@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+set -eu -o pipefail -x
+
+iid=$(docker build -q -f ./hack/dockerfiles/vendor.Dockerfile .)
+cid=$(docker create $iid noop)
+docker cp $cid:/go/src/github.com/tonistiigi/buildkit_poc/vendor .
+docker rm $cid
