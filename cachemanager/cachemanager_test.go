@@ -16,6 +16,9 @@ func TestCacheManager(t *testing.T) {
 	cm, err := NewCacheManager(CacheManagerOpt{Root: tmpdir})
 	assert.NoError(t, err)
 
+	_, err = cm.Get("foobar")
+	assert.Error(t, err)
+
 	err = cm.Close()
 	assert.NoError(t, err)
 }

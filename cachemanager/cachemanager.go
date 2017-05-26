@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/boltdb/bolt"
@@ -37,25 +38,25 @@ type GCPolicy struct {
 
 type SnapshotRef interface {
 	Mountable
-	Releasable
+	Release() error
 	Size() (int64, error)
 	// Prepare() / ChainID() / Meta()
 }
 
 type ActiveRef interface {
 	Mountable
-	Releasable
+	Release() (SnapshotRef, error)
 	ReleaseAndCommit(ctx context.Context) (SnapshotRef, error)
 	Size() (int64, error)
 }
 
 type Mountable interface {
-	Mount() (string, error) // containerd.Mount
-	Unmount() error
+	Mount() (Mount, error)
 }
 
-type Releasable interface {
-	Release() error
+type Mount interface { // replace with containerd.Mount
+	Mount() (string, error)
+	Unmount() error
 }
 
 type CacheAccessor interface {
@@ -77,18 +78,10 @@ type CacheManager interface {
 }
 
 type cacheManager struct {
-	db    *bolt.DB // note: no particual reason for bolt
-	items map[string]*cacheRecord
+	db      *bolt.DB // note: no particual reason for bolt
+	records map[string]*cacheRecord
+	mu      sync.Mutex
 	CacheManagerOpt
-}
-
-type snapshotRef struct {
-}
-
-type cacheRecord struct {
-	active bool
-	// meta   SnapMeta
-	refs map[*snapshotRef]struct{}
 }
 
 func NewCacheManager(opt CacheManagerOpt) (CacheManager, error) {
@@ -105,7 +98,7 @@ func NewCacheManager(opt CacheManagerOpt) (CacheManager, error) {
 	cm := &cacheManager{
 		CacheManagerOpt: opt,
 		db:              db,
-		items:           make(map[string]*cacheRecord),
+		records:         make(map[string]*cacheRecord),
 	}
 
 	if err := cm.init(); err != nil {
@@ -131,7 +124,14 @@ func (cm *cacheManager) Close() error {
 }
 
 func (cm *cacheManager) Get(id string) (SnapshotRef, error) {
-	return nil, errors.New("Get not implemented")
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+	rec, ok := cm.records[id]
+	if !ok {
+		// TODO: lazy-load from Snapshotter
+		return nil, errors.Errorf("not found")
+	}
+	return rec.ref(), nil
 }
 func (cm *cacheManager) New(id string, s SnapshotRef) (ActiveRef, error) {
 	return nil, errors.New("New not implemented")
@@ -150,4 +150,33 @@ func (cm *cacheManager) Prune(ctx context.Context) (map[string]int64, error) {
 
 func (cm *cacheManager) GC(ctx context.Context) error {
 	return errors.New("GC not implemented")
+}
+
+type cacheRecord struct {
+	active bool
+	// meta   SnapMeta
+	refs map[*snapshotRef]struct{}
+}
+
+// hold manager lock before calling
+func (cr *cacheRecord) ref() *snapshotRef {
+	ref := &snapshotRef{cacheRecord: cr}
+	cr.refs[ref] = struct{}{}
+	return ref
+}
+
+type snapshotRef struct {
+	*cacheRecord
+}
+
+func (sr *snapshotRef) Mount() (Mount, error) {
+	return nil, errors.New("Mount not implemented")
+}
+
+func (sr *snapshotRef) Release() error {
+	return errors.New("Release not implemented")
+}
+
+func (sr *snapshotRef) Size() (int64, error) {
+	return -1, errors.New("Size not implemented")
 }
