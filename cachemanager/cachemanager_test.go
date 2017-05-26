@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/containerd/containerd/snapshot/naive"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/tonistiigi/buildkit_poc/snapshot"
 )
@@ -43,6 +44,23 @@ func TestCacheManager(t *testing.T) {
 	assert.Equal(t, fi.IsDir(), true)
 
 	err = lm.Unmount()
+	assert.NoError(t, err)
+
+	_, err = cm.GetActive(active.ID())
+	assert.Error(t, err)
+	assert.Equal(t, errors.Cause(err), errLocked)
+
+	snap, err := active.ReleaseActive()
+	assert.NoError(t, err)
+
+	_, err = cm.GetActive(active.ID())
+	assert.Error(t, err)
+	assert.Equal(t, errors.Cause(err), errLocked)
+
+	err = snap.Release()
+	assert.NoError(t, err)
+
+	_, err = cm.GetActive(active.ID())
 	assert.NoError(t, err)
 
 	err = cm.Close()

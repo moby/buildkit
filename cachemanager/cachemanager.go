@@ -17,6 +17,12 @@ import (
 
 const dbFile = "cache.db"
 
+var (
+	errLocked   = errors.New("locked")
+	errNotFound = errors.New("not found")
+	errInvalid  = errors.New("invalid")
+)
+
 type CacheManagerOpt struct {
 	Snapshotter snapshot.Snapshotter
 	Root        string
@@ -41,6 +47,7 @@ type GCPolicy struct {
 
 type SnapshotRef interface {
 	Mountable
+	ID() string
 	Release() error
 	Size() (int64, error)
 	// Prepare() / ChainID() / Meta()
@@ -48,6 +55,7 @@ type SnapshotRef interface {
 
 type ActiveRef interface {
 	Mountable
+	ID() string
 	ReleaseActive() (SnapshotRef, error)
 	ReleaseAndCommit(ctx context.Context) (SnapshotRef, error)
 	Size() (int64, error)
@@ -127,7 +135,7 @@ func (cm *cacheManager) Get(id string) (SnapshotRef, error) {
 	rec, ok := cm.records[id]
 	if !ok {
 		// TODO: lazy-load from Snapshotter
-		return nil, errors.Errorf("not found")
+		return nil, errors.Wrapf(errNotFound, "%s not found", id)
 	}
 	return rec.ref(), nil
 }
@@ -149,10 +157,34 @@ func (cm *cacheManager) New(s SnapshotRef) (ActiveRef, error) {
 		refs:   make(map[*snapshotRef]struct{}),
 	}
 
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	cm.records[id] = rec // TODO: save to db
+
 	return rec.ref(), nil
 }
 func (cm *cacheManager) GetActive(id string) (ActiveRef, error) { // Rebase?
-	return nil, errors.New("GetActive not implemented")
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	rec, ok := cm.records[id]
+	if !ok {
+		return nil, errors.Wrapf(errNotFound, "%s not found", id)
+	}
+
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+
+	if !rec.active {
+		return nil, errors.Wrapf(errInvalid, "%s is not active", id)
+	}
+
+	if rec.sharedActive || len(rec.refs) != 0 {
+		return nil, errors.Wrapf(errLocked, "%s is locked", id)
+	}
+
+	return rec.ref(), nil
 }
 
 func (cm *cacheManager) DiskUsage(ctx context.Context) (map[string]int64, error) {
@@ -168,8 +200,9 @@ func (cm *cacheManager) GC(ctx context.Context) error {
 }
 
 type cacheRecord struct {
-	mu     sync.Mutex
-	active bool
+	mu           sync.Mutex
+	active       bool
+	sharedActive bool
 	// meta   SnapMeta
 	refs map[*snapshotRef]struct{}
 	id   string
@@ -203,11 +236,36 @@ func (sr *snapshotRef) Mount() ([]mount.Mount, error) {
 }
 
 func (sr *snapshotRef) Release() error {
-	return errors.New("Release not implemented")
+	sr.cm.mu.Lock()
+	defer sr.cm.mu.Unlock()
+
+	delete(sr.refs, sr)
+	if len(sr.refs) == 0 {
+		//go sr.cm.GC()
+	}
+	sr.sharedActive = false
+
+	return nil
 }
 
 func (sr *snapshotRef) ReleaseActive() (SnapshotRef, error) {
-	return nil, errors.New("ReleaseActive not implemented")
+	sr.cm.mu.Lock()
+	defer sr.cm.mu.Unlock()
+
+	sr.mu.Lock()
+	defer sr.mu.Unlock()
+
+	if !sr.active || sr.sharedActive || len(sr.refs) != 1 {
+		return nil, errors.New("invalid active")
+	}
+
+	if _, ok := sr.refs[sr]; !ok {
+		return nil, errors.New("invalid active")
+	}
+
+	sr.sharedActive = true
+
+	return sr, nil
 }
 
 func (sr *snapshotRef) ReleaseAndCommit(ctx context.Context) (SnapshotRef, error) {
@@ -216,6 +274,10 @@ func (sr *snapshotRef) ReleaseAndCommit(ctx context.Context) (SnapshotRef, error
 
 func (sr *snapshotRef) Size() (int64, error) {
 	return -1, errors.New("Size not implemented")
+}
+
+func (sr *snapshotRef) ID() string {
+	return sr.id
 }
 
 func generateID() string {
