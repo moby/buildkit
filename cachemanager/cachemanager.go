@@ -72,7 +72,7 @@ type CacheAccessor interface {
 }
 
 type CacheController interface {
-	DiskUsage(ctx context.Context) (map[string]int64, error)
+	DiskUsage(ctx context.Context) ([]CacheRecord, error)
 	Prune(ctx context.Context) (map[string]int64, error)
 	GC(ctx context.Context) error
 }
@@ -81,6 +81,15 @@ type CacheManager interface {
 	CacheAccessor
 	CacheController
 	Close() error
+}
+
+type CacheRecord struct {
+	ID     string
+	Active bool
+	InUse  bool
+	Size   int64
+	// Meta string
+	// LastUsed time.Time
 }
 
 type cacheManager struct {
@@ -209,8 +218,25 @@ func (cm *cacheManager) GetActive(id string) (ActiveRef, error) { // Rebase?
 	return rec.ref(), nil
 }
 
-func (cm *cacheManager) DiskUsage(ctx context.Context) (map[string]int64, error) {
-	return nil, errors.New("DiskUsage not implemented")
+func (cm *cacheManager) DiskUsage(ctx context.Context) ([]CacheRecord, error) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	var du []CacheRecord
+
+	for id, cr := range cm.records {
+		cr.mu.Lock()
+		c := CacheRecord{
+			ID:     id,
+			Active: cr.active,
+			InUse:  len(cr.refs) > 0,
+			Size:   -1, // TODO
+		}
+		cr.mu.Unlock()
+		du = append(du, c)
+	}
+
+	return du, nil
 }
 
 func (cm *cacheManager) Prune(ctx context.Context) (map[string]int64, error) {
