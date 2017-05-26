@@ -87,6 +87,15 @@ func TestCacheManager(t *testing.T) {
 	err = snap.Release()
 	assert.NoError(t, err)
 
+	active2, err := cm.New(snap2)
+	assert.NoError(t, err)
+
+	snap3, err := active2.ReleaseActive()
+	assert.NoError(t, err)
+
+	err = snap3.Release()
+	assert.NoError(t, err)
+
 	err = snap2.Release()
 	assert.NoError(t, err)
 

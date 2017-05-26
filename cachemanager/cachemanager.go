@@ -152,13 +152,23 @@ func (cm *cacheManager) Get(id string) (SnapshotRef, error) {
 	return rec.ref(), nil
 }
 func (cm *cacheManager) New(s SnapshotRef) (ActiveRef, error) {
-	if s != nil {
-		return nil, errors.New("snapshot parents not implemented") // TODO
-	}
-
 	id := generateID()
 
-	if _, err := cm.Snapshotter.Prepare(context.TODO(), id, ""); err != nil {
+	var parent SnapshotRef
+	var parentID string
+	if s != nil {
+		var err error
+		parent, err = cm.Get(s.ID())
+		if err != nil {
+			return nil, err
+		}
+		parentID = parent.ID()
+	}
+
+	if _, err := cm.Snapshotter.Prepare(context.TODO(), id, parentID); err != nil {
+		if parent != nil {
+			parent.Release()
+		}
 		return nil, errors.Wrapf(err, "failed to prepare %s", id)
 	}
 
@@ -167,6 +177,7 @@ func (cm *cacheManager) New(s SnapshotRef) (ActiveRef, error) {
 		id:     id,
 		cm:     cm,
 		refs:   make(map[*snapshotRef]struct{}),
+		parent: parent,
 	}
 
 	cm.mu.Lock()
@@ -215,9 +226,10 @@ type cacheRecord struct {
 	active       bool
 	sharedActive bool
 	// meta   SnapMeta
-	refs map[*snapshotRef]struct{}
-	id   string
-	cm   *cacheManager
+	refs   map[*snapshotRef]struct{}
+	id     string
+	cm     *cacheManager
+	parent SnapshotRef
 }
 
 // hold manager lock before calling
@@ -250,11 +262,24 @@ func (sr *snapshotRef) Release() error {
 	sr.cm.mu.Lock()
 	defer sr.cm.mu.Unlock()
 
+	sr.mu.Lock()
+	defer sr.mu.Unlock()
+
+	return sr.release()
+}
+
+func (sr *snapshotRef) release() error {
+	if sr.parent != nil {
+		if err := sr.parent.(*snapshotRef).release(); err != nil {
+			return err
+		}
+	}
 	delete(sr.refs, sr)
+	sr.sharedActive = false
+
 	if len(sr.refs) == 0 {
 		//go sr.cm.GC()
 	}
-	sr.sharedActive = false
 
 	return nil
 }
