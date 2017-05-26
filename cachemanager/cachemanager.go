@@ -2,12 +2,15 @@ package cachemanager
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/boltdb/bolt"
+	"github.com/containerd/containerd/mount"
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/buildkit_poc/snapshot"
 )
@@ -45,23 +48,18 @@ type SnapshotRef interface {
 
 type ActiveRef interface {
 	Mountable
-	Release() (SnapshotRef, error)
+	ReleaseActive() (SnapshotRef, error)
 	ReleaseAndCommit(ctx context.Context) (SnapshotRef, error)
 	Size() (int64, error)
 }
 
 type Mountable interface {
-	Mount() (Mount, error)
-}
-
-type Mount interface { // replace with containerd.Mount
-	Mount() (string, error)
-	Unmount() error
+	Mount() ([]mount.Mount, error)
 }
 
 type CacheAccessor interface {
 	Get(id string) (SnapshotRef, error)
-	New(id string, s SnapshotRef) (ActiveRef, error)
+	New(s SnapshotRef) (ActiveRef, error)
 	GetActive(id string) (ActiveRef, error) // Rebase?
 }
 
@@ -133,8 +131,25 @@ func (cm *cacheManager) Get(id string) (SnapshotRef, error) {
 	}
 	return rec.ref(), nil
 }
-func (cm *cacheManager) New(id string, s SnapshotRef) (ActiveRef, error) {
-	return nil, errors.New("New not implemented")
+func (cm *cacheManager) New(s SnapshotRef) (ActiveRef, error) {
+	if s != nil {
+		return nil, errors.New("snapshot parents not implemented") // TODO
+	}
+
+	id := generateID()
+
+	if _, err := cm.Snapshotter.Prepare(context.TODO(), id, ""); err != nil {
+		return nil, errors.Wrapf(err, "failed to prepare %s", id)
+	}
+
+	rec := &cacheRecord{
+		active: true,
+		id:     id,
+		cm:     cm,
+		refs:   make(map[*snapshotRef]struct{}),
+	}
+
+	return rec.ref(), nil
 }
 func (cm *cacheManager) GetActive(id string) (ActiveRef, error) { // Rebase?
 	return nil, errors.New("GetActive not implemented")
@@ -153,9 +168,12 @@ func (cm *cacheManager) GC(ctx context.Context) error {
 }
 
 type cacheRecord struct {
+	mu     sync.Mutex
 	active bool
 	// meta   SnapMeta
 	refs map[*snapshotRef]struct{}
+	id   string
+	cm   *cacheManager
 }
 
 // hold manager lock before calling
@@ -169,14 +187,41 @@ type snapshotRef struct {
 	*cacheRecord
 }
 
-func (sr *snapshotRef) Mount() (Mount, error) {
-	return nil, errors.New("Mount not implemented")
+func (sr *snapshotRef) Mount() ([]mount.Mount, error) {
+	sr.mu.Lock()
+	defer sr.mu.Unlock()
+
+	if sr.active {
+		m, err := sr.cm.Snapshotter.Mounts(context.TODO(), sr.id)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to mount %s", sr.id)
+		}
+		return m, nil
+	}
+
+	return nil, errors.New("snapshot mount not implemented")
 }
 
 func (sr *snapshotRef) Release() error {
 	return errors.New("Release not implemented")
 }
 
+func (sr *snapshotRef) ReleaseActive() (SnapshotRef, error) {
+	return nil, errors.New("ReleaseActive not implemented")
+}
+
+func (sr *snapshotRef) ReleaseAndCommit(ctx context.Context) (SnapshotRef, error) {
+	return nil, errors.New("ReleaseActive not implemented")
+}
+
 func (sr *snapshotRef) Size() (int64, error) {
 	return -1, errors.New("Size not implemented")
+}
+
+func generateID() string {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		panic(err)
+	}
+	return hex.EncodeToString(b)
 }
