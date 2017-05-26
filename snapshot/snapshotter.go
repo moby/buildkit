@@ -10,4 +10,5 @@ import (
 type Snapshotter interface {
 	Prepare(ctx context.Context, key, parent string) ([]mount.Mount, error)
 	Mounts(ctx context.Context, key string) ([]mount.Mount, error)
+	Commit(ctx context.Context, name, key string) error
 }

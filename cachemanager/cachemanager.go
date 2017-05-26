@@ -137,6 +137,18 @@ func (cm *cacheManager) Get(id string) (SnapshotRef, error) {
 		// TODO: lazy-load from Snapshotter
 		return nil, errors.Wrapf(errNotFound, "%s not found", id)
 	}
+
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+
+	if rec.active && !rec.sharedActive {
+		if len(rec.refs) != 0 {
+			return nil, errors.Wrapf(errLocked, "%s is locked", id)
+		} else {
+			rec.sharedActive = true
+		}
+	}
+
 	return rec.ref(), nil
 }
 func (cm *cacheManager) New(s SnapshotRef) (ActiveRef, error) {
@@ -175,7 +187,6 @@ func (cm *cacheManager) GetActive(id string) (ActiveRef, error) { // Rebase?
 
 	rec.mu.Lock()
 	defer rec.mu.Unlock()
-
 	if !rec.active {
 		return nil, errors.Wrapf(errInvalid, "%s is not active", id)
 	}
@@ -256,11 +267,11 @@ func (sr *snapshotRef) ReleaseActive() (SnapshotRef, error) {
 	defer sr.mu.Unlock()
 
 	if !sr.active || sr.sharedActive || len(sr.refs) != 1 {
-		return nil, errors.New("invalid active")
+		return nil, errors.Wrapf(errInvalid, "invalid active")
 	}
 
 	if _, ok := sr.refs[sr]; !ok {
-		return nil, errors.New("invalid active")
+		return nil, errors.Wrapf(errInvalid, "invalid active")
 	}
 
 	sr.sharedActive = true
@@ -269,7 +280,39 @@ func (sr *snapshotRef) ReleaseActive() (SnapshotRef, error) {
 }
 
 func (sr *snapshotRef) ReleaseAndCommit(ctx context.Context) (SnapshotRef, error) {
-	return nil, errors.New("ReleaseActive not implemented")
+	sr.cm.mu.Lock()
+	defer sr.cm.mu.Unlock()
+
+	sr.mu.Lock()
+
+	if !sr.active || sr.sharedActive {
+		sr.mu.Unlock()
+		return nil, errors.Wrapf(errInvalid, "invalid active")
+	}
+	if len(sr.refs) != 1 {
+		sr.mu.Unlock()
+		return nil, errors.Wrapf(errInvalid, "multiple active references")
+	}
+
+	sr.mu.Unlock()
+
+	id := generateID() // TODO: no need to actually switch the key here
+
+	err := sr.cm.Snapshotter.Commit(ctx, id, sr.id)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to commit %s", sr.id)
+	}
+
+	delete(sr.cm.records, sr.id)
+
+	rec := &cacheRecord{
+		id:   id,
+		cm:   sr.cm,
+		refs: make(map[*snapshotRef]struct{}),
+	}
+	sr.cm.records[id] = rec // TODO: save to db
+
+	return rec.ref(), nil
 }
 
 func (sr *snapshotRef) Size() (int64, error) {

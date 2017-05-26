@@ -1,6 +1,7 @@
 package cachemanager
 
 import (
+	"context"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -48,19 +49,45 @@ func TestCacheManager(t *testing.T) {
 
 	_, err = cm.GetActive(active.ID())
 	assert.Error(t, err)
-	assert.Equal(t, errors.Cause(err), errLocked)
+	assert.Equal(t, errLocked, errors.Cause(err))
 
 	snap, err := active.ReleaseActive()
 	assert.NoError(t, err)
 
 	_, err = cm.GetActive(active.ID())
 	assert.Error(t, err)
-	assert.Equal(t, errors.Cause(err), errLocked)
+	assert.Equal(t, errLocked, errors.Cause(err))
+
+	err = snap.Release()
+	assert.NoError(t, err)
+
+	active, err = cm.GetActive(active.ID())
+	assert.NoError(t, err)
+
+	snap, err = active.ReleaseAndCommit(context.TODO())
+	assert.NoError(t, err)
 
 	err = snap.Release()
 	assert.NoError(t, err)
 
 	_, err = cm.GetActive(active.ID())
+	assert.Error(t, err)
+	assert.Equal(t, errNotFound, errors.Cause(err))
+
+	_, err = cm.GetActive(snap.ID())
+	assert.Error(t, err)
+	assert.Equal(t, errInvalid, errors.Cause(err))
+
+	snap, err = cm.Get(snap.ID())
+	assert.NoError(t, err)
+
+	snap2, err := cm.Get(snap.ID())
+	assert.NoError(t, err)
+
+	err = snap.Release()
+	assert.NoError(t, err)
+
+	err = snap2.Release()
 	assert.NoError(t, err)
 
 	err = cm.Close()
