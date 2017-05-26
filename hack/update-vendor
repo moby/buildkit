@@ -2,7 +2,8 @@
 
 set -eu -o pipefail -x
 
-iid=$(docker build -q -f ./hack/dockerfiles/vendor.Dockerfile .)
-cid=$(docker create $iid noop)
+# update this to iidfile after 17.06
+docker build -t buildkit_poc:vendor -f ./hack/dockerfiles/vendor.Dockerfile --force-rm .
+cid=$(docker create buildkit_poc:vendor noop)
 docker cp $cid:/go/src/github.com/tonistiigi/buildkit_poc/vendor .
 docker rm $cid

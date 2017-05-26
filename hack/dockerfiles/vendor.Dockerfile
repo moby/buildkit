@@ -7,4 +7,4 @@ RUN go get -d github.com/LK4D4/vndr \
 	&& go install ./
 WORKDIR /go/src/github.com/tonistiigi/buildkit_poc
 COPY . .
-RUN vndr
+RUN vndr --verbose
