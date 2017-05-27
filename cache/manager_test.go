@@ -1,4 +1,4 @@
-package cachemanager
+package cache
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 	"github.com/tonistiigi/buildkit_poc/snapshot"
 )
 
-func TestCacheManager(t *testing.T) {
+func TestManager(t *testing.T) {
 	tmpdir, err := ioutil.TempDir("", "cachemanager")
 	assert.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
@@ -21,7 +21,7 @@ func TestCacheManager(t *testing.T) {
 	snapshotter, err := naive.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	assert.NoError(t, err)
 
-	cm, err := NewCacheManager(CacheManagerOpt{
+	cm, err := NewManager(ManagerOpt{
 		Root:        tmpdir,
 		Snapshotter: snapshotter,
 	})
@@ -49,18 +49,18 @@ func TestCacheManager(t *testing.T) {
 	err = lm.Unmount()
 	assert.NoError(t, err)
 
-	_, err = cm.GetActive(active.ID())
+	_, err = cm.GetMutable(active.ID())
 	assert.Error(t, err)
 	assert.Equal(t, errLocked, errors.Cause(err))
 
 	checkDiskUsage(t, cm, 1, 0)
 
-	snap, err := active.ReleaseActive()
+	snap, err := active.Freeze()
 	assert.NoError(t, err)
 
 	checkDiskUsage(t, cm, 1, 0)
 
-	_, err = cm.GetActive(active.ID())
+	_, err = cm.GetMutable(active.ID())
 	assert.Error(t, err)
 	assert.Equal(t, errLocked, errors.Cause(err))
 
@@ -69,7 +69,7 @@ func TestCacheManager(t *testing.T) {
 
 	checkDiskUsage(t, cm, 0, 1)
 
-	active, err = cm.GetActive(active.ID())
+	active, err = cm.GetMutable(active.ID())
 	assert.NoError(t, err)
 
 	checkDiskUsage(t, cm, 1, 0)
@@ -82,11 +82,11 @@ func TestCacheManager(t *testing.T) {
 	err = snap.Release()
 	assert.NoError(t, err)
 
-	_, err = cm.GetActive(active.ID())
+	_, err = cm.GetMutable(active.ID())
 	assert.Error(t, err)
 	assert.Equal(t, errNotFound, errors.Cause(err))
 
-	_, err = cm.GetActive(snap.ID())
+	_, err = cm.GetMutable(snap.ID())
 	assert.Error(t, err)
 	assert.Equal(t, errInvalid, errors.Cause(err))
 
@@ -106,7 +106,7 @@ func TestCacheManager(t *testing.T) {
 
 	checkDiskUsage(t, cm, 2, 0)
 
-	snap3, err := active2.ReleaseActive()
+	snap3, err := active2.Freeze()
 	assert.NoError(t, err)
 
 	err = snap2.Release()
@@ -123,7 +123,7 @@ func TestCacheManager(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func checkDiskUsage(t *testing.T, cm CacheManager, inuse, unused int) {
+func checkDiskUsage(t *testing.T, cm Manager, inuse, unused int) {
 	du, err := cm.DiskUsage(context.TODO())
 	assert.NoError(t, err)
 	var inuseActual, unusedActual int

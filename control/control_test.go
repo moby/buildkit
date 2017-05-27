@@ -21,10 +21,9 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
-	"github.com/tonistiigi/buildkit_poc/cachemanager"
-	"github.com/tonistiigi/buildkit_poc/sources"
-	"github.com/tonistiigi/buildkit_poc/sources/containerimage"
-	"github.com/tonistiigi/buildkit_poc/sources/identifier"
+	"github.com/tonistiigi/buildkit_poc/cache"
+	"github.com/tonistiigi/buildkit_poc/source"
+	"github.com/tonistiigi/buildkit_poc/source/containerimage"
 )
 
 func TestControl(t *testing.T) {
@@ -35,25 +34,25 @@ func TestControl(t *testing.T) {
 	cd, err := localContainerd(tmpdir)
 	assert.NoError(t, err)
 
-	cm, err := cachemanager.NewCacheManager(cachemanager.CacheManagerOpt{
+	cm, err := cache.NewManager(cache.ManagerOpt{
 		Snapshotter: cd.Snapshotter,
 		Root:        filepath.Join(tmpdir, "cachemanager"),
 	})
 
-	sm, err := sources.NewSourceManager()
+	sm, err := source.NewManager()
 	assert.NoError(t, err)
 
-	is, err := containerimage.NewContainerImageSource(containerimage.ContainerImageSourceOpt{
-		Snapshotter:   cd.Snapshotter,
-		ContentStore:  cd.ContentStore,
-		Applier:       cd.Applier,
-		CacheAccessor: cm,
+	is, err := containerimage.NewSource(containerimage.SourceOpt{
+		Snapshotter:  cd.Snapshotter,
+		ContentStore: cd.ContentStore,
+		Applier:      cd.Applier,
+		Accessor:     cm,
 	})
 	assert.NoError(t, err)
 
 	sm.Register(is)
 
-	img, err := identifier.NewImageIdentifier("docker.io/library/redis:latest")
+	img, err := source.NewImageIdentifier("docker.io/library/redis:latest")
 	assert.NoError(t, err)
 
 	snap, err := sm.Pull(context.TODO(), img)

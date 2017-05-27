@@ -1,0 +1,200 @@
+package cache
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"sync"
+
+	"github.com/boltdb/bolt"
+	"github.com/pkg/errors"
+	"github.com/tonistiigi/buildkit_poc/snapshot"
+)
+
+const dbFile = "cache.db"
+
+var (
+	errLocked   = errors.New("locked")
+	errNotFound = errors.New("not found")
+	errInvalid  = errors.New("invalid")
+)
+
+type ManagerOpt struct {
+	Snapshotter snapshot.Snapshotter
+	Root        string
+	GCPolicy    GCPolicy
+}
+
+type Accessor interface {
+	Get(id string) (ImmutableRef, error)
+	New(s ImmutableRef) (MutableRef, error)
+	GetMutable(id string) (MutableRef, error) // Rebase?
+}
+
+type Controller interface {
+	DiskUsage(ctx context.Context) ([]UsageInfo, error)
+	Prune(ctx context.Context) (map[string]int64, error)
+	GC(ctx context.Context) error
+}
+
+type Manager interface {
+	Accessor
+	Controller
+	Close() error
+}
+
+type UsageInfo struct {
+	ID     string
+	Active bool
+	InUse  bool
+	Size   int64
+	// Meta string
+	// LastUsed time.Time
+}
+
+type cacheManager struct {
+	db      *bolt.DB // note: no particual reason for bolt
+	records map[string]*cacheRecord
+	mu      sync.Mutex
+	ManagerOpt
+}
+
+func NewManager(opt ManagerOpt) (Manager, error) {
+	if err := os.MkdirAll(opt.Root, 0700); err != nil {
+		return nil, errors.Wrapf(err, "failed to create %s", opt.Root)
+	}
+
+	p := filepath.Join(opt.Root, dbFile)
+	db, err := bolt.Open(p, 0600, nil)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to open database file %s", p)
+	}
+
+	cm := &cacheManager{
+		ManagerOpt: opt,
+		db:         db,
+		records:    make(map[string]*cacheRecord),
+	}
+
+	if err := cm.init(); err != nil {
+		return nil, err
+	}
+
+	// cm.scheduleGC(5 * time.Minute)
+
+	return cm, nil
+}
+
+func (cm *cacheManager) init() error {
+	// load all refs from db
+	// compare with the walk from Snapshotter
+	// delete items that are not in db (or implement broken transaction detection)
+	// keep all refs in memory(maybe in future work on disk only or with lru)
+	return nil
+}
+
+func (cm *cacheManager) Close() error {
+	// TODO: allocate internal context and cancel it here
+	return cm.db.Close()
+}
+
+func (cm *cacheManager) Get(id string) (ImmutableRef, error) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+	rec, ok := cm.records[id]
+	if !ok {
+		// TODO: lazy-load from Snapshotter
+		return nil, errors.Wrapf(errNotFound, "%s not found", id)
+	}
+
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+
+	if rec.mutable && !rec.frozen {
+		if len(rec.refs) != 0 {
+			return nil, errors.Wrapf(errLocked, "%s is locked", id)
+		} else {
+			rec.frozen = true
+		}
+	}
+
+	return rec.ref(), nil
+}
+func (cm *cacheManager) New(s ImmutableRef) (MutableRef, error) {
+	id := generateID()
+
+	var parent ImmutableRef
+	var parentID string
+	if s != nil {
+		var err error
+		parent, err = cm.Get(s.ID())
+		if err != nil {
+			return nil, err
+		}
+		parentID = parent.ID()
+	}
+
+	if _, err := cm.Snapshotter.Prepare(context.TODO(), id, parentID); err != nil {
+		if parent != nil {
+			parent.Release()
+		}
+		return nil, errors.Wrapf(err, "failed to prepare %s", id)
+	}
+
+	rec := &cacheRecord{
+		mutable: true,
+		id:      id,
+		cm:      cm,
+		refs:    make(map[*cacheRef]struct{}),
+		parent:  parent,
+	}
+
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	cm.records[id] = rec // TODO: save to db
+
+	return rec.ref(), nil
+}
+func (cm *cacheManager) GetMutable(id string) (MutableRef, error) { // Rebase?
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	rec, ok := cm.records[id]
+	if !ok {
+		return nil, errors.Wrapf(errNotFound, "%s not found", id)
+	}
+
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	if !rec.mutable {
+		return nil, errors.Wrapf(errInvalid, "%s is not mutable", id)
+	}
+
+	if rec.frozen || len(rec.refs) != 0 {
+		return nil, errors.Wrapf(errLocked, "%s is locked", id)
+	}
+
+	return rec.ref(), nil
+}
+
+func (cm *cacheManager) DiskUsage(ctx context.Context) ([]UsageInfo, error) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	var du []UsageInfo
+
+	for id, cr := range cm.records {
+		cr.mu.Lock()
+		c := UsageInfo{
+			ID:     id,
+			Active: cr.mutable,
+			InUse:  len(cr.refs) > 0,
+			Size:   -1, // TODO:
+		}
+		cr.mu.Unlock()
+		du = append(du, c)
+	}
+
+	return du, nil
+}

@@ -1,4 +1,4 @@
-package identifier
+package source
 
 import (
 	"strings"

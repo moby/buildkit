@@ -13,29 +13,28 @@ import (
 	"github.com/containerd/containerd/snapshot"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
-	"github.com/tonistiigi/buildkit_poc/cachemanager"
-	"github.com/tonistiigi/buildkit_poc/sources"
-	"github.com/tonistiigi/buildkit_poc/sources/identifier"
+	"github.com/tonistiigi/buildkit_poc/cache"
+	"github.com/tonistiigi/buildkit_poc/source"
 )
 
 // TODO: break apart containerd specifics like contentstore so the resolver
 // code can be used with any implementation
 
-type ContainerImageSourceOpt struct {
-	Snapshotter   snapshot.Snapshotter
-	ContentStore  content.Store
-	Applier       rootfs.Applier
-	CacheAccessor cachemanager.CacheAccessor
+type SourceOpt struct {
+	Snapshotter  snapshot.Snapshotter
+	ContentStore content.Store
+	Applier      rootfs.Applier
+	Accessor     cache.Accessor
 }
 
 type imageSource struct {
-	ContainerImageSourceOpt
+	SourceOpt
 	resolver remotes.Resolver
 }
 
-func NewContainerImageSource(opt ContainerImageSourceOpt) (sources.Source, error) {
+func NewSource(opt SourceOpt) (source.Source, error) {
 	is := &imageSource{
-		ContainerImageSourceOpt: opt,
+		SourceOpt: opt,
 		resolver: docker.NewResolver(docker.ResolverOptions{
 			Client: http.DefaultClient,
 		}),
@@ -44,14 +43,14 @@ func NewContainerImageSource(opt ContainerImageSourceOpt) (sources.Source, error
 }
 
 func (is *imageSource) ID() string {
-	return identifier.DockerImageScheme
+	return source.DockerImageScheme
 }
 
-func (is *imageSource) Pull(ctx context.Context, id identifier.Identifier) (cachemanager.SnapshotRef, error) {
+func (is *imageSource) Pull(ctx context.Context, id source.Identifier) (cache.ImmutableRef, error) {
 	// TODO: update this to always centralize layer downloads/unpacks
 	// TODO: progress status
 
-	imageIdentifier, ok := id.(*identifier.ImageIdentifier)
+	imageIdentifier, ok := id.(*source.ImageIdentifier)
 	if !ok {
 		return nil, errors.New("invalid identifier")
 	}
