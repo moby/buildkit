@@ -1,3 +1,5 @@
+// +build linux
+
 package control
 
 import (
@@ -19,15 +21,45 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/tonistiigi/buildkit_poc/cachemanager"
+	"github.com/tonistiigi/buildkit_poc/sources"
+	"github.com/tonistiigi/buildkit_poc/sources/containerimage"
+	"github.com/tonistiigi/buildkit_poc/sources/identifier"
 )
 
 func TestControl(t *testing.T) {
-	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	tmpdir, err := ioutil.TempDir("", "controltest")
 	assert.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
+	// defer os.RemoveAll(tmpdir)
 
-	_, err = localContainerd(tmpdir)
+	cd, err := localContainerd(tmpdir)
 	assert.NoError(t, err)
+
+	cm, err := cachemanager.NewCacheManager(cachemanager.CacheManagerOpt{
+		Snapshotter: cd.Snapshotter,
+		Root:        filepath.Join(tmpdir, "cachemanager"),
+	})
+
+	sm, err := sources.NewSourceManager()
+	assert.NoError(t, err)
+
+	is, err := containerimage.NewContainerImageSource(containerimage.ContainerImageSourceOpt{
+		Snapshotter:   cd.Snapshotter,
+		ContentStore:  cd.ContentStore,
+		Applier:       cd.Applier,
+		CacheAccessor: cm,
+	})
+	assert.NoError(t, err)
+
+	sm.Register(is)
+
+	img, err := identifier.NewImageIdentifier("docker.io/library/redis:latest")
+	assert.NoError(t, err)
+
+	snap, err := sm.Pull(context.TODO(), img)
+	assert.NoError(t, err)
+
+	_ = snap
 }
 
 type containerd struct {

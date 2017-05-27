@@ -1,5 +1,5 @@
 test:
-	docker build -f ./hack/dockerfiles/test.Dockerfile .
+	./hack/test
 
 vendor:
 	./hack/update-vendor
