@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/boltdb/bolt"
+	cdsnapshot "github.com/containerd/containerd/snapshot"
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/buildkit_poc/snapshot"
 )
@@ -101,10 +102,34 @@ func (cm *cacheManager) Close() error {
 func (cm *cacheManager) Get(id string) (ImmutableRef, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
+	return cm.get(id)
+}
+func (cm *cacheManager) get(id string) (ImmutableRef, error) {
 	rec, ok := cm.records[id]
 	if !ok {
-		// TODO: lazy-load from Snapshotter
-		return nil, errors.Wrapf(errNotFound, "%s not found", id)
+		info, err := cm.Snapshotter.Stat(context.TODO(), id)
+		if err != nil {
+			return nil, err
+		}
+		if info.Kind != cdsnapshot.KindCommitted {
+			return nil, errors.Wrapf(errInvalid, "can't lazy load active %s", id)
+		}
+
+		var parent ImmutableRef
+		if info.Parent != "" {
+			parent, err = cm.get(info.Parent)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		rec = &cacheRecord{
+			id:     id,
+			cm:     cm,
+			refs:   make(map[*cacheRef]struct{}),
+			parent: parent,
+		}
+		cm.records[id] = rec // TODO: store to db
 	}
 
 	rec.mu.Lock()

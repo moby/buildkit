@@ -35,10 +35,12 @@ type cacheRecord struct {
 	mutable bool
 	frozen  bool
 	// meta   SnapMeta
-	refs   map[*cacheRef]struct{}
-	id     string
-	cm     *cacheManager
-	parent ImmutableRef
+	refs      map[*cacheRef]struct{}
+	id        string
+	cm        *cacheManager
+	parent    ImmutableRef
+	view      string
+	viewMount []mount.Mount
 }
 
 // hold manager lock before calling
@@ -62,6 +64,17 @@ func (sr *cacheRef) Mount() ([]mount.Mount, error) {
 			return nil, errors.Wrapf(err, "failed to mount %s", sr.id)
 		}
 		return m, nil
+	} else {
+		if sr.viewMount == nil { // TODO: handle this better
+			sr.view = generateID()
+			m, err := sr.cm.Snapshotter.View(context.TODO(), sr.view, sr.id)
+			if err != nil {
+				sr.view = ""
+				return nil, errors.Wrapf(err, "failed to mount %s", sr.id)
+			}
+			sr.viewMount = m
+		}
+		return sr.viewMount, nil
 	}
 
 	return nil, errors.New("snapshot mount not implemented")
@@ -83,6 +96,14 @@ func (sr *cacheRef) release() error {
 			return err
 		}
 	}
+	if sr.viewMount != nil {
+		if err := sr.cm.Snapshotter.Remove(context.TODO(), sr.view); err != nil {
+			return err
+		}
+		sr.view = ""
+		sr.viewMount = nil
+	}
+
 	delete(sr.refs, sr)
 	sr.frozen = false
 

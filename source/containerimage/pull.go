@@ -21,10 +21,10 @@ import (
 // code can be used with any implementation
 
 type SourceOpt struct {
-	Snapshotter  snapshot.Snapshotter
-	ContentStore content.Store
-	Applier      rootfs.Applier
-	Accessor     cache.Accessor
+	Snapshotter   snapshot.Snapshotter
+	ContentStore  content.Store
+	Applier       rootfs.Applier
+	CacheAccessor cache.Accessor
 }
 
 type imageSource struct {
@@ -64,6 +64,9 @@ func (is *imageSource) Pull(ctx context.Context, id source.Identifier) (cache.Im
 		return nil, err
 	}
 
+	// TODO: need a wrapper snapshot interface that combines content
+	// and snapshots as 1) buildkit shouldn't have a dependency on contentstore
+	// or 2) cachemanager should manage the contentstore
 	handlers := []images.Handler{
 		remotes.FetchHandler(is.ContentStore, fetcher),
 		images.ChildrenHandler(is.ContentStore),
@@ -72,24 +75,25 @@ func (is *imageSource) Pull(ctx context.Context, id source.Identifier) (cache.Im
 		return nil, err
 	}
 
-	if err := is.unpack(ctx, desc); err != nil {
+	chainid, err := is.unpack(ctx, desc)
+	if err != nil {
 		return nil, err
 	}
-	return nil, nil
+
+	return is.CacheAccessor.Get(chainid)
 }
 
-func (is *imageSource) unpack(ctx context.Context, desc ocispec.Descriptor) error {
+func (is *imageSource) unpack(ctx context.Context, desc ocispec.Descriptor) (string, error) {
 	layers, err := getLayers(ctx, is.ContentStore, desc)
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	chainid, err := rootfs.ApplyLayers(ctx, layers, is.Snapshotter, is.Applier)
+	chainID, err := rootfs.ApplyLayers(ctx, layers, is.Snapshotter, is.Applier)
 	if err != nil {
-		return err
+		return "", err
 	}
-	_ = chainid
-	return nil
+	return string(chainID), nil
 }
 
 func getLayers(ctx context.Context, provider content.Provider, desc ocispec.Descriptor) ([]rootfs.Layer, error) {

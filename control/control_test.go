@@ -15,21 +15,23 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/rootfs"
-	"github.com/containerd/containerd/snapshot"
+	cdsnapshot "github.com/containerd/containerd/snapshot"
 	"github.com/containerd/containerd/snapshot/naive"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/tonistiigi/buildkit_poc/cache"
+	"github.com/tonistiigi/buildkit_poc/snapshot"
 	"github.com/tonistiigi/buildkit_poc/source"
 	"github.com/tonistiigi/buildkit_poc/source/containerimage"
 )
 
 func TestControl(t *testing.T) {
+	// this should be an example or e2e test
 	tmpdir, err := ioutil.TempDir("", "controltest")
 	assert.NoError(t, err)
-	// defer os.RemoveAll(tmpdir)
+	defer os.RemoveAll(tmpdir)
 
 	cd, err := localContainerd(tmpdir)
 	assert.NoError(t, err)
@@ -43,10 +45,10 @@ func TestControl(t *testing.T) {
 	assert.NoError(t, err)
 
 	is, err := containerimage.NewSource(containerimage.SourceOpt{
-		Snapshotter:  cd.Snapshotter,
-		ContentStore: cd.ContentStore,
-		Applier:      cd.Applier,
-		Accessor:     cm,
+		Snapshotter:   cd.Snapshotter,
+		ContentStore:  cd.ContentStore,
+		Applier:       cd.Applier,
+		CacheAccessor: cm,
 	})
 	assert.NoError(t, err)
 
@@ -58,11 +60,33 @@ func TestControl(t *testing.T) {
 	snap, err := sm.Pull(context.TODO(), img)
 	assert.NoError(t, err)
 
-	_ = snap
+	mounts, err := snap.Mount()
+	assert.NoError(t, err)
+
+	lm := snapshot.LocalMounter(mounts)
+
+	target, err := lm.Mount()
+	assert.NoError(t, err)
+
+	f, err := os.Open(target)
+	assert.NoError(t, err)
+
+	names, err := f.Readdirnames(-1)
+	assert.NoError(t, err)
+	assert.True(t, len(names) > 10)
+
+	err = f.Close()
+	assert.NoError(t, err)
+
+	lm.Unmount()
+	assert.NoError(t, err)
+
+	err = snap.Release()
+	assert.NoError(t, err)
 }
 
 type containerd struct {
-	Snapshotter  snapshot.Snapshotter
+	Snapshotter  cdsnapshot.Snapshotter
 	ContentStore content.Store
 	Applier      rootfs.Applier
 }
@@ -149,15 +173,3 @@ func (rc *readCounter) Read(p []byte) (n int, err error) {
 	rc.c += int64(n)
 	return
 }
-
-// req := &diffapi.ApplyRequest{
-// 	Diff:   fromDescriptor(diff),
-// 	Mounts: fromMounts(mounts),
-// }
-// resp, err := r.client.Apply(ctx, req)
-// if err != nil {
-// 	return ocispec.Descriptor{}, err
-// }
-// return toDescriptor(resp.Applied), nil
-
-//	Apply(context.Context, ocispec.Descriptor, []mount.Mount) (ocispec.Descriptor, error)
