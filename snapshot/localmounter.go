@@ -14,6 +14,8 @@ type Mounter interface {
 	Unmount() error
 }
 
+// LocalMounter is a helper for mounting to temporary path. In addition it can
+// mount binds without privileges
 func LocalMounter(m []mount.Mount) Mounter {
 	return &localMounter{m: m}
 }

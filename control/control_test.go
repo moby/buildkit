@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/tonistiigi/buildkit_poc/cache"
 	"github.com/tonistiigi/buildkit_poc/snapshot"
+	"github.com/tonistiigi/buildkit_poc/snapshot/blobmapping"
 	"github.com/tonistiigi/buildkit_poc/source"
 	"github.com/tonistiigi/buildkit_poc/source/containerimage"
 )
@@ -36,8 +37,15 @@ func TestControl(t *testing.T) {
 	cd, err := localContainerd(tmpdir)
 	assert.NoError(t, err)
 
-	cm, err := cache.NewManager(cache.ManagerOpt{
+	snapshotter, err := blobmapping.NewSnapshotter(blobmapping.Opt{
+		Root:        filepath.Join(tmpdir, "blobmap"),
+		Content:     cd.ContentStore,
 		Snapshotter: cd.Snapshotter,
+	})
+	assert.NoError(t, err)
+
+	cm, err := cache.NewManager(cache.ManagerOpt{
+		Snapshotter: snapshotter,
 		Root:        filepath.Join(tmpdir, "cachemanager"),
 	})
 
@@ -45,7 +53,7 @@ func TestControl(t *testing.T) {
 	assert.NoError(t, err)
 
 	is, err := containerimage.NewSource(containerimage.SourceOpt{
-		Snapshotter:   cd.Snapshotter,
+		Snapshotter:   snapshotter,
 		ContentStore:  cd.ContentStore,
 		Applier:       cd.Applier,
 		CacheAccessor: cm,
