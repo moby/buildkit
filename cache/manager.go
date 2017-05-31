@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"sync"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/boltdb/bolt"
 	cdsnapshot "github.com/containerd/containerd/snapshot"
 	"github.com/pkg/errors"
@@ -33,7 +35,7 @@ type Accessor interface {
 }
 
 type Controller interface {
-	DiskUsage(ctx context.Context) ([]UsageInfo, error)
+	DiskUsage(ctx context.Context) ([]*UsageInfo, error)
 	Prune(ctx context.Context) (map[string]int64, error)
 	GC(ctx context.Context) error
 }
@@ -128,6 +130,7 @@ func (cm *cacheManager) get(id string) (ImmutableRef, error) {
 			cm:     cm,
 			refs:   make(map[*cacheRef]struct{}),
 			parent: parent,
+			size:   sizeUnknown,
 		}
 		cm.records[id] = rec // TODO: store to db
 	}
@@ -172,6 +175,7 @@ func (cm *cacheManager) New(s ImmutableRef) (MutableRef, error) {
 		cm:      cm,
 		refs:    make(map[*cacheRef]struct{}),
 		parent:  parent,
+		size:    sizeUnknown,
 	}
 
 	cm.mu.Lock()
@@ -203,22 +207,51 @@ func (cm *cacheManager) GetMutable(id string) (MutableRef, error) { // Rebase?
 	return rec.ref(), nil
 }
 
-func (cm *cacheManager) DiskUsage(ctx context.Context) ([]UsageInfo, error) {
+func (cm *cacheManager) DiskUsage(ctx context.Context) ([]*UsageInfo, error) {
 	cm.mu.Lock()
-	defer cm.mu.Unlock()
 
-	var du []UsageInfo
+	var du []*UsageInfo
 
 	for id, cr := range cm.records {
 		cr.mu.Lock()
-		c := UsageInfo{
+		c := &UsageInfo{
 			ID:     id,
 			Active: cr.mutable,
 			InUse:  len(cr.refs) > 0,
-			Size:   -1, // TODO:
+			Size:   cr.size,
+		}
+		if cr.mutable && len(cr.refs) > 0 && !cr.frozen {
+			c.Size = 0 // size can not be determined because it is changing
 		}
 		cr.mu.Unlock()
 		du = append(du, c)
+	}
+	cm.mu.Unlock()
+
+	eg, ctx := errgroup.WithContext(ctx)
+
+	for _, d := range du {
+		if d.Size == sizeUnknown {
+			func(d *UsageInfo) {
+				eg.Go(func() error {
+					ref, err := cm.Get(d.ID)
+					if err != nil {
+						d.Size = 0
+						return nil
+					}
+					s, err := ref.Size(ctx)
+					if err != nil {
+						return err
+					}
+					d.Size = s
+					return ref.Release()
+				})
+			}(d)
+		}
+	}
+
+	if err := eg.Wait(); err != nil {
+		return du, err
 	}
 
 	return du, nil

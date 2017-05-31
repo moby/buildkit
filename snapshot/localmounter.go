@@ -44,7 +44,7 @@ func (lm *localMounter) Mount() (string, error) {
 		return "", err
 	}
 	lm.target = dir
-	return "", nil
+	return dir, nil
 }
 
 func (lm *localMounter) Unmount() error {

@@ -1,20 +1,23 @@
 package cache
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"sync"
 
 	"github.com/containerd/containerd/mount"
 	"github.com/pkg/errors"
+	"github.com/tonistiigi/buildkit_poc/util/flightcontrol"
+	"golang.org/x/net/context"
 )
+
+const sizeUnknown int64 = -1
 
 type ImmutableRef interface {
 	Mountable
 	ID() string
 	Release() error
-	Size() (int64, error)
+	Size(ctx context.Context) (int64, error)
 	// Prepare() / ChainID() / Meta()
 }
 
@@ -23,7 +26,7 @@ type MutableRef interface {
 	ID() string
 	Freeze() (ImmutableRef, error)
 	ReleaseAndCommit(ctx context.Context) (ImmutableRef, error)
-	Size() (int64, error)
+	Size(ctx context.Context) (int64, error)
 }
 
 type Mountable interface {
@@ -41,6 +44,9 @@ type cacheRecord struct {
 	parent    ImmutableRef
 	view      string
 	viewMount []mount.Mount
+
+	sizeG flightcontrol.Group
+	size  int64
 }
 
 // hold manager lock before calling
@@ -48,6 +54,27 @@ func (cr *cacheRecord) ref() *cacheRef {
 	ref := &cacheRef{cacheRecord: cr}
 	cr.refs[ref] = struct{}{}
 	return ref
+}
+
+func (cr *cacheRecord) Size(ctx context.Context) (int64, error) {
+	// this expects that usage() is implemented lazily
+	s, err, _ := cr.sizeG.Do(ctx, cr.id, func(ctx context.Context) (interface{}, error) {
+		cr.mu.Lock()
+		s := cr.size
+		cr.mu.Unlock()
+		if s != sizeUnknown {
+			return s, nil
+		}
+		usage, err := cr.cm.ManagerOpt.Snapshotter.Usage(ctx, cr.id)
+		if err != nil {
+			return s, errors.Wrapf(err, "failed to get usage for %s", cr.id)
+		}
+		cr.mu.Lock()
+		cr.size = s
+		cr.mu.Unlock()
+		return usage.Size, nil
+	})
+	return s.(int64), err
 }
 
 type cacheRef struct {
@@ -130,6 +157,7 @@ func (sr *cacheRef) Freeze() (ImmutableRef, error) {
 	}
 
 	sr.frozen = true
+	sr.size = sizeUnknown
 
 	return sr, nil
 }
@@ -164,14 +192,11 @@ func (sr *cacheRef) ReleaseAndCommit(ctx context.Context) (ImmutableRef, error) 
 		id:   id,
 		cm:   sr.cm,
 		refs: make(map[*cacheRef]struct{}),
+		size: sizeUnknown,
 	}
 	sr.cm.records[id] = rec // TODO: save to db
 
 	return rec.ref(), nil
-}
-
-func (sr *cacheRef) Size() (int64, error) {
-	return -1, errors.New("Size not implemented")
 }
 
 func (sr *cacheRef) ID() string {

@@ -16,7 +16,7 @@ import (
 	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/rootfs"
 	cdsnapshot "github.com/containerd/containerd/snapshot"
-	"github.com/containerd/containerd/snapshot/naive"
+	"github.com/containerd/containerd/snapshot/overlay"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -89,8 +89,23 @@ func TestControl(t *testing.T) {
 	lm.Unmount()
 	assert.NoError(t, err)
 
+	du, err := cm.DiskUsage(context.TODO())
+	assert.NoError(t, err)
+
+	// fmt.Printf("du1:\n")
+	// for _, d := range du {
+	// 	fmt.Printf("du1: %+v\n", d)
+	// }
+
 	err = snap.Release()
 	assert.NoError(t, err)
+
+	du, err = cm.DiskUsage(context.TODO())
+	assert.NoError(t, err)
+
+	for _, d := range du {
+		assert.True(t, d.Size >= 8192)
+	}
 }
 
 type containerd struct {
@@ -100,7 +115,7 @@ type containerd struct {
 }
 
 func localContainerd(root string) (*containerd, error) {
-	s, err := naive.NewSnapshotter(filepath.Join(root, "snapshots"))
+	s, err := overlay.NewSnapshotter(filepath.Join(root, "snapshots"))
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +146,6 @@ func (a *localApplier) Apply(ctx context.Context, desc ocispec.Descriptor, mount
 		return ocispec.Descriptor{}, errors.Wrap(err, "failed to create temporary directory")
 	}
 	defer os.RemoveAll(dir)
-
 	if err := mount.MountAll(mounts, dir); err != nil {
 		return ocispec.Descriptor{}, errors.Wrap(err, "failed to mount")
 	}
