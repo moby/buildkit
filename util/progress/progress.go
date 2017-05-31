@@ -65,10 +65,13 @@ type streamHandle struct {
 }
 
 func (sh *streamHandle) next() (*Progress, bool) {
-	last := sh.pw.lastP.Load().(*Progress)
-	if last != sh.lastP {
-		sh.lastP = last
-		return last, true
+	lasti := sh.pw.lastP.Load()
+	if lasti != nil {
+		last := lasti.(*Progress)
+		if last != sh.lastP {
+			sh.lastP = last
+			return last, true
+		}
 	}
 	return nil, false
 }
@@ -92,13 +95,13 @@ func (pr *progressReader) Read(ctx context.Context) (*Progress, error) {
 		default:
 		}
 		open := false
-		for _, sh := range pr.handles {
+		for _, sh := range pr.handles { // could be more efficient but unlikely that this array will be very big, maybe random ordering?
 			p, ok := sh.next()
 			if ok {
 				pr.mu.Unlock()
 				return p, nil
 			}
-			if !sh.lastP.Done {
+			if sh.lastP == nil || !sh.lastP.Done {
 				open = true
 			}
 		}
@@ -134,7 +137,10 @@ func pipe() (*progressReader, *progressWriter, func()) {
 		ctx: ctx,
 	}
 	pr.cond = sync.NewCond(&pr.mu)
-
+	go func() {
+		<-ctx.Done()
+		pr.cond.Broadcast()
+	}()
 	pw := &progressWriter{
 		reader: pr,
 	}
@@ -161,9 +167,6 @@ type progressWriter struct {
 }
 
 func (pw *progressWriter) Write(p Progress) error {
-	// find progressstream, write to it
-	// if no progressstream then make one
-	// if done then close stream for writing
 	if pw.done {
 		return errors.Errorf("writing to closed progresswriter %s", pw.id)
 	}
@@ -190,6 +193,7 @@ func (pw *progressWriter) Done() error {
 	} else {
 		p = Progress{}
 	}
+	p.Done = true
 	return pw.Write(p)
 }
 
