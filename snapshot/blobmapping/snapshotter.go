@@ -53,6 +53,7 @@ func NewSnapshotter(opt Opt) (*Snapshotter, error) {
 	s := &Snapshotter{
 		Snapshotter: opt.Snapshotter,
 		db:          db,
+		opt:         opt,
 	}
 
 	return s, nil
@@ -67,7 +68,7 @@ func (s *Snapshotter) init() error {
 // Remove also removes a refrence to a blob. If it is a last reference then it deletes it the blob as well
 // Remove is not safe to be called concurrently
 func (s *Snapshotter) Remove(ctx context.Context, key string) error {
-	blob, err := s.Blob(ctx, key)
+	blob, err := s.GetBlob(ctx, key)
 	if err != nil {
 		return err
 	}
@@ -97,8 +98,8 @@ func (s *Snapshotter) Remove(ctx context.Context, key string) error {
 // TODO: make Blob/SetBlob part of generic metadata wrapper that can detect
 // blob key for deletion logic
 
-func (s *Snapshotter) Blob(ctx context.Context, key string) (string, error) {
-	var blob string
+func (s *Snapshotter) GetBlob(ctx context.Context, key string) (digest.Digest, error) {
+	var blob digest.Digest
 	err := s.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket(bucketBySnapshot)
 		if b == nil {
@@ -106,7 +107,7 @@ func (s *Snapshotter) Blob(ctx context.Context, key string) (string, error) {
 		}
 		v := b.Get([]byte(key))
 		if v != nil {
-			blob = string(v)
+			blob = digest.Digest(v)
 		}
 		return nil
 	})
@@ -116,7 +117,11 @@ func (s *Snapshotter) Blob(ctx context.Context, key string) (string, error) {
 // Validates that there is no blob associated with the snapshot.
 // Checks that there is a blob in the content store.
 // If same blob has already been set then this is a noop.
-func (s *Snapshotter) SetBlob(ctx context.Context, key, blob string) error {
+func (s *Snapshotter) SetBlob(ctx context.Context, key string, blob digest.Digest) error {
+	_, err := s.opt.Content.Info(ctx, blob)
+	if err != nil {
+		return err
+	}
 	return s.db.Update(func(tx *bolt.Tx) error {
 		b, err := tx.CreateBucketIfNotExists(bucketBySnapshot)
 		if err != nil {
@@ -124,7 +129,7 @@ func (s *Snapshotter) SetBlob(ctx context.Context, key, blob string) error {
 		}
 		v := b.Get([]byte(key))
 		if v != nil {
-			if string(v) != blob {
+			if string(v) != string(blob) {
 				return errors.Errorf("different blob already set for %s", key)
 			} else {
 				return nil
@@ -142,8 +147,8 @@ func (s *Snapshotter) SetBlob(ctx context.Context, key, blob string) error {
 	})
 }
 
-func blobKey(blob, snapshot string) []byte {
-	return []byte(blob + "-" + snapshot)
+func blobKey(blob digest.Digest, snapshot string) []byte {
+	return []byte(string(blob) + "-" + snapshot)
 }
 
 // results are only valid for the lifetime of the transaction

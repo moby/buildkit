@@ -11,6 +11,8 @@ import (
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/rootfs"
 	"github.com/containerd/containerd/snapshot"
+	digest "github.com/opencontainers/go-digest"
+	"github.com/opencontainers/image-spec/identity"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/buildkit_poc/cache"
@@ -27,6 +29,11 @@ type SourceOpt struct {
 	CacheAccessor cache.Accessor
 }
 
+type blobmapper interface {
+	GetBlob(ctx context.Context, key string) (digest.Digest, error)
+	SetBlob(ctx context.Context, key string, blob digest.Digest) error
+}
+
 type imageSource struct {
 	SourceOpt
 	resolver remotes.Resolver
@@ -39,6 +46,11 @@ func NewSource(opt SourceOpt) (source.Source, error) {
 			Client: http.DefaultClient,
 		}),
 	}
+
+	if _, ok := opt.Snapshotter.(blobmapper); !ok {
+		return nil, errors.Errorf("imagesource requires snapshotter with blobs mapping support")
+	}
+
 	return is, nil
 }
 
@@ -93,7 +105,24 @@ func (is *imageSource) unpack(ctx context.Context, desc ocispec.Descriptor) (str
 	if err != nil {
 		return "", err
 	}
+
+	if err := is.fillBlobMapping(ctx, layers); err != nil {
+		return "", err
+	}
+
 	return string(chainID), nil
+}
+
+func (is *imageSource) fillBlobMapping(ctx context.Context, layers []rootfs.Layer) error {
+	var chain []digest.Digest
+	for _, l := range layers {
+		chain = append(chain, l.Diff.Digest)
+		chainID := identity.ChainID(chain)
+		if err := is.SourceOpt.Snapshotter.(blobmapper).SetBlob(ctx, string(chainID), l.Blob.Digest); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func getLayers(ctx context.Context, provider content.Provider, desc ocispec.Descriptor) ([]rootfs.Layer, error) {
