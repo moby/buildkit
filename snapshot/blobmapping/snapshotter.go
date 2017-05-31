@@ -88,11 +88,30 @@ func (s *Snapshotter) Remove(ctx context.Context, key string) error {
 			b = tx.Bucket(bucketByBlob)
 			b.Delete(blobKey(blob, key))
 			if len(keyRange(tx, blobKey(blob, ""))) == 0 { // last snapshot
-				s.opt.Content.Delete(ctx, digest.Digest(blob)) // log error
+				s.opt.Content.Delete(ctx, blob) // log error
 			}
 		}
 		return nil
 	})
+}
+
+func (s *Snapshotter) Usage(ctx context.Context, key string) (snapshot.Usage, error) {
+	u, err := s.Snapshotter.Usage(ctx, key)
+	if err != nil {
+		return snapshot.Usage{}, err
+	}
+	blob, err := s.GetBlob(ctx, key)
+	if err != nil {
+		return u, err
+	}
+	if blob != "" {
+		info, err := s.opt.Content.Info(ctx, blob)
+		if err != nil {
+			return u, err
+		}
+		(&u).Add(snapshot.Usage{Size: info.Size, Inodes: 1})
+	}
+	return u, nil
 }
 
 // TODO: make Blob/SetBlob part of generic metadata wrapper that can detect

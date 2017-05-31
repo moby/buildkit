@@ -92,9 +92,8 @@ func TestControl(t *testing.T) {
 	du, err := cm.DiskUsage(context.TODO())
 	assert.NoError(t, err)
 
-	// fmt.Printf("du1:\n")
 	// for _, d := range du {
-	// 	fmt.Printf("du1: %+v\n", d)
+	// 	fmt.Printf("du: %+v\n", d)
 	// }
 
 	err = snap.Release()
