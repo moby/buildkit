@@ -26,6 +26,8 @@ import (
 	"github.com/tonistiigi/buildkit_poc/snapshot/blobmapping"
 	"github.com/tonistiigi/buildkit_poc/source"
 	"github.com/tonistiigi/buildkit_poc/source/containerimage"
+	"github.com/tonistiigi/buildkit_poc/worker"
+	"github.com/tonistiigi/buildkit_poc/worker/runcworker"
 )
 
 func TestControl(t *testing.T) {
@@ -62,7 +64,7 @@ func TestControl(t *testing.T) {
 
 	sm.Register(is)
 
-	img, err := source.NewImageIdentifier("docker.io/library/redis:latest")
+	img, err := source.NewImageIdentifier("docker.io/library/busybox:latest")
 	assert.NoError(t, err)
 
 	snap, err := sm.Pull(context.TODO(), img)
@@ -81,7 +83,7 @@ func TestControl(t *testing.T) {
 
 	names, err := f.Readdirnames(-1)
 	assert.NoError(t, err)
-	assert.True(t, len(names) > 10)
+	assert.True(t, len(names) > 5)
 
 	err = f.Close()
 	assert.NoError(t, err)
@@ -96,15 +98,60 @@ func TestControl(t *testing.T) {
 	// 	fmt.Printf("du: %+v\n", d)
 	// }
 
-	err = snap.Release()
-	assert.NoError(t, err)
-
-	du, err = cm.DiskUsage(context.TODO())
-	assert.NoError(t, err)
-
 	for _, d := range du {
 		assert.True(t, d.Size >= 8192)
 	}
+
+	w, err := runcworker.New(tmpdir)
+	assert.NoError(t, err)
+
+	meta := worker.Meta{
+		Args: []string{"/bin/sh", "-c", "echo \"foo\" > /bar"},
+		// Args: []string{"/bin/sleep", "3"},
+		Cwd: "/",
+	}
+
+	m := make(map[string]cache.Mountable)
+	m["/"] = snap
+
+	err = w.Exec(context.TODO(), meta, m)
+	assert.Error(t, err) // Read-only root
+
+	root, err := cm.New(snap)
+	assert.NoError(t, err)
+
+	m["/"] = root
+	err = w.Exec(context.TODO(), meta, m)
+	assert.NoError(t, err)
+
+	rf, err := root.Freeze()
+	assert.NoError(t, err)
+
+	mounts, err = rf.Mount()
+	assert.NoError(t, err)
+
+	lm = snapshot.LocalMounter(mounts)
+
+	target, err = lm.Mount()
+	assert.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(target, "bar"))
+	assert.NoError(t, err)
+	assert.Equal(t, string(dt), "foo\n")
+
+	lm.Unmount()
+	assert.NoError(t, err)
+
+	err = rf.Release()
+	assert.NoError(t, err)
+
+	err = snap.Release()
+	assert.NoError(t, err)
+
+	du2, err := cm.DiskUsage(context.TODO())
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(du2)-len(du))
+
 }
 
 type containerd struct {

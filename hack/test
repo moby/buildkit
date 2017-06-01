@@ -4,4 +4,4 @@ set -eu -o pipefail -x
 
 # update this to iidfile after 17.06
 docker build -t buildkit_poc:test -f ./hack/dockerfiles/test.Dockerfile --force-rm .
-docker run -v /tmp --cap-add=SYS_ADMIN buildkit_poc:test go test ${TESTFLAGS:--v} ${TESTPKGS:-./...}
+docker run -v /tmp --privileged buildkit_poc:test go test ${TESTFLAGS:--v} ${TESTPKGS:-./...}

@@ -38,7 +38,7 @@ type cacheRecord struct {
 	mutable bool
 	frozen  bool
 	// meta   SnapMeta
-	refs      map[*cacheRef]struct{}
+	refs      map[Mountable]struct{}
 	id        string
 	cm        *cacheManager
 	parent    ImmutableRef
@@ -50,8 +50,15 @@ type cacheRecord struct {
 }
 
 // hold manager lock before calling
-func (cr *cacheRecord) ref() *cacheRef {
-	ref := &cacheRef{cacheRecord: cr}
+func (cr *cacheRecord) ref() *immutableRef {
+	ref := &immutableRef{cacheRecord: cr}
+	cr.refs[ref] = struct{}{}
+	return ref
+}
+
+// hold manager lock before calling
+func (cr *cacheRecord) mref() *mutableRef {
+	ref := &mutableRef{cacheRecord: cr}
 	cr.refs[ref] = struct{}{}
 	return ref
 }
@@ -77,37 +84,45 @@ func (cr *cacheRecord) Size(ctx context.Context) (int64, error) {
 	return s.(int64), err
 }
 
-type cacheRef struct {
-	*cacheRecord
-}
+func (cr *cacheRecord) Mount() ([]mount.Mount, error) {
+	cr.mu.Lock()
+	defer cr.mu.Unlock()
 
-func (sr *cacheRef) Mount() ([]mount.Mount, error) {
-	sr.mu.Lock()
-	defer sr.mu.Unlock()
-
-	if sr.mutable {
-		m, err := sr.cm.Snapshotter.Mounts(context.TODO(), sr.id)
+	if cr.mutable {
+		m, err := cr.cm.Snapshotter.Mounts(context.TODO(), cr.id)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to mount %s", sr.id)
+			return nil, errors.Wrapf(err, "failed to mount %s", cr.id)
 		}
 		return m, nil
 	} else {
-		if sr.viewMount == nil { // TODO: handle this better
-			sr.view = generateID()
-			m, err := sr.cm.Snapshotter.View(context.TODO(), sr.view, sr.id)
+		if cr.viewMount == nil { // TODO: handle this better
+			cr.view = generateID()
+			m, err := cr.cm.Snapshotter.View(context.TODO(), cr.view, cr.id)
 			if err != nil {
-				sr.view = ""
-				return nil, errors.Wrapf(err, "failed to mount %s", sr.id)
+				cr.view = ""
+				return nil, errors.Wrapf(err, "failed to mount %s", cr.id)
 			}
-			sr.viewMount = m
+			cr.viewMount = m
 		}
-		return sr.viewMount, nil
+		return cr.viewMount, nil
 	}
 
 	return nil, errors.New("snapshot mount not implemented")
 }
 
-func (sr *cacheRef) Release() error {
+func (cr *cacheRecord) ID() string {
+	return cr.id
+}
+
+type immutableRef struct {
+	*cacheRecord
+}
+
+type mutableRef struct {
+	*cacheRecord
+}
+
+func (sr *immutableRef) Release() error {
 	sr.cm.mu.Lock()
 	defer sr.cm.mu.Unlock()
 
@@ -117,9 +132,9 @@ func (sr *cacheRef) Release() error {
 	return sr.release()
 }
 
-func (sr *cacheRef) release() error {
+func (sr *immutableRef) release() error {
 	if sr.parent != nil {
-		if err := sr.parent.(*cacheRef).release(); err != nil {
+		if err := sr.parent.(*immutableRef).release(); err != nil {
 			return err
 		}
 	}
@@ -141,7 +156,7 @@ func (sr *cacheRef) release() error {
 	return nil
 }
 
-func (sr *cacheRef) Freeze() (ImmutableRef, error) {
+func (sr *mutableRef) Freeze() (ImmutableRef, error) {
 	sr.cm.mu.Lock()
 	defer sr.cm.mu.Unlock()
 
@@ -156,13 +171,17 @@ func (sr *cacheRef) Freeze() (ImmutableRef, error) {
 		return nil, errors.Wrapf(errInvalid, "invalid mutable")
 	}
 
-	sr.frozen = true
-	sr.size = sizeUnknown
+	delete(sr.refs, sr)
 
-	return sr, nil
+	sri := sr.ref()
+
+	sri.frozen = true
+	sri.size = sizeUnknown
+
+	return sri, nil
 }
 
-func (sr *cacheRef) ReleaseAndCommit(ctx context.Context) (ImmutableRef, error) {
+func (sr *mutableRef) ReleaseAndCommit(ctx context.Context) (ImmutableRef, error) {
 	sr.cm.mu.Lock()
 	defer sr.cm.mu.Unlock()
 
@@ -191,16 +210,12 @@ func (sr *cacheRef) ReleaseAndCommit(ctx context.Context) (ImmutableRef, error) 
 	rec := &cacheRecord{
 		id:   id,
 		cm:   sr.cm,
-		refs: make(map[*cacheRef]struct{}),
+		refs: make(map[Mountable]struct{}),
 		size: sizeUnknown,
 	}
 	sr.cm.records[id] = rec // TODO: save to db
 
 	return rec.ref(), nil
-}
-
-func (sr *cacheRef) ID() string {
-	return sr.id
 }
 
 func generateID() string {

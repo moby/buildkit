@@ -128,7 +128,7 @@ func (cm *cacheManager) get(id string) (ImmutableRef, error) {
 		rec = &cacheRecord{
 			id:     id,
 			cm:     cm,
-			refs:   make(map[*cacheRef]struct{}),
+			refs:   make(map[Mountable]struct{}),
 			parent: parent,
 			size:   sizeUnknown,
 		}
@@ -173,7 +173,7 @@ func (cm *cacheManager) New(s ImmutableRef) (MutableRef, error) {
 		mutable: true,
 		id:      id,
 		cm:      cm,
-		refs:    make(map[*cacheRef]struct{}),
+		refs:    make(map[Mountable]struct{}),
 		parent:  parent,
 		size:    sizeUnknown,
 	}
@@ -183,7 +183,7 @@ func (cm *cacheManager) New(s ImmutableRef) (MutableRef, error) {
 
 	cm.records[id] = rec // TODO: save to db
 
-	return rec.ref(), nil
+	return rec.mref(), nil
 }
 func (cm *cacheManager) GetMutable(id string) (MutableRef, error) { // Rebase?
 	cm.mu.Lock()
@@ -204,7 +204,7 @@ func (cm *cacheManager) GetMutable(id string) (MutableRef, error) { // Rebase?
 		return nil, errors.Wrapf(errLocked, "%s is locked", id)
 	}
 
-	return rec.ref(), nil
+	return rec.mref(), nil
 }
 
 func (cm *cacheManager) DiskUsage(ctx context.Context) ([]*UsageInfo, error) {
