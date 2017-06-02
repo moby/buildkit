@@ -3,6 +3,7 @@
 package control
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"io/ioutil"
@@ -107,21 +108,23 @@ func TestControl(t *testing.T) {
 
 	meta := worker.Meta{
 		Args: []string{"/bin/sh", "-c", "echo \"foo\" > /bar"},
-		// Args: []string{"/bin/sleep", "3"},
-		Cwd: "/",
+		Cwd:  "/",
 	}
 
 	m := make(map[string]cache.Mountable)
 	m["/"] = snap
 
-	err = w.Exec(context.TODO(), meta, m)
+	stderr := bytes.NewBuffer(nil)
+
+	err = w.Exec(context.TODO(), meta, m, nil, &nopCloser{stderr})
 	assert.Error(t, err) // Read-only root
+	assert.Contains(t, stderr.String(), "Read-only file system")
 
 	root, err := cm.New(snap)
 	assert.NoError(t, err)
 
 	m["/"] = root
-	err = w.Exec(context.TODO(), meta, m)
+	err = w.Exec(context.TODO(), meta, m, nil, nil)
 	assert.NoError(t, err)
 
 	rf, err := root.Freeze()
@@ -240,4 +243,12 @@ func (rc *readCounter) Read(p []byte) (n int, err error) {
 	n, err = rc.r.Read(p)
 	rc.c += int64(n)
 	return
+}
+
+type nopCloser struct {
+	io.Writer
+}
+
+func (n *nopCloser) Close() error {
+	return nil
 }

@@ -4,7 +4,9 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"syscall"
 
@@ -36,7 +38,7 @@ func New(root string) (worker.Worker, error) {
 	return w, nil
 }
 
-func (w *runcworker) Exec(ctx context.Context, meta worker.Meta, mounts map[string]cache.Mountable) error {
+func (w *runcworker) Exec(ctx context.Context, meta worker.Meta, mounts map[string]cache.Mountable, stdout, stderr io.WriteCloser) error {
 	root, ok := mounts["/"]
 	if !ok {
 		return errors.Errorf("no root mount")
@@ -81,18 +83,39 @@ func (w *runcworker) Exec(ctx context.Context, meta worker.Meta, mounts map[stri
 		return err
 	}
 
-	io, err := runc.NewSTDIO()
-	if err != nil {
-		return err
-	}
 	status, err := w.runc.Run(ctx, id, bundle, &runc.CreateOpts{
-		IO: io,
+		IO: &forwardIO{stdout: stdout, stderr: stderr},
 	})
 	if status != 0 {
 		return errors.Errorf("exit code %d", status)
 	}
 
 	return err
+}
+
+type forwardIO struct {
+	stdout, stderr io.WriteCloser
+}
+
+func (s *forwardIO) Close() error {
+	return nil
+}
+
+func (s *forwardIO) Set(cmd *exec.Cmd) {
+	cmd.Stdout = s.stdout
+	cmd.Stderr = s.stderr
+}
+
+func (s *forwardIO) Stdin() io.WriteCloser {
+	return nil
+}
+
+func (s *forwardIO) Stdout() io.ReadCloser {
+	return nil
+}
+
+func (s *forwardIO) Stderr() io.ReadCloser {
+	return nil
 }
 
 func generateID() string {

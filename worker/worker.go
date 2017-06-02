@@ -1,6 +1,8 @@
 package worker
 
 import (
+	"io"
+
 	"github.com/tonistiigi/buildkit_poc/cache"
 	"golang.org/x/net/context"
 )
@@ -16,5 +18,5 @@ type Meta struct {
 
 type Worker interface {
 	// TODO: add stdout/err
-	Exec(ctx context.Context, meta Meta, mounts map[string]cache.Mountable) error
+	Exec(ctx context.Context, meta Meta, mounts map[string]cache.Mountable, stdout, stderr io.WriteCloser) error
 }
