@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/containerd/containerd/api/services/containers"
@@ -29,10 +30,12 @@ import (
 	protobuf "github.com/gogo/protobuf/types"
 	"github.com/opencontainers/image-spec/identity"
 	"github.com/opencontainers/image-spec/specs-go/v1"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/grpclog"
+	"google.golang.org/grpc/health/grpc_health_v1"
 )
 
 func init() {
@@ -80,6 +83,14 @@ type Client struct {
 
 	runtime   string
 	namespace string
+}
+
+func (c *Client) IsServing(ctx context.Context) (bool, error) {
+	r, err := c.HealthService().Check(ctx, &grpc_health_v1.HealthCheckRequest{})
+	if err != nil {
+		return false, err
+	}
+	return r.Status == grpc_health_v1.HealthCheckResponse_SERVING, nil
 }
 
 // Containers returns all containers created in containerd
@@ -192,28 +203,73 @@ func (c *Client) NewContainer(ctx context.Context, id string, spec *specs.Spec, 
 	return containerFromProto(c, r.Container), nil
 }
 
-type PullOpts func(*Client, *PullContext) error
+type RemoteOpts func(*Client, *RemoteContext) error
 
-type PullContext struct {
+// RemoteContext is used to configure object resolutions and transfers with
+// remote content stores and image providers.
+type RemoteContext struct {
+	// Resolver is used to resolve names to objects, fetchers, and pushers.
+	// If no resolver is provided, defaults to Docker registry resolver.
 	Resolver remotes.Resolver
+
+	// Unpacker is used after an image is pulled to extract into a registry.
+	// If an image is not unpacked on pull, it can be unpacked any time
+	// afterwards. Unpacking is required to run an image.
 	Unpacker Unpacker
+
+	// PushWrapper allows hooking into the push method. This can be used
+	// track content that is being sent to the remote.
+	PushWrapper func(remotes.Pusher) remotes.Pusher
+
+	// BaseHandlers are a set of handlers which get are called on dispatch.
+	// These handlers always get called before any operation specific
+	// handlers.
+	BaseHandlers []images.Handler
 }
 
-func defaultPullContext() *PullContext {
-	return &PullContext{
+func defaultRemoteContext() *RemoteContext {
+	return &RemoteContext{
 		Resolver: docker.NewResolver(docker.ResolverOptions{
 			Client: http.DefaultClient,
 		}),
 	}
 }
 
-func WithPullUnpack(client *Client, c *PullContext) error {
+// WithPullUnpack is used to unpack an image after pull. This
+// uses the snapshotter, content store, and diff service
+// configured for the client.
+func WithPullUnpack(client *Client, c *RemoteContext) error {
 	c.Unpacker = &snapshotUnpacker{
 		store:       client.ContentStore(),
 		diff:        client.DiffService(),
 		snapshotter: client.SnapshotService(),
 	}
 	return nil
+}
+
+// WithResolver specifies the resolver to use.
+func WithResolver(resolver remotes.Resolver) RemoteOpts {
+	return func(client *Client, c *RemoteContext) error {
+		c.Resolver = resolver
+		return nil
+	}
+}
+
+// WithImageHandler adds a base handler to be called on dispatch.
+func WithImageHandler(h images.Handler) RemoteOpts {
+	return func(client *Client, c *RemoteContext) error {
+		c.BaseHandlers = append(c.BaseHandlers, h)
+		return nil
+	}
+}
+
+// WithPushWrapper is used to wrap a pusher to hook into
+// the push content as it is sent to a remote.
+func WithPushWrapper(w func(remotes.Pusher) remotes.Pusher) RemoteOpts {
+	return func(client *Client, c *RemoteContext) error {
+		c.PushWrapper = w
+		return nil
+	}
 }
 
 type Unpacker interface {
@@ -265,8 +321,8 @@ func (s *snapshotUnpacker) getLayers(ctx context.Context, image images.Image) ([
 	return layers, nil
 }
 
-func (c *Client) Pull(ctx context.Context, ref string, opts ...PullOpts) (Image, error) {
-	pullCtx := defaultPullContext()
+func (c *Client) Pull(ctx context.Context, ref string, opts ...RemoteOpts) (Image, error) {
+	pullCtx := defaultRemoteContext()
 	for _, o := range opts {
 		if err := o(c, pullCtx); err != nil {
 			return nil, err
@@ -283,10 +339,10 @@ func (c *Client) Pull(ctx context.Context, ref string, opts ...PullOpts) (Image,
 		return nil, err
 	}
 
-	handlers := []images.Handler{
+	handlers := append(pullCtx.BaseHandlers,
 		remotes.FetchHandler(store, fetcher),
 		images.ChildrenHandler(store),
-	}
+	)
 	if err := images.Dispatch(ctx, images.Handlers(handlers...), desc); err != nil {
 		return nil, err
 	}
@@ -307,6 +363,74 @@ func (c *Client) Pull(ctx context.Context, ref string, opts ...PullOpts) (Image,
 		client: c,
 		i:      i,
 	}, nil
+}
+
+// GetImage returns an existing image
+func (c *Client) GetImage(ctx context.Context, ref string) (Image, error) {
+	i, err := c.ImageService().Get(ctx, ref)
+	if err != nil {
+		return nil, err
+	}
+	return &image{
+		client: c,
+		i:      i,
+	}, nil
+}
+
+func (c *Client) Push(ctx context.Context, ref string, desc ocispec.Descriptor, opts ...RemoteOpts) error {
+	pushCtx := defaultRemoteContext()
+	for _, o := range opts {
+		if err := o(c, pushCtx); err != nil {
+			return err
+		}
+	}
+
+	pusher, err := pushCtx.Resolver.Pusher(ctx, ref)
+	if err != nil {
+		return err
+	}
+
+	if pushCtx.PushWrapper != nil {
+		pusher = pushCtx.PushWrapper(pusher)
+	}
+
+	var m sync.Mutex
+	manifestStack := []ocispec.Descriptor{}
+
+	filterHandler := images.HandlerFunc(func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
+		switch desc.MediaType {
+		case images.MediaTypeDockerSchema2Manifest, ocispec.MediaTypeImageManifest,
+			images.MediaTypeDockerSchema2ManifestList, ocispec.MediaTypeImageIndex:
+			m.Lock()
+			manifestStack = append(manifestStack, desc)
+			m.Unlock()
+			return nil, images.StopHandler
+		default:
+			return nil, nil
+		}
+	})
+
+	cs := c.ContentStore()
+	pushHandler := remotes.PushHandler(cs, pusher)
+
+	handlers := append(pushCtx.BaseHandlers,
+		images.ChildrenHandler(cs),
+		filterHandler,
+		pushHandler,
+	)
+
+	if err := images.Dispatch(ctx, images.Handlers(handlers...), desc); err != nil {
+		return err
+	}
+
+	// Iterate in reverse order as seen, parent always uploaded after child
+	for i := len(manifestStack) - 1; i >= 0; i-- {
+		_, err := pushHandler(ctx, manifestStack[i])
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Close closes the clients connection to containerd
@@ -336,4 +460,8 @@ func (c *Client) ImageService() images.Store {
 
 func (c *Client) DiffService() diff.DiffService {
 	return diffservice.NewDiffServiceFromClient(diffapi.NewDiffClient(c.conn))
+}
+
+func (c *Client) HealthService() grpc_health_v1.HealthClient {
+	return grpc_health_v1.NewHealthClient(c.conn)
 }

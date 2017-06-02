@@ -2,163 +2,14 @@ package containerd
 
 import (
 	"context"
-	"io"
-	"io/ioutil"
-	"os"
-	"path/filepath"
-	"sync"
 	"syscall"
 
 	"github.com/containerd/containerd/api/services/execution"
 	taskapi "github.com/containerd/containerd/api/types/task"
-	"github.com/containerd/fifo"
+	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 
 const UnknownExitStatus = 255
-
-type IO struct {
-	Terminal bool
-	Stdin    string
-	Stdout   string
-	Stderr   string
-
-	closer io.Closer
-}
-
-func (i *IO) Close() error {
-	if i.closer == nil {
-		return nil
-	}
-	return i.closer.Close()
-}
-
-type IOCreation func() (*IO, error)
-
-// Stdio returns an IO implementation to be used for a task
-// that outputs the container's IO as the current processes Stdio
-func Stdio() (*IO, error) {
-	paths, err := fifoPaths()
-	if err != nil {
-		return nil, err
-	}
-	set := &ioSet{
-		in:  os.Stdin,
-		out: os.Stdout,
-		err: os.Stderr,
-	}
-	closer, err := copyIO(paths, set, false)
-	if err != nil {
-		return nil, err
-	}
-	return &IO{
-		Terminal: false,
-		Stdin:    paths.in,
-		Stdout:   paths.out,
-		Stderr:   paths.err,
-		closer:   closer,
-	}, nil
-}
-
-func fifoPaths() (*fifoSet, error) {
-	root := filepath.Join(os.TempDir(), "containerd")
-	if err := os.MkdirAll(root, 0700); err != nil {
-		return nil, err
-	}
-	dir, err := ioutil.TempDir(root, "")
-	if err != nil {
-		return nil, err
-	}
-	return &fifoSet{
-		dir: dir,
-		in:  filepath.Join(dir, "stdin"),
-		out: filepath.Join(dir, "stdout"),
-		err: filepath.Join(dir, "stderr"),
-	}, nil
-}
-
-type fifoSet struct {
-	// dir is the directory holding the task fifos
-	dir          string
-	in, out, err string
-}
-
-type ioSet struct {
-	in       io.Reader
-	out, err io.Writer
-}
-
-func copyIO(fifos *fifoSet, ioset *ioSet, tty bool) (closer io.Closer, err error) {
-	var (
-		ctx = context.Background()
-		wg  = &sync.WaitGroup{}
-	)
-
-	f, err := fifo.OpenFifo(ctx, fifos.in, syscall.O_WRONLY|syscall.O_CREAT|syscall.O_NONBLOCK, 0700)
-	if err != nil {
-		return nil, err
-	}
-	defer func(c io.Closer) {
-		if err != nil {
-			c.Close()
-		}
-	}(f)
-	go func(w io.WriteCloser) {
-		io.Copy(w, ioset.in)
-		w.Close()
-	}(f)
-
-	f, err = fifo.OpenFifo(ctx, fifos.out, syscall.O_RDONLY|syscall.O_CREAT|syscall.O_NONBLOCK, 0700)
-	if err != nil {
-		return nil, err
-	}
-	defer func(c io.Closer) {
-		if err != nil {
-			c.Close()
-		}
-	}(f)
-	wg.Add(1)
-	go func(r io.ReadCloser) {
-		io.Copy(ioset.out, r)
-		r.Close()
-		wg.Done()
-	}(f)
-
-	f, err = fifo.OpenFifo(ctx, fifos.err, syscall.O_RDONLY|syscall.O_CREAT|syscall.O_NONBLOCK, 0700)
-	if err != nil {
-		return nil, err
-	}
-	defer func(c io.Closer) {
-		if err != nil {
-			c.Close()
-		}
-	}(f)
-
-	if !tty {
-		wg.Add(1)
-		go func(r io.ReadCloser) {
-			io.Copy(ioset.err, r)
-			r.Close()
-			wg.Done()
-		}(f)
-	}
-	return &wgCloser{
-		wg:  wg,
-		dir: fifos.dir,
-	}, nil
-}
-
-type wgCloser struct {
-	wg  *sync.WaitGroup
-	dir string
-}
-
-func (g *wgCloser) Close() error {
-	g.wg.Wait()
-	if g.dir != "" {
-		return os.RemoveAll(g.dir)
-	}
-	return nil
-}
 
 type TaskStatus string
 
@@ -171,13 +22,22 @@ const (
 )
 
 type Task interface {
+	Pid() uint32
 	Delete(context.Context) (uint32, error)
 	Kill(context.Context, syscall.Signal) error
 	Pause(context.Context) error
 	Resume(context.Context) error
-	Pid() uint32
 	Start(context.Context) error
 	Status(context.Context) (TaskStatus, error)
+	Wait(context.Context) (uint32, error)
+	Exec(context.Context, *specs.Process, IOCreation) (Process, error)
+	Processes(context.Context) ([]uint32, error)
+}
+
+type Process interface {
+	Pid() uint32
+	Start(context.Context) error
+	Kill(context.Context, syscall.Signal) error
 	Wait(context.Context) (uint32, error)
 }
 
@@ -270,4 +130,31 @@ func (t *task) Delete(ctx context.Context) (uint32, error) {
 		return UnknownExitStatus, err
 	}
 	return r.ExitStatus, cerr
+}
+
+func (t *task) Exec(ctx context.Context, spec *specs.Process, ioCreate IOCreation) (Process, error) {
+	i, err := ioCreate()
+	if err != nil {
+		return nil, err
+	}
+	return &process{
+		task:    t,
+		io:      i,
+		spec:    spec,
+		pidSync: make(chan struct{}),
+	}, nil
+}
+
+func (t *task) Processes(ctx context.Context) ([]uint32, error) {
+	response, err := t.client.TaskService().Processes(ctx, &execution.ProcessesRequest{
+		ContainerID: t.containerID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	var out []uint32
+	for _, p := range response.Processes {
+		out = append(out, p.Pid)
+	}
+	return out, nil
 }

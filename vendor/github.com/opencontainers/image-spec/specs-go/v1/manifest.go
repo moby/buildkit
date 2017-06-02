@@ -27,6 +27,6 @@ type Manifest struct {
 	// Layers is an indexed list of layers referenced by the manifest.
 	Layers []Descriptor `json:"layers"`
 
-	// Annotations contains arbitrary metadata for the manifest.
+	// Annotations contains arbitrary metadata for the image manifest.
 	Annotations map[string]string `json:"annotations,omitempty"`
 }
