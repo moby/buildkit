@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package pb;
+
+message Op {
+	repeated string inputs = 1;
+	oneof op {
+		ExecOp exec = 2;
+		SourceOp source = 3;
+		CopyOp copy = 4;
+	 }
+}
+
+message ExecOp {
+	Meta meta = 1;
+	repeated Mount mounts = 2;
+}
+
+message Meta {
+	repeated string args = 1;
+	repeated string env = 2;
+	string cwd = 3;
+}
+
+message Mount {
+	int64 input = 1;
+	string selector = 2;
+	string dest = 3;
+	int64 output = 4;
+}
+
+message CopyOp {
+	repeated CopySource src = 1;
+	string dest = 2;
+}
+
+message CopySource {
+	int64 input = 1;
+	string selector = 2;
+}
+
+message SourceOp {
+	string identifier = 1;
+}
