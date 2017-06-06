@@ -91,11 +91,24 @@ func NewSolver(opt SolverOpt) *Solver {
 
 func (s *Solver) Solve(ctx context.Context, g *opVertex) error {
 	err := g.solve(ctx, s.opt) // TODO: separate exporting
+	g.release()
 	return err
 }
 
-func (g *opVertex) release(ctx context.Context) error {
-	return errors.Errorf("release not implemented")
+func (g *opVertex) release() (retErr error) {
+	for _, i := range g.inputs {
+		if err := i.release(); err != nil {
+			retErr = err
+		}
+	}
+	for _, ref := range g.refs {
+		if ref != nil {
+			if err := ref.Release(); err != nil {
+				retErr = err
+			}
+		}
+	}
+	return retErr
 }
 
 func (g *opVertex) solve(ctx context.Context, opt SolverOpt) (retErr error) {
