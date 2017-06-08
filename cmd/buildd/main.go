@@ -6,14 +6,12 @@ import (
 	"os"
 	"os/signal"
 
-	"golang.org/x/sys/unix"
-
-	"google.golang.org/grpc"
-
 	"github.com/Sirupsen/logrus"
 	"github.com/containerd/containerd/sys"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
+	"golang.org/x/sys/unix"
+	"google.golang.org/grpc"
 )
 
 func main() {

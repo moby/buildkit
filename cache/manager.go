@@ -11,6 +11,7 @@ import (
 	"github.com/boltdb/bolt"
 	cdsnapshot "github.com/containerd/containerd/snapshot"
 	"github.com/pkg/errors"
+	"github.com/tonistiigi/buildkit_poc/client"
 	"github.com/tonistiigi/buildkit_poc/snapshot"
 )
 
@@ -35,7 +36,7 @@ type Accessor interface {
 }
 
 type Controller interface {
-	DiskUsage(ctx context.Context) ([]*UsageInfo, error)
+	DiskUsage(ctx context.Context) ([]*client.UsageInfo, error)
 	Prune(ctx context.Context) (map[string]int64, error)
 	GC(ctx context.Context) error
 }
@@ -44,15 +45,6 @@ type Manager interface {
 	Accessor
 	Controller
 	Close() error
-}
-
-type UsageInfo struct {
-	ID      string
-	Mutable bool
-	InUse   bool
-	Size    int64
-	// Meta string
-	// LastUsed time.Time
 }
 
 type cacheManager struct {
@@ -207,14 +199,14 @@ func (cm *cacheManager) GetMutable(id string) (MutableRef, error) { // Rebase?
 	return rec.mref(), nil
 }
 
-func (cm *cacheManager) DiskUsage(ctx context.Context) ([]*UsageInfo, error) {
+func (cm *cacheManager) DiskUsage(ctx context.Context) ([]*client.UsageInfo, error) {
 	cm.mu.Lock()
 
-	var du []*UsageInfo
+	var du []*client.UsageInfo
 
 	for id, cr := range cm.records {
 		cr.mu.Lock()
-		c := &UsageInfo{
+		c := &client.UsageInfo{
 			ID:      id,
 			Mutable: cr.mutable,
 			InUse:   len(cr.refs) > 0,
@@ -232,7 +224,7 @@ func (cm *cacheManager) DiskUsage(ctx context.Context) ([]*UsageInfo, error) {
 
 	for _, d := range du {
 		if d.Size == sizeUnknown {
-			func(d *UsageInfo) {
+			func(d *client.UsageInfo) {
 				eg.Go(func() error {
 					ref, err := cm.Get(d.ID)
 					if err != nil {
