@@ -1,4 +1,4 @@
-package solver
+package llb
 
 import (
 	"sort"
@@ -8,8 +8,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/buildkit_poc/solver/pb"
 )
-
-const noOutput = -1
 
 type Op interface {
 	Validate() error
@@ -173,7 +171,7 @@ func (eo *ExecOp) recursiveMarshal(list [][]byte, cache map[digest.Digest]struct
 			pm.Output = outputIndex
 			outputIndex++
 		} else {
-			pm.Output = noOutput
+			pm.Output = -1
 		}
 		peo.Mounts = append(peo.Mounts, pm)
 	}
