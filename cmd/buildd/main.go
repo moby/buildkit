@@ -36,6 +36,8 @@ func main() {
 		},
 	}
 
+	app.Flags = appendFlags(app.Flags)
+
 	app.Action = func(c *cli.Context) error {
 		signals := make(chan os.Signal, 2048)
 		signal.Notify(signals, unix.SIGTERM, unix.SIGINT)
