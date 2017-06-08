@@ -71,8 +71,8 @@ func loadReqursive(dgst digest.Digest, op *pb.Op, inputs map[digest.Digest]*pb.O
 	return vtx, nil
 }
 
-type SolverOpt struct {
-	SourceManager source.Manager
+type Opt struct {
+	SourceManager *source.Manager
 	CacheManager  cache.Manager // TODO: this shouldn't be needed before instruction cache
 	Worker        worker.Worker
 }
@@ -82,10 +82,10 @@ func (g *opVertex) inputRequiresExport(i int) bool {
 }
 
 type Solver struct {
-	opt SolverOpt
+	opt Opt
 }
 
-func NewSolver(opt SolverOpt) *Solver {
+func New(opt Opt) *Solver {
 	return &Solver{opt: opt}
 }
 
@@ -111,7 +111,7 @@ func (g *opVertex) release() (retErr error) {
 	return retErr
 }
 
-func (g *opVertex) solve(ctx context.Context, opt SolverOpt) (retErr error) {
+func (g *opVertex) solve(ctx context.Context, opt Opt) (retErr error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 

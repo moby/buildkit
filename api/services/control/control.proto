@@ -4,6 +4,8 @@ package control;
 
 service Control {
 	rpc DiskUsage(DiskUsageRequest) returns (DiskUsageResponse);
+	rpc Solve(SolveRequest) returns (SolveResponse);
+	// rpc Status() returns ();
 }
 
 message DiskUsageRequest {
@@ -20,3 +22,14 @@ message UsageRecord {
 	int64 Size = 4;
 }
 
+message SolveRequest {
+	string Ref = 1;
+	repeated bytes Definition = 2; // TODO: remove repeated
+}
+
+message SolveResponse {
+	repeated VertexStatus vertex = 1;
+}
+
+message VertexStatus {
+}

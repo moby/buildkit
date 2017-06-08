@@ -4,6 +4,7 @@ import (
 	"github.com/containerd/containerd/snapshot"
 	controlapi "github.com/tonistiigi/buildkit_poc/api/services/control"
 	"github.com/tonistiigi/buildkit_poc/cache"
+	"github.com/tonistiigi/buildkit_poc/solver"
 	"github.com/tonistiigi/buildkit_poc/source"
 	"github.com/tonistiigi/buildkit_poc/worker"
 	"golang.org/x/net/context"
@@ -17,13 +18,19 @@ type Opt struct {
 	SourceManager *source.Manager
 }
 
-type Controller struct {
-	opt Opt
+type Controller struct { // TODO: ControlService
+	opt    Opt
+	solver *solver.Solver
 }
 
 func NewController(opt Opt) (*Controller, error) {
 	c := &Controller{
 		opt: opt,
+		solver: solver.New(solver.Opt{
+			SourceManager: opt.SourceManager,
+			CacheManager:  opt.CacheManager,
+			Worker:        opt.Worker,
+		}),
 	}
 	return c, nil
 }
@@ -49,4 +56,15 @@ func (c *Controller) DiskUsage(ctx context.Context, _ *controlapi.DiskUsageReque
 		})
 	}
 	return resp, nil
+}
+
+func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*controlapi.SolveResponse, error) {
+	v, err := solver.Load(req.Definition)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.solver.Solve(ctx, v); err != nil {
+		return nil, err
+	}
+	return &controlapi.SolveResponse{}, nil
 }
