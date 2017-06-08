@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package control;
+
+service Control {
+	rpc DiskUsage(DiskUsageRequest) returns (DiskUsageResponse);
+}
+
+message DiskUsageRequest {
+}
+
+message DiskUsageResponse {
+	repeated UsageRecord record = 1;
+}
+
+message UsageRecord {
+	string ID = 1;
+	bool Mutable = 2;
+	bool InUse = 3;
+	int64 Size = 4;
+}
+

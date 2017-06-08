@@ -47,10 +47,10 @@ type Manager interface {
 }
 
 type UsageInfo struct {
-	ID     string
-	Active bool
-	InUse  bool
-	Size   int64
+	ID      string
+	Mutable bool
+	InUse   bool
+	Size    int64
 	// Meta string
 	// LastUsed time.Time
 }
@@ -215,10 +215,10 @@ func (cm *cacheManager) DiskUsage(ctx context.Context) ([]*UsageInfo, error) {
 	for id, cr := range cm.records {
 		cr.mu.Lock()
 		c := &UsageInfo{
-			ID:     id,
-			Active: cr.mutable,
-			InUse:  len(cr.refs) > 0,
-			Size:   cr.size,
+			ID:      id,
+			Mutable: cr.mutable,
+			InUse:   len(cr.refs) > 0,
+			Size:    cr.size,
 		}
 		if cr.mutable && len(cr.refs) > 0 && !cr.frozen {
 			c.Size = 0 // size can not be determined because it is changing

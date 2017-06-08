@@ -51,6 +51,7 @@ func TestControl(t *testing.T) {
 		Snapshotter: snapshotter,
 		Root:        filepath.Join(tmpdir, "cachemanager"),
 	})
+	assert.NoError(t, err)
 
 	sm, err := source.NewManager()
 	assert.NoError(t, err)
