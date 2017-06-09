@@ -2,6 +2,7 @@ package control
 
 import (
 	"github.com/containerd/containerd/snapshot"
+	"github.com/pkg/errors"
 	controlapi "github.com/tonistiigi/buildkit_poc/api/services/control"
 	"github.com/tonistiigi/buildkit_poc/cache"
 	"github.com/tonistiigi/buildkit_poc/solver"
@@ -61,7 +62,7 @@ func (c *Controller) DiskUsage(ctx context.Context, _ *controlapi.DiskUsageReque
 func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*controlapi.SolveResponse, error) {
 	v, err := solver.Load(req.Definition)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to load")
 	}
 	if err := c.solver.Solve(ctx, v); err != nil {
 		return nil, err

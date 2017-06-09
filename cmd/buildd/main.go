@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"os/signal"
@@ -10,6 +9,7 @@ import (
 	"github.com/containerd/containerd/sys"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
+	"golang.org/x/net/context"
 	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
 )
@@ -42,7 +42,7 @@ func main() {
 		signals := make(chan os.Signal, 2048)
 		signal.Notify(signals, unix.SIGTERM, unix.SIGINT)
 
-		server := grpc.NewServer()
+		server := grpc.NewServer(debugGrpcErrors())
 
 		root := c.GlobalString("root")
 
@@ -104,4 +104,14 @@ func handleSignals(ctx context.Context, signals chan os.Signal, server *grpc.Ser
 		server.Stop()
 		return nil
 	}
+}
+
+func debugGrpcErrors() grpc.ServerOption {
+	return grpc.UnaryInterceptor(func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+		resp, err = handler(ctx, req)
+		if err != nil {
+			logrus.Errorf("%s returned error: %+v", info.FullMethod, err)
+		}
+		return
+	})
 }

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/containerd/containerd/mount"
 	runc "github.com/containerd/go-runc"
 	"github.com/pkg/errors"
@@ -25,6 +26,16 @@ type runcworker struct {
 }
 
 func New(root string) (worker.Worker, error) {
+	if err := os.MkdirAll(root, 0700); err != nil {
+		return nil, errors.Wrapf(err, "failed to create %s", root)
+	}
+
+	root, err := filepath.Abs(root)
+	if err != nil {
+		return nil, err
+	}
+	// TODO: check that root is not symlink to fail early
+
 	runtime := &runc.Runc{
 		Log:          filepath.Join(root, "runc-log.json"),
 		LogFormat:    runc.JSON,
@@ -51,6 +62,7 @@ func (w *runcworker) Exec(ctx context.Context, meta worker.Meta, mounts map[stri
 
 	id := generateID()
 	bundle := filepath.Join(w.root, id)
+
 	if err := os.Mkdir(bundle, 0700); err != nil {
 		return err
 	}
@@ -83,9 +95,12 @@ func (w *runcworker) Exec(ctx context.Context, meta worker.Meta, mounts map[stri
 		return err
 	}
 
+	logrus.Debugf("> running %s %v", id, meta.Args)
+
 	status, err := w.runc.Run(ctx, id, bundle, &runc.CreateOpts{
 		IO: &forwardIO{stdout: stdout, stderr: stderr},
 	})
+	logrus.Debugf("< completed %s %v %v", id, status, err)
 	if status != 0 {
 		return errors.Errorf("exit code %d", status)
 	}

@@ -3,12 +3,17 @@ syntax = "proto3";
 package pb;
 
 message Op {
-	repeated string inputs = 1;
+	repeated Input inputs = 1;
 	oneof op {
 		ExecOp exec = 2;
 		SourceOp source = 3;
 		CopyOp copy = 4;
 	 }
+}
+
+message Input {
+	string digest = 1;
+	int64 index = 2;
 }
 
 message ExecOp {

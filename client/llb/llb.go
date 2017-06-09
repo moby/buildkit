@@ -1,6 +1,7 @@
 package llb
 
 import (
+	_ "crypto/sha256"
 	"sort"
 
 	"github.com/gogo/protobuf/proto"
@@ -76,14 +77,19 @@ func (so *SourceOp) recursiveMarshal(list [][]byte, cache map[digest.Digest]stru
 	return marshal(po, list, cache)
 }
 
+func Image(ref string) *SourceOp {
+	return Source("docker-image://" + ref) // controversial
+}
+
 func newExec(meta Meta, src *SourceOp, m *mount) *ExecOp {
 	exec := &ExecOp{
 		meta:   meta,
 		mounts: []*mount{},
 		root: &mount{
-			dest:  "/",
-			src:   src,
-			mount: m,
+			dest:   "/",
+			src:    src,
+			mount:  m,
+			output: true,
 		},
 	}
 	exec.root.op = exec
@@ -157,10 +163,16 @@ func (eo *ExecOp) recursiveMarshal(list [][]byte, cache map[digest.Digest]struct
 		}
 		inputIndex := len(pop.Inputs)
 		for i := range pop.Inputs {
-			if pop.Inputs[i] == dgst.String() {
+			if pop.Inputs[i].Digest == dgst.String() {
 				inputIndex = i
 				break
 			}
+		}
+		if inputIndex == len(pop.Inputs) {
+			pop.Inputs = append(pop.Inputs, &pb.Input{
+				Digest: dgst.String(),
+				Index:  0, // TODO
+			})
 		}
 
 		pm := &pb.Mount{

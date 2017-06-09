@@ -2,6 +2,7 @@ package solver
 
 import (
 	"context"
+	"os"
 	"sync"
 
 	"golang.org/x/sync/errgroup"
@@ -20,9 +21,14 @@ type opVertex struct {
 	inputs []*opVertex
 	refs   []cache.ImmutableRef
 	err    error
+	dgst   digest.Digest
 }
 
 func Load(ops [][]byte) (*opVertex, error) {
+	if len(ops) == 0 {
+		return nil, errors.New("invalid empty definition")
+	}
+
 	m := make(map[digest.Digest]*pb.Op)
 
 	var lastOp *pb.Op
@@ -38,6 +44,7 @@ func Load(ops [][]byte) (*opVertex, error) {
 		if i != len(ops)-1 {
 			m[dgst] = &op
 		}
+		// logrus.Debugf("op %d %s %#v", i, dgst, op)
 	}
 
 	cache := make(map[digest.Digest]*opVertex)
@@ -55,13 +62,13 @@ func loadReqursive(dgst digest.Digest, op *pb.Op, inputs map[digest.Digest]*pb.O
 	if v, ok := cache[dgst]; ok {
 		return v, nil
 	}
-	vtx := &opVertex{op: op}
+	vtx := &opVertex{op: op, dgst: dgst}
 	for _, in := range op.Inputs {
-		op, ok := inputs[digest.Digest(in)]
+		op, ok := inputs[digest.Digest(in.Digest)]
 		if !ok {
 			return nil, errors.Errorf("failed to find %s", in)
 		}
-		sub, err := loadReqursive(digest.Digest(in), op, inputs, cache)
+		sub, err := loadReqursive(digest.Digest(in.Digest), op, inputs, cache)
 		if err != nil {
 			return nil, err
 		}
@@ -109,6 +116,16 @@ func (g *opVertex) release() (retErr error) {
 		}
 	}
 	return retErr
+}
+
+func (g *opVertex) getInputRef(i int) cache.ImmutableRef {
+	input := g.op.Inputs[i]
+	for _, v := range g.inputs {
+		if v.dgst == digest.Digest(input.Digest) {
+			return v.refs[input.Index]
+		}
+	}
+	return nil
 }
 
 func (g *opVertex) solve(ctx context.Context, opt Opt) (retErr error) {
@@ -176,7 +193,7 @@ func (g *opVertex) solve(ctx context.Context, opt Opt) (retErr error) {
 
 		for _, m := range op.Exec.Mounts {
 			var mountable cache.Mountable
-			ref := g.refs[int(m.Input)]
+			ref := g.getInputRef(int(m.Input))
 			mountable = ref
 			if m.Output != -1 {
 				active, err := opt.CacheManager.New(ref) // TODO: should be method
@@ -195,7 +212,7 @@ func (g *opVertex) solve(ctx context.Context, opt Opt) (retErr error) {
 			Cwd:  op.Exec.Meta.Cwd,
 		}
 
-		if err := opt.Worker.Exec(ctx, meta, mounts, nil, nil); err != nil {
+		if err := opt.Worker.Exec(ctx, meta, mounts, os.Stderr, os.Stderr); err != nil {
 			return errors.Wrapf(err, "worker failed running %v", meta.Args)
 		}
 
