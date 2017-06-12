@@ -29,6 +29,7 @@ func main() {
 	app.Commands = []cli.Command{
 		diskUsageCommand,
 		buildCommand,
+		dumpCommand,
 	}
 
 	app.Before = func(context *cli.Context) error {
