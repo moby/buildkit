@@ -10,15 +10,9 @@ import (
 	"strings"
 	"time"
 
-	contentapi "github.com/containerd/containerd/api/services/content"
-	diffapi "github.com/containerd/containerd/api/services/diff"
-	snapshotapi "github.com/containerd/containerd/api/services/snapshot"
-	contentservice "github.com/containerd/containerd/services/content"
-	diffservice "github.com/containerd/containerd/services/diff"
-	snapshotservice "github.com/containerd/containerd/services/snapshot"
+	"github.com/containerd/containerd"
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/buildkit_poc/worker/runcworker"
-	"google.golang.org/grpc"
 )
 
 func NewContainerd(root, address string) (*Controller, error) {
@@ -27,23 +21,12 @@ func NewContainerd(root, address string) (*Controller, error) {
 	}
 
 	// TODO: take lock to make sure there are no duplicates
-
-	gopts := []grpc.DialOption{
-		grpc.WithBlock(),
-		grpc.WithInsecure(),
-		grpc.WithTimeout(100 * time.Second),
-		grpc.WithDialer(dialer),
-		grpc.FailOnNonTempDialError(true),
-	}
-	conn, err := grpc.Dial(dialAddress(address), gopts...)
+	client, err := containerd.New(address, containerd.WithDefaultNamespace("buildkit"))
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to connect to %q . make sure containerd is running", address)
+		return nil, errors.Wrapf(err, "failed to connect client to %q . make sure containerd is running", address)
 	}
 
-	pd, err := newPullDeps(conn)
-	if err != nil {
-		return nil, err
-	}
+	pd := newPullDeps(client)
 
 	opt, err := defaultControllerOpts(root, *pd)
 	if err != nil {
@@ -60,16 +43,12 @@ func NewContainerd(root, address string) (*Controller, error) {
 	return NewController(*opt)
 }
 
-func newPullDeps(conn *grpc.ClientConn) (*pullDeps, error) {
-	s := snapshotservice.NewSnapshotterFromClient(snapshotapi.NewSnapshotClient(conn))
-	c := contentservice.NewStoreFromClient(contentapi.NewContentClient(conn))
-	a := diffservice.NewDiffServiceFromClient(diffapi.NewDiffClient(conn))
-
+func newPullDeps(client *containerd.Client) *pullDeps {
 	return &pullDeps{
-		Snapshotter:  s,
-		ContentStore: c,
-		Applier:      a,
-	}, nil
+		Snapshotter:  client.SnapshotService(),
+		ContentStore: client.ContentStore(),
+		Applier:      client.DiffService(),
+	}
 }
 
 func dialer(address string, timeout time.Duration) (net.Conn, error) {
