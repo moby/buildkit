@@ -116,7 +116,6 @@ func (pr *progressReader) Read(ctx context.Context) (*Progress, error) {
 			pr.cond.Wait()
 		}
 	}
-	return nil, errors.Errorf("Read not implemented")
 }
 
 func (pr *progressReader) append(pw *progressWriter) {

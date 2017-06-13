@@ -94,20 +94,17 @@ func (cr *cacheRecord) Mount() ([]mount.Mount, error) {
 			return nil, errors.Wrapf(err, "failed to mount %s", cr.id)
 		}
 		return m, nil
-	} else {
-		if cr.viewMount == nil { // TODO: handle this better
-			cr.view = generateID()
-			m, err := cr.cm.Snapshotter.View(context.TODO(), cr.view, cr.id)
-			if err != nil {
-				cr.view = ""
-				return nil, errors.Wrapf(err, "failed to mount %s", cr.id)
-			}
-			cr.viewMount = m
-		}
-		return cr.viewMount, nil
 	}
-
-	return nil, errors.New("snapshot mount not implemented")
+	if cr.viewMount == nil { // TODO: handle this better
+		cr.view = generateID()
+		m, err := cr.cm.Snapshotter.View(context.TODO(), cr.view, cr.id)
+		if err != nil {
+			cr.view = ""
+			return nil, errors.Wrapf(err, "failed to mount %s", cr.id)
+		}
+		cr.viewMount = m
+	}
+	return cr.viewMount, nil
 }
 
 func (cr *cacheRecord) ID() string {

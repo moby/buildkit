@@ -127,5 +127,4 @@ func saveProgress(ctx context.Context, pr ProgressReader, t *trace) error {
 		}
 		t.items = append(t.items, *p)
 	}
-	return nil
 }
