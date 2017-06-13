@@ -9,3 +9,4 @@ install:
 script:
   - ./hack/test
   - ./hack/lint
+  - ./hack/validate-vendor

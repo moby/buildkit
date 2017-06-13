@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+
+set -eu -o pipefail -x
+
+# update this to iidfile after 17.06
+docker build -t buildkit_poc:vendor -f ./hack/dockerfiles/vendor.Dockerfile --force-rm .
+diffs="$(docker run buildkit_poc:vendor git status --porcelain -- vendor 2>/dev/null)"
+if [ "$diffs" ]; then
+    {
+        set +x
+        echo 'The result of vndr differs'
+        echo
+        echo "$diffs"
+        echo
+        echo 'Please vendor your package with github.com/LK4D4/vndr.'
+        echo
+    } >&2
+    false
+fi
+echo 'Congratulations! All vendoring changes are done the right way.'
