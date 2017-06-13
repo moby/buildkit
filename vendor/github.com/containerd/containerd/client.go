@@ -2,7 +2,6 @@ package containerd
 
 import (
 	"context"
-	"encoding/json"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -15,23 +14,22 @@ import (
 	diffapi "github.com/containerd/containerd/api/services/diff"
 	"github.com/containerd/containerd/api/services/execution"
 	imagesapi "github.com/containerd/containerd/api/services/images"
+	namespacesapi "github.com/containerd/containerd/api/services/namespaces"
 	snapshotapi "github.com/containerd/containerd/api/services/snapshot"
+	versionservice "github.com/containerd/containerd/api/services/version"
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
-	"github.com/containerd/containerd/rootfs"
 	contentservice "github.com/containerd/containerd/services/content"
 	"github.com/containerd/containerd/services/diff"
 	diffservice "github.com/containerd/containerd/services/diff"
 	imagesservice "github.com/containerd/containerd/services/images"
 	snapshotservice "github.com/containerd/containerd/services/snapshot"
 	"github.com/containerd/containerd/snapshot"
-	protobuf "github.com/gogo/protobuf/types"
+	pempty "github.com/golang/protobuf/ptypes/empty"
 	"github.com/opencontainers/image-spec/identity"
-	"github.com/opencontainers/image-spec/specs-go/v1"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
-	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/grpclog"
@@ -43,37 +41,50 @@ func init() {
 	grpclog.SetLogger(log.New(ioutil.Discard, "", log.LstdFlags))
 }
 
-type NewClientOpts func(c *Client) error
+type clientOpts struct {
+	defaultns string
+}
 
-func WithNamespace(namespace string) NewClientOpts {
-	return func(c *Client) error {
-		c.namespace = namespace
+type ClientOpt func(c *clientOpts) error
+
+func WithDefaultNamespace(ns string) ClientOpt {
+	return func(c *clientOpts) error {
+		c.defaultns = ns
 		return nil
 	}
 }
 
 // New returns a new containerd client that is connected to the containerd
 // instance provided by address
-func New(address string, opts ...NewClientOpts) (*Client, error) {
+func New(address string, opts ...ClientOpt) (*Client, error) {
+	var copts clientOpts
+	for _, o := range opts {
+		if err := o(&copts); err != nil {
+			return nil, err
+		}
+	}
+
 	gopts := []grpc.DialOption{
 		grpc.WithInsecure(),
 		grpc.WithTimeout(100 * time.Second),
 		grpc.WithDialer(dialer),
 	}
+	if copts.defaultns != "" {
+		unary, stream := newNSInterceptors(copts.defaultns)
+		gopts = append(gopts,
+			grpc.WithUnaryInterceptor(unary),
+			grpc.WithStreamInterceptor(stream),
+		)
+	}
+
 	conn, err := grpc.Dial(dialAddress(address), gopts...)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to dial %q", address)
 	}
-	c := &Client{
+	return &Client{
 		conn:    conn,
 		runtime: runtime.GOOS,
-	}
-	for _, o := range opts {
-		if err := o(c); err != nil {
-			return nil, err
-		}
-	}
-	return c, nil
+	}, nil
 }
 
 // Client is the client to interact with containerd and its various services
@@ -81,8 +92,8 @@ func New(address string, opts ...NewClientOpts) (*Client, error) {
 type Client struct {
 	conn *grpc.ClientConn
 
+	defaultns string
 	runtime   string
-	namespace string
 }
 
 func (c *Client) IsServing(ctx context.Context) (bool, error) {
@@ -176,18 +187,10 @@ func WithImage(i Image) NewContainerOpts {
 
 // NewContainer will create a new container in container with the provided id
 // the id must be unique within the namespace
-func (c *Client) NewContainer(ctx context.Context, id string, spec *specs.Spec, opts ...NewContainerOpts) (Container, error) {
-	data, err := json.Marshal(spec)
-	if err != nil {
-		return nil, err
-	}
+func (c *Client) NewContainer(ctx context.Context, id string, opts ...NewContainerOpts) (Container, error) {
 	container := containers.Container{
 		ID:      id,
 		Runtime: c.runtime,
-		Spec: &protobuf.Any{
-			TypeUrl: specs.Version,
-			Value:   data,
-		},
 	}
 	for _, o := range opts {
 		if err := o(ctx, c, &container); err != nil {
@@ -203,6 +206,16 @@ func (c *Client) NewContainer(ctx context.Context, id string, spec *specs.Spec, 
 	return containerFromProto(c, r.Container), nil
 }
 
+func (c *Client) LoadContainer(ctx context.Context, id string) (Container, error) {
+	response, err := c.ContainerService().Get(ctx, &containers.GetContainerRequest{
+		ID: id,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return containerFromProto(c, response.Container), nil
+}
+
 type RemoteOpts func(*Client, *RemoteContext) error
 
 // RemoteContext is used to configure object resolutions and transfers with
@@ -212,14 +225,10 @@ type RemoteContext struct {
 	// If no resolver is provided, defaults to Docker registry resolver.
 	Resolver remotes.Resolver
 
-	// Unpacker is used after an image is pulled to extract into a registry.
+	// Unpack is done after an image is pulled to extract into a snapshotter.
 	// If an image is not unpacked on pull, it can be unpacked any time
 	// afterwards. Unpacking is required to run an image.
-	Unpacker Unpacker
-
-	// PushWrapper allows hooking into the push method. This can be used
-	// track content that is being sent to the remote.
-	PushWrapper func(remotes.Pusher) remotes.Pusher
+	Unpack bool
 
 	// BaseHandlers are a set of handlers which get are called on dispatch.
 	// These handlers always get called before any operation specific
@@ -239,11 +248,7 @@ func defaultRemoteContext() *RemoteContext {
 // uses the snapshotter, content store, and diff service
 // configured for the client.
 func WithPullUnpack(client *Client, c *RemoteContext) error {
-	c.Unpacker = &snapshotUnpacker{
-		store:       client.ContentStore(),
-		diff:        client.DiffService(),
-		snapshotter: client.SnapshotService(),
-	}
+	c.Unpack = true
 	return nil
 }
 
@@ -261,64 +266,6 @@ func WithImageHandler(h images.Handler) RemoteOpts {
 		c.BaseHandlers = append(c.BaseHandlers, h)
 		return nil
 	}
-}
-
-// WithPushWrapper is used to wrap a pusher to hook into
-// the push content as it is sent to a remote.
-func WithPushWrapper(w func(remotes.Pusher) remotes.Pusher) RemoteOpts {
-	return func(client *Client, c *RemoteContext) error {
-		c.PushWrapper = w
-		return nil
-	}
-}
-
-type Unpacker interface {
-	Unpack(context.Context, images.Image) error
-}
-
-type snapshotUnpacker struct {
-	snapshotter snapshot.Snapshotter
-	store       content.Store
-	diff        diff.DiffService
-}
-
-func (s *snapshotUnpacker) Unpack(ctx context.Context, image images.Image) error {
-	layers, err := s.getLayers(ctx, image)
-	if err != nil {
-		return err
-	}
-	if _, err := rootfs.ApplyLayers(ctx, layers, s.snapshotter, s.diff); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (s *snapshotUnpacker) getLayers(ctx context.Context, image images.Image) ([]rootfs.Layer, error) {
-	p, err := content.ReadBlob(ctx, s.store, image.Target.Digest)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to read manifest blob")
-	}
-	var manifest v1.Manifest
-	if err := json.Unmarshal(p, &manifest); err != nil {
-		return nil, errors.Wrap(err, "failed to unmarshal manifest")
-	}
-	diffIDs, err := image.RootFS(ctx, s.store)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to resolve rootfs")
-	}
-	if len(diffIDs) != len(manifest.Layers) {
-		return nil, errors.Errorf("mismatched image rootfs and manifest layers")
-	}
-	layers := make([]rootfs.Layer, len(diffIDs))
-	for i := range diffIDs {
-		layers[i].Diff = v1.Descriptor{
-			// TODO: derive media type from compressed type
-			MediaType: v1.MediaTypeImageLayer,
-			Digest:    diffIDs[i],
-		}
-		layers[i].Blob = manifest.Layers[i]
-	}
-	return layers, nil
 }
 
 func (c *Client) Pull(ctx context.Context, ref string, opts ...RemoteOpts) (Image, error) {
@@ -354,27 +301,16 @@ func (c *Client) Pull(ctx context.Context, ref string, opts ...RemoteOpts) (Imag
 	if err != nil {
 		return nil, err
 	}
-	if pullCtx.Unpacker != nil {
-		if err := pullCtx.Unpacker.Unpack(ctx, i); err != nil {
+	img := &image{
+		client: c,
+		i:      i,
+	}
+	if pullCtx.Unpack {
+		if err := img.Unpack(ctx); err != nil {
 			return nil, err
 		}
 	}
-	return &image{
-		client: c,
-		i:      i,
-	}, nil
-}
-
-// GetImage returns an existing image
-func (c *Client) GetImage(ctx context.Context, ref string) (Image, error) {
-	i, err := c.ImageService().Get(ctx, ref)
-	if err != nil {
-		return nil, err
-	}
-	return &image{
-		client: c,
-		i:      i,
-	}, nil
+	return img, nil
 }
 
 func (c *Client) Push(ctx context.Context, ref string, desc ocispec.Descriptor, opts ...RemoteOpts) error {
@@ -388,10 +324,6 @@ func (c *Client) Push(ctx context.Context, ref string, desc ocispec.Descriptor, 
 	pusher, err := pushCtx.Resolver.Pusher(ctx, ref)
 	if err != nil {
 		return err
-	}
-
-	if pushCtx.PushWrapper != nil {
-		pusher = pushCtx.PushWrapper(pusher)
 	}
 
 	var m sync.Mutex
@@ -433,9 +365,41 @@ func (c *Client) Push(ctx context.Context, ref string, desc ocispec.Descriptor, 
 	return nil
 }
 
+// GetImage returns an existing image
+func (c *Client) GetImage(ctx context.Context, ref string) (Image, error) {
+	i, err := c.ImageService().Get(ctx, ref)
+	if err != nil {
+		return nil, err
+	}
+	return &image{
+		client: c,
+		i:      i,
+	}, nil
+}
+
+// ListImages returns all existing images
+func (c *Client) ListImages(ctx context.Context) ([]Image, error) {
+	imgs, err := c.ImageService().List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	images := make([]Image, len(imgs))
+	for i, img := range imgs {
+		images[i] = &image{
+			client: c,
+			i:      img,
+		}
+	}
+	return images, nil
+}
+
 // Close closes the clients connection to containerd
 func (c *Client) Close() error {
 	return c.conn.Close()
+}
+
+func (c *Client) NamespaceService() namespacesapi.NamespacesClient {
+	return namespacesapi.NewNamespacesClient(c.conn)
 }
 
 func (c *Client) ContainerService() containers.ContainersClient {
@@ -464,4 +428,24 @@ func (c *Client) DiffService() diff.DiffService {
 
 func (c *Client) HealthService() grpc_health_v1.HealthClient {
 	return grpc_health_v1.NewHealthClient(c.conn)
+}
+
+func (c *Client) VersionService() versionservice.VersionClient {
+	return versionservice.NewVersionClient(c.conn)
+}
+
+type Version struct {
+	Version  string
+	Revision string
+}
+
+func (c *Client) Version(ctx context.Context) (Version, error) {
+	response, err := c.VersionService().Version(ctx, &pempty.Empty{})
+	if err != nil {
+		return Version{}, err
+	}
+	return Version{
+		Version:  response.Version,
+		Revision: response.Revision,
+	}, nil
 }
