@@ -1,0 +1,12 @@
+{
+  "Vendor": true,
+  "Deadline": "8m",
+
+  "DisableAll": true,
+  "Enable": [
+    "gofmt",
+    "goimports",
+    "ineffassign",
+    "vet"
+  ]
+}
