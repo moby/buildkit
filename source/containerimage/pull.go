@@ -92,7 +92,7 @@ func (is *imageSource) Pull(ctx context.Context, id source.Identifier) (cache.Im
 		return nil, err
 	}
 
-	return is.CacheAccessor.Get(chainid)
+	return is.CacheAccessor.Get(ctx, chainid)
 }
 
 func (is *imageSource) unpack(ctx context.Context, desc ocispec.Descriptor) (string, error) {

@@ -1,6 +1,8 @@
 package oci
 
 import (
+	"context"
+
 	"github.com/containerd/containerd"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -10,7 +12,7 @@ import (
 
 // Ideally we don't have to import whole containerd just for the default spec
 
-func GenerateSpec(meta worker.Meta, mounts map[string]cache.Mountable) (*specs.Spec, error) {
+func GenerateSpec(ctx context.Context, meta worker.Meta, mounts map[string]cache.Mountable) (*specs.Spec, error) {
 	s, err := containerd.GenerateSpec()
 	if err != nil {
 		return nil, err
@@ -24,7 +26,7 @@ func GenerateSpec(meta worker.Meta, mounts map[string]cache.Mountable) (*specs.S
 		if dest == "/" {
 			continue
 		}
-		mounts, err := m.Mount()
+		mounts, err := m.Mount(ctx)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to mount to %s", dest)
 		}

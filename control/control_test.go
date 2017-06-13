@@ -4,7 +4,6 @@ package control
 
 import (
 	"bytes"
-	"context"
 	"io"
 	"io/ioutil"
 	"os"
@@ -15,6 +14,7 @@ import (
 	"github.com/containerd/containerd/archive/compression"
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/mount"
+	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/rootfs"
 	cdsnapshot "github.com/containerd/containerd/snapshot"
 	"github.com/containerd/containerd/snapshot/overlay"
@@ -29,9 +29,12 @@ import (
 	"github.com/tonistiigi/buildkit_poc/source/containerimage"
 	"github.com/tonistiigi/buildkit_poc/worker"
 	"github.com/tonistiigi/buildkit_poc/worker/runcworker"
+	"golang.org/x/net/context"
 )
 
 func TestControl(t *testing.T) {
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+
 	// this should be an example or e2e test
 	tmpdir, err := ioutil.TempDir("", "controltest")
 	assert.NoError(t, err)
@@ -69,10 +72,10 @@ func TestControl(t *testing.T) {
 	img, err := source.NewImageIdentifier("docker.io/library/busybox:latest")
 	assert.NoError(t, err)
 
-	snap, err := sm.Pull(context.TODO(), img)
+	snap, err := sm.Pull(ctx, img)
 	assert.NoError(t, err)
 
-	mounts, err := snap.Mount()
+	mounts, err := snap.Mount(ctx)
 	assert.NoError(t, err)
 
 	lm := snapshot.LocalMounter(mounts)
@@ -93,7 +96,7 @@ func TestControl(t *testing.T) {
 	lm.Unmount()
 	assert.NoError(t, err)
 
-	du, err := cm.DiskUsage(context.TODO())
+	du, err := cm.DiskUsage(ctx)
 	assert.NoError(t, err)
 
 	// for _, d := range du {
@@ -117,21 +120,21 @@ func TestControl(t *testing.T) {
 
 	stderr := bytes.NewBuffer(nil)
 
-	err = w.Exec(context.TODO(), meta, m, nil, &nopCloser{stderr})
+	err = w.Exec(ctx, meta, m, nil, &nopCloser{stderr})
 	assert.Error(t, err) // Read-only root
 	assert.Contains(t, stderr.String(), "Read-only file system")
 
-	root, err := cm.New(snap)
+	root, err := cm.New(ctx, snap)
 	assert.NoError(t, err)
 
 	m["/"] = root
-	err = w.Exec(context.TODO(), meta, m, nil, nil)
+	err = w.Exec(ctx, meta, m, nil, nil)
 	assert.NoError(t, err)
 
 	rf, err := root.Freeze()
 	assert.NoError(t, err)
 
-	mounts, err = rf.Mount()
+	mounts, err = rf.Mount(ctx)
 	assert.NoError(t, err)
 
 	lm = snapshot.LocalMounter(mounts)
@@ -146,13 +149,13 @@ func TestControl(t *testing.T) {
 	lm.Unmount()
 	assert.NoError(t, err)
 
-	err = rf.Release()
+	err = rf.Release(ctx)
 	assert.NoError(t, err)
 
-	err = snap.Release()
+	err = snap.Release(ctx)
 	assert.NoError(t, err)
 
-	du2, err := cm.DiskUsage(context.TODO())
+	du2, err := cm.DiskUsage(ctx)
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(du2)-len(du))
 

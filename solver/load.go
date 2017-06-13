@@ -98,19 +98,19 @@ func New(opt Opt) *Solver {
 
 func (s *Solver) Solve(ctx context.Context, g *opVertex) error {
 	err := g.solve(ctx, s.opt) // TODO: separate exporting
-	g.release()
+	g.release(ctx)
 	return err
 }
 
-func (g *opVertex) release() (retErr error) {
+func (g *opVertex) release(ctx context.Context) (retErr error) {
 	for _, i := range g.inputs {
-		if err := i.release(); err != nil {
+		if err := i.release(ctx); err != nil {
 			retErr = err
 		}
 	}
 	for _, ref := range g.refs {
 		if ref != nil {
-			if err := ref.Release(); err != nil {
+			if err := ref.Release(ctx); err != nil {
 				retErr = err
 			}
 		}
@@ -185,7 +185,7 @@ func (g *opVertex) solve(ctx context.Context, opt Opt) (retErr error) {
 				if o != nil {
 					s, err := o.Freeze() // TODO: log error
 					if err == nil {
-						s.Release()
+						s.Release(ctx)
 					}
 				}
 			}
@@ -196,7 +196,7 @@ func (g *opVertex) solve(ctx context.Context, opt Opt) (retErr error) {
 			ref := g.getInputRef(int(m.Input))
 			mountable = ref
 			if m.Output != -1 {
-				active, err := opt.CacheManager.New(ref) // TODO: should be method
+				active, err := opt.CacheManager.New(ctx, ref) // TODO: should be method
 				if err != nil {
 					return err
 				}
