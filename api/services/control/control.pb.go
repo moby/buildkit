@@ -14,7 +14,11 @@
 		UsageRecord
 		SolveRequest
 		SolveResponse
+		StatusRequest
+		StatusResponse
+		Vertex
 		VertexStatus
+		VertexLog
 */
 package control
 
@@ -130,26 +134,214 @@ func (m *SolveRequest) GetDefinition() [][]byte {
 }
 
 type SolveResponse struct {
-	Vertex []*VertexStatus `protobuf:"bytes,1,rep,name=vertex" json:"vertex,omitempty"`
+	Vtx []*Vertex `protobuf:"bytes,1,rep,name=vtx" json:"vtx,omitempty"`
 }
 
 func (m *SolveResponse) Reset()                    { *m = SolveResponse{} }
 func (*SolveResponse) ProtoMessage()               {}
 func (*SolveResponse) Descriptor() ([]byte, []int) { return fileDescriptorControl, []int{4} }
 
-func (m *SolveResponse) GetVertex() []*VertexStatus {
+func (m *SolveResponse) GetVtx() []*Vertex {
 	if m != nil {
-		return m.Vertex
+		return m.Vtx
 	}
 	return nil
 }
 
+type StatusRequest struct {
+	Ref string `protobuf:"bytes,1,opt,name=Ref,proto3" json:"Ref,omitempty"`
+}
+
+func (m *StatusRequest) Reset()                    { *m = StatusRequest{} }
+func (*StatusRequest) ProtoMessage()               {}
+func (*StatusRequest) Descriptor() ([]byte, []int) { return fileDescriptorControl, []int{5} }
+
+func (m *StatusRequest) GetRef() string {
+	if m != nil {
+		return m.Ref
+	}
+	return ""
+}
+
+type StatusResponse struct {
+	Vtx    []*Vertex       `protobuf:"bytes,1,rep,name=vtx" json:"vtx,omitempty"`
+	Status []*VertexStatus `protobuf:"bytes,2,rep,name=status" json:"status,omitempty"`
+	Log    []*VertexLog    `protobuf:"bytes,3,rep,name=log" json:"log,omitempty"`
+}
+
+func (m *StatusResponse) Reset()                    { *m = StatusResponse{} }
+func (*StatusResponse) ProtoMessage()               {}
+func (*StatusResponse) Descriptor() ([]byte, []int) { return fileDescriptorControl, []int{6} }
+
+func (m *StatusResponse) GetVtx() []*Vertex {
+	if m != nil {
+		return m.Vtx
+	}
+	return nil
+}
+
+func (m *StatusResponse) GetStatus() []*VertexStatus {
+	if m != nil {
+		return m.Status
+	}
+	return nil
+}
+
+func (m *StatusResponse) GetLog() []*VertexLog {
+	if m != nil {
+		return m.Log
+	}
+	return nil
+}
+
+type Vertex struct {
+	ID        string          `protobuf:"bytes,1,opt,name=ID,proto3" json:"ID,omitempty"`
+	Inputs    []string        `protobuf:"bytes,2,rep,name=inputs" json:"inputs,omitempty"`
+	Name      string          `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Status    []*VertexStatus `protobuf:"bytes,4,rep,name=status" json:"status,omitempty"`
+	Cached    bool            `protobuf:"varint,5,opt,name=cached,proto3" json:"cached,omitempty"`
+	Started   int64           `protobuf:"varint,6,opt,name=started,proto3" json:"started,omitempty"`
+	Completed int64           `protobuf:"varint,7,opt,name=completed,proto3" json:"completed,omitempty"`
+}
+
+func (m *Vertex) Reset()                    { *m = Vertex{} }
+func (*Vertex) ProtoMessage()               {}
+func (*Vertex) Descriptor() ([]byte, []int) { return fileDescriptorControl, []int{7} }
+
+func (m *Vertex) GetID() string {
+	if m != nil {
+		return m.ID
+	}
+	return ""
+}
+
+func (m *Vertex) GetInputs() []string {
+	if m != nil {
+		return m.Inputs
+	}
+	return nil
+}
+
+func (m *Vertex) GetName() string {
+	if m != nil {
+		return m.Name
+	}
+	return ""
+}
+
+func (m *Vertex) GetStatus() []*VertexStatus {
+	if m != nil {
+		return m.Status
+	}
+	return nil
+}
+
+func (m *Vertex) GetCached() bool {
+	if m != nil {
+		return m.Cached
+	}
+	return false
+}
+
+func (m *Vertex) GetStarted() int64 {
+	if m != nil {
+		return m.Started
+	}
+	return 0
+}
+
+func (m *Vertex) GetCompleted() int64 {
+	if m != nil {
+		return m.Completed
+	}
+	return 0
+}
+
 type VertexStatus struct {
+	ID      string `protobuf:"bytes,1,opt,name=ID,proto3" json:"ID,omitempty"`
+	Vertex  string `protobuf:"bytes,2,opt,name=vertex,proto3" json:"vertex,omitempty"`
+	Name    string `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Current int64  `protobuf:"varint,4,opt,name=current,proto3" json:"current,omitempty"`
+	Total   int64  `protobuf:"varint,5,opt,name=total,proto3" json:"total,omitempty"`
 }
 
 func (m *VertexStatus) Reset()                    { *m = VertexStatus{} }
 func (*VertexStatus) ProtoMessage()               {}
-func (*VertexStatus) Descriptor() ([]byte, []int) { return fileDescriptorControl, []int{5} }
+func (*VertexStatus) Descriptor() ([]byte, []int) { return fileDescriptorControl, []int{8} }
+
+func (m *VertexStatus) GetID() string {
+	if m != nil {
+		return m.ID
+	}
+	return ""
+}
+
+func (m *VertexStatus) GetVertex() string {
+	if m != nil {
+		return m.Vertex
+	}
+	return ""
+}
+
+func (m *VertexStatus) GetName() string {
+	if m != nil {
+		return m.Name
+	}
+	return ""
+}
+
+func (m *VertexStatus) GetCurrent() int64 {
+	if m != nil {
+		return m.Current
+	}
+	return 0
+}
+
+func (m *VertexStatus) GetTotal() int64 {
+	if m != nil {
+		return m.Total
+	}
+	return 0
+}
+
+type VertexLog struct {
+	Inc       int64  `protobuf:"varint,1,opt,name=inc,proto3" json:"inc,omitempty"`
+	Timestamp int64  `protobuf:"varint,2,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	Stream    int64  `protobuf:"varint,3,opt,name=stream,proto3" json:"stream,omitempty"`
+	Msg       []byte `protobuf:"bytes,4,opt,name=msg,proto3" json:"msg,omitempty"`
+}
+
+func (m *VertexLog) Reset()                    { *m = VertexLog{} }
+func (*VertexLog) ProtoMessage()               {}
+func (*VertexLog) Descriptor() ([]byte, []int) { return fileDescriptorControl, []int{9} }
+
+func (m *VertexLog) GetInc() int64 {
+	if m != nil {
+		return m.Inc
+	}
+	return 0
+}
+
+func (m *VertexLog) GetTimestamp() int64 {
+	if m != nil {
+		return m.Timestamp
+	}
+	return 0
+}
+
+func (m *VertexLog) GetStream() int64 {
+	if m != nil {
+		return m.Stream
+	}
+	return 0
+}
+
+func (m *VertexLog) GetMsg() []byte {
+	if m != nil {
+		return m.Msg
+	}
+	return nil
+}
 
 func init() {
 	proto.RegisterType((*DiskUsageRequest)(nil), "control.DiskUsageRequest")
@@ -157,7 +349,11 @@ func init() {
 	proto.RegisterType((*UsageRecord)(nil), "control.UsageRecord")
 	proto.RegisterType((*SolveRequest)(nil), "control.SolveRequest")
 	proto.RegisterType((*SolveResponse)(nil), "control.SolveResponse")
+	proto.RegisterType((*StatusRequest)(nil), "control.StatusRequest")
+	proto.RegisterType((*StatusResponse)(nil), "control.StatusResponse")
+	proto.RegisterType((*Vertex)(nil), "control.Vertex")
 	proto.RegisterType((*VertexStatus)(nil), "control.VertexStatus")
+	proto.RegisterType((*VertexLog)(nil), "control.VertexLog")
 }
 func (this *DiskUsageRequest) Equal(that interface{}) bool {
 	if that == nil {
@@ -323,13 +519,152 @@ func (this *SolveResponse) Equal(that interface{}) bool {
 	} else if this == nil {
 		return false
 	}
-	if len(this.Vertex) != len(that1.Vertex) {
+	if len(this.Vtx) != len(that1.Vtx) {
 		return false
 	}
-	for i := range this.Vertex {
-		if !this.Vertex[i].Equal(that1.Vertex[i]) {
+	for i := range this.Vtx {
+		if !this.Vtx[i].Equal(that1.Vtx[i]) {
 			return false
 		}
+	}
+	return true
+}
+func (this *StatusRequest) Equal(that interface{}) bool {
+	if that == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	}
+
+	that1, ok := that.(*StatusRequest)
+	if !ok {
+		that2, ok := that.(StatusRequest)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	} else if this == nil {
+		return false
+	}
+	if this.Ref != that1.Ref {
+		return false
+	}
+	return true
+}
+func (this *StatusResponse) Equal(that interface{}) bool {
+	if that == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	}
+
+	that1, ok := that.(*StatusResponse)
+	if !ok {
+		that2, ok := that.(StatusResponse)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	} else if this == nil {
+		return false
+	}
+	if len(this.Vtx) != len(that1.Vtx) {
+		return false
+	}
+	for i := range this.Vtx {
+		if !this.Vtx[i].Equal(that1.Vtx[i]) {
+			return false
+		}
+	}
+	if len(this.Status) != len(that1.Status) {
+		return false
+	}
+	for i := range this.Status {
+		if !this.Status[i].Equal(that1.Status[i]) {
+			return false
+		}
+	}
+	if len(this.Log) != len(that1.Log) {
+		return false
+	}
+	for i := range this.Log {
+		if !this.Log[i].Equal(that1.Log[i]) {
+			return false
+		}
+	}
+	return true
+}
+func (this *Vertex) Equal(that interface{}) bool {
+	if that == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	}
+
+	that1, ok := that.(*Vertex)
+	if !ok {
+		that2, ok := that.(Vertex)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	} else if this == nil {
+		return false
+	}
+	if this.ID != that1.ID {
+		return false
+	}
+	if len(this.Inputs) != len(that1.Inputs) {
+		return false
+	}
+	for i := range this.Inputs {
+		if this.Inputs[i] != that1.Inputs[i] {
+			return false
+		}
+	}
+	if this.Name != that1.Name {
+		return false
+	}
+	if len(this.Status) != len(that1.Status) {
+		return false
+	}
+	for i := range this.Status {
+		if !this.Status[i].Equal(that1.Status[i]) {
+			return false
+		}
+	}
+	if this.Cached != that1.Cached {
+		return false
+	}
+	if this.Started != that1.Started {
+		return false
+	}
+	if this.Completed != that1.Completed {
+		return false
 	}
 	return true
 }
@@ -356,6 +691,60 @@ func (this *VertexStatus) Equal(that interface{}) bool {
 		}
 		return false
 	} else if this == nil {
+		return false
+	}
+	if this.ID != that1.ID {
+		return false
+	}
+	if this.Vertex != that1.Vertex {
+		return false
+	}
+	if this.Name != that1.Name {
+		return false
+	}
+	if this.Current != that1.Current {
+		return false
+	}
+	if this.Total != that1.Total {
+		return false
+	}
+	return true
+}
+func (this *VertexLog) Equal(that interface{}) bool {
+	if that == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	}
+
+	that1, ok := that.(*VertexLog)
+	if !ok {
+		that2, ok := that.(VertexLog)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	} else if this == nil {
+		return false
+	}
+	if this.Inc != that1.Inc {
+		return false
+	}
+	if this.Timestamp != that1.Timestamp {
+		return false
+	}
+	if this.Stream != that1.Stream {
+		return false
+	}
+	if !bytes.Equal(this.Msg, that1.Msg) {
 		return false
 	}
 	return true
@@ -411,9 +800,55 @@ func (this *SolveResponse) GoString() string {
 	}
 	s := make([]string, 0, 5)
 	s = append(s, "&control.SolveResponse{")
-	if this.Vertex != nil {
-		s = append(s, "Vertex: "+fmt.Sprintf("%#v", this.Vertex)+",\n")
+	if this.Vtx != nil {
+		s = append(s, "Vtx: "+fmt.Sprintf("%#v", this.Vtx)+",\n")
 	}
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func (this *StatusRequest) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 5)
+	s = append(s, "&control.StatusRequest{")
+	s = append(s, "Ref: "+fmt.Sprintf("%#v", this.Ref)+",\n")
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func (this *StatusResponse) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 7)
+	s = append(s, "&control.StatusResponse{")
+	if this.Vtx != nil {
+		s = append(s, "Vtx: "+fmt.Sprintf("%#v", this.Vtx)+",\n")
+	}
+	if this.Status != nil {
+		s = append(s, "Status: "+fmt.Sprintf("%#v", this.Status)+",\n")
+	}
+	if this.Log != nil {
+		s = append(s, "Log: "+fmt.Sprintf("%#v", this.Log)+",\n")
+	}
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func (this *Vertex) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 11)
+	s = append(s, "&control.Vertex{")
+	s = append(s, "ID: "+fmt.Sprintf("%#v", this.ID)+",\n")
+	s = append(s, "Inputs: "+fmt.Sprintf("%#v", this.Inputs)+",\n")
+	s = append(s, "Name: "+fmt.Sprintf("%#v", this.Name)+",\n")
+	if this.Status != nil {
+		s = append(s, "Status: "+fmt.Sprintf("%#v", this.Status)+",\n")
+	}
+	s = append(s, "Cached: "+fmt.Sprintf("%#v", this.Cached)+",\n")
+	s = append(s, "Started: "+fmt.Sprintf("%#v", this.Started)+",\n")
+	s = append(s, "Completed: "+fmt.Sprintf("%#v", this.Completed)+",\n")
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
@@ -421,8 +856,26 @@ func (this *VertexStatus) GoString() string {
 	if this == nil {
 		return "nil"
 	}
-	s := make([]string, 0, 4)
+	s := make([]string, 0, 9)
 	s = append(s, "&control.VertexStatus{")
+	s = append(s, "ID: "+fmt.Sprintf("%#v", this.ID)+",\n")
+	s = append(s, "Vertex: "+fmt.Sprintf("%#v", this.Vertex)+",\n")
+	s = append(s, "Name: "+fmt.Sprintf("%#v", this.Name)+",\n")
+	s = append(s, "Current: "+fmt.Sprintf("%#v", this.Current)+",\n")
+	s = append(s, "Total: "+fmt.Sprintf("%#v", this.Total)+",\n")
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func (this *VertexLog) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 8)
+	s = append(s, "&control.VertexLog{")
+	s = append(s, "Inc: "+fmt.Sprintf("%#v", this.Inc)+",\n")
+	s = append(s, "Timestamp: "+fmt.Sprintf("%#v", this.Timestamp)+",\n")
+	s = append(s, "Stream: "+fmt.Sprintf("%#v", this.Stream)+",\n")
+	s = append(s, "Msg: "+fmt.Sprintf("%#v", this.Msg)+",\n")
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
@@ -448,6 +901,7 @@ const _ = grpc.SupportPackageIsVersion4
 type ControlClient interface {
 	DiskUsage(ctx context.Context, in *DiskUsageRequest, opts ...grpc.CallOption) (*DiskUsageResponse, error)
 	Solve(ctx context.Context, in *SolveRequest, opts ...grpc.CallOption) (*SolveResponse, error)
+	Status(ctx context.Context, in *StatusRequest, opts ...grpc.CallOption) (Control_StatusClient, error)
 }
 
 type controlClient struct {
@@ -476,11 +930,44 @@ func (c *controlClient) Solve(ctx context.Context, in *SolveRequest, opts ...grp
 	return out, nil
 }
 
+func (c *controlClient) Status(ctx context.Context, in *StatusRequest, opts ...grpc.CallOption) (Control_StatusClient, error) {
+	stream, err := grpc.NewClientStream(ctx, &_Control_serviceDesc.Streams[0], c.cc, "/control.Control/Status", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &controlStatusClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Control_StatusClient interface {
+	Recv() (*StatusResponse, error)
+	grpc.ClientStream
+}
+
+type controlStatusClient struct {
+	grpc.ClientStream
+}
+
+func (x *controlStatusClient) Recv() (*StatusResponse, error) {
+	m := new(StatusResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // Server API for Control service
 
 type ControlServer interface {
 	DiskUsage(context.Context, *DiskUsageRequest) (*DiskUsageResponse, error)
 	Solve(context.Context, *SolveRequest) (*SolveResponse, error)
+	Status(*StatusRequest, Control_StatusServer) error
 }
 
 func RegisterControlServer(s *grpc.Server, srv ControlServer) {
@@ -523,6 +1010,27 @@ func _Control_Solve_Handler(srv interface{}, ctx context.Context, dec func(inter
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Control_Status_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(StatusRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(ControlServer).Status(m, &controlStatusServer{stream})
+}
+
+type Control_StatusServer interface {
+	Send(*StatusResponse) error
+	grpc.ServerStream
+}
+
+type controlStatusServer struct {
+	grpc.ServerStream
+}
+
+func (x *controlStatusServer) Send(m *StatusResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 var _Control_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "control.Control",
 	HandlerType: (*ControlServer)(nil),
@@ -536,7 +1044,13 @@ var _Control_serviceDesc = grpc.ServiceDesc{
 			Handler:    _Control_Solve_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "Status",
+			Handler:       _Control_Status_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "control.proto",
 }
 
@@ -684,8 +1198,8 @@ func (m *SolveResponse) MarshalTo(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if len(m.Vertex) > 0 {
-		for _, msg := range m.Vertex {
+	if len(m.Vtx) > 0 {
+		for _, msg := range m.Vtx {
 			dAtA[i] = 0xa
 			i++
 			i = encodeVarintControl(dAtA, i, uint64(msg.Size()))
@@ -695,6 +1209,161 @@ func (m *SolveResponse) MarshalTo(dAtA []byte) (int, error) {
 			}
 			i += n
 		}
+	}
+	return i, nil
+}
+
+func (m *StatusRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *StatusRequest) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Ref) > 0 {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintControl(dAtA, i, uint64(len(m.Ref)))
+		i += copy(dAtA[i:], m.Ref)
+	}
+	return i, nil
+}
+
+func (m *StatusResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *StatusResponse) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Vtx) > 0 {
+		for _, msg := range m.Vtx {
+			dAtA[i] = 0xa
+			i++
+			i = encodeVarintControl(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if len(m.Status) > 0 {
+		for _, msg := range m.Status {
+			dAtA[i] = 0x12
+			i++
+			i = encodeVarintControl(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if len(m.Log) > 0 {
+		for _, msg := range m.Log {
+			dAtA[i] = 0x1a
+			i++
+			i = encodeVarintControl(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	return i, nil
+}
+
+func (m *Vertex) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Vertex) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.ID) > 0 {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintControl(dAtA, i, uint64(len(m.ID)))
+		i += copy(dAtA[i:], m.ID)
+	}
+	if len(m.Inputs) > 0 {
+		for _, s := range m.Inputs {
+			dAtA[i] = 0x12
+			i++
+			l = len(s)
+			for l >= 1<<7 {
+				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
+				l >>= 7
+				i++
+			}
+			dAtA[i] = uint8(l)
+			i++
+			i += copy(dAtA[i:], s)
+		}
+	}
+	if len(m.Name) > 0 {
+		dAtA[i] = 0x1a
+		i++
+		i = encodeVarintControl(dAtA, i, uint64(len(m.Name)))
+		i += copy(dAtA[i:], m.Name)
+	}
+	if len(m.Status) > 0 {
+		for _, msg := range m.Status {
+			dAtA[i] = 0x22
+			i++
+			i = encodeVarintControl(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if m.Cached {
+		dAtA[i] = 0x28
+		i++
+		if m.Cached {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i++
+	}
+	if m.Started != 0 {
+		dAtA[i] = 0x30
+		i++
+		i = encodeVarintControl(dAtA, i, uint64(m.Started))
+	}
+	if m.Completed != 0 {
+		dAtA[i] = 0x38
+		i++
+		i = encodeVarintControl(dAtA, i, uint64(m.Completed))
 	}
 	return i, nil
 }
@@ -714,6 +1383,73 @@ func (m *VertexStatus) MarshalTo(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if len(m.ID) > 0 {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintControl(dAtA, i, uint64(len(m.ID)))
+		i += copy(dAtA[i:], m.ID)
+	}
+	if len(m.Vertex) > 0 {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintControl(dAtA, i, uint64(len(m.Vertex)))
+		i += copy(dAtA[i:], m.Vertex)
+	}
+	if len(m.Name) > 0 {
+		dAtA[i] = 0x1a
+		i++
+		i = encodeVarintControl(dAtA, i, uint64(len(m.Name)))
+		i += copy(dAtA[i:], m.Name)
+	}
+	if m.Current != 0 {
+		dAtA[i] = 0x20
+		i++
+		i = encodeVarintControl(dAtA, i, uint64(m.Current))
+	}
+	if m.Total != 0 {
+		dAtA[i] = 0x28
+		i++
+		i = encodeVarintControl(dAtA, i, uint64(m.Total))
+	}
+	return i, nil
+}
+
+func (m *VertexLog) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *VertexLog) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Inc != 0 {
+		dAtA[i] = 0x8
+		i++
+		i = encodeVarintControl(dAtA, i, uint64(m.Inc))
+	}
+	if m.Timestamp != 0 {
+		dAtA[i] = 0x10
+		i++
+		i = encodeVarintControl(dAtA, i, uint64(m.Timestamp))
+	}
+	if m.Stream != 0 {
+		dAtA[i] = 0x18
+		i++
+		i = encodeVarintControl(dAtA, i, uint64(m.Stream))
+	}
+	if len(m.Msg) > 0 {
+		dAtA[i] = 0x22
+		i++
+		i = encodeVarintControl(dAtA, i, uint64(len(m.Msg)))
+		i += copy(dAtA[i:], m.Msg)
+	}
 	return i, nil
 }
 
@@ -800,8 +1536,8 @@ func (m *SolveRequest) Size() (n int) {
 func (m *SolveResponse) Size() (n int) {
 	var l int
 	_ = l
-	if len(m.Vertex) > 0 {
-		for _, e := range m.Vertex {
+	if len(m.Vtx) > 0 {
+		for _, e := range m.Vtx {
 			l = e.Size()
 			n += 1 + l + sovControl(uint64(l))
 		}
@@ -809,9 +1545,115 @@ func (m *SolveResponse) Size() (n int) {
 	return n
 }
 
+func (m *StatusRequest) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Ref)
+	if l > 0 {
+		n += 1 + l + sovControl(uint64(l))
+	}
+	return n
+}
+
+func (m *StatusResponse) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.Vtx) > 0 {
+		for _, e := range m.Vtx {
+			l = e.Size()
+			n += 1 + l + sovControl(uint64(l))
+		}
+	}
+	if len(m.Status) > 0 {
+		for _, e := range m.Status {
+			l = e.Size()
+			n += 1 + l + sovControl(uint64(l))
+		}
+	}
+	if len(m.Log) > 0 {
+		for _, e := range m.Log {
+			l = e.Size()
+			n += 1 + l + sovControl(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *Vertex) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.ID)
+	if l > 0 {
+		n += 1 + l + sovControl(uint64(l))
+	}
+	if len(m.Inputs) > 0 {
+		for _, s := range m.Inputs {
+			l = len(s)
+			n += 1 + l + sovControl(uint64(l))
+		}
+	}
+	l = len(m.Name)
+	if l > 0 {
+		n += 1 + l + sovControl(uint64(l))
+	}
+	if len(m.Status) > 0 {
+		for _, e := range m.Status {
+			l = e.Size()
+			n += 1 + l + sovControl(uint64(l))
+		}
+	}
+	if m.Cached {
+		n += 2
+	}
+	if m.Started != 0 {
+		n += 1 + sovControl(uint64(m.Started))
+	}
+	if m.Completed != 0 {
+		n += 1 + sovControl(uint64(m.Completed))
+	}
+	return n
+}
+
 func (m *VertexStatus) Size() (n int) {
 	var l int
 	_ = l
+	l = len(m.ID)
+	if l > 0 {
+		n += 1 + l + sovControl(uint64(l))
+	}
+	l = len(m.Vertex)
+	if l > 0 {
+		n += 1 + l + sovControl(uint64(l))
+	}
+	l = len(m.Name)
+	if l > 0 {
+		n += 1 + l + sovControl(uint64(l))
+	}
+	if m.Current != 0 {
+		n += 1 + sovControl(uint64(m.Current))
+	}
+	if m.Total != 0 {
+		n += 1 + sovControl(uint64(m.Total))
+	}
+	return n
+}
+
+func (m *VertexLog) Size() (n int) {
+	var l int
+	_ = l
+	if m.Inc != 0 {
+		n += 1 + sovControl(uint64(m.Inc))
+	}
+	if m.Timestamp != 0 {
+		n += 1 + sovControl(uint64(m.Timestamp))
+	}
+	if m.Stream != 0 {
+		n += 1 + sovControl(uint64(m.Stream))
+	}
+	l = len(m.Msg)
+	if l > 0 {
+		n += 1 + l + sovControl(uint64(l))
+	}
 	return n
 }
 
@@ -876,7 +1718,45 @@ func (this *SolveResponse) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&SolveResponse{`,
-		`Vertex:` + strings.Replace(fmt.Sprintf("%v", this.Vertex), "VertexStatus", "VertexStatus", 1) + `,`,
+		`Vtx:` + strings.Replace(fmt.Sprintf("%v", this.Vtx), "Vertex", "Vertex", 1) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *StatusRequest) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&StatusRequest{`,
+		`Ref:` + fmt.Sprintf("%v", this.Ref) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *StatusResponse) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&StatusResponse{`,
+		`Vtx:` + strings.Replace(fmt.Sprintf("%v", this.Vtx), "Vertex", "Vertex", 1) + `,`,
+		`Status:` + strings.Replace(fmt.Sprintf("%v", this.Status), "VertexStatus", "VertexStatus", 1) + `,`,
+		`Log:` + strings.Replace(fmt.Sprintf("%v", this.Log), "VertexLog", "VertexLog", 1) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *Vertex) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&Vertex{`,
+		`ID:` + fmt.Sprintf("%v", this.ID) + `,`,
+		`Inputs:` + fmt.Sprintf("%v", this.Inputs) + `,`,
+		`Name:` + fmt.Sprintf("%v", this.Name) + `,`,
+		`Status:` + strings.Replace(fmt.Sprintf("%v", this.Status), "VertexStatus", "VertexStatus", 1) + `,`,
+		`Cached:` + fmt.Sprintf("%v", this.Cached) + `,`,
+		`Started:` + fmt.Sprintf("%v", this.Started) + `,`,
+		`Completed:` + fmt.Sprintf("%v", this.Completed) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -886,6 +1766,24 @@ func (this *VertexStatus) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&VertexStatus{`,
+		`ID:` + fmt.Sprintf("%v", this.ID) + `,`,
+		`Vertex:` + fmt.Sprintf("%v", this.Vertex) + `,`,
+		`Name:` + fmt.Sprintf("%v", this.Name) + `,`,
+		`Current:` + fmt.Sprintf("%v", this.Current) + `,`,
+		`Total:` + fmt.Sprintf("%v", this.Total) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *VertexLog) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&VertexLog{`,
+		`Inc:` + fmt.Sprintf("%v", this.Inc) + `,`,
+		`Timestamp:` + fmt.Sprintf("%v", this.Timestamp) + `,`,
+		`Stream:` + fmt.Sprintf("%v", this.Stream) + `,`,
+		`Msg:` + fmt.Sprintf("%v", this.Msg) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -1306,7 +2204,7 @@ func (m *SolveResponse) Unmarshal(dAtA []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Vertex", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Vtx", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -1330,11 +2228,459 @@ func (m *SolveResponse) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Vertex = append(m.Vertex, &VertexStatus{})
-			if err := m.Vertex[len(m.Vertex)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+			m.Vtx = append(m.Vtx, &Vertex{})
+			if err := m.Vtx[len(m.Vtx)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipControl(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthControl
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *StatusRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowControl
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: StatusRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: StatusRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Ref", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthControl
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Ref = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipControl(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthControl
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *StatusResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowControl
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: StatusResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: StatusResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Vtx", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthControl
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Vtx = append(m.Vtx, &Vertex{})
+			if err := m.Vtx[len(m.Vtx)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Status", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthControl
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Status = append(m.Status, &VertexStatus{})
+			if err := m.Status[len(m.Status)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Log", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthControl
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Log = append(m.Log, &VertexLog{})
+			if err := m.Log[len(m.Log)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipControl(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthControl
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Vertex) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowControl
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Vertex: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Vertex: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ID", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthControl
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ID = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Inputs", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthControl
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Inputs = append(m.Inputs, string(dAtA[iNdEx:postIndex]))
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthControl
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Name = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Status", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthControl
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Status = append(m.Status, &VertexStatus{})
+			if err := m.Status[len(m.Status)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 5:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Cached", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Cached = bool(v != 0)
+		case 6:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Started", wireType)
+			}
+			m.Started = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Started |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 7:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Completed", wireType)
+			}
+			m.Completed = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Completed |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipControl(dAtA[iNdEx:])
@@ -1385,6 +2731,269 @@ func (m *VertexStatus) Unmarshal(dAtA []byte) error {
 			return fmt.Errorf("proto: VertexStatus: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ID", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthControl
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ID = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Vertex", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthControl
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Vertex = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthControl
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Name = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Current", wireType)
+			}
+			m.Current = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Current |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 5:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Total", wireType)
+			}
+			m.Total = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Total |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipControl(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthControl
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *VertexLog) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowControl
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: VertexLog: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: VertexLog: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Inc", wireType)
+			}
+			m.Inc = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Inc |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Timestamp", wireType)
+			}
+			m.Timestamp = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Timestamp |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Stream", wireType)
+			}
+			m.Stream = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Stream |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Msg", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthControl
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Msg = append(m.Msg[:0], dAtA[iNdEx:postIndex]...)
+			if m.Msg == nil {
+				m.Msg = []byte{}
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipControl(dAtA[iNdEx:])
@@ -1514,27 +3123,42 @@ var (
 func init() { proto.RegisterFile("control.proto", fileDescriptorControl) }
 
 var fileDescriptorControl = []byte{
-	// 349 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0x6c, 0x92, 0xbb, 0x4e, 0x02, 0x41,
-	0x14, 0x86, 0x77, 0x76, 0xb9, 0xc8, 0xe1, 0x12, 0x9c, 0xa0, 0x19, 0x29, 0x26, 0x9b, 0xad, 0xb6,
-	0x40, 0x0a, 0x4c, 0x2c, 0x8d, 0xe2, 0x36, 0x14, 0x36, 0x43, 0xb0, 0x5f, 0x70, 0x30, 0x1b, 0xc9,
-	0x0e, 0xee, 0x0c, 0xc4, 0x58, 0xd9, 0xd8, 0xfb, 0x18, 0x3e, 0x8a, 0x25, 0xa5, 0xa5, 0x8c, 0x8d,
-	0x25, 0x8f, 0x60, 0x58, 0x06, 0xdc, 0x10, 0xbb, 0x73, 0xbe, 0x73, 0x99, 0xff, 0x3f, 0x19, 0xa8,
-	0x8e, 0x44, 0xac, 0x12, 0x31, 0x69, 0x4f, 0x13, 0xa1, 0x04, 0x2e, 0x9a, 0xd4, 0xc3, 0x50, 0x0f,
-	0x22, 0xf9, 0x30, 0x90, 0xe1, 0x3d, 0x67, 0xfc, 0x71, 0xc6, 0xa5, 0xf2, 0xae, 0xe0, 0x30, 0xc3,
-	0xe4, 0x54, 0xc4, 0x92, 0xe3, 0x16, 0x14, 0x12, 0x3e, 0x12, 0xc9, 0x1d, 0x41, 0xae, 0xe3, 0x97,
-	0x3b, 0x8d, 0xf6, 0x76, 0xa3, 0xe9, 0x5b, 0xd7, 0x98, 0xe9, 0xf1, 0x42, 0x28, 0x67, 0x30, 0xae,
-	0x81, 0xdd, 0x0b, 0x08, 0x72, 0x91, 0x5f, 0x62, 0x76, 0x2f, 0xc0, 0x04, 0x8a, 0x37, 0x33, 0x15,
-	0x0e, 0x27, 0x9c, 0xd8, 0x2e, 0xf2, 0x0f, 0xd8, 0x36, 0xc5, 0x0d, 0xc8, 0xf7, 0xe2, 0x81, 0xe4,
-	0xc4, 0x49, 0xf9, 0x26, 0xc1, 0x18, 0x72, 0xfd, 0xe8, 0x99, 0x93, 0x9c, 0x8b, 0x7c, 0x87, 0xa5,
-	0xb1, 0x77, 0x09, 0x95, 0xbe, 0x98, 0xcc, 0xb7, 0xaa, 0x71, 0x1d, 0x1c, 0xc6, 0xc7, 0xe6, 0x91,
-	0x75, 0x88, 0x29, 0x40, 0xc0, 0xc7, 0x51, 0x1c, 0xa9, 0x48, 0xc4, 0xc4, 0x76, 0x1d, 0xbf, 0xc2,
-	0x32, 0xc4, 0xbb, 0x80, 0xaa, 0xd9, 0x60, 0x3c, 0x9e, 0x42, 0x61, 0xce, 0x13, 0xc5, 0x9f, 0x8c,
-	0xc7, 0xa3, 0x9d, 0xc7, 0xdb, 0x14, 0xf7, 0x55, 0xa8, 0x66, 0x92, 0x99, 0x26, 0xaf, 0x06, 0x95,
-	0x2c, 0xef, 0xbc, 0x22, 0x28, 0x5e, 0x6f, 0x06, 0x70, 0x17, 0x4a, 0xbb, 0x1b, 0xe2, 0x93, 0xdd,
-	0x9e, 0xfd, 0x5b, 0x37, 0x9b, 0xff, 0x95, 0x8c, 0x9c, 0x73, 0xc8, 0xa7, 0xfa, 0xf0, 0x9f, 0x8e,
-	0xac, 0xe3, 0xe6, 0xf1, 0x3e, 0xde, 0xcc, 0x75, 0x5b, 0x8b, 0x25, 0xb5, 0x3e, 0x97, 0xd4, 0x5a,
-	0x2d, 0x29, 0x7a, 0xd1, 0x14, 0xbd, 0x6b, 0x8a, 0x3e, 0x34, 0x45, 0x0b, 0x4d, 0xd1, 0x97, 0xa6,
-	0xe8, 0x47, 0x53, 0x6b, 0xa5, 0x29, 0x7a, 0xfb, 0xa6, 0xd6, 0xb0, 0x90, 0xfe, 0x88, 0xb3, 0xdf,
-	0x00, 0x00, 0x00, 0xff, 0xff, 0x80, 0xe3, 0xfa, 0x6f, 0x22, 0x02, 0x00, 0x00,
+	// 577 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0x8c, 0x54, 0xbf, 0x6f, 0xd3, 0x4e,
+	0x14, 0xcf, 0xe5, 0x1a, 0xe7, 0xeb, 0x97, 0xa4, 0xdf, 0x72, 0x2a, 0xc1, 0x44, 0xe8, 0x94, 0x5a,
+	0x0c, 0x19, 0x4a, 0x85, 0x82, 0xc4, 0xc2, 0x02, 0x25, 0x4b, 0x24, 0x58, 0x2e, 0x2a, 0xbb, 0xeb,
+	0x5c, 0x83, 0x85, 0xed, 0x0b, 0xbe, 0x4b, 0x54, 0x75, 0x62, 0x64, 0xe4, 0xcf, 0xe0, 0xef, 0x80,
+	0x85, 0xb1, 0x23, 0x23, 0x31, 0x0b, 0x63, 0xff, 0x04, 0x74, 0xe7, 0x73, 0x62, 0xa5, 0x41, 0xea,
+	0xf6, 0x3e, 0x9f, 0xf7, 0xfc, 0xde, 0xe7, 0xfd, 0x38, 0x43, 0x27, 0x14, 0xa9, 0xca, 0x44, 0x7c,
+	0x32, 0xcf, 0x84, 0x12, 0xa4, 0x69, 0xa1, 0x4f, 0xe0, 0x60, 0x14, 0xc9, 0x0f, 0x67, 0x32, 0x98,
+	0x71, 0xc6, 0x3f, 0x2e, 0xb8, 0x54, 0xfe, 0x2b, 0xb8, 0x57, 0xe1, 0xe4, 0x5c, 0xa4, 0x92, 0x93,
+	0x63, 0x70, 0x32, 0x1e, 0x8a, 0x6c, 0xea, 0xa1, 0x3e, 0x1e, 0xb4, 0x86, 0x87, 0x27, 0x65, 0x46,
+	0x1b, 0xa7, 0x7d, 0xcc, 0xc6, 0xf8, 0x01, 0xb4, 0x2a, 0x34, 0xd9, 0x87, 0xfa, 0x78, 0xe4, 0xa1,
+	0x3e, 0x1a, 0xb8, 0xac, 0x3e, 0x1e, 0x11, 0x0f, 0x9a, 0x6f, 0x17, 0x2a, 0x38, 0x8f, 0xb9, 0x57,
+	0xef, 0xa3, 0xc1, 0x7f, 0xac, 0x84, 0xe4, 0x10, 0x1a, 0xe3, 0xf4, 0x4c, 0x72, 0x0f, 0x1b, 0xbe,
+	0x00, 0x84, 0xc0, 0xde, 0x24, 0xba, 0xe2, 0xde, 0x5e, 0x1f, 0x0d, 0x30, 0x33, 0xb6, 0xff, 0x12,
+	0xda, 0x13, 0x11, 0x2f, 0x4b, 0xd5, 0xe4, 0x00, 0x30, 0xe3, 0x17, 0xb6, 0x88, 0x36, 0x09, 0x05,
+	0x18, 0xf1, 0x8b, 0x28, 0x8d, 0x54, 0x24, 0x52, 0xaf, 0xde, 0xc7, 0x83, 0x36, 0xab, 0x30, 0xfe,
+	0x10, 0x3a, 0x36, 0x83, 0xed, 0xf1, 0x08, 0xf0, 0x52, 0x5d, 0xda, 0x06, 0xff, 0x5f, 0x37, 0xf8,
+	0x8e, 0x67, 0x8a, 0x5f, 0x32, 0xed, 0xf3, 0x8f, 0xa0, 0x33, 0x51, 0x81, 0x5a, 0xc8, 0x7f, 0x96,
+	0xf5, 0x3f, 0x23, 0xd8, 0x2f, 0x63, 0xee, 0x9c, 0x98, 0x3c, 0x01, 0x47, 0x9a, 0x8f, 0x8c, 0xd0,
+	0xd6, 0xf0, 0xfe, 0x56, 0x94, 0xcd, 0x68, 0x83, 0xc8, 0x63, 0xc0, 0xb1, 0x98, 0x79, 0xd8, 0xc4,
+	0x92, 0xad, 0xd8, 0x37, 0x62, 0xc6, 0xb4, 0xdb, 0xff, 0x8e, 0xc0, 0x29, 0xa8, 0x5b, 0x2b, 0xe8,
+	0x82, 0x13, 0xa5, 0xf3, 0x85, 0x2a, 0xea, 0xb9, 0xcc, 0x22, 0x3d, 0xea, 0x34, 0x48, 0x8a, 0xf9,
+	0xbb, 0xcc, 0xd8, 0x15, 0x6d, 0x7b, 0x77, 0xd1, 0xd6, 0x05, 0x27, 0x0c, 0xc2, 0xf7, 0x7c, 0xea,
+	0x35, 0xcc, 0x12, 0x2d, 0xd2, 0x5b, 0x97, 0x2a, 0xc8, 0x14, 0x9f, 0x7a, 0x8e, 0x59, 0x64, 0x09,
+	0xc9, 0x23, 0x70, 0x43, 0x91, 0xcc, 0x63, 0xae, 0x7d, 0x4d, 0xe3, 0xdb, 0x10, 0xfe, 0x15, 0xb4,
+	0xab, 0x75, 0x76, 0xb5, 0xb2, 0x34, 0x7e, 0x73, 0x4c, 0x2e, 0xb3, 0x68, 0x67, 0x2b, 0x1e, 0x34,
+	0xc3, 0x45, 0x96, 0xf1, 0x54, 0xd9, 0x63, 0x2a, 0xa1, 0xbe, 0x3c, 0x25, 0x54, 0x10, 0x1b, 0xd1,
+	0x98, 0x15, 0xc0, 0xe7, 0xe0, 0xae, 0x67, 0xaa, 0x77, 0x1d, 0xa5, 0xa1, 0xa9, 0x8c, 0x99, 0x36,
+	0xb5, 0x70, 0x15, 0x25, 0x5c, 0xaa, 0x20, 0x99, 0x9b, 0xea, 0x98, 0x6d, 0x08, 0x2d, 0x4c, 0xaa,
+	0x8c, 0x07, 0x89, 0x91, 0x80, 0x99, 0x45, 0x3a, 0x4f, 0x22, 0x67, 0x46, 0x40, 0x9b, 0x69, 0x73,
+	0xf8, 0x0d, 0x41, 0xf3, 0x75, 0x31, 0x53, 0x72, 0x0a, 0xee, 0xfa, 0xf9, 0x91, 0x87, 0xeb, 0x51,
+	0x6f, 0x3f, 0xd3, 0x5e, 0x6f, 0x97, 0xcb, 0x1e, 0xdc, 0x73, 0x68, 0x98, 0xd3, 0x26, 0x9b, 0x55,
+	0x55, 0x1f, 0x4b, 0xaf, 0xbb, 0x4d, 0xdb, 0xef, 0x5e, 0x80, 0x63, 0x87, 0x5c, 0x89, 0xa8, 0xde,
+	0x7b, 0xef, 0xc1, 0x2d, 0xbe, 0xf8, 0xf4, 0x29, 0x3a, 0x3d, 0xbe, 0x5e, 0xd1, 0xda, 0xcf, 0x15,
+	0xad, 0xdd, 0xac, 0x28, 0xfa, 0x94, 0x53, 0xf4, 0x35, 0xa7, 0xe8, 0x47, 0x4e, 0xd1, 0x75, 0x4e,
+	0xd1, 0xaf, 0x9c, 0xa2, 0x3f, 0x39, 0xad, 0xdd, 0xe4, 0x14, 0x7d, 0xf9, 0x4d, 0x6b, 0xe7, 0x8e,
+	0xf9, 0x13, 0x3d, 0xfb, 0x1b, 0x00, 0x00, 0xff, 0xff, 0xc4, 0xe0, 0x91, 0xb1, 0x9a, 0x04, 0x00,
+	0x00,
 }

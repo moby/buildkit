@@ -5,7 +5,7 @@ package control;
 service Control {
 	rpc DiskUsage(DiskUsageRequest) returns (DiskUsageResponse);
 	rpc Solve(SolveRequest) returns (SolveResponse);
-	// rpc Status() returns ();
+	rpc Status(StatusRequest) returns (stream StatusResponse);
 }
 
 message DiskUsageRequest {
@@ -28,8 +28,40 @@ message SolveRequest {
 }
 
 message SolveResponse {
-	repeated VertexStatus vertex = 1;
+	repeated Vertex vtx = 1;
+}
+
+message StatusRequest {
+	string Ref = 1;
+}
+
+message StatusResponse {
+	repeated Vertex vtx = 1;
+	repeated VertexStatus status = 2;
+	repeated VertexLog log = 3;
+}
+
+message Vertex {
+	string ID = 1;
+	repeated string inputs = 2;
+	string name = 3;
+	repeated VertexStatus status = 4;
+	bool cached = 5;
+	int64 started = 6; // relative, add abolute google.protobuf.Timestamp as well?
+	int64 completed = 7;
 }
 
 message VertexStatus {
+	string ID = 1;
+	string vertex = 2;
+	string name = 3;
+	int64 current = 4;
+	int64 total = 5;
+}
+
+message VertexLog {
+	int64 inc = 1;
+	int64 timestamp = 2;
+	int64 stream = 3;
+	bytes msg = 4;
 }

@@ -3,15 +3,19 @@ package solver
 import (
 	"context"
 	"os"
+	"strings"
 	"sync"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/buildkit_poc/cache"
+	"github.com/tonistiigi/buildkit_poc/client"
 	"github.com/tonistiigi/buildkit_poc/solver/pb"
 	"github.com/tonistiigi/buildkit_poc/source"
+	"github.com/tonistiigi/buildkit_poc/util/progress"
 	"github.com/tonistiigi/buildkit_poc/worker"
 )
 
@@ -22,6 +26,7 @@ type opVertex struct {
 	refs   []cache.ImmutableRef
 	err    error
 	dgst   digest.Digest
+	vtx    client.Vertex
 }
 
 func Load(ops [][]byte) (*opVertex, error) {
@@ -63,16 +68,24 @@ func loadReqursive(dgst digest.Digest, op *pb.Op, inputs map[digest.Digest]*pb.O
 		return v, nil
 	}
 	vtx := &opVertex{op: op, dgst: dgst}
+	inputDigests := make([]digest.Digest, 0, len(op.Inputs))
 	for _, in := range op.Inputs {
-		op, ok := inputs[digest.Digest(in.Digest)]
+		dgst := digest.Digest(in.Digest)
+		inputDigests = append(inputDigests, dgst)
+		op, ok := inputs[dgst]
 		if !ok {
 			return nil, errors.Errorf("failed to find %s", in)
 		}
-		sub, err := loadReqursive(digest.Digest(in.Digest), op, inputs, cache)
+		sub, err := loadReqursive(dgst, op, inputs, cache)
 		if err != nil {
 			return nil, err
 		}
 		vtx.inputs = append(vtx.inputs, sub)
+	}
+	vtx.vtx = client.Vertex{
+		Inputs: inputDigests,
+		Name:   vtx.name(),
+		ID:     dgst,
 	}
 	cache[dgst] = vtx
 	return vtx, nil
@@ -89,17 +102,42 @@ func (g *opVertex) inputRequiresExport(i int) bool {
 }
 
 type Solver struct {
-	opt Opt
+	opt  Opt
+	jobs jobs
 }
 
 func New(opt Opt) *Solver {
 	return &Solver{opt: opt}
 }
 
-func (s *Solver) Solve(ctx context.Context, g *opVertex) error {
-	err := g.solve(ctx, s.opt) // TODO: separate exporting
+func (s *Solver) Solve(ctx context.Context, id string, g *opVertex) error {
+	// ctx, cancel := context.WithCancel(ctx)
+	// defer cancel()
+
+	pr, ctx, closeProgressWriter := progress.NewContext(ctx)
+
+	_, err := s.jobs.new(id, g, pr)
+	if err != nil {
+		return err
+	}
+
+	err = g.solve(ctx, s.opt) // TODO: separate exporting
+	closeProgressWriter()
+	if err != nil {
+		return err
+	}
+
 	g.release(ctx)
+	// TODO: export final vertex state
 	return err
+}
+
+func (s *Solver) Status(ctx context.Context, id string, statusChan chan *client.SolveStatus) error {
+	j, err := s.jobs.get(id)
+	if err != nil {
+		return nil
+	}
+	return j.pipe(ctx, statusChan)
 }
 
 func (g *opVertex) release(ctx context.Context) (retErr error) {
@@ -150,8 +188,7 @@ func (g *opVertex) solve(ctx context.Context, opt Opt) (retErr error) {
 
 		for _, in := range g.inputs {
 			eg.Go(func() error {
-				err := in.solve(ctx, opt)
-				if err != nil {
+				if err := in.solve(ctx, opt); err != nil {
 					return err
 				}
 				return nil
@@ -162,6 +199,12 @@ func (g *opVertex) solve(ctx context.Context, opt Opt) (retErr error) {
 			return err
 		}
 	}
+
+	pw, _, ctx := progress.FromContext(ctx, g.dgst.String())
+	defer pw.Done()
+
+	g.notifyStarted(pw)
+	defer g.notifyComplete(pw)
 
 	switch op := g.op.Op.(type) {
 	case *pb.Op_Source:
@@ -231,4 +274,29 @@ func (g *opVertex) solve(ctx context.Context, opt Opt) (retErr error) {
 		return errors.Errorf("invalid op type")
 	}
 	return nil
+}
+
+func (g *opVertex) notifyStarted(pw progress.ProgressWriter) {
+	g.vtx.Started = time.Now()
+	pw.Write(g.vtx)
+}
+
+func (g *opVertex) notifyComplete(pw progress.ProgressWriter) {
+	g.vtx.Completed = time.Now()
+	pw.Write(g.vtx)
+}
+
+func (g *opVertex) name() string {
+	switch op := g.op.Op.(type) {
+	case *pb.Op_Source:
+		return op.Source.Identifier
+	case *pb.Op_Exec:
+		name := strings.Join(op.Exec.Meta.Args, " ")
+		if len(name) > 22 { // TODO: const
+			name = name[:20] + "..."
+		}
+		return name
+	default:
+		return "unknown"
+	}
 }

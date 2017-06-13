@@ -3,7 +3,6 @@
 package control
 
 import (
-	"context"
 	"io"
 	"io/ioutil"
 	"os"
@@ -18,6 +17,7 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/buildkit_poc/worker/runcworker"
+	"golang.org/x/net/context"
 )
 
 func NewStandalone(root string) (*Controller, error) {

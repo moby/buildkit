@@ -20,7 +20,7 @@ func FromContext(ctx context.Context, name string) (ProgressWriter, bool, contex
 	}
 	pw = newWriter(pw, name)
 	ctx = context.WithValue(ctx, contextKey, pw)
-	return pw, false, ctx
+	return pw, true, ctx
 }
 
 func NewContext(ctx context.Context) (ProgressReader, context.Context, func()) {
@@ -30,7 +30,7 @@ func NewContext(ctx context.Context) (ProgressReader, context.Context, func()) {
 }
 
 type ProgressWriter interface {
-	Write(Progress) error
+	Write(interface{}) error
 	Done() error
 }
 
@@ -39,17 +39,17 @@ type ProgressReader interface {
 }
 
 type Progress struct {
-	ID string
-
-	// Progress contains a Message or...
-	Message string
-
-	// ...progress of an action
-	Action    string
-	Current   int
-	Total     int
+	ID        string
 	Timestamp time.Time
 	Done      bool
+	Sys       interface{}
+}
+
+type Status struct {
+	// ...progress of an action
+	Action  string
+	Current int
+	Total   int
 }
 
 type progressReader struct {
@@ -95,7 +95,7 @@ func (pr *progressReader) Read(ctx context.Context) (*Progress, error) {
 		default:
 		}
 		open := false
-		for _, sh := range pr.handles { // could be more efficient but unlikely that this array will be very big, maybe random ordering?
+		for _, sh := range pr.handles { // could be more efficient but unlikely that this array will be very big, maybe random ordering? at least remove the completed handlers.
 			p, ok := sh.next()
 			if ok {
 				pr.mu.Unlock()
@@ -148,7 +148,11 @@ func pipe() (*progressReader, *progressWriter, func()) {
 
 func newWriter(pw *progressWriter, name string) *progressWriter {
 	if pw.id != "" {
-		name = pw.id + "." + name
+		if name == "" {
+			name = pw.id
+		} else {
+			name = pw.id + "." + name
+		}
 	}
 	pw = &progressWriter{
 		id:     name,
@@ -163,20 +167,27 @@ type progressWriter struct {
 	lastP  atomic.Value
 	done   bool
 	reader *progressReader
+
+	byKey map[string]atomic.Value
+	items []atomic.Value
 }
 
-func (pw *progressWriter) Write(p Progress) error {
+func (pw *progressWriter) Write(s interface{}) error {
 	if pw.done {
 		return errors.Errorf("writing to closed progresswriter %s", pw.id)
 	}
+	var p Progress
 	p.ID = pw.id
-	if p.Timestamp.IsZero() {
-		p.Timestamp = time.Now()
-	}
-	pw.lastP.Store(&p)
+	p.Timestamp = time.Now()
+	p.Sys = s
+	return pw.write(p)
+}
+
+func (pw *progressWriter) write(p Progress) error {
 	if p.Done {
 		pw.done = true
 	}
+	pw.lastP.Store(&p)
 	pw.reader.cond.Broadcast()
 	return nil
 }
@@ -184,21 +195,24 @@ func (pw *progressWriter) Write(p Progress) error {
 func (pw *progressWriter) Done() error {
 	var p Progress
 	lastP := pw.lastP.Load().(*Progress)
+	p.ID = pw.id
+	p.Timestamp = time.Now()
 	if lastP != nil {
 		p = *lastP
 		if p.Done {
 			return nil
 		}
 	} else {
-		p = Progress{}
+		p.Sys = lastP.Sys
 	}
 	p.Done = true
-	return pw.Write(p)
+	pw.done = true
+	return pw.write(p)
 }
 
 type noOpWriter struct{}
 
-func (pw *noOpWriter) Write(p Progress) error {
+func (pw *noOpWriter) Write(p interface{}) error {
 	return nil
 }
 

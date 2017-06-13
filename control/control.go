@@ -64,8 +64,12 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to load")
 	}
-	if err := c.solver.Solve(ctx, v); err != nil {
+	if err := c.solver.Solve(ctx, req.Ref, v); err != nil {
 		return nil, err
 	}
 	return &controlapi.SolveResponse{}, nil
+}
+
+func (c *Controller) Status(*controlapi.StatusRequest, controlapi.Control_StatusServer) error {
+	return errors.Errorf("not implemented")
 }
