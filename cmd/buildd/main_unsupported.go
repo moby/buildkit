@@ -13,6 +13,6 @@ func appendFlags(f []cli.Flag) []cli.Flag {
 	return f
 }
 
-func newController(c *cli.Context) (*control.Controller, error) {
+func newController(c *cli.Context, root string) (*control.Controller, error) {
 	return nil, errors.New("invalid build")
 }

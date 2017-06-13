@@ -11,8 +11,7 @@ func appendFlags(f []cli.Flag) []cli.Flag {
 	return f
 }
 
-func newController(c *cli.Context) (*control.Controller, error) {
-	root := c.GlobalString("root")
-
+// root must be an absolute path
+func newController(c *cli.Context, root string) (*control.Controller, error) {
 	return control.NewStandalone(root)
 }

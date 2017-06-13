@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/containerd/containerd/sys"
@@ -44,13 +45,17 @@ func main() {
 
 		server := grpc.NewServer(debugGrpcErrors())
 
-		root := c.GlobalString("root")
+		// relative path does not work with nightlyone/lockfile
+		root, err := filepath.Abs(c.GlobalString("root"))
+		if err != nil {
+			return err
+		}
 
 		if err := os.MkdirAll(root, 0700); err != nil {
 			return errors.Wrapf(err, "failed to create %s", root)
 		}
 
-		controller, err := newController(c)
+		controller, err := newController(c, root)
 		if err != nil {
 			return err
 		}

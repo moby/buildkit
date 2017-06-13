@@ -17,8 +17,8 @@ func appendFlags(f []cli.Flag) []cli.Flag {
 	}...)
 }
 
-func newController(c *cli.Context) (*control.Controller, error) {
-	root := c.GlobalString("root")
+// root must be an absolute path
+func newController(c *cli.Context, root string) (*control.Controller, error) {
 	socket := c.GlobalString("containerd")
 
 	return control.NewContainerd(root, socket)
