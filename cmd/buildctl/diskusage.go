@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/urfave/cli"
 )
 
@@ -24,7 +25,7 @@ func diskUsage(clicontext *cli.Context) error {
 		return err
 	}
 
-	log.Printf("%+v", du)
+	log.Printf(spew.Sdump(du))
 
 	return nil
 }
