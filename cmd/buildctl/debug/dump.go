@@ -1,4 +1,4 @@
-package main
+package debug
 
 import (
 	"io"
@@ -13,7 +13,7 @@ import (
 	"github.com/urfave/cli"
 )
 
-var dumpCommand = cli.Command{
+var DumpCommand = cli.Command{
 	Name:   "dump",
 	Usage:  "dump LLB in human-readable format. LLB must be passed via stdin. This command does not require the daemon to be running.",
 	Action: dumpLLB,
