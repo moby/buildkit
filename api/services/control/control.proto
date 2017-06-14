@@ -1,11 +1,18 @@
 syntax = "proto3";
 
-package control;
+package moby.buildkit.v1;
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+import "google/protobuf/timestamp.proto";
+
+option (gogoproto.sizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
 
 service Control {
 	rpc DiskUsage(DiskUsageRequest) returns (DiskUsageResponse);
 	rpc Solve(SolveRequest) returns (SolveResponse);
-	// rpc Status() returns ();
+	rpc Status(StatusRequest) returns (stream StatusResponse);
 }
 
 message DiskUsageRequest {
@@ -28,8 +35,40 @@ message SolveRequest {
 }
 
 message SolveResponse {
-	repeated VertexStatus vertex = 1;
+	repeated Vertex vtx = 1;
+}
+
+message StatusRequest {
+	string Ref = 1;
+}
+
+message StatusResponse {
+	repeated Vertex vertexes = 1;
+	repeated VertexStatus statuses = 2;
+	repeated VertexLog logs = 3;
+}
+
+message Vertex {
+	string digest = 1 [(gogoproto.customtype) = "github.com/opencontainers/go-digest.Digest", (gogoproto.nullable) = false];
+	repeated string inputs = 2 [(gogoproto.customtype) = "github.com/opencontainers/go-digest.Digest", (gogoproto.nullable) = false];
+	string name = 3;
+	bool cached = 4;
+	google.protobuf.Timestamp started = 5 [(gogoproto.stdtime) = true ];
+	google.protobuf.Timestamp completed = 6 [(gogoproto.stdtime) = true ];
 }
 
 message VertexStatus {
+	string ID = 1;
+	string vertex = 2 [(gogoproto.customtype) = "github.com/opencontainers/go-digest.Digest", (gogoproto.nullable) = false];
+	string name = 3;
+	int64 current = 4;
+	int64 total = 5;
+	google.protobuf.Timestamp timestamp = 6 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+}
+
+message VertexLog {
+	string vertex = 1 [(gogoproto.customtype) = "github.com/opencontainers/go-digest.Digest", (gogoproto.nullable) = false];
+	google.protobuf.Timestamp timestamp = 2 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+	int64 stream = 3;
+	bytes msg = 4;
 }

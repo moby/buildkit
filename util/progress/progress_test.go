@@ -30,7 +30,8 @@ func TestProgress(t *testing.T) {
 	err = eg.Wait()
 	assert.NoError(t, err)
 
-	assert.Equal(t, 6, len(trace.items))
+	assert.True(t, len(trace.items) > 5)
+	assert.True(t, len(trace.items) <= 7)
 	assert.Equal(t, trace.items[len(trace.items)-1].Done, true)
 }
 
@@ -51,7 +52,7 @@ func TestProgressNested(t *testing.T) {
 	assert.NoError(t, err)
 
 	assert.True(t, len(trace.items) > 9) // usually 14
-	assert.True(t, len(trace.items) <= 14)
+	assert.True(t, len(trace.items) <= 15)
 	streams := 0
 	for _, t := range trace.items {
 		if t.Done {
@@ -66,7 +67,7 @@ func calc(ctx context.Context, total int, name string) (int, error) {
 	defer pw.Done()
 
 	sum := 0
-	pw.Write(Progress{Action: "starting", Total: total})
+	pw.Write(Status{Action: "starting", Total: total})
 	for i := 1; i <= total; i++ {
 		select {
 		case <-ctx.Done():
@@ -74,12 +75,13 @@ func calc(ctx context.Context, total int, name string) (int, error) {
 		case <-time.After(10 * time.Millisecond):
 		}
 		if i == total {
-			pw.Write(Progress{Action: "done", Total: total, Current: total, Done: true})
+			pw.Write(Status{Action: "done", Total: total, Current: total})
 		} else {
-			pw.Write(Progress{Action: "calculating", Total: total, Current: i})
+			pw.Write(Status{Action: "calculating", Total: total, Current: i})
 		}
 		sum += i
 	}
+	pw.Done()
 
 	return sum, nil
 }
@@ -90,7 +92,7 @@ func reduceCalc(ctx context.Context, total int) (int, error) {
 	pw, _, ctx := FromContext(ctx, "reduce")
 	defer pw.Done()
 
-	pw.Write(Progress{Action: "starting"})
+	pw.Write(Status{Action: "starting"})
 
 	// sync step
 	sum, err := calc(ctx, total, "synccalc")

@@ -5,10 +5,12 @@ import (
 	"github.com/pkg/errors"
 	controlapi "github.com/tonistiigi/buildkit_poc/api/services/control"
 	"github.com/tonistiigi/buildkit_poc/cache"
+	"github.com/tonistiigi/buildkit_poc/client"
 	"github.com/tonistiigi/buildkit_poc/solver"
 	"github.com/tonistiigi/buildkit_poc/source"
 	"github.com/tonistiigi/buildkit_poc/worker"
 	"golang.org/x/net/context"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 )
 
@@ -64,8 +66,45 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to load")
 	}
-	if err := c.solver.Solve(ctx, v); err != nil {
+	if err := c.solver.Solve(ctx, req.Ref, v); err != nil {
 		return nil, err
 	}
 	return &controlapi.SolveResponse{}, nil
+}
+
+func (c *Controller) Status(req *controlapi.StatusRequest, stream controlapi.Control_StatusServer) error {
+	ch := make(chan *client.SolveStatus, 8)
+
+	eg, ctx := errgroup.WithContext(stream.Context())
+	eg.Go(func() error {
+		return c.solver.Status(ctx, req.Ref, ch)
+	})
+
+	eg.Go(func() error {
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case ss, ok := <-ch:
+				if !ok {
+					return nil
+				}
+				sr := controlapi.StatusResponse{}
+				for _, v := range ss.Vertexes {
+					sr.Vertexes = append(sr.Vertexes, &controlapi.Vertex{
+						Digest:    v.Digest,
+						Inputs:    v.Inputs,
+						Name:      v.Name,
+						Started:   v.Started,
+						Completed: v.Completed,
+					})
+				}
+				if err := stream.SendMsg(&sr); err != nil {
+					return err
+				}
+			}
+		}
+	})
+
+	return eg.Wait()
 }

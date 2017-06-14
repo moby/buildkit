@@ -3,7 +3,7 @@
 // DO NOT EDIT!
 
 /*
-	Package control is a generated protocol buffer package.
+	Package moby_buildkit_v1 is a generated protocol buffer package.
 
 	It is generated from these files:
 		control.proto
@@ -14,23 +14,29 @@
 		UsageRecord
 		SolveRequest
 		SolveResponse
+		StatusRequest
+		StatusResponse
+		Vertex
 		VertexStatus
+		VertexLog
 */
-package control
+package moby_buildkit_v1
 
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
+import _ "github.com/gogo/protobuf/gogoproto"
+import _ "github.com/golang/protobuf/ptypes/timestamp"
 
-import bytes "bytes"
-
-import strings "strings"
-import reflect "reflect"
+import github_com_opencontainers_go_digest "github.com/opencontainers/go-digest"
+import time "time"
 
 import (
 	context "golang.org/x/net/context"
 	grpc "google.golang.org/grpc"
 )
+
+import github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
 
 import io "io"
 
@@ -38,6 +44,7 @@ import io "io"
 var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
+var _ = time.Kitchen
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the proto package it is being compiled against.
@@ -49,6 +56,7 @@ type DiskUsageRequest struct {
 }
 
 func (m *DiskUsageRequest) Reset()                    { *m = DiskUsageRequest{} }
+func (m *DiskUsageRequest) String() string            { return proto.CompactTextString(m) }
 func (*DiskUsageRequest) ProtoMessage()               {}
 func (*DiskUsageRequest) Descriptor() ([]byte, []int) { return fileDescriptorControl, []int{0} }
 
@@ -57,6 +65,7 @@ type DiskUsageResponse struct {
 }
 
 func (m *DiskUsageResponse) Reset()                    { *m = DiskUsageResponse{} }
+func (m *DiskUsageResponse) String() string            { return proto.CompactTextString(m) }
 func (*DiskUsageResponse) ProtoMessage()               {}
 func (*DiskUsageResponse) Descriptor() ([]byte, []int) { return fileDescriptorControl, []int{1} }
 
@@ -75,6 +84,7 @@ type UsageRecord struct {
 }
 
 func (m *UsageRecord) Reset()                    { *m = UsageRecord{} }
+func (m *UsageRecord) String() string            { return proto.CompactTextString(m) }
 func (*UsageRecord) ProtoMessage()               {}
 func (*UsageRecord) Descriptor() ([]byte, []int) { return fileDescriptorControl, []int{2} }
 
@@ -112,6 +122,7 @@ type SolveRequest struct {
 }
 
 func (m *SolveRequest) Reset()                    { *m = SolveRequest{} }
+func (m *SolveRequest) String() string            { return proto.CompactTextString(m) }
 func (*SolveRequest) ProtoMessage()               {}
 func (*SolveRequest) Descriptor() ([]byte, []int) { return fileDescriptorControl, []int{3} }
 
@@ -130,309 +141,204 @@ func (m *SolveRequest) GetDefinition() [][]byte {
 }
 
 type SolveResponse struct {
-	Vertex []*VertexStatus `protobuf:"bytes,1,rep,name=vertex" json:"vertex,omitempty"`
+	Vtx []*Vertex `protobuf:"bytes,1,rep,name=vtx" json:"vtx,omitempty"`
 }
 
 func (m *SolveResponse) Reset()                    { *m = SolveResponse{} }
+func (m *SolveResponse) String() string            { return proto.CompactTextString(m) }
 func (*SolveResponse) ProtoMessage()               {}
 func (*SolveResponse) Descriptor() ([]byte, []int) { return fileDescriptorControl, []int{4} }
 
-func (m *SolveResponse) GetVertex() []*VertexStatus {
+func (m *SolveResponse) GetVtx() []*Vertex {
 	if m != nil {
-		return m.Vertex
+		return m.Vtx
+	}
+	return nil
+}
+
+type StatusRequest struct {
+	Ref string `protobuf:"bytes,1,opt,name=Ref,proto3" json:"Ref,omitempty"`
+}
+
+func (m *StatusRequest) Reset()                    { *m = StatusRequest{} }
+func (m *StatusRequest) String() string            { return proto.CompactTextString(m) }
+func (*StatusRequest) ProtoMessage()               {}
+func (*StatusRequest) Descriptor() ([]byte, []int) { return fileDescriptorControl, []int{5} }
+
+func (m *StatusRequest) GetRef() string {
+	if m != nil {
+		return m.Ref
+	}
+	return ""
+}
+
+type StatusResponse struct {
+	Vertexes []*Vertex       `protobuf:"bytes,1,rep,name=vertexes" json:"vertexes,omitempty"`
+	Statuses []*VertexStatus `protobuf:"bytes,2,rep,name=statuses" json:"statuses,omitempty"`
+	Logs     []*VertexLog    `protobuf:"bytes,3,rep,name=logs" json:"logs,omitempty"`
+}
+
+func (m *StatusResponse) Reset()                    { *m = StatusResponse{} }
+func (m *StatusResponse) String() string            { return proto.CompactTextString(m) }
+func (*StatusResponse) ProtoMessage()               {}
+func (*StatusResponse) Descriptor() ([]byte, []int) { return fileDescriptorControl, []int{6} }
+
+func (m *StatusResponse) GetVertexes() []*Vertex {
+	if m != nil {
+		return m.Vertexes
+	}
+	return nil
+}
+
+func (m *StatusResponse) GetStatuses() []*VertexStatus {
+	if m != nil {
+		return m.Statuses
+	}
+	return nil
+}
+
+func (m *StatusResponse) GetLogs() []*VertexLog {
+	if m != nil {
+		return m.Logs
+	}
+	return nil
+}
+
+type Vertex struct {
+	Digest    github_com_opencontainers_go_digest.Digest   `protobuf:"bytes,1,opt,name=digest,proto3,customtype=github.com/opencontainers/go-digest.Digest" json:"digest"`
+	Inputs    []github_com_opencontainers_go_digest.Digest `protobuf:"bytes,2,rep,name=inputs,customtype=github.com/opencontainers/go-digest.Digest" json:"inputs"`
+	Name      string                                       `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Cached    bool                                         `protobuf:"varint,4,opt,name=cached,proto3" json:"cached,omitempty"`
+	Started   *time.Time                                   `protobuf:"bytes,5,opt,name=started,stdtime" json:"started,omitempty"`
+	Completed *time.Time                                   `protobuf:"bytes,6,opt,name=completed,stdtime" json:"completed,omitempty"`
+}
+
+func (m *Vertex) Reset()                    { *m = Vertex{} }
+func (m *Vertex) String() string            { return proto.CompactTextString(m) }
+func (*Vertex) ProtoMessage()               {}
+func (*Vertex) Descriptor() ([]byte, []int) { return fileDescriptorControl, []int{7} }
+
+func (m *Vertex) GetName() string {
+	if m != nil {
+		return m.Name
+	}
+	return ""
+}
+
+func (m *Vertex) GetCached() bool {
+	if m != nil {
+		return m.Cached
+	}
+	return false
+}
+
+func (m *Vertex) GetStarted() *time.Time {
+	if m != nil {
+		return m.Started
+	}
+	return nil
+}
+
+func (m *Vertex) GetCompleted() *time.Time {
+	if m != nil {
+		return m.Completed
 	}
 	return nil
 }
 
 type VertexStatus struct {
+	ID        string                                     `protobuf:"bytes,1,opt,name=ID,proto3" json:"ID,omitempty"`
+	Vertex    github_com_opencontainers_go_digest.Digest `protobuf:"bytes,2,opt,name=vertex,proto3,customtype=github.com/opencontainers/go-digest.Digest" json:"vertex"`
+	Name      string                                     `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Current   int64                                      `protobuf:"varint,4,opt,name=current,proto3" json:"current,omitempty"`
+	Total     int64                                      `protobuf:"varint,5,opt,name=total,proto3" json:"total,omitempty"`
+	Timestamp time.Time                                  `protobuf:"bytes,6,opt,name=timestamp,stdtime" json:"timestamp"`
 }
 
 func (m *VertexStatus) Reset()                    { *m = VertexStatus{} }
+func (m *VertexStatus) String() string            { return proto.CompactTextString(m) }
 func (*VertexStatus) ProtoMessage()               {}
-func (*VertexStatus) Descriptor() ([]byte, []int) { return fileDescriptorControl, []int{5} }
+func (*VertexStatus) Descriptor() ([]byte, []int) { return fileDescriptorControl, []int{8} }
+
+func (m *VertexStatus) GetID() string {
+	if m != nil {
+		return m.ID
+	}
+	return ""
+}
+
+func (m *VertexStatus) GetName() string {
+	if m != nil {
+		return m.Name
+	}
+	return ""
+}
+
+func (m *VertexStatus) GetCurrent() int64 {
+	if m != nil {
+		return m.Current
+	}
+	return 0
+}
+
+func (m *VertexStatus) GetTotal() int64 {
+	if m != nil {
+		return m.Total
+	}
+	return 0
+}
+
+func (m *VertexStatus) GetTimestamp() time.Time {
+	if m != nil {
+		return m.Timestamp
+	}
+	return time.Time{}
+}
+
+type VertexLog struct {
+	Vertex    github_com_opencontainers_go_digest.Digest `protobuf:"bytes,1,opt,name=vertex,proto3,customtype=github.com/opencontainers/go-digest.Digest" json:"vertex"`
+	Timestamp time.Time                                  `protobuf:"bytes,2,opt,name=timestamp,stdtime" json:"timestamp"`
+	Stream    int64                                      `protobuf:"varint,3,opt,name=stream,proto3" json:"stream,omitempty"`
+	Msg       []byte                                     `protobuf:"bytes,4,opt,name=msg,proto3" json:"msg,omitempty"`
+}
+
+func (m *VertexLog) Reset()                    { *m = VertexLog{} }
+func (m *VertexLog) String() string            { return proto.CompactTextString(m) }
+func (*VertexLog) ProtoMessage()               {}
+func (*VertexLog) Descriptor() ([]byte, []int) { return fileDescriptorControl, []int{9} }
+
+func (m *VertexLog) GetTimestamp() time.Time {
+	if m != nil {
+		return m.Timestamp
+	}
+	return time.Time{}
+}
+
+func (m *VertexLog) GetStream() int64 {
+	if m != nil {
+		return m.Stream
+	}
+	return 0
+}
+
+func (m *VertexLog) GetMsg() []byte {
+	if m != nil {
+		return m.Msg
+	}
+	return nil
+}
 
 func init() {
-	proto.RegisterType((*DiskUsageRequest)(nil), "control.DiskUsageRequest")
-	proto.RegisterType((*DiskUsageResponse)(nil), "control.DiskUsageResponse")
-	proto.RegisterType((*UsageRecord)(nil), "control.UsageRecord")
-	proto.RegisterType((*SolveRequest)(nil), "control.SolveRequest")
-	proto.RegisterType((*SolveResponse)(nil), "control.SolveResponse")
-	proto.RegisterType((*VertexStatus)(nil), "control.VertexStatus")
-}
-func (this *DiskUsageRequest) Equal(that interface{}) bool {
-	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	}
-
-	that1, ok := that.(*DiskUsageRequest)
-	if !ok {
-		that2, ok := that.(DiskUsageRequest)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	} else if this == nil {
-		return false
-	}
-	return true
-}
-func (this *DiskUsageResponse) Equal(that interface{}) bool {
-	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	}
-
-	that1, ok := that.(*DiskUsageResponse)
-	if !ok {
-		that2, ok := that.(DiskUsageResponse)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	} else if this == nil {
-		return false
-	}
-	if len(this.Record) != len(that1.Record) {
-		return false
-	}
-	for i := range this.Record {
-		if !this.Record[i].Equal(that1.Record[i]) {
-			return false
-		}
-	}
-	return true
-}
-func (this *UsageRecord) Equal(that interface{}) bool {
-	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	}
-
-	that1, ok := that.(*UsageRecord)
-	if !ok {
-		that2, ok := that.(UsageRecord)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	} else if this == nil {
-		return false
-	}
-	if this.ID != that1.ID {
-		return false
-	}
-	if this.Mutable != that1.Mutable {
-		return false
-	}
-	if this.InUse != that1.InUse {
-		return false
-	}
-	if this.Size_ != that1.Size_ {
-		return false
-	}
-	return true
-}
-func (this *SolveRequest) Equal(that interface{}) bool {
-	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	}
-
-	that1, ok := that.(*SolveRequest)
-	if !ok {
-		that2, ok := that.(SolveRequest)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	} else if this == nil {
-		return false
-	}
-	if this.Ref != that1.Ref {
-		return false
-	}
-	if len(this.Definition) != len(that1.Definition) {
-		return false
-	}
-	for i := range this.Definition {
-		if !bytes.Equal(this.Definition[i], that1.Definition[i]) {
-			return false
-		}
-	}
-	return true
-}
-func (this *SolveResponse) Equal(that interface{}) bool {
-	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	}
-
-	that1, ok := that.(*SolveResponse)
-	if !ok {
-		that2, ok := that.(SolveResponse)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	} else if this == nil {
-		return false
-	}
-	if len(this.Vertex) != len(that1.Vertex) {
-		return false
-	}
-	for i := range this.Vertex {
-		if !this.Vertex[i].Equal(that1.Vertex[i]) {
-			return false
-		}
-	}
-	return true
-}
-func (this *VertexStatus) Equal(that interface{}) bool {
-	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	}
-
-	that1, ok := that.(*VertexStatus)
-	if !ok {
-		that2, ok := that.(VertexStatus)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	} else if this == nil {
-		return false
-	}
-	return true
-}
-func (this *DiskUsageRequest) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 4)
-	s = append(s, "&control.DiskUsageRequest{")
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func (this *DiskUsageResponse) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 5)
-	s = append(s, "&control.DiskUsageResponse{")
-	if this.Record != nil {
-		s = append(s, "Record: "+fmt.Sprintf("%#v", this.Record)+",\n")
-	}
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func (this *UsageRecord) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 8)
-	s = append(s, "&control.UsageRecord{")
-	s = append(s, "ID: "+fmt.Sprintf("%#v", this.ID)+",\n")
-	s = append(s, "Mutable: "+fmt.Sprintf("%#v", this.Mutable)+",\n")
-	s = append(s, "InUse: "+fmt.Sprintf("%#v", this.InUse)+",\n")
-	s = append(s, "Size_: "+fmt.Sprintf("%#v", this.Size_)+",\n")
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func (this *SolveRequest) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 6)
-	s = append(s, "&control.SolveRequest{")
-	s = append(s, "Ref: "+fmt.Sprintf("%#v", this.Ref)+",\n")
-	s = append(s, "Definition: "+fmt.Sprintf("%#v", this.Definition)+",\n")
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func (this *SolveResponse) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 5)
-	s = append(s, "&control.SolveResponse{")
-	if this.Vertex != nil {
-		s = append(s, "Vertex: "+fmt.Sprintf("%#v", this.Vertex)+",\n")
-	}
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func (this *VertexStatus) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 4)
-	s = append(s, "&control.VertexStatus{")
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func valueToGoStringControl(v interface{}, typ string) string {
-	rv := reflect.ValueOf(v)
-	if rv.IsNil() {
-		return "nil"
-	}
-	pv := reflect.Indirect(rv).Interface()
-	return fmt.Sprintf("func(v %v) *%v { return &v } ( %#v )", typ, typ, pv)
+	proto.RegisterType((*DiskUsageRequest)(nil), "moby.buildkit.v1.DiskUsageRequest")
+	proto.RegisterType((*DiskUsageResponse)(nil), "moby.buildkit.v1.DiskUsageResponse")
+	proto.RegisterType((*UsageRecord)(nil), "moby.buildkit.v1.UsageRecord")
+	proto.RegisterType((*SolveRequest)(nil), "moby.buildkit.v1.SolveRequest")
+	proto.RegisterType((*SolveResponse)(nil), "moby.buildkit.v1.SolveResponse")
+	proto.RegisterType((*StatusRequest)(nil), "moby.buildkit.v1.StatusRequest")
+	proto.RegisterType((*StatusResponse)(nil), "moby.buildkit.v1.StatusResponse")
+	proto.RegisterType((*Vertex)(nil), "moby.buildkit.v1.Vertex")
+	proto.RegisterType((*VertexStatus)(nil), "moby.buildkit.v1.VertexStatus")
+	proto.RegisterType((*VertexLog)(nil), "moby.buildkit.v1.VertexLog")
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -448,6 +354,7 @@ const _ = grpc.SupportPackageIsVersion4
 type ControlClient interface {
 	DiskUsage(ctx context.Context, in *DiskUsageRequest, opts ...grpc.CallOption) (*DiskUsageResponse, error)
 	Solve(ctx context.Context, in *SolveRequest, opts ...grpc.CallOption) (*SolveResponse, error)
+	Status(ctx context.Context, in *StatusRequest, opts ...grpc.CallOption) (Control_StatusClient, error)
 }
 
 type controlClient struct {
@@ -460,7 +367,7 @@ func NewControlClient(cc *grpc.ClientConn) ControlClient {
 
 func (c *controlClient) DiskUsage(ctx context.Context, in *DiskUsageRequest, opts ...grpc.CallOption) (*DiskUsageResponse, error) {
 	out := new(DiskUsageResponse)
-	err := grpc.Invoke(ctx, "/control.Control/DiskUsage", in, out, c.cc, opts...)
+	err := grpc.Invoke(ctx, "/moby.buildkit.v1.Control/DiskUsage", in, out, c.cc, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -469,11 +376,43 @@ func (c *controlClient) DiskUsage(ctx context.Context, in *DiskUsageRequest, opt
 
 func (c *controlClient) Solve(ctx context.Context, in *SolveRequest, opts ...grpc.CallOption) (*SolveResponse, error) {
 	out := new(SolveResponse)
-	err := grpc.Invoke(ctx, "/control.Control/Solve", in, out, c.cc, opts...)
+	err := grpc.Invoke(ctx, "/moby.buildkit.v1.Control/Solve", in, out, c.cc, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
+}
+
+func (c *controlClient) Status(ctx context.Context, in *StatusRequest, opts ...grpc.CallOption) (Control_StatusClient, error) {
+	stream, err := grpc.NewClientStream(ctx, &_Control_serviceDesc.Streams[0], c.cc, "/moby.buildkit.v1.Control/Status", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &controlStatusClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Control_StatusClient interface {
+	Recv() (*StatusResponse, error)
+	grpc.ClientStream
+}
+
+type controlStatusClient struct {
+	grpc.ClientStream
+}
+
+func (x *controlStatusClient) Recv() (*StatusResponse, error) {
+	m := new(StatusResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 // Server API for Control service
@@ -481,6 +420,7 @@ func (c *controlClient) Solve(ctx context.Context, in *SolveRequest, opts ...grp
 type ControlServer interface {
 	DiskUsage(context.Context, *DiskUsageRequest) (*DiskUsageResponse, error)
 	Solve(context.Context, *SolveRequest) (*SolveResponse, error)
+	Status(*StatusRequest, Control_StatusServer) error
 }
 
 func RegisterControlServer(s *grpc.Server, srv ControlServer) {
@@ -497,7 +437,7 @@ func _Control_DiskUsage_Handler(srv interface{}, ctx context.Context, dec func(i
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/control.Control/DiskUsage",
+		FullMethod: "/moby.buildkit.v1.Control/DiskUsage",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ControlServer).DiskUsage(ctx, req.(*DiskUsageRequest))
@@ -515,7 +455,7 @@ func _Control_Solve_Handler(srv interface{}, ctx context.Context, dec func(inter
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/control.Control/Solve",
+		FullMethod: "/moby.buildkit.v1.Control/Solve",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ControlServer).Solve(ctx, req.(*SolveRequest))
@@ -523,8 +463,29 @@ func _Control_Solve_Handler(srv interface{}, ctx context.Context, dec func(inter
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Control_Status_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(StatusRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(ControlServer).Status(m, &controlStatusServer{stream})
+}
+
+type Control_StatusServer interface {
+	Send(*StatusResponse) error
+	grpc.ServerStream
+}
+
+type controlStatusServer struct {
+	grpc.ServerStream
+}
+
+func (x *controlStatusServer) Send(m *StatusResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 var _Control_serviceDesc = grpc.ServiceDesc{
-	ServiceName: "control.Control",
+	ServiceName: "moby.buildkit.v1.Control",
 	HandlerType: (*ControlServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
@@ -536,7 +497,13 @@ var _Control_serviceDesc = grpc.ServiceDesc{
 			Handler:    _Control_Solve_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "Status",
+			Handler:       _Control_Status_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "control.proto",
 }
 
@@ -684,8 +651,8 @@ func (m *SolveResponse) MarshalTo(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if len(m.Vertex) > 0 {
-		for _, msg := range m.Vertex {
+	if len(m.Vtx) > 0 {
+		for _, msg := range m.Vtx {
 			dAtA[i] = 0xa
 			i++
 			i = encodeVarintControl(dAtA, i, uint64(msg.Size()))
@@ -695,6 +662,159 @@ func (m *SolveResponse) MarshalTo(dAtA []byte) (int, error) {
 			}
 			i += n
 		}
+	}
+	return i, nil
+}
+
+func (m *StatusRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *StatusRequest) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Ref) > 0 {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintControl(dAtA, i, uint64(len(m.Ref)))
+		i += copy(dAtA[i:], m.Ref)
+	}
+	return i, nil
+}
+
+func (m *StatusResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *StatusResponse) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Vertexes) > 0 {
+		for _, msg := range m.Vertexes {
+			dAtA[i] = 0xa
+			i++
+			i = encodeVarintControl(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if len(m.Statuses) > 0 {
+		for _, msg := range m.Statuses {
+			dAtA[i] = 0x12
+			i++
+			i = encodeVarintControl(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if len(m.Logs) > 0 {
+		for _, msg := range m.Logs {
+			dAtA[i] = 0x1a
+			i++
+			i = encodeVarintControl(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	return i, nil
+}
+
+func (m *Vertex) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Vertex) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Digest) > 0 {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintControl(dAtA, i, uint64(len(m.Digest)))
+		i += copy(dAtA[i:], m.Digest)
+	}
+	if len(m.Inputs) > 0 {
+		for _, s := range m.Inputs {
+			dAtA[i] = 0x12
+			i++
+			l = len(s)
+			for l >= 1<<7 {
+				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
+				l >>= 7
+				i++
+			}
+			dAtA[i] = uint8(l)
+			i++
+			i += copy(dAtA[i:], s)
+		}
+	}
+	if len(m.Name) > 0 {
+		dAtA[i] = 0x1a
+		i++
+		i = encodeVarintControl(dAtA, i, uint64(len(m.Name)))
+		i += copy(dAtA[i:], m.Name)
+	}
+	if m.Cached {
+		dAtA[i] = 0x20
+		i++
+		if m.Cached {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i++
+	}
+	if m.Started != nil {
+		dAtA[i] = 0x2a
+		i++
+		i = encodeVarintControl(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(*m.Started)))
+		n1, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.Started, dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n1
+	}
+	if m.Completed != nil {
+		dAtA[i] = 0x32
+		i++
+		i = encodeVarintControl(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(*m.Completed)))
+		n2, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.Completed, dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n2
 	}
 	return i, nil
 }
@@ -714,6 +834,85 @@ func (m *VertexStatus) MarshalTo(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if len(m.ID) > 0 {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintControl(dAtA, i, uint64(len(m.ID)))
+		i += copy(dAtA[i:], m.ID)
+	}
+	if len(m.Vertex) > 0 {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintControl(dAtA, i, uint64(len(m.Vertex)))
+		i += copy(dAtA[i:], m.Vertex)
+	}
+	if len(m.Name) > 0 {
+		dAtA[i] = 0x1a
+		i++
+		i = encodeVarintControl(dAtA, i, uint64(len(m.Name)))
+		i += copy(dAtA[i:], m.Name)
+	}
+	if m.Current != 0 {
+		dAtA[i] = 0x20
+		i++
+		i = encodeVarintControl(dAtA, i, uint64(m.Current))
+	}
+	if m.Total != 0 {
+		dAtA[i] = 0x28
+		i++
+		i = encodeVarintControl(dAtA, i, uint64(m.Total))
+	}
+	dAtA[i] = 0x32
+	i++
+	i = encodeVarintControl(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(m.Timestamp)))
+	n3, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.Timestamp, dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n3
+	return i, nil
+}
+
+func (m *VertexLog) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *VertexLog) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Vertex) > 0 {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintControl(dAtA, i, uint64(len(m.Vertex)))
+		i += copy(dAtA[i:], m.Vertex)
+	}
+	dAtA[i] = 0x12
+	i++
+	i = encodeVarintControl(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(m.Timestamp)))
+	n4, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.Timestamp, dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n4
+	if m.Stream != 0 {
+		dAtA[i] = 0x18
+		i++
+		i = encodeVarintControl(dAtA, i, uint64(m.Stream))
+	}
+	if len(m.Msg) > 0 {
+		dAtA[i] = 0x22
+		i++
+		i = encodeVarintControl(dAtA, i, uint64(len(m.Msg)))
+		i += copy(dAtA[i:], m.Msg)
+	}
 	return i, nil
 }
 
@@ -800,8 +999,8 @@ func (m *SolveRequest) Size() (n int) {
 func (m *SolveResponse) Size() (n int) {
 	var l int
 	_ = l
-	if len(m.Vertex) > 0 {
-		for _, e := range m.Vertex {
+	if len(m.Vtx) > 0 {
+		for _, e := range m.Vtx {
 			l = e.Size()
 			n += 1 + l + sovControl(uint64(l))
 		}
@@ -809,9 +1008,113 @@ func (m *SolveResponse) Size() (n int) {
 	return n
 }
 
+func (m *StatusRequest) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Ref)
+	if l > 0 {
+		n += 1 + l + sovControl(uint64(l))
+	}
+	return n
+}
+
+func (m *StatusResponse) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.Vertexes) > 0 {
+		for _, e := range m.Vertexes {
+			l = e.Size()
+			n += 1 + l + sovControl(uint64(l))
+		}
+	}
+	if len(m.Statuses) > 0 {
+		for _, e := range m.Statuses {
+			l = e.Size()
+			n += 1 + l + sovControl(uint64(l))
+		}
+	}
+	if len(m.Logs) > 0 {
+		for _, e := range m.Logs {
+			l = e.Size()
+			n += 1 + l + sovControl(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *Vertex) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Digest)
+	if l > 0 {
+		n += 1 + l + sovControl(uint64(l))
+	}
+	if len(m.Inputs) > 0 {
+		for _, s := range m.Inputs {
+			l = len(s)
+			n += 1 + l + sovControl(uint64(l))
+		}
+	}
+	l = len(m.Name)
+	if l > 0 {
+		n += 1 + l + sovControl(uint64(l))
+	}
+	if m.Cached {
+		n += 2
+	}
+	if m.Started != nil {
+		l = github_com_gogo_protobuf_types.SizeOfStdTime(*m.Started)
+		n += 1 + l + sovControl(uint64(l))
+	}
+	if m.Completed != nil {
+		l = github_com_gogo_protobuf_types.SizeOfStdTime(*m.Completed)
+		n += 1 + l + sovControl(uint64(l))
+	}
+	return n
+}
+
 func (m *VertexStatus) Size() (n int) {
 	var l int
 	_ = l
+	l = len(m.ID)
+	if l > 0 {
+		n += 1 + l + sovControl(uint64(l))
+	}
+	l = len(m.Vertex)
+	if l > 0 {
+		n += 1 + l + sovControl(uint64(l))
+	}
+	l = len(m.Name)
+	if l > 0 {
+		n += 1 + l + sovControl(uint64(l))
+	}
+	if m.Current != 0 {
+		n += 1 + sovControl(uint64(m.Current))
+	}
+	if m.Total != 0 {
+		n += 1 + sovControl(uint64(m.Total))
+	}
+	l = github_com_gogo_protobuf_types.SizeOfStdTime(m.Timestamp)
+	n += 1 + l + sovControl(uint64(l))
+	return n
+}
+
+func (m *VertexLog) Size() (n int) {
+	var l int
+	_ = l
+	l = len(m.Vertex)
+	if l > 0 {
+		n += 1 + l + sovControl(uint64(l))
+	}
+	l = github_com_gogo_protobuf_types.SizeOfStdTime(m.Timestamp)
+	n += 1 + l + sovControl(uint64(l))
+	if m.Stream != 0 {
+		n += 1 + sovControl(uint64(m.Stream))
+	}
+	l = len(m.Msg)
+	if l > 0 {
+		n += 1 + l + sovControl(uint64(l))
+	}
 	return n
 }
 
@@ -827,76 +1130,6 @@ func sovControl(x uint64) (n int) {
 }
 func sozControl(x uint64) (n int) {
 	return sovControl(uint64((x << 1) ^ uint64((int64(x) >> 63))))
-}
-func (this *DiskUsageRequest) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&DiskUsageRequest{`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *DiskUsageResponse) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&DiskUsageResponse{`,
-		`Record:` + strings.Replace(fmt.Sprintf("%v", this.Record), "UsageRecord", "UsageRecord", 1) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *UsageRecord) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&UsageRecord{`,
-		`ID:` + fmt.Sprintf("%v", this.ID) + `,`,
-		`Mutable:` + fmt.Sprintf("%v", this.Mutable) + `,`,
-		`InUse:` + fmt.Sprintf("%v", this.InUse) + `,`,
-		`Size_:` + fmt.Sprintf("%v", this.Size_) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *SolveRequest) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&SolveRequest{`,
-		`Ref:` + fmt.Sprintf("%v", this.Ref) + `,`,
-		`Definition:` + fmt.Sprintf("%v", this.Definition) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *SolveResponse) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&SolveResponse{`,
-		`Vertex:` + strings.Replace(fmt.Sprintf("%v", this.Vertex), "VertexStatus", "VertexStatus", 1) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *VertexStatus) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&VertexStatus{`,
-		`}`,
-	}, "")
-	return s
-}
-func valueToStringControl(v interface{}) string {
-	rv := reflect.ValueOf(v)
-	if rv.IsNil() {
-		return "nil"
-	}
-	pv := reflect.Indirect(rv).Interface()
-	return fmt.Sprintf("*%v", pv)
 }
 func (m *DiskUsageRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
@@ -1306,7 +1539,7 @@ func (m *SolveResponse) Unmarshal(dAtA []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Vertex", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Vtx", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -1330,8 +1563,453 @@ func (m *SolveResponse) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Vertex = append(m.Vertex, &VertexStatus{})
-			if err := m.Vertex[len(m.Vertex)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+			m.Vtx = append(m.Vtx, &Vertex{})
+			if err := m.Vtx[len(m.Vtx)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipControl(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthControl
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *StatusRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowControl
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: StatusRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: StatusRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Ref", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthControl
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Ref = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipControl(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthControl
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *StatusResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowControl
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: StatusResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: StatusResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Vertexes", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthControl
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Vertexes = append(m.Vertexes, &Vertex{})
+			if err := m.Vertexes[len(m.Vertexes)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Statuses", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthControl
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Statuses = append(m.Statuses, &VertexStatus{})
+			if err := m.Statuses[len(m.Statuses)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Logs", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthControl
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Logs = append(m.Logs, &VertexLog{})
+			if err := m.Logs[len(m.Logs)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipControl(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthControl
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Vertex) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowControl
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Vertex: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Vertex: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Digest", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthControl
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Digest = github_com_opencontainers_go_digest.Digest(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Inputs", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthControl
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Inputs = append(m.Inputs, github_com_opencontainers_go_digest.Digest(dAtA[iNdEx:postIndex]))
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthControl
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Name = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Cached", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Cached = bool(v != 0)
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Started", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthControl
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Started == nil {
+				m.Started = new(time.Time)
+			}
+			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(m.Started, dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Completed", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthControl
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Completed == nil {
+				m.Completed = new(time.Time)
+			}
+			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(m.Completed, dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -1385,6 +2063,320 @@ func (m *VertexStatus) Unmarshal(dAtA []byte) error {
 			return fmt.Errorf("proto: VertexStatus: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ID", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthControl
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ID = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Vertex", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthControl
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Vertex = github_com_opencontainers_go_digest.Digest(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthControl
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Name = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Current", wireType)
+			}
+			m.Current = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Current |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 5:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Total", wireType)
+			}
+			m.Total = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Total |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Timestamp", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthControl
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(&m.Timestamp, dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipControl(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthControl
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *VertexLog) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowControl
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: VertexLog: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: VertexLog: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Vertex", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthControl
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Vertex = github_com_opencontainers_go_digest.Digest(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Timestamp", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthControl
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(&m.Timestamp, dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Stream", wireType)
+			}
+			m.Stream = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Stream |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Msg", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthControl
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Msg = append(m.Msg[:0], dAtA[iNdEx:postIndex]...)
+			if m.Msg == nil {
+				m.Msg = []byte{}
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipControl(dAtA[iNdEx:])
@@ -1514,27 +2506,49 @@ var (
 func init() { proto.RegisterFile("control.proto", fileDescriptorControl) }
 
 var fileDescriptorControl = []byte{
-	// 349 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0x6c, 0x92, 0xbb, 0x4e, 0x02, 0x41,
-	0x14, 0x86, 0x77, 0x76, 0xb9, 0xc8, 0xe1, 0x12, 0x9c, 0xa0, 0x19, 0x29, 0x26, 0x9b, 0xad, 0xb6,
-	0x40, 0x0a, 0x4c, 0x2c, 0x8d, 0xe2, 0x36, 0x14, 0x36, 0x43, 0xb0, 0x5f, 0x70, 0x30, 0x1b, 0xc9,
-	0x0e, 0xee, 0x0c, 0xc4, 0x58, 0xd9, 0xd8, 0xfb, 0x18, 0x3e, 0x8a, 0x25, 0xa5, 0xa5, 0x8c, 0x8d,
-	0x25, 0x8f, 0x60, 0x58, 0x06, 0xdc, 0x10, 0xbb, 0x73, 0xbe, 0x73, 0x99, 0xff, 0x3f, 0x19, 0xa8,
-	0x8e, 0x44, 0xac, 0x12, 0x31, 0x69, 0x4f, 0x13, 0xa1, 0x04, 0x2e, 0x9a, 0xd4, 0xc3, 0x50, 0x0f,
-	0x22, 0xf9, 0x30, 0x90, 0xe1, 0x3d, 0x67, 0xfc, 0x71, 0xc6, 0xa5, 0xf2, 0xae, 0xe0, 0x30, 0xc3,
-	0xe4, 0x54, 0xc4, 0x92, 0xe3, 0x16, 0x14, 0x12, 0x3e, 0x12, 0xc9, 0x1d, 0x41, 0xae, 0xe3, 0x97,
-	0x3b, 0x8d, 0xf6, 0x76, 0xa3, 0xe9, 0x5b, 0xd7, 0x98, 0xe9, 0xf1, 0x42, 0x28, 0x67, 0x30, 0xae,
-	0x81, 0xdd, 0x0b, 0x08, 0x72, 0x91, 0x5f, 0x62, 0x76, 0x2f, 0xc0, 0x04, 0x8a, 0x37, 0x33, 0x15,
-	0x0e, 0x27, 0x9c, 0xd8, 0x2e, 0xf2, 0x0f, 0xd8, 0x36, 0xc5, 0x0d, 0xc8, 0xf7, 0xe2, 0x81, 0xe4,
-	0xc4, 0x49, 0xf9, 0x26, 0xc1, 0x18, 0x72, 0xfd, 0xe8, 0x99, 0x93, 0x9c, 0x8b, 0x7c, 0x87, 0xa5,
-	0xb1, 0x77, 0x09, 0x95, 0xbe, 0x98, 0xcc, 0xb7, 0xaa, 0x71, 0x1d, 0x1c, 0xc6, 0xc7, 0xe6, 0x91,
-	0x75, 0x88, 0x29, 0x40, 0xc0, 0xc7, 0x51, 0x1c, 0xa9, 0x48, 0xc4, 0xc4, 0x76, 0x1d, 0xbf, 0xc2,
-	0x32, 0xc4, 0xbb, 0x80, 0xaa, 0xd9, 0x60, 0x3c, 0x9e, 0x42, 0x61, 0xce, 0x13, 0xc5, 0x9f, 0x8c,
-	0xc7, 0xa3, 0x9d, 0xc7, 0xdb, 0x14, 0xf7, 0x55, 0xa8, 0x66, 0x92, 0x99, 0x26, 0xaf, 0x06, 0x95,
-	0x2c, 0xef, 0xbc, 0x22, 0x28, 0x5e, 0x6f, 0x06, 0x70, 0x17, 0x4a, 0xbb, 0x1b, 0xe2, 0x93, 0xdd,
-	0x9e, 0xfd, 0x5b, 0x37, 0x9b, 0xff, 0x95, 0x8c, 0x9c, 0x73, 0xc8, 0xa7, 0xfa, 0xf0, 0x9f, 0x8e,
-	0xac, 0xe3, 0xe6, 0xf1, 0x3e, 0xde, 0xcc, 0x75, 0x5b, 0x8b, 0x25, 0xb5, 0x3e, 0x97, 0xd4, 0x5a,
-	0x2d, 0x29, 0x7a, 0xd1, 0x14, 0xbd, 0x6b, 0x8a, 0x3e, 0x34, 0x45, 0x0b, 0x4d, 0xd1, 0x97, 0xa6,
-	0xe8, 0x47, 0x53, 0x6b, 0xa5, 0x29, 0x7a, 0xfb, 0xa6, 0xd6, 0xb0, 0x90, 0xfe, 0x88, 0xb3, 0xdf,
-	0x00, 0x00, 0x00, 0xff, 0xff, 0x80, 0xe3, 0xfa, 0x6f, 0x22, 0x02, 0x00, 0x00,
+	// 689 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0xa4, 0x54, 0xc1, 0x6e, 0xd3, 0x4c,
+	0x10, 0xfe, 0x37, 0x4e, 0x9d, 0x64, 0x92, 0x56, 0xfd, 0x57, 0x08, 0x59, 0x41, 0x24, 0xc6, 0x5c,
+	0xa2, 0x4a, 0x75, 0x20, 0xc0, 0xa5, 0x48, 0x08, 0x85, 0x1c, 0x68, 0x45, 0x2f, 0xdb, 0x96, 0xbb,
+	0xe3, 0x6c, 0x5d, 0xab, 0xb6, 0x37, 0x78, 0xd7, 0x51, 0xe1, 0x29, 0x78, 0x17, 0x9e, 0x01, 0xa9,
+	0x47, 0xce, 0x1c, 0x0a, 0xea, 0x23, 0x70, 0xe2, 0x88, 0xbc, 0xbb, 0x76, 0x4d, 0xdb, 0x40, 0x55,
+	0x4e, 0xd9, 0xd9, 0x7c, 0xf3, 0xed, 0x7c, 0xe3, 0xf9, 0x06, 0x56, 0x7d, 0x96, 0x88, 0x94, 0x45,
+	0xee, 0x3c, 0x65, 0x82, 0xe1, 0xf5, 0x98, 0x4d, 0xdf, 0xbb, 0xd3, 0x2c, 0x8c, 0x66, 0xc7, 0xa1,
+	0x70, 0x17, 0x8f, 0xbb, 0x9b, 0x41, 0x28, 0x8e, 0xb2, 0xa9, 0xeb, 0xb3, 0x78, 0x18, 0xb0, 0x80,
+	0x0d, 0x25, 0x70, 0x9a, 0x1d, 0xca, 0x48, 0x06, 0xf2, 0xa4, 0x08, 0xba, 0xfd, 0x80, 0xb1, 0x20,
+	0xa2, 0x17, 0x28, 0x11, 0xc6, 0x94, 0x0b, 0x2f, 0x9e, 0x2b, 0x80, 0x83, 0x61, 0x7d, 0x12, 0xf2,
+	0xe3, 0x03, 0xee, 0x05, 0x94, 0xd0, 0x77, 0x19, 0xe5, 0xc2, 0xd9, 0x81, 0xff, 0x2b, 0x77, 0x7c,
+	0xce, 0x12, 0x4e, 0xf1, 0x33, 0x30, 0x53, 0xea, 0xb3, 0x74, 0x66, 0x21, 0xdb, 0x18, 0xb4, 0x47,
+	0xf7, 0xdd, 0xcb, 0xb5, 0xb9, 0x3a, 0x21, 0x07, 0x11, 0x0d, 0x76, 0x3c, 0x68, 0x57, 0xae, 0xf1,
+	0x1a, 0xd4, 0xb6, 0x27, 0x16, 0xb2, 0xd1, 0xa0, 0x45, 0x6a, 0xdb, 0x13, 0x6c, 0x41, 0x63, 0x37,
+	0x13, 0xde, 0x34, 0xa2, 0x56, 0xcd, 0x46, 0x83, 0x26, 0x29, 0x42, 0x7c, 0x07, 0x56, 0xb6, 0x93,
+	0x03, 0x4e, 0x2d, 0x43, 0xde, 0xab, 0x00, 0x63, 0xa8, 0xef, 0x85, 0x1f, 0xa8, 0x55, 0xb7, 0xd1,
+	0xc0, 0x20, 0xf2, 0xec, 0xbc, 0x84, 0xce, 0x1e, 0x8b, 0x16, 0x45, 0xf9, 0x78, 0x1d, 0x0c, 0x42,
+	0x0f, 0xf5, 0x23, 0xf9, 0x11, 0xf7, 0x00, 0x26, 0xf4, 0x30, 0x4c, 0x42, 0x11, 0xb2, 0xc4, 0xaa,
+	0xd9, 0xc6, 0xa0, 0x43, 0x2a, 0x37, 0xce, 0x73, 0x58, 0xd5, 0x0c, 0x5a, 0xec, 0x06, 0x18, 0x0b,
+	0x71, 0xa2, 0x95, 0x5a, 0x57, 0x95, 0xbe, 0xa5, 0xa9, 0xa0, 0x27, 0x24, 0x07, 0x39, 0x0f, 0x60,
+	0x75, 0x4f, 0x78, 0x22, 0xe3, 0x4b, 0xdf, 0x77, 0x3e, 0x21, 0x58, 0x2b, 0x30, 0xfa, 0x85, 0xa7,
+	0xd0, 0x5c, 0x48, 0x12, 0xca, 0xff, 0xfa, 0x4c, 0x89, 0xc4, 0x5b, 0xd0, 0xe4, 0x92, 0x87, 0x72,
+	0x29, 0xa3, 0x3d, 0xea, 0x2d, 0xcb, 0xd2, 0xef, 0x95, 0x78, 0x3c, 0x84, 0x7a, 0xc4, 0x02, 0x6e,
+	0x19, 0x32, 0xef, 0xde, 0xb2, 0xbc, 0x37, 0x2c, 0x20, 0x12, 0xe8, 0x9c, 0xd6, 0xc0, 0x54, 0x77,
+	0x78, 0x07, 0xcc, 0x59, 0x18, 0x50, 0x2e, 0x94, 0xaa, 0xf1, 0xe8, 0xf4, 0xac, 0xff, 0xdf, 0xd7,
+	0xb3, 0xfe, 0x46, 0x65, 0x1a, 0xd9, 0x9c, 0x26, 0xf9, 0xf4, 0x7a, 0x61, 0x42, 0x53, 0x3e, 0x0c,
+	0xd8, 0xa6, 0x4a, 0x71, 0x27, 0xf2, 0x87, 0x68, 0x86, 0x9c, 0x2b, 0x4c, 0xe6, 0x99, 0x50, 0x0a,
+	0x6e, 0xc9, 0xa5, 0x18, 0xf2, 0x71, 0x48, 0xbc, 0x58, 0xcd, 0x48, 0x8b, 0xc8, 0x33, 0xbe, 0x0b,
+	0xa6, 0xef, 0xf9, 0x47, 0x74, 0x26, 0x87, 0xa4, 0x49, 0x74, 0x84, 0xb7, 0xa0, 0xc1, 0x85, 0x97,
+	0x0a, 0x3a, 0xb3, 0x56, 0x6c, 0x34, 0x68, 0x8f, 0xba, 0xae, 0x32, 0x87, 0x5b, 0x98, 0xc3, 0xdd,
+	0x2f, 0xcc, 0x31, 0xae, 0x7f, 0xfc, 0xd6, 0x47, 0xa4, 0x48, 0xc0, 0x2f, 0xa0, 0xe5, 0xb3, 0x78,
+	0x1e, 0xd1, 0x3c, 0xdb, 0xbc, 0x61, 0xf6, 0x45, 0x8a, 0xf3, 0x03, 0x41, 0xa7, 0xfa, 0x59, 0xae,
+	0xf8, 0x60, 0x07, 0x4c, 0xf5, 0x91, 0xa5, 0x0d, 0x6e, 0xd9, 0x14, 0xc5, 0x70, 0x6d, 0x53, 0x2c,
+	0x68, 0xf8, 0x59, 0x9a, 0xd2, 0x44, 0x68, 0xeb, 0x14, 0x61, 0xee, 0x33, 0xc1, 0x84, 0x17, 0xc9,
+	0xa6, 0x18, 0x44, 0x05, 0x78, 0x0c, 0xad, 0x72, 0x53, 0xdc, 0x40, 0x70, 0x33, 0x2f, 0x57, 0x89,
+	0x2e, 0xd3, 0x9c, 0xcf, 0x08, 0x5a, 0xe5, 0x4c, 0x55, 0x14, 0xa2, 0x7f, 0x56, 0xf8, 0x5b, 0x75,
+	0xb5, 0x5b, 0x55, 0x97, 0x8f, 0x09, 0x17, 0x29, 0xf5, 0x62, 0xd9, 0x27, 0x83, 0xe8, 0x28, 0x77,
+	0x6f, 0xcc, 0x03, 0xd9, 0xa5, 0x0e, 0xc9, 0x8f, 0xa3, 0x9f, 0x08, 0x1a, 0xaf, 0xd4, 0x5a, 0xc6,
+	0xfb, 0xd0, 0x2a, 0x57, 0x23, 0x76, 0xae, 0x7a, 0xe8, 0xf2, 0x2e, 0xed, 0x3e, 0xfc, 0x23, 0x46,
+	0x2f, 0x83, 0xd7, 0xb0, 0x22, 0xf7, 0x0f, 0xbe, 0xc6, 0xcd, 0xd5, 0xd5, 0xd6, 0xed, 0x2f, 0xfd,
+	0x5f, 0x33, 0xed, 0x82, 0xa9, 0x27, 0xec, 0x3a, 0x68, 0x75, 0x4d, 0x75, 0xed, 0xe5, 0x00, 0x45,
+	0xf6, 0x08, 0x8d, 0x3b, 0xa7, 0xe7, 0x3d, 0xf4, 0xe5, 0xbc, 0x87, 0xbe, 0x9f, 0xf7, 0xd0, 0xd4,
+	0x94, 0xbd, 0x7d, 0xf2, 0x2b, 0x00, 0x00, 0xff, 0xff, 0x08, 0xd7, 0xbb, 0xa9, 0xa5, 0x06, 0x00,
+	0x00,
 }
