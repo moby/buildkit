@@ -30,9 +30,9 @@ type ManagerOpt struct {
 }
 
 type Accessor interface {
-	Get(id string) (ImmutableRef, error)
-	New(s ImmutableRef) (MutableRef, error)
-	GetMutable(id string) (MutableRef, error) // Rebase?
+	Get(ctx context.Context, id string) (ImmutableRef, error)
+	New(ctx context.Context, s ImmutableRef) (MutableRef, error)
+	GetMutable(ctx context.Context, id string) (MutableRef, error) // Rebase?
 }
 
 type Controller interface {
@@ -93,15 +93,15 @@ func (cm *cacheManager) Close() error {
 	return cm.db.Close()
 }
 
-func (cm *cacheManager) Get(id string) (ImmutableRef, error) {
+func (cm *cacheManager) Get(ctx context.Context, id string) (ImmutableRef, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
-	return cm.get(id)
+	return cm.get(ctx, id)
 }
-func (cm *cacheManager) get(id string) (ImmutableRef, error) {
+func (cm *cacheManager) get(ctx context.Context, id string) (ImmutableRef, error) {
 	rec, ok := cm.records[id]
 	if !ok {
-		info, err := cm.Snapshotter.Stat(context.TODO(), id)
+		info, err := cm.Snapshotter.Stat(ctx, id)
 		if err != nil {
 			return nil, err
 		}
@@ -111,7 +111,7 @@ func (cm *cacheManager) get(id string) (ImmutableRef, error) {
 
 		var parent ImmutableRef
 		if info.Parent != "" {
-			parent, err = cm.get(info.Parent)
+			parent, err = cm.get(ctx, info.Parent)
 			if err != nil {
 				return nil, err
 			}
@@ -140,23 +140,23 @@ func (cm *cacheManager) get(id string) (ImmutableRef, error) {
 
 	return rec.ref(), nil
 }
-func (cm *cacheManager) New(s ImmutableRef) (MutableRef, error) {
+func (cm *cacheManager) New(ctx context.Context, s ImmutableRef) (MutableRef, error) {
 	id := generateID()
 
 	var parent ImmutableRef
 	var parentID string
 	if s != nil {
 		var err error
-		parent, err = cm.Get(s.ID())
+		parent, err = cm.Get(ctx, s.ID())
 		if err != nil {
 			return nil, err
 		}
 		parentID = parent.ID()
 	}
 
-	if _, err := cm.Snapshotter.Prepare(context.TODO(), id, parentID); err != nil {
+	if _, err := cm.Snapshotter.Prepare(ctx, id, parentID); err != nil {
 		if parent != nil {
-			parent.Release()
+			parent.Release(ctx)
 		}
 		return nil, errors.Wrapf(err, "failed to prepare %s", id)
 	}
@@ -177,7 +177,7 @@ func (cm *cacheManager) New(s ImmutableRef) (MutableRef, error) {
 
 	return rec.mref(), nil
 }
-func (cm *cacheManager) GetMutable(id string) (MutableRef, error) { // Rebase?
+func (cm *cacheManager) GetMutable(ctx context.Context, id string) (MutableRef, error) { // Rebase?
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -226,7 +226,7 @@ func (cm *cacheManager) DiskUsage(ctx context.Context) ([]*client.UsageInfo, err
 		if d.Size == sizeUnknown {
 			func(d *client.UsageInfo) {
 				eg.Go(func() error {
-					ref, err := cm.Get(d.ID)
+					ref, err := cm.Get(ctx, d.ID)
 					if err != nil {
 						d.Size = 0
 						return nil
@@ -236,7 +236,7 @@ func (cm *cacheManager) DiskUsage(ctx context.Context) ([]*client.UsageInfo, err
 						return err
 					}
 					d.Size = s
-					return ref.Release()
+					return ref.Release(ctx)
 				})
 			}(d)
 		}

@@ -55,7 +55,7 @@ func (w *runcworker) Exec(ctx context.Context, meta worker.Meta, mounts map[stri
 		return errors.Errorf("no root mount")
 	}
 
-	rootMount, err := root.Mount()
+	rootMount, err := root.Mount(ctx)
 	if err != nil {
 		return err
 	}
@@ -77,7 +77,7 @@ func (w *runcworker) Exec(ctx context.Context, meta worker.Meta, mounts map[stri
 	}
 	defer f.Close()
 
-	spec, err := oci.GenerateSpec(meta, mounts)
+	spec, err := oci.GenerateSpec(ctx, meta, mounts)
 	if err != nil {
 		return err
 	}

@@ -16,7 +16,7 @@ const sizeUnknown int64 = -1
 type ImmutableRef interface {
 	Mountable
 	ID() string
-	Release() error
+	Release(context.Context) error
 	Size(ctx context.Context) (int64, error)
 	// Prepare() / ChainID() / Meta()
 }
@@ -30,7 +30,7 @@ type MutableRef interface {
 }
 
 type Mountable interface {
-	Mount() ([]mount.Mount, error)
+	Mount(ctx context.Context) ([]mount.Mount, error)
 }
 
 type cacheRecord struct {
@@ -84,12 +84,12 @@ func (cr *cacheRecord) Size(ctx context.Context) (int64, error) {
 	return s.(int64), err
 }
 
-func (cr *cacheRecord) Mount() ([]mount.Mount, error) {
+func (cr *cacheRecord) Mount(ctx context.Context) ([]mount.Mount, error) {
 	cr.mu.Lock()
 	defer cr.mu.Unlock()
 
 	if cr.mutable {
-		m, err := cr.cm.Snapshotter.Mounts(context.TODO(), cr.id)
+		m, err := cr.cm.Snapshotter.Mounts(ctx, cr.id)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to mount %s", cr.id)
 		}
@@ -97,7 +97,7 @@ func (cr *cacheRecord) Mount() ([]mount.Mount, error) {
 	}
 	if cr.viewMount == nil { // TODO: handle this better
 		cr.view = generateID()
-		m, err := cr.cm.Snapshotter.View(context.TODO(), cr.view, cr.id)
+		m, err := cr.cm.Snapshotter.View(ctx, cr.view, cr.id)
 		if err != nil {
 			cr.view = ""
 			return nil, errors.Wrapf(err, "failed to mount %s", cr.id)
@@ -119,24 +119,24 @@ type mutableRef struct {
 	*cacheRecord
 }
 
-func (sr *immutableRef) Release() error {
+func (sr *immutableRef) Release(ctx context.Context) error {
 	sr.cm.mu.Lock()
 	defer sr.cm.mu.Unlock()
 
 	sr.mu.Lock()
 	defer sr.mu.Unlock()
 
-	return sr.release()
+	return sr.release(ctx)
 }
 
-func (sr *immutableRef) release() error {
+func (sr *immutableRef) release(ctx context.Context) error {
 	if sr.parent != nil {
-		if err := sr.parent.(*immutableRef).release(); err != nil {
+		if err := sr.parent.(*immutableRef).release(ctx); err != nil {
 			return err
 		}
 	}
 	if sr.viewMount != nil {
-		if err := sr.cm.Snapshotter.Remove(context.TODO(), sr.view); err != nil {
+		if err := sr.cm.Snapshotter.Remove(ctx, sr.view); err != nil {
 			return err
 		}
 		sr.view = ""
