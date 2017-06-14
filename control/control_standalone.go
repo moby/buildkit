@@ -3,6 +3,7 @@
 package control
 
 import (
+	"context"
 	"io"
 	"io/ioutil"
 	"os"
@@ -12,12 +13,14 @@ import (
 	"github.com/containerd/containerd/archive/compression"
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/mount"
+	"github.com/containerd/containerd/namespaces"
+	ctdsnapshot "github.com/containerd/containerd/snapshot"
 	"github.com/containerd/containerd/snapshot/overlay"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/buildkit_poc/worker/runcworker"
-	"golang.org/x/net/context"
+	netcontext "golang.org/x/net/context" // TODO: fix
 )
 
 func NewStandalone(root string) (*Controller, error) {
@@ -61,7 +64,7 @@ func newPullDeps(root string) (*pullDeps, error) {
 	a := &localApplier{root: root, content: c}
 
 	return &pullDeps{
-		Snapshotter:  s,
+		Snapshotter:  &nsSnapshotter{s},
 		ContentStore: c,
 		Applier:      a,
 	}, nil
@@ -73,7 +76,7 @@ type localApplier struct {
 	content content.Store
 }
 
-func (a *localApplier) Apply(ctx context.Context, desc ocispec.Descriptor, mounts []mount.Mount) (ocispec.Descriptor, error) {
+func (a *localApplier) Apply(ctx netcontext.Context, desc ocispec.Descriptor, mounts []mount.Mount) (ocispec.Descriptor, error) {
 	dir, err := ioutil.TempDir(a.root, "extract-")
 	if err != nil {
 		return ocispec.Descriptor{}, errors.Wrap(err, "failed to create temporary directory")
@@ -135,4 +138,44 @@ type nopCloser struct {
 
 func (n *nopCloser) Close() error {
 	return nil
+}
+
+// this should be supported by containerd. currently packages are unusable without wrapping
+const dummyNs = "buildkit"
+
+type nsSnapshotter struct {
+	ctdsnapshot.Snapshotter
+}
+
+func (s *nsSnapshotter) Stat(ctx context.Context, key string) (ctdsnapshot.Info, error) {
+	ctx = namespaces.WithNamespace(ctx, dummyNs)
+	return s.Snapshotter.Stat(ctx, key)
+}
+func (s *nsSnapshotter) Usage(ctx context.Context, key string) (ctdsnapshot.Usage, error) {
+	ctx = namespaces.WithNamespace(ctx, dummyNs)
+	return s.Snapshotter.Usage(ctx, key)
+}
+func (s *nsSnapshotter) Mounts(ctx context.Context, key string) ([]mount.Mount, error) {
+	ctx = namespaces.WithNamespace(ctx, dummyNs)
+	return s.Snapshotter.Mounts(ctx, key)
+}
+func (s *nsSnapshotter) Prepare(ctx context.Context, key, parent string) ([]mount.Mount, error) {
+	ctx = namespaces.WithNamespace(ctx, dummyNs)
+	return s.Snapshotter.Prepare(ctx, key, parent)
+}
+func (s *nsSnapshotter) View(ctx context.Context, key, parent string) ([]mount.Mount, error) {
+	ctx = namespaces.WithNamespace(ctx, dummyNs)
+	return s.Snapshotter.View(ctx, key, parent)
+}
+func (s *nsSnapshotter) Commit(ctx context.Context, name, key string) error {
+	ctx = namespaces.WithNamespace(ctx, dummyNs)
+	return s.Snapshotter.Commit(ctx, name, key)
+}
+func (s *nsSnapshotter) Remove(ctx context.Context, key string) error {
+	ctx = namespaces.WithNamespace(ctx, dummyNs)
+	return s.Snapshotter.Remove(ctx, key)
+}
+func (s *nsSnapshotter) Walk(ctx context.Context, fn func(context.Context, ctdsnapshot.Info) error) error {
+	ctx = namespaces.WithNamespace(ctx, dummyNs)
+	return s.Snapshotter.Walk(ctx, fn)
 }
