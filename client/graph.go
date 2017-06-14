@@ -10,8 +10,8 @@ type Vertex struct {
 	ID        digest.Digest
 	Inputs    []digest.Digest
 	Name      string
-	Started   time.Time
-	Completed time.Time
+	Started   *time.Time
+	Completed *time.Time
 	Cached    bool
 	Error     string
 }

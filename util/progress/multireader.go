@@ -10,13 +10,14 @@ type MultiReader struct {
 	main        ProgressReader
 	initialized bool
 	done        chan struct{}
-	writers     map[*progressWriter]struct{}
+	writers     map[*progressWriter]func()
 }
 
 func NewMultiReader(pr ProgressReader) *MultiReader {
 	mr := &MultiReader{
-		main: pr,
-		done: make(chan struct{}),
+		main:    pr,
+		writers: make(map[*progressWriter]func()),
+		done:    make(chan struct{}),
 	}
 	return mr
 }
@@ -25,11 +26,11 @@ func (mr *MultiReader) Reader(ctx context.Context) ProgressReader {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
 
-	pr, ctx, _ := NewContext(ctx)
+	pr, ctx, closeWriter := NewContext(ctx)
 	pw, _, _ := FromContext(ctx, "")
 
 	w := pw.(*progressWriter)
-	mr.writers[w] = struct{}{}
+	mr.writers[w] = closeWriter
 
 	go func() {
 		select {
@@ -55,13 +56,17 @@ func (mr *MultiReader) handle() error {
 		if err != nil {
 			return err
 		}
+		mr.mu.Lock()
+		for w, c := range mr.writers {
+			if p == nil {
+				c()
+			} else {
+				w.write(*p)
+			}
+		}
+		mr.mu.Unlock()
 		if p == nil {
 			return nil
 		}
-		mr.mu.Lock()
-		for w := range mr.writers {
-			w.write(*p)
-		}
-		mr.mu.Unlock()
 	}
 }

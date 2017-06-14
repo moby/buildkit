@@ -31,7 +31,7 @@ func NewContext(ctx context.Context) (ProgressReader, context.Context, func()) {
 
 type ProgressWriter interface {
 	Write(interface{}) error
-	Done() error
+	Done() error // Close
 }
 
 type ProgressReader interface {
