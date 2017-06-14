@@ -7,7 +7,7 @@ import (
 )
 
 type Vertex struct {
-	ID        digest.Digest
+	Digest    digest.Digest
 	Inputs    []digest.Digest
 	Name      string
 	Started   *time.Time
@@ -17,7 +17,7 @@ type Vertex struct {
 }
 
 type VertexStatus struct {
-	ID        digest.Digest
+	ID        string
 	Vertex    digest.Digest
 	Name      string
 	Total     int

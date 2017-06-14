@@ -3,7 +3,7 @@
 // DO NOT EDIT!
 
 /*
-	Package control is a generated protocol buffer package.
+	Package moby_buildkit_v1 is a generated protocol buffer package.
 
 	It is generated from these files:
 		control.proto
@@ -20,21 +20,23 @@
 		VertexStatus
 		VertexLog
 */
-package control
+package moby_buildkit_v1
 
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
+import _ "github.com/gogo/protobuf/gogoproto"
+import _ "github.com/golang/protobuf/ptypes/timestamp"
 
-import bytes "bytes"
-
-import strings "strings"
-import reflect "reflect"
+import github_com_opencontainers_go_digest "github.com/opencontainers/go-digest"
+import time "time"
 
 import (
 	context "golang.org/x/net/context"
 	grpc "google.golang.org/grpc"
 )
+
+import github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
 
 import io "io"
 
@@ -42,6 +44,7 @@ import io "io"
 var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
+var _ = time.Kitchen
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the proto package it is being compiled against.
@@ -53,6 +56,7 @@ type DiskUsageRequest struct {
 }
 
 func (m *DiskUsageRequest) Reset()                    { *m = DiskUsageRequest{} }
+func (m *DiskUsageRequest) String() string            { return proto.CompactTextString(m) }
 func (*DiskUsageRequest) ProtoMessage()               {}
 func (*DiskUsageRequest) Descriptor() ([]byte, []int) { return fileDescriptorControl, []int{0} }
 
@@ -61,6 +65,7 @@ type DiskUsageResponse struct {
 }
 
 func (m *DiskUsageResponse) Reset()                    { *m = DiskUsageResponse{} }
+func (m *DiskUsageResponse) String() string            { return proto.CompactTextString(m) }
 func (*DiskUsageResponse) ProtoMessage()               {}
 func (*DiskUsageResponse) Descriptor() ([]byte, []int) { return fileDescriptorControl, []int{1} }
 
@@ -79,6 +84,7 @@ type UsageRecord struct {
 }
 
 func (m *UsageRecord) Reset()                    { *m = UsageRecord{} }
+func (m *UsageRecord) String() string            { return proto.CompactTextString(m) }
 func (*UsageRecord) ProtoMessage()               {}
 func (*UsageRecord) Descriptor() ([]byte, []int) { return fileDescriptorControl, []int{2} }
 
@@ -116,6 +122,7 @@ type SolveRequest struct {
 }
 
 func (m *SolveRequest) Reset()                    { *m = SolveRequest{} }
+func (m *SolveRequest) String() string            { return proto.CompactTextString(m) }
 func (*SolveRequest) ProtoMessage()               {}
 func (*SolveRequest) Descriptor() ([]byte, []int) { return fileDescriptorControl, []int{3} }
 
@@ -138,6 +145,7 @@ type SolveResponse struct {
 }
 
 func (m *SolveResponse) Reset()                    { *m = SolveResponse{} }
+func (m *SolveResponse) String() string            { return proto.CompactTextString(m) }
 func (*SolveResponse) ProtoMessage()               {}
 func (*SolveResponse) Descriptor() ([]byte, []int) { return fileDescriptorControl, []int{4} }
 
@@ -153,6 +161,7 @@ type StatusRequest struct {
 }
 
 func (m *StatusRequest) Reset()                    { *m = StatusRequest{} }
+func (m *StatusRequest) String() string            { return proto.CompactTextString(m) }
 func (*StatusRequest) ProtoMessage()               {}
 func (*StatusRequest) Descriptor() ([]byte, []int) { return fileDescriptorControl, []int{5} }
 
@@ -170,6 +179,7 @@ type StatusResponse struct {
 }
 
 func (m *StatusResponse) Reset()                    { *m = StatusResponse{} }
+func (m *StatusResponse) String() string            { return proto.CompactTextString(m) }
 func (*StatusResponse) ProtoMessage()               {}
 func (*StatusResponse) Descriptor() ([]byte, []int) { return fileDescriptorControl, []int{6} }
 
@@ -195,31 +205,18 @@ func (m *StatusResponse) GetLogs() []*VertexLog {
 }
 
 type Vertex struct {
-	ID        string   `protobuf:"bytes,1,opt,name=ID,proto3" json:"ID,omitempty"`
-	Inputs    []string `protobuf:"bytes,2,rep,name=inputs" json:"inputs,omitempty"`
-	Name      string   `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
-	Cached    bool     `protobuf:"varint,4,opt,name=cached,proto3" json:"cached,omitempty"`
-	Started   int64    `protobuf:"varint,5,opt,name=started,proto3" json:"started,omitempty"`
-	Completed int64    `protobuf:"varint,6,opt,name=completed,proto3" json:"completed,omitempty"`
+	Digest    github_com_opencontainers_go_digest.Digest   `protobuf:"bytes,1,opt,name=digest,proto3,customtype=github.com/opencontainers/go-digest.Digest" json:"digest"`
+	Inputs    []github_com_opencontainers_go_digest.Digest `protobuf:"bytes,2,rep,name=inputs,customtype=github.com/opencontainers/go-digest.Digest" json:"inputs"`
+	Name      string                                       `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Cached    bool                                         `protobuf:"varint,4,opt,name=cached,proto3" json:"cached,omitempty"`
+	Started   *time.Time                                   `protobuf:"bytes,5,opt,name=started,stdtime" json:"started,omitempty"`
+	Completed *time.Time                                   `protobuf:"bytes,6,opt,name=completed,stdtime" json:"completed,omitempty"`
 }
 
 func (m *Vertex) Reset()                    { *m = Vertex{} }
+func (m *Vertex) String() string            { return proto.CompactTextString(m) }
 func (*Vertex) ProtoMessage()               {}
 func (*Vertex) Descriptor() ([]byte, []int) { return fileDescriptorControl, []int{7} }
-
-func (m *Vertex) GetID() string {
-	if m != nil {
-		return m.ID
-	}
-	return ""
-}
-
-func (m *Vertex) GetInputs() []string {
-	if m != nil {
-		return m.Inputs
-	}
-	return nil
-}
 
 func (m *Vertex) GetName() string {
 	if m != nil {
@@ -235,42 +232,37 @@ func (m *Vertex) GetCached() bool {
 	return false
 }
 
-func (m *Vertex) GetStarted() int64 {
+func (m *Vertex) GetStarted() *time.Time {
 	if m != nil {
 		return m.Started
 	}
-	return 0
+	return nil
 }
 
-func (m *Vertex) GetCompleted() int64 {
+func (m *Vertex) GetCompleted() *time.Time {
 	if m != nil {
 		return m.Completed
 	}
-	return 0
+	return nil
 }
 
 type VertexStatus struct {
-	ID      string `protobuf:"bytes,1,opt,name=ID,proto3" json:"ID,omitempty"`
-	Vertex  string `protobuf:"bytes,2,opt,name=vertex,proto3" json:"vertex,omitempty"`
-	Name    string `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
-	Current int64  `protobuf:"varint,4,opt,name=current,proto3" json:"current,omitempty"`
-	Total   int64  `protobuf:"varint,5,opt,name=total,proto3" json:"total,omitempty"`
+	ID        string                                     `protobuf:"bytes,1,opt,name=ID,proto3" json:"ID,omitempty"`
+	Vertex    github_com_opencontainers_go_digest.Digest `protobuf:"bytes,2,opt,name=vertex,proto3,customtype=github.com/opencontainers/go-digest.Digest" json:"vertex"`
+	Name      string                                     `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Current   int64                                      `protobuf:"varint,4,opt,name=current,proto3" json:"current,omitempty"`
+	Total     int64                                      `protobuf:"varint,5,opt,name=total,proto3" json:"total,omitempty"`
+	Timestamp time.Time                                  `protobuf:"bytes,6,opt,name=timestamp,stdtime" json:"timestamp"`
 }
 
 func (m *VertexStatus) Reset()                    { *m = VertexStatus{} }
+func (m *VertexStatus) String() string            { return proto.CompactTextString(m) }
 func (*VertexStatus) ProtoMessage()               {}
 func (*VertexStatus) Descriptor() ([]byte, []int) { return fileDescriptorControl, []int{8} }
 
 func (m *VertexStatus) GetID() string {
 	if m != nil {
 		return m.ID
-	}
-	return ""
-}
-
-func (m *VertexStatus) GetVertex() string {
-	if m != nil {
-		return m.Vertex
 	}
 	return ""
 }
@@ -296,29 +288,30 @@ func (m *VertexStatus) GetTotal() int64 {
 	return 0
 }
 
-type VertexLog struct {
-	Inc       int64  `protobuf:"varint,1,opt,name=inc,proto3" json:"inc,omitempty"`
-	Timestamp int64  `protobuf:"varint,2,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-	Stream    int64  `protobuf:"varint,3,opt,name=stream,proto3" json:"stream,omitempty"`
-	Msg       []byte `protobuf:"bytes,4,opt,name=msg,proto3" json:"msg,omitempty"`
-}
-
-func (m *VertexLog) Reset()                    { *m = VertexLog{} }
-func (*VertexLog) ProtoMessage()               {}
-func (*VertexLog) Descriptor() ([]byte, []int) { return fileDescriptorControl, []int{9} }
-
-func (m *VertexLog) GetInc() int64 {
-	if m != nil {
-		return m.Inc
-	}
-	return 0
-}
-
-func (m *VertexLog) GetTimestamp() int64 {
+func (m *VertexStatus) GetTimestamp() time.Time {
 	if m != nil {
 		return m.Timestamp
 	}
-	return 0
+	return time.Time{}
+}
+
+type VertexLog struct {
+	Vertex    github_com_opencontainers_go_digest.Digest `protobuf:"bytes,1,opt,name=vertex,proto3,customtype=github.com/opencontainers/go-digest.Digest" json:"vertex"`
+	Timestamp time.Time                                  `protobuf:"bytes,2,opt,name=timestamp,stdtime" json:"timestamp"`
+	Stream    int64                                      `protobuf:"varint,3,opt,name=stream,proto3" json:"stream,omitempty"`
+	Msg       []byte                                     `protobuf:"bytes,4,opt,name=msg,proto3" json:"msg,omitempty"`
+}
+
+func (m *VertexLog) Reset()                    { *m = VertexLog{} }
+func (m *VertexLog) String() string            { return proto.CompactTextString(m) }
+func (*VertexLog) ProtoMessage()               {}
+func (*VertexLog) Descriptor() ([]byte, []int) { return fileDescriptorControl, []int{9} }
+
+func (m *VertexLog) GetTimestamp() time.Time {
+	if m != nil {
+		return m.Timestamp
+	}
+	return time.Time{}
 }
 
 func (m *VertexLog) GetStream() int64 {
@@ -336,537 +329,16 @@ func (m *VertexLog) GetMsg() []byte {
 }
 
 func init() {
-	proto.RegisterType((*DiskUsageRequest)(nil), "control.DiskUsageRequest")
-	proto.RegisterType((*DiskUsageResponse)(nil), "control.DiskUsageResponse")
-	proto.RegisterType((*UsageRecord)(nil), "control.UsageRecord")
-	proto.RegisterType((*SolveRequest)(nil), "control.SolveRequest")
-	proto.RegisterType((*SolveResponse)(nil), "control.SolveResponse")
-	proto.RegisterType((*StatusRequest)(nil), "control.StatusRequest")
-	proto.RegisterType((*StatusResponse)(nil), "control.StatusResponse")
-	proto.RegisterType((*Vertex)(nil), "control.Vertex")
-	proto.RegisterType((*VertexStatus)(nil), "control.VertexStatus")
-	proto.RegisterType((*VertexLog)(nil), "control.VertexLog")
-}
-func (this *DiskUsageRequest) Equal(that interface{}) bool {
-	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	}
-
-	that1, ok := that.(*DiskUsageRequest)
-	if !ok {
-		that2, ok := that.(DiskUsageRequest)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	} else if this == nil {
-		return false
-	}
-	return true
-}
-func (this *DiskUsageResponse) Equal(that interface{}) bool {
-	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	}
-
-	that1, ok := that.(*DiskUsageResponse)
-	if !ok {
-		that2, ok := that.(DiskUsageResponse)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	} else if this == nil {
-		return false
-	}
-	if len(this.Record) != len(that1.Record) {
-		return false
-	}
-	for i := range this.Record {
-		if !this.Record[i].Equal(that1.Record[i]) {
-			return false
-		}
-	}
-	return true
-}
-func (this *UsageRecord) Equal(that interface{}) bool {
-	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	}
-
-	that1, ok := that.(*UsageRecord)
-	if !ok {
-		that2, ok := that.(UsageRecord)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	} else if this == nil {
-		return false
-	}
-	if this.ID != that1.ID {
-		return false
-	}
-	if this.Mutable != that1.Mutable {
-		return false
-	}
-	if this.InUse != that1.InUse {
-		return false
-	}
-	if this.Size_ != that1.Size_ {
-		return false
-	}
-	return true
-}
-func (this *SolveRequest) Equal(that interface{}) bool {
-	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	}
-
-	that1, ok := that.(*SolveRequest)
-	if !ok {
-		that2, ok := that.(SolveRequest)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	} else if this == nil {
-		return false
-	}
-	if this.Ref != that1.Ref {
-		return false
-	}
-	if len(this.Definition) != len(that1.Definition) {
-		return false
-	}
-	for i := range this.Definition {
-		if !bytes.Equal(this.Definition[i], that1.Definition[i]) {
-			return false
-		}
-	}
-	return true
-}
-func (this *SolveResponse) Equal(that interface{}) bool {
-	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	}
-
-	that1, ok := that.(*SolveResponse)
-	if !ok {
-		that2, ok := that.(SolveResponse)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	} else if this == nil {
-		return false
-	}
-	if len(this.Vtx) != len(that1.Vtx) {
-		return false
-	}
-	for i := range this.Vtx {
-		if !this.Vtx[i].Equal(that1.Vtx[i]) {
-			return false
-		}
-	}
-	return true
-}
-func (this *StatusRequest) Equal(that interface{}) bool {
-	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	}
-
-	that1, ok := that.(*StatusRequest)
-	if !ok {
-		that2, ok := that.(StatusRequest)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	} else if this == nil {
-		return false
-	}
-	if this.Ref != that1.Ref {
-		return false
-	}
-	return true
-}
-func (this *StatusResponse) Equal(that interface{}) bool {
-	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	}
-
-	that1, ok := that.(*StatusResponse)
-	if !ok {
-		that2, ok := that.(StatusResponse)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	} else if this == nil {
-		return false
-	}
-	if len(this.Vertexes) != len(that1.Vertexes) {
-		return false
-	}
-	for i := range this.Vertexes {
-		if !this.Vertexes[i].Equal(that1.Vertexes[i]) {
-			return false
-		}
-	}
-	if len(this.Statuses) != len(that1.Statuses) {
-		return false
-	}
-	for i := range this.Statuses {
-		if !this.Statuses[i].Equal(that1.Statuses[i]) {
-			return false
-		}
-	}
-	if len(this.Logs) != len(that1.Logs) {
-		return false
-	}
-	for i := range this.Logs {
-		if !this.Logs[i].Equal(that1.Logs[i]) {
-			return false
-		}
-	}
-	return true
-}
-func (this *Vertex) Equal(that interface{}) bool {
-	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	}
-
-	that1, ok := that.(*Vertex)
-	if !ok {
-		that2, ok := that.(Vertex)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	} else if this == nil {
-		return false
-	}
-	if this.ID != that1.ID {
-		return false
-	}
-	if len(this.Inputs) != len(that1.Inputs) {
-		return false
-	}
-	for i := range this.Inputs {
-		if this.Inputs[i] != that1.Inputs[i] {
-			return false
-		}
-	}
-	if this.Name != that1.Name {
-		return false
-	}
-	if this.Cached != that1.Cached {
-		return false
-	}
-	if this.Started != that1.Started {
-		return false
-	}
-	if this.Completed != that1.Completed {
-		return false
-	}
-	return true
-}
-func (this *VertexStatus) Equal(that interface{}) bool {
-	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	}
-
-	that1, ok := that.(*VertexStatus)
-	if !ok {
-		that2, ok := that.(VertexStatus)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	} else if this == nil {
-		return false
-	}
-	if this.ID != that1.ID {
-		return false
-	}
-	if this.Vertex != that1.Vertex {
-		return false
-	}
-	if this.Name != that1.Name {
-		return false
-	}
-	if this.Current != that1.Current {
-		return false
-	}
-	if this.Total != that1.Total {
-		return false
-	}
-	return true
-}
-func (this *VertexLog) Equal(that interface{}) bool {
-	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	}
-
-	that1, ok := that.(*VertexLog)
-	if !ok {
-		that2, ok := that.(VertexLog)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	} else if this == nil {
-		return false
-	}
-	if this.Inc != that1.Inc {
-		return false
-	}
-	if this.Timestamp != that1.Timestamp {
-		return false
-	}
-	if this.Stream != that1.Stream {
-		return false
-	}
-	if !bytes.Equal(this.Msg, that1.Msg) {
-		return false
-	}
-	return true
-}
-func (this *DiskUsageRequest) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 4)
-	s = append(s, "&control.DiskUsageRequest{")
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func (this *DiskUsageResponse) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 5)
-	s = append(s, "&control.DiskUsageResponse{")
-	if this.Record != nil {
-		s = append(s, "Record: "+fmt.Sprintf("%#v", this.Record)+",\n")
-	}
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func (this *UsageRecord) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 8)
-	s = append(s, "&control.UsageRecord{")
-	s = append(s, "ID: "+fmt.Sprintf("%#v", this.ID)+",\n")
-	s = append(s, "Mutable: "+fmt.Sprintf("%#v", this.Mutable)+",\n")
-	s = append(s, "InUse: "+fmt.Sprintf("%#v", this.InUse)+",\n")
-	s = append(s, "Size_: "+fmt.Sprintf("%#v", this.Size_)+",\n")
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func (this *SolveRequest) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 6)
-	s = append(s, "&control.SolveRequest{")
-	s = append(s, "Ref: "+fmt.Sprintf("%#v", this.Ref)+",\n")
-	s = append(s, "Definition: "+fmt.Sprintf("%#v", this.Definition)+",\n")
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func (this *SolveResponse) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 5)
-	s = append(s, "&control.SolveResponse{")
-	if this.Vtx != nil {
-		s = append(s, "Vtx: "+fmt.Sprintf("%#v", this.Vtx)+",\n")
-	}
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func (this *StatusRequest) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 5)
-	s = append(s, "&control.StatusRequest{")
-	s = append(s, "Ref: "+fmt.Sprintf("%#v", this.Ref)+",\n")
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func (this *StatusResponse) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 7)
-	s = append(s, "&control.StatusResponse{")
-	if this.Vertexes != nil {
-		s = append(s, "Vertexes: "+fmt.Sprintf("%#v", this.Vertexes)+",\n")
-	}
-	if this.Statuses != nil {
-		s = append(s, "Statuses: "+fmt.Sprintf("%#v", this.Statuses)+",\n")
-	}
-	if this.Logs != nil {
-		s = append(s, "Logs: "+fmt.Sprintf("%#v", this.Logs)+",\n")
-	}
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func (this *Vertex) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 10)
-	s = append(s, "&control.Vertex{")
-	s = append(s, "ID: "+fmt.Sprintf("%#v", this.ID)+",\n")
-	s = append(s, "Inputs: "+fmt.Sprintf("%#v", this.Inputs)+",\n")
-	s = append(s, "Name: "+fmt.Sprintf("%#v", this.Name)+",\n")
-	s = append(s, "Cached: "+fmt.Sprintf("%#v", this.Cached)+",\n")
-	s = append(s, "Started: "+fmt.Sprintf("%#v", this.Started)+",\n")
-	s = append(s, "Completed: "+fmt.Sprintf("%#v", this.Completed)+",\n")
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func (this *VertexStatus) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 9)
-	s = append(s, "&control.VertexStatus{")
-	s = append(s, "ID: "+fmt.Sprintf("%#v", this.ID)+",\n")
-	s = append(s, "Vertex: "+fmt.Sprintf("%#v", this.Vertex)+",\n")
-	s = append(s, "Name: "+fmt.Sprintf("%#v", this.Name)+",\n")
-	s = append(s, "Current: "+fmt.Sprintf("%#v", this.Current)+",\n")
-	s = append(s, "Total: "+fmt.Sprintf("%#v", this.Total)+",\n")
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func (this *VertexLog) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 8)
-	s = append(s, "&control.VertexLog{")
-	s = append(s, "Inc: "+fmt.Sprintf("%#v", this.Inc)+",\n")
-	s = append(s, "Timestamp: "+fmt.Sprintf("%#v", this.Timestamp)+",\n")
-	s = append(s, "Stream: "+fmt.Sprintf("%#v", this.Stream)+",\n")
-	s = append(s, "Msg: "+fmt.Sprintf("%#v", this.Msg)+",\n")
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func valueToGoStringControl(v interface{}, typ string) string {
-	rv := reflect.ValueOf(v)
-	if rv.IsNil() {
-		return "nil"
-	}
-	pv := reflect.Indirect(rv).Interface()
-	return fmt.Sprintf("func(v %v) *%v { return &v } ( %#v )", typ, typ, pv)
+	proto.RegisterType((*DiskUsageRequest)(nil), "moby.buildkit.v1.DiskUsageRequest")
+	proto.RegisterType((*DiskUsageResponse)(nil), "moby.buildkit.v1.DiskUsageResponse")
+	proto.RegisterType((*UsageRecord)(nil), "moby.buildkit.v1.UsageRecord")
+	proto.RegisterType((*SolveRequest)(nil), "moby.buildkit.v1.SolveRequest")
+	proto.RegisterType((*SolveResponse)(nil), "moby.buildkit.v1.SolveResponse")
+	proto.RegisterType((*StatusRequest)(nil), "moby.buildkit.v1.StatusRequest")
+	proto.RegisterType((*StatusResponse)(nil), "moby.buildkit.v1.StatusResponse")
+	proto.RegisterType((*Vertex)(nil), "moby.buildkit.v1.Vertex")
+	proto.RegisterType((*VertexStatus)(nil), "moby.buildkit.v1.VertexStatus")
+	proto.RegisterType((*VertexLog)(nil), "moby.buildkit.v1.VertexLog")
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -895,7 +367,7 @@ func NewControlClient(cc *grpc.ClientConn) ControlClient {
 
 func (c *controlClient) DiskUsage(ctx context.Context, in *DiskUsageRequest, opts ...grpc.CallOption) (*DiskUsageResponse, error) {
 	out := new(DiskUsageResponse)
-	err := grpc.Invoke(ctx, "/control.Control/DiskUsage", in, out, c.cc, opts...)
+	err := grpc.Invoke(ctx, "/moby.buildkit.v1.Control/DiskUsage", in, out, c.cc, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -904,7 +376,7 @@ func (c *controlClient) DiskUsage(ctx context.Context, in *DiskUsageRequest, opt
 
 func (c *controlClient) Solve(ctx context.Context, in *SolveRequest, opts ...grpc.CallOption) (*SolveResponse, error) {
 	out := new(SolveResponse)
-	err := grpc.Invoke(ctx, "/control.Control/Solve", in, out, c.cc, opts...)
+	err := grpc.Invoke(ctx, "/moby.buildkit.v1.Control/Solve", in, out, c.cc, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -912,7 +384,7 @@ func (c *controlClient) Solve(ctx context.Context, in *SolveRequest, opts ...grp
 }
 
 func (c *controlClient) Status(ctx context.Context, in *StatusRequest, opts ...grpc.CallOption) (Control_StatusClient, error) {
-	stream, err := grpc.NewClientStream(ctx, &_Control_serviceDesc.Streams[0], c.cc, "/control.Control/Status", opts...)
+	stream, err := grpc.NewClientStream(ctx, &_Control_serviceDesc.Streams[0], c.cc, "/moby.buildkit.v1.Control/Status", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -965,7 +437,7 @@ func _Control_DiskUsage_Handler(srv interface{}, ctx context.Context, dec func(i
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/control.Control/DiskUsage",
+		FullMethod: "/moby.buildkit.v1.Control/DiskUsage",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ControlServer).DiskUsage(ctx, req.(*DiskUsageRequest))
@@ -983,7 +455,7 @@ func _Control_Solve_Handler(srv interface{}, ctx context.Context, dec func(inter
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/control.Control/Solve",
+		FullMethod: "/moby.buildkit.v1.Control/Solve",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ControlServer).Solve(ctx, req.(*SolveRequest))
@@ -1013,7 +485,7 @@ func (x *controlStatusServer) Send(m *StatusResponse) error {
 }
 
 var _Control_serviceDesc = grpc.ServiceDesc{
-	ServiceName: "control.Control",
+	ServiceName: "moby.buildkit.v1.Control",
 	HandlerType: (*ControlServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
@@ -1287,11 +759,11 @@ func (m *Vertex) MarshalTo(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if len(m.ID) > 0 {
+	if len(m.Digest) > 0 {
 		dAtA[i] = 0xa
 		i++
-		i = encodeVarintControl(dAtA, i, uint64(len(m.ID)))
-		i += copy(dAtA[i:], m.ID)
+		i = encodeVarintControl(dAtA, i, uint64(len(m.Digest)))
+		i += copy(dAtA[i:], m.Digest)
 	}
 	if len(m.Inputs) > 0 {
 		for _, s := range m.Inputs {
@@ -1324,15 +796,25 @@ func (m *Vertex) MarshalTo(dAtA []byte) (int, error) {
 		}
 		i++
 	}
-	if m.Started != 0 {
-		dAtA[i] = 0x28
+	if m.Started != nil {
+		dAtA[i] = 0x2a
 		i++
-		i = encodeVarintControl(dAtA, i, uint64(m.Started))
+		i = encodeVarintControl(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(*m.Started)))
+		n1, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.Started, dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n1
 	}
-	if m.Completed != 0 {
-		dAtA[i] = 0x30
+	if m.Completed != nil {
+		dAtA[i] = 0x32
 		i++
-		i = encodeVarintControl(dAtA, i, uint64(m.Completed))
+		i = encodeVarintControl(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(*m.Completed)))
+		n2, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.Completed, dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n2
 	}
 	return i, nil
 }
@@ -1380,6 +862,14 @@ func (m *VertexStatus) MarshalTo(dAtA []byte) (int, error) {
 		i++
 		i = encodeVarintControl(dAtA, i, uint64(m.Total))
 	}
+	dAtA[i] = 0x32
+	i++
+	i = encodeVarintControl(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(m.Timestamp)))
+	n3, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.Timestamp, dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n3
 	return i, nil
 }
 
@@ -1398,16 +888,20 @@ func (m *VertexLog) MarshalTo(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.Inc != 0 {
-		dAtA[i] = 0x8
+	if len(m.Vertex) > 0 {
+		dAtA[i] = 0xa
 		i++
-		i = encodeVarintControl(dAtA, i, uint64(m.Inc))
+		i = encodeVarintControl(dAtA, i, uint64(len(m.Vertex)))
+		i += copy(dAtA[i:], m.Vertex)
 	}
-	if m.Timestamp != 0 {
-		dAtA[i] = 0x10
-		i++
-		i = encodeVarintControl(dAtA, i, uint64(m.Timestamp))
+	dAtA[i] = 0x12
+	i++
+	i = encodeVarintControl(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(m.Timestamp)))
+	n4, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.Timestamp, dAtA[i:])
+	if err != nil {
+		return 0, err
 	}
+	i += n4
 	if m.Stream != 0 {
 		dAtA[i] = 0x18
 		i++
@@ -1551,7 +1045,7 @@ func (m *StatusResponse) Size() (n int) {
 func (m *Vertex) Size() (n int) {
 	var l int
 	_ = l
-	l = len(m.ID)
+	l = len(m.Digest)
 	if l > 0 {
 		n += 1 + l + sovControl(uint64(l))
 	}
@@ -1568,11 +1062,13 @@ func (m *Vertex) Size() (n int) {
 	if m.Cached {
 		n += 2
 	}
-	if m.Started != 0 {
-		n += 1 + sovControl(uint64(m.Started))
+	if m.Started != nil {
+		l = github_com_gogo_protobuf_types.SizeOfStdTime(*m.Started)
+		n += 1 + l + sovControl(uint64(l))
 	}
-	if m.Completed != 0 {
-		n += 1 + sovControl(uint64(m.Completed))
+	if m.Completed != nil {
+		l = github_com_gogo_protobuf_types.SizeOfStdTime(*m.Completed)
+		n += 1 + l + sovControl(uint64(l))
 	}
 	return n
 }
@@ -1598,18 +1094,20 @@ func (m *VertexStatus) Size() (n int) {
 	if m.Total != 0 {
 		n += 1 + sovControl(uint64(m.Total))
 	}
+	l = github_com_gogo_protobuf_types.SizeOfStdTime(m.Timestamp)
+	n += 1 + l + sovControl(uint64(l))
 	return n
 }
 
 func (m *VertexLog) Size() (n int) {
 	var l int
 	_ = l
-	if m.Inc != 0 {
-		n += 1 + sovControl(uint64(m.Inc))
+	l = len(m.Vertex)
+	if l > 0 {
+		n += 1 + l + sovControl(uint64(l))
 	}
-	if m.Timestamp != 0 {
-		n += 1 + sovControl(uint64(m.Timestamp))
-	}
+	l = github_com_gogo_protobuf_types.SizeOfStdTime(m.Timestamp)
+	n += 1 + l + sovControl(uint64(l))
 	if m.Stream != 0 {
 		n += 1 + sovControl(uint64(m.Stream))
 	}
@@ -1632,131 +1130,6 @@ func sovControl(x uint64) (n int) {
 }
 func sozControl(x uint64) (n int) {
 	return sovControl(uint64((x << 1) ^ uint64((int64(x) >> 63))))
-}
-func (this *DiskUsageRequest) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&DiskUsageRequest{`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *DiskUsageResponse) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&DiskUsageResponse{`,
-		`Record:` + strings.Replace(fmt.Sprintf("%v", this.Record), "UsageRecord", "UsageRecord", 1) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *UsageRecord) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&UsageRecord{`,
-		`ID:` + fmt.Sprintf("%v", this.ID) + `,`,
-		`Mutable:` + fmt.Sprintf("%v", this.Mutable) + `,`,
-		`InUse:` + fmt.Sprintf("%v", this.InUse) + `,`,
-		`Size_:` + fmt.Sprintf("%v", this.Size_) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *SolveRequest) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&SolveRequest{`,
-		`Ref:` + fmt.Sprintf("%v", this.Ref) + `,`,
-		`Definition:` + fmt.Sprintf("%v", this.Definition) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *SolveResponse) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&SolveResponse{`,
-		`Vtx:` + strings.Replace(fmt.Sprintf("%v", this.Vtx), "Vertex", "Vertex", 1) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *StatusRequest) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&StatusRequest{`,
-		`Ref:` + fmt.Sprintf("%v", this.Ref) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *StatusResponse) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&StatusResponse{`,
-		`Vertexes:` + strings.Replace(fmt.Sprintf("%v", this.Vertexes), "Vertex", "Vertex", 1) + `,`,
-		`Statuses:` + strings.Replace(fmt.Sprintf("%v", this.Statuses), "VertexStatus", "VertexStatus", 1) + `,`,
-		`Logs:` + strings.Replace(fmt.Sprintf("%v", this.Logs), "VertexLog", "VertexLog", 1) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *Vertex) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&Vertex{`,
-		`ID:` + fmt.Sprintf("%v", this.ID) + `,`,
-		`Inputs:` + fmt.Sprintf("%v", this.Inputs) + `,`,
-		`Name:` + fmt.Sprintf("%v", this.Name) + `,`,
-		`Cached:` + fmt.Sprintf("%v", this.Cached) + `,`,
-		`Started:` + fmt.Sprintf("%v", this.Started) + `,`,
-		`Completed:` + fmt.Sprintf("%v", this.Completed) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *VertexStatus) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&VertexStatus{`,
-		`ID:` + fmt.Sprintf("%v", this.ID) + `,`,
-		`Vertex:` + fmt.Sprintf("%v", this.Vertex) + `,`,
-		`Name:` + fmt.Sprintf("%v", this.Name) + `,`,
-		`Current:` + fmt.Sprintf("%v", this.Current) + `,`,
-		`Total:` + fmt.Sprintf("%v", this.Total) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *VertexLog) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&VertexLog{`,
-		`Inc:` + fmt.Sprintf("%v", this.Inc) + `,`,
-		`Timestamp:` + fmt.Sprintf("%v", this.Timestamp) + `,`,
-		`Stream:` + fmt.Sprintf("%v", this.Stream) + `,`,
-		`Msg:` + fmt.Sprintf("%v", this.Msg) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func valueToStringControl(v interface{}) string {
-	rv := reflect.ValueOf(v)
-	if rv.IsNil() {
-		return "nil"
-	}
-	pv := reflect.Indirect(rv).Interface()
-	return fmt.Sprintf("*%v", pv)
 }
 func (m *DiskUsageRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
@@ -2469,7 +1842,7 @@ func (m *Vertex) Unmarshal(dAtA []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ID", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Digest", wireType)
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
@@ -2494,7 +1867,7 @@ func (m *Vertex) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.ID = string(dAtA[iNdEx:postIndex])
+			m.Digest = github_com_opencontainers_go_digest.Digest(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -2523,7 +1896,7 @@ func (m *Vertex) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Inputs = append(m.Inputs, string(dAtA[iNdEx:postIndex]))
+			m.Inputs = append(m.Inputs, github_com_opencontainers_go_digest.Digest(dAtA[iNdEx:postIndex]))
 			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {
@@ -2575,10 +1948,10 @@ func (m *Vertex) Unmarshal(dAtA []byte) error {
 			}
 			m.Cached = bool(v != 0)
 		case 5:
-			if wireType != 0 {
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Started", wireType)
 			}
-			m.Started = 0
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowControl
@@ -2588,16 +1961,30 @@ func (m *Vertex) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Started |= (int64(b) & 0x7F) << shift
+				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			if msglen < 0 {
+				return ErrInvalidLengthControl
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Started == nil {
+				m.Started = new(time.Time)
+			}
+			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(m.Started, dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		case 6:
-			if wireType != 0 {
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Completed", wireType)
 			}
-			m.Completed = 0
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowControl
@@ -2607,11 +1994,25 @@ func (m *Vertex) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Completed |= (int64(b) & 0x7F) << shift
+				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			if msglen < 0 {
+				return ErrInvalidLengthControl
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Completed == nil {
+				m.Completed = new(time.Time)
+			}
+			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(m.Completed, dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipControl(dAtA[iNdEx:])
@@ -2718,7 +2119,7 @@ func (m *VertexStatus) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Vertex = string(dAtA[iNdEx:postIndex])
+			m.Vertex = github_com_opencontainers_go_digest.Digest(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {
@@ -2787,6 +2188,36 @@ func (m *VertexStatus) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Timestamp", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowControl
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthControl
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(&m.Timestamp, dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipControl(dAtA[iNdEx:])
@@ -2838,10 +2269,10 @@ func (m *VertexLog) Unmarshal(dAtA []byte) error {
 		}
 		switch fieldNum {
 		case 1:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Inc", wireType)
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Vertex", wireType)
 			}
-			m.Inc = 0
+			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowControl
@@ -2851,16 +2282,26 @@ func (m *VertexLog) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Inc |= (int64(b) & 0x7F) << shift
+				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthControl
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Vertex = github_com_opencontainers_go_digest.Digest(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
 		case 2:
-			if wireType != 0 {
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Timestamp", wireType)
 			}
-			m.Timestamp = 0
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowControl
@@ -2870,11 +2311,22 @@ func (m *VertexLog) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Timestamp |= (int64(b) & 0x7F) << shift
+				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			if msglen < 0 {
+				return ErrInvalidLengthControl
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(&m.Timestamp, dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		case 3:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Stream", wireType)
@@ -3054,42 +2506,49 @@ var (
 func init() { proto.RegisterFile("control.proto", fileDescriptorControl) }
 
 var fileDescriptorControl = []byte{
-	// 581 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0x74, 0x54, 0x31, 0x6f, 0xd3, 0x40,
-	0x14, 0xce, 0xc5, 0x89, 0x13, 0xbf, 0x24, 0xa5, 0x9c, 0x4a, 0x31, 0x11, 0x3a, 0xa5, 0x1e, 0x50,
-	0x24, 0xaa, 0x0a, 0x82, 0xc4, 0xc2, 0x02, 0x25, 0x4b, 0x24, 0x58, 0x2e, 0x2a, 0xbb, 0xeb, 0x5c,
-	0x83, 0x85, 0xed, 0x0b, 0xbe, 0x4b, 0x54, 0x75, 0xe2, 0x27, 0x30, 0x30, 0xf0, 0x13, 0xf8, 0x1d,
-	0x4c, 0x8c, 0x1d, 0x19, 0x89, 0x59, 0x18, 0xfb, 0x13, 0xd0, 0x9d, 0xcf, 0x8e, 0x95, 0xa6, 0xdb,
-	0xfb, 0xbe, 0xf7, 0xf9, 0xbd, 0xef, 0xee, 0xbd, 0x33, 0xf4, 0x02, 0x9e, 0xc8, 0x94, 0x47, 0x27,
-	0x8b, 0x94, 0x4b, 0x8e, 0x5b, 0x06, 0x7a, 0x18, 0xf6, 0xc7, 0xa1, 0xf8, 0x74, 0x26, 0xfc, 0x39,
-	0xa3, 0xec, 0xf3, 0x92, 0x09, 0xe9, 0xbd, 0x81, 0xfb, 0x15, 0x4e, 0x2c, 0x78, 0x22, 0x18, 0x3e,
-	0x06, 0x3b, 0x65, 0x01, 0x4f, 0x67, 0x2e, 0x1a, 0x58, 0xc3, 0xce, 0xe8, 0xe0, 0xa4, 0xa8, 0x68,
-	0x74, 0x2a, 0x47, 0x8d, 0xc6, 0xf3, 0xa1, 0x53, 0xa1, 0xf1, 0x1e, 0xd4, 0x27, 0x63, 0x17, 0x0d,
-	0xd0, 0xd0, 0xa1, 0xf5, 0xc9, 0x18, 0xbb, 0xd0, 0x7a, 0xbf, 0x94, 0xfe, 0x79, 0xc4, 0xdc, 0xfa,
-	0x00, 0x0d, 0xdb, 0xb4, 0x80, 0xf8, 0x00, 0x9a, 0x93, 0xe4, 0x4c, 0x30, 0xd7, 0xd2, 0x7c, 0x0e,
-	0x30, 0x86, 0xc6, 0x34, 0xbc, 0x62, 0x6e, 0x63, 0x80, 0x86, 0x16, 0xd5, 0xb1, 0xf7, 0x1a, 0xba,
-	0x53, 0x1e, 0xad, 0x0a, 0xd7, 0x78, 0x1f, 0x2c, 0xca, 0x2e, 0x4c, 0x13, 0x15, 0x62, 0x02, 0x30,
-	0x66, 0x17, 0x61, 0x12, 0xca, 0x90, 0x27, 0x6e, 0x7d, 0x60, 0x0d, 0xbb, 0xb4, 0xc2, 0x78, 0x23,
-	0xe8, 0x99, 0x0a, 0xe6, 0x8c, 0x47, 0x60, 0xad, 0xe4, 0xa5, 0x39, 0xe0, 0xbd, 0xf2, 0x80, 0x1f,
-	0x58, 0x2a, 0xd9, 0x25, 0x55, 0x39, 0xef, 0x08, 0x7a, 0x53, 0xe9, 0xcb, 0xa5, 0xb8, 0xb3, 0xad,
-	0xf7, 0x1d, 0xc1, 0x5e, 0xa1, 0x31, 0x85, 0x9f, 0x42, 0x7b, 0xa5, 0x8b, 0x30, 0x71, 0x57, 0xf5,
-	0x52, 0x80, 0x9f, 0x43, 0x5b, 0xe8, 0xcf, 0x99, 0xd0, 0xa6, 0x3b, 0xa3, 0x07, 0x5b, 0x62, 0x53,
-	0xbd, 0x94, 0xe1, 0x27, 0xd0, 0x88, 0xf8, 0x5c, 0xb8, 0x96, 0x96, 0xe3, 0x2d, 0xf9, 0x3b, 0x3e,
-	0xa7, 0x3a, 0xef, 0x7d, 0x43, 0x60, 0xe7, 0xdc, 0xad, 0x91, 0x1c, 0x82, 0x1d, 0x26, 0x8b, 0xa5,
-	0xcc, 0x7b, 0x3a, 0xd4, 0x20, 0x75, 0xf5, 0x89, 0x1f, 0xe7, 0xf3, 0x70, 0xa8, 0x8e, 0x95, 0x36,
-	0xf0, 0x83, 0x8f, 0x6c, 0xa6, 0x07, 0xd2, 0xa6, 0x06, 0xa9, 0xb1, 0x0a, 0xe9, 0xa7, 0x92, 0xcd,
-	0xdc, 0xa6, 0x9e, 0x54, 0x01, 0xf1, 0x63, 0x70, 0x02, 0x1e, 0x2f, 0x22, 0xa6, 0x72, 0xb6, 0xce,
-	0x6d, 0x08, 0xef, 0x0a, 0xba, 0xd5, 0x83, 0xed, 0xf2, 0x96, 0xdf, 0x8e, 0xde, 0x16, 0x87, 0x1a,
-	0xb4, 0xd3, 0x9b, 0x0b, 0xad, 0x60, 0x99, 0xa6, 0x2c, 0x91, 0x66, 0x5b, 0x0a, 0xa8, 0x56, 0x4b,
-	0x72, 0xe9, 0x47, 0xc6, 0x5b, 0x0e, 0x3c, 0x06, 0x4e, 0x79, 0x4b, 0x6a, 0x98, 0x61, 0x12, 0xe8,
-	0xce, 0x16, 0x55, 0xa1, 0x32, 0x2e, 0xc3, 0x98, 0x09, 0xe9, 0xc7, 0x0b, 0xdd, 0xdd, 0xa2, 0x1b,
-	0x42, 0x19, 0x13, 0x32, 0x65, 0x7e, 0xac, 0x2d, 0x58, 0xd4, 0x20, 0x55, 0x27, 0x16, 0x73, 0x6d,
-	0xa0, 0x4b, 0x55, 0x38, 0xfa, 0x89, 0xa0, 0xf5, 0x36, 0x9f, 0x0a, 0x3e, 0x05, 0xa7, 0x7c, 0x5f,
-	0xf8, 0x51, 0x39, 0xac, 0xed, 0x77, 0xd8, 0xef, 0xef, 0x4a, 0x99, 0x8d, 0x7a, 0x09, 0x4d, 0xbd,
-	0xbb, 0x78, 0xb3, 0x1b, 0xd5, 0xd7, 0xd0, 0x3f, 0xdc, 0xa6, 0xcd, 0x77, 0xaf, 0xc0, 0x36, 0x97,
-	0x5c, 0x51, 0x54, 0x17, 0xba, 0xff, 0xf0, 0x16, 0x9f, 0x7f, 0xfa, 0x0c, 0x9d, 0x1e, 0x5f, 0xaf,
-	0x49, 0xed, 0xf7, 0x9a, 0xd4, 0x6e, 0xd6, 0x04, 0x7d, 0xc9, 0x08, 0xfa, 0x91, 0x11, 0xf4, 0x2b,
-	0x23, 0xe8, 0x3a, 0x23, 0xe8, 0x4f, 0x46, 0xd0, 0xbf, 0x8c, 0xd4, 0x6e, 0x32, 0x82, 0xbe, 0xfe,
-	0x25, 0xb5, 0x73, 0x5b, 0xff, 0x6a, 0x5e, 0xfc, 0x0f, 0x00, 0x00, 0xff, 0xff, 0x03, 0x50, 0xff,
-	0x6a, 0x7b, 0x04, 0x00, 0x00,
+	// 689 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0xa4, 0x54, 0xc1, 0x6e, 0xd3, 0x4c,
+	0x10, 0xfe, 0x37, 0x4e, 0x9d, 0x64, 0x92, 0x56, 0xfd, 0x57, 0x08, 0x59, 0x41, 0x24, 0xc6, 0x5c,
+	0xa2, 0x4a, 0x75, 0x20, 0xc0, 0xa5, 0x48, 0x08, 0x85, 0x1c, 0x68, 0x45, 0x2f, 0xdb, 0x96, 0xbb,
+	0xe3, 0x6c, 0x5d, 0xab, 0xb6, 0x37, 0x78, 0xd7, 0x51, 0xe1, 0x29, 0x78, 0x17, 0x9e, 0x01, 0xa9,
+	0x47, 0xce, 0x1c, 0x0a, 0xea, 0x23, 0x70, 0xe2, 0x88, 0xbc, 0xbb, 0x76, 0x4d, 0xdb, 0x40, 0x55,
+	0x4e, 0xd9, 0xd9, 0x7c, 0xf3, 0xed, 0x7c, 0xe3, 0xf9, 0x06, 0x56, 0x7d, 0x96, 0x88, 0x94, 0x45,
+	0xee, 0x3c, 0x65, 0x82, 0xe1, 0xf5, 0x98, 0x4d, 0xdf, 0xbb, 0xd3, 0x2c, 0x8c, 0x66, 0xc7, 0xa1,
+	0x70, 0x17, 0x8f, 0xbb, 0x9b, 0x41, 0x28, 0x8e, 0xb2, 0xa9, 0xeb, 0xb3, 0x78, 0x18, 0xb0, 0x80,
+	0x0d, 0x25, 0x70, 0x9a, 0x1d, 0xca, 0x48, 0x06, 0xf2, 0xa4, 0x08, 0xba, 0xfd, 0x80, 0xb1, 0x20,
+	0xa2, 0x17, 0x28, 0x11, 0xc6, 0x94, 0x0b, 0x2f, 0x9e, 0x2b, 0x80, 0x83, 0x61, 0x7d, 0x12, 0xf2,
+	0xe3, 0x03, 0xee, 0x05, 0x94, 0xd0, 0x77, 0x19, 0xe5, 0xc2, 0xd9, 0x81, 0xff, 0x2b, 0x77, 0x7c,
+	0xce, 0x12, 0x4e, 0xf1, 0x33, 0x30, 0x53, 0xea, 0xb3, 0x74, 0x66, 0x21, 0xdb, 0x18, 0xb4, 0x47,
+	0xf7, 0xdd, 0xcb, 0xb5, 0xb9, 0x3a, 0x21, 0x07, 0x11, 0x0d, 0x76, 0x3c, 0x68, 0x57, 0xae, 0xf1,
+	0x1a, 0xd4, 0xb6, 0x27, 0x16, 0xb2, 0xd1, 0xa0, 0x45, 0x6a, 0xdb, 0x13, 0x6c, 0x41, 0x63, 0x37,
+	0x13, 0xde, 0x34, 0xa2, 0x56, 0xcd, 0x46, 0x83, 0x26, 0x29, 0x42, 0x7c, 0x07, 0x56, 0xb6, 0x93,
+	0x03, 0x4e, 0x2d, 0x43, 0xde, 0xab, 0x00, 0x63, 0xa8, 0xef, 0x85, 0x1f, 0xa8, 0x55, 0xb7, 0xd1,
+	0xc0, 0x20, 0xf2, 0xec, 0xbc, 0x84, 0xce, 0x1e, 0x8b, 0x16, 0x45, 0xf9, 0x78, 0x1d, 0x0c, 0x42,
+	0x0f, 0xf5, 0x23, 0xf9, 0x11, 0xf7, 0x00, 0x26, 0xf4, 0x30, 0x4c, 0x42, 0x11, 0xb2, 0xc4, 0xaa,
+	0xd9, 0xc6, 0xa0, 0x43, 0x2a, 0x37, 0xce, 0x73, 0x58, 0xd5, 0x0c, 0x5a, 0xec, 0x06, 0x18, 0x0b,
+	0x71, 0xa2, 0x95, 0x5a, 0x57, 0x95, 0xbe, 0xa5, 0xa9, 0xa0, 0x27, 0x24, 0x07, 0x39, 0x0f, 0x60,
+	0x75, 0x4f, 0x78, 0x22, 0xe3, 0x4b, 0xdf, 0x77, 0x3e, 0x21, 0x58, 0x2b, 0x30, 0xfa, 0x85, 0xa7,
+	0xd0, 0x5c, 0x48, 0x12, 0xca, 0xff, 0xfa, 0x4c, 0x89, 0xc4, 0x5b, 0xd0, 0xe4, 0x92, 0x87, 0x72,
+	0x29, 0xa3, 0x3d, 0xea, 0x2d, 0xcb, 0xd2, 0xef, 0x95, 0x78, 0x3c, 0x84, 0x7a, 0xc4, 0x02, 0x6e,
+	0x19, 0x32, 0xef, 0xde, 0xb2, 0xbc, 0x37, 0x2c, 0x20, 0x12, 0xe8, 0x9c, 0xd6, 0xc0, 0x54, 0x77,
+	0x78, 0x07, 0xcc, 0x59, 0x18, 0x50, 0x2e, 0x94, 0xaa, 0xf1, 0xe8, 0xf4, 0xac, 0xff, 0xdf, 0xd7,
+	0xb3, 0xfe, 0x46, 0x65, 0x1a, 0xd9, 0x9c, 0x26, 0xf9, 0xf4, 0x7a, 0x61, 0x42, 0x53, 0x3e, 0x0c,
+	0xd8, 0xa6, 0x4a, 0x71, 0x27, 0xf2, 0x87, 0x68, 0x86, 0x9c, 0x2b, 0x4c, 0xe6, 0x99, 0x50, 0x0a,
+	0x6e, 0xc9, 0xa5, 0x18, 0xf2, 0x71, 0x48, 0xbc, 0x58, 0xcd, 0x48, 0x8b, 0xc8, 0x33, 0xbe, 0x0b,
+	0xa6, 0xef, 0xf9, 0x47, 0x74, 0x26, 0x87, 0xa4, 0x49, 0x74, 0x84, 0xb7, 0xa0, 0xc1, 0x85, 0x97,
+	0x0a, 0x3a, 0xb3, 0x56, 0x6c, 0x34, 0x68, 0x8f, 0xba, 0xae, 0x32, 0x87, 0x5b, 0x98, 0xc3, 0xdd,
+	0x2f, 0xcc, 0x31, 0xae, 0x7f, 0xfc, 0xd6, 0x47, 0xa4, 0x48, 0xc0, 0x2f, 0xa0, 0xe5, 0xb3, 0x78,
+	0x1e, 0xd1, 0x3c, 0xdb, 0xbc, 0x61, 0xf6, 0x45, 0x8a, 0xf3, 0x03, 0x41, 0xa7, 0xfa, 0x59, 0xae,
+	0xf8, 0x60, 0x07, 0x4c, 0xf5, 0x91, 0xa5, 0x0d, 0x6e, 0xd9, 0x14, 0xc5, 0x70, 0x6d, 0x53, 0x2c,
+	0x68, 0xf8, 0x59, 0x9a, 0xd2, 0x44, 0x68, 0xeb, 0x14, 0x61, 0xee, 0x33, 0xc1, 0x84, 0x17, 0xc9,
+	0xa6, 0x18, 0x44, 0x05, 0x78, 0x0c, 0xad, 0x72, 0x53, 0xdc, 0x40, 0x70, 0x33, 0x2f, 0x57, 0x89,
+	0x2e, 0xd3, 0x9c, 0xcf, 0x08, 0x5a, 0xe5, 0x4c, 0x55, 0x14, 0xa2, 0x7f, 0x56, 0xf8, 0x5b, 0x75,
+	0xb5, 0x5b, 0x55, 0x97, 0x8f, 0x09, 0x17, 0x29, 0xf5, 0x62, 0xd9, 0x27, 0x83, 0xe8, 0x28, 0x77,
+	0x6f, 0xcc, 0x03, 0xd9, 0xa5, 0x0e, 0xc9, 0x8f, 0xa3, 0x9f, 0x08, 0x1a, 0xaf, 0xd4, 0x5a, 0xc6,
+	0xfb, 0xd0, 0x2a, 0x57, 0x23, 0x76, 0xae, 0x7a, 0xe8, 0xf2, 0x2e, 0xed, 0x3e, 0xfc, 0x23, 0x46,
+	0x2f, 0x83, 0xd7, 0xb0, 0x22, 0xf7, 0x0f, 0xbe, 0xc6, 0xcd, 0xd5, 0xd5, 0xd6, 0xed, 0x2f, 0xfd,
+	0x5f, 0x33, 0xed, 0x82, 0xa9, 0x27, 0xec, 0x3a, 0x68, 0x75, 0x4d, 0x75, 0xed, 0xe5, 0x00, 0x45,
+	0xf6, 0x08, 0x8d, 0x3b, 0xa7, 0xe7, 0x3d, 0xf4, 0xe5, 0xbc, 0x87, 0xbe, 0x9f, 0xf7, 0xd0, 0xd4,
+	0x94, 0xbd, 0x7d, 0xf2, 0x2b, 0x00, 0x00, 0xff, 0xff, 0x08, 0xd7, 0xbb, 0xa9, 0xa5, 0x06, 0x00,
+	0x00,
 }

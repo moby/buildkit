@@ -1,6 +1,13 @@
 syntax = "proto3";
 
-package control;
+package moby.buildkit.v1;
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+import "google/protobuf/timestamp.proto";
+
+option (gogoproto.sizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
 
 service Control {
 	rpc DiskUsage(DiskUsageRequest) returns (DiskUsageResponse);
@@ -42,25 +49,26 @@ message StatusResponse {
 }
 
 message Vertex {
-	string ID = 1;
-	repeated string inputs = 2;
+	string digest = 1 [(gogoproto.customtype) = "github.com/opencontainers/go-digest.Digest", (gogoproto.nullable) = false];
+	repeated string inputs = 2 [(gogoproto.customtype) = "github.com/opencontainers/go-digest.Digest", (gogoproto.nullable) = false];
 	string name = 3;
 	bool cached = 4;
-	int64 started = 5; // relative, add abolute google.protobuf.Timestamp as well?
-	int64 completed = 6;
+	google.protobuf.Timestamp started = 5 [(gogoproto.stdtime) = true ];
+	google.protobuf.Timestamp completed = 6 [(gogoproto.stdtime) = true ];
 }
 
 message VertexStatus {
 	string ID = 1;
-	string vertex = 2;
+	string vertex = 2 [(gogoproto.customtype) = "github.com/opencontainers/go-digest.Digest", (gogoproto.nullable) = false];
 	string name = 3;
 	int64 current = 4;
 	int64 total = 5;
+	google.protobuf.Timestamp timestamp = 6 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
 }
 
 message VertexLog {
-	int64 inc = 1;
-	int64 timestamp = 2;
+	string vertex = 1 [(gogoproto.customtype) = "github.com/opencontainers/go-digest.Digest", (gogoproto.nullable) = false];
+	google.protobuf.Timestamp timestamp = 2 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
 	int64 stream = 3;
 	bytes msg = 4;
 }

@@ -63,7 +63,7 @@ func loadReqursive(dgst digest.Digest, op *pb.Op, inputs map[digest.Digest]*pb.O
 	vtx.vtx = client.Vertex{
 		Inputs: inputDigests,
 		Name:   vtx.name(),
-		ID:     dgst,
+		Digest: dgst,
 	}
 	cache[dgst] = vtx
 	return vtx, nil

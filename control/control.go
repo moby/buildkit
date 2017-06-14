@@ -1,10 +1,7 @@
 package control
 
 import (
-	"time"
-
 	"github.com/containerd/containerd/snapshot"
-	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	controlapi "github.com/tonistiigi/buildkit_poc/api/services/control"
 	"github.com/tonistiigi/buildkit_poc/cache"
@@ -95,11 +92,11 @@ func (c *Controller) Status(req *controlapi.StatusRequest, stream controlapi.Con
 				sr := controlapi.StatusResponse{}
 				for _, v := range ss.Vertexes {
 					sr.Vertexes = append(sr.Vertexes, &controlapi.Vertex{
-						ID:        v.ID.String(),
-						Inputs:    digestToString(v.Inputs),
+						Digest:    v.Digest,
+						Inputs:    v.Inputs,
 						Name:      v.Name,
-						Started:   marshalTimeStamp(v.Started),
-						Completed: marshalTimeStamp(v.Completed),
+						Started:   v.Started,
+						Completed: v.Completed,
 					})
 				}
 				if err := stream.SendMsg(&sr); err != nil {
@@ -110,18 +107,4 @@ func (c *Controller) Status(req *controlapi.StatusRequest, stream controlapi.Con
 	})
 
 	return eg.Wait()
-}
-
-func digestToString(dgsts []digest.Digest) (out []string) { // TODO: make proto use digest
-	for _, dgst := range dgsts {
-		out = append(out, dgst.String())
-	}
-	return
-}
-
-func marshalTimeStamp(tm *time.Time) int64 {
-	if tm == nil {
-		return 0
-	}
-	return tm.UnixNano()
 }
