@@ -99,6 +99,18 @@ func (c *Controller) Status(req *controlapi.StatusRequest, stream controlapi.Con
 						Completed: v.Completed,
 					})
 				}
+				for _, v := range ss.Statuses {
+					sr.Statuses = append(sr.Statuses, &controlapi.VertexStatus{
+						ID:        v.ID,
+						Vertex:    v.Vertex,
+						Name:      v.Name,
+						Current:   v.Current,
+						Total:     v.Total,
+						Timestamp: v.Timestamp,
+						Started:   v.Started,
+						Completed: v.Completed,
+					})
+				}
 				if err := stream.SendMsg(&sr); err != nil {
 					return err
 				}
