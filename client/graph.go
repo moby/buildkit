@@ -23,8 +23,8 @@ type VertexStatus struct {
 	Total     int64
 	Current   int64
 	Timestamp time.Time
-	Started   *time.Time // StartedAt
-	Completed *time.Time // StartedAt
+	Started   *time.Time
+	Completed *time.Time
 }
 
 type VertexLog struct {

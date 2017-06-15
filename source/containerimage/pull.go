@@ -84,6 +84,7 @@ func (is *imageSource) Pull(ctx context.Context, id source.Identifier) (cache.Im
 
 	fetcher, err := is.resolver.Fetcher(ctx, ref)
 	if err != nil {
+		stopProgress()
 		return nil, err
 	}
 
@@ -99,6 +100,7 @@ func (is *imageSource) Pull(ctx context.Context, id source.Identifier) (cache.Im
 		images.ChildrenHandler(is.ContentStore),
 	}
 	if err := images.Dispatch(ctx, images.Handlers(handlers...), desc); err != nil {
+		stopProgress()
 		return nil, err
 	}
 	stopProgress()
@@ -337,7 +339,6 @@ func oneOffProgress(ctx context.Context, id string) func(err error) error {
 	pw, _, _ := progress.FromContext(ctx, id)
 	now := time.Now()
 	st := progress.Status{
-		Action:  id,
 		Started: &now,
 	}
 	pw.Write(st)
