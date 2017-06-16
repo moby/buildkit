@@ -3,6 +3,7 @@ package progress
 import (
 	"context"
 	"fmt"
+	"io"
 	"testing"
 	"time"
 
@@ -32,7 +33,6 @@ func TestProgress(t *testing.T) {
 
 	assert.True(t, len(trace.items) > 5)
 	assert.True(t, len(trace.items) <= 7)
-	assert.Equal(t, trace.items[len(trace.items)-1].Done, true)
 }
 
 func TestProgressNested(t *testing.T) {
@@ -53,13 +53,6 @@ func TestProgressNested(t *testing.T) {
 
 	assert.True(t, len(trace.items) > 9) // usually 14
 	assert.True(t, len(trace.items) <= 15)
-	streams := 0
-	for _, t := range trace.items {
-		if t.Done {
-			streams++
-		}
-	}
-	assert.Equal(t, streams, 4)
 }
 
 func calc(ctx context.Context, total int, name string) (int, error) {
@@ -115,18 +108,18 @@ func reduceCalc(ctx context.Context, total int) (int, error) {
 }
 
 type trace struct {
-	items []Progress
+	items []*Progress
 }
 
 func saveProgress(ctx context.Context, pr ProgressReader, t *trace) error {
 	for {
 		p, err := pr.Read(ctx)
 		if err != nil {
+			if err == io.EOF {
+				return nil
+			}
 			return err
 		}
-		if p == nil {
-			return nil
-		}
-		t.items = append(t.items, *p)
+		t.items = append(t.items, p...)
 	}
 }
