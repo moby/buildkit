@@ -2,8 +2,9 @@ package progress
 
 import (
 	"context"
+	"io"
+	"sort"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/pkg/errors"
@@ -35,13 +36,12 @@ type ProgressWriter interface {
 }
 
 type ProgressReader interface {
-	Read(context.Context) (*Progress, error)
+	Read(context.Context) ([]*Progress, error)
 }
 
 type Progress struct {
 	ID        string
 	Timestamp time.Time
-	Done      bool
 	Sys       interface{}
 }
 
@@ -58,27 +58,37 @@ type progressReader struct {
 	ctx     context.Context
 	cond    *sync.Cond
 	mu      sync.Mutex
-	handles []*streamHandle
+	writers map[*progressWriter]struct{}
+	dirty   map[string]*Progress
 }
 
-type streamHandle struct {
-	pw    *progressWriter
-	lastP *Progress
-}
+// type progressState struct {
+// 	mu      sync.Mutex
+//
+// }
+//
+// type streamHandle struct {
+// 	pw    *progressWriter
+// 	lastP *Progress
+// }
+//
+// func (sh *streamHandle) next() (*Progress, bool) {
+// 	lasti := sh.pw.lastP.Load()
+// 	if lasti != nil {
+// 		last := lasti.(*Progress)
+// 		if last != sh.lastP {
+// 			sh.lastP = last
+// 			return last, true
+// 		}
+// 	}
+// 	return nil, false
+// }
+//
+// func (pr *progressReader) write(id string, p *Progress) {
+//
+// }
 
-func (sh *streamHandle) next() (*Progress, bool) {
-	lasti := sh.pw.lastP.Load()
-	if lasti != nil {
-		last := lasti.(*Progress)
-		if last != sh.lastP {
-			sh.lastP = last
-			return last, true
-		}
-	}
-	return nil, false
-}
-
-func (pr *progressReader) Read(ctx context.Context) (*Progress, error) {
+func (pr *progressReader) Read(ctx context.Context) ([]*Progress, error) {
 	done := make(chan struct{})
 	defer close(done)
 	go func() {
@@ -96,27 +106,29 @@ func (pr *progressReader) Read(ctx context.Context) (*Progress, error) {
 			return nil, ctx.Err()
 		default:
 		}
-		open := false
-		for _, sh := range pr.handles { // could be more efficient but unlikely that this array will be very big, maybe random ordering? at least remove the completed handlers.
-			p, ok := sh.next()
-			if ok {
-				pr.mu.Unlock()
-				return p, nil
-			}
-			if sh.lastP == nil || !sh.lastP.Done {
-				open = true
-			}
-		}
-		select {
-		case <-pr.ctx.Done():
+		dmap := pr.dirty
+		open := len(pr.writers) > 0
+		if len(dmap) == 0 {
 			if !open {
 				pr.mu.Unlock()
-				return nil, nil
+				return nil, io.EOF
 			}
 			pr.cond.Wait()
-		default:
-			pr.cond.Wait()
+			continue
 		}
+		pr.dirty = make(map[string]*Progress)
+		pr.mu.Unlock()
+
+		out := make([]*Progress, 0, len(dmap))
+		for _, p := range dmap {
+			out = append(out, p)
+		}
+
+		sort.Slice(out, func(i, j int) bool {
+			return out[i].Timestamp.Before(out[j].Timestamp)
+		})
+
+		return out, nil
 	}
 }
 
@@ -128,14 +140,16 @@ func (pr *progressReader) append(pw *progressWriter) {
 	case <-pr.ctx.Done():
 		return
 	default:
-		pr.handles = append(pr.handles, &streamHandle{pw: pw})
+		pr.writers[pw] = struct{}{}
 	}
 }
 
 func pipe() (*progressReader, *progressWriter, func()) {
 	ctx, cancel := context.WithCancel(context.Background())
 	pr := &progressReader{
-		ctx: ctx,
+		ctx:     ctx,
+		writers: make(map[*progressWriter]struct{}),
+		dirty:   make(map[string]*Progress),
 	}
 	pr.cond = sync.NewCond(&pr.mu)
 	go func() {
@@ -166,12 +180,8 @@ func newWriter(pw *progressWriter, name string) *progressWriter {
 
 type progressWriter struct {
 	id     string
-	lastP  atomic.Value
 	done   bool
 	reader *progressReader
-
-	byKey map[string]atomic.Value
-	items []atomic.Value
 }
 
 func (pw *progressWriter) Write(s interface{}) error {
@@ -186,30 +196,20 @@ func (pw *progressWriter) Write(s interface{}) error {
 }
 
 func (pw *progressWriter) write(p Progress) error {
-	if p.Done {
-		pw.done = true
-	}
-	pw.lastP.Store(&p)
+	pw.reader.mu.Lock()
+	pw.reader.dirty[pw.id+"."+p.ID] = &p
+	pw.reader.mu.Unlock()
 	pw.reader.cond.Broadcast()
 	return nil
 }
 
 func (pw *progressWriter) Done() error {
-	var p Progress
-	lastP := pw.lastP.Load().(*Progress)
-	p.ID = pw.id
-	p.Timestamp = time.Now()
-	if lastP != nil {
-		p = *lastP
-		if p.Done {
-			return nil
-		}
-	} else {
-		p.Sys = lastP.Sys
-	}
-	p.Done = true
+	pw.reader.mu.Lock()
+	delete(pw.reader.writers, pw)
+	pw.reader.mu.Unlock()
+	pw.reader.cond.Broadcast()
 	pw.done = true
-	return pw.write(p)
+	return nil
 }
 
 type noOpWriter struct{}

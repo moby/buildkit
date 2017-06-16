@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	busybox := llb.Image("docker.io/library/busybox:latest")
+	busybox := llb.Image("docker.io/library/redis:latest")
 	mod1 := busybox.Run(llb.Meta{Args: []string{"/bin/sleep", "1"}, Cwd: "/"})
 	mod2 := mod1.Run(llb.Meta{Args: []string{"/bin/sh", "-c", "echo foo > /bar"}, Cwd: "/"})
 	alpine := llb.Image("docker.io/library/alpine:latest")

@@ -233,11 +233,7 @@ func (g *opVertex) name() string {
 	case *pb.Op_Source:
 		return op.Source.Identifier
 	case *pb.Op_Exec:
-		name := strings.Join(op.Exec.Meta.Args, " ")
-		if len(name) > 22 { // TODO: const
-			name = name[:20] + "..."
-		}
-		return name
+		return strings.Join(op.Exec.Meta.Args, " ")
 	default:
 		return "unknown"
 	}

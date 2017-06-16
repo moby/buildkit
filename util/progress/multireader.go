@@ -2,6 +2,7 @@ package progress
 
 import (
 	"context"
+	"io"
 	"sync"
 )
 
@@ -54,19 +55,26 @@ func (mr *MultiReader) handle() error {
 	for {
 		p, err := mr.main.Read(context.TODO())
 		if err != nil {
+			if err == io.EOF {
+				mr.mu.Lock()
+				for w := range mr.writers {
+					w.Done()
+				}
+				mr.mu.Unlock()
+				return nil
+			}
 			return err
 		}
 		mr.mu.Lock()
-		for w, c := range mr.writers {
-			if p == nil {
-				c()
-			} else {
-				w.write(*p)
+		for _, p := range p {
+			for w, c := range mr.writers {
+				if p == nil {
+					c()
+				} else {
+					w.write(*p)
+				}
 			}
 		}
 		mr.mu.Unlock()
-		if p == nil {
-			return nil
-		}
 	}
 }

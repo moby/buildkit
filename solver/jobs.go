@@ -2,6 +2,7 @@ package solver
 
 import (
 	"context"
+	"io"
 	"strings"
 	"sync"
 	"time"
@@ -93,37 +94,36 @@ func (j *job) pipe(ctx context.Context, ch chan *client.SolveStatus) error {
 	for {
 		p, err := pr.Read(ctx)
 		if err != nil {
+			if err == io.EOF {
+				return nil
+			}
 			return err
 		}
-		if p == nil {
-			return nil
+		ss := &client.SolveStatus{}
+		for _, p := range p {
+			switch v := p.Sys.(type) {
+			case client.Vertex:
+				ss.Vertexes = append(ss.Vertexes, &v)
+
+			case progress.Status:
+				i := strings.Index(p.ID, ".")
+				vs := &client.VertexStatus{
+					ID:        p.ID[i+1:],
+					Vertex:    digest.Digest(p.ID[:i]), // TODO: this needs to be handled better
+					Name:      v.Action,
+					Total:     int64(v.Total),
+					Current:   int64(v.Current),
+					Timestamp: p.Timestamp,
+					Started:   v.Started,
+					Completed: v.Completed,
+				}
+				ss.Statuses = append(ss.Statuses, vs)
+			}
 		}
-		switch v := p.Sys.(type) {
-		case client.Vertex:
-			ss := &client.SolveStatus{Vertexes: []*client.Vertex{&v}}
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case ch <- ss:
-			}
-		case progress.Status:
-			i := strings.Index(p.ID, ".")
-			vs := &client.VertexStatus{
-				ID:        p.ID[i+1:],
-				Vertex:    digest.Digest(p.ID[:i]), // TODO: this needs to be handled better
-				Name:      v.Action,
-				Total:     int64(v.Total),
-				Current:   int64(v.Current),
-				Timestamp: p.Timestamp,
-				Started:   v.Started,
-				Completed: v.Completed,
-			}
-			ss := &client.SolveStatus{Statuses: []*client.VertexStatus{vs}}
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case ch <- ss:
-			}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case ch <- ss:
 		}
 	}
 }
