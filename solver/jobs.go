@@ -2,6 +2,7 @@ package solver
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -90,7 +91,7 @@ func (j *job) pipe(ctx context.Context, ch chan *client.SolveStatus) error {
 		}
 	}
 	for {
-		p, err := pr.Read(ctx) // add cancelling
+		p, err := pr.Read(ctx)
 		if err != nil {
 			return err
 		}
@@ -100,6 +101,24 @@ func (j *job) pipe(ctx context.Context, ch chan *client.SolveStatus) error {
 		switch v := p.Sys.(type) {
 		case client.Vertex:
 			ss := &client.SolveStatus{Vertexes: []*client.Vertex{&v}}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case ch <- ss:
+			}
+		case progress.Status:
+			i := strings.Index(p.ID, ".")
+			vs := &client.VertexStatus{
+				ID:        p.ID[i+1:],
+				Vertex:    digest.Digest(p.ID[:i]), // TODO: this needs to be handled better
+				Name:      v.Action,
+				Total:     int64(v.Total),
+				Current:   int64(v.Current),
+				Timestamp: p.Timestamp,
+				Started:   v.Started,
+				Completed: v.Completed,
+			}
+			ss := &client.SolveStatus{Statuses: []*client.VertexStatus{vs}}
 			select {
 			case <-ctx.Done():
 				return ctx.Err()

@@ -22,8 +22,8 @@ type SourceOp struct {
 
 type ExecOp struct {
 	meta   Meta
-	mounts []*mount
-	root   *mount
+	mounts []*Mount
+	root   *Mount
 }
 
 type Meta struct {
@@ -32,10 +32,10 @@ type Meta struct {
 	Cwd  string
 }
 
-type mount struct {
+type Mount struct {
 	op     *ExecOp
 	dest   string
-	mount  *mount
+	mount  *Mount
 	src    *SourceOp
 	output bool
 }
@@ -81,11 +81,11 @@ func Image(ref string) *SourceOp {
 	return Source("docker-image://" + ref) // controversial
 }
 
-func newExec(meta Meta, src *SourceOp, m *mount) *ExecOp {
+func newExec(meta Meta, src *SourceOp, m *Mount) *ExecOp {
 	exec := &ExecOp{
 		meta:   meta,
-		mounts: []*mount{},
-		root: &mount{
+		mounts: []*Mount{},
+		root: &Mount{
 			dest:   "/",
 			src:    src,
 			mount:  m,
@@ -95,6 +95,28 @@ func newExec(meta Meta, src *SourceOp, m *mount) *ExecOp {
 	exec.root.op = exec
 	exec.mounts = append(exec.mounts, exec.root)
 	return exec
+}
+
+func (eo *ExecOp) AddMount(dest string, src interface{}) *Mount {
+	var s *SourceOp
+	var m *Mount
+	switch v := src.(type) {
+	case *SourceOp:
+		s = v
+	case *Mount:
+		m = v
+	case *ExecOp:
+		m = v.root
+	default:
+		panic("invalid input")
+	}
+	eo.mounts = append(eo.mounts, &Mount{
+		dest:   dest,
+		src:    s,
+		mount:  m,
+		output: true, // TODO: should be set only if something inherits
+	})
+	return m
 }
 
 func (eo *ExecOp) Validate() error {

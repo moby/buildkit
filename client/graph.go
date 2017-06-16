@@ -20,9 +20,11 @@ type VertexStatus struct {
 	ID        string
 	Vertex    digest.Digest
 	Name      string
-	Total     int
-	Current   int
+	Total     int64
+	Current   int64
 	Timestamp time.Time
+	Started   *time.Time
+	Completed *time.Time
 }
 
 type VertexLog struct {

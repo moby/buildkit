@@ -6,14 +6,13 @@ import (
 	"encoding/hex"
 	"io"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/pkg/errors"
 	controlapi "github.com/tonistiigi/buildkit_poc/api/services/control"
 	"github.com/tonistiigi/buildkit_poc/client/llb"
 	"golang.org/x/sync/errgroup"
 )
 
-func (c *Client) Solve(ctx context.Context, r io.Reader) error {
+func (c *Client) Solve(ctx context.Context, r io.Reader, statusChan chan *SolveStatus) error {
 	def, err := llb.ReadFrom(r)
 	if err != nil {
 		return errors.Wrap(err, "failed to parse input")
@@ -52,9 +51,39 @@ func (c *Client) Solve(ctx context.Context, r io.Reader) error {
 				}
 				return errors.Wrap(err, "failed to receive status")
 			}
-			logrus.Debugf("status: %+v", resp)
+			s := SolveStatus{}
+			for _, v := range resp.Vertexes {
+				s.Vertexes = append(s.Vertexes, &Vertex{
+					Digest:    v.Digest,
+					Inputs:    v.Inputs,
+					Name:      v.Name,
+					Started:   v.Started,
+					Completed: v.Completed,
+				})
+			}
+			for _, v := range resp.Statuses {
+				s.Statuses = append(s.Statuses, &VertexStatus{
+					ID:        v.ID,
+					Vertex:    v.Vertex,
+					Name:      v.Name,
+					Total:     v.Total,
+					Current:   v.Current,
+					Timestamp: v.Timestamp,
+					Started:   v.Started,
+					Completed: v.Completed,
+				})
+			}
+			if statusChan != nil {
+				statusChan <- &s
+			}
 		}
 	})
+
+	defer func() {
+		if statusChan != nil {
+			close(statusChan)
+		}
+	}()
 
 	return eg.Wait()
 }

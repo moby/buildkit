@@ -47,9 +47,11 @@ type Progress struct {
 
 type Status struct {
 	// ...progress of an action
-	Action  string
-	Current int
-	Total   int
+	Action    string
+	Current   int
+	Total     int
+	Started   *time.Time
+	Completed *time.Time
 }
 
 type progressReader struct {

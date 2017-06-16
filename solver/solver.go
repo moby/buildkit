@@ -125,12 +125,14 @@ func (g *opVertex) solve(ctx context.Context, opt Opt) (retErr error) {
 		eg, ctx := errgroup.WithContext(ctx)
 
 		for _, in := range g.inputs {
-			eg.Go(func() error {
-				if err := in.solve(ctx, opt); err != nil {
-					return err
-				}
-				return nil
-			})
+			func(in *opVertex) {
+				eg.Go(func() error {
+					if err := in.solve(ctx, opt); err != nil {
+						return err
+					}
+					return nil
+				})
+			}(in)
 		}
 		err := eg.Wait()
 		if err != nil {
