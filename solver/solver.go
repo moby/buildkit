@@ -121,6 +121,9 @@ func (g *opVertex) solve(ctx context.Context, opt Opt) (retErr error) {
 		}
 	}()
 
+	pw, _, ctx := progress.FromContext(ctx, progress.WithMetadata("vertex", g.dgst))
+	defer pw.Close()
+
 	if len(g.inputs) > 0 {
 		eg, ctx := errgroup.WithContext(ctx)
 
@@ -139,9 +142,6 @@ func (g *opVertex) solve(ctx context.Context, opt Opt) (retErr error) {
 			return err
 		}
 	}
-
-	pw, _, ctx := progress.FromContext(ctx, g.dgst.String())
-	defer pw.Done()
 
 	g.notifyStarted(pw)
 	defer g.notifyComplete(pw)
@@ -216,16 +216,16 @@ func (g *opVertex) solve(ctx context.Context, opt Opt) (retErr error) {
 	return nil
 }
 
-func (g *opVertex) notifyStarted(pw progress.ProgressWriter) {
+func (g *opVertex) notifyStarted(pw progress.Writer) {
 	now := time.Now()
 	g.vtx.Started = &now
-	pw.Write(g.vtx)
+	pw.Write(g.dgst.String(), g.vtx)
 }
 
-func (g *opVertex) notifyComplete(pw progress.ProgressWriter) {
+func (g *opVertex) notifyComplete(pw progress.Writer) {
 	now := time.Now()
 	g.vtx.Completed = &now
-	pw.Write(g.vtx)
+	pw.Write(g.dgst.String(), g.vtx)
 }
 
 func (g *opVertex) name() string {

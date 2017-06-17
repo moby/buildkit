@@ -78,6 +78,7 @@ func (is *imageSource) Pull(ctx context.Context, id source.Identifier) (cache.Im
 	resolveProgressDone(nil)
 
 	ongoing := newJobs(ref)
+
 	pctx, stopProgress := context.WithCancel(ctx)
 
 	go showProgress(pctx, ongoing, is.ContentStore)
@@ -93,7 +94,7 @@ func (is *imageSource) Pull(ctx context.Context, id source.Identifier) (cache.Im
 	// or 2) cachemanager should manage the contentstore
 	handlers := []images.Handler{
 		images.HandlerFunc(func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
-			ongoing.add(ctx, desc)
+			ongoing.add(desc)
 			return nil, nil
 		}),
 		remotes.FetchHandler(is.ContentStore, fetcher),
@@ -176,12 +177,14 @@ func getLayers(ctx context.Context, provider content.Provider, desc ocispec.Desc
 
 func showProgress(ctx context.Context, ongoing *jobs, cs content.Store) {
 	var (
-		ticker = time.NewTicker(100 * time.Millisecond)
-		// fw       = progress.NewWriter(out)
+		ticker   = time.NewTicker(100 * time.Millisecond)
 		statuses = map[string]statusInfo{}
 		done     bool
 	)
 	defer ticker.Stop()
+
+	pw, _, ctx := progress.FromContext(ctx)
+	defer pw.Close()
 
 	for {
 		select {
@@ -189,9 +192,6 @@ func showProgress(ctx context.Context, ongoing *jobs, cs content.Store) {
 		case <-ctx.Done():
 			done = true
 		}
-		// fw.Flush()
-
-		// tw := tabwriter.NewWriter(fw, 1, 8, 1, ' ', 0)
 
 		resolved := "resolved"
 		if !ongoing.isResolved() {
@@ -201,7 +201,6 @@ func showProgress(ctx context.Context, ongoing *jobs, cs content.Store) {
 			Ref:    ongoing.name,
 			Status: resolved,
 		}
-		// keys := []string{ongoing.name}
 
 		actives := make(map[string]statusInfo)
 
@@ -228,7 +227,7 @@ func showProgress(ctx context.Context, ongoing *jobs, cs content.Store) {
 		for _, j := range ongoing.jobs() {
 			refKey := remotes.MakeRefKey(ctx, j.Descriptor)
 			if a, ok := actives[refKey]; ok {
-				j.Write(progress.Status{
+				pw.Write(j.Digest.String(), progress.Status{
 					Action:  a.Status,
 					Total:   int(a.Total),
 					Current: int(a.Offset),
@@ -241,7 +240,7 @@ func showProgress(ctx context.Context, ongoing *jobs, cs content.Store) {
 				info, err := cs.Info(ctx, j.Digest)
 				if err != nil {
 					if content.IsNotFound(err) {
-						j.Write(progress.Status{
+						pw.Write(j.Digest.String(), progress.Status{
 							Action: "waiting",
 						})
 						continue
@@ -251,14 +250,13 @@ func showProgress(ctx context.Context, ongoing *jobs, cs content.Store) {
 				}
 
 				if done || j.done {
-					j.Write(progress.Status{
+					pw.Write(j.Digest.String(), progress.Status{
 						Action:    "done",
 						Current:   int(info.Size),
 						Total:     int(info.Size),
 						Completed: &info.CommittedAt,
 						Started:   &j.started,
 					})
-					j.Done()
 				}
 			}
 		}
@@ -282,7 +280,6 @@ type jobs struct {
 
 type job struct {
 	ocispec.Descriptor
-	progress.ProgressWriter
 	done    bool
 	started time.Time
 }
@@ -294,18 +291,16 @@ func newJobs(name string) *jobs {
 	}
 }
 
-func (j *jobs) add(ctx context.Context, desc ocispec.Descriptor) {
+func (j *jobs) add(desc ocispec.Descriptor) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 
 	if _, ok := j.added[desc.Digest]; ok {
 		return
 	}
-	pw, _, _ := progress.FromContext(ctx, desc.Digest.String())
 	j.added[desc.Digest] = job{
-		Descriptor:     desc,
-		ProgressWriter: pw,
-		started:        time.Now(),
+		Descriptor: desc,
+		started:    time.Now(),
 	}
 }
 
@@ -336,18 +331,18 @@ type statusInfo struct {
 }
 
 func oneOffProgress(ctx context.Context, id string) func(err error) error {
-	pw, _, _ := progress.FromContext(ctx, id)
+	pw, _, _ := progress.FromContext(ctx)
 	now := time.Now()
 	st := progress.Status{
 		Started: &now,
 	}
-	pw.Write(st)
+	pw.Write(id, st)
 	return func(err error) error {
 		// TODO: set error on status
 		now := time.Now()
 		st.Completed = &now
-		pw.Write(st)
-		pw.Done()
+		pw.Write(id, st)
+		pw.Close()
 		return err
 	}
 }

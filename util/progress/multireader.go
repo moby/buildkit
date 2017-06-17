@@ -8,13 +8,13 @@ import (
 
 type MultiReader struct {
 	mu          sync.Mutex
-	main        ProgressReader
+	main        Reader
 	initialized bool
 	done        chan struct{}
 	writers     map[*progressWriter]func()
 }
 
-func NewMultiReader(pr ProgressReader) *MultiReader {
+func NewMultiReader(pr Reader) *MultiReader {
 	mr := &MultiReader{
 		main:    pr,
 		writers: make(map[*progressWriter]func()),
@@ -23,12 +23,12 @@ func NewMultiReader(pr ProgressReader) *MultiReader {
 	return mr
 }
 
-func (mr *MultiReader) Reader(ctx context.Context) ProgressReader {
+func (mr *MultiReader) Reader(ctx context.Context) Reader {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
 
 	pr, ctx, closeWriter := NewContext(ctx)
-	pw, _, _ := FromContext(ctx, "")
+	pw, _, ctx := FromContext(ctx)
 
 	w := pw.(*progressWriter)
 	mr.writers[w] = closeWriter
@@ -57,8 +57,9 @@ func (mr *MultiReader) handle() error {
 		if err != nil {
 			if err == io.EOF {
 				mr.mu.Lock()
-				for w := range mr.writers {
-					w.Done()
+				for w, c := range mr.writers {
+					w.Close()
+					c()
 				}
 				mr.mu.Unlock()
 				return nil
@@ -67,12 +68,8 @@ func (mr *MultiReader) handle() error {
 		}
 		mr.mu.Lock()
 		for _, p := range p {
-			for w, c := range mr.writers {
-				if p == nil {
-					c()
-				} else {
-					w.write(*p)
-				}
+			for w := range mr.writers {
+				w.WriteRawProgress(p)
 			}
 		}
 		mr.mu.Unlock()

@@ -65,7 +65,7 @@ func (cr *cacheRecord) mref() *mutableRef {
 
 func (cr *cacheRecord) Size(ctx context.Context) (int64, error) {
 	// this expects that usage() is implemented lazily
-	s, err, _ := cr.sizeG.Do(ctx, cr.id, func(ctx context.Context) (interface{}, error) {
+	s, err := cr.sizeG.Do(ctx, cr.id, func(ctx context.Context) (interface{}, error) {
 		cr.mu.Lock()
 		s := cr.size
 		cr.mu.Unlock()
