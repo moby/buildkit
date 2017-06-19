@@ -26,7 +26,7 @@ func NewContainerd(root, address string) (*Controller, error) {
 		return nil, errors.Wrapf(err, "failed to connect client to %q . make sure containerd is running", address)
 	}
 
-	pd := newPullDeps(client)
+	pd := newContainerdPullDeps(client)
 
 	opt, err := defaultControllerOpts(root, *pd)
 	if err != nil {
@@ -43,7 +43,7 @@ func NewContainerd(root, address string) (*Controller, error) {
 	return NewController(*opt)
 }
 
-func newPullDeps(client *containerd.Client) *pullDeps {
+func newContainerdPullDeps(client *containerd.Client) *pullDeps {
 	return &pullDeps{
 		Snapshotter:  client.SnapshotService(),
 		ContentStore: client.ContentStore(),

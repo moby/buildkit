@@ -4,5 +4,7 @@ set -eu -o pipefail -x
 
 # update this to iidfile after 17.06
 docker build -t buildkit_poc:test -f ./hack/dockerfiles/test.Dockerfile --force-rm .
-docker run -v /tmp --privileged buildkit_poc:test go test ${TESTFLAGS:--v} ${TESTPKGS:-./...}
-docker run buildkit_poc:test go build ./...
+docker run -v /tmp --privileged buildkit_poc:test go test ${TESTFLAGS:--v -tags 'containerd standalone'} ${TESTPKGS:-./...}
+docker run --rm buildkit_poc:test go build ./...
+docker run --rm buildkit_poc:test go build -tags standalone ./cmd/buildd
+docker run --rm buildkit_poc:test go build -tags containerd ./cmd/buildd

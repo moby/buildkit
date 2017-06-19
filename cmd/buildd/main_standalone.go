@@ -1,4 +1,4 @@
-// +build standalone
+// +build standalone,!containerd
 
 package main
 

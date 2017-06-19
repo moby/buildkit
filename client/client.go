@@ -12,14 +12,20 @@ type Client struct {
 	conn *grpc.ClientConn
 }
 
+type ClientOpt interface{}
+
 // New returns a new buildkit client
-func New(address string) (*Client, error) {
+func New(address string, opts ...ClientOpt) (*Client, error) {
 	gopts := []grpc.DialOption{
-		grpc.WithBlock(),
 		grpc.WithInsecure(),
-		grpc.WithTimeout(100 * time.Second),
+		grpc.WithTimeout(30 * time.Second),
 		grpc.WithDialer(dialer),
 		grpc.FailOnNonTempDialError(true),
+	}
+	for _, o := range opts {
+		if _, ok := o.(*withBlockOpt); ok {
+			gopts = append(gopts, grpc.WithBlock(), grpc.FailOnNonTempDialError(true))
+		}
 	}
 	conn, err := grpc.Dial(dialAddress(address), gopts...)
 	if err != nil {
@@ -33,4 +39,10 @@ func New(address string) (*Client, error) {
 
 func (c *Client) controlClient() controlapi.ControlClient {
 	return controlapi.NewControlClient(c.conn)
+}
+
+type withBlockOpt struct{}
+
+func WithBlock() ClientOpt {
+	return &withBlockOpt{}
 }
