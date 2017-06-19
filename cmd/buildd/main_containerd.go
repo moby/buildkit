@@ -1,4 +1,4 @@
-// +build containerd
+// +build containerd,!standalone
 
 package main
 

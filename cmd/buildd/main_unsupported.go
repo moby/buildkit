@@ -1,4 +1,4 @@
-// +build !standalone,!containerd
+// +build !standalone,!containerd standalone,containerd
 
 package main
 

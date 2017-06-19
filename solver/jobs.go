@@ -3,10 +3,10 @@ package solver
 import (
 	"context"
 	"io"
-	"strings"
 	"sync"
 	"time"
 
+	"github.com/Sirupsen/logrus"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/buildkit_poc/client"
@@ -27,7 +27,7 @@ func newJobList() *jobList {
 	return jl
 }
 
-func (jl *jobList) new(ctx context.Context, id string, g *opVertex, pr progress.ProgressReader) (*job, error) {
+func (jl *jobList) new(ctx context.Context, id string, g *opVertex, pr progress.Reader) (*job, error) {
 	jl.mu.Lock()
 	defer jl.mu.Unlock()
 
@@ -106,10 +106,14 @@ func (j *job) pipe(ctx context.Context, ch chan *client.SolveStatus) error {
 				ss.Vertexes = append(ss.Vertexes, &v)
 
 			case progress.Status:
-				i := strings.Index(p.ID, ".")
+				vtx, ok := p.Meta("vertex")
+				if !ok {
+					logrus.Warnf("progress %s status without vertex info", p.ID)
+					continue
+				}
 				vs := &client.VertexStatus{
-					ID:        p.ID[i+1:],
-					Vertex:    digest.Digest(p.ID[:i]), // TODO: this needs to be handled better
+					ID:        p.ID,
+					Vertex:    vtx.(digest.Digest),
 					Name:      v.Action,
 					Total:     int64(v.Total),
 					Current:   int64(v.Current),
@@ -118,6 +122,15 @@ func (j *job) pipe(ctx context.Context, ch chan *client.SolveStatus) error {
 					Completed: v.Completed,
 				}
 				ss.Statuses = append(ss.Statuses, vs)
+			case client.VertexLog:
+				vtx, ok := p.Meta("vertex")
+				if !ok {
+					logrus.Warnf("progress %s status without vertex info", p.ID)
+					continue
+				}
+				v.Vertex = vtx.(digest.Digest)
+				v.Timestamp = p.Timestamp
+				ss.Logs = append(ss.Logs, &v)
 			}
 		}
 		select {

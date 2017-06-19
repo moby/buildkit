@@ -30,7 +30,7 @@ func NewStandalone(root string) (*Controller, error) {
 
 	// TODO: take lock to make sure there are no duplicates
 
-	pd, err := newPullDeps(root)
+	pd, err := newStandalonePullDeps(root)
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +50,7 @@ func NewStandalone(root string) (*Controller, error) {
 	return NewController(*opt)
 }
 
-func newPullDeps(root string) (*pullDeps, error) {
+func newStandalonePullDeps(root string) (*pullDeps, error) {
 	s, err := overlay.NewSnapshotter(filepath.Join(root, "snapshots"))
 	if err != nil {
 		return nil, err

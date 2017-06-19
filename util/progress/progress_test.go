@@ -23,7 +23,10 @@ func TestProgress(t *testing.T) {
 	eg.Go(func() error {
 		return saveProgress(ctx, pr, &trace)
 	})
+
+	pw, _, ctx := FromContext(ctx, WithMetadata("tag", "foo"))
 	s, err = calc(ctx, 5, "calc")
+	pw.Close()
 	assert.NoError(t, err)
 	assert.Equal(t, 15, s)
 
@@ -33,6 +36,11 @@ func TestProgress(t *testing.T) {
 
 	assert.True(t, len(trace.items) > 5)
 	assert.True(t, len(trace.items) <= 7)
+	for _, p := range trace.items {
+		v, ok := p.Meta("tag")
+		assert.True(t, ok)
+		assert.Equal(t, v.(string), "foo")
+	}
 }
 
 func TestProgressNested(t *testing.T) {
@@ -56,11 +64,11 @@ func TestProgressNested(t *testing.T) {
 }
 
 func calc(ctx context.Context, total int, name string) (int, error) {
-	pw, _, ctx := FromContext(ctx, name)
-	defer pw.Done()
+	pw, _, ctx := FromContext(ctx)
+	defer pw.Close()
 
 	sum := 0
-	pw.Write(Status{Action: "starting", Total: total})
+	pw.Write(name, Status{Action: "starting", Total: total})
 	for i := 1; i <= total; i++ {
 		select {
 		case <-ctx.Done():
@@ -68,13 +76,12 @@ func calc(ctx context.Context, total int, name string) (int, error) {
 		case <-time.After(10 * time.Millisecond):
 		}
 		if i == total {
-			pw.Write(Status{Action: "done", Total: total, Current: total})
+			pw.Write(name, Status{Action: "done", Total: total, Current: total})
 		} else {
-			pw.Write(Status{Action: "calculating", Total: total, Current: i})
+			pw.Write(name, Status{Action: "calculating", Total: total, Current: i})
 		}
 		sum += i
 	}
-	pw.Done()
 
 	return sum, nil
 }
@@ -82,10 +89,10 @@ func calc(ctx context.Context, total int, name string) (int, error) {
 func reduceCalc(ctx context.Context, total int) (int, error) {
 	eg, ctx := errgroup.WithContext(ctx)
 
-	pw, _, ctx := FromContext(ctx, "reduce")
-	defer pw.Done()
+	pw, _, ctx := FromContext(ctx)
+	defer pw.Close()
 
-	pw.Write(Status{Action: "starting"})
+	pw.Write("reduce", Status{Action: "starting"})
 
 	// sync step
 	sum, err := calc(ctx, total, "synccalc")
@@ -111,7 +118,7 @@ type trace struct {
 	items []*Progress
 }
 
-func saveProgress(ctx context.Context, pr ProgressReader, t *trace) error {
+func saveProgress(ctx context.Context, pr Reader, t *trace) error {
 	for {
 		p, err := pr.Read(ctx)
 		if err != nil {

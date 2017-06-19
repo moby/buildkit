@@ -10,32 +10,53 @@ import (
 	"github.com/pkg/errors"
 )
 
+// Progress package provides utility functions for using the context to capture
+// progress of a running function. All progress items written contain an ID
+// that is used to collapse unread messages.
+
 type contextKeyT string
 
 var contextKey = contextKeyT("buildkit/util/progress")
 
-func FromContext(ctx context.Context, name string) (ProgressWriter, bool, context.Context) {
+// FromContext returns a progress writer from a context.
+func FromContext(ctx context.Context, opts ...WriterOption) (Writer, bool, context.Context) {
 	pw, ok := ctx.Value(contextKey).(*progressWriter)
 	if !ok {
 		return &noOpWriter{}, false, ctx
 	}
-	pw = newWriter(pw, name)
+	pw = newWriter(pw)
+	for _, o := range opts {
+		o(pw)
+	}
 	ctx = context.WithValue(ctx, contextKey, pw)
 	return pw, true, ctx
 }
 
-func NewContext(ctx context.Context) (ProgressReader, context.Context, func()) {
+type WriterOption func(Writer)
+
+// NewContext returns a new context and a progress reader that captures all
+// progress items writtern to this context. Last returned parameter is a closer
+// function to signal that no new writes will happen to this context.
+func NewContext(ctx context.Context) (Reader, context.Context, func()) {
 	pr, pw, cancel := pipe()
 	ctx = context.WithValue(ctx, contextKey, pw)
 	return pr, ctx, cancel
 }
 
-type ProgressWriter interface {
-	Write(interface{}) error
-	Done() error // Close
+func WithMetadata(key string, val interface{}) WriterOption {
+	return func(w Writer) {
+		if pw, ok := w.(*progressWriter); ok {
+			pw.meta[key] = val
+		}
+	}
 }
 
-type ProgressReader interface {
+type Writer interface {
+	Write(id string, value interface{}) error
+	Close() error
+}
+
+type Reader interface {
 	Read(context.Context) ([]*Progress, error)
 }
 
@@ -43,10 +64,10 @@ type Progress struct {
 	ID        string
 	Timestamp time.Time
 	Sys       interface{}
+	meta      map[string]interface{}
 }
 
 type Status struct {
-	// ...progress of an action
 	Action    string
 	Current   int
 	Total     int
@@ -61,32 +82,6 @@ type progressReader struct {
 	writers map[*progressWriter]struct{}
 	dirty   map[string]*Progress
 }
-
-// type progressState struct {
-// 	mu      sync.Mutex
-//
-// }
-//
-// type streamHandle struct {
-// 	pw    *progressWriter
-// 	lastP *Progress
-// }
-//
-// func (sh *streamHandle) next() (*Progress, bool) {
-// 	lasti := sh.pw.lastP.Load()
-// 	if lasti != nil {
-// 		last := lasti.(*Progress)
-// 		if last != sh.lastP {
-// 			sh.lastP = last
-// 			return last, true
-// 		}
-// 	}
-// 	return nil, false
-// }
-//
-// func (pr *progressReader) write(id string, p *Progress) {
-//
-// }
 
 func (pr *progressReader) Read(ctx context.Context) ([]*Progress, error) {
 	done := make(chan struct{})
@@ -107,11 +102,14 @@ func (pr *progressReader) Read(ctx context.Context) ([]*Progress, error) {
 		default:
 		}
 		dmap := pr.dirty
-		open := len(pr.writers) > 0
 		if len(dmap) == 0 {
-			if !open {
-				pr.mu.Unlock()
-				return nil, io.EOF
+			select {
+			case <-pr.ctx.Done():
+				if len(pr.writers) == 0 {
+					pr.mu.Unlock()
+					return nil, io.EOF
+				}
+			default:
 			}
 			pr.cond.Wait()
 			continue
@@ -162,48 +160,46 @@ func pipe() (*progressReader, *progressWriter, func()) {
 	return pr, pw, cancel
 }
 
-func newWriter(pw *progressWriter, name string) *progressWriter {
-	if pw.id != "" {
-		if name == "" {
-			name = pw.id
-		} else {
-			name = pw.id + "." + name
-		}
+func newWriter(pw *progressWriter) *progressWriter {
+	meta := make(map[string]interface{})
+	for k, v := range pw.meta {
+		meta[k] = v
 	}
 	pw = &progressWriter{
-		id:     name,
 		reader: pw.reader,
+		meta:   meta,
 	}
 	pw.reader.append(pw)
 	return pw
 }
 
 type progressWriter struct {
-	id     string
 	done   bool
 	reader *progressReader
+	meta   map[string]interface{}
 }
 
-func (pw *progressWriter) Write(s interface{}) error {
+func (pw *progressWriter) Write(id string, v interface{}) error {
 	if pw.done {
-		return errors.Errorf("writing to closed progresswriter %s", pw.id)
+		return errors.Errorf("writing %s to closed progress writer", id)
 	}
-	var p Progress
-	p.ID = pw.id
-	p.Timestamp = time.Now()
-	p.Sys = s
-	return pw.write(p)
+	return pw.WriteRawProgress(&Progress{
+		ID:        id,
+		Timestamp: time.Now(),
+		Sys:       v,
+		meta:      pw.meta,
+	})
 }
 
-func (pw *progressWriter) write(p Progress) error {
+func (pw *progressWriter) WriteRawProgress(p *Progress) error {
 	pw.reader.mu.Lock()
-	pw.reader.dirty[pw.id+"."+p.ID] = &p
+	pw.reader.dirty[p.ID] = p
 	pw.reader.mu.Unlock()
 	pw.reader.cond.Broadcast()
 	return nil
 }
 
-func (pw *progressWriter) Done() error {
+func (pw *progressWriter) Close() error {
 	pw.reader.mu.Lock()
 	delete(pw.reader.writers, pw)
 	pw.reader.mu.Unlock()
@@ -212,19 +208,17 @@ func (pw *progressWriter) Done() error {
 	return nil
 }
 
+func (p *Progress) Meta(key string) (interface{}, bool) {
+	v, ok := p.meta[key]
+	return v, ok
+}
+
 type noOpWriter struct{}
 
-func (pw *noOpWriter) Write(p interface{}) error {
+func (pw *noOpWriter) Write(_ string, _ interface{}) error {
 	return nil
 }
 
-func (pw *noOpWriter) Done() error {
+func (pw *noOpWriter) Close() error {
 	return nil
 }
-
-// type ProgressRecord struct {
-// 	UUID   string
-// 	Parent string
-// 	Done   bool
-// 	*Progress
-// }

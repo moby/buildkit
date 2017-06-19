@@ -73,6 +73,14 @@ func (c *Client) Solve(ctx context.Context, r io.Reader, statusChan chan *SolveS
 					Completed: v.Completed,
 				})
 			}
+			for _, v := range resp.Logs {
+				s.Logs = append(s.Logs, &VertexLog{
+					Vertex:    v.Vertex,
+					Stream:    int(v.Stream),
+					Data:      v.Msg,
+					Timestamp: v.Timestamp,
+				})
+			}
 			if statusChan != nil {
 				statusChan <- &s
 			}

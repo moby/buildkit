@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"io/ioutil"
 	"os"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/tonistiigi/buildkit_poc/client"
 	"github.com/tonistiigi/buildkit_poc/util/progress/progressui"
 	"github.com/urfave/cli"
@@ -22,7 +25,17 @@ func build(clicontext *cli.Context) error {
 		return err
 	}
 
+	traceFile, err := ioutil.TempFile("", "buildctl")
+	if err != nil {
+		return err
+	}
+	defer traceFile.Close()
+	traceEnc := json.NewEncoder(traceFile)
+
+	logrus.Infof("tracing logs to %s", traceFile.Name())
+
 	ch := make(chan *client.SolveStatus)
+	displayCh := make(chan *client.SolveStatus)
 	eg, ctx := errgroup.WithContext(context.TODO()) // TODO: define appContext
 
 	eg.Go(func() error {
@@ -30,16 +43,18 @@ func build(clicontext *cli.Context) error {
 	})
 
 	eg.Go(func() error {
-		return progressui.DisplaySolveStatus(ctx, ch)
-		// for s := range ch {
-		// 		for _, v := range s.Vertexes {
-		// 			log.Print(spew.Sdump(v))
-		// 		}
-		// 		for _, v := range s.Statuses {
-		// 			log.Print(spew.Sdump(v))
-		// 		}
-		// 	}
-		// return nil
+		defer close(displayCh)
+		for s := range ch {
+			if err := traceEnc.Encode(s); err != nil {
+				logrus.Error(err)
+			}
+			displayCh <- s
+		}
+		return nil
+	})
+
+	eg.Go(func() error {
+		return progressui.DisplaySolveStatus(ctx, displayCh)
 	})
 
 	return eg.Wait()

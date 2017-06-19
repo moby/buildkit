@@ -133,7 +133,7 @@ func (t *trace) displayInfo(maxRows int) (d displayInfo) {
 				name:          "=> " + s.ID,
 			}
 			if s.Total != 0 {
-				j.name += " " + units.HumanSize(float64(s.Current)) + " / " + units.HumanSize(float64(s.Current))
+				j.name += " " + units.HumanSize(float64(s.Current)) + " / " + units.HumanSize(float64(s.Total))
 			}
 			d.jobs = append(d.jobs, j)
 		}

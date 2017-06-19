@@ -45,5 +45,5 @@ func main() {
 }
 
 func resolveClient(c *cli.Context) (*client.Client, error) {
-	return client.New(c.GlobalString("socket"))
+	return client.New(c.GlobalString("socket"), client.WithBlock())
 }
