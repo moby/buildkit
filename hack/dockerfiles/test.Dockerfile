@@ -20,10 +20,25 @@ RUN git clone https://github.com/containerd/containerd.git "$GOPATH/src/github.c
 	&& git checkout -q "$RUNC_VERSION" \
 	&& make bin/containerd
 
-FROM gobuild-base
+FROM gobuild-base AS unit-tests
 COPY --from=runc /usr/bin/runc /usr/bin/runc 
 COPY --from=containerd /go/src/github.com/containerd/containerd/bin/containerd /usr/bin/containerd 
 WORKDIR /go/src/github.com/tonistiigi/buildkit_poc
 COPY . .
-RUN go build -o /usr/bin/buildd-standalone -tags standalone ./cmd/buildd
-RUN go build -o /usr/bin/buildd-containerd -tags containerd ./cmd/buildd
+
+FROM unit-tests AS buildctl
+ENV CGO_ENABLED=0
+ARG GOOS=linux
+RUN go build -ldflags '-d' -o /usr/bin/buildctl ./cmd/buildctl
+
+FROM unit-tests AS buildd-standalone
+ENV CGO_ENABLED=0
+RUN go build -ldflags '-d'  -o /usr/bin/buildd-standalone -tags standalone ./cmd/buildd
+
+FROM unit-tests AS buildd-containerd
+ENV CGO_ENABLED=0
+RUN go build -ldflags '-d'  -o /usr/bin/buildd-containerd -tags containerd ./cmd/buildd
+
+FROM unit-tests AS integration-tests
+COPY --from=buildd-containerd /usr/bin/buildd-containerd /usr/bin
+COPY --from=buildd-standalone /usr/bin/buildd-standalone /usr/bin
