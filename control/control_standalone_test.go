@@ -1,4 +1,4 @@
-// +build linux standalone
+// +build linux,standalone
 
 package control
 

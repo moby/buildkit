@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+set -eu -o pipefail -x
+
+# update this to iidfile after 17.06
+docker build -t buildkit_poc:test --target unit-tests -f ./hack/dockerfiles/test.Dockerfile --force-rm .
+docker run --rm buildkit_poc:test go build ./...
+docker run -e GOOS=darwin --rm buildkit_poc:test go build ./cmd/buildctl
