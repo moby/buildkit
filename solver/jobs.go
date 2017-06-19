@@ -122,6 +122,15 @@ func (j *job) pipe(ctx context.Context, ch chan *client.SolveStatus) error {
 					Completed: v.Completed,
 				}
 				ss.Statuses = append(ss.Statuses, vs)
+			case client.VertexLog:
+				vtx, ok := p.Meta("vertex")
+				if !ok {
+					logrus.Warnf("progress %s status without vertex info", p.ID)
+					continue
+				}
+				v.Vertex = vtx.(digest.Digest)
+				v.Timestamp = p.Timestamp
+				ss.Logs = append(ss.Logs, &v)
 			}
 		}
 		select {

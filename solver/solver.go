@@ -1,6 +1,7 @@
 package solver
 
 import (
+	"io"
 	"os"
 	"strings"
 	"sync"
@@ -10,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/buildkit_poc/cache"
 	"github.com/tonistiigi/buildkit_poc/client"
+	"github.com/tonistiigi/buildkit_poc/identity"
 	"github.com/tonistiigi/buildkit_poc/solver/pb"
 	"github.com/tonistiigi/buildkit_poc/source"
 	"github.com/tonistiigi/buildkit_poc/util/progress"
@@ -211,7 +213,12 @@ func (g *opVertex) runExecOp(ctx context.Context, cm cache.Manager, w worker.Wor
 		Cwd:  op.Exec.Meta.Cwd,
 	}
 
-	if err := w.Exec(ctx, meta, mounts, os.Stderr, os.Stderr); err != nil {
+	stdout := newStreamWriter(ctx, 1)
+	defer stdout.Close()
+	stderr := newStreamWriter(ctx, 2)
+	defer stderr.Close()
+
+	if err := w.Exec(ctx, meta, mounts, stdout, stderr); err != nil {
 		return errors.Wrapf(err, "worker failed running %v", meta.Args)
 	}
 
@@ -252,4 +259,37 @@ func (g *opVertex) name() string {
 	default:
 		return "unknown"
 	}
+}
+
+func newStreamWriter(ctx context.Context, stream int) io.WriteCloser {
+	pw, _, _ := progress.FromContext(ctx)
+	return &streamWriter{
+		pw:     pw,
+		stream: stream,
+	}
+}
+
+type streamWriter struct {
+	pw     progress.Writer
+	stream int
+}
+
+func (sw *streamWriter) Write(dt []byte) (int, error) {
+	sw.pw.Write(identity.NewID(), client.VertexLog{
+		Stream: sw.stream,
+		Data:   append([]byte{}, dt...),
+	})
+	// TODO: remove debug
+	switch sw.stream {
+	case 1:
+		return os.Stdout.Write(dt)
+	case 2:
+		return os.Stderr.Write(dt)
+	default:
+		return 0, errors.Errorf("invalid stream %d", sw.stream)
+	}
+}
+
+func (sw *streamWriter) Close() error {
+	return sw.pw.Close()
 }

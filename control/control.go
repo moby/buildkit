@@ -111,6 +111,14 @@ func (c *Controller) Status(req *controlapi.StatusRequest, stream controlapi.Con
 						Completed: v.Completed,
 					})
 				}
+				for _, v := range ss.Logs {
+					sr.Logs = append(sr.Logs, &controlapi.VertexLog{
+						Vertex:    v.Vertex,
+						Stream:    int64(v.Stream),
+						Msg:       v.Data,
+						Timestamp: v.Timestamp,
+					})
+				}
 				if err := stream.SendMsg(&sr); err != nil {
 					return err
 				}
