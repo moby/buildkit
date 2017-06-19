@@ -78,7 +78,7 @@ func newCall(fn func(ctx context.Context) (interface{}, error)) *call {
 	c.ctx = ctx
 	c.closeProgressWriter = closeProgressWriter
 
-	go c.progressState.run(pr)
+	go c.progressState.run(pr) // TODO: remove this, wrap writer instead
 
 	return c
 }

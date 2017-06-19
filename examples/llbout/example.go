@@ -13,6 +13,7 @@ func main() {
 	alpine := llb.Image("docker.io/library/alpine:latest")
 	mod3 := mod2.Run(llb.Meta{Args: []string{"/bin/cp", "-a", "/alpine/etc/passwd", "baz"}, Cwd: "/"})
 	mod3.AddMount("/alpine", alpine)
+	mod3.AddMount("/redis", busybox)
 	mod4 := mod3.Run(llb.Meta{Args: []string{"/bin/ls", "-l", "/"}, Cwd: "/"})
 
 	res := mod4
