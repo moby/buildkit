@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package pb;
 
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+
 message Op {
 	repeated Input inputs = 1;
 	oneof op {
@@ -12,7 +14,7 @@ message Op {
 }
 
 message Input {
-	string digest = 1;
+	string digest = 1 [(gogoproto.customtype) = "github.com/opencontainers/go-digest.Digest", (gogoproto.nullable) = false];
 	int64 index = 2;
 }
 

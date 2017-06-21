@@ -13,7 +13,7 @@ import (
 // Ideally we don't have to import whole containerd just for the default spec
 
 func GenerateSpec(ctx context.Context, meta worker.Meta, mounts map[string]cache.Mountable) (*specs.Spec, error) {
-	s, err := containerd.GenerateSpec()
+	s, err := containerd.GenerateSpec(containerd.WithHostNamespace(specs.NetworkNamespace))
 	if err != nil {
 		return nil, err
 	}

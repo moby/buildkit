@@ -17,7 +17,7 @@ RUN apk add --no-cache btrfs-progs-dev
 ARG CONTAINERD_VERSION
 RUN git clone https://github.com/containerd/containerd.git "$GOPATH/src/github.com/containerd/containerd" \
 	&& cd "$GOPATH/src/github.com/containerd/containerd" \
-	&& git checkout -q "$RUNC_VERSION" \
+	&& git checkout -q "$CONTAINERD_VERSION" \
 	&& make bin/containerd
 
 FROM gobuild-base AS unit-tests
