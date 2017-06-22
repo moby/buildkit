@@ -7,8 +7,8 @@ import (
 	"os"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/tonistiigi/buildkit_poc/client"
-	"github.com/tonistiigi/buildkit_poc/util/progress/progressui"
+	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/util/progress/progressui"
 	"github.com/urfave/cli"
 	"golang.org/x/sync/errgroup"
 )

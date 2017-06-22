@@ -8,10 +8,10 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/rootfs"
 	ctdsnapshot "github.com/containerd/containerd/snapshot"
-	"github.com/tonistiigi/buildkit_poc/cache"
-	"github.com/tonistiigi/buildkit_poc/snapshot/blobmapping"
-	"github.com/tonistiigi/buildkit_poc/source"
-	"github.com/tonistiigi/buildkit_poc/source/containerimage"
+	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/snapshot/blobmapping"
+	"github.com/moby/buildkit/source"
+	"github.com/moby/buildkit/source/containerimage"
 )
 
 type pullDeps struct {

@@ -5,6 +5,6 @@ RUN go get -d github.com/LK4D4/vndr \
   && cd /go/src/github.com/LK4D4/vndr \
 	&& git checkout $VNDR_VERSION \
 	&& go install ./
-WORKDIR /go/src/github.com/tonistiigi/buildkit_poc
+WORKDIR /go/src/github.com/moby/buildkit
 COPY . .
 RUN vndr --verbose

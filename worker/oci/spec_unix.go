@@ -4,10 +4,10 @@ import (
 	"context"
 
 	"github.com/containerd/containerd"
+	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/worker"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
-	"github.com/tonistiigi/buildkit_poc/cache"
-	"github.com/tonistiigi/buildkit_poc/worker"
 )
 
 // Ideally we don't have to import whole containerd just for the default spec

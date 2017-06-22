@@ -1,10 +1,10 @@
 package solver
 
 import (
+	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
-	"github.com/tonistiigi/buildkit_poc/client"
-	"github.com/tonistiigi/buildkit_poc/solver/pb"
 )
 
 func Load(ops [][]byte) (*opVertex, error) {

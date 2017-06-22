@@ -6,9 +6,9 @@ import (
 	"encoding/hex"
 	"io"
 
+	controlapi "github.com/moby/buildkit/api/services/control"
+	"github.com/moby/buildkit/client/llb"
 	"github.com/pkg/errors"
-	controlapi "github.com/tonistiigi/buildkit_poc/api/services/control"
-	"github.com/tonistiigi/buildkit_poc/client/llb"
 	"golang.org/x/sync/errgroup"
 )
 

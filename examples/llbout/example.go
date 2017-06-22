@@ -4,7 +4,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/tonistiigi/buildkit_poc/client/llb"
+	"github.com/moby/buildkit/client/llb"
 )
 
 func main() {

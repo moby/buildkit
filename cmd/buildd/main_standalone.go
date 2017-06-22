@@ -3,7 +3,7 @@
 package main
 
 import (
-	"github.com/tonistiigi/buildkit_poc/control"
+	"github.com/moby/buildkit/control"
 	"github.com/urfave/cli"
 )
 

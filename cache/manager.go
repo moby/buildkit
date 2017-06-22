@@ -10,9 +10,9 @@ import (
 
 	"github.com/boltdb/bolt"
 	cdsnapshot "github.com/containerd/containerd/snapshot"
+	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/snapshot"
 	"github.com/pkg/errors"
-	"github.com/tonistiigi/buildkit_poc/client"
-	"github.com/tonistiigi/buildkit_poc/snapshot"
 )
 
 const dbFile = "cache.db"

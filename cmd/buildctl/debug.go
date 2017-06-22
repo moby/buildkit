@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/tonistiigi/buildkit_poc/cmd/buildctl/debug"
+	"github.com/moby/buildkit/cmd/buildctl/debug"
 	"github.com/urfave/cli"
 )
 

@@ -13,10 +13,10 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/containerd/containerd/mount"
 	runc "github.com/containerd/go-runc"
+	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/worker"
+	"github.com/moby/buildkit/worker/oci"
 	"github.com/pkg/errors"
-	"github.com/tonistiigi/buildkit_poc/cache"
-	"github.com/tonistiigi/buildkit_poc/worker"
-	"github.com/tonistiigi/buildkit_poc/worker/oci"
 	"golang.org/x/net/context"
 )
 

@@ -9,9 +9,9 @@ import (
 
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/snapshot/naive"
+	"github.com/moby/buildkit/snapshot"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
-	"github.com/tonistiigi/buildkit_poc/snapshot"
 )
 
 func TestManager(t *testing.T) {
