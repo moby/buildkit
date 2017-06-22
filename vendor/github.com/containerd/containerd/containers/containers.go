@@ -13,11 +13,16 @@ type Container struct {
 	ID        string
 	Labels    map[string]string
 	Image     string
-	Runtime   string
+	Runtime   RuntimeInfo
 	Spec      []byte
 	RootFS    string
 	CreatedAt time.Time
 	UpdatedAt time.Time
+}
+
+type RuntimeInfo struct {
+	Name    string
+	Options map[string]string
 }
 
 type Store interface {

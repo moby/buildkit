@@ -2,6 +2,7 @@ package containerd
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -9,18 +10,21 @@ import (
 	"sync"
 	"time"
 
-	"github.com/containerd/containerd/api/services/containers"
-	contentapi "github.com/containerd/containerd/api/services/content"
-	diffapi "github.com/containerd/containerd/api/services/diff"
-	"github.com/containerd/containerd/api/services/execution"
-	imagesapi "github.com/containerd/containerd/api/services/images"
-	namespacesapi "github.com/containerd/containerd/api/services/namespaces"
-	snapshotapi "github.com/containerd/containerd/api/services/snapshot"
-	versionservice "github.com/containerd/containerd/api/services/version"
+	"github.com/containerd/containerd/api/services/containers/v1"
+	contentapi "github.com/containerd/containerd/api/services/content/v1"
+	diffapi "github.com/containerd/containerd/api/services/diff/v1"
+	eventsapi "github.com/containerd/containerd/api/services/events/v1"
+	imagesapi "github.com/containerd/containerd/api/services/images/v1"
+	namespacesapi "github.com/containerd/containerd/api/services/namespaces/v1"
+	snapshotapi "github.com/containerd/containerd/api/services/snapshot/v1"
+	"github.com/containerd/containerd/api/services/tasks/v1"
+	versionservice "github.com/containerd/containerd/api/services/version/v1"
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/images"
+	"github.com/containerd/containerd/plugin"
 	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
+	"github.com/containerd/containerd/remotes/docker/schema1"
 	contentservice "github.com/containerd/containerd/services/content"
 	"github.com/containerd/containerd/services/diff"
 	diffservice "github.com/containerd/containerd/services/diff"
@@ -65,9 +69,11 @@ func New(address string, opts ...ClientOpt) (*Client, error) {
 	}
 
 	gopts := []grpc.DialOption{
+		grpc.WithBlock(),
 		grpc.WithInsecure(),
 		grpc.WithTimeout(100 * time.Second),
 		grpc.WithDialer(dialer),
+		grpc.FailOnNonTempDialError(true),
 	}
 	if copts.defaultns != "" {
 		unary, stream := newNSInterceptors(copts.defaultns)
@@ -83,7 +89,7 @@ func New(address string, opts ...ClientOpt) (*Client, error) {
 	}
 	return &Client{
 		conn:    conn,
-		runtime: runtime.GOOS,
+		runtime: fmt.Sprintf("%s.%s", plugin.RuntimePlugin, runtime.GOOS),
 	}, nil
 }
 
@@ -151,6 +157,7 @@ func WithNewRootFS(id string, i Image) NewContainerOpts {
 			return err
 		}
 		c.RootFS = id
+		c.Image = i.Name()
 		return nil
 	}
 }
@@ -167,13 +174,16 @@ func WithNewReadonlyRootFS(id string, i Image) NewContainerOpts {
 			return err
 		}
 		c.RootFS = id
+		c.Image = i.Name()
 		return nil
 	}
 }
 
 func WithRuntime(name string) NewContainerOpts {
 	return func(ctx context.Context, client *Client, c *containers.Container) error {
-		c.Runtime = name
+		c.Runtime = &containers.Container_Runtime{
+			Name: name,
+		}
 		return nil
 	}
 }
@@ -189,8 +199,10 @@ func WithImage(i Image) NewContainerOpts {
 // the id must be unique within the namespace
 func (c *Client) NewContainer(ctx context.Context, id string, opts ...NewContainerOpts) (Container, error) {
 	container := containers.Container{
-		ID:      id,
-		Runtime: c.runtime,
+		ID: id,
+		Runtime: &containers.Container_Runtime{
+			Name: c.runtime,
+		},
 	}
 	for _, o := range opts {
 		if err := o(ctx, c, &container); err != nil {
@@ -234,6 +246,11 @@ type RemoteContext struct {
 	// These handlers always get called before any operation specific
 	// handlers.
 	BaseHandlers []images.Handler
+
+	// ConvertSchema1 is whether to convert Docker registry schema 1
+	// manifests. If this option is false then any image which resolves
+	// to schema 1 will return an error since schema 1 is not supported.
+	ConvertSchema1 bool
 }
 
 func defaultRemoteContext() *RemoteContext {
@@ -249,6 +266,14 @@ func defaultRemoteContext() *RemoteContext {
 // configured for the client.
 func WithPullUnpack(client *Client, c *RemoteContext) error {
 	c.Unpack = true
+	return nil
+}
+
+// WithSchema1Conversion is used to convert Docker registry schema 1
+// manifests to oci manifests on pull. Without this option schema 1
+// manifests will return a not supported error.
+func WithSchema1Conversion(client *Client, c *RemoteContext) error {
+	c.ConvertSchema1 = true
 	return nil
 }
 
@@ -286,15 +311,32 @@ func (c *Client) Pull(ctx context.Context, ref string, opts ...RemoteOpts) (Imag
 		return nil, err
 	}
 
-	handlers := append(pullCtx.BaseHandlers,
-		remotes.FetchHandler(store, fetcher),
-		images.ChildrenHandler(store),
+	var (
+		schema1Converter *schema1.Converter
+		handler          images.Handler
 	)
-	if err := images.Dispatch(ctx, images.Handlers(handlers...), desc); err != nil {
+	if desc.MediaType == images.MediaTypeDockerSchema1Manifest && pullCtx.ConvertSchema1 {
+		schema1Converter = schema1.NewConverter(store, fetcher)
+		handler = images.Handlers(append(pullCtx.BaseHandlers, schema1Converter)...)
+	} else {
+		handler = images.Handlers(append(pullCtx.BaseHandlers,
+			remotes.FetchHandler(store, fetcher),
+			images.ChildrenHandler(store))...,
+		)
+	}
+
+	if err := images.Dispatch(ctx, handler, desc); err != nil {
 		return nil, err
 	}
+	if schema1Converter != nil {
+		desc, err = schema1Converter.Convert(ctx)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	is := c.ImageService()
-	if err := is.Put(ctx, name, desc); err != nil {
+	if err := is.Update(ctx, name, desc); err != nil {
 		return nil, err
 	}
 	i, err := is.Get(ctx, name)
@@ -411,11 +453,11 @@ func (c *Client) ContentStore() content.Store {
 }
 
 func (c *Client) SnapshotService() snapshot.Snapshotter {
-	return snapshotservice.NewSnapshotterFromClient(snapshotapi.NewSnapshotClient(c.conn))
+	return snapshotservice.NewSnapshotterFromClient(snapshotapi.NewSnapshotsClient(c.conn))
 }
 
-func (c *Client) TaskService() execution.TasksClient {
-	return execution.NewTasksClient(c.conn)
+func (c *Client) TaskService() tasks.TasksClient {
+	return tasks.NewTasksClient(c.conn)
 }
 
 func (c *Client) ImageService() images.Store {
@@ -428,6 +470,10 @@ func (c *Client) DiffService() diff.DiffService {
 
 func (c *Client) HealthService() grpc_health_v1.HealthClient {
 	return grpc_health_v1.NewHealthClient(c.conn)
+}
+
+func (c *Client) EventService() eventsapi.EventsClient {
+	return eventsapi.NewEventsClient(c.conn)
 }
 
 func (c *Client) VersionService() versionservice.VersionClient {

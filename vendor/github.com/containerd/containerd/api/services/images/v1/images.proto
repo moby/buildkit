@@ -1,0 +1,69 @@
+syntax = "proto3";
+
+package containerd.services.images.v1;
+
+import "gogoproto/gogo.proto";
+import "google/protobuf/empty.proto";
+import "github.com/containerd/containerd/api/types/descriptor/descriptor.proto";
+
+option go_package = "github.com/containerd/containerd/api/services/images/v1;images";
+
+// Images is a service that allows one to register images with containerd.
+//
+// In containerd, an image is merely the mapping of a name to a content root,
+// described by a descriptor. The behavior and state of image is purely
+// dictated by the type of the descriptor.
+//
+// From the perspective of this service, these references are mostly shallow,
+// in that the existence of the required content won't be validated until
+// required by consuming services.
+//
+// As such, this can really be considered a "metadata service".
+service Images {
+	// Get returns an image by name.
+	rpc Get(GetImageRequest) returns (GetImageResponse);
+
+	// List returns a list of all images known to containerd.
+	rpc List(ListImagesRequest) returns (ListImagesResponse);
+
+	// Update assigns the name to a given target image based on the provided
+	// image.
+	rpc Update(UpdateImageRequest) returns (UpdateImageResponse);
+
+	// Delete deletes the image by name.
+	rpc Delete(DeleteImageRequest) returns (google.protobuf.Empty);
+}
+
+message Image {
+	string name = 1;
+	map<string, string> labels = 2;
+	containerd.v1.types.Descriptor target = 3 [(gogoproto.nullable) = false];
+}
+
+message GetImageRequest {
+	string name = 1;
+}
+
+message GetImageResponse {
+	Image image = 1;
+}
+
+message UpdateImageRequest {
+	Image image = 1 [(gogoproto.nullable) = false];
+}
+
+message UpdateImageResponse {
+	Image image = 1 [(gogoproto.nullable) = false];
+}
+
+message ListImagesRequest {
+	string filter = 1;
+}
+
+message ListImagesResponse {
+	repeated Image images = 1 [(gogoproto.nullable) = false];
+}
+
+message DeleteImageRequest {
+	string name = 1;
+}

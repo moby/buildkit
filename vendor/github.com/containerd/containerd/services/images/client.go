@@ -3,7 +3,7 @@ package images
 import (
 	"context"
 
-	imagesapi "github.com/containerd/containerd/api/services/images"
+	imagesapi "github.com/containerd/containerd/api/services/images/v1"
 	"github.com/containerd/containerd/images"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
@@ -18,10 +18,10 @@ func NewStoreFromClient(client imagesapi.ImagesClient) images.Store {
 	}
 }
 
-func (s *remoteStore) Put(ctx context.Context, name string, desc ocispec.Descriptor) error {
+func (s *remoteStore) Update(ctx context.Context, name string, desc ocispec.Descriptor) error {
 	// TODO(stevvooe): Consider that the remote may want to augment and return
 	// a modified image.
-	_, err := s.client.Put(ctx, &imagesapi.PutRequest{
+	_, err := s.client.Update(ctx, &imagesapi.UpdateImageRequest{
 		Image: imagesapi.Image{
 			Name:   name,
 			Target: descToProto(&desc),
@@ -32,7 +32,7 @@ func (s *remoteStore) Put(ctx context.Context, name string, desc ocispec.Descrip
 }
 
 func (s *remoteStore) Get(ctx context.Context, name string) (images.Image, error) {
-	resp, err := s.client.Get(ctx, &imagesapi.GetRequest{
+	resp, err := s.client.Get(ctx, &imagesapi.GetImageRequest{
 		Name: name,
 	})
 	if err != nil {
@@ -43,7 +43,7 @@ func (s *remoteStore) Get(ctx context.Context, name string) (images.Image, error
 }
 
 func (s *remoteStore) List(ctx context.Context) ([]images.Image, error) {
-	resp, err := s.client.List(ctx, &imagesapi.ListRequest{})
+	resp, err := s.client.List(ctx, &imagesapi.ListImagesRequest{})
 	if err != nil {
 		return nil, rewriteGRPCError(err)
 	}
@@ -52,7 +52,7 @@ func (s *remoteStore) List(ctx context.Context) ([]images.Image, error) {
 }
 
 func (s *remoteStore) Delete(ctx context.Context, name string) error {
-	_, err := s.client.Delete(ctx, &imagesapi.DeleteRequest{
+	_, err := s.client.Delete(ctx, &imagesapi.DeleteImageRequest{
 		Name: name,
 	})
 
