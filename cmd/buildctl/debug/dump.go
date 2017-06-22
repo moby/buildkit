@@ -1,11 +1,10 @@
 package debug
 
 import (
+	"encoding/json"
 	"io"
-	"log"
 	"os"
 
-	"github.com/davecgh/go-spew/spew"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/buildkit_poc/client/llb"
@@ -24,7 +23,12 @@ func dumpLLB(clicontext *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	log.Print(spew.Sdump(ops))
+	enc := json.NewEncoder(os.Stdout)
+	for _, op := range ops {
+		if err := enc.Encode(op); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
