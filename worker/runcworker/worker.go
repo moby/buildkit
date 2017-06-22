@@ -26,6 +26,10 @@ type runcworker struct {
 }
 
 func New(root string) (worker.Worker, error) {
+	if err := exec.Command("runc", "--version").Run(); err != nil {
+		return nil, errors.Wrap(err, "failed to find runc binary")
+	}
+
 	if err := os.MkdirAll(root, 0700); err != nil {
 		return nil, errors.Wrapf(err, "failed to create %s", root)
 	}
