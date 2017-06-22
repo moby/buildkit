@@ -3,6 +3,7 @@ package progressui
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/containerd/console"
@@ -10,14 +11,21 @@ import (
 	"github.com/morikuni/aec"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/tonistiigi/buildkit_poc/client"
+	"golang.org/x/time/rate"
 )
 
 func DisplaySolveStatus(ctx context.Context, ch chan *client.SolveStatus) error {
-	disp := &display{c: console.Current()}
+	c, err := console.ConsoleFromFile(os.Stdout)
+	if err != nil {
+		return err // TODO: switch to log mode
+	}
+	disp := &display{c: c}
 
 	t := newTrace()
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
+
+	displayLimiter := rate.NewLimiter(rate.Every(50*time.Millisecond), 1)
 
 	var done bool
 
@@ -28,14 +36,17 @@ func DisplaySolveStatus(ctx context.Context, ch chan *client.SolveStatus) error 
 		case <-ticker.C:
 		case ss, ok := <-ch:
 			if ok {
-				t.update(ss) // rate limit
+				t.update(ss)
 			} else {
 				done = true
 			}
 		}
-		disp.print(t.displayInfo(-1))
+
 		if done {
+			disp.print(t.displayInfo(), true)
 			return nil
+		} else if displayLimiter.Allow() {
+			disp.print(t.displayInfo(), false)
 		}
 	}
 }
@@ -51,6 +62,7 @@ type job struct {
 	startTime     *time.Time
 	completedTime *time.Time
 	name          string
+	status        string
 }
 
 type trace struct {
@@ -107,7 +119,7 @@ func (t *trace) update(s *client.SolveStatus) {
 	}
 }
 
-func (t *trace) displayInfo(maxRows int) (d displayInfo) {
+func (t *trace) displayInfo() (d displayInfo) {
 	d.startTime = time.Now()
 	if t.localTimeDiff != 0 {
 		d.startTime = (*t.vertexes[0].Started).Add(t.localTimeDiff)
@@ -133,7 +145,7 @@ func (t *trace) displayInfo(maxRows int) (d displayInfo) {
 				name:          "=> " + s.ID,
 			}
 			if s.Total != 0 {
-				j.name += " " + units.HumanSize(float64(s.Current)) + " / " + units.HumanSize(float64(s.Total))
+				j.status = units.HumanSize(float64(s.Current)) + " / " + units.HumanSize(float64(s.Total))
 			}
 			d.jobs = append(d.jobs, j)
 		}
@@ -156,13 +168,19 @@ type display struct {
 	repeated  bool
 }
 
-func (disp *display) print(d displayInfo) {
-	width := 60
+func (disp *display) print(d displayInfo, all bool) {
+	// this output is inspired by Buck
+	width := 80
+	height := 10
 	size, err := disp.c.Size()
 	if err == nil {
 		width = int(size.Width)
+		height = int(size.Height)
 	}
-	_ = width
+
+	if !all {
+		d.jobs = wrapHeight(d.jobs, height-2)
+	}
 
 	b := aec.EmptyBuilder
 	for i := 0; i <= disp.lineCount; i++ {
@@ -181,6 +199,7 @@ func (disp *display) print(d displayInfo) {
 	}
 
 	fmt.Printf("[+] Building %.1fs (%d/%d) %s\n", time.Since(d.startTime).Seconds(), d.countCompleted, d.countTotal, statusStr)
+	lineCount := 0
 	for _, j := range d.jobs {
 		endTime := time.Now()
 		if j.completedTime != nil {
@@ -190,11 +209,43 @@ func (disp *display) print(d displayInfo) {
 		if dt < 0.05 {
 			dt = 0
 		}
-		out := fmt.Sprintf(" => %s %.1fs\n", j.name, dt)
+		pfx := " => "
+		timer := fmt.Sprintf(" %.1fs\n", dt)
+		status := j.status
+		showStatus := false
+
+		left := width - len(pfx) - len(timer) - 1
+		if status != "" {
+			if left+len(status) > 20 {
+				showStatus = true
+				left -= len(status) + 1
+			}
+		}
+		if left < 12 { // too small screen to show progress
+			continue
+		}
+		if len(j.name) > left {
+			j.name = j.name[:left]
+		}
+
+		out := pfx + j.name
+		if showStatus {
+			out += " " + status
+		}
+
+		out = fmt.Sprintf("%-[2]*[1]s %[3]s", out, width-len(timer)-1, timer)
 		if j.completedTime != nil {
 			out = aec.Apply(out, aec.BlueF)
 		}
 		fmt.Print(out)
+		lineCount++
 	}
-	disp.lineCount = len(d.jobs)
+	disp.lineCount = lineCount
+}
+
+func wrapHeight(j []job, limit int) []job {
+	if len(j) > limit {
+		j = j[len(j)-limit:]
+	}
+	return j
 }
