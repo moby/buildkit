@@ -40,40 +40,7 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func runContainerd() (string, func(), error) {
-	var buf = bytes.NewBuffer(nil)
-
-	tmpdir, err := ioutil.TempDir("", "containerd")
-	if err != nil {
-		return "", nil, err
-	}
-	defer os.RemoveAll(tmpdir)
-
-	address := filepath.Join(tmpdir, "containerd.sock")
-
-	args := append([]string{}, "containerd", "--root", tmpdir, "--root", filepath.Join(tmpdir, "state"), "--address", address)
-
-	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Stderr = buf
-	if err := cmd.Start(); err != nil {
-		return "", nil, err
-	}
-
-	return address, func() {
-		// tear down the daemon and resources created
-		if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-		}
-		if _, err := cmd.Process.Wait(); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-		}
-		os.RemoveAll(tmpdir)
-	}, nil
-}
-
 func runBuildd(args []string) (string, func(), error) {
-	var buf = bytes.NewBuffer(nil)
-
 	tmpdir, err := ioutil.TempDir("", "buildd")
 	if err != nil {
 		return "", nil, err
@@ -85,7 +52,8 @@ func runBuildd(args []string) (string, func(), error) {
 	args = append(args, "--root", tmpdir, "--socket", address, "--debug")
 
 	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Stderr = buf
+	// cmd.Stderr = os.Stdout
+	// cmd.Stdout = os.Stdout
 	if err := cmd.Start(); err != nil {
 		return "", nil, err
 	}

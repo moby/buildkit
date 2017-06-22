@@ -1,0 +1,96 @@
+syntax = "proto3";
+
+package containerd.services.snapshots.v1;
+
+import "gogoproto/gogo.proto";
+import "google/protobuf/empty.proto";
+import "github.com/containerd/containerd/api/types/mount/mount.proto";
+
+option go_package = "github.com/containerd/containerd/api/services/snapshot/v1;snapshot";
+
+// Snapshot service manages snapshots
+service Snapshots {
+	rpc Prepare(PrepareSnapshotRequest) returns (PrepareSnapshotResponse);
+	rpc View(ViewSnapshotRequest) returns (ViewSnapshotResponse);
+	rpc Mounts(MountsRequest) returns (MountsResponse);
+	rpc Commit(CommitSnapshotRequest) returns (google.protobuf.Empty);
+	rpc Remove(RemoveSnapshotRequest) returns (google.protobuf.Empty);
+	rpc Stat(StatSnapshotRequest) returns (StatSnapshotResponse);
+	rpc List(ListSnapshotsRequest) returns (stream ListSnapshotsResponse);
+	rpc Usage(UsageRequest) returns (UsageResponse);
+}
+
+message PrepareSnapshotRequest {
+	string key = 1;
+	string parent = 2;
+}
+
+message PrepareSnapshotResponse {
+	repeated containerd.v1.types.Mount mounts = 1;
+}
+
+message ViewSnapshotRequest {
+	string key = 1;
+	string parent = 2;
+}
+
+message ViewSnapshotResponse {
+	repeated containerd.v1.types.Mount mounts = 1;
+}
+
+message MountsRequest {
+	string key = 1;
+}
+
+message MountsResponse {
+	repeated containerd.v1.types.Mount mounts = 1;
+}
+
+message RemoveSnapshotRequest {
+	string key = 1;
+}
+
+message CommitSnapshotRequest {
+	string name = 1;
+	string key = 2;
+}
+
+message StatSnapshotRequest {
+	string key = 1;
+}
+
+enum Kind {
+	option (gogoproto.goproto_enum_prefix) = false;
+	option (gogoproto.enum_customname) = "Kind";
+
+	ACTIVE = 0 [(gogoproto.enumvalue_customname) = "KindActive"];
+
+	COMMITTED = 1 [(gogoproto.enumvalue_customname) = "KindCommitted"];
+}
+
+message Info {
+	string name = 1;
+	string parent = 2;
+	Kind kind = 3;
+	bool readonly = 4;
+}
+
+message StatSnapshotResponse {
+	Info info = 1 [(gogoproto.nullable) = false];
+}
+
+message ListSnapshotsRequest{
+}
+
+message ListSnapshotsResponse {
+	repeated Info info = 1 [(gogoproto.nullable) = false];
+}
+
+message UsageRequest {
+	string key = 1;
+}
+
+message UsageResponse {
+	int64 size = 1;
+	int64 inodes = 2;
+}

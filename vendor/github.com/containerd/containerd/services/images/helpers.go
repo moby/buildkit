@@ -1,7 +1,7 @@
 package images
 
 import (
-	imagesapi "github.com/containerd/containerd/api/services/images"
+	imagesapi "github.com/containerd/containerd/api/services/images/v1"
 	"github.com/containerd/containerd/api/types/descriptor"
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/metadata"
@@ -69,9 +69,9 @@ func rewriteGRPCError(err error) error {
 
 	switch grpc.Code(errors.Cause(err)) {
 	case codes.AlreadyExists:
-		return metadata.ErrExists
+		return metadata.ErrExists(grpc.ErrorDesc(err))
 	case codes.NotFound:
-		return metadata.ErrNotFound
+		return metadata.ErrNotFound(grpc.ErrorDesc(err))
 	}
 
 	return err
@@ -85,6 +85,8 @@ func mapGRPCError(err error, id string) error {
 		return grpc.Errorf(codes.AlreadyExists, "image %v already exists", id)
 	case namespaces.IsNamespaceRequired(err):
 		return grpc.Errorf(codes.InvalidArgument, "namespace required, please set %q header", namespaces.GRPCHeader)
+	case namespaces.IsNamespaceInvalid(err):
+		return grpc.Errorf(codes.InvalidArgument, err.Error())
 	}
 
 	return err

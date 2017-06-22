@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/containerd/containerd/api/services/containers"
+	"github.com/containerd/containerd/api/services/containers/v1"
 	"github.com/containerd/containerd/images"
 	protobuf "github.com/gogo/protobuf/types"
 	"github.com/opencontainers/image-spec/specs-go/v1"
@@ -184,6 +184,24 @@ func WithHostNamespace(ns specs.LinuxNamespaceType) SpecOpts {
 				return nil
 			}
 		}
+		return nil
+	}
+}
+
+// WithLinuxNamespace uses the passed in namespace for the spec. If a namespace of the same type already exists in the
+// spec, the existing namespace is replaced by the one provided.
+func WithLinuxNamespace(ns specs.LinuxNamespace) SpecOpts {
+	return func(s *specs.Spec) error {
+		for i, n := range s.Linux.Namespaces {
+			if n.Type == ns.Type {
+				before := s.Linux.Namespaces[:i]
+				after := s.Linux.Namespaces[i+1:]
+				s.Linux.Namespaces = append(before, ns)
+				s.Linux.Namespaces = append(s.Linux.Namespaces, after...)
+				return nil
+			}
+		}
+		s.Linux.Namespaces = append(s.Linux.Namespaces, ns)
 		return nil
 	}
 }
