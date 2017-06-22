@@ -2,19 +2,18 @@ package llb
 
 import (
 	_ "crypto/sha256"
+	"fmt"
 	"sort"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/google/shlex"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/buildkit_poc/solver/pb"
+	"github.com/tonistiigi/buildkit_poc/util/system"
 )
 
-type Op interface {
-	Validate() error
-	Marshal() ([][]byte, error)
-	Run(meta Meta) *ExecOp
-}
+type RunOption func(m Meta) Meta
 
 type SourceOp struct {
 	id string
@@ -33,52 +32,138 @@ type Meta struct {
 }
 
 type Mount struct {
-	op     *ExecOp
-	dest   string
-	mount  *Mount
-	src    *SourceOp
-	output bool
+	op         *ExecOp
+	dest       string
+	mount      *Mount
+	src        *SourceOp
+	output     bool
+	inputIndex int64
 }
 
-func Source(id string) *SourceOp {
-	return &SourceOp{id: id}
+func NewMeta(args ...string) Meta {
+	m := Meta{}
+	m = m.addEnv("PATH", system.DefaultPathEnv)
+	m = m.setArgs(args...)
+	m.Cwd = "/"
+	return m
 }
 
-func (so *SourceOp) Validate() error {
-	// TODO: basic identifier validation
-	if so.id == "" {
-		return errors.Errorf("source identifier can't be empty")
+func (m *Meta) ensurePrivate() {
+	m.Env = append([]string{}, m.Env...)
+	m.Args = append([]string{}, m.Args...)
+}
+
+func (m Meta) addEnv(k, v string) Meta {
+	(&m).ensurePrivate()
+	// TODO: flatten
+	m.Env = append(m.Env, k+"="+v)
+	return m
+}
+
+func (m Meta) setArgs(args ...string) Meta {
+	m.Args = append([]string{}, args...)
+	return m
+}
+
+func Shlex(str string, v ...string) RunOption {
+	return func(m Meta) Meta {
+		vi := make([]interface{}, 0, len(v))
+		for _, v := range v {
+			vi = append(vi, v)
+		}
+		sp, err := shlex.Split(fmt.Sprintf(str, vi...))
+		if err != nil {
+			panic(err) // TODO
+		}
+		(&m).ensurePrivate()
+		return m.setArgs(sp...)
+	}
+}
+
+type State struct {
+	src      *SourceOp
+	exec     *ExecOp
+	meta     Meta
+	mount    *Mount
+	metaNext Meta
+}
+
+type ExecState struct {
+	State
+}
+
+func (s *State) Validate() error {
+	if s.src != nil {
+		if err := s.src.Validate(); err != nil {
+			return err
+		}
+	}
+	if s.exec != nil {
+		if err := s.exec.Validate(); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-func (so *SourceOp) Run(m Meta) *ExecOp {
-	return newExec(m, so, nil)
+func (s *State) Run(opts ...RunOption) *ExecState {
+	var es ExecState
+	meta := s.metaNext
+	for _, o := range opts {
+		meta = o(meta)
+	}
+	exec := newExec(meta, s.src, s.mount)
+	es.exec = exec
+	es.mount = exec.root
+	es.metaNext = meta
+	es.meta = meta
+	return &es
 }
 
-func (so *SourceOp) Marshal() ([][]byte, error) {
-	if err := so.Validate(); err != nil {
+func (s *State) AddEnv(k, v string) *State {
+	s.metaNext = s.metaNext.addEnv(k, v)
+	return s
+}
+func (s *State) Dir(wd string) *State {
+	s.metaNext.Cwd = wd
+	return s
+}
+
+func (s *State) Marshal() ([][]byte, error) {
+	if err := s.Validate(); err != nil {
 		return nil, err
 	}
 	cache := make(map[digest.Digest]struct{})
-	_, list, err := so.recursiveMarshal(nil, cache)
+	var list [][]byte
+	var err error
+	if s.src != nil { // TODO: fix repetition
+		_, list, err = s.src.recursiveMarshal(nil, cache)
+	} else if s.exec != nil {
+		_, list, err = s.exec.root.recursiveMarshal(nil, cache)
+	} else {
+		_, list, err = s.mount.recursiveMarshal(nil, cache)
+	}
 	return list, err
 }
 
-func (so *SourceOp) recursiveMarshal(list [][]byte, cache map[digest.Digest]struct{}) (digest.Digest, [][]byte, error) {
-	if err := so.Validate(); err != nil {
-		return "", nil, err
+func (s *ExecState) AddMount(dest string, mount *State) *State {
+	m := &Mount{
+		dest:   dest,
+		src:    mount.src,
+		mount:  mount.mount,
+		op:     s.exec,
+		output: true, // TODO: should be set only if something inherits
 	}
-	po := &pb.Op{
-		Op: &pb.Op_Source{
-			Source: &pb.SourceOp{Identifier: so.id},
-		},
-	}
-	return marshal(po, list, cache)
+	var newState State
+	newState.meta = s.meta
+	newState.metaNext = s.meta
+	newState.mount = m
+	s.exec.mounts = append(s.exec.mounts, m)
+	return &newState
 }
 
-func Image(ref string) *SourceOp {
-	return Source("docker-image://" + ref) // controversial
+func (s *ExecState) Root() *State {
+	return &s.State
 }
 
 func newExec(meta Meta, src *SourceOp, m *Mount) *ExecOp {
@@ -97,26 +182,35 @@ func newExec(meta Meta, src *SourceOp, m *Mount) *ExecOp {
 	return exec
 }
 
-func (eo *ExecOp) AddMount(dest string, src interface{}) *Mount {
-	var s *SourceOp
-	var m *Mount
-	switch v := src.(type) {
-	case *SourceOp:
-		s = v
-	case *Mount:
-		m = v
-	case *ExecOp:
-		m = v.root
-	default:
-		panic("invalid input")
+func Source(id string) *State {
+	return &State{
+		metaNext: NewMeta(),
+		src:      &SourceOp{id: id},
 	}
-	eo.mounts = append(eo.mounts, &Mount{
-		dest:   dest,
-		src:    s,
-		mount:  m,
-		output: true, // TODO: should be set only if something inherits
-	})
-	return m
+}
+
+func (so *SourceOp) Validate() error {
+	// TODO: basic identifier validation
+	if so.id == "" {
+		return errors.Errorf("source identifier can't be empty")
+	}
+	return nil
+}
+
+func (so *SourceOp) recursiveMarshal(list [][]byte, cache map[digest.Digest]struct{}) (digest.Digest, [][]byte, error) {
+	if err := so.Validate(); err != nil {
+		return "", nil, err
+	}
+	po := &pb.Op{
+		Op: &pb.Op_Source{
+			Source: &pb.SourceOp{Identifier: so.id},
+		},
+	}
+	return appendResult(po, list, cache)
+}
+
+func Image(ref string) *State {
+	return Source("docker-image://" + ref) // controversial
 }
 
 func (eo *ExecOp) Validate() error {
@@ -134,10 +228,6 @@ func (eo *ExecOp) Validate() error {
 	}
 	// TODO: validate meta
 	return nil
-}
-
-func (eo *ExecOp) Run(meta Meta) *ExecOp {
-	return newExec(meta, nil, eo.root)
 }
 
 func (eo *ExecOp) Marshal() ([][]byte, error) {
@@ -173,7 +263,7 @@ func (eo *ExecOp) recursiveMarshal(list [][]byte, cache map[digest.Digest]struct
 	for _, m := range eo.mounts {
 		var dgst digest.Digest
 		var err error
-		var op Op
+		var op interface{}
 		if m.src != nil {
 			op = m.src
 		} else {
@@ -185,15 +275,19 @@ func (eo *ExecOp) recursiveMarshal(list [][]byte, cache map[digest.Digest]struct
 		}
 		inputIndex := len(pop.Inputs)
 		for i := range pop.Inputs {
-			if pop.Inputs[i].Digest == dgst.String() {
+			if pop.Inputs[i].Digest == dgst {
 				inputIndex = i
 				break
 			}
 		}
 		if inputIndex == len(pop.Inputs) {
+			var mountIndex int64
+			if m.mount != nil {
+				mountIndex = m.mount.inputIndex
+			}
 			pop.Inputs = append(pop.Inputs, &pb.Input{
-				Digest: dgst.String(),
-				Index:  0, // TODO
+				Digest: dgst,
+				Index:  mountIndex,
 			})
 		}
 
@@ -207,13 +301,36 @@ func (eo *ExecOp) recursiveMarshal(list [][]byte, cache map[digest.Digest]struct
 		} else {
 			pm.Output = -1
 		}
+		m.inputIndex = outputIndex - 1
 		peo.Mounts = append(peo.Mounts, pm)
 	}
 
-	return marshal(pop, list, cache)
+	return appendResult(pop, list, cache)
 }
 
-func marshal(p proto.Marshaler, list [][]byte, cache map[digest.Digest]struct{}) (dgst digest.Digest, out [][]byte, err error) {
+func (m *Mount) recursiveMarshal(list [][]byte, cache map[digest.Digest]struct{}) (digest.Digest, [][]byte, error) {
+	if m.op == nil {
+		return "", nil, errors.Errorf("invalid mount")
+	}
+	var dgst digest.Digest
+	dgst, list, err := m.op.recursiveMarshal(list, cache)
+	if err != nil {
+		return "", list, err
+	}
+	for _, m2 := range m.op.mounts {
+		if m2 == m {
+			po := &pb.Op{}
+			po.Inputs = append(po.Inputs, &pb.Input{
+				Digest: dgst,
+				Index:  int64(m.inputIndex),
+			})
+			return appendResult(po, list, cache)
+		}
+	}
+	return "", nil, errors.Errorf("invalid mount")
+}
+
+func appendResult(p proto.Marshaler, list [][]byte, cache map[digest.Digest]struct{}) (dgst digest.Digest, out [][]byte, err error) {
 	dt, err := p.Marshal()
 	if err != nil {
 		return "", nil, err
@@ -227,7 +344,7 @@ func marshal(p proto.Marshaler, list [][]byte, cache map[digest.Digest]struct{})
 	return dgst, list, nil
 }
 
-func recursiveMarshalAny(op Op, list [][]byte, cache map[digest.Digest]struct{}) (dgst digest.Digest, out [][]byte, err error) {
+func recursiveMarshalAny(op interface{}, list [][]byte, cache map[digest.Digest]struct{}) (dgst digest.Digest, out [][]byte, err error) {
 	switch op := op.(type) {
 	case *ExecOp:
 		return op.recursiveMarshal(list, cache)

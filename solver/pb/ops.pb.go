@@ -23,9 +23,9 @@ package pb
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
+import _ "github.com/gogo/protobuf/gogoproto"
 
-import strings "strings"
-import reflect "reflect"
+import github_com_opencontainers_go_digest "github.com/opencontainers/go-digest"
 
 import io "io"
 
@@ -33,12 +33,6 @@ import io "io"
 var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
-
-// This is a compile-time assertion to ensure that this generated file
-// is compatible with the proto package it is being compiled against.
-// A compilation error at this line likely means your copy of the
-// proto package needs to be updated.
-const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
 type Op struct {
 	Inputs []*Input `protobuf:"bytes,1,rep,name=inputs" json:"inputs,omitempty"`
@@ -49,13 +43,12 @@ type Op struct {
 	Op isOp_Op `protobuf_oneof:"op"`
 }
 
-func (m *Op) Reset()                    { *m = Op{} }
-func (*Op) ProtoMessage()               {}
-func (*Op) Descriptor() ([]byte, []int) { return fileDescriptorOps, []int{0} }
+func (m *Op) Reset()         { *m = Op{} }
+func (m *Op) String() string { return proto.CompactTextString(m) }
+func (*Op) ProtoMessage()    {}
 
 type isOp_Op interface {
 	isOp_Op()
-	Equal(interface{}) bool
 	MarshalTo([]byte) (int, error)
 	Size() int
 }
@@ -110,8 +103,8 @@ func (m *Op) GetCopy() *CopyOp {
 }
 
 // XXX_OneofFuncs is for the internal use of the proto package.
-func (*Op) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), func(msg proto.Message) (n int), []interface{}) {
-	return _Op_OneofMarshaler, _Op_OneofUnmarshaler, _Op_OneofSizer, []interface{}{
+func (*Op) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), []interface{}) {
+	return _Op_OneofMarshaler, _Op_OneofUnmarshaler, []interface{}{
 		(*Op_Exec)(nil),
 		(*Op_Source)(nil),
 		(*Op_Copy)(nil),
@@ -176,63 +169,23 @@ func _Op_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer) (bo
 	}
 }
 
-func _Op_OneofSizer(msg proto.Message) (n int) {
-	m := msg.(*Op)
-	// op
-	switch x := m.Op.(type) {
-	case *Op_Exec:
-		s := proto.Size(x.Exec)
-		n += proto.SizeVarint(2<<3 | proto.WireBytes)
-		n += proto.SizeVarint(uint64(s))
-		n += s
-	case *Op_Source:
-		s := proto.Size(x.Source)
-		n += proto.SizeVarint(3<<3 | proto.WireBytes)
-		n += proto.SizeVarint(uint64(s))
-		n += s
-	case *Op_Copy:
-		s := proto.Size(x.Copy)
-		n += proto.SizeVarint(4<<3 | proto.WireBytes)
-		n += proto.SizeVarint(uint64(s))
-		n += s
-	case nil:
-	default:
-		panic(fmt.Sprintf("proto: unexpected type %T in oneof", x))
-	}
-	return n
-}
-
 type Input struct {
-	Digest string `protobuf:"bytes,1,opt,name=digest,proto3" json:"digest,omitempty"`
-	Index  int64  `protobuf:"varint,2,opt,name=index,proto3" json:"index,omitempty"`
+	Digest github_com_opencontainers_go_digest.Digest `protobuf:"bytes,1,opt,name=digest,proto3,customtype=github.com/opencontainers/go-digest.Digest" json:"digest"`
+	Index  int64                                      `protobuf:"varint,2,opt,name=index,proto3" json:"index,omitempty"`
 }
 
-func (m *Input) Reset()                    { *m = Input{} }
-func (*Input) ProtoMessage()               {}
-func (*Input) Descriptor() ([]byte, []int) { return fileDescriptorOps, []int{1} }
-
-func (m *Input) GetDigest() string {
-	if m != nil {
-		return m.Digest
-	}
-	return ""
-}
-
-func (m *Input) GetIndex() int64 {
-	if m != nil {
-		return m.Index
-	}
-	return 0
-}
+func (m *Input) Reset()         { *m = Input{} }
+func (m *Input) String() string { return proto.CompactTextString(m) }
+func (*Input) ProtoMessage()    {}
 
 type ExecOp struct {
 	Meta   *Meta    `protobuf:"bytes,1,opt,name=meta" json:"meta,omitempty"`
 	Mounts []*Mount `protobuf:"bytes,2,rep,name=mounts" json:"mounts,omitempty"`
 }
 
-func (m *ExecOp) Reset()                    { *m = ExecOp{} }
-func (*ExecOp) ProtoMessage()               {}
-func (*ExecOp) Descriptor() ([]byte, []int) { return fileDescriptorOps, []int{2} }
+func (m *ExecOp) Reset()         { *m = ExecOp{} }
+func (m *ExecOp) String() string { return proto.CompactTextString(m) }
+func (*ExecOp) ProtoMessage()    {}
 
 func (m *ExecOp) GetMeta() *Meta {
 	if m != nil {
@@ -254,30 +207,9 @@ type Meta struct {
 	Cwd  string   `protobuf:"bytes,3,opt,name=cwd,proto3" json:"cwd,omitempty"`
 }
 
-func (m *Meta) Reset()                    { *m = Meta{} }
-func (*Meta) ProtoMessage()               {}
-func (*Meta) Descriptor() ([]byte, []int) { return fileDescriptorOps, []int{3} }
-
-func (m *Meta) GetArgs() []string {
-	if m != nil {
-		return m.Args
-	}
-	return nil
-}
-
-func (m *Meta) GetEnv() []string {
-	if m != nil {
-		return m.Env
-	}
-	return nil
-}
-
-func (m *Meta) GetCwd() string {
-	if m != nil {
-		return m.Cwd
-	}
-	return ""
-}
+func (m *Meta) Reset()         { *m = Meta{} }
+func (m *Meta) String() string { return proto.CompactTextString(m) }
+func (*Meta) ProtoMessage()    {}
 
 type Mount struct {
 	Input    int64  `protobuf:"varint,1,opt,name=input,proto3" json:"input,omitempty"`
@@ -286,46 +218,18 @@ type Mount struct {
 	Output   int64  `protobuf:"varint,4,opt,name=output,proto3" json:"output,omitempty"`
 }
 
-func (m *Mount) Reset()                    { *m = Mount{} }
-func (*Mount) ProtoMessage()               {}
-func (*Mount) Descriptor() ([]byte, []int) { return fileDescriptorOps, []int{4} }
-
-func (m *Mount) GetInput() int64 {
-	if m != nil {
-		return m.Input
-	}
-	return 0
-}
-
-func (m *Mount) GetSelector() string {
-	if m != nil {
-		return m.Selector
-	}
-	return ""
-}
-
-func (m *Mount) GetDest() string {
-	if m != nil {
-		return m.Dest
-	}
-	return ""
-}
-
-func (m *Mount) GetOutput() int64 {
-	if m != nil {
-		return m.Output
-	}
-	return 0
-}
+func (m *Mount) Reset()         { *m = Mount{} }
+func (m *Mount) String() string { return proto.CompactTextString(m) }
+func (*Mount) ProtoMessage()    {}
 
 type CopyOp struct {
 	Src  []*CopySource `protobuf:"bytes,1,rep,name=src" json:"src,omitempty"`
 	Dest string        `protobuf:"bytes,2,opt,name=dest,proto3" json:"dest,omitempty"`
 }
 
-func (m *CopyOp) Reset()                    { *m = CopyOp{} }
-func (*CopyOp) ProtoMessage()               {}
-func (*CopyOp) Descriptor() ([]byte, []int) { return fileDescriptorOps, []int{5} }
+func (m *CopyOp) Reset()         { *m = CopyOp{} }
+func (m *CopyOp) String() string { return proto.CompactTextString(m) }
+func (*CopyOp) ProtoMessage()    {}
 
 func (m *CopyOp) GetSrc() []*CopySource {
 	if m != nil {
@@ -334,50 +238,22 @@ func (m *CopyOp) GetSrc() []*CopySource {
 	return nil
 }
 
-func (m *CopyOp) GetDest() string {
-	if m != nil {
-		return m.Dest
-	}
-	return ""
-}
-
 type CopySource struct {
 	Input    int64  `protobuf:"varint,1,opt,name=input,proto3" json:"input,omitempty"`
 	Selector string `protobuf:"bytes,2,opt,name=selector,proto3" json:"selector,omitempty"`
 }
 
-func (m *CopySource) Reset()                    { *m = CopySource{} }
-func (*CopySource) ProtoMessage()               {}
-func (*CopySource) Descriptor() ([]byte, []int) { return fileDescriptorOps, []int{6} }
-
-func (m *CopySource) GetInput() int64 {
-	if m != nil {
-		return m.Input
-	}
-	return 0
-}
-
-func (m *CopySource) GetSelector() string {
-	if m != nil {
-		return m.Selector
-	}
-	return ""
-}
+func (m *CopySource) Reset()         { *m = CopySource{} }
+func (m *CopySource) String() string { return proto.CompactTextString(m) }
+func (*CopySource) ProtoMessage()    {}
 
 type SourceOp struct {
 	Identifier string `protobuf:"bytes,1,opt,name=identifier,proto3" json:"identifier,omitempty"`
 }
 
-func (m *SourceOp) Reset()                    { *m = SourceOp{} }
-func (*SourceOp) ProtoMessage()               {}
-func (*SourceOp) Descriptor() ([]byte, []int) { return fileDescriptorOps, []int{7} }
-
-func (m *SourceOp) GetIdentifier() string {
-	if m != nil {
-		return m.Identifier
-	}
-	return ""
-}
+func (m *SourceOp) Reset()         { *m = SourceOp{} }
+func (m *SourceOp) String() string { return proto.CompactTextString(m) }
+func (*SourceOp) ProtoMessage()    {}
 
 func init() {
 	proto.RegisterType((*Op)(nil), "pb.Op")
@@ -389,550 +265,27 @@ func init() {
 	proto.RegisterType((*CopySource)(nil), "pb.CopySource")
 	proto.RegisterType((*SourceOp)(nil), "pb.SourceOp")
 }
-func (this *Op) Equal(that interface{}) bool {
-	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	}
-
-	that1, ok := that.(*Op)
-	if !ok {
-		that2, ok := that.(Op)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	} else if this == nil {
-		return false
-	}
-	if len(this.Inputs) != len(that1.Inputs) {
-		return false
-	}
-	for i := range this.Inputs {
-		if !this.Inputs[i].Equal(that1.Inputs[i]) {
-			return false
-		}
-	}
-	if that1.Op == nil {
-		if this.Op != nil {
-			return false
-		}
-	} else if this.Op == nil {
-		return false
-	} else if !this.Op.Equal(that1.Op) {
-		return false
-	}
-	return true
-}
-func (this *Op_Exec) Equal(that interface{}) bool {
-	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	}
-
-	that1, ok := that.(*Op_Exec)
-	if !ok {
-		that2, ok := that.(Op_Exec)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	} else if this == nil {
-		return false
-	}
-	if !this.Exec.Equal(that1.Exec) {
-		return false
-	}
-	return true
-}
-func (this *Op_Source) Equal(that interface{}) bool {
-	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	}
-
-	that1, ok := that.(*Op_Source)
-	if !ok {
-		that2, ok := that.(Op_Source)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	} else if this == nil {
-		return false
-	}
-	if !this.Source.Equal(that1.Source) {
-		return false
-	}
-	return true
-}
-func (this *Op_Copy) Equal(that interface{}) bool {
-	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	}
-
-	that1, ok := that.(*Op_Copy)
-	if !ok {
-		that2, ok := that.(Op_Copy)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	} else if this == nil {
-		return false
-	}
-	if !this.Copy.Equal(that1.Copy) {
-		return false
-	}
-	return true
-}
-func (this *Input) Equal(that interface{}) bool {
-	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	}
-
-	that1, ok := that.(*Input)
-	if !ok {
-		that2, ok := that.(Input)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	} else if this == nil {
-		return false
-	}
-	if this.Digest != that1.Digest {
-		return false
-	}
-	if this.Index != that1.Index {
-		return false
-	}
-	return true
-}
-func (this *ExecOp) Equal(that interface{}) bool {
-	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	}
-
-	that1, ok := that.(*ExecOp)
-	if !ok {
-		that2, ok := that.(ExecOp)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	} else if this == nil {
-		return false
-	}
-	if !this.Meta.Equal(that1.Meta) {
-		return false
-	}
-	if len(this.Mounts) != len(that1.Mounts) {
-		return false
-	}
-	for i := range this.Mounts {
-		if !this.Mounts[i].Equal(that1.Mounts[i]) {
-			return false
-		}
-	}
-	return true
-}
-func (this *Meta) Equal(that interface{}) bool {
-	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	}
-
-	that1, ok := that.(*Meta)
-	if !ok {
-		that2, ok := that.(Meta)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	} else if this == nil {
-		return false
-	}
-	if len(this.Args) != len(that1.Args) {
-		return false
-	}
-	for i := range this.Args {
-		if this.Args[i] != that1.Args[i] {
-			return false
-		}
-	}
-	if len(this.Env) != len(that1.Env) {
-		return false
-	}
-	for i := range this.Env {
-		if this.Env[i] != that1.Env[i] {
-			return false
-		}
-	}
-	if this.Cwd != that1.Cwd {
-		return false
-	}
-	return true
-}
-func (this *Mount) Equal(that interface{}) bool {
-	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	}
-
-	that1, ok := that.(*Mount)
-	if !ok {
-		that2, ok := that.(Mount)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	} else if this == nil {
-		return false
-	}
-	if this.Input != that1.Input {
-		return false
-	}
-	if this.Selector != that1.Selector {
-		return false
-	}
-	if this.Dest != that1.Dest {
-		return false
-	}
-	if this.Output != that1.Output {
-		return false
-	}
-	return true
-}
-func (this *CopyOp) Equal(that interface{}) bool {
-	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	}
-
-	that1, ok := that.(*CopyOp)
-	if !ok {
-		that2, ok := that.(CopyOp)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	} else if this == nil {
-		return false
-	}
-	if len(this.Src) != len(that1.Src) {
-		return false
-	}
-	for i := range this.Src {
-		if !this.Src[i].Equal(that1.Src[i]) {
-			return false
-		}
-	}
-	if this.Dest != that1.Dest {
-		return false
-	}
-	return true
-}
-func (this *CopySource) Equal(that interface{}) bool {
-	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	}
-
-	that1, ok := that.(*CopySource)
-	if !ok {
-		that2, ok := that.(CopySource)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	} else if this == nil {
-		return false
-	}
-	if this.Input != that1.Input {
-		return false
-	}
-	if this.Selector != that1.Selector {
-		return false
-	}
-	return true
-}
-func (this *SourceOp) Equal(that interface{}) bool {
-	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	}
-
-	that1, ok := that.(*SourceOp)
-	if !ok {
-		that2, ok := that.(SourceOp)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
-	} else if this == nil {
-		return false
-	}
-	if this.Identifier != that1.Identifier {
-		return false
-	}
-	return true
-}
-func (this *Op) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 8)
-	s = append(s, "&pb.Op{")
-	if this.Inputs != nil {
-		s = append(s, "Inputs: "+fmt.Sprintf("%#v", this.Inputs)+",\n")
-	}
-	if this.Op != nil {
-		s = append(s, "Op: "+fmt.Sprintf("%#v", this.Op)+",\n")
-	}
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func (this *Op_Exec) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&pb.Op_Exec{` +
-		`Exec:` + fmt.Sprintf("%#v", this.Exec) + `}`}, ", ")
-	return s
-}
-func (this *Op_Source) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&pb.Op_Source{` +
-		`Source:` + fmt.Sprintf("%#v", this.Source) + `}`}, ", ")
-	return s
-}
-func (this *Op_Copy) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&pb.Op_Copy{` +
-		`Copy:` + fmt.Sprintf("%#v", this.Copy) + `}`}, ", ")
-	return s
-}
-func (this *Input) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 6)
-	s = append(s, "&pb.Input{")
-	s = append(s, "Digest: "+fmt.Sprintf("%#v", this.Digest)+",\n")
-	s = append(s, "Index: "+fmt.Sprintf("%#v", this.Index)+",\n")
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func (this *ExecOp) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 6)
-	s = append(s, "&pb.ExecOp{")
-	if this.Meta != nil {
-		s = append(s, "Meta: "+fmt.Sprintf("%#v", this.Meta)+",\n")
-	}
-	if this.Mounts != nil {
-		s = append(s, "Mounts: "+fmt.Sprintf("%#v", this.Mounts)+",\n")
-	}
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func (this *Meta) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 7)
-	s = append(s, "&pb.Meta{")
-	s = append(s, "Args: "+fmt.Sprintf("%#v", this.Args)+",\n")
-	s = append(s, "Env: "+fmt.Sprintf("%#v", this.Env)+",\n")
-	s = append(s, "Cwd: "+fmt.Sprintf("%#v", this.Cwd)+",\n")
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func (this *Mount) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 8)
-	s = append(s, "&pb.Mount{")
-	s = append(s, "Input: "+fmt.Sprintf("%#v", this.Input)+",\n")
-	s = append(s, "Selector: "+fmt.Sprintf("%#v", this.Selector)+",\n")
-	s = append(s, "Dest: "+fmt.Sprintf("%#v", this.Dest)+",\n")
-	s = append(s, "Output: "+fmt.Sprintf("%#v", this.Output)+",\n")
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func (this *CopyOp) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 6)
-	s = append(s, "&pb.CopyOp{")
-	if this.Src != nil {
-		s = append(s, "Src: "+fmt.Sprintf("%#v", this.Src)+",\n")
-	}
-	s = append(s, "Dest: "+fmt.Sprintf("%#v", this.Dest)+",\n")
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func (this *CopySource) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 6)
-	s = append(s, "&pb.CopySource{")
-	s = append(s, "Input: "+fmt.Sprintf("%#v", this.Input)+",\n")
-	s = append(s, "Selector: "+fmt.Sprintf("%#v", this.Selector)+",\n")
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func (this *SourceOp) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 5)
-	s = append(s, "&pb.SourceOp{")
-	s = append(s, "Identifier: "+fmt.Sprintf("%#v", this.Identifier)+",\n")
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func valueToGoStringOps(v interface{}, typ string) string {
-	rv := reflect.ValueOf(v)
-	if rv.IsNil() {
-		return "nil"
-	}
-	pv := reflect.Indirect(rv).Interface()
-	return fmt.Sprintf("func(v %v) *%v { return &v } ( %#v )", typ, typ, pv)
-}
-func (m *Op) Marshal() (dAtA []byte, err error) {
+func (m *Op) Marshal() (data []byte, err error) {
 	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
 	if err != nil {
 		return nil, err
 	}
-	return dAtA[:n], nil
+	return data[:n], nil
 }
 
-func (m *Op) MarshalTo(dAtA []byte) (int, error) {
+func (m *Op) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if len(m.Inputs) > 0 {
 		for _, msg := range m.Inputs {
-			dAtA[i] = 0xa
+			data[i] = 0xa
 			i++
-			i = encodeVarintOps(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
+			i = encodeVarintOps(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -940,7 +293,7 @@ func (m *Op) MarshalTo(dAtA []byte) (int, error) {
 		}
 	}
 	if m.Op != nil {
-		nn1, err := m.Op.MarshalTo(dAtA[i:])
+		nn1, err := m.Op.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
@@ -949,13 +302,13 @@ func (m *Op) MarshalTo(dAtA []byte) (int, error) {
 	return i, nil
 }
 
-func (m *Op_Exec) MarshalTo(dAtA []byte) (int, error) {
+func (m *Op_Exec) MarshalTo(data []byte) (int, error) {
 	i := 0
 	if m.Exec != nil {
-		dAtA[i] = 0x12
+		data[i] = 0x12
 		i++
-		i = encodeVarintOps(dAtA, i, uint64(m.Exec.Size()))
-		n2, err := m.Exec.MarshalTo(dAtA[i:])
+		i = encodeVarintOps(data, i, uint64(m.Exec.Size()))
+		n2, err := m.Exec.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
@@ -963,13 +316,13 @@ func (m *Op_Exec) MarshalTo(dAtA []byte) (int, error) {
 	}
 	return i, nil
 }
-func (m *Op_Source) MarshalTo(dAtA []byte) (int, error) {
+func (m *Op_Source) MarshalTo(data []byte) (int, error) {
 	i := 0
 	if m.Source != nil {
-		dAtA[i] = 0x1a
+		data[i] = 0x1a
 		i++
-		i = encodeVarintOps(dAtA, i, uint64(m.Source.Size()))
-		n3, err := m.Source.MarshalTo(dAtA[i:])
+		i = encodeVarintOps(data, i, uint64(m.Source.Size()))
+		n3, err := m.Source.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
@@ -977,13 +330,13 @@ func (m *Op_Source) MarshalTo(dAtA []byte) (int, error) {
 	}
 	return i, nil
 }
-func (m *Op_Copy) MarshalTo(dAtA []byte) (int, error) {
+func (m *Op_Copy) MarshalTo(data []byte) (int, error) {
 	i := 0
 	if m.Copy != nil {
-		dAtA[i] = 0x22
+		data[i] = 0x22
 		i++
-		i = encodeVarintOps(dAtA, i, uint64(m.Copy.Size()))
-		n4, err := m.Copy.MarshalTo(dAtA[i:])
+		i = encodeVarintOps(data, i, uint64(m.Copy.Size()))
+		n4, err := m.Copy.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
@@ -991,55 +344,55 @@ func (m *Op_Copy) MarshalTo(dAtA []byte) (int, error) {
 	}
 	return i, nil
 }
-func (m *Input) Marshal() (dAtA []byte, err error) {
+func (m *Input) Marshal() (data []byte, err error) {
 	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
 	if err != nil {
 		return nil, err
 	}
-	return dAtA[:n], nil
+	return data[:n], nil
 }
 
-func (m *Input) MarshalTo(dAtA []byte) (int, error) {
+func (m *Input) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if len(m.Digest) > 0 {
-		dAtA[i] = 0xa
+		data[i] = 0xa
 		i++
-		i = encodeVarintOps(dAtA, i, uint64(len(m.Digest)))
-		i += copy(dAtA[i:], m.Digest)
+		i = encodeVarintOps(data, i, uint64(len(m.Digest)))
+		i += copy(data[i:], m.Digest)
 	}
 	if m.Index != 0 {
-		dAtA[i] = 0x10
+		data[i] = 0x10
 		i++
-		i = encodeVarintOps(dAtA, i, uint64(m.Index))
+		i = encodeVarintOps(data, i, uint64(m.Index))
 	}
 	return i, nil
 }
 
-func (m *ExecOp) Marshal() (dAtA []byte, err error) {
+func (m *ExecOp) Marshal() (data []byte, err error) {
 	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
 	if err != nil {
 		return nil, err
 	}
-	return dAtA[:n], nil
+	return data[:n], nil
 }
 
-func (m *ExecOp) MarshalTo(dAtA []byte) (int, error) {
+func (m *ExecOp) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if m.Meta != nil {
-		dAtA[i] = 0xa
+		data[i] = 0xa
 		i++
-		i = encodeVarintOps(dAtA, i, uint64(m.Meta.Size()))
-		n5, err := m.Meta.MarshalTo(dAtA[i:])
+		i = encodeVarintOps(data, i, uint64(m.Meta.Size()))
+		n5, err := m.Meta.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
@@ -1047,10 +400,10 @@ func (m *ExecOp) MarshalTo(dAtA []byte) (int, error) {
 	}
 	if len(m.Mounts) > 0 {
 		for _, msg := range m.Mounts {
-			dAtA[i] = 0x12
+			data[i] = 0x12
 			i++
-			i = encodeVarintOps(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
+			i = encodeVarintOps(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -1060,121 +413,121 @@ func (m *ExecOp) MarshalTo(dAtA []byte) (int, error) {
 	return i, nil
 }
 
-func (m *Meta) Marshal() (dAtA []byte, err error) {
+func (m *Meta) Marshal() (data []byte, err error) {
 	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
 	if err != nil {
 		return nil, err
 	}
-	return dAtA[:n], nil
+	return data[:n], nil
 }
 
-func (m *Meta) MarshalTo(dAtA []byte) (int, error) {
+func (m *Meta) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if len(m.Args) > 0 {
 		for _, s := range m.Args {
-			dAtA[i] = 0xa
+			data[i] = 0xa
 			i++
 			l = len(s)
 			for l >= 1<<7 {
-				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
+				data[i] = uint8(uint64(l)&0x7f | 0x80)
 				l >>= 7
 				i++
 			}
-			dAtA[i] = uint8(l)
+			data[i] = uint8(l)
 			i++
-			i += copy(dAtA[i:], s)
+			i += copy(data[i:], s)
 		}
 	}
 	if len(m.Env) > 0 {
 		for _, s := range m.Env {
-			dAtA[i] = 0x12
+			data[i] = 0x12
 			i++
 			l = len(s)
 			for l >= 1<<7 {
-				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
+				data[i] = uint8(uint64(l)&0x7f | 0x80)
 				l >>= 7
 				i++
 			}
-			dAtA[i] = uint8(l)
+			data[i] = uint8(l)
 			i++
-			i += copy(dAtA[i:], s)
+			i += copy(data[i:], s)
 		}
 	}
 	if len(m.Cwd) > 0 {
-		dAtA[i] = 0x1a
+		data[i] = 0x1a
 		i++
-		i = encodeVarintOps(dAtA, i, uint64(len(m.Cwd)))
-		i += copy(dAtA[i:], m.Cwd)
+		i = encodeVarintOps(data, i, uint64(len(m.Cwd)))
+		i += copy(data[i:], m.Cwd)
 	}
 	return i, nil
 }
 
-func (m *Mount) Marshal() (dAtA []byte, err error) {
+func (m *Mount) Marshal() (data []byte, err error) {
 	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
 	if err != nil {
 		return nil, err
 	}
-	return dAtA[:n], nil
+	return data[:n], nil
 }
 
-func (m *Mount) MarshalTo(dAtA []byte) (int, error) {
+func (m *Mount) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if m.Input != 0 {
-		dAtA[i] = 0x8
+		data[i] = 0x8
 		i++
-		i = encodeVarintOps(dAtA, i, uint64(m.Input))
+		i = encodeVarintOps(data, i, uint64(m.Input))
 	}
 	if len(m.Selector) > 0 {
-		dAtA[i] = 0x12
+		data[i] = 0x12
 		i++
-		i = encodeVarintOps(dAtA, i, uint64(len(m.Selector)))
-		i += copy(dAtA[i:], m.Selector)
+		i = encodeVarintOps(data, i, uint64(len(m.Selector)))
+		i += copy(data[i:], m.Selector)
 	}
 	if len(m.Dest) > 0 {
-		dAtA[i] = 0x1a
+		data[i] = 0x1a
 		i++
-		i = encodeVarintOps(dAtA, i, uint64(len(m.Dest)))
-		i += copy(dAtA[i:], m.Dest)
+		i = encodeVarintOps(data, i, uint64(len(m.Dest)))
+		i += copy(data[i:], m.Dest)
 	}
 	if m.Output != 0 {
-		dAtA[i] = 0x20
+		data[i] = 0x20
 		i++
-		i = encodeVarintOps(dAtA, i, uint64(m.Output))
+		i = encodeVarintOps(data, i, uint64(m.Output))
 	}
 	return i, nil
 }
 
-func (m *CopyOp) Marshal() (dAtA []byte, err error) {
+func (m *CopyOp) Marshal() (data []byte, err error) {
 	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
 	if err != nil {
 		return nil, err
 	}
-	return dAtA[:n], nil
+	return data[:n], nil
 }
 
-func (m *CopyOp) MarshalTo(dAtA []byte) (int, error) {
+func (m *CopyOp) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if len(m.Src) > 0 {
 		for _, msg := range m.Src {
-			dAtA[i] = 0xa
+			data[i] = 0xa
 			i++
-			i = encodeVarintOps(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
+			i = encodeVarintOps(data, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(data[i:])
 			if err != nil {
 				return 0, err
 			}
@@ -1182,92 +535,92 @@ func (m *CopyOp) MarshalTo(dAtA []byte) (int, error) {
 		}
 	}
 	if len(m.Dest) > 0 {
-		dAtA[i] = 0x12
+		data[i] = 0x12
 		i++
-		i = encodeVarintOps(dAtA, i, uint64(len(m.Dest)))
-		i += copy(dAtA[i:], m.Dest)
+		i = encodeVarintOps(data, i, uint64(len(m.Dest)))
+		i += copy(data[i:], m.Dest)
 	}
 	return i, nil
 }
 
-func (m *CopySource) Marshal() (dAtA []byte, err error) {
+func (m *CopySource) Marshal() (data []byte, err error) {
 	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
 	if err != nil {
 		return nil, err
 	}
-	return dAtA[:n], nil
+	return data[:n], nil
 }
 
-func (m *CopySource) MarshalTo(dAtA []byte) (int, error) {
+func (m *CopySource) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if m.Input != 0 {
-		dAtA[i] = 0x8
+		data[i] = 0x8
 		i++
-		i = encodeVarintOps(dAtA, i, uint64(m.Input))
+		i = encodeVarintOps(data, i, uint64(m.Input))
 	}
 	if len(m.Selector) > 0 {
-		dAtA[i] = 0x12
+		data[i] = 0x12
 		i++
-		i = encodeVarintOps(dAtA, i, uint64(len(m.Selector)))
-		i += copy(dAtA[i:], m.Selector)
+		i = encodeVarintOps(data, i, uint64(len(m.Selector)))
+		i += copy(data[i:], m.Selector)
 	}
 	return i, nil
 }
 
-func (m *SourceOp) Marshal() (dAtA []byte, err error) {
+func (m *SourceOp) Marshal() (data []byte, err error) {
 	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
 	if err != nil {
 		return nil, err
 	}
-	return dAtA[:n], nil
+	return data[:n], nil
 }
 
-func (m *SourceOp) MarshalTo(dAtA []byte) (int, error) {
+func (m *SourceOp) MarshalTo(data []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
 	if len(m.Identifier) > 0 {
-		dAtA[i] = 0xa
+		data[i] = 0xa
 		i++
-		i = encodeVarintOps(dAtA, i, uint64(len(m.Identifier)))
-		i += copy(dAtA[i:], m.Identifier)
+		i = encodeVarintOps(data, i, uint64(len(m.Identifier)))
+		i += copy(data[i:], m.Identifier)
 	}
 	return i, nil
 }
 
-func encodeFixed64Ops(dAtA []byte, offset int, v uint64) int {
-	dAtA[offset] = uint8(v)
-	dAtA[offset+1] = uint8(v >> 8)
-	dAtA[offset+2] = uint8(v >> 16)
-	dAtA[offset+3] = uint8(v >> 24)
-	dAtA[offset+4] = uint8(v >> 32)
-	dAtA[offset+5] = uint8(v >> 40)
-	dAtA[offset+6] = uint8(v >> 48)
-	dAtA[offset+7] = uint8(v >> 56)
+func encodeFixed64Ops(data []byte, offset int, v uint64) int {
+	data[offset] = uint8(v)
+	data[offset+1] = uint8(v >> 8)
+	data[offset+2] = uint8(v >> 16)
+	data[offset+3] = uint8(v >> 24)
+	data[offset+4] = uint8(v >> 32)
+	data[offset+5] = uint8(v >> 40)
+	data[offset+6] = uint8(v >> 48)
+	data[offset+7] = uint8(v >> 56)
 	return offset + 8
 }
-func encodeFixed32Ops(dAtA []byte, offset int, v uint32) int {
-	dAtA[offset] = uint8(v)
-	dAtA[offset+1] = uint8(v >> 8)
-	dAtA[offset+2] = uint8(v >> 16)
-	dAtA[offset+3] = uint8(v >> 24)
+func encodeFixed32Ops(data []byte, offset int, v uint32) int {
+	data[offset] = uint8(v)
+	data[offset+1] = uint8(v >> 8)
+	data[offset+2] = uint8(v >> 16)
+	data[offset+3] = uint8(v >> 24)
 	return offset + 4
 }
-func encodeVarintOps(dAtA []byte, offset int, v uint64) int {
+func encodeVarintOps(data []byte, offset int, v uint64) int {
 	for v >= 1<<7 {
-		dAtA[offset] = uint8(v&0x7f | 0x80)
+		data[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
-	dAtA[offset] = uint8(v)
+	data[offset] = uint8(v)
 	return offset + 1
 }
 func (m *Op) Size() (n int) {
@@ -1435,136 +788,8 @@ func sovOps(x uint64) (n int) {
 func sozOps(x uint64) (n int) {
 	return sovOps(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
-func (this *Op) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&Op{`,
-		`Inputs:` + strings.Replace(fmt.Sprintf("%v", this.Inputs), "Input", "Input", 1) + `,`,
-		`Op:` + fmt.Sprintf("%v", this.Op) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *Op_Exec) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&Op_Exec{`,
-		`Exec:` + strings.Replace(fmt.Sprintf("%v", this.Exec), "ExecOp", "ExecOp", 1) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *Op_Source) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&Op_Source{`,
-		`Source:` + strings.Replace(fmt.Sprintf("%v", this.Source), "SourceOp", "SourceOp", 1) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *Op_Copy) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&Op_Copy{`,
-		`Copy:` + strings.Replace(fmt.Sprintf("%v", this.Copy), "CopyOp", "CopyOp", 1) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *Input) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&Input{`,
-		`Digest:` + fmt.Sprintf("%v", this.Digest) + `,`,
-		`Index:` + fmt.Sprintf("%v", this.Index) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *ExecOp) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&ExecOp{`,
-		`Meta:` + strings.Replace(fmt.Sprintf("%v", this.Meta), "Meta", "Meta", 1) + `,`,
-		`Mounts:` + strings.Replace(fmt.Sprintf("%v", this.Mounts), "Mount", "Mount", 1) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *Meta) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&Meta{`,
-		`Args:` + fmt.Sprintf("%v", this.Args) + `,`,
-		`Env:` + fmt.Sprintf("%v", this.Env) + `,`,
-		`Cwd:` + fmt.Sprintf("%v", this.Cwd) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *Mount) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&Mount{`,
-		`Input:` + fmt.Sprintf("%v", this.Input) + `,`,
-		`Selector:` + fmt.Sprintf("%v", this.Selector) + `,`,
-		`Dest:` + fmt.Sprintf("%v", this.Dest) + `,`,
-		`Output:` + fmt.Sprintf("%v", this.Output) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *CopyOp) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&CopyOp{`,
-		`Src:` + strings.Replace(fmt.Sprintf("%v", this.Src), "CopySource", "CopySource", 1) + `,`,
-		`Dest:` + fmt.Sprintf("%v", this.Dest) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *CopySource) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&CopySource{`,
-		`Input:` + fmt.Sprintf("%v", this.Input) + `,`,
-		`Selector:` + fmt.Sprintf("%v", this.Selector) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *SourceOp) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&SourceOp{`,
-		`Identifier:` + fmt.Sprintf("%v", this.Identifier) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func valueToStringOps(v interface{}) string {
-	rv := reflect.ValueOf(v)
-	if rv.IsNil() {
-		return "nil"
-	}
-	pv := reflect.Indirect(rv).Interface()
-	return fmt.Sprintf("*%v", pv)
-}
-func (m *Op) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
+func (m *Op) Unmarshal(data []byte) error {
+	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -1576,7 +801,7 @@ func (m *Op) Unmarshal(dAtA []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := dAtA[iNdEx]
+			b := data[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -1604,7 +829,7 @@ func (m *Op) Unmarshal(dAtA []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := dAtA[iNdEx]
+				b := data[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1619,7 +844,7 @@ func (m *Op) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Inputs = append(m.Inputs, &Input{})
-			if err := m.Inputs[len(m.Inputs)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+			if err := m.Inputs[len(m.Inputs)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -1635,7 +860,7 @@ func (m *Op) Unmarshal(dAtA []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := dAtA[iNdEx]
+				b := data[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1650,7 +875,7 @@ func (m *Op) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			v := &ExecOp{}
-			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+			if err := v.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			m.Op = &Op_Exec{v}
@@ -1667,7 +892,7 @@ func (m *Op) Unmarshal(dAtA []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := dAtA[iNdEx]
+				b := data[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1682,7 +907,7 @@ func (m *Op) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			v := &SourceOp{}
-			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+			if err := v.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			m.Op = &Op_Source{v}
@@ -1699,7 +924,7 @@ func (m *Op) Unmarshal(dAtA []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := dAtA[iNdEx]
+				b := data[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1714,14 +939,14 @@ func (m *Op) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			v := &CopyOp{}
-			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+			if err := v.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			m.Op = &Op_Copy{v}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipOps(dAtA[iNdEx:])
+			skippy, err := skipOps(data[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -1740,8 +965,8 @@ func (m *Op) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *Input) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
+func (m *Input) Unmarshal(data []byte) error {
+	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -1753,7 +978,7 @@ func (m *Input) Unmarshal(dAtA []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := dAtA[iNdEx]
+			b := data[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -1781,7 +1006,7 @@ func (m *Input) Unmarshal(dAtA []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := dAtA[iNdEx]
+				b := data[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1796,7 +1021,7 @@ func (m *Input) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Digest = string(dAtA[iNdEx:postIndex])
+			m.Digest = github_com_opencontainers_go_digest.Digest(data[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 2:
 			if wireType != 0 {
@@ -1810,7 +1035,7 @@ func (m *Input) Unmarshal(dAtA []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := dAtA[iNdEx]
+				b := data[iNdEx]
 				iNdEx++
 				m.Index |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1819,7 +1044,7 @@ func (m *Input) Unmarshal(dAtA []byte) error {
 			}
 		default:
 			iNdEx = preIndex
-			skippy, err := skipOps(dAtA[iNdEx:])
+			skippy, err := skipOps(data[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -1838,8 +1063,8 @@ func (m *Input) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *ExecOp) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
+func (m *ExecOp) Unmarshal(data []byte) error {
+	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -1851,7 +1076,7 @@ func (m *ExecOp) Unmarshal(dAtA []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := dAtA[iNdEx]
+			b := data[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -1879,7 +1104,7 @@ func (m *ExecOp) Unmarshal(dAtA []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := dAtA[iNdEx]
+				b := data[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1896,7 +1121,7 @@ func (m *ExecOp) Unmarshal(dAtA []byte) error {
 			if m.Meta == nil {
 				m.Meta = &Meta{}
 			}
-			if err := m.Meta.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+			if err := m.Meta.Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -1912,7 +1137,7 @@ func (m *ExecOp) Unmarshal(dAtA []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := dAtA[iNdEx]
+				b := data[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -1927,13 +1152,13 @@ func (m *ExecOp) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Mounts = append(m.Mounts, &Mount{})
-			if err := m.Mounts[len(m.Mounts)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+			if err := m.Mounts[len(m.Mounts)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipOps(dAtA[iNdEx:])
+			skippy, err := skipOps(data[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -1952,8 +1177,8 @@ func (m *ExecOp) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *Meta) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
+func (m *Meta) Unmarshal(data []byte) error {
+	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -1965,7 +1190,7 @@ func (m *Meta) Unmarshal(dAtA []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := dAtA[iNdEx]
+			b := data[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -1993,7 +1218,7 @@ func (m *Meta) Unmarshal(dAtA []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := dAtA[iNdEx]
+				b := data[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2008,7 +1233,7 @@ func (m *Meta) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Args = append(m.Args, string(dAtA[iNdEx:postIndex]))
+			m.Args = append(m.Args, string(data[iNdEx:postIndex]))
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -2022,7 +1247,7 @@ func (m *Meta) Unmarshal(dAtA []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := dAtA[iNdEx]
+				b := data[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2037,7 +1262,7 @@ func (m *Meta) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Env = append(m.Env, string(dAtA[iNdEx:postIndex]))
+			m.Env = append(m.Env, string(data[iNdEx:postIndex]))
 			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {
@@ -2051,7 +1276,7 @@ func (m *Meta) Unmarshal(dAtA []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := dAtA[iNdEx]
+				b := data[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2066,11 +1291,11 @@ func (m *Meta) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Cwd = string(dAtA[iNdEx:postIndex])
+			m.Cwd = string(data[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipOps(dAtA[iNdEx:])
+			skippy, err := skipOps(data[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -2089,8 +1314,8 @@ func (m *Meta) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *Mount) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
+func (m *Mount) Unmarshal(data []byte) error {
+	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -2102,7 +1327,7 @@ func (m *Mount) Unmarshal(dAtA []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := dAtA[iNdEx]
+			b := data[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -2130,7 +1355,7 @@ func (m *Mount) Unmarshal(dAtA []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := dAtA[iNdEx]
+				b := data[iNdEx]
 				iNdEx++
 				m.Input |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2149,7 +1374,7 @@ func (m *Mount) Unmarshal(dAtA []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := dAtA[iNdEx]
+				b := data[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2164,7 +1389,7 @@ func (m *Mount) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Selector = string(dAtA[iNdEx:postIndex])
+			m.Selector = string(data[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {
@@ -2178,7 +1403,7 @@ func (m *Mount) Unmarshal(dAtA []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := dAtA[iNdEx]
+				b := data[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2193,7 +1418,7 @@ func (m *Mount) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Dest = string(dAtA[iNdEx:postIndex])
+			m.Dest = string(data[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 4:
 			if wireType != 0 {
@@ -2207,7 +1432,7 @@ func (m *Mount) Unmarshal(dAtA []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := dAtA[iNdEx]
+				b := data[iNdEx]
 				iNdEx++
 				m.Output |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2216,7 +1441,7 @@ func (m *Mount) Unmarshal(dAtA []byte) error {
 			}
 		default:
 			iNdEx = preIndex
-			skippy, err := skipOps(dAtA[iNdEx:])
+			skippy, err := skipOps(data[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -2235,8 +1460,8 @@ func (m *Mount) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *CopyOp) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
+func (m *CopyOp) Unmarshal(data []byte) error {
+	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -2248,7 +1473,7 @@ func (m *CopyOp) Unmarshal(dAtA []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := dAtA[iNdEx]
+			b := data[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -2276,7 +1501,7 @@ func (m *CopyOp) Unmarshal(dAtA []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := dAtA[iNdEx]
+				b := data[iNdEx]
 				iNdEx++
 				msglen |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2291,7 +1516,7 @@ func (m *CopyOp) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Src = append(m.Src, &CopySource{})
-			if err := m.Src[len(m.Src)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+			if err := m.Src[len(m.Src)-1].Unmarshal(data[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -2307,7 +1532,7 @@ func (m *CopyOp) Unmarshal(dAtA []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := dAtA[iNdEx]
+				b := data[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2322,11 +1547,11 @@ func (m *CopyOp) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Dest = string(dAtA[iNdEx:postIndex])
+			m.Dest = string(data[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipOps(dAtA[iNdEx:])
+			skippy, err := skipOps(data[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -2345,8 +1570,8 @@ func (m *CopyOp) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *CopySource) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
+func (m *CopySource) Unmarshal(data []byte) error {
+	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -2358,7 +1583,7 @@ func (m *CopySource) Unmarshal(dAtA []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := dAtA[iNdEx]
+			b := data[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -2386,7 +1611,7 @@ func (m *CopySource) Unmarshal(dAtA []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := dAtA[iNdEx]
+				b := data[iNdEx]
 				iNdEx++
 				m.Input |= (int64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2405,7 +1630,7 @@ func (m *CopySource) Unmarshal(dAtA []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := dAtA[iNdEx]
+				b := data[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2420,11 +1645,11 @@ func (m *CopySource) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Selector = string(dAtA[iNdEx:postIndex])
+			m.Selector = string(data[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipOps(dAtA[iNdEx:])
+			skippy, err := skipOps(data[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -2443,8 +1668,8 @@ func (m *CopySource) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *SourceOp) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
+func (m *SourceOp) Unmarshal(data []byte) error {
+	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
 		preIndex := iNdEx
@@ -2456,7 +1681,7 @@ func (m *SourceOp) Unmarshal(dAtA []byte) error {
 			if iNdEx >= l {
 				return io.ErrUnexpectedEOF
 			}
-			b := dAtA[iNdEx]
+			b := data[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -2484,7 +1709,7 @@ func (m *SourceOp) Unmarshal(dAtA []byte) error {
 				if iNdEx >= l {
 					return io.ErrUnexpectedEOF
 				}
-				b := dAtA[iNdEx]
+				b := data[iNdEx]
 				iNdEx++
 				stringLen |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2499,11 +1724,11 @@ func (m *SourceOp) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Identifier = string(dAtA[iNdEx:postIndex])
+			m.Identifier = string(data[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
-			skippy, err := skipOps(dAtA[iNdEx:])
+			skippy, err := skipOps(data[iNdEx:])
 			if err != nil {
 				return err
 			}
@@ -2522,8 +1747,8 @@ func (m *SourceOp) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func skipOps(dAtA []byte) (n int, err error) {
-	l := len(dAtA)
+func skipOps(data []byte) (n int, err error) {
+	l := len(data)
 	iNdEx := 0
 	for iNdEx < l {
 		var wire uint64
@@ -2534,7 +1759,7 @@ func skipOps(dAtA []byte) (n int, err error) {
 			if iNdEx >= l {
 				return 0, io.ErrUnexpectedEOF
 			}
-			b := dAtA[iNdEx]
+			b := data[iNdEx]
 			iNdEx++
 			wire |= (uint64(b) & 0x7F) << shift
 			if b < 0x80 {
@@ -2552,7 +1777,7 @@ func skipOps(dAtA []byte) (n int, err error) {
 					return 0, io.ErrUnexpectedEOF
 				}
 				iNdEx++
-				if dAtA[iNdEx-1] < 0x80 {
+				if data[iNdEx-1] < 0x80 {
 					break
 				}
 			}
@@ -2569,7 +1794,7 @@ func skipOps(dAtA []byte) (n int, err error) {
 				if iNdEx >= l {
 					return 0, io.ErrUnexpectedEOF
 				}
-				b := dAtA[iNdEx]
+				b := data[iNdEx]
 				iNdEx++
 				length |= (int(b) & 0x7F) << shift
 				if b < 0x80 {
@@ -2592,7 +1817,7 @@ func skipOps(dAtA []byte) (n int, err error) {
 					if iNdEx >= l {
 						return 0, io.ErrUnexpectedEOF
 					}
-					b := dAtA[iNdEx]
+					b := data[iNdEx]
 					iNdEx++
 					innerWire |= (uint64(b) & 0x7F) << shift
 					if b < 0x80 {
@@ -2603,7 +1828,7 @@ func skipOps(dAtA []byte) (n int, err error) {
 				if innerWireType == 4 {
 					break
 				}
-				next, err := skipOps(dAtA[start:])
+				next, err := skipOps(data[start:])
 				if err != nil {
 					return 0, err
 				}
@@ -2626,36 +1851,3 @@ var (
 	ErrInvalidLengthOps = fmt.Errorf("proto: negative length found during unmarshaling")
 	ErrIntOverflowOps   = fmt.Errorf("proto: integer overflow")
 )
-
-func init() { proto.RegisterFile("ops.proto", fileDescriptorOps) }
-
-var fileDescriptorOps = []byte{
-	// 422 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0x94, 0x52, 0xb1, 0x8e, 0xd3, 0x40,
-	0x10, 0xf5, 0xda, 0x8e, 0x15, 0x4f, 0x10, 0x42, 0x2b, 0x84, 0x2c, 0x84, 0x56, 0x66, 0x0b, 0x14,
-	0x21, 0x94, 0x22, 0x88, 0x36, 0xc5, 0x21, 0x24, 0xae, 0x38, 0x9d, 0xb4, 0x7c, 0x41, 0x62, 0x2f,
-	0x27, 0x4b, 0xc4, 0xbb, 0xb2, 0xd7, 0x90, 0x74, 0x7c, 0x02, 0x2d, 0x7f, 0xc0, 0xa7, 0x50, 0xa6,
-	0xa4, 0x24, 0xa6, 0xa1, 0xcc, 0x27, 0xa0, 0x99, 0x75, 0x62, 0xda, 0xeb, 0x66, 0xde, 0x9b, 0x7d,
-	0x7e, 0x6f, 0xc6, 0x90, 0x1a, 0xdb, 0x2e, 0x6c, 0x63, 0x9c, 0xe1, 0xa1, 0xdd, 0xc8, 0xef, 0x0c,
-	0xc2, 0x5b, 0xcb, 0x9f, 0x43, 0x52, 0xd5, 0xb6, 0x73, 0x6d, 0xc6, 0xf2, 0x68, 0x3e, 0x5b, 0xa6,
-	0x0b, 0xbb, 0x59, 0x5c, 0x23, 0xa2, 0x06, 0x82, 0xe7, 0x10, 0xeb, 0x9d, 0x2e, 0xb2, 0x30, 0x67,
-	0xf3, 0xd9, 0x12, 0x70, 0xe0, 0xdd, 0x4e, 0x17, 0xb7, 0xf6, 0x7d, 0xa0, 0x88, 0xe1, 0x2f, 0x20,
-	0x69, 0x4d, 0xd7, 0x14, 0x3a, 0x8b, 0x68, 0xe6, 0x01, 0xce, 0x7c, 0x20, 0x84, 0xa6, 0x06, 0x16,
-	0x95, 0x0a, 0x63, 0xf7, 0x59, 0x3c, 0x2a, 0xbd, 0x35, 0x76, 0xef, 0x95, 0x90, 0xb9, 0x8a, 0x21,
-	0x34, 0x56, 0xbe, 0x81, 0x09, 0x59, 0xe0, 0x4f, 0x20, 0x29, 0xab, 0x3b, 0xdd, 0xba, 0x8c, 0xe5,
-	0x6c, 0x9e, 0xaa, 0xa1, 0xe3, 0x8f, 0x61, 0x52, 0xd5, 0xa5, 0xde, 0x91, 0xa7, 0x48, 0xf9, 0x46,
-	0x5e, 0x43, 0xe2, 0x8d, 0xf1, 0x67, 0x10, 0x6f, 0xb5, 0x5b, 0xd3, 0xab, 0xd9, 0x72, 0x8a, 0x1f,
-	0xba, 0xd1, 0x6e, 0xad, 0x08, 0xc5, 0xcc, 0x5b, 0xd3, 0xd5, 0xae, 0xcd, 0xc2, 0x31, 0xf3, 0x0d,
-	0x22, 0x6a, 0x20, 0xe4, 0x0a, 0x62, 0x7c, 0xc0, 0x39, 0xc4, 0xeb, 0xe6, 0xce, 0x2f, 0x27, 0x55,
-	0x54, 0xf3, 0x47, 0x10, 0xe9, 0xfa, 0x33, 0xbd, 0x4d, 0x15, 0x96, 0x88, 0x14, 0x5f, 0x4a, 0x0a,
-	0x9f, 0x2a, 0x2c, 0xa5, 0x86, 0x09, 0x09, 0x7a, 0xa7, 0xb6, 0xf3, 0x01, 0xc8, 0x29, 0xe6, 0x7a,
-	0x0a, 0xd3, 0x56, 0x7f, 0xd2, 0x85, 0x33, 0x0d, 0x45, 0x48, 0xd5, 0xa5, 0xc7, 0x4f, 0x96, 0x98,
-	0xd8, 0xab, 0x51, 0x8d, 0x7b, 0x30, 0x9d, 0x43, 0x99, 0x98, 0x64, 0x86, 0x4e, 0xae, 0x20, 0xf1,
-	0x0b, 0xe4, 0x39, 0x44, 0x6d, 0x53, 0x0c, 0x47, 0x7c, 0x78, 0xde, 0xac, 0xbf, 0x81, 0x42, 0xea,
-	0xa2, 0x1b, 0x8e, 0xba, 0x72, 0x05, 0x30, 0x8e, 0xdd, 0xdf, 0xab, 0x7c, 0x09, 0xd3, 0xf3, 0x99,
-	0xb9, 0x00, 0xa8, 0x4a, 0x5d, 0xbb, 0xea, 0x63, 0xa5, 0x9b, 0xe1, 0x5e, 0xff, 0x21, 0x57, 0xaf,
-	0x0e, 0x47, 0x11, 0xfc, 0x3a, 0x8a, 0xe0, 0x74, 0x14, 0xec, 0x6b, 0x2f, 0xd8, 0x8f, 0x5e, 0xb0,
-	0x9f, 0xbd, 0x60, 0x87, 0x5e, 0xb0, 0xdf, 0xbd, 0x60, 0x7f, 0x7b, 0x11, 0x9c, 0x7a, 0xc1, 0xbe,
-	0xfd, 0x11, 0xc1, 0x26, 0xa1, 0x3f, 0xf5, 0xf5, 0xbf, 0x00, 0x00, 0x00, 0xff, 0xff, 0xa9, 0xb7,
-	0xed, 0xb5, 0xb6, 0x02, 0x00, 0x00,
-}

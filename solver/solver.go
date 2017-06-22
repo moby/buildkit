@@ -41,6 +41,10 @@ func (s *Solver) Solve(ctx context.Context, id string, g *opVertex) error {
 
 	pr, ctx, closeProgressWriter := progress.NewContext(ctx)
 
+	if len(g.inputs) > 0 { // TODO: detect op_return better
+		g = g.inputs[0]
+	}
+
 	_, err := s.jobs.new(ctx, id, g, pr)
 	if err != nil {
 		return err
@@ -158,7 +162,7 @@ func (g *opVertex) solve(ctx context.Context, opt Opt) (retErr error) {
 			return err
 		}
 	default:
-		return errors.Errorf("invalid op type")
+		return errors.Errorf("invalid op type %T", g.op.Op)
 	}
 	return nil
 }

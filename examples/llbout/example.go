@@ -1,24 +1,29 @@
 package main
 
 import (
+	"log"
 	"os"
 
 	"github.com/tonistiigi/buildkit_poc/client/llb"
 )
 
 func main() {
-	busybox := llb.Image("docker.io/library/redis:latest")
-	mod1 := busybox.Run(llb.Meta{Args: []string{"/bin/sleep", "1"}, Cwd: "/"})
-	mod2 := mod1.Run(llb.Meta{Args: []string{"/bin/sh", "-c", "echo foo > /bar"}, Cwd: "/"})
-	alpine := llb.Image("docker.io/library/alpine:latest")
-	mod3 := mod2.Run(llb.Meta{Args: []string{"/bin/cp", "-a", "/alpine/etc/passwd", "baz"}, Cwd: "/"})
-	mod3.AddMount("/alpine", alpine)
-	mod3.AddMount("/redis", busybox)
-	mod4 := mod3.Run(llb.Meta{Args: []string{"/bin/ls", "-l", "/"}, Cwd: "/"})
+	busybox := llb.Image("docker.io/library/busybox:latest")
+	img1 := busybox.
+		Run(llb.Shlex("sleep 1")).
+		Run(llb.Shlex("sh -c \"echo foo > /bar\""))
 
-	res := mod4
+	alpine := llb.Image("docker.io/library/alpine:latest")
+
+	copy := img1.Run(llb.Shlex("cp -a /alpine/etc/passwd /baz"))
+	copy.AddMount("/alpine", alpine)
+	copy.AddMount("/subroot", busybox)
+
+	res := copy.Run(llb.Shlex("ls -l /"))
+
 	dt, err := res.Marshal()
 	if err != nil {
+		log.Printf("%+v\n", err)
 		panic(err)
 	}
 	llb.WriteTo(dt, os.Stdout)

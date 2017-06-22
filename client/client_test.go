@@ -115,9 +115,9 @@ func testBuildMultiMount(t *testing.T, address string) {
 	assert.Nil(t, err)
 
 	alpine := llb.Image("docker.io/library/alpine:latest")
-	ls := alpine.Run(llb.Meta{Args: []string{"/bin/ls", "-l"}, Cwd: "/"})
+	ls := alpine.Run(llb.Shlex("/bin/ls -l"))
 	busybox := llb.Image("docker.io/library/busybox:latest")
-	cp := ls.Run(llb.Meta{Args: []string{"/bin/cp", "-a", "/busybox/etc/passwd", "baz"}, Cwd: "/"})
+	cp := ls.Run(llb.Shlex("/bin/cp -a /busybox/etc/passwd baz"))
 	cp.AddMount("/busybox", busybox)
 
 	dt, err := cp.Marshal()
