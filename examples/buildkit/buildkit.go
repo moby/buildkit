@@ -4,8 +4,8 @@ import (
 	"flag"
 	"os"
 
-	"github.com/tonistiigi/buildkit_poc/client/llb"
-	"github.com/tonistiigi/buildkit_poc/util/system"
+	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/util/system"
 )
 
 func main() {
@@ -50,8 +50,8 @@ func containerd(version string) *llb.State {
 
 func buildkit(withContainerd bool) *llb.State {
 	src := goBuildBase().
-		Run(llb.Shlex("git clone https://github.com/tonistiigi/buildkit_poc.git /go/src/github.com/tonistiigi/buildkit_poc")).
-		Dir("/go/src/github.com/tonistiigi/buildkit_poc")
+		Run(llb.Shlex("git clone https://github.com/moby/buildkit.git /go/src/github.com/moby/buildkit")).
+		Dir("/go/src/github.com/moby/buildkit")
 
 	builddStandalone := src.
 		Run(llb.Shlex("go build -o /bin/buildd-standalone -tags standalone ./cmd/buildd"))

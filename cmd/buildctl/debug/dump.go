@@ -5,10 +5,10 @@ import (
 	"io"
 	"os"
 
+	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
-	"github.com/tonistiigi/buildkit_poc/client/llb"
-	"github.com/tonistiigi/buildkit_poc/solver/pb"
 	"github.com/urfave/cli"
 )
 

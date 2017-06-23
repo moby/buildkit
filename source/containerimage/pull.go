@@ -13,13 +13,13 @@ import (
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/rootfs"
 	"github.com/containerd/containerd/snapshot"
+	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/source"
+	"github.com/moby/buildkit/util/progress"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/identity"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
-	"github.com/tonistiigi/buildkit_poc/cache"
-	"github.com/tonistiigi/buildkit_poc/source"
-	"github.com/tonistiigi/buildkit_poc/util/progress"
 )
 
 // TODO: break apart containerd specifics like contentstore so the resolver

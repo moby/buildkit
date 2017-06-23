@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/moby/buildkit/util/progress"
 	"github.com/pkg/errors"
-	"github.com/tonistiigi/buildkit_poc/util/progress"
 	"golang.org/x/net/context"
 )
 

@@ -16,10 +16,10 @@ import (
 	"github.com/containerd/containerd/namespaces"
 	ctdsnapshot "github.com/containerd/containerd/snapshot"
 	"github.com/containerd/containerd/snapshot/overlay"
+	"github.com/moby/buildkit/worker/runcworker"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
-	"github.com/tonistiigi/buildkit_poc/worker/runcworker"
 	netcontext "golang.org/x/net/context" // TODO: fix
 )
 

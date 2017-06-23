@@ -6,8 +6,8 @@ import (
 	"sync"
 
 	"github.com/containerd/containerd/mount"
+	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/pkg/errors"
-	"github.com/tonistiigi/buildkit_poc/util/flightcontrol"
 	"golang.org/x/net/context"
 )
 

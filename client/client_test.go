@@ -11,8 +11,8 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/moby/buildkit/client/llb"
 	"github.com/stretchr/testify/assert"
-	"github.com/tonistiigi/buildkit_poc/client/llb"
 )
 
 var clientAddressStandalone string

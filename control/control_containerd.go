@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/containerd/containerd"
+	"github.com/moby/buildkit/worker/runcworker"
 	"github.com/pkg/errors"
-	"github.com/tonistiigi/buildkit_poc/worker/runcworker"
 )
 
 func NewContainerd(root, address string) (*Controller, error) {

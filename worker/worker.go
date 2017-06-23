@@ -3,7 +3,7 @@ package worker
 import (
 	"io"
 
-	"github.com/tonistiigi/buildkit_poc/cache"
+	"github.com/moby/buildkit/cache"
 	"golang.org/x/net/context"
 )
 

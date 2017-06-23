@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/tonistiigi/buildkit_poc/client"
+	"github.com/moby/buildkit/client"
 	"github.com/urfave/cli"
 )
 

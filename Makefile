@@ -5,16 +5,16 @@ binaries: $(BINARIES)
 
 bin/buildctl-darwin: FORCE
 	mkdir -p bin
-	docker build --build-arg GOOS=darwin -t buildkit_poc:buildctl-darwin --target buildctl -f ./hack/dockerfiles/test.Dockerfile --force-rm .
-	( containerID=$$(docker create buildkit_poc:buildctl-darwin noop); \
+	docker build --build-arg GOOS=darwin -t buildkit:buildctl-darwin --target buildctl -f ./hack/dockerfiles/test.Dockerfile --force-rm .
+	( containerID=$$(docker create buildkit:buildctl-darwin noop); \
 		docker cp $$containerID:/usr/bin/buildctl $@; \
 		docker rm $$containerID )
 	chmod +x $@
 
 bin/%: FORCE
 	mkdir -p bin
-	docker build -t buildkit_poc:$* --target $* -f ./hack/dockerfiles/test.Dockerfile --force-rm .
-	( containerID=$$(docker create buildkit_poc:$* noop); \
+	docker build -t buildkit:$* --target $* -f ./hack/dockerfiles/test.Dockerfile --force-rm .
+	( containerID=$$(docker create buildkit:$* noop); \
 		docker cp $$containerID:/usr/bin/$* $@; \
 		docker rm $$containerID )
 	chmod +x $@

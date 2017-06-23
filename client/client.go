@@ -3,8 +3,8 @@ package client
 import (
 	"time"
 
+	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/pkg/errors"
-	controlapi "github.com/tonistiigi/buildkit_poc/api/services/control"
 	"google.golang.org/grpc"
 )
 

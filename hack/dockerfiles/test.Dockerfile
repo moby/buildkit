@@ -23,7 +23,7 @@ RUN git clone https://github.com/containerd/containerd.git "$GOPATH/src/github.c
 FROM gobuild-base AS unit-tests
 COPY --from=runc /usr/bin/runc /usr/bin/runc 
 COPY --from=containerd /go/src/github.com/containerd/containerd/bin/containerd /usr/bin/containerd 
-WORKDIR /go/src/github.com/tonistiigi/buildkit_poc
+WORKDIR /go/src/github.com/moby/buildkit
 COPY . .
 
 FROM unit-tests AS buildctl

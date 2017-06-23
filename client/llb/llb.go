@@ -7,10 +7,10 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/google/shlex"
+	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/system"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
-	"github.com/tonistiigi/buildkit_poc/solver/pb"
-	"github.com/tonistiigi/buildkit_poc/util/system"
 )
 
 type RunOption func(m Meta) Meta

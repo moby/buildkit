@@ -8,9 +8,9 @@ import (
 
 	"github.com/containerd/console"
 	"github.com/docker/go-units"
+	"github.com/moby/buildkit/client"
 	"github.com/morikuni/aec"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/tonistiigi/buildkit_poc/client"
 	"golang.org/x/time/rate"
 )
 

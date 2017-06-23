@@ -10,14 +10,14 @@ import (
 	"testing"
 
 	"github.com/containerd/containerd/namespaces"
+	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/snapshot"
+	"github.com/moby/buildkit/snapshot/blobmapping"
+	"github.com/moby/buildkit/source"
+	"github.com/moby/buildkit/source/containerimage"
+	"github.com/moby/buildkit/worker"
+	"github.com/moby/buildkit/worker/runcworker"
 	"github.com/stretchr/testify/assert"
-	"github.com/tonistiigi/buildkit_poc/cache"
-	"github.com/tonistiigi/buildkit_poc/snapshot"
-	"github.com/tonistiigi/buildkit_poc/snapshot/blobmapping"
-	"github.com/tonistiigi/buildkit_poc/source"
-	"github.com/tonistiigi/buildkit_poc/source/containerimage"
-	"github.com/tonistiigi/buildkit_poc/worker"
-	"github.com/tonistiigi/buildkit_poc/worker/runcworker"
 	"golang.org/x/net/context"
 )
 

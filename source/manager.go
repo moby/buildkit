@@ -4,8 +4,8 @@ import (
 	"context"
 	"sync"
 
+	"github.com/moby/buildkit/cache"
 	"github.com/pkg/errors"
-	"github.com/tonistiigi/buildkit_poc/cache"
 )
 
 type Source interface {

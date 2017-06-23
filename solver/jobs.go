@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/util/progress"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
-	"github.com/tonistiigi/buildkit_poc/client"
-	"github.com/tonistiigi/buildkit_poc/util/progress"
 )
 
 type jobList struct {
