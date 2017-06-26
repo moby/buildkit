@@ -65,10 +65,14 @@ func (s *State) Run(opts ...RunOption) *ExecState {
 	return &es
 }
 
-func (s *State) AddEnv(key, value string, v ...interface{}) *State {
-	s.metaNext, _ = AddEnv(key, value, v...)(s.metaNext)
+func (s *State) AddEnv(key, value string) *State {
+	return s.AddEnvf(key, value)
+}
+func (s *State) AddEnvf(key, value string, v ...interface{}) *State {
+	s.metaNext, _ = AddEnvf(key, value, v...)(s.metaNext)
 	return s
 }
+
 func (s *State) DelEnv(key string) *State {
 	s.metaNext, _ = DelEnv(key)(s.metaNext)
 	return s
@@ -81,10 +85,14 @@ func (s *State) GetEnv(key string) (string, bool) {
 	return s.metaNext.Env(key)
 }
 
-func (s *State) Dir(str string, v ...interface{}) *State {
-	s.metaNext, _ = Dir(str, v...)(s.metaNext)
+func (s *State) Dir(str string) *State {
+	return s.Dirf(str)
+}
+func (s *State) Dirf(str string, v ...interface{}) *State {
+	s.metaNext, _ = Dirf(str, v...)(s.metaNext)
 	return s
 }
+
 func (s *State) GetDir() string {
 	return s.metaNext.Dir()
 }

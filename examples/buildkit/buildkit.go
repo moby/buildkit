@@ -75,9 +75,9 @@ func buildkit(withContainerd bool) *llb.State {
 func goFromGit(repo, tag string) llb.StateOption {
 	src := llb.Image("docker.io/library/alpine:latest").
 		Run(llb.Shlex("apk add --no-cache git")).
-		Run(llb.Shlex("git clone https://%[1]s.git /go/src/%[1]s", repo)).
-		Dir("/go/src/%s", repo).
-		Run(llb.Shlex("git checkout -q %s", tag)).Root()
+		Run(llb.Shlexf("git clone https://%[1]s.git /go/src/%[1]s", repo)).
+		Dirf("/go/src/%s", repo).
+		Run(llb.Shlexf("git checkout -q %s", tag)).Root()
 	return func(s *llb.State) *llb.State {
 		return s.With(copyFrom(src, "/go", "/")).Reset(s).Dir(src.GetDir())
 	}
@@ -93,7 +93,7 @@ func copyFrom(src *llb.State, srcPath, destPath string) llb.StateOption {
 // copy copies files between 2 states using cp until there is no copyOp
 func copy(src *llb.State, srcPath string, dest *llb.State, destPath string) *llb.State {
 	cpImage := llb.Image("docker.io/library/alpine:latest")
-	cp := cpImage.Run(llb.Shlex("cp -a /src%s /dest%s", srcPath, destPath))
+	cp := cpImage.Run(llb.Shlexf("cp -a /src%s /dest%s", srcPath, destPath))
 	cp.AddMount("/src", src)
 	return cp.AddMount("/dest", dest)
 }

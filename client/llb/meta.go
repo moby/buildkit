@@ -21,7 +21,10 @@ type Meta struct {
 	cwd  string
 }
 
-func AddEnv(key, value string, v ...interface{}) RunOption {
+func AddEnv(key, value string) RunOption {
+	return AddEnvf(key, value)
+}
+func AddEnvf(key, value string, v ...interface{}) RunOption {
 	return func(m Meta) (Meta, error) {
 		m.env = m.env.AddOrReplace(key, fmt.Sprintf(value, v...))
 		return m, nil
@@ -49,7 +52,10 @@ func Args(args ...string) RunOption {
 	}
 }
 
-func Dir(str string, v ...interface{}) RunOption {
+func Dir(str string) RunOption {
+	return Dirf(str)
+}
+func Dirf(str string, v ...interface{}) RunOption {
 	return func(m Meta) (Meta, error) {
 		m.cwd = fmt.Sprintf(str, v...)
 		return m, nil
@@ -77,7 +83,11 @@ func (m Meta) Args() []string {
 	return append([]string{}, m.args...)
 }
 
-func Shlex(str string, v ...interface{}) RunOption {
+func Shlex(str string) RunOption {
+	return Shlexf(str)
+}
+
+func Shlexf(str string, v ...interface{}) RunOption {
 	return func(m Meta) (Meta, error) {
 		args, err := shlex.Split(fmt.Sprintf(str, v...))
 		if err != nil {
