@@ -33,47 +33,64 @@ func goBuildBase() *llb.State {
 
 func runc(version string) *llb.State {
 	return goBuildBase().
-		Run(llb.Shlex("git clone https://github.com/opencontainers/runc.git /go/src/github.com/opencontainers/runc")).
-		Dir("/go/src/github.com/opencontainers/runc").
-		Run(llb.Shlex("git checkout -q %s", version)).
-		Run(llb.Shlex("go build -o /usr/bin/runc ./")).Root()
+		With(goFromGit("github.com/opencontainers/runc", version)).
+		Run(llb.Shlex("go build -o /usr/bin/runc ./")).
+		Root()
 }
 
 func containerd(version string) *llb.State {
 	return goBuildBase().
 		Run(llb.Shlex("apk add --no-cache btrfs-progs-dev")).
-		Run(llb.Shlex("git clone https://github.com/containerd/containerd.git /go/src/github.com/containerd/containerd")).
-		Dir("/go/src/github.com/containerd/containerd").
-		Run(llb.Shlex("git checkout -q %s", version)).
+		With(goFromGit("github.com/containerd/containerd", version)).
 		Run(llb.Shlex("make bin/containerd")).Root()
 }
 
 func buildkit(withContainerd bool) *llb.State {
-	src := goBuildBase().
-		Run(llb.Shlex("git clone https://github.com/moby/buildkit.git /go/src/github.com/moby/buildkit")).
-		Dir("/go/src/github.com/moby/buildkit")
+	src := goBuildBase().With(goFromGit("github.com/moby/buildkit", "master"))
 
 	builddStandalone := src.
-		Run(llb.Shlex("go build -o /bin/buildd-standalone -tags standalone ./cmd/buildd"))
+		Run(llb.Shlex("go build -o /bin/buildd-standalone -tags standalone ./cmd/buildd")).Root()
 
 	builddContainerd := src.
-		Run(llb.Shlex("go build -o /bin/buildd-containerd -tags containerd ./cmd/buildd"))
+		Run(llb.Shlex("go build -o /bin/buildd-containerd -tags containerd ./cmd/buildd")).Root()
 
 	buildctl := src.
-		Run(llb.Shlex("go build -o /bin/buildctl ./cmd/buildctl"))
+		Run(llb.Shlex("go build -o /bin/buildctl ./cmd/buildctl")).Root()
 
-	r := llb.Image("docker.io/library/alpine:latest")
-	r = copy(buildctl.Root(), "/bin/buildctl", r, "/bin/")
-	r = copy(runc("v1.0.0-rc3"), "/usr/bin/runc", r, "/bin/")
+	r := llb.Image("docker.io/library/alpine:latest").With(
+		copyFrom(buildctl, "/bin/buildctl", "/bin/"),
+		copyFrom(runc("v1.0.0-rc3"), "/usr/bin/runc", "/bin/"),
+	)
+
 	if withContainerd {
-		r = copy(containerd("master"), "/go/src/github.com/containerd/containerd/bin/containerd", r, "/bin/")
-		r = copy(builddContainerd.Root(), "/bin/buildd-containerd", r, "/bin/")
-	} else {
-		r = copy(builddStandalone.Root(), "/bin/buildd-standalone", r, "/bin/")
+		return r.With(
+			copyFrom(containerd("master"), "/go/src/github.com/containerd/containerd/bin/containerd", "/bin/"),
+			copyFrom(builddContainerd, "/bin/buildd-containerd", "/bin/"))
 	}
-	return r
+	return r.With(copyFrom(builddStandalone, "/bin/buildd-standalone", "/bin/"))
 }
 
+// goFromGit is a helper for cloning a git repo, checking out a tag and copying
+// source directory into
+func goFromGit(repo, tag string) llb.StateOption {
+	src := llb.Image("docker.io/library/alpine:latest").
+		Run(llb.Shlex("apk add --no-cache git")).
+		Run(llb.Shlex("git clone https://%[1]s.git /go/src/%[1]s", repo)).
+		Dir("/go/src/%s", repo).
+		Run(llb.Shlex("git checkout -q %s", tag)).Root()
+	return func(s *llb.State) *llb.State {
+		return s.With(copyFrom(src, "/go", "/")).Reset(s).Dir(src.GetDir())
+	}
+}
+
+// copyFrom has similar semantics as `COPY --from`
+func copyFrom(src *llb.State, srcPath, destPath string) llb.StateOption {
+	return func(s *llb.State) *llb.State {
+		return copy(src, srcPath, s, destPath)
+	}
+}
+
+// copy copies files between 2 states using cp until there is no copyOp
 func copy(src *llb.State, srcPath string, dest *llb.State, destPath string) *llb.State {
 	cpImage := llb.Image("docker.io/library/alpine:latest")
 	cp := cpImage.Run(llb.Shlex("cp -a /src%s /dest%s", srcPath, destPath))
