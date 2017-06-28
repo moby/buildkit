@@ -69,7 +69,7 @@ func (mr *MultiReader) handle() error {
 		mr.mu.Lock()
 		for _, p := range p {
 			for w := range mr.writers {
-				w.WriteRawProgress(p)
+				w.writeRawProgress(p)
 			}
 		}
 		mr.mu.Unlock()
