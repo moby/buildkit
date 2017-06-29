@@ -183,7 +183,7 @@ func (pw *progressWriter) Write(id string, v interface{}) error {
 	if pw.done {
 		return errors.Errorf("writing %s to closed progress writer", id)
 	}
-	return pw.WriteRawProgress(&Progress{
+	return pw.writeRawProgress(&Progress{
 		ID:        id,
 		Timestamp: time.Now(),
 		Sys:       v,
@@ -192,6 +192,11 @@ func (pw *progressWriter) Write(id string, v interface{}) error {
 }
 
 func (pw *progressWriter) WriteRawProgress(p *Progress) error {
+	p.meta = pw.meta
+	return pw.writeRawProgress(p)
+}
+
+func (pw *progressWriter) writeRawProgress(p *Progress) error {
 	pw.reader.mu.Lock()
 	pw.reader.dirty[p.ID] = p
 	pw.reader.mu.Unlock()

@@ -64,6 +64,7 @@ type call struct {
 
 	closeProgressWriter func()
 	progressState       *progressState
+	progressCtx         context.Context
 }
 
 func newCall(fn func(ctx context.Context) (interface{}, error)) *call {
@@ -73,8 +74,9 @@ func newCall(fn func(ctx context.Context) (interface{}, error)) *call {
 		progressState: newProgressState(),
 	}
 	ctx := newContext(c) // newSharedContext
-	pr, _, closeProgressWriter := progress.NewContext(ctx)
+	pr, pctx, closeProgressWriter := progress.NewContext(context.Background())
 
+	c.progressCtx = pctx
 	c.ctx = ctx
 	c.closeProgressWriter = closeProgressWriter
 
@@ -175,7 +177,7 @@ func (c *call) Err() error {
 func (c *call) Value(key interface{}) interface{} {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	for _, ctx := range append([]context.Context{}, c.ctxs...) {
+	for _, ctx := range append([]context.Context{c.progressCtx}, c.ctxs...) {
 		select {
 		case <-ctx.Done():
 		default:
