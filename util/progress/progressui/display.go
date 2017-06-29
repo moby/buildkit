@@ -45,6 +45,7 @@ func DisplaySolveStatus(ctx context.Context, ch chan *client.SolveStatus) error 
 
 		if done {
 			disp.print(t.displayInfo(), true)
+			t.printErrorLogs()
 			return nil
 		} else if displayLimiter.Allow() {
 			disp.print(t.displayInfo(), false)
@@ -78,6 +79,7 @@ type vertex struct {
 	*client.Vertex
 	statuses []*status
 	byID     map[string]*status
+	logs     []*client.VertexLog
 }
 
 type status struct {
@@ -119,6 +121,31 @@ func (t *trace) update(s *client.SolveStatus) {
 			v.statuses = append(v.statuses, v.byID[s.ID])
 		}
 		v.byID[s.ID].VertexStatus = s
+	}
+	for _, l := range s.Logs {
+		v, ok := t.byDigest[l.Vertex]
+		if !ok {
+			continue // shouldn't happen
+		}
+		v.logs = append(v.logs, l)
+	}
+}
+
+func (t *trace) printErrorLogs() {
+	for _, v := range t.vertexes {
+		if v.Error != "" && !strings.HasSuffix(v.Error, context.Canceled.Error()) {
+			fmt.Println("------")
+			fmt.Printf(" > %s:\n", v.Name)
+			for _, l := range v.logs {
+				switch l.Stream {
+				case 1:
+					os.Stdout.Write(l.Data)
+				case 2:
+					os.Stderr.Write(l.Data)
+				}
+			}
+			fmt.Println("------")
+		}
 	}
 }
 
