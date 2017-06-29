@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/containerd/console"
@@ -25,7 +26,7 @@ func DisplaySolveStatus(ctx context.Context, ch chan *client.SolveStatus) error 
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
-	displayLimiter := rate.NewLimiter(rate.Every(50*time.Millisecond), 1)
+	displayLimiter := rate.NewLimiter(rate.Every(70*time.Millisecond), 1)
 
 	var done bool
 
@@ -63,6 +64,8 @@ type job struct {
 	completedTime *time.Time
 	name          string
 	status        string
+	hasError      bool
+	isCanceled    bool
 }
 
 type trace struct {
@@ -137,6 +140,15 @@ func (t *trace) displayInfo() (d displayInfo) {
 			completedTime: addTime(v.Completed, t.localTimeDiff),
 			name:          v.Name,
 		}
+		if v.Error != "" {
+			if strings.HasSuffix(v.Error, context.Canceled.Error()) {
+				j.isCanceled = true
+				j.name = "CANCELED " + j.name
+			} else {
+				j.hasError = true
+				j.name = "ERROR " + j.name
+			}
+		}
 		d.jobs = append(d.jobs, j)
 		for _, s := range v.statuses {
 			j := job{
@@ -205,6 +217,9 @@ func (disp *display) print(d displayInfo, all bool) {
 		if j.completedTime != nil {
 			endTime = *j.completedTime
 		}
+		if j.startTime == nil {
+			continue
+		}
 		dt := endTime.Sub(*j.startTime).Seconds()
 		if dt < 0.05 {
 			dt = 0
@@ -235,7 +250,13 @@ func (disp *display) print(d displayInfo, all bool) {
 
 		out = fmt.Sprintf("%-[2]*[1]s %[3]s", out, width-len(timer)-1, timer)
 		if j.completedTime != nil {
-			out = aec.Apply(out, aec.BlueF)
+			color := aec.BlueF
+			if j.isCanceled {
+				color = aec.YellowF
+			} else if j.hasError {
+				color = aec.RedF
+			}
+			out = aec.Apply(out, color)
 		}
 		fmt.Print(out)
 		lineCount++
