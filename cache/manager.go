@@ -6,13 +6,13 @@ import (
 	"path/filepath"
 	"sync"
 
-	"golang.org/x/sync/errgroup"
-
 	"github.com/boltdb/bolt"
 	cdsnapshot "github.com/containerd/containerd/snapshot"
 	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 const dbFile = "cache.db"
@@ -141,7 +141,7 @@ func (cm *cacheManager) get(ctx context.Context, id string) (ImmutableRef, error
 	return rec.ref(), nil
 }
 func (cm *cacheManager) New(ctx context.Context, s ImmutableRef) (MutableRef, error) {
-	id := generateID()
+	id := identity.NewID()
 
 	var parent ImmutableRef
 	var parentID string
@@ -202,23 +202,61 @@ func (cm *cacheManager) GetMutable(ctx context.Context, id string) (MutableRef, 
 func (cm *cacheManager) DiskUsage(ctx context.Context) ([]*client.UsageInfo, error) {
 	cm.mu.Lock()
 
-	var du []*client.UsageInfo
+	type cacheUsageInfo struct {
+		refs    int
+		parent  string
+		size    int64
+		mutable bool
+	}
+
+	m := make(map[string]*cacheUsageInfo, len(cm.records))
+	rescan := make(map[string]struct{}, len(cm.records))
 
 	for id, cr := range cm.records {
 		cr.mu.Lock()
+		c := &cacheUsageInfo{
+			refs:    len(cr.refs),
+			mutable: cr.mutable,
+			size:    cr.size,
+		}
+		if cr.parent != nil {
+			c.parent = cr.parent.ID()
+		}
+		if cr.mutable && c.refs > 0 && !cr.frozen {
+			c.size = 0 // size can not be determined because it is changing
+		}
+		m[id] = c
+		cr.mu.Unlock()
+		rescan[id] = struct{}{}
+	}
+	cm.mu.Unlock()
+
+	for {
+		if len(rescan) == 0 {
+			break
+		}
+		for id := range rescan {
+			if parentID := m[id].parent; parentID != "" {
+				p := m[parentID]
+				p.refs--
+				if p.refs == 0 && p.parent != "" {
+					rescan[parentID] = struct{}{}
+				}
+			}
+			delete(rescan, id)
+		}
+	}
+
+	var du []*client.UsageInfo
+	for id, cr := range m {
 		c := &client.UsageInfo{
 			ID:      id,
 			Mutable: cr.mutable,
-			InUse:   len(cr.refs) > 0,
+			InUse:   cr.refs > 0,
 			Size:    cr.size,
 		}
-		if cr.mutable && len(cr.refs) > 0 && !cr.frozen {
-			c.Size = 0 // size can not be determined because it is changing
-		}
-		cr.mu.Unlock()
 		du = append(du, c)
 	}
-	cm.mu.Unlock()
 
 	eg, ctx := errgroup.WithContext(ctx)
 

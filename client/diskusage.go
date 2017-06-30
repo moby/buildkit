@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"sort"
 
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/pkg/errors"
@@ -32,6 +33,10 @@ func (c *Client) DiskUsage(ctx context.Context) ([]*UsageInfo, error) {
 			Size:    d.Size_,
 		})
 	}
+
+	sort.Slice(du, func(i, j int) bool {
+		return du[i].Size > du[j].Size
+	})
 
 	return du, nil
 }

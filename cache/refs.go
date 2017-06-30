@@ -1,11 +1,10 @@
 package cache
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"sync"
 
 	"github.com/containerd/containerd/mount"
+	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -77,7 +76,7 @@ func (cr *cacheRecord) Size(ctx context.Context) (int64, error) {
 			return s, errors.Wrapf(err, "failed to get usage for %s", cr.id)
 		}
 		cr.mu.Lock()
-		cr.size = s
+		cr.size = usage.Size
 		cr.mu.Unlock()
 		return usage.Size, nil
 	})
@@ -96,7 +95,7 @@ func (cr *cacheRecord) Mount(ctx context.Context) ([]mount.Mount, error) {
 		return m, nil
 	}
 	if cr.viewMount == nil { // TODO: handle this better
-		cr.view = generateID()
+		cr.view = identity.NewID()
 		m, err := cr.cm.Snapshotter.View(ctx, cr.view, cr.id)
 		if err != nil {
 			cr.view = ""
@@ -195,7 +194,7 @@ func (sr *mutableRef) ReleaseAndCommit(ctx context.Context) (ImmutableRef, error
 
 	sr.mu.Unlock()
 
-	id := generateID() // TODO: no need to actually switch the key here
+	id := identity.NewID()
 
 	err := sr.cm.Snapshotter.Commit(ctx, id, sr.id)
 	if err != nil {
@@ -205,20 +204,13 @@ func (sr *mutableRef) ReleaseAndCommit(ctx context.Context) (ImmutableRef, error
 	delete(sr.cm.records, sr.id)
 
 	rec := &cacheRecord{
-		id:   id,
-		cm:   sr.cm,
-		refs: make(map[Mountable]struct{}),
-		size: sizeUnknown,
+		id:     id,
+		cm:     sr.cm,
+		parent: sr.parent,
+		refs:   make(map[Mountable]struct{}),
+		size:   sizeUnknown,
 	}
 	sr.cm.records[id] = rec // TODO: save to db
 
 	return rec.ref(), nil
-}
-
-func generateID() string {
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		panic(err)
-	}
-	return hex.EncodeToString(b)
 }
