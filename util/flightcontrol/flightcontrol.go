@@ -104,7 +104,13 @@ func (c *call) wait(ctx context.Context) (v interface{}, err error) {
 		return nil, errRetry
 	default:
 	}
-	c.append(ctx)
+
+	pw, ok, ctx := progress.FromContext(ctx)
+	if ok {
+		c.progressState.add(pw)
+	}
+	c.ctxs = append(c.ctxs, ctx)
+
 	c.mu.Unlock()
 
 	go c.once.Do(c.run)
@@ -118,28 +124,14 @@ func (c *call) wait(ctx context.Context) (v interface{}, err error) {
 			<-c.ready
 			return c.result, c.err
 		default:
+			if ok {
+				c.progressState.close(pw)
+			}
 			return nil, ctx.Err()
 		}
 	case <-c.ready:
 		return c.result, c.err // shared not implemented yet
 	}
-}
-
-func (c *call) append(ctx context.Context) {
-	pw, ok, ctx := progress.FromContext(ctx)
-	if ok {
-		c.progressState.add(pw)
-	}
-	c.ctxs = append(c.ctxs, ctx)
-	go func() {
-		select {
-		case <-c.ctx.done:
-		case <-ctx.Done():
-			c.mu.Lock()
-			c.ctx.signal()
-			c.mu.Unlock()
-		}
-	}()
 }
 
 func (c *call) Deadline() (deadline time.Time, ok bool) {
@@ -281,6 +273,22 @@ func (ps *progressState) add(pw progress.Writer) {
 		rw.Close()
 	} else {
 		ps.writers = append(ps.writers, rw)
+	}
+	ps.mu.Unlock()
+}
+
+func (ps *progressState) close(pw progress.Writer) {
+	rw, ok := pw.(rawProgressWriter)
+	if !ok {
+		return
+	}
+	ps.mu.Lock()
+	for i, w := range ps.writers {
+		if w == rw {
+			w.Close()
+			ps.writers = append(ps.writers[:i], ps.writers[i+1:]...)
+			break
+		}
 	}
 	ps.mu.Unlock()
 }
