@@ -30,13 +30,13 @@ Practices](https://docs.docker.com/engine/userguide/eng-image/dockerfile_best-pr
 ## Usage
 
 The [`docker build`](commandline/build.md) command builds an image from
-a `Dockerfile` and a *context*. The build's context is the files at a specified
-location `PATH` or `URL`. The `PATH` is a directory on your local filesystem.
-The `URL` is a Git repository location.
+a `Dockerfile` and a *context*. The build's context is the set of files at a
+specified location `PATH` or `URL`. The `PATH` is a directory on your local
+filesystem. The `URL` is a Git repository location.
 
 A context is processed recursively. So, a `PATH` includes any subdirectories and
-the `URL` includes the repository and its submodules. A simple build command
-that uses the current directory as context:
+the `URL` includes the repository and its submodules. This example shows a
+build command that uses the current directory as context:
 
     $ docker build .
     Sending build context to Docker daemon  6.51 MB
@@ -1328,9 +1328,9 @@ The `WORKDIR` instruction sets the working directory for any `RUN`, `CMD`,
 If the `WORKDIR` doesn't exist, it will be created even if it's not used in any
 subsequent `Dockerfile` instruction.
 
-It can be used multiple times in the one `Dockerfile`. If a relative path
-is provided, it will be relative to the path of the previous `WORKDIR`
-instruction. For example:
+The `WORKDIR` instruction can be used multiple times in a `Dockerfile`. If a
+relative path is provided, it will be relative to the path of the previous
+`WORKDIR` instruction. For example:
 
     WORKDIR /a
     WORKDIR b
