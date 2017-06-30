@@ -75,8 +75,6 @@ func (s *Solver) Status(ctx context.Context, id string, statusChan chan *client.
 }
 
 func (s *Solver) getRefs(ctx context.Context, j *job, g *opVertex) (retRef []cache.ImmutableRef, retErr error) {
-	pw, _, ctx := progress.FromContext(ctx, progress.WithMetadata("vertex", g.dgst))
-	defer pw.Close()
 
 	s.active.probe(j, g.dgst) // this registers the key with the job
 
@@ -126,21 +124,26 @@ func (s *Solver) getRefs(ctx context.Context, j *job, g *opVertex) (retRef []cac
 		}
 	}
 
+	pw, _, ctx := progress.FromContext(ctx, progress.WithMetadata("vertex", g.dgst))
+	defer pw.Close()
+
 	g.notifyStarted(ctx)
 	defer func() {
 		g.notifyCompleted(ctx, retErr)
 	}()
 
-	_, err := s.active.Do(ctx, g.dgst.String(), func(ctx context.Context) (interface{}, error) {
+	_, err := s.active.Do(ctx, g.dgst.String(), func(doctx context.Context) (interface{}, error) {
 		if hit := s.active.probe(j, g.dgst); hit {
+			if err := s.active.writeProgressSnapshot(ctx, g.dgst); err != nil {
+				return nil, err
+			}
 			return nil, nil
 		}
-		refs, err := s.runVertex(ctx, g, inputs)
+		refs, err := s.runVertex(doctx, g, inputs)
 		if err != nil {
 			return nil, err
 		}
-
-		s.active.set(g.dgst, refs)
+		s.active.set(doctx, g.dgst, refs)
 		return nil, nil
 	})
 	if err != nil {

@@ -125,7 +125,7 @@ func (j *job) pipe(ctx context.Context, ch chan *client.SolveStatus) error {
 			case client.VertexLog:
 				vtx, ok := p.Meta("vertex")
 				if !ok {
-					logrus.Warnf("progress %s status without vertex info", p.ID)
+					logrus.Warnf("progress %s log without vertex info", p.ID)
 					continue
 				}
 				v.Vertex = vtx.(digest.Digest)

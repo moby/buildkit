@@ -5,6 +5,7 @@ import (
 
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/util/flightcontrol"
+	"github.com/moby/buildkit/util/progress"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -20,8 +21,9 @@ type refCache struct {
 }
 
 type cachedReq struct {
-	jobs  map[*job]struct{}
-	value []*sharedRef
+	jobs        map[*job]struct{}
+	value       []*sharedRef
+	progressCtx context.Context
 }
 
 func (c *refCache) probe(j *job, key digest.Digest) bool {
@@ -59,13 +61,14 @@ func (c *refCache) get(key digest.Digest) ([]cache.ImmutableRef, error) {
 	}
 	return refs, nil
 }
-func (c *refCache) set(key digest.Digest, refs []cache.ImmutableRef) {
+func (c *refCache) set(ctx context.Context, key digest.Digest, refs []cache.ImmutableRef) {
 	c.mu.Lock()
 	sharedRefs := make([]*sharedRef, 0, len(refs))
 	for _, r := range refs {
 		sharedRefs = append(sharedRefs, newSharedRef(r))
 	}
 	c.cache[key].value = sharedRefs
+	c.cache[key].progressCtx = ctx
 	c.mu.Unlock()
 }
 func (c *refCache) cancel(j *job) {
@@ -82,6 +85,24 @@ func (c *refCache) cancel(j *job) {
 		}
 	}
 	c.mu.Unlock()
+}
+
+func (c *refCache) writeProgressSnapshot(ctx context.Context, key digest.Digest) error {
+	pw, ok, _ := progress.FromContext(ctx)
+	if ok {
+		c.mu.Lock()
+		v, ok := c.cache[key]
+		if !ok {
+			c.mu.Unlock()
+			return errors.Errorf("no ref cache found")
+		}
+		pctx := v.progressCtx
+		c.mu.Unlock()
+		if pctx != nil {
+			return flightcontrol.WriteProgress(pctx, pw)
+		}
+	}
+	return nil
 }
 
 // sharedRef is a wrapper around releasable that allows you to make new
