@@ -74,7 +74,7 @@ func (s *Solver) Status(ctx context.Context, id string, statusChan chan *client.
 	return j.pipe(ctx, statusChan)
 }
 
-func (s *Solver) getRefs(ctx context.Context, j *job, g *opVertex) ([]cache.ImmutableRef, error) {
+func (s *Solver) getRefs(ctx context.Context, j *job, g *opVertex) (retRef []cache.ImmutableRef, retErr error) {
 	pw, _, ctx := progress.FromContext(ctx, progress.WithMetadata("vertex", g.dgst))
 	defer pw.Close()
 
@@ -127,7 +127,9 @@ func (s *Solver) getRefs(ctx context.Context, j *job, g *opVertex) ([]cache.Immu
 	}
 
 	g.notifyStarted(ctx)
-	defer g.notifyCompleted(ctx)
+	defer func() {
+		g.notifyCompleted(ctx, retErr)
+	}()
 
 	_, err := s.active.Do(ctx, g.dgst.String(), func(ctx context.Context) (interface{}, error) {
 		if hit := s.active.probe(j, g.dgst); hit {
@@ -252,11 +254,14 @@ func (g *opVertex) notifyStarted(ctx context.Context) {
 	pw.Write(g.dgst.String(), g.vtx)
 }
 
-func (g *opVertex) notifyCompleted(ctx context.Context) {
+func (g *opVertex) notifyCompleted(ctx context.Context, err error) {
 	pw, _, _ := progress.FromContext(ctx)
 	defer pw.Close()
 	now := time.Now()
 	g.vtx.Completed = &now
+	if err != nil {
+		g.vtx.Error = err.Error()
+	}
 	pw.Write(g.dgst.String(), g.vtx)
 }
 

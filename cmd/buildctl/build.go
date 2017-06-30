@@ -36,7 +36,7 @@ func build(clicontext *cli.Context) error {
 
 	ch := make(chan *client.SolveStatus)
 	displayCh := make(chan *client.SolveStatus)
-	eg, ctx := errgroup.WithContext(context.TODO()) // TODO: define appContext
+	eg, ctx := errgroup.WithContext(appContext())
 
 	eg.Go(func() error {
 		return c.Solve(ctx, os.Stdin, ch)
@@ -54,7 +54,8 @@ func build(clicontext *cli.Context) error {
 	})
 
 	eg.Go(func() error {
-		return progressui.DisplaySolveStatus(ctx, displayCh)
+		// not using shared context to not disrupt display but let is finish reporting errors
+		return progressui.DisplaySolveStatus(context.TODO(), displayCh)
 	})
 
 	return eg.Wait()

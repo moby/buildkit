@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"io"
+	"time"
 
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client/llb"
@@ -25,7 +26,15 @@ func (c *Client) Solve(ctx context.Context, r io.Reader, statusChan chan *SolveS
 	ref := generateID()
 	eg, ctx := errgroup.WithContext(ctx)
 
+	statusContext, cancelStatus := context.WithCancel(context.Background())
+
 	eg.Go(func() error {
+		defer func() { // make sure the Status ends cleanly on build errors
+			go func() {
+				<-time.After(3 * time.Second)
+				cancelStatus()
+			}()
+		}()
 		_, err = c.controlClient().Solve(ctx, &controlapi.SolveRequest{
 			Ref:        ref,
 			Definition: def,
@@ -37,7 +46,7 @@ func (c *Client) Solve(ctx context.Context, r io.Reader, statusChan chan *SolveS
 	})
 
 	eg.Go(func() error {
-		stream, err := c.controlClient().Status(ctx, &controlapi.StatusRequest{
+		stream, err := c.controlClient().Status(statusContext, &controlapi.StatusRequest{
 			Ref: ref,
 		})
 		if err != nil {
@@ -59,6 +68,7 @@ func (c *Client) Solve(ctx context.Context, r io.Reader, statusChan chan *SolveS
 					Name:      v.Name,
 					Started:   v.Started,
 					Completed: v.Completed,
+					Error:     v.Error,
 				})
 			}
 			for _, v := range resp.Statuses {

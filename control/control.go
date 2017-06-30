@@ -97,6 +97,7 @@ func (c *Controller) Status(req *controlapi.StatusRequest, stream controlapi.Con
 						Name:      v.Name,
 						Started:   v.Started,
 						Completed: v.Completed,
+						Error:     v.Error,
 					})
 				}
 				for _, v := range ss.Statuses {

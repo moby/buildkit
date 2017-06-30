@@ -106,6 +106,12 @@ func (w *runcworker) Exec(ctx context.Context, meta worker.Meta, mounts map[stri
 	})
 	logrus.Debugf("< completed %s %v %v", id, status, err)
 	if status != 0 {
+		select {
+		case <-ctx.Done():
+			// runc can't report context.Cancelled directly
+			return errors.Wrapf(ctx.Err(), "exit code %d", status)
+		default:
+		}
 		return errors.Errorf("exit code %d", status)
 	}
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/containerd/console"
@@ -25,7 +26,7 @@ func DisplaySolveStatus(ctx context.Context, ch chan *client.SolveStatus) error 
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
-	displayLimiter := rate.NewLimiter(rate.Every(50*time.Millisecond), 1)
+	displayLimiter := rate.NewLimiter(rate.Every(70*time.Millisecond), 1)
 
 	var done bool
 
@@ -44,6 +45,7 @@ func DisplaySolveStatus(ctx context.Context, ch chan *client.SolveStatus) error 
 
 		if done {
 			disp.print(t.displayInfo(), true)
+			t.printErrorLogs()
 			return nil
 		} else if displayLimiter.Allow() {
 			disp.print(t.displayInfo(), false)
@@ -63,6 +65,8 @@ type job struct {
 	completedTime *time.Time
 	name          string
 	status        string
+	hasError      bool
+	isCanceled    bool
 }
 
 type trace struct {
@@ -75,6 +79,7 @@ type vertex struct {
 	*client.Vertex
 	statuses []*status
 	byID     map[string]*status
+	logs     []*client.VertexLog
 }
 
 type status struct {
@@ -117,6 +122,31 @@ func (t *trace) update(s *client.SolveStatus) {
 		}
 		v.byID[s.ID].VertexStatus = s
 	}
+	for _, l := range s.Logs {
+		v, ok := t.byDigest[l.Vertex]
+		if !ok {
+			continue // shouldn't happen
+		}
+		v.logs = append(v.logs, l)
+	}
+}
+
+func (t *trace) printErrorLogs() {
+	for _, v := range t.vertexes {
+		if v.Error != "" && !strings.HasSuffix(v.Error, context.Canceled.Error()) {
+			fmt.Println("------")
+			fmt.Printf(" > %s:\n", v.Name)
+			for _, l := range v.logs {
+				switch l.Stream {
+				case 1:
+					os.Stdout.Write(l.Data)
+				case 2:
+					os.Stderr.Write(l.Data)
+				}
+			}
+			fmt.Println("------")
+		}
+	}
 }
 
 func (t *trace) displayInfo() (d displayInfo) {
@@ -136,6 +166,15 @@ func (t *trace) displayInfo() (d displayInfo) {
 			startTime:     addTime(v.Started, t.localTimeDiff),
 			completedTime: addTime(v.Completed, t.localTimeDiff),
 			name:          v.Name,
+		}
+		if v.Error != "" {
+			if strings.HasSuffix(v.Error, context.Canceled.Error()) {
+				j.isCanceled = true
+				j.name = "CANCELED " + j.name
+			} else {
+				j.hasError = true
+				j.name = "ERROR " + j.name
+			}
 		}
 		d.jobs = append(d.jobs, j)
 		for _, s := range v.statuses {
@@ -205,6 +244,9 @@ func (disp *display) print(d displayInfo, all bool) {
 		if j.completedTime != nil {
 			endTime = *j.completedTime
 		}
+		if j.startTime == nil {
+			continue
+		}
 		dt := endTime.Sub(*j.startTime).Seconds()
 		if dt < 0.05 {
 			dt = 0
@@ -235,7 +277,13 @@ func (disp *display) print(d displayInfo, all bool) {
 
 		out = fmt.Sprintf("%-[2]*[1]s %[3]s", out, width-len(timer)-1, timer)
 		if j.completedTime != nil {
-			out = aec.Apply(out, aec.BlueF)
+			color := aec.BlueF
+			if j.isCanceled {
+				color = aec.YellowF
+			} else if j.hasError {
+				color = aec.RedF
+			}
+			out = aec.Apply(out, color)
 		}
 		fmt.Print(out)
 		lineCount++

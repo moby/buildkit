@@ -8,11 +8,18 @@ import (
 	"github.com/moby/buildkit/util/system"
 )
 
+type buildOpt struct {
+	target     string
+	containerd string
+}
+
 func main() {
-	target := flag.String("target", "containerd", "target (standalone, containerd)")
+	var opt buildOpt
+	flag.StringVar(&opt.target, "target", "containerd", "target (standalone, containerd)")
+	flag.StringVar(&opt.containerd, "containerd", "master", "containerd version")
 	flag.Parse()
 
-	bk := buildkit(*target == "containerd")
+	bk := buildkit(opt)
 	out := bk.Run(llb.Shlex("ls -l /bin")) // debug output
 
 	dt, err := out.Marshal()
@@ -45,7 +52,7 @@ func containerd(version string) *llb.State {
 		Run(llb.Shlex("make bin/containerd")).Root()
 }
 
-func buildkit(withContainerd bool) *llb.State {
+func buildkit(opt buildOpt) *llb.State {
 	src := goBuildBase().With(goFromGit("github.com/moby/buildkit", "master"))
 
 	builddStandalone := src.
@@ -62,9 +69,9 @@ func buildkit(withContainerd bool) *llb.State {
 		copyFrom(runc("v1.0.0-rc3"), "/usr/bin/runc", "/bin/"),
 	)
 
-	if withContainerd {
+	if opt.target == "containerd" {
 		return r.With(
-			copyFrom(containerd("master"), "/go/src/github.com/containerd/containerd/bin/containerd", "/bin/"),
+			copyFrom(containerd(opt.containerd), "/go/src/github.com/containerd/containerd/bin/containerd", "/bin/"),
 			copyFrom(builddContainerd, "/bin/buildd-containerd", "/bin/"))
 	}
 	return r.With(copyFrom(builddStandalone, "/bin/buildd-standalone", "/bin/"))
