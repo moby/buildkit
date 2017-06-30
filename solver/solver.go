@@ -133,14 +133,16 @@ func (s *Solver) getRefs(ctx context.Context, j *job, g *opVertex) (retRef []cac
 
 	_, err := s.active.Do(ctx, g.dgst.String(), func(ctx context.Context) (interface{}, error) {
 		if hit := s.active.probe(j, g.dgst); hit {
+			if err := s.active.writeProgressSnapshot(ctx, g.dgst); err != nil {
+				return nil, err
+			}
 			return nil, nil
 		}
 		refs, err := s.runVertex(ctx, g, inputs)
 		if err != nil {
 			return nil, err
 		}
-
-		s.active.set(g.dgst, refs)
+		s.active.set(ctx, g.dgst, refs)
 		return nil, nil
 	})
 	if err != nil {

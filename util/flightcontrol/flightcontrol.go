@@ -17,6 +17,10 @@ import (
 
 var errRetry = errors.Errorf("retry")
 
+type contextKeyT string
+
+var contextKey = contextKeyT("buildkit/util/flightcontrol.progress")
+
 type Group struct {
 	mu sync.Mutex       // protects m
 	m  map[string]*call // lazily initialized
@@ -167,6 +171,9 @@ func (c *call) Err() error {
 }
 
 func (c *call) Value(key interface{}) interface{} {
+	if key == contextKey {
+		return c.progressState
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for _, ctx := range append([]context.Context{c.progressCtx}, c.ctxs...) {
@@ -291,4 +298,14 @@ func (ps *progressState) close(pw progress.Writer) {
 		}
 	}
 	ps.mu.Unlock()
+}
+
+func WriteProgress(ctx context.Context, pw progress.Writer) error {
+	v := ctx.Value(contextKey)
+	p, ok := v.(*progressState)
+	if !ok {
+		return errors.Errorf("invalid context not from flightcontrol")
+	}
+	p.add(pw)
+	return nil
 }
