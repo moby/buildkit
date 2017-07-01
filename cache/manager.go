@@ -236,12 +236,10 @@ func (cm *cacheManager) DiskUsage(ctx context.Context) ([]*client.UsageInfo, err
 			break
 		}
 		for id := range rescan {
-			if parentID := m[id].parent; parentID != "" {
-				p := m[parentID]
-				p.refs--
-				if p.refs == 0 && p.parent != "" {
-					rescan[parentID] = struct{}{}
-				}
+			v := m[id]
+			if v.refs == 0 && v.parent != "" {
+				m[v.parent].refs--
+				rescan[v.parent] = struct{}{}
 			}
 			delete(rescan, id)
 		}
@@ -274,7 +272,7 @@ func (cm *cacheManager) DiskUsage(ctx context.Context) ([]*client.UsageInfo, err
 						return err
 					}
 					d.Size = s
-					return ref.Release(ctx)
+					return ref.Release(context.TODO())
 				})
 			}(d)
 		}

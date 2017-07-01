@@ -129,11 +129,6 @@ func (sr *immutableRef) Release(ctx context.Context) error {
 }
 
 func (sr *immutableRef) release(ctx context.Context) error {
-	if sr.parent != nil {
-		if err := sr.parent.(*immutableRef).release(ctx); err != nil {
-			return err
-		}
-	}
 	if sr.viewMount != nil {
 		if err := sr.cm.Snapshotter.Remove(ctx, sr.view); err != nil {
 			return err
