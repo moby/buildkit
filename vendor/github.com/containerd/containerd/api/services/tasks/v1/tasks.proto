@@ -5,8 +5,8 @@ package containerd.services.tasks.v1;
 import "google/protobuf/empty.proto";
 import "google/protobuf/any.proto";
 import "gogoproto/gogo.proto";
-import "github.com/containerd/containerd/api/types/mount/mount.proto";
-import "github.com/containerd/containerd/api/types/descriptor/descriptor.proto";
+import "github.com/containerd/containerd/api/types/mount.proto";
+import "github.com/containerd/containerd/api/types/descriptor.proto";
 import "github.com/containerd/containerd/api/types/task/task.proto";
 import "google/protobuf/timestamp.proto";
 
@@ -41,9 +41,11 @@ service Tasks {
 
 	rpc Resume(ResumeTaskRequest) returns (google.protobuf.Empty);
 
-	rpc ListProcesses(ListProcessesRequest) returns (ListProcessesResponse);
+	rpc ListPids(ListPidsRequest) returns (ListPidsResponse);
 
 	rpc Checkpoint(CheckpointTaskRequest) returns (CheckpointTaskResponse);
+
+	rpc Update(UpdateTaskRequest) returns (google.protobuf.Empty);
 }
 
 message CreateTaskRequest {
@@ -62,14 +64,16 @@ message CreateTaskRequest {
 	// These are for mounts that cannot be performed in the user namespace.
 	// Typically, these mounts should be resolved from snapshots specified on
 	// the container object.
-	repeated containerd.v1.types.Mount rootfs = 3;
+	repeated containerd.types.Mount rootfs = 3;
 
 	string stdin = 4;
 	string stdout = 5;
 	string stderr = 6;
 	bool terminal = 7;
 
-	containerd.v1.types.Descriptor checkpoint = 8;
+	containerd.types.Descriptor checkpoint = 8;
+
+	google.protobuf.Any options = 9;
 }
 
 message CreateTaskResponse {
@@ -171,20 +175,25 @@ message ResumeTaskRequest {
 	string container_id = 1;
 }
 
-message ListProcessesRequest {
+message ListPidsRequest {
 	string container_id = 1;
 }
 
-message ListProcessesResponse{
-	repeated containerd.v1.types.Process processes = 1;
+message ListPidsResponse{
+	repeated uint32 pids = 1;
 }
 
 message CheckpointTaskRequest {
 	string container_id = 1;
 	string parent_checkpoint = 2 [(gogoproto.customtype) = "github.com/opencontainers/go-digest.Digest", (gogoproto.nullable) = false];
-	map<string, string> options = 3;
+	google.protobuf.Any options = 3;
 }
 
 message CheckpointTaskResponse {
-	repeated containerd.v1.types.Descriptor descriptors = 1;
+	repeated containerd.types.Descriptor descriptors = 1;
+}
+
+message UpdateTaskRequest {
+	string container_id = 1;
+	google.protobuf.Any resources = 2;
 }

@@ -6,20 +6,20 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"runtime"
+	goruntime "runtime"
 	"strings"
 	"syscall"
 
 	"github.com/containerd/containerd/api/services/containers/v1"
 	eventsapi "github.com/containerd/containerd/api/services/events/v1"
 	"github.com/containerd/containerd/api/services/tasks/v1"
-	"github.com/containerd/containerd/api/types/event"
-	tasktypes "github.com/containerd/containerd/api/types/task"
 	"github.com/containerd/containerd/content"
+	"github.com/containerd/containerd/events"
 	"github.com/containerd/containerd/rootfs"
-	"github.com/gogo/protobuf/proto"
+	"github.com/containerd/containerd/runtime"
 	"github.com/opencontainers/image-spec/specs-go/v1"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
+	"google.golang.org/grpc"
 )
 
 const UnknownExitStatus = 255
@@ -57,6 +57,7 @@ type Task interface {
 	Resize(ctx context.Context, w, h uint32) error
 	IO() *IO
 	Checkpoint(context.Context, ...CheckpointOpts) (v1.Descriptor, error)
+	Update(context.Context, ...UpdateTaskOpts) error
 }
 
 type Process interface {
@@ -109,11 +110,17 @@ func (t *task) Kill(ctx context.Context, s syscall.Signal) error {
 	_, err := t.client.TaskService().Kill(ctx, &tasks.KillRequest{
 		Signal:      uint32(s),
 		ContainerID: t.containerID,
-		PidOrAll: &tasks.KillRequest_All{
-			All: true,
+		PidOrAll: &tasks.KillRequest_Pid{
+			Pid: t.pid,
 		},
 	})
-	return err
+	if err != nil {
+		if strings.Contains(grpc.ErrorDesc(err), runtime.ErrProcessExited.Error()) {
+			return ErrProcessExited
+		}
+		return err
+	}
+	return nil
 }
 
 func (t *task) Pause(ctx context.Context) error {
@@ -143,29 +150,34 @@ func (t *task) Status(ctx context.Context) (TaskStatus, error) {
 // Wait is a blocking call that will wait for the task to exit and return the exit status
 func (t *task) Wait(ctx context.Context) (uint32, error) {
 	// TODO (ehazlett): add filtering for specific event
-	events, err := t.client.EventService().Stream(ctx, &eventsapi.StreamEventsRequest{})
+	eventstream, err := t.client.EventService().Stream(ctx, &eventsapi.StreamEventsRequest{})
 	if err != nil {
 		return UnknownExitStatus, err
 	}
 	<-t.pidSync
+
+	var e eventsapi.RuntimeEvent
+
 	for {
-		evt, err := events.Recv()
+		evt, err := eventstream.Recv()
 		if err != nil {
 			return UnknownExitStatus, err
 		}
-		if evt.Event.TypeUrl == "types.containerd.io/containerd.v1.types.event.RuntimeEvent" {
-			e := &event.RuntimeEvent{}
-			if err := proto.Unmarshal(evt.Event.Value, e); err != nil {
-				return UnknownExitStatus, err
-			}
 
-			if e.Type != tasktypes.Event_EXIT {
-				continue
-			}
+		if !events.Is(evt.Event, &eventsapi.RuntimeEvent{}) {
+			continue
+		}
 
-			if e.ID == t.containerID && e.Pid == t.pid {
-				return e.ExitStatus, nil
-			}
+		if err := events.UnmarshalEvent(evt.Event, &e); err != nil {
+			return UnknownExitStatus, err
+		}
+
+		if e.Type != eventsapi.RuntimeEvent_EXIT {
+			continue
+		}
+
+		if e.ID == t.containerID && e.Pid == t.pid {
+			return e.ExitStatus, nil
 		}
 	}
 }
@@ -201,17 +213,13 @@ func (t *task) Exec(ctx context.Context, spec *specs.Process, ioCreate IOCreatio
 }
 
 func (t *task) Processes(ctx context.Context) ([]uint32, error) {
-	response, err := t.client.TaskService().ListProcesses(ctx, &tasks.ListProcessesRequest{
+	response, err := t.client.TaskService().ListPids(ctx, &tasks.ListPidsRequest{
 		ContainerID: t.containerID,
 	})
 	if err != nil {
 		return nil, err
 	}
-	var out []uint32
-	for _, p := range response.Processes {
-		out = append(out, p.Pid)
-	}
-	return out, nil
+	return response.Pids, nil
 }
 
 func (t *task) CloseIO(ctx context.Context, opts ...IOCloserOpts) error {
@@ -240,15 +248,9 @@ func (t *task) Resize(ctx context.Context, w, h uint32) error {
 	return err
 }
 
-func WithExit(r *tasks.CheckpointTaskRequest) error {
-	r.Options["exit"] = "true"
-	return nil
-}
-
 func (t *task) Checkpoint(ctx context.Context, opts ...CheckpointOpts) (d v1.Descriptor, err error) {
 	request := &tasks.CheckpointTaskRequest{
 		ContainerID: t.containerID,
-		Options:     make(map[string]string),
 	}
 	for _, o := range opts {
 		if err := o(request); err != nil {
@@ -281,6 +283,21 @@ func (t *task) Checkpoint(ctx context.Context, opts ...CheckpointOpts) (d v1.Des
 	return t.writeIndex(ctx, &index)
 }
 
+type UpdateTaskOpts func(context.Context, *Client, *tasks.UpdateTaskRequest) error
+
+func (t *task) Update(ctx context.Context, opts ...UpdateTaskOpts) error {
+	request := &tasks.UpdateTaskRequest{
+		ContainerID: t.containerID,
+	}
+	for _, o := range opts {
+		if err := o(ctx, t.client, request); err != nil {
+			return err
+		}
+	}
+	_, err := t.client.TaskService().Update(ctx, request)
+	return err
+}
+
 func (t *task) checkpointTask(ctx context.Context, index *v1.Index, request *tasks.CheckpointTaskRequest) error {
 	response, err := t.client.TaskService().Checkpoint(ctx, request)
 	if err != nil {
@@ -293,8 +310,8 @@ func (t *task) checkpointTask(ctx context.Context, index *v1.Index, request *tas
 			Size:      d.Size_,
 			Digest:    d.Digest,
 			Platform: &v1.Platform{
-				OS:           runtime.GOOS,
-				Architecture: runtime.GOARCH,
+				OS:           goruntime.GOOS,
+				Architecture: goruntime.GOARCH,
 			},
 		})
 	}
@@ -307,8 +324,8 @@ func (t *task) checkpointRWSnapshot(ctx context.Context, index *v1.Index, id str
 		return err
 	}
 	rw.Platform = &v1.Platform{
-		OS:           runtime.GOOS,
-		Architecture: runtime.GOARCH,
+		OS:           goruntime.GOOS,
+		Architecture: goruntime.GOARCH,
 	}
 	index.Manifests = append(index.Manifests, rw)
 	return nil
