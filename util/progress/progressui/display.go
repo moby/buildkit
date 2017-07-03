@@ -223,12 +223,11 @@ func (disp *display) print(d displayInfo, all bool) {
 
 	b := aec.EmptyBuilder
 	for i := 0; i <= disp.lineCount; i++ {
-		b = b.EraseLine(aec.EraseModes.All).Up(1)
+		b = b.Up(1)
 	}
 	if !disp.repeated {
 		b = b.Down(1)
 	}
-	b = b.EraseLine(aec.EraseModes.All)
 	disp.repeated = true
 	fmt.Print(b.Column(0).ANSI)
 
@@ -237,7 +236,12 @@ func (disp *display) print(d displayInfo, all bool) {
 		statusStr = "FINISHED"
 	}
 
-	fmt.Printf("[+] Building %.1fs (%d/%d) %s\n", time.Since(d.startTime).Seconds(), d.countCompleted, d.countTotal, statusStr)
+	fmt.Print(aec.Hide)
+	defer fmt.Print(aec.Show)
+
+	out := fmt.Sprintf("[+] Building %.1fs (%d/%d) %s", time.Since(d.startTime).Seconds(), d.countCompleted, d.countTotal, statusStr)
+	out = align(out, "", width)
+	fmt.Println(out)
 	lineCount := 0
 	for _, j := range d.jobs {
 		endTime := time.Now()
@@ -275,7 +279,7 @@ func (disp *display) print(d displayInfo, all bool) {
 			out += " " + status
 		}
 
-		out = fmt.Sprintf("%-[2]*[1]s %[3]s", out, width-len(timer)-1, timer)
+		out = align(out, timer, width)
 		if j.completedTime != nil {
 			color := aec.BlueF
 			if j.isCanceled {
@@ -289,6 +293,10 @@ func (disp *display) print(d displayInfo, all bool) {
 		lineCount++
 	}
 	disp.lineCount = lineCount
+}
+
+func align(l, r string, w int) string {
+	return fmt.Sprintf("%-[2]*[1]s %[3]s", l, w-len(r)-1, r)
 }
 
 func wrapHeight(j []job, limit int) []job {
