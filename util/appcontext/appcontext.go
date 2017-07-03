@@ -1,4 +1,4 @@
-package main
+package appcontext
 
 import (
 	"context"
@@ -6,13 +6,16 @@ import (
 	"os/signal"
 	"sync"
 
+	"github.com/Sirupsen/logrus"
 	"golang.org/x/sys/unix"
 )
 
 var appContextCache context.Context
 var appContextOnce sync.Once
 
-func appContext() context.Context {
+// Context returns a static context that reacts to termination signals of the
+// running process. Useful in CLI tools.
+func Context() context.Context {
 	appContextOnce.Do(func() {
 		signals := make(chan os.Signal, 2048)
 		signal.Notify(signals, unix.SIGTERM, unix.SIGINT)
@@ -29,6 +32,7 @@ func appContext() context.Context {
 				cancel()
 				retries++
 				if retries >= exitLimit {
+					logrus.Errorf("got %d SIGTERM/SIGINTs, forcing shutdown", retries)
 					os.Exit(1)
 				}
 			}

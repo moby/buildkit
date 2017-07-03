@@ -8,6 +8,7 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/util/appcontext"
 	"github.com/moby/buildkit/util/progress/progressui"
 	"github.com/urfave/cli"
 	"golang.org/x/sync/errgroup"
@@ -36,7 +37,7 @@ func build(clicontext *cli.Context) error {
 
 	ch := make(chan *client.SolveStatus)
 	displayCh := make(chan *client.SolveStatus)
-	eg, ctx := errgroup.WithContext(appContext())
+	eg, ctx := errgroup.WithContext(appcontext.Context())
 
 	eg.Go(func() error {
 		return c.Solve(ctx, os.Stdin, ch)
