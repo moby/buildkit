@@ -3,15 +3,14 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/signal"
 	"path/filepath"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/containerd/containerd/sys"
+	"github.com/moby/buildkit/util/appcontext"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 	"golang.org/x/net/context"
-	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
 )
 
@@ -45,8 +44,7 @@ func main() {
 	app.Flags = appendFlags(app.Flags)
 
 	app.Action = func(c *cli.Context) error {
-		signals := make(chan os.Signal, 2048)
-		signal.Notify(signals, unix.SIGTERM, unix.SIGINT)
+		ctx, cancel := context.WithCancel(appcontext.Context())
 
 		if debugAddr := c.GlobalString("debugaddr"); debugAddr != "" {
 			if err := setupDebugHandlers(debugAddr); err != nil {
@@ -54,7 +52,7 @@ func main() {
 			}
 		}
 
-		server := grpc.NewServer(debugGrpcErrors())
+		server := grpc.NewServer(unaryInterceptor(ctx))
 
 		// relative path does not work with nightlyone/lockfile
 		root, err := filepath.Abs(c.GlobalString("root"))
@@ -73,12 +71,23 @@ func main() {
 
 		controller.Register(server)
 
-		ctx, cancel := context.WithCancel(context.Background())
-		if err := serveGRPC(c.GlobalString("socket"), server, cancel); err != nil {
+		errCh := make(chan error, 1)
+		if err := serveGRPC(server, c.GlobalString("socket"), errCh); err != nil {
 			return err
 		}
 
-		return handleSignals(ctx, signals, server)
+		select {
+		case serverErr := <-errCh:
+			err = serverErr
+			cancel()
+		case <-ctx.Done():
+			err = ctx.Err()
+		}
+
+		logrus.Infof("stopping server")
+		server.GracefulStop()
+
+		return err
 	}
 	app.Before = func(context *cli.Context) error {
 		if context.GlobalBool("debug") {
@@ -92,7 +101,7 @@ func main() {
 	}
 }
 
-func serveGRPC(path string, server *grpc.Server, cancel func()) error {
+func serveGRPC(server *grpc.Server, path string, errCh chan error) error {
 	if path == "" {
 		return errors.New("--socket path cannot be empty")
 	}
@@ -103,27 +112,24 @@ func serveGRPC(path string, server *grpc.Server, cancel func()) error {
 	go func() {
 		defer l.Close()
 		logrus.Infof("running server on %s", path)
-		if err := server.Serve(l); err != nil {
-			logrus.WithError(err).Fatal("serve GRPC")
-			cancel()
-		}
+		errCh <- server.Serve(l)
 	}()
 	return nil
 }
 
-func handleSignals(ctx context.Context, signals chan os.Signal, server *grpc.Server) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-signals:
-		logrus.Infof("stopping server")
-		server.Stop()
-		return nil
-	}
-}
-
-func debugGrpcErrors() grpc.ServerOption {
+func unaryInterceptor(globalCtx context.Context) grpc.ServerOption {
 	return grpc.UnaryInterceptor(func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+
+		go func() {
+			select {
+			case <-ctx.Done():
+			case <-globalCtx.Done():
+				cancel()
+			}
+		}()
+
 		resp, err = handler(ctx, req)
 		if err != nil {
 			logrus.Errorf("%s returned error: %+v", info.FullMethod, err)

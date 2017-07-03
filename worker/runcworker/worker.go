@@ -44,6 +44,7 @@ func New(root string) (worker.Worker, error) {
 		Log:          filepath.Join(root, "runc-log.json"),
 		LogFormat:    runc.JSON,
 		PdeathSignal: syscall.SIGKILL,
+		Setpgid:      true,
 	}
 
 	w := &runcworker{
