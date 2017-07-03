@@ -7,7 +7,7 @@ import "google/protobuf/any.proto";
 import "google/protobuf/empty.proto";
 import "google/protobuf/field_mask.proto";
 import "google/protobuf/timestamp.proto";
-import "github.com/containerd/containerd/api/types/descriptor/descriptor.proto";
+import "github.com/containerd/containerd/api/types/descriptor.proto";
 
 option go_package = "github.com/containerd/containerd/api/services/containers/v1;containers";
 
@@ -57,7 +57,7 @@ message Container {
 		// Name is the name of the runtime.
 		string name = 1;
 		// Options specify additional runtime initialization options.
-		map<string, string> options = 2;
+		google.protobuf.Any options = 2;
 	}
 	// Runtime specifies which runtime to use for executing this container.
 	Runtime runtime = 4;

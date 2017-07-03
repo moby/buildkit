@@ -54,6 +54,10 @@ go run examples/buildkit/buildkit.go | buildctl build
 
 `buildctl build` will show interactive progress bar by default while the build job is running. It will also show you the path to the trace file that contains all information about the timing of the individual steps and logs.
 
+#### Supported runc version
+
+During development buildkit is tested with the version of runc that is being used by the containerd repository. Please refer to [runc.md](https://github.com/containerd/containerd/blob/8bd8030edec48308a8a2e9b71598a3c4c898784f/RUNC.md) for more information.
+
 
 #### Contributing
 

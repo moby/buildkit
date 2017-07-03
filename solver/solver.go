@@ -114,6 +114,12 @@ func (s *Solver) getRefs(ctx context.Context, j *job, g *opVertex) (retRef []cac
 		}
 	}
 
+	defer func() {
+		for _, r := range inputs {
+			go r.Release(context.TODO())
+		}
+	}()
+
 	// release anything else
 	for _, r := range refs {
 		for _, r := range r {

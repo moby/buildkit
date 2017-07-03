@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/containerd/containerd/content"
+	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
@@ -239,7 +240,7 @@ func showProgress(ctx context.Context, ongoing *jobs, cs content.Store) {
 			if !j.done {
 				info, err := cs.Info(context.TODO(), j.Digest)
 				if err != nil {
-					if content.IsNotFound(err) {
+					if errdefs.IsNotFound(err) {
 						pw.Write(j.Digest.String(), progress.Status{
 							Action: "waiting",
 						})
