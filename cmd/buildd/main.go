@@ -35,6 +35,11 @@ func main() {
 			Usage: "listening socket",
 			Value: "/run/buildkit/buildd.sock",
 		},
+		cli.StringFlag{
+			Name:  "debugaddr",
+			Usage: "Debugging address (eg. 0.0.0.0:6060)",
+			Value: "",
+		},
 	}
 
 	app.Flags = appendFlags(app.Flags)
@@ -42,6 +47,12 @@ func main() {
 	app.Action = func(c *cli.Context) error {
 		signals := make(chan os.Signal, 2048)
 		signal.Notify(signals, unix.SIGTERM, unix.SIGINT)
+
+		if debugAddr := c.GlobalString("debugaddr"); debugAddr != "" {
+			if err := setupDebugHandlers(debugAddr); err != nil {
+				return err
+			}
+		}
 
 		server := grpc.NewServer(debugGrpcErrors())
 
