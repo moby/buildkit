@@ -2,20 +2,17 @@ package cache
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"sync"
 
-	"github.com/boltdb/bolt"
+	"github.com/Sirupsen/logrus"
 	cdsnapshot "github.com/containerd/containerd/snapshot"
+	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
-
-const dbFile = "cache.db"
 
 var (
 	errLocked   = errors.New("locked")
@@ -24,9 +21,9 @@ var (
 )
 
 type ManagerOpt struct {
-	Snapshotter snapshot.Snapshotter
-	Root        string
-	GCPolicy    GCPolicy
+	Snapshotter   snapshot.Snapshotter
+	GCPolicy      GCPolicy
+	MetadataStore *metadata.Store
 }
 
 type Accessor interface {
@@ -48,30 +45,20 @@ type Manager interface {
 }
 
 type cacheManager struct {
-	db      *bolt.DB // note: no particual reason for bolt
 	records map[string]*cacheRecord
 	mu      sync.Mutex
 	ManagerOpt
+	md *metadata.Store
 }
 
 func NewManager(opt ManagerOpt) (Manager, error) {
-	if err := os.MkdirAll(opt.Root, 0700); err != nil {
-		return nil, errors.Wrapf(err, "failed to create %s", opt.Root)
-	}
-
-	p := filepath.Join(opt.Root, dbFile)
-	db, err := bolt.Open(p, 0600, nil)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to open database file %s", p)
-	}
-
 	cm := &cacheManager{
 		ManagerOpt: opt,
-		db:         db,
+		md:         opt.MetadataStore,
 		records:    make(map[string]*cacheRecord),
 	}
 
-	if err := cm.init(); err != nil {
+	if err := cm.init(context.TODO()); err != nil {
 		return nil, err
 	}
 
@@ -80,17 +67,24 @@ func NewManager(opt ManagerOpt) (Manager, error) {
 	return cm, nil
 }
 
-func (cm *cacheManager) init() error {
-	// load all refs from db
-	// compare with the walk from Snapshotter
-	// delete items that are not in db (or implement broken transaction detection)
-	// keep all refs in memory(maybe in future work on disk only or with lru)
+func (cm *cacheManager) init(ctx context.Context) error {
+	items, err := cm.md.All()
+	if err != nil {
+		return err
+	}
+
+	for _, si := range items {
+		if _, err := cm.load(ctx, si.ID()); err != nil {
+			logrus.Debugf("could not load snapshot %s, %v", si.ID(), err)
+			cm.md.Clear(si.ID())
+		}
+	}
 	return nil
 }
 
 func (cm *cacheManager) Close() error {
 	// TODO: allocate internal context and cancel it here
-	return cm.db.Close()
+	return cm.md.Close()
 }
 
 func (cm *cacheManager) Get(ctx context.Context, id string) (ImmutableRef, error) {
@@ -99,36 +93,16 @@ func (cm *cacheManager) Get(ctx context.Context, id string) (ImmutableRef, error
 	return cm.get(ctx, id)
 }
 func (cm *cacheManager) get(ctx context.Context, id string) (ImmutableRef, error) {
-	rec, ok := cm.records[id]
-	if !ok {
-		info, err := cm.Snapshotter.Stat(ctx, id)
-		if err != nil {
-			return nil, err
-		}
-		if info.Kind != cdsnapshot.KindCommitted {
-			return nil, errors.Wrapf(errInvalid, "can't lazy load active %s", id)
-		}
-
-		var parent ImmutableRef
-		if info.Parent != "" {
-			parent, err = cm.get(ctx, info.Parent)
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		rec = &cacheRecord{
-			id:     id,
-			cm:     cm,
-			refs:   make(map[Mountable]struct{}),
-			parent: parent,
-			size:   sizeUnknown,
-		}
-		cm.records[id] = rec // TODO: store to db
+	rec, err := cm.load(ctx, id)
+	if err != nil {
+		return nil, err
 	}
-
 	rec.mu.Lock()
 	defer rec.mu.Unlock()
+
+	if rec.mutable {
+		return nil, errors.Wrapf(errInvalid, "invalid mutable ref %s", id)
+	}
 
 	if rec.mutable && !rec.frozen {
 		if len(rec.refs) != 0 {
@@ -140,6 +114,38 @@ func (cm *cacheManager) get(ctx context.Context, id string) (ImmutableRef, error
 
 	return rec.ref(), nil
 }
+
+func (cm *cacheManager) load(ctx context.Context, id string) (*cacheRecord, error) {
+	if rec, ok := cm.records[id]; ok {
+		return rec, nil
+	}
+
+	info, err := cm.Snapshotter.Stat(ctx, id)
+	if err != nil {
+		return nil, errors.Wrap(errNotFound, err.Error())
+	}
+
+	var parent ImmutableRef
+	if info.Parent != "" {
+		parent, err = cm.get(ctx, info.Parent)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	md, _ := cm.md.Get(id)
+
+	rec := &cacheRecord{
+		mutable: info.Kind != cdsnapshot.KindCommitted,
+		cm:      cm,
+		refs:    make(map[Mountable]struct{}),
+		parent:  parent,
+		md:      &md,
+	}
+	cm.records[id] = rec // TODO: store to db
+	return rec, nil
+}
+
 func (cm *cacheManager) New(ctx context.Context, s ImmutableRef) (MutableRef, error) {
 	id := identity.NewID()
 
@@ -161,13 +167,14 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef) (MutableRef, er
 		return nil, errors.Wrapf(err, "failed to prepare %s", id)
 	}
 
+	md, _ := cm.md.Get(id)
+
 	rec := &cacheRecord{
 		mutable: true,
-		id:      id,
 		cm:      cm,
 		refs:    make(map[Mountable]struct{}),
 		parent:  parent,
-		size:    sizeUnknown,
+		md:      &md,
 	}
 
 	cm.mu.Lock()
@@ -181,9 +188,9 @@ func (cm *cacheManager) GetMutable(ctx context.Context, id string) (MutableRef, 
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	rec, ok := cm.records[id]
-	if !ok {
-		return nil, errors.Wrapf(errNotFound, "%s not found", id)
+	rec, err := cm.load(ctx, id)
+	if err != nil {
+		return nil, err
 	}
 
 	rec.mu.Lock()
@@ -217,7 +224,7 @@ func (cm *cacheManager) DiskUsage(ctx context.Context) ([]*client.UsageInfo, err
 		c := &cacheUsageInfo{
 			refs:    len(cr.refs),
 			mutable: cr.mutable,
-			size:    cr.size,
+			size:    getSize(cr.md),
 		}
 		if cr.parent != nil {
 			c.parent = cr.parent.ID()

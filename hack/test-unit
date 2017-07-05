@@ -5,4 +5,4 @@ set -eu -o pipefail -x
 # update this to iidfile after 17.06
 docker build -t buildkit:test --target unit-tests -f ./hack/dockerfiles/test.Dockerfile --force-rm .
 docker run --rm -v /tmp --privileged buildkit:test go test ${TESTFLAGS:--v} ${TESTPKGS:-./...}
-
+docker run --rm -v /tmp --privileged buildkit:test go test -tags standalone -v ./control

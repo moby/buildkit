@@ -4,13 +4,12 @@ import (
 	"sync"
 
 	"github.com/containerd/containerd/mount"
+	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
-
-const sizeUnknown int64 = -1
 
 type ImmutableRef interface {
 	Mountable
@@ -38,14 +37,14 @@ type cacheRecord struct {
 	frozen  bool
 	// meta   SnapMeta
 	refs      map[Mountable]struct{}
-	id        string
 	cm        *cacheManager
 	parent    ImmutableRef
+	md        *metadata.StorageItem
 	view      string
 	viewMount []mount.Mount
 
 	sizeG flightcontrol.Group
-	size  int64
+	// size  int64
 }
 
 // hold manager lock before calling
@@ -64,19 +63,22 @@ func (cr *cacheRecord) mref() *mutableRef {
 
 func (cr *cacheRecord) Size(ctx context.Context) (int64, error) {
 	// this expects that usage() is implemented lazily
-	s, err := cr.sizeG.Do(ctx, cr.id, func(ctx context.Context) (interface{}, error) {
+	s, err := cr.sizeG.Do(ctx, cr.ID(), func(ctx context.Context) (interface{}, error) {
 		cr.mu.Lock()
-		s := cr.size
+		s := getSize(cr.md)
 		cr.mu.Unlock()
 		if s != sizeUnknown {
 			return s, nil
 		}
-		usage, err := cr.cm.ManagerOpt.Snapshotter.Usage(ctx, cr.id)
+		usage, err := cr.cm.ManagerOpt.Snapshotter.Usage(ctx, cr.ID())
 		if err != nil {
-			return s, errors.Wrapf(err, "failed to get usage for %s", cr.id)
+			return s, errors.Wrapf(err, "failed to get usage for %s", cr.ID())
 		}
 		cr.mu.Lock()
-		cr.size = usage.Size
+		setSize(cr.md, usage.Size)
+		if err := cr.md.Commit(); err != nil {
+			return s, err
+		}
 		cr.mu.Unlock()
 		return usage.Size, nil
 	})
@@ -88,18 +90,18 @@ func (cr *cacheRecord) Mount(ctx context.Context) ([]mount.Mount, error) {
 	defer cr.mu.Unlock()
 
 	if cr.mutable {
-		m, err := cr.cm.Snapshotter.Mounts(ctx, cr.id)
+		m, err := cr.cm.Snapshotter.Mounts(ctx, cr.ID())
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to mount %s", cr.id)
+			return nil, errors.Wrapf(err, "failed to mount %s", cr.ID())
 		}
 		return m, nil
 	}
 	if cr.viewMount == nil { // TODO: handle this better
 		cr.view = identity.NewID()
-		m, err := cr.cm.Snapshotter.View(ctx, cr.view, cr.id)
+		m, err := cr.cm.Snapshotter.View(ctx, cr.view, cr.ID())
 		if err != nil {
 			cr.view = ""
-			return nil, errors.Wrapf(err, "failed to mount %s", cr.id)
+			return nil, errors.Wrapf(err, "failed to mount %s", cr.ID())
 		}
 		cr.viewMount = m
 	}
@@ -107,7 +109,7 @@ func (cr *cacheRecord) Mount(ctx context.Context) ([]mount.Mount, error) {
 }
 
 func (cr *cacheRecord) ID() string {
-	return cr.id
+	return cr.md.ID()
 }
 
 type immutableRef struct {
@@ -167,7 +169,10 @@ func (sr *mutableRef) Freeze() (ImmutableRef, error) {
 	sri := sr.ref()
 
 	sri.frozen = true
-	sri.size = sizeUnknown
+	setSize(sr.md, sizeUnknown)
+	if err := sr.md.Commit(); err != nil {
+		return nil, err
+	}
 
 	return sri, nil
 }
@@ -191,19 +196,24 @@ func (sr *mutableRef) ReleaseAndCommit(ctx context.Context) (ImmutableRef, error
 
 	id := identity.NewID()
 
-	err := sr.cm.Snapshotter.Commit(ctx, id, sr.id)
+	err := sr.cm.Snapshotter.Commit(ctx, id, sr.ID())
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to commit %s", sr.id)
+		return nil, errors.Wrapf(err, "failed to commit %s", sr.ID())
 	}
 
-	delete(sr.cm.records, sr.id)
+	delete(sr.cm.records, sr.ID())
+
+	if err := sr.cm.md.Clear(sr.ID()); err != nil {
+		return nil, err
+	}
+
+	md, _ := sr.cm.md.Get(id)
 
 	rec := &cacheRecord{
-		id:     id,
 		cm:     sr.cm,
 		parent: sr.parent,
 		refs:   make(map[Mountable]struct{}),
-		size:   sizeUnknown,
+		md:     &md,
 	}
 	sr.cm.records[id] = rec // TODO: save to db
 

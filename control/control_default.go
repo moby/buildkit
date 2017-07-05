@@ -9,6 +9,7 @@ import (
 	"github.com/containerd/containerd/rootfs"
 	ctdsnapshot "github.com/containerd/containerd/snapshot"
 	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/snapshot/blobmapping"
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/source/containerimage"
@@ -21,18 +22,23 @@ type pullDeps struct {
 }
 
 func defaultControllerOpts(root string, pd pullDeps) (*Opt, error) {
+	md, err := metadata.NewStore(filepath.Join(root, "metadata.db"))
+	if err != nil {
+		return nil, err
+	}
+
 	snapshotter, err := blobmapping.NewSnapshotter(blobmapping.Opt{
-		Root:        filepath.Join(root, "blobmap"),
-		Content:     pd.ContentStore,
-		Snapshotter: pd.Snapshotter,
+		Content:       pd.ContentStore,
+		Snapshotter:   pd.Snapshotter,
+		MetadataStore: md,
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	cm, err := cache.NewManager(cache.ManagerOpt{
-		Snapshotter: snapshotter,
-		Root:        filepath.Join(root, "cachemanager"),
+		Snapshotter:   snapshotter,
+		MetadataStore: md,
 	})
 	if err != nil {
 		return nil, err

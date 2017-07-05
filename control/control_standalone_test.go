@@ -11,6 +11,7 @@ import (
 
 	"github.com/containerd/containerd/namespaces"
 	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/snapshot/blobmapping"
 	"github.com/moby/buildkit/source"
@@ -32,16 +33,19 @@ func TestControl(t *testing.T) {
 	cd, err := newStandalonePullDeps(tmpdir)
 	assert.NoError(t, err)
 
+	md, err := metadata.NewStore(filepath.Join(tmpdir, "metadata.db"))
+	assert.NoError(t, err)
+
 	snapshotter, err := blobmapping.NewSnapshotter(blobmapping.Opt{
-		Root:        filepath.Join(tmpdir, "blobmap"),
-		Content:     cd.ContentStore,
-		Snapshotter: cd.Snapshotter,
+		Content:       cd.ContentStore,
+		Snapshotter:   cd.Snapshotter,
+		MetadataStore: md,
 	})
 	assert.NoError(t, err)
 
 	cm, err := cache.NewManager(cache.ManagerOpt{
-		Snapshotter: snapshotter,
-		Root:        filepath.Join(tmpdir, "cachemanager"),
+		Snapshotter:   snapshotter,
+		MetadataStore: md,
 	})
 	assert.NoError(t, err)
 
