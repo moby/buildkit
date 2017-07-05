@@ -9,6 +9,7 @@ import (
 
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/snapshot/naive"
+	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
@@ -24,9 +25,12 @@ func TestManager(t *testing.T) {
 	snapshotter, err := naive.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	assert.NoError(t, err)
 
+	md, err := metadata.NewStore(filepath.Join(tmpdir, "metadata.db"))
+	assert.NoError(t, err)
+
 	cm, err := NewManager(ManagerOpt{
-		Root:        tmpdir,
-		Snapshotter: snapshotter,
+		Snapshotter:   snapshotter,
+		MetadataStore: md,
 	})
 	assert.NoError(t, err)
 

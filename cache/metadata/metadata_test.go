@@ -21,7 +21,7 @@ func TestGetSetSearch(t *testing.T) {
 	require.NoError(t, err)
 	defer s.Close()
 
-	si, ok := s.GetItem("foo")
+	si, ok := s.Get("foo")
 	require.False(t, ok)
 
 	v := si.Get("bar")
@@ -52,7 +52,7 @@ func TestGetSetSearch(t *testing.T) {
 	require.NoError(t, err)
 	defer s.Close()
 
-	si, ok = s.GetItem("foo")
+	si, ok = s.Get("foo")
 	require.True(t, ok)
 
 	v = si.Get("bar")
@@ -65,7 +65,7 @@ func TestGetSetSearch(t *testing.T) {
 
 	// add second item to test Search
 
-	si, ok = s.GetItem("foo2")
+	si, ok = s.Get("foo2")
 	require.False(t, ok)
 
 	v, err = NewValue("foobar2")
@@ -103,7 +103,7 @@ func TestGetSetSearch(t *testing.T) {
 
 	require.Equal(t, "foo2", sis[0].ID())
 
-	_, ok = s.GetItem("foo")
+	_, ok = s.Get("foo")
 	require.False(t, ok)
 }
 
@@ -127,7 +127,7 @@ func TestIndexes(t *testing.T) {
 	}
 
 	for _, tcase := range tcases {
-		si, ok := s.GetItem(tcase.key)
+		si, ok := s.Get(tcase.key)
 		require.False(t, ok)
 
 		v, err := NewValue(tcase.valueKey)

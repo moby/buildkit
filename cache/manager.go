@@ -2,8 +2,6 @@ package cache
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"sync"
 
 	"github.com/Sirupsen/logrus"
@@ -16,8 +14,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const dbFile = "cache.db"
-
 var (
 	errLocked   = errors.New("locked")
 	errNotFound = errors.New("not found")
@@ -25,9 +21,9 @@ var (
 )
 
 type ManagerOpt struct {
-	Snapshotter snapshot.Snapshotter
-	Root        string
-	GCPolicy    GCPolicy
+	Snapshotter   snapshot.Snapshotter
+	GCPolicy      GCPolicy
+	MetadataStore *metadata.Store
 }
 
 type Accessor interface {
@@ -56,18 +52,9 @@ type cacheManager struct {
 }
 
 func NewManager(opt ManagerOpt) (Manager, error) {
-	if err := os.MkdirAll(opt.Root, 0700); err != nil {
-		return nil, errors.Wrapf(err, "failed to create %s", opt.Root)
-	}
-
-	md, err := metadata.NewStore(filepath.Join(opt.Root, dbFile))
-	if err != nil {
-		return nil, err
-	}
-
 	cm := &cacheManager{
 		ManagerOpt: opt,
-		md:         md,
+		md:         opt.MetadataStore,
 		records:    make(map[string]*cacheRecord),
 	}
 
