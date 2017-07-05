@@ -12,14 +12,26 @@ import (
 	"github.com/urfave/cli"
 )
 
-var DumpCommand = cli.Command{
-	Name:   "dump",
-	Usage:  "dump LLB in human-readable format. LLB must be passed via stdin. This command does not require the daemon to be running.",
-	Action: dumpLLB,
+var DumpLLBCommand = cli.Command{
+	Name:      "dump-llb",
+	Usage:     "dump LLB in human-readable format. LLB can be also passed via stdin. This command does not require the daemon to be running.",
+	ArgsUsage: "<llbfile>",
+	Action:    dumpLLB,
 }
 
 func dumpLLB(clicontext *cli.Context) error {
-	ops, err := loadLLB(os.Stdin)
+	var r io.Reader
+	if llbFile := clicontext.Args().First(); llbFile != "" && llbFile != "-" {
+		f, err := os.Open(llbFile)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		r = f
+	} else {
+		r = os.Stdin
+	}
+	ops, err := loadLLB(r)
 	if err != nil {
 		return err
 	}
