@@ -32,6 +32,9 @@ message UsageRecord {
 message SolveRequest {
 	string Ref = 1;
 	repeated bytes Definition = 2; // TODO: remove repeated
+	int64 SourceOpConcurrency = 3;
+	int64 ExecOpConcurrency = 4;
+	// TODO: add CopyOpConcurrency when CopyOp implemented
 }
 
 message SolveResponse {

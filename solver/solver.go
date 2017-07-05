@@ -33,10 +33,32 @@ func New(opt Opt) *Solver {
 	return &Solver{opt: opt, jobs: newJobList()}
 }
 
-func (s *Solver) Solve(ctx context.Context, id string, g *opVertex) error {
+type Concurrency struct {
+	SourceOp      int
+	ExecOp        int
+	sourceOpLimit chan struct{}
+	execOpLimit   chan struct{}
+}
+
+func (c *Concurrency) init() error {
+	if c.SourceOp < 0 {
+		return errors.New("negative SourceOpConcurrency")
+	}
+	if c.ExecOp < 0 {
+		return errors.New("negative ExecOpConcurrency")
+	}
+	c.sourceOpLimit = make(chan struct{}, c.SourceOp)
+	c.execOpLimit = make(chan struct{}, c.ExecOp)
+	return nil
+}
+
+func (s *Solver) Solve(ctx context.Context, id string, g *opVertex, concurrency *Concurrency) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	if err := concurrency.init(); err != nil {
+		return err
+	}
 	pr, ctx, closeProgressWriter := progress.NewContext(ctx)
 
 	if len(g.inputs) > 0 { // TODO: detect op_return better
@@ -48,7 +70,7 @@ func (s *Solver) Solve(ctx context.Context, id string, g *opVertex) error {
 		return err
 	}
 
-	refs, err := s.getRefs(ctx, j, j.g)
+	refs, err := s.getRefs(ctx, j, j.g, concurrency)
 	closeProgressWriter()
 	s.active.cancel(j)
 	if err != nil {
@@ -71,7 +93,7 @@ func (s *Solver) Status(ctx context.Context, id string, statusChan chan *client.
 	return j.pipe(ctx, statusChan)
 }
 
-func (s *Solver) getRefs(ctx context.Context, j *job, g *opVertex) (retRef []cache.ImmutableRef, retErr error) {
+func (s *Solver) getRefs(ctx context.Context, j *job, g *opVertex, concurrency *Concurrency) (retRef []cache.ImmutableRef, retErr error) {
 
 	s.active.probe(j, g.dgst) // this registers the key with the job
 
@@ -81,8 +103,9 @@ func (s *Solver) getRefs(ctx context.Context, j *job, g *opVertex) (retRef []cac
 		eg, ctx := errgroup.WithContext(ctx)
 		for i, in := range g.inputs {
 			func(i int, in *opVertex) {
+
 				eg.Go(func() error {
-					r, err := s.getRefs(ctx, j, in)
+					r, err := s.getRefs(ctx, j, in, concurrency)
 					if err != nil {
 						return err
 					}
@@ -130,7 +153,7 @@ func (s *Solver) getRefs(ctx context.Context, j *job, g *opVertex) (retRef []cac
 	pw, _, ctx := progress.FromContext(ctx, progress.WithMetadata("vertex", g.dgst))
 	defer pw.Close()
 
-	g.notifyStarted(ctx)
+	// notifyStarted is called in runVertex
 	defer func() {
 		g.notifyCompleted(ctx, retErr)
 	}()
@@ -142,7 +165,7 @@ func (s *Solver) getRefs(ctx context.Context, j *job, g *opVertex) (retRef []cac
 			}
 			return nil, nil
 		}
-		refs, err := s.runVertex(doctx, g, inputs)
+		refs, err := s.runVertex(doctx, g, inputs, concurrency)
 		if err != nil {
 			return nil, err
 		}
@@ -155,15 +178,45 @@ func (s *Solver) getRefs(ctx context.Context, j *job, g *opVertex) (retRef []cac
 	return s.active.get(g.dgst)
 }
 
-func (s *Solver) runVertex(ctx context.Context, g *opVertex, inputs []cache.ImmutableRef) ([]cache.ImmutableRef, error) {
+func (s *Solver) runVertex(ctx context.Context, g *opVertex, inputs []cache.ImmutableRef, concurrency *Concurrency) ([]cache.ImmutableRef, error) {
+	var (
+		refs []cache.ImmutableRef
+		err  error
+	)
+	done := make(chan struct{})
 	switch op := g.op.Op.(type) {
 	case *pb.Op_Source:
-		return runSourceOp(ctx, s.opt.SourceManager, op)
+		if concurrency.SourceOp == 0 {
+			g.notifyStarted(ctx)
+			refs, err = runSourceOp(ctx, s.opt.SourceManager, op)
+		} else {
+			concurrency.sourceOpLimit <- struct{}{}
+			g.notifyStarted(ctx)
+			go func() {
+				refs, err = runSourceOp(ctx, s.opt.SourceManager, op)
+				<-concurrency.sourceOpLimit
+				done <- struct{}{}
+			}()
+			<-done
+		}
 	case *pb.Op_Exec:
-		return runExecOp(ctx, s.opt.CacheManager, s.opt.Worker, op, inputs)
+		if concurrency.ExecOp == 0 {
+			g.notifyStarted(ctx)
+			refs, err = runExecOp(ctx, s.opt.CacheManager, s.opt.Worker, op, inputs)
+		} else {
+			concurrency.execOpLimit <- struct{}{}
+			g.notifyStarted(ctx)
+			go func() {
+				refs, err = runExecOp(ctx, s.opt.CacheManager, s.opt.Worker, op, inputs)
+				<-concurrency.execOpLimit
+				done <- struct{}{}
+			}()
+			<-done
+		}
 	default:
-		return nil, errors.Errorf("invalid op type %T", g.op.Op)
+		err = errors.Errorf("invalid op type %T", g.op.Op)
 	}
+	return refs, err
 }
 
 type opVertex struct {
