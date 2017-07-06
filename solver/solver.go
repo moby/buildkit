@@ -1,49 +1,77 @@
 package solver
 
 import (
-	"strings"
-	"sync"
-	"time"
-
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/worker"
-	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 )
 
-type Opt struct {
+type LLBOpt struct {
 	SourceManager *source.Manager
 	CacheManager  cache.Manager // TODO: this shouldn't be needed before instruction cache
 	Worker        worker.Worker
 }
 
+func NewLLBSolver(opt LLBOpt) *Solver {
+	return New(func(v Vertex) (Op, error) {
+		switch op := v.Sys().(type) {
+		case *pb.Op_Source:
+			return newSourceOp(op, opt.SourceManager)
+		case *pb.Op_Exec:
+			return newExecOp(op, opt.CacheManager, opt.Worker)
+		default:
+			return nil, errors.Errorf("invalid op type %T", op)
+		}
+	})
+}
+
+// ResolveOpFunc finds an Op implementation for a vertex
+type ResolveOpFunc func(Vertex) (Op, error)
+
+// Reference is a reference to the object passed through the build steps.
+type Reference interface {
+	Release(context.Context) error
+}
+
+// Op is an implementation for running a vertex
+type Op interface {
+	// CacheKeys(context.Context, [][]string) ([]string, error)
+	Run(ctx context.Context, inputs []Reference) (outputs []Reference, err error)
+}
+
+// type Cache interface {
+// 	Lookup(context.Context, string) ([]Reference, error)
+// }
+
 type Solver struct {
-	opt    Opt
-	jobs   *jobList
-	active refCache
+	resolve ResolveOpFunc
+	jobs    *jobList
+	active  refCache
 }
 
-func New(opt Opt) *Solver {
-	return &Solver{opt: opt, jobs: newJobList()}
+func New(resolve ResolveOpFunc) *Solver {
+	return &Solver{resolve: resolve, jobs: newJobList()}
 }
 
-func (s *Solver) Solve(ctx context.Context, id string, g *opVertex) error {
+func (s *Solver) Solve(ctx context.Context, id string, v Vertex) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	pr, ctx, closeProgressWriter := progress.NewContext(ctx)
 
-	if len(g.inputs) > 0 { // TODO: detect op_return better
-		g = g.inputs[0]
+	if len(v.Inputs()) > 0 { // TODO: detect op_return better
+		v = v.Inputs()[0].Vertex
 	}
 
-	j, err := s.jobs.new(ctx, id, g, pr)
+	vv := toInternalVertex(v)
+
+	j, err := s.jobs.new(ctx, id, vv, pr)
 	if err != nil {
 		return err
 	}
@@ -71,16 +99,16 @@ func (s *Solver) Status(ctx context.Context, id string, statusChan chan *client.
 	return j.pipe(ctx, statusChan)
 }
 
-func (s *Solver) getRefs(ctx context.Context, j *job, g *opVertex) (retRef []cache.ImmutableRef, retErr error) {
+func (s *Solver) getRefs(ctx context.Context, j *job, g *vertex) (retRef []Reference, retErr error) {
 
-	s.active.probe(j, g.dgst) // this registers the key with the job
+	s.active.probe(j, g.digest) // this registers the key with the job
 
 	// refs contains all outputs for all input vertexes
 	refs := make([][]*sharedRef, len(g.inputs))
 	if len(g.inputs) > 0 {
 		eg, ctx := errgroup.WithContext(ctx)
 		for i, in := range g.inputs {
-			func(i int, in *opVertex) {
+			func(i int, in *vertex) {
 				eg.Go(func() error {
 					r, err := s.getRefs(ctx, j, in)
 					if err != nil {
@@ -91,7 +119,7 @@ func (s *Solver) getRefs(ctx context.Context, j *job, g *opVertex) (retRef []cac
 					}
 					return nil
 				})
-			}(i, in)
+			}(i, in.vertex)
 		}
 		err := eg.Wait()
 		if err != nil {
@@ -105,17 +133,13 @@ func (s *Solver) getRefs(ctx context.Context, j *job, g *opVertex) (retRef []cac
 	}
 
 	// determine the inputs that were needed
-	inputs := make([]cache.ImmutableRef, 0, len(g.op.Inputs))
-	for _, inp := range g.op.Inputs {
-		for i, v := range g.inputs {
-			if v.dgst == digest.Digest(inp.Digest) {
-				inputs = append(inputs, refs[i][int(inp.Index)].Clone())
-			}
-		}
+	inputRefs := make([]Reference, 0, len(g.inputs))
+	for i, inp := range g.inputs {
+		inputRefs = append(inputRefs, refs[i][inp.index].Clone())
 	}
 
 	defer func() {
-		for _, r := range inputs {
+		for _, r := range inputRefs {
 			go r.Release(context.TODO())
 		}
 	}()
@@ -127,7 +151,7 @@ func (s *Solver) getRefs(ctx context.Context, j *job, g *opVertex) (retRef []cac
 		}
 	}
 
-	pw, _, ctx := progress.FromContext(ctx, progress.WithMetadata("vertex", g.dgst))
+	pw, _, ctx := progress.FromContext(ctx, progress.WithMetadata("vertex", g.Digest()))
 	defer pw.Close()
 
 	g.notifyStarted(ctx)
@@ -135,76 +159,26 @@ func (s *Solver) getRefs(ctx context.Context, j *job, g *opVertex) (retRef []cac
 		g.notifyCompleted(ctx, retErr)
 	}()
 
-	_, err := s.active.Do(ctx, g.dgst.String(), func(doctx context.Context) (interface{}, error) {
-		if hit := s.active.probe(j, g.dgst); hit {
-			if err := s.active.writeProgressSnapshot(ctx, g.dgst); err != nil {
+	_, err := s.active.Do(ctx, g.digest.String(), func(doctx context.Context) (interface{}, error) {
+		if hit := s.active.probe(j, g.digest); hit {
+			if err := s.active.writeProgressSnapshot(ctx, g.digest); err != nil {
 				return nil, err
 			}
 			return nil, nil
 		}
-		refs, err := s.runVertex(doctx, g, inputs)
+		op, err := s.resolve(g)
 		if err != nil {
 			return nil, err
 		}
-		s.active.set(doctx, g.dgst, refs)
+		refs, err := op.Run(doctx, inputRefs)
+		if err != nil {
+			return nil, err
+		}
+		s.active.set(doctx, g.digest, refs)
 		return nil, nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	return s.active.get(g.dgst)
-}
-
-func (s *Solver) runVertex(ctx context.Context, g *opVertex, inputs []cache.ImmutableRef) ([]cache.ImmutableRef, error) {
-	switch op := g.op.Op.(type) {
-	case *pb.Op_Source:
-		return runSourceOp(ctx, s.opt.SourceManager, op)
-	case *pb.Op_Exec:
-		return runExecOp(ctx, s.opt.CacheManager, s.opt.Worker, op, inputs)
-	default:
-		return nil, errors.Errorf("invalid op type %T", g.op.Op)
-	}
-}
-
-type opVertex struct {
-	mu     sync.Mutex
-	op     *pb.Op
-	inputs []*opVertex
-	err    error
-	dgst   digest.Digest
-	vtx    client.Vertex
-}
-
-func (g *opVertex) inputRequiresExport(i int) bool {
-	return true // TODO
-}
-
-func (g *opVertex) notifyStarted(ctx context.Context) {
-	pw, _, _ := progress.FromContext(ctx)
-	defer pw.Close()
-	now := time.Now()
-	g.vtx.Started = &now
-	pw.Write(g.dgst.String(), g.vtx)
-}
-
-func (g *opVertex) notifyCompleted(ctx context.Context, err error) {
-	pw, _, _ := progress.FromContext(ctx)
-	defer pw.Close()
-	now := time.Now()
-	g.vtx.Completed = &now
-	if err != nil {
-		g.vtx.Error = err.Error()
-	}
-	pw.Write(g.dgst.String(), g.vtx)
-}
-
-func (g *opVertex) name() string {
-	switch op := g.op.Op.(type) {
-	case *pb.Op_Source:
-		return op.Source.Identifier
-	case *pb.Op_Exec:
-		return strings.Join(op.Exec.Meta.Args, " ")
-	default:
-		return "unknown"
-	}
+	return s.active.get(g.digest)
 }

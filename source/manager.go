@@ -13,6 +13,16 @@ type Source interface {
 	Pull(ctx context.Context, id Identifier) (cache.ImmutableRef, error)
 }
 
+// type Source interface {
+// 	ID() string
+// 	Resolve(ctx context.Context, id Identifier) (SourceInstance, error)
+// }
+//
+// type SourceInstance interface {
+// 	GetCacheKey(ctx context.Context) ([]string, error)
+// 	GetSnapshot(ctx context.Context) (cache.ImmutableRef, error)
+// }
+
 type Manager struct {
 	mu      sync.Mutex
 	sources map[string]Source

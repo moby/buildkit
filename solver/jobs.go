@@ -27,7 +27,7 @@ func newJobList() *jobList {
 	return jl
 }
 
-func (jl *jobList) new(ctx context.Context, id string, g *opVertex, pr progress.Reader) (*job, error) {
+func (jl *jobList) new(ctx context.Context, id string, g *vertex, pr progress.Reader) (*job, error) {
 	jl.mu.Lock()
 	defer jl.mu.Unlock()
 
@@ -75,15 +75,16 @@ func (jl *jobList) get(id string) (*job, error) {
 
 type job struct {
 	mu sync.Mutex
-	g  *opVertex
+	g  *vertex
 	pr *progress.MultiReader
 }
 
 func (j *job) pipe(ctx context.Context, ch chan *client.SolveStatus) error {
 	pr := j.pr.Reader(ctx)
 	for v := range walk(j.g) {
+		vv := v.(*vertex)
 		ss := &client.SolveStatus{
-			Vertexes: []*client.Vertex{&v.vtx},
+			Vertexes: []*client.Vertex{&vv.clientVertex},
 		}
 		select {
 		case <-ctx.Done():
@@ -141,23 +142,23 @@ func (j *job) pipe(ctx context.Context, ch chan *client.SolveStatus) error {
 	}
 }
 
-func walk(op *opVertex) chan *opVertex {
+func walk(v Vertex) chan Vertex {
 	cache := make(map[digest.Digest]struct{})
-	ch := make(chan *opVertex, 32)
+	ch := make(chan Vertex, 32)
 
-	var send func(op *opVertex)
-	send = func(op *opVertex) {
-		for _, v := range op.inputs {
-			send(v)
+	var send func(v Vertex)
+	send = func(v Vertex) {
+		for _, v := range v.Inputs() {
+			send(v.Vertex)
 		}
-		if _, ok := cache[op.dgst]; !ok {
-			ch <- op
-			cache[op.dgst] = struct{}{}
+		if _, ok := cache[v.Digest()]; !ok {
+			ch <- v
+			cache[v.Digest()] = struct{}{}
 		}
 	}
 
 	go func() {
-		send(op)
+		send(v)
 		close(ch)
 	}()
 	return ch

@@ -3,7 +3,6 @@ package solver
 import (
 	"sync"
 
-	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/progress"
 	digest "github.com/opencontainers/go-digest"
@@ -44,7 +43,7 @@ func (c *refCache) probe(j *job, key digest.Digest) bool {
 	c.mu.Unlock()
 	return false
 }
-func (c *refCache) get(key digest.Digest) ([]cache.ImmutableRef, error) {
+func (c *refCache) get(key digest.Digest) ([]Reference, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	v, ok := c.cache[key]
@@ -55,13 +54,13 @@ func (c *refCache) get(key digest.Digest) ([]cache.ImmutableRef, error) {
 	if v.value == nil {
 		return nil, errors.Errorf("no ref cache value set")
 	}
-	refs := make([]cache.ImmutableRef, 0, len(v.value))
+	refs := make([]Reference, 0, len(v.value))
 	for _, r := range v.value {
 		refs = append(refs, r.Clone())
 	}
 	return refs, nil
 }
-func (c *refCache) set(ctx context.Context, key digest.Digest, refs []cache.ImmutableRef) {
+func (c *refCache) set(ctx context.Context, key digest.Digest, refs []Reference) {
 	c.mu.Lock()
 	sharedRefs := make([]*sharedRef, 0, len(refs))
 	for _, r := range refs {
@@ -110,20 +109,20 @@ func (c *refCache) writeProgressSnapshot(ctx context.Context, key digest.Digest)
 type sharedRef struct {
 	mu   sync.Mutex
 	refs map[*sharedRefInstance]struct{}
-	main cache.ImmutableRef
-	cache.ImmutableRef
+	main Reference
+	Reference
 }
 
-func newSharedRef(main cache.ImmutableRef) *sharedRef {
+func newSharedRef(main Reference) *sharedRef {
 	mr := &sharedRef{
-		refs:         make(map[*sharedRefInstance]struct{}),
-		ImmutableRef: main,
+		refs:      make(map[*sharedRefInstance]struct{}),
+		Reference: main,
 	}
 	mr.main = mr.Clone()
 	return mr
 }
 
-func (mr *sharedRef) Clone() cache.ImmutableRef {
+func (mr *sharedRef) Clone() Reference {
 	mr.mu.Lock()
 	r := &sharedRefInstance{sharedRef: mr}
 	mr.refs[r] = struct{}{}
@@ -135,6 +134,16 @@ func (mr *sharedRef) Release(ctx context.Context) error {
 	return mr.main.Release(ctx)
 }
 
+func (mr *sharedRef) Sys() Reference {
+	sys := mr.Reference
+	if s, ok := sys.(interface {
+		Sys() Reference
+	}); ok {
+		return s.Sys()
+	}
+	return sys
+}
+
 type sharedRefInstance struct {
 	*sharedRef
 }
@@ -144,7 +153,7 @@ func (r *sharedRefInstance) Release(ctx context.Context) error {
 	defer r.sharedRef.mu.Unlock()
 	delete(r.sharedRef.refs, r)
 	if len(r.sharedRef.refs) == 0 {
-		return r.sharedRef.ImmutableRef.Release(ctx)
+		return r.sharedRef.Reference.Release(ctx)
 	}
 	return nil
 }
