@@ -1,11 +1,9 @@
 package debug
 
 import (
-	"encoding/json"
 	"fmt"
 	"path/filepath"
 
-	"github.com/moby/buildkit/cache/metadata"
 	"github.com/urfave/cli"
 )
 
@@ -22,15 +20,7 @@ var DumpMetadataCommand = cli.Command{
 	Action: func(clicontext *cli.Context) error {
 		dbFile := filepath.Join(clicontext.String("root"), "metadata.db")
 		return dumpBolt(dbFile, func(k, v []byte) string {
-			raw := fmt.Sprintf("%q: %q", string(k), string(v))
-			if len(v) == 0 {
-				return raw
-			}
-			var mv metadata.Value
-			if err := json.Unmarshal(v, &mv); err != nil {
-				return raw
-			}
-			return fmt.Sprintf("%q: {\"Data\":%q, \"Index\":%q}", string(k), string(mv.Data), mv.Index)
+			return fmt.Sprintf("%q: %s", string(k), string(v))
 		})
 	},
 }

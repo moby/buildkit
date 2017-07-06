@@ -261,8 +261,8 @@ func (s *StorageItem) SetValue(b *bolt.Bucket, key string, v Value) error {
 }
 
 type Value struct {
-	Data  []byte
-	Index string
+	Value json.RawMessage `json:"value,omitempty"`
+	Index string          `json:"index,omitempty"`
 	// External bool
 }
 
@@ -271,11 +271,11 @@ func NewValue(v interface{}) (*Value, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Value{Data: dt}, nil
+	return &Value{Value: json.RawMessage(dt)}, nil
 }
 
 func (v *Value) Unmarshal(target interface{}) error {
-	err := json.Unmarshal(v.Data, target)
+	err := json.Unmarshal(v.Value, target)
 	return err
 }
 
