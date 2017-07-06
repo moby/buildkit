@@ -13,7 +13,25 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func (c *Client) Solve(ctx context.Context, r io.Reader, statusChan chan *SolveStatus) error {
+type SolveOpt interface{}
+
+type withSourceOpConcurrency struct {
+	concurrency int
+}
+
+func WithSourceOpConcurrency(concurrency int) SolveOpt {
+	return &withSourceOpConcurrency{concurrency: concurrency}
+}
+
+type withExecOpConcurrency struct {
+	concurrency int
+}
+
+func WithExecOpConcurrency(concurrency int) SolveOpt {
+	return &withExecOpConcurrency{concurrency: concurrency}
+}
+
+func (c *Client) Solve(ctx context.Context, r io.Reader, statusChan chan *SolveStatus, opts ...SolveOpt) error {
 	def, err := llb.ReadFrom(r)
 	if err != nil {
 		return errors.Wrap(err, "failed to parse input")
@@ -21,6 +39,15 @@ func (c *Client) Solve(ctx context.Context, r io.Reader, statusChan chan *SolveS
 
 	if len(def) == 0 {
 		return errors.New("invalid empty definition")
+	}
+	sourceOpConcurrency := 0
+	execOpConcurrency := 0
+	for _, o := range opts {
+		if x, ok := o.(*withSourceOpConcurrency); ok {
+			sourceOpConcurrency = x.concurrency
+		} else if x, ok := o.(*withExecOpConcurrency); ok {
+			execOpConcurrency = x.concurrency
+		}
 	}
 
 	ref := generateID()
@@ -36,8 +63,10 @@ func (c *Client) Solve(ctx context.Context, r io.Reader, statusChan chan *SolveS
 			}()
 		}()
 		_, err = c.controlClient().Solve(ctx, &controlapi.SolveRequest{
-			Ref:        ref,
-			Definition: def,
+			Ref:                 ref,
+			Definition:          def,
+			SourceOpConcurrency: int64(sourceOpConcurrency),
+			ExecOpConcurrency:   int64(execOpConcurrency),
 		})
 		if err != nil {
 			return errors.Wrap(err, "failed to solve")

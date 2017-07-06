@@ -66,7 +66,10 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to load")
 	}
-	if err := c.solver.Solve(ctx, req.Ref, v); err != nil {
+	if err := c.solver.Solve(ctx, req.Ref, v, &solver.Concurrency{
+		SourceOp: int(req.SourceOpConcurrency),
+		ExecOp:   int(req.ExecOpConcurrency),
+	}); err != nil {
 		return nil, err
 	}
 	return &controlapi.SolveResponse{}, nil

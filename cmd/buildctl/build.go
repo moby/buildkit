@@ -15,8 +15,18 @@ import (
 )
 
 var buildCommand = cli.Command{
-	Name:   "build",
-	Usage:  "build",
+	Name:  "build",
+	Usage: "build",
+	Flags: []cli.Flag{
+		cli.UintFlag{
+			Name:  "source-op-concurrency",
+			Usage: "source op max concurrency (0=unlimited)",
+		},
+		cli.UintFlag{
+			Name:  "exec-op-concurrency",
+			Usage: "exec op max concurrency (0=unlimited)",
+		},
+	},
 	Action: build,
 }
 
@@ -40,7 +50,10 @@ func build(clicontext *cli.Context) error {
 	eg, ctx := errgroup.WithContext(appcontext.Context())
 
 	eg.Go(func() error {
-		return c.Solve(ctx, os.Stdin, ch)
+		return c.Solve(ctx, os.Stdin, ch,
+			client.WithSourceOpConcurrency(int(clicontext.Uint("source-op-concurrency"))),
+			client.WithExecOpConcurrency(int(clicontext.Uint("exec-op-concurrency"))),
+		)
 	})
 
 	eg.Go(func() error {
