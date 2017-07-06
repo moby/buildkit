@@ -40,10 +40,10 @@ The first thing to test could be to try building BuildKit with BuildKit. BuildKi
 
 `examples/buildkit/buildkit.go` is a script that defines how to build different configurations of BuildKit and its dependencies using the `client` package. Running this script generates a protobuf definition of a build graph. Note that the script itself does not execute any steps of the build.
 
-You can use `buildctl debug dump` to see what data is this definition.
+You can use `buildctl debug dump-llb` to see what data is this definition.
 
 ```bash
-go run examples/buildkit/buildkit.go | buildctl debug dump | jq .
+go run examples/buildkit/buildkit.go | buildctl debug dump-llb | jq .
 ```
 
 To start building use `buildctl build` command. The script accepts `--target` flag to choose between `containerd` and `standalone` configurations. In standalone mode BuildKit binaries are built together with `runc`. In containerd mode, the `containerd` binary is built as well from the upstream repo.
