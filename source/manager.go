@@ -14,7 +14,7 @@ type Source interface {
 }
 
 type SourceInstance interface {
-	CacheKey(ctx context.Context) ([]string, error)
+	CacheKey(ctx context.Context) (string, error)
 	Snapshot(ctx context.Context) (cache.ImmutableRef, error)
 }
 

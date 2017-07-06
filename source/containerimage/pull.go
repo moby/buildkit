@@ -100,11 +100,11 @@ func (p *puller) resolve(ctx context.Context) error {
 	return p.resolveErr
 }
 
-func (p *puller) CacheKey(ctx context.Context) ([]string, error) {
+func (p *puller) CacheKey(ctx context.Context) (string, error) {
 	if err := p.resolve(ctx); err != nil {
-		return nil, err
+		return "", err
 	}
-	return []string{p.desc.Digest.String()}, nil
+	return p.desc.Digest.String(), nil
 }
 
 func (p *puller) Snapshot(ctx context.Context) (cache.ImmutableRef, error) {

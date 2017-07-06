@@ -1,6 +1,7 @@
 package solver
 
 import (
+	"encoding/json"
 	"io"
 	"os"
 
@@ -10,22 +11,37 @@ import (
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/worker"
+	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
 
 type execOp struct {
-	op *pb.Op_Exec
+	op *pb.ExecOp
 	cm cache.Manager
 	w  worker.Worker
 }
 
 func newExecOp(op *pb.Op_Exec, cm cache.Manager, w worker.Worker) (Op, error) {
 	return &execOp{
-		op: op,
+		op: op.Exec,
 		cm: cm,
 		w:  w,
 	}, nil
+}
+
+func (e *execOp) CacheKey(ctx context.Context, inputs []string) (string, error) {
+	dt, err := json.Marshal(struct {
+		Inputs []string
+		Exec   *pb.ExecOp
+	}{
+		Inputs: inputs,
+		Exec:   e.op,
+	})
+	if err != nil {
+		return "", err
+	}
+	return digest.FromBytes(dt).String(), nil
 }
 
 func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, error) {
@@ -44,7 +60,7 @@ func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, erro
 		}
 	}()
 
-	for _, m := range e.op.Exec.Mounts {
+	for _, m := range e.op.Mounts {
 		var mountable cache.Mountable
 		if int(m.Input) > len(inputs) {
 			return nil, errors.Errorf("missing input %d", m.Input)
@@ -72,9 +88,9 @@ func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, erro
 	}
 
 	meta := worker.Meta{
-		Args: e.op.Exec.Meta.Args,
-		Env:  e.op.Exec.Meta.Env,
-		Cwd:  e.op.Exec.Meta.Cwd,
+		Args: e.op.Meta.Args,
+		Env:  e.op.Meta.Env,
+		Cwd:  e.op.Meta.Cwd,
 	}
 
 	stdout := newStreamWriter(ctx, 1)

@@ -176,6 +176,9 @@ func (t *trace) displayInfo() (d displayInfo) {
 				j.name = "ERROR " + j.name
 			}
 		}
+		if v.Cached {
+			j.name = "CACHED " + j.name
+		}
 		d.jobs = append(d.jobs, j)
 		for _, s := range v.statuses {
 			j := job{

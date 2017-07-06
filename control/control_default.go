@@ -9,6 +9,7 @@ import (
 	"github.com/containerd/containerd/rootfs"
 	ctdsnapshot "github.com/containerd/containerd/snapshot"
 	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/cache/instructioncache"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/snapshot/blobmapping"
 	"github.com/moby/buildkit/source"
@@ -44,6 +45,11 @@ func defaultControllerOpts(root string, pd pullDeps) (*Opt, error) {
 		return nil, err
 	}
 
+	ic := &instructioncache.LocalStore{
+		MetadataStore: md,
+		Cache:         cm,
+	}
+
 	sm, err := source.NewManager()
 	if err != nil {
 		return nil, err
@@ -62,8 +68,9 @@ func defaultControllerOpts(root string, pd pullDeps) (*Opt, error) {
 	sm.Register(is)
 
 	return &Opt{
-		Snapshotter:   snapshotter,
-		CacheManager:  cm,
-		SourceManager: sm,
+		Snapshotter:      snapshotter,
+		CacheManager:     cm,
+		SourceManager:    sm,
+		InstructionCache: ic,
 	}, nil
 }
