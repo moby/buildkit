@@ -1,21 +1,31 @@
 package solver
 
 import (
-	"context"
-
-	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/source"
+	"golang.org/x/net/context"
 )
 
-func runSourceOp(ctx context.Context, sm *source.Manager, op *pb.Op_Source) ([]cache.ImmutableRef, error) {
-	id, err := source.FromString(op.Source.Identifier)
+type sourceOp struct {
+	op *pb.Op_Source
+	sm *source.Manager
+}
+
+func newSourceOp(op *pb.Op_Source, sm *source.Manager) (Op, error) {
+	return &sourceOp{
+		op: op,
+		sm: sm,
+	}, nil
+}
+
+func (s *sourceOp) Run(ctx context.Context, _ []Reference) ([]Reference, error) {
+	id, err := source.FromString(s.op.Source.Identifier)
 	if err != nil {
 		return nil, err
 	}
-	ref, err := sm.Pull(ctx, id)
+	ref, err := s.sm.Pull(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	return []cache.ImmutableRef{ref}, nil
+	return []Reference{ref}, nil
 }

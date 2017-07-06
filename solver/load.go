@@ -1,70 +1,89 @@
 package solver
 
 import (
-	"github.com/moby/buildkit/client"
+	"strings"
+
 	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
 
-func Load(ops [][]byte) (*opVertex, error) {
+func LoadLLB(ops [][]byte) (Vertex, error) {
 	if len(ops) == 0 {
 		return nil, errors.New("invalid empty definition")
 	}
 
-	m := make(map[digest.Digest]*pb.Op)
+	allOps := make(map[digest.Digest]*pb.Op)
 
 	var lastOp *pb.Op
-	var dgst digest.Digest
+	var lastDigest digest.Digest
 
-	for i, dt := range ops {
+	for _, dt := range ops {
 		var op pb.Op
 		if err := (&op).Unmarshal(dt); err != nil {
-			return nil, errors.Wrap(err, "failed to parse op")
+			return nil, errors.Wrap(err, "failed to parse llb proto op")
 		}
 		lastOp = &op
-		dgst = digest.FromBytes(dt)
-		if i != len(ops)-1 {
-			m[dgst] = &op
-		}
-		// logrus.Debugf("op %d %s %#v", i, dgst, op)
+		lastDigest = digest.FromBytes(dt)
+		allOps[lastDigest] = &op
 	}
 
-	cache := make(map[digest.Digest]*opVertex)
+	delete(allOps, lastDigest) // avoid loops
+
+	cache := make(map[digest.Digest]*vertex)
 
 	// TODO: validate the connections
-	vtx, err := loadReqursive(dgst, lastOp, m, cache)
-	if err != nil {
-		return nil, err
-	}
-
-	return vtx, err
+	return loadLLBVertexRecursive(lastDigest, lastOp, allOps, cache)
 }
 
-func loadReqursive(dgst digest.Digest, op *pb.Op, inputs map[digest.Digest]*pb.Op, cache map[digest.Digest]*opVertex) (*opVertex, error) {
+func toInternalVertex(v Vertex) *vertex {
+	cache := make(map[digest.Digest]*vertex)
+	return loadInternalVertexHelper(v, cache)
+}
+
+func loadInternalVertexHelper(v Vertex, cache map[digest.Digest]*vertex) *vertex {
+	if v, ok := cache[v.Digest()]; ok {
+		return v
+	}
+	vtx := &vertex{sys: v.Sys(), digest: v.Digest(), name: v.Name()}
+	for _, in := range v.Inputs() {
+		vv := loadInternalVertexHelper(in.Vertex, cache)
+		vtx.inputs = append(vtx.inputs, &input{index: in.Index, vertex: vv})
+	}
+	vtx.initClientVertex()
+	cache[v.Digest()] = vtx
+	return vtx
+}
+
+func loadLLBVertexRecursive(dgst digest.Digest, op *pb.Op, all map[digest.Digest]*pb.Op, cache map[digest.Digest]*vertex) (*vertex, error) {
 	if v, ok := cache[dgst]; ok {
 		return v, nil
 	}
-	vtx := &opVertex{op: op, dgst: dgst}
-	inputDigests := make([]digest.Digest, 0, len(op.Inputs))
+	vtx := &vertex{sys: op.Op, digest: dgst, name: llbOpName(op)}
 	for _, in := range op.Inputs {
 		dgst := digest.Digest(in.Digest)
-		inputDigests = append(inputDigests, dgst)
-		op, ok := inputs[dgst]
+		op, ok := all[dgst]
 		if !ok {
 			return nil, errors.Errorf("failed to find %s", in)
 		}
-		sub, err := loadReqursive(dgst, op, inputs, cache)
+		sub, err := loadLLBVertexRecursive(dgst, op, all, cache)
 		if err != nil {
 			return nil, err
 		}
-		vtx.inputs = append(vtx.inputs, sub)
+		vtx.inputs = append(vtx.inputs, &input{index: int(in.Index), vertex: sub})
 	}
-	vtx.vtx = client.Vertex{
-		Inputs: inputDigests,
-		Name:   vtx.name(),
-		Digest: dgst,
-	}
+	vtx.initClientVertex()
 	cache[dgst] = vtx
 	return vtx, nil
+}
+
+func llbOpName(op *pb.Op) string {
+	switch op := op.Op.(type) {
+	case *pb.Op_Source:
+		return op.Source.Identifier
+	case *pb.Op_Exec:
+		return strings.Join(op.Exec.Meta.Args, " ")
+	default:
+		return "unknown"
+	}
 }

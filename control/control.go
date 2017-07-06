@@ -29,7 +29,7 @@ type Controller struct { // TODO: ControlService
 func NewController(opt Opt) (*Controller, error) {
 	c := &Controller{
 		opt: opt,
-		solver: solver.New(solver.Opt{
+		solver: solver.NewLLBSolver(solver.LLBOpt{
 			SourceManager: opt.SourceManager,
 			CacheManager:  opt.CacheManager,
 			Worker:        opt.Worker,
@@ -62,7 +62,7 @@ func (c *Controller) DiskUsage(ctx context.Context, _ *controlapi.DiskUsageReque
 }
 
 func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*controlapi.SolveResponse, error) {
-	v, err := solver.Load(req.Definition)
+	v, err := solver.LoadLLB(req.Definition)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to load")
 	}

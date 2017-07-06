@@ -1,7 +1,6 @@
 package solver
 
 import (
-	"context"
 	"io"
 	"os"
 
@@ -12,9 +11,24 @@ import (
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/worker"
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 )
 
-func runExecOp(ctx context.Context, cm cache.Manager, w worker.Worker, op *pb.Op_Exec, inputs []cache.ImmutableRef) ([]cache.ImmutableRef, error) {
+type execOp struct {
+	op *pb.Op_Exec
+	cm cache.Manager
+	w  worker.Worker
+}
+
+func newExecOp(op *pb.Op_Exec, cm cache.Manager, w worker.Worker) (Op, error) {
+	return &execOp{
+		op: op,
+		cm: cm,
+		w:  w,
+	}, nil
+}
+
+func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, error) {
 	mounts := make(map[string]cache.Mountable)
 
 	var outputs []cache.MutableRef
@@ -30,15 +44,24 @@ func runExecOp(ctx context.Context, cm cache.Manager, w worker.Worker, op *pb.Op
 		}
 	}()
 
-	for _, m := range op.Exec.Mounts {
+	for _, m := range e.op.Exec.Mounts {
 		var mountable cache.Mountable
 		if int(m.Input) > len(inputs) {
 			return nil, errors.Errorf("missing input %d", m.Input)
 		}
-		ref := inputs[int(m.Input)]
+		inp := inputs[int(m.Input)]
+		if sys, ok := inp.(interface {
+			Sys() Reference
+		}); ok {
+			inp = sys.Sys()
+		}
+		ref, ok := inp.(cache.ImmutableRef)
+		if !ok {
+			return nil, errors.Errorf("invalid reference for exec %T", inputs[int(m.Input)])
+		}
 		mountable = ref
 		if m.Output != -1 {
-			active, err := cm.New(ctx, ref) // TODO: should be method
+			active, err := e.cm.New(ctx, ref) // TODO: should be method
 			if err != nil {
 				return nil, err
 			}
@@ -49,9 +72,9 @@ func runExecOp(ctx context.Context, cm cache.Manager, w worker.Worker, op *pb.Op
 	}
 
 	meta := worker.Meta{
-		Args: op.Exec.Meta.Args,
-		Env:  op.Exec.Meta.Env,
-		Cwd:  op.Exec.Meta.Cwd,
+		Args: e.op.Exec.Meta.Args,
+		Env:  e.op.Exec.Meta.Env,
+		Cwd:  e.op.Exec.Meta.Cwd,
 	}
 
 	stdout := newStreamWriter(ctx, 1)
@@ -59,11 +82,11 @@ func runExecOp(ctx context.Context, cm cache.Manager, w worker.Worker, op *pb.Op
 	stderr := newStreamWriter(ctx, 2)
 	defer stderr.Close()
 
-	if err := w.Exec(ctx, meta, mounts, stdout, stderr); err != nil {
+	if err := e.w.Exec(ctx, meta, mounts, stdout, stderr); err != nil {
 		return nil, errors.Wrapf(err, "worker failed running %v", meta.Args)
 	}
 
-	refs := []cache.ImmutableRef{}
+	refs := []Reference{}
 	for i, o := range outputs {
 		ref, err := o.ReleaseAndCommit(ctx)
 		if err != nil {
