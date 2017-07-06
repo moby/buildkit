@@ -62,29 +62,63 @@ func (is *imageSource) ID() string {
 	return source.DockerImageScheme
 }
 
-func (is *imageSource) Pull(ctx context.Context, id source.Identifier) (cache.ImmutableRef, error) {
-	// TODO: update this to always centralize layer downloads/unpacks
-	// TODO: progress status
+type puller struct {
+	is          *imageSource
+	resolveOnce sync.Once
+	src         *source.ImageIdentifier
+	desc        ocispec.Descriptor
+	ref         string
+	resolveErr  error
+}
 
+func (is *imageSource) Resolve(ctx context.Context, id source.Identifier) (source.SourceInstance, error) {
 	imageIdentifier, ok := id.(*source.ImageIdentifier)
 	if !ok {
 		return nil, errors.New("invalid identifier")
 	}
 
-	resolveProgressDone := oneOffProgress(ctx, "resolve "+imageIdentifier.Reference.String())
-	ref, desc, err := is.resolver.Resolve(ctx, imageIdentifier.Reference.String())
-	if err != nil {
-		return nil, resolveProgressDone(err)
+	p := &puller{
+		src: imageIdentifier,
+		is:  is,
 	}
-	resolveProgressDone(nil)
+	return p, nil
+}
 
-	ongoing := newJobs(ref)
+func (p *puller) resolve(ctx context.Context) error {
+	p.resolveOnce.Do(func() {
+		resolveProgressDone := oneOffProgress(ctx, "resolve "+p.src.Reference.String())
+		ref, desc, err := p.is.resolver.Resolve(ctx, p.src.Reference.String())
+		if err != nil {
+			p.resolveErr = err
+			resolveProgressDone(err)
+			return
+		}
+		p.desc = desc
+		p.ref = ref
+		resolveProgressDone(nil)
+	})
+	return p.resolveErr
+}
+
+func (p *puller) CacheKey(ctx context.Context) ([]string, error) {
+	if err := p.resolve(ctx); err != nil {
+		return nil, err
+	}
+	return []string{p.desc.Digest.String()}, nil
+}
+
+func (p *puller) Snapshot(ctx context.Context) (cache.ImmutableRef, error) {
+	if err := p.resolve(ctx); err != nil {
+		return nil, err
+	}
+
+	ongoing := newJobs(p.ref)
 
 	pctx, stopProgress := context.WithCancel(ctx)
 
-	go showProgress(pctx, ongoing, is.ContentStore)
+	go showProgress(pctx, ongoing, p.is.ContentStore)
 
-	fetcher, err := is.resolver.Fetcher(ctx, ref)
+	fetcher, err := p.is.resolver.Fetcher(ctx, p.ref)
 	if err != nil {
 		stopProgress()
 		return nil, err
@@ -98,23 +132,23 @@ func (is *imageSource) Pull(ctx context.Context, id source.Identifier) (cache.Im
 			ongoing.add(desc)
 			return nil, nil
 		}),
-		remotes.FetchHandler(is.ContentStore, fetcher),
-		images.ChildrenHandler(is.ContentStore),
+		remotes.FetchHandler(p.is.ContentStore, fetcher),
+		images.ChildrenHandler(p.is.ContentStore),
 	}
-	if err := images.Dispatch(ctx, images.Handlers(handlers...), desc); err != nil {
+	if err := images.Dispatch(ctx, images.Handlers(handlers...), p.desc); err != nil {
 		stopProgress()
 		return nil, err
 	}
 	stopProgress()
 
-	unpackProgressDone := oneOffProgress(ctx, "unpacking "+imageIdentifier.Reference.String())
-	chainid, err := is.unpack(ctx, desc)
+	unpackProgressDone := oneOffProgress(ctx, "unpacking "+p.src.Reference.String())
+	chainid, err := p.is.unpack(ctx, p.desc)
 	if err != nil {
 		return nil, unpackProgressDone(err)
 	}
 	unpackProgressDone(nil)
 
-	return is.CacheAccessor.Get(ctx, chainid)
+	return p.is.CacheAccessor.Get(ctx, chainid)
 }
 
 func (is *imageSource) unpack(ctx context.Context, desc ocispec.Descriptor) (string, error) {

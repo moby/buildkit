@@ -23,7 +23,11 @@ func (s *sourceOp) Run(ctx context.Context, _ []Reference) ([]Reference, error) 
 	if err != nil {
 		return nil, err
 	}
-	ref, err := s.sm.Pull(ctx, id)
+	src, err := s.sm.Resolve(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	ref, err := src.Snapshot(ctx)
 	if err != nil {
 		return nil, err
 	}

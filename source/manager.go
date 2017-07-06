@@ -10,18 +10,13 @@ import (
 
 type Source interface {
 	ID() string
-	Pull(ctx context.Context, id Identifier) (cache.ImmutableRef, error)
+	Resolve(ctx context.Context, id Identifier) (SourceInstance, error)
 }
 
-// type Source interface {
-// 	ID() string
-// 	Resolve(ctx context.Context, id Identifier) (SourceInstance, error)
-// }
-//
-// type SourceInstance interface {
-// 	GetCacheKey(ctx context.Context) ([]string, error)
-// 	GetSnapshot(ctx context.Context) (cache.ImmutableRef, error)
-// }
+type SourceInstance interface {
+	CacheKey(ctx context.Context) ([]string, error)
+	Snapshot(ctx context.Context) (cache.ImmutableRef, error)
+}
 
 type Manager struct {
 	mu      sync.Mutex
@@ -40,7 +35,7 @@ func (sm *Manager) Register(src Source) {
 	sm.mu.Unlock()
 }
 
-func (sm *Manager) Pull(ctx context.Context, id Identifier) (cache.ImmutableRef, error) {
+func (sm *Manager) Resolve(ctx context.Context, id Identifier) (SourceInstance, error) {
 	sm.mu.Lock()
 	src, ok := sm.sources[id.ID()]
 	sm.mu.Unlock()
@@ -49,5 +44,5 @@ func (sm *Manager) Pull(ctx context.Context, id Identifier) (cache.ImmutableRef,
 		return nil, errors.Errorf("no handler fro %s", id.ID())
 	}
 
-	return src.Pull(ctx, id)
+	return src.Resolve(ctx, id)
 }
