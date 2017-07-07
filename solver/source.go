@@ -1,14 +1,18 @@
 package solver
 
 import (
+	"sync"
+
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/source"
 	"golang.org/x/net/context"
 )
 
 type sourceOp struct {
-	op *pb.Op_Source
-	sm *source.Manager
+	mu  sync.Mutex
+	op  *pb.Op_Source
+	sm  *source.Manager
+	src source.SourceInstance
 }
 
 func newSourceOp(op *pb.Op_Source, sm *source.Manager) (Op, error) {
@@ -18,12 +22,38 @@ func newSourceOp(op *pb.Op_Source, sm *source.Manager) (Op, error) {
 	}, nil
 }
 
-func (s *sourceOp) Run(ctx context.Context, _ []Reference) ([]Reference, error) {
+func (s *sourceOp) instance(ctx context.Context) (source.SourceInstance, error) {
+	s.mu.Lock()
+	if s.src != nil {
+		return s.src, nil
+	}
 	id, err := source.FromString(s.op.Source.Identifier)
 	if err != nil {
 		return nil, err
 	}
-	ref, err := s.sm.Pull(ctx, id)
+	src, err := s.sm.Resolve(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	s.src = src
+	s.mu.Unlock()
+	return s.src, nil
+}
+
+func (s *sourceOp) CacheKey(ctx context.Context, _ []string) (string, error) {
+	src, err := s.instance(ctx)
+	if err != nil {
+		return "", err
+	}
+	return src.CacheKey(ctx)
+}
+
+func (s *sourceOp) Run(ctx context.Context, _ []Reference) ([]Reference, error) {
+	src, err := s.instance(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ref, err := src.Snapshot(ctx)
 	if err != nil {
 		return nil, err
 	}

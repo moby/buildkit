@@ -86,13 +86,26 @@ func (v *vertex) notifyStarted(ctx context.Context) {
 	pw.Write(v.Digest().String(), v.clientVertex)
 }
 
-func (v *vertex) notifyCompleted(ctx context.Context, err error) {
+func (v *vertex) notifyCompleted(ctx context.Context, cached bool, err error) {
 	pw, _, _ := progress.FromContext(ctx)
 	defer pw.Close()
 	now := time.Now()
+	if v.clientVertex.Started == nil {
+		v.clientVertex.Started = &now
+	}
 	v.clientVertex.Completed = &now
+	v.clientVertex.Cached = cached
 	if err != nil {
 		v.clientVertex.Error = err.Error()
 	}
 	pw.Write(v.Digest().String(), v.clientVertex)
+}
+
+func (v *vertex) recursiveMarkCached(ctx context.Context) {
+	for _, inp := range v.inputs {
+		inp.vertex.recursiveMarkCached(ctx)
+	}
+	if v.clientVertex.Started == nil {
+		v.notifyCompleted(ctx, true, nil)
+	}
 }

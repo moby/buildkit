@@ -15,10 +15,11 @@ import (
 )
 
 type Opt struct {
-	Snapshotter   snapshot.Snapshotter
-	CacheManager  cache.Manager
-	Worker        worker.Worker
-	SourceManager *source.Manager
+	Snapshotter      snapshot.Snapshotter
+	CacheManager     cache.Manager
+	Worker           worker.Worker
+	SourceManager    *source.Manager
+	InstructionCache solver.InstructionCache
 }
 
 type Controller struct { // TODO: ControlService
@@ -30,9 +31,10 @@ func NewController(opt Opt) (*Controller, error) {
 	c := &Controller{
 		opt: opt,
 		solver: solver.NewLLBSolver(solver.LLBOpt{
-			SourceManager: opt.SourceManager,
-			CacheManager:  opt.CacheManager,
-			Worker:        opt.Worker,
+			SourceManager:    opt.SourceManager,
+			CacheManager:     opt.CacheManager,
+			Worker:           opt.Worker,
+			InstructionCache: opt.InstructionCache,
 		}),
 	}
 	return c, nil
@@ -98,6 +100,7 @@ func (c *Controller) Status(req *controlapi.StatusRequest, stream controlapi.Con
 						Started:   v.Started,
 						Completed: v.Completed,
 						Error:     v.Error,
+						Cached:    v.Cached,
 					})
 				}
 				for _, v := range ss.Statuses {

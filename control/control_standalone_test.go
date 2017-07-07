@@ -65,7 +65,10 @@ func TestControl(t *testing.T) {
 	img, err := source.NewImageIdentifier("docker.io/library/busybox:latest")
 	assert.NoError(t, err)
 
-	snap, err := sm.Pull(ctx, img)
+	src, err := sm.Resolve(ctx, img)
+	assert.NoError(t, err)
+
+	snap, err := src.Snapshot(ctx)
 	assert.NoError(t, err)
 
 	mounts, err := snap.Mount(ctx)

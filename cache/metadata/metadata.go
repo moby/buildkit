@@ -210,6 +210,14 @@ func (s *StorageItem) Update(fn func(b *bolt.Bucket) error) error {
 	return s.storage.Update(s.id, fn)
 }
 
+func (s *StorageItem) Keys() []string {
+	keys := make([]string, 0, len(s.values))
+	for k := range s.values {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
 func (s *StorageItem) Get(k string) *Value {
 	return s.values[k]
 }

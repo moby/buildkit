@@ -1,6 +1,7 @@
 package solver
 
 import (
+	"github.com/Sirupsen/logrus"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/solver/pb"
@@ -13,9 +14,10 @@ import (
 )
 
 type LLBOpt struct {
-	SourceManager *source.Manager
-	CacheManager  cache.Manager // TODO: this shouldn't be needed before instruction cache
-	Worker        worker.Worker
+	SourceManager    *source.Manager
+	CacheManager     cache.Manager // TODO: this shouldn't be needed before instruction cache
+	Worker           worker.Worker
+	InstructionCache InstructionCache
 }
 
 func NewLLBSolver(opt LLBOpt) *Solver {
@@ -28,7 +30,7 @@ func NewLLBSolver(opt LLBOpt) *Solver {
 		default:
 			return nil, errors.Errorf("invalid op type %T", op)
 		}
-	})
+	}, opt.InstructionCache)
 }
 
 // ResolveOpFunc finds an Op implementation for a vertex
@@ -41,22 +43,24 @@ type Reference interface {
 
 // Op is an implementation for running a vertex
 type Op interface {
-	// CacheKeys(context.Context, [][]string) ([]string, error)
+	CacheKey(context.Context, []string) (string, error)
 	Run(ctx context.Context, inputs []Reference) (outputs []Reference, err error)
 }
 
-// type Cache interface {
-// 	Lookup(context.Context, string) ([]Reference, error)
-// }
-
-type Solver struct {
-	resolve ResolveOpFunc
-	jobs    *jobList
-	active  refCache
+type InstructionCache interface {
+	Lookup(ctx context.Context, key string) ([]interface{}, error) // TODO: regular ref
+	Set(key string, refs []interface{}) error
 }
 
-func New(resolve ResolveOpFunc) *Solver {
-	return &Solver{resolve: resolve, jobs: newJobList()}
+type Solver struct {
+	resolve     ResolveOpFunc
+	jobs        *jobList
+	activeState activeState
+	cache       InstructionCache
+}
+
+func New(resolve ResolveOpFunc, cache InstructionCache) *Solver {
+	return &Solver{resolve: resolve, jobs: newJobList(), cache: cache}
 }
 
 func (s *Solver) Solve(ctx context.Context, id string, v Vertex) error {
@@ -78,7 +82,7 @@ func (s *Solver) Solve(ctx context.Context, id string, v Vertex) error {
 
 	refs, err := s.getRefs(ctx, j, j.g)
 	closeProgressWriter()
-	s.active.cancel(j)
+	s.activeState.cancel(j)
 	if err != nil {
 		return err
 	}
@@ -99,9 +103,77 @@ func (s *Solver) Status(ctx context.Context, id string, statusChan chan *client.
 	return j.pipe(ctx, statusChan)
 }
 
-func (s *Solver) getRefs(ctx context.Context, j *job, g *vertex) (retRef []Reference, retErr error) {
+func (s *Solver) getCacheKey(ctx context.Context, j *job, g *vertex) (cacheKey string, retErr error) {
+	state, err := s.activeState.vertexState(j, g.digest, func() (Op, error) {
+		return s.resolve(g)
+	})
+	if err != nil {
+		return "", err
+	}
 
-	s.active.probe(j, g.digest) // this registers the key with the job
+	inputs := make([]string, len(g.inputs))
+	if len(g.inputs) > 0 {
+		eg, ctx := errgroup.WithContext(ctx)
+		for i, in := range g.inputs {
+			func(i int, in *vertex) {
+				eg.Go(func() error {
+					k, err := s.getCacheKey(ctx, j, in)
+					if err != nil {
+						return err
+					}
+					inputs[i] = k
+					return nil
+				})
+			}(i, in.vertex)
+		}
+		if err := eg.Wait(); err != nil {
+			return "", err
+		}
+	}
+
+	pw, _, ctx := progress.FromContext(ctx, progress.WithMetadata("vertex", g.Digest()))
+	defer pw.Close()
+
+	if len(g.inputs) == 0 {
+		g.notifyStarted(ctx)
+		defer func() {
+			g.notifyCompleted(ctx, false, retErr)
+		}()
+	}
+
+	return state.GetCacheKey(ctx, func(ctx context.Context, op Op) (string, error) {
+		return op.CacheKey(ctx, inputs)
+	})
+}
+
+func (s *Solver) getRefs(ctx context.Context, j *job, g *vertex) (retRef []Reference, retErr error) {
+	state, err := s.activeState.vertexState(j, g.digest, func() (Op, error) {
+		return s.resolve(g)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var cacheKey string
+	if s.cache != nil {
+		var err error
+		cacheKey, err = s.getCacheKey(ctx, j, g)
+		if err != nil {
+			return nil, err
+		}
+		cacheRefsAny, err := s.cache.Lookup(ctx, cacheKey)
+		if err != nil {
+			return nil, err
+		}
+		if len(cacheRefsAny) > 0 {
+			cacheRefs, err := toReferenceArray(cacheRefsAny)
+			if err != nil {
+				return nil, err
+			}
+			g.recursiveMarkCached(ctx)
+			return cacheRefs, nil
+		}
+	}
 
 	// refs contains all outputs for all input vertexes
 	refs := make([][]*sharedRef, len(g.inputs))
@@ -156,29 +228,39 @@ func (s *Solver) getRefs(ctx context.Context, j *job, g *vertex) (retRef []Refer
 
 	g.notifyStarted(ctx)
 	defer func() {
-		g.notifyCompleted(ctx, retErr)
+		g.notifyCompleted(ctx, false, retErr)
 	}()
 
-	_, err := s.active.Do(ctx, g.digest.String(), func(doctx context.Context) (interface{}, error) {
-		if hit := s.active.probe(j, g.digest); hit {
-			if err := s.active.writeProgressSnapshot(ctx, g.digest); err != nil {
-				return nil, err
+	return state.GetRefs(ctx, func(ctx context.Context, op Op) ([]Reference, error) {
+		refs, err := op.Run(ctx, inputRefs)
+		if err != nil {
+			return nil, err
+		}
+		if s.cache != nil {
+			if err := s.cache.Set(cacheKey, toAny(refs)); err != nil {
+				logrus.Errorf("failed to save cache for %s: %v", cacheKey, err)
 			}
-			return nil, nil
 		}
-		op, err := s.resolve(g)
-		if err != nil {
-			return nil, err
-		}
-		refs, err := op.Run(doctx, inputRefs)
-		if err != nil {
-			return nil, err
-		}
-		s.active.set(doctx, g.digest, refs)
-		return nil, nil
+		return refs, nil
 	})
-	if err != nil {
-		return nil, err
+}
+
+func toReferenceArray(in []interface{}) ([]Reference, error) {
+	out := make([]Reference, 0, len(in))
+	for _, i := range in {
+		r, ok := i.(Reference)
+		if !ok {
+			return nil, errors.Errorf("invalid reference")
+		}
+		out = append(out, r)
 	}
-	return s.active.get(g.digest)
+	return out, nil
+}
+
+func toAny(in []Reference) []interface{} {
+	out := make([]interface{}, 0, len(in))
+	for _, i := range in {
+		out = append(out, i)
+	}
+	return out
 }
