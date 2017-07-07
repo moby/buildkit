@@ -138,7 +138,7 @@ be UPPERCASE to distinguish them from arguments more easily.
 Docker runs instructions in a `Dockerfile` in order. A `Dockerfile` **must
 start with a \`FROM\` instruction**. The `FROM` instruction specifies the [*Base
 Image*](glossary.md#base-image) from which you are building. `FROM` may only be
-proceeded by one or more `ARG` instructions, which declare arguments that are used
+preceded by one or more `ARG` instructions, which declare arguments that are used
 in `FROM` lines in the `Dockerfile`.
 
 Docker treats lines that *begin* with `#` as a comment, unless the line is
@@ -499,7 +499,7 @@ valid `Dockerfile` must start with a `FROM` instruction. The image can be
 any valid image – it is especially easy to start by **pulling an image** from 
 the [*Public Repositories*](https://docs.docker.com/engine/tutorials/dockerrepos/).
 
-- `ARG` is the only instruction that may proceed `FROM` in the `Dockerfile`. 
+- `ARG` is the only instruction that may precede `FROM` in the `Dockerfile`.
   See [Understand how ARG and FROM interact](#understand-how-arg-and-from-interact).
 
 - `FROM` can appear multiple times within a single `Dockerfile` to 
