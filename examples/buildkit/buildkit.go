@@ -11,12 +11,14 @@ import (
 type buildOpt struct {
 	target     string
 	containerd string
+	runc       string
 }
 
 func main() {
 	var opt buildOpt
 	flag.StringVar(&opt.target, "target", "containerd", "target (standalone, containerd)")
 	flag.StringVar(&opt.containerd, "containerd", "master", "containerd version")
+	flag.StringVar(&opt.runc, "runc", "v1.0.0-rc3", "runc version")
 	flag.Parse()
 
 	bk := buildkit(opt)
@@ -39,10 +41,12 @@ func goBuildBase() *llb.State {
 }
 
 func runc(version string) *llb.State {
-	return goBuildBase().
-		With(goFromGit("github.com/opencontainers/runc", version)).
-		Run(llb.Shlex("go build -o /usr/bin/runc ./")).
-		Root()
+	repo := "github.com/opencontainers/runc"
+	build := goBuildBase().
+		Run(llb.Shlexf("go build -o /usr/bin/runc %s", repo))
+	build.AddMount("/go/src/"+repo, llb.Git(repo, version))
+
+	return build.Root()
 }
 
 func containerd(version string) *llb.State {
@@ -66,7 +70,7 @@ func buildkit(opt buildOpt) *llb.State {
 
 	r := llb.Image("docker.io/library/alpine:latest").With(
 		copyFrom(buildctl, "/bin/buildctl", "/bin/"),
-		copyFrom(runc("v1.0.0-rc3"), "/usr/bin/runc", "/bin/"),
+		copyFrom(runc(opt.runc), "/usr/bin/runc", "/bin/"),
 	)
 
 	if opt.target == "containerd" {

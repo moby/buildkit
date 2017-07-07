@@ -49,6 +49,14 @@ func Image(ref string) *State {
 	return Source("docker-image://" + ref) // controversial
 }
 
+func Git(remote, ref string) *State {
+	id := remote
+	if ref != "" {
+		id += "#" + ref
+	}
+	return Source("git://" + id)
+}
+
 type exec struct {
 	meta   Meta
 	mounts []*mount

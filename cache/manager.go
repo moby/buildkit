@@ -291,3 +291,7 @@ func (cm *cacheManager) DiskUsage(ctx context.Context) ([]*client.UsageInfo, err
 
 	return du, nil
 }
+
+func IsLocked(err error) bool {
+	return errors.Cause(err) == errLocked
+}

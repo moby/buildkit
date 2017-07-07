@@ -24,6 +24,7 @@ func newSourceOp(op *pb.Op_Source, sm *source.Manager) (Op, error) {
 
 func (s *sourceOp) instance(ctx context.Context) (source.SourceInstance, error) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.src != nil {
 		return s.src, nil
 	}
@@ -36,7 +37,6 @@ func (s *sourceOp) instance(ctx context.Context) (source.SourceInstance, error) 
 		return nil, err
 	}
 	s.src = src
-	s.mu.Unlock()
 	return s.src, nil
 }
 

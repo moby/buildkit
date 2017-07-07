@@ -2,15 +2,11 @@ package solver
 
 import (
 	"encoding/json"
-	"io"
-	"os"
 	"sort"
 
 	"github.com/moby/buildkit/cache"
-	"github.com/moby/buildkit/client"
-	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/solver/pb"
-	"github.com/moby/buildkit/util/progress"
+	"github.com/moby/buildkit/util/progress/logs"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
@@ -102,9 +98,8 @@ func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, erro
 		Cwd:  e.op.Meta.Cwd,
 	}
 
-	stdout := newStreamWriter(ctx, 1)
+	stdout, stderr := logs.NewLogStreams(ctx)
 	defer stdout.Close()
-	stderr := newStreamWriter(ctx, 2)
 	defer stderr.Close()
 
 	if err := e.w.Exec(ctx, meta, root, mounts, stdout, stderr); err != nil {
@@ -121,37 +116,4 @@ func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, erro
 		outputs[i] = nil
 	}
 	return refs, nil
-}
-
-func newStreamWriter(ctx context.Context, stream int) io.WriteCloser {
-	pw, _, _ := progress.FromContext(ctx)
-	return &streamWriter{
-		pw:     pw,
-		stream: stream,
-	}
-}
-
-type streamWriter struct {
-	pw     progress.Writer
-	stream int
-}
-
-func (sw *streamWriter) Write(dt []byte) (int, error) {
-	sw.pw.Write(identity.NewID(), client.VertexLog{
-		Stream: sw.stream,
-		Data:   append([]byte{}, dt...),
-	})
-	// TODO: remove debug
-	switch sw.stream {
-	case 1:
-		return os.Stdout.Write(dt)
-	case 2:
-		return os.Stderr.Write(dt)
-	default:
-		return 0, errors.Errorf("invalid stream %d", sw.stream)
-	}
-}
-
-func (sw *streamWriter) Close() error {
-	return sw.pw.Close()
 }
