@@ -3,7 +3,9 @@ package git
 import (
 	"bytes"
 	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -12,6 +14,7 @@ import (
 	"github.com/boltdb/bolt"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/metadata"
+	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/util/progress/logs"
@@ -130,7 +133,7 @@ func (gs *gitSource) mountRemote(ctx context.Context, remote string) (target str
 		}
 
 		if err := si.Update(func(b *bolt.Bucket) error {
-			return si.SetValue(b, "git-repo", *v)
+			return si.SetValue(b, "git-remote", *v)
 		}); err != nil {
 			return "", nil, err
 		}
@@ -143,7 +146,7 @@ func (gs *gitSource) mountRemote(ctx context.Context, remote string) (target str
 
 type gitSourceHandler struct {
 	*gitSource
-	src      *source.GitIdentifier
+	src      source.GitIdentifier
 	cacheKey string
 }
 
@@ -154,7 +157,7 @@ func (gs *gitSource) Resolve(ctx context.Context, id source.Identifier) (source.
 	}
 
 	return &gitSourceHandler{
-		src:       gitIdentifier,
+		src:       *gitIdentifier,
 		gitSource: gs,
 	}, nil
 }
@@ -165,7 +168,6 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context) (string, error) {
 	if ref == "" {
 		ref = "master"
 	}
-
 	gs.locker.Lock(remote)
 	defer gs.locker.Unlock(remote)
 
@@ -196,7 +198,7 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context) (string, error) {
 	if !isCommitSHA(sha) {
 		return "", errors.Errorf("invalid commit sha %q", sha)
 	}
-	gs.cacheKey = ref
+	gs.cacheKey = sha
 	return sha, nil
 }
 
@@ -245,10 +247,14 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context) (out cache.ImmutableRe
 		args := []string{"fetch", "--recurse-submodules=yes"}
 		if !isCommitSHA(ref) { // TODO: find a branch from ls-remote?
 			args = append(args, "--depth=1", "--no-tags")
+		} else {
+			if _, err := os.Lstat(filepath.Join(gitDir, "shallow")); err == nil {
+				args = append(args, "--unshallow")
+			}
 		}
 		args = append(args, "origin")
 		if !isCommitSHA(ref) {
-			args = append(args, ref+":"+ref)
+			args = append(args, ref+":tags/"+ref)
 			// local refs are needed so they would be advertised on next fetches
 			// TODO: is there a better way to do this?
 		}
@@ -280,12 +286,45 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context) (out cache.ImmutableRe
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		if retErr != nil && lm != nil {
+			lm.Unmount()
+		}
+	}()
 
-	_, err = gitWithinDir(ctx, gitDir, checkoutDir, "checkout", ref, "--", ".")
-	lm.Unmount()
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to checkout remote %s", gs.src.Remote)
+	if gs.src.KeepGitDir {
+		_, err = gitWithinDir(ctx, checkoutDir, "", "init")
+		if err != nil {
+			return nil, err
+		}
+		_, err = gitWithinDir(ctx, checkoutDir, "", "remote", "add", "origin", gitDir)
+		if err != nil {
+			return nil, err
+		}
+		pullref := ref
+		if isCommitSHA(ref) {
+			pullref = "refs/buildkit/" + identity.NewID()
+			_, err = gitWithinDir(ctx, gitDir, "", "update-ref", pullref, ref)
+			if err != nil {
+				return nil, err
+			}
+		}
+		_, err = gitWithinDir(ctx, checkoutDir, "", "fetch", "--recurse-submodules=yes", "--depth=1", "origin", pullref)
+		if err != nil {
+			return nil, err
+		}
+		_, err = gitWithinDir(ctx, checkoutDir, checkoutDir, "checkout", "FETCH_HEAD")
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to checkout remote %s", gs.src.Remote)
+		}
+	} else {
+		_, err = gitWithinDir(ctx, gitDir, checkoutDir, "checkout", ref, "--", ".")
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to checkout remote %s", gs.src.Remote)
+		}
 	}
+	lm.Unmount()
+	lm = nil
 
 	snap, err := checkoutRef.ReleaseAndCommit(ctx)
 	if err != nil {

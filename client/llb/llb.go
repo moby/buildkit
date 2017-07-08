@@ -17,12 +17,13 @@ type RunOption func(m Meta) (Meta, error)
 func Source(id string) *State {
 	return &State{
 		metaNext: NewMeta(),
-		source:   &source{id: id},
+		source:   &source{id: id, attrs: map[string]string{}},
 	}
 }
 
 type source struct {
-	id string
+	id    string
+	attrs map[string]string
 }
 
 func (so *source) Validate() error {
@@ -39,7 +40,7 @@ func (so *source) marshalTo(list [][]byte, cache map[digest.Digest]struct{}) (di
 	}
 	po := &pb.Op{
 		Op: &pb.Op_Source{
-			Source: &pb.SourceOp{Identifier: so.id},
+			Source: &pb.SourceOp{Identifier: so.id, Attrs: so.attrs},
 		},
 	}
 	return appendResult(po, list, cache)
@@ -49,12 +50,24 @@ func Image(ref string) *State {
 	return Source("docker-image://" + ref) // controversial
 }
 
-func Git(remote, ref string) *State {
+func Git(remote, ref string, opts ...GitOption) *State {
 	id := remote
 	if ref != "" {
 		id += "#" + ref
 	}
-	return Source("git://" + id)
+	state := Source("git://" + id)
+	for _, opt := range opts {
+		opt(state.source)
+	}
+	return state
+}
+
+type GitOption func(*source)
+
+func KeepGitDir() GitOption {
+	return func(s *source) {
+		s.attrs[pb.AttrKeepGitDir] = "true"
+	}
 }
 
 type exec struct {

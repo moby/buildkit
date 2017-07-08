@@ -9,9 +9,10 @@ import (
 )
 
 type GitIdentifier struct {
-	Remote string
-	Ref    string
-	Subdir string
+	Remote     string
+	Ref        string
+	Subdir     string
+	KeepGitDir bool
 }
 
 func NewGitIdentifier(remoteURL string) (*GitIdentifier, error) {

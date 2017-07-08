@@ -50,10 +50,12 @@ func runc(version string) *llb.State {
 }
 
 func containerd(version string) *llb.State {
-	return goBuildBase().
+	repo := "github.com/containerd/containerd"
+	build := goBuildBase().
 		Run(llb.Shlex("apk add --no-cache btrfs-progs-dev")).
-		With(goFromGit("github.com/containerd/containerd", version)).
-		Run(llb.Shlex("make bin/containerd")).Root()
+		Dir("/go/src/" + repo).
+		Run(llb.Shlex("make bin/containerd"))
+	return build.AddMount("/go/src/"+repo, llb.Git(repo, version, llb.KeepGitDir()))
 }
 
 func buildkit(opt buildOpt) *llb.State {
@@ -75,7 +77,7 @@ func buildkit(opt buildOpt) *llb.State {
 
 	if opt.target == "containerd" {
 		return r.With(
-			copyFrom(containerd(opt.containerd), "/go/src/github.com/containerd/containerd/bin/containerd", "/bin/"),
+			copyFrom(containerd(opt.containerd), "/bin/containerd", "/bin/"),
 			copyFrom(builddContainerd, "/bin/buildd-containerd", "/bin/"))
 	}
 	return r.With(copyFrom(builddStandalone, "/bin/buildd-standalone", "/bin/"))

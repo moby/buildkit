@@ -248,12 +248,21 @@ func (m *CopySource) String() string { return proto.CompactTextString(m) }
 func (*CopySource) ProtoMessage()    {}
 
 type SourceOp struct {
-	Identifier string `protobuf:"bytes,1,opt,name=identifier,proto3" json:"identifier,omitempty"`
+	// source type?
+	Identifier string            `protobuf:"bytes,1,opt,name=identifier,proto3" json:"identifier,omitempty"`
+	Attrs      map[string]string `protobuf:"bytes,2,rep,name=attrs" json:"attrs,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 }
 
 func (m *SourceOp) Reset()         { *m = SourceOp{} }
 func (m *SourceOp) String() string { return proto.CompactTextString(m) }
 func (*SourceOp) ProtoMessage()    {}
+
+func (m *SourceOp) GetAttrs() map[string]string {
+	if m != nil {
+		return m.Attrs
+	}
+	return nil
+}
 
 func init() {
 	proto.RegisterType((*Op)(nil), "pb.Op")
@@ -593,6 +602,23 @@ func (m *SourceOp) MarshalTo(data []byte) (int, error) {
 		i = encodeVarintOps(data, i, uint64(len(m.Identifier)))
 		i += copy(data[i:], m.Identifier)
 	}
+	if len(m.Attrs) > 0 {
+		for k, _ := range m.Attrs {
+			data[i] = 0x12
+			i++
+			v := m.Attrs[k]
+			mapSize := 1 + len(k) + sovOps(uint64(len(k))) + 1 + len(v) + sovOps(uint64(len(v)))
+			i = encodeVarintOps(data, i, uint64(mapSize))
+			data[i] = 0xa
+			i++
+			i = encodeVarintOps(data, i, uint64(len(k)))
+			i += copy(data[i:], k)
+			data[i] = 0x12
+			i++
+			i = encodeVarintOps(data, i, uint64(len(v)))
+			i += copy(data[i:], v)
+		}
+	}
 	return i, nil
 }
 
@@ -771,6 +797,14 @@ func (m *SourceOp) Size() (n int) {
 	l = len(m.Identifier)
 	if l > 0 {
 		n += 1 + l + sovOps(uint64(l))
+	}
+	if len(m.Attrs) > 0 {
+		for k, v := range m.Attrs {
+			_ = k
+			_ = v
+			mapEntrySize := 1 + len(k) + sovOps(uint64(len(k))) + 1 + len(v) + sovOps(uint64(len(v)))
+			n += mapEntrySize + 1 + sovOps(uint64(mapEntrySize))
+		}
 	}
 	return n
 }
@@ -1725,6 +1759,117 @@ func (m *SourceOp) Unmarshal(data []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.Identifier = string(data[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Attrs", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowOps
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthOps
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			var keykey uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowOps
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				keykey |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			var stringLenmapkey uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowOps
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLenmapkey |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLenmapkey := int(stringLenmapkey)
+			if intStringLenmapkey < 0 {
+				return ErrInvalidLengthOps
+			}
+			postStringIndexmapkey := iNdEx + intStringLenmapkey
+			if postStringIndexmapkey > l {
+				return io.ErrUnexpectedEOF
+			}
+			mapkey := string(data[iNdEx:postStringIndexmapkey])
+			iNdEx = postStringIndexmapkey
+			var valuekey uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowOps
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				valuekey |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			var stringLenmapvalue uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowOps
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLenmapvalue |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLenmapvalue := int(stringLenmapvalue)
+			if intStringLenmapvalue < 0 {
+				return ErrInvalidLengthOps
+			}
+			postStringIndexmapvalue := iNdEx + intStringLenmapvalue
+			if postStringIndexmapvalue > l {
+				return io.ErrUnexpectedEOF
+			}
+			mapvalue := string(data[iNdEx:postStringIndexmapvalue])
+			iNdEx = postStringIndexmapvalue
+			if m.Attrs == nil {
+				m.Attrs = make(map[string]string)
+			}
+			m.Attrs[mapkey] = mapvalue
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
