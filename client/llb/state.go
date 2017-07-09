@@ -40,10 +40,6 @@ func (s *State) Validate() error {
 func (s *State) Run(opts ...RunOption) *ExecState {
 	var es ExecState
 	meta := s.metaNext
-	var err error
-	for _, o := range opts {
-		meta, err = o(meta)
-	}
 
 	exec := &exec{
 		meta:   meta,
@@ -60,8 +56,13 @@ func (s *State) Run(opts ...RunOption) *ExecState {
 
 	es.exec = exec
 	es.mount = exec.root
-	es.metaNext = meta
 	es.meta = meta
+	es.metaNext = es.meta
+	var err error
+	for _, o := range opts {
+		es = *o(&es)
+	}
+	es.exec.meta = es.meta
 	es.err = err
 	return &es
 }
@@ -70,16 +71,16 @@ func (s *State) AddEnv(key, value string) *State {
 	return s.AddEnvf(key, value)
 }
 func (s *State) AddEnvf(key, value string, v ...interface{}) *State {
-	s.metaNext, _ = AddEnvf(key, value, v...)(s.metaNext)
+	s.metaNext, _ = addEnvf(key, value, v...)(s.metaNext)
 	return s
 }
 
 func (s *State) DelEnv(key string) *State {
-	s.metaNext, _ = DelEnv(key)(s.metaNext)
+	s.metaNext, _ = delEnv(key)(s.metaNext)
 	return s
 }
 func (s *State) ClearEnv() *State {
-	s.metaNext, _ = ClearEnv()(s.metaNext)
+	s.metaNext, _ = clearEnv()(s.metaNext)
 	return s
 }
 func (s *State) GetEnv(key string) (string, bool) {
@@ -90,7 +91,7 @@ func (s *State) Dir(str string) *State {
 	return s.Dirf(str)
 }
 func (s *State) Dirf(str string, v ...interface{}) *State {
-	s.metaNext, _ = Dirf(str, v...)(s.metaNext)
+	s.metaNext, _ = dirf(str, v...)(s.metaNext)
 	return s
 }
 
@@ -98,14 +99,14 @@ func (s *State) GetDir() string {
 	return s.metaNext.Dir()
 }
 
-func (s *State) Args(args ...string) *State {
-	s.metaNext, _ = Args(args...)(s.metaNext)
+func (s *State) Args(arg ...string) *State {
+	s.metaNext, _ = args(arg...)(s.metaNext)
 	return s
 }
 
 func (s *State) Reset(src *State) *State {
 	copy := *s
-	copy.metaNext, _ = Reset(src)(s.metaNext)
+	copy.metaNext, _ = reset(src)(s.metaNext)
 	return &copy
 }
 
@@ -168,4 +169,72 @@ func (s *ExecState) GetMount(target string) (*State, error) {
 		}
 	}
 	return nil, errors.WithStack(errNotFound)
+}
+
+func (s *ExecState) updateMeta(fn metaOption) *ExecState {
+	meta, err := fn(s.meta)
+	s.meta = meta
+	if err != nil {
+		s.err = err
+	}
+	return s
+}
+
+type RunOption func(es *ExecState) *ExecState
+
+func AddMount(dest string, mountState *State) RunOption {
+	return func(es *ExecState) *ExecState {
+		es.AddMount(dest, mountState)
+		return nil
+	}
+}
+
+func Shlex(str string) RunOption {
+	return Shlexf(str)
+}
+func Shlexf(str string, v ...interface{}) RunOption {
+	return func(es *ExecState) *ExecState {
+		return es.updateMeta(shlexf(str, v...))
+	}
+}
+
+func AddEnv(key, value string) RunOption {
+	return AddEnvf(key, value)
+}
+func AddEnvf(key, value string, v ...interface{}) RunOption {
+	return func(es *ExecState) *ExecState {
+		return es.updateMeta(addEnvf(key, value, v...))
+	}
+}
+
+func DelEnv(key string) RunOption {
+	return func(es *ExecState) *ExecState {
+		return es.updateMeta(delEnv(key))
+	}
+}
+func ClearEnv() RunOption {
+	return func(es *ExecState) *ExecState {
+		return es.updateMeta(clearEnv())
+	}
+}
+
+func Dir(str string) RunOption {
+	return Dirf(str)
+}
+func Dirf(str string, v ...interface{}) RunOption {
+	return func(es *ExecState) *ExecState {
+		return es.updateMeta(dirf(str, v...))
+	}
+}
+
+func Args(arg ...string) RunOption {
+	return func(es *ExecState) *ExecState {
+		return es.updateMeta(args(arg...))
+	}
+}
+
+func Reset(src *State) RunOption {
+	return func(es *ExecState) *ExecState {
+		return es.updateMeta(reset(src))
+	}
 }

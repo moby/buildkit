@@ -12,8 +12,6 @@ import (
 
 var errNotFound = errors.Errorf("not found")
 
-type RunOption func(m Meta) (Meta, error)
-
 func Source(id string) *State {
 	return &State{
 		metaNext: NewMeta(),
