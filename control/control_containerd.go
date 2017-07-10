@@ -44,10 +44,13 @@ func NewContainerd(root, address string) (*Controller, error) {
 }
 
 func newContainerdPullDeps(client *containerd.Client) *pullDeps {
+	diff := client.DiffService()
 	return &pullDeps{
 		Snapshotter:  client.SnapshotService(),
 		ContentStore: client.ContentStore(),
-		Applier:      client.DiffService(),
+		Applier:      diff,
+		Differ:       diff,
+		Images:       client.ImageService(),
 	}
 }
 

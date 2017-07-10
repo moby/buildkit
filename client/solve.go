@@ -13,7 +13,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func (c *Client) Solve(ctx context.Context, r io.Reader, statusChan chan *SolveStatus) error {
+func (c *Client) Solve(ctx context.Context, r io.Reader, statusChan chan *SolveStatus, exporter string, exporterAttrs map[string]string) error {
 	def, err := llb.ReadFrom(r)
 	if err != nil {
 		return errors.Wrap(err, "failed to parse input")
@@ -36,8 +36,10 @@ func (c *Client) Solve(ctx context.Context, r io.Reader, statusChan chan *SolveS
 			}()
 		}()
 		_, err = c.controlClient().Solve(ctx, &controlapi.SolveRequest{
-			Ref:        ref,
-			Definition: def,
+			Ref:           ref,
+			Definition:    def,
+			Exporter:      exporter,
+			ExporterAttrs: exporterAttrs,
 		})
 		if err != nil {
 			return errors.Wrap(err, "failed to solve")

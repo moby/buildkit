@@ -92,6 +92,7 @@ func (cm *cacheManager) Get(ctx context.Context, id string) (ImmutableRef, error
 	defer cm.mu.Unlock()
 	return cm.get(ctx, id)
 }
+
 func (cm *cacheManager) get(ctx context.Context, id string) (ImmutableRef, error) {
 	rec, err := cm.load(ctx, id)
 	if err != nil {

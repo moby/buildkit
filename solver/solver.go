@@ -4,6 +4,7 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/util/progress"
@@ -63,7 +64,7 @@ func New(resolve ResolveOpFunc, cache InstructionCache) *Solver {
 	return &Solver{resolve: resolve, jobs: newJobList(), cache: cache}
 }
 
-func (s *Solver) Solve(ctx context.Context, id string, v Vertex) error {
+func (s *Solver) Solve(ctx context.Context, id string, v Vertex, exp exporter.ExporterInstance) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -87,10 +88,22 @@ func (s *Solver) Solve(ctx context.Context, id string, v Vertex) error {
 		return err
 	}
 
-	for _, r := range refs {
-		r.Release(context.TODO())
+	defer func() {
+		for _, r := range refs {
+			r.Release(context.TODO())
+		}
+	}()
+
+	if exp != nil {
+		immutable, ok := toImmutableRef(refs[0])
+		if !ok {
+			return errors.Errorf("invalid reference for exporting: %T", refs[0])
+		}
+		if err := exp.Export(ctx, immutable); err != nil {
+			return err
+		}
 	}
-	// TODO: export final vertex state
+
 	return err
 }
 
@@ -263,4 +276,27 @@ func toAny(in []Reference) []interface{} {
 		out = append(out, i)
 	}
 	return out
+}
+
+func toImmutableRef(ref Reference) (cache.ImmutableRef, bool) {
+	sysRef := ref
+	if sys, ok := ref.(interface {
+		Sys() Reference
+	}); ok {
+		sysRef = sys.Sys()
+	}
+	immutable, ok := sysRef.(cache.ImmutableRef)
+	if !ok {
+		return nil, false
+	}
+	return &immutableRef{immutable, ref.Release}, true
+}
+
+type immutableRef struct {
+	cache.ImmutableRef
+	release func(context.Context) error
+}
+
+func (ir *immutableRef) Release(ctx context.Context) error {
+	return ir.release(ctx)
 }

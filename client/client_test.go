@@ -95,6 +95,6 @@ func testBuildMultiMount(t *testing.T, address string) {
 	err = llb.WriteTo(dt, buf)
 	assert.Nil(t, err)
 
-	err = c.Solve(context.TODO(), buf, nil)
+	err = c.Solve(context.TODO(), buf, nil, "", nil)
 	assert.Nil(t, err)
 }

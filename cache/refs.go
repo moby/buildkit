@@ -16,6 +16,7 @@ type ImmutableRef interface {
 	ID() string
 	Release(context.Context) error
 	Size(ctx context.Context) (int64, error)
+	Parent() ImmutableRef
 	// Prepare() / ChainID() / Meta()
 }
 
@@ -83,6 +84,13 @@ func (cr *cacheRecord) Size(ctx context.Context) (int64, error) {
 		return usage.Size, nil
 	})
 	return s.(int64), err
+}
+
+func (cr *cacheRecord) Parent() ImmutableRef {
+	if cr.parent == nil {
+		return nil
+	}
+	return cr.parent.(*immutableRef).ref()
 }
 
 func (cr *cacheRecord) Mount(ctx context.Context) ([]mount.Mount, error) {

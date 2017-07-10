@@ -6,21 +6,28 @@ import (
 	"path/filepath"
 
 	"github.com/containerd/containerd/content"
+	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/rootfs"
 	ctdsnapshot "github.com/containerd/containerd/snapshot"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/instructioncache"
 	"github.com/moby/buildkit/cache/metadata"
+	"github.com/moby/buildkit/exporter"
+	imageexporter "github.com/moby/buildkit/exporter/containerimage"
 	"github.com/moby/buildkit/snapshot/blobmapping"
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/source/containerimage"
 	"github.com/moby/buildkit/source/git"
 )
 
+const keyImageExporter = "image"
+
 type pullDeps struct {
 	Snapshotter  ctdsnapshot.Snapshotter
 	ContentStore content.Store
 	Applier      rootfs.Applier
+	Differ       rootfs.MountDiffer
+	Images       images.Store
 }
 
 func defaultControllerOpts(root string, pd pullDeps) (*Opt, error) {
@@ -78,10 +85,25 @@ func defaultControllerOpts(root string, pd pullDeps) (*Opt, error) {
 
 	sm.Register(gs)
 
+	exporters := map[string]exporter.Exporter{}
+
+	imageExporter, err := imageexporter.New(imageexporter.Opt{
+		Snapshotter:   snapshotter,
+		ContentStore:  pd.ContentStore,
+		Differ:        pd.Differ,
+		CacheAccessor: cm,
+		Images:        pd.Images,
+	})
+	if err != nil {
+		return nil, err
+	}
+	exporters[keyImageExporter] = imageExporter
+
 	return &Opt{
 		Snapshotter:      snapshotter,
 		CacheManager:     cm,
 		SourceManager:    sm,
 		InstructionCache: ic,
+		Exporters:        exporters,
 	}, nil
 }

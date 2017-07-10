@@ -5,6 +5,7 @@ import (
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/worker"
@@ -20,6 +21,7 @@ type Opt struct {
 	Worker           worker.Worker
 	SourceManager    *source.Manager
 	InstructionCache solver.InstructionCache
+	Exporters        map[string]exporter.Exporter
 }
 
 type Controller struct { // TODO: ControlService
@@ -68,7 +70,20 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to load")
 	}
-	if err := c.solver.Solve(ctx, req.Ref, v); err != nil {
+
+	var expi exporter.ExporterInstance
+	if req.Exporter != "" {
+		exp, ok := c.opt.Exporters[req.Exporter]
+		if !ok {
+			return nil, errors.Errorf("exporter %q could not be found", req.Exporter)
+		}
+		expi, err = exp.Resolve(ctx, req.ExporterAttrs)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if err := c.solver.Solve(ctx, req.Ref, v, expi); err != nil {
 		return nil, err
 	}
 	return &controlapi.SolveResponse{}, nil
