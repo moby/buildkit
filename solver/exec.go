@@ -59,20 +59,24 @@ func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, erro
 
 	for _, m := range e.op.Mounts {
 		var mountable cache.Mountable
-		if int(m.Input) > len(inputs) {
-			return nil, errors.Errorf("missing input %d", m.Input)
+		var ref cache.ImmutableRef
+		if m.Input != -1 {
+			if int(m.Input) > len(inputs) {
+				return nil, errors.Errorf("missing input %d", m.Input)
+			}
+			inp := inputs[int(m.Input)]
+			if sys, ok := inp.(interface {
+				Sys() Reference
+			}); ok {
+				inp = sys.Sys()
+			}
+			var ok bool
+			ref, ok = inp.(cache.ImmutableRef)
+			if !ok {
+				return nil, errors.Errorf("invalid reference for exec %T", inputs[int(m.Input)])
+			}
+			mountable = ref
 		}
-		inp := inputs[int(m.Input)]
-		if sys, ok := inp.(interface {
-			Sys() Reference
-		}); ok {
-			inp = sys.Sys()
-		}
-		ref, ok := inp.(cache.ImmutableRef)
-		if !ok {
-			return nil, errors.Errorf("invalid reference for exec %T", inputs[int(m.Input)])
-		}
-		mountable = ref
 		if m.Output != -1 {
 			active, err := e.cm.New(ctx, ref) // TODO: should be method
 			if err != nil {

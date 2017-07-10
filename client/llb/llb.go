@@ -22,8 +22,9 @@ func Source(id string) *State {
 }
 
 type source struct {
-	id    string
-	attrs map[string]string
+	id      string
+	attrs   map[string]string
+	scratch bool
 }
 
 func (so *source) Validate() error {
@@ -35,6 +36,9 @@ func (so *source) Validate() error {
 }
 
 func (so *source) marshalTo(list [][]byte, cache map[digest.Digest]struct{}) (digest.Digest, [][]byte, error) {
+	if so.scratch {
+		return "", list, nil
+	}
 	if err := so.Validate(); err != nil {
 		return "", nil, err
 	}
@@ -68,6 +72,12 @@ func KeepGitDir() GitOption {
 	return func(s *source) {
 		s.attrs[pb.AttrKeepGitDir] = "true"
 	}
+}
+
+func Scratch() *State {
+	s := Source("scratch")
+	s.source.scratch = true
+	return s
 }
 
 type exec struct {
@@ -131,6 +141,9 @@ func (eo *exec) marshalTo(list [][]byte, cache map[digest.Digest]struct{}) (dige
 				inputIndex = i
 				break
 			}
+		}
+		if dgst == "" {
+			inputIndex = -1
 		}
 		if inputIndex == len(pop.Inputs) {
 			var mountIndex int64
