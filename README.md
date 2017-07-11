@@ -62,7 +62,7 @@ Different versions of the example scripts show different ways of describing the 
 
 #### Supported runc version
 
-During development buildkit is tested with the version of runc that is being used by the containerd repository. Please refer to [runc.md](https://github.com/containerd/containerd/blob/8bd8030edec48308a8a2e9b71598a3c4c898784f/RUNC.md) for more information.
+During development buildkit is tested with the version of runc that is being used by the containerd repository. Please refer to [runc.md](https://github.com/containerd/containerd/blob/3707703a694187c7d08e2f333da6ddd58bcb729d/RUNC.md) for more information.
 
 
 #### Contributing
