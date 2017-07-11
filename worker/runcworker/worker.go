@@ -13,6 +13,7 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/containerd/containerd/mount"
 	runc "github.com/containerd/go-runc"
+	"github.com/docker/docker/pkg/symlink"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/worker"
 	"github.com/moby/buildkit/worker/oci"
@@ -87,8 +88,16 @@ func (w *runcworker) Exec(ctx context.Context, meta worker.Meta, root cache.Moun
 	}
 	defer mount.Unmount(rootFSPath, 0)
 	spec.Root.Path = rootFSPath
-	if _, ok := root.(cache.ImmutableRef); ok {
+	if _, ok := root.(cache.ImmutableRef); ok { // TODO: pass in with mount, not ref type
 		spec.Root.Readonly = true
+	}
+
+	newp, err := symlink.FollowSymlinkInScope(filepath.Join(rootFSPath, meta.Cwd), rootFSPath)
+	if err != nil {
+		return errors.Wrapf(err, "working dir %s points to invalid target", newp)
+	}
+	if err := os.MkdirAll(newp, 0700); err != nil {
+		return errors.Wrapf(err, "failed to create working directory %s", newp)
 	}
 
 	if err := json.NewEncoder(f).Encode(spec); err != nil {

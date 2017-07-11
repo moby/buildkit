@@ -24,6 +24,7 @@ func newSourceOp(op *pb.Op_Source, sm *source.Manager) (Op, error) {
 
 func (s *sourceOp) instance(ctx context.Context) (source.SourceInstance, error) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.src != nil {
 		return s.src, nil
 	}
@@ -31,12 +32,21 @@ func (s *sourceOp) instance(ctx context.Context) (source.SourceInstance, error) 
 	if err != nil {
 		return nil, err
 	}
+	if id, ok := id.(*source.GitIdentifier); ok {
+		for k, v := range s.op.Source.Attrs {
+			switch k {
+			case pb.AttrKeepGitDir:
+				if v == "true" {
+					id.KeepGitDir = true
+				}
+			}
+		}
+	}
 	src, err := s.sm.Resolve(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 	s.src = src
-	s.mu.Unlock()
 	return s.src, nil
 }
 

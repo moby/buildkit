@@ -20,10 +20,10 @@ func TestReset(t *testing.T) {
 	m := NewMeta()
 	wd := m.Dir()
 	path, _ := m.Env("PATH")
-	m, _ = Dir("/foo")(m)
-	m, _ = AddEnv("FOO", "bar")(m)
+	m, _ = dir("/foo")(m)
+	m, _ = addEnv("FOO", "bar")(m)
 
-	m, _ = Reset(nil)(m)
+	m, _ = reset(nil)(m)
 	assert.Equal(t, wd, m.Dir())
 	path2, _ := m.Env("PATH")
 	assert.Equal(t, path, path2)
@@ -31,9 +31,9 @@ func TestReset(t *testing.T) {
 
 func TestEnv(t *testing.T) {
 	m := NewMeta()
-	m, _ = AddEnv("FOO", "bar")(m)
-	m2, _ := AddEnv("FOO", "baz")(m)
-	m2, _ = AddEnv("BAR", "abc")(m2)
+	m, _ = addEnv("FOO", "bar")(m)
+	m2, _ := addEnv("FOO", "baz")(m)
+	m2, _ = addEnv("BAR", "abc")(m2)
 
 	v, ok := m.Env("FOO")
 	assert.True(t, ok)
@@ -52,10 +52,10 @@ func TestEnv(t *testing.T) {
 }
 
 func TestShlex(t *testing.T) {
-	m, err := Shlex("echo foo")(Meta{})
+	m, err := shlexf("echo foo")(Meta{})
 	assert.Nil(t, err)
 	assert.Equal(t, []string{"echo", "foo"}, m.Args())
 
-	m, err = Shlex("echo \"foo")(Meta{})
+	_, err = shlexf("echo \"foo")(Meta{})
 	assert.Error(t, err)
 }

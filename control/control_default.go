@@ -14,6 +14,7 @@ import (
 	"github.com/moby/buildkit/snapshot/blobmapping"
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/source/containerimage"
+	"github.com/moby/buildkit/source/git"
 )
 
 type pullDeps struct {
@@ -66,6 +67,16 @@ func defaultControllerOpts(root string, pd pullDeps) (*Opt, error) {
 	}
 
 	sm.Register(is)
+
+	gs, err := git.NewSource(git.Opt{
+		CacheAccessor: cm,
+		MetadataStore: md,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	sm.Register(gs)
 
 	return &Opt{
 		Snapshotter:      snapshotter,

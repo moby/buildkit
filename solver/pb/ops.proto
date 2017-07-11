@@ -47,5 +47,7 @@ message CopySource {
 }
 
 message SourceOp {
+	// source type?
 	string identifier = 1;
+	map<string, string> attrs = 2;
 }

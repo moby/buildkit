@@ -14,6 +14,7 @@ var (
 
 const (
 	DockerImageScheme = "docker-image"
+	GitScheme         = "git"
 )
 
 type Identifier interface {
@@ -30,6 +31,8 @@ func FromString(s string) (Identifier, error) {
 	switch parts[0] {
 	case DockerImageScheme:
 		return NewImageIdentifier(parts[1])
+	case GitScheme:
+		return NewGitIdentifier(parts[1])
 	default:
 		return nil, errors.Wrapf(errNotFound, "unknown schema %s", parts[0])
 	}

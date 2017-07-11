@@ -12,17 +12,17 @@ import (
 
 var errNotFound = errors.Errorf("not found")
 
-type RunOption func(m Meta) (Meta, error)
-
 func Source(id string) *State {
 	return &State{
 		metaNext: NewMeta(),
-		source:   &source{id: id},
+		source:   &source{id: id, attrs: map[string]string{}},
 	}
 }
 
 type source struct {
-	id string
+	id      string
+	attrs   map[string]string
+	scratch bool
 }
 
 func (so *source) Validate() error {
@@ -34,12 +34,15 @@ func (so *source) Validate() error {
 }
 
 func (so *source) marshalTo(list [][]byte, cache map[digest.Digest]struct{}) (digest.Digest, [][]byte, error) {
+	if so.scratch {
+		return "", list, nil
+	}
 	if err := so.Validate(); err != nil {
 		return "", nil, err
 	}
 	po := &pb.Op{
 		Op: &pb.Op_Source{
-			Source: &pb.SourceOp{Identifier: so.id},
+			Source: &pb.SourceOp{Identifier: so.id, Attrs: so.attrs},
 		},
 	}
 	return appendResult(po, list, cache)
@@ -47,6 +50,32 @@ func (so *source) marshalTo(list [][]byte, cache map[digest.Digest]struct{}) (di
 
 func Image(ref string) *State {
 	return Source("docker-image://" + ref) // controversial
+}
+
+func Git(remote, ref string, opts ...GitOption) *State {
+	id := remote
+	if ref != "" {
+		id += "#" + ref
+	}
+	state := Source("git://" + id)
+	for _, opt := range opts {
+		opt(state.source)
+	}
+	return state
+}
+
+type GitOption func(*source)
+
+func KeepGitDir() GitOption {
+	return func(s *source) {
+		s.attrs[pb.AttrKeepGitDir] = "true"
+	}
+}
+
+func Scratch() *State {
+	s := Source("scratch")
+	s.source.scratch = true
+	return s
 }
 
 type exec struct {
@@ -110,6 +139,9 @@ func (eo *exec) marshalTo(list [][]byte, cache map[digest.Digest]struct{}) (dige
 				inputIndex = i
 				break
 			}
+		}
+		if dgst == "" {
+			inputIndex = -1
 		}
 		if inputIndex == len(pop.Inputs) {
 			var mountIndex int64

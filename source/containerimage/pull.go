@@ -1,7 +1,7 @@
 package containerimage
 
 import (
-	"context"
+	gocontext "context"
 	"encoding/json"
 	"net/http"
 	"sync"
@@ -21,6 +21,7 @@ import (
 	"github.com/opencontainers/image-spec/identity"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
 )
 
 // TODO: break apart containerd specifics like contentstore so the resolver
@@ -34,8 +35,8 @@ type SourceOpt struct {
 }
 
 type blobmapper interface {
-	GetBlob(ctx context.Context, key string) (digest.Digest, error)
-	SetBlob(ctx context.Context, key string, blob digest.Digest) error
+	GetBlob(ctx gocontext.Context, key string) (digest.Digest, error)
+	SetBlob(ctx gocontext.Context, key string, blob digest.Digest) error
 }
 
 type imageSource struct {
@@ -74,7 +75,7 @@ type puller struct {
 func (is *imageSource) Resolve(ctx context.Context, id source.Identifier) (source.SourceInstance, error) {
 	imageIdentifier, ok := id.(*source.ImageIdentifier)
 	if !ok {
-		return nil, errors.New("invalid identifier")
+		return nil, errors.Errorf("invalid image identifier %v", id)
 	}
 
 	p := &puller{
@@ -128,7 +129,7 @@ func (p *puller) Snapshot(ctx context.Context) (cache.ImmutableRef, error) {
 	// and snapshots as 1) buildkit shouldn't have a dependency on contentstore
 	// or 2) cachemanager should manage the contentstore
 	handlers := []images.Handler{
-		images.HandlerFunc(func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
+		images.HandlerFunc(func(ctx gocontext.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
 			ongoing.add(desc)
 			return nil, nil
 		}),

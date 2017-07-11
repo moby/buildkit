@@ -36,23 +36,29 @@ go build -o buildctl ./cmd/buildctl
 
 You can also use `make binaries` that prepares all binaries into the `bin/` directory.
 
-The first thing to test could be to try building BuildKit with BuildKit. BuildKit provides a low-level solver format that could be used by multiple build definitions. Preparation work for making the Dockerfile parser reusable as a frontend is tracked in https://github.com/moby/moby/pull/33492. As no frontends have been integrated yet we currently have to use a script to generate this low-level definition.
+The first thing to test could be to try building BuildKit with BuildKit. BuildKit provides a low-level solver format that could be used by multiple build definitions. Preparation work for making the Dockerfile parser reusable as a frontend is tracked in https://github.com/moby/moby/pull/33492. As no frontends have been integrated yet we currently have to use a client library to generate this low-level definition.
 
-`examples/buildkit/buildkit.go` is a script that defines how to build different configurations of BuildKit and its dependencies using the `client` package. Running this script generates a protobuf definition of a build graph. Note that the script itself does not execute any steps of the build.
+`examples/buildkit*` directory contains scripts that define how to build different configurations of BuildKit and its dependencies using the `client` package. Running one of these script generates a protobuf definition of a build graph. Note that the script itself does not execute any steps of the build.
 
 You can use `buildctl debug dump-llb` to see what data is this definition.
 
 ```bash
-go run examples/buildkit/buildkit.go | buildctl debug dump-llb | jq .
+go run examples/buildkit0/buildkit.go | buildctl debug dump-llb | jq .
 ```
 
 To start building use `buildctl build` command. The script accepts `--target` flag to choose between `containerd` and `standalone` configurations. In standalone mode BuildKit binaries are built together with `runc`. In containerd mode, the `containerd` binary is built as well from the upstream repo.
 
 ```bash
-go run examples/buildkit/buildkit.go | buildctl build
+go run examples/buildkit0/buildkit.go | buildctl build
 ```
 
 `buildctl build` will show interactive progress bar by default while the build job is running. It will also show you the path to the trace file that contains all information about the timing of the individual steps and logs.
+
+Different versions of the example scripts show different ways of describing the build definition for this project to show the capabilities of the library. New versions have been added when new features have become available.
+
+- `./examples/buildkit0` - uses only exec operations, defines a full stage per component.
+- `./examples/buildkit1` - cloning git repositories has been separated for extra concurrency.
+- `./examples/buildkit2` - uses git sources directly instead of running `git clone`, allowing better performance and much safer caching.
 
 #### Supported runc version
 

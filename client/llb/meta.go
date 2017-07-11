@@ -7,11 +7,11 @@ import (
 	"github.com/moby/buildkit/util/system"
 )
 
-func NewMeta(args ...string) Meta {
+func NewMeta(arg ...string) Meta {
 	m := Meta{}
-	m, _ = AddEnv("PATH", system.DefaultPathEnv)(m)
-	m, _ = Args(args...)(m)
-	m, _ = Dir("/")(m)
+	m, _ = addEnv("PATH", system.DefaultPathEnv)(m)
+	m, _ = args(arg...)(m)
+	m, _ = dir("/")(m)
 	return m
 }
 
@@ -21,48 +21,50 @@ type Meta struct {
 	cwd  string
 }
 
-func AddEnv(key, value string) RunOption {
-	return AddEnvf(key, value)
+type metaOption func(Meta) (Meta, error)
+
+func addEnv(key, value string) metaOption {
+	return addEnvf(key, value)
 }
-func AddEnvf(key, value string, v ...interface{}) RunOption {
+func addEnvf(key, value string, v ...interface{}) metaOption {
 	return func(m Meta) (Meta, error) {
 		m.env = m.env.AddOrReplace(key, fmt.Sprintf(value, v...))
 		return m, nil
 	}
 }
 
-func ClearEnv() RunOption {
+func clearEnv() metaOption {
 	return func(m Meta) (Meta, error) {
 		m.env = NewMeta().env
 		return m, nil
 	}
 }
 
-func DelEnv(key string) RunOption {
+func delEnv(key string) metaOption {
 	return func(m Meta) (Meta, error) {
 		m.env = m.env.Delete(key)
 		return m, nil
 	}
 }
 
-func Args(args ...string) RunOption {
+func args(args ...string) metaOption {
 	return func(m Meta) (Meta, error) {
 		m.args = args
 		return m, nil
 	}
 }
 
-func Dir(str string) RunOption {
-	return Dirf(str)
+func dir(str string) metaOption {
+	return dirf(str)
 }
-func Dirf(str string, v ...interface{}) RunOption {
+func dirf(str string, v ...interface{}) metaOption {
 	return func(m Meta) (Meta, error) {
 		m.cwd = fmt.Sprintf(str, v...)
 		return m, nil
 	}
 }
 
-func Reset(s *State) RunOption {
+func reset(s *State) metaOption {
 	return func(m Meta) (Meta, error) {
 		if s == nil {
 			return NewMeta(), nil
@@ -83,17 +85,13 @@ func (m Meta) Args() []string {
 	return append([]string{}, m.args...)
 }
 
-func Shlex(str string) RunOption {
-	return Shlexf(str)
-}
-
-func Shlexf(str string, v ...interface{}) RunOption {
+func shlexf(str string, v ...interface{}) metaOption {
 	return func(m Meta) (Meta, error) {
-		args, err := shlex.Split(fmt.Sprintf(str, v...))
+		arg, err := shlex.Split(fmt.Sprintf(str, v...))
 		if err != nil {
 			return m, err
 		}
-		return Args(args...)(m)
+		return args(arg...)(m)
 	}
 }
 
