@@ -78,6 +78,18 @@ func Scratch() *State {
 	return s
 }
 
+func Local(name string) *State {
+	return Source("local://" + name)
+}
+
+type LocalOption func(*source)
+
+func SessionID(id string) LocalOption {
+	return func(s *source) {
+		s.attrs[pb.AttrLocalSessionID] = id
+	}
+}
+
 type exec struct {
 	meta   Meta
 	mounts []*mount

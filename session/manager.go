@@ -102,6 +102,8 @@ func (sm *Manager) handleConn(ctx context.Context, conn net.Conn, opts map[strin
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	opts = canonicalHeaders(opts)
+
 	h := http.Header(opts)
 	uuid := h.Get(headerSessionUUID)
 	name := h.Get(headerSessionName)
@@ -199,4 +201,12 @@ func (c *client) Supports(url string) bool {
 }
 func (c *client) Conn() *grpc.ClientConn {
 	return c.cc
+}
+
+func canonicalHeaders(in map[string][]string) map[string][]string {
+	out := map[string][]string{}
+	for k := range in {
+		out[http.CanonicalHeaderKey(k)] = in[k]
+	}
+	return out
 }

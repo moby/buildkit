@@ -1,6 +1,7 @@
 package filesync
 
 import (
+	"fmt"
 	"os"
 	"strings"
 
@@ -177,6 +178,8 @@ func FSSync(ctx context.Context, c session.Caller, opt FSSendRequestOpt) error {
 			return err
 		}
 		stream = cc
+	default:
+		panic(fmt.Sprintf("invalid protocol: %q", pr.name))
 	}
 
 	return pr.recvFn(stream, opt.DestDir, opt.CacheUpdater)

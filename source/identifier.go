@@ -15,6 +15,7 @@ var (
 const (
 	DockerImageScheme = "docker-image"
 	GitScheme         = "git"
+	LocalScheme       = "local"
 )
 
 type Identifier interface {
@@ -33,6 +34,8 @@ func FromString(s string) (Identifier, error) {
 		return NewImageIdentifier(parts[1])
 	case GitScheme:
 		return NewGitIdentifier(parts[1])
+	case LocalScheme:
+		return NewLocalIdentifier(parts[1])
 	default:
 		return nil, errors.Wrapf(errNotFound, "unknown schema %s", parts[0])
 	}
@@ -54,6 +57,19 @@ func NewImageIdentifier(str string) (*ImageIdentifier, error) {
 	return &ImageIdentifier{Reference: ref}, nil
 }
 
-func (i *ImageIdentifier) ID() string {
+func (_ *ImageIdentifier) ID() string {
 	return DockerImageScheme
+}
+
+type LocalIdentifier struct {
+	Name      string
+	SessionID string
+}
+
+func NewLocalIdentifier(str string) (*LocalIdentifier, error) {
+	return &LocalIdentifier{Name: str}, nil
+}
+
+func (_ *LocalIdentifier) ID() string {
+	return LocalScheme
 }

@@ -3,10 +3,9 @@ package filesync
 import (
 	"time"
 
-	"google.golang.org/grpc"
-
 	"github.com/Sirupsen/logrus"
 	"github.com/tonistiigi/fsutil"
+	"google.golang.org/grpc"
 )
 
 func sendDiffCopy(stream grpc.Stream, dir string, includes, excludes []string, progress progressCb) error {

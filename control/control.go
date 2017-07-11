@@ -1,11 +1,14 @@
 package control
 
 import (
+	"github.com/Sirupsen/logrus"
 	"github.com/containerd/containerd/snapshot"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/exporter"
+	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/session/grpchijack"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/worker"
@@ -22,6 +25,7 @@ type Opt struct {
 	SourceManager    *source.Manager
 	InstructionCache solver.InstructionCache
 	Exporters        map[string]exporter.Exporter
+	SessionManager   *session.Manager
 }
 
 type Controller struct { // TODO: ControlService
@@ -82,6 +86,8 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 			return nil, err
 		}
 	}
+
+	ctx = session.NewContext(ctx, req.Session)
 
 	if err := c.solver.Solve(ctx, req.Ref, v, expi); err != nil {
 		return nil, err
@@ -146,4 +152,13 @@ func (c *Controller) Status(req *controlapi.StatusRequest, stream controlapi.Con
 	})
 
 	return eg.Wait()
+}
+
+func (c *Controller) Session(stream controlapi.Control_SessionServer) error {
+	logrus.Debugf("session started")
+	conn, opts := grpchijack.Hijack(stream)
+	defer conn.Close()
+	err := c.opt.SessionManager.HandleConn(stream.Context(), conn, opts)
+	logrus.Debugf("session finished: %v", err)
+	return err
 }

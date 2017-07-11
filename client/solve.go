@@ -5,15 +5,29 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"io"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
+	"github.com/Sirupsen/logrus"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/session/filesync"
+	"github.com/moby/buildkit/session/grpchijack"
+	"github.com/moby/buildkit/solver/pb"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
-func (c *Client) Solve(ctx context.Context, r io.Reader, statusChan chan *SolveStatus, exporter string, exporterAttrs map[string]string) error {
+func (c *Client) Solve(ctx context.Context, r io.Reader, statusChan chan *SolveStatus, exporter string, exporterAttrs map[string]string, localDir string) error {
+	defer func() {
+		if statusChan != nil {
+			close(statusChan)
+		}
+	}()
+
 	def, err := llb.ReadFrom(r)
 	if err != nil {
 		return errors.Wrap(err, "failed to parse input")
@@ -23,10 +37,34 @@ func (c *Client) Solve(ctx context.Context, r io.Reader, statusChan chan *SolveS
 		return errors.New("invalid empty definition")
 	}
 
+	if err := validateLocals(def, localDir); err != nil {
+		return err
+	}
+
 	ref := generateID()
 	eg, ctx := errgroup.WithContext(ctx)
 
 	statusContext, cancelStatus := context.WithCancel(context.Background())
+	defer cancelStatus()
+
+	sharedKey, err := getSharedKey(localDir)
+	if err != nil {
+		return errors.Wrap(err, "failed to get build shared key")
+	}
+	s, err := session.NewSession(filepath.Base(localDir), sharedKey)
+	if err != nil {
+		return errors.Wrap(err, "failed to create session")
+	}
+
+	if localDir != "" {
+		_, dir, _ := parseLocalDir(localDir)
+		workdirProvider := filesync.NewFSSyncProvider(dir, nil)
+		s.Allow(workdirProvider)
+	}
+
+	eg.Go(func() error {
+		return s.Run(ctx, grpchijack.Dialer(c.controlClient()))
+	})
 
 	eg.Go(func() error {
 		defer func() { // make sure the Status ends cleanly on build errors
@@ -34,12 +72,15 @@ func (c *Client) Solve(ctx context.Context, r io.Reader, statusChan chan *SolveS
 				<-time.After(3 * time.Second)
 				cancelStatus()
 			}()
+			logrus.Debugf("stopping session")
+			s.Close()
 		}()
 		_, err = c.controlClient().Solve(ctx, &controlapi.SolveRequest{
 			Ref:           ref,
 			Definition:    def,
 			Exporter:      exporter,
 			ExporterAttrs: exporterAttrs,
+			Session:       s.UUID(),
 		})
 		if err != nil {
 			return errors.Wrap(err, "failed to solve")
@@ -100,12 +141,6 @@ func (c *Client) Solve(ctx context.Context, r io.Reader, statusChan chan *SolveS
 		}
 	})
 
-	defer func() {
-		if statusChan != nil {
-			close(statusChan)
-		}
-	}()
-
 	return eg.Wait()
 }
 
@@ -115,4 +150,45 @@ func generateID() string {
 		panic(err)
 	}
 	return hex.EncodeToString(b)
+}
+
+func validateLocals(defs [][]byte, localDir string) error {
+	k, _, err := parseLocalDir(localDir)
+	if err != nil {
+		return err
+	}
+	for _, dt := range defs {
+		var op pb.Op
+		if err := (&op).Unmarshal(dt); err != nil {
+			return errors.Wrap(err, "failed to parse llb proto op")
+		}
+		if src := op.GetSource(); src != nil {
+			if strings.HasPrefix(src.Identifier, "local://") { // TODO: just make a type property
+				name := strings.TrimPrefix(src.Identifier, "local://")
+				if name != k {
+					return errors.Errorf("local directory %s not enabled", name)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func parseLocalDir(str string) (string, string, error) {
+	if str == "" {
+		return "", "", nil
+	}
+	parts := strings.SplitN(str, "=", 2)
+	if len(parts) != 2 {
+		return "", "", errors.Errorf("invalid local indentifier %q, need name=dir", str)
+	}
+	fi, err := os.Stat(parts[1])
+	if err != nil {
+		return "", "", errors.Wrapf(err, "could not find %s", parts[1])
+	}
+	if !fi.IsDir() {
+		return "", "", errors.Errorf("%s not a directory", parts[1])
+	}
+	return parts[0], parts[1], nil
+
 }

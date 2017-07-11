@@ -13,6 +13,7 @@ service Control {
 	rpc DiskUsage(DiskUsageRequest) returns (DiskUsageResponse);
 	rpc Solve(SolveRequest) returns (SolveResponse);
 	rpc Status(StatusRequest) returns (stream StatusResponse);
+	rpc Session(stream BytesMessage) returns (stream BytesMessage);
 }
 
 message DiskUsageRequest {
@@ -34,6 +35,7 @@ message SolveRequest {
 	repeated bytes Definition = 2; // TODO: remove repeated
 	string Exporter = 3;
 	map<string, string> ExporterAttrs = 4;
+	string Session = 5;
 }
 
 message SolveResponse {
@@ -77,4 +79,8 @@ message VertexLog {
 	google.protobuf.Timestamp timestamp = 2 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
 	int64 stream = 3;
 	bytes msg = 4;
+}
+
+message BytesMessage {
+	bytes data = 1;
 }
