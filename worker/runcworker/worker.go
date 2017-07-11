@@ -54,12 +54,7 @@ func New(root string) (worker.Worker, error) {
 	return w, nil
 }
 
-func (w *runcworker) Exec(ctx context.Context, meta worker.Meta, mounts map[string]cache.Mountable, stdout, stderr io.WriteCloser) error {
-	root, ok := mounts["/"]
-	if !ok {
-		return errors.Errorf("no root mount")
-	}
-
+func (w *runcworker) Exec(ctx context.Context, meta worker.Meta, root cache.Mountable, mounts []worker.Mount, stdout, stderr io.WriteCloser) error {
 	rootMount, err := root.Mount(ctx)
 	if err != nil {
 		return err

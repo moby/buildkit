@@ -111,20 +111,16 @@ func TestControl(t *testing.T) {
 		Cwd:  "/",
 	}
 
-	m := make(map[string]cache.Mountable)
-	m["/"] = snap
-
 	stderr := bytes.NewBuffer(nil)
 
-	err = w.Exec(ctx, meta, m, nil, &nopCloser{stderr})
+	err = w.Exec(ctx, meta, snap, nil, nil, &nopCloser{stderr})
 	assert.Error(t, err) // Read-only root
 	assert.Contains(t, stderr.String(), "Read-only file system")
 
 	root, err := cm.New(ctx, snap)
 	assert.NoError(t, err)
 
-	m["/"] = root
-	err = w.Exec(ctx, meta, m, nil, nil)
+	err = w.Exec(ctx, meta, root, nil, nil, nil)
 	assert.NoError(t, err)
 
 	rf, err := root.Freeze()

@@ -3,6 +3,7 @@ package llb
 import (
 	_ "crypto/sha256"
 
+	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
@@ -48,7 +49,7 @@ func (s *State) Run(opts ...RunOption) *ExecState {
 		meta:   meta,
 		mounts: []*mount{},
 		root: &mount{
-			dest:      "/",
+			dest:      pb.RootMount,
 			source:    s.source,
 			parent:    s.mount,
 			hasOutput: true,

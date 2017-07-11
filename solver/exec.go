@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"sort"
 
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/client"
@@ -45,9 +46,9 @@ func (e *execOp) CacheKey(ctx context.Context, inputs []string) (string, error) 
 }
 
 func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, error) {
-	mounts := make(map[string]cache.Mountable)
-
+	var mounts []worker.Mount
 	var outputs []cache.MutableRef
+	var root cache.Mountable
 
 	defer func() {
 		for _, o := range outputs {
@@ -84,8 +85,16 @@ func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, erro
 			outputs = append(outputs, active)
 			mountable = active
 		}
-		mounts[m.Dest] = mountable
+		if m.Dest == pb.RootMount {
+			root = mountable
+		} else {
+			mounts = append(mounts, worker.Mount{Src: mountable, Dest: m.Dest})
+		}
 	}
+
+	sort.Slice(mounts, func(i, j int) bool {
+		return mounts[i].Dest < mounts[j].Dest
+	})
 
 	meta := worker.Meta{
 		Args: e.op.Meta.Args,
@@ -98,7 +107,7 @@ func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, erro
 	stderr := newStreamWriter(ctx, 2)
 	defer stderr.Close()
 
-	if err := e.w.Exec(ctx, meta, mounts, stdout, stderr); err != nil {
+	if err := e.w.Exec(ctx, meta, root, mounts, stdout, stderr); err != nil {
 		return nil, errors.Wrapf(err, "worker failed running %v", meta.Args)
 	}
 
