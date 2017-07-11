@@ -85,7 +85,7 @@ func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, erro
 			outputs = append(outputs, active)
 			mountable = active
 		}
-		if m.Dest == "/" {
+		if m.Dest == pb.RootMount {
 			root = mountable
 		} else {
 			mounts = append(mounts, worker.Mount{Src: mountable, Dest: m.Dest})
