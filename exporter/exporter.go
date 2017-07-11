@@ -10,5 +10,6 @@ type Exporter interface {
 }
 
 type ExporterInstance interface {
+	Name() string
 	Export(context.Context, cache.ImmutableRef) error
 }

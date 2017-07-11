@@ -70,19 +70,29 @@ func (s *Solver) Solve(ctx context.Context, id string, v Vertex, exp exporter.Ex
 
 	pr, ctx, closeProgressWriter := progress.NewContext(ctx)
 
+	origVertex := v
+
+	defer closeProgressWriter()
+
 	if len(v.Inputs()) > 0 { // TODO: detect op_return better
 		v = v.Inputs()[0].Vertex
 	}
 
 	vv := toInternalVertex(v)
+	solveVertex := vv
+
+	if exp != nil {
+		vv = &vertex{digest: origVertex.Digest(), name: exp.Name()}
+		vv.inputs = []*input{{index: 0, vertex: solveVertex}}
+		vv.initClientVertex()
+	}
 
 	j, err := s.jobs.new(ctx, id, vv, pr)
 	if err != nil {
 		return err
 	}
 
-	refs, err := s.getRefs(ctx, j, j.g)
-	closeProgressWriter()
+	refs, err := s.getRefs(ctx, j, solveVertex)
 	s.activeState.cancel(j)
 	if err != nil {
 		return err
@@ -99,7 +109,12 @@ func (s *Solver) Solve(ctx context.Context, id string, v Vertex, exp exporter.Ex
 		if !ok {
 			return errors.Errorf("invalid reference for exporting: %T", refs[0])
 		}
-		if err := exp.Export(ctx, immutable); err != nil {
+		vv.notifyStarted(ctx)
+		pw, _, ctx := progress.FromContext(ctx, progress.WithMetadata("vertex", vv.Digest()))
+		defer pw.Close()
+		err := exp.Export(ctx, immutable)
+		vv.notifyCompleted(ctx, false, err)
+		if err != nil {
 			return err
 		}
 	}

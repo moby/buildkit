@@ -5,6 +5,7 @@ import (
 	gocontext "context"
 	"encoding/json"
 	"runtime"
+	"time"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/containerd/containerd/content"
@@ -16,6 +17,7 @@ import (
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/util/flightcontrol"
+	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/system"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -146,11 +148,17 @@ type imageExporterInstance struct {
 	targetName string
 }
 
+func (e *imageExporterInstance) Name() string {
+	return "exporting to image"
+}
+
 func (e *imageExporterInstance) Export(ctx context.Context, ref cache.ImmutableRef) error {
+	layersDone := oneOffProgress(ctx, "exporting layers")
 	diffPairs, err := e.getBlobs(ctx, ref)
 	if err != nil {
 		return err
 	}
+	layersDone(nil)
 
 	diffIDs := make([]digest.Digest, 0, len(diffPairs))
 	for _, dp := range diffPairs {
@@ -163,10 +171,12 @@ func (e *imageExporterInstance) Export(ctx context.Context, ref cache.ImmutableR
 	}
 
 	dgst := digest.FromBytes(dt)
+	configDone := oneOffProgress(ctx, "exporting config "+dgst.String())
 
 	if err := content.WriteBlob(ctx, e.opt.ContentStore, dgst.String(), bytes.NewReader(dt), int64(len(dt)), dgst); err != nil {
-		return errors.Wrap(err, "error writing config blob")
+		return configDone(errors.Wrap(err, "error writing config blob"))
 	}
+	configDone(nil)
 
 	mfst := ocispec.Manifest{
 		Config: ocispec.Descriptor{
@@ -180,7 +190,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, ref cache.ImmutableR
 	for _, dp := range diffPairs {
 		info, err := e.opt.ContentStore.Info(ctx, dp.blobsum)
 		if err != nil {
-			return errors.Wrapf(err, "could not get blob %s", dp.blobsum)
+			return configDone(errors.Wrapf(err, "could not get blob %s", dp.blobsum))
 		}
 		mfst.Layers = append(mfst.Layers, ocispec.Descriptor{
 			Digest:    dp.blobsum,
@@ -195,20 +205,25 @@ func (e *imageExporterInstance) Export(ctx context.Context, ref cache.ImmutableR
 	}
 
 	dgst = digest.FromBytes(dt)
+	mfstDone := oneOffProgress(ctx, "exporting manifest "+dgst.String())
 
 	if err := content.WriteBlob(ctx, e.opt.ContentStore, dgst.String(), bytes.NewReader(dt), int64(len(dt)), dgst); err != nil {
-		return errors.Wrap(err, "error writing manifest blob")
+		return mfstDone(errors.Wrap(err, "error writing manifest blob"))
 	}
 
-	logrus.Debugf("wrote manifest %s", dgst)
+	mfstDone(nil)
 
 	if e.opt.Images != nil && e.targetName != "" {
-		e.opt.Images.Update(ctx, e.targetName, ocispec.Descriptor{
+		tagDone := oneOffProgress(ctx, "tagging to "+e.targetName)
+		err := e.opt.Images.Update(ctx, e.targetName, ocispec.Descriptor{
 			Digest:    dgst,
 			Size:      int64(len(dt)),
 			MediaType: ocispec.MediaTypeImageManifest,
 		})
-		logrus.Debugf("updated tag for %s", e.targetName)
+		if err != nil {
+			return tagDone(err)
+		}
+		tagDone(nil)
 	}
 
 	return err
@@ -225,4 +240,21 @@ func imageConfig(diffIDs []digest.Digest) ocispec.Image {
 	img.Config.WorkingDir = "/"
 	img.Config.Env = []string{"PATH=" + system.DefaultPathEnv}
 	return img
+}
+
+func oneOffProgress(ctx context.Context, id string) func(err error) error {
+	pw, _, _ := progress.FromContext(ctx)
+	now := time.Now()
+	st := progress.Status{
+		Started: &now,
+	}
+	pw.Write(id, st)
+	return func(err error) error {
+		// TODO: set error on status
+		now := time.Now()
+		st.Completed = &now
+		pw.Write(id, st)
+		pw.Close()
+		return err
+	}
 }
