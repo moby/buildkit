@@ -1,7 +1,7 @@
 {
   "Vendor": true,
   "Deadline": "8m",
-  "Exclude": ["solver/pb/ops.pb.go"],
+  "Exclude": ["solver/pb/ops.pb.go", "api/services/control/control.pb.go"],
   "DisableAll": true,
   "Enable": [
     "gofmt",

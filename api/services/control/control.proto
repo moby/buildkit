@@ -32,6 +32,8 @@ message UsageRecord {
 message SolveRequest {
 	string Ref = 1;
 	repeated bytes Definition = 2; // TODO: remove repeated
+	string Exporter = 3;
+	map<string, string> ExporterAttrs = 4;
 }
 
 message SolveResponse {

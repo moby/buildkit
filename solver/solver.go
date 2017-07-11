@@ -4,6 +4,7 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/util/progress"
@@ -63,34 +64,61 @@ func New(resolve ResolveOpFunc, cache InstructionCache) *Solver {
 	return &Solver{resolve: resolve, jobs: newJobList(), cache: cache}
 }
 
-func (s *Solver) Solve(ctx context.Context, id string, v Vertex) error {
+func (s *Solver) Solve(ctx context.Context, id string, v Vertex, exp exporter.ExporterInstance) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	pr, ctx, closeProgressWriter := progress.NewContext(ctx)
+
+	origVertex := v
+
+	defer closeProgressWriter()
 
 	if len(v.Inputs()) > 0 { // TODO: detect op_return better
 		v = v.Inputs()[0].Vertex
 	}
 
 	vv := toInternalVertex(v)
+	solveVertex := vv
+
+	if exp != nil {
+		vv = &vertex{digest: origVertex.Digest(), name: exp.Name()}
+		vv.inputs = []*input{{index: 0, vertex: solveVertex}}
+		vv.initClientVertex()
+	}
 
 	j, err := s.jobs.new(ctx, id, vv, pr)
 	if err != nil {
 		return err
 	}
 
-	refs, err := s.getRefs(ctx, j, j.g)
-	closeProgressWriter()
+	refs, err := s.getRefs(ctx, j, solveVertex)
 	s.activeState.cancel(j)
 	if err != nil {
 		return err
 	}
 
-	for _, r := range refs {
-		r.Release(context.TODO())
+	defer func() {
+		for _, r := range refs {
+			r.Release(context.TODO())
+		}
+	}()
+
+	if exp != nil {
+		immutable, ok := toImmutableRef(refs[0])
+		if !ok {
+			return errors.Errorf("invalid reference for exporting: %T", refs[0])
+		}
+		vv.notifyStarted(ctx)
+		pw, _, ctx := progress.FromContext(ctx, progress.WithMetadata("vertex", vv.Digest()))
+		defer pw.Close()
+		err := exp.Export(ctx, immutable)
+		vv.notifyCompleted(ctx, false, err)
+		if err != nil {
+			return err
+		}
 	}
-	// TODO: export final vertex state
+
 	return err
 }
 
@@ -263,4 +291,27 @@ func toAny(in []Reference) []interface{} {
 		out = append(out, i)
 	}
 	return out
+}
+
+func toImmutableRef(ref Reference) (cache.ImmutableRef, bool) {
+	sysRef := ref
+	if sys, ok := ref.(interface {
+		Sys() Reference
+	}); ok {
+		sysRef = sys.Sys()
+	}
+	immutable, ok := sysRef.(cache.ImmutableRef)
+	if !ok {
+		return nil, false
+	}
+	return &immutableRef{immutable, ref.Release}, true
+}
+
+type immutableRef struct {
+	cache.ImmutableRef
+	release func(context.Context) error
+}
+
+func (ir *immutableRef) Release(ctx context.Context) error {
+	return ir.release(ctx)
 }

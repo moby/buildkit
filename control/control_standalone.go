@@ -12,6 +12,7 @@ import (
 	"github.com/containerd/containerd/archive"
 	"github.com/containerd/containerd/archive/compression"
 	"github.com/containerd/containerd/content"
+	"github.com/containerd/containerd/differ"
 	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/namespaces"
 	ctdsnapshot "github.com/containerd/containerd/snapshot"
@@ -61,12 +62,16 @@ func newStandalonePullDeps(root string) (*pullDeps, error) {
 		return nil, err
 	}
 
-	a := &localApplier{root: root, content: c}
+	differ, err := differ.NewBaseDiff(c)
+	if err != nil {
+		return nil, err
+	}
 
 	return &pullDeps{
 		Snapshotter:  &nsSnapshotter{s},
 		ContentStore: c,
-		Applier:      a,
+		Applier:      differ,
+		Differ:       differ,
 	}, nil
 }
 

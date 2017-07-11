@@ -65,13 +65,8 @@ func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, erro
 				return nil, errors.Errorf("missing input %d", m.Input)
 			}
 			inp := inputs[int(m.Input)]
-			if sys, ok := inp.(interface {
-				Sys() Reference
-			}); ok {
-				inp = sys.Sys()
-			}
 			var ok bool
-			ref, ok = inp.(cache.ImmutableRef)
+			ref, ok = toImmutableRef(inp)
 			if !ok {
 				return nil, errors.Errorf("invalid reference for exec %T", inputs[int(m.Input)])
 			}
