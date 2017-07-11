@@ -4,6 +4,7 @@ package control
 
 import (
 	"bytes"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -151,4 +152,12 @@ func TestControl(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(du2)-len(du))
 
+}
+
+type nopCloser struct {
+	io.Writer
+}
+
+func (n *nopCloser) Close() error {
+	return nil
 }

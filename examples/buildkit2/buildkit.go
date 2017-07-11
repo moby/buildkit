@@ -85,14 +85,6 @@ func buildkit(opt buildOpt) *llb.State {
 	return r.With(copyAll(builddStandalone, "/bin"))
 }
 
-// goFromGit is a helper for cloning a git repo, checking out a tag and copying
-// source directory into
-func goFromGit(repo, tag string) llb.StateOption {
-	return func(s *llb.State) *llb.State {
-		return s.Run(llb.Shlexf("mkdir -p /go/src/%s", repo)).With(copyFrom(llb.Git(repo, tag), "/.", "/go/src/"+repo+"/")).Reset(s).Dirf("/go/src/%s", repo)
-	}
-}
-
 func copyAll(src *llb.State, destPath string) llb.StateOption {
 	return copyFrom(src, "/.", destPath)
 }
