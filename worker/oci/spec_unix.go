@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/containerd/containerd"
-	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/worker"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -12,7 +11,7 @@ import (
 
 // Ideally we don't have to import whole containerd just for the default spec
 
-func GenerateSpec(ctx context.Context, meta worker.Meta, mounts map[string]cache.Mountable) (*specs.Spec, error) {
+func GenerateSpec(ctx context.Context, meta worker.Meta, mounts []worker.Mount) (*specs.Spec, error) {
 	s, err := containerd.GenerateSpec(containerd.WithHostNamespace(specs.NetworkNamespace))
 	if err != nil {
 		return nil, err
@@ -22,17 +21,14 @@ func GenerateSpec(ctx context.Context, meta worker.Meta, mounts map[string]cache
 	s.Process.Cwd = meta.Cwd
 	// TODO: User
 
-	for dest, m := range mounts {
-		if dest == "/" {
-			continue
-		}
-		mounts, err := m.Mount(ctx)
+	for _, m := range mounts {
+		mounts, err := m.Src.Mount(ctx)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to mount to %s", dest)
+			return nil, errors.Wrapf(err, "failed to mount %s", m.Dest)
 		}
 		for _, mount := range mounts {
 			s.Mounts = append(s.Mounts, specs.Mount{
-				Destination: dest,
+				Destination: m.Dest,
 				Type:        mount.Type,
 				Source:      mount.Source,
 				Options:     mount.Options,

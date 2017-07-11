@@ -16,7 +16,13 @@ type Meta struct {
 	// DisableNetworking bool
 }
 
+type Mount struct {
+	Src      cache.Mountable
+	Dest     string
+	ReadOnly bool
+}
+
 type Worker interface {
 	// TODO: add stdout/err
-	Exec(ctx context.Context, meta Meta, mounts map[string]cache.Mountable, stdout, stderr io.WriteCloser) error
+	Exec(ctx context.Context, meta Meta, rootfs cache.Mountable, mounts []Mount, stdout, stderr io.WriteCloser) error
 }
