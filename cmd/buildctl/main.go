@@ -7,6 +7,7 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/util/appdefaults"
+	"github.com/moby/buildkit/util/profiler"
 	"github.com/urfave/cli"
 )
 
@@ -39,6 +40,9 @@ func main() {
 		}
 		return nil
 	}
+
+	profiler.Attach(app)
+
 	if err := app.Run(os.Args); err != nil {
 		fmt.Fprintf(os.Stderr, "buildd: %s\n", err)
 		os.Exit(1)
