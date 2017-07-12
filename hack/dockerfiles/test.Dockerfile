@@ -42,3 +42,14 @@ RUN go build -ldflags '-d'  -o /usr/bin/buildd-containerd -tags containerd ./cmd
 FROM unit-tests AS integration-tests
 COPY --from=buildd-containerd /usr/bin/buildd-containerd /usr/bin
 COPY --from=buildd-standalone /usr/bin/buildd-standalone /usr/bin
+
+FROM gobuild-base AS cross-windows
+ENV GOOS=windows
+WORKDIR /go/src/github.com/moby/buildkit
+COPY . .
+
+FROM cross-windows AS buildctl.exe
+RUN go build -o /buildctl.exe ./cmd/buildctl
+
+FROM cross-windows AS buildd.exe
+RUN go build -o /buildd.exe ./cmd/buildd

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/boltdb/bolt"
+	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/urfave/cli"
 )
 
@@ -17,7 +18,7 @@ var DumpMetadataCommand = cli.Command{
 		cli.StringFlag{
 			Name:  "root",
 			Usage: "path to state directory",
-			Value: ".buildstate",
+			Value: appdefaults.Root,
 		},
 	},
 	Action: func(clicontext *cli.Context) error {

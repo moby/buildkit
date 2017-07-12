@@ -8,6 +8,7 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/containerd/containerd/sys"
 	"github.com/moby/buildkit/util/appcontext"
+	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 	"golang.org/x/net/context"
@@ -27,12 +28,12 @@ func main() {
 		cli.StringFlag{
 			Name:  "root",
 			Usage: "path to state directory",
-			Value: ".buildstate",
+			Value: appdefaults.Root,
 		},
 		cli.StringFlag{
 			Name:  "socket",
 			Usage: "listening socket",
-			Value: "/run/buildkit/buildd.sock",
+			Value: appdefaults.Socket,
 		},
 		cli.StringFlag{
 			Name:  "debugaddr",

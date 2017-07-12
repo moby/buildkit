@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	"github.com/Sirupsen/logrus"
-	"golang.org/x/sys/unix"
 )
 
 var appContextCache context.Context
@@ -18,7 +17,7 @@ var appContextOnce sync.Once
 func Context() context.Context {
 	appContextOnce.Do(func() {
 		signals := make(chan os.Signal, 2048)
-		signal.Notify(signals, unix.SIGTERM, unix.SIGINT)
+		signal.Notify(signals, terminationSignals...)
 
 		const exitLimit = 3
 		retries := 0
