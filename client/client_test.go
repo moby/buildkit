@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"syscall"
 	"testing"
 
@@ -48,6 +49,9 @@ func runBuildd(args []string) (string, func(), error) {
 	defer os.RemoveAll(tmpdir)
 
 	address := filepath.Join(tmpdir, "buildd.sock")
+	if runtime.GOOS == "windows" {
+		address = "//./pipe/buildd-" + filepath.Base(tmpdir)
+	}
 
 	args = append(args, "--root", tmpdir, "--socket", address, "--debug")
 
@@ -70,6 +74,12 @@ func runBuildd(args []string) (string, func(), error) {
 	}, nil
 }
 
+func requiresLinux(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skipf("unsupported GOOS: %s", runtime.GOOS)
+	}
+}
+
 func testCallDiskUsage(t *testing.T, address string) {
 	c, err := New(address)
 	assert.Nil(t, err)
@@ -78,6 +88,7 @@ func testCallDiskUsage(t *testing.T, address string) {
 }
 
 func testBuildMultiMount(t *testing.T, address string) {
+	requiresLinux(t)
 	t.Parallel()
 	c, err := New(address)
 	assert.Nil(t, err)

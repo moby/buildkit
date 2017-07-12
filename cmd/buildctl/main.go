@@ -6,6 +6,7 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/urfave/cli"
 )
 
@@ -22,7 +23,7 @@ func main() {
 		cli.StringFlag{
 			Name:  "socket",
 			Usage: "listening socket",
-			Value: "/run/buildkit/buildd.sock",
+			Value: appdefaults.Socket,
 		},
 	}
 
