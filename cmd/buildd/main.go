@@ -9,6 +9,7 @@ import (
 	"github.com/containerd/containerd/sys"
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/moby/buildkit/util/appdefaults"
+	"github.com/moby/buildkit/util/profiler"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 	"golang.org/x/net/context"
@@ -96,6 +97,9 @@ func main() {
 		}
 		return nil
 	}
+
+	profiler.Attach(app)
+
 	if err := app.Run(os.Args); err != nil {
 		fmt.Fprintf(os.Stderr, "buildd: %s\n", err)
 		os.Exit(1)
