@@ -241,7 +241,7 @@ func showProgress(ctx context.Context, ongoing *jobs, cs content.Store) {
 		actives := make(map[string]statusInfo)
 
 		if !done {
-			active, err := cs.Status(ctx, "")
+			active, err := cs.ListStatuses(ctx, "")
 			if err != nil {
 				// log.G(ctx).WithError(err).Error("active check failed")
 				continue
@@ -290,7 +290,7 @@ func showProgress(ctx context.Context, ongoing *jobs, cs content.Store) {
 						Action:    "done",
 						Current:   int(info.Size),
 						Total:     int(info.Size),
-						Completed: &info.CommittedAt,
+						Completed: &info.CreatedAt,
 						Started:   &j.started,
 					})
 				}
