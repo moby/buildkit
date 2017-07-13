@@ -12,6 +12,8 @@
 		Info
 		InfoRequest
 		InfoResponse
+		UpdateRequest
+		UpdateResponse
 		ListContentRequest
 		ListContentResponse
 		DeleteContentRequest
@@ -20,6 +22,8 @@
 		Status
 		StatusRequest
 		StatusResponse
+		ListStatusesRequest
+		ListStatusesResponse
 		WriteContentRequest
 		WriteContentResponse
 		AbortRequest
@@ -30,8 +34,9 @@ import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
 import _ "github.com/gogo/protobuf/gogoproto"
+import google_protobuf1 "github.com/gogo/protobuf/types"
 import _ "github.com/gogo/protobuf/types"
-import google_protobuf2 "github.com/golang/protobuf/ptypes/empty"
+import google_protobuf3 "github.com/golang/protobuf/ptypes/empty"
 
 import github_com_opencontainers_go_digest "github.com/opencontainers/go-digest"
 import time "time"
@@ -45,6 +50,7 @@ import github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
 
 import strings "strings"
 import reflect "reflect"
+import github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
 
 import io "io"
 
@@ -105,8 +111,12 @@ type Info struct {
 	Digest github_com_opencontainers_go_digest.Digest `protobuf:"bytes,1,opt,name=digest,proto3,customtype=github.com/opencontainers/go-digest.Digest" json:"digest"`
 	// Size is the total number of bytes in the blob.
 	Size_ int64 `protobuf:"varint,2,opt,name=size,proto3" json:"size,omitempty"`
-	// CommittedAt provides the time at which the blob was committed.
-	CommittedAt time.Time `protobuf:"bytes,3,opt,name=committed_at,json=committedAt,stdtime" json:"committed_at"`
+	// CreatedAt provides the time at which the blob was committed.
+	CreatedAt time.Time `protobuf:"bytes,3,opt,name=created_at,json=createdAt,stdtime" json:"created_at"`
+	// UpdatedAt provides the time the info was last updated.
+	UpdatedAt time.Time `protobuf:"bytes,4,opt,name=updated_at,json=updatedAt,stdtime" json:"updated_at"`
+	// Labels are arbitrary data on content.
+	Labels map[string]string `protobuf:"bytes,5,rep,name=labels" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 }
 
 func (m *Info) Reset()                    { *m = Info{} }
@@ -129,12 +139,46 @@ func (m *InfoResponse) Reset()                    { *m = InfoResponse{} }
 func (*InfoResponse) ProtoMessage()               {}
 func (*InfoResponse) Descriptor() ([]byte, []int) { return fileDescriptorContent, []int{2} }
 
+type UpdateRequest struct {
+	Info Info `protobuf:"bytes,1,opt,name=info" json:"info"`
+	// UpdateMask specifies which fields to perform the update on. If empty,
+	// the operation applies to all fields.
+	//
+	// In info, Digest, Size, and CreatedAt are immutable,
+	// other field may be updated using this mask.
+	// If no mask is provided, all mutable field are updated.
+	UpdateMask *google_protobuf1.FieldMask `protobuf:"bytes,2,opt,name=update_mask,json=updateMask" json:"update_mask,omitempty"`
+}
+
+func (m *UpdateRequest) Reset()                    { *m = UpdateRequest{} }
+func (*UpdateRequest) ProtoMessage()               {}
+func (*UpdateRequest) Descriptor() ([]byte, []int) { return fileDescriptorContent, []int{3} }
+
+type UpdateResponse struct {
+	Info Info `protobuf:"bytes,1,opt,name=info" json:"info"`
+}
+
+func (m *UpdateResponse) Reset()                    { *m = UpdateResponse{} }
+func (*UpdateResponse) ProtoMessage()               {}
+func (*UpdateResponse) Descriptor() ([]byte, []int) { return fileDescriptorContent, []int{4} }
+
 type ListContentRequest struct {
+	// Filters contains one or more filters using the syntax defined in the
+	// containerd filter package.
+	//
+	// The returned result will be those that match any of the provided
+	// filters. Expanded, containers that match the following will be
+	// returned:
+	//
+	//   filters[0] or filters[1] or ... or filters[n-1] or filters[n]
+	//
+	// If filters is zero-length or nil, all items will be returned.
+	Filters []string `protobuf:"bytes,1,rep,name=filters" json:"filters,omitempty"`
 }
 
 func (m *ListContentRequest) Reset()                    { *m = ListContentRequest{} }
 func (*ListContentRequest) ProtoMessage()               {}
-func (*ListContentRequest) Descriptor() ([]byte, []int) { return fileDescriptorContent, []int{3} }
+func (*ListContentRequest) Descriptor() ([]byte, []int) { return fileDescriptorContent, []int{5} }
 
 type ListContentResponse struct {
 	Info []Info `protobuf:"bytes,1,rep,name=info" json:"info"`
@@ -142,7 +186,7 @@ type ListContentResponse struct {
 
 func (m *ListContentResponse) Reset()                    { *m = ListContentResponse{} }
 func (*ListContentResponse) ProtoMessage()               {}
-func (*ListContentResponse) Descriptor() ([]byte, []int) { return fileDescriptorContent, []int{4} }
+func (*ListContentResponse) Descriptor() ([]byte, []int) { return fileDescriptorContent, []int{6} }
 
 type DeleteContentRequest struct {
 	// Digest specifies which content to delete.
@@ -151,7 +195,7 @@ type DeleteContentRequest struct {
 
 func (m *DeleteContentRequest) Reset()                    { *m = DeleteContentRequest{} }
 func (*DeleteContentRequest) ProtoMessage()               {}
-func (*DeleteContentRequest) Descriptor() ([]byte, []int) { return fileDescriptorContent, []int{5} }
+func (*DeleteContentRequest) Descriptor() ([]byte, []int) { return fileDescriptorContent, []int{7} }
 
 // ReadContentRequest defines the fields that make up a request to read a portion of
 // data from a stored object.
@@ -169,7 +213,7 @@ type ReadContentRequest struct {
 
 func (m *ReadContentRequest) Reset()                    { *m = ReadContentRequest{} }
 func (*ReadContentRequest) ProtoMessage()               {}
-func (*ReadContentRequest) Descriptor() ([]byte, []int) { return fileDescriptorContent, []int{6} }
+func (*ReadContentRequest) Descriptor() ([]byte, []int) { return fileDescriptorContent, []int{8} }
 
 // ReadContentResponse carries byte data for a read request.
 type ReadContentResponse struct {
@@ -179,7 +223,7 @@ type ReadContentResponse struct {
 
 func (m *ReadContentResponse) Reset()                    { *m = ReadContentResponse{} }
 func (*ReadContentResponse) ProtoMessage()               {}
-func (*ReadContentResponse) Descriptor() ([]byte, []int) { return fileDescriptorContent, []int{7} }
+func (*ReadContentResponse) Descriptor() ([]byte, []int) { return fileDescriptorContent, []int{9} }
 
 type Status struct {
 	StartedAt time.Time                                  `protobuf:"bytes,1,opt,name=started_at,json=startedAt,stdtime" json:"started_at"`
@@ -192,23 +236,39 @@ type Status struct {
 
 func (m *Status) Reset()                    { *m = Status{} }
 func (*Status) ProtoMessage()               {}
-func (*Status) Descriptor() ([]byte, []int) { return fileDescriptorContent, []int{8} }
+func (*Status) Descriptor() ([]byte, []int) { return fileDescriptorContent, []int{10} }
 
 type StatusRequest struct {
-	Filter string `protobuf:"bytes,1,opt,name=filter,proto3" json:"filter,omitempty"`
+	Ref string `protobuf:"bytes,1,opt,name=ref,proto3" json:"ref,omitempty"`
 }
 
 func (m *StatusRequest) Reset()                    { *m = StatusRequest{} }
 func (*StatusRequest) ProtoMessage()               {}
-func (*StatusRequest) Descriptor() ([]byte, []int) { return fileDescriptorContent, []int{9} }
+func (*StatusRequest) Descriptor() ([]byte, []int) { return fileDescriptorContent, []int{11} }
 
 type StatusResponse struct {
-	Statuses []Status `protobuf:"bytes,1,rep,name=statuses" json:"statuses"`
+	Status *Status `protobuf:"bytes,1,opt,name=status" json:"status,omitempty"`
 }
 
 func (m *StatusResponse) Reset()                    { *m = StatusResponse{} }
 func (*StatusResponse) ProtoMessage()               {}
-func (*StatusResponse) Descriptor() ([]byte, []int) { return fileDescriptorContent, []int{10} }
+func (*StatusResponse) Descriptor() ([]byte, []int) { return fileDescriptorContent, []int{12} }
+
+type ListStatusesRequest struct {
+	Filters []string `protobuf:"bytes,1,rep,name=filters" json:"filters,omitempty"`
+}
+
+func (m *ListStatusesRequest) Reset()                    { *m = ListStatusesRequest{} }
+func (*ListStatusesRequest) ProtoMessage()               {}
+func (*ListStatusesRequest) Descriptor() ([]byte, []int) { return fileDescriptorContent, []int{13} }
+
+type ListStatusesResponse struct {
+	Statuses []Status `protobuf:"bytes,1,rep,name=statuses" json:"statuses"`
+}
+
+func (m *ListStatusesResponse) Reset()                    { *m = ListStatusesResponse{} }
+func (*ListStatusesResponse) ProtoMessage()               {}
+func (*ListStatusesResponse) Descriptor() ([]byte, []int) { return fileDescriptorContent, []int{14} }
 
 // WriteContentRequest writes data to the request ref at offset.
 type WriteContentRequest struct {
@@ -265,7 +325,7 @@ type WriteContentRequest struct {
 
 func (m *WriteContentRequest) Reset()                    { *m = WriteContentRequest{} }
 func (*WriteContentRequest) ProtoMessage()               {}
-func (*WriteContentRequest) Descriptor() ([]byte, []int) { return fileDescriptorContent, []int{11} }
+func (*WriteContentRequest) Descriptor() ([]byte, []int) { return fileDescriptorContent, []int{15} }
 
 // WriteContentResponse is returned on the culmination of a write call.
 type WriteContentResponse struct {
@@ -299,7 +359,7 @@ type WriteContentResponse struct {
 
 func (m *WriteContentResponse) Reset()                    { *m = WriteContentResponse{} }
 func (*WriteContentResponse) ProtoMessage()               {}
-func (*WriteContentResponse) Descriptor() ([]byte, []int) { return fileDescriptorContent, []int{12} }
+func (*WriteContentResponse) Descriptor() ([]byte, []int) { return fileDescriptorContent, []int{16} }
 
 type AbortRequest struct {
 	Ref string `protobuf:"bytes,1,opt,name=ref,proto3" json:"ref,omitempty"`
@@ -307,12 +367,14 @@ type AbortRequest struct {
 
 func (m *AbortRequest) Reset()                    { *m = AbortRequest{} }
 func (*AbortRequest) ProtoMessage()               {}
-func (*AbortRequest) Descriptor() ([]byte, []int) { return fileDescriptorContent, []int{13} }
+func (*AbortRequest) Descriptor() ([]byte, []int) { return fileDescriptorContent, []int{17} }
 
 func init() {
 	proto.RegisterType((*Info)(nil), "containerd.services.content.v1.Info")
 	proto.RegisterType((*InfoRequest)(nil), "containerd.services.content.v1.InfoRequest")
 	proto.RegisterType((*InfoResponse)(nil), "containerd.services.content.v1.InfoResponse")
+	proto.RegisterType((*UpdateRequest)(nil), "containerd.services.content.v1.UpdateRequest")
+	proto.RegisterType((*UpdateResponse)(nil), "containerd.services.content.v1.UpdateResponse")
 	proto.RegisterType((*ListContentRequest)(nil), "containerd.services.content.v1.ListContentRequest")
 	proto.RegisterType((*ListContentResponse)(nil), "containerd.services.content.v1.ListContentResponse")
 	proto.RegisterType((*DeleteContentRequest)(nil), "containerd.services.content.v1.DeleteContentRequest")
@@ -321,6 +383,8 @@ func init() {
 	proto.RegisterType((*Status)(nil), "containerd.services.content.v1.Status")
 	proto.RegisterType((*StatusRequest)(nil), "containerd.services.content.v1.StatusRequest")
 	proto.RegisterType((*StatusResponse)(nil), "containerd.services.content.v1.StatusResponse")
+	proto.RegisterType((*ListStatusesRequest)(nil), "containerd.services.content.v1.ListStatusesRequest")
+	proto.RegisterType((*ListStatusesResponse)(nil), "containerd.services.content.v1.ListStatusesResponse")
 	proto.RegisterType((*WriteContentRequest)(nil), "containerd.services.content.v1.WriteContentRequest")
 	proto.RegisterType((*WriteContentResponse)(nil), "containerd.services.content.v1.WriteContentResponse")
 	proto.RegisterType((*AbortRequest)(nil), "containerd.services.content.v1.AbortRequest")
@@ -343,6 +407,12 @@ type ContentClient interface {
 	// This call can be used for getting the size of content and checking for
 	// existence.
 	Info(ctx context.Context, in *InfoRequest, opts ...grpc.CallOption) (*InfoResponse, error)
+	// Update updates content metadata.
+	//
+	// This call can be used to manage the mutable content labels. The
+	// immutable metadata such as digest, size, and committed at cannot
+	// be updated.
+	Update(ctx context.Context, in *UpdateRequest, opts ...grpc.CallOption) (*UpdateResponse, error)
 	// List streams the entire set of content as Info objects and closes the
 	// stream.
 	//
@@ -351,18 +421,20 @@ type ContentClient interface {
 	// set.
 	List(ctx context.Context, in *ListContentRequest, opts ...grpc.CallOption) (Content_ListClient, error)
 	// Delete will delete the referenced object.
-	Delete(ctx context.Context, in *DeleteContentRequest, opts ...grpc.CallOption) (*google_protobuf2.Empty, error)
+	Delete(ctx context.Context, in *DeleteContentRequest, opts ...grpc.CallOption) (*google_protobuf3.Empty, error)
 	// Read allows one to read an object based on the offset into the content.
 	//
 	// The requested data may be returned in one or more messages.
 	Read(ctx context.Context, in *ReadContentRequest, opts ...grpc.CallOption) (Content_ReadClient, error)
-	// Status returns the status of ongoing object ingestions, started via
+	// Status returns the status for a single reference.
+	Status(ctx context.Context, in *StatusRequest, opts ...grpc.CallOption) (*StatusResponse, error)
+	// ListStatuses returns the status of ongoing object ingestions, started via
 	// Write.
 	//
 	// Only those matching the regular expression will be provided in the
 	// response. If the provided regular expression is empty, all ingestions
 	// will be provided.
-	Status(ctx context.Context, in *StatusRequest, opts ...grpc.CallOption) (*StatusResponse, error)
+	ListStatuses(ctx context.Context, in *ListStatusesRequest, opts ...grpc.CallOption) (*ListStatusesResponse, error)
 	// Write begins or resumes writes to a resource identified by a unique ref.
 	// Only one active stream may exist at a time for each ref.
 	//
@@ -382,7 +454,7 @@ type ContentClient interface {
 	Write(ctx context.Context, opts ...grpc.CallOption) (Content_WriteClient, error)
 	// Abort cancels the ongoing write named in the request. Any resources
 	// associated with the write will be collected.
-	Abort(ctx context.Context, in *AbortRequest, opts ...grpc.CallOption) (*google_protobuf2.Empty, error)
+	Abort(ctx context.Context, in *AbortRequest, opts ...grpc.CallOption) (*google_protobuf3.Empty, error)
 }
 
 type contentClient struct {
@@ -396,6 +468,15 @@ func NewContentClient(cc *grpc.ClientConn) ContentClient {
 func (c *contentClient) Info(ctx context.Context, in *InfoRequest, opts ...grpc.CallOption) (*InfoResponse, error) {
 	out := new(InfoResponse)
 	err := grpc.Invoke(ctx, "/containerd.services.content.v1.Content/Info", in, out, c.cc, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *contentClient) Update(ctx context.Context, in *UpdateRequest, opts ...grpc.CallOption) (*UpdateResponse, error) {
+	out := new(UpdateResponse)
+	err := grpc.Invoke(ctx, "/containerd.services.content.v1.Content/Update", in, out, c.cc, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -434,8 +515,8 @@ func (x *contentListClient) Recv() (*ListContentResponse, error) {
 	return m, nil
 }
 
-func (c *contentClient) Delete(ctx context.Context, in *DeleteContentRequest, opts ...grpc.CallOption) (*google_protobuf2.Empty, error) {
-	out := new(google_protobuf2.Empty)
+func (c *contentClient) Delete(ctx context.Context, in *DeleteContentRequest, opts ...grpc.CallOption) (*google_protobuf3.Empty, error) {
+	out := new(google_protobuf3.Empty)
 	err := grpc.Invoke(ctx, "/containerd.services.content.v1.Content/Delete", in, out, c.cc, opts...)
 	if err != nil {
 		return nil, err
@@ -484,6 +565,15 @@ func (c *contentClient) Status(ctx context.Context, in *StatusRequest, opts ...g
 	return out, nil
 }
 
+func (c *contentClient) ListStatuses(ctx context.Context, in *ListStatusesRequest, opts ...grpc.CallOption) (*ListStatusesResponse, error) {
+	out := new(ListStatusesResponse)
+	err := grpc.Invoke(ctx, "/containerd.services.content.v1.Content/ListStatuses", in, out, c.cc, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *contentClient) Write(ctx context.Context, opts ...grpc.CallOption) (Content_WriteClient, error) {
 	stream, err := grpc.NewClientStream(ctx, &_Content_serviceDesc.Streams[2], c.cc, "/containerd.services.content.v1.Content/Write", opts...)
 	if err != nil {
@@ -515,8 +605,8 @@ func (x *contentWriteClient) Recv() (*WriteContentResponse, error) {
 	return m, nil
 }
 
-func (c *contentClient) Abort(ctx context.Context, in *AbortRequest, opts ...grpc.CallOption) (*google_protobuf2.Empty, error) {
-	out := new(google_protobuf2.Empty)
+func (c *contentClient) Abort(ctx context.Context, in *AbortRequest, opts ...grpc.CallOption) (*google_protobuf3.Empty, error) {
+	out := new(google_protobuf3.Empty)
 	err := grpc.Invoke(ctx, "/containerd.services.content.v1.Content/Abort", in, out, c.cc, opts...)
 	if err != nil {
 		return nil, err
@@ -532,6 +622,12 @@ type ContentServer interface {
 	// This call can be used for getting the size of content and checking for
 	// existence.
 	Info(context.Context, *InfoRequest) (*InfoResponse, error)
+	// Update updates content metadata.
+	//
+	// This call can be used to manage the mutable content labels. The
+	// immutable metadata such as digest, size, and committed at cannot
+	// be updated.
+	Update(context.Context, *UpdateRequest) (*UpdateResponse, error)
 	// List streams the entire set of content as Info objects and closes the
 	// stream.
 	//
@@ -540,18 +636,20 @@ type ContentServer interface {
 	// set.
 	List(*ListContentRequest, Content_ListServer) error
 	// Delete will delete the referenced object.
-	Delete(context.Context, *DeleteContentRequest) (*google_protobuf2.Empty, error)
+	Delete(context.Context, *DeleteContentRequest) (*google_protobuf3.Empty, error)
 	// Read allows one to read an object based on the offset into the content.
 	//
 	// The requested data may be returned in one or more messages.
 	Read(*ReadContentRequest, Content_ReadServer) error
-	// Status returns the status of ongoing object ingestions, started via
+	// Status returns the status for a single reference.
+	Status(context.Context, *StatusRequest) (*StatusResponse, error)
+	// ListStatuses returns the status of ongoing object ingestions, started via
 	// Write.
 	//
 	// Only those matching the regular expression will be provided in the
 	// response. If the provided regular expression is empty, all ingestions
 	// will be provided.
-	Status(context.Context, *StatusRequest) (*StatusResponse, error)
+	ListStatuses(context.Context, *ListStatusesRequest) (*ListStatusesResponse, error)
 	// Write begins or resumes writes to a resource identified by a unique ref.
 	// Only one active stream may exist at a time for each ref.
 	//
@@ -571,7 +669,7 @@ type ContentServer interface {
 	Write(Content_WriteServer) error
 	// Abort cancels the ongoing write named in the request. Any resources
 	// associated with the write will be collected.
-	Abort(context.Context, *AbortRequest) (*google_protobuf2.Empty, error)
+	Abort(context.Context, *AbortRequest) (*google_protobuf3.Empty, error)
 }
 
 func RegisterContentServer(s *grpc.Server, srv ContentServer) {
@@ -592,6 +690,24 @@ func _Content_Info_Handler(srv interface{}, ctx context.Context, dec func(interf
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ContentServer).Info(ctx, req.(*InfoRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Content_Update_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ContentServer).Update(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/containerd.services.content.v1.Content/Update",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ContentServer).Update(ctx, req.(*UpdateRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -674,6 +790,24 @@ func _Content_Status_Handler(srv interface{}, ctx context.Context, dec func(inte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Content_ListStatuses_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListStatusesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ContentServer).ListStatuses(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/containerd.services.content.v1.Content/ListStatuses",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ContentServer).ListStatuses(ctx, req.(*ListStatusesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Content_Write_Handler(srv interface{}, stream grpc.ServerStream) error {
 	return srv.(ContentServer).Write(&contentWriteServer{stream})
 }
@@ -727,12 +861,20 @@ var _Content_serviceDesc = grpc.ServiceDesc{
 			Handler:    _Content_Info_Handler,
 		},
 		{
+			MethodName: "Update",
+			Handler:    _Content_Update_Handler,
+		},
+		{
 			MethodName: "Delete",
 			Handler:    _Content_Delete_Handler,
 		},
 		{
 			MethodName: "Status",
 			Handler:    _Content_Status_Handler,
+		},
+		{
+			MethodName: "ListStatuses",
+			Handler:    _Content_ListStatuses_Handler,
 		},
 		{
 			MethodName: "Abort",
@@ -788,12 +930,37 @@ func (m *Info) MarshalTo(dAtA []byte) (int, error) {
 	}
 	dAtA[i] = 0x1a
 	i++
-	i = encodeVarintContent(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(m.CommittedAt)))
-	n1, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.CommittedAt, dAtA[i:])
+	i = encodeVarintContent(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(m.CreatedAt)))
+	n1, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.CreatedAt, dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
 	i += n1
+	dAtA[i] = 0x22
+	i++
+	i = encodeVarintContent(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(m.UpdatedAt)))
+	n2, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.UpdatedAt, dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n2
+	if len(m.Labels) > 0 {
+		for k, _ := range m.Labels {
+			dAtA[i] = 0x2a
+			i++
+			v := m.Labels[k]
+			mapSize := 1 + len(k) + sovContent(uint64(len(k))) + 1 + len(v) + sovContent(uint64(len(v)))
+			i = encodeVarintContent(dAtA, i, uint64(mapSize))
+			dAtA[i] = 0xa
+			i++
+			i = encodeVarintContent(dAtA, i, uint64(len(k)))
+			i += copy(dAtA[i:], k)
+			dAtA[i] = 0x12
+			i++
+			i = encodeVarintContent(dAtA, i, uint64(len(v)))
+			i += copy(dAtA[i:], v)
+		}
+	}
 	return i, nil
 }
 
@@ -839,11 +1006,73 @@ func (m *InfoResponse) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintContent(dAtA, i, uint64(m.Info.Size()))
-	n2, err := m.Info.MarshalTo(dAtA[i:])
+	n3, err := m.Info.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n2
+	i += n3
+	return i, nil
+}
+
+func (m *UpdateRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *UpdateRequest) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	dAtA[i] = 0xa
+	i++
+	i = encodeVarintContent(dAtA, i, uint64(m.Info.Size()))
+	n4, err := m.Info.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n4
+	if m.UpdateMask != nil {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintContent(dAtA, i, uint64(m.UpdateMask.Size()))
+		n5, err := m.UpdateMask.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n5
+	}
+	return i, nil
+}
+
+func (m *UpdateResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *UpdateResponse) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	dAtA[i] = 0xa
+	i++
+	i = encodeVarintContent(dAtA, i, uint64(m.Info.Size()))
+	n6, err := m.Info.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n6
 	return i, nil
 }
 
@@ -862,6 +1091,21 @@ func (m *ListContentRequest) MarshalTo(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if len(m.Filters) > 0 {
+		for _, s := range m.Filters {
+			dAtA[i] = 0xa
+			i++
+			l = len(s)
+			for l >= 1<<7 {
+				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
+				l >>= 7
+				i++
+			}
+			dAtA[i] = uint8(l)
+			i++
+			i += copy(dAtA[i:], s)
+		}
+	}
 	return i, nil
 }
 
@@ -1000,19 +1244,19 @@ func (m *Status) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintContent(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(m.StartedAt)))
-	n3, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.StartedAt, dAtA[i:])
+	n7, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.StartedAt, dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n3
+	i += n7
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintContent(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(m.UpdatedAt)))
-	n4, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.UpdatedAt, dAtA[i:])
+	n8, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.UpdatedAt, dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n4
+	i += n8
 	if len(m.Ref) > 0 {
 		dAtA[i] = 0x1a
 		i++
@@ -1053,11 +1297,11 @@ func (m *StatusRequest) MarshalTo(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if len(m.Filter) > 0 {
+	if len(m.Ref) > 0 {
 		dAtA[i] = 0xa
 		i++
-		i = encodeVarintContent(dAtA, i, uint64(len(m.Filter)))
-		i += copy(dAtA[i:], m.Filter)
+		i = encodeVarintContent(dAtA, i, uint64(len(m.Ref)))
+		i += copy(dAtA[i:], m.Ref)
 	}
 	return i, nil
 }
@@ -1073,6 +1317,67 @@ func (m *StatusResponse) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *StatusResponse) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Status != nil {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintContent(dAtA, i, uint64(m.Status.Size()))
+		n9, err := m.Status.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n9
+	}
+	return i, nil
+}
+
+func (m *ListStatusesRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ListStatusesRequest) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Filters) > 0 {
+		for _, s := range m.Filters {
+			dAtA[i] = 0xa
+			i++
+			l = len(s)
+			for l >= 1<<7 {
+				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
+				l >>= 7
+				i++
+			}
+			dAtA[i] = uint8(l)
+			i++
+			i += copy(dAtA[i:], s)
+		}
+	}
+	return i, nil
+}
+
+func (m *ListStatusesResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ListStatusesResponse) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -1166,19 +1471,19 @@ func (m *WriteContentResponse) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintContent(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(m.StartedAt)))
-	n5, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.StartedAt, dAtA[i:])
+	n10, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.StartedAt, dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n5
+	i += n10
 	dAtA[i] = 0x1a
 	i++
 	i = encodeVarintContent(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(m.UpdatedAt)))
-	n6, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.UpdatedAt, dAtA[i:])
+	n11, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.UpdatedAt, dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n6
+	i += n11
 	if m.Offset != 0 {
 		dAtA[i] = 0x20
 		i++
@@ -1259,8 +1564,18 @@ func (m *Info) Size() (n int) {
 	if m.Size_ != 0 {
 		n += 1 + sovContent(uint64(m.Size_))
 	}
-	l = github_com_gogo_protobuf_types.SizeOfStdTime(m.CommittedAt)
+	l = github_com_gogo_protobuf_types.SizeOfStdTime(m.CreatedAt)
 	n += 1 + l + sovContent(uint64(l))
+	l = github_com_gogo_protobuf_types.SizeOfStdTime(m.UpdatedAt)
+	n += 1 + l + sovContent(uint64(l))
+	if len(m.Labels) > 0 {
+		for k, v := range m.Labels {
+			_ = k
+			_ = v
+			mapEntrySize := 1 + len(k) + sovContent(uint64(len(k))) + 1 + len(v) + sovContent(uint64(len(v)))
+			n += mapEntrySize + 1 + sovContent(uint64(mapEntrySize))
+		}
+	}
 	return n
 }
 
@@ -1282,9 +1597,35 @@ func (m *InfoResponse) Size() (n int) {
 	return n
 }
 
+func (m *UpdateRequest) Size() (n int) {
+	var l int
+	_ = l
+	l = m.Info.Size()
+	n += 1 + l + sovContent(uint64(l))
+	if m.UpdateMask != nil {
+		l = m.UpdateMask.Size()
+		n += 1 + l + sovContent(uint64(l))
+	}
+	return n
+}
+
+func (m *UpdateResponse) Size() (n int) {
+	var l int
+	_ = l
+	l = m.Info.Size()
+	n += 1 + l + sovContent(uint64(l))
+	return n
+}
+
 func (m *ListContentRequest) Size() (n int) {
 	var l int
 	_ = l
+	if len(m.Filters) > 0 {
+		for _, s := range m.Filters {
+			l = len(s)
+			n += 1 + l + sovContent(uint64(l))
+		}
+	}
 	return n
 }
 
@@ -1366,7 +1707,7 @@ func (m *Status) Size() (n int) {
 func (m *StatusRequest) Size() (n int) {
 	var l int
 	_ = l
-	l = len(m.Filter)
+	l = len(m.Ref)
 	if l > 0 {
 		n += 1 + l + sovContent(uint64(l))
 	}
@@ -1374,6 +1715,28 @@ func (m *StatusRequest) Size() (n int) {
 }
 
 func (m *StatusResponse) Size() (n int) {
+	var l int
+	_ = l
+	if m.Status != nil {
+		l = m.Status.Size()
+		n += 1 + l + sovContent(uint64(l))
+	}
+	return n
+}
+
+func (m *ListStatusesRequest) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.Filters) > 0 {
+		for _, s := range m.Filters {
+			l = len(s)
+			n += 1 + l + sovContent(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *ListStatusesResponse) Size() (n int) {
 	var l int
 	_ = l
 	if len(m.Statuses) > 0 {
@@ -1462,10 +1825,22 @@ func (this *Info) String() string {
 	if this == nil {
 		return "nil"
 	}
+	keysForLabels := make([]string, 0, len(this.Labels))
+	for k, _ := range this.Labels {
+		keysForLabels = append(keysForLabels, k)
+	}
+	github_com_gogo_protobuf_sortkeys.Strings(keysForLabels)
+	mapStringForLabels := "map[string]string{"
+	for _, k := range keysForLabels {
+		mapStringForLabels += fmt.Sprintf("%v: %v,", k, this.Labels[k])
+	}
+	mapStringForLabels += "}"
 	s := strings.Join([]string{`&Info{`,
 		`Digest:` + fmt.Sprintf("%v", this.Digest) + `,`,
 		`Size_:` + fmt.Sprintf("%v", this.Size_) + `,`,
-		`CommittedAt:` + strings.Replace(strings.Replace(this.CommittedAt.String(), "Timestamp", "google_protobuf1.Timestamp", 1), `&`, ``, 1) + `,`,
+		`CreatedAt:` + strings.Replace(strings.Replace(this.CreatedAt.String(), "Timestamp", "google_protobuf2.Timestamp", 1), `&`, ``, 1) + `,`,
+		`UpdatedAt:` + strings.Replace(strings.Replace(this.UpdatedAt.String(), "Timestamp", "google_protobuf2.Timestamp", 1), `&`, ``, 1) + `,`,
+		`Labels:` + mapStringForLabels + `,`,
 		`}`,
 	}, "")
 	return s
@@ -1490,11 +1865,33 @@ func (this *InfoResponse) String() string {
 	}, "")
 	return s
 }
+func (this *UpdateRequest) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&UpdateRequest{`,
+		`Info:` + strings.Replace(strings.Replace(this.Info.String(), "Info", "Info", 1), `&`, ``, 1) + `,`,
+		`UpdateMask:` + strings.Replace(fmt.Sprintf("%v", this.UpdateMask), "FieldMask", "google_protobuf1.FieldMask", 1) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *UpdateResponse) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&UpdateResponse{`,
+		`Info:` + strings.Replace(strings.Replace(this.Info.String(), "Info", "Info", 1), `&`, ``, 1) + `,`,
+		`}`,
+	}, "")
+	return s
+}
 func (this *ListContentRequest) String() string {
 	if this == nil {
 		return "nil"
 	}
 	s := strings.Join([]string{`&ListContentRequest{`,
+		`Filters:` + fmt.Sprintf("%v", this.Filters) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -1547,8 +1944,8 @@ func (this *Status) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&Status{`,
-		`StartedAt:` + strings.Replace(strings.Replace(this.StartedAt.String(), "Timestamp", "google_protobuf1.Timestamp", 1), `&`, ``, 1) + `,`,
-		`UpdatedAt:` + strings.Replace(strings.Replace(this.UpdatedAt.String(), "Timestamp", "google_protobuf1.Timestamp", 1), `&`, ``, 1) + `,`,
+		`StartedAt:` + strings.Replace(strings.Replace(this.StartedAt.String(), "Timestamp", "google_protobuf2.Timestamp", 1), `&`, ``, 1) + `,`,
+		`UpdatedAt:` + strings.Replace(strings.Replace(this.UpdatedAt.String(), "Timestamp", "google_protobuf2.Timestamp", 1), `&`, ``, 1) + `,`,
 		`Ref:` + fmt.Sprintf("%v", this.Ref) + `,`,
 		`Offset:` + fmt.Sprintf("%v", this.Offset) + `,`,
 		`Total:` + fmt.Sprintf("%v", this.Total) + `,`,
@@ -1562,7 +1959,7 @@ func (this *StatusRequest) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&StatusRequest{`,
-		`Filter:` + fmt.Sprintf("%v", this.Filter) + `,`,
+		`Ref:` + fmt.Sprintf("%v", this.Ref) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -1572,6 +1969,26 @@ func (this *StatusResponse) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&StatusResponse{`,
+		`Status:` + strings.Replace(fmt.Sprintf("%v", this.Status), "Status", "Status", 1) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *ListStatusesRequest) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&ListStatusesRequest{`,
+		`Filters:` + fmt.Sprintf("%v", this.Filters) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *ListStatusesResponse) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&ListStatusesResponse{`,
 		`Statuses:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.Statuses), "Status", "Status", 1), `&`, ``, 1) + `,`,
 		`}`,
 	}, "")
@@ -1598,8 +2015,8 @@ func (this *WriteContentResponse) String() string {
 	}
 	s := strings.Join([]string{`&WriteContentResponse{`,
 		`Action:` + fmt.Sprintf("%v", this.Action) + `,`,
-		`StartedAt:` + strings.Replace(strings.Replace(this.StartedAt.String(), "Timestamp", "google_protobuf1.Timestamp", 1), `&`, ``, 1) + `,`,
-		`UpdatedAt:` + strings.Replace(strings.Replace(this.UpdatedAt.String(), "Timestamp", "google_protobuf1.Timestamp", 1), `&`, ``, 1) + `,`,
+		`StartedAt:` + strings.Replace(strings.Replace(this.StartedAt.String(), "Timestamp", "google_protobuf2.Timestamp", 1), `&`, ``, 1) + `,`,
+		`UpdatedAt:` + strings.Replace(strings.Replace(this.UpdatedAt.String(), "Timestamp", "google_protobuf2.Timestamp", 1), `&`, ``, 1) + `,`,
 		`Offset:` + fmt.Sprintf("%v", this.Offset) + `,`,
 		`Total:` + fmt.Sprintf("%v", this.Total) + `,`,
 		`Digest:` + fmt.Sprintf("%v", this.Digest) + `,`,
@@ -1704,7 +2121,7 @@ func (m *Info) Unmarshal(dAtA []byte) error {
 			}
 		case 3:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field CommittedAt", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field CreatedAt", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -1728,8 +2145,154 @@ func (m *Info) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(&m.CommittedAt, dAtA[iNdEx:postIndex]); err != nil {
+			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(&m.CreatedAt, dAtA[iNdEx:postIndex]); err != nil {
 				return err
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field UpdatedAt", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowContent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthContent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(&m.UpdatedAt, dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Labels", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowContent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthContent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			var keykey uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowContent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				keykey |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			var stringLenmapkey uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowContent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLenmapkey |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLenmapkey := int(stringLenmapkey)
+			if intStringLenmapkey < 0 {
+				return ErrInvalidLengthContent
+			}
+			postStringIndexmapkey := iNdEx + intStringLenmapkey
+			if postStringIndexmapkey > l {
+				return io.ErrUnexpectedEOF
+			}
+			mapkey := string(dAtA[iNdEx:postStringIndexmapkey])
+			iNdEx = postStringIndexmapkey
+			if m.Labels == nil {
+				m.Labels = make(map[string]string)
+			}
+			if iNdEx < postIndex {
+				var valuekey uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowContent
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					valuekey |= (uint64(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				var stringLenmapvalue uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowContent
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					stringLenmapvalue |= (uint64(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				intStringLenmapvalue := int(stringLenmapvalue)
+				if intStringLenmapvalue < 0 {
+					return ErrInvalidLengthContent
+				}
+				postStringIndexmapvalue := iNdEx + intStringLenmapvalue
+				if postStringIndexmapvalue > l {
+					return io.ErrUnexpectedEOF
+				}
+				mapvalue := string(dAtA[iNdEx:postStringIndexmapvalue])
+				iNdEx = postStringIndexmapvalue
+				m.Labels[mapkey] = mapvalue
+			} else {
+				var mapvalue string
+				m.Labels[mapkey] = mapvalue
 			}
 			iNdEx = postIndex
 		default:
@@ -1912,6 +2475,199 @@ func (m *InfoResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+func (m *UpdateRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowContent
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: UpdateRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: UpdateRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Info", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowContent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthContent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Info.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field UpdateMask", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowContent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthContent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.UpdateMask == nil {
+				m.UpdateMask = &google_protobuf1.FieldMask{}
+			}
+			if err := m.UpdateMask.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipContent(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthContent
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *UpdateResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowContent
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: UpdateResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: UpdateResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Info", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowContent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthContent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Info.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipContent(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthContent
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func (m *ListContentRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -1941,6 +2697,35 @@ func (m *ListContentRequest) Unmarshal(dAtA []byte) error {
 			return fmt.Errorf("proto: ListContentRequest: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Filters", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowContent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthContent
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Filters = append(m.Filters, string(dAtA[iNdEx:postIndex]))
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipContent(dAtA[iNdEx:])
@@ -2576,7 +3361,7 @@ func (m *StatusRequest) Unmarshal(dAtA []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Filter", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Ref", wireType)
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
@@ -2601,7 +3386,7 @@ func (m *StatusRequest) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Filter = string(dAtA[iNdEx:postIndex])
+			m.Ref = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -2651,6 +3436,168 @@ func (m *StatusResponse) Unmarshal(dAtA []byte) error {
 		}
 		if fieldNum <= 0 {
 			return fmt.Errorf("proto: StatusResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Status", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowContent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthContent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Status == nil {
+				m.Status = &Status{}
+			}
+			if err := m.Status.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipContent(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthContent
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ListStatusesRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowContent
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ListStatusesRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ListStatusesRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Filters", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowContent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthContent
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Filters = append(m.Filters, string(dAtA[iNdEx:postIndex]))
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipContent(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthContent
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ListStatusesResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowContent
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ListStatusesResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ListStatusesResponse: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -3286,61 +4233,72 @@ func init() {
 }
 
 var fileDescriptorContent = []byte{
-	// 881 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xb4, 0x56, 0x4f, 0x6f, 0xe3, 0x44,
-	0x14, 0xcf, 0x24, 0x8e, 0x69, 0x5f, 0xc2, 0x12, 0x26, 0xa1, 0x8a, 0x8c, 0x70, 0x82, 0x85, 0x20,
-	0xda, 0x65, 0x9d, 0x6e, 0xba, 0x37, 0x24, 0x44, 0x92, 0x5d, 0xa0, 0x88, 0x2e, 0x92, 0x37, 0xb0,
-	0xa2, 0x17, 0xe4, 0x24, 0x13, 0x63, 0x29, 0xf1, 0x78, 0xed, 0x49, 0x04, 0x9c, 0xb8, 0x20, 0xa1,
-	0x8a, 0x03, 0x5f, 0xa0, 0x17, 0xe0, 0xce, 0x9d, 0x4f, 0xd0, 0x23, 0x47, 0xb4, 0x87, 0x96, 0xe6,
-	0x83, 0x20, 0xe4, 0xf1, 0xd8, 0x71, 0x9a, 0x96, 0xfc, 0x69, 0x38, 0xe5, 0x79, 0xfc, 0x7e, 0xbf,
-	0xf7, 0xef, 0x97, 0x79, 0x86, 0x0f, 0x2d, 0x9b, 0x7d, 0x3d, 0xee, 0xea, 0x3d, 0x3a, 0xaa, 0xf7,
-	0xa8, 0xc3, 0x4c, 0xdb, 0x21, 0x5e, 0x3f, 0x69, 0x9a, 0xae, 0x5d, 0xf7, 0x89, 0x37, 0xb1, 0x7b,
-	0xc4, 0xe7, 0xe7, 0xc4, 0x61, 0xf5, 0xc9, 0x83, 0xc8, 0xd4, 0x5d, 0x8f, 0x32, 0x8a, 0xd5, 0x19,
-	0x42, 0x8f, 0xbc, 0xf5, 0xc8, 0x65, 0xf2, 0x40, 0x29, 0x59, 0xd4, 0xa2, 0xdc, 0xb5, 0x1e, 0x58,
-	0x21, 0x4a, 0xa9, 0x58, 0x94, 0x5a, 0x43, 0x52, 0xe7, 0x4f, 0xdd, 0xf1, 0xa0, 0xce, 0xec, 0x11,
-	0xf1, 0x99, 0x39, 0x72, 0x85, 0xc3, 0xeb, 0x57, 0x1d, 0xc8, 0xc8, 0x65, 0xdf, 0x86, 0x2f, 0xb5,
-	0xdf, 0x11, 0x48, 0x87, 0xce, 0x80, 0xe2, 0x4f, 0x40, 0xee, 0xdb, 0x16, 0xf1, 0x59, 0x19, 0x55,
-	0x51, 0x6d, 0xb7, 0xd5, 0x38, 0x3b, 0xaf, 0xa4, 0x5e, 0x9c, 0x57, 0xee, 0x26, 0x8a, 0xa3, 0x2e,
-	0x71, 0xe2, 0x1c, 0xfd, 0xba, 0x45, 0xef, 0x87, 0x10, 0xfd, 0x11, 0xff, 0x31, 0x04, 0x03, 0xc6,
-	0x20, 0xf9, 0xf6, 0x77, 0xa4, 0x9c, 0xae, 0xa2, 0x5a, 0xc6, 0xe0, 0x36, 0xfe, 0x08, 0xf2, 0x3d,
-	0x3a, 0x1a, 0xd9, 0x8c, 0x91, 0xfe, 0x57, 0x26, 0x2b, 0x67, 0xaa, 0xa8, 0x96, 0x6b, 0x28, 0x7a,
-	0x98, 0x9c, 0x1e, 0x25, 0xa7, 0x77, 0xa2, 0xec, 0x5b, 0x3b, 0x41, 0x06, 0x3f, 0x5f, 0x54, 0x90,
-	0x91, 0x8b, 0x91, 0x4d, 0xa6, 0x7d, 0x09, 0xb9, 0x20, 0x61, 0x83, 0x3c, 0x1f, 0x07, 0xb1, 0xb6,
-	0x98, 0xb7, 0xf6, 0x04, 0xf2, 0x21, 0xb5, 0xef, 0x52, 0xc7, 0x27, 0xf8, 0x7d, 0x90, 0x6c, 0x67,
-	0x40, 0x39, 0x73, 0xae, 0xf1, 0x96, 0xfe, 0xdf, 0xf3, 0xd1, 0x03, 0x6c, 0x4b, 0x0a, 0xe2, 0x1b,
-	0x1c, 0xa7, 0x95, 0x00, 0x7f, 0x6a, 0xfb, 0xac, 0x1d, 0xba, 0x88, 0x8c, 0xb5, 0xcf, 0xa1, 0x38,
-	0x77, 0xba, 0x10, 0x2c, 0xb3, 0x51, 0xb0, 0x2e, 0x94, 0x1e, 0x91, 0x21, 0x61, 0x64, 0x3e, 0xdc,
-	0x56, 0x1b, 0xf4, 0x13, 0x02, 0x6c, 0x10, 0xb3, 0xff, 0xff, 0x85, 0xc0, 0x7b, 0x20, 0xd3, 0xc1,
-	0xc0, 0x27, 0x4c, 0xa8, 0x47, 0x3c, 0xc5, 0x9a, 0xca, 0xcc, 0x34, 0xa5, 0x35, 0xa1, 0x38, 0x97,
-	0x8d, 0xe8, 0xe4, 0x8c, 0x02, 0x5d, 0xa5, 0xe8, 0x9b, 0xcc, 0xe4, 0xc4, 0x79, 0x83, 0xdb, 0xda,
-	0x2f, 0x69, 0x90, 0x9f, 0x32, 0x93, 0x8d, 0x7d, 0xdc, 0x06, 0xf0, 0x99, 0xe9, 0x09, 0x7d, 0xa2,
-	0x35, 0xf4, 0xb9, 0x2b, 0x70, 0x4d, 0x16, 0x90, 0x8c, 0xdd, 0xbe, 0x29, 0x48, 0xd2, 0xeb, 0x90,
-	0x08, 0x5c, 0x93, 0xe1, 0x02, 0x64, 0x3c, 0x32, 0xe0, 0xa5, 0xee, 0x1a, 0x81, 0x99, 0x28, 0x49,
-	0x9a, 0x2b, 0xa9, 0x04, 0x59, 0x46, 0x99, 0x39, 0x2c, 0x67, 0xf9, 0x71, 0xf8, 0x80, 0x9f, 0xc0,
-	0x0e, 0xf9, 0xc6, 0x25, 0x3d, 0x46, 0xfa, 0x65, 0x79, 0xe3, 0x89, 0xc4, 0x1c, 0xda, 0x3b, 0xf0,
-	0x72, 0xd8, 0xa3, 0x68, 0xe0, 0x7b, 0x20, 0x0f, 0xec, 0x21, 0x23, 0x5e, 0x38, 0x70, 0x43, 0x3c,
-	0x69, 0xc7, 0x70, 0x27, 0x72, 0x14, 0xb3, 0xf8, 0x18, 0x76, 0x7c, 0x7e, 0x42, 0x7c, 0xa1, 0xec,
-	0xb7, 0x97, 0x29, 0x3b, 0x64, 0x10, 0xda, 0x8e, 0xd1, 0xda, 0x3f, 0x08, 0x8a, 0xcf, 0x3c, 0x7b,
-	0x41, 0xdf, 0x6d, 0x90, 0xcd, 0x1e, 0xb3, 0xa9, 0xc3, 0x73, 0xb9, 0xd3, 0xb8, 0xb7, 0x8c, 0x9f,
-	0x93, 0x34, 0x39, 0xc4, 0x10, 0xd0, 0xa8, 0xe3, 0xe9, 0x59, 0xc7, 0xe3, 0xce, 0x66, 0x6e, 0xea,
-	0xac, 0x74, 0xfb, 0xce, 0x26, 0xe6, 0x9a, 0xbd, 0x56, 0xaa, 0x72, 0x42, 0xaa, 0x17, 0x69, 0x28,
-	0xcd, 0x37, 0x40, 0xf4, 0x78, 0x2b, 0x1d, 0x98, 0x57, 0x7f, 0x7a, 0x1b, 0xea, 0xcf, 0x6c, 0xa6,
-	0xfe, 0xf5, 0xb4, 0x3e, 0xbb, 0x7b, 0xe4, 0x5b, 0x5f, 0x6f, 0x55, 0xc8, 0x37, 0xbb, 0xd4, 0x8b,
-	0xa5, 0x25, 0x54, 0x81, 0x62, 0x55, 0xdc, 0xfd, 0x01, 0x41, 0x2e, 0xd1, 0x3d, 0xfc, 0x06, 0x48,
-	0x4f, 0x3b, 0xcd, 0x4e, 0x21, 0xa5, 0x14, 0x4f, 0x4e, 0xab, 0xaf, 0x24, 0x5e, 0x05, 0x2a, 0xc6,
-	0x15, 0xc8, 0x3e, 0x33, 0x0e, 0x3b, 0x8f, 0x0b, 0x48, 0x29, 0x9d, 0x9c, 0x56, 0x0b, 0x89, 0xf7,
-	0xdc, 0xc4, 0x6f, 0x82, 0xdc, 0xfe, 0xec, 0xe8, 0xe8, 0xb0, 0x53, 0x48, 0x2b, 0xaf, 0x9d, 0x9c,
-	0x56, 0x5f, 0x4d, 0x78, 0xb4, 0xf9, 0xd2, 0x53, 0x8a, 0x3f, 0xfe, 0xaa, 0xa6, 0xfe, 0xf8, 0x4d,
-	0x4d, 0xc6, 0x6d, 0xbc, 0xc8, 0xc2, 0x4b, 0x42, 0x06, 0xd8, 0x14, 0x1b, 0xfc, 0xde, 0x2a, 0x2b,
-	0x43, 0x94, 0xa6, 0xbc, 0xbb, 0x9a, 0xb3, 0x50, 0xd8, 0x73, 0x90, 0x82, 0x95, 0x85, 0x1b, 0xcb,
-	0x50, 0x8b, 0xeb, 0x4e, 0x39, 0x58, 0x0b, 0x13, 0x06, 0xdc, 0x47, 0xf8, 0x0b, 0x90, 0xc3, 0x75,
-	0x86, 0x1f, 0x2e, 0x23, 0xb8, 0x6e, 0xed, 0x29, 0x7b, 0x0b, 0xb2, 0x7b, 0x1c, 0x7c, 0xf6, 0x04,
-	0xa5, 0x04, 0x3b, 0x63, 0x79, 0x29, 0x8b, 0x7b, 0x6e, 0x79, 0x29, 0xd7, 0x6c, 0xa3, 0x7d, 0x84,
-	0xad, 0x78, 0xc5, 0xdc, 0x5f, 0xed, 0xee, 0x8b, 0xe2, 0xe9, 0xab, 0xba, 0x8b, 0x31, 0x4d, 0x20,
-	0x1b, 0xca, 0xea, 0x60, 0xa5, 0x1b, 0xe0, 0x4a, 0x75, 0x0f, 0xd7, 0x03, 0x85, 0x31, 0x6b, 0x68,
-	0x1f, 0xe1, 0x23, 0xc8, 0xf2, 0xff, 0x0d, 0x5e, 0xaa, 0xaa, 0xe4, 0xdf, 0xeb, 0xa6, 0x11, 0xb5,
-	0x8e, 0xcf, 0x2e, 0xd5, 0xd4, 0x5f, 0x97, 0x6a, 0xea, 0xfb, 0xa9, 0x8a, 0xce, 0xa6, 0x2a, 0xfa,
-	0x73, 0xaa, 0xa2, 0xbf, 0xa7, 0x2a, 0x3a, 0xfe, 0x60, 0xd3, 0x2f, 0xed, 0xf7, 0x84, 0xd9, 0x95,
-	0x79, 0xac, 0x83, 0x7f, 0x03, 0x00, 0x00, 0xff, 0xff, 0x26, 0x49, 0x54, 0x8e, 0xb4, 0x0b, 0x00,
-	0x00,
+	// 1065 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xb4, 0x57, 0x4f, 0x6f, 0x1b, 0x45,
+	0x14, 0xf7, 0x78, 0xed, 0x4d, 0xfc, 0x9c, 0x16, 0x33, 0x36, 0x95, 0xb5, 0x08, 0x7b, 0xbb, 0x42,
+	0xc8, 0x6a, 0xc9, 0x3a, 0x75, 0x72, 0x00, 0x2a, 0x21, 0x1c, 0x37, 0x55, 0x83, 0x9a, 0x82, 0xb6,
+	0x2e, 0x15, 0xbd, 0x94, 0xb5, 0x3d, 0x36, 0xab, 0xd8, 0x5e, 0x77, 0x77, 0x6c, 0x11, 0x4e, 0x5c,
+	0x90, 0x50, 0xd4, 0x03, 0x5f, 0x20, 0x17, 0xe0, 0x53, 0x70, 0xe0, 0x9c, 0x23, 0x47, 0xc4, 0xa1,
+	0x25, 0xf9, 0x0e, 0x5c, 0x11, 0x9a, 0x3f, 0x6b, 0xaf, 0xed, 0x04, 0xff, 0x89, 0x39, 0xe5, 0xcd,
+	0xf8, 0xfd, 0xde, 0xbc, 0xf7, 0x7b, 0xff, 0x36, 0x70, 0xbf, 0xe5, 0xd0, 0xaf, 0xfb, 0x35, 0xb3,
+	0xee, 0x76, 0x8a, 0x75, 0xb7, 0x4b, 0x6d, 0xa7, 0x4b, 0xbc, 0x46, 0x58, 0xb4, 0x7b, 0x4e, 0xd1,
+	0x27, 0xde, 0xc0, 0xa9, 0x13, 0x9f, 0xdf, 0x93, 0x2e, 0x2d, 0x0e, 0xee, 0x04, 0xa2, 0xd9, 0xf3,
+	0x5c, 0xea, 0xe2, 0xdc, 0x08, 0x61, 0x06, 0xda, 0x66, 0xa0, 0x32, 0xb8, 0xa3, 0x65, 0x5a, 0x6e,
+	0xcb, 0xe5, 0xaa, 0x45, 0x26, 0x09, 0x94, 0xa6, 0xb7, 0x5c, 0xb7, 0xd5, 0x26, 0x45, 0x7e, 0xaa,
+	0xf5, 0x9b, 0xc5, 0xa6, 0x43, 0xda, 0x8d, 0xe7, 0x1d, 0xdb, 0x3f, 0x94, 0x1a, 0xf9, 0x49, 0x0d,
+	0xea, 0x74, 0x88, 0x4f, 0xed, 0x4e, 0x4f, 0x2a, 0xbc, 0x3d, 0xa9, 0x40, 0x3a, 0x3d, 0x7a, 0x24,
+	0x7e, 0x34, 0xfe, 0x8e, 0x42, 0x6c, 0xbf, 0xdb, 0x74, 0xf1, 0xa7, 0xa0, 0x36, 0x9c, 0x16, 0xf1,
+	0x69, 0x16, 0xe9, 0xa8, 0x90, 0xd8, 0x2d, 0x9d, 0xbe, 0xca, 0x47, 0xfe, 0x7c, 0x95, 0xbf, 0x15,
+	0x0a, 0xdf, 0xed, 0x91, 0xee, 0x30, 0x0a, 0xbf, 0xd8, 0x72, 0x37, 0x05, 0xc4, 0xbc, 0xc7, 0xff,
+	0x58, 0xd2, 0x02, 0xc6, 0x10, 0xf3, 0x9d, 0x6f, 0x49, 0x36, 0xaa, 0xa3, 0x82, 0x62, 0x71, 0x19,
+	0x57, 0x00, 0xea, 0x1e, 0xb1, 0x29, 0x69, 0x3c, 0xb7, 0x69, 0x56, 0xd1, 0x51, 0x21, 0x59, 0xd2,
+	0x4c, 0xe1, 0x9a, 0x19, 0xb8, 0x66, 0x56, 0x03, 0xdf, 0x77, 0xd7, 0xd9, 0xfb, 0x3f, 0xbe, 0xce,
+	0x23, 0x2b, 0x21, 0x71, 0x65, 0xca, 0x8c, 0xf4, 0x7b, 0x8d, 0xc0, 0x48, 0x6c, 0x11, 0x23, 0x12,
+	0x57, 0xa6, 0xf8, 0x01, 0xa8, 0x6d, 0xbb, 0x46, 0xda, 0x7e, 0x36, 0xae, 0x2b, 0x85, 0x64, 0x69,
+	0xcb, 0xfc, 0xef, 0xcc, 0x98, 0x8c, 0x1f, 0xf3, 0x21, 0x87, 0xec, 0x75, 0xa9, 0x77, 0x64, 0x49,
+	0xbc, 0xf6, 0x21, 0x24, 0x43, 0xd7, 0x38, 0x05, 0xca, 0x21, 0x39, 0x12, 0xfc, 0x59, 0x4c, 0xc4,
+	0x19, 0x88, 0x0f, 0xec, 0x76, 0x5f, 0x30, 0x91, 0xb0, 0xc4, 0xe1, 0xa3, 0xe8, 0x07, 0xc8, 0xf8,
+	0x12, 0x92, 0xcc, 0xac, 0x45, 0x5e, 0xf4, 0x19, 0x63, 0x2b, 0x64, 0xdf, 0x78, 0x04, 0x1b, 0xc2,
+	0xb4, 0xdf, 0x73, 0xbb, 0x3e, 0xc1, 0x1f, 0x43, 0xcc, 0xe9, 0x36, 0x5d, 0x6e, 0x39, 0x59, 0x7a,
+	0x77, 0x9e, 0x68, 0x77, 0x63, 0xec, 0x7d, 0x8b, 0xe3, 0x8c, 0x97, 0x08, 0xae, 0x3d, 0xe1, 0xec,
+	0x05, 0xde, 0x5e, 0xd1, 0x22, 0xbe, 0x0b, 0x49, 0x91, 0x0e, 0x5e, 0xc7, 0x9c, 0x9c, 0x8b, 0xf2,
+	0x78, 0x9f, 0x95, 0xfa, 0x81, 0xed, 0x1f, 0x5a, 0x32, 0xeb, 0x4c, 0x36, 0x3e, 0x87, 0xeb, 0x81,
+	0x37, 0x2b, 0x0a, 0xd0, 0x04, 0xfc, 0xd0, 0xf1, 0x69, 0x45, 0xa8, 0x04, 0x41, 0x66, 0x61, 0xad,
+	0xe9, 0xb4, 0x29, 0xf1, 0xfc, 0x2c, 0xd2, 0x95, 0x42, 0xc2, 0x0a, 0x8e, 0xc6, 0x13, 0x48, 0x8f,
+	0xe9, 0x4f, 0xb9, 0xa1, 0x2c, 0xe5, 0x46, 0x0d, 0x32, 0xf7, 0x48, 0x9b, 0x50, 0x32, 0xe1, 0xc8,
+	0x2a, 0x6b, 0xe3, 0x25, 0x02, 0x6c, 0x11, 0xbb, 0xf1, 0xff, 0x3d, 0x81, 0x6f, 0x80, 0xea, 0x36,
+	0x9b, 0x3e, 0xa1, 0xb2, 0xfd, 0xe5, 0x69, 0x38, 0x14, 0x94, 0xd1, 0x50, 0x30, 0xca, 0x90, 0x1e,
+	0xf3, 0x46, 0x32, 0x39, 0x32, 0x81, 0x26, 0x4d, 0x34, 0x6c, 0x6a, 0x73, 0xc3, 0x1b, 0x16, 0x97,
+	0x8d, 0x9f, 0xa2, 0xa0, 0x3e, 0xa6, 0x36, 0xed, 0xfb, 0x6c, 0x3a, 0xf8, 0xd4, 0xf6, 0xe4, 0x74,
+	0x40, 0x8b, 0x4c, 0x07, 0x89, 0x9b, 0x1a, 0x31, 0xd1, 0xe5, 0x46, 0x4c, 0x0a, 0x14, 0x8f, 0x34,
+	0x79, 0xa8, 0x09, 0x8b, 0x89, 0xa1, 0x90, 0x62, 0x63, 0x21, 0x65, 0x20, 0x4e, 0x5d, 0x6a, 0xb7,
+	0xb3, 0x71, 0x7e, 0x2d, 0x0e, 0xf8, 0x11, 0xac, 0x93, 0x6f, 0x7a, 0xa4, 0x4e, 0x49, 0x23, 0xab,
+	0x2e, 0x9d, 0x91, 0xa1, 0x0d, 0xe3, 0x26, 0x5c, 0x13, 0x1c, 0x05, 0x09, 0x97, 0x0e, 0xa2, 0xa1,
+	0x83, 0xac, 0xad, 0x02, 0x95, 0x61, 0x3d, 0xab, 0x3e, 0xbf, 0x91, 0x54, 0xbe, 0x37, 0xab, 0xa2,
+	0x25, 0x5e, 0xa2, 0x8c, 0xa2, 0x68, 0x13, 0x71, 0x4b, 0xfc, 0xd9, 0x7d, 0xf5, 0x15, 0x64, 0xc6,
+	0x01, 0xd2, 0x91, 0x07, 0xb0, 0xee, 0xcb, 0x3b, 0xd9, 0x5c, 0x73, 0xba, 0x22, 0xdb, 0x6b, 0x88,
+	0x36, 0xfe, 0x41, 0x90, 0x7e, 0xea, 0x39, 0x53, 0x2d, 0x56, 0x01, 0xd5, 0xae, 0x53, 0xc7, 0xed,
+	0xf2, 0x50, 0xaf, 0x97, 0x6e, 0xcf, 0xb2, 0xcf, 0x8d, 0x94, 0x39, 0xc4, 0x92, 0xd0, 0x80, 0xd3,
+	0xe8, 0x28, 0xe9, 0xc3, 0xe4, 0x2a, 0x97, 0x25, 0x37, 0x76, 0xf5, 0xe4, 0x86, 0x4a, 0x2b, 0x7e,
+	0x61, 0xb7, 0xa8, 0xa1, 0x6e, 0x79, 0x1d, 0x85, 0xcc, 0x38, 0x01, 0x92, 0xe3, 0x95, 0x30, 0x30,
+	0xde, 0x80, 0xd1, 0x55, 0x34, 0xa0, 0xb2, 0x5c, 0x03, 0x2e, 0xd6, 0x6e, 0xa3, 0xf1, 0xa7, 0x5e,
+	0x79, 0xc2, 0xea, 0xb0, 0x51, 0xae, 0xb9, 0x1e, 0xbd, 0xb4, 0xd3, 0x6e, 0x7d, 0x8f, 0x20, 0x19,
+	0x62, 0x0f, 0xbf, 0x03, 0xb1, 0xc7, 0xd5, 0x72, 0x35, 0x15, 0xd1, 0xd2, 0xc7, 0x27, 0xfa, 0x1b,
+	0xa1, 0x9f, 0x58, 0x15, 0xe3, 0x3c, 0xc4, 0x9f, 0x5a, 0xfb, 0xd5, 0xbd, 0x14, 0xd2, 0x32, 0xc7,
+	0x27, 0x7a, 0x2a, 0xf4, 0x3b, 0x17, 0xf1, 0x4d, 0x50, 0x2b, 0x9f, 0x1d, 0x1c, 0xec, 0x57, 0x53,
+	0x51, 0xed, 0xad, 0xe3, 0x13, 0xfd, 0xcd, 0x90, 0x46, 0xc5, 0xed, 0x74, 0x1c, 0xaa, 0xa5, 0x7f,
+	0xf8, 0x39, 0x17, 0xf9, 0xf5, 0x97, 0x5c, 0xf8, 0xdd, 0xd2, 0x6f, 0x6b, 0xb0, 0x26, 0xcb, 0x00,
+	0xdb, 0xf2, 0x2b, 0xf0, 0xf6, 0x3c, 0x5b, 0x4b, 0x86, 0xa6, 0xbd, 0x3f, 0x9f, 0xb2, 0xac, 0xb0,
+	0x16, 0xa8, 0x62, 0x6f, 0xe3, 0xcd, 0x59, 0xb8, 0xb1, 0xaf, 0x0d, 0xcd, 0x9c, 0x57, 0x5d, 0x3e,
+	0xf4, 0x02, 0x62, 0x6c, 0x8c, 0xe0, 0xd2, 0x2c, 0xdc, 0xf4, 0xd2, 0xd7, 0xb6, 0x17, 0xc2, 0x88,
+	0x07, 0xb7, 0x10, 0xfe, 0x02, 0x54, 0xb1, 0xba, 0xf1, 0xce, 0x2c, 0x03, 0x17, 0xad, 0x78, 0xed,
+	0xc6, 0x54, 0x7d, 0xef, 0xb1, 0x6f, 0x74, 0x16, 0x0a, 0xdb, 0x8f, 0xb3, 0x43, 0x99, 0xde, 0xe9,
+	0xb3, 0x43, 0xb9, 0x60, 0xf3, 0x6e, 0x21, 0x96, 0x26, 0xb9, 0x4e, 0x37, 0xe7, 0x9c, 0xf7, 0xf3,
+	0xa6, 0x69, 0x62, 0xbd, 0x1c, 0xc1, 0x46, 0x78, 0xda, 0xe3, 0xb9, 0xa8, 0x9f, 0x58, 0x26, 0xda,
+	0xce, 0x62, 0x20, 0xf9, 0xf4, 0x00, 0xe2, 0xa2, 0x75, 0xb6, 0xe7, 0x9a, 0x72, 0x13, 0xc4, 0xee,
+	0x2c, 0x06, 0x12, 0x6f, 0x16, 0xd0, 0x16, 0xc2, 0x07, 0x10, 0xe7, 0xb3, 0x01, 0xcf, 0xec, 0x9c,
+	0xf0, 0x08, 0xb9, 0xac, 0x3a, 0x76, 0x9f, 0x9d, 0x9e, 0xe5, 0x22, 0x7f, 0x9c, 0xe5, 0x22, 0xdf,
+	0x9d, 0xe7, 0xd0, 0xe9, 0x79, 0x0e, 0xfd, 0x7e, 0x9e, 0x43, 0x7f, 0x9d, 0xe7, 0xd0, 0xb3, 0x4f,
+	0x96, 0xfd, 0x9f, 0xf5, 0xae, 0x14, 0x6b, 0x2a, 0x7f, 0x6b, 0xfb, 0xdf, 0x00, 0x00, 0x00, 0xff,
+	0xff, 0x28, 0x28, 0x53, 0x76, 0xfe, 0x0e, 0x00, 0x00,
 }

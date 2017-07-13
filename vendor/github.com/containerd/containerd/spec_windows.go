@@ -5,8 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/containerd/containerd/api/services/containers/v1"
-	tasks "github.com/containerd/containerd/api/services/tasks/v1"
+	"github.com/containerd/containerd/containers"
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/typeurl"
 	"github.com/opencontainers/image-spec/specs-go/v1"
@@ -18,7 +17,7 @@ const pipeRoot = `\\.\pipe`
 func createDefaultSpec() (*specs.Spec, error) {
 	return &specs.Spec{
 		Version: specs.Version,
-		Root:    specs.Root{},
+		Root:    &specs.Root{},
 		Process: &specs.Process{
 			ConsoleSize: &specs.Box{
 				Width:  80,
@@ -87,12 +86,8 @@ func WithSpec(spec *specs.Spec) NewContainerOpts {
 }
 
 func WithResources(resources *specs.WindowsResources) UpdateTaskOpts {
-	return func(ctx context.Context, client *Client, r *tasks.UpdateTaskRequest) error {
-		any, err := typeurl.MarshalAny(resources)
-		if err != nil {
-			return err
-		}
-		r.Resources = any
+	return func(ctx context.Context, client *Client, r *UpdateTaskInfo) error {
+		r.Resources = resources
 		return nil
 	}
 }

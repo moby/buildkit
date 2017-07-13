@@ -10,13 +10,15 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/containerd/containerd/api/services/containers/v1"
 	eventsapi "github.com/containerd/containerd/api/services/events/v1"
 	"github.com/containerd/containerd/api/services/tasks/v1"
+	"github.com/containerd/containerd/api/types"
 	"github.com/containerd/containerd/content"
+	"github.com/containerd/containerd/linux/runcopts"
 	"github.com/containerd/containerd/rootfs"
 	"github.com/containerd/containerd/runtime"
 	"github.com/containerd/containerd/typeurl"
+	digest "github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go/v1"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"google.golang.org/grpc"
@@ -34,13 +36,27 @@ const (
 	Pausing TaskStatus = "pausing"
 )
 
-type IOCloserOpts func(*tasks.CloseIORequest)
+type IOCloseInfo struct {
+	Stdin bool
+}
 
-func WithStdinCloser(r *tasks.CloseIORequest) {
+type IOCloserOpts func(*IOCloseInfo)
+
+func WithStdinCloser(r *IOCloseInfo) {
 	r.Stdin = true
 }
 
-type CheckpointOpts func(*tasks.CheckpointTaskRequest) error
+type CheckpointTaskInfo struct {
+	ParentCheckpoint digest.Digest
+	Options          interface{}
+}
+
+type CheckpointTaskOpts func(*CheckpointTaskInfo) error
+
+type TaskInfo struct {
+	Checkpoint *types.Descriptor
+	Options    interface{}
+}
 
 type Task interface {
 	Pid() uint32
@@ -56,7 +72,7 @@ type Task interface {
 	CloseIO(context.Context, ...IOCloserOpts) error
 	Resize(ctx context.Context, w, h uint32) error
 	IO() *IO
-	Checkpoint(context.Context, ...CheckpointOpts) (v1.Descriptor, error)
+	Checkpoint(context.Context, ...CheckpointTaskOpts) (v1.Descriptor, error)
 	Update(context.Context, ...UpdateTaskOpts) error
 }
 
@@ -93,6 +109,7 @@ func (t *task) Start(ctx context.Context) error {
 		response, err := t.client.TaskService().Create(ctx, t.deferred)
 		t.deferred = nil
 		if err != nil {
+			t.io.closer.Close()
 			return err
 		}
 		t.pid = response.Pid
@@ -101,6 +118,9 @@ func (t *task) Start(ctx context.Context) error {
 	_, err := t.client.TaskService().Start(ctx, &tasks.StartTaskRequest{
 		ContainerID: t.id,
 	})
+	if err != nil {
+		t.io.closer.Close()
+	}
 	return err
 }
 
@@ -153,16 +173,13 @@ func (t *task) Wait(ctx context.Context) (uint32, error) {
 		if err != nil {
 			return UnknownExitStatus, err
 		}
-		if typeurl.Is(evt.Event, &eventsapi.RuntimeEvent{}) {
+		if typeurl.Is(evt.Event, &eventsapi.TaskExit{}) {
 			v, err := typeurl.UnmarshalAny(evt.Event)
 			if err != nil {
 				return UnknownExitStatus, err
 			}
-			e := v.(*eventsapi.RuntimeEvent)
-			if e.Type != eventsapi.RuntimeEvent_EXIT {
-				continue
-			}
-			if e.ID == t.id && e.Pid == t.pid {
+			e := v.(*eventsapi.TaskExit)
+			if e.ContainerID == t.id && e.Pid == t.pid {
 				return e.ExitStatus, nil
 			}
 		}
@@ -173,9 +190,9 @@ func (t *task) Wait(ctx context.Context) (uint32, error) {
 // it returns the exit status of the task and any errors that were encountered
 // during cleanup
 func (t *task) Delete(ctx context.Context) (uint32, error) {
-	var cerr error
 	if t.io != nil {
-		cerr = t.io.Close()
+		t.io.Wait()
+		t.io.Close()
 	}
 	r, err := t.client.TaskService().Delete(ctx, &tasks.DeleteTaskRequest{
 		ContainerID: t.id,
@@ -183,10 +200,13 @@ func (t *task) Delete(ctx context.Context) (uint32, error) {
 	if err != nil {
 		return UnknownExitStatus, err
 	}
-	return r.ExitStatus, cerr
+	return r.ExitStatus, nil
 }
 
 func (t *task) Exec(ctx context.Context, id string, spec *specs.Process, ioCreate IOCreation) (Process, error) {
+	if id == "" {
+		return nil, ErrNoExecID
+	}
 	i, err := ioCreate()
 	if err != nil {
 		return nil, err
@@ -213,9 +233,11 @@ func (t *task) CloseIO(ctx context.Context, opts ...IOCloserOpts) error {
 	r := &tasks.CloseIORequest{
 		ContainerID: t.id,
 	}
+	var i IOCloseInfo
 	for _, o := range opts {
-		o(r)
+		o(&i)
 	}
+	r.Stdin = i.Stdin
 	_, err := t.client.TaskService().CloseIO(ctx, r)
 	return err
 }
@@ -233,23 +255,30 @@ func (t *task) Resize(ctx context.Context, w, h uint32) error {
 	return err
 }
 
-func (t *task) Checkpoint(ctx context.Context, opts ...CheckpointOpts) (d v1.Descriptor, err error) {
+func (t *task) Checkpoint(ctx context.Context, opts ...CheckpointTaskOpts) (d v1.Descriptor, err error) {
 	request := &tasks.CheckpointTaskRequest{
 		ContainerID: t.id,
 	}
+	var i CheckpointTaskInfo
 	for _, o := range opts {
-		if err := o(request); err != nil {
+		if err := o(&i); err != nil {
 			return d, err
 		}
+	}
+	request.ParentCheckpoint = i.ParentCheckpoint
+	if i.Options != nil {
+		any, err := typeurl.MarshalAny(i.Options)
+		if err != nil {
+			return d, err
+		}
+		request.Options = any
 	}
 	// make sure we pause it and resume after all other filesystem operations are completed
 	if err := t.Pause(ctx); err != nil {
 		return d, err
 	}
 	defer t.Resume(ctx)
-	cr, err := t.client.ContainerService().Get(ctx, &containers.GetContainerRequest{
-		ID: t.id,
-	})
+	cr, err := t.client.ContainerService().Get(ctx, t.id)
 	if err != nil {
 		return d, err
 	}
@@ -257,27 +286,39 @@ func (t *task) Checkpoint(ctx context.Context, opts ...CheckpointOpts) (d v1.Des
 	if err := t.checkpointTask(ctx, &index, request); err != nil {
 		return d, err
 	}
-	if err := t.checkpointImage(ctx, &index, cr.Container.Image); err != nil {
+	if err := t.checkpointImage(ctx, &index, cr.Image); err != nil {
 		return d, err
 	}
-	if err := t.checkpointRWSnapshot(ctx, &index, cr.Container.RootFS); err != nil {
+	if err := t.checkpointRWSnapshot(ctx, &index, cr.Snapshotter, cr.RootFS); err != nil {
 		return d, err
 	}
 	index.Annotations = make(map[string]string)
-	index.Annotations["image.name"] = cr.Container.Image
+	index.Annotations["image.name"] = cr.Image
 	return t.writeIndex(ctx, &index)
 }
 
-type UpdateTaskOpts func(context.Context, *Client, *tasks.UpdateTaskRequest) error
+type UpdateTaskInfo struct {
+	Resources interface{}
+}
+
+type UpdateTaskOpts func(context.Context, *Client, *UpdateTaskInfo) error
 
 func (t *task) Update(ctx context.Context, opts ...UpdateTaskOpts) error {
 	request := &tasks.UpdateTaskRequest{
 		ContainerID: t.id,
 	}
+	var i UpdateTaskInfo
 	for _, o := range opts {
-		if err := o(ctx, t.client, request); err != nil {
+		if err := o(ctx, t.client, &i); err != nil {
 			return err
 		}
+	}
+	if i.Resources != nil {
+		any, err := typeurl.MarshalAny(i.Resources)
+		if err != nil {
+			return err
+		}
+		request.Resources = any
 	}
 	_, err := t.client.TaskService().Update(ctx, request)
 	return err
@@ -303,8 +344,8 @@ func (t *task) checkpointTask(ctx context.Context, index *v1.Index, request *tas
 	return nil
 }
 
-func (t *task) checkpointRWSnapshot(ctx context.Context, index *v1.Index, id string) error {
-	rw, err := rootfs.Diff(ctx, id, fmt.Sprintf("checkpoint-rw-%s", id), t.client.SnapshotService(), t.client.DiffService())
+func (t *task) checkpointRWSnapshot(ctx context.Context, index *v1.Index, snapshotterName string, id string) error {
+	rw, err := rootfs.Diff(ctx, id, fmt.Sprintf("checkpoint-rw-%s", id), t.client.SnapshotService(snapshotterName), t.client.DiffService())
 	if err != nil {
 		return err
 	}
@@ -346,7 +387,7 @@ func writeContent(ctx context.Context, store content.Store, mediaType, ref strin
 	if err != nil {
 		return d, err
 	}
-	if err := writer.Commit(0, ""); err != nil {
+	if err := writer.Commit(size, ""); err != nil {
 		return d, err
 	}
 	return v1.Descriptor{
@@ -354,4 +395,11 @@ func writeContent(ctx context.Context, store content.Store, mediaType, ref strin
 		Digest:    writer.Digest(),
 		Size:      size,
 	}, nil
+}
+
+func WithExit(r *CheckpointTaskInfo) error {
+	r.Options = &runcopts.CheckpointOptions{
+		Exit: true,
+	}
+	return nil
 }

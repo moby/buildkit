@@ -5,12 +5,14 @@ import (
 	"sync"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/boltdb/bolt"
 	api "github.com/containerd/containerd/api/services/content/v1"
 	eventsapi "github.com/containerd/containerd/api/services/events/v1"
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/events"
 	"github.com/containerd/containerd/log"
+	"github.com/containerd/containerd/metadata"
 	"github.com/containerd/containerd/plugin"
 	"github.com/golang/protobuf/ptypes/empty"
 	digest "github.com/opencontainers/go-digest"
@@ -39,6 +41,7 @@ func init() {
 		ID:   "content",
 		Requires: []plugin.PluginType{
 			plugin.ContentPlugin,
+			plugin.MetadataPlugin,
 		},
 		Init: NewService,
 	})
@@ -49,8 +52,13 @@ func NewService(ic *plugin.InitContext) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
+	m, err := ic.Get(plugin.MetadataPlugin)
+	if err != nil {
+		return nil, err
+	}
+	cs := metadata.NewContentStore(m.(*bolt.DB), c.(content.Store))
 	return &Service{
-		store:   c.(content.Store),
+		store:   cs,
 		emitter: events.GetPoster(ic.Context),
 	}, nil
 }
@@ -71,11 +79,22 @@ func (s *Service) Info(ctx context.Context, req *api.InfoRequest) (*api.InfoResp
 	}
 
 	return &api.InfoResponse{
-		Info: api.Info{
-			Digest:      bi.Digest,
-			Size_:       bi.Size,
-			CommittedAt: bi.CommittedAt,
-		},
+		Info: infoToGRPC(bi),
+	}, nil
+}
+
+func (s *Service) Update(ctx context.Context, req *api.UpdateRequest) (*api.UpdateResponse, error) {
+	if err := req.Info.Digest.Validate(); err != nil {
+		return nil, grpc.Errorf(codes.InvalidArgument, "%q failed validation", req.Info.Digest)
+	}
+
+	info, err := s.store.Update(ctx, infoFromGRPC(req.Info), req.UpdateMask.GetPaths()...)
+	if err != nil {
+		return nil, errdefs.ToGRPC(err)
+	}
+
+	return &api.UpdateResponse{
+		Info: infoToGRPC(info),
 	}, nil
 }
 
@@ -92,9 +111,10 @@ func (s *Service) List(req *api.ListContentRequest, session api.Content_ListServ
 
 	if err := s.store.Walk(session.Context(), func(info content.Info) error {
 		buffer = append(buffer, api.Info{
-			Digest:      info.Digest,
-			Size_:       info.Size,
-			CommittedAt: info.CommittedAt,
+			Digest:    info.Digest,
+			Size_:     info.Size,
+			CreatedAt: info.CreatedAt,
+			Labels:    info.Labels,
 		})
 
 		if len(buffer) >= 100 {
@@ -106,7 +126,7 @@ func (s *Service) List(req *api.ListContentRequest, session api.Content_ListServ
 		}
 
 		return nil
-	}); err != nil {
+	}, req.Filters...); err != nil {
 		return err
 	}
 
@@ -216,12 +236,31 @@ func (rw *readResponseWriter) Write(p []byte) (n int, err error) {
 }
 
 func (s *Service) Status(ctx context.Context, req *api.StatusRequest) (*api.StatusResponse, error) {
-	statuses, err := s.store.Status(ctx, req.Filter)
+	status, err := s.store.Status(ctx, req.Ref)
 	if err != nil {
-		return nil, errdefs.ToGRPCf(err, "could not get status for filter %q", req.Filter)
+		return nil, errdefs.ToGRPCf(err, "could not get status for ref %q", req.Ref)
 	}
 
 	var resp api.StatusResponse
+	resp.Status = &api.Status{
+		StartedAt: status.StartedAt,
+		UpdatedAt: status.UpdatedAt,
+		Ref:       status.Ref,
+		Offset:    status.Offset,
+		Total:     status.Total,
+		Expected:  status.Expected,
+	}
+
+	return &resp, nil
+}
+
+func (s *Service) ListStatuses(ctx context.Context, req *api.ListStatusesRequest) (*api.ListStatusesResponse, error) {
+	statuses, err := s.store.ListStatuses(ctx, req.Filters...)
+	if err != nil {
+		return nil, errdefs.ToGRPC(err)
+	}
+
+	var resp api.ListStatusesResponse
 	for _, status := range statuses {
 		resp.Statuses = append(resp.Statuses, api.Status{
 			StartedAt: status.StartedAt,

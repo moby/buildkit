@@ -45,6 +45,7 @@ func (p *process) Start(ctx context.Context) error {
 	}
 	response, err := p.task.client.TaskService().Exec(ctx, request)
 	if err != nil {
+		p.io.Close()
 		return err
 	}
 	p.pid = response.Pid
@@ -65,21 +66,17 @@ func (p *process) Wait(ctx context.Context) (uint32, error) {
 	if err != nil {
 		return UnknownExitStatus, err
 	}
-evloop:
 	for {
 		evt, err := eventstream.Recv()
 		if err != nil {
 			return UnknownExitStatus, err
 		}
-		if typeurl.Is(evt.Event, &eventsapi.RuntimeEvent{}) {
+		if typeurl.Is(evt.Event, &eventsapi.TaskExit{}) {
 			v, err := typeurl.UnmarshalAny(evt.Event)
 			if err != nil {
 				return UnknownExitStatus, err
 			}
-			e := v.(*eventsapi.RuntimeEvent)
-			if e.Type != eventsapi.RuntimeEvent_EXIT {
-				continue evloop
-			}
+			e := v.(*eventsapi.TaskExit)
 			if e.ID == p.id && e.ContainerID == p.task.id {
 				return e.ExitStatus, nil
 			}
@@ -92,9 +89,11 @@ func (p *process) CloseIO(ctx context.Context, opts ...IOCloserOpts) error {
 		ContainerID: p.task.id,
 		ExecID:      p.id,
 	}
+	var i IOCloseInfo
 	for _, o := range opts {
-		o(r)
+		o(&i)
 	}
+	r.Stdin = i.Stdin
 	_, err := p.task.client.TaskService().CloseIO(ctx, r)
 	return err
 }
@@ -114,7 +113,10 @@ func (p *process) Resize(ctx context.Context, w, h uint32) error {
 }
 
 func (p *process) Delete(ctx context.Context) (uint32, error) {
-	cerr := p.io.Close()
+	if p.io != nil {
+		p.io.Wait()
+		p.io.Close()
+	}
 	r, err := p.task.client.TaskService().DeleteProcess(ctx, &tasks.DeleteProcessRequest{
 		ContainerID: p.task.id,
 		ExecID:      p.id,
@@ -122,5 +124,5 @@ func (p *process) Delete(ctx context.Context) (uint32, error) {
 	if err != nil {
 		return UnknownExitStatus, err
 	}
-	return r.ExitStatus, cerr
+	return r.ExitStatus, nil
 }
