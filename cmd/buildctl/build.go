@@ -33,6 +33,10 @@ var buildCommand = cli.Command{
 			Name:  "no-progress",
 			Usage: "Don't show interactive progress",
 		},
+		cli.StringFlag{
+			Name:  "local",
+			Usage: "Allow build access to the local directory",
+		},
 	},
 }
 
@@ -61,7 +65,7 @@ func build(clicontext *cli.Context) error {
 	}
 
 	eg.Go(func() error {
-		return c.Solve(ctx, os.Stdin, ch, clicontext.String("exporter"), exporterAttrs)
+		return c.Solve(ctx, os.Stdin, ch, clicontext.String("exporter"), exporterAttrs, clicontext.String("local"))
 	})
 
 	eg.Go(func() error {

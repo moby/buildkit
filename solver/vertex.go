@@ -83,6 +83,7 @@ func (v *vertex) notifyStarted(ctx context.Context) {
 	defer pw.Close()
 	now := time.Now()
 	v.clientVertex.Started = &now
+	v.clientVertex.Completed = nil
 	pw.Write(v.Digest().String(), v.clientVertex)
 }
 

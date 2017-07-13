@@ -14,10 +14,12 @@ import (
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/exporter"
 	imageexporter "github.com/moby/buildkit/exporter/containerimage"
+	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot/blobmapping"
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/source/containerimage"
 	"github.com/moby/buildkit/source/git"
+	"github.com/moby/buildkit/source/local"
 )
 
 const keyImageExporter = "image"
@@ -85,6 +87,20 @@ func defaultControllerOpts(root string, pd pullDeps) (*Opt, error) {
 
 	sm.Register(gs)
 
+	sessm, err := session.NewManager()
+	if err != nil {
+		return nil, err
+	}
+
+	ss, err := local.NewSource(local.Opt{
+		SessionManager: sessm,
+		CacheAccessor:  cm,
+	})
+	if err != nil {
+		return nil, err
+	}
+	sm.Register(ss)
+
 	exporters := map[string]exporter.Exporter{}
 
 	imageExporter, err := imageexporter.New(imageexporter.Opt{
@@ -105,5 +121,6 @@ func defaultControllerOpts(root string, pd pullDeps) (*Opt, error) {
 		SourceManager:    sm,
 		InstructionCache: ic,
 		Exporters:        exporters,
+		SessionManager:   sessm,
 	}, nil
 }

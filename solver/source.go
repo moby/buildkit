@@ -42,6 +42,14 @@ func (s *sourceOp) instance(ctx context.Context) (source.SourceInstance, error) 
 			}
 		}
 	}
+	if id, ok := id.(*source.LocalIdentifier); ok {
+		for k, v := range s.op.Source.Attrs {
+			switch k {
+			case pb.AttrLocalSessionID:
+				id.SessionID = v
+			}
+		}
+	}
 	src, err := s.sm.Resolve(ctx, id)
 	if err != nil {
 		return nil, err
