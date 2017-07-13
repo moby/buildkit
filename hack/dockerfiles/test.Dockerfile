@@ -1,5 +1,5 @@
 ARG RUNC_VERSION=429a5387123625040bacfbb60d96b1cbd02293ab
-ARG CONTAINERD_VERSION=3707703a694187c7d08e2f333da6ddd58bcb729d
+ARG CONTAINERD_VERSION=v1.0.0-alpha0
 
 FROM golang:1.8-alpine AS gobuild-base
 RUN apk add --no-cache g++ linux-headers

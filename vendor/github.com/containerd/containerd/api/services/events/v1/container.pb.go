@@ -11,7 +11,6 @@
 		github.com/containerd/containerd/api/services/events/v1/events.proto
 		github.com/containerd/containerd/api/services/events/v1/image.proto
 		github.com/containerd/containerd/api/services/events/v1/namespace.proto
-		github.com/containerd/containerd/api/services/events/v1/runtime.proto
 		github.com/containerd/containerd/api/services/events/v1/snapshot.proto
 		github.com/containerd/containerd/api/services/events/v1/task.proto
 
@@ -21,23 +20,27 @@
 		ContainerDelete
 		ContentDelete
 		StreamEventsRequest
+		PostEventRequest
 		Envelope
+		ImageCreate
 		ImageUpdate
 		ImageDelete
 		NamespaceCreate
 		NamespaceUpdate
 		NamespaceDelete
-		RuntimeIO
-		RuntimeMount
-		RuntimeCreate
-		RuntimeEvent
-		RuntimeDelete
 		SnapshotPrepare
 		SnapshotCommit
 		SnapshotRemove
 		TaskCreate
 		TaskStart
 		TaskDelete
+		TaskIO
+		TaskExit
+		TaskOOM
+		TaskExecAdded
+		TaskPaused
+		TaskResumed
+		TaskCheckpointed
 */
 package events
 

@@ -3,6 +3,7 @@ syntax = "proto3";
 package containerd.services.content.v1;
 
 import "gogoproto/gogo.proto";
+import "google/protobuf/field_mask.proto";
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/empty.proto";
 
@@ -15,6 +16,13 @@ service Content {
 	// This call can be used for getting the size of content and checking for
 	// existence.
 	rpc Info(InfoRequest) returns (InfoResponse);
+
+	// Update updates content metadata.
+	//
+	// This call can be used to manage the mutable content labels. The
+	// immutable metadata such as digest, size, and committed at cannot
+	// be updated.
+	rpc Update(UpdateRequest) returns (UpdateResponse);
 
 	// List streams the entire set of content as Info objects and closes the
 	// stream.
@@ -32,13 +40,16 @@ service Content {
 	// The requested data may be returned in one or more messages.
 	rpc Read(ReadContentRequest) returns (stream ReadContentResponse);
 
-	// Status returns the status of ongoing object ingestions, started via
+	// Status returns the status for a single reference.
+	rpc Status(StatusRequest) returns (StatusResponse);
+
+	// ListStatuses returns the status of ongoing object ingestions, started via
 	// Write.
 	//
 	// Only those matching the regular expression will be provided in the
 	// response. If the provided regular expression is empty, all ingestions
 	// will be provided.
-	rpc Status(StatusRequest) returns (StatusResponse);
+	rpc ListStatuses(ListStatusesRequest) returns (ListStatusesResponse);
 
 	// Write begins or resumes writes to a resource identified by a unique ref.
 	// Only one active stream may exist at a time for each ref.
@@ -70,8 +81,14 @@ message Info {
 	// Size is the total number of bytes in the blob.
 	int64 size = 2;
 
-	// CommittedAt provides the time at which the blob was committed.
-	google.protobuf.Timestamp committed_at = 3 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+	// CreatedAt provides the time at which the blob was committed.
+	google.protobuf.Timestamp created_at = 3 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+
+	// UpdatedAt provides the time the info was last updated.
+	google.protobuf.Timestamp updated_at = 4 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+
+	// Labels are arbitrary data on content.
+	map<string, string> labels  = 5;
 }
 
 message InfoRequest {
@@ -82,7 +99,35 @@ message InfoResponse {
 	Info info = 1 [(gogoproto.nullable) = false];
 }
 
-message ListContentRequest {}
+message UpdateRequest {
+	Info info = 1 [(gogoproto.nullable) = false];
+
+	// UpdateMask specifies which fields to perform the update on. If empty,
+	// the operation applies to all fields.
+	//
+	// In info, Digest, Size, and CreatedAt are immutable,
+	// other field may be updated using this mask.
+	// If no mask is provided, all mutable field are updated.
+	google.protobuf.FieldMask update_mask = 2;
+}
+
+message UpdateResponse {
+	Info info = 1 [(gogoproto.nullable) = false];
+}
+
+message ListContentRequest {
+	// Filters contains one or more filters using the syntax defined in the
+	// containerd filter package.
+	//
+	// The returned result will be those that match any of the provided
+	// filters. Expanded, containers that match the following will be
+	// returned:
+	//
+	//   filters[0] or filters[1] or ... or filters[n-1] or filters[n]
+	//
+	// If filters is zero-length or nil, all items will be returned.
+	repeated string filters = 1;
+}
 
 message ListContentResponse {
 	repeated Info info = 1 [(gogoproto.nullable) = false];
@@ -124,11 +169,20 @@ message Status {
 	string expected = 6 [(gogoproto.customtype) = "github.com/opencontainers/go-digest.Digest", (gogoproto.nullable) = false];
 }
 
+
 message StatusRequest {
-	string filter = 1;
+	string ref = 1;
 }
 
 message StatusResponse {
+	Status status = 1;
+}
+
+message ListStatusesRequest {
+	repeated string filters = 1;
+}
+
+message ListStatusesResponse {
 	repeated Status statuses = 1 [(gogoproto.nullable) = false];
 }
 

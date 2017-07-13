@@ -9,6 +9,7 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	"github.com/containerd/containerd/content"
+	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/rootfs"
@@ -214,14 +215,26 @@ func (e *imageExporterInstance) Export(ctx context.Context, ref cache.ImmutableR
 	mfstDone(nil)
 
 	if e.opt.Images != nil && e.targetName != "" {
-		tagDone := oneOffProgress(ctx, "tagging to "+e.targetName)
-		err := e.opt.Images.Update(ctx, e.targetName, ocispec.Descriptor{
-			Digest:    dgst,
-			Size:      int64(len(dt)),
-			MediaType: ocispec.MediaTypeImageManifest,
-		})
+		tagDone := oneOffProgress(ctx, "naming to "+e.targetName)
+		imgrec := images.Image{
+			Name: e.targetName,
+			Target: ocispec.Descriptor{
+				Digest:    dgst,
+				Size:      int64(len(dt)),
+				MediaType: ocispec.MediaTypeImageManifest,
+			},
+			CreatedAt: time.Now(),
+		}
+		_, err := e.opt.Images.Update(ctx, imgrec)
 		if err != nil {
-			return tagDone(err)
+			if !errdefs.IsNotFound(err) {
+				return tagDone(err)
+			}
+
+			_, err := e.opt.Images.Create(ctx, imgrec)
+			if err != nil {
+				return tagDone(err)
+			}
 		}
 		tagDone(nil)
 	}

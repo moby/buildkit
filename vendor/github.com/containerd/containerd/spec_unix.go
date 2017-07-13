@@ -9,8 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/containerd/containerd/api/services/containers/v1"
-	"github.com/containerd/containerd/api/services/tasks/v1"
+	"github.com/containerd/containerd/containers"
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/typeurl"
 	"github.com/opencontainers/image-spec/specs-go/v1"
@@ -64,7 +63,7 @@ func defaultNamespaces() []specs.LinuxNamespace {
 func createDefaultSpec() (*specs.Spec, error) {
 	s := &specs.Spec{
 		Version: specs.Version,
-		Root: specs.Root{
+		Root: &specs.Root{
 			Path: defaultRootfsPath,
 		},
 		Process: &specs.Process{
@@ -81,7 +80,7 @@ func createDefaultSpec() (*specs.Spec, error) {
 				Effective:   defaltCaps(),
 				Ambient:     defaltCaps(),
 			},
-			Rlimits: []specs.LinuxRlimit{
+			Rlimits: []specs.POSIXRlimit{
 				{
 					Type: "RLIMIT_NOFILE",
 					Hard: uint64(1024),
@@ -285,12 +284,8 @@ func WithSpec(spec *specs.Spec) NewContainerOpts {
 }
 
 func WithResources(resources *specs.LinuxResources) UpdateTaskOpts {
-	return func(ctx context.Context, client *Client, r *tasks.UpdateTaskRequest) error {
-		any, err := typeurl.MarshalAny(resources)
-		if err != nil {
-			return err
-		}
-		r.Resources = any
+	return func(ctx context.Context, client *Client, r *UpdateTaskInfo) error {
+		r.Resources = resources
 		return nil
 	}
 }

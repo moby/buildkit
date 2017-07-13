@@ -8,9 +8,8 @@ import (
 	"fmt"
 	"io/ioutil"
 
-	"github.com/containerd/containerd/api/services/containers/v1"
-	"github.com/containerd/containerd/api/services/tasks/v1"
 	"github.com/containerd/containerd/api/types"
+	"github.com/containerd/containerd/containers"
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
@@ -45,7 +44,7 @@ func WithCheckpoint(desc v1.Descriptor, rootfsID string) NewContainerOpts {
 				if err != nil {
 					return err
 				}
-				if _, err := client.SnapshotService().Prepare(ctx, rootfsID, identity.ChainID(diffIDs).String()); err != nil {
+				if _, err := client.SnapshotService(c.Snapshotter).Prepare(ctx, rootfsID, identity.ChainID(diffIDs).String()); err != nil {
 					if !errdefs.IsAlreadyExists(err) {
 						return err
 					}
@@ -70,7 +69,7 @@ func WithCheckpoint(desc v1.Descriptor, rootfsID string) NewContainerOpts {
 		}
 		if rw != nil {
 			// apply the rw snapshot to the new rw layer
-			mounts, err := client.SnapshotService().Mounts(ctx, rootfsID)
+			mounts, err := client.SnapshotService(c.Snapshotter).Mounts(ctx, rootfsID)
 			if err != nil {
 				return err
 			}
@@ -84,7 +83,7 @@ func WithCheckpoint(desc v1.Descriptor, rootfsID string) NewContainerOpts {
 }
 
 func WithTaskCheckpoint(desc v1.Descriptor) NewTaskOpts {
-	return func(ctx context.Context, c *Client, r *tasks.CreateTaskRequest) error {
+	return func(ctx context.Context, c *Client, info *TaskInfo) error {
 		id := desc.Digest
 		index, err := decodeIndex(ctx, c.ContentStore(), id)
 		if err != nil {
@@ -92,7 +91,7 @@ func WithTaskCheckpoint(desc v1.Descriptor) NewTaskOpts {
 		}
 		for _, m := range index.Manifests {
 			if m.MediaType == images.MediaTypeContainerd1Checkpoint {
-				r.Checkpoint = &types.Descriptor{
+				info.Checkpoint = &types.Descriptor{
 					MediaType: m.MediaType,
 					Size_:     m.Size,
 					Digest:    m.Digest,
