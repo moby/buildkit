@@ -80,7 +80,7 @@ func (c *Client) Solve(ctx context.Context, r io.Reader, statusChan chan *SolveS
 			Definition:    def,
 			Exporter:      exporter,
 			ExporterAttrs: exporterAttrs,
-			Session:       s.UUID(),
+			Session:       s.ID(),
 		})
 		if err != nil {
 			return errors.Wrap(err, "failed to solve")

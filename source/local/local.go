@@ -55,11 +55,11 @@ func (ls *localSourceHandler) CacheKey(ctx context.Context) (string, error) {
 	sessionID := ls.src.SessionID
 
 	if sessionID == "" {
-		uuid := session.FromContext(ctx)
-		if uuid == "" {
+		id := session.FromContext(ctx)
+		if id == "" {
 			return "", errors.New("could not access local files without session")
 		}
-		sessionID = uuid
+		sessionID = id
 	}
 
 	return "session:" + ls.src.Name + ":" + sessionID, nil
@@ -67,15 +67,15 @@ func (ls *localSourceHandler) CacheKey(ctx context.Context) (string, error) {
 
 func (ls *localSourceHandler) Snapshot(ctx context.Context) (out cache.ImmutableRef, retErr error) {
 
-	uuid := session.FromContext(ctx)
-	if uuid == "" {
+	id := session.FromContext(ctx)
+	if id == "" {
 		return nil, errors.New("could not access local files without session")
 	}
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	caller, err := ls.sm.Get(timeoutCtx, uuid)
+	caller, err := ls.sm.Get(timeoutCtx, id)
 	if err != nil {
 		return nil, err
 	}
