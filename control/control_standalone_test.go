@@ -124,7 +124,7 @@ func TestControl(t *testing.T) {
 	err = w.Exec(ctx, meta, root, nil, nil, nil)
 	assert.NoError(t, err)
 
-	rf, err := root.Freeze()
+	rf, err := root.Commit(ctx)
 	assert.NoError(t, err)
 
 	mounts, err = rf.Mount(ctx)

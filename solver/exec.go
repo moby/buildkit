@@ -27,7 +27,7 @@ func newExecOp(op *pb.Op_Exec, cm cache.Manager, w worker.Worker) (Op, error) {
 	}, nil
 }
 
-func (e *execOp) CacheKey(ctx context.Context, inputs []string) (string, error) {
+func (e *execOp) CacheKey(ctx context.Context, inputs []string) (string, int, error) {
 	dt, err := json.Marshal(struct {
 		Inputs []string
 		Exec   *pb.ExecOp
@@ -36,9 +36,16 @@ func (e *execOp) CacheKey(ctx context.Context, inputs []string) (string, error) 
 		Exec:   e.op,
 	})
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
-	return digest.FromBytes(dt).String(), nil
+	numRefs := 0
+	for _, m := range e.op.Mounts {
+		if m.Output != pb.SkipOutput {
+			numRefs++
+		}
+	}
+
+	return digest.FromBytes(dt).String(), numRefs, nil
 }
 
 func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, error) {
@@ -49,10 +56,7 @@ func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, erro
 	defer func() {
 		for _, o := range outputs {
 			if o != nil {
-				s, err := o.Freeze() // TODO: log error
-				if err == nil {
-					go s.Release(ctx)
-				}
+				go o.Release(ctx)
 			}
 		}
 	}()
@@ -60,7 +64,7 @@ func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, erro
 	for _, m := range e.op.Mounts {
 		var mountable cache.Mountable
 		var ref cache.ImmutableRef
-		if m.Input != -1 {
+		if m.Input != pb.Empty {
 			if int(m.Input) > len(inputs) {
 				return nil, errors.Errorf("missing input %d", m.Input)
 			}
@@ -72,7 +76,7 @@ func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, erro
 			}
 			mountable = ref
 		}
-		if m.Output != -1 {
+		if m.Output != pb.SkipOutput {
 			active, err := e.cm.New(ctx, ref) // TODO: should be method
 			if err != nil {
 				return nil, err
@@ -107,7 +111,7 @@ func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, erro
 
 	refs := []Reference{}
 	for i, o := range outputs {
-		ref, err := o.ReleaseAndCommit(ctx)
+		ref, err := o.Commit(ctx)
 		if err != nil {
 			return nil, errors.Wrapf(err, "error committing %s", o.ID())
 		}

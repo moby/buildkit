@@ -153,7 +153,7 @@ func (eo *exec) marshalTo(list [][]byte, cache map[digest.Digest]struct{}) (dige
 			}
 		}
 		if dgst == "" {
-			inputIndex = -1
+			inputIndex = pb.Empty
 		}
 		if inputIndex == len(pop.Inputs) {
 			var mountIndex int64
@@ -174,7 +174,7 @@ func (eo *exec) marshalTo(list [][]byte, cache map[digest.Digest]struct{}) (dige
 			pm.Output = outputIndex
 			outputIndex++
 		} else {
-			pm.Output = -1
+			pm.Output = pb.SkipOutput
 		}
 		m.outputIndex = outputIndex - 1
 		peo.Mounts = append(peo.Mounts, pm)

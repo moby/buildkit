@@ -95,6 +95,7 @@ func defaultControllerOpts(root string, pd pullDeps) (*Opt, error) {
 	ss, err := local.NewSource(local.Opt{
 		SessionManager: sessm,
 		CacheAccessor:  cm,
+		MetadataStore:  md,
 	})
 	if err != nil {
 		return nil, err

@@ -114,7 +114,7 @@ func (s *Snapshotter) SetBlob(ctx context.Context, key string, blob digest.Diges
 	v.Index = index(blob)
 
 	return md.Update(func(b *bolt.Bucket) error {
-		return md.SetValue(b, blobKey, *v)
+		return md.SetValue(b, blobKey, v)
 	})
 }
 

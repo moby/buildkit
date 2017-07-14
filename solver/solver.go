@@ -1,6 +1,8 @@
 package solver
 
 import (
+	"fmt"
+
 	"github.com/Sirupsen/logrus"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/client"
@@ -44,13 +46,13 @@ type Reference interface {
 
 // Op is an implementation for running a vertex
 type Op interface {
-	CacheKey(context.Context, []string) (string, error)
+	CacheKey(context.Context, []string) (string, int, error)
 	Run(ctx context.Context, inputs []Reference) (outputs []Reference, err error)
 }
 
 type InstructionCache interface {
-	Lookup(ctx context.Context, key string) ([]interface{}, error) // TODO: regular ref
-	Set(key string, refs []interface{}) error
+	Lookup(ctx context.Context, key string) (interface{}, error) // TODO: regular ref
+	Set(key string, ref interface{}) error
 }
 
 type Solver struct {
@@ -104,6 +106,16 @@ func (s *Solver) Solve(ctx context.Context, id string, v Vertex, exp exporter.Ex
 		}
 	}()
 
+	for _, ref := range refs {
+		immutable, ok := toImmutableRef(ref)
+		if !ok {
+			return errors.Errorf("invalid reference for exporting: %T", ref)
+		}
+		if err := immutable.Finalize(ctx); err != nil {
+			return err
+		}
+	}
+
 	if exp != nil {
 		immutable, ok := toImmutableRef(refs[0])
 		if !ok {
@@ -118,7 +130,6 @@ func (s *Solver) Solve(ctx context.Context, id string, v Vertex, exp exporter.Ex
 			return err
 		}
 	}
-
 	return err
 }
 
@@ -131,31 +142,31 @@ func (s *Solver) Status(ctx context.Context, id string, statusChan chan *client.
 	return j.pipe(ctx, statusChan)
 }
 
-func (s *Solver) getCacheKey(ctx context.Context, j *job, g *vertex) (cacheKey string, retErr error) {
+func (s *Solver) getCacheKey(ctx context.Context, j *job, g *vertex) (cacheKey string, numRefs int, retErr error) {
 	state, err := s.activeState.vertexState(j, g.digest, func() (Op, error) {
 		return s.resolve(g)
 	})
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 
 	inputs := make([]string, len(g.inputs))
 	if len(g.inputs) > 0 {
 		eg, ctx := errgroup.WithContext(ctx)
 		for i, in := range g.inputs {
-			func(i int, in *vertex) {
+			func(i int, in *vertex, index int) {
 				eg.Go(func() error {
-					k, err := s.getCacheKey(ctx, j, in)
+					k, _, err := s.getCacheKey(ctx, j, in)
 					if err != nil {
 						return err
 					}
-					inputs[i] = k
+					inputs[i] = fmt.Sprintf("%s.%d", k, index)
 					return nil
 				})
-			}(i, in.vertex)
+			}(i, in.vertex, in.index)
 		}
 		if err := eg.Wait(); err != nil {
-			return "", err
+			return "", 0, err
 		}
 	}
 
@@ -169,7 +180,7 @@ func (s *Solver) getCacheKey(ctx context.Context, j *job, g *vertex) (cacheKey s
 		}()
 	}
 
-	return state.GetCacheKey(ctx, func(ctx context.Context, op Op) (string, error) {
+	return state.GetCacheKey(ctx, func(ctx context.Context, op Op) (string, int, error) {
 		return op.CacheKey(ctx, inputs)
 	})
 }
@@ -185,21 +196,29 @@ func (s *Solver) getRefs(ctx context.Context, j *job, g *vertex) (retRef []Refer
 	var cacheKey string
 	if s.cache != nil {
 		var err error
-		cacheKey, err = s.getCacheKey(ctx, j, g)
+		var numRefs int
+		cacheKey, numRefs, err = s.getCacheKey(ctx, j, g)
 		if err != nil {
 			return nil, err
 		}
-		cacheRefsAny, err := s.cache.Lookup(ctx, cacheKey)
-		if err != nil {
-			return nil, err
-		}
-		if len(cacheRefsAny) > 0 {
-			cacheRefs, err := toReferenceArray(cacheRefsAny)
+		cacheRefs := make([]Reference, 0, numRefs)
+		// check if all current refs are already cached
+		for i := 0; i < numRefs; i++ {
+			ref, err := s.cache.Lookup(ctx, fmt.Sprintf("%s.%d", cacheKey, i))
 			if err != nil {
 				return nil, err
 			}
-			g.recursiveMarkCached(ctx)
-			return cacheRefs, nil
+			if ref == nil { // didn't find ref, release all
+				for _, ref := range cacheRefs {
+					ref.Release(context.TODO())
+				}
+				break
+			}
+			cacheRefs = append(cacheRefs, ref.(Reference))
+			if len(cacheRefs) == numRefs { // last item
+				g.recursiveMarkCached(ctx)
+				return cacheRefs, nil
+			}
 		}
 	}
 
@@ -208,8 +227,28 @@ func (s *Solver) getRefs(ctx context.Context, j *job, g *vertex) (retRef []Refer
 	if len(g.inputs) > 0 {
 		eg, ctx := errgroup.WithContext(ctx)
 		for i, in := range g.inputs {
-			func(i int, in *vertex) {
+			func(i int, in *vertex, index int) {
 				eg.Go(func() error {
+					if s.cache != nil {
+						k, numRefs, err := s.getCacheKey(ctx, j, in)
+						if err != nil {
+							return err
+						}
+						ref, err := s.cache.Lookup(ctx, fmt.Sprintf("%s.%d", k, index))
+						if err != nil {
+							return err
+						}
+						if ref != nil {
+							if ref, ok := toImmutableRef(ref.(Reference)); ok {
+								refs[i] = make([]*sharedRef, numRefs)
+								refs[i][index] = newSharedRef(ref)
+								in.recursiveMarkCached(ctx)
+								return nil
+							}
+						}
+					}
+
+					// execute input vertex
 					r, err := s.getRefs(ctx, j, in)
 					if err != nil {
 						return err
@@ -219,13 +258,15 @@ func (s *Solver) getRefs(ctx context.Context, j *job, g *vertex) (retRef []Refer
 					}
 					return nil
 				})
-			}(i, in.vertex)
+			}(i, in.vertex, in.index)
 		}
 		err := eg.Wait()
 		if err != nil {
 			for _, r := range refs {
 				for _, r := range r {
-					go r.Release(context.TODO())
+					if r != nil {
+						go r.Release(context.TODO())
+					}
 				}
 			}
 			return nil, err
@@ -247,7 +288,9 @@ func (s *Solver) getRefs(ctx context.Context, j *job, g *vertex) (retRef []Refer
 	// release anything else
 	for _, r := range refs {
 		for _, r := range r {
-			go r.Release(context.TODO())
+			if r != nil {
+				go r.Release(context.TODO())
+			}
 		}
 	}
 
@@ -265,32 +308,16 @@ func (s *Solver) getRefs(ctx context.Context, j *job, g *vertex) (retRef []Refer
 			return nil, err
 		}
 		if s.cache != nil {
-			if err := s.cache.Set(cacheKey, toAny(refs)); err != nil {
-				logrus.Errorf("failed to save cache for %s: %v", cacheKey, err)
+			for i, ref := range refs {
+				if ref != nil {
+					if err := s.cache.Set(fmt.Sprintf("%s.%d", cacheKey, i), ref); err != nil {
+						logrus.Errorf("failed to save cache for %s: %v", cacheKey, err)
+					}
+				}
 			}
 		}
 		return refs, nil
 	})
-}
-
-func toReferenceArray(in []interface{}) ([]Reference, error) {
-	out := make([]Reference, 0, len(in))
-	for _, i := range in {
-		r, ok := i.(Reference)
-		if !ok {
-			return nil, errors.Errorf("invalid reference")
-		}
-		out = append(out, r)
-	}
-	return out, nil
-}
-
-func toAny(in []Reference) []interface{} {
-	out := make([]interface{}, 0, len(in))
-	for _, i := range in {
-		out = append(out, i)
-	}
-	return out
 }
 
 func toImmutableRef(ref Reference) (cache.ImmutableRef, bool) {

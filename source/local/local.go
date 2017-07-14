@@ -3,7 +3,10 @@ package local
 import (
 	"time"
 
+	"github.com/Sirupsen/logrus"
+	"github.com/boltdb/bolt"
 	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/snapshot"
@@ -12,15 +15,19 @@ import (
 	"golang.org/x/net/context"
 )
 
+const keySharedKey = "local.sharedKey"
+
 type Opt struct {
 	SessionManager *session.Manager
 	CacheAccessor  cache.Accessor
+	MetadataStore  *metadata.Store
 }
 
 func NewSource(opt Opt) (source.Source, error) {
 	ls := &localSource{
 		sm: opt.SessionManager,
 		cm: opt.CacheAccessor,
+		md: opt.MetadataStore,
 	}
 	return ls, nil
 }
@@ -28,6 +35,7 @@ func NewSource(opt Opt) (source.Source, error) {
 type localSource struct {
 	sm *session.Manager
 	cm cache.Accessor
+	md *metadata.Store
 }
 
 func (ls *localSource) ID() string {
@@ -80,17 +88,33 @@ func (ls *localSourceHandler) Snapshot(ctx context.Context) (out cache.Immutable
 		return nil, err
 	}
 
-	mutable, err := ls.cm.New(ctx, nil)
+	sharedKey := keySharedKey + ":" + ls.src.Name + ":" + caller.SharedKey()
+
+	var mutable cache.MutableRef
+	sis, err := ls.md.Search(sharedKey)
 	if err != nil {
 		return nil, err
+	}
+	for _, si := range sis {
+		if m, err := ls.cm.GetMutable(ctx, si.ID()); err == nil {
+			logrus.Debugf("reusing ref for local: %s", m.ID())
+			mutable = m
+			break
+		}
+	}
+
+	if mutable == nil {
+		m, err := ls.cm.New(ctx, nil)
+		if err != nil {
+			return nil, err
+		}
+		mutable = m
+		logrus.Debugf("new ref for local: %s", mutable.ID())
 	}
 
 	defer func() {
 		if retErr != nil && mutable != nil {
-			s, err := mutable.Freeze()
-			if err == nil {
-				go s.Release(context.TODO())
-			}
+			go mutable.Release(context.TODO())
 		}
 	}()
 
@@ -128,11 +152,34 @@ func (ls *localSourceHandler) Snapshot(ctx context.Context) (out cache.Immutable
 	}
 	lm = nil
 
-	snap, err := mutable.ReleaseAndCommit(ctx)
+	skipStoreSharedKey := false
+	si, _ := ls.md.Get(mutable.ID())
+	if v := si.Get(keySharedKey); v != nil {
+		var str string
+		if err := v.Unmarshal(&str); err != nil {
+			return nil, err
+		}
+		skipStoreSharedKey = str == sharedKey
+	}
+	if !skipStoreSharedKey {
+		v, err := metadata.NewValue(sharedKey)
+		if err != nil {
+			return nil, err
+		}
+		v.Index = sharedKey
+		if err := si.Update(func(b *bolt.Bucket) error {
+			return si.SetValue(b, sharedKey, v)
+		}); err != nil {
+			return nil, err
+		}
+		logrus.Debugf("saved %s as %s", mutable.ID(), sharedKey)
+	}
+
+	snap, err := mutable.Commit(ctx)
 	if err != nil {
 		return nil, err
 	}
 	mutable = nil
 
-	return snap, err
+	return snap, nil
 }

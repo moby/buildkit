@@ -24,6 +24,7 @@ type state struct {
 	jobs        map[*job]struct{}
 	refs        []*sharedRef
 	cacheKey    string
+	numRefs     int
 	op          Op
 	progressCtx context.Context
 	cacheCtx    context.Context
@@ -96,7 +97,7 @@ func (s *state) GetRefs(ctx context.Context, cb func(context.Context, Op) ([]Ref
 	return refs, nil
 }
 
-func (s *state) GetCacheKey(ctx context.Context, cb func(context.Context, Op) (string, error)) (string, error) {
+func (s *state) GetCacheKey(ctx context.Context, cb func(context.Context, Op) (string, int, error)) (string, int, error) {
 	_, err := s.Do(ctx, "cache:"+s.key.String(), func(doctx context.Context) (interface{}, error) {
 		if s.cacheKey != "" {
 			if err := writeProgressSnapshot(s.cacheCtx, ctx); err != nil {
@@ -104,18 +105,19 @@ func (s *state) GetCacheKey(ctx context.Context, cb func(context.Context, Op) (s
 			}
 			return nil, nil
 		}
-		cacheKey, err := cb(doctx, s.op)
+		cacheKey, numRefs, err := cb(doctx, s.op)
 		if err != nil {
 			return nil, err
 		}
 		s.cacheKey = cacheKey
+		s.numRefs = numRefs
 		s.cacheCtx = doctx
 		return nil, nil
 	})
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
-	return s.cacheKey, nil
+	return s.cacheKey, s.numRefs, nil
 }
 
 func writeProgressSnapshot(srcCtx, destCtx context.Context) error {

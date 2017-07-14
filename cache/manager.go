@@ -102,15 +102,10 @@ func (cm *cacheManager) get(ctx context.Context, id string) (ImmutableRef, error
 	defer rec.mu.Unlock()
 
 	if rec.mutable {
-		return nil, errors.Wrapf(errInvalid, "invalid mutable ref %s", id)
-	}
-
-	if rec.mutable && !rec.frozen {
 		if len(rec.refs) != 0 {
 			return nil, errors.Wrapf(errLocked, "%s is locked", id)
-		} else {
-			rec.frozen = true
 		}
+		return rec.mref().commit(ctx)
 	}
 
 	return rec.ref(), nil
@@ -118,6 +113,24 @@ func (cm *cacheManager) get(ctx context.Context, id string) (ImmutableRef, error
 
 func (cm *cacheManager) load(ctx context.Context, id string) (*cacheRecord, error) {
 	if rec, ok := cm.records[id]; ok {
+		return rec, nil
+	}
+
+	md, _ := cm.md.Get(id)
+	if mutableID := getEqualMutable(&md); mutableID != "" {
+		mutable, err := cm.load(ctx, mutableID)
+		if err != nil {
+			return nil, err
+		}
+		rec := &cacheRecord{
+			cm:           cm,
+			refs:         make(map[Mountable]struct{}),
+			parent:       mutable.parent,
+			md:           &md,
+			equalMutable: &mutableRef{cacheRecord: mutable},
+		}
+		mutable.equalImmutable = &immutableRef{cacheRecord: rec}
+		cm.records[id] = rec
 		return rec, nil
 	}
 
@@ -134,8 +147,6 @@ func (cm *cacheManager) load(ctx context.Context, id string) (*cacheRecord, erro
 		}
 	}
 
-	md, _ := cm.md.Get(id)
-
 	rec := &cacheRecord{
 		mutable: info.Kind != cdsnapshot.KindCommitted,
 		cm:      cm,
@@ -143,7 +154,7 @@ func (cm *cacheManager) load(ctx context.Context, id string) (*cacheRecord, erro
 		parent:  parent,
 		md:      &md,
 	}
-	cm.records[id] = rec // TODO: store to db
+	cm.records[id] = rec
 	return rec, nil
 }
 
@@ -156,6 +167,9 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef) (MutableRef, er
 		var err error
 		parent, err = cm.Get(ctx, s.ID())
 		if err != nil {
+			return nil, err
+		}
+		if err := parent.Finalize(ctx); err != nil {
 			return nil, err
 		}
 		parentID = parent.ID()
@@ -185,7 +199,7 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef) (MutableRef, er
 
 	return rec.mref(), nil
 }
-func (cm *cacheManager) GetMutable(ctx context.Context, id string) (MutableRef, error) { // Rebase?
+func (cm *cacheManager) GetMutable(ctx context.Context, id string) (MutableRef, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -200,8 +214,16 @@ func (cm *cacheManager) GetMutable(ctx context.Context, id string) (MutableRef, 
 		return nil, errors.Wrapf(errInvalid, "%s is not mutable", id)
 	}
 
-	if rec.frozen || len(rec.refs) != 0 {
+	if len(rec.refs) != 0 {
 		return nil, errors.Wrapf(errLocked, "%s is locked", id)
+	}
+
+	if rec.equalImmutable != nil {
+		delete(cm.records, rec.equalImmutable.ID())
+		if err := rec.equalImmutable.remove(ctx, false); err != nil {
+			return nil, err
+		}
+		rec.equalImmutable = nil
 	}
 
 	return rec.mref(), nil
@@ -222,6 +244,11 @@ func (cm *cacheManager) DiskUsage(ctx context.Context) ([]*client.UsageInfo, err
 
 	for id, cr := range cm.records {
 		cr.mu.Lock()
+		// ignore duplicates that share data
+		if cr.equalImmutable != nil && len(cr.equalImmutable.refs) > 0 || cr.equalMutable != nil && len(cr.refs) == 0 {
+			cr.mu.Unlock()
+			continue
+		}
 		c := &cacheUsageInfo{
 			refs:    len(cr.refs),
 			mutable: cr.mutable,
@@ -230,12 +257,12 @@ func (cm *cacheManager) DiskUsage(ctx context.Context) ([]*client.UsageInfo, err
 		if cr.parent != nil {
 			c.parent = cr.parent.ID()
 		}
-		if cr.mutable && c.refs > 0 && !cr.frozen {
+		if cr.mutable && c.refs > 0 {
 			c.size = 0 // size can not be determined because it is changing
 		}
 		m[id] = c
-		cr.mu.Unlock()
 		rescan[id] = struct{}{}
+		cr.mu.Unlock()
 	}
 	cm.mu.Unlock()
 
@@ -270,17 +297,20 @@ func (cm *cacheManager) DiskUsage(ctx context.Context) ([]*client.UsageInfo, err
 		if d.Size == sizeUnknown {
 			func(d *client.UsageInfo) {
 				eg.Go(func() error {
-					ref, err := cm.Get(ctx, d.ID)
-					if err != nil {
-						d.Size = 0
-						return nil
+					if !d.Mutable {
+						ref, err := cm.Get(ctx, d.ID)
+						if err != nil {
+							d.Size = 0
+							return nil
+						}
+						s, err := ref.Size(ctx)
+						if err != nil {
+							return err
+						}
+						d.Size = s
+						return ref.Release(context.TODO())
 					}
-					s, err := ref.Size(ctx)
-					if err != nil {
-						return err
-					}
-					d.Size = s
-					return ref.Release(context.TODO())
+					return nil
 				})
 			}(d)
 		}
