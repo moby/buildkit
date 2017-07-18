@@ -55,7 +55,7 @@ func testRepeatedFetch(t *testing.T, keepGitDir bool) {
 	require.NoError(t, err)
 	defer ref1.Release(context.TODO())
 
-	mount, err := ref1.Mount(ctx)
+	mount, err := ref1.Mount(ctx, false)
 	require.NoError(t, err)
 
 	lm := snapshot.LocalMounter(mount)
@@ -102,7 +102,7 @@ func testRepeatedFetch(t *testing.T, keepGitDir bool) {
 	require.NoError(t, err)
 	defer ref3.Release(context.TODO())
 
-	mount, err = ref3.Mount(ctx)
+	mount, err = ref3.Mount(ctx, false)
 	require.NoError(t, err)
 
 	lm = snapshot.LocalMounter(mount)
@@ -161,7 +161,7 @@ func testFetchBySHA(t *testing.T, keepGitDir bool) {
 	require.NoError(t, err)
 	defer ref1.Release(context.TODO())
 
-	mount, err := ref1.Mount(ctx)
+	mount, err := ref1.Mount(ctx, false)
 	require.NoError(t, err)
 
 	lm := snapshot.LocalMounter(mount)
@@ -234,7 +234,7 @@ func testMultipleRepos(t *testing.T, keepGitDir bool) {
 	require.NoError(t, err)
 	defer ref1.Release(context.TODO())
 
-	mount, err := ref1.Mount(ctx)
+	mount, err := ref1.Mount(ctx, false)
 	require.NoError(t, err)
 
 	lm := snapshot.LocalMounter(mount)
@@ -246,7 +246,7 @@ func testMultipleRepos(t *testing.T, keepGitDir bool) {
 	require.NoError(t, err)
 	defer ref2.Release(context.TODO())
 
-	mount, err = ref2.Mount(ctx)
+	mount, err = ref2.Mount(ctx, false)
 	require.NoError(t, err)
 
 	lm = snapshot.LocalMounter(mount)

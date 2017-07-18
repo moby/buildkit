@@ -30,7 +30,7 @@ type MutableRef interface {
 }
 
 type Mountable interface {
-	Mount(ctx context.Context) ([]mount.Mount, error)
+	Mount(ctx context.Context, readonly bool) ([]mount.Mount, error)
 }
 
 type cacheRecord struct {
@@ -101,7 +101,7 @@ func (cr *cacheRecord) Parent() ImmutableRef {
 	return cr.parent.(*immutableRef).ref()
 }
 
-func (cr *cacheRecord) Mount(ctx context.Context) ([]mount.Mount, error) {
+func (cr *cacheRecord) Mount(ctx context.Context, readonly bool) ([]mount.Mount, error) {
 	cr.mu.Lock()
 	defer cr.mu.Unlock()
 
@@ -110,8 +110,20 @@ func (cr *cacheRecord) Mount(ctx context.Context) ([]mount.Mount, error) {
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to mount %s", cr.ID())
 		}
+		if readonly {
+			m = setReadonly(m)
+		}
 		return m, nil
 	}
+
+	if cr.equalMutable != nil && readonly {
+		m, err := cr.cm.Snapshotter.Mounts(ctx, cr.equalMutable.ID())
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to mount %s", cr.equalMutable.ID())
+		}
+		return setReadonly(m), nil
+	}
+
 	if err := cr.finalize(ctx); err != nil {
 		return nil, err
 	}
@@ -267,4 +279,18 @@ func (sr *mutableRef) release(ctx context.Context) error {
 	// 	return err
 	// }
 	return nil
+}
+
+func setReadonly(mounts []mount.Mount) []mount.Mount {
+	for i, m := range mounts {
+		opts := make([]string, 0, len(m.Options))
+		for _, opt := range m.Options {
+			if opt != "rw" {
+				opts = append(opts, opt)
+			}
+		}
+		opts = append(opts, "ro")
+		mounts[i].Options = opts
+	}
+	return mounts
 }

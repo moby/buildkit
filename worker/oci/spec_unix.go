@@ -22,7 +22,7 @@ func GenerateSpec(ctx context.Context, meta worker.Meta, mounts []worker.Mount) 
 	// TODO: User
 
 	for _, m := range mounts {
-		mounts, err := m.Src.Mount(ctx)
+		mounts, err := m.Src.Mount(ctx, m.Readonly)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to mount %s", m.Dest)
 		}

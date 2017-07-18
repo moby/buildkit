@@ -33,7 +33,7 @@ func TestManager(t *testing.T) {
 	active, err := cm.New(ctx, nil)
 	require.NoError(t, err)
 
-	m, err := active.Mount(ctx)
+	m, err := active.Mount(ctx, false)
 	require.NoError(t, err)
 
 	lm := snapshot.LocalMounter(m)

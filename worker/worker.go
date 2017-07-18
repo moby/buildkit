@@ -19,7 +19,7 @@ type Meta struct {
 type Mount struct {
 	Src      cache.Mountable
 	Dest     string
-	ReadOnly bool
+	Readonly bool
 }
 
 type Worker interface {

@@ -34,6 +34,7 @@ message Mount {
 	string selector = 2;
 	string dest = 3;
 	int64 output = 4;
+	bool readonly = 5;
 }
 
 message CopyOp {

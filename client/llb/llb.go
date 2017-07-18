@@ -167,8 +167,9 @@ func (eo *exec) marshalTo(list [][]byte, cache map[digest.Digest]struct{}) (dige
 		}
 
 		pm := &pb.Mount{
-			Input: int64(inputIndex),
-			Dest:  m.dest,
+			Input:    int64(inputIndex),
+			Dest:     m.dest,
+			Readonly: m.readonly,
 		}
 		if m.hasOutput {
 			pm.Output = outputIndex
@@ -186,7 +187,7 @@ func (eo *exec) marshalTo(list [][]byte, cache map[digest.Digest]struct{}) (dige
 type mount struct {
 	execState *ExecState
 	dest      string
-	// ro bool
+	readonly  bool
 	// either parent or source has to be set
 	parent      *mount
 	source      *source

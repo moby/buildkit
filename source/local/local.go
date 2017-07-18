@@ -118,7 +118,7 @@ func (ls *localSourceHandler) Snapshot(ctx context.Context) (out cache.Immutable
 		}
 	}()
 
-	mount, err := mutable.Mount(ctx)
+	mount, err := mutable.Mount(ctx, false)
 	if err != nil {
 		return nil, err
 	}

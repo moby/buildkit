@@ -138,13 +138,16 @@ type ExecState struct {
 	State
 }
 
-func (s *ExecState) AddMount(dest string, mountState *State) *State {
+func (s *ExecState) AddMount(dest string, mountState *State, opts ...MountOption) *State {
 	m := &mount{
 		dest:      dest,
 		source:    mountState.source,
 		parent:    mountState.mount,
 		execState: s,
 		hasOutput: true, // TODO: should be set only if something inherits
+	}
+	for _, opt := range opts {
+		opt(m)
 	}
 	var newState State
 	newState.meta = s.meta
@@ -182,9 +185,15 @@ func (s *ExecState) updateMeta(fn metaOption) *ExecState {
 
 type RunOption func(es *ExecState) *ExecState
 
-func AddMount(dest string, mountState *State) RunOption {
+type MountOption func(*mount)
+
+func Readonly(m *mount) {
+	m.readonly = true
+}
+
+func AddMount(dest string, mountState *State, opts ...MountOption) RunOption {
 	return func(es *ExecState) *ExecState {
-		es.AddMount(dest, mountState)
+		es.AddMount(dest, mountState, opts...)
 		return nil
 	}
 }

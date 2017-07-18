@@ -56,7 +56,7 @@ func New(root string) (worker.Worker, error) {
 }
 
 func (w *runcworker) Exec(ctx context.Context, meta worker.Meta, root cache.Mountable, mounts []worker.Mount, stdout, stderr io.WriteCloser) error {
-	rootMount, err := root.Mount(ctx)
+	rootMount, err := root.Mount(ctx, false)
 	if err != nil {
 		return err
 	}

@@ -95,7 +95,7 @@ func (gs *gitSource) mountRemote(ctx context.Context, remote string) (target str
 		}
 	}()
 
-	mount, err := remoteRef.Mount(ctx)
+	mount, err := remoteRef.Mount(ctx, false)
 	if err != nil {
 		return "", nil, err
 	}
@@ -271,7 +271,7 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context) (out cache.ImmutableRe
 		}
 	}()
 
-	mount, err := checkoutRef.Mount(ctx)
+	mount, err := checkoutRef.Mount(ctx, false)
 	if err != nil {
 		return nil, err
 	}

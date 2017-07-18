@@ -50,7 +50,7 @@ func (e *execOp) CacheKey(ctx context.Context, inputs []string) (string, int, er
 
 func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, error) {
 	var mounts []worker.Mount
-	var outputs []cache.MutableRef
+	var outputs []Reference
 	var root cache.Mountable
 
 	defer func() {
@@ -77,17 +77,21 @@ func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, erro
 			mountable = ref
 		}
 		if m.Output != pb.SkipOutput {
-			active, err := e.cm.New(ctx, ref) // TODO: should be method
-			if err != nil {
-				return nil, err
+			if m.Readonly && ref != nil {
+				outputs = append(outputs, newSharedRef(ref).Clone())
+			} else {
+				active, err := e.cm.New(ctx, ref) // TODO: should be method
+				if err != nil {
+					return nil, err
+				}
+				outputs = append(outputs, active)
+				mountable = active
 			}
-			outputs = append(outputs, active)
-			mountable = active
 		}
 		if m.Dest == pb.RootMount {
 			root = mountable
 		} else {
-			mounts = append(mounts, worker.Mount{Src: mountable, Dest: m.Dest})
+			mounts = append(mounts, worker.Mount{Src: mountable, Dest: m.Dest, Readonly: m.Readonly})
 		}
 	}
 
@@ -111,11 +115,15 @@ func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, erro
 
 	refs := []Reference{}
 	for i, o := range outputs {
-		ref, err := o.Commit(ctx)
-		if err != nil {
-			return nil, errors.Wrapf(err, "error committing %s", o.ID())
+		if mutable, ok := o.(cache.MutableRef); ok {
+			ref, err := mutable.Commit(ctx)
+			if err != nil {
+				return nil, errors.Wrapf(err, "error committing %s", mutable.ID())
+			}
+			refs = append(refs, ref)
+		} else {
+			refs = append(refs, o)
 		}
-		refs = append(refs, ref)
 		outputs[i] = nil
 	}
 	return refs, nil
