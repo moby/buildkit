@@ -28,7 +28,7 @@ type ManagerOpt struct {
 
 type Accessor interface {
 	Get(ctx context.Context, id string) (ImmutableRef, error)
-	New(ctx context.Context, s ImmutableRef) (MutableRef, error)
+	New(ctx context.Context, s ImmutableRef, opt ...RefOption) (MutableRef, error)
 	GetMutable(ctx context.Context, id string) (MutableRef, error) // Rebase?
 }
 
@@ -158,7 +158,7 @@ func (cm *cacheManager) load(ctx context.Context, id string) (*cacheRecord, erro
 	return rec, nil
 }
 
-func (cm *cacheManager) New(ctx context.Context, s ImmutableRef) (MutableRef, error) {
+func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, opts ...RefOption) (MutableRef, error) {
 	id := identity.NewID()
 
 	var parent ImmutableRef
@@ -192,6 +192,15 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef) (MutableRef, er
 		md:      &md,
 	}
 
+	for _, opt := range opts {
+		if err := opt(rec); err != nil {
+			if parent != nil {
+				parent.Release(ctx)
+			}
+			return nil, err
+		}
+	}
+
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -219,6 +228,9 @@ func (cm *cacheManager) GetMutable(ctx context.Context, id string) (MutableRef, 
 	}
 
 	if rec.equalImmutable != nil {
+		if len(rec.equalImmutable.refs) != 0 {
+			return nil, errors.Wrapf(errLocked, "%s is locked", id)
+		}
 		delete(cm.records, rec.equalImmutable.ID())
 		if err := rec.equalImmutable.remove(ctx, false); err != nil {
 			return nil, err
@@ -297,20 +309,17 @@ func (cm *cacheManager) DiskUsage(ctx context.Context) ([]*client.UsageInfo, err
 		if d.Size == sizeUnknown {
 			func(d *client.UsageInfo) {
 				eg.Go(func() error {
-					if !d.Mutable {
-						ref, err := cm.Get(ctx, d.ID)
-						if err != nil {
-							d.Size = 0
-							return nil
-						}
-						s, err := ref.Size(ctx)
-						if err != nil {
-							return err
-						}
-						d.Size = s
-						return ref.Release(context.TODO())
+					ref, err := cm.Get(ctx, d.ID)
+					if err != nil {
+						d.Size = 0
+						return nil
 					}
-					return nil
+					s, err := ref.Size(ctx)
+					if err != nil {
+						return err
+					}
+					d.Size = s
+					return ref.Release(context.TODO())
 				})
 			}(d)
 		}
@@ -325,4 +334,17 @@ func (cm *cacheManager) DiskUsage(ctx context.Context) ([]*client.UsageInfo, err
 
 func IsLocked(err error) bool {
 	return errors.Cause(err) == errLocked
+}
+
+type RefOption func(*cacheRecord) error
+
+type cachePolicy int
+
+const (
+	cachePolicyDefault cachePolicy = iota
+	cachePolicyKeepMutable
+)
+
+func CachePolicyKeepMutable(cr *cacheRecord) error {
+	return setCachePolicy(cr.md, cachePolicyKeepMutable)
 }
