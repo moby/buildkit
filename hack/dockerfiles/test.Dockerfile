@@ -1,5 +1,5 @@
 ARG RUNC_VERSION=429a5387123625040bacfbb60d96b1cbd02293ab
-ARG CONTAINERD_VERSION=v1.0.0-alpha0
+ARG CONTAINERD_VERSION=036232856fb8f088a844b22f3330bcddb5d44c0a
 
 FROM golang:1.8-alpine AS gobuild-base
 RUN apk add --no-cache g++ linux-headers
@@ -21,8 +21,8 @@ RUN git clone https://github.com/containerd/containerd.git "$GOPATH/src/github.c
 	&& make bin/containerd
 
 FROM gobuild-base AS unit-tests
-COPY --from=runc /usr/bin/runc /usr/bin/runc 
-COPY --from=containerd /go/src/github.com/containerd/containerd/bin/containerd /usr/bin/containerd 
+COPY --from=runc /usr/bin/runc /usr/bin/runc
+COPY --from=containerd /go/src/github.com/containerd/containerd/bin/containerd* /usr/bin/
 WORKDIR /go/src/github.com/moby/buildkit
 COPY . .
 

@@ -1,11 +1,10 @@
 package containerd
 
 import (
+	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
-	"path/filepath"
 	"sync"
 )
 
@@ -16,6 +15,13 @@ type IO struct {
 	Stderr   string
 
 	closer *wgCloser
+}
+
+func (i *IO) Cancel() {
+	if i.closer == nil {
+		return
+	}
+	i.closer.Cancel()
 }
 
 func (i *IO) Wait() {
@@ -32,7 +38,7 @@ func (i *IO) Close() error {
 	return i.closer.Close()
 }
 
-type IOCreation func() (*IO, error)
+type IOCreation func(id string) (*IO, error)
 
 type IOAttach func(*FIFOSet) (*IO, error)
 
@@ -41,8 +47,8 @@ func NewIO(stdin io.Reader, stdout, stderr io.Writer) IOCreation {
 }
 
 func NewIOWithTerminal(stdin io.Reader, stdout, stderr io.Writer, terminal bool) IOCreation {
-	return func() (*IO, error) {
-		paths, err := NewFifos()
+	return func(id string) (*IO, error) {
+		paths, err := NewFifos(id)
 		if err != nil {
 			return nil, err
 		}
@@ -64,7 +70,6 @@ func NewIOWithTerminal(stdin io.Reader, stdout, stderr io.Writer, terminal bool)
 		i.closer = closer
 		return i, nil
 	}
-
 }
 
 func WithAttach(stdin io.Reader, stdout, stderr io.Writer) IOAttach {
@@ -94,31 +99,13 @@ func WithAttach(stdin io.Reader, stdout, stderr io.Writer) IOAttach {
 
 // Stdio returns an IO implementation to be used for a task
 // that outputs the container's IO as the current processes Stdio
-func Stdio() (*IO, error) {
-	return NewIO(os.Stdin, os.Stdout, os.Stderr)()
+func Stdio(id string) (*IO, error) {
+	return NewIO(os.Stdin, os.Stdout, os.Stderr)(id)
 }
 
 // StdioTerminal will setup the IO for the task to use a terminal
-func StdioTerminal() (*IO, error) {
-	return NewIOWithTerminal(os.Stdin, os.Stdout, os.Stderr, true)()
-}
-
-// NewFifos returns a new set of fifos for the task
-func NewFifos() (*FIFOSet, error) {
-	root := filepath.Join(os.TempDir(), "containerd")
-	if err := os.MkdirAll(root, 0700); err != nil {
-		return nil, err
-	}
-	dir, err := ioutil.TempDir(root, "")
-	if err != nil {
-		return nil, err
-	}
-	return &FIFOSet{
-		Dir: dir,
-		In:  filepath.Join(dir, "stdin"),
-		Out: filepath.Join(dir, "stdout"),
-		Err: filepath.Join(dir, "stderr"),
-	}, nil
+func StdioTerminal(id string) (*IO, error) {
+	return NewIOWithTerminal(os.Stdin, os.Stdout, os.Stderr, true)(id)
 }
 
 type FIFOSet struct {
@@ -134,9 +121,10 @@ type ioSet struct {
 }
 
 type wgCloser struct {
-	wg  *sync.WaitGroup
-	dir string
-	set []io.Closer
+	wg     *sync.WaitGroup
+	dir    string
+	set    []io.Closer
+	cancel context.CancelFunc
 }
 
 func (g *wgCloser) Wait() {
@@ -151,4 +139,8 @@ func (g *wgCloser) Close() error {
 		return os.RemoveAll(g.dir)
 	}
 	return nil
+}
+
+func (g *wgCloser) Cancel() {
+	g.cancel()
 }

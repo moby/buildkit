@@ -251,7 +251,12 @@ func (cs *contentStore) Status(ctx context.Context, ref string) (content.Status,
 		return content.Status{}, err
 	}
 
-	return cs.Store.Status(ctx, bref)
+	st, err := cs.Store.Status(ctx, bref)
+	if err != nil {
+		return content.Status{}, err
+	}
+	st.Ref = ref
+	return st, nil
 }
 
 func (cs *contentStore) Abort(ctx context.Context, ref string) error {
@@ -298,18 +303,23 @@ func (cs *contentStore) Writer(ctx context.Context, ref string, size int64, expe
 			return err
 		}
 
-		if len(bkt.Get([]byte(ref))) > 0 {
-			return errors.Wrapf(errdefs.ErrUnavailable, "ref %v is currently in use", ref)
-		}
+		var (
+			bref  string
+			brefb = bkt.Get([]byte(ref))
+		)
 
-		sid, err := bkt.NextSequence()
-		if err != nil {
-			return err
-		}
+		if brefb == nil {
+			sid, err := bkt.NextSequence()
+			if err != nil {
+				return err
+			}
 
-		bref := createKey(sid, ns, ref)
-		if err := bkt.Put([]byte(ref), []byte(bref)); err != nil {
-			return err
+			bref = createKey(sid, ns, ref)
+			if err := bkt.Put([]byte(ref), []byte(bref)); err != nil {
+				return err
+			}
+		} else {
+			bref = string(brefb)
 		}
 
 		// Do not use the passed in expected value here since it was
@@ -385,13 +395,14 @@ func (nw *namespacedWriter) commit(tx *bolt.Tx, size int64, expected digest.Dige
 		return err
 	}
 
-	timeEncoded, err := status.UpdatedAt.MarshalBinary()
+	timeEncoded, err := time.Now().UTC().MarshalBinary()
 	if err != nil {
 		return err
 	}
 
 	for _, v := range [][2][]byte{
 		{bucketKeyCreatedAt, timeEncoded},
+		{bucketKeyUpdatedAt, timeEncoded},
 		{bucketKeySize, sizeEncoded},
 	} {
 		if err := bkt.Put(v[0], v[1]); err != nil {
@@ -400,6 +411,14 @@ func (nw *namespacedWriter) commit(tx *bolt.Tx, size int64, expected digest.Dige
 	}
 
 	return nil
+}
+
+func (nw *namespacedWriter) Status() (content.Status, error) {
+	st, err := nw.Writer.Status()
+	if err == nil {
+		st.Ref = nw.ref
+	}
+	return st, err
 }
 
 func (cs *contentStore) Reader(ctx context.Context, dgst digest.Digest) (io.ReadCloser, error) {

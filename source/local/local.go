@@ -3,7 +3,6 @@ package local
 import (
 	"time"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/boltdb/bolt"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/metadata"
@@ -13,6 +12,7 @@ import (
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 	"golang.org/x/time/rate"
 )

@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/moby/buildkit/util/profiler"
+	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )
 

@@ -1,11 +1,11 @@
 package instructioncache
 
 import (
-	"github.com/Sirupsen/logrus"
 	"github.com/boltdb/bolt"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 )
 

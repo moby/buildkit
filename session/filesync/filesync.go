@@ -131,11 +131,6 @@ var supportedProtocols = []protocol{
 		sendFn: sendDiffCopy,
 		recvFn: recvDiffCopy,
 	},
-	{
-		name:   "tarstream",
-		sendFn: sendTarStream,
-		recvFn: recvTarStream,
-	},
 }
 
 // FSSendRequestOpt defines options for FSSend request
