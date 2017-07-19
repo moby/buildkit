@@ -309,36 +309,11 @@ func (s *Solver) getRefs(ctx context.Context, j *job, g *vertex) (retRef []Refer
 		}
 		if s.cache != nil {
 			for i, ref := range refs {
-				if ref != nil {
-					if err := s.cache.Set(fmt.Sprintf("%s.%d", cacheKey, i), ref); err != nil {
-						logrus.Errorf("failed to save cache for %s: %v", cacheKey, err)
-					}
+				if err := s.cache.Set(fmt.Sprintf("%s.%d", cacheKey, i), originRef(ref)); err != nil {
+					logrus.Errorf("failed to save cache for %s: %v", cacheKey, err)
 				}
 			}
 		}
 		return refs, nil
 	})
-}
-
-func toImmutableRef(ref Reference) (cache.ImmutableRef, bool) {
-	sysRef := ref
-	if sys, ok := ref.(interface {
-		Sys() Reference
-	}); ok {
-		sysRef = sys.Sys()
-	}
-	immutable, ok := sysRef.(cache.ImmutableRef)
-	if !ok {
-		return nil, false
-	}
-	return &immutableRef{immutable, ref.Release}, true
-}
-
-type immutableRef struct {
-	cache.ImmutableRef
-	release func(context.Context) error
-}
-
-func (ir *immutableRef) Release(ctx context.Context) error {
-	return ir.release(ctx)
 }

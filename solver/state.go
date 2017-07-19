@@ -3,6 +3,7 @@ package solver
 import (
 	"sync"
 
+	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/progress"
 	digest "github.com/opencontainers/go-digest"
@@ -182,4 +183,31 @@ func (r *sharedRefInstance) Release(ctx context.Context) error {
 		return r.sharedRef.Reference.Release(ctx)
 	}
 	return nil
+}
+
+func originRef(ref Reference) Reference {
+	sysRef := ref
+	if sys, ok := ref.(interface {
+		Sys() Reference
+	}); ok {
+		sysRef = sys.Sys()
+	}
+	return sysRef
+}
+
+func toImmutableRef(ref Reference) (cache.ImmutableRef, bool) {
+	immutable, ok := originRef(ref).(cache.ImmutableRef)
+	if !ok {
+		return nil, false
+	}
+	return &immutableRef{immutable, ref.Release}, true
+}
+
+type immutableRef struct {
+	cache.ImmutableRef
+	release func(context.Context) error
+}
+
+func (ir *immutableRef) Release(ctx context.Context) error {
+	return ir.release(ctx)
 }
