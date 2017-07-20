@@ -33,7 +33,7 @@ var buildCommand = cli.Command{
 			Name:  "no-progress",
 			Usage: "Don't show interactive progress",
 		},
-		cli.StringFlag{
+		cli.StringSliceFlag{
 			Name:  "local",
 			Usage: "Allow build access to the local directory",
 		},
@@ -64,8 +64,17 @@ func build(clicontext *cli.Context) error {
 		return errors.Wrap(err, "invalid exporter-opt")
 	}
 
+	localDirs, err := attrMap(clicontext.StringSlice("local"))
+	if err != nil {
+		return errors.Wrap(err, "invalid local")
+	}
+
 	eg.Go(func() error {
-		return c.Solve(ctx, os.Stdin, ch, clicontext.String("exporter"), exporterAttrs, clicontext.String("local"))
+		return c.Solve(ctx, os.Stdin, client.SolveOpt{
+			Exporter:      clicontext.String("exporter"),
+			ExporterAttrs: exporterAttrs,
+			LocalDirs:     localDirs,
+		}, ch)
 	})
 
 	eg.Go(func() error {

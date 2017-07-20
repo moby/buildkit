@@ -59,6 +59,7 @@ Different versions of the example scripts show different ways of describing the 
 - `./examples/buildkit0` - uses only exec operations, defines a full stage per component.
 - `./examples/buildkit1` - cloning git repositories has been separated for extra concurrency.
 - `./examples/buildkit2` - uses git sources directly instead of running `git clone`, allowing better performance and much safer caching.
+- `./examples/buildkit3` - allows using local source files for separate components eg. `./buildkit3 --runc=local | buildctl build --local runc-src=some/local/path`  
 
 #### Supported runc version
 

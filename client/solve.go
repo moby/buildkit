@@ -21,7 +21,15 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func (c *Client) Solve(ctx context.Context, r io.Reader, statusChan chan *SolveStatus, exporter string, exporterAttrs map[string]string, localDir string) error {
+type SolveOpt struct {
+	Exporter      string
+	ExporterAttrs map[string]string
+	LocalDirs     map[string]string
+	SharedKey     string
+	// Session string
+}
+
+func (c *Client) Solve(ctx context.Context, r io.Reader, opt SolveOpt, statusChan chan *SolveStatus) error {
 	defer func() {
 		if statusChan != nil {
 			close(statusChan)
@@ -37,7 +45,8 @@ func (c *Client) Solve(ctx context.Context, r io.Reader, statusChan chan *SolveS
 		return errors.New("invalid empty definition")
 	}
 
-	if err := validateLocals(def, localDir); err != nil {
+	syncedDirs, err := prepareSyncedDirs(def, opt.LocalDirs)
+	if err != nil {
 		return err
 	}
 
@@ -47,19 +56,13 @@ func (c *Client) Solve(ctx context.Context, r io.Reader, statusChan chan *SolveS
 	statusContext, cancelStatus := context.WithCancel(context.Background())
 	defer cancelStatus()
 
-	sharedKey, err := getSharedKey(localDir)
-	if err != nil {
-		return errors.Wrap(err, "failed to get build shared key")
-	}
-	s, err := session.NewSession(filepath.Base(localDir), sharedKey)
+	s, err := session.NewSession(defaultSessionName(), opt.SharedKey)
 	if err != nil {
 		return errors.Wrap(err, "failed to create session")
 	}
 
-	if localDir != "" {
-		_, dir, _ := parseLocalDir(localDir)
-		workdirProvider := filesync.NewFSSyncProvider(dir, nil)
-		s.Allow(workdirProvider)
+	if len(syncedDirs) > 0 {
+		s.Allow(filesync.NewFSSyncProvider(syncedDirs))
 	}
 
 	eg.Go(func() error {
@@ -78,8 +81,8 @@ func (c *Client) Solve(ctx context.Context, r io.Reader, statusChan chan *SolveS
 		_, err = c.controlClient().Solve(ctx, &controlapi.SolveRequest{
 			Ref:           ref,
 			Definition:    def,
-			Exporter:      exporter,
-			ExporterAttrs: exporterAttrs,
+			Exporter:      opt.Exporter,
+			ExporterAttrs: opt.ExporterAttrs,
 			Session:       s.ID(),
 		})
 		if err != nil {
@@ -152,43 +155,40 @@ func generateID() string {
 	return hex.EncodeToString(b)
 }
 
-func validateLocals(defs [][]byte, localDir string) error {
-	k, _, err := parseLocalDir(localDir)
-	if err != nil {
-		return err
+func prepareSyncedDirs(defs [][]byte, localDirs map[string]string) ([]filesync.SyncedDir, error) {
+	for _, d := range localDirs {
+		fi, err := os.Stat(d)
+		if err != nil {
+			return nil, errors.Wrapf(err, "could not find %s", d)
+		}
+		if !fi.IsDir() {
+			return nil, errors.Errorf("%s not a directory", d)
+		}
 	}
+	dirs := make([]filesync.SyncedDir, 0, len(localDirs))
 	for _, dt := range defs {
 		var op pb.Op
 		if err := (&op).Unmarshal(dt); err != nil {
-			return errors.Wrap(err, "failed to parse llb proto op")
+			return nil, errors.Wrap(err, "failed to parse llb proto op")
 		}
 		if src := op.GetSource(); src != nil {
 			if strings.HasPrefix(src.Identifier, "local://") { // TODO: just make a type property
 				name := strings.TrimPrefix(src.Identifier, "local://")
-				if name != k {
-					return errors.Errorf("local directory %s not enabled", name)
+				d, ok := localDirs[name]
+				if !ok {
+					return nil, errors.Errorf("local directory %s not enabled", name)
 				}
+				dirs = append(dirs, filesync.SyncedDir{Name: name, Dir: d}) // TODO: excludes
 			}
 		}
 	}
-	return nil
+	return dirs, nil
 }
 
-func parseLocalDir(str string) (string, string, error) {
-	if str == "" {
-		return "", "", nil
-	}
-	parts := strings.SplitN(str, "=", 2)
-	if len(parts) != 2 {
-		return "", "", errors.Errorf("invalid local indentifier %q, need name=dir", str)
-	}
-	fi, err := os.Stat(parts[1])
+func defaultSessionName() string {
+	wd, err := os.Getwd()
 	if err != nil {
-		return "", "", errors.Wrapf(err, "could not find %s", parts[1])
+		return "unknown"
 	}
-	if !fi.IsDir() {
-		return "", "", errors.Errorf("%s not a directory", parts[1])
-	}
-	return parts[0], parts[1], nil
-
+	return filepath.Base(wd)
 }

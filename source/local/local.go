@@ -137,6 +137,7 @@ func (ls *localSourceHandler) Snapshot(ctx context.Context) (out cache.Immutable
 	}()
 
 	opt := filesync.FSSendRequestOpt{
+		Name:             ls.src.Name,
 		IncludePatterns:  nil,
 		OverrideExcludes: false,
 		DestDir:          dest,
