@@ -15,6 +15,8 @@ import (
 
 const sizeUnknown int64 = -1
 const keySize = "snapshot.size"
+const keyEqualMutable = "cache.equalMutable"
+const keyEqualImmutable = "cache.equalImmutable"
 
 func setSize(si *metadata.StorageItem, s int64) error {
 	v, err := metadata.NewValue(s)
@@ -22,7 +24,7 @@ func setSize(si *metadata.StorageItem, s int64) error {
 		return errors.Wrap(err, "failed to create size value")
 	}
 	si.Queue(func(b *bolt.Bucket) error {
-		return si.SetValue(b, keySize, *v)
+		return si.SetValue(b, keySize, v)
 	})
 	return nil
 }
@@ -37,4 +39,34 @@ func getSize(si *metadata.StorageItem) int64 {
 		return sizeUnknown
 	}
 	return size
+}
+
+func getEqualMutable(si *metadata.StorageItem) string {
+	v := si.Get(keyEqualMutable)
+	if v == nil {
+		return ""
+	}
+	var str string
+	if err := v.Unmarshal(&str); err != nil {
+		return ""
+	}
+	return str
+}
+
+func setEqualMutable(si *metadata.StorageItem, s string) error {
+	v, err := metadata.NewValue(s)
+	if err != nil {
+		return errors.Wrapf(err, "failed to create %s meta value", keyEqualMutable)
+	}
+	si.Queue(func(b *bolt.Bucket) error {
+		return si.SetValue(b, keyEqualMutable, v)
+	})
+	return nil
+}
+
+func clearEqualMutable(si *metadata.StorageItem) error {
+	si.Queue(func(b *bolt.Bucket) error {
+		return si.SetValue(b, keyEqualMutable, nil)
+	})
+	return nil
 }

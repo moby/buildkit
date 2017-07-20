@@ -4,11 +4,11 @@ import "context"
 
 type contextKeyT string
 
-var contextKey = contextKeyT("buildkit/session-uuid")
+var contextKey = contextKeyT("buildkit/session-id")
 
-func NewContext(ctx context.Context, uuid string) context.Context {
-	if uuid != "" {
-		return context.WithValue(ctx, contextKey, uuid)
+func NewContext(ctx context.Context, id string) context.Context {
+	if id != "" {
+		return context.WithValue(ctx, contextKey, id)
 	}
 	return ctx
 }

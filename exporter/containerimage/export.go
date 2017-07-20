@@ -113,12 +113,12 @@ func (e *imageExporter) getBlobs(ctx context.Context, ref cache.ImmutableRef) ([
 			var lower []mount.Mount
 			if parent != nil {
 				defer parent.Release(context.TODO())
-				lower, err = parent.Mount(ctx)
+				lower, err = parent.Mount(ctx, true)
 				if err != nil {
 					return nil, err
 				}
 			}
-			upper, err := ref.Mount(ctx)
+			upper, err := ref.Mount(ctx, true)
 			if err != nil {
 				return nil, err
 			}

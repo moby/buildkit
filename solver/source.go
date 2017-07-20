@@ -58,12 +58,13 @@ func (s *sourceOp) instance(ctx context.Context) (source.SourceInstance, error) 
 	return s.src, nil
 }
 
-func (s *sourceOp) CacheKey(ctx context.Context, _ []string) (string, error) {
+func (s *sourceOp) CacheKey(ctx context.Context, _ []string) (string, int, error) {
 	src, err := s.instance(ctx)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
-	return src.CacheKey(ctx)
+	k, err := src.CacheKey(ctx)
+	return k, 1, err
 }
 
 func (s *sourceOp) Run(ctx context.Context, _ []Reference) ([]Reference, error) {

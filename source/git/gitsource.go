@@ -86,10 +86,7 @@ func (gs *gitSource) mountRemote(ctx context.Context, remote string) (target str
 	}
 
 	releaseRemoteRef := func() {
-		s, err := remoteRef.Freeze() // TODO: remove this
-		if err == nil {
-			s.Release(context.TODO())
-		}
+		remoteRef.Release(context.TODO())
 	}
 
 	defer func() {
@@ -98,7 +95,7 @@ func (gs *gitSource) mountRemote(ctx context.Context, remote string) (target str
 		}
 	}()
 
-	mount, err := remoteRef.Mount(ctx)
+	mount, err := remoteRef.Mount(ctx, false)
 	if err != nil {
 		return "", nil, err
 	}
@@ -133,7 +130,7 @@ func (gs *gitSource) mountRemote(ctx context.Context, remote string) (target str
 		}
 
 		if err := si.Update(func(b *bolt.Bucket) error {
-			return si.SetValue(b, "git-remote", *v)
+			return si.SetValue(b, "git-remote", v)
 		}); err != nil {
 			return "", nil, err
 		}
@@ -270,14 +267,11 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context) (out cache.ImmutableRe
 
 	defer func() {
 		if retErr != nil && checkoutRef != nil {
-			s, err := checkoutRef.Freeze() // TODO: remove this
-			if err != nil {
-				s.Release(context.TODO())
-			}
+			checkoutRef.Release(context.TODO())
 		}
 	}()
 
-	mount, err := checkoutRef.Mount(ctx)
+	mount, err := checkoutRef.Mount(ctx, false)
 	if err != nil {
 		return nil, err
 	}
@@ -326,7 +320,7 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context) (out cache.ImmutableRe
 	lm.Unmount()
 	lm = nil
 
-	snap, err := checkoutRef.ReleaseAndCommit(ctx)
+	snap, err := checkoutRef.Commit(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -345,7 +339,7 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context) (out cache.ImmutableRe
 		return nil, err
 	}
 	if err := si.Update(func(b *bolt.Bucket) error {
-		return si.SetValue(b, "git-snapshot", *v)
+		return si.SetValue(b, "git-snapshot", v)
 	}); err != nil {
 		return nil, err
 	}

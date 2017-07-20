@@ -216,6 +216,7 @@ type Mount struct {
 	Selector string `protobuf:"bytes,2,opt,name=selector,proto3" json:"selector,omitempty"`
 	Dest     string `protobuf:"bytes,3,opt,name=dest,proto3" json:"dest,omitempty"`
 	Output   int64  `protobuf:"varint,4,opt,name=output,proto3" json:"output,omitempty"`
+	Readonly bool   `protobuf:"varint,5,opt,name=readonly,proto3" json:"readonly,omitempty"`
 }
 
 func (m *Mount) Reset()         { *m = Mount{} }
@@ -513,6 +514,16 @@ func (m *Mount) MarshalTo(data []byte) (int, error) {
 		i++
 		i = encodeVarintOps(data, i, uint64(m.Output))
 	}
+	if m.Readonly {
+		data[i] = 0x28
+		i++
+		if m.Readonly {
+			data[i] = 1
+		} else {
+			data[i] = 0
+		}
+		i++
+	}
 	return i, nil
 }
 
@@ -758,6 +769,9 @@ func (m *Mount) Size() (n int) {
 	}
 	if m.Output != 0 {
 		n += 1 + sovOps(uint64(m.Output))
+	}
+	if m.Readonly {
+		n += 2
 	}
 	return n
 }
@@ -1473,6 +1487,26 @@ func (m *Mount) Unmarshal(data []byte) error {
 					break
 				}
 			}
+		case 5:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Readonly", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowOps
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				v |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Readonly = bool(v != 0)
 		default:
 			iNdEx = preIndex
 			skippy, err := skipOps(data[iNdEx:])

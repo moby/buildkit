@@ -153,7 +153,7 @@ func (eo *exec) marshalTo(list [][]byte, cache map[digest.Digest]struct{}) (dige
 			}
 		}
 		if dgst == "" {
-			inputIndex = -1
+			inputIndex = pb.Empty
 		}
 		if inputIndex == len(pop.Inputs) {
 			var mountIndex int64
@@ -167,14 +167,15 @@ func (eo *exec) marshalTo(list [][]byte, cache map[digest.Digest]struct{}) (dige
 		}
 
 		pm := &pb.Mount{
-			Input: int64(inputIndex),
-			Dest:  m.dest,
+			Input:    int64(inputIndex),
+			Dest:     m.dest,
+			Readonly: m.readonly,
 		}
 		if m.hasOutput {
 			pm.Output = outputIndex
 			outputIndex++
 		} else {
-			pm.Output = -1
+			pm.Output = pb.SkipOutput
 		}
 		m.outputIndex = outputIndex - 1
 		peo.Mounts = append(peo.Mounts, pm)
@@ -186,7 +187,7 @@ func (eo *exec) marshalTo(list [][]byte, cache map[digest.Digest]struct{}) (dige
 type mount struct {
 	execState *ExecState
 	dest      string
-	// ro bool
+	readonly  bool
 	// either parent or source has to be set
 	parent      *mount
 	source      *source

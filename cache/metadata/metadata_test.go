@@ -31,7 +31,7 @@ func TestGetSetSearch(t *testing.T) {
 	require.NoError(t, err)
 
 	si.Queue(func(b *bolt.Bucket) error {
-		return si.SetValue(b, "bar", *v)
+		return si.SetValue(b, "bar", v)
 	})
 
 	err = si.Commit()
@@ -72,7 +72,7 @@ func TestGetSetSearch(t *testing.T) {
 	require.NoError(t, err)
 
 	si.Queue(func(b *bolt.Bucket) error {
-		return si.SetValue(b, "bar2", *v)
+		return si.SetValue(b, "bar2", v)
 	})
 
 	err = si.Commit()
@@ -135,7 +135,7 @@ func TestIndexes(t *testing.T) {
 		v.Index = tcase.index
 
 		si.Queue(func(b *bolt.Bucket) error {
-			return si.SetValue(b, tcase.value, *v)
+			return si.SetValue(b, tcase.value, v)
 		})
 
 		err = si.Commit()

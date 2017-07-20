@@ -31,7 +31,16 @@ func (lm *localMounter) Mount() (string, error) {
 	defer lm.mu.Unlock()
 
 	if len(lm.m) == 1 && lm.m[0].Type == "bind" {
-		return lm.m[0].Source, nil
+		ro := false
+		for _, opt := range lm.m[0].Options {
+			if opt == "ro" {
+				ro = true
+				break
+			}
+		}
+		if !ro {
+			return lm.m[0].Source, nil
+		}
 	}
 
 	dir, err := ioutil.TempDir("", "buildkit-mount")

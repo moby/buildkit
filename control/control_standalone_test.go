@@ -72,7 +72,7 @@ func TestControl(t *testing.T) {
 	snap, err := src.Snapshot(ctx)
 	assert.NoError(t, err)
 
-	mounts, err := snap.Mount(ctx)
+	mounts, err := snap.Mount(ctx, false)
 	assert.NoError(t, err)
 
 	lm := snapshot.LocalMounter(mounts)
@@ -124,10 +124,10 @@ func TestControl(t *testing.T) {
 	err = w.Exec(ctx, meta, root, nil, nil, nil)
 	assert.NoError(t, err)
 
-	rf, err := root.Freeze()
+	rf, err := root.Commit(ctx)
 	assert.NoError(t, err)
 
-	mounts, err = rf.Mount(ctx)
+	mounts, err = rf.Mount(ctx, false)
 	assert.NoError(t, err)
 
 	lm = snapshot.LocalMounter(mounts)

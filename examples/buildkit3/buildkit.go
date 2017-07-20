@@ -45,15 +45,15 @@ func goRepo(s *llb.State, repo string, src *llb.State) func(ro ...llb.RunOption)
 	dir := "/go/src/" + repo
 	return func(ro ...llb.RunOption) *llb.State {
 		es := s.Dir(dir).Run(ro...)
-		es.AddMount(dir, src)
-		return es.AddMount(dir+"/bin", llb.Scratch())
+		es.AddMount(dir, src, llb.Readonly)
+		return es.AddMount("/out", llb.Scratch())
 	}
 }
 
 func runc(version string) *llb.State {
 	repo := "github.com/opencontainers/runc"
 	return goRepo(goBuildBase(), repo, llb.Git(repo, version))(
-		llb.Shlex("go build -o ./bin/runc ./"),
+		llb.Shlex("go build -o /out/runc ./"),
 	)
 }
 
@@ -63,7 +63,7 @@ func containerd(version string) *llb.State {
 		goBuildBase().
 			Run(llb.Shlex("apk add --no-cache btrfs-progs-dev")).Root(),
 		repo, llb.Git(repo, version, llb.KeepGitDir()))(
-		llb.Shlex("make bin/containerd"),
+		llb.Shlex("go build -o /out/containerd ./cmd/containerd"),
 	)
 }
 
@@ -75,11 +75,11 @@ func buildkit(opt buildOpt) *llb.State {
 	}
 	run := goRepo(goBuildBase(), repo, src)
 
-	builddStandalone := run(llb.Shlex("go build -o ./bin/buildd-standalone -tags standalone ./cmd/buildd"))
+	builddStandalone := run(llb.Shlex("go build -o /out/buildd-standalone -tags standalone ./cmd/buildd"))
 
-	builddContainerd := run(llb.Shlex("go build -o ./bin/buildd-containerd -tags containerd ./cmd/buildd"))
+	builddContainerd := run(llb.Shlex("go build -o /out/buildd-containerd -tags containerd ./cmd/buildd"))
 
-	buildctl := run(llb.Shlex("go build -o ./bin/buildctl ./cmd/buildctl"))
+	buildctl := run(llb.Shlex("go build -o /out/buildctl ./cmd/buildctl"))
 
 	r := llb.Image("docker.io/library/alpine:latest").With(
 		copyAll(buildctl, "/bin"),

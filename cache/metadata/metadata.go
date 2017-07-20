@@ -186,10 +186,12 @@ func newStorageItem(id string, b *bolt.Bucket, s *Store) (StorageItem, error) {
 	if b != nil {
 		if err := b.ForEach(func(k, v []byte) error {
 			var sv Value
-			if err := json.Unmarshal(v, &sv); err != nil {
-				return err
+			if len(v) > 0 {
+				if err := json.Unmarshal(v, &sv); err != nil {
+					return err
+				}
+				si.values[string(k)] = &sv
 			}
-			si.values[string(k)] = &sv
 			return nil
 		}); err != nil {
 			return si, err
@@ -247,7 +249,14 @@ func (s *StorageItem) Indexes() (out []string) {
 	return
 }
 
-func (s *StorageItem) SetValue(b *bolt.Bucket, key string, v Value) error {
+func (s *StorageItem) SetValue(b *bolt.Bucket, key string, v *Value) error {
+	if v == nil {
+		if err := b.Put([]byte(key), nil); err != nil {
+			return err
+		}
+		delete(s.values, key)
+		return nil
+	}
 	dt, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -264,7 +273,7 @@ func (s *StorageItem) SetValue(b *bolt.Bucket, key string, v Value) error {
 			return err
 		}
 	}
-	s.values[key] = &v
+	s.values[key] = v
 	return nil
 }
 

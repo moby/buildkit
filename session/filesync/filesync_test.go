@@ -44,7 +44,7 @@ func TestFileSyncIncludePatterns(t *testing.T) {
 	})
 
 	g.Go(func() (reterr error) {
-		c, err := m.Get(ctx, s.UUID())
+		c, err := m.Get(ctx, s.ID())
 		if err != nil {
 			return err
 		}
