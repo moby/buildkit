@@ -78,7 +78,7 @@ func (gs *gitSource) mountRemote(ctx context.Context, remote string) (target str
 
 	initializeRepo := false
 	if remoteRef == nil {
-		remoteRef, err = gs.cache.New(ctx, nil)
+		remoteRef, err = gs.cache.New(ctx, nil, cache.CachePolicyKeepMutable)
 		if err != nil {
 			return "", nil, errors.Wrapf(err, "failed to create new mutable for %s", remote)
 		}

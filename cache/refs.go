@@ -140,6 +140,7 @@ func (cr *cacheRecord) Mount(ctx context.Context, readonly bool) ([]mount.Mount,
 }
 
 func (cr *cacheRecord) remove(ctx context.Context, removeSnapshot bool) error {
+	delete(cr.cm.records, cr.ID())
 	if err := cr.cm.md.Clear(cr.ID()); err != nil {
 		return err
 	}
@@ -210,7 +211,6 @@ func (sr *cacheRecord) finalize(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrapf(err, "failed to commit %s", sr.equalMutable.ID())
 	}
-	delete(sr.cm.records, sr.equalMutable.ID())
 	if err := sr.equalMutable.remove(ctx, false); err != nil {
 		return err
 	}
@@ -274,10 +274,19 @@ func (sr *mutableRef) Release(ctx context.Context) error {
 
 func (sr *mutableRef) release(ctx context.Context) error {
 	delete(sr.refs, sr)
-	// delete(sr.cm.records, sr.ID())
-	// if err := sr.remove(ctx, true); err != nil {
-	// 	return err
-	// }
+	if getCachePolicy(sr.md) != cachePolicyKeepMutable {
+		if sr.equalImmutable != nil {
+			if err := sr.equalImmutable.remove(ctx, false); err != nil {
+				return err
+			}
+		}
+		if sr.parent != nil {
+			if err := sr.parent.(*immutableRef).release(ctx); err != nil {
+				return err
+			}
+		}
+		return sr.remove(ctx, true)
+	}
 	return nil
 }
 

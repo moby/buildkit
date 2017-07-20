@@ -17,6 +17,7 @@ const sizeUnknown int64 = -1
 const keySize = "snapshot.size"
 const keyEqualMutable = "cache.equalMutable"
 const keyEqualImmutable = "cache.equalImmutable"
+const keyCachePolicy = "cache.cachePolicy"
 
 func setSize(si *metadata.StorageItem, s int64) error {
 	v, err := metadata.NewValue(s)
@@ -69,4 +70,26 @@ func clearEqualMutable(si *metadata.StorageItem) error {
 		return si.SetValue(b, keyEqualMutable, nil)
 	})
 	return nil
+}
+
+func setCachePolicy(si *metadata.StorageItem, p cachePolicy) error {
+	v, err := metadata.NewValue(p)
+	if err != nil {
+		return errors.Wrap(err, "failed to create size value")
+	}
+	return si.Update(func(b *bolt.Bucket) error {
+		return si.SetValue(b, keyCachePolicy, v)
+	})
+}
+
+func getCachePolicy(si *metadata.StorageItem) cachePolicy {
+	v := si.Get(keyCachePolicy)
+	if v == nil {
+		return cachePolicyDefault
+	}
+	var p cachePolicy
+	if err := v.Unmarshal(&p); err != nil {
+		return cachePolicyDefault
+	}
+	return p
 }
