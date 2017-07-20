@@ -105,6 +105,9 @@ func (cm *cacheManager) get(ctx context.Context, id string) (ImmutableRef, error
 		if len(rec.refs) != 0 {
 			return nil, errors.Wrapf(errLocked, "%s is locked", id)
 		}
+		if rec.equalImmutable != nil {
+			return rec.equalImmutable.ref(), nil
+		}
 		return rec.mref().commit(ctx)
 	}
 
@@ -336,15 +339,19 @@ func IsLocked(err error) bool {
 	return errors.Cause(err) == errLocked
 }
 
-type RefOption func(*cacheRecord) error
+type RefOption func(withMetadata) error
 
 type cachePolicy int
 
 const (
 	cachePolicyDefault cachePolicy = iota
-	cachePolicyKeepMutable
+	cachePolicyRetain
 )
 
-func CachePolicyKeepMutable(cr *cacheRecord) error {
-	return setCachePolicy(cr.md, cachePolicyKeepMutable)
+type withMetadata interface {
+	Metadata() *metadata.StorageItem
+}
+
+func CachePolicyRetain(m withMetadata) error {
+	return setCachePolicy(m.Metadata(), cachePolicyRetain)
 }

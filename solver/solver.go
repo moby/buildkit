@@ -256,6 +256,12 @@ func (s *Solver) getRefs(ctx context.Context, j *job, g *vertex) (retRef []Refer
 					for _, r := range r {
 						refs[i] = append(refs[i], newSharedRef(r))
 					}
+					if ref, ok := toImmutableRef(r[index].(Reference)); ok {
+						// make sure input that is required by next step does not get released in case build is cancelled
+						if err := cache.CachePolicyRetain(ref); err != nil {
+							return err
+						}
+					}
 					return nil
 				})
 			}(i, in.vertex, in.index)
