@@ -132,7 +132,7 @@ func (eo *exec) marshalTo(list [][]byte, cache map[digest.Digest]struct{}) (dige
 		return eo.mounts[i].dest < eo.mounts[j].dest
 	})
 
-	var outputIndex int64 = 0
+	var outputIndex pb.OutputIndex
 
 	for _, m := range eo.mounts {
 		var dgst digest.Digest
@@ -145,21 +145,23 @@ func (eo *exec) marshalTo(list [][]byte, cache map[digest.Digest]struct{}) (dige
 		if err != nil {
 			return "", list, err
 		}
-		inputIndex := len(pop.Inputs)
-		for i := range pop.Inputs {
-			if pop.Inputs[i].Digest == dgst {
-				inputIndex = i
+
+		var mountIndex pb.OutputIndex
+		if m.parent != nil {
+			mountIndex = m.parent.outputIndex
+		}
+
+		inputIndex := pb.InputIndex(len(pop.Inputs))
+		for i, inp := range pop.Inputs {
+			if inp.Digest == dgst && inp.Index == mountIndex {
+				inputIndex = pb.InputIndex(i)
 				break
 			}
 		}
 		if dgst == "" {
 			inputIndex = pb.Empty
 		}
-		if inputIndex == len(pop.Inputs) {
-			var mountIndex int64
-			if m.parent != nil {
-				mountIndex = m.parent.outputIndex
-			}
+		if inputIndex == pb.InputIndex(len(pop.Inputs)) {
 			pop.Inputs = append(pop.Inputs, &pb.Input{
 				Digest: dgst,
 				Index:  mountIndex,
@@ -167,7 +169,7 @@ func (eo *exec) marshalTo(list [][]byte, cache map[digest.Digest]struct{}) (dige
 		}
 
 		pm := &pb.Mount{
-			Input:    int64(inputIndex),
+			Input:    inputIndex,
 			Dest:     m.dest,
 			Readonly: m.readonly,
 		}
@@ -177,7 +179,7 @@ func (eo *exec) marshalTo(list [][]byte, cache map[digest.Digest]struct{}) (dige
 		} else {
 			pm.Output = pb.SkipOutput
 		}
-		m.outputIndex = outputIndex - 1
+		m.outputIndex = pm.Output
 		peo.Mounts = append(peo.Mounts, pm)
 	}
 
@@ -191,9 +193,8 @@ type mount struct {
 	// either parent or source has to be set
 	parent      *mount
 	source      *source
-	hasOutput   bool  // TODO: remove
-	outputIndex int64 // filled in after marshal
-	state       *ExecState
+	hasOutput   bool           // TODO: remove
+	outputIndex pb.OutputIndex // filled in after marshal
 }
 
 func (m *mount) marshalTo(list [][]byte, cache map[digest.Digest]struct{}) (digest.Digest, [][]byte, error) {
@@ -210,7 +211,7 @@ func (m *mount) marshalTo(list [][]byte, cache map[digest.Digest]struct{}) (dige
 			po := &pb.Op{}
 			po.Inputs = append(po.Inputs, &pb.Input{
 				Digest: dgst,
-				Index:  int64(m.outputIndex),
+				Index:  m.outputIndex,
 			})
 			return appendResult(po, list, cache)
 		}

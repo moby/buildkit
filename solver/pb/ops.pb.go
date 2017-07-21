@@ -171,7 +171,7 @@ func _Op_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer) (bo
 
 type Input struct {
 	Digest github_com_opencontainers_go_digest.Digest `protobuf:"bytes,1,opt,name=digest,proto3,customtype=github.com/opencontainers/go-digest.Digest" json:"digest"`
-	Index  int64                                      `protobuf:"varint,2,opt,name=index,proto3" json:"index,omitempty"`
+	Index  OutputIndex                                `protobuf:"varint,2,opt,name=index,proto3,customtype=OutputIndex" json:"index"`
 }
 
 func (m *Input) Reset()         { *m = Input{} }
@@ -212,11 +212,11 @@ func (m *Meta) String() string { return proto.CompactTextString(m) }
 func (*Meta) ProtoMessage()    {}
 
 type Mount struct {
-	Input    int64  `protobuf:"varint,1,opt,name=input,proto3" json:"input,omitempty"`
-	Selector string `protobuf:"bytes,2,opt,name=selector,proto3" json:"selector,omitempty"`
-	Dest     string `protobuf:"bytes,3,opt,name=dest,proto3" json:"dest,omitempty"`
-	Output   int64  `protobuf:"varint,4,opt,name=output,proto3" json:"output,omitempty"`
-	Readonly bool   `protobuf:"varint,5,opt,name=readonly,proto3" json:"readonly,omitempty"`
+	Input    InputIndex  `protobuf:"varint,1,opt,name=input,proto3,customtype=InputIndex" json:"input"`
+	Selector string      `protobuf:"bytes,2,opt,name=selector,proto3" json:"selector,omitempty"`
+	Dest     string      `protobuf:"bytes,3,opt,name=dest,proto3" json:"dest,omitempty"`
+	Output   OutputIndex `protobuf:"varint,4,opt,name=output,proto3,customtype=OutputIndex" json:"output"`
+	Readonly bool        `protobuf:"varint,5,opt,name=readonly,proto3" json:"readonly,omitempty"`
 }
 
 func (m *Mount) Reset()         { *m = Mount{} }
@@ -240,8 +240,8 @@ func (m *CopyOp) GetSrc() []*CopySource {
 }
 
 type CopySource struct {
-	Input    int64  `protobuf:"varint,1,opt,name=input,proto3" json:"input,omitempty"`
-	Selector string `protobuf:"bytes,2,opt,name=selector,proto3" json:"selector,omitempty"`
+	Input    InputIndex `protobuf:"varint,1,opt,name=input,proto3,customtype=InputIndex" json:"input"`
+	Selector string     `protobuf:"bytes,2,opt,name=selector,proto3" json:"selector,omitempty"`
 }
 
 func (m *CopySource) Reset()         { *m = CopySource{} }
@@ -1085,7 +1085,7 @@ func (m *Input) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.Index |= (int64(b) & 0x7F) << shift
+				m.Index |= (OutputIndex(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1405,7 +1405,7 @@ func (m *Mount) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.Input |= (int64(b) & 0x7F) << shift
+				m.Input |= (InputIndex(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1482,7 +1482,7 @@ func (m *Mount) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.Output |= (int64(b) & 0x7F) << shift
+				m.Output |= (OutputIndex(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1681,7 +1681,7 @@ func (m *CopySource) Unmarshal(data []byte) error {
 				}
 				b := data[iNdEx]
 				iNdEx++
-				m.Input |= (int64(b) & 0x7F) << shift
+				m.Input |= (InputIndex(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
