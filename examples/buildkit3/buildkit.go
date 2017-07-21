@@ -12,7 +12,7 @@ type buildOpt struct {
 	target     string
 	containerd string
 	runc       string
-	local      bool
+	buildkit   string
 }
 
 func main() {
@@ -20,7 +20,7 @@ func main() {
 	flag.StringVar(&opt.target, "target", "containerd", "target (standalone, containerd)")
 	flag.StringVar(&opt.containerd, "containerd", "master", "containerd version")
 	flag.StringVar(&opt.runc, "runc", "v1.0.0-rc3", "runc version")
-	flag.BoolVar(&opt.local, "local", false, "use local buildkit source")
+	flag.StringVar(&opt.buildkit, "buildkit", "master", "buildkit version")
 	flag.Parse()
 
 	bk := buildkit(opt)
@@ -52,17 +52,25 @@ func goRepo(s *llb.State, repo string, src *llb.State) func(ro ...llb.RunOption)
 
 func runc(version string) *llb.State {
 	repo := "github.com/opencontainers/runc"
-	return goRepo(goBuildBase(), repo, llb.Git(repo, version))(
+	src := llb.Git(repo, version)
+	if version == "local" {
+		src = llb.Local("runc-src")
+	}
+	return goRepo(goBuildBase(), repo, src)(
 		llb.Shlex("go build -o /out/runc ./"),
 	)
 }
 
 func containerd(version string) *llb.State {
 	repo := "github.com/containerd/containerd"
+	src := llb.Git(repo, version, llb.KeepGitDir())
+	if version == "local" {
+		src = llb.Local("containerd-src")
+	}
 	return goRepo(
 		goBuildBase().
 			Run(llb.Shlex("apk add --no-cache btrfs-progs-dev")).Root(),
-		repo, llb.Git(repo, version, llb.KeepGitDir()))(
+		repo, src)(
 		llb.Shlex("go build -o /out/containerd ./cmd/containerd"),
 	)
 }
@@ -70,7 +78,7 @@ func containerd(version string) *llb.State {
 func buildkit(opt buildOpt) *llb.State {
 	repo := "github.com/moby/buildkit"
 	src := llb.Git(repo, "master")
-	if opt.local {
+	if opt.buildkit == "local" {
 		src = llb.Local("buildkit-src")
 	}
 	run := goRepo(goBuildBase(), repo, src)
@@ -109,6 +117,6 @@ func copyFrom(src *llb.State, srcPath, destPath string) llb.StateOption {
 func copy(src *llb.State, srcPath string, dest *llb.State, destPath string) *llb.State {
 	cpImage := llb.Image("docker.io/library/alpine:latest")
 	cp := cpImage.Run(llb.Shlexf("cp -a /src%s /dest%s", srcPath, destPath))
-	cp.AddMount("/src", src)
+	cp.AddMount("/src", src, llb.Readonly)
 	return cp.AddMount("/dest", dest)
 }

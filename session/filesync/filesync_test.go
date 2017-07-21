@@ -32,7 +32,7 @@ func TestFileSyncIncludePatterns(t *testing.T) {
 	m, err := session.NewManager()
 	require.NoError(t, err)
 
-	fs := NewFSSyncProvider(tmpDir, nil)
+	fs := NewFSSyncProvider([]SyncedDir{{Name: "test0", Dir: tmpDir}})
 	s.Allow(fs)
 
 	dialer := session.Dialer(testutil.TestStream(testutil.Handler(m.HandleConn)))
@@ -49,6 +49,7 @@ func TestFileSyncIncludePatterns(t *testing.T) {
 			return err
 		}
 		if err := FSSync(ctx, c, FSSendRequestOpt{
+			Name:            "test0",
 			DestDir:         destDir,
 			IncludePatterns: []string{"ba*"},
 		}); err != nil {

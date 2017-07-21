@@ -16,20 +16,28 @@ import (
 const (
 	keyOverrideExcludes = "override-excludes"
 	keyIncludePatterns  = "include-patterns"
+	keyDirName          = "dir-name"
 )
 
 type fsSyncProvider struct {
-	root     string
-	excludes []string
-	p        progressCb
-	doneCh   chan error
+	dirs   map[string]SyncedDir
+	p      progressCb
+	doneCh chan error
+}
+
+type SyncedDir struct {
+	Name     string
+	Dir      string
+	Excludes []string
 }
 
 // NewFSSyncProvider creates a new provider for sending files from client
-func NewFSSyncProvider(root string, excludes []string) session.Attachable {
+func NewFSSyncProvider(dirs []SyncedDir) session.Attachable {
 	p := &fsSyncProvider{
-		root:     root,
-		excludes: excludes,
+		dirs: map[string]SyncedDir{},
+	}
+	for _, d := range dirs {
+		p.dirs[d.Name] = d
 	}
 	return p
 }
@@ -59,9 +67,19 @@ func (sp *fsSyncProvider) handle(method string, stream grpc.ServerStream) error 
 
 	opts, _ := metadata.FromContext(stream.Context()) // if no metadata continue with empty object
 
+	name, ok := opts[keyDirName]
+	if !ok || len(name) != 1 {
+		return errors.New("no dir name in request")
+	}
+
+	dir, ok := sp.dirs[name[0]]
+	if !ok {
+		return errors.Errorf("no access allowed to dir %q", name[0])
+	}
+
 	var excludes []string
 	if len(opts[keyOverrideExcludes]) == 0 || opts[keyOverrideExcludes][0] != "true" {
-		excludes = sp.excludes
+		excludes = dir.Excludes
 	}
 	includes := opts[keyIncludePatterns]
 
@@ -76,7 +94,7 @@ func (sp *fsSyncProvider) handle(method string, stream grpc.ServerStream) error 
 		doneCh = sp.doneCh
 		sp.doneCh = nil
 	}
-	err := pr.sendFn(stream, sp.root, includes, excludes, progress)
+	err := pr.sendFn(stream, dir.Dir, includes, excludes, progress)
 	if doneCh != nil {
 		if err != nil {
 			doneCh <- err
@@ -122,6 +140,7 @@ var supportedProtocols = []protocol{
 
 // FSSendRequestOpt defines options for FSSend request
 type FSSendRequestOpt struct {
+	Name             string
 	IncludePatterns  []string
 	OverrideExcludes bool
 	DestDir          string
@@ -155,6 +174,8 @@ func FSSync(ctx context.Context, c session.Caller, opt FSSendRequestOpt) error {
 	if opt.IncludePatterns != nil {
 		opts[keyIncludePatterns] = opt.IncludePatterns
 	}
+
+	opts[keyDirName] = []string{opt.Name}
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
