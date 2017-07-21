@@ -14,6 +14,7 @@ type Vertex struct {
 	Completed *time.Time
 	Cached    bool
 	Error     string
+	Parent    digest.Digest
 }
 
 type VertexStatus struct {

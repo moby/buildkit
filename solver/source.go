@@ -15,7 +15,7 @@ type sourceOp struct {
 	src source.SourceInstance
 }
 
-func newSourceOp(op *pb.Op_Source, sm *source.Manager) (Op, error) {
+func newSourceOp(_ Vertex, op *pb.Op_Source, sm *source.Manager) (Op, error) {
 	return &sourceOp{
 		op: op,
 		sm: sm,

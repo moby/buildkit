@@ -7,6 +7,7 @@ import (
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/progress"
 	digest "github.com/opencontainers/go-digest"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
 
@@ -31,7 +32,13 @@ type state struct {
 	cacheCtx    context.Context
 }
 
-func (s *activeState) vertexState(j *job, key digest.Digest, cb func() (Op, error)) (*state, error) {
+func (s *activeState) vertexState(ctx context.Context, key digest.Digest, cb func() (Op, error)) (*state, error) {
+	jv := ctx.Value(jobKey)
+	if jv == nil {
+		return nil, errors.Errorf("can't get vertex state without active job")
+	}
+	j := jv.(*job)
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

@@ -106,6 +106,8 @@ func attr(dgst digest.Digest, op pb.Op) (string, string) {
 		return op.Source.Identifier, "ellipse"
 	case *pb.Op_Exec:
 		return strings.Join(op.Exec.Meta.Args, " "), "box"
+	case *pb.Op_Build:
+		return "build", "box3d"
 	default:
 		return dgst.String(), "plaintext"
 	}

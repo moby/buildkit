@@ -13,6 +13,10 @@ import (
 	"github.com/pkg/errors"
 )
 
+type jobKeyT string
+
+var jobKey = jobKeyT("buildkit/solver/job")
+
 type jobList struct {
 	mu         sync.RWMutex
 	refs       map[string]*job
@@ -27,12 +31,12 @@ func newJobList() *jobList {
 	return jl
 }
 
-func (jl *jobList) new(ctx context.Context, id string, g *vertex, pr progress.Reader) (*job, error) {
+func (jl *jobList) new(ctx context.Context, id string, g *vertex, pr progress.Reader) (context.Context, *job, error) {
 	jl.mu.Lock()
 	defer jl.mu.Unlock()
 
 	if _, ok := jl.refs[id]; ok {
-		return nil, errors.Errorf("id %s exists", id)
+		return nil, nil, errors.Errorf("id %s exists", id)
 	}
 	j := &job{g: g, pr: progress.NewMultiReader(pr)}
 	jl.refs[id] = j
@@ -44,7 +48,7 @@ func (jl *jobList) new(ctx context.Context, id string, g *vertex, pr progress.Re
 		delete(jl.refs, id)
 	}()
 
-	return jl.refs[id], nil
+	return context.WithValue(ctx, jobKey, jl.refs[id]), jl.refs[id], nil
 }
 
 func (jl *jobList) get(id string) (*job, error) {
@@ -104,6 +108,10 @@ func (j *job) pipe(ctx context.Context, ch chan *client.SolveStatus) error {
 		for _, p := range p {
 			switch v := p.Sys.(type) {
 			case client.Vertex:
+				vtx, ok := p.Meta("parentVertex")
+				if ok {
+					v.Parent = vtx.(digest.Digest)
+				}
 				ss.Vertexes = append(ss.Vertexes, &v)
 
 			case progress.Status:

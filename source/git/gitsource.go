@@ -226,6 +226,8 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context) (out cache.ImmutableRe
 		return gs.cache.Get(ctx, sis[0].ID())
 	}
 
+	gs.locker.Lock(gs.src.Remote)
+	defer gs.locker.Unlock(gs.src.Remote)
 	gitDir, unmountGitDir, err := gs.mountRemote(ctx, gs.src.Remote)
 	if err != nil {
 		return nil, err

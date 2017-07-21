@@ -19,7 +19,7 @@ type execOp struct {
 	w  worker.Worker
 }
 
-func newExecOp(op *pb.Op_Exec, cm cache.Manager, w worker.Worker) (Op, error) {
+func newExecOp(_ Vertex, op *pb.Op_Exec, cm cache.Manager, w worker.Worker) (Op, error) {
 	return &execOp{
 		op: op.Exec,
 		cm: cm,

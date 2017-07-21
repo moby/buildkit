@@ -17,6 +17,8 @@
 		CopyOp
 		CopySource
 		SourceOp
+		BuildOp
+		BuildInput
 */
 package pb
 
@@ -26,6 +28,8 @@ import math "math"
 import _ "github.com/gogo/protobuf/gogoproto"
 
 import github_com_opencontainers_go_digest "github.com/opencontainers/go-digest"
+
+import errors "errors"
 
 import io "io"
 
@@ -40,6 +44,7 @@ type Op struct {
 	//	*Op_Exec
 	//	*Op_Source
 	//	*Op_Copy
+	//	*Op_Build
 	Op isOp_Op `protobuf_oneof:"op"`
 }
 
@@ -62,10 +67,14 @@ type Op_Source struct {
 type Op_Copy struct {
 	Copy *CopyOp `protobuf:"bytes,4,opt,name=copy,oneof"`
 }
+type Op_Build struct {
+	Build *BuildOp `protobuf:"bytes,5,opt,name=build,oneof"`
+}
 
 func (*Op_Exec) isOp_Op()   {}
 func (*Op_Source) isOp_Op() {}
 func (*Op_Copy) isOp_Op()   {}
+func (*Op_Build) isOp_Op()  {}
 
 func (m *Op) GetOp() isOp_Op {
 	if m != nil {
@@ -102,12 +111,20 @@ func (m *Op) GetCopy() *CopyOp {
 	return nil
 }
 
+func (m *Op) GetBuild() *BuildOp {
+	if x, ok := m.GetOp().(*Op_Build); ok {
+		return x.Build
+	}
+	return nil
+}
+
 // XXX_OneofFuncs is for the internal use of the proto package.
 func (*Op) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), []interface{}) {
 	return _Op_OneofMarshaler, _Op_OneofUnmarshaler, []interface{}{
 		(*Op_Exec)(nil),
 		(*Op_Source)(nil),
 		(*Op_Copy)(nil),
+		(*Op_Build)(nil),
 	}
 }
 
@@ -128,6 +145,11 @@ func _Op_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
 	case *Op_Copy:
 		_ = b.EncodeVarint(4<<3 | proto.WireBytes)
 		if err := b.EncodeMessage(x.Copy); err != nil {
+			return err
+		}
+	case *Op_Build:
+		_ = b.EncodeVarint(5<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.Build); err != nil {
 			return err
 		}
 	case nil:
@@ -163,6 +185,14 @@ func _Op_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer) (bo
 		msg := new(CopyOp)
 		err := b.DecodeMessage(msg)
 		m.Op = &Op_Copy{msg}
+		return true, err
+	case 5: // op.build
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(BuildOp)
+		err := b.DecodeMessage(msg)
+		m.Op = &Op_Build{msg}
 		return true, err
 	default:
 		return false, nil
@@ -265,6 +295,39 @@ func (m *SourceOp) GetAttrs() map[string]string {
 	return nil
 }
 
+type BuildOp struct {
+	Builder InputIndex             `protobuf:"varint,1,opt,name=builder,proto3,customtype=InputIndex" json:"builder"`
+	Inputs  map[string]*BuildInput `protobuf:"bytes,2,rep,name=inputs" json:"inputs,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`
+	Def     [][]byte               `protobuf:"bytes,3,rep,name=def" json:"def,omitempty"`
+	Attrs   map[string]string      `protobuf:"bytes,4,rep,name=attrs" json:"attrs,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+}
+
+func (m *BuildOp) Reset()         { *m = BuildOp{} }
+func (m *BuildOp) String() string { return proto.CompactTextString(m) }
+func (*BuildOp) ProtoMessage()    {}
+
+func (m *BuildOp) GetInputs() map[string]*BuildInput {
+	if m != nil {
+		return m.Inputs
+	}
+	return nil
+}
+
+func (m *BuildOp) GetAttrs() map[string]string {
+	if m != nil {
+		return m.Attrs
+	}
+	return nil
+}
+
+type BuildInput struct {
+	Input InputIndex `protobuf:"varint,1,opt,name=input,proto3,customtype=InputIndex" json:"input"`
+}
+
+func (m *BuildInput) Reset()         { *m = BuildInput{} }
+func (m *BuildInput) String() string { return proto.CompactTextString(m) }
+func (*BuildInput) ProtoMessage()    {}
+
 func init() {
 	proto.RegisterType((*Op)(nil), "pb.Op")
 	proto.RegisterType((*Input)(nil), "pb.Input")
@@ -274,6 +337,8 @@ func init() {
 	proto.RegisterType((*CopyOp)(nil), "pb.CopyOp")
 	proto.RegisterType((*CopySource)(nil), "pb.CopySource")
 	proto.RegisterType((*SourceOp)(nil), "pb.SourceOp")
+	proto.RegisterType((*BuildOp)(nil), "pb.BuildOp")
+	proto.RegisterType((*BuildInput)(nil), "pb.BuildInput")
 }
 func (m *Op) Marshal() (data []byte, err error) {
 	size := m.Size()
@@ -354,6 +419,20 @@ func (m *Op_Copy) MarshalTo(data []byte) (int, error) {
 	}
 	return i, nil
 }
+func (m *Op_Build) MarshalTo(data []byte) (int, error) {
+	i := 0
+	if m.Build != nil {
+		data[i] = 0x2a
+		i++
+		i = encodeVarintOps(data, i, uint64(m.Build.Size()))
+		n5, err := m.Build.MarshalTo(data[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n5
+	}
+	return i, nil
+}
 func (m *Input) Marshal() (data []byte, err error) {
 	size := m.Size()
 	data = make([]byte, size)
@@ -402,11 +481,11 @@ func (m *ExecOp) MarshalTo(data []byte) (int, error) {
 		data[i] = 0xa
 		i++
 		i = encodeVarintOps(data, i, uint64(m.Meta.Size()))
-		n5, err := m.Meta.MarshalTo(data[i:])
+		n6, err := m.Meta.MarshalTo(data[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n5
+		i += n6
 	}
 	if len(m.Mounts) > 0 {
 		for _, msg := range m.Mounts {
@@ -633,6 +712,102 @@ func (m *SourceOp) MarshalTo(data []byte) (int, error) {
 	return i, nil
 }
 
+func (m *BuildOp) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *BuildOp) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Builder != 0 {
+		data[i] = 0x8
+		i++
+		i = encodeVarintOps(data, i, uint64(m.Builder))
+	}
+	if len(m.Inputs) > 0 {
+		for k, _ := range m.Inputs {
+			data[i] = 0x12
+			i++
+			v := m.Inputs[k]
+			if v == nil {
+				return 0, errors.New("proto: map has nil element")
+			}
+			msgSize := v.Size()
+			mapSize := 1 + len(k) + sovOps(uint64(len(k))) + 1 + msgSize + sovOps(uint64(msgSize))
+			i = encodeVarintOps(data, i, uint64(mapSize))
+			data[i] = 0xa
+			i++
+			i = encodeVarintOps(data, i, uint64(len(k)))
+			i += copy(data[i:], k)
+			data[i] = 0x12
+			i++
+			i = encodeVarintOps(data, i, uint64(v.Size()))
+			n7, err := v.MarshalTo(data[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n7
+		}
+	}
+	if len(m.Def) > 0 {
+		for _, b := range m.Def {
+			data[i] = 0x1a
+			i++
+			i = encodeVarintOps(data, i, uint64(len(b)))
+			i += copy(data[i:], b)
+		}
+	}
+	if len(m.Attrs) > 0 {
+		for k, _ := range m.Attrs {
+			data[i] = 0x22
+			i++
+			v := m.Attrs[k]
+			mapSize := 1 + len(k) + sovOps(uint64(len(k))) + 1 + len(v) + sovOps(uint64(len(v)))
+			i = encodeVarintOps(data, i, uint64(mapSize))
+			data[i] = 0xa
+			i++
+			i = encodeVarintOps(data, i, uint64(len(k)))
+			i += copy(data[i:], k)
+			data[i] = 0x12
+			i++
+			i = encodeVarintOps(data, i, uint64(len(v)))
+			i += copy(data[i:], v)
+		}
+	}
+	return i, nil
+}
+
+func (m *BuildInput) Marshal() (data []byte, err error) {
+	size := m.Size()
+	data = make([]byte, size)
+	n, err := m.MarshalTo(data)
+	if err != nil {
+		return nil, err
+	}
+	return data[:n], nil
+}
+
+func (m *BuildInput) MarshalTo(data []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Input != 0 {
+		data[i] = 0x8
+		i++
+		i = encodeVarintOps(data, i, uint64(m.Input))
+	}
+	return i, nil
+}
+
 func encodeFixed64Ops(data []byte, offset int, v uint64) int {
 	data[offset] = uint8(v)
 	data[offset+1] = uint8(v >> 8)
@@ -698,6 +873,15 @@ func (m *Op_Copy) Size() (n int) {
 	_ = l
 	if m.Copy != nil {
 		l = m.Copy.Size()
+		n += 1 + l + sovOps(uint64(l))
+	}
+	return n
+}
+func (m *Op_Build) Size() (n int) {
+	var l int
+	_ = l
+	if m.Build != nil {
+		l = m.Build.Size()
 		n += 1 + l + sovOps(uint64(l))
 	}
 	return n
@@ -819,6 +1003,50 @@ func (m *SourceOp) Size() (n int) {
 			mapEntrySize := 1 + len(k) + sovOps(uint64(len(k))) + 1 + len(v) + sovOps(uint64(len(v)))
 			n += mapEntrySize + 1 + sovOps(uint64(mapEntrySize))
 		}
+	}
+	return n
+}
+
+func (m *BuildOp) Size() (n int) {
+	var l int
+	_ = l
+	if m.Builder != 0 {
+		n += 1 + sovOps(uint64(m.Builder))
+	}
+	if len(m.Inputs) > 0 {
+		for k, v := range m.Inputs {
+			_ = k
+			_ = v
+			l = 0
+			if v != nil {
+				l = v.Size()
+			}
+			mapEntrySize := 1 + len(k) + sovOps(uint64(len(k))) + 1 + l + sovOps(uint64(l))
+			n += mapEntrySize + 1 + sovOps(uint64(mapEntrySize))
+		}
+	}
+	if len(m.Def) > 0 {
+		for _, b := range m.Def {
+			l = len(b)
+			n += 1 + l + sovOps(uint64(l))
+		}
+	}
+	if len(m.Attrs) > 0 {
+		for k, v := range m.Attrs {
+			_ = k
+			_ = v
+			mapEntrySize := 1 + len(k) + sovOps(uint64(len(k))) + 1 + len(v) + sovOps(uint64(len(v)))
+			n += mapEntrySize + 1 + sovOps(uint64(mapEntrySize))
+		}
+	}
+	return n
+}
+
+func (m *BuildInput) Size() (n int) {
+	var l int
+	_ = l
+	if m.Input != 0 {
+		n += 1 + sovOps(uint64(m.Input))
 	}
 	return n
 }
@@ -991,6 +1219,38 @@ func (m *Op) Unmarshal(data []byte) error {
 				return err
 			}
 			m.Op = &Op_Copy{v}
+			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Build", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowOps
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthOps
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &BuildOp{}
+			if err := v.Unmarshal(data[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Op = &Op_Build{v}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -1905,6 +2165,400 @@ func (m *SourceOp) Unmarshal(data []byte) error {
 			}
 			m.Attrs[mapkey] = mapvalue
 			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipOps(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthOps
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *BuildOp) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowOps
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: BuildOp: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: BuildOp: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Builder", wireType)
+			}
+			m.Builder = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowOps
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.Builder |= (InputIndex(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Inputs", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowOps
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthOps
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			var keykey uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowOps
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				keykey |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			var stringLenmapkey uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowOps
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLenmapkey |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLenmapkey := int(stringLenmapkey)
+			if intStringLenmapkey < 0 {
+				return ErrInvalidLengthOps
+			}
+			postStringIndexmapkey := iNdEx + intStringLenmapkey
+			if postStringIndexmapkey > l {
+				return io.ErrUnexpectedEOF
+			}
+			mapkey := string(data[iNdEx:postStringIndexmapkey])
+			iNdEx = postStringIndexmapkey
+			var valuekey uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowOps
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				valuekey |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			var mapmsglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowOps
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				mapmsglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if mapmsglen < 0 {
+				return ErrInvalidLengthOps
+			}
+			postmsgIndex := iNdEx + mapmsglen
+			if mapmsglen < 0 {
+				return ErrInvalidLengthOps
+			}
+			if postmsgIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			mapvalue := &BuildInput{}
+			if err := mapvalue.Unmarshal(data[iNdEx:postmsgIndex]); err != nil {
+				return err
+			}
+			iNdEx = postmsgIndex
+			if m.Inputs == nil {
+				m.Inputs = make(map[string]*BuildInput)
+			}
+			m.Inputs[mapkey] = mapvalue
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Def", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowOps
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthOps
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Def = append(m.Def, make([]byte, postIndex-iNdEx))
+			copy(m.Def[len(m.Def)-1], data[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Attrs", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowOps
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthOps
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			var keykey uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowOps
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				keykey |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			var stringLenmapkey uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowOps
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLenmapkey |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLenmapkey := int(stringLenmapkey)
+			if intStringLenmapkey < 0 {
+				return ErrInvalidLengthOps
+			}
+			postStringIndexmapkey := iNdEx + intStringLenmapkey
+			if postStringIndexmapkey > l {
+				return io.ErrUnexpectedEOF
+			}
+			mapkey := string(data[iNdEx:postStringIndexmapkey])
+			iNdEx = postStringIndexmapkey
+			var valuekey uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowOps
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				valuekey |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			var stringLenmapvalue uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowOps
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				stringLenmapvalue |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLenmapvalue := int(stringLenmapvalue)
+			if intStringLenmapvalue < 0 {
+				return ErrInvalidLengthOps
+			}
+			postStringIndexmapvalue := iNdEx + intStringLenmapvalue
+			if postStringIndexmapvalue > l {
+				return io.ErrUnexpectedEOF
+			}
+			mapvalue := string(data[iNdEx:postStringIndexmapvalue])
+			iNdEx = postStringIndexmapvalue
+			if m.Attrs == nil {
+				m.Attrs = make(map[string]string)
+			}
+			m.Attrs[mapkey] = mapvalue
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipOps(data[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthOps
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *BuildInput) Unmarshal(data []byte) error {
+	l := len(data)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowOps
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: BuildInput: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: BuildInput: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Input", wireType)
+			}
+			m.Input = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowOps
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				m.Input |= (InputIndex(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipOps(data[iNdEx:])

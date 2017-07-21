@@ -83,6 +83,8 @@ func llbOpName(op *pb.Op) string {
 		return op.Source.Identifier
 	case *pb.Op_Exec:
 		return strings.Join(op.Exec.Meta.Args, " ")
+	case *pb.Op_Build:
+		return "build"
 	default:
 		return "unknown"
 	}

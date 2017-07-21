@@ -10,6 +10,7 @@ message Op {
 		ExecOp exec = 2;
 		SourceOp source = 3;
 		CopyOp copy = 4;
+		BuildOp build = 5;
 	 }
 }
 
@@ -51,4 +52,16 @@ message SourceOp {
 	// source type?
 	string identifier = 1;
 	map<string, string> attrs = 2;
+}
+
+message BuildOp {
+	int64 builder = 1 [(gogoproto.customtype) = "InputIndex", (gogoproto.nullable) = false];
+	map<string, BuildInput> inputs = 2;
+	repeated bytes def = 3;
+	map<string, string> attrs = 4;
+	// outputs
+}
+
+message BuildInput {
+	int64 input = 1 [(gogoproto.customtype) = "InputIndex", (gogoproto.nullable) = false];
 }

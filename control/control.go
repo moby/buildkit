@@ -122,6 +122,7 @@ func (c *Controller) Status(req *controlapi.StatusRequest, stream controlapi.Con
 						Completed: v.Completed,
 						Error:     v.Error,
 						Cached:    v.Cached,
+						Parent:    v.Parent,
 					})
 				}
 				for _, v := range ss.Statuses {
