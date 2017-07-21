@@ -15,7 +15,7 @@ func sendDiffCopy(stream grpc.Stream, dir string, includes, excludes []string, p
 	}, progress)
 }
 
-func recvDiffCopy(ds grpc.Stream, dest string, cu CacheUpdater) error {
+func recvDiffCopy(ds grpc.Stream, dest string, cu CacheUpdater, progress progressCb) error {
 	st := time.Now()
 	defer func() {
 		logrus.Debugf("diffcopy took: %v", time.Since(st))
@@ -26,5 +26,5 @@ func recvDiffCopy(ds grpc.Stream, dest string, cu CacheUpdater) error {
 		cf = cu.HandleChange
 	}
 
-	return fsutil.Receive(ds.Context(), ds, dest, cf)
+	return fsutil.Receive(ds.Context(), ds, dest, cf, progress)
 }

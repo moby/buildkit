@@ -188,6 +188,8 @@ func (t *trace) displayInfo() (d displayInfo) {
 			}
 			if s.Total != 0 {
 				j.status = units.HumanSize(float64(s.Current)) + " / " + units.HumanSize(float64(s.Total))
+			} else if s.Current != 0 {
+				j.status = units.HumanSize(float64(s.Current))
 			}
 			d.jobs = append(d.jobs, j)
 		}

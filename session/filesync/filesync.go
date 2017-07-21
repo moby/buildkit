@@ -114,7 +114,7 @@ type progressCb func(int, bool)
 type protocol struct {
 	name   string
 	sendFn func(stream grpc.Stream, srcDir string, includes, excludes []string, progress progressCb) error
-	recvFn func(stream grpc.Stream, destDir string, cu CacheUpdater) error
+	recvFn func(stream grpc.Stream, destDir string, cu CacheUpdater, progress progressCb) error
 }
 
 func isProtoSupported(p string) bool {
@@ -145,6 +145,7 @@ type FSSendRequestOpt struct {
 	OverrideExcludes bool
 	DestDir          string
 	CacheUpdater     CacheUpdater
+	ProgressCb       func(int, bool)
 }
 
 // CacheUpdater is an object capable of sending notifications for the cache hash changes
@@ -203,5 +204,5 @@ func FSSync(ctx context.Context, c session.Caller, opt FSSendRequestOpt) error {
 		panic(fmt.Sprintf("invalid protocol: %q", pr.name))
 	}
 
-	return pr.recvFn(stream, opt.DestDir, opt.CacheUpdater)
+	return pr.recvFn(stream, opt.DestDir, opt.CacheUpdater, opt.ProgressCb)
 }

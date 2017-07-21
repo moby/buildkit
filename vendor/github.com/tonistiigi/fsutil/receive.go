@@ -12,7 +12,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func Receive(ctx context.Context, conn Stream, dest string, notifyHashed ChangeFunc) error {
+func Receive(ctx context.Context, conn Stream, dest string, notifyHashed ChangeFunc, progressCb func(int, bool)) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -22,17 +22,19 @@ func Receive(ctx context.Context, conn Stream, dest string, notifyHashed ChangeF
 		files:        make(map[string]uint32),
 		pipes:        make(map[uint32]io.WriteCloser),
 		notifyHashed: notifyHashed,
+		progressCb:   progressCb,
 	}
 	return r.run(ctx)
 }
 
 type receiver struct {
-	dest    string
-	conn    Stream
-	files   map[string]uint32
-	pipes   map[uint32]io.WriteCloser
-	mu      sync.RWMutex
-	muPipes sync.RWMutex
+	dest       string
+	conn       Stream
+	files      map[string]uint32
+	pipes      map[uint32]io.WriteCloser
+	mu         sync.RWMutex
+	muPipes    sync.RWMutex
+	progressCb func(int, bool)
 
 	notifyHashed   ChangeFunc
 	orderValidator Validator
@@ -105,12 +107,23 @@ func (r *receiver) run(ctx context.Context) error {
 	g.Go(func() error {
 		var i uint32 = 0
 
+		size := 0
+		if r.progressCb != nil {
+			defer func() {
+				r.progressCb(size, true)
+			}()
+		}
 		var p Packet
 		for {
 			p = Packet{Data: p.Data[:0]}
 			if err := r.conn.RecvMsg(&p); err != nil {
 				return err
 			}
+			if r.progressCb != nil {
+				size += p.Size()
+				r.progressCb(size, false)
+			}
+
 			switch p.Type {
 			case PACKET_STAT:
 				if p.Stat == nil {

@@ -95,7 +95,7 @@ func build(clicontext *cli.Context) error {
 					logrus.Debugf("vertex: %s %s %v %v", v.Digest, v.Name, v.Started, v.Completed)
 				}
 				for _, s := range s.Statuses {
-					logrus.Debugf("status: %s %s", s.Vertex, s.ID)
+					logrus.Debugf("status: %s %s %d", s.Vertex, s.ID, s.Current)
 				}
 				for _, l := range s.Logs {
 					logrus.Debugf("log: %s\n%s", l.Vertex, l.Data)

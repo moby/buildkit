@@ -11,8 +11,10 @@ import (
 	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/source"
+	"github.com/moby/buildkit/util/progress"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
+	"golang.org/x/time/rate"
 )
 
 const keySharedKey = "local.sharedKey"
@@ -142,6 +144,7 @@ func (ls *localSourceHandler) Snapshot(ctx context.Context) (out cache.Immutable
 		OverrideExcludes: false,
 		DestDir:          dest,
 		CacheUpdater:     nil,
+		ProgressCb:       newProgressHandler(ctx, "transferring "+ls.src.Name+":"),
 	}
 
 	if err := filesync.FSSync(ctx, caller, opt); err != nil {
@@ -153,6 +156,7 @@ func (ls *localSourceHandler) Snapshot(ctx context.Context) (out cache.Immutable
 	}
 	lm = nil
 
+	// skip storing snapshot by the shared key if it already exists
 	skipStoreSharedKey := false
 	si, _ := ls.md.Get(mutable.ID())
 	if v := si.Get(keySharedKey); v != nil {
@@ -180,7 +184,31 @@ func (ls *localSourceHandler) Snapshot(ctx context.Context) (out cache.Immutable
 	if err != nil {
 		return nil, err
 	}
-	mutable = nil
+	mutable = nil // avoid deferred cleanup
 
 	return snap, nil
+}
+
+func newProgressHandler(ctx context.Context, id string) func(int, bool) {
+	limiter := rate.NewLimiter(rate.Every(100*time.Millisecond), 1)
+	pw, _, _ := progress.FromContext(ctx)
+	now := time.Now()
+	st := progress.Status{
+		Started: &now,
+		Action:  "transferring",
+	}
+	pw.Write(id, st)
+	return func(s int, last bool) {
+		if last || limiter.Allow() {
+			st.Current = s
+			if last {
+				now := time.Now()
+				st.Completed = &now
+			}
+			pw.Write(id, st)
+			if last {
+				pw.Close()
+			}
+		}
+	}
 }

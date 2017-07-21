@@ -45,9 +45,16 @@ func sendTarStream(stream grpc.Stream, dir string, includes, excludes []string, 
 	return nil
 }
 
-func recvTarStream(ds grpc.Stream, dest string, cs CacheUpdater) error {
+func recvTarStream(ds grpc.Stream, dest string, cs CacheUpdater, progress progressCb) error {
 
 	pr, pw := io.Pipe()
+
+	size := 0
+	defer func() {
+		if progress != nil {
+			progress(size, true)
+		}
+	}()
 
 	go func() {
 		var (
@@ -64,6 +71,10 @@ func recvTarStream(ds grpc.Stream, dest string, cs CacheUpdater) error {
 			_, err = pw.Write(t.Data)
 			if err != nil {
 				break
+			}
+			size += len(t.Data)
+			if progress != nil {
+				progress(size, false)
 			}
 		}
 		if err = pw.CloseWithError(err); err != nil {
