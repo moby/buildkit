@@ -30,7 +30,7 @@ func TestManager(t *testing.T) {
 
 	checkDiskUsage(t, ctx, cm, 0, 0)
 
-	active, err := cm.New(ctx, nil, CachePolicyKeepMutable)
+	active, err := cm.New(ctx, nil, CachePolicyRetain)
 	require.NoError(t, err)
 
 	m, err := active.Mount(ctx, false)
@@ -102,7 +102,7 @@ func TestManager(t *testing.T) {
 	err = snap.Release(ctx)
 	require.NoError(t, err)
 
-	active2, err := cm.New(ctx, snap2, CachePolicyKeepMutable)
+	active2, err := cm.New(ctx, snap2, CachePolicyRetain)
 	require.NoError(t, err)
 
 	checkDiskUsage(t, ctx, cm, 2, 0)
@@ -133,7 +133,7 @@ func TestLazyCommit(t *testing.T) {
 
 	cm := getCacheManager(t, tmpdir)
 
-	active, err := cm.New(ctx, nil, CachePolicyKeepMutable)
+	active, err := cm.New(ctx, nil, CachePolicyRetain)
 	require.NoError(t, err)
 
 	// after commit mutable is locked
@@ -202,7 +202,7 @@ func TestLazyCommit(t *testing.T) {
 	require.NoError(t, err)
 
 	// test restarting after commit
-	active, err = cm.New(ctx, nil, CachePolicyKeepMutable)
+	active, err = cm.New(ctx, nil, CachePolicyRetain)
 	require.NoError(t, err)
 
 	// after commit mutable is locked

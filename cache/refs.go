@@ -18,6 +18,7 @@ type ImmutableRef interface {
 	Size(ctx context.Context) (int64, error)
 	Parent() ImmutableRef
 	Finalize(ctx context.Context) error // Make sure reference is flushed to driver
+	Metadata() *metadata.StorageItem
 	// Prepare() / ChainID() / Meta()
 }
 
@@ -202,6 +203,10 @@ func (sr *immutableRef) Finalize(ctx context.Context) error {
 	return sr.finalize(ctx)
 }
 
+func (sr *cacheRecord) Metadata() *metadata.StorageItem {
+	return sr.md
+}
+
 func (sr *cacheRecord) finalize(ctx context.Context) error {
 	mutable := sr.equalMutable
 	if mutable == nil {
@@ -274,8 +279,11 @@ func (sr *mutableRef) Release(ctx context.Context) error {
 
 func (sr *mutableRef) release(ctx context.Context) error {
 	delete(sr.refs, sr)
-	if getCachePolicy(sr.md) != cachePolicyKeepMutable {
+	if getCachePolicy(sr.md) != cachePolicyRetain {
 		if sr.equalImmutable != nil {
+			if getCachePolicy(sr.equalImmutable.md) == cachePolicyRetain {
+				return nil
+			}
 			if err := sr.equalImmutable.remove(ctx, false); err != nil {
 				return err
 			}

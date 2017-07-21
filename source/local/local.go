@@ -104,7 +104,7 @@ func (ls *localSourceHandler) Snapshot(ctx context.Context) (out cache.Immutable
 	}
 
 	if mutable == nil {
-		m, err := ls.cm.New(ctx, nil, cache.CachePolicyKeepMutable)
+		m, err := ls.cm.New(ctx, nil, cache.CachePolicyRetain)
 		if err != nil {
 			return nil, err
 		}
