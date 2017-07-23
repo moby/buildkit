@@ -1,249 +1,189 @@
 package llb
 
 import (
-	_ "crypto/sha256"
+	"context"
 
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/system"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
 )
 
-type StateOption func(s *State) *State
+type StateOption func(State) State
 
-// State represents modifiable llb state
+type Output interface {
+	ToInput() (*pb.Input, error)
+	Vertex() Vertex
+}
+
+type Vertex interface {
+	Validate() error
+	Marshal() ([]byte, error)
+	Output() Output
+	Inputs() []Output
+}
+
+func NewState(o Output) State {
+	s := State{
+		out: o,
+		ctx: context.Background(),
+	}
+	s = dir("/")(s)
+	s = addEnv("PATH", system.DefaultPathEnv)(s)
+	return s
+}
+
 type State struct {
-	source   *source
-	exec     *exec
-	meta     Meta
-	mount    *mount
-	metaNext Meta // this meta will be used for the next Run()
-	err      error
+	out Output
+	ctx context.Context
 }
 
-// TODO: add state.Reset() state.Save() state.Restore()
+func (s State) WithValue(k, v interface{}) State {
+	return State{
+		out: s.out,
+		ctx: context.WithValue(s.ctx, k, v),
+	}
+}
 
-// Validate checks that every node has been set up properly
-func (s *State) Validate() error {
-	if s.source != nil {
-		if err := s.source.Validate(); err != nil {
-			return err
+func (s State) Value(k interface{}) interface{} {
+	return s.ctx.Value(k)
+}
+
+func (s State) Marshal() ([][]byte, error) {
+	list, err := marshal(s.Output().Vertex(), nil, map[digest.Digest]struct{}{})
+	if err != nil {
+		return nil, err
+	}
+	inp, err := s.Output().ToInput()
+	if err != nil {
+		return nil, err
+	}
+	proto := &pb.Op{Inputs: []*pb.Input{inp}}
+	dt, err := proto.Marshal()
+	if err != nil {
+		return nil, err
+	}
+	list = append(list, dt)
+	return list, nil
+}
+
+func marshal(v Vertex, list [][]byte, cache map[digest.Digest]struct{}) (out [][]byte, err error) {
+	for _, inp := range v.Inputs() {
+		var err error
+		list, err = marshal(inp.Vertex(), list, cache)
+		if err != nil {
+			return nil, err
 		}
 	}
-	if s.exec != nil {
-		if err := s.exec.Validate(); err != nil {
-			return err
-		}
+	dt, err := v.Marshal()
+	if err != nil {
+		return nil, err
 	}
-	return nil
+	dgst := digest.FromBytes(dt)
+	if _, ok := cache[dgst]; ok {
+		return list, nil
+	}
+	list = append(list, dt)
+	cache[dgst] = struct{}{}
+	return list, nil
 }
 
-func (s *State) Run(opts ...RunOption) *ExecState {
-	var es ExecState
-	meta := s.metaNext
-
-	exec := &exec{
-		meta:   meta,
-		mounts: []*mount{},
-		root: &mount{
-			dest:      pb.RootMount,
-			source:    s.source,
-			parent:    s.mount,
-			hasOutput: true,
-		},
-	}
-	exec.root.execState = &es
-	exec.mounts = append(exec.mounts, exec.root)
-
-	es.exec = exec
-	es.mount = exec.root
-	es.meta = meta
-	es.metaNext = es.meta
-	var err error
-	for _, o := range opts {
-		es = *o(&es)
-	}
-	es.exec.meta = es.meta
-	es.err = err
-	return &es
+func (s State) Validate() error {
+	return s.Output().Vertex().Validate()
 }
 
-func (s *State) AddEnv(key, value string) *State {
+func (s State) Output() Output {
+	return s.out
+}
+
+func (s State) WithOutput(o Output) State {
+	return State{
+		out: o,
+		ctx: s.ctx,
+	}
+}
+
+func (s State) Run(ro ...RunOption) ExecState {
+	ei := ExecInfo{State: s}
+	for _, o := range ro {
+		ei = o(ei)
+	}
+	meta := Meta{
+		Args: getArgs(ei.State),
+		Cwd:  getDir(ei.State),
+		Env:  getEnv(ei.State),
+	}
+
+	exec := NewExecOp(s.Output(), meta)
+	for _, m := range ei.Mounts {
+		exec.AddMount(m.Target, m.Source, m.Opts...)
+	}
+
+	return ExecState{
+		State: s.WithOutput(exec.Output()),
+		exec:  exec,
+	}
+}
+
+func (s State) AddEnv(key, value string) State {
 	return s.AddEnvf(key, value)
 }
-func (s *State) AddEnvf(key, value string, v ...interface{}) *State {
-	s.metaNext, _ = addEnvf(key, value, v...)(s.metaNext)
-	return s
+
+func (s State) AddEnvf(key, value string, v ...interface{}) State {
+	return addEnvf(key, value, v...)(s)
 }
 
-func (s *State) DelEnv(key string) *State {
-	s.metaNext, _ = delEnv(key)(s.metaNext)
-	return s
-}
-func (s *State) ClearEnv() *State {
-	s.metaNext, _ = clearEnv()(s.metaNext)
-	return s
-}
-func (s *State) GetEnv(key string) (string, bool) {
-	return s.metaNext.Env(key)
-}
-
-func (s *State) Dir(str string) *State {
+func (s State) Dir(str string) State {
 	return s.Dirf(str)
 }
-func (s *State) Dirf(str string, v ...interface{}) *State {
-	s.metaNext, _ = dirf(str, v...)(s.metaNext)
-	return s
+func (s State) Dirf(str string, v ...interface{}) State {
+	return dirf(str, v...)(s)
 }
 
-func (s *State) GetDir() string {
-	return s.metaNext.Dir()
+func (s State) GetEnv(key string) (string, bool) {
+	return getEnv(s).Get(key)
 }
 
-func (s *State) Args(arg ...string) *State {
-	s.metaNext, _ = args(arg...)(s.metaNext)
-	return s
+func (s State) GetDir() string {
+	return getDir(s)
 }
 
-func (s *State) Reset(src *State) *State {
-	copy := *s
-	copy.metaNext, _ = reset(src)(s.metaNext)
-	return &copy
+func (s State) GetArgs() []string {
+	return getArgs(s)
 }
 
-func (s *State) With(so ...StateOption) *State {
+func (s State) Reset(s2 State) State {
+	return reset(s2)(s)
+}
+
+func (s State) With(so ...StateOption) State {
 	for _, o := range so {
 		s = o(s)
 	}
 	return s
 }
 
-func (s *State) Marshal() (list [][]byte, err error) {
-	if err := s.Validate(); err != nil {
-		return nil, err
-	}
-	cache := make(map[digest.Digest]struct{})
-	if s.source != nil {
-		_, list, err = s.source.marshalTo(nil, cache)
-	} else if s.exec != nil {
-		_, list, err = s.exec.root.marshalTo(nil, cache)
-	} else {
-		_, list, err = s.mount.marshalTo(nil, cache)
-	}
-	return
+type output struct {
+	vertex   Vertex
+	getIndex func() (pb.OutputIndex, error)
 }
 
-// ExecState is a state with a active leaf pointing to a run exec command.
-// Mounts can be added only to this state.
-type ExecState struct {
-	State
-}
-
-func (s *ExecState) AddMount(dest string, mountState *State, opts ...MountOption) *State {
-	m := &mount{
-		dest:      dest,
-		source:    mountState.source,
-		parent:    mountState.mount,
-		execState: s,
-		hasOutput: true, // TODO: should be set only if something inherits
-	}
-	for _, opt := range opts {
-		opt(m)
-	}
-	var newState State
-	newState.meta = s.meta
-	newState.metaNext = s.metaNext
-	newState.mount = m
-	s.exec.mounts = append(s.exec.mounts, m)
-	return &newState
-}
-
-func (s *ExecState) Root() *State {
-	return &s.State
-}
-
-func (s *ExecState) GetMount(target string) (*State, error) {
-	for _, m := range s.exec.mounts {
-		if m.dest == target {
-			var newState State
-			newState.meta = m.execState.meta
-			newState.metaNext = m.execState.metaNext
-			newState.mount = m
-			return &newState, nil
+func (o *output) ToInput() (*pb.Input, error) {
+	var index pb.OutputIndex
+	if o.getIndex != nil {
+		var err error
+		index, err = o.getIndex()
+		if err != nil {
+			return nil, err
 		}
 	}
-	return nil, errors.WithStack(errNotFound)
-}
-
-func (s *ExecState) updateMeta(fn metaOption) *ExecState {
-	meta, err := fn(s.meta)
-	s.meta = meta
+	dt, err := o.vertex.Marshal()
 	if err != nil {
-		s.err = err
+		return nil, err
 	}
-	return s
+	dgst := digest.FromBytes(dt)
+	return &pb.Input{Digest: dgst, Index: index}, nil
 }
 
-type RunOption func(es *ExecState) *ExecState
-
-type MountOption func(*mount)
-
-func Readonly(m *mount) {
-	m.readonly = true
-}
-
-func AddMount(dest string, mountState *State, opts ...MountOption) RunOption {
-	return func(es *ExecState) *ExecState {
-		es.AddMount(dest, mountState, opts...)
-		return nil
-	}
-}
-
-func Shlex(str string) RunOption {
-	return Shlexf(str)
-}
-func Shlexf(str string, v ...interface{}) RunOption {
-	return func(es *ExecState) *ExecState {
-		return es.updateMeta(shlexf(str, v...))
-	}
-}
-
-func AddEnv(key, value string) RunOption {
-	return AddEnvf(key, value)
-}
-func AddEnvf(key, value string, v ...interface{}) RunOption {
-	return func(es *ExecState) *ExecState {
-		return es.updateMeta(addEnvf(key, value, v...))
-	}
-}
-
-func DelEnv(key string) RunOption {
-	return func(es *ExecState) *ExecState {
-		return es.updateMeta(delEnv(key))
-	}
-}
-func ClearEnv() RunOption {
-	return func(es *ExecState) *ExecState {
-		return es.updateMeta(clearEnv())
-	}
-}
-
-func Dir(str string) RunOption {
-	return Dirf(str)
-}
-func Dirf(str string, v ...interface{}) RunOption {
-	return func(es *ExecState) *ExecState {
-		return es.updateMeta(dirf(str, v...))
-	}
-}
-
-func Args(arg ...string) RunOption {
-	return func(es *ExecState) *ExecState {
-		return es.updateMeta(args(arg...))
-	}
-}
-
-func Reset(src *State) RunOption {
-	return func(es *ExecState) *ExecState {
-		return es.updateMeta(reset(src))
-	}
+func (o *output) Vertex() Vertex {
+	return o.vertex
 }
