@@ -31,7 +31,7 @@ func main() {
 	llb.WriteTo(dt, os.Stdout)
 }
 
-func goBuildBase() *llb.State {
+func goBuildBase() llb.State {
 	goAlpine := llb.Image("docker.io/library/golang:1.8-alpine")
 	return goAlpine.
 		AddEnv("PATH", "/usr/local/go/bin:"+system.DefaultPathEnv).
@@ -40,7 +40,7 @@ func goBuildBase() *llb.State {
 		Run(llb.Shlex("apk add --no-cache git make")).Root()
 }
 
-func runc(version string) *llb.State {
+func runc(version string) llb.State {
 	return goBuildBase().
 		Run(llb.Shlex("git clone https://github.com/opencontainers/runc.git /go/src/github.com/opencontainers/runc")).
 		Dir("/go/src/github.com/opencontainers/runc").
@@ -48,7 +48,7 @@ func runc(version string) *llb.State {
 		Run(llb.Shlex("go build -o /usr/bin/runc ./")).Root()
 }
 
-func containerd(version string) *llb.State {
+func containerd(version string) llb.State {
 	return goBuildBase().
 		Run(llb.Shlex("apk add --no-cache btrfs-progs-dev")).
 		Run(llb.Shlex("git clone https://github.com/containerd/containerd.git /go/src/github.com/containerd/containerd")).
@@ -57,7 +57,7 @@ func containerd(version string) *llb.State {
 		Run(llb.Shlex("make bin/containerd")).Root()
 }
 
-func buildkit(opt buildOpt) *llb.State {
+func buildkit(opt buildOpt) llb.State {
 	src := goBuildBase().
 		Run(llb.Shlex("git clone https://github.com/moby/buildkit.git /go/src/github.com/moby/buildkit")).
 		Dir("/go/src/github.com/moby/buildkit")
@@ -83,7 +83,7 @@ func buildkit(opt buildOpt) *llb.State {
 	return r
 }
 
-func copy(src *llb.State, srcPath string, dest *llb.State, destPath string) *llb.State {
+func copy(src llb.State, srcPath string, dest llb.State, destPath string) llb.State {
 	cpImage := llb.Image("docker.io/library/alpine:latest")
 	cp := cpImage.Run(llb.Shlexf("cp -a /src%s /dest%s", srcPath, destPath))
 	cp.AddMount("/src", src)

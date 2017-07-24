@@ -31,7 +31,7 @@ func main() {
 	llb.WriteTo(dt, os.Stdout)
 }
 
-func goBuildBase() *llb.State {
+func goBuildBase() llb.State {
 	goAlpine := llb.Image("docker.io/library/golang:1.8-alpine")
 	return goAlpine.
 		AddEnv("PATH", "/usr/local/go/bin:"+system.DefaultPathEnv).
@@ -40,21 +40,21 @@ func goBuildBase() *llb.State {
 		Run(llb.Shlex("apk add --no-cache git make")).Root()
 }
 
-func runc(version string) *llb.State {
+func runc(version string) llb.State {
 	return goBuildBase().
 		With(goFromGit("github.com/opencontainers/runc", version)).
 		Run(llb.Shlex("go build -o /usr/bin/runc ./")).
 		Root()
 }
 
-func containerd(version string) *llb.State {
+func containerd(version string) llb.State {
 	return goBuildBase().
 		Run(llb.Shlex("apk add --no-cache btrfs-progs-dev")).
 		With(goFromGit("github.com/containerd/containerd", version)).
 		Run(llb.Shlex("make bin/containerd")).Root()
 }
 
-func buildkit(opt buildOpt) *llb.State {
+func buildkit(opt buildOpt) llb.State {
 	src := goBuildBase().With(goFromGit("github.com/moby/buildkit", "master"))
 
 	builddStandalone := src.
@@ -87,20 +87,20 @@ func goFromGit(repo, tag string) llb.StateOption {
 		Run(llb.Shlexf("git clone https://%[1]s.git /go/src/%[1]s", repo)).
 		Dirf("/go/src/%s", repo).
 		Run(llb.Shlexf("git checkout -q %s", tag)).Root()
-	return func(s *llb.State) *llb.State {
+	return func(s llb.State) llb.State {
 		return s.With(copyFrom(src, "/go", "/")).Reset(s).Dir(src.GetDir())
 	}
 }
 
 // copyFrom has similar semantics as `COPY --from`
-func copyFrom(src *llb.State, srcPath, destPath string) llb.StateOption {
-	return func(s *llb.State) *llb.State {
+func copyFrom(src llb.State, srcPath, destPath string) llb.StateOption {
+	return func(s llb.State) llb.State {
 		return copy(src, srcPath, s, destPath)
 	}
 }
 
 // copy copies files between 2 states using cp until there is no copyOp
-func copy(src *llb.State, srcPath string, dest *llb.State, destPath string) *llb.State {
+func copy(src llb.State, srcPath string, dest llb.State, destPath string) llb.State {
 	cpImage := llb.Image("docker.io/library/alpine:latest")
 	cp := cpImage.Run(llb.Shlexf("cp -a /src%s /dest%s", srcPath, destPath))
 	cp.AddMount("/src", src)

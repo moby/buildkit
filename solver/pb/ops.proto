@@ -15,7 +15,7 @@ message Op {
 
 message Input {
 	string digest = 1 [(gogoproto.customtype) = "github.com/opencontainers/go-digest.Digest", (gogoproto.nullable) = false];
-	int64 index = 2;
+	int64 index = 2 [(gogoproto.customtype) = "OutputIndex", (gogoproto.nullable) = false];
 }
 
 message ExecOp {
@@ -30,10 +30,10 @@ message Meta {
 }
 
 message Mount {
-	int64 input = 1;
+	int64 input = 1 [(gogoproto.customtype) = "InputIndex", (gogoproto.nullable) = false];
 	string selector = 2;
 	string dest = 3;
-	int64 output = 4;
+	int64 output = 4 [(gogoproto.customtype) = "OutputIndex", (gogoproto.nullable) = false];
 	bool readonly = 5;
 }
 
@@ -43,7 +43,7 @@ message CopyOp {
 }
 
 message CopySource {
-	int64 input = 1;
+	int64 input = 1 [(gogoproto.customtype) = "InputIndex", (gogoproto.nullable) = false];
 	string selector = 2;
 }
 

@@ -1,5 +1,8 @@
 package pb
 
+type InputIndex int64
+type OutputIndex int64
+
 const RootMount = "/"
-const SkipOutput = -1 // TODO: custom type
-const Empty = -1      // TODO: custom type
+const SkipOutput OutputIndex = -1
+const Empty InputIndex = -1
