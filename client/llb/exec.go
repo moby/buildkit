@@ -125,7 +125,7 @@ func (e *ExecOp) Marshal() ([]byte, error) {
 				pop.Inputs = append(pop.Inputs, inp)
 			}
 		} else {
-			inputIndex = 0
+			inputIndex = pb.Empty
 		}
 
 		pm := &pb.Mount{
@@ -208,7 +208,42 @@ func Shlexf(str string, v ...interface{}) RunOption {
 	}
 }
 
-func AddMount(dest string, mountState *State, opts ...MountOption) RunOption {
+func AddEnv(key, value string) RunOption {
+	return AddEnvf(key, value)
+}
+
+func AddEnvf(key, value string, v ...interface{}) RunOption {
+	return func(ei ExecInfo) ExecInfo {
+		ei.State = ei.State.AddEnvf(key, value, v...)
+		return ei
+	}
+}
+
+func Dir(str string) RunOption {
+	return Dirf(str)
+}
+func Dirf(str string, v ...interface{}) RunOption {
+	return func(ei ExecInfo) ExecInfo {
+		ei.State = ei.State.Dirf(str, v...)
+		return ei
+	}
+}
+
+func Reset(s State) RunOption {
+	return func(ei ExecInfo) ExecInfo {
+		ei.State = ei.State.Reset(s)
+		return ei
+	}
+}
+
+func With(so ...StateOption) RunOption {
+	return func(ei ExecInfo) ExecInfo {
+		ei.State = ei.State.With(so...)
+		return ei
+	}
+}
+
+func AddMount(dest string, mountState State, opts ...MountOption) RunOption {
 	return func(ei ExecInfo) ExecInfo {
 		ei.Mounts = append(ei.Mounts, MountInfo{dest, mountState.Output(), opts})
 		return ei
