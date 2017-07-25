@@ -13,6 +13,7 @@ import (
 	"github.com/containerd/containerd/namespaces"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/metadata"
+	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/snapshot/blobmapping"
 	"github.com/moby/buildkit/source"
@@ -93,7 +94,7 @@ func TestControl(t *testing.T) {
 	lm.Unmount()
 	assert.NoError(t, err)
 
-	du, err := cm.DiskUsage(ctx)
+	du, err := cm.DiskUsage(ctx, client.DiskUsageInfo{})
 	assert.NoError(t, err)
 
 	// for _, d := range du {
@@ -148,7 +149,7 @@ func TestControl(t *testing.T) {
 	err = snap.Release(ctx)
 	assert.NoError(t, err)
 
-	du2, err := cm.DiskUsage(ctx)
+	du2, err := cm.DiskUsage(ctx, client.DiskUsageInfo{})
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(du2)-len(du))
 

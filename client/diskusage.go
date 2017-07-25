@@ -22,8 +22,14 @@ type UsageInfo struct {
 	Description string
 }
 
-func (c *Client) DiskUsage(ctx context.Context) ([]*UsageInfo, error) {
-	resp, err := c.controlClient().DiskUsage(ctx, &controlapi.DiskUsageRequest{})
+func (c *Client) DiskUsage(ctx context.Context, opts ...DiskUsageOption) ([]*UsageInfo, error) {
+	info := &DiskUsageInfo{}
+	for _, o := range opts {
+		o(info)
+	}
+
+	req := &controlapi.DiskUsageRequest{Filter: info.Filter}
+	resp, err := c.controlClient().DiskUsage(ctx, req)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get diskusage")
 	}
@@ -45,8 +51,23 @@ func (c *Client) DiskUsage(ctx context.Context) ([]*UsageInfo, error) {
 	}
 
 	sort.Slice(du, func(i, j int) bool {
+		if du[i].Size == du[j].Size {
+			return du[i].ID > du[j].ID
+		}
 		return du[i].Size > du[j].Size
 	})
 
 	return du, nil
+}
+
+type DiskUsageOption func(*DiskUsageInfo)
+
+type DiskUsageInfo struct {
+	Filter string
+}
+
+func WithFilter(f string) DiskUsageOption {
+	return func(di *DiskUsageInfo) {
+		di.Filter = f
+	}
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/snapshot/naive"
 	"github.com/moby/buildkit/cache/metadata"
+	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -265,7 +266,7 @@ func getCacheManager(t *testing.T, tmpdir string) Manager {
 }
 
 func checkDiskUsage(t *testing.T, ctx context.Context, cm Manager, inuse, unused int) {
-	du, err := cm.DiskUsage(ctx)
+	du, err := cm.DiskUsage(ctx, client.DiskUsageInfo{})
 	require.NoError(t, err)
 	var inuseActual, unusedActual int
 	for _, r := range du {

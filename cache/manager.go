@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -34,7 +35,7 @@ type Accessor interface {
 }
 
 type Controller interface {
-	DiskUsage(ctx context.Context) ([]*client.UsageInfo, error)
+	DiskUsage(ctx context.Context, info client.DiskUsageInfo) ([]*client.UsageInfo, error)
 	Prune(ctx context.Context) (map[string]int64, error)
 	GC(ctx context.Context) error
 }
@@ -251,7 +252,7 @@ func (cm *cacheManager) GetMutable(ctx context.Context, id string) (MutableRef, 
 	return rec.mref(), nil
 }
 
-func (cm *cacheManager) DiskUsage(ctx context.Context) ([]*client.UsageInfo, error) {
+func (cm *cacheManager) DiskUsage(ctx context.Context, opt client.DiskUsageInfo) ([]*client.UsageInfo, error) {
 	cm.mu.Lock()
 
 	type cacheUsageInfo struct {
@@ -275,6 +276,7 @@ func (cm *cacheManager) DiskUsage(ctx context.Context) ([]*client.UsageInfo, err
 			cr.mu.Unlock()
 			continue
 		}
+
 		usageCount, lastUsedAt := getLastUsed(cr.md)
 		c := &cacheUsageInfo{
 			refs:        len(cr.refs),
@@ -313,6 +315,10 @@ func (cm *cacheManager) DiskUsage(ctx context.Context) ([]*client.UsageInfo, err
 
 	var du []*client.UsageInfo
 	for id, cr := range m {
+		if opt.Filter != "" && !strings.HasPrefix(id, opt.Filter) {
+			continue
+		}
+
 		c := &client.UsageInfo{
 			ID:          id,
 			Mutable:     cr.mutable,

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"os"
@@ -9,6 +8,7 @@ import (
 
 	units "github.com/docker/go-units"
 	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/util/appcontext"
 	"github.com/urfave/cli"
 )
 
@@ -17,6 +17,10 @@ var diskUsageCommand = cli.Command{
 	Usage:  "disk usage",
 	Action: diskUsage,
 	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  "filter, f",
+			Usage: "Filter snapshot ID",
+		},
 		cli.BoolFlag{
 			Name:  "verbose, v",
 			Usage: "Verbose output",
@@ -25,12 +29,12 @@ var diskUsageCommand = cli.Command{
 }
 
 func diskUsage(clicontext *cli.Context) error {
-	client, err := resolveClient(clicontext)
+	c, err := resolveClient(clicontext)
 	if err != nil {
 		return err
 	}
 
-	du, err := client.DiskUsage(context.TODO())
+	du, err := c.DiskUsage(appcontext.Context(), client.WithFilter(clicontext.String("filter")))
 	if err != nil {
 		return err
 	}
@@ -43,7 +47,9 @@ func diskUsage(clicontext *cli.Context) error {
 		printTable(tw, du)
 	}
 
-	printSummary(tw, du)
+	if clicontext.String("filter") == "" {
+		printSummary(tw, du)
+	}
 
 	return nil
 }

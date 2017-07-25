@@ -51,8 +51,10 @@ func (c *Controller) Register(server *grpc.Server) error {
 	return nil
 }
 
-func (c *Controller) DiskUsage(ctx context.Context, _ *controlapi.DiskUsageRequest) (*controlapi.DiskUsageResponse, error) {
-	du, err := c.opt.CacheManager.DiskUsage(ctx)
+func (c *Controller) DiskUsage(ctx context.Context, r *controlapi.DiskUsageRequest) (*controlapi.DiskUsageResponse, error) {
+	du, err := c.opt.CacheManager.DiskUsage(ctx, client.DiskUsageInfo{
+		Filter: r.Filter,
+	})
 	if err != nil {
 		return nil, err
 	}
