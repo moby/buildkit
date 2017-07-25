@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"sort"
+	"time"
 
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/pkg/errors"
@@ -13,8 +14,12 @@ type UsageInfo struct {
 	Mutable bool
 	InUse   bool
 	Size    int64
-	// Meta string
-	// LastUsed time.Time
+
+	CreatedAt   time.Time
+	LastUsedAt  *time.Time
+	UsageCount  int
+	Parent      string
+	Description string
 }
 
 func (c *Client) DiskUsage(ctx context.Context) ([]*UsageInfo, error) {
@@ -27,10 +32,15 @@ func (c *Client) DiskUsage(ctx context.Context) ([]*UsageInfo, error) {
 
 	for _, d := range resp.Record {
 		du = append(du, &UsageInfo{
-			ID:      d.ID,
-			Mutable: d.Mutable,
-			InUse:   d.InUse,
-			Size:    d.Size_,
+			ID:          d.ID,
+			Mutable:     d.Mutable,
+			InUse:       d.InUse,
+			Size:        d.Size_,
+			Parent:      d.Parent,
+			CreatedAt:   d.CreatedAt,
+			Description: d.Description,
+			UsageCount:  int(d.UsageCount),
+			LastUsedAt:  d.LastUsedAt,
 		})
 	}
 

@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/Sirupsen/logrus"
 	cdsnapshot "github.com/containerd/containerd/snapshot"
@@ -27,8 +28,8 @@ type ManagerOpt struct {
 }
 
 type Accessor interface {
-	Get(ctx context.Context, id string) (ImmutableRef, error)
-	New(ctx context.Context, s ImmutableRef, opt ...RefOption) (MutableRef, error)
+	Get(ctx context.Context, id string, opts ...RefOption) (ImmutableRef, error)
+	New(ctx context.Context, s ImmutableRef, opts ...RefOption) (MutableRef, error)
 	GetMutable(ctx context.Context, id string) (MutableRef, error) // Rebase?
 }
 
@@ -87,14 +88,14 @@ func (cm *cacheManager) Close() error {
 	return cm.md.Close()
 }
 
-func (cm *cacheManager) Get(ctx context.Context, id string) (ImmutableRef, error) {
+func (cm *cacheManager) Get(ctx context.Context, id string, opts ...RefOption) (ImmutableRef, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
-	return cm.get(ctx, id)
+	return cm.get(ctx, id, opts...)
 }
 
-func (cm *cacheManager) get(ctx context.Context, id string) (ImmutableRef, error) {
-	rec, err := cm.load(ctx, id)
+func (cm *cacheManager) get(ctx context.Context, id string, opts ...RefOption) (ImmutableRef, error) {
+	rec, err := cm.load(ctx, id, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +115,7 @@ func (cm *cacheManager) get(ctx context.Context, id string) (ImmutableRef, error
 	return rec.ref(), nil
 }
 
-func (cm *cacheManager) load(ctx context.Context, id string) (*cacheRecord, error) {
+func (cm *cacheManager) load(ctx context.Context, id string, opts ...RefOption) (*cacheRecord, error) {
 	if rec, ok := cm.records[id]; ok {
 		return rec, nil
 	}
@@ -144,7 +145,7 @@ func (cm *cacheManager) load(ctx context.Context, id string) (*cacheRecord, erro
 
 	var parent ImmutableRef
 	if info.Parent != "" {
-		parent, err = cm.get(ctx, info.Parent)
+		parent, err = cm.get(ctx, info.Parent, opts...)
 		if err != nil {
 			return nil, err
 		}
@@ -157,6 +158,14 @@ func (cm *cacheManager) load(ctx context.Context, id string) (*cacheRecord, erro
 		parent:  parent,
 		md:      &md,
 	}
+
+	if err := initializeMetadata(rec, opts...); err != nil {
+		if parent != nil {
+			parent.Release(ctx)
+		}
+		return nil, err
+	}
+
 	cm.records[id] = rec
 	return rec, nil
 }
@@ -195,13 +204,11 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, opts ...RefOpti
 		md:      &md,
 	}
 
-	for _, opt := range opts {
-		if err := opt(rec); err != nil {
-			if parent != nil {
-				parent.Release(ctx)
-			}
-			return nil, err
+	if err := initializeMetadata(rec, opts...); err != nil {
+		if parent != nil {
+			parent.Release(ctx)
 		}
+		return nil, err
 	}
 
 	cm.mu.Lock()
@@ -248,10 +255,14 @@ func (cm *cacheManager) DiskUsage(ctx context.Context) ([]*client.UsageInfo, err
 	cm.mu.Lock()
 
 	type cacheUsageInfo struct {
-		refs    int
-		parent  string
-		size    int64
-		mutable bool
+		refs        int
+		parent      string
+		size        int64
+		mutable     bool
+		createdAt   time.Time
+		usageCount  int
+		lastUsedAt  *time.Time
+		description string
 	}
 
 	m := make(map[string]*cacheUsageInfo, len(cm.records))
@@ -264,10 +275,15 @@ func (cm *cacheManager) DiskUsage(ctx context.Context) ([]*client.UsageInfo, err
 			cr.mu.Unlock()
 			continue
 		}
+		usageCount, lastUsedAt := getLastUsed(cr.md)
 		c := &cacheUsageInfo{
-			refs:    len(cr.refs),
-			mutable: cr.mutable,
-			size:    getSize(cr.md),
+			refs:        len(cr.refs),
+			mutable:     cr.mutable,
+			size:        getSize(cr.md),
+			createdAt:   getCreatedAt(cr.md),
+			usageCount:  usageCount,
+			lastUsedAt:  lastUsedAt,
+			description: getDescription(cr.md),
 		}
 		if cr.parent != nil {
 			c.parent = cr.parent.ID()
@@ -298,10 +314,15 @@ func (cm *cacheManager) DiskUsage(ctx context.Context) ([]*client.UsageInfo, err
 	var du []*client.UsageInfo
 	for id, cr := range m {
 		c := &client.UsageInfo{
-			ID:      id,
-			Mutable: cr.mutable,
-			InUse:   cr.refs > 0,
-			Size:    cr.size,
+			ID:          id,
+			Mutable:     cr.mutable,
+			InUse:       cr.refs > 0,
+			Size:        cr.size,
+			Parent:      cr.parent,
+			CreatedAt:   cr.createdAt,
+			Description: cr.description,
+			LastUsedAt:  cr.lastUsedAt,
+			UsageCount:  cr.usageCount,
 		}
 		du = append(du, c)
 	}
@@ -353,5 +374,33 @@ type withMetadata interface {
 }
 
 func CachePolicyRetain(m withMetadata) error {
-	return setCachePolicy(m.Metadata(), cachePolicyRetain)
+	return queueCachePolicy(m.Metadata(), cachePolicyRetain)
+}
+
+func WithDescription(descr string) RefOption {
+	return func(m withMetadata) error {
+		return queueDescription(m.Metadata(), descr)
+	}
+}
+
+func initializeMetadata(m withMetadata, opts ...RefOption) error {
+	md := m.Metadata()
+	if tm := getCreatedAt(md); !tm.IsZero() {
+		return nil
+	}
+
+	for _, opt := range opts {
+		if err := opt(m); err != nil {
+			return err
+		}
+	}
+
+	if err := queueCreatedAt(md); err != nil {
+		return err
+	}
+
+	if err := md.Commit(); err != nil {
+		return err
+	}
+	return nil
 }

@@ -2,7 +2,9 @@ package solver
 
 import (
 	"encoding/json"
+	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/solver/pb"
@@ -80,7 +82,7 @@ func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, erro
 			if m.Readonly && ref != nil {
 				outputs = append(outputs, newSharedRef(ref).Clone())
 			} else {
-				active, err := e.cm.New(ctx, ref) // TODO: should be method
+				active, err := e.cm.New(ctx, ref, cache.WithDescription(fmt.Sprintf("mount %s from exec %s", m.Dest, strings.Join(e.op.Meta.Args, " ")))) // TODO: should be method
 				if err != nil {
 					return nil, err
 				}

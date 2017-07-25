@@ -1,6 +1,7 @@
 package local
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -106,7 +107,7 @@ func (ls *localSourceHandler) Snapshot(ctx context.Context) (out cache.Immutable
 	}
 
 	if mutable == nil {
-		m, err := ls.cm.New(ctx, nil, cache.CachePolicyRetain)
+		m, err := ls.cm.New(ctx, nil, cache.CachePolicyRetain, cache.WithDescription(fmt.Sprintf("local source for %s", ls.src.Name)))
 		if err != nil {
 			return nil, err
 		}

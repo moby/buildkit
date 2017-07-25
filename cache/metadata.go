@@ -1,6 +1,8 @@
 package cache
 
 import (
+	"time"
+
 	"github.com/boltdb/bolt"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/pkg/errors"
@@ -18,6 +20,10 @@ const keySize = "snapshot.size"
 const keyEqualMutable = "cache.equalMutable"
 const keyEqualImmutable = "cache.equalImmutable"
 const keyCachePolicy = "cache.cachePolicy"
+const keyDescription = "cache.description"
+const keyCreatedAt = "cache.createdAt"
+const keyLastUsedAt = "cache.lastUsedAt"
+const keyUsageCount = "cache.usageCount"
 
 func setSize(si *metadata.StorageItem, s int64) error {
 	v, err := metadata.NewValue(s)
@@ -72,14 +78,15 @@ func clearEqualMutable(si *metadata.StorageItem) error {
 	return nil
 }
 
-func setCachePolicy(si *metadata.StorageItem, p cachePolicy) error {
+func queueCachePolicy(si *metadata.StorageItem, p cachePolicy) error {
 	v, err := metadata.NewValue(p)
 	if err != nil {
-		return errors.Wrap(err, "failed to create size value")
+		return errors.Wrap(err, "failed to create cachePolicy value")
 	}
-	return si.Update(func(b *bolt.Bucket) error {
+	si.Queue(func(b *bolt.Bucket) error {
 		return si.SetValue(b, keyCachePolicy, v)
 	})
+	return nil
 }
 
 func getCachePolicy(si *metadata.StorageItem) cachePolicy {
@@ -92,4 +99,91 @@ func getCachePolicy(si *metadata.StorageItem) cachePolicy {
 		return cachePolicyDefault
 	}
 	return p
+}
+
+func queueDescription(si *metadata.StorageItem, descr string) error {
+	v, err := metadata.NewValue(descr)
+	if err != nil {
+		return errors.Wrap(err, "failed to create description value")
+	}
+	si.Queue(func(b *bolt.Bucket) error {
+		return si.SetValue(b, keyDescription, v)
+	})
+	return nil
+}
+
+func getDescription(si *metadata.StorageItem) string {
+	v := si.Get(keyDescription)
+	if v == nil {
+		return ""
+	}
+	var str string
+	if err := v.Unmarshal(&str); err != nil {
+		return ""
+	}
+	return str
+}
+
+func queueCreatedAt(si *metadata.StorageItem) error {
+	v, err := metadata.NewValue(time.Now().UnixNano())
+	if err != nil {
+		return errors.Wrap(err, "failed to create createdAt value")
+	}
+	si.Queue(func(b *bolt.Bucket) error {
+		return si.SetValue(b, keyCreatedAt, v)
+	})
+	return nil
+}
+
+func getCreatedAt(si *metadata.StorageItem) time.Time {
+	v := si.Get(keyCreatedAt)
+	if v == nil {
+		return time.Time{}
+	}
+	var tm int64
+	if err := v.Unmarshal(&tm); err != nil {
+		return time.Time{}
+	}
+	return time.Unix(tm/1e9, tm%1e9)
+}
+
+func getLastUsed(si *metadata.StorageItem) (int, *time.Time) {
+	v := si.Get(keyUsageCount)
+	if v == nil {
+		return 0, nil
+	}
+	var usageCount int
+	if err := v.Unmarshal(&usageCount); err != nil {
+		return 0, nil
+	}
+	v = si.Get(keyLastUsedAt)
+	if v == nil {
+		return usageCount, nil
+	}
+	var lastUsedTs int64
+	if err := v.Unmarshal(&lastUsedTs); err != nil || lastUsedTs == 0 {
+		return usageCount, nil
+	}
+	tm := time.Unix(lastUsedTs/1e9, lastUsedTs%1e9)
+	return usageCount, &tm
+}
+
+func updateLastUsed(si *metadata.StorageItem) error {
+	count, _ := getLastUsed(si)
+	count++
+
+	v, err := metadata.NewValue(count)
+	if err != nil {
+		return errors.Wrap(err, "failed to create usageCount value")
+	}
+	v2, err := metadata.NewValue(time.Now().UnixNano())
+	if err != nil {
+		return errors.Wrap(err, "failed to create lastUsedAt value")
+	}
+	return si.Update(func(b *bolt.Bucket) error {
+		if err := si.SetValue(b, keyUsageCount, v); err != nil {
+			return err
+		}
+		return si.SetValue(b, keyLastUsedAt, v2)
+	})
 }

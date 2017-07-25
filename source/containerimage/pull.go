@@ -3,6 +3,7 @@ package containerimage
 import (
 	gocontext "context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
@@ -149,7 +150,7 @@ func (p *puller) Snapshot(ctx context.Context) (cache.ImmutableRef, error) {
 	}
 	unpackProgressDone(nil)
 
-	return p.is.CacheAccessor.Get(ctx, chainid)
+	return p.is.CacheAccessor.Get(ctx, chainid, cache.WithDescription(fmt.Sprintf("pulled from %s", p.ref)))
 }
 
 func (is *imageSource) unpack(ctx context.Context, desc ocispec.Descriptor) (string, error) {

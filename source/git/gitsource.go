@@ -2,6 +2,7 @@ package git
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -78,7 +79,7 @@ func (gs *gitSource) mountRemote(ctx context.Context, remote string) (target str
 
 	initializeRepo := false
 	if remoteRef == nil {
-		remoteRef, err = gs.cache.New(ctx, nil, cache.CachePolicyRetain)
+		remoteRef, err = gs.cache.New(ctx, nil, cache.CachePolicyRetain, cache.WithDescription(fmt.Sprintf("shared git repo for %s", remote)))
 		if err != nil {
 			return "", nil, errors.Wrapf(err, "failed to create new mutable for %s", remote)
 		}
@@ -262,7 +263,7 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context) (out cache.ImmutableRe
 		}
 	}
 
-	checkoutRef, err := gs.cache.New(ctx, nil)
+	checkoutRef, err := gs.cache.New(ctx, nil, cache.WithDescription(fmt.Sprintf("git snapshot for %s#%s", gs.src.Remote, ref)))
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to create new mutable for %s", gs.src.Remote)
 	}
