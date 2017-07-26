@@ -27,6 +27,12 @@ type Group struct {
 }
 
 func (g *Group) Do(ctx context.Context, key string, fn func(ctx context.Context) (interface{}, error)) (v interface{}, err error) {
+	defer func() {
+		if errors.Cause(err) == errRetry {
+			runtime.Gosched()
+			v, err = g.Do(ctx, key, fn)
+		}
+	}()
 	g.mu.Lock()
 	if g.m == nil {
 		g.m = make(map[string]*call)
@@ -34,12 +40,7 @@ func (g *Group) Do(ctx context.Context, key string, fn func(ctx context.Context)
 
 	if c, ok := g.m[key]; ok { // register 2nd waiter
 		g.mu.Unlock()
-		v, err := c.wait(ctx)
-		if err == errRetry {
-			runtime.Gosched()
-			return g.Do(ctx, key, fn)
-		}
-		return v, err
+		return c.wait(ctx)
 	}
 
 	c := newCall(fn)
