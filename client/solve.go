@@ -116,6 +116,7 @@ func (c *Client) Solve(ctx context.Context, r io.Reader, opt SolveOpt, statusCha
 					Completed: v.Completed,
 					Error:     v.Error,
 					Cached:    v.Cached,
+					Parent:    v.Parent,
 				})
 			}
 			for _, v := range resp.Statuses {

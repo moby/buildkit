@@ -24,16 +24,20 @@ type LLBOpt struct {
 }
 
 func NewLLBSolver(opt LLBOpt) *Solver {
-	return New(func(v Vertex) (Op, error) {
+	var s *Solver
+	s = New(func(v Vertex) (Op, error) {
 		switch op := v.Sys().(type) {
 		case *pb.Op_Source:
-			return newSourceOp(op, opt.SourceManager)
+			return newSourceOp(v, op, opt.SourceManager)
 		case *pb.Op_Exec:
-			return newExecOp(op, opt.CacheManager, opt.Worker)
+			return newExecOp(v, op, opt.CacheManager, opt.Worker)
+		case *pb.Op_Build:
+			return newBuildOp(v, op, s)
 		default:
 			return nil, errors.Errorf("invalid op type %T", op)
 		}
 	}, opt.InstructionCache)
+	return s
 }
 
 // ResolveOpFunc finds an Op implementation for a vertex
@@ -76,9 +80,12 @@ func (s *Solver) Solve(ctx context.Context, id string, v Vertex, exp exporter.Ex
 
 	defer closeProgressWriter()
 
-	if len(v.Inputs()) > 0 { // TODO: detect op_return better
-		v = v.Inputs()[0].Vertex
+	if len(v.Inputs()) == 0 {
+		return errors.New("required vertex needs to have inputs")
 	}
+
+	index := v.Inputs()[0].Index
+	v = v.Inputs()[0].Vertex
 
 	vv := toInternalVertex(v)
 	solveVertex := vv
@@ -89,12 +96,12 @@ func (s *Solver) Solve(ctx context.Context, id string, v Vertex, exp exporter.Ex
 		vv.initClientVertex()
 	}
 
-	j, err := s.jobs.new(ctx, id, vv, pr)
+	ctx, j, err := s.jobs.new(ctx, id, vv, pr)
 	if err != nil {
 		return err
 	}
 
-	refs, err := s.getRefs(ctx, j, solveVertex)
+	refs, err := s.getRefs(ctx, solveVertex)
 	s.activeState.cancel(j)
 	if err != nil {
 		return err
@@ -117,9 +124,10 @@ func (s *Solver) Solve(ctx context.Context, id string, v Vertex, exp exporter.Ex
 	}
 
 	if exp != nil {
-		immutable, ok := toImmutableRef(refs[0])
+		r := refs[int(index)]
+		immutable, ok := toImmutableRef(r)
 		if !ok {
-			return errors.Errorf("invalid reference for exporting: %T", refs[0])
+			return errors.Errorf("invalid reference for exporting: %T", r)
 		}
 		vv.notifyStarted(ctx)
 		pw, _, ctx := progress.FromContext(ctx, progress.WithMetadata("vertex", vv.Digest()))
@@ -142,8 +150,8 @@ func (s *Solver) Status(ctx context.Context, id string, statusChan chan *client.
 	return j.pipe(ctx, statusChan)
 }
 
-func (s *Solver) getCacheKey(ctx context.Context, j *job, g *vertex) (cacheKey string, numRefs int, retErr error) {
-	state, err := s.activeState.vertexState(j, g.digest, func() (Op, error) {
+func (s *Solver) getCacheKey(ctx context.Context, g *vertex) (cacheKey string, numRefs int, retErr error) {
+	state, err := s.activeState.vertexState(ctx, g.digest, func() (Op, error) {
 		return s.resolve(g)
 	})
 	if err != nil {
@@ -156,7 +164,7 @@ func (s *Solver) getCacheKey(ctx context.Context, j *job, g *vertex) (cacheKey s
 		for i, in := range g.inputs {
 			func(i int, in *vertex, index int) {
 				eg.Go(func() error {
-					k, _, err := s.getCacheKey(ctx, j, in)
+					k, _, err := s.getCacheKey(ctx, in)
 					if err != nil {
 						return err
 					}
@@ -185,8 +193,8 @@ func (s *Solver) getCacheKey(ctx context.Context, j *job, g *vertex) (cacheKey s
 	})
 }
 
-func (s *Solver) getRefs(ctx context.Context, j *job, g *vertex) (retRef []Reference, retErr error) {
-	state, err := s.activeState.vertexState(j, g.digest, func() (Op, error) {
+func (s *Solver) getRefs(ctx context.Context, g *vertex) (retRef []Reference, retErr error) {
+	state, err := s.activeState.vertexState(ctx, g.digest, func() (Op, error) {
 		return s.resolve(g)
 	})
 	if err != nil {
@@ -197,7 +205,7 @@ func (s *Solver) getRefs(ctx context.Context, j *job, g *vertex) (retRef []Refer
 	if s.cache != nil {
 		var err error
 		var numRefs int
-		cacheKey, numRefs, err = s.getCacheKey(ctx, j, g)
+		cacheKey, numRefs, err = s.getCacheKey(ctx, g)
 		if err != nil {
 			return nil, err
 		}
@@ -230,7 +238,7 @@ func (s *Solver) getRefs(ctx context.Context, j *job, g *vertex) (retRef []Refer
 			func(i int, in *vertex, index int) {
 				eg.Go(func() error {
 					if s.cache != nil {
-						k, numRefs, err := s.getCacheKey(ctx, j, in)
+						k, numRefs, err := s.getCacheKey(ctx, in)
 						if err != nil {
 							return err
 						}
@@ -249,7 +257,7 @@ func (s *Solver) getRefs(ctx context.Context, j *job, g *vertex) (retRef []Refer
 					}
 
 					// execute input vertex
-					r, err := s.getRefs(ctx, j, in)
+					r, err := s.getRefs(ctx, in)
 					if err != nil {
 						return err
 					}

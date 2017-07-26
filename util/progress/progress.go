@@ -192,7 +192,19 @@ func (pw *progressWriter) Write(id string, v interface{}) error {
 }
 
 func (pw *progressWriter) WriteRawProgress(p *Progress) error {
-	p.meta = pw.meta
+	meta := p.meta
+	if len(pw.meta) > 0 {
+		meta = map[string]interface{}{}
+		for k, v := range p.meta {
+			meta[k] = v
+		}
+		for k, v := range pw.meta {
+			if _, ok := meta[k]; !ok {
+				meta[k] = v
+			}
+		}
+	}
+	p.meta = meta
 	return pw.writeRawProgress(p)
 }
 
