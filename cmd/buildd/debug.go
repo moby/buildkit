@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"net/http/pprof"
 
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/net/trace"
 )
 

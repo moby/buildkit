@@ -3,12 +3,12 @@ package blobmapping
 import (
 	"context"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/boltdb/bolt"
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/snapshot"
 	"github.com/moby/buildkit/cache/metadata"
 	digest "github.com/opencontainers/go-digest"
+	"github.com/sirupsen/logrus"
 )
 
 const blobKey = "blobmapping.blob"

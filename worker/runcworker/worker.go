@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/containerd/containerd/mount"
 	runc "github.com/containerd/go-runc"
 	"github.com/docker/docker/pkg/symlink"
@@ -18,6 +17,7 @@ import (
 	"github.com/moby/buildkit/worker"
 	"github.com/moby/buildkit/worker/oci"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 )
 

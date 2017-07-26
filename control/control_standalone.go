@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/containerd/containerd/content"
+	"github.com/containerd/containerd/content/local"
 	"github.com/containerd/containerd/differ"
 	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/namespaces"
@@ -50,7 +50,7 @@ func newStandalonePullDeps(root string) (*pullDeps, error) {
 		return nil, err
 	}
 
-	c, err := content.NewStore(filepath.Join(root, "content"))
+	c, err := local.NewStore(filepath.Join(root, "content"))
 	if err != nil {
 		return nil, err
 	}

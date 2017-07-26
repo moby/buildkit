@@ -7,7 +7,6 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
@@ -23,6 +22,7 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 )

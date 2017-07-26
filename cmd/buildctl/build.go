@@ -7,11 +7,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/moby/buildkit/util/progress/progressui"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	"golang.org/x/sync/errgroup"
 )

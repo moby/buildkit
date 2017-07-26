@@ -5,12 +5,12 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/containerd/containerd/sys"
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/moby/buildkit/util/profiler"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"

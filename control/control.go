@@ -1,7 +1,6 @@
 package control
 
 import (
-	"github.com/Sirupsen/logrus"
 	"github.com/containerd/containerd/snapshot"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/cache"
@@ -13,6 +12,7 @@ import (
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/worker"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"

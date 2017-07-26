@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/boltdb/bolt"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 const (

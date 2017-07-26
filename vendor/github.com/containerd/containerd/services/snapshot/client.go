@@ -105,7 +105,7 @@ func (r *remoteSnapshotter) Walk(ctx context.Context, fn func(context.Context, s
 		Snapshotter: r.snapshotterName,
 	})
 	if err != nil {
-		errdefs.FromGRPC(err)
+		return errdefs.FromGRPC(err)
 	}
 	for {
 		resp, err := sc.Recv()
@@ -135,10 +135,9 @@ func toKind(kind snapshotapi.Kind) snapshot.Kind {
 
 func toInfo(info snapshotapi.Info) snapshot.Info {
 	return snapshot.Info{
-		Name:     info.Name,
-		Parent:   info.Parent,
-		Kind:     toKind(info.Kind),
-		Readonly: info.Readonly,
+		Name:   info.Name,
+		Parent: info.Parent,
+		Kind:   toKind(info.Kind),
 	}
 }
 

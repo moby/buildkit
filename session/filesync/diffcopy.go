@@ -3,7 +3,7 @@ package filesync
 import (
 	"time"
 
-	"github.com/Sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"github.com/tonistiigi/fsutil"
 	"google.golang.org/grpc"
 )

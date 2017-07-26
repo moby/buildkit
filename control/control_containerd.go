@@ -6,12 +6,11 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/containerd/containerd"
-	"github.com/moby/buildkit/worker/runcworker"
+	"github.com/moby/buildkit/worker/containerdworker"
 	"github.com/pkg/errors"
 )
 
@@ -33,12 +32,7 @@ func NewContainerd(root, address string) (*Controller, error) {
 		return nil, err
 	}
 
-	w, err := runcworker.New(filepath.Join(root, "runc"))
-	if err != nil {
-		return nil, err
-	}
-
-	opt.Worker = w
+	opt.Worker = containerdworker.New(client)
 
 	return NewController(*opt)
 }

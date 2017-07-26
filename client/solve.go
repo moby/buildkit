@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Sirupsen/logrus"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/session"
@@ -18,6 +17,7 @@ import (
 	"github.com/moby/buildkit/session/grpchijack"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
 

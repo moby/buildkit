@@ -4,13 +4,13 @@ import (
 	"context"
 	"sync"
 
-	"github.com/Sirupsen/logrus"
 	cdsnapshot "github.com/containerd/containerd/snapshot"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
 
