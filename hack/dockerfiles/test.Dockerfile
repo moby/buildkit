@@ -18,7 +18,8 @@ ARG CONTAINERD_VERSION
 RUN git clone https://github.com/containerd/containerd.git "$GOPATH/src/github.com/containerd/containerd" \
 	&& cd "$GOPATH/src/github.com/containerd/containerd" \
 	&& git checkout -q "$CONTAINERD_VERSION" \
-	&& make bin/containerd
+	&& make bin/containerd \
+	&& make bin/containerd-shim
 
 FROM gobuild-base AS unit-tests
 COPY --from=runc /usr/bin/runc /usr/bin/runc
