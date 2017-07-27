@@ -12,17 +12,18 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func Receive(ctx context.Context, conn Stream, dest string, notifyHashed ChangeFunc, progressCb func(int, bool)) error {
+func Receive(ctx context.Context, conn Stream, dest string, notifyHashed ChangeFunc, contentHasher ContentHasher, progressCb func(int, bool)) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	r := &receiver{
-		conn:         &syncStream{Stream: conn},
-		dest:         dest,
-		files:        make(map[string]uint32),
-		pipes:        make(map[uint32]io.WriteCloser),
-		notifyHashed: notifyHashed,
-		progressCb:   progressCb,
+		conn:          &syncStream{Stream: conn},
+		dest:          dest,
+		files:         make(map[string]uint32),
+		pipes:         make(map[uint32]io.WriteCloser),
+		notifyHashed:  notifyHashed,
+		contentHasher: contentHasher,
+		progressCb:    progressCb,
 	}
 	return r.run(ctx)
 }
@@ -37,6 +38,7 @@ type receiver struct {
 	progressCb func(int, bool)
 
 	notifyHashed   ChangeFunc
+	contentHasher  ContentHasher
 	orderValidator Validator
 	hlValidator    Hardlinks
 }
@@ -83,8 +85,9 @@ func (r *receiver) run(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 
 	dw, err := NewDiskWriter(ctx, r.dest, DiskWriterOpt{
-		AsyncDataCb: r.asyncDataFunc,
-		NotifyCb:    r.notifyHashed,
+		AsyncDataCb:   r.asyncDataFunc,
+		NotifyCb:      r.notifyHashed,
+		ContentHasher: r.contentHasher,
 	})
 	if err != nil {
 		return err

@@ -9,6 +9,6 @@ import (
 	"golang.org/x/net/context"
 )
 
-func Receive(ctx context.Context, conn Stream, dest string, notifyHashed ChangeFunc, progressCb func(int, bool)) error {
+func Receive(ctx context.Context, conn Stream, dest string, notifyHashed ChangeFunc, contentHasher ContentHasher, progressCb func(int, bool)) error {
 	return errors.Errorf("receive is unsupported in %s", runtime.GOOS)
 }
