@@ -184,6 +184,8 @@ func (sr *immutableRef) release(ctx context.Context) error {
 		sr.viewMount = nil
 	}
 
+	updateLastUsed(sr.md)
+
 	delete(sr.refs, sr)
 
 	if len(sr.refs) == 0 {
@@ -240,6 +242,16 @@ func (sr *mutableRef) commit(ctx context.Context) (ImmutableRef, error) {
 		md:           &md,
 	}
 
+	if descr := getDescription(sr.md); descr != "" {
+		if err := queueDescription(&md, descr); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := initializeMetadata(rec); err != nil {
+		return nil, err
+	}
+
 	sr.cm.records[id] = rec
 
 	if err := sr.md.Commit(); err != nil {
@@ -279,6 +291,7 @@ func (sr *mutableRef) Release(ctx context.Context) error {
 
 func (sr *mutableRef) release(ctx context.Context) error {
 	delete(sr.refs, sr)
+	updateLastUsed(sr.md)
 	if getCachePolicy(sr.md) != cachePolicyRetain {
 		if sr.equalImmutable != nil {
 			if getCachePolicy(sr.equalImmutable.md) == cachePolicyRetain {
