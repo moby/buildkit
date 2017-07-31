@@ -18,7 +18,6 @@ import (
 const sizeUnknown int64 = -1
 const keySize = "snapshot.size"
 const keyEqualMutable = "cache.equalMutable"
-const keyEqualImmutable = "cache.equalImmutable"
 const keyCachePolicy = "cache.cachePolicy"
 const keyDescription = "cache.description"
 const keyCreatedAt = "cache.createdAt"

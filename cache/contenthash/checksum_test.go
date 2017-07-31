@@ -92,7 +92,7 @@ func TestChecksumBasicFile(t *testing.T) {
 	dgst, err = cc.Checksum(context.TODO(), ref, "/")
 	assert.NoError(t, err)
 
-	assert.Equal(t, digest.Digest("sha256:0d87c8c2a606f961483cd4c5dc0350a4136a299b4066eea4a969d6ed756614cd"), dgst)
+	assert.Equal(t, digest.Digest("sha256:7378af5287e8b417b6cbc63154d300e130983bfc645e35e86fdadf6f5060468a"), dgst)
 
 	dgst, err = cc.Checksum(context.TODO(), ref, "d0")
 	assert.NoError(t, err)

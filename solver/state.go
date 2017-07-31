@@ -25,8 +25,7 @@ type state struct {
 	key         digest.Digest
 	jobs        map[*job]struct{}
 	refs        []*sharedRef
-	cacheKey    string
-	numRefs     int
+	cacheKey    digest.Digest
 	op          Op
 	progressCtx context.Context
 	cacheCtx    context.Context
@@ -75,7 +74,7 @@ func (s *activeState) cancel(j *job) {
 	}
 }
 
-func (s *state) GetRefs(ctx context.Context, cb func(context.Context, Op) ([]Reference, error)) ([]Reference, error) {
+func (s *state) GetRefs(ctx context.Context, index Index, cb func(context.Context, Op) ([]Reference, error)) (Reference, error) {
 	_, err := s.Do(ctx, s.key.String(), func(doctx context.Context) (interface{}, error) {
 		if s.refs != nil {
 			if err := writeProgressSnapshot(s.progressCtx, ctx); err != nil {
@@ -98,14 +97,10 @@ func (s *state) GetRefs(ctx context.Context, cb func(context.Context, Op) ([]Ref
 	if err != nil {
 		return nil, err
 	}
-	refs := make([]Reference, 0, len(s.refs))
-	for _, r := range s.refs {
-		refs = append(refs, r.Clone())
-	}
-	return refs, nil
+	return s.refs[int(index)].Clone(), nil
 }
 
-func (s *state) GetCacheKey(ctx context.Context, cb func(context.Context, Op) (string, int, error)) (string, int, error) {
+func (s *state) GetCacheKey(ctx context.Context, cb func(context.Context, Op) (digest.Digest, error)) (digest.Digest, error) {
 	_, err := s.Do(ctx, "cache:"+s.key.String(), func(doctx context.Context) (interface{}, error) {
 		if s.cacheKey != "" {
 			if err := writeProgressSnapshot(s.cacheCtx, ctx); err != nil {
@@ -113,19 +108,18 @@ func (s *state) GetCacheKey(ctx context.Context, cb func(context.Context, Op) (s
 			}
 			return nil, nil
 		}
-		cacheKey, numRefs, err := cb(doctx, s.op)
+		cacheKey, err := cb(doctx, s.op)
 		if err != nil {
 			return nil, err
 		}
 		s.cacheKey = cacheKey
-		s.numRefs = numRefs
 		s.cacheCtx = doctx
 		return nil, nil
 	})
 	if err != nil {
-		return "", 0, err
+		return "", err
 	}
-	return s.cacheKey, s.numRefs, nil
+	return s.cacheKey, nil
 }
 
 func writeProgressSnapshot(srcCtx, destCtx context.Context) error {

@@ -205,6 +205,10 @@ func newStorageItem(id string, b *bolt.Bucket, s *Store) (StorageItem, error) {
 	return si, nil
 }
 
+func (s *StorageItem) Storage() *Store { // TODO: used in local source. how to remove this?
+	return s.storage
+}
+
 func (s *StorageItem) ID() string {
 	return s.id
 }

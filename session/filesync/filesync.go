@@ -147,6 +147,7 @@ type FSSendRequestOpt struct {
 type CacheUpdater interface {
 	MarkSupported(bool)
 	HandleChange(fsutil.ChangeKind, string, os.FileInfo, error) error
+	ContentHasher() fsutil.ContentHasher
 }
 
 // FSSync initializes a transfer of files
