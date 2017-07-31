@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/containerd/containerd/snapshot/naive"
 	"github.com/moby/buildkit/cache"
@@ -249,8 +250,60 @@ func TestHandleChange(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestPersistence(t *testing.T) {
+	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	cm := setupCacheManager(t, tmpdir)
+	defer cm.Close()
+
+	ch := []string{
+		"ADD foo file data0",
+		"ADD bar file data1",
+		"ADD d0 dir",
+		"ADD d0/abc file data0",
+		"ADD d0/def symlink abc",
+		"ADD d0/ghi symlink nosuchfile",
+	}
+
+	ref := createRef(t, cm, ch)
+	id := ref.ID()
+
+	dgst, err := Checksum(context.TODO(), ref, "foo")
+	assert.NoError(t, err)
+	assert.Equal(t, dgstFileData0, dgst)
+
+	err = ref.Release(context.TODO())
+	require.NoError(t, err)
+
+	ref, err = cm.Get(context.TODO(), id)
+	assert.NoError(t, err)
+
+	dgst, err = Checksum(context.TODO(), ref, "foo")
+	assert.NoError(t, err)
+	assert.Equal(t, dgstFileData0, dgst)
+
+	err = ref.Release(context.TODO())
+	require.NoError(t, err)
+
+	time.Sleep(100 * time.Millisecond) // saving happens on the background
+
+	cm.Close()
+	getDefaultManager().lru.Purge()
+	cm = setupCacheManager(t, tmpdir)
+	defer cm.Close()
+
+	ref, err = cm.Get(context.TODO(), id)
+	assert.NoError(t, err)
+
+	dgst, err = Checksum(context.TODO(), ref, "foo")
+	assert.NoError(t, err)
+	assert.Equal(t, dgstFileData0, dgst)
+}
+
 func createRef(t *testing.T, cm cache.Manager, files []string) cache.ImmutableRef {
-	mref, err := cm.New(context.TODO(), nil)
+	mref, err := cm.New(context.TODO(), nil, cache.CachePolicyRetain)
 	require.NoError(t, err)
 
 	mounts, err := mref.Mount(context.TODO(), false)
