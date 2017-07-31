@@ -49,55 +49,54 @@ func TestChecksumBasicFile(t *testing.T) {
 	// for the digest values, the actual values are not important in development
 	// phase but consistency is
 
-	cc := newCacheContext(ref)
+	cc, err := newCacheContext(ref.Metadata())
+	assert.NoError(t, err)
 
-	_, err = cc.Checksum(context.TODO(), "nosuch")
+	_, err = cc.Checksum(context.TODO(), ref, "nosuch")
 	assert.Error(t, err)
 
-	dgst, err := cc.Checksum(context.TODO(), "foo")
+	dgst, err := cc.Checksum(context.TODO(), ref, "foo")
 	assert.NoError(t, err)
 
 	assert.Equal(t, dgstFileData0, dgst)
 
 	// second file returns different hash
-	dgst, err = cc.Checksum(context.TODO(), "bar")
+	dgst, err = cc.Checksum(context.TODO(), ref, "bar")
 	assert.NoError(t, err)
 
 	assert.Equal(t, digest.Digest("sha256:cb62966e6dc11e3252ce1a14ed51c6ed0cf112de9c5d23104dc6dcc708f914f1"), dgst)
 
 	// same file inside a directory
-	dgst, err = cc.Checksum(context.TODO(), "d0/abc")
+	dgst, err = cc.Checksum(context.TODO(), ref, "d0/abc")
 	assert.NoError(t, err)
 
 	assert.Equal(t, dgstFileData0, dgst)
 
 	// repeat because codepath is different
-	dgst, err = cc.Checksum(context.TODO(), "d0/abc")
+	dgst, err = cc.Checksum(context.TODO(), ref, "d0/abc")
 	assert.NoError(t, err)
 
 	assert.Equal(t, dgstFileData0, dgst)
 
 	// symlink to the same file is followed, returns same hash
-	dgst, err = cc.Checksum(context.TODO(), "d0/def")
+	dgst, err = cc.Checksum(context.TODO(), ref, "d0/def")
 	assert.NoError(t, err)
 
 	assert.Equal(t, dgstFileData0, dgst)
 
-	_, err = cc.Checksum(context.TODO(), "d0/ghi")
+	_, err = cc.Checksum(context.TODO(), ref, "d0/ghi")
 	assert.Error(t, err)
 	assert.Equal(t, errNotFound, errors.Cause(err))
 
-	dgst, err = cc.Checksum(context.TODO(), "/")
+	dgst, err = cc.Checksum(context.TODO(), ref, "/")
 	assert.NoError(t, err)
 
 	assert.Equal(t, digest.Digest("sha256:0d87c8c2a606f961483cd4c5dc0350a4136a299b4066eea4a969d6ed756614cd"), dgst)
 
-	dgst, err = cc.Checksum(context.TODO(), "d0")
+	dgst, err = cc.Checksum(context.TODO(), ref, "d0")
 	assert.NoError(t, err)
 
 	assert.Equal(t, dgstDirD0, dgst)
-
-	cc.clean()
 
 	err = ref.Release(context.TODO())
 	require.NoError(t, err)
@@ -111,14 +110,13 @@ func TestChecksumBasicFile(t *testing.T) {
 
 	ref = createRef(t, cm, ch)
 
-	cc = newCacheContext(ref)
+	cc, err = newCacheContext(ref.Metadata())
+	assert.NoError(t, err)
 
-	dgst, err = cc.Checksum(context.TODO(), "/")
+	dgst, err = cc.Checksum(context.TODO(), ref, "/")
 	assert.NoError(t, err)
 
 	assert.Equal(t, dgstDirD0, dgst)
-
-	cc.clean()
 
 	err = ref.Release(context.TODO())
 	require.NoError(t, err)
@@ -131,15 +129,14 @@ func TestChecksumBasicFile(t *testing.T) {
 
 	ref = createRef(t, cm, ch)
 
-	cc = newCacheContext(ref)
+	cc, err = newCacheContext(ref.Metadata())
+	assert.NoError(t, err)
 
-	dgst, err = cc.Checksum(context.TODO(), "/")
+	dgst, err = cc.Checksum(context.TODO(), ref, "/")
 	assert.NoError(t, err)
 
 	assert.Equal(t, dgstDirD0Modified, dgst)
 	assert.NotEqual(t, dgstDirD0, dgst)
-
-	cc.clean()
 
 	err = ref.Release(context.TODO())
 	require.NoError(t, err)
@@ -158,25 +155,23 @@ func TestChecksumBasicFile(t *testing.T) {
 
 	ref = createRef(t, cm, ch)
 
-	cc = newCacheContext(ref)
+	cc, err = newCacheContext(ref.Metadata())
+	assert.NoError(t, err)
 
-	dgst, err = cc.Checksum(context.TODO(), "abc/aa/foo")
+	dgst, err = cc.Checksum(context.TODO(), ref, "abc/aa/foo")
 	assert.NoError(t, err)
 
 	assert.Equal(t, digest.Digest("sha256:e1e22281a1ebb637e46aa0781c7fceaca817f1268dd2047dfbce4a23a6cf50ad"), dgst)
 	assert.NotEqual(t, dgstDirD0, dgst)
 
 	// this will force rescan
-	dgst, err = cc.Checksum(context.TODO(), "d0")
+	dgst, err = cc.Checksum(context.TODO(), ref, "d0")
 	assert.NoError(t, err)
 
 	assert.Equal(t, dgstDirD0, dgst)
 
-	cc.clean()
-
 	err = ref.Release(context.TODO())
 	require.NoError(t, err)
-
 }
 
 func TestHandleChange(t *testing.T) {
@@ -201,24 +196,25 @@ func TestHandleChange(t *testing.T) {
 	// for the digest values, the actual values are not important in development
 	// phase but consistency is
 
-	cc := newCacheContext(ref)
+	cc, err := newCacheContext(ref.Metadata())
+	assert.NoError(t, err)
 
 	err = emit(cc.HandleChange, changeStream(ch))
 	assert.NoError(t, err)
 
-	dgstFoo, err := cc.Checksum(context.TODO(), "foo")
+	dgstFoo, err := cc.Checksum(context.TODO(), ref, "foo")
 	assert.NoError(t, err)
 
 	assert.Equal(t, dgstFileData0, dgstFoo)
 
 	// symlink to the same file is followed, returns same hash
-	dgst, err := cc.Checksum(context.TODO(), "d0/def")
+	dgst, err := cc.Checksum(context.TODO(), ref, "d0/def")
 	assert.NoError(t, err)
 
 	assert.Equal(t, dgstFoo, dgst)
 
 	// symlink to the same file is followed, returns same hash
-	dgst, err = cc.Checksum(context.TODO(), "d0")
+	dgst, err = cc.Checksum(context.TODO(), ref, "d0")
 	assert.NoError(t, err)
 
 	assert.Equal(t, dgstDirD0, dgst)
@@ -230,7 +226,7 @@ func TestHandleChange(t *testing.T) {
 	err = emit(cc.HandleChange, changeStream(ch))
 	assert.NoError(t, err)
 
-	dgst, err = cc.Checksum(context.TODO(), "d0")
+	dgst, err = cc.Checksum(context.TODO(), ref, "d0")
 	assert.NoError(t, err)
 	assert.Equal(t, dgstDirD0Modified, dgst)
 
@@ -241,15 +237,13 @@ func TestHandleChange(t *testing.T) {
 	err = emit(cc.HandleChange, changeStream(ch))
 	assert.NoError(t, err)
 
-	_, err = cc.Checksum(context.TODO(), "d0")
+	_, err = cc.Checksum(context.TODO(), ref, "d0")
 	assert.Error(t, err)
 	assert.Equal(t, errNotFound, errors.Cause(err))
 
-	_, err = cc.Checksum(context.TODO(), "d0/abc")
+	_, err = cc.Checksum(context.TODO(), ref, "d0/abc")
 	assert.Error(t, err)
 	assert.Equal(t, errNotFound, errors.Cause(err))
-
-	cc.clean()
 
 	err = ref.Release(context.TODO())
 	require.NoError(t, err)
