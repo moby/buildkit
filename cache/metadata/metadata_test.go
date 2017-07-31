@@ -164,3 +164,43 @@ func TestIndexes(t *testing.T) {
 
 	require.Equal(t, sis[0].ID(), "foo3")
 }
+
+func TestExternalData(t *testing.T) {
+	tmpdir, err := ioutil.TempDir("", "buildkit-storage")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	dbPath := filepath.Join(tmpdir, "storage.db")
+
+	s, err := NewStore(dbPath)
+	require.NoError(t, err)
+	defer s.Close()
+
+	si, ok := s.Get("foo")
+	require.False(t, ok)
+
+	err = si.SetExternal("ext1", []byte("data"))
+	require.NoError(t, err)
+
+	dt, err := si.GetExternal("ext1")
+	require.NoError(t, err)
+	require.Equal(t, "data", string(dt))
+
+	si, ok = s.Get("bar")
+	require.False(t, ok)
+
+	_, err = si.GetExternal("ext1")
+	require.Error(t, err)
+
+	si, _ = s.Get("foo")
+	dt, err = si.GetExternal("ext1")
+	require.NoError(t, err)
+	require.Equal(t, "data", string(dt))
+
+	err = s.Clear("foo")
+	require.NoError(t, err)
+
+	si, _ = s.Get("foo")
+	_, err = si.GetExternal("ext1")
+	require.Error(t, err)
+}
