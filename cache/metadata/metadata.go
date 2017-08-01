@@ -10,8 +10,9 @@ import (
 )
 
 const (
-	mainBucket  = "_main"
-	indexBucket = "_index"
+	mainBucket     = "_main"
+	indexBucket    = "_index"
+	externalBucket = "_external"
 )
 
 var errNotFound = errors.Errorf("not found")
@@ -104,6 +105,10 @@ func (s *Store) View(id string, fn func(b *bolt.Bucket) error) error {
 
 func (s *Store) Clear(id string) error {
 	return s.db.Update(func(tx *bolt.Tx) error {
+		external := tx.Bucket([]byte(externalBucket))
+		if external != nil {
+			external.DeleteBucket([]byte(id))
+		}
 		main := tx.Bucket([]byte(mainBucket))
 		if main == nil {
 			return nil
@@ -224,6 +229,43 @@ func (s *StorageItem) Get(k string) *Value {
 	return s.values[k]
 }
 
+func (s *StorageItem) GetExternal(k string) ([]byte, error) {
+	var dt []byte
+	err := s.storage.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(externalBucket))
+		if b == nil {
+			return errors.WithStack(errNotFound)
+		}
+		b = b.Bucket([]byte(s.id))
+		if b == nil {
+			return errors.WithStack(errNotFound)
+		}
+		dt = b.Get([]byte(k))
+		if dt == nil {
+			return errors.WithStack(errNotFound)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return dt, nil
+}
+
+func (s *StorageItem) SetExternal(k string, dt []byte) error {
+	return s.storage.db.Update(func(tx *bolt.Tx) error {
+		b, err := tx.CreateBucketIfNotExists([]byte(externalBucket))
+		if err != nil {
+			return err
+		}
+		b, err = b.CreateBucketIfNotExists([]byte(s.id))
+		if err != nil {
+			return err
+		}
+		return b.Put([]byte(k), dt)
+	})
+}
+
 func (s *StorageItem) Queue(fn func(b *bolt.Bucket) error) {
 	s.queue = append(s.queue, fn)
 }
@@ -280,7 +322,6 @@ func (s *StorageItem) SetValue(b *bolt.Bucket, key string, v *Value) error {
 type Value struct {
 	Value json.RawMessage `json:"value,omitempty"`
 	Index string          `json:"index,omitempty"`
-	// External bool
 }
 
 func NewValue(v interface{}) (*Value, error) {

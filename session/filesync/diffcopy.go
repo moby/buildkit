@@ -25,6 +25,6 @@ func recvDiffCopy(ds grpc.Stream, dest string, cu CacheUpdater, progress progres
 		cu.MarkSupported(true)
 		cf = cu.HandleChange
 	}
-
-	return fsutil.Receive(ds.Context(), ds, dest, cf, progress)
+	_ = cf
+	return fsutil.Receive(ds.Context(), ds, dest, nil, nil, progress)
 }
