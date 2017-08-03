@@ -65,6 +65,14 @@ func (c *Client) Solve(ctx context.Context, r io.Reader, opt SolveOpt, statusCha
 		s.Allow(filesync.NewFSSyncProvider(syncedDirs))
 	}
 
+	if opt.Exporter == ExporterLocal {
+		outputDir, ok := opt.ExporterAttrs[exporterLocalOutputDir]
+		if !ok {
+			return errors.Errorf("output directory is required for local exporter")
+		}
+		s.Allow(filesync.NewFSSyncTarget(outputDir))
+	}
+
 	eg.Go(func() error {
 		return s.Run(ctx, grpchijack.Dialer(c.controlClient()))
 	})

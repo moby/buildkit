@@ -203,9 +203,6 @@ func (s *Solver) walkVertex(ctx context.Context, g *vertex, index Index, fn func
 	inputCacheKeys := make([][]digest.Digest, len(g.inputs))
 	walkerStopped := false
 
-	inputCtx, cancelInputCtx := context.WithCancel(ctx)
-	defer cancelInputCtx()
-
 	inputRefs := make([]Reference, len(g.inputs))
 
 	defer func() {
@@ -218,6 +215,8 @@ func (s *Solver) walkVertex(ctx context.Context, g *vertex, index Index, fn func
 
 	if len(g.inputs) > 0 {
 		eg, ctx := errgroup.WithContext(ctx)
+		inputCtx, cancelInputCtx := context.WithCancel(ctx)
+		defer cancelInputCtx()
 		for i, in := range g.inputs {
 			func(i int, in *input) {
 				eg.Go(func() error {

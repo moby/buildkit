@@ -82,6 +82,8 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		return nil, errors.Wrap(err, "failed to load")
 	}
 
+	ctx = session.NewContext(ctx, req.Session)
+
 	var expi exporter.ExporterInstance
 	if req.Exporter != "" {
 		exp, ok := c.opt.Exporters[req.Exporter]
@@ -93,8 +95,6 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 			return nil, err
 		}
 	}
-
-	ctx = session.NewContext(ctx, req.Session)
 
 	if err := c.solver.Solve(ctx, req.Ref, v, expi); err != nil {
 		return nil, err

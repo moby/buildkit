@@ -24,8 +24,7 @@ func main() {
 	flag.Parse()
 
 	bk := buildkit(opt)
-	out := bk.Run(llb.Shlex("ls -l /bin")) // debug output
-
+	out := bk
 	dt, err := out.Marshal()
 	if err != nil {
 		panic(err)
@@ -89,17 +88,17 @@ func buildkit(opt buildOpt) llb.State {
 
 	buildctl := run(llb.Shlex("go build -o /out/buildctl ./cmd/buildctl"))
 
-	r := llb.Image("docker.io/library/alpine:latest").With(
-		copyAll(buildctl, "/bin"),
-		copyAll(runc(opt.runc), "/bin"),
+	r := llb.Scratch().With(
+		copyAll(buildctl, "/"),
+		copyAll(runc(opt.runc), "/"),
 	)
 
 	if opt.target == "containerd" {
 		return r.With(
-			copyAll(containerd(opt.containerd), "/bin"),
-			copyAll(builddContainerd, "/bin"))
+			copyAll(containerd(opt.containerd), "/"),
+			copyAll(builddContainerd, "/"))
 	}
-	return r.With(copyAll(builddStandalone, "/bin"))
+	return r.With(copyAll(builddStandalone, "/"))
 }
 
 func copyAll(src llb.State, destPath string) llb.StateOption {
