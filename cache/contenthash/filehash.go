@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/stevvooe/continuity/sysx"
 	"github.com/tonistiigi/fsutil"
 )
 
@@ -30,22 +29,9 @@ func NewFileHash(path string, fi os.FileInfo) (hash.Hash, error) {
 		Linkname: link,
 	}
 
-	setUnixOpt(fi, stat)
-
-	attrs, err := sysx.LListxattr(path)
-	if err != nil {
+	if err := setUnixOpt(path, fi, stat); err != nil {
 		return nil, err
 	}
-	if len(attrs) > 0 {
-		stat.Xattrs = map[string][]byte{}
-		for _, attr := range attrs {
-			v, err := sysx.LGetxattr(path, attr)
-			if err == nil {
-				stat.Xattrs[attr] = v
-			}
-		}
-	}
-
 	return NewFromStat(stat)
 }
 
