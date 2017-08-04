@@ -18,5 +18,6 @@ func chmodWindowsTarEntry(perm os.FileMode) os.FileMode {
 	return perm
 }
 
-func setUnixOpt(fi os.FileInfo, stat *fsutil.Stat) {
+func setUnixOpt(path string, fi os.FileInfo, stat *fsutil.Stat) error {
+	return nil
 }
