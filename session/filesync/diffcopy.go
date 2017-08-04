@@ -21,10 +21,11 @@ func recvDiffCopy(ds grpc.Stream, dest string, cu CacheUpdater, progress progres
 		logrus.Debugf("diffcopy took: %v", time.Since(st))
 	}()
 	var cf fsutil.ChangeFunc
+	var ch fsutil.ContentHasher
 	if cu != nil {
 		cu.MarkSupported(true)
 		cf = cu.HandleChange
+		ch = cu.ContentHasher()
 	}
-	_ = cf
-	return fsutil.Receive(ds.Context(), ds, dest, nil, nil, progress)
+	return fsutil.Receive(ds.Context(), ds, dest, cf, ch, progress)
 }

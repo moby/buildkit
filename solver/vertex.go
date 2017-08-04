@@ -22,14 +22,16 @@ type Vertex interface {
 	Name() string // change this to general metadata
 }
 
+type Index int
+
 // Input is an pointer to a single reference from a vertex by an index.
 type Input struct {
-	Index  int
+	Index  Index
 	Vertex Vertex
 }
 
 type input struct {
-	index  int
+	index  Index
 	vertex *vertex
 }
 

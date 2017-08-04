@@ -6,6 +6,7 @@ import (
 
 	"github.com/boltdb/bolt"
 	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/cache/contenthash"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/filesync"
@@ -14,6 +15,7 @@ import (
 	"github.com/moby/buildkit/util/progress"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"github.com/tonistiigi/fsutil"
 	"golang.org/x/net/context"
 	"golang.org/x/time/rate"
 )
@@ -139,12 +141,17 @@ func (ls *localSourceHandler) Snapshot(ctx context.Context) (out cache.Immutable
 		}
 	}()
 
+	cc, err := contenthash.GetCacheContext(ctx, mutable.Metadata())
+	if err != nil {
+		return nil, err
+	}
+
 	opt := filesync.FSSendRequestOpt{
 		Name:             ls.src.Name,
 		IncludePatterns:  nil,
 		OverrideExcludes: false,
 		DestDir:          dest,
-		CacheUpdater:     nil,
+		CacheUpdater:     &cacheUpdater{cc},
 		ProgressCb:       newProgressHandler(ctx, "transferring "+ls.src.Name+":"),
 	}
 
@@ -156,6 +163,10 @@ func (ls *localSourceHandler) Snapshot(ctx context.Context) (out cache.Immutable
 		return nil, err
 	}
 	lm = nil
+
+	if err := contenthash.SetCacheContext(ctx, mutable.Metadata(), cc); err != nil {
+		return nil, err
+	}
 
 	// skip storing snapshot by the shared key if it already exists
 	skipStoreSharedKey := false
@@ -185,6 +196,7 @@ func (ls *localSourceHandler) Snapshot(ctx context.Context) (out cache.Immutable
 	if err != nil {
 		return nil, err
 	}
+
 	mutable = nil // avoid deferred cleanup
 
 	return snap, nil
@@ -212,4 +224,15 @@ func newProgressHandler(ctx context.Context, id string) func(int, bool) {
 			}
 		}
 	}
+}
+
+type cacheUpdater struct {
+	contenthash.CacheContext
+}
+
+func (cu *cacheUpdater) MarkSupported(bool) {
+}
+
+func (cu *cacheUpdater) ContentHasher() fsutil.ContentHasher {
+	return contenthash.NewFromStat
 }

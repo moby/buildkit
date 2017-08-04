@@ -7,13 +7,17 @@ import (
 	"strings"
 
 	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/cache/contenthash"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/progress/logs"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
+	"golang.org/x/sync/errgroup"
 )
+
+const execCacheType = "buildkit.exec.v0"
 
 type execOp struct {
 	op *pb.ExecOp
@@ -29,25 +33,19 @@ func newExecOp(_ Vertex, op *pb.Op_Exec, cm cache.Manager, w worker.Worker) (Op,
 	}, nil
 }
 
-func (e *execOp) CacheKey(ctx context.Context, inputs []string) (string, int, error) {
+func (e *execOp) CacheKey(ctx context.Context) (digest.Digest, error) {
 	dt, err := json.Marshal(struct {
-		Inputs []string
-		Exec   *pb.ExecOp
+		Type string
+		Exec *pb.ExecOp
 	}{
-		Inputs: inputs,
-		Exec:   e.op,
+		Type: execCacheType,
+		Exec: e.op,
 	})
 	if err != nil {
-		return "", 0, err
-	}
-	numRefs := 0
-	for _, m := range e.op.Mounts {
-		if m.Output != pb.SkipOutput {
-			numRefs++
-		}
+		return "", err
 	}
 
-	return digest.FromBytes(dt).String(), numRefs, nil
+	return digest.FromBytes(dt), nil
 }
 
 func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, error) {
@@ -129,4 +127,75 @@ func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, erro
 		outputs[i] = nil
 	}
 	return refs, nil
+}
+
+func (e *execOp) ContentKeys(ctx context.Context, inputs [][]digest.Digest, refs []Reference) ([]digest.Digest, error) {
+	if len(refs) == 0 {
+		return nil, nil
+	}
+	// contentKey for exec uses content based checksum for mounts and definition
+	// based checksum for root
+
+	rootIndex := -1
+	skip := true
+	srcs := make([]string, len(refs))
+	for _, m := range e.op.Mounts {
+		if m.Input != pb.Empty {
+			if m.Dest != pb.RootMount {
+				srcs[int(m.Input)] = "/" // TODO: selector
+				skip = false
+			} else {
+				rootIndex = int(m.Input)
+			}
+		}
+	}
+	if skip {
+		return nil, nil
+	}
+
+	dgsts := make([]digest.Digest, len(refs))
+	eg, ctx := errgroup.WithContext(ctx)
+	for i, ref := range refs {
+		if srcs[i] == "" {
+			continue
+		}
+		func(i int, ref Reference) {
+			eg.Go(func() error {
+				ref, ok := toImmutableRef(ref)
+				if !ok {
+					return errors.Errorf("invalid reference")
+				}
+				dgst, err := contenthash.Checksum(ctx, ref, srcs[i])
+				if err != nil {
+					return err
+				}
+				dgsts[i] = dgst
+				return nil
+			})
+		}(i, ref)
+	}
+	if err := eg.Wait(); err != nil {
+		return nil, err
+	}
+
+	var out []digest.Digest
+	for _, cacheKeys := range inputs {
+		dt, err := json.Marshal(struct {
+			Type    string
+			Sources []digest.Digest
+			Root    digest.Digest
+			Exec    *pb.ExecOp
+		}{
+			Type:    execCacheType,
+			Sources: dgsts,
+			Root:    cacheKeys[rootIndex],
+			Exec:    e.op,
+		})
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, digest.FromBytes(dt))
+	}
+
+	return out, nil
 }

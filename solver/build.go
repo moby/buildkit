@@ -15,6 +15,8 @@ import (
 	"golang.org/x/net/context"
 )
 
+const buildCacheType = "buildkit.build.v0"
+
 type buildOp struct {
 	op *pb.BuildOp
 	s  *Solver
@@ -29,18 +31,18 @@ func newBuildOp(v Vertex, op *pb.Op_Build, s *Solver) (Op, error) {
 	}, nil
 }
 
-func (b *buildOp) CacheKey(ctx context.Context, inputs []string) (string, int, error) {
+func (b *buildOp) CacheKey(ctx context.Context) (digest.Digest, error) {
 	dt, err := json.Marshal(struct {
-		Inputs []string
-		Exec   *pb.BuildOp
+		Type string
+		Exec *pb.BuildOp
 	}{
-		Inputs: inputs,
-		Exec:   b.op,
+		Type: buildCacheType,
+		Exec: b.op,
 	})
 	if err != nil {
-		return "", 0, err
+		return "", err
 	}
-	return digest.FromBytes(dt).String(), 1, nil // TODO: other builders should support many outputs
+	return digest.FromBytes(dt), nil
 }
 
 func (b *buildOp) Run(ctx context.Context, inputs []Reference) (outputs []Reference, retErr error) {
@@ -125,17 +127,14 @@ func (b *buildOp) Run(ctx context.Context, inputs []Reference) (outputs []Refere
 	pw, _, ctx := progress.FromContext(ctx, progress.WithMetadata("parentVertex", b.v.Digest()))
 	defer pw.Close()
 
-	refs, err := b.s.getRefs(ctx, vv)
-
-	// filer out only the required ref
-	var out Reference
-	for i, r := range refs {
-		if i == index {
-			out = r
-		} else {
-			go r.Release(context.TODO())
-		}
+	newref, err := b.s.getRef(ctx, vv, index)
+	if err != nil {
+		return nil, err
 	}
 
-	return []Reference{out}, err
+	return []Reference{newref}, err
+}
+
+func (b *buildOp) ContentKeys(context.Context, [][]digest.Digest, []Reference) ([]digest.Digest, error) {
+	return nil, nil
 }

@@ -28,6 +28,7 @@ type MutableRef interface {
 	Commit(context.Context) (ImmutableRef, error)
 	Release(context.Context) error
 	Size(ctx context.Context) (int64, error)
+	Metadata() *metadata.StorageItem
 }
 
 type Mountable interface {

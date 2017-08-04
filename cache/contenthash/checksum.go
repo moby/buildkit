@@ -47,12 +47,12 @@ func Checksum(ctx context.Context, ref cache.ImmutableRef, path string) (digest.
 	return getDefaultManager().Checksum(ctx, ref, path)
 }
 
-func GetCacheContext(ctx context.Context, ref cache.ImmutableRef) (CacheContext, error) {
-	return getDefaultManager().GetCacheContext(ctx, ref)
+func GetCacheContext(ctx context.Context, md *metadata.StorageItem) (CacheContext, error) {
+	return getDefaultManager().GetCacheContext(ctx, md)
 }
 
-func SetCacheContext(ctx context.Context, ref cache.ImmutableRef, cc CacheContext) error {
-	return getDefaultManager().SetCacheContext(ctx, ref, cc)
+func SetCacheContext(ctx context.Context, md *metadata.StorageItem, cc CacheContext) error {
+	return getDefaultManager().SetCacheContext(ctx, md, cc)
 }
 
 type CacheContext interface {
@@ -67,45 +67,57 @@ type Hashed interface {
 type cacheManager struct {
 	locker *locker.Locker
 	lru    *simplelru.LRU
+	lruMu  sync.Mutex
 }
 
 func (cm *cacheManager) Checksum(ctx context.Context, ref cache.ImmutableRef, p string) (digest.Digest, error) {
-	cc, err := cm.GetCacheContext(ctx, ref)
+	cc, err := cm.GetCacheContext(ctx, ensureOriginMetadata(ref.Metadata()))
 	if err != nil {
 		return "", nil
 	}
 	return cc.Checksum(ctx, ref, p)
 }
 
-func (cm *cacheManager) GetCacheContext(ctx context.Context, ref cache.ImmutableRef) (CacheContext, error) {
-	cm.locker.Lock(ref.ID())
-	v, ok := cm.lru.Get(ref.ID())
+func (cm *cacheManager) GetCacheContext(ctx context.Context, md *metadata.StorageItem) (CacheContext, error) {
+	cm.locker.Lock(md.ID())
+	cm.lruMu.Lock()
+	v, ok := cm.lru.Get(md.ID())
+	cm.lruMu.Unlock()
 	if ok {
-		cm.locker.Unlock(ref.ID())
+		cm.locker.Unlock(md.ID())
 		return v.(*cacheContext), nil
 	}
-	cc, err := newCacheContext(ref.Metadata())
+	cc, err := newCacheContext(md)
 	if err != nil {
-		cm.locker.Unlock(ref.ID())
+		cm.locker.Unlock(md.ID())
 		return nil, err
 	}
-	cm.lru.Add(ref.ID(), cc)
-	cm.locker.Unlock(ref.ID())
+	cm.lruMu.Lock()
+	cm.lru.Add(md.ID(), cc)
+	cm.lruMu.Unlock()
+	cm.locker.Unlock(md.ID())
 	return cc, nil
 }
 
-func (cm *cacheManager) SetCacheContext(ctx context.Context, ref cache.ImmutableRef, cci CacheContext) error {
+func (cm *cacheManager) SetCacheContext(ctx context.Context, md *metadata.StorageItem, cci CacheContext) error {
 	cc, ok := cci.(*cacheContext)
 	if !ok {
 		return errors.Errorf("invalid cachecontext: %T", cc)
 	}
-	if ref.ID() != cc.md.ID() {
-		return errors.New("saving cachecontext under different ID not supported")
+	if md.ID() != cc.md.ID() {
+		cc = &cacheContext{
+			md:       md,
+			tree:     cci.(*cacheContext).tree,
+			dirtyMap: map[string]struct{}{},
+		}
+	} else {
+		if err := cc.save(); err != nil {
+			return err
+		}
 	}
-	if err := cc.save(); err != nil {
-		return err
-	}
-	cm.lru.Add(ref.ID(), cc)
+	cm.lruMu.Lock()
+	cm.lru.Add(md.ID(), cc)
+	cm.lruMu.Unlock()
 	return nil
 }
 
@@ -193,7 +205,9 @@ func (cc *cacheContext) save() error {
 	cc.mu.Lock()
 	defer cc.mu.Unlock()
 
-	cc.dirty = true
+	if cc.txn != nil {
+		cc.commitActiveTransaction()
+	}
 
 	var l CacheRecords
 	node := cc.tree.Root()
@@ -231,10 +245,23 @@ func (cc *cacheContext) HandleChange(kind fsutil.ChangeKind, p string, fi os.Fil
 	}
 
 	cc.mu.Lock()
+	defer cc.mu.Unlock()
 	if cc.txn == nil {
 		cc.txn = cc.tree.Txn()
 		cc.node = cc.tree.Root()
+
+		// root is not called by HandleChange. need to fake it
+		if _, ok := cc.node.Get([]byte("/")); !ok {
+			cc.txn.Insert([]byte("/"), &CacheRecord{
+				Type:   CacheRecordTypeDirHeader,
+				Digest: digest.FromBytes(nil),
+			})
+			cc.txn.Insert([]byte(""), &CacheRecord{
+				Type: CacheRecordTypeDir,
+			})
+		}
 	}
+
 	if kind == fsutil.ChangeKindDelete {
 		v, ok := cc.txn.Delete(k)
 		if ok {
@@ -245,7 +272,6 @@ func (cc *cacheContext) HandleChange(kind fsutil.ChangeKind, p string, fi os.Fil
 			d = ""
 		}
 		cc.dirtyMap[d] = struct{}{}
-		cc.mu.Unlock()
 		return
 	}
 
@@ -256,7 +282,6 @@ func (cc *cacheContext) HandleChange(kind fsutil.ChangeKind, p string, fi os.Fil
 
 	h, ok := fi.(Hashed)
 	if !ok {
-		cc.mu.Unlock()
 		return errors.Errorf("invalid fileinfo: %s", p)
 	}
 
@@ -287,7 +312,6 @@ func (cc *cacheContext) HandleChange(kind fsutil.ChangeKind, p string, fi os.Fil
 		d = ""
 	}
 	cc.dirtyMap[d] = struct{}{}
-	cc.mu.Unlock()
 
 	return nil
 }
@@ -405,12 +429,12 @@ func (cc *cacheContext) checksum(ctx context.Context, root *iradix.Node, txn *ir
 	switch cr.Type {
 	case CacheRecordTypeDir:
 		h := sha256.New()
-		iter := root.Iterator()
 		next := append(k, []byte("/")...)
-		iter.SeekPrefix(next)
+		iter := root.Seek(next)
+		subk := next
+		ok := true
 		for {
-			subk, _, ok := iter.Next()
-			if !ok || bytes.Compare(next, subk) > 0 {
+			if !ok || !bytes.HasPrefix(subk, next) {
 				break
 			}
 			h.Write(bytes.TrimPrefix(subk, k))
@@ -422,9 +446,10 @@ func (cc *cacheContext) checksum(ctx context.Context, root *iradix.Node, txn *ir
 
 			h.Write([]byte(subcr.Digest))
 			if subcr.Type == CacheRecordTypeDir { // skip subfiles
-				next = append(k, []byte("/\xff")...)
-				iter.SeekPrefix(next)
+				next := append(subk, []byte("/\xff")...)
+				iter = root.Seek(next)
 			}
+			subk, _, ok = iter.Next()
 		}
 		dgst = digest.NewDigest(digest.SHA256, h)
 	default:
@@ -564,4 +589,20 @@ func addParentToMap(d string, m map[string]struct{}) {
 	}
 	m[d] = struct{}{}
 	addParentToMap(d, m)
+}
+
+func ensureOriginMetadata(md *metadata.StorageItem) *metadata.StorageItem {
+	v := md.Get("cache.equalMutable") // TODO: const
+	if v == nil {
+		return md
+	}
+	var mutable string
+	if err := v.Unmarshal(&mutable); err != nil {
+		return md
+	}
+	si, ok := md.Storage().Get(mutable)
+	if ok {
+		return &si
+	}
+	return md
 }

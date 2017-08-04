@@ -70,7 +70,7 @@ func loadLLBVertexRecursive(dgst digest.Digest, op *pb.Op, all map[digest.Digest
 		if err != nil {
 			return nil, err
 		}
-		vtx.inputs = append(vtx.inputs, &input{index: int(in.Index), vertex: sub})
+		vtx.inputs = append(vtx.inputs, &input{index: Index(in.Index), vertex: sub})
 	}
 	vtx.initClientVertex()
 	cache[dgst] = vtx

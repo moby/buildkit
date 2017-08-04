@@ -5,8 +5,11 @@ import (
 
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/source"
+	digest "github.com/opencontainers/go-digest"
 	"golang.org/x/net/context"
 )
+
+const sourceCacheType = "buildkit.source.v0"
 
 type sourceOp struct {
 	mu  sync.Mutex
@@ -58,13 +61,16 @@ func (s *sourceOp) instance(ctx context.Context) (source.SourceInstance, error) 
 	return s.src, nil
 }
 
-func (s *sourceOp) CacheKey(ctx context.Context, _ []string) (string, int, error) {
+func (s *sourceOp) CacheKey(ctx context.Context) (digest.Digest, error) {
 	src, err := s.instance(ctx)
 	if err != nil {
-		return "", 0, err
+		return "", err
 	}
 	k, err := src.CacheKey(ctx)
-	return k, 1, err
+	if err != nil {
+		return "", err
+	}
+	return digest.FromBytes([]byte(sourceCacheType + ":" + k)), nil
 }
 
 func (s *sourceOp) Run(ctx context.Context, _ []Reference) ([]Reference, error) {
@@ -77,4 +83,8 @@ func (s *sourceOp) Run(ctx context.Context, _ []Reference) ([]Reference, error) 
 		return nil, err
 	}
 	return []Reference{ref}, nil
+}
+
+func (s *sourceOp) ContentKeys(context.Context, [][]digest.Digest, []Reference) ([]digest.Digest, error) {
+	return nil, nil
 }
