@@ -3,5 +3,4 @@
 set -eu -o pipefail -x
 
 ./hack/test-unit
-./hack/test-binaries
 ./hack/test-integration

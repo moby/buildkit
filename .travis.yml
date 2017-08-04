@@ -7,6 +7,4 @@ install:
   - curl -fsSL https://get.docker.com/ | sh
 
 script:
-  - ./hack/test
-  - ./hack/lint
-  - ./hack/validate-vendor
+  - make binaries validate-all
