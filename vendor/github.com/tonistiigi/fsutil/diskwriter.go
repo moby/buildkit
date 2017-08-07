@@ -1,5 +1,3 @@
-// +build linux windows
-
 package fsutil
 
 import (
@@ -24,7 +22,10 @@ type DiskWriterOpt struct {
 	SyncDataCb    WriteToFunc
 	NotifyCb      func(ChangeKind, string, os.FileInfo, error) error
 	ContentHasher ContentHasher
+	Filter        FilterFunc
 }
+
+type FilterFunc func(*Stat) bool
 
 type DiskWriter struct {
 	opt  DiskWriterOpt
@@ -34,6 +35,7 @@ type DiskWriter struct {
 	ctx    context.Context
 	cancel func()
 	eg     *errgroup.Group
+	filter FilterFunc
 }
 
 func NewDiskWriter(ctx context.Context, dest string, opt DiskWriterOpt) (*DiskWriter, error) {
@@ -97,6 +99,12 @@ func (dw *DiskWriter) HandleChange(kind ChangeKind, p string, fi os.FileInfo, er
 	stat, ok := fi.Sys().(*Stat)
 	if !ok {
 		return errors.Errorf("%s invalid change without stat information", p)
+	}
+
+	if dw.filter != nil {
+		if ok := dw.filter(stat); !ok {
+			return nil
+		}
 	}
 
 	rename := true

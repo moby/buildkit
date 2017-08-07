@@ -202,3 +202,39 @@ func FSSync(ctx context.Context, c session.Caller, opt FSSendRequestOpt) error {
 
 	return pr.recvFn(stream, opt.DestDir, opt.CacheUpdater, opt.ProgressCb)
 }
+
+// NewFSSyncTarget allows writing into a directory
+func NewFSSyncTarget(outdir string) session.Attachable {
+	p := &fsSyncTarget{
+		outdir: outdir,
+	}
+	return p
+}
+
+type fsSyncTarget struct {
+	outdir string
+}
+
+func (sp *fsSyncTarget) Register(server *grpc.Server) {
+	RegisterFileSendServer(server, sp)
+}
+
+func (sp *fsSyncTarget) DiffCopy(stream FileSend_DiffCopyServer) error {
+	return syncTargetDiffCopy(stream, sp.outdir)
+}
+
+func CopyToCaller(ctx context.Context, srcPath string, c session.Caller, progress func(int, bool)) error {
+	method := session.MethodURL(_FileSend_serviceDesc.ServiceName, "diffcopy")
+	if !c.Supports(method) {
+		return errors.Errorf("method %s not supported by the client", method)
+	}
+
+	client := NewFileSendClient(c.Conn())
+
+	cc, err := client.DiffCopy(ctx)
+	if err != nil {
+		return err
+	}
+
+	return sendDiffCopy(cc, srcPath, nil, nil, progress)
+}

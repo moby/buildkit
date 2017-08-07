@@ -12,8 +12,10 @@ import (
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/instructioncache"
 	"github.com/moby/buildkit/cache/metadata"
+	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/exporter"
 	imageexporter "github.com/moby/buildkit/exporter/containerimage"
+	localexporter "github.com/moby/buildkit/exporter/local"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot/blobmapping"
 	"github.com/moby/buildkit/source"
@@ -21,8 +23,6 @@ import (
 	"github.com/moby/buildkit/source/git"
 	"github.com/moby/buildkit/source/local"
 )
-
-const keyImageExporter = "image"
 
 type pullDeps struct {
 	Snapshotter  ctdsnapshot.Snapshotter
@@ -114,7 +114,15 @@ func defaultControllerOpts(root string, pd pullDeps) (*Opt, error) {
 	if err != nil {
 		return nil, err
 	}
-	exporters[keyImageExporter] = imageExporter
+	exporters[client.ExporterImage] = imageExporter
+
+	localExporter, err := localexporter.New(localexporter.Opt{
+		SessionManager: sessm,
+	})
+	if err != nil {
+		return nil, err
+	}
+	exporters[client.ExporterLocal] = localExporter
 
 	return &Opt{
 		Snapshotter:      snapshotter,

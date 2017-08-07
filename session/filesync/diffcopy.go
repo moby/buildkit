@@ -1,6 +1,7 @@
 package filesync
 
 import (
+	"os"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -27,5 +28,27 @@ func recvDiffCopy(ds grpc.Stream, dest string, cu CacheUpdater, progress progres
 		cf = cu.HandleChange
 		ch = cu.ContentHasher()
 	}
-	return fsutil.Receive(ds.Context(), ds, dest, cf, ch, progress)
+	return fsutil.Receive(ds.Context(), ds, dest, fsutil.ReceiveOpt{
+		NotifyHashed:  cf,
+		ContentHasher: ch,
+		ProgressCb:    progress,
+	})
+}
+
+func syncTargetDiffCopy(ds grpc.Stream, dest string) error {
+	if err := os.MkdirAll(dest, 0700); err != nil {
+		return err
+	}
+	return fsutil.Receive(ds.Context(), ds, dest, fsutil.ReceiveOpt{
+		Merge: true,
+		Filter: func() func(*fsutil.Stat) bool {
+			uid := os.Getuid()
+			gid := os.Getgid()
+			return func(st *fsutil.Stat) bool {
+				st.Uid = uint32(uid)
+				st.Gid = uint32(gid)
+				return true
+			}
+		}(),
+	})
 }
