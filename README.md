@@ -5,6 +5,12 @@
 
 ## BuildKit
 
+<!-- godoc is mainly for LLB stuff -->
+[![GoDoc](https://godoc.org/github.com/moby/buildkit?status.svg)](https://godoc.org/github.com/moby/buildkit/client/llb)
+[![Build Status](https://travis-ci.org/moby/buildkit.svg?branch=master)](https://travis-ci.org/moby/buildkit)
+[![Go Report Card](https://goreportcard.com/badge/github.com/moby/buildkit)](https://goreportcard.com/report/github.com/moby/buildkit)
+
+
 BuildKit is a toolkit for converting source code to build artifacts in an efficient, expressive and repeatable manner.
 
 Key features:
