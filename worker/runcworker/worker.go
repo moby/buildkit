@@ -56,6 +56,7 @@ func New(root string) (worker.Worker, error) {
 }
 
 func (w *runcworker) Exec(ctx context.Context, meta worker.Meta, root cache.Mountable, mounts []worker.Mount, stdout, stderr io.WriteCloser) error {
+
 	rootMount, err := root.Mount(ctx, false)
 	if err != nil {
 		return err
@@ -77,11 +78,11 @@ func (w *runcworker) Exec(ctx context.Context, meta worker.Meta, root cache.Moun
 		return err
 	}
 	defer f.Close()
-
-	spec, err := oci.GenerateSpec(ctx, meta, mounts)
+	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts)
 	if err != nil {
 		return err
 	}
+	defer cleanup()
 
 	if err := mount.MountAll(rootMount, rootFSPath); err != nil {
 		return err

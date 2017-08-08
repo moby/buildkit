@@ -91,7 +91,7 @@ func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, erro
 		if m.Dest == pb.RootMount {
 			root = mountable
 		} else {
-			mounts = append(mounts, worker.Mount{Src: mountable, Dest: m.Dest, Readonly: m.Readonly})
+			mounts = append(mounts, worker.Mount{Src: mountable, Dest: m.Dest, Readonly: m.Readonly, Selector: m.Selector})
 		}
 	}
 

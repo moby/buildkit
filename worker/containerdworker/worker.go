@@ -25,10 +25,11 @@ func New(client *containerd.Client) worker.Worker {
 func (w containerdWorker) Exec(ctx context.Context, meta worker.Meta, root cache.Mountable, mounts []worker.Mount, stdout, stderr io.WriteCloser) error {
 	id := identity.NewID()
 
-	spec, err := oci.GenerateSpec(ctx, meta, mounts)
+	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts)
 	if err != nil {
 		return err
 	}
+	defer cleanup()
 
 	rootMounts, err := root.Mount(ctx, false)
 	if err != nil {

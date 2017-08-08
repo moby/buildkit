@@ -18,6 +18,7 @@ type Meta struct {
 
 type Mount struct {
 	Src      cache.Mountable
+	Selector string
 	Dest     string
 	Readonly bool
 }
