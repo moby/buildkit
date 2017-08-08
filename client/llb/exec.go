@@ -32,6 +32,7 @@ type mount struct {
 	readonly bool
 	source   Output
 	output   Output
+	selector string
 	// hasOutput bool
 }
 
@@ -133,6 +134,7 @@ func (e *ExecOp) Marshal() ([]byte, error) {
 			Dest:     m.target,
 			Readonly: m.readonly,
 			Output:   pb.OutputIndex(i),
+			Selector: m.selector,
 		}
 		peo.Mounts = append(peo.Mounts, pm)
 	}
@@ -194,6 +196,12 @@ type MountOption func(*mount)
 
 func Readonly(m *mount) {
 	m.readonly = true
+}
+
+func SourcePath(src string) MountOption {
+	return func(m *mount) {
+		m.selector = src
+	}
 }
 
 type RunOption func(es ExecInfo) ExecInfo
