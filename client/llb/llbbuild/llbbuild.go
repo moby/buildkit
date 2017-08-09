@@ -21,8 +21,9 @@ func NewBuildOp(source llb.Output, opt ...BuildOption) llb.Vertex {
 }
 
 type build struct {
-	source llb.Output
-	info   *BuildInfo
+	source   llb.Output
+	info     *BuildInfo
+	cachedPB []byte
 }
 
 func (b *build) ToInput() (*pb.Input, error) {
@@ -43,6 +44,9 @@ func (b *build) Validate() error {
 }
 
 func (b *build) Marshal() ([]byte, error) {
+	if b.cachedPB != nil {
+		return b.cachedPB, nil
+	}
 	pbo := &pb.BuildOp{
 		Builder: pb.LLBBuilder,
 		Inputs: map[string]*pb.BuildInput{
@@ -68,7 +72,12 @@ func (b *build) Marshal() ([]byte, error) {
 
 	pop.Inputs = append(pop.Inputs, inp)
 
-	return pop.Marshal()
+	dt, err := pop.Marshal()
+	if err != nil {
+		return nil, err
+	}
+	b.cachedPB = dt
+	return dt, nil
 }
 
 func (b *build) Output() llb.Output {

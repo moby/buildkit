@@ -37,9 +37,10 @@ type mount struct {
 }
 
 type ExecOp struct {
-	root   Output
-	mounts []*mount
-	meta   Meta
+	root     Output
+	mounts   []*mount
+	meta     Meta
+	cachedPB []byte
 }
 
 func (e *ExecOp) AddMount(target string, source Output, opt ...MountOption) Output {
@@ -52,6 +53,7 @@ func (e *ExecOp) AddMount(target string, source Output, opt ...MountOption) Outp
 	}
 	e.mounts = append(e.mounts, m)
 	m.output = &output{vertex: e, getIndex: e.getMountIndexFn(m)}
+	e.cachedPB = nil
 	return m.output
 }
 
@@ -82,6 +84,9 @@ func (e *ExecOp) Validate() error {
 }
 
 func (e *ExecOp) Marshal() ([]byte, error) {
+	if e.cachedPB != nil {
+		return e.cachedPB, nil
+	}
 	if err := e.Validate(); err != nil {
 		return nil, err
 	}
@@ -139,7 +144,12 @@ func (e *ExecOp) Marshal() ([]byte, error) {
 		peo.Mounts = append(peo.Mounts, pm)
 	}
 
-	return pop.Marshal()
+	dt, err := pop.Marshal()
+	if err != nil {
+		return nil, err
+	}
+	e.cachedPB = dt
+	return dt, nil
 }
 
 func (e *ExecOp) Output() Output {
