@@ -47,23 +47,23 @@ func Attach(app *cli.App) {
 		}
 
 		if cpuProfile := clicontext.String("profile-cpu"); cpuProfile != "" {
-			stoppers = append(stoppers, profile.Start(profile.CPUProfile, profile.ProfilePath(cpuProfile)))
+			stoppers = append(stoppers, profile.Start(profile.CPUProfile, profile.ProfilePath(cpuProfile), profile.NoShutdownHook))
 		}
 
 		if memProfile := clicontext.String("profile-memory"); memProfile != "" {
-			stoppers = append(stoppers, profile.Start(profile.MemProfile, profile.ProfilePath(memProfile), profile.MemProfileRate(clicontext.Int("profile-memoryrate"))))
+			stoppers = append(stoppers, profile.Start(profile.MemProfile, profile.ProfilePath(memProfile), profile.NoShutdownHook, profile.MemProfileRate(clicontext.Int("profile-memoryrate"))))
 		}
 
 		if blockProfile := clicontext.String("profile-block"); blockProfile != "" {
-			stoppers = append(stoppers, profile.Start(profile.BlockProfile, profile.ProfilePath(blockProfile)))
+			stoppers = append(stoppers, profile.Start(profile.BlockProfile, profile.ProfilePath(blockProfile), profile.NoShutdownHook))
 		}
 
 		if mutexProfile := clicontext.String("profile-mutex"); mutexProfile != "" {
-			stoppers = append(stoppers, profile.Start(profile.MutexProfile, profile.ProfilePath(mutexProfile)))
+			stoppers = append(stoppers, profile.Start(profile.MutexProfile, profile.ProfilePath(mutexProfile), profile.NoShutdownHook))
 		}
 
 		if traceProfile := clicontext.String("profile-trace"); traceProfile != "" {
-			stoppers = append(stoppers, profile.Start(profile.TraceProfile, profile.ProfilePath(traceProfile)))
+			stoppers = append(stoppers, profile.Start(profile.TraceProfile, profile.ProfilePath(traceProfile), profile.NoShutdownHook))
 		}
 		return nil
 	}
