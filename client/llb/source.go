@@ -8,9 +8,10 @@ import (
 )
 
 type SourceOp struct {
-	id     string
-	attrs  map[string]string
-	output Output
+	id       string
+	attrs    map[string]string
+	output   Output
+	cachedPB []byte
 }
 
 func NewSource(id string, attrs map[string]string) *SourceOp {
@@ -30,6 +31,9 @@ func (s *SourceOp) Validate() error {
 }
 
 func (s *SourceOp) Marshal() ([]byte, error) {
+	if s.cachedPB != nil {
+		return s.cachedPB, nil
+	}
 	if err := s.Validate(); err != nil {
 		return nil, err
 	}
@@ -39,7 +43,12 @@ func (s *SourceOp) Marshal() ([]byte, error) {
 			Source: &pb.SourceOp{Identifier: s.id, Attrs: s.attrs},
 		},
 	}
-	return proto.Marshal()
+	dt, err := proto.Marshal()
+	if err != nil {
+		return nil, err
+	}
+	s.cachedPB = dt
+	return dt, nil
 }
 
 func (s *SourceOp) Output() Output {

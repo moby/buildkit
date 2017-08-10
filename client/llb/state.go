@@ -49,7 +49,7 @@ func (s State) Value(k interface{}) interface{} {
 }
 
 func (s State) Marshal() ([][]byte, error) {
-	list, err := marshal(s.Output().Vertex(), nil, map[digest.Digest]struct{}{})
+	list, err := marshal(s.Output().Vertex(), nil, map[digest.Digest]struct{}{}, map[Vertex]struct{}{})
 	if err != nil {
 		return nil, err
 	}
@@ -66,18 +66,23 @@ func (s State) Marshal() ([][]byte, error) {
 	return list, nil
 }
 
-func marshal(v Vertex, list [][]byte, cache map[digest.Digest]struct{}) (out [][]byte, err error) {
+func marshal(v Vertex, list [][]byte, cache map[digest.Digest]struct{}, vertexCache map[Vertex]struct{}) (out [][]byte, err error) {
 	for _, inp := range v.Inputs() {
 		var err error
-		list, err = marshal(inp.Vertex(), list, cache)
+		list, err = marshal(inp.Vertex(), list, cache, vertexCache)
 		if err != nil {
 			return nil, err
 		}
 	}
+	if _, ok := vertexCache[v]; ok {
+		return list, nil
+	}
+
 	dt, err := v.Marshal()
 	if err != nil {
 		return nil, err
 	}
+	vertexCache[v] = struct{}{}
 	dgst := digest.FromBytes(dt)
 	if _, ok := cache[dgst]; ok {
 		return list, nil
