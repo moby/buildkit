@@ -138,12 +138,18 @@ func (e *execOp) ContentKeys(ctx context.Context, inputs [][]digest.Digest, refs
 	// based checksum for root
 
 	skipped := make([]int, 0)
+
+	type src struct {
+		index    pb.InputIndex
+		selector string
+	}
+
 	skip := true
-	srcs := make([]string, len(refs))
+	srcsMap := make(map[src]struct{}, len(refs))
 	for _, m := range e.op.Mounts {
 		if m.Input != pb.Empty {
 			if m.Dest != pb.RootMount && m.Readonly { // could also include rw if they don't have a selector, but not sure if helps performance
-				srcs[int(m.Input)] = path.Join("/", m.Selector)
+				srcsMap[src{m.Input, path.Join("/", m.Selector)}] = struct{}{}
 				skip = false
 			} else {
 				skipped = append(skipped, int(m.Input))
@@ -154,26 +160,35 @@ func (e *execOp) ContentKeys(ctx context.Context, inputs [][]digest.Digest, refs
 		return nil, nil
 	}
 
-	dgsts := make([]digest.Digest, len(refs))
-	eg, ctx := errgroup.WithContext(ctx)
-	for i, ref := range refs {
-		if srcs[i] == "" {
-			continue
+	srcs := make([]src, 0, len(srcsMap))
+	for s := range srcsMap {
+		srcs = append(srcs, s)
+	}
+
+	sort.Slice(srcs, func(i, j int) bool {
+		if srcs[i].index == srcs[j].index {
+			return srcs[i].selector < srcs[j].selector
 		}
-		func(i int, ref Reference) {
+		return srcs[i].index < srcs[j].index
+	})
+
+	dgsts := make([]digest.Digest, len(srcs))
+	eg, ctx := errgroup.WithContext(ctx)
+	for i, s := range srcs {
+		func(i int, s src, ref Reference) {
 			eg.Go(func() error {
 				ref, ok := toImmutableRef(ref)
 				if !ok {
 					return errors.Errorf("invalid reference")
 				}
-				dgst, err := contenthash.Checksum(ctx, ref, srcs[i])
+				dgst, err := contenthash.Checksum(ctx, ref, s.selector)
 				if err != nil {
 					return err
 				}
 				dgsts[i] = dgst
 				return nil
 			})
-		}(i, ref)
+		}(i, s, refs[int(s.index)])
 	}
 	if err := eg.Wait(); err != nil {
 		return nil, err

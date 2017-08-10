@@ -9,7 +9,6 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver/pb"
-	"github.com/moby/buildkit/util/progress"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -124,10 +123,7 @@ func (b *buildOp) Run(ctx context.Context, inputs []Reference) (outputs []Refere
 
 	vv := toInternalVertex(v)
 
-	pw, _, ctx := progress.FromContext(ctx, progress.WithMetadata("parentVertex", b.v.Digest()))
-	defer pw.Close()
-
-	newref, err := b.s.getRef(ctx, vv, index)
+	newref, err := b.s.loadAndSolveChildVertex(ctx, b.v.Digest(), vv, index)
 	if err != nil {
 		return nil, err
 	}

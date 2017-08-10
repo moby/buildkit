@@ -177,7 +177,18 @@ func (c *call) Value(key interface{}) interface{} {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	for _, ctx := range append([]context.Context{c.progressCtx}, c.ctxs...) {
+
+	ctx := c.progressCtx
+	select {
+	case <-ctx.Done():
+	default:
+		if v := ctx.Value(key); v != nil {
+			return v
+		}
+	}
+
+	if len(c.ctxs) > 0 {
+		ctx = c.ctxs[0]
 		select {
 		case <-ctx.Done():
 		default:
@@ -186,6 +197,7 @@ func (c *call) Value(key interface{}) interface{} {
 			}
 		}
 	}
+
 	return nil
 }
 

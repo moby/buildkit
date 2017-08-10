@@ -43,6 +43,7 @@ type vertex struct {
 	digest       digest.Digest
 	clientVertex client.Vertex
 	name         string
+	notifyMu     sync.Mutex
 }
 
 func (v *vertex) initClientVertex() {
@@ -66,6 +67,7 @@ func (v *vertex) Sys() interface{} {
 }
 
 func (v *vertex) Inputs() (inputs []Input) {
+	inputs = make([]Input, 0, len(v.inputs))
 	for _, i := range v.inputs {
 		inputs = append(inputs, Input{i.index, i.vertex})
 	}
@@ -81,6 +83,7 @@ func (v *vertex) inputRequiresExport(i int) bool {
 }
 
 func (v *vertex) notifyStarted(ctx context.Context) {
+	v.recursiveMarkCached(ctx)
 	pw, _, _ := progress.FromContext(ctx)
 	defer pw.Close()
 	now := time.Now()
@@ -93,6 +96,7 @@ func (v *vertex) notifyCompleted(ctx context.Context, cached bool, err error) {
 	pw, _, _ := progress.FromContext(ctx)
 	defer pw.Close()
 	now := time.Now()
+	v.recursiveMarkCached(ctx)
 	if v.clientVertex.Started == nil {
 		v.clientVertex.Started = &now
 	}
@@ -106,9 +110,12 @@ func (v *vertex) notifyCompleted(ctx context.Context, cached bool, err error) {
 
 func (v *vertex) recursiveMarkCached(ctx context.Context) {
 	for _, inp := range v.inputs {
-		inp.vertex.recursiveMarkCached(ctx)
+		inp.vertex.notifyMu.Lock()
+		if inp.vertex.clientVertex.Started == nil {
+			inp.vertex.recursiveMarkCached(ctx)
+			inp.vertex.notifyCompleted(ctx, true, nil)
+		}
+		inp.vertex.notifyMu.Unlock()
 	}
-	if v.clientVertex.Started == nil {
-		v.notifyCompleted(ctx, true, nil)
-	}
+
 }

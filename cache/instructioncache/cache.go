@@ -1,7 +1,7 @@
 package instructioncache
 
 import (
-	"strings"
+	"bytes"
 
 	"github.com/boltdb/bolt"
 	"github.com/moby/buildkit/cache"
@@ -14,6 +14,8 @@ import (
 
 const cacheKey = "buildkit.instructioncache"
 const contentCacheKey = "buildkit.instructioncache.content"
+
+const mappingBucket = "_contentMapping"
 
 type LocalStore struct {
 	MetadataStore *metadata.Store
@@ -34,6 +36,9 @@ func (ls *LocalStore) Set(key digest.Digest, value interface{}) error {
 	return si.Update(func(b *bolt.Bucket) error {
 		return si.SetValue(b, v.Index, v)
 	})
+}
+func (ls *LocalStore) Probe(ctx context.Context, key digest.Digest) (bool, error) {
+	return ls.MetadataStore.Probe(index(key.String()))
 }
 
 func (ls *LocalStore) Lookup(ctx context.Context, key digest.Digest) (interface{}, error) {
@@ -60,42 +65,44 @@ func (ls *LocalStore) Lookup(ctx context.Context, key digest.Digest) (interface{
 	return nil, nil
 }
 
-func (ls *LocalStore) SetContentMapping(key digest.Digest, value interface{}) error {
-	ref, ok := value.(cache.ImmutableRef)
-	if !ok {
-		return errors.Errorf("invalid ref")
-	}
-	v, err := metadata.NewValue(ref.ID())
-	if err != nil {
-		return err
-	}
-	v.Index = contentIndex(key.String())
-	si, _ := ls.MetadataStore.Get(ref.ID())
-	return si.Update(func(b *bolt.Bucket) error {
-		return si.SetValue(b, v.Index, v)
+func (ls *LocalStore) SetContentMapping(contentKey, regularKey digest.Digest) error {
+	db := ls.MetadataStore.DB()
+	return db.Update(func(tx *bolt.Tx) error {
+		b, err := tx.CreateBucketIfNotExists([]byte(mappingBucket))
+		if err != nil {
+			return err
+		}
+		return b.Put([]byte(contentKey.String()+"::"+regularKey.String()), []byte{})
 	})
 }
 
 func (ls *LocalStore) GetContentMapping(key digest.Digest) ([]digest.Digest, error) {
-	snaps, err := ls.MetadataStore.Search(contentIndex(key.String()))
-	if err != nil {
-		return nil, err
-	}
-	var out []digest.Digest
-	for _, s := range snaps {
-		for _, k := range s.Keys() {
-			if strings.HasPrefix(k, index("")) {
-				out = append(out, digest.Digest(strings.TrimPrefix(k, index("")))) // TODO: type
+	var dgsts []digest.Digest
+	db := ls.MetadataStore.DB()
+	if err := db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(mappingBucket))
+		if b == nil {
+			return nil
+		}
+
+		c := b.Cursor()
+		index := []byte(key.String() + "::")
+		k, _ := c.Seek(index)
+		for {
+			if k != nil && bytes.HasPrefix(k, index) {
+				dgsts = append(dgsts, digest.Digest(string(bytes.TrimPrefix(k, index))))
+				k, _ = c.Next()
+			} else {
+				break
 			}
 		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
-	return out, nil
+	return dgsts, nil
 }
 
 func index(k string) string {
 	return cacheKey + "::" + k
-}
-
-func contentIndex(k string) string {
-	return contentCacheKey + "::" + k
 }

@@ -1,8 +1,10 @@
 package metadata
 
 import (
+	"bytes"
 	"encoding/json"
 	"strings"
+	"sync"
 
 	"github.com/boltdb/bolt"
 	"github.com/pkg/errors"
@@ -29,8 +31,12 @@ func NewStore(dbPath string) (*Store, error) {
 	return &Store{db: db}, nil
 }
 
-func (s *Store) All() ([]StorageItem, error) {
-	var out []StorageItem
+func (s *Store) DB() *bolt.DB {
+	return s.db
+}
+
+func (s *Store) All() ([]*StorageItem, error) {
+	var out []*StorageItem
 	err := s.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(mainBucket))
 		if b == nil {
@@ -52,8 +58,30 @@ func (s *Store) All() ([]StorageItem, error) {
 	return out, err
 }
 
-func (s *Store) Search(index string) ([]StorageItem, error) {
-	var out []StorageItem
+func (s *Store) Probe(index string) (bool, error) {
+	var exists bool
+	err := s.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(indexBucket))
+		if b == nil {
+			return nil
+		}
+		main := tx.Bucket([]byte(mainBucket))
+		if main == nil {
+			return nil
+		}
+		search := []byte(indexKey(index, ""))
+		c := b.Cursor()
+		k, _ := c.Seek(search)
+		if k != nil && bytes.HasPrefix(k, search) {
+			exists = true
+		}
+		return nil
+	})
+	return exists, err
+}
+
+func (s *Store) Search(index string) ([]*StorageItem, error) {
+	var out []*StorageItem
 	err := s.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(indexBucket))
 		if b == nil {
@@ -149,8 +177,8 @@ func (s *Store) Update(id string, fn func(b *bolt.Bucket) error) error {
 	})
 }
 
-func (s *Store) Get(id string) (StorageItem, bool) {
-	empty := func() StorageItem {
+func (s *Store) Get(id string) (*StorageItem, bool) {
+	empty := func() *StorageItem {
 		si, _ := newStorageItem(id, nil, s)
 		return si
 	}
@@ -180,10 +208,11 @@ type StorageItem struct {
 	values  map[string]*Value
 	queue   []func(*bolt.Bucket) error
 	storage *Store
+	mu      sync.RWMutex
 }
 
-func newStorageItem(id string, b *bolt.Bucket, s *Store) (StorageItem, error) {
-	si := StorageItem{
+func newStorageItem(id string, b *bolt.Bucket, s *Store) (*StorageItem, error) {
+	si := &StorageItem{
 		id:      id,
 		storage: s,
 		values:  make(map[string]*Value),
@@ -230,7 +259,10 @@ func (s *StorageItem) Keys() []string {
 }
 
 func (s *StorageItem) Get(k string) *Value {
-	return s.values[k]
+	s.mu.RLock()
+	v := s.values[k]
+	s.mu.RUnlock()
+	return v
 }
 
 func (s *StorageItem) GetExternal(k string) ([]byte, error) {
@@ -271,10 +303,14 @@ func (s *StorageItem) SetExternal(k string, dt []byte) error {
 }
 
 func (s *StorageItem) Queue(fn func(b *bolt.Bucket) error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.queue = append(s.queue, fn)
 }
 
 func (s *StorageItem) Commit() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return s.Update(func(b *bolt.Bucket) error {
 		for _, fn := range s.queue {
 			if err := fn(b); err != nil {
