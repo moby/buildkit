@@ -3,7 +3,6 @@ package metadata
 import (
 	"context"
 	"encoding/binary"
-	"io"
 	"strings"
 	"time"
 
@@ -11,6 +10,7 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/filters"
+	"github.com/containerd/containerd/metadata/boltutil"
 	"github.com/containerd/containerd/namespaces"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
@@ -170,7 +170,7 @@ func (cs *contentStore) Delete(ctx context.Context, dgst digest.Digest) error {
 
 		// Just remove local reference, garbage collector is responsible for
 		// cleaning up on disk content
-		return getBlobsBucket(tx, ns).Delete([]byte(dgst.String()))
+		return getBlobsBucket(tx, ns).DeleteBucket([]byte(dgst.String()))
 	})
 }
 
@@ -352,7 +352,7 @@ type namespacedWriter struct {
 	db        *bolt.DB
 }
 
-func (nw *namespacedWriter) Commit(size int64, expected digest.Digest) error {
+func (nw *namespacedWriter) Commit(size int64, expected digest.Digest, opts ...content.Opt) error {
 	return nw.db.Update(func(tx *bolt.Tx) error {
 		bkt := getIngestBucket(tx, nw.namespace)
 		if bkt != nil {
@@ -360,11 +360,17 @@ func (nw *namespacedWriter) Commit(size int64, expected digest.Digest) error {
 				return err
 			}
 		}
-		return nw.commit(tx, size, expected)
+		return nw.commit(tx, size, expected, opts...)
 	})
 }
 
-func (nw *namespacedWriter) commit(tx *bolt.Tx, size int64, expected digest.Digest) error {
+func (nw *namespacedWriter) commit(tx *bolt.Tx, size int64, expected digest.Digest, opts ...content.Opt) error {
+	var base content.Info
+	for _, opt := range opts {
+		if err := opt(&base); err != nil {
+			return err
+		}
+	}
 	status, err := nw.Writer.Status()
 	if err != nil {
 		return err
@@ -390,24 +396,21 @@ func (nw *namespacedWriter) commit(tx *bolt.Tx, size int64, expected digest.Dige
 		return err
 	}
 
+	commitTime := time.Now().UTC()
+
 	sizeEncoded, err := encodeSize(size)
 	if err != nil {
 		return err
 	}
 
-	timeEncoded, err := time.Now().UTC().MarshalBinary()
-	if err != nil {
+	if err := boltutil.WriteTimestamps(bkt, commitTime, commitTime); err != nil {
 		return err
 	}
-
-	for _, v := range [][2][]byte{
-		{bucketKeyCreatedAt, timeEncoded},
-		{bucketKeyUpdatedAt, timeEncoded},
-		{bucketKeySize, sizeEncoded},
-	} {
-		if err := bkt.Put(v[0], v[1]); err != nil {
-			return err
-		}
+	if err := boltutil.WriteLabels(bkt, base.Labels); err != nil {
+		return err
+	}
+	if err := bkt.Put(bucketKeySize, sizeEncoded); err != nil {
+		return err
 	}
 
 	return nil
@@ -421,14 +424,7 @@ func (nw *namespacedWriter) Status() (content.Status, error) {
 	return st, err
 }
 
-func (cs *contentStore) Reader(ctx context.Context, dgst digest.Digest) (io.ReadCloser, error) {
-	if err := cs.checkAccess(ctx, dgst); err != nil {
-		return nil, err
-	}
-	return cs.Store.Reader(ctx, dgst)
-}
-
-func (cs *contentStore) ReaderAt(ctx context.Context, dgst digest.Digest) (io.ReaderAt, error) {
+func (cs *contentStore) ReaderAt(ctx context.Context, dgst digest.Digest) (content.ReaderAt, error) {
 	if err := cs.checkAccess(ctx, dgst); err != nil {
 		return nil, err
 	}
@@ -451,17 +447,15 @@ func (cs *contentStore) checkAccess(ctx context.Context, dgst digest.Digest) err
 }
 
 func readInfo(info *content.Info, bkt *bolt.Bucket) error {
-	if err := readTimestamps(&info.CreatedAt, &info.UpdatedAt, bkt); err != nil {
+	if err := boltutil.ReadTimestamps(bkt, &info.CreatedAt, &info.UpdatedAt); err != nil {
 		return err
 	}
 
-	lbkt := bkt.Bucket(bucketKeyLabels)
-	if lbkt != nil {
-		info.Labels = map[string]string{}
-		if err := readLabels(info.Labels, lbkt); err != nil {
-			return err
-		}
+	labels, err := boltutil.ReadLabels(bkt)
+	if err != nil {
+		return err
 	}
+	info.Labels = labels
 
 	if v := bkt.Get(bucketKeySize); len(v) > 0 {
 		info.Size, _ = binary.Varint(v)
@@ -471,11 +465,11 @@ func readInfo(info *content.Info, bkt *bolt.Bucket) error {
 }
 
 func writeInfo(info *content.Info, bkt *bolt.Bucket) error {
-	if err := writeTimestamps(bkt, info.CreatedAt, info.UpdatedAt); err != nil {
+	if err := boltutil.WriteTimestamps(bkt, info.CreatedAt, info.UpdatedAt); err != nil {
 		return err
 	}
 
-	if err := writeLabels(bkt, info.Labels); err != nil {
+	if err := boltutil.WriteLabels(bkt, info.Labels); err != nil {
 		return errors.Wrapf(err, "writing labels for info %v", info.Digest)
 	}
 

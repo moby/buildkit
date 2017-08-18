@@ -79,6 +79,12 @@ func (s *nsSnapshotter) Stat(ctx context.Context, key string) (ctdsnapshot.Info,
 	ctx = namespaces.WithNamespace(ctx, dummyNs)
 	return s.Snapshotter.Stat(ctx, key)
 }
+
+func (s *nsSnapshotter) Update(ctx context.Context, info ctdsnapshot.Info, fieldpaths ...string) (ctdsnapshot.Info, error) {
+	ctx = namespaces.WithNamespace(ctx, dummyNs)
+	return s.Snapshotter.Update(ctx, info, fieldpaths...)
+}
+
 func (s *nsSnapshotter) Usage(ctx context.Context, key string) (ctdsnapshot.Usage, error) {
 	ctx = namespaces.WithNamespace(ctx, dummyNs)
 	return s.Snapshotter.Usage(ctx, key)
@@ -87,17 +93,17 @@ func (s *nsSnapshotter) Mounts(ctx context.Context, key string) ([]mount.Mount, 
 	ctx = namespaces.WithNamespace(ctx, dummyNs)
 	return s.Snapshotter.Mounts(ctx, key)
 }
-func (s *nsSnapshotter) Prepare(ctx context.Context, key, parent string) ([]mount.Mount, error) {
+func (s *nsSnapshotter) Prepare(ctx context.Context, key, parent string, opts ...ctdsnapshot.Opt) ([]mount.Mount, error) {
 	ctx = namespaces.WithNamespace(ctx, dummyNs)
-	return s.Snapshotter.Prepare(ctx, key, parent)
+	return s.Snapshotter.Prepare(ctx, key, parent, opts...)
 }
-func (s *nsSnapshotter) View(ctx context.Context, key, parent string) ([]mount.Mount, error) {
+func (s *nsSnapshotter) View(ctx context.Context, key, parent string, opts ...ctdsnapshot.Opt) ([]mount.Mount, error) {
 	ctx = namespaces.WithNamespace(ctx, dummyNs)
-	return s.Snapshotter.View(ctx, key, parent)
+	return s.Snapshotter.View(ctx, key, parent, opts...)
 }
-func (s *nsSnapshotter) Commit(ctx context.Context, name, key string) error {
+func (s *nsSnapshotter) Commit(ctx context.Context, name, key string, opts ...ctdsnapshot.Opt) error {
 	ctx = namespaces.WithNamespace(ctx, dummyNs)
-	return s.Snapshotter.Commit(ctx, name, key)
+	return s.Snapshotter.Commit(ctx, name, key, opts...)
 }
 func (s *nsSnapshotter) Remove(ctx context.Context, key string) error {
 	ctx = namespaces.WithNamespace(ctx, dummyNs)

@@ -23,8 +23,8 @@ import (
 )
 
 type Service struct {
-	store   content.Store
-	emitter events.Poster
+	store     content.Store
+	publisher events.Publisher
 }
 
 var bufPool = sync.Pool{
@@ -58,8 +58,8 @@ func NewService(ic *plugin.InitContext) (interface{}, error) {
 	}
 	cs := metadata.NewContentStore(m.(*bolt.DB), c.(content.Store))
 	return &Service{
-		store:   cs,
-		emitter: events.GetPoster(ic.Context),
+		store:     cs,
+		publisher: ic.Events,
 	}, nil
 }
 
@@ -149,7 +149,7 @@ func (s *Service) Delete(ctx context.Context, req *api.DeleteContentRequest) (*e
 		return nil, errdefs.ToGRPC(err)
 	}
 
-	if err := s.emit(ctx, "/content/delete", &eventsapi.ContentDelete{
+	if err := s.publisher.Publish(ctx, "/content/delete", &eventsapi.ContentDelete{
 		Digest: req.Digest,
 	}); err != nil {
 		return nil, err
@@ -168,20 +168,11 @@ func (s *Service) Read(req *api.ReadContentRequest, session api.Content_ReadServ
 		return errdefs.ToGRPC(err)
 	}
 
-	rc, err := s.store.Reader(session.Context(), req.Digest)
+	ra, err := s.store.ReaderAt(session.Context(), req.Digest)
 	if err != nil {
 		return errdefs.ToGRPC(err)
 	}
-	defer rc.Close() // TODO(stevvooe): Cache these file descriptors for performance.
-
-	ra, ok := rc.(io.ReaderAt)
-	if !ok {
-		// TODO(stevvooe): Need to set this up to get correct behavior across
-		// board. May change interface to store to just return ReaderAtCloser.
-		// Possibly, we could just return io.ReaderAt and handle file
-		// descriptors internally.
-		return errors.New("content service only supports content stores that return ReaderAt")
-	}
+	defer ra.Close()
 
 	var (
 		offset = req.Offset
@@ -429,7 +420,11 @@ func (s *Service) Write(session api.Content_WriteServer) (err error) {
 			}
 
 			if req.Action == api.WriteActionCommit {
-				if err := wr.Commit(total, expected); err != nil {
+				var opts []content.Opt
+				if req.Labels != nil {
+					opts = append(opts, content.WithLabels(req.Labels))
+				}
+				if err := wr.Commit(total, expected, opts...); err != nil {
 					return err
 				}
 			}
@@ -458,13 +453,4 @@ func (s *Service) Abort(ctx context.Context, req *api.AbortRequest) (*empty.Empt
 	}
 
 	return &empty.Empty{}, nil
-}
-
-func (s *Service) emit(ctx context.Context, topic string, evt interface{}) error {
-	emitterCtx := events.WithTopic(ctx, topic)
-	if err := s.emitter.Post(emitterCtx, evt); err != nil {
-		return err
-	}
-
-	return nil
 }

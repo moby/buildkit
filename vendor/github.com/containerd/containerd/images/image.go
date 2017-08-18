@@ -3,7 +3,6 @@ package images
 import (
 	"context"
 	"encoding/json"
-	"io/ioutil"
 	"time"
 
 	"github.com/containerd/containerd/content"
@@ -68,18 +67,17 @@ func (image *Image) Size(ctx context.Context, provider content.Provider) (int64,
 	}), ChildrenHandler(provider)), image.Target)
 }
 
+// Config resolves the image configuration descriptor using a content provided
+// to resolve child resources on the image.
+//
+// The caller can then use the descriptor to resolve and process the
+// configuration of the image.
 func Config(ctx context.Context, provider content.Provider, image ocispec.Descriptor) (ocispec.Descriptor, error) {
 	var configDesc ocispec.Descriptor
 	return configDesc, Walk(ctx, HandlerFunc(func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
 		switch image.MediaType {
 		case MediaTypeDockerSchema2Manifest, ocispec.MediaTypeImageManifest:
-			rc, err := provider.Reader(ctx, image.Digest)
-			if err != nil {
-				return nil, err
-			}
-			defer rc.Close()
-
-			p, err := ioutil.ReadAll(rc)
+			p, err := content.ReadBlob(ctx, provider, image.Digest)
 			if err != nil {
 				return nil, err
 			}
