@@ -1,4 +1,4 @@
-// +build darwin freebsd
+// +build solaris darwin freebsd
 
 package fs
 
@@ -7,8 +7,10 @@ import (
 	"os"
 	"syscall"
 
+	"github.com/containerd/containerd/sys"
 	"github.com/containerd/continuity/sysx"
 	"github.com/pkg/errors"
+	"golang.org/x/sys/unix"
 )
 
 func copyFileInfo(fi os.FileInfo, name string) error {
@@ -23,7 +25,8 @@ func copyFileInfo(fi os.FileInfo, name string) error {
 		}
 	}
 
-	if err := syscall.UtimesNano(name, []syscall.Timespec{st.Atimespec, st.Mtimespec}); err != nil {
+	timespec := []syscall.Timespec{sys.StatAtime(st), sys.StatMtime(st)}
+	if err := syscall.UtimesNano(name, timespec); err != nil {
 		return errors.Wrapf(err, "failed to utime %s", name)
 	}
 
@@ -61,5 +64,5 @@ func copyDevice(dst string, fi os.FileInfo) error {
 	if !ok {
 		return errors.New("unsupported stat type")
 	}
-	return syscall.Mknod(dst, uint32(fi.Mode()), int(st.Rdev))
+	return unix.Mknod(dst, uint32(fi.Mode()), int(st.Rdev))
 }

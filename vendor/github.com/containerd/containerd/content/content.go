@@ -8,9 +8,14 @@ import (
 	"github.com/opencontainers/go-digest"
 )
 
+type ReaderAt interface {
+	io.ReaderAt
+	io.Closer
+	Size() int64
+}
+
 type Provider interface {
-	Reader(ctx context.Context, dgst digest.Digest) (io.ReadCloser, error)
-	ReaderAt(ctx context.Context, dgst digest.Digest) (io.ReaderAt, error)
+	ReaderAt(ctx context.Context, dgst digest.Digest) (ReaderAt, error)
 }
 
 type Ingester interface {
@@ -77,10 +82,20 @@ type IngestManager interface {
 }
 
 type Writer interface {
+	// Close is expected to be called after Commit() when commission is needed.
 	io.WriteCloser
-	Status() (Status, error)
+
+	// Digest may return empty digest or panics until committed.
 	Digest() digest.Digest
-	Commit(size int64, expected digest.Digest) error
+
+	// Commit commits the blob (but no roll-back is guaranteed on an error).
+	// size and expected can be zero-value when unknown.
+	Commit(size int64, expected digest.Digest, opts ...Opt) error
+
+	// Status returns the current state of write
+	Status() (Status, error)
+
+	// Truncate updates the size of the target blob
 	Truncate(size int64) error
 }
 
@@ -91,4 +106,14 @@ type Store interface {
 	Provider
 	IngestManager
 	Ingester
+}
+
+// Opt is used to alter the mutable properties of content
+type Opt func(*Info) error
+
+func WithLabels(labels map[string]string) Opt {
+	return func(info *Info) error {
+		info.Labels = labels
+		return nil
+	}
 }
