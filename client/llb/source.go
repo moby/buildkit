@@ -1,7 +1,9 @@
 package llb
 
 import (
+	"context"
 	_ "crypto/sha256"
+	"strings"
 
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/pkg/errors"
@@ -12,6 +14,7 @@ type SourceOp struct {
 	attrs    map[string]string
 	output   Output
 	cachedPB []byte
+	err      error
 }
 
 func NewSource(id string, attrs map[string]string) *SourceOp {
@@ -24,6 +27,9 @@ func NewSource(id string, attrs map[string]string) *SourceOp {
 }
 
 func (s *SourceOp) Validate() error {
+	if s.err != nil {
+		return s.err
+	}
 	if s.id == "" {
 		return errors.Errorf("source identifier can't be empty")
 	}
@@ -63,8 +69,39 @@ func Source(id string) State {
 	return NewState(NewSource(id, nil).Output())
 }
 
-func Image(ref string) State {
-	return Source("docker-image://" + ref) // controversial
+func Image(ref string, opts ...ImageOption) State {
+	src := NewSource("docker-image://"+ref, nil) // controversial
+	var info ImageInfo
+	for _, opt := range opts {
+		opt(&info)
+	}
+	if info.metaResolver != nil {
+		img, err := info.metaResolver.Resolve(context.TODO(), ref)
+		if err != nil {
+			src.err = err
+		} else {
+			st := NewState(src.Output())
+			for _, env := range img.Config.Env {
+				parts := strings.SplitN(env, "=", 2)
+				if len(parts[0]) > 0 {
+					var v string
+					if len(parts) > 1 {
+						v = parts[1]
+					}
+					st = st.AddEnv(parts[0], v)
+				}
+			}
+			st = st.Dir(img.Config.WorkingDir)
+			return st
+		}
+	}
+	return NewState(src.Output())
+}
+
+type ImageOption func(*ImageInfo)
+
+type ImageInfo struct {
+	metaResolver ImageMetaResolver
 }
 
 func Git(remote, ref string, opts ...GitOption) State {
