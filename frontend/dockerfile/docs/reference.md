@@ -301,9 +301,9 @@ Results in:
      ---> Running in a2c157f842f5
      Volume in drive C has no label.
      Volume Serial Number is 7E6D-E0F7
-    
+
      Directory of c:\
-    
+
     10/05/2016  05:04 PM             1,894 License.txt
     10/05/2016  02:22 PM    <DIR>          Program Files
     10/05/2016  02:14 PM    <DIR>          Program Files (x86)
@@ -381,7 +381,7 @@ throughout the entire instruction. In other words, in this example:
     ENV ghi=$abc
 
 will result in `def` having a value of `hello`, not `bye`. However,
-`ghi` will have a value of `bye` because it is not part of the same instruction 
+`ghi` will have a value of `bye` because it is not part of the same instruction
 that set `abc` to `bye`.
 
 ## .dockerignore file
@@ -415,12 +415,12 @@ temp?
 
 This file causes the following build behavior:
 
-| Rule           | Behavior                                                                                                                                                                     |
-|----------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `# comment`    | Ignored.                 |
-| `*/temp*`      | Exclude files and directories whose names start with `temp` in any immediate subdirectory of the root.  For example, the plain file `/somedir/temporary.txt` is excluded, as is the directory `/somedir/temp`.                 |
-| `*/*/temp*`    | Exclude files and directories starting with `temp` from any subdirectory that is two levels below the root. For example, `/somedir/subdir/temporary.txt` is excluded. |
-| `temp?`        | Exclude files and directories in the root directory whose names are a one-character extension of `temp`.  For example, `/tempa` and `/tempb` are excluded.
+| Rule        | Behavior                                                                                                                                                                                                       |
+|:------------|:---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `# comment` | Ignored.                                                                                                                                                                                                       |
+| `*/temp*`   | Exclude files and directories whose names start with `temp` in any immediate subdirectory of the root.  For example, the plain file `/somedir/temporary.txt` is excluded, as is the directory `/somedir/temp`. |
+| `*/*/temp*` | Exclude files and directories starting with `temp` from any subdirectory that is two levels below the root. For example, `/somedir/subdir/temporary.txt` is excluded.                                          |
+| `temp?`     | Exclude files and directories in the root directory whose names are a one-character extension of `temp`.  For example, `/tempa` and `/tempb` are excluded.                                                     |
 
 
 Matching is done using Go's
@@ -493,32 +493,32 @@ Or
 
     FROM <image>[@<digest>] [AS <name>]
 
-The `FROM` instruction initializes a new build stage and sets the 
-[*Base Image*](glossary.md#base-image) for subsequent instructions. As such, a 
+The `FROM` instruction initializes a new build stage and sets the
+[*Base Image*](glossary.md#base-image) for subsequent instructions. As such, a
 valid `Dockerfile` must start with a `FROM` instruction. The image can be
-any valid image – it is especially easy to start by **pulling an image** from 
+any valid image – it is especially easy to start by **pulling an image** from
 the [*Public Repositories*](https://docs.docker.com/engine/tutorials/dockerrepos/).
 
 - `ARG` is the only instruction that may precede `FROM` in the `Dockerfile`.
   See [Understand how ARG and FROM interact](#understand-how-arg-and-from-interact).
 
-- `FROM` can appear multiple times within a single `Dockerfile` to 
+- `FROM` can appear multiple times within a single `Dockerfile` to
   create multiple images or use one build stage as a dependency for another.
-  Simply make a note of the last image ID output by the commit before each new 
+  Simply make a note of the last image ID output by the commit before each new
   `FROM` instruction. Each `FROM` instruction clears any state created by previous
   instructions.
 
-- Optionally a name can be given to a new build stage by adding `AS name` to the 
+- Optionally a name can be given to a new build stage by adding `AS name` to the
   `FROM` instruction. The name can be used in subsequent `FROM` and
   `COPY --from=<name|index>` instructions to refer to the image built in this stage.
 
-- The `tag` or `digest` values are optional. If you omit either of them, the 
+- The `tag` or `digest` values are optional. If you omit either of them, the
   builder assumes a `latest` tag by default. The builder returns an error if it
   cannot find the `tag` value.
 
 ### Understand how ARG and FROM interact
 
-`FROM` instructions support variables that are declared by any `ARG` 
+`FROM` instructions support variables that are declared by any `ARG`
 instructions that occur before the first `FROM`.
 
 ```Dockerfile
@@ -754,20 +754,26 @@ This will then be visible from `docker inspect` with the other labels.
 
 ## EXPOSE
 
-    EXPOSE <port> [<port>...]
+    EXPOSE <port> [<port>/<protocol>...]
 
 The `EXPOSE` instruction informs Docker that the container listens on the
-specified network ports at runtime. `EXPOSE` does not make the ports of the
-container accessible to the host. To do that, you must use either the `-p` flag
-to publish a range of ports or the `-P` flag to publish all of the exposed
-ports. You can expose one port number and publish it externally under another
-number.
+specified network ports at runtime. You can specify whether the port listens on
+TCP or UDP, and the default is TCP if the protocol is not specified.
+
+The `EXPOSE` instruction does not actually publish the port. It functions as a
+type of documentation between the person who builds the image and the person who
+runs the container, about which ports are intended to be published. To actually
+publish the port when running the container, use the `-p` flag on `docker run`
+to publish and map one or more ports, or the `-P` flag to publish all exposed
+ports and map them to to high-order ports.
 
 To set up port redirection on the host system, see [using the -P
-flag](run.md#expose-incoming-ports). The Docker network feature supports
-creating networks without the need to expose ports within the network, for
-detailed information see the  [overview of this
-feature](https://docs.docker.com/engine/userguide/networking/)).
+flag](run.md#expose-incoming-ports). The `docker network` command supports
+creating networks for communication among containers without the need to
+expose or publish specific ports, because the containers connected to the
+network can communicate with each other over any port. For detailed information,
+see the
+[overview of this feature](https://docs.docker.com/engine/userguide/networking/)).
 
 ## ENV
 
@@ -976,9 +982,9 @@ All new files and directories are created with a UID and GID of 0.
 
 Optionally `COPY` accepts a flag `--from=<name|index>` that can be used to set
 the source location to a previous build stage (created with `FROM .. AS <name>`)
-that will be used instead of a build context sent by the user. The flag also 
-accepts a numeric index assigned for all previous build stages started with 
-`FROM` instruction. In case a build stage with a specified name can't be found an 
+that will be used instead of a build context sent by the user. The flag also
+accepts a numeric index assigned for all previous build stages started with
+`FROM` instruction. In case a build stage with a specified name can't be found an
 image with the same name is attempted to be used instead.
 
 `COPY` obeys the following rules:
@@ -1250,7 +1256,7 @@ or for executing an ad-hoc command in a container.
 The table below shows what command is executed for different `ENTRYPOINT` / `CMD` combinations:
 
 |                                | No ENTRYPOINT              | ENTRYPOINT exec_entry p1_entry | ENTRYPOINT ["exec_entry", "p1_entry"]          |
-|--------------------------------|----------------------------|--------------------------------|------------------------------------------------|
+|:-------------------------------|:---------------------------|:-------------------------------|:-----------------------------------------------|
 | **No CMD**                     | *error, not allowed*       | /bin/sh -c exec_entry p1_entry | exec_entry p1_entry                            |
 | **CMD ["exec_cmd", "p1_cmd"]** | exec_cmd p1_cmd            | /bin/sh -c exec_entry p1_entry | exec_entry p1_entry exec_cmd p1_cmd            |
 | **CMD ["p1_cmd", "p2_cmd"]**   | p1_cmd p2_cmd              | /bin/sh -c exec_entry p1_entry | exec_entry p1_entry p1_cmd p2_cmd              |
@@ -1288,7 +1294,7 @@ Keep the following things in mind about volumes in the `Dockerfile`.
 
 - **Volumes on Windows-based containers**: When using Windows-based containers,
   the destination of a volume inside the container must be one of:
-  
+
   - a non-existing or empty directory
   - a drive other than `C:`
 
@@ -1805,16 +1811,16 @@ Resulting in:
     Removing intermediate container 6fcdb6855ae2
     Step 3/5 : RUN New-Item -ItemType Directory C:\Example
      ---> Running in d0eef8386e97
-    
-    
+
+
         Directory: C:\
-    
-    
+
+
     Mode                LastWriteTime         Length Name
     ----                -------------         ------ ----
     d-----       10/28/2016  11:26 AM                Example
-    
-    
+
+
      ---> 3f2fbf1395d9
     Removing intermediate container d0eef8386e97
     Step 4/5 : ADD Execute-MyCmdlet.ps1 c:\example\
