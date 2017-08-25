@@ -54,7 +54,7 @@ func (w *writer) Write(p []byte) (n int, err error) {
 	return n, err
 }
 
-func (w *writer) Commit(size int64, expected digest.Digest) error {
+func (w *writer) Commit(size int64, expected digest.Digest, opts ...content.Opt) error {
 	if err := w.fp.Sync(); err != nil {
 		return errors.Wrap(err, "sync failed")
 	}
@@ -78,7 +78,7 @@ func (w *writer) Commit(size int64, expected digest.Digest) error {
 	}
 
 	if size > 0 && size != fi.Size() {
-		return errors.Errorf("%q failed size validation: %v != %v", w.ref, fi.Size(), size)
+		return errors.Errorf("unexpected commit size %d, expected %d", fi.Size(), size)
 	}
 
 	if err := w.fp.Close(); err != nil {
@@ -87,7 +87,7 @@ func (w *writer) Commit(size int64, expected digest.Digest) error {
 
 	dgst := w.digester.Digest()
 	if expected != "" && expected != dgst {
-		return errors.Errorf("unexpected digest: %v != %v", dgst, expected)
+		return errors.Errorf("unexpected commit digest %s, expected %s", dgst, expected)
 	}
 
 	var (

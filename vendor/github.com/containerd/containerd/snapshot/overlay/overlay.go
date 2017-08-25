@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/containerd/containerd/fs"
 	"github.com/containerd/containerd/log"
@@ -89,6 +90,25 @@ func (o *snapshotter) Stat(ctx context.Context, key string) (snapshot.Info, erro
 	return info, nil
 }
 
+func (o *snapshotter) Update(ctx context.Context, info snapshot.Info, fieldpaths ...string) (snapshot.Info, error) {
+	ctx, t, err := o.ms.TransactionContext(ctx, true)
+	if err != nil {
+		return snapshot.Info{}, err
+	}
+
+	info, err = storage.UpdateInfo(ctx, info, fieldpaths...)
+	if err != nil {
+		t.Rollback()
+		return snapshot.Info{}, err
+	}
+
+	if err := t.Commit(); err != nil {
+		return snapshot.Info{}, err
+	}
+
+	return info, nil
+}
+
 // Usage returns the resources taken by the snapshot identified by key.
 //
 // For active snapshots, this will scan the usage of the overlay "diff" (aka
@@ -121,12 +141,12 @@ func (o *snapshotter) Usage(ctx context.Context, key string) (snapshot.Usage, er
 	return usage, nil
 }
 
-func (o *snapshotter) Prepare(ctx context.Context, key, parent string) ([]mount.Mount, error) {
-	return o.createSnapshot(ctx, snapshot.KindActive, key, parent)
+func (o *snapshotter) Prepare(ctx context.Context, key, parent string, opts ...snapshot.Opt) ([]mount.Mount, error) {
+	return o.createSnapshot(ctx, snapshot.KindActive, key, parent, opts)
 }
 
-func (o *snapshotter) View(ctx context.Context, key, parent string) ([]mount.Mount, error) {
-	return o.createSnapshot(ctx, snapshot.KindView, key, parent)
+func (o *snapshotter) View(ctx context.Context, key, parent string, opts ...snapshot.Opt) ([]mount.Mount, error) {
+	return o.createSnapshot(ctx, snapshot.KindView, key, parent, opts)
 }
 
 // Mounts returns the mounts for the transaction identified by key. Can be
@@ -146,7 +166,7 @@ func (o *snapshotter) Mounts(ctx context.Context, key string) ([]mount.Mount, er
 	return o.mounts(s), nil
 }
 
-func (o *snapshotter) Commit(ctx context.Context, name, key string) error {
+func (o *snapshotter) Commit(ctx context.Context, name, key string, opts ...snapshot.Opt) error {
 	ctx, t, err := o.ms.TransactionContext(ctx, true)
 	if err != nil {
 		return err
@@ -171,7 +191,7 @@ func (o *snapshotter) Commit(ctx context.Context, name, key string) error {
 		return err
 	}
 
-	if _, err = storage.CommitActive(ctx, key, name, snapshot.Usage(usage)); err != nil {
+	if _, err = storage.CommitActive(ctx, key, name, snapshot.Usage(usage), opts...); err != nil {
 		return errors.Wrap(err, "failed to commit snapshot")
 	}
 	return t.Commit()
@@ -230,7 +250,7 @@ func (o *snapshotter) Walk(ctx context.Context, fn func(context.Context, snapsho
 	return storage.WalkInfo(ctx, fn)
 }
 
-func (o *snapshotter) createSnapshot(ctx context.Context, kind snapshot.Kind, key, parent string) ([]mount.Mount, error) {
+func (o *snapshotter) createSnapshot(ctx context.Context, kind snapshot.Kind, key, parent string, opts []snapshot.Opt) ([]mount.Mount, error) {
 	var (
 		path        string
 		snapshotDir = filepath.Join(o.root, "snapshots")
@@ -255,12 +275,13 @@ func (o *snapshotter) createSnapshot(ctx context.Context, kind snapshot.Kind, ke
 		}
 	}()
 
-	if err = os.MkdirAll(filepath.Join(td, "fs"), 0711); err != nil {
+	fs := filepath.Join(td, "fs")
+	if err = os.MkdirAll(fs, 0755); err != nil {
 		return nil, err
 	}
 
 	if kind == snapshot.KindActive {
-		if err = os.MkdirAll(filepath.Join(td, "work"), 0700); err != nil {
+		if err = os.MkdirAll(filepath.Join(td, "work"), 0711); err != nil {
 			return nil, err
 		}
 	}
@@ -270,12 +291,31 @@ func (o *snapshotter) createSnapshot(ctx context.Context, kind snapshot.Kind, ke
 		return nil, err
 	}
 
-	s, err := storage.CreateSnapshot(ctx, kind, key, parent)
+	s, err := storage.CreateSnapshot(ctx, kind, key, parent, opts...)
 	if err != nil {
 		if rerr := t.Rollback(); rerr != nil {
 			log.G(ctx).WithError(rerr).Warn("Failure rolling back transaction")
 		}
 		return nil, errors.Wrap(err, "failed to create active")
+	}
+
+	if len(s.ParentIDs) > 0 {
+		st, err := os.Stat(filepath.Join(o.upperPath(s.ParentIDs[0])))
+		if err != nil {
+			if rerr := t.Rollback(); rerr != nil {
+				log.G(ctx).WithError(rerr).Warn("Failure rolling back transaction")
+			}
+			return nil, errors.Wrap(err, "failed to stat parent")
+		}
+
+		stat := st.Sys().(*syscall.Stat_t)
+
+		if err := os.Lchown(fs, int(stat.Uid), int(stat.Gid)); err != nil {
+			if rerr := t.Rollback(); rerr != nil {
+				log.G(ctx).WithError(rerr).Warn("Failure rolling back transaction")
+			}
+			return nil, errors.Wrap(err, "failed to chown")
+		}
 	}
 
 	path = filepath.Join(snapshotDir, s.ID)
