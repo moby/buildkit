@@ -16,6 +16,8 @@ import (
 	"github.com/moby/buildkit/exporter"
 	imageexporter "github.com/moby/buildkit/exporter/containerimage"
 	localexporter "github.com/moby/buildkit/exporter/local"
+	"github.com/moby/buildkit/frontend"
+	"github.com/moby/buildkit/frontend/dockerfile"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot/blobmapping"
 	"github.com/moby/buildkit/source"
@@ -124,6 +126,9 @@ func defaultControllerOpts(root string, pd pullDeps) (*Opt, error) {
 	}
 	exporters[client.ExporterLocal] = localExporter
 
+	frontends := map[string]frontend.Frontend{}
+	frontends["dockerfile.v0"] = dockerfile.NewDockerfileFrontend()
+
 	return &Opt{
 		Snapshotter:      snapshotter,
 		CacheManager:     cm,
@@ -131,5 +136,6 @@ func defaultControllerOpts(root string, pd pullDeps) (*Opt, error) {
 		InstructionCache: ic,
 		Exporters:        exporters,
 		SessionManager:   sessm,
+		Frontends:        frontends,
 	}, nil
 }

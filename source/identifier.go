@@ -62,8 +62,9 @@ func (_ *ImageIdentifier) ID() string {
 }
 
 type LocalIdentifier struct {
-	Name      string
-	SessionID string
+	Name            string
+	SessionID       string
+	IncludePatterns []string
 }
 
 func NewLocalIdentifier(str string) (*LocalIdentifier, error) {

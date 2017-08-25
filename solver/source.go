@@ -1,6 +1,7 @@
 package solver
 
 import (
+	"encoding/json"
 	"sync"
 
 	"github.com/moby/buildkit/solver/pb"
@@ -50,6 +51,12 @@ func (s *sourceOp) instance(ctx context.Context) (source.SourceInstance, error) 
 			switch k {
 			case pb.AttrLocalSessionID:
 				id.SessionID = v
+			case pb.AttrIncludePatterns:
+				var patterns []string
+				if err := json.Unmarshal([]byte(v), &patterns); err != nil {
+					return nil, err
+				}
+				id.IncludePatterns = patterns
 			}
 		}
 	}

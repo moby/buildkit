@@ -1,6 +1,7 @@
 package local
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/util/progress"
+	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/tonistiigi/fsutil"
@@ -74,8 +76,14 @@ func (ls *localSourceHandler) CacheKey(ctx context.Context) (string, error) {
 		}
 		sessionID = id
 	}
-
-	return "session:" + ls.src.Name + ":" + sessionID, nil
+	dt, err := json.Marshal(struct {
+		SessionID       string
+		IncludePatterns []string
+	}{SessionID: sessionID, IncludePatterns: ls.src.IncludePatterns})
+	if err != nil {
+		return "", err
+	}
+	return "session:" + ls.src.Name + ":" + digest.FromBytes(dt).String(), nil
 }
 
 func (ls *localSourceHandler) Snapshot(ctx context.Context) (out cache.ImmutableRef, retErr error) {
@@ -148,7 +156,7 @@ func (ls *localSourceHandler) Snapshot(ctx context.Context) (out cache.Immutable
 
 	opt := filesync.FSSendRequestOpt{
 		Name:             ls.src.Name,
-		IncludePatterns:  nil,
+		IncludePatterns:  ls.src.IncludePatterns,
 		OverrideExcludes: false,
 		DestDir:          dest,
 		CacheUpdater:     &cacheUpdater{cc},

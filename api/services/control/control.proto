@@ -42,6 +42,8 @@ message SolveRequest {
 	string Exporter = 3;
 	map<string, string> ExporterAttrs = 4;
 	string Session = 5;
+	string Frontend = 6;
+	map<string, string> FrontendAttrs = 7;
 }
 
 message SolveResponse {

@@ -8,6 +8,7 @@ import (
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/exporter"
+	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/util/progress"
@@ -76,30 +77,64 @@ func New(resolve ResolveOpFunc, cache InstructionCache) *Solver {
 	return &Solver{resolve: resolve, jobs: newJobList(), cache: cache}
 }
 
-func (s *Solver) Solve(ctx context.Context, id string, v Vertex, exp exporter.ExporterInstance) error {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+type llbBridge struct {
+	solver func(ctx context.Context, v *vertex, i Index) (Reference, error)
+}
 
-	pr, ctx, closeProgressWriter := progress.NewContext(ctx)
-
-	origVertex := v
-
-	defer closeProgressWriter()
-
+func (s *llbBridge) Solve(ctx context.Context, dt [][]byte) (cache.ImmutableRef, error) {
+	v, err := LoadLLB(dt)
+	if err != nil {
+		return nil, err
+	}
 	if len(v.Inputs()) == 0 {
-		return errors.New("required vertex needs to have inputs")
+		return nil, errors.New("required vertex needs to have inputs")
 	}
 
 	index := v.Inputs()[0].Index
 	v = v.Inputs()[0].Vertex
 
 	vv := toInternalVertex(v)
-	solveVertex := vv
+	ref, err := s.solver(ctx, vv, index)
+	if err != nil {
+		return nil, err
+	}
+	immutable, ok := toImmutableRef(ref)
+	if !ok {
+		return nil, errors.Errorf("invalid reference for exporting: %T", ref)
+	}
 
-	if exp != nil {
-		vv = &vertex{digest: origVertex.Digest(), name: exp.Name()}
-		vv.inputs = []*input{{index: 0, vertex: solveVertex}}
-		vv.initClientVertex()
+	return immutable, nil
+}
+
+func (s *Solver) Solve(ctx context.Context, id string, f frontend.Frontend, v Vertex, exp exporter.ExporterInstance, frontendOpt map[string]string) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	pr, ctx, closeProgressWriter := progress.NewContext(ctx)
+
+	defer closeProgressWriter()
+
+	var vv *vertex
+	var solveVertex *vertex
+	var index Index
+	if v != nil {
+		origVertex := v
+
+		if len(v.Inputs()) == 0 {
+			return errors.New("required vertex needs to have inputs")
+		}
+
+		index = v.Inputs()[0].Index
+		v = v.Inputs()[0].Vertex
+
+		vv = toInternalVertex(v)
+		solveVertex = vv
+
+		if exp != nil {
+			vv = &vertex{digest: origVertex.Digest(), name: exp.Name()}
+			vv.inputs = []*input{{index: 0, vertex: solveVertex}}
+			vv.initClientVertex()
+		}
 	}
 
 	ctx, j, err := s.jobs.new(ctx, id, vv, pr)
@@ -107,7 +142,14 @@ func (s *Solver) Solve(ctx context.Context, id string, v Vertex, exp exporter.Ex
 		return err
 	}
 
-	ref, err := s.getRef(ctx, solveVertex, index)
+	var ref Reference
+	if solveVertex != nil {
+		ref, err = s.getRef(ctx, solveVertex, index)
+	} else {
+		ref, err = f.Solve(ctx, &llbBridge{
+			solver: s.getRef,
+		}, frontendOpt)
+	}
 	s.activeState.cancel(j)
 	if err != nil {
 		return err
