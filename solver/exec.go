@@ -3,6 +3,7 @@ package solver
 import (
 	"encoding/json"
 	"fmt"
+	"path"
 	"sort"
 	"strings"
 
@@ -142,7 +143,7 @@ func (e *execOp) ContentKeys(ctx context.Context, inputs [][]digest.Digest, refs
 	for _, m := range e.op.Mounts {
 		if m.Input != pb.Empty {
 			if m.Dest != pb.RootMount {
-				srcs[int(m.Input)] = "/" // TODO: selector
+				srcs[int(m.Input)] = path.Join("/", m.Selector)
 				skip = false
 			} else {
 				rootIndex = int(m.Input)
