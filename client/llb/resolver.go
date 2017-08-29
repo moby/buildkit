@@ -192,8 +192,18 @@ func (i *inMemoryIngester) Reader(ctx context.Context, dgst digest.Digest) (io.R
 	return ioutil.NopCloser(rdr), nil
 }
 
-func (i *inMemoryIngester) ReaderAt(ctx context.Context, dgst digest.Digest) (io.ReaderAt, error) {
-	return i.reader(ctx, dgst)
+type ReaderAt interface {
+	io.ReaderAt
+	io.Closer
+	Size() int64
+}
+
+func (i *inMemoryIngester) ReaderAt(ctx context.Context, dgst digest.Digest) (content.ReaderAt, error) {
+	r, err := i.reader(ctx, dgst)
+	if err != nil {
+		return nil, err
+	}
+	return &contentReaderAt{r}, nil
 }
 
 func (i *inMemoryIngester) reader(ctx context.Context, dgst digest.Digest) (*bytes.Reader, error) {
@@ -211,6 +221,18 @@ func (i *inMemoryIngester) addMap(k digest.Digest, dt []byte) {
 	i.mu.Lock()
 	i.mu.Unlock()
 	i.buffers[k] = dt
+}
+
+type contentReaderAt struct {
+	*bytes.Reader
+}
+
+func (c *contentReaderAt) Close() error {
+	return nil
+}
+
+func (c *contentReaderAt) Size() int64 {
+	return int64(c.Reader.Len())
 }
 
 type bufferedWriter struct {
@@ -255,7 +277,7 @@ func (w *bufferedWriter) Digest() digest.Digest {
 	return w.digester.Digest()
 }
 
-func (w *bufferedWriter) Commit(size int64, expected digest.Digest) error {
+func (w *bufferedWriter) Commit(size int64, expected digest.Digest, opt ...content.Opt) error {
 	if w.buffer == nil {
 		return errors.Errorf("can't commit already committed or closed")
 	}
