@@ -85,15 +85,17 @@ type job struct {
 
 func (j *job) pipe(ctx context.Context, ch chan *client.SolveStatus) error {
 	pr := j.pr.Reader(ctx)
-	for v := range walk(j.g) {
-		vv := v.(*vertex)
-		ss := &client.SolveStatus{
-			Vertexes: []*client.Vertex{&vv.clientVertex},
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case ch <- ss:
+	if j.g != nil {
+		for v := range walk(j.g) {
+			vv := v.(*vertex)
+			ss := &client.SolveStatus{
+				Vertexes: []*client.Vertex{&vv.clientVertex},
+			}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case ch <- ss:
+			}
 		}
 	}
 	for {

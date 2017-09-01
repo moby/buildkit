@@ -212,7 +212,7 @@ type ExecState struct {
 }
 
 func (e ExecState) AddMount(target string, source State, opt ...MountOption) State {
-	return NewState(e.exec.AddMount(target, source.Output(), opt...))
+	return source.WithOutput(e.exec.AddMount(target, source.Output(), opt...))
 }
 
 func (e ExecState) GetMount(target string) State {
@@ -243,6 +243,13 @@ func Shlex(str string) RunOption {
 func Shlexf(str string, v ...interface{}) RunOption {
 	return func(ei ExecInfo) ExecInfo {
 		ei.State = shlexf(str, v...)(ei.State)
+		return ei
+	}
+}
+
+func Args(a []string) RunOption {
+	return func(ei ExecInfo) ExecInfo {
+		ei.State = args(a...)(ei.State)
 		return ei
 	}
 }

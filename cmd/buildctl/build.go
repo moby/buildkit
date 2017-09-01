@@ -37,6 +37,14 @@ var buildCommand = cli.Command{
 			Name:  "local",
 			Usage: "Allow build access to the local directory",
 		},
+		cli.StringFlag{
+			Name:  "frontend",
+			Usage: "Define frontend used for build",
+		},
+		cli.StringSliceFlag{
+			Name:  "frontend-opt",
+			Usage: "Define custom options for frontend",
+		},
 	},
 }
 
@@ -64,6 +72,11 @@ func build(clicontext *cli.Context) error {
 		return errors.Wrap(err, "invalid exporter-opt")
 	}
 
+	frontendAttrs, err := attrMap(clicontext.StringSlice("frontend-opt"))
+	if err != nil {
+		return errors.Wrap(err, "invalid frontend-opt")
+	}
+
 	localDirs, err := attrMap(clicontext.StringSlice("local"))
 	if err != nil {
 		return errors.Wrap(err, "invalid local")
@@ -74,6 +87,8 @@ func build(clicontext *cli.Context) error {
 			Exporter:      clicontext.String("exporter"),
 			ExporterAttrs: exporterAttrs,
 			LocalDirs:     localDirs,
+			Frontend:      clicontext.String("frontend"),
+			FrontendAttrs: frontendAttrs,
 		}, ch)
 	})
 

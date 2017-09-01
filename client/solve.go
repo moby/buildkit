@@ -26,6 +26,8 @@ type SolveOpt struct {
 	ExporterAttrs map[string]string
 	LocalDirs     map[string]string
 	SharedKey     string
+	Frontend      string
+	FrontendAttrs map[string]string
 	// Session string
 }
 
@@ -36,13 +38,17 @@ func (c *Client) Solve(ctx context.Context, r io.Reader, opt SolveOpt, statusCha
 		}
 	}()
 
-	def, err := llb.ReadFrom(r)
-	if err != nil {
-		return errors.Wrap(err, "failed to parse input")
-	}
+	var def [][]byte
+	var err error
+	if opt.Frontend == "" {
+		def, err = llb.ReadFrom(r)
+		if err != nil {
+			return errors.Wrap(err, "failed to parse input")
+		}
 
-	if len(def) == 0 {
-		return errors.New("invalid empty definition")
+		if len(def) == 0 {
+			return errors.New("invalid empty definition")
+		}
 	}
 
 	syncedDirs, err := prepareSyncedDirs(def, opt.LocalDirs)
@@ -92,6 +98,8 @@ func (c *Client) Solve(ctx context.Context, r io.Reader, opt SolveOpt, statusCha
 			Exporter:      opt.Exporter,
 			ExporterAttrs: opt.ExporterAttrs,
 			Session:       s.ID(),
+			Frontend:      opt.Frontend,
+			FrontendAttrs: opt.FrontendAttrs,
 		})
 		if err != nil {
 			return errors.Wrap(err, "failed to solve")
@@ -175,6 +183,11 @@ func prepareSyncedDirs(defs [][]byte, localDirs map[string]string) ([]filesync.S
 		}
 	}
 	dirs := make([]filesync.SyncedDir, 0, len(localDirs))
+	if len(defs) == 0 {
+		for name, d := range localDirs {
+			dirs = append(dirs, filesync.SyncedDir{Name: name, Dir: d})
+		}
+	}
 	for _, dt := range defs {
 		var op pb.Op
 		if err := (&op).Unmarshal(dt); err != nil {

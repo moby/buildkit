@@ -6,6 +6,7 @@ import (
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/exporter"
+	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/grpchijack"
 	"github.com/moby/buildkit/solver"
@@ -26,6 +27,7 @@ type Opt struct {
 	InstructionCache solver.InstructionCache
 	Exporters        map[string]exporter.Exporter
 	SessionManager   *session.Manager
+	Frontends        map[string]frontend.Frontend
 }
 
 type Controller struct { // TODO: ControlService
@@ -77,14 +79,28 @@ func (c *Controller) DiskUsage(ctx context.Context, r *controlapi.DiskUsageReque
 }
 
 func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*controlapi.SolveResponse, error) {
-	v, err := solver.LoadLLB(req.Definition)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to load")
+	var frontend frontend.Frontend
+	if req.Frontend != "" {
+		var ok bool
+		frontend, ok = c.opt.Frontends[req.Frontend]
+		if !ok {
+			return nil, errors.Errorf("frontend %s not found", req.Frontend)
+		}
+	}
+
+	var vertex solver.Vertex
+	if req.Frontend == "" {
+		v, err := solver.LoadLLB(req.Definition)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to load llb definition")
+		}
+		vertex = v
 	}
 
 	ctx = session.NewContext(ctx, req.Session)
 
 	var expi exporter.ExporterInstance
+	var err error
 	if req.Exporter != "" {
 		exp, ok := c.opt.Exporters[req.Exporter]
 		if !ok {
@@ -96,7 +112,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		}
 	}
 
-	if err := c.solver.Solve(ctx, req.Ref, v, expi); err != nil {
+	if err := c.solver.Solve(ctx, req.Ref, frontend, vertex, expi, req.FrontendAttrs); err != nil {
 		return nil, err
 	}
 	return &controlapi.SolveResponse{}, nil

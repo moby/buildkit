@@ -3,8 +3,10 @@ package llb
 import (
 	"context"
 	_ "crypto/sha256"
+	"encoding/json"
 	"strings"
 
+	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/pkg/errors"
 )
@@ -70,7 +72,14 @@ func Source(id string) State {
 }
 
 func Image(ref string, opts ...ImageOption) State {
+	r, err := reference.ParseNormalizedNamed(ref)
+	if err == nil {
+		ref = reference.TagNameOnly(r).String()
+	}
 	src := NewSource("docker-image://"+ref, nil) // controversial
+	if err != nil {
+		src.err = err
+	}
 	var info ImageInfo
 	for _, opt := range opts {
 		opt(&info)
@@ -149,6 +158,9 @@ func Local(name string, opts ...LocalOption) State {
 	if gi.SessionID != "" {
 		attrs[pb.AttrLocalSessionID] = gi.SessionID
 	}
+	if gi.IncludePatterns != "" {
+		attrs[pb.AttrIncludePatterns] = gi.IncludePatterns
+	}
 
 	source := NewSource("local://"+name, attrs)
 	return NewState(source.Output())
@@ -162,6 +174,14 @@ func SessionID(id string) LocalOption {
 	}
 }
 
+func IncludePatterns(p []string) LocalOption {
+	return func(li *LocalInfo) {
+		dt, _ := json.Marshal(p) // empty on error
+		li.IncludePatterns = string(dt)
+	}
+}
+
 type LocalInfo struct {
-	SessionID string
+	SessionID       string
+	IncludePatterns string
 }
