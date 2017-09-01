@@ -118,7 +118,7 @@ func (s State) Run(ro ...RunOption) ExecState {
 		Env:  getEnv(ei.State),
 	}
 
-	exec := NewExecOp(s.Output(), meta)
+	exec := NewExecOp(s.Output(), meta, ei.ReadonlyRootFS)
 	for _, m := range ei.Mounts {
 		exec.AddMount(m.Target, m.Source, m.Opts...)
 	}

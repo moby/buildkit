@@ -14,14 +14,19 @@ type Meta struct {
 	Cwd  string
 }
 
-func NewExecOp(root Output, meta Meta) *ExecOp {
+func NewExecOp(root Output, meta Meta, readOnly bool) *ExecOp {
 	e := &ExecOp{meta: meta}
 	rootMount := &mount{
-		target: pb.RootMount,
-		source: root,
+		target:   pb.RootMount,
+		source:   root,
+		readonly: readOnly,
 	}
 	e.mounts = append(e.mounts, rootMount)
-	e.root = &output{vertex: e, getIndex: e.getMountIndexFn(rootMount)}
+	if readOnly {
+		e.root = root
+	} else {
+		e.root = &output{vertex: e, getIndex: e.getMountIndexFn(rootMount)}
+	}
 	rootMount.output = e.root
 
 	return e
@@ -52,7 +57,11 @@ func (e *ExecOp) AddMount(target string, source Output, opt ...MountOption) Outp
 		o(m)
 	}
 	e.mounts = append(e.mounts, m)
-	m.output = &output{vertex: e, getIndex: e.getMountIndexFn(m)}
+	if m.readonly {
+		m.output = source
+	} else {
+		m.output = &output{vertex: e, getIndex: e.getMountIndexFn(m)}
+	}
 	e.cachedPB = nil
 	return m.output
 }
@@ -109,7 +118,8 @@ func (e *ExecOp) Marshal() ([]byte, error) {
 		},
 	}
 
-	for i, m := range e.mounts {
+	outIndex := 0
+	for _, m := range e.mounts {
 		inputIndex := pb.InputIndex(len(pop.Inputs))
 		if m.source != nil {
 			inp, err := m.source.ToInput()
@@ -134,11 +144,17 @@ func (e *ExecOp) Marshal() ([]byte, error) {
 			inputIndex = pb.Empty
 		}
 
+		outputIndex := pb.OutputIndex(-1)
+		if !m.readonly {
+			outputIndex = pb.OutputIndex(outIndex)
+			outIndex++
+		}
+
 		pm := &pb.Mount{
 			Input:    inputIndex,
 			Dest:     m.target,
 			Readonly: m.readonly,
-			Output:   pb.OutputIndex(i),
+			Output:   outputIndex,
 			Selector: m.selector,
 		}
 		peo.Mounts = append(peo.Mounts, pm)
@@ -176,10 +192,15 @@ func (e *ExecOp) getMountIndexFn(m *mount) func() (pb.OutputIndex, error) {
 			return e.mounts[i].target < e.mounts[j].target
 		})
 
-		for i, m2 := range e.mounts {
+		i := 0
+		for _, m2 := range e.mounts {
+			if m2.readonly {
+				continue
+			}
 			if m == m2 {
 				return pb.OutputIndex(i), nil
 			}
+			i++
 		}
 		return pb.OutputIndex(0), errors.Errorf("invalid mount")
 	}
@@ -268,9 +289,15 @@ func AddMount(dest string, mountState State, opts ...MountOption) RunOption {
 	}
 }
 
+func ReadonlyRootFS(ei ExecInfo) ExecInfo {
+	ei.ReadonlyRootFS = true
+	return ei
+}
+
 type ExecInfo struct {
-	State  State
-	Mounts []MountInfo
+	State          State
+	Mounts         []MountInfo
+	ReadonlyRootFS bool
 }
 
 type MountInfo struct {
