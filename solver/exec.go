@@ -137,16 +137,16 @@ func (e *execOp) ContentKeys(ctx context.Context, inputs [][]digest.Digest, refs
 	// contentKey for exec uses content based checksum for mounts and definition
 	// based checksum for root
 
-	rootIndex := -1
+	skipped := make([]int, 0)
 	skip := true
 	srcs := make([]string, len(refs))
 	for _, m := range e.op.Mounts {
 		if m.Input != pb.Empty {
-			if m.Dest != pb.RootMount {
+			if m.Dest != pb.RootMount && m.Readonly { // could also include rw if they don't have a selector, but not sure if helps performance
 				srcs[int(m.Input)] = path.Join("/", m.Selector)
 				skip = false
 			} else {
-				rootIndex = int(m.Input)
+				skipped = append(skipped, int(m.Input))
 			}
 		}
 	}
@@ -180,16 +180,20 @@ func (e *execOp) ContentKeys(ctx context.Context, inputs [][]digest.Digest, refs
 	}
 
 	var out []digest.Digest
+	inputKeys := make([]digest.Digest, len(skipped))
 	for _, cacheKeys := range inputs {
+		for i := range inputKeys {
+			inputKeys[i] = cacheKeys[skipped[i]]
+		}
 		dt, err := json.Marshal(struct {
 			Type    string
 			Sources []digest.Digest
-			Root    digest.Digest
+			Inputs  []digest.Digest
 			Exec    *pb.ExecOp
 		}{
 			Type:    execCacheType,
 			Sources: dgsts,
-			Root:    cacheKeys[rootIndex],
+			Inputs:  inputKeys,
 			Exec:    e.op,
 		})
 		if err != nil {

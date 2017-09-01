@@ -3,8 +3,8 @@ package dockerfile2llb
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"path"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -184,6 +184,8 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand) error {
 	var args []string = c.CmdLine
 	if c.PrependShell {
 		args = append(defaultShell(), strings.Join(args, " "))
+	} else if d.image.Config.Entrypoint != nil {
+		args = append(d.image.Config.Entrypoint, args...)
 	}
 	d.state = d.state.Run(llb.Args(args)).Root()
 	return nil
@@ -201,20 +203,23 @@ func dispatchWorkdir(d *dispatchState, c *instructions.WorkdirCommand) error {
 
 func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState llb.State) error {
 	// TODO: this should use CopyOp instead. Current implementation is inefficient and doesn't match Dockerfile path suffixes rules
-	img := llb.Image("docker.io/library/alpine@sha256:1072e499f3f655a032e88542330cf75b02e7bdf673278f701d7ba61629ee3ebe")
+	img := llb.Image("tonistiigi/copy@sha256:260a4355be76e0609518ebd7c0e026831c80b8908d4afd3f8e8c942645b1e5cf")
 
-	destDir := filepath.Join("/dest", toWorkingDir(d.state, c.Dest())) // TODO: detect file source + no dest path case
-	srcs := make([]string, 0, len(c.Sources()))
-	for _, src := range c.Sources() {
-		src = path.Join("/src", toWorkingDir(sourceState, src))
-		if src == "/src" {
-			src += "/."
+	dest := path.Join("/dest", toWorkingDir(d.state, c.Dest()))
+	args := []string{"copy"}
+	mounts := make([]llb.RunOption, 0, len(c.Sources()))
+	for i, src := range c.Sources() {
+		d, f := splitWildcards(src)
+		if f == "" {
+			f = path.Base(src)
 		}
-		srcs = append(srcs, src)
+		target := path.Join(fmt.Sprintf("/src-%d", i), f)
+		args = append(args, target)
+		mounts = append(mounts, llb.AddMount(target, sourceState, llb.SourcePath(d), llb.Readonly))
 	}
 
-	run := img.Run(llb.Shlexf("sh -c \"mkdir -p %s && cp -a %s %s\"", destDir, strings.Join(srcs, " "), destDir))
-	run.AddMount("/src", sourceState, llb.Readonly)
+	args = append(args, dest)
+	run := img.Run(append([]llb.RunOption{llb.Args(args)}, mounts...)...)
 	d.state = run.AddMount("/dest", d.state)
 	return nil
 }
@@ -254,4 +259,20 @@ func dispatchCmd(d *dispatchState, c *instructions.CmdCommand) error {
 	d.image.Config.Cmd = args
 	// d.image.Config.ArgsEscaped = true
 	return nil
+}
+
+func splitWildcards(name string) (string, string) {
+	i := 0
+	for ; i < len(name); i++ {
+		ch := name[i]
+		if ch == '\\' {
+			i++
+		} else if ch == '*' || ch == '?' || ch == '[' {
+			break
+		}
+	}
+	if i == len(name) {
+		return name, ""
+	}
+	return path.Dir(name[:i]), path.Base(name[:i]) + name[i:]
 }
