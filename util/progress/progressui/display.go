@@ -173,7 +173,7 @@ func (t *trace) displayInfo() (d displayInfo) {
 		j := job{
 			startTime:     addTime(v.Started, t.localTimeDiff),
 			completedTime: addTime(v.Completed, t.localTimeDiff),
-			name:          v.Name,
+			name:          strings.Replace(v.Name, "\t", " ", -1),
 		}
 		if v.Error != "" {
 			if strings.HasSuffix(v.Error, context.Canceled.Error()) {
