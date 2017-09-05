@@ -14,6 +14,7 @@ import (
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
@@ -25,6 +26,7 @@ type LLBOpt struct {
 	CacheManager     cache.Manager // TODO: this shouldn't be needed before instruction cache
 	Worker           worker.Worker
 	InstructionCache InstructionCache
+	ImageSource      source.Source
 }
 
 func NewLLBSolver(opt LLBOpt) *Solver {
@@ -40,7 +42,7 @@ func NewLLBSolver(opt LLBOpt) *Solver {
 		default:
 			return nil, errors.Errorf("invalid op type %T", op)
 		}
-	}, opt.InstructionCache)
+	}, opt.InstructionCache, opt.ImageSource)
 	return s
 }
 
@@ -71,13 +73,19 @@ type Solver struct {
 	jobs        *jobList
 	activeState activeState
 	cache       InstructionCache
+	imageSource source.Source
 }
 
-func New(resolve ResolveOpFunc, cache InstructionCache) *Solver {
-	return &Solver{resolve: resolve, jobs: newJobList(), cache: cache}
+func New(resolve ResolveOpFunc, cache InstructionCache, imageSource source.Source) *Solver {
+	return &Solver{resolve: resolve, jobs: newJobList(), cache: cache, imageSource: imageSource}
+}
+
+type resolveImageConfig interface {
+	ResolveImageConfig(ctx context.Context, ref string) (*ocispec.Image, error)
 }
 
 type llbBridge struct {
+	resolveImageConfig
 	solver func(ctx context.Context, v *vertex, i Index) (Reference, error)
 }
 
@@ -147,7 +155,8 @@ func (s *Solver) Solve(ctx context.Context, id string, f frontend.Frontend, v Ve
 		ref, err = s.getRef(ctx, solveVertex, index)
 	} else {
 		ref, err = f.Solve(ctx, &llbBridge{
-			solver: s.getRef,
+			solver:             s.getRef,
+			resolveImageConfig: s.imageSource.(resolveImageConfig),
 		}, frontendOpt)
 	}
 	s.activeState.cancel(j)

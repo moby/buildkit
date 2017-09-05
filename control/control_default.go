@@ -137,5 +137,6 @@ func defaultControllerOpts(root string, pd pullDeps) (*Opt, error) {
 		Exporters:        exporters,
 		SessionManager:   sessm,
 		Frontends:        frontends,
+		ImageSource:      is,
 	}, nil
 }

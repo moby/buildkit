@@ -28,6 +28,7 @@ type Opt struct {
 	Exporters        map[string]exporter.Exporter
 	SessionManager   *session.Manager
 	Frontends        map[string]frontend.Frontend
+	ImageSource      source.Source
 }
 
 type Controller struct { // TODO: ControlService
@@ -43,6 +44,7 @@ func NewController(opt Opt) (*Controller, error) {
 			CacheManager:     opt.CacheManager,
 			Worker:           opt.Worker,
 			InstructionCache: opt.InstructionCache,
+			ImageSource:      opt.ImageSource,
 		}),
 	}
 	return c, nil

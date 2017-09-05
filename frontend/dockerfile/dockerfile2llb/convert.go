@@ -79,7 +79,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 					}
 					d.stage.BaseName = reference.TagNameOnly(ref).String()
 					if opt.MetaResolver != nil {
-						img, err := metaResolver.Resolve(ctx, d.stage.BaseName)
+						img, err := metaResolver.ResolveImageConfig(ctx, d.stage.BaseName)
 						if err != nil {
 							return err
 						}
