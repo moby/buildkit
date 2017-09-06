@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BurntSushi/locker"
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
@@ -17,6 +18,7 @@ import (
 	"github.com/containerd/containerd/snapshot"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/source"
+	"github.com/moby/buildkit/util/imageutil"
 	"github.com/moby/buildkit/util/progress"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/identity"
@@ -40,17 +42,24 @@ type blobmapper interface {
 	SetBlob(ctx gocontext.Context, key string, blob digest.Digest) error
 }
 
+type resolveRecord struct {
+	desc ocispec.Descriptor
+	ts   time.Time
+}
+
 type imageSource struct {
 	SourceOpt
 	resolver remotes.Resolver
+	lru      map[string]resolveRecord
 }
 
 func NewSource(opt SourceOpt) (source.Source, error) {
 	is := &imageSource{
 		SourceOpt: opt,
-		resolver: docker.NewResolver(docker.ResolverOptions{
+		lru:       map[string]resolveRecord{},
+		resolver: newCachedResolver(docker.NewResolver(docker.ResolverOptions{
 			Client: http.DefaultClient,
-		}),
+		}), 5*time.Second),
 	}
 
 	if _, ok := opt.Snapshotter.(blobmapper); !ok {
@@ -64,13 +73,8 @@ func (is *imageSource) ID() string {
 	return source.DockerImageScheme
 }
 
-type puller struct {
-	is          *imageSource
-	resolveOnce sync.Once
-	src         *source.ImageIdentifier
-	desc        ocispec.Descriptor
-	ref         string
-	resolveErr  error
+func (is *imageSource) ResolveImageConfig(ctx context.Context, ref string) (*ocispec.Image, error) {
+	return imageutil.Config(ctx, ref, is.resolver, is.ContentStore)
 }
 
 func (is *imageSource) Resolve(ctx context.Context, id source.Identifier) (source.SourceInstance, error) {
@@ -86,9 +90,34 @@ func (is *imageSource) Resolve(ctx context.Context, id source.Identifier) (sourc
 	return p, nil
 }
 
+type puller struct {
+	is          *imageSource
+	resolveOnce sync.Once
+	src         *source.ImageIdentifier
+	desc        ocispec.Descriptor
+	ref         string
+	resolveErr  error
+}
+
 func (p *puller) resolve(ctx context.Context) error {
 	p.resolveOnce.Do(func() {
 		resolveProgressDone := oneOffProgress(ctx, "resolve "+p.src.Reference.String())
+
+		dgst := p.src.Reference.Digest()
+		if dgst != "" {
+			info, err := p.is.ContentStore.Info(ctx, dgst)
+			if err == nil {
+				p.ref = p.src.Reference.String()
+				p.desc = ocispec.Descriptor{
+					Size:      info.Size,
+					Digest:    dgst,
+					MediaType: ocispec.MediaTypeImageManifest, // TODO: detect schema1/manifest-list
+				}
+				resolveProgressDone(nil)
+				return
+			}
+		}
+
 		ref, desc, err := p.is.resolver.Resolve(ctx, p.src.Reference.String())
 		if err != nil {
 			p.resolveErr = err
@@ -382,4 +411,46 @@ func oneOffProgress(ctx context.Context, id string) func(err error) error {
 		pw.Close()
 		return err
 	}
+}
+
+func newCachedResolver(r remotes.Resolver, timeout time.Duration) remotes.Resolver {
+	return &cachedResolver{
+		Resolver: r,
+		cache:    map[string]cachedResult{},
+		timeout:  timeout,
+		locker:   locker.NewLocker(),
+	}
+}
+
+type cachedResolver struct {
+	remotes.Resolver
+	cache   map[string]cachedResult
+	timeout time.Duration
+	locker  *locker.Locker
+}
+
+func (cr *cachedResolver) Resolve(ctx gocontext.Context, ref string) (name string, desc ocispec.Descriptor, err error) {
+	cr.locker.Lock(ref)
+	defer cr.locker.Unlock(ref)
+	r, ok := cr.cache[ref]
+	if ok && time.Since(r.ts) < cr.timeout {
+		return r.name, r.desc, nil
+	}
+	delete(cr.cache, ref)
+	n, d, err := cr.Resolver.Resolve(ctx, ref)
+	if err != nil {
+		return "", d, err
+	}
+	cr.cache[ref] = cachedResult{
+		name: n,
+		desc: d,
+		ts:   time.Now(),
+	}
+	return n, d, nil
+}
+
+type cachedResult struct {
+	name string
+	desc ocispec.Descriptor
+	ts   time.Time
 }

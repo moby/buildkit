@@ -3,9 +3,6 @@ package llb
 import (
 	"bytes"
 	"context"
-	"encoding/json"
-	"io"
-	"io/ioutil"
 	"net/http"
 	"sync"
 	"time"
@@ -13,9 +10,9 @@ import (
 	"github.com/BurntSushi/locker"
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
-	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
+	"github.com/moby/buildkit/util/imageutil"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -35,7 +32,7 @@ func WithDefaultMetaResolver(ii *ImageInfo) {
 }
 
 type ImageMetaResolver interface {
-	Resolve(ctx context.Context, ref string) (*ocispec.Image, error)
+	ResolveImageConfig(ctx context.Context, ref string) (*ocispec.Image, error)
 }
 
 func NewImageMetaResolver() ImageMetaResolver {
@@ -63,7 +60,7 @@ type imageMetaResolver struct {
 	cache    map[string]*ocispec.Image
 }
 
-func (imr *imageMetaResolver) Resolve(ctx context.Context, ref string) (*ocispec.Image, error) {
+func (imr *imageMetaResolver) ResolveImageConfig(ctx context.Context, ref string) (*ocispec.Image, error) {
 	imr.locker.Lock(ref)
 	defer imr.locker.Unlock(ref)
 
@@ -71,87 +68,13 @@ func (imr *imageMetaResolver) Resolve(ctx context.Context, ref string) (*ocispec
 		return img, nil
 	}
 
-	ref, desc, err := imr.resolver.Resolve(ctx, ref)
+	img, err := imageutil.Config(ctx, ref, imr.resolver, imr.ingester)
 	if err != nil {
 		return nil, err
 	}
 
-	fetcher, err := imr.resolver.Fetcher(ctx, ref)
-	if err != nil {
-		return nil, err
-	}
-
-	handlers := []images.Handler{
-		remotes.FetchHandler(imr.ingester, fetcher),
-		childrenConfigHandler(imr.ingester),
-	}
-	if err := images.Dispatch(ctx, images.Handlers(handlers...), desc); err != nil {
-		return nil, err
-	}
-	config, err := images.Config(ctx, imr.ingester, desc)
-	if err != nil {
-		return nil, err
-	}
-
-	var ociimage ocispec.Image
-
-	r, err := imr.ingester.Reader(ctx, config.Digest)
-	if err != nil {
-		return nil, err
-	}
-	defer r.Close()
-	dec := json.NewDecoder(r)
-	if err := dec.Decode(&ociimage); err != nil {
-		return nil, err
-	}
-	if dec.More() {
-		return nil, errors.New("invalid image config")
-	}
-
-	imr.cache[ref] = &ociimage
-
-	return &ociimage, nil
-}
-
-func childrenConfigHandler(provider content.Provider) images.HandlerFunc {
-	return func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
-		var descs []ocispec.Descriptor
-		switch desc.MediaType {
-		case images.MediaTypeDockerSchema2Manifest, ocispec.MediaTypeImageManifest:
-			p, err := content.ReadBlob(ctx, provider, desc.Digest)
-			if err != nil {
-				return nil, err
-			}
-
-			// TODO(stevvooe): We just assume oci manifest, for now. There may be
-			// subtle differences from the docker version.
-			var manifest ocispec.Manifest
-			if err := json.Unmarshal(p, &manifest); err != nil {
-				return nil, err
-			}
-
-			descs = append(descs, manifest.Config)
-		case images.MediaTypeDockerSchema2ManifestList, ocispec.MediaTypeImageIndex:
-			p, err := content.ReadBlob(ctx, provider, desc.Digest)
-			if err != nil {
-				return nil, err
-			}
-
-			var index ocispec.Index
-			if err := json.Unmarshal(p, &index); err != nil {
-				return nil, err
-			}
-
-			descs = append(descs, index.Manifests...)
-		case images.MediaTypeDockerSchema2Config, ocispec.MediaTypeImageConfig:
-			// childless data types.
-			return nil, nil
-		default:
-			return nil, errors.Errorf("encountered unknown type %v; children may not be fetched", desc.MediaType)
-		}
-
-		return descs, nil
-	}
+	imr.cache[ref] = img
+	return img, nil
 }
 
 type inMemoryIngester struct {
@@ -182,20 +105,6 @@ func (i *inMemoryIngester) Writer(ctx context.Context, ref string, size int64, e
 		},
 	}
 	return w, nil
-}
-
-func (i *inMemoryIngester) Reader(ctx context.Context, dgst digest.Digest) (io.ReadCloser, error) {
-	rdr, err := i.reader(ctx, dgst)
-	if err != nil {
-		return nil, err
-	}
-	return ioutil.NopCloser(rdr), nil
-}
-
-type ReaderAt interface {
-	io.ReaderAt
-	io.Closer
-	Size() int64
 }
 
 func (i *inMemoryIngester) ReaderAt(ctx context.Context, dgst digest.Digest) (content.ReaderAt, error) {

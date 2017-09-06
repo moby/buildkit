@@ -2,6 +2,7 @@ package frontend
 
 import (
 	"github.com/moby/buildkit/cache"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"golang.org/x/net/context"
 )
 
@@ -12,5 +13,5 @@ type Frontend interface {
 
 type FrontendLLBBridge interface {
 	Solve(ctx context.Context, vtx [][]byte) (cache.ImmutableRef, error)
-	// ImageConfigResolver
+	ResolveImageConfig(ctx context.Context, ref string) (*ocispec.Image, error)
 }
