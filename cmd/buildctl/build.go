@@ -33,6 +33,10 @@ var buildCommand = cli.Command{
 			Name:  "no-progress",
 			Usage: "Don't show interactive progress",
 		},
+		cli.StringFlag{
+			Name:  "trace",
+			Usage: "Path to trace file. e.g. /dev/null. Defaults to /tmp/buildctlXXXXXXXXX.",
+		},
 		cli.StringSliceFlag{
 			Name:  "local",
 			Usage: "Allow build access to the local directory",
@@ -48,13 +52,20 @@ var buildCommand = cli.Command{
 	},
 }
 
+func openTraceFile(clicontext *cli.Context) (*os.File, error) {
+	if traceFileName := clicontext.String("trace"); traceFileName != "" {
+		return os.OpenFile(traceFileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+	}
+	return ioutil.TempFile("", "buildctl")
+}
+
 func build(clicontext *cli.Context) error {
 	c, err := resolveClient(clicontext)
 	if err != nil {
 		return err
 	}
 
-	traceFile, err := ioutil.TempFile("", "buildctl")
+	traceFile, err := openTraceFile(clicontext)
 	if err != nil {
 		return err
 	}
