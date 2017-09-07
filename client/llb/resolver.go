@@ -186,7 +186,7 @@ func (w *bufferedWriter) Digest() digest.Digest {
 	return w.digester.Digest()
 }
 
-func (w *bufferedWriter) Commit(size int64, expected digest.Digest, opt ...content.Opt) error {
+func (w *bufferedWriter) Commit(ctx context.Context, size int64, expected digest.Digest, opt ...content.Opt) error {
 	if w.buffer == nil {
 		return errors.Errorf("can't commit already committed or closed")
 	}

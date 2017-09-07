@@ -18,7 +18,7 @@ import (
 // Ideally we don't have to import whole containerd just for the default spec
 
 func GenerateSpec(ctx context.Context, meta worker.Meta, mounts []worker.Mount) (*specs.Spec, func(), error) {
-	s, err := containerd.GenerateSpec(
+	s, err := containerd.GenerateSpec(ctx, nil, nil,
 		containerd.WithHostNamespace(specs.NetworkNamespace),
 		containerd.WithHostResolvconf,
 		containerd.WithHostHostsFile,

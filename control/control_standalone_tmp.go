@@ -1,15 +1,19 @@
-package differ
+// This file is just copied from https://github.com/containerd/containerd/blob/v1.0.0-beta.0/differ/differ.go
+// This file should be removed when the containerd exposes newWalkingDiff().
+
+package control
 
 import (
 	"io"
 	"io/ioutil"
 	"os"
+	"strings"
 
-	"github.com/boltdb/bolt"
 	"github.com/containerd/containerd/archive"
 	"github.com/containerd/containerd/archive/compression"
 	"github.com/containerd/containerd/content"
-	"github.com/containerd/containerd/metadata"
+	"github.com/containerd/containerd/errdefs"
+	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/plugin"
 	digest "github.com/opencontainers/go-digest"
@@ -18,44 +22,33 @@ import (
 	"golang.org/x/net/context"
 )
 
-func init() {
-	plugin.Register(&plugin.Registration{
-		Type: plugin.DiffPlugin,
-		ID:   "base-diff",
-		Requires: []plugin.PluginType{
-			plugin.ContentPlugin,
-			plugin.MetadataPlugin,
-		},
-		Init: func(ic *plugin.InitContext) (interface{}, error) {
-			c, err := ic.Get(plugin.ContentPlugin)
-			if err != nil {
-				return nil, err
-			}
-			md, err := ic.Get(plugin.MetadataPlugin)
-			if err != nil {
-				return nil, err
-			}
-			return NewBaseDiff(metadata.NewContentStore(md.(*bolt.DB), c.(content.Store)))
-		},
-	})
-}
-
-type BaseDiff struct {
+type walkingDiff struct {
 	store content.Store
 }
 
-var _ plugin.Differ = &BaseDiff{}
-
 var emptyDesc = ocispec.Descriptor{}
 
-func NewBaseDiff(store content.Store) (*BaseDiff, error) {
-	return &BaseDiff{
+func newWalkingDiff(store content.Store) (plugin.Differ, error) {
+	return &walkingDiff{
 		store: store,
 	}, nil
 }
 
-func (s *BaseDiff) Apply(ctx context.Context, desc ocispec.Descriptor, mounts []mount.Mount) (ocispec.Descriptor, error) {
-	// TODO: Check for supported media types
+func (s *walkingDiff) Apply(ctx context.Context, desc ocispec.Descriptor, mounts []mount.Mount) (ocispec.Descriptor, error) {
+	var isCompressed bool
+	switch desc.MediaType {
+	case ocispec.MediaTypeImageLayer, images.MediaTypeDockerSchema2Layer:
+	case ocispec.MediaTypeImageLayerGzip, images.MediaTypeDockerSchema2LayerGzip:
+		isCompressed = true
+	default:
+		// Still apply all generic media types *.tar[.+]gzip and *.tar
+		if strings.HasSuffix(desc.MediaType, ".tar.gzip") || strings.HasSuffix(desc.MediaType, ".tar+gzip") {
+			isCompressed = true
+		} else if !strings.HasSuffix(desc.MediaType, ".tar") {
+			return emptyDesc, errors.Wrapf(errdefs.ErrNotSupported, "unsupported diff media type: %v", desc.MediaType)
+		}
+	}
+
 	dir, err := ioutil.TempDir("", "extract-")
 	if err != nil {
 		return emptyDesc, errors.Wrap(err, "failed to create temporary directory")
@@ -67,22 +60,25 @@ func (s *BaseDiff) Apply(ctx context.Context, desc ocispec.Descriptor, mounts []
 	}
 	defer mount.Unmount(dir, 0)
 
-	r, err := s.store.ReaderAt(ctx, desc.Digest)
+	ra, err := s.store.ReaderAt(ctx, desc.Digest)
 	if err != nil {
 		return emptyDesc, errors.Wrap(err, "failed to get reader from content store")
 	}
-	defer r.Close()
+	defer ra.Close()
 
-	// TODO: only decompress stream if media type is compressed
-	ds, err := compression.DecompressStream(content.NewReader(r))
-	if err != nil {
-		return emptyDesc, err
+	r := content.NewReader(ra)
+	if isCompressed {
+		ds, err := compression.DecompressStream(r)
+		if err != nil {
+			return emptyDesc, err
+		}
+		defer ds.Close()
+		r = ds
 	}
-	defer ds.Close()
 
 	digester := digest.Canonical.Digester()
 	rc := &readCounter{
-		r: io.TeeReader(ds, digester.Hash()),
+		r: io.TeeReader(r, digester.Hash()),
 	}
 
 	if _, err := archive.Apply(ctx, dir, rc); err != nil {
@@ -101,7 +97,7 @@ func (s *BaseDiff) Apply(ctx context.Context, desc ocispec.Descriptor, mounts []
 	}, nil
 }
 
-func (s *BaseDiff) DiffMounts(ctx context.Context, lower, upper []mount.Mount, media, ref string) (ocispec.Descriptor, error) {
+func (s *walkingDiff) DiffMounts(ctx context.Context, lower, upper []mount.Mount, media, ref string) (ocispec.Descriptor, error) {
 	var isCompressed bool
 	switch media {
 	case ocispec.MediaTypeImageLayer:
@@ -111,7 +107,7 @@ func (s *BaseDiff) DiffMounts(ctx context.Context, lower, upper []mount.Mount, m
 		media = ocispec.MediaTypeImageLayerGzip
 		isCompressed = true
 	default:
-		return emptyDesc, errors.Errorf("unsupported diff media type: %v", media)
+		return emptyDesc, errors.Wrapf(errdefs.ErrNotSupported, "unsupported diff media type: %v", media)
 	}
 	aDir, err := ioutil.TempDir("", "left-")
 	if err != nil {
@@ -162,7 +158,7 @@ func (s *BaseDiff) DiffMounts(ctx context.Context, lower, upper []mount.Mount, m
 	}
 
 	dgst := cw.Digest()
-	if err := cw.Commit(0, dgst, opts...); err != nil {
+	if err := cw.Commit(ctx, 0, dgst, opts...); err != nil {
 		return emptyDesc, errors.Wrap(err, "failed to commit")
 	}
 
