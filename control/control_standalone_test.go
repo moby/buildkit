@@ -117,7 +117,9 @@ func TestControl(t *testing.T) {
 
 	err = w.Exec(ctx, meta, snap, nil, nil, &nopCloser{stderr})
 	assert.Error(t, err) // Read-only root
-	assert.Contains(t, stderr.String(), "Read-only file system")
+	// typical error is like `mkdir /.../rootfs/proc: read-only file system`.
+	// make sure the error is caused before running `echo foo > /bar`.
+	assert.Contains(t, stderr.String(), "read-only file system")
 
 	root, err := cm.New(ctx, snap)
 	assert.NoError(t, err)

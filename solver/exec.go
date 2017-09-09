@@ -78,7 +78,7 @@ func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, erro
 			mountable = ref
 		}
 		if m.Output != pb.SkipOutput {
-			if m.Readonly && ref != nil {
+			if m.Readonly && ref != nil && m.Dest != pb.RootMount { // exclude read-only rootfs
 				outputs = append(outputs, newSharedRef(ref).Clone())
 			} else {
 				active, err := e.cm.New(ctx, ref, cache.WithDescription(fmt.Sprintf("mount %s from exec %s", m.Dest, strings.Join(e.op.Meta.Args, " ")))) // TODO: should be method
