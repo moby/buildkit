@@ -9,6 +9,7 @@ import (
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/frontend"
+	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/util/progress"
@@ -40,7 +41,7 @@ func NewLLBSolver(opt LLBOpt) *Solver {
 		case *pb.Op_Build:
 			return newBuildOp(v, op, s)
 		default:
-			return nil, errors.Errorf("invalid op type %T", op)
+			return nil, nil
 		}
 	}, opt.InstructionCache, opt.ImageSource)
 	return s
@@ -177,11 +178,15 @@ func (s *Solver) Solve(ctx context.Context, id string, f frontend.Frontend, v Ve
 	}
 
 	if exp != nil {
-		vv.notifyStarted(ctx)
-		pw, _, ctx := progress.FromContext(ctx, progress.WithMetadata("vertex", vv.Digest()))
+		v := toInternalVertex(&vertex{digest: digest.FromBytes([]byte(identity.NewID())), name: exp.Name()})
+		if err := j.load(v, s.resolve); err != nil {
+			return err
+		}
+		v.notifyStarted(ctx)
+		pw, _, ctx := progress.FromContext(ctx, progress.WithMetadata("vertex", v.Digest()))
 		defer pw.Close()
-		err := exp.Export(ctx, immutable)
-		vv.notifyCompleted(ctx, false, err)
+		err := exp.Export(ctx, immutable, exporterOpt)
+		v.notifyCompleted(ctx, false, err)
 		if err != nil {
 			return err
 		}

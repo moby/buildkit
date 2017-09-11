@@ -6,8 +6,7 @@ import (
 )
 
 type Frontend interface {
-	Solve(ctx context.Context, llb FrontendLLBBridge, opt map[string]string) (cache.ImmutableRef, error)
-	// TODO: return exporter data
+	Solve(ctx context.Context, llb FrontendLLBBridge, opt map[string]string) (cache.ImmutableRef, map[string]interface{}, error)
 }
 
 type FrontendLLBBridge interface {

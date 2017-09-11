@@ -13,7 +13,7 @@ ENV FOO bar
 COPY f1 f2 /sub/
 RUN ls -l
 `
-	_, err := Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	_, _, err := Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
 	assert.NoError(t, err)
 
 	df = `FROM busybox AS foo
@@ -22,7 +22,7 @@ FROM foo
 COPY --from=foo f1 /
 COPY --from=0 f2 /
 	`
-	_, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	_, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
 	assert.NoError(t, err)
 
 	df = `FROM busybox AS foo
@@ -31,12 +31,12 @@ FROM foo
 COPY --from=foo f1 /
 COPY --from=0 f2 /
 	`
-	_, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{
+	_, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{
 		Target: "Foo",
 	})
 	assert.NoError(t, err)
 
-	_, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{
+	_, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{
 		Target: "nosuch",
 	})
 	assert.Error(t, err)

@@ -28,19 +28,19 @@ type ConvertOpt struct {
 	MetaResolver llb.ImageMetaResolver
 }
 
-func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State, error) {
+func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State, *Image, error) {
 	if len(dt) == 0 {
-		return nil, errors.Errorf("the Dockerfile cannot be empty")
+		return nil, nil, errors.Errorf("the Dockerfile cannot be empty")
 	}
 
 	dockerfile, err := parser.Parse(bytes.NewReader(dt))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	stages, metaArgs, err := instructions.Parse(dockerfile.AST)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	_ = metaArgs
@@ -98,12 +98,13 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 	}
 
 	if err := eg.Wait(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	for _, d := range allStages {
 		if d.base != nil {
 			d.state = d.base.state
+			d.image = clone(d.base.image)
 		}
 
 		for _, env := range d.image.Config.Env {
@@ -113,12 +114,12 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 				v = parts[1]
 			}
 			if err := dispatchEnv(d, &instructions.EnvCommand{Env: []instructions.KeyValuePair{{Key: parts[0], Value: v}}}); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		}
 		if d.image.Config.WorkingDir != "" {
 			if err = dispatchWorkdir(d, &instructions.WorkdirCommand{Path: d.image.Config.WorkingDir}); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		}
 
@@ -159,12 +160,12 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 					if err != nil {
 						stn, ok := stagesByName[strings.ToLower(c.From)]
 						if !ok {
-							return nil, errors.Errorf("stage %s not found", c.From)
+							return nil, nil, errors.Errorf("stage %s not found", c.From)
 						}
 						l = stn.state
 					} else {
 						if index >= len(allStages) {
-							return nil, errors.Errorf("invalid stage index %d", index)
+							return nil, nil, errors.Errorf("invalid stage index %d", index)
 						}
 						l = allStages[index].state
 					}
@@ -174,26 +175,22 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 				continue
 			}
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		}
 
 	}
 
 	if opt.Target == "" {
-		return &allStages[len(allStages)-1].state, nil
+		return &allStages[len(allStages)-1].state, &allStages[len(allStages)-1].image, nil
 	}
 
 	state, ok := stagesByName[strings.ToLower(opt.Target)]
 	if !ok {
-		return nil, errors.Errorf("target stage %s could not be found", opt.Target)
+		return nil, nil, errors.Errorf("target stage %s could not be found", opt.Target)
 	}
-	return &state.state, nil
+	return &state.state, &state.image, nil
 }
-
-// cmd
-// entrypoint
-// arg
 
 type dispatchState struct {
 	state llb.State
@@ -382,13 +379,13 @@ func addEnv(d *dispatchState, k, v string) error {
 		envParts := strings.SplitN(envVar, "=", 2)
 		compareFrom := envParts[0]
 		if equalEnvKeys(compareFrom, k) {
-			d.image.Config.Env[i] = v
+			d.image.Config.Env[i] = k + "=" + v
 			gotOne = true
 			break
 		}
 	}
 	if !gotOne {
-		d.image.Config.Env = append(d.image.Config.Env, v)
+		d.image.Config.Env = append(d.image.Config.Env, k+"="+v)
 	}
 	return nil
 }

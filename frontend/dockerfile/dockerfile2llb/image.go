@@ -49,3 +49,12 @@ type Image struct {
 	// Config defines the execution parameters which should be used as a base when running a container using the image.
 	Config ImageConfig `json:"config,omitempty"`
 }
+
+func clone(src Image) Image {
+	img := src
+	img.Config = src.Config
+	img.Config.Env = append([]string{}, src.Config.Env...)
+	img.Config.Cmd = append([]string{}, src.Config.Cmd...)
+	img.Config.Entrypoint = append([]string{}, src.Config.Entrypoint...)
+	return img
+}

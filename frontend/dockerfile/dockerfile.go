@@ -15,8 +15,9 @@ import (
 )
 
 const (
-	keyTarget   = "target"
-	keyFilename = "filename"
+	keyTarget           = "target"
+	keyFilename         = "filename"
+	exporterImageConfig = "containerimage.config"
 )
 
 type dfFrontend struct{}
@@ -25,25 +26,25 @@ func NewDockerfileFrontend() frontend.Frontend {
 	return &dfFrontend{}
 }
 
-func (f *dfFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string) (retRef cache.ImmutableRef, retErr error) {
+func (f *dfFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string) (retRef cache.ImmutableRef, exporterAttr map[string]interface{}, retErr error) {
 
 	filename := opts[keyFilename]
 	if filename == "" {
 		filename = "Dockerfile"
 	}
 	if path.Base(filename) != filename {
-		return nil, errors.Errorf("invalid filename %s", filename)
+		return nil, nil, errors.Errorf("invalid filename %s", filename)
 	}
 
 	src := llb.Local("dockerfile", llb.IncludePatterns([]string{filename}))
 	dt, err := src.Marshal()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	ref, err := llbBridge.Solve(ctx, dt)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	defer func() {
@@ -54,14 +55,14 @@ func (f *dfFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBr
 
 	mount, err := ref.Mount(ctx, false)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	lm := snapshot.LocalMounter(mount)
 
 	root, err := lm.Mount()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	defer func() {
@@ -72,36 +73,39 @@ func (f *dfFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBr
 
 	dtDockerfile, err := ioutil.ReadFile(filepath.Join(root, filename))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if err := lm.Unmount(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	lm = nil
 
 	if err := ref.Release(ctx); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	ref = nil
 
-	st, err := dockerfile2llb.Dockerfile2LLB(ctx, dtDockerfile, dockerfile2llb.ConvertOpt{
+	st, img, err := dockerfile2llb.Dockerfile2LLB(ctx, dtDockerfile, dockerfile2llb.ConvertOpt{
 		Target:       opts[keyTarget],
 		MetaResolver: llb.DefaultImageMetaResolver(),
 	})
+
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	dt, err = st.Marshal()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	retRef, err = llbBridge.Solve(ctx, dt)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return retRef, nil
+	return retRef, map[string]interface{}{
+		exporterImageConfig: img,
+	}, nil
 }
