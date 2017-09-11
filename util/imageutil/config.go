@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"io/ioutil"
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/images"
@@ -17,7 +18,7 @@ type IngesterProvider interface {
 	content.Provider
 }
 
-func Config(ctx context.Context, ref string, resolver remotes.Resolver, ingester IngesterProvider) (*ocispec.Image, error) {
+func Config(ctx context.Context, ref string, resolver remotes.Resolver, ingester IngesterProvider) ([]byte, error) {
 	ref, desc, err := resolver.Resolve(ctx, ref)
 	if err != nil {
 		return nil, err
@@ -40,22 +41,18 @@ func Config(ctx context.Context, ref string, resolver remotes.Resolver, ingester
 		return nil, err
 	}
 
-	var ociimage ocispec.Image
-
 	r, err := ingester.ReaderAt(ctx, config.Digest)
 	if err != nil {
 		return nil, err
 	}
 	defer r.Close()
-	dec := json.NewDecoder(readerAtToReader(r))
-	if err := dec.Decode(&ociimage); err != nil {
+
+	dt, err := ioutil.ReadAll(readerAtToReader(r))
+	if err != nil {
 		return nil, err
 	}
-	if dec.More() {
-		return nil, errors.New("invalid image config")
-	}
 
-	return &ociimage, nil
+	return dt, nil
 }
 
 func childrenConfigHandler(provider content.Provider) images.HandlerFunc {
