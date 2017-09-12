@@ -26,6 +26,7 @@ const (
 type ConvertOpt struct {
 	Target       string
 	MetaResolver llb.ImageMetaResolver
+	BuildArgs    map[string]string
 }
 
 func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State, *Image, error) {
@@ -43,12 +44,21 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		return nil, nil, err
 	}
 
-	_ = metaArgs
+	for i := range metaArgs {
+		metaArgs[i] = setArgValue(metaArgs[i], opt.BuildArgs)
+	}
+
+	shlex := NewShellLex(dockerfile.EscapeToken)
 
 	var allStages []*dispatchState
 	stagesByName := map[string]*dispatchState{}
 
 	for _, st := range stages {
+		name, err := shlex.ProcessWord(st.BaseName, combineArgs([]string{}, metaArgs))
+		if err != nil {
+			return nil, nil, err
+		}
+		st.BaseName = name
 		state := llb.Scratch()
 		if st.BaseName != emptyImageName {
 			state = llb.Image(st.BaseName)
@@ -83,7 +93,8 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 					if opt.MetaResolver != nil {
 						dt, err := metaResolver.ResolveImageConfig(ctx, d.stage.BaseName)
 						if err != nil {
-							return err
+							return nil // handle the error while builder is actually running
+							// TODO: detect unreachable stages so config is not pulled for them
 						}
 						var img Image
 						if err := json.Unmarshal(dt, &img); err != nil {
@@ -107,6 +118,8 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 			d.image = clone(d.base.image)
 		}
 
+		var args []instructions.ArgCommand
+
 		for _, env := range d.image.Config.Env {
 			parts := strings.SplitN(env, "=", 2)
 			v := ""
@@ -124,11 +137,20 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		}
 
 		for _, cmd := range d.stage.Commands {
+			if ex, ok := cmd.(instructions.SupportsSingleWordExpansion); ok {
+				err := ex.Expand(func(word string) (string, error) {
+					return shlex.ProcessWord(word, combineArgs(d.image.Config.Env, args))
+				})
+				if err != nil {
+					return nil, nil, err
+				}
+			}
+
 			switch c := cmd.(type) {
 			case *instructions.EnvCommand:
 				err = dispatchEnv(d, c)
 			case *instructions.RunCommand:
-				err = dispatchRun(d, c)
+				err = dispatchRun(d, c, args)
 			case *instructions.WorkdirCommand:
 				err = dispatchWorkdir(d, c)
 			case *instructions.AddCommand:
@@ -153,6 +175,8 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 				err = dispatchStopSignal(d, c)
 			case *instructions.ShellCommand:
 				err = dispatchShell(d, c)
+			case *instructions.ArgCommand:
+				args, err = dispatchArg(d, c, args, metaArgs, opt.BuildArgs)
 			case *instructions.CopyCommand:
 				l := llb.Local("context")
 				if c.From != "" {
@@ -202,21 +226,23 @@ type dispatchState struct {
 func dispatchEnv(d *dispatchState, c *instructions.EnvCommand) error {
 	for _, e := range c.Env {
 		d.state = d.state.AddEnv(e.Key, e.Value)
-		if err := addEnv(d, e.Key, e.Value); err != nil {
-			return err
-		}
+		d.image.Config.Env = addEnv(d.image.Config.Env, e.Key, e.Value, true)
 	}
 	return nil
 }
 
-func dispatchRun(d *dispatchState, c *instructions.RunCommand) error {
+func dispatchRun(d *dispatchState, c *instructions.RunCommand, buildArgs []instructions.ArgCommand) error {
 	var args []string = c.CmdLine
 	if c.PrependShell {
 		args = append(defaultShell(), strings.Join(args, " "))
 	} else if d.image.Config.Entrypoint != nil {
 		args = append(d.image.Config.Entrypoint, args...)
 	}
-	d.state = d.state.Run(llb.Args(args)).Root()
+	opt := []llb.RunOption{llb.Args(args)}
+	for _, arg := range buildArgs {
+		opt = append(opt, llb.AddEnv(arg.Key, getArgValue(arg)))
+	}
+	d.state = d.state.Run(opt...).Root()
 	return nil
 }
 
@@ -357,6 +383,19 @@ func dispatchShell(d *dispatchState, c *instructions.ShellCommand) error {
 	return nil
 }
 
+func dispatchArg(d *dispatchState, c *instructions.ArgCommand, args []instructions.ArgCommand, metaArgs []instructions.ArgCommand, buildArgs map[string]string) ([]instructions.ArgCommand, error) {
+	if c.Value == nil {
+		for _, ma := range metaArgs {
+			if ma.Key == c.Key {
+				c.Value = ma.Value
+			}
+		}
+	}
+
+	args = append(args, setArgValue(*c, buildArgs))
+	return args, nil
+}
+
 func splitWildcards(name string) (string, string) {
 	i := 0
 	for ; i < len(name); i++ {
@@ -373,23 +412,47 @@ func splitWildcards(name string) (string, string) {
 	return path.Dir(name[:i]), path.Base(name[:i]) + name[i:]
 }
 
-func addEnv(d *dispatchState, k, v string) error {
+func addEnv(env []string, k, v string, override bool) []string {
 	gotOne := false
-	for i, envVar := range d.image.Config.Env {
+	for i, envVar := range env {
 		envParts := strings.SplitN(envVar, "=", 2)
 		compareFrom := envParts[0]
 		if equalEnvKeys(compareFrom, k) {
-			d.image.Config.Env[i] = k + "=" + v
+			if override {
+				env[i] = k + "=" + v
+			}
 			gotOne = true
 			break
 		}
 	}
 	if !gotOne {
-		d.image.Config.Env = append(d.image.Config.Env, k+"="+v)
+		env = append(env, k+"="+v)
 	}
-	return nil
+	return env
 }
 
 func equalEnvKeys(from, to string) bool {
 	return from == to
+}
+
+func setArgValue(c instructions.ArgCommand, values map[string]string) instructions.ArgCommand {
+	if v, ok := values[c.Key]; ok {
+		c.Value = &v
+	}
+	return c
+}
+
+func combineArgs(env []string, args []instructions.ArgCommand) []string {
+	for _, arg := range args {
+		env = addEnv(env, arg.Key, getArgValue(arg), false)
+	}
+	return env
+}
+
+func getArgValue(arg instructions.ArgCommand) string {
+	v := ""
+	if arg.Value != nil {
+		v = *arg.Value
+	}
+	return v
 }

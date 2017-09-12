@@ -4,6 +4,7 @@ import (
 	"io/ioutil"
 	"path"
 	"path/filepath"
+	"strings"
 
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/client/llb"
@@ -89,6 +90,7 @@ func (f *dfFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBr
 	st, img, err := dockerfile2llb.Dockerfile2LLB(ctx, dtDockerfile, dockerfile2llb.ConvertOpt{
 		Target:       opts[keyTarget],
 		MetaResolver: llb.DefaultImageMetaResolver(),
+		BuildArgs:    filterBuildArgs(opts),
 	})
 
 	if err != nil {
@@ -108,4 +110,14 @@ func (f *dfFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBr
 	return retRef, map[string]interface{}{
 		exporterImageConfig: img,
 	}, nil
+}
+
+func filterBuildArgs(opt map[string]string) map[string]string {
+	m := map[string]string{}
+	for k, v := range opt {
+		if strings.HasPrefix(k, "build-arg:") {
+			m[strings.TrimPrefix(k, "build-arg:")] = v
+		}
+	}
+	return m
 }
