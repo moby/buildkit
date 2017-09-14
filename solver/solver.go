@@ -9,13 +9,11 @@ import (
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/frontend"
-	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
@@ -82,7 +80,7 @@ func New(resolve ResolveOpFunc, cache InstructionCache, imageSource source.Sourc
 }
 
 type resolveImageConfig interface {
-	ResolveImageConfig(ctx context.Context, ref string) (*ocispec.Image, error)
+	ResolveImageConfig(ctx context.Context, ref string) ([]byte, error)
 }
 
 type llbBridge struct {
@@ -152,10 +150,11 @@ func (s *Solver) Solve(ctx context.Context, id string, f frontend.Frontend, v Ve
 	}
 
 	var ref Reference
+	var exporterOpt map[string]interface{}
 	if solveVertex != nil {
 		ref, err = s.getRef(ctx, solveVertex, index)
 	} else {
-		ref, err = f.Solve(ctx, &llbBridge{
+		ref, exporterOpt, err = f.Solve(ctx, &llbBridge{
 			solver:             s.getRef,
 			resolveImageConfig: s.imageSource.(resolveImageConfig),
 		}, frontendOpt)
@@ -178,15 +177,11 @@ func (s *Solver) Solve(ctx context.Context, id string, f frontend.Frontend, v Ve
 	}
 
 	if exp != nil {
-		v := toInternalVertex(&vertex{digest: digest.FromBytes([]byte(identity.NewID())), name: exp.Name()})
-		if err := j.load(v, s.resolve); err != nil {
-			return err
-		}
-		v.notifyStarted(ctx)
-		pw, _, ctx := progress.FromContext(ctx, progress.WithMetadata("vertex", v.Digest()))
+		vv.notifyStarted(ctx)
+		pw, _, ctx := progress.FromContext(ctx, progress.WithMetadata("vertex", vv.Digest()))
 		defer pw.Close()
 		err := exp.Export(ctx, immutable, exporterOpt)
-		v.notifyCompleted(ctx, false, err)
+		vv.notifyCompleted(ctx, false, err)
 		if err != nil {
 			return err
 		}

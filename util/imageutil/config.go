@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"io/ioutil"
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/images"
+	"github.com/containerd/containerd/platforms"
+	"github.com/containerd/containerd/reference"
 	"github.com/containerd/containerd/remotes"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -18,13 +19,34 @@ type IngesterProvider interface {
 	content.Provider
 }
 
-func Config(ctx context.Context, ref string, resolver remotes.Resolver, ingester IngesterProvider) ([]byte, error) {
-	ref, desc, err := resolver.Resolve(ctx, ref)
+func Config(ctx context.Context, str string, resolver remotes.Resolver, ingester IngesterProvider) ([]byte, error) {
+	ref, err := reference.Parse(str)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
-	fetcher, err := resolver.Fetcher(ctx, ref)
+	dgst := ref.Digest()
+	var desc *ocispec.Descriptor
+	if dgst != "" {
+		info, err := ingester.ReaderAt(ctx, dgst)
+		if err == nil {
+			desc = &ocispec.Descriptor{
+				Size:      info.Size(),
+				Digest:    dgst,
+				MediaType: ocispec.MediaTypeImageManifest, // TODO: detect schema1/manifest-list
+			}
+		}
+	}
+
+	if desc == nil {
+		_, desc2, err := resolver.Resolve(ctx, ref.String())
+		if err != nil {
+			return nil, err
+		}
+		desc = &desc2
+	}
+
+	fetcher, err := resolver.Fetcher(ctx, ref.String())
 	if err != nil {
 		return nil, err
 	}
@@ -33,26 +55,15 @@ func Config(ctx context.Context, ref string, resolver remotes.Resolver, ingester
 		remotes.FetchHandler(ingester, fetcher),
 		childrenConfigHandler(ingester),
 	}
-	if err := images.Dispatch(ctx, images.Handlers(handlers...), desc); err != nil {
+	if err := images.Dispatch(ctx, images.Handlers(handlers...), *desc); err != nil {
 		return nil, err
 	}
-	config, err := images.Config(ctx, ingester, desc, "")
+	config, err := images.Config(ctx, ingester, *desc, platforms.Format(platforms.Default()))
 	if err != nil {
 		return nil, err
 	}
 
-	r, err := ingester.ReaderAt(ctx, config.Digest)
-	if err != nil {
-		return nil, err
-	}
-	defer r.Close()
-
-	dt, err := ioutil.ReadAll(readerAtToReader(r))
-	if err != nil {
-		return nil, err
-	}
-
-	return dt, nil
+	return content.ReadBlob(ctx, ingester, config.Digest)
 }
 
 func childrenConfigHandler(provider content.Provider) images.HandlerFunc {

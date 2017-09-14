@@ -78,7 +78,10 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		}
 	}
 
-	metaResolver := llb.DefaultImageMetaResolver()
+	metaResolver := opt.MetaResolver
+	if metaResolver == nil {
+		metaResolver = llb.DefaultImageMetaResolver()
+	}
 
 	eg, ctx := errgroup.WithContext(ctx)
 	for i, d := range allStages {
@@ -90,7 +93,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 						return err
 					}
 					d.stage.BaseName = reference.TagNameOnly(ref).String()
-					if opt.MetaResolver != nil {
+					if metaResolver != nil {
 						dt, err := metaResolver.ResolveImageConfig(ctx, d.stage.BaseName)
 						if err != nil {
 							return nil // handle the error while builder is actually running

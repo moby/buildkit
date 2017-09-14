@@ -15,6 +15,7 @@ import (
 	"github.com/moby/buildkit/util/imageutil"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
+	netcontext "golang.org/x/net/context"
 )
 
 var defaultImageMetaResolver ImageMetaResolver
@@ -31,7 +32,7 @@ func WithDefaultMetaResolver(ii *ImageInfo) {
 }
 
 type ImageMetaResolver interface {
-	ResolveImageConfig(ctx context.Context, ref string) ([]byte, error)
+	ResolveImageConfig(ctx netcontext.Context, ref string) ([]byte, error)
 }
 
 func NewImageMetaResolver() ImageMetaResolver {
@@ -59,7 +60,7 @@ type imageMetaResolver struct {
 	cache    map[string][]byte
 }
 
-func (imr *imageMetaResolver) ResolveImageConfig(ctx context.Context, ref string) ([]byte, error) {
+func (imr *imageMetaResolver) ResolveImageConfig(ctx netcontext.Context, ref string) ([]byte, error) {
 	imr.locker.Lock(ref)
 	defer imr.locker.Unlock(ref)
 

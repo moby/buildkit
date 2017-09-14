@@ -89,7 +89,7 @@ func (f *dfFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBr
 
 	st, img, err := dockerfile2llb.Dockerfile2LLB(ctx, dtDockerfile, dockerfile2llb.ConvertOpt{
 		Target:       opts[keyTarget],
-		MetaResolver: llb.DefaultImageMetaResolver(),
+		MetaResolver: llbBridge,
 		BuildArgs:    filterBuildArgs(opts),
 	})
 
