@@ -222,7 +222,7 @@ func getLayers(ctx context.Context, provider content.Provider, desc ocispec.Desc
 		return nil, errors.Wrap(err, "failed to unmarshal manifest")
 	}
 	image := images.Image{Target: desc}
-	diffIDs, err := image.RootFS(ctx, provider)
+	diffIDs, err := image.RootFS(ctx, provider, "")
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to resolve rootfs")
 	}

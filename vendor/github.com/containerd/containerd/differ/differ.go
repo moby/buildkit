@@ -1,7 +1,4 @@
-// This file is just copied from https://github.com/containerd/containerd/blob/v1.0.0-beta.0/differ/differ.go
-// This file should be removed when the containerd exposes newWalkingDiff().
-
-package control
+package differ
 
 import (
 	"io"
@@ -9,11 +6,13 @@ import (
 	"os"
 	"strings"
 
+	"github.com/boltdb/bolt"
 	"github.com/containerd/containerd/archive"
 	"github.com/containerd/containerd/archive/compression"
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
+	"github.com/containerd/containerd/metadata"
 	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/plugin"
 	digest "github.com/opencontainers/go-digest"
@@ -22,18 +21,45 @@ import (
 	"golang.org/x/net/context"
 )
 
+func init() {
+	plugin.Register(&plugin.Registration{
+		Type: plugin.DiffPlugin,
+		ID:   "walking",
+		Requires: []plugin.PluginType{
+			plugin.ContentPlugin,
+			plugin.MetadataPlugin,
+		},
+		Init: func(ic *plugin.InitContext) (interface{}, error) {
+			c, err := ic.Get(plugin.ContentPlugin)
+			if err != nil {
+				return nil, err
+			}
+			md, err := ic.Get(plugin.MetadataPlugin)
+			if err != nil {
+				return nil, err
+			}
+			return NewWalkingDiff(metadata.NewContentStore(md.(*bolt.DB), c.(content.Store)))
+		},
+	})
+}
+
 type walkingDiff struct {
 	store content.Store
 }
 
 var emptyDesc = ocispec.Descriptor{}
 
-func newWalkingDiff(store content.Store) (plugin.Differ, error) {
+// NewWalkingDiff is a generic implementation of plugin.Differ.
+// NewWalkingDiff is expected to work with any filesystem.
+func NewWalkingDiff(store content.Store) (plugin.Differ, error) {
 	return &walkingDiff{
 		store: store,
 	}, nil
 }
 
+// Apply applies the content associated with the provided digests onto the
+// provided mounts. Archive content will be extracted and decompressed if
+// necessary.
 func (s *walkingDiff) Apply(ctx context.Context, desc ocispec.Descriptor, mounts []mount.Mount) (ocispec.Descriptor, error) {
 	var isCompressed bool
 	switch desc.MediaType {
@@ -45,7 +71,7 @@ func (s *walkingDiff) Apply(ctx context.Context, desc ocispec.Descriptor, mounts
 		if strings.HasSuffix(desc.MediaType, ".tar.gzip") || strings.HasSuffix(desc.MediaType, ".tar+gzip") {
 			isCompressed = true
 		} else if !strings.HasSuffix(desc.MediaType, ".tar") {
-			return emptyDesc, errors.Wrapf(errdefs.ErrNotSupported, "unsupported diff media type: %v", desc.MediaType)
+			return emptyDesc, errors.Wrapf(errdefs.ErrNotImplemented, "unsupported diff media type: %v", desc.MediaType)
 		}
 	}
 
@@ -97,6 +123,8 @@ func (s *walkingDiff) Apply(ctx context.Context, desc ocispec.Descriptor, mounts
 	}, nil
 }
 
+// DiffMounts creates a diff between the given mounts and uploads the result
+// to the content store.
 func (s *walkingDiff) DiffMounts(ctx context.Context, lower, upper []mount.Mount, media, ref string) (ocispec.Descriptor, error) {
 	var isCompressed bool
 	switch media {
@@ -107,7 +135,7 @@ func (s *walkingDiff) DiffMounts(ctx context.Context, lower, upper []mount.Mount
 		media = ocispec.MediaTypeImageLayerGzip
 		isCompressed = true
 	default:
-		return emptyDesc, errors.Wrapf(errdefs.ErrNotSupported, "unsupported diff media type: %v", media)
+		return emptyDesc, errors.Wrapf(errdefs.ErrNotImplemented, "unsupported diff media type: %v", media)
 	}
 	aDir, err := ioutil.TempDir("", "left-")
 	if err != nil {

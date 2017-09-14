@@ -35,7 +35,7 @@ func Config(ctx context.Context, ref string, resolver remotes.Resolver, ingester
 	if err := images.Dispatch(ctx, images.Handlers(handlers...), desc); err != nil {
 		return nil, err
 	}
-	config, err := images.Config(ctx, ingester, desc)
+	config, err := images.Config(ctx, ingester, desc, "")
 	if err != nil {
 		return nil, err
 	}

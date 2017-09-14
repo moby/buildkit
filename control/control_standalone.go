@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/containerd/containerd/content/local"
+	"github.com/containerd/containerd/differ"
 	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/namespaces"
 	ctdsnapshot "github.com/containerd/containerd/snapshot"
@@ -54,8 +55,7 @@ func newStandalonePullDeps(root string) (*pullDeps, error) {
 		return nil, err
 	}
 
-	// TODO: use github.com/containerd/containerd/differ.newWalkingDiff() when it is exposed
-	differ, err := newWalkingDiff(c)
+	df, err := differ.NewWalkingDiff(c)
 	if err != nil {
 		return nil, err
 	}
@@ -63,8 +63,8 @@ func newStandalonePullDeps(root string) (*pullDeps, error) {
 	return &pullDeps{
 		Snapshotter:  &nsSnapshotter{s},
 		ContentStore: c,
-		Applier:      differ,
-		Differ:       differ,
+		Applier:      df,
+		Differ:       df,
 	}, nil
 }
 
