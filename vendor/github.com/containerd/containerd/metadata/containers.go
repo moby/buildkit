@@ -91,8 +91,8 @@ func (s *containerStore) Create(ctx context.Context, container containers.Contai
 		return containers.Container{}, err
 	}
 
-	if err := identifiers.Validate(container.ID); err != nil {
-		return containers.Container{}, err
+	if err := validateContainer(&container); err != nil {
+		return containers.Container{}, errors.Wrap(err, "create container failed validation")
 	}
 
 	bkt, err := createContainersBucket(s.tx, namespace)
@@ -144,37 +144,55 @@ func (s *containerStore) Update(ctx context.Context, container containers.Contai
 	createdat := updated.CreatedAt
 	updated.ID = container.ID
 
+	if len(fieldpaths) == 0 {
+		// only allow updates to these field on full replace.
+		fieldpaths = []string{"labels", "spec"}
+
+		// Fields that are immutable must cause an error when no field paths
+		// are provided. This allows these fields to become mutable in the
+		// future.
+		if updated.Image != container.Image {
+			return containers.Container{}, errors.Wrapf(errdefs.ErrInvalidArgument, "container.Image field is immutable")
+		}
+
+		if updated.SnapshotKey != container.SnapshotKey {
+			return containers.Container{}, errors.Wrapf(errdefs.ErrInvalidArgument, "container.SnapshotKey field is immutable")
+		}
+
+		if updated.Snapshotter != container.Snapshotter {
+			return containers.Container{}, errors.Wrapf(errdefs.ErrInvalidArgument, "container.Snapshotter field is immutable")
+		}
+
+		if updated.Runtime.Name != container.Runtime.Name {
+			return containers.Container{}, errors.Wrapf(errdefs.ErrInvalidArgument, "container.Runtime.Name field is immutable")
+		}
+	}
+
 	// apply the field mask. If you update this code, you better follow the
 	// field mask rules in field_mask.proto. If you don't know what this
 	// is, do not update this code.
-	if len(fieldpaths) > 0 {
-		// TODO(stevvooe): Move this logic into the store itself.
-		for _, path := range fieldpaths {
-			if strings.HasPrefix(path, "labels.") {
-				if updated.Labels == nil {
-					updated.Labels = map[string]string{}
-				}
-				key := strings.TrimPrefix(path, "labels.")
-				updated.Labels[key] = container.Labels[key]
-				continue
+	for _, path := range fieldpaths {
+		if strings.HasPrefix(path, "labels.") {
+			if updated.Labels == nil {
+				updated.Labels = map[string]string{}
 			}
-
-			switch path {
-			case "labels":
-				updated.Labels = container.Labels
-			case "image":
-				updated.Image = container.Image
-			case "spec":
-				updated.Spec = container.Spec
-			case "rootfs":
-				updated.RootFS = container.RootFS
-			default:
-				return containers.Container{}, errors.Wrapf(errdefs.ErrInvalidArgument, "cannot update %q field on %q", path, container.ID)
-			}
+			key := strings.TrimPrefix(path, "labels.")
+			updated.Labels[key] = container.Labels[key]
+			continue
 		}
-	} else {
-		// no field mask present, just replace everything
-		updated = container
+
+		switch path {
+		case "labels":
+			updated.Labels = container.Labels
+		case "spec":
+			updated.Spec = container.Spec
+		default:
+			return containers.Container{}, errors.Wrapf(errdefs.ErrInvalidArgument, "cannot update %q field on %q", path, container.ID)
+		}
+	}
+
+	if err := validateContainer(&updated); err != nil {
+		return containers.Container{}, errors.Wrap(err, "update failed validation")
 	}
 
 	updated.CreatedAt = createdat
@@ -183,7 +201,7 @@ func (s *containerStore) Update(ctx context.Context, container containers.Contai
 		return containers.Container{}, errors.Wrap(err, "failed to write container")
 	}
 
-	return container, nil
+	return updated, nil
 }
 
 func (s *containerStore) Delete(ctx context.Context, id string) error {
@@ -201,6 +219,27 @@ func (s *containerStore) Delete(ctx context.Context, id string) error {
 		return errors.Wrapf(errdefs.ErrNotFound, "container %v", id)
 	}
 	return err
+}
+
+func validateContainer(container *containers.Container) error {
+	if err := identifiers.Validate(container.ID); err != nil {
+		return errors.Wrapf(err, "container.ID validation error")
+	}
+
+	// labels and image have no validation
+	if container.Runtime.Name == "" {
+		return errors.Wrapf(errdefs.ErrInvalidArgument, "container.Runtime.Name must be set")
+	}
+
+	if container.Spec == nil {
+		return errors.Wrapf(errdefs.ErrInvalidArgument, "container.Spec must be set")
+	}
+
+	if container.SnapshotKey != "" && container.Snapshotter == "" {
+		return errors.Wrapf(errdefs.ErrInvalidArgument, "container.Snapshotter must be set if container.SnapshotKey is set")
+	}
+
+	return nil
 }
 
 func readContainer(container *containers.Container, bkt *bolt.Bucket) error {
@@ -245,9 +284,10 @@ func readContainer(container *containers.Container, bkt *bolt.Bucket) error {
 				return err
 			}
 			container.Spec = &any
-		case string(bucketKeyRootFS):
-			container.RootFS = string(v)
-
+		case string(bucketKeySnapshotKey):
+			container.SnapshotKey = string(v)
+		case string(bucketKeySnapshotter):
+			container.Snapshotter = string(v)
 		}
 
 		return nil
@@ -272,7 +312,8 @@ func writeContainer(bkt *bolt.Bucket, container *containers.Container) error {
 
 	for _, v := range [][2][]byte{
 		{bucketKeyImage, []byte(container.Image)},
-		{bucketKeyRootFS, []byte(container.RootFS)},
+		{bucketKeySnapshotter, []byte(container.Snapshotter)},
+		{bucketKeySnapshotKey, []byte(container.SnapshotKey)},
 	} {
 		if err := bkt.Put(v[0], v[1]); err != nil {
 			return err
@@ -294,18 +335,13 @@ func writeContainer(bkt *bolt.Bucket, container *containers.Container) error {
 		return err
 	}
 
-	obkt, err := rbkt.CreateBucket(bucketKeyOptions)
-	if err != nil {
-		return err
-	}
-
 	if container.Runtime.Options != nil {
 		data, err := proto.Marshal(container.Runtime.Options)
 		if err != nil {
 			return err
 		}
 
-		if err := obkt.Put(bucketKeyOptions, data); err != nil {
+		if err := rbkt.Put(bucketKeyOptions, data); err != nil {
 			return err
 		}
 	}

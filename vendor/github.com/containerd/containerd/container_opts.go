@@ -4,7 +4,12 @@ import (
 	"context"
 
 	"github.com/containerd/containerd/containers"
+	"github.com/containerd/containerd/errdefs"
+	"github.com/containerd/containerd/platforms"
+	"github.com/containerd/containerd/typeurl"
+	"github.com/gogo/protobuf/types"
 	"github.com/opencontainers/image-spec/identity"
+	"github.com/pkg/errors"
 )
 
 // NewContainerOpts allows the caller to set additional options when creating a container
@@ -12,10 +17,21 @@ type NewContainerOpts func(ctx context.Context, client *Client, c *containers.Co
 
 // WithRuntime allows a user to specify the runtime name and additional options that should
 // be used to create tasks for the container
-func WithRuntime(name string) NewContainerOpts {
+func WithRuntime(name string, options interface{}) NewContainerOpts {
 	return func(ctx context.Context, client *Client, c *containers.Container) error {
+		var (
+			any *types.Any
+			err error
+		)
+		if options != nil {
+			any, err = typeurl.MarshalAny(options)
+			if err != nil {
+				return err
+			}
+		}
 		c.Runtime = containers.RuntimeInfo{
-			Name: name,
+			Name:    name,
+			Options: any,
 		}
 		return nil
 	}
@@ -38,6 +54,8 @@ func WithContainerLabels(labels map[string]string) NewContainerOpts {
 }
 
 // WithSnapshotter sets the provided snapshotter for use by the container
+//
+// This option must appear before other snapshotter options to have an effect.
 func WithSnapshotter(name string) NewContainerOpts {
 	return func(ctx context.Context, client *Client, c *containers.Container) error {
 		c.Snapshotter = name
@@ -48,11 +66,12 @@ func WithSnapshotter(name string) NewContainerOpts {
 // WithSnapshot uses an existing root filesystem for the container
 func WithSnapshot(id string) NewContainerOpts {
 	return func(ctx context.Context, client *Client, c *containers.Container) error {
+		setSnapshotterIfEmpty(c)
 		// check that the snapshot exists, if not, fail on creation
 		if _, err := client.SnapshotService(c.Snapshotter).Mounts(ctx, id); err != nil {
 			return err
 		}
-		c.RootFS = id
+		c.SnapshotKey = id
 		return nil
 	}
 }
@@ -61,23 +80,27 @@ func WithSnapshot(id string) NewContainerOpts {
 // root filesystem in read-write mode
 func WithNewSnapshot(id string, i Image) NewContainerOpts {
 	return func(ctx context.Context, client *Client, c *containers.Container) error {
-		diffIDs, err := i.(*image).i.RootFS(ctx, client.ContentStore())
+		diffIDs, err := i.(*image).i.RootFS(ctx, client.ContentStore(), platforms.Format(platforms.Default()))
 		if err != nil {
 			return err
 		}
+		setSnapshotterIfEmpty(c)
 		if _, err := client.SnapshotService(c.Snapshotter).Prepare(ctx, id, identity.ChainID(diffIDs).String()); err != nil {
 			return err
 		}
-		c.RootFS = id
+		c.SnapshotKey = id
 		c.Image = i.Name()
 		return nil
 	}
 }
 
-// WithSnapshotCleanup deletes the rootfs allocated for the container
+// WithSnapshotCleanup deletes the rootfs snapshot allocated for the container
 func WithSnapshotCleanup(ctx context.Context, client *Client, c containers.Container) error {
-	if c.RootFS != "" {
-		return client.SnapshotService(c.Snapshotter).Remove(ctx, c.RootFS)
+	if c.SnapshotKey != "" {
+		if c.Snapshotter == "" {
+			return errors.Wrapf(errdefs.ErrInvalidArgument, "container.Snapshotter must be set to cleanup rootfs snapshot")
+		}
+		return client.SnapshotService(c.Snapshotter).Remove(ctx, c.SnapshotKey)
 	}
 	return nil
 }
@@ -86,15 +109,22 @@ func WithSnapshotCleanup(ctx context.Context, client *Client, c containers.Conta
 // root filesystem in read-only mode
 func WithNewSnapshotView(id string, i Image) NewContainerOpts {
 	return func(ctx context.Context, client *Client, c *containers.Container) error {
-		diffIDs, err := i.(*image).i.RootFS(ctx, client.ContentStore())
+		diffIDs, err := i.(*image).i.RootFS(ctx, client.ContentStore(), platforms.Format(platforms.Default()))
 		if err != nil {
 			return err
 		}
+		setSnapshotterIfEmpty(c)
 		if _, err := client.SnapshotService(c.Snapshotter).View(ctx, id, identity.ChainID(diffIDs).String()); err != nil {
 			return err
 		}
-		c.RootFS = id
+		c.SnapshotKey = id
 		c.Image = i.Name()
 		return nil
+	}
+}
+
+func setSnapshotterIfEmpty(c *containers.Container) {
+	if c.Snapshotter == "" {
+		c.Snapshotter = DefaultSnapshotter
 	}
 }

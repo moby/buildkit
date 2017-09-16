@@ -55,7 +55,7 @@ func newStandalonePullDeps(root string) (*pullDeps, error) {
 		return nil, err
 	}
 
-	differ, err := differ.NewBaseDiff(c)
+	df, err := differ.NewWalkingDiff(c)
 	if err != nil {
 		return nil, err
 	}
@@ -63,8 +63,8 @@ func newStandalonePullDeps(root string) (*pullDeps, error) {
 	return &pullDeps{
 		Snapshotter:  &nsSnapshotter{s},
 		ContentStore: c,
-		Applier:      differ,
-		Differ:       differ,
+		Applier:      df,
+		Differ:       df,
 	}, nil
 }
 

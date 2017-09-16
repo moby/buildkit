@@ -2,7 +2,6 @@ package containerimage
 
 import (
 	gocontext "context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"sync"
@@ -12,6 +11,7 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
+	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/rootfs"
@@ -213,21 +213,17 @@ func (is *imageSource) fillBlobMapping(ctx context.Context, layers []rootfs.Laye
 }
 
 func getLayers(ctx context.Context, provider content.Provider, desc ocispec.Descriptor) ([]rootfs.Layer, error) {
-	p, err := content.ReadBlob(ctx, provider, desc.Digest)
+	manifest, err := images.Manifest(ctx, provider, desc, platforms.Format(platforms.Default()))
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to read manifest blob")
-	}
-	var manifest ocispec.Manifest
-	if err := json.Unmarshal(p, &manifest); err != nil {
-		return nil, errors.Wrap(err, "failed to unmarshal manifest")
+		return nil, errors.WithStack(err)
 	}
 	image := images.Image{Target: desc}
-	diffIDs, err := image.RootFS(ctx, provider)
+	diffIDs, err := image.RootFS(ctx, provider, platforms.Format(platforms.Default()))
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to resolve rootfs")
 	}
 	if len(diffIDs) != len(manifest.Layers) {
-		return nil, errors.Errorf("mismatched image rootfs and manifest layers")
+		return nil, errors.Errorf("mismatched image rootfs and manifest layers %+v %+v", diffIDs, manifest.Layers)
 	}
 	layers := make([]rootfs.Layer, len(diffIDs))
 	for i := range diffIDs {

@@ -115,7 +115,7 @@ func copyFrom(src llb.State, srcPath, destPath string) llb.StateOption {
 // copy copies files between 2 states using cp until there is no copyOp
 func copy(src llb.State, srcPath string, dest llb.State, destPath string) llb.State {
 	cpImage := llb.Image("docker.io/library/alpine:latest")
-	cp := cpImage.Run(llb.Shlexf("cp -a /src%s /dest%s", srcPath, destPath), llb.ReadonlyRootFS)
+	cp := cpImage.Run(llb.Shlexf("cp -a /src%s /dest%s", srcPath, destPath))
 	cp.AddMount("/src", src, llb.Readonly)
 	return cp.AddMount("/dest", dest)
 }

@@ -2,10 +2,9 @@ package containerd
 
 import (
 	"context"
-	"encoding/json"
 
-	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/images"
+	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/rootfs"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -20,10 +19,12 @@ type Image interface {
 	Target() ocispec.Descriptor
 	// Unpack unpacks the image's content into a snapshot
 	Unpack(context.Context, string) error
-	// RootFS returns the image digests
+	// RootFS returns the unpacked diffids that make up images rootfs.
 	RootFS(ctx context.Context) ([]digest.Digest, error)
-	// Size returns the image size
+	// Size returns the total size of the image's packed resources.
 	Size(ctx context.Context) (int64, error)
+	// Config descriptor for the image.
+	Config(ctx context.Context) (ocispec.Descriptor, error)
 }
 
 var _ = (Image)(&image{})
@@ -44,7 +45,7 @@ func (i *image) Target() ocispec.Descriptor {
 
 func (i *image) RootFS(ctx context.Context) ([]digest.Digest, error) {
 	provider := i.client.ContentStore()
-	return i.i.RootFS(ctx, provider)
+	return i.i.RootFS(ctx, provider, platforms.Format(platforms.Default()))
 }
 
 func (i *image) Size(ctx context.Context) (int64, error) {
@@ -52,8 +53,13 @@ func (i *image) Size(ctx context.Context) (int64, error) {
 	return i.i.Size(ctx, provider)
 }
 
+func (i *image) Config(ctx context.Context) (ocispec.Descriptor, error) {
+	provider := i.client.ContentStore()
+	return i.i.Config(ctx, provider, platforms.Format(platforms.Default()))
+}
+
 func (i *image) Unpack(ctx context.Context, snapshotterName string) error {
-	layers, err := i.getLayers(ctx)
+	layers, err := i.getLayers(ctx, platforms.Format(platforms.Default()))
 	if err != nil {
 		return err
 	}
@@ -91,19 +97,15 @@ func (i *image) Unpack(ctx context.Context, snapshotterName string) error {
 	return nil
 }
 
-func (i *image) getLayers(ctx context.Context) ([]rootfs.Layer, error) {
+func (i *image) getLayers(ctx context.Context, platform string) ([]rootfs.Layer, error) {
 	cs := i.client.ContentStore()
 
-	// TODO: Support manifest list
-	p, err := content.ReadBlob(ctx, cs, i.i.Target.Digest)
+	manifest, err := images.Manifest(ctx, cs, i.i.Target, platform)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to read manifest blob")
+		return nil, errors.Wrap(err, "")
 	}
-	var manifest ocispec.Manifest
-	if err := json.Unmarshal(p, &manifest); err != nil {
-		return nil, errors.Wrap(err, "failed to unmarshal manifest")
-	}
-	diffIDs, err := i.i.RootFS(ctx, cs)
+
+	diffIDs, err := i.i.RootFS(ctx, cs, platform)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to resolve rootfs")
 	}
