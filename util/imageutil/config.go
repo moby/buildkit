@@ -3,7 +3,6 @@ package imageutil
 import (
 	"context"
 	"encoding/json"
-	"io"
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/images"
@@ -28,12 +27,15 @@ func Config(ctx context.Context, str string, resolver remotes.Resolver, ingester
 	dgst := ref.Digest()
 	var desc *ocispec.Descriptor
 	if dgst != "" {
-		info, err := ingester.ReaderAt(ctx, dgst)
+		ra, err := ingester.ReaderAt(ctx, dgst)
 		if err == nil {
-			desc = &ocispec.Descriptor{
-				Size:      info.Size(),
-				Digest:    dgst,
-				MediaType: ocispec.MediaTypeImageManifest, // TODO: detect schema1/manifest-list
+			mt, err := detectManifestMediaType(ra)
+			if err == nil {
+				desc = &ocispec.Descriptor{
+					Size:      ra.Size(),
+					Digest:    dgst,
+					MediaType: mt,
+				}
 			}
 		}
 	}
@@ -107,17 +109,25 @@ func childrenConfigHandler(provider content.Provider) images.HandlerFunc {
 	}
 }
 
-func readerAtToReader(r io.ReaderAt) io.Reader {
-	return &reader{ra: r}
-}
+// ocispec.MediaTypeImageManifest, // TODO: detect schema1/manifest-list
+func detectManifestMediaType(ra content.ReaderAt) (string, error) {
+	// TODO: schema1
 
-type reader struct {
-	ra     io.ReaderAt
-	offset int64
-}
+	p := make([]byte, ra.Size())
+	if _, err := ra.ReadAt(p, 0); err != nil {
+		return "", err
+	}
 
-func (r *reader) Read(b []byte) (int, error) {
-	n, err := r.ra.ReadAt(b, r.offset)
-	r.offset += int64(n)
-	return n, err
+	var mfst struct {
+		Config json.RawMessage `json:"config"`
+	}
+
+	if err := json.Unmarshal(p, &mfst); err != nil {
+		return "", err
+	}
+
+	if mfst.Config != nil {
+		return ocispec.MediaTypeImageManifest, nil
+	}
+	return ocispec.MediaTypeImageIndex, nil
 }
