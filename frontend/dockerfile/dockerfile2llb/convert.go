@@ -3,6 +3,7 @@ package dockerfile2llb
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"path"
 	"strconv"
@@ -11,8 +12,9 @@ import (
 	"github.com/docker/distribution/reference"
 	"github.com/docker/docker/builder/dockerfile/instructions"
 	"github.com/docker/docker/builder/dockerfile/parser"
+	"github.com/docker/docker/pkg/signal"
+	"github.com/docker/go-connections/nat"
 	"github.com/moby/buildkit/client/llb"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -24,29 +26,39 @@ const (
 type ConvertOpt struct {
 	Target       string
 	MetaResolver llb.ImageMetaResolver
+	BuildArgs    map[string]string
 }
 
-func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State, error) {
+func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State, *Image, error) {
 	if len(dt) == 0 {
-		return nil, errors.Errorf("the Dockerfile cannot be empty")
+		return nil, nil, errors.Errorf("the Dockerfile cannot be empty")
 	}
 
 	dockerfile, err := parser.Parse(bytes.NewReader(dt))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	stages, metaArgs, err := instructions.Parse(dockerfile.AST)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	_ = metaArgs
+	for i := range metaArgs {
+		metaArgs[i] = setArgValue(metaArgs[i], opt.BuildArgs)
+	}
+
+	shlex := NewShellLex(dockerfile.EscapeToken)
 
 	var allStages []*dispatchState
 	stagesByName := map[string]*dispatchState{}
 
 	for _, st := range stages {
+		name, err := shlex.ProcessWord(st.BaseName, combineArgs([]string{}, metaArgs))
+		if err != nil {
+			return nil, nil, err
+		}
+		st.BaseName = name
 		state := llb.Scratch()
 		if st.BaseName != emptyImageName {
 			state = llb.Image(st.BaseName)
@@ -66,7 +78,10 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		}
 	}
 
-	metaResolver := llb.DefaultImageMetaResolver()
+	metaResolver := opt.MetaResolver
+	if metaResolver == nil {
+		metaResolver = llb.DefaultImageMetaResolver()
+	}
 
 	eg, ctx := errgroup.WithContext(ctx)
 	for i, d := range allStages {
@@ -78,12 +93,17 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 						return err
 					}
 					d.stage.BaseName = reference.TagNameOnly(ref).String()
-					if opt.MetaResolver != nil {
-						img, err := metaResolver.ResolveImageConfig(ctx, d.stage.BaseName)
+					if metaResolver != nil {
+						dt, err := metaResolver.ResolveImageConfig(ctx, d.stage.BaseName)
 						if err != nil {
+							return nil // handle the error while builder is actually running
+							// TODO: detect unreachable stages so config is not pulled for them
+						}
+						var img Image
+						if err := json.Unmarshal(dt, &img); err != nil {
 							return err
 						}
-						allStages[i].image = *img
+						allStages[i].image = img
 					}
 					return nil
 				})
@@ -92,13 +112,16 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 	}
 
 	if err := eg.Wait(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	for _, d := range allStages {
 		if d.base != nil {
 			d.state = d.base.state
+			d.image = clone(d.base.image)
 		}
+
+		var args []instructions.ArgCommand
 
 		for _, env := range d.image.Config.Env {
 			parts := strings.SplitN(env, "=", 2)
@@ -107,25 +130,56 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 				v = parts[1]
 			}
 			if err := dispatchEnv(d, &instructions.EnvCommand{Env: []instructions.KeyValuePair{{Key: parts[0], Value: v}}}); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		}
 		if d.image.Config.WorkingDir != "" {
 			if err = dispatchWorkdir(d, &instructions.WorkdirCommand{Path: d.image.Config.WorkingDir}); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		}
 
 		for _, cmd := range d.stage.Commands {
+			if ex, ok := cmd.(instructions.SupportsSingleWordExpansion); ok {
+				err := ex.Expand(func(word string) (string, error) {
+					return shlex.ProcessWord(word, combineArgs(d.image.Config.Env, args))
+				})
+				if err != nil {
+					return nil, nil, err
+				}
+			}
+
 			switch c := cmd.(type) {
 			case *instructions.EnvCommand:
 				err = dispatchEnv(d, c)
 			case *instructions.RunCommand:
-				err = dispatchRun(d, c)
+				err = dispatchRun(d, c, args)
 			case *instructions.WorkdirCommand:
 				err = dispatchWorkdir(d, c)
 			case *instructions.AddCommand:
 				err = dispatchCopy(d, c.SourcesAndDest, llb.Local("context"))
+			case *instructions.LabelCommand:
+				err = dispatchLabel(d, c)
+			case *instructions.OnbuildCommand:
+				err = dispatchOnbuild(d, c)
+			case *instructions.CmdCommand:
+				err = dispatchCmd(d, c)
+			case *instructions.EntrypointCommand:
+				err = dispatchEntrypoint(d, c)
+			case *instructions.HealthCheckCommand:
+				err = dispatchHealthcheck(d, c)
+			case *instructions.ExposeCommand:
+				err = dispatchExpose(d, c)
+			case *instructions.UserCommand:
+				err = dispatchUser(d, c)
+			case *instructions.VolumeCommand:
+				err = dispatchVolume(d, c)
+			case *instructions.StopSignalCommand:
+				err = dispatchStopSignal(d, c)
+			case *instructions.ShellCommand:
+				err = dispatchShell(d, c)
+			case *instructions.ArgCommand:
+				args, err = dispatchArg(d, c, args, metaArgs, opt.BuildArgs)
 			case *instructions.CopyCommand:
 				l := llb.Local("context")
 				if c.From != "" {
@@ -133,12 +187,12 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 					if err != nil {
 						stn, ok := stagesByName[strings.ToLower(c.From)]
 						if !ok {
-							return nil, errors.Errorf("stage %s not found", c.From)
+							return nil, nil, errors.Errorf("stage %s not found", c.From)
 						}
 						l = stn.state
 					} else {
 						if index >= len(allStages) {
-							return nil, errors.Errorf("invalid stage index %d", index)
+							return nil, nil, errors.Errorf("invalid stage index %d", index)
 						}
 						l = allStages[index].state
 					}
@@ -148,26 +202,26 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 				continue
 			}
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		}
 
 	}
 
 	if opt.Target == "" {
-		return &allStages[len(allStages)-1].state, nil
+		return &allStages[len(allStages)-1].state, &allStages[len(allStages)-1].image, nil
 	}
 
 	state, ok := stagesByName[strings.ToLower(opt.Target)]
 	if !ok {
-		return nil, errors.Errorf("target stage %s could not be found", opt.Target)
+		return nil, nil, errors.Errorf("target stage %s could not be found", opt.Target)
 	}
-	return &state.state, nil
+	return &state.state, &state.image, nil
 }
 
 type dispatchState struct {
 	state llb.State
-	image ocispec.Image
+	image Image
 	stage instructions.Stage
 	base  *dispatchState
 }
@@ -175,19 +229,23 @@ type dispatchState struct {
 func dispatchEnv(d *dispatchState, c *instructions.EnvCommand) error {
 	for _, e := range c.Env {
 		d.state = d.state.AddEnv(e.Key, e.Value)
-		// addEnv(d.image, e.Key, e.Value)
+		d.image.Config.Env = addEnv(d.image.Config.Env, e.Key, e.Value, true)
 	}
 	return nil
 }
 
-func dispatchRun(d *dispatchState, c *instructions.RunCommand) error {
+func dispatchRun(d *dispatchState, c *instructions.RunCommand, buildArgs []instructions.ArgCommand) error {
 	var args []string = c.CmdLine
 	if c.PrependShell {
 		args = append(defaultShell(), strings.Join(args, " "))
 	} else if d.image.Config.Entrypoint != nil {
 		args = append(d.image.Config.Entrypoint, args...)
 	}
-	d.state = d.state.Run(llb.Args(args)).Root()
+	opt := []llb.RunOption{llb.Args(args)}
+	for _, arg := range buildArgs {
+		opt = append(opt, llb.AddEnv(arg.Key, getArgValue(arg)))
+	}
+	d.state = d.state.Run(opt...).Root()
 	return nil
 }
 
@@ -236,7 +294,7 @@ func dispatchMaintainer(d *dispatchState, c instructions.MaintainerCommand) erro
 	return nil
 }
 
-func dispatchLabel(d *dispatchState, c instructions.LabelCommand) error {
+func dispatchLabel(d *dispatchState, c *instructions.LabelCommand) error {
 	if d.image.Config.Labels == nil {
 		d.image.Config.Labels = make(map[string]string)
 	}
@@ -246,10 +304,10 @@ func dispatchLabel(d *dispatchState, c instructions.LabelCommand) error {
 	return nil
 }
 
-// func dispatchOnbuild(d *dispatchState, c *instructions.OnbuildCommand) error {
-// 	d.image.Config.OnBuild = append(d.image.Config.OnBuild, c.Expression)
-// 	return nil
-// }
+func dispatchOnbuild(d *dispatchState, c *instructions.OnbuildCommand) error {
+	d.image.Config.OnBuild = append(d.image.Config.OnBuild, c.Expression)
+	return nil
+}
 
 func dispatchCmd(d *dispatchState, c *instructions.CmdCommand) error {
 	var args []string = c.CmdLine
@@ -257,8 +315,88 @@ func dispatchCmd(d *dispatchState, c *instructions.CmdCommand) error {
 		args = append(defaultShell(), strings.Join(args, " "))
 	}
 	d.image.Config.Cmd = args
-	// d.image.Config.ArgsEscaped = true
+	d.image.Config.ArgsEscaped = true
 	return nil
+}
+
+func dispatchEntrypoint(d *dispatchState, c *instructions.EntrypointCommand) error {
+	var args []string = c.CmdLine
+	if c.PrependShell {
+		args = append(defaultShell(), strings.Join(args, " "))
+	}
+	d.image.Config.Entrypoint = args
+	return nil
+}
+
+func dispatchHealthcheck(d *dispatchState, c *instructions.HealthCheckCommand) error {
+	d.image.Config.Healthcheck = &HealthConfig{
+		Test:        c.Health.Test,
+		Interval:    c.Health.Interval,
+		Timeout:     c.Health.Timeout,
+		StartPeriod: c.Health.StartPeriod,
+		Retries:     c.Health.Retries,
+	}
+	return nil
+}
+
+func dispatchExpose(d *dispatchState, c *instructions.ExposeCommand) error {
+	// TODO: custom multi word expansion
+	ps, _, err := nat.ParsePortSpecs(c.Ports)
+	if err != nil {
+		return err
+	}
+
+	if d.image.Config.ExposedPorts == nil {
+		d.image.Config.ExposedPorts = make(map[string]struct{})
+	}
+	for p := range ps {
+		d.image.Config.ExposedPorts[string(p)] = struct{}{}
+	}
+
+	return nil
+}
+func dispatchUser(d *dispatchState, c *instructions.UserCommand) error {
+	d.image.Config.User = c.User
+	return nil
+}
+
+func dispatchVolume(d *dispatchState, c *instructions.VolumeCommand) error {
+	if d.image.Config.Volumes == nil {
+		d.image.Config.Volumes = map[string]struct{}{}
+	}
+	for _, v := range c.Volumes {
+		if v == "" {
+			return errors.New("VOLUME specified can not be an empty string")
+		}
+		d.image.Config.Volumes[v] = struct{}{}
+	}
+	return nil
+}
+
+func dispatchStopSignal(d *dispatchState, c *instructions.StopSignalCommand) error {
+	if _, err := signal.ParseSignal(c.Signal); err != nil {
+		return err
+	}
+	d.image.Config.StopSignal = c.Signal
+	return nil
+}
+
+func dispatchShell(d *dispatchState, c *instructions.ShellCommand) error {
+	d.image.Config.Shell = c.Shell
+	return nil
+}
+
+func dispatchArg(d *dispatchState, c *instructions.ArgCommand, args []instructions.ArgCommand, metaArgs []instructions.ArgCommand, buildArgs map[string]string) ([]instructions.ArgCommand, error) {
+	if c.Value == nil {
+		for _, ma := range metaArgs {
+			if ma.Key == c.Key {
+				c.Value = ma.Value
+			}
+		}
+	}
+
+	args = append(args, setArgValue(*c, buildArgs))
+	return args, nil
 }
 
 func splitWildcards(name string) (string, string) {
@@ -275,4 +413,49 @@ func splitWildcards(name string) (string, string) {
 		return name, ""
 	}
 	return path.Dir(name[:i]), path.Base(name[:i]) + name[i:]
+}
+
+func addEnv(env []string, k, v string, override bool) []string {
+	gotOne := false
+	for i, envVar := range env {
+		envParts := strings.SplitN(envVar, "=", 2)
+		compareFrom := envParts[0]
+		if equalEnvKeys(compareFrom, k) {
+			if override {
+				env[i] = k + "=" + v
+			}
+			gotOne = true
+			break
+		}
+	}
+	if !gotOne {
+		env = append(env, k+"="+v)
+	}
+	return env
+}
+
+func equalEnvKeys(from, to string) bool {
+	return from == to
+}
+
+func setArgValue(c instructions.ArgCommand, values map[string]string) instructions.ArgCommand {
+	if v, ok := values[c.Key]; ok {
+		c.Value = &v
+	}
+	return c
+}
+
+func combineArgs(env []string, args []instructions.ArgCommand) []string {
+	for _, arg := range args {
+		env = addEnv(env, arg.Key, getArgValue(arg), false)
+	}
+	return env
+}
+
+func getArgValue(arg instructions.ArgCommand) string {
+	v := ""
+	if arg.Value != nil {
+		v = *arg.Value
+	}
+	return v
 }

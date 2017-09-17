@@ -14,8 +14,8 @@ import (
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/moby/buildkit/util/imageutil"
 	digest "github.com/opencontainers/go-digest"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	netcontext "golang.org/x/net/context"
 )
 
 var defaultImageMetaResolver ImageMetaResolver
@@ -32,7 +32,7 @@ func WithDefaultMetaResolver(ii *ImageInfo) {
 }
 
 type ImageMetaResolver interface {
-	ResolveImageConfig(ctx context.Context, ref string) (*ocispec.Image, error)
+	ResolveImageConfig(ctx netcontext.Context, ref string) ([]byte, error)
 }
 
 func NewImageMetaResolver() ImageMetaResolver {
@@ -41,7 +41,7 @@ func NewImageMetaResolver() ImageMetaResolver {
 			Client: http.DefaultClient,
 		}),
 		ingester: newInMemoryIngester(),
-		cache:    map[string]*ocispec.Image{},
+		cache:    map[string][]byte{},
 		locker:   locker.NewLocker(),
 	}
 }
@@ -57,10 +57,10 @@ type imageMetaResolver struct {
 	resolver remotes.Resolver
 	ingester *inMemoryIngester
 	locker   *locker.Locker
-	cache    map[string]*ocispec.Image
+	cache    map[string][]byte
 }
 
-func (imr *imageMetaResolver) ResolveImageConfig(ctx context.Context, ref string) (*ocispec.Image, error) {
+func (imr *imageMetaResolver) ResolveImageConfig(ctx netcontext.Context, ref string) ([]byte, error) {
 	imr.locker.Lock(ref)
 	defer imr.locker.Unlock(ref)
 

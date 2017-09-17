@@ -55,7 +55,7 @@ func (e *localExporterInstance) Name() string {
 	return "exporting to client"
 }
 
-func (e *localExporterInstance) Export(ctx context.Context, ref cache.ImmutableRef) error {
+func (e *localExporterInstance) Export(ctx context.Context, ref cache.ImmutableRef, opt map[string]interface{}) error {
 	mount, err := ref.Mount(ctx, true)
 	if err != nil {
 		return err

@@ -8,6 +8,7 @@ import (
 
 	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/solver/pb"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
 
@@ -85,23 +86,28 @@ func Image(ref string, opts ...ImageOption) State {
 		opt(&info)
 	}
 	if info.metaResolver != nil {
-		img, err := info.metaResolver.ResolveImageConfig(context.TODO(), ref)
+		dt, err := info.metaResolver.ResolveImageConfig(context.TODO(), ref)
 		if err != nil {
 			src.err = err
 		} else {
-			st := NewState(src.Output())
-			for _, env := range img.Config.Env {
-				parts := strings.SplitN(env, "=", 2)
-				if len(parts[0]) > 0 {
-					var v string
-					if len(parts) > 1 {
-						v = parts[1]
+			var img ocispec.Image
+			if err := json.Unmarshal(dt, &img); err != nil {
+				src.err = err
+			} else {
+				st := NewState(src.Output())
+				for _, env := range img.Config.Env {
+					parts := strings.SplitN(env, "=", 2)
+					if len(parts[0]) > 0 {
+						var v string
+						if len(parts) > 1 {
+							v = parts[1]
+						}
+						st = st.AddEnv(parts[0], v)
 					}
-					st = st.AddEnv(parts[0], v)
 				}
+				st = st.Dir(img.Config.WorkingDir)
+				return st
 			}
-			st = st.Dir(img.Config.WorkingDir)
-			return st
 		}
 	}
 	return NewState(src.Output())

@@ -3,10 +3,11 @@ package imageutil
 import (
 	"context"
 	"encoding/json"
-	"io"
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/images"
+	"github.com/containerd/containerd/platforms"
+	"github.com/containerd/containerd/reference"
 	"github.com/containerd/containerd/remotes"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -17,13 +18,37 @@ type IngesterProvider interface {
 	content.Provider
 }
 
-func Config(ctx context.Context, ref string, resolver remotes.Resolver, ingester IngesterProvider) (*ocispec.Image, error) {
-	ref, desc, err := resolver.Resolve(ctx, ref)
+func Config(ctx context.Context, str string, resolver remotes.Resolver, ingester IngesterProvider) ([]byte, error) {
+	ref, err := reference.Parse(str)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 
-	fetcher, err := resolver.Fetcher(ctx, ref)
+	dgst := ref.Digest()
+	var desc *ocispec.Descriptor
+	if dgst != "" {
+		ra, err := ingester.ReaderAt(ctx, dgst)
+		if err == nil {
+			mt, err := detectManifestMediaType(ra)
+			if err == nil {
+				desc = &ocispec.Descriptor{
+					Size:      ra.Size(),
+					Digest:    dgst,
+					MediaType: mt,
+				}
+			}
+		}
+	}
+
+	if desc == nil {
+		_, desc2, err := resolver.Resolve(ctx, ref.String())
+		if err != nil {
+			return nil, err
+		}
+		desc = &desc2
+	}
+
+	fetcher, err := resolver.Fetcher(ctx, ref.String())
 	if err != nil {
 		return nil, err
 	}
@@ -32,30 +57,15 @@ func Config(ctx context.Context, ref string, resolver remotes.Resolver, ingester
 		remotes.FetchHandler(ingester, fetcher),
 		childrenConfigHandler(ingester),
 	}
-	if err := images.Dispatch(ctx, images.Handlers(handlers...), desc); err != nil {
+	if err := images.Dispatch(ctx, images.Handlers(handlers...), *desc); err != nil {
 		return nil, err
 	}
-	config, err := images.Config(ctx, ingester, desc, "")
+	config, err := images.Config(ctx, ingester, *desc, platforms.Format(platforms.Default()))
 	if err != nil {
 		return nil, err
 	}
 
-	var ociimage ocispec.Image
-
-	r, err := ingester.ReaderAt(ctx, config.Digest)
-	if err != nil {
-		return nil, err
-	}
-	defer r.Close()
-	dec := json.NewDecoder(readerAtToReader(r))
-	if err := dec.Decode(&ociimage); err != nil {
-		return nil, err
-	}
-	if dec.More() {
-		return nil, errors.New("invalid image config")
-	}
-
-	return &ociimage, nil
+	return content.ReadBlob(ctx, ingester, config.Digest)
 }
 
 func childrenConfigHandler(provider content.Provider) images.HandlerFunc {
@@ -99,17 +109,25 @@ func childrenConfigHandler(provider content.Provider) images.HandlerFunc {
 	}
 }
 
-func readerAtToReader(r io.ReaderAt) io.Reader {
-	return &reader{ra: r}
-}
+// ocispec.MediaTypeImageManifest, // TODO: detect schema1/manifest-list
+func detectManifestMediaType(ra content.ReaderAt) (string, error) {
+	// TODO: schema1
 
-type reader struct {
-	ra     io.ReaderAt
-	offset int64
-}
+	p := make([]byte, ra.Size())
+	if _, err := ra.ReadAt(p, 0); err != nil {
+		return "", err
+	}
 
-func (r *reader) Read(b []byte) (int, error) {
-	n, err := r.ra.ReadAt(b, r.offset)
-	r.offset += int64(n)
-	return n, err
+	var mfst struct {
+		Config json.RawMessage `json:"config"`
+	}
+
+	if err := json.Unmarshal(p, &mfst); err != nil {
+		return "", err
+	}
+
+	if mfst.Config != nil {
+		return ocispec.MediaTypeImageManifest, nil
+	}
+	return ocispec.MediaTypeImageIndex, nil
 }

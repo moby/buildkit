@@ -25,7 +25,7 @@ func main() {
 		panic(err)
 	}
 
-	state, err := dockerfile2llb.Dockerfile2LLB(appcontext.Context(), df, dockerfile2llb.ConvertOpt{
+	state, img, err := dockerfile2llb.Dockerfile2LLB(appcontext.Context(), df, dockerfile2llb.ConvertOpt{
 		MetaResolver: llb.DefaultImageMetaResolver(),
 		Target:       opt.target,
 	})
@@ -33,6 +33,8 @@ func main() {
 		log.Printf("err: %+v", err)
 		panic(err)
 	}
+
+	_ = img
 
 	dt, err := state.Marshal()
 	if err != nil {

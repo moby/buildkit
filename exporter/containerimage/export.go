@@ -15,6 +15,7 @@ import (
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/exporter"
+	"github.com/moby/buildkit/frontend/dockerfile/dockerfile2llb"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/progress"
@@ -28,7 +29,8 @@ import (
 )
 
 const (
-	keyImageName = "name"
+	keyImageName        = "name"
+	exporterImageConfig = "containerimage.config"
 )
 
 type Opt struct {
@@ -153,7 +155,7 @@ func (e *imageExporterInstance) Name() string {
 	return "exporting to image"
 }
 
-func (e *imageExporterInstance) Export(ctx context.Context, ref cache.ImmutableRef) error {
+func (e *imageExporterInstance) Export(ctx context.Context, ref cache.ImmutableRef, opt map[string]interface{}) error {
 	layersDone := oneOffProgress(ctx, "exporting layers")
 	diffPairs, err := e.getBlobs(ctx, ref)
 	if err != nil {
@@ -166,9 +168,22 @@ func (e *imageExporterInstance) Export(ctx context.Context, ref cache.ImmutableR
 		diffIDs = append(diffIDs, dp.diffID)
 	}
 
-	dt, err := json.Marshal(imageConfig(diffIDs))
-	if err != nil {
-		return errors.Wrap(err, "failed to marshal image config")
+	var dt []byte
+	if imgInterface, ok := opt[exporterImageConfig]; ok {
+		img, ok := imgInterface.(*dockerfile2llb.Image)
+		if !ok {
+			return errors.Errorf("invalid image config")
+		}
+		setDiffIDs(img, diffIDs)
+		dt, err = json.Marshal(img)
+		if err != nil {
+			return errors.Wrap(err, "failed to marshal image config")
+		}
+	} else {
+		dt, err = json.Marshal(imageConfig(diffIDs))
+		if err != nil {
+			return errors.Wrap(err, "failed to marshal image config")
+		}
 	}
 
 	dgst := digest.FromBytes(dt)
@@ -253,6 +268,11 @@ func imageConfig(diffIDs []digest.Digest) ocispec.Image {
 	img.Config.WorkingDir = "/"
 	img.Config.Env = []string{"PATH=" + system.DefaultPathEnv}
 	return img
+}
+
+func setDiffIDs(img *dockerfile2llb.Image, diffIDs []digest.Digest) {
+	img.RootFS.Type = "layers"
+	img.RootFS.DiffIDs = diffIDs
 }
 
 func oneOffProgress(ctx context.Context, id string) func(err error) error {

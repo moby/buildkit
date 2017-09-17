@@ -14,7 +14,6 @@ import (
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
@@ -40,7 +39,7 @@ func NewLLBSolver(opt LLBOpt) *Solver {
 		case *pb.Op_Build:
 			return newBuildOp(v, op, s)
 		default:
-			return nil, errors.Errorf("invalid op type %T", op)
+			return nil, nil
 		}
 	}, opt.InstructionCache, opt.ImageSource)
 	return s
@@ -81,7 +80,7 @@ func New(resolve ResolveOpFunc, cache InstructionCache, imageSource source.Sourc
 }
 
 type resolveImageConfig interface {
-	ResolveImageConfig(ctx context.Context, ref string) (*ocispec.Image, error)
+	ResolveImageConfig(ctx context.Context, ref string) ([]byte, error)
 }
 
 type llbBridge struct {
@@ -151,10 +150,11 @@ func (s *Solver) Solve(ctx context.Context, id string, f frontend.Frontend, v Ve
 	}
 
 	var ref Reference
+	var exporterOpt map[string]interface{}
 	if solveVertex != nil {
 		ref, err = s.getRef(ctx, solveVertex, index)
 	} else {
-		ref, err = f.Solve(ctx, &llbBridge{
+		ref, exporterOpt, err = f.Solve(ctx, &llbBridge{
 			solver:             s.getRef,
 			resolveImageConfig: s.imageSource.(resolveImageConfig),
 		}, frontendOpt)
@@ -180,7 +180,7 @@ func (s *Solver) Solve(ctx context.Context, id string, f frontend.Frontend, v Ve
 		vv.notifyStarted(ctx)
 		pw, _, ctx := progress.FromContext(ctx, progress.WithMetadata("vertex", vv.Digest()))
 		defer pw.Close()
-		err := exp.Export(ctx, immutable)
+		err := exp.Export(ctx, immutable, exporterOpt)
 		vv.notifyCompleted(ctx, false, err)
 		if err != nil {
 			return err

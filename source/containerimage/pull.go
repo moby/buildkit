@@ -73,7 +73,7 @@ func (is *imageSource) ID() string {
 	return source.DockerImageScheme
 }
 
-func (is *imageSource) ResolveImageConfig(ctx context.Context, ref string) (*ocispec.Image, error) {
+func (is *imageSource) ResolveImageConfig(ctx context.Context, ref string) ([]byte, error) {
 	return imageutil.Config(ctx, ref, is.resolver, is.ContentStore)
 }
 
