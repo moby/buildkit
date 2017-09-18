@@ -31,7 +31,9 @@ type F struct {
 
 func (f *F) NewCaller() *Caller {
 	c := &Caller{F: f, active: true}
+	f.semMu.Lock()
 	f.addSem()
+	f.semMu.Unlock()
 	return c
 }
 
@@ -76,20 +78,17 @@ func (f *F) run() {
 }
 
 func (f *F) addSem() {
-	f.semMu.Lock()
 	f.sem++
-	f.semMu.Unlock()
 }
 
 func (f *F) clearSem() error {
-	f.semMu.Lock()
 	f.sem--
 	var err error
-	if f.sem == 0 && f.cancelCtx != nil {
-		f.cancelCtx()
+	if cctx := f.cancelCtx; f.sem == 0 && cctx != nil {
+		cctx()
 		err = <-f.ctxErr
+		f.cancelCtx = nil
 	}
-	f.semMu.Unlock()
 	return err
 }
 
@@ -151,6 +150,8 @@ func (c *Caller) Call(ctx context.Context, f func() (interface{}, error)) (inter
 }
 
 func (c *Caller) Cancel() error {
+	c.F.semMu.Lock()
+	defer c.F.semMu.Unlock()
 	if c.active {
 		c.active = false
 		return c.F.clearSem()
@@ -163,6 +164,8 @@ func (c *Caller) ensureStarted() {
 	if c.F.done {
 		return
 	}
+	c.F.semMu.Lock()
+	defer c.F.semMu.Unlock()
 
 	if !c.active {
 		c.active = true

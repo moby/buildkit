@@ -65,7 +65,7 @@ func (jl *jobList) new(ctx context.Context, id string, pr progress.Reader, cache
 }
 
 func (jl *jobList) get(id string) (*job, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
 	go func() {
