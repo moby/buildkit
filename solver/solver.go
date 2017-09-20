@@ -11,6 +11,7 @@ import (
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/source"
+	"github.com/moby/buildkit/util/bgfunc"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
@@ -61,56 +62,22 @@ type Op interface {
 }
 
 type InstructionCache interface {
+	Probe(ctx context.Context, key digest.Digest) (bool, error)
 	Lookup(ctx context.Context, key digest.Digest) (interface{}, error) // TODO: regular ref
 	Set(key digest.Digest, ref interface{}) error
-	SetContentMapping(key digest.Digest, value interface{}) error
+	SetContentMapping(contentKey, key digest.Digest) error
 	GetContentMapping(dgst digest.Digest) ([]digest.Digest, error)
 }
 
 type Solver struct {
 	resolve     ResolveOpFunc
 	jobs        *jobList
-	activeState activeState
 	cache       InstructionCache
 	imageSource source.Source
 }
 
 func New(resolve ResolveOpFunc, cache InstructionCache, imageSource source.Source) *Solver {
 	return &Solver{resolve: resolve, jobs: newJobList(), cache: cache, imageSource: imageSource}
-}
-
-type resolveImageConfig interface {
-	ResolveImageConfig(ctx context.Context, ref string) ([]byte, error)
-}
-
-type llbBridge struct {
-	resolveImageConfig
-	solver func(ctx context.Context, v *vertex, i Index) (Reference, error)
-}
-
-func (s *llbBridge) Solve(ctx context.Context, dt [][]byte) (cache.ImmutableRef, error) {
-	v, err := LoadLLB(dt)
-	if err != nil {
-		return nil, err
-	}
-	if len(v.Inputs()) == 0 {
-		return nil, errors.New("required vertex needs to have inputs")
-	}
-
-	index := v.Inputs()[0].Index
-	v = v.Inputs()[0].Vertex
-
-	vv := toInternalVertex(v)
-	ref, err := s.solver(ctx, vv, index)
-	if err != nil {
-		return nil, err
-	}
-	immutable, ok := toImmutableRef(ref)
-	if !ok {
-		return nil, errors.Errorf("invalid reference for exporting: %T", ref)
-	}
-
-	return immutable, nil
 }
 
 func (s *Solver) Solve(ctx context.Context, id string, f frontend.Frontend, v Vertex, exp exporter.ExporterInstance, frontendOpt map[string]string) error {
@@ -122,11 +89,8 @@ func (s *Solver) Solve(ctx context.Context, id string, f frontend.Frontend, v Ve
 	defer closeProgressWriter()
 
 	var vv *vertex
-	var solveVertex *vertex
 	var index Index
 	if v != nil {
-		origVertex := v
-
 		if len(v.Inputs()) == 0 {
 			return errors.New("required vertex needs to have inputs")
 		}
@@ -135,37 +99,36 @@ func (s *Solver) Solve(ctx context.Context, id string, f frontend.Frontend, v Ve
 		v = v.Inputs()[0].Vertex
 
 		vv = toInternalVertex(v)
-		solveVertex = vv
-
-		if exp != nil {
-			vv = &vertex{digest: origVertex.Digest(), name: exp.Name()}
-			vv.inputs = []*input{{index: 0, vertex: solveVertex}}
-			vv.initClientVertex()
-		}
 	}
 
-	ctx, j, err := s.jobs.new(ctx, id, vv, pr)
+	ctx, j, err := s.jobs.new(ctx, id, pr, s.cache)
 	if err != nil {
 		return err
 	}
 
 	var ref Reference
 	var exporterOpt map[string]interface{}
-	if solveVertex != nil {
-		ref, err = s.getRef(ctx, solveVertex, index)
+	// solver:             s.getRef,
+	if vv != nil {
+		if err := j.load(vv, s.resolve); err != nil {
+			j.discard()
+			return err
+		}
+		ref, err = j.getRef(ctx, vv, index)
 	} else {
 		ref, exporterOpt, err = f.Solve(ctx, &llbBridge{
-			solver:             s.getRef,
+			job:                j,
+			resolveOp:          s.resolve,
 			resolveImageConfig: s.imageSource.(resolveImageConfig),
 		}, frontendOpt)
 	}
-	s.activeState.cancel(j)
+	j.discard()
 	if err != nil {
 		return err
 	}
 
 	defer func() {
-		ref.Release(context.TODO())
+		go ref.Release(context.TODO())
 	}()
 
 	immutable, ok := toImmutableRef(ref)
@@ -198,327 +161,429 @@ func (s *Solver) Status(ctx context.Context, id string, statusChan chan *client.
 	return j.pipe(ctx, statusChan)
 }
 
-// getCacheKey return a cache key for a single output of a vertex
-func (s *Solver) getCacheKey(ctx context.Context, g *vertex, inputs []digest.Digest, index Index) (dgst digest.Digest, retErr error) {
-	state, err := s.activeState.vertexState(ctx, g.digest, func() (Op, error) {
-		return s.resolve(g)
-	})
+func (s *Solver) loadAndSolveChildVertex(ctx context.Context, dgst digest.Digest, vv *vertex, index Index) (Reference, error) {
+	return s.jobs.loadAndSolveChildVertex(ctx, dgst, vv, index, s.resolve, s.cache)
+}
+
+type VertexSolver interface {
+	CacheKey(ctx context.Context, index Index) (digest.Digest, error)
+	OutputEvaluator(Index) (VertexEvaluator, error)
+	Release() error
+}
+
+type vertexInput struct {
+	solver    VertexSolver
+	ev        VertexEvaluator
+	cacheKeys []digest.Digest
+	ref       Reference
+}
+
+type vertexSolver struct {
+	inputs []*vertexInput
+	v      *vertex
+	op     Op
+	cache  InstructionCache
+	refs   []*sharedRef
+	f      *bgfunc.F
+	ctx    context.Context
+
+	baseKey digest.Digest
+	mu      sync.Mutex
+	results []digest.Digest
+
+	signal *signal // used to notify that there are callers who need more data
+}
+
+type resolveF func(digest.Digest) (VertexSolver, error)
+
+func newVertexSolver(ctx context.Context, v *vertex, op Op, c InstructionCache, resolve resolveF) (VertexSolver, error) {
+	inputs := make([]*vertexInput, len(v.inputs))
+	for i, in := range v.inputs {
+		s, err := resolve(in.vertex.digest)
+		if err != nil {
+			return nil, err
+		}
+		ev, err := s.OutputEvaluator(in.index)
+		if err != nil {
+			return nil, err
+		}
+		inputs[i] = &vertexInput{
+			solver: s,
+			ev:     ev,
+		}
+	}
+	return &vertexSolver{
+		ctx:    ctx,
+		inputs: inputs,
+		v:      v,
+		op:     op,
+		cache:  c,
+		signal: newSignaller(),
+	}, nil
+}
+
+func (vs *vertexSolver) CacheKey(ctx context.Context, index Index) (digest.Digest, error) {
+	vs.mu.Lock()
+	defer vs.mu.Unlock()
+	if vs.baseKey == "" {
+		eg, ctx := errgroup.WithContext(vs.ctx)
+		for i := range vs.inputs {
+			func(i int) {
+				eg.Go(func() error {
+					k, err := vs.inputs[i].solver.CacheKey(ctx, vs.v.inputs[i].index)
+					if err != nil {
+						return err
+					}
+					vs.inputs[i].cacheKeys = append(vs.inputs[i].cacheKeys, k)
+					return nil
+				})
+			}(i)
+		}
+		var dgst digest.Digest
+		eg.Go(func() error {
+			var err error
+			dgst, err = vs.op.CacheKey(ctx)
+			if err != nil {
+				return err
+			}
+			return nil
+		})
+
+		if err := eg.Wait(); err != nil {
+			return "", err
+		}
+
+		vs.baseKey = dgst
+	}
+
+	k, err := vs.lastCacheKey()
 	if err != nil {
 		return "", err
 	}
 
-	pw, _, ctx := progress.FromContext(ctx, progress.WithMetadata("vertex", g.Digest()))
-	defer pw.Close()
+	return cacheKeyForIndex(k, index), nil
+}
 
-	if len(g.inputs) == 0 {
-		g.notifyStarted(ctx)
-		defer func() {
-			g.notifyCompleted(ctx, false, retErr)
-		}()
+func (vs *vertexSolver) lastCacheKey() (digest.Digest, error) {
+	return vs.currentCacheKey(true)
+}
+
+func (vs *vertexSolver) mainCacheKey() (digest.Digest, error) {
+	return vs.currentCacheKey(false)
+}
+
+func (vs *vertexSolver) currentCacheKey(last bool) (digest.Digest, error) {
+	inputKeys := make([]digest.Digest, len(vs.inputs))
+	for i, inp := range vs.inputs {
+		if len(inp.cacheKeys) == 0 {
+			return "", errors.Errorf("inputs not processed")
+		}
+		if last {
+			inputKeys[i] = inp.cacheKeys[len(inp.cacheKeys)-1]
+		} else {
+			inputKeys[i] = inp.cacheKeys[0]
+		}
 	}
-
-	dgst, err = state.GetCacheKey(ctx, func(ctx context.Context, op Op) (digest.Digest, error) {
-		return op.CacheKey(ctx)
-	})
-
-	if err != nil {
-		return "", err
-	}
-
 	dt, err := json.Marshal(struct {
-		Index  Index
-		Inputs []digest.Digest
-		Digest digest.Digest
-	}{
-		Index:  index,
-		Inputs: inputs,
-		Digest: dgst,
-	})
+		Inputs   []digest.Digest
+		CacheKey digest.Digest
+	}{Inputs: inputKeys, CacheKey: vs.baseKey})
 	if err != nil {
 		return "", err
 	}
 	return digest.FromBytes(dt), nil
 }
 
-// walkVertex walks all possible cache keys and a evaluated reference for a
-// single output of a vertex.
-func (s *Solver) walkVertex(ctx context.Context, g *vertex, index Index, fn func(digest.Digest, Reference) (bool, error)) (retErr error) {
-	state, err := s.activeState.vertexState(ctx, g.digest, func() (Op, error) {
-		return s.resolve(g)
-	})
-	if err != nil {
-		return err
-	}
-
-	inputCacheKeysMu := sync.Mutex{}
-	inputCacheKeys := make([][]digest.Digest, len(g.inputs))
-	walkerStopped := false
-
-	inputRefs := make([]Reference, len(g.inputs))
-
-	defer func() {
-		for _, r := range inputRefs {
-			if r != nil {
-				go r.Release(context.TODO())
-			}
-		}
-	}()
-
-	if len(g.inputs) > 0 {
-		eg, ctx := errgroup.WithContext(ctx)
-		inputCtx, cancelInputCtx := context.WithCancel(ctx)
-		defer cancelInputCtx()
-		for i, in := range g.inputs {
-			func(i int, in *input) {
-				eg.Go(func() error {
-					var inputRef Reference
-					defer func() {
-						if inputRef != nil {
-							go inputRef.Release(context.TODO())
-						}
-					}()
-					err := s.walkVertex(inputCtx, in.vertex, in.index, func(k digest.Digest, ref Reference) (bool, error) {
-						if k == "" && ref == nil {
-							// indicator between cache key and reference
-							if inputRef != nil {
-								return true, nil
-							}
-							// TODO: might be good to block here if other inputs may
-							// cause cache hits to avoid duplicate work.
-							return false, nil
-						}
-						if ref != nil {
-							inputRef = ref
-							return true, nil
-						}
-
-						inputCacheKeysMu.Lock()
-						defer inputCacheKeysMu.Unlock()
-
-						if walkerStopped {
-							return walkerStopped, nil
-						}
-
-						// try all known combinations together with new key
-						inputCacheKeysCopy := append([][]digest.Digest{}, inputCacheKeys...)
-						inputCacheKeysCopy[i] = []digest.Digest{k}
-						inputCacheKeys[i] = append(inputCacheKeys[i], k)
-
-						for _, inputKeys := range combinations(inputCacheKeysCopy) {
-							cacheKey, err := s.getCacheKey(ctx, g, inputKeys, index)
-							if err != nil {
-								return false, err
-							}
-							stop, err := fn(cacheKey, nil)
-							if err != nil {
-								return false, err
-							}
-							if stop {
-								walkerStopped = true
-								cancelInputCtx() // parent matched, stop processing current node and its inputs
-								return true, nil
-							}
-						}
-
-						// if no parent matched, try looking up current node from cache
-						if s.cache != nil && inputRef == nil {
-							lookupRef, err := s.cache.Lookup(ctx, k)
-							if err != nil {
-								return false, err
-							}
-							if lookupRef != nil {
-								inputRef = lookupRef.(Reference)
-								in.vertex.recursiveMarkCached(ctx)
-								return true, nil
-							}
-						}
-						return false, nil
-					})
-					if inputRef != nil {
-						// make sure that the inputs for other steps don't get released on cancellation
-						if ref, ok := toImmutableRef(inputRef); ok {
-							if err := cache.CachePolicyRetain(ref); err != nil {
-								return err
-							}
-							if err := ref.Metadata().Commit(); err != nil {
-								return err
-							}
-						}
-					}
-					inputCacheKeysMu.Lock()
-					defer inputCacheKeysMu.Unlock()
-					if walkerStopped {
-						return nil
-					}
-					if err != nil {
-						return err
-					}
-					inputRefs[i] = inputRef
-					inputRef = nil
-					return nil
-				})
-			}(i, in)
-		}
-		if err := eg.Wait(); err != nil && !walkerStopped {
-			return err
-		}
-	} else {
-		cacheKey, err := s.getCacheKey(ctx, g, nil, index)
-		if err != nil {
-			return err
-		}
-		stop, err := fn(cacheKey, nil)
-		if err != nil {
-			return err
-		}
-		walkerStopped = stop
-	}
-
-	if walkerStopped {
-		return nil
-	}
-
-	var contentKeys []digest.Digest
-	if s.cache != nil {
-		// try to determine content based key
-		contentKeys, err = state.op.ContentKeys(ctx, combinations(inputCacheKeys), inputRefs)
-		if err != nil {
-			return err
-		}
-
-		for _, k := range contentKeys {
-			cks, err := s.cache.GetContentMapping(contentKeyWithIndex(k, index))
-			if err != nil {
-				return err
-			}
-			for _, k := range cks {
-				stop, err := fn(k, nil)
-				if err != nil {
-					return err
-				}
-				if stop {
-					return nil
-				}
-			}
-		}
-	}
-
-	// signal that no more cache keys are coming
-	stop, err := fn("", nil)
-	if err != nil {
-		return err
-	}
-	if stop {
-		return nil
-	}
-
-	pw, _, ctx := progress.FromContext(ctx, progress.WithMetadata("vertex", g.Digest()))
-	defer pw.Close()
-
-	g.notifyStarted(ctx)
-	defer func() {
-		g.notifyCompleted(ctx, false, retErr)
-	}()
-
-	ref, err := state.GetRefs(ctx, index, func(ctx context.Context, op Op) ([]Reference, error) {
-		refs, err := op.Run(ctx, inputRefs)
+func (vs *vertexSolver) OutputEvaluator(index Index) (VertexEvaluator, error) {
+	if vs.f == nil {
+		f, err := bgfunc.New(vs.ctx, vs.run)
 		if err != nil {
 			return nil, err
 		}
-		if s.cache != nil {
-			mainInputKeys := firstKeys(inputCacheKeys)
-			for i, ref := range refs {
-				if ref != nil {
-					cacheKey, err := s.getCacheKey(ctx, g, mainInputKeys, Index(i))
-					if err != nil {
-						return nil, err
-					}
-					r := originRef(ref)
-					if err := s.cache.Set(cacheKey, r); err != nil {
-						logrus.Errorf("failed to save cache for %s: %v", cacheKey, err)
-					}
+		vs.f = f
+	}
+	c := vs.f.NewCaller()
+	ve := &vertexEvaluator{vertexSolver: vs, c: c, index: index}
+	return ve, nil
+}
 
-					for _, k := range contentKeys {
-						if err := s.cache.SetContentMapping(contentKeyWithIndex(k, Index(i)), r); err != nil {
-							logrus.Errorf("failed to save content mapping: %v", err)
-						}
-					}
-				}
-			}
+func (vs *vertexSolver) Release() error {
+	for _, inp := range vs.inputs {
+		if inp.ref != nil {
+			inp.ref.Release(context.TODO())
 		}
-		return refs, nil
-	})
-	if err != nil {
-		return err
 	}
-
-	// return reference
-	_, err = fn("", ref)
-	if err != nil {
-		return err
+	if vs.refs != nil {
+		for _, r := range vs.refs {
+			r.Release(context.TODO())
+		}
 	}
-
 	return nil
 }
 
-func (s *Solver) getRef(ctx context.Context, g *vertex, index Index) (ref Reference, retErr error) {
-	logrus.Debugf("> getRef %s %v %s", g.digest, index, g.name)
-	defer logrus.Debugf("< getRef %s %v", g.digest, index)
+// run is called by the bgfunc concurrency primitive. This function may be
+// called multiple times but never in parallal. Repeated calls should make an
+// effort to continue from previous state. Lock vs.mu to syncronize data to the
+// callers. Signal parameter can be used to notify callers that new data is
+// available without returning from the function.
+func (vs *vertexSolver) run(ctx context.Context, signal func()) (retErr error) {
+	vs.mu.Lock()
+	if vs.refs != nil {
+		vs.mu.Unlock()
+		return nil
+	}
+	vs.mu.Unlock()
 
-	var returnRef Reference
-	err := s.walkVertex(ctx, g, index, func(ck digest.Digest, ref Reference) (bool, error) {
-		if ref != nil {
-			returnRef = ref
-			return true, nil
+	wait := vs.signal.Wait()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-wait:
+	}
+
+	// this is where you lookup the cache keys that were successfully probed
+
+	eg, ctx2 := errgroup.WithContext(ctx)
+
+	// process all the inputs
+	for i, inp := range vs.inputs {
+		if inp.ref == nil {
+			func(i int) {
+				eg.Go(func() error {
+					inp := vs.inputs[i]
+					defer inp.ev.Cancel()
+					for {
+
+						select {
+						case <-ctx2.Done():
+							return ctx2.Err()
+						case <-wait:
+						}
+
+						// check if current cache key is in cache
+						if len(inp.cacheKeys) > 0 {
+							ref, err := vs.cache.Lookup(ctx2, inp.cacheKeys[len(inp.cacheKeys)-1])
+							if err != nil {
+								return err
+							}
+							if ref != nil {
+								inp.ref = ref.(Reference)
+								return nil
+							}
+						}
+
+						// evaluate next cachekey/reference for input
+						res, err := inp.ev.Next(ctx2)
+						if err != nil {
+							return err
+						}
+						if res == nil { // there is no more data coming
+							return nil
+						}
+						if ref := res.Reference; ref != nil {
+							if ref, ok := toImmutableRef(ref); ok {
+								if !cache.HasCachePolicyRetain(ref) {
+									if err := cache.CachePolicyRetain(ref); err != nil {
+										return err
+									}
+									ref.Metadata().Commit()
+								}
+								inp.ref = ref
+							}
+							return nil
+						}
+
+						// Only try matching cache if the cachekey for input is present
+						exists, err := vs.cache.Probe(ctx2, res.CacheKey)
+						if err != nil {
+							return err
+						}
+						if exists {
+							vs.mu.Lock()
+							inp.cacheKeys = append(inp.cacheKeys, res.CacheKey)
+							dgst, err := vs.lastCacheKey()
+							if err != nil {
+								vs.mu.Unlock()
+								return err
+							}
+							vs.results = append(vs.results, dgst)
+							signal()                 // wake up callers
+							wait = vs.signal.Reset() // make sure we don't continue unless there are callers
+							vs.mu.Unlock()
+						}
+					}
+				})
+			}(i)
 		}
-		if ck == "" {
-			return false, nil
-		}
-		lookupRef, err := s.cache.Lookup(ctx, ck)
+	}
+
+	if err := eg.Wait(); err != nil {
+		return err
+	}
+
+	// Find extra cache keys by content
+	inputRefs := make([]Reference, len(vs.inputs))
+	lastInputKeys := make([]digest.Digest, len(vs.inputs))
+	for i := range vs.inputs {
+		inputRefs[i] = vs.inputs[i].ref
+		lastInputKeys[i] = vs.inputs[i].cacheKeys[len(vs.inputs[i].cacheKeys)-1]
+	}
+
+	// TODO: avoid doing this twice on cancellation+resume
+	contentKeys, err := vs.op.ContentKeys(ctx, [][]digest.Digest{lastInputKeys}, inputRefs)
+	if err != nil {
+		return err
+	}
+
+	var extraKeys []digest.Digest
+	for _, k := range contentKeys {
+		cks, err := vs.cache.GetContentMapping(k)
 		if err != nil {
-			return false, err
+			return err
 		}
-		if lookupRef != nil {
-			g.recursiveMarkCached(ctx)
-			returnRef = lookupRef.(Reference)
-			return true, nil
+		extraKeys = append(extraKeys, cks...)
+	}
+	if len(extraKeys) > 0 {
+		vs.mu.Lock()
+		vs.results = append(vs.results, extraKeys...)
+		signal()
+		wait = vs.signal.Reset()
+		vs.mu.Unlock()
+	}
+
+	select {
+	case <-ctx.Done():
+		return
+	case <-wait:
+	}
+
+	// no cache hit. start evaluating the node
+	vs.v.notifyStarted(ctx)
+	defer func() {
+		vs.v.notifyCompleted(ctx, false, retErr)
+	}()
+
+	refs, err := vs.op.Run(ctx, inputRefs)
+	if err != nil {
+		return err
+	}
+	sr := make([]*sharedRef, len(refs))
+	for i, r := range refs {
+		sr[i] = newSharedRef(r)
+	}
+	vs.refs = sr
+
+	// store the cacheKeys for current refs
+	if vs.cache != nil {
+		cacheKey, err := vs.mainCacheKey()
+		if err != nil {
+			return err
 		}
-		return false, nil
+		for i, ref := range refs {
+			if err != nil {
+				return err
+			}
+			r := originRef(ref)
+			if err := vs.cache.Set(cacheKeyForIndex(cacheKey, Index(i)), r); err != nil {
+				logrus.Errorf("failed to save cache for %s: %v", cacheKey, err)
+			}
+		}
+		if len(contentKeys) > 0 {
+			for _, ck := range contentKeys {
+				if err := vs.cache.SetContentMapping(ck, cacheKey); err != nil {
+					logrus.Errorf("failed to save content mapping: %v", err)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+type VertexEvaluator interface {
+	Next(context.Context) (*VertexResult, error)
+	Cancel() error
+}
+
+type vertexEvaluator struct {
+	*vertexSolver
+	c      *bgfunc.Caller
+	cursor int
+	index  Index
+}
+
+func (ve *vertexEvaluator) Next(ctx context.Context) (*VertexResult, error) {
+	v, err := ve.c.Call(ctx, func() (interface{}, error) {
+		ve.mu.Lock()
+		defer ve.mu.Unlock()
+		if ve.refs != nil {
+			return &VertexResult{Reference: ve.refs[int(ve.index)].Clone()}, nil
+		}
+		if i := ve.cursor; i < len(ve.results) {
+			ve.cursor++
+			return &VertexResult{CacheKey: cacheKeyForIndex(ve.results[i], ve.index)}, nil
+		}
+		ve.signal.Signal()
+		return nil, nil
 	})
 	if err != nil {
 		return nil, err
 	}
-
-	return returnRef, nil
+	if v == nil {
+		return nil, nil // no more records are coming
+	}
+	return v.(*VertexResult), nil
 }
 
-func firstKeys(inp [][]digest.Digest) []digest.Digest {
-	var out []digest.Digest
-	for _, v := range inp {
-		out = append(out, v[0])
-	}
-	return out
+func (ve *vertexEvaluator) Cancel() error {
+	return ve.c.Cancel()
 }
 
-func combinations(inp [][]digest.Digest) [][]digest.Digest {
-	var out [][]digest.Digest
-	if len(inp) == 0 {
-		return inp
-	}
-	if len(inp) == 1 {
-		for _, v := range inp[0] {
-			out = append(out, []digest.Digest{v})
-		}
-		return out
-	}
-	for _, v := range inp[0] {
-		for _, v2 := range combinations(inp[1:]) {
-			out = append(out, append([]digest.Digest{v}, v2...))
-		}
-	}
-	return out
+type VertexResult struct {
+	CacheKey  digest.Digest
+	Reference Reference
 }
 
-func contentKeyWithIndex(dgst digest.Digest, index Index) digest.Digest {
+// llbBridge is an helper used by frontends
+type llbBridge struct {
+	resolveImageConfig
+	job       *job
+	resolveOp ResolveOpFunc
+}
+
+type resolveImageConfig interface {
+	ResolveImageConfig(ctx context.Context, ref string) ([]byte, error)
+}
+
+func (s *llbBridge) Solve(ctx context.Context, dt [][]byte) (cache.ImmutableRef, error) {
+	v, err := LoadLLB(dt)
+	if err != nil {
+		return nil, err
+	}
+	if len(v.Inputs()) == 0 {
+		return nil, errors.New("required vertex needs to have inputs")
+	}
+
+	index := v.Inputs()[0].Index
+	v = v.Inputs()[0].Vertex
+
+	vv := toInternalVertex(v)
+
+	if err := s.job.load(vv, s.resolveOp); err != nil {
+		return nil, err
+	}
+	ref, err := s.job.getRef(ctx, vv, index)
+	if err != nil {
+		return nil, err
+	}
+	immutable, ok := toImmutableRef(ref)
+	if !ok {
+		return nil, errors.Errorf("invalid reference for exporting: %T", ref)
+	}
+
+	return immutable, nil
+}
+
+func cacheKeyForIndex(dgst digest.Digest, index Index) digest.Digest {
 	return digest.FromBytes([]byte(fmt.Sprintf("%s.%d", dgst, index)))
 }

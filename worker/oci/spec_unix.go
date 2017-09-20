@@ -5,6 +5,7 @@ package oci
 import (
 	"context"
 	"path"
+	"sync"
 
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/mount"
@@ -108,9 +109,17 @@ func (s *submounts) subMount(m mount.Mount, subPath string) (mount.Mount, error)
 }
 
 func (s *submounts) cleanup() {
+	var wg sync.WaitGroup
+	wg.Add(len(s.m))
 	for _, m := range s.m {
-		m.unmount()
+		func(m mountRef) {
+			go func() {
+				m.unmount()
+				wg.Done()
+			}()
+		}(m)
 	}
+	wg.Wait()
 }
 
 func sub(m mount.Mount, subPath string) mount.Mount {

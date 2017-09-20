@@ -20,8 +20,12 @@ var contextKey = contextKeyT("buildkit/util/progress")
 
 // FromContext returns a progress writer from a context.
 func FromContext(ctx context.Context, opts ...WriterOption) (Writer, bool, context.Context) {
-	pw, ok := ctx.Value(contextKey).(*progressWriter)
+	v := ctx.Value(contextKey)
+	pw, ok := v.(*progressWriter)
 	if !ok {
+		if pw, ok := v.(*MultiWriter); ok {
+			return pw, true, ctx
+		}
 		return &noOpWriter{}, false, ctx
 	}
 	pw = newWriter(pw)
@@ -39,13 +43,20 @@ type WriterOption func(Writer)
 // function to signal that no new writes will happen to this context.
 func NewContext(ctx context.Context) (Reader, context.Context, func()) {
 	pr, pw, cancel := pipe()
-	ctx = context.WithValue(ctx, contextKey, pw)
+	ctx = WithProgress(ctx, pw)
 	return pr, ctx, cancel
+}
+
+func WithProgress(ctx context.Context, pw Writer) context.Context {
+	return context.WithValue(ctx, contextKey, pw)
 }
 
 func WithMetadata(key string, val interface{}) WriterOption {
 	return func(w Writer) {
 		if pw, ok := w.(*progressWriter); ok {
+			pw.meta[key] = val
+		}
+		if pw, ok := w.(*MultiWriter); ok {
 			pw.meta[key] = val
 		}
 	}
@@ -211,8 +222,8 @@ func (pw *progressWriter) WriteRawProgress(p *Progress) error {
 func (pw *progressWriter) writeRawProgress(p *Progress) error {
 	pw.reader.mu.Lock()
 	pw.reader.dirty[p.ID] = p
-	pw.reader.mu.Unlock()
 	pw.reader.cond.Broadcast()
+	pw.reader.mu.Unlock()
 	return nil
 }
 

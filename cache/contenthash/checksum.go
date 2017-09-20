@@ -602,7 +602,7 @@ func ensureOriginMetadata(md *metadata.StorageItem) *metadata.StorageItem {
 	}
 	si, ok := md.Storage().Get(mutable)
 	if ok {
-		return &si
+		return si
 	}
 	return md
 }

@@ -240,11 +240,11 @@ func (sr *mutableRef) commit(ctx context.Context) (ImmutableRef, error) {
 		parent:       sr.parent,
 		equalMutable: sr,
 		refs:         make(map[Mountable]struct{}),
-		md:           &md,
+		md:           md,
 	}
 
 	if descr := getDescription(sr.md); descr != "" {
-		if err := queueDescription(&md, descr); err != nil {
+		if err := queueDescription(md, descr); err != nil {
 			return nil, err
 		}
 	}
@@ -259,8 +259,8 @@ func (sr *mutableRef) commit(ctx context.Context) (ImmutableRef, error) {
 		return nil, err
 	}
 
-	setSize(&md, sizeUnknown)
-	setEqualMutable(&md, sr.ID())
+	setSize(md, sizeUnknown)
+	setEqualMutable(md, sr.ID())
 	if err := md.Commit(); err != nil {
 		return nil, err
 	}

@@ -122,7 +122,7 @@ func (cm *cacheManager) load(ctx context.Context, id string, opts ...RefOption) 
 	}
 
 	md, _ := cm.md.Get(id)
-	if mutableID := getEqualMutable(&md); mutableID != "" {
+	if mutableID := getEqualMutable(md); mutableID != "" {
 		mutable, err := cm.load(ctx, mutableID)
 		if err != nil {
 			return nil, err
@@ -131,7 +131,7 @@ func (cm *cacheManager) load(ctx context.Context, id string, opts ...RefOption) 
 			cm:           cm,
 			refs:         make(map[Mountable]struct{}),
 			parent:       mutable.parent,
-			md:           &md,
+			md:           md,
 			equalMutable: &mutableRef{cacheRecord: mutable},
 		}
 		mutable.equalImmutable = &immutableRef{cacheRecord: rec}
@@ -157,7 +157,7 @@ func (cm *cacheManager) load(ctx context.Context, id string, opts ...RefOption) 
 		cm:      cm,
 		refs:    make(map[Mountable]struct{}),
 		parent:  parent,
-		md:      &md,
+		md:      md,
 	}
 
 	if err := initializeMetadata(rec, opts...); err != nil {
@@ -202,7 +202,7 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, opts ...RefOpti
 		cm:      cm,
 		refs:    make(map[Mountable]struct{}),
 		parent:  parent,
-		md:      &md,
+		md:      md,
 	}
 
 	if err := initializeMetadata(rec, opts...); err != nil {
@@ -377,6 +377,10 @@ const (
 
 type withMetadata interface {
 	Metadata() *metadata.StorageItem
+}
+
+func HasCachePolicyRetain(m withMetadata) bool {
+	return getCachePolicy(m.Metadata()) == cachePolicyRetain
 }
 
 func CachePolicyRetain(m withMetadata) error {

@@ -33,7 +33,7 @@ func main() {
 }
 
 func goBuildBase() llb.State {
-	goAlpine := llb.Image("docker.io/library/golang:1.8-alpine")
+	goAlpine := llb.Image("docker.io/library/golang:1.8-alpine@sha256:2287e0e274c1d2e9076c1f81d04f1a63c86b73c73603b09caada5da307a8f86d")
 	return goAlpine.
 		AddEnv("PATH", "/usr/local/go/bin:"+system.DefaultPathEnv).
 		AddEnv("GOPATH", "/go").
@@ -76,7 +76,7 @@ func containerd(version string) llb.State {
 
 func buildkit(opt buildOpt) llb.State {
 	repo := "github.com/moby/buildkit"
-	src := llb.Git(repo, "master")
+	src := llb.Git(repo, opt.buildkit)
 	if opt.buildkit == "local" {
 		src = llb.Local("buildkit-src")
 	}
@@ -114,7 +114,7 @@ func copyFrom(src llb.State, srcPath, destPath string) llb.StateOption {
 
 // copy copies files between 2 states using cp until there is no copyOp
 func copy(src llb.State, srcPath string, dest llb.State, destPath string) llb.State {
-	cpImage := llb.Image("docker.io/library/alpine:latest")
+	cpImage := llb.Image("docker.io/library/alpine:latest@sha256:1072e499f3f655a032e88542330cf75b02e7bdf673278f701d7ba61629ee3ebe")
 	cp := cpImage.Run(llb.Shlexf("cp -a /src%s /dest%s", srcPath, destPath))
 	cp.AddMount("/src", src, llb.Readonly)
 	return cp.AddMount("/dest", dest)
