@@ -1,6 +1,6 @@
 package appdefaults
 
 const (
-	Socket = "//./pipe/buildd"
-	Root   = ".buildstate"
+	Address = "npipe:////./pipe/buildd"
+	Root    = ".buildstate"
 )

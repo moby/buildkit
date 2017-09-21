@@ -29,9 +29,9 @@ func New(address string, opts ...ClientOpt) (*Client, error) {
 		}
 	}
 	if address == "" {
-		address = appdefaults.Socket
+		address = appdefaults.Address
 	}
-	conn, err := grpc.Dial(dialAddress(address), gopts...)
+	conn, err := grpc.Dial(address, gopts...)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to dial %q . make sure buildd is running", address)
 	}

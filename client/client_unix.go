@@ -3,17 +3,17 @@
 package client
 
 import (
-	"fmt"
 	"net"
 	"strings"
 	"time"
+
+	"github.com/pkg/errors"
 )
 
 func dialer(address string, timeout time.Duration) (net.Conn, error) {
-	address = strings.TrimPrefix(address, "unix://")
-	return net.DialTimeout("unix", address, timeout)
-}
-
-func dialAddress(address string) string {
-	return fmt.Sprintf("unix://%s", address)
+	addrParts := strings.SplitN(address, "://", 2)
+	if len(addrParts) != 2 {
+		return nil, errors.Errorf("invalid address %s", address)
+	}
+	return net.DialTimeout(addrParts[0], addrParts[1], timeout)
 }

@@ -50,9 +50,11 @@ func runBuildd(args []string) (string, func(), error) {
 	address := filepath.Join(tmpdir, "buildd.sock")
 	if runtime.GOOS == "windows" {
 		address = "//./pipe/buildd-" + filepath.Base(tmpdir)
+	} else {
+		address = "unix://" + address
 	}
 
-	args = append(args, "--root", tmpdir, "--socket", address, "--debug")
+	args = append(args, "--root", tmpdir, "--addr", address, "--debug")
 
 	cmd := exec.Command(args[0], args[1:]...)
 	// cmd.Stderr = os.Stdout
