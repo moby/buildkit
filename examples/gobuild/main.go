@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/moby/buildkit/client/llb"
-	"github.com/moby/buildkit/examples/gobuilder"
+	gobuild "github.com/tonistiigi/llb-gobuild"
 )
 
 func main() {
@@ -16,15 +16,57 @@ func main() {
 }
 
 func run() error {
-
 	src := llb.Local("src")
 
-	g := gobuilder.New(src)
+	gb := gobuild.New(nil)
+	// gb := gobuild.New(&gobuild.Opt{DevMode: true})
+
+	buildctl, err := gb.BuildExe(gobuild.BuildOpt{
+		Source:    src,
+		MountPath: "/go/src/github.com/moby/buildkit",
+		Pkg:       "github.com/moby/buildkit/cmd/buildctl",
+		BuildTags: []string{},
+	})
+	if err != nil {
+		return err
+	}
+
+	buildd, err := gb.BuildExe(gobuild.BuildOpt{
+		Source:    src,
+		MountPath: "/go/src/github.com/moby/buildkit",
+		Pkg:       "github.com/moby/buildkit/cmd/buildd",
+		BuildTags: []string{"standalone"},
+	})
+	if err != nil {
+		return err
+	}
+	_ = buildd
+
+	containerd, err := gb.BuildExe(gobuild.BuildOpt{
+		Source:    llb.Git("github.com/containerd/containerd", "master"),
+		MountPath: "/go/src/github.com/containerd/containerd",
+		Pkg:       "github.com/containerd/containerd/cmd/containerd",
+		BuildTags: []string{"no_btrfs"},
+	})
+	if err != nil {
+		return err
+	}
+	runc, err := gb.BuildExe(gobuild.BuildOpt{
+		CgoEnabled: true,
+		Source:     llb.Git("github.com/opencontainers/runc", "master"),
+		MountPath:  "/go/src/github.com/opencontainers/runc",
+		Pkg:        "github.com/opencontainers/runc",
+		BuildTags:  []string{},
+	})
+	if err != nil {
+		return err
+	}
 
 	sc := llb.Scratch().
-		// With(copyAll(g.Build("github.com/moby/buildkit/client/llb"), "/"))
-		With(copyAll(g.Build("github.com/moby/buildkit/cmd/buildd"), "/")).
-		With(copyAll(g.Build("github.com/moby/buildkit/cmd/buildctl"), "/"))
+		With(copyAll(*buildctl, "/")).
+		With(copyAll(*containerd, "/")).
+		// With(copyAll(*buildd, "/")).
+		With(copyAll(*runc, "/"))
 
 	dt, err := sc.Marshal()
 	if err != nil {
