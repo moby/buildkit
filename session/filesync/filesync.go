@@ -29,6 +29,7 @@ type SyncedDir struct {
 	Name     string
 	Dir      string
 	Excludes []string
+	Map      func(*fsutil.Stat) bool
 }
 
 // NewFSSyncProvider creates a new provider for sending files from client
@@ -94,7 +95,7 @@ func (sp *fsSyncProvider) handle(method string, stream grpc.ServerStream) error 
 		doneCh = sp.doneCh
 		sp.doneCh = nil
 	}
-	err := pr.sendFn(stream, dir.Dir, includes, excludes, progress)
+	err := pr.sendFn(stream, dir.Dir, includes, excludes, progress, dir.Map)
 	if doneCh != nil {
 		if err != nil {
 			doneCh <- err
@@ -113,7 +114,7 @@ type progressCb func(int, bool)
 
 type protocol struct {
 	name   string
-	sendFn func(stream grpc.Stream, srcDir string, includes, excludes []string, progress progressCb) error
+	sendFn func(stream grpc.Stream, srcDir string, includes, excludes []string, progress progressCb, _map func(*fsutil.Stat) bool) error
 	recvFn func(stream grpc.Stream, destDir string, cu CacheUpdater, progress progressCb) error
 }
 
@@ -236,5 +237,5 @@ func CopyToCaller(ctx context.Context, srcPath string, c session.Caller, progres
 		return err
 	}
 
-	return sendDiffCopy(cc, srcPath, nil, nil, progress)
+	return sendDiffCopy(cc, srcPath, nil, nil, progress, nil)
 }
