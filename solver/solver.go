@@ -552,7 +552,7 @@ type llbBridge struct {
 }
 
 type resolveImageConfig interface {
-	ResolveImageConfig(ctx context.Context, ref string) ([]byte, error)
+	ResolveImageConfig(ctx context.Context, ref string) (digest.Digest, []byte, error)
 }
 
 func (s *llbBridge) Solve(ctx context.Context, dt [][]byte) (cache.ImmutableRef, error) {

@@ -51,6 +51,11 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 
 	shlex := NewShellLex(dockerfile.EscapeToken)
 
+	metaResolver := opt.MetaResolver
+	if metaResolver == nil {
+		metaResolver = llb.DefaultImageMetaResolver()
+	}
+
 	var allDispatchStates []*dispatchState
 	dispatchStatesByName := map[string]*dispatchState{}
 
@@ -61,34 +66,27 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 			return nil, nil, err
 		}
 		st.BaseName = name
-		state := llb.Scratch()
-		if st.BaseName != emptyImageName {
-			state = llb.Image(st.BaseName)
-		}
 
 		ds := &dispatchState{
-			state: state,
 			stage: st,
 		}
 		if d, ok := dispatchStatesByName[st.BaseName]; ok {
 			ds.base = d
 		}
-
 		allDispatchStates = append(allDispatchStates, ds)
 		if st.Name != "" {
 			dispatchStatesByName[strings.ToLower(st.Name)] = ds
 		}
 	}
 
-	metaResolver := opt.MetaResolver
-	if metaResolver == nil {
-		metaResolver = llb.DefaultImageMetaResolver()
-	}
-
 	eg, ctx := errgroup.WithContext(ctx)
 	for i, d := range allDispatchStates {
 		// resolve image config for every stage
-		if d.base == nil && d.stage.BaseName != emptyImageName {
+		if d.base == nil {
+			if d.stage.BaseName == emptyImageName {
+				d.state = llb.Scratch()
+				continue
+			}
 			func(i int, d *dispatchState) {
 				eg.Go(func() error {
 					ref, err := reference.ParseNormalizedNamed(d.stage.BaseName)
@@ -97,21 +95,28 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 					}
 					d.stage.BaseName = reference.TagNameOnly(ref).String()
 					if metaResolver != nil {
-						dt, err := metaResolver.ResolveImageConfig(ctx, d.stage.BaseName)
-						if err != nil {
-							return nil // handle the error while builder is actually running
+						dgst, dt, err := metaResolver.ResolveImageConfig(ctx, d.stage.BaseName)
+						if err == nil { // handle the error while builder is actually running
 							// TODO: detect unreachable stages so config is not pulled for them
+							var img Image
+							if err := json.Unmarshal(dt, &img); err != nil {
+								return err
+							}
+							d.image = img
+							ref, err := reference.WithDigest(ref, dgst)
+							if err != nil {
+								return err
+							}
+							d.stage.BaseName = ref.String()
+							_ = ref
 						}
-						var img Image
-						if err := json.Unmarshal(dt, &img); err != nil {
-							return err
-						}
-						allDispatchStates[i].image = img
 					}
+					d.state = llb.Image(d.stage.BaseName)
 					return nil
 				})
 			}(i, d)
 		}
+
 	}
 
 	if err := eg.Wait(); err != nil {

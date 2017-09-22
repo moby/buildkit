@@ -32,7 +32,7 @@ func WithDefaultMetaResolver(ii *ImageInfo) {
 }
 
 type ImageMetaResolver interface {
-	ResolveImageConfig(ctx netcontext.Context, ref string) ([]byte, error)
+	ResolveImageConfig(ctx netcontext.Context, ref string) (digest.Digest, []byte, error)
 }
 
 func NewImageMetaResolver() ImageMetaResolver {
@@ -41,7 +41,7 @@ func NewImageMetaResolver() ImageMetaResolver {
 			Client: http.DefaultClient,
 		}),
 		ingester: newInMemoryIngester(),
-		cache:    map[string][]byte{},
+		cache:    map[string]resolveResult{},
 		locker:   locker.NewLocker(),
 	}
 }
@@ -57,24 +57,29 @@ type imageMetaResolver struct {
 	resolver remotes.Resolver
 	ingester *inMemoryIngester
 	locker   *locker.Locker
-	cache    map[string][]byte
+	cache    map[string]resolveResult
 }
 
-func (imr *imageMetaResolver) ResolveImageConfig(ctx netcontext.Context, ref string) ([]byte, error) {
+type resolveResult struct {
+	config []byte
+	dgst   digest.Digest
+}
+
+func (imr *imageMetaResolver) ResolveImageConfig(ctx netcontext.Context, ref string) (digest.Digest, []byte, error) {
 	imr.locker.Lock(ref)
 	defer imr.locker.Unlock(ref)
 
-	if img, ok := imr.cache[ref]; ok {
-		return img, nil
+	if res, ok := imr.cache[ref]; ok {
+		return res.dgst, res.config, nil
 	}
 
-	img, err := imageutil.Config(ctx, ref, imr.resolver, imr.ingester)
+	dgst, config, err := imageutil.Config(ctx, ref, imr.resolver, imr.ingester)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 
-	imr.cache[ref] = img
-	return img, nil
+	imr.cache[ref] = resolveResult{dgst: dgst, config: config}
+	return dgst, config, nil
 }
 
 type inMemoryIngester struct {
