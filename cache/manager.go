@@ -162,7 +162,7 @@ func (cm *cacheManager) load(ctx context.Context, id string, opts ...RefOption) 
 
 	if err := initializeMetadata(rec, opts...); err != nil {
 		if parent != nil {
-			parent.Release(ctx)
+			parent.Release(context.TODO())
 		}
 		return nil, err
 	}
@@ -190,7 +190,7 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, opts ...RefOpti
 
 	if _, err := cm.Snapshotter.Prepare(ctx, id, parentID); err != nil {
 		if parent != nil {
-			parent.Release(ctx)
+			parent.Release(context.TODO())
 		}
 		return nil, errors.Wrapf(err, "failed to prepare %s", id)
 	}
@@ -207,7 +207,7 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, opts ...RefOpti
 
 	if err := initializeMetadata(rec, opts...); err != nil {
 		if parent != nil {
-			parent.Release(ctx)
+			parent.Release(context.TODO())
 		}
 		return nil, err
 	}
