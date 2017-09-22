@@ -9,10 +9,11 @@ import (
 	"google.golang.org/grpc"
 )
 
-func sendDiffCopy(stream grpc.Stream, dir string, includes, excludes []string, progress progressCb) error {
+func sendDiffCopy(stream grpc.Stream, dir string, includes, excludes []string, progress progressCb, _map func(*fsutil.Stat) bool) error {
 	return fsutil.Send(stream.Context(), stream, dir, &fsutil.WalkOpt{
 		ExcludePatterns: excludes,
 		IncludePatterns: includes,
+		Map:             _map,
 	}, progress)
 }
 
