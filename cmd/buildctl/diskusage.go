@@ -6,9 +6,9 @@ import (
 	"os"
 	"text/tabwriter"
 
-	units "github.com/docker/go-units"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/util/appcontext"
+	"github.com/tonistiigi/units"
 	"github.com/urfave/cli"
 )
 
@@ -67,7 +67,7 @@ func printVerbose(tw *tabwriter.Writer, du []*client.UsageInfo) {
 		printKV(tw, "Created at", di.CreatedAt)
 		printKV(tw, "Mutable", di.Mutable)
 		printKV(tw, "Reclaimable", !di.InUse)
-		printKV(tw, "Size", units.HumanSize(float64(di.Size)))
+		printKV(tw, "Size", fmt.Sprintf("%.2f", units.Bytes(di.Size)))
 		if di.Description != "" {
 			printKV(tw, "Description", di.Description)
 		}
@@ -90,8 +90,7 @@ func printTable(tw *tabwriter.Writer, du []*client.UsageInfo) {
 		if di.Mutable {
 			id += "*"
 		}
-		fmt.Fprintf(tw, "%s\t%v\t%s\t\n", id, !di.InUse, units.HumanSize(float64(di.Size)))
-
+		fmt.Fprintf(tw, "%s\t%v\t%.2f\t\n", id, !di.InUse, units.Bytes(di.Size))
 	}
 
 	tw.Flush()
@@ -111,7 +110,7 @@ func printSummary(tw *tabwriter.Writer, du []*client.UsageInfo) {
 	}
 
 	tw = tabwriter.NewWriter(os.Stdout, 1, 8, 1, '\t', 0)
-	fmt.Fprintf(tw, "Reclaimable:\t%s\n", units.HumanSize(float64(reclaimable)))
-	fmt.Fprintf(tw, "Total:\t%s\n", units.HumanSize(float64(total)))
+	fmt.Fprintf(tw, "Reclaimable:\t%.2f\n", units.Bytes(reclaimable))
+	fmt.Fprintf(tw, "Total:\t%.2f\n", units.Bytes(total))
 	tw.Flush()
 }
