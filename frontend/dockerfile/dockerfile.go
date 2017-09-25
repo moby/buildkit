@@ -16,28 +16,31 @@ import (
 )
 
 const (
-	keyTarget           = "target"
-	keyFilename         = "filename"
-	exporterImageConfig = "containerimage.config"
+	keyTarget             = "target"
+	keyFilename           = "filename"
+	exporterImageConfig   = "containerimage.config"
+	defaultDockerfileName = "Dockerfile"
+	localNameDockerfile   = "dockerfile"
+	buildArgPrefix        = "build-arg:"
 )
-
-type dfFrontend struct{}
 
 func NewDockerfileFrontend() frontend.Frontend {
 	return &dfFrontend{}
 }
 
+type dfFrontend struct{}
+
 func (f *dfFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string) (retRef cache.ImmutableRef, exporterAttr map[string]interface{}, retErr error) {
 
 	filename := opts[keyFilename]
 	if filename == "" {
-		filename = "Dockerfile"
+		filename = defaultDockerfileName
 	}
 	if path.Base(filename) != filename {
 		return nil, nil, errors.Errorf("invalid filename %s", filename)
 	}
 
-	src := llb.Local("dockerfile", llb.IncludePatterns([]string{filename}))
+	src := llb.Local(localNameDockerfile, llb.IncludePatterns([]string{filename}))
 	dt, err := src.Marshal()
 	if err != nil {
 		return nil, nil, err
@@ -82,7 +85,7 @@ func (f *dfFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBr
 	}
 	lm = nil
 
-	if err := ref.Release(ctx); err != nil {
+	if err := ref.Release(context.TODO()); err != nil {
 		return nil, nil, err
 	}
 	ref = nil
@@ -115,8 +118,8 @@ func (f *dfFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBr
 func filterBuildArgs(opt map[string]string) map[string]string {
 	m := map[string]string{}
 	for k, v := range opt {
-		if strings.HasPrefix(k, "build-arg:") {
-			m[strings.TrimPrefix(k, "build-arg:")] = v
+		if strings.HasPrefix(k, buildArgPrefix) {
+			m[strings.TrimPrefix(k, buildArgPrefix)] = v
 		}
 	}
 	return m

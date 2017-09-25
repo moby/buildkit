@@ -73,7 +73,7 @@ func (is *imageSource) ID() string {
 	return source.DockerImageScheme
 }
 
-func (is *imageSource) ResolveImageConfig(ctx context.Context, ref string) ([]byte, error) {
+func (is *imageSource) ResolveImageConfig(ctx context.Context, ref string) (digest.Digest, []byte, error) {
 	return imageutil.Config(ctx, ref, is.resolver, is.ContentStore)
 }
 
@@ -108,13 +108,19 @@ func (p *puller) resolve(ctx context.Context) error {
 			info, err := p.is.ContentStore.Info(ctx, dgst)
 			if err == nil {
 				p.ref = p.src.Reference.String()
-				p.desc = ocispec.Descriptor{
-					Size:      info.Size,
-					Digest:    dgst,
-					MediaType: ocispec.MediaTypeImageManifest, // TODO: detect schema1/manifest-list
+				ra, err := p.is.ContentStore.ReaderAt(ctx, dgst)
+				if err == nil {
+					mt, err := imageutil.DetectManifestMediaType(ra)
+					if err == nil {
+						p.desc = ocispec.Descriptor{
+							Size:      info.Size,
+							Digest:    dgst,
+							MediaType: mt,
+						}
+						resolveProgressDone(nil)
+						return
+					}
 				}
-				resolveProgressDone(nil)
-				return
 			}
 		}
 

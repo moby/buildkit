@@ -57,7 +57,7 @@ func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, erro
 	defer func() {
 		for _, o := range outputs {
 			if o != nil {
-				go o.Release(ctx)
+				go o.Release(context.TODO())
 			}
 		}
 	}()

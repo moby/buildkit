@@ -20,7 +20,8 @@ import (
 )
 
 const (
-	emptyImageName = "scratch"
+	emptyImageName   = "scratch"
+	localNameContext = "context"
 )
 
 type ConvertOpt struct {
@@ -45,47 +46,47 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 	}
 
 	for i := range metaArgs {
-		metaArgs[i] = setArgValue(metaArgs[i], opt.BuildArgs)
+		metaArgs[i] = setBuildArgValue(metaArgs[i], opt.BuildArgs)
 	}
 
 	shlex := NewShellLex(dockerfile.EscapeToken)
-
-	var allStages []*dispatchState
-	stagesByName := map[string]*dispatchState{}
-
-	for _, st := range stages {
-		name, err := shlex.ProcessWord(st.BaseName, combineArgs([]string{}, metaArgs))
-		if err != nil {
-			return nil, nil, err
-		}
-		st.BaseName = name
-		state := llb.Scratch()
-		if st.BaseName != emptyImageName {
-			state = llb.Image(st.BaseName)
-		}
-
-		ds := &dispatchState{
-			state: state,
-			stage: st,
-		}
-		if d, ok := stagesByName[st.BaseName]; ok {
-			ds.base = d
-		}
-
-		allStages = append(allStages, ds)
-		if st.Name != "" {
-			stagesByName[strings.ToLower(st.Name)] = ds
-		}
-	}
 
 	metaResolver := opt.MetaResolver
 	if metaResolver == nil {
 		metaResolver = llb.DefaultImageMetaResolver()
 	}
 
+	var allDispatchStates []*dispatchState
+	dispatchStatesByName := map[string]*dispatchState{}
+
+	// set base state for every image
+	for _, st := range stages {
+		name, err := shlex.ProcessWord(st.BaseName, toEnvList(metaArgs, nil))
+		if err != nil {
+			return nil, nil, err
+		}
+		st.BaseName = name
+
+		ds := &dispatchState{
+			stage: st,
+		}
+		if d, ok := dispatchStatesByName[st.BaseName]; ok {
+			ds.base = d
+		}
+		allDispatchStates = append(allDispatchStates, ds)
+		if st.Name != "" {
+			dispatchStatesByName[strings.ToLower(st.Name)] = ds
+		}
+	}
+
 	eg, ctx := errgroup.WithContext(ctx)
-	for i, d := range allStages {
-		if d.base == nil && d.stage.BaseName != emptyImageName {
+	for i, d := range allDispatchStates {
+		// resolve image config for every stage
+		if d.base == nil {
+			if d.stage.BaseName == emptyImageName {
+				d.state = llb.Scratch()
+				continue
+			}
 			func(i int, d *dispatchState) {
 				eg.Go(func() error {
 					ref, err := reference.ParseNormalizedNamed(d.stage.BaseName)
@@ -94,35 +95,41 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 					}
 					d.stage.BaseName = reference.TagNameOnly(ref).String()
 					if metaResolver != nil {
-						dt, err := metaResolver.ResolveImageConfig(ctx, d.stage.BaseName)
-						if err != nil {
-							return nil // handle the error while builder is actually running
+						dgst, dt, err := metaResolver.ResolveImageConfig(ctx, d.stage.BaseName)
+						if err == nil { // handle the error while builder is actually running
 							// TODO: detect unreachable stages so config is not pulled for them
+							var img Image
+							if err := json.Unmarshal(dt, &img); err != nil {
+								return err
+							}
+							d.image = img
+							ref, err := reference.WithDigest(ref, dgst)
+							if err != nil {
+								return err
+							}
+							d.stage.BaseName = ref.String()
+							_ = ref
 						}
-						var img Image
-						if err := json.Unmarshal(dt, &img); err != nil {
-							return err
-						}
-						allStages[i].image = img
 					}
+					d.state = llb.Image(d.stage.BaseName)
 					return nil
 				})
 			}(i, d)
 		}
+
 	}
 
 	if err := eg.Wait(); err != nil {
 		return nil, nil, err
 	}
 
-	for _, d := range allStages {
+	for _, d := range allDispatchStates {
 		if d.base != nil {
 			d.state = d.base.state
 			d.image = clone(d.base.image)
 		}
 
-		var args []instructions.ArgCommand
-
+		// initialize base metadata from image conf
 		for _, env := range d.image.Config.Env {
 			parts := strings.SplitN(env, "=", 2)
 			v := ""
@@ -138,85 +145,113 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 				return nil, nil, err
 			}
 		}
-
-		for _, cmd := range d.stage.Commands {
-			if ex, ok := cmd.(instructions.SupportsSingleWordExpansion); ok {
-				err := ex.Expand(func(word string) (string, error) {
-					return shlex.ProcessWord(word, combineArgs(d.image.Config.Env, args))
-				})
-				if err != nil {
-					return nil, nil, err
-				}
-			}
-
-			switch c := cmd.(type) {
-			case *instructions.EnvCommand:
-				err = dispatchEnv(d, c)
-			case *instructions.RunCommand:
-				err = dispatchRun(d, c, args)
-			case *instructions.WorkdirCommand:
-				err = dispatchWorkdir(d, c)
-			case *instructions.AddCommand:
-				err = dispatchCopy(d, c.SourcesAndDest, llb.Local("context"))
-			case *instructions.LabelCommand:
-				err = dispatchLabel(d, c)
-			case *instructions.OnbuildCommand:
-				err = dispatchOnbuild(d, c)
-			case *instructions.CmdCommand:
-				err = dispatchCmd(d, c)
-			case *instructions.EntrypointCommand:
-				err = dispatchEntrypoint(d, c)
-			case *instructions.HealthCheckCommand:
-				err = dispatchHealthcheck(d, c)
-			case *instructions.ExposeCommand:
-				err = dispatchExpose(d, c)
-			case *instructions.UserCommand:
-				err = dispatchUser(d, c)
-			case *instructions.VolumeCommand:
-				err = dispatchVolume(d, c)
-			case *instructions.StopSignalCommand:
-				err = dispatchStopSignal(d, c)
-			case *instructions.ShellCommand:
-				err = dispatchShell(d, c)
-			case *instructions.ArgCommand:
-				args, err = dispatchArg(d, c, args, metaArgs, opt.BuildArgs)
-			case *instructions.CopyCommand:
-				l := llb.Local("context")
-				if c.From != "" {
-					index, err := strconv.Atoi(c.From)
-					if err != nil {
-						stn, ok := stagesByName[strings.ToLower(c.From)]
-						if !ok {
-							return nil, nil, errors.Errorf("stage %s not found", c.From)
-						}
-						l = stn.state
-					} else {
-						if index >= len(allStages) {
-							return nil, nil, errors.Errorf("invalid stage index %d", index)
-						}
-						l = allStages[index].state
-					}
-				}
-				err = dispatchCopy(d, c.SourcesAndDest, l)
-			default:
-				continue
-			}
-			if err != nil {
+		if d.image.Config.User != "" {
+			if err = dispatchUser(d, &instructions.UserCommand{User: d.image.Config.User}); err != nil {
 				return nil, nil, err
 			}
 		}
 
+		opt := dispatchOpt{
+			allDispatchStates:    allDispatchStates,
+			dispatchStatesByName: dispatchStatesByName,
+			metaArgs:             metaArgs,
+			buildArgValues:       opt.BuildArgs,
+			shlex:                shlex,
+		}
+
+		if err = dispatchOnBuild(d, d.image.Config.OnBuild, opt); err != nil {
+			return nil, nil, err
+		}
+
+		for _, cmd := range d.stage.Commands {
+			if err := dispatch(d, cmd, opt); err != nil {
+				return nil, nil, err
+			}
+		}
 	}
 
 	if opt.Target == "" {
-		return &allStages[len(allStages)-1].state, &allStages[len(allStages)-1].image, nil
+		return &allDispatchStates[len(allDispatchStates)-1].state, &allDispatchStates[len(allDispatchStates)-1].image, nil
 	}
 
-	state, ok := stagesByName[strings.ToLower(opt.Target)]
+	state, ok := dispatchStatesByName[strings.ToLower(opt.Target)]
 	if !ok {
 		return nil, nil, errors.Errorf("target stage %s could not be found", opt.Target)
 	}
 	return &state.state, &state.image, nil
+}
+
+type dispatchOpt struct {
+	allDispatchStates    []*dispatchState
+	dispatchStatesByName map[string]*dispatchState
+	metaArgs             []instructions.ArgCommand
+	buildArgValues       map[string]string
+	shlex                *ShellLex
+}
+
+func dispatch(d *dispatchState, cmd instructions.Command, opt dispatchOpt) error {
+	if ex, ok := cmd.(instructions.SupportsSingleWordExpansion); ok {
+		err := ex.Expand(func(word string) (string, error) {
+			return opt.shlex.ProcessWord(word, toEnvList(d.buildArgs, d.image.Config.Env))
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	var err error
+	switch c := cmd.(type) {
+	case *instructions.EnvCommand:
+		err = dispatchEnv(d, c)
+	case *instructions.RunCommand:
+		err = dispatchRun(d, c)
+	case *instructions.WorkdirCommand:
+		err = dispatchWorkdir(d, c)
+	case *instructions.AddCommand:
+		err = dispatchCopy(d, c.SourcesAndDest, llb.Local(localNameContext))
+	case *instructions.LabelCommand:
+		err = dispatchLabel(d, c)
+	case *instructions.OnbuildCommand:
+		err = dispatchOnbuild(d, c)
+	case *instructions.CmdCommand:
+		err = dispatchCmd(d, c)
+	case *instructions.EntrypointCommand:
+		err = dispatchEntrypoint(d, c)
+	case *instructions.HealthCheckCommand:
+		err = dispatchHealthcheck(d, c)
+	case *instructions.ExposeCommand:
+		err = dispatchExpose(d, c)
+	case *instructions.UserCommand:
+		err = dispatchUser(d, c)
+	case *instructions.VolumeCommand:
+		err = dispatchVolume(d, c)
+	case *instructions.StopSignalCommand:
+		err = dispatchStopSignal(d, c)
+	case *instructions.ShellCommand:
+		err = dispatchShell(d, c)
+	case *instructions.ArgCommand:
+		err = dispatchArg(d, c, opt.metaArgs, opt.buildArgValues)
+	case *instructions.CopyCommand:
+		l := llb.Local(localNameContext)
+		if c.From != "" {
+			index, err := strconv.Atoi(c.From)
+			if err != nil {
+				stn, ok := opt.dispatchStatesByName[strings.ToLower(c.From)]
+				if !ok {
+					return errors.Errorf("stage %s not found", c.From)
+				}
+				l = stn.state
+			} else {
+				if index >= len(opt.allDispatchStates) {
+					return errors.Errorf("invalid stage index %d", index)
+				}
+				l = opt.allDispatchStates[index].state
+			}
+		}
+		err = dispatchCopy(d, c.SourcesAndDest, l)
+	default:
+	}
+	return err
 }
 
 type dispatchState struct {
@@ -224,6 +259,28 @@ type dispatchState struct {
 	image Image
 	stage instructions.Stage
 	base  *dispatchState
+
+	buildArgs []instructions.ArgCommand
+}
+
+func dispatchOnBuild(d *dispatchState, triggers []string, opt dispatchOpt) error {
+	for _, trigger := range triggers {
+		ast, err := parser.Parse(strings.NewReader(trigger))
+		if err != nil {
+			return err
+		}
+		if len(ast.AST.Children) != 1 {
+			return errors.New("onbuild trigger should be a single expression")
+		}
+		cmd, err := instructions.ParseCommand(ast.AST.Children[0])
+		if err != nil {
+			return err
+		}
+		if err := dispatch(d, cmd, opt); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func dispatchEnv(d *dispatchState, c *instructions.EnvCommand) error {
@@ -234,7 +291,7 @@ func dispatchEnv(d *dispatchState, c *instructions.EnvCommand) error {
 	return nil
 }
 
-func dispatchRun(d *dispatchState, c *instructions.RunCommand, buildArgs []instructions.ArgCommand) error {
+func dispatchRun(d *dispatchState, c *instructions.RunCommand) error {
 	var args []string = c.CmdLine
 	if c.PrependShell {
 		args = append(defaultShell(), strings.Join(args, " "))
@@ -242,7 +299,7 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, buildArgs []instr
 		args = append(d.image.Config.Entrypoint, args...)
 	}
 	opt := []llb.RunOption{llb.Args(args)}
-	for _, arg := range buildArgs {
+	for _, arg := range d.buildArgs {
 		opt = append(opt, llb.AddEnv(arg.Key, getArgValue(arg)))
 	}
 	d.state = d.state.Run(opt...).Root()
@@ -263,7 +320,7 @@ func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState l
 	// TODO: this should use CopyOp instead. Current implementation is inefficient and doesn't match Dockerfile path suffixes rules
 	img := llb.Image("tonistiigi/copy@sha256:260a4355be76e0609518ebd7c0e026831c80b8908d4afd3f8e8c942645b1e5cf")
 
-	dest := path.Join("/dest", toWorkingDir(d.state, c.Dest()))
+	dest := path.Join("/dest", pathRelativeToWorkingDir(d.state, c.Dest()))
 	args := []string{"copy"}
 	mounts := make([]llb.RunOption, 0, len(c.Sources()))
 	for i, src := range c.Sources() {
@@ -280,13 +337,6 @@ func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState l
 	run := img.Run(append([]llb.RunOption{llb.Args(args)}, mounts...)...)
 	d.state = run.AddMount("/dest", d.state)
 	return nil
-}
-
-func toWorkingDir(s llb.State, p string) string {
-	if path.IsAbs(p) {
-		return p
-	}
-	return path.Join(s.GetDir(), p)
 }
 
 func dispatchMaintainer(d *dispatchState, c instructions.MaintainerCommand) error {
@@ -386,7 +436,7 @@ func dispatchShell(d *dispatchState, c *instructions.ShellCommand) error {
 	return nil
 }
 
-func dispatchArg(d *dispatchState, c *instructions.ArgCommand, args []instructions.ArgCommand, metaArgs []instructions.ArgCommand, buildArgs map[string]string) ([]instructions.ArgCommand, error) {
+func dispatchArg(d *dispatchState, c *instructions.ArgCommand, metaArgs []instructions.ArgCommand, buildArgValues map[string]string) error {
 	if c.Value == nil {
 		for _, ma := range metaArgs {
 			if ma.Key == c.Key {
@@ -395,8 +445,15 @@ func dispatchArg(d *dispatchState, c *instructions.ArgCommand, args []instructio
 		}
 	}
 
-	args = append(args, setArgValue(*c, buildArgs))
-	return args, nil
+	d.buildArgs = append(d.buildArgs, setBuildArgValue(*c, buildArgValues))
+	return nil
+}
+
+func pathRelativeToWorkingDir(s llb.State, p string) string {
+	if path.IsAbs(p) {
+		return p
+	}
+	return path.Join(s.GetDir(), p)
 }
 
 func splitWildcards(name string) (string, string) {
@@ -438,14 +495,14 @@ func equalEnvKeys(from, to string) bool {
 	return from == to
 }
 
-func setArgValue(c instructions.ArgCommand, values map[string]string) instructions.ArgCommand {
+func setBuildArgValue(c instructions.ArgCommand, values map[string]string) instructions.ArgCommand {
 	if v, ok := values[c.Key]; ok {
 		c.Value = &v
 	}
 	return c
 }
 
-func combineArgs(env []string, args []instructions.ArgCommand) []string {
+func toEnvList(args []instructions.ArgCommand, env []string) []string {
 	for _, arg := range args {
 		env = addEnv(env, arg.Key, getArgValue(arg), false)
 	}

@@ -9,6 +9,7 @@ import (
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/reference"
 	"github.com/containerd/containerd/remotes"
+	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
@@ -18,10 +19,10 @@ type IngesterProvider interface {
 	content.Provider
 }
 
-func Config(ctx context.Context, str string, resolver remotes.Resolver, ingester IngesterProvider) ([]byte, error) {
+func Config(ctx context.Context, str string, resolver remotes.Resolver, ingester IngesterProvider) (digest.Digest, []byte, error) {
 	ref, err := reference.Parse(str)
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return "", nil, errors.WithStack(err)
 	}
 
 	dgst := ref.Digest()
@@ -29,7 +30,7 @@ func Config(ctx context.Context, str string, resolver remotes.Resolver, ingester
 	if dgst != "" {
 		ra, err := ingester.ReaderAt(ctx, dgst)
 		if err == nil {
-			mt, err := detectManifestMediaType(ra)
+			mt, err := DetectManifestMediaType(ra)
 			if err == nil {
 				desc = &ocispec.Descriptor{
 					Size:      ra.Size(),
@@ -43,14 +44,14 @@ func Config(ctx context.Context, str string, resolver remotes.Resolver, ingester
 	if desc == nil {
 		_, desc2, err := resolver.Resolve(ctx, ref.String())
 		if err != nil {
-			return nil, err
+			return "", nil, err
 		}
 		desc = &desc2
 	}
 
 	fetcher, err := resolver.Fetcher(ctx, ref.String())
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 
 	handlers := []images.Handler{
@@ -58,14 +59,19 @@ func Config(ctx context.Context, str string, resolver remotes.Resolver, ingester
 		childrenConfigHandler(ingester),
 	}
 	if err := images.Dispatch(ctx, images.Handlers(handlers...), *desc); err != nil {
-		return nil, err
+		return "", nil, err
 	}
 	config, err := images.Config(ctx, ingester, *desc, platforms.Format(platforms.Default()))
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 
-	return content.ReadBlob(ctx, ingester, config.Digest)
+	dt, err := content.ReadBlob(ctx, ingester, config.Digest)
+	if err != nil {
+		return "", nil, err
+	}
+
+	return desc.Digest, dt, nil
 }
 
 func childrenConfigHandler(provider content.Provider) images.HandlerFunc {
@@ -110,7 +116,7 @@ func childrenConfigHandler(provider content.Provider) images.HandlerFunc {
 }
 
 // ocispec.MediaTypeImageManifest, // TODO: detect schema1/manifest-list
-func detectManifestMediaType(ra content.ReaderAt) (string, error) {
+func DetectManifestMediaType(ra content.ReaderAt) (string, error) {
 	// TODO: schema1
 
 	p := make([]byte, ra.Size())
