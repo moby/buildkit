@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/containerd/console"
-	"github.com/docker/go-units"
 	"github.com/moby/buildkit/client"
 	"github.com/morikuni/aec"
 	digest "github.com/opencontainers/go-digest"
+	"github.com/tonistiigi/units"
 	"golang.org/x/time/rate"
 )
 
@@ -196,9 +196,9 @@ func (t *trace) displayInfo() (d displayInfo) {
 				name:          v.indent + "=> " + s.ID,
 			}
 			if s.Total != 0 {
-				j.status = units.HumanSize(float64(s.Current)) + " / " + units.HumanSize(float64(s.Total))
+				j.status = fmt.Sprintf("%.2f / %.2f", units.Bytes(s.Current), units.Bytes(s.Total))
 			} else if s.Current != 0 {
-				j.status = units.HumanSize(float64(s.Current))
+				j.status = fmt.Sprintf("%.2f", units.Bytes(s.Current))
 			}
 			d.jobs = append(d.jobs, j)
 		}
@@ -270,7 +270,7 @@ func (disp *display) print(d displayInfo, all bool) {
 			dt = 0
 		}
 		pfx := " => "
-		timer := fmt.Sprintf(" %.1fs\n", dt)
+		timer := fmt.Sprintf(" %3.1fs\n", dt)
 		status := j.status
 		showStatus := false
 
