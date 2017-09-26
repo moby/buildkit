@@ -109,21 +109,7 @@ func (b *buildOp) Run(ctx context.Context, inputs []Reference) (outputs []Refere
 	lm.Unmount()
 	lm = nil
 
-	v, err := LoadLLB(def)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(v.Inputs()) == 0 {
-		return nil, errors.New("required vertex needs to have inputs")
-	}
-
-	index := v.Inputs()[0].Index
-	v = v.Inputs()[0].Vertex
-
-	vv := toInternalVertex(v)
-
-	newref, err := b.s.loadAndSolveChildVertex(ctx, b.v.Digest(), vv, index)
+	newref, err := b.s.loadAndSolve(ctx, b.v.Digest(), def)
 	if err != nil {
 		return nil, err
 	}

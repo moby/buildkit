@@ -14,7 +14,6 @@ type Vertex struct {
 	Completed *time.Time
 	Cached    bool
 	Error     string
-	Parent    digest.Digest
 }
 
 type VertexStatus struct {
@@ -40,13 +39,3 @@ type SolveStatus struct {
 	Statuses []*VertexStatus
 	Logs     []*VertexLog
 }
-
-//
-// type VertexEvent struct {
-// 	ID        digest.Digest
-// 	Vertex    digest.Digest
-// 	Name      string
-// 	Total     int
-// 	Current   int
-// 	Timestamp int64
-// }

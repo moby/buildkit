@@ -7,6 +7,7 @@ import (
 
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/progress"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
@@ -26,7 +27,7 @@ type jobList struct {
 }
 
 type state struct {
-	jobs   map[*job]struct{}
+	jobs   map[*job]*vertex
 	solver VertexSolver
 	mpw    *progress.MultiWriter
 }
@@ -90,7 +91,7 @@ func (jl *jobList) get(id string) (*job, error) {
 	}
 }
 
-func (jl *jobList) loadAndSolveChildVertex(ctx context.Context, dgst digest.Digest, vv *vertex, index Index, f ResolveOpFunc, cache InstructionCache) (Reference, error) {
+func (jl *jobList) loadAndSolve(ctx context.Context, dgst digest.Digest, ops [][]byte, f ResolveOpFunc, cache InstructionCache) (Reference, error) {
 	jl.mu.Lock()
 
 	st, ok := jl.actives[dgst]
@@ -99,18 +100,19 @@ func (jl *jobList) loadAndSolveChildVertex(ctx context.Context, dgst digest.Dige
 		return nil, errors.Errorf("no such parent vertex: %v", dgst)
 	}
 
-	var newst *state
+	var inp *Input
 	for j := range st.jobs {
 		var err error
-		newst, err = j.loadInternal(vv, f)
+		inp, err = j.loadInternal(ops, f)
 		if err != nil {
 			jl.mu.Unlock()
 			return nil, err
 		}
 	}
+	st = jl.actives[inp.Vertex.Digest()]
 	jl.mu.Unlock()
 
-	return getRef(newst.solver, ctx, vv, index, cache)
+	return getRef(st.solver, ctx, inp.Vertex.(*vertex), inp.Index, cache) // TODO: combine to pass single input
 }
 
 type job struct {
@@ -121,49 +123,57 @@ type job struct {
 	cache   InstructionCache
 }
 
-func (j *job) load(v *vertex, f ResolveOpFunc) error {
+func (j *job) load(ops [][]byte, resolveOp ResolveOpFunc) (*Input, error) {
 	j.l.mu.Lock()
 	defer j.l.mu.Unlock()
 
-	_, err := j.loadInternal(v, f)
-	return err
+	return j.loadInternal(ops, resolveOp)
 }
 
-func (j *job) loadInternal(v *vertex, f ResolveOpFunc) (*state, error) {
-	for _, inp := range v.inputs {
-		if _, err := j.loadInternal(inp.vertex, f); err != nil {
-			return nil, err
+func (j *job) loadInternal(ops [][]byte, resolveOp ResolveOpFunc) (*Input, error) {
+	vtx, idx, err := loadLLB(ops, func(dgst digest.Digest, op *pb.Op, load func(digest.Digest) (interface{}, error)) (interface{}, error) {
+		if st, ok := j.l.actives[dgst]; ok {
+			if vtx, ok := st.jobs[j]; ok {
+				return vtx, nil
+			}
 		}
-	}
-
-	dgst := v.Digest()
-	st, ok := j.l.actives[dgst]
-	if !ok {
-		st = &state{
-			jobs: map[*job]struct{}{},
-			mpw:  progress.NewMultiWriter(progress.WithMetadata("vertex", dgst)),
-		}
-		op, err := f(v)
+		vtx, err := newVertex(dgst, op, load)
 		if err != nil {
 			return nil, err
 		}
-		ctx := progress.WithProgress(context.Background(), st.mpw)
-		ctx = session.NewContext(ctx, j.session) // TODO: support multiple
 
-		s, err := newVertexSolver(ctx, v, op, j.cache, j.getSolver)
-		if err != nil {
-			return nil, err
+		st, ok := j.l.actives[dgst]
+		if !ok {
+			st = &state{
+				jobs: map[*job]*vertex{},
+				mpw:  progress.NewMultiWriter(progress.WithMetadata("vertex", dgst)),
+			}
+			op, err := resolveOp(vtx)
+			if err != nil {
+				return nil, err
+			}
+			ctx := progress.WithProgress(context.Background(), st.mpw)
+			ctx = session.NewContext(ctx, j.session) // TODO: support multiple
+
+			s, err := newVertexSolver(ctx, vtx, op, j.cache, j.getSolver)
+			if err != nil {
+				return nil, err
+			}
+			st.solver = s
+
+			j.l.actives[dgst] = st
 		}
-		st.solver = s
-
-		j.l.actives[dgst] = st
+		if _, ok := st.jobs[j]; !ok {
+			j.pw.Write(vtx.Digest().String(), vtx.clientVertex)
+			st.mpw.Add(j.pw)
+			st.jobs[j] = vtx
+		}
+		return vtx, nil
+	})
+	if err != nil {
+		return nil, err
 	}
-	if _, ok := st.jobs[j]; !ok {
-		j.pw.Write(v.Digest().String(), v.clientVertex)
-		st.mpw.Add(j.pw)
-		st.jobs[j] = struct{}{}
-	}
-	return st, nil
+	return &Input{Vertex: vtx.(*vertex), Index: idx}, nil
 }
 
 func (j *job) discard() {
@@ -209,7 +219,7 @@ func getRef(s VertexSolver, ctx context.Context, v *vertex, index Index, cache I
 		return nil, err
 	}
 	if ref != nil {
-		v.notifyCompleted(ctx, true, nil)
+		markCached(ctx, v.clientVertex)
 		return ref.(Reference), nil
 	}
 
@@ -230,7 +240,7 @@ func getRef(s VertexSolver, ctx context.Context, v *vertex, index Index, cache I
 				return nil, err
 			}
 			if ref != nil {
-				v.notifyCompleted(ctx, true, nil)
+				markCached(ctx, v.clientVertex)
 				return ref.(Reference), nil
 			}
 			continue
@@ -240,7 +250,13 @@ func getRef(s VertexSolver, ctx context.Context, v *vertex, index Index, cache I
 }
 
 func (j *job) pipe(ctx context.Context, ch chan *client.SolveStatus) error {
+	vs := &vertexStream{cache: map[digest.Digest]*client.Vertex{}}
 	pr := j.pr.Reader(ctx)
+	defer func() {
+		if enc := vs.encore(); len(enc) > 0 {
+			ch <- &client.SolveStatus{Vertexes: enc}
+		}
+	}()
 	for {
 		p, err := pr.Read(ctx)
 		if err != nil {
@@ -253,7 +269,7 @@ func (j *job) pipe(ctx context.Context, ch chan *client.SolveStatus) error {
 		for _, p := range p {
 			switch v := p.Sys.(type) {
 			case client.Vertex:
-				ss.Vertexes = append(ss.Vertexes, &v)
+				ss.Vertexes = append(ss.Vertexes, vs.append(v)...)
 
 			case progress.Status:
 				vtx, ok := p.Meta("vertex")
@@ -289,4 +305,39 @@ func (j *job) pipe(ctx context.Context, ch chan *client.SolveStatus) error {
 		case ch <- ss:
 		}
 	}
+}
+
+type vertexStream struct {
+	cache map[digest.Digest]*client.Vertex
+}
+
+func (vs *vertexStream) append(v client.Vertex) []*client.Vertex {
+	var out []*client.Vertex
+	vs.cache[v.Digest] = &v
+	if v.Cached {
+		for _, inp := range v.Inputs {
+			if inpv, ok := vs.cache[inp]; ok {
+				if !inpv.Cached && inpv.Completed == nil {
+					inpv.Cached = true
+					inpv.Started = v.Completed
+					inpv.Completed = v.Completed
+					out = append(vs.append(*inpv), inpv)
+				}
+			}
+		}
+	}
+	return append(out, &v)
+}
+
+func (vs *vertexStream) encore() []*client.Vertex {
+	var out []*client.Vertex
+	for _, v := range vs.cache {
+		if v.Started != nil && v.Completed == nil {
+			now := time.Now()
+			v.Completed = &now
+			v.Error = context.Canceled.Error()
+			out = append(out, v)
+		}
+	}
+	return out
 }

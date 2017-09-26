@@ -41,10 +41,13 @@ func (f *F) run() {
 	f.runMu.Lock()
 	if !f.running && !f.done {
 		f.running = true
+		ctx, cancel := context.WithCancel(f.mainCtx)
+		ctxErr := make(chan error, 1)
+		f.cancelCtx = cancel
+		f.ctxErr = ctxErr
 		go func() {
 			var err error
 			var nodone bool
-			ctxErr := make(chan error, 1)
 			defer func() {
 				// release all cancellations
 				f.runMu.Lock()
@@ -59,11 +62,6 @@ func (f *F) run() {
 				ctxErr <- err
 				f.mu.Unlock()
 			}()
-			ctx, cancel := context.WithCancel(f.mainCtx)
-			f.runMu.Lock()
-			f.cancelCtx = cancel
-			f.ctxErr = ctxErr
-			f.runMu.Unlock()
 			err = f.f(ctx, func() {
 				f.cond.Broadcast()
 			})

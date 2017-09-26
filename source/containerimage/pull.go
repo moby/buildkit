@@ -295,11 +295,12 @@ func showProgress(ctx context.Context, ongoing *jobs, cs content.Store) {
 		for _, j := range ongoing.jobs() {
 			refKey := remotes.MakeRefKey(ctx, j.Descriptor)
 			if a, ok := actives[refKey]; ok {
+				started := j.started
 				pw.Write(j.Digest.String(), progress.Status{
 					Action:  a.Status,
 					Total:   int(a.Total),
 					Current: int(a.Offset),
-					Started: &j.started,
+					Started: &started,
 				})
 				continue
 			}
@@ -318,12 +319,14 @@ func showProgress(ctx context.Context, ongoing *jobs, cs content.Store) {
 				}
 
 				if done || j.done {
+					started := j.started
+					createdAt := info.CreatedAt
 					pw.Write(j.Digest.String(), progress.Status{
 						Action:    "done",
 						Current:   int(info.Size),
 						Total:     int(info.Size),
-						Completed: &info.CreatedAt,
-						Started:   &j.started,
+						Completed: &createdAt,
+						Started:   &started,
 					})
 				}
 			}

@@ -90,15 +90,6 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		}
 	}
 
-	var vertex solver.Vertex
-	if req.Frontend == "" {
-		v, err := solver.LoadLLB(req.Definition)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to load llb definition")
-		}
-		vertex = v
-	}
-
 	ctx = session.NewContext(ctx, req.Session)
 
 	var expi exporter.ExporterInstance
@@ -114,7 +105,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		}
 	}
 
-	if err := c.solver.Solve(ctx, req.Ref, frontend, vertex, expi, req.FrontendAttrs); err != nil {
+	if err := c.solver.Solve(ctx, req.Ref, frontend, req.Definition, expi, req.FrontendAttrs); err != nil {
 		return nil, err
 	}
 	return &controlapi.SolveResponse{}, nil
@@ -130,49 +121,44 @@ func (c *Controller) Status(req *controlapi.StatusRequest, stream controlapi.Con
 
 	eg.Go(func() error {
 		for {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case ss, ok := <-ch:
-				if !ok {
-					return nil
-				}
-				sr := controlapi.StatusResponse{}
-				for _, v := range ss.Vertexes {
-					sr.Vertexes = append(sr.Vertexes, &controlapi.Vertex{
-						Digest:    v.Digest,
-						Inputs:    v.Inputs,
-						Name:      v.Name,
-						Started:   v.Started,
-						Completed: v.Completed,
-						Error:     v.Error,
-						Cached:    v.Cached,
-						Parent:    v.Parent,
-					})
-				}
-				for _, v := range ss.Statuses {
-					sr.Statuses = append(sr.Statuses, &controlapi.VertexStatus{
-						ID:        v.ID,
-						Vertex:    v.Vertex,
-						Name:      v.Name,
-						Current:   v.Current,
-						Total:     v.Total,
-						Timestamp: v.Timestamp,
-						Started:   v.Started,
-						Completed: v.Completed,
-					})
-				}
-				for _, v := range ss.Logs {
-					sr.Logs = append(sr.Logs, &controlapi.VertexLog{
-						Vertex:    v.Vertex,
-						Stream:    int64(v.Stream),
-						Msg:       v.Data,
-						Timestamp: v.Timestamp,
-					})
-				}
-				if err := stream.SendMsg(&sr); err != nil {
-					return err
-				}
+			ss, ok := <-ch
+			if !ok {
+				return nil
+			}
+			sr := controlapi.StatusResponse{}
+			for _, v := range ss.Vertexes {
+				sr.Vertexes = append(sr.Vertexes, &controlapi.Vertex{
+					Digest:    v.Digest,
+					Inputs:    v.Inputs,
+					Name:      v.Name,
+					Started:   v.Started,
+					Completed: v.Completed,
+					Error:     v.Error,
+					Cached:    v.Cached,
+				})
+			}
+			for _, v := range ss.Statuses {
+				sr.Statuses = append(sr.Statuses, &controlapi.VertexStatus{
+					ID:        v.ID,
+					Vertex:    v.Vertex,
+					Name:      v.Name,
+					Current:   v.Current,
+					Total:     v.Total,
+					Timestamp: v.Timestamp,
+					Started:   v.Started,
+					Completed: v.Completed,
+				})
+			}
+			for _, v := range ss.Logs {
+				sr.Logs = append(sr.Logs, &controlapi.VertexLog{
+					Vertex:    v.Vertex,
+					Stream:    int64(v.Stream),
+					Msg:       v.Data,
+					Timestamp: v.Timestamp,
+				})
+			}
+			if err := stream.SendMsg(&sr); err != nil {
+				return err
 			}
 		}
 	})

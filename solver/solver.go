@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/frontend"
+	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/util/bgfunc"
@@ -80,26 +82,13 @@ func New(resolve ResolveOpFunc, cache InstructionCache, imageSource source.Sourc
 	return &Solver{resolve: resolve, jobs: newJobList(), cache: cache, imageSource: imageSource}
 }
 
-func (s *Solver) Solve(ctx context.Context, id string, f frontend.Frontend, v Vertex, exp exporter.ExporterInstance, frontendOpt map[string]string) error {
+func (s *Solver) Solve(ctx context.Context, id string, f frontend.Frontend, dt [][]byte, exp exporter.ExporterInstance, frontendOpt map[string]string) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	pr, ctx, closeProgressWriter := progress.NewContext(ctx)
 
 	defer closeProgressWriter()
-
-	var vv *vertex
-	var index Index
-	if v != nil {
-		if len(v.Inputs()) == 0 {
-			return errors.New("required vertex needs to have inputs")
-		}
-
-		index = v.Inputs()[0].Index
-		v = v.Inputs()[0].Vertex
-
-		vv = toInternalVertex(v)
-	}
 
 	ctx, j, err := s.jobs.new(ctx, id, pr, s.cache)
 	if err != nil {
@@ -108,13 +97,14 @@ func (s *Solver) Solve(ctx context.Context, id string, f frontend.Frontend, v Ve
 
 	var ref Reference
 	var exporterOpt map[string]interface{}
-	// solver:             s.getRef,
-	if vv != nil {
-		if err := j.load(vv, s.resolve); err != nil {
+	if dt != nil {
+		var inp *Input
+		inp, err = j.load(dt, s.resolve)
+		if err != nil {
 			j.discard()
 			return err
 		}
-		ref, err = j.getRef(ctx, vv, index)
+		ref, err = j.getRef(ctx, inp.Vertex.(*vertex), inp.Index)
 	} else {
 		ref, exporterOpt, err = f.Solve(ctx, &llbBridge{
 			job:                j,
@@ -140,11 +130,15 @@ func (s *Solver) Solve(ctx context.Context, id string, f frontend.Frontend, v Ve
 	}
 
 	if exp != nil {
-		vv.notifyStarted(ctx)
-		pw, _, ctx := progress.FromContext(ctx, progress.WithMetadata("vertex", vv.Digest()))
+		v := client.Vertex{
+			Digest: digest.FromBytes([]byte(identity.NewID())),
+			Name:   exp.Name(),
+		}
+		notifyStarted(ctx, &v)
+		pw, _, ctx := progress.FromContext(ctx, progress.WithMetadata("vertex", v.Digest))
 		defer pw.Close()
 		err := exp.Export(ctx, immutable, exporterOpt)
-		vv.notifyCompleted(ctx, false, err)
+		notifyCompleted(ctx, &v, err)
 		if err != nil {
 			return err
 		}
@@ -161,8 +155,8 @@ func (s *Solver) Status(ctx context.Context, id string, statusChan chan *client.
 	return j.pipe(ctx, statusChan)
 }
 
-func (s *Solver) loadAndSolveChildVertex(ctx context.Context, dgst digest.Digest, vv *vertex, index Index) (Reference, error) {
-	return s.jobs.loadAndSolveChildVertex(ctx, dgst, vv, index, s.resolve, s.cache)
+func (s *Solver) loadAndSolve(ctx context.Context, dgst digest.Digest, def [][]byte) (Reference, error) {
+	return s.jobs.loadAndSolve(ctx, dgst, def, s.resolve, s.cache)
 }
 
 type VertexSolver interface {
@@ -181,6 +175,7 @@ type vertexInput struct {
 type vertexSolver struct {
 	inputs []*vertexInput
 	v      *vertex
+	cv     client.Vertex
 	op     Op
 	cache  InstructionCache
 	refs   []*sharedRef
@@ -196,7 +191,7 @@ type vertexSolver struct {
 
 type resolveF func(digest.Digest) (VertexSolver, error)
 
-func newVertexSolver(ctx context.Context, v *vertex, op Op, c InstructionCache, resolve resolveF) (VertexSolver, error) {
+func newVertexSolver(ctx context.Context, v *vertex, op Op, c InstructionCache, resolve resolveF) (*vertexSolver, error) {
 	inputs := make([]*vertexInput, len(v.inputs))
 	for i, in := range v.inputs {
 		s, err := resolve(in.vertex.digest)
@@ -207,6 +202,7 @@ func newVertexSolver(ctx context.Context, v *vertex, op Op, c InstructionCache, 
 		if err != nil {
 			return nil, err
 		}
+		ev.Cancel()
 		inputs[i] = &vertexInput{
 			solver: s,
 			ev:     ev,
@@ -216,10 +212,24 @@ func newVertexSolver(ctx context.Context, v *vertex, op Op, c InstructionCache, 
 		ctx:    ctx,
 		inputs: inputs,
 		v:      v,
+		cv:     v.clientVertex,
 		op:     op,
 		cache:  c,
 		signal: newSignaller(),
 	}, nil
+}
+
+func markCached(ctx context.Context, cv client.Vertex) {
+	pw, _, _ := progress.FromContext(ctx)
+	defer pw.Close()
+
+	if cv.Started == nil {
+		now := time.Now()
+		cv.Started = &now
+		cv.Completed = &now
+		cv.Cached = true
+	}
+	pw.Write(cv.Digest.String(), cv)
 }
 
 func (vs *vertexSolver) CacheKey(ctx context.Context, index Index) (digest.Digest, error) {
@@ -369,6 +379,7 @@ func (vs *vertexSolver) run(ctx context.Context, signal func()) (retErr error) {
 							}
 							if ref != nil {
 								inp.ref = ref.(Reference)
+								markCached(ctx, inp.solver.(*vertexSolver).cv)
 								return nil
 							}
 						}
@@ -459,9 +470,9 @@ func (vs *vertexSolver) run(ctx context.Context, signal func()) (retErr error) {
 	}
 
 	// no cache hit. start evaluating the node
-	vs.v.notifyStarted(ctx)
+	notifyStarted(ctx, &vs.cv)
 	defer func() {
-		vs.v.notifyCompleted(ctx, false, retErr)
+		notifyCompleted(ctx, &vs.cv, retErr)
 	}()
 
 	refs, err := vs.op.Run(ctx, inputRefs)
@@ -472,11 +483,13 @@ func (vs *vertexSolver) run(ctx context.Context, signal func()) (retErr error) {
 	for i, r := range refs {
 		sr[i] = newSharedRef(r)
 	}
+	vs.mu.Lock()
 	vs.refs = sr
+	vs.mu.Unlock()
 
 	// store the cacheKeys for current refs
 	if vs.cache != nil {
-		cacheKey, err := vs.mainCacheKey()
+		cacheKey, err := vs.lastCacheKey()
 		if err != nil {
 			return err
 		}
@@ -556,23 +569,11 @@ type resolveImageConfig interface {
 }
 
 func (s *llbBridge) Solve(ctx context.Context, dt [][]byte) (cache.ImmutableRef, error) {
-	v, err := LoadLLB(dt)
+	inp, err := s.job.load(dt, s.resolveOp)
 	if err != nil {
 		return nil, err
 	}
-	if len(v.Inputs()) == 0 {
-		return nil, errors.New("required vertex needs to have inputs")
-	}
-
-	index := v.Inputs()[0].Index
-	v = v.Inputs()[0].Vertex
-
-	vv := toInternalVertex(v)
-
-	if err := s.job.load(vv, s.resolveOp); err != nil {
-		return nil, err
-	}
-	ref, err := s.job.getRef(ctx, vv, index)
+	ref, err := s.job.getRef(ctx, inp.Vertex.(*vertex), inp.Index)
 	if err != nil {
 		return nil, err
 	}
