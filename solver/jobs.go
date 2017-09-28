@@ -326,7 +326,8 @@ func (vs *vertexStream) append(v client.Vertex) []*client.Vertex {
 			}
 		}
 	}
-	return append(out, &v)
+	vcopy := v
+	return append(out, &vcopy)
 }
 
 func (vs *vertexStream) encore() []*client.Vertex {

@@ -8,6 +8,7 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 )
 
@@ -44,6 +45,7 @@ type cacheRecord struct {
 	md        *metadata.StorageItem
 	view      string
 	viewMount []mount.Mount
+	dead      bool
 
 	sizeG flightcontrol.Group
 	// size  int64
@@ -215,13 +217,18 @@ func (sr *cacheRecord) finalize(ctx context.Context) error {
 	if mutable == nil {
 		return nil
 	}
-	err := sr.cm.Snapshotter.Commit(ctx, sr.ID(), sr.equalMutable.ID())
+	err := sr.cm.Snapshotter.Commit(ctx, sr.ID(), mutable.ID())
 	if err != nil {
-		return errors.Wrapf(err, "failed to commit %s", sr.equalMutable.ID())
+		return errors.Wrapf(err, "failed to commit %s", mutable.ID())
 	}
-	if err := sr.equalMutable.remove(ctx, false); err != nil {
-		return err
-	}
+	mutable.dead = true
+	go func() {
+		sr.cm.mu.Lock()
+		defer sr.cm.mu.Unlock()
+		if err := mutable.remove(context.TODO(), false); err != nil {
+			logrus.Error(err)
+		}
+	}()
 	sr.equalMutable = nil
 	clearEqualMutable(sr.md)
 	return sr.md.Commit()

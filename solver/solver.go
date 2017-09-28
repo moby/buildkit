@@ -182,9 +182,10 @@ type vertexSolver struct {
 	f      *bgfunc.F
 	ctx    context.Context
 
-	baseKey digest.Digest
-	mu      sync.Mutex
-	results []digest.Digest
+	baseKey        digest.Digest
+	mu             sync.Mutex
+	results        []digest.Digest
+	markCachedOnce sync.Once
 
 	signal *signal // used to notify that there are callers who need more data
 }
@@ -344,12 +345,13 @@ func (vs *vertexSolver) run(ctx context.Context, signal func()) (retErr error) {
 	}
 	vs.mu.Unlock()
 
-	wait := vs.signal.Wait()
+	waitFirst := vs.signal.Wait()
+	waitRun := waitFirst
 
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-wait:
+	case <-waitFirst:
 	}
 
 	// this is where you lookup the cache keys that were successfully probed
@@ -363,12 +365,13 @@ func (vs *vertexSolver) run(ctx context.Context, signal func()) (retErr error) {
 				eg.Go(func() error {
 					inp := vs.inputs[i]
 					defer inp.ev.Cancel()
-					for {
 
+					waitNext := waitFirst
+					for {
 						select {
 						case <-ctx2.Done():
 							return ctx2.Err()
-						case <-wait:
+						case <-waitNext:
 						}
 
 						// check if current cache key is in cache
@@ -379,7 +382,9 @@ func (vs *vertexSolver) run(ctx context.Context, signal func()) (retErr error) {
 							}
 							if ref != nil {
 								inp.ref = ref.(Reference)
-								markCached(ctx, inp.solver.(*vertexSolver).cv)
+								inp.solver.(*vertexSolver).markCachedOnce.Do(func() {
+									markCached(ctx, inp.solver.(*vertexSolver).cv)
+								})
 								return nil
 							}
 						}
@@ -419,8 +424,9 @@ func (vs *vertexSolver) run(ctx context.Context, signal func()) (retErr error) {
 								return err
 							}
 							vs.results = append(vs.results, dgst)
-							signal()                 // wake up callers
-							wait = vs.signal.Reset() // make sure we don't continue unless there are callers
+							signal()                     // wake up callers
+							waitNext = vs.signal.Reset() // make sure we don't continue unless there are callers
+							waitRun = waitNext
 							vs.mu.Unlock()
 						}
 					}
@@ -459,14 +465,14 @@ func (vs *vertexSolver) run(ctx context.Context, signal func()) (retErr error) {
 		vs.mu.Lock()
 		vs.results = append(vs.results, extraKeys...)
 		signal()
-		wait = vs.signal.Reset()
+		waitRun = vs.signal.Reset()
 		vs.mu.Unlock()
 	}
 
 	select {
 	case <-ctx.Done():
 		return
-	case <-wait:
+	case <-waitRun:
 	}
 
 	// no cache hit. start evaluating the node
