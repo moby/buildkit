@@ -100,10 +100,6 @@ func (t *trace) update(s *client.SolveStatus) {
 			t.byDigest[v.Digest] = &vertex{
 				byID: make(map[string]*status),
 			}
-		} else {
-			if prev.Parent != v.Parent { // skip vertexes already in list for other parents
-				continue
-			}
 		}
 		if v.Started != nil && (prev == nil || prev.Started == nil) {
 			if t.localTimeDiff == 0 {
@@ -112,9 +108,6 @@ func (t *trace) update(s *client.SolveStatus) {
 			t.vertexes = append(t.vertexes, t.byDigest[v.Digest])
 		}
 		t.byDigest[v.Digest].Vertex = v
-		if v.Parent != "" {
-			t.byDigest[v.Digest].indent = t.byDigest[v.Parent].indent + "=> "
-		}
 	}
 	for _, s := range s.Statuses {
 		v, ok := t.byDigest[s.Vertex]

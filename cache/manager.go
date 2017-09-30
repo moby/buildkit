@@ -104,7 +104,7 @@ func (cm *cacheManager) get(ctx context.Context, id string, opts ...RefOption) (
 	defer rec.mu.Unlock()
 
 	if rec.mutable {
-		if len(rec.refs) != 0 {
+		if rec.dead || len(rec.refs) != 0 {
 			return nil, errors.Wrapf(errLocked, "%s is locked", id)
 		}
 		if rec.equalImmutable != nil {

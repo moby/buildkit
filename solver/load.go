@@ -8,32 +8,17 @@ import (
 	"github.com/pkg/errors"
 )
 
-func LoadLLB(ops [][]byte) (Vertex, error) {
-	if len(ops) == 0 {
-		return nil, errors.New("invalid empty definition")
-	}
-
-	allOps := make(map[digest.Digest]*pb.Op)
-
-	var lastOp *pb.Op
-	var lastDigest digest.Digest
-
-	for _, dt := range ops {
-		var op pb.Op
-		if err := (&op).Unmarshal(dt); err != nil {
-			return nil, errors.Wrap(err, "failed to parse llb proto op")
+func newVertex(dgst digest.Digest, op *pb.Op, load func(digest.Digest) (interface{}, error)) (*vertex, error) {
+	vtx := &vertex{sys: op.Op, digest: dgst, name: llbOpName(op)}
+	for _, in := range op.Inputs {
+		sub, err := load(in.Digest)
+		if err != nil {
+			return nil, err
 		}
-		lastOp = &op
-		lastDigest = digest.FromBytes(dt)
-		allOps[lastDigest] = &op
+		vtx.inputs = append(vtx.inputs, &input{index: Index(in.Index), vertex: sub.(*vertex)})
 	}
-
-	delete(allOps, lastDigest) // avoid loops
-
-	cache := make(map[digest.Digest]*vertex)
-
-	// TODO: validate the connections
-	return loadLLBVertexRecursive(lastDigest, lastOp, allOps, cache)
+	vtx.initClientVertex()
+	return vtx, nil
 }
 
 func toInternalVertex(v Vertex) *vertex {
@@ -55,26 +40,45 @@ func loadInternalVertexHelper(v Vertex, cache map[digest.Digest]*vertex) *vertex
 	return vtx
 }
 
-func loadLLBVertexRecursive(dgst digest.Digest, op *pb.Op, all map[digest.Digest]*pb.Op, cache map[digest.Digest]*vertex) (*vertex, error) {
-	if v, ok := cache[dgst]; ok {
-		return v, nil
+func loadLLB(ops [][]byte, fn func(digest.Digest, *pb.Op, func(digest.Digest) (interface{}, error)) (interface{}, error)) (interface{}, Index, error) {
+	if len(ops) == 0 {
+		return nil, 0, errors.New("invalid empty definition")
 	}
-	vtx := &vertex{sys: op.Op, digest: dgst, name: llbOpName(op)}
-	for _, in := range op.Inputs {
-		dgst := digest.Digest(in.Digest)
-		op, ok := all[dgst]
-		if !ok {
-			return nil, errors.Errorf("failed to find %s", in)
+
+	allOps := make(map[digest.Digest]*pb.Op)
+
+	var dgst digest.Digest
+
+	for _, dt := range ops {
+		var op pb.Op
+		if err := (&op).Unmarshal(dt); err != nil {
+			return nil, 0, errors.Wrap(err, "failed to parse llb proto op")
 		}
-		sub, err := loadLLBVertexRecursive(dgst, op, all, cache)
+		dgst = digest.FromBytes(dt)
+		allOps[dgst] = &op
+	}
+
+	lastOp := allOps[dgst]
+	delete(allOps, dgst)
+	dgst = lastOp.Inputs[0].Digest
+
+	cache := make(map[digest.Digest]interface{})
+
+	var rec func(dgst digest.Digest) (interface{}, error)
+	rec = func(dgst digest.Digest) (interface{}, error) {
+		if v, ok := cache[dgst]; ok {
+			return v, nil
+		}
+		v, err := fn(dgst, allOps[dgst], rec)
 		if err != nil {
 			return nil, err
 		}
-		vtx.inputs = append(vtx.inputs, &input{index: Index(in.Index), vertex: sub})
+		cache[dgst] = v
+		return v, nil
 	}
-	vtx.initClientVertex()
-	cache[dgst] = vtx
-	return vtx, nil
+
+	v, err := rec(dgst)
+	return v, Index(lastOp.Inputs[0].Index), err
 }
 
 func llbOpName(op *pb.Op) string {

@@ -1,13 +1,13 @@
 package solver
 
 import (
+	"context"
 	"sync"
 	"time"
 
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/util/progress"
 	digest "github.com/opencontainers/go-digest"
-	"golang.org/x/net/context"
 )
 
 // Vertex is one node in the build graph
@@ -78,44 +78,26 @@ func (v *vertex) Name() string {
 	return v.name
 }
 
-func (v *vertex) inputRequiresExport(i int) bool {
-	return true // TODO
-}
-
-func (v *vertex) notifyStarted(ctx context.Context) {
-	v.recursiveMarkCached(ctx)
+func notifyStarted(ctx context.Context, v *client.Vertex) {
 	pw, _, _ := progress.FromContext(ctx)
 	defer pw.Close()
 	now := time.Now()
-	v.clientVertex.Started = &now
-	v.clientVertex.Completed = nil
-	pw.Write(v.Digest().String(), v.clientVertex)
+	v.Started = &now
+	v.Completed = nil
+	pw.Write(v.Digest.String(), *v)
 }
 
-func (v *vertex) notifyCompleted(ctx context.Context, cached bool, err error) {
+func notifyCompleted(ctx context.Context, v *client.Vertex, err error) {
 	pw, _, _ := progress.FromContext(ctx)
 	defer pw.Close()
 	now := time.Now()
-	v.recursiveMarkCached(ctx)
-	if v.clientVertex.Started == nil {
-		v.clientVertex.Started = &now
+	if v.Started == nil {
+		v.Started = &now
 	}
-	v.clientVertex.Completed = &now
-	v.clientVertex.Cached = cached
+	v.Completed = &now
+	v.Cached = false
 	if err != nil {
-		v.clientVertex.Error = err.Error()
+		v.Error = err.Error()
 	}
-	pw.Write(v.Digest().String(), v.clientVertex)
-}
-
-func (v *vertex) recursiveMarkCached(ctx context.Context) {
-	for _, inp := range v.inputs {
-		inp.vertex.notifyMu.Lock()
-		if inp.vertex.clientVertex.Started == nil {
-			inp.vertex.recursiveMarkCached(ctx)
-			inp.vertex.notifyCompleted(ctx, true, nil)
-		}
-		inp.vertex.notifyMu.Unlock()
-	}
-
+	pw.Write(v.Digest.String(), *v)
 }

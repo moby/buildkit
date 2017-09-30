@@ -41,29 +41,28 @@ func (f *F) run() {
 	f.runMu.Lock()
 	if !f.running && !f.done {
 		f.running = true
+		ctx, cancel := context.WithCancel(f.mainCtx)
+		ctxErr := make(chan error, 1)
+		f.ctxErr = ctxErr
+		f.cancelCtx = cancel
 		go func() {
 			var err error
 			var nodone bool
-			ctxErr := make(chan error, 1)
 			defer func() {
 				// release all cancellations
+				ctxErr <- err
+				close(ctxErr)
+				f.mu.Lock()
 				f.runMu.Lock()
 				f.running = false
 				f.runMu.Unlock()
-				f.mu.Lock()
 				if !nodone {
 					f.done = true
 					f.err = err
 				}
 				f.cond.Broadcast()
-				ctxErr <- err
 				f.mu.Unlock()
 			}()
-			ctx, cancel := context.WithCancel(f.mainCtx)
-			f.runMu.Lock()
-			f.cancelCtx = cancel
-			f.ctxErr = ctxErr
-			f.runMu.Unlock()
 			err = f.f(ctx, func() {
 				f.cond.Broadcast()
 			})
@@ -84,11 +83,13 @@ func (f *F) addSem() {
 func (f *F) clearSem() error {
 	f.sem--
 	var err error
+	f.runMu.Lock()
 	if cctx := f.cancelCtx; f.sem == 0 && cctx != nil {
 		cctx()
 		err = <-f.ctxErr
 		f.cancelCtx = nil
 	}
+	f.runMu.Unlock()
 	return err
 }
 
@@ -114,10 +115,11 @@ func (c *Caller) Call(ctx context.Context, f func() (interface{}, error)) (inter
 	for {
 		select {
 		case <-ctx.Done():
-			c.F.mu.RUnlock()
-			if err := c.Cancel(); err != nil {
+			if err := c.cancel(); err != nil {
+				c.F.mu.RUnlock()
 				return nil, err
 			}
+			c.F.mu.RUnlock()
 			return nil, ctx.Err()
 		default:
 		}
@@ -150,6 +152,12 @@ func (c *Caller) Call(ctx context.Context, f func() (interface{}, error)) (inter
 }
 
 func (c *Caller) Cancel() error {
+	c.F.mu.Lock()
+	defer c.F.mu.Unlock()
+	return c.cancel()
+}
+
+func (c *Caller) cancel() error {
 	c.F.semMu.Lock()
 	defer c.F.semMu.Unlock()
 	if c.active {

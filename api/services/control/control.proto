@@ -68,7 +68,6 @@ message Vertex {
 	google.protobuf.Timestamp started = 5 [(gogoproto.stdtime) = true ];
 	google.protobuf.Timestamp completed = 6 [(gogoproto.stdtime) = true ];
 	string error = 7; // typed errors?
-	string parent = 8 [(gogoproto.customtype) = "github.com/opencontainers/go-digest.Digest", (gogoproto.nullable) = false];
 }
 
 message VertexStatus {
