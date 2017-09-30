@@ -6,7 +6,7 @@ import (
 	"os"
 	"syscall"
 
-	"github.com/stevvooe/continuity/sysx"
+	"github.com/containerd/continuity/sysx"
 	"github.com/tonistiigi/fsutil"
 )
 
