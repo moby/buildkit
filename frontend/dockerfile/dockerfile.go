@@ -10,6 +10,7 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/frontend/dockerfile/dockerfile2llb"
+	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -40,14 +41,18 @@ func (f *dfFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBr
 		return nil, nil, errors.Errorf("invalid filename %s", filename)
 	}
 
-	src := llb.Local(localNameDockerfile, llb.IncludePatterns([]string{filename}))
+	sid := session.FromContext(ctx)
+
+	src := llb.Local(localNameDockerfile,
+		llb.IncludePatterns([]string{filename}),
+		llb.SessionID(sid),
+	)
 	def, err := src.Marshal()
 	if err != nil {
 		return nil, nil, err
 	}
-	defPB := def.ToPB()
 
-	ref, err := llbBridge.Solve(ctx, defPB)
+	ref, _, err := llbBridge.Solve(ctx, def.ToPB(), "")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -95,6 +100,7 @@ func (f *dfFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBr
 		Target:       opts[keyTarget],
 		MetaResolver: llbBridge,
 		BuildArgs:    filterBuildArgs(opts),
+		SessionID:    sid,
 	})
 
 	if err != nil {
@@ -105,8 +111,7 @@ func (f *dfFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBr
 	if err != nil {
 		return nil, nil, err
 	}
-	defPB = def.ToPB()
-	retRef, err = llbBridge.Solve(ctx, defPB)
+	retRef, _, err = llbBridge.Solve(ctx, def.ToPB(), "")
 	if err != nil {
 		return nil, nil, err
 	}

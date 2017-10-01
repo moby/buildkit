@@ -105,7 +105,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		}
 	}
 
-	if err := c.solver.Solve(ctx, req.Ref, frontend, req.Definition, expi, req.FrontendAttrs); err != nil {
+	if err := c.solver.Solve(ctx, req.Ref, frontend, req.Definition, expi, req.FrontendAttrs, c.opt.Frontends); err != nil {
 		return nil, err
 	}
 	return &controlapi.SolveResponse{}, nil

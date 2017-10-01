@@ -115,7 +115,7 @@ func TestControl(t *testing.T) {
 
 	stderr := bytes.NewBuffer(nil)
 
-	err = w.Exec(ctx, meta, snap, nil, nil, &nopCloser{stderr})
+	err = w.Exec(ctx, meta, snap, nil, nil, nil, &nopCloser{stderr})
 	assert.Error(t, err) // Read-only root
 	// typical error is like `mkdir /.../rootfs/proc: read-only file system`.
 	// make sure the error is caused before running `echo foo > /bar`.
@@ -124,7 +124,7 @@ func TestControl(t *testing.T) {
 	root, err := cm.New(ctx, snap)
 	assert.NoError(t, err)
 
-	err = w.Exec(ctx, meta, root, nil, nil, nil)
+	err = w.Exec(ctx, meta, root, nil, nil, nil, nil)
 	assert.NoError(t, err)
 
 	rf, err := root.Commit(ctx)

@@ -2,6 +2,7 @@ package solver
 
 import (
 	"encoding/json"
+	"strings"
 	"sync"
 
 	"github.com/moby/buildkit/solver/pb"
@@ -51,6 +52,10 @@ func (s *sourceOp) instance(ctx context.Context) (source.SourceInstance, error) 
 			switch k {
 			case pb.AttrLocalSessionID:
 				id.SessionID = v
+				if p := strings.SplitN(v, ":", 2); len(p) == 2 {
+					id.Name = p[0] + "-" + id.Name
+					id.SessionID = p[1]
+				}
 			case pb.AttrIncludePatterns:
 				var patterns []string
 				if err := json.Unmarshal([]byte(v), &patterns); err != nil {

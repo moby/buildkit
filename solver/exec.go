@@ -110,7 +110,7 @@ func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, erro
 	defer stdout.Close()
 	defer stderr.Close()
 
-	if err := e.w.Exec(ctx, meta, root, mounts, stdout, stderr); err != nil {
+	if err := e.w.Exec(ctx, meta, root, mounts, nil, stdout, stderr); err != nil {
 		return nil, errors.Wrapf(err, "worker failed running %v", meta.Args)
 	}
 

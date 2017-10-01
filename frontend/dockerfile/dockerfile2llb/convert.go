@@ -28,6 +28,7 @@ type ConvertOpt struct {
 	Target       string
 	MetaResolver llb.ImageMetaResolver
 	BuildArgs    map[string]string
+	SessionID    string
 }
 
 func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State, *Image, error) {
@@ -157,6 +158,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 			metaArgs:             metaArgs,
 			buildArgValues:       opt.BuildArgs,
 			shlex:                shlex,
+			sessionID:            opt.SessionID,
 		}
 
 		if err = dispatchOnBuild(d, d.image.Config.OnBuild, opt); err != nil {
@@ -187,6 +189,7 @@ type dispatchOpt struct {
 	metaArgs             []instructions.ArgCommand
 	buildArgValues       map[string]string
 	shlex                *ShellLex
+	sessionID            string
 }
 
 func dispatch(d *dispatchState, cmd instructions.Command, opt dispatchOpt) error {
@@ -208,7 +211,7 @@ func dispatch(d *dispatchState, cmd instructions.Command, opt dispatchOpt) error
 	case *instructions.WorkdirCommand:
 		err = dispatchWorkdir(d, c)
 	case *instructions.AddCommand:
-		err = dispatchCopy(d, c.SourcesAndDest, llb.Local(localNameContext))
+		err = dispatchCopy(d, c.SourcesAndDest, llb.Local(localNameContext, llb.SessionID(opt.sessionID)))
 	case *instructions.LabelCommand:
 		err = dispatchLabel(d, c)
 	case *instructions.OnbuildCommand:
@@ -232,7 +235,7 @@ func dispatch(d *dispatchState, cmd instructions.Command, opt dispatchOpt) error
 	case *instructions.ArgCommand:
 		err = dispatchArg(d, c, opt.metaArgs, opt.buildArgValues)
 	case *instructions.CopyCommand:
-		l := llb.Local(localNameContext)
+		l := llb.Local(localNameContext, llb.SessionID(opt.sessionID))
 		if c.From != "" {
 			index, err := strconv.Atoi(c.From)
 			if err != nil {

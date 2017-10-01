@@ -3,6 +3,7 @@ package solver
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"sync"
 	"time"
 
@@ -44,7 +45,7 @@ func NewLLBSolver(opt LLBOpt) *Solver {
 		default:
 			return nil, nil
 		}
-	}, opt.InstructionCache, opt.ImageSource)
+	}, opt.InstructionCache, opt.ImageSource, opt.Worker, opt.CacheManager)
 	return s
 }
 
@@ -76,13 +77,15 @@ type Solver struct {
 	jobs        *jobList
 	cache       InstructionCache
 	imageSource source.Source
+	worker      worker.Worker
+	cm          cache.Manager // TODO: remove with immutableRef.New()
 }
 
-func New(resolve ResolveOpFunc, cache InstructionCache, imageSource source.Source) *Solver {
-	return &Solver{resolve: resolve, jobs: newJobList(), cache: cache, imageSource: imageSource}
+func New(resolve ResolveOpFunc, cache InstructionCache, imageSource source.Source, worker worker.Worker, cm cache.Manager) *Solver {
+	return &Solver{resolve: resolve, jobs: newJobList(), cache: cache, imageSource: imageSource, worker: worker, cm: cm}
 }
 
-func (s *Solver) Solve(ctx context.Context, id string, f frontend.Frontend, def *pb.Definition, exp exporter.ExporterInstance, frontendOpt map[string]string) error {
+func (s *Solver) Solve(ctx context.Context, id string, f frontend.Frontend, def *pb.Definition, exp exporter.ExporterInstance, frontendOpt map[string]string, allFrontends map[string]frontend.Frontend) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -107,9 +110,12 @@ func (s *Solver) Solve(ctx context.Context, id string, f frontend.Frontend, def 
 		ref, err = j.getRef(ctx, inp.Vertex.(*vertex), inp.Index)
 	} else {
 		ref, exporterOpt, err = f.Solve(ctx, &llbBridge{
+			worker:             s.worker,
 			job:                j,
+			cm:                 s.cm,
 			resolveOp:          s.resolve,
 			resolveImageConfig: s.imageSource.(resolveImageConfig),
+			allFrontends:       allFrontends,
 		}, frontendOpt)
 	}
 	j.discard()
@@ -566,29 +572,60 @@ type VertexResult struct {
 // llbBridge is an helper used by frontends
 type llbBridge struct {
 	resolveImageConfig
-	job       *job
-	resolveOp ResolveOpFunc
+	job          *job
+	resolveOp    ResolveOpFunc
+	worker       worker.Worker
+	allFrontends map[string]frontend.Frontend
+	cm           cache.Manager
 }
 
 type resolveImageConfig interface {
 	ResolveImageConfig(ctx context.Context, ref string) (digest.Digest, []byte, error)
 }
 
-func (s *llbBridge) Solve(ctx context.Context, def *pb.Definition) (cache.ImmutableRef, error) {
+func (s *llbBridge) Solve(ctx context.Context, def *pb.Definition, frontend string) (cache.ImmutableRef, map[string]interface{}, error) {
+	if def == nil {
+		f, ok := s.allFrontends[frontend]
+		if !ok {
+			return nil, nil, errors.Errorf("invalid frontend: %s", frontend)
+		}
+		ref, exporterOpt, err := f.Solve(ctx, &llbBridge{
+			job:                s.job,
+			resolveOp:          s.resolveOp,
+			resolveImageConfig: s,
+		}, nil)
+		if err != nil {
+			return nil, nil, err
+		}
+		immutable, ok := toImmutableRef(ref)
+		if !ok {
+			return nil, nil, errors.Errorf("invalid reference for exporting: %T", ref)
+		}
+		return immutable, exporterOpt, nil
+	}
 	inp, err := s.job.load(def, s.resolveOp)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	ref, err := s.job.getRef(ctx, inp.Vertex.(*vertex), inp.Index)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	immutable, ok := toImmutableRef(ref)
 	if !ok {
-		return nil, errors.Errorf("invalid reference for exporting: %T", ref)
+		return nil, nil, errors.Errorf("invalid reference for exporting: %T", ref)
 	}
 
-	return immutable, nil
+	return immutable, nil, nil
+}
+
+func (s *llbBridge) Exec(ctx context.Context, meta worker.Meta, rootFS cache.ImmutableRef, stdin io.ReadCloser, stdout, stderr io.WriteCloser) error {
+	active, err := s.cm.New(ctx, rootFS)
+	if err != nil {
+		return err
+	}
+	defer active.Release(context.TODO())
+	return s.worker.Exec(ctx, meta, active, nil, stdin, stdout, stderr)
 }
 
 func cacheKeyForIndex(dgst digest.Digest, index Index) digest.Digest {
