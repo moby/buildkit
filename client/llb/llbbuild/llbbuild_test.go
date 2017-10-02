@@ -11,7 +11,8 @@ import (
 
 func TestMarshal(t *testing.T) {
 	b := NewBuildOp(newDummyOutput("foobar"), WithFilename("myfilename"))
-	dt, err := b.Marshal()
+	dt, opMeta, err := b.Marshal()
+	_ = opMeta
 	require.NoError(t, err)
 
 	var op pb.Op

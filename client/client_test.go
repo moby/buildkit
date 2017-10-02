@@ -1,7 +1,6 @@
 package client
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io/ioutil"
@@ -99,13 +98,9 @@ func testBuildMultiMount(t *testing.T, address string) {
 	cp := ls.Run(llb.Shlex("/bin/cp -a /busybox/etc/passwd baz"))
 	cp.AddMount("/busybox", busybox)
 
-	dt, err := cp.Marshal()
+	def, err := cp.Marshal()
 	assert.Nil(t, err)
 
-	buf := bytes.NewBuffer(nil)
-	err = llb.WriteTo(dt, buf)
-	assert.Nil(t, err)
-
-	err = c.Solve(context.TODO(), buf, SolveOpt{}, nil)
+	err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
 	assert.Nil(t, err)
 }

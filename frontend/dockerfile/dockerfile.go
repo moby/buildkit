@@ -41,12 +41,13 @@ func (f *dfFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBr
 	}
 
 	src := llb.Local(localNameDockerfile, llb.IncludePatterns([]string{filename}))
-	dt, err := src.Marshal()
+	def, err := src.Marshal()
 	if err != nil {
 		return nil, nil, err
 	}
+	defPB := def.ToPB()
 
-	ref, err := llbBridge.Solve(ctx, dt)
+	ref, err := llbBridge.Solve(ctx, defPB)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -100,12 +101,12 @@ func (f *dfFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBr
 		return nil, nil, err
 	}
 
-	dt, err = st.Marshal()
+	def, err = st.Marshal()
 	if err != nil {
 		return nil, nil, err
 	}
-
-	retRef, err = llbBridge.Solve(ctx, dt)
+	defPB = def.ToPB()
+	retRef, err = llbBridge.Solve(ctx, defPB)
 	if err != nil {
 		return nil, nil, err
 	}

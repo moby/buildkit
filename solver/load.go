@@ -8,8 +8,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-func newVertex(dgst digest.Digest, op *pb.Op, load func(digest.Digest) (interface{}, error)) (*vertex, error) {
-	vtx := &vertex{sys: op.Op, digest: dgst, name: llbOpName(op)}
+func newVertex(dgst digest.Digest, op *pb.Op, opMeta *pb.OpMetadata, load func(digest.Digest) (interface{}, error)) (*vertex, error) {
+	vtx := &vertex{sys: op.Op, metadata: opMeta, digest: dgst, name: llbOpName(op)}
 	for _, in := range op.Inputs {
 		sub, err := load(in.Digest)
 		if err != nil {
@@ -30,7 +30,7 @@ func loadInternalVertexHelper(v Vertex, cache map[digest.Digest]*vertex) *vertex
 	if v, ok := cache[v.Digest()]; ok {
 		return v
 	}
-	vtx := &vertex{sys: v.Sys(), digest: v.Digest(), name: v.Name()}
+	vtx := &vertex{sys: v.Sys(), metadata: v.Metadata(), digest: v.Digest(), name: v.Name()}
 	for _, in := range v.Inputs() {
 		vv := loadInternalVertexHelper(in.Vertex, cache)
 		vtx.inputs = append(vtx.inputs, &input{index: in.Index, vertex: vv})
@@ -40,8 +40,10 @@ func loadInternalVertexHelper(v Vertex, cache map[digest.Digest]*vertex) *vertex
 	return vtx
 }
 
-func loadLLB(ops [][]byte, fn func(digest.Digest, *pb.Op, func(digest.Digest) (interface{}, error)) (interface{}, error)) (interface{}, Index, error) {
-	if len(ops) == 0 {
+// loadLLB loads LLB.
+// fn is executed sequentially.
+func loadLLB(def *pb.Definition, fn func(digest.Digest, *pb.Op, func(digest.Digest) (interface{}, error)) (interface{}, error)) (interface{}, Index, error) {
+	if len(def.Def) == 0 {
 		return nil, 0, errors.New("invalid empty definition")
 	}
 
@@ -49,7 +51,7 @@ func loadLLB(ops [][]byte, fn func(digest.Digest, *pb.Op, func(digest.Digest) (i
 
 	var dgst digest.Digest
 
-	for _, dt := range ops {
+	for _, dt := range def.Def {
 		var op pb.Op
 		if err := (&op).Unmarshal(dt); err != nil {
 			return nil, 0, errors.Wrap(err, "failed to parse llb proto op")

@@ -13,11 +13,12 @@ import (
 )
 
 type SourceOp struct {
-	id       string
-	attrs    map[string]string
-	output   Output
-	cachedPB []byte
-	err      error
+	id               string
+	attrs            map[string]string
+	output           Output
+	cachedPB         []byte
+	cachedOpMetadata *pb.OpMetadata
+	err              error
 }
 
 func NewSource(id string, attrs map[string]string) *SourceOp {
@@ -39,12 +40,12 @@ func (s *SourceOp) Validate() error {
 	return nil
 }
 
-func (s *SourceOp) Marshal() ([]byte, error) {
+func (s *SourceOp) Marshal() ([]byte, *pb.OpMetadata, error) {
 	if s.cachedPB != nil {
-		return s.cachedPB, nil
+		return s.cachedPB, s.cachedOpMetadata, nil
 	}
 	if err := s.Validate(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	proto := &pb.Op{
@@ -54,10 +55,11 @@ func (s *SourceOp) Marshal() ([]byte, error) {
 	}
 	dt, err := proto.Marshal()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	s.cachedPB = dt
-	return dt, nil
+	s.cachedOpMetadata = &pb.OpMetadata{}
+	return dt, s.cachedOpMetadata, nil
 }
 
 func (s *SourceOp) Output() Output {

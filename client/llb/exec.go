@@ -42,10 +42,11 @@ type mount struct {
 }
 
 type ExecOp struct {
-	root     Output
-	mounts   []*mount
-	meta     Meta
-	cachedPB []byte
+	root             Output
+	mounts           []*mount
+	meta             Meta
+	cachedPB         []byte
+	cachedOpMetadata *pb.OpMetadata
 }
 
 func (e *ExecOp) AddMount(target string, source Output, opt ...MountOption) Output {
@@ -92,12 +93,12 @@ func (e *ExecOp) Validate() error {
 	return nil
 }
 
-func (e *ExecOp) Marshal() ([]byte, error) {
+func (e *ExecOp) Marshal() ([]byte, *pb.OpMetadata, error) {
 	if e.cachedPB != nil {
-		return e.cachedPB, nil
+		return e.cachedPB, e.cachedOpMetadata, nil
 	}
 	if err := e.Validate(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	// make sure mounts are sorted
 	sort.Slice(e.mounts, func(i, j int) bool {
@@ -124,7 +125,7 @@ func (e *ExecOp) Marshal() ([]byte, error) {
 		if m.source != nil {
 			inp, err := m.source.ToInput()
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 
 			newInput := true
@@ -162,10 +163,11 @@ func (e *ExecOp) Marshal() ([]byte, error) {
 
 	dt, err := pop.Marshal()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	e.cachedPB = dt
-	return dt, nil
+	e.cachedOpMetadata = &pb.OpMetadata{}
+	return dt, e.cachedOpMetadata, nil
 }
 
 func (e *ExecOp) Output() Output {

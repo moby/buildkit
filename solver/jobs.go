@@ -91,7 +91,7 @@ func (jl *jobList) get(id string) (*job, error) {
 	}
 }
 
-func (jl *jobList) loadAndSolve(ctx context.Context, dgst digest.Digest, ops [][]byte, f ResolveOpFunc, cache InstructionCache) (Reference, error) {
+func (jl *jobList) loadAndSolve(ctx context.Context, dgst digest.Digest, def *pb.Definition, f ResolveOpFunc, cache InstructionCache) (Reference, error) {
 	jl.mu.Lock()
 
 	st, ok := jl.actives[dgst]
@@ -103,7 +103,7 @@ func (jl *jobList) loadAndSolve(ctx context.Context, dgst digest.Digest, ops [][
 	var inp *Input
 	for j := range st.jobs {
 		var err error
-		inp, err = j.loadInternal(ops, f)
+		inp, err = j.loadInternal(def, f)
 		if err != nil {
 			jl.mu.Unlock()
 			return nil, err
@@ -123,21 +123,22 @@ type job struct {
 	cache   InstructionCache
 }
 
-func (j *job) load(ops [][]byte, resolveOp ResolveOpFunc) (*Input, error) {
+func (j *job) load(def *pb.Definition, resolveOp ResolveOpFunc) (*Input, error) {
 	j.l.mu.Lock()
 	defer j.l.mu.Unlock()
 
-	return j.loadInternal(ops, resolveOp)
+	return j.loadInternal(def, resolveOp)
 }
 
-func (j *job) loadInternal(ops [][]byte, resolveOp ResolveOpFunc) (*Input, error) {
-	vtx, idx, err := loadLLB(ops, func(dgst digest.Digest, op *pb.Op, load func(digest.Digest) (interface{}, error)) (interface{}, error) {
+func (j *job) loadInternal(def *pb.Definition, resolveOp ResolveOpFunc) (*Input, error) {
+	vtx, idx, err := loadLLB(def, func(dgst digest.Digest, op *pb.Op, load func(digest.Digest) (interface{}, error)) (interface{}, error) {
 		if st, ok := j.l.actives[dgst]; ok {
 			if vtx, ok := st.jobs[j]; ok {
 				return vtx, nil
 			}
 		}
-		vtx, err := newVertex(dgst, op, load)
+		opMetadata := def.Metadata[dgst]
+		vtx, err := newVertex(dgst, op, &opMetadata, load)
 		if err != nil {
 			return nil, err
 		}
@@ -210,6 +211,9 @@ func (j *job) getRef(ctx context.Context, v *vertex, index Index) (Reference, er
 }
 
 func getRef(s VertexSolver, ctx context.Context, v *vertex, index Index, cache InstructionCache) (Reference, error) {
+	if v.metadata != nil && v.metadata.GetIgnoreCache() {
+		logrus.Warnf("Unimplemented vertex metadata: IgnoreCache (%s, %s)", v.digest, v.name)
+	}
 	k, err := s.CacheKey(ctx, index)
 	if err != nil {
 		return nil, err

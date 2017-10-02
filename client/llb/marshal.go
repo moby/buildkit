@@ -1,40 +1,62 @@
 package llb
 
 import (
-	"encoding/binary"
 	"io"
+	"io/ioutil"
+
+	"github.com/moby/buildkit/solver/pb"
+	digest "github.com/opencontainers/go-digest"
 )
 
-// These are temporary functions for testing the solver without frontends
-
-func WriteTo(dt [][]byte, w io.Writer) error {
-	for _, d := range dt {
-		l := make([]byte, 4)
-		binary.LittleEndian.PutUint32(l, uint32(len(d)))
-		if _, err := w.Write(l); err != nil {
-			return err
-		}
-		if _, err := w.Write(d); err != nil {
-			return err
-		}
-	}
-	return nil
+// Definition is the LLB definition structure with per-vertex metadata entries
+// Corresponds to the Definition structure defined in solver/pb.Definition.
+type Definition struct {
+	Def      [][]byte
+	Metadata map[digest.Digest]OpMetadata
 }
 
-func ReadFrom(r io.Reader) (out [][]byte, err error) {
-	for {
-		b := make([]byte, 4)
-		if n, err := io.ReadFull(r, b); err != nil {
-			if err == io.EOF && n == 0 {
-				return out, nil
-			}
-			return nil, err
-		}
-		l := binary.LittleEndian.Uint32(b)
-		b = make([]byte, l)
-		if _, err := io.ReadFull(r, b); err != nil {
-			return nil, err
-		}
-		out = append(out, b)
+func (def *Definition) ToPB() *pb.Definition {
+	md := make(map[digest.Digest]pb.OpMetadata)
+	for k, v := range def.Metadata {
+		md[k] = v.OpMetadata
 	}
+	return &pb.Definition{
+		Def:      def.Def,
+		Metadata: md,
+	}
+}
+
+func (def *Definition) FromPB(x *pb.Definition) {
+	def.Def = x.Def
+	def.Metadata = make(map[digest.Digest]OpMetadata)
+	for k, v := range x.Metadata {
+		def.Metadata[k] = OpMetadata{v}
+	}
+}
+
+type OpMetadata struct {
+	pb.OpMetadata
+}
+
+func WriteTo(def *Definition, w io.Writer) error {
+	b, err := def.ToPB().Marshal()
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(b)
+	return err
+}
+
+func ReadFrom(r io.Reader) (*Definition, error) {
+	b, err := ioutil.ReadAll(r)
+	if err != nil {
+		return nil, err
+	}
+	var pbDef pb.Definition
+	if err := pbDef.Unmarshal(b); err != nil {
+		return nil, err
+	}
+	var def Definition
+	def.FromPB(&pbDef)
+	return &def, nil
 }

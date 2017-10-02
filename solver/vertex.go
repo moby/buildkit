@@ -17,9 +17,15 @@ type Vertex interface {
 	// Sys returns an internal value that is used to execute the vertex. Usually
 	// this is capured by the operation resolver method during solve.
 	Sys() interface{}
+	Metadata() Metadata
 	// Array of vertexes current vertex depends on.
 	Inputs() []Input
 	Name() string // change this to general metadata
+}
+
+// Metadata is per-vertex metadata, implemented by *pb.OpMetadata
+type Metadata interface {
+	GetIgnoreCache() bool
 }
 
 type Index int
@@ -38,6 +44,7 @@ type input struct {
 type vertex struct {
 	mu           sync.Mutex
 	sys          interface{}
+	metadata     Metadata
 	inputs       []*input
 	err          error
 	digest       digest.Digest
@@ -64,6 +71,10 @@ func (v *vertex) Digest() digest.Digest {
 
 func (v *vertex) Sys() interface{} {
 	return v.sys
+}
+
+func (v *vertex) Metadata() Metadata {
+	return v.metadata
 }
 
 func (v *vertex) Inputs() (inputs []Input) {

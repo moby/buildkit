@@ -17,7 +17,7 @@ type Output interface {
 
 type Vertex interface {
 	Validate() error
-	Marshal() ([]byte, error)
+	Marshal() ([]byte, *pb.OpMetadata, error)
 	Output() Output
 	Inputs() []Output
 }
@@ -48,48 +48,54 @@ func (s State) Value(k interface{}) interface{} {
 	return s.ctx.Value(k)
 }
 
-func (s State) Marshal() ([][]byte, error) {
-	list, err := marshal(s.Output().Vertex(), nil, map[digest.Digest]struct{}{}, map[Vertex]struct{}{})
+func (s State) Marshal() (*Definition, error) {
+	def := &Definition{
+		Metadata: make(map[digest.Digest]OpMetadata, 0),
+	}
+	def, err := marshal(s.Output().Vertex(), def, map[digest.Digest]struct{}{}, map[Vertex]struct{}{})
 	if err != nil {
-		return nil, err
+		return def, err
 	}
 	inp, err := s.Output().ToInput()
 	if err != nil {
-		return nil, err
+		return def, err
 	}
 	proto := &pb.Op{Inputs: []*pb.Input{inp}}
 	dt, err := proto.Marshal()
 	if err != nil {
-		return nil, err
+		return def, err
 	}
-	list = append(list, dt)
-	return list, nil
+	def.Def = append(def.Def, dt)
+	return def, nil
 }
 
-func marshal(v Vertex, list [][]byte, cache map[digest.Digest]struct{}, vertexCache map[Vertex]struct{}) (out [][]byte, err error) {
+func marshal(v Vertex, def *Definition, cache map[digest.Digest]struct{}, vertexCache map[Vertex]struct{}) (*Definition, error) {
 	for _, inp := range v.Inputs() {
 		var err error
-		list, err = marshal(inp.Vertex(), list, cache, vertexCache)
+		def, err = marshal(inp.Vertex(), def, cache, vertexCache)
 		if err != nil {
-			return nil, err
+			return def, err
 		}
 	}
 	if _, ok := vertexCache[v]; ok {
-		return list, nil
+		return def, nil
 	}
 
-	dt, err := v.Marshal()
+	dt, opMeta, err := v.Marshal()
 	if err != nil {
-		return nil, err
+		return def, err
 	}
 	vertexCache[v] = struct{}{}
 	dgst := digest.FromBytes(dt)
 	if _, ok := cache[dgst]; ok {
-		return list, nil
+		return def, nil
 	}
-	list = append(list, dt)
+	def.Def = append(def.Def, dt)
+	if opMeta != nil {
+		def.Metadata[dgst] = OpMetadata{*opMeta}
+	}
 	cache[dgst] = struct{}{}
-	return list, nil
+	return def, nil
 }
 
 func (s State) Validate() error {
@@ -181,7 +187,8 @@ func (o *output) ToInput() (*pb.Input, error) {
 			return nil, err
 		}
 	}
-	dt, err := o.vertex.Marshal()
+	dt, opMeta, err := o.vertex.Marshal()
+	_ = opMeta
 	if err != nil {
 		return nil, err
 	}

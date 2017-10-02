@@ -82,7 +82,7 @@ func New(resolve ResolveOpFunc, cache InstructionCache, imageSource source.Sourc
 	return &Solver{resolve: resolve, jobs: newJobList(), cache: cache, imageSource: imageSource}
 }
 
-func (s *Solver) Solve(ctx context.Context, id string, f frontend.Frontend, dt [][]byte, exp exporter.ExporterInstance, frontendOpt map[string]string) error {
+func (s *Solver) Solve(ctx context.Context, id string, f frontend.Frontend, def *pb.Definition, exp exporter.ExporterInstance, frontendOpt map[string]string) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -97,9 +97,9 @@ func (s *Solver) Solve(ctx context.Context, id string, f frontend.Frontend, dt [
 
 	var ref Reference
 	var exporterOpt map[string]interface{}
-	if dt != nil {
+	if def != nil {
 		var inp *Input
-		inp, err = j.load(dt, s.resolve)
+		inp, err = j.load(def, s.resolve)
 		if err != nil {
 			j.discard()
 			return err
@@ -155,7 +155,7 @@ func (s *Solver) Status(ctx context.Context, id string, statusChan chan *client.
 	return j.pipe(ctx, statusChan)
 }
 
-func (s *Solver) loadAndSolve(ctx context.Context, dgst digest.Digest, def [][]byte) (Reference, error) {
+func (s *Solver) loadAndSolve(ctx context.Context, dgst digest.Digest, def *pb.Definition) (Reference, error) {
 	return s.jobs.loadAndSolve(ctx, dgst, def, s.resolve, s.cache)
 }
 
@@ -574,8 +574,8 @@ type resolveImageConfig interface {
 	ResolveImageConfig(ctx context.Context, ref string) (digest.Digest, []byte, error)
 }
 
-func (s *llbBridge) Solve(ctx context.Context, dt [][]byte) (cache.ImmutableRef, error) {
-	inp, err := s.job.load(dt, s.resolveOp)
+func (s *llbBridge) Solve(ctx context.Context, def *pb.Definition) (cache.ImmutableRef, error) {
+	inp, err := s.job.load(def, s.resolveOp)
 	if err != nil {
 		return nil, err
 	}
