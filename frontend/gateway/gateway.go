@@ -8,18 +8,19 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend"
-	"github.com/moby/buildkit/frontend/dockerfile/dockerfile2llb"
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/worker"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
@@ -42,7 +43,17 @@ func NewGatewayFrontend() frontend.Frontend {
 type gatewayFrontend struct {
 }
 
-func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string) (retRef cache.ImmutableRef, exporterAttr map[string]interface{}, retErr error) {
+func filterPrefix(opts map[string]string, pfx string) map[string]string {
+	m := map[string]string{}
+	for k, v := range opts {
+		if strings.HasPrefix(k, pfx) {
+			m[strings.TrimPrefix(k, pfx)] = v
+		}
+	}
+	return m
+}
+
+func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string) (retRef cache.ImmutableRef, exporterAttr map[string][]byte, retErr error) {
 
 	source, ok := opts[keySource]
 	if !ok {
@@ -52,22 +63,20 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 	sid := session.FromContext(ctx)
 
 	_, isDevel := opts[keyDevel]
-	var img dockerfile2llb.Image
+	var img ocispec.Image
 	var rootFS cache.ImmutableRef
 
 	if isDevel {
-		ref, exp, err := llbBridge.Solve(session.NewContext(ctx, "gateway:"+sid), nil, source)
+		ref, exp, err := llbBridge.Solve(session.NewContext(ctx, "gateway:"+sid), nil, source, filterPrefix(opts, "gateway-"))
 		if err != nil {
 			return nil, nil, err
 		}
 		rootFS = ref
 		config, ok := exp[exporterImageConfig]
 		if ok {
-			// TODO: map json.RawMessage
-			img = *config.(*dockerfile2llb.Image)
-			// if err := json.Unmarshal(config.(*dockerfile2llb.Image), &img); err != nil {
-			// 	return nil, nil, err
-			// }
+			if err := json.Unmarshal(config, &img); err != nil {
+				return nil, nil, err
+			}
 		}
 	} else {
 		sourceRef, err := reference.ParseNormalizedNamed(source)
@@ -75,7 +84,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 			return nil, nil, err
 		}
 
-		dgst, config, err := llbBridge.ResolveImageConfig(ctx, source)
+		dgst, config, err := llbBridge.ResolveImageConfig(ctx, sourceRef.String())
 		if err != nil {
 			return nil, nil, err
 		}
@@ -96,7 +105,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 			return nil, nil, err
 		}
 
-		ref, _, err := llbBridge.Solve(ctx, def.ToPB(), "")
+		ref, _, err := llbBridge.Solve(ctx, def.ToPB(), "", nil)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -215,7 +224,7 @@ type llbBrideForwarder struct {
 	llbBridge    frontend.FrontendLLBBridge
 	refs         map[string]cache.ImmutableRef
 	lastRef      cache.ImmutableRef
-	exporterAttr map[string]interface{}
+	exporterAttr map[string][]byte
 	*pipe
 }
 
@@ -231,12 +240,12 @@ func (lbf *llbBrideForwarder) ResolveImageConfig(ctx context.Context, req *pb.Re
 }
 
 func (lbf *llbBrideForwarder) Solve(ctx context.Context, req *pb.SolveRequest) (*pb.SolveResponse, error) {
-	ref, expResp, err := lbf.llbBridge.Solve(ctx, req.Definition, req.Frontend)
+	ref, expResp, err := lbf.llbBridge.Solve(ctx, req.Definition, req.Frontend, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	exp := map[string]interface{}{}
+	exp := map[string][]byte{}
 	if err := json.Unmarshal(req.ExporterAttr, &exp); err != nil {
 		return nil, err
 	}

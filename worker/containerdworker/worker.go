@@ -44,6 +44,10 @@ func (w containerdWorker) Exec(ctx context.Context, meta worker.Meta, root cache
 	}
 	defer container.Delete(ctx)
 
+	if stdin == nil {
+		stdin = &emptyReadCloser{}
+	}
+
 	task, err := container.NewTask(ctx, containerd.NewIO(stdin, stdout, stderr), containerd.WithRootFS(rootMounts))
 	if err != nil {
 		return err
@@ -67,5 +71,15 @@ func (w containerdWorker) Exec(ctx context.Context, meta worker.Meta, root cache
 		return errors.Errorf("process returned non-zero exit code: %d", status.ExitCode())
 	}
 
+	return nil
+}
+
+type emptyReadCloser struct{}
+
+func (_ *emptyReadCloser) Read([]byte) (int, error) {
+	return 0, io.EOF
+}
+
+func (_ *emptyReadCloser) Close() error {
 	return nil
 }

@@ -1,6 +1,7 @@
 package dockerfile
 
 import (
+	"encoding/json"
 	"io/ioutil"
 	"path"
 	"path/filepath"
@@ -31,7 +32,7 @@ func NewDockerfileFrontend() frontend.Frontend {
 
 type dfFrontend struct{}
 
-func (f *dfFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string) (retRef cache.ImmutableRef, exporterAttr map[string]interface{}, retErr error) {
+func (f *dfFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string) (retRef cache.ImmutableRef, exporterAttr map[string][]byte, retErr error) {
 
 	filename := opts[keyFilename]
 	if filename == "" {
@@ -52,7 +53,7 @@ func (f *dfFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBr
 		return nil, nil, err
 	}
 
-	ref, _, err := llbBridge.Solve(ctx, def.ToPB(), "")
+	ref, _, err := llbBridge.Solve(ctx, def.ToPB(), "", nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -111,13 +112,18 @@ func (f *dfFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBr
 	if err != nil {
 		return nil, nil, err
 	}
-	retRef, _, err = llbBridge.Solve(ctx, def.ToPB(), "")
+	retRef, _, err = llbBridge.Solve(ctx, def.ToPB(), "", nil)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return retRef, map[string]interface{}{
-		exporterImageConfig: img,
+	config, err := json.Marshal(img)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return retRef, map[string][]byte{
+		exporterImageConfig: config,
 	}, nil
 }
 

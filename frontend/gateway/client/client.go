@@ -40,7 +40,7 @@ type Client struct {
 	sessionID string
 }
 
-func (c *Client) Solve(ctx context.Context, def *opspb.Definition, frontend string, exporterAttr map[string]interface{}, final bool) (*Reference, error) {
+func (c *Client) Solve(ctx context.Context, def *opspb.Definition, frontend string, exporterAttr map[string][]byte, final bool) (*Reference, error) {
 	dt, err := json.Marshal(exporterAttr)
 	if err != nil {
 		return nil, err

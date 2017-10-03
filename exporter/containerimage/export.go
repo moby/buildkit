@@ -15,7 +15,6 @@ import (
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/exporter"
-	"github.com/moby/buildkit/frontend/dockerfile/dockerfile2llb"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/progress"
@@ -155,7 +154,7 @@ func (e *imageExporterInstance) Name() string {
 	return "exporting to image"
 }
 
-func (e *imageExporterInstance) Export(ctx context.Context, ref cache.ImmutableRef, opt map[string]interface{}) error {
+func (e *imageExporterInstance) Export(ctx context.Context, ref cache.ImmutableRef, opt map[string][]byte) error {
 	layersDone := oneOffProgress(ctx, "exporting layers")
 	diffPairs, err := e.getBlobs(ctx, ref)
 	if err != nil {
@@ -169,15 +168,10 @@ func (e *imageExporterInstance) Export(ctx context.Context, ref cache.ImmutableR
 	}
 
 	var dt []byte
-	if imgInterface, ok := opt[exporterImageConfig]; ok {
-		img, ok := imgInterface.(*dockerfile2llb.Image)
-		if !ok {
-			return errors.Errorf("invalid image config")
-		}
-		setDiffIDs(img, diffIDs)
-		dt, err = json.Marshal(img)
+	if config, ok := opt[exporterImageConfig]; ok {
+		dt, err = setDiffIDs(config, diffIDs)
 		if err != nil {
-			return errors.Wrap(err, "failed to marshal image config")
+			return err
 		}
 	} else {
 		dt, err = json.Marshal(imageConfig(diffIDs))
@@ -270,9 +264,20 @@ func imageConfig(diffIDs []digest.Digest) ocispec.Image {
 	return img
 }
 
-func setDiffIDs(img *dockerfile2llb.Image, diffIDs []digest.Digest) {
-	img.RootFS.Type = "layers"
-	img.RootFS.DiffIDs = diffIDs
+func setDiffIDs(config []byte, diffIDs []digest.Digest) ([]byte, error) {
+	mp := map[string]json.RawMessage{}
+	if err := json.Unmarshal(config, &mp); err != nil {
+		return nil, err
+	}
+	var rootFS ocispec.RootFS
+	rootFS.Type = "layers"
+	rootFS.DiffIDs = diffIDs
+	dt, err := json.Marshal(rootFS)
+	if err != nil {
+		return nil, err
+	}
+	mp["rootfs"] = dt
+	return json.Marshal(mp)
 }
 
 func oneOffProgress(ctx context.Context, id string) func(err error) error {

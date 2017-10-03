@@ -99,7 +99,7 @@ func (s *Solver) Solve(ctx context.Context, id string, f frontend.Frontend, def 
 	}
 
 	var ref Reference
-	var exporterOpt map[string]interface{}
+	var exporterOpt map[string][]byte
 	if def != nil {
 		var inp *Input
 		inp, err = j.load(def, s.resolve)
@@ -583,17 +583,13 @@ type resolveImageConfig interface {
 	ResolveImageConfig(ctx context.Context, ref string) (digest.Digest, []byte, error)
 }
 
-func (s *llbBridge) Solve(ctx context.Context, def *pb.Definition, frontend string) (cache.ImmutableRef, map[string]interface{}, error) {
+func (s *llbBridge) Solve(ctx context.Context, def *pb.Definition, frontend string, opts map[string]string) (cache.ImmutableRef, map[string][]byte, error) {
 	if def == nil {
 		f, ok := s.allFrontends[frontend]
 		if !ok {
 			return nil, nil, errors.Errorf("invalid frontend: %s", frontend)
 		}
-		ref, exporterOpt, err := f.Solve(ctx, &llbBridge{
-			job:                s.job,
-			resolveOp:          s.resolveOp,
-			resolveImageConfig: s,
-		}, nil)
+		ref, exporterOpt, err := f.Solve(ctx, s, opts)
 		if err != nil {
 			return nil, nil, err
 		}
