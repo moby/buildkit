@@ -57,28 +57,31 @@ func dumpLLB(clicontext *cli.Context) error {
 }
 
 type llbOp struct {
-	Op     pb.Op
-	Digest digest.Digest
+	Op         pb.Op
+	Digest     digest.Digest
+	OpMetadata pb.OpMetadata
 }
 
 func loadLLB(r io.Reader) ([]llbOp, error) {
-	bs, err := llb.ReadFrom(r)
+	def, err := llb.ReadFrom(r)
 	if err != nil {
 		return nil, err
 	}
 	var ops []llbOp
-	for _, dt := range bs {
+	for _, dt := range def.Def {
 		var op pb.Op
 		if err := (&op).Unmarshal(dt); err != nil {
 			return nil, errors.Wrap(err, "failed to parse op")
 		}
 		dgst := digest.FromBytes(dt)
-		ops = append(ops, llbOp{Op: op, Digest: dgst})
+		ent := llbOp{Op: op, Digest: dgst, OpMetadata: def.Metadata[dgst].OpMetadata}
+		ops = append(ops, ent)
 	}
 	return ops, nil
 }
 
 func writeDot(ops []llbOp, w io.Writer) {
+	// TODO: print OpMetadata
 	fmt.Fprintln(w, "digraph {")
 	defer fmt.Fprintln(w, "}")
 	for _, op := range ops {

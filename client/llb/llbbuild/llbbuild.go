@@ -21,13 +21,15 @@ func NewBuildOp(source llb.Output, opt ...BuildOption) llb.Vertex {
 }
 
 type build struct {
-	source   llb.Output
-	info     *BuildInfo
-	cachedPB []byte
+	source           llb.Output
+	info             *BuildInfo
+	cachedPB         []byte
+	cachedOpMetadata *pb.OpMetadata
 }
 
 func (b *build) ToInput() (*pb.Input, error) {
-	dt, err := b.Marshal()
+	dt, opMetadata, err := b.Marshal()
+	_ = opMetadata
 	if err != nil {
 		return nil, err
 	}
@@ -43,9 +45,9 @@ func (b *build) Validate() error {
 	return nil
 }
 
-func (b *build) Marshal() ([]byte, error) {
+func (b *build) Marshal() ([]byte, *pb.OpMetadata, error) {
 	if b.cachedPB != nil {
-		return b.cachedPB, nil
+		return b.cachedPB, b.cachedOpMetadata, nil
 	}
 	pbo := &pb.BuildOp{
 		Builder: pb.LLBBuilder,
@@ -67,17 +69,18 @@ func (b *build) Marshal() ([]byte, error) {
 
 	inp, err := b.source.ToInput()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	pop.Inputs = append(pop.Inputs, inp)
 
 	dt, err := pop.Marshal()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	b.cachedPB = dt
-	return dt, nil
+	b.cachedOpMetadata = &pb.OpMetadata{}
+	return dt, b.cachedOpMetadata, nil
 }
 
 func (b *build) Output() llb.Output {

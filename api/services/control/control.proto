@@ -4,6 +4,7 @@ package moby.buildkit.v1;
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 import "google/protobuf/timestamp.proto";
+import "github.com/moby/buildkit/solver/pb/ops.proto";
 
 option (gogoproto.sizer_all) = true;
 option (gogoproto.marshaler_all) = true;
@@ -38,7 +39,7 @@ message UsageRecord {
 
 message SolveRequest {
 	string Ref = 1;
-	repeated bytes Definition = 2; // TODO: remove repeated
+	pb.Definition Definition = 2;
 	string Exporter = 3;
 	map<string, string> ExporterAttrs = 4;
 	string Session = 5;

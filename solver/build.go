@@ -104,12 +104,13 @@ func (b *buildOp) Run(ctx context.Context, inputs []Reference) (outputs []Refere
 		f.Close()
 		return nil, err
 	}
+	defPB := def.ToPB()
 
 	f.Close()
 	lm.Unmount()
 	lm = nil
 
-	newref, err := b.s.loadAndSolve(ctx, b.v.Digest(), def)
+	newref, err := b.s.loadAndSolve(ctx, b.v.Digest(), defPB)
 	if err != nil {
 		return nil, err
 	}

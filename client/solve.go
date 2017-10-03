@@ -31,27 +31,23 @@ type SolveOpt struct {
 	// Session string
 }
 
-func (c *Client) Solve(ctx context.Context, r io.Reader, opt SolveOpt, statusChan chan *SolveStatus) error {
+// Solve calls Solve on the controller.
+// def must be nil if (and only if) opt.Frontend is set.
+func (c *Client) Solve(ctx context.Context, def *llb.Definition, opt SolveOpt, statusChan chan *SolveStatus) error {
 	defer func() {
 		if statusChan != nil {
 			close(statusChan)
 		}
 	}()
 
-	var def [][]byte
-	var err error
-	if opt.Frontend == "" {
-		def, err = llb.ReadFrom(r)
-		if err != nil {
-			return errors.Wrap(err, "failed to parse input")
-		}
-
-		if len(def) == 0 {
-			return errors.New("invalid empty definition")
-		}
+	if opt.Frontend == "" && def == nil {
+		return errors.New("invalid empty definition")
+	}
+	if opt.Frontend != "" && def != nil {
+		return errors.Errorf("invalid definition for frontend %s", opt.Frontend)
 	}
 
-	syncedDirs, err := prepareSyncedDirs(def, opt.LocalDirs)
+	syncedDirs, err := prepareSyncedDirs(def.Def, opt.LocalDirs)
 	if err != nil {
 		return err
 	}
@@ -94,7 +90,7 @@ func (c *Client) Solve(ctx context.Context, r io.Reader, opt SolveOpt, statusCha
 		}()
 		_, err = c.controlClient().Solve(ctx, &controlapi.SolveRequest{
 			Ref:           ref,
-			Definition:    def,
+			Definition:    def.ToPB(),
 			Exporter:      opt.Exporter,
 			ExporterAttrs: opt.ExporterAttrs,
 			Session:       s.ID(),
