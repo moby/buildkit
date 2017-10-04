@@ -18,6 +18,7 @@ import (
 	localexporter "github.com/moby/buildkit/exporter/local"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/frontend/dockerfile"
+	"github.com/moby/buildkit/frontend/gateway"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot/blobmapping"
 	"github.com/moby/buildkit/source"
@@ -128,6 +129,7 @@ func defaultControllerOpts(root string, pd pullDeps) (*Opt, error) {
 
 	frontends := map[string]frontend.Frontend{}
 	frontends["dockerfile.v0"] = dockerfile.NewDockerfileFrontend()
+	frontends["gateway.v0"] = gateway.NewGatewayFrontend()
 
 	return &Opt{
 		Snapshotter:      snapshotter,

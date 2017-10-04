@@ -22,7 +22,7 @@ func New(client *containerd.Client) worker.Worker {
 	}
 }
 
-func (w containerdWorker) Exec(ctx context.Context, meta worker.Meta, root cache.Mountable, mounts []worker.Mount, stdout, stderr io.WriteCloser) error {
+func (w containerdWorker) Exec(ctx context.Context, meta worker.Meta, root cache.Mountable, mounts []worker.Mount, stdin io.ReadCloser, stdout, stderr io.WriteCloser) error {
 	id := identity.NewID()
 
 	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts)
@@ -44,7 +44,11 @@ func (w containerdWorker) Exec(ctx context.Context, meta worker.Meta, root cache
 	}
 	defer container.Delete(ctx)
 
-	task, err := container.NewTask(ctx, containerd.Stdio, containerd.WithRootFS(rootMounts))
+	if stdin == nil {
+		stdin = &emptyReadCloser{}
+	}
+
+	task, err := container.NewTask(ctx, containerd.NewIO(stdin, stdout, stderr), containerd.WithRootFS(rootMounts))
 	if err != nil {
 		return err
 	}
@@ -67,5 +71,15 @@ func (w containerdWorker) Exec(ctx context.Context, meta worker.Meta, root cache
 		return errors.Errorf("process returned non-zero exit code: %d", status.ExitCode())
 	}
 
+	return nil
+}
+
+type emptyReadCloser struct{}
+
+func (_ *emptyReadCloser) Read([]byte) (int, error) {
+	return 0, io.EOF
+}
+
+func (_ *emptyReadCloser) Close() error {
 	return nil
 }

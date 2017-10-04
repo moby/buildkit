@@ -54,7 +54,7 @@ func New(root string) (worker.Worker, error) {
 	return w, nil
 }
 
-func (w *runcworker) Exec(ctx context.Context, meta worker.Meta, root cache.Mountable, mounts []worker.Mount, stdout, stderr io.WriteCloser) error {
+func (w *runcworker) Exec(ctx context.Context, meta worker.Meta, root cache.Mountable, mounts []worker.Mount, stdin io.ReadCloser, stdout, stderr io.WriteCloser) error {
 
 	rootMount, err := root.Mount(ctx, false)
 	if err != nil {
@@ -107,7 +107,7 @@ func (w *runcworker) Exec(ctx context.Context, meta worker.Meta, root cache.Moun
 	logrus.Debugf("> running %s %v", id, meta.Args)
 
 	status, err := w.runc.Run(ctx, id, bundle, &runc.CreateOpts{
-		IO: &forwardIO{stdout: stdout, stderr: stderr},
+		IO: &forwardIO{stdin: stdin, stdout: stdout, stderr: stderr},
 	})
 	logrus.Debugf("< completed %s %v %v", id, status, err)
 	if status != 0 {
@@ -124,6 +124,7 @@ func (w *runcworker) Exec(ctx context.Context, meta worker.Meta, root cache.Moun
 }
 
 type forwardIO struct {
+	stdin          io.ReadCloser
 	stdout, stderr io.WriteCloser
 }
 
@@ -132,6 +133,7 @@ func (s *forwardIO) Close() error {
 }
 
 func (s *forwardIO) Set(cmd *exec.Cmd) {
+	cmd.Stdin = s.stdin
 	cmd.Stdout = s.stdout
 	cmd.Stderr = s.stderr
 }

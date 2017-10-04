@@ -25,5 +25,5 @@ type Mount struct {
 
 type Worker interface {
 	// TODO: add stdout/err
-	Exec(ctx context.Context, meta Meta, rootfs cache.Mountable, mounts []Mount, stdout, stderr io.WriteCloser) error
+	Exec(ctx context.Context, meta Meta, rootfs cache.Mountable, mounts []Mount, stdin io.ReadCloser, stdout, stderr io.WriteCloser) error
 }
