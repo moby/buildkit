@@ -1,8 +1,6 @@
 package runcworker
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"io"
 	"os"
@@ -14,6 +12,7 @@ import (
 	runc "github.com/containerd/go-runc"
 	"github.com/docker/docker/pkg/symlink"
 	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/worker"
 	"github.com/moby/buildkit/worker/oci"
 	"github.com/pkg/errors"
@@ -62,7 +61,7 @@ func (w *runcworker) Exec(ctx context.Context, meta worker.Meta, root cache.Moun
 		return err
 	}
 
-	id := generateID()
+	id := identity.NewID()
 	bundle := filepath.Join(w.root, id)
 
 	if err := os.Mkdir(bundle, 0700); err != nil {
@@ -147,12 +146,4 @@ func (s *forwardIO) Stdout() io.ReadCloser {
 
 func (s *forwardIO) Stderr() io.ReadCloser {
 	return nil
-}
-
-func generateID() string {
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		panic(err)
-	}
-	return hex.EncodeToString(b)
 }
