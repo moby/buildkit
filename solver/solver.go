@@ -11,7 +11,6 @@ import (
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/frontend"
-	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/util/bgfunc"
@@ -26,10 +25,11 @@ import (
 
 type LLBOpt struct {
 	SourceManager    *source.Manager
-	CacheManager     cache.Manager // TODO: this shouldn't be needed before instruction cache
+	CacheManager     cache.Manager
 	Worker           worker.Worker
 	InstructionCache InstructionCache
 	ImageSource      source.Source
+	Frontends        map[string]frontend.Frontend // used by nested invocations
 }
 
 func NewLLBSolver(opt LLBOpt) *Solver {
@@ -45,7 +45,7 @@ func NewLLBSolver(opt LLBOpt) *Solver {
 		default:
 			return nil, nil
 		}
-	}, opt.InstructionCache, opt.ImageSource, opt.Worker, opt.CacheManager)
+	}, opt.InstructionCache, opt.ImageSource, opt.Worker, opt.CacheManager, opt.Frontends)
 	return s
 }
 
@@ -79,46 +79,55 @@ type Solver struct {
 	imageSource source.Source
 	worker      worker.Worker
 	cm          cache.Manager // TODO: remove with immutableRef.New()
+	frontends   map[string]frontend.Frontend
 }
 
-func New(resolve ResolveOpFunc, cache InstructionCache, imageSource source.Source, worker worker.Worker, cm cache.Manager) *Solver {
-	return &Solver{resolve: resolve, jobs: newJobList(), cache: cache, imageSource: imageSource, worker: worker, cm: cm}
+func New(resolve ResolveOpFunc, cache InstructionCache, imageSource source.Source, worker worker.Worker, cm cache.Manager, f map[string]frontend.Frontend) *Solver {
+	return &Solver{resolve: resolve, jobs: newJobList(), cache: cache, imageSource: imageSource, worker: worker, cm: cm, frontends: f}
 }
 
-func (s *Solver) Solve(ctx context.Context, id string, f frontend.Frontend, def *pb.Definition, exp exporter.ExporterInstance, frontendOpt map[string]string, allFrontends map[string]frontend.Frontend) error {
+type SolveRequest struct {
+	Definition  *pb.Definition
+	Frontend    frontend.Frontend
+	Exporter    exporter.ExporterInstance
+	FrontendOpt map[string]string
+}
+
+func (s *Solver) solve(ctx context.Context, j *job, req SolveRequest) (Reference, map[string][]byte, error) {
+	if req.Definition == nil {
+		if req.Frontend == nil {
+			return nil, nil, errors.Errorf("invalid request: no definition nor frontend")
+		}
+		return req.Frontend.Solve(ctx, s.llbBridge(j), req.FrontendOpt)
+	}
+
+	inp, err := j.load(req.Definition, s.resolve)
+	if err != nil {
+		return nil, nil, err
+	}
+	ref, err := j.getRef(ctx, inp.Vertex.(*vertex), inp.Index)
+	return ref, nil, err
+}
+
+func (s *Solver) llbBridge(j *job) *llbBridge {
+	return &llbBridge{job: j, Solver: s, resolveImageConfig: s.imageSource.(resolveImageConfig)}
+}
+
+func (s *Solver) Solve(ctx context.Context, id string, req SolveRequest) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	pr, ctx, closeProgressWriter := progress.NewContext(ctx)
-
 	defer closeProgressWriter()
 
+	// register a build job. vertex needs to be loaded to a job to run
 	ctx, j, err := s.jobs.new(ctx, id, pr, s.cache)
 	if err != nil {
 		return err
 	}
 
-	var ref Reference
-	var exporterOpt map[string][]byte
-	if def != nil {
-		var inp *Input
-		inp, err = j.load(def, s.resolve)
-		if err != nil {
-			j.discard()
-			return err
-		}
-		ref, err = j.getRef(ctx, inp.Vertex.(*vertex), inp.Index)
-	} else {
-		ref, exporterOpt, err = f.Solve(ctx, &llbBridge{
-			worker:             s.worker,
-			job:                j,
-			cm:                 s.cm,
-			resolveOp:          s.resolve,
-			resolveImageConfig: s.imageSource.(resolveImageConfig),
-			allFrontends:       allFrontends,
-		}, frontendOpt)
-	}
-	j.discard()
+	ref, exporterOpt, err := s.solve(ctx, j, req)
+	defer j.discard()
 	if err != nil {
 		return err
 	}
@@ -135,19 +144,10 @@ func (s *Solver) Solve(ctx context.Context, id string, f frontend.Frontend, def 
 		return err
 	}
 
-	if exp != nil {
-		v := client.Vertex{
-			Digest: digest.FromBytes([]byte(identity.NewID())),
-			Name:   exp.Name(),
-		}
-		notifyStarted(ctx, &v)
-		pw, _, ctx := progress.FromContext(ctx, progress.WithMetadata("vertex", v.Digest))
-		defer pw.Close()
-		err := exp.Export(ctx, immutable, exporterOpt)
-		notifyCompleted(ctx, &v, err)
-		if err != nil {
-			return err
-		}
+	if exp := req.Exporter; exp != nil {
+		return inVertexContext(ctx, exp.Name(), func(ctx context.Context) error {
+			return exp.Export(ctx, immutable, exporterOpt)
+		})
 	}
 	return err
 }
@@ -571,39 +571,29 @@ type VertexResult struct {
 
 // llbBridge is an helper used by frontends
 type llbBridge struct {
+	*Solver
+	job *job
 	resolveImageConfig
-	job          *job
-	resolveOp    ResolveOpFunc
-	worker       worker.Worker
-	allFrontends map[string]frontend.Frontend
-	cm           cache.Manager
 }
 
 type resolveImageConfig interface {
 	ResolveImageConfig(ctx context.Context, ref string) (digest.Digest, []byte, error)
 }
 
-func (s *llbBridge) Solve(ctx context.Context, def *pb.Definition, frontend string, opts map[string]string) (cache.ImmutableRef, map[string][]byte, error) {
-	if def == nil {
-		f, ok := s.allFrontends[frontend]
+func (s *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (cache.ImmutableRef, map[string][]byte, error) {
+	var f frontend.Frontend
+	if req.Frontend != "" {
+		var ok bool
+		f, ok = s.frontends[req.Frontend]
 		if !ok {
-			return nil, nil, errors.Errorf("invalid frontend: %s", frontend)
+			return nil, nil, errors.Errorf("invalid frontend: %s", req.Frontend)
 		}
-		ref, exporterOpt, err := f.Solve(ctx, s, opts)
-		if err != nil {
-			return nil, nil, err
-		}
-		immutable, ok := toImmutableRef(ref)
-		if !ok {
-			return nil, nil, errors.Errorf("invalid reference for exporting: %T", ref)
-		}
-		return immutable, exporterOpt, nil
 	}
-	inp, err := s.job.load(def, s.resolveOp)
-	if err != nil {
-		return nil, nil, err
-	}
-	ref, err := s.job.getRef(ctx, inp.Vertex.(*vertex), inp.Index)
+	ref, exp, err := s.solve(ctx, s.job, SolveRequest{
+		Definition:  req.Definition,
+		Frontend:    f,
+		FrontendOpt: req.FrontendOpt,
+	})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -611,8 +601,7 @@ func (s *llbBridge) Solve(ctx context.Context, def *pb.Definition, frontend stri
 	if !ok {
 		return nil, nil, errors.Errorf("invalid reference for exporting: %T", ref)
 	}
-
-	return immutable, nil, nil
+	return immutable, exp, nil
 }
 
 func (s *llbBridge) Exec(ctx context.Context, meta worker.Meta, rootFS cache.ImmutableRef, stdin io.ReadCloser, stdout, stderr io.WriteCloser) error {

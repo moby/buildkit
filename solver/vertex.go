@@ -1,13 +1,14 @@
 package solver
 
 import (
-	"context"
 	"sync"
 	"time"
 
 	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/util/progress"
 	digest "github.com/opencontainers/go-digest"
+	"golang.org/x/net/context"
 )
 
 // Vertex is one node in the build graph
@@ -111,4 +112,17 @@ func notifyCompleted(ctx context.Context, v *client.Vertex, err error) {
 		v.Error = err.Error()
 	}
 	pw.Write(v.Digest.String(), *v)
+}
+
+func inVertexContext(ctx context.Context, name string, f func(ctx context.Context) error) error {
+	v := client.Vertex{
+		Digest: digest.FromBytes([]byte(identity.NewID())),
+		Name:   name,
+	}
+	pw, _, ctx := progress.FromContext(ctx, progress.WithMetadata("vertex", v.Digest))
+	notifyStarted(ctx, &v)
+	defer pw.Close()
+	err := f(ctx)
+	notifyCompleted(ctx, &v, err)
+	return err
 }

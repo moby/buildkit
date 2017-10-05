@@ -67,7 +67,11 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 	var rootFS cache.ImmutableRef
 
 	if isDevel {
-		ref, exp, err := llbBridge.Solve(session.NewContext(ctx, "gateway:"+sid), nil, source, filterPrefix(opts, "gateway-"))
+		ref, exp, err := llbBridge.Solve(session.NewContext(ctx, "gateway:"+sid),
+			frontend.SolveRequest{
+				Frontend:    source,
+				FrontendOpt: filterPrefix(opts, "gateway-"),
+			})
 		if err != nil {
 			return nil, nil, err
 		}
@@ -105,7 +109,9 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 			return nil, nil, err
 		}
 
-		ref, _, err := llbBridge.Solve(ctx, def.ToPB(), "", nil)
+		ref, _, err := llbBridge.Solve(ctx, frontend.SolveRequest{
+			Definition: def.ToPB(),
+		})
 		if err != nil {
 			return nil, nil, err
 		}
@@ -240,7 +246,10 @@ func (lbf *llbBrideForwarder) ResolveImageConfig(ctx context.Context, req *pb.Re
 }
 
 func (lbf *llbBrideForwarder) Solve(ctx context.Context, req *pb.SolveRequest) (*pb.SolveResponse, error) {
-	ref, expResp, err := lbf.llbBridge.Solve(ctx, req.Definition, req.Frontend, nil)
+	ref, expResp, err := lbf.llbBridge.Solve(ctx, frontend.SolveRequest{
+		Definition: req.Definition,
+		Frontend:   req.Frontend,
+	})
 	if err != nil {
 		return nil, err
 	}
