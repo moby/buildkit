@@ -91,30 +91,6 @@ func (jl *jobList) get(id string) (*job, error) {
 	}
 }
 
-func (jl *jobList) loadAndSolve(ctx context.Context, dgst digest.Digest, def *pb.Definition, f ResolveOpFunc, cache InstructionCache) (Reference, error) {
-	jl.mu.Lock()
-
-	st, ok := jl.actives[dgst]
-	if !ok {
-		jl.mu.Unlock()
-		return nil, errors.Errorf("no such parent vertex: %v", dgst)
-	}
-
-	var inp *Input
-	for j := range st.jobs {
-		var err error
-		inp, err = j.loadInternal(def, f)
-		if err != nil {
-			jl.mu.Unlock()
-			return nil, err
-		}
-	}
-	st = jl.actives[inp.Vertex.Digest()]
-	jl.mu.Unlock()
-
-	return getRef(st.solver, ctx, inp.Vertex.(*vertex), inp.Index, cache) // TODO: combine to pass single input
-}
-
 type job struct {
 	l       *jobList
 	pr      *progress.MultiReader

@@ -161,8 +161,28 @@ func (s *Solver) Status(ctx context.Context, id string, statusChan chan *client.
 	return j.pipe(ctx, statusChan)
 }
 
-func (s *Solver) loadAndSolve(ctx context.Context, dgst digest.Digest, def *pb.Definition) (Reference, error) {
-	return s.jobs.loadAndSolve(ctx, dgst, def, s.resolve, s.cache)
+func (s *Solver) subBuild(ctx context.Context, dgst digest.Digest, req SolveRequest) (Reference, error) {
+	jl := s.jobs
+	jl.mu.Lock()
+	st, ok := jl.actives[dgst]
+	if !ok {
+		jl.mu.Unlock()
+		return nil, errors.Errorf("no such parent vertex: %v", dgst)
+	}
+
+	var inp *Input
+	for j := range st.jobs {
+		var err error
+		inp, err = j.loadInternal(req.Definition, s.resolve)
+		if err != nil {
+			jl.mu.Unlock()
+			return nil, err
+		}
+	}
+	st = jl.actives[inp.Vertex.Digest()]
+	jl.mu.Unlock()
+
+	return getRef(st.solver, ctx, inp.Vertex.(*vertex), inp.Index, s.cache) // TODO: combine to pass single input
 }
 
 type VertexSolver interface {
