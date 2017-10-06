@@ -45,6 +45,7 @@ func NewController(opt Opt) (*Controller, error) {
 			Worker:           opt.Worker,
 			InstructionCache: opt.InstructionCache,
 			ImageSource:      opt.ImageSource,
+			Frontends:        opt.Frontends,
 		}),
 	}
 	return c, nil
@@ -105,7 +106,12 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		}
 	}
 
-	if err := c.solver.Solve(ctx, req.Ref, frontend, req.Definition, expi, req.FrontendAttrs, c.opt.Frontends); err != nil {
+	if err := c.solver.Solve(ctx, req.Ref, solver.SolveRequest{
+		Frontend:    frontend,
+		Definition:  req.Definition,
+		Exporter:    expi,
+		FrontendOpt: req.FrontendAttrs,
+	}); err != nil {
 		return nil, err
 	}
 	return &controlapi.SolveResponse{}, nil

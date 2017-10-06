@@ -53,7 +53,9 @@ func (f *dfFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBr
 		return nil, nil, err
 	}
 
-	ref, _, err := llbBridge.Solve(ctx, def.ToPB(), "", nil)
+	ref, _, err := llbBridge.Solve(ctx, frontend.SolveRequest{
+		Definition: def.ToPB(),
+	})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -112,7 +114,9 @@ func (f *dfFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBr
 	if err != nil {
 		return nil, nil, err
 	}
-	retRef, _, err = llbBridge.Solve(ctx, def.ToPB(), "", nil)
+	retRef, _, err = llbBridge.Solve(ctx, frontend.SolveRequest{
+		Definition: def.ToPB(),
+	})
 	if err != nil {
 		return nil, nil, err
 	}

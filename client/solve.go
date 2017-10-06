@@ -46,7 +46,7 @@ func (c *Client) Solve(ctx context.Context, def *llb.Definition, opt SolveOpt, s
 		return errors.Errorf("invalid definition for frontend %s", opt.Frontend)
 	}
 
-	syncedDirs, err := prepareSyncedDirs(def.Def, opt.LocalDirs)
+	syncedDirs, err := prepareSyncedDirs(def, opt.LocalDirs)
 	if err != nil {
 		return err
 	}
@@ -87,9 +87,13 @@ func (c *Client) Solve(ctx context.Context, def *llb.Definition, opt SolveOpt, s
 			logrus.Debugf("stopping session")
 			s.Close()
 		}()
+		var pbd *pb.Definition
+		if def != nil {
+			pbd = def.ToPB()
+		}
 		_, err = c.controlClient().Solve(ctx, &controlapi.SolveRequest{
 			Ref:           ref,
-			Definition:    def.ToPB(),
+			Definition:    pbd,
 			Exporter:      opt.Exporter,
 			ExporterAttrs: opt.ExporterAttrs,
 			Session:       s.ID(),
@@ -158,7 +162,7 @@ func (c *Client) Solve(ctx context.Context, def *llb.Definition, opt SolveOpt, s
 	return eg.Wait()
 }
 
-func prepareSyncedDirs(defs [][]byte, localDirs map[string]string) ([]filesync.SyncedDir, error) {
+func prepareSyncedDirs(def *llb.Definition, localDirs map[string]string) ([]filesync.SyncedDir, error) {
 	for _, d := range localDirs {
 		fi, err := os.Stat(d)
 		if err != nil {
@@ -169,24 +173,25 @@ func prepareSyncedDirs(defs [][]byte, localDirs map[string]string) ([]filesync.S
 		}
 	}
 	dirs := make([]filesync.SyncedDir, 0, len(localDirs))
-	if len(defs) == 0 {
+	if def == nil {
 		for name, d := range localDirs {
 			dirs = append(dirs, filesync.SyncedDir{Name: name, Dir: d})
 		}
-	}
-	for _, dt := range defs {
-		var op pb.Op
-		if err := (&op).Unmarshal(dt); err != nil {
-			return nil, errors.Wrap(err, "failed to parse llb proto op")
-		}
-		if src := op.GetSource(); src != nil {
-			if strings.HasPrefix(src.Identifier, "local://") { // TODO: just make a type property
-				name := strings.TrimPrefix(src.Identifier, "local://")
-				d, ok := localDirs[name]
-				if !ok {
-					return nil, errors.Errorf("local directory %s not enabled", name)
+	} else {
+		for _, dt := range def.Def {
+			var op pb.Op
+			if err := (&op).Unmarshal(dt); err != nil {
+				return nil, errors.Wrap(err, "failed to parse llb proto op")
+			}
+			if src := op.GetSource(); src != nil {
+				if strings.HasPrefix(src.Identifier, "local://") { // TODO: just make a type property
+					name := strings.TrimPrefix(src.Identifier, "local://")
+					d, ok := localDirs[name]
+					if !ok {
+						return nil, errors.Errorf("local directory %s not enabled", name)
+					}
+					dirs = append(dirs, filesync.SyncedDir{Name: name, Dir: d}) // TODO: excludes
 				}
-				dirs = append(dirs, filesync.SyncedDir{Name: name, Dir: d}) // TODO: excludes
 			}
 		}
 	}
