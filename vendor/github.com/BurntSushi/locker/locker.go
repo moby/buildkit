@@ -82,6 +82,9 @@ func (lker *Locker) newLock(key string) *sync.RWMutex {
 	lker.locksRW.Lock()
 	defer lker.locksRW.Unlock()
 
+	if lk, ok := lker.locks[key]; ok {
+		return lk
+	}
 	lk := new(sync.RWMutex)
 	lker.locks[key] = lk
 	return lk

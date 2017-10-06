@@ -18,8 +18,9 @@ func setupDebugHandlers(addr string) error {
 	m.Handle("/debug/pprof/profile", http.HandlerFunc(pprof.Profile))
 	m.Handle("/debug/pprof/symbol", http.HandlerFunc(pprof.Symbol))
 	m.Handle("/debug/pprof/trace", http.HandlerFunc(pprof.Trace))
-	m.Handle("/debug/requests", http.HandlerFunc(trace.Traces))
-	m.Handle("/debug/events", http.HandlerFunc(trace.Events))
+	// TODO: reenable after golang.org/x/net update
+	// m.Handle("/debug/requests", http.HandlerFunc(trace.Traces))
+	// m.Handle("/debug/events", http.HandlerFunc(trace.Events))
 
 	// setting debugaddr is opt-in. permission is defined by listener address
 	trace.AuthRequest = func(_ *http.Request) (bool, bool) {

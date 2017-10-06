@@ -41,12 +41,12 @@ type Runc struct {
 	PdeathSignal  syscall.Signal
 	Setpgid       bool
 	Criu          string
-	SystemdCgroup string
+	SystemdCgroup bool
 }
 
 // List returns all containers created inside the provided runc root directory
 func (r *Runc) List(context context.Context) ([]*Container, error) {
-	data, err := Monitor.Output(r.command(context, "list", "--format=json"))
+	data, err := cmdOutput(r.command(context, "list", "--format=json"), false)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +59,7 @@ func (r *Runc) List(context context.Context) ([]*Container, error) {
 
 // State returns the state for the container provided by id
 func (r *Runc) State(context context.Context, id string) (*Container, error) {
-	data, err := Monitor.CombinedOutput(r.command(context, "state", id))
+	data, err := cmdOutput(r.command(context, "state", id), true)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %s", err, data)
 	}
@@ -128,13 +128,14 @@ func (r *Runc) Create(context context.Context, id, bundle string, opts *CreateOp
 	cmd.ExtraFiles = opts.ExtraFiles
 
 	if cmd.Stdout == nil && cmd.Stderr == nil {
-		data, err := Monitor.CombinedOutput(cmd)
+		data, err := cmdOutput(cmd, true)
 		if err != nil {
 			return fmt.Errorf("%s: %s", err, data)
 		}
 		return nil
 	}
-	if err := Monitor.Start(cmd); err != nil {
+	ec, err := Monitor.Start(cmd)
+	if err != nil {
 		return err
 	}
 	if opts != nil && opts.IO != nil {
@@ -144,7 +145,10 @@ func (r *Runc) Create(context context.Context, id, bundle string, opts *CreateOp
 			}
 		}
 	}
-	_, err := Monitor.Wait(cmd)
+	status, err := Monitor.Wait(cmd, ec)
+	if err == nil && status != 0 {
+		err = fmt.Errorf("%s did not terminate sucessfully", cmd.Args[0])
+	}
 	return err
 }
 
@@ -203,13 +207,14 @@ func (r *Runc) Exec(context context.Context, id string, spec specs.Process, opts
 		opts.Set(cmd)
 	}
 	if cmd.Stdout == nil && cmd.Stderr == nil {
-		data, err := Monitor.CombinedOutput(cmd)
+		data, err := cmdOutput(cmd, true)
 		if err != nil {
 			return fmt.Errorf("%s: %s", err, data)
 		}
 		return nil
 	}
-	if err := Monitor.Start(cmd); err != nil {
+	ec, err := Monitor.Start(cmd)
+	if err != nil {
 		return err
 	}
 	if opts != nil && opts.IO != nil {
@@ -219,7 +224,10 @@ func (r *Runc) Exec(context context.Context, id string, spec specs.Process, opts
 			}
 		}
 	}
-	_, err = Monitor.Wait(cmd)
+	status, err := Monitor.Wait(cmd, ec)
+	if err == nil && status != 0 {
+		err = fmt.Errorf("%s did not terminate sucessfully", cmd.Args[0])
+	}
 	return err
 }
 
@@ -238,10 +246,11 @@ func (r *Runc) Run(context context.Context, id, bundle string, opts *CreateOpts)
 	if opts != nil {
 		opts.Set(cmd)
 	}
-	if err := Monitor.Start(cmd); err != nil {
+	ec, err := Monitor.Start(cmd)
+	if err != nil {
 		return -1, err
 	}
-	return Monitor.Wait(cmd)
+	return Monitor.Wait(cmd, ec)
 }
 
 type DeleteOpts struct {
@@ -294,13 +303,14 @@ func (r *Runc) Stats(context context.Context, id string) (*Stats, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		rd.Close()
-		Monitor.Wait(cmd)
-	}()
-	if err := Monitor.Start(cmd); err != nil {
+	ec, err := Monitor.Start(cmd)
+	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		rd.Close()
+		Monitor.Wait(cmd, ec)
+	}()
 	var e Event
 	if err := json.NewDecoder(rd).Decode(&e); err != nil {
 		return nil, err
@@ -315,7 +325,8 @@ func (r *Runc) Events(context context.Context, id string, interval time.Duration
 	if err != nil {
 		return nil, err
 	}
-	if err := Monitor.Start(cmd); err != nil {
+	ec, err := Monitor.Start(cmd)
+	if err != nil {
 		rd.Close()
 		return nil, err
 	}
@@ -327,7 +338,7 @@ func (r *Runc) Events(context context.Context, id string, interval time.Duration
 		defer func() {
 			close(c)
 			rd.Close()
-			Monitor.Wait(cmd)
+			Monitor.Wait(cmd, ec)
 		}()
 		for {
 			var e Event
@@ -358,7 +369,7 @@ func (r *Runc) Resume(context context.Context, id string) error {
 
 // Ps lists all the processes inside the container returning their pids
 func (r *Runc) Ps(context context.Context, id string) ([]int, error) {
-	data, err := Monitor.CombinedOutput(r.command(context, "ps", "--format", "json", id))
+	data, err := cmdOutput(r.command(context, "ps", "--format", "json", id), true)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %s", err, data)
 	}
@@ -505,7 +516,8 @@ func (r *Runc) Restore(context context.Context, id, bundle string, opts *Restore
 	if opts != nil {
 		opts.Set(cmd)
 	}
-	if err := Monitor.Start(cmd); err != nil {
+	ec, err := Monitor.Start(cmd)
+	if err != nil {
 		return -1, err
 	}
 	if opts != nil && opts.IO != nil {
@@ -515,7 +527,7 @@ func (r *Runc) Restore(context context.Context, id, bundle string, opts *Restore
 			}
 		}
 	}
-	return Monitor.Wait(cmd)
+	return Monitor.Wait(cmd, ec)
 }
 
 // Update updates the current container with the provided resource spec
@@ -540,7 +552,7 @@ type Version struct {
 
 // Version returns the runc and runtime-spec versions
 func (r *Runc) Version(context context.Context) (Version, error) {
-	data, err := Monitor.Output(r.command(context, "--version"))
+	data, err := cmdOutput(r.command(context, "--version"), false)
 	if err != nil {
 		return Version{}, err
 	}
@@ -596,8 +608,8 @@ func (r *Runc) args() (out []string) {
 	if r.Criu != "" {
 		out = append(out, "--criu", r.Criu)
 	}
-	if r.SystemdCgroup != "" {
-		out = append(out, "--systemd-cgroup", r.SystemdCgroup)
+	if r.SystemdCgroup {
+		out = append(out, "--systemd-cgroup")
 	}
 	return out
 }
@@ -608,11 +620,39 @@ func (r *Runc) args() (out []string) {
 // <stderr>
 func (r *Runc) runOrError(cmd *exec.Cmd) error {
 	if cmd.Stdout != nil || cmd.Stderr != nil {
-		return Monitor.Run(cmd)
+		ec, err := Monitor.Start(cmd)
+		if err != nil {
+			return err
+		}
+		status, err := Monitor.Wait(cmd, ec)
+		if err == nil && status != 0 {
+			err = fmt.Errorf("%s did not terminate sucessfully", cmd.Args[0])
+		}
+		return err
 	}
-	data, err := Monitor.CombinedOutput(cmd)
+	data, err := cmdOutput(cmd, true)
 	if err != nil {
 		return fmt.Errorf("%s: %s", err, data)
 	}
 	return nil
+}
+
+func cmdOutput(cmd *exec.Cmd, combined bool) ([]byte, error) {
+	var b bytes.Buffer
+
+	cmd.Stdout = &b
+	if combined {
+		cmd.Stderr = &b
+	}
+	ec, err := Monitor.Start(cmd)
+	if err != nil {
+		return nil, err
+	}
+
+	status, err := Monitor.Wait(cmd, ec)
+	if err == nil && status != 0 {
+		err = fmt.Errorf("%s did not terminate sucessfully", cmd.Args[0])
+	}
+
+	return b.Bytes(), err
 }
