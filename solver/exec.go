@@ -142,10 +142,14 @@ func (e *execOp) ContentMask(ctx context.Context) (digest.Digest, [][]string, er
 	}
 
 	srcsMap := make(map[src]struct{})
-	for _, m := range e.op.Mounts {
+	mountsCopy := make([]*pb.Mount, len(e.op.Mounts))
+	for i, m := range e.op.Mounts {
+		copy := *m
+		mountsCopy[i] = &copy
 		if m.Input != pb.Empty {
 			if m.Dest != pb.RootMount && m.Readonly { // could also include rw if they don't have a selector, but not sure if helps performance
 				srcsMap[src{int(m.Input), path.Join("/", m.Selector)}] = struct{}{}
+				mountsCopy[i].Selector = ""
 			} else {
 				skipped[int(m.Input)] = struct{}{}
 			}
@@ -165,12 +169,15 @@ func (e *execOp) ContentMask(ctx context.Context) (digest.Digest, [][]string, er
 		sort.Strings(contentInputs[k])
 	}
 
+	ecopy := *e.op
+	ecopy.Mounts = mountsCopy
+
 	dt, err := json.Marshal(struct {
 		Type string
 		Exec *pb.ExecOp
 	}{
 		Type: execCacheType,
-		Exec: e.op,
+		Exec: &ecopy,
 	})
 	if err != nil {
 		return "", nil, err

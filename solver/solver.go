@@ -60,8 +60,13 @@ type Reference interface {
 
 // Op is an implementation for running a vertex
 type Op interface {
+	// CacheKey returns a persistent cache key for operation.
 	CacheKey(context.Context) (digest.Digest, error)
+	// ContentMask returns a partial cache checksum with content paths to the
+	// inputs. User can combine the content checksum of these paths to get a valid
+	// content based cache key.
 	ContentMask(context.Context) (digest.Digest, [][]string, error)
+	// Run runs an operation and returns the output references.
 	Run(ctx context.Context, inputs []Reference) (outputs []Reference, err error)
 }
 
