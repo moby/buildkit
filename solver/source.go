@@ -97,6 +97,6 @@ func (s *sourceOp) Run(ctx context.Context, _ []Reference) ([]Reference, error) 
 	return []Reference{ref}, nil
 }
 
-func (s *sourceOp) ContentKeys(context.Context, [][]digest.Digest, []Reference) ([]digest.Digest, error) {
-	return nil, nil
+func (s *sourceOp) ContentMask(context.Context) (digest.Digest, [][]string, error) {
+	return "", nil, nil
 }

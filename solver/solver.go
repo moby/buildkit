@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/cache/contenthash"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/frontend"
@@ -60,7 +61,7 @@ type Reference interface {
 // Op is an implementation for running a vertex
 type Op interface {
 	CacheKey(context.Context) (digest.Digest, error)
-	ContentKeys(context.Context, [][]digest.Digest, []Reference) ([]digest.Digest, error)
+	ContentMask(context.Context) (digest.Digest, [][]string, error)
 	Run(ctx context.Context, inputs []Reference) (outputs []Reference, err error)
 }
 
@@ -453,26 +454,31 @@ func (vs *vertexSolver) run(ctx context.Context, signal func()) (retErr error) {
 		lastInputKeys[i] = vs.inputs[i].cacheKeys[len(vs.inputs[i].cacheKeys)-1]
 	}
 
-	// TODO: avoid doing this twice on cancellation+resume
-	contentKeys, err := vs.op.ContentKeys(ctx, [][]digest.Digest{lastInputKeys}, inputRefs)
+	dgst, inp, err := vs.op.ContentMask(ctx)
 	if err != nil {
 		return err
 	}
 
-	var extraKeys []digest.Digest
-	for _, k := range contentKeys {
-		cks, err := vs.cache.GetContentMapping(k)
+	var contentKey digest.Digest
+	if dgst != "" {
+		contentKey, err = calculateContentHash(ctx, inputRefs, dgst, lastInputKeys, inp)
+		if err != nil {
+			return err
+		}
+
+		var extraKeys []digest.Digest
+		cks, err := vs.cache.GetContentMapping(contentKey)
 		if err != nil {
 			return err
 		}
 		extraKeys = append(extraKeys, cks...)
-	}
-	if len(extraKeys) > 0 {
-		vs.mu.Lock()
-		vs.results = append(vs.results, extraKeys...)
-		signal()
-		waitRun = vs.signal.Reset()
-		vs.mu.Unlock()
+		if len(extraKeys) > 0 {
+			vs.mu.Lock()
+			vs.results = append(vs.results, extraKeys...)
+			signal()
+			waitRun = vs.signal.Reset()
+			vs.mu.Unlock()
+		}
 	}
 
 	select {
@@ -514,15 +520,71 @@ func (vs *vertexSolver) run(ctx context.Context, signal func()) (retErr error) {
 				logrus.Errorf("failed to save cache for %s: %v", cacheKey, err)
 			}
 		}
-		if len(contentKeys) > 0 {
-			for _, ck := range contentKeys {
-				if err := vs.cache.SetContentMapping(ck, cacheKey); err != nil {
-					logrus.Errorf("failed to save content mapping: %v", err)
-				}
+		if contentKey != "" {
+			if err := vs.cache.SetContentMapping(contentKey, cacheKey); err != nil {
+				logrus.Errorf("failed to save content mapping: %v", err)
 			}
 		}
 	}
 	return nil
+}
+
+func getInputContentHash(ctx context.Context, ref cache.ImmutableRef, selectors []string) (digest.Digest, error) {
+	out := make([]digest.Digest, 0, len(selectors))
+	for _, s := range selectors {
+		dgst, err := contenthash.Checksum(ctx, ref, s)
+		if err != nil {
+			return "", err
+		}
+		out = append(out, dgst)
+	}
+	if len(out) == 1 {
+		return out[0], nil
+	}
+	dt, err := json.Marshal(out)
+	if err != nil {
+		return "", err
+	}
+	return digest.FromBytes(dt), nil
+}
+
+func calculateContentHash(ctx context.Context, refs []Reference, mainDigest digest.Digest, inputs []digest.Digest, contentMap [][]string) (digest.Digest, error) {
+	dgsts := make([]digest.Digest, len(contentMap))
+	eg, ctx := errgroup.WithContext(ctx)
+	for i, sel := range contentMap {
+		if sel == nil {
+			dgsts[i] = inputs[i]
+			continue
+		}
+		func(i int) {
+			eg.Go(func() error {
+				ref, ok := toImmutableRef(refs[i])
+				if !ok {
+					return errors.Errorf("invalid reference for exporting: %T", ref)
+				}
+				dgst, err := getInputContentHash(ctx, ref, contentMap[i])
+				if err != nil {
+					return err
+				}
+				dgsts[i] = dgst
+				return nil
+			})
+		}(i)
+	}
+	if err := eg.Wait(); err != nil {
+		return "", err
+	}
+	dt, err := json.Marshal(struct {
+		Main   digest.Digest
+		Inputs []digest.Digest
+	}{
+		Main:   mainDigest,
+		Inputs: dgsts,
+	})
+	if err != nil {
+		return "", err
+	}
+	return digest.FromBytes(dt), nil
 }
 
 type VertexEvaluator interface {
