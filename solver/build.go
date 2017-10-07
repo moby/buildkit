@@ -118,6 +118,6 @@ func (b *buildOp) Run(ctx context.Context, inputs []Reference) (outputs []Refere
 	return []Reference{newref}, err
 }
 
-func (b *buildOp) ContentKeys(context.Context, [][]digest.Digest, []Reference) ([]digest.Digest, error) {
-	return nil, nil
+func (b *buildOp) ContentMask(context.Context) (digest.Digest, [][]string, error) {
+	return "", nil, nil
 }

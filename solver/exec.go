@@ -8,29 +8,29 @@ import (
 	"strings"
 
 	"github.com/moby/buildkit/cache"
-	"github.com/moby/buildkit/cache/contenthash"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/progress/logs"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
-	"golang.org/x/sync/errgroup"
 )
 
 const execCacheType = "buildkit.exec.v0"
 
 type execOp struct {
-	op *pb.ExecOp
-	cm cache.Manager
-	w  worker.Worker
+	op        *pb.ExecOp
+	cm        cache.Manager
+	w         worker.Worker
+	numInputs int
 }
 
-func newExecOp(_ Vertex, op *pb.Op_Exec, cm cache.Manager, w worker.Worker) (Op, error) {
+func newExecOp(v Vertex, op *pb.Op_Exec, cm cache.Manager, w worker.Worker) (Op, error) {
 	return &execOp{
-		op: op.Exec,
-		cm: cm,
-		w:  w,
+		op:        op.Exec,
+		cm:        cm,
+		w:         w,
+		numInputs: len(v.Inputs()),
 	}, nil
 }
 
@@ -130,92 +130,58 @@ func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, erro
 	return refs, nil
 }
 
-func (e *execOp) ContentKeys(ctx context.Context, inputs [][]digest.Digest, refs []Reference) ([]digest.Digest, error) {
-	if len(refs) == 0 {
-		return nil, nil
-	}
+func (e *execOp) ContentMask(ctx context.Context) (digest.Digest, [][]string, error) {
 	// contentKey for exec uses content based checksum for mounts and definition
 	// based checksum for root
 
-	skipped := make([]int, 0)
+	skipped := make(map[int]struct{}, 0)
 
 	type src struct {
-		index    pb.InputIndex
+		index    int
 		selector string
 	}
 
-	skip := true
-	srcsMap := make(map[src]struct{}, len(refs))
-	for _, m := range e.op.Mounts {
+	srcsMap := make(map[src]struct{})
+	mountsCopy := make([]*pb.Mount, len(e.op.Mounts))
+	for i, m := range e.op.Mounts {
+		copy := *m
+		mountsCopy[i] = &copy
 		if m.Input != pb.Empty {
 			if m.Dest != pb.RootMount && m.Readonly { // could also include rw if they don't have a selector, but not sure if helps performance
-				srcsMap[src{m.Input, path.Join("/", m.Selector)}] = struct{}{}
-				skip = false
+				srcsMap[src{int(m.Input), path.Join("/", m.Selector)}] = struct{}{}
+				mountsCopy[i].Selector = ""
 			} else {
-				skipped = append(skipped, int(m.Input))
+				skipped[int(m.Input)] = struct{}{}
 			}
 		}
 	}
-	if skip {
-		return nil, nil
+	if len(srcsMap) == 0 {
+		return "", nil, nil
 	}
 
-	srcs := make([]src, 0, len(srcsMap))
-	for s := range srcsMap {
-		srcs = append(srcs, s)
+	contentInputs := make([][]string, e.numInputs)
+	for in := range srcsMap {
+		contentInputs[in.index] = append(contentInputs[in.index], in.selector)
+	}
+	// TODO: remove nested directories
+
+	for k := range contentInputs {
+		sort.Strings(contentInputs[k])
 	}
 
-	sort.Slice(srcs, func(i, j int) bool {
-		if srcs[i].index == srcs[j].index {
-			return srcs[i].selector < srcs[j].selector
-		}
-		return srcs[i].index < srcs[j].index
+	ecopy := *e.op
+	ecopy.Mounts = mountsCopy
+
+	dt, err := json.Marshal(struct {
+		Type string
+		Exec *pb.ExecOp
+	}{
+		Type: execCacheType,
+		Exec: &ecopy,
 	})
-
-	dgsts := make([]digest.Digest, len(srcs))
-	eg, ctx := errgroup.WithContext(ctx)
-	for i, s := range srcs {
-		func(i int, s src, ref Reference) {
-			eg.Go(func() error {
-				ref, ok := toImmutableRef(ref)
-				if !ok {
-					return errors.Errorf("invalid reference")
-				}
-				dgst, err := contenthash.Checksum(ctx, ref, s.selector)
-				if err != nil {
-					return err
-				}
-				dgsts[i] = dgst
-				return nil
-			})
-		}(i, s, refs[int(s.index)])
-	}
-	if err := eg.Wait(); err != nil {
-		return nil, err
+	if err != nil {
+		return "", nil, err
 	}
 
-	var out []digest.Digest
-	inputKeys := make([]digest.Digest, len(skipped))
-	for _, cacheKeys := range inputs {
-		for i := range inputKeys {
-			inputKeys[i] = cacheKeys[skipped[i]]
-		}
-		dt, err := json.Marshal(struct {
-			Type    string
-			Sources []digest.Digest
-			Inputs  []digest.Digest
-			Exec    *pb.ExecOp
-		}{
-			Type:    execCacheType,
-			Sources: dgsts,
-			Inputs:  inputKeys,
-			Exec:    e.op,
-		})
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, digest.FromBytes(dt))
-	}
-
-	return out, nil
+	return digest.FromBytes(dt), contentInputs, nil
 }
