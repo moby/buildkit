@@ -1,10 +1,9 @@
-// +build darwin freebsd linux
+// +build darwin freebsd linux solaris
 
 package console
 
 import (
 	"os"
-	"unsafe"
 
 	"golang.org/x/sys/unix"
 )
@@ -50,11 +49,7 @@ func (m *master) Close() error {
 }
 
 func (m *master) Resize(ws WinSize) error {
-	return ioctl(
-		m.f.Fd(),
-		uintptr(unix.TIOCSWINSZ),
-		uintptr(unsafe.Pointer(&ws)),
-	)
+	return tcswinsz(m.f.Fd(), ws)
 }
 
 func (m *master) ResizeFrom(c Console) error {
@@ -103,19 +98,15 @@ func (m *master) DisableEcho() error {
 }
 
 func (m *master) Size() (WinSize, error) {
-	var ws WinSize
-	if err := ioctl(
-		m.f.Fd(),
-		uintptr(unix.TIOCGWINSZ),
-		uintptr(unsafe.Pointer(&ws)),
-	); err != nil {
-		return ws, err
-	}
-	return ws, nil
+	return tcgwinsz(m.f.Fd())
 }
 
 func (m *master) Fd() uintptr {
 	return m.f.Fd()
+}
+
+func (m *master) Name() string {
+	return m.f.Name()
 }
 
 // checkConsole checks if the provided file is a console
@@ -131,4 +122,13 @@ func newMaster(f *os.File) Console {
 	return &master{
 		f: f,
 	}
+}
+
+// SaneTerminal sets the necessary tty_ioctl(4)s to ensure that a pty pair
+// created by us acts normally. In particular, a not-very-well-known default of
+// Linux unix98 ptys is that they have +onlcr by default. While this isn't a
+// problem for terminal emulators, because we relay data from the terminal we
+// also relay that funky line discipline.
+func SaneTerminal(f *os.File) error {
+	return saneTerminal(f)
 }
