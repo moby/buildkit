@@ -18,8 +18,8 @@ type buildOpt struct {
 func main() {
 	var opt buildOpt
 	flag.StringVar(&opt.target, "target", "containerd", "target (standalone, containerd)")
-	flag.StringVar(&opt.containerd, "containerd", "master", "containerd version")
-	flag.StringVar(&opt.runc, "runc", "v1.0.0-rc3", "runc version")
+	flag.StringVar(&opt.containerd, "containerd", "v1.0.0-beta.1", "containerd version")
+	flag.StringVar(&opt.runc, "runc", "v1.0.0-rc4", "runc version")
 	flag.StringVar(&opt.buildkit, "buildkit", "master", "buildkit version")
 	flag.Parse()
 
