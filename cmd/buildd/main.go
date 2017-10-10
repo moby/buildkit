@@ -2,10 +2,13 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/containerd/containerd/sys"
+	"github.com/docker/go-connections/sockets"
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/moby/buildkit/util/profiler"
@@ -32,13 +35,13 @@ func main() {
 			Value: appdefaults.Root,
 		},
 		cli.StringFlag{
-			Name:  "socket",
-			Usage: "listening socket",
-			Value: appdefaults.Socket,
+			Name:  "addr",
+			Usage: "listening address (socket or tcp)",
+			Value: appdefaults.Address,
 		},
 		cli.StringFlag{
 			Name:  "debugaddr",
-			Usage: "Debugging address (eg. 0.0.0.0:6060)",
+			Usage: "debugging address (eg. 0.0.0.0:6060)",
 			Value: "",
 		},
 	}
@@ -74,7 +77,7 @@ func main() {
 		controller.Register(server)
 
 		errCh := make(chan error, 1)
-		if err := serveGRPC(server, c.GlobalString("socket"), errCh); err != nil {
+		if err := serveGRPC(server, c.GlobalString("addr"), errCh); err != nil {
 			return err
 		}
 
@@ -106,20 +109,34 @@ func main() {
 	}
 }
 
-func serveGRPC(server *grpc.Server, path string, errCh chan error) error {
-	if path == "" {
-		return errors.New("--socket path cannot be empty")
+func serveGRPC(server *grpc.Server, addr string, errCh chan error) error {
+	if addr == "" {
+		return errors.New("--addr cannot be empty")
 	}
-	l, err := sys.GetLocalListener(path, os.Getuid(), os.Getgid())
+	l, err := getListener(addr)
 	if err != nil {
 		return err
 	}
 	go func() {
 		defer l.Close()
-		logrus.Infof("running server on %s", path)
+		logrus.Infof("running server on %s", addr)
 		errCh <- server.Serve(l)
 	}()
 	return nil
+}
+
+func getListener(addr string) (net.Listener, error) {
+	addrSlice := strings.SplitN(addr, "://", 2)
+	proto := addrSlice[0]
+	listenAddr := addrSlice[1]
+	switch proto {
+	case "unix", "npipe":
+		return sys.GetLocalListener(listenAddr, os.Getuid(), os.Getgid())
+	case "tcp":
+		return sockets.NewTCPSocket(listenAddr, nil)
+	default:
+		return nil, errors.Errorf("addr %s not supported", addr)
+	}
 }
 
 func unaryInterceptor(globalCtx context.Context) grpc.ServerOption {

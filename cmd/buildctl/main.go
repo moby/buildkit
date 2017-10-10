@@ -22,9 +22,9 @@ func main() {
 			Usage: "enable debug output in logs",
 		},
 		cli.StringFlag{
-			Name:  "socket",
-			Usage: "listening socket",
-			Value: appdefaults.Socket,
+			Name:  "addr",
+			Usage: "listening address",
+			Value: appdefaults.Address,
 		},
 	}
 
@@ -50,5 +50,5 @@ func main() {
 }
 
 func resolveClient(c *cli.Context) (*client.Client, error) {
-	return client.New(c.GlobalString("socket"), client.WithBlock())
+	return client.New(c.GlobalString("addr"), client.WithBlock())
 }

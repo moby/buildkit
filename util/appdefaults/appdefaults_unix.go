@@ -3,6 +3,6 @@
 package appdefaults
 
 const (
-	Socket = "/run/buildkit/buildd.sock"
-	Root   = ".buildstate"
+	Address = "unix:///run/buildkit/buildd.sock"
+	Root    = ".buildstate"
 )
