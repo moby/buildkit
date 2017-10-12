@@ -155,6 +155,21 @@ func (s *Solver) Solve(ctx context.Context, id string, req SolveRequest) error {
 			return exp.Export(ctx, immutable, exporterOpt)
 		})
 	}
+
+	cache, err := j.cacheExporter(ref)
+	if err != nil {
+		return err
+	}
+
+	records, err := cache.Export(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, r := range records {
+		logrus.Debugf("cache-record: %#v", r)
+	}
+
 	return err
 }
 
@@ -188,13 +203,14 @@ func (s *Solver) subBuild(ctx context.Context, dgst digest.Digest, req SolveRequ
 	st = jl.actives[inp.Vertex.Digest()]
 	jl.mu.Unlock()
 
-	return getRef(st.solver, ctx, inp.Vertex.(*vertex), inp.Index, s.cache) // TODO: combine to pass single input
+	return getRef(st.solver, ctx, inp.Vertex.(*vertex), inp.Index, s.cache) // TODO: combine to pass single input                                        // TODO: export cache for subbuilds
 }
 
 type VertexSolver interface {
 	CacheKey(ctx context.Context, index Index) (digest.Digest, error)
 	OutputEvaluator(Index) (VertexEvaluator, error)
 	Release() error
+	Cache(Index) CacheExporter
 }
 
 type vertexInput struct {
@@ -218,6 +234,7 @@ type vertexSolver struct {
 	mu             sync.Mutex
 	results        []digest.Digest
 	markCachedOnce sync.Once
+	contentKey     digest.Digest
 
 	signal *signal // used to notify that there are callers who need more data
 }
@@ -263,6 +280,73 @@ func markCached(ctx context.Context, cv client.Vertex) {
 		cv.Cached = true
 	}
 	pw.Write(cv.Digest.String(), cv)
+}
+
+type CacheExporter interface {
+	Export(context.Context) ([]CacheRecord, error)
+}
+
+type CacheRecord struct {
+	CacheKey   digest.Digest
+	Reference  cache.ImmutableRef
+	ContentKey digest.Digest
+}
+
+func (vs *vertexSolver) Cache(index Index) CacheExporter {
+	return &cacheExporter{vertexSolver: vs, index: index}
+}
+
+type cacheExporter struct {
+	*vertexSolver
+	index Index
+}
+
+func (ce *cacheExporter) Export(ctx context.Context) ([]CacheRecord, error) {
+	return ce.vertexSolver.Export(ctx, ce.index)
+}
+
+func (vs *vertexSolver) Export(ctx context.Context, index Index) ([]CacheRecord, error) {
+	mp := map[digest.Digest]CacheRecord{}
+	if err := vs.appendInputCache(ctx, mp); err != nil {
+		return nil, err
+	}
+	out := make([]CacheRecord, 0, len(mp))
+	for _, cr := range mp {
+		out = append(out, cr)
+	}
+	return out, nil
+}
+
+func (vs *vertexSolver) appendInputCache(ctx context.Context, mp map[digest.Digest]CacheRecord) error {
+	for i, inp := range vs.inputs {
+		mainDgst, err := inp.solver.(*vertexSolver).mainCacheKey()
+		if err != nil {
+			return err
+		}
+		dgst := cacheKeyForIndex(mainDgst, vs.v.inputs[i].index)
+		if cr, ok := mp[dgst]; !ok || (cr.Reference == nil && inp.ref != nil) {
+			if err := inp.solver.(*vertexSolver).appendInputCache(ctx, mp); err != nil {
+				return err
+			}
+			if inp.ref != nil && len(inp.solver.(*vertexSolver).inputs) > 0 { // Ignore pushing the refs for sources
+				ref, ok := toImmutableRef(inp.ref)
+				if !ok {
+					return errors.Errorf("invalid reference")
+				}
+				mp[dgst] = CacheRecord{CacheKey: dgst, Reference: ref}
+			} else {
+				mp[dgst] = CacheRecord{CacheKey: dgst}
+			}
+		}
+	}
+	if ck := vs.contentKey; ck != "" {
+		mainDgst, err := vs.mainCacheKey()
+		if err != nil {
+			return err
+		}
+		mp[ck] = CacheRecord{CacheKey: mainDgst, ContentKey: ck}
+	}
+	return nil
 }
 
 func (vs *vertexSolver) CacheKey(ctx context.Context, index Index) (digest.Digest, error) {
@@ -490,6 +574,7 @@ func (vs *vertexSolver) run(ctx context.Context, signal func()) (retErr error) {
 		if err != nil {
 			return err
 		}
+		vs.contentKey = contentKey
 
 		var extraKeys []digest.Digest
 		cks, err := vs.cache.GetContentMapping(contentKey)

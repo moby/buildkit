@@ -52,7 +52,7 @@ func (jl *jobList) new(ctx context.Context, id string, pr progress.Reader, cache
 	pw, _, _ := progress.FromContext(ctx) // TODO: remove this
 	sid := session.FromContext(ctx)
 
-	j := &job{l: jl, pr: progress.NewMultiReader(pr), pw: pw, session: sid, cache: cache}
+	j := &job{l: jl, pr: progress.NewMultiReader(pr), pw: pw, session: sid, cache: cache, cached: map[string]*cacheRecord{}}
 	jl.refs[id] = j
 	jl.updateCond.Broadcast()
 	go func() {
@@ -97,6 +97,12 @@ type job struct {
 	pw      progress.Writer
 	session string
 	cache   InstructionCache
+	cached  map[string]*cacheRecord
+}
+
+type cacheRecord struct {
+	VertexSolver
+	index Index
 }
 
 func (j *job) load(def *pb.Definition, resolveOp ResolveOpFunc) (*Input, error) {
@@ -183,7 +189,31 @@ func (j *job) getRef(ctx context.Context, v *vertex, index Index) (Reference, er
 	if err != nil {
 		return nil, err
 	}
-	return getRef(s, ctx, v, index, j.cache)
+	ref, err := getRef(s, ctx, v, index, j.cache)
+	if err != nil {
+		return nil, err
+	}
+	j.keepCacheRef(s, index, ref)
+	return ref, nil
+}
+
+func (j *job) keepCacheRef(s VertexSolver, index Index, ref Reference) {
+	immutable, ok := toImmutableRef(ref)
+	if ok {
+		j.cached[immutable.ID()] = &cacheRecord{s, index}
+	}
+}
+
+func (j *job) cacheExporter(ref Reference) (CacheExporter, error) {
+	immutable, ok := toImmutableRef(ref)
+	if !ok {
+		return nil, errors.Errorf("invalid reference")
+	}
+	cr, ok := j.cached[immutable.ID()]
+	if !ok {
+		return nil, errors.Errorf("invalid cache exporter")
+	}
+	return cr.Cache(cr.index), nil
 }
 
 func getRef(s VertexSolver, ctx context.Context, v *vertex, index Index, cache InstructionCache) (Reference, error) {
