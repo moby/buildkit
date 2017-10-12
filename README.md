@@ -106,6 +106,52 @@ buildctl build ... --exporter=local --exporter-opt output=path/to/output-dir
 buildctl du -v
 ```
 
+#### Running containerized buildkit
+
+buildkit daemon supports communicating with clients over TCP. This is supports some use cases like:
+
+* Docker for Mac or Windows users which cannot yet run natively buildkit daemon on their platform,
+* Centralized daemon for remote build scripts execution in a team settings
+* ...
+
+To run daemon in a container:
+
+```
+$ docker run --rm --privileged -p 12345:12345 --tmpfs /tmp  buildkit:buildd-standalone buildd-standalone --addr tcp://0.0.0.0:12345 --root /tmp/buildkit
+```
+
+Notes:
+
+* `--privileged` is needed to grant [enough rights](https://docs.docker.com/engine/reference/run/#runtime-privilege-and-linux-capabilities) to buildkit
+* You need to make sure the --root directory exists on a filesystem that is supported by overlay filesystem. e.g. tmpfs, ext4, xfs.
+
+Build a script:
+
+```
+$ go build examples/buildkit0
+```
+
+Run build script:
+
+On MacOS:
+
+```
+$ ./buildkit0 | ./bin/buildctl-darwin --addr tcp://localhost:12345 build
+```
+
+On Windows:
+
+```
+$ ./buildkit0 | ./bin/buildctl.exe --addr tcp://localhost:12345 build
+```
+
+On Linux:
+
+```
+$ ./buildkit0 | ./bin/buildctl --addr tcp://localhost:12345 build
+```
+
+
 #### Supported runc version
 
 During development buildkit is tested with the version of runc that is being used by the containerd repository. Please refer to [runc.md](https://github.com/containerd/containerd/blob/d1e11f17ec7b325f89608dd46c128300b8727d50/RUNC.md) for more information.
