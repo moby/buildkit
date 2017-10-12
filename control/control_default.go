@@ -108,11 +108,10 @@ func defaultControllerOpts(root string, pd pullDeps) (*Opt, error) {
 	exporters := map[string]exporter.Exporter{}
 
 	imageExporter, err := imageexporter.New(imageexporter.Opt{
-		Snapshotter:   snapshotter,
-		ContentStore:  pd.ContentStore,
-		Differ:        pd.Differ,
-		CacheAccessor: cm,
-		Images:        pd.Images,
+		Snapshotter:  snapshotter,
+		ContentStore: pd.ContentStore,
+		Differ:       pd.Differ,
+		Images:       pd.Images,
 	})
 	if err != nil {
 		return nil, err
