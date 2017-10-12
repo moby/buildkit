@@ -4,6 +4,7 @@ import (
 	"github.com/containerd/containerd/snapshot"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/cache/cacheimport"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/frontend"
@@ -29,6 +30,7 @@ type Opt struct {
 	SessionManager   *session.Manager
 	Frontends        map[string]frontend.Frontend
 	ImageSource      source.Source
+	CacheExporter    *cacheimport.CacheExporter
 }
 
 type Controller struct { // TODO: ControlService
@@ -46,6 +48,7 @@ func NewController(opt Opt) (*Controller, error) {
 			InstructionCache: opt.InstructionCache,
 			ImageSource:      opt.ImageSource,
 			Frontends:        opt.Frontends,
+			CacheExporter:    opt.CacheExporter,
 		}),
 	}
 	return c, nil

@@ -10,6 +10,7 @@ import (
 	"github.com/containerd/containerd/rootfs"
 	ctdsnapshot "github.com/containerd/containerd/snapshot"
 	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/cache/cacheimport"
 	"github.com/moby/buildkit/cache/instructioncache"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
@@ -130,6 +131,12 @@ func defaultControllerOpts(root string, pd pullDeps) (*Opt, error) {
 	frontends["dockerfile.v0"] = dockerfile.NewDockerfileFrontend()
 	frontends["gateway.v0"] = gateway.NewGatewayFrontend()
 
+	ce := cacheimport.NewCacheExporter(cacheimport.Opt{
+		Snapshotter:  snapshotter,
+		ContentStore: pd.ContentStore,
+		Differ:       pd.Differ,
+	})
+
 	return &Opt{
 		Snapshotter:      snapshotter,
 		CacheManager:     cm,
@@ -139,5 +146,6 @@ func defaultControllerOpts(root string, pd pullDeps) (*Opt, error) {
 		SessionManager:   sessm,
 		Frontends:        frontends,
 		ImageSource:      is,
+		CacheExporter:    ce,
 	}, nil
 }

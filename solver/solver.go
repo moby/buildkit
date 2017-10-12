@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/cache/cacheimport"
 	"github.com/moby/buildkit/cache/contenthash"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/exporter"
@@ -31,6 +32,7 @@ type LLBOpt struct {
 	InstructionCache InstructionCache
 	ImageSource      source.Source
 	Frontends        map[string]frontend.Frontend // used by nested invocations
+	CacheExporter    *cacheimport.CacheExporter
 }
 
 func NewLLBSolver(opt LLBOpt) *Solver {
@@ -46,7 +48,7 @@ func NewLLBSolver(opt LLBOpt) *Solver {
 		default:
 			return nil, nil
 		}
-	}, opt.InstructionCache, opt.ImageSource, opt.Worker, opt.CacheManager, opt.Frontends)
+	}, opt.InstructionCache, opt.ImageSource, opt.Worker, opt.CacheManager, opt.Frontends, opt.CacheExporter)
 	return s
 }
 
@@ -86,10 +88,11 @@ type Solver struct {
 	worker      worker.Worker
 	cm          cache.Manager // TODO: remove with immutableRef.New()
 	frontends   map[string]frontend.Frontend
+	ce          *cacheimport.CacheExporter
 }
 
-func New(resolve ResolveOpFunc, cache InstructionCache, imageSource source.Source, worker worker.Worker, cm cache.Manager, f map[string]frontend.Frontend) *Solver {
-	return &Solver{resolve: resolve, jobs: newJobList(), cache: cache, imageSource: imageSource, worker: worker, cm: cm, frontends: f}
+func New(resolve ResolveOpFunc, cache InstructionCache, imageSource source.Source, worker worker.Worker, cm cache.Manager, f map[string]frontend.Frontend, ce *cacheimport.CacheExporter) *Solver {
+	return &Solver{resolve: resolve, jobs: newJobList(), cache: cache, imageSource: imageSource, worker: worker, cm: cm, frontends: f, ce: ce}
 }
 
 type SolveRequest struct {
@@ -151,23 +154,27 @@ func (s *Solver) Solve(ctx context.Context, id string, req SolveRequest) error {
 	}
 
 	if exp := req.Exporter; exp != nil {
-		return inVertexContext(ctx, exp.Name(), func(ctx context.Context) error {
+		if err := inVertexContext(ctx, exp.Name(), func(ctx context.Context) error {
 			return exp.Export(ctx, immutable, exporterOpt)
-		})
+		}); err != nil {
+			return err
+		}
 	}
 
-	cache, err := j.cacheExporter(ref)
-	if err != nil {
+	if err := inVertexContext(ctx, "exporting build cache", func(ctx context.Context) error {
+		cache, err := j.cacheExporter(ref)
+		if err != nil {
+			return err
+		}
+
+		records, err := cache.Export(ctx)
+		if err != nil {
+			return err
+		}
+
+		return s.ce.Export(ctx, records)
+	}); err != nil {
 		return err
-	}
-
-	records, err := cache.Export(ctx)
-	if err != nil {
-		return err
-	}
-
-	for _, r := range records {
-		logrus.Debugf("cache-record: %#v", r)
 	}
 
 	return err
@@ -283,13 +290,7 @@ func markCached(ctx context.Context, cv client.Vertex) {
 }
 
 type CacheExporter interface {
-	Export(context.Context) ([]CacheRecord, error)
-}
-
-type CacheRecord struct {
-	CacheKey   digest.Digest
-	Reference  cache.ImmutableRef
-	ContentKey digest.Digest
+	Export(context.Context) ([]cacheimport.CacheRecord, error)
 }
 
 func (vs *vertexSolver) Cache(index Index) CacheExporter {
@@ -301,23 +302,23 @@ type cacheExporter struct {
 	index Index
 }
 
-func (ce *cacheExporter) Export(ctx context.Context) ([]CacheRecord, error) {
+func (ce *cacheExporter) Export(ctx context.Context) ([]cacheimport.CacheRecord, error) {
 	return ce.vertexSolver.Export(ctx, ce.index)
 }
 
-func (vs *vertexSolver) Export(ctx context.Context, index Index) ([]CacheRecord, error) {
-	mp := map[digest.Digest]CacheRecord{}
+func (vs *vertexSolver) Export(ctx context.Context, index Index) ([]cacheimport.CacheRecord, error) {
+	mp := map[digest.Digest]cacheimport.CacheRecord{}
 	if err := vs.appendInputCache(ctx, mp); err != nil {
 		return nil, err
 	}
-	out := make([]CacheRecord, 0, len(mp))
+	out := make([]cacheimport.CacheRecord, 0, len(mp))
 	for _, cr := range mp {
 		out = append(out, cr)
 	}
 	return out, nil
 }
 
-func (vs *vertexSolver) appendInputCache(ctx context.Context, mp map[digest.Digest]CacheRecord) error {
+func (vs *vertexSolver) appendInputCache(ctx context.Context, mp map[digest.Digest]cacheimport.CacheRecord) error {
 	for i, inp := range vs.inputs {
 		mainDgst, err := inp.solver.(*vertexSolver).mainCacheKey()
 		if err != nil {
@@ -333,9 +334,9 @@ func (vs *vertexSolver) appendInputCache(ctx context.Context, mp map[digest.Dige
 				if !ok {
 					return errors.Errorf("invalid reference")
 				}
-				mp[dgst] = CacheRecord{CacheKey: dgst, Reference: ref}
+				mp[dgst] = cacheimport.CacheRecord{CacheKey: dgst, Reference: ref}
 			} else {
-				mp[dgst] = CacheRecord{CacheKey: dgst}
+				mp[dgst] = cacheimport.CacheRecord{CacheKey: dgst}
 			}
 		}
 	}
@@ -344,7 +345,7 @@ func (vs *vertexSolver) appendInputCache(ctx context.Context, mp map[digest.Dige
 		if err != nil {
 			return err
 		}
-		mp[ck] = CacheRecord{CacheKey: mainDgst, ContentKey: ck}
+		mp[ck] = cacheimport.CacheRecord{CacheKey: mainDgst, ContentKey: ck}
 	}
 	return nil
 }
