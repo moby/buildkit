@@ -112,7 +112,7 @@ func (ci *CacheImporter) Import(ctx context.Context, ref string) (InstructionCac
 		if ci.CacheKey != "" {
 			byCacheKey[ci.CacheKey] = ci
 			if ci.ContentKey != "" {
-				byContentKey[ci.ContentKey] = append(byContentKey[ci.ContentKey], ci.ContentKey)
+				byContentKey[ci.ContentKey] = append(byContentKey[ci.ContentKey], ci.CacheKey)
 			}
 		}
 	}

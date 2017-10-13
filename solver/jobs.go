@@ -103,6 +103,7 @@ type job struct {
 type cacheRecord struct {
 	VertexSolver
 	index Index
+	ref   Reference
 }
 
 func (j *job) load(def *pb.Definition, resolveOp ResolveOpFunc) (*Input, error) {
@@ -200,7 +201,7 @@ func (j *job) getRef(ctx context.Context, v *vertex, index Index) (Reference, er
 func (j *job) keepCacheRef(s VertexSolver, index Index, ref Reference) {
 	immutable, ok := toImmutableRef(ref)
 	if ok {
-		j.cached[immutable.ID()] = &cacheRecord{s, index}
+		j.cached[immutable.ID()] = &cacheRecord{s, index, ref}
 	}
 }
 
@@ -213,7 +214,7 @@ func (j *job) cacheExporter(ref Reference) (CacheExporter, error) {
 	if !ok {
 		return nil, errors.Errorf("invalid cache exporter")
 	}
-	return cr.Cache(cr.index), nil
+	return cr.Cache(cr.index, cr.ref), nil
 }
 
 func getRef(s VertexSolver, ctx context.Context, v *vertex, index Index, cache InstructionCache) (Reference, error) {

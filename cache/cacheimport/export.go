@@ -21,7 +21,7 @@ import (
 	"golang.org/x/net/context"
 )
 
-const mediaTypeConfig = "application/vnd.buildkit.buildcache.v0"
+const mediaTypeConfig = "application/vnd.buildkit.cacheconfig.v0"
 
 type blobmapper interface {
 	GetBlob(ctx gocontext.Context, key string) (digest.Digest, digest.Digest, error)

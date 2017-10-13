@@ -81,54 +81,6 @@ type InstructionCache interface {
 	GetContentMapping(dgst digest.Digest) ([]digest.Digest, error)
 }
 
-func mergeRemoteCache(local, remote InstructionCache) InstructionCache {
-	return &mergedCache{local: local, remote: remote}
-}
-
-func (mc *mergedCache) Probe(ctx context.Context, key digest.Digest) (bool, error) {
-	v, err := mc.local.Probe(ctx, key)
-	if err != nil {
-		return false, err
-	}
-	if v {
-		return v, nil
-	}
-	return mc.remote.Probe(ctx, key)
-}
-
-func (mc *mergedCache) Lookup(ctx context.Context, key digest.Digest) (interface{}, error) {
-	v, err := mc.local.Probe(ctx, key)
-	if err != nil {
-		return false, err
-	}
-	if v {
-		return mc.local.Lookup(ctx, key)
-	}
-	return mc.remote.Lookup(ctx, key)
-}
-func (mc *mergedCache) Set(key digest.Digest, ref interface{}) error {
-	return mc.local.Set(key, ref)
-}
-func (mc *mergedCache) SetContentMapping(contentKey, key digest.Digest) error {
-	return mc.local.SetContentMapping(contentKey, key)
-}
-func (mc *mergedCache) GetContentMapping(dgst digest.Digest) ([]digest.Digest, error) {
-	localKeys, err := mc.local.GetContentMapping(dgst)
-	if err != nil {
-		return nil, err
-	}
-	remoteKeys, err := mc.remote.GetContentMapping(dgst)
-	if err != nil {
-		return nil, err
-	}
-	return append(localKeys, remoteKeys...), nil
-}
-
-type mergedCache struct {
-	local  InstructionCache
-	remote InstructionCache
-}
-
 type Solver struct {
 	resolve     ResolveOpFunc
 	jobs        *jobList
@@ -279,7 +231,7 @@ type VertexSolver interface {
 	CacheKey(ctx context.Context, index Index) (digest.Digest, error)
 	OutputEvaluator(Index) (VertexEvaluator, error)
 	Release() error
-	Cache(Index) CacheExporter
+	Cache(Index, Reference) CacheExporter
 }
 
 type vertexInput struct {
@@ -355,24 +307,35 @@ type CacheExporter interface {
 	Export(context.Context) ([]cacheimport.CacheRecord, error)
 }
 
-func (vs *vertexSolver) Cache(index Index) CacheExporter {
-	return &cacheExporter{vertexSolver: vs, index: index}
+func (vs *vertexSolver) Cache(index Index, ref Reference) CacheExporter {
+	return &cacheExporter{vertexSolver: vs, index: index, ref: ref}
 }
 
 type cacheExporter struct {
 	*vertexSolver
 	index Index
+	ref   Reference
 }
 
 func (ce *cacheExporter) Export(ctx context.Context) ([]cacheimport.CacheRecord, error) {
-	return ce.vertexSolver.Export(ctx, ce.index)
+	return ce.vertexSolver.Export(ctx, ce.index, ce.ref)
 }
 
-func (vs *vertexSolver) Export(ctx context.Context, index Index) ([]cacheimport.CacheRecord, error) {
+func (vs *vertexSolver) Export(ctx context.Context, index Index, ref Reference) ([]cacheimport.CacheRecord, error) {
 	mp := map[digest.Digest]cacheimport.CacheRecord{}
 	if err := vs.appendInputCache(ctx, mp); err != nil {
 		return nil, err
 	}
+	dgst, err := vs.mainCacheKey()
+	if err != nil {
+		return nil, err
+	}
+	immutable, ok := toImmutableRef(ref)
+	if !ok {
+		return nil, errors.Errorf("invalid reference")
+	}
+	dgst = cacheKeyForIndex(dgst, index)
+	mp[dgst] = cacheimport.CacheRecord{CacheKey: dgst, Reference: immutable}
 	out := make([]cacheimport.CacheRecord, 0, len(mp))
 	for _, cr := range mp {
 		out = append(out, cr)
@@ -850,4 +813,52 @@ func (s *llbBridge) Exec(ctx context.Context, meta worker.Meta, rootFS cache.Imm
 
 func cacheKeyForIndex(dgst digest.Digest, index Index) digest.Digest {
 	return digest.FromBytes([]byte(fmt.Sprintf("%s.%d", dgst, index)))
+}
+
+func mergeRemoteCache(local, remote InstructionCache) InstructionCache {
+	return &mergedCache{local: local, remote: remote}
+}
+
+type mergedCache struct {
+	local  InstructionCache
+	remote InstructionCache
+}
+
+func (mc *mergedCache) Probe(ctx context.Context, key digest.Digest) (bool, error) {
+	v, err := mc.local.Probe(ctx, key)
+	if err != nil {
+		return false, err
+	}
+	if v {
+		return v, nil
+	}
+	return mc.remote.Probe(ctx, key)
+}
+
+func (mc *mergedCache) Lookup(ctx context.Context, key digest.Digest) (interface{}, error) {
+	v, err := mc.local.Probe(ctx, key)
+	if err != nil {
+		return false, err
+	}
+	if v {
+		return mc.local.Lookup(ctx, key)
+	}
+	return mc.remote.Lookup(ctx, key)
+}
+func (mc *mergedCache) Set(key digest.Digest, ref interface{}) error {
+	return mc.local.Set(key, ref)
+}
+func (mc *mergedCache) SetContentMapping(contentKey, key digest.Digest) error {
+	return mc.local.SetContentMapping(contentKey, key)
+}
+func (mc *mergedCache) GetContentMapping(dgst digest.Digest) ([]digest.Digest, error) {
+	localKeys, err := mc.local.GetContentMapping(dgst)
+	if err != nil {
+		return nil, err
+	}
+	remoteKeys, err := mc.remote.GetContentMapping(dgst)
+	if err != nil {
+		return nil, err
+	}
+	return append(localKeys, remoteKeys...), nil
 }
