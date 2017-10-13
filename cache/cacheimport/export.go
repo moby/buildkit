@@ -24,8 +24,8 @@ import (
 const mediaTypeConfig = "application/vnd.buildkit.buildcache.v0"
 
 type blobmapper interface {
-	GetBlob(ctx gocontext.Context, key string) (digest.Digest, error)
-	SetBlob(ctx gocontext.Context, key string, blob digest.Digest) error
+	GetBlob(ctx gocontext.Context, key string) (digest.Digest, digest.Digest, error)
+	SetBlob(ctx gocontext.Context, key string, diffID, blob digest.Digest) error
 }
 
 type CacheRecord struct {

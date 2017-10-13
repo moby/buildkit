@@ -23,8 +23,8 @@ type DiffPair struct {
 }
 
 type blobmapper interface {
-	GetBlob(ctx gocontext.Context, key string) (digest.Digest, error)
-	SetBlob(ctx gocontext.Context, key string, blob digest.Digest) error
+	GetBlob(ctx gocontext.Context, key string) (digest.Digest, digest.Digest, error)
+	SetBlob(ctx gocontext.Context, key string, diffID, blob digest.Digest) error
 }
 
 func GetDiffPairs(ctx context.Context, snapshotter snapshot.Snapshotter, differ rootfs.MountDiffer, ref cache.ImmutableRef) ([]DiffPair, error) {
@@ -50,15 +50,11 @@ func GetDiffPairs(ctx context.Context, snapshotter snapshot.Snapshotter, differ 
 	}
 	eg.Go(func() error {
 		dp, err := g.Do(ctx, ref.ID(), func(ctx context.Context) (interface{}, error) {
-			blob, err := blobmap.GetBlob(ctx, ref.ID())
+			diffID, blob, err := blobmap.GetBlob(ctx, ref.ID())
 			if err != nil {
 				return nil, err
 			}
 			if blob != "" {
-				diffID, err := digest.Parse(ref.ID())
-				if err != nil {
-					diffID = blob
-				}
 				return DiffPair{DiffID: diffID, Blobsum: blob}, nil
 			}
 			// reference needs to be committed
@@ -79,7 +75,7 @@ func GetDiffPairs(ctx context.Context, snapshotter snapshot.Snapshotter, differ 
 			if err != nil {
 				return nil, err
 			}
-			if err := blobmap.SetBlob(ctx, ref.ID(), descr.Digest); err != nil {
+			if err := blobmap.SetBlob(ctx, ref.ID(), descr.Digest, descr.Digest); err != nil {
 				return nil, err
 			}
 			return DiffPair{DiffID: descr.Digest, Blobsum: descr.Digest}, nil

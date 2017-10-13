@@ -238,7 +238,7 @@ func (ii *importInfo) fillBlobMapping(ctx context.Context, layers []rootfs.Layer
 	for _, l := range layers {
 		chain = append(chain, l.Diff.Digest)
 		chainID := identity.ChainID(chain)
-		if err := ii.opt.Snapshotter.(blobmapper).SetBlob(ctx, string(chainID), l.Blob.Digest); err != nil {
+		if err := ii.opt.Snapshotter.(blobmapper).SetBlob(ctx, string(chainID), l.Diff.Digest, l.Blob.Digest); err != nil {
 			return err
 		}
 	}
