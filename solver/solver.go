@@ -81,6 +81,54 @@ type InstructionCache interface {
 	GetContentMapping(dgst digest.Digest) ([]digest.Digest, error)
 }
 
+func mergeRemoteCache(local, remote InstructionCache) InstructionCache {
+	return &mergedCache{local: local, remote: remote}
+}
+
+func (mc *mergedCache) Probe(ctx context.Context, key digest.Digest) (bool, error) {
+	v, err := mc.local.Probe(ctx, key)
+	if err != nil {
+		return false, err
+	}
+	if v {
+		return v, nil
+	}
+	return mc.remote.Probe(ctx, key)
+}
+
+func (mc *mergedCache) Lookup(ctx context.Context, key digest.Digest) (interface{}, error) {
+	v, err := mc.local.Probe(ctx, key)
+	if err != nil {
+		return false, err
+	}
+	if v {
+		return mc.local.Lookup(ctx, key)
+	}
+	return mc.remote.Lookup(ctx, key)
+}
+func (mc *mergedCache) Set(key digest.Digest, ref interface{}) error {
+	return mc.local.Set(key, ref)
+}
+func (mc *mergedCache) SetContentMapping(contentKey, key digest.Digest) error {
+	return mc.local.SetContentMapping(contentKey, key)
+}
+func (mc *mergedCache) GetContentMapping(dgst digest.Digest) ([]digest.Digest, error) {
+	localKeys, err := mc.local.GetContentMapping(dgst)
+	if err != nil {
+		return nil, err
+	}
+	remoteKeys, err := mc.remote.GetContentMapping(dgst)
+	if err != nil {
+		return nil, err
+	}
+	return append(localKeys, remoteKeys...), nil
+}
+
+type mergedCache struct {
+	local  InstructionCache
+	remote InstructionCache
+}
+
 type Solver struct {
 	resolve     ResolveOpFunc
 	jobs        *jobList
@@ -132,6 +180,14 @@ func (s *Solver) Solve(ctx context.Context, id string, req SolveRequest) error {
 
 	pr, ctx, closeProgressWriter := progress.NewContext(ctx)
 	defer closeProgressWriter()
+
+	if importRef := req.ImportCacheRef; importRef != "" {
+		cache, err := s.ci.Import(ctx, importRef)
+		if err != nil {
+			return err
+		}
+		s.cache = mergeRemoteCache(s.cache, cache)
+	}
 
 	// register a build job. vertex needs to be loaded to a job to run
 	ctx, j, err := s.jobs.new(ctx, id, pr, s.cache)

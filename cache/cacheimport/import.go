@@ -1,10 +1,12 @@
 package cacheimport
 
 import (
-	"context"
 	"encoding/json"
+	"net/http"
 
 	"github.com/containerd/containerd/content"
+	"github.com/containerd/containerd/remotes"
+	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/rootfs"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/blobs"
@@ -13,6 +15,8 @@ import (
 	"github.com/opencontainers/image-spec/identity"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"golang.org/x/net/context"
+	"golang.org/x/sync/errgroup"
 )
 
 type ImportOpt struct {
@@ -30,8 +34,35 @@ type CacheImporter struct {
 	opt ImportOpt
 }
 
-func (ci *CacheImporter) Import(ctx context.Context, dgst digest.Digest) (InstructionCache, error) {
-	dt, err := content.ReadBlob(ctx, ci.opt.ContentStore, dgst)
+func (ci *CacheImporter) pull(ctx context.Context, ref string) (*ocispec.Descriptor, remotes.Fetcher, error) {
+	resolver := docker.NewResolver(docker.ResolverOptions{
+		Client: http.DefaultClient,
+	})
+
+	ref, desc, err := resolver.Resolve(ctx, ref)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	fetcher, err := resolver.Fetcher(ctx, ref)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if _, err := remotes.FetchHandler(ci.opt.ContentStore, fetcher)(ctx, desc); err != nil {
+		return nil, nil, err
+	}
+
+	return &desc, fetcher, err
+}
+
+func (ci *CacheImporter) Import(ctx context.Context, ref string) (InstructionCache, error) {
+	desc, fetcher, err := ci.pull(ctx, ref)
+	if err != nil {
+		return nil, err
+	}
+
+	dt, err := content.ReadBlob(ctx, ci.opt.ContentStore, desc.Digest)
 	if err != nil {
 		return nil, err
 	}
@@ -41,28 +72,47 @@ func (ci *CacheImporter) Import(ctx context.Context, dgst digest.Digest) (Instru
 		return nil, err
 	}
 
-	allBlobs := map[digest.Digest]ocispec.Descriptor{}
-	byCacheKey := map[digest.Digest]ocispec.Descriptor{}
+	allDesc := map[digest.Digest]ocispec.Descriptor{}
+	allBlobs := map[digest.Digest]configItem{}
+	byCacheKey := map[digest.Digest]configItem{}
 	byContentKey := map[digest.Digest][]digest.Digest{}
 
+	var configDesc ocispec.Descriptor
+
 	for _, m := range mfst.Manifests {
-		if m.Digest != "" {
-			allBlobs[m.Digest] = m
+		if m.MediaType == mediaTypeConfig {
+			configDesc = m
+			continue
 		}
-		if m.Annotations != nil {
-			if cacheKey := m.Annotations["buildkit.cachekey"]; cacheKey != "" {
-				cacheKeyDigest, err := digest.Parse(cacheKey)
-				if err != nil {
-					return nil, err
-				}
-				byCacheKey[cacheKeyDigest] = m
-				if contentKey := m.Annotations["buildkit.contentkey"]; contentKey != "" {
-					contentKeyDigest, err := digest.Parse(contentKey)
-					if err != nil {
-						return nil, err
-					}
-					byContentKey[contentKeyDigest] = append(byContentKey[contentKeyDigest], cacheKeyDigest)
-				}
+		allDesc[m.Digest] = m
+	}
+
+	if configDesc.Digest == "" {
+		return nil, errors.Errorf("invalid build cache: %s", ref)
+	}
+
+	if _, err := remotes.FetchHandler(ci.opt.ContentStore, fetcher)(ctx, configDesc); err != nil {
+		return nil, err
+	}
+
+	dt, err = content.ReadBlob(ctx, ci.opt.ContentStore, configDesc.Digest)
+	if err != nil {
+		return nil, err
+	}
+
+	var cfg cacheConfig
+	if err := json.Unmarshal(dt, &cfg); err != nil {
+		return nil, err
+	}
+
+	for _, ci := range cfg.Items {
+		if ci.Blobsum != "" {
+			allBlobs[ci.Blobsum] = ci
+		}
+		if ci.CacheKey != "" {
+			byCacheKey[ci.CacheKey] = ci
+			if ci.ContentKey != "" {
+				byContentKey[ci.ContentKey] = append(byContentKey[ci.ContentKey], ci.ContentKey)
 			}
 		}
 	}
@@ -72,14 +122,18 @@ func (ci *CacheImporter) Import(ctx context.Context, dgst digest.Digest) (Instru
 		byCacheKey:    byCacheKey,
 		byContentKey:  byContentKey,
 		allBlobs:      allBlobs,
+		allDesc:       allDesc,
+		fetcher:       fetcher,
 	}, nil
 }
 
 type importInfo struct {
 	*CacheImporter
-	byCacheKey   map[digest.Digest]ocispec.Descriptor
+	fetcher      remotes.Fetcher
+	byCacheKey   map[digest.Digest]configItem
 	byContentKey map[digest.Digest][]digest.Digest
-	allBlobs     map[digest.Digest]ocispec.Descriptor
+	allDesc      map[digest.Digest]ocispec.Descriptor
+	allBlobs     map[digest.Digest]configItem
 }
 
 func (ii *importInfo) Probe(ctx context.Context, key digest.Digest) (bool, error) {
@@ -88,47 +142,29 @@ func (ii *importInfo) Probe(ctx context.Context, key digest.Digest) (bool, error
 }
 
 func (ii *importInfo) getChain(dgst digest.Digest) ([]blobs.DiffPair, error) {
-	desc, ok := ii.allBlobs[dgst]
+	cfg, ok := ii.allBlobs[dgst]
 	if !ok {
 		return nil, errors.Errorf("blob %s not found in cache", dgst)
 	}
-	var parentDigest digest.Digest
-	if desc.Annotations == nil {
-		return nil, errors.Errorf("missing annotations")
-	}
-	parent := desc.Annotations["buildkit.parent"]
-	if parent != "" {
-		dgst, err := digest.Parse(parent)
-		if err != nil {
-			return nil, err
-		}
-		parentDigest = dgst
-	}
+	parent := cfg.Parent
 
 	var out []blobs.DiffPair
-	if parentDigest != "" {
-		parentChain, err := ii.getChain(parentDigest)
+	if parent != "" {
+		parentChain, err := ii.getChain(parent)
 		if err != nil {
 			return nil, err
 		}
 		out = parentChain
 	}
-
-	diffIDStr := desc.Annotations["buildkit.diffid"]
-	diffID, err := digest.Parse(diffIDStr)
-	if err != nil {
-		return nil, err
-	}
-
-	return append(out, blobs.DiffPair{Blobsum: dgst, DiffID: diffID}), nil
+	return append(out, blobs.DiffPair{Blobsum: dgst, DiffID: cfg.DiffID}), nil
 }
 
 func (ii *importInfo) Lookup(ctx context.Context, key digest.Digest) (interface{}, error) {
 	desc, ok := ii.byCacheKey[key]
-	if !ok || desc.Digest == "" {
+	if !ok || desc.Blobsum == "" {
 		return nil, nil
 	}
-	ch, err := ii.getChain(desc.Digest)
+	ch, err := ii.getChain(desc.Blobsum)
 	if err != nil {
 		return nil, err
 	}
@@ -152,6 +188,25 @@ func (ii *importInfo) GetContentMapping(dgst digest.Digest) ([]digest.Digest, er
 }
 
 func (ii *importInfo) fetch(ctx context.Context, chain []blobs.DiffPair) (cache.ImmutableRef, error) {
+	eg, ctx := errgroup.WithContext(ctx)
+	for _, dp := range chain {
+		func(dp blobs.DiffPair) {
+			eg.Go(func() error {
+				desc, ok := ii.allDesc[dp.Blobsum]
+				if !ok {
+					return errors.Errorf("failed to find %s for fetch", dp.Blobsum)
+				}
+				if _, err := remotes.FetchHandler(ii.opt.ContentStore, ii.fetcher)(ctx, desc); err != nil {
+					return err
+				}
+				return nil
+			})
+		}(dp)
+	}
+	if err := eg.Wait(); err != nil {
+		return nil, err
+	}
+
 	chainid, err := ii.unpack(ctx, chain)
 	if err != nil {
 		return nil, err

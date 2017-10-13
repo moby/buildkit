@@ -93,6 +93,8 @@ func (ce *CacheExporter) Export(ctx context.Context, rec []CacheRecord, target s
 		Manifests []ocispec.Descriptor `json:"manifests"`
 	}
 
+	var config cacheConfig
+
 	var mfst manifestList
 	mfst.SchemaVersion = 2
 	mfst.MediaType = images.MediaTypeDockerSchema2ManifestList
@@ -170,6 +172,6 @@ type configItem struct {
 	DiffID     digest.Digest
 }
 
-var config struct {
+type cacheConfig struct {
 	Items []configItem
 }
