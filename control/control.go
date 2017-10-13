@@ -2,6 +2,7 @@ package control
 
 import (
 	"github.com/containerd/containerd/snapshot"
+	"github.com/docker/distribution/reference"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/cacheimport"
@@ -111,11 +112,31 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		}
 	}
 
+	exportCacheRef := ""
+	if ref := req.Cache.ExportRef; ref != "" {
+		parsed, err := reference.ParseNormalizedNamed(ref)
+		if err != nil {
+			return nil, err
+		}
+		exportCacheRef = reference.TagNameOnly(parsed).String()
+	}
+
+	importCacheRef := ""
+	if ref := req.Cache.ImportRef; ref != "" {
+		parsed, err := reference.ParseNormalizedNamed(ref)
+		if err != nil {
+			return nil, err
+		}
+		importCacheRef = reference.TagNameOnly(parsed).String()
+	}
+
 	if err := c.solver.Solve(ctx, req.Ref, solver.SolveRequest{
-		Frontend:    frontend,
-		Definition:  req.Definition,
-		Exporter:    expi,
-		FrontendOpt: req.FrontendAttrs,
+		Frontend:       frontend,
+		Definition:     req.Definition,
+		Exporter:       expi,
+		FrontendOpt:    req.FrontendAttrs,
+		ExportCacheRef: exportCacheRef,
+		ImportCacheRef: importCacheRef,
 	}); err != nil {
 		return nil, err
 	}

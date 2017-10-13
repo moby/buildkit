@@ -27,6 +27,8 @@ type SolveOpt struct {
 	SharedKey     string
 	Frontend      string
 	FrontendAttrs map[string]string
+	ExportCache   string
+	ImportCache   string
 	// Session string
 }
 
@@ -99,6 +101,10 @@ func (c *Client) Solve(ctx context.Context, def *llb.Definition, opt SolveOpt, s
 			Session:       s.ID(),
 			Frontend:      opt.Frontend,
 			FrontendAttrs: opt.FrontendAttrs,
+			Cache: controlapi.CacheOptions{
+				ExportRef: opt.ExportCache,
+				ImportRef: opt.ImportCache,
+			},
 		})
 		if err != nil {
 			return errors.Wrap(err, "failed to solve")

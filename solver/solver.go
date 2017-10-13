@@ -98,10 +98,12 @@ func New(resolve ResolveOpFunc, cache InstructionCache, imageSource source.Sourc
 }
 
 type SolveRequest struct {
-	Definition  *pb.Definition
-	Frontend    frontend.Frontend
-	Exporter    exporter.ExporterInstance
-	FrontendOpt map[string]string
+	Definition     *pb.Definition
+	Frontend       frontend.Frontend
+	Exporter       exporter.ExporterInstance
+	FrontendOpt    map[string]string
+	ExportCacheRef string
+	ImportCacheRef string
 }
 
 func (s *Solver) solve(ctx context.Context, j *job, req SolveRequest) (Reference, map[string][]byte, error) {
@@ -163,20 +165,22 @@ func (s *Solver) Solve(ctx context.Context, id string, req SolveRequest) error {
 		}
 	}
 
-	if err := inVertexContext(ctx, "exporting build cache", func(ctx context.Context) error {
-		cache, err := j.cacheExporter(ref)
-		if err != nil {
+	if exportName := req.ExportCacheRef; exportName != "" {
+		if err := inVertexContext(ctx, "exporting build cache", func(ctx context.Context) error {
+			cache, err := j.cacheExporter(ref)
+			if err != nil {
+				return err
+			}
+
+			records, err := cache.Export(ctx)
+			if err != nil {
+				return err
+			}
+
+			return s.ce.Export(ctx, records, exportName)
+		}); err != nil {
 			return err
 		}
-
-		records, err := cache.Export(ctx)
-		if err != nil {
-			return err
-		}
-
-		return s.ce.Export(ctx, records)
-	}); err != nil {
-		return err
 	}
 
 	return err

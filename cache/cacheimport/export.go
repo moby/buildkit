@@ -6,16 +6,22 @@ import (
 	"encoding/json"
 
 	"github.com/containerd/containerd/content"
+	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/rootfs"
+	"github.com/docker/distribution/manifest"
+	"github.com/docker/distribution/manifest/schema2"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/blobs"
 	"github.com/moby/buildkit/snapshot"
+	"github.com/moby/buildkit/util/push"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 )
+
+const mediaTypeConfig = "application/vnd.buildkit.buildcache.v0"
 
 type blobmapper interface {
 	GetBlob(ctx gocontext.Context, key string) (digest.Digest, error)
@@ -42,7 +48,7 @@ type CacheExporter struct {
 	opt ExporterOpt
 }
 
-func (ce *CacheExporter) Export(ctx context.Context, rec []CacheRecord) error {
+func (ce *CacheExporter) Export(ctx context.Context, rec []CacheRecord, target string) error {
 	allBlobs := map[digest.Digest][]blobs.DiffPair{}
 	currentBlobs := map[digest.Digest]struct{}{}
 	type cr struct {
@@ -79,13 +85,22 @@ func (ce *CacheExporter) Export(ctx context.Context, rec []CacheRecord) error {
 		}
 	}
 
-	var mfst ocispec.Index
+	// own type because oci type can't be pushed and docker type doesn't have annotations
+	type manifestList struct {
+		manifest.Versioned
+
+		// Manifests references platform specific manifests.
+		Manifests []ocispec.Descriptor `json:"manifests"`
+	}
+
+	var mfst manifestList
 	mfst.SchemaVersion = 2
+	mfst.MediaType = images.MediaTypeDockerSchema2ManifestList
 
 	for _, l := range list {
 		var size int64
-		parent := ""
-		diffID := ""
+		var parent digest.Digest
+		var diffID digest.Digest
 		if l.dgst != "" {
 			info, err := ce.opt.ContentStore.Info(ctx, l.dgst)
 			if err != nil {
@@ -94,30 +109,49 @@ func (ce *CacheExporter) Export(ctx context.Context, rec []CacheRecord) error {
 			size = info.Size
 			chain := allBlobs[l.dgst]
 			if len(chain) > 1 {
-				parent = chain[len(chain)-2].Blobsum.String()
+				parent = chain[len(chain)-2].Blobsum
 			}
-			diffID = chain[len(chain)-1].DiffID.String()
+			diffID = chain[len(chain)-1].DiffID
+
+			mfst.Manifests = append(mfst.Manifests, ocispec.Descriptor{
+				MediaType: schema2.MediaTypeLayer,
+				Size:      size,
+				Digest:    l.dgst,
+			})
 		}
 
-		mfst.Manifests = append(mfst.Manifests, ocispec.Descriptor{
-			MediaType: ocispec.MediaTypeImageLayerGzip,
-			Size:      size,
-			Digest:    l.dgst,
-			Annotations: map[string]string{
-				"buildkit.cachekey":   l.CacheKey.String(),
-				"buildkit.contentkey": l.ContentKey.String(),
-				"buildkit.parent":     parent,
-				"buildkit.diffid":     diffID,
-			},
+		config.Items = append(config.Items, configItem{
+			Blobsum:    l.dgst,
+			CacheKey:   l.CacheKey,
+			ContentKey: l.ContentKey,
+			Parent:     parent,
+			DiffID:     diffID,
 		})
 	}
 
-	dt, err := json.Marshal(mfst)
+	dt, err := json.Marshal(config)
+	if err != nil {
+		return err
+	}
+
+	dgst := digest.FromBytes(dt)
+
+	if err := content.WriteBlob(ctx, ce.opt.ContentStore, dgst.String(), bytes.NewReader(dt), int64(len(dt)), dgst); err != nil {
+		return errors.Wrap(err, "error writing config blob")
+	}
+
+	mfst.Manifests = append(mfst.Manifests, ocispec.Descriptor{
+		MediaType: mediaTypeConfig,
+		Size:      int64(len(dt)),
+		Digest:    dgst,
+	})
+
+	dt, err = json.Marshal(mfst)
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal manifest")
 	}
 
-	dgst := digest.FromBytes(dt)
+	dgst = digest.FromBytes(dt)
 
 	if err := content.WriteBlob(ctx, ce.opt.ContentStore, dgst.String(), bytes.NewReader(dt), int64(len(dt)), dgst); err != nil {
 		return errors.Wrap(err, "error writing manifest blob")
@@ -125,5 +159,17 @@ func (ce *CacheExporter) Export(ctx context.Context, rec []CacheRecord) error {
 
 	logrus.Debugf("cache-manifest: %s", dgst)
 
-	return nil
+	return push.Push(ctx, ce.opt.ContentStore, dgst, target)
+}
+
+type configItem struct {
+	Blobsum    digest.Digest
+	CacheKey   digest.Digest
+	ContentKey digest.Digest
+	Parent     digest.Digest
+	DiffID     digest.Digest
+}
+
+var config struct {
+	Items []configItem
 }
