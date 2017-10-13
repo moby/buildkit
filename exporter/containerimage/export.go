@@ -10,11 +10,14 @@ import (
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/rootfs"
+	"github.com/docker/distribution"
+	"github.com/docker/distribution/manifest/schema2"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/blobs"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/util/progress"
+	"github.com/moby/buildkit/util/push"
 	"github.com/moby/buildkit/util/system"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -25,6 +28,7 @@ import (
 
 const (
 	keyImageName        = "name"
+	keyPush             = "push"
 	exporterImageConfig = "containerimage.config"
 )
 
@@ -50,6 +54,8 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 		switch k {
 		case keyImageName:
 			i.targetName = v
+		case keyPush:
+			i.push = true
 		default:
 			logrus.Warnf("unknown exporter option %s", k)
 		}
@@ -60,6 +66,7 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 type imageExporterInstance struct {
 	*imageExporter
 	targetName string
+	push       bool
 }
 
 func (e *imageExporterInstance) Name() string {
@@ -100,24 +107,25 @@ func (e *imageExporterInstance) Export(ctx context.Context, ref cache.ImmutableR
 	}
 	configDone(nil)
 
-	mfst := ocispec.Manifest{
-		Config: ocispec.Descriptor{
+	mfst := schema2.Manifest{
+		Config: distribution.Descriptor{
 			Digest:    dgst,
 			Size:      int64(len(dt)),
-			MediaType: ocispec.MediaTypeImageConfig,
+			MediaType: schema2.MediaTypeImageConfig,
 		},
 	}
 	mfst.SchemaVersion = 2
+	mfst.MediaType = schema2.MediaTypeManifest
 
 	for _, dp := range diffPairs {
 		info, err := e.opt.ContentStore.Info(ctx, dp.Blobsum)
 		if err != nil {
 			return configDone(errors.Wrapf(err, "could not get blob %s", dp.Blobsum))
 		}
-		mfst.Layers = append(mfst.Layers, ocispec.Descriptor{
+		mfst.Layers = append(mfst.Layers, distribution.Descriptor{
 			Digest:    dp.Blobsum,
 			Size:      info.Size,
-			MediaType: ocispec.MediaTypeImageLayerGzip,
+			MediaType: schema2.MediaTypeLayer,
 		})
 	}
 
@@ -135,29 +143,34 @@ func (e *imageExporterInstance) Export(ctx context.Context, ref cache.ImmutableR
 
 	mfstDone(nil)
 
-	if e.opt.Images != nil && e.targetName != "" {
-		tagDone := oneOffProgress(ctx, "naming to "+e.targetName)
-		imgrec := images.Image{
-			Name: e.targetName,
-			Target: ocispec.Descriptor{
-				Digest:    dgst,
-				Size:      int64(len(dt)),
-				MediaType: ocispec.MediaTypeImageManifest,
-			},
-			CreatedAt: time.Now(),
-		}
-		_, err := e.opt.Images.Update(ctx, imgrec)
-		if err != nil {
-			if !errdefs.IsNotFound(err) {
-				return tagDone(err)
+	if e.targetName != "" {
+		if e.opt.Images != nil {
+			tagDone := oneOffProgress(ctx, "naming to "+e.targetName)
+			imgrec := images.Image{
+				Name: e.targetName,
+				Target: ocispec.Descriptor{
+					Digest:    dgst,
+					Size:      int64(len(dt)),
+					MediaType: ocispec.MediaTypeImageManifest,
+				},
+				CreatedAt: time.Now(),
 			}
-
-			_, err := e.opt.Images.Create(ctx, imgrec)
+			_, err := e.opt.Images.Update(ctx, imgrec)
 			if err != nil {
-				return tagDone(err)
+				if !errdefs.IsNotFound(err) {
+					return tagDone(err)
+				}
+
+				_, err := e.opt.Images.Create(ctx, imgrec)
+				if err != nil {
+					return tagDone(err)
+				}
 			}
+			tagDone(nil)
 		}
-		tagDone(nil)
+		if e.push {
+			return push.Push(ctx, e.opt.ContentStore, dgst, e.targetName)
+		}
 	}
 
 	return err

@@ -133,7 +133,7 @@ func DetectManifestMediaType(ra content.ReaderAt) (string, error) {
 	}
 
 	if mfst.Config != nil {
-		return ocispec.MediaTypeImageManifest, nil
+		return images.MediaTypeDockerSchema2Manifest, nil
 	}
 	return ocispec.MediaTypeImageIndex, nil
 }
