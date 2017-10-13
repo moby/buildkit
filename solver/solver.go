@@ -33,6 +33,7 @@ type LLBOpt struct {
 	ImageSource      source.Source
 	Frontends        map[string]frontend.Frontend // used by nested invocations
 	CacheExporter    *cacheimport.CacheExporter
+	CacheImporter    *cacheimport.CacheImporter
 }
 
 func NewLLBSolver(opt LLBOpt) *Solver {
@@ -48,7 +49,7 @@ func NewLLBSolver(opt LLBOpt) *Solver {
 		default:
 			return nil, nil
 		}
-	}, opt.InstructionCache, opt.ImageSource, opt.Worker, opt.CacheManager, opt.Frontends, opt.CacheExporter)
+	}, opt.InstructionCache, opt.ImageSource, opt.Worker, opt.CacheManager, opt.Frontends, opt.CacheExporter, opt.CacheImporter)
 	return s
 }
 
@@ -89,10 +90,11 @@ type Solver struct {
 	cm          cache.Manager // TODO: remove with immutableRef.New()
 	frontends   map[string]frontend.Frontend
 	ce          *cacheimport.CacheExporter
+	ci          *cacheimport.CacheImporter
 }
 
-func New(resolve ResolveOpFunc, cache InstructionCache, imageSource source.Source, worker worker.Worker, cm cache.Manager, f map[string]frontend.Frontend, ce *cacheimport.CacheExporter) *Solver {
-	return &Solver{resolve: resolve, jobs: newJobList(), cache: cache, imageSource: imageSource, worker: worker, cm: cm, frontends: f, ce: ce}
+func New(resolve ResolveOpFunc, cache InstructionCache, imageSource source.Source, worker worker.Worker, cm cache.Manager, f map[string]frontend.Frontend, ce *cacheimport.CacheExporter, ci *cacheimport.CacheImporter) *Solver {
+	return &Solver{resolve: resolve, jobs: newJobList(), cache: cache, imageSource: imageSource, worker: worker, cm: cm, frontends: f, ce: ce, ci: ci}
 }
 
 type SolveRequest struct {

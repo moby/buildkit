@@ -31,6 +31,7 @@ type Opt struct {
 	Frontends        map[string]frontend.Frontend
 	ImageSource      source.Source
 	CacheExporter    *cacheimport.CacheExporter
+	CacheImporter    *cacheimport.CacheImporter
 }
 
 type Controller struct { // TODO: ControlService
@@ -49,6 +50,7 @@ func NewController(opt Opt) (*Controller, error) {
 			ImageSource:      opt.ImageSource,
 			Frontends:        opt.Frontends,
 			CacheExporter:    opt.CacheExporter,
+			CacheImporter:    opt.CacheImporter,
 		}),
 	}
 	return c, nil

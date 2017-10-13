@@ -131,10 +131,17 @@ func defaultControllerOpts(root string, pd pullDeps) (*Opt, error) {
 	frontends["dockerfile.v0"] = dockerfile.NewDockerfileFrontend()
 	frontends["gateway.v0"] = gateway.NewGatewayFrontend()
 
-	ce := cacheimport.NewCacheExporter(cacheimport.Opt{
+	ce := cacheimport.NewCacheExporter(cacheimport.ExporterOpt{
 		Snapshotter:  snapshotter,
 		ContentStore: pd.ContentStore,
 		Differ:       pd.Differ,
+	})
+
+	ci := cacheimport.NewCacheImporter(cacheimport.ImportOpt{
+		Snapshotter:   snapshotter,
+		ContentStore:  pd.ContentStore,
+		Applier:       pd.Applier,
+		CacheAccessor: cm,
 	})
 
 	return &Opt{
@@ -147,5 +154,6 @@ func defaultControllerOpts(root string, pd pullDeps) (*Opt, error) {
 		Frontends:        frontends,
 		ImageSource:      is,
 		CacheExporter:    ce,
+		CacheImporter:    ci,
 	}, nil
 }
