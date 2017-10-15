@@ -225,7 +225,7 @@ func getRef(s VertexSolver, ctx context.Context, v *vertex, index Index, cache I
 	if err != nil {
 		return nil, err
 	}
-	ref, err := cache.Lookup(ctx, k)
+	ref, err := cache.Lookup(ctx, k, s.(*vertexSolver).v.Name())
 	if err != nil {
 		return nil, err
 	}
@@ -246,7 +246,7 @@ func getRef(s VertexSolver, ctx context.Context, v *vertex, index Index, cache I
 			return nil, err
 		}
 		if r.CacheKey != "" {
-			ref, err := cache.Lookup(ctx, r.CacheKey)
+			ref, err := cache.Lookup(ctx, r.CacheKey, s.(*vertexSolver).v.Name())
 			if err != nil {
 				return nil, err
 			}

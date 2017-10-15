@@ -41,7 +41,7 @@ func (ls *LocalStore) Probe(ctx context.Context, key digest.Digest) (bool, error
 	return ls.MetadataStore.Probe(index(key.String()))
 }
 
-func (ls *LocalStore) Lookup(ctx context.Context, key digest.Digest) (interface{}, error) {
+func (ls *LocalStore) Lookup(ctx context.Context, key digest.Digest, msg string) (interface{}, error) {
 	snaps, err := ls.MetadataStore.Search(index(key.String()))
 	if err != nil {
 		return nil, err

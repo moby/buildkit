@@ -75,7 +75,7 @@ type Op interface {
 
 type InstructionCache interface {
 	Probe(ctx context.Context, key digest.Digest) (bool, error)
-	Lookup(ctx context.Context, key digest.Digest) (interface{}, error) // TODO: regular ref
+	Lookup(ctx context.Context, key digest.Digest, msg string) (interface{}, error) // TODO: regular ref
 	Set(key digest.Digest, ref interface{}) error
 	SetContentMapping(contentKey, key digest.Digest) error
 	GetContentMapping(dgst digest.Digest) ([]digest.Digest, error)
@@ -518,7 +518,7 @@ func (vs *vertexSolver) run(ctx context.Context, signal func()) (retErr error) {
 
 						// check if current cache key is in cache
 						if len(inp.cacheKeys) > 0 {
-							ref, err := vs.cache.Lookup(ctx2, inp.cacheKeys[len(inp.cacheKeys)-1])
+							ref, err := vs.cache.Lookup(ctx2, inp.cacheKeys[len(inp.cacheKeys)-1], inp.solver.(*vertexSolver).v.Name())
 							if err != nil {
 								return err
 							}
@@ -835,15 +835,15 @@ func (mc *mergedCache) Probe(ctx context.Context, key digest.Digest) (bool, erro
 	return mc.remote.Probe(ctx, key)
 }
 
-func (mc *mergedCache) Lookup(ctx context.Context, key digest.Digest) (interface{}, error) {
+func (mc *mergedCache) Lookup(ctx context.Context, key digest.Digest, msg string) (interface{}, error) {
 	v, err := mc.local.Probe(ctx, key)
 	if err != nil {
 		return false, err
 	}
 	if v {
-		return mc.local.Lookup(ctx, key)
+		return mc.local.Lookup(ctx, key, msg)
 	}
-	return mc.remote.Lookup(ctx, key)
+	return mc.remote.Lookup(ctx, key, msg)
 }
 func (mc *mergedCache) Set(key digest.Digest, ref interface{}) error {
 	return mc.local.Set(key, ref)
