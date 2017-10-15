@@ -16,6 +16,11 @@ func main() {
 	app.Name = "buildctl"
 	app.Usage = "build utility"
 
+	defaultAddress := os.Getenv("BUILDKIT_HOST")
+	if defaultAddress == "" {
+		defaultAddress = appdefaults.Address
+	}
+
 	app.Flags = []cli.Flag{
 		cli.BoolFlag{
 			Name:  "debug",
@@ -24,7 +29,7 @@ func main() {
 		cli.StringFlag{
 			Name:  "addr",
 			Usage: "listening address",
-			Value: appdefaults.Address,
+			Value: defaultAddress,
 		},
 	}
 

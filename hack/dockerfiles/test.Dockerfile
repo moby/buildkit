@@ -1,5 +1,6 @@
 ARG RUNC_VERSION=e775f0fba3ea329b8b766451c892c41a3d49594d
 ARG CONTAINERD_VERSION=d1e11f17ec7b325f89608dd46c128300b8727d50
+ARG BUILDKIT_TARGET=standalone
 
 FROM golang:1.8-alpine@sha256:2287e0e274c1d2e9076c1f81d04f1a63c86b73c73603b09caada5da307a8f86d AS gobuild-base
 RUN apk add --no-cache g++ linux-headers
@@ -54,3 +55,23 @@ RUN go build -o /buildctl.exe ./cmd/buildctl
 
 FROM cross-windows AS buildd.exe
 RUN go build -o /buildd.exe ./cmd/buildd
+
+# Copy together all binaries needed for standalone mode
+FROM alpine AS buildkit-standalone
+COPY --from=runc /usr/bin/runc /usr/bin/
+COPY --from=buildd-standalone /usr/bin/buildd-standalone /usr/bin/
+COPY --from=buildctl /usr/bin/buildctl /usr/bin/
+ENTRYPOINT ["buildd-standalone"]
+
+# Copy together all binaries for containerd mode
+FROM alpine AS buildkit-containerd
+COPY --from=buildd-containerd /usr/bin/buildd-containerd /usr/bin/
+COPY --from=buildctl /usr/bin/buildctl /usr/bin/
+COPY --from=runc /usr/bin/runc /usr/bin/
+COPY --from=containerd /go/src/github.com/containerd/containerd/bin/containerd /usr/bin/
+COPY --from=containerd /go/src/github.com/containerd/containerd/bin/containerd-shim /usr/bin/
+ENTRYPOINT ["buildd-containerd"]
+
+FROM buildkit-${BUILDKIT_TARGET}
+RUN apk add --no-cache git
+VOLUME /var/lib/buildkit

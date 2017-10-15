@@ -108,48 +108,17 @@ buildctl du -v
 
 #### Running containerized buildkit
 
-buildkit daemon supports communicating with clients over TCP. This is supports some use cases like:
-
-* Docker for Mac or Windows users which cannot yet run natively buildkit daemon on their platform,
-* Centralized daemon for remote build scripts execution in a team settings
-* ...
+buildkit can be also used by running the `buildd` daemon inside a Docker container and accessing it remotely. The client tool `buildctl` is also available for Mac and Windows.
 
 To run daemon in a container:
 
 ```
-$ docker run --rm --privileged -p 12345:12345 --tmpfs /tmp  buildkit:buildd-standalone buildd-standalone --addr tcp://0.0.0.0:12345 --root /tmp/buildkit
+docker run --d --privileged -p 1234:1234 tonistiigi/buildkit:standalone --addr tcp://0.0.0.0:1234
+export BUILDKIT_HOST=tcp://0.0.0.0:1234
+buildctl build --help
 ```
 
-Notes:
-
-* `--privileged` is needed to grant [enough rights](https://docs.docker.com/engine/reference/run/#runtime-privilege-and-linux-capabilities) to buildkit
-* You need to make sure the --root directory exists on a filesystem that is supported by overlay filesystem. e.g. tmpfs, ext4, xfs.
-
-Build a script:
-
-```
-$ go build examples/buildkit0
-```
-
-Run build script:
-
-On MacOS:
-
-```
-$ ./buildkit0 | ./bin/buildctl-darwin --addr tcp://localhost:12345 build
-```
-
-On Windows:
-
-```
-$ ./buildkit0 | ./bin/buildctl.exe --addr tcp://localhost:12345 build
-```
-
-On Linux:
-
-```
-$ ./buildkit0 | ./bin/buildctl --addr tcp://localhost:12345 build
-```
+The `tonistiigi/buildkit:standalone` image can be built locally using the Dockerfile in `./hack/dockerfiles/test.Dockerfile`.
 
 
 #### Supported runc version
