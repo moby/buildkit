@@ -12,6 +12,9 @@ import (
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
+	"github.com/docker/distribution/reference"
+	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/session/auth"
 	"github.com/moby/buildkit/util/imageutil"
 	"github.com/moby/buildkit/util/progress"
 	digest "github.com/opencontainers/go-digest"
@@ -19,9 +22,35 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func Push(ctx context.Context, cs content.Store, dgst digest.Digest, ref string) error {
+func getCredentialsFunc(ctx context.Context, sm *session.Manager) func(string) (string, string, error) {
+	id := session.FromContext(ctx)
+	if id == "" {
+		return nil
+	}
+	return func(host string) (string, string, error) {
+		timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		caller, err := sm.Get(timeoutCtx, id)
+		if err != nil {
+			return "", "", err
+		}
+
+		return auth.CredentialsFunc(context.TODO(), caller)(host)
+	}
+}
+
+func Push(ctx context.Context, sm *session.Manager, cs content.Store, dgst digest.Digest, ref string) error {
+
+	parsed, err := reference.ParseNormalizedNamed(ref)
+	if err != nil {
+		return err
+	}
+	ref = reference.TagNameOnly(parsed).String()
+
 	resolver := docker.NewResolver(docker.ResolverOptions{
-		Client: http.DefaultClient,
+		Client:      http.DefaultClient,
+		Credentials: getCredentialsFunc(ctx, sm),
 	})
 
 	pusher, err := resolver.Pusher(ctx, ref)

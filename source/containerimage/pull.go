@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/BurntSushi/locker"
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
@@ -17,6 +16,8 @@ import (
 	"github.com/containerd/containerd/rootfs"
 	"github.com/containerd/containerd/snapshot"
 	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/session/auth"
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/util/imageutil"
 	"github.com/moby/buildkit/util/progress"
@@ -31,10 +32,11 @@ import (
 // code can be used with any implementation
 
 type SourceOpt struct {
-	Snapshotter   snapshot.Snapshotter
-	ContentStore  content.Store
-	Applier       rootfs.Applier
-	CacheAccessor cache.Accessor
+	SessionManager *session.Manager
+	Snapshotter    snapshot.Snapshotter
+	ContentStore   content.Store
+	Applier        rootfs.Applier
+	CacheAccessor  cache.Accessor
 }
 
 type blobmapper interface {
@@ -49,17 +51,13 @@ type resolveRecord struct {
 
 type imageSource struct {
 	SourceOpt
-	resolver remotes.Resolver
-	lru      map[string]resolveRecord
+	lru map[string]resolveRecord
 }
 
 func NewSource(opt SourceOpt) (source.Source, error) {
 	is := &imageSource{
 		SourceOpt: opt,
 		lru:       map[string]resolveRecord{},
-		resolver: newCachedResolver(docker.NewResolver(docker.ResolverOptions{
-			Client: http.DefaultClient,
-		}), 5*time.Second),
 	}
 
 	if _, ok := opt.Snapshotter.(blobmapper); !ok {
@@ -73,8 +71,33 @@ func (is *imageSource) ID() string {
 	return source.DockerImageScheme
 }
 
+func (is *imageSource) getResolver(ctx context.Context) remotes.Resolver {
+	return docker.NewResolver(docker.ResolverOptions{
+		Client:      http.DefaultClient,
+		Credentials: is.getCredentialsFromSession(ctx),
+	})
+}
+
+func (is *imageSource) getCredentialsFromSession(ctx context.Context) func(string) (string, string, error) {
+	id := session.FromContext(ctx)
+	if id == "" {
+		return nil
+	}
+	return func(host string) (string, string, error) {
+		timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		caller, err := is.SessionManager.Get(timeoutCtx, id)
+		if err != nil {
+			return "", "", err
+		}
+
+		return auth.CredentialsFunc(context.TODO(), caller)(host)
+	}
+}
+
 func (is *imageSource) ResolveImageConfig(ctx context.Context, ref string) (digest.Digest, []byte, error) {
-	return imageutil.Config(ctx, ref, is.resolver, is.ContentStore)
+	return imageutil.Config(ctx, ref, is.getResolver(ctx), is.ContentStore)
 }
 
 func (is *imageSource) Resolve(ctx context.Context, id source.Identifier) (source.SourceInstance, error) {
@@ -84,8 +107,9 @@ func (is *imageSource) Resolve(ctx context.Context, id source.Identifier) (sourc
 	}
 
 	p := &puller{
-		src: imageIdentifier,
-		is:  is,
+		src:      imageIdentifier,
+		is:       is,
+		resolver: is.getResolver(ctx),
 	}
 	return p, nil
 }
@@ -97,6 +121,7 @@ type puller struct {
 	desc        ocispec.Descriptor
 	ref         string
 	resolveErr  error
+	resolver    remotes.Resolver
 }
 
 func (p *puller) resolve(ctx context.Context) error {
@@ -124,7 +149,7 @@ func (p *puller) resolve(ctx context.Context) error {
 			}
 		}
 
-		ref, desc, err := p.is.resolver.Resolve(ctx, p.src.Reference.String())
+		ref, desc, err := p.resolver.Resolve(ctx, p.src.Reference.String())
 		if err != nil {
 			p.resolveErr = err
 			resolveProgressDone(err)
@@ -155,7 +180,7 @@ func (p *puller) Snapshot(ctx context.Context) (cache.ImmutableRef, error) {
 
 	go showProgress(pctx, ongoing, p.is.ContentStore)
 
-	fetcher, err := p.is.resolver.Fetcher(ctx, p.ref)
+	fetcher, err := p.resolver.Fetcher(ctx, p.ref)
 	if err != nil {
 		stopProgress()
 		return nil, err
@@ -416,46 +441,4 @@ func oneOffProgress(ctx context.Context, id string) func(err error) error {
 		pw.Close()
 		return err
 	}
-}
-
-func newCachedResolver(r remotes.Resolver, timeout time.Duration) remotes.Resolver {
-	return &cachedResolver{
-		Resolver: r,
-		cache:    map[string]cachedResult{},
-		timeout:  timeout,
-		locker:   locker.NewLocker(),
-	}
-}
-
-type cachedResolver struct {
-	remotes.Resolver
-	cache   map[string]cachedResult
-	timeout time.Duration
-	locker  *locker.Locker
-}
-
-func (cr *cachedResolver) Resolve(ctx gocontext.Context, ref string) (name string, desc ocispec.Descriptor, err error) {
-	cr.locker.Lock(ref)
-	defer cr.locker.Unlock(ref)
-	r, ok := cr.cache[ref]
-	if ok && time.Since(r.ts) < cr.timeout {
-		return r.name, r.desc, nil
-	}
-	delete(cr.cache, ref)
-	n, d, err := cr.Resolver.Resolve(ctx, ref)
-	if err != nil {
-		return "", d, err
-	}
-	cr.cache[ref] = cachedResult{
-		name: n,
-		desc: d,
-		ts:   time.Now(),
-	}
-	return n, d, nil
-}
-
-type cachedResult struct {
-	name string
-	desc ocispec.Descriptor
-	ts   time.Time
 }

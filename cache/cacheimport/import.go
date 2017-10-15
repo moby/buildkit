@@ -14,6 +14,8 @@ import (
 	"github.com/moby/buildkit/cache/blobs"
 	"github.com/moby/buildkit/client"
 	buildkitidentity "github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/session/auth"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/util/progress"
 	digest "github.com/opencontainers/go-digest"
@@ -25,10 +27,11 @@ import (
 )
 
 type ImportOpt struct {
-	ContentStore  content.Store
-	Snapshotter   snapshot.Snapshotter
-	Applier       rootfs.Applier
-	CacheAccessor cache.Accessor
+	SessionManager *session.Manager
+	ContentStore   content.Store
+	Snapshotter    snapshot.Snapshotter
+	Applier        rootfs.Applier
+	CacheAccessor  cache.Accessor
 }
 
 func NewCacheImporter(opt ImportOpt) *CacheImporter {
@@ -39,9 +42,29 @@ type CacheImporter struct {
 	opt ImportOpt
 }
 
+func (ci *CacheImporter) getCredentialsFromSession(ctx context.Context) func(string) (string, string, error) {
+	id := session.FromContext(ctx)
+	if id == "" {
+		return nil
+	}
+
+	return func(host string) (string, string, error) {
+		timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		caller, err := ci.opt.SessionManager.Get(timeoutCtx, id)
+		if err != nil {
+			return "", "", err
+		}
+
+		return auth.CredentialsFunc(context.TODO(), caller)(host)
+	}
+}
+
 func (ci *CacheImporter) pull(ctx context.Context, ref string) (*ocispec.Descriptor, remotes.Fetcher, error) {
 	resolver := docker.NewResolver(docker.ResolverOptions{
-		Client: http.DefaultClient,
+		Client:      http.DefaultClient,
+		Credentials: ci.getCredentialsFromSession(ctx),
 	})
 
 	ref, desc, err := resolver.Resolve(ctx, ref)

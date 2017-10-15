@@ -69,11 +69,17 @@ func defaultControllerOpts(root string, pd pullDeps) (*Opt, error) {
 		return nil, err
 	}
 
+	sessm, err := session.NewManager()
+	if err != nil {
+		return nil, err
+	}
+
 	is, err := containerimage.NewSource(containerimage.SourceOpt{
-		Snapshotter:   snapshotter,
-		ContentStore:  pd.ContentStore,
-		Applier:       pd.Applier,
-		CacheAccessor: cm,
+		Snapshotter:    snapshotter,
+		ContentStore:   pd.ContentStore,
+		SessionManager: sessm,
+		Applier:        pd.Applier,
+		CacheAccessor:  cm,
 	})
 	if err != nil {
 		return nil, err
@@ -91,11 +97,6 @@ func defaultControllerOpts(root string, pd pullDeps) (*Opt, error) {
 
 	sm.Register(gs)
 
-	sessm, err := session.NewManager()
-	if err != nil {
-		return nil, err
-	}
-
 	ss, err := local.NewSource(local.Opt{
 		SessionManager: sessm,
 		CacheAccessor:  cm,
@@ -109,10 +110,11 @@ func defaultControllerOpts(root string, pd pullDeps) (*Opt, error) {
 	exporters := map[string]exporter.Exporter{}
 
 	imageExporter, err := imageexporter.New(imageexporter.Opt{
-		Snapshotter:  snapshotter,
-		ContentStore: pd.ContentStore,
-		Differ:       pd.Differ,
-		Images:       pd.Images,
+		Snapshotter:    snapshotter,
+		ContentStore:   pd.ContentStore,
+		Differ:         pd.Differ,
+		Images:         pd.Images,
+		SessionManager: sessm,
 	})
 	if err != nil {
 		return nil, err
@@ -132,16 +134,18 @@ func defaultControllerOpts(root string, pd pullDeps) (*Opt, error) {
 	frontends["gateway.v0"] = gateway.NewGatewayFrontend()
 
 	ce := cacheimport.NewCacheExporter(cacheimport.ExporterOpt{
-		Snapshotter:  snapshotter,
-		ContentStore: pd.ContentStore,
-		Differ:       pd.Differ,
+		Snapshotter:    snapshotter,
+		ContentStore:   pd.ContentStore,
+		SessionManager: sessm,
+		Differ:         pd.Differ,
 	})
 
 	ci := cacheimport.NewCacheImporter(cacheimport.ImportOpt{
-		Snapshotter:   snapshotter,
-		ContentStore:  pd.ContentStore,
-		Applier:       pd.Applier,
-		CacheAccessor: cm,
+		Snapshotter:    snapshotter,
+		ContentStore:   pd.ContentStore,
+		Applier:        pd.Applier,
+		CacheAccessor:  cm,
+		SessionManager: sessm,
 	})
 
 	return &Opt{

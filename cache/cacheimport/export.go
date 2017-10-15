@@ -12,6 +12,7 @@ import (
 	"github.com/docker/distribution/manifest/schema2"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/blobs"
+	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/util/push"
 	digest "github.com/opencontainers/go-digest"
@@ -35,9 +36,10 @@ type CacheRecord struct {
 }
 
 type ExporterOpt struct {
-	Snapshotter  snapshot.Snapshotter
-	ContentStore content.Store
-	Differ       rootfs.MountDiffer
+	Snapshotter    snapshot.Snapshotter
+	ContentStore   content.Store
+	Differ         rootfs.MountDiffer
+	SessionManager *session.Manager
 }
 
 func NewCacheExporter(opt ExporterOpt) *CacheExporter {
@@ -161,7 +163,7 @@ func (ce *CacheExporter) Export(ctx context.Context, rec []CacheRecord, target s
 
 	logrus.Debugf("cache-manifest: %s", dgst)
 
-	return push.Push(ctx, ce.opt.ContentStore, dgst, target)
+	return push.Push(ctx, ce.opt.SessionManager, ce.opt.ContentStore, dgst, target)
 }
 
 type configItem struct {

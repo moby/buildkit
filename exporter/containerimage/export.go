@@ -15,6 +15,7 @@ import (
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/blobs"
 	"github.com/moby/buildkit/exporter"
+	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/push"
@@ -33,10 +34,11 @@ const (
 )
 
 type Opt struct {
-	Snapshotter  snapshot.Snapshotter
-	ContentStore content.Store
-	Differ       rootfs.MountDiffer
-	Images       images.Store
+	SessionManager *session.Manager
+	Snapshotter    snapshot.Snapshotter
+	ContentStore   content.Store
+	Differ         rootfs.MountDiffer
+	Images         images.Store
 }
 
 type imageExporter struct {
@@ -169,7 +171,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, ref cache.ImmutableR
 			tagDone(nil)
 		}
 		if e.push {
-			return push.Push(ctx, e.opt.ContentStore, dgst, e.targetName)
+			return push.Push(ctx, e.opt.SessionManager, e.opt.ContentStore, dgst, e.targetName)
 		}
 	}
 

@@ -12,6 +12,7 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/session/auth"
 	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/session/grpchijack"
 	"github.com/moby/buildkit/solver/pb"
@@ -67,6 +68,8 @@ func (c *Client) Solve(ctx context.Context, def *llb.Definition, opt SolveOpt, s
 	if len(syncedDirs) > 0 {
 		s.Allow(filesync.NewFSSyncProvider(syncedDirs))
 	}
+
+	s.Allow(auth.NewDockerAuthProvider())
 
 	if opt.Exporter == ExporterLocal {
 		outputDir, ok := opt.ExporterAttrs[exporterLocalOutputDir]
