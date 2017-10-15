@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -38,9 +39,13 @@ func (e *execOp) CacheKey(ctx context.Context) (digest.Digest, error) {
 	dt, err := json.Marshal(struct {
 		Type string
 		Exec *pb.ExecOp
+		OS   string
+		Arch string
 	}{
 		Type: execCacheType,
 		Exec: e.op,
+		OS:   runtime.GOOS,
+		Arch: runtime.GOARCH,
 	})
 	if err != nil {
 		return "", err
@@ -175,9 +180,13 @@ func (e *execOp) ContentMask(ctx context.Context) (digest.Digest, [][]string, er
 	dt, err := json.Marshal(struct {
 		Type string
 		Exec *pb.ExecOp
+		OS   string
+		Arch string
 	}{
 		Type: execCacheType,
 		Exec: &ecopy,
+		OS:   runtime.GOOS,
+		Arch: runtime.GOARCH,
 	})
 	if err != nil {
 		return "", nil, err
