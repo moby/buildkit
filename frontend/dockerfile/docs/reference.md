@@ -708,23 +708,24 @@ backslashes as you would in command-line parsing. A few usage examples:
     LABEL description="This text illustrates \
     that label-values can span multiple lines."
 
-An image can have more than one label. To specify multiple labels,
-Docker recommends combining labels into a single `LABEL` instruction where
-possible. Each `LABEL` instruction produces a new layer which can result in an
-inefficient image if you use many labels. This example results in a single image
-layer.
+An image can have more than one label. You can specify multiple labels on a
+single line. Prior to Docker 1.10, this decreased the size of the final image,
+but this is no longer the case. You may still choose to specify multiple labels
+in a single instruction, in one of the following two ways:
 
-    LABEL multi.label1="value1" multi.label2="value2" other="value3"
+```none
+LABEL multi.label1="value1" multi.label2="value2" other="value3"
+```
 
-The above can also be written as:
+```none
+LABEL multi.label1="value1" \
+      multi.label2="value2" \
+      other="value3"
+```
 
-    LABEL multi.label1="value1" \
-          multi.label2="value2" \
-          other="value3"
-
-Labels are additive including `LABEL`s in `FROM` images. If Docker
-encounters a label/key that already exists, the new value overrides any previous
-labels with identical keys.
+Labels included in base or parent images (images in the `FROM` line) are
+inherited by your image. If a label already exists but with a different value,
+the most-recently-applied value overrides any previously-set value.
 
 To view an image's labels, use the `docker inspect` command.
 
