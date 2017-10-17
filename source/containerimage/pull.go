@@ -38,8 +38,8 @@ type SourceOpt struct {
 }
 
 type blobmapper interface {
-	GetBlob(ctx gocontext.Context, key string) (digest.Digest, error)
-	SetBlob(ctx gocontext.Context, key string, blob digest.Digest) error
+	GetBlob(ctx gocontext.Context, key string) (digest.Digest, digest.Digest, error)
+	SetBlob(ctx gocontext.Context, key string, diffID, blob digest.Digest) error
 }
 
 type resolveRecord struct {
@@ -211,7 +211,7 @@ func (is *imageSource) fillBlobMapping(ctx context.Context, layers []rootfs.Laye
 	for _, l := range layers {
 		chain = append(chain, l.Diff.Digest)
 		chainID := identity.ChainID(chain)
-		if err := is.SourceOpt.Snapshotter.(blobmapper).SetBlob(ctx, string(chainID), l.Blob.Digest); err != nil {
+		if err := is.SourceOpt.Snapshotter.(blobmapper).SetBlob(ctx, string(chainID), l.Diff.Digest, l.Blob.Digest); err != nil {
 			return err
 		}
 	}

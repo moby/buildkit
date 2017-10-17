@@ -57,6 +57,14 @@ var buildCommand = cli.Command{
 			Name:  "no-cache",
 			Usage: "Disable cache for all the vertices. (Not yet implemented.) Frontend is not supported.",
 		},
+		cli.StringFlag{
+			Name:  "export-cache",
+			Usage: "Reference to export build cache to",
+		},
+		cli.StringFlag{
+			Name:  "import-cache",
+			Usage: "Reference to import build cache from",
+		},
 	},
 }
 
@@ -143,6 +151,8 @@ func build(clicontext *cli.Context) error {
 			LocalDirs:     localDirs,
 			Frontend:      clicontext.String("frontend"),
 			FrontendAttrs: frontendAttrs,
+			ExportCache:   clicontext.String("export-cache"),
+			ImportCache:   clicontext.String("import-cache"),
 		}, ch)
 	})
 

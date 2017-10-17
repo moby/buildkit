@@ -2,8 +2,10 @@ package control
 
 import (
 	"github.com/containerd/containerd/snapshot"
+	"github.com/docker/distribution/reference"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/cache/cacheimport"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/frontend"
@@ -29,6 +31,8 @@ type Opt struct {
 	SessionManager   *session.Manager
 	Frontends        map[string]frontend.Frontend
 	ImageSource      source.Source
+	CacheExporter    *cacheimport.CacheExporter
+	CacheImporter    *cacheimport.CacheImporter
 }
 
 type Controller struct { // TODO: ControlService
@@ -46,6 +50,8 @@ func NewController(opt Opt) (*Controller, error) {
 			InstructionCache: opt.InstructionCache,
 			ImageSource:      opt.ImageSource,
 			Frontends:        opt.Frontends,
+			CacheExporter:    opt.CacheExporter,
+			CacheImporter:    opt.CacheImporter,
 		}),
 	}
 	return c, nil
@@ -106,11 +112,31 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		}
 	}
 
+	exportCacheRef := ""
+	if ref := req.Cache.ExportRef; ref != "" {
+		parsed, err := reference.ParseNormalizedNamed(ref)
+		if err != nil {
+			return nil, err
+		}
+		exportCacheRef = reference.TagNameOnly(parsed).String()
+	}
+
+	importCacheRef := ""
+	if ref := req.Cache.ImportRef; ref != "" {
+		parsed, err := reference.ParseNormalizedNamed(ref)
+		if err != nil {
+			return nil, err
+		}
+		importCacheRef = reference.TagNameOnly(parsed).String()
+	}
+
 	if err := c.solver.Solve(ctx, req.Ref, solver.SolveRequest{
-		Frontend:    frontend,
-		Definition:  req.Definition,
-		Exporter:    expi,
-		FrontendOpt: req.FrontendAttrs,
+		Frontend:       frontend,
+		Definition:     req.Definition,
+		Exporter:       expi,
+		FrontendOpt:    req.FrontendAttrs,
+		ExportCacheRef: exportCacheRef,
+		ImportCacheRef: importCacheRef,
 	}); err != nil {
 		return nil, err
 	}

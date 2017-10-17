@@ -10,6 +10,7 @@ import (
 	"github.com/containerd/containerd/rootfs"
 	ctdsnapshot "github.com/containerd/containerd/snapshot"
 	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/cache/cacheimport"
 	"github.com/moby/buildkit/cache/instructioncache"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
@@ -108,11 +109,10 @@ func defaultControllerOpts(root string, pd pullDeps) (*Opt, error) {
 	exporters := map[string]exporter.Exporter{}
 
 	imageExporter, err := imageexporter.New(imageexporter.Opt{
-		Snapshotter:   snapshotter,
-		ContentStore:  pd.ContentStore,
-		Differ:        pd.Differ,
-		CacheAccessor: cm,
-		Images:        pd.Images,
+		Snapshotter:  snapshotter,
+		ContentStore: pd.ContentStore,
+		Differ:       pd.Differ,
+		Images:       pd.Images,
 	})
 	if err != nil {
 		return nil, err
@@ -131,6 +131,19 @@ func defaultControllerOpts(root string, pd pullDeps) (*Opt, error) {
 	frontends["dockerfile.v0"] = dockerfile.NewDockerfileFrontend()
 	frontends["gateway.v0"] = gateway.NewGatewayFrontend()
 
+	ce := cacheimport.NewCacheExporter(cacheimport.ExporterOpt{
+		Snapshotter:  snapshotter,
+		ContentStore: pd.ContentStore,
+		Differ:       pd.Differ,
+	})
+
+	ci := cacheimport.NewCacheImporter(cacheimport.ImportOpt{
+		Snapshotter:   snapshotter,
+		ContentStore:  pd.ContentStore,
+		Applier:       pd.Applier,
+		CacheAccessor: cm,
+	})
+
 	return &Opt{
 		Snapshotter:      snapshotter,
 		CacheManager:     cm,
@@ -140,5 +153,7 @@ func defaultControllerOpts(root string, pd pullDeps) (*Opt, error) {
 		SessionManager:   sessm,
 		Frontends:        frontends,
 		ImageSource:      is,
+		CacheExporter:    ce,
+		CacheImporter:    ci,
 	}, nil
 }

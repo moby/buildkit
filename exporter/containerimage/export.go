@@ -2,7 +2,6 @@ package containerimage
 
 import (
 	"bytes"
-	gocontext "context"
 	"encoding/json"
 	"runtime"
 	"time"
@@ -10,60 +9,42 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
-	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/rootfs"
+	"github.com/docker/distribution"
+	"github.com/docker/distribution/manifest/schema2"
 	"github.com/moby/buildkit/cache"
-	"github.com/moby/buildkit/cache/metadata"
+	"github.com/moby/buildkit/cache/blobs"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/snapshot"
-	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/progress"
+	"github.com/moby/buildkit/util/push"
 	"github.com/moby/buildkit/util/system"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
-	"golang.org/x/sync/errgroup"
 )
 
 const (
 	keyImageName        = "name"
+	keyPush             = "push"
 	exporterImageConfig = "containerimage.config"
 )
 
 type Opt struct {
-	Snapshotter   snapshot.Snapshotter
-	ContentStore  content.Store
-	Differ        rootfs.MountDiffer
-	CacheAccessor cache.Accessor
-	MetadataStore metadata.Store
-	Images        images.Store
+	Snapshotter  snapshot.Snapshotter
+	ContentStore content.Store
+	Differ       rootfs.MountDiffer
+	Images       images.Store
 }
 
 type imageExporter struct {
-	blobmap blobmapper
-	opt     Opt
-	g       flightcontrol.Group
-}
-
-type diffPair struct {
-	diffID  digest.Digest
-	blobsum digest.Digest
-}
-
-type blobmapper interface {
-	GetBlob(ctx gocontext.Context, key string) (digest.Digest, error)
-	SetBlob(ctx gocontext.Context, key string, blob digest.Digest) error
+	opt Opt
 }
 
 func New(opt Opt) (exporter.Exporter, error) {
-	blobmap, ok := opt.Snapshotter.(blobmapper)
-	if !ok {
-		return nil, errors.Errorf("image exporter requires snapshotter with blobs mapping support")
-	}
-
-	im := &imageExporter{opt: opt, blobmap: blobmap}
+	im := &imageExporter{opt: opt}
 	return im, nil
 }
 
@@ -73,6 +54,8 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 		switch k {
 		case keyImageName:
 			i.targetName = v
+		case keyPush:
+			i.push = true
 		default:
 			logrus.Warnf("unknown exporter option %s", k)
 		}
@@ -80,74 +63,10 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 	return i, nil
 }
 
-func (e *imageExporter) getBlobs(ctx context.Context, ref cache.ImmutableRef) ([]diffPair, error) {
-	eg, ctx := errgroup.WithContext(ctx)
-	var diffPairs []diffPair
-	var currentPair diffPair
-	parent := ref.Parent()
-	if parent != nil {
-		defer parent.Release(context.TODO())
-		eg.Go(func() error {
-			dp, err := e.getBlobs(ctx, parent)
-			if err != nil {
-				return err
-			}
-			diffPairs = dp
-			return nil
-		})
-	}
-	eg.Go(func() error {
-		dp, err := e.g.Do(ctx, ref.ID(), func(ctx context.Context) (interface{}, error) {
-			blob, err := e.blobmap.GetBlob(ctx, ref.ID())
-			if err != nil {
-				return nil, err
-			}
-			if blob != "" {
-				diffID, err := digest.Parse(ref.ID())
-				if err != nil {
-					diffID = blob
-				}
-				return diffPair{diffID: diffID, blobsum: blob}, nil
-			}
-			// reference needs to be committed
-			parent := ref.Parent()
-			var lower []mount.Mount
-			if parent != nil {
-				defer parent.Release(context.TODO())
-				lower, err = parent.Mount(ctx, true)
-				if err != nil {
-					return nil, err
-				}
-			}
-			upper, err := ref.Mount(ctx, true)
-			if err != nil {
-				return nil, err
-			}
-			descr, err := e.opt.Differ.DiffMounts(ctx, lower, upper, ocispec.MediaTypeImageLayer, ref.ID())
-			if err != nil {
-				return nil, err
-			}
-			if err := e.blobmap.SetBlob(ctx, ref.ID(), descr.Digest); err != nil {
-				return nil, err
-			}
-			return diffPair{diffID: descr.Digest, blobsum: descr.Digest}, nil
-		})
-		if err != nil {
-			return err
-		}
-		currentPair = dp.(diffPair)
-		return nil
-	})
-	err := eg.Wait()
-	if err != nil {
-		return nil, err
-	}
-	return append(diffPairs, currentPair), nil
-}
-
 type imageExporterInstance struct {
 	*imageExporter
 	targetName string
+	push       bool
 }
 
 func (e *imageExporterInstance) Name() string {
@@ -156,7 +75,7 @@ func (e *imageExporterInstance) Name() string {
 
 func (e *imageExporterInstance) Export(ctx context.Context, ref cache.ImmutableRef, opt map[string][]byte) error {
 	layersDone := oneOffProgress(ctx, "exporting layers")
-	diffPairs, err := e.getBlobs(ctx, ref)
+	diffPairs, err := blobs.GetDiffPairs(ctx, e.opt.Snapshotter, e.opt.Differ, ref)
 	if err != nil {
 		return err
 	}
@@ -164,7 +83,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, ref cache.ImmutableR
 
 	diffIDs := make([]digest.Digest, 0, len(diffPairs))
 	for _, dp := range diffPairs {
-		diffIDs = append(diffIDs, dp.diffID)
+		diffIDs = append(diffIDs, dp.DiffID)
 	}
 
 	var dt []byte
@@ -188,24 +107,25 @@ func (e *imageExporterInstance) Export(ctx context.Context, ref cache.ImmutableR
 	}
 	configDone(nil)
 
-	mfst := ocispec.Manifest{
-		Config: ocispec.Descriptor{
+	mfst := schema2.Manifest{
+		Config: distribution.Descriptor{
 			Digest:    dgst,
 			Size:      int64(len(dt)),
-			MediaType: ocispec.MediaTypeImageConfig,
+			MediaType: schema2.MediaTypeImageConfig,
 		},
 	}
 	mfst.SchemaVersion = 2
+	mfst.MediaType = schema2.MediaTypeManifest
 
 	for _, dp := range diffPairs {
-		info, err := e.opt.ContentStore.Info(ctx, dp.blobsum)
+		info, err := e.opt.ContentStore.Info(ctx, dp.Blobsum)
 		if err != nil {
-			return configDone(errors.Wrapf(err, "could not get blob %s", dp.blobsum))
+			return configDone(errors.Wrapf(err, "could not get blob %s", dp.Blobsum))
 		}
-		mfst.Layers = append(mfst.Layers, ocispec.Descriptor{
-			Digest:    dp.blobsum,
+		mfst.Layers = append(mfst.Layers, distribution.Descriptor{
+			Digest:    dp.Blobsum,
 			Size:      info.Size,
-			MediaType: ocispec.MediaTypeImageLayerGzip,
+			MediaType: schema2.MediaTypeLayer,
 		})
 	}
 
@@ -223,29 +143,34 @@ func (e *imageExporterInstance) Export(ctx context.Context, ref cache.ImmutableR
 
 	mfstDone(nil)
 
-	if e.opt.Images != nil && e.targetName != "" {
-		tagDone := oneOffProgress(ctx, "naming to "+e.targetName)
-		imgrec := images.Image{
-			Name: e.targetName,
-			Target: ocispec.Descriptor{
-				Digest:    dgst,
-				Size:      int64(len(dt)),
-				MediaType: ocispec.MediaTypeImageManifest,
-			},
-			CreatedAt: time.Now(),
-		}
-		_, err := e.opt.Images.Update(ctx, imgrec)
-		if err != nil {
-			if !errdefs.IsNotFound(err) {
-				return tagDone(err)
+	if e.targetName != "" {
+		if e.opt.Images != nil {
+			tagDone := oneOffProgress(ctx, "naming to "+e.targetName)
+			imgrec := images.Image{
+				Name: e.targetName,
+				Target: ocispec.Descriptor{
+					Digest:    dgst,
+					Size:      int64(len(dt)),
+					MediaType: ocispec.MediaTypeImageManifest,
+				},
+				CreatedAt: time.Now(),
 			}
-
-			_, err := e.opt.Images.Create(ctx, imgrec)
+			_, err := e.opt.Images.Update(ctx, imgrec)
 			if err != nil {
-				return tagDone(err)
+				if !errdefs.IsNotFound(err) {
+					return tagDone(err)
+				}
+
+				_, err := e.opt.Images.Create(ctx, imgrec)
+				if err != nil {
+					return tagDone(err)
+				}
 			}
+			tagDone(nil)
 		}
-		tagDone(nil)
+		if e.push {
+			return push.Push(ctx, e.opt.ContentStore, dgst, e.targetName)
+		}
 	}
 
 	return err

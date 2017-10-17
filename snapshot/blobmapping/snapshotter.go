@@ -24,6 +24,11 @@ type Info struct {
 	Blob string
 }
 
+type DiffPair struct {
+	Blobsum digest.Digest
+	DiffID  digest.Digest
+}
+
 // this snapshotter keeps an internal mapping between a snapshot and a blob
 
 type Snapshotter struct {
@@ -43,7 +48,7 @@ func NewSnapshotter(opt Opt) (*Snapshotter, error) {
 // Remove also removes a refrence to a blob. If it is a last reference then it deletes it the blob as well
 // Remove is not safe to be called concurrently
 func (s *Snapshotter) Remove(ctx context.Context, key string) error {
-	blob, err := s.GetBlob(ctx, key)
+	_, blob, err := s.GetBlob(ctx, key)
 	if err != nil {
 		return err
 	}
@@ -70,7 +75,7 @@ func (s *Snapshotter) Usage(ctx context.Context, key string) (snapshot.Usage, er
 	if err != nil {
 		return snapshot.Usage{}, err
 	}
-	blob, err := s.GetBlob(ctx, key)
+	_, blob, err := s.GetBlob(ctx, key)
 	if err != nil {
 		return u, err
 	}
@@ -84,34 +89,34 @@ func (s *Snapshotter) Usage(ctx context.Context, key string) (snapshot.Usage, er
 	return u, nil
 }
 
-func (s *Snapshotter) GetBlob(ctx context.Context, key string) (digest.Digest, error) {
+func (s *Snapshotter) GetBlob(ctx context.Context, key string) (digest.Digest, digest.Digest, error) {
 	md, _ := s.opt.MetadataStore.Get(key)
 	v := md.Get(blobKey)
 	if v == nil {
-		return "", nil
+		return "", "", nil
 	}
-	var blob digest.Digest
+	var blob DiffPair
 	if err := v.Unmarshal(&blob); err != nil {
-		return "", err
+		return "", "", err
 	}
-	return blob, nil
+	return blob.DiffID, blob.Blobsum, nil
 }
 
 // Validates that there is no blob associated with the snapshot.
 // Checks that there is a blob in the content store.
 // If same blob has already been set then this is a noop.
-func (s *Snapshotter) SetBlob(ctx context.Context, key string, blob digest.Digest) error {
-	_, err := s.opt.Content.Info(ctx, blob)
+func (s *Snapshotter) SetBlob(ctx context.Context, key string, diffID, blobsum digest.Digest) error {
+	_, err := s.opt.Content.Info(ctx, blobsum)
 	if err != nil {
 		return err
 	}
 	md, _ := s.opt.MetadataStore.Get(key)
 
-	v, err := metadata.NewValue(blob)
+	v, err := metadata.NewValue(DiffPair{DiffID: diffID, Blobsum: blobsum})
 	if err != nil {
 		return err
 	}
-	v.Index = index(blob)
+	v.Index = index(blobsum)
 
 	return md.Update(func(b *bolt.Bucket) error {
 		return md.SetValue(b, blobKey, v)

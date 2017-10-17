@@ -45,6 +45,12 @@ message SolveRequest {
 	string Session = 5;
 	string Frontend = 6;
 	map<string, string> FrontendAttrs = 7;
+	CacheOptions Cache = 8 [(gogoproto.nullable) = false];
+}
+
+message CacheOptions {
+	string ExportRef = 1;
+	string ImportRef = 2;
 }
 
 message SolveResponse {
