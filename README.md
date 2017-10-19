@@ -113,7 +113,7 @@ buildkit can be also used by running the `buildd` daemon inside a Docker contain
 To run daemon in a container:
 
 ```
-docker run --d --privileged -p 1234:1234 tonistiigi/buildkit:standalone --addr tcp://0.0.0.0:1234
+docker run -d --privileged -p 1234:1234 tonistiigi/buildkit:standalone --addr tcp://0.0.0.0:1234
 export BUILDKIT_HOST=tcp://0.0.0.0:1234
 buildctl build --help
 ```
