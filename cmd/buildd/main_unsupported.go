@@ -14,5 +14,5 @@ func appendFlags(f []cli.Flag) []cli.Flag {
 }
 
 func newController(c *cli.Context, root string) (*control.Controller, error) {
-	return nil, errors.New("invalid build")
+	return nil, errors.New("need to build daemon with either standalone or containerd build tag")
 }
