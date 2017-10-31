@@ -765,7 +765,7 @@ type of documentation between the person who builds the image and the person who
 runs the container, about which ports are intended to be published. To actually
 publish the port when running the container, use the `-p` flag on `docker run`
 to publish and map one or more ports, or the `-P` flag to publish all exposed
-ports and map them to to high-order ports.
+ports and map them to high-order ports.
 
 To set up port redirection on the host system, see [using the -P
 flag](run.md#expose-incoming-ports). The `docker network` command supports
