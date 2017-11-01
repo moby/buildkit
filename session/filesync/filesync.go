@@ -68,14 +68,15 @@ func (sp *fsSyncProvider) handle(method string, stream grpc.ServerStream) error 
 
 	opts, _ := metadata.FromContext(stream.Context()) // if no metadata continue with empty object
 
+	dirName := ""
 	name, ok := opts[keyDirName]
-	if !ok || len(name) != 1 {
-		return errors.New("no dir name in request")
+	if ok && len(name) > 0 {
+		dirName = name[0]
 	}
 
-	dir, ok := sp.dirs[name[0]]
+	dir, ok := sp.dirs[dirName]
 	if !ok {
-		return errors.Errorf("no access allowed to dir %q", name[0])
+		return errors.Errorf("no access allowed to dir %q", dirName)
 	}
 
 	var excludes []string
