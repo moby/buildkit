@@ -23,9 +23,9 @@ import (
 )
 
 const (
-	dgstFileData0     = digest.Digest("sha256:5a08b2cd870f1f48a9513629458c2c962ac11a2e44908956b3ec2d269c3e1223")
-	dgstDirD0         = digest.Digest("sha256:260564ab80256c98f63fde8a6ef289525cc542c723970d1c47d721c9c469f9ea")
-	dgstDirD0Modified = digest.Digest("sha256:60c901771ca6f68be81fefe1fcb921118458e0de00227e7c9a9676fb4f32946b")
+	dgstFileData0     = digest.Digest("sha256:cd8e75bca50f2d695f220d0cb0997d8ead387e4f926e8669a92d7f104cc9885b")
+	dgstDirD0         = digest.Digest("sha256:5f8fc802a74ea165f2dfa25d356a581a3d8282a343192421b670079819f4afa7")
+	dgstDirD0Modified = digest.Digest("sha256:4071993a2baf46d92cf3ea64a3fac9f7ab5d0b3876aed0333769ed99756f968b")
 )
 
 func TestChecksumBasicFile(t *testing.T) {
@@ -65,7 +65,7 @@ func TestChecksumBasicFile(t *testing.T) {
 	dgst, err = cc.Checksum(context.TODO(), ref, "bar")
 	assert.NoError(t, err)
 
-	assert.Equal(t, digest.Digest("sha256:cb62966e6dc11e3252ce1a14ed51c6ed0cf112de9c5d23104dc6dcc708f914f1"), dgst)
+	assert.Equal(t, digest.Digest("sha256:c2b5e234f5f38fc5864da7def04782f82501a40d46192e4207d5b3f0c3c4732b"), dgst)
 
 	// same file inside a directory
 	dgst, err = cc.Checksum(context.TODO(), ref, "d0/abc")
@@ -92,7 +92,7 @@ func TestChecksumBasicFile(t *testing.T) {
 	dgst, err = cc.Checksum(context.TODO(), ref, "/")
 	assert.NoError(t, err)
 
-	assert.Equal(t, digest.Digest("sha256:7378af5287e8b417b6cbc63154d300e130983bfc645e35e86fdadf6f5060468a"), dgst)
+	assert.Equal(t, digest.Digest("sha256:6308f8be7bb12f5f6c99635cfa09e9d7055a6c03033e0f6b034cb48849906180"), dgst)
 
 	dgst, err = cc.Checksum(context.TODO(), ref, "d0")
 	assert.NoError(t, err)
@@ -162,7 +162,7 @@ func TestChecksumBasicFile(t *testing.T) {
 	dgst, err = cc.Checksum(context.TODO(), ref, "abc/aa/foo")
 	assert.NoError(t, err)
 
-	assert.Equal(t, digest.Digest("sha256:e1e22281a1ebb637e46aa0781c7fceaca817f1268dd2047dfbce4a23a6cf50ad"), dgst)
+	assert.Equal(t, digest.Digest("sha256:1c67653c3cf95b12a0014e2c4cd1d776b474b3218aee54155d6ae27b9b999c54"), dgst)
 	assert.NotEqual(t, dgstDirD0, dgst)
 
 	// this will force rescan
