@@ -2,7 +2,7 @@ ARG RUNC_VERSION=e775f0fba3ea329b8b766451c892c41a3d49594d
 ARG CONTAINERD_VERSION=d1e11f17ec7b325f89608dd46c128300b8727d50
 ARG BUILDKIT_TARGET=standalone
 
-FROM golang:1.8-alpine@sha256:2287e0e274c1d2e9076c1f81d04f1a63c86b73c73603b09caada5da307a8f86d AS gobuild-base
+FROM golang:1.9-alpine AS gobuild-base
 RUN apk add --no-cache g++ linux-headers
 RUN apk add --no-cache git make
 
