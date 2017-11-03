@@ -30,6 +30,7 @@ import (
 const (
 	keyImageName        = "name"
 	keyPush             = "push"
+	keyInsecure         = "registry.insecure"
 	exporterImageConfig = "containerimage.config"
 )
 
@@ -58,6 +59,8 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 			i.targetName = v
 		case keyPush:
 			i.push = true
+		case keyInsecure:
+			i.insecure = true
 		default:
 			logrus.Warnf("unknown exporter option %s", k)
 		}
@@ -69,6 +72,7 @@ type imageExporterInstance struct {
 	*imageExporter
 	targetName string
 	push       bool
+	insecure   bool
 }
 
 func (e *imageExporterInstance) Name() string {
@@ -171,7 +175,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, ref cache.ImmutableR
 			tagDone(nil)
 		}
 		if e.push {
-			return push.Push(ctx, e.opt.SessionManager, e.opt.ContentStore, dgst, e.targetName)
+			return push.Push(ctx, e.opt.SessionManager, e.opt.ContentStore, dgst, e.targetName, e.insecure)
 		}
 	}
 

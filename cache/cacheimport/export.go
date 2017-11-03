@@ -163,7 +163,7 @@ func (ce *CacheExporter) Export(ctx context.Context, rec []CacheRecord, target s
 
 	logrus.Debugf("cache-manifest: %s", dgst)
 
-	return push.Push(ctx, ce.opt.SessionManager, ce.opt.ContentStore, dgst, target)
+	return push.Push(ctx, ce.opt.SessionManager, ce.opt.ContentStore, dgst, target, false)
 }
 
 type configItem struct {

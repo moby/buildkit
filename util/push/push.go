@@ -40,7 +40,7 @@ func getCredentialsFunc(ctx context.Context, sm *session.Manager) func(string) (
 	}
 }
 
-func Push(ctx context.Context, sm *session.Manager, cs content.Store, dgst digest.Digest, ref string) error {
+func Push(ctx context.Context, sm *session.Manager, cs content.Store, dgst digest.Digest, ref string, insecure bool) error {
 
 	parsed, err := reference.ParseNormalizedNamed(ref)
 	if err != nil {
@@ -51,6 +51,7 @@ func Push(ctx context.Context, sm *session.Manager, cs content.Store, dgst diges
 	resolver := docker.NewResolver(docker.ResolverOptions{
 		Client:      http.DefaultClient,
 		Credentials: getCredentialsFunc(ctx, sm),
+		PlainHTTP:   insecure,
 	})
 
 	pusher, err := resolver.Pusher(ctx, ref)
