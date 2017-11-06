@@ -54,6 +54,8 @@ func NewLLBSolver(opt LLBOpt) *Solver {
 type ResolveOpFunc func(Vertex) (Op, error)
 
 // Reference is a reference to the object passed through the build steps.
+// This interface is a subset of the cache.Ref interface.
+// For ease of unit testing, this interface only has Release().
 type Reference interface {
 	Release(context.Context) error
 }
