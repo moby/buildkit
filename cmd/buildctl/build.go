@@ -55,7 +55,7 @@ var buildCommand = cli.Command{
 		},
 		cli.BoolFlag{
 			Name:  "no-cache",
-			Usage: "Disable cache for all the vertices. (Not yet implemented.) Frontend is not supported.",
+			Usage: "Disable cache for all the vertices. Frontend is not supported.",
 		},
 		cli.StringFlag{
 			Name:  "export-cache",
