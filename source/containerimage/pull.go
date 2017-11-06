@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/containerd/containerd/content"
+	"github.com/containerd/containerd/diff"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/platforms"
@@ -35,7 +36,7 @@ type SourceOpt struct {
 	SessionManager *session.Manager
 	Snapshotter    snapshot.Snapshotter
 	ContentStore   content.Store
-	Applier        rootfs.Applier
+	Applier        diff.Differ
 	CacheAccessor  cache.Accessor
 }
 
@@ -195,7 +196,7 @@ func (p *puller) Snapshot(ctx context.Context) (cache.ImmutableRef, error) {
 			return nil, nil
 		}),
 		remotes.FetchHandler(p.is.ContentStore, fetcher),
-		images.ChildrenHandler(p.is.ContentStore),
+		images.ChildrenHandler(p.is.ContentStore, platforms.Default()),
 	}
 	if err := images.Dispatch(ctx, images.Handlers(handlers...), p.desc); err != nil {
 		stopProgress()
@@ -219,7 +220,18 @@ func (is *imageSource) unpack(ctx context.Context, desc ocispec.Descriptor) (str
 		return "", err
 	}
 
-	chainID, err := rootfs.ApplyLayers(ctx, layers, is.Snapshotter, is.Applier)
+	var chain []digest.Digest
+	for _, layer := range layers {
+		labels := map[string]string{
+			"containerd.io/gc.root":      time.Now().UTC().Format(time.RFC3339Nano),
+			"containerd.io/uncompressed": layer.Diff.Digest.String(),
+		}
+		if _, err := rootfs.ApplyLayer(ctx, layer, chain, is.Snapshotter, is.Applier, snapshot.WithLabels(labels)); err != nil {
+			return "", err
+		}
+		chain = append(chain, layer.Diff.Digest)
+	}
+	chainID := identity.ChainID(chain)
 	if err != nil {
 		return "", err
 	}
@@ -244,12 +256,12 @@ func (is *imageSource) fillBlobMapping(ctx context.Context, layers []rootfs.Laye
 }
 
 func getLayers(ctx context.Context, provider content.Provider, desc ocispec.Descriptor) ([]rootfs.Layer, error) {
-	manifest, err := images.Manifest(ctx, provider, desc, platforms.Format(platforms.Default()))
+	manifest, err := images.Manifest(ctx, provider, desc, platforms.Default())
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 	image := images.Image{Target: desc}
-	diffIDs, err := image.RootFS(ctx, provider, platforms.Format(platforms.Default()))
+	diffIDs, err := image.RootFS(ctx, provider, platforms.Default())
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to resolve rootfs")
 	}

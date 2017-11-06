@@ -77,13 +77,13 @@ func (w *runcworker) Exec(ctx context.Context, meta worker.Meta, root cache.Moun
 		return err
 	}
 	defer f.Close()
-	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts)
+	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id)
 	if err != nil {
 		return err
 	}
 	defer cleanup()
 
-	if err := mount.MountAll(rootMount, rootFSPath); err != nil {
+	if err := mount.All(rootMount, rootFSPath); err != nil {
 		return err
 	}
 	defer mount.Unmount(rootFSPath, 0)

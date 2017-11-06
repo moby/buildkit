@@ -24,7 +24,9 @@ func TestManager(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
-	cm := getCacheManager(t, tmpdir)
+	snapshotter, err := naive.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	cm := getCacheManager(t, tmpdir, snapshotter)
 
 	_, err = cm.Get(ctx, "foobar")
 	require.Error(t, err)
@@ -132,7 +134,9 @@ func TestLazyCommit(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
-	cm := getCacheManager(t, tmpdir)
+	snapshotter, err := naive.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	cm := getCacheManager(t, tmpdir, snapshotter)
 
 	active, err := cm.New(ctx, nil, CachePolicyRetain)
 	require.NoError(t, err)
@@ -213,7 +217,8 @@ func TestLazyCommit(t *testing.T) {
 	err = cm.Close()
 	require.NoError(t, err)
 
-	cm = getCacheManager(t, tmpdir)
+	// we can't close snapshotter and open it twice (especially, its internal boltdb store)
+	cm = getCacheManager(t, tmpdir, snapshotter)
 
 	snap2, err = cm.Get(ctx, snap.ID())
 	require.NoError(t, err)
@@ -234,7 +239,7 @@ func TestLazyCommit(t *testing.T) {
 	err = cm.Close()
 	require.NoError(t, err)
 
-	cm = getCacheManager(t, tmpdir)
+	cm = getCacheManager(t, tmpdir, snapshotter)
 
 	snap2, err = cm.Get(ctx, snap.ID())
 	require.NoError(t, err)
@@ -250,10 +255,7 @@ func TestLazyCommit(t *testing.T) {
 	require.Equal(t, errNotFound, errors.Cause(err))
 }
 
-func getCacheManager(t *testing.T, tmpdir string) Manager {
-	snapshotter, err := naive.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
-	require.NoError(t, err)
-
+func getCacheManager(t *testing.T, tmpdir string, snapshotter snapshot.Snapshotter) Manager {
 	md, err := metadata.NewStore(filepath.Join(tmpdir, "metadata.db"))
 	require.NoError(t, err)
 

@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 
 	"github.com/containerd/containerd/content"
+	"github.com/containerd/containerd/diff"
 	"github.com/containerd/containerd/images"
-	"github.com/containerd/containerd/rootfs"
 	"github.com/docker/distribution/manifest"
 	"github.com/docker/distribution/manifest/schema2"
 	"github.com/moby/buildkit/cache"
@@ -38,7 +38,7 @@ type CacheRecord struct {
 type ExporterOpt struct {
 	Snapshotter    snapshot.Snapshotter
 	ContentStore   content.Store
-	Differ         rootfs.MountDiffer
+	Differ         diff.Differ
 	SessionManager *session.Manager
 }
 

@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/containerd/containerd/content"
+	"github.com/containerd/containerd/diff"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
-	"github.com/containerd/containerd/rootfs"
 	"github.com/docker/distribution"
 	"github.com/docker/distribution/manifest/schema2"
 	"github.com/moby/buildkit/cache"
@@ -38,7 +38,7 @@ type Opt struct {
 	SessionManager *session.Manager
 	Snapshotter    snapshot.Snapshotter
 	ContentStore   content.Store
-	Differ         rootfs.MountDiffer
+	Differ         diff.Differ
 	Images         images.Store
 }
 

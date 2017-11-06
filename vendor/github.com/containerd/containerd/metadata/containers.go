@@ -10,6 +10,7 @@ import (
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/filters"
 	"github.com/containerd/containerd/identifiers"
+	"github.com/containerd/containerd/labels"
 	"github.com/containerd/containerd/metadata/boltutil"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/gogo/protobuf/proto"
@@ -21,6 +22,7 @@ type containerStore struct {
 	tx *bolt.Tx
 }
 
+// NewContainerStore returns a Store backed by an underlying bolt DB
 func NewContainerStore(tx *bolt.Tx) containers.Store {
 	return &containerStore{
 		tx: tx,
@@ -146,7 +148,7 @@ func (s *containerStore) Update(ctx context.Context, container containers.Contai
 
 	if len(fieldpaths) == 0 {
 		// only allow updates to these field on full replace.
-		fieldpaths = []string{"labels", "spec"}
+		fieldpaths = []string{"labels", "spec", "extensions"}
 
 		// Fields that are immutable must cause an error when no field paths
 		// are provided. This allows these fields to become mutable in the
@@ -181,11 +183,22 @@ func (s *containerStore) Update(ctx context.Context, container containers.Contai
 			continue
 		}
 
+		if strings.HasPrefix(path, "extensions.") {
+			if updated.Extensions == nil {
+				updated.Extensions = map[string]types.Any{}
+			}
+			key := strings.TrimPrefix(path, "extensions.")
+			updated.Extensions[key] = container.Extensions[key]
+			continue
+		}
+
 		switch path {
 		case "labels":
 			updated.Labels = container.Labels
 		case "spec":
 			updated.Spec = container.Spec
+		case "extensions":
+			updated.Extensions = container.Extensions
 		default:
 			return containers.Container{}, errors.Wrapf(errdefs.ErrInvalidArgument, "cannot update %q field on %q", path, container.ID)
 		}
@@ -226,7 +239,19 @@ func validateContainer(container *containers.Container) error {
 		return errors.Wrapf(err, "container.ID validation error")
 	}
 
-	// labels and image have no validation
+	for k := range container.Extensions {
+		if k == "" {
+			return errors.Wrapf(errdefs.ErrInvalidArgument, "container.Extension keys must not be zero-length")
+		}
+	}
+
+	// image has no validation
+	for k, v := range container.Labels {
+		if err := labels.Validate(k, v); err == nil {
+			return errors.Wrapf(err, "containers.Labels")
+		}
+	}
+
 	if container.Runtime.Name == "" {
 		return errors.Wrapf(errdefs.ErrInvalidArgument, "container.Runtime.Name must be set")
 	}
@@ -288,6 +313,27 @@ func readContainer(container *containers.Container, bkt *bolt.Bucket) error {
 			container.SnapshotKey = string(v)
 		case string(bucketKeySnapshotter):
 			container.Snapshotter = string(v)
+		case string(bucketKeyExtensions):
+			ebkt := bkt.Bucket(bucketKeyExtensions)
+			if ebkt == nil {
+				return nil
+			}
+
+			extensions := make(map[string]types.Any)
+			if err := ebkt.ForEach(func(k, v []byte) error {
+				var a types.Any
+				if err := proto.Unmarshal(v, &a); err != nil {
+					return err
+				}
+
+				extensions[string(k)] = a
+				return nil
+			}); err != nil {
+
+				return err
+			}
+
+			container.Extensions = extensions
 		}
 
 		return nil
@@ -333,6 +379,24 @@ func writeContainer(bkt *bolt.Bucket, container *containers.Container) error {
 
 	if err := rbkt.Put(bucketKeyName, []byte(container.Runtime.Name)); err != nil {
 		return err
+	}
+
+	if len(container.Extensions) > 0 {
+		ebkt, err := bkt.CreateBucketIfNotExists(bucketKeyExtensions)
+		if err != nil {
+			return err
+		}
+
+		for name, ext := range container.Extensions {
+			p, err := proto.Marshal(&ext)
+			if err != nil {
+				return err
+			}
+
+			if err := ebkt.Put([]byte(name), p); err != nil {
+				return err
+			}
+		}
 	}
 
 	if container.Runtime.Options != nil {

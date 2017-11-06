@@ -69,7 +69,7 @@ func Push(ctx context.Context, sm *session.Manager, cs content.Store, dgst diges
 			m.Lock()
 			manifestStack = append(manifestStack, desc)
 			m.Unlock()
-			return nil, images.StopHandler
+			return nil, images.ErrStopHandler
 		default:
 			return nil, nil
 		}

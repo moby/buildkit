@@ -14,6 +14,7 @@ import (
 	"github.com/containerd/containerd/fs"
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/mount"
+	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/plugin"
 	"github.com/containerd/containerd/snapshot"
 	"github.com/containerd/containerd/snapshot/storage"
@@ -24,7 +25,9 @@ func init() {
 	plugin.Register(&plugin.Registration{
 		Type: plugin.SnapshotPlugin,
 		ID:   "overlayfs",
-		Init: func(ic *plugin.InitContext) (interface{}, error) {
+		InitFn: func(ic *plugin.InitContext) (interface{}, error) {
+			ic.Meta.Platforms = append(ic.Meta.Platforms, platforms.DefaultSpec())
+			ic.Meta.Exports["root"] = ic.Root
 			return NewSnapshotter(ic.Root)
 		},
 	})
@@ -54,7 +57,7 @@ func NewSnapshotter(root string) (snapshot.Snapshotter, error) {
 		return nil, err
 	}
 	if !supportsDType {
-		return nil, fmt.Errorf("%s does not support d_type. If the backing filesystem is xfs, please reformat with ftype=1 to enable d_type support.", root)
+		return nil, fmt.Errorf("%s does not support d_type. If the backing filesystem is xfs, please reformat with ftype=1 to enable d_type support", root)
 	}
 	ms, err := storage.NewMetaStore(filepath.Join(root, "metadata.db"))
 	if err != nil {
@@ -121,12 +124,13 @@ func (o *snapshotter) Usage(ctx context.Context, key string) (snapshot.Usage, er
 		return snapshot.Usage{}, err
 	}
 	id, info, usage, err := storage.GetInfo(ctx, key)
+	t.Rollback() // transaction no longer needed at this point.
+
 	if err != nil {
 		return snapshot.Usage{}, err
 	}
 
 	upperPath := o.upperPath(id)
-	t.Rollback() // transaction no longer needed at this point.
 
 	if info.Kind == snapshot.KindActive {
 		du, err := fs.DiskUsage(upperPath)

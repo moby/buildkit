@@ -11,9 +11,11 @@ import (
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/filters"
 	"github.com/containerd/containerd/images"
+	"github.com/containerd/containerd/labels"
 	"github.com/containerd/containerd/metadata/boltutil"
 	"github.com/containerd/containerd/namespaces"
 	digest "github.com/opencontainers/go-digest"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
 
@@ -21,6 +23,7 @@ type imageStore struct {
 	tx *bolt.Tx
 }
 
+// NewImageStore returns a store backed by a bolt DB
 func NewImageStore(tx *bolt.Tx) images.Store {
 	return &imageStore{tx: tx}
 }
@@ -101,6 +104,10 @@ func (s *imageStore) Create(ctx context.Context, image images.Image) (images.Ima
 		return images.Image{}, errors.Wrapf(errdefs.ErrInvalidArgument, "image name is required for create")
 	}
 
+	if err := validateImage(&image); err != nil {
+		return images.Image{}, err
+	}
+
 	return image, withImagesBucket(s.tx, namespace, func(bkt *bolt.Bucket) error {
 		ibkt, err := bkt.CreateBucket([]byte(image.Name))
 		if err != nil {
@@ -170,6 +177,10 @@ func (s *imageStore) Update(ctx context.Context, image images.Image, fieldpaths 
 			updated = image
 		}
 
+		if err := validateImage(&image); err != nil {
+			return err
+		}
+
 		updated.CreatedAt = createdat
 		updated.UpdatedAt = time.Now().UTC()
 		return writeImage(ibkt, &updated)
@@ -189,6 +200,38 @@ func (s *imageStore) Delete(ctx context.Context, name string) error {
 		}
 		return err
 	})
+}
+
+func validateImage(image *images.Image) error {
+	if image.Name == "" {
+		return errors.Wrapf(errdefs.ErrInvalidArgument, "image name must not be empty")
+	}
+
+	for k, v := range image.Labels {
+		if err := labels.Validate(k, v); err != nil {
+			return errors.Wrapf(err, "image.Labels")
+		}
+	}
+
+	return validateTarget(&image.Target)
+}
+
+func validateTarget(target *ocispec.Descriptor) error {
+	// NOTE(stevvooe): Only validate fields we actually store.
+
+	if err := target.Digest.Validate(); err != nil {
+		return errors.Wrapf(errdefs.ErrInvalidArgument, "Target.Digest %q invalid: %v", target.Digest, err)
+	}
+
+	if target.Size <= 0 {
+		return errors.Wrapf(errdefs.ErrInvalidArgument, "Target.Size must be greater than zero")
+	}
+
+	if target.MediaType == "" {
+		return errors.Wrapf(errdefs.ErrInvalidArgument, "Target.MediaType must be set")
+	}
+
+	return nil
 }
 
 func readImage(image *images.Image, bkt *bolt.Bucket) error {
@@ -241,7 +284,7 @@ func writeImage(bkt *bolt.Bucket, image *images.Image) error {
 		return err
 	}
 
-	sizeEncoded, err := encodeSize(image.Target.Size)
+	sizeEncoded, err := encodeInt(image.Target.Size)
 	if err != nil {
 		return err
 	}
@@ -259,15 +302,15 @@ func writeImage(bkt *bolt.Bucket, image *images.Image) error {
 	return nil
 }
 
-func encodeSize(size int64) ([]byte, error) {
+func encodeInt(i int64) ([]byte, error) {
 	var (
-		buf         [binary.MaxVarintLen64]byte
-		sizeEncoded []byte = buf[:]
+		buf      [binary.MaxVarintLen64]byte
+		iEncoded = buf[:]
 	)
-	sizeEncoded = sizeEncoded[:binary.PutVarint(sizeEncoded, size)]
+	iEncoded = iEncoded[:binary.PutVarint(iEncoded, i)]
 
-	if len(sizeEncoded) == 0 {
-		return nil, fmt.Errorf("failed encoding size = %v", size)
+	if len(iEncoded) == 0 {
+		return nil, fmt.Errorf("failed encoding integer = %v", i)
 	}
-	return sizeEncoded, nil
+	return iEncoded, nil
 }

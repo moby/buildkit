@@ -9,6 +9,8 @@ containerd is an industry-standard container runtime with an emphasis on simplic
 
 containerd is designed to be embedded into a larger system, rather than being used directly by developers or end-users.
 
+![architecture](design/architecture.png)
+
 ## Getting Started
 
 If you are interested in trying out containerd please see our [Getting Started Guide](docs/getting-started.md).
@@ -79,7 +81,7 @@ You can specify options when creating a container about how to modify the specif
 redis, err := client.NewContainer(context, "redis-master", containerd.WithNewSpec(containerd.WithImageConfig(image)))
 ```
 
-## Root Filesystems
+### Root Filesystems
 
 containerd allows you to use overlay or snapshot filesystems with your containers.  It comes with builtin support for overlayfs and btrfs.
 
@@ -148,11 +150,11 @@ defer task.Delete(context)
 err := task.Start(context)
 ```
 
-### Developer Quick-Start
+## Developer Quick-Start
 
 To build the daemon and `ctr` simple test client, the following build system dependencies are required:
 
-* Go 1.8.x or above (requires 1.8 due to use of golang plugin(s))
+* Go 1.9.x or above
 * Protoc 3.x compiler and headers (download at the [Google protobuf releases page](https://github.com/google/protobuf/releases))
 * Btrfs headers and libraries for your distribution. Note that building the btrfs driver can be disabled via build tag removing this dependency.
 
@@ -194,14 +196,12 @@ For sync communication we have a community slack with a #containerd channel that
 
 ### Reporting security issues
 
-__If you are reporting a security issue, please follow the responsible
-disclosure guidelines and reach out discreetly at containerd-security@googlegroups.com__.
+__If you are reporting a security issue, please reach out discreetly at security@containerd.io__.
 
-## Copyright and license
+## Licenses
 
-Copyright ©2016-2017 Docker, Inc. All rights reserved, except as follows. Code
-is released under the Apache 2.0 license. The README.md file, and files in the
-"docs" folder are licensed under the Creative Commons Attribution 4.0
-International License under the terms and conditions set forth in the file
-"LICENSE.docs". You may obtain a duplicate copy of the same license, titled
-CC-BY-SA-4.0, at http://creativecommons.org/licenses/by/4.0/.
+The containerd codebase is released under the [Apache 2.0 license](LICENSE.code).
+The README.md file, and files in the "docs" folder are licensed under the
+Creative Commons Attribution 4.0 International License under the terms and
+conditions set forth in the file "[LICENSE.docs](LICENSE.docs)". You may obtain a duplicate
+copy of the same license, titled CC-BY-4.0, at http://creativecommons.org/licenses/by/4.0/.

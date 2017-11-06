@@ -30,21 +30,6 @@ var (
 	ErrNoTransaction = errors.New("no transaction in context")
 )
 
-type boltFileTransactor struct {
-	db *bolt.DB
-	tx *bolt.Tx
-}
-
-func (bft *boltFileTransactor) Rollback() error {
-	defer bft.db.Close()
-	return bft.tx.Rollback()
-}
-
-func (bft *boltFileTransactor) Commit() error {
-	defer bft.db.Close()
-	return bft.tx.Commit()
-}
-
 // parentKey returns a composite key of the parent and child identifiers. The
 // parts of the key are separated by a zero byte.
 func parentKey(parent, child uint64) []byte {
@@ -90,6 +75,7 @@ func GetInfo(ctx context.Context, key string) (string, snapshot.Info, snapshot.U
 	return fmt.Sprintf("%d", id), si, su, nil
 }
 
+// UpdateInfo updates an existing snapshot info's data
 func UpdateInfo(ctx context.Context, info snapshot.Info, fieldpaths ...string) (snapshot.Info, error) {
 	updated := snapshot.Info{
 		Name: info.Name,
@@ -131,11 +117,7 @@ func UpdateInfo(ctx context.Context, info snapshot.Info, fieldpaths ...string) (
 			return err
 		}
 
-		if err := boltutil.WriteLabels(sbkt, updated.Labels); err != nil {
-			return err
-		}
-
-		return nil
+		return boltutil.WriteLabels(sbkt, updated.Labels)
 	})
 	if err != nil {
 		return snapshot.Info{}, err
@@ -305,7 +287,7 @@ func Remove(ctx context.Context, key string) (string, snapshot.Kind, error) {
 		if pbkt != nil {
 			k, _ := pbkt.Cursor().Seek(parentPrefixKey(id))
 			if getParentPrefix(k) == id {
-				return errors.Errorf("cannot remove snapshot with child")
+				return errors.Wrap(errdefs.ErrFailedPrecondition, "cannot remove snapshot with child")
 			}
 
 			if si.Parent != "" {
@@ -408,11 +390,11 @@ func CommitActive(ctx context.Context, key, name string, usage snapshot.Usage, o
 }
 
 func withSnapshotBucket(ctx context.Context, key string, fn func(context.Context, *bolt.Bucket, *bolt.Bucket) error) error {
-	t, ok := ctx.Value(transactionKey{}).(*boltFileTransactor)
+	tx, ok := ctx.Value(transactionKey{}).(*bolt.Tx)
 	if !ok {
 		return ErrNoTransaction
 	}
-	bkt := t.tx.Bucket(bucketKeyStorageVersion)
+	bkt := tx.Bucket(bucketKeyStorageVersion)
 	if bkt == nil {
 		return errors.Wrap(errdefs.ErrNotFound, "bucket does not exist")
 	}
@@ -429,11 +411,11 @@ func withSnapshotBucket(ctx context.Context, key string, fn func(context.Context
 }
 
 func withBucket(ctx context.Context, fn func(context.Context, *bolt.Bucket, *bolt.Bucket) error) error {
-	t, ok := ctx.Value(transactionKey{}).(*boltFileTransactor)
+	tx, ok := ctx.Value(transactionKey{}).(*bolt.Tx)
 	if !ok {
 		return ErrNoTransaction
 	}
-	bkt := t.tx.Bucket(bucketKeyStorageVersion)
+	bkt := tx.Bucket(bucketKeyStorageVersion)
 	if bkt == nil {
 		return errors.Wrap(errdefs.ErrNotFound, "bucket does not exist")
 	}
@@ -441,12 +423,12 @@ func withBucket(ctx context.Context, fn func(context.Context, *bolt.Bucket, *bol
 }
 
 func createBucketIfNotExists(ctx context.Context, fn func(context.Context, *bolt.Bucket, *bolt.Bucket) error) error {
-	t, ok := ctx.Value(transactionKey{}).(*boltFileTransactor)
+	tx, ok := ctx.Value(transactionKey{}).(*bolt.Tx)
 	if !ok {
 		return ErrNoTransaction
 	}
 
-	bkt, err := t.tx.CreateBucketIfNotExists(bucketKeyStorageVersion)
+	bkt, err := tx.CreateBucketIfNotExists(bucketKeyStorageVersion)
 	if err != nil {
 		return errors.Wrap(err, "failed to create version bucket")
 	}
@@ -534,12 +516,7 @@ func putSnapshot(bkt *bolt.Bucket, id uint64, si snapshot.Info) error {
 	if err := boltutil.WriteTimestamps(bkt, si.Created, si.Updated); err != nil {
 		return err
 	}
-
-	if err := boltutil.WriteLabels(bkt, si.Labels); err != nil {
-		return err
-	}
-
-	return nil
+	return boltutil.WriteLabels(bkt, si.Labels)
 }
 
 func getUsage(bkt *bolt.Bucket, usage *snapshot.Usage) {
@@ -569,7 +546,7 @@ func putUsage(bkt *bolt.Bucket, usage snapshot.Usage) error {
 func encodeSize(size int64) ([]byte, error) {
 	var (
 		buf         [binary.MaxVarintLen64]byte
-		sizeEncoded []byte = buf[:]
+		sizeEncoded = buf[:]
 	)
 	sizeEncoded = sizeEncoded[:binary.PutVarint(sizeEncoded, size)]
 
@@ -582,7 +559,7 @@ func encodeSize(size int64) ([]byte, error) {
 func encodeID(id uint64) ([]byte, error) {
 	var (
 		buf       [binary.MaxVarintLen64]byte
-		idEncoded []byte = buf[:]
+		idEncoded = buf[:]
 	)
 	idEncoded = idEncoded[:binary.PutUvarint(idEncoded, id)]
 

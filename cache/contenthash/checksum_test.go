@@ -33,7 +33,9 @@ func TestChecksumBasicFile(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
-	cm := setupCacheManager(t, tmpdir)
+	snapshotter, err := naive.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	cm := setupCacheManager(t, tmpdir, snapshotter)
 	defer cm.Close()
 
 	ch := []string{
@@ -180,7 +182,9 @@ func TestHandleChange(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
-	cm := setupCacheManager(t, tmpdir)
+	snapshotter, err := naive.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	cm := setupCacheManager(t, tmpdir, snapshotter)
 	defer cm.Close()
 
 	ch := []string{
@@ -255,7 +259,9 @@ func TestPersistence(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
-	cm := setupCacheManager(t, tmpdir)
+	snapshotter, err := naive.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	cm := setupCacheManager(t, tmpdir, snapshotter)
 	defer cm.Close()
 
 	ch := []string{
@@ -289,9 +295,10 @@ func TestPersistence(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond) // saving happens on the background
 
+	// we can't close snapshotter and open it twice (especially, its internal boltdb store)
 	cm.Close()
 	getDefaultManager().lru.Purge()
-	cm = setupCacheManager(t, tmpdir)
+	cm = setupCacheManager(t, tmpdir, snapshotter)
 	defer cm.Close()
 
 	ref, err = cm.Get(context.TODO(), id)
@@ -324,10 +331,7 @@ func createRef(t *testing.T, cm cache.Manager, files []string) cache.ImmutableRe
 	return ref
 }
 
-func setupCacheManager(t *testing.T, tmpdir string) cache.Manager {
-	snapshotter, err := naive.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
-	require.NoError(t, err)
-
+func setupCacheManager(t *testing.T, tmpdir string, snapshotter snapshot.Snapshotter) cache.Manager {
 	md, err := metadata.NewStore(filepath.Join(tmpdir, "metadata.db"))
 	require.NoError(t, err)
 

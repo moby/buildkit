@@ -123,7 +123,7 @@ The `tonistiigi/buildkit:standalone` image can be built locally using the Docker
 
 #### Supported runc version
 
-During development buildkit is tested with the version of runc that is being used by the containerd repository. Please refer to [runc.md](https://github.com/containerd/containerd/blob/d1e11f17ec7b325f89608dd46c128300b8727d50/RUNC.md) for more information.
+During development buildkit is tested with the version of runc that is being used by the containerd repository. Please refer to [runc.md](https://github.com/containerd/containerd/blob/v1.0.0-beta.3/RUNC.md) for more information.
 
 
 #### Contributing

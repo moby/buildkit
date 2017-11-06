@@ -57,13 +57,18 @@ type Container struct {
 
 	// UpdatedAt is the time at which the container was updated.
 	UpdatedAt time.Time
+
+	// Extensions stores client-specified metadata
+	Extensions map[string]types.Any
 }
 
+// RuntimeInfo holds runtime specific information
 type RuntimeInfo struct {
 	Name    string
 	Options *types.Any
 }
 
+// Store interacts with the underlying container storage
 type Store interface {
 	Get(ctx context.Context, id string) (Container, error)
 

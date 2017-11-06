@@ -31,23 +31,11 @@ func setHeaderForSpecialDevice(hdr *tar.Header, name string, fi os.FileInfo) err
 	// Currently go does not fill in the major/minors
 	if s.Mode&syscall.S_IFBLK != 0 ||
 		s.Mode&syscall.S_IFCHR != 0 {
-		hdr.Devmajor = int64(major(uint64(s.Rdev)))
-		hdr.Devminor = int64(minor(uint64(s.Rdev)))
+		hdr.Devmajor = int64(unix.Major(uint64(s.Rdev)))
+		hdr.Devminor = int64(unix.Minor(uint64(s.Rdev)))
 	}
 
 	return nil
-}
-
-func major(device uint64) uint64 {
-	return (device >> 8) & 0xfff
-}
-
-func minor(device uint64) uint64 {
-	return (device & 0xff) | ((device >> 12) & 0xfff00)
-}
-
-func mkdev(major int64, minor int64) uint32 {
-	return uint32(((minor & 0xfff00) << 12) | ((major & 0xfff) << 8) | (minor & 0xff))
 }
 
 func open(p string) (*os.File, error) {
@@ -55,20 +43,28 @@ func open(p string) (*os.File, error) {
 }
 
 func openFile(name string, flag int, perm os.FileMode) (*os.File, error) {
-	return os.OpenFile(name, flag, perm)
+	f, err := os.OpenFile(name, flag, perm)
+	if err != nil {
+		return nil, err
+	}
+	// Call chmod to avoid permission mask
+	if err := os.Chmod(name, perm); err != nil {
+		return nil, err
+	}
+	return f, err
 }
 
 func mkdirAll(path string, perm os.FileMode) error {
 	return os.MkdirAll(path, perm)
 }
 
-func prepareApply() func() {
-	// Unset unmask before doing an apply operation,
-	// restore unmask when complete
-	oldmask := unix.Umask(0)
-	return func() {
-		unix.Umask(oldmask)
+func mkdir(path string, perm os.FileMode) error {
+	if err := os.Mkdir(path, perm); err != nil {
+		return err
 	}
+	// Only final created directory gets explicit permission
+	// call to avoid permission mask
+	return os.Chmod(path, perm)
 }
 
 func skipFile(*tar.Header) bool {
@@ -103,7 +99,7 @@ func handleTarTypeBlockCharFifo(hdr *tar.Header, path string) error {
 		mode |= unix.S_IFIFO
 	}
 
-	return unix.Mknod(path, mode, int(mkdev(hdr.Devmajor, hdr.Devminor)))
+	return unix.Mknod(path, mode, int(unix.Mkdev(uint32(hdr.Devmajor), uint32(hdr.Devminor))))
 }
 
 func handleLChmod(hdr *tar.Header, path string, hdrInfo os.FileInfo) error {

@@ -7,9 +7,11 @@ import (
 	"time"
 
 	"github.com/containerd/containerd/content"
+	"github.com/containerd/containerd/diff"
 	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/rootfs"
+	cdsnapshot "github.com/containerd/containerd/snapshot"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/blobs"
 	"github.com/moby/buildkit/client"
@@ -30,7 +32,7 @@ type ImportOpt struct {
 	SessionManager *session.Manager
 	ContentStore   content.Store
 	Snapshotter    snapshot.Snapshotter
-	Applier        rootfs.Applier
+	Applier        diff.Differ
 	CacheAccessor  cache.Accessor
 }
 
@@ -263,10 +265,18 @@ func (ii *importInfo) unpack(ctx context.Context, dpairs []blobs.DiffPair) (stri
 		return "", err
 	}
 
-	chainID, err := rootfs.ApplyLayers(ctx, layers, ii.opt.Snapshotter, ii.opt.Applier)
-	if err != nil {
-		return "", err
+	var chain []digest.Digest
+	for _, layer := range layers {
+		labels := map[string]string{
+			"containerd.io/gc.root":      time.Now().UTC().Format(time.RFC3339Nano),
+			"containerd.io/uncompressed": layer.Diff.Digest.String(),
+		}
+		if _, err := rootfs.ApplyLayer(ctx, layer, chain, ii.opt.Snapshotter, ii.opt.Applier, cdsnapshot.WithLabels(labels)); err != nil {
+			return "", err
+		}
+		chain = append(chain, layer.Diff.Digest)
 	}
+	chainID := identity.ChainID(chain)
 
 	if err := ii.fillBlobMapping(ctx, layers); err != nil {
 		return "", err

@@ -188,7 +188,10 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, opts ...RefOpti
 		parentID = parent.ID()
 	}
 
-	if _, err := cm.Snapshotter.Prepare(ctx, id, parentID); err != nil {
+	labels := map[string]string{
+		"containerd.io/gc.root": time.Now().UTC().Format(time.RFC3339Nano),
+	}
+	if _, err := cm.Snapshotter.Prepare(ctx, id, parentID, cdsnapshot.WithLabels(labels)); err != nil {
 		if parent != nil {
 			parent.Release(context.TODO())
 		}
