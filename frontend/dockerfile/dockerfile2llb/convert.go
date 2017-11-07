@@ -333,6 +333,9 @@ func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState l
 	img := llb.Image("tonistiigi/copy@sha256:260a4355be76e0609518ebd7c0e026831c80b8908d4afd3f8e8c942645b1e5cf")
 
 	dest := path.Join("/dest", pathRelativeToWorkingDir(d.state, c.Dest()))
+	if c.Dest() == "." || c.Dest()[len(c.Dest())-1] == filepath.Separator {
+		dest += string(filepath.Separator)
+	}
 	args := []string{"copy"}
 	mounts := make([]llb.RunOption, 0, len(c.Sources()))
 	for i, src := range c.Sources() {
