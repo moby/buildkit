@@ -81,7 +81,7 @@ func (e *imageExporterInstance) Name() string {
 
 func (e *imageExporterInstance) Export(ctx context.Context, ref cache.ImmutableRef, opt map[string][]byte) error {
 	layersDone := oneOffProgress(ctx, "exporting layers")
-	diffPairs, err := blobs.GetDiffPairs(ctx, e.opt.Snapshotter, e.opt.Differ, ref)
+	diffPairs, err := blobs.GetDiffPairs(ctx, e.opt.ContentStore, e.opt.Snapshotter, e.opt.Differ, ref)
 	if err != nil {
 		return err
 	}
@@ -105,10 +105,14 @@ func (e *imageExporterInstance) Export(ctx context.Context, ref cache.ImmutableR
 		}
 	}
 
+	addAsRoot := content.WithLabels(map[string]string{
+		"containerd.io/gc.root": time.Now().UTC().Format(time.RFC3339Nano),
+	})
+
 	dgst := digest.FromBytes(dt)
 	configDone := oneOffProgress(ctx, "exporting config "+dgst.String())
 
-	if err := content.WriteBlob(ctx, e.opt.ContentStore, dgst.String(), bytes.NewReader(dt), int64(len(dt)), dgst); err != nil {
+	if err := content.WriteBlob(ctx, e.opt.ContentStore, dgst.String(), bytes.NewReader(dt), int64(len(dt)), dgst, addAsRoot); err != nil {
 		return configDone(errors.Wrap(err, "error writing config blob"))
 	}
 	configDone(nil)
@@ -143,7 +147,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, ref cache.ImmutableR
 	dgst = digest.FromBytes(dt)
 	mfstDone := oneOffProgress(ctx, "exporting manifest "+dgst.String())
 
-	if err := content.WriteBlob(ctx, e.opt.ContentStore, dgst.String(), bytes.NewReader(dt), int64(len(dt)), dgst); err != nil {
+	if err := content.WriteBlob(ctx, e.opt.ContentStore, dgst.String(), bytes.NewReader(dt), int64(len(dt)), dgst, addAsRoot); err != nil {
 		return mfstDone(errors.Wrap(err, "error writing manifest blob"))
 	}
 

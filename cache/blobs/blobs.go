@@ -2,7 +2,9 @@ package blobs
 
 import (
 	gocontext "context"
+	"time"
 
+	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/diff"
 	"github.com/containerd/containerd/mount"
 	"github.com/moby/buildkit/cache"
@@ -17,6 +19,8 @@ import (
 
 var g flightcontrol.Group
 
+const containerdUncompressed = "containerd.io/uncompressed"
+
 type DiffPair struct {
 	DiffID  digest.Digest
 	Blobsum digest.Digest
@@ -27,7 +31,7 @@ type blobmapper interface {
 	SetBlob(ctx gocontext.Context, key string, diffID, blob digest.Digest) error
 }
 
-func GetDiffPairs(ctx context.Context, snapshotter snapshot.Snapshotter, differ diff.Differ, ref cache.ImmutableRef) ([]DiffPair, error) {
+func GetDiffPairs(ctx context.Context, contentStore content.Store, snapshotter snapshot.Snapshotter, differ diff.Differ, ref cache.ImmutableRef) ([]DiffPair, error) {
 	blobmap, ok := snapshotter.(blobmapper)
 	if !ok {
 		return nil, errors.Errorf("image exporter requires snapshotter with blobs mapping support")
@@ -40,7 +44,7 @@ func GetDiffPairs(ctx context.Context, snapshotter snapshot.Snapshotter, differ 
 	if parent != nil {
 		defer parent.Release(context.TODO())
 		eg.Go(func() error {
-			dp, err := GetDiffPairs(ctx, snapshotter, differ, parent)
+			dp, err := GetDiffPairs(ctx, contentStore, snapshotter, differ, parent)
 			if err != nil {
 				return err
 			}
@@ -72,15 +76,31 @@ func GetDiffPairs(ctx context.Context, snapshotter snapshot.Snapshotter, differ 
 				return nil, err
 			}
 			descr, err := differ.DiffMounts(ctx, lower, upper,
-				diff.WithMediaType(ocispec.MediaTypeImageLayer),
-				diff.WithReference(ref.ID()))
+				diff.WithMediaType(ocispec.MediaTypeImageLayerGzip),
+				diff.WithReference(ref.ID()),
+				diff.WithLabels(map[string]string{
+					"containerd.io/gc.root": time.Now().UTC().Format(time.RFC3339Nano),
+				}),
+			)
 			if err != nil {
 				return nil, err
 			}
-			if err := blobmap.SetBlob(ctx, ref.ID(), descr.Digest, descr.Digest); err != nil {
+			info, err := contentStore.Info(ctx, descr.Digest)
+			if err != nil {
 				return nil, err
 			}
-			return DiffPair{DiffID: descr.Digest, Blobsum: descr.Digest}, nil
+			diffIDStr, ok := info.Labels[containerdUncompressed]
+			if !ok {
+				return nil, errors.Errorf("invalid differ response with no diffID")
+			}
+			diffIDDigest, err := digest.Parse(diffIDStr)
+			if err != nil {
+				return nil, err
+			}
+			if err := blobmap.SetBlob(ctx, ref.ID(), diffIDDigest, descr.Digest); err != nil {
+				return nil, err
+			}
+			return DiffPair{DiffID: diffIDDigest, Blobsum: descr.Digest}, nil
 		})
 		if err != nil {
 			return err

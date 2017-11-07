@@ -4,6 +4,7 @@ import (
 	"bytes"
 	gocontext "context"
 	"encoding/json"
+	"time"
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/diff"
@@ -67,7 +68,7 @@ func (ce *CacheExporter) Export(ctx context.Context, rec []CacheRecord, target s
 			continue
 		}
 
-		dpairs, err := blobs.GetDiffPairs(ctx, ce.opt.Snapshotter, ce.opt.Differ, ref)
+		dpairs, err := blobs.GetDiffPairs(ctx, ce.opt.ContentStore, ce.opt.Snapshotter, ce.opt.Differ, ref)
 		if err != nil {
 			return err
 		}
@@ -140,7 +141,11 @@ func (ce *CacheExporter) Export(ctx context.Context, rec []CacheRecord, target s
 
 	dgst := digest.FromBytes(dt)
 
-	if err := content.WriteBlob(ctx, ce.opt.ContentStore, dgst.String(), bytes.NewReader(dt), int64(len(dt)), dgst); err != nil {
+	addAsRoot := content.WithLabels(map[string]string{
+		"containerd.io/gc.root": time.Now().UTC().Format(time.RFC3339Nano),
+	})
+
+	if err := content.WriteBlob(ctx, ce.opt.ContentStore, dgst.String(), bytes.NewReader(dt), int64(len(dt)), dgst, addAsRoot); err != nil {
 		return errors.Wrap(err, "error writing config blob")
 	}
 
@@ -157,7 +162,7 @@ func (ce *CacheExporter) Export(ctx context.Context, rec []CacheRecord, target s
 
 	dgst = digest.FromBytes(dt)
 
-	if err := content.WriteBlob(ctx, ce.opt.ContentStore, dgst.String(), bytes.NewReader(dt), int64(len(dt)), dgst); err != nil {
+	if err := content.WriteBlob(ctx, ce.opt.ContentStore, dgst.String(), bytes.NewReader(dt), int64(len(dt)), dgst, addAsRoot); err != nil {
 		return errors.Wrap(err, "error writing manifest blob")
 	}
 
