@@ -24,6 +24,8 @@ const (
 	defaultDockerfileName = "Dockerfile"
 	localNameDockerfile   = "dockerfile"
 	buildArgPrefix        = "build-arg:"
+	localNameContext      = "context"
+	gitPrefix             = "git://"
 )
 
 func NewDockerfileFrontend() frontend.Frontend {
@@ -33,7 +35,6 @@ func NewDockerfileFrontend() frontend.Frontend {
 type dfFrontend struct{}
 
 func (f *dfFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string) (retRef cache.ImmutableRef, exporterAttr map[string][]byte, retErr error) {
-
 	filename := opts[keyFilename]
 	if filename == "" {
 		filename = defaultDockerfileName
@@ -48,6 +49,13 @@ func (f *dfFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBr
 		llb.IncludePatterns([]string{filename}),
 		llb.SessionID(sid),
 	)
+
+	var buildContext *llb.State
+	if strings.HasPrefix(opts[localNameContext], gitPrefix) {
+		src = parseGitSource(opts[localNameContext])
+		buildContext = &src
+	}
+
 	def, err := src.Marshal()
 	if err != nil {
 		return nil, nil, err
@@ -104,6 +112,7 @@ func (f *dfFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBr
 		MetaResolver: llbBridge,
 		BuildArgs:    filterBuildArgs(opts),
 		SessionID:    sid,
+		BuildContext: buildContext,
 	})
 
 	if err != nil {
@@ -139,4 +148,14 @@ func filterBuildArgs(opt map[string]string) map[string]string {
 		}
 	}
 	return m
+}
+
+func parseGitSource(ref string) llb.State {
+	ref = strings.TrimPrefix(ref, gitPrefix)
+	parts := strings.SplitN(ref, "#", 2)
+	branch := ""
+	if len(parts) > 1 {
+		branch = parts[1]
+	}
+	return llb.Git(parts[0], branch)
 }

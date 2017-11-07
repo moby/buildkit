@@ -20,6 +20,8 @@ const (
 	defaultDockerfileName = "Dockerfile"
 	localNameDockerfile   = "dockerfile"
 	buildArgPrefix        = "build-arg:"
+	localNameContext      = "context"
+	gitPrefix             = "git://"
 )
 
 func main() {
@@ -51,6 +53,11 @@ func run() error {
 		llb.IncludePatterns([]string{filename}),
 		llb.SessionID(c.SessionID()),
 	)
+	var buildContext *llb.State
+	if strings.HasPrefix(opts[localNameContext], gitPrefix) {
+		src = parseGitSource(opts[localNameContext])
+		buildContext = &src
+	}
 	def, err := src.Marshal()
 	if err != nil {
 		return err
@@ -71,6 +78,7 @@ func run() error {
 		MetaResolver: c,
 		BuildArgs:    filterBuildArgs(opts),
 		SessionID:    c.SessionID(),
+		BuildContext: buildContext,
 	})
 
 	if err != nil {
@@ -104,4 +112,14 @@ func filterBuildArgs(opt map[string]string) map[string]string {
 		}
 	}
 	return m
+}
+
+func parseGitSource(ref string) llb.State {
+	ref = strings.TrimPrefix(ref, gitPrefix)
+	parts := strings.SplitN(ref, "#", 2)
+	branch := ""
+	if len(parts) > 1 {
+		branch = parts[1]
+	}
+	return llb.Git(parts[0], branch)
 }

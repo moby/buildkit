@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -29,6 +30,7 @@ type ConvertOpt struct {
 	MetaResolver llb.ImageMetaResolver
 	BuildArgs    map[string]string
 	SessionID    string
+	BuildContext *llb.State
 }
 
 func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State, *Image, error) {
@@ -124,6 +126,11 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		return nil, nil, err
 	}
 
+	buildContext := llb.Local(localNameContext, llb.SessionID(opt.SessionID))
+	if opt.BuildContext != nil {
+		buildContext = *opt.BuildContext
+	}
+
 	for _, d := range allDispatchStates {
 		if d.base != nil {
 			d.state = d.base.state
@@ -159,6 +166,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 			buildArgValues:       opt.BuildArgs,
 			shlex:                shlex,
 			sessionID:            opt.SessionID,
+			buildContext:         buildContext,
 		}
 
 		if err = dispatchOnBuild(d, d.image.Config.OnBuild, opt); err != nil {
@@ -190,6 +198,7 @@ type dispatchOpt struct {
 	buildArgValues       map[string]string
 	shlex                *ShellLex
 	sessionID            string
+	buildContext         llb.State
 }
 
 func dispatch(d *dispatchState, cmd instructions.Command, opt dispatchOpt) error {
@@ -211,7 +220,7 @@ func dispatch(d *dispatchState, cmd instructions.Command, opt dispatchOpt) error
 	case *instructions.WorkdirCommand:
 		err = dispatchWorkdir(d, c)
 	case *instructions.AddCommand:
-		err = dispatchCopy(d, c.SourcesAndDest, llb.Local(localNameContext, llb.SessionID(opt.sessionID)))
+		err = dispatchCopy(d, c.SourcesAndDest, opt.buildContext)
 	case *instructions.LabelCommand:
 		err = dispatchLabel(d, c)
 	case *instructions.OnbuildCommand:
@@ -235,7 +244,7 @@ func dispatch(d *dispatchState, cmd instructions.Command, opt dispatchOpt) error
 	case *instructions.ArgCommand:
 		err = dispatchArg(d, c, opt.metaArgs, opt.buildArgValues)
 	case *instructions.CopyCommand:
-		l := llb.Local(localNameContext, llb.SessionID(opt.sessionID))
+		l := opt.buildContext
 		if c.From != "" {
 			index, err := strconv.Atoi(c.From)
 			if err != nil {
