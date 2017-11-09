@@ -767,6 +767,30 @@ publish the port when running the container, use the `-p` flag on `docker run`
 to publish and map one or more ports, or the `-P` flag to publish all exposed
 ports and map them to high-order ports.
 
+By default, `EXPOSE` assumes TCP. You can also specify UDP:
+
+```Dockerfile
+EXPOSE 80/udp
+```
+
+To expose on both TCP and UDP, include two lines:
+
+```Dockerfile
+EXPOSE 80/tcp
+EXPOSE 80/udp
+```
+
+In this case, if you use `-P` with `docker run`, the port will be exposed once
+for TCP and once for UDP. Remember that `-P` uses an ephemeral high-ordered host
+port on the host, so the port will not be the same for TCP and UDP.
+
+Regardless of the `EXPOSE` settings, you can override them at runtime by using
+the `-p` flag. For example
+
+```bash
+docker run -p 80:80/tcp -p 80:80/udp ...
+```
+
 To set up port redirection on the host system, see [using the -P
 flag](run.md#expose-incoming-ports). The `docker network` command supports
 creating networks for communication among containers without the need to
