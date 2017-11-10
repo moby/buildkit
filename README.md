@@ -80,10 +80,17 @@ buildd-standalone --debug --root /var/lib/buildkit
 
 ```
 buildctl build --frontend=dockerfile.v0 --local context=. --local dockerfile=.
+buildctl build --frontend=dockerfile.v0 --local context=. --local dockerfile=. --frontend-opt target=foo --frontend-opt build-arg:foo=bar
 ```
 
 `context` and `dockerfile` should point to local directories for build context and Dockerfile location.
 
+##### Building a Dockerfile using [external frontend](https://hub.docker.com/r/tonistiigi/dockerfile/tags/):
+
+```
+buildctl build --frontend=gateway.v0 --frontend-opt=source=tonistiigi/dockerfile:v0 --local context=. --local dockerfile=.
+buildctl build --frontend gateway.v0 --frontend-opt=source=tonistiigi/dockerfile:v0 --frontend-opt=context=git://github.com/moby/moby --frontend-opt build-arg:APT_MIRROR=cdn-fastly.deb.debian.org
+````
 
 ##### Exporting resulting image to containerd
 
@@ -93,6 +100,15 @@ Containerd version of buildd needs to be used
 buildctl build ... --exporter=image --exporter-opt name=docker.io/username/image
 ctr --namespace=buildkit images ls
 ```
+
+##### Push resulting image to registry
+
+```
+buildctl build ... --exporter=image --exporter-opt name=docker.io/username/image --exporter-opt push=true
+```
+
+If credentials are required, `buildctl` will attempt to read Docker configuration file.
+
 
 ##### Exporting build result back to client
 
