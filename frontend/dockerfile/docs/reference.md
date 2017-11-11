@@ -1284,7 +1284,7 @@ consider the following Dockerfile snippet:
     RUN echo "hello world" > /myvol/greeting
     VOLUME /myvol
 
-This Dockerfile results in an image that causes `docker run`, to
+This Dockerfile results in an image that causes `docker run` to
 create a new mount point at `/myvol` and copy the  `greeting` file
 into the newly created volume.
 
@@ -1306,8 +1306,8 @@ Keep the following things in mind about volumes in the `Dockerfile`.
 
 - **The host directory is declared at container run-time**: The host directory
   (the mountpoint) is, by its nature, host-dependent. This is to preserve image
-  portability. since a given host directory can't be guaranteed to be available
-  on all hosts.For this reason, you can't mount a host directory from
+  portability, since a given host directory can't be guaranteed to be available
+  on all hosts. For this reason, you can't mount a host directory from
   within the Dockerfile. The `VOLUME` instruction does not support specifying a `host-dir`
   parameter.  You must specify the mountpoint when you create or run the container.
 
