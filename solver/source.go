@@ -65,6 +65,18 @@ func (s *sourceOp) instance(ctx context.Context) (source.SourceInstance, error) 
 			}
 		}
 	}
+	if id, ok := id.(*source.HttpIdentifier); ok {
+		for k, v := range s.op.Source.Attrs {
+			switch k {
+			case pb.AttrHTTPChecksum:
+				dgst, err := digest.Parse(v)
+				if err != nil {
+					return nil, err
+				}
+				id.Checksum = dgst
+			}
+		}
+	}
 	src, err := s.sm.Resolve(ctx, id)
 	if err != nil {
 		return nil, err

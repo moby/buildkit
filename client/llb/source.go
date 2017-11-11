@@ -8,6 +8,7 @@ import (
 
 	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/solver/pb"
+	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
 
@@ -197,4 +198,29 @@ func IncludePatterns(p []string) LocalOption {
 type LocalInfo struct {
 	SessionID       string
 	IncludePatterns string
+}
+
+func HTTP(url string, opts ...HTTPOption) State {
+	hi := &HTTPInfo{}
+	for _, o := range opts {
+		o(hi)
+	}
+	attrs := map[string]string{}
+	if hi.Checksum != "" {
+		attrs[pb.AttrHTTPChecksum] = hi.Checksum.String()
+	}
+	source := NewSource(url, attrs)
+	return NewState(source.Output())
+}
+
+type HTTPInfo struct {
+	Checksum digest.Digest
+}
+
+type HTTPOption func(*HTTPInfo)
+
+func Checksum(dgst digest.Digest) HTTPOption {
+	return func(hi *HTTPInfo) {
+		hi.Checksum = dgst
+	}
 }

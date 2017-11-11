@@ -41,7 +41,7 @@ func (sm *Manager) Resolve(ctx context.Context, id Identifier) (SourceInstance, 
 	sm.mu.Unlock()
 
 	if !ok {
-		return nil, errors.Errorf("no handler fro %s", id.ID())
+		return nil, errors.Errorf("no handler for %s", id.ID())
 	}
 
 	return src.Resolve(ctx, id)

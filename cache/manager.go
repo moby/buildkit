@@ -369,6 +369,10 @@ func IsLocked(err error) bool {
 	return errors.Cause(err) == errLocked
 }
 
+func IsNotFound(err error) bool {
+	return errors.Cause(err) == errNotFound
+}
+
 type RefOption func(withMetadata) error
 
 type cachePolicy int
