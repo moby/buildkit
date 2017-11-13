@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 
 	"github.com/containerd/containerd/content"
+	"github.com/containerd/containerd/diff"
 	"github.com/containerd/containerd/images"
-	"github.com/containerd/containerd/rootfs"
 	ctdsnapshot "github.com/containerd/containerd/snapshot"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/cacheimport"
@@ -31,8 +31,8 @@ import (
 type pullDeps struct {
 	Snapshotter  ctdsnapshot.Snapshotter
 	ContentStore content.Store
-	Applier      rootfs.Applier
-	Differ       rootfs.MountDiffer
+	Applier      diff.Differ
+	Differ       diff.Differ
 	Images       images.Store
 }
 

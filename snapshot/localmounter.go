@@ -48,7 +48,7 @@ func (lm *localMounter) Mount() (string, error) {
 		return "", errors.Wrap(err, "failed to create temp dir")
 	}
 
-	if err := mount.MountAll(lm.m, dir); err != nil {
+	if err := mount.All(lm.m, dir); err != nil {
 		os.RemoveAll(dir)
 		return "", err
 	}

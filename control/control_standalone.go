@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/containerd/containerd/content/local"
-	"github.com/containerd/containerd/differ"
+	"github.com/containerd/containerd/diff/walking"
 	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/namespaces"
 	ctdsnapshot "github.com/containerd/containerd/snapshot"
@@ -55,7 +55,7 @@ func newStandalonePullDeps(root string) (*pullDeps, error) {
 		return nil, err
 	}
 
-	df, err := differ.NewWalkingDiff(c)
+	df, err := walking.NewWalkingDiff(c)
 	if err != nil {
 		return nil, err
 	}

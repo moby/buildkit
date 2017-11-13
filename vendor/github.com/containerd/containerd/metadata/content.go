@@ -4,12 +4,15 @@ import (
 	"context"
 	"encoding/binary"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/boltdb/bolt"
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/filters"
+	"github.com/containerd/containerd/labels"
+	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/metadata/boltutil"
 	"github.com/containerd/containerd/namespaces"
 	digest "github.com/opencontainers/go-digest"
@@ -18,12 +21,13 @@ import (
 
 type contentStore struct {
 	content.Store
-	db *bolt.DB
+	db *DB
+	l  sync.RWMutex
 }
 
-// NewContentStore returns a namespaced content store using an existing
+// newContentStore returns a namespaced content store using an existing
 // content store interface.
-func NewContentStore(db *bolt.DB, cs content.Store) content.Store {
+func newContentStore(db *DB, cs content.Store) *contentStore {
 	return &contentStore{
 		Store: cs,
 		db:    db,
@@ -57,6 +61,9 @@ func (cs *contentStore) Update(ctx context.Context, info content.Info, fieldpath
 	if err != nil {
 		return content.Info{}, err
 	}
+
+	cs.l.RLock()
+	defer cs.l.RUnlock()
 
 	updated := content.Info{
 		Digest: info.Digest,
@@ -93,6 +100,9 @@ func (cs *contentStore) Update(ctx context.Context, info content.Info, fieldpath
 		} else {
 			// Set mutable fields
 			updated.Labels = info.Labels
+		}
+		if err := validateInfo(&updated); err != nil {
+			return err
 		}
 
 		updated.UpdatedAt = time.Now().UTC()
@@ -162,15 +172,25 @@ func (cs *contentStore) Delete(ctx context.Context, dgst digest.Digest) error {
 		return err
 	}
 
+	cs.l.RLock()
+	defer cs.l.RUnlock()
+
 	return update(ctx, cs.db, func(tx *bolt.Tx) error {
 		bkt := getBlobBucket(tx, ns, dgst)
 		if bkt == nil {
 			return errors.Wrapf(errdefs.ErrNotFound, "content digest %v", dgst)
 		}
 
-		// Just remove local reference, garbage collector is responsible for
-		// cleaning up on disk content
-		return getBlobsBucket(tx, ns).DeleteBucket([]byte(dgst.String()))
+		if err := getBlobsBucket(tx, ns).DeleteBucket([]byte(dgst.String())); err != nil {
+			return err
+		}
+
+		// Mark content store as dirty for triggering garbage collection
+		cs.db.dirtyL.Lock()
+		cs.db.dirtyCS = true
+		cs.db.dirtyL.Unlock()
+
+		return nil
 	})
 }
 
@@ -265,6 +285,9 @@ func (cs *contentStore) Abort(ctx context.Context, ref string) error {
 		return err
 	}
 
+	cs.l.RLock()
+	defer cs.l.RUnlock()
+
 	return update(ctx, cs.db, func(tx *bolt.Tx) error {
 		bkt := getIngestBucket(tx, ns)
 		if bkt == nil {
@@ -288,6 +311,9 @@ func (cs *contentStore) Writer(ctx context.Context, ref string, size int64, expe
 	if err != nil {
 		return nil, err
 	}
+
+	cs.l.RLock()
+	defer cs.l.RUnlock()
 
 	var w content.Writer
 	if err := update(ctx, cs.db, func(tx *bolt.Tx) error {
@@ -342,6 +368,7 @@ func (cs *contentStore) Writer(ctx context.Context, ref string, size int64, expe
 		ref:       ref,
 		namespace: ns,
 		db:        cs.db,
+		l:         &cs.l,
 	}, nil
 }
 
@@ -349,10 +376,14 @@ type namespacedWriter struct {
 	content.Writer
 	ref       string
 	namespace string
-	db        *bolt.DB
+	db        transactor
+	l         *sync.RWMutex
 }
 
 func (nw *namespacedWriter) Commit(ctx context.Context, size int64, expected digest.Digest, opts ...content.Opt) error {
+	nw.l.RLock()
+	defer nw.l.RUnlock()
+
 	return update(ctx, nw.db, func(tx *bolt.Tx) error {
 		bkt := getIngestBucket(tx, nw.namespace)
 		if bkt != nil {
@@ -360,23 +391,31 @@ func (nw *namespacedWriter) Commit(ctx context.Context, size int64, expected dig
 				return err
 			}
 		}
-		return nw.commit(ctx, tx, size, expected, opts...)
+		dgst, err := nw.commit(ctx, tx, size, expected, opts...)
+		if err != nil {
+			return err
+		}
+		return addContentLease(ctx, tx, dgst)
 	})
 }
 
-func (nw *namespacedWriter) commit(ctx context.Context, tx *bolt.Tx, size int64, expected digest.Digest, opts ...content.Opt) error {
+func (nw *namespacedWriter) commit(ctx context.Context, tx *bolt.Tx, size int64, expected digest.Digest, opts ...content.Opt) (digest.Digest, error) {
 	var base content.Info
 	for _, opt := range opts {
 		if err := opt(&base); err != nil {
-			return err
+			return "", err
 		}
 	}
+	if err := validateInfo(&base); err != nil {
+		return "", err
+	}
+
 	status, err := nw.Writer.Status()
 	if err != nil {
-		return err
+		return "", err
 	}
 	if size != 0 && size != status.Offset {
-		return errors.Errorf("%q failed size validation: %v != %v", nw.ref, status.Offset, size)
+		return "", errors.Errorf("%q failed size validation: %v != %v", nw.ref, status.Offset, size)
 	}
 	size = status.Offset
 
@@ -384,36 +423,32 @@ func (nw *namespacedWriter) commit(ctx context.Context, tx *bolt.Tx, size int64,
 
 	if err := nw.Writer.Commit(ctx, size, expected); err != nil {
 		if !errdefs.IsAlreadyExists(err) {
-			return err
+			return "", err
 		}
 		if getBlobBucket(tx, nw.namespace, actual) != nil {
-			return errors.Wrapf(errdefs.ErrAlreadyExists, "content %v", actual)
+			return "", errors.Wrapf(errdefs.ErrAlreadyExists, "content %v", actual)
 		}
 	}
 
 	bkt, err := createBlobBucket(tx, nw.namespace, actual)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	commitTime := time.Now().UTC()
 
-	sizeEncoded, err := encodeSize(size)
+	sizeEncoded, err := encodeInt(size)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	if err := boltutil.WriteTimestamps(bkt, commitTime, commitTime); err != nil {
-		return err
+		return "", err
 	}
 	if err := boltutil.WriteLabels(bkt, base.Labels); err != nil {
-		return err
+		return "", err
 	}
-	if err := bkt.Put(bucketKeySize, sizeEncoded); err != nil {
-		return err
-	}
-
-	return nil
+	return actual, bkt.Put(bucketKeySize, sizeEncoded)
 }
 
 func (nw *namespacedWriter) Status() (content.Status, error) {
@@ -446,6 +481,16 @@ func (cs *contentStore) checkAccess(ctx context.Context, dgst digest.Digest) err
 	})
 }
 
+func validateInfo(info *content.Info) error {
+	for k, v := range info.Labels {
+		if err := labels.Validate(k, v); err == nil {
+			return errors.Wrapf(err, "info.Labels")
+		}
+	}
+
+	return nil
+}
+
 func readInfo(info *content.Info, bkt *bolt.Bucket) error {
 	if err := boltutil.ReadTimestamps(bkt, &info.CreatedAt, &info.UpdatedAt); err != nil {
 		return err
@@ -474,14 +519,64 @@ func writeInfo(info *content.Info, bkt *bolt.Bucket) error {
 	}
 
 	// Write size
-	sizeEncoded, err := encodeSize(info.Size)
+	sizeEncoded, err := encodeInt(info.Size)
 	if err != nil {
 		return err
 	}
 
-	if err := bkt.Put(bucketKeySize, sizeEncoded); err != nil {
+	return bkt.Put(bucketKeySize, sizeEncoded)
+}
+
+func (cs *contentStore) garbageCollect(ctx context.Context) error {
+	lt1 := time.Now()
+	cs.l.Lock()
+	defer func() {
+		cs.l.Unlock()
+		log.G(ctx).WithField("t", time.Now().Sub(lt1)).Debugf("content garbage collected")
+	}()
+
+	seen := map[string]struct{}{}
+	if err := cs.db.View(func(tx *bolt.Tx) error {
+		v1bkt := tx.Bucket(bucketKeyVersion)
+		if v1bkt == nil {
+			return nil
+		}
+
+		// iterate through each namespace
+		v1c := v1bkt.Cursor()
+
+		for k, v := v1c.First(); k != nil; k, v = v1c.Next() {
+			if v != nil {
+				continue
+			}
+
+			cbkt := v1bkt.Bucket(k).Bucket(bucketKeyObjectContent)
+			if cbkt == nil {
+				continue
+			}
+			bbkt := cbkt.Bucket(bucketKeyObjectBlob)
+			if err := bbkt.ForEach(func(ck, cv []byte) error {
+				if cv == nil {
+					seen[string(ck)] = struct{}{}
+				}
+				return nil
+			}); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}); err != nil {
 		return err
 	}
 
-	return nil
+	return cs.Store.Walk(ctx, func(info content.Info) error {
+		if _, ok := seen[info.Digest.String()]; !ok {
+			if err := cs.Store.Delete(ctx, info.Digest); err != nil {
+				return err
+			}
+			log.G(ctx).WithField("digest", info.Digest).Debug("removed content")
+		}
+		return nil
+	})
 }

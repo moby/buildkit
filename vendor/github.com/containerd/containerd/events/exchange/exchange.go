@@ -1,27 +1,30 @@
-package events
+package exchange
 
 import (
 	"context"
 	"strings"
 	"time"
 
-	events "github.com/containerd/containerd/api/services/events/v1"
+	v1 "github.com/containerd/containerd/api/services/events/v1"
 	"github.com/containerd/containerd/errdefs"
+	"github.com/containerd/containerd/events"
 	"github.com/containerd/containerd/filters"
 	"github.com/containerd/containerd/identifiers"
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/namespaces"
-	"github.com/containerd/containerd/typeurl"
+	"github.com/containerd/typeurl"
 	goevents "github.com/docker/go-events"
 	"github.com/gogo/protobuf/types"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
+// Exchange broadcasts events
 type Exchange struct {
 	broadcaster *goevents.Broadcaster
 }
 
+// NewExchange returns a new event Exchange
 func NewExchange() *Exchange {
 	return &Exchange{
 		broadcaster: goevents.NewBroadcaster(),
@@ -32,7 +35,7 @@ func NewExchange() *Exchange {
 //
 // This is useful when an event is forwaded on behalf of another namespace or
 // when the event is propagated on behalf of another publisher.
-func (e *Exchange) Forward(ctx context.Context, envelope *events.Envelope) (err error) {
+func (e *Exchange) Forward(ctx context.Context, envelope *v1.Envelope) (err error) {
 	if err := validateEnvelope(envelope); err != nil {
 		return err
 	}
@@ -57,11 +60,11 @@ func (e *Exchange) Forward(ctx context.Context, envelope *events.Envelope) (err 
 // Publish packages and sends an event. The caller will be considered the
 // initial publisher of the event. This means the timestamp will be calculated
 // at this point and this method may read from the calling context.
-func (e *Exchange) Publish(ctx context.Context, topic string, event Event) (err error) {
+func (e *Exchange) Publish(ctx context.Context, topic string, event events.Event) (err error) {
 	var (
 		namespace string
 		encoded   *types.Any
-		envelope  events.Envelope
+		envelope  v1.Envelope
 	)
 
 	namespace, err = namespaces.NamespaceRequired(ctx)
@@ -106,9 +109,9 @@ func (e *Exchange) Publish(ctx context.Context, topic string, event Event) (err 
 // Zero or more filters may be provided as strings. Only events that match
 // *any* of the provided filters will be sent on the channel. The filters use
 // the standard containerd filters package syntax.
-func (e *Exchange) Subscribe(ctx context.Context, fs ...string) (ch <-chan *events.Envelope, errs <-chan error) {
+func (e *Exchange) Subscribe(ctx context.Context, fs ...string) (ch <-chan *v1.Envelope, errs <-chan error) {
 	var (
-		evch                  = make(chan *events.Envelope)
+		evch                  = make(chan *v1.Envelope)
 		errq                  = make(chan error, 1)
 		channel               = goevents.NewChannel(0)
 		queue                 = goevents.NewQueue(channel)
@@ -148,7 +151,7 @@ func (e *Exchange) Subscribe(ctx context.Context, fs ...string) (ch <-chan *even
 		for {
 			select {
 			case ev := <-channel.C:
-				env, ok := ev.(*events.Envelope)
+				env, ok := ev.(*v1.Envelope)
 				if !ok {
 					// TODO(stevvooe): For the most part, we are well protected
 					// from this condition. Both Forward and Publish protect
@@ -202,7 +205,7 @@ func validateTopic(topic string) error {
 	return nil
 }
 
-func validateEnvelope(envelope *events.Envelope) error {
+func validateEnvelope(envelope *v1.Envelope) error {
 	if err := namespaces.Validate(envelope.Namespace); err != nil {
 		return errors.Wrapf(err, "event envelope has invalid namespace")
 	}

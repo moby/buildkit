@@ -20,6 +20,9 @@ const (
 	KindCommitted
 )
 
+// ParseKind parses the provided string into a Kind
+//
+// If the string cannot be parsed KindUnknown is returned
 func ParseKind(s string) Kind {
 	s = strings.ToLower(s)
 	switch s {
@@ -34,6 +37,7 @@ func ParseKind(s string) Kind {
 	return KindUnknown
 }
 
+// String returns the string representation of the Kind
 func (k Kind) String() string {
 	switch k {
 	case KindView:
@@ -47,10 +51,12 @@ func (k Kind) String() string {
 	return "Unknown"
 }
 
+// MarshalJSON the Kind to JSON
 func (k Kind) MarshalJSON() ([]byte, error) {
 	return json.Marshal(k.String())
 }
 
+// UnmarshalJSON the Kind from JSON
 func (k *Kind) UnmarshalJSON(b []byte) error {
 	var s string
 	if err := json.Unmarshal(b, &s); err != nil {
@@ -81,6 +87,7 @@ type Usage struct {
 	Size   int64 // provides usage, in bytes, of snapshot
 }
 
+// Add the provided usage to the current usage
 func (u *Usage) Add(other Usage) {
 	u.Size += other.Size
 
@@ -146,7 +153,7 @@ func (u *Usage) Add(other Usage) {
 // the active snapshot. Mount this to the temporary location with the
 // following:
 //
-//	if err := containerd.MountAll(mounts, tmpDir); err != nil { ... }
+//	if err := mount.All(mounts, tmpDir); err != nil { ... }
 //
 // Once the mounts are performed, our temporary location is ready to capture
 // a diff. In practice, this works similar to a filesystem transaction. The
@@ -213,7 +220,7 @@ type Snapshotter interface {
 	// the kind of snapshot.
 	Stat(ctx context.Context, key string) (Info, error)
 
-	// Update updates the infor for a snapshot.
+	// Update updates the info for a snapshot.
 	//
 	// Only mutable properties of a snapshot may be updated.
 	Update(ctx context.Context, info Info, fieldpaths ...string) (Info, error)

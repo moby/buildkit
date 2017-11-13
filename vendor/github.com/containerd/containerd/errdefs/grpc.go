@@ -29,17 +29,17 @@ func ToGRPC(err error) error {
 
 	switch {
 	case IsInvalidArgument(err):
-		return grpc.Errorf(codes.InvalidArgument, err.Error())
+		return status.Errorf(codes.InvalidArgument, err.Error())
 	case IsNotFound(err):
-		return grpc.Errorf(codes.NotFound, err.Error())
+		return status.Errorf(codes.NotFound, err.Error())
 	case IsAlreadyExists(err):
-		return grpc.Errorf(codes.AlreadyExists, err.Error())
+		return status.Errorf(codes.AlreadyExists, err.Error())
 	case IsFailedPrecondition(err):
-		return grpc.Errorf(codes.FailedPrecondition, err.Error())
+		return status.Errorf(codes.FailedPrecondition, err.Error())
 	case IsUnavailable(err):
-		return grpc.Errorf(codes.Unavailable, err.Error())
+		return status.Errorf(codes.Unavailable, err.Error())
 	case IsNotImplemented(err):
-		return grpc.Errorf(codes.Unimplemented, err.Error())
+		return status.Errorf(codes.Unimplemented, err.Error())
 	}
 
 	return err
@@ -53,6 +53,7 @@ func ToGRPCf(err error, format string, args ...interface{}) error {
 	return ToGRPC(errors.Wrapf(err, format, args...))
 }
 
+// FromGRPC returns the underlying error from a grpc service based on the grpc error code
 func FromGRPC(err error) error {
 	if err == nil {
 		return nil

@@ -5,6 +5,7 @@ import (
 
 	"github.com/boltdb/bolt"
 	"github.com/containerd/containerd/errdefs"
+	l "github.com/containerd/containerd/labels"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/pkg/errors"
 )
@@ -13,6 +14,7 @@ type namespaceStore struct {
 	tx *bolt.Tx
 }
 
+// NewNamespaceStore returns a store backed by a bolt DB
 func NewNamespaceStore(tx *bolt.Tx) namespaces.Store {
 	return &namespaceStore{tx: tx}
 }
@@ -25,6 +27,12 @@ func (s *namespaceStore) Create(ctx context.Context, namespace string, labels ma
 
 	if err := namespaces.Validate(namespace); err != nil {
 		return err
+	}
+
+	for k, v := range labels {
+		if err := l.Validate(k, v); err != nil {
+			return errors.Wrapf(err, "namespace.Labels")
+		}
 	}
 
 	// provides the already exists error.
@@ -70,6 +78,10 @@ func (s *namespaceStore) Labels(ctx context.Context, namespace string) (map[stri
 }
 
 func (s *namespaceStore) SetLabel(ctx context.Context, namespace, key, value string) error {
+	if err := l.Validate(key, value); err != nil {
+		return errors.Wrapf(err, "namespace.Labels")
+	}
+
 	return withNamespacesLabelsBucket(s.tx, namespace, func(bkt *bolt.Bucket) error {
 		if value == "" {
 			return bkt.Delete([]byte(key))

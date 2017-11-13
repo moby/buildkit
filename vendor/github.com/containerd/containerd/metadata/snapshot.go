@@ -4,10 +4,13 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/boltdb/bolt"
 	"github.com/containerd/containerd/errdefs"
+	"github.com/containerd/containerd/labels"
+	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/metadata/boltutil"
 	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/namespaces"
@@ -18,12 +21,13 @@ import (
 type snapshotter struct {
 	snapshot.Snapshotter
 	name string
-	db   *bolt.DB
+	db   *DB
+	l    sync.RWMutex
 }
 
-// NewSnapshotter returns a new Snapshotter which namespaces the given snapshot
-// using the provided name and metadata store.
-func NewSnapshotter(db *bolt.DB, name string, sn snapshot.Snapshotter) snapshot.Snapshotter {
+// newSnapshotter returns a new Snapshotter which namespaces the given snapshot
+// using the provided name and database.
+func newSnapshotter(db *DB, name string, sn snapshot.Snapshotter) *snapshotter {
 	return &snapshotter{
 		Snapshotter: sn,
 		name:        name,
@@ -124,6 +128,9 @@ func (s *snapshotter) Stat(ctx context.Context, key string) (snapshot.Info, erro
 }
 
 func (s *snapshotter) Update(ctx context.Context, info snapshot.Info, fieldpaths ...string) (snapshot.Info, error) {
+	s.l.RLock()
+	defer s.l.RUnlock()
+
 	ns, err := namespaces.NamespaceRequired(ctx)
 	if err != nil {
 		return snapshot.Info{}, err
@@ -179,6 +186,9 @@ func (s *snapshotter) Update(ctx context.Context, info snapshot.Info, fieldpaths
 			}
 		} else {
 			local.Labels = info.Labels
+		}
+		if err := validateSnapshot(&local); err != nil {
+			return err
 		}
 		local.Updated = time.Now().UTC()
 
@@ -245,6 +255,9 @@ func (s *snapshotter) View(ctx context.Context, key, parent string, opts ...snap
 }
 
 func (s *snapshotter) createSnapshot(ctx context.Context, key, parent string, readonly bool, opts []snapshot.Opt) ([]mount.Mount, error) {
+	s.l.RLock()
+	defer s.l.RUnlock()
+
 	ns, err := namespaces.NamespaceRequired(ctx)
 	if err != nil {
 		return nil, err
@@ -255,6 +268,10 @@ func (s *snapshotter) createSnapshot(ctx context.Context, key, parent string, re
 		if err := opt(&base); err != nil {
 			return nil, err
 		}
+	}
+
+	if err := validateSnapshot(&base); err != nil {
+		return nil, err
 	}
 
 	var m []mount.Mount
@@ -275,9 +292,17 @@ func (s *snapshotter) createSnapshot(ctx context.Context, key, parent string, re
 		if parent != "" {
 			pbkt := bkt.Bucket([]byte(parent))
 			if pbkt == nil {
-				return errors.Wrapf(errdefs.ErrNotFound, "snapshot %v does not exist", parent)
+				return errors.Wrapf(errdefs.ErrNotFound, "parent snapshot %v does not exist", parent)
 			}
 			bparent = string(pbkt.Get(bucketKeyName))
+
+			cbkt, err := pbkt.CreateBucketIfNotExists(bucketKeyChildren)
+			if err != nil {
+				return err
+			}
+			if err := cbkt.Put([]byte(key), nil); err != nil {
+				return err
+			}
 
 			if err := bbkt.Put(bucketKeyParent, []byte(parent)); err != nil {
 				return err
@@ -301,6 +326,10 @@ func (s *snapshotter) createSnapshot(ctx context.Context, key, parent string, re
 			return err
 		}
 
+		if err := addSnapshotLease(ctx, tx, s.name, key); err != nil {
+			return err
+		}
+
 		// TODO: Consider doing this outside of transaction to lessen
 		// metadata lock time
 		if readonly {
@@ -316,6 +345,9 @@ func (s *snapshotter) createSnapshot(ctx context.Context, key, parent string, re
 }
 
 func (s *snapshotter) Commit(ctx context.Context, name, key string, opts ...snapshot.Opt) error {
+	s.l.RLock()
+	defer s.l.RUnlock()
+
 	ns, err := namespaces.NamespaceRequired(ctx)
 	if err != nil {
 		return err
@@ -326,6 +358,10 @@ func (s *snapshotter) Commit(ctx context.Context, name, key string, opts ...snap
 		if err := opt(&base); err != nil {
 			return err
 		}
+	}
+
+	if err := validateSnapshot(&base); err != nil {
+		return err
 	}
 
 	return update(ctx, s.db, func(tx *bolt.Tx) error {
@@ -348,7 +384,6 @@ func (s *snapshotter) Commit(ctx context.Context, name, key string, opts ...snap
 		}
 
 		bkey := string(obkt.Get(bucketKeyName))
-		parent := string(obkt.Get(bucketKeyParent))
 
 		sid, err := bkt.NextSequence()
 		if err != nil {
@@ -360,8 +395,28 @@ func (s *snapshotter) Commit(ctx context.Context, name, key string, opts ...snap
 		if err := bbkt.Put(bucketKeyName, []byte(nameKey)); err != nil {
 			return err
 		}
-		if err := bbkt.Put(bucketKeyParent, []byte(parent)); err != nil {
-			return err
+
+		parent := obkt.Get(bucketKeyParent)
+		if len(parent) > 0 {
+			pbkt := bkt.Bucket(parent)
+			if pbkt == nil {
+				return errors.Wrapf(errdefs.ErrNotFound, "parent snapshot %v does not exist", string(parent))
+			}
+
+			cbkt, err := pbkt.CreateBucketIfNotExists(bucketKeyChildren)
+			if err != nil {
+				return err
+			}
+			if err := cbkt.Delete([]byte(key)); err != nil {
+				return err
+			}
+			if err := cbkt.Put([]byte(name), nil); err != nil {
+				return err
+			}
+
+			if err := bbkt.Put(bucketKeyParent, parent); err != nil {
+				return err
+			}
 		}
 		ts := time.Now().UTC()
 		if err := boltutil.WriteTimestamps(bbkt, ts, ts); err != nil {
@@ -382,29 +437,55 @@ func (s *snapshotter) Commit(ctx context.Context, name, key string, opts ...snap
 }
 
 func (s *snapshotter) Remove(ctx context.Context, key string) error {
+	s.l.RLock()
+	defer s.l.RUnlock()
+
 	ns, err := namespaces.NamespaceRequired(ctx)
 	if err != nil {
 		return err
 	}
 
 	return update(ctx, s.db, func(tx *bolt.Tx) error {
-		var bkey string
+		var sbkt *bolt.Bucket
 		bkt := getSnapshotterBucket(tx, ns, s.name)
 		if bkt != nil {
-			sbkt := bkt.Bucket([]byte(key))
-			if sbkt != nil {
-				bkey = string(sbkt.Get(bucketKeyName))
+			sbkt = bkt.Bucket([]byte(key))
+		}
+		if sbkt == nil {
+			return errors.Wrapf(errdefs.ErrNotFound, "snapshot %v does not exist", key)
+		}
+
+		cbkt := sbkt.Bucket(bucketKeyChildren)
+		if cbkt != nil {
+			if child, _ := cbkt.Cursor().First(); child != nil {
+				return errors.Wrap(errdefs.ErrFailedPrecondition, "cannot remove snapshot with child")
 			}
 		}
-		if bkey == "" {
-			return errors.Wrapf(errdefs.ErrNotFound, "snapshot %v does not exist", key)
+
+		parent := sbkt.Get(bucketKeyParent)
+		if len(parent) > 0 {
+			pbkt := bkt.Bucket(parent)
+			if pbkt == nil {
+				return errors.Wrapf(errdefs.ErrNotFound, "parent snapshot %v does not exist", string(parent))
+			}
+			cbkt := pbkt.Bucket(bucketKeyChildren)
+			if cbkt != nil {
+				if err := cbkt.Delete([]byte(key)); err != nil {
+					return errors.Wrap(err, "failed to remove child link")
+				}
+			}
 		}
 
 		if err := bkt.DeleteBucket([]byte(key)); err != nil {
 			return err
 		}
 
-		return s.Snapshotter.Remove(ctx, bkey)
+		// Mark snapshotter as dirty for triggering garbage collection
+		s.db.dirtyL.Lock()
+		s.db.dirtySS[s.name] = struct{}{}
+		s.db.dirtyL.Unlock()
+
+		return nil
 	})
 }
 
@@ -498,6 +579,147 @@ func (s *snapshotter) Walk(ctx context.Context, fn func(context.Context, snapsho
 
 		pairs = pairs[:0]
 
+	}
+
+	return nil
+}
+
+func validateSnapshot(info *snapshot.Info) error {
+	for k, v := range info.Labels {
+		if err := labels.Validate(k, v); err != nil {
+			return errors.Wrapf(err, "info.Labels")
+		}
+	}
+
+	return nil
+}
+
+func (s *snapshotter) garbageCollect(ctx context.Context) error {
+	logger := log.G(ctx).WithField("snapshotter", s.name)
+	lt1 := time.Now()
+	s.l.Lock()
+	defer func() {
+		s.l.Unlock()
+		logger.WithField("t", time.Now().Sub(lt1)).Debugf("garbage collected")
+	}()
+
+	seen := map[string]struct{}{}
+	if err := s.db.View(func(tx *bolt.Tx) error {
+		v1bkt := tx.Bucket(bucketKeyVersion)
+		if v1bkt == nil {
+			return nil
+		}
+
+		// iterate through each namespace
+		v1c := v1bkt.Cursor()
+
+		for k, v := v1c.First(); k != nil; k, v = v1c.Next() {
+			if v != nil {
+				continue
+			}
+
+			sbkt := v1bkt.Bucket(k).Bucket(bucketKeyObjectSnapshots)
+			if sbkt == nil {
+				continue
+			}
+
+			// Load specific snapshotter
+			ssbkt := sbkt.Bucket([]byte(s.name))
+			if ssbkt == nil {
+				continue
+			}
+
+			if err := ssbkt.ForEach(func(sk, sv []byte) error {
+				if sv == nil {
+					bkey := ssbkt.Bucket(sk).Get(bucketKeyName)
+					if len(bkey) > 0 {
+						seen[string(bkey)] = struct{}{}
+					}
+				}
+				return nil
+			}); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	roots, err := s.walkTree(ctx, seen)
+	if err != nil {
+		return err
+	}
+
+	// TODO: Unlock before prune (once nodes are fully unavailable)
+
+	for _, node := range roots {
+		if err := s.pruneBranch(ctx, node); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+type treeNode struct {
+	info     snapshot.Info
+	remove   bool
+	children []*treeNode
+}
+
+func (s *snapshotter) walkTree(ctx context.Context, seen map[string]struct{}) ([]*treeNode, error) {
+	roots := []*treeNode{}
+	nodes := map[string]*treeNode{}
+
+	if err := s.Snapshotter.Walk(ctx, func(ctx context.Context, info snapshot.Info) error {
+		_, isSeen := seen[info.Name]
+		node, ok := nodes[info.Name]
+		if !ok {
+			node = &treeNode{}
+			nodes[info.Name] = node
+		}
+
+		node.remove = !isSeen
+		node.info = info
+
+		if info.Parent == "" {
+			roots = append(roots, node)
+		} else {
+			parent, ok := nodes[info.Parent]
+			if !ok {
+				parent = &treeNode{}
+				nodes[info.Parent] = parent
+			}
+			parent.children = append(parent.children, node)
+		}
+
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return roots, nil
+}
+
+func (s *snapshotter) pruneBranch(ctx context.Context, node *treeNode) error {
+	for _, child := range node.children {
+		if err := s.pruneBranch(ctx, child); err != nil {
+			return err
+		}
+	}
+
+	if node.remove {
+		logger := log.G(ctx).WithField("snapshotter", s.name)
+		if err := s.Snapshotter.Remove(ctx, node.info.Name); err != nil {
+			if !errdefs.IsFailedPrecondition(err) {
+				return err
+			}
+			logger.WithError(err).WithField("key", node.info.Name).Warnf("snapshot removal failed")
+		} else {
+			logger.WithField("key", node.info.Name).Debug("removed snapshot")
+		}
 	}
 
 	return nil

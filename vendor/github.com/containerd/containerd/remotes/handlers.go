@@ -2,8 +2,10 @@ package remotes
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"time"
 
 	"github.com/containerd/containerd/content"
@@ -11,10 +13,11 @@ import (
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/log"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
-// MakeRef returns a unique reference for the descriptor. This reference can be
+// MakeRefKey returns a unique reference for the descriptor. This reference can be
 // used to lookup ongoing processes related to the descriptor. This function
 // may look to the context to namespace the reference appropriately.
 func MakeRefKey(ctx context.Context, desc ocispec.Descriptor) string {
@@ -27,6 +30,7 @@ func MakeRefKey(ctx context.Context, desc ocispec.Descriptor) string {
 	case images.MediaTypeDockerSchema2ManifestList, ocispec.MediaTypeImageIndex:
 		return "index-" + desc.Digest.String()
 	case images.MediaTypeDockerSchema2Layer, images.MediaTypeDockerSchema2LayerGzip,
+		images.MediaTypeDockerSchema2LayerForeign, images.MediaTypeDockerSchema2LayerForeignGzip,
 		ocispec.MediaTypeImageLayer, ocispec.MediaTypeImageLayerGzip,
 		ocispec.MediaTypeImageLayerNonDistributable, ocispec.MediaTypeImageLayerNonDistributableGzip:
 		return "layer-" + desc.Digest.String()
@@ -81,7 +85,7 @@ func fetch(ctx context.Context, ingester content.Ingester, fetcher Fetcher, desc
 			// of writer and abort if not updated recently.
 
 			select {
-			case <-time.After(time.Millisecond * time.Duration(retry)):
+			case <-time.After(time.Millisecond * time.Duration(rand.Intn(retry))):
 				if retry < 2048 {
 					retry = retry << 1
 				}
@@ -101,7 +105,76 @@ func fetch(ctx context.Context, ingester content.Ingester, fetcher Fetcher, desc
 	}
 	defer rc.Close()
 
-	return content.Copy(ctx, cw, rc, desc.Size, desc.Digest)
+	r, opts := commitOpts(desc, rc)
+	return content.Copy(ctx, cw, r, desc.Size, desc.Digest, opts...)
+}
+
+// commitOpts gets the appropriate content options to alter
+// the content info on commit based on media type.
+func commitOpts(desc ocispec.Descriptor, r io.Reader) (io.Reader, []content.Opt) {
+	var childrenF func(r io.Reader) ([]ocispec.Descriptor, error)
+
+	switch desc.MediaType {
+	case images.MediaTypeDockerSchema2Manifest, ocispec.MediaTypeImageManifest:
+		childrenF = func(r io.Reader) ([]ocispec.Descriptor, error) {
+			var (
+				manifest ocispec.Manifest
+				decoder  = json.NewDecoder(r)
+			)
+			if err := decoder.Decode(&manifest); err != nil {
+				return nil, err
+			}
+
+			return append([]ocispec.Descriptor{manifest.Config}, manifest.Layers...), nil
+		}
+	case images.MediaTypeDockerSchema2ManifestList, ocispec.MediaTypeImageIndex:
+		childrenF = func(r io.Reader) ([]ocispec.Descriptor, error) {
+			var (
+				index   ocispec.Index
+				decoder = json.NewDecoder(r)
+			)
+			if err := decoder.Decode(&index); err != nil {
+				return nil, err
+			}
+
+			return index.Manifests, nil
+		}
+	default:
+		return r, nil
+	}
+
+	pr, pw := io.Pipe()
+
+	var children []ocispec.Descriptor
+	errC := make(chan error)
+
+	go func() {
+		defer close(errC)
+		ch, err := childrenF(pr)
+		if err != nil {
+			errC <- err
+		}
+		children = ch
+	}()
+
+	opt := func(info *content.Info) error {
+		err := <-errC
+		if err != nil {
+			return errors.Wrap(err, "unable to get commit labels")
+		}
+
+		if len(children) > 0 {
+			if info.Labels == nil {
+				info.Labels = map[string]string{}
+			}
+			for i, ch := range children {
+				info.Labels[fmt.Sprintf("containerd.io/gc.ref.content.%d", i)] = ch.Digest.String()
+			}
+		}
+		return nil
+	}
+
+	return io.TeeReader(r, pw), []content.Opt{opt}
 }
 
 // PushHandler returns a handler that will push all content from the provider

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"strings"
 	"sync"
 	"time"
@@ -25,6 +26,8 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
+
+const manifestSizeLimit = 8e6 // 8MB
 
 var (
 	mediaTypeManifest = "application/vnd.docker.distribution.manifest.v1+json"
@@ -47,6 +50,7 @@ type Converter struct {
 	layerBlobs map[digest.Digest]ocispec.Descriptor
 }
 
+// NewConverter returns a new converter
 func NewConverter(contentStore content.Store, fetcher remotes.Fetcher) *Converter {
 	return &Converter{
 		contentStore: contentStore,
@@ -56,6 +60,7 @@ func NewConverter(contentStore content.Store, fetcher remotes.Fetcher) *Converte
 	}
 }
 
+// Handle fetching descriptors for a docker media type
 func (c *Converter) Handle(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
 	switch desc.MediaType {
 	case images.MediaTypeDockerSchema1Manifest:
@@ -101,6 +106,7 @@ func (c *Converter) Handle(ctx context.Context, desc ocispec.Descriptor) ([]ocis
 	}
 }
 
+// Convert a docker manifest to an OCI descriptor
 func (c *Converter) Convert(ctx context.Context) (ocispec.Descriptor, error) {
 	history, diffIDs, err := c.schema1ManifestHistory()
 	if err != nil {
@@ -129,11 +135,6 @@ func (c *Converter) Convert(ctx context.Context) (ocispec.Descriptor, error) {
 		Size:      int64(len(b)),
 	}
 
-	ref := remotes.MakeRefKey(ctx, config)
-	if err := content.WriteBlob(ctx, c.contentStore, ref, bytes.NewReader(b), config.Size, config.Digest); err != nil {
-		return ocispec.Descriptor{}, errors.Wrap(err, "failed to write config")
-	}
-
 	layers := make([]ocispec.Descriptor, len(diffIDs))
 	for i, diffID := range diffIDs {
 		layers[i] = c.layerBlobs[diffID]
@@ -147,19 +148,30 @@ func (c *Converter) Convert(ctx context.Context) (ocispec.Descriptor, error) {
 		Layers: layers,
 	}
 
-	b, err = json.Marshal(manifest)
+	mb, err := json.Marshal(manifest)
 	if err != nil {
 		return ocispec.Descriptor{}, errors.Wrap(err, "failed to marshal image")
 	}
 
 	desc := ocispec.Descriptor{
 		MediaType: ocispec.MediaTypeImageManifest,
-		Digest:    digest.Canonical.FromBytes(b),
-		Size:      int64(len(b)),
+		Digest:    digest.Canonical.FromBytes(mb),
+		Size:      int64(len(mb)),
 	}
 
-	ref = remotes.MakeRefKey(ctx, desc)
-	if err := content.WriteBlob(ctx, c.contentStore, ref, bytes.NewReader(b), desc.Size, desc.Digest); err != nil {
+	labels := map[string]string{}
+	labels["containerd.io/gc.ref.content.0"] = manifest.Config.Digest.String()
+	for i, ch := range manifest.Layers {
+		labels[fmt.Sprintf("containerd.io/gc.ref.content.%d", i+1)] = ch.Digest.String()
+	}
+
+	ref := remotes.MakeRefKey(ctx, desc)
+	if err := content.WriteBlob(ctx, c.contentStore, ref, bytes.NewReader(mb), desc.Size, desc.Digest, content.WithLabels(labels)); err != nil {
+		return ocispec.Descriptor{}, errors.Wrap(err, "failed to write config")
+	}
+
+	ref = remotes.MakeRefKey(ctx, config)
+	if err := content.WriteBlob(ctx, c.contentStore, ref, bytes.NewReader(b), config.Size, config.Digest); err != nil {
 		return ocispec.Descriptor{}, errors.Wrap(err, "failed to write config")
 	}
 
@@ -174,7 +186,7 @@ func (c *Converter) fetchManifest(ctx context.Context, desc ocispec.Descriptor) 
 		return err
 	}
 
-	b, err := ioutil.ReadAll(rc)
+	b, err := ioutil.ReadAll(io.LimitReader(rc, manifestSizeLimit)) // limit to 8MB
 	rc.Close()
 	if err != nil {
 		return err
@@ -197,13 +209,26 @@ func (c *Converter) fetchManifest(ctx context.Context, desc ocispec.Descriptor) 
 func (c *Converter) fetchBlob(ctx context.Context, desc ocispec.Descriptor) error {
 	log.G(ctx).Debug("fetch blob")
 
-	ref := remotes.MakeRefKey(ctx, desc)
+	var (
+		ref   = remotes.MakeRefKey(ctx, desc)
+		calc  = newBlobStateCalculator()
+		retry = 16
+	)
 
-	calc := newBlobStateCalculator()
-
+tryit:
 	cw, err := c.contentStore.Writer(ctx, ref, desc.Size, desc.Digest)
 	if err != nil {
-		if !errdefs.IsAlreadyExists(err) {
+		if errdefs.IsUnavailable(err) {
+			select {
+			case <-time.After(time.Millisecond * time.Duration(rand.Intn(retry))):
+				if retry < 2048 {
+					retry = retry << 1
+				}
+				goto tryit
+			case <-ctx.Done():
+				return err
+			}
+		} else if !errdefs.IsAlreadyExists(err) {
 			return err
 		}
 
@@ -258,8 +283,6 @@ func (c *Converter) fetchBlob(ctx context.Context, desc ocispec.Descriptor) erro
 		if err := eg.Wait(); err != nil {
 			return err
 		}
-
-		// TODO: Label blob
 	}
 
 	if desc.Size == 0 {

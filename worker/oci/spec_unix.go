@@ -8,7 +8,9 @@ import (
 	"sync"
 
 	"github.com/containerd/containerd"
+	"github.com/containerd/containerd/containers"
 	"github.com/containerd/containerd/mount"
+	"github.com/containerd/containerd/namespaces"
 	"github.com/mitchellh/hashstructure"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/worker"
@@ -18,8 +20,18 @@ import (
 
 // Ideally we don't have to import whole containerd just for the default spec
 
-func GenerateSpec(ctx context.Context, meta worker.Meta, mounts []worker.Mount) (*specs.Spec, func(), error) {
-	s, err := containerd.GenerateSpec(ctx, nil, nil,
+// GenerateSpec generates spec using containerd functionality.
+func GenerateSpec(ctx context.Context, meta worker.Meta, mounts []worker.Mount, id string) (*specs.Spec, func(), error) {
+	c := &containers.Container{
+		ID: id,
+	}
+	_, ok := namespaces.Namespace(ctx)
+	if !ok {
+		ctx = namespaces.WithNamespace(ctx, "buildkit")
+	}
+	// Note that containerd.GenerateSpec is namespaced so as to make
+	// specs.Linux.CgroupsPath namespaced
+	s, err := containerd.GenerateSpec(ctx, nil, c,
 		containerd.WithHostNamespace(specs.NetworkNamespace),
 		containerd.WithHostResolvconf,
 		containerd.WithHostHostsFile,

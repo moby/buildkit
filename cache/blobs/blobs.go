@@ -3,8 +3,8 @@ package blobs
 import (
 	gocontext "context"
 
+	"github.com/containerd/containerd/diff"
 	"github.com/containerd/containerd/mount"
-	"github.com/containerd/containerd/rootfs"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/util/flightcontrol"
@@ -27,7 +27,7 @@ type blobmapper interface {
 	SetBlob(ctx gocontext.Context, key string, diffID, blob digest.Digest) error
 }
 
-func GetDiffPairs(ctx context.Context, snapshotter snapshot.Snapshotter, differ rootfs.MountDiffer, ref cache.ImmutableRef) ([]DiffPair, error) {
+func GetDiffPairs(ctx context.Context, snapshotter snapshot.Snapshotter, differ diff.Differ, ref cache.ImmutableRef) ([]DiffPair, error) {
 	blobmap, ok := snapshotter.(blobmapper)
 	if !ok {
 		return nil, errors.Errorf("image exporter requires snapshotter with blobs mapping support")
@@ -71,7 +71,9 @@ func GetDiffPairs(ctx context.Context, snapshotter snapshot.Snapshotter, differ 
 			if err != nil {
 				return nil, err
 			}
-			descr, err := differ.DiffMounts(ctx, lower, upper, ocispec.MediaTypeImageLayer, ref.ID())
+			descr, err := differ.DiffMounts(ctx, lower, upper,
+				diff.WithMediaType(ocispec.MediaTypeImageLayer),
+				diff.WithReference(ref.ID()))
 			if err != nil {
 				return nil, err
 			}

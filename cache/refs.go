@@ -2,8 +2,10 @@ package cache
 
 import (
 	"sync"
+	"time"
 
 	"github.com/containerd/containerd/mount"
+	cdsnapshot "github.com/containerd/containerd/snapshot"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/util/flightcontrol"
@@ -134,7 +136,10 @@ func (cr *cacheRecord) Mount(ctx context.Context, readonly bool) ([]mount.Mount,
 	}
 	if cr.viewMount == nil { // TODO: handle this better
 		cr.view = identity.NewID()
-		m, err := cr.cm.Snapshotter.View(ctx, cr.view, cr.ID())
+		labels := map[string]string{
+			"containerd.io/gc.root": time.Now().UTC().Format(time.RFC3339Nano),
+		}
+		m, err := cr.cm.Snapshotter.View(ctx, cr.view, cr.ID(), cdsnapshot.WithLabels(labels))
 		if err != nil {
 			cr.view = ""
 			return nil, errors.Wrapf(err, "failed to mount %s", cr.ID())

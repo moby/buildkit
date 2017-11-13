@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/containerd/containerd/containers"
-	"github.com/containerd/containerd/typeurl"
+	"github.com/containerd/typeurl"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 
@@ -15,6 +15,14 @@ type SpecOpts func(context.Context, *Client, *containers.Container, *specs.Spec)
 func WithProcessArgs(args ...string) SpecOpts {
 	return func(_ context.Context, _ *Client, _ *containers.Container, s *specs.Spec) error {
 		s.Process.Args = args
+		return nil
+	}
+}
+
+// WithProcessCwd replaces the current working directory on the generated spec
+func WithProcessCwd(cwd string) SpecOpts {
+	return func(_ context.Context, _ *Client, _ *containers.Container, s *specs.Spec) error {
+		s.Process.Cwd = cwd
 		return nil
 	}
 }
@@ -30,7 +38,7 @@ func WithHostname(name string) SpecOpts {
 // WithNewSpec generates a new spec for a new container
 func WithNewSpec(opts ...SpecOpts) NewContainerOpts {
 	return func(ctx context.Context, client *Client, c *containers.Container) error {
-		s, err := createDefaultSpec()
+		s, err := createDefaultSpec(ctx, c.ID)
 		if err != nil {
 			return err
 		}

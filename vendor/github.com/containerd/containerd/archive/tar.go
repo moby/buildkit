@@ -88,8 +88,6 @@ const (
 // See https://github.com/opencontainers/image-spec/blob/master/layer.md#applying-changesets
 func Apply(ctx context.Context, root string, r io.Reader) (int64, error) {
 	root = filepath.Clean(root)
-	fn := prepareApply()
-	defer fn()
 
 	var (
 		tr   = tar.NewReader(r)
@@ -107,6 +105,12 @@ func Apply(ctx context.Context, root string, r io.Reader) (int64, error) {
 
 	// Iterate through the files in the archive.
 	for {
+		select {
+		case <-ctx.Done():
+			return 0, ctx.Err()
+		default:
+		}
+
 		hdr, err := tr.Next()
 		if err == io.EOF {
 			// end of tar archive
@@ -445,19 +449,18 @@ func createTarFile(ctx context.Context, path, extractDir string, hdr *tar.Header
 		// Create directory unless it exists as a directory already.
 		// In that case we just want to merge the two
 		if fi, err := os.Lstat(path); !(err == nil && fi.IsDir()) {
-			if err := os.Mkdir(path, hdrInfo.Mode()); err != nil {
+			if err := mkdir(path, hdrInfo.Mode()); err != nil {
 				return err
 			}
 		}
 
 	case tar.TypeReg, tar.TypeRegA:
-		file, err := openFile(path, os.O_CREATE|os.O_WRONLY, hdrInfo.Mode())
+		file, err := openFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, hdrInfo.Mode())
 		if err != nil {
 			return err
 		}
-		buf := bufferPool.Get().([]byte)
-		_, err = io.CopyBuffer(file, reader, buf)
-		bufferPool.Put(buf)
+
+		_, err = copyBuffered(ctx, file, reader)
 		if err1 := file.Close(); err == nil {
 			err = err1
 		}
@@ -522,9 +525,43 @@ func createTarFile(ctx context.Context, path, extractDir string, hdr *tar.Header
 		return err
 	}
 
-	if err := chtimes(path, boundTime(latestTime(hdr.AccessTime, hdr.ModTime)), boundTime(hdr.ModTime)); err != nil {
-		return err
-	}
+	return chtimes(path, boundTime(latestTime(hdr.AccessTime, hdr.ModTime)), boundTime(hdr.ModTime))
+}
 
-	return nil
+func copyBuffered(ctx context.Context, dst io.Writer, src io.Reader) (written int64, err error) {
+	buf := bufferPool.Get().([]byte)
+	defer bufferPool.Put(buf)
+
+	for {
+		select {
+		case <-ctx.Done():
+			err = ctx.Err()
+			return
+		default:
+		}
+
+		nr, er := src.Read(buf)
+		if nr > 0 {
+			nw, ew := dst.Write(buf[0:nr])
+			if nw > 0 {
+				written += int64(nw)
+			}
+			if ew != nil {
+				err = ew
+				break
+			}
+			if nr != nw {
+				err = io.ErrShortWrite
+				break
+			}
+		}
+		if er != nil {
+			if er != io.EOF {
+				err = er
+			}
+			break
+		}
+	}
+	return written, err
+
 }

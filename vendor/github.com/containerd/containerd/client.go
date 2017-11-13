@@ -15,26 +15,31 @@ import (
 	diffapi "github.com/containerd/containerd/api/services/diff/v1"
 	eventsapi "github.com/containerd/containerd/api/services/events/v1"
 	imagesapi "github.com/containerd/containerd/api/services/images/v1"
+	introspectionapi "github.com/containerd/containerd/api/services/introspection/v1"
 	namespacesapi "github.com/containerd/containerd/api/services/namespaces/v1"
 	snapshotapi "github.com/containerd/containerd/api/services/snapshot/v1"
 	"github.com/containerd/containerd/api/services/tasks/v1"
 	versionservice "github.com/containerd/containerd/api/services/version/v1"
 	"github.com/containerd/containerd/containers"
 	"github.com/containerd/containerd/content"
+	"github.com/containerd/containerd/dialer"
+	"github.com/containerd/containerd/diff"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
+	"github.com/containerd/containerd/namespaces"
+	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/plugin"
 	"github.com/containerd/containerd/reference"
 	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/remotes/docker/schema1"
 	contentservice "github.com/containerd/containerd/services/content"
-	"github.com/containerd/containerd/services/diff"
 	diffservice "github.com/containerd/containerd/services/diff"
 	imagesservice "github.com/containerd/containerd/services/images"
+	namespacesservice "github.com/containerd/containerd/services/namespaces"
 	snapshotservice "github.com/containerd/containerd/services/snapshot"
 	"github.com/containerd/containerd/snapshot"
-	"github.com/containerd/containerd/typeurl"
+	"github.com/containerd/typeurl"
 	pempty "github.com/golang/protobuf/ptypes/empty"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
@@ -44,12 +49,13 @@ import (
 )
 
 func init() {
+	const prefix = "types.containerd.io"
 	// register TypeUrls for commonly marshaled external types
 	major := strconv.Itoa(specs.VersionMajor)
-	typeurl.Register(&specs.Spec{}, "opencontainers/runtime-spec", major, "Spec")
-	typeurl.Register(&specs.Process{}, "opencontainers/runtime-spec", major, "Process")
-	typeurl.Register(&specs.LinuxResources{}, "opencontainers/runtime-spec", major, "LinuxResources")
-	typeurl.Register(&specs.WindowsResources{}, "opencontainers/runtime-spec", major, "WindowsResources")
+	typeurl.Register(&specs.Spec{}, prefix, "opencontainers/runtime-spec", major, "Spec")
+	typeurl.Register(&specs.Process{}, prefix, "opencontainers/runtime-spec", major, "Process")
+	typeurl.Register(&specs.LinuxResources{}, prefix, "opencontainers/runtime-spec", major, "LinuxResources")
+	typeurl.Register(&specs.WindowsResources{}, prefix, "opencontainers/runtime-spec", major, "WindowsResources")
 }
 
 // New returns a new containerd client that is connected to the containerd
@@ -67,7 +73,7 @@ func New(address string, opts ...ClientOpt) (*Client, error) {
 		grpc.WithTimeout(60 * time.Second),
 		grpc.FailOnNonTempDialError(true),
 		grpc.WithBackoffMaxDelay(3 * time.Second),
-		grpc.WithDialer(Dialer),
+		grpc.WithDialer(dialer.Dialer),
 	}
 	if len(copts.dialOptions) > 0 {
 		gopts = copts.dialOptions
@@ -79,7 +85,7 @@ func New(address string, opts ...ClientOpt) (*Client, error) {
 			grpc.WithStreamInterceptor(stream),
 		)
 	}
-	conn, err := grpc.Dial(DialAddress(address), gopts...)
+	conn, err := grpc.Dial(dialer.DialAddress(address), gopts...)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to dial %q", address)
 	}
@@ -98,10 +104,8 @@ func NewWithConn(conn *grpc.ClientConn, opts ...ClientOpt) (*Client, error) {
 // Client is the client to interact with containerd and its various services
 // using a uniform interface
 type Client struct {
-	conn *grpc.ClientConn
-
-	defaultns string
-	runtime   string
+	conn    *grpc.ClientConn
+	runtime string
 }
 
 // IsServing returns true if the client can successfully connect to the
@@ -134,6 +138,12 @@ func (c *Client) Containers(ctx context.Context, filters ...string) ([]Container
 // NewContainer will create a new container in container with the provided id
 // the id must be unique within the namespace
 func (c *Client) NewContainer(ctx context.Context, id string, opts ...NewContainerOpts) (Container, error) {
+	ctx, done, err := c.withLease(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer done()
+
 	container := containers.Container{
 		ID: id,
 		Runtime: containers.RuntimeInfo{
@@ -176,6 +186,9 @@ type RemoteContext struct {
 	// Snapshotter used for unpacking
 	Snapshotter string
 
+	// Labels to be applied to the created image
+	Labels map[string]string
+
 	// BaseHandlers are a set of handlers which get are called on dispatch.
 	// These handlers always get called before any operation specific
 	// handlers.
@@ -197,7 +210,7 @@ func defaultRemoteContext() *RemoteContext {
 }
 
 // Pull downloads the provided content into containerd's content store
-func (c *Client) Pull(ctx context.Context, ref string, opts ...RemoteOpts) (Image, error) {
+func (c *Client) Pull(ctx context.Context, ref string, opts ...RemoteOpt) (Image, error) {
 	pullCtx := defaultRemoteContext()
 	for _, o := range opts {
 		if err := o(c, pullCtx); err != nil {
@@ -205,6 +218,12 @@ func (c *Client) Pull(ctx context.Context, ref string, opts ...RemoteOpts) (Imag
 		}
 	}
 	store := c.ContentStore()
+
+	ctx, done, err := c.withLease(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer done()
 
 	name, desc, err := pullCtx.Resolver.Resolve(ctx, ref)
 	if err != nil {
@@ -225,7 +244,7 @@ func (c *Client) Pull(ctx context.Context, ref string, opts ...RemoteOpts) (Imag
 	} else {
 		handler = images.Handlers(append(pullCtx.BaseHandlers,
 			remotes.FetchHandler(store, fetcher),
-			images.ChildrenHandler(store))...,
+			images.ChildrenHandler(store, platforms.Default()))...,
 		)
 	}
 
@@ -242,22 +261,23 @@ func (c *Client) Pull(ctx context.Context, ref string, opts ...RemoteOpts) (Imag
 	imgrec := images.Image{
 		Name:   name,
 		Target: desc,
+		Labels: pullCtx.Labels,
 	}
 
 	is := c.ImageService()
-	if updated, err := is.Update(ctx, imgrec, "target"); err != nil {
-		if !errdefs.IsNotFound(err) {
+	if created, err := is.Create(ctx, imgrec); err != nil {
+		if !errdefs.IsAlreadyExists(err) {
 			return nil, err
 		}
 
-		created, err := is.Create(ctx, imgrec)
+		updated, err := is.Update(ctx, imgrec)
 		if err != nil {
 			return nil, err
 		}
 
-		imgrec = created
-	} else {
 		imgrec = updated
+	} else {
+		imgrec = created
 	}
 
 	img := &image{
@@ -273,7 +293,7 @@ func (c *Client) Pull(ctx context.Context, ref string, opts ...RemoteOpts) (Imag
 }
 
 // Push uploads the provided content to a remote resource
-func (c *Client) Push(ctx context.Context, ref string, desc ocispec.Descriptor, opts ...RemoteOpts) error {
+func (c *Client) Push(ctx context.Context, ref string, desc ocispec.Descriptor, opts ...RemoteOpt) error {
 	pushCtx := defaultRemoteContext()
 	for _, o := range opts {
 		if err := o(c, pushCtx); err != nil {
@@ -296,7 +316,7 @@ func (c *Client) Push(ctx context.Context, ref string, desc ocispec.Descriptor, 
 			m.Lock()
 			manifestStack = append(manifestStack, desc)
 			m.Unlock()
-			return nil, images.StopHandler
+			return nil, images.ErrStopHandler
 		default:
 			return nil, nil
 		}
@@ -306,7 +326,7 @@ func (c *Client) Push(ctx context.Context, ref string, desc ocispec.Descriptor, 
 	pushHandler := remotes.PushHandler(cs, pusher)
 
 	handlers := append(pushCtx.BaseHandlers,
-		images.ChildrenHandler(cs),
+		images.ChildrenHandler(cs, platforms.Default()),
 		filterHandler,
 		pushHandler,
 	)
@@ -338,8 +358,8 @@ func (c *Client) GetImage(ctx context.Context, ref string) (Image, error) {
 }
 
 // ListImages returns all existing images
-func (c *Client) ListImages(ctx context.Context) ([]Image, error) {
-	imgs, err := c.ImageService().List(ctx)
+func (c *Client) ListImages(ctx context.Context, filters ...string) ([]Image, error) {
+	imgs, err := c.ImageService().List(ctx, filters...)
 	if err != nil {
 		return nil, err
 	}
@@ -404,42 +424,57 @@ func (c *Client) Close() error {
 	return c.conn.Close()
 }
 
-func (c *Client) NamespaceService() namespacesapi.NamespacesClient {
-	return namespacesapi.NewNamespacesClient(c.conn)
+// NamespaceService returns the underlying Namespaces Store
+func (c *Client) NamespaceService() namespaces.Store {
+	return namespacesservice.NewStoreFromClient(namespacesapi.NewNamespacesClient(c.conn))
 }
 
+// ContainerService returns the underlying container Store
 func (c *Client) ContainerService() containers.Store {
 	return NewRemoteContainerStore(containersapi.NewContainersClient(c.conn))
 }
 
+// ContentStore returns the underlying content Store
 func (c *Client) ContentStore() content.Store {
 	return contentservice.NewStoreFromClient(contentapi.NewContentClient(c.conn))
 }
 
+// SnapshotService returns the underlying snapshotter for the provided snapshotter name
 func (c *Client) SnapshotService(snapshotterName string) snapshot.Snapshotter {
 	return snapshotservice.NewSnapshotterFromClient(snapshotapi.NewSnapshotsClient(c.conn), snapshotterName)
 }
 
+// TaskService returns the underlying TasksClient
 func (c *Client) TaskService() tasks.TasksClient {
 	return tasks.NewTasksClient(c.conn)
 }
 
+// ImageService returns the underlying image Store
 func (c *Client) ImageService() images.Store {
 	return imagesservice.NewStoreFromClient(imagesapi.NewImagesClient(c.conn))
 }
 
-func (c *Client) DiffService() diff.DiffService {
+// DiffService returns the underlying Differ
+func (c *Client) DiffService() diff.Differ {
 	return diffservice.NewDiffServiceFromClient(diffapi.NewDiffClient(c.conn))
 }
 
+// IntrospectionService returns the underlying Introspection Client
+func (c *Client) IntrospectionService() introspectionapi.IntrospectionClient {
+	return introspectionapi.NewIntrospectionClient(c.conn)
+}
+
+// HealthService returns the underlying GRPC HealthClient
 func (c *Client) HealthService() grpc_health_v1.HealthClient {
 	return grpc_health_v1.NewHealthClient(c.conn)
 }
 
+// EventService returns the underlying EventsClient
 func (c *Client) EventService() eventsapi.EventsClient {
 	return eventsapi.NewEventsClient(c.conn)
 }
 
+// VersionService returns the underlying VersionClient
 func (c *Client) VersionService() versionservice.VersionClient {
 	return versionservice.NewVersionClient(c.conn)
 }
@@ -473,10 +508,37 @@ const (
 type importOpts struct {
 	format    imageFormat
 	refObject string
+	labels    map[string]string
 }
 
 // ImportOpt allows the caller to specify import specific options
 type ImportOpt func(c *importOpts) error
+
+// WithImportLabel sets a label to be associated with an imported image
+func WithImportLabel(key, value string) ImportOpt {
+	return func(opts *importOpts) error {
+		if opts.labels == nil {
+			opts.labels = make(map[string]string)
+		}
+
+		opts.labels[key] = value
+		return nil
+	}
+}
+
+// WithImportLabels associates a set of labels to an imported image
+func WithImportLabels(labels map[string]string) ImportOpt {
+	return func(opts *importOpts) error {
+		if opts.labels == nil {
+			opts.labels = make(map[string]string)
+		}
+
+		for k, v := range labels {
+			opts.labels[k] = v
+		}
+		return nil
+	}
+}
 
 // WithOCIImportFormat sets the import format for an OCI image format
 func WithOCIImportFormat() ImportOpt {
@@ -529,6 +591,13 @@ func (c *Client) Import(ctx context.Context, ref string, reader io.Reader, opts 
 	if err != nil {
 		return nil, err
 	}
+
+	ctx, done, err := c.withLease(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer done()
+
 	switch iopts.format {
 	case ociImageFormat:
 		return c.importFromOCITar(ctx, ref, reader, iopts)
