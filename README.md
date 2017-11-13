@@ -25,8 +25,6 @@ Key features:
 - Pluggable architecture
 
 
-Read the proposal from https://github.com/moby/moby/issues/32925
-
 #### Quick start
 
 BuildKit daemon can be built in two different versions: one that uses [containerd](https://github.com/containerd/containerd) for execution and distribution, and a standalone version that doesn't have other dependencies apart from [runc](https://github.com/opencontainers/runc). We are open for adding more backends. `buildd` is a CLI utility for serving the gRPC API. 
@@ -162,3 +160,9 @@ Validating your updates before submission:
 ```bash
 make validate-all
 ```
+
+#### Documents
+- https://github.com/moby/moby/issues/32925: Original proposal
+- ['docs/roadmap.md'](./docs/roadmap.md): roadmap (tentative)
+- ['docs/misc'](./docs/misc): miscellaneous unformatted documents
+- https://drive.google.com/drive/folders/1KpNIqmiAGU1UAddscscZFMqlpvLqcQYM?usp=sharing : BoF notes
