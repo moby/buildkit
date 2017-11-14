@@ -1325,6 +1325,17 @@ group (or GID) to use when running the image and for any `RUN`, `CMD` and
 > When the user does doesn't have a primary group then the image (or the next
 > instructions) will be run with the `root` group.
 
+> On Windows, the user must be created first if it's not a built-in account.
+> This can be done with the `net user` command called as part of a Dockerfile.
+
+```Dockerfile
+    FROM microsoft/windowsservercore
+    # Create Windows user in the container
+    RUN net user /add patrick
+    # Set it for subsequent commands
+    USER patrick
+```
+
 
 ## WORKDIR
 
