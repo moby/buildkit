@@ -3,6 +3,7 @@
 package control
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
@@ -10,7 +11,9 @@ import (
 	"time"
 
 	"github.com/containerd/containerd"
+	"github.com/containerd/containerd/content"
 	"github.com/moby/buildkit/worker/containerdworker"
+	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
 
@@ -41,7 +44,7 @@ func newContainerdPullDeps(client *containerd.Client) *pullDeps {
 	diff := client.DiffService()
 	return &pullDeps{
 		Snapshotter:  client.SnapshotService(containerd.DefaultSnapshotter),
-		ContentStore: client.ContentStore(),
+		ContentStore: &noGCContentStore{client.ContentStore()},
 		Applier:      diff,
 		Differ:       diff,
 		Images:       client.ImageService(),
@@ -55,4 +58,29 @@ func dialer(address string, timeout time.Duration) (net.Conn, error) {
 
 func dialAddress(address string) string {
 	return fmt.Sprintf("unix://%s", address)
+}
+
+// TODO: Replace this with leases
+
+type noGCContentStore struct {
+	content.Store
+}
+type noGCWriter struct {
+	content.Writer
+}
+
+func (cs *noGCContentStore) Writer(ctx context.Context, ref string, size int64, expected digest.Digest) (content.Writer, error) {
+	w, err := cs.Store.Writer(ctx, ref, size, expected)
+	return &noGCWriter{w}, err
+}
+
+func (w *noGCWriter) Commit(ctx context.Context, size int64, expected digest.Digest, opts ...content.Opt) error {
+	opts = append(opts, func(info *content.Info) error {
+		if info.Labels == nil {
+			info.Labels = map[string]string{}
+		}
+		info.Labels["containerd.io/gc.root"] = time.Now().UTC().Format(time.RFC3339Nano)
+		return nil
+	})
+	return w.Writer.Commit(ctx, size, expected, opts...)
 }
