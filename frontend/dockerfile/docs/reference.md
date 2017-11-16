@@ -1322,7 +1322,7 @@ group (or GID) to use when running the image and for any `RUN`, `CMD` and
 `ENTRYPOINT` instructions that follow it in the `Dockerfile`.
 
 > **Warning**:
-> When the user does doesn't have a primary group then the image (or the next
+> When the user doesn't have a primary group then the image (or the next
 > instructions) will be run with the `root` group.
 
 > On Windows, the user must be created first if it's not a built-in account.
