@@ -386,7 +386,9 @@ func (cc *cacheContext) commitActiveTransaction() {
 		addParentToMap(d, cc.dirtyMap)
 	}
 	for d := range cc.dirtyMap {
-		cc.txn.Insert([]byte(d), &CacheRecord{Type: CacheRecordTypeDir})
+		if _, ok := cc.txn.Get([]byte(d)); ok {
+			cc.txn.Insert([]byte(d), &CacheRecord{Type: CacheRecordTypeDir})
+		}
 	}
 	cc.tree = cc.txn.Commit()
 	cc.node = nil
@@ -402,8 +404,8 @@ func (cc *cacheContext) lazyChecksum(ctx context.Context, m *mount, p string) (*
 		}
 	}
 	k := []byte(p)
-	root = cc.tree.Root()
 	txn := cc.tree.Txn()
+	root = txn.Root()
 	cr, updated, err := cc.checksum(ctx, root, txn, m, k)
 	if err != nil {
 		return nil, err
