@@ -284,10 +284,14 @@ func (s *snapshotter) createSnapshot(ctx context.Context, key, parent string, re
 		bbkt, err := bkt.CreateBucket([]byte(key))
 		if err != nil {
 			if err == bolt.ErrBucketExists {
-				err = errors.Wrapf(errdefs.ErrAlreadyExists, "snapshot %v already exists", key)
+				err = errors.Wrapf(errdefs.ErrAlreadyExists, "snapshot %q", key)
 			}
 			return err
 		}
+		if err := addSnapshotLease(ctx, tx, s.name, key); err != nil {
+			return err
+		}
+
 		var bparent string
 		if parent != "" {
 			pbkt := bkt.Bucket([]byte(parent))
@@ -323,10 +327,6 @@ func (s *snapshotter) createSnapshot(ctx context.Context, key, parent string, re
 			return err
 		}
 		if err := boltutil.WriteLabels(bbkt, base.Labels); err != nil {
-			return err
-		}
-
-		if err := addSnapshotLease(ctx, tx, s.name, key); err != nil {
 			return err
 		}
 
@@ -373,8 +373,11 @@ func (s *snapshotter) Commit(ctx context.Context, name, key string, opts ...snap
 		bbkt, err := bkt.CreateBucket([]byte(name))
 		if err != nil {
 			if err == bolt.ErrBucketExists {
-				err = errors.Wrapf(errdefs.ErrAlreadyExists, "snapshot %v already exists", name)
+				err = errors.Wrapf(errdefs.ErrAlreadyExists, "snapshot %q", name)
 			}
+			return err
+		}
+		if err := addSnapshotLease(ctx, tx, s.name, name); err != nil {
 			return err
 		}
 
@@ -425,7 +428,11 @@ func (s *snapshotter) Commit(ctx context.Context, name, key string, opts ...snap
 		if err := boltutil.WriteLabels(bbkt, base.Labels); err != nil {
 			return err
 		}
+
 		if err := bkt.DeleteBucket([]byte(key)); err != nil {
+			return err
+		}
+		if err := removeSnapshotLease(ctx, tx, s.name, key); err != nil {
 			return err
 		}
 
@@ -477,6 +484,9 @@ func (s *snapshotter) Remove(ctx context.Context, key string) error {
 		}
 
 		if err := bkt.DeleteBucket([]byte(key)); err != nil {
+			return err
+		}
+		if err := removeSnapshotLease(ctx, tx, s.name, key); err != nil {
 			return err
 		}
 
@@ -723,4 +733,9 @@ func (s *snapshotter) pruneBranch(ctx context.Context, node *treeNode) error {
 	}
 
 	return nil
+}
+
+// Close closes s.Snapshotter but not db
+func (s *snapshotter) Close() error {
+	return s.Snapshotter.Close()
 }

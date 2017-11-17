@@ -8,6 +8,6 @@ import (
 )
 
 func Hijack(stream controlapi.Control_SessionServer) (net.Conn, map[string][]string) {
-	md, _ := metadata.FromContext(stream.Context())
+	md, _ := metadata.FromIncomingContext(stream.Context())
 	return streamToConn(stream), md
 }
