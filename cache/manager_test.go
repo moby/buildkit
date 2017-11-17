@@ -31,7 +31,7 @@ func TestManager(t *testing.T) {
 	_, err = cm.Get(ctx, "foobar")
 	require.Error(t, err)
 
-	checkDiskUsage(t, ctx, cm, 0, 0)
+	checkDiskUsage(ctx, t, cm, 0, 0)
 
 	active, err := cm.New(ctx, nil, CachePolicyRetain)
 	require.NoError(t, err)
@@ -54,12 +54,12 @@ func TestManager(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, errLocked, errors.Cause(err))
 
-	checkDiskUsage(t, ctx, cm, 1, 0)
+	checkDiskUsage(ctx, t, cm, 1, 0)
 
 	snap, err := active.Commit(ctx)
 	require.NoError(t, err)
 
-	checkDiskUsage(t, ctx, cm, 1, 0)
+	checkDiskUsage(ctx, t, cm, 1, 0)
 
 	_, err = cm.GetMutable(ctx, active.ID())
 	require.Error(t, err)
@@ -68,17 +68,17 @@ func TestManager(t *testing.T) {
 	err = snap.Release(ctx)
 	require.NoError(t, err)
 
-	checkDiskUsage(t, ctx, cm, 0, 1)
+	checkDiskUsage(ctx, t, cm, 0, 1)
 
 	active, err = cm.GetMutable(ctx, active.ID())
 	require.NoError(t, err)
 
-	checkDiskUsage(t, ctx, cm, 1, 0)
+	checkDiskUsage(ctx, t, cm, 1, 0)
 
 	snap, err = active.Commit(ctx)
 	require.NoError(t, err)
 
-	checkDiskUsage(t, ctx, cm, 1, 0)
+	checkDiskUsage(ctx, t, cm, 1, 0)
 
 	err = snap.Finalize(ctx)
 	require.NoError(t, err)
@@ -100,7 +100,7 @@ func TestManager(t *testing.T) {
 	snap2, err := cm.Get(ctx, snap.ID())
 	require.NoError(t, err)
 
-	checkDiskUsage(t, ctx, cm, 1, 0)
+	checkDiskUsage(ctx, t, cm, 1, 0)
 
 	err = snap.Release(ctx)
 	require.NoError(t, err)
@@ -108,7 +108,7 @@ func TestManager(t *testing.T) {
 	active2, err := cm.New(ctx, snap2, CachePolicyRetain)
 	require.NoError(t, err)
 
-	checkDiskUsage(t, ctx, cm, 2, 0)
+	checkDiskUsage(ctx, t, cm, 2, 0)
 
 	snap3, err := active2.Commit(ctx)
 	require.NoError(t, err)
@@ -116,12 +116,12 @@ func TestManager(t *testing.T) {
 	err = snap2.Release(ctx)
 	require.NoError(t, err)
 
-	checkDiskUsage(t, ctx, cm, 2, 0)
+	checkDiskUsage(ctx, t, cm, 2, 0)
 
 	err = snap3.Release(ctx)
 	require.NoError(t, err)
 
-	checkDiskUsage(t, ctx, cm, 0, 2)
+	checkDiskUsage(ctx, t, cm, 0, 2)
 
 	err = cm.Close()
 	require.NoError(t, err)
@@ -267,7 +267,7 @@ func getCacheManager(t *testing.T, tmpdir string, snapshotter snapshot.Snapshott
 	return cm
 }
 
-func checkDiskUsage(t *testing.T, ctx context.Context, cm Manager, inuse, unused int) {
+func checkDiskUsage(ctx context.Context, t *testing.T, cm Manager, inuse, unused int) {
 	du, err := cm.DiskUsage(ctx, client.DiskUsageInfo{})
 	require.NoError(t, err)
 	var inuseActual, unusedActual int

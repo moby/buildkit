@@ -174,20 +174,16 @@ func TestCancellation(t *testing.T) {
 
 	c3 := f.NewCaller()
 
-	var cancelFirst func()
 	firstErr := make(chan error)
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-		cancelFirst = cancel
+		ctx, _ := context.WithTimeout(context.Background(), 50*time.Millisecond)
 		_, err := c1.Call(ctx, fn1)
 		firstErr <- err
 	}()
 
-	var cancelSecond func()
 	secondErr := make(chan error)
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-		cancelSecond = cancel
+		ctx, _ := context.WithTimeout(context.Background(), 100*time.Millisecond)
 		_, err := c2.Call(ctx, fn2)
 		secondErr <- err
 	}()

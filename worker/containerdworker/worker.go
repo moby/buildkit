@@ -76,10 +76,10 @@ func (w containerdWorker) Exec(ctx context.Context, meta worker.Meta, root cache
 
 type emptyReadCloser struct{}
 
-func (_ *emptyReadCloser) Read([]byte) (int, error) {
+func (*emptyReadCloser) Read([]byte) (int, error) {
 	return 0, io.EOF
 }
 
-func (_ *emptyReadCloser) Close() error {
+func (*emptyReadCloser) Close() error {
 	return nil
 }

@@ -214,30 +214,30 @@ func (sr *immutableRef) Finalize(ctx context.Context) error {
 	return sr.finalize(ctx)
 }
 
-func (sr *cacheRecord) Metadata() *metadata.StorageItem {
-	return sr.md
+func (cr *cacheRecord) Metadata() *metadata.StorageItem {
+	return cr.md
 }
 
-func (sr *cacheRecord) finalize(ctx context.Context) error {
-	mutable := sr.equalMutable
+func (cr *cacheRecord) finalize(ctx context.Context) error {
+	mutable := cr.equalMutable
 	if mutable == nil {
 		return nil
 	}
-	err := sr.cm.Snapshotter.Commit(ctx, sr.ID(), mutable.ID())
+	err := cr.cm.Snapshotter.Commit(ctx, cr.ID(), mutable.ID())
 	if err != nil {
 		return errors.Wrapf(err, "failed to commit %s", mutable.ID())
 	}
 	mutable.dead = true
 	go func() {
-		sr.cm.mu.Lock()
-		defer sr.cm.mu.Unlock()
+		cr.cm.mu.Lock()
+		defer cr.cm.mu.Unlock()
 		if err := mutable.remove(context.TODO(), false); err != nil {
 			logrus.Error(err)
 		}
 	}()
-	sr.equalMutable = nil
-	clearEqualMutable(sr.md)
-	return sr.md.Commit()
+	cr.equalMutable = nil
+	clearEqualMutable(cr.md)
+	return cr.md.Commit()
 }
 
 func (sr *mutableRef) commit(ctx context.Context) (ImmutableRef, error) {

@@ -45,7 +45,7 @@ func NewSnapshotter(opt Opt) (*Snapshotter, error) {
 	return s, nil
 }
 
-// Remove also removes a refrence to a blob. If it is a last reference then it deletes it the blob as well
+// Remove also removes a reference to a blob. If it is a last reference then it deletes it the blob as well
 // Remove is not safe to be called concurrently
 func (s *Snapshotter) Remove(ctx context.Context, key string) error {
 	_, blob, err := s.GetBlob(ctx, key)
