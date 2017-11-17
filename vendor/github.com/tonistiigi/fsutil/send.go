@@ -90,6 +90,8 @@ func (s *sender) run(ctx context.Context) error {
 				return err
 			}
 			switch p.Type {
+			case PACKET_ERR:
+				return errors.Errorf("error from receiver: %s", p.Data)
 			case PACKET_REQ:
 				if err := s.queue(p.ID); err != nil {
 					return err
