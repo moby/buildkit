@@ -412,8 +412,5 @@ func initializeMetadata(m withMetadata, opts ...RefOption) error {
 		return err
 	}
 
-	if err := md.Commit(); err != nil {
-		return err
-	}
-	return nil
+	return md.Commit()
 }

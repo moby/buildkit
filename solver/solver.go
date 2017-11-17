@@ -226,7 +226,7 @@ func (s *Solver) subBuild(ctx context.Context, dgst digest.Digest, req SolveRequ
 	st = jl.actives[inp.Vertex.Digest()]
 	jl.mu.Unlock()
 
-	return getRef(st.solver, ctx, inp.Vertex.(*vertex), inp.Index, s.cache) // TODO: combine to pass single input                                        // TODO: export cache for subbuilds
+	return getRef(ctx, st.solver, inp.Vertex.(*vertex), inp.Index, s.cache) // TODO: combine to pass single input                                        // TODO: export cache for subbuilds
 }
 
 type VertexSolver interface {

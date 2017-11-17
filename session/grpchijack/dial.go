@@ -80,26 +80,26 @@ func (c *conn) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
-func (s *conn) Close() error {
-	if cs, ok := s.stream.(grpc.ClientStream); ok {
+func (c *conn) Close() error {
+	if cs, ok := c.stream.(grpc.ClientStream); ok {
 		return cs.CloseSend()
 	}
 	return nil
 }
 
-func (s *conn) LocalAddr() net.Addr {
+func (c *conn) LocalAddr() net.Addr {
 	return dummyAddr{}
 }
-func (s *conn) RemoteAddr() net.Addr {
+func (c *conn) RemoteAddr() net.Addr {
 	return dummyAddr{}
 }
-func (s *conn) SetDeadline(t time.Time) error {
+func (c *conn) SetDeadline(t time.Time) error {
 	return nil
 }
-func (s *conn) SetReadDeadline(t time.Time) error {
+func (c *conn) SetReadDeadline(t time.Time) error {
 	return nil
 }
-func (s *conn) SetWriteDeadline(t time.Time) error {
+func (c *conn) SetWriteDeadline(t time.Time) error {
 	return nil
 }
 

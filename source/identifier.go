@@ -71,6 +71,6 @@ func NewLocalIdentifier(str string) (*LocalIdentifier, error) {
 	return &LocalIdentifier{Name: str}, nil
 }
 
-func (_ *LocalIdentifier) ID() string {
+func (*LocalIdentifier) ID() string {
 	return LocalScheme
 }
