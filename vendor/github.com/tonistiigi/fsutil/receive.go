@@ -106,7 +106,12 @@ func (r *receiver) run(ctx context.Context) error {
 
 	w := newDynamicWalker()
 
-	g.Go(func() error {
+	g.Go(func() (retErr error) {
+		defer func() {
+			if retErr != nil {
+				r.conn.SendMsg(&Packet{Type: PACKET_ERR, Data: []byte(retErr.Error())})
+			}
+		}()
 		destWalker := emptyWalker
 		if !r.merge {
 			destWalker = GetWalkerFn(r.dest)
