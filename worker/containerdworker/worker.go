@@ -4,6 +4,7 @@ import (
 	"io"
 
 	"github.com/containerd/containerd"
+	"github.com/containerd/containerd/cio"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/worker"
@@ -48,7 +49,7 @@ func (w containerdWorker) Exec(ctx context.Context, meta worker.Meta, root cache
 		stdin = &emptyReadCloser{}
 	}
 
-	task, err := container.NewTask(ctx, containerd.NewIO(stdin, stdout, stderr), containerd.WithRootFS(rootMounts))
+	task, err := container.NewTask(ctx, cio.NewIO(stdin, stdout, stderr), containerd.WithRootFS(rootMounts))
 	if err != nil {
 		return err
 	}

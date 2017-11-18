@@ -1,15 +1,13 @@
-// +build linux solaris
+// +build darwin freebsd linux solaris
 
 package console
 
 import (
-	"os"
-
 	"golang.org/x/sys/unix"
 )
 
 func tcget(fd uintptr, p *unix.Termios) error {
-	termios, err := unix.IoctlGetTermios(int(fd), unix.TCGETS)
+	termios, err := unix.IoctlGetTermios(int(fd), cmdTcGet)
 	if err != nil {
 		return err
 	}
@@ -18,7 +16,7 @@ func tcget(fd uintptr, p *unix.Termios) error {
 }
 
 func tcset(fd uintptr, p *unix.Termios) error {
-	return unix.IoctlSetTermios(int(fd), unix.TCSETS, p)
+	return unix.IoctlSetTermios(int(fd), cmdTcSet, p)
 }
 
 func tcgwinsz(fd uintptr) (WinSize, error) {
@@ -49,22 +47,27 @@ func tcswinsz(fd uintptr, ws WinSize) error {
 	return unix.IoctlSetWinsize(int(fd), unix.TIOCSWINSZ, &uws)
 }
 
-func saneTerminal(f *os.File) error {
+func setONLCR(fd uintptr, enable bool) error {
 	var termios unix.Termios
-	if err := tcget(f.Fd(), &termios); err != nil {
+	if err := tcget(fd, &termios); err != nil {
 		return err
 	}
-	// Set -onlcr so we don't have to deal with \r.
-	termios.Oflag &^= unix.ONLCR
-	return tcset(f.Fd(), &termios)
+	if enable {
+		// Set +onlcr so we can act like a real terminal
+		termios.Oflag |= unix.ONLCR
+	} else {
+		// Set -onlcr so we don't have to deal with \r.
+		termios.Oflag &^= unix.ONLCR
+	}
+	return tcset(fd, &termios)
 }
 
 func cfmakeraw(t unix.Termios) unix.Termios {
-	t.Iflag = t.Iflag & ^uint32((unix.IGNBRK | unix.BRKINT | unix.PARMRK | unix.ISTRIP | unix.INLCR | unix.IGNCR | unix.ICRNL | unix.IXON))
-	t.Oflag = t.Oflag & ^uint32(unix.OPOST)
-	t.Lflag = t.Lflag & ^(uint32(unix.ECHO | unix.ECHONL | unix.ICANON | unix.ISIG | unix.IEXTEN))
-	t.Cflag = t.Cflag & ^(uint32(unix.CSIZE | unix.PARENB))
-	t.Cflag = t.Cflag | unix.CS8
+	t.Iflag &^= (unix.IGNBRK | unix.BRKINT | unix.PARMRK | unix.ISTRIP | unix.INLCR | unix.IGNCR | unix.ICRNL | unix.IXON)
+	t.Oflag &^= unix.OPOST
+	t.Lflag &^= (unix.ECHO | unix.ECHONL | unix.ICANON | unix.ISIG | unix.IEXTEN)
+	t.Cflag &^= (unix.CSIZE | unix.PARENB)
+	t.Cflag &^= unix.CS8
 	t.Cc[unix.VMIN] = 1
 	t.Cc[unix.VTIME] = 0
 

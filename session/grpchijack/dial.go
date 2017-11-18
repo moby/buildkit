@@ -26,7 +26,7 @@ func Dialer(api controlapi.ControlClient) session.Dialer {
 
 		md := metadata.MD(meta)
 
-		ctx = metadata.NewContext(context.Background(), md)
+		ctx = metadata.NewOutgoingContext(context.Background(), md)
 
 		stream, err := api.Session(ctx)
 		if err != nil {

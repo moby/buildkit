@@ -66,7 +66,7 @@ func (sp *fsSyncProvider) handle(method string, stream grpc.ServerStream) error 
 		return errors.New("failed to negotiate protocol")
 	}
 
-	opts, _ := metadata.FromContext(stream.Context()) // if no metadata continue with empty object
+	opts, _ := metadata.FromIncomingContext(stream.Context()) // if no metadata continue with empty object
 
 	dirName := ""
 	name, ok := opts[keyDirName]
@@ -183,7 +183,7 @@ func FSSync(ctx context.Context, c session.Caller, opt FSSendRequestOpt) error {
 
 	var stream grpc.ClientStream
 
-	ctx = metadata.NewContext(ctx, opts)
+	ctx = metadata.NewOutgoingContext(ctx, opts)
 
 	switch pr.name {
 	case "tarstream":
