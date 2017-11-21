@@ -128,6 +128,7 @@ func (s *sender) queue(id uint32) error {
 func (s *sender) sendFile(h *sendHandle) error {
 	f, err := os.Open(filepath.Join(s.root, h.path))
 	if err == nil {
+		defer f.Close()
 		buf := bufPool.Get().([]byte)
 		defer bufPool.Put(buf)
 		if _, err := io.CopyBuffer(&fileSender{sender: s, id: h.id}, f, buf); err != nil {
