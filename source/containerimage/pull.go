@@ -14,6 +14,7 @@ import (
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
+	"github.com/containerd/containerd/remotes/docker/schema1"
 	"github.com/containerd/containerd/rootfs"
 	"github.com/containerd/containerd/snapshot"
 	"github.com/moby/buildkit/cache"
@@ -195,14 +196,30 @@ func (p *puller) Snapshot(ctx context.Context) (cache.ImmutableRef, error) {
 			ongoing.add(desc)
 			return nil, nil
 		}),
-		remotes.FetchHandler(p.is.ContentStore, fetcher),
-		images.ChildrenHandler(p.is.ContentStore, platforms.Default()),
 	}
+	var schema1Converter *schema1.Converter
+	if p.desc.MediaType == images.MediaTypeDockerSchema1Manifest {
+		schema1Converter = schema1.NewConverter(p.is.ContentStore, fetcher)
+		handlers = append(handlers, schema1Converter)
+	} else {
+		handlers = append(handlers,
+			remotes.FetchHandler(p.is.ContentStore, fetcher),
+			images.ChildrenHandler(p.is.ContentStore, platforms.Default()),
+		)
+	}
+
 	if err := images.Dispatch(ctx, images.Handlers(handlers...), p.desc); err != nil {
 		stopProgress()
 		return nil, err
 	}
 	stopProgress()
+
+	if schema1Converter != nil {
+		p.desc, err = schema1Converter.Convert(ctx)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	unpackProgressDone := oneOffProgress(ctx, "unpacking "+p.src.Reference.String())
 	chainid, err := p.is.unpack(ctx, p.desc)
