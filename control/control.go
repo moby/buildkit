@@ -1,18 +1,14 @@
 package control
 
 import (
-	"github.com/containerd/containerd/snapshots"
 	"github.com/docker/distribution/reference"
 	controlapi "github.com/moby/buildkit/api/services/control"
-	"github.com/moby/buildkit/cache"
-	"github.com/moby/buildkit/cache/cacheimport"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/grpchijack"
 	"github.com/moby/buildkit/solver"
-	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/worker"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -22,17 +18,9 @@ import (
 )
 
 type Opt struct {
-	Snapshotter      snapshots.Snapshotter
-	CacheManager     cache.Manager
-	Worker           worker.Worker
-	SourceManager    *source.Manager
-	InstructionCache solver.InstructionCache
-	Exporters        map[string]exporter.Exporter
 	SessionManager   *session.Manager
+	WorkerController *worker.Controller
 	Frontends        map[string]frontend.Frontend
-	ImageSource      source.Source
-	CacheExporter    *cacheimport.CacheExporter
-	CacheImporter    *cacheimport.CacheImporter
 }
 
 type Controller struct { // TODO: ControlService
@@ -42,17 +30,8 @@ type Controller struct { // TODO: ControlService
 
 func NewController(opt Opt) (*Controller, error) {
 	c := &Controller{
-		opt: opt,
-		solver: solver.NewLLBSolver(solver.LLBOpt{
-			SourceManager:    opt.SourceManager,
-			CacheManager:     opt.CacheManager,
-			Worker:           opt.Worker,
-			InstructionCache: opt.InstructionCache,
-			ImageSource:      opt.ImageSource,
-			Frontends:        opt.Frontends,
-			CacheExporter:    opt.CacheExporter,
-			CacheImporter:    opt.CacheImporter,
-		}),
+		opt:    opt,
+		solver: solver.NewLLBSolver(opt.WorkerController, opt.Frontends),
 	}
 	return c, nil
 }
@@ -63,26 +42,29 @@ func (c *Controller) Register(server *grpc.Server) error {
 }
 
 func (c *Controller) DiskUsage(ctx context.Context, r *controlapi.DiskUsageRequest) (*controlapi.DiskUsageResponse, error) {
-	du, err := c.opt.CacheManager.DiskUsage(ctx, client.DiskUsageInfo{
-		Filter: r.Filter,
-	})
-	if err != nil {
-		return nil, err
-	}
-
 	resp := &controlapi.DiskUsageResponse{}
-	for _, r := range du {
-		resp.Record = append(resp.Record, &controlapi.UsageRecord{
-			ID:          r.ID,
-			Mutable:     r.Mutable,
-			InUse:       r.InUse,
-			Size_:       r.Size,
-			Parent:      r.Parent,
-			UsageCount:  int64(r.UsageCount),
-			Description: r.Description,
-			CreatedAt:   r.CreatedAt,
-			LastUsedAt:  r.LastUsedAt,
+	for _, w := range c.opt.WorkerController.GetAll() {
+		du, err := w.CacheManager.DiskUsage(ctx, client.DiskUsageInfo{
+			Filter: r.Filter,
 		})
+		if err != nil {
+			return nil, err
+		}
+
+		for _, r := range du {
+			resp.Record = append(resp.Record, &controlapi.UsageRecord{
+				// TODO: add worker info
+				ID:          r.ID,
+				Mutable:     r.Mutable,
+				InUse:       r.InUse,
+				Size_:       r.Size,
+				Parent:      r.Parent,
+				UsageCount:  int64(r.UsageCount),
+				Description: r.Description,
+				CreatedAt:   r.CreatedAt,
+				LastUsedAt:  r.LastUsedAt,
+			})
+		}
 	}
 	return resp, nil
 }
@@ -100,9 +82,14 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 	ctx = session.NewContext(ctx, req.Session)
 
 	var expi exporter.ExporterInstance
-	var err error
+	// TODO: multiworker
+	// This is actually tricky, as the exporter should come from the worker that has the returned reference. We may need to delay this so that the solver loads this.
+	w, err := c.opt.WorkerController.GetDefault()
+	if err != nil {
+		return nil, err
+	}
 	if req.Exporter != "" {
-		exp, ok := c.opt.Exporters[req.Exporter]
+		exp, ok := w.Exporters[req.Exporter]
 		if !ok {
 			return nil, errors.Errorf("exporter %q could not be found", req.Exporter)
 		}

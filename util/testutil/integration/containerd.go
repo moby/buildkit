@@ -64,7 +64,7 @@ func (c *containerd) New() (sb Sandbox, cl func() error, err error) {
 		return nil, nil, err
 	}
 
-	builddSock, stop, err := runBuildd([]string{"buildd-containerd", "--containerd", address}, logs)
+	builddSock, stop, err := runBuildd([]string{"buildd-containerd", "--containerd-worker-addr", address}, logs)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -1,6 +1,6 @@
 // +build linux,standalone
 
-package control
+package runc
 
 import (
 	"bytes"
@@ -12,20 +12,17 @@ import (
 	"testing"
 
 	"github.com/containerd/containerd/namespaces"
-	"github.com/moby/buildkit/cache"
-	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/executor"
+	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
-	"github.com/moby/buildkit/snapshot/blobmapping"
 	"github.com/moby/buildkit/source"
-	"github.com/moby/buildkit/source/containerimage"
 	"github.com/moby/buildkit/worker"
-	"github.com/moby/buildkit/worker/runcworker"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/net/context"
 )
 
-func TestControlStandalone(t *testing.T) {
+func TestRuncWorker(t *testing.T) {
 	t.Parallel()
 	if os.Getuid() != 0 {
 		t.Skip("requires root")
@@ -37,46 +34,23 @@ func TestControlStandalone(t *testing.T) {
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
 	// this should be an example or e2e test
-	tmpdir, err := ioutil.TempDir("", "controltest")
+	tmpdir, err := ioutil.TempDir("", "workertest")
 	assert.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
-	cd, err := newStandalonePullDeps(tmpdir)
+	workerOpt, err := NewWorkerOpt(tmpdir)
 	assert.NoError(t, err)
 
-	md, err := metadata.NewStore(filepath.Join(tmpdir, "metadata.db"))
+	workerOpt.SessionManager, err = session.NewManager()
 	assert.NoError(t, err)
 
-	snapshotter, err := blobmapping.NewSnapshotter(blobmapping.Opt{
-		Content:       cd.ContentStore,
-		Snapshotter:   cd.Snapshotter,
-		MetadataStore: md,
-	})
+	w, err := worker.NewWorker(workerOpt)
 	assert.NoError(t, err)
-
-	cm, err := cache.NewManager(cache.ManagerOpt{
-		Snapshotter:   snapshotter,
-		MetadataStore: md,
-	})
-	assert.NoError(t, err)
-
-	sm, err := source.NewManager()
-	assert.NoError(t, err)
-
-	is, err := containerimage.NewSource(containerimage.SourceOpt{
-		Snapshotter:   snapshotter,
-		ContentStore:  cd.ContentStore,
-		Applier:       cd.Applier,
-		CacheAccessor: cm,
-	})
-	assert.NoError(t, err)
-
-	sm.Register(is)
 
 	img, err := source.NewImageIdentifier("docker.io/library/busybox:latest")
 	assert.NoError(t, err)
 
-	src, err := sm.Resolve(ctx, img)
+	src, err := w.SourceManager.Resolve(ctx, img)
 	assert.NoError(t, err)
 
 	snap, err := src.Snapshot(ctx)
@@ -103,7 +77,7 @@ func TestControlStandalone(t *testing.T) {
 	lm.Unmount()
 	assert.NoError(t, err)
 
-	du, err := cm.DiskUsage(ctx, client.DiskUsageInfo{})
+	du, err := w.CacheManager.DiskUsage(ctx, client.DiskUsageInfo{})
 	assert.NoError(t, err)
 
 	// for _, d := range du {
@@ -114,26 +88,23 @@ func TestControlStandalone(t *testing.T) {
 		assert.True(t, d.Size >= 8192)
 	}
 
-	w, err := runcworker.New(tmpdir)
-	assert.NoError(t, err)
-
-	meta := worker.Meta{
+	meta := executor.Meta{
 		Args: []string{"/bin/sh", "-c", "echo \"foo\" > /bar"},
 		Cwd:  "/",
 	}
 
 	stderr := bytes.NewBuffer(nil)
 
-	err = w.Exec(ctx, meta, snap, nil, nil, nil, &nopCloser{stderr})
+	err = w.Executor.Exec(ctx, meta, snap, nil, nil, nil, &nopCloser{stderr})
 	assert.Error(t, err) // Read-only root
 	// typical error is like `mkdir /.../rootfs/proc: read-only file system`.
 	// make sure the error is caused before running `echo foo > /bar`.
 	assert.Contains(t, stderr.String(), "read-only file system")
 
-	root, err := cm.New(ctx, snap)
+	root, err := w.CacheManager.New(ctx, snap)
 	assert.NoError(t, err)
 
-	err = w.Exec(ctx, meta, root, nil, nil, nil, nil)
+	err = w.Executor.Exec(ctx, meta, root, nil, nil, nil, nil)
 	assert.NoError(t, err)
 
 	rf, err := root.Commit(ctx)
@@ -160,7 +131,7 @@ func TestControlStandalone(t *testing.T) {
 	err = snap.Release(ctx)
 	assert.NoError(t, err)
 
-	du2, err := cm.DiskUsage(ctx, client.DiskUsageInfo{})
+	du2, err := w.CacheManager.DiskUsage(ctx, client.DiskUsageInfo{})
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(du2)-len(du))
 

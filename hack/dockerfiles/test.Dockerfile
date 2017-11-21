@@ -1,6 +1,7 @@
 ARG RUNC_VERSION=74a17296470088de3805e138d3d87c62e613dfc4
 ARG CONTAINERD_VERSION=v1.0.0
-ARG BUILDKIT_TARGET=standalone
+# available targets: buildd (standalone+containerd), buildd-standalone, buildd-containerd
+ARG BUILDKIT_TARGET=buildd
 ARG REGISTRY_VERSION=2.6
 
 FROM golang:1.9-alpine AS gobuild-base
@@ -47,6 +48,10 @@ RUN go build -ldflags '-d'  -o /usr/bin/buildd-containerd -tags containerd ./cmd
 
 FROM registry:$REGISTRY_VERSION AS registry
 
+FROM buildkit-base AS buildd
+ENV CGO_ENABLED=0
+RUN go build -ldflags '-d'  -o /usr/bin/buildd -tags "standalone containerd" ./cmd/buildd
+
 FROM unit-tests AS integration-tests
 COPY --from=buildctl /usr/bin/buildctl /usr/bin/
 COPY --from=buildd-containerd /usr/bin/buildd-containerd /usr/bin
@@ -69,17 +74,23 @@ RUN apk add --no-cache git
 VOLUME /var/lib/buildkit
 
 # Copy together all binaries needed for standalone mode
-FROM buildkit-export AS buildkit-standalone
+FROM buildkit-export AS buildkit-buildd-standalone
 COPY --from=buildd-standalone /usr/bin/buildd-standalone /usr/bin/
 COPY --from=buildctl /usr/bin/buildctl /usr/bin/
 ENTRYPOINT ["buildd-standalone"]
 
 # Copy together all binaries for containerd mode
-FROM buildkit-export AS buildkit-containerd
+FROM buildkit-export AS buildkit-buildd-containerd
 COPY --from=runc /usr/bin/runc /usr/bin/
 COPY --from=buildd-containerd /usr/bin/buildd-containerd /usr/bin/
 COPY --from=buildctl /usr/bin/buildctl /usr/bin/
 ENTRYPOINT ["buildd-containerd"]
+
+# Copy together all binaries for standalone+containerd mode
+FROM buildkit-export AS buildkit-buildd
+COPY --from=runc /usr/bin/runc /usr/bin/
+COPY --from=buildd /usr/bin/buildd /usr/bin/
+COPY --from=buildctl /usr/bin/buildctl /usr/bin/
 
 FROM alpine AS containerd-runtime
 COPY --from=runc /usr/bin/runc /usr/bin/

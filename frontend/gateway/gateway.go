@@ -14,12 +14,12 @@ import (
 	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/frontend"
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
-	"github.com/moby/buildkit/worker"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -144,7 +144,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 
 	env = append(env, "BUILDKIT_SESSION_ID="+sid)
 
-	err = llbBridge.Exec(ctx, worker.Meta{
+	err = llbBridge.Exec(ctx, executor.Meta{
 		Env:  env,
 		Args: args,
 		Cwd:  cwd,
