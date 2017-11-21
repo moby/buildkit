@@ -55,8 +55,16 @@ func (w containerdWorker) Exec(ctx context.Context, meta worker.Meta, root cache
 	}
 	defer task.Delete(ctx)
 
-	// TODO: Configure bridge networking
+	// FIXME: remove hardcoded "docker0" with user input
+	pair, err := CreateBridgePair("docker0")
+	if err != nil {
+		return errors.Errorf("error in paring : %v", err)
+	}
 
+	if err := pair.Set(task); err != nil {
+		return errors.Errorf("could not set bridge network : %v", err)
+	}
+	defer pair.Remove(task)
 	// TODO: support sending signals
 
 	if err := task.Start(ctx); err != nil {
