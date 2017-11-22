@@ -1,4 +1,4 @@
-package containerdworker
+package bridge
 
 import (
 	"fmt"
@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/containerd/containerd"
 	"github.com/vishvananda/netlink"
 )
 
@@ -64,16 +63,16 @@ type VethPair struct {
 }
 
 //Set network namespace of task
-func (v *VethPair) Set(task containerd.Task) error {
+func (v *VethPair) Set(pid int) error {
 	child, err := netlink.LinkByName(v.peer)
 	if err != nil {
 		return err
 	}
-	return netlink.LinkSetNsPid(child, int(task.Pid()))
+	return netlink.LinkSetNsPid(child, pid)
 }
 
 //Remove the link from system
-func (v *VethPair) Remove(task containerd.Task) error {
+func (v *VethPair) Remove() error {
 	child, err := netlink.LinkByName(v.peer)
 	if err != nil {
 		return err
