@@ -254,6 +254,54 @@ func TestHandleChange(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestHandleRecursiveDir(t *testing.T) {
+	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	snapshotter, err := naive.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	cm := setupCacheManager(t, tmpdir, snapshotter)
+	defer cm.Close()
+
+	ch := []string{
+		"ADD d0 dir",
+		"ADD d0/foo dir",
+		"ADD d0/foo/bar dir",
+		"ADD d0/foo/bar/foo file data0",
+		"ADD d0/foo/bar/bar file data1",
+		"ADD d1 dir",
+		"ADD d1/foo file data0",
+	}
+
+	ref := createRef(t, cm, nil)
+
+	cc, err := newCacheContext(ref.Metadata())
+	assert.NoError(t, err)
+
+	err = emit(cc.HandleChange, changeStream(ch))
+	assert.NoError(t, err)
+
+	dgst, err := cc.Checksum(context.TODO(), ref, "d0/foo/bar")
+	assert.NoError(t, err)
+
+	ch = []string{
+		"DEL d0 dir",
+		"DEL d0/foo dir", // the differ can produce a record for subdir as well
+		"ADD d1/bar file data1",
+	}
+
+	err = emit(cc.HandleChange, changeStream(ch))
+	assert.NoError(t, err)
+
+	dgst2, err := cc.Checksum(context.TODO(), ref, "d1")
+	assert.NoError(t, err)
+	assert.Equal(t, dgst2, dgst)
+
+	_, err = cc.Checksum(context.TODO(), ref, "")
+	assert.NoError(t, err)
+}
+
 func TestPersistence(t *testing.T) {
 	tmpdir, err := ioutil.TempDir("", "buildkit-state")
 	require.NoError(t, err)
