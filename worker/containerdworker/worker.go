@@ -8,6 +8,7 @@ import (
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/worker"
+	"github.com/moby/buildkit/worker/bridge"
 	"github.com/moby/buildkit/worker/oci"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -55,8 +56,16 @@ func (w containerdWorker) Exec(ctx context.Context, meta worker.Meta, root cache
 	}
 	defer task.Delete(ctx)
 
-	// TODO: Configure bridge networking
+	// FIXME: remove hardcoded "docker0" with user input
+	pair, err := bridge.CreateBridgePair("docker0")
+	if err != nil {
+		return errors.Errorf("error in paring : %v", err)
+	}
 
+	if err := pair.Set(int(task.Pid())); err != nil {
+		return errors.Errorf("could not set bridge network : %v", err)
+	}
+	defer pair.Remove()
 	// TODO: support sending signals
 
 	if err := task.Start(ctx); err != nil {

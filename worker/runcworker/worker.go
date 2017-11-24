@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/containerd/containerd/mount"
 	runc "github.com/containerd/go-runc"
@@ -14,6 +15,7 @@ import (
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/worker"
+	"github.com/moby/buildkit/worker/bridge"
 	"github.com/moby/buildkit/worker/oci"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -104,20 +106,51 @@ func (w *runcworker) Exec(ctx context.Context, meta worker.Meta, root cache.Moun
 		return err
 	}
 
-	logrus.Debugf("> running %s %v", id, meta.Args)
-
-	status, err := w.runc.Run(ctx, id, bundle, &runc.CreateOpts{
-		IO: &forwardIO{stdin: stdin, stdout: stdout, stderr: stderr},
-	})
-	logrus.Debugf("< completed %s %v %v", id, status, err)
-	if status != 0 {
-		select {
-		case <-ctx.Done():
-			// runc can't report context.Cancelled directly
-			return errors.Wrapf(ctx.Err(), "exit code %d", status)
-		default:
+	containerDone := make(chan bool)
+	logrus.Debugf(">>> creating %s %v", id, meta.Args)
+	go func() {
+		err = w.runc.Create(ctx, id, bundle, &runc.CreateOpts{
+			IO: &forwardIO{stdin: stdin, stdout: stdout, stderr: stderr},
+		})
+		if err != nil {
+			logrus.Debugf(">>> error %v ", err)
 		}
-		return errors.Errorf("exit code %d", status)
+		containerDone <- true
+	}()
+
+	//FIXME: How to fix this. with event?
+	time.Sleep(time.Millisecond * 500)
+
+	ctr, err := w.runc.State(ctx, id)
+	logrus.Debugf(">>> Status: %s %d", ctr.Status, ctr.Pid)
+
+	// FIXME: remove hardcoded "docker0" with user input
+	pair, err := bridge.CreateBridgePair("docker0")
+	if err != nil {
+		return errors.Errorf("error in paring : %v", err)
+	}
+
+	if err := pair.Set(ctr.Pid); err != nil {
+		return errors.Errorf("could not set bridge network : %v", err)
+	}
+	defer pair.Remove()
+
+	logrus.Debugf(">>> starting %s", id)
+	err = w.runc.Start(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	ctr, _ = w.runc.State(ctx, id)
+	logrus.Debugf(">>> Status: %s %d", ctr.Status, ctr.Pid)
+
+	<-containerDone
+	ctr, _ = w.runc.State(ctx, id)
+	logrus.Debugf("< completed %s %s %v", id, ctr.Status, err)
+
+	err = w.runc.Delete(ctx, id, &runc.DeleteOpts{})
+	if err != nil {
+		return err
 	}
 
 	return err
