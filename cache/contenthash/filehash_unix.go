@@ -8,6 +8,8 @@ import (
 
 	"github.com/containerd/continuity/sysx"
 	"github.com/tonistiigi/fsutil"
+
+	"golang.org/x/sys/unix"
 )
 
 func chmodWindowsTarEntry(perm os.FileMode) os.FileMode {
@@ -23,8 +25,8 @@ func setUnixOpt(path string, fi os.FileInfo, stat *fsutil.Stat) error {
 	if !fi.IsDir() {
 		if s.Mode&syscall.S_IFBLK != 0 ||
 			s.Mode&syscall.S_IFCHR != 0 {
-			stat.Devmajor = int64(major(uint64(s.Rdev)))
-			stat.Devminor = int64(minor(uint64(s.Rdev)))
+			stat.Devmajor = int64(unix.Major(uint64(s.Rdev)))
+			stat.Devminor = int64(unix.Minor(uint64(s.Rdev)))
 		}
 	}
 
@@ -42,12 +44,4 @@ func setUnixOpt(path string, fi os.FileInfo, stat *fsutil.Stat) error {
 		}
 	}
 	return nil
-}
-
-func major(device uint64) uint64 {
-	return (device >> 8) & 0xfff
-}
-
-func minor(device uint64) uint64 {
-	return (device & 0xff) | ((device >> 12) & 0xfff00)
 }
