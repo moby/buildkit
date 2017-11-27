@@ -2,96 +2,59 @@ package client
 
 import (
 	"context"
-	"fmt"
-	"io/ioutil"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"runtime"
-	"syscall"
 	"testing"
 
 	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/util/testutil/integration"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-var clientAddressStandalone string
-var clientAddressContainerd string
+var testCases = map[string]integration.Test{
+	"TestCallDiskUsage":   testCallDiskUsage,
+	"TestBuildMultiMount": testBuildMultiMount,
+}
 
-func TestMain(m *testing.M) {
+func TestClientIntegration(t *testing.T) {
 	if testing.Short() {
-		os.Exit(m.Run())
+		t.Skip("skipping in short mode")
 	}
-
-	cleanup, err := setupStandalone()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	defer cleanup()
-
-	cleanup, err = setupContainerd()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	defer cleanup()
-
-	os.Exit(m.Run())
-}
-
-func runBuildd(args []string) (string, func(), error) {
-	tmpdir, err := ioutil.TempDir("", "buildd")
-	if err != nil {
-		return "", nil, err
-	}
-	defer os.RemoveAll(tmpdir)
-
-	address := filepath.Join(tmpdir, "buildd.sock")
-	if runtime.GOOS == "windows" {
-		address = "//./pipe/buildd-" + filepath.Base(tmpdir)
-	} else {
-		address = "unix://" + address
-	}
-
-	args = append(args, "--root", tmpdir, "--addr", address, "--debug")
-
-	cmd := exec.Command(args[0], args[1:]...)
-	// cmd.Stderr = os.Stdout
-	// cmd.Stdout = os.Stdout
-	if err := cmd.Start(); err != nil {
-		return "", nil, err
-	}
-
-	return address, func() {
-		// tear down the daemon and resources created
-		if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
-			fmt.Fprintln(os.Stderr, err)
+	for _, br := range integration.List() {
+		for name, tc := range testCases {
+			ok := t.Run(name+"/worker="+br.Name(), func(t *testing.T) {
+				sb, close, err := br.New()
+				if err != nil {
+					if errors.Cause(err) == integration.ErrorRequirements {
+						t.Skip(err.Error())
+					}
+					require.NoError(t, err)
+				}
+				defer func() {
+					assert.NoError(t, close())
+					if t.Failed() {
+						sb.PrintLogs(t)
+					}
+				}()
+				tc(t, sb)
+			})
+			require.True(t, ok)
 		}
-		if _, err := cmd.Process.Wait(); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-		}
-		os.RemoveAll(tmpdir)
-	}, nil
-}
-
-func requiresLinux(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skipf("unsupported GOOS: %s", runtime.GOOS)
 	}
 }
 
-func testCallDiskUsage(t *testing.T, address string) {
-	c, err := New(address)
+func testCallDiskUsage(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Address())
 	assert.Nil(t, err)
 	_, err = c.DiskUsage(context.TODO())
 	assert.Nil(t, err)
 }
 
-func testBuildMultiMount(t *testing.T, address string) {
+func testBuildMultiMount(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 	t.Parallel()
-	c, err := New(address)
+	c, err := New(sb.Address())
 	assert.Nil(t, err)
 
 	alpine := llb.Image("docker.io/library/alpine:latest")
@@ -105,4 +68,10 @@ func testBuildMultiMount(t *testing.T, address string) {
 
 	err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
 	assert.Nil(t, err)
+}
+
+func requiresLinux(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skipf("unsupported GOOS: %s", runtime.GOOS)
+	}
 }
