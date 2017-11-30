@@ -49,7 +49,7 @@ func (c *containerd) New() (sb Sandbox, cl func() error, err error) {
 	deferF.append(func() error { return os.RemoveAll(tmpdir) })
 
 	address := filepath.Join(tmpdir, "containerd.sock")
-	args := append([]string{}, "containerd", "--root", filepath.Join(tmpdir, "root"), "--root", filepath.Join(tmpdir, "state"), "--address", address)
+	args := append([]string{}, "containerd", "--root", filepath.Join(tmpdir, "root"), "--log-level", "debug", "--root", filepath.Join(tmpdir, "state"), "--address", address)
 
 	cmd := exec.Command(args[0], args[1:]...)
 

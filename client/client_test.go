@@ -7,9 +7,7 @@ import (
 
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/util/testutil/integration"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 var testCases = map[string]integration.Test{
@@ -18,30 +16,7 @@ var testCases = map[string]integration.Test{
 }
 
 func TestClientIntegration(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping in short mode")
-	}
-	for _, br := range integration.List() {
-		for name, tc := range testCases {
-			ok := t.Run(name+"/worker="+br.Name(), func(t *testing.T) {
-				sb, close, err := br.New()
-				if err != nil {
-					if errors.Cause(err) == integration.ErrorRequirements {
-						t.Skip(err.Error())
-					}
-					require.NoError(t, err)
-				}
-				defer func() {
-					assert.NoError(t, close())
-					if t.Failed() {
-						sb.PrintLogs(t)
-					}
-				}()
-				tc(t, sb)
-			})
-			require.True(t, ok)
-		}
-	}
+	integration.Run(t, testCases)
 }
 
 func testCallDiskUsage(t *testing.T, sb integration.Sandbox) {

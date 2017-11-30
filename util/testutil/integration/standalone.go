@@ -58,6 +58,13 @@ func (sb *sandbox) PrintLogs(t *testing.T) {
 	}
 }
 
+func (sb *sandbox) Cmd(args ...string) *exec.Cmd {
+	cmd := exec.Command("buildctl", args...)
+	cmd.Env = append(cmd.Env, os.Environ()...)
+	cmd.Env = append(cmd.Env, "BUILDKIT_HOST="+sb.Address())
+	return cmd
+}
+
 func runBuildd(args []string, logs map[string]*bytes.Buffer) (address string, cl func() error, err error) {
 	deferF := &multiCloser{}
 	cl = deferF.F()
@@ -75,11 +82,9 @@ func runBuildd(args []string, logs map[string]*bytes.Buffer) (address string, cl
 	}
 	deferF.append(func() error { return os.RemoveAll(tmpdir) })
 
-	address = filepath.Join(tmpdir, "buildd.sock")
+	address = "unix://" + filepath.Join(tmpdir, "buildd.sock")
 	if runtime.GOOS == "windows" {
 		address = "//./pipe/buildd-" + filepath.Base(tmpdir)
-	} else {
-		address = "unix://" + address
 	}
 
 	args = append(args, "--root", tmpdir, "--addr", address, "--debug")
