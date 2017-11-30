@@ -150,6 +150,20 @@ Running tests:
 make test
 ```
 
+This runs all unit and integration tests in a containerized environment. Locally, every package can be tested separately with standard Go tools but integration tests are skipped if local user doesn't have enough permissions or worker binaries are not installed.
+
+```
+# test a specific package only
+make test TESTPKGS=./client
+
+# run a specific test with all worker combinations
+make test TESTPKGS=./client TESTFLAGS="--run /TestCallDiskUsage -v" 
+
+# run all integration tests with a specific worker
+# supported workers are standalone and containerd
+make test TESTPKGS=./client TESTFLAGS="--run //worker=containerd -v" 
+```
+
 Updating vendored dependencies:
 
 ```bash
