@@ -10,6 +10,8 @@ import (
 	"runtime"
 	"testing"
 	"time"
+
+	"github.com/google/shlex"
 )
 
 func init() {
@@ -59,6 +61,11 @@ func (sb *sandbox) PrintLogs(t *testing.T) {
 }
 
 func (sb *sandbox) Cmd(args ...string) *exec.Cmd {
+	if len(args) == 1 {
+		if split, err := shlex.Split(args[0]); err == nil {
+			args = split
+		}
+	}
 	cmd := exec.Command("buildctl", args...)
 	cmd.Env = append(cmd.Env, os.Environ()...)
 	cmd.Env = append(cmd.Env, "BUILDKIT_HOST="+sb.Address())
