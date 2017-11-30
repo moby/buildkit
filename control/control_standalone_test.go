@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -24,7 +25,14 @@ import (
 	"golang.org/x/net/context"
 )
 
-func TestControl(t *testing.T) {
+func TestControlStandalone(t *testing.T) {
+	if os.Getuid() != 0 {
+		t.Skip("requires root")
+	}
+	if _, err := exec.LookPath("runc"); err != nil {
+		t.Skipf("no runc found: %s", err.Error())
+	}
+
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
 	// this should be an example or e2e test

@@ -42,6 +42,7 @@ ENV CGO_ENABLED=0
 RUN go build -ldflags '-d'  -o /usr/bin/buildd-containerd -tags containerd ./cmd/buildd
 
 FROM unit-tests AS integration-tests
+COPY --from=buildctl /usr/bin/buildctl /usr/bin/
 COPY --from=buildd-containerd /usr/bin/buildd-containerd /usr/bin
 COPY --from=buildd-standalone /usr/bin/buildd-standalone /usr/bin
 
