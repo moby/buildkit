@@ -2,6 +2,9 @@ package integration
 
 import (
 	"os/exec"
+	"reflect"
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/pkg/errors"
@@ -32,13 +35,13 @@ func List() []Worker {
 	return defaultWorkers
 }
 
-func Run(t *testing.T, testCases map[string]Test) {
+func Run(t *testing.T, testCases []Test) {
 	if testing.Short() {
 		t.Skip("skipping in short mode")
 	}
 	for _, br := range List() {
-		for name, tc := range testCases {
-			ok := t.Run(name+"/worker="+br.Name(), func(t *testing.T) {
+		for _, tc := range testCases {
+			ok := t.Run(getFunctionName(tc)+"/worker="+br.Name(), func(t *testing.T) {
 				sb, close, err := br.New()
 				if err != nil {
 					if errors.Cause(err) == ErrorRequirements {
@@ -57,4 +60,10 @@ func Run(t *testing.T, testCases map[string]Test) {
 			require.True(t, ok)
 		}
 	}
+}
+
+func getFunctionName(i interface{}) string {
+	fullname := runtime.FuncForPC(reflect.ValueOf(i).Pointer()).Name()
+	dot := strings.LastIndex(fullname, ".") + 1
+	return strings.Title(fullname[dot:])
 }

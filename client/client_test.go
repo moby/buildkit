@@ -10,13 +10,11 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var testCases = map[string]integration.Test{
-	"TestCallDiskUsage":   testCallDiskUsage,
-	"TestBuildMultiMount": testBuildMultiMount,
-}
-
 func TestClientIntegration(t *testing.T) {
-	integration.Run(t, testCases)
+	integration.Run(t, []integration.Test{
+		testCallDiskUsage,
+		testBuildMultiMount,
+	})
 }
 
 func testCallDiskUsage(t *testing.T, sb integration.Sandbox) {
