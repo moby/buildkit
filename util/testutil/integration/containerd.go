@@ -70,5 +70,14 @@ func (c *containerd) New() (sb Sandbox, cl func() error, err error) {
 	}
 	deferF.append(stop)
 
-	return &sandbox{address: builddSock, logs: logs}, cl, nil
+	return &cdsandbox{address: address, sandbox: sandbox{address: builddSock, logs: logs}}, cl, nil
+}
+
+type cdsandbox struct {
+	sandbox
+	address string
+}
+
+func (s *cdsandbox) ContainerdAddress() string {
+	return s.address
 }

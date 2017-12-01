@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -9,7 +10,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/fs/fstest"
+	"github.com/containerd/containerd/namespaces"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/stretchr/testify/require"
@@ -62,6 +65,39 @@ func testBuildLocalExporter(t *testing.T, sb integration.Sandbox) {
 	dt, err := ioutil.ReadFile(filepath.Join(tmpdir, "foo"))
 	require.NoError(t, err)
 	require.Equal(t, string(dt), "bar")
+}
+
+func testBuildContainerdExporter(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	var cdAddress string
+	if cd, ok := sb.(interface {
+		ContainerdAddress() string
+	}); !ok {
+		t.Skip("only for containerd worker")
+	} else {
+		cdAddress = cd.ContainerdAddress()
+	}
+
+	st := llb.Image("busybox").
+		Run(llb.Shlex("sh -c 'echo -n bar > /foo'"))
+
+	rdr, err := marshal(st.Root())
+	require.NoError(t, err)
+
+	cmd := sb.Cmd("build --no-progress --exporter=image --exporter-opt name=example.com/moby/imageexporter:test")
+	cmd.Stdin = rdr
+	err = cmd.Run()
+	require.NoError(t, err)
+
+	client, err := containerd.New(cdAddress)
+	require.NoError(t, err)
+	defer client.Close()
+
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit")
+
+	_, err = client.ImageService().Get(ctx, "example.com/moby/imageexporter:test")
+	require.NoError(t, err)
 }
 
 func marshal(st llb.State) (io.Reader, error) {

@@ -11,5 +11,6 @@ func TestCLIIntegration(t *testing.T) {
 		testDiskUsage,
 		testBuildWithLocalFiles,
 		testBuildLocalExporter,
+		testBuildContainerdExporter,
 	})
 }
