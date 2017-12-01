@@ -57,7 +57,7 @@ type httpSourceHandler struct {
 func (hs *httpSource) Resolve(ctx context.Context, id source.Identifier) (source.SourceInstance, error) {
 	httpIdentifier, ok := id.(*source.HttpIdentifier)
 	if !ok {
-		return nil, errors.Errorf("invalid git identifier %v", id)
+		return nil, errors.Errorf("invalid http identifier %v", id)
 	}
 
 	return &httpSourceHandler{
@@ -105,7 +105,9 @@ func (hs *httpSourceHandler) CacheKey(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-
+	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
+		return "", errors.Errorf("invalid response status %d", resp.StatusCode)
+	}
 	if resp.StatusCode == http.StatusNotModified {
 		respETag := resp.Header.Get("ETag")
 		si, ok := m[respETag]
@@ -164,7 +166,6 @@ func (hs *httpSourceHandler) save(ctx context.Context, resp *http.Response) (ref
 			lm.Unmount()
 		}
 	}()
-
 	f, err := os.Create(filepath.Join(dir, getFileName(hs.src.URL, resp)))
 	if err != nil {
 		return nil, "", err
@@ -227,7 +228,7 @@ func (hs *httpSourceHandler) Snapshot(ctx context.Context) (cache.ImmutableRef, 
 		return nil, errors.Errorf("digest mismatch %s: %s", dgst, hs.cacheKey)
 	}
 
-	return ref, errors.Errorf("not-implemented")
+	return ref, nil
 }
 
 const keyETag = "etag"
@@ -296,7 +297,7 @@ func getFileName(urlStr string, resp *http.Response) string {
 	}
 	u, err := url.Parse(urlStr)
 	if err == nil {
-		if base := path.Base(u.Path); base != "" {
+		if base := path.Base(u.Path); base != "." {
 			return base
 		}
 	}
