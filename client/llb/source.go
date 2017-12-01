@@ -8,7 +8,6 @@ import (
 
 	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/solver/pb"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
 
@@ -92,7 +91,13 @@ func Image(ref string, opts ...ImageOption) State {
 		if err != nil {
 			src.err = err
 		} else {
-			var img ocispec.Image
+			var img struct {
+				Config struct {
+					Env        []string `json:"Env,omitempty"`
+					WorkingDir string   `json:"WorkingDir,omitempty"`
+					User       string   `json:"User,omitempty"`
+				} `json:"config,omitempty"`
+			}
 			if err := json.Unmarshal(dt, &img); err != nil {
 				src.err = err
 			} else {
