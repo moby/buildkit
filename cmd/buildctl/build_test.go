@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/containerd/containerd/fs/fstest"
@@ -15,6 +16,7 @@ import (
 )
 
 func testBuildWithLocalFiles(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
 	dir, err := tmpdir(
 		fstest.CreateFile("foo", []byte("bar"), 0600),
 	)
@@ -37,6 +39,31 @@ func testBuildWithLocalFiles(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 }
 
+func testBuildLocalExporter(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+	st := llb.Image("busybox").
+		Run(llb.Shlex("sh -c 'echo -n bar > /out/foo'"))
+
+	out := st.AddMount("/out", llb.Scratch())
+
+	rdr, err := marshal(out)
+	require.NoError(t, err)
+
+	tmpdir, err := ioutil.TempDir("", "buildkit-buildctl")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	cmd := sb.Cmd(fmt.Sprintf("build --no-progress --exporter=local --exporter-opt output=%s", tmpdir))
+	cmd.Stdin = rdr
+	err = cmd.Run()
+
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(tmpdir, "foo"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), "bar")
+}
+
 func marshal(st llb.State) (io.Reader, error) {
 	def, err := st.Marshal()
 	if err != nil {
@@ -50,7 +77,7 @@ func marshal(st llb.State) (io.Reader, error) {
 }
 
 func tmpdir(appliers ...fstest.Applier) (string, error) {
-	tmpdir, err := ioutil.TempDir("", "buildkit-dockerfile")
+	tmpdir, err := ioutil.TempDir("", "buildkit-buildctl")
 	if err != nil {
 		return "", err
 	}
