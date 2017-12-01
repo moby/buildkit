@@ -16,6 +16,7 @@ import (
 	"github.com/docker/docker/pkg/signal"
 	"github.com/docker/go-connections/nat"
 	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/client/llb/imagemetaresolver"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -56,7 +57,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 
 	metaResolver := opt.MetaResolver
 	if metaResolver == nil {
-		metaResolver = llb.DefaultImageMetaResolver()
+		metaResolver = imagemetaresolver.Default()
 	}
 
 	var allDispatchStates []*dispatchState

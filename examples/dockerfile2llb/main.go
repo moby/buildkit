@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/client/llb/imagemetaresolver"
 	"github.com/moby/buildkit/frontend/dockerfile/dockerfile2llb"
 	"github.com/moby/buildkit/util/appcontext"
 )
@@ -26,7 +27,7 @@ func main() {
 	}
 
 	state, img, err := dockerfile2llb.Dockerfile2LLB(appcontext.Context(), df, dockerfile2llb.ConvertOpt{
-		MetaResolver: llb.DefaultImageMetaResolver(),
+		MetaResolver: imagemetaresolver.Default(),
 		Target:       opt.target,
 	})
 	if err != nil {
