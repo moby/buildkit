@@ -45,6 +45,10 @@ func (c *Client) controlClient() controlapi.ControlClient {
 	return controlapi.NewControlClient(c.conn)
 }
 
+func (c *Client) Close() error {
+	return c.conn.Close()
+}
+
 type withBlockOpt struct{}
 
 func WithBlock() ClientOpt {
