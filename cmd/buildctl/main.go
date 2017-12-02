@@ -39,8 +39,11 @@ func main() {
 		debugCommand,
 	}
 
+	var debugEnabled bool
+
 	app.Before = func(context *cli.Context) error {
-		if context.GlobalBool("debug") {
+		debugEnabled = context.GlobalBool("debug")
+		if debugEnabled {
 			logrus.SetLevel(logrus.DebugLevel)
 		}
 		return nil
@@ -49,7 +52,11 @@ func main() {
 	profiler.Attach(app)
 
 	if err := app.Run(os.Args); err != nil {
-		fmt.Fprintf(os.Stderr, "buildd: %s\n", err)
+		if debugEnabled {
+			fmt.Fprintf(os.Stderr, "error: %+v\n", err)
+		} else {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		}
 		os.Exit(1)
 	}
 }

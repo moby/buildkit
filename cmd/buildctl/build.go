@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/containerd/console"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/solver/pb"
@@ -168,22 +169,25 @@ func build(clicontext *cli.Context) error {
 	})
 
 	eg.Go(func() error {
-		if clicontext.Bool("no-progress") {
-			for s := range displayCh {
-				for _, v := range s.Vertexes {
-					logrus.Debugf("vertex: %s %s %v %v", v.Digest, v.Name, v.Started, v.Completed)
-				}
-				for _, s := range s.Statuses {
-					logrus.Debugf("status: %s %s %d", s.Vertex, s.ID, s.Current)
-				}
-				for _, l := range s.Logs {
-					logrus.Debugf("log: %s\n%s", l.Vertex, l.Data)
-				}
+		if !clicontext.Bool("no-progress") {
+			if c, err := console.ConsoleFromFile(os.Stdout); err == nil {
+				// not using shared context to not disrupt display but let is finish reporting errors
+				return progressui.DisplaySolveStatus(context.TODO(), c, displayCh)
 			}
-			return nil
 		}
-		// not using shared context to not disrupt display but let is finish reporting errors
-		return progressui.DisplaySolveStatus(context.TODO(), displayCh)
+
+		for s := range displayCh {
+			for _, v := range s.Vertexes {
+				logrus.Debugf("vertex: %s %s %v %v", v.Digest, v.Name, v.Started, v.Completed)
+			}
+			for _, s := range s.Statuses {
+				logrus.Debugf("status: %s %s %d", s.Vertex, s.ID, s.Current)
+			}
+			for _, l := range s.Logs {
+				logrus.Debugf("log: %s\n%s", l.Vertex, l.Data)
+			}
+		}
+		return nil
 	})
 
 	return eg.Wait()
