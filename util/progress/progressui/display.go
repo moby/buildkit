@@ -15,11 +15,7 @@ import (
 	"golang.org/x/time/rate"
 )
 
-func DisplaySolveStatus(ctx context.Context, ch chan *client.SolveStatus) error {
-	c, err := console.ConsoleFromFile(os.Stdout)
-	if err != nil {
-		return err // TODO: switch to log mode
-	}
+func DisplaySolveStatus(ctx context.Context, c console.Console, ch chan *client.SolveStatus) error {
 	disp := &display{c: c}
 
 	t := newTrace()
