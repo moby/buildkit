@@ -10,6 +10,7 @@ import (
 
 	"github.com/containerd/containerd/fs/fstest"
 	"github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/util/testutil/httpserver"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/stretchr/testify/require"
 )
@@ -18,6 +19,7 @@ func TestIntegration(t *testing.T) {
 	integration.Run(t, []integration.Test{
 		testDockerfileDirs,
 		testDockerfileInvalidCommand,
+		testDockerfileADDFromURL,
 	})
 }
 
@@ -110,6 +112,45 @@ func testDockerfileInvalidCommand(t *testing.T, sb integration.Sandbox) {
 	require.Error(t, err)
 	require.Contains(t, stdout.String(), "/bin/sh -c invalidcmd")
 	require.Contains(t, stdout.String(), "worker failed running")
+}
+
+func testDockerfileADDFromURL(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	resp := httpserver.Response{
+		Etag:    identity.NewID(),
+		Content: []byte("content1"),
+	}
+
+	server := httpserver.NewTestServer(map[string]httpserver.Response{
+		"/foo": resp,
+	})
+	defer server.Close()
+
+	dockerfile := []byte(fmt.Sprintf(`
+FROM scratch
+ADD %s /dest/
+`, server.URL+"/foo"))
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	args, trace := dfCmdArgs(dir, dir)
+	defer os.RemoveAll(trace)
+
+	destDir, err := tmpdir()
+	require.NoError(t, err)
+
+	cmd := sb.Cmd(args + fmt.Sprintf(" --exporter=local --exporter-opt output=%s", destDir))
+	err = cmd.Run()
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "dest/foo"))
+	require.NoError(t, err)
+	require.Equal(t, []byte("content1"), dt)
 }
 
 func tmpdir(appliers ...fstest.Applier) (string, error) {
