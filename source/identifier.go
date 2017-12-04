@@ -94,6 +94,10 @@ type HttpIdentifier struct {
 	TLS      bool
 	URL      string
 	Checksum digest.Digest
+	Filename string
+	Perm     int
+	UID      int
+	GID      int
 }
 
 func (_ *HttpIdentifier) ID() string {

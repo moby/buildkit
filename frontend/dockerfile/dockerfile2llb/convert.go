@@ -331,7 +331,7 @@ func dispatchWorkdir(d *dispatchState, c *instructions.WorkdirCommand) error {
 	return nil
 }
 
-func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState llb.State, remoteAllowed bool) error {
+func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState llb.State, isAddCommand bool) error {
 	// TODO: this should use CopyOp instead. Current implementation is inefficient and doesn't match Dockerfile path suffixes rules
 	img := llb.Image("tonistiigi/copy@sha256:260a4355be76e0609518ebd7c0e026831c80b8908d4afd3f8e8c942645b1e5cf")
 
@@ -342,17 +342,17 @@ func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState l
 	args := []string{"copy"}
 	mounts := make([]llb.RunOption, 0, len(c.Sources()))
 	for i, src := range c.Sources() {
-		if urlutil.IsURL(src) {
+		if isAddCommand && urlutil.IsURL(src) {
 			u, err := url.Parse(src)
-			f := "download"
+			f := "__unnamed__"
 			if err == nil {
-				if base := path.Base(u.Path); base != "." {
+				if base := path.Base(u.Path); base != "." && base != "/" {
 					f = base
 				}
 			}
 			target := path.Join(fmt.Sprintf("/src-%d", i), f)
 			args = append(args, target)
-			mounts = append(mounts, llb.AddMount(target, llb.HTTP(src), llb.Readonly))
+			mounts = append(mounts, llb.AddMount(target, llb.HTTP(src, llb.Filename(f)), llb.Readonly))
 		} else {
 			d, f := splitWildcards(src)
 			if f == "" {
