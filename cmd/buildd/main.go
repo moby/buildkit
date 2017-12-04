@@ -16,6 +16,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	"golang.org/x/net/context"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 )
 
@@ -34,10 +35,10 @@ func main() {
 			Usage: "path to state directory",
 			Value: appdefaults.Root,
 		},
-		cli.StringFlag{
+		cli.StringSliceFlag{
 			Name:  "addr",
 			Usage: "listening address (socket or tcp)",
-			Value: appdefaults.Address,
+			Value: &cli.StringSlice{appdefaults.Address},
 		},
 		cli.StringFlag{
 			Name:  "debugaddr",
@@ -77,7 +78,11 @@ func main() {
 		controller.Register(server)
 
 		errCh := make(chan error, 1)
-		if err := serveGRPC(server, c.GlobalString("addr"), errCh); err != nil {
+		addrs := c.GlobalStringSlice("addr")
+		if len(addrs) > 1 {
+			addrs = addrs[1:] // https://github.com/urfave/cli/issues/160
+		}
+		if err := serveGRPC(server, addrs, errCh); err != nil {
 			return err
 		}
 
@@ -109,18 +114,33 @@ func main() {
 	}
 }
 
-func serveGRPC(server *grpc.Server, addr string, errCh chan error) error {
-	if addr == "" {
+func serveGRPC(server *grpc.Server, addrs []string, errCh chan error) error {
+	if len(addrs) == 0 {
 		return errors.New("--addr cannot be empty")
 	}
-	l, err := getListener(addr)
-	if err != nil {
-		return err
+	eg, _ := errgroup.WithContext(context.Background())
+	listeners := make([]net.Listener, 0, len(addrs))
+	for _, addr := range addrs {
+		l, err := getListener(addr)
+		if err != nil {
+			for _, l := range listeners {
+				l.Close()
+			}
+			return err
+		}
+		listeners = append(listeners, l)
+	}
+	for _, l := range listeners {
+		func(l net.Listener) {
+			eg.Go(func() error {
+				defer l.Close()
+				logrus.Infof("running server on %s", l.Addr())
+				return server.Serve(l)
+			})
+		}(l)
 	}
 	go func() {
-		defer l.Close()
-		logrus.Infof("running server on %s", addr)
-		errCh <- server.Serve(l)
+		errCh <- eg.Wait()
 	}()
 	return nil
 }
