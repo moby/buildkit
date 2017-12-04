@@ -52,6 +52,9 @@ func (s State) Marshal() (*Definition, error) {
 	def := &Definition{
 		Metadata: make(map[digest.Digest]OpMetadata, 0),
 	}
+	if s.Output() == nil {
+		return def, nil
+	}
 	def, err := marshal(s.Output().Vertex(), def, map[digest.Digest]struct{}{}, map[Vertex]struct{}{})
 	if err != nil {
 		return def, err

@@ -1,6 +1,8 @@
 package local
 
 import (
+	"io/ioutil"
+	"os"
 	"time"
 
 	"github.com/moby/buildkit/cache"
@@ -56,21 +58,31 @@ func (e *localExporterInstance) Name() string {
 }
 
 func (e *localExporterInstance) Export(ctx context.Context, ref cache.ImmutableRef, opt map[string][]byte) error {
-	mount, err := ref.Mount(ctx, true)
-	if err != nil {
-		return err
-	}
+	var src string
+	var err error
+	if ref == nil {
+		src, err = ioutil.TempDir("", "buildkit")
+		if err != nil {
+			return err
+		}
+		defer os.RemoveAll(src)
+	} else {
+		mount, err := ref.Mount(ctx, true)
+		if err != nil {
+			return err
+		}
 
-	lm := snapshot.LocalMounter(mount)
+		lm := snapshot.LocalMounter(mount)
 
-	dest, err := lm.Mount()
-	if err != nil {
-		return err
+		src, err = lm.Mount()
+		if err != nil {
+			return err
+		}
+		defer lm.Unmount()
 	}
-	defer lm.Unmount()
 
 	progress := newProgressHandler(ctx, "copying files")
-	return filesync.CopyToCaller(ctx, dest, e.caller, progress)
+	return filesync.CopyToCaller(ctx, src, e.caller, progress)
 }
 
 func newProgressHandler(ctx context.Context, id string) func(int, bool) {
