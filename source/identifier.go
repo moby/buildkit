@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/containerd/containerd/reference"
+	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
 
@@ -16,6 +17,8 @@ const (
 	DockerImageScheme = "docker-image"
 	GitScheme         = "git"
 	LocalScheme       = "local"
+	HttpScheme        = "http"
+	HttpsScheme       = "https"
 )
 
 type Identifier interface {
@@ -36,6 +39,10 @@ func FromString(s string) (Identifier, error) {
 		return NewGitIdentifier(parts[1])
 	case LocalScheme:
 		return NewLocalIdentifier(parts[1])
+	case HttpsScheme:
+		return NewHttpIdentifier(parts[1], true)
+	case HttpScheme:
+		return NewHttpIdentifier(parts[1], false)
 	default:
 		return nil, errors.Wrapf(errNotFound, "unknown schema %s", parts[0])
 	}
@@ -73,4 +80,26 @@ func NewLocalIdentifier(str string) (*LocalIdentifier, error) {
 
 func (*LocalIdentifier) ID() string {
 	return LocalScheme
+}
+
+func NewHttpIdentifier(str string, tls bool) (*HttpIdentifier, error) {
+	proto := "https://"
+	if !tls {
+		proto = "http://"
+	}
+	return &HttpIdentifier{TLS: tls, URL: proto + str}, nil
+}
+
+type HttpIdentifier struct {
+	TLS      bool
+	URL      string
+	Checksum digest.Digest
+	Filename string
+	Perm     int
+	UID      int
+	GID      int
+}
+
+func (_ *HttpIdentifier) ID() string {
+	return HttpsScheme
 }

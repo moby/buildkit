@@ -4,10 +4,13 @@ import (
 	"context"
 	_ "crypto/sha256"
 	"encoding/json"
+	"os"
+	"strconv"
 	"strings"
 
 	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/solver/pb"
+	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
 
@@ -197,4 +200,65 @@ func IncludePatterns(p []string) LocalOption {
 type LocalInfo struct {
 	SessionID       string
 	IncludePatterns string
+}
+
+func HTTP(url string, opts ...HTTPOption) State {
+	hi := &HTTPInfo{}
+	for _, o := range opts {
+		o(hi)
+	}
+	attrs := map[string]string{}
+	if hi.Checksum != "" {
+		attrs[pb.AttrHTTPChecksum] = hi.Checksum.String()
+	}
+	if hi.Filename != "" {
+		attrs[pb.AttrHTTPFilename] = hi.Filename
+	}
+	if hi.Perm != 0 {
+		attrs[pb.AttrHTTPPerm] = "0" + strconv.FormatInt(int64(hi.Perm), 8)
+	}
+	if hi.UID != 0 {
+		attrs[pb.AttrHTTPUID] = strconv.Itoa(hi.UID)
+	}
+	if hi.UID != 0 {
+		attrs[pb.AttrHTTPGID] = strconv.Itoa(hi.GID)
+	}
+
+	source := NewSource(url, attrs)
+	return NewState(source.Output())
+}
+
+type HTTPInfo struct {
+	Checksum digest.Digest
+	Filename string
+	Perm     int
+	UID      int
+	GID      int
+}
+
+type HTTPOption func(*HTTPInfo)
+
+func Checksum(dgst digest.Digest) HTTPOption {
+	return func(hi *HTTPInfo) {
+		hi.Checksum = dgst
+	}
+}
+
+func Chmod(perm os.FileMode) HTTPOption {
+	return func(hi *HTTPInfo) {
+		hi.Perm = int(perm) & 0777
+	}
+}
+
+func Filename(name string) HTTPOption {
+	return func(hi *HTTPInfo) {
+		hi.Filename = name
+	}
+}
+
+func Chown(uid, gid int) HTTPOption {
+	return func(hi *HTTPInfo) {
+		hi.UID = uid
+		hi.GID = gid
+	}
 }

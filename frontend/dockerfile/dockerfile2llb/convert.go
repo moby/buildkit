@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"path"
 	"path/filepath"
 	"strconv"
@@ -14,6 +15,7 @@ import (
 	"github.com/docker/docker/builder/dockerfile/instructions"
 	"github.com/docker/docker/builder/dockerfile/parser"
 	"github.com/docker/docker/pkg/signal"
+	"github.com/docker/docker/pkg/urlutil"
 	"github.com/docker/go-connections/nat"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/client/llb/imagemetaresolver"
@@ -221,7 +223,7 @@ func dispatch(d *dispatchState, cmd instructions.Command, opt dispatchOpt) error
 	case *instructions.WorkdirCommand:
 		err = dispatchWorkdir(d, c)
 	case *instructions.AddCommand:
-		err = dispatchCopy(d, c.SourcesAndDest, opt.buildContext)
+		err = dispatchCopy(d, c.SourcesAndDest, opt.buildContext, true)
 	case *instructions.LabelCommand:
 		err = dispatchLabel(d, c)
 	case *instructions.OnbuildCommand:
@@ -261,7 +263,7 @@ func dispatch(d *dispatchState, cmd instructions.Command, opt dispatchOpt) error
 				l = opt.allDispatchStates[index].state
 			}
 		}
-		err = dispatchCopy(d, c.SourcesAndDest, l)
+		err = dispatchCopy(d, c.SourcesAndDest, l, false)
 	default:
 	}
 	return err
@@ -329,7 +331,7 @@ func dispatchWorkdir(d *dispatchState, c *instructions.WorkdirCommand) error {
 	return nil
 }
 
-func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState llb.State) error {
+func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState llb.State, isAddCommand bool) error {
 	// TODO: this should use CopyOp instead. Current implementation is inefficient and doesn't match Dockerfile path suffixes rules
 	img := llb.Image("tonistiigi/copy@sha256:260a4355be76e0609518ebd7c0e026831c80b8908d4afd3f8e8c942645b1e5cf")
 
@@ -340,13 +342,26 @@ func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState l
 	args := []string{"copy"}
 	mounts := make([]llb.RunOption, 0, len(c.Sources()))
 	for i, src := range c.Sources() {
-		d, f := splitWildcards(src)
-		if f == "" {
-			f = path.Base(src)
+		if isAddCommand && urlutil.IsURL(src) {
+			u, err := url.Parse(src)
+			f := "__unnamed__"
+			if err == nil {
+				if base := path.Base(u.Path); base != "." && base != "/" {
+					f = base
+				}
+			}
+			target := path.Join(fmt.Sprintf("/src-%d", i), f)
+			args = append(args, target)
+			mounts = append(mounts, llb.AddMount(target, llb.HTTP(src, llb.Filename(f)), llb.Readonly))
+		} else {
+			d, f := splitWildcards(src)
+			if f == "" {
+				f = path.Base(src)
+			}
+			target := path.Join(fmt.Sprintf("/src-%d", i), f)
+			args = append(args, target)
+			mounts = append(mounts, llb.AddMount(target, sourceState, llb.SourcePath(d), llb.Readonly))
 		}
-		target := path.Join(fmt.Sprintf("/src-%d", i), f)
-		args = append(args, target)
-		mounts = append(mounts, llb.AddMount(target, sourceState, llb.SourcePath(d), llb.Readonly))
 	}
 
 	args = append(args, dest)

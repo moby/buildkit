@@ -25,6 +25,7 @@ import (
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/source/containerimage"
 	"github.com/moby/buildkit/source/git"
+	"github.com/moby/buildkit/source/http"
 	"github.com/moby/buildkit/source/local"
 )
 
@@ -96,6 +97,16 @@ func defaultControllerOpts(root string, pd pullDeps) (*Opt, error) {
 	}
 
 	sm.Register(gs)
+
+	hs, err := http.NewSource(http.Opt{
+		CacheAccessor: cm,
+		MetadataStore: md,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	sm.Register(hs)
 
 	ss, err := local.NewSource(local.Opt{
 		SessionManager: sessm,

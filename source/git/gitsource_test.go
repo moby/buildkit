@@ -27,7 +27,7 @@ func TestRepeatedFetchKeepGitDir(t *testing.T) {
 }
 
 func testRepeatedFetch(t *testing.T, keepGitDir bool) {
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+	ctx := context.TODO()
 
 	tmpdir, err := ioutil.TempDir("", "buildkit-state")
 	require.NoError(t, err)
@@ -277,10 +277,6 @@ func setupGitSource(t *testing.T, tmpdir string) source.Source {
 		MetadataStore: md,
 	})
 	assert.NoError(t, err)
-
-	repodir, err := ioutil.TempDir("", "buildkit-gitsource")
-	require.NoError(t, err)
-	defer os.RemoveAll(repodir)
 
 	gs, err := NewSource(Opt{
 		CacheAccessor: cm,

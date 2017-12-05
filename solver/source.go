@@ -2,6 +2,7 @@ package solver
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -62,6 +63,38 @@ func (s *sourceOp) instance(ctx context.Context) (source.SourceInstance, error) 
 					return nil, err
 				}
 				id.IncludePatterns = patterns
+			}
+		}
+	}
+	if id, ok := id.(*source.HttpIdentifier); ok {
+		for k, v := range s.op.Source.Attrs {
+			switch k {
+			case pb.AttrHTTPChecksum:
+				dgst, err := digest.Parse(v)
+				if err != nil {
+					return nil, err
+				}
+				id.Checksum = dgst
+			case pb.AttrHTTPFilename:
+				id.Filename = v
+			case pb.AttrHTTPPerm:
+				i, err := strconv.ParseInt(v, 0, 64)
+				if err != nil {
+					return nil, err
+				}
+				id.Perm = int(i)
+			case pb.AttrHTTPUID:
+				i, err := strconv.ParseInt(v, 0, 64)
+				if err != nil {
+					return nil, err
+				}
+				id.UID = int(i)
+			case pb.AttrHTTPGID:
+				i, err := strconv.ParseInt(v, 0, 64)
+				if err != nil {
+					return nil, err
+				}
+				id.GID = int(i)
 			}
 		}
 	}

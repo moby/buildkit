@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/containerd/containerd/fs/fstest"
 	"github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/util/testutil/httpserver"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/stretchr/testify/require"
 )
@@ -18,6 +21,7 @@ func TestIntegration(t *testing.T) {
 	integration.Run(t, []integration.Test{
 		testDockerfileDirs,
 		testDockerfileInvalidCommand,
+		testDockerfileADDFromURL,
 	})
 }
 
@@ -110,6 +114,87 @@ func testDockerfileInvalidCommand(t *testing.T, sb integration.Sandbox) {
 	require.Error(t, err)
 	require.Contains(t, stdout.String(), "/bin/sh -c invalidcmd")
 	require.Contains(t, stdout.String(), "worker failed running")
+}
+
+func testDockerfileADDFromURL(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	modTime := time.Now().Add(-24 * time.Hour) // avoid falso positive with current time
+
+	resp := httpserver.Response{
+		Etag:    identity.NewID(),
+		Content: []byte("content1"),
+	}
+
+	resp2 := httpserver.Response{
+		Etag:         identity.NewID(),
+		LastModified: &modTime,
+		Content:      []byte("content2"),
+	}
+
+	server := httpserver.NewTestServer(map[string]httpserver.Response{
+		"/foo": resp,
+		"/":    resp2,
+	})
+	defer server.Close()
+
+	dockerfile := []byte(fmt.Sprintf(`
+FROM scratch
+ADD %s /dest/
+`, server.URL+"/foo"))
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	args, trace := dfCmdArgs(dir, dir)
+	defer os.RemoveAll(trace)
+
+	destDir, err := tmpdir()
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	cmd := sb.Cmd(args + fmt.Sprintf(" --exporter=local --exporter-opt output=%s", destDir))
+	err = cmd.Run()
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "dest/foo"))
+	require.NoError(t, err)
+	require.Equal(t, []byte("content1"), dt)
+
+	// test the default properties
+	dockerfile = []byte(fmt.Sprintf(`
+FROM scratch
+ADD %s /dest/
+`, server.URL+"/"))
+
+	dir, err = tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	args, trace = dfCmdArgs(dir, dir)
+	defer os.RemoveAll(trace)
+
+	destDir, err = tmpdir()
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	cmd = sb.Cmd(args + fmt.Sprintf(" --exporter=local --exporter-opt output=%s", destDir))
+	err = cmd.Run()
+	require.NoError(t, err)
+
+	destFile := filepath.Join(destDir, "dest/__unnamed__")
+	dt, err = ioutil.ReadFile(destFile)
+	require.NoError(t, err)
+	require.Equal(t, []byte("content2"), dt)
+
+	fi, err := os.Stat(destFile)
+	require.NoError(t, err)
+	require.Equal(t, fi.ModTime().Format(http.TimeFormat), modTime.Format(http.TimeFormat))
 }
 
 func tmpdir(appliers ...fstest.Applier) (string, error) {
