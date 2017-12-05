@@ -91,6 +91,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		if d.base == nil {
 			if d.stage.BaseName == emptyImageName {
 				d.state = llb.Scratch()
+				d.image = emptyImage()
 				continue
 			}
 			func(i int, d *dispatchState) {

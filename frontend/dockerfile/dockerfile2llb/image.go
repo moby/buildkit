@@ -1,9 +1,11 @@
 package dockerfile2llb
 
 import (
+	"runtime"
 	"time"
 
 	"github.com/docker/docker/api/types/strslice"
+	"github.com/moby/buildkit/util/system"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
@@ -56,5 +58,18 @@ func clone(src Image) Image {
 	img.Config.Env = append([]string{}, src.Config.Env...)
 	img.Config.Cmd = append([]string{}, src.Config.Cmd...)
 	img.Config.Entrypoint = append([]string{}, src.Config.Entrypoint...)
+	return img
+}
+
+func emptyImage() Image {
+	img := Image{
+		Image: ocispec.Image{
+			Architecture: runtime.GOARCH,
+			OS:           runtime.GOOS,
+		},
+	}
+	img.RootFS.Type = "layers"
+	img.Config.WorkingDir = "/"
+	img.Config.Env = []string{"PATH=" + system.DefaultPathEnv}
 	return img
 }

@@ -156,15 +156,21 @@ func (s *Solver) Solve(ctx context.Context, id string, req SolveRequest) error {
 	}
 
 	defer func() {
-		go ref.Release(context.TODO())
+		if ref != nil {
+			go ref.Release(context.TODO())
+		}
 	}()
 
-	immutable, ok := toImmutableRef(ref)
-	if !ok {
-		return errors.Errorf("invalid reference for exporting: %T", ref)
-	}
-	if err := immutable.Finalize(ctx); err != nil {
-		return err
+	var immutable cache.ImmutableRef
+	if ref != nil {
+		var ok bool
+		immutable, ok = toImmutableRef(ref)
+		if !ok {
+			return errors.Errorf("invalid reference for exporting: %T", ref)
+		}
+		if err := immutable.Finalize(ctx); err != nil {
+			return err
+		}
 	}
 
 	if exp := req.Exporter; exp != nil {
@@ -787,6 +793,10 @@ func (s *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (cache
 		f, ok = s.frontends[req.Frontend]
 		if !ok {
 			return nil, nil, errors.Errorf("invalid frontend: %s", req.Frontend)
+		}
+	} else {
+		if req.Definition == nil || req.Definition.Def == nil {
+			return nil, nil, nil
 		}
 	}
 	ref, exp, err := s.solve(ctx, s.job, SolveRequest{

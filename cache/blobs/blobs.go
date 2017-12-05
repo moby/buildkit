@@ -32,6 +32,9 @@ type blobmapper interface {
 }
 
 func GetDiffPairs(ctx context.Context, contentStore content.Store, snapshotter snapshot.Snapshotter, differ diff.Differ, ref cache.ImmutableRef) ([]DiffPair, error) {
+	if ref == nil {
+		return nil, nil
+	}
 	blobmap, ok := snapshotter.(blobmapper)
 	if !ok {
 		return nil, errors.Errorf("image exporter requires snapshotter with blobs mapping support")

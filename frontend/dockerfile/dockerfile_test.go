@@ -4,18 +4,26 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/containerd/containerd"
+	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/fs/fstest"
+	"github.com/containerd/containerd/namespaces"
+	"github.com/containerd/containerd/platforms"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/util/testutil/httpserver"
 	"github.com/moby/buildkit/util/testutil/integration"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,6 +33,7 @@ func TestIntegration(t *testing.T) {
 		testDockerfileInvalidCommand,
 		testDockerfileADDFromURL,
 		testDockerfileAddArchive,
+		testDockerfileScratchConfig,
 	})
 }
 
@@ -340,6 +349,71 @@ ADD %s /
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "t.tar.gz"))
 	require.NoError(t, err)
 	require.Equal(t, buf2.Bytes(), dt)
+}
+
+func testDockerfileScratchConfig(t *testing.T, sb integration.Sandbox) {
+	var cdAddress string
+	if cd, ok := sb.(interface {
+		ContainerdAddress() string
+	}); !ok {
+		t.Skip("only for containerd worker")
+	} else {
+		cdAddress = cd.ContainerdAddress()
+	}
+
+	t.Parallel()
+	dockerfile := []byte(`
+FROM scratch
+ENV foo=bar
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	args, trace := dfCmdArgs(dir, dir)
+	defer os.RemoveAll(trace)
+
+	target := "example.com/moby/dockerfilescratch:test"
+	cmd := sb.Cmd(args + " --exporter=image --exporter-opt=name=" + target)
+	err = cmd.Run()
+	require.NoError(t, err)
+
+	client, err := containerd.New(cdAddress)
+	require.NoError(t, err)
+	defer client.Close()
+
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit")
+
+	img, err := client.ImageService().Get(ctx, target)
+	require.NoError(t, err)
+
+	desc, err := img.Config(ctx, client.ContentStore(), platforms.Default())
+	require.NoError(t, err)
+
+	dt, err := content.ReadBlob(ctx, client.ContentStore(), desc.Digest)
+	require.NoError(t, err)
+
+	var ociimg ocispec.Image
+	err = json.Unmarshal(dt, &ociimg)
+	require.NoError(t, err)
+
+	require.NotEqual(t, "", ociimg.OS)
+	require.NotEqual(t, "", ociimg.Architecture)
+	require.NotEqual(t, "", ociimg.Config.WorkingDir)
+	require.Equal(t, "layers", ociimg.RootFS.Type)
+
+	require.Contains(t, ociimg.Config.Env, "foo=bar")
+	require.Condition(t, func() bool {
+		for _, env := range ociimg.Config.Env {
+			if strings.HasPrefix(env, "PATH=") {
+				return true
+			}
+		}
+		return false
+	})
 }
 
 func tmpdir(appliers ...fstest.Applier) (string, error) {
