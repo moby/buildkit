@@ -8,7 +8,7 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/diff"
 	"github.com/containerd/containerd/images"
-	ctdsnapshot "github.com/containerd/containerd/snapshot"
+	ctdsnapshot "github.com/containerd/containerd/snapshots"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/cacheimport"
 	"github.com/moby/buildkit/cache/instructioncache"

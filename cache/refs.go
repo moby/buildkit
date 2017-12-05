@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/containerd/containerd/mount"
-	cdsnapshot "github.com/containerd/containerd/snapshot"
+	cdsnapshot "github.com/containerd/containerd/snapshots"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/util/flightcontrol"

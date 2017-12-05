@@ -7,10 +7,10 @@ import (
 	"path"
 	"sync"
 
-	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/containers"
 	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/namespaces"
+	"github.com/containerd/containerd/oci"
 	"github.com/mitchellh/hashstructure"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/worker"
@@ -31,10 +31,10 @@ func GenerateSpec(ctx context.Context, meta worker.Meta, mounts []worker.Mount, 
 	}
 	// Note that containerd.GenerateSpec is namespaced so as to make
 	// specs.Linux.CgroupsPath namespaced
-	s, err := containerd.GenerateSpec(ctx, nil, c,
-		containerd.WithHostNamespace(specs.NetworkNamespace),
-		containerd.WithHostResolvconf,
-		containerd.WithHostHostsFile,
+	s, err := oci.GenerateSpec(ctx, nil, c,
+		oci.WithHostNamespace(specs.NetworkNamespace),
+		oci.WithHostResolvconf,
+		oci.WithHostHostsFile,
 	)
 	if err != nil {
 		return nil, nil, err

@@ -5,7 +5,7 @@ import (
 
 	"github.com/boltdb/bolt"
 	"github.com/containerd/containerd/content"
-	"github.com/containerd/containerd/snapshot"
+	"github.com/containerd/containerd/snapshots"
 	"github.com/moby/buildkit/cache/metadata"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/sirupsen/logrus"
@@ -15,12 +15,12 @@ const blobKey = "blobmapping.blob"
 
 type Opt struct {
 	Content       content.Store
-	Snapshotter   snapshot.Snapshotter
+	Snapshotter   snapshots.Snapshotter
 	MetadataStore *metadata.Store
 }
 
 type Info struct {
-	snapshot.Info
+	snapshots.Info
 	Blob string
 }
 
@@ -32,7 +32,7 @@ type DiffPair struct {
 // this snapshotter keeps an internal mapping between a snapshot and a blob
 
 type Snapshotter struct {
-	snapshot.Snapshotter
+	snapshots.Snapshotter
 	opt Opt
 }
 
@@ -70,10 +70,10 @@ func (s *Snapshotter) Remove(ctx context.Context, key string) error {
 	return nil
 }
 
-func (s *Snapshotter) Usage(ctx context.Context, key string) (snapshot.Usage, error) {
+func (s *Snapshotter) Usage(ctx context.Context, key string) (snapshots.Usage, error) {
 	u, err := s.Snapshotter.Usage(ctx, key)
 	if err != nil {
-		return snapshot.Usage{}, err
+		return snapshots.Usage{}, err
 	}
 	_, blob, err := s.GetBlob(ctx, key)
 	if err != nil {
@@ -84,7 +84,7 @@ func (s *Snapshotter) Usage(ctx context.Context, key string) (snapshot.Usage, er
 		if err != nil {
 			return u, err
 		}
-		(&u).Add(snapshot.Usage{Size: info.Size, Inodes: 1})
+		(&u).Add(snapshots.Usage{Size: info.Size, Inodes: 1})
 	}
 	return u, nil
 }

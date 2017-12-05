@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	cdsnapshot "github.com/containerd/containerd/snapshot"
+	cdsnapshot "github.com/containerd/containerd/snapshots"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/identity"
