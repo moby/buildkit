@@ -38,12 +38,16 @@ func (s *standalone) New() (Sandbox, func() error, error) {
 		return nil, nil, err
 	}
 
-	return &sandbox{address: builddSock, logs: logs}, stop, nil
+	deferF := &multiCloser{}
+	deferF.append(stop)
+
+	return &sandbox{address: builddSock, logs: logs, cleanup: deferF}, deferF.F(), nil
 }
 
 type sandbox struct {
 	address string
 	logs    map[string]*bytes.Buffer
+	cleanup *multiCloser
 }
 
 func (sb *sandbox) Address() string {
@@ -58,6 +62,15 @@ func (sb *sandbox) PrintLogs(t *testing.T) {
 			t.Log(s.Text())
 		}
 	}
+}
+
+func (sb *sandbox) NewRegistry() (string, error) {
+	url, cl, err := newRegistry()
+	if err != nil {
+		return "", err
+	}
+	sb.cleanup.append(cl)
+	return url, nil
 }
 
 func (sb *sandbox) Cmd(args ...string) *exec.Cmd {

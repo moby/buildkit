@@ -1,6 +1,7 @@
 ARG RUNC_VERSION=74a17296470088de3805e138d3d87c62e613dfc4
 ARG CONTAINERD_VERSION=v1.0.0
 ARG BUILDKIT_TARGET=standalone
+ARG REGISTRY_VERSION=2.6
 
 FROM golang:1.9-alpine AS gobuild-base
 RUN apk add --no-cache g++ linux-headers
@@ -44,10 +45,13 @@ FROM buildkit-base AS buildd-containerd
 ENV CGO_ENABLED=0
 RUN go build -ldflags '-d'  -o /usr/bin/buildd-containerd -tags containerd ./cmd/buildd
 
+FROM registry:$REGISTRY_VERSION AS registry
+
 FROM unit-tests AS integration-tests
 COPY --from=buildctl /usr/bin/buildctl /usr/bin/
 COPY --from=buildd-containerd /usr/bin/buildd-containerd /usr/bin
 COPY --from=buildd-standalone /usr/bin/buildd-standalone /usr/bin
+COPY --from=registry /bin/registry /usr/bin
 
 FROM gobuild-base AS cross-windows
 ENV GOOS=windows
