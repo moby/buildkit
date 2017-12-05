@@ -332,14 +332,17 @@ func dispatchWorkdir(d *dispatchState, c *instructions.WorkdirCommand) error {
 }
 
 func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState llb.State, isAddCommand bool) error {
-	// TODO: this should use CopyOp instead. Current implementation is inefficient and doesn't match Dockerfile path suffixes rules
-	img := llb.Image("tonistiigi/copy@sha256:260a4355be76e0609518ebd7c0e026831c80b8908d4afd3f8e8c942645b1e5cf")
+	// TODO: this should use CopyOp instead. Current implementation is inefficient
+	img := llb.Image("tonistiigi/copy@sha256:ca6620946b2db7ad92f80cc5834f5d0724e6ede1f00004c965f6ded61592553a")
 
 	dest := path.Join("/dest", pathRelativeToWorkingDir(d.state, c.Dest()))
 	if c.Dest() == "." || c.Dest()[len(c.Dest())-1] == filepath.Separator {
 		dest += string(filepath.Separator)
 	}
 	args := []string{"copy"}
+	if isAddCommand {
+		args = append(args, "--unpack")
+	}
 	mounts := make([]llb.RunOption, 0, len(c.Sources()))
 	for i, src := range c.Sources() {
 		if isAddCommand && urlutil.IsURL(src) {

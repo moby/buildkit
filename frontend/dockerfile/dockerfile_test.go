@@ -1,7 +1,9 @@
 package dockerfile
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -22,6 +24,7 @@ func TestIntegration(t *testing.T) {
 		testDockerfileDirs,
 		testDockerfileInvalidCommand,
 		testDockerfileADDFromURL,
+		testDockerfileAddArchive,
 	})
 }
 
@@ -195,6 +198,148 @@ ADD %s /dest/
 	fi, err := os.Stat(destFile)
 	require.NoError(t, err)
 	require.Equal(t, fi.ModTime().Format(http.TimeFormat), modTime.Format(http.TimeFormat))
+}
+
+func testDockerfileAddArchive(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	buf := bytes.NewBuffer(nil)
+	tw := tar.NewWriter(buf)
+	expectedContent := []byte("content0")
+	err := tw.WriteHeader(&tar.Header{
+		Name:     "foo",
+		Typeflag: tar.TypeReg,
+		Size:     int64(len(expectedContent)),
+		Mode:     0644,
+	})
+	require.NoError(t, err)
+	_, err = tw.Write(expectedContent)
+	require.NoError(t, err)
+	err = tw.Close()
+	require.NoError(t, err)
+
+	dockerfile := []byte(`
+FROM scratch
+ADD t.tar /
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("t.tar", buf.Bytes(), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	args, trace := dfCmdArgs(dir, dir)
+	defer os.RemoveAll(trace)
+
+	destDir, err := tmpdir()
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	cmd := sb.Cmd(args + fmt.Sprintf(" --exporter=local --exporter-opt output=%s", destDir))
+	require.NoError(t, cmd.Run())
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "foo"))
+	require.NoError(t, err)
+	require.Equal(t, expectedContent, dt)
+
+	// add gzip tar
+	buf2 := bytes.NewBuffer(nil)
+	gz := gzip.NewWriter(buf2)
+	_, err = gz.Write(buf.Bytes())
+	require.NoError(t, err)
+	err = gz.Close()
+	require.NoError(t, err)
+
+	dockerfile = []byte(`
+FROM scratch
+ADD t.tar.gz /
+`)
+
+	dir, err = tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("t.tar.gz", buf2.Bytes(), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	args, trace = dfCmdArgs(dir, dir)
+	defer os.RemoveAll(trace)
+
+	destDir, err = tmpdir()
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	cmd = sb.Cmd(args + fmt.Sprintf(" --exporter=local --exporter-opt output=%s", destDir))
+	require.NoError(t, cmd.Run())
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "foo"))
+	require.NoError(t, err)
+	require.Equal(t, expectedContent, dt)
+
+	// COPY doesn't extract
+	dockerfile = []byte(`
+FROM scratch
+COPY t.tar.gz /
+`)
+
+	dir, err = tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("t.tar.gz", buf2.Bytes(), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	args, trace = dfCmdArgs(dir, dir)
+	defer os.RemoveAll(trace)
+
+	destDir, err = tmpdir()
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	cmd = sb.Cmd(args + fmt.Sprintf(" --exporter=local --exporter-opt output=%s", destDir))
+	require.NoError(t, cmd.Run())
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "t.tar.gz"))
+	require.NoError(t, err)
+	require.Equal(t, buf2.Bytes(), dt)
+
+	// ADD from URL doesn't extract
+	resp := httpserver.Response{
+		Etag:    identity.NewID(),
+		Content: buf2.Bytes(),
+	}
+
+	server := httpserver.NewTestServer(map[string]httpserver.Response{
+		"/t.tar.gz": resp,
+	})
+	defer server.Close()
+
+	dockerfile = []byte(fmt.Sprintf(`
+FROM scratch
+ADD %s /
+`, server.URL+"/t.tar.gz"))
+
+	dir, err = tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	args, trace = dfCmdArgs(dir, dir)
+	defer os.RemoveAll(trace)
+
+	destDir, err = tmpdir()
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	cmd = sb.Cmd(args + fmt.Sprintf(" --exporter=local --exporter-opt output=%s", destDir))
+	require.NoError(t, cmd.Run())
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "t.tar.gz"))
+	require.NoError(t, err)
+	require.Equal(t, buf2.Bytes(), dt)
 }
 
 func tmpdir(appliers ...fstest.Applier) (string, error) {
