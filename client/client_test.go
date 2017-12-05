@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -312,10 +313,12 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, int32(item.header.Typeflag), tar.TypeReg)
 	require.Equal(t, []byte("second"), item.data)
 
-	// TODO: #154 check that the unmodified parents are still in tar
-	// item, ok = m["foo/"]
-	// require.True(t, ok)
-	// require.Equal(t, int32(item.header.Typeflag), tar.TypeDir)
+	fmt.Println("second:", m)
+
+	// #154 check that the unmodified parents are still in tar
+	item, ok = m["foo/"]
+	require.True(t, ok)
+	require.Equal(t, int32(item.header.Typeflag), tar.TypeDir)
 }
 
 func requiresLinux(t *testing.T) {
