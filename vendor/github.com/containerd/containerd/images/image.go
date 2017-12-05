@@ -38,6 +38,23 @@ type Image struct {
 	CreatedAt, UpdatedAt time.Time
 }
 
+// DeleteOptions provide options on image delete
+type DeleteOptions struct {
+	Synchronous bool
+}
+
+// DeleteOpt allows configuring a delete operation
+type DeleteOpt func(context.Context, *DeleteOptions) error
+
+// SynchronousDelete is used to indicate that an image deletion and removal of
+// the image resources should occur synchronously before returning a result.
+func SynchronousDelete() DeleteOpt {
+	return func(ctx context.Context, o *DeleteOptions) error {
+		o.Synchronous = true
+		return nil
+	}
+}
+
 // Store and interact with images
 type Store interface {
 	Get(ctx context.Context, name string) (Image, error)
@@ -48,7 +65,7 @@ type Store interface {
 	// one or more fieldpaths are provided, only those fields will be updated.
 	Update(ctx context.Context, image Image, fieldpaths ...string) (Image, error)
 
-	Delete(ctx context.Context, name string) error
+	Delete(ctx context.Context, name string, opts ...DeleteOpt) error
 }
 
 // TODO(stevvooe): Many of these functions make strong platform assumptions,
@@ -170,13 +187,13 @@ func Manifest(ctx context.Context, provider content.Provider, image ocispec.Desc
 			return descs, nil
 
 		}
-		return nil, errors.Wrap(errdefs.ErrNotFound, "could not resolve manifest")
+		return nil, errors.Wrapf(errdefs.ErrNotFound, "unexpected media type %v for %v", desc.MediaType, desc.Digest)
 	}), image); err != nil {
 		return ocispec.Manifest{}, err
 	}
 
 	if m == nil {
-		return ocispec.Manifest{}, errors.Wrap(errdefs.ErrNotFound, "manifest not found")
+		return ocispec.Manifest{}, errors.Wrapf(errdefs.ErrNotFound, "manifest %v", image.Digest)
 	}
 
 	return *m, nil
@@ -240,7 +257,7 @@ func Check(ctx context.Context, provider content.Provider, image ocispec.Descrip
 			return false, []ocispec.Descriptor{image}, nil, []ocispec.Descriptor{image}, nil
 		}
 
-		return false, nil, nil, nil, errors.Wrap(err, "image check failed")
+		return false, nil, nil, nil, errors.Wrapf(err, "failed to check image %v", image.Digest)
 	}
 
 	// TODO(stevvooe): It is possible that referenced conponents could have
@@ -255,7 +272,7 @@ func Check(ctx context.Context, provider content.Provider, image ocispec.Descrip
 				missing = append(missing, desc)
 				continue
 			} else {
-				return false, nil, nil, nil, err
+				return false, nil, nil, nil, errors.Wrapf(err, "failed to check image %v", desc.Digest)
 			}
 		}
 		ra.Close()

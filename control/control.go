@@ -1,7 +1,7 @@
 package control
 
 import (
-	"github.com/containerd/containerd/snapshot"
+	"github.com/containerd/containerd/snapshots"
 	"github.com/docker/distribution/reference"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/cache"
@@ -22,7 +22,7 @@ import (
 )
 
 type Opt struct {
-	Snapshotter      snapshot.Snapshotter
+	Snapshotter      snapshots.Snapshotter
 	CacheManager     cache.Manager
 	Worker           worker.Worker
 	SourceManager    *source.Manager

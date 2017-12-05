@@ -16,7 +16,7 @@ import (
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/remotes/docker/schema1"
 	"github.com/containerd/containerd/rootfs"
-	"github.com/containerd/containerd/snapshot"
+	"github.com/containerd/containerd/snapshots"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/auth"
@@ -35,7 +35,7 @@ import (
 
 type SourceOpt struct {
 	SessionManager *session.Manager
-	Snapshotter    snapshot.Snapshotter
+	Snapshotter    snapshots.Snapshotter
 	ContentStore   content.Store
 	Applier        diff.Differ
 	CacheAccessor  cache.Accessor
@@ -243,7 +243,7 @@ func (is *imageSource) unpack(ctx context.Context, desc ocispec.Descriptor) (str
 			"containerd.io/gc.root":      time.Now().UTC().Format(time.RFC3339Nano),
 			"containerd.io/uncompressed": layer.Diff.Digest.String(),
 		}
-		if _, err := rootfs.ApplyLayer(ctx, layer, chain, is.Snapshotter, is.Applier, snapshot.WithLabels(labels)); err != nil {
+		if _, err := rootfs.ApplyLayer(ctx, layer, chain, is.Snapshotter, is.Applier, snapshots.WithLabels(labels)); err != nil {
 			return "", err
 		}
 		chain = append(chain, layer.Diff.Digest)
