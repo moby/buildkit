@@ -22,9 +22,9 @@ import (
 var defaultImageMetaResolver llb.ImageMetaResolver
 var defaultImageMetaResolverOnce sync.Once
 
-func WithDefault(ii *llb.ImageInfo) {
-	llb.WithMetaResolver(Default())(ii)
-}
+var WithDefault = llb.ImageOptionFunc(func(ii *llb.ImageInfo) {
+	llb.WithMetaResolver(Default()).SetImageOption(ii)
+})
 
 func New() llb.ImageMetaResolver {
 	return &imageMetaResolver{

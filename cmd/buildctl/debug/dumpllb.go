@@ -74,7 +74,7 @@ func loadLLB(r io.Reader) ([]llbOp, error) {
 			return nil, errors.Wrap(err, "failed to parse op")
 		}
 		dgst := digest.FromBytes(dt)
-		ent := llbOp{Op: op, Digest: dgst, OpMetadata: def.Metadata[dgst].OpMetadata}
+		ent := llbOp{Op: op, Digest: dgst, OpMetadata: def.Metadata[dgst]}
 		ops = append(ops, ent)
 	}
 	return ops, nil

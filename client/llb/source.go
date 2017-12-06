@@ -19,14 +19,15 @@ type SourceOp struct {
 	attrs            map[string]string
 	output           Output
 	cachedPB         []byte
-	cachedOpMetadata *pb.OpMetadata
+	cachedOpMetadata OpMetadata
 	err              error
 }
 
-func NewSource(id string, attrs map[string]string) *SourceOp {
+func NewSource(id string, attrs map[string]string, md OpMetadata) *SourceOp {
 	s := &SourceOp{
-		id:    id,
-		attrs: attrs,
+		id:               id,
+		attrs:            attrs,
+		cachedOpMetadata: md,
 	}
 	s.output = &output{vertex: s}
 	return s
@@ -42,9 +43,9 @@ func (s *SourceOp) Validate() error {
 	return nil
 }
 
-func (s *SourceOp) Marshal() ([]byte, *pb.OpMetadata, error) {
+func (s *SourceOp) Marshal() ([]byte, *OpMetadata, error) {
 	if s.cachedPB != nil {
-		return s.cachedPB, s.cachedOpMetadata, nil
+		return s.cachedPB, &s.cachedOpMetadata, nil
 	}
 	if err := s.Validate(); err != nil {
 		return nil, nil, err
@@ -60,8 +61,7 @@ func (s *SourceOp) Marshal() ([]byte, *pb.OpMetadata, error) {
 		return nil, nil, err
 	}
 	s.cachedPB = dt
-	s.cachedOpMetadata = &pb.OpMetadata{}
-	return dt, s.cachedOpMetadata, nil
+	return dt, &s.cachedOpMetadata, nil
 }
 
 func (s *SourceOp) Output() Output {
@@ -73,7 +73,7 @@ func (s *SourceOp) Inputs() []Output {
 }
 
 func Source(id string) State {
-	return NewState(NewSource(id, nil).Output())
+	return NewState(NewSource(id, nil, OpMetadata{}).Output())
 }
 
 func Image(ref string, opts ...ImageOption) State {
@@ -81,13 +81,13 @@ func Image(ref string, opts ...ImageOption) State {
 	if err == nil {
 		ref = reference.TagNameOnly(r).String()
 	}
-	src := NewSource("docker-image://"+ref, nil) // controversial
-	if err != nil {
-		src.err = err
-	}
 	var info ImageInfo
 	for _, opt := range opts {
-		opt(&info)
+		opt.SetImageOption(&info)
+	}
+	src := NewSource("docker-image://"+ref, nil, info.Metadata()) // controversial
+	if err != nil {
+		src.err = err
 	}
 	if info.metaResolver != nil {
 		_, dt, err := info.metaResolver.ResolveImageConfig(context.TODO(), ref)
@@ -123,9 +123,18 @@ func Image(ref string, opts ...ImageOption) State {
 	return NewState(src.Output())
 }
 
-type ImageOption func(*ImageInfo)
+type ImageOption interface {
+	SetImageOption(*ImageInfo)
+}
+
+type ImageOptionFunc func(*ImageInfo)
+
+func (fn ImageOptionFunc) SetImageOption(ii *ImageInfo) {
+	fn(ii)
+}
 
 type ImageInfo struct {
+	opMetaWrapper
 	metaResolver ImageMetaResolver
 }
 
@@ -137,27 +146,34 @@ func Git(remote, ref string, opts ...GitOption) State {
 
 	gi := &GitInfo{}
 	for _, o := range opts {
-		o(gi)
+		o.SetGitOption(gi)
 	}
 	attrs := map[string]string{}
 	if gi.KeepGitDir {
 		attrs[pb.AttrKeepGitDir] = "true"
 	}
-
-	source := NewSource("git://"+id, attrs)
+	source := NewSource("git://"+id, attrs, gi.Metadata())
 	return NewState(source.Output())
 }
 
-type GitOption func(*GitInfo)
+type GitOption interface {
+	SetGitOption(*GitInfo)
+}
+type gitOptionFunc func(*GitInfo)
+
+func (fn gitOptionFunc) SetGitOption(gi *GitInfo) {
+	fn(gi)
+}
 
 type GitInfo struct {
+	opMetaWrapper
 	KeepGitDir bool
 }
 
 func KeepGitDir() GitOption {
-	return func(gi *GitInfo) {
+	return gitOptionFunc(func(gi *GitInfo) {
 		gi.KeepGitDir = true
-	}
+	})
 }
 
 func Scratch() State {
@@ -168,7 +184,7 @@ func Local(name string, opts ...LocalOption) State {
 	gi := &LocalInfo{}
 
 	for _, o := range opts {
-		o(gi)
+		o.SetLocalOption(gi)
 	}
 	attrs := map[string]string{}
 	if gi.SessionID != "" {
@@ -178,26 +194,35 @@ func Local(name string, opts ...LocalOption) State {
 		attrs[pb.AttrIncludePatterns] = gi.IncludePatterns
 	}
 
-	source := NewSource("local://"+name, attrs)
+	source := NewSource("local://"+name, attrs, gi.Metadata())
 	return NewState(source.Output())
 }
 
-type LocalOption func(*LocalInfo)
+type LocalOption interface {
+	SetLocalOption(*LocalInfo)
+}
+
+type localOptionFunc func(*LocalInfo)
+
+func (fn localOptionFunc) SetLocalOption(li *LocalInfo) {
+	fn(li)
+}
 
 func SessionID(id string) LocalOption {
-	return func(li *LocalInfo) {
+	return localOptionFunc(func(li *LocalInfo) {
 		li.SessionID = id
-	}
+	})
 }
 
 func IncludePatterns(p []string) LocalOption {
-	return func(li *LocalInfo) {
+	return localOptionFunc(func(li *LocalInfo) {
 		dt, _ := json.Marshal(p) // empty on error
 		li.IncludePatterns = string(dt)
-	}
+	})
 }
 
 type LocalInfo struct {
+	opMetaWrapper
 	SessionID       string
 	IncludePatterns string
 }
@@ -205,7 +230,7 @@ type LocalInfo struct {
 func HTTP(url string, opts ...HTTPOption) State {
 	hi := &HTTPInfo{}
 	for _, o := range opts {
-		o(hi)
+		o.SetHTTPOption(hi)
 	}
 	attrs := map[string]string{}
 	if hi.Checksum != "" {
@@ -224,11 +249,12 @@ func HTTP(url string, opts ...HTTPOption) State {
 		attrs[pb.AttrHTTPGID] = strconv.Itoa(hi.GID)
 	}
 
-	source := NewSource(url, attrs)
+	source := NewSource(url, attrs, hi.Metadata())
 	return NewState(source.Output())
 }
 
 type HTTPInfo struct {
+	opMetaWrapper
 	Checksum digest.Digest
 	Filename string
 	Perm     int
@@ -236,29 +262,37 @@ type HTTPInfo struct {
 	GID      int
 }
 
-type HTTPOption func(*HTTPInfo)
+type HTTPOption interface {
+	SetHTTPOption(*HTTPInfo)
+}
+
+type httpOptionFunc func(*HTTPInfo)
+
+func (fn httpOptionFunc) SetHTTPOption(hi *HTTPInfo) {
+	fn(hi)
+}
 
 func Checksum(dgst digest.Digest) HTTPOption {
-	return func(hi *HTTPInfo) {
+	return httpOptionFunc(func(hi *HTTPInfo) {
 		hi.Checksum = dgst
-	}
+	})
 }
 
 func Chmod(perm os.FileMode) HTTPOption {
-	return func(hi *HTTPInfo) {
+	return httpOptionFunc(func(hi *HTTPInfo) {
 		hi.Perm = int(perm) & 0777
-	}
+	})
 }
 
 func Filename(name string) HTTPOption {
-	return func(hi *HTTPInfo) {
+	return httpOptionFunc(func(hi *HTTPInfo) {
 		hi.Filename = name
-	}
+	})
 }
 
 func Chown(uid, gid int) HTTPOption {
-	return func(hi *HTTPInfo) {
+	return httpOptionFunc(func(hi *HTTPInfo) {
 		hi.UID = uid
 		hi.GID = gid
-	}
+	})
 }

@@ -85,7 +85,7 @@ func read(r io.Reader, clicontext *cli.Context) (*llb.Definition, error) {
 			if !ok {
 				opMetadata = llb.OpMetadata{}
 			}
-			opMetadata.IgnoreCache = true
+			llb.IgnoreCache(&opMetadata)
 			def.Metadata[dgst] = opMetadata
 		}
 	}
