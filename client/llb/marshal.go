@@ -16,9 +16,9 @@ type Definition struct {
 }
 
 func (def *Definition) ToPB() *pb.Definition {
-	md := make(map[digest.Digest]pb.OpMetadata)
+	md := make(map[digest.Digest]OpMetadata)
 	for k, v := range def.Metadata {
-		md[k] = v.OpMetadata
+		md[k] = v
 	}
 	return &pb.Definition{
 		Def:      def.Def,
@@ -30,13 +30,11 @@ func (def *Definition) FromPB(x *pb.Definition) {
 	def.Def = x.Def
 	def.Metadata = make(map[digest.Digest]OpMetadata)
 	for k, v := range x.Metadata {
-		def.Metadata[k] = OpMetadata{v}
+		def.Metadata[k] = v
 	}
 }
 
-type OpMetadata struct {
-	pb.OpMetadata
-}
+type OpMetadata = pb.OpMetadata
 
 func WriteTo(def *Definition, w io.Writer) error {
 	b, err := def.ToPB().Marshal()

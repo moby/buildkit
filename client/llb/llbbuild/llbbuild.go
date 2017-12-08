@@ -17,14 +17,14 @@ func NewBuildOp(source llb.Output, opt ...BuildOption) llb.Vertex {
 	for _, o := range opt {
 		o(info)
 	}
-	return &build{source: source, info: info}
+	return &build{source: source, info: info, cachedOpMetadata: info.OpMetadata}
 }
 
 type build struct {
 	source           llb.Output
 	info             *BuildInfo
 	cachedPB         []byte
-	cachedOpMetadata *pb.OpMetadata
+	cachedOpMetadata llb.OpMetadata
 }
 
 func (b *build) ToInput() (*pb.Input, error) {
@@ -45,9 +45,9 @@ func (b *build) Validate() error {
 	return nil
 }
 
-func (b *build) Marshal() ([]byte, *pb.OpMetadata, error) {
+func (b *build) Marshal() ([]byte, *llb.OpMetadata, error) {
 	if b.cachedPB != nil {
-		return b.cachedPB, b.cachedOpMetadata, nil
+		return b.cachedPB, &b.cachedOpMetadata, nil
 	}
 	pbo := &pb.BuildOp{
 		Builder: pb.LLBBuilder,
@@ -79,8 +79,7 @@ func (b *build) Marshal() ([]byte, *pb.OpMetadata, error) {
 		return nil, nil, err
 	}
 	b.cachedPB = dt
-	b.cachedOpMetadata = &pb.OpMetadata{}
-	return dt, b.cachedOpMetadata, nil
+	return dt, &b.cachedOpMetadata, nil
 }
 
 func (b *build) Output() llb.Output {
@@ -92,6 +91,7 @@ func (b *build) Inputs() []llb.Output {
 }
 
 type BuildInfo struct {
+	llb.OpMetadata
 	DefinitionFilename string
 }
 
@@ -100,5 +100,11 @@ type BuildOption func(*BuildInfo)
 func WithFilename(fn string) BuildOption {
 	return func(b *BuildInfo) {
 		b.DefinitionFilename = fn
+	}
+}
+
+func WithMetadata(md llb.MetadataOpt) BuildOption {
+	return func(b *BuildInfo) {
+		md.SetMetadataOption(&b.OpMetadata)
 	}
 }
