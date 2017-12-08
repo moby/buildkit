@@ -118,7 +118,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 							_ = ref
 						}
 					}
-					d.state = llb.Image(d.stage.BaseName)
+					d.state = llb.Image(d.stage.BaseName, dfCmd(d.stage.SourceCode))
 					return nil
 				})
 			}(i, d)
@@ -224,7 +224,7 @@ func dispatch(d *dispatchState, cmd instructions.Command, opt dispatchOpt) error
 	case *instructions.WorkdirCommand:
 		err = dispatchWorkdir(d, c)
 	case *instructions.AddCommand:
-		err = dispatchCopy(d, c.SourcesAndDest, opt.buildContext, true)
+		err = dispatchCopy(d, c.SourcesAndDest, opt.buildContext, true, c)
 	case *instructions.LabelCommand:
 		err = dispatchLabel(d, c)
 	case *instructions.OnbuildCommand:
@@ -264,7 +264,7 @@ func dispatch(d *dispatchState, cmd instructions.Command, opt dispatchOpt) error
 				l = opt.allDispatchStates[index].state
 			}
 		}
-		err = dispatchCopy(d, c.SourcesAndDest, l, false)
+		err = dispatchCopy(d, c.SourcesAndDest, l, false, c)
 	default:
 	}
 	return err
@@ -318,6 +318,7 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand) error {
 	for _, arg := range d.buildArgs {
 		opt = append(opt, llb.AddEnv(arg.Key, getArgValue(arg)))
 	}
+	opt = append(opt, dfCmd(c))
 	d.state = d.state.Run(opt...).Root()
 	return nil
 }
@@ -332,7 +333,7 @@ func dispatchWorkdir(d *dispatchState, c *instructions.WorkdirCommand) error {
 	return nil
 }
 
-func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState llb.State, isAddCommand bool) error {
+func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState llb.State, isAddCommand bool, cmdToPrint interface{}) error {
 	// TODO: this should use CopyOp instead. Current implementation is inefficient
 	img := llb.Image("tonistiigi/copy@sha256:ca6620946b2db7ad92f80cc5834f5d0724e6ede1f00004c965f6ded61592553a")
 
@@ -356,7 +357,7 @@ func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState l
 			}
 			target := path.Join(fmt.Sprintf("/src-%d", i), f)
 			args = append(args, target)
-			mounts = append(mounts, llb.AddMount(target, llb.HTTP(src, llb.Filename(f)), llb.Readonly))
+			mounts = append(mounts, llb.AddMount(target, llb.HTTP(src, llb.Filename(f), dfCmd(c)), llb.Readonly))
 		} else {
 			d, f := splitWildcards(src)
 			if f == "" {
@@ -369,7 +370,7 @@ func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState l
 	}
 
 	args = append(args, dest)
-	run := img.Run(append([]llb.RunOption{llb.Args(args)}, mounts...)...)
+	run := img.Run(append([]llb.RunOption{llb.Args(args), dfCmd(cmdToPrint)}, mounts...)...)
 	d.state = run.AddMount("/dest", d.state)
 	return nil
 }
@@ -550,4 +551,17 @@ func getArgValue(arg instructions.ArgCommand) string {
 		v = *arg.Value
 	}
 	return v
+}
+
+func dfCmd(cmd interface{}) llb.MetadataOpt {
+	var cmdStr string
+	if cmd, ok := cmd.(fmt.Stringer); ok {
+		cmdStr = cmd.String()
+	}
+	if cmd, ok := cmd.(string); ok {
+		cmdStr = cmd
+	}
+	return llb.WithDescription(map[string]string{
+		"com.docker.dockerfile.v1.command": cmdStr,
+	})
 }

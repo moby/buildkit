@@ -71,6 +71,8 @@ message BuildInput {
 // OpMetadata is a per-vertex metadata entry, which can be defined for arbitrary Op vertex by both "script" and build client (e.g. buildctl).
 message OpMetadata {
 	bool ignore_cache = 1;
+	// Description can be used for keeping any text fields that builder doesn't parse
+	map<string, string> description = 2;  
 	// TODO: add worker constraint, etc.
 }
 
