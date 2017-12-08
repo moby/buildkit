@@ -288,7 +288,7 @@ func (cm *cacheManager) DiskUsage(ctx context.Context, opt client.DiskUsageInfo)
 			createdAt:   getCreatedAt(cr.md),
 			usageCount:  usageCount,
 			lastUsedAt:  lastUsedAt,
-			description: getDescription(cr.md),
+			description: GetDescription(cr.md),
 		}
 		if cr.parent != nil {
 			c.parent = cr.parent.ID()

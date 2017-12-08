@@ -111,7 +111,7 @@ func queueDescription(si *metadata.StorageItem, descr string) error {
 	return nil
 }
 
-func getDescription(si *metadata.StorageItem) string {
+func GetDescription(si *metadata.StorageItem) string {
 	v := si.Get(keyDescription)
 	if v == nil {
 		return ""
