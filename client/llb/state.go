@@ -246,12 +246,26 @@ func mergeMetadata(m1, m2 OpMetadata) OpMetadata {
 	if m2.IgnoreCache {
 		m1.IgnoreCache = true
 	}
+	if len(m2.Description) > 0 {
+		if m1.Description == nil {
+			m1.Description = make(map[string]string)
+		}
+		for k, v := range m2.Description {
+			m1.Description[k] = v
+		}
+	}
 	return m1
 }
 
 var IgnoreCache = metadataOptFunc(func(md *OpMetadata) {
 	md.IgnoreCache = true
 })
+
+func WithDescription(m map[string]string) MetadataOpt {
+	return metadataOptFunc(func(md *OpMetadata) {
+		md.Description = m
+	})
+}
 
 type opMetaWrapper struct {
 	OpMetadata
