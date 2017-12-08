@@ -172,6 +172,7 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	}
 
 	run(`sh -c "mkdir -p foo/sub; echo -n first > foo/sub/bar; chmod 0741 foo;"`)
+	run(`true`) // this doesn't create a layer
 	run(`sh -c "echo -n second > foo/sub/baz"`)
 
 	def, err := st.Marshal()
@@ -267,6 +268,14 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 		}
 		return false
 	})
+
+	require.Equal(t, 3, len(ociimg.History))
+	require.Contains(t, ociimg.History[0].CreatedBy, "foo/sub/bar")
+	require.Contains(t, ociimg.History[1].CreatedBy, "true")
+	require.Contains(t, ociimg.History[2].CreatedBy, "foo/sub/baz")
+	require.False(t, ociimg.History[0].EmptyLayer)
+	require.True(t, ociimg.History[1].EmptyLayer)
+	require.False(t, ociimg.History[2].EmptyLayer)
 
 	dt, err = content.ReadBlob(ctx, img.ContentStore(), img.Target().Digest)
 	require.NoError(t, err)
