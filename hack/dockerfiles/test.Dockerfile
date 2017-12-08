@@ -20,24 +20,27 @@ RUN git clone https://github.com/containerd/containerd.git "$GOPATH/src/github.c
 	&& cd "$GOPATH/src/github.com/containerd/containerd" \
 	&& git checkout -q "$CONTAINERD_VERSION" \
 	&& make bin/containerd \
-	&& make bin/containerd-shim
+	&& make bin/containerd-shim \
+	&& make bin/ctr
 
-FROM gobuild-base AS unit-tests
-COPY --from=runc /usr/bin/runc /usr/bin/runc
-COPY --from=containerd /go/src/github.com/containerd/containerd/bin/containerd* /usr/bin/
+FROM gobuild-base AS buildkit-base
 WORKDIR /go/src/github.com/moby/buildkit
 COPY . .
 
-FROM unit-tests AS buildctl
+FROM buildkit-base AS unit-tests
+COPY --from=runc /usr/bin/runc /usr/bin/runc
+COPY --from=containerd /go/src/github.com/containerd/containerd/bin/containerd* /usr/bin/
+
+FROM buildkit-base AS buildctl
 ENV CGO_ENABLED=0
 ARG GOOS=linux
 RUN go build -ldflags '-d' -o /usr/bin/buildctl ./cmd/buildctl
 
-FROM unit-tests AS buildd-standalone
+FROM buildkit-base AS buildd-standalone
 ENV CGO_ENABLED=0
 RUN go build -ldflags '-d'  -o /usr/bin/buildd-standalone -tags standalone ./cmd/buildd
 
-FROM unit-tests AS buildd-containerd
+FROM buildkit-base AS buildd-containerd
 ENV CGO_ENABLED=0
 RUN go build -ldflags '-d'  -o /usr/bin/buildd-containerd -tags containerd ./cmd/buildd
 
@@ -57,22 +60,31 @@ RUN go build -o /buildctl.exe ./cmd/buildctl
 FROM cross-windows AS buildd.exe
 RUN go build -o /buildd.exe ./cmd/buildd
 
+FROM alpine AS buildkit-export
+RUN apk add --no-cache git
+VOLUME /var/lib/buildkit
+
 # Copy together all binaries needed for standalone mode
-FROM alpine AS buildkit-standalone
-COPY --from=runc /usr/bin/runc /usr/bin/
+FROM buildkit-export AS buildkit-standalone
 COPY --from=buildd-standalone /usr/bin/buildd-standalone /usr/bin/
 COPY --from=buildctl /usr/bin/buildctl /usr/bin/
 ENTRYPOINT ["buildd-standalone"]
 
 # Copy together all binaries for containerd mode
-FROM alpine AS buildkit-containerd
+FROM buildkit-export AS buildkit-containerd
+COPY --from=runc /usr/bin/runc /usr/bin/
 COPY --from=buildd-containerd /usr/bin/buildd-containerd /usr/bin/
 COPY --from=buildctl /usr/bin/buildctl /usr/bin/
-COPY --from=runc /usr/bin/runc /usr/bin/
-COPY --from=containerd /go/src/github.com/containerd/containerd/bin/containerd /usr/bin/
-COPY --from=containerd /go/src/github.com/containerd/containerd/bin/containerd-shim /usr/bin/
 ENTRYPOINT ["buildd-containerd"]
 
+FROM alpine AS containerd-runtime
+COPY --from=runc /usr/bin/runc /usr/bin/
+COPY --from=containerd /go/src/github.com/containerd/containerd/bin/containerd* /usr/bin/
+COPY --from=containerd /go/src/github.com/containerd/containerd/bin/ctr /usr/bin/
+VOLUME /var/lib/containerd
+VOLUME /run/containerd
+ENTRYPOINT ["containerd"]
+
 FROM buildkit-${BUILDKIT_TARGET}
-RUN apk add --no-cache git
-VOLUME /var/lib/buildkit
+
+
