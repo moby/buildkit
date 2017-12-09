@@ -34,6 +34,7 @@ func TestIntegration(t *testing.T) {
 		testDockerfileADDFromURL,
 		testDockerfileAddArchive,
 		testDockerfileScratchConfig,
+		testExportedHistory,
 	})
 }
 
@@ -404,6 +405,11 @@ ENV foo=bar
 	require.NotEqual(t, "", ociimg.Architecture)
 	require.NotEqual(t, "", ociimg.Config.WorkingDir)
 	require.Equal(t, "layers", ociimg.RootFS.Type)
+	require.Equal(t, 0, len(ociimg.RootFS.DiffIDs))
+
+	require.Equal(t, 1, len(ociimg.History))
+	require.Contains(t, ociimg.History[0].CreatedBy, "ENV foo=bar")
+	require.Equal(t, true, ociimg.History[0].EmptyLayer)
 
 	require.Contains(t, ociimg.Config.Env, "foo=bar")
 	require.Condition(t, func() bool {
@@ -414,6 +420,80 @@ ENV foo=bar
 		}
 		return false
 	})
+}
+
+func testExportedHistory(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	// using multi-stage to test that history is scoped to one stage
+	dockerfile := []byte(`
+FROM busybox AS base
+ENV foo=bar
+COPY foo /foo2
+FROM busybox
+COPY --from=base foo2 foo3
+WORKDIR /
+RUN echo bar > foo4
+RUN ["ls"]
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("foo", []byte("contents0"), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	args, trace := dfCmdArgs(dir, dir)
+	defer os.RemoveAll(trace)
+
+	target := "example.com/moby/dockerfilescratch:test"
+	cmd := sb.Cmd(args + " --exporter=image --exporter-opt=name=" + target)
+	require.NoError(t, cmd.Run())
+
+	// TODO: expose this test to standalone
+
+	var cdAddress string
+	if cd, ok := sb.(interface {
+		ContainerdAddress() string
+	}); !ok {
+		t.Skip("only for containerd worker")
+	} else {
+		cdAddress = cd.ContainerdAddress()
+	}
+
+	client, err := containerd.New(cdAddress)
+	require.NoError(t, err)
+	defer client.Close()
+
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit")
+
+	img, err := client.ImageService().Get(ctx, target)
+	require.NoError(t, err)
+
+	desc, err := img.Config(ctx, client.ContentStore(), platforms.Default())
+	require.NoError(t, err)
+
+	dt, err := content.ReadBlob(ctx, client.ContentStore(), desc.Digest)
+	require.NoError(t, err)
+
+	var ociimg ocispec.Image
+	err = json.Unmarshal(dt, &ociimg)
+	require.NoError(t, err)
+
+	require.Equal(t, "layers", ociimg.RootFS.Type)
+	// this depends on busybox. should be ok after freezing images
+	require.Equal(t, 3, len(ociimg.RootFS.DiffIDs))
+
+	require.Equal(t, 6, len(ociimg.History))
+	require.Contains(t, ociimg.History[2].CreatedBy, "COPY foo2 foo3")
+	require.Equal(t, false, ociimg.History[2].EmptyLayer)
+	require.Contains(t, ociimg.History[3].CreatedBy, "WORKDIR /")
+	require.Equal(t, true, ociimg.History[3].EmptyLayer)
+	require.Contains(t, ociimg.History[4].CreatedBy, "echo bar > foo4")
+	require.Equal(t, false, ociimg.History[4].EmptyLayer)
+	require.Contains(t, ociimg.History[5].CreatedBy, "RUN ls")
+	require.Equal(t, true, ociimg.History[5].EmptyLayer)
 }
 
 func tmpdir(appliers ...fstest.Applier) (string, error) {
