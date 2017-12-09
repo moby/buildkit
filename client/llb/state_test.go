@@ -7,6 +7,8 @@ import (
 )
 
 func TestStateMeta(t *testing.T) {
+	t.Parallel()
+
 	s := Source("foo")
 	s = s.AddEnv("BAR", "abc").Dir("/foo/bar")
 

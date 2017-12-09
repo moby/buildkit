@@ -26,6 +26,7 @@ import (
 )
 
 func TestControlStandalone(t *testing.T) {
+	t.Parallel()
 	if os.Getuid() != 0 {
 		t.Skip("requires root")
 	}

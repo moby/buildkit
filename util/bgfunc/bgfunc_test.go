@@ -11,6 +11,7 @@ import (
 )
 
 func TestBgFuncSimple(t *testing.T) {
+	t.Parallel()
 	var res string
 	var mu sync.Mutex
 	calls1 := 0
@@ -48,6 +49,7 @@ func TestBgFuncSimple(t *testing.T) {
 }
 
 func TestSignal(t *testing.T) {
+	t.Parallel()
 	var res []string
 	var mu sync.Mutex
 	next := make(chan struct{})
@@ -109,6 +111,7 @@ func TestSignal(t *testing.T) {
 }
 
 func TestCancellation(t *testing.T) {
+	t.Parallel()
 	var res []string
 	var mu sync.Mutex
 	next := make(chan struct{})
@@ -225,6 +228,7 @@ func TestCancellation(t *testing.T) {
 }
 
 func TestError(t *testing.T) {
+	t.Parallel()
 	// function returns an error in the middle of processing
 	var res string
 	var mu sync.Mutex

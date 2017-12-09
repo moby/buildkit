@@ -39,6 +39,7 @@ func TestClientIntegration(t *testing.T) {
 }
 
 func testCallDiskUsage(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
 	c, err := New(sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -47,8 +48,8 @@ func testCallDiskUsage(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBuildMultiMount(t *testing.T, sb integration.Sandbox) {
-	requiresLinux(t)
 	t.Parallel()
+	requiresLinux(t)
 	c, err := New(sb.Address())
 	require.NoError(t, err)
 	defer c.Close()

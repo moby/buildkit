@@ -27,6 +27,7 @@ func TestRepeatedFetchKeepGitDir(t *testing.T) {
 }
 
 func testRepeatedFetch(t *testing.T, keepGitDir bool) {
+	t.Parallel()
 	ctx := context.TODO()
 
 	tmpdir, err := ioutil.TempDir("", "buildkit-state")
@@ -124,6 +125,7 @@ func TestFetchBySHAKeepGitDir(t *testing.T) {
 }
 
 func testFetchBySHA(t *testing.T, keepGitDir bool) {
+	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
 	tmpdir, err := ioutil.TempDir("", "buildkit-state")
@@ -184,6 +186,7 @@ func TestMultipleReposKeepGitDir(t *testing.T) {
 }
 
 func testMultipleRepos(t *testing.T, keepGitDir bool) {
+	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
 	tmpdir, err := ioutil.TempDir("", "buildkit-state")

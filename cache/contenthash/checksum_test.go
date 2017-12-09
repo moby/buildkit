@@ -29,6 +29,7 @@ const (
 )
 
 func TestChecksumBasicFile(t *testing.T) {
+	t.Parallel()
 	tmpdir, err := ioutil.TempDir("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
@@ -178,6 +179,7 @@ func TestChecksumBasicFile(t *testing.T) {
 }
 
 func TestHandleChange(t *testing.T) {
+	t.Parallel()
 	tmpdir, err := ioutil.TempDir("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
@@ -255,6 +257,7 @@ func TestHandleChange(t *testing.T) {
 }
 
 func TestHandleRecursiveDir(t *testing.T) {
+	t.Parallel()
 	tmpdir, err := ioutil.TempDir("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
@@ -303,6 +306,7 @@ func TestHandleRecursiveDir(t *testing.T) {
 }
 
 func TestPersistence(t *testing.T) {
+	t.Parallel()
 	tmpdir, err := ioutil.TempDir("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)

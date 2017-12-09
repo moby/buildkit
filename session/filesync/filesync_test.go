@@ -14,6 +14,7 @@ import (
 )
 
 func TestFileSyncIncludePatterns(t *testing.T) {
+	t.Parallel()
 	tmpDir, err := ioutil.TempDir("", "fsynctest")
 	require.NoError(t, err)
 

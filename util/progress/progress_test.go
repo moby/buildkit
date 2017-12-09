@@ -12,6 +12,7 @@ import (
 )
 
 func TestProgress(t *testing.T) {
+	t.Parallel()
 	s, err := calc(context.TODO(), 4, "calc")
 	assert.NoError(t, err)
 	assert.Equal(t, 10, s)
@@ -44,6 +45,7 @@ func TestProgress(t *testing.T) {
 }
 
 func TestProgressNested(t *testing.T) {
+	t.Parallel()
 	eg, ctx := errgroup.WithContext(context.Background())
 	pr, ctx, cancelProgress := NewContext(ctx)
 	var trace trace

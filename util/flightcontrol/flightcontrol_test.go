@@ -12,6 +12,7 @@ import (
 )
 
 func TestNoCancel(t *testing.T) {
+	t.Parallel()
 	g := &Group{}
 	eg, ctx := errgroup.WithContext(context.Background())
 	var r1, r2 string
@@ -41,6 +42,7 @@ func TestNoCancel(t *testing.T) {
 }
 
 func TestCancelOne(t *testing.T) {
+	t.Parallel()
 	g := &Group{}
 	eg, ctx := errgroup.WithContext(context.Background())
 	var r1, r2 string
@@ -81,6 +83,7 @@ func TestCancelOne(t *testing.T) {
 }
 
 func TestCancelBoth(t *testing.T) {
+	t.Parallel()
 	g := &Group{}
 	eg, ctx := errgroup.WithContext(context.Background())
 	var r1, r2 string
