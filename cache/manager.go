@@ -117,7 +117,7 @@ func (cm *cacheManager) get(ctx context.Context, id string, opts ...RefOption) (
 }
 
 func (cm *cacheManager) load(ctx context.Context, id string, opts ...RefOption) (*cacheRecord, error) {
-	if rec, ok := cm.records[id]; ok {
+	if rec, ok := cm.records[id]; ok && !rec.dead {
 		return rec, nil
 	}
 
