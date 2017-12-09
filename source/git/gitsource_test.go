@@ -15,6 +15,7 @@ import (
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/source"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -40,7 +41,8 @@ func testRepeatedFetch(t *testing.T, keepGitDir bool) {
 	require.NoError(t, err)
 	defer os.RemoveAll(repodir)
 
-	setupGitRepo(t, repodir)
+	repodir, err = setupGitRepo(repodir)
+	require.NoError(t, err)
 
 	id := &source.GitIdentifier{Remote: repodir, KeepGitDir: keepGitDir}
 
@@ -70,6 +72,10 @@ func testRepeatedFetch(t *testing.T, keepGitDir bool) {
 	require.Equal(t, "bar\n", string(dt))
 
 	_, err = os.Lstat(filepath.Join(dir, "ghi"))
+	require.Error(t, err)
+	require.True(t, os.IsNotExist(err))
+
+	_, err = os.Lstat(filepath.Join(dir, "sub/subfile"))
 	require.Error(t, err)
 	require.True(t, os.IsNotExist(err))
 
@@ -115,6 +121,11 @@ func testRepeatedFetch(t *testing.T, keepGitDir bool) {
 	require.NoError(t, err)
 
 	require.Equal(t, "baz\n", string(dt))
+
+	dt, err = ioutil.ReadFile(filepath.Join(dir, "sub/subfile"))
+	require.NoError(t, err)
+
+	require.Equal(t, "subcontents\n", string(dt))
 }
 
 func TestFetchBySHA(t *testing.T) {
@@ -138,7 +149,8 @@ func testFetchBySHA(t *testing.T, keepGitDir bool) {
 	require.NoError(t, err)
 	defer os.RemoveAll(repodir)
 
-	setupGitRepo(t, repodir)
+	repodir, err = setupGitRepo(repodir)
+	require.NoError(t, err)
 
 	cmd := exec.Command("git", "rev-parse", "feature")
 	cmd.Dir = repodir
@@ -175,6 +187,11 @@ func testFetchBySHA(t *testing.T, keepGitDir bool) {
 	require.NoError(t, err)
 
 	require.Equal(t, "baz\n", string(dt))
+
+	dt, err = ioutil.ReadFile(filepath.Join(dir, "sub/subfile"))
+	require.NoError(t, err)
+
+	require.Equal(t, "subcontents\n", string(dt))
 }
 
 func TestMultipleRepos(t *testing.T) {
@@ -199,13 +216,14 @@ func testMultipleRepos(t *testing.T, keepGitDir bool) {
 	require.NoError(t, err)
 	defer os.RemoveAll(repodir)
 
-	setupGitRepo(t, repodir)
+	repodir, err = setupGitRepo(repodir)
+	require.NoError(t, err)
 
 	repodir2, err := ioutil.TempDir("", "buildkit-gitsource")
 	require.NoError(t, err)
 	defer os.RemoveAll(repodir2)
 
-	runShell(t, repodir2,
+	err = runShell(repodir2,
 		"git init",
 		"git config --local user.email test",
 		"git config --local user.name test",
@@ -213,6 +231,7 @@ func testMultipleRepos(t *testing.T, keepGitDir bool) {
 		"git add xyz",
 		"git commit -m initial",
 	)
+	require.NoError(t, err)
 
 	id := &source.GitIdentifier{Remote: repodir, KeepGitDir: keepGitDir}
 	id2 := &source.GitIdentifier{Remote: repodir2, KeepGitDir: keepGitDir}
@@ -290,8 +309,29 @@ func setupGitSource(t *testing.T, tmpdir string) source.Source {
 	return gs
 }
 
-func setupGitRepo(t *testing.T, dir string) {
-	runShell(t, dir,
+func setupGitRepo(dir string) (string, error) {
+	subPath := filepath.Join(dir, "sub")
+	mainPath := filepath.Join(dir, "main")
+
+	if err := os.MkdirAll(subPath, 0700); err != nil {
+		return "", err
+	}
+
+	if err := os.MkdirAll(mainPath, 0700); err != nil {
+		return "", err
+	}
+
+	if err := runShell(filepath.Join(dir, "sub"),
+		"git init",
+		"git config --local user.email test",
+		"git config --local user.name test",
+		"echo subcontents > subfile",
+		"git add subfile",
+		"git commit -m initial",
+	); err != nil {
+		return "", err
+	}
+	if err := runShell(filepath.Join(dir, "main"),
 		"git init",
 		"git config --local user.email test",
 		"git config --local user.name test",
@@ -305,14 +345,22 @@ func setupGitRepo(t *testing.T, dir string) {
 		"echo baz > ghi",
 		"git add ghi",
 		"git commit -m feature",
-	)
+		"git submodule add "+subPath+" sub",
+		"git add -A",
+		"git commit -m withsub",
+	); err != nil {
+		return "", err
+	}
+	return mainPath, nil
 }
 
-func runShell(t *testing.T, dir string, cmds ...string) {
+func runShell(dir string, cmds ...string) error {
 	for _, args := range cmds {
 		cmd := exec.Command("sh", "-c", args)
 		cmd.Dir = dir
-		dt, err := cmd.CombinedOutput()
-		require.NoError(t, err, "command %v returned %s", args, dt)
+		if err := cmd.Run(); err != nil {
+			return errors.Wrapf(err, "error running %v", args)
+		}
 	}
+	return nil
 }
