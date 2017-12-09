@@ -16,6 +16,7 @@ type Sandbox interface {
 	Address() string
 	PrintLogs(*testing.T)
 	Cmd(...string) *exec.Cmd
+	NewRegistry() (string, error)
 }
 
 type Worker interface {
