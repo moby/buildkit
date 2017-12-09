@@ -256,7 +256,7 @@ func (sr *mutableRef) commit(ctx context.Context) (ImmutableRef, error) {
 		md:           md,
 	}
 
-	if descr := getDescription(sr.md); descr != "" {
+	if descr := GetDescription(sr.md); descr != "" {
 		if err := queueDescription(md, descr); err != nil {
 			return nil, err
 		}
