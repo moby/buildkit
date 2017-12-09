@@ -18,6 +18,7 @@ import (
 )
 
 func TestManager(t *testing.T) {
+	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
 	tmpdir, err := ioutil.TempDir("", "cachemanager")
@@ -128,6 +129,7 @@ func TestManager(t *testing.T) {
 }
 
 func TestLazyCommit(t *testing.T) {
+	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
 	tmpdir, err := ioutil.TempDir("", "cachemanager")

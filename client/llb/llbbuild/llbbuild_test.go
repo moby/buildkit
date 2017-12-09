@@ -10,6 +10,7 @@ import (
 )
 
 func TestMarshal(t *testing.T) {
+	t.Parallel()
 	b := NewBuildOp(newDummyOutput("foobar"), WithFilename("myfilename"))
 	dt, opMeta, err := b.Marshal()
 	_ = opMeta

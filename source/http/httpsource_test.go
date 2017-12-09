@@ -19,6 +19,7 @@ import (
 )
 
 func TestHTTPSource(t *testing.T) {
+	t.Parallel()
 	ctx := context.TODO()
 
 	tmpdir, err := ioutil.TempDir("", "buildkit-state")
@@ -132,6 +133,7 @@ func TestHTTPSource(t *testing.T) {
 }
 
 func TestHTTPDefaultName(t *testing.T) {
+	t.Parallel()
 	ctx := context.TODO()
 
 	tmpdir, err := ioutil.TempDir("", "buildkit-state")
@@ -180,6 +182,7 @@ func TestHTTPDefaultName(t *testing.T) {
 }
 
 func TestHTTPInvalidURL(t *testing.T) {
+	t.Parallel()
 	ctx := context.TODO()
 
 	tmpdir, err := ioutil.TempDir("", "buildkit-state")
@@ -203,6 +206,7 @@ func TestHTTPInvalidURL(t *testing.T) {
 }
 
 func TestHTTPChecksum(t *testing.T) {
+	t.Parallel()
 	ctx := context.TODO()
 
 	tmpdir, err := ioutil.TempDir("", "buildkit-state")

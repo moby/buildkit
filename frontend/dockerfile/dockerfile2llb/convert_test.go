@@ -8,6 +8,7 @@ import (
 )
 
 func TestDockerfileParsing(t *testing.T) {
+	t.Parallel()
 	df := `FROM busybox
 ENV FOO bar
 COPY f1 f2 /sub/

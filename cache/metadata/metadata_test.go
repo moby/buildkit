@@ -11,6 +11,8 @@ import (
 )
 
 func TestGetSetSearch(t *testing.T) {
+	t.Parallel()
+
 	tmpdir, err := ioutil.TempDir("", "buildkit-storage")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
@@ -108,6 +110,8 @@ func TestGetSetSearch(t *testing.T) {
 }
 
 func TestIndexes(t *testing.T) {
+	t.Parallel()
+
 	tmpdir, err := ioutil.TempDir("", "buildkit-storage")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
@@ -166,6 +170,8 @@ func TestIndexes(t *testing.T) {
 }
 
 func TestExternalData(t *testing.T) {
+	t.Parallel()
+
 	tmpdir, err := ioutil.TempDir("", "buildkit-storage")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
