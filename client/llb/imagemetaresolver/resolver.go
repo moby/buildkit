@@ -124,7 +124,7 @@ func (i *inMemoryIngester) reader(ctx context.Context, dgst digest.Digest) (*byt
 
 func (i *inMemoryIngester) addMap(k digest.Digest, dt []byte) {
 	i.mu.Lock()
-	i.mu.Unlock()
+	defer i.mu.Unlock()
 	i.buffers[k] = dt
 }
 
