@@ -223,7 +223,10 @@ func (cr *cacheRecord) finalize(ctx context.Context) error {
 	if mutable == nil {
 		return nil
 	}
-	err := cr.cm.Snapshotter.Commit(ctx, cr.ID(), mutable.ID())
+	labels := map[string]string{
+		"containerd.io/gc.root": time.Now().UTC().Format(time.RFC3339Nano),
+	}
+	err := cr.cm.Snapshotter.Commit(ctx, cr.ID(), mutable.ID(), cdsnapshot.WithLabels(labels))
 	if err != nil {
 		return errors.Wrapf(err, "failed to commit %s", mutable.ID())
 	}
