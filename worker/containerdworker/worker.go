@@ -15,18 +15,30 @@ import (
 
 type containerdWorker struct {
 	client *containerd.Client
+	root   string
 }
 
-func New(client *containerd.Client) worker.Worker {
+func New(client *containerd.Client, root string) worker.Worker {
 	return containerdWorker{
 		client: client,
+		root:   root,
 	}
 }
 
 func (w containerdWorker) Exec(ctx context.Context, meta worker.Meta, root cache.Mountable, mounts []worker.Mount, stdin io.ReadCloser, stdout, stderr io.WriteCloser) error {
 	id := identity.NewID()
 
-	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id)
+	resolvConf, err := oci.GetResolvConf(ctx, w.root)
+	if err != nil {
+		return err
+	}
+
+	hostsFile, err := oci.GetHostsFile(ctx, w.root)
+	if err != nil {
+		return err
+	}
+
+	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile)
 	if err != nil {
 		return err
 	}

@@ -35,6 +35,7 @@ func TestClientIntegration(t *testing.T) {
 		testBuildMultiMount,
 		testBuildHTTPSource,
 		testBuildPushAndValidate,
+		testResolveAndHosts,
 	})
 }
 
@@ -155,6 +156,48 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, int(fi.Mode()&0777), 0741)
 
 	// TODO: check that second request was marked as cached
+}
+
+func testResolveAndHosts(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	t.Parallel()
+	c, err := New(sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("busybox:latest")
+	st := llb.Scratch()
+
+	run := func(cmd string) {
+		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+	}
+
+	run(`sh -c "cp /etc/resolv.conf ."`)
+	run(`sh -c "cp /etc/hosts ."`)
+
+	def, err := st.Marshal()
+	require.NoError(t, err)
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	err = c.Solve(context.TODO(), def, SolveOpt{
+		Exporter: ExporterLocal,
+		ExporterAttrs: map[string]string{
+			"output": destDir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "resolv.conf"))
+	require.NoError(t, err)
+	require.Contains(t, string(dt), "nameserver")
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "hosts"))
+	require.NoError(t, err)
+	require.Contains(t, string(dt), "127.0.0.1	localhost")
+
 }
 
 func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
