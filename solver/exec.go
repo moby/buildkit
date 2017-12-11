@@ -109,6 +109,7 @@ func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, erro
 		Args: e.op.Meta.Args,
 		Env:  e.op.Meta.Env,
 		Cwd:  e.op.Meta.Cwd,
+		User: e.op.Meta.User,
 	}
 
 	stdout, stderr := logs.NewLogStreams(ctx)

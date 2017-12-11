@@ -12,6 +12,7 @@ type Meta struct {
 	Args []string
 	Env  EnvList
 	Cwd  string
+	User string
 }
 
 func NewExecOp(root Output, meta Meta, readOnly bool, md OpMetadata) *ExecOp {
@@ -110,6 +111,7 @@ func (e *ExecOp) Marshal() ([]byte, *OpMetadata, error) {
 			Args: e.meta.Args,
 			Env:  e.meta.Env.ToArray(),
 			Cwd:  e.meta.Cwd,
+			User: e.meta.User,
 		},
 	}
 
@@ -268,6 +270,12 @@ func AddEnv(key, value string) RunOption {
 func AddEnvf(key, value string, v ...interface{}) RunOption {
 	return runOptionFunc(func(ei *ExecInfo) {
 		ei.State = ei.State.AddEnvf(key, value, v...)
+	})
+}
+
+func User(str string) RunOption {
+	return runOptionFunc(func(ei *ExecInfo) {
+		ei.State = ei.State.User(str)
 	})
 }
 

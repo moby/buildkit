@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/containerd/containerd/mount"
+	containerdoci "github.com/containerd/containerd/oci"
 	runc "github.com/containerd/go-runc"
 	"github.com/docker/docker/pkg/symlink"
 	"github.com/moby/buildkit/cache"
@@ -82,21 +83,27 @@ func (w *runcExecutor) Exec(ctx context.Context, meta executor.Meta, root cache.
 	if err := os.Mkdir(rootFSPath, 0700); err != nil {
 		return err
 	}
+	if err := mount.All(rootMount, rootFSPath); err != nil {
+		return err
+	}
+	defer mount.Unmount(rootFSPath, 0)
+
+	uid, gid, err := oci.GetUser(ctx, rootFSPath, meta.User)
+	if err != nil {
+		return err
+	}
+
 	f, err := os.Create(filepath.Join(bundle, "config.json"))
 	if err != nil {
 		return err
 	}
 	defer f.Close()
-	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile)
+	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, containerdoci.WithUIDGID(uid, gid))
 	if err != nil {
 		return err
 	}
 	defer cleanup()
 
-	if err := mount.All(rootMount, rootFSPath); err != nil {
-		return err
-	}
-	defer mount.Unmount(rootFSPath, 0)
 	spec.Root.Path = rootFSPath
 	if _, ok := root.(cache.ImmutableRef); ok { // TODO: pass in with mount, not ref type
 		spec.Root.Readonly = true

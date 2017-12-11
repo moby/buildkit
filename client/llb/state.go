@@ -129,6 +129,7 @@ func (s State) Run(ro ...RunOption) ExecState {
 		Args: getArgs(ei.State),
 		Cwd:  getDir(ei.State),
 		Env:  getEnv(ei.State),
+		User: getUser(ei.State),
 	}
 
 	exec := NewExecOp(s.Output(), meta, ei.ReadonlyRootFS, ei.Metadata())
@@ -171,6 +172,10 @@ func (s State) GetArgs() []string {
 
 func (s State) Reset(s2 State) State {
 	return reset(s2)(s)
+}
+
+func (s State) User(v string) State {
+	return user(v)(s)
 }
 
 func (s State) With(so ...StateOption) State {

@@ -30,6 +30,7 @@ message Meta {
 	repeated string args = 1;
 	repeated string env = 2;
 	string cwd = 3;
+	string user = 4;
 }
 
 message Mount {
