@@ -35,7 +35,7 @@ func NewContainerd(root, address string) (*Controller, error) {
 		return nil, err
 	}
 
-	opt.Worker = containerdworker.New(client)
+	opt.Worker = containerdworker.New(client, root)
 
 	return NewController(*opt)
 }

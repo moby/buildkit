@@ -21,7 +21,7 @@ import (
 // Ideally we don't have to import whole containerd just for the default spec
 
 // GenerateSpec generates spec using containerd functionality.
-func GenerateSpec(ctx context.Context, meta worker.Meta, mounts []worker.Mount, id string) (*specs.Spec, func(), error) {
+func GenerateSpec(ctx context.Context, meta worker.Meta, mounts []worker.Mount, id, resolvConf, hostsFile string) (*specs.Spec, func(), error) {
 	c := &containers.Container{
 		ID: id,
 	}
@@ -33,8 +33,8 @@ func GenerateSpec(ctx context.Context, meta worker.Meta, mounts []worker.Mount, 
 	// specs.Linux.CgroupsPath namespaced
 	s, err := oci.GenerateSpec(ctx, nil, c,
 		oci.WithHostNamespace(specs.NetworkNamespace),
-		oci.WithHostResolvconf,
-		oci.WithHostHostsFile,
+		withROBind(resolvConf, "/etc/resolv.conf"),
+		withROBind(hostsFile, "/etc/hosts"),
 	)
 	if err != nil {
 		return nil, nil, err
@@ -68,6 +68,18 @@ func GenerateSpec(ctx context.Context, meta worker.Meta, mounts []worker.Mount, 
 	}
 
 	return s, sm.cleanup, nil
+}
+
+func withROBind(src, dest string) func(_ context.Context, _ oci.Client, _ *containers.Container, s *specs.Spec) error {
+	return func(_ context.Context, _ oci.Client, _ *containers.Container, s *specs.Spec) error {
+		s.Mounts = append(s.Mounts, specs.Mount{
+			Destination: dest,
+			Type:        "bind",
+			Source:      src,
+			Options:     []string{"rbind", "ro"},
+		})
+		return nil
+	}
 }
 
 type mountRef struct {
