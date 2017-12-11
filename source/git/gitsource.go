@@ -244,7 +244,7 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context) (out cache.ImmutableRe
 	}
 
 	if doFetch {
-		args := []string{"fetch", "--recurse-submodules=yes"}
+		args := []string{"fetch"}
 		if !isCommitSHA(ref) { // TODO: find a branch from ls-remote?
 			args = append(args, "--depth=1", "--no-tags")
 		} else {
@@ -306,7 +306,7 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context) (out cache.ImmutableRe
 				return nil, err
 			}
 		}
-		_, err = gitWithinDir(ctx, checkoutDir, "", "fetch", "--recurse-submodules=yes", "--depth=1", "origin", pullref)
+		_, err = gitWithinDir(ctx, checkoutDir, "", "fetch", "--depth=1", "origin", pullref)
 		if err != nil {
 			return nil, err
 		}
@@ -314,12 +314,19 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context) (out cache.ImmutableRe
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to checkout remote %s", gs.src.Remote)
 		}
+		gitDir = checkoutDir
 	} else {
 		_, err = gitWithinDir(ctx, gitDir, checkoutDir, "checkout", ref, "--", ".")
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to checkout remote %s", gs.src.Remote)
 		}
 	}
+
+	_, err = gitWithinDir(ctx, gitDir, checkoutDir, "submodule", "update", "--init", "--recursive", "--depth=1")
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to update submodules for %s", gs.src.Remote)
+	}
+
 	lm.Unmount()
 	lm = nil
 
@@ -359,14 +366,15 @@ func gitWithinDir(ctx context.Context, gitDir, workDir string, args ...string) (
 	if workDir != "" {
 		a = append(a, "--work-tree", workDir)
 	}
-	return git(ctx, append(a, args...)...)
+	return git(ctx, workDir, append(a, args...)...)
 }
 
-func git(ctx context.Context, args ...string) (*bytes.Buffer, error) {
+func git(ctx context.Context, dir string, args ...string) (*bytes.Buffer, error) {
 	stdout, stderr := logs.NewLogStreams(ctx)
 	defer stdout.Close()
 	defer stderr.Close()
 	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd.Dir = dir // some commands like submodule require this
 	buf := bytes.NewBuffer(nil)
 	cmd.Stdout = io.MultiWriter(stdout, buf)
 	cmd.Stderr = stderr
