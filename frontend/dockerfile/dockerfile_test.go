@@ -38,6 +38,7 @@ func TestIntegration(t *testing.T) {
 		testDockerfileScratchConfig,
 		testExportedHistory,
 		testExposeExpansion,
+		testUser,
 	})
 }
 
@@ -573,6 +574,101 @@ RUN ["ls"]
 	require.Equal(t, false, ociimg.History[4].EmptyLayer)
 	require.Contains(t, ociimg.History[5].CreatedBy, "RUN ls")
 	require.Equal(t, true, ociimg.History[5].EmptyLayer)
+}
+
+func testUser(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	dockerfile := []byte(`
+FROM busybox AS base
+RUN mkdir -m 0777 /out
+RUN id -un > /out/rootuser
+USER daemon
+RUN id -un > /out/daemonuser
+FROM scratch
+COPY --from=base /out /
+USER nobody
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	err = c.Solve(context.TODO(), nil, client.SolveOpt{
+		Frontend: "dockerfile.v0",
+		Exporter: client.ExporterLocal,
+		ExporterAttrs: map[string]string{
+			"output": destDir,
+		},
+		LocalDirs: map[string]string{
+			localNameDockerfile: dir,
+			localNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "rootuser"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), "root\n")
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "daemonuser"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), "daemon\n")
+
+	// test user in exported
+	target := "example.com/moby/dockerfileuser:test"
+	err = c.Solve(context.TODO(), nil, client.SolveOpt{
+		Frontend: "dockerfile.v0",
+		Exporter: client.ExporterImage,
+		ExporterAttrs: map[string]string{
+			"name": target,
+		},
+		LocalDirs: map[string]string{
+			localNameDockerfile: dir,
+			localNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	var cdAddress string
+	if cd, ok := sb.(interface {
+		ContainerdAddress() string
+	}); !ok {
+		return
+	} else {
+		cdAddress = cd.ContainerdAddress()
+	}
+
+	client, err := containerd.New(cdAddress)
+	require.NoError(t, err)
+	defer client.Close()
+
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit")
+
+	img, err := client.ImageService().Get(ctx, target)
+	require.NoError(t, err)
+
+	desc, err := img.Config(ctx, client.ContentStore(), platforms.Default())
+	require.NoError(t, err)
+
+	dt, err = content.ReadBlob(ctx, client.ContentStore(), desc.Digest)
+	require.NoError(t, err)
+
+	var ociimg ocispec.Image
+	err = json.Unmarshal(dt, &ociimg)
+	require.NoError(t, err)
+
+	require.Equal(t, "nobody", ociimg.Config.User)
 }
 
 func tmpdir(appliers ...fstest.Applier) (string, error) {

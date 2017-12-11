@@ -477,6 +477,7 @@ func dispatchExpose(d *dispatchState, c *instructions.ExposeCommand, shlex *Shel
 	return commitToHistory(&d.image, fmt.Sprintf("EXPOSE %v", ps), false, nil)
 }
 func dispatchUser(d *dispatchState, c *instructions.UserCommand, commit bool) error {
+	d.state = d.state.User(c.User)
 	d.image.Config.User = c.User
 	if commit {
 		return commitToHistory(&d.image, fmt.Sprintf("USER %v", c.User), false, nil)
