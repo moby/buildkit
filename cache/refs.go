@@ -185,19 +185,19 @@ func (sr *immutableRef) Release(ctx context.Context) error {
 }
 
 func (sr *immutableRef) release(ctx context.Context) error {
-	if sr.viewMount != nil {
-		if err := sr.cm.Snapshotter.Remove(ctx, sr.view); err != nil {
-			return err
-		}
-		sr.view = ""
-		sr.viewMount = nil
-	}
-
 	updateLastUsed(sr.md)
 
 	delete(sr.refs, sr)
 
 	if len(sr.refs) == 0 {
+		if sr.viewMount != nil { // TODO: release viewMount earlier if possible
+			if err := sr.cm.Snapshotter.Remove(ctx, sr.view); err != nil {
+				return err
+			}
+			sr.view = ""
+			sr.viewMount = nil
+		}
+
 		if sr.equalMutable != nil {
 			sr.equalMutable.release(ctx)
 		}
