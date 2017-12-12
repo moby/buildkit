@@ -185,19 +185,19 @@ func (sr *immutableRef) Release(ctx context.Context) error {
 }
 
 func (sr *immutableRef) release(ctx context.Context) error {
-	if sr.viewMount != nil {
-		if err := sr.cm.Snapshotter.Remove(ctx, sr.view); err != nil {
-			return err
-		}
-		sr.view = ""
-		sr.viewMount = nil
-	}
-
 	updateLastUsed(sr.md)
 
 	delete(sr.refs, sr)
 
 	if len(sr.refs) == 0 {
+		if sr.viewMount != nil { // TODO: release viewMount earlier if possible
+			if err := sr.cm.Snapshotter.Remove(ctx, sr.view); err != nil {
+				return err
+			}
+			sr.view = ""
+			sr.viewMount = nil
+		}
+
 		if sr.equalMutable != nil {
 			sr.equalMutable.release(ctx)
 		}
@@ -223,7 +223,10 @@ func (cr *cacheRecord) finalize(ctx context.Context) error {
 	if mutable == nil {
 		return nil
 	}
-	err := cr.cm.Snapshotter.Commit(ctx, cr.ID(), mutable.ID())
+	labels := map[string]string{
+		"containerd.io/gc.root": time.Now().UTC().Format(time.RFC3339Nano),
+	}
+	err := cr.cm.Snapshotter.Commit(ctx, cr.ID(), mutable.ID(), cdsnapshot.WithLabels(labels))
 	if err != nil {
 		return errors.Wrapf(err, "failed to commit %s", mutable.ID())
 	}
