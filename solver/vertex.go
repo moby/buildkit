@@ -6,6 +6,7 @@ import (
 
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/progress"
 	digest "github.com/opencontainers/go-digest"
 	"golang.org/x/net/context"
@@ -18,15 +19,11 @@ type Vertex interface {
 	// Sys returns an internal value that is used to execute the vertex. Usually
 	// this is capured by the operation resolver method during solve.
 	Sys() interface{}
-	Metadata() Metadata
+	// FIXME(AkihiroSuda): we should not import pb pkg here.
+	Metadata() *pb.OpMetadata
 	// Array of vertexes current vertex depends on.
 	Inputs() []Input
 	Name() string // change this to general metadata
-}
-
-// Metadata is per-vertex metadata, implemented by *pb.OpMetadata
-type Metadata interface {
-	GetIgnoreCache() bool
 }
 
 type Index int
@@ -45,7 +42,7 @@ type input struct {
 type vertex struct {
 	mu           sync.Mutex
 	sys          interface{}
-	metadata     Metadata
+	metadata     *pb.OpMetadata
 	inputs       []*input
 	err          error
 	digest       digest.Digest
@@ -74,7 +71,7 @@ func (v *vertex) Sys() interface{} {
 	return v.sys
 }
 
-func (v *vertex) Metadata() Metadata {
+func (v *vertex) Metadata() *pb.OpMetadata {
 	return v.metadata
 }
 

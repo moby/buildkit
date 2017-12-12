@@ -9,9 +9,9 @@ import (
 	"strings"
 
 	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/progress/logs"
-	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -22,15 +22,15 @@ const execCacheType = "buildkit.exec.v0"
 type execOp struct {
 	op        *pb.ExecOp
 	cm        cache.Manager
-	w         worker.Worker
+	exec      executor.Executor
 	numInputs int
 }
 
-func newExecOp(v Vertex, op *pb.Op_Exec, cm cache.Manager, w worker.Worker) (Op, error) {
+func newExecOp(v Vertex, op *pb.Op_Exec, cm cache.Manager, exec executor.Executor) (Op, error) {
 	return &execOp{
 		op:        op.Exec,
 		cm:        cm,
-		w:         w,
+		exec:      exec,
 		numInputs: len(v.Inputs()),
 	}, nil
 }
@@ -55,7 +55,7 @@ func (e *execOp) CacheKey(ctx context.Context) (digest.Digest, error) {
 }
 
 func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, error) {
-	var mounts []worker.Mount
+	var mounts []executor.Mount
 	var outputs []Reference
 	var root cache.Mountable
 
@@ -97,7 +97,7 @@ func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, erro
 		if m.Dest == pb.RootMount {
 			root = mountable
 		} else {
-			mounts = append(mounts, worker.Mount{Src: mountable, Dest: m.Dest, Readonly: m.Readonly, Selector: m.Selector})
+			mounts = append(mounts, executor.Mount{Src: mountable, Dest: m.Dest, Readonly: m.Readonly, Selector: m.Selector})
 		}
 	}
 
@@ -105,7 +105,7 @@ func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, erro
 		return mounts[i].Dest < mounts[j].Dest
 	})
 
-	meta := worker.Meta{
+	meta := executor.Meta{
 		Args: e.op.Meta.Args,
 		Env:  e.op.Meta.Env,
 		Cwd:  e.op.Meta.Cwd,
@@ -115,8 +115,8 @@ func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, erro
 	defer stdout.Close()
 	defer stderr.Close()
 
-	if err := e.w.Exec(ctx, meta, root, mounts, nil, stdout, stderr); err != nil {
-		return nil, errors.Wrapf(err, "worker failed running %v", meta.Args)
+	if err := e.exec.Exec(ctx, meta, root, mounts, nil, stdout, stderr); err != nil {
+		return nil, errors.Wrapf(err, "executor failed running %v", meta.Args)
 	}
 
 	refs := []Reference{}

@@ -11,10 +11,10 @@ import (
 	"github.com/moby/buildkit/cache/cacheimport"
 	"github.com/moby/buildkit/cache/contenthash"
 	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/solver/pb"
-	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/util/bgfunc"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/worker"
@@ -25,31 +25,32 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type LLBOpt struct {
-	SourceManager    *source.Manager
-	CacheManager     cache.Manager
-	Worker           worker.Worker
-	InstructionCache InstructionCache
-	ImageSource      source.Source
-	Frontends        map[string]frontend.Frontend // used by nested invocations
-	CacheExporter    *cacheimport.CacheExporter
-	CacheImporter    *cacheimport.CacheImporter
+// DetermineVertexWorker determines worker for a vertex.
+// Currently, constraint is just ignored.
+// Also we need to track the workers of the inputs.
+func DetermineVertexWorker(wc *worker.Controller, v Vertex) (*worker.Worker, error) {
+	// TODO: multiworker
+	return wc.GetDefault()
 }
 
-func NewLLBSolver(opt LLBOpt) *Solver {
+func NewLLBSolver(wc *worker.Controller, frontends map[string]frontend.Frontend) *Solver {
 	var s *Solver
 	s = New(func(v Vertex) (Op, error) {
+		w, err := DetermineVertexWorker(wc, v)
+		if err != nil {
+			return nil, err
+		}
 		switch op := v.Sys().(type) {
 		case *pb.Op_Source:
-			return newSourceOp(v, op, opt.SourceManager)
+			return newSourceOp(v, op, w.SourceManager)
 		case *pb.Op_Exec:
-			return newExecOp(v, op, opt.CacheManager, opt.Worker)
+			return newExecOp(v, op, w.CacheManager, w.Executor)
 		case *pb.Op_Build:
 			return newBuildOp(v, op, s)
 		default:
 			return nil, nil
 		}
-	}, opt.InstructionCache, opt.ImageSource, opt.Worker, opt.CacheManager, opt.Frontends, opt.CacheExporter, opt.CacheImporter)
+	}, wc, frontends)
 	return s
 }
 
@@ -84,19 +85,14 @@ type InstructionCache interface {
 }
 
 type Solver struct {
-	resolve     ResolveOpFunc
-	jobs        *jobList
-	cache       InstructionCache
-	imageSource source.Source
-	worker      worker.Worker
-	cm          cache.Manager // TODO: remove with immutableRef.New()
-	frontends   map[string]frontend.Frontend
-	ce          *cacheimport.CacheExporter
-	ci          *cacheimport.CacheImporter
+	resolve          ResolveOpFunc
+	jobs             *jobList
+	workerController *worker.Controller
+	frontends        map[string]frontend.Frontend
 }
 
-func New(resolve ResolveOpFunc, cache InstructionCache, imageSource source.Source, worker worker.Worker, cm cache.Manager, f map[string]frontend.Frontend, ce *cacheimport.CacheExporter, ci *cacheimport.CacheImporter) *Solver {
-	return &Solver{resolve: resolve, jobs: newJobList(), cache: cache, imageSource: imageSource, worker: worker, cm: cm, frontends: f, ce: ce, ci: ci}
+func New(resolve ResolveOpFunc, wc *worker.Controller, f map[string]frontend.Frontend) *Solver {
+	return &Solver{resolve: resolve, jobs: newJobList(), workerController: wc, frontends: f}
 }
 
 type SolveRequest struct {
@@ -125,7 +121,12 @@ func (s *Solver) solve(ctx context.Context, j *job, req SolveRequest) (Reference
 }
 
 func (s *Solver) llbBridge(j *job) *llbBridge {
-	return &llbBridge{job: j, Solver: s, resolveImageConfig: s.imageSource.(resolveImageConfig)}
+	// FIXME(AkihiroSuda): make sure worker implements interfaces required by llbBridge
+	worker, err := s.workerController.GetDefault()
+	if err != nil {
+		panic(err)
+	}
+	return &llbBridge{job: j, Solver: s, worker: worker}
 }
 
 func (s *Solver) Solve(ctx context.Context, id string, req SolveRequest) error {
@@ -135,16 +136,21 @@ func (s *Solver) Solve(ctx context.Context, id string, req SolveRequest) error {
 	pr, ctx, closeProgressWriter := progress.NewContext(ctx)
 	defer closeProgressWriter()
 
+	// TODO: multiworker
+	defaultWorker, err := s.workerController.GetDefault()
+	if err != nil {
+		return err
+	}
 	if importRef := req.ImportCacheRef; importRef != "" {
-		cache, err := s.ci.Import(ctx, importRef)
+		cache, err := defaultWorker.CacheImporter.Import(ctx, importRef)
 		if err != nil {
 			return err
 		}
-		s.cache = mergeRemoteCache(s.cache, cache)
+		defaultWorker.InstructionCache = mergeRemoteCache(defaultWorker.InstructionCache, cache)
 	}
 
 	// register a build job. vertex needs to be loaded to a job to run
-	ctx, j, err := s.jobs.new(ctx, id, pr, s.cache)
+	ctx, j, err := s.jobs.new(ctx, id, pr, defaultWorker.InstructionCache)
 	if err != nil {
 		return err
 	}
@@ -193,7 +199,8 @@ func (s *Solver) Solve(ctx context.Context, id string, req SolveRequest) error {
 				return err
 			}
 
-			return s.ce.Export(ctx, records, exportName)
+			// TODO: multiworker
+			return defaultWorker.CacheExporter.Export(ctx, records, exportName)
 		}); err != nil {
 			return err
 		}
@@ -232,7 +239,11 @@ func (s *Solver) subBuild(ctx context.Context, dgst digest.Digest, req SolveRequ
 	st = jl.actives[inp.Vertex.Digest()]
 	jl.mu.Unlock()
 
-	return getRef(ctx, st.solver, inp.Vertex.(*vertex), inp.Index, s.cache) // TODO: combine to pass single input                                        // TODO: export cache for subbuilds
+	w, err := DetermineVertexWorker(s.workerController, inp.Vertex)
+	if err != nil {
+		return nil, err
+	}
+	return getRef(ctx, st.solver, inp.Vertex.(*vertex), inp.Index, w.InstructionCache) // TODO: combine to pass single input                                        // TODO: export cache for subbuilds
 }
 
 type VertexSolver interface {
@@ -779,7 +790,8 @@ type VertexResult struct {
 type llbBridge struct {
 	*Solver
 	job *job
-	resolveImageConfig
+	// this worker is used for running containerized frontend, not vertices
+	worker *worker.Worker
 }
 
 type resolveImageConfig interface {
@@ -814,13 +826,22 @@ func (s *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (cache
 	return immutable, exp, nil
 }
 
-func (s *llbBridge) Exec(ctx context.Context, meta worker.Meta, rootFS cache.ImmutableRef, stdin io.ReadCloser, stdout, stderr io.WriteCloser) error {
-	active, err := s.cm.New(ctx, rootFS)
+func (s *llbBridge) ResolveImageConfig(ctx context.Context, ref string) (digest.Digest, []byte, error) {
+	// ImageSource is typically source/containerimage
+	resolveImageConfig, ok := s.worker.ImageSource.(resolveImageConfig)
+	if !ok {
+		return "", nil, errors.Errorf("worker %q does not implement ResolveImageConfig", s.worker.Name)
+	}
+	return resolveImageConfig.ResolveImageConfig(ctx, ref)
+}
+
+func (s *llbBridge) Exec(ctx context.Context, meta executor.Meta, rootFS cache.ImmutableRef, stdin io.ReadCloser, stdout, stderr io.WriteCloser) error {
+	active, err := s.worker.CacheManager.New(ctx, rootFS)
 	if err != nil {
 		return err
 	}
 	defer active.Release(context.TODO())
-	return s.worker.Exec(ctx, meta, active, nil, stdin, stdout, stderr)
+	return s.worker.Executor.Exec(ctx, meta, active, nil, stdin, stdout, stderr)
 }
 
 func cacheKeyForIndex(dgst digest.Digest, index Index) digest.Digest {

@@ -12,8 +12,8 @@ import (
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/oci"
 	"github.com/mitchellh/hashstructure"
+	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/snapshot"
-	"github.com/moby/buildkit/worker"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 )
@@ -21,7 +21,7 @@ import (
 // Ideally we don't have to import whole containerd just for the default spec
 
 // GenerateSpec generates spec using containerd functionality.
-func GenerateSpec(ctx context.Context, meta worker.Meta, mounts []worker.Mount, id, resolvConf, hostsFile string) (*specs.Spec, func(), error) {
+func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mount, id string, resolvConf, hostsFile string) (*specs.Spec, func(), error) {
 	c := &containers.Container{
 		ID: id,
 	}

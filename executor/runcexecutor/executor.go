@@ -1,4 +1,4 @@
-package runcworker
+package runcexecutor
 
 import (
 	"encoding/json"
@@ -12,20 +12,20 @@ import (
 	runc "github.com/containerd/go-runc"
 	"github.com/docker/docker/pkg/symlink"
 	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/executor"
+	"github.com/moby/buildkit/executor/oci"
 	"github.com/moby/buildkit/identity"
-	"github.com/moby/buildkit/worker"
-	"github.com/moby/buildkit/worker/oci"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 )
 
-type runcworker struct {
+type runcExecutor struct {
 	runc *runc.Runc
 	root string
 }
 
-func New(root string) (worker.Worker, error) {
+func New(root string) (executor.Executor, error) {
 	if err := exec.Command("runc", "--version").Run(); err != nil {
 		return nil, errors.Wrap(err, "failed to find runc binary")
 	}
@@ -47,14 +47,14 @@ func New(root string) (worker.Worker, error) {
 		Setpgid:      true,
 	}
 
-	w := &runcworker{
+	w := &runcExecutor{
 		runc: runtime,
 		root: root,
 	}
 	return w, nil
 }
 
-func (w *runcworker) Exec(ctx context.Context, meta worker.Meta, root cache.Mountable, mounts []worker.Mount, stdin io.ReadCloser, stdout, stderr io.WriteCloser) error {
+func (w *runcExecutor) Exec(ctx context.Context, meta executor.Meta, root cache.Mountable, mounts []executor.Mount, stdin io.ReadCloser, stdout, stderr io.WriteCloser) error {
 
 	resolvConf, err := oci.GetResolvConf(ctx, w.root)
 	if err != nil {

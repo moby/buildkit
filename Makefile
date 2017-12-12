@@ -1,5 +1,5 @@
 
-BINARIES=bin/buildd-standalone bin/buildd-containerd bin/buildctl	bin/buildctl-darwin bin/buildd.exe bin/buildctl.exe
+BINARIES=bin/buildd bin/buildd-standalone bin/buildd-containerd bin/buildctl	bin/buildctl-darwin bin/buildd.exe bin/buildctl.exe
 
 binaries: $(BINARIES)
 
