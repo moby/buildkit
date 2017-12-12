@@ -18,7 +18,7 @@ import (
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/worker"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/net/context"
 )
 
@@ -35,57 +35,57 @@ func TestRuncWorker(t *testing.T) {
 
 	// this should be an example or e2e test
 	tmpdir, err := ioutil.TempDir("", "workertest")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
 	workerOpt, err := NewWorkerOpt(tmpdir)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	workerOpt.SessionManager, err = session.NewManager()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	w, err := worker.NewWorker(workerOpt)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	img, err := source.NewImageIdentifier("docker.io/library/busybox:latest")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	src, err := w.SourceManager.Resolve(ctx, img)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	snap, err := src.Snapshot(ctx)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	mounts, err := snap.Mount(ctx, false)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	lm := snapshot.LocalMounter(mounts)
 
 	target, err := lm.Mount()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	f, err := os.Open(target)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	names, err := f.Readdirnames(-1)
-	assert.NoError(t, err)
-	assert.True(t, len(names) > 5)
+	require.NoError(t, err)
+	require.True(t, len(names) > 5)
 
 	err = f.Close()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	lm.Unmount()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	du, err := w.CacheManager.DiskUsage(ctx, client.DiskUsageInfo{})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// for _, d := range du {
 	// 	fmt.Printf("du: %+v\n", d)
 	// }
 
 	for _, d := range du {
-		assert.True(t, d.Size >= 8192)
+		require.True(t, d.Size >= 8192)
 	}
 
 	meta := executor.Meta{
@@ -96,44 +96,44 @@ func TestRuncWorker(t *testing.T) {
 	stderr := bytes.NewBuffer(nil)
 
 	err = w.Executor.Exec(ctx, meta, snap, nil, nil, nil, &nopCloser{stderr})
-	assert.Error(t, err) // Read-only root
+	require.Error(t, err) // Read-only root
 	// typical error is like `mkdir /.../rootfs/proc: read-only file system`.
 	// make sure the error is caused before running `echo foo > /bar`.
-	assert.Contains(t, stderr.String(), "read-only file system")
+	require.Contains(t, stderr.String(), "read-only file system")
 
 	root, err := w.CacheManager.New(ctx, snap)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	err = w.Executor.Exec(ctx, meta, root, nil, nil, nil, nil)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	rf, err := root.Commit(ctx)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	mounts, err = rf.Mount(ctx, false)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	lm = snapshot.LocalMounter(mounts)
 
 	target, err = lm.Mount()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	dt, err := ioutil.ReadFile(filepath.Join(target, "bar"))
-	assert.NoError(t, err)
-	assert.Equal(t, string(dt), "foo\n")
+	require.NoError(t, err)
+	require.Equal(t, string(dt), "foo\n")
 
 	lm.Unmount()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	err = rf.Release(ctx)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	err = snap.Release(ctx)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	du2, err := w.CacheManager.DiskUsage(ctx, client.DiskUsageInfo{})
-	assert.NoError(t, err)
-	assert.Equal(t, 1, len(du2)-len(du))
+	require.NoError(t, err)
+	require.Equal(t, 1, len(du2)-len(du))
 
 }
 
