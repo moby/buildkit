@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"github.com/containerd/containerd/fs/fstest"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/platforms"
+	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/util/testutil/httpserver"
 	"github.com/moby/buildkit/util/testutil/integration"
@@ -35,6 +37,7 @@ func TestIntegration(t *testing.T) {
 		testDockerfileAddArchive,
 		testDockerfileScratchConfig,
 		testExportedHistory,
+		testExposeExpansion,
 	})
 }
 
@@ -420,6 +423,82 @@ ENV foo=bar
 		}
 		return false
 	})
+}
+
+func testExposeExpansion(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	dockerfile := []byte(`
+FROM scratch
+ARG PORTS="3000 4000/udp"
+EXPOSE $PORTS
+EXPOSE 5000
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	target := "example.com/moby/dockerfileexpansion:test"
+	err = c.Solve(context.TODO(), nil, client.SolveOpt{
+		Frontend: "dockerfile.v0",
+		Exporter: client.ExporterImage,
+		ExporterAttrs: map[string]string{
+			"name": target,
+		},
+		LocalDirs: map[string]string{
+			localNameDockerfile: dir,
+			localNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	var cdAddress string
+	if cd, ok := sb.(interface {
+		ContainerdAddress() string
+	}); !ok {
+		return
+	} else {
+		cdAddress = cd.ContainerdAddress()
+	}
+
+	client, err := containerd.New(cdAddress)
+	require.NoError(t, err)
+	defer client.Close()
+
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit")
+
+	img, err := client.ImageService().Get(ctx, target)
+	require.NoError(t, err)
+
+	desc, err := img.Config(ctx, client.ContentStore(), platforms.Default())
+	require.NoError(t, err)
+
+	dt, err := content.ReadBlob(ctx, client.ContentStore(), desc.Digest)
+	require.NoError(t, err)
+
+	var ociimg ocispec.Image
+	err = json.Unmarshal(dt, &ociimg)
+	require.NoError(t, err)
+
+	require.Equal(t, 3, len(ociimg.Config.ExposedPorts))
+
+	var ports []string
+	for p := range ociimg.Config.ExposedPorts {
+		ports = append(ports, p)
+	}
+
+	sort.Strings(ports)
+
+	require.Equal(t, "3000/tcp", ports[0])
+	require.Equal(t, "4000/udp", ports[1])
+	require.Equal(t, "5000/tcp", ports[2])
 }
 
 func testExportedHistory(t *testing.T, sb integration.Sandbox) {
