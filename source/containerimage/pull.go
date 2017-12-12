@@ -21,6 +21,7 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/auth"
 	"github.com/moby/buildkit/source"
+	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/imageutil"
 	"github.com/moby/buildkit/util/progress"
 	digest "github.com/opencontainers/go-digest"
@@ -53,13 +54,12 @@ type resolveRecord struct {
 
 type imageSource struct {
 	SourceOpt
-	lru map[string]resolveRecord
+	g flightcontrol.Group
 }
 
 func NewSource(opt SourceOpt) (source.Source, error) {
 	is := &imageSource{
 		SourceOpt: opt,
-		lru:       map[string]resolveRecord{},
 	}
 
 	if _, ok := opt.Snapshotter.(blobmapper); !ok {
@@ -99,7 +99,22 @@ func (is *imageSource) getCredentialsFromSession(ctx context.Context) func(strin
 }
 
 func (is *imageSource) ResolveImageConfig(ctx context.Context, ref string) (digest.Digest, []byte, error) {
-	return imageutil.Config(ctx, ref, is.getResolver(ctx), is.ContentStore)
+	type t struct {
+		dgst digest.Digest
+		dt   []byte
+	}
+	res, err := is.g.Do(ctx, ref, func(ctx context.Context) (interface{}, error) {
+		dgst, dt, err := imageutil.Config(ctx, ref, is.getResolver(ctx), is.ContentStore)
+		if err != nil {
+			return nil, err
+		}
+		return &t{dgst: dgst, dt: dt}, nil
+	})
+	if err != nil {
+		return "", nil, err
+	}
+	typed := res.(*t)
+	return typed.dgst, typed.dt, nil
 }
 
 func (is *imageSource) Resolve(ctx context.Context, id source.Identifier) (source.SourceInstance, error) {
