@@ -240,7 +240,7 @@ func dispatch(d *dispatchState, cmd instructions.Command, opt dispatchOpt) error
 	case *instructions.HealthCheckCommand:
 		err = dispatchHealthcheck(d, c)
 	case *instructions.ExposeCommand:
-		err = dispatchExpose(d, c)
+		err = dispatchExpose(d, c, opt.shlex)
 	case *instructions.UserCommand:
 		err = dispatchUser(d, c, true)
 	case *instructions.VolumeCommand:
@@ -451,8 +451,17 @@ func dispatchHealthcheck(d *dispatchState, c *instructions.HealthCheckCommand) e
 	return commitToHistory(&d.image, fmt.Sprintf("HEALTHCHECK %q", d.image.Config.Healthcheck), false, nil)
 }
 
-func dispatchExpose(d *dispatchState, c *instructions.ExposeCommand) error {
-	// TODO: custom multi word expansion
+func dispatchExpose(d *dispatchState, c *instructions.ExposeCommand, shlex *ShellLex) error {
+	ports := []string{}
+	for _, p := range c.Ports {
+		ps, err := shlex.ProcessWords(p, toEnvList(d.buildArgs, d.image.Config.Env))
+		if err != nil {
+			return err
+		}
+		ports = append(ports, ps...)
+	}
+	c.Ports = ports
+
 	ps, _, err := nat.ParsePortSpecs(c.Ports)
 	if err != nil {
 		return err
