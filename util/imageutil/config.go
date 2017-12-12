@@ -56,7 +56,7 @@ func Config(ctx context.Context, str string, resolver remotes.Resolver, ingester
 
 	handlers := []images.Handler{
 		remotes.FetchHandler(ingester, fetcher),
-		childrenConfigHandler(ingester),
+		childrenConfigHandler(ingester, platforms.Default()),
 	}
 	if err := images.Dispatch(ctx, images.Handlers(handlers...), *desc); err != nil {
 		return "", nil, err
@@ -74,7 +74,7 @@ func Config(ctx context.Context, str string, resolver remotes.Resolver, ingester
 	return desc.Digest, dt, nil
 }
 
-func childrenConfigHandler(provider content.Provider) images.HandlerFunc {
+func childrenConfigHandler(provider content.Provider, platform string) images.HandlerFunc {
 	return func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
 		var descs []ocispec.Descriptor
 		switch desc.MediaType {
@@ -103,7 +103,20 @@ func childrenConfigHandler(provider content.Provider) images.HandlerFunc {
 				return nil, err
 			}
 
-			descs = append(descs, index.Manifests...)
+			if platform != "" {
+				matcher, err := platforms.Parse(platform)
+				if err != nil {
+					return nil, err
+				}
+
+				for _, d := range index.Manifests {
+					if d.Platform == nil || matcher.Match(*d.Platform) {
+						descs = append(descs, d)
+					}
+				}
+			} else {
+				descs = append(descs, index.Manifests...)
+			}
 		case images.MediaTypeDockerSchema2Config, ocispec.MediaTypeImageConfig:
 			// childless data types.
 			return nil, nil
