@@ -89,16 +89,19 @@ func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root c
 		return err
 	}
 
-	killCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-
+	var cancel func()
 	ctxDone := ctx.Done()
 	for {
 		select {
 		case <-ctxDone:
 			ctxDone = nil
+			var killCtx context.Context
+			killCtx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
 			task.Kill(killCtx, syscall.SIGKILL)
 		case status := <-statusCh:
-			cancel()
+			if cancel != nil {
+				cancel()
+			}
 			if status.ExitCode() != 0 {
 				return errors.Errorf("process returned non-zero exit code: %d", status.ExitCode())
 			}
