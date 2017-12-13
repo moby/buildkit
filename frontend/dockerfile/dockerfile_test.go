@@ -22,6 +22,7 @@ import (
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/platforms"
 	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/frontend/dockerfile/builder"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/util/testutil/httpserver"
 	"github.com/moby/buildkit/util/testutil/integration"
@@ -454,8 +455,8 @@ EXPOSE 5000
 			"name": target,
 		},
 		LocalDirs: map[string]string{
-			localNameDockerfile: dir,
-			localNameContext:    dir,
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -611,8 +612,8 @@ USER nobody
 			"output": destDir,
 		},
 		LocalDirs: map[string]string{
-			localNameDockerfile: dir,
-			localNameContext:    dir,
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -634,8 +635,8 @@ USER nobody
 			"name": target,
 		},
 		LocalDirs: map[string]string{
-			localNameDockerfile: dir,
-			localNameContext:    dir,
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)

@@ -8,3 +8,4 @@ docker build -t buildkit:test --target integration-tests -f ./hack/dockerfiles/t
 docker run --rm -v /tmp --privileged buildkit:test go test -tags standalone ${TESTFLAGS:--v} ${TESTPKGS:-./...}
 
 docker run --rm buildkit:test go build ./frontend/gateway/client
+docker run --rm buildkit:test go build ./frontend/dockerfile/cmd/dockerfile-frontend

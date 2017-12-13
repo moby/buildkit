@@ -4,10 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -19,7 +17,6 @@ import (
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
-	"github.com/moby/buildkit/snapshot"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -279,33 +276,10 @@ func (lbf *llbBrideForwarder) ReadFile(ctx context.Context, req *pb.ReadFileRequ
 		return nil, errors.Errorf("no such ref: %v", req.Ref)
 	}
 
-	mount, err := ref.Mount(ctx, false)
+	dt, err := cache.ReadFile(ctx, ref, req.FilePath)
 	if err != nil {
 		return nil, err
 	}
-
-	lm := snapshot.LocalMounter(mount)
-
-	root, err := lm.Mount()
-	if err != nil {
-		return nil, err
-	}
-
-	defer func() {
-		if lm != nil {
-			lm.Unmount()
-		}
-	}()
-
-	dt, err := ioutil.ReadFile(filepath.Join(root, req.FilePath))
-	if err != nil {
-		return nil, err
-	}
-
-	if err := lm.Unmount(); err != nil {
-		return nil, err
-	}
-	lm = nil
 
 	return &pb.ReadFileResponse{Data: dt}, nil
 }
