@@ -9,6 +9,7 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver/pb"
+	vtxpkg "github.com/moby/buildkit/solver/vertex"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -19,10 +20,10 @@ const buildCacheType = "buildkit.build.v0"
 type buildOp struct {
 	op *pb.BuildOp
 	s  *Solver
-	v  Vertex
+	v  vtxpkg.Vertex
 }
 
-func newBuildOp(v Vertex, op *pb.Op_Build, s *Solver) (Op, error) {
+func newBuildOp(v vtxpkg.Vertex, op *pb.Op_Build, s *Solver) (Op, error) {
 	return &buildOp{
 		op: op.Build,
 		s:  s,

@@ -11,6 +11,7 @@ import (
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/solver/pb"
+	vtxpkg "github.com/moby/buildkit/solver/vertex"
 	"github.com/moby/buildkit/util/progress/logs"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
@@ -26,7 +27,7 @@ type execOp struct {
 	numInputs int
 }
 
-func newExecOp(v Vertex, op *pb.Op_Exec, cm cache.Manager, exec executor.Executor) (Op, error) {
+func newExecOp(v vtxpkg.Vertex, op *pb.Op_Exec, cm cache.Manager, exec executor.Executor) (Op, error) {
 	return &execOp{
 		op:        op.Exec,
 		cm:        cm,

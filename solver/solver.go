@@ -14,6 +14,7 @@ import (
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/solver/pb"
+	vtxpkg "github.com/moby/buildkit/solver/vertex"
 	"github.com/moby/buildkit/util/bgfunc"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/worker"
@@ -27,14 +28,14 @@ import (
 // DetermineVertexWorker determines worker for a vertex.
 // Currently, constraint is just ignored.
 // Also we need to track the workers of the inputs.
-func DetermineVertexWorker(wc *worker.Controller, v Vertex) (*worker.Worker, error) {
+func DetermineVertexWorker(wc *worker.Controller, v vtxpkg.Vertex) (*worker.Worker, error) {
 	// TODO: multiworker
 	return wc.GetDefault()
 }
 
 func NewLLBSolver(wc *worker.Controller, frontends map[string]frontend.Frontend) *Solver {
 	var s *Solver
-	s = New(func(v Vertex) (Op, error) {
+	s = New(func(v vtxpkg.Vertex) (Op, error) {
 		w, err := DetermineVertexWorker(wc, v)
 		if err != nil {
 			return nil, err
@@ -54,7 +55,7 @@ func NewLLBSolver(wc *worker.Controller, frontends map[string]frontend.Frontend)
 }
 
 // ResolveOpFunc finds an Op implementation for a vertex
-type ResolveOpFunc func(Vertex) (Op, error)
+type ResolveOpFunc func(vtxpkg.Vertex) (Op, error)
 
 // Reference is a reference to the object passed through the build steps.
 // This interface is a subset of the cache.Ref interface.
@@ -218,7 +219,7 @@ func (s *Solver) subBuild(ctx context.Context, dgst digest.Digest, req SolveRequ
 		return nil, errors.Errorf("no such parent vertex: %v", dgst)
 	}
 
-	var inp *Input
+	var inp *vtxpkg.Input
 	for j := range st.jobs {
 		var err error
 		inp, err = j.loadInternal(req.Definition, s.resolve)
@@ -238,10 +239,10 @@ func (s *Solver) subBuild(ctx context.Context, dgst digest.Digest, req SolveRequ
 }
 
 type VertexSolver interface {
-	CacheKey(ctx context.Context, index Index) (digest.Digest, error)
-	OutputEvaluator(Index) (VertexEvaluator, error)
+	CacheKey(ctx context.Context, index vtxpkg.Index) (digest.Digest, error)
+	OutputEvaluator(vtxpkg.Index) (VertexEvaluator, error)
 	Release() error
-	Cache(Index, Reference) CacheExporter
+	Cache(vtxpkg.Index, Reference) CacheExporter
 }
 
 type vertexInput struct {
@@ -317,13 +318,13 @@ type CacheExporter interface {
 	Export(context.Context) ([]cacheimport.CacheRecord, error)
 }
 
-func (vs *vertexSolver) Cache(index Index, ref Reference) CacheExporter {
+func (vs *vertexSolver) Cache(index vtxpkg.Index, ref Reference) CacheExporter {
 	return &cacheExporter{vertexSolver: vs, index: index, ref: ref}
 }
 
 type cacheExporter struct {
 	*vertexSolver
-	index Index
+	index vtxpkg.Index
 	ref   Reference
 }
 
@@ -331,7 +332,7 @@ func (ce *cacheExporter) Export(ctx context.Context) ([]cacheimport.CacheRecord,
 	return ce.vertexSolver.Export(ctx, ce.index, ce.ref)
 }
 
-func (vs *vertexSolver) Export(ctx context.Context, index Index, ref Reference) ([]cacheimport.CacheRecord, error) {
+func (vs *vertexSolver) Export(ctx context.Context, index vtxpkg.Index, ref Reference) ([]cacheimport.CacheRecord, error) {
 	mp := map[digest.Digest]cacheimport.CacheRecord{}
 	if err := vs.appendInputCache(ctx, mp); err != nil {
 		return nil, err
@@ -385,7 +386,7 @@ func (vs *vertexSolver) appendInputCache(ctx context.Context, mp map[digest.Dige
 	return nil
 }
 
-func (vs *vertexSolver) CacheKey(ctx context.Context, index Index) (digest.Digest, error) {
+func (vs *vertexSolver) CacheKey(ctx context.Context, index vtxpkg.Index) (digest.Digest, error) {
 	vs.mu.Lock()
 	defer vs.mu.Unlock()
 	if vs.baseKey == "" {
@@ -457,7 +458,7 @@ func (vs *vertexSolver) currentCacheKey(last bool) (digest.Digest, error) {
 	return digest.FromBytes(dt), nil
 }
 
-func (vs *vertexSolver) OutputEvaluator(index Index) (VertexEvaluator, error) {
+func (vs *vertexSolver) OutputEvaluator(index vtxpkg.Index) (VertexEvaluator, error) {
 	if vs.f == nil {
 		f, err := bgfunc.New(vs.ctx, vs.run)
 		if err != nil {
@@ -662,7 +663,7 @@ func (vs *vertexSolver) run(ctx context.Context, signal func()) (retErr error) {
 				return err
 			}
 			r := originRef(ref)
-			if err := vs.cache.Set(cacheKeyForIndex(cacheKey, Index(i)), r); err != nil {
+			if err := vs.cache.Set(cacheKeyForIndex(cacheKey, vtxpkg.Index(i)), r); err != nil {
 				logrus.Errorf("failed to save cache for %s: %v", cacheKey, err)
 			}
 		}
@@ -742,7 +743,7 @@ type vertexEvaluator struct {
 	*vertexSolver
 	c      *bgfunc.Caller
 	cursor int
-	index  Index
+	index  vtxpkg.Index
 }
 
 func (ve *vertexEvaluator) Next(ctx context.Context) (*VertexResult, error) {
@@ -777,6 +778,6 @@ type VertexResult struct {
 	Reference Reference
 }
 
-func cacheKeyForIndex(dgst digest.Digest, index Index) digest.Digest {
+func cacheKeyForIndex(dgst digest.Digest, index vtxpkg.Index) digest.Digest {
 	return digest.FromBytes([]byte(fmt.Sprintf("%s.%d", dgst, index)))
 }
