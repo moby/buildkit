@@ -9,6 +9,7 @@ import (
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/cacheimport"
 	"github.com/moby/buildkit/cache/contenthash"
+	"github.com/moby/buildkit/cache/instructioncache"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/frontend"
@@ -72,14 +73,6 @@ type Op interface {
 	ContentMask(context.Context) (digest.Digest, [][]string, error)
 	// Run runs an operation and returns the output references.
 	Run(ctx context.Context, inputs []Reference) (outputs []Reference, err error)
-}
-
-type InstructionCache interface {
-	Probe(ctx context.Context, key digest.Digest) (bool, error)
-	Lookup(ctx context.Context, key digest.Digest, msg string) (interface{}, error) // TODO: regular ref
-	Set(key digest.Digest, ref interface{}) error
-	SetContentMapping(contentKey, key digest.Digest) error
-	GetContentMapping(dgst digest.Digest) ([]digest.Digest, error)
 }
 
 type Solver struct {
@@ -263,7 +256,7 @@ type vertexSolver struct {
 	v      *vertex
 	cv     client.Vertex
 	op     Op
-	cache  InstructionCache
+	cache  instructioncache.InstructionCache
 	refs   []*sharedRef
 	f      *bgfunc.F
 	ctx    context.Context
@@ -279,7 +272,7 @@ type vertexSolver struct {
 
 type resolveF func(digest.Digest) (VertexSolver, error)
 
-func newVertexSolver(ctx context.Context, v *vertex, op Op, c InstructionCache, resolve resolveF) (*vertexSolver, error) {
+func newVertexSolver(ctx context.Context, v *vertex, op Op, c instructioncache.InstructionCache, resolve resolveF) (*vertexSolver, error) {
 	inputs := make([]*vertexInput, len(v.inputs))
 	for i, in := range v.inputs {
 		s, err := resolve(in.vertex.digest)
@@ -788,13 +781,13 @@ func cacheKeyForIndex(dgst digest.Digest, index Index) digest.Digest {
 	return digest.FromBytes([]byte(fmt.Sprintf("%s.%d", dgst, index)))
 }
 
-func mergeRemoteCache(local, remote InstructionCache) InstructionCache {
+func mergeRemoteCache(local, remote instructioncache.InstructionCache) instructioncache.InstructionCache {
 	return &mergedCache{local: local, remote: remote}
 }
 
 type mergedCache struct {
-	local  InstructionCache
-	remote InstructionCache
+	local  instructioncache.InstructionCache
+	remote instructioncache.InstructionCache
 }
 
 func (mc *mergedCache) Probe(ctx context.Context, key digest.Digest) (bool, error) {

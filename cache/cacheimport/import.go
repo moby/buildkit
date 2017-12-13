@@ -14,6 +14,7 @@ import (
 	cdsnapshot "github.com/containerd/containerd/snapshots"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/blobs"
+	"github.com/moby/buildkit/cache/instructioncache"
 	"github.com/moby/buildkit/client"
 	buildkitidentity "github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
@@ -86,7 +87,7 @@ func (ci *CacheImporter) pull(ctx context.Context, ref string) (*ocispec.Descrip
 	return &desc, fetcher, err
 }
 
-func (ci *CacheImporter) Import(ctx context.Context, ref string) (InstructionCache, error) {
+func (ci *CacheImporter) Import(ctx context.Context, ref string) (instructioncache.InstructionCache, error) {
 	desc, fetcher, err := ci.pull(ctx, ref)
 	if err != nil {
 		return nil, err
@@ -317,14 +318,6 @@ func (ii *importInfo) getLayers(ctx context.Context, dpairs []blobs.DiffPair) ([
 		}
 	}
 	return layers, nil
-}
-
-type InstructionCache interface {
-	Probe(ctx context.Context, key digest.Digest) (bool, error)
-	Lookup(ctx context.Context, key digest.Digest, msg string) (interface{}, error) // TODO: regular ref
-	Set(key digest.Digest, ref interface{}) error
-	SetContentMapping(contentKey, key digest.Digest) error
-	GetContentMapping(dgst digest.Digest) ([]digest.Digest, error)
 }
 
 func inVertexContext(ctx context.Context, name string, f func(ctx context.Context) error) error {
