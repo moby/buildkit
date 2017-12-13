@@ -9,6 +9,7 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/solver/reference"
 	vtxpkg "github.com/moby/buildkit/solver/vertex"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
@@ -45,7 +46,7 @@ func (b *buildOp) CacheKey(ctx context.Context) (digest.Digest, error) {
 	return digest.FromBytes(dt), nil
 }
 
-func (b *buildOp) Run(ctx context.Context, inputs []Reference) (outputs []Reference, retErr error) {
+func (b *buildOp) Run(ctx context.Context, inputs []reference.Ref) (outputs []reference.Ref, retErr error) {
 	if b.op.Builder != pb.LLBBuilder {
 		return nil, errors.Errorf("only llb builder is currently allowed")
 	}
@@ -116,7 +117,7 @@ func (b *buildOp) Run(ctx context.Context, inputs []Reference) (outputs []Refere
 		return nil, err
 	}
 
-	return []Reference{newref}, err
+	return []reference.Ref{newref}, err
 }
 
 func (b *buildOp) ContentMask(context.Context) (digest.Digest, [][]string, error) {

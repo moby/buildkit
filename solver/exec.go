@@ -11,6 +11,7 @@ import (
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/solver/reference"
 	vtxpkg "github.com/moby/buildkit/solver/vertex"
 	"github.com/moby/buildkit/util/progress/logs"
 	digest "github.com/opencontainers/go-digest"
@@ -55,9 +56,9 @@ func (e *execOp) CacheKey(ctx context.Context) (digest.Digest, error) {
 	return digest.FromBytes(dt), nil
 }
 
-func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, error) {
+func (e *execOp) Run(ctx context.Context, inputs []reference.Ref) ([]reference.Ref, error) {
 	var mounts []executor.Mount
-	var outputs []Reference
+	var outputs []reference.Ref
 	var root cache.Mountable
 
 	defer func() {
@@ -121,7 +122,7 @@ func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, erro
 		return nil, errors.Wrapf(err, "executor failed running %v", meta.Args)
 	}
 
-	refs := []Reference{}
+	refs := []reference.Ref{}
 	for i, o := range outputs {
 		if mutable, ok := o.(cache.MutableRef); ok {
 			ref, err := mutable.Commit(ctx)

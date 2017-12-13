@@ -14,6 +14,7 @@ import (
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/solver/reference"
 	vtxpkg "github.com/moby/buildkit/solver/vertex"
 	"github.com/moby/buildkit/util/bgfunc"
 	"github.com/moby/buildkit/util/progress"
@@ -57,13 +58,6 @@ func NewLLBSolver(wc *worker.Controller, frontends map[string]frontend.Frontend)
 // ResolveOpFunc finds an Op implementation for a vertex
 type ResolveOpFunc func(vtxpkg.Vertex) (Op, error)
 
-// Reference is a reference to the object passed through the build steps.
-// This interface is a subset of the cache.Ref interface.
-// For ease of unit testing, this interface only has Release().
-type Reference interface {
-	Release(context.Context) error
-}
-
 // Op is an implementation for running a vertex
 type Op interface {
 	// CacheKey returns a persistent cache key for operation.
@@ -73,7 +67,7 @@ type Op interface {
 	// content based cache key.
 	ContentMask(context.Context) (digest.Digest, [][]string, error)
 	// Run runs an operation and returns the output references.
-	Run(ctx context.Context, inputs []Reference) (outputs []Reference, err error)
+	Run(ctx context.Context, inputs []reference.Ref) (outputs []reference.Ref, err error)
 }
 
 type Solver struct {
@@ -96,7 +90,7 @@ type SolveRequest struct {
 	ImportCacheRef string
 }
 
-func (s *Solver) solve(ctx context.Context, j *job, req SolveRequest) (Reference, map[string][]byte, error) {
+func (s *Solver) solve(ctx context.Context, j *job, req SolveRequest) (reference.Ref, map[string][]byte, error) {
 	if req.Definition == nil {
 		if req.Frontend == nil {
 			return nil, nil, errors.Errorf("invalid request: no definition nor frontend")
@@ -210,7 +204,7 @@ func (s *Solver) Status(ctx context.Context, id string, statusChan chan *client.
 	return j.pipe(ctx, statusChan)
 }
 
-func (s *Solver) subBuild(ctx context.Context, dgst digest.Digest, req SolveRequest) (Reference, error) {
+func (s *Solver) subBuild(ctx context.Context, dgst digest.Digest, req SolveRequest) (reference.Ref, error) {
 	jl := s.jobs
 	jl.mu.Lock()
 	st, ok := jl.actives[dgst]
@@ -242,14 +236,14 @@ type VertexSolver interface {
 	CacheKey(ctx context.Context, index vtxpkg.Index) (digest.Digest, error)
 	OutputEvaluator(vtxpkg.Index) (VertexEvaluator, error)
 	Release() error
-	Cache(vtxpkg.Index, Reference) CacheExporter
+	Cache(vtxpkg.Index, reference.Ref) CacheExporter
 }
 
 type vertexInput struct {
 	solver    VertexSolver
 	ev        VertexEvaluator
 	cacheKeys []digest.Digest
-	ref       Reference
+	ref       reference.Ref
 }
 
 type vertexSolver struct {
@@ -318,21 +312,21 @@ type CacheExporter interface {
 	Export(context.Context) ([]cacheimport.CacheRecord, error)
 }
 
-func (vs *vertexSolver) Cache(index vtxpkg.Index, ref Reference) CacheExporter {
+func (vs *vertexSolver) Cache(index vtxpkg.Index, ref reference.Ref) CacheExporter {
 	return &cacheExporter{vertexSolver: vs, index: index, ref: ref}
 }
 
 type cacheExporter struct {
 	*vertexSolver
 	index vtxpkg.Index
-	ref   Reference
+	ref   reference.Ref
 }
 
 func (ce *cacheExporter) Export(ctx context.Context) ([]cacheimport.CacheRecord, error) {
 	return ce.vertexSolver.Export(ctx, ce.index, ce.ref)
 }
 
-func (vs *vertexSolver) Export(ctx context.Context, index vtxpkg.Index, ref Reference) ([]cacheimport.CacheRecord, error) {
+func (vs *vertexSolver) Export(ctx context.Context, index vtxpkg.Index, ref reference.Ref) ([]cacheimport.CacheRecord, error) {
 	mp := map[digest.Digest]cacheimport.CacheRecord{}
 	if err := vs.appendInputCache(ctx, mp); err != nil {
 		return nil, err
@@ -534,7 +528,7 @@ func (vs *vertexSolver) run(ctx context.Context, signal func()) (retErr error) {
 								return err
 							}
 							if ref != nil {
-								inp.ref = ref.(Reference)
+								inp.ref = ref.(reference.Ref)
 								inp.solver.(*vertexSolver).markCachedOnce.Do(func() {
 									markCached(ctx, inp.solver.(*vertexSolver).cv)
 								})
@@ -593,7 +587,7 @@ func (vs *vertexSolver) run(ctx context.Context, signal func()) (retErr error) {
 	}
 
 	// Find extra cache keys by content
-	inputRefs := make([]Reference, len(vs.inputs))
+	inputRefs := make([]reference.Ref, len(vs.inputs))
 	lastInputKeys := make([]digest.Digest, len(vs.inputs))
 	for i := range vs.inputs {
 		inputRefs[i] = vs.inputs[i].ref
@@ -695,7 +689,7 @@ func getInputContentHash(ctx context.Context, ref cache.ImmutableRef, selectors 
 	return digest.FromBytes(dt), nil
 }
 
-func calculateContentHash(ctx context.Context, refs []Reference, mainDigest digest.Digest, inputs []digest.Digest, contentMap [][]string) (digest.Digest, error) {
+func calculateContentHash(ctx context.Context, refs []reference.Ref, mainDigest digest.Digest, inputs []digest.Digest, contentMap [][]string) (digest.Digest, error) {
 	dgsts := make([]digest.Digest, len(contentMap))
 	eg, ctx := errgroup.WithContext(ctx)
 	for i, sel := range contentMap {
@@ -775,7 +769,7 @@ func (ve *vertexEvaluator) Cancel() error {
 
 type VertexResult struct {
 	CacheKey  digest.Digest
-	Reference Reference
+	Reference reference.Ref
 }
 
 func cacheKeyForIndex(dgst digest.Digest, index vtxpkg.Index) digest.Digest {
