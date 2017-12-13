@@ -78,7 +78,7 @@ func (e *execOp) Run(ctx context.Context, inputs []reference.Ref) ([]reference.R
 			}
 			inp := inputs[int(m.Input)]
 			var ok bool
-			ref, ok = toImmutableRef(inp)
+			ref, ok = reference.ToImmutableRef(inp)
 			if !ok {
 				return nil, errors.Errorf("invalid reference for exec %T", inputs[int(m.Input)])
 			}
@@ -86,7 +86,7 @@ func (e *execOp) Run(ctx context.Context, inputs []reference.Ref) ([]reference.R
 		}
 		if m.Output != pb.SkipOutput {
 			if m.Readonly && ref != nil && m.Dest != pb.RootMount { // exclude read-only rootfs
-				outputs = append(outputs, newSharedRef(ref).Clone())
+				outputs = append(outputs, reference.NewSharedRef(ref).Clone())
 			} else {
 				active, err := e.cm.New(ctx, ref, cache.WithDescription(fmt.Sprintf("mount %s from exec %s", m.Dest, strings.Join(e.op.Meta.Args, " ")))) // TODO: should be method
 				if err != nil {

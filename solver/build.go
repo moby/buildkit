@@ -63,7 +63,7 @@ func (b *buildOp) Run(ctx context.Context, inputs []reference.Ref) (outputs []re
 	}
 	inp := inputs[i]
 
-	ref, ok := toImmutableRef(inp)
+	ref, ok := reference.ToImmutableRef(inp)
 	if !ok {
 		return nil, errors.Errorf("invalid reference for build %T", inp)
 	}

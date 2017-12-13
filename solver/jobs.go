@@ -270,14 +270,14 @@ func (j *job) getRef(ctx context.Context, cv client.Vertex, index vtxpkg.Index) 
 }
 
 func (j *job) keepCacheRef(s VertexSolver, index vtxpkg.Index, ref reference.Ref) {
-	immutable, ok := toImmutableRef(ref)
+	immutable, ok := reference.ToImmutableRef(ref)
 	if ok {
 		j.cached[immutable.ID()] = &cacheRecord{s, index, ref}
 	}
 }
 
 func (j *job) cacheExporter(ref reference.Ref) (CacheExporter, error) {
-	immutable, ok := toImmutableRef(ref)
+	immutable, ok := reference.ToImmutableRef(ref)
 	if !ok {
 		return nil, errors.Errorf("invalid reference")
 	}

@@ -156,7 +156,7 @@ func (s *Solver) Solve(ctx context.Context, id string, req SolveRequest) error {
 	var immutable cache.ImmutableRef
 	if ref != nil {
 		var ok bool
-		immutable, ok = toImmutableRef(ref)
+		immutable, ok = reference.ToImmutableRef(ref)
 		if !ok {
 			return errors.Errorf("invalid reference for exporting: %T", ref)
 		}
@@ -252,7 +252,7 @@ type vertexSolver struct {
 	cv     client.Vertex
 	op     Op
 	cache  instructioncache.InstructionCache
-	refs   []*sharedRef
+	refs   []*reference.SharedRef
 	f      *bgfunc.F
 	ctx    context.Context
 
@@ -335,7 +335,7 @@ func (vs *vertexSolver) Export(ctx context.Context, index vtxpkg.Index, ref refe
 	if err != nil {
 		return nil, err
 	}
-	immutable, ok := toImmutableRef(ref)
+	immutable, ok := reference.ToImmutableRef(ref)
 	if !ok {
 		return nil, errors.Errorf("invalid reference")
 	}
@@ -360,7 +360,7 @@ func (vs *vertexSolver) appendInputCache(ctx context.Context, mp map[digest.Dige
 				return err
 			}
 			if inp.ref != nil && len(inp.solver.(*vertexSolver).inputs) > 0 { // Ignore pushing the refs for sources
-				ref, ok := toImmutableRef(inp.ref)
+				ref, ok := reference.ToImmutableRef(inp.ref)
 				if !ok {
 					return errors.Errorf("invalid reference")
 				}
@@ -545,7 +545,7 @@ func (vs *vertexSolver) run(ctx context.Context, signal func()) (retErr error) {
 							return nil
 						}
 						if ref := res.Reference; ref != nil {
-							if ref, ok := toImmutableRef(ref); ok {
+							if ref, ok := reference.ToImmutableRef(ref); ok {
 								if !cache.HasCachePolicyRetain(ref) {
 									if err := cache.CachePolicyRetain(ref); err != nil {
 										return err
@@ -638,9 +638,9 @@ func (vs *vertexSolver) run(ctx context.Context, signal func()) (retErr error) {
 	if err != nil {
 		return err
 	}
-	sr := make([]*sharedRef, len(refs))
+	sr := make([]*reference.SharedRef, len(refs))
 	for i, r := range refs {
-		sr[i] = newSharedRef(r)
+		sr[i] = reference.NewSharedRef(r)
 	}
 	vs.mu.Lock()
 	vs.refs = sr
@@ -656,7 +656,7 @@ func (vs *vertexSolver) run(ctx context.Context, signal func()) (retErr error) {
 			if err != nil {
 				return err
 			}
-			r := originRef(ref)
+			r := reference.OriginRef(ref)
 			if err := vs.cache.Set(cacheKeyForIndex(cacheKey, vtxpkg.Index(i)), r); err != nil {
 				logrus.Errorf("failed to save cache for %s: %v", cacheKey, err)
 			}
@@ -699,7 +699,7 @@ func calculateContentHash(ctx context.Context, refs []reference.Ref, mainDigest 
 		}
 		func(i int) {
 			eg.Go(func() error {
-				ref, ok := toImmutableRef(refs[i])
+				ref, ok := reference.ToImmutableRef(refs[i])
 				if !ok {
 					return errors.Errorf("invalid reference for exporting: %T", ref)
 				}
