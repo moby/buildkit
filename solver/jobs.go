@@ -8,6 +8,7 @@ import (
 	"github.com/moby/buildkit/cache/instructioncache"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/solver/llbload"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/progress"
 	digest "github.com/opencontainers/go-digest"
@@ -173,7 +174,7 @@ func (j *job) load(def *pb.Definition, resolveOp ResolveOpFunc) (*Input, error) 
 }
 
 func (j *job) loadInternal(def *pb.Definition, resolveOp ResolveOpFunc) (*Input, error) {
-	vtx, idx, err := loadLLB(def, func(dgst digest.Digest, pbOp *pb.Op, load func(digest.Digest) (interface{}, error)) (interface{}, error) {
+	vtx, idx, err := llbload.Load(def, func(dgst digest.Digest, pbOp *pb.Op, load func(digest.Digest) (interface{}, error)) (interface{}, error) {
 		if st, ok := j.l.actives[dgst]; ok {
 			if vtx, ok := st.jobs[j]; ok {
 				return vtx, nil
@@ -225,7 +226,7 @@ func (j *job) loadInternal(def *pb.Definition, resolveOp ResolveOpFunc) (*Input,
 	if err != nil {
 		return nil, err
 	}
-	return &Input{Vertex: vtx.(*vertex), Index: idx}, nil
+	return &Input{Vertex: vtx.(*vertex), Index: Index(idx)}, nil
 }
 
 func (j *job) discard() {
