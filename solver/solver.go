@@ -107,7 +107,7 @@ func (s *Solver) solve(ctx context.Context, j *job, req SolveRequest) (Reference
 	if err != nil {
 		return nil, nil, err
 	}
-	ref, err := j.getRef(ctx, inp.Vertex.(*vertex), inp.Index)
+	ref, err := j.getRef(ctx, inp.Vertex.(*vertex).clientVertex, inp.Index)
 	return ref, nil, err
 }
 
@@ -234,7 +234,7 @@ func (s *Solver) subBuild(ctx context.Context, dgst digest.Digest, req SolveRequ
 	if err != nil {
 		return nil, err
 	}
-	return getRef(ctx, st.solver, inp.Vertex.(*vertex), inp.Index, w.InstructionCache) // TODO: combine to pass single input                                        // TODO: export cache for subbuilds
+	return getRef(ctx, st.solver, inp.Vertex.(*vertex).clientVertex, inp.Index, w.InstructionCache) // TODO: combine to pass single input                                        // TODO: export cache for subbuilds
 }
 
 type VertexSolver interface {

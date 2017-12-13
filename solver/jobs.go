@@ -253,12 +253,12 @@ func (j *job) getSolver(dgst digest.Digest) (VertexSolver, error) {
 	return st.solver, nil
 }
 
-func (j *job) getRef(ctx context.Context, v *vertex, index Index) (Reference, error) {
-	s, err := j.getSolver(v.Digest())
+func (j *job) getRef(ctx context.Context, cv client.Vertex, index Index) (Reference, error) {
+	s, err := j.getSolver(cv.Digest)
 	if err != nil {
 		return nil, err
 	}
-	ref, err := getRef(ctx, s, v, index, j.cache)
+	ref, err := getRef(ctx, s, cv, index, j.cache)
 	if err != nil {
 		return nil, err
 	}
@@ -285,7 +285,7 @@ func (j *job) cacheExporter(ref Reference) (CacheExporter, error) {
 	return cr.Cache(cr.index, cr.ref), nil
 }
 
-func getRef(ctx context.Context, s VertexSolver, v *vertex, index Index, cache instructioncache.InstructionCache) (Reference, error) {
+func getRef(ctx context.Context, s VertexSolver, cv client.Vertex, index Index, cache instructioncache.InstructionCache) (Reference, error) {
 	k, err := s.CacheKey(ctx, index)
 	if err != nil {
 		return nil, err
@@ -295,7 +295,7 @@ func getRef(ctx context.Context, s VertexSolver, v *vertex, index Index, cache i
 		return nil, err
 	}
 	if ref != nil {
-		markCached(ctx, v.clientVertex)
+		markCached(ctx, cv)
 		return ref.(Reference), nil
 	}
 
@@ -316,7 +316,7 @@ func getRef(ctx context.Context, s VertexSolver, v *vertex, index Index, cache i
 				return nil, err
 			}
 			if ref != nil {
-				markCached(ctx, v.clientVertex)
+				markCached(ctx, cv)
 				return ref.(Reference), nil
 			}
 			continue
