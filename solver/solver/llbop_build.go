@@ -8,6 +8,7 @@ import (
 	"github.com/docker/docker/pkg/symlink"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/snapshot"
+	solver "github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/solver/reference"
 	vtxpkg "github.com/moby/buildkit/solver/vertex"
@@ -24,7 +25,7 @@ type buildOp struct {
 	v  vtxpkg.Vertex
 }
 
-func newBuildOp(v vtxpkg.Vertex, op *pb.Op_Build, s *Solver) (Op, error) {
+func newBuildOp(v vtxpkg.Vertex, op *pb.Op_Build, s *Solver) (solver.Op, error) {
 	return &buildOp{
 		op: op.Build,
 		s:  s,
@@ -110,7 +111,7 @@ func (b *buildOp) Run(ctx context.Context, inputs []reference.Ref) (outputs []re
 	lm.Unmount()
 	lm = nil
 
-	newref, err := b.s.subBuild(ctx, b.v.Digest(), SolveRequest{
+	newref, err := b.s.subBuild(ctx, b.v.Digest(), solver.SolveRequest{
 		Definition: def.ToPB(),
 	})
 	if err != nil {

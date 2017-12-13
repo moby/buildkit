@@ -6,6 +6,7 @@ import (
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/frontend"
+	solver "github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/reference"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
@@ -38,7 +39,7 @@ func (s *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (cache
 			return nil, nil, nil
 		}
 	}
-	ref, exp, err := s.solve(ctx, s.job, SolveRequest{
+	ref, exp, err := s.solve(ctx, s.job, solver.SolveRequest{
 		Definition:  req.Definition,
 		Frontend:    f,
 		FrontendOpt: req.FrontendOpt,
