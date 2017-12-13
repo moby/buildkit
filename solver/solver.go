@@ -3,15 +3,14 @@ package solver
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"sync"
 	"time"
 
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/cacheimport"
 	"github.com/moby/buildkit/cache/contenthash"
+	"github.com/moby/buildkit/cache/instructioncache"
 	"github.com/moby/buildkit/client"
-	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/solver/pb"
@@ -76,14 +75,6 @@ type Op interface {
 	Run(ctx context.Context, inputs []Reference) (outputs []Reference, err error)
 }
 
-type InstructionCache interface {
-	Probe(ctx context.Context, key digest.Digest) (bool, error)
-	Lookup(ctx context.Context, key digest.Digest, msg string) (interface{}, error) // TODO: regular ref
-	Set(key digest.Digest, ref interface{}) error
-	SetContentMapping(contentKey, key digest.Digest) error
-	GetContentMapping(dgst digest.Digest) ([]digest.Digest, error)
-}
-
 type Solver struct {
 	resolve          ResolveOpFunc
 	jobs             *jobList
@@ -146,7 +137,7 @@ func (s *Solver) Solve(ctx context.Context, id string, req SolveRequest) error {
 		if err != nil {
 			return err
 		}
-		defaultWorker.InstructionCache = mergeRemoteCache(defaultWorker.InstructionCache, cache)
+		defaultWorker.InstructionCache = instructioncache.Union(defaultWorker.InstructionCache, cache)
 	}
 
 	// register a build job. vertex needs to be loaded to a job to run
@@ -265,7 +256,7 @@ type vertexSolver struct {
 	v      *vertex
 	cv     client.Vertex
 	op     Op
-	cache  InstructionCache
+	cache  instructioncache.InstructionCache
 	refs   []*sharedRef
 	f      *bgfunc.F
 	ctx    context.Context
@@ -281,7 +272,7 @@ type vertexSolver struct {
 
 type resolveF func(digest.Digest) (VertexSolver, error)
 
-func newVertexSolver(ctx context.Context, v *vertex, op Op, c InstructionCache, resolve resolveF) (*vertexSolver, error) {
+func newVertexSolver(ctx context.Context, v *vertex, op Op, c instructioncache.InstructionCache, resolve resolveF) (*vertexSolver, error) {
 	inputs := make([]*vertexInput, len(v.inputs))
 	for i, in := range v.inputs {
 		s, err := resolve(in.vertex.digest)
@@ -786,112 +777,6 @@ type VertexResult struct {
 	Reference Reference
 }
 
-// llbBridge is an helper used by frontends
-type llbBridge struct {
-	*Solver
-	job *job
-	// this worker is used for running containerized frontend, not vertices
-	worker *worker.Worker
-}
-
-type resolveImageConfig interface {
-	ResolveImageConfig(ctx context.Context, ref string) (digest.Digest, []byte, error)
-}
-
-func (s *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (cache.ImmutableRef, map[string][]byte, error) {
-	var f frontend.Frontend
-	if req.Frontend != "" {
-		var ok bool
-		f, ok = s.frontends[req.Frontend]
-		if !ok {
-			return nil, nil, errors.Errorf("invalid frontend: %s", req.Frontend)
-		}
-	} else {
-		if req.Definition == nil || req.Definition.Def == nil {
-			return nil, nil, nil
-		}
-	}
-	ref, exp, err := s.solve(ctx, s.job, SolveRequest{
-		Definition:  req.Definition,
-		Frontend:    f,
-		FrontendOpt: req.FrontendOpt,
-	})
-	if err != nil {
-		return nil, nil, err
-	}
-	immutable, ok := toImmutableRef(ref)
-	if !ok {
-		return nil, nil, errors.Errorf("invalid reference for exporting: %T", ref)
-	}
-	return immutable, exp, nil
-}
-
-func (s *llbBridge) ResolveImageConfig(ctx context.Context, ref string) (digest.Digest, []byte, error) {
-	// ImageSource is typically source/containerimage
-	resolveImageConfig, ok := s.worker.ImageSource.(resolveImageConfig)
-	if !ok {
-		return "", nil, errors.Errorf("worker %q does not implement ResolveImageConfig", s.worker.Name)
-	}
-	return resolveImageConfig.ResolveImageConfig(ctx, ref)
-}
-
-func (s *llbBridge) Exec(ctx context.Context, meta executor.Meta, rootFS cache.ImmutableRef, stdin io.ReadCloser, stdout, stderr io.WriteCloser) error {
-	active, err := s.worker.CacheManager.New(ctx, rootFS)
-	if err != nil {
-		return err
-	}
-	defer active.Release(context.TODO())
-	return s.worker.Executor.Exec(ctx, meta, active, nil, stdin, stdout, stderr)
-}
-
 func cacheKeyForIndex(dgst digest.Digest, index Index) digest.Digest {
 	return digest.FromBytes([]byte(fmt.Sprintf("%s.%d", dgst, index)))
-}
-
-func mergeRemoteCache(local, remote InstructionCache) InstructionCache {
-	return &mergedCache{local: local, remote: remote}
-}
-
-type mergedCache struct {
-	local  InstructionCache
-	remote InstructionCache
-}
-
-func (mc *mergedCache) Probe(ctx context.Context, key digest.Digest) (bool, error) {
-	v, err := mc.local.Probe(ctx, key)
-	if err != nil {
-		return false, err
-	}
-	if v {
-		return v, nil
-	}
-	return mc.remote.Probe(ctx, key)
-}
-
-func (mc *mergedCache) Lookup(ctx context.Context, key digest.Digest, msg string) (interface{}, error) {
-	v, err := mc.local.Probe(ctx, key)
-	if err != nil {
-		return false, err
-	}
-	if v {
-		return mc.local.Lookup(ctx, key, msg)
-	}
-	return mc.remote.Lookup(ctx, key, msg)
-}
-func (mc *mergedCache) Set(key digest.Digest, ref interface{}) error {
-	return mc.local.Set(key, ref)
-}
-func (mc *mergedCache) SetContentMapping(contentKey, key digest.Digest) error {
-	return mc.local.SetContentMapping(contentKey, key)
-}
-func (mc *mergedCache) GetContentMapping(dgst digest.Digest) ([]digest.Digest, error) {
-	localKeys, err := mc.local.GetContentMapping(dgst)
-	if err != nil {
-		return nil, err
-	}
-	remoteKeys, err := mc.remote.GetContentMapping(dgst)
-	if err != nil {
-		return nil, err
-	}
-	return append(localKeys, remoteKeys...), nil
 }

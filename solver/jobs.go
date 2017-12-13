@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/moby/buildkit/cache/instructioncache"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver/pb"
@@ -46,7 +47,7 @@ func newJobList() *jobList {
 // Lookup for objects with IgnoreCache fail until Set is called.
 type jobInstructionCache struct {
 	mu sync.RWMutex
-	InstructionCache
+	instructioncache.InstructionCache
 	ignoreCache  map[digest.Digest]struct{}
 	setInThisJob map[digest.Digest]struct{}
 }
@@ -90,7 +91,7 @@ func (jic *jobInstructionCache) SetIgnoreCache(key digest.Digest) {
 	jic.ignoreCache[key] = struct{}{}
 }
 
-func newJobInstructionCache(base InstructionCache) *jobInstructionCache {
+func newJobInstructionCache(base instructioncache.InstructionCache) *jobInstructionCache {
 	return &jobInstructionCache{
 		InstructionCache: base,
 		ignoreCache:      make(map[digest.Digest]struct{}),
@@ -98,7 +99,7 @@ func newJobInstructionCache(base InstructionCache) *jobInstructionCache {
 	}
 }
 
-func (jl *jobList) new(ctx context.Context, id string, pr progress.Reader, cache InstructionCache) (context.Context, *job, error) {
+func (jl *jobList) new(ctx context.Context, id string, pr progress.Reader, cache instructioncache.InstructionCache) (context.Context, *job, error) {
 	jl.mu.Lock()
 	defer jl.mu.Unlock()
 
@@ -284,7 +285,7 @@ func (j *job) cacheExporter(ref Reference) (CacheExporter, error) {
 	return cr.Cache(cr.index, cr.ref), nil
 }
 
-func getRef(ctx context.Context, s VertexSolver, v *vertex, index Index, cache InstructionCache) (Reference, error) {
+func getRef(ctx context.Context, s VertexSolver, v *vertex, index Index, cache instructioncache.InstructionCache) (Reference, error) {
 	k, err := s.CacheKey(ctx, index)
 	if err != nil {
 		return nil, err

@@ -1,8 +1,6 @@
 package worker
 
 import (
-	"golang.org/x/net/context"
-
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/diff"
 	"github.com/containerd/containerd/images"
@@ -10,6 +8,7 @@ import (
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/cacheimport"
 	"github.com/moby/buildkit/cache/instructioncache"
+	localcache "github.com/moby/buildkit/cache/instructioncache/local"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/executor"
@@ -23,7 +22,6 @@ import (
 	"github.com/moby/buildkit/source/git"
 	"github.com/moby/buildkit/source/http"
 	"github.com/moby/buildkit/source/local"
-	digest "github.com/opencontainers/go-digest"
 )
 
 // WorkerOpt is specific to a worker.
@@ -48,21 +46,12 @@ type Worker struct {
 	Snapshotter      ctdsnapshot.Snapshotter // blobmapping snapshotter
 	CacheManager     cache.Manager
 	SourceManager    *source.Manager
-	InstructionCache InstructionCache
+	InstructionCache instructioncache.InstructionCache
 	Exporters        map[string]exporter.Exporter
 	ImageSource      source.Source
 	CacheExporter    *cacheimport.CacheExporter
 	CacheImporter    *cacheimport.CacheImporter
 	// no frontend here
-}
-
-// FIXME: deduplicate interface definitions?
-type InstructionCache interface {
-	Probe(ctx context.Context, key digest.Digest) (bool, error)
-	Lookup(ctx context.Context, key digest.Digest, msg string) (interface{}, error) // TODO: regular ref
-	Set(key digest.Digest, ref interface{}) error
-	SetContentMapping(contentKey, key digest.Digest) error
-	GetContentMapping(dgst digest.Digest) ([]digest.Digest, error)
 }
 
 // NewWorker instantiates a local worker
@@ -84,7 +73,7 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 		return nil, err
 	}
 
-	ic := &instructioncache.LocalStore{
+	ic := &localcache.LocalStore{
 		MetadataStore: opt.MetadataStore,
 		Cache:         cm,
 	}

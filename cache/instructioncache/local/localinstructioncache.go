@@ -1,4 +1,4 @@
-package instructioncache
+package local
 
 import (
 	"bytes"
