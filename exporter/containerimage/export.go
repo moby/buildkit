@@ -45,6 +45,8 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 			i.push = true
 		case keyInsecure:
 			i.insecure = true
+		case exporterImageConfig:
+			i.config = []byte(v)
 		default:
 			logrus.Warnf("image exporter: unknown option %s", k)
 		}
@@ -57,6 +59,7 @@ type imageExporterInstance struct {
 	targetName string
 	push       bool
 	insecure   bool
+	config     []byte
 }
 
 func (e *imageExporterInstance) Name() string {
@@ -64,7 +67,10 @@ func (e *imageExporterInstance) Name() string {
 }
 
 func (e *imageExporterInstance) Export(ctx context.Context, ref cache.ImmutableRef, opt map[string][]byte) error {
-	desc, err := e.opt.ImageWriter.Commit(ctx, ref, opt[exporterImageConfig])
+	if config, ok := opt[exporterImageConfig]; ok {
+		e.config = config
+	}
+	desc, err := e.opt.ImageWriter.Commit(ctx, ref, e.config)
 	if err != nil {
 		return err
 	}

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/containerd/console"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/identity"
@@ -71,12 +72,30 @@ func (c *Client) Solve(ctx context.Context, def *llb.Definition, opt SolveOpt, s
 
 	s.Allow(auth.NewDockerAuthProvider())
 
-	if opt.Exporter == ExporterLocal {
+	switch opt.Exporter {
+	case ExporterLocal:
 		outputDir, ok := opt.ExporterAttrs[exporterLocalOutputDir]
 		if !ok {
 			return errors.Errorf("output directory is required for local exporter")
 		}
 		s.Allow(filesync.NewFSSyncTarget(outputDir))
+	case ExporterOCI:
+		outputFile, ok := opt.ExporterAttrs[exporterOCIDestination]
+		if ok {
+			fi, err := os.Stat(outputFile)
+			if err != nil && !os.IsNotExist(err) {
+				return errors.Wrapf(err, "invlid destination file: %s", outputFile)
+			}
+			if err == nil && fi.IsDir() {
+				return errors.Errorf("destination file is a directory")
+			}
+		} else {
+			if _, err := console.ConsoleFromFile(os.Stdout); err == nil {
+				return errors.Errorf("output file is required for OCI exporter. refusing to write to console")
+			}
+			outputFile = ""
+		}
+		s.Allow(filesync.NewFSSyncTargetFile(outputFile))
 	}
 
 	eg.Go(func() error {
