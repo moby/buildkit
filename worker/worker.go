@@ -139,12 +139,19 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 
 	exporters := map[string]exporter.Exporter{}
 
+	iw, err := imageexporter.NewImageWriter(imageexporter.WriterOpt{
+		Snapshotter:  bmSnapshotter,
+		ContentStore: opt.ContentStore,
+		Differ:       opt.Differ,
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	imageExporter, err := imageexporter.New(imageexporter.Opt{
-		Snapshotter:    bmSnapshotter,
-		ContentStore:   opt.ContentStore,
-		Differ:         opt.Differ,
 		Images:         opt.ImageStore,
 		SessionManager: opt.SessionManager,
+		ImageWriter:    iw,
 	})
 	if err != nil {
 		return nil, err
