@@ -12,6 +12,7 @@ var (
 	keyArgs = contextKeyT("llb.exec.args")
 	keyDir  = contextKeyT("llb.exec.dir")
 	keyEnv  = contextKeyT("llb.exec.env")
+	keyUser = contextKeyT("llb.exec.user")
 )
 
 func addEnv(key, value string) StateOption {
@@ -39,6 +40,12 @@ func dir(str string) StateOption {
 func dirf(str string, v ...interface{}) StateOption {
 	return func(s State) State {
 		return s.WithValue(keyDir, fmt.Sprintf(str, v...))
+	}
+}
+
+func user(str string) StateOption {
+	return func(s State) State {
+		return s.WithValue(keyUser, str)
 	}
 }
 
@@ -72,6 +79,14 @@ func getArgs(s State) []string {
 		return v.([]string)
 	}
 	return nil
+}
+
+func getUser(s State) string {
+	v := s.Value(keyUser)
+	if v != nil {
+		return v.(string)
+	}
+	return ""
 }
 
 func args(args ...string) StateOption {

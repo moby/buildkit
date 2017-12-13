@@ -21,7 +21,7 @@ import (
 // Ideally we don't have to import whole containerd just for the default spec
 
 // GenerateSpec generates spec using containerd functionality.
-func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mount, id string, resolvConf, hostsFile string) (*specs.Spec, func(), error) {
+func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mount, id, resolvConf, hostsFile string, opts ...oci.SpecOpts) (*specs.Spec, func(), error) {
 	c := &containers.Container{
 		ID: id,
 	}
@@ -29,13 +29,16 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 	if !ok {
 		ctx = namespaces.WithNamespace(ctx, "buildkit")
 	}
-	// Note that containerd.GenerateSpec is namespaced so as to make
-	// specs.Linux.CgroupsPath namespaced
-	s, err := oci.GenerateSpec(ctx, nil, c,
+
+	opts = append(opts,
 		oci.WithHostNamespace(specs.NetworkNamespace),
 		withROBind(resolvConf, "/etc/resolv.conf"),
 		withROBind(hostsFile, "/etc/hosts"),
 	)
+
+	// Note that containerd.GenerateSpec is namespaced so as to make
+	// specs.Linux.CgroupsPath namespaced
+	s, err := oci.GenerateSpec(ctx, nil, c, opts...)
 	if err != nil {
 		return nil, nil, err
 	}

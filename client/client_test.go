@@ -36,6 +36,7 @@ func TestClientIntegration(t *testing.T) {
 		testBuildHTTPSource,
 		testBuildPushAndValidate,
 		testResolveAndHosts,
+		testUser,
 	})
 }
 
@@ -198,6 +199,59 @@ func testResolveAndHosts(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	require.Contains(t, string(dt), "127.0.0.1	localhost")
 
+}
+
+func testUser(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	t.Parallel()
+	c, err := New(sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Image("busybox:latest").Run(llb.Shlex(`sh -c "mkdir -m 0777 /wd"`))
+
+	run := func(user, cmd string) {
+		st = st.Run(llb.Shlex(cmd), llb.Dir("/wd"), llb.User(user))
+	}
+
+	run("daemon", `sh -c "id -nu > user"`)
+	run("daemon:daemon", `sh -c "id -ng > group"`)
+	run("daemon:nogroup", `sh -c "id -ng > nogroup"`)
+	run("1:1", `sh -c "id -g > userone"`)
+
+	st = st.Run(llb.Shlex("cp -a /wd/. /out/"))
+	out := st.AddMount("/out", llb.Scratch())
+
+	def, err := out.Marshal()
+	require.NoError(t, err)
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	err = c.Solve(context.TODO(), def, SolveOpt{
+		Exporter: ExporterLocal,
+		ExporterAttrs: map[string]string{
+			"output": destDir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "user"))
+	require.NoError(t, err)
+	require.Contains(t, string(dt), "daemon")
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "group"))
+	require.NoError(t, err)
+	require.Contains(t, string(dt), "daemon")
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "nogroup"))
+	require.NoError(t, err)
+	require.Contains(t, string(dt), "nogroup")
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "userone"))
+	require.NoError(t, err)
+	require.Contains(t, string(dt), "1")
 }
 
 func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {

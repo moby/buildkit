@@ -7,10 +7,12 @@ import (
 
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/cio"
+	containerdoci "github.com/containerd/containerd/oci"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/executor/oci"
 	"github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/snapshot"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
@@ -40,16 +42,31 @@ func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root c
 		return err
 	}
 
-	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile)
-	if err != nil {
-		return err
-	}
-	defer cleanup()
-
 	rootMounts, err := root.Mount(ctx, false)
 	if err != nil {
 		return err
 	}
+
+	uid, gid, err := oci.ParseUser(meta.User)
+	if err != nil {
+		lm := snapshot.LocalMounter(rootMounts)
+		rootfsPath, err := lm.Mount()
+		if err != nil {
+			return err
+		}
+		uid, gid, err = oci.GetUser(ctx, rootfsPath, meta.User)
+		if err != nil {
+			lm.Unmount()
+			return err
+		}
+		lm.Unmount()
+	}
+
+	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, containerdoci.WithUIDGID(uid, gid))
+	if err != nil {
+		return err
+	}
+	defer cleanup()
 
 	container, err := w.client.NewContainer(ctx, id,
 		containerd.WithSpec(spec),
