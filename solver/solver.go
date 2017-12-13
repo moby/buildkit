@@ -13,6 +13,7 @@ import (
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/frontend"
+	llbop "github.com/moby/buildkit/solver/llbop"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/solver/reference"
 	vtxpkg "github.com/moby/buildkit/solver/vertex"
@@ -43,9 +44,9 @@ func NewLLBSolver(wc *worker.Controller, frontends map[string]frontend.Frontend)
 		}
 		switch op := v.Sys().(type) {
 		case *pb.Op_Source:
-			return newSourceOp(v, op, w.SourceManager)
+			return llbop.NewSourceOp(v, op, w.SourceManager)
 		case *pb.Op_Exec:
-			return newExecOp(v, op, w.CacheManager, w.Executor)
+			return llbop.NewExecOp(v, op, w.CacheManager, w.Executor)
 		case *pb.Op_Build:
 			return newBuildOp(v, op, s)
 		default:

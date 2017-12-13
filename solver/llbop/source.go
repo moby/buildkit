@@ -1,4 +1,4 @@
-package solver
+package llbop
 
 import (
 	"encoding/json"
@@ -23,7 +23,7 @@ type sourceOp struct {
 	src source.SourceInstance
 }
 
-func newSourceOp(_ vtxpkg.Vertex, op *pb.Op_Source, sm *source.Manager) (Op, error) {
+func NewSourceOp(_ vtxpkg.Vertex, op *pb.Op_Source, sm *source.Manager) (*sourceOp, error) {
 	return &sourceOp{
 		op: op,
 		sm: sm,

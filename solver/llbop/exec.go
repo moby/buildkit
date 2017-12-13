@@ -1,4 +1,4 @@
-package solver
+package llbop
 
 import (
 	"encoding/json"
@@ -28,7 +28,7 @@ type execOp struct {
 	numInputs int
 }
 
-func newExecOp(v vtxpkg.Vertex, op *pb.Op_Exec, cm cache.Manager, exec executor.Executor) (Op, error) {
+func NewExecOp(v vtxpkg.Vertex, op *pb.Op_Exec, cm cache.Manager, exec executor.Executor) (*execOp, error) {
 	return &execOp{
 		op:        op.Exec,
 		cm:        cm,
