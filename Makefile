@@ -1,7 +1,9 @@
-
-BINARIES=bin/buildd bin/buildd-standalone bin/buildd-containerd bin/buildctl	bin/buildctl-darwin bin/buildd.exe bin/buildctl.exe
+BINARIES=bin/buildd bin/buildctl
+BINARIES_EXTRA=bin/buildd-standalone bin/buildd-containerd bin/buildctl-darwin bin/buildd.exe bin/buildctl.exe
+DESTDIR=/usr/local
 
 binaries: $(BINARIES)
+binaries-all: $(BINARIES) $(BINARIES_EXTRA)
 
 bin/buildctl-darwin: FORCE
 	mkdir -p bin
@@ -27,6 +29,13 @@ bin/%: FORCE
 		docker rm $$containerID )
 	chmod +x $@
 
+install: FORCE
+	mkdir -p $(DESTDIR)/bin
+	install $(BINARIES) $(DESTDIR)/bin
+
+clean: FORCE
+	rm -rf ./bin
+
 test:
 	./hack/test
 
@@ -41,5 +50,5 @@ validate-all: test lint validate-vendor
 vendor:
 	./hack/update-vendor
 
-.PHONY: vendor test binaries lint validate-all validate-vendor
+.PHONY: vendor test binaries binaries-all install clean lint validate-all validate-vendor
 FORCE:
