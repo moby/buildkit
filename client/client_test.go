@@ -37,6 +37,7 @@ func TestClientIntegration(t *testing.T) {
 		testBuildPushAndValidate,
 		testResolveAndHosts,
 		testUser,
+		testOCIExporter,
 	})
 }
 
@@ -254,6 +255,72 @@ func testUser(t *testing.T, sb integration.Sandbox) {
 	require.Contains(t, string(dt), "1")
 }
 
+func testOCIExporter(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	t.Parallel()
+	c, err := New(sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("busybox:latest")
+	st := llb.Scratch()
+
+	run := func(cmd string) {
+		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+	}
+
+	run(`sh -c "echo -n first > foo"`)
+	run(`sh -c "echo -n second > bar"`)
+
+	def, err := st.Marshal()
+	require.NoError(t, err)
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	out := filepath.Join(destDir, "out.tar")
+
+	err = c.Solve(context.TODO(), def, SolveOpt{
+		Exporter: ExporterOCI,
+		ExporterAttrs: map[string]string{
+			"output": out,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(out)
+	require.NoError(t, err)
+
+	m, err := readTarToMap(dt, false)
+	require.NoError(t, err)
+
+	_, ok := m["oci-layout"]
+	require.True(t, ok)
+
+	var index ocispec.Index
+	err = json.Unmarshal(m["index.json"].data, &index)
+	require.NoError(t, err)
+	require.Equal(t, 2, index.SchemaVersion)
+	require.Equal(t, 1, len(index.Manifests))
+
+	var mfst ocispec.Manifest
+	err = json.Unmarshal(m["blobs/sha256/"+index.Manifests[0].Digest.Hex()].data, &mfst)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(mfst.Layers))
+
+	var ociimg ocispec.Image
+	err = json.Unmarshal(m["blobs/sha256/"+mfst.Config.Digest.Hex()].data, &ociimg)
+	require.NoError(t, err)
+	require.Equal(t, "layers", ociimg.RootFS.Type)
+	require.Equal(t, 2, len(ociimg.RootFS.DiffIDs))
+
+	_, ok = m["blobs/sha256/"+mfst.Layers[0].Digest.Hex()]
+	require.True(t, ok)
+	_, ok = m["blobs/sha256/"+mfst.Layers[1].Digest.Hex()]
+	require.True(t, ok)
+}
+
 func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 	t.Parallel()
@@ -300,6 +367,7 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 
 	destDir, err := ioutil.TempDir("", "buildkit")
 	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
 
 	err = c.Solve(context.TODO(), def, SolveOpt{
 		Exporter: ExporterLocal,
@@ -387,7 +455,7 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	dt, err = content.ReadBlob(ctx, img.ContentStore(), mfst.Layers[0].Digest)
 	require.NoError(t, err)
 
-	m, err := readTarToMap(dt)
+	m, err := readTarToMap(dt, true)
 	require.NoError(t, err)
 
 	item, ok := m["foo/"]
@@ -410,7 +478,7 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	dt, err = content.ReadBlob(ctx, img.ContentStore(), mfst.Layers[1].Digest)
 	require.NoError(t, err)
 
-	m, err = readTarToMap(dt)
+	m, err = readTarToMap(dt, true)
 	require.NoError(t, err)
 
 	item, ok = m["foo/sub/baz"]
@@ -435,16 +503,20 @@ type tarItem struct {
 	data   []byte
 }
 
-func readTarToMap(dt []byte) (map[string]*tarItem, error) {
+func readTarToMap(dt []byte, compressed bool) (map[string]*tarItem, error) {
 	m := map[string]*tarItem{}
-	gz, err := gzip.NewReader(bytes.NewBuffer(dt))
-	if err != nil {
-		return nil, err
+	var r io.Reader = bytes.NewBuffer(dt)
+	if compressed {
+		gz, err := gzip.NewReader(r)
+		if err != nil {
+			return nil, err
+		}
+		defer gz.Close()
+		r = gz
 	}
-	defer gz.Close()
-	rdr := tar.NewReader(gz)
+	tr := tar.NewReader(r)
 	for {
-		h, err := rdr.Next()
+		h, err := tr.Next()
 		if err != nil {
 			if err == io.EOF {
 				return m, nil
@@ -453,7 +525,7 @@ func readTarToMap(dt []byte) (map[string]*tarItem, error) {
 		}
 		var dt []byte
 		if h.Typeflag == tar.TypeReg {
-			dt, err = ioutil.ReadAll(rdr)
+			dt, err = ioutil.ReadAll(tr)
 			if err != nil {
 				return nil, err
 			}
