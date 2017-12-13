@@ -72,6 +72,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 		if err != nil {
 			return nil, nil, err
 		}
+		defer ref.Release(context.TODO())
 		rootFS = ref
 		config, ok := exp[exporterImageConfig]
 		if ok {
@@ -112,6 +113,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 		if err != nil {
 			return nil, nil, err
 		}
+		defer ref.Release(context.TODO())
 		rootFS = ref
 	}
 
@@ -140,6 +142,14 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 	}
 
 	env = append(env, "BUILDKIT_SESSION_ID="+sid)
+
+	defer func() {
+		for _, r := range lbf.refs {
+			if lbf.lastRef != r || retErr != nil {
+				r.Release(context.TODO())
+			}
+		}
+	}()
 
 	err = llbBridge.Exec(ctx, executor.Meta{
 		Env:  env,
