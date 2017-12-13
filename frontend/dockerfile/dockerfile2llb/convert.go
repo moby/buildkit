@@ -79,6 +79,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 
 		ds := &dispatchState{
 			stage: st,
+			deps:  make(map[*dispatchState]struct{}),
 		}
 		if d, ok := dispatchStatesByName[st.BaseName]; ok {
 			ds.base = d
@@ -86,6 +87,40 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		allDispatchStates = append(allDispatchStates, ds)
 		if st.Name != "" {
 			dispatchStatesByName[strings.ToLower(st.Name)] = ds
+		}
+	}
+
+	var target *dispatchState
+	if opt.Target == "" {
+		target = allDispatchStates[len(allDispatchStates)-1]
+	} else {
+		var ok bool
+		target, ok = dispatchStatesByName[strings.ToLower(opt.Target)]
+		if !ok {
+			return nil, nil, errors.Errorf("target stage %s could not be found", opt.Target)
+		}
+	}
+
+	// fill dependencies to stages so unreachable ones can avoid loading image configs
+	for _, d := range allDispatchStates {
+		for _, cmd := range d.stage.Commands {
+			if c, ok := cmd.(*instructions.CopyCommand); ok {
+				if c.From != "" {
+					index, err := strconv.Atoi(c.From)
+					if err != nil {
+						stn, ok := dispatchStatesByName[strings.ToLower(c.From)]
+						if !ok {
+							return nil, nil, errors.Errorf("stage %s not found", c.From)
+						}
+						d.deps[stn] = struct{}{}
+					} else {
+						if index < 0 || index >= len(allDispatchStates) {
+							return nil, nil, errors.Errorf("invalid stage index %d", index)
+						}
+						d.deps[allDispatchStates[index]] = struct{}{}
+					}
+				}
+			}
 		}
 	}
 
@@ -105,10 +140,9 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 						return err
 					}
 					d.stage.BaseName = reference.TagNameOnly(ref).String()
-					if metaResolver != nil {
+					if metaResolver != nil && isReachable(target, d) {
 						dgst, dt, err := metaResolver.ResolveImageConfig(ctx, d.stage.BaseName)
 						if err == nil { // handle the error while builder is actually running
-							// TODO: detect unreachable stages so config is not pulled for them
 							var img Image
 							if err := json.Unmarshal(dt, &img); err != nil {
 								return err
@@ -127,7 +161,6 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 				})
 			}(i, d)
 		}
-
 	}
 
 	if err := eg.Wait(); err != nil {
@@ -188,15 +221,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		}
 	}
 
-	if opt.Target == "" {
-		return &allDispatchStates[len(allDispatchStates)-1].state, &allDispatchStates[len(allDispatchStates)-1].image, nil
-	}
-
-	state, ok := dispatchStatesByName[strings.ToLower(opt.Target)]
-	if !ok {
-		return nil, nil, errors.Errorf("target stage %s could not be found", opt.Target)
-	}
-	return &state.state, &state.image, nil
+	return &target.state, &target.image, nil
 }
 
 type dispatchOpt struct {
@@ -275,11 +300,11 @@ func dispatch(d *dispatchState, cmd instructions.Command, opt dispatchOpt) error
 }
 
 type dispatchState struct {
-	state llb.State
-	image Image
-	stage instructions.Stage
-	base  *dispatchState
-
+	state     llb.State
+	image     Image
+	stage     instructions.Stage
+	base      *dispatchState
+	deps      map[*dispatchState]struct{}
 	buildArgs []instructions.ArgCommand
 }
 
@@ -638,4 +663,19 @@ func commitToHistory(img *Image, msg string, withLayer bool, st *llb.State) erro
 		EmptyLayer: !withLayer,
 	})
 	return nil
+}
+
+func isReachable(from, to *dispatchState) (ret bool) {
+	if from == nil {
+		return false
+	}
+	if from == to || isReachable(from.base, to) {
+		return true
+	}
+	for d := range from.deps {
+		if isReachable(d, to) {
+			return true
+		}
+	}
+	return false
 }
