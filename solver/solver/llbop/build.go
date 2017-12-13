@@ -1,4 +1,4 @@
-package solver
+package llbop
 
 import (
 	"encoding/json"
@@ -7,21 +7,27 @@ import (
 	"github.com/containerd/containerd/fs"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/snapshot"
+	solver "github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/solver/reference"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
 
+type SubBuilder interface {
+	SubBuild(ctx context.Context, dgst digest.Digest, req solver.SolveRequest) (solver.Ref, error)
+}
+
 const buildCacheType = "buildkit.build.v0"
 
 type buildOp struct {
 	op *pb.BuildOp
-	s  *Solver
-	v  Vertex
+	s  SubBuilder
+	v  solver.Vertex
 }
 
-func newBuildOp(v Vertex, op *pb.Op_Build, s *Solver) (Op, error) {
+func NewBuildOp(v solver.Vertex, op *pb.Op_Build, s SubBuilder) (solver.Op, error) {
 	return &buildOp{
 		op: op.Build,
 		s:  s,
@@ -43,7 +49,7 @@ func (b *buildOp) CacheKey(ctx context.Context) (digest.Digest, error) {
 	return digest.FromBytes(dt), nil
 }
 
-func (b *buildOp) Run(ctx context.Context, inputs []Reference) (outputs []Reference, retErr error) {
+func (b *buildOp) Run(ctx context.Context, inputs []solver.Ref) (outputs []solver.Ref, retErr error) {
 	if b.op.Builder != pb.LLBBuilder {
 		return nil, errors.Errorf("only llb builder is currently allowed")
 	}
@@ -60,7 +66,7 @@ func (b *buildOp) Run(ctx context.Context, inputs []Reference) (outputs []Refere
 	}
 	inp := inputs[i]
 
-	ref, ok := toImmutableRef(inp)
+	ref, ok := reference.ToImmutableRef(inp)
 	if !ok {
 		return nil, errors.Errorf("invalid reference for build %T", inp)
 	}
@@ -107,14 +113,14 @@ func (b *buildOp) Run(ctx context.Context, inputs []Reference) (outputs []Refere
 	lm.Unmount()
 	lm = nil
 
-	newref, err := b.s.subBuild(ctx, b.v.Digest(), SolveRequest{
+	newref, err := b.s.SubBuild(ctx, b.v.Digest(), solver.SolveRequest{
 		Definition: def.ToPB(),
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	return []Reference{newref}, err
+	return []solver.Ref{newref}, err
 }
 
 func (b *buildOp) ContentMask(context.Context) (digest.Digest, [][]string, error) {

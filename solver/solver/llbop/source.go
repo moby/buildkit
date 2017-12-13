@@ -1,8 +1,9 @@
-package solver
+package llbop
 
 import (
 	"sync"
 
+	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/source"
 	digest "github.com/opencontainers/go-digest"
@@ -18,7 +19,7 @@ type sourceOp struct {
 	src source.SourceInstance
 }
 
-func newSourceOp(_ Vertex, op *pb.Op_Source, sm *source.Manager) (Op, error) {
+func NewSourceOp(_ solver.Vertex, op *pb.Op_Source, sm *source.Manager) (solver.Op, error) {
 	return &sourceOp{
 		op: op,
 		sm: sm,
@@ -55,7 +56,7 @@ func (s *sourceOp) CacheKey(ctx context.Context) (digest.Digest, error) {
 	return digest.FromBytes([]byte(sourceCacheType + ":" + k)), nil
 }
 
-func (s *sourceOp) Run(ctx context.Context, _ []Reference) ([]Reference, error) {
+func (s *sourceOp) Run(ctx context.Context, _ []solver.Ref) ([]solver.Ref, error) {
 	src, err := s.instance(ctx)
 	if err != nil {
 		return nil, err
@@ -64,7 +65,7 @@ func (s *sourceOp) Run(ctx context.Context, _ []Reference) ([]Reference, error) 
 	if err != nil {
 		return nil, err
 	}
-	return []Reference{ref}, nil
+	return []solver.Ref{ref}, nil
 }
 
 func (s *sourceOp) ContentMask(context.Context) (digest.Digest, [][]string, error) {
