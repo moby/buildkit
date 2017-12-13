@@ -29,18 +29,18 @@ Read the proposal from https://github.com/moby/moby/issues/32925
 
 #### Quick start
 
-BuildKit daemon can be built in two different versions: one that uses [containerd](https://github.com/containerd/containerd) for execution and distribution, and a standalone version that doesn't have other dependencies apart from [runc](https://github.com/opencontainers/runc). We are open for adding more backends. `buildd` is a CLI utility for serving the gRPC API. 
+Dependencies:
+- [runc](https://github.com/opencontainers/runc)
+- [containerd](https://github.com/containerd/containerd) (if you want to use containerd worker)
+
+
+The following command installs `buildd` and `buildctl` to `/usr/local/bin`:
 
 ```bash
-# buildd daemon (choose one)
-go build -o buildd-containerd -tags containerd ./cmd/buildd
-go build -o buildd-standalone -tags standalone ./cmd/buildd
-
-# buildctl utility
-go build -o buildctl ./cmd/buildctl
+$ make && sudo make install
 ```
 
-You can also use `make binaries` that prepares all binaries into the `bin/` directory.
+You can also use `make binaries-all` to prepare `buildd-containerd` (containerd worker only) and `buildd-standalone` (OCI worker only).
 
 `examples/buildkit*` directory contains scripts that define how to build different configurations of BuildKit and its dependencies using the `client` package. Running one of these script generates a protobuf definition of a build graph. Note that the script itself does not execute any steps of the build.
 
@@ -73,8 +73,15 @@ Different versions of the example scripts show different ways of describing the 
 ##### Starting the buildd daemon:
 
 ```
-buildd-standalone --debug --root /var/lib/buildkit
+buildd --debug --root /var/lib/buildkit
 ```
+
+The buildd daemon suppports two worker backends: OCI (runc) and containerd.
+
+By default, the OCI (runc) worker is used.
+You can set `--oci-worker=false --containerd-worker=true` to use the containerd worker.
+
+We are open to add more backends.
 
 ##### Building a Dockerfile:
 
@@ -94,7 +101,7 @@ buildctl build --frontend gateway.v0 --frontend-opt=source=tonistiigi/dockerfile
 
 ##### Exporting resulting image to containerd
 
-Containerd version of buildd needs to be used
+The containerd worker needs to be used
 
 ```
 buildctl build ... --exporter=image --exporter-opt name=docker.io/username/image
