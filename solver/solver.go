@@ -137,7 +137,7 @@ func (s *Solver) Solve(ctx context.Context, id string, req SolveRequest) error {
 		if err != nil {
 			return err
 		}
-		defaultWorker.InstructionCache = mergeRemoteCache(defaultWorker.InstructionCache, cache)
+		defaultWorker.InstructionCache = instructioncache.Union(defaultWorker.InstructionCache, cache)
 	}
 
 	// register a build job. vertex needs to be loaded to a job to run
@@ -779,52 +779,4 @@ type VertexResult struct {
 
 func cacheKeyForIndex(dgst digest.Digest, index Index) digest.Digest {
 	return digest.FromBytes([]byte(fmt.Sprintf("%s.%d", dgst, index)))
-}
-
-func mergeRemoteCache(local, remote instructioncache.InstructionCache) instructioncache.InstructionCache {
-	return &mergedCache{local: local, remote: remote}
-}
-
-type mergedCache struct {
-	local  instructioncache.InstructionCache
-	remote instructioncache.InstructionCache
-}
-
-func (mc *mergedCache) Probe(ctx context.Context, key digest.Digest) (bool, error) {
-	v, err := mc.local.Probe(ctx, key)
-	if err != nil {
-		return false, err
-	}
-	if v {
-		return v, nil
-	}
-	return mc.remote.Probe(ctx, key)
-}
-
-func (mc *mergedCache) Lookup(ctx context.Context, key digest.Digest, msg string) (interface{}, error) {
-	v, err := mc.local.Probe(ctx, key)
-	if err != nil {
-		return false, err
-	}
-	if v {
-		return mc.local.Lookup(ctx, key, msg)
-	}
-	return mc.remote.Lookup(ctx, key, msg)
-}
-func (mc *mergedCache) Set(key digest.Digest, ref interface{}) error {
-	return mc.local.Set(key, ref)
-}
-func (mc *mergedCache) SetContentMapping(contentKey, key digest.Digest) error {
-	return mc.local.SetContentMapping(contentKey, key)
-}
-func (mc *mergedCache) GetContentMapping(dgst digest.Digest) ([]digest.Digest, error) {
-	localKeys, err := mc.local.GetContentMapping(dgst)
-	if err != nil {
-		return nil, err
-	}
-	remoteKeys, err := mc.remote.GetContentMapping(dgst)
-	if err != nil {
-		return nil, err
-	}
-	return append(localKeys, remoteKeys...), nil
 }
