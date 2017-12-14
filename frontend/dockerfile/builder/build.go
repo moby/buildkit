@@ -1,15 +1,18 @@
 package builder
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"path"
 	"strings"
 
+	"github.com/docker/docker/builder/dockerignore"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend/dockerfile/dockerfile2llb"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -19,6 +22,7 @@ const (
 	keyFilename           = "filename"
 	exporterImageConfig   = "containerimage.config"
 	defaultDockerfileName = "Dockerfile"
+	dockerignoreFilename  = ".dockerignore"
 	buildArgPrefix        = "build-arg:"
 	gitPrefix             = "git://"
 )
@@ -48,13 +52,46 @@ func Build(ctx context.Context, c client.Client) error {
 		return err
 	}
 
-	ref, err := c.Solve(ctx, def.ToPB(), "", nil, false)
-	if err != nil {
-		return err
-	}
+	eg, ctx2 := errgroup.WithContext(ctx)
+	var dtDockerfile []byte
+	eg.Go(func() error {
+		ref, err := c.Solve(ctx2, def.ToPB(), "", nil, false)
+		if err != nil {
+			return err
+		}
 
-	dtDockerfile, err := ref.ReadFile(ctx, filename)
-	if err != nil {
+		dtDockerfile, err = ref.ReadFile(ctx2, filename)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	var excludes []string
+	eg.Go(func() error {
+		dockerignoreState := buildContext
+		if dockerignoreState == nil {
+			st := llb.Local(LocalNameContext, llb.SessionID(c.SessionID()), llb.IncludePatterns([]string{dockerignoreFilename}))
+			dockerignoreState = &st
+		}
+		def, err := dockerignoreState.Marshal()
+		if err != nil {
+			return err
+		}
+		ref, err := c.Solve(ctx2, def.ToPB(), "", nil, false)
+		if err != nil {
+			return err
+		}
+		dtDockerignore, err := ref.ReadFile(ctx2, dockerignoreFilename)
+		if err == nil {
+			excludes, err = dockerignore.ReadAll(bytes.NewBuffer(dtDockerignore))
+			if err != nil {
+				return errors.Wrap(err, "failed to parse dockerignore")
+			}
+		}
+		return nil
+	})
+
+	if err := eg.Wait(); err != nil {
 		return err
 	}
 
@@ -64,6 +101,7 @@ func Build(ctx context.Context, c client.Client) error {
 		BuildArgs:    filterBuildArgs(opts),
 		SessionID:    c.SessionID(),
 		BuildContext: buildContext,
+		Excludes:     excludes,
 	})
 
 	if err != nil {

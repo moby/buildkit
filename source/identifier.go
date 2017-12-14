@@ -80,6 +80,12 @@ func FromLLB(op *pb.Op_Source) (Identifier, error) {
 					return nil, err
 				}
 				id.IncludePatterns = patterns
+			case pb.AttrExcludePatterns:
+				var patterns []string
+				if err := json.Unmarshal([]byte(v), &patterns); err != nil {
+					return nil, err
+				}
+				id.ExcludePatterns = patterns
 			}
 		}
 	}
@@ -142,6 +148,7 @@ type LocalIdentifier struct {
 	Name            string
 	SessionID       string
 	IncludePatterns []string
+	ExcludePatterns []string
 }
 
 func NewLocalIdentifier(str string) (*LocalIdentifier, error) {

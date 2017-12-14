@@ -17,6 +17,7 @@ import (
 const (
 	keyOverrideExcludes = "override-excludes"
 	keyIncludePatterns  = "include-patterns"
+	keyExcludePatterns  = "exclude-patterns"
 	keyDirName          = "dir-name"
 )
 
@@ -55,7 +56,7 @@ func (sp *fsSyncProvider) TarStream(stream FileSync_TarStreamServer) error {
 	return sp.handle("tarstream", stream)
 }
 
-func (sp *fsSyncProvider) handle(method string, stream grpc.ServerStream) error {
+func (sp *fsSyncProvider) handle(method string, stream grpc.ServerStream) (retErr error) {
 	var pr *protocol
 	for _, p := range supportedProtocols {
 		if method == p.name && isProtoSupported(p.name) {
@@ -80,8 +81,8 @@ func (sp *fsSyncProvider) handle(method string, stream grpc.ServerStream) error 
 		return errors.Errorf("no access allowed to dir %q", dirName)
 	}
 
-	var excludes []string
-	if len(opts[keyOverrideExcludes]) == 0 || opts[keyOverrideExcludes][0] != "true" {
+	excludes := opts[keyExcludePatterns]
+	if len(dir.Excludes) != 0 && (len(opts[keyOverrideExcludes]) == 0 || opts[keyOverrideExcludes][0] != "true") {
 		excludes = dir.Excludes
 	}
 	includes := opts[keyIncludePatterns]
@@ -140,7 +141,8 @@ var supportedProtocols = []protocol{
 type FSSendRequestOpt struct {
 	Name             string
 	IncludePatterns  []string
-	OverrideExcludes bool
+	ExcludePatterns  []string
+	OverrideExcludes bool // deprecated: this is used by docker/cli for automatically loading .dockerignore from the directory
 	DestDir          string
 	CacheUpdater     CacheUpdater
 	ProgressCb       func(int, bool)
@@ -173,6 +175,10 @@ func FSSync(ctx context.Context, c session.Caller, opt FSSendRequestOpt) error {
 
 	if opt.IncludePatterns != nil {
 		opts[keyIncludePatterns] = opt.IncludePatterns
+	}
+
+	if opt.ExcludePatterns != nil {
+		opts[keyExcludePatterns] = opt.ExcludePatterns
 	}
 
 	opts[keyDirName] = []string{opt.Name}

@@ -193,6 +193,9 @@ func Local(name string, opts ...LocalOption) State {
 	if gi.IncludePatterns != "" {
 		attrs[pb.AttrIncludePatterns] = gi.IncludePatterns
 	}
+	if gi.ExcludePatterns != "" {
+		attrs[pb.AttrExcludePatterns] = gi.ExcludePatterns
+	}
 
 	source := NewSource("local://"+name, attrs, gi.Metadata())
 	return NewState(source.Output())
@@ -216,8 +219,23 @@ func SessionID(id string) LocalOption {
 
 func IncludePatterns(p []string) LocalOption {
 	return localOptionFunc(func(li *LocalInfo) {
+		if len(p) == 0 {
+			li.IncludePatterns = ""
+			return
+		}
 		dt, _ := json.Marshal(p) // empty on error
 		li.IncludePatterns = string(dt)
+	})
+}
+
+func ExcludePatterns(p []string) LocalOption {
+	return localOptionFunc(func(li *LocalInfo) {
+		if len(p) == 0 {
+			li.ExcludePatterns = ""
+			return
+		}
+		dt, _ := json.Marshal(p) // empty on error
+		li.ExcludePatterns = string(dt)
 	})
 }
 
@@ -225,6 +243,7 @@ type LocalInfo struct {
 	opMetaWrapper
 	SessionID       string
 	IncludePatterns string
+	ExcludePatterns string
 }
 
 func HTTP(url string, opts ...HTTPOption) State {
