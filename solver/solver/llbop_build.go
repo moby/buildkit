@@ -47,7 +47,7 @@ func (b *buildOp) CacheKey(ctx context.Context) (digest.Digest, error) {
 	return digest.FromBytes(dt), nil
 }
 
-func (b *buildOp) Run(ctx context.Context, inputs []reference.Ref) (outputs []reference.Ref, retErr error) {
+func (b *buildOp) Run(ctx context.Context, inputs []solver.Ref) (outputs []solver.Ref, retErr error) {
 	if b.op.Builder != pb.LLBBuilder {
 		return nil, errors.Errorf("only llb builder is currently allowed")
 	}
@@ -118,7 +118,7 @@ func (b *buildOp) Run(ctx context.Context, inputs []reference.Ref) (outputs []re
 		return nil, err
 	}
 
-	return []reference.Ref{newref}, err
+	return []solver.Ref{newref}, err
 }
 
 func (b *buildOp) ContentMask(context.Context) (digest.Digest, [][]string, error) {

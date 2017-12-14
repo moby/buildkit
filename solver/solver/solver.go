@@ -70,7 +70,7 @@ func New(resolve ResolveOpFunc, wc *worker.Controller, f map[string]frontend.Fro
 	return &Solver{resolve: resolve, jobs: newJobList(), workerController: wc, frontends: f}
 }
 
-func (s *Solver) solve(ctx context.Context, j *job, req solver.SolveRequest) (reference.Ref, map[string][]byte, error) {
+func (s *Solver) solve(ctx context.Context, j *job, req solver.SolveRequest) (solver.Ref, map[string][]byte, error) {
 	if req.Definition == nil {
 		if req.Frontend == nil {
 			return nil, nil, errors.Errorf("invalid request: no definition nor frontend")
@@ -184,7 +184,7 @@ func (s *Solver) Status(ctx context.Context, id string, statusChan chan *client.
 	return j.pipe(ctx, statusChan)
 }
 
-func (s *Solver) subBuild(ctx context.Context, dgst digest.Digest, req solver.SolveRequest) (reference.Ref, error) {
+func (s *Solver) subBuild(ctx context.Context, dgst digest.Digest, req solver.SolveRequest) (solver.Ref, error) {
 	jl := s.jobs
 	jl.mu.Lock()
 	st, ok := jl.actives[dgst]
@@ -216,14 +216,14 @@ type VertexSolver interface {
 	CacheKey(ctx context.Context, index vtxpkg.Index) (digest.Digest, error)
 	OutputEvaluator(vtxpkg.Index) (VertexEvaluator, error)
 	Release() error
-	Cache(vtxpkg.Index, reference.Ref) CacheExporter
+	Cache(vtxpkg.Index, solver.Ref) CacheExporter
 }
 
 type vertexInput struct {
 	solver    VertexSolver
 	ev        VertexEvaluator
 	cacheKeys []digest.Digest
-	ref       reference.Ref
+	ref       solver.Ref
 }
 
 type vertexSolver struct {
@@ -292,21 +292,21 @@ type CacheExporter interface {
 	Export(context.Context) ([]cacheimport.CacheRecord, error)
 }
 
-func (vs *vertexSolver) Cache(index vtxpkg.Index, ref reference.Ref) CacheExporter {
+func (vs *vertexSolver) Cache(index vtxpkg.Index, ref solver.Ref) CacheExporter {
 	return &cacheExporter{vertexSolver: vs, index: index, ref: ref}
 }
 
 type cacheExporter struct {
 	*vertexSolver
 	index vtxpkg.Index
-	ref   reference.Ref
+	ref   solver.Ref
 }
 
 func (ce *cacheExporter) Export(ctx context.Context) ([]cacheimport.CacheRecord, error) {
 	return ce.vertexSolver.Export(ctx, ce.index, ce.ref)
 }
 
-func (vs *vertexSolver) Export(ctx context.Context, index vtxpkg.Index, ref reference.Ref) ([]cacheimport.CacheRecord, error) {
+func (vs *vertexSolver) Export(ctx context.Context, index vtxpkg.Index, ref solver.Ref) ([]cacheimport.CacheRecord, error) {
 	mp := map[digest.Digest]cacheimport.CacheRecord{}
 	if err := vs.appendInputCache(ctx, mp); err != nil {
 		return nil, err
@@ -508,7 +508,7 @@ func (vs *vertexSolver) run(ctx context.Context, signal func()) (retErr error) {
 								return err
 							}
 							if ref != nil {
-								inp.ref = ref.(reference.Ref)
+								inp.ref = ref.(solver.Ref)
 								inp.solver.(*vertexSolver).markCachedOnce.Do(func() {
 									markCached(ctx, inp.solver.(*vertexSolver).cv)
 								})
@@ -567,7 +567,7 @@ func (vs *vertexSolver) run(ctx context.Context, signal func()) (retErr error) {
 	}
 
 	// Find extra cache keys by content
-	inputRefs := make([]reference.Ref, len(vs.inputs))
+	inputRefs := make([]solver.Ref, len(vs.inputs))
 	lastInputKeys := make([]digest.Digest, len(vs.inputs))
 	for i := range vs.inputs {
 		inputRefs[i] = vs.inputs[i].ref
@@ -669,7 +669,7 @@ func getInputContentHash(ctx context.Context, ref cache.ImmutableRef, selectors 
 	return digest.FromBytes(dt), nil
 }
 
-func calculateContentHash(ctx context.Context, refs []reference.Ref, mainDigest digest.Digest, inputs []digest.Digest, contentMap [][]string) (digest.Digest, error) {
+func calculateContentHash(ctx context.Context, refs []solver.Ref, mainDigest digest.Digest, inputs []digest.Digest, contentMap [][]string) (digest.Digest, error) {
 	dgsts := make([]digest.Digest, len(contentMap))
 	eg, ctx := errgroup.WithContext(ctx)
 	for i, sel := range contentMap {
@@ -749,7 +749,7 @@ func (ve *vertexEvaluator) Cancel() error {
 
 type VertexResult struct {
 	CacheKey  digest.Digest
-	Reference reference.Ref
+	Reference solver.Ref
 }
 
 func cacheKeyForIndex(dgst digest.Digest, index vtxpkg.Index) digest.Digest {

@@ -6,8 +6,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/pb"
-	"github.com/moby/buildkit/solver/reference"
 	vtxpkg "github.com/moby/buildkit/solver/vertex"
 	"github.com/moby/buildkit/source"
 	digest "github.com/opencontainers/go-digest"
@@ -120,7 +120,7 @@ func (s *sourceOp) CacheKey(ctx context.Context) (digest.Digest, error) {
 	return digest.FromBytes([]byte(sourceCacheType + ":" + k)), nil
 }
 
-func (s *sourceOp) Run(ctx context.Context, _ []reference.Ref) ([]reference.Ref, error) {
+func (s *sourceOp) Run(ctx context.Context, _ []solver.Ref) ([]solver.Ref, error) {
 	src, err := s.instance(ctx)
 	if err != nil {
 		return nil, err
@@ -129,7 +129,7 @@ func (s *sourceOp) Run(ctx context.Context, _ []reference.Ref) ([]reference.Ref,
 	if err != nil {
 		return nil, err
 	}
-	return []reference.Ref{ref}, nil
+	return []solver.Ref{ref}, nil
 }
 
 func (s *sourceOp) ContentMask(context.Context) (digest.Digest, [][]string, error) {

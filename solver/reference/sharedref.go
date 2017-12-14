@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/solver"
 	"golang.org/x/net/context"
 )
 
@@ -12,11 +13,11 @@ import (
 type SharedRef struct {
 	mu   sync.Mutex
 	refs map[*sharedRefInstance]struct{}
-	main Ref
-	Ref
+	main solver.Ref
+	solver.Ref
 }
 
-func NewSharedRef(main Ref) *SharedRef {
+func NewSharedRef(main solver.Ref) *SharedRef {
 	mr := &SharedRef{
 		refs: make(map[*sharedRefInstance]struct{}),
 		Ref:  main,
@@ -25,7 +26,7 @@ func NewSharedRef(main Ref) *SharedRef {
 	return mr
 }
 
-func (mr *SharedRef) Clone() Ref {
+func (mr *SharedRef) Clone() solver.Ref {
 	mr.mu.Lock()
 	r := &sharedRefInstance{SharedRef: mr}
 	mr.refs[r] = struct{}{}
@@ -37,10 +38,10 @@ func (mr *SharedRef) Release(ctx context.Context) error {
 	return mr.main.Release(ctx)
 }
 
-func (mr *SharedRef) Sys() Ref {
+func (mr *SharedRef) Sys() solver.Ref {
 	sys := mr.Ref
 	if s, ok := sys.(interface {
-		Sys() Ref
+		Sys() solver.Ref
 	}); ok {
 		return s.Sys()
 	}
@@ -61,17 +62,17 @@ func (r *sharedRefInstance) Release(ctx context.Context) error {
 	return nil
 }
 
-func OriginRef(ref Ref) Ref {
+func OriginRef(ref solver.Ref) solver.Ref {
 	sysRef := ref
 	if sys, ok := ref.(interface {
-		Sys() Ref
+		Sys() solver.Ref
 	}); ok {
 		sysRef = sys.Sys()
 	}
 	return sysRef
 }
 
-func ToImmutableRef(ref Ref) (cache.ImmutableRef, bool) {
+func ToImmutableRef(ref solver.Ref) (cache.ImmutableRef, bool) {
 	immutable, ok := OriginRef(ref).(cache.ImmutableRef)
 	if !ok {
 		return nil, false

@@ -10,6 +10,7 @@ import (
 
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/executor"
+	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/solver/reference"
 	vtxpkg "github.com/moby/buildkit/solver/vertex"
@@ -56,9 +57,9 @@ func (e *execOp) CacheKey(ctx context.Context) (digest.Digest, error) {
 	return digest.FromBytes(dt), nil
 }
 
-func (e *execOp) Run(ctx context.Context, inputs []reference.Ref) ([]reference.Ref, error) {
+func (e *execOp) Run(ctx context.Context, inputs []solver.Ref) ([]solver.Ref, error) {
 	var mounts []executor.Mount
-	var outputs []reference.Ref
+	var outputs []solver.Ref
 	var root cache.Mountable
 
 	defer func() {
@@ -122,7 +123,7 @@ func (e *execOp) Run(ctx context.Context, inputs []reference.Ref) ([]reference.R
 		return nil, errors.Wrapf(err, "executor failed running %v", meta.Args)
 	}
 
-	refs := []reference.Ref{}
+	refs := []solver.Ref{}
 	for i, o := range outputs {
 		if mutable, ok := o.(cache.MutableRef); ok {
 			ref, err := mutable.Commit(ctx)

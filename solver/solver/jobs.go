@@ -8,6 +8,7 @@ import (
 	"github.com/moby/buildkit/cache/instructioncache"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/llbload"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/solver/reference"
@@ -165,7 +166,7 @@ type job struct {
 type cacheRecord struct {
 	VertexSolver
 	index vtxpkg.Index
-	ref   reference.Ref
+	ref   solver.Ref
 }
 
 func (j *job) load(def *pb.Definition, resolveOp ResolveOpFunc) (*vtxpkg.Input, error) {
@@ -256,7 +257,7 @@ func (j *job) getSolver(dgst digest.Digest) (VertexSolver, error) {
 	return st.solver, nil
 }
 
-func (j *job) getRef(ctx context.Context, cv client.Vertex, index vtxpkg.Index) (reference.Ref, error) {
+func (j *job) getRef(ctx context.Context, cv client.Vertex, index vtxpkg.Index) (solver.Ref, error) {
 	s, err := j.getSolver(cv.Digest)
 	if err != nil {
 		return nil, err
@@ -269,14 +270,14 @@ func (j *job) getRef(ctx context.Context, cv client.Vertex, index vtxpkg.Index) 
 	return ref, nil
 }
 
-func (j *job) keepCacheRef(s VertexSolver, index vtxpkg.Index, ref reference.Ref) {
+func (j *job) keepCacheRef(s VertexSolver, index vtxpkg.Index, ref solver.Ref) {
 	immutable, ok := reference.ToImmutableRef(ref)
 	if ok {
 		j.cached[immutable.ID()] = &cacheRecord{s, index, ref}
 	}
 }
 
-func (j *job) cacheExporter(ref reference.Ref) (CacheExporter, error) {
+func (j *job) cacheExporter(ref solver.Ref) (CacheExporter, error) {
 	immutable, ok := reference.ToImmutableRef(ref)
 	if !ok {
 		return nil, errors.Errorf("invalid reference")
@@ -288,7 +289,7 @@ func (j *job) cacheExporter(ref reference.Ref) (CacheExporter, error) {
 	return cr.Cache(cr.index, cr.ref), nil
 }
 
-func getRef(ctx context.Context, s VertexSolver, cv client.Vertex, index vtxpkg.Index, cache instructioncache.InstructionCache) (reference.Ref, error) {
+func getRef(ctx context.Context, s VertexSolver, cv client.Vertex, index vtxpkg.Index, cache instructioncache.InstructionCache) (solver.Ref, error) {
 	k, err := s.CacheKey(ctx, index)
 	if err != nil {
 		return nil, err
@@ -299,7 +300,7 @@ func getRef(ctx context.Context, s VertexSolver, cv client.Vertex, index vtxpkg.
 	}
 	if ref != nil {
 		markCached(ctx, cv)
-		return ref.(reference.Ref), nil
+		return ref.(solver.Ref), nil
 	}
 
 	ev, err := s.OutputEvaluator(index)
@@ -320,7 +321,7 @@ func getRef(ctx context.Context, s VertexSolver, cv client.Vertex, index vtxpkg.
 			}
 			if ref != nil {
 				markCached(ctx, cv)
-				return ref.(reference.Ref), nil
+				return ref.(solver.Ref), nil
 			}
 			continue
 		}

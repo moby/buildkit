@@ -5,10 +5,16 @@ import (
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/solver/pb"
-	"github.com/moby/buildkit/solver/reference"
 	digest "github.com/opencontainers/go-digest"
 	"golang.org/x/net/context"
 )
+
+// Ref is a reference to the object passed through the build steps.
+// This interface is a subset of the github.com/buildkit/buildkit/cache.Ref interface.
+// For ease of unit testing, this interface only has Release().
+type Ref interface {
+	Release(context.Context) error
+}
 
 // Op is an implementation for running a vertex
 type Op interface {
@@ -19,7 +25,7 @@ type Op interface {
 	// content based cache key.
 	ContentMask(context.Context) (digest.Digest, [][]string, error)
 	// Run runs an operation and returns the output references.
-	Run(ctx context.Context, inputs []reference.Ref) (outputs []reference.Ref, err error)
+	Run(ctx context.Context, inputs []Ref) (outputs []Ref, err error)
 }
 
 type SolveRequest struct {
