@@ -170,7 +170,7 @@ func build(clicontext *cli.Context) error {
 
 	eg.Go(func() error {
 		if !clicontext.Bool("no-progress") {
-			if c, err := console.ConsoleFromFile(os.Stdout); err == nil {
+			if c, err := console.ConsoleFromFile(os.Stderr); err == nil {
 				// not using shared context to not disrupt display but let is finish reporting errors
 				return progressui.DisplaySolveStatus(context.TODO(), c, displayCh)
 			}

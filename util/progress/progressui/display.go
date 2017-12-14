@@ -3,7 +3,7 @@ package progressui
 import (
 	"context"
 	"fmt"
-	"os"
+	"io"
 	"strings"
 	"time"
 
@@ -41,7 +41,7 @@ func DisplaySolveStatus(ctx context.Context, c console.Console, ch chan *client.
 
 		if done {
 			disp.print(t.displayInfo(), true)
-			t.printErrorLogs()
+			t.printErrorLogs(c)
 			return nil
 		} else if displayLimiter.Allow() {
 			disp.print(t.displayInfo(), false)
@@ -128,20 +128,20 @@ func (t *trace) update(s *client.SolveStatus) {
 	}
 }
 
-func (t *trace) printErrorLogs() {
+func (t *trace) printErrorLogs(f io.Writer) {
 	for _, v := range t.vertexes {
 		if v.Error != "" && !strings.HasSuffix(v.Error, context.Canceled.Error()) {
-			fmt.Println("------")
-			fmt.Printf(" > %s:\n", v.Name)
+			fmt.Fprintln(f, "------")
+			fmt.Fprintf(f, " > %s:\n", v.Name)
 			for _, l := range v.logs {
 				switch l.Stream {
 				case 1:
-					os.Stdout.Write(l.Data)
+					f.Write(l.Data)
 				case 2:
-					os.Stderr.Write(l.Data)
+					f.Write(l.Data)
 				}
 			}
-			fmt.Println("------")
+			fmt.Fprintln(f, "------")
 		}
 	}
 }
@@ -232,19 +232,19 @@ func (disp *display) print(d displayInfo, all bool) {
 		b = b.Down(1)
 	}
 	disp.repeated = true
-	fmt.Print(b.Column(0).ANSI)
+	fmt.Fprint(disp.c, b.Column(0).ANSI)
 
 	statusStr := ""
 	if d.countCompleted > 0 && d.countCompleted == d.countTotal {
 		statusStr = "FINISHED"
 	}
 
-	fmt.Print(aec.Hide)
-	defer fmt.Print(aec.Show)
+	fmt.Fprint(disp.c, aec.Hide)
+	defer fmt.Fprint(disp.c, aec.Show)
 
 	out := fmt.Sprintf("[+] Building %.1fs (%d/%d) %s", time.Since(d.startTime).Seconds(), d.countCompleted, d.countTotal, statusStr)
 	out = align(out, "", width)
-	fmt.Println(out)
+	fmt.Fprintln(disp.c, out)
 	lineCount := 0
 	for _, j := range d.jobs {
 		endTime := time.Now()
@@ -292,7 +292,7 @@ func (disp *display) print(d displayInfo, all bool) {
 			}
 			out = aec.Apply(out, color)
 		}
-		fmt.Print(out)
+		fmt.Fprint(disp.c, out)
 		lineCount++
 	}
 	disp.lineCount = lineCount

@@ -15,6 +15,7 @@ import (
 	"github.com/moby/buildkit/exporter"
 	imageexporter "github.com/moby/buildkit/exporter/containerimage"
 	localexporter "github.com/moby/buildkit/exporter/local"
+	ociexporter "github.com/moby/buildkit/exporter/oci"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot/blobmapping"
 	"github.com/moby/buildkit/source"
@@ -128,12 +129,19 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 
 	exporters := map[string]exporter.Exporter{}
 
+	iw, err := imageexporter.NewImageWriter(imageexporter.WriterOpt{
+		Snapshotter:  bmSnapshotter,
+		ContentStore: opt.ContentStore,
+		Differ:       opt.Differ,
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	imageExporter, err := imageexporter.New(imageexporter.Opt{
-		Snapshotter:    bmSnapshotter,
-		ContentStore:   opt.ContentStore,
-		Differ:         opt.Differ,
 		Images:         opt.ImageStore,
 		SessionManager: opt.SessionManager,
+		ImageWriter:    iw,
 	})
 	if err != nil {
 		return nil, err
@@ -147,6 +155,15 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 		return nil, err
 	}
 	exporters[client.ExporterLocal] = localExporter
+
+	ociExporter, err := ociexporter.New(ociexporter.Opt{
+		SessionManager: opt.SessionManager,
+		ImageWriter:    iw,
+	})
+	if err != nil {
+		return nil, err
+	}
+	exporters[client.ExporterOCI] = ociExporter
 
 	ce := cacheimport.NewCacheExporter(cacheimport.ExporterOpt{
 		Snapshotter:    bmSnapshotter,

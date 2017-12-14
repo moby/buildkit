@@ -2,6 +2,7 @@ package filesync
 
 import (
 	"fmt"
+	io "io"
 	"os"
 	"strings"
 
@@ -213,8 +214,17 @@ func NewFSSyncTarget(outdir string) session.Attachable {
 	return p
 }
 
+// NewFSSyncTargetFile allows writing into a file. Empty file means stdout
+func NewFSSyncTargetFile(outfile string) session.Attachable {
+	p := &fsSyncTarget{
+		outfile: outfile,
+	}
+	return p
+}
+
 type fsSyncTarget struct {
-	outdir string
+	outdir  string
+	outfile string
 }
 
 func (sp *fsSyncTarget) Register(server *grpc.Server) {
@@ -222,7 +232,21 @@ func (sp *fsSyncTarget) Register(server *grpc.Server) {
 }
 
 func (sp *fsSyncTarget) DiffCopy(stream FileSend_DiffCopyServer) error {
-	return syncTargetDiffCopy(stream, sp.outdir)
+	if sp.outdir != "" {
+		return syncTargetDiffCopy(stream, sp.outdir)
+	}
+	var f *os.File
+	if sp.outfile == "" {
+		f = os.Stdout
+	} else {
+		var err error
+		f, err = os.Create(sp.outfile)
+		if err != nil {
+			return err
+		}
+	}
+	defer f.Close()
+	return writeTargetFile(stream, f)
 }
 
 func CopyToCaller(ctx context.Context, srcPath string, c session.Caller, progress func(int, bool)) error {
@@ -239,4 +263,20 @@ func CopyToCaller(ctx context.Context, srcPath string, c session.Caller, progres
 	}
 
 	return sendDiffCopy(cc, srcPath, nil, nil, progress, nil)
+}
+
+func CopyFileWriter(ctx context.Context, c session.Caller) (io.WriteCloser, error) {
+	method := session.MethodURL(_FileSend_serviceDesc.ServiceName, "diffcopy")
+	if !c.Supports(method) {
+		return nil, errors.Errorf("method %s not supported by the client", method)
+	}
+
+	client := NewFileSendClient(c.Conn())
+
+	cc, err := client.DiffCopy(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return newStreamWriter(cc), nil
 }
