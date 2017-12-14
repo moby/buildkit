@@ -1,9 +1,12 @@
 package source
 
 import (
+	"encoding/json"
+	"strconv"
 	"strings"
 
 	"github.com/containerd/containerd/reference"
+	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
@@ -46,6 +49,73 @@ func FromString(s string) (Identifier, error) {
 	default:
 		return nil, errors.Wrapf(errNotFound, "unknown schema %s", parts[0])
 	}
+}
+func FromLLB(op *pb.Op_Source) (Identifier, error) {
+	id, err := FromString(op.Source.Identifier)
+	if err != nil {
+		return nil, err
+	}
+	if id, ok := id.(*GitIdentifier); ok {
+		for k, v := range op.Source.Attrs {
+			switch k {
+			case pb.AttrKeepGitDir:
+				if v == "true" {
+					id.KeepGitDir = true
+				}
+			}
+		}
+	}
+	if id, ok := id.(*LocalIdentifier); ok {
+		for k, v := range op.Source.Attrs {
+			switch k {
+			case pb.AttrLocalSessionID:
+				id.SessionID = v
+				if p := strings.SplitN(v, ":", 2); len(p) == 2 {
+					id.Name = p[0] + "-" + id.Name
+					id.SessionID = p[1]
+				}
+			case pb.AttrIncludePatterns:
+				var patterns []string
+				if err := json.Unmarshal([]byte(v), &patterns); err != nil {
+					return nil, err
+				}
+				id.IncludePatterns = patterns
+			}
+		}
+	}
+	if id, ok := id.(*HttpIdentifier); ok {
+		for k, v := range op.Source.Attrs {
+			switch k {
+			case pb.AttrHTTPChecksum:
+				dgst, err := digest.Parse(v)
+				if err != nil {
+					return nil, err
+				}
+				id.Checksum = dgst
+			case pb.AttrHTTPFilename:
+				id.Filename = v
+			case pb.AttrHTTPPerm:
+				i, err := strconv.ParseInt(v, 0, 64)
+				if err != nil {
+					return nil, err
+				}
+				id.Perm = int(i)
+			case pb.AttrHTTPUID:
+				i, err := strconv.ParseInt(v, 0, 64)
+				if err != nil {
+					return nil, err
+				}
+				id.UID = int(i)
+			case pb.AttrHTTPGID:
+				i, err := strconv.ParseInt(v, 0, 64)
+				if err != nil {
+					return nil, err
+				}
+				id.GID = int(i)
+			}
+		}
+	}
+	return id, nil
 }
 
 type ImageIdentifier struct {
