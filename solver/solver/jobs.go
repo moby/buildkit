@@ -9,9 +9,9 @@ import (
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
-	"github.com/moby/buildkit/solver/llbload"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/solver/reference"
+	"github.com/moby/buildkit/solver/solver/pbload"
 	"github.com/moby/buildkit/util/progress"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
@@ -176,7 +176,7 @@ func (j *job) load(def *pb.Definition, resolveOp ResolveOpFunc) (*solver.Input, 
 }
 
 func (j *job) loadInternal(def *pb.Definition, resolveOp ResolveOpFunc) (*solver.Input, error) {
-	vtx, idx, err := llbload.Load(def, func(dgst digest.Digest, pbOp *pb.Op, load func(digest.Digest) (interface{}, error)) (interface{}, error) {
+	vtx, idx, err := pbload.Load(def, func(dgst digest.Digest, pbOp *pb.Op, load func(digest.Digest) (interface{}, error)) (interface{}, error) {
 		if st, ok := j.l.actives[dgst]; ok {
 			if vtx, ok := st.jobs[j]; ok {
 				return vtx, nil

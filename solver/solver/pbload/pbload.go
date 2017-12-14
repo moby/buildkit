@@ -1,4 +1,4 @@
-package llbload
+package pbload
 
 import (
 	"github.com/moby/buildkit/solver/pb"
@@ -6,7 +6,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// load loads LLB.
+// Load loads PB.
 // fn is executed sequentially.
 func Load(def *pb.Definition, fn func(digest.Digest, *pb.Op, func(digest.Digest) (interface{}, error)) (interface{}, error)) (interface{}, pb.OutputIndex, error) {
 	if len(def.Def) == 0 {
