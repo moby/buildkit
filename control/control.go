@@ -9,7 +9,7 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/grpchijack"
 	"github.com/moby/buildkit/solver"
-	solverimpl "github.com/moby/buildkit/solver/solver"
+	"github.com/moby/buildkit/solver/llbsolver"
 	"github.com/moby/buildkit/worker"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -32,7 +32,7 @@ type Controller struct { // TODO: ControlService
 func NewController(opt Opt) (*Controller, error) {
 	c := &Controller{
 		opt:    opt,
-		solver: solverimpl.NewLLBSolver(opt.WorkerController, opt.Frontends),
+		solver: llbsolver.New(opt.WorkerController, opt.Frontends),
 	}
 	return c, nil
 }

@@ -13,8 +13,6 @@ import (
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/frontend"
 	solver "github.com/moby/buildkit/solver"
-	llbop "github.com/moby/buildkit/solver/llbop"
-	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/solver/reference"
 	"github.com/moby/buildkit/util/bgfunc"
 	"github.com/moby/buildkit/util/progress"
@@ -26,47 +24,22 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// DetermineVertexWorker determines worker for a vertex.
-// Currently, constraint is just ignored.
-// Also we need to track the workers of the inputs.
-func DetermineVertexWorker(wc *worker.Controller, v solver.Vertex) (*worker.Worker, error) {
-	// TODO: multiworker
-	return wc.GetDefault()
-}
-
-func NewLLBSolver(wc *worker.Controller, frontends map[string]frontend.Frontend) *Solver {
-	var s *Solver
-	s = New(func(v solver.Vertex) (solver.Op, error) {
-		w, err := DetermineVertexWorker(wc, v)
-		if err != nil {
-			return nil, err
-		}
-		switch op := v.Sys().(type) {
-		case *pb.Op_Source:
-			return llbop.NewSourceOp(v, op, w.SourceManager)
-		case *pb.Op_Exec:
-			return llbop.NewExecOp(v, op, w.CacheManager, w.Executor)
-		case *pb.Op_Build:
-			return llbop.NewBuildOp(v, op, s)
-		default:
-			return nil, nil
-		}
-	}, wc, frontends)
-	return s
-}
+// FIXME: Also we need to track the workers of the inputs.
+type VertexWorkerDeterminer func(wc *worker.Controller, v solver.Vertex) (*worker.Worker, error)
 
 // ResolveOpFunc finds an Op implementation for a vertex
 type ResolveOpFunc func(solver.Vertex) (solver.Op, error)
 
 type Solver struct {
-	resolve          ResolveOpFunc
-	jobs             *jobList
-	workerController *worker.Controller
-	frontends        map[string]frontend.Frontend
+	resolve               ResolveOpFunc
+	jobs                  *jobList
+	workerController      *worker.Controller
+	determineVertexWorker VertexWorkerDeterminer
+	frontends             map[string]frontend.Frontend
 }
 
-func New(resolve ResolveOpFunc, wc *worker.Controller, f map[string]frontend.Frontend) *Solver {
-	return &Solver{resolve: resolve, jobs: newJobList(), workerController: wc, frontends: f}
+func New(resolve ResolveOpFunc, wc *worker.Controller, vwd VertexWorkerDeterminer, f map[string]frontend.Frontend) *Solver {
+	return &Solver{resolve: resolve, jobs: newJobList(), workerController: wc, determineVertexWorker: vwd, frontends: f}
 }
 
 func (s *Solver) solve(ctx context.Context, j *job, req solver.SolveRequest) (solver.Ref, map[string][]byte, error) {
@@ -204,7 +177,7 @@ func (s *Solver) SubBuild(ctx context.Context, dgst digest.Digest, req solver.So
 	st = jl.actives[inp.Vertex.Digest()]
 	jl.mu.Unlock()
 
-	w, err := DetermineVertexWorker(s.workerController, inp.Vertex)
+	w, err := s.determineVertexWorker(s.workerController, inp.Vertex)
 	if err != nil {
 		return nil, err
 	}
