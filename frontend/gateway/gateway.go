@@ -4,10 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -19,7 +17,6 @@ import (
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
-	"github.com/moby/buildkit/snapshot"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -75,6 +72,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 		if err != nil {
 			return nil, nil, err
 		}
+		defer ref.Release(context.TODO())
 		rootFS = ref
 		config, ok := exp[exporterImageConfig]
 		if ok {
@@ -115,6 +113,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 		if err != nil {
 			return nil, nil, err
 		}
+		defer ref.Release(context.TODO())
 		rootFS = ref
 	}
 
@@ -143,6 +142,14 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 	}
 
 	env = append(env, "BUILDKIT_SESSION_ID="+sid)
+
+	defer func() {
+		for _, r := range lbf.refs {
+			if r != nil && (lbf.lastRef != r || retErr != nil) {
+				r.Release(context.TODO())
+			}
+		}
+	}()
 
 	err = llbBridge.Exec(ctx, executor.Meta{
 		Env:  env,
@@ -271,6 +278,9 @@ func (lbf *llbBrideForwarder) Solve(ctx context.Context, req *pb.SolveRequest) (
 		lbf.lastRef = ref
 		lbf.exporterAttr = exp
 	}
+	if ref == nil {
+		id = ""
+	}
 	return &pb.SolveResponse{Ref: id}, nil
 }
 func (lbf *llbBrideForwarder) ReadFile(ctx context.Context, req *pb.ReadFileRequest) (*pb.ReadFileResponse, error) {
@@ -278,34 +288,13 @@ func (lbf *llbBrideForwarder) ReadFile(ctx context.Context, req *pb.ReadFileRequ
 	if !ok {
 		return nil, errors.Errorf("no such ref: %v", req.Ref)
 	}
-
-	mount, err := ref.Mount(ctx, false)
+	if ref == nil {
+		return nil, errors.Wrapf(os.ErrNotExist, "%s no found", req.FilePath)
+	}
+	dt, err := cache.ReadFile(ctx, ref, req.FilePath)
 	if err != nil {
 		return nil, err
 	}
-
-	lm := snapshot.LocalMounter(mount)
-
-	root, err := lm.Mount()
-	if err != nil {
-		return nil, err
-	}
-
-	defer func() {
-		if lm != nil {
-			lm.Unmount()
-		}
-	}()
-
-	dt, err := ioutil.ReadFile(filepath.Join(root, req.FilePath))
-	if err != nil {
-		return nil, err
-	}
-
-	if err := lm.Unmount(); err != nil {
-		return nil, err
-	}
-	lm = nil
 
 	return &pb.ReadFileResponse{Data: dt}, nil
 }
