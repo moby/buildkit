@@ -8,7 +8,6 @@ import (
 
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/pb"
-	vtxpkg "github.com/moby/buildkit/solver/vertex"
 	"github.com/moby/buildkit/source"
 	digest "github.com/opencontainers/go-digest"
 	"golang.org/x/net/context"
@@ -23,7 +22,7 @@ type sourceOp struct {
 	src source.SourceInstance
 }
 
-func NewSourceOp(_ vtxpkg.Vertex, op *pb.Op_Source, sm *source.Manager) (*sourceOp, error) {
+func NewSourceOp(_ solver.Vertex, op *pb.Op_Source, sm *source.Manager) (*sourceOp, error) {
 	return &sourceOp{
 		op: op,
 		sm: sm,

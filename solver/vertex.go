@@ -1,4 +1,4 @@
-package vertex
+package solver
 
 import (
 	"github.com/moby/buildkit/solver/pb"

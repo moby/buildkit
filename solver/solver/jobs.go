@@ -12,7 +12,6 @@ import (
 	"github.com/moby/buildkit/solver/llbload"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/solver/reference"
-	vtxpkg "github.com/moby/buildkit/solver/vertex"
 	"github.com/moby/buildkit/util/progress"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
@@ -165,18 +164,18 @@ type job struct {
 
 type cacheRecord struct {
 	VertexSolver
-	index vtxpkg.Index
+	index solver.Index
 	ref   solver.Ref
 }
 
-func (j *job) load(def *pb.Definition, resolveOp ResolveOpFunc) (*vtxpkg.Input, error) {
+func (j *job) load(def *pb.Definition, resolveOp ResolveOpFunc) (*solver.Input, error) {
 	j.l.mu.Lock()
 	defer j.l.mu.Unlock()
 
 	return j.loadInternal(def, resolveOp)
 }
 
-func (j *job) loadInternal(def *pb.Definition, resolveOp ResolveOpFunc) (*vtxpkg.Input, error) {
+func (j *job) loadInternal(def *pb.Definition, resolveOp ResolveOpFunc) (*solver.Input, error) {
 	vtx, idx, err := llbload.Load(def, func(dgst digest.Digest, pbOp *pb.Op, load func(digest.Digest) (interface{}, error)) (interface{}, error) {
 		if st, ok := j.l.actives[dgst]; ok {
 			if vtx, ok := st.jobs[j]; ok {
@@ -208,7 +207,7 @@ func (j *job) loadInternal(def *pb.Definition, resolveOp ResolveOpFunc) (*vtxpkg
 			}
 			for i, input := range pbOp.Inputs {
 				if inputMetadata := def.Metadata[input.Digest]; inputMetadata.IgnoreCache {
-					k, err := s.CacheKey(ctx, vtxpkg.Index(i))
+					k, err := s.CacheKey(ctx, solver.Index(i))
 					if err != nil {
 						return nil, err
 					}
@@ -229,7 +228,7 @@ func (j *job) loadInternal(def *pb.Definition, resolveOp ResolveOpFunc) (*vtxpkg
 	if err != nil {
 		return nil, err
 	}
-	return &vtxpkg.Input{Vertex: vtx.(*vertex), Index: vtxpkg.Index(idx)}, nil
+	return &solver.Input{Vertex: vtx.(*vertex), Index: solver.Index(idx)}, nil
 }
 
 func (j *job) discard() {
@@ -257,7 +256,7 @@ func (j *job) getSolver(dgst digest.Digest) (VertexSolver, error) {
 	return st.solver, nil
 }
 
-func (j *job) getRef(ctx context.Context, cv client.Vertex, index vtxpkg.Index) (solver.Ref, error) {
+func (j *job) getRef(ctx context.Context, cv client.Vertex, index solver.Index) (solver.Ref, error) {
 	s, err := j.getSolver(cv.Digest)
 	if err != nil {
 		return nil, err
@@ -270,7 +269,7 @@ func (j *job) getRef(ctx context.Context, cv client.Vertex, index vtxpkg.Index) 
 	return ref, nil
 }
 
-func (j *job) keepCacheRef(s VertexSolver, index vtxpkg.Index, ref solver.Ref) {
+func (j *job) keepCacheRef(s VertexSolver, index solver.Index, ref solver.Ref) {
 	immutable, ok := reference.ToImmutableRef(ref)
 	if ok {
 		j.cached[immutable.ID()] = &cacheRecord{s, index, ref}
@@ -289,7 +288,7 @@ func (j *job) cacheExporter(ref solver.Ref) (CacheExporter, error) {
 	return cr.Cache(cr.index, cr.ref), nil
 }
 
-func getRef(ctx context.Context, s VertexSolver, cv client.Vertex, index vtxpkg.Index, cache instructioncache.InstructionCache) (solver.Ref, error) {
+func getRef(ctx context.Context, s VertexSolver, cv client.Vertex, index solver.Index, cache instructioncache.InstructionCache) (solver.Ref, error) {
 	k, err := s.CacheKey(ctx, index)
 	if err != nil {
 		return nil, err

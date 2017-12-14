@@ -6,15 +6,15 @@ import (
 
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/pb"
-	vtxpkg "github.com/moby/buildkit/solver/vertex"
 	"github.com/moby/buildkit/util/progress"
 	digest "github.com/opencontainers/go-digest"
 	"golang.org/x/net/context"
 )
 
 type input struct {
-	index  vtxpkg.Index
+	index  solver.Index
 	vertex *vertex
 }
 
@@ -54,10 +54,10 @@ func (v *vertex) Metadata() *pb.OpMetadata {
 	return v.metadata
 }
 
-func (v *vertex) Inputs() (inputs []vtxpkg.Input) {
-	inputs = make([]vtxpkg.Input, 0, len(v.inputs))
+func (v *vertex) Inputs() (inputs []solver.Input) {
+	inputs = make([]solver.Input, 0, len(v.inputs))
 	for _, i := range v.inputs {
-		inputs = append(inputs, vtxpkg.Input{i.index, i.vertex})
+		inputs = append(inputs, solver.Input{i.index, i.vertex})
 	}
 	return
 }
