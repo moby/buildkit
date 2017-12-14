@@ -1,4 +1,4 @@
-package solver
+package llbop
 
 import (
 	"encoding/json"
@@ -10,7 +10,9 @@ import (
 
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/executor"
+	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/solver/reference"
 	"github.com/moby/buildkit/util/progress/logs"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
@@ -26,7 +28,7 @@ type execOp struct {
 	numInputs int
 }
 
-func newExecOp(v Vertex, op *pb.Op_Exec, cm cache.Manager, exec executor.Executor) (Op, error) {
+func NewExecOp(v solver.Vertex, op *pb.Op_Exec, cm cache.Manager, exec executor.Executor) (*execOp, error) {
 	return &execOp{
 		op:        op.Exec,
 		cm:        cm,
@@ -54,9 +56,9 @@ func (e *execOp) CacheKey(ctx context.Context) (digest.Digest, error) {
 	return digest.FromBytes(dt), nil
 }
 
-func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, error) {
+func (e *execOp) Run(ctx context.Context, inputs []solver.Ref) ([]solver.Ref, error) {
 	var mounts []executor.Mount
-	var outputs []Reference
+	var outputs []solver.Ref
 	var root cache.Mountable
 
 	defer func() {
@@ -76,7 +78,7 @@ func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, erro
 			}
 			inp := inputs[int(m.Input)]
 			var ok bool
-			ref, ok = toImmutableRef(inp)
+			ref, ok = reference.ToImmutableRef(inp)
 			if !ok {
 				return nil, errors.Errorf("invalid reference for exec %T", inputs[int(m.Input)])
 			}
@@ -84,7 +86,7 @@ func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, erro
 		}
 		if m.Output != pb.SkipOutput {
 			if m.Readonly && ref != nil && m.Dest != pb.RootMount { // exclude read-only rootfs
-				outputs = append(outputs, newSharedRef(ref).Clone())
+				outputs = append(outputs, reference.NewSharedRef(ref).Clone())
 			} else {
 				active, err := e.cm.New(ctx, ref, cache.WithDescription(fmt.Sprintf("mount %s from exec %s", m.Dest, strings.Join(e.op.Meta.Args, " ")))) // TODO: should be method
 				if err != nil {
@@ -120,7 +122,7 @@ func (e *execOp) Run(ctx context.Context, inputs []Reference) ([]Reference, erro
 		return nil, errors.Wrapf(err, "executor failed running %v", meta.Args)
 	}
 
-	refs := []Reference{}
+	refs := []solver.Ref{}
 	for i, o := range outputs {
 		if mutable, ok := o.(cache.MutableRef); ok {
 			ref, err := mutable.Commit(ctx)
