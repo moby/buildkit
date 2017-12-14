@@ -1,4 +1,4 @@
-package solver
+package llbop
 
 import (
 	"encoding/json"
@@ -16,15 +16,19 @@ import (
 	"golang.org/x/net/context"
 )
 
+type SubBuilder interface {
+	SubBuild(ctx context.Context, dgst digest.Digest, req solver.SolveRequest) (solver.Ref, error)
+}
+
 const buildCacheType = "buildkit.build.v0"
 
 type buildOp struct {
 	op *pb.BuildOp
-	s  *Solver
+	s  SubBuilder
 	v  solver.Vertex
 }
 
-func newBuildOp(v solver.Vertex, op *pb.Op_Build, s *Solver) (solver.Op, error) {
+func NewBuildOp(v solver.Vertex, op *pb.Op_Build, s SubBuilder) (solver.Op, error) {
 	return &buildOp{
 		op: op.Build,
 		s:  s,
@@ -110,7 +114,7 @@ func (b *buildOp) Run(ctx context.Context, inputs []solver.Ref) (outputs []solve
 	lm.Unmount()
 	lm = nil
 
-	newref, err := b.s.subBuild(ctx, b.v.Digest(), solver.SolveRequest{
+	newref, err := b.s.SubBuild(ctx, b.v.Digest(), solver.SolveRequest{
 		Definition: def.ToPB(),
 	})
 	if err != nil {

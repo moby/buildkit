@@ -47,7 +47,7 @@ func NewLLBSolver(wc *worker.Controller, frontends map[string]frontend.Frontend)
 		case *pb.Op_Exec:
 			return llbop.NewExecOp(v, op, w.CacheManager, w.Executor)
 		case *pb.Op_Build:
-			return newBuildOp(v, op, s)
+			return llbop.NewBuildOp(v, op, s)
 		default:
 			return nil, nil
 		}
@@ -183,7 +183,7 @@ func (s *Solver) Status(ctx context.Context, id string, statusChan chan *client.
 	return j.pipe(ctx, statusChan)
 }
 
-func (s *Solver) subBuild(ctx context.Context, dgst digest.Digest, req solver.SolveRequest) (solver.Ref, error) {
+func (s *Solver) SubBuild(ctx context.Context, dgst digest.Digest, req solver.SolveRequest) (solver.Ref, error) {
 	jl := s.jobs
 	jl.mu.Lock()
 	st, ok := jl.actives[dgst]
