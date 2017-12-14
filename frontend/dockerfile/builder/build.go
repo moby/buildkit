@@ -41,6 +41,7 @@ func Build(ctx context.Context, c client.Client) error {
 	src := llb.Local(LocalNameDockerfile,
 		llb.IncludePatterns([]string{filename}),
 		llb.SessionID(c.SessionID()),
+		llb.SharedKeyHint(defaultDockerfileName),
 	)
 	var buildContext *llb.State
 	if strings.HasPrefix(opts[LocalNameContext], gitPrefix) {
@@ -70,7 +71,11 @@ func Build(ctx context.Context, c client.Client) error {
 	eg.Go(func() error {
 		dockerignoreState := buildContext
 		if dockerignoreState == nil {
-			st := llb.Local(LocalNameContext, llb.SessionID(c.SessionID()), llb.IncludePatterns([]string{dockerignoreFilename}))
+			st := llb.Local(LocalNameContext,
+				llb.SessionID(c.SessionID()),
+				llb.IncludePatterns([]string{dockerignoreFilename}),
+				llb.SharedKeyHint(dockerignoreFilename),
+			)
 			dockerignoreState = &st
 		}
 		def, err := dockerignoreState.Marshal()

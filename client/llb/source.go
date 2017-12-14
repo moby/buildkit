@@ -196,6 +196,9 @@ func Local(name string, opts ...LocalOption) State {
 	if gi.ExcludePatterns != "" {
 		attrs[pb.AttrExcludePatterns] = gi.ExcludePatterns
 	}
+	if gi.SharedKeyHint != "" {
+		attrs[pb.AttrSharedKeyHint] = gi.SharedKeyHint
+	}
 
 	source := NewSource("local://"+name, attrs, gi.Metadata())
 	return NewState(source.Output())
@@ -239,11 +242,18 @@ func ExcludePatterns(p []string) LocalOption {
 	})
 }
 
+func SharedKeyHint(h string) LocalOption {
+	return localOptionFunc(func(li *LocalInfo) {
+		li.SharedKeyHint = h
+	})
+}
+
 type LocalInfo struct {
 	opMetaWrapper
 	SessionID       string
 	IncludePatterns string
 	ExcludePatterns string
+	SharedKeyHint   string
 }
 
 func HTTP(url string, opts ...HTTPOption) State {

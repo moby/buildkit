@@ -86,6 +86,8 @@ func FromLLB(op *pb.Op_Source) (Identifier, error) {
 					return nil, err
 				}
 				id.ExcludePatterns = patterns
+			case pb.AttrSharedKeyHint:
+				id.SharedKeyHint = v
 			}
 		}
 	}
@@ -149,6 +151,7 @@ type LocalIdentifier struct {
 	SessionID       string
 	IncludePatterns []string
 	ExcludePatterns []string
+	SharedKeyHint   string
 }
 
 func NewLocalIdentifier(str string) (*LocalIdentifier, error) {

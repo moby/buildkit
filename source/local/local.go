@@ -79,7 +79,8 @@ func (ls *localSourceHandler) CacheKey(ctx context.Context) (string, error) {
 	dt, err := json.Marshal(struct {
 		SessionID       string
 		IncludePatterns []string
-	}{SessionID: sessionID, IncludePatterns: ls.src.IncludePatterns})
+		ExcludePatterns []string
+	}{SessionID: sessionID, IncludePatterns: ls.src.IncludePatterns, ExcludePatterns: ls.src.ExcludePatterns})
 	if err != nil {
 		return "", err
 	}
@@ -101,7 +102,7 @@ func (ls *localSourceHandler) Snapshot(ctx context.Context) (out cache.Immutable
 		return nil, err
 	}
 
-	sharedKey := keySharedKey + ":" + ls.src.Name + ":" + caller.SharedKey()
+	sharedKey := keySharedKey + ":" + ls.src.Name + ":" + ls.src.SharedKeyHint + ":" + caller.SharedKey() // TODO: replace caller.SharedKey() with source based hint from client(absolute-path+nodeid)
 
 	var mutable cache.MutableRef
 	sis, err := ls.md.Search(sharedKey)
