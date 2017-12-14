@@ -4,7 +4,6 @@ import (
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/frontend/dockerfile/builder"
-	"github.com/moby/buildkit/util/appcontext"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
@@ -30,7 +29,7 @@ func (f *dfFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBr
 		}
 	}()
 
-	if err := builder.Build(appcontext.Context(), c); err != nil {
+	if err := builder.Build(ctx, c); err != nil {
 		return nil, nil, err
 	}
 
