@@ -145,7 +145,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 
 	defer func() {
 		for _, r := range lbf.refs {
-			if lbf.lastRef != r || retErr != nil {
+			if r != nil && (lbf.lastRef != r || retErr != nil) {
 				r.Release(context.TODO())
 			}
 		}
@@ -278,6 +278,9 @@ func (lbf *llbBrideForwarder) Solve(ctx context.Context, req *pb.SolveRequest) (
 		lbf.lastRef = ref
 		lbf.exporterAttr = exp
 	}
+	if ref == nil {
+		id = ""
+	}
 	return &pb.SolveResponse{Ref: id}, nil
 }
 func (lbf *llbBrideForwarder) ReadFile(ctx context.Context, req *pb.ReadFileRequest) (*pb.ReadFileResponse, error) {
@@ -285,7 +288,9 @@ func (lbf *llbBrideForwarder) ReadFile(ctx context.Context, req *pb.ReadFileRequ
 	if !ok {
 		return nil, errors.Errorf("no such ref: %v", req.Ref)
 	}
-
+	if ref == nil {
+		return nil, errors.Wrapf(os.ErrNotExist, "%s no found", req.FilePath)
+	}
 	dt, err := cache.ReadFile(ctx, ref, req.FilePath)
 	if err != nil {
 		return nil, err

@@ -1,11 +1,14 @@
 package dockerfile
 
 import (
+	"os"
+
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
 
@@ -16,7 +19,7 @@ func llbBridgeToGatewayClient(ctx context.Context, llbBridge frontend.FrontendLL
 type bridgeClient struct {
 	frontend.FrontendLLBBridge
 	opts         map[string]string
-	final        cache.ImmutableRef
+	final        *ref
 	sid          string
 	exporterAttr map[string][]byte
 	refs         []*ref
@@ -56,5 +59,8 @@ type ref struct {
 }
 
 func (r *ref) ReadFile(ctx context.Context, fp string) ([]byte, error) {
+	if r.ImmutableRef == nil {
+		return nil, errors.Wrapf(os.ErrNotExist, "%s no found", fp)
+	}
 	return cache.ReadFile(ctx, r.ImmutableRef, fp)
 }

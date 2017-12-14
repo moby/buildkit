@@ -24,7 +24,7 @@ func (f *dfFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBr
 
 	defer func() {
 		for _, r := range c.refs {
-			if c.final != r || retErr != nil {
+			if r != nil && (c.final != r || retErr != nil) {
 				r.Release(context.TODO())
 			}
 		}
@@ -38,5 +38,5 @@ func (f *dfFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBr
 		return nil, nil, errors.Errorf("invalid empty return") // shouldn't happen
 	}
 
-	return c.final, c.exporterAttr, nil
+	return c.final.ImmutableRef, c.exporterAttr, nil
 }

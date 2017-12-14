@@ -51,6 +51,9 @@ func (c *grpcClient) Solve(ctx context.Context, def *opspb.Definition, frontend 
 	if err != nil {
 		return nil, err
 	}
+	if resp.Ref == "" {
+		return nil, nil
+	}
 	return &reference{id: resp.Ref, c: c}, nil
 }
 
