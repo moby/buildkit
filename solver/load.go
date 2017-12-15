@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/source"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
@@ -86,6 +87,13 @@ func loadLLB(def *pb.Definition, fn func(digest.Digest, *pb.Op, func(digest.Dige
 func llbOpName(op *pb.Op) string {
 	switch op := op.Op.(type) {
 	case *pb.Op_Source:
+		if id, err := source.FromLLB(op); err == nil {
+			if id, ok := id.(*source.LocalIdentifier); ok {
+				if len(id.IncludePatterns) == 1 {
+					return op.Source.Identifier + " (" + id.IncludePatterns[0] + ")"
+				}
+			}
+		}
 		return op.Source.Identifier
 	case *pb.Op_Exec:
 		return strings.Join(op.Exec.Meta.Args, " ")
