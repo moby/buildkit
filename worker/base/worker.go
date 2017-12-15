@@ -204,7 +204,7 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 	}, nil
 }
 
-func (w *Worker) Resolve(v solver.Vertex, s worker.SubBuilder) (solver.Op, error) {
+func (w *Worker) ResolveVertex(v solver.Vertex, s worker.SubBuilder) (solver.Op, error) {
 	switch op := v.Sys().(type) {
 	case *pb.Op_Source:
 		return llbop.NewSourceOp(v, op, w.SourceManager)

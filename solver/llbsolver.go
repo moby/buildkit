@@ -29,7 +29,7 @@ func NewLLBOpSolver(opt LLBOpt) *Solver {
 		if err != nil {
 			return nil, err
 		}
-		return w.Resolve(v, s)
+		return w.ResolveVertex(v, s)
 	}, opt.WorkerController, determineVertexWorker, opt.Frontends, opt.CacheExporter, opt.CacheImporter)
 	return s
 }
