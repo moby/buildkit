@@ -9,14 +9,14 @@ import (
 )
 
 type buildOpt struct {
-	target     string
-	containerd string
-	runc       string
+	withContainerd bool
+	containerd     string
+	runc           string
 }
 
 func main() {
 	var opt buildOpt
-	flag.StringVar(&opt.target, "target", "containerd", "target (standalone, containerd)")
+	flag.BoolVar(&opt.withContainerd, "with-containerd", true, "enable containerd worker")
 	flag.StringVar(&opt.containerd, "containerd", "v1.0.0", "containerd version")
 	flag.StringVar(&opt.runc, "runc", "74a17296470088de3805e138d3d87c62e613dfc4", "runc version")
 	flag.Parse()
@@ -57,11 +57,11 @@ func containerd(version string) llb.State {
 func buildkit(opt buildOpt) llb.State {
 	src := goBuildBase().With(goFromGit("github.com/moby/buildkit", "master"))
 
-	builddStandalone := src.
-		Run(llb.Shlex("go build -o /bin/buildd-standalone -tags standalone ./cmd/buildd")).Root()
+	builddOCIWorkerOnly := src.
+		Run(llb.Shlex("go build -o /bin/buildd.oci_only -tags no_containerd_worker ./cmd/buildd")).Root()
 
-	builddContainerd := src.
-		Run(llb.Shlex("go build -o /bin/buildd-containerd -tags containerd ./cmd/buildd")).Root()
+	buildd := src.
+		Run(llb.Shlex("go build -o /bin/buildd ./cmd/buildd")).Root()
 
 	buildctl := src.
 		Run(llb.Shlex("go build -o /bin/buildctl ./cmd/buildctl")).Root()
@@ -71,12 +71,12 @@ func buildkit(opt buildOpt) llb.State {
 		copyFrom(runc(opt.runc), "/usr/bin/runc", "/bin/"),
 	)
 
-	if opt.target == "containerd" {
+	if opt.withContainerd {
 		return r.With(
 			copyFrom(containerd(opt.containerd), "/go/src/github.com/containerd/containerd/bin/containerd", "/bin/"),
-			copyFrom(builddContainerd, "/bin/buildd-containerd", "/bin/"))
+			copyFrom(buildd, "/bin/buildd", "/bin/"))
 	}
-	return r.With(copyFrom(builddStandalone, "/bin/buildd-standalone", "/bin/"))
+	return r.With(copyFrom(builddOCIWorkerOnly, "/bin/buildd.oci_only", "/bin/"))
 }
 
 // goFromGit is a helper for cloning a git repo, checking out a tag and copying

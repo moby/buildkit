@@ -1,4 +1,4 @@
-// +build linux,standalone
+// +build linux,no_containerd_worker
 
 package runc
 

@@ -15,25 +15,25 @@ import (
 )
 
 func init() {
-	register(&standalone{})
+	register(&oci{})
 }
 
-type standalone struct {
+type oci struct {
 }
 
-func (s *standalone) Name() string {
-	return "standalone"
+func (s *oci) Name() string {
+	return "oci"
 }
 
-func (s *standalone) New() (Sandbox, func() error, error) {
-	if err := lookupBinary("buildd-standalone"); err != nil {
+func (s *oci) New() (Sandbox, func() error, error) {
+	if err := lookupBinary("buildd"); err != nil {
 		return nil, nil, err
 	}
 	if err := requireRoot(); err != nil {
 		return nil, nil, err
 	}
 	logs := map[string]*bytes.Buffer{}
-	builddSock, stop, err := runBuildd([]string{"buildd-standalone"}, logs)
+	builddSock, stop, err := runBuildd([]string{"buildd", "--oci-worker=true", "--containerd-worker=false"}, logs)
 	if err != nil {
 		return nil, nil, err
 	}
