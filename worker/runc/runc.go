@@ -30,7 +30,7 @@ func NewWorkerOpt(root string) (worker.WorkerOpt, error) {
 	if err := os.MkdirAll(root, 0700); err != nil {
 		return opt, err
 	}
-	md, err := metadata.NewStore(filepath.Join(root, name+"-metadata.db"))
+	md, err := metadata.NewStore(filepath.Join(root, "metadata.db"))
 	if err != nil {
 		return opt, err
 	}
