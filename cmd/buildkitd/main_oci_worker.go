@@ -32,6 +32,7 @@ func init() {
 }
 
 func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker.Worker, error) {
+	bridge := c.GlobalString("bridge")
 	boolOrAuto, err := parseBoolOrAuto(c.GlobalString("oci-worker"))
 	if err != nil {
 		return nil, err
@@ -43,7 +44,7 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 	if err != nil {
 		return nil, err
 	}
-	opt, err := runc.NewWorkerOpt(common.root, labels)
+	opt, err := runc.NewWorkerOpt(common.root, labels, bridge)
 	if err != nil {
 		return nil, err
 	}

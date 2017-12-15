@@ -97,6 +97,11 @@ func main() {
 			Name:  "tlscacert",
 			Usage: "ca certificate to verify clients",
 		},
+		cli.StringFlag{
+			Name:  "bridge",
+			Usage: "Attach workers to a network bridge",
+			Value: "docker0",
+		},
 	}
 
 	app.Flags = append(app.Flags, appFlags...)

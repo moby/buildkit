@@ -14,18 +14,22 @@ import (
 	"github.com/moby/buildkit/executor/oci"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/snapshot"
+	"github.com/moby/buildkit/util/network"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 type containerdExecutor struct {
-	client *containerd.Client
-	root   string
+	client          *containerd.Client
+	root            string
+	networkProvider network.NetworkProvider
 }
 
-func New(client *containerd.Client, root string) executor.Executor {
+func New(client *containerd.Client, root string, networkProvider network.NetworkProvider) executor.Executor {
 	return containerdExecutor{
-		client: client,
-		root:   root,
+		client:          client,
+		root:            root,
+		networkProvider: networkProvider,
 	}
 }
 
@@ -41,10 +45,14 @@ func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root c
 	if err != nil {
 		return err
 	}
-
 	rootMounts, err := root.Mount(ctx, false)
+
+	hostNetworkEnabled := false
+
+	iface, err := w.networkProvider.NewInterface()
 	if err != nil {
-		return err
+		logrus.Debug("network interface error, enabling HostNetworking")
+		hostNetworkEnabled = true
 	}
 
 	uid, gid, err := oci.ParseUser(meta.User)
@@ -62,7 +70,7 @@ func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root c
 		lm.Unmount()
 	}
 
-	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, containerdoci.WithUIDGID(uid, gid))
+	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, hostNetworkEnabled, containerdoci.WithUIDGID(uid, gid))
 	if err != nil {
 		return err
 	}
@@ -95,7 +103,15 @@ func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root c
 		}
 	}()
 
-	// TODO: Configure bridge networking
+	if iface != nil {
+		if err := iface.Set(int(task.Pid())); err != nil {
+			return errors.Wrap(err, "could not set the network")
+		}
+		defer iface.Remove(int(task.Pid()))
+		defer w.networkProvider.Release(iface)
+	}
+
+	// TODO: support sending signals
 
 	if err := task.Start(ctx); err != nil {
 		return err
