@@ -10,6 +10,7 @@ import (
 
 	"github.com/containerd/containerd/sys"
 	"github.com/docker/go-connections/sockets"
+	"github.com/moby/buildkit/cache/cacheimport"
 	"github.com/moby/buildkit/control"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/frontend/dockerfile"
@@ -19,6 +20,7 @@ import (
 	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/moby/buildkit/util/profiler"
 	"github.com/moby/buildkit/worker"
+	"github.com/moby/buildkit/worker/base"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -33,7 +35,7 @@ type workerInitializerOpt struct {
 }
 
 type workerInitializer struct {
-	fn func(c *cli.Context, common workerInitializerOpt) ([]*worker.Worker, error)
+	fn func(c *cli.Context, common workerInitializerOpt) ([]worker.Worker, error)
 	// less priority number, more preferred
 	priority int
 }
@@ -227,10 +229,28 @@ func newController(c *cli.Context, root string) (*control.Controller, error) {
 	frontends := map[string]frontend.Frontend{}
 	frontends["dockerfile.v0"] = dockerfile.NewDockerfileFrontend()
 	frontends["gateway.v0"] = gateway.NewGatewayFrontend()
+
+	// cache exporter and importer are manager concepts but as there is no
+	// way to pull data into specific worker yet we currently set them up
+	// as part of default worker
+	var ce *cacheimport.CacheExporter
+	var ci *cacheimport.CacheImporter
+
+	w, err := wc.GetDefault()
+	if err != nil {
+		return nil, err
+	}
+
+	wt := w.(*base.Worker)
+	ce = wt.CacheExporter
+	ci = wt.CacheImporter
+
 	return control.NewController(control.Opt{
 		SessionManager:   sessionManager,
 		WorkerController: wc,
 		Frontends:        frontends,
+		CacheExporter:    ce,
+		CacheImporter:    ci,
 	})
 }
 
@@ -242,7 +262,7 @@ func newWorkerController(c *cli.Context, wiOpt workerInitializerOpt) (*worker.Co
 			return nil, err
 		}
 		for _, w := range ws {
-			logrus.Infof("Found worker %q", w.Name)
+			logrus.Infof("found worker %q", w.Name())
 			if err = wc.Add(w); err != nil {
 				return nil, err
 			}
@@ -256,7 +276,7 @@ func newWorkerController(c *cli.Context, wiOpt workerInitializerOpt) (*worker.Co
 	if err != nil {
 		return nil, err
 	}
-	logrus.Infof("Found %d workers, default=%q", nWorkers, defaultWorker.Name)
-	logrus.Warn("Currently, only the default worker can be used.")
+	logrus.Infof("found %d workers, default=%q", nWorkers, defaultWorker.Name)
+	logrus.Warn("currently, only the default worker can be used.")
 	return wc, nil
 }

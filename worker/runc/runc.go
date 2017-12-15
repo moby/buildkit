@@ -16,15 +16,15 @@ import (
 	"github.com/containerd/containerd/snapshots/overlay"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/executor/runcexecutor"
-	"github.com/moby/buildkit/worker"
+	"github.com/moby/buildkit/worker/base"
 	"github.com/opencontainers/go-digest"
 )
 
 // NewWorkerOpt creates a WorkerOpt.
 // But it does not set the following fields:
 //  - SessionManager
-func NewWorkerOpt(root string) (worker.WorkerOpt, error) {
-	var opt worker.WorkerOpt
+func NewWorkerOpt(root string) (base.WorkerOpt, error) {
+	var opt base.WorkerOpt
 	name := "runc-overlay"
 	root = filepath.Join(root, name)
 	if err := os.MkdirAll(root, 0700); err != nil {
@@ -68,7 +68,7 @@ func NewWorkerOpt(root string) (worker.WorkerOpt, error) {
 
 	// TODO: call mdb.GarbageCollect . maybe just inject it into nsSnapshotter.Remove and csContent.Delete
 
-	opt = worker.WorkerOpt{
+	opt = base.WorkerOpt{
 		Name:            name,
 		MetadataStore:   md,
 		Executor:        exe,

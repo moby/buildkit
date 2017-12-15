@@ -8,9 +8,7 @@ import (
 	"github.com/moby/buildkit/cache/instructioncache"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/session"
-	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/pb"
-	"github.com/moby/buildkit/solver/reference"
 	"github.com/moby/buildkit/util/progress"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
@@ -163,18 +161,18 @@ type job struct {
 
 type cacheRecord struct {
 	VertexSolver
-	index solver.Index
-	ref   solver.Ref
+	index Index
+	ref   Ref
 }
 
-func (j *job) load(def *pb.Definition, resolveOp ResolveOpFunc) (*solver.Input, error) {
+func (j *job) load(def *pb.Definition, resolveOp ResolveOpFunc) (*Input, error) {
 	j.l.mu.Lock()
 	defer j.l.mu.Unlock()
 
 	return j.loadInternal(def, resolveOp)
 }
 
-func (j *job) loadInternal(def *pb.Definition, resolveOp ResolveOpFunc) (*solver.Input, error) {
+func (j *job) loadInternal(def *pb.Definition, resolveOp ResolveOpFunc) (*Input, error) {
 	vtx, idx, err := loadLLB(def, func(dgst digest.Digest, pbOp *pb.Op, load func(digest.Digest) (interface{}, error)) (interface{}, error) {
 		if st, ok := j.l.actives[dgst]; ok {
 			if vtx, ok := st.jobs[j]; ok {
@@ -206,7 +204,7 @@ func (j *job) loadInternal(def *pb.Definition, resolveOp ResolveOpFunc) (*solver
 			}
 			for i, input := range pbOp.Inputs {
 				if inputMetadata := def.Metadata[input.Digest]; inputMetadata.IgnoreCache {
-					k, err := s.CacheKey(ctx, solver.Index(i))
+					k, err := s.CacheKey(ctx, Index(i))
 					if err != nil {
 						return nil, err
 					}
@@ -227,7 +225,7 @@ func (j *job) loadInternal(def *pb.Definition, resolveOp ResolveOpFunc) (*solver
 	if err != nil {
 		return nil, err
 	}
-	return &solver.Input{Vertex: vtx.(*vertex), Index: solver.Index(idx)}, nil
+	return &Input{Vertex: vtx.(*vertex), Index: Index(idx)}, nil
 }
 
 func (j *job) discard() {
@@ -255,7 +253,7 @@ func (j *job) getSolver(dgst digest.Digest) (VertexSolver, error) {
 	return st.solver, nil
 }
 
-func (j *job) getRef(ctx context.Context, cv client.Vertex, index solver.Index) (solver.Ref, error) {
+func (j *job) getRef(ctx context.Context, cv client.Vertex, index Index) (Ref, error) {
 	s, err := j.getSolver(cv.Digest)
 	if err != nil {
 		return nil, err
@@ -268,15 +266,15 @@ func (j *job) getRef(ctx context.Context, cv client.Vertex, index solver.Index) 
 	return ref, nil
 }
 
-func (j *job) keepCacheRef(s VertexSolver, index solver.Index, ref solver.Ref) {
-	immutable, ok := reference.ToImmutableRef(ref)
+func (j *job) keepCacheRef(s VertexSolver, index Index, ref Ref) {
+	immutable, ok := ToImmutableRef(ref)
 	if ok {
 		j.cached[immutable.ID()] = &cacheRecord{s, index, ref}
 	}
 }
 
-func (j *job) cacheExporter(ref solver.Ref) (CacheExporter, error) {
-	immutable, ok := reference.ToImmutableRef(ref)
+func (j *job) cacheExporter(ref Ref) (CacheExporter, error) {
+	immutable, ok := ToImmutableRef(ref)
 	if !ok {
 		return nil, errors.Errorf("invalid reference")
 	}
@@ -287,7 +285,7 @@ func (j *job) cacheExporter(ref solver.Ref) (CacheExporter, error) {
 	return cr.Cache(cr.index, cr.ref), nil
 }
 
-func getRef(ctx context.Context, s VertexSolver, cv client.Vertex, index solver.Index, cache instructioncache.InstructionCache) (solver.Ref, error) {
+func getRef(ctx context.Context, s VertexSolver, cv client.Vertex, index Index, cache instructioncache.InstructionCache) (Ref, error) {
 	k, err := s.CacheKey(ctx, index)
 	if err != nil {
 		return nil, err
@@ -298,7 +296,7 @@ func getRef(ctx context.Context, s VertexSolver, cv client.Vertex, index solver.
 	}
 	if ref != nil {
 		markCached(ctx, cv)
-		return ref.(solver.Ref), nil
+		return ref.(Ref), nil
 	}
 
 	ev, err := s.OutputEvaluator(index)
@@ -319,7 +317,7 @@ func getRef(ctx context.Context, s VertexSolver, cv client.Vertex, index solver.
 			}
 			if ref != nil {
 				markCached(ctx, cv)
-				return ref.(solver.Ref), nil
+				return ref.(Ref), nil
 			}
 			continue
 		}

@@ -11,11 +11,11 @@ import (
 type Controller struct {
 	mu sync.Mutex
 	// TODO: define worker interface and support remote ones
-	workers []*Worker
+	workers []Worker
 }
 
 // Add adds a local worker
-func (c *Controller) Add(w *Worker) error {
+func (c *Controller) Add(w Worker) error {
 	c.mu.Lock()
 	c.workers = append(c.workers, w)
 	c.mu.Unlock()
@@ -23,7 +23,7 @@ func (c *Controller) Add(w *Worker) error {
 }
 
 // GetAll returns all local workers
-func (c *Controller) GetAll() []*Worker {
+func (c *Controller) GetAll() []Worker {
 	c.mu.Lock()
 	workers := c.workers
 	c.mu.Unlock()
@@ -31,8 +31,8 @@ func (c *Controller) GetAll() []*Worker {
 }
 
 // GetDefault returns the default local worker
-func (c *Controller) GetDefault() (*Worker, error) {
-	var w *Worker
+func (c *Controller) GetDefault() (Worker, error) {
+	var w Worker
 	c.mu.Lock()
 	if len(c.workers) > 0 {
 		w = c.workers[0]

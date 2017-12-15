@@ -7,27 +7,23 @@ import (
 	"github.com/containerd/containerd/fs"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/snapshot"
-	solver "github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/pb"
-	"github.com/moby/buildkit/solver/reference"
+	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 )
 
-type SubBuilder interface {
-	SubBuild(ctx context.Context, dgst digest.Digest, req solver.SolveRequest) (solver.Ref, error)
-}
-
 const buildCacheType = "buildkit.build.v0"
 
 type buildOp struct {
 	op *pb.BuildOp
-	s  SubBuilder
+	s  worker.SubBuilder
 	v  solver.Vertex
 }
 
-func NewBuildOp(v solver.Vertex, op *pb.Op_Build, s SubBuilder) (solver.Op, error) {
+func NewBuildOp(v solver.Vertex, op *pb.Op_Build, s worker.SubBuilder) (solver.Op, error) {
 	return &buildOp{
 		op: op.Build,
 		s:  s,
@@ -66,7 +62,7 @@ func (b *buildOp) Run(ctx context.Context, inputs []solver.Ref) (outputs []solve
 	}
 	inp := inputs[i]
 
-	ref, ok := reference.ToImmutableRef(inp)
+	ref, ok := solver.ToImmutableRef(inp)
 	if !ok {
 		return nil, errors.Errorf("invalid reference for build %T", inp)
 	}

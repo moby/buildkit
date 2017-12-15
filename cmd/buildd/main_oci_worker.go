@@ -6,6 +6,7 @@ import (
 	"os/exec"
 
 	"github.com/moby/buildkit/worker"
+	"github.com/moby/buildkit/worker/base"
 	"github.com/moby/buildkit/worker/runc"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -25,7 +26,7 @@ func init() {
 	// TODO: allow multiple oci runtimes and snapshotters
 }
 
-func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]*worker.Worker, error) {
+func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker.Worker, error) {
 	boolOrAuto, err := parseBoolOrAuto(c.GlobalString("oci-worker"))
 	if err != nil {
 		return nil, err
@@ -38,11 +39,11 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]*worke
 		return nil, err
 	}
 	opt.SessionManager = common.sessionManager
-	w, err := worker.NewWorker(opt)
+	w, err := base.NewWorker(opt)
 	if err != nil {
 		return nil, err
 	}
-	return []*worker.Worker{w}, nil
+	return []worker.Worker{w}, nil
 }
 
 func validOCIBinary() bool {

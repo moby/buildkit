@@ -12,7 +12,6 @@ import (
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/pb"
-	"github.com/moby/buildkit/solver/reference"
 	"github.com/moby/buildkit/util/progress/logs"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
@@ -78,7 +77,7 @@ func (e *execOp) Run(ctx context.Context, inputs []solver.Ref) ([]solver.Ref, er
 			}
 			inp := inputs[int(m.Input)]
 			var ok bool
-			ref, ok = reference.ToImmutableRef(inp)
+			ref, ok = solver.ToImmutableRef(inp)
 			if !ok {
 				return nil, errors.Errorf("invalid reference for exec %T", inputs[int(m.Input)])
 			}
@@ -86,7 +85,7 @@ func (e *execOp) Run(ctx context.Context, inputs []solver.Ref) ([]solver.Ref, er
 		}
 		if m.Output != pb.SkipOutput {
 			if m.Readonly && ref != nil && m.Dest != pb.RootMount { // exclude read-only rootfs
-				outputs = append(outputs, reference.NewSharedRef(ref).Clone())
+				outputs = append(outputs, solver.NewSharedRef(ref).Clone())
 			} else {
 				active, err := e.cm.New(ctx, ref, cache.WithDescription(fmt.Sprintf("mount %s from exec %s", m.Dest, strings.Join(e.op.Meta.Args, " ")))) // TODO: should be method
 				if err != nil {

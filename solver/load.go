@@ -3,7 +3,6 @@ package solver
 import (
 	"strings"
 
-	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/source"
 	digest "github.com/opencontainers/go-digest"
@@ -17,18 +16,18 @@ func newVertex(dgst digest.Digest, op *pb.Op, opMeta *pb.OpMetadata, load func(d
 		if err != nil {
 			return nil, err
 		}
-		vtx.inputs = append(vtx.inputs, &input{index: solver.Index(in.Index), vertex: sub.(*vertex)})
+		vtx.inputs = append(vtx.inputs, &input{index: Index(in.Index), vertex: sub.(*vertex)})
 	}
 	vtx.initClientVertex()
 	return vtx, nil
 }
 
-func toInternalVertex(v solver.Vertex) *vertex {
+func toInternalVertex(v Vertex) *vertex {
 	cache := make(map[digest.Digest]*vertex)
 	return loadInternalVertexHelper(v, cache)
 }
 
-func loadInternalVertexHelper(v solver.Vertex, cache map[digest.Digest]*vertex) *vertex {
+func loadInternalVertexHelper(v Vertex, cache map[digest.Digest]*vertex) *vertex {
 	if v, ok := cache[v.Digest()]; ok {
 		return v
 	}

@@ -17,7 +17,7 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/source"
-	"github.com/moby/buildkit/worker"
+	"github.com/moby/buildkit/worker/base"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/context"
 )
@@ -44,7 +44,7 @@ func TestRuncWorker(t *testing.T) {
 	workerOpt.SessionManager, err = session.NewManager()
 	require.NoError(t, err)
 
-	w, err := worker.NewWorker(workerOpt)
+	w, err := base.NewWorker(workerOpt)
 	require.NoError(t, err)
 
 	img, err := source.NewImageIdentifier("docker.io/library/busybox:latest")

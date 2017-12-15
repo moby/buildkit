@@ -3,13 +3,13 @@ package control
 import (
 	"github.com/docker/distribution/reference"
 	controlapi "github.com/moby/buildkit/api/services/control"
+	"github.com/moby/buildkit/cache/cacheimport"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/grpchijack"
 	"github.com/moby/buildkit/solver"
-	solverimpl "github.com/moby/buildkit/solver/solver"
 	"github.com/moby/buildkit/worker"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -22,17 +22,24 @@ type Opt struct {
 	SessionManager   *session.Manager
 	WorkerController *worker.Controller
 	Frontends        map[string]frontend.Frontend
+	CacheExporter    *cacheimport.CacheExporter
+	CacheImporter    *cacheimport.CacheImporter
 }
 
 type Controller struct { // TODO: ControlService
 	opt    Opt
-	solver solver.Solver
+	solver *solver.Solver
 }
 
 func NewController(opt Opt) (*Controller, error) {
 	c := &Controller{
-		opt:    opt,
-		solver: solverimpl.NewLLBOpSolver(opt.WorkerController, opt.Frontends),
+		opt: opt,
+		solver: solver.NewLLBOpSolver(solver.LLBOpt{
+			WorkerController: opt.WorkerController,
+			Frontends:        opt.Frontends,
+			CacheExporter:    opt.CacheExporter,
+			CacheImporter:    opt.CacheImporter,
+		}),
 	}
 	return c, nil
 }
@@ -45,7 +52,7 @@ func (c *Controller) Register(server *grpc.Server) error {
 func (c *Controller) DiskUsage(ctx context.Context, r *controlapi.DiskUsageRequest) (*controlapi.DiskUsageResponse, error) {
 	resp := &controlapi.DiskUsageResponse{}
 	for _, w := range c.opt.WorkerController.GetAll() {
-		du, err := w.CacheManager.DiskUsage(ctx, client.DiskUsageInfo{
+		du, err := w.DiskUsage(ctx, client.DiskUsageInfo{
 			Filter: r.Filter,
 		})
 		if err != nil {
@@ -90,9 +97,9 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		return nil, err
 	}
 	if req.Exporter != "" {
-		exp, ok := w.Exporters[req.Exporter]
-		if !ok {
-			return nil, errors.Errorf("exporter %q could not be found", req.Exporter)
+		exp, err := w.Exporter(req.Exporter)
+		if err != nil {
+			return nil, err
 		}
 		expi, err = exp.Resolve(ctx, req.ExporterAttrs)
 		if err != nil {
