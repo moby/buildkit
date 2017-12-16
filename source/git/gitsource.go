@@ -370,13 +370,35 @@ func gitWithinDir(ctx context.Context, gitDir, workDir string, args ...string) (
 }
 
 func git(ctx context.Context, dir string, args ...string) (*bytes.Buffer, error) {
-	stdout, stderr := logs.NewLogStreams(ctx)
-	defer stdout.Close()
-	defer stderr.Close()
-	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Dir = dir // some commands like submodule require this
-	buf := bytes.NewBuffer(nil)
-	cmd.Stdout = io.MultiWriter(stdout, buf)
-	cmd.Stderr = stderr
-	return buf, cmd.Run()
+	for {
+		stdout, stderr := logs.NewLogStreams(ctx)
+		defer stdout.Close()
+		defer stderr.Close()
+		cmd := exec.CommandContext(ctx, "git", args...)
+		cmd.Dir = dir // some commands like submodule require this
+		buf := bytes.NewBuffer(nil)
+		errbuf := bytes.NewBuffer(nil)
+		cmd.Stdout = io.MultiWriter(stdout, buf)
+		cmd.Stderr = io.MultiWriter(stderr, errbuf)
+		err := cmd.Run()
+		if err != nil {
+			if strings.Contains(errbuf.String(), "--depth") || strings.Contains(errbuf.String(), "shallow") {
+				if newArgs := argsNoDepth(args); len(args) > len(newArgs) {
+					args = newArgs
+					continue
+				}
+			}
+		}
+		return buf, err
+	}
+}
+
+func argsNoDepth(args []string) []string {
+	out := make([]string, 0, len(args))
+	for _, a := range args {
+		if a != "--depth=1" {
+			out = append(out, a)
+		}
+	}
+	return out
 }

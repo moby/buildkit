@@ -35,7 +35,7 @@ func NewGitIdentifier(remoteURL string) (*GitIdentifier, error) {
 	} else {
 		u, err := url.Parse(remoteURL)
 		if err != nil {
-			return &repo, err
+			return nil, err
 		}
 
 		repo.Ref, repo.Subdir = getRefAndSubdir(u.Fragment)
