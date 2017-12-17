@@ -3,9 +3,8 @@ package solver
 import (
 	"encoding/json"
 	"os"
-	"path/filepath"
 
-	"github.com/docker/docker/pkg/symlink"
+	"github.com/containerd/containerd/fs"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver/pb"
@@ -89,7 +88,7 @@ func (b *buildOp) Run(ctx context.Context, inputs []Reference) (outputs []Refere
 		fn = override
 	}
 
-	newfn, err := symlink.FollowSymlinkInScope(filepath.Join(root, fn), root)
+	newfn, err := fs.RootPath(root, fn)
 	if err != nil {
 		return nil, errors.Wrapf(err, "working dir %s points to invalid target", fn)
 	}

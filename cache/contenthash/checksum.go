@@ -10,8 +10,8 @@ import (
 	"sync"
 
 	"github.com/BurntSushi/locker"
+	"github.com/containerd/containerd/fs"
 	"github.com/docker/docker/pkg/pools"
-	"github.com/docker/docker/pkg/symlink"
 	iradix "github.com/hashicorp/go-immutable-radix"
 	"github.com/hashicorp/golang-lru/simplelru"
 	"github.com/moby/buildkit/cache"
@@ -509,7 +509,7 @@ func (cc *cacheContext) scanPath(ctx context.Context, m *mount, p string) (retEr
 		return err
 	}
 
-	parentPath, err := symlink.FollowSymlinkInScope(filepath.Join(mp, filepath.FromSlash(d)), mp)
+	parentPath, err := fs.RootPath(mp, filepath.FromSlash(d))
 	if err != nil {
 		return err
 	}

@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/containerd/containerd/fs"
 	"github.com/containerd/containerd/mount"
 	containerdoci "github.com/containerd/containerd/oci"
 	runc "github.com/containerd/go-runc"
-	"github.com/docker/docker/pkg/symlink"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/executor/oci"
@@ -109,7 +109,7 @@ func (w *runcExecutor) Exec(ctx context.Context, meta executor.Meta, root cache.
 		spec.Root.Readonly = true
 	}
 
-	newp, err := symlink.FollowSymlinkInScope(filepath.Join(rootFSPath, meta.Cwd), rootFSPath)
+	newp, err := fs.RootPath(rootFSPath, meta.Cwd)
 	if err != nil {
 		return errors.Wrapf(err, "working dir %s points to invalid target", newp)
 	}
