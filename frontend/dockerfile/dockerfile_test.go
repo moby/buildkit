@@ -9,7 +9,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -27,6 +29,7 @@ import (
 	"github.com/moby/buildkit/util/testutil/httpserver"
 	"github.com/moby/buildkit/util/testutil/integration"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -41,6 +44,7 @@ func TestIntegration(t *testing.T) {
 		testExposeExpansion,
 		testUser,
 		testDockerignore,
+		testDockerfileFromGit,
 	})
 }
 
@@ -745,6 +749,104 @@ USER nobody
 	require.Equal(t, "nobody", ociimg.Config.User)
 }
 
+func testDockerfileFromGit(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	gitDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(gitDir)
+
+	dockerfile := `
+FROM busybox AS build
+RUN echo -n fromgit > foo	
+FROM scratch
+COPY --from=build foo bar
+`
+
+	err = ioutil.WriteFile(filepath.Join(gitDir, "Dockerfile"), []byte(dockerfile), 0600)
+	require.NoError(t, err)
+
+	err = runShell(gitDir,
+		"git init",
+		"git config --local user.email test",
+		"git config --local user.name test",
+		"git add Dockerfile",
+		"git commit -m initial",
+		"git branch first",
+	)
+	require.NoError(t, err)
+
+	dockerfile += `
+COPY --from=build foo bar2
+`
+
+	err = ioutil.WriteFile(filepath.Join(gitDir, "Dockerfile"), []byte(dockerfile), 0600)
+	require.NoError(t, err)
+
+	err = runShell(gitDir,
+		"git add Dockerfile",
+		"git commit -m second",
+		"git update-server-info",
+	)
+	require.NoError(t, err)
+
+	server := httptest.NewServer(http.FileServer(http.Dir(filepath.Join(gitDir, ".git"))))
+	defer server.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	c, err := client.New(sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	err = c.Solve(context.TODO(), nil, client.SolveOpt{
+		Frontend: "dockerfile.v0",
+		FrontendAttrs: map[string]string{
+			"context": "git://" + server.URL + "/#first",
+		},
+		Exporter: client.ExporterLocal,
+		ExporterAttrs: map[string]string{
+			"output": destDir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "bar"))
+	require.NoError(t, err)
+	require.Equal(t, "fromgit", string(dt))
+
+	_, err = os.Stat(filepath.Join(destDir, "bar2"))
+	require.Error(t, err)
+	require.True(t, os.IsNotExist(err))
+
+	// second request from master branch contains both files
+	destDir, err = ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	err = c.Solve(context.TODO(), nil, client.SolveOpt{
+		Frontend: "dockerfile.v0",
+		FrontendAttrs: map[string]string{
+			"context": "git://" + server.URL + "/",
+		},
+		Exporter: client.ExporterLocal,
+		ExporterAttrs: map[string]string{
+			"output": destDir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "bar"))
+	require.NoError(t, err)
+	require.Equal(t, "fromgit", string(dt))
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "bar2"))
+	require.NoError(t, err)
+	require.Equal(t, "fromgit", string(dt))
+}
+
 func tmpdir(appliers ...fstest.Applier) (string, error) {
 	tmpdir, err := ioutil.TempDir("", "buildkit-dockerfile")
 	if err != nil {
@@ -759,4 +861,15 @@ func tmpdir(appliers ...fstest.Applier) (string, error) {
 func dfCmdArgs(ctx, dockerfile string) (string, string) {
 	traceFile := filepath.Join(os.TempDir(), "trace"+identity.NewID())
 	return fmt.Sprintf("build --no-progress --frontend dockerfile.v0 --local context=%s --local dockerfile=%s --trace=%s", ctx, dockerfile, traceFile), traceFile
+}
+
+func runShell(dir string, cmds ...string) error {
+	for _, args := range cmds {
+		cmd := exec.Command("sh", "-c", args)
+		cmd.Dir = dir
+		if err := cmd.Run(); err != nil {
+			return errors.Wrapf(err, "error running %v", args)
+		}
+	}
+	return nil
 }
