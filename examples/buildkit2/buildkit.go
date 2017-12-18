@@ -66,9 +66,9 @@ func containerd(version string) llb.State {
 func buildkit(opt buildOpt) llb.State {
 	run := goRepo(goBuildBase(), "github.com/moby/buildkit", "master")
 
-	builddOCIWorkerOnly := run(llb.Shlex("go build -o ./bin/buildd.oci_only -tags no_containerd_worker ./cmd/buildd"))
+	buildkitdOCIWorkerOnly := run(llb.Shlex("go build -o ./bin/buildkitd.oci_only -tags no_containerd_worker ./cmd/buildkitd"))
 
-	buildd := run(llb.Shlex("go build -o ./bin/buildd ./cmd/buildd"))
+	buildkitd := run(llb.Shlex("go build -o ./bin/buildkitd ./cmd/buildkitd"))
 
 	buildctl := run(llb.Shlex("go build -o ./bin/buildctl ./cmd/buildctl"))
 
@@ -80,9 +80,9 @@ func buildkit(opt buildOpt) llb.State {
 	if opt.withContainerd {
 		return r.With(
 			copyAll(containerd(opt.containerd), "/bin"),
-			copyAll(buildd, "/bin"))
+			copyAll(buildkitd, "/bin"))
 	}
-	return r.With(copyAll(builddOCIWorkerOnly, "/bin"))
+	return r.With(copyAll(buildkitdOCIWorkerOnly, "/bin"))
 }
 
 func copyAll(src llb.State, destPath string) llb.StateOption {

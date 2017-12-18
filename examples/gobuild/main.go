@@ -31,16 +31,16 @@ func run() error {
 		return err
 	}
 
-	buildd, err := gb.BuildExe(gobuild.BuildOpt{
+	buildkitd, err := gb.BuildExe(gobuild.BuildOpt{
 		Source:    src,
 		MountPath: "/go/src/github.com/moby/buildkit",
-		Pkg:       "github.com/moby/buildkit/cmd/buildd",
+		Pkg:       "github.com/moby/buildkit/cmd/buildkitd",
 		BuildTags: []string{"no_containerd_worker"},
 	})
 	if err != nil {
 		return err
 	}
-	_ = buildd
+	_ = buildkitd
 
 	containerd, err := gb.BuildExe(gobuild.BuildOpt{
 		Source:    llb.Git("github.com/containerd/containerd", "master"),
@@ -65,7 +65,7 @@ func run() error {
 	sc := llb.Scratch().
 		With(copyAll(*buildctl, "/")).
 		With(copyAll(*containerd, "/")).
-		// With(copyAll(*buildd, "/")).
+		// With(copyAll(*buildkitd, "/")).
 		With(copyAll(*runc, "/"))
 
 	dt, err := sc.Marshal()
