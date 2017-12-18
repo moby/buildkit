@@ -11,12 +11,14 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/util/progress"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 )
 
 const (
 	exporterImageConfig = "containerimage.config"
+	keyImageName        = "name"
 )
 
 type Opt struct {
@@ -52,6 +54,8 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 		switch k {
 		case exporterImageConfig:
 			i.config = []byte(v)
+		case keyImageName:
+			i.name = v
 		default:
 			logrus.Warnf("oci exporter: unknown option %s", k)
 		}
@@ -63,6 +67,7 @@ type imageExporterInstance struct {
 	*imageExporter
 	config []byte
 	caller session.Caller
+	name   string
 }
 
 func (e *imageExporterInstance) Name() string {
@@ -76,6 +81,13 @@ func (e *imageExporterInstance) Export(ctx context.Context, ref cache.ImmutableR
 	desc, err := e.opt.ImageWriter.Commit(ctx, ref, e.config)
 	if err != nil {
 		return err
+	}
+	if desc.Annotations == nil {
+		desc.Annotations = map[string]string{}
+	}
+	desc.Annotations[ocispec.AnnotationCreated] = time.Now().UTC().Format(time.RFC3339)
+	if e.name != "" {
+		desc.Annotations[ocispec.AnnotationRefName] = e.name
 	}
 
 	w, err := filesync.CopyFileWriter(ctx, e.caller)

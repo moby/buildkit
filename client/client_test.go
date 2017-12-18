@@ -280,11 +280,13 @@ func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 	defer os.RemoveAll(destDir)
 
 	out := filepath.Join(destDir, "out.tar")
+	target := "example.com/buildkit/testoci:latest"
 
 	err = c.Solve(context.TODO(), def, SolveOpt{
 		Exporter: ExporterOCI,
 		ExporterAttrs: map[string]string{
 			"output": out,
+			"name":   target,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -308,6 +310,7 @@ func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 	err = json.Unmarshal(m["blobs/sha256/"+index.Manifests[0].Digest.Hex()].data, &mfst)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(mfst.Layers))
+	require.Equal(t, target, index.Manifests[0].Annotations["org.opencontainers.image.ref.name"])
 
 	var ociimg ocispec.Image
 	err = json.Unmarshal(m["blobs/sha256/"+mfst.Config.Digest.Hex()].data, &ociimg)
