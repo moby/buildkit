@@ -162,7 +162,7 @@ type job struct {
 type cacheRecord struct {
 	VertexSolver
 	index Index
-	ref   Reference
+	ref   Ref
 }
 
 func (j *job) load(def *pb.Definition, resolveOp ResolveOpFunc) (*Input, error) {
@@ -225,7 +225,7 @@ func (j *job) loadInternal(def *pb.Definition, resolveOp ResolveOpFunc) (*Input,
 	if err != nil {
 		return nil, err
 	}
-	return &Input{Vertex: vtx.(*vertex), Index: idx}, nil
+	return &Input{Vertex: vtx.(*vertex), Index: Index(idx)}, nil
 }
 
 func (j *job) discard() {
@@ -253,12 +253,12 @@ func (j *job) getSolver(dgst digest.Digest) (VertexSolver, error) {
 	return st.solver, nil
 }
 
-func (j *job) getRef(ctx context.Context, v *vertex, index Index) (Reference, error) {
-	s, err := j.getSolver(v.Digest())
+func (j *job) getRef(ctx context.Context, cv client.Vertex, index Index) (Ref, error) {
+	s, err := j.getSolver(cv.Digest)
 	if err != nil {
 		return nil, err
 	}
-	ref, err := getRef(ctx, s, v, index, j.cache)
+	ref, err := getRef(ctx, s, cv, index, j.cache)
 	if err != nil {
 		return nil, err
 	}
@@ -266,15 +266,15 @@ func (j *job) getRef(ctx context.Context, v *vertex, index Index) (Reference, er
 	return ref, nil
 }
 
-func (j *job) keepCacheRef(s VertexSolver, index Index, ref Reference) {
-	immutable, ok := toImmutableRef(ref)
+func (j *job) keepCacheRef(s VertexSolver, index Index, ref Ref) {
+	immutable, ok := ToImmutableRef(ref)
 	if ok {
 		j.cached[immutable.ID()] = &cacheRecord{s, index, ref}
 	}
 }
 
-func (j *job) cacheExporter(ref Reference) (CacheExporter, error) {
-	immutable, ok := toImmutableRef(ref)
+func (j *job) cacheExporter(ref Ref) (CacheExporter, error) {
+	immutable, ok := ToImmutableRef(ref)
 	if !ok {
 		return nil, errors.Errorf("invalid reference")
 	}
@@ -285,7 +285,7 @@ func (j *job) cacheExporter(ref Reference) (CacheExporter, error) {
 	return cr.Cache(cr.index, cr.ref), nil
 }
 
-func getRef(ctx context.Context, s VertexSolver, v *vertex, index Index, cache instructioncache.InstructionCache) (Reference, error) {
+func getRef(ctx context.Context, s VertexSolver, cv client.Vertex, index Index, cache instructioncache.InstructionCache) (Ref, error) {
 	k, err := s.CacheKey(ctx, index)
 	if err != nil {
 		return nil, err
@@ -295,8 +295,8 @@ func getRef(ctx context.Context, s VertexSolver, v *vertex, index Index, cache i
 		return nil, err
 	}
 	if ref != nil {
-		markCached(ctx, v.clientVertex)
-		return ref.(Reference), nil
+		markCached(ctx, cv)
+		return ref.(Ref), nil
 	}
 
 	ev, err := s.OutputEvaluator(index)
@@ -316,8 +316,8 @@ func getRef(ctx context.Context, s VertexSolver, v *vertex, index Index, cache i
 				return nil, err
 			}
 			if ref != nil {
-				markCached(ctx, v.clientVertex)
-				return ref.(Reference), nil
+				markCached(ctx, cv)
+				return ref.(Ref), nil
 			}
 			continue
 		}

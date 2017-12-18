@@ -1,10 +1,7 @@
 package solver
 
 import (
-	"io"
-
 	"github.com/moby/buildkit/cache"
-	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
@@ -17,7 +14,7 @@ type llbBridge struct {
 	*Solver
 	job *job
 	// this worker is used for running containerized frontend, not vertices
-	worker *worker.Worker
+	worker.Worker
 }
 
 type resolveImageConfig interface {
@@ -45,27 +42,9 @@ func (s *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (cache
 	if err != nil {
 		return nil, nil, err
 	}
-	immutable, ok := toImmutableRef(ref)
+	immutable, ok := ToImmutableRef(ref)
 	if !ok {
 		return nil, nil, errors.Errorf("invalid reference for exporting: %T", ref)
 	}
 	return immutable, exp, nil
-}
-
-func (s *llbBridge) ResolveImageConfig(ctx context.Context, ref string) (digest.Digest, []byte, error) {
-	// ImageSource is typically source/containerimage
-	resolveImageConfig, ok := s.worker.ImageSource.(resolveImageConfig)
-	if !ok {
-		return "", nil, errors.Errorf("worker %q does not implement ResolveImageConfig", s.worker.Name)
-	}
-	return resolveImageConfig.ResolveImageConfig(ctx, ref)
-}
-
-func (s *llbBridge) Exec(ctx context.Context, meta executor.Meta, rootFS cache.ImmutableRef, stdin io.ReadCloser, stdout, stderr io.WriteCloser) error {
-	active, err := s.worker.CacheManager.New(ctx, rootFS)
-	if err != nil {
-		return err
-	}
-	defer active.Release(context.TODO())
-	return s.worker.Executor.Exec(ctx, meta, active, nil, stdin, stdout, stderr)
 }

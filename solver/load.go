@@ -43,7 +43,7 @@ func loadInternalVertexHelper(v Vertex, cache map[digest.Digest]*vertex) *vertex
 
 // loadLLB loads LLB.
 // fn is executed sequentially.
-func loadLLB(def *pb.Definition, fn func(digest.Digest, *pb.Op, func(digest.Digest) (interface{}, error)) (interface{}, error)) (interface{}, Index, error) {
+func loadLLB(def *pb.Definition, fn func(digest.Digest, *pb.Op, func(digest.Digest) (interface{}, error)) (interface{}, error)) (interface{}, pb.OutputIndex, error) {
 	if len(def.Def) == 0 {
 		return nil, 0, errors.New("invalid empty definition")
 	}
@@ -81,7 +81,7 @@ func loadLLB(def *pb.Definition, fn func(digest.Digest, *pb.Op, func(digest.Dige
 	}
 
 	v, err := rec(dgst)
-	return v, Index(lastOp.Inputs[0].Index), err
+	return v, lastOp.Inputs[0].Index, err
 }
 
 func llbOpName(op *pb.Op) string {

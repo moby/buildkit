@@ -8,6 +8,7 @@ import (
 
 	ctd "github.com/containerd/containerd"
 	"github.com/moby/buildkit/worker"
+	"github.com/moby/buildkit/worker/base"
 	"github.com/moby/buildkit/worker/containerd"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -33,7 +34,7 @@ func init() {
 	// TODO(AkihiroSuda): allow using multiple snapshotters. should be useful for some applications that does not work with the default overlay snapshotter. e.g. mysql (docker/for-linux#72)",
 }
 
-func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]*worker.Worker, error) {
+func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker.Worker, error) {
 	socket := c.GlobalString("containerd-worker-addr")
 	boolOrAuto, err := parseBoolOrAuto(c.GlobalString("containerd-worker"))
 	if err != nil {
@@ -47,11 +48,11 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 		return nil, err
 	}
 	opt.SessionManager = common.sessionManager
-	w, err := worker.NewWorker(opt)
+	w, err := base.NewWorker(opt)
 	if err != nil {
 		return nil, err
 	}
-	return []*worker.Worker{w}, nil
+	return []worker.Worker{w}, nil
 }
 
 func validContainerdSocket(socket string) bool {

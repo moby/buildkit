@@ -11,7 +11,7 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/executor/containerdexecutor"
-	"github.com/moby/buildkit/worker"
+	"github.com/moby/buildkit/worker/base"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
@@ -19,32 +19,32 @@ import (
 // NewWorkerOpt creates a WorkerOpt.
 // But it does not set the following fields:
 //  - SessionManager
-func NewWorkerOpt(root string, address, snapshotterName string, opts ...containerd.ClientOpt) (worker.WorkerOpt, error) {
+func NewWorkerOpt(root string, address, snapshotterName string, opts ...containerd.ClientOpt) (base.WorkerOpt, error) {
 	// TODO: take lock to make sure there are no duplicates
 	opts = append([]containerd.ClientOpt{containerd.WithDefaultNamespace("buildkit")}, opts...)
 	client, err := containerd.New(address, opts...)
 	if err != nil {
-		return worker.WorkerOpt{}, errors.Wrapf(err, "failed to connect client to %q . make sure containerd is running", address)
+		return base.WorkerOpt{}, errors.Wrapf(err, "failed to connect client to %q . make sure containerd is running", address)
 	}
 	return newContainerd(root, client, snapshotterName)
 }
 
-func newContainerd(root string, client *containerd.Client, snapshotterName string) (worker.WorkerOpt, error) {
+func newContainerd(root string, client *containerd.Client, snapshotterName string) (base.WorkerOpt, error) {
 	if strings.Contains(snapshotterName, "/") {
-		return worker.WorkerOpt{}, errors.Errorf("bad snapshotter name: %q", snapshotterName)
+		return base.WorkerOpt{}, errors.Errorf("bad snapshotter name: %q", snapshotterName)
 	}
 	name := "containerd-" + snapshotterName
 	root = filepath.Join(root, name)
 	if err := os.MkdirAll(root, 0700); err != nil {
-		return worker.WorkerOpt{}, errors.Wrapf(err, "failed to create %s", root)
+		return base.WorkerOpt{}, errors.Wrapf(err, "failed to create %s", root)
 	}
 
 	md, err := metadata.NewStore(filepath.Join(root, "metadata.db"))
 	if err != nil {
-		return worker.WorkerOpt{}, err
+		return base.WorkerOpt{}, err
 	}
 	df := client.DiffService()
-	opt := worker.WorkerOpt{
+	opt := base.WorkerOpt{
 		Name:            name,
 		MetadataStore:   md,
 		Executor:        containerdexecutor.New(client, root),

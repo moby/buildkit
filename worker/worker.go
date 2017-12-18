@@ -1,194 +1,30 @@
 package worker
 
 import (
-	"github.com/containerd/containerd/content"
-	"github.com/containerd/containerd/diff"
-	"github.com/containerd/containerd/images"
-	ctdsnapshot "github.com/containerd/containerd/snapshots"
+	"io"
+
 	"github.com/moby/buildkit/cache"
-	"github.com/moby/buildkit/cache/cacheimport"
 	"github.com/moby/buildkit/cache/instructioncache"
-	localcache "github.com/moby/buildkit/cache/instructioncache/local"
-	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/exporter"
-	imageexporter "github.com/moby/buildkit/exporter/containerimage"
-	localexporter "github.com/moby/buildkit/exporter/local"
-	ociexporter "github.com/moby/buildkit/exporter/oci"
-	"github.com/moby/buildkit/session"
-	"github.com/moby/buildkit/snapshot/blobmapping"
-	"github.com/moby/buildkit/source"
-	"github.com/moby/buildkit/source/containerimage"
-	"github.com/moby/buildkit/source/git"
-	"github.com/moby/buildkit/source/http"
-	"github.com/moby/buildkit/source/local"
+	"github.com/moby/buildkit/solver/types"
+	digest "github.com/opencontainers/go-digest"
+	"golang.org/x/net/context"
 )
 
-// WorkerOpt is specific to a worker.
-// See also CommonOpt.
-type WorkerOpt struct {
-	Name            string
-	SessionManager  *session.Manager
-	MetadataStore   *metadata.Store
-	Executor        executor.Executor
-	BaseSnapshotter ctdsnapshot.Snapshotter // not blobmapping one (FIXME: just require blobmapping snapshotter?)
-	ContentStore    content.Store
-	Applier         diff.Differ
-	Differ          diff.Differ
-	ImageStore      images.Store
+type SubBuilder interface {
+	SubBuild(ctx context.Context, dgst digest.Digest, req types.SolveRequest) (types.Ref, error)
 }
 
-// Worker is a local worker instance with dedicated snapshotter, cache, and so on.
-// TODO: s/Worker/OpWorker/g ?
-// FIXME: Worker should be rather an interface
-type Worker struct {
-	WorkerOpt
-	Snapshotter      ctdsnapshot.Snapshotter // blobmapping snapshotter
-	CacheManager     cache.Manager
-	SourceManager    *source.Manager
-	InstructionCache instructioncache.InstructionCache
-	Exporters        map[string]exporter.Exporter
-	ImageSource      source.Source
-	CacheExporter    *cacheimport.CacheExporter
-	CacheImporter    *cacheimport.CacheImporter
-	// no frontend here
-}
-
-// NewWorker instantiates a local worker
-func NewWorker(opt WorkerOpt) (*Worker, error) {
-	bmSnapshotter, err := blobmapping.NewSnapshotter(blobmapping.Opt{
-		Content:       opt.ContentStore,
-		Snapshotter:   opt.BaseSnapshotter,
-		MetadataStore: opt.MetadataStore,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	cm, err := cache.NewManager(cache.ManagerOpt{
-		Snapshotter:   bmSnapshotter,
-		MetadataStore: opt.MetadataStore,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	ic := &localcache.LocalStore{
-		MetadataStore: opt.MetadataStore,
-		Cache:         cm,
-	}
-
-	sm, err := source.NewManager()
-	if err != nil {
-		return nil, err
-	}
-
-	is, err := containerimage.NewSource(containerimage.SourceOpt{
-		Snapshotter:    bmSnapshotter,
-		ContentStore:   opt.ContentStore,
-		SessionManager: opt.SessionManager,
-		Applier:        opt.Applier,
-		CacheAccessor:  cm,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	sm.Register(is)
-
-	gs, err := git.NewSource(git.Opt{
-		CacheAccessor: cm,
-		MetadataStore: opt.MetadataStore,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	sm.Register(gs)
-
-	hs, err := http.NewSource(http.Opt{
-		CacheAccessor: cm,
-		MetadataStore: opt.MetadataStore,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	sm.Register(hs)
-
-	ss, err := local.NewSource(local.Opt{
-		SessionManager: opt.SessionManager,
-		CacheAccessor:  cm,
-		MetadataStore:  opt.MetadataStore,
-	})
-	if err != nil {
-		return nil, err
-	}
-	sm.Register(ss)
-
-	exporters := map[string]exporter.Exporter{}
-
-	iw, err := imageexporter.NewImageWriter(imageexporter.WriterOpt{
-		Snapshotter:  bmSnapshotter,
-		ContentStore: opt.ContentStore,
-		Differ:       opt.Differ,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	imageExporter, err := imageexporter.New(imageexporter.Opt{
-		Images:         opt.ImageStore,
-		SessionManager: opt.SessionManager,
-		ImageWriter:    iw,
-	})
-	if err != nil {
-		return nil, err
-	}
-	exporters[client.ExporterImage] = imageExporter
-
-	localExporter, err := localexporter.New(localexporter.Opt{
-		SessionManager: opt.SessionManager,
-	})
-	if err != nil {
-		return nil, err
-	}
-	exporters[client.ExporterLocal] = localExporter
-
-	ociExporter, err := ociexporter.New(ociexporter.Opt{
-		SessionManager: opt.SessionManager,
-		ImageWriter:    iw,
-	})
-	if err != nil {
-		return nil, err
-	}
-	exporters[client.ExporterOCI] = ociExporter
-
-	ce := cacheimport.NewCacheExporter(cacheimport.ExporterOpt{
-		Snapshotter:    bmSnapshotter,
-		ContentStore:   opt.ContentStore,
-		SessionManager: opt.SessionManager,
-		Differ:         opt.Differ,
-	})
-
-	ci := cacheimport.NewCacheImporter(cacheimport.ImportOpt{
-		Snapshotter:    bmSnapshotter,
-		ContentStore:   opt.ContentStore,
-		Applier:        opt.Applier,
-		CacheAccessor:  cm,
-		SessionManager: opt.SessionManager,
-	})
-
-	return &Worker{
-		WorkerOpt:        opt,
-		Snapshotter:      bmSnapshotter,
-		CacheManager:     cm,
-		SourceManager:    sm,
-		InstructionCache: ic,
-		Exporters:        exporters,
-		ImageSource:      is,
-		CacheExporter:    ce,
-		CacheImporter:    ci,
-	}, nil
+type Worker interface {
+	InstructionCache() instructioncache.InstructionCache
+	// ResolveVertex resolves Vertex.Sys() to Op implementation. SubBuilder is needed for pb.Op_Build.
+	ResolveVertex(v types.Vertex, s SubBuilder) (types.Op, error)
+	ResolveImageConfig(ctx context.Context, ref string) (digest.Digest, []byte, error)
+	// Exec is similar to executor.Exec but without []mount.Mount
+	Exec(ctx context.Context, meta executor.Meta, rootFS cache.ImmutableRef, stdin io.ReadCloser, stdout, stderr io.WriteCloser) error
+	DiskUsage(ctx context.Context, opt client.DiskUsageInfo) ([]*client.UsageInfo, error)
+	Name() string
+	Exporter(name string) (exporter.Exporter, error)
 }
