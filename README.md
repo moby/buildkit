@@ -123,7 +123,14 @@ If credentials are required, `buildctl` will attempt to read Docker configuratio
 buildctl build ... --exporter=local --exporter-opt output=path/to/output-dir
 ```
 
-#### Exporting OCI Image Format tarball to client
+##### Exporting build result to Docker
+
+```
+# exported tarball is also compatible with OCI spec
+buildctl build ... --exporter=docker --exporter-opt name=myimage | docker load
+```
+
+##### Exporting OCI Image Format tarball to client
 
 ```
 buildctl build ... --exporter=oci --exporter-opt output=path/to/output.tar

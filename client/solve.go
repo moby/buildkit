@@ -79,7 +79,7 @@ func (c *Client) Solve(ctx context.Context, def *llb.Definition, opt SolveOpt, s
 			return errors.Errorf("output directory is required for local exporter")
 		}
 		s.Allow(filesync.NewFSSyncTarget(outputDir))
-	case ExporterOCI:
+	case ExporterOCI, ExporterDocker:
 		outputFile, ok := opt.ExporterAttrs[exporterOCIDestination]
 		if ok {
 			fi, err := os.Stat(outputFile)
@@ -91,7 +91,7 @@ func (c *Client) Solve(ctx context.Context, def *llb.Definition, opt SolveOpt, s
 			}
 		} else {
 			if _, err := console.ConsoleFromFile(os.Stdout); err == nil {
-				return errors.Errorf("output file is required for OCI exporter. refusing to write to console")
+				return errors.Errorf("output file is required for %s exporter. refusing to write to console", opt.Exporter)
 			}
 			outputFile = ""
 		}

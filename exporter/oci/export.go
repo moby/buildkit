@@ -1,27 +1,36 @@
 package oci
 
 import (
-	"errors"
 	"time"
 
+	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/images/oci"
+	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/util/progress"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 )
 
+type ExporterVariant string
+
 const (
 	exporterImageConfig = "containerimage.config"
+	keyImageName        = "name"
+	VariantOCI          = "oci"
+	VariantDocker       = "docker"
 )
 
 type Opt struct {
 	SessionManager *session.Manager
 	ImageWriter    *containerimage.ImageWriter
+	Variant        ExporterVariant
 }
 
 type imageExporter struct {
@@ -52,6 +61,12 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 		switch k {
 		case exporterImageConfig:
 			i.config = []byte(v)
+		case keyImageName:
+			parsed, err := reference.ParseNormalizedNamed(v)
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to parse %s", v)
+			}
+			i.name = reference.TagNameOnly(parsed).String()
 		default:
 			logrus.Warnf("oci exporter: unknown option %s", k)
 		}
@@ -63,6 +78,7 @@ type imageExporterInstance struct {
 	*imageExporter
 	config []byte
 	caller session.Caller
+	name   string
 }
 
 func (e *imageExporterInstance) Name() string {
@@ -77,13 +93,22 @@ func (e *imageExporterInstance) Export(ctx context.Context, ref cache.ImmutableR
 	if err != nil {
 		return err
 	}
+	if desc.Annotations == nil {
+		desc.Annotations = map[string]string{}
+	}
+	desc.Annotations[ocispec.AnnotationCreated] = time.Now().UTC().Format(time.RFC3339)
+
+	exp, err := getExporter(e.opt.Variant, e.name)
+	if err != nil {
+		return err
+	}
 
 	w, err := filesync.CopyFileWriter(ctx, e.caller)
 	if err != nil {
 		return err
 	}
 	report := oneOffProgress(ctx, "sending tarball")
-	if err := (&oci.V1Exporter{}).Export(ctx, e.opt.ImageWriter.ContentStore(), *desc, w); err != nil {
+	if err := exp.Export(ctx, e.opt.ImageWriter.ContentStore(), *desc, w); err != nil {
 		w.Close()
 		return report(err)
 	}
@@ -104,5 +129,16 @@ func oneOffProgress(ctx context.Context, id string) func(err error) error {
 		pw.Write(id, st)
 		pw.Close()
 		return err
+	}
+}
+
+func getExporter(variant ExporterVariant, name string) (images.Exporter, error) {
+	switch variant {
+	case VariantOCI:
+		return &oci.V1Exporter{}, nil
+	case VariantDocker:
+		return &DockerExporter{name: name}, nil
+	default:
+		return nil, errors.Errorf("invalid variant %q", variant)
 	}
 }
