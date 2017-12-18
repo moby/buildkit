@@ -40,6 +40,7 @@ func TestIntegration(t *testing.T) {
 		testExportedHistory,
 		testExposeExpansion,
 		testUser,
+		testDockerignore,
 	})
 }
 
@@ -501,6 +502,78 @@ EXPOSE 5000
 	require.Equal(t, "3000/tcp", ports[0])
 	require.Equal(t, "4000/udp", ports[1])
 	require.Equal(t, "5000/tcp", ports[2])
+}
+
+func testDockerignore(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	dockerfile := []byte(`
+FROM scratch
+COPY . .
+`)
+
+	dockerignore := []byte(`
+ba*
+Dockerfile
+!bay
+.dockerignore
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("foo", []byte(`foo-contents`), 0600),
+		fstest.CreateFile("bar", []byte(`bar-contents`), 0600),
+		fstest.CreateFile("baz", []byte(`baz-contents`), 0600),
+		fstest.CreateFile("bay", []byte(`bay-contents`), 0600),
+		fstest.CreateFile(".dockerignore", dockerignore, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	err = c.Solve(context.TODO(), nil, client.SolveOpt{
+		Frontend: "dockerfile.v0",
+		Exporter: client.ExporterLocal,
+		ExporterAttrs: map[string]string{
+			"output": destDir,
+		},
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "foo"))
+	require.NoError(t, err)
+	require.Equal(t, "foo-contents", string(dt))
+
+	_, err = os.Stat(filepath.Join(destDir, ".dockerignore"))
+	require.Error(t, err)
+	require.True(t, os.IsNotExist(err))
+
+	_, err = os.Stat(filepath.Join(destDir, "Dockerfile"))
+	require.Error(t, err)
+	require.True(t, os.IsNotExist(err))
+
+	_, err = os.Stat(filepath.Join(destDir, "bar"))
+	require.Error(t, err)
+	require.True(t, os.IsNotExist(err))
+
+	_, err = os.Stat(filepath.Join(destDir, "baz"))
+	require.Error(t, err)
+	require.True(t, os.IsNotExist(err))
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "bay"))
+	require.NoError(t, err)
+	require.Equal(t, "bay-contents", string(dt))
 }
 
 func testExportedHistory(t *testing.T, sb integration.Sandbox) {

@@ -38,6 +38,7 @@ type ConvertOpt struct {
 	BuildArgs    map[string]string
 	SessionID    string
 	BuildContext *llb.State
+	Excludes     []string
 }
 
 func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State, *Image, error) {
@@ -166,8 +167,11 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 	if err := eg.Wait(); err != nil {
 		return nil, nil, err
 	}
-
-	buildContext := llb.Local(localNameContext, llb.SessionID(opt.SessionID))
+	buildContext := llb.Local(localNameContext,
+		llb.SessionID(opt.SessionID),
+		llb.ExcludePatterns(opt.Excludes),
+		llb.SharedKeyHint(localNameContext),
+	)
 	if opt.BuildContext != nil {
 		buildContext = *opt.BuildContext
 	}
