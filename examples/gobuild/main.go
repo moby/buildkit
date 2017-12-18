@@ -35,7 +35,7 @@ func run() error {
 		Source:    src,
 		MountPath: "/go/src/github.com/moby/buildkit",
 		Pkg:       "github.com/moby/buildkit/cmd/buildd",
-		BuildTags: []string{"standalone"},
+		BuildTags: []string{"no_containerd_worker"},
 	})
 	if err != nil {
 		return err

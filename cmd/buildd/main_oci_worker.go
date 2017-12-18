@@ -1,6 +1,4 @@
-// +build standalone
-
-// TODO(AkihiroSuda): s/standalone/oci/g
+// +build linux,!no_oci_worker
 
 package main
 

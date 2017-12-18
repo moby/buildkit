@@ -250,7 +250,7 @@ func newWorkerController(c *cli.Context, wiOpt workerInitializerOpt) (*worker.Co
 	}
 	nWorkers := len(wc.GetAll())
 	if nWorkers == 0 {
-		return nil, errors.New("no worker found, build the buildkit daemon with tags? (e.g. \"standalone\", \"containerd\")")
+		return nil, errors.New("no worker found, rebuild the buildkit daemon?")
 	}
 	defaultWorker, err := wc.GetDefault()
 	if err != nil {

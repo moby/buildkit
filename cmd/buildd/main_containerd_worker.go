@@ -1,4 +1,4 @@
-// +build containerd
+// +build linux,!no_containerd_worker
 
 package main
 

@@ -1,5 +1,5 @@
 BINARIES=bin/buildd bin/buildctl
-BINARIES_EXTRA=bin/buildd-standalone bin/buildd-containerd bin/buildctl-darwin bin/buildd.exe bin/buildctl.exe
+BINARIES_EXTRA=bin/buildd.oci_only bin/buildd.containerd_only bin/buildctl-darwin bin/buildd.exe bin/buildctl.exe
 DESTDIR=/usr/local
 
 binaries: $(BINARIES)

@@ -5,7 +5,7 @@ set -eu -o pipefail -x
 # update this to iidfile after 17.06
 docker build -t buildkit:test --target integration-tests -f ./hack/dockerfiles/test.Dockerfile --force-rm .
 
-docker run --rm -v /tmp --privileged buildkit:test go test -tags standalone ${TESTFLAGS:--v} ${TESTPKGS:-./...}
+docker run --rm -v /tmp --privileged buildkit:test go test -tags no_containerd_worker ${TESTFLAGS:--v} ${TESTPKGS:-./...}
 
 docker run --rm buildkit:test go build ./frontend/gateway/client
 docker run --rm buildkit:test go build ./frontend/dockerfile/cmd/dockerfile-frontend

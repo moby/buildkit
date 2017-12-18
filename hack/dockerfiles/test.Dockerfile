@@ -1,6 +1,6 @@
 ARG RUNC_VERSION=74a17296470088de3805e138d3d87c62e613dfc4
 ARG CONTAINERD_VERSION=v1.0.0
-# available targets: buildd (standalone+containerd), buildd-standalone, buildd-containerd
+# available targets: buildd, buildd.oci_only, buildd.containerd_only
 ARG BUILDKIT_TARGET=buildd
 ARG REGISTRY_VERSION=2.6
 
@@ -22,7 +22,7 @@ RUN go build -ldflags '-d' -o /usr/bin/buildctl ./cmd/buildctl
 
 FROM buildkit-base AS buildd
 ENV CGO_ENABLED=0
-RUN go build -ldflags '-d'  -o /usr/bin/buildd -tags "standalone containerd" ./cmd/buildd
+RUN go build -ldflags '-d'  -o /usr/bin/buildd ./cmd/buildd
 
 # test dependencies begin here
 FROM gobuild-base AS runc
@@ -47,20 +47,19 @@ COPY --from=runc /usr/bin/runc /usr/bin/runc
 COPY --from=containerd /go/src/github.com/containerd/containerd/bin/containerd* /usr/bin/
 
 
-FROM buildkit-base AS buildd-standalone
+FROM buildkit-base AS buildd.oci_only
 ENV CGO_ENABLED=0
-RUN go build -ldflags '-d'  -o /usr/bin/buildd-standalone -tags standalone ./cmd/buildd
+RUN go build -ldflags '-d'  -o /usr/bin/buildd.oci_only -tags no_containerd_worker ./cmd/buildd
 
-FROM buildkit-base AS buildd-containerd
+FROM buildkit-base AS buildd.containerd_only
 ENV CGO_ENABLED=0
-RUN go build -ldflags '-d'  -o /usr/bin/buildd-containerd -tags containerd ./cmd/buildd
+RUN go build -ldflags '-d'  -o /usr/bin/buildd.containerd_only -tags no_oci_worker ./cmd/buildd
 
 FROM registry:$REGISTRY_VERSION AS registry
 
 FROM unit-tests AS integration-tests
 COPY --from=buildctl /usr/bin/buildctl /usr/bin/
-COPY --from=buildd-containerd /usr/bin/buildd-containerd /usr/bin
-COPY --from=buildd-standalone /usr/bin/buildd-standalone /usr/bin
+COPY --from=buildd /usr/bin/buildd /usr/bin
 COPY --from=registry /bin/registry /usr/bin
 
 FROM gobuild-base AS cross-windows
@@ -78,24 +77,25 @@ FROM alpine AS buildkit-export
 RUN apk add --no-cache git
 VOLUME /var/lib/buildkit
 
-# Copy together all binaries for standalone+containerd mode
+# Copy together all binaries for oci+containerd mode
 FROM buildkit-export AS buildkit-buildd
 COPY --from=runc /usr/bin/runc /usr/bin/
 COPY --from=buildd /usr/bin/buildd /usr/bin/
 COPY --from=buildctl /usr/bin/buildctl /usr/bin/
+ENTRYPOINT ["buildd"]
 
-# Copy together all binaries needed for standalone mode
-FROM buildkit-export AS buildkit-buildd-standalone
-COPY --from=buildd-standalone /usr/bin/buildd-standalone /usr/bin/
+# Copy together all binaries needed for oci worker mode
+FROM buildkit-export AS buildkit-buildd.oci_only
+COPY --from=buildd.oci_only /usr/bin/buildd.oci_only /usr/bin/
 COPY --from=buildctl /usr/bin/buildctl /usr/bin/
-ENTRYPOINT ["buildd-standalone"]
+ENTRYPOINT ["buildd.oci_only"]
 
-# Copy together all binaries for containerd mode
-FROM buildkit-export AS buildkit-buildd-containerd
+# Copy together all binaries for containerd worker mode
+FROM buildkit-export AS buildkit-buildd.containerd_only
 COPY --from=runc /usr/bin/runc /usr/bin/
-COPY --from=buildd-containerd /usr/bin/buildd-containerd /usr/bin/
+COPY --from=buildd.containerd_only /usr/bin/buildd.containerd_only /usr/bin/
 COPY --from=buildctl /usr/bin/buildctl /usr/bin/
-ENTRYPOINT ["buildd-containerd"]
+ENTRYPOINT ["buildd.containerd_only"]
 
 FROM alpine AS containerd-runtime
 COPY --from=runc /usr/bin/runc /usr/bin/

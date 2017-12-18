@@ -40,7 +40,7 @@ The following command installs `buildd` and `buildctl` to `/usr/local/bin`:
 $ make && sudo make install
 ```
 
-You can also use `make binaries-all` to prepare `buildd-containerd` (containerd worker only) and `buildd-standalone` (OCI worker only).
+You can also use `make binaries-all` to prepare `buildd.containerd_only` and `buildd.oci_only`.
 
 `examples/buildkit*` directory contains scripts that define how to build different configurations of BuildKit and its dependencies using the `client` package. Running one of these script generates a protobuf definition of a build graph. Note that the script itself does not execute any steps of the build.
 
@@ -50,7 +50,7 @@ You can use `buildctl debug dump-llb` to see what data is in this definition. Ad
 go run examples/buildkit0/buildkit.go | buildctl debug dump-llb | jq .
 ```
 
-To start building use `buildctl build` command. The example script accepts `--target` flag to choose between `containerd` and `standalone` configurations. In standalone mode BuildKit binaries are built together with `runc`. In containerd mode, the `containerd` binary is built as well from the upstream repo.
+To start building use `buildctl build` command. The example script accepts `--target` flag to choose between `containerd-worker-only` and `oci-worker-only` configurations. In OCI worker mode BuildKit binaries are built together with `runc`. In containerd worker mode, the `containerd` binary is built as well from the upstream repo.
 
 ```bash
 go run examples/buildkit0/buildkit.go | buildctl build
@@ -143,13 +143,12 @@ buildkit can be also used by running the `buildd` daemon inside a Docker contain
 To run daemon in a container:
 
 ```
-docker run -d --privileged -p 1234:1234 tonistiigi/buildkit:standalone --addr tcp://0.0.0.0:1234
+docker run -d --privileged -p 1234:1234 tonistiigi/buildkit --addr tcp://0.0.0.0:1234 --oci-worker=true --containerd-worker=false
 export BUILDKIT_HOST=tcp://0.0.0.0:1234
 buildctl build --help
 ```
 
-The `tonistiigi/buildkit:standalone` image can be built locally using the Dockerfile in `./hack/dockerfiles/test.Dockerfile`.
-
+The `tonistiigi/buildkit` image can be built locally using the Dockerfile in `./hack/dockerfiles/test.Dockerfile`.
 
 #### Supported runc version
 
@@ -174,7 +173,7 @@ make test TESTPKGS=./client
 make test TESTPKGS=./client TESTFLAGS="--run /TestCallDiskUsage -v" 
 
 # run all integration tests with a specific worker
-# supported workers are standalone and containerd
+# supported workers are oci and containerd
 make test TESTPKGS=./client TESTFLAGS="--run //worker=containerd -v" 
 ```
 

@@ -609,7 +609,7 @@ RUN ["ls"]
 	cmd := sb.Cmd(args + " --exporter=image --exporter-opt=name=" + target)
 	require.NoError(t, cmd.Run())
 
-	// TODO: expose this test to standalone
+	// TODO: expose this test to OCI worker
 
 	var cdAddress string
 	if cd, ok := sb.(interface {

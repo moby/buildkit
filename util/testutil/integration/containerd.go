@@ -24,7 +24,7 @@ func (c *containerd) New() (sb Sandbox, cl func() error, err error) {
 	if err := lookupBinary("containerd"); err != nil {
 		return nil, nil, err
 	}
-	if err := lookupBinary("buildd-containerd"); err != nil {
+	if err := lookupBinary("buildd"); err != nil {
 		return nil, nil, err
 	}
 	if err := requireRoot(); err != nil {
@@ -64,7 +64,10 @@ func (c *containerd) New() (sb Sandbox, cl func() error, err error) {
 		return nil, nil, err
 	}
 
-	builddSock, stop, err := runBuildd([]string{"buildd-containerd", "--containerd-worker-addr", address}, logs)
+	builddSock, stop, err := runBuildd([]string{"buildd",
+		"--oci-worker=false",
+		"--containerd-worker=true",
+		"--containerd-worker-addr", address}, logs)
 	if err != nil {
 		return nil, nil, err
 	}

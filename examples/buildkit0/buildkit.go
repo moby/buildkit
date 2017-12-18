@@ -9,14 +9,14 @@ import (
 )
 
 type buildOpt struct {
-	target     string
-	containerd string
-	runc       string
+	withContainerd bool
+	containerd     string
+	runc           string
 }
 
 func main() {
 	var opt buildOpt
-	flag.StringVar(&opt.target, "target", "containerd", "target (standalone, containerd)")
+	flag.BoolVar(&opt.withContainerd, "with-containerd", true, "enable containerd worker")
 	flag.StringVar(&opt.containerd, "containerd", "v1.0.0", "containerd version")
 	flag.StringVar(&opt.runc, "runc", "74a17296470088de3805e138d3d87c62e613dfc4", "runc version")
 	flag.Parse()
@@ -62,11 +62,11 @@ func buildkit(opt buildOpt) llb.State {
 		Run(llb.Shlex("git clone https://github.com/moby/buildkit.git /go/src/github.com/moby/buildkit")).
 		Dir("/go/src/github.com/moby/buildkit")
 
-	builddStandalone := src.
-		Run(llb.Shlex("go build -o /bin/buildd-standalone -tags standalone ./cmd/buildd"))
+	builddOCIWorkerOnly := src.
+		Run(llb.Shlex("go build -o /bin/buildd.oci_only -tags no_containerd_worker ./cmd/buildd"))
 
-	builddContainerd := src.
-		Run(llb.Shlex("go build -o /bin/buildd-containerd -tags containerd ./cmd/buildd"))
+	buildd := src.
+		Run(llb.Shlex("go build -o /bin/buildd ./cmd/buildd"))
 
 	buildctl := src.
 		Run(llb.Shlex("go build -o /bin/buildctl ./cmd/buildctl"))
@@ -74,11 +74,11 @@ func buildkit(opt buildOpt) llb.State {
 	r := llb.Image("docker.io/library/alpine:latest")
 	r = copy(buildctl.Root(), "/bin/buildctl", r, "/bin/")
 	r = copy(runc(opt.runc), "/usr/bin/runc", r, "/bin/")
-	if opt.target == "containerd" {
+	if opt.withContainerd {
 		r = copy(containerd(opt.containerd), "/go/src/github.com/containerd/containerd/bin/containerd", r, "/bin/")
-		r = copy(builddContainerd.Root(), "/bin/buildd-containerd", r, "/bin/")
+		r = copy(buildd.Root(), "/bin/buildd", r, "/bin/")
 	} else {
-		r = copy(builddStandalone.Root(), "/bin/buildd-standalone", r, "/bin/")
+		r = copy(builddOCIWorkerOnly.Root(), "/bin/buildd.oci_only", r, "/bin/")
 	}
 	return r
 }
