@@ -2,9 +2,8 @@ package cache
 
 import (
 	"io/ioutil"
-	"path/filepath"
 
-	"github.com/docker/docker/pkg/symlink"
+	"github.com/containerd/containerd/fs"
 	"github.com/moby/buildkit/snapshot"
 	"golang.org/x/net/context"
 )
@@ -28,7 +27,7 @@ func ReadFile(ctx context.Context, ref ImmutableRef, p string) ([]byte, error) {
 		}
 	}()
 
-	fp, err := symlink.FollowSymlinkInScope(filepath.Join(root, p), root)
+	fp, err := fs.RootPath(root, p)
 	if err != nil {
 		return nil, err
 	}
