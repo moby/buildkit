@@ -170,11 +170,22 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 	ociExporter, err := ociexporter.New(ociexporter.Opt{
 		SessionManager: opt.SessionManager,
 		ImageWriter:    iw,
+		Variant:        ociexporter.VariantOCI,
 	})
 	if err != nil {
 		return nil, err
 	}
 	exporters[client.ExporterOCI] = ociExporter
+
+	dockerExporter, err := ociexporter.New(ociexporter.Opt{
+		SessionManager: opt.SessionManager,
+		ImageWriter:    iw,
+		Variant:        ociexporter.VariantDocker,
+	})
+	if err != nil {
+		return nil, err
+	}
+	exporters[client.ExporterDocker] = dockerExporter
 
 	ce := cacheimport.NewCacheExporter(cacheimport.ExporterOpt{
 		Snapshotter:    bmSnapshotter,

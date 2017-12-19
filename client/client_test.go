@@ -275,50 +275,80 @@ func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal()
 	require.NoError(t, err)
 
-	destDir, err := ioutil.TempDir("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
+	for _, exp := range []string{ExporterOCI, ExporterDocker} {
 
-	out := filepath.Join(destDir, "out.tar")
+		destDir, err := ioutil.TempDir("", "buildkit")
+		require.NoError(t, err)
+		defer os.RemoveAll(destDir)
 
-	err = c.Solve(context.TODO(), def, SolveOpt{
-		Exporter: ExporterOCI,
-		ExporterAttrs: map[string]string{
-			"output": out,
-		},
-	}, nil)
-	require.NoError(t, err)
+		out := filepath.Join(destDir, "out.tar")
+		target := "example.com/buildkit/testoci:latest"
 
-	dt, err := ioutil.ReadFile(out)
-	require.NoError(t, err)
+		err = c.Solve(context.TODO(), def, SolveOpt{
+			Exporter: exp,
+			ExporterAttrs: map[string]string{
+				"output": out,
+				"name":   target,
+			},
+		}, nil)
+		require.NoError(t, err)
 
-	m, err := readTarToMap(dt, false)
-	require.NoError(t, err)
+		dt, err := ioutil.ReadFile(out)
+		require.NoError(t, err)
 
-	_, ok := m["oci-layout"]
-	require.True(t, ok)
+		m, err := readTarToMap(dt, false)
+		require.NoError(t, err)
 
-	var index ocispec.Index
-	err = json.Unmarshal(m["index.json"].data, &index)
-	require.NoError(t, err)
-	require.Equal(t, 2, index.SchemaVersion)
-	require.Equal(t, 1, len(index.Manifests))
+		_, ok := m["oci-layout"]
+		require.True(t, ok)
 
-	var mfst ocispec.Manifest
-	err = json.Unmarshal(m["blobs/sha256/"+index.Manifests[0].Digest.Hex()].data, &mfst)
-	require.NoError(t, err)
-	require.Equal(t, 2, len(mfst.Layers))
+		var index ocispec.Index
+		err = json.Unmarshal(m["index.json"].data, &index)
+		require.NoError(t, err)
+		require.Equal(t, 2, index.SchemaVersion)
+		require.Equal(t, 1, len(index.Manifests))
 
-	var ociimg ocispec.Image
-	err = json.Unmarshal(m["blobs/sha256/"+mfst.Config.Digest.Hex()].data, &ociimg)
-	require.NoError(t, err)
-	require.Equal(t, "layers", ociimg.RootFS.Type)
-	require.Equal(t, 2, len(ociimg.RootFS.DiffIDs))
+		var mfst ocispec.Manifest
+		err = json.Unmarshal(m["blobs/sha256/"+index.Manifests[0].Digest.Hex()].data, &mfst)
+		require.NoError(t, err)
+		require.Equal(t, 2, len(mfst.Layers))
 
-	_, ok = m["blobs/sha256/"+mfst.Layers[0].Digest.Hex()]
-	require.True(t, ok)
-	_, ok = m["blobs/sha256/"+mfst.Layers[1].Digest.Hex()]
-	require.True(t, ok)
+		var ociimg ocispec.Image
+		err = json.Unmarshal(m["blobs/sha256/"+mfst.Config.Digest.Hex()].data, &ociimg)
+		require.NoError(t, err)
+		require.Equal(t, "layers", ociimg.RootFS.Type)
+		require.Equal(t, 2, len(ociimg.RootFS.DiffIDs))
+
+		_, ok = m["blobs/sha256/"+mfst.Layers[0].Digest.Hex()]
+		require.True(t, ok)
+		_, ok = m["blobs/sha256/"+mfst.Layers[1].Digest.Hex()]
+		require.True(t, ok)
+
+		if exp != ExporterDocker {
+			continue
+		}
+
+		var dockerMfst []struct {
+			Config   string
+			RepoTags []string
+			Layers   []string
+		}
+		err = json.Unmarshal(m["manifest.json"].data, &dockerMfst)
+		require.NoError(t, err)
+		require.Equal(t, 1, len(dockerMfst))
+
+		_, ok = m[dockerMfst[0].Config]
+		require.True(t, ok)
+		require.Equal(t, 2, len(dockerMfst[0].Layers))
+		require.Equal(t, 1, len(dockerMfst[0].RepoTags))
+		require.Equal(t, target, dockerMfst[0].RepoTags[0])
+
+		for _, l := range dockerMfst[0].Layers {
+			_, ok := m[l]
+			require.True(t, ok)
+		}
+
+	}
 }
 
 func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
