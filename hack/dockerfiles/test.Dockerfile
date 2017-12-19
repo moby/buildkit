@@ -1,10 +1,10 @@
 ARG RUNC_VERSION=74a17296470088de3805e138d3d87c62e613dfc4
 ARG CONTAINERD_VERSION=v1.0.0
-# available targets: buildd, buildd.oci_only, buildd.containerd_only
-ARG BUILDKIT_TARGET=buildd
+# available targets: buildkitd, buildkitd.oci_only, buildkitd.containerd_only
+ARG BUILDKIT_TARGET=buildkitd
 ARG REGISTRY_VERSION=2.6
 
-# The `buildd` stage and the `buildctl` stage are placed here
+# The `buildkitd` stage and the `buildctl` stage are placed here
 # so that they can be built quickly with legacy DAG-unaware `docker build --target=...`
 
 FROM golang:1.9-alpine AS gobuild-base
@@ -20,9 +20,9 @@ ENV CGO_ENABLED=0
 ARG GOOS=linux
 RUN go build -ldflags '-d' -o /usr/bin/buildctl ./cmd/buildctl
 
-FROM buildkit-base AS buildd
+FROM buildkit-base AS buildkitd
 ENV CGO_ENABLED=0
-RUN go build -ldflags '-d'  -o /usr/bin/buildd ./cmd/buildd
+RUN go build -ldflags '-d'  -o /usr/bin/buildkitd ./cmd/buildkitd
 
 # test dependencies begin here
 FROM gobuild-base AS runc
@@ -47,19 +47,19 @@ COPY --from=runc /usr/bin/runc /usr/bin/runc
 COPY --from=containerd /go/src/github.com/containerd/containerd/bin/containerd* /usr/bin/
 
 
-FROM buildkit-base AS buildd.oci_only
+FROM buildkit-base AS buildkitd.oci_only
 ENV CGO_ENABLED=0
-RUN go build -ldflags '-d'  -o /usr/bin/buildd.oci_only -tags no_containerd_worker ./cmd/buildd
+RUN go build -ldflags '-d'  -o /usr/bin/buildkitd.oci_only -tags no_containerd_worker ./cmd/buildkitd
 
-FROM buildkit-base AS buildd.containerd_only
+FROM buildkit-base AS buildkitd.containerd_only
 ENV CGO_ENABLED=0
-RUN go build -ldflags '-d'  -o /usr/bin/buildd.containerd_only -tags no_oci_worker ./cmd/buildd
+RUN go build -ldflags '-d'  -o /usr/bin/buildkitd.containerd_only -tags no_oci_worker ./cmd/buildkitd
 
 FROM registry:$REGISTRY_VERSION AS registry
 
 FROM unit-tests AS integration-tests
 COPY --from=buildctl /usr/bin/buildctl /usr/bin/
-COPY --from=buildd /usr/bin/buildd /usr/bin
+COPY --from=buildkitd /usr/bin/buildkitd /usr/bin
 COPY --from=registry /bin/registry /usr/bin
 
 FROM gobuild-base AS cross-windows
@@ -70,32 +70,32 @@ COPY . .
 FROM cross-windows AS buildctl.exe
 RUN go build -o /buildctl.exe ./cmd/buildctl
 
-FROM cross-windows AS buildd.exe
-RUN go build -o /buildd.exe ./cmd/buildd
+FROM cross-windows AS buildkitd.exe
+RUN go build -o /buildkitd.exe ./cmd/buildkitd
 
 FROM alpine AS buildkit-export
 RUN apk add --no-cache git
 VOLUME /var/lib/buildkit
 
 # Copy together all binaries for oci+containerd mode
-FROM buildkit-export AS buildkit-buildd
+FROM buildkit-export AS buildkit-buildkitd
 COPY --from=runc /usr/bin/runc /usr/bin/
-COPY --from=buildd /usr/bin/buildd /usr/bin/
+COPY --from=buildkitd /usr/bin/buildkitd /usr/bin/
 COPY --from=buildctl /usr/bin/buildctl /usr/bin/
-ENTRYPOINT ["buildd"]
+ENTRYPOINT ["buildkitd"]
 
 # Copy together all binaries needed for oci worker mode
-FROM buildkit-export AS buildkit-buildd.oci_only
-COPY --from=buildd.oci_only /usr/bin/buildd.oci_only /usr/bin/
+FROM buildkit-export AS buildkit-buildkitd.oci_only
+COPY --from=buildkitd.oci_only /usr/bin/buildkitd.oci_only /usr/bin/
 COPY --from=buildctl /usr/bin/buildctl /usr/bin/
-ENTRYPOINT ["buildd.oci_only"]
+ENTRYPOINT ["buildkitd.oci_only"]
 
 # Copy together all binaries for containerd worker mode
-FROM buildkit-export AS buildkit-buildd.containerd_only
+FROM buildkit-export AS buildkit-buildkitd.containerd_only
 COPY --from=runc /usr/bin/runc /usr/bin/
-COPY --from=buildd.containerd_only /usr/bin/buildd.containerd_only /usr/bin/
+COPY --from=buildkitd.containerd_only /usr/bin/buildkitd.containerd_only /usr/bin/
 COPY --from=buildctl /usr/bin/buildctl /usr/bin/
-ENTRYPOINT ["buildd.containerd_only"]
+ENTRYPOINT ["buildkitd.containerd_only"]
 
 FROM alpine AS containerd-runtime
 COPY --from=runc /usr/bin/runc /usr/bin/

@@ -33,7 +33,7 @@ func New(address string, opts ...ClientOpt) (*Client, error) {
 	}
 	conn, err := grpc.Dial(address, gopts...)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to dial %q . make sure buildd is running", address)
+		return nil, errors.Wrapf(err, "failed to dial %q . make sure buildkitd is running", address)
 	}
 	c := &Client{
 		conn: conn,

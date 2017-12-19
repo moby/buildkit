@@ -62,11 +62,11 @@ func buildkit(opt buildOpt) llb.State {
 		Run(llb.Shlex("git clone https://github.com/moby/buildkit.git /go/src/github.com/moby/buildkit")).
 		Dir("/go/src/github.com/moby/buildkit")
 
-	builddOCIWorkerOnly := src.
-		Run(llb.Shlex("go build -o /bin/buildd.oci_only -tags no_containerd_worker ./cmd/buildd"))
+	buildkitdOCIWorkerOnly := src.
+		Run(llb.Shlex("go build -o /bin/buildkitd.oci_only -tags no_containerd_worker ./cmd/buildkitd"))
 
-	buildd := src.
-		Run(llb.Shlex("go build -o /bin/buildd ./cmd/buildd"))
+	buildkitd := src.
+		Run(llb.Shlex("go build -o /bin/buildkitd ./cmd/buildkitd"))
 
 	buildctl := src.
 		Run(llb.Shlex("go build -o /bin/buildctl ./cmd/buildctl"))
@@ -76,9 +76,9 @@ func buildkit(opt buildOpt) llb.State {
 	r = copy(runc(opt.runc), "/usr/bin/runc", r, "/bin/")
 	if opt.withContainerd {
 		r = copy(containerd(opt.containerd), "/go/src/github.com/containerd/containerd/bin/containerd", r, "/bin/")
-		r = copy(buildd.Root(), "/bin/buildd", r, "/bin/")
+		r = copy(buildkitd.Root(), "/bin/buildkitd", r, "/bin/")
 	} else {
-		r = copy(builddOCIWorkerOnly.Root(), "/bin/buildd.oci_only", r, "/bin/")
+		r = copy(buildkitdOCIWorkerOnly.Root(), "/bin/buildkitd.oci_only", r, "/bin/")
 	}
 	return r
 }

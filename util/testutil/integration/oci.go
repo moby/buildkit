@@ -26,14 +26,14 @@ func (s *oci) Name() string {
 }
 
 func (s *oci) New() (Sandbox, func() error, error) {
-	if err := lookupBinary("buildd"); err != nil {
+	if err := lookupBinary("buildkitd"); err != nil {
 		return nil, nil, err
 	}
 	if err := requireRoot(); err != nil {
 		return nil, nil, err
 	}
 	logs := map[string]*bytes.Buffer{}
-	builddSock, stop, err := runBuildd([]string{"buildd", "--oci-worker=true", "--containerd-worker=false"}, logs)
+	buildkitdSock, stop, err := runBuildkitd([]string{"buildkitd", "--oci-worker=true", "--containerd-worker=false"}, logs)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -41,7 +41,7 @@ func (s *oci) New() (Sandbox, func() error, error) {
 	deferF := &multiCloser{}
 	deferF.append(stop)
 
-	return &sandbox{address: builddSock, logs: logs, cleanup: deferF}, deferF.F(), nil
+	return &sandbox{address: buildkitdSock, logs: logs, cleanup: deferF}, deferF.F(), nil
 }
 
 type sandbox struct {
@@ -85,7 +85,7 @@ func (sb *sandbox) Cmd(args ...string) *exec.Cmd {
 	return cmd
 }
 
-func runBuildd(args []string, logs map[string]*bytes.Buffer) (address string, cl func() error, err error) {
+func runBuildkitd(args []string, logs map[string]*bytes.Buffer) (address string, cl func() error, err error) {
 	deferF := &multiCloser{}
 	cl = deferF.F()
 
@@ -96,15 +96,15 @@ func runBuildd(args []string, logs map[string]*bytes.Buffer) (address string, cl
 		}
 	}()
 
-	tmpdir, err := ioutil.TempDir("", "bktest_buildd")
+	tmpdir, err := ioutil.TempDir("", "bktest_buildkitd")
 	if err != nil {
 		return "", nil, err
 	}
 	deferF.append(func() error { return os.RemoveAll(tmpdir) })
 
-	address = "unix://" + filepath.Join(tmpdir, "buildd.sock")
+	address = "unix://" + filepath.Join(tmpdir, "buildkitd.sock")
 	if runtime.GOOS == "windows" {
-		address = "//./pipe/buildd-" + filepath.Base(tmpdir)
+		address = "//./pipe/buildkitd-" + filepath.Base(tmpdir)
 	}
 
 	args = append(args, "--root", tmpdir, "--addr", address, "--debug")

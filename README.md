@@ -34,13 +34,13 @@ Dependencies:
 - [containerd](https://github.com/containerd/containerd) (if you want to use containerd worker)
 
 
-The following command installs `buildd` and `buildctl` to `/usr/local/bin`:
+The following command installs `buildkitd` and `buildctl` to `/usr/local/bin`:
 
 ```bash
 $ make && sudo make install
 ```
 
-You can also use `make binaries-all` to prepare `buildd.containerd_only` and `buildd.oci_only`.
+You can also use `make binaries-all` to prepare `buildkitd.containerd_only` and `buildkitd.oci_only`.
 
 `examples/buildkit*` directory contains scripts that define how to build different configurations of BuildKit and its dependencies using the `client` package. Running one of these script generates a protobuf definition of a build graph. Note that the script itself does not execute any steps of the build.
 
@@ -70,13 +70,13 @@ Different versions of the example scripts show different ways of describing the 
 
 #### Examples
 
-##### Starting the buildd daemon:
+##### Starting the buildkitd daemon:
 
 ```
-buildd --debug --root /var/lib/buildkit
+buildkitd --debug --root /var/lib/buildkit
 ```
 
-The buildd daemon suppports two worker backends: OCI (runc) and containerd.
+The buildkitd daemon suppports two worker backends: OCI (runc) and containerd.
 
 By default, the OCI (runc) worker is used.
 You can set `--oci-worker=false --containerd-worker=true` to use the containerd worker.
@@ -145,7 +145,7 @@ buildctl du -v
 
 #### Running containerized buildkit
 
-buildkit can be also used by running the `buildd` daemon inside a Docker container and accessing it remotely. The client tool `buildctl` is also available for Mac and Windows.
+buildkit can be also used by running the `buildkitd` daemon inside a Docker container and accessing it remotely. The client tool `buildctl` is also available for Mac and Windows.
 
 To run daemon in a container:
 

@@ -24,7 +24,7 @@ func (c *containerd) New() (sb Sandbox, cl func() error, err error) {
 	if err := lookupBinary("containerd"); err != nil {
 		return nil, nil, err
 	}
-	if err := lookupBinary("buildd"); err != nil {
+	if err := lookupBinary("buildkitd"); err != nil {
 		return nil, nil, err
 	}
 	if err := requireRoot(); err != nil {
@@ -64,7 +64,7 @@ func (c *containerd) New() (sb Sandbox, cl func() error, err error) {
 		return nil, nil, err
 	}
 
-	builddSock, stop, err := runBuildd([]string{"buildd",
+	buildkitdSock, stop, err := runBuildkitd([]string{"buildkitd",
 		"--oci-worker=false",
 		"--containerd-worker=true",
 		"--containerd-worker-addr", address}, logs)
@@ -73,7 +73,7 @@ func (c *containerd) New() (sb Sandbox, cl func() error, err error) {
 	}
 	deferF.append(stop)
 
-	return &cdsandbox{address: address, sandbox: sandbox{address: builddSock, logs: logs, cleanup: deferF}}, cl, nil
+	return &cdsandbox{address: address, sandbox: sandbox{address: buildkitdSock, logs: logs, cleanup: deferF}}, cl, nil
 }
 
 type cdsandbox struct {

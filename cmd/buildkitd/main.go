@@ -56,7 +56,7 @@ func registerWorkerInitializer(wi workerInitializer, flags ...cli.Flag) {
 
 func main() {
 	app := cli.NewApp()
-	app.Name = "buildd"
+	app.Name = "buildkitd"
 	app.Usage = "build daemon"
 
 	app.Flags = []cli.Flag{
@@ -143,7 +143,7 @@ func main() {
 	profiler.Attach(app)
 
 	if err := app.Run(os.Args); err != nil {
-		fmt.Fprintf(os.Stderr, "buildd: %s\n", err)
+		fmt.Fprintf(os.Stderr, "buildkitd: %s\n", err)
 		os.Exit(1)
 	}
 }
