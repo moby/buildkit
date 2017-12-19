@@ -19,8 +19,8 @@ type SubBuilder interface {
 
 type Worker interface {
 	InstructionCache() instructioncache.InstructionCache
-	// ResolveVertex resolves Vertex.Sys() to Op implementation. SubBuilder is needed for pb.Op_Build.
-	ResolveVertex(v types.Vertex, s SubBuilder) (types.Op, error)
+	// ResolveOp resolves Vertex.Sys() to Op implementation. SubBuilder is needed for pb.Op_Build.
+	ResolveOp(v types.Vertex, s SubBuilder) (types.Op, error)
 	ResolveImageConfig(ctx context.Context, ref string) (digest.Digest, []byte, error)
 	// Exec is similar to executor.Exec but without []mount.Mount
 	Exec(ctx context.Context, meta executor.Meta, rootFS cache.ImmutableRef, stdin io.ReadCloser, stdout, stderr io.WriteCloser) error
