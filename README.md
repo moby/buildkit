@@ -25,8 +25,6 @@ Key features:
 - Pluggable architecture
 
 
-Read the proposal from https://github.com/moby/moby/issues/32925
-
 #### Quick start
 
 Dependencies:
@@ -196,3 +194,9 @@ Validating your updates before submission:
 ```bash
 make validate-all
 ```
+
+#### Documents
+- https://github.com/moby/moby/issues/32925: Original proposal
+- ['docs/roadmap.md'](./docs/roadmap.md): roadmap (tentative)
+- ['docs/misc'](./docs/misc): miscellaneous unformatted documents
+- https://drive.google.com/drive/folders/1KpNIqmiAGU1UAddscscZFMqlpvLqcQYM?usp=sharing : BoF notes
