@@ -22,7 +22,12 @@ func init() {
 			Name:  "oci-worker",
 			Usage: "enable oci workers (true/false/auto)",
 			Value: "auto",
-		})
+		},
+		cli.StringSliceFlag{
+			Name:  "oci-worker-labels",
+			Usage: "user-specific annotation labels (com.example.foo=bar)",
+		},
+	)
 	// TODO: allow multiple oci runtimes and snapshotters
 }
 
@@ -34,7 +39,11 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 	if (boolOrAuto == nil && !validOCIBinary()) || (boolOrAuto != nil && !*boolOrAuto) {
 		return nil, nil
 	}
-	opt, err := runc.NewWorkerOpt(common.root)
+	labels, err := attrMap(c.GlobalStringSlice("oci-worker-labels"))
+	if err != nil {
+		return nil, err
+	}
+	opt, err := runc.NewWorkerOpt(common.root, labels)
 	if err != nil {
 		return nil, err
 	}

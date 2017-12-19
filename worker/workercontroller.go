@@ -3,6 +3,7 @@ package worker
 import (
 	"sync"
 
+	"github.com/containerd/containerd/filters"
 	"github.com/pkg/errors"
 )
 
@@ -22,12 +23,22 @@ func (c *Controller) Add(w Worker) error {
 	return nil
 }
 
-// GetAll returns all local workers
-func (c *Controller) GetAll() []Worker {
+// List lists workers
+func (c *Controller) List(filterStrings ...string) ([]Worker, error) {
+	filter, err := filters.ParseAll(filterStrings...)
+	if err != nil {
+		return nil, err
+	}
 	c.mu.Lock()
-	workers := c.workers
+	allWorkers := c.workers
 	c.mu.Unlock()
-	return workers
+	var workers []Worker
+	for _, w := range allWorkers {
+		if filter.Match(adaptWorker(w)) {
+			workers = append(workers, w)
+		}
+	}
+	return workers, nil
 }
 
 // GetDefault returns the default local worker

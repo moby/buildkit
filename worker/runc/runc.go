@@ -23,9 +23,9 @@ import (
 // NewWorkerOpt creates a WorkerOpt.
 // But it does not set the following fields:
 //  - SessionManager
-func NewWorkerOpt(root string) (base.WorkerOpt, error) {
+func NewWorkerOpt(root string, labels map[string]string) (base.WorkerOpt, error) {
 	var opt base.WorkerOpt
-	name := "runc-overlay"
+	name := "runc-overlayfs"
 	root = filepath.Join(root, name)
 	if err := os.MkdirAll(root, 0700); err != nil {
 		return opt, err
@@ -54,7 +54,7 @@ func NewWorkerOpt(root string) (base.WorkerOpt, error) {
 	}
 
 	mdb := ctdmetadata.NewDB(db, c, map[string]ctdsnapshot.Snapshotter{
-		"overlay": s,
+		"overlayfs": s,
 	})
 	if err := mdb.Init(context.TODO()); err != nil {
 		return opt, err
@@ -68,11 +68,20 @@ func NewWorkerOpt(root string) (base.WorkerOpt, error) {
 
 	// TODO: call mdb.GarbageCollect . maybe just inject it into nsSnapshotter.Remove and csContent.Delete
 
+	id, err := base.ID(root)
+	if err != nil {
+		return opt, err
+	}
+	xlabels := base.Labels("oci", "overlayfs")
+	for k, v := range labels {
+		xlabels[k] = v
+	}
 	opt = base.WorkerOpt{
-		Name:            name,
+		ID:              id,
+		Labels:          xlabels,
 		MetadataStore:   md,
 		Executor:        exe,
-		BaseSnapshotter: &nsSnapshotter{mdb.Snapshotter("overlay")},
+		BaseSnapshotter: &nsSnapshotter{mdb.Snapshotter("overlayfs")},
 		ContentStore:    c,
 		Applier:         df,
 		Differ:          df,

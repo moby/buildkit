@@ -256,19 +256,20 @@ func newController(c *cli.Context, root string) (*control.Controller, error) {
 
 func newWorkerController(c *cli.Context, wiOpt workerInitializerOpt) (*worker.Controller, error) {
 	wc := &worker.Controller{}
+	nWorkers := 0
 	for _, wi := range workerInitializers {
 		ws, err := wi.fn(c, wiOpt)
 		if err != nil {
 			return nil, err
 		}
 		for _, w := range ws {
-			logrus.Infof("found worker %q", w.Name())
+			logrus.Infof("found worker %q, labels=%v", w.ID(), w.Labels())
 			if err = wc.Add(w); err != nil {
 				return nil, err
 			}
+			nWorkers++
 		}
 	}
-	nWorkers := len(wc.GetAll())
 	if nWorkers == 0 {
 		return nil, errors.New("no worker found, rebuild the buildkit daemon?")
 	}
@@ -276,7 +277,19 @@ func newWorkerController(c *cli.Context, wiOpt workerInitializerOpt) (*worker.Co
 	if err != nil {
 		return nil, err
 	}
-	logrus.Infof("found %d workers, default=%q", nWorkers, defaultWorker.Name)
+	logrus.Infof("found %d workers, default=%q", nWorkers, defaultWorker.ID())
 	logrus.Warn("currently, only the default worker can be used.")
 	return wc, nil
+}
+
+func attrMap(sl []string) (map[string]string, error) {
+	m := map[string]string{}
+	for _, v := range sl {
+		parts := strings.SplitN(v, "=", 2)
+		if len(parts) != 2 {
+			return nil, errors.Errorf("invalid value %s", v)
+		}
+		m[parts[0]] = parts[1]
+	}
+	return m, nil
 }

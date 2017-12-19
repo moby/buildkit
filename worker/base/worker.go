@@ -2,6 +2,10 @@ package base
 
 import (
 	"io"
+	"io/ioutil"
+	"os"
+	"path/filepath"
+	"runtime"
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/diff"
@@ -18,6 +22,7 @@ import (
 	imageexporter "github.com/moby/buildkit/exporter/containerimage"
 	localexporter "github.com/moby/buildkit/exporter/local"
 	ociexporter "github.com/moby/buildkit/exporter/oci"
+	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot/blobmapping"
 	"github.com/moby/buildkit/solver"
@@ -39,7 +44,8 @@ import (
 // WorkerOpt is specific to a worker.
 // See also CommonOpt.
 type WorkerOpt struct {
-	Name            string
+	ID              string
+	Labels          map[string]string
 	SessionManager  *session.Manager
 	MetadataStore   *metadata.Store
 	Executor        executor.Executor
@@ -47,12 +53,11 @@ type WorkerOpt struct {
 	ContentStore    content.Store
 	Applier         diff.Differ
 	Differ          diff.Differ
-	ImageStore      images.Store
+	ImageStore      images.Store // optional
 }
 
 // Worker is a local worker instance with dedicated snapshotter, cache, and so on.
 // TODO: s/Worker/OpWorker/g ?
-// FIXME: Worker should be rather an interface
 type Worker struct {
 	WorkerOpt
 	Snapshotter   ctdsnapshot.Snapshotter // blobmapping snapshotter
@@ -215,6 +220,14 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 	}, nil
 }
 
+func (w *Worker) ID() string {
+	return w.WorkerOpt.ID
+}
+
+func (w *Worker) Labels() map[string]string {
+	return w.WorkerOpt.Labels
+}
+
 func (w *Worker) ResolveOp(v solver.Vertex, s worker.SubBuilder) (solver.Op, error) {
 	switch op := v.Sys().(type) {
 	case *pb.Op_Source:
@@ -232,7 +245,7 @@ func (w *Worker) ResolveImageConfig(ctx context.Context, ref string) (digest.Dig
 	// ImageSource is typically source/containerimage
 	resolveImageConfig, ok := w.ImageSource.(resolveImageConfig)
 	if !ok {
-		return "", nil, errors.Errorf("worker %q does not implement ResolveImageConfig", w.Name())
+		return "", nil, errors.Errorf("worker %q does not implement ResolveImageConfig", w.ID())
 	}
 	return resolveImageConfig.ResolveImageConfig(ctx, ref)
 }
@@ -254,10 +267,6 @@ func (w *Worker) DiskUsage(ctx context.Context, opt client.DiskUsageInfo) ([]*cl
 	return w.CacheManager.DiskUsage(ctx, opt)
 }
 
-func (w *Worker) Name() string {
-	return w.WorkerOpt.Name
-}
-
 func (w *Worker) Exporter(name string) (exporter.Exporter, error) {
 	exp, ok := w.Exporters[name]
 	if !ok {
@@ -268,4 +277,37 @@ func (w *Worker) Exporter(name string) (exporter.Exporter, error) {
 
 func (w *Worker) InstructionCache() instructioncache.InstructionCache {
 	return w.cache
+}
+
+// utility function. could be moved to the constructor logic?
+func Labels(executor, snapshotter string) map[string]string {
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = "unknown"
+	}
+	labels := map[string]string{
+		worker.LabelOS:          runtime.GOOS,
+		worker.LabelArch:        runtime.GOARCH,
+		worker.LabelExecutor:    executor,
+		worker.LabelSnapshotter: snapshotter,
+		worker.LabelHostname:    hostname,
+	}
+	return labels
+}
+
+// ID reads the worker id from the `workerid` file.
+// If not exist, it creates a random one,
+func ID(root string) (string, error) {
+	f := filepath.Join(root, "workerid")
+	b, err := ioutil.ReadFile(f)
+	if err != nil {
+		if os.IsNotExist(err) {
+			id := identity.NewID()
+			err := ioutil.WriteFile(f, []byte(id), 0400)
+			return id, err
+		} else {
+			return "", err
+		}
+	}
+	return string(b), nil
 }

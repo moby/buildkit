@@ -15,10 +15,11 @@ service Control {
 	rpc Solve(SolveRequest) returns (SolveResponse);
 	rpc Status(StatusRequest) returns (stream StatusResponse);
 	rpc Session(stream BytesMessage) returns (stream BytesMessage);
+	rpc ListWorkers(ListWorkersRequest) returns (ListWorkersResponse);
 }
 
 message DiskUsageRequest {
-	string filter = 1;
+	string filter = 1; // FIXME: this should be containerd-compatible repeated string?
 }
 
 message DiskUsageResponse {
@@ -98,4 +99,17 @@ message VertexLog {
 
 message BytesMessage {
 	bytes data = 1;
+}
+
+message ListWorkersRequest {
+	repeated string filter = 1; // containerd style
+}
+
+message ListWorkersResponse {
+	repeated WorkerRecord record = 1;
+}
+
+message WorkerRecord {
+	string ID = 1;
+	map<string, string> Labels = 2;
 }

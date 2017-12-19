@@ -18,6 +18,9 @@ type SubBuilder interface {
 }
 
 type Worker interface {
+	// ID needs to be unique in the cluster
+	ID() string
+	Labels() map[string]string
 	InstructionCache() instructioncache.InstructionCache
 	// ResolveOp resolves Vertex.Sys() to Op implementation. SubBuilder is needed for pb.Op_Build.
 	ResolveOp(v types.Vertex, s SubBuilder) (types.Op, error)
@@ -25,6 +28,15 @@ type Worker interface {
 	// Exec is similar to executor.Exec but without []mount.Mount
 	Exec(ctx context.Context, meta executor.Meta, rootFS cache.ImmutableRef, stdin io.ReadCloser, stdout, stderr io.WriteCloser) error
 	DiskUsage(ctx context.Context, opt client.DiskUsageInfo) ([]*client.UsageInfo, error)
-	Name() string
 	Exporter(name string) (exporter.Exporter, error)
 }
+
+// Pre-defined label keys
+const (
+	labelPrefix      = "org.mobyproject.buildkit.worker."
+	LabelOS          = labelPrefix + "os"          // GOOS
+	LabelArch        = labelPrefix + "arch"        // GOARCH
+	LabelExecutor    = labelPrefix + "executor"    // "oci" or "containerd"
+	LabelSnapshotter = labelPrefix + "snapshotter" // containerd snapshotter name ("overlay", "naive", ...)
+	LabelHostname    = labelPrefix + "hostname"
+)

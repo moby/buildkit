@@ -19,17 +19,17 @@ import (
 // NewWorkerOpt creates a WorkerOpt.
 // But it does not set the following fields:
 //  - SessionManager
-func NewWorkerOpt(root string, address, snapshotterName string, opts ...containerd.ClientOpt) (base.WorkerOpt, error) {
+func NewWorkerOpt(root string, address, snapshotterName string, labels map[string]string, opts ...containerd.ClientOpt) (base.WorkerOpt, error) {
 	// TODO: take lock to make sure there are no duplicates
 	opts = append([]containerd.ClientOpt{containerd.WithDefaultNamespace("buildkit")}, opts...)
 	client, err := containerd.New(address, opts...)
 	if err != nil {
 		return base.WorkerOpt{}, errors.Wrapf(err, "failed to connect client to %q . make sure containerd is running", address)
 	}
-	return newContainerd(root, client, snapshotterName)
+	return newContainerd(root, client, snapshotterName, labels)
 }
 
-func newContainerd(root string, client *containerd.Client, snapshotterName string) (base.WorkerOpt, error) {
+func newContainerd(root string, client *containerd.Client, snapshotterName string, labels map[string]string) (base.WorkerOpt, error) {
 	if strings.Contains(snapshotterName, "/") {
 		return base.WorkerOpt{}, errors.Errorf("bad snapshotter name: %q", snapshotterName)
 	}
@@ -44,8 +44,18 @@ func newContainerd(root string, client *containerd.Client, snapshotterName strin
 		return base.WorkerOpt{}, err
 	}
 	df := client.DiffService()
+	// TODO: should use containerd daemon instance ID (containerd/containerd#1862)?
+	id, err := base.ID(root)
+	if err != nil {
+		return base.WorkerOpt{}, err
+	}
+	xlabels := base.Labels("containerd", snapshotterName)
+	for k, v := range labels {
+		xlabels[k] = v
+	}
 	opt := base.WorkerOpt{
-		Name:            name,
+		ID:              id,
+		Labels:          xlabels,
 		MetadataStore:   md,
 		Executor:        containerdexecutor.New(client, root),
 		BaseSnapshotter: client.SnapshotService(snapshotterName),

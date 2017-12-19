@@ -74,14 +74,12 @@ message OpMetadata {
 	bool ignore_cache = 1;
 	// Description can be used for keeping any text fields that builder doesn't parse
 	map<string, string> description = 2;  
-	// TODO: add worker constraint, etc.
 	WorkerConstraint worker_constraint = 3;
 }
 
-// WorkerConstraint is WIP. Will be changed.
+// WorkerConstraint is experimental and likely to be changed.
 message WorkerConstraint {
-	string worker_type = 1; // e.g. "runc", "containerd"...? also we will have worker_brand, arch, os, labels...
-// TODO: distributed mode
+	repeated string filter = 1; // containerd-style filter
 }
 
 // Definition is the LLB definition structure with per-vertex metadata entries

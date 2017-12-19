@@ -30,7 +30,12 @@ func init() {
 			Name:  "containerd-worker-addr",
 			Usage: "containerd socket",
 			Value: "/run/containerd/containerd.sock",
-		})
+		},
+		cli.StringSliceFlag{
+			Name:  "containerd-worker-labels",
+			Usage: "user-specific annotation labels (com.example.foo=bar)",
+		},
+	)
 	// TODO(AkihiroSuda): allow using multiple snapshotters. should be useful for some applications that does not work with the default overlay snapshotter. e.g. mysql (docker/for-linux#72)",
 }
 
@@ -43,7 +48,11 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 	if (boolOrAuto == nil && !validContainerdSocket(socket)) || (boolOrAuto != nil && !*boolOrAuto) {
 		return nil, nil
 	}
-	opt, err := containerd.NewWorkerOpt(common.root, socket, ctd.DefaultSnapshotter)
+	labels, err := attrMap(c.GlobalStringSlice("containerd-worker-labels"))
+	if err != nil {
+		return nil, err
+	}
+	opt, err := containerd.NewWorkerOpt(common.root, socket, ctd.DefaultSnapshotter, labels)
 	if err != nil {
 		return nil, err
 	}
