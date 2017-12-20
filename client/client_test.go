@@ -516,10 +516,17 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, int32(item.header.Typeflag), tar.TypeReg)
 	require.Equal(t, []byte("second"), item.data)
 
-	// TODO: #154 check that the unmodified parents are still in tar
-	// item, ok = m["foo/"]
-	// require.True(t, ok)
-	// require.Equal(t, int32(item.header.Typeflag), tar.TypeDir)
+	item, ok = m["foo/"]
+	require.True(t, ok)
+	require.Equal(t, int32(item.header.Typeflag), tar.TypeDir)
+	require.Equal(t, 0741, int(item.header.Mode&0777))
+
+	item, ok = m["foo/sub/"]
+	require.True(t, ok)
+	require.Equal(t, int32(item.header.Typeflag), tar.TypeDir)
+
+	_, ok = m["foo/sub/bar"]
+	require.False(t, ok)
 }
 
 func requiresLinux(t *testing.T) {
