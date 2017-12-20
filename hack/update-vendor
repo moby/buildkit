@@ -2,9 +2,11 @@
 
 set -eu -o pipefail -x
 
-# update this to iidfile after 17.06
-docker build --build-arg VNDR_VERSION=48ac2669d9d1bcacd3163650ef911edca2ec3b42 -t buildkit:vendor -f ./hack/dockerfiles/vendor.Dockerfile --force-rm .
-cid=$(docker create buildkit:vendor noop)
+iidfile=$(mktemp --tmpdir docker-iidfile.XXXXXXXXXX)
+docker build --build-arg VNDR_VERSION=48ac2669d9d1bcacd3163650ef911edca2ec3b42 --iidfile $iidfile -f ./hack/dockerfiles/vendor.Dockerfile --force-rm .
+iid=$(cat $iidfile)
+cid=$(docker create $iid noop)
 rm -rf ./vendor
 docker cp $cid:/go/src/github.com/moby/buildkit/vendor .
 docker rm $cid
+rm -f $iidfile

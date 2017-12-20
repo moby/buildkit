@@ -2,6 +2,8 @@
 
 set -eu -o pipefail -x
 
-# update this to iidfile after 17.06
-docker build -t buildkit:lint -f ./hack/dockerfiles/lint.Dockerfile --force-rm .
-docker run buildkit:lint gometalinter --config=gometalinter.json ./...
+iidfile=$(mktemp --tmpdir docker-iidfile.XXXXXXXXXX)
+docker build --iidfile $iidfile -f ./hack/dockerfiles/lint.Dockerfile --force-rm .
+iid=$(cat $iidfile)
+docker run $iid gometalinter --config=gometalinter.json ./...
+rm -f $iidfile
