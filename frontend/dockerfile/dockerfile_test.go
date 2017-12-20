@@ -45,6 +45,7 @@ func TestIntegration(t *testing.T) {
 		testUser,
 		testDockerignore,
 		testDockerfileFromGit,
+		testCopyChown,
 	})
 }
 
@@ -747,6 +748,59 @@ USER nobody
 	require.NoError(t, err)
 
 	require.Equal(t, "nobody", ociimg.Config.User)
+}
+
+func testCopyChown(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	dockerfile := []byte(`
+FROM busybox AS base
+RUN mkdir -m 0777 /out
+COPY --chown=daemon foo /
+COPY --chown=1000:nogroup bar /baz
+RUN stat -c "%U %G" /foo  > /out/fooowner
+RUN stat -c "%u %G" /baz/sub  > /out/subowner
+FROM scratch
+COPY --from=base /out /
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("foo", []byte(`foo-contents`), 0600),
+		fstest.CreateDir("bar", 0700),
+		fstest.CreateFile("bar/sub", nil, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	err = c.Solve(context.TODO(), nil, client.SolveOpt{
+		Frontend: "dockerfile.v0",
+		Exporter: client.ExporterLocal,
+		ExporterAttrs: map[string]string{
+			"output": destDir,
+		},
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "fooowner"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), "daemon daemon\n")
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "subowner"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), "1000 nogroup\n")
 }
 
 func testDockerfileFromGit(t *testing.T, sb integration.Sandbox) {
