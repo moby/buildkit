@@ -2,10 +2,15 @@
 
 set -eu -o pipefail -x
 
-# update this to iidfile after 17.06
-docker build -t buildkit:test --target integration-tests -f ./hack/dockerfiles/test.Dockerfile --force-rm .
+iidfile=$(mktemp --tmpdir docker-iidfile.XXXXXXXXXX)
 
-docker run --rm -v /tmp --privileged buildkit:test go test -tags no_containerd_worker ${TESTFLAGS:--v} ${TESTPKGS:-./...}
+docker build --iidfile $iidfile --target integration-tests -f ./hack/dockerfiles/test.Dockerfile --force-rm .
 
-docker run --rm buildkit:test go build ./frontend/gateway/client
-docker run --rm buildkit:test go build ./frontend/dockerfile/cmd/dockerfile-frontend
+iid=$(cat $iidfile)
+
+docker run --rm -v /tmp --privileged $iid go test -tags no_containerd_worker ${TESTFLAGS:--v} ${TESTPKGS:-./...}
+
+docker run --rm $iid go build ./frontend/gateway/client
+docker run --rm $iid go build ./frontend/dockerfile/cmd/dockerfile-frontend
+
+rm -f $iidfile
