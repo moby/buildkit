@@ -257,7 +257,7 @@ func dispatch(d *dispatchState, cmd instructions.Command, opt dispatchOpt) error
 	case *instructions.WorkdirCommand:
 		err = dispatchWorkdir(d, c, true)
 	case *instructions.AddCommand:
-		err = dispatchCopy(d, c.SourcesAndDest, opt.buildContext, true, c)
+		err = dispatchCopy(d, c.SourcesAndDest, opt.buildContext, true, c, "")
 	case *instructions.LabelCommand:
 		err = dispatchLabel(d, c)
 	case *instructions.OnbuildCommand:
@@ -297,7 +297,7 @@ func dispatch(d *dispatchState, cmd instructions.Command, opt dispatchOpt) error
 				l = opt.allDispatchStates[index].state
 			}
 		}
-		err = dispatchCopy(d, c.SourcesAndDest, l, false, c)
+		err = dispatchCopy(d, c.SourcesAndDest, l, false, c, c.Chown)
 	default:
 	}
 	return err
@@ -374,9 +374,9 @@ func dispatchWorkdir(d *dispatchState, c *instructions.WorkdirCommand, commit bo
 	return nil
 }
 
-func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState llb.State, isAddCommand bool, cmdToPrint interface{}) error {
+func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState llb.State, isAddCommand bool, cmdToPrint interface{}, chown string) error {
 	// TODO: this should use CopyOp instead. Current implementation is inefficient
-	img := llb.Image("tonistiigi/copy@sha256:ca6620946b2db7ad92f80cc5834f5d0724e6ede1f00004c965f6ded61592553a")
+	img := llb.Image("tonistiigi/copy@sha256:9e6b90a83acc95831c81a0c9c6e45e27b439c19e7974f34f258971e454c8b793")
 
 	dest := path.Join("/dest", pathRelativeToWorkingDir(d.state, c.Dest()))
 	if c.Dest() == "." || c.Dest()[len(c.Dest())-1] == filepath.Separator {
@@ -387,6 +387,16 @@ func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState l
 		args = append(args, "--unpack")
 	}
 
+	mounts := make([]llb.RunOption, 0, len(c.Sources()))
+	if chown != "" {
+		args = append(args, fmt.Sprintf("--chown=%s", chown))
+		_, _, err := parseUser(chown)
+		if err != nil {
+			mounts = append(mounts, llb.AddMount("/etc/passwd", d.state, llb.SourcePath("/etc/passwd"), llb.Readonly))
+			mounts = append(mounts, llb.AddMount("/etc/group", d.state, llb.SourcePath("/etc/group"), llb.Readonly))
+		}
+	}
+
 	commitMessage := bytes.NewBufferString("")
 	if isAddCommand {
 		commitMessage.WriteString("ADD")
@@ -394,7 +404,6 @@ func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState l
 		commitMessage.WriteString("COPY")
 	}
 
-	mounts := make([]llb.RunOption, 0, len(c.Sources()))
 	for i, src := range c.Sources() {
 		commitMessage.WriteString(" " + src)
 		if isAddCommand && urlutil.IsURL(src) {
@@ -683,4 +692,40 @@ func isReachable(from, to *dispatchState) (ret bool) {
 		}
 	}
 	return false
+}
+
+func parseUser(str string) (uid uint32, gid uint32, err error) {
+	if str == "" {
+		return 0, 0, nil
+	}
+	parts := strings.SplitN(str, ":", 2)
+	for i, v := range parts {
+		switch i {
+		case 0:
+			uid, err = parseUID(v)
+			if err != nil {
+				return 0, 0, err
+			}
+			if len(parts) == 1 {
+				gid = uid
+			}
+		case 1:
+			gid, err = parseUID(v)
+			if err != nil {
+				return 0, 0, err
+			}
+		}
+	}
+	return
+}
+
+func parseUID(str string) (uint32, error) {
+	if str == "root" {
+		return 0, nil
+	}
+	uid, err := strconv.ParseUint(str, 10, 32)
+	if err != nil {
+		return 0, err
+	}
+	return uint32(uid), nil
 }
