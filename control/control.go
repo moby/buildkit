@@ -51,7 +51,11 @@ func (c *Controller) Register(server *grpc.Server) error {
 
 func (c *Controller) DiskUsage(ctx context.Context, r *controlapi.DiskUsageRequest) (*controlapi.DiskUsageResponse, error) {
 	resp := &controlapi.DiskUsageResponse{}
-	for _, w := range c.opt.WorkerController.GetAll() {
+	workers, err := c.opt.WorkerController.List()
+	if err != nil {
+		return nil, err
+	}
+	for _, w := range workers {
 		du, err := w.DiskUsage(ctx, client.DiskUsageInfo{
 			Filter: r.Filter,
 		})
@@ -200,4 +204,19 @@ func (c *Controller) Session(stream controlapi.Control_SessionServer) error {
 	err := c.opt.SessionManager.HandleConn(stream.Context(), conn, opts)
 	logrus.Debugf("session finished: %v", err)
 	return err
+}
+
+func (c *Controller) ListWorkers(ctx context.Context, r *controlapi.ListWorkersRequest) (*controlapi.ListWorkersResponse, error) {
+	resp := &controlapi.ListWorkersResponse{}
+	workers, err := c.opt.WorkerController.List(r.Filter...)
+	if err != nil {
+		return nil, err
+	}
+	for _, w := range workers {
+		resp.Record = append(resp.Record, &controlapi.WorkerRecord{
+			ID:     w.ID(),
+			Labels: w.Labels(),
+		})
+	}
+	return resp, nil
 }
