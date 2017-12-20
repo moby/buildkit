@@ -28,8 +28,28 @@ func main() {
 		},
 		cli.StringFlag{
 			Name:  "addr",
-			Usage: "listening address",
+			Usage: "buildkitd address",
 			Value: defaultAddress,
+		},
+		cli.StringFlag{
+			Name:  "server-name",
+			Usage: "buildkitd server name for certificate validation",
+			Value: "",
+		},
+		cli.StringFlag{
+			Name:  "ca-cert",
+			Usage: "CA certificate for validation",
+			Value: "",
+		},
+		cli.StringFlag{
+			Name:  "cert",
+			Usage: "client certificate",
+			Value: "",
+		},
+		cli.StringFlag{
+			Name:  "key",
+			Usage: "client key",
+			Value: "",
 		},
 	}
 
@@ -62,5 +82,13 @@ func main() {
 }
 
 func resolveClient(c *cli.Context) (*client.Client, error) {
-	return client.New(c.GlobalString("addr"), client.WithBlock())
+	serverName := c.GlobalString("server-name")
+	caCert := c.GlobalString("ca-cert")
+	cert := c.GlobalString("cert")
+	key := c.GlobalString("key")
+	opts := []client.ClientOpt{client.WithBlock()}
+	if serverName != "" {
+		opts = append(opts, client.WithCredentials(serverName, caCert, cert, key))
+	}
+	return client.New(c.GlobalString("addr"), opts...)
 }

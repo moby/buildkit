@@ -1,7 +1,10 @@
 package main
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"os"
 	"path/filepath"
@@ -27,6 +30,7 @@ import (
 	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 type workerInitializerOpt struct {
@@ -79,6 +83,18 @@ func main() {
 			Usage: "debugging address (eg. 0.0.0.0:6060)",
 			Value: "",
 		},
+		cli.StringFlag{
+			Name:  "cert",
+			Usage: "certificate file to use",
+		},
+		cli.StringFlag{
+			Name:  "key",
+			Usage: "key file to use",
+		},
+		cli.StringFlag{
+			Name:  "ca-cert",
+			Usage: "ca certificate to verify clients",
+		},
 	}
 
 	app.Flags = append(app.Flags, appFlags...)
@@ -91,8 +107,15 @@ func main() {
 				return err
 			}
 		}
-
-		server := grpc.NewServer(unaryInterceptor(ctx))
+		opts := []grpc.ServerOption{unaryInterceptor(ctx)}
+		creds, err := serverCredentials(c)
+		if err != nil {
+			return err
+		}
+		if creds != nil {
+			opts = append(opts, creds)
+		}
+		server := grpc.NewServer(opts...)
 
 		// relative path does not work with nightlyone/lockfile
 		root, err := filepath.Abs(c.GlobalString("root"))
@@ -212,6 +235,44 @@ func unaryInterceptor(globalCtx context.Context) grpc.ServerOption {
 		}
 		return
 	})
+}
+
+func serverCredentials(c *cli.Context) (grpc.ServerOption, error) {
+	certFile := c.GlobalString("cert")
+	keyFile := c.GlobalString("key")
+	caFile := c.GlobalString("ca-cert")
+	if certFile == "" && keyFile == "" {
+		return nil, nil
+	}
+	err := errors.New("you must specify key and cert file if one is specified")
+	if certFile == "" {
+		return nil, err
+	}
+	if keyFile == "" {
+		return nil, err
+	}
+	certificate, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not load server key pair")
+	}
+	tlsConf := &tls.Config{
+		Certificates: []tls.Certificate{certificate},
+	}
+	if caFile != "" {
+		certPool := x509.NewCertPool()
+		ca, err := ioutil.ReadFile(caFile)
+		if err != nil {
+			return nil, errors.Wrap(err, "could not read ca certificate")
+		}
+		// Append the client certificates from the CA
+		if ok := certPool.AppendCertsFromPEM(ca); !ok {
+			return nil, errors.New("failed to append ca cert")
+		}
+		tlsConf.ClientAuth = tls.RequireAndVerifyClientCert
+		tlsConf.ClientCAs = certPool
+	}
+	creds := grpc.Creds(credentials.NewTLS(tlsConf))
+	return creds, nil
 }
 
 func newController(c *cli.Context, root string) (*control.Controller, error) {
