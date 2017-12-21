@@ -9,7 +9,7 @@ import (
 )
 
 func ReadFile(ctx context.Context, ref ImmutableRef, p string) ([]byte, error) {
-	mount, err := ref.Mount(ctx, false)
+	mount, err := ref.Mount(ctx, true)
 	if err != nil {
 		return nil, err
 	}
