@@ -103,7 +103,7 @@ buildctl build --frontend=dockerfile.v0 --local context=. --local dockerfile=. -
 
 ##### build-using-dockerfile utility
 
-For people familiar with `docker build` command, there is an example wrapper utility in `./examples/build-using-dockerfile` that allows building Dockerfiles with BuildKit using a syntax familiar to `docker build`.
+For people familiar with `docker build` command, there is an example wrapper utility in `./examples/build-using-dockerfile` that allows building Dockerfiles with BuildKit using a syntax similar to `docker build`.
 
 ```
 go build ./examples/build-using-dockerfile && sudo install build-using-dockerfile /usr/local/bin
