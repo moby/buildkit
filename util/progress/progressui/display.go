@@ -235,7 +235,7 @@ func (disp *display) print(d displayInfo, all bool) {
 	fmt.Fprint(disp.c, b.Column(0).ANSI)
 
 	statusStr := ""
-	if d.countCompleted > 0 && d.countCompleted == d.countTotal {
+	if d.countCompleted > 0 && d.countCompleted == d.countTotal && all {
 		statusStr = "FINISHED"
 	}
 

@@ -258,6 +258,7 @@ func (j *job) getRef(ctx context.Context, cv client.Vertex, index Index) (Ref, e
 	if err != nil {
 		return nil, err
 	}
+	ctx = progress.WithProgress(ctx, j.pw)
 	ref, err := getRef(ctx, s, cv, index, j.cache)
 	if err != nil {
 		return nil, err
@@ -397,8 +398,9 @@ func (vs *vertexStream) append(v client.Vertex) []*client.Vertex {
 					inpv.Cached = true
 					inpv.Started = v.Completed
 					inpv.Completed = v.Completed
-					out = append(vs.append(*inpv), inpv)
 				}
+				delete(vs.cache, inp)
+				out = append(out, vs.append(*inpv)...)
 			}
 		}
 	}
