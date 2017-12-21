@@ -238,9 +238,9 @@ func unaryInterceptor(globalCtx context.Context) grpc.ServerOption {
 }
 
 func serverCredentials(c *cli.Context) (grpc.ServerOption, error) {
-	certFile := c.GlobalString("cert")
-	keyFile := c.GlobalString("key")
-	caFile := c.GlobalString("ca-cert")
+	certFile := c.GlobalString("tlscert")
+	keyFile := c.GlobalString("tlskey")
+	caFile := c.GlobalString("tlscacert")
 	if certFile == "" && keyFile == "" {
 		return nil, nil
 	}
