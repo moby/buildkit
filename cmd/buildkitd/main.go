@@ -84,15 +84,15 @@ func main() {
 			Value: "",
 		},
 		cli.StringFlag{
-			Name:  "cert",
+			Name:  "tlscert",
 			Usage: "certificate file to use",
 		},
 		cli.StringFlag{
-			Name:  "key",
+			Name:  "tlskey",
 			Usage: "key file to use",
 		},
 		cli.StringFlag{
-			Name:  "ca-cert",
+			Name:  "tlscacert",
 			Usage: "ca certificate to verify clients",
 		},
 	}
