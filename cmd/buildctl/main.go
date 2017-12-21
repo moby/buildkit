@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 
 	"github.com/moby/buildkit/client"
@@ -28,8 +29,28 @@ func main() {
 		},
 		cli.StringFlag{
 			Name:  "addr",
-			Usage: "listening address",
+			Usage: "buildkitd address",
 			Value: defaultAddress,
+		},
+		cli.StringFlag{
+			Name:  "tlsservername",
+			Usage: "buildkitd server name for certificate validation",
+			Value: "",
+		},
+		cli.StringFlag{
+			Name:  "tlscacert",
+			Usage: "CA certificate for validation",
+			Value: "",
+		},
+		cli.StringFlag{
+			Name:  "tlscert",
+			Usage: "client certificate",
+			Value: "",
+		},
+		cli.StringFlag{
+			Name:  "tlskey",
+			Usage: "client key",
+			Value: "",
 		},
 	}
 
@@ -62,5 +83,21 @@ func main() {
 }
 
 func resolveClient(c *cli.Context) (*client.Client, error) {
-	return client.New(c.GlobalString("addr"), client.WithBlock())
+	serverName := c.GlobalString("tlsservername")
+	if serverName == "" {
+		// guess servername as hostname of target address
+		uri, err := url.Parse(c.GlobalString("addr"))
+		if err != nil {
+			return nil, err
+		}
+		serverName = uri.Hostname()
+	}
+	caCert := c.GlobalString("tlscacert")
+	cert := c.GlobalString("tlscert")
+	key := c.GlobalString("tlskey")
+	opts := []client.ClientOpt{client.WithBlock()}
+	if caCert != "" || cert != "" || key != "" {
+		opts = append(opts, client.WithCredentials(serverName, caCert, cert, key))
+	}
+	return client.New(c.GlobalString("addr"), opts...)
 }
