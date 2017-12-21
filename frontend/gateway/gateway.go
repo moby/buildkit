@@ -86,7 +86,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 			return nil, nil, err
 		}
 
-		dgst, config, err := llbBridge.ResolveImageConfig(ctx, sourceRef.String())
+		dgst, config, err := llbBridge.ResolveImageConfig(ctx, reference.TagNameOnly(sourceRef).String())
 		if err != nil {
 			return nil, nil, err
 		}
