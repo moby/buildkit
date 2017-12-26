@@ -46,6 +46,7 @@ func TestIntegration(t *testing.T) {
 		testDockerignore,
 		testDockerfileFromGit,
 		testCopyChown,
+		testCopyWildcards,
 	})
 }
 
@@ -801,6 +802,96 @@ COPY --from=base /out /
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "subowner"))
 	require.NoError(t, err)
 	require.Equal(t, string(dt), "1000 nogroup\n")
+}
+
+func testCopyWildcards(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	dockerfile := []byte(`
+FROM scratch AS base
+COPY *.go /gofiles/
+COPY f*.go foo2.go
+COPY sub/* /subdest/
+COPY sub/*/dir2/foo /subdest2/
+COPY sub/*/dir2/foo /subdest3/bar
+COPY . all/
+COPY sub/dir1/ subdest4
+COPY sub/dir1/. subdest5
+COPY sub/dir1 subdest6
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("foo.go", []byte(`foo-contents`), 0600),
+		fstest.CreateFile("bar.go", []byte(`bar-contents`), 0600),
+		fstest.CreateDir("sub", 0700),
+		fstest.CreateDir("sub/dir1", 0700),
+		fstest.CreateDir("sub/dir1/dir2", 0700),
+		fstest.CreateFile("sub/dir1/dir2/foo", []byte(`foo-contents`), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	err = c.Solve(context.TODO(), nil, client.SolveOpt{
+		Frontend: "dockerfile.v0",
+		Exporter: client.ExporterLocal,
+		ExporterAttrs: map[string]string{
+			"output": destDir,
+		},
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "gofiles/foo.go"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), "foo-contents")
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "gofiles/bar.go"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), "bar-contents")
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "foo2.go"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), "foo-contents")
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "subdest/dir1/dir2/foo"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), "foo-contents")
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "subdest2/foo"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), "foo-contents")
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "subdest3/bar"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), "foo-contents")
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "all/foo.go"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), "foo-contents")
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "subdest4/dir2/foo"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), "foo-contents")
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "subdest5/dir2/foo"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), "foo-contents")
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "subdest6/dir2/foo"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), "foo-contents")
 }
 
 func testDockerfileFromGit(t *testing.T, sb integration.Sandbox) {
