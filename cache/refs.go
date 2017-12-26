@@ -27,7 +27,6 @@ type ImmutableRef interface {
 	Ref
 	Parent() ImmutableRef
 	Finalize(ctx context.Context) error // Make sure reference is flushed to driver
-	// Prepare() / ChainID() / Meta()
 }
 
 type MutableRef interface {
@@ -40,42 +39,54 @@ type Mountable interface {
 }
 
 type cacheRecord struct {
-	mu        sync.Mutex
-	mutable   bool
-	refs      map[Mountable]struct{}
-	cm        *cacheManager
-	parent    ImmutableRef
-	md        *metadata.StorageItem
+	cm *cacheManager
+	mu *sync.Mutex // the mutex is shared by records sharing data
+
+	mutable bool
+	refs    map[Mountable]struct{}
+	parent  ImmutableRef
+	md      *metadata.StorageItem
+
+	// dead means record is marked as deleted
+	dead bool
+
 	view      string
 	viewMount []mount.Mount
-	dead      bool
 
 	sizeG flightcontrol.Group
-	// size  int64
 
 	// these are filled if multiple refs point to same data
 	equalMutable   *mutableRef
 	equalImmutable *immutableRef
 }
 
-// hold manager lock before calling
+// hold ref lock before calling
 func (cr *cacheRecord) ref() *immutableRef {
 	ref := &immutableRef{cacheRecord: cr}
 	cr.refs[ref] = struct{}{}
 	return ref
 }
 
-// hold manager lock before calling
+// hold ref lock before calling
 func (cr *cacheRecord) mref() *mutableRef {
 	ref := &mutableRef{cacheRecord: cr}
 	cr.refs[ref] = struct{}{}
 	return ref
 }
 
+// hold ref lock before calling
+func (cr *cacheRecord) isDead() bool {
+	return cr.dead || (cr.equalImmutable != nil && cr.equalImmutable.dead) || (cr.equalMutable != nil && cr.equalMutable.dead)
+}
+
 func (cr *cacheRecord) Size(ctx context.Context) (int64, error) {
 	// this expects that usage() is implemented lazily
 	s, err := cr.sizeG.Do(ctx, cr.ID(), func(ctx context.Context) (interface{}, error) {
 		cr.mu.Lock()
+		if cr.isDead() {
+			cr.mu.Unlock()
+			return 0, nil
+		}
 		s := getSize(cr.md)
 		if s != sizeUnknown {
 			cr.mu.Unlock()
@@ -105,7 +116,10 @@ func (cr *cacheRecord) Parent() ImmutableRef {
 	if cr.parent == nil {
 		return nil
 	}
-	return cr.parent.(*immutableRef).ref()
+	p := cr.parent.(*immutableRef)
+	p.mu.Lock()
+	p.mu.Unlock()
+	return p.ref()
 }
 
 func (cr *cacheRecord) Mount(ctx context.Context, readonly bool) ([]mount.Mount, error) {
@@ -245,13 +259,14 @@ func (cr *cacheRecord) finalize(ctx context.Context) error {
 
 func (sr *mutableRef) commit(ctx context.Context) (ImmutableRef, error) {
 	if !sr.mutable || len(sr.refs) == 0 {
-		return nil, errors.Wrapf(errInvalid, "invalid mutable")
+		return nil, errors.Wrapf(errInvalid, "invalid mutable ref")
 	}
 
 	id := identity.NewID()
 	md, _ := sr.cm.md.Get(id)
 
 	rec := &cacheRecord{
+		mu:           sr.mu,
 		cm:           sr.cm,
 		parent:       sr.parent,
 		equalMutable: sr,

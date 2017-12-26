@@ -69,6 +69,8 @@ func NewManager(opt ManagerOpt) (Manager, error) {
 	return cm, nil
 }
 
+// init loads all snapshots from metadata state and tries to load the records
+// from the snapshotter. If snaphot can't be found, metadata is deleted as well.
 func (cm *cacheManager) init(ctx context.Context) error {
 	items, err := cm.md.All()
 	if err != nil {
@@ -76,27 +78,32 @@ func (cm *cacheManager) init(ctx context.Context) error {
 	}
 
 	for _, si := range items {
-		if _, err := cm.load(ctx, si.ID()); err != nil {
-			logrus.Debugf("could not load snapshot %s, %v", si.ID(), err)
+		if _, err := cm.getRecord(ctx, si.ID()); err != nil {
+			logrus.Debugf("could not load snapshot %s: %v", si.ID(), err)
 			cm.md.Clear(si.ID())
+			// TODO: make sure content is deleted as well
 		}
 	}
 	return nil
 }
 
+// Close closes the manager and releases the metadata database lock. No other
+// method should be called after Close.
 func (cm *cacheManager) Close() error {
 	// TODO: allocate internal context and cancel it here
 	return cm.md.Close()
 }
 
+// Get returns an immutable snapshot reference for ID
 func (cm *cacheManager) Get(ctx context.Context, id string, opts ...RefOption) (ImmutableRef, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 	return cm.get(ctx, id, opts...)
 }
 
+// get requires manager lock to be taken
 func (cm *cacheManager) get(ctx context.Context, id string, opts ...RefOption) (ImmutableRef, error) {
-	rec, err := cm.load(ctx, id, opts...)
+	rec, err := cm.getRecord(ctx, id, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +111,7 @@ func (cm *cacheManager) get(ctx context.Context, id string, opts ...RefOption) (
 	defer rec.mu.Unlock()
 
 	if rec.mutable {
-		if rec.dead || len(rec.refs) != 0 {
+		if len(rec.refs) != 0 {
 			return nil, errors.Wrapf(errLocked, "%s is locked", id)
 		}
 		if rec.equalImmutable != nil {
@@ -116,18 +123,23 @@ func (cm *cacheManager) get(ctx context.Context, id string, opts ...RefOption) (
 	return rec.ref(), nil
 }
 
-func (cm *cacheManager) load(ctx context.Context, id string, opts ...RefOption) (*cacheRecord, error) {
-	if rec, ok := cm.records[id]; ok && !rec.dead {
+// getRecord returns record for id. Requires manager lock.
+func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOption) (*cacheRecord, error) {
+	if rec, ok := cm.records[id]; ok {
+		if rec.isDead() {
+			return nil, errNotFound
+		}
 		return rec, nil
 	}
 
 	md, _ := cm.md.Get(id)
 	if mutableID := getEqualMutable(md); mutableID != "" {
-		mutable, err := cm.load(ctx, mutableID)
+		mutable, err := cm.getRecord(ctx, mutableID)
 		if err != nil {
 			return nil, err
 		}
 		rec := &cacheRecord{
+			mu:           &sync.Mutex{},
 			cm:           cm,
 			refs:         make(map[Mountable]struct{}),
 			parent:       mutable.parent,
@@ -153,6 +165,7 @@ func (cm *cacheManager) load(ctx context.Context, id string, opts ...RefOption) 
 	}
 
 	rec := &cacheRecord{
+		mu:      &sync.Mutex{},
 		mutable: info.Kind != cdsnapshot.KindCommitted,
 		cm:      cm,
 		refs:    make(map[Mountable]struct{}),
@@ -201,6 +214,7 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, opts ...RefOpti
 	md, _ := cm.md.Get(id)
 
 	rec := &cacheRecord{
+		mu:      &sync.Mutex{},
 		mutable: true,
 		cm:      cm,
 		refs:    make(map[Mountable]struct{}),
@@ -226,7 +240,7 @@ func (cm *cacheManager) GetMutable(ctx context.Context, id string) (MutableRef, 
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	rec, err := cm.load(ctx, id)
+	rec, err := cm.getRecord(ctx, id)
 	if err != nil {
 		return nil, err
 	}
