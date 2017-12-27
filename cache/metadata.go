@@ -8,13 +8,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Fields to be added:
-// Size int64
-// AccessTime int64
-// Tags
-// Descr
-// CachePolicy
-
 const sizeUnknown int64 = -1
 const keySize = "snapshot.size"
 const keyEqualMutable = "cache.equalMutable"
@@ -23,6 +16,31 @@ const keyDescription = "cache.description"
 const keyCreatedAt = "cache.createdAt"
 const keyLastUsedAt = "cache.lastUsedAt"
 const keyUsageCount = "cache.usageCount"
+
+const keyDeleted = "cache.deleted"
+
+func setDeleted(si *metadata.StorageItem) error {
+	v, err := metadata.NewValue(true)
+	if err != nil {
+		return errors.Wrap(err, "failed to create size value")
+	}
+	si.Update(func(b *bolt.Bucket) error {
+		return si.SetValue(b, keyDeleted, v)
+	})
+	return nil
+}
+
+func getDeleted(si *metadata.StorageItem) bool {
+	v := si.Get(keyDeleted)
+	if v == nil {
+		return false
+	}
+	var deleted bool
+	if err := v.Unmarshal(&deleted); err != nil {
+		return false
+	}
+	return deleted
+}
 
 func setSize(si *metadata.StorageItem, s int64) error {
 	v, err := metadata.NewValue(s)

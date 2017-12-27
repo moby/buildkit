@@ -56,6 +56,7 @@ func main() {
 
 	app.Commands = []cli.Command{
 		diskUsageCommand,
+		pruneCommand,
 		buildCommand,
 		debugCommand,
 	}

@@ -12,10 +12,15 @@ option (gogoproto.unmarshaler_all) = true;
 
 service Control {
 	rpc DiskUsage(DiskUsageRequest) returns (DiskUsageResponse);
+	rpc Prune(PruneRequest) returns (stream UsageRecord);
 	rpc Solve(SolveRequest) returns (SolveResponse);
 	rpc Status(StatusRequest) returns (stream StatusResponse);
 	rpc Session(stream BytesMessage) returns (stream BytesMessage);
 	rpc ListWorkers(ListWorkersRequest) returns (ListWorkersResponse);
+}
+
+message PruneRequest {
+	// TODO: filter
 }
 
 message DiskUsageRequest {

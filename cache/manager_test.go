@@ -124,8 +124,119 @@ func TestManager(t *testing.T) {
 
 	checkDiskUsage(ctx, t, cm, 0, 2)
 
+	buf := pruneResultBuffer()
+	err = cm.Prune(ctx, buf.C)
+	buf.close()
+	require.NoError(t, err)
+
+	checkDiskUsage(ctx, t, cm, 0, 0)
+
+	require.Equal(t, len(buf.all), 2)
+
 	err = cm.Close()
 	require.NoError(t, err)
+
+	dirs, err := ioutil.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
+	require.NoError(t, err)
+	require.Equal(t, 0, len(dirs))
+}
+
+func TestPrune(t *testing.T) {
+	t.Parallel()
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+
+	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	snapshotter, err := naive.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	cm := getCacheManager(t, tmpdir, snapshotter)
+
+	active, err := cm.New(ctx, nil)
+	require.NoError(t, err)
+
+	snap, err := active.Commit(ctx)
+	require.NoError(t, err)
+
+	active, err = cm.New(ctx, snap, CachePolicyRetain)
+	require.NoError(t, err)
+
+	snap2, err := active.Commit(ctx)
+	require.NoError(t, err)
+
+	checkDiskUsage(ctx, t, cm, 2, 0)
+
+	// prune with keeping refs does nothing
+	buf := pruneResultBuffer()
+	err = cm.Prune(ctx, buf.C)
+	buf.close()
+	require.NoError(t, err)
+
+	checkDiskUsage(ctx, t, cm, 2, 0)
+	require.Equal(t, len(buf.all), 0)
+
+	dirs, err := ioutil.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
+	require.NoError(t, err)
+	require.Equal(t, 2, len(dirs))
+
+	err = snap2.Release(ctx)
+	require.NoError(t, err)
+
+	checkDiskUsage(ctx, t, cm, 1, 1)
+
+	// prune with keeping single refs deletes one
+	buf = pruneResultBuffer()
+	err = cm.Prune(ctx, buf.C)
+	buf.close()
+	require.NoError(t, err)
+
+	checkDiskUsage(ctx, t, cm, 1, 0)
+	require.Equal(t, len(buf.all), 1)
+
+	dirs, err = ioutil.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
+	require.NoError(t, err)
+	require.Equal(t, 1, len(dirs))
+
+	err = snap.Release(ctx)
+	require.NoError(t, err)
+
+	active, err = cm.New(ctx, snap, CachePolicyRetain)
+	require.NoError(t, err)
+
+	snap2, err = active.Commit(ctx)
+	require.NoError(t, err)
+
+	err = snap.Release(ctx)
+	require.NoError(t, err)
+
+	checkDiskUsage(ctx, t, cm, 2, 0)
+
+	// prune with parent released does nothing
+	buf = pruneResultBuffer()
+	err = cm.Prune(ctx, buf.C)
+	buf.close()
+	require.NoError(t, err)
+
+	checkDiskUsage(ctx, t, cm, 2, 0)
+	require.Equal(t, len(buf.all), 0)
+
+	// releasing last reference
+	err = snap2.Release(ctx)
+	require.NoError(t, err)
+	checkDiskUsage(ctx, t, cm, 0, 2)
+
+	buf = pruneResultBuffer()
+	err = cm.Prune(ctx, buf.C)
+	buf.close()
+	require.NoError(t, err)
+
+	checkDiskUsage(ctx, t, cm, 0, 0)
+	require.Equal(t, len(buf.all), 2)
+
+	dirs, err = ioutil.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
+	require.NoError(t, err)
+	require.Equal(t, 0, len(dirs))
 }
 
 func TestLazyCommit(t *testing.T) {
@@ -282,4 +393,26 @@ func checkDiskUsage(ctx context.Context, t *testing.T, cm Manager, inuse, unused
 	}
 	require.Equal(t, inuse, inuseActual)
 	require.Equal(t, unused, unusedActual)
+}
+
+func pruneResultBuffer() *buf {
+	b := &buf{C: make(chan client.UsageInfo), closed: make(chan struct{})}
+	go func() {
+		for c := range b.C {
+			b.all = append(b.all, c)
+		}
+		close(b.closed)
+	}()
+	return b
+}
+
+type buf struct {
+	C      chan client.UsageInfo
+	closed chan struct{}
+	all    []client.UsageInfo
+}
+
+func (b *buf) close() {
+	close(b.C)
+	<-b.closed
 }

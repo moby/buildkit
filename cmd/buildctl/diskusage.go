@@ -83,17 +83,25 @@ func printVerbose(tw *tabwriter.Writer, du []*client.UsageInfo) {
 }
 
 func printTable(tw *tabwriter.Writer, du []*client.UsageInfo) {
-	fmt.Fprintln(tw, "ID\tRECLAIMABLE\tSIZE\tLAST ACCESSED")
+	printTableHeader(tw)
 
 	for _, di := range du {
-		id := di.ID
-		if di.Mutable {
-			id += "*"
-		}
-		fmt.Fprintf(tw, "%s\t%v\t%.2f\t\n", id, !di.InUse, units.Bytes(di.Size))
+		printTableRow(tw, di)
 	}
 
 	tw.Flush()
+}
+
+func printTableHeader(tw *tabwriter.Writer) {
+	fmt.Fprintln(tw, "ID\tRECLAIMABLE\tSIZE\tLAST ACCESSED")
+}
+
+func printTableRow(tw *tabwriter.Writer, di *client.UsageInfo) {
+	id := di.ID
+	if di.Mutable {
+		id += "*"
+	}
+	fmt.Fprintf(tw, "%-71s\t%-11v\t%.2f\t\n", id, !di.InUse, units.Bytes(di.Size))
 }
 
 func printSummary(tw *tabwriter.Writer, du []*client.UsageInfo) {

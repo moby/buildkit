@@ -83,10 +83,6 @@ func (cr *cacheRecord) Size(ctx context.Context) (int64, error) {
 	// this expects that usage() is implemented lazily
 	s, err := cr.sizeG.Do(ctx, cr.ID(), func(ctx context.Context) (interface{}, error) {
 		cr.mu.Lock()
-		if cr.isDead() {
-			cr.mu.Unlock()
-			return 0, nil
-		}
 		s := getSize(cr.md)
 		if s != sizeUnknown {
 			cr.mu.Unlock()
@@ -99,6 +95,10 @@ func (cr *cacheRecord) Size(ctx context.Context) (int64, error) {
 		cr.mu.Unlock()
 		usage, err := cr.cm.ManagerOpt.Snapshotter.Usage(ctx, driverID)
 		if err != nil {
+			if cr.isDead() {
+				cr.mu.Unlock()
+				return int64(0), nil
+			}
 			return s, errors.Wrapf(err, "failed to get usage for %s", cr.ID())
 		}
 		cr.mu.Lock()
@@ -163,15 +163,21 @@ func (cr *cacheRecord) Mount(ctx context.Context, readonly bool) ([]mount.Mount,
 	return cr.viewMount, nil
 }
 
+// call when holding the manager lock
 func (cr *cacheRecord) remove(ctx context.Context, removeSnapshot bool) error {
 	delete(cr.cm.records, cr.ID())
-	if err := cr.cm.md.Clear(cr.ID()); err != nil {
-		return err
+	if cr.parent != nil {
+		if err := cr.parent.(*immutableRef).release(ctx); err != nil {
+			return err
+		}
 	}
 	if removeSnapshot {
 		if err := cr.cm.Snapshotter.Remove(ctx, cr.ID()); err != nil {
 			return err
 		}
+	}
+	if err := cr.cm.md.Clear(cr.ID()); err != nil {
+		return err
 	}
 	return nil
 }
@@ -268,7 +274,7 @@ func (sr *mutableRef) commit(ctx context.Context) (ImmutableRef, error) {
 	rec := &cacheRecord{
 		mu:           sr.mu,
 		cm:           sr.cm,
-		parent:       sr.parent,
+		parent:       sr.Parent(),
 		equalMutable: sr,
 		refs:         make(map[Mountable]struct{}),
 		md:           md,

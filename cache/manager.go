@@ -36,7 +36,7 @@ type Accessor interface {
 
 type Controller interface {
 	DiskUsage(ctx context.Context, info client.DiskUsageInfo) ([]*client.UsageInfo, error)
-	Prune(ctx context.Context) (map[string]int64, error)
+	Prune(ctx context.Context, ch chan client.UsageInfo) error
 	GC(ctx context.Context) error
 }
 
@@ -124,7 +124,7 @@ func (cm *cacheManager) get(ctx context.Context, id string, opts ...RefOption) (
 }
 
 // getRecord returns record for id. Requires manager lock.
-func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOption) (*cacheRecord, error) {
+func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOption) (cr *cacheRecord, retErr error) {
 	if rec, ok := cm.records[id]; ok {
 		if rec.isDead() {
 			return nil, errNotFound
@@ -136,13 +136,17 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOpt
 	if mutableID := getEqualMutable(md); mutableID != "" {
 		mutable, err := cm.getRecord(ctx, mutableID)
 		if err != nil {
+			// check loading mutable deleted record from disk
+			if errors.Cause(err) == errNotFound {
+				cm.md.Clear(id)
+			}
 			return nil, err
 		}
 		rec := &cacheRecord{
 			mu:           &sync.Mutex{},
 			cm:           cm,
 			refs:         make(map[Mountable]struct{}),
-			parent:       mutable.parent,
+			parent:       mutable.Parent(),
 			md:           md,
 			equalMutable: &mutableRef{cacheRecord: mutable},
 		}
@@ -162,6 +166,11 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOpt
 		if err != nil {
 			return nil, err
 		}
+		defer func() {
+			if retErr != nil {
+				parent.Release(context.TODO())
+			}
+		}()
 	}
 
 	rec := &cacheRecord{
@@ -171,6 +180,14 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOpt
 		refs:    make(map[Mountable]struct{}),
 		parent:  parent,
 		md:      md,
+	}
+
+	// the record was deleted but we crashed before data on disk was removed
+	if getDeleted(md) {
+		if err := rec.remove(ctx, true); err != nil {
+			return nil, err
+		}
+		return nil, errNotFound
 	}
 
 	if err := initializeMetadata(rec, opts...); err != nil {
@@ -269,6 +286,97 @@ func (cm *cacheManager) GetMutable(ctx context.Context, id string) (MutableRef, 
 	return rec.mref(), nil
 }
 
+func (cm *cacheManager) Prune(ctx context.Context, ch chan client.UsageInfo) error {
+	// TODO: global prune lock
+
+	var toDelete []*cacheRecord
+	cm.mu.Lock()
+
+	for _, cr := range cm.records {
+		cr.mu.Lock()
+		// ignore duplicates that share data
+		if cr.equalImmutable != nil && len(cr.equalImmutable.refs) > 0 || cr.equalMutable != nil && len(cr.refs) == 0 {
+			cr.mu.Unlock()
+			continue
+		}
+
+		if len(cr.refs) == 0 {
+			cr.dead = true
+			toDelete = append(toDelete, cr)
+		}
+
+		// mark metadata as deleted in case we crash before cleanup finished
+		if err := setDeleted(cr.md); err != nil {
+			cr.mu.Unlock()
+			cm.mu.Unlock()
+			return err
+		}
+		cr.mu.Unlock()
+	}
+
+	cm.mu.Unlock()
+
+	if len(toDelete) == 0 {
+		return nil
+	}
+
+	var err error
+	for _, cr := range toDelete {
+		cr.mu.Lock()
+
+		usageCount, lastUsedAt := getLastUsed(cr.md)
+
+		c := client.UsageInfo{
+			ID:          cr.ID(),
+			Mutable:     cr.mutable,
+			InUse:       len(cr.refs) > 0,
+			Size:        getSize(cr.md),
+			CreatedAt:   getCreatedAt(cr.md),
+			Description: GetDescription(cr.md),
+			LastUsedAt:  lastUsedAt,
+			UsageCount:  usageCount,
+		}
+
+		if cr.parent != nil {
+			c.Parent = cr.parent.ID()
+		}
+
+		if c.Size == sizeUnknown {
+			cr.mu.Unlock() // all the non-prune modifications already protected by cr.dead
+			s, err := cr.Size(ctx)
+			if err != nil {
+				return err
+			}
+			c.Size = s
+			cr.mu.Lock()
+		}
+
+		if cr.equalImmutable != nil {
+			if err1 := cr.equalImmutable.remove(ctx, false); err == nil {
+				err = err1
+			}
+		}
+		if err1 := cr.remove(ctx, true); err == nil {
+			err = err1
+		}
+
+		if err == nil && ch != nil {
+			ch <- c
+		}
+		cr.mu.Unlock()
+	}
+	if err != nil {
+		return err
+	}
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		return cm.Prune(ctx, ch)
+	}
+}
+
 func (cm *cacheManager) DiskUsage(ctx context.Context, opt client.DiskUsageInfo) ([]*client.UsageInfo, error) {
 	cm.mu.Lock()
 
@@ -281,6 +389,7 @@ func (cm *cacheManager) DiskUsage(ctx context.Context, opt client.DiskUsageInfo)
 		usageCount  int
 		lastUsedAt  *time.Time
 		description string
+		doubleRef   bool
 	}
 
 	m := make(map[string]*cacheUsageInfo, len(cm.records))
@@ -303,6 +412,7 @@ func (cm *cacheManager) DiskUsage(ctx context.Context, opt client.DiskUsageInfo)
 			usageCount:  usageCount,
 			lastUsedAt:  lastUsedAt,
 			description: GetDescription(cr.md),
+			doubleRef:   cr.equalImmutable != nil,
 		}
 		if cr.parent != nil {
 			c.parent = cr.parent.ID()
@@ -324,6 +434,9 @@ func (cm *cacheManager) DiskUsage(ctx context.Context, opt client.DiskUsageInfo)
 			v := m[id]
 			if v.refs == 0 && v.parent != "" {
 				m[v.parent].refs--
+				if v.doubleRef {
+					m[v.parent].refs--
+				}
 				rescan[v.parent] = struct{}{}
 			}
 			delete(rescan, id)

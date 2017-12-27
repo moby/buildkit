@@ -22,10 +22,6 @@ type GCPolicy struct {
 // 	return CachePolicy{Priority: 10, LastUsed: time.Now()}
 // }
 
-func (cm *cacheManager) Prune(ctx context.Context) (map[string]int64, error) {
-	return nil, errors.New("Prune not implemented")
-}
-
 func (cm *cacheManager) GC(ctx context.Context) error {
 	return errors.New("GC not implemented")
 }

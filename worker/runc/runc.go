@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/boltdb/bolt"
 	"github.com/containerd/containerd/content"
@@ -18,6 +19,7 @@ import (
 	"github.com/moby/buildkit/executor/runcexecutor"
 	"github.com/moby/buildkit/worker/base"
 	"github.com/opencontainers/go-digest"
+	"github.com/sirupsen/logrus"
 )
 
 // NewWorkerOpt creates a WorkerOpt.
@@ -60,7 +62,7 @@ func NewWorkerOpt(root string, labels map[string]string) (base.WorkerOpt, error)
 		return opt, err
 	}
 
-	c = &nsContent{mdb.ContentStore()}
+	c = &noGCContentStore{&nsContent{mdb.ContentStore(), mdb.GarbageCollect}}
 	df, err := walking.NewWalkingDiff(c)
 	if err != nil {
 		return opt, err
@@ -81,7 +83,7 @@ func NewWorkerOpt(root string, labels map[string]string) (base.WorkerOpt, error)
 		Labels:          xlabels,
 		MetadataStore:   md,
 		Executor:        exe,
-		BaseSnapshotter: &nsSnapshotter{mdb.Snapshotter("overlayfs")},
+		BaseSnapshotter: &nsSnapshotter{mdb.Snapshotter("overlayfs"), mdb.GarbageCollect},
 		ContentStore:    c,
 		Applier:         df,
 		Differ:          df,
@@ -93,8 +95,11 @@ func NewWorkerOpt(root string, labels map[string]string) (base.WorkerOpt, error)
 // this should be supported by containerd. currently packages are unusable without wrapping
 const dummyNs = "buildkit"
 
+type garbageCollect func(context.Context) (ctdmetadata.GCStats, error)
+
 type nsContent struct {
 	content.Store
+	gc garbageCollect
 }
 
 func (c *nsContent) Info(ctx context.Context, dgst digest.Digest) (content.Info, error) {
@@ -114,7 +119,12 @@ func (c *nsContent) Walk(ctx context.Context, fn content.WalkFunc, filters ...st
 
 func (c *nsContent) Delete(ctx context.Context, dgst digest.Digest) error {
 	ctx = namespaces.WithNamespace(ctx, dummyNs)
-	return c.Store.Delete(ctx, dgst)
+	logrus.Debugf("delete-blob", dgst)
+	if err := c.Store.Delete(ctx, dgst); err != nil {
+		return err
+	}
+	_, err := c.gc(ctx)
+	return err
 }
 
 func (c *nsContent) Status(ctx context.Context, ref string) (content.Status, error) {
@@ -144,6 +154,7 @@ func (c *nsContent) Writer(ctx context.Context, ref string, size int64, expected
 
 type nsSnapshotter struct {
 	ctdsnapshot.Snapshotter
+	gc garbageCollect
 }
 
 func (s *nsSnapshotter) Stat(ctx context.Context, key string) (ctdsnapshot.Info, error) {
@@ -178,9 +189,38 @@ func (s *nsSnapshotter) Commit(ctx context.Context, name, key string, opts ...ct
 }
 func (s *nsSnapshotter) Remove(ctx context.Context, key string) error {
 	ctx = namespaces.WithNamespace(ctx, dummyNs)
-	return s.Snapshotter.Remove(ctx, key)
+	if _, err := s.Update(ctx, ctdsnapshot.Info{
+		Name: key,
+	}, "labels.containerd.io/gc.root"); err != nil {
+		return err
+	} // calling snapshotter.Remove here causes a race in containerd
+	_, err := s.gc(ctx)
+	return err
 }
 func (s *nsSnapshotter) Walk(ctx context.Context, fn func(context.Context, ctdsnapshot.Info) error) error {
 	ctx = namespaces.WithNamespace(ctx, dummyNs)
 	return s.Snapshotter.Walk(ctx, fn)
+}
+
+type noGCContentStore struct {
+	content.Store
+}
+type noGCWriter struct {
+	content.Writer
+}
+
+func (cs *noGCContentStore) Writer(ctx context.Context, ref string, size int64, expected digest.Digest) (content.Writer, error) {
+	w, err := cs.Store.Writer(ctx, ref, size, expected)
+	return &noGCWriter{w}, err
+}
+
+func (w *noGCWriter) Commit(ctx context.Context, size int64, expected digest.Digest, opts ...content.Opt) error {
+	opts = append(opts, func(info *content.Info) error {
+		if info.Labels == nil {
+			info.Labels = map[string]string{}
+		}
+		info.Labels["containerd.io/gc.root"] = time.Now().UTC().Format(time.RFC3339Nano)
+		return nil
+	})
+	return w.Writer.Commit(ctx, size, expected, opts...)
 }

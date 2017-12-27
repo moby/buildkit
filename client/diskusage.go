@@ -31,7 +31,7 @@ func (c *Client) DiskUsage(ctx context.Context, opts ...DiskUsageOption) ([]*Usa
 	req := &controlapi.DiskUsageRequest{Filter: info.Filter}
 	resp, err := c.controlClient().DiskUsage(ctx, req)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get diskusage")
+		return nil, errors.Wrap(err, "failed to call diskusage")
 	}
 
 	var du []*UsageInfo

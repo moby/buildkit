@@ -81,6 +81,53 @@ func (c *Controller) DiskUsage(ctx context.Context, r *controlapi.DiskUsageReque
 	return resp, nil
 }
 
+func (c *Controller) Prune(req *controlapi.PruneRequest, stream controlapi.Control_PruneServer) error {
+	ch := make(chan client.UsageInfo)
+
+	eg, ctx := errgroup.WithContext(stream.Context())
+	workers, err := c.opt.WorkerController.List()
+	if err != nil {
+		return errors.Wrap(err, "failed to list workers for prune")
+	}
+
+	for _, w := range workers {
+		func(w worker.Worker) {
+			eg.Go(func() error {
+				return w.Prune(ctx, ch)
+			})
+		}(w)
+	}
+
+	eg2, ctx := errgroup.WithContext(stream.Context())
+
+	eg2.Go(func() error {
+		defer close(ch)
+		return eg.Wait()
+	})
+
+	eg2.Go(func() error {
+		for r := range ch {
+			if err := stream.Send(&controlapi.UsageRecord{
+				// TODO: add worker info
+				ID:          r.ID,
+				Mutable:     r.Mutable,
+				InUse:       r.InUse,
+				Size_:       r.Size,
+				Parent:      r.Parent,
+				UsageCount:  int64(r.UsageCount),
+				Description: r.Description,
+				CreatedAt:   r.CreatedAt,
+				LastUsedAt:  r.LastUsedAt,
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	return eg2.Wait()
+}
+
 func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*controlapi.SolveResponse, error) {
 	var frontend frontend.Frontend
 	if req.Frontend != "" {
