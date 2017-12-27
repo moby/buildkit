@@ -419,12 +419,15 @@ func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState l
 			mounts = append(mounts, llb.AddMount(target, llb.HTTP(src, llb.Filename(f), dfCmd(c)), llb.Readonly))
 		} else {
 			d, f := splitWildcards(src)
+			targetCmd := fmt.Sprintf("/src-%d", i)
+			targetMount := targetCmd
 			if f == "" {
 				f = path.Base(src)
+				targetMount = path.Join(targetMount, f)
 			}
-			target := path.Join(fmt.Sprintf("/src-%d", i), f)
-			args = append(args, target)
-			mounts = append(mounts, llb.AddMount(target, sourceState, llb.SourcePath(d), llb.Readonly))
+			targetCmd = path.Join(targetCmd, f)
+			args = append(args, targetCmd)
+			mounts = append(mounts, llb.AddMount(targetMount, sourceState, llb.SourcePath(d), llb.Readonly))
 		}
 	}
 
@@ -586,7 +589,12 @@ func splitWildcards(name string) (string, string) {
 	if i == len(name) {
 		return name, ""
 	}
-	return path.Dir(name[:i]), path.Base(name[:i]) + name[i:]
+
+	base := path.Base(name[:i])
+	if name[:i] == "" || strings.HasSuffix(name[:i], string(filepath.Separator)) {
+		base = ""
+	}
+	return path.Dir(name[:i]), base + name[i:]
 }
 
 func addEnv(env []string, k, v string, override bool) []string {
