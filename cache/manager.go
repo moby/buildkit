@@ -50,6 +50,8 @@ type cacheManager struct {
 	mu      sync.Mutex
 	ManagerOpt
 	md *metadata.Store
+
+	muPrune sync.Mutex // make sure parallel prune is not allowed so there will not be inconsistent results
 }
 
 func NewManager(opt ManagerOpt) (Manager, error) {
@@ -283,8 +285,12 @@ func (cm *cacheManager) GetMutable(ctx context.Context, id string) (MutableRef, 
 }
 
 func (cm *cacheManager) Prune(ctx context.Context, ch chan client.UsageInfo) error {
-	// TODO: global prune lock
+	cm.muPrune.Lock()
+	defer cm.muPrune.Unlock()
+	return cm.prune(ctx, ch)
+}
 
+func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo) error {
 	var toDelete []*cacheRecord
 	cm.mu.Lock()
 
@@ -375,7 +381,7 @@ func (cm *cacheManager) Prune(ctx context.Context, ch chan client.UsageInfo) err
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
-		return cm.Prune(ctx, ch)
+		return cm.prune(ctx, ch)
 	}
 }
 
