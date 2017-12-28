@@ -228,6 +228,40 @@ func (p *puller) Snapshot(ctx context.Context) (cache.ImmutableRef, error) {
 		}
 	}
 
+	// split all pulled data to layers and rest. layers remain roots and are deleted with snapshots. rest will be linked to layers.
+	var notLayerBlobs []ocispec.Descriptor
+	var layerBlobs []ocispec.Descriptor
+	for _, j := range ongoing.added {
+		switch j.MediaType {
+		case ocispec.MediaTypeImageLayer, images.MediaTypeDockerSchema2Layer, ocispec.MediaTypeImageLayerGzip, images.MediaTypeDockerSchema2LayerGzip:
+			layerBlobs = append(layerBlobs, j.Descriptor)
+		default:
+			notLayerBlobs = append(notLayerBlobs, j.Descriptor)
+		}
+	}
+
+	for _, l := range layerBlobs {
+		labels := map[string]string{}
+		var fields []string
+		for _, nl := range notLayerBlobs {
+			k := "containerd.io/gc.ref.content." + nl.Digest.Hex()[:12]
+			labels[k] = nl.Digest.String()
+			fields = append(fields, "labels."+k)
+		}
+		if _, err := p.is.ContentStore.Update(ctx, content.Info{
+			Digest: l.Digest,
+			Labels: labels,
+		}, fields...); err != nil {
+			return nil, err
+		}
+	}
+
+	for _, nl := range notLayerBlobs {
+		if err := p.is.ContentStore.Delete(ctx, nl.Digest); err != nil {
+			return nil, err
+		}
+	}
+
 	unpackProgressDone := oneOffProgress(ctx, "unpacking "+p.src.Reference.String())
 	chainid, err := p.is.unpack(ctx, p.desc)
 	if err != nil {
