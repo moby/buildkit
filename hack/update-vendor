@@ -2,7 +2,7 @@
 
 set -eu -o pipefail -x
 
-iidfile=$(mktemp --tmpdir docker-iidfile.XXXXXXXXXX)
+iidfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
 docker build --build-arg VNDR_VERSION=48ac2669d9d1bcacd3163650ef911edca2ec3b42 --iidfile $iidfile -f ./hack/dockerfiles/vendor.Dockerfile --force-rm .
 iid=$(cat $iidfile)
 cid=$(docker create $iid noop)
