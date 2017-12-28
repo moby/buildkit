@@ -3,6 +3,7 @@ package containerimage
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"runtime"
 	"strings"
 	"time"
@@ -68,17 +69,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, ref cache.ImmutableRef, confi
 		return nil, err
 	}
 
-	addAsRoot := content.WithLabels(map[string]string{
-		"containerd.io/gc.root": time.Now().UTC().Format(time.RFC3339Nano),
-	})
-
 	configDigest := digest.FromBytes(config)
-	configDone := oneOffProgress(ctx, "exporting config "+configDigest.String())
-
-	if err := content.WriteBlob(ctx, ic.opt.ContentStore, configDigest.String(), bytes.NewReader(config), int64(len(config)), configDigest, addAsRoot); err != nil {
-		return nil, configDone(errors.Wrap(err, "error writing config blob"))
-	}
-	configDone(nil)
 
 	mfst := schema2.Manifest{
 		Config: distribution.Descriptor{
@@ -90,16 +81,21 @@ func (ic *ImageWriter) Commit(ctx context.Context, ref cache.ImmutableRef, confi
 	mfst.SchemaVersion = 2
 	mfst.MediaType = schema2.MediaTypeManifest
 
-	for _, dp := range diffPairs {
+	labels := map[string]string{
+		"containerd.io/gc.ref.content.0": configDigest.String(),
+	}
+
+	for i, dp := range diffPairs {
 		info, err := ic.opt.ContentStore.Info(ctx, dp.Blobsum)
 		if err != nil {
-			return nil, configDone(errors.Wrapf(err, "could not find blob %s from contentstore", dp.Blobsum))
+			return nil, errors.Wrapf(err, "could not find blob %s from contentstore", dp.Blobsum)
 		}
 		mfst.Layers = append(mfst.Layers, distribution.Descriptor{
 			Digest:    dp.Blobsum,
 			Size:      info.Size,
 			MediaType: schema2.MediaTypeLayer,
 		})
+		labels[fmt.Sprintf("containerd.io/gc.ref.content.%d", i+1)] = dp.Blobsum.String()
 	}
 
 	mfstJSON, err := json.Marshal(mfst)
@@ -110,10 +106,22 @@ func (ic *ImageWriter) Commit(ctx context.Context, ref cache.ImmutableRef, confi
 	mfstDigest := digest.FromBytes(mfstJSON)
 	mfstDone := oneOffProgress(ctx, "exporting manifest "+mfstDigest.String())
 
-	if err := content.WriteBlob(ctx, ic.opt.ContentStore, mfstDigest.String(), bytes.NewReader(mfstJSON), int64(len(mfstJSON)), mfstDigest, addAsRoot); err != nil {
+	if err := content.WriteBlob(ctx, ic.opt.ContentStore, mfstDigest.String(), bytes.NewReader(mfstJSON), int64(len(mfstJSON)), mfstDigest, content.WithLabels(labels)); err != nil {
 		return nil, mfstDone(errors.Wrapf(err, "error writing manifest blob %s", mfstDigest))
 	}
 	mfstDone(nil)
+
+	configDone := oneOffProgress(ctx, "exporting config "+configDigest.String())
+
+	if err := content.WriteBlob(ctx, ic.opt.ContentStore, configDigest.String(), bytes.NewReader(config), int64(len(config)), configDigest); err != nil {
+		return nil, configDone(errors.Wrap(err, "error writing config blob"))
+	}
+	configDone(nil)
+
+	// delete config root. config will remain linked to the manifest
+	if err := ic.opt.ContentStore.Delete(context.TODO(), configDigest); err != nil {
+		return nil, errors.Wrap(err, "error removing config root")
+	}
 
 	return &ocispec.Descriptor{
 		Digest:    mfstDigest,
