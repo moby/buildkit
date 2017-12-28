@@ -2,7 +2,6 @@ package cacheimport
 
 import (
 	"bytes"
-	gocontext "context"
 	"encoding/json"
 	"time"
 
@@ -24,11 +23,6 @@ import (
 )
 
 const mediaTypeConfig = "application/vnd.buildkit.cacheconfig.v0"
-
-type blobmapper interface {
-	GetBlob(ctx gocontext.Context, key string) (digest.Digest, digest.Digest, error)
-	SetBlob(ctx gocontext.Context, key string, diffID, blob digest.Digest) error
-}
 
 type CacheRecord struct {
 	CacheKey   digest.Digest

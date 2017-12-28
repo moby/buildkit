@@ -6,11 +6,10 @@ import (
 	"sync"
 	"time"
 
-	cdsnapshot "github.com/containerd/containerd/snapshots"
+	"github.com/containerd/containerd/snapshots"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/identity"
-	"github.com/moby/buildkit/snapshot"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
@@ -23,7 +22,7 @@ var (
 )
 
 type ManagerOpt struct {
-	Snapshotter   snapshot.Snapshotter
+	Snapshotter   snapshots.Snapshotter
 	GCPolicy      GCPolicy
 	MetadataStore *metadata.Store
 }
@@ -175,7 +174,7 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOpt
 
 	rec := &cacheRecord{
 		mu:      &sync.Mutex{},
-		mutable: info.Kind != cdsnapshot.KindCommitted,
+		mutable: info.Kind != snapshots.KindCommitted,
 		cm:      cm,
 		refs:    make(map[Mountable]struct{}),
 		parent:  parent,
@@ -218,10 +217,7 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, opts ...RefOpti
 		parentID = parent.ID()
 	}
 
-	labels := map[string]string{
-		"containerd.io/gc.root": time.Now().UTC().Format(time.RFC3339Nano),
-	}
-	if _, err := cm.Snapshotter.Prepare(ctx, id, parentID, cdsnapshot.WithLabels(labels)); err != nil {
+	if _, err := cm.Snapshotter.Prepare(ctx, id, parentID); err != nil {
 		if parent != nil {
 			parent.Release(context.TODO())
 		}
@@ -294,8 +290,14 @@ func (cm *cacheManager) Prune(ctx context.Context, ch chan client.UsageInfo) err
 
 	for _, cr := range cm.records {
 		cr.mu.Lock()
+
 		// ignore duplicates that share data
 		if cr.equalImmutable != nil && len(cr.equalImmutable.refs) > 0 || cr.equalMutable != nil && len(cr.refs) == 0 {
+			cr.mu.Unlock()
+			continue
+		}
+
+		if cr.isDead() {
 			cr.mu.Unlock()
 			continue
 		}

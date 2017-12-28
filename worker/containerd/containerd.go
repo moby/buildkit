@@ -5,13 +5,15 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/namespaces"
+	"github.com/containerd/containerd/snapshots"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/executor/containerdexecutor"
 	"github.com/moby/buildkit/identity"
-	"github.com/moby/buildkit/snapshot/nogc"
+	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/worker/base"
 	"github.com/pkg/errors"
 )
@@ -55,10 +57,13 @@ func newContainerd(root string, client *containerd.Client, snapshotterName strin
 	}
 
 	gc := func(ctx context.Context) error {
+		// TODO: how to avoid this?
 		snapshotter := client.SnapshotService(snapshotterName)
 		ctx = namespaces.WithNamespace(ctx, "buildkit")
 		key := identity.NewID()
-		if _, err := snapshotter.Prepare(ctx, key, ""); err != nil {
+		if _, err := snapshotter.Prepare(ctx, key, "", snapshots.WithLabels(map[string]string{
+			"containerd.io/gc.root": time.Now().UTC().Format(time.RFC3339Nano),
+		})); err != nil {
 			return err
 		}
 		if err := snapshotter.Remove(ctx, key); err != nil {
@@ -67,16 +72,18 @@ func newContainerd(root string, client *containerd.Client, snapshotterName strin
 		return nil
 	}
 
+	cs := containerdsnapshot.NewContentStore(client.ContentStore(), "buildkit", gc)
+
 	opt := base.WorkerOpt{
-		ID:              id,
-		Labels:          xlabels,
-		MetadataStore:   md,
-		Executor:        containerdexecutor.New(client, root),
-		BaseSnapshotter: nogc.NewSnapshotter(client.SnapshotService(snapshotterName), "buildkit", gc),
-		ContentStore:    nogc.NewContentStore(client.ContentStore(), "buildkit", gc),
-		Applier:         df,
-		Differ:          df,
-		ImageStore:      client.ImageService(),
+		ID:            id,
+		Labels:        xlabels,
+		MetadataStore: md,
+		Executor:      containerdexecutor.New(client, root),
+		Snapshotter:   containerdsnapshot.NewSnapshotter(client.SnapshotService(snapshotterName), cs, md, "buildkit", gc),
+		ContentStore:  cs,
+		Applier:       df,
+		Differ:        df,
+		ImageStore:    client.ImageService(),
 	}
 	return opt, nil
 }

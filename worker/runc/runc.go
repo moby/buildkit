@@ -13,7 +13,7 @@ import (
 	"github.com/containerd/containerd/snapshots/overlay"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/executor/runcexecutor"
-	"github.com/moby/buildkit/snapshot/nogc"
+	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/worker/base"
 )
 
@@ -62,7 +62,7 @@ func NewWorkerOpt(root string, labels map[string]string) (base.WorkerOpt, error)
 		return err
 	}
 
-	c = nogc.NewContentStore(mdb.ContentStore(), "buildkit", gc)
+	c = containerdsnapshot.NewContentStore(mdb.ContentStore(), "buildkit", gc)
 	df, err := walking.NewWalkingDiff(c)
 	if err != nil {
 		return opt, err
@@ -77,15 +77,15 @@ func NewWorkerOpt(root string, labels map[string]string) (base.WorkerOpt, error)
 		xlabels[k] = v
 	}
 	opt = base.WorkerOpt{
-		ID:              id,
-		Labels:          xlabels,
-		MetadataStore:   md,
-		Executor:        exe,
-		BaseSnapshotter: nogc.NewSnapshotter(mdb.Snapshotter("overlayfs"), "buildkit", gc),
-		ContentStore:    c,
-		Applier:         df,
-		Differ:          df,
-		ImageStore:      nil, // explicitly
+		ID:            id,
+		Labels:        xlabels,
+		MetadataStore: md,
+		Executor:      exe,
+		Snapshotter:   containerdsnapshot.NewSnapshotter(mdb.Snapshotter("overlayfs"), c, md, "buildkit", gc),
+		ContentStore:  c,
+		Applier:       df,
+		Differ:        df,
+		ImageStore:    nil, // explicitly
 	}
 	return opt, nil
 }

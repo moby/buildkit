@@ -2,10 +2,8 @@ package cache
 
 import (
 	"sync"
-	"time"
 
 	"github.com/containerd/containerd/mount"
-	cdsnapshot "github.com/containerd/containerd/snapshots"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/util/flightcontrol"
@@ -150,10 +148,7 @@ func (cr *cacheRecord) Mount(ctx context.Context, readonly bool) ([]mount.Mount,
 	}
 	if cr.viewMount == nil { // TODO: handle this better
 		cr.view = identity.NewID()
-		labels := map[string]string{
-			"containerd.io/gc.root": time.Now().UTC().Format(time.RFC3339Nano),
-		}
-		m, err := cr.cm.Snapshotter.View(ctx, cr.view, cr.ID(), cdsnapshot.WithLabels(labels))
+		m, err := cr.cm.Snapshotter.View(ctx, cr.view, cr.ID())
 		if err != nil {
 			cr.view = ""
 			return nil, errors.Wrapf(err, "failed to mount %s", cr.ID())
@@ -243,10 +238,7 @@ func (cr *cacheRecord) finalize(ctx context.Context) error {
 	if mutable == nil {
 		return nil
 	}
-	labels := map[string]string{
-		"containerd.io/gc.root": time.Now().UTC().Format(time.RFC3339Nano),
-	}
-	err := cr.cm.Snapshotter.Commit(ctx, cr.ID(), mutable.ID(), cdsnapshot.WithLabels(labels))
+	err := cr.cm.Snapshotter.Commit(ctx, cr.ID(), mutable.ID())
 	if err != nil {
 		return errors.Wrapf(err, "failed to commit %s", mutable.ID())
 	}

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/containerd/containerd/namespaces"
+	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/containerd/snapshots/naive"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
@@ -368,7 +369,7 @@ func TestLazyCommit(t *testing.T) {
 	require.Equal(t, errNotFound, errors.Cause(err))
 }
 
-func getCacheManager(t *testing.T, tmpdir string, snapshotter snapshot.Snapshotter) Manager {
+func getCacheManager(t *testing.T, tmpdir string, snapshotter snapshots.Snapshotter) Manager {
 	md, err := metadata.NewStore(filepath.Join(tmpdir, "metadata.db"))
 	require.NoError(t, err)
 

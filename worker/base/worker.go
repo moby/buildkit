@@ -10,7 +10,6 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/diff"
 	"github.com/containerd/containerd/images"
-	ctdsnapshot "github.com/containerd/containerd/snapshots"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/cacheimport"
 	"github.com/moby/buildkit/cache/instructioncache"
@@ -24,7 +23,7 @@ import (
 	ociexporter "github.com/moby/buildkit/exporter/oci"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
-	"github.com/moby/buildkit/snapshot/blobmapping"
+	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/llbop"
 	"github.com/moby/buildkit/solver/pb"
@@ -44,23 +43,22 @@ import (
 // WorkerOpt is specific to a worker.
 // See also CommonOpt.
 type WorkerOpt struct {
-	ID              string
-	Labels          map[string]string
-	SessionManager  *session.Manager
-	MetadataStore   *metadata.Store
-	Executor        executor.Executor
-	BaseSnapshotter ctdsnapshot.Snapshotter // not blobmapping one (FIXME: just require blobmapping snapshotter?)
-	ContentStore    content.Store
-	Applier         diff.Differ
-	Differ          diff.Differ
-	ImageStore      images.Store // optional
+	ID             string
+	Labels         map[string]string
+	SessionManager *session.Manager
+	MetadataStore  *metadata.Store
+	Executor       executor.Executor
+	Snapshotter    snapshot.Snapshotter
+	ContentStore   content.Store
+	Applier        diff.Differ
+	Differ         diff.Differ
+	ImageStore     images.Store // optional
 }
 
 // Worker is a local worker instance with dedicated snapshotter, cache, and so on.
 // TODO: s/Worker/OpWorker/g ?
 type Worker struct {
 	WorkerOpt
-	Snapshotter   ctdsnapshot.Snapshotter // blobmapping snapshotter
 	CacheManager  cache.Manager
 	SourceManager *source.Manager
 	cache         instructioncache.InstructionCache
@@ -73,17 +71,8 @@ type Worker struct {
 
 // NewWorker instantiates a local worker
 func NewWorker(opt WorkerOpt) (*Worker, error) {
-	bmSnapshotter, err := blobmapping.NewSnapshotter(blobmapping.Opt{
-		Content:       opt.ContentStore,
-		Snapshotter:   opt.BaseSnapshotter,
-		MetadataStore: opt.MetadataStore,
-	})
-	if err != nil {
-		return nil, err
-	}
-
 	cm, err := cache.NewManager(cache.ManagerOpt{
-		Snapshotter:   bmSnapshotter,
+		Snapshotter:   opt.Snapshotter,
 		MetadataStore: opt.MetadataStore,
 	})
 	if err != nil {
@@ -101,7 +90,7 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 	}
 
 	is, err := containerimage.NewSource(containerimage.SourceOpt{
-		Snapshotter:    bmSnapshotter,
+		Snapshotter:    opt.Snapshotter,
 		ContentStore:   opt.ContentStore,
 		SessionManager: opt.SessionManager,
 		Applier:        opt.Applier,
@@ -146,7 +135,7 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 	exporters := map[string]exporter.Exporter{}
 
 	iw, err := imageexporter.NewImageWriter(imageexporter.WriterOpt{
-		Snapshotter:  bmSnapshotter,
+		Snapshotter:  opt.Snapshotter,
 		ContentStore: opt.ContentStore,
 		Differ:       opt.Differ,
 	})
@@ -193,14 +182,14 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 	exporters[client.ExporterDocker] = dockerExporter
 
 	ce := cacheimport.NewCacheExporter(cacheimport.ExporterOpt{
-		Snapshotter:    bmSnapshotter,
+		Snapshotter:    opt.Snapshotter,
 		ContentStore:   opt.ContentStore,
 		SessionManager: opt.SessionManager,
 		Differ:         opt.Differ,
 	})
 
 	ci := cacheimport.NewCacheImporter(cacheimport.ImportOpt{
-		Snapshotter:    bmSnapshotter,
+		Snapshotter:    opt.Snapshotter,
 		ContentStore:   opt.ContentStore,
 		Applier:        opt.Applier,
 		CacheAccessor:  cm,
@@ -209,7 +198,6 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 
 	return &Worker{
 		WorkerOpt:     opt,
-		Snapshotter:   bmSnapshotter,
 		CacheManager:  cm,
 		SourceManager: sm,
 		cache:         ic,

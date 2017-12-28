@@ -1,15 +1,24 @@
-package nogc
+package containerd
 
 import (
 	"context"
+	"time"
 
+	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/namespaces"
 	ctdsnapshot "github.com/containerd/containerd/snapshots"
+	"github.com/moby/buildkit/cache/metadata"
+	"github.com/moby/buildkit/snapshot"
+	"github.com/moby/buildkit/snapshot/blobmapping"
 )
 
-func NewSnapshotter(snapshotter ctdsnapshot.Snapshotter, ns string, gc func(context.Context) error) ctdsnapshot.Snapshotter {
-	return &nsSnapshotter{ns, snapshotter, gc}
+func NewSnapshotter(snapshotter ctdsnapshot.Snapshotter, store content.Store, mdstore *metadata.Store, ns string, gc func(context.Context) error) snapshot.Snapshotter {
+	return blobmapping.NewSnapshotter(blobmapping.Opt{
+		Content:       store,
+		Snapshotter:   &nsSnapshotter{ns, snapshotter, gc},
+		MetadataStore: mdstore,
+	})
 }
 
 type nsSnapshotter struct {
@@ -38,15 +47,15 @@ func (s *nsSnapshotter) Mounts(ctx context.Context, key string) ([]mount.Mount, 
 }
 func (s *nsSnapshotter) Prepare(ctx context.Context, key, parent string, opts ...ctdsnapshot.Opt) ([]mount.Mount, error) {
 	ctx = namespaces.WithNamespace(ctx, s.ns)
-	return s.Snapshotter.Prepare(ctx, key, parent, opts...)
+	return s.Snapshotter.Prepare(ctx, key, parent, addRootLabel(opts...))
 }
 func (s *nsSnapshotter) View(ctx context.Context, key, parent string, opts ...ctdsnapshot.Opt) ([]mount.Mount, error) {
 	ctx = namespaces.WithNamespace(ctx, s.ns)
-	return s.Snapshotter.View(ctx, key, parent, opts...)
+	return s.Snapshotter.View(ctx, key, parent, addRootLabel(opts...))
 }
 func (s *nsSnapshotter) Commit(ctx context.Context, name, key string, opts ...ctdsnapshot.Opt) error {
 	ctx = namespaces.WithNamespace(ctx, s.ns)
-	return s.Snapshotter.Commit(ctx, name, key, opts...)
+	return s.Snapshotter.Commit(ctx, name, key, addRootLabel(opts...))
 }
 func (s *nsSnapshotter) Remove(ctx context.Context, key string) error {
 	ctx = namespaces.WithNamespace(ctx, s.ns)
@@ -63,4 +72,19 @@ func (s *nsSnapshotter) Remove(ctx context.Context, key string) error {
 func (s *nsSnapshotter) Walk(ctx context.Context, fn func(context.Context, ctdsnapshot.Info) error) error {
 	ctx = namespaces.WithNamespace(ctx, s.ns)
 	return s.Snapshotter.Walk(ctx, fn)
+}
+
+func addRootLabel(opts ...ctdsnapshot.Opt) ctdsnapshot.Opt {
+	return func(info *ctdsnapshot.Info) error {
+		for _, opt := range opts {
+			if err := opt(info); err != nil {
+				return err
+			}
+		}
+		if info.Labels == nil {
+			info.Labels = map[string]string{}
+		}
+		info.Labels["containerd.io/gc.root"] = time.Now().UTC().Format(time.RFC3339Nano)
+		return nil
+	}
 }
