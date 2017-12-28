@@ -18,7 +18,9 @@ import (
 
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/content"
+	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/namespaces"
+	"github.com/containerd/containerd/snapshots"
 	"github.com/docker/distribution/manifest/schema2"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/identity"
@@ -68,6 +70,8 @@ func testBuildMultiMount(t *testing.T, sb integration.Sandbox) {
 
 	err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
 	require.NoError(t, err)
+
+	checkAllReleasable(t, c, sb, true)
 }
 
 func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
@@ -156,6 +160,8 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	require.Equal(t, fi.ModTime().Format(http.TimeFormat), modTime.Format(http.TimeFormat))
 	require.Equal(t, int(fi.Mode()&0777), 0741)
+
+	checkAllReleasable(t, c, sb, true)
 
 	// TODO: check that second request was marked as cached
 }
@@ -253,6 +259,8 @@ func testUser(t *testing.T, sb integration.Sandbox) {
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "userone"))
 	require.NoError(t, err)
 	require.Contains(t, string(dt), "1")
+
+	checkAllReleasable(t, c, sb, true)
 }
 
 func testOCIExporter(t *testing.T, sb integration.Sandbox) {
@@ -347,8 +355,9 @@ func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 			_, ok := m[l]
 			require.True(t, ok)
 		}
-
 	}
+
+	checkAllReleasable(t, c, sb, true)
 }
 
 func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
@@ -419,6 +428,8 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	require.Equal(t, 0741, int(fi.Mode()&0777))
 
+	checkAllReleasable(t, c, sb, false)
+
 	// examine contents of exported tars (requires containerd)
 	var cdAddress string
 	if cd, ok := sb.(interface {
@@ -436,6 +447,16 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	defer client.Close()
 
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit")
+
+	// check image in containerd
+	_, err = client.ImageService().Get(ctx, target)
+	require.NoError(t, err)
+
+	// deleting image should release all content
+	err = client.ImageService().Delete(ctx, target, images.SynchronousDelete())
+	require.NoError(t, err)
+
+	checkAllReleasable(t, c, sb, true)
 
 	img, err := client.Pull(ctx, target)
 	require.NoError(t, err)
@@ -561,5 +582,69 @@ func readTarToMap(dt []byte, compressed bool) (map[string]*tarItem, error) {
 			}
 		}
 		m[h.Name] = &tarItem{header: h, data: dt}
+	}
+}
+
+func checkAllReleasable(t *testing.T, c *Client, sb integration.Sandbox, checkContent bool) {
+	err := c.Prune(context.TODO(), nil)
+	require.NoError(t, err)
+
+	du, err := c.DiskUsage(context.TODO())
+	require.NoError(t, err)
+	require.Equal(t, 0, len(du))
+
+	// examine contents of exported tars (requires containerd)
+	var cdAddress string
+	if cd, ok := sb.(interface {
+		ContainerdAddress() string
+	}); !ok {
+		return
+	} else {
+		cdAddress = cd.ContainerdAddress()
+	}
+
+	// TODO: make public pull helper function so this can be checked for standalone as well
+
+	client, err := containerd.New(cdAddress)
+	require.NoError(t, err)
+	defer client.Close()
+
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit")
+	snapshotService := client.SnapshotService("overlayfs")
+
+	retries := 0
+	for {
+		count := 0
+		err = snapshotService.Walk(ctx, func(context.Context, snapshots.Info) error {
+			count++
+			return nil
+		})
+		require.NoError(t, err)
+		if count == 0 {
+			break
+		}
+		require.True(t, 20 > retries)
+		retries++
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	if !checkContent {
+		return
+	}
+
+	retries = 0
+	for {
+		count := 0
+		err = client.ContentStore().Walk(ctx, func(content.Info) error {
+			count++
+			return nil
+		})
+		require.NoError(t, err)
+		if count == 0 {
+			break
+		}
+		require.True(t, 20 > retries)
+		retries++
+		time.Sleep(500 * time.Millisecond)
 	}
 }

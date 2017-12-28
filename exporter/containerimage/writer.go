@@ -248,7 +248,11 @@ func getRefDesciptions(ref cache.ImmutableRef, limit int) []string {
 	if descr == "" {
 		descr = defaultMsg
 	}
-	return append(getRefDesciptions(ref.Parent(), limit-1), descr)
+	p := ref.Parent()
+	if p != nil {
+		defer p.Release(context.TODO())
+	}
+	return append(getRefDesciptions(p, limit-1), descr)
 }
 
 func oneOffProgress(ctx context.Context, id string) func(err error) error {

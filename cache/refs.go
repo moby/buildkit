@@ -116,7 +116,7 @@ func (cr *cacheRecord) Parent() ImmutableRef {
 	}
 	p := cr.parent.(*immutableRef)
 	p.mu.Lock()
-	p.mu.Unlock()
+	defer p.mu.Unlock()
 	return p.ref()
 }
 
