@@ -5,14 +5,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/containerd/containerd"
-	"github.com/containerd/containerd/content"
+	"github.com/containerd/containerd/namespaces"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/executor/containerdexecutor"
+	"github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/snapshot/nogc"
 	"github.com/moby/buildkit/worker/base"
-	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
 
@@ -53,41 +53,30 @@ func newContainerd(root string, client *containerd.Client, snapshotterName strin
 	for k, v := range labels {
 		xlabels[k] = v
 	}
+
+	gc := func(ctx context.Context) error {
+		snapshotter := client.SnapshotService(snapshotterName)
+		ctx = namespaces.WithNamespace(ctx, "buildkit")
+		key := identity.NewID()
+		if _, err := snapshotter.Prepare(ctx, key, ""); err != nil {
+			return err
+		}
+		if err := snapshotter.Remove(ctx, key); err != nil {
+			return err
+		}
+		return nil
+	}
+
 	opt := base.WorkerOpt{
 		ID:              id,
 		Labels:          xlabels,
 		MetadataStore:   md,
 		Executor:        containerdexecutor.New(client, root),
-		BaseSnapshotter: client.SnapshotService(snapshotterName),
-		ContentStore:    &noGCContentStore{client.ContentStore()},
+		BaseSnapshotter: nogc.NewSnapshotter(client.SnapshotService(snapshotterName), "buildkit", gc),
+		ContentStore:    nogc.NewContentStore(client.ContentStore(), "buildkit", gc),
 		Applier:         df,
 		Differ:          df,
 		ImageStore:      client.ImageService(),
 	}
 	return opt, nil
-}
-
-// TODO: Replace this with leases
-
-type noGCContentStore struct {
-	content.Store
-}
-type noGCWriter struct {
-	content.Writer
-}
-
-func (cs *noGCContentStore) Writer(ctx context.Context, ref string, size int64, expected digest.Digest) (content.Writer, error) {
-	w, err := cs.Store.Writer(ctx, ref, size, expected)
-	return &noGCWriter{w}, err
-}
-
-func (w *noGCWriter) Commit(ctx context.Context, size int64, expected digest.Digest, opts ...content.Opt) error {
-	opts = append(opts, func(info *content.Info) error {
-		if info.Labels == nil {
-			info.Labels = map[string]string{}
-		}
-		info.Labels["containerd.io/gc.root"] = time.Now().UTC().Format(time.RFC3339Nano)
-		return nil
-	})
-	return w.Writer.Commit(ctx, size, expected, opts...)
 }
