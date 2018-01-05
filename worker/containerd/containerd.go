@@ -8,11 +8,13 @@ import (
 	"time"
 
 	"github.com/containerd/containerd"
-	"github.com/containerd/containerd/content"
+	"github.com/containerd/containerd/namespaces"
+	"github.com/containerd/containerd/snapshots"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/executor/containerdexecutor"
+	"github.com/moby/buildkit/identity"
+	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/worker/base"
-	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
 
@@ -53,41 +55,35 @@ func newContainerd(root string, client *containerd.Client, snapshotterName strin
 	for k, v := range labels {
 		xlabels[k] = v
 	}
+
+	gc := func(ctx context.Context) error {
+		// TODO: how to avoid this?
+		snapshotter := client.SnapshotService(snapshotterName)
+		ctx = namespaces.WithNamespace(ctx, "buildkit")
+		key := identity.NewID()
+		if _, err := snapshotter.Prepare(ctx, key, "", snapshots.WithLabels(map[string]string{
+			"containerd.io/gc.root": time.Now().UTC().Format(time.RFC3339Nano),
+		})); err != nil {
+			return err
+		}
+		if err := snapshotter.Remove(ctx, key); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	cs := containerdsnapshot.NewContentStore(client.ContentStore(), "buildkit", gc)
+
 	opt := base.WorkerOpt{
-		ID:              id,
-		Labels:          xlabels,
-		MetadataStore:   md,
-		Executor:        containerdexecutor.New(client, root),
-		BaseSnapshotter: client.SnapshotService(snapshotterName),
-		ContentStore:    &noGCContentStore{client.ContentStore()},
-		Applier:         df,
-		Differ:          df,
-		ImageStore:      client.ImageService(),
+		ID:            id,
+		Labels:        xlabels,
+		MetadataStore: md,
+		Executor:      containerdexecutor.New(client, root),
+		Snapshotter:   containerdsnapshot.NewSnapshotter(client.SnapshotService(snapshotterName), cs, md, "buildkit", gc),
+		ContentStore:  cs,
+		Applier:       df,
+		Differ:        df,
+		ImageStore:    client.ImageService(),
 	}
 	return opt, nil
-}
-
-// TODO: Replace this with leases
-
-type noGCContentStore struct {
-	content.Store
-}
-type noGCWriter struct {
-	content.Writer
-}
-
-func (cs *noGCContentStore) Writer(ctx context.Context, ref string, size int64, expected digest.Digest) (content.Writer, error) {
-	w, err := cs.Store.Writer(ctx, ref, size, expected)
-	return &noGCWriter{w}, err
-}
-
-func (w *noGCWriter) Commit(ctx context.Context, size int64, expected digest.Digest, opts ...content.Opt) error {
-	opts = append(opts, func(info *content.Info) error {
-		if info.Labels == nil {
-			info.Labels = map[string]string{}
-		}
-		info.Labels["containerd.io/gc.root"] = time.Now().UTC().Format(time.RFC3339Nano)
-		return nil
-	})
-	return w.Writer.Commit(ctx, size, expected, opts...)
 }

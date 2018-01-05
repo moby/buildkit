@@ -1,7 +1,6 @@
 package blobs
 
 import (
-	gocontext "context"
 	"time"
 
 	"github.com/containerd/containerd/content"
@@ -26,18 +25,9 @@ type DiffPair struct {
 	Blobsum digest.Digest
 }
 
-type blobmapper interface {
-	GetBlob(ctx gocontext.Context, key string) (digest.Digest, digest.Digest, error)
-	SetBlob(ctx gocontext.Context, key string, diffID, blob digest.Digest) error
-}
-
 func GetDiffPairs(ctx context.Context, contentStore content.Store, snapshotter snapshot.Snapshotter, differ diff.Differ, ref cache.ImmutableRef) ([]DiffPair, error) {
 	if ref == nil {
 		return nil, nil
-	}
-	blobmap, ok := snapshotter.(blobmapper)
-	if !ok {
-		return nil, errors.Errorf("image exporter requires snapshotter with blobs mapping support")
 	}
 
 	eg, ctx := errgroup.WithContext(ctx)
@@ -57,7 +47,7 @@ func GetDiffPairs(ctx context.Context, contentStore content.Store, snapshotter s
 	}
 	eg.Go(func() error {
 		dp, err := g.Do(ctx, ref.ID(), func(ctx context.Context) (interface{}, error) {
-			diffID, blob, err := blobmap.GetBlob(ctx, ref.ID())
+			diffID, blob, err := snapshotter.GetBlob(ctx, ref.ID())
 			if err != nil {
 				return nil, err
 			}
@@ -100,7 +90,7 @@ func GetDiffPairs(ctx context.Context, contentStore content.Store, snapshotter s
 			if err != nil {
 				return nil, err
 			}
-			if err := blobmap.SetBlob(ctx, ref.ID(), diffIDDigest, descr.Digest); err != nil {
+			if err := snapshotter.SetBlob(ctx, ref.ID(), diffIDDigest, descr.Digest); err != nil {
 				return nil, err
 			}
 			return DiffPair{DiffID: diffIDDigest, Blobsum: descr.Digest}, nil

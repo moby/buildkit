@@ -2,10 +2,8 @@ package cache
 
 import (
 	"sync"
-	"time"
 
 	"github.com/containerd/containerd/mount"
-	cdsnapshot "github.com/containerd/containerd/snapshots"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/util/flightcontrol"
@@ -27,7 +25,6 @@ type ImmutableRef interface {
 	Ref
 	Parent() ImmutableRef
 	Finalize(ctx context.Context) error // Make sure reference is flushed to driver
-	// Prepare() / ChainID() / Meta()
 }
 
 type MutableRef interface {
@@ -40,36 +37,44 @@ type Mountable interface {
 }
 
 type cacheRecord struct {
-	mu        sync.Mutex
-	mutable   bool
-	refs      map[Mountable]struct{}
-	cm        *cacheManager
-	parent    ImmutableRef
-	md        *metadata.StorageItem
+	cm *cacheManager
+	mu *sync.Mutex // the mutex is shared by records sharing data
+
+	mutable bool
+	refs    map[Mountable]struct{}
+	parent  ImmutableRef
+	md      *metadata.StorageItem
+
+	// dead means record is marked as deleted
+	dead bool
+
 	view      string
 	viewMount []mount.Mount
-	dead      bool
 
 	sizeG flightcontrol.Group
-	// size  int64
 
 	// these are filled if multiple refs point to same data
 	equalMutable   *mutableRef
 	equalImmutable *immutableRef
 }
 
-// hold manager lock before calling
+// hold ref lock before calling
 func (cr *cacheRecord) ref() *immutableRef {
 	ref := &immutableRef{cacheRecord: cr}
 	cr.refs[ref] = struct{}{}
 	return ref
 }
 
-// hold manager lock before calling
+// hold ref lock before calling
 func (cr *cacheRecord) mref() *mutableRef {
 	ref := &mutableRef{cacheRecord: cr}
 	cr.refs[ref] = struct{}{}
 	return ref
+}
+
+// hold ref lock before calling
+func (cr *cacheRecord) isDead() bool {
+	return cr.dead || (cr.equalImmutable != nil && cr.equalImmutable.dead) || (cr.equalMutable != nil && cr.equalMutable.dead)
 }
 
 func (cr *cacheRecord) Size(ctx context.Context) (int64, error) {
@@ -88,6 +93,10 @@ func (cr *cacheRecord) Size(ctx context.Context) (int64, error) {
 		cr.mu.Unlock()
 		usage, err := cr.cm.ManagerOpt.Snapshotter.Usage(ctx, driverID)
 		if err != nil {
+			if cr.isDead() {
+				cr.mu.Unlock()
+				return int64(0), nil
+			}
 			return s, errors.Wrapf(err, "failed to get usage for %s", cr.ID())
 		}
 		cr.mu.Lock()
@@ -105,7 +114,10 @@ func (cr *cacheRecord) Parent() ImmutableRef {
 	if cr.parent == nil {
 		return nil
 	}
-	return cr.parent.(*immutableRef).ref()
+	p := cr.parent.(*immutableRef)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.ref()
 }
 
 func (cr *cacheRecord) Mount(ctx context.Context, readonly bool) ([]mount.Mount, error) {
@@ -136,10 +148,7 @@ func (cr *cacheRecord) Mount(ctx context.Context, readonly bool) ([]mount.Mount,
 	}
 	if cr.viewMount == nil { // TODO: handle this better
 		cr.view = identity.NewID()
-		labels := map[string]string{
-			"containerd.io/gc.root": time.Now().UTC().Format(time.RFC3339Nano),
-		}
-		m, err := cr.cm.Snapshotter.View(ctx, cr.view, cr.ID(), cdsnapshot.WithLabels(labels))
+		m, err := cr.cm.Snapshotter.View(ctx, cr.view, cr.ID())
 		if err != nil {
 			cr.view = ""
 			return nil, errors.Wrapf(err, "failed to mount %s", cr.ID())
@@ -149,15 +158,21 @@ func (cr *cacheRecord) Mount(ctx context.Context, readonly bool) ([]mount.Mount,
 	return cr.viewMount, nil
 }
 
+// call when holding the manager lock
 func (cr *cacheRecord) remove(ctx context.Context, removeSnapshot bool) error {
 	delete(cr.cm.records, cr.ID())
-	if err := cr.cm.md.Clear(cr.ID()); err != nil {
-		return err
+	if cr.parent != nil {
+		if err := cr.parent.(*immutableRef).release(ctx); err != nil {
+			return err
+		}
 	}
 	if removeSnapshot {
 		if err := cr.cm.Snapshotter.Remove(ctx, cr.ID()); err != nil {
 			return err
 		}
+	}
+	if err := cr.cm.md.Clear(cr.ID()); err != nil {
+		return err
 	}
 	return nil
 }
@@ -223,10 +238,7 @@ func (cr *cacheRecord) finalize(ctx context.Context) error {
 	if mutable == nil {
 		return nil
 	}
-	labels := map[string]string{
-		"containerd.io/gc.root": time.Now().UTC().Format(time.RFC3339Nano),
-	}
-	err := cr.cm.Snapshotter.Commit(ctx, cr.ID(), mutable.ID(), cdsnapshot.WithLabels(labels))
+	err := cr.cm.Snapshotter.Commit(ctx, cr.ID(), mutable.ID())
 	if err != nil {
 		return errors.Wrapf(err, "failed to commit %s", mutable.ID())
 	}
@@ -245,15 +257,16 @@ func (cr *cacheRecord) finalize(ctx context.Context) error {
 
 func (sr *mutableRef) commit(ctx context.Context) (ImmutableRef, error) {
 	if !sr.mutable || len(sr.refs) == 0 {
-		return nil, errors.Wrapf(errInvalid, "invalid mutable")
+		return nil, errors.Wrapf(errInvalid, "invalid mutable ref")
 	}
 
 	id := identity.NewID()
 	md, _ := sr.cm.md.Get(id)
 
 	rec := &cacheRecord{
+		mu:           sr.mu,
 		cm:           sr.cm,
-		parent:       sr.parent,
+		parent:       sr.Parent(),
 		equalMutable: sr,
 		refs:         make(map[Mountable]struct{}),
 		md:           md,

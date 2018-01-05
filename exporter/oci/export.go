@@ -93,6 +93,9 @@ func (e *imageExporterInstance) Export(ctx context.Context, ref cache.ImmutableR
 	if err != nil {
 		return err
 	}
+	defer func() {
+		e.opt.ImageWriter.ContentStore().Delete(context.TODO(), desc.Digest)
+	}()
 	if desc.Annotations == nil {
 		desc.Annotations = map[string]string{}
 	}

@@ -75,6 +75,10 @@ func (e *imageExporterInstance) Export(ctx context.Context, ref cache.ImmutableR
 		return err
 	}
 
+	defer func() {
+		e.opt.ImageWriter.ContentStore().Delete(context.TODO(), desc.Digest)
+	}()
+
 	if e.targetName != "" {
 		if e.opt.Images != nil {
 			tagDone := oneOffProgress(ctx, "naming to "+e.targetName)

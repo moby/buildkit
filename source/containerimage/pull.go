@@ -20,6 +20,7 @@ import (
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/auth"
+	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/imageutil"
@@ -36,15 +37,10 @@ import (
 
 type SourceOpt struct {
 	SessionManager *session.Manager
-	Snapshotter    snapshots.Snapshotter
+	Snapshotter    snapshot.Snapshotter
 	ContentStore   content.Store
 	Applier        diff.Differ
 	CacheAccessor  cache.Accessor
-}
-
-type blobmapper interface {
-	GetBlob(ctx gocontext.Context, key string) (digest.Digest, digest.Digest, error)
-	SetBlob(ctx gocontext.Context, key string, diffID, blob digest.Digest) error
 }
 
 type resolveRecord struct {
@@ -60,10 +56,6 @@ type imageSource struct {
 func NewSource(opt SourceOpt) (source.Source, error) {
 	is := &imageSource{
 		SourceOpt: opt,
-	}
-
-	if _, ok := opt.Snapshotter.(blobmapper); !ok {
-		return nil, errors.Errorf("imagesource requires snapshotter with blobs mapping support")
 	}
 
 	return is, nil
@@ -236,6 +228,40 @@ func (p *puller) Snapshot(ctx context.Context) (cache.ImmutableRef, error) {
 		}
 	}
 
+	// split all pulled data to layers and rest. layers remain roots and are deleted with snapshots. rest will be linked to layers.
+	var notLayerBlobs []ocispec.Descriptor
+	var layerBlobs []ocispec.Descriptor
+	for _, j := range ongoing.added {
+		switch j.MediaType {
+		case ocispec.MediaTypeImageLayer, images.MediaTypeDockerSchema2Layer, ocispec.MediaTypeImageLayerGzip, images.MediaTypeDockerSchema2LayerGzip:
+			layerBlobs = append(layerBlobs, j.Descriptor)
+		default:
+			notLayerBlobs = append(notLayerBlobs, j.Descriptor)
+		}
+	}
+
+	for _, l := range layerBlobs {
+		labels := map[string]string{}
+		var fields []string
+		for _, nl := range notLayerBlobs {
+			k := "containerd.io/gc.ref.content." + nl.Digest.Hex()[:12]
+			labels[k] = nl.Digest.String()
+			fields = append(fields, "labels."+k)
+		}
+		if _, err := p.is.ContentStore.Update(ctx, content.Info{
+			Digest: l.Digest,
+			Labels: labels,
+		}, fields...); err != nil {
+			return nil, err
+		}
+	}
+
+	for _, nl := range notLayerBlobs {
+		if err := p.is.ContentStore.Delete(ctx, nl.Digest); err != nil {
+			return nil, err
+		}
+	}
+
 	unpackProgressDone := oneOffProgress(ctx, "unpacking "+p.src.Reference.String())
 	chainid, err := p.is.unpack(ctx, p.desc)
 	if err != nil {
@@ -280,7 +306,7 @@ func (is *imageSource) fillBlobMapping(ctx context.Context, layers []rootfs.Laye
 	for _, l := range layers {
 		chain = append(chain, l.Diff.Digest)
 		chainID := identity.ChainID(chain)
-		if err := is.SourceOpt.Snapshotter.(blobmapper).SetBlob(ctx, string(chainID), l.Diff.Digest, l.Blob.Digest); err != nil {
+		if err := is.SourceOpt.Snapshotter.SetBlob(ctx, string(chainID), l.Diff.Digest, l.Blob.Digest); err != nil {
 			return err
 		}
 	}

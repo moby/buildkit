@@ -7,6 +7,7 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/snapshots"
 	"github.com/moby/buildkit/cache/metadata"
+	"github.com/moby/buildkit/snapshot"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/sirupsen/logrus"
 )
@@ -36,13 +37,13 @@ type Snapshotter struct {
 	opt Opt
 }
 
-func NewSnapshotter(opt Opt) (*Snapshotter, error) {
+func NewSnapshotter(opt Opt) snapshot.Snapshotter {
 	s := &Snapshotter{
 		Snapshotter: opt.Snapshotter,
 		opt:         opt,
 	}
 
-	return s, nil
+	return s
 }
 
 // Remove also removes a reference to a blob. If it is a last reference then it deletes it the blob as well
@@ -64,7 +65,7 @@ func (s *Snapshotter) Remove(ctx context.Context, key string) error {
 
 	if len(blobs) == 1 && blobs[0].ID() == key { // last snapshot
 		if err := s.opt.Content.Delete(ctx, blob); err != nil {
-			logrus.Errorf("failed to delete blob %v", blob)
+			logrus.Errorf("failed to delete blob %v: %+v", blob, err)
 		}
 	}
 	return nil

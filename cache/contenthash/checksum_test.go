@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/containerd/snapshots/naive"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/metadata"
@@ -383,7 +384,7 @@ func createRef(t *testing.T, cm cache.Manager, files []string) cache.ImmutableRe
 	return ref
 }
 
-func setupCacheManager(t *testing.T, tmpdir string, snapshotter snapshot.Snapshotter) cache.Manager {
+func setupCacheManager(t *testing.T, tmpdir string, snapshotter snapshots.Snapshotter) cache.Manager {
 	md, err := metadata.NewStore(filepath.Join(tmpdir, "metadata.db"))
 	require.NoError(t, err)
 
