@@ -17,6 +17,7 @@ import (
 	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/session/grpchijack"
 	"github.com/moby/buildkit/solver/pb"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
@@ -60,6 +61,10 @@ func (c *Client) Solve(ctx context.Context, def *llb.Definition, opt SolveOpt, s
 
 	statusContext, cancelStatus := context.WithCancel(context.Background())
 	defer cancelStatus()
+
+	if span := opentracing.SpanFromContext(ctx); span != nil {
+		statusContext = opentracing.ContextWithSpan(statusContext, span)
+	}
 
 	s, err := session.NewSession(defaultSessionName(), opt.SharedKey)
 	if err != nil {

@@ -12,7 +12,6 @@ import (
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/solver/pb"
-	"github.com/moby/buildkit/util/appcontext"
 	"github.com/moby/buildkit/util/progress/progressui"
 	"github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
@@ -116,7 +115,7 @@ func build(clicontext *cli.Context) error {
 
 	ch := make(chan *client.SolveStatus)
 	displayCh := make(chan *client.SolveStatus)
-	eg, ctx := errgroup.WithContext(appcontext.Context())
+	eg, ctx := errgroup.WithContext(commandContext(clicontext))
 
 	exporterAttrs, err := attrMap(clicontext.StringSlice("exporter-opt"))
 	if err != nil {

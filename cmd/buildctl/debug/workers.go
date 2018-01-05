@@ -1,13 +1,13 @@
 package debug
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"sort"
 	"text/tabwriter"
 
 	"github.com/moby/buildkit/client"
-	"github.com/moby/buildkit/util/appcontext"
 	"github.com/urfave/cli"
 )
 
@@ -37,7 +37,7 @@ func listWorkers(clicontext *cli.Context) error {
 		return err
 	}
 
-	workers, err := c.ListWorkers(appcontext.Context(), client.WithWorkerFilter(clicontext.StringSlice("filter")))
+	workers, err := c.ListWorkers(commandContext(clicontext), client.WithWorkerFilter(clicontext.StringSlice("filter")))
 	if err != nil {
 		return err
 	}
@@ -85,4 +85,8 @@ func sortedKeys(m map[string]string) []string {
 	}
 	sort.Strings(s)
 	return s
+}
+
+func commandContext(c *cli.Context) context.Context {
+	return c.App.Metadata["context"].(context.Context)
 }
