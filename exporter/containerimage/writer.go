@@ -179,6 +179,13 @@ func patchImageConfig(dt []byte, dps []blobs.DiffPair, history []ocispec.History
 	}
 	m["history"] = dt
 
+	now := time.Now()
+	dt, err = json.Marshal(&now)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to marshal creation time")
+	}
+	m["created"] = dt
+
 	dt, err = json.Marshal(m)
 	return dt, errors.Wrap(err, "failed to marshal config after patch")
 }

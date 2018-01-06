@@ -476,6 +476,8 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	require.NotEqual(t, "", ociimg.Config.WorkingDir)
 	require.Equal(t, "layers", ociimg.RootFS.Type)
 	require.Equal(t, 2, len(ociimg.RootFS.DiffIDs))
+	require.NotNil(t, ociimg.Created)
+	require.True(t, time.Since(*ociimg.Created) < 2*time.Minute)
 	require.Condition(t, func() bool {
 		for _, env := range ociimg.Config.Env {
 			if strings.HasPrefix(env, "PATH=") {
