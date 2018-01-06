@@ -86,7 +86,7 @@ func (is *imageSource) getCredentialsFromSession(ctx context.Context) func(strin
 			return "", "", err
 		}
 
-		return auth.CredentialsFunc(context.TODO(), caller)(host)
+		return auth.CredentialsFunc(ctx, caller)(host)
 	}
 }
 

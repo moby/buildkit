@@ -4,6 +4,8 @@ import (
 	"net"
 
 	"github.com/docker/docker/pkg/stringid"
+	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -35,16 +37,27 @@ type Session struct {
 	cancelCtx  func()
 	done       chan struct{}
 	grpcServer *grpc.Server
+	conn       net.Conn
 }
 
 // NewSession returns a new long running session
-func NewSession(name, sharedKey string) (*Session, error) {
+func NewSession(ctx context.Context, name, sharedKey string) (*Session, error) {
 	id := stringid.GenerateRandomID()
+
+	serverOpts := []grpc.ServerOption{}
+	if span := opentracing.SpanFromContext(ctx); span != nil {
+		tracer := span.Tracer()
+		serverOpts = []grpc.ServerOption{
+			grpc.StreamInterceptor(otgrpc.OpenTracingStreamServerInterceptor(span.Tracer())),
+			grpc.UnaryInterceptor(otgrpc.OpenTracingServerInterceptor(tracer, otgrpc.LogPayloads())),
+		}
+	}
+
 	s := &Session{
 		id:         id,
 		name:       name,
 		sharedKey:  sharedKey,
-		grpcServer: grpc.NewServer(),
+		grpcServer: grpc.NewServer(serverOpts...),
 	}
 
 	grpc_health_v1.RegisterHealthServer(s.grpcServer, health.NewServer())
@@ -85,6 +98,7 @@ func (s *Session) Run(ctx context.Context, dialer Dialer) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to dial gRPC")
 	}
+	s.conn = conn
 	serve(ctx, s.grpcServer, conn)
 	return nil
 }
@@ -92,8 +106,10 @@ func (s *Session) Run(ctx context.Context, dialer Dialer) error {
 // Close closes the session
 func (s *Session) Close() error {
 	if s.cancelCtx != nil && s.done != nil {
+		if s.conn != nil {
+			s.conn.Close()
+		}
 		s.grpcServer.Stop()
-		s.cancelCtx()
 		<-s.done
 	}
 	return nil

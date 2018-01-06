@@ -11,6 +11,7 @@ import (
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/progress"
 	digest "github.com/opencontainers/go-digest"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
@@ -109,9 +110,10 @@ func (jl *jobList) new(ctx context.Context, id string, pr progress.Reader, cache
 
 	pw, _, _ := progress.FromContext(ctx) // TODO: remove this
 	sid := session.FromContext(ctx)
+	span := opentracing.SpanFromContext(ctx)
 
 	// TODO(AkihiroSuda): find a way to integrate map[string]*cacheRecord to jobInstructionCache?
-	j := &job{l: jl, pr: progress.NewMultiReader(pr), pw: pw, session: sid, cache: newJobInstructionCache(cache), cached: map[string]*cacheRecord{}}
+	j := &job{l: jl, pr: progress.NewMultiReader(pr), pw: pw, session: sid, cache: newJobInstructionCache(cache), cached: map[string]*cacheRecord{}, traceSpan: span}
 	jl.refs[id] = j
 	jl.updateCond.Broadcast()
 	go func() {
@@ -157,6 +159,8 @@ type job struct {
 	session string
 	cache   *jobInstructionCache
 	cached  map[string]*cacheRecord
+
+	traceSpan opentracing.Span // TODO(tonistiigi): temporary until shared tracers support. Do not change until solver refactoring in merged.
 }
 
 type cacheRecord struct {
@@ -197,6 +201,10 @@ func (j *job) loadInternal(def *pb.Definition, resolveOp ResolveOpFunc) (*Input,
 			}
 			ctx := progress.WithProgress(context.Background(), st.mpw)
 			ctx = session.NewContext(ctx, j.session) // TODO: support multiple
+
+			if j.traceSpan != nil {
+				ctx = opentracing.ContextWithSpan(ctx, j.traceSpan)
+			}
 
 			s, err := newVertexSolver(ctx, vtx, op, j.cache, j.getSolver)
 			if err != nil {

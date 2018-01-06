@@ -66,7 +66,7 @@ func (c *Client) Solve(ctx context.Context, def *llb.Definition, opt SolveOpt, s
 		statusContext = opentracing.ContextWithSpan(statusContext, span)
 	}
 
-	s, err := session.NewSession(defaultSessionName(), opt.SharedKey)
+	s, err := session.NewSession(statusContext, defaultSessionName(), opt.SharedKey)
 	if err != nil {
 		return errors.Wrap(err, "failed to create session")
 	}
@@ -104,7 +104,7 @@ func (c *Client) Solve(ctx context.Context, def *llb.Definition, opt SolveOpt, s
 	}
 
 	eg.Go(func() error {
-		return s.Run(ctx, grpchijack.Dialer(c.controlClient()))
+		return s.Run(statusContext, grpchijack.Dialer(c.controlClient()))
 	})
 
 	eg.Go(func() error {
