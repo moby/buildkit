@@ -41,8 +41,8 @@ func grpcClientConn(ctx context.Context, conn net.Conn) (context.Context, *grpc.
 	if span := opentracing.SpanFromContext(ctx); span != nil {
 		tracer := span.Tracer()
 		dialOpts = append(dialOpts,
-			grpc.WithUnaryInterceptor(otgrpc.OpenTracingClientInterceptor(tracer, otgrpc.LogPayloads())),
-			grpc.WithStreamInterceptor(otgrpc.OpenTracingStreamClientInterceptor(tracer)),
+			grpc.WithUnaryInterceptor(otgrpc.OpenTracingClientInterceptor(tracer, traceFilter())),
+			grpc.WithStreamInterceptor(otgrpc.OpenTracingStreamClientInterceptor(tracer, traceFilter())),
 		)
 	}
 

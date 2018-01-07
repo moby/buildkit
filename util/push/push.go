@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"sync"
 	"time"
 
@@ -17,6 +16,7 @@ import (
 	"github.com/moby/buildkit/session/auth"
 	"github.com/moby/buildkit/util/imageutil"
 	"github.com/moby/buildkit/util/progress"
+	"github.com/moby/buildkit/util/tracing"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/sirupsen/logrus"
@@ -49,7 +49,7 @@ func Push(ctx context.Context, sm *session.Manager, cs content.Store, dgst diges
 	ref = reference.TagNameOnly(parsed).String()
 
 	resolver := docker.NewResolver(docker.ResolverOptions{
-		Client:      http.DefaultClient,
+		Client:      tracing.DefaultClient,
 		Credentials: getCredentialsFunc(ctx, sm),
 		PlainHTTP:   insecure,
 	})

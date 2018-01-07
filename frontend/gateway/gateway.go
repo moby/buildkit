@@ -17,6 +17,7 @@ import (
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/util/tracing"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -166,6 +167,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 
 func newLLBBrideForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge) (*llbBrideForwarder, error) {
 	lbf := &llbBrideForwarder{
+		callCtx:   ctx,
 		llbBridge: llbBridge,
 		refs:      map[string]cache.ImmutableRef{},
 		pipe:      newPipe(),
@@ -234,6 +236,7 @@ func (d dummyAddr) String() string {
 }
 
 type llbBrideForwarder struct {
+	callCtx      context.Context
 	llbBridge    frontend.FrontendLLBBridge
 	refs         map[string]cache.ImmutableRef
 	lastRef      cache.ImmutableRef
@@ -242,6 +245,7 @@ type llbBrideForwarder struct {
 }
 
 func (lbf *llbBrideForwarder) ResolveImageConfig(ctx context.Context, req *pb.ResolveImageConfigRequest) (*pb.ResolveImageConfigResponse, error) {
+	ctx = tracing.ContextWithSpanFromContext(ctx, lbf.callCtx)
 	dgst, dt, err := lbf.llbBridge.ResolveImageConfig(ctx, req.Ref)
 	if err != nil {
 		return nil, err
@@ -253,6 +257,7 @@ func (lbf *llbBrideForwarder) ResolveImageConfig(ctx context.Context, req *pb.Re
 }
 
 func (lbf *llbBrideForwarder) Solve(ctx context.Context, req *pb.SolveRequest) (*pb.SolveResponse, error) {
+	ctx = tracing.ContextWithSpanFromContext(ctx, lbf.callCtx)
 	ref, expResp, err := lbf.llbBridge.Solve(ctx, frontend.SolveRequest{
 		Definition: req.Definition,
 		Frontend:   req.Frontend,
@@ -284,6 +289,7 @@ func (lbf *llbBrideForwarder) Solve(ctx context.Context, req *pb.SolveRequest) (
 	return &pb.SolveResponse{Ref: id}, nil
 }
 func (lbf *llbBrideForwarder) ReadFile(ctx context.Context, req *pb.ReadFileRequest) (*pb.ReadFileResponse, error) {
+	ctx = tracing.ContextWithSpanFromContext(ctx, lbf.callCtx)
 	ref, ok := lbf.refs[req.Ref]
 	if !ok {
 		return nil, errors.Errorf("no such ref: %v", req.Ref)

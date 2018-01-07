@@ -2,6 +2,7 @@ package session
 
 import (
 	"net"
+	"strings"
 
 	"github.com/docker/docker/pkg/stringid"
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
@@ -48,8 +49,8 @@ func NewSession(ctx context.Context, name, sharedKey string) (*Session, error) {
 	if span := opentracing.SpanFromContext(ctx); span != nil {
 		tracer := span.Tracer()
 		serverOpts = []grpc.ServerOption{
-			grpc.StreamInterceptor(otgrpc.OpenTracingStreamServerInterceptor(span.Tracer())),
-			grpc.UnaryInterceptor(otgrpc.OpenTracingServerInterceptor(tracer, otgrpc.LogPayloads())),
+			grpc.StreamInterceptor(otgrpc.OpenTracingStreamServerInterceptor(span.Tracer(), traceFilter())),
+			grpc.UnaryInterceptor(otgrpc.OpenTracingServerInterceptor(tracer, traceFilter())),
 		}
 	}
 
@@ -131,4 +132,12 @@ func (s *Session) closed() bool {
 // MethodURL returns a gRPC method URL for service and method name
 func MethodURL(s, m string) string {
 	return "/" + s + "/" + m
+}
+
+func traceFilter() otgrpc.Option {
+	return otgrpc.IncludingSpans(func(parentSpanCtx opentracing.SpanContext,
+		method string,
+		req, resp interface{}) bool {
+		return !strings.HasSuffix(method, "Health/Check")
+	})
 }

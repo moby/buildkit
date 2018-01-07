@@ -15,8 +15,10 @@ import (
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/util/bgfunc"
 	"github.com/moby/buildkit/util/progress"
+	"github.com/moby/buildkit/util/tracing"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
@@ -55,7 +57,10 @@ func (s *Solver) solve(ctx context.Context, j *job, req SolveRequest) (Ref, map[
 		if req.Frontend == nil {
 			return nil, nil, errors.Errorf("invalid request: no definition nor frontend")
 		}
-		return req.Frontend.Solve(ctx, s.llbBridge(j), req.FrontendOpt)
+		span, ctx := tracing.StartSpan(ctx, fmt.Sprintf("%T", req.Frontend))
+		ref, attr, err := req.Frontend.Solve(ctx, s.llbBridge(j), req.FrontendOpt)
+		tracing.FinishWithError(span, err)
+		return ref, attr, err
 	}
 
 	inp, err := j.load(req.Definition, s.resolve)
@@ -359,7 +364,15 @@ func (vs *vertexSolver) CacheKey(ctx context.Context, index Index) (digest.Diges
 		var dgst digest.Digest
 		eg.Go(func() error {
 			var err error
+
+			var span opentracing.Span
+			if len(vs.inputs) == 0 {
+				span, ctx = tracing.StartSpan(ctx, "cache-key: "+vs.v.Name())
+			}
 			dgst, err = vs.op.CacheKey(ctx)
+			if span != nil {
+				tracing.FinishWithError(span, err)
+			}
 			if err != nil {
 				return err
 			}
@@ -590,8 +603,10 @@ func (vs *vertexSolver) run(ctx context.Context, signal func()) (retErr error) {
 	}
 
 	// no cache hit. start evaluating the node
+	span, ctx := tracing.StartSpan(ctx, vs.v.Name())
 	notifyStarted(ctx, &vs.cv)
 	defer func() {
+		tracing.FinishWithError(span, retErr)
 		notifyCompleted(ctx, &vs.cv, retErr)
 	}()
 

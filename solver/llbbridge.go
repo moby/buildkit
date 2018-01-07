@@ -1,8 +1,13 @@
 package solver
 
 import (
+	"io"
+	"strings"
+
 	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/frontend"
+	"github.com/moby/buildkit/util/tracing"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
@@ -47,4 +52,11 @@ func (s *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (cache
 		return nil, nil, errors.Errorf("invalid reference for exporting: %T", ref)
 	}
 	return immutable, exp, nil
+}
+
+func (s *llbBridge) Exec(ctx context.Context, meta executor.Meta, root cache.ImmutableRef, stdin io.ReadCloser, stdout, stderr io.WriteCloser) (err error) {
+	span, ctx := tracing.StartSpan(ctx, strings.Join(meta.Args, " "))
+	err = s.Worker.Exec(ctx, meta, root, stdin, stdout, stderr)
+	tracing.FinishWithError(span, err)
+	return err
 }
