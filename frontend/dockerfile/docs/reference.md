@@ -855,7 +855,7 @@ whitespace)
 > The `--chown` feature is only supported on Dockerfiles used to build Linux containers,
 > and will not work on Windows containers. Since user and group ownership concepts do
 > not translate between Linux and Windows, the use of `/etc/passwd` and `/etc/group` for
-> translating user and group names to IDs restricts this feature to only be viable for
+> translating user and group names to IDs restricts this feature to only be viable
 > for Linux OS-based containers.
 
 The `ADD` instruction copies new files, directories or remote file URLs from `<src>`
