@@ -184,7 +184,7 @@ buildctl debug workers -v
 
 ### Running containerized buildkit
 
-buildkit can also be used by running the `buildkitd` daemon inside a Docker container and accessing it remotely. The client tool `buildctl` is also available for Mac and Windows.
+BuildKit can also be used by running the `buildkitd` daemon inside a Docker container and accessing it remotely. The client tool `buildctl` is also available for Mac and Windows.
 
 To run daemon in a container:
 
@@ -195,6 +195,19 @@ buildctl build --help
 ```
 
 The `tonistiigi/buildkit` image can be built locally using the Dockerfile in `./hack/dockerfiles/test.Dockerfile`.
+
+### Opentracing support
+
+BuildKit supports opentracing for buildkitd gRPC API and buildctl commands. To capture the trace to [Jaeger](https://github.com/jaegertracing/jaeger), set `JAEGER_TRACE` environment variable to the collection address.
+
+
+```
+docker run -d -p6831:6831/udp -p16686:16686 jaegertracing/all-in-one:latest
+export JAEGER_TRACE=0.0.0.0:6831
+# restart buildkitd and buildctl so they know JAEGER_TRACE
+# any buildctl command should be traced to http://127.0.0.1:16686/
+```
+
 
 ### Supported runc version
 
