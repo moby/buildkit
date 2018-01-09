@@ -588,6 +588,22 @@ func readTarToMap(dt []byte, compressed bool) (map[string]*tarItem, error) {
 }
 
 func checkAllReleasable(t *testing.T, c *Client, sb integration.Sandbox, checkContent bool) {
+	retries := 0
+loop0:
+	for {
+		require.True(t, 20 > retries)
+		retries++
+		du, err := c.DiskUsage(context.TODO())
+		require.NoError(t, err)
+		for _, d := range du {
+			if d.InUse {
+				time.Sleep(500 * time.Millisecond)
+				continue loop0
+			}
+		}
+		break
+	}
+
 	err := c.Prune(context.TODO(), nil)
 	require.NoError(t, err)
 
@@ -614,7 +630,7 @@ func checkAllReleasable(t *testing.T, c *Client, sb integration.Sandbox, checkCo
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit")
 	snapshotService := client.SnapshotService("overlayfs")
 
-	retries := 0
+	retries = 0
 	for {
 		count := 0
 		err = snapshotService.Walk(ctx, func(context.Context, snapshots.Info) error {
