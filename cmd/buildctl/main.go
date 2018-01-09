@@ -8,6 +8,7 @@ import (
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/moby/buildkit/util/profiler"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )
@@ -71,6 +72,8 @@ func main() {
 		return nil
 	}
 
+	attachAppContext(app)
+
 	profiler.Attach(app)
 
 	if err := app.Run(os.Args); err != nil {
@@ -96,7 +99,13 @@ func resolveClient(c *cli.Context) (*client.Client, error) {
 	caCert := c.GlobalString("tlscacert")
 	cert := c.GlobalString("tlscert")
 	key := c.GlobalString("tlskey")
+
 	opts := []client.ClientOpt{client.WithBlock()}
+
+	if span := opentracing.SpanFromContext(commandContext(c)); span != nil {
+		opts = append(opts, client.WithTracer(span.Tracer()))
+	}
+
 	if caCert != "" || cert != "" || key != "" {
 		opts = append(opts, client.WithCredentials(serverName, caCert, cert, key))
 	}

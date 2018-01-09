@@ -6,7 +6,6 @@ import (
 	"text/tabwriter"
 
 	"github.com/moby/buildkit/client"
-	"github.com/moby/buildkit/util/appcontext"
 	"github.com/tonistiigi/units"
 	"github.com/urfave/cli"
 )
@@ -53,7 +52,7 @@ func prune(clicontext *cli.Context) error {
 		}
 	}()
 
-	err = c.Prune(appcontext.Context(), ch)
+	err = c.Prune(commandContext(clicontext), ch)
 	close(ch)
 	<-printed
 	if err != nil {

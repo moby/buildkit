@@ -20,6 +20,7 @@ import (
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/source"
+	"github.com/moby/buildkit/util/tracing"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -126,6 +127,7 @@ func (hs *httpSourceHandler) CacheKey(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	req = req.WithContext(ctx)
 	m := map[string]*metadata.StorageItem{}
 
 	if len(sis) > 0 {
@@ -141,7 +143,7 @@ func (hs *httpSourceHandler) CacheKey(ctx context.Context) (string, error) {
 		}
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := tracing.DefaultClient.Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -291,8 +293,9 @@ func (hs *httpSourceHandler) Snapshot(ctx context.Context) (cache.ImmutableRef, 
 	if err != nil {
 		return nil, err
 	}
+	req = req.WithContext(ctx)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := tracing.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
 	}

@@ -198,7 +198,15 @@ func (r *receiver) run(ctx context.Context) error {
 					}
 				}
 			case PACKET_FIN:
-				return nil
+				for {
+					var p Packet
+					if err := r.conn.RecvMsg(&p); err != nil {
+						if err == io.EOF {
+							return nil
+						}
+						return err
+					}
+				}
 			}
 		}
 	})

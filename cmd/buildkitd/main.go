@@ -13,6 +13,7 @@ import (
 
 	"github.com/containerd/containerd/sys"
 	"github.com/docker/go-connections/sockets"
+	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
 	"github.com/moby/buildkit/cache/cacheimport"
 	"github.com/moby/buildkit/control"
 	"github.com/moby/buildkit/frontend"
@@ -107,7 +108,7 @@ func main() {
 				return err
 			}
 		}
-		opts := []grpc.ServerOption{unaryInterceptor(ctx)}
+		opts := []grpc.ServerOption{unaryInterceptor(ctx), grpc.StreamInterceptor(otgrpc.OpenTracingStreamServerInterceptor(tracer))}
 		creds, err := serverCredentials(c)
 		if err != nil {
 			return err
@@ -159,6 +160,13 @@ func main() {
 	app.Before = func(context *cli.Context) error {
 		if context.GlobalBool("debug") {
 			logrus.SetLevel(logrus.DebugLevel)
+		}
+		return nil
+	}
+
+	app.After = func(context *cli.Context) error {
+		if closeTracer != nil {
+			return closeTracer.Close()
 		}
 		return nil
 	}
@@ -217,6 +225,8 @@ func getListener(addr string) (net.Listener, error) {
 }
 
 func unaryInterceptor(globalCtx context.Context) grpc.ServerOption {
+	withTrace := otgrpc.OpenTracingServerInterceptor(tracer, otgrpc.LogPayloads())
+
 	return grpc.UnaryInterceptor(func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
@@ -229,7 +239,7 @@ func unaryInterceptor(globalCtx context.Context) grpc.ServerOption {
 			}
 		}()
 
-		resp, err = handler(ctx, req)
+		resp, err = withTrace(ctx, req, info, handler)
 		if err != nil {
 			logrus.Errorf("%s returned error: %+v", info.FullMethod, err)
 		}

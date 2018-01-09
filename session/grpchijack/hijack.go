@@ -7,7 +7,8 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-func Hijack(stream controlapi.Control_SessionServer) (net.Conn, map[string][]string) {
+func Hijack(stream controlapi.Control_SessionServer) (net.Conn, <-chan struct{}, map[string][]string) {
 	md, _ := metadata.FromIncomingContext(stream.Context())
-	return streamToConn(stream), md
+	c, closeCh := streamToConn(stream)
+	return c, closeCh, md
 }

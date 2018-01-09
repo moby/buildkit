@@ -3,7 +3,6 @@ package containerimage
 import (
 	gocontext "context"
 	"fmt"
-	"net/http"
 	"sync"
 	"time"
 
@@ -25,6 +24,7 @@ import (
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/imageutil"
 	"github.com/moby/buildkit/util/progress"
+	"github.com/moby/buildkit/util/tracing"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/identity"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -67,7 +67,7 @@ func (is *imageSource) ID() string {
 
 func (is *imageSource) getResolver(ctx context.Context) remotes.Resolver {
 	return docker.NewResolver(docker.ResolverOptions{
-		Client:      http.DefaultClient,
+		Client:      tracing.DefaultClient,
 		Credentials: is.getCredentialsFromSession(ctx),
 	})
 }
@@ -86,7 +86,7 @@ func (is *imageSource) getCredentialsFromSession(ctx context.Context) func(strin
 			return "", "", err
 		}
 
-		return auth.CredentialsFunc(context.TODO(), caller)(host)
+		return auth.CredentialsFunc(tracing.ContextWithSpanFromContext(context.TODO(), ctx), caller)(host)
 	}
 }
 

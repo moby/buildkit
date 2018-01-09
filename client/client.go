@@ -6,8 +6,10 @@ import (
 	"io/ioutil"
 	"time"
 
+	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/util/appdefaults"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -38,6 +40,11 @@ func New(address string, opts ...ClientOpt) (*Client, error) {
 			}
 			gopts = append(gopts, opt)
 			needWithInsecure = false
+		}
+		if wt, ok := o.(*withTracer); ok {
+			gopts = append(gopts,
+				grpc.WithUnaryInterceptor(otgrpc.OpenTracingClientInterceptor(wt.tracer, otgrpc.LogPayloads())),
+				grpc.WithStreamInterceptor(otgrpc.OpenTracingStreamClientInterceptor(wt.tracer)))
 		}
 	}
 	if needWithInsecure {
@@ -114,4 +121,12 @@ func loadCredentials(opts *withCredentials) (grpc.DialOption, error) {
 	}
 
 	return grpc.WithTransportCredentials(credentials.NewTLS(cfg)), nil
+}
+
+func WithTracer(t opentracing.Tracer) ClientOpt {
+	return &withTracer{t}
+}
+
+type withTracer struct {
+	tracer opentracing.Tracer
 }

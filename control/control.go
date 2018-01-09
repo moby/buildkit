@@ -246,9 +246,16 @@ func (c *Controller) Status(req *controlapi.StatusRequest, stream controlapi.Con
 
 func (c *Controller) Session(stream controlapi.Control_SessionServer) error {
 	logrus.Debugf("session started")
-	conn, opts := grpchijack.Hijack(stream)
+	conn, closeCh, opts := grpchijack.Hijack(stream)
 	defer conn.Close()
-	err := c.opt.SessionManager.HandleConn(stream.Context(), conn, opts)
+
+	ctx, cancel := context.WithCancel(stream.Context())
+	go func() {
+		<-closeCh
+		cancel()
+	}()
+
+	err := c.opt.SessionManager.HandleConn(ctx, conn, opts)
 	logrus.Debugf("session finished: %v", err)
 	return err
 }
