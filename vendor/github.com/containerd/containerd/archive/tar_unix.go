@@ -3,6 +3,7 @@
 package archive
 
 import (
+	"context"
 	"os"
 	"sync"
 	"syscall"
@@ -28,11 +29,14 @@ func setHeaderForSpecialDevice(hdr *tar.Header, name string, fi os.FileInfo) err
 		return errors.New("unsupported stat type")
 	}
 
+	// Rdev is int32 on darwin/bsd, int64 on linux/solaris
+	rdev := uint64(s.Rdev) // nolint: unconvert
+
 	// Currently go does not fill in the major/minors
 	if s.Mode&syscall.S_IFBLK != 0 ||
 		s.Mode&syscall.S_IFCHR != 0 {
-		hdr.Devmajor = int64(unix.Major(uint64(s.Rdev)))
-		hdr.Devminor = int64(unix.Minor(uint64(s.Rdev)))
+		hdr.Devmajor = int64(unix.Major(rdev))
+		hdr.Devminor = int64(unix.Minor(rdev))
 	}
 
 	return nil
@@ -127,4 +131,10 @@ func getxattr(path, attr string) ([]byte, error) {
 
 func setxattr(path, key, value string) error {
 	return sysx.LSetxattr(path, key, []byte(value), 0)
+}
+
+// apply applies a tar stream of an OCI style diff tar.
+// See https://github.com/opencontainers/image-spec/blob/master/layer.md#applying-changesets
+func apply(ctx context.Context, root string, tr *tar.Reader, options ApplyOptions) (size int64, err error) {
+	return applyNaive(ctx, root, tr, options)
 }
