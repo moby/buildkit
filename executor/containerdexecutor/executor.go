@@ -85,7 +85,7 @@ func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root c
 		stdin = &emptyReadCloser{}
 	}
 
-	task, err := container.NewTask(ctx, cio.NewIO(stdin, stdout, stderr), containerd.WithRootFS(rootMounts))
+	task, err := container.NewTask(ctx, cio.NewCreator(cio.WithStreams(stdin, stdout, stderr)), containerd.WithRootFS(rootMounts))
 	if err != nil {
 		return err
 	}
