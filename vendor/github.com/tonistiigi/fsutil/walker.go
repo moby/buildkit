@@ -40,13 +40,18 @@ func Walk(ctx context.Context, p string, opt *WalkOpt, fn filepath.WalkFunc) err
 	}
 
 	seenFiles := make(map[uint64]string)
-	return filepath.Walk(root, func(path string, fi os.FileInfo, err error) error {
+	return filepath.Walk(root, func(path string, fi os.FileInfo, err error) (retErr error) {
 		if err != nil {
 			if os.IsNotExist(err) {
 				return filepath.SkipDir
 			}
 			return err
 		}
+		defer func() {
+			if retErr != nil && os.IsNotExist(errors.Cause(retErr)) {
+				retErr = filepath.SkipDir
+			}
+		}()
 		origpath := path
 		path, err = filepath.Rel(root, path)
 		if err != nil {
