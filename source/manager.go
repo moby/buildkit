@@ -1,11 +1,11 @@
 package source
 
 import (
+	"context"
 	"sync"
 
 	"github.com/moby/buildkit/cache"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 type Source interface {

@@ -1,11 +1,11 @@
 package cache
 
 import (
+	"context"
 	"io/ioutil"
 
 	"github.com/containerd/containerd/fs"
 	"github.com/moby/buildkit/snapshot"
-	"golang.org/x/net/context"
 )
 
 func ReadFile(ctx context.Context, ref ImmutableRef, p string) ([]byte, error) {

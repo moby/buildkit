@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"context"
 	"io"
 
 	"github.com/moby/buildkit/cache"
@@ -10,7 +11,6 @@ import (
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/solver/types"
 	digest "github.com/opencontainers/go-digest"
-	"golang.org/x/net/context"
 )
 
 type SubBuilder interface {

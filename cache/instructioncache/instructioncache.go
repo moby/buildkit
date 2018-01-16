@@ -1,7 +1,7 @@
 package instructioncache
 
 import (
-	"golang.org/x/net/context"
+	"context"
 
 	digest "github.com/opencontainers/go-digest"
 )

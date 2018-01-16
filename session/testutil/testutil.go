@@ -1,12 +1,12 @@
 package testutil
 
 import (
+	"context"
 	"io"
 	"net"
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"golang.org/x/net/context"
 )
 
 // Handler is function called to handle incoming connection

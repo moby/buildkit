@@ -1,6 +1,7 @@
 package base
 
 import (
+	"context"
 	"io"
 	"io/ioutil"
 	"os"
@@ -35,7 +36,6 @@ import (
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 // TODO: this file should be removed. containerd defines ContainerdWorker, oci defines OCIWorker. There is no base worker.

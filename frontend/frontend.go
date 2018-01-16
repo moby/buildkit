@@ -1,13 +1,13 @@
 package frontend
 
 import (
+	"context"
 	"io"
 
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
-	"golang.org/x/net/context"
 )
 
 type Frontend interface {

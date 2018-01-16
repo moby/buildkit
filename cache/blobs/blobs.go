@@ -1,6 +1,7 @@
 package blobs
 
 import (
+	"context"
 	"time"
 
 	"github.com/containerd/containerd/content"
@@ -12,7 +13,6 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 )
 

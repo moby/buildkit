@@ -1,13 +1,13 @@
 package bgfunc
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
 
 func TestBgFuncSimple(t *testing.T) {
@@ -179,14 +179,16 @@ func TestCancellation(t *testing.T) {
 
 	firstErr := make(chan error)
 	go func() {
-		ctx, _ := context.WithTimeout(context.Background(), 50*time.Millisecond)
+		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+		defer cancel()
 		_, err := c1.Call(ctx, fn1)
 		firstErr <- err
 	}()
 
 	secondErr := make(chan error)
 	go func() {
-		ctx, _ := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
 		_, err := c2.Call(ctx, fn2)
 		secondErr <- err
 	}()

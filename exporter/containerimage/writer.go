@@ -2,6 +2,7 @@ package containerimage
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"runtime"
@@ -21,7 +22,6 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"golang.org/x/net/context"
 )
 
 const (

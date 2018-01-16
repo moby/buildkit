@@ -1,6 +1,7 @@
 package solver
 
 import (
+	"context"
 	"io"
 	"sync"
 	"time"
@@ -14,7 +15,6 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"golang.org/x/net/context"
 )
 
 type jobKeyT string

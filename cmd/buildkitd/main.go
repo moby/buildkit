@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
@@ -28,7 +29,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
-	"golang.org/x/net/context"
+	netcontext "golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -102,6 +103,7 @@ func main() {
 
 	app.Action = func(c *cli.Context) error {
 		ctx, cancel := context.WithCancel(appcontext.Context())
+		defer cancel()
 
 		if debugAddr := c.GlobalString("debugaddr"); debugAddr != "" {
 			if err := setupDebugHandlers(debugAddr); err != nil {
@@ -227,7 +229,7 @@ func getListener(addr string) (net.Listener, error) {
 func unaryInterceptor(globalCtx context.Context) grpc.ServerOption {
 	withTrace := otgrpc.OpenTracingServerInterceptor(tracer, otgrpc.LogPayloads())
 
-	return grpc.UnaryInterceptor(func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+	return grpc.UnaryInterceptor(func(ctx netcontext.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 

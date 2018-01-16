@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"context"
 	"sync"
 
 	"github.com/containerd/containerd/mount"
@@ -9,7 +10,6 @@ import (
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"golang.org/x/net/context"
 )
 
 // Ref is a reference to cacheable objects.

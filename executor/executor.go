@@ -1,10 +1,10 @@
 package executor
 
 import (
+	"context"
 	"io"
 
 	"github.com/moby/buildkit/cache"
-	"golang.org/x/net/context"
 )
 
 type Meta struct {

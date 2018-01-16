@@ -1,6 +1,7 @@
 package llbop
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 
@@ -12,7 +13,6 @@ import (
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 const buildCacheType = "buildkit.build.v0"

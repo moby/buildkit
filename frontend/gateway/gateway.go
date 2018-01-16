@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -21,7 +22,7 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"golang.org/x/net/context"
+	netcontext "golang.org/x/net/context"
 	"golang.org/x/net/http2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
@@ -244,7 +245,7 @@ type llbBrideForwarder struct {
 	*pipe
 }
 
-func (lbf *llbBrideForwarder) ResolveImageConfig(ctx context.Context, req *pb.ResolveImageConfigRequest) (*pb.ResolveImageConfigResponse, error) {
+func (lbf *llbBrideForwarder) ResolveImageConfig(ctx netcontext.Context, req *pb.ResolveImageConfigRequest) (*pb.ResolveImageConfigResponse, error) {
 	ctx = tracing.ContextWithSpanFromContext(ctx, lbf.callCtx)
 	dgst, dt, err := lbf.llbBridge.ResolveImageConfig(ctx, req.Ref)
 	if err != nil {
@@ -256,7 +257,7 @@ func (lbf *llbBrideForwarder) ResolveImageConfig(ctx context.Context, req *pb.Re
 	}, nil
 }
 
-func (lbf *llbBrideForwarder) Solve(ctx context.Context, req *pb.SolveRequest) (*pb.SolveResponse, error) {
+func (lbf *llbBrideForwarder) Solve(ctx netcontext.Context, req *pb.SolveRequest) (*pb.SolveResponse, error) {
 	ctx = tracing.ContextWithSpanFromContext(ctx, lbf.callCtx)
 	ref, expResp, err := lbf.llbBridge.Solve(ctx, frontend.SolveRequest{
 		Definition: req.Definition,
@@ -288,7 +289,7 @@ func (lbf *llbBrideForwarder) Solve(ctx context.Context, req *pb.SolveRequest) (
 	}
 	return &pb.SolveResponse{Ref: id}, nil
 }
-func (lbf *llbBrideForwarder) ReadFile(ctx context.Context, req *pb.ReadFileRequest) (*pb.ReadFileResponse, error) {
+func (lbf *llbBrideForwarder) ReadFile(ctx netcontext.Context, req *pb.ReadFileRequest) (*pb.ReadFileResponse, error) {
 	ctx = tracing.ContextWithSpanFromContext(ctx, lbf.callCtx)
 	ref, ok := lbf.refs[req.Ref]
 	if !ok {
@@ -305,7 +306,7 @@ func (lbf *llbBrideForwarder) ReadFile(ctx context.Context, req *pb.ReadFileRequ
 	return &pb.ReadFileResponse{Data: dt}, nil
 }
 
-func (lbf *llbBrideForwarder) Ping(context.Context, *pb.PingRequest) (*pb.PongResponse, error) {
+func (lbf *llbBrideForwarder) Ping(netcontext.Context, *pb.PingRequest) (*pb.PongResponse, error) {
 	return &pb.PongResponse{}, nil
 }
 

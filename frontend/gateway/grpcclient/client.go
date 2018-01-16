@@ -1,6 +1,7 @@
 package grpcclient
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net"
@@ -13,7 +14,6 @@ import (
 	opspb "github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
 

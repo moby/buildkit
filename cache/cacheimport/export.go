@@ -2,6 +2,7 @@ package cacheimport
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"time"
 
@@ -19,7 +20,6 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"golang.org/x/net/context"
 )
 
 const mediaTypeConfig = "application/vnd.buildkit.cacheconfig.v0"

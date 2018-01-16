@@ -1,11 +1,10 @@
 package oci
 
 import (
+	"context"
 	"io/ioutil"
 	"os"
 	"path/filepath"
-
-	"golang.org/x/net/context"
 )
 
 const hostsContent = `

@@ -1,6 +1,7 @@
 package solver
 
 import (
+	"context"
 	"io"
 	"strings"
 
@@ -11,7 +12,6 @@ import (
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 // llbBridge is an helper used by frontends

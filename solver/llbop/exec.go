@@ -1,6 +1,7 @@
 package llbop
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"path"
@@ -15,7 +16,6 @@ import (
 	"github.com/moby/buildkit/util/progress/logs"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 const execCacheType = "buildkit.exec.v0"

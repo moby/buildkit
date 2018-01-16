@@ -16,7 +16,6 @@ import (
 	"github.com/moby/buildkit/util/imageutil"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
-	netcontext "golang.org/x/net/context"
 )
 
 var defaultImageMetaResolver llb.ImageMetaResolver
@@ -56,7 +55,7 @@ type resolveResult struct {
 	dgst   digest.Digest
 }
 
-func (imr *imageMetaResolver) ResolveImageConfig(ctx netcontext.Context, ref string) (digest.Digest, []byte, error) {
+func (imr *imageMetaResolver) ResolveImageConfig(ctx context.Context, ref string) (digest.Digest, []byte, error) {
 	imr.locker.Lock(ref)
 	defer imr.locker.Unlock(ref)
 

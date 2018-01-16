@@ -1,11 +1,12 @@
 package types
 
 import (
+	"context"
+
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
-	"golang.org/x/net/context"
 )
 
 // These could be also defined in worker

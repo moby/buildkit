@@ -1,6 +1,7 @@
 package runcexecutor
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"os"
@@ -18,7 +19,6 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"golang.org/x/net/context"
 )
 
 type runcExecutor struct {
