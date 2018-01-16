@@ -1845,7 +1845,7 @@ all previous `SHELL` instructions, and affects all subsequent instructions. For 
     RUN Write-Host hello
 
     # Executed as cmd /S /C echo hello
-    SHELL ["cmd", "/S"", "/C"]
+    SHELL ["cmd", "/S", "/C"]
     RUN echo hello
 
 The following instructions can be affected by the `SHELL` instruction when the
