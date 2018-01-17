@@ -805,14 +805,15 @@ see the
     ENV <key>=<value> ...
 
 The `ENV` instruction sets the environment variable `<key>` to the value
-`<value>`. This value will be in the environment of all "descendant"
-`Dockerfile` commands and can be [replaced inline](#environment-replacement) in
+`<value>`. This value will be in the environment for all subsequent instructions
+in the build stage and can be [replaced inline](#environment-replacement) in
 many as well.
 
 The `ENV` instruction has two forms. The first form, `ENV <key> <value>`,
 will set a single variable to a value. The entire string after the first
-space will be treated as the `<value>` - including characters such as
-spaces and quotes.
+space will be treated as the `<value>` - including whitespace characters. The
+value will be interpreted for other environment variables, so quote characters
+will be removed if they are not escaped.
 
 The second form, `ENV <key>=<value> ...`, allows for multiple variables to
 be set at one time. Notice that the second form uses the equals sign (=)
@@ -830,8 +831,7 @@ and
     ENV myDog Rex The Dog
     ENV myCat fluffy
 
-will yield the same net results in the final image, but the first form
-is preferred because it produces a single cache layer.
+will yield the same net results in the final image.
 
 The environment variables set using `ENV` will persist when a container is run
 from the resulting image. You can view the values using `docker inspect`, and
