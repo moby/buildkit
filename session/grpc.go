@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"net"
 	"sync/atomic"
 	"time"
@@ -9,7 +10,6 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"golang.org/x/net/context"
 	"golang.org/x/net/http2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"

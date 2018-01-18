@@ -1,6 +1,7 @@
 package filesync
 
 import (
+	"context"
 	"fmt"
 	io "io"
 	"os"
@@ -9,7 +10,6 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )

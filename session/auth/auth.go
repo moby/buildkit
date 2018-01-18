@@ -1,12 +1,13 @@
 package auth
 
 import (
+	"context"
 	"io/ioutil"
 
 	"github.com/docker/cli/cli/config"
 	"github.com/docker/cli/cli/config/configfile"
 	"github.com/moby/buildkit/session"
-	"golang.org/x/net/context"
+	netcontext "golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
 
@@ -24,7 +25,7 @@ func (ap *authProvider) Register(server *grpc.Server) {
 	RegisterAuthServer(server, ap)
 }
 
-func (ap *authProvider) Credentials(ctx context.Context, req *CredentialsRequest) (*CredentialsResponse, error) {
+func (ap *authProvider) Credentials(ctx netcontext.Context, req *CredentialsRequest) (*CredentialsResponse, error) {
 	if req.Host == "registry-1.docker.io" {
 		req.Host = "https://index.docker.io/v1/"
 	}

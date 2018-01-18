@@ -1,6 +1,7 @@
 package containerdexecutor
 
 import (
+	"context"
 	"io"
 	"syscall"
 	"time"
@@ -14,7 +15,6 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 type containerdExecutor struct {

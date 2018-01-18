@@ -1,6 +1,7 @@
 package dockerfile
 
 import (
+	"context"
 	"os"
 
 	"github.com/moby/buildkit/cache"
@@ -9,7 +10,6 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 func llbBridgeToGatewayClient(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string) (*bridgeClient, error) {

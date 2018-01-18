@@ -1,6 +1,7 @@
 package local
 
 import (
+	"context"
 	"io/ioutil"
 	"os"
 	"time"
@@ -12,7 +13,6 @@ import (
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 	"golang.org/x/time/rate"
 )
 

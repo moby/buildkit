@@ -1,13 +1,13 @@
 package flightcontrol
 
 import (
+	"context"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
-	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 )
 

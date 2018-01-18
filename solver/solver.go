@@ -1,6 +1,7 @@
 package solver
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -21,7 +22,6 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 )
 

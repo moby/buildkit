@@ -1,8 +1,9 @@
 package llb
 
 import (
+	"context"
+
 	digest "github.com/opencontainers/go-digest"
-	"golang.org/x/net/context"
 )
 
 func WithMetaResolver(mr ImageMetaResolver) ImageOption {

@@ -1,6 +1,7 @@
 package containerimage
 
 import (
+	"context"
 	"time"
 
 	"github.com/containerd/containerd/errdefs"
@@ -10,7 +11,6 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/util/push"
 	"github.com/sirupsen/logrus"
-	"golang.org/x/net/context"
 )
 
 const (

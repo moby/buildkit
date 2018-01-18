@@ -1,13 +1,13 @@
 package session
 
 import (
+	"context"
 	"net"
 	"net/http"
 	"strings"
 	"sync"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
 

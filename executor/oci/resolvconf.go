@@ -1,13 +1,13 @@
 package oci
 
 import (
+	"context"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 
 	"github.com/docker/libnetwork/resolvconf"
 	"github.com/moby/buildkit/util/flightcontrol"
-	"golang.org/x/net/context"
 )
 
 var g flightcontrol.Group

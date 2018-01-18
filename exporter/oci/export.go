@@ -1,6 +1,7 @@
 package oci
 
 import (
+	"context"
 	"time"
 
 	"github.com/containerd/containerd/images"
@@ -15,7 +16,6 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"golang.org/x/net/context"
 )
 
 type ExporterVariant string

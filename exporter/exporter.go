@@ -1,8 +1,9 @@
 package exporter
 
 import (
+	"context"
+
 	"github.com/moby/buildkit/cache"
-	"golang.org/x/net/context"
 )
 
 type Exporter interface {

@@ -2,6 +2,7 @@ package local
 
 import (
 	"bytes"
+	"context"
 
 	"github.com/boltdb/bolt"
 	"github.com/moby/buildkit/cache"
@@ -9,7 +10,6 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"golang.org/x/net/context"
 )
 
 const cacheKey = "buildkit.instructioncache"

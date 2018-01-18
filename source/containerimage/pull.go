@@ -1,7 +1,7 @@
 package containerimage
 
 import (
-	gocontext "context"
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -29,7 +29,6 @@ import (
 	"github.com/opencontainers/image-spec/identity"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 // TODO: break apart containerd specifics like contentstore so the resolver
@@ -199,7 +198,7 @@ func (p *puller) Snapshot(ctx context.Context) (cache.ImmutableRef, error) {
 	// and snapshots as 1) buildkit shouldn't have a dependency on contentstore
 	// or 2) cachemanager should manage the contentstore
 	handlers := []images.Handler{
-		images.HandlerFunc(func(ctx gocontext.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
+		images.HandlerFunc(func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
 			ongoing.add(desc)
 			return nil, nil
 		}),

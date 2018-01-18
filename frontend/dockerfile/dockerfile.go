@@ -1,11 +1,12 @@
 package dockerfile
 
 import (
+	"context"
+
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/frontend/dockerfile/builder"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 func NewDockerfileFrontend() frontend.Frontend {

@@ -1,6 +1,7 @@
 package flightcontrol
 
 import (
+	"context"
 	"io"
 	"runtime"
 	"sort"
@@ -9,7 +10,6 @@ import (
 
 	"github.com/moby/buildkit/util/progress"
 	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 // flightcontrol is like singleflight but with support for cancellation and

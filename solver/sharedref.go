@@ -1,10 +1,10 @@
 package solver
 
 import (
+	"context"
 	"sync"
 
 	"github.com/moby/buildkit/cache"
-	"golang.org/x/net/context"
 )
 
 // SharedRef is a wrapper around releasable that allows you to make new

@@ -1,9 +1,8 @@
 package bgfunc
 
 import (
+	"context"
 	"sync"
-
-	"golang.org/x/net/context"
 )
 
 func New(ctx context.Context, fn func(context.Context, func()) error) (*F, error) {

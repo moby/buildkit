@@ -1,6 +1,7 @@
 package grpchijack
 
 import (
+	"context"
 	"io"
 	"net"
 	"strings"
@@ -9,7 +10,6 @@ import (
 
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/session"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )

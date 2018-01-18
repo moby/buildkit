@@ -1,9 +1,10 @@
 package client
 
 import (
+	"context"
+
 	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
-	"golang.org/x/net/context"
 )
 
 // TODO: make this take same options as LLBBridge. Add Return()

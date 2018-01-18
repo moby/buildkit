@@ -1,13 +1,13 @@
 package llbop
 
 import (
+	"context"
 	"sync"
 
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/source"
 	digest "github.com/opencontainers/go-digest"
-	"golang.org/x/net/context"
 )
 
 const sourceCacheType = "buildkit.source.v0"
