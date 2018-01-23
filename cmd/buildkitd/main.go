@@ -214,6 +214,10 @@ func serveGRPC(server *grpc.Server, addrs []string, errCh chan error) error {
 
 func getListener(addr string) (net.Listener, error) {
 	addrSlice := strings.SplitN(addr, "://", 2)
+	if len(addrSlice) < 2 {
+		return nil, errors.Errorf("address %s does not contain proto, you meant unix://%s ?",
+			addr, addr)
+	}
 	proto := addrSlice[0]
 	listenAddr := addrSlice[1]
 	switch proto {
