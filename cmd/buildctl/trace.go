@@ -61,7 +61,9 @@ func attachAppContext(app *cli.App) {
 	}
 
 	app.ExitErrHandler = func(clicontext *cli.Context, err error) {
-		ext.Error.Set(span, true)
+		if span != nil {
+			ext.Error.Set(span, true)
+		}
 		cli.HandleExitCoder(err)
 	}
 
