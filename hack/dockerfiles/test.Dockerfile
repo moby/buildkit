@@ -1,5 +1,5 @@
 ARG RUNC_VERSION=7f24b40cc5423969b4554ef04ba0b00e2b4ba010
-ARG CONTAINERD_VERSION=v1.0.1-rc.0
+ARG CONTAINERD_VERSION=v1.0.1
 # available targets: buildkitd, buildkitd.oci_only, buildkitd.containerd_only
 ARG BUILDKIT_TARGET=buildkitd
 ARG REGISTRY_VERSION=2.6
