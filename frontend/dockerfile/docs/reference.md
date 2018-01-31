@@ -1003,7 +1003,7 @@ whitespace)
 > and will not work on Windows containers. Since user and group ownership concepts do
 > not translate between Linux and Windows, the use of `/etc/passwd` and `/etc/group` for
 > translating user and group names to IDs restricts this feature to only be viable for
-> for Linux OS-based containers.
+> Linux OS-based containers.
 
 The `COPY` instruction copies new files or directories from `<src>`
 and adds them to the filesystem of the container at the path `<dest>`.
