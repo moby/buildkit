@@ -1114,6 +1114,200 @@ func TestSlowCache(t *testing.T) {
 
 }
 
+// TestParallelInputs validates that inputs are processed in parallel
+func TestParallelInputs(t *testing.T) {
+	t.Parallel()
+	ctx := context.TODO()
+
+	rand.Seed(time.Now().UnixNano())
+
+	l := NewJobList(SolverOpt{
+		ResolveOpFunc: testOpResolver,
+	})
+	defer l.Close()
+
+	j0, err := l.NewJob("j0")
+	require.NoError(t, err)
+
+	defer func() {
+		if j0 != nil {
+			j0.Discard()
+		}
+	}()
+
+	wait2Ready := blockingFuncion(2)
+	wait2Ready2 := blockingFuncion(2)
+
+	g0 := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "v0",
+			cacheKeySeed: "seed0",
+			value:        "result0",
+			inputs: []Edge{
+				{Vertex: vtx(vtxOpt{
+					name:         "v1",
+					cacheKeySeed: "seed1",
+					value:        "result1",
+					cachePreFunc: wait2Ready,
+					execPreFunc:  wait2Ready2,
+				})},
+				{Vertex: vtx(vtxOpt{
+					name:         "v2",
+					cacheKeySeed: "seed2",
+					value:        "result2",
+					cachePreFunc: wait2Ready,
+					execPreFunc:  wait2Ready2,
+				})},
+			},
+		}),
+	}
+	g0.Vertex.(*vertex).setupCallCounters()
+
+	res, err := j0.Build(ctx, g0)
+	require.NoError(t, err)
+	require.Equal(t, unwrap(res), "result0")
+
+	require.NoError(t, j0.Discard())
+	j0 = nil
+
+	require.Equal(t, int64(3), *g0.Vertex.(*vertex).cacheCallCount)
+	require.Equal(t, int64(3), *g0.Vertex.(*vertex).execCallCount)
+}
+
+func TestErrorReturns(t *testing.T) {
+	t.Parallel()
+	ctx := context.TODO()
+
+	rand.Seed(time.Now().UnixNano())
+
+	l := NewJobList(SolverOpt{
+		ResolveOpFunc: testOpResolver,
+	})
+	defer l.Close()
+
+	j0, err := l.NewJob("j0")
+	require.NoError(t, err)
+
+	defer func() {
+		if j0 != nil {
+			j0.Discard()
+		}
+	}()
+
+	g0 := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "v0",
+			cacheKeySeed: "seed0",
+			value:        "result0",
+			inputs: []Edge{
+				{Vertex: vtx(vtxOpt{
+					name:         "v1",
+					cacheKeySeed: "seed1",
+					value:        "result1",
+					cachePreFunc: func(ctx context.Context) error {
+						return errors.Errorf("error-from-test")
+					},
+				})},
+				{Vertex: vtx(vtxOpt{
+					name:         "v2",
+					cacheKeySeed: "seed2",
+					value:        "result2",
+				})},
+			},
+		}),
+	}
+
+	_, err = j0.Build(ctx, g0)
+	require.Error(t, err)
+	require.Contains(t, errors.Cause(err).Error(), "error-from-test")
+
+	require.NoError(t, j0.Discard())
+	j0 = nil
+
+	// error with cancel error. to check that this isn't mixed up with regular build cancel.
+
+	j1, err := l.NewJob("j1")
+	require.NoError(t, err)
+
+	defer func() {
+		if j1 != nil {
+			j1.Discard()
+		}
+	}()
+
+	g1 := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "v0",
+			cacheKeySeed: "seed0",
+			value:        "result0",
+			inputs: []Edge{
+				{Vertex: vtx(vtxOpt{
+					name:         "v1",
+					cacheKeySeed: "seed1",
+					value:        "result1",
+					cachePreFunc: func(ctx context.Context) error {
+						return context.Canceled
+					},
+				})},
+				{Vertex: vtx(vtxOpt{
+					name:         "v2",
+					cacheKeySeed: "seed2",
+					value:        "result2",
+				})},
+			},
+		}),
+	}
+
+	_, err = j1.Build(ctx, g1)
+	require.Error(t, err)
+	require.Equal(t, errors.Cause(err), context.Canceled)
+
+	require.NoError(t, j1.Discard())
+	j1 = nil
+
+	// error from exec
+
+	j2, err := l.NewJob("j2")
+	require.NoError(t, err)
+
+	defer func() {
+		if j2 != nil {
+			j2.Discard()
+		}
+	}()
+
+	g2 := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "v0",
+			cacheKeySeed: "seed0",
+			value:        "result0",
+			inputs: []Edge{
+				{Vertex: vtx(vtxOpt{
+					name:         "v1",
+					cacheKeySeed: "seed1",
+					value:        "result1",
+				})},
+				{Vertex: vtx(vtxOpt{
+					name:         "v2",
+					cacheKeySeed: "seed3",
+					value:        "result2",
+					execPreFunc: func(ctx context.Context) error {
+						return errors.Errorf("exec-error-from-test")
+					},
+				})},
+			},
+		}),
+	}
+
+	_, err = j2.Build(ctx, g2)
+	require.Error(t, err)
+	require.Contains(t, errors.Cause(err).Error(), "exec-error-from-test")
+
+	require.NoError(t, j2.Discard())
+	j1 = nil
+
+}
+
 func generateSubGraph(nodes int) (Edge, int) {
 	if nodes == 1 {
 		value := rand.Int() % 500
