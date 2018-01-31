@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/moby/buildkit/solver-next/internal/pipe"
+	"github.com/moby/buildkit/util/cond"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -22,7 +23,7 @@ func NewScheduler(ef EdgeFactory) *Scheduler {
 
 		ef: ef,
 	}
-	s.cond = sync.NewCond(&s.mu)
+	s.cond = cond.NewStatefulCond(&s.mu)
 
 	go s.loop()
 
@@ -30,7 +31,7 @@ func NewScheduler(ef EdgeFactory) *Scheduler {
 }
 
 type Scheduler struct {
-	cond *sync.Cond
+	cond *cond.StatefulCond
 	mu   sync.Mutex
 	muQ  sync.Mutex
 
@@ -167,18 +168,7 @@ func (s *Scheduler) signal(e *edge) {
 	s.muQ.Lock()
 	if _, ok := s.waitq[e]; !ok {
 		s.waitq[e] = struct{}{}
-		go func() {
-			s.mu.Lock()
-			s.muQ.Lock()
-			_, ok := s.waitq[e]
-			s.muQ.Unlock()
-			if !ok {
-				s.mu.Unlock()
-				return
-			}
-			s.cond.Signal()
-			s.mu.Unlock()
-		}()
+		s.cond.Signal()
 	}
 	s.muQ.Unlock()
 }
