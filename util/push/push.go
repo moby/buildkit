@@ -75,7 +75,7 @@ func Push(ctx context.Context, sm *session.Manager, cs content.Store, dgst diges
 		}
 	})
 
-	pushHandler := remotes.PushHandler(cs, pusher)
+	pushHandler := remotes.PushHandler(pusher, cs)
 
 	handlers := append([]images.Handler{},
 		childrenHandler(cs),
