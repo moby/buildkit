@@ -8,6 +8,8 @@ import (
 )
 
 func TestPipe(t *testing.T) {
+	t.Parallel()
+
 	runCh := make(chan struct{})
 	f := func(ctx context.Context) (interface{}, error) {
 		select {
@@ -48,6 +50,8 @@ func TestPipe(t *testing.T) {
 }
 
 func TestPipeCancel(t *testing.T) {
+	t.Parallel()
+
 	runCh := make(chan struct{})
 	f := func(ctx context.Context) (interface{}, error) {
 		select {

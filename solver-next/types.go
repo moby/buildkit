@@ -14,7 +14,7 @@ type Vertex interface {
 	// Sys returns an internal value that is used to execute the vertex. Usually
 	// this is capured by the operation resolver method during solve.
 	Sys() interface{}
-	Metadata() Metadata
+	Options() VertexOptions
 	// Array of edges current vertex depends on.
 	Inputs() []Edge
 	Name() string
@@ -29,8 +29,8 @@ type Edge struct {
 	Vertex Vertex
 }
 
-// Metadata has optional metadata for the vertex that is not contained in digest
-type Metadata struct {
+// VertexOptions has optional metadata for the vertex that is not contained in digest
+type VertexOptions struct {
 	IgnoreCache bool
 	CacheSource CacheManager
 	Description map[string]string // text values with no special meaning for solver

@@ -204,7 +204,7 @@ func (jl *JobList) loadUnlocked(v, parent Vertex, j *Job) error {
 	}
 
 	st.mu.Lock()
-	if cache := v.Metadata().CacheSource; cache != nil && cache.ID() != st.mainCache.ID() {
+	if cache := v.Options().CacheSource; cache != nil && cache.ID() != st.mainCache.ID() {
 		st.cache[cache.ID()] = cache
 	}
 	st.mu.Unlock()

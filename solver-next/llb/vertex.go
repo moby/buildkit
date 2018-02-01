@@ -11,11 +11,11 @@ import (
 )
 
 type vertex struct {
-	sys      interface{}
-	metadata solver.Metadata
-	inputs   []solver.Edge
-	digest   digest.Digest
-	name     string
+	sys     interface{}
+	options solver.VertexOptions
+	inputs  []solver.Edge
+	digest  digest.Digest
+	name    string
 }
 
 func (v *vertex) Digest() digest.Digest {
@@ -26,8 +26,8 @@ func (v *vertex) Sys() interface{} {
 	return v.sys
 }
 
-func (v *vertex) Metadata() solver.Metadata {
-	return v.metadata
+func (v *vertex) Options() solver.VertexOptions {
+	return v.options
 }
 
 func (v *vertex) Inputs() []solver.Edge {
@@ -50,12 +50,12 @@ func Load(def *pb.Definition) (solver.Edge, error) {
 }
 
 func newVertex(dgst digest.Digest, op *pb.Op, opMeta *pb.OpMetadata, load func(digest.Digest) (solver.Vertex, error)) (*vertex, error) {
-	md := solver.Metadata{}
+	opt := solver.VertexOptions{}
 	if opMeta != nil {
-		md.IgnoreCache = opMeta.IgnoreCache
-		md.Description = opMeta.Description
+		opt.IgnoreCache = opMeta.IgnoreCache
+		opt.Description = opMeta.Description
 	}
-	vtx := &vertex{sys: op.Op, metadata: md, digest: dgst, name: llbOpName(op)}
+	vtx := &vertex{sys: op.Op, options: opt, digest: dgst, name: llbOpName(op)}
 	for _, in := range op.Inputs {
 		sub, err := load(in.Digest)
 		if err != nil {
