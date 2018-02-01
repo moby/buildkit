@@ -48,6 +48,9 @@ type state struct {
 	edges map[Index]*edge
 	opts  SolverOpt
 	index *EdgeIndex
+
+	cache     map[string]CacheManager
+	mainCache CacheManager
 }
 
 func (s *state) getEdge(index Index) *edge {
@@ -79,6 +82,22 @@ func (s *state) setEdge(index Index, newEdge *edge) {
 
 	newEdge.incrementReferenceCount()
 	s.edges[index] = newEdge
+}
+
+func (s *state) combinedCacheManager() CacheManager {
+	s.mu.Lock()
+	cms := make([]CacheManager, 0, len(s.cache)+1)
+	cms = append(cms, s.mainCache)
+	for _, cm := range s.cache {
+		cms = append(cms, cm)
+	}
+	s.mu.Unlock()
+
+	if len(cms) == 1 {
+		return s.mainCache
+	}
+
+	return newCombinedCacheManager(cms, s.mainCache)
 }
 
 func (s *state) Release() {
@@ -178,9 +197,17 @@ func (jl *JobList) loadUnlocked(v, parent Vertex, j *Job) error {
 			clientVertex: initClientVertex(v),
 			edges:        map[Index]*edge{},
 			index:        jl.index,
+			mainCache:    jl.opts.DefaultCache,
+			cache:        map[string]CacheManager{},
 		}
 		jl.actives[dgst] = st
 	}
+
+	st.mu.Lock()
+	if cache := v.Metadata().CacheSource; cache != nil && cache.ID() != st.mainCache.ID() {
+		st.cache[cache.ID()] = cache
+	}
+	st.mu.Unlock()
 
 	if j != nil {
 		if _, ok := st.jobs[j]; !ok {
@@ -316,7 +343,6 @@ func newSharedOp(resolver ResolveOpFunc, cacheManager CacheManager, st *state) *
 	so := &sharedOp{
 		resolver:     resolver,
 		st:           st,
-		cacheManager: cacheManager,
 		slowCacheRes: map[Index]digest.Digest{},
 		slowCacheErr: map[Index]error{},
 	}
@@ -324,10 +350,9 @@ func newSharedOp(resolver ResolveOpFunc, cacheManager CacheManager, st *state) *
 }
 
 type sharedOp struct {
-	resolver     ResolveOpFunc
-	cacheManager CacheManager
-	st           *state
-	g            flightcontrol.Group
+	resolver ResolveOpFunc
+	st       *state
+	g        flightcontrol.Group
 
 	opOnce sync.Once
 	op     Op
@@ -345,7 +370,7 @@ type sharedOp struct {
 }
 
 func (s *sharedOp) Cache() CacheManager {
-	return s.cacheManager // TODO: add on load
+	return s.st.combinedCacheManager()
 }
 
 func (s *sharedOp) CalcSlowCache(ctx context.Context, index Index, f ResultBasedCacheFunc, res Result) (digest.Digest, error) {

@@ -6,8 +6,10 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/moby/buildkit/identity"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 type internalMemoryKeyT string
@@ -17,6 +19,7 @@ var internalMemoryKey = internalMemoryKeyT("buildkit/memory-cache-id")
 func NewInMemoryCacheManager() CacheManager {
 	return &inMemoryCacheManager{
 		byID: map[string]*inMemoryCacheKey{},
+		id:   identity.NewID(),
 	}
 }
 
@@ -49,6 +52,11 @@ type link struct {
 type inMemoryCacheManager struct {
 	mu   sync.RWMutex
 	byID map[string]*inMemoryCacheKey
+	id   string
+}
+
+func (c *inMemoryCacheManager) ID() string {
+	return c.id
 }
 
 func (c *inMemoryCacheManager) Query(deps []CacheKey, input Index, dgst digest.Digest, output Index) ([]*CacheRecord, error) {
@@ -91,8 +99,9 @@ func (c *inMemoryCacheManager) Query(deps []CacheKey, input Index, dgst digest.D
 		if ck, ok := c.byID[id]; ok {
 			for _, res := range ck.results[output] {
 				outs = append(outs, &CacheRecord{
-					ID:       id + "@" + res.ID(),
-					CacheKey: ck,
+					ID:           id + "@" + res.ID(),
+					CacheKey:     ck,
+					CacheManager: c,
 				})
 			}
 		}
@@ -219,4 +228,69 @@ func (c *inMemoryCacheManager) addLink(l link, from, to *inMemoryCacheKey) error
 	}
 	m[to.id] = struct{}{}
 	return nil
+}
+
+func newCombinedCacheManager(cms []CacheManager, main CacheManager) CacheManager {
+	return &combinedCacheManager{cms: cms, main: main}
+}
+
+type combinedCacheManager struct {
+	cms    []CacheManager
+	main   CacheManager
+	id     string
+	idOnce sync.Once
+}
+
+func (cm *combinedCacheManager) ID() string {
+	cm.idOnce.Do(func() {
+		ids := make([]string, len(cm.cms))
+		for i, c := range cm.cms {
+			ids[i] = c.ID()
+		}
+		cm.id = digest.FromBytes([]byte(strings.Join(ids, ","))).String()
+	})
+	return cm.id
+}
+
+func (cm *combinedCacheManager) Query(inp []CacheKey, inputIndex Index, dgst digest.Digest, outputIndex Index) ([]*CacheRecord, error) {
+	eg, _ := errgroup.WithContext(context.TODO())
+	res := make(map[string]*CacheRecord, len(cm.cms))
+	var mu sync.Mutex
+	for i, c := range cm.cms {
+		func(i int, c CacheManager) {
+			eg.Go(func() error {
+				recs, err := c.Query(inp, inputIndex, dgst, outputIndex)
+				if err != nil {
+					return err
+				}
+				mu.Lock()
+				for _, r := range recs {
+					if _, ok := res[r.ID]; !ok {
+						r.CacheManager = c
+						res[r.ID] = r
+					}
+				}
+				mu.Unlock()
+				return nil
+			})
+		}(i, c)
+	}
+
+	if err := eg.Wait(); err != nil {
+		return nil, err
+	}
+
+	out := make([]*CacheRecord, 0, len(res))
+	for _, r := range res {
+		out = append(out, r)
+	}
+	return out, nil
+}
+
+func (cm *combinedCacheManager) Load(ctx context.Context, rec *CacheRecord) (Result, error) {
+	return rec.CacheManager.Load(ctx, rec)
+}
+
+func (cm *combinedCacheManager) Save(key CacheKey, s Result) (CacheKey, error) {
+	return cm.main.Save(key, s)
 }

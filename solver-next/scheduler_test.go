@@ -1382,6 +1382,9 @@ func (v *vertex) Inputs() []Edge {
 func (v *vertex) Name() string {
 	return v.opt.name
 }
+func (v *vertex) Metadata() Metadata {
+	return Metadata{}
+}
 
 func (v *vertex) setupCallCounters() {
 	var cacheCount int64
