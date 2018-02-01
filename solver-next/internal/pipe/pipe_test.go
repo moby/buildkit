@@ -1,4 +1,4 @@
-package solver
+package pipe
 
 import (
 	"context"
@@ -25,12 +25,12 @@ func TestPipe(t *testing.T) {
 		waitSignal <- struct{}{}
 	}
 
-	p, start := newFuncionPipe(f)
-	p.SignalWriter = signal
+	p, start := NewWithFunction(f)
+	p.OnSendCompletion = signal
 	go start()
-	require.Equal(t, false, p.Reader.Reload())
+	require.Equal(t, false, p.Receiver.Receive())
 
-	st := p.Reader.Status()
+	st := p.Receiver.Status()
 	require.Equal(t, st.Completed, false)
 	require.Equal(t, st.Canceled, false)
 	require.Nil(t, st.Value)
@@ -39,8 +39,8 @@ func TestPipe(t *testing.T) {
 	close(runCh)
 	<-waitSignal
 
-	p.Reader.Reload()
-	st = p.Reader.Status()
+	p.Receiver.Receive()
+	st = p.Receiver.Status()
 	require.Equal(t, st.Completed, true)
 	require.Equal(t, st.Canceled, false)
 	require.NoError(t, st.Err)
@@ -65,22 +65,22 @@ func TestPipeCancel(t *testing.T) {
 		waitSignal <- struct{}{}
 	}
 
-	p, start := newFuncionPipe(f)
-	p.SignalWriter = signal
+	p, start := NewWithFunction(f)
+	p.OnSendCompletion = signal
 	go start()
-	p.Reader.Reload()
+	p.Receiver.Receive()
 
-	st := p.Reader.Status()
+	st := p.Receiver.Status()
 	require.Equal(t, st.Completed, false)
 	require.Equal(t, st.Canceled, false)
 	require.Nil(t, st.Value)
 	require.Equal(t, signalled, 0)
 
-	p.Reader.Cancel()
+	p.Receiver.Cancel()
 	<-waitSignal
 
-	p.Reader.Reload()
-	st = p.Reader.Status()
+	p.Receiver.Receive()
+	st = p.Receiver.Status()
 	require.Equal(t, st.Completed, true)
 	require.Equal(t, st.Canceled, true)
 	require.Error(t, st.Err)

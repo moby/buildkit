@@ -107,28 +107,24 @@ func NewCacheKey(dgst digest.Digest, index Index, deps []CacheKey) CacheKey {
 		dgst:   dgst,
 		deps:   deps,
 		index:  index,
-		values: map[interface{}]interface{}{},
+		values: &sync.Map{},
 	}
 }
 
 type cacheKey struct {
-	mu     sync.RWMutex
 	dgst   digest.Digest
 	index  Index
 	deps   []CacheKey
-	values map[interface{}]interface{}
+	values *sync.Map
 }
 
 func (ck *cacheKey) SetValue(key, value interface{}) {
-	ck.mu.Lock()
-	defer ck.mu.Unlock()
-	ck.values[key] = value
+	ck.values.Store(key, value)
 }
 
 func (ck *cacheKey) GetValue(key interface{}) interface{} {
-	ck.mu.RLock()
-	defer ck.mu.RUnlock()
-	return ck.values[key]
+	v, _ := ck.values.Load(key)
+	return v
 }
 
 func (ck *cacheKey) Deps() []CacheKey {

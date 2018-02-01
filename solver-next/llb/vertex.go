@@ -3,8 +3,8 @@ package llb
 import (
 	"strings"
 
+	"github.com/moby/buildkit/solver-next"
 	"github.com/moby/buildkit/solver/pb"
-	"github.com/moby/buildkit/solver2/solver"
 	"github.com/moby/buildkit/source"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"

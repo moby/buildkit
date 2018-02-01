@@ -77,7 +77,7 @@ func (s *state) setEdge(index Index, newEdge *edge) {
 		e.release()
 	}
 
-	newEdge.duplicateReleaser()
+	newEdge.incrementReferenceCount()
 	s.edges[index] = newEdge
 }
 

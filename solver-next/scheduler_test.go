@@ -677,6 +677,7 @@ func TestMultiLevelCalculation(t *testing.T) {
 	require.NoError(t, j0.Discard())
 	j0 = nil
 
+	// repeating same build with cache should behave the same
 	j1, err := l.NewJob("j1")
 	require.NoError(t, err)
 
