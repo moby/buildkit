@@ -3,6 +3,7 @@ package solver
 import (
 	"context"
 	"sync"
+	"time"
 
 	digest "github.com/opencontainers/go-digest"
 )
@@ -95,7 +96,8 @@ type CacheRecord struct {
 	CacheManager CacheManager
 	// Loadable bool
 	// Size int
-	// CreatedAt time.Time
+	CreatedAt time.Time
+	Priority  int
 }
 
 // CacheManager implements build cache backend

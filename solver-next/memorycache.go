@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/moby/buildkit/identity"
 	digest "github.com/opencontainers/go-digest"
@@ -30,7 +31,7 @@ type inMemoryCacheKey struct {
 	output Index
 	deps   []CacheKey // only []*inMemoryCacheManager
 
-	results map[Index]map[string]Result
+	results map[Index]map[string]savedResult
 	links   map[link]map[string]struct{}
 }
 
@@ -42,6 +43,11 @@ func (ck *inMemoryCacheKey) Digest() digest.Digest {
 }
 func (ck *inMemoryCacheKey) Index() Index {
 	return ck.output
+}
+
+type savedResult struct {
+	result    Result
+	createdAt time.Time
 }
 
 type link struct {
@@ -99,9 +105,10 @@ func (c *inMemoryCacheManager) Query(deps []CacheKey, input Index, dgst digest.D
 		if ck, ok := c.byID[id]; ok {
 			for _, res := range ck.results[output] {
 				outs = append(outs, &CacheRecord{
-					ID:           id + "@" + res.ID(),
+					ID:           id + "@" + res.result.ID(),
 					CacheKey:     ck,
 					CacheManager: c,
+					CreatedAt:    res.createdAt,
 				})
 			}
 		}
@@ -126,7 +133,7 @@ func (c *inMemoryCacheManager) Load(ctx context.Context, rec *CacheRecord) (Resu
 	for output := range ck.results {
 		res, ok := ck.results[output][keyParts[1]]
 		if ok {
-			return res, nil
+			return res.result, nil
 		}
 	}
 	return nil, errors.Errorf("failed to load cache record") // TODO: typed error
@@ -191,7 +198,7 @@ func (c *inMemoryCacheManager) getInternalKey(k CacheKey, createIfNotExist bool)
 			dgst:     k.Digest(),
 			output:   k.Output(),
 			deps:     inputs,
-			results:  map[Index]map[string]Result{},
+			results:  map[Index]map[string]savedResult{},
 			links:    map[link]map[string]struct{}{},
 		}
 		ck.SetValue(internalMemoryKey, internalKey)
@@ -213,10 +220,10 @@ func (c *inMemoryCacheManager) getInternalKey(k CacheKey, createIfNotExist bool)
 func (c *inMemoryCacheManager) addResult(ck *inMemoryCacheKey, output Index, r Result) error {
 	m, ok := ck.results[output]
 	if !ok {
-		m = map[string]Result{}
+		m = map[string]savedResult{}
 		ck.results[output] = m
 	}
-	m[r.ID()] = r
+	m[r.ID()] = savedResult{result: r, createdAt: time.Now()}
 	return nil
 }
 
@@ -265,8 +272,11 @@ func (cm *combinedCacheManager) Query(inp []CacheKey, inputIndex Index, dgst dig
 				}
 				mu.Lock()
 				for _, r := range recs {
-					if _, ok := res[r.ID]; !ok {
+					if _, ok := res[r.ID]; !ok || c == cm.main {
 						r.CacheManager = c
+						if c == cm.main {
+							r.Priority = 1
+						}
 						res[r.ID] = r
 					}
 				}
