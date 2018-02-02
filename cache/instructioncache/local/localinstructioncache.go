@@ -13,7 +13,6 @@ import (
 )
 
 const cacheKey = "buildkit.instructioncache"
-const contentCacheKey = "buildkit.instructioncache.content"
 
 const mappingBucket = "_contentMapping"
 

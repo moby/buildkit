@@ -14,12 +14,6 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-var bufPool = sync.Pool{
-	New: func() interface{} {
-		return make([]byte, 32*1<<10)
-	},
-}
-
 func Dialer(api controlapi.ControlClient) session.Dialer {
 	return func(ctx context.Context, proto string, meta map[string][]string) (net.Conn, error) {
 

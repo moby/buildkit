@@ -10,7 +10,6 @@ import (
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/util/tracing"
 	"github.com/moby/buildkit/worker"
-	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
 
@@ -20,10 +19,6 @@ type llbBridge struct {
 	job *job
 	// this worker is used for running containerized frontend, not vertices
 	worker.Worker
-}
-
-type resolveImageConfig interface {
-	ResolveImageConfig(ctx context.Context, ref string) (digest.Digest, []byte, error)
 }
 
 func (s *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (cache.ImmutableRef, map[string][]byte, error) {

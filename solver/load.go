@@ -22,11 +22,6 @@ func newVertex(dgst digest.Digest, op *pb.Op, opMeta *pb.OpMetadata, load func(d
 	return vtx, nil
 }
 
-func toInternalVertex(v Vertex) *vertex {
-	cache := make(map[digest.Digest]*vertex)
-	return loadInternalVertexHelper(v, cache)
-}
-
 func loadInternalVertexHelper(v Vertex, cache map[digest.Digest]*vertex) *vertex {
 	if v, ok := cache[v.Digest()]; ok {
 		return v

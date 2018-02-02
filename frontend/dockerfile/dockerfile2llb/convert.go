@@ -249,6 +249,8 @@ func dispatch(d *dispatchState, cmd instructions.Command, opt dispatchOpt) error
 
 	var err error
 	switch c := cmd.(type) {
+	case *instructions.MaintainerCommand:
+		err = dispatchMaintainer(d, c)
 	case *instructions.EnvCommand:
 		err = dispatchEnv(d, c, true)
 	case *instructions.RunCommand:
@@ -439,7 +441,7 @@ func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState l
 	return commitToHistory(&d.image, commitMessage.String(), true, &d.state)
 }
 
-func dispatchMaintainer(d *dispatchState, c instructions.MaintainerCommand) error {
+func dispatchMaintainer(d *dispatchState, c *instructions.MaintainerCommand) error {
 	d.image.Author = c.Maintainer
 	return commitToHistory(&d.image, fmt.Sprintf("MAINTAINER %v", c.Maintainer), false, nil)
 }
