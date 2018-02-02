@@ -18,25 +18,17 @@ var (
 func addEnv(key, value string) StateOption {
 	return addEnvf(key, value)
 }
+
 func addEnvf(key, value string, v ...interface{}) StateOption {
 	return func(s State) State {
 		return s.WithValue(keyEnv, getEnv(s).AddOrReplace(key, fmt.Sprintf(value, v...)))
-	}
-}
-func clearEnv() StateOption {
-	return func(s State) State {
-		return s.WithValue(keyEnv, EnvList{})
-	}
-}
-func delEnv(key string) StateOption {
-	return func(s State) State {
-		return s.WithValue(keyEnv, getEnv(s).Delete(key))
 	}
 }
 
 func dir(str string) StateOption {
 	return dirf(str)
 }
+
 func dirf(str string, v ...interface{}) StateOption {
 	return func(s State) State {
 		return s.WithValue(keyDir, fmt.Sprintf(str, v...))

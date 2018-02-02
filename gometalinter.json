@@ -1,12 +1,13 @@
 {
   "Vendor": true,
   "Deadline": "8m",
-  "Exclude": ["solver/pb/ops.pb.go", "api/services/control/control.pb.go"],
+  "Exclude": [".*.pb.go"],
   "DisableAll": true,
   "Enable": [
     "gofmt",
     "goimports",
     "ineffassign",
-    "vet"
+    "vet",
+    "deadcode"
   ]
 }

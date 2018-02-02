@@ -42,11 +42,6 @@ type SourceOpt struct {
 	CacheAccessor  cache.Accessor
 }
 
-type resolveRecord struct {
-	desc ocispec.Descriptor
-	ts   time.Time
-}
-
 type imageSource struct {
 	SourceOpt
 	g flightcontrol.Group
