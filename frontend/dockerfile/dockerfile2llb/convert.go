@@ -15,6 +15,7 @@ import (
 	"github.com/docker/distribution/reference"
 	"github.com/docker/docker/builder/dockerfile/instructions"
 	"github.com/docker/docker/builder/dockerfile/parser"
+	"github.com/docker/docker/builder/dockerfile/shell"
 	"github.com/docker/docker/pkg/signal"
 	"github.com/docker/go-connections/nat"
 	"github.com/moby/buildkit/client/llb"
@@ -59,7 +60,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		metaArgs[i] = setBuildArgValue(metaArgs[i], opt.BuildArgs)
 	}
 
-	shlex := NewShellLex(dockerfile.EscapeToken)
+	shlex := shell.NewLex(dockerfile.EscapeToken)
 
 	metaResolver := opt.MetaResolver
 	if metaResolver == nil {
@@ -232,7 +233,7 @@ type dispatchOpt struct {
 	dispatchStatesByName map[string]*dispatchState
 	metaArgs             []instructions.ArgCommand
 	buildArgValues       map[string]string
-	shlex                *ShellLex
+	shlex                *shell.Lex
 	sessionID            string
 	buildContext         llb.State
 }
@@ -491,7 +492,7 @@ func dispatchHealthcheck(d *dispatchState, c *instructions.HealthCheckCommand) e
 	return commitToHistory(&d.image, fmt.Sprintf("HEALTHCHECK %q", d.image.Config.Healthcheck), false, nil)
 }
 
-func dispatchExpose(d *dispatchState, c *instructions.ExposeCommand, shlex *ShellLex) error {
+func dispatchExpose(d *dispatchState, c *instructions.ExposeCommand, shlex *shell.Lex) error {
 	ports := []string{}
 	for _, p := range c.Ports {
 		ps, err := shlex.ProcessWords(p, toEnvList(d.buildArgs, d.image.Config.Env))
@@ -516,6 +517,7 @@ func dispatchExpose(d *dispatchState, c *instructions.ExposeCommand, shlex *Shel
 
 	return commitToHistory(&d.image, fmt.Sprintf("EXPOSE %v", ps), false, nil)
 }
+
 func dispatchUser(d *dispatchState, c *instructions.UserCommand, commit bool) error {
 	d.state = d.state.User(c.User)
 	d.image.Config.User = c.User
@@ -601,7 +603,7 @@ func addEnv(env []string, k, v string, override bool) []string {
 	for i, envVar := range env {
 		envParts := strings.SplitN(envVar, "=", 2)
 		compareFrom := envParts[0]
-		if equalEnvKeys(compareFrom, k) {
+		if shell.EqualEnvKeys(compareFrom, k) {
 			if override {
 				env[i] = k + "=" + v
 			}
@@ -613,10 +615,6 @@ func addEnv(env []string, k, v string, override bool) []string {
 		env = append(env, k+"="+v)
 	}
 	return env
-}
-
-func equalEnvKeys(from, to string) bool {
-	return from == to
 }
 
 func setBuildArgValue(c instructions.ArgCommand, values map[string]string) instructions.ArgCommand {
