@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"io"
 	"os"
 	"path"
 	"path/filepath"
@@ -11,7 +12,6 @@ import (
 
 	"github.com/BurntSushi/locker"
 	"github.com/containerd/containerd/fs"
-	"github.com/docker/docker/pkg/pools"
 	iradix "github.com/hashicorp/go-immutable-radix"
 	"github.com/hashicorp/golang-lru/simplelru"
 	"github.com/moby/buildkit/cache"
@@ -574,7 +574,7 @@ func prepareDigest(fp, p string, fi os.FileInfo) (digest.Digest, error) {
 			return "", errors.Wrapf(err, "failed to open %s", p)
 		}
 		defer f.Close()
-		if _, err := pools.Copy(h, f); err != nil {
+		if _, err := poolsCopy(h, f); err != nil {
 			return "", errors.Wrapf(err, "failed to copy file data for %s", p)
 		}
 	}
@@ -607,4 +607,15 @@ func ensureOriginMetadata(md *metadata.StorageItem) *metadata.StorageItem {
 		return si
 	}
 	return md
+}
+
+var pool32K = sync.Pool{
+	New: func() interface{} { return make([]byte, 32*1024) }, // 32K
+}
+
+func poolsCopy(dst io.Writer, src io.Reader) (written int64, err error) {
+	buf := pool32K.Get().([]byte)
+	written, err = io.CopyBuffer(dst, src, buf)
+	pool32K.Put(buf)
+	return
 }

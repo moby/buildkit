@@ -4,7 +4,6 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/docker/docker/pkg/urlutil"
 	"github.com/pkg/errors"
 )
 
@@ -55,7 +54,7 @@ func (i *GitIdentifier) ID() string {
 // isGitTransport returns true if the provided str is a git transport by inspecting
 // the prefix of the string for known protocols used in git.
 func isGitTransport(str string) bool {
-	return urlutil.IsURL(str) || strings.HasPrefix(str, "git://") || strings.HasPrefix(str, "git@")
+	return strings.HasPrefix(str, "http://") || strings.HasPrefix(str, "https://") || strings.HasPrefix(str, "git://") || strings.HasPrefix(str, "git@")
 }
 
 func getRefAndSubdir(fragment string) (ref string, subdir string) {
