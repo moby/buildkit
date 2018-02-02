@@ -16,7 +16,6 @@ import (
 	"github.com/docker/docker/builder/dockerfile/instructions"
 	"github.com/docker/docker/builder/dockerfile/parser"
 	"github.com/docker/docker/pkg/signal"
-	"github.com/docker/docker/pkg/urlutil"
 	"github.com/docker/go-connections/nat"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/client/llb/imagemetaresolver"
@@ -406,7 +405,7 @@ func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState l
 
 	for i, src := range c.Sources() {
 		commitMessage.WriteString(" " + src)
-		if isAddCommand && urlutil.IsURL(src) {
+		if isAddCommand && (strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://")) {
 			u, err := url.Parse(src)
 			f := "__unnamed__"
 			if err == nil {

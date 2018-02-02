@@ -5,8 +5,8 @@ import (
 	"net"
 	"strings"
 
-	"github.com/docker/docker/pkg/stringid"
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
+	"github.com/moby/buildkit/identity"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
@@ -43,7 +43,7 @@ type Session struct {
 
 // NewSession returns a new long running session
 func NewSession(ctx context.Context, name, sharedKey string) (*Session, error) {
-	id := stringid.GenerateRandomID()
+	id := identity.NewID()
 
 	serverOpts := []grpc.ServerOption{}
 	if span := opentracing.SpanFromContext(ctx); span != nil {
