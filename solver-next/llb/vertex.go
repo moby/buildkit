@@ -38,10 +38,18 @@ func (v *vertex) Name() string {
 	return v.name
 }
 
-func Load(def *pb.Definition) (solver.Edge, error) {
+type LoadOpt func(*solver.VertexOptions)
+
+func WithCacheSource(cm solver.CacheManager) LoadOpt {
+	return func(opt *solver.VertexOptions) {
+		opt.CacheSource = cm
+	}
+}
+
+func Load(def *pb.Definition, opts ...LoadOpt) (solver.Edge, error) {
 	return loadLLB(def, func(dgst digest.Digest, pbOp *pb.Op, load func(digest.Digest) (solver.Vertex, error)) (solver.Vertex, error) {
 		opMetadata := def.Metadata[dgst]
-		vtx, err := newVertex(dgst, pbOp, &opMetadata, load)
+		vtx, err := newVertex(dgst, pbOp, &opMetadata, load, opts...)
 		if err != nil {
 			return nil, err
 		}
@@ -49,11 +57,14 @@ func Load(def *pb.Definition) (solver.Edge, error) {
 	})
 }
 
-func newVertex(dgst digest.Digest, op *pb.Op, opMeta *pb.OpMetadata, load func(digest.Digest) (solver.Vertex, error)) (*vertex, error) {
+func newVertex(dgst digest.Digest, op *pb.Op, opMeta *pb.OpMetadata, load func(digest.Digest) (solver.Vertex, error), opts ...LoadOpt) (*vertex, error) {
 	opt := solver.VertexOptions{}
 	if opMeta != nil {
 		opt.IgnoreCache = opMeta.IgnoreCache
 		opt.Description = opMeta.Description
+	}
+	for _, fn := range opts {
+		fn(&opt)
 	}
 	vtx := &vertex{sys: op.Op, options: opt, digest: dgst, name: llbOpName(op)}
 	for _, in := range op.Inputs {
