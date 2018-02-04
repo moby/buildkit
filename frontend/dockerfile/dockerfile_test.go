@@ -47,6 +47,7 @@ func TestIntegration(t *testing.T) {
 		testDockerfileFromGit,
 		testCopyChown,
 		testCopyWildcards,
+		testCopyOverrideFiles,
 	})
 }
 
@@ -802,6 +803,60 @@ COPY --from=base /out /
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "subowner"))
 	require.NoError(t, err)
 	require.Equal(t, string(dt), "1000 nogroup\n")
+}
+
+func testCopyOverrideFiles(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	dockerfile := []byte(`
+FROM scratch AS base
+COPY sub sub
+COPY sub sub
+COPY files/foo.go dest/foo.go
+COPY files/foo.go dest/foo.go
+COPY files dest
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateDir("sub", 0700),
+		fstest.CreateDir("sub/dir1", 0700),
+		fstest.CreateDir("sub/dir1/dir2", 0700),
+		fstest.CreateFile("sub/dir1/dir2/foo", []byte(`foo-contents`), 0600),
+		fstest.CreateDir("files", 0700),
+		fstest.CreateFile("files/foo.go", []byte(`foo.go-contents`), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	err = c.Solve(context.TODO(), nil, client.SolveOpt{
+		Frontend: "dockerfile.v0",
+		Exporter: client.ExporterLocal,
+		ExporterAttrs: map[string]string{
+			"output": destDir,
+		},
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "sub/dir1/dir2/foo"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), "foo-contents")
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "dest/foo.go"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), "foo.go-contents")
 }
 
 func testCopyWildcards(t *testing.T, sb integration.Sandbox) {
