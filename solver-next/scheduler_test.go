@@ -1309,6 +1309,122 @@ func TestErrorReturns(t *testing.T) {
 
 }
 
+func TestMultipleCacheSources(t *testing.T) {
+	t.Parallel()
+	ctx := context.TODO()
+
+	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
+
+	l := NewJobList(SolverOpt{
+		ResolveOpFunc: testOpResolver,
+		DefaultCache:  cacheManager,
+	})
+	defer l.Close()
+
+	j0, err := l.NewJob("j0")
+	require.NoError(t, err)
+
+	defer func() {
+		if j0 != nil {
+			j0.Discard()
+		}
+	}()
+
+	g0 := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "v0",
+			cacheKeySeed: "seed0",
+			value:        "result0",
+			inputs: []Edge{
+				{Vertex: vtx(vtxOpt{
+					name:         "v1",
+					cacheKeySeed: "seed1",
+					value:        "result1",
+				})},
+			},
+		}),
+	}
+
+	res, err := j0.Build(ctx, g0)
+	require.NoError(t, err)
+	require.Equal(t, unwrap(res), "result0")
+	require.Equal(t, int64(0), cacheManager.loadCounter)
+
+	require.NoError(t, j0.Discard())
+	j0 = nil
+
+	cacheManager2 := newTrackingCacheManager(NewInMemoryCacheManager())
+
+	l2 := NewJobList(SolverOpt{
+		ResolveOpFunc: testOpResolver,
+		DefaultCache:  cacheManager2,
+	})
+	defer l2.Close()
+
+	j1, err := l.NewJob("j1")
+	require.NoError(t, err)
+
+	defer func() {
+		if j1 != nil {
+			j1.Discard()
+		}
+	}()
+
+	g1 := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "v0",
+			cacheKeySeed: "seed0",
+			value:        "result0-no-cache",
+			cacheSource:  cacheManager,
+			inputs: []Edge{
+				{Vertex: vtx(vtxOpt{
+					name:         "v1",
+					cacheKeySeed: "seed1",
+					value:        "result1-no-cache",
+					cacheSource:  cacheManager,
+				})},
+			},
+		}),
+	}
+
+	res, err = j1.Build(ctx, g1)
+	require.NoError(t, err)
+	require.Equal(t, unwrap(res), "result0")
+	require.Equal(t, int64(1), cacheManager.loadCounter)
+	require.Equal(t, int64(0), cacheManager2.loadCounter)
+
+	require.NoError(t, j1.Discard())
+	j0 = nil
+
+	// build on top of old cache
+	j2, err := l.NewJob("j2")
+	require.NoError(t, err)
+
+	defer func() {
+		if j2 != nil {
+			j2.Discard()
+		}
+	}()
+
+	g2 := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "v2",
+			cacheKeySeed: "seed2",
+			value:        "result2",
+			inputs:       []Edge{g1},
+		}),
+	}
+
+	res, err = j1.Build(ctx, g2)
+	require.NoError(t, err)
+	require.Equal(t, unwrap(res), "result2")
+	require.Equal(t, int64(2), cacheManager.loadCounter)
+	require.Equal(t, int64(0), cacheManager2.loadCounter)
+
+	require.NoError(t, j1.Discard())
+	j0 = nil
+}
+
 func generateSubGraph(nodes int) (Edge, int) {
 	if nodes == 1 {
 		value := rand.Int() % 500
@@ -1351,6 +1467,7 @@ type vtxOpt struct {
 	inputs           []Edge
 	value            string
 	slowCacheCompute map[int]ResultBasedCacheFunc
+	cacheSource      CacheManager
 }
 
 func vtx(opt vtxOpt) *vertex {
@@ -1381,6 +1498,11 @@ func (v *vertex) Inputs() []Edge {
 }
 func (v *vertex) Name() string {
 	return v.opt.name
+}
+func (v *vertex) Options() VertexOptions {
+	return VertexOptions{
+		CacheSource: v.opt.cacheSource,
+	}
 }
 
 func (v *vertex) setupCallCounters() {

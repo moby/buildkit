@@ -639,9 +639,11 @@ func (e *edge) postpone(f *pipeFactory) {
 // loadCache creates a request to load edge result from cache
 func (e *edge) loadCache(ctx context.Context) (interface{}, error) {
 	var rec *CacheRecord
-	for _, r := range e.cacheRecords { // TODO: time/priority order
-		rec = r
-		break
+
+	for _, r := range e.cacheRecords {
+		if rec == nil || rec.CreatedAt.Before(r.CreatedAt) || (rec.CreatedAt.Equal(r.CreatedAt) && rec.Priority < r.Priority) {
+			rec = r
+		}
 	}
 	logrus.Debugf("load cache for %s with %s", e.edge.Vertex.Name(), rec.ID)
 	res, err := e.op.Cache().Load(ctx, rec)

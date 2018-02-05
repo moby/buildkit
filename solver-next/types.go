@@ -3,6 +3,7 @@ package solver
 import (
 	"context"
 	"sync"
+	"time"
 
 	digest "github.com/opencontainers/go-digest"
 )
@@ -14,9 +15,7 @@ type Vertex interface {
 	// Sys returns an internal value that is used to execute the vertex. Usually
 	// this is capured by the operation resolver method during solve.
 	Sys() interface{}
-	// FIXME(AkihiroSuda): we should not import pb pkg here.
-	// TODO(tonistiigi): reenable strict metadata CacheManager, cache_ignore
-	// Metadata() *pb.OpMetadata
+	Options() VertexOptions
 	// Array of edges current vertex depends on.
 	Inputs() []Edge
 	Name() string
@@ -29,6 +28,14 @@ type Index int
 type Edge struct {
 	Index  Index
 	Vertex Vertex
+}
+
+// VertexOptions has optional metadata for the vertex that is not contained in digest
+type VertexOptions struct {
+	IgnoreCache bool
+	CacheSource CacheManager
+	Description map[string]string // text values with no special meaning for solver
+	// WorkerConstraint
 }
 
 // Result is an abstract return value for a solve
@@ -84,16 +91,22 @@ type CacheKey interface {
 
 // CacheRecord is an identifier for loading in cache
 type CacheRecord struct {
-	ID       string
-	CacheKey CacheKey
+	ID           string
+	CacheKey     CacheKey
+	CacheManager CacheManager
 	// Loadable bool
 	// Size int
-	// CreatedAt time.Time
+	CreatedAt time.Time
+	Priority  int
 }
 
 // CacheManager implements build cache backend
 type CacheManager interface {
-	// Query searches for cache paths from one cache key to the output of a possible match.
+	// ID is used to identify cache providers that are backed by same source
+	// to avoid duplicate calls to the same provider
+	ID() string
+	// Query searches for cache paths from one cache key to the output of a
+	// possible match.
 	Query(inp []CacheKey, inputIndex Index, dgst digest.Digest, outputIndex Index) ([]*CacheRecord, error)
 	// Load pulls and returns the cached result
 	Load(ctx context.Context, rec *CacheRecord) (Result, error)

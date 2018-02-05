@@ -5,9 +5,12 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/moby/buildkit/identity"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 type internalMemoryKeyT string
@@ -17,6 +20,7 @@ var internalMemoryKey = internalMemoryKeyT("buildkit/memory-cache-id")
 func NewInMemoryCacheManager() CacheManager {
 	return &inMemoryCacheManager{
 		byID: map[string]*inMemoryCacheKey{},
+		id:   identity.NewID(),
 	}
 }
 
@@ -27,7 +31,7 @@ type inMemoryCacheKey struct {
 	output Index
 	deps   []CacheKey // only []*inMemoryCacheManager
 
-	results map[Index]map[string]Result
+	results map[Index]map[string]savedResult
 	links   map[link]map[string]struct{}
 }
 
@@ -41,6 +45,11 @@ func (ck *inMemoryCacheKey) Index() Index {
 	return ck.output
 }
 
+type savedResult struct {
+	result    Result
+	createdAt time.Time
+}
+
 type link struct {
 	input, output Index
 	digest        digest.Digest
@@ -49,6 +58,11 @@ type link struct {
 type inMemoryCacheManager struct {
 	mu   sync.RWMutex
 	byID map[string]*inMemoryCacheKey
+	id   string
+}
+
+func (c *inMemoryCacheManager) ID() string {
+	return c.id
 }
 
 func (c *inMemoryCacheManager) Query(deps []CacheKey, input Index, dgst digest.Digest, output Index) ([]*CacheRecord, error) {
@@ -91,8 +105,10 @@ func (c *inMemoryCacheManager) Query(deps []CacheKey, input Index, dgst digest.D
 		if ck, ok := c.byID[id]; ok {
 			for _, res := range ck.results[output] {
 				outs = append(outs, &CacheRecord{
-					ID:       id + "@" + res.ID(),
-					CacheKey: ck,
+					ID:           id + "@" + res.result.ID(),
+					CacheKey:     ck,
+					CacheManager: c,
+					CreatedAt:    res.createdAt,
 				})
 			}
 		}
@@ -117,7 +133,7 @@ func (c *inMemoryCacheManager) Load(ctx context.Context, rec *CacheRecord) (Resu
 	for output := range ck.results {
 		res, ok := ck.results[output][keyParts[1]]
 		if ok {
-			return res, nil
+			return res.result, nil
 		}
 	}
 	return nil, errors.Errorf("failed to load cache record") // TODO: typed error
@@ -182,7 +198,7 @@ func (c *inMemoryCacheManager) getInternalKey(k CacheKey, createIfNotExist bool)
 			dgst:     k.Digest(),
 			output:   k.Output(),
 			deps:     inputs,
-			results:  map[Index]map[string]Result{},
+			results:  map[Index]map[string]savedResult{},
 			links:    map[link]map[string]struct{}{},
 		}
 		ck.SetValue(internalMemoryKey, internalKey)
@@ -204,10 +220,10 @@ func (c *inMemoryCacheManager) getInternalKey(k CacheKey, createIfNotExist bool)
 func (c *inMemoryCacheManager) addResult(ck *inMemoryCacheKey, output Index, r Result) error {
 	m, ok := ck.results[output]
 	if !ok {
-		m = map[string]Result{}
+		m = map[string]savedResult{}
 		ck.results[output] = m
 	}
-	m[r.ID()] = r
+	m[r.ID()] = savedResult{result: r, createdAt: time.Now()}
 	return nil
 }
 
@@ -219,4 +235,72 @@ func (c *inMemoryCacheManager) addLink(l link, from, to *inMemoryCacheKey) error
 	}
 	m[to.id] = struct{}{}
 	return nil
+}
+
+func newCombinedCacheManager(cms []CacheManager, main CacheManager) CacheManager {
+	return &combinedCacheManager{cms: cms, main: main}
+}
+
+type combinedCacheManager struct {
+	cms    []CacheManager
+	main   CacheManager
+	id     string
+	idOnce sync.Once
+}
+
+func (cm *combinedCacheManager) ID() string {
+	cm.idOnce.Do(func() {
+		ids := make([]string, len(cm.cms))
+		for i, c := range cm.cms {
+			ids[i] = c.ID()
+		}
+		cm.id = digest.FromBytes([]byte(strings.Join(ids, ","))).String()
+	})
+	return cm.id
+}
+
+func (cm *combinedCacheManager) Query(inp []CacheKey, inputIndex Index, dgst digest.Digest, outputIndex Index) ([]*CacheRecord, error) {
+	eg, _ := errgroup.WithContext(context.TODO())
+	res := make(map[string]*CacheRecord, len(cm.cms))
+	var mu sync.Mutex
+	for i, c := range cm.cms {
+		func(i int, c CacheManager) {
+			eg.Go(func() error {
+				recs, err := c.Query(inp, inputIndex, dgst, outputIndex)
+				if err != nil {
+					return err
+				}
+				mu.Lock()
+				for _, r := range recs {
+					if _, ok := res[r.ID]; !ok || c == cm.main {
+						r.CacheManager = c
+						if c == cm.main {
+							r.Priority = 1
+						}
+						res[r.ID] = r
+					}
+				}
+				mu.Unlock()
+				return nil
+			})
+		}(i, c)
+	}
+
+	if err := eg.Wait(); err != nil {
+		return nil, err
+	}
+
+	out := make([]*CacheRecord, 0, len(res))
+	for _, r := range res {
+		out = append(out, r)
+	}
+	return out, nil
+}
+
+func (cm *combinedCacheManager) Load(ctx context.Context, rec *CacheRecord) (Result, error) {
+	return rec.CacheManager.Load(ctx, rec)
+}
+
+func (cm *combinedCacheManager) Save(key CacheKey, s Result) (CacheKey, error) {
+	return cm.main.Save(key, s)
 }
