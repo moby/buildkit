@@ -162,6 +162,9 @@ func (e *edge) probeCache(d *dep, keys []CacheKey) {
 	if len(keys) == 0 {
 		return
 	}
+	if e.op.IgnoreCache() {
+		return
+	}
 	records, err := e.op.Cache().Query(keys, d.index, e.cacheMap.Digest, e.edge.Index)
 	if err != nil {
 		e.err = errors.Wrap(err, "error on cache query")
@@ -286,20 +289,22 @@ func (e *edge) processUpdate(upt pipe.Receiver) (depChanged bool) {
 		} else {
 			e.cacheMap = upt.Status().Value.(*CacheMap)
 			if len(e.deps) == 0 {
-				k := NewCacheKey(e.cacheMap.Digest, e.edge.Index, nil)
-				records, err := e.op.Cache().Query(nil, 0, e.cacheMap.Digest, e.edge.Index)
-				if err != nil {
-					logrus.Error(errors.Wrap(err, "invalid query response")) // make the build fail for this error
-				} else {
-					for _, r := range records {
-						e.cacheRecords[r.ID] = r
+				if !e.op.IgnoreCache() {
+					k := NewCacheKey(e.cacheMap.Digest, e.edge.Index, nil)
+					records, err := e.op.Cache().Query(nil, 0, e.cacheMap.Digest, e.edge.Index)
+					if err != nil {
+						logrus.Error(errors.Wrap(err, "invalid query response")) // make the build fail for this error
+					} else {
+						for _, r := range records {
+							e.cacheRecords[r.ID] = r
+						}
+						if len(records) > 0 {
+							e.keys = append(e.keys, k)
+						}
 					}
-					if len(records) > 0 {
-						e.keys = append(e.keys, k)
-					}
-					if e.allDepsHaveKeys() {
-						e.keysDidChange = true
-					}
+				}
+				if e.allDepsHaveKeys() {
+					e.keysDidChange = true
 				}
 				e.state = edgeStatusCacheSlow
 			}

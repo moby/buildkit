@@ -158,10 +158,11 @@ func (jl *JobList) GetEdge(e Edge) *edge {
 }
 
 func (jl *JobList) SubBuild(ctx context.Context, e Edge, parent Vertex) (CachedResult, error) {
-	if err := jl.load(e.Vertex, parent, nil); err != nil {
+	v, err := jl.load(e.Vertex, parent, nil)
+	if err != nil {
 		return nil, err
 	}
-
+	e.Vertex = v
 	return jl.s.build(ctx, e)
 }
 
@@ -169,22 +170,45 @@ func (jl *JobList) Close() {
 	jl.s.Stop()
 }
 
-func (jl *JobList) load(v, parent Vertex, j *Job) error {
+func (jl *JobList) load(v, parent Vertex, j *Job) (Vertex, error) {
 	jl.mu.Lock()
 	defer jl.mu.Unlock()
 	return jl.loadUnlocked(v, parent, j)
 }
 
-func (jl *JobList) loadUnlocked(v, parent Vertex, j *Job) error {
-	for _, e := range v.Inputs() {
-		if err := jl.loadUnlocked(e.Vertex, parent, j); err != nil {
-			return err
+func (jl *JobList) loadUnlocked(v, parent Vertex, j *Job) (Vertex, error) {
+	inputs := make([]Edge, len(v.Inputs()))
+	for i, e := range v.Inputs() {
+		v, err := jl.loadUnlocked(e.Vertex, parent, j)
+		if err != nil {
+			return nil, err
 		}
+		inputs[i] = Edge{Index: e.Index, Vertex: v}
 	}
 
 	dgst := v.Digest()
 
-	st, ok := jl.actives[dgst]
+	dgstWithoutCache := digest.FromBytes([]byte(fmt.Sprintf("%s-ignorecache", dgst)))
+
+	st, ok := jl.actives[dgstWithoutCache]
+
+	if !ok {
+		st, ok = jl.actives[dgst]
+
+		// !ignorecache merges with ignorecache but ignorecache doesn't merge with !ignorecache
+		if ok && !st.vtx.Options().IgnoreCache && v.Options().IgnoreCache {
+			dgst = dgstWithoutCache
+		}
+
+		v = &vertexWithCacheOptions{
+			Vertex: v,
+			dgst:   dgst,
+			inputs: inputs,
+		}
+
+		st, ok = jl.actives[dgst]
+	}
+
 	if !ok {
 		st = &state{
 			opts:         jl.opts,
@@ -220,14 +244,14 @@ func (jl *JobList) loadUnlocked(v, parent Vertex, j *Job) error {
 			st.parents[parent.Digest()] = struct{}{}
 			parentState, ok := jl.actives[parent.Digest()]
 			if !ok {
-				return errors.Errorf("inactive parent %s", parent.Digest())
+				return nil, errors.Errorf("inactive parent %s", parent.Digest())
 			}
 			parentState.childVtx[dgst] = struct{}{}
 		}
 	}
 
 	jl.connectProgressFromState(st, st)
-	return nil
+	return v, nil
 }
 
 func (jl *JobList) connectProgressFromState(target, src *state) {
@@ -307,9 +331,11 @@ func (jl *JobList) deleteIfUnreferenced(k digest.Digest, st *state) {
 }
 
 func (j *Job) Build(ctx context.Context, e Edge) (CachedResult, error) {
-	if err := j.list.load(e.Vertex, nil, j); err != nil {
+	v, err := j.list.load(e.Vertex, nil, j)
+	if err != nil {
 		return nil, err
 	}
+	e.Vertex = v
 	return j.list.s.build(ctx, e)
 }
 
@@ -335,6 +361,7 @@ func (j *Job) Discard() error {
 
 type activeOp interface {
 	Op
+	IgnoreCache() bool
 	Cache() CacheManager
 	CalcSlowCache(context.Context, Index, ResultBasedCacheFunc, Result) (digest.Digest, error)
 }
@@ -367,6 +394,10 @@ type sharedOp struct {
 	slowMu       sync.Mutex
 	slowCacheRes map[Index]digest.Digest
 	slowCacheErr map[Index]error
+}
+
+func (s *sharedOp) IgnoreCache() bool {
+	return s.st.vtx.Options().IgnoreCache
 }
 
 func (s *sharedOp) Cache() CacheManager {
@@ -537,4 +568,18 @@ func unwrapShared(inp []*SharedResult) []Result {
 		out[i] = r.Clone()
 	}
 	return out
+}
+
+type vertexWithCacheOptions struct {
+	Vertex
+	inputs []Edge
+	dgst   digest.Digest
+}
+
+func (v *vertexWithCacheOptions) Digest() digest.Digest {
+	return v.dgst
+}
+
+func (v *vertexWithCacheOptions) Inputs() []Edge {
+	return v.inputs
 }

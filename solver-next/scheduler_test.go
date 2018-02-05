@@ -1422,7 +1422,378 @@ func TestMultipleCacheSources(t *testing.T) {
 	require.Equal(t, int64(0), cacheManager2.loadCounter)
 
 	require.NoError(t, j1.Discard())
+	j1 = nil
+}
+
+func TestRepeatBuildWithIgnoreCache(t *testing.T) {
+	t.Parallel()
+	ctx := context.TODO()
+
+	l := NewJobList(SolverOpt{
+		ResolveOpFunc: testOpResolver,
+	})
+	defer l.Close()
+
+	j0, err := l.NewJob("j0")
+	require.NoError(t, err)
+
+	defer func() {
+		if j0 != nil {
+			j0.Discard()
+		}
+	}()
+
+	g0 := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "v0",
+			cacheKeySeed: "seed0",
+			value:        "result0",
+			inputs: []Edge{
+				{Vertex: vtx(vtxOpt{
+					name:         "v1",
+					cacheKeySeed: "seed1",
+					value:        "result1",
+				})},
+			},
+		}),
+	}
+	g0.Vertex.(*vertex).setupCallCounters()
+
+	res, err := j0.Build(ctx, g0)
+	require.NoError(t, err)
+	require.Equal(t, unwrap(res), "result0")
+	require.Equal(t, int64(2), *g0.Vertex.(*vertex).cacheCallCount)
+	require.Equal(t, int64(2), *g0.Vertex.(*vertex).execCallCount)
+
+	require.NoError(t, j0.Discard())
 	j0 = nil
+
+	// rebuild with ignore-cache reevaluates everything
+
+	j1, err := l.NewJob("j1")
+	require.NoError(t, err)
+
+	defer func() {
+		if j1 != nil {
+			j1.Discard()
+		}
+	}()
+
+	g1 := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "v0",
+			cacheKeySeed: "seed0",
+			value:        "result0-1",
+			ignoreCache:  true,
+			inputs: []Edge{
+				{Vertex: vtx(vtxOpt{
+					name:         "v1",
+					cacheKeySeed: "seed1",
+					value:        "result1-1",
+					ignoreCache:  true,
+				})},
+			},
+		}),
+	}
+	g1.Vertex.(*vertex).setupCallCounters()
+
+	res, err = j1.Build(ctx, g1)
+	require.NoError(t, err)
+	require.Equal(t, unwrap(res), "result0-1")
+	require.Equal(t, int64(2), *g1.Vertex.(*vertex).cacheCallCount)
+	require.Equal(t, int64(2), *g1.Vertex.(*vertex).execCallCount)
+
+	require.NoError(t, j1.Discard())
+	j1 = nil
+
+	// ignore-cache in child reevaluates parent
+
+	j2, err := l.NewJob("j2")
+	require.NoError(t, err)
+
+	defer func() {
+		if j2 != nil {
+			j2.Discard()
+		}
+	}()
+
+	g2 := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "v0",
+			cacheKeySeed: "seed0",
+			value:        "result0-2",
+			inputs: []Edge{
+				{Vertex: vtx(vtxOpt{
+					name:         "v1",
+					cacheKeySeed: "seed1",
+					value:        "result1-2",
+					ignoreCache:  true,
+				})},
+			},
+		}),
+	}
+	g2.Vertex.(*vertex).setupCallCounters()
+
+	res, err = j2.Build(ctx, g2)
+	require.NoError(t, err)
+	require.Equal(t, unwrap(res), "result0-2")
+	require.Equal(t, int64(2), *g2.Vertex.(*vertex).cacheCallCount)
+	require.Equal(t, int64(2), *g2.Vertex.(*vertex).execCallCount)
+
+	require.NoError(t, j2.Discard())
+	j2 = nil
+}
+
+// TestIgnoreCacheResumeFromSlowCache tests that parent cache resumes if child
+// with ignore-cache generates same slow cache key
+func TestIgnoreCacheResumeFromSlowCache(t *testing.T) {
+	t.Parallel()
+	ctx := context.TODO()
+
+	l := NewJobList(SolverOpt{
+		ResolveOpFunc: testOpResolver,
+	})
+	defer l.Close()
+
+	j0, err := l.NewJob("j0")
+	require.NoError(t, err)
+
+	defer func() {
+		if j0 != nil {
+			j0.Discard()
+		}
+	}()
+
+	g0 := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "v0",
+			cacheKeySeed: "seed0",
+			value:        "result0",
+			slowCacheCompute: map[int]ResultBasedCacheFunc{
+				0: digestFromResult,
+			},
+			inputs: []Edge{
+				{Vertex: vtx(vtxOpt{
+					name:         "v1",
+					cacheKeySeed: "seed1",
+					value:        "result1",
+				})},
+			},
+		}),
+	}
+	g0.Vertex.(*vertex).setupCallCounters()
+
+	res, err := j0.Build(ctx, g0)
+	require.NoError(t, err)
+	require.Equal(t, unwrap(res), "result0")
+	require.Equal(t, int64(2), *g0.Vertex.(*vertex).cacheCallCount)
+	require.Equal(t, int64(2), *g0.Vertex.(*vertex).execCallCount)
+
+	require.NoError(t, j0.Discard())
+	j0 = nil
+
+	// rebuild reevaluates child, but not parent
+
+	j1, err := l.NewJob("j1")
+	require.NoError(t, err)
+
+	defer func() {
+		if j1 != nil {
+			j1.Discard()
+		}
+	}()
+
+	g1 := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "v0-1", // doesn't matter but avoid match because another bug
+			cacheKeySeed: "seed0",
+			value:        "result0-no-cache",
+			slowCacheCompute: map[int]ResultBasedCacheFunc{
+				0: digestFromResult,
+			},
+			inputs: []Edge{
+				{Vertex: vtx(vtxOpt{
+					name:         "v1-1",
+					cacheKeySeed: "seed1-1", // doesn't matter but avoid match because another bug
+					value:        "result1", // same as g0
+					ignoreCache:  true,
+				})},
+			},
+		}),
+	}
+	g1.Vertex.(*vertex).setupCallCounters()
+
+	res, err = j1.Build(ctx, g1)
+	require.NoError(t, err)
+	require.Equal(t, unwrap(res), "result0")
+	require.Equal(t, int64(2), *g1.Vertex.(*vertex).cacheCallCount)
+	require.Equal(t, int64(1), *g1.Vertex.(*vertex).execCallCount)
+
+	require.NoError(t, j1.Discard())
+	j1 = nil
+}
+
+func TestParallelBuildsIgnoreCache(t *testing.T) {
+	t.Parallel()
+	ctx := context.TODO()
+
+	l := NewJobList(SolverOpt{
+		ResolveOpFunc: testOpResolver,
+	})
+	defer l.Close()
+
+	j0, err := l.NewJob("j0")
+	require.NoError(t, err)
+
+	defer func() {
+		if j0 != nil {
+			j0.Discard()
+		}
+	}()
+
+	g0 := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "v0",
+			cacheKeySeed: "seed0",
+			value:        "result0",
+		}),
+	}
+	g0.Vertex.(*vertex).setupCallCounters()
+
+	res, err := j0.Build(ctx, g0)
+	require.NoError(t, err)
+
+	require.Equal(t, unwrap(res), "result0")
+
+	// match by vertex digest
+	j1, err := l.NewJob("j1")
+	require.NoError(t, err)
+
+	defer func() {
+		if j1 != nil {
+			j1.Discard()
+		}
+	}()
+
+	g1 := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "v0",
+			cacheKeySeed: "seed1",
+			value:        "result1",
+			ignoreCache:  true,
+		}),
+	}
+	g1.Vertex.(*vertex).setupCallCounters()
+
+	res, err = j1.Build(ctx, g1)
+	require.NoError(t, err)
+
+	require.Equal(t, unwrap(res), "result1")
+
+	require.NoError(t, j0.Discard())
+	j0 = nil
+	require.NoError(t, j1.Discard())
+	j1 = nil
+
+	// new base
+	j2, err := l.NewJob("j2")
+	require.NoError(t, err)
+
+	defer func() {
+		if j2 != nil {
+			j2.Discard()
+		}
+	}()
+
+	g2 := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "v2",
+			cacheKeySeed: "seed2",
+			value:        "result2",
+		}),
+	}
+	g2.Vertex.(*vertex).setupCallCounters()
+
+	res, err = j2.Build(ctx, g2)
+	require.NoError(t, err)
+
+	require.Equal(t, unwrap(res), "result2")
+
+	// match by cache key
+	j3, err := l.NewJob("j3")
+	require.NoError(t, err)
+
+	defer func() {
+		if j3 != nil {
+			j3.Discard()
+		}
+	}()
+
+	g3 := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "v3",
+			cacheKeySeed: "seed2",
+			value:        "result3",
+			ignoreCache:  true,
+		}),
+	}
+	g3.Vertex.(*vertex).setupCallCounters()
+
+	res, err = j3.Build(ctx, g3)
+	require.NoError(t, err)
+
+	require.Equal(t, unwrap(res), "result3")
+
+	// add another ignorecache merges now
+
+	j4, err := l.NewJob("j4")
+	require.NoError(t, err)
+
+	defer func() {
+		if j4 != nil {
+			j4.Discard()
+		}
+	}()
+
+	g4 := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "v4",
+			cacheKeySeed: "seed2", // same as g2/g3
+			value:        "result4",
+			ignoreCache:  true,
+		}),
+	}
+	g4.Vertex.(*vertex).setupCallCounters()
+
+	res, err = j4.Build(ctx, g4)
+	require.NoError(t, err)
+
+	require.Equal(t, unwrap(res), "result3")
+
+	// add another !ignorecache merges now
+
+	j5, err := l.NewJob("j5")
+	require.NoError(t, err)
+
+	defer func() {
+		if j5 != nil {
+			j5.Discard()
+		}
+	}()
+
+	g5 := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "v5",
+			cacheKeySeed: "seed2", // same as g2/g3/g4
+			value:        "result5",
+		}),
+	}
+	g5.Vertex.(*vertex).setupCallCounters()
+
+	res, err = j5.Build(ctx, g5)
+	require.NoError(t, err)
+
+	require.Equal(t, unwrap(res), "result3")
 }
 
 func generateSubGraph(nodes int) (Edge, int) {
@@ -1468,6 +1839,7 @@ type vtxOpt struct {
 	value            string
 	slowCacheCompute map[int]ResultBasedCacheFunc
 	cacheSource      CacheManager
+	ignoreCache      bool
 }
 
 func vtx(opt vtxOpt) *vertex {
@@ -1502,6 +1874,7 @@ func (v *vertex) Name() string {
 func (v *vertex) Options() VertexOptions {
 	return VertexOptions{
 		CacheSource: v.opt.cacheSource,
+		IgnoreCache: v.opt.ignoreCache,
 	}
 }
 

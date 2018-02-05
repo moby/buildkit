@@ -145,8 +145,9 @@ func (s *Scheduler) dispatch(e *edge) {
 		origEdge := e.index.LoadOrStore(e, e.cacheMap.Digest, e.edge.Index, e.depKeys())
 		if origEdge != nil {
 			logrus.Debugf("merging edge %s to %s\n", e.edge.Vertex.Name(), origEdge.edge.Vertex.Name())
-			s.mergeTo(origEdge, e)
-			s.ef.SetEdge(e.edge, origEdge)
+			if s.mergeTo(origEdge, e) {
+				s.ef.SetEdge(e.edge, origEdge)
+			}
 		}
 		e.keysDidChange = false
 	}
@@ -254,7 +255,10 @@ func (s *Scheduler) newRequestWithFunc(e *edge, f func(context.Context) (interfa
 }
 
 // mergeTo merges the state from one edge to another. source edge is discarded.
-func (s *Scheduler) mergeTo(target, src *edge) {
+func (s *Scheduler) mergeTo(target, src *edge) bool {
+	if !target.edge.Vertex.Options().IgnoreCache && src.edge.Vertex.Options().IgnoreCache {
+		return false
+	}
 	for _, inc := range s.incoming[src] {
 		inc.mu.Lock()
 		inc.Target = target
@@ -275,7 +279,8 @@ func (s *Scheduler) mergeTo(target, src *edge) {
 	s.signal(target)
 
 	// TODO(tonistiigi): merge cache providers
-	// TODO(tonistiigi): check ignore-cache compat before merge
+
+	return true
 }
 
 // EdgeFactory allows access to the edges from a shared graph

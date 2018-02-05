@@ -26,8 +26,8 @@ func (ei *EdgeIndex) LoadOrStore(e *edge, dgst digest.Digest, index Index, deps 
 	ei.mu.Lock()
 	defer ei.mu.Unlock()
 
-	if e := ei.load(e, dgst, index, deps); e != nil {
-		return e
+	if old := ei.load(e, dgst, index, deps); old != nil && !(!old.edge.Vertex.Options().IgnoreCache && e.edge.Vertex.Options().IgnoreCache) {
+		return old
 	}
 
 	ei.store(e, dgst, index, deps)
@@ -64,6 +64,12 @@ func (ei *EdgeIndex) load(ignore *edge, dgst digest.Digest, index Index, deps []
 		if !ok {
 			return nil
 		}
+		// prioritize edges with ignoreCache
+		for e := range m2 {
+			if e.edge.Vertex.Options().IgnoreCache && e != ignore {
+				return e
+			}
+		}
 		for e := range m2 {
 			if e != ignore {
 				return e
@@ -99,6 +105,13 @@ func (ei *EdgeIndex) load(ignore *edge, dgst digest.Digest, index Index, deps []
 		}
 		if len(matches) == 0 {
 			break
+		}
+	}
+
+	// prioritize edges with ignoreCache
+	for m := range matches {
+		if m.edge.Vertex.Options().IgnoreCache {
+			return m
 		}
 	}
 
