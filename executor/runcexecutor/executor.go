@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/containerd/containerd/fs"
 	"github.com/containerd/containerd/mount"
 	containerdoci "github.com/containerd/containerd/oci"
+	"github.com/containerd/continuity/fs"
 	runc "github.com/containerd/go-runc"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/executor"

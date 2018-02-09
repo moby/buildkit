@@ -11,7 +11,7 @@ import (
 	"sync"
 
 	"github.com/BurntSushi/locker"
-	"github.com/containerd/containerd/fs"
+	"github.com/containerd/continuity/fs"
 	iradix "github.com/hashicorp/go-immutable-radix"
 	"github.com/hashicorp/golang-lru/simplelru"
 	"github.com/moby/buildkit/cache"

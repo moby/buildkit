@@ -13,8 +13,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/containerd/containerd/fs"
 	"github.com/containerd/containerd/log"
+	"github.com/containerd/continuity/fs"
 	"github.com/dmcgowan/go-tar"
 	"github.com/pkg/errors"
 )
@@ -435,6 +435,9 @@ func (cw *changeWriter) HandleChange(k fs.ChangeKind, p string, f os.FileInfo, e
 			ModTime:    cw.whiteoutT,
 			AccessTime: cw.whiteoutT,
 			ChangeTime: cw.whiteoutT,
+		}
+		if err := cw.includeParents(hdr); err != nil {
+			return err
 		}
 		if err := cw.tw.WriteHeader(hdr); err != nil {
 			return errors.Wrap(err, "failed to write whiteout header")

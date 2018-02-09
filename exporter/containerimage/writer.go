@@ -31,7 +31,7 @@ const (
 type WriterOpt struct {
 	Snapshotter  snapshot.Snapshotter
 	ContentStore content.Store
-	Differ       diff.Differ
+	Differ       diff.Comparer
 }
 
 func NewImageWriter(opt WriterOpt) (*ImageWriter, error) {

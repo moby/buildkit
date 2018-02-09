@@ -25,7 +25,7 @@ type DiffPair struct {
 	Blobsum digest.Digest
 }
 
-func GetDiffPairs(ctx context.Context, contentStore content.Store, snapshotter snapshot.Snapshotter, differ diff.Differ, ref cache.ImmutableRef) ([]DiffPair, error) {
+func GetDiffPairs(ctx context.Context, contentStore content.Store, snapshotter snapshot.Snapshotter, differ diff.Comparer, ref cache.ImmutableRef) ([]DiffPair, error) {
 	if ref == nil {
 		return nil, nil
 	}
@@ -68,7 +68,7 @@ func GetDiffPairs(ctx context.Context, contentStore content.Store, snapshotter s
 			if err != nil {
 				return nil, err
 			}
-			descr, err := differ.DiffMounts(ctx, lower, upper,
+			descr, err := differ.Compare(ctx, lower, upper,
 				diff.WithMediaType(ocispec.MediaTypeImageLayerGzip),
 				diff.WithReference(ref.ID()),
 				diff.WithLabels(map[string]string{
