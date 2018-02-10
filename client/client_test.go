@@ -583,6 +583,10 @@ func readTarToMap(dt []byte, compressed bool) (map[string]*tarItem, error) {
 			}
 			return nil, err
 		}
+		if _, ok := m[h.Name]; ok {
+			return nil, errors.Errorf("duplicate entries for %s", h.Name)
+		}
+
 		var dt []byte
 		if h.Typeflag == tar.TypeReg {
 			dt, err = ioutil.ReadAll(tr)
