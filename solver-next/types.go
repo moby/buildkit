@@ -68,7 +68,6 @@ type CacheMap struct {
 	Digest digest.Digest
 	Deps   []struct {
 		// Optional digest that is merged with the cache key of the input
-		// TODO(tonistiigi): not implemented
 		Selector digest.Digest
 		// Optional function that returns a digest for the input based on its
 		// return value
@@ -79,7 +78,7 @@ type CacheMap struct {
 // CacheKey is an identifier for storing/loading build cache
 type CacheKey interface {
 	// Deps are dependant cache keys
-	Deps() []CacheKey
+	Deps() []CacheKeyWithSelector
 	// Base digest for operation. Usually CacheMap.Digest
 	Digest() digest.Digest
 	// Index for the output that is cached
@@ -107,7 +106,7 @@ type CacheManager interface {
 	ID() string
 	// Query searches for cache paths from one cache key to the output of a
 	// possible match.
-	Query(inp []CacheKey, inputIndex Index, dgst digest.Digest, outputIndex Index) ([]*CacheRecord, error)
+	Query(inp []CacheKey, inputIndex Index, dgst digest.Digest, outputIndex Index, selector digest.Digest) ([]*CacheRecord, error)
 	// Load pulls and returns the cached result
 	Load(ctx context.Context, rec *CacheRecord) (Result, error)
 	// Save saves a result based on a cache key
@@ -115,7 +114,7 @@ type CacheManager interface {
 }
 
 // NewCacheKey creates a new cache key for a specific output index
-func NewCacheKey(dgst digest.Digest, index Index, deps []CacheKey) CacheKey {
+func NewCacheKey(dgst digest.Digest, index Index, deps []CacheKeyWithSelector) CacheKey {
 	return &cacheKey{
 		dgst:   dgst,
 		deps:   deps,
@@ -124,10 +123,17 @@ func NewCacheKey(dgst digest.Digest, index Index, deps []CacheKey) CacheKey {
 	}
 }
 
+// CacheKeyWithSelector combines a cache key with an optional selector digest.
+// Used to limit the matches for dependency cache key.
+type CacheKeyWithSelector struct {
+	Selector digest.Digest
+	CacheKey CacheKey
+}
+
 type cacheKey struct {
 	dgst   digest.Digest
 	index  Index
-	deps   []CacheKey
+	deps   []CacheKeyWithSelector
 	values *sync.Map
 }
 
@@ -140,7 +146,7 @@ func (ck *cacheKey) GetValue(key interface{}) interface{} {
 	return v
 }
 
-func (ck *cacheKey) Deps() []CacheKey {
+func (ck *cacheKey) Deps() []CacheKeyWithSelector {
 	return ck.deps
 }
 

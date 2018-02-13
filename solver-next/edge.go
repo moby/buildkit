@@ -122,12 +122,16 @@ func (e *edge) commitOptions() (CacheKey, []Result) {
 		return NewCacheKey(e.cacheMap.Digest, e.edge.Index, nil), nil
 	}
 
-	inputs := make([]CacheKey, len(e.deps))
+	inputs := make([]CacheKeyWithSelector, len(e.deps))
 	results := make([]Result, len(e.deps))
 	for i, dep := range e.deps {
-		inputs[i] = dep.result.CacheKey()
+		inputs[i] = CacheKeyWithSelector{CacheKey: dep.result.CacheKey(), Selector: e.cacheMap.Deps[i].Selector}
 		if dep.slowCacheKey != nil {
-			inputs[i] = NewCacheKey("", 0, []CacheKey{inputs[i], dep.slowCacheKey})
+			inputs[i] = CacheKeyWithSelector{CacheKey: NewCacheKey("", 0, []CacheKeyWithSelector{
+				inputs[i],
+				{CacheKey: dep.slowCacheKey, Selector: NoSelector},
+			},
+			)}
 		}
 		results[i] = dep.result
 	}
@@ -165,7 +169,7 @@ func (e *edge) probeCache(d *dep, keys []CacheKey) {
 	if e.op.IgnoreCache() {
 		return
 	}
-	records, err := e.op.Cache().Query(keys, d.index, e.cacheMap.Digest, e.edge.Index)
+	records, err := e.op.Cache().Query(keys, d.index, e.cacheMap.Digest, e.edge.Index, e.cacheMap.Deps[d.index].Selector)
 	if err != nil {
 		e.err = errors.Wrap(err, "error on cache query")
 	}
@@ -291,7 +295,7 @@ func (e *edge) processUpdate(upt pipe.Receiver) (depChanged bool) {
 			if len(e.deps) == 0 {
 				if !e.op.IgnoreCache() {
 					k := NewCacheKey(e.cacheMap.Digest, e.edge.Index, nil)
-					records, err := e.op.Cache().Query(nil, 0, e.cacheMap.Digest, e.edge.Index)
+					records, err := e.op.Cache().Query(nil, 0, e.cacheMap.Digest, e.edge.Index, "")
 					if err != nil {
 						logrus.Error(errors.Wrap(err, "invalid query response")) // make the build fail for this error
 					} else {
