@@ -14,7 +14,11 @@ import (
 )
 
 // ResolveOpFunc finds an Op implementation for a Vertex
-type ResolveOpFunc func(Vertex) (Op, error)
+type ResolveOpFunc func(Vertex, Builder) (Op, error)
+
+type Builder interface {
+	Build(ctx context.Context, e Edge) (CachedResult, error)
+}
 
 // JobList provides a shared graph of all the vertexes currently being
 // processed. Every vertex that is being solved needs to be loaded into job
@@ -51,6 +55,11 @@ type state struct {
 
 	cache     map[string]CacheManager
 	mainCache CacheManager
+	jobList   *JobList
+}
+
+func (s *state) builder() Builder {
+	return &subBuilder{state: s}
 }
 
 func (s *state) getEdge(index Index) *edge {
@@ -106,6 +115,14 @@ func (s *state) Release() {
 	}
 }
 
+type subBuilder struct {
+	*state
+}
+
+func (sb *subBuilder) Build(ctx context.Context, e Edge) (CachedResult, error) {
+	return sb.jobList.subBuild(ctx, e, sb.vtx)
+}
+
 type Job struct {
 	list *JobList
 	pr   *progress.MultiReader
@@ -157,7 +174,7 @@ func (jl *JobList) GetEdge(e Edge) *edge {
 	return st.getEdge(e.Index)
 }
 
-func (jl *JobList) SubBuild(ctx context.Context, e Edge, parent Vertex) (CachedResult, error) {
+func (jl *JobList) subBuild(ctx context.Context, e Edge, parent Vertex) (CachedResult, error) {
 	v, err := jl.load(e.Vertex, parent, nil)
 	if err != nil {
 		return nil, err
@@ -223,6 +240,7 @@ func (jl *JobList) loadUnlocked(v, parent Vertex, j *Job) (Vertex, error) {
 			index:        jl.index,
 			mainCache:    jl.opts.DefaultCache,
 			cache:        map[string]CacheManager{},
+			jobList:      jl,
 		}
 		jl.actives[dgst] = st
 	}
@@ -526,7 +544,7 @@ func (s *sharedOp) Exec(ctx context.Context, inputs []Result) (outputs []Result,
 
 func (s *sharedOp) getOp() (Op, error) {
 	s.opOnce.Do(func() {
-		s.op, s.err = s.resolver(s.st.vtx)
+		s.op, s.err = s.resolver(s.st.vtx, s.st.builder())
 	})
 	if s.err != nil {
 		return nil, s.err
