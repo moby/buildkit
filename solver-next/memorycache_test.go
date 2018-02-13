@@ -53,15 +53,15 @@ func TestInMemoryCache(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, len(matches), 0)
 
-	matches, err = m.Query([]CacheKey{cacheFoo}, 0, dgst("baz"), 0, "")
+	matches, err = m.Query([]ExportableCacheKey{cacheFoo}, 0, dgst("baz"), 0, "")
 	require.NoError(t, err)
 	require.Equal(t, len(matches), 0)
 
-	matches, err = m.Query([]CacheKey{cacheFoo}, 1, dgst("baz"), Index(1), "")
+	matches, err = m.Query([]ExportableCacheKey{cacheFoo}, 1, dgst("baz"), Index(1), "")
 	require.NoError(t, err)
 	require.Equal(t, len(matches), 0)
 
-	matches, err = m.Query([]CacheKey{cacheFoo}, 0, dgst("baz"), Index(1), "")
+	matches, err = m.Query([]ExportableCacheKey{cacheFoo}, 0, dgst("baz"), Index(1), "")
 	require.NoError(t, err)
 	require.Equal(t, len(matches), 1)
 
@@ -69,7 +69,7 @@ func TestInMemoryCache(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "result2", unwrap(res))
 
-	matches2, err := m.Query([]CacheKey{cacheBar}, 1, dgst("baz"), Index(1), "")
+	matches2, err := m.Query([]ExportableCacheKey{cacheBar}, 1, dgst("baz"), Index(1), "")
 	require.NoError(t, err)
 	require.Equal(t, len(matches2), 1)
 
@@ -81,7 +81,7 @@ func TestInMemoryCache(t *testing.T) {
 	_, err = m.Save(k, testResult("result3"))
 	require.NoError(t, err)
 
-	matches, err = m.Query([]CacheKey{cacheFoo}, 0, dgst("baz"), Index(1), "")
+	matches, err = m.Query([]ExportableCacheKey{cacheFoo}, 0, dgst("baz"), Index(1), "")
 	require.NoError(t, err)
 	require.Equal(t, len(matches), 2)
 
@@ -91,24 +91,24 @@ func TestInMemoryCache(t *testing.T) {
 	})
 
 	k = NewCacheKey(dgst("bax"), 0, []CacheKeyWithSelector{
-		{CacheKey: k2}, {CacheKey: cacheBar},
+		{CacheKey: ExportableCacheKey{CacheKey: k2}}, {CacheKey: cacheBar},
 	})
 	_, err = m.Save(k, testResult("result4"))
 	require.NoError(t, err)
 
 	// foo, bar, baz should all point to result4
-	matches, err = m.Query([]CacheKey{cacheFoo}, 0, dgst("bax"), 0, "")
+	matches, err = m.Query([]ExportableCacheKey{cacheFoo}, 0, dgst("bax"), 0, "")
 	require.NoError(t, err)
 	require.Equal(t, len(matches), 1)
 
 	id := matches[0].ID
 
-	matches, err = m.Query([]CacheKey{cacheBar}, 1, dgst("bax"), 0, "")
+	matches, err = m.Query([]ExportableCacheKey{cacheBar}, 1, dgst("bax"), 0, "")
 	require.NoError(t, err)
 	require.Equal(t, len(matches), 1)
 	require.Equal(t, matches[0].ID, id)
 
-	matches, err = m.Query([]CacheKey{cacheBaz}, 0, dgst("bax"), 0, "")
+	matches, err = m.Query([]ExportableCacheKey{cacheBaz}, 0, dgst("bax"), 0, "")
 	require.NoError(t, err)
 	require.Equal(t, len(matches), 1)
 	require.Equal(t, matches[0].ID, id)
@@ -127,15 +127,15 @@ func TestInMemoryCacheSelector(t *testing.T) {
 	}), testResult("result1"))
 	require.NoError(t, err)
 
-	matches, err := m.Query([]CacheKey{cacheFoo}, 0, dgst("bar"), 0, "")
+	matches, err := m.Query([]ExportableCacheKey{cacheFoo}, 0, dgst("bar"), 0, "")
 	require.NoError(t, err)
 	require.Equal(t, len(matches), 0)
 
-	matches, err = m.Query([]CacheKey{cacheFoo}, 0, dgst("bar"), 0, "sel-invalid")
+	matches, err = m.Query([]ExportableCacheKey{cacheFoo}, 0, dgst("bar"), 0, "sel-invalid")
 	require.NoError(t, err)
 	require.Equal(t, len(matches), 0)
 
-	matches, err = m.Query([]CacheKey{cacheFoo}, 0, dgst("bar"), 0, dgst("sel0"))
+	matches, err = m.Query([]ExportableCacheKey{cacheFoo}, 0, dgst("bar"), 0, dgst("sel0"))
 	require.NoError(t, err)
 	require.Equal(t, len(matches), 1)
 
@@ -154,42 +154,42 @@ func TestInMemoryCacheSelectorNested(t *testing.T) {
 
 	k2 := NewCacheKey("", 0, []CacheKeyWithSelector{
 		{CacheKey: cacheFoo, Selector: dgst("sel0")},
-		{CacheKey: NewCacheKey(dgst("second"), 0, nil), Selector: NoSelector},
+		{CacheKey: ExportableCacheKey{CacheKey: NewCacheKey(dgst("second"), 0, nil)}, Selector: NoSelector},
 	})
 
 	_, err = m.Save(NewCacheKey(dgst("bar"), 0, []CacheKeyWithSelector{
-		{CacheKey: k2},
+		{CacheKey: ExportableCacheKey{CacheKey: k2}},
 	}), testResult("result1"))
 	require.NoError(t, err)
 
-	matches, err := m.Query([]CacheKey{cacheFoo}, 0, dgst("bar"), 0, dgst("sel0"))
+	matches, err := m.Query([]ExportableCacheKey{cacheFoo}, 0, dgst("bar"), 0, dgst("sel0"))
 	require.NoError(t, err)
 	require.Equal(t, len(matches), 1)
 	res, err := m.Load(ctx, matches[0])
 	require.NoError(t, err)
 	require.Equal(t, "result1", unwrap(res))
 
-	matches, err = m.Query([]CacheKey{cacheFoo}, 0, dgst("bar"), 0, "")
+	matches, err = m.Query([]ExportableCacheKey{cacheFoo}, 0, dgst("bar"), 0, "")
 	require.NoError(t, err)
 	require.Equal(t, len(matches), 0)
 
-	matches, err = m.Query([]CacheKey{cacheFoo}, 0, dgst("bar"), 0, dgst("bar"))
+	matches, err = m.Query([]ExportableCacheKey{cacheFoo}, 0, dgst("bar"), 0, dgst("bar"))
 	require.NoError(t, err)
 	require.Equal(t, len(matches), 0)
 
 	// keys with NoSelector always match
-	matches, err = m.Query([]CacheKey{NewCacheKey(dgst("second"), 0, nil)}, 0, dgst("bar"), 0, dgst("sel0"))
+	matches, err = m.Query([]ExportableCacheKey{{CacheKey: NewCacheKey(dgst("second"), 0, nil)}}, 0, dgst("bar"), 0, dgst("sel0"))
 	require.NoError(t, err)
 	require.Equal(t, len(matches), 1)
 	res, err = m.Load(ctx, matches[0])
 	require.NoError(t, err)
 	require.Equal(t, "result1", unwrap(res))
 
-	matches, err = m.Query([]CacheKey{NewCacheKey(dgst("second"), 0, nil)}, 0, dgst("bar"), 0, "")
+	matches, err = m.Query([]ExportableCacheKey{{CacheKey: NewCacheKey(dgst("second"), 0, nil)}}, 0, dgst("bar"), 0, "")
 	require.NoError(t, err)
 	require.Equal(t, len(matches), 1)
 
-	matches, err = m.Query([]CacheKey{NewCacheKey(dgst("second"), 0, nil)}, 0, dgst("bar"), 0, dgst("bar"))
+	matches, err = m.Query([]ExportableCacheKey{{CacheKey: NewCacheKey(dgst("second"), 0, nil)}}, 0, dgst("bar"), 0, dgst("bar"))
 	require.NoError(t, err)
 	require.Equal(t, len(matches), 1)
 }

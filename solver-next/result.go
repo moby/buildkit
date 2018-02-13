@@ -5,6 +5,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -58,15 +59,28 @@ func (r *splitResult) Release(ctx context.Context) error {
 }
 
 // NewCachedResult combines a result and cache key into cached result
-func NewCachedResult(res Result, k CacheKey) CachedResult {
-	return &cachedResult{res, k}
+func NewCachedResult(res Result, k CacheKey, exp Exporter) CachedResult {
+	return &cachedResult{res, k, exp}
 }
 
 type cachedResult struct {
 	Result
-	k CacheKey
+	k   CacheKey
+	exp Exporter
 }
 
-func (cr *cachedResult) CacheKey() CacheKey {
-	return cr.k
+func (cr *cachedResult) CacheKey() ExportableCacheKey {
+	return ExportableCacheKey{CacheKey: cr.k, Exporter: cr.exp}
+}
+
+func (cr *cachedResult) Export(ctx context.Context, converter func(context.Context, Result) (*Remote, error)) ([]ExportRecord, error) {
+	m := make(map[digest.Digest]*ExportRecord)
+	if _, err := cr.exp.Export(ctx, m, converter); err != nil {
+		return nil, err
+	}
+	out := make([]ExportRecord, 0, len(m))
+	for _, r := range m {
+		out = append(out, *r)
+	}
+	return out, nil
 }

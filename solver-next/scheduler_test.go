@@ -13,6 +13,7 @@ import (
 
 	"github.com/moby/buildkit/identity"
 	digest "github.com/opencontainers/go-digest"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
@@ -2091,6 +2092,156 @@ func TestCacheSlowWithSelector(t *testing.T) {
 	j1 = nil
 }
 
+func TestCacheExporting(t *testing.T) {
+	t.Parallel()
+	ctx := context.TODO()
+
+	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
+
+	l := NewJobList(SolverOpt{
+		ResolveOpFunc: testOpResolver,
+		DefaultCache:  cacheManager,
+	})
+	defer l.Close()
+
+	j0, err := l.NewJob("j0")
+	require.NoError(t, err)
+
+	defer func() {
+		if j0 != nil {
+			j0.Discard()
+		}
+	}()
+
+	g0 := Edge{
+		Vertex: vtxSum(1, vtxOpt{
+			inputs: []Edge{
+				{Vertex: vtxConst(2, vtxOpt{})},
+				{Vertex: vtxConst(3, vtxOpt{})},
+			},
+		}),
+	}
+
+	res, err := j0.Build(ctx, g0)
+	require.NoError(t, err)
+	require.Equal(t, unwrapInt(res), 6)
+
+	require.NoError(t, j0.Discard())
+	j0 = nil
+
+	rec, err := res.Export(ctx, testConvertToRemote)
+	require.NoError(t, err)
+
+	require.Equal(t, 3, len(rec))
+
+	j1, err := l.NewJob("j1")
+	require.NoError(t, err)
+
+	defer func() {
+		if j1 != nil {
+			j1.Discard()
+		}
+	}()
+
+	res, err = j1.Build(ctx, g0)
+	require.NoError(t, err)
+	require.Equal(t, unwrapInt(res), 6)
+
+	require.NoError(t, j1.Discard())
+	j1 = nil
+
+	rec2, err := res.Export(ctx, testConvertToRemote)
+	require.NoError(t, err)
+
+	require.Equal(t, 3, len(rec2))
+}
+
+func TestCacheExportingPartialSelector(t *testing.T) {
+	t.Parallel()
+	ctx := context.TODO()
+
+	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
+
+	l := NewJobList(SolverOpt{
+		ResolveOpFunc: testOpResolver,
+		DefaultCache:  cacheManager,
+	})
+	defer l.Close()
+
+	j0, err := l.NewJob("j0")
+	require.NoError(t, err)
+
+	defer func() {
+		if j0 != nil {
+			j0.Discard()
+		}
+	}()
+
+	g0 := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "v0",
+			cacheKeySeed: "seed0",
+			value:        "result0",
+			inputs: []Edge{
+				{Vertex: vtx(vtxOpt{
+					name:         "v1",
+					cacheKeySeed: "seed1",
+					value:        "result1",
+				})},
+			},
+			selectors: map[int]digest.Digest{
+				0: dgst("sel0"),
+			},
+			slowCacheCompute: map[int]ResultBasedCacheFunc{
+				0: digestFromResult,
+			},
+		}),
+	}
+
+	res, err := j0.Build(ctx, g0)
+	require.NoError(t, err)
+	require.Equal(t, unwrap(res), "result0")
+
+	require.NoError(t, j0.Discard())
+	j0 = nil
+
+	rec, err := res.Export(ctx, testConvertToRemote)
+	require.NoError(t, err)
+
+	require.Equal(t, len(rec), 4) // v1 creates 3 records
+
+	// repeat so that all coming from cache are retained
+
+	j1, err := l.NewJob("j1")
+	require.NoError(t, err)
+
+	defer func() {
+		if j1 != nil {
+			j1.Discard()
+		}
+	}()
+
+	g1 := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "v2",
+			cacheKeySeed: "seed2",
+			value:        "result2",
+			inputs:       []Edge{g0},
+		},
+		),
+	}
+
+	res, err = j1.Build(ctx, g1)
+	require.NoError(t, err)
+	require.Equal(t, unwrap(res), "result2")
+
+	require.NoError(t, j1.Discard())
+	j1 = nil
+
+	_, err = res.Export(ctx, testConvertToRemote)
+	require.NoError(t, err)
+}
+
 func generateSubGraph(nodes int) (Edge, int) {
 	if nodes == 1 {
 		value := rand.Int() % 500
@@ -2445,4 +2596,10 @@ func (cm *trackingCacheManager) Load(ctx context.Context, rec *CacheRecord) (Res
 
 func digestFromResult(ctx context.Context, res Result) (digest.Digest, error) {
 	return digest.FromBytes([]byte(unwrap(res))), nil
+}
+
+func testConvertToRemote(ctx context.Context, res Result) (*Remote, error) {
+	return &Remote{Descriptors: []ocispec.Descriptor{{
+		Annotations: map[string]string{"value": fmt.Sprintf("%d", unwrapInt(res))},
+	}}}, nil
 }
