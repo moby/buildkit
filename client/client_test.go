@@ -41,6 +41,7 @@ func TestClientIntegration(t *testing.T) {
 		testUser,
 		testOCIExporter,
 		testWhiteoutParentDir,
+		testDuplicateWhiteouts,
 	})
 }
 
@@ -551,6 +552,74 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 
 	_, ok = m["foo/sub/bar"]
 	require.False(t, ok)
+}
+
+// containerd/containerd#2119
+func testDuplicateWhiteouts(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	t.Parallel()
+	c, err := New(sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("busybox:latest")
+	st := llb.Scratch()
+
+	run := func(cmd string) {
+		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+	}
+
+	run(`sh -c "mkdir -p d0 d1; echo -n first > d1/bar;"`)
+	run(`sh -c "rm -rf d0 d1"`)
+
+	def, err := st.Marshal()
+	require.NoError(t, err)
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	out := filepath.Join(destDir, "out.tar")
+
+	err = c.Solve(context.TODO(), def, SolveOpt{
+		Exporter: ExporterOCI,
+		ExporterAttrs: map[string]string{
+			"output": out,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(out)
+	require.NoError(t, err)
+
+	m, err := readTarToMap(dt, false)
+	require.NoError(t, err)
+
+	var index ocispec.Index
+	err = json.Unmarshal(m["index.json"].data, &index)
+	require.NoError(t, err)
+
+	var mfst ocispec.Manifest
+	err = json.Unmarshal(m["blobs/sha256/"+index.Manifests[0].Digest.Hex()].data, &mfst)
+	require.NoError(t, err)
+
+	lastLayer := mfst.Layers[len(mfst.Layers)-1]
+
+	layer, ok := m["blobs/sha256/"+lastLayer.Digest.Hex()]
+	require.True(t, ok)
+
+	m, err = readTarToMap(layer.data, true)
+	require.NoError(t, err)
+
+	_, ok = m[".wh.d0"]
+	require.True(t, ok)
+
+	_, ok = m[".wh.d1"]
+	require.True(t, ok)
+
+	// check for a bug that added whiteout for subfile
+	_, ok = m["d1/.wh.bar"]
+	require.True(t, !ok)
 }
 
 // #276
