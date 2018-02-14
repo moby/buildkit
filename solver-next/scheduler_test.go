@@ -1858,6 +1858,239 @@ func TestSubbuild(t *testing.T) {
 
 }
 
+func TestCacheWithSelector(t *testing.T) {
+	t.Parallel()
+	ctx := context.TODO()
+
+	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
+
+	l := NewJobList(SolverOpt{
+		ResolveOpFunc: testOpResolver,
+		DefaultCache:  cacheManager,
+	})
+	defer l.Close()
+
+	j0, err := l.NewJob("j0")
+	require.NoError(t, err)
+
+	defer func() {
+		if j0 != nil {
+			j0.Discard()
+		}
+	}()
+
+	g0 := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "v0",
+			cacheKeySeed: "seed0",
+			value:        "result0",
+			inputs: []Edge{
+				{Vertex: vtx(vtxOpt{
+					name:         "v1",
+					cacheKeySeed: "seed1",
+					value:        "result1",
+				})},
+			},
+			selectors: map[int]digest.Digest{
+				0: dgst("sel0"),
+			},
+		}),
+	}
+	g0.Vertex.(*vertex).setupCallCounters()
+
+	res, err := j0.Build(ctx, g0)
+	require.NoError(t, err)
+	require.Equal(t, unwrap(res), "result0")
+
+	require.Equal(t, int64(2), *g0.Vertex.(*vertex).cacheCallCount)
+	require.Equal(t, int64(2), *g0.Vertex.(*vertex).execCallCount)
+	require.Equal(t, int64(0), cacheManager.loadCounter)
+
+	require.NoError(t, j0.Discard())
+	j0 = nil
+
+	// repeat, cache is matched
+
+	j1, err := l.NewJob("j1")
+	require.NoError(t, err)
+
+	defer func() {
+		if j1 != nil {
+			j1.Discard()
+		}
+	}()
+
+	g1 := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "v0",
+			cacheKeySeed: "seed0",
+			value:        "result0-no-cache",
+			inputs: []Edge{
+				{Vertex: vtx(vtxOpt{
+					name:         "v1",
+					cacheKeySeed: "seed1",
+					value:        "result1-no-cache",
+				})},
+			},
+			selectors: map[int]digest.Digest{
+				0: dgst("sel0"),
+			},
+		}),
+	}
+	g1.Vertex.(*vertex).setupCallCounters()
+
+	res, err = j1.Build(ctx, g1)
+	require.NoError(t, err)
+	require.Equal(t, unwrap(res), "result0")
+
+	require.Equal(t, int64(2), *g1.Vertex.(*vertex).cacheCallCount)
+	require.Equal(t, int64(0), *g1.Vertex.(*vertex).execCallCount)
+	require.Equal(t, int64(1), cacheManager.loadCounter)
+
+	require.NoError(t, j1.Discard())
+	j1 = nil
+
+	// using different selector doesn't match
+
+	j2, err := l.NewJob("j2")
+	require.NoError(t, err)
+
+	defer func() {
+		if j2 != nil {
+			j2.Discard()
+		}
+	}()
+
+	g2 := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "v0",
+			cacheKeySeed: "seed0",
+			value:        "result0-1",
+			inputs: []Edge{
+				{Vertex: vtx(vtxOpt{
+					name:         "v1",
+					cacheKeySeed: "seed1",
+					value:        "result1-1",
+				})},
+			},
+			selectors: map[int]digest.Digest{
+				0: dgst("sel1"),
+			},
+		}),
+	}
+	g2.Vertex.(*vertex).setupCallCounters()
+
+	res, err = j2.Build(ctx, g2)
+	require.NoError(t, err)
+	require.Equal(t, unwrap(res), "result0-1")
+
+	require.Equal(t, int64(2), *g2.Vertex.(*vertex).cacheCallCount)
+	require.Equal(t, int64(1), *g2.Vertex.(*vertex).execCallCount)
+	require.Equal(t, int64(2), cacheManager.loadCounter)
+
+	require.NoError(t, j2.Discard())
+	j2 = nil
+}
+
+func TestCacheSlowWithSelector(t *testing.T) {
+	t.Parallel()
+	ctx := context.TODO()
+
+	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
+
+	l := NewJobList(SolverOpt{
+		ResolveOpFunc: testOpResolver,
+		DefaultCache:  cacheManager,
+	})
+	defer l.Close()
+
+	j0, err := l.NewJob("j0")
+	require.NoError(t, err)
+
+	defer func() {
+		if j0 != nil {
+			j0.Discard()
+		}
+	}()
+
+	g0 := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "v0",
+			cacheKeySeed: "seed0",
+			value:        "result0",
+			inputs: []Edge{
+				{Vertex: vtx(vtxOpt{
+					name:         "v1",
+					cacheKeySeed: "seed1",
+					value:        "result1",
+				})},
+			},
+			selectors: map[int]digest.Digest{
+				0: dgst("sel0"),
+			},
+			slowCacheCompute: map[int]ResultBasedCacheFunc{
+				0: digestFromResult,
+			},
+		}),
+	}
+	g0.Vertex.(*vertex).setupCallCounters()
+
+	res, err := j0.Build(ctx, g0)
+	require.NoError(t, err)
+	require.Equal(t, unwrap(res), "result0")
+
+	require.Equal(t, int64(2), *g0.Vertex.(*vertex).cacheCallCount)
+	require.Equal(t, int64(2), *g0.Vertex.(*vertex).execCallCount)
+	require.Equal(t, int64(0), cacheManager.loadCounter)
+
+	require.NoError(t, j0.Discard())
+	j0 = nil
+
+	// repeat, cache is matched
+
+	j1, err := l.NewJob("j1")
+	require.NoError(t, err)
+
+	defer func() {
+		if j1 != nil {
+			j1.Discard()
+		}
+	}()
+
+	g1 := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "v0",
+			cacheKeySeed: "seed0",
+			value:        "result0-no-cache",
+			inputs: []Edge{
+				{Vertex: vtx(vtxOpt{
+					name:         "v1",
+					cacheKeySeed: "seed1",
+					value:        "result1-no-cache",
+				})},
+			},
+			selectors: map[int]digest.Digest{
+				0: dgst("sel1"),
+			},
+			slowCacheCompute: map[int]ResultBasedCacheFunc{
+				0: digestFromResult,
+			},
+		}),
+	}
+	g1.Vertex.(*vertex).setupCallCounters()
+
+	res, err = j1.Build(ctx, g1)
+	require.NoError(t, err)
+	require.Equal(t, unwrap(res), "result0")
+
+	require.Equal(t, int64(2), *g1.Vertex.(*vertex).cacheCallCount)
+	require.Equal(t, int64(0), *g1.Vertex.(*vertex).execCallCount)
+	require.Equal(t, int64(2), cacheManager.loadCounter)
+
+	require.NoError(t, j1.Discard())
+	j1 = nil
+}
+
 func generateSubGraph(nodes int) (Edge, int) {
 	if nodes == 1 {
 		value := rand.Int() % 500
@@ -1900,6 +2133,7 @@ type vtxOpt struct {
 	inputs           []Edge
 	value            string
 	slowCacheCompute map[int]ResultBasedCacheFunc
+	selectors        map[int]digest.Digest
 	cacheSource      CacheManager
 	ignoreCache      bool
 }
@@ -2038,6 +2272,9 @@ func (v *vertex) makeCacheMap() *CacheMap {
 	}
 	for i, f := range v.opt.slowCacheCompute {
 		m.Deps[i].ComputeDigestFunc = f
+	}
+	for i, dgst := range v.opt.selectors {
+		m.Deps[i].Selector = dgst
 	}
 	return m
 }

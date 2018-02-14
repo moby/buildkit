@@ -186,7 +186,8 @@ func getUniqueID(k CacheKey) digest.Digest {
 
 	dgstr := digest.SHA256.Digester()
 	for _, inp := range k.Deps() {
-		dgstr.Hash().Write([]byte(getUniqueID(inp)))
+		dgstr.Hash().Write([]byte(getUniqueID(inp.CacheKey)))
+		dgstr.Hash().Write([]byte(inp.Selector))
 	}
 
 	dgstr.Hash().Write([]byte(k.Digest()))

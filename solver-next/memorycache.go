@@ -17,6 +17,8 @@ type internalMemoryKeyT string
 
 var internalMemoryKey = internalMemoryKeyT("buildkit/memory-cache-id")
 
+var NoSelector = digest.FromBytes(nil)
+
 func NewInMemoryCacheManager() CacheManager {
 	return &inMemoryCacheManager{
 		byID: map[string]*inMemoryCacheKey{},
@@ -29,13 +31,13 @@ type inMemoryCacheKey struct {
 	id     string
 	dgst   digest.Digest
 	output Index
-	deps   []CacheKey // only []*inMemoryCacheManager
+	deps   []CacheKeyWithSelector // only []*inMemoryCacheKey
 
 	results map[Index]map[string]savedResult
 	links   map[link]map[string]struct{}
 }
 
-func (ck *inMemoryCacheKey) Deps() []CacheKey {
+func (ck *inMemoryCacheKey) Deps() []CacheKeyWithSelector {
 	return ck.deps
 }
 func (ck *inMemoryCacheKey) Digest() digest.Digest {
@@ -53,6 +55,7 @@ type savedResult struct {
 type link struct {
 	input, output Index
 	digest        digest.Digest
+	selector      digest.Digest
 }
 
 type inMemoryCacheManager struct {
@@ -65,7 +68,7 @@ func (c *inMemoryCacheManager) ID() string {
 	return c.id
 }
 
-func (c *inMemoryCacheManager) Query(deps []CacheKey, input Index, dgst digest.Digest, output Index) ([]*CacheRecord, error) {
+func (c *inMemoryCacheManager) Query(deps []CacheKey, input Index, dgst digest.Digest, output Index, selector digest.Digest) ([]*CacheRecord, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -75,10 +78,13 @@ func (c *inMemoryCacheManager) Query(deps []CacheKey, input Index, dgst digest.D
 	for _, dep := range deps {
 		ck, err := c.getInternalKey(dep, false)
 		if err == nil {
-			for key := range ck.links[link{input, output, dgst}] {
+			for key := range ck.links[link{input, output, dgst, selector}] {
 				refs[key] = struct{}{}
 			}
-			for key := range ck.links[link{Index(-1), Index(0), ""}] {
+			for key := range ck.links[link{Index(-1), Index(0), "", selector}] {
+				sublinks[key] = struct{}{}
+			}
+			for key := range ck.links[link{Index(-1), Index(0), "", NoSelector}] {
 				sublinks[key] = struct{}{}
 			}
 		}
@@ -86,7 +92,7 @@ func (c *inMemoryCacheManager) Query(deps []CacheKey, input Index, dgst digest.D
 
 	for id := range sublinks {
 		if ck, ok := c.byID[id]; ok {
-			for key := range ck.links[link{input, output, dgst}] {
+			for key := range ck.links[link{input, output, dgst, ""}] {
 				refs[key] = struct{}{}
 			}
 		}
@@ -165,15 +171,15 @@ func (c *inMemoryCacheManager) getInternalKey(k CacheKey, createIfNotExist bool)
 		}
 		return ck, nil
 	}
-	inputs := make([]CacheKey, len(k.Deps()))
+	inputs := make([]CacheKeyWithSelector, len(k.Deps()))
 	dgstr := digest.SHA256.Digester()
 	for i, inp := range k.Deps() {
-		ck, err := c.getInternalKey(inp, createIfNotExist)
+		ck, err := c.getInternalKey(inp.CacheKey, createIfNotExist)
 		if err != nil {
 			return nil, err
 		}
-		inputs[i] = ck
-		if _, err := dgstr.Hash().Write([]byte(ck.id)); err != nil {
+		inputs[i] = CacheKeyWithSelector{CacheKey: ck, Selector: inp.Selector}
+		if _, err := dgstr.Hash().Write([]byte(fmt.Sprintf("%s:%s,", ck.id, inp.Selector))); err != nil {
 			return nil, err
 		}
 	}
@@ -209,7 +215,7 @@ func (c *inMemoryCacheManager) getInternalKey(k CacheKey, createIfNotExist bool)
 		if ck.dgst == "" {
 			i = -1
 		}
-		if err := c.addLink(link{Index(i), ck.output, ck.dgst}, inp.(*inMemoryCacheKey), ck); err != nil {
+		if err := c.addLink(link{Index(i), ck.output, ck.dgst, inp.Selector}, inp.CacheKey.(*inMemoryCacheKey), ck); err != nil {
 			return nil, err
 		}
 	}
@@ -259,14 +265,14 @@ func (cm *combinedCacheManager) ID() string {
 	return cm.id
 }
 
-func (cm *combinedCacheManager) Query(inp []CacheKey, inputIndex Index, dgst digest.Digest, outputIndex Index) ([]*CacheRecord, error) {
+func (cm *combinedCacheManager) Query(inp []CacheKey, inputIndex Index, dgst digest.Digest, outputIndex Index, selector digest.Digest) ([]*CacheRecord, error) {
 	eg, _ := errgroup.WithContext(context.TODO())
 	res := make(map[string]*CacheRecord, len(cm.cms))
 	var mu sync.Mutex
 	for i, c := range cm.cms {
 		func(i int, c CacheManager) {
 			eg.Go(func() error {
-				recs, err := c.Query(inp, inputIndex, dgst, outputIndex)
+				recs, err := c.Query(inp, inputIndex, dgst, outputIndex, selector)
 				if err != nil {
 					return err
 				}
