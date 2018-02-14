@@ -4,7 +4,7 @@ import (
 	"context"
 	"io/ioutil"
 
-	"github.com/containerd/containerd/fs"
+	"github.com/containerd/continuity/fs"
 	"github.com/moby/buildkit/snapshot"
 )
 

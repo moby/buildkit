@@ -7,6 +7,7 @@ import (
 
 	"github.com/boltdb/bolt"
 	"github.com/containerd/containerd/content/local"
+	"github.com/containerd/containerd/diff/apply"
 	"github.com/containerd/containerd/diff/walking"
 	ctdmetadata "github.com/containerd/containerd/metadata"
 	ctdsnapshot "github.com/containerd/containerd/snapshots"
@@ -63,10 +64,6 @@ func NewWorkerOpt(root string, labels map[string]string) (base.WorkerOpt, error)
 	}
 
 	c = containerdsnapshot.NewContentStore(mdb.ContentStore(), "buildkit", gc)
-	df, err := walking.NewWalkingDiff(c)
-	if err != nil {
-		return opt, err
-	}
 
 	id, err := base.ID(root)
 	if err != nil {
@@ -83,8 +80,8 @@ func NewWorkerOpt(root string, labels map[string]string) (base.WorkerOpt, error)
 		Executor:      exe,
 		Snapshotter:   containerdsnapshot.NewSnapshotter(mdb.Snapshotter("overlayfs"), c, md, "buildkit", gc),
 		ContentStore:  c,
-		Applier:       df,
-		Differ:        df,
+		Applier:       apply.NewFileSystemApplier(c),
+		Differ:        walking.NewWalkingDiff(c),
 		ImageStore:    nil, // explicitly
 	}
 	return opt, nil

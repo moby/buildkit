@@ -38,7 +38,7 @@ type SourceOpt struct {
 	SessionManager *session.Manager
 	Snapshotter    snapshot.Snapshotter
 	ContentStore   content.Store
-	Applier        diff.Differ
+	Applier        diff.Applier
 	CacheAccessor  cache.Accessor
 }
 
@@ -203,9 +203,16 @@ func (p *puller) Snapshot(ctx context.Context) (cache.ImmutableRef, error) {
 		schema1Converter = schema1.NewConverter(p.is.ContentStore, fetcher)
 		handlers = append(handlers, schema1Converter)
 	} else {
+		// Get all the children for a descriptor
+		childrenHandler := images.ChildrenHandler(p.is.ContentStore)
+		// Set any children labels for that content
+		childrenHandler = images.SetChildrenLabels(p.is.ContentStore, childrenHandler)
+		// Filter the childen by the platform
+		childrenHandler = images.FilterPlatform(platforms.Default(), childrenHandler)
+
 		handlers = append(handlers,
 			remotes.FetchHandler(p.is.ContentStore, fetcher),
-			images.ChildrenHandler(p.is.ContentStore, platforms.Default()),
+			childrenHandler,
 		)
 	}
 

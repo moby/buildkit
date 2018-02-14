@@ -25,7 +25,7 @@ type DockerExporter struct {
 }
 
 // Export exports tarball into writer.
-func (de *DockerExporter) Export(ctx context.Context, store content.Store, desc ocispec.Descriptor, writer io.Writer) error {
+func (de *DockerExporter) Export(ctx context.Context, store content.Provider, desc ocispec.Descriptor, writer io.Writer) error {
 	tw := tar.NewWriter(writer)
 	defer tw.Close()
 
@@ -47,8 +47,13 @@ func (de *DockerExporter) Export(ctx context.Context, store content.Store, desc 
 		return nil, nil
 	}
 
+	// Get all the children for a descriptor
+	childrenHandler := images.ChildrenHandler(store)
+	// Filter the childen by the platform
+	childrenHandler = images.FilterPlatform(platforms.Default(), childrenHandler)
+
 	handlers := images.Handlers(
-		images.ChildrenHandler(store, platforms.Default()),
+		childrenHandler,
 		images.HandlerFunc(exportHandler),
 	)
 
@@ -124,7 +129,7 @@ func dockerManifestRecord(ctx context.Context, provider content.Provider, desc o
 
 }
 
-func blobRecord(cs content.Store, desc ocispec.Descriptor) tarRecord {
+func blobRecord(cs content.Provider, desc ocispec.Descriptor) tarRecord {
 	path := "blobs/" + desc.Digest.Algorithm().String() + "/" + desc.Digest.Hex()
 	return tarRecord{
 		Header: &tar.Header{

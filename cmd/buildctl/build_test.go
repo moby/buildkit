@@ -11,8 +11,8 @@ import (
 	"testing"
 
 	"github.com/containerd/containerd"
-	"github.com/containerd/containerd/fs/fstest"
 	"github.com/containerd/containerd/namespaces"
+	"github.com/containerd/continuity/fs/fstest"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/stretchr/testify/require"

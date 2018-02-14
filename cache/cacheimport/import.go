@@ -33,7 +33,7 @@ type ImportOpt struct {
 	SessionManager *session.Manager
 	ContentStore   content.Store
 	Snapshotter    snapshot.Snapshotter
-	Applier        diff.Differ
+	Applier        diff.Applier
 	CacheAccessor  cache.Accessor
 }
 

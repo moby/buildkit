@@ -50,8 +50,8 @@ type WorkerOpt struct {
 	Executor       executor.Executor
 	Snapshotter    snapshot.Snapshotter
 	ContentStore   content.Store
-	Applier        diff.Differ
-	Differ         diff.Differ
+	Applier        diff.Applier
+	Differ         diff.Comparer
 	ImageStore     images.Store // optional
 }
 

@@ -22,7 +22,6 @@ import (
 	"github.com/containerd/containerd/containers"
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/dialer"
-	"github.com/containerd/containerd/diff"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/namespaces"
@@ -235,10 +234,17 @@ func (c *Client) Pull(ctx context.Context, ref string, opts ...RemoteOpt) (Image
 		schema1Converter = schema1.NewConverter(store, fetcher)
 		handler = images.Handlers(append(pullCtx.BaseHandlers, schema1Converter)...)
 	} else {
+		// Get all the children for a descriptor
+		childrenHandler := images.ChildrenHandler(store)
+		// Set any children labels for that content
+		childrenHandler = images.SetChildrenLabels(store, childrenHandler)
+		// Filter the childen by the platform
+		childrenHandler = images.FilterPlatform(platforms.Default(), childrenHandler)
+
 		handler = images.Handlers(append(pullCtx.BaseHandlers,
 			remotes.FetchHandler(store, fetcher),
-			images.ChildrenHandler(store, platforms.Default()))...,
-		)
+			childrenHandler,
+		)...)
 	}
 
 	if err := images.Dispatch(ctx, handler, desc); err != nil {
@@ -412,7 +418,7 @@ func (c *Client) ImageService() images.Store {
 }
 
 // DiffService returns the underlying Differ
-func (c *Client) DiffService() diff.Differ {
+func (c *Client) DiffService() DiffService {
 	return NewDiffServiceFromClient(diffapi.NewDiffClient(c.conn))
 }
 

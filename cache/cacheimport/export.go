@@ -33,7 +33,7 @@ type CacheRecord struct {
 type ExporterOpt struct {
 	Snapshotter    snapshot.Snapshotter
 	ContentStore   content.Store
-	Differ         diff.Differ
+	Differ         diff.Comparer
 	SessionManager *session.Manager
 }
 
