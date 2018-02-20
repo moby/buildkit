@@ -38,7 +38,7 @@ func TestRuncWorker(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
-	workerOpt, err := NewWorkerOpt(tmpdir, nil)
+	workerOpt, err := NewWorkerOpt(tmpdir, nil, "overlayfs")
 	require.NoError(t, err)
 
 	workerOpt.SessionManager, err = session.NewManager()

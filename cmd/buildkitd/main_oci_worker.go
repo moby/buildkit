@@ -27,6 +27,12 @@ func init() {
 			Name:  "oci-worker-labels",
 			Usage: "user-specific annotation labels (com.example.foo=bar)",
 		},
+		cli.StringFlag{
+			Name:  "oci-worker-snapshotter",
+			Usage: "name of snapshotter (overlayfs or naive)",
+			// TODO(AkihiroSuda): autodetect overlayfs availability when the value is set to "auto"?
+			Value: "overlayfs",
+		},
 	)
 	// TODO: allow multiple oci runtimes and snapshotters
 }
@@ -43,7 +49,7 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 	if err != nil {
 		return nil, err
 	}
-	opt, err := runc.NewWorkerOpt(common.root, labels)
+	opt, err := runc.NewWorkerOpt(common.root, labels, c.GlobalString("oci-worker-snapshotter"))
 	if err != nil {
 		return nil, err
 	}
