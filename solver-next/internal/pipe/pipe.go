@@ -10,7 +10,6 @@ import (
 
 type channel struct {
 	OnSendCompletion func()
-	mu               sync.Mutex
 	value            atomic.Value
 	lastValue        interface{}
 }

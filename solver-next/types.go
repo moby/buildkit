@@ -5,7 +5,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/containerd/containerd/content"
 	digest "github.com/opencontainers/go-digest"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 // Vertex is one node in the build graph
@@ -48,8 +50,36 @@ type Result interface {
 // CachedResult is a result connected with its cache key
 type CachedResult interface {
 	Result
-	CacheKey() CacheKey
-	// ExportCache(context.Context, content.Store) (*ocispec.Descriptor, error)
+	CacheKey() ExportableCacheKey
+	Export(ctx context.Context, converter func(context.Context, Result) (*Remote, error)) ([]ExportRecord, error)
+}
+
+// Exporter can export the artifacts of the build chain
+type Exporter interface {
+	Export(ctx context.Context, m map[digest.Digest]*ExportRecord, converter func(context.Context, Result) (*Remote, error)) (*ExportRecord, error)
+}
+
+// ExportRecord defines a single record in the exported cache chain
+type ExportRecord struct {
+	Digest digest.Digest
+	Links  map[CacheLink]struct{}
+	Remote *Remote
+}
+
+// Remote is a descriptor or a list of stacked descriptors that can be pulled
+// from a content provider
+type Remote struct {
+	Descriptors []ocispec.Descriptor
+	Provider    content.Provider
+}
+
+// CacheLink is a link between two cache records
+type CacheLink struct {
+	Source   digest.Digest
+	Input    Index
+	Output   Index
+	Base     digest.Digest
+	Selector digest.Digest
 }
 
 // Op is an implementation for running a vertex
@@ -75,6 +105,13 @@ type CacheMap struct {
 	}
 }
 
+// ExportableCacheKey is a cache key connected with an exporter that can export
+// a chain of cacherecords pointing to that key
+type ExportableCacheKey struct {
+	CacheKey
+	Exporter
+}
+
 // CacheKey is an identifier for storing/loading build cache
 type CacheKey interface {
 	// Deps are dependant cache keys
@@ -91,7 +128,7 @@ type CacheKey interface {
 // CacheRecord is an identifier for loading in cache
 type CacheRecord struct {
 	ID           string
-	CacheKey     CacheKey
+	CacheKey     ExportableCacheKey
 	CacheManager CacheManager
 	// Loadable bool
 	// Size int
@@ -106,11 +143,11 @@ type CacheManager interface {
 	ID() string
 	// Query searches for cache paths from one cache key to the output of a
 	// possible match.
-	Query(inp []CacheKey, inputIndex Index, dgst digest.Digest, outputIndex Index, selector digest.Digest) ([]*CacheRecord, error)
+	Query(inp []ExportableCacheKey, inputIndex Index, dgst digest.Digest, outputIndex Index, selector digest.Digest) ([]*CacheRecord, error)
 	// Load pulls and returns the cached result
 	Load(ctx context.Context, rec *CacheRecord) (Result, error)
 	// Save saves a result based on a cache key
-	Save(key CacheKey, s Result) (CacheKey, error)
+	Save(key CacheKey, s Result) (ExportableCacheKey, error)
 }
 
 // NewCacheKey creates a new cache key for a specific output index
@@ -127,7 +164,7 @@ func NewCacheKey(dgst digest.Digest, index Index, deps []CacheKeyWithSelector) C
 // Used to limit the matches for dependency cache key.
 type CacheKeyWithSelector struct {
 	Selector digest.Digest
-	CacheKey CacheKey
+	CacheKey ExportableCacheKey
 }
 
 type cacheKey struct {
@@ -156,4 +193,8 @@ func (ck *cacheKey) Digest() digest.Digest {
 
 func (ck *cacheKey) Output() Index {
 	return ck.index
+}
+
+func (ck *cacheKey) Export(ctx context.Context, converter func(context.Context, Result) ([]ocispec.Descriptor, content.Provider, error)) ([]ExportRecord, content.Provider, error) {
+	return nil, nil, nil
 }
