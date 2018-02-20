@@ -15,14 +15,18 @@ import (
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/executor/runcexecutor"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
+	"github.com/moby/buildkit/util/network"
 	"github.com/moby/buildkit/worker/base"
 )
 
 // NewWorkerOpt creates a WorkerOpt.
 // But it does not set the following fields:
 //  - SessionManager
-func NewWorkerOpt(root string, labels map[string]string) (base.WorkerOpt, error) {
+func NewWorkerOpt(root string, labels map[string]string, bridge string) (base.WorkerOpt, error) {
 	var opt base.WorkerOpt
+
+	bridgeProvider, _ := network.InitBridgeProvider(bridge)
+
 	name := "runc-overlayfs"
 	root = filepath.Join(root, name)
 	if err := os.MkdirAll(root, 0700); err != nil {
@@ -32,7 +36,8 @@ func NewWorkerOpt(root string, labels map[string]string) (base.WorkerOpt, error)
 	if err != nil {
 		return opt, err
 	}
-	exe, err := runcexecutor.New(filepath.Join(root, "executor"))
+
+	exe, err := runcexecutor.New(filepath.Join(root, "executor"), bridgeProvider)
 	if err != nil {
 		return opt, err
 	}

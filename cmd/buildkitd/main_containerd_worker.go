@@ -41,6 +41,7 @@ func init() {
 
 func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker.Worker, error) {
 	socket := c.GlobalString("containerd-worker-addr")
+	bridge := c.GlobalString("bridge")
 	boolOrAuto, err := parseBoolOrAuto(c.GlobalString("containerd-worker"))
 	if err != nil {
 		return nil, err
@@ -52,7 +53,7 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 	if err != nil {
 		return nil, err
 	}
-	opt, err := containerd.NewWorkerOpt(common.root, socket, ctd.DefaultSnapshotter, labels)
+	opt, err := containerd.NewWorkerOpt(common.root, socket, ctd.DefaultSnapshotter, labels, bridge)
 	if err != nil {
 		return nil, err
 	}
