@@ -104,22 +104,17 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 
 	// fill dependencies to stages so unreachable ones can avoid loading image configs
 	for _, d := range allDispatchStates {
-		for _, cmd := range d.stage.Commands {
-			if c, ok := cmd.(*instructions.CopyCommand); ok {
-				if c.From != "" {
-					index, err := strconv.Atoi(c.From)
-					if err != nil {
-						stn, ok := dispatchStatesByName[strings.ToLower(c.From)]
-						if !ok {
-							return nil, nil, errors.Errorf("stage %s not found", c.From)
-						}
-						d.deps[stn] = struct{}{}
-					} else {
-						if index < 0 || index >= len(allDispatchStates) {
-							return nil, nil, errors.Errorf("invalid stage index %d", index)
-						}
-						d.deps[allDispatchStates[index]] = struct{}{}
-					}
+		d.commands = make([]command, len(d.stage.Commands))
+		for i, cmd := range d.stage.Commands {
+			newCmd, created, err := toCommand(cmd, dispatchStatesByName, allDispatchStates)
+			if err != nil {
+				return nil, nil, err
+			}
+			d.commands[i] = newCmd
+			if newCmd.copySource != nil {
+				d.deps[newCmd.copySource] = struct{}{}
+				if created {
+					allDispatchStates = append(allDispatchStates, newCmd.copySource)
 				}
 			}
 		}
@@ -218,7 +213,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 			return nil, nil, err
 		}
 
-		for _, cmd := range d.stage.Commands {
+		for _, cmd := range d.commands {
 			if err := dispatch(d, cmd, opt); err != nil {
 				return nil, nil, err
 			}
@@ -226,6 +221,34 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 	}
 
 	return &target.state, &target.image, nil
+}
+
+func toCommand(ic instructions.Command, dispatchStatesByName map[string]*dispatchState, allDispatchStates []*dispatchState) (command, bool, error) {
+	cmd := command{Command: ic}
+	created := false
+	if c, ok := ic.(*instructions.CopyCommand); ok {
+		if c.From != "" {
+			var stn *dispatchState
+			index, err := strconv.Atoi(c.From)
+			if err != nil {
+				stn, ok = dispatchStatesByName[strings.ToLower(c.From)]
+				if !ok {
+					stn = &dispatchState{
+						stage: instructions.Stage{BaseName: c.From},
+						deps:  make(map[*dispatchState]struct{}),
+					}
+					created = true
+				}
+			} else {
+				if index < 0 || index >= len(allDispatchStates) {
+					return command{}, false, errors.Errorf("invalid stage index %d", index)
+				}
+				stn = allDispatchStates[index]
+			}
+			cmd.copySource = stn
+		}
+	}
+	return cmd, created, nil
 }
 
 type dispatchOpt struct {
@@ -238,8 +261,8 @@ type dispatchOpt struct {
 	buildContext         llb.State
 }
 
-func dispatch(d *dispatchState, cmd instructions.Command, opt dispatchOpt) error {
-	if ex, ok := cmd.(instructions.SupportsSingleWordExpansion); ok {
+func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
+	if ex, ok := cmd.Command.(instructions.SupportsSingleWordExpansion); ok {
 		err := ex.Expand(func(word string) (string, error) {
 			return opt.shlex.ProcessWord(word, toEnvList(d.buildArgs, d.image.Config.Env))
 		})
@@ -249,7 +272,7 @@ func dispatch(d *dispatchState, cmd instructions.Command, opt dispatchOpt) error
 	}
 
 	var err error
-	switch c := cmd.(type) {
+	switch c := cmd.Command.(type) {
 	case *instructions.MaintainerCommand:
 		err = dispatchMaintainer(d, c)
 	case *instructions.EnvCommand:
@@ -284,20 +307,8 @@ func dispatch(d *dispatchState, cmd instructions.Command, opt dispatchOpt) error
 		err = dispatchArg(d, c, opt.metaArgs, opt.buildArgValues)
 	case *instructions.CopyCommand:
 		l := opt.buildContext
-		if c.From != "" {
-			index, err := strconv.Atoi(c.From)
-			if err != nil {
-				stn, ok := opt.dispatchStatesByName[strings.ToLower(c.From)]
-				if !ok {
-					return errors.Errorf("stage %s not found", c.From)
-				}
-				l = stn.state
-			} else {
-				if index >= len(opt.allDispatchStates) {
-					return errors.Errorf("invalid stage index %d", index)
-				}
-				l = opt.allDispatchStates[index].state
-			}
+		if cmd.copySource != nil {
+			l = cmd.copySource.state
 		}
 		err = dispatchCopy(d, c.SourcesAndDest, l, false, c, c.Chown)
 	default:
@@ -312,6 +323,12 @@ type dispatchState struct {
 	base      *dispatchState
 	deps      map[*dispatchState]struct{}
 	buildArgs []instructions.ArgCommand
+	commands  []command
+}
+
+type command struct {
+	instructions.Command
+	copySource *dispatchState
 }
 
 func dispatchOnBuild(d *dispatchState, triggers []string, opt dispatchOpt) error {
@@ -323,7 +340,11 @@ func dispatchOnBuild(d *dispatchState, triggers []string, opt dispatchOpt) error
 		if len(ast.AST.Children) != 1 {
 			return errors.New("onbuild trigger should be a single expression")
 		}
-		cmd, err := instructions.ParseCommand(ast.AST.Children[0])
+		ic, err := instructions.ParseCommand(ast.AST.Children[0])
+		if err != nil {
+			return err
+		}
+		cmd, _, err := toCommand(ic, opt.dispatchStatesByName, opt.allDispatchStates)
 		if err != nil {
 			return err
 		}

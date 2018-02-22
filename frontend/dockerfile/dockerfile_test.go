@@ -48,6 +48,7 @@ func TestIntegration(t *testing.T) {
 		testCopyChown,
 		testCopyWildcards,
 		testCopyOverrideFiles,
+		testMultiStageImplicitFrom,
 	})
 }
 
@@ -1045,6 +1046,83 @@ COPY --from=build foo bar2
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "bar2"))
 	require.NoError(t, err)
 	require.Equal(t, "fromgit", string(dt))
+}
+
+func testMultiStageImplicitFrom(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	dockerfile := []byte(`
+FROM scratch
+COPY --from=busybox /etc/passwd test
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	err = c.Solve(context.TODO(), nil, client.SolveOpt{
+		Frontend: "dockerfile.v0",
+		Exporter: client.ExporterLocal,
+		ExporterAttrs: map[string]string{
+			"output": destDir,
+		},
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "test"))
+	require.NoError(t, err)
+	require.Contains(t, string(dt), "root")
+
+	// testing masked image will load actual stage
+
+	dockerfile = []byte(`
+FROM busybox AS golang
+RUN mkdir /usr/bin && echo -n foo > /usr/bin/go
+
+FROM scratch
+COPY --from=golang /usr/bin/go go
+`)
+
+	dir, err = tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	destDir, err = ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	err = c.Solve(context.TODO(), nil, client.SolveOpt{
+		Frontend: "dockerfile.v0",
+		Exporter: client.ExporterLocal,
+		ExporterAttrs: map[string]string{
+			"output": destDir,
+		},
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "go"))
+	require.NoError(t, err)
+	require.Contains(t, string(dt), "foo")
 }
 
 func tmpdir(appliers ...fstest.Applier) (string, error) {
