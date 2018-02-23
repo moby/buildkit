@@ -40,6 +40,7 @@ type SourceOpt struct {
 	ContentStore   content.Store
 	Applier        diff.Applier
 	CacheAccessor  cache.Accessor
+	ImageStore     images.Store // optional
 }
 
 type imageSource struct {
@@ -60,10 +61,16 @@ func (is *imageSource) ID() string {
 }
 
 func (is *imageSource) getResolver(ctx context.Context) remotes.Resolver {
-	return docker.NewResolver(docker.ResolverOptions{
+	r := docker.NewResolver(docker.ResolverOptions{
 		Client:      tracing.DefaultClient,
 		Credentials: is.getCredentialsFromSession(ctx),
 	})
+
+	if is.ImageStore == nil {
+		return r
+	}
+
+	return localFallbackResolver{r, is.ImageStore}
 }
 
 func (is *imageSource) getCredentialsFromSession(ctx context.Context) func(string) (string, string, error) {
@@ -115,6 +122,36 @@ func (is *imageSource) Resolve(ctx context.Context, id source.Identifier) (sourc
 		resolver: is.getResolver(ctx),
 	}
 	return p, nil
+}
+
+// A remotes.Resolver which checks the local image store if the real
+// resolver cannot find the image, essentially falling back to a local
+// image if one is present.
+//
+// We do not override the Fetcher or Pusher methods:
+//
+// - Fetcher is called by github.com/containerd/containerd/remotes/:fetch()
+//   only after it has checked for the content locally, so avoid the
+//   hassle of interposing a local-fetch proxy and simply pass on the
+//   request.
+// - Pusher wouldn't make sense to push locally, so just forward.
+
+type localFallbackResolver struct {
+	remotes.Resolver
+	is images.Store
+}
+
+func (r localFallbackResolver) Resolve(ctx context.Context, ref string) (string, ocispec.Descriptor, error) {
+	n, desc, err := r.Resolver.Resolve(ctx, ref)
+	if err == nil {
+		return n, desc, err
+	}
+
+	img, err2 := r.is.Get(ctx, ref)
+	if err2 != nil {
+		return "", ocispec.Descriptor{}, err
+	}
+	return ref, img.Target, nil
 }
 
 type puller struct {
