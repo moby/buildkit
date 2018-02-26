@@ -12,6 +12,7 @@ import (
 	"github.com/moby/buildkit/exporter/containerimage"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/filesync"
+	"github.com/moby/buildkit/util/dockerexporter"
 	"github.com/moby/buildkit/util/progress"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -140,7 +141,7 @@ func getExporter(variant ExporterVariant, name string) (images.Exporter, error) 
 	case VariantOCI:
 		return &oci.V1Exporter{}, nil
 	case VariantDocker:
-		return &DockerExporter{name: name}, nil
+		return &dockerexporter.DockerExporter{Name: name}, nil
 	default:
 		return nil, errors.Errorf("invalid variant %q", variant)
 	}
