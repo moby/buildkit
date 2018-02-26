@@ -258,7 +258,7 @@ func (p *puller) Snapshot(ctx context.Context) (cache.ImmutableRef, error) {
 	}
 
 	for _, nl := range notLayerBlobs {
-		if err := p.is.ContentStore.Delete(ctx, nl.Digest); err != nil {
+		if err := p.is.ContentStore.Delete(ctx, nl.Digest); err != nil && !errdefs.IsNotFound(err) {
 			return nil, err
 		}
 	}
