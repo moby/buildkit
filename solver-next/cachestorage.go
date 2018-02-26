@@ -13,7 +13,7 @@ var ErrNotFound = errors.Errorf("not found")
 // CacheKeyStorage is interface for persisting cache metadata
 type CacheKeyStorage interface {
 	Get(id string) (CacheKeyInfo, error)
-	Set(id string, info CacheKeyInfo) error
+	Set(info CacheKeyInfo) error
 
 	WalkResults(id string, fn func(CacheResult) error) error
 	Load(id string, resultID string) (CacheResult, error)
@@ -47,9 +47,10 @@ type CacheResult struct {
 
 // CacheInfoLink is a link between two cache keys
 type CacheInfoLink struct {
-	Input, Output Index
-	Digest        digest.Digest
-	Selector      digest.Digest
+	Input    Index         `json:"Input,omitempty"`
+	Output   Index         `json:"Output,omitempty"`
+	Digest   digest.Digest `json:"Digest,omitempty"`
+	Selector digest.Digest `json:"Selector,omitempty"`
 }
 
 // CacheResultStorage is interface for converting cache metadata result to

@@ -34,16 +34,16 @@ func (s *inMemoryStore) Get(id string) (CacheKeyInfo, error) {
 	return k.CacheKeyInfo, nil
 }
 
-func (s *inMemoryStore) Set(id string, info CacheKeyInfo) error {
+func (s *inMemoryStore) Set(info CacheKeyInfo) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	k, ok := s.byID[id]
+	k, ok := s.byID[info.ID]
 	if !ok {
 		k = &inMemoryKey{
 			results: map[string]CacheResult{},
 			links:   map[CacheInfoLink]map[string]struct{}{},
 		}
-		s.byID[id] = k
+		s.byID[info.ID] = k
 	}
 	k.CacheKeyInfo = info
 	return nil
