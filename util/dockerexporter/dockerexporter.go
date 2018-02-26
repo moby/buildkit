@@ -1,4 +1,4 @@
-package oci
+package dockerexporter
 
 import (
 	"archive/tar"
@@ -16,20 +16,22 @@ import (
 	"github.com/pkg/errors"
 )
 
-// DockerExporter implements exporting to
+// DockerExporter implements containerd/images.Exporter to
 // Docker Combined Image JSON + Filesystem Changeset Format v1.1
 // https://github.com/moby/moby/blob/master/image/spec/v1.1.md#combined-image-json--filesystem-changeset-format
 // The outputed tarball is also compatible wih OCI Image Format Specification
 type DockerExporter struct {
-	name string
+	Name string
 }
+
+var _ images.Exporter = &DockerExporter{}
 
 // Export exports tarball into writer.
 func (de *DockerExporter) Export(ctx context.Context, store content.Provider, desc ocispec.Descriptor, writer io.Writer) error {
 	tw := tar.NewWriter(writer)
 	defer tw.Close()
 
-	dockerManifest, err := dockerManifestRecord(ctx, store, desc, de.name)
+	dockerManifest, err := dockerManifestRecord(ctx, store, desc, de.Name)
 	if err != nil {
 		return err
 	}
