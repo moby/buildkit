@@ -11,30 +11,24 @@ import (
 	"github.com/containerd/containerd/diff/walking"
 	ctdmetadata "github.com/containerd/containerd/metadata"
 	ctdsnapshot "github.com/containerd/containerd/snapshots"
-	"github.com/containerd/containerd/snapshots/naive"
-	"github.com/containerd/containerd/snapshots/overlay"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/executor/runcexecutor"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/worker/base"
-	"github.com/pkg/errors"
 )
+
+// SnapshotterFactory instantiates a snapshotter
+type SnapshotterFactory struct {
+	Name string
+	New  func(root string) (ctdsnapshot.Snapshotter, error)
+}
 
 // NewWorkerOpt creates a WorkerOpt.
 // But it does not set the following fields:
 //  - SessionManager
-func NewWorkerOpt(root string, labels map[string]string, snapshotterName string) (base.WorkerOpt, error) {
+func NewWorkerOpt(root string, snFactory SnapshotterFactory, labels map[string]string) (base.WorkerOpt, error) {
 	var opt base.WorkerOpt
-	var snapshotterNew func(root string) (ctdsnapshot.Snapshotter, error)
-	switch snapshotterName {
-	case "naive":
-		snapshotterNew = naive.NewSnapshotter
-	case "overlayfs": // not "overlay", for consistency with containerd snapshotter plugin ID.
-		snapshotterNew = overlay.NewSnapshotter
-	default:
-		return opt, errors.Errorf("unknown snapshotter name: %q", snapshotterName)
-	}
-	name := "runc-" + snapshotterName
+	name := "runc-" + snFactory.Name
 	root = filepath.Join(root, name)
 	if err := os.MkdirAll(root, 0700); err != nil {
 		return opt, err
@@ -47,7 +41,7 @@ func NewWorkerOpt(root string, labels map[string]string, snapshotterName string)
 	if err != nil {
 		return opt, err
 	}
-	s, err := snapshotterNew(filepath.Join(root, "snapshots"))
+	s, err := snFactory.New(filepath.Join(root, "snapshots"))
 	if err != nil {
 		return opt, err
 	}
@@ -63,7 +57,7 @@ func NewWorkerOpt(root string, labels map[string]string, snapshotterName string)
 	}
 
 	mdb := ctdmetadata.NewDB(db, c, map[string]ctdsnapshot.Snapshotter{
-		snapshotterName: s,
+		snFactory.Name: s,
 	})
 	if err := mdb.Init(context.TODO()); err != nil {
 		return opt, err
@@ -80,7 +74,7 @@ func NewWorkerOpt(root string, labels map[string]string, snapshotterName string)
 	if err != nil {
 		return opt, err
 	}
-	xlabels := base.Labels("oci", snapshotterName)
+	xlabels := base.Labels("oci", snFactory.Name)
 	for k, v := range labels {
 		xlabels[k] = v
 	}
@@ -89,7 +83,7 @@ func NewWorkerOpt(root string, labels map[string]string, snapshotterName string)
 		Labels:        xlabels,
 		MetadataStore: md,
 		Executor:      exe,
-		Snapshotter:   containerdsnapshot.NewSnapshotter(mdb.Snapshotter(snapshotterName), c, md, "buildkit", gc),
+		Snapshotter:   containerdsnapshot.NewSnapshotter(mdb.Snapshotter(snFactory.Name), c, md, "buildkit", gc),
 		ContentStore:  c,
 		Applier:       apply.NewFileSystemApplier(c),
 		Differ:        walking.NewWalkingDiff(c),

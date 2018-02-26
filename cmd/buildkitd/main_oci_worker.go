@@ -5,9 +5,12 @@ package main
 import (
 	"os/exec"
 
+	"github.com/containerd/containerd/snapshots/naive"
+	"github.com/containerd/containerd/snapshots/overlay"
 	"github.com/moby/buildkit/worker"
 	"github.com/moby/buildkit/worker/base"
 	"github.com/moby/buildkit/worker/runc"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )
@@ -49,7 +52,11 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 	if err != nil {
 		return nil, err
 	}
-	opt, err := runc.NewWorkerOpt(common.root, labels, c.GlobalString("oci-worker-snapshotter"))
+	snFactory, err := snapshotterFactory(c.GlobalString("oci-worker-snapshotter"))
+	if err != nil {
+		return nil, err
+	}
+	opt, err := runc.NewWorkerOpt(common.root, snFactory, labels)
 	if err != nil {
 		return nil, err
 	}
@@ -59,6 +66,22 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 		return nil, err
 	}
 	return []worker.Worker{w}, nil
+}
+
+func snapshotterFactory(name string) (runc.SnapshotterFactory, error) {
+	snFactory := runc.SnapshotterFactory{
+		Name: name,
+	}
+	var err error
+	switch name {
+	case "naive":
+		snFactory.New = naive.NewSnapshotter
+	case "overlayfs": // not "overlay", for consistency with containerd snapshotter plugin ID.
+		snFactory.New = overlay.NewSnapshotter
+	default:
+		err = errors.Errorf("unknown snapshotter name: %q", name)
+	}
+	return snFactory, err
 }
 
 func validOCIBinary() bool {

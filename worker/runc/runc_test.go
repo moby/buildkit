@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/containerd/containerd/namespaces"
+	"github.com/containerd/containerd/snapshots/overlay"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/session"
@@ -38,7 +39,11 @@ func TestRuncWorker(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
-	workerOpt, err := NewWorkerOpt(tmpdir, nil, "overlayfs")
+	snFactory := SnapshotterFactory{
+		Name: "overlayfs",
+		New:  overlay.NewSnapshotter,
+	}
+	workerOpt, err := NewWorkerOpt(tmpdir, snFactory, nil)
 	require.NoError(t, err)
 
 	workerOpt.SessionManager, err = session.NewManager()
