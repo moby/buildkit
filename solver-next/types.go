@@ -130,7 +130,7 @@ type CacheRecord struct {
 	ID           string
 	CacheKey     ExportableCacheKey
 	CacheManager CacheManager
-	// Loadable bool
+	Loadable     bool
 	// Size int
 	CreatedAt time.Time
 	Priority  int

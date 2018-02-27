@@ -17,6 +17,8 @@ func RunCacheStorageTests(t *testing.T, st func() (CacheKeyStorage, func())) {
 		testGetSet,
 		testResults,
 		testLinks,
+		testResultReleaseSingleLevel,
+		testResultReleaseMultiLevel,
 	} {
 		runStorageTest(t, tc, st)
 	}
@@ -144,13 +146,18 @@ func testLinks(t *testing.T, st CacheKeyStorage) {
 	err = st.Set(cki2)
 	require.NoError(t, err)
 
+	require.NoError(t, st.Set(CacheKeyInfo{ID: "target0"}))
+	require.NoError(t, st.Set(CacheKeyInfo{ID: "target0-second"}))
+	require.NoError(t, st.Set(CacheKeyInfo{ID: "target1"}))
+	require.NoError(t, st.Set(CacheKeyInfo{ID: "target1-second"}))
+
 	l0 := CacheInfoLink{
 		Input: 0, Output: 1, Digest: digest.FromBytes([]byte(">target0")),
 	}
 	err = st.AddLink(cki.ID, l0, "target0")
 	require.NoError(t, err)
 
-	err = st.AddLink(cki2.ID, l0, "target0-bar")
+	err = st.AddLink(cki2.ID, l0, "target0-second")
 	require.NoError(t, err)
 
 	m := map[string]struct{}{}
@@ -203,6 +210,176 @@ func testLinks(t *testing.T, st CacheKeyStorage) {
 	require.True(t, ok)
 	_, ok = m["target1-second"]
 	require.True(t, ok)
+}
+
+func testResultReleaseSingleLevel(t *testing.T, st CacheKeyStorage) {
+	t.Parallel()
+	cki := CacheKeyInfo{
+		ID:   "foo",
+		Base: digest.FromBytes([]byte("foo")),
+	}
+	err := st.Set(cki)
+	require.NoError(t, err)
+
+	err = st.AddResult(cki.ID, CacheResult{
+		ID:        "foo0",
+		CreatedAt: time.Now(),
+	})
+	require.NoError(t, err)
+
+	err = st.AddResult(cki.ID, CacheResult{
+		ID:        "foo1",
+		CreatedAt: time.Now(),
+	})
+	require.NoError(t, err)
+
+	err = st.Release("foo0")
+	require.NoError(t, err)
+
+	m := map[string]struct{}{}
+	st.WalkResults("foo", func(res CacheResult) error {
+		m[res.ID] = struct{}{}
+		return nil
+	})
+
+	require.Equal(t, len(m), 1)
+	_, ok := m["foo1"]
+	require.True(t, ok)
+
+	err = st.Release("foo1")
+	require.NoError(t, err)
+
+	m = map[string]struct{}{}
+	st.WalkResults("foo", func(res CacheResult) error {
+		m[res.ID] = struct{}{}
+		return nil
+	})
+
+	require.Equal(t, len(m), 0)
+
+	_, err = st.Get("foo")
+	require.Error(t, err)
+	require.Error(t, errors.Cause(err), ErrNotFound)
+}
+
+func testResultReleaseMultiLevel(t *testing.T, st CacheKeyStorage) {
+	t.Parallel()
+	cki := CacheKeyInfo{
+		ID:   "foo",
+		Base: digest.FromBytes([]byte("foo")),
+	}
+	err := st.Set(cki)
+	require.NoError(t, err)
+
+	err = st.AddResult(cki.ID, CacheResult{
+		ID:        "foo-result",
+		CreatedAt: time.Now(),
+	})
+	require.NoError(t, err)
+
+	sub0 := CacheKeyInfo{
+		ID:   "sub0",
+		Base: digest.FromBytes([]byte("sub0")),
+	}
+	err = st.Set(sub0)
+	require.NoError(t, err)
+
+	err = st.AddResult(sub0.ID, CacheResult{
+		ID:        "sub0-result",
+		CreatedAt: time.Now(),
+	})
+	require.NoError(t, err)
+
+	l0 := CacheInfoLink{
+		Input: 0, Output: 1, Digest: digest.FromBytes([]byte("to-sub0")),
+	}
+	err = st.AddLink(cki.ID, l0, "sub0")
+	require.NoError(t, err)
+
+	sub1 := CacheKeyInfo{
+		ID:   "sub1",
+		Base: digest.FromBytes([]byte("sub1")),
+	}
+	err = st.Set(sub1)
+	require.NoError(t, err)
+
+	err = st.AddResult(sub1.ID, CacheResult{
+		ID:        "sub1-result",
+		CreatedAt: time.Now(),
+	})
+	require.NoError(t, err)
+
+	err = st.AddLink(cki.ID, l0, "sub1")
+	require.NoError(t, err)
+
+	// delete one sub doesn't delete parent
+
+	err = st.Release("sub0-result")
+	require.NoError(t, err)
+
+	m := map[string]struct{}{}
+	err = st.WalkResults("foo", func(res CacheResult) error {
+		m[res.ID] = struct{}{}
+		return nil
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, len(m), 1)
+	_, ok := m["foo-result"]
+	require.True(t, ok)
+
+	_, err = st.Get("sub0")
+	require.Error(t, err)
+	require.Equal(t, errors.Cause(err), ErrNotFound)
+
+	m = map[string]struct{}{}
+	err = st.WalkLinks("foo", l0, func(id string) error {
+		m[id] = struct{}{}
+		return nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, len(m), 1)
+
+	_, ok = m["sub1"]
+	require.True(t, ok)
+
+	// release foo removes the result but doesn't break the chain
+
+	err = st.Release("foo-result")
+	require.NoError(t, err)
+
+	_, err = st.Get("foo")
+	require.NoError(t, err)
+
+	m = map[string]struct{}{}
+	err = st.WalkResults("foo", func(res CacheResult) error {
+		m[res.ID] = struct{}{}
+		return nil
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, len(m), 0)
+
+	m = map[string]struct{}{}
+	err = st.WalkLinks("foo", l0, func(id string) error {
+		m[id] = struct{}{}
+		return nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, len(m), 1)
+
+	// release sub1 now releases foo as well
+
+	err = st.Release("sub1-result")
+	require.NoError(t, err)
+
+	_, err = st.Get("sub1")
+	require.Error(t, err)
+	require.Equal(t, errors.Cause(err), ErrNotFound)
+
+	_, err = st.Get("foo")
+	require.Error(t, err)
+	require.Equal(t, errors.Cause(err), ErrNotFound)
 }
 
 func getFunctionName(i interface{}) string {

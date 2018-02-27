@@ -302,7 +302,9 @@ func (e *edge) processUpdate(upt pipe.Receiver) (depChanged bool) {
 						logrus.Error(errors.Wrap(err, "invalid query response")) // make the build fail for this error
 					} else {
 						for _, r := range records {
-							e.cacheRecords[r.ID] = r
+							if r.Loadable {
+								e.cacheRecords[r.ID] = r
+							}
 						}
 						if len(records) > 0 {
 							e.keys = append(e.keys, records[0].CacheKey)
@@ -423,7 +425,9 @@ func (e *edge) recalcCurrentState() {
 
 	for k, r := range newRecords {
 		e.keys = append(e.keys, r.CacheKey)
-		e.cacheRecords[k] = r
+		if r.Loadable {
+			e.cacheRecords[k] = r
+		}
 	}
 
 	// detect lower/upper bound for current state
@@ -622,7 +626,7 @@ func (e *edge) createInputRequests(desiredState edgeStatusType, f *pipeFactory) 
 // execIfPossible creates a request for getting the edge result if there is
 // enough state
 func (e *edge) execIfPossible(f *pipeFactory) {
-	if len(e.keys) > 0 {
+	if len(e.cacheRecords) > 0 {
 		if e.keysDidChange {
 			e.postpone(f)
 			return
@@ -652,6 +656,9 @@ func (e *edge) loadCache(ctx context.Context) (interface{}, error) {
 	var rec *CacheRecord
 
 	for _, r := range e.cacheRecords {
+		if !r.Loadable {
+			continue
+		}
 		if rec == nil || rec.CreatedAt.Before(r.CreatedAt) || (rec.CreatedAt.Equal(r.CreatedAt) && rec.Priority < r.Priority) {
 			rec = r
 		}

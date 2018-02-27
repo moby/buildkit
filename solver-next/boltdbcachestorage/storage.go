@@ -135,7 +135,7 @@ func (s *Store) AddResult(id string, res solver.CacheResult) error {
 	})
 }
 
-func (s *Store) Release(resultID string) error {
+func (s *Store) Release(id, resultID string) error {
 	return errors.Errorf("not-implemented")
 }
 
