@@ -46,7 +46,7 @@ func New(root string) (executor.Executor, error) {
 		return nil, err
 	}
 	if rootInfo.Mode() & os.ModeSymlink != 0 {
-		return nil, fmt.Errorf("%s is a symlink", root)
+		return nil, errors.Errorf("%s is a symlink", root)
     	}
 
 	runtime := &runc.Runc{
