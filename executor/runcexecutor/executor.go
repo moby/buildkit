@@ -47,7 +47,7 @@ func New(root string) (executor.Executor, error) {
 	}
 	if rootInfo.Mode() & os.ModeSymlink != 0 {
 		return nil, errors.Errorf("%s is a symlink", root)
-    	}
+    }
 
 	runtime := &runc.Runc{
 		Log:          filepath.Join(root, "runc-log.json"),
