@@ -4,6 +4,9 @@
 /*
 	Package pb is a generated protocol buffer package.
 
+	Package pb provides the protobuf definition of LLB: low-level builder instruction.
+	LLB is DAG-structured; Op represents a vertex, and Definition represents a graph.
+
 	It is generated from these files:
 		ops.proto
 
@@ -44,7 +47,9 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
+// Op represents a vertex of the LLB DAG.
 type Op struct {
+	// inputs is a set of input edges.
 	Inputs []*Input `protobuf:"bytes,1,rep,name=inputs" json:"inputs,omitempty"`
 	// Types that are valid to be assigned to Op:
 	//	*Op_Exec
@@ -237,9 +242,12 @@ func _Op_OneofSizer(msg proto.Message) (n int) {
 	return n
 }
 
+// Input represents an input edge for an Op.
 type Input struct {
+	// digest of the marshaled input Op
 	Digest github_com_opencontainers_go_digest.Digest `protobuf:"bytes,1,opt,name=digest,proto3,customtype=github.com/opencontainers/go-digest.Digest" json:"digest"`
-	Index  OutputIndex                                `protobuf:"varint,2,opt,name=index,proto3,customtype=OutputIndex" json:"index"`
+	// output index of the input Op
+	Index OutputIndex `protobuf:"varint,2,opt,name=index,proto3,customtype=OutputIndex" json:"index"`
 }
 
 func (m *Input) Reset()                    { *m = Input{} }
@@ -247,6 +255,7 @@ func (m *Input) String() string            { return proto.CompactTextString(m) }
 func (*Input) ProtoMessage()               {}
 func (*Input) Descriptor() ([]byte, []int) { return fileDescriptorOps, []int{1} }
 
+// ExecOp executes a command in a container.
 type ExecOp struct {
 	Meta   *Meta    `protobuf:"bytes,1,opt,name=meta" json:"meta,omitempty"`
 	Mounts []*Mount `protobuf:"bytes,2,rep,name=mounts" json:"mounts,omitempty"`
@@ -271,6 +280,7 @@ func (m *ExecOp) GetMounts() []*Mount {
 	return nil
 }
 
+// Meta is a set of arguments for ExecOp.
 // Meta is unrelated to LLB metadata.
 // FIXME: rename (ExecContext? ExecArgs?)
 type Meta struct {
@@ -313,6 +323,7 @@ func (m *Meta) GetUser() string {
 	return ""
 }
 
+// Mount specifies how to mount an input Op as a filesystem.
 type Mount struct {
 	Input    InputIndex  `protobuf:"varint,1,opt,name=input,proto3,customtype=InputIndex" json:"input"`
 	Selector string      `protobuf:"bytes,2,opt,name=selector,proto3" json:"selector,omitempty"`
@@ -347,6 +358,7 @@ func (m *Mount) GetReadonly() bool {
 	return false
 }
 
+// CopyOp copies files across Ops.
 type CopyOp struct {
 	Src  []*CopySource `protobuf:"bytes,1,rep,name=src" json:"src,omitempty"`
 	Dest string        `protobuf:"bytes,2,opt,name=dest,proto3" json:"dest,omitempty"`
@@ -371,6 +383,7 @@ func (m *CopyOp) GetDest() string {
 	return ""
 }
 
+// CopySource specifies a source for CopyOp.
 type CopySource struct {
 	Input    InputIndex `protobuf:"varint,1,opt,name=input,proto3,customtype=InputIndex" json:"input"`
 	Selector string     `protobuf:"bytes,2,opt,name=selector,proto3" json:"selector,omitempty"`
@@ -388,10 +401,13 @@ func (m *CopySource) GetSelector() string {
 	return ""
 }
 
+// SourceOp specifies a source such as build contexts and images.
 type SourceOp struct {
-	// source type?
-	Identifier string            `protobuf:"bytes,1,opt,name=identifier,proto3" json:"identifier,omitempty"`
-	Attrs      map[string]string `protobuf:"bytes,2,rep,name=attrs" json:"attrs,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	// TODO: use source type or any type instead of URL protocol.
+	// identifier e.g. local://, docker-image://, git://, https://...
+	Identifier string `protobuf:"bytes,1,opt,name=identifier,proto3" json:"identifier,omitempty"`
+	// attrs are defined in attr.go
+	Attrs map[string]string `protobuf:"bytes,2,rep,name=attrs" json:"attrs,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 }
 
 func (m *SourceOp) Reset()                    { *m = SourceOp{} }
@@ -413,6 +429,7 @@ func (m *SourceOp) GetAttrs() map[string]string {
 	return nil
 }
 
+// BuildOp is used for nested build invocation.
 type BuildOp struct {
 	Builder InputIndex             `protobuf:"varint,1,opt,name=builder,proto3,customtype=InputIndex" json:"builder"`
 	Inputs  map[string]*BuildInput `protobuf:"bytes,2,rep,name=inputs" json:"inputs,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`
@@ -446,6 +463,7 @@ func (m *BuildOp) GetAttrs() map[string]string {
 	return nil
 }
 
+// BuildInput is used for BuildOp.
 type BuildInput struct {
 	Input InputIndex `protobuf:"varint,1,opt,name=input,proto3,customtype=InputIndex" json:"input"`
 }
@@ -455,8 +473,9 @@ func (m *BuildInput) String() string            { return proto.CompactTextString
 func (*BuildInput) ProtoMessage()               {}
 func (*BuildInput) Descriptor() ([]byte, []int) { return fileDescriptorOps, []int{9} }
 
-// OpMetadata is a per-vertex metadata entry, which can be defined for arbitrary Op vertex by both "script" and build client (e.g. buildctl).
+// OpMetadata is a per-vertex metadata entry, which can be defined for arbitrary Op vertex and overridable on the run time.
 type OpMetadata struct {
+	// ignore_cache specifies to ignore the cache for this Op.
 	IgnoreCache bool `protobuf:"varint,1,opt,name=ignore_cache,json=ignoreCache,proto3" json:"ignore_cache,omitempty"`
 	// Description can be used for keeping any text fields that builder doesn't parse
 	Description      map[string]string `protobuf:"bytes,2,rep,name=description" json:"description,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
@@ -508,8 +527,10 @@ func (m *WorkerConstraint) GetFilter() []string {
 
 // Definition is the LLB definition structure with per-vertex metadata entries
 type Definition struct {
+	// def is a list of marshaled Op messages
 	Def [][]byte `protobuf:"bytes,1,rep,name=def" json:"def,omitempty"`
-	// key = LLB op digest string. Currently, empty string is not expected but may change in the future.
+	// metadata contains metadata for the each of the Op messages.
+	// A key must be an LLB op digest string. Currently, empty string is not expected as a key, but it may change in the future.
 	Metadata map[github_com_opencontainers_go_digest.Digest]OpMetadata `protobuf:"bytes,2,rep,name=metadata,castkey=github.com/opencontainers/go-digest.Digest" json:"metadata" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`
 }
 

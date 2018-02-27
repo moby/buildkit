@@ -58,7 +58,19 @@ We are open to adding more backends.
 
 #### Exploring LLB
 
-BuildKit builds are based on a binary intermediate format called LLB that is used for defining the dependency graph for processes running part of your build.
+BuildKit builds are based on a binary intermediate format called LLB that is used for defining the dependency graph for processes running part of your build. tl;dr: LLB is to Dockerfile what LLVM IR is to C.
+
+- Marshaled as Protobuf messages
+- Concurrently executable
+- Efficiently cacheable
+- Vendor-neutral (i.e. non-Dockerfile languages can be easily implemented)
+
+See [`solver/pb/ops.proto`](./solver/pb/ops.proto) for the format definition.
+
+Currently, following high-level languages has been implemented for LLB:
+
+- Dockerfile (See [Exploring Dockerfiles](#exploring-dockerfiles))
+- (open a PR to add your own language)
 
 For understanding the basics of LLB, `examples/buildkit*` directory contains scripts that define how to build different configurations of BuildKit itself and its dependencies using the `client` package. Running one of these scripts generates a protobuf definition of a build graph. Note that the script itself does not execute any steps of the build.
 
