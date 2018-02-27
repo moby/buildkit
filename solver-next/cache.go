@@ -364,7 +364,7 @@ func (c *inMemoryCacheManager) getInternalKey(k CacheKey, createIfNotExist bool)
 			Deps:   inputs,
 		}
 
-		if err := c.backend.Set(cki.ID, cki); err != nil {
+		if err := c.backend.Set(cki); err != nil {
 			return nil, err
 		}
 
