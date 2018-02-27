@@ -145,16 +145,14 @@ func (s *inMemoryStore) Release(resultID string) error {
 			delete(s.byResult, resultID)
 		}
 
-		if len(k.results) == 0 && len(k.links) == 0 {
-			s.emptyBranchWithParents(k)
-		}
+		s.emptyBranchWithParents(k)
 	}
 
 	return nil
 }
 
 func (s *inMemoryStore) emptyBranchWithParents(k *inMemoryKey) {
-	if len(k.results) != 0 && len(k.links) != 0 {
+	if len(k.results) != 0 || len(k.links) != 0 {
 		return
 	}
 	for id := range k.backlinks {
