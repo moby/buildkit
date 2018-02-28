@@ -13,6 +13,7 @@ var ErrNotFound = errors.Errorf("not found")
 // CacheKeyStorage is interface for persisting cache metadata
 type CacheKeyStorage interface {
 	Get(id string) (CacheKeyInfo, error)
+	Walk(fn func(id string) error) error
 	Set(info CacheKeyInfo) error
 
 	WalkResults(id string, fn func(CacheResult) error) error
@@ -59,4 +60,5 @@ type CacheResultStorage interface {
 	Save(Result) (CacheResult, error)
 	Load(ctx context.Context, res CacheResult) (Result, error)
 	LoadRemote(ctx context.Context, res CacheResult) (*Remote, error)
+	Exists(id string) bool
 }

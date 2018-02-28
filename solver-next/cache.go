@@ -21,11 +21,26 @@ var internalMemoryKey = internalMemoryKeyT("buildkit/memory-cache-id")
 var NoSelector = digest.FromBytes(nil)
 
 func NewInMemoryCacheManager() CacheManager {
-	return &inMemoryCacheManager{
-		id:      identity.NewID(),
-		backend: NewInMemoryCacheStorage(),
-		results: NewInMemoryResultStorage(),
+	return NewCacheManager(identity.NewID(), NewInMemoryCacheStorage(), NewInMemoryResultStorage())
+}
+
+func NewCacheManager(id string, storage CacheKeyStorage, results CacheResultStorage) CacheManager {
+	cm := &inMemoryCacheManager{
+		id:      id,
+		backend: storage,
+		results: results,
 	}
+
+	storage.Walk(func(id string) error {
+		return storage.WalkResults(id, func(cr CacheResult) error {
+			if !results.Exists(cr.ID) {
+				storage.Release(cr.ID)
+			}
+			return nil
+		})
+	})
+
+	return cm
 }
 
 type inMemoryCacheKey struct {
@@ -180,7 +195,7 @@ func (c *inMemoryCacheManager) getBestResult(cki CacheKeyInfo) (*CacheResult, er
 	}
 
 	sort.Slice(results, func(i, j int) bool {
-		return results[i].CreatedAt.Before(results[j].CreatedAt)
+		return results[i].CreatedAt.After(results[j].CreatedAt)
 	})
 
 	if len(results) > 0 {
@@ -243,22 +258,36 @@ func (c *inMemoryCacheManager) Query(deps []ExportableCacheKey, input Index, dgs
 		refs[ck.CacheKeyInfo.ID] = struct{}{}
 	}
 
+	keys := make([]*inMemoryCacheKey, 0)
 	outs := make([]*CacheRecord, 0, len(refs))
 	for id := range refs {
 		cki, err := c.backend.Get(id)
 		if err == nil {
 			k := c.toInMemoryCacheKey(cki)
+			keys = append(keys, k)
 			if err := c.backend.WalkResults(id, func(r CacheResult) error {
 				outs = append(outs, &CacheRecord{
 					ID:           id + "@" + r.ID,
 					CacheKey:     withExporter(k, &r),
 					CacheManager: c,
+					Loadable:     true,
 					CreatedAt:    r.CreatedAt,
 				})
 				return nil
 			}); err != nil {
 				return nil, err
 			}
+		}
+	}
+
+	if len(outs) == 0 {
+		for _, k := range keys {
+			outs = append(outs, &CacheRecord{
+				ID:           k.CacheKeyInfo.ID,
+				CacheKey:     withExporter(k, nil),
+				CacheManager: c,
+				Loadable:     false,
+			})
 		}
 	}
 

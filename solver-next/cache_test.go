@@ -194,6 +194,87 @@ func TestInMemoryCacheSelectorNested(t *testing.T) {
 	require.Equal(t, len(matches), 1)
 }
 
+func TestInMemoryCacheReleaseParent(t *testing.T) {
+	storage := NewInMemoryCacheStorage()
+	results := NewInMemoryResultStorage()
+	m := NewCacheManager(identity.NewID(), storage, results)
+
+	res0 := testResult("result0")
+	cacheFoo, err := m.Save(NewCacheKey(dgst("foo"), 0, nil), res0)
+	require.NoError(t, err)
+
+	res1 := testResult("result1")
+	_, err = m.Save(NewCacheKey(dgst("bar"), 0, []CacheKeyWithSelector{
+		{CacheKey: cacheFoo},
+	}), res1)
+	require.NoError(t, err)
+
+	matches, err := m.Query(nil, 0, dgst("foo"), 0, "")
+	require.NoError(t, err)
+	require.Equal(t, len(matches), 1)
+
+	require.True(t, matches[0].Loadable)
+
+	err = storage.Release(res0.ID())
+	require.NoError(t, err)
+
+	// foo becomes unloadable
+	matches, err = m.Query(nil, 0, dgst("foo"), 0, "")
+	require.NoError(t, err)
+	require.Equal(t, len(matches), 1)
+
+	require.False(t, matches[0].Loadable)
+
+	matches, err = m.Query([]ExportableCacheKey{matches[0].CacheKey}, 0, dgst("bar"), 0, "")
+	require.NoError(t, err)
+	require.Equal(t, len(matches), 1)
+
+	require.True(t, matches[0].Loadable)
+
+	// releasing bar releases both foo and bar
+	err = storage.Release(res1.ID())
+	require.NoError(t, err)
+
+	matches, err = m.Query(nil, 0, dgst("foo"), 0, "")
+	require.NoError(t, err)
+	require.Equal(t, len(matches), 0)
+}
+
+// TestInMemoryCacheRestoreOfflineDeletion deletes a result while the
+// cachemanager is not running and checks that it syncs up on restore
+func TestInMemoryCacheRestoreOfflineDeletion(t *testing.T) {
+	storage := NewInMemoryCacheStorage()
+	results := NewInMemoryResultStorage()
+	m := NewCacheManager(identity.NewID(), storage, results)
+
+	res0 := testResult("result0")
+	cacheFoo, err := m.Save(NewCacheKey(dgst("foo"), 0, nil), res0)
+	require.NoError(t, err)
+
+	res1 := testResult("result1")
+	_, err = m.Save(NewCacheKey(dgst("bar"), 0, []CacheKeyWithSelector{
+		{CacheKey: cacheFoo},
+	}), res1)
+	require.NoError(t, err)
+
+	results2 := NewInMemoryResultStorage()
+	_, err = results2.Save(res1) // only add bar
+	require.NoError(t, err)
+
+	m = NewCacheManager(identity.NewID(), storage, results2)
+
+	matches, err := m.Query(nil, 0, dgst("foo"), 0, "")
+	require.NoError(t, err)
+	require.Equal(t, len(matches), 1)
+	require.False(t, matches[0].Loadable)
+
+	matches, err = m.Query([]ExportableCacheKey{matches[0].CacheKey}, 0, dgst("bar"), 0, "")
+	require.NoError(t, err)
+	require.Equal(t, len(matches), 1)
+
+	require.True(t, matches[0].Loadable)
+}
+
 func dgst(s string) digest.Digest {
 	return digest.FromBytes([]byte(s))
 }
