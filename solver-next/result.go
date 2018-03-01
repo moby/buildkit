@@ -84,3 +84,40 @@ func (cr *cachedResult) Export(ctx context.Context, converter func(context.Conte
 	}
 	return out, nil
 }
+
+func NewSharedCachedResult(res CachedResult) *SharedCachedResult {
+	return &SharedCachedResult{
+		SharedResult: NewSharedResult(res),
+		CachedResult: res,
+	}
+}
+
+func (r *SharedCachedResult) Clone() CachedResult {
+	return &clonedCachedResult{Result: r.SharedResult.Clone(), cr: r.CachedResult}
+}
+
+func (r *SharedCachedResult) Release(ctx context.Context) error {
+	return r.SharedResult.Release(ctx)
+}
+
+type clonedCachedResult struct {
+	Result
+	cr CachedResult
+}
+
+func (r *clonedCachedResult) ID() string {
+	return r.Result.ID()
+}
+
+func (cr *clonedCachedResult) CacheKey() ExportableCacheKey {
+	return cr.cr.CacheKey()
+}
+
+func (cr *clonedCachedResult) Export(ctx context.Context, converter func(context.Context, Result) (*Remote, error)) ([]ExportRecord, error) {
+	return cr.cr.Export(ctx, converter)
+}
+
+type SharedCachedResult struct {
+	*SharedResult
+	CachedResult
+}

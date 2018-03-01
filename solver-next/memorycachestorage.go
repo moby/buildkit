@@ -196,13 +196,19 @@ func (s *inMemoryStore) AddLink(id string, link CacheInfoLink, target string) er
 
 func (s *inMemoryStore) WalkLinks(id string, link CacheInfoLink, fn func(id string) error) error {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
 	k, ok := s.byID[id]
 	if !ok {
+		s.mu.RUnlock()
 		return errors.Wrapf(ErrNotFound, "no such key %s", id)
 	}
+	var links []string
 	for target := range k.links[link] {
-		if err := fn(target); err != nil {
+		links = append(links, target)
+	}
+	s.mu.RUnlock()
+
+	for _, t := range links {
+		if err := fn(t); err != nil {
 			return err
 		}
 	}
