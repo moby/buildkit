@@ -222,22 +222,55 @@ func (p *puller) Snapshot(ctx context.Context) (cache.ImmutableRef, error) {
 	}
 	stopProgress()
 
+	var usedBlobs, unusedBlobs []ocispec.Descriptor
+
 	if schema1Converter != nil {
+		ongoing.remove(p.desc) // Not left in the content store so this is sufficient.
 		p.desc, err = schema1Converter.Convert(ctx)
 		if err != nil {
 			return nil, err
+		}
+		ongoing.add(p.desc)
+
+		var mu sync.Mutex // images.Dispatch calls handlers in parallel
+		allBlobs := make(map[digest.Digest]ocispec.Descriptor)
+		for _, j := range ongoing.added {
+			allBlobs[j.Digest] = j.Descriptor
+		}
+
+		handlers := []images.Handler{
+			images.HandlerFunc(func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
+				usedBlobs = append(usedBlobs, desc)
+				mu.Lock()
+				defer mu.Unlock()
+				delete(allBlobs, desc.Digest)
+				return nil, nil
+			}),
+			images.FilterPlatform(platforms.Default(), images.ChildrenHandler(p.is.ContentStore)),
+		}
+
+		if err := images.Dispatch(ctx, images.Handlers(handlers...), p.desc); err != nil {
+			return nil, err
+		}
+
+		for _, j := range allBlobs {
+			unusedBlobs = append(unusedBlobs, j)
+		}
+	} else {
+		for _, j := range ongoing.added {
+			usedBlobs = append(usedBlobs, j.Descriptor)
 		}
 	}
 
 	// split all pulled data to layers and rest. layers remain roots and are deleted with snapshots. rest will be linked to layers.
 	var notLayerBlobs []ocispec.Descriptor
 	var layerBlobs []ocispec.Descriptor
-	for _, j := range ongoing.added {
+	for _, j := range usedBlobs {
 		switch j.MediaType {
 		case ocispec.MediaTypeImageLayer, images.MediaTypeDockerSchema2Layer, ocispec.MediaTypeImageLayerGzip, images.MediaTypeDockerSchema2LayerGzip:
-			layerBlobs = append(layerBlobs, j.Descriptor)
+			layerBlobs = append(layerBlobs, j)
 		default:
-			notLayerBlobs = append(notLayerBlobs, j.Descriptor)
+			notLayerBlobs = append(notLayerBlobs, j)
 		}
 	}
 
@@ -257,7 +290,7 @@ func (p *puller) Snapshot(ctx context.Context) (cache.ImmutableRef, error) {
 		}
 	}
 
-	for _, nl := range notLayerBlobs {
+	for _, nl := range append(notLayerBlobs, unusedBlobs...) {
 		if err := p.is.ContentStore.Delete(ctx, nl.Digest); err != nil {
 			return nil, err
 		}
@@ -469,6 +502,13 @@ func (j *jobs) add(desc ocispec.Descriptor) {
 		Descriptor: desc,
 		started:    time.Now(),
 	}
+}
+
+func (j *jobs) remove(desc ocispec.Descriptor) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+
+	delete(j.added, desc.Digest)
 }
 
 func (j *jobs) jobs() []job {
