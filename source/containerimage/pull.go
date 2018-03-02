@@ -240,9 +240,9 @@ func (p *puller) Snapshot(ctx context.Context) (cache.ImmutableRef, error) {
 
 		handlers := []images.Handler{
 			images.HandlerFunc(func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
-				usedBlobs = append(usedBlobs, desc)
 				mu.Lock()
 				defer mu.Unlock()
+				usedBlobs = append(usedBlobs, desc)
 				delete(allBlobs, desc.Digest)
 				return nil, nil
 			}),
