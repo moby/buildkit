@@ -94,6 +94,7 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 		ContentStore:   opt.ContentStore,
 		SessionManager: opt.SessionManager,
 		Applier:        opt.Applier,
+		ImageStore:     opt.ImageStore,
 		CacheAccessor:  cm,
 	})
 	if err != nil {
