@@ -42,6 +42,7 @@ func TestClientIntegration(t *testing.T) {
 		testOCIExporter,
 		testWhiteoutParentDir,
 		testDuplicateWhiteouts,
+		testSchema1Image,
 	})
 }
 
@@ -684,6 +685,24 @@ func testWhiteoutParentDir(t *testing.T, sb integration.Sandbox) {
 
 	_, ok = m["foo/"]
 	require.True(t, ok)
+}
+
+// #296
+func testSchema1Image(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+	c, err := New(sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Image("gcr.io/google_containers/pause:3.0@sha256:0d093c962a6c2dd8bb8727b661e2b5f13e9df884af9945b4cc7088d9350cd3ee")
+
+	def, err := st.Marshal()
+	require.NoError(t, err)
+
+	err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	require.NoError(t, err)
+
+	checkAllReleasable(t, c, sb, true)
 }
 
 func requiresLinux(t *testing.T) {
