@@ -119,7 +119,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 		rootFS = ref
 	}
 
-	lbf, err := newLLBBrideForwarder(ctx, llbBridge)
+	lbf, err := newLLBBridgeForwarder(ctx, llbBridge)
 	defer lbf.conn.Close()
 	if err != nil {
 		return nil, nil, err
@@ -166,8 +166,8 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 	return lbf.lastRef, lbf.exporterAttr, nil
 }
 
-func newLLBBrideForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge) (*llbBrideForwarder, error) {
-	lbf := &llbBrideForwarder{
+func newLLBBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge) (*llbBridgeForwarder, error) {
+	lbf := &llbBridgeForwarder{
 		callCtx:   ctx,
 		llbBridge: llbBridge,
 		refs:      map[string]cache.ImmutableRef{},
@@ -236,7 +236,7 @@ func (d dummyAddr) String() string {
 	return "localhost"
 }
 
-type llbBrideForwarder struct {
+type llbBridgeForwarder struct {
 	callCtx      context.Context
 	llbBridge    frontend.FrontendLLBBridge
 	refs         map[string]cache.ImmutableRef
@@ -245,7 +245,7 @@ type llbBrideForwarder struct {
 	*pipe
 }
 
-func (lbf *llbBrideForwarder) ResolveImageConfig(ctx netcontext.Context, req *pb.ResolveImageConfigRequest) (*pb.ResolveImageConfigResponse, error) {
+func (lbf *llbBridgeForwarder) ResolveImageConfig(ctx netcontext.Context, req *pb.ResolveImageConfigRequest) (*pb.ResolveImageConfigResponse, error) {
 	ctx = tracing.ContextWithSpanFromContext(ctx, lbf.callCtx)
 	dgst, dt, err := lbf.llbBridge.ResolveImageConfig(ctx, req.Ref)
 	if err != nil {
@@ -257,7 +257,7 @@ func (lbf *llbBrideForwarder) ResolveImageConfig(ctx netcontext.Context, req *pb
 	}, nil
 }
 
-func (lbf *llbBrideForwarder) Solve(ctx netcontext.Context, req *pb.SolveRequest) (*pb.SolveResponse, error) {
+func (lbf *llbBridgeForwarder) Solve(ctx netcontext.Context, req *pb.SolveRequest) (*pb.SolveResponse, error) {
 	ctx = tracing.ContextWithSpanFromContext(ctx, lbf.callCtx)
 	ref, expResp, err := lbf.llbBridge.Solve(ctx, frontend.SolveRequest{
 		Definition: req.Definition,
@@ -289,7 +289,7 @@ func (lbf *llbBrideForwarder) Solve(ctx netcontext.Context, req *pb.SolveRequest
 	}
 	return &pb.SolveResponse{Ref: id}, nil
 }
-func (lbf *llbBrideForwarder) ReadFile(ctx netcontext.Context, req *pb.ReadFileRequest) (*pb.ReadFileResponse, error) {
+func (lbf *llbBridgeForwarder) ReadFile(ctx netcontext.Context, req *pb.ReadFileRequest) (*pb.ReadFileResponse, error) {
 	ctx = tracing.ContextWithSpanFromContext(ctx, lbf.callCtx)
 	ref, ok := lbf.refs[req.Ref]
 	if !ok {
@@ -306,7 +306,7 @@ func (lbf *llbBrideForwarder) ReadFile(ctx netcontext.Context, req *pb.ReadFileR
 	return &pb.ReadFileResponse{Data: dt}, nil
 }
 
-func (lbf *llbBrideForwarder) Ping(netcontext.Context, *pb.PingRequest) (*pb.PongResponse, error) {
+func (lbf *llbBridgeForwarder) Ping(netcontext.Context, *pb.PingRequest) (*pb.PongResponse, error) {
 	return &pb.PongResponse{}, nil
 }
 
