@@ -7,4 +7,6 @@ RUN go get -d github.com/LK4D4/vndr \
 	&& go install ./
 WORKDIR /go/src/github.com/moby/buildkit
 COPY . .
-RUN vndr --verbose
+# Remove vendor first to workaround  https://github.com/LK4D4/vndr/issues/63.
+RUN rm -rf vendor
+RUN vndr --verbose --strict
