@@ -233,11 +233,11 @@ func (cc *cacheContext) HandleChange(kind fsutil.ChangeKind, p string, fi os.Fil
 	if p == "/" {
 		p = ""
 	}
-	k := []byte(p)
+	k := convertPathToKey([]byte(p))
 
 	deleteDir := func(cr *CacheRecord) {
 		if cr.Type == CacheRecordTypeDir {
-			cc.node.WalkPrefix(append(k, []byte("/")...), func(k []byte, v interface{}) bool {
+			cc.node.WalkPrefix(append(k, 0), func(k []byte, v interface{}) bool {
 				cc.txn.Delete(k)
 				return false
 			})
@@ -251,8 +251,8 @@ func (cc *cacheContext) HandleChange(kind fsutil.ChangeKind, p string, fi os.Fil
 		cc.node = cc.tree.Root()
 
 		// root is not called by HandleChange. need to fake it
-		if _, ok := cc.node.Get([]byte("/")); !ok {
-			cc.txn.Insert([]byte("/"), &CacheRecord{
+		if _, ok := cc.node.Get([]byte{0}); !ok {
+			cc.txn.Insert([]byte{0}, &CacheRecord{
 				Type:   CacheRecordTypeDirHeader,
 				Digest: digest.FromBytes(nil),
 			})
@@ -267,7 +267,7 @@ func (cc *cacheContext) HandleChange(kind fsutil.ChangeKind, p string, fi os.Fil
 		if ok {
 			deleteDir(v.(*CacheRecord))
 		}
-		d := path.Dir(string(k))
+		d := path.Dir(p)
 		if d == "/" {
 			d = ""
 		}
@@ -303,11 +303,12 @@ func (cc *cacheContext) HandleChange(kind fsutil.ChangeKind, p string, fi os.Fil
 			Type: CacheRecordTypeDir,
 		}
 		cc.txn.Insert(k, cr2)
-		k = append(k, []byte("/")...)
+		k = append(k, 0)
+		p += "/"
 	}
 	cr.Digest = h.Digest()
 	cc.txn.Insert(k, cr)
-	d := path.Dir(string(k))
+	d := path.Dir(p)
 	if d == "/" {
 		d = ""
 	}
@@ -353,7 +354,7 @@ func (cc *cacheContext) checksumNoFollow(ctx context.Context, m *mount, p string
 	if cc.txn == nil {
 		root := cc.tree.Root()
 		cc.mu.RUnlock()
-		v, ok := root.Get([]byte(p))
+		v, ok := root.Get(convertPathToKey([]byte(p)))
 		if ok {
 			cr := v.(*CacheRecord)
 			if cr.Digest != "" {
@@ -386,8 +387,9 @@ func (cc *cacheContext) commitActiveTransaction() {
 		addParentToMap(d, cc.dirtyMap)
 	}
 	for d := range cc.dirtyMap {
-		if _, ok := cc.txn.Get([]byte(d)); ok {
-			cc.txn.Insert([]byte(d), &CacheRecord{Type: CacheRecordTypeDir})
+		k := convertPathToKey([]byte(d))
+		if _, ok := cc.txn.Get(k); ok {
+			cc.txn.Insert(k, &CacheRecord{Type: CacheRecordTypeDir})
 		}
 	}
 	cc.tree = cc.txn.Commit()
@@ -403,7 +405,7 @@ func (cc *cacheContext) lazyChecksum(ctx context.Context, m *mount, p string) (*
 			return nil, err
 		}
 	}
-	k := []byte(p)
+	k := convertPathToKey([]byte(p))
 	txn := cc.tree.Txn()
 	root = txn.Root()
 	cr, updated, err := cc.checksum(ctx, root, txn, m, k)
@@ -431,7 +433,7 @@ func (cc *cacheContext) checksum(ctx context.Context, root *iradix.Node, txn *ir
 	switch cr.Type {
 	case CacheRecordTypeDir:
 		h := sha256.New()
-		next := append(k, []byte("/")...)
+		next := append(k, 0)
 		iter := root.Seek(next)
 		subk := next
 		ok := true
@@ -447,15 +449,17 @@ func (cc *cacheContext) checksum(ctx context.Context, root *iradix.Node, txn *ir
 			}
 
 			h.Write([]byte(subcr.Digest))
+
 			if subcr.Type == CacheRecordTypeDir { // skip subfiles
-				next := append(subk, []byte("/\xff")...)
+				next := append(subk, 0, 0xff)
 				iter = root.Seek(next)
 			}
 			subk, _, ok = iter.Next()
 		}
 		dgst = digest.NewDigest(digest.SHA256, h)
+
 	default:
-		p := string(bytes.TrimSuffix(k, []byte("/")))
+		p := string(convertKeyToPath(bytes.TrimSuffix(k, []byte{0})))
 
 		target, err := m.mount(ctx)
 		if err != nil {
@@ -491,7 +495,7 @@ func (cc *cacheContext) needsScan(root *iradix.Node, p string) bool {
 	if p == "/" {
 		p = ""
 	}
-	if _, ok := root.Get([]byte(p)); !ok {
+	if _, ok := root.Get(convertPathToKey([]byte(p))); !ok {
 		if p == "" {
 			return true
 		}
@@ -529,6 +533,7 @@ func (cc *cacheContext) scanPath(ctx context.Context, m *mount, p string) (retEr
 		if string(k) == "/" {
 			k = []byte{}
 		}
+		k = convertPathToKey(k)
 		if _, ok := n.Get(k); !ok {
 			cr := &CacheRecord{
 				Type: CacheRecordTypeFile,
@@ -547,7 +552,7 @@ func (cc *cacheContext) scanPath(ctx context.Context, m *mount, p string) (retEr
 					Type: CacheRecordTypeDir,
 				}
 				txn.Insert(k, cr2)
-				k = append(k, []byte("/")...)
+				k = append(k, 0)
 			}
 			txn.Insert(k, cr)
 		}
@@ -618,4 +623,12 @@ func poolsCopy(dst io.Writer, src io.Reader) (written int64, err error) {
 	written, err = io.CopyBuffer(dst, src, buf)
 	pool32K.Put(buf)
 	return
+}
+
+func convertPathToKey(p []byte) []byte {
+	return bytes.Replace([]byte(p), []byte("/"), []byte{0}, -1)
+}
+
+func convertKeyToPath(p []byte) []byte {
+	return bytes.Replace([]byte(p), []byte{0}, []byte("/"), -1)
 }

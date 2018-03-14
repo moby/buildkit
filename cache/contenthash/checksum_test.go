@@ -25,8 +25,8 @@ import (
 
 const (
 	dgstFileData0     = digest.Digest("sha256:cd8e75bca50f2d695f220d0cb0997d8ead387e4f926e8669a92d7f104cc9885b")
-	dgstDirD0         = digest.Digest("sha256:5f8fc802a74ea165f2dfa25d356a581a3d8282a343192421b670079819f4afa7")
-	dgstDirD0Modified = digest.Digest("sha256:4071993a2baf46d92cf3ea64a3fac9f7ab5d0b3876aed0333769ed99756f968b")
+	dgstDirD0         = digest.Digest("sha256:311457c20a9b6bfc7b368282be86a0c98b7be882a268967605559c9b5acd7068")
+	dgstDirD0Modified = digest.Digest("sha256:a0da3975efcd81ddec35ba1481f7b57a46af1c1e42a14b6024323d3fe2e7b2d8")
 )
 
 func TestChecksumBasicFile(t *testing.T) {
@@ -96,7 +96,7 @@ func TestChecksumBasicFile(t *testing.T) {
 	dgst, err = cc.Checksum(context.TODO(), ref, "/")
 	assert.NoError(t, err)
 
-	assert.Equal(t, digest.Digest("sha256:6308f8be7bb12f5f6c99635cfa09e9d7055a6c03033e0f6b034cb48849906180"), dgst)
+	assert.Equal(t, digest.Digest("sha256:f57ab28e15b8dadb573ef097f2f99967f3acc4c44accc4888f4df510f9e9d2de"), dgst)
 
 	dgst, err = cc.Checksum(context.TODO(), ref, "d0")
 	assert.NoError(t, err)
@@ -304,6 +304,59 @@ func TestHandleRecursiveDir(t *testing.T) {
 
 	_, err = cc.Checksum(context.TODO(), ref, "")
 	assert.NoError(t, err)
+}
+
+func TestChecksumUnorderedFiles(t *testing.T) {
+	t.Parallel()
+	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	snapshotter, err := naive.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	cm := setupCacheManager(t, tmpdir, snapshotter)
+	defer cm.Close()
+
+	ch := []string{
+		"ADD d0 dir",
+		"ADD d0/foo dir",
+		"ADD d0/foo/bar file data0",
+		"ADD d0/foo-subdir dir",
+		"ADD d0/foo.subdir file data1",
+	}
+
+	ref := createRef(t, cm, nil)
+
+	cc, err := newCacheContext(ref.Metadata())
+	assert.NoError(t, err)
+
+	err = emit(cc.HandleChange, changeStream(ch))
+	assert.NoError(t, err)
+
+	dgst, err := cc.Checksum(context.TODO(), ref, "d0")
+	assert.NoError(t, err)
+
+	assert.Equal(t, dgst, digest.Digest("sha256:67bed5f4c5ec9cd367b89962f6b1836740e1694e35a127fa4af58b0c339a7b7b"))
+
+	// check regression from earier version that didn't track some files
+	ch = []string{
+		"ADD d0 dir",
+		"ADD d0/foo dir",
+		"ADD d0/foo/bar file data0",
+	}
+
+	ref = createRef(t, cm, nil)
+
+	cc, err = newCacheContext(ref.Metadata())
+	assert.NoError(t, err)
+
+	err = emit(cc.HandleChange, changeStream(ch))
+	assert.NoError(t, err)
+
+	dgst2, err := cc.Checksum(context.TODO(), ref, "d0")
+	assert.NoError(t, err)
+
+	assert.NotEqual(t, dgst, dgst2)
 }
 
 func TestPersistence(t *testing.T) {
