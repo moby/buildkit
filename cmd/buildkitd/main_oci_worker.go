@@ -9,6 +9,7 @@ import (
 	ctdsnapshot "github.com/containerd/containerd/snapshots"
 	"github.com/containerd/containerd/snapshots/native"
 	"github.com/containerd/containerd/snapshots/overlay"
+	"github.com/moby/buildkit/util/network"
 	"github.com/moby/buildkit/worker"
 	"github.com/moby/buildkit/worker/base"
 	"github.com/moby/buildkit/worker/runc"
@@ -79,12 +80,16 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 	if err != nil {
 		return nil, err
 	}
-	// GlobalBool works for BoolT as well
 	rootless := c.GlobalBool("oci-worker-rootless") || c.GlobalBool("rootless")
 	if rootless {
 		logrus.Debugf("running in rootless mode")
 	}
-	opt, err := runc.NewWorkerOpt(common.root, snFactory, rootless, labels)
+	workerNet := c.String("worker-net")
+	cniConfig := c.GlobalString("cni-config-dir")
+	cniPlugin := c.GlobalString("cni-binary-dir")
+	networkOpts := network.NetworkOpts{Type: workerNet, CNIConfigPath: cniConfig, CNIPluginPath: cniPlugin}
+
+	opt, err := runc.NewWorkerOpt(common.root, snFactory, rootless, labels, networkOpts)
 	if err != nil {
 		return nil, err
 	}

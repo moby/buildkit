@@ -136,7 +136,21 @@ func main() {
 			Name:  "tlscacert",
 			Usage: "ca certificate to verify clients",
 		},
+		cli.StringFlag{
+			Name:  "worker-net",
+			Usage: "worker network type (cni or host)",
+			Value: "cni",
+		},
+		cli.StringFlag{
+			Name:  "cni-config-dir",
+			Usage: "path of cni config files ( eg. /etc/cni/net.d )",
+		},
+		cli.StringFlag{
+			Name:  "cni-binary-dir",
+			Usage: "path of cni binary files ( eg. /opt/cni/bin )",
+		},
 	)
+
 	app.Flags = append(app.Flags, appFlags...)
 
 	app.Action = func(c *cli.Context) error {

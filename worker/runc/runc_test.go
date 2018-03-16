@@ -20,6 +20,7 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/source"
+	"github.com/moby/buildkit/util/network"
 	"github.com/moby/buildkit/worker/base"
 	"github.com/stretchr/testify/require"
 )
@@ -47,7 +48,10 @@ func TestRuncWorker(t *testing.T) {
 		},
 	}
 	rootless := false
-	workerOpt, err := NewWorkerOpt(tmpdir, snFactory, rootless, nil)
+
+	netOpts := network.NetworkOpts{Type: "host", CNIConfigPath: "", CNIPluginPath: ""}
+	workerOpt, err := NewWorkerOpt(tmpdir, snFactory, rootless, nil, netOpts)
+
 	require.NoError(t, err)
 
 	workerOpt.SessionManager, err = session.NewManager()
@@ -112,7 +116,7 @@ func TestRuncWorker(t *testing.T) {
 	root, err := w.CacheManager.New(ctx, snap)
 	require.NoError(t, err)
 
-	err = w.Executor.Exec(ctx, meta, root, nil, nil, nil, nil)
+	err = w.Executor.Exec(ctx, meta, root, nil, nil, nil, &nopCloser{stderr})
 	require.NoError(t, err)
 
 	meta = executor.Meta{
