@@ -48,7 +48,7 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, labe
 		Root: filepath.Join(root, "executor"),
 		// without root privileges
 		Rootless: rootless,
-	})
+	}, nil)
 	if err != nil {
 		return opt, err
 	}

@@ -107,7 +107,7 @@ func newContainerd(root string, client *containerd.Client, snapshotterName strin
 		ID:            id,
 		Labels:        xlabels,
 		MetadataStore: md,
-		Executor:      containerdexecutor.New(client, root),
+		Executor:      containerdexecutor.New(client, root, nil),
 		Snapshotter:   containerdsnapshot.NewSnapshotter(client.SnapshotService(snapshotterName), cs, md, "buildkit", gc),
 		ContentStore:  cs,
 		Applier:       winlayers.NewFileSystemApplierWithWindows(cs, df),
