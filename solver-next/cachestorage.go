@@ -30,7 +30,7 @@ type CacheKeyInfo struct {
 	ID     string
 	Base   digest.Digest
 	Output int
-	Deps   []CacheKeyInfoWithSelector
+	// Deps   []CacheKeyInfoWithSelector
 }
 
 // CacheKeyInfoWithSelector is CacheKeyInfo combined with a selector
