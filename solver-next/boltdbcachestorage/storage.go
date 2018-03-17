@@ -10,7 +10,6 @@ import (
 )
 
 const (
-	mainBucket      = "_main"
 	resultBucket    = "_result"
 	linksBucket     = "_links"
 	byResultBucket  = "_byresult"
@@ -27,7 +26,7 @@ func NewStore(dbPath string) (*Store, error) {
 		return nil, errors.Wrapf(err, "failed to open database file %s", dbPath)
 	}
 	if err := db.Update(func(tx *bolt.Tx) error {
-		for _, b := range []string{mainBucket, resultBucket, linksBucket, byResultBucket, backlinksBucket} {
+		for _, b := range []string{resultBucket, linksBucket, byResultBucket, backlinksBucket} {
 			if _, err := tx.CreateBucketIfNotExists([]byte(b)); err != nil {
 				return err
 			}
@@ -39,47 +38,30 @@ func NewStore(dbPath string) (*Store, error) {
 	return &Store{db: db}, nil
 }
 
-func (s *Store) Get(id string) (solver.CacheKeyInfo, error) {
-	var cki solver.CacheKeyInfo
+func (s *Store) Exists(id string) bool {
+	exists := false
 	err := s.db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(mainBucket))
-		if b == nil {
-			return errors.WithStack(solver.ErrNotFound)
-		}
-		v := b.Get([]byte(id))
-		if v == nil {
-			return errors.WithStack(solver.ErrNotFound)
-		}
-		return json.Unmarshal(v, &cki)
+		b := tx.Bucket([]byte(linksBucket)).Bucket([]byte(id))
+		exists = b != nil
+		return nil
 	})
 	if err != nil {
-		return solver.CacheKeyInfo{}, err
+		return false
 	}
-	return cki, nil
-}
-
-func (s *Store) Set(info solver.CacheKeyInfo) error {
-	return s.db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(mainBucket))
-		if b == nil {
-			return errors.WithStack(solver.ErrNotFound)
-		}
-		dt, err := json.Marshal(info)
-		if err != nil {
-			return err
-		}
-		return b.Put([]byte(info.ID), dt)
-	})
+	return exists
 }
 
 func (s *Store) Walk(fn func(id string) error) error {
 	ids := make([]string, 0)
 	if err := s.db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(mainBucket))
-		return b.ForEach(func(k, v []byte) error {
-			ids = append(ids, string(k))
-			return nil
-		})
+		b := tx.Bucket([]byte(linksBucket))
+		c := b.Cursor()
+		for k, v := c.First(); k != nil; k, v = c.Next() {
+			if v == nil {
+				ids = append(ids, string(k))
+			}
+		}
+		return nil
 	}); err != nil {
 		return err
 	}
@@ -272,7 +254,7 @@ func (s *Store) emptyBranchWithParents(tx *bolt.Tx, id []byte) error {
 			return err
 		}
 	}
-	return tx.Bucket([]byte(mainBucket)).Delete(id)
+	return nil
 }
 
 func (s *Store) AddLink(id string, link solver.CacheInfoLink, target string) error {

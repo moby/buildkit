@@ -43,10 +43,12 @@ func NewCacheManager(id string, storage CacheKeyStorage, results CacheResultStor
 }
 
 type inMemoryCacheKey struct {
-	CacheKeyInfo CacheKeyInfo
-	manager      *inMemoryCacheManager
-	cacheResult  CacheResult
-	deps         []CacheKeyWithSelector // only []*inMemoryCacheKey
+	manager     *inMemoryCacheManager
+	cacheResult CacheResult
+	deps        []CacheKeyWithSelector // only []*inMemoryCacheKey
+	digest      digest.Digest
+	output      Index
+	id          string
 	CacheKey
 }
 
@@ -55,10 +57,10 @@ func (ck *inMemoryCacheKey) Deps() []CacheKeyWithSelector {
 }
 
 func (ck *inMemoryCacheKey) Digest() digest.Digest {
-	return ck.CacheKeyInfo.Base
+	return ck.digest
 }
 func (ck *inMemoryCacheKey) Output() Index {
-	return Index(ck.CacheKeyInfo.Output)
+	return ck.output
 }
 
 func withExporter(ck *inMemoryCacheKey, cacheResult *CacheResult, deps []CacheKeyWithSelector) ExportableCacheKey {
@@ -78,7 +80,7 @@ type cacheExporter struct {
 func (ce *cacheExporter) Export(ctx context.Context, m map[digest.Digest]*ExportRecord, converter func(context.Context, Result) (*Remote, error)) (*ExportRecord, error) {
 	var res Result
 	if ce.cacheResult == nil {
-		cr, err := ce.inMemoryCacheKey.manager.getBestResult(ce.inMemoryCacheKey.CacheKeyInfo)
+		cr, err := ce.inMemoryCacheKey.manager.getBestResult(ce.inMemoryCacheKey.id)
 		if err != nil {
 			return nil, err
 		}
@@ -109,7 +111,7 @@ func (ce *cacheExporter) Export(ctx context.Context, m map[digest.Digest]*Export
 		}
 	}
 
-	cacheID := digest.FromBytes([]byte(ce.inMemoryCacheKey.CacheKeyInfo.ID))
+	cacheID := digest.FromBytes([]byte(ce.inMemoryCacheKey.id))
 	if remote != nil && len(remote.Descriptors) > 0 && remote.Descriptors[0].Digest != "" {
 		cacheID = remote.Descriptors[0].Digest
 	}
@@ -164,20 +166,22 @@ func (c *inMemoryCacheManager) ID() string {
 	return c.id
 }
 
-func (c *inMemoryCacheManager) toInMemoryCacheKey(cki CacheKeyInfo, deps []CacheKeyWithSelector) *inMemoryCacheKey {
+func (c *inMemoryCacheManager) toInMemoryCacheKey(id string, dgst digest.Digest, output Index, deps []CacheKeyWithSelector) *inMemoryCacheKey {
 	ck := &inMemoryCacheKey{
-		CacheKeyInfo: cki,
-		manager:      c,
-		CacheKey:     NewCacheKey("", 0, nil),
-		deps:         deps,
+		id:       id,
+		output:   output,
+		digest:   dgst,
+		manager:  c,
+		CacheKey: NewCacheKey("", 0, nil),
+		deps:     deps,
 	}
-	ck.SetValue(internalMemoryKey, cki.ID)
+	ck.SetValue(internalMemoryKey, id)
 	return ck
 }
 
-func (c *inMemoryCacheManager) getBestResult(cki CacheKeyInfo) (*CacheResult, error) {
+func (c *inMemoryCacheManager) getBestResult(id string) (*CacheResult, error) {
 	var results []*CacheResult
-	if err := c.backend.WalkResults(cki.ID, func(res CacheResult) error {
+	if err := c.backend.WalkResults(id, func(res CacheResult) error {
 		results = append(results, &res)
 		return nil
 	}); err != nil {
@@ -241,7 +245,7 @@ func (c *inMemoryCacheManager) Query(deps []CacheKeyWithSelector, input Index, d
 	allRes := map[string]struct{}{}
 	for _, d := range allDeps {
 		if d.internalKey != nil {
-			if err := c.backend.WalkLinks(d.internalKey.CacheKeyInfo.ID, CacheInfoLink{input, output, dgst, d.key.Selector}, func(id string) error {
+			if err := c.backend.WalkLinks(d.internalKey.id, CacheInfoLink{input, output, dgst, d.key.Selector}, func(id string) error {
 				d.results[id] = struct{}{}
 				allRes[id] = struct{}{}
 				return nil
@@ -267,7 +271,7 @@ func (c *inMemoryCacheManager) Query(deps []CacheKeyWithSelector, input Index, d
 				d.internalKey = internalKey
 			}
 			if _, ok := d.results[res]; !ok {
-				if err := c.backend.AddLink(d.internalKey.CacheKeyInfo.ID, CacheInfoLink{
+				if err := c.backend.AddLink(d.internalKey.id, CacheInfoLink{
 					Input:    input,
 					Output:   output,
 					Digest:   dgst,
@@ -279,21 +283,14 @@ func (c *inMemoryCacheManager) Query(deps []CacheKeyWithSelector, input Index, d
 		}
 		hadResults := false
 
-		cki, err := c.backend.Get(res)
-		if err != nil {
-			if errors.Cause(err) == ErrNotFound {
-				continue
-			}
-			return nil, errors.Wrapf(err, "failed lookup by internal ID %s", res)
-		}
-		deps := formatDeps(allDeps, int(input))
-		k := c.toInMemoryCacheKey(cki, deps)
+		fdeps := formatDeps(allDeps, int(input))
+		k := c.toInMemoryCacheKey(res, dgst, output, fdeps)
 		// TODO: invoke this only once per input
 		if err := c.backend.WalkResults(res, func(r CacheResult) error {
 			if c.results.Exists(r.ID) {
 				outs = append(outs, &CacheRecord{
 					ID:           res + "@" + r.ID,
-					CacheKey:     withExporter(k, &r, deps),
+					CacheKey:     withExporter(k, &r, fdeps),
 					CacheManager: c,
 					Loadable:     true,
 					CreatedAt:    r.CreatedAt,
@@ -308,18 +305,14 @@ func (c *inMemoryCacheManager) Query(deps []CacheKeyWithSelector, input Index, d
 		}
 
 		if !hadResults {
-			cki, err := c.backend.Get(res)
-			if err != nil {
-				if errors.Cause(err) == ErrNotFound {
+			if len(deps) == 0 {
+				if !c.backend.Exists(res) {
 					continue
 				}
-				return nil, errors.Wrapf(err, "failed lookup by internal ID %s", res)
 			}
-			deps := formatDeps(allDeps, int(input))
-			k := c.toInMemoryCacheKey(cki, deps)
 			outs = append(outs, &CacheRecord{
 				ID:           res,
-				CacheKey:     withExporter(k, nil, deps),
+				CacheKey:     withExporter(k, nil, fdeps),
 				CacheManager: c,
 				Loadable:     false,
 			})
@@ -342,7 +335,7 @@ func (c *inMemoryCacheManager) Load(ctx context.Context, rec *CacheRecord) (Resu
 		return nil, err
 	}
 
-	res, err := c.backend.Load(ck.CacheKeyInfo.ID, keyParts[1])
+	res, err := c.backend.Load(ck.id, keyParts[1])
 	if err != nil {
 		return nil, err
 	}
@@ -366,7 +359,7 @@ func (c *inMemoryCacheManager) Save(k CacheKey, r Result) (ExportableCacheKey, e
 		return empty, err
 	}
 
-	if err := c.backend.AddResult(ck.CacheKeyInfo.ID, res); err != nil {
+	if err := c.backend.AddResult(ck.id, res); err != nil {
 		return empty, err
 	}
 
@@ -417,11 +410,7 @@ func (c *inMemoryCacheManager) getInternalKey(k CacheKey, createIfNotExist bool)
 	}
 	internalV := k.GetValue(internalMemoryKey)
 	if internalV != nil {
-		cki, err := c.backend.Get(internalV.(string))
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed lookup by internal ID %s", internalV.(string))
-		}
-		return c.toInMemoryCacheKey(cki, k.Deps()), nil
+		return c.toInMemoryCacheKey(internalV.(string), k.Digest(), k.Output(), k.Deps()), nil
 	}
 
 	matches := make(map[string]struct{})
@@ -444,7 +433,7 @@ func (c *inMemoryCacheManager) getInternalKey(k CacheKey, createIfNotExist bool)
 			for _, ck := range cks {
 				internalCk := ck.CacheKey.CacheKey.(*inMemoryCacheKey)
 				m2 := make(map[string]struct{})
-				if err := c.backend.WalkLinks(internalCk.CacheKeyInfo.ID, CacheInfoLink{
+				if err := c.backend.WalkLinks(internalCk.id, CacheInfoLink{
 					Input:    Index(i),
 					Output:   Index(k.Output()),
 					Digest:   k.Digest(),
@@ -486,46 +475,25 @@ func (c *inMemoryCacheManager) getInternalKey(k CacheKey, createIfNotExist bool)
 		if len(k.Deps()) == 0 {
 			internalKey = digest.FromBytes([]byte(fmt.Sprintf("%s@%d", k.Digest(), k.Output()))).String()
 		}
-		cki, err := c.backend.Get(internalKey)
-		if err != nil {
-			if errors.Cause(err) == ErrNotFound {
-				if !createIfNotExist {
-					return nil, err
-				}
-			} else {
-				return nil, err
-			}
-		} else {
-			return c.toInMemoryCacheKey(cki, k.Deps()), nil
-		}
-	}
-
-	cki := CacheKeyInfo{
-		ID:     internalKey,
-		Base:   k.Digest(),
-		Output: int(k.Output()),
-	}
-
-	if err := c.backend.Set(cki); err != nil {
-		return nil, err
+		return c.toInMemoryCacheKey(internalKey, k.Digest(), k.Output(), k.Deps()), nil
 	}
 
 	for i, dep := range deps {
 		for _, ck := range dep {
 			internalCk := ck.CacheKey.CacheKey.(*inMemoryCacheKey)
-			err := c.backend.AddLink(internalCk.CacheKeyInfo.ID, CacheInfoLink{
+			err := c.backend.AddLink(internalCk.id, CacheInfoLink{
 				Input:    Index(i),
-				Output:   Index(cki.Output),
-				Digest:   cki.Base,
+				Output:   k.Output(),
+				Digest:   k.Digest(),
 				Selector: ck.Selector,
-			}, cki.ID)
+			}, internalKey)
 			if err != nil {
 				return nil, err
 			}
 		}
 	}
 
-	return c.toInMemoryCacheKey(cki, k.Deps()), nil
+	return c.toInMemoryCacheKey(internalKey, k.Digest(), k.Output(), k.Deps()), nil
 }
 
 func newCombinedCacheManager(cms []CacheManager, main CacheManager) CacheManager {
