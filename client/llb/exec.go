@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"github.com/moby/buildkit/solver/pb"
+	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
 
@@ -46,8 +47,10 @@ type ExecOp struct {
 	root             Output
 	mounts           []*mount
 	meta             Meta
+	cachedPBDigest   digest.Digest
 	cachedPB         []byte
 	cachedOpMetadata OpMetadata
+	isValidated      bool
 }
 
 func (e *ExecOp) AddMount(target string, source Output, opt ...MountOption) Output {
@@ -65,6 +68,7 @@ func (e *ExecOp) AddMount(target string, source Output, opt ...MountOption) Outp
 		m.output = &output{vertex: e, getIndex: e.getMountIndexFn(m)}
 	}
 	e.cachedPB = nil
+	e.isValidated = false
 	return m.output
 }
 
@@ -78,6 +82,9 @@ func (e *ExecOp) GetMount(target string) Output {
 }
 
 func (e *ExecOp) Validate() error {
+	if e.isValidated {
+		return nil
+	}
 	if len(e.meta.Args) == 0 {
 		return errors.Errorf("arguments are required")
 	}
@@ -87,19 +94,20 @@ func (e *ExecOp) Validate() error {
 	for _, m := range e.mounts {
 		if m.source != nil {
 			if err := m.source.Vertex().Validate(); err != nil {
-				return nil
+				return err
 			}
 		}
 	}
+	e.isValidated = true
 	return nil
 }
 
-func (e *ExecOp) Marshal() ([]byte, *OpMetadata, error) {
+func (e *ExecOp) Marshal() (digest.Digest, []byte, *OpMetadata, error) {
 	if e.cachedPB != nil {
-		return e.cachedPB, &e.cachedOpMetadata, nil
+		return e.cachedPBDigest, e.cachedPB, &e.cachedOpMetadata, nil
 	}
 	if err := e.Validate(); err != nil {
-		return nil, nil, err
+		return "", nil, nil, err
 	}
 	// make sure mounts are sorted
 	sort.Slice(e.mounts, func(i, j int) bool {
@@ -127,7 +135,7 @@ func (e *ExecOp) Marshal() ([]byte, *OpMetadata, error) {
 		if m.source != nil {
 			inp, err := m.source.ToInput()
 			if err != nil {
-				return nil, nil, err
+				return "", nil, nil, err
 			}
 
 			newInput := true
@@ -165,10 +173,11 @@ func (e *ExecOp) Marshal() ([]byte, *OpMetadata, error) {
 
 	dt, err := pop.Marshal()
 	if err != nil {
-		return nil, nil, err
+		return "", nil, nil, err
 	}
+	e.cachedPBDigest = digest.FromBytes(dt)
 	e.cachedPB = dt
-	return dt, &e.cachedOpMetadata, nil
+	return e.cachedPBDigest, dt, &e.cachedOpMetadata, nil
 }
 
 func (e *ExecOp) Output() Output {

@@ -18,6 +18,7 @@ type SourceOp struct {
 	id               string
 	attrs            map[string]string
 	output           Output
+	cachedPBDigest   digest.Digest
 	cachedPB         []byte
 	cachedOpMetadata OpMetadata
 	err              error
@@ -43,12 +44,12 @@ func (s *SourceOp) Validate() error {
 	return nil
 }
 
-func (s *SourceOp) Marshal() ([]byte, *OpMetadata, error) {
+func (s *SourceOp) Marshal() (digest.Digest, []byte, *OpMetadata, error) {
 	if s.cachedPB != nil {
-		return s.cachedPB, &s.cachedOpMetadata, nil
+		return s.cachedPBDigest, s.cachedPB, &s.cachedOpMetadata, nil
 	}
 	if err := s.Validate(); err != nil {
-		return nil, nil, err
+		return "", nil, nil, err
 	}
 
 	proto := &pb.Op{
@@ -58,10 +59,11 @@ func (s *SourceOp) Marshal() ([]byte, *OpMetadata, error) {
 	}
 	dt, err := proto.Marshal()
 	if err != nil {
-		return nil, nil, err
+		return "", nil, nil, err
 	}
 	s.cachedPB = dt
-	return dt, &s.cachedOpMetadata, nil
+	s.cachedPBDigest = digest.FromBytes(dt)
+	return s.cachedPBDigest, dt, &s.cachedOpMetadata, nil
 }
 
 func (s *SourceOp) Output() Output {

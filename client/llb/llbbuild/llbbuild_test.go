@@ -12,9 +12,11 @@ import (
 func TestMarshal(t *testing.T) {
 	t.Parallel()
 	b := NewBuildOp(newDummyOutput("foobar"), WithFilename("myfilename"))
-	dt, opMeta, err := b.Marshal()
+	dgst, dt, opMeta, err := b.Marshal()
 	_ = opMeta
 	require.NoError(t, err)
+
+	require.Equal(t, dgst, digest.FromBytes(dt))
 
 	var op pb.Op
 	err = op.Unmarshal(dt)
