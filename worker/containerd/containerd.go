@@ -14,8 +14,10 @@ import (
 	"github.com/moby/buildkit/executor/containerdexecutor"
 	"github.com/moby/buildkit/identity"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
+	"github.com/moby/buildkit/util/throttle"
 	"github.com/moby/buildkit/worker/base"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 // NewWorkerOpt creates a WorkerOpt.
@@ -56,19 +58,24 @@ func newContainerd(root string, client *containerd.Client, snapshotterName strin
 		xlabels[k] = v
 	}
 
-	gc := func(ctx context.Context) error {
+	throttledGC := throttle.Throttle(time.Second, func() {
 		// TODO: how to avoid this?
+		ctx := context.TODO()
 		snapshotter := client.SnapshotService(snapshotterName)
 		ctx = namespaces.WithNamespace(ctx, "buildkit")
 		key := identity.NewID()
 		if _, err := snapshotter.Prepare(ctx, key, "", snapshots.WithLabels(map[string]string{
 			"containerd.io/gc.root": time.Now().UTC().Format(time.RFC3339Nano),
 		})); err != nil {
-			return err
+			logrus.Errorf("GC error: %+v", err)
 		}
 		if err := snapshotter.Remove(ctx, key); err != nil {
-			return err
+			logrus.Errorf("GC error: %+v", err)
 		}
+	})
+
+	gc := func(ctx context.Context) error {
+		throttledGC()
 		return nil
 	}
 
