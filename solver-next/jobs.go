@@ -190,13 +190,21 @@ func (jl *JobList) Close() {
 func (jl *JobList) load(v, parent Vertex, j *Job) (Vertex, error) {
 	jl.mu.Lock()
 	defer jl.mu.Unlock()
-	return jl.loadUnlocked(v, parent, j)
+
+	cache := map[Vertex]Vertex{}
+
+	return jl.loadUnlocked(v, parent, j, cache)
 }
 
-func (jl *JobList) loadUnlocked(v, parent Vertex, j *Job) (Vertex, error) {
+func (jl *JobList) loadUnlocked(v, parent Vertex, j *Job, cache map[Vertex]Vertex) (Vertex, error) {
+	if v, ok := cache[v]; ok {
+		return v, nil
+	}
+	origVtx := v
+
 	inputs := make([]Edge, len(v.Inputs()))
 	for i, e := range v.Inputs() {
-		v, err := jl.loadUnlocked(e.Vertex, parent, j)
+		v, err := jl.loadUnlocked(e.Vertex, parent, j, cache)
 		if err != nil {
 			return nil, err
 		}
@@ -207,6 +215,7 @@ func (jl *JobList) loadUnlocked(v, parent Vertex, j *Job) (Vertex, error) {
 
 	dgstWithoutCache := digest.FromBytes([]byte(fmt.Sprintf("%s-ignorecache", dgst)))
 
+	// if same vertex is already loaded without cache just use that
 	st, ok := jl.actives[dgstWithoutCache]
 
 	if !ok {
@@ -269,6 +278,7 @@ func (jl *JobList) loadUnlocked(v, parent Vertex, j *Job) (Vertex, error) {
 	}
 
 	jl.connectProgressFromState(st, st)
+	cache[origVtx] = v
 	return v, nil
 }
 
