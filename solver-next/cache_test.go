@@ -275,6 +275,39 @@ func TestInMemoryCacheRestoreOfflineDeletion(t *testing.T) {
 	require.True(t, matches[0].Loadable)
 }
 
+func TestCarryOverFromSublink(t *testing.T) {
+	storage := NewInMemoryCacheStorage()
+	results := NewInMemoryResultStorage()
+	m := NewCacheManager(identity.NewID(), storage, results)
+
+	cacheFoo, err := m.Save(NewCacheKey(dgst("foo"), 0, nil), testResult("resultFoo"))
+	require.NoError(t, err)
+
+	k := NewCacheKey("", 0, []CacheKeyWithSelector{
+		{CacheKey: cacheFoo, Selector: dgst("sel0")},
+		{CacheKey: ExportableCacheKey{CacheKey: NewCacheKey(dgst("content0"), 0, nil)}, Selector: NoSelector},
+	})
+
+	_, err = m.Save(NewCacheKey(dgst("res"), 0, []CacheKeyWithSelector{{CacheKey: ExportableCacheKey{CacheKey: k}}}), testResult("result0"))
+	require.NoError(t, err)
+
+	cacheBar, err := m.Save(NewCacheKey(dgst("bar"), 0, nil), testResult("resultBar"))
+	require.NoError(t, err)
+
+	k3 := NewCacheKey("", 0, []CacheKeyWithSelector{
+		{CacheKey: cacheBar, Selector: dgst("sel0")},
+		{CacheKey: ExportableCacheKey{CacheKey: NewCacheKey(dgst("content0"), 0, nil)}, Selector: NoSelector},
+	})
+
+	matches, err := m.Query([]ExportableCacheKey{{CacheKey: k3}}, 0, dgst("res"), 0, "")
+	require.NoError(t, err)
+	require.Equal(t, len(matches), 1)
+
+	matches, err = m.Query([]ExportableCacheKey{{CacheKey: cacheBar}}, 0, dgst("res"), 0, dgst("sel0"))
+	require.NoError(t, err)
+	require.Equal(t, len(matches), 1)
+}
+
 func dgst(s string) digest.Digest {
 	return digest.FromBytes([]byte(s))
 }

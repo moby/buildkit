@@ -92,7 +92,8 @@ func (s *Store) Walk(fn func(id string) error) error {
 }
 
 func (s *Store) WalkResults(id string, fn func(solver.CacheResult) error) error {
-	return s.db.View(func(tx *bolt.Tx) error {
+	var list []solver.CacheResult
+	if err := s.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(resultBucket))
 		if b == nil {
 			return nil
@@ -101,17 +102,24 @@ func (s *Store) WalkResults(id string, fn func(solver.CacheResult) error) error 
 		if b == nil {
 			return nil
 		}
-		if err := b.ForEach(func(k, v []byte) error {
+
+		return b.ForEach(func(k, v []byte) error {
 			var res solver.CacheResult
 			if err := json.Unmarshal(v, &res); err != nil {
 				return err
 			}
-			return fn(res)
-		}); err != nil {
+			list = append(list, res)
+			return nil
+		})
+	}); err != nil {
+		return err
+	}
+	for _, res := range list {
+		if err := fn(res); err != nil {
 			return err
 		}
-		return nil
-	})
+	}
+	return nil
 }
 
 func (s *Store) Load(id string, resultID string) (solver.CacheResult, error) {
@@ -151,7 +159,6 @@ func (s *Store) AddResult(id string, res solver.CacheResult) error {
 		if err := b.Put([]byte(res.ID), dt); err != nil {
 			return err
 		}
-
 		b, err = tx.Bucket([]byte(byResultBucket)).CreateBucketIfNotExists([]byte(res.ID))
 		if err != nil {
 			return err
@@ -298,6 +305,7 @@ func (s *Store) AddLink(id string, link solver.CacheInfoLink, target string) err
 }
 
 func (s *Store) WalkLinks(id string, link solver.CacheInfoLink, fn func(id string) error) error {
+	var links []string
 	if err := s.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(linksBucket))
 		if b == nil {
@@ -312,18 +320,13 @@ func (s *Store) WalkLinks(id string, link solver.CacheInfoLink, fn func(id strin
 		if err != nil {
 			return err
 		}
-
 		index := bytes.Join([][]byte{dt, {}}, []byte("@"))
 		c := b.Cursor()
 		k, _ := c.Seek([]byte(index))
 		for {
 			if k != nil && bytes.HasPrefix(k, index) {
 				target := bytes.TrimPrefix(k, index)
-
-				if err := fn(string(target)); err != nil {
-					return err
-				}
-
+				links = append(links, string(target))
 				k, _ = c.Next()
 			} else {
 				break
@@ -333,6 +336,11 @@ func (s *Store) WalkLinks(id string, link solver.CacheInfoLink, fn func(id strin
 		return nil
 	}); err != nil {
 		return err
+	}
+	for _, l := range links {
+		if err := fn(l); err != nil {
+			return err
+		}
 	}
 	return nil
 }

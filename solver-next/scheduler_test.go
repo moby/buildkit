@@ -2156,6 +2156,94 @@ func TestCacheExporting(t *testing.T) {
 	require.Equal(t, 3, len(rec2))
 }
 
+func TestSlowCacheAvoidAccess(t *testing.T) {
+	t.Parallel()
+	ctx := context.TODO()
+
+	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
+
+	l := NewJobList(SolverOpt{
+		ResolveOpFunc: testOpResolver,
+		DefaultCache:  cacheManager,
+	})
+	defer l.Close()
+
+	j0, err := l.NewJob("j0")
+	require.NoError(t, err)
+
+	defer func() {
+		if j0 != nil {
+			j0.Discard()
+		}
+	}()
+
+	g0 := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "v0",
+			cacheKeySeed: "seed0",
+			cachePreFunc: func(context.Context) error {
+				select {
+				case <-time.After(50 * time.Millisecond):
+				case <-ctx.Done():
+				}
+				return nil
+			},
+			value: "result0",
+			inputs: []Edge{{
+				Vertex: vtx(vtxOpt{
+					name:         "v1",
+					cacheKeySeed: "seed1",
+					value:        "result1",
+					inputs: []Edge{
+						{Vertex: vtx(vtxOpt{
+							name:         "v2",
+							cacheKeySeed: "seed2",
+							value:        "result2",
+						})},
+					},
+					selectors: map[int]digest.Digest{
+						0: dgst("sel0"),
+					},
+					slowCacheCompute: map[int]ResultBasedCacheFunc{
+						0: digestFromResult,
+					},
+				}),
+			}},
+		}),
+	}
+	g0.Vertex.(*vertex).setupCallCounters()
+
+	res, err := j0.Build(ctx, g0)
+	require.NoError(t, err)
+	require.Equal(t, unwrap(res), "result0")
+	require.Equal(t, int64(0), cacheManager.loadCounter)
+
+	require.NoError(t, j0.Discard())
+	j0 = nil
+
+	j1, err := l.NewJob("j1")
+	require.NoError(t, err)
+
+	g0.Vertex.(*vertex).setupCallCounters()
+
+	defer func() {
+		if j1 != nil {
+			j1.Discard()
+		}
+	}()
+
+	res, err = j1.Build(ctx, g0)
+	require.NoError(t, err)
+	require.Equal(t, unwrap(res), "result0")
+
+	require.NoError(t, j1.Discard())
+	j1 = nil
+
+	require.Equal(t, int64(3), *g0.Vertex.(*vertex).cacheCallCount)
+	require.Equal(t, int64(0), *g0.Vertex.(*vertex).execCallCount)
+	require.Equal(t, int64(1), cacheManager.loadCounter)
+}
+
 func TestCacheExportingPartialSelector(t *testing.T) {
 	t.Parallel()
 	ctx := context.TODO()

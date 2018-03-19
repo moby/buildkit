@@ -141,7 +141,7 @@ func (s *Scheduler) dispatch(e *edge) {
 	}
 
 	// if keys changed there might be possiblity for merge with other edge
-	if e.keysDidChange {
+	if e.keysDidChange && e.cacheMap != nil {
 		origEdge := e.index.LoadOrStore(e, e.cacheMap.Digest, e.edge.Index, e.depKeys())
 		if origEdge != nil {
 			logrus.Debugf("merging edge %s to %s\n", e.edge.Vertex.Name(), origEdge.edge.Vertex.Name())
@@ -208,7 +208,7 @@ func (s *Scheduler) build(ctx context.Context, edge Edge) (CachedResult, error) 
 	if err := p.Receiver.Status().Err; err != nil {
 		return nil, err
 	}
-	return p.Receiver.Status().Value.(*edgeState).result, nil
+	return p.Receiver.Status().Value.(*edgeState).result.Clone(), nil
 }
 
 // newPipe creates a new request pipe between two edges
@@ -318,14 +318,14 @@ func debugSchedulerPreUnpark(e *edge, inc []pipe.Sender, updates, allPipes []pip
 	if !debugScheduler {
 		return
 	}
-	logrus.Debugf(">> unpark %s req=%d upt=%d out=%d state=%s", e.edge.Vertex.Name(), len(inc), len(updates), len(allPipes), e.state)
+	logrus.Debugf(">> unpark %s req=%d upt=%d out=%d state=%s %s", e.edge.Vertex.Name(), len(inc), len(updates), len(allPipes), e.state, e.edge.Vertex.Digest())
 
 	for i, dep := range e.deps {
 		des := edgeStatusInitial
 		if dep.req != nil {
 			des = dep.req.Request().(*edgeRequest).desiredState
 		}
-		logrus.Debugf(":: dep%d %s state=%s des=%s", i, e.edge.Vertex.Inputs()[i].Vertex.Name(), dep.state, des)
+		logrus.Debugf(":: dep%d %s state=%s des=%s keys=%s hasslowcache=%v", i, e.edge.Vertex.Inputs()[i].Vertex.Name(), dep.state, des, len(dep.keys), e.slowCacheFunc(dep) != nil)
 	}
 
 	for i, in := range inc {
@@ -346,6 +346,8 @@ func debugSchedulerPreUnpark(e *edge, inc []pipe.Sender, updates, allPipes []pip
 					index = int(dep.index)
 				}
 				logrus.Debugf("> update-%d: %p input-%d keys=%d state=%s", i, up, index, len(st.keys), st.state)
+			} else {
+				logrus.Debugf("> update-%d: unknown", i)
 			}
 		}
 	}

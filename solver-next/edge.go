@@ -50,6 +50,7 @@ type edge struct {
 	noCacheMatchPossible      bool
 	allDepsCompletedCacheFast bool
 	allDepsCompletedCacheSlow bool
+	allDepsStateCacheSlow     bool
 	allDepsCompleted          bool
 	hasActiveOutgoing         bool
 
@@ -68,6 +69,7 @@ type dep struct {
 	e                 *edge
 	slowCacheReq      pipe.Receiver // TODO: reuse req
 	slowCacheComplete bool
+	slowCacheFoundKey bool
 	slowCacheKey      *ExportableCacheKey
 	err               error
 }
@@ -84,7 +86,7 @@ type edgePipe struct {
 
 type edgeState struct {
 	state    edgeStatusType
-	result   CachedResult
+	result   *SharedCachedResult
 	cacheMap *CacheMap
 	keys     []ExportableCacheKey
 }
@@ -99,6 +101,7 @@ func isEqualState(s1, s2 edgeState) bool {
 type edgeRequest struct {
 	desiredState edgeStatusType
 	currentState edgeState
+	currentKeys  int
 }
 
 // incrementReferenceCount increases the number of times release needs to be
@@ -114,6 +117,9 @@ func (e *edge) release() {
 		return
 	}
 	e.index.Release(e)
+	if e.result != nil {
+		e.result.Release(context.TODO())
+	}
 }
 
 // commitOptions returns parameters for the op execution
@@ -127,12 +133,7 @@ func (e *edge) commitOptions() (CacheKey, []CachedResult) {
 	for i, dep := range e.deps {
 		inputs[i] = CacheKeyWithSelector{CacheKey: dep.result.CacheKey(), Selector: e.cacheMap.Deps[i].Selector}
 		if dep.slowCacheKey != nil {
-			ck := NewCacheKey("", 0, []CacheKeyWithSelector{
-				inputs[i],
-				{CacheKey: *dep.slowCacheKey, Selector: NoSelector},
-			},
-			)
-			inputs[i] = CacheKeyWithSelector{CacheKey: ExportableCacheKey{CacheKey: ck, Exporter: &emptyExporter{ck}}}
+			inputs[i] = CacheKeyWithSelector{CacheKey: *dep.slowCacheKey}
 		}
 		results[i] = dep.result
 	}
@@ -163,12 +164,12 @@ func (e *edge) updateIncoming(req pipe.Sender) {
 
 // probeCache is called with unprocessed cache keys for dependency
 // if the key could match the edge, the cacheRecords for dependency are filled
-func (e *edge) probeCache(d *dep, keys []ExportableCacheKey) {
+func (e *edge) probeCache(d *dep, keys []ExportableCacheKey) bool {
 	if len(keys) == 0 {
-		return
+		return false
 	}
 	if e.op.IgnoreCache() {
-		return
+		return false
 	}
 	records, err := e.op.Cache().Query(keys, d.index, e.cacheMap.Digest, e.edge.Index, e.cacheMap.Deps[d.index].Selector)
 	if err != nil {
@@ -179,12 +180,13 @@ func (e *edge) probeCache(d *dep, keys []ExportableCacheKey) {
 			d.cacheRecords[r.ID] = r
 		}
 	}
+	return len(records) > 0
 }
 
 // checkDepMatchPossible checks if any cache matches are possible past this point
 func (e *edge) checkDepMatchPossible(dep *dep) {
 	depHasSlowCache := e.cacheMap.Deps[dep.index].ComputeDigestFunc != nil
-	if !e.noCacheMatchPossible && ((dep.slowCacheComplete && depHasSlowCache) || (!depHasSlowCache && dep.state == edgeStatusCacheFast) && len(dep.cacheRecords) == 0) {
+	if !e.noCacheMatchPossible && (((!dep.slowCacheFoundKey && dep.slowCacheComplete && depHasSlowCache) || (!depHasSlowCache && dep.state >= edgeStatusCacheSlow)) && len(dep.keys) == 0) {
 		e.noCacheMatchPossible = true
 	}
 }
@@ -200,8 +202,11 @@ func (e *edge) slowCacheFunc(dep *dep) ResultBasedCacheFunc {
 // allDepsHaveKeys checks if all dependencies have at least one key. used for
 // determining if there is enough data for combining cache key for edge
 func (e *edge) allDepsHaveKeys() bool {
+	if e.cacheMap == nil {
+		return false
+	}
 	for _, d := range e.deps {
-		if len(d.keys) == 0 {
+		if len(d.keys) == 0 && d.slowCacheKey == nil {
 			return false
 		}
 	}
@@ -242,6 +247,21 @@ func (e *edge) skipPhase2SlowCache(dep *dep) bool {
 	return false
 }
 
+func (e *edge) skipPhase2FastCache(dep *dep) bool {
+	isPhase1 := false
+	for _, dep := range e.deps {
+		if e.cacheMap == nil || len(dep.cacheRecords) == 0 && ((!dep.slowCacheComplete && e.slowCacheFunc(dep) != nil) || (dep.state < edgeStatusComplete && e.slowCacheFunc(dep) == nil)) {
+			isPhase1 = true
+			break
+		}
+	}
+
+	if isPhase1 && len(dep.cacheRecords) > 0 {
+		return true
+	}
+	return false
+}
+
 // unpark is called by the scheduler with incoming requests and updates for
 // previous calls.
 // To avoid deadlocks and resource leaks this function needs to follow
@@ -276,11 +296,15 @@ func (e *edge) unpark(incoming []pipe.Sender, updates, allPipes []pipe.Receiver,
 		})
 	}
 
-	e.createInputRequests(desiredState, f)
-
 	// execute op
 	if e.execReq == nil && desiredState == edgeStatusComplete {
-		e.execIfPossible(f)
+		if ok := e.execIfPossible(f); ok {
+			return
+		}
+	}
+
+	if e.execReq == nil {
+		e.createInputRequests(desiredState, f)
 	}
 
 }
@@ -290,7 +314,8 @@ func (e *edge) processUpdate(upt pipe.Receiver) (depChanged bool) {
 	// response for cachemap request
 	if upt == e.cacheMapReq && upt.Status().Completed {
 		if err := upt.Status().Err; err != nil {
-			if e.err == nil {
+			e.cacheMapReq = nil
+			if !upt.Status().Canceled && e.err == nil {
 				e.err = err
 			}
 		} else {
@@ -328,11 +353,12 @@ func (e *edge) processUpdate(upt pipe.Receiver) (depChanged bool) {
 	// response for exec request
 	if upt == e.execReq && upt.Status().Completed {
 		if err := upt.Status().Err; err != nil {
-			if e.err == nil {
+			e.execReq = nil
+			if !upt.Status().Canceled && e.err == nil {
 				e.err = err
 			}
 		} else {
-			e.result = upt.Status().Value.(CachedResult)
+			e.result = NewSharedCachedResult(upt.Status().Value.(CachedResult))
 			e.state = edgeStatusComplete
 		}
 		return true
@@ -377,18 +403,24 @@ func (e *edge) processUpdate(upt pipe.Receiver) (depChanged bool) {
 	}
 
 	// response for result based cache function
-	for _, dep := range e.deps {
+	for i, dep := range e.deps {
 		if upt == dep.slowCacheReq && upt.Status().Completed {
 			if err := upt.Status().Err; err != nil {
-				if e.err == nil {
+				dep.slowCacheReq = nil
+				if !upt.Status().Canceled && e.err == nil {
 					e.err = upt.Status().Err
 				}
 			} else if !dep.slowCacheComplete {
 				k := NewCacheKey(upt.Status().Value.(digest.Digest), -1, nil)
-				dep.slowCacheKey = &ExportableCacheKey{k, &emptyExporter{k}}
-				e.probeCache(dep, []ExportableCacheKey{*dep.slowCacheKey})
+				ck := NewCacheKey("", 0, []CacheKeyWithSelector{
+					{CacheKey: dep.result.CacheKey(), Selector: e.cacheMap.Deps[i].Selector},
+					{CacheKey: ExportableCacheKey{CacheKey: k, Exporter: &emptyExporter{k}}, Selector: NoSelector},
+				})
+				dep.slowCacheKey = &ExportableCacheKey{ck, &emptyExporter{ck}}
+				dep.slowCacheFoundKey = e.probeCache(dep, []ExportableCacheKey{*dep.slowCacheKey})
 				dep.slowCacheComplete = true
 				e.keysDidChange = true
+				e.checkDepMatchPossible(dep) // not matching key here doesn't set nocachematch possible to true
 			}
 			return true
 		}
@@ -431,22 +463,31 @@ func (e *edge) recalcCurrentState() {
 	}
 
 	// detect lower/upper bound for current state
-	allDepsCompletedCacheFast := true
-	allDepsCompletedCacheSlow := true
+	allDepsCompletedCacheFast := e.cacheMap != nil
+	allDepsCompletedCacheSlow := e.cacheMap != nil
+	allDepsStateCacheSlow := true
 	allDepsCompleted := true
-	stLow := edgeStatusInitial
-	stHigh := edgeStatusCacheSlow
+	stLow := edgeStatusInitial    // minimal possible state
+	stHigh := edgeStatusCacheSlow // maximum possible state
 	if e.cacheMap != nil {
 		for _, dep := range e.deps {
 			isSlowIncomplete := e.slowCacheFunc(dep) != nil && (dep.state == edgeStatusCacheSlow || (dep.state == edgeStatusComplete && !dep.slowCacheComplete))
+
 			if dep.state > stLow && len(dep.cacheRecords) == 0 && !isSlowIncomplete {
 				stLow = dep.state
 				if stLow > edgeStatusCacheSlow {
 					stLow = edgeStatusCacheSlow
 				}
 			}
-			if dep.state < stHigh {
-				stHigh = dep.state
+			effectiveState := dep.state
+			if dep.state == edgeStatusCacheSlow && isSlowIncomplete {
+				effectiveState = edgeStatusCacheFast
+			}
+			if dep.state == edgeStatusComplete && isSlowIncomplete {
+				effectiveState = edgeStatusCacheFast
+			}
+			if effectiveState < stHigh {
+				stHigh = effectiveState
 			}
 			if isSlowIncomplete || dep.state < edgeStatusComplete {
 				allDepsCompleted = false
@@ -457,15 +498,20 @@ func (e *edge) recalcCurrentState() {
 			if isSlowIncomplete || dep.state < edgeStatusCacheSlow {
 				allDepsCompletedCacheSlow = false
 			}
-		}
-		if stHigh > e.state {
-			e.state = stHigh
+			if dep.state < edgeStatusCacheSlow && len(dep.keys) == 0 {
+				allDepsStateCacheSlow = false
+			}
 		}
 		if stLow > e.state {
 			e.state = stLow
 		}
+		if stHigh > e.state {
+			e.state = stHigh
+		}
+
 		e.allDepsCompletedCacheFast = allDepsCompletedCacheFast
 		e.allDepsCompletedCacheSlow = allDepsCompletedCacheSlow
+		e.allDepsStateCacheSlow = allDepsStateCacheSlow
 		e.allDepsCompleted = allDepsCompleted
 	}
 }
@@ -476,36 +522,31 @@ func (e *edge) respondToIncoming(incoming []pipe.Sender, allPipes []pipe.Receive
 	// detect the result state for the requests
 	allIncomingCanComplete := true
 	desiredState := e.state
+	allCanceled := true
 
 	// check incoming requests
-	// check if all requests can be either answered
+	// check if all requests can be either answered or canceled
 	if !e.isComplete() {
 		for _, req := range incoming {
 			if !req.Request().Canceled {
+				allCanceled = false
 				if r := req.Request().Payload.(*edgeRequest); desiredState < r.desiredState {
 					desiredState = r.desiredState
-					allIncomingCanComplete = false
+					if e.hasActiveOutgoing || r.desiredState == edgeStatusComplete || r.currentKeys == len(e.keys) {
+						allIncomingCanComplete = false
+					}
 				}
 			}
 		}
 	}
 
-	// do not set allIncomingCanComplete if some e.state != edgeStateComplete dep.state < e.state && len(e.keys) == 0
-	hasIncompleteDeps := false
-	if e.state < edgeStatusComplete && len(e.keys) == 0 {
-		for _, dep := range e.deps {
-			if dep.err == nil && dep.state < e.state {
-				hasIncompleteDeps = true
-				break
-			}
-		}
-	}
-	if hasIncompleteDeps {
+	// do not set allIncomingCanComplete if active ongoing can modify the state
+	if !allCanceled && e.state < edgeStatusComplete && len(e.keys) == 0 && e.hasActiveOutgoing {
 		allIncomingCanComplete = false
 	}
 
 	if debugScheduler {
-		logrus.Debugf("status state=%s cancomplete=%v hasouts=%v noPossibleCache=%v depsCacheFast=%v", e.state, allIncomingCanComplete, e.hasActiveOutgoing, e.noCacheMatchPossible, e.allDepsCompletedCacheFast)
+		logrus.Debugf("status state=%s cancomplete=%v hasouts=%v noPossibleCache=%v depsCacheFast=%v keys=%d cacheRecords=%d", e.state, allIncomingCanComplete, e.hasActiveOutgoing, e.noCacheMatchPossible, e.allDepsCompletedCacheFast, len(e.keys), len(e.cacheRecords))
 	}
 
 	if allIncomingCanComplete && e.hasActiveOutgoing {
@@ -543,7 +584,9 @@ func (e *edge) respondToIncoming(incoming []pipe.Sender, allPipes []pipe.Receive
 	// update incoming based on current state
 	for _, req := range incoming {
 		r := req.Request().Payload.(*edgeRequest)
-		if !hasIncompleteDeps && (e.state >= r.desiredState || req.Request().Canceled) {
+		if req.Request().Canceled {
+			e.finishIncoming(req)
+		} else if !e.hasActiveOutgoing && e.state >= r.desiredState {
 			e.finishIncoming(req)
 		} else if !isEqualState(r.currentState, e.edgeState) && !req.Request().Canceled {
 			e.updateIncoming(req)
@@ -569,21 +612,25 @@ func (e *edge) createInputRequests(desiredState edgeStatusType, f *pipeFactory) 
 		desiredStateDep := dep.state
 
 		if e.noCacheMatchPossible {
-			desiredStateDep = desiredState
+			desiredStateDep = edgeStatusComplete
 		} else if dep.state == edgeStatusInitial && desiredState > dep.state {
 			desiredStateDep = edgeStatusCacheFast
 		} else if dep.state == edgeStatusCacheFast && desiredState > dep.state {
-			if e.allDepsCompletedCacheFast && len(e.keys) == 0 {
-				desiredStateDep = edgeStatusCacheSlow
+			// wait all deps to complete cache fast before continuing with slow cache
+			if (e.allDepsCompletedCacheFast && len(e.keys) == 0) || len(dep.keys) == 0 || e.allDepsHaveKeys() {
+				if !e.skipPhase2FastCache(dep) {
+					desiredStateDep = edgeStatusCacheSlow
+				}
 			}
 		} else if dep.state == edgeStatusCacheSlow && desiredState == edgeStatusComplete {
-			if (e.allDepsCompletedCacheSlow || e.slowCacheFunc(dep) != nil) && len(e.keys) == 0 {
-				if !e.skipPhase2SlowCache(dep) {
+			// if all deps have completed cache-slow or content based cache for input is available
+			if (len(dep.keys) == 0 || e.allDepsCompletedCacheSlow || (!e.skipPhase2FastCache(dep) && e.slowCacheFunc(dep) != nil)) && (len(e.cacheRecords) == 0) {
+				if len(dep.keys) == 0 || !e.skipPhase2SlowCache(dep) && e.allDepsStateCacheSlow {
 					desiredStateDep = edgeStatusComplete
 				}
 			}
 		} else if dep.state == edgeStatusCacheSlow && e.slowCacheFunc(dep) != nil && desiredState == edgeStatusCacheSlow {
-			if !e.skipPhase2SlowCache(dep) {
+			if len(dep.keys) == 0 || !e.skipPhase2SlowCache(dep) && e.allDepsStateCacheSlow {
 				desiredStateDep = edgeStatusComplete
 			}
 		}
@@ -602,6 +649,7 @@ func (e *edge) createInputRequests(desiredState edgeStatusType, f *pipeFactory) 
 				req := f.NewInputRequest(e.edge.Vertex.Inputs()[int(dep.index)], &edgeRequest{
 					currentState: dep.edgeState,
 					desiredState: desiredStateDep,
+					currentKeys:  len(dep.keys),
 				})
 				e.depRequests[req] = dep
 				dep.req = req
@@ -625,23 +673,26 @@ func (e *edge) createInputRequests(desiredState edgeStatusType, f *pipeFactory) 
 
 // execIfPossible creates a request for getting the edge result if there is
 // enough state
-func (e *edge) execIfPossible(f *pipeFactory) {
+func (e *edge) execIfPossible(f *pipeFactory) bool {
 	if len(e.cacheRecords) > 0 {
 		if e.keysDidChange {
 			e.postpone(f)
-			return
+			return true
 		}
 		e.execReq = f.NewFuncRequest(e.loadCache)
 		for req := range e.depRequests {
 			req.Cancel()
 		}
+		return true
 	} else if e.allDepsCompleted {
 		if e.keysDidChange {
 			e.postpone(f)
-			return
+			return true
 		}
 		e.execReq = f.NewFuncRequest(e.execOp)
+		return true
 	}
+	return false
 }
 
 // postpone delays exec to next unpark invocation if we have unprocessed keys
@@ -698,6 +749,11 @@ func (e *edge) execOp(ctx context.Context) (interface{}, error) {
 
 	res := results[int(index)]
 
+	for i := range results {
+		if i != int(index) {
+			go results[i].Release(context.TODO())
+		}
+	}
 	ck, err := e.op.Cache().Save(cacheKey, res)
 	if err != nil {
 		return nil, err
