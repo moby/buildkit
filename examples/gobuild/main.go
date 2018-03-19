@@ -43,7 +43,7 @@ func run() error {
 	_ = buildkitd
 
 	containerd, err := gb.BuildExe(gobuild.BuildOpt{
-		Source:    llb.Git("github.com/containerd/containerd", "master"),
+		Source:    llb.Git("github.com/containerd/containerd", "v1.0.2"),
 		MountPath: "/go/src/github.com/containerd/containerd",
 		Pkg:       "github.com/containerd/containerd/cmd/containerd",
 		BuildTags: []string{"no_btrfs"},
