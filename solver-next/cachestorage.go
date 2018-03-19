@@ -12,9 +12,8 @@ var ErrNotFound = errors.Errorf("not found")
 
 // CacheKeyStorage is interface for persisting cache metadata
 type CacheKeyStorage interface {
-	Get(id string) (CacheKeyInfo, error)
+	Exists(id string) bool
 	Walk(fn func(id string) error) error
-	Set(info CacheKeyInfo) error
 
 	WalkResults(id string, fn func(CacheResult) error) error
 	Load(id string, resultID string) (CacheResult, error)
@@ -23,20 +22,6 @@ type CacheKeyStorage interface {
 
 	AddLink(id string, link CacheInfoLink, target string) error
 	WalkLinks(id string, link CacheInfoLink, fn func(id string) error) error
-}
-
-// CacheKeyInfo is storable metadata about single cache key
-type CacheKeyInfo struct {
-	ID     string
-	Base   digest.Digest
-	Output int
-	Deps   []CacheKeyInfoWithSelector
-}
-
-// CacheKeyInfoWithSelector is CacheKeyInfo combined with a selector
-type CacheKeyInfoWithSelector struct {
-	ID       string
-	Selector digest.Digest
 }
 
 // CacheResult is a record for a single solve result

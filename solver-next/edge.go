@@ -164,14 +164,14 @@ func (e *edge) updateIncoming(req pipe.Sender) {
 
 // probeCache is called with unprocessed cache keys for dependency
 // if the key could match the edge, the cacheRecords for dependency are filled
-func (e *edge) probeCache(d *dep, keys []ExportableCacheKey) bool {
+func (e *edge) probeCache(d *dep, keys []CacheKeyWithSelector) bool {
 	if len(keys) == 0 {
 		return false
 	}
 	if e.op.IgnoreCache() {
 		return false
 	}
-	records, err := e.op.Cache().Query(keys, d.index, e.cacheMap.Digest, e.edge.Index, e.cacheMap.Deps[d.index].Selector)
+	records, err := e.op.Cache().Query(keys, d.index, e.cacheMap.Digest, e.edge.Index)
 	if err != nil {
 		e.err = errors.Wrap(err, "error on cache query")
 	}
@@ -309,6 +309,14 @@ func (e *edge) unpark(incoming []pipe.Sender, updates, allPipes []pipe.Receiver,
 
 }
 
+func withSelector(keys []ExportableCacheKey, selector digest.Digest) []CacheKeyWithSelector {
+	out := make([]CacheKeyWithSelector, len(keys))
+	for i, k := range keys {
+		out[i] = CacheKeyWithSelector{Selector: selector, CacheKey: k}
+	}
+	return out
+}
+
 // processUpdate is called by unpark for every updated pipe request
 func (e *edge) processUpdate(upt pipe.Receiver) (depChanged bool) {
 	// response for cachemap request
@@ -322,7 +330,7 @@ func (e *edge) processUpdate(upt pipe.Receiver) (depChanged bool) {
 			e.cacheMap = upt.Status().Value.(*CacheMap)
 			if len(e.deps) == 0 {
 				if !e.op.IgnoreCache() {
-					records, err := e.op.Cache().Query(nil, 0, e.cacheMap.Digest, e.edge.Index, "")
+					records, err := e.op.Cache().Query(nil, 0, e.cacheMap.Digest, e.edge.Index)
 					if err != nil {
 						logrus.Error(errors.Wrap(err, "invalid query response")) // make the build fail for this error
 					} else {
@@ -342,8 +350,8 @@ func (e *edge) processUpdate(upt pipe.Receiver) (depChanged bool) {
 				e.state = edgeStatusCacheSlow
 			}
 			// probe keys that were loaded before cache map
-			for _, dep := range e.deps {
-				e.probeCache(dep, dep.keys)
+			for i, dep := range e.deps {
+				e.probeCache(dep, withSelector(dep.keys, e.cacheMap.Deps[i].Selector))
 				e.checkDepMatchPossible(dep)
 			}
 		}
@@ -377,9 +385,8 @@ func (e *edge) processUpdate(upt pipe.Receiver) (depChanged bool) {
 
 		if len(dep.keys) < len(state.keys) {
 			newKeys := state.keys[len(dep.keys):]
-
 			if e.cacheMap != nil {
-				e.probeCache(dep, newKeys)
+				e.probeCache(dep, withSelector(newKeys, e.cacheMap.Deps[dep.index].Selector))
 				if e.allDepsHaveKeys() {
 					e.keysDidChange = true
 				}
@@ -417,7 +424,7 @@ func (e *edge) processUpdate(upt pipe.Receiver) (depChanged bool) {
 					{CacheKey: ExportableCacheKey{CacheKey: k, Exporter: &emptyExporter{k}}, Selector: NoSelector},
 				})
 				dep.slowCacheKey = &ExportableCacheKey{ck, &emptyExporter{ck}}
-				dep.slowCacheFoundKey = e.probeCache(dep, []ExportableCacheKey{*dep.slowCacheKey})
+				dep.slowCacheFoundKey = e.probeCache(dep, []CacheKeyWithSelector{{CacheKey: ExportableCacheKey{CacheKey: *dep.slowCacheKey}}})
 				dep.slowCacheComplete = true
 				e.keysDidChange = true
 				e.checkDepMatchPossible(dep) // not matching key here doesn't set nocachematch possible to true
@@ -456,9 +463,15 @@ func (e *edge) recalcCurrentState() {
 	}
 
 	for k, r := range newRecords {
-		e.keys = append(e.keys, r.CacheKey)
+		mergedKey := r.CacheKey
+		if len(e.deps) > 0 {
+			mergedKey = toMergedCacheKey(e.deps, k)
+		}
+		e.keys = append(e.keys, mergedKey)
 		if r.Loadable {
-			e.cacheRecords[k] = r
+			r2 := r
+			r2.CacheKey = mergedKey
+			e.cacheRecords[k] = r2
 		}
 	}
 
@@ -714,24 +727,12 @@ func (e *edge) loadCache(ctx context.Context) (interface{}, error) {
 			rec = r
 		}
 	}
-	var exp Exporter
-	if len(e.deps) > 0 {
-		for _, dep := range e.deps {
-			if exp == nil {
-				exp = dep.cacheRecords[rec.ID].CacheKey
-			} else {
-				exp = &mergedExporter{exp, dep.cacheRecords[rec.ID].CacheKey}
-			}
-		}
-	} else {
-		exp = rec.CacheKey
-	}
 	logrus.Debugf("load cache for %s with %s", e.edge.Vertex.Name(), rec.ID)
 	res, err := e.op.Cache().Load(ctx, rec)
 	if err != nil {
 		return nil, err
 	}
-	return NewCachedResult(res, rec.CacheKey, exp), nil
+	return NewCachedResult(res, rec.CacheKey, rec.CacheKey), nil
 }
 
 // execOp creates a request to execute the vertex operation
@@ -810,20 +811,37 @@ func (e *emptyExporter) Export(ctx context.Context, m map[digest.Digest]*ExportR
 }
 
 type mergedExporter struct {
-	e1, e2 Exporter
+	exporters []Exporter
 }
 
-func (e *mergedExporter) Export(ctx context.Context, m map[digest.Digest]*ExportRecord, fn func(context.Context, Result) (*Remote, error)) (*ExportRecord, error) {
-
-	_, err := e.e1.Export(ctx, m, fn)
-	if err != nil {
-		return nil, err
+func (e *mergedExporter) Export(ctx context.Context, m map[digest.Digest]*ExportRecord, fn func(context.Context, Result) (*Remote, error)) (er *ExportRecord, err error) {
+	for _, e := range e.exporters {
+		er, err = e.Export(ctx, m, fn)
+		if err != nil {
+			return nil, err
+		}
 	}
+	return
+}
 
-	r, err := e.e2.Export(ctx, m, fn)
-	if err != nil {
-		return nil, err
+func toMergedCacheKey(deps []*dep, id string) ExportableCacheKey {
+	depKeys := make([]CacheKeyWithSelector, len(deps))
+	exporters := make([]Exporter, len(deps))
+	for i, d := range deps {
+		depKeys[i] = d.cacheRecords[id].CacheKey.Deps()[i]
+		exporters[i] = d.cacheRecords[id].CacheKey
 	}
+	return ExportableCacheKey{
+		CacheKey: &mergedCacheKey{CacheKey: deps[0].cacheRecords[id].CacheKey, deps: depKeys},
+		Exporter: &mergedExporter{exporters: exporters},
+	}
+}
 
-	return r, nil
+type mergedCacheKey struct {
+	CacheKey
+	deps []CacheKeyWithSelector
+}
+
+func (ck *mergedCacheKey) Deps() []CacheKeyWithSelector {
+	return ck.deps
 }

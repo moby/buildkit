@@ -143,7 +143,7 @@ type CacheManager interface {
 	ID() string
 	// Query searches for cache paths from one cache key to the output of a
 	// possible match.
-	Query(inp []ExportableCacheKey, inputIndex Index, dgst digest.Digest, outputIndex Index, selector digest.Digest) ([]*CacheRecord, error)
+	Query(inp []CacheKeyWithSelector, inputIndex Index, dgst digest.Digest, outputIndex Index) ([]*CacheRecord, error)
 	// Load pulls and returns the cached result
 	Load(ctx context.Context, rec *CacheRecord) (Result, error)
 	// Save saves a result based on a cache key

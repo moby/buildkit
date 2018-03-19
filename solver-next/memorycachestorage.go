@@ -22,37 +22,28 @@ type inMemoryStore struct {
 }
 
 type inMemoryKey struct {
-	CacheKeyInfo
-
+	id        string
 	results   map[string]CacheResult
 	links     map[CacheInfoLink]map[string]struct{}
 	backlinks map[string]struct{}
 }
 
-func (s *inMemoryStore) Get(id string) (CacheKeyInfo, error) {
+func (s *inMemoryStore) Exists(id string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	k, ok := s.byID[id]
-	if !ok {
-		return CacheKeyInfo{}, errors.WithStack(ErrNotFound)
+	if k, ok := s.byID[id]; ok {
+		return len(k.links) > 0
 	}
-	return k.CacheKeyInfo, nil
+	return false
 }
 
-func (s *inMemoryStore) Set(info CacheKeyInfo) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	k, ok := s.byID[info.ID]
-	if !ok {
-		k = &inMemoryKey{
-			results:   map[string]CacheResult{},
-			links:     map[CacheInfoLink]map[string]struct{}{},
-			backlinks: map[string]struct{}{},
-		}
-		s.byID[info.ID] = k
+func newKey(id string) *inMemoryKey {
+	return &inMemoryKey{
+		results:   map[string]CacheResult{},
+		links:     map[CacheInfoLink]map[string]struct{}{},
+		backlinks: map[string]struct{}{},
+		id:        id,
 	}
-	k.CacheKeyInfo = info
-	return nil
 }
 
 func (s *inMemoryStore) Walk(fn func(string) error) error {
@@ -112,7 +103,8 @@ func (s *inMemoryStore) AddResult(id string, res CacheResult) error {
 	defer s.mu.Unlock()
 	k, ok := s.byID[id]
 	if !ok {
-		return errors.Wrapf(ErrNotFound, "no such key %s", id)
+		k = newKey(id)
+		s.byID[id] = k
 	}
 	k.results[res.ID] = res
 	m, ok := s.byResult[res.ID]
@@ -161,7 +153,7 @@ func (s *inMemoryStore) emptyBranchWithParents(k *inMemoryKey) {
 			continue
 		}
 		for l := range p.links {
-			delete(p.links[l], k.ID)
+			delete(p.links[l], k.id)
 			if len(p.links[l]) == 0 {
 				delete(p.links, l)
 			}
@@ -169,7 +161,7 @@ func (s *inMemoryStore) emptyBranchWithParents(k *inMemoryKey) {
 		s.emptyBranchWithParents(p)
 	}
 
-	delete(s.byID, k.ID)
+	delete(s.byID, k.id)
 }
 
 func (s *inMemoryStore) AddLink(id string, link CacheInfoLink, target string) error {
@@ -177,11 +169,13 @@ func (s *inMemoryStore) AddLink(id string, link CacheInfoLink, target string) er
 	defer s.mu.Unlock()
 	k, ok := s.byID[id]
 	if !ok {
-		return errors.Wrapf(ErrNotFound, "no such key %s", id)
+		k = newKey(id)
+		s.byID[id] = k
 	}
 	k2, ok := s.byID[target]
 	if !ok {
-		return errors.Wrapf(ErrNotFound, "no such key %s", target)
+		k2 = newKey(target)
+		s.byID[target] = k2
 	}
 	m, ok := k.links[link]
 	if !ok {
@@ -199,7 +193,7 @@ func (s *inMemoryStore) WalkLinks(id string, link CacheInfoLink, fn func(id stri
 	k, ok := s.byID[id]
 	if !ok {
 		s.mu.RUnlock()
-		return errors.Wrapf(ErrNotFound, "no such key %s", id)
+		return nil
 	}
 	var links []string
 	for target := range k.links[link] {
