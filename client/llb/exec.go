@@ -315,9 +315,10 @@ func AddMount(dest string, mountState State, opts ...MountOption) RunOption {
 	})
 }
 
-func ReadonlyRootFS(ei ExecInfo) ExecInfo {
-	ei.ReadonlyRootFS = true
-	return ei
+func ReadonlyRootFS() RunOption {
+	return runOptionFunc(func(ei *ExecInfo) {
+		ei.ReadonlyRootFS = true
+	})
 }
 
 type ExecInfo struct {
