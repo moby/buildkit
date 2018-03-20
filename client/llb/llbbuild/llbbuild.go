@@ -23,17 +23,16 @@ func NewBuildOp(source llb.Output, opt ...BuildOption) llb.Vertex {
 type build struct {
 	source           llb.Output
 	info             *BuildInfo
+	cachedPBDigest   digest.Digest
 	cachedPB         []byte
 	cachedOpMetadata llb.OpMetadata
 }
 
 func (b *build) ToInput() (*pb.Input, error) {
-	dt, opMetadata, err := b.Marshal()
-	_ = opMetadata
+	dgst, _, _, err := b.Marshal()
 	if err != nil {
 		return nil, err
 	}
-	dgst := digest.FromBytes(dt)
 	return &pb.Input{Digest: dgst, Index: pb.OutputIndex(0)}, nil
 }
 
@@ -45,9 +44,9 @@ func (b *build) Validate() error {
 	return nil
 }
 
-func (b *build) Marshal() ([]byte, *llb.OpMetadata, error) {
+func (b *build) Marshal() (digest.Digest, []byte, *llb.OpMetadata, error) {
 	if b.cachedPB != nil {
-		return b.cachedPB, &b.cachedOpMetadata, nil
+		return b.cachedPBDigest, b.cachedPB, &b.cachedOpMetadata, nil
 	}
 	pbo := &pb.BuildOp{
 		Builder: pb.LLBBuilder,
@@ -69,17 +68,18 @@ func (b *build) Marshal() ([]byte, *llb.OpMetadata, error) {
 
 	inp, err := b.source.ToInput()
 	if err != nil {
-		return nil, nil, err
+		return "", nil, nil, err
 	}
 
 	pop.Inputs = append(pop.Inputs, inp)
 
 	dt, err := pop.Marshal()
 	if err != nil {
-		return nil, nil, err
+		return "", nil, nil, err
 	}
 	b.cachedPB = dt
-	return dt, &b.cachedOpMetadata, nil
+	b.cachedPBDigest = digest.FromBytes(dt)
+	return b.cachedPBDigest, dt, &b.cachedOpMetadata, nil
 }
 
 func (b *build) Output() llb.Output {

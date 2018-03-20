@@ -17,7 +17,7 @@ type Output interface {
 
 type Vertex interface {
 	Validate() error
-	Marshal() ([]byte, *OpMetadata, error)
+	Marshal() (digest.Digest, []byte, *OpMetadata, error)
 	Output() Output
 	Inputs() []Output
 }
@@ -73,6 +73,9 @@ func (s State) Marshal(md ...MetadataOpt) (*Definition, error) {
 }
 
 func marshal(v Vertex, def *Definition, cache map[digest.Digest]struct{}, vertexCache map[Vertex]struct{}, md []MetadataOpt) (*Definition, error) {
+	if _, ok := vertexCache[v]; ok {
+		return def, nil
+	}
 	for _, inp := range v.Inputs() {
 		var err error
 		def, err = marshal(inp.Vertex(), def, cache, vertexCache, md)
@@ -80,16 +83,12 @@ func marshal(v Vertex, def *Definition, cache map[digest.Digest]struct{}, vertex
 			return def, err
 		}
 	}
-	if _, ok := vertexCache[v]; ok {
-		return def, nil
-	}
 
-	dt, opMeta, err := v.Marshal()
+	dgst, dt, opMeta, err := v.Marshal()
 	if err != nil {
 		return def, err
 	}
 	vertexCache[v] = struct{}{}
-	dgst := digest.FromBytes(dt)
 	if opMeta != nil {
 		m := mergeMetadata(def.Metadata[dgst], *opMeta)
 		for _, f := range md {
@@ -199,12 +198,10 @@ func (o *output) ToInput() (*pb.Input, error) {
 			return nil, err
 		}
 	}
-	dt, opMeta, err := o.vertex.Marshal()
-	_ = opMeta
+	dgst, _, _, err := o.vertex.Marshal()
 	if err != nil {
 		return nil, err
 	}
-	dgst := digest.FromBytes(dt)
 	return &pb.Input{Digest: dgst, Index: index}, nil
 }
 
