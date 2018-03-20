@@ -667,10 +667,7 @@ func (e *edge) createInputRequests(desiredState edgeStatusType, f *pipeFactory) 
 				e.depRequests[req] = dep
 				dep.req = req
 			}
-		} else if dep.req != nil && !dep.req.Status().Completed {
-			dep.req.Cancel()
 		}
-
 		// initialize function to compute cache key based on dependency result
 		if dep.state == edgeStatusComplete && dep.slowCacheReq == nil && e.slowCacheFunc(dep) != nil && e.cacheMap != nil {
 			fn := e.slowCacheFunc(dep)
