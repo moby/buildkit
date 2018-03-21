@@ -43,6 +43,7 @@ func TestClientIntegration(t *testing.T) {
 		testWhiteoutParentDir,
 		testDuplicateWhiteouts,
 		testSchema1Image,
+		testMountWithNoSource,
 	})
 }
 
@@ -701,6 +702,37 @@ func testSchema1Image(t *testing.T, sb integration.Sandbox) {
 
 	err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
 	require.NoError(t, err)
+
+	checkAllReleasable(t, c, sb, true)
+}
+
+// #319
+func testMountWithNoSource(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+	c, err := New(sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("docker.io/library/busybox:latest")
+	st := llb.Scratch()
+
+	var nilState llb.State
+
+	// This should never actually be run, but we want to succeed
+	// if it was, because we expect an error below, or a daemon
+	// panic if the issue has regressed.
+	run := busybox.Run(
+		llb.Args([]string{"/bin/true"}),
+		llb.AddMount("/nil", nilState, llb.SourcePath("/"), llb.Readonly))
+
+	st = run.AddMount("/mnt", st)
+
+	def, err := st.Marshal()
+	require.NoError(t, err)
+
+	err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "has no input")
 
 	checkAllReleasable(t, c, sb, true)
 }
