@@ -95,6 +95,11 @@ func (e *execOp) Run(ctx context.Context, inputs []solver.Ref) ([]solver.Ref, er
 				mountable = active
 			}
 		}
+
+		if mountable == nil {
+			return nil, errors.Errorf("mount %s has no input", m.Dest)
+		}
+
 		if m.Dest == pb.RootMount {
 			root = mountable
 		} else {

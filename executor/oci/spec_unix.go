@@ -50,6 +50,9 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 	sm := &submounts{}
 
 	for _, m := range mounts {
+		if m.Src == nil {
+			return nil, nil, errors.Errorf("mount %s has no source", m.Dest)
+		}
 		mounts, err := m.Src.Mount(ctx, m.Readonly)
 		if err != nil {
 			sm.cleanup()
