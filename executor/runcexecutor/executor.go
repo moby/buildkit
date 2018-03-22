@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/containerd/containerd/contrib/seccomp"
 	"github.com/containerd/containerd/mount"
 	containerdoci "github.com/containerd/containerd/oci"
 	"github.com/containerd/continuity/fs"
@@ -98,7 +99,7 @@ func (w *runcExecutor) Exec(ctx context.Context, meta executor.Meta, root cache.
 		return err
 	}
 	defer f.Close()
-	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, containerdoci.WithUIDGID(uid, gid))
+	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, containerdoci.WithUIDGID(uid, gid), seccomp.WithDefaultProfile())
 	if err != nil {
 		return err
 	}
