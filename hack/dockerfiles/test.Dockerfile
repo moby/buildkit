@@ -9,7 +9,7 @@ ARG REGISTRY_VERSION=2.6
 
 FROM golang:1.9-alpine AS gobuild-base
 RUN apk add --no-cache g++ linux-headers
-RUN apk add --no-cache git make
+RUN apk add --no-cache git libseccomp-dev make
 
 FROM gobuild-base AS buildkit-base
 WORKDIR /go/src/github.com/moby/buildkit
@@ -21,16 +21,17 @@ ARG GOOS=linux
 RUN go build -ldflags '-d' -o /usr/bin/buildctl ./cmd/buildctl
 
 FROM buildkit-base AS buildkitd
-ENV CGO_ENABLED=0
-RUN go build -ldflags '-d'  -o /usr/bin/buildkitd ./cmd/buildkitd
+ENV CGO_ENABLED=1
+RUN go build -installsuffix netgo -ldflags '-w -extldflags -static' -tags 'seccomp netgo cgo static_build' -o /usr/bin/buildkitd ./cmd/buildkitd
 
 # test dependencies begin here
 FROM gobuild-base AS runc
 ARG RUNC_VERSION
+ENV CGO_ENABLED=1
 RUN git clone https://github.com/opencontainers/runc.git "$GOPATH/src/github.com/opencontainers/runc" \
 	&& cd "$GOPATH/src/github.com/opencontainers/runc" \
 	&& git checkout -q "$RUNC_VERSION" \
-	&& go build -o /usr/bin/runc ./
+	&& go build -installsuffix netgo -ldflags '-w -extldflags -static' -tags 'seccomp netgo cgo static_build' -o /usr/bin/runc ./
 
 FROM gobuild-base AS containerd
 RUN apk add --no-cache btrfs-progs-dev
@@ -48,8 +49,8 @@ COPY --from=containerd /go/src/github.com/containerd/containerd/bin/containerd* 
 
 
 FROM buildkit-base AS buildkitd.oci_only
-ENV CGO_ENABLED=0
-RUN go build -ldflags '-d'  -o /usr/bin/buildkitd.oci_only -tags no_containerd_worker ./cmd/buildkitd
+ENV CGO_ENABLED=1
+RUN go build -installsuffix netgo -ldflags '-w -extldflags -static' -tags 'no_containerd_worker seccomp netgo cgo static_build' -o /usr/bin/buildkitd.oci_only ./cmd/buildkitd
 
 FROM buildkit-base AS buildkitd.containerd_only
 ENV CGO_ENABLED=0
@@ -71,6 +72,7 @@ FROM cross-windows AS buildctl.exe
 RUN go build -o /buildctl.exe ./cmd/buildctl
 
 FROM cross-windows AS buildkitd.exe
+ENV CGO_ENABLED=0
 RUN go build -o /buildkitd.exe ./cmd/buildkitd
 
 FROM alpine AS buildkit-export
