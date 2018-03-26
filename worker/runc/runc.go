@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/boltdb/bolt"
 	"github.com/containerd/containerd/content/local"
@@ -14,7 +15,9 @@ import (
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/executor/runcexecutor"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
+	"github.com/moby/buildkit/util/throttle"
 	"github.com/moby/buildkit/worker/base"
+	"github.com/sirupsen/logrus"
 )
 
 // SnapshotterFactory instantiates a snapshotter
@@ -63,9 +66,15 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, labels map[string]s
 		return opt, err
 	}
 
+	throttledGC := throttle.Throttle(time.Second, func() {
+		if _, err := mdb.GarbageCollect(context.TODO()); err != nil {
+			logrus.Errorf("GC error: %+v", err)
+		}
+	})
+
 	gc := func(ctx context.Context) error {
-		_, err := mdb.GarbageCollect(ctx)
-		return err
+		throttledGC()
+		return nil
 	}
 
 	c = containerdsnapshot.NewContentStore(mdb.ContentStore(), "buildkit", gc)
