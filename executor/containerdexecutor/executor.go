@@ -62,7 +62,11 @@ func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root c
 		lm.Unmount()
 	}
 
-	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, containerdoci.WithUIDGID(uid, gid))
+	opts := []containerdoci.SpecOpts{containerdoci.WithUIDGID(uid, gid)}
+	if meta.ReadonlyRootFS {
+		opts = append(opts, containerdoci.WithRootFSReadonly())
+	}
+	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, opts...)
 	if err != nil {
 		return err
 	}

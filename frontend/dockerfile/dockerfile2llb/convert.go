@@ -457,7 +457,7 @@ func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState l
 	commitMessage.WriteString(" " + c.Dest())
 
 	args = append(args, dest)
-	run := img.Run(append([]llb.RunOption{llb.Args(args), dfCmd(cmdToPrint)}, mounts...)...)
+	run := img.Run(append([]llb.RunOption{llb.Args(args), llb.ReadonlyRootFS(), dfCmd(cmdToPrint)}, mounts...)...)
 	d.state = run.AddMount("/dest", d.state)
 
 	return commitToHistory(&d.image, commitMessage.String(), true, &d.state)

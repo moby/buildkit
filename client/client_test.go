@@ -45,6 +45,7 @@ func TestClientIntegration(t *testing.T) {
 		testSchema1Image,
 		testMountWithNoSource,
 		testInvalidExporter,
+		testReadonlyRootFS,
 	})
 }
 
@@ -725,6 +726,35 @@ func testMountWithNoSource(t *testing.T, sb integration.Sandbox) {
 	err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "has no input")
+
+	checkAllReleasable(t, c, sb, true)
+}
+
+// #324
+func testReadonlyRootFS(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+	c, err := New(sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("docker.io/library/busybox:latest")
+	st := llb.Scratch()
+
+	// The path /foo should be unwriteable.
+	run := busybox.Run(
+		llb.ReadonlyRootFS(),
+		llb.Args([]string{"/bin/touch", "/foo"}))
+	st = run.AddMount("/mnt", st)
+
+	def, err := st.Marshal()
+	require.NoError(t, err)
+
+	err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	require.Error(t, err)
+	// Would prefer to detect more specifically "Read-only file
+	// system" but that isn't exposed here (it is on the stdio
+	// which we don't see).
+	require.Contains(t, err.Error(), "executor failed running [/bin/touch /foo]:")
 
 	checkAllReleasable(t, c, sb, true)
 }
