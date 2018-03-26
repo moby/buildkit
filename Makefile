@@ -45,10 +45,16 @@ lint:
 validate-vendor:
 	./hack/validate-vendor
 
-validate-all: test lint validate-vendor
+validate-generated-files:
+	./hack/validate-generated-files
+
+validate-all: test lint validate-vendor validate-generated-files
 
 vendor:
 	./hack/update-vendor
 
-.PHONY: vendor test binaries binaries-all install clean lint validate-all validate-vendor
+generated-files:
+	./hack/update-generated-files
+
+.PHONY: vendor generated-files test binaries binaries-all install clean lint validate-all validate-vendor validate-generated-files
 FORCE:

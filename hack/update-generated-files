@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+
+set -eu -o pipefail -x
+
+iidfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
+docker build --build-arg GOGO_VERSION=eda389564aa83cc6949f47e0524c47cc2e4aaa23 --iidfile $iidfile -f ./hack/dockerfiles/generated-files.Dockerfile --target update --force-rm .
+iid=$(cat $iidfile)
+cid=$(docker create $iid noop)
+
+docker export $cid | tar -xf - --strip-components=1 generated-files
+
+docker rm $cid
+
+rm -f $iidfile
