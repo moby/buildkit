@@ -125,10 +125,8 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 	defer os.RemoveAll(tmpdir)
 
 	err = c.Solve(context.TODO(), def, SolveOpt{
-		Exporter: ExporterLocal,
-		ExporterAttrs: map[string]string{
-			exporterLocalOutputDir: tmpdir,
-		},
+		Exporter:          ExporterLocal,
+		ExporterOutputDir: tmpdir,
 	}, nil)
 	require.NoError(t, err)
 
@@ -146,10 +144,8 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	err = c.Solve(context.TODO(), def, SolveOpt{
-		Exporter: ExporterLocal,
-		ExporterAttrs: map[string]string{
-			exporterLocalOutputDir: tmpdir,
-		},
+		Exporter:          ExporterLocal,
+		ExporterOutputDir: tmpdir,
 	}, nil)
 	require.NoError(t, err)
 
@@ -195,10 +191,8 @@ func testResolveAndHosts(t *testing.T, sb integration.Sandbox) {
 	defer os.RemoveAll(destDir)
 
 	err = c.Solve(context.TODO(), def, SolveOpt{
-		Exporter: ExporterLocal,
-		ExporterAttrs: map[string]string{
-			"output": destDir,
-		},
+		Exporter:          ExporterLocal,
+		ExporterOutputDir: destDir,
 	}, nil)
 	require.NoError(t, err)
 
@@ -241,10 +235,8 @@ func testUser(t *testing.T, sb integration.Sandbox) {
 	defer os.RemoveAll(destDir)
 
 	err = c.Solve(context.TODO(), def, SolveOpt{
-		Exporter: ExporterLocal,
-		ExporterAttrs: map[string]string{
-			"output": destDir,
-		},
+		Exporter:          ExporterLocal,
+		ExporterOutputDir: destDir,
 	}, nil)
 	require.NoError(t, err)
 
@@ -294,14 +286,16 @@ func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 		defer os.RemoveAll(destDir)
 
 		out := filepath.Join(destDir, "out.tar")
+		outW, err := os.Create(out)
+		require.NoError(t, err)
 		target := "example.com/buildkit/testoci:latest"
 
 		err = c.Solve(context.TODO(), def, SolveOpt{
 			Exporter: exp,
 			ExporterAttrs: map[string]string{
-				"output": out,
-				"name":   target,
+				"name": target,
 			},
+			ExporterOutput: outW,
 		}, nil)
 		require.NoError(t, err)
 
@@ -413,10 +407,8 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	defer os.RemoveAll(destDir)
 
 	err = c.Solve(context.TODO(), def, SolveOpt{
-		Exporter: ExporterLocal,
-		ExporterAttrs: map[string]string{
-			"output": destDir,
-		},
+		Exporter:          ExporterLocal,
+		ExporterOutputDir: destDir,
 	}, nil)
 	require.NoError(t, err)
 
@@ -582,12 +574,12 @@ func testDuplicateWhiteouts(t *testing.T, sb integration.Sandbox) {
 	defer os.RemoveAll(destDir)
 
 	out := filepath.Join(destDir, "out.tar")
+	outW, err := os.Create(out)
+	require.NoError(t, err)
 
 	err = c.Solve(context.TODO(), def, SolveOpt{
-		Exporter: ExporterOCI,
-		ExporterAttrs: map[string]string{
-			"output": out,
-		},
+		Exporter:       ExporterOCI,
+		ExporterOutput: outW,
 	}, nil)
 	require.NoError(t, err)
 
@@ -650,12 +642,11 @@ func testWhiteoutParentDir(t *testing.T, sb integration.Sandbox) {
 	defer os.RemoveAll(destDir)
 
 	out := filepath.Join(destDir, "out.tar")
-
+	outW, err := os.Create(out)
+	require.NoError(t, err)
 	err = c.Solve(context.TODO(), def, SolveOpt{
-		Exporter: ExporterOCI,
-		ExporterAttrs: map[string]string{
-			"output": out,
-		},
+		Exporter:       ExporterOCI,
+		ExporterOutput: outW,
 	}, nil)
 	require.NoError(t, err)
 

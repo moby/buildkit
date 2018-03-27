@@ -547,11 +547,9 @@ Dockerfile
 	defer os.RemoveAll(destDir)
 
 	err = c.Solve(context.TODO(), nil, client.SolveOpt{
-		Frontend: "dockerfile.v0",
-		Exporter: client.ExporterLocal,
-		ExporterAttrs: map[string]string{
-			"output": destDir,
-		},
+		Frontend:          "dockerfile.v0",
+		Exporter:          client.ExporterLocal,
+		ExporterOutputDir: destDir,
 		LocalDirs: map[string]string{
 			builder.LocalNameDockerfile: dir,
 			builder.LocalNameContext:    dir,
@@ -687,11 +685,9 @@ USER nobody
 	defer os.RemoveAll(destDir)
 
 	err = c.Solve(context.TODO(), nil, client.SolveOpt{
-		Frontend: "dockerfile.v0",
-		Exporter: client.ExporterLocal,
-		ExporterAttrs: map[string]string{
-			"output": destDir,
-		},
+		Frontend:          "dockerfile.v0",
+		Exporter:          client.ExporterLocal,
+		ExporterOutputDir: destDir,
 		LocalDirs: map[string]string{
 			builder.LocalNameDockerfile: dir,
 			builder.LocalNameContext:    dir,
@@ -785,11 +781,9 @@ COPY --from=base /out /
 	defer os.RemoveAll(destDir)
 
 	err = c.Solve(context.TODO(), nil, client.SolveOpt{
-		Frontend: "dockerfile.v0",
-		Exporter: client.ExporterLocal,
-		ExporterAttrs: map[string]string{
-			"output": destDir,
-		},
+		Frontend:          "dockerfile.v0",
+		Exporter:          client.ExporterLocal,
+		ExporterOutputDir: destDir,
 		LocalDirs: map[string]string{
 			builder.LocalNameDockerfile: dir,
 			builder.LocalNameContext:    dir,
@@ -839,11 +833,9 @@ COPY files dest
 	defer os.RemoveAll(destDir)
 
 	err = c.Solve(context.TODO(), nil, client.SolveOpt{
-		Frontend: "dockerfile.v0",
-		Exporter: client.ExporterLocal,
-		ExporterAttrs: map[string]string{
-			"output": destDir,
-		},
+		Frontend:          "dockerfile.v0",
+		Exporter:          client.ExporterLocal,
+		ExporterOutputDir: destDir,
 		LocalDirs: map[string]string{
 			builder.LocalNameDockerfile: dir,
 			builder.LocalNameContext:    dir,
@@ -897,11 +889,9 @@ COPY sub/dir1 subdest6
 	defer os.RemoveAll(destDir)
 
 	err = c.Solve(context.TODO(), nil, client.SolveOpt{
-		Frontend: "dockerfile.v0",
-		Exporter: client.ExporterLocal,
-		ExporterAttrs: map[string]string{
-			"output": destDir,
-		},
+		Frontend:          "dockerfile.v0",
+		Exporter:          client.ExporterLocal,
+		ExporterOutputDir: destDir,
 		LocalDirs: map[string]string{
 			builder.LocalNameDockerfile: dir,
 			builder.LocalNameContext:    dir,
@@ -1007,10 +997,8 @@ COPY --from=build foo bar2
 		FrontendAttrs: map[string]string{
 			"context": "git://" + server.URL + "/#first",
 		},
-		Exporter: client.ExporterLocal,
-		ExporterAttrs: map[string]string{
-			"output": destDir,
-		},
+		Exporter:          client.ExporterLocal,
+		ExporterOutputDir: destDir,
 	}, nil)
 	require.NoError(t, err)
 
@@ -1032,10 +1020,8 @@ COPY --from=build foo bar2
 		FrontendAttrs: map[string]string{
 			"context": "git://" + server.URL + "/",
 		},
-		Exporter: client.ExporterLocal,
-		ExporterAttrs: map[string]string{
-			"output": destDir,
-		},
+		Exporter:          client.ExporterLocal,
+		ExporterOutputDir: destDir,
 	}, nil)
 	require.NoError(t, err)
 
@@ -1071,11 +1057,9 @@ COPY --from=busybox /etc/passwd test
 	defer os.RemoveAll(destDir)
 
 	err = c.Solve(context.TODO(), nil, client.SolveOpt{
-		Frontend: "dockerfile.v0",
-		Exporter: client.ExporterLocal,
-		ExporterAttrs: map[string]string{
-			"output": destDir,
-		},
+		Frontend:          "dockerfile.v0",
+		Exporter:          client.ExporterLocal,
+		ExporterOutputDir: destDir,
 		LocalDirs: map[string]string{
 			builder.LocalNameDockerfile: dir,
 			builder.LocalNameContext:    dir,
@@ -1108,11 +1092,9 @@ COPY --from=golang /usr/bin/go go
 	defer os.RemoveAll(destDir)
 
 	err = c.Solve(context.TODO(), nil, client.SolveOpt{
-		Frontend: "dockerfile.v0",
-		Exporter: client.ExporterLocal,
-		ExporterAttrs: map[string]string{
-			"output": destDir,
-		},
+		Frontend:          "dockerfile.v0",
+		Exporter:          client.ExporterLocal,
+		ExporterOutputDir: destDir,
 		LocalDirs: map[string]string{
 			builder.LocalNameDockerfile: dir,
 			builder.LocalNameContext:    dir,

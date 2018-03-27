@@ -5,7 +5,4 @@ const (
 	ExporterLocal  = "local"
 	ExporterOCI    = "oci"
 	ExporterDocker = "docker"
-
-	exporterLocalOutputDir = "output"
-	exporterOCIDestination = "output"
 )
