@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/containerd/console"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/identity"
@@ -24,14 +23,16 @@ import (
 )
 
 type SolveOpt struct {
-	Exporter      string
-	ExporterAttrs map[string]string
-	LocalDirs     map[string]string
-	SharedKey     string
-	Frontend      string
-	FrontendAttrs map[string]string
-	ExportCache   string
-	ImportCache   string
+	Exporter          string
+	ExporterAttrs     map[string]string
+	ExporterOutput    io.WriteCloser // for ExporterOCI and ExporterDocker
+	ExporterOutputDir string         // for ExporterLocal
+	LocalDirs         map[string]string
+	SharedKey         string
+	Frontend          string
+	FrontendAttrs     map[string]string
+	ExportCache       string
+	ImportCache       string
 	// Session string
 }
 
@@ -79,28 +80,30 @@ func (c *Client) Solve(ctx context.Context, def *llb.Definition, opt SolveOpt, s
 
 	switch opt.Exporter {
 	case ExporterLocal:
-		outputDir, ok := opt.ExporterAttrs[exporterLocalOutputDir]
-		if !ok {
-			return errors.Errorf("output directory is required for local exporter")
+		if opt.ExporterOutput != nil {
+			logrus.Warnf("output file writer is ignored for local exporter")
 		}
-		s.Allow(filesync.NewFSSyncTarget(outputDir))
+		// it is ok to have empty output dir (just ignored)
+		// FIXME(AkihiroSuda): maybe disallow empty output dir? (breaks integration tests)
+		if opt.ExporterOutputDir != "" {
+			s.Allow(filesync.NewFSSyncTargetDir(opt.ExporterOutputDir))
+		}
 	case ExporterOCI, ExporterDocker:
-		outputFile, ok := opt.ExporterAttrs[exporterOCIDestination]
-		if ok {
-			fi, err := os.Stat(outputFile)
-			if err != nil && !os.IsNotExist(err) {
-				return errors.Wrapf(err, "invlid destination file: %s", outputFile)
-			}
-			if err == nil && fi.IsDir() {
-				return errors.Errorf("destination file is a directory")
-			}
-		} else {
-			if _, err := console.ConsoleFromFile(os.Stdout); err == nil {
-				return errors.Errorf("output file is required for %s exporter. refusing to write to console", opt.Exporter)
-			}
-			outputFile = ""
+		if opt.ExporterOutputDir != "" {
+			logrus.Warnf("output directory %s is ignored for %s exporter", opt.ExporterOutputDir, opt.Exporter)
 		}
-		s.Allow(filesync.NewFSSyncTargetFile(outputFile))
+		// it is ok to have empty output file (just ignored)
+		// FIXME(AkihiroSuda): maybe disallow empty output file? (breaks integration tests)
+		if opt.ExporterOutput != nil {
+			s.Allow(filesync.NewFSSyncTarget(opt.ExporterOutput))
+		}
+	default:
+		if opt.ExporterOutput != nil {
+			logrus.Warnf("output file writer is ignored for %s exporter", opt.Exporter)
+		}
+		if opt.ExporterOutputDir != "" {
+			logrus.Warnf("output directory %s is ignored for %s exporter", opt.ExporterOutputDir, opt.Exporter)
+		}
 	}
 
 	eg.Go(func() error {

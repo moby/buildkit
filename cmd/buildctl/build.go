@@ -117,17 +117,33 @@ func build(clicontext *cli.Context) error {
 	displayCh := make(chan *client.SolveStatus)
 	eg, ctx := errgroup.WithContext(commandContext(clicontext))
 
-	exporterAttrs, err := attrMap(clicontext.StringSlice("exporter-opt"))
+	solveOpt := client.SolveOpt{
+		Exporter: clicontext.String("exporter"),
+		// ExporterAttrs is set later
+		// LocalDirs is set later
+		Frontend: clicontext.String("frontend"),
+		// FrontendAttrs is set later
+		ExportCache: clicontext.String("export-cache"),
+		ImportCache: clicontext.String("import-cache"),
+	}
+	solveOpt.ExporterAttrs, err = attrMap(clicontext.StringSlice("exporter-opt"))
 	if err != nil {
 		return errors.Wrap(err, "invalid exporter-opt")
 	}
+	solveOpt.ExporterOutput, solveOpt.ExporterOutputDir, err = resolveExporterOutput(solveOpt.Exporter, solveOpt.ExporterAttrs["output"])
+	if err != nil {
+		return errors.Wrap(err, "invalid exporter-opt: output")
+	}
+	if solveOpt.ExporterOutput != nil || solveOpt.ExporterOutputDir != "" {
+		delete(solveOpt.ExporterAttrs, "output")
+	}
 
-	frontendAttrs, err := attrMap(clicontext.StringSlice("frontend-opt"))
+	solveOpt.FrontendAttrs, err = attrMap(clicontext.StringSlice("frontend-opt"))
 	if err != nil {
 		return errors.Wrap(err, "invalid frontend-opt")
 	}
 
-	localDirs, err := attrMap(clicontext.StringSlice("local"))
+	solveOpt.LocalDirs, err = attrMap(clicontext.StringSlice("local"))
 	if err != nil {
 		return errors.Wrap(err, "invalid local")
 	}
@@ -145,15 +161,7 @@ func build(clicontext *cli.Context) error {
 	}
 
 	eg.Go(func() error {
-		return c.Solve(ctx, def, client.SolveOpt{
-			Exporter:      clicontext.String("exporter"),
-			ExporterAttrs: exporterAttrs,
-			LocalDirs:     localDirs,
-			Frontend:      clicontext.String("frontend"),
-			FrontendAttrs: frontendAttrs,
-			ExportCache:   clicontext.String("export-cache"),
-			ImportCache:   clicontext.String("import-cache"),
-		}, ch)
+		return c.Solve(ctx, def, solveOpt, ch)
 	})
 
 	eg.Go(func() error {
@@ -202,4 +210,35 @@ func attrMap(sl []string) (map[string]string, error) {
 		m[parts[0]] = parts[1]
 	}
 	return m, nil
+}
+
+// resolveExporterOutput returns at most either one of io.WriteCloser (single file) or a string (directory path).
+func resolveExporterOutput(exporter, output string) (io.WriteCloser, string, error) {
+	switch exporter {
+	case client.ExporterLocal:
+		// it is ok to have empty output dir (just ignored)
+		// FIXME(AkihiroSuda): maybe disallow empty output dir? (breaks integration tests)
+		return nil, output, nil
+	case client.ExporterOCI, client.ExporterDocker:
+		if output != "" {
+			fi, err := os.Stat(output)
+			if err != nil && !os.IsNotExist(err) {
+				return nil, "", errors.Wrapf(err, "invalid destination file: %s", output)
+			}
+			if err == nil && fi.IsDir() {
+				return nil, "", errors.Errorf("destination file is a directory")
+			}
+			w, err := os.Create(output)
+			return w, "", err
+		}
+		if _, err := console.ConsoleFromFile(os.Stdout); err == nil {
+			return nil, "", errors.Errorf("output file is required for %s exporter. refusing to write to console", exporter)
+		}
+		return os.Stdout, "", nil
+	default: // e.g. client.ExporterImage
+		if output != "" {
+			logrus.Warnf("output %s is ignored for %s exporter", output, exporter)
+		}
+		return nil, "", nil
+	}
 }
