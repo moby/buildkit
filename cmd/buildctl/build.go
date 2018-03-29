@@ -216,8 +216,9 @@ func attrMap(sl []string) (map[string]string, error) {
 func resolveExporterOutput(exporter, output string) (io.WriteCloser, string, error) {
 	switch exporter {
 	case client.ExporterLocal:
-		// it is ok to have empty output dir (just ignored)
-		// FIXME(AkihiroSuda): maybe disallow empty output dir? (breaks integration tests)
+		if output == "" {
+			return nil, "", errors.New("output directory is required for local exporter")
+		}
 		return nil, output, nil
 	case client.ExporterOCI, client.ExporterDocker:
 		if output != "" {
@@ -231,13 +232,14 @@ func resolveExporterOutput(exporter, output string) (io.WriteCloser, string, err
 			w, err := os.Create(output)
 			return w, "", err
 		}
+		// if no output file is specified, use stdout
 		if _, err := console.ConsoleFromFile(os.Stdout); err == nil {
 			return nil, "", errors.Errorf("output file is required for %s exporter. refusing to write to console", exporter)
 		}
 		return os.Stdout, "", nil
 	default: // e.g. client.ExporterImage
 		if output != "" {
-			logrus.Warnf("output %s is ignored for %s exporter", output, exporter)
+			return nil, "", errors.Errorf("output %s is not supported by %s exporter", output, exporter)
 		}
 		return nil, "", nil
 	}
