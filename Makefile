@@ -48,13 +48,20 @@ validate-vendor:
 validate-generated-files:
 	./hack/validate-generated-files
 
-validate-all: test lint validate-vendor validate-generated-files
+test-with-cni:
+	./hack/cni-setup
+	./hack/test
+
+validate-all: test test-with-cni lint validate-vendor validate-generated-files
 
 vendor:
 	./hack/update-vendor
 
 generated-files:
 	./hack/update-generated-files
+
+install-cni:
+	./hack/cni-setup
 
 .PHONY: vendor generated-files test binaries binaries-all install clean lint validate-all validate-vendor validate-generated-files
 FORCE:
