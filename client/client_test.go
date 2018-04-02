@@ -44,6 +44,7 @@ func TestClientIntegration(t *testing.T) {
 		testDuplicateWhiteouts,
 		testSchema1Image,
 		testMountWithNoSource,
+		testInvalidExporter,
 	})
 }
 
@@ -852,4 +853,59 @@ loop0:
 		retries++
 		time.Sleep(500 * time.Millisecond)
 	}
+}
+
+func testInvalidExporter(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	t.Parallel()
+	c, err := New(sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	def, err := llb.Image("busybox:latest").Marshal()
+	require.NoError(t, err)
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	target := "example.com/buildkit/testoci:latest"
+	attrs := map[string]string{
+		"name": target,
+	}
+	for _, exp := range []string{ExporterOCI, ExporterDocker} {
+		err = c.Solve(context.TODO(), def, SolveOpt{
+			Exporter:      exp,
+			ExporterAttrs: attrs,
+		}, nil)
+		// output file writer is required
+		require.Error(t, err)
+		err = c.Solve(context.TODO(), def, SolveOpt{
+			Exporter:          exp,
+			ExporterAttrs:     attrs,
+			ExporterOutputDir: destDir,
+		}, nil)
+		// output directory is not supported
+		require.Error(t, err)
+	}
+
+	err = c.Solve(context.TODO(), def, SolveOpt{
+		Exporter:      ExporterLocal,
+		ExporterAttrs: attrs,
+	}, nil)
+	// output directory is required
+	require.Error(t, err)
+
+	f, err := os.Create(filepath.Join(destDir, "a"))
+	require.NoError(t, err)
+	defer f.Close()
+	err = c.Solve(context.TODO(), def, SolveOpt{
+		Exporter:       ExporterLocal,
+		ExporterAttrs:  attrs,
+		ExporterOutput: f,
+	}, nil)
+	// output file writer is not supported
+	require.Error(t, err)
+
+	checkAllReleasable(t, c, sb, true)
 }
