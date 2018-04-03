@@ -1,5 +1,21 @@
 // +build linux
 
+/*
+   Copyright The containerd Authors.
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+*/
+
 package seccomp
 
 import (
@@ -428,25 +444,8 @@ func DefaultProfile(sp *specs.Spec) *specs.LinuxSeccomp {
 		})
 	}
 
-	// make a map of enabled capabilities
-	caps := make(map[string]bool)
+	admin := false
 	for _, c := range sp.Process.Capabilities.Bounding {
-		caps[c] = true
-	}
-	for _, c := range sp.Process.Capabilities.Effective {
-		caps[c] = true
-	}
-	for _, c := range sp.Process.Capabilities.Inheritable {
-		caps[c] = true
-	}
-	for _, c := range sp.Process.Capabilities.Permitted {
-		caps[c] = true
-	}
-	for _, c := range sp.Process.Capabilities.Ambient {
-		caps[c] = true
-	}
-
-	for c := range caps {
 		switch c {
 		case "CAP_DAC_READ_SEARCH":
 			s.Syscalls = append(s.Syscalls, specs.LinuxSyscall{
@@ -455,6 +454,7 @@ func DefaultProfile(sp *specs.Spec) *specs.LinuxSeccomp {
 				Args:   []specs.LinuxSeccompArg{},
 			})
 		case "CAP_SYS_ADMIN":
+			admin = true
 			s.Syscalls = append(s.Syscalls, specs.LinuxSyscall{
 				Names: []string{
 					"bpf",
@@ -542,7 +542,7 @@ func DefaultProfile(sp *specs.Spec) *specs.LinuxSeccomp {
 		}
 	}
 
-	if !caps["CAP_SYS_ADMIN"] {
+	if !admin {
 		switch runtime.GOARCH {
 		case "s390", "s390x":
 			s.Syscalls = append(s.Syscalls, specs.LinuxSyscall{

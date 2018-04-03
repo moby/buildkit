@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/containerd/containerd/namespaces"
-	"github.com/containerd/containerd/snapshots/naive"
+	"github.com/containerd/containerd/snapshots/native"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/snapshot"
@@ -288,7 +288,7 @@ func testMultipleRepos(t *testing.T, keepGitDir bool) {
 }
 
 func setupGitSource(t *testing.T, tmpdir string) source.Source {
-	snapshotter, err := naive.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	assert.NoError(t, err)
 
 	md, err := metadata.NewStore(filepath.Join(tmpdir, "metadata.db"))

@@ -104,10 +104,11 @@ func childrenConfigHandler(provider content.Provider, platform string) images.Ha
 			}
 
 			if platform != "" {
-				matcher, err := platforms.Parse(platform)
+				pf, err := platforms.Parse(platform)
 				if err != nil {
 					return nil, err
 				}
+				matcher := platforms.NewMatcher(pf)
 
 				for _, d := range index.Manifests {
 					if d.Platform == nil || matcher.Match(*d.Platform) {

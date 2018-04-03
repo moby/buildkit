@@ -245,7 +245,7 @@ func (p *puller) Snapshot(ctx context.Context) (cache.ImmutableRef, error) {
 		// Set any children labels for that content
 		childrenHandler = images.SetChildrenLabels(p.is.ContentStore, childrenHandler)
 		// Filter the childen by the platform
-		childrenHandler = images.FilterPlatform(platforms.Default(), childrenHandler)
+		childrenHandler = images.FilterPlatforms(childrenHandler, platforms.Default())
 
 		handlers = append(handlers,
 			remotes.FetchHandler(p.is.ContentStore, fetcher),
@@ -283,7 +283,7 @@ func (p *puller) Snapshot(ctx context.Context) (cache.ImmutableRef, error) {
 				delete(allBlobs, desc.Digest)
 				return nil, nil
 			}),
-			images.FilterPlatform(platforms.Default(), images.ChildrenHandler(p.is.ContentStore)),
+			images.FilterPlatforms(images.ChildrenHandler(p.is.ContentStore), platforms.Default()),
 		}
 
 		if err := images.Dispatch(ctx, images.Handlers(handlers...), p.desc); err != nil {

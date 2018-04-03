@@ -1,5 +1,5 @@
-# protoc is dynamically linked to glibc to can't use golang:1.9-alpine
-FROM golang:1.9 AS gobuild-base
+# protoc is dynamically linked to glibc to can't use golang:1.10-alpine
+FROM golang:1.10 AS gobuild-base
 ARG PROTOC_VERSION=3.1.0
 ARG GOGO_VERSION=master
 RUN apt-get update && apt-get install -y \

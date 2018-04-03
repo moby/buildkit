@@ -1,3 +1,19 @@
+/*
+   Copyright The containerd Authors.
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+*/
+
 package schema1
 
 import (
@@ -9,7 +25,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"math/rand"
 	"strings"
 	"sync"
 	"time"
@@ -240,10 +255,9 @@ func (c *Converter) fetchBlob(ctx context.Context, desc ocispec.Descriptor) erro
 	log.G(ctx).Debug("fetch blob")
 
 	var (
-		ref   = remotes.MakeRefKey(ctx, desc)
-		calc  = newBlobStateCalculator()
-		retry = 16
-		size  = desc.Size
+		ref  = remotes.MakeRefKey(ctx, desc)
+		calc = newBlobStateCalculator()
+		size = desc.Size
 	)
 
 	// size may be unknown, set to zero for content ingest
@@ -251,20 +265,9 @@ func (c *Converter) fetchBlob(ctx context.Context, desc ocispec.Descriptor) erro
 		size = 0
 	}
 
-tryit:
-	cw, err := c.contentStore.Writer(ctx, ref, size, desc.Digest)
+	cw, err := content.OpenWriter(ctx, c.contentStore, ref, size, desc.Digest)
 	if err != nil {
-		if errdefs.IsUnavailable(err) {
-			select {
-			case <-time.After(time.Millisecond * time.Duration(rand.Intn(retry))):
-				if retry < 2048 {
-					retry = retry << 1
-				}
-				goto tryit
-			case <-ctx.Done():
-				return err
-			}
-		} else if !errdefs.IsAlreadyExists(err) {
+		if !errdefs.IsAlreadyExists(err) {
 			return err
 		}
 

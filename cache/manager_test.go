@@ -10,7 +10,7 @@ import (
 
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/snapshots"
-	"github.com/containerd/containerd/snapshots/naive"
+	"github.com/containerd/containerd/snapshots/native"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/snapshot"
@@ -26,7 +26,7 @@ func TestManager(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
-	snapshotter, err := naive.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
 	cm := getCacheManager(t, tmpdir, snapshotter)
 
@@ -150,7 +150,7 @@ func TestPrune(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
-	snapshotter, err := naive.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
 	cm := getCacheManager(t, tmpdir, snapshotter)
 
@@ -248,7 +248,7 @@ func TestLazyCommit(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
-	snapshotter, err := naive.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
 	cm := getCacheManager(t, tmpdir, snapshotter)
 
