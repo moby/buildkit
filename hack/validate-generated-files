@@ -16,7 +16,7 @@ case ${1:-} in
 		echo
 		echo "$diffs"
 		echo
-		echo 'Please update with "make generate"'
+		echo 'Please update with "make generated-files"'
 		echo
 	    } >&2
 	    false
