@@ -84,11 +84,16 @@ func (e *execOp) Run(ctx context.Context, inputs []solver.Ref) ([]solver.Ref, er
 			}
 			mountable = ref
 		}
+		activate := func(cache.ImmutableRef) (cache.MutableRef, error) {
+			desc := fmt.Sprintf("mount %s from exec %s", m.Dest, strings.Join(e.op.Meta.Args, " "))
+			return e.cm.New(ctx, ref, cache.WithDescription(desc)) // TODO: should be method `immutableRef.New() mutableRef`
+		}
+
 		if m.Output != pb.SkipOutput {
 			if m.Readonly && ref != nil && m.Dest != pb.RootMount { // exclude read-only rootfs
 				outputs = append(outputs, solver.NewSharedRef(ref).Clone())
 			} else {
-				active, err := e.cm.New(ctx, ref, cache.WithDescription(fmt.Sprintf("mount %s from exec %s", m.Dest, strings.Join(e.op.Meta.Args, " ")))) // TODO: should be method
+				active, err := activate(ref)
 				if err != nil {
 					return nil, err
 				}
@@ -105,8 +110,7 @@ func (e *execOp) Run(ctx context.Context, inputs []solver.Ref) ([]solver.Ref, er
 			root = mountable
 			readonlyRootFS = m.Readonly
 			if m.Output == pb.SkipOutput && readonlyRootFS {
-				// XXX this duplicates a case from above.
-				active, err := e.cm.New(ctx, ref, cache.WithDescription(fmt.Sprintf("mount %s from exec %s", m.Dest, strings.Join(e.op.Meta.Args, " ")))) // TODO: should be method
+				active, err := activate(ref)
 				if err != nil {
 					return nil, err
 				}
