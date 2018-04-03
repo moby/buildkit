@@ -4,7 +4,8 @@ set -eu -o pipefail
 
 case ${1:-} in
     '')
-	docker build --build-arg GOGO_VERSION=v0.5 -f ./hack/dockerfiles/generated-files.Dockerfile --target validate --force-rm .
+	gogo_version=$(awk '$1 == "github.com/gogo/protobuf" { print $2 }' vendor.conf)
+	docker build --build-arg GOGO_VERSION=$gogo_version -f ./hack/dockerfiles/generated-files.Dockerfile --target validate --force-rm .
 	;;
     check)
 	diffs="$(git status --porcelain -- **/*.pb.go 2>/dev/null)"
