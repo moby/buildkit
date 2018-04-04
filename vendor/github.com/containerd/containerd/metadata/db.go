@@ -1,3 +1,19 @@
+/*
+   Copyright The containerd Authors.
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+*/
+
 package metadata
 
 import (
@@ -27,7 +43,7 @@ const (
 	// dbVersion represents updates to the schema
 	// version which are additions and compatible with
 	// prior version of the same schema.
-	dbVersion = 1
+	dbVersion = 2
 )
 
 // DB represents a metadata database backed by a bolt
@@ -177,6 +193,15 @@ func (m *DB) Snapshotter(name string) snapshots.Snapshotter {
 		return nil
 	}
 	return sn
+}
+
+// Snapshotters returns all available snapshotters.
+func (m *DB) Snapshotters() map[string]snapshots.Snapshotter {
+	ss := make(map[string]snapshots.Snapshotter, len(m.ss))
+	for n, sn := range m.ss {
+		ss[n] = sn
+	}
+	return ss
 }
 
 // View runs a readonly transaction on the metadata store.

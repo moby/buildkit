@@ -52,7 +52,7 @@ func (de *DockerExporter) Export(ctx context.Context, store content.Provider, de
 	// Get all the children for a descriptor
 	childrenHandler := images.ChildrenHandler(store)
 	// Filter the childen by the platform
-	childrenHandler = images.FilterPlatform(platforms.Default(), childrenHandler)
+	childrenHandler = images.FilterPlatforms(childrenHandler, platforms.Default())
 
 	handlers := images.Handlers(
 		childrenHandler,

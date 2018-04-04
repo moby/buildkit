@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/containerd/containerd/namespaces"
+	ctdsnapshot "github.com/containerd/containerd/snapshots"
 	"github.com/containerd/containerd/snapshots/overlay"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/executor"
@@ -41,7 +42,9 @@ func TestRuncWorker(t *testing.T) {
 
 	snFactory := SnapshotterFactory{
 		Name: "overlayfs",
-		New:  overlay.NewSnapshotter,
+		New: func(root string) (ctdsnapshot.Snapshotter, error) {
+			return overlay.NewSnapshotter(root)
+		},
 	}
 	workerOpt, err := NewWorkerOpt(tmpdir, snFactory, nil)
 	require.NoError(t, err)

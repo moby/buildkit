@@ -3,7 +3,7 @@
 set -eu -o pipefail -x
 
 iidfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
-docker build --build-arg VNDR_VERSION=48ac2669d9d1bcacd3163650ef911edca2ec3b42 --iidfile $iidfile -f ./hack/dockerfiles/vendor.Dockerfile --force-rm .
+docker build --build-arg VNDR_VERSION=15dc0965b7ba6dd78ae741e6fda33f23207033c4 --iidfile $iidfile -f ./hack/dockerfiles/vendor.Dockerfile --force-rm .
 iid=$(cat $iidfile)
 diffs="$(docker run --rm $iid git status --porcelain -- vendor 2>/dev/null)"
 if [ "$diffs" ]; then

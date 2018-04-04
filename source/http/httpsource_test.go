@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/containerd/containerd/snapshots/naive"
+	"github.com/containerd/containerd/snapshots/native"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/identity"
@@ -304,7 +304,7 @@ func readFile(ctx context.Context, ref cache.ImmutableRef, fp string) ([]byte, e
 }
 
 func newHTTPSource(tmpdir string) (source.Source, error) {
-	snapshotter, err := naive.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	if err != nil {
 		return nil, err
 	}

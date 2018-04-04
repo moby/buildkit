@@ -1,5 +1,6 @@
-FROM golang:1.9-alpine AS vndr
+FROM golang:1.10-alpine AS vndr
 RUN  apk add --no-cache git
+# NOTE: hack scripts override VNDR_VERSION to a specific revision
 ARG VNDR_VERSION=master
 RUN go get -d github.com/LK4D4/vndr \
   && cd /go/src/github.com/LK4D4/vndr \

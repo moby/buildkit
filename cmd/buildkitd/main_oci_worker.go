@@ -5,7 +5,8 @@ package main
 import (
 	"os/exec"
 
-	"github.com/containerd/containerd/snapshots/naive"
+	ctdsnapshot "github.com/containerd/containerd/snapshots"
+	"github.com/containerd/containerd/snapshots/native"
 	"github.com/containerd/containerd/snapshots/overlay"
 	"github.com/moby/buildkit/worker"
 	"github.com/moby/buildkit/worker/base"
@@ -32,7 +33,7 @@ func init() {
 		},
 		cli.StringFlag{
 			Name:  "oci-worker-snapshotter",
-			Usage: "name of snapshotter (overlayfs or naive)",
+			Usage: "name of snapshotter (overlayfs or native)",
 			// TODO(AkihiroSuda): autodetect overlayfs availability when the value is set to "auto"?
 			Value: "overlayfs",
 		},
@@ -74,10 +75,12 @@ func snapshotterFactory(name string) (runc.SnapshotterFactory, error) {
 	}
 	var err error
 	switch name {
-	case "naive":
-		snFactory.New = naive.NewSnapshotter
+	case "native":
+		snFactory.New = native.NewSnapshotter
 	case "overlayfs": // not "overlay", for consistency with containerd snapshotter plugin ID.
-		snFactory.New = overlay.NewSnapshotter
+		snFactory.New = func(root string) (ctdsnapshot.Snapshotter, error) {
+			return overlay.NewSnapshotter(root)
+		}
 	default:
 		err = errors.Errorf("unknown snapshotter name: %q", name)
 	}

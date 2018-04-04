@@ -1,5 +1,5 @@
 ARG RUNC_VERSION=9f9c96235cc97674e935002fc3d78361b696a69e
-ARG CONTAINERD_VERSION=v1.0.2
+ARG CONTAINERD_VERSION=v1.0.3
 # available targets: buildkitd, buildkitd.oci_only, buildkitd.containerd_only
 ARG BUILDKIT_TARGET=buildkitd
 ARG REGISTRY_VERSION=2.6
@@ -7,7 +7,7 @@ ARG REGISTRY_VERSION=2.6
 # The `buildkitd` stage and the `buildctl` stage are placed here
 # so that they can be built quickly with legacy DAG-unaware `docker build --target=...`
 
-FROM golang:1.9-alpine AS gobuild-base
+FROM golang:1.10-alpine AS gobuild-base
 RUN apk add --no-cache g++ linux-headers
 RUN apk add --no-cache git libseccomp-dev make
 

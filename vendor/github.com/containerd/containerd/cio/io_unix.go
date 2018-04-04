@@ -1,5 +1,21 @@
 // +build !windows
 
+/*
+   Copyright The containerd Authors.
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+*/
+
 package cio
 
 import (
@@ -98,17 +114,24 @@ func openFifos(ctx context.Context, fifos *FIFOSet) (pipes, error) {
 		if f.Stdin, err = fifo.OpenFifo(ctx, fifos.Stdin, syscall.O_WRONLY|syscall.O_CREAT|syscall.O_NONBLOCK, 0700); err != nil {
 			return f, errors.Wrapf(err, "failed to open stdin fifo")
 		}
+		defer func() {
+			if err != nil && f.Stdin != nil {
+				f.Stdin.Close()
+			}
+		}()
 	}
 	if fifos.Stdout != "" {
 		if f.Stdout, err = fifo.OpenFifo(ctx, fifos.Stdout, syscall.O_RDONLY|syscall.O_CREAT|syscall.O_NONBLOCK, 0700); err != nil {
-			f.Stdin.Close()
 			return f, errors.Wrapf(err, "failed to open stdout fifo")
 		}
+		defer func() {
+			if err != nil && f.Stdout != nil {
+				f.Stdout.Close()
+			}
+		}()
 	}
 	if fifos.Stderr != "" {
 		if f.Stderr, err = fifo.OpenFifo(ctx, fifos.Stderr, syscall.O_RDONLY|syscall.O_CREAT|syscall.O_NONBLOCK, 0700); err != nil {
-			f.Stdin.Close()
-			f.Stdout.Close()
 			return f, errors.Wrapf(err, "failed to open stderr fifo")
 		}
 	}

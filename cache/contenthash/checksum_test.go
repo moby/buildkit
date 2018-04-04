@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/containerd/containerd/snapshots"
-	"github.com/containerd/containerd/snapshots/naive"
+	"github.com/containerd/containerd/snapshots/native"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/snapshot"
@@ -35,7 +35,7 @@ func TestChecksumBasicFile(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
-	snapshotter, err := naive.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
 	cm := setupCacheManager(t, tmpdir, snapshotter)
 	defer cm.Close()
@@ -185,7 +185,7 @@ func TestHandleChange(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
-	snapshotter, err := naive.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
 	cm := setupCacheManager(t, tmpdir, snapshotter)
 	defer cm.Close()
@@ -263,7 +263,7 @@ func TestHandleRecursiveDir(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
-	snapshotter, err := naive.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
 	cm := setupCacheManager(t, tmpdir, snapshotter)
 	defer cm.Close()
@@ -312,7 +312,7 @@ func TestChecksumUnorderedFiles(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
-	snapshotter, err := naive.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
 	cm := setupCacheManager(t, tmpdir, snapshotter)
 	defer cm.Close()
@@ -365,7 +365,7 @@ func TestPersistence(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
-	snapshotter, err := naive.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
 	cm := setupCacheManager(t, tmpdir, snapshotter)
 	defer cm.Close()

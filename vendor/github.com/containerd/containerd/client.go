@@ -1,3 +1,19 @@
+/*
+   Copyright The containerd Authors.
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+*/
+
 package containerd
 
 import (
@@ -15,17 +31,19 @@ import (
 	eventsapi "github.com/containerd/containerd/api/services/events/v1"
 	imagesapi "github.com/containerd/containerd/api/services/images/v1"
 	introspectionapi "github.com/containerd/containerd/api/services/introspection/v1"
+	leasesapi "github.com/containerd/containerd/api/services/leases/v1"
 	namespacesapi "github.com/containerd/containerd/api/services/namespaces/v1"
 	snapshotsapi "github.com/containerd/containerd/api/services/snapshots/v1"
 	"github.com/containerd/containerd/api/services/tasks/v1"
 	versionservice "github.com/containerd/containerd/api/services/version/v1"
 	"github.com/containerd/containerd/containers"
 	"github.com/containerd/containerd/content"
+	"github.com/containerd/containerd/defaults"
 	"github.com/containerd/containerd/dialer"
 	"github.com/containerd/containerd/errdefs"
+	"github.com/containerd/containerd/events"
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/namespaces"
-	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/plugin"
 	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
@@ -59,45 +77,94 @@ func New(address string, opts ...ClientOpt) (*Client, error) {
 			return nil, err
 		}
 	}
-	gopts := []grpc.DialOption{
-		grpc.WithBlock(),
-		grpc.WithInsecure(),
-		grpc.WithTimeout(60 * time.Second),
-		grpc.FailOnNonTempDialError(true),
-		grpc.WithBackoffMaxDelay(3 * time.Second),
-		grpc.WithDialer(dialer.Dialer),
+	c := &Client{
+		runtime: fmt.Sprintf("%s.%s", plugin.RuntimePlugin, runtime.GOOS),
 	}
-	if len(copts.dialOptions) > 0 {
-		gopts = copts.dialOptions
+	if copts.services != nil {
+		c.services = *copts.services
 	}
-	if copts.defaultns != "" {
-		unary, stream := newNSInterceptors(copts.defaultns)
-		gopts = append(gopts,
-			grpc.WithUnaryInterceptor(unary),
-			grpc.WithStreamInterceptor(stream),
-		)
+	if address != "" {
+		gopts := []grpc.DialOption{
+			grpc.WithBlock(),
+			grpc.WithInsecure(),
+			grpc.WithTimeout(60 * time.Second),
+			grpc.FailOnNonTempDialError(true),
+			grpc.WithBackoffMaxDelay(3 * time.Second),
+			grpc.WithDialer(dialer.Dialer),
+
+			// TODO(stevvooe): We may need to allow configuration of this on the client.
+			grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(defaults.DefaultMaxRecvMsgSize)),
+			grpc.WithDefaultCallOptions(grpc.MaxCallSendMsgSize(defaults.DefaultMaxSendMsgSize)),
+		}
+		if len(copts.dialOptions) > 0 {
+			gopts = copts.dialOptions
+		}
+		if copts.defaultns != "" {
+			unary, stream := newNSInterceptors(copts.defaultns)
+			gopts = append(gopts,
+				grpc.WithUnaryInterceptor(unary),
+				grpc.WithStreamInterceptor(stream),
+			)
+		}
+		connector := func() (*grpc.ClientConn, error) {
+			conn, err := grpc.Dial(dialer.DialAddress(address), gopts...)
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to dial %q", address)
+			}
+			return conn, nil
+		}
+		conn, err := connector()
+		if err != nil {
+			return nil, err
+		}
+		c.conn, c.connector = conn, connector
 	}
-	conn, err := grpc.Dial(dialer.DialAddress(address), gopts...)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to dial %q", address)
+	if copts.services == nil && c.conn == nil {
+		return nil, errors.New("no grpc connection or services is available")
 	}
-	return NewWithConn(conn, opts...)
+	return c, nil
 }
 
 // NewWithConn returns a new containerd client that is connected to the containerd
 // instance provided by the connection
 func NewWithConn(conn *grpc.ClientConn, opts ...ClientOpt) (*Client, error) {
-	return &Client{
+	var copts clientOpts
+	for _, o := range opts {
+		if err := o(&copts); err != nil {
+			return nil, err
+		}
+	}
+	c := &Client{
 		conn:    conn,
 		runtime: fmt.Sprintf("%s.%s", plugin.RuntimePlugin, runtime.GOOS),
-	}, nil
+	}
+	if copts.services != nil {
+		c.services = *copts.services
+	}
+	return c, nil
 }
 
 // Client is the client to interact with containerd and its various services
 // using a uniform interface
 type Client struct {
-	conn    *grpc.ClientConn
-	runtime string
+	services
+	conn      *grpc.ClientConn
+	runtime   string
+	connector func() (*grpc.ClientConn, error)
+}
+
+// Reconnect re-establishes the GRPC connection to the containerd daemon
+func (c *Client) Reconnect() error {
+	if c.connector == nil {
+		return errors.New("unable to reconnect to containerd, no connector available")
+	}
+	c.conn.Close()
+	conn, err := c.connector()
+	if err != nil {
+		return err
+	}
+	c.conn = conn
+	return nil
 }
 
 // IsServing returns true if the client can successfully connect to the
@@ -107,6 +174,9 @@ type Client struct {
 // connection. A timeout can be set in the context to ensure it returns
 // early.
 func (c *Client) IsServing(ctx context.Context) (bool, error) {
+	if c.conn == nil {
+		return false, errors.New("no grpc connection available")
+	}
 	r, err := c.HealthService().Check(ctx, &grpc_health_v1.HealthCheckRequest{}, grpc.FailFast(false))
 	if err != nil {
 		return false, err
@@ -134,7 +204,7 @@ func (c *Client) NewContainer(ctx context.Context, id string, opts ...NewContain
 	if err != nil {
 		return nil, err
 	}
-	defer done()
+	defer done(ctx)
 
 	container := containers.Container{
 		ID: id,
@@ -169,6 +239,10 @@ type RemoteContext struct {
 	// Resolver is used to resolve names to objects, fetchers, and pushers.
 	// If no resolver is provided, defaults to Docker registry resolver.
 	Resolver remotes.Resolver
+
+	// Platforms defines which platforms to handle when doing the image operation.
+	// If this field is empty, content for all platforms will be pulled.
+	Platforms []string
 
 	// Unpack is done after an image is pulled to extract into a snapshotter.
 	// If an image is not unpacked on pull, it can be unpacked any time
@@ -215,12 +289,13 @@ func (c *Client) Pull(ctx context.Context, ref string, opts ...RemoteOpt) (Image
 	if err != nil {
 		return nil, err
 	}
-	defer done()
+	defer done(ctx)
 
 	name, desc, err := pullCtx.Resolver.Resolve(ctx, ref)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to resolve reference %q", ref)
 	}
+
 	fetcher, err := pullCtx.Resolver.Fetcher(ctx, name)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to get fetcher for %q", name)
@@ -238,8 +313,8 @@ func (c *Client) Pull(ctx context.Context, ref string, opts ...RemoteOpt) (Image
 		childrenHandler := images.ChildrenHandler(store)
 		// Set any children labels for that content
 		childrenHandler = images.SetChildrenLabels(store, childrenHandler)
-		// Filter the childen by the platform
-		childrenHandler = images.FilterPlatform(platforms.Default(), childrenHandler)
+		// Filter childen by platforms
+		childrenHandler = images.FilterPlatforms(childrenHandler, pullCtx.Platforms...)
 
 		handler = images.Handlers(append(pullCtx.BaseHandlers,
 			remotes.FetchHandler(store, fetcher),
@@ -305,7 +380,7 @@ func (c *Client) Push(ctx context.Context, ref string, desc ocispec.Descriptor, 
 		return err
 	}
 
-	return remotes.PushContent(ctx, pusher, desc, c.ContentStore(), pushCtx.BaseHandlers...)
+	return remotes.PushContent(ctx, pusher, desc, c.ContentStore(), pushCtx.Platforms, pushCtx.BaseHandlers...)
 }
 
 // GetImage returns an existing image
@@ -338,48 +413,13 @@ func (c *Client) ListImages(ctx context.Context, filters ...string) ([]Image, er
 
 // Subscribe to events that match one or more of the provided filters.
 //
-// Callers should listen on both the envelope channel and errs channel. If the
-// errs channel returns nil or an error, the subscriber should terminate.
+// Callers should listen on both the envelope and errs channels. If the errs
+// channel returns nil or an error, the subscriber should terminate.
 //
-// To cancel shutdown reciept of events, cancel the provided context. The errs
-// channel will be closed and return a nil error.
-func (c *Client) Subscribe(ctx context.Context, filters ...string) (ch <-chan *eventsapi.Envelope, errs <-chan error) {
-	var (
-		evq  = make(chan *eventsapi.Envelope)
-		errq = make(chan error, 1)
-	)
-
-	errs = errq
-	ch = evq
-
-	session, err := c.EventService().Subscribe(ctx, &eventsapi.SubscribeRequest{
-		Filters: filters,
-	})
-	if err != nil {
-		errq <- err
-		close(errq)
-		return
-	}
-
-	go func() {
-		defer close(errq)
-
-		for {
-			ev, err := session.Recv()
-			if err != nil {
-				errq <- err
-				return
-			}
-
-			select {
-			case evq <- ev:
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-
-	return ch, errs
+// The subscriber can stop receiving events by canceling the provided context.
+// The errs channel will be closed and return a nil error.
+func (c *Client) Subscribe(ctx context.Context, filters ...string) (ch <-chan *events.Envelope, errs <-chan error) {
+	return c.EventService().Subscribe(ctx, filters...)
 }
 
 // Close closes the clients connection to containerd
@@ -389,36 +429,57 @@ func (c *Client) Close() error {
 
 // NamespaceService returns the underlying Namespaces Store
 func (c *Client) NamespaceService() namespaces.Store {
+	if c.namespaceStore != nil {
+		return c.namespaceStore
+	}
 	return NewNamespaceStoreFromClient(namespacesapi.NewNamespacesClient(c.conn))
 }
 
 // ContainerService returns the underlying container Store
 func (c *Client) ContainerService() containers.Store {
+	if c.containerStore != nil {
+		return c.containerStore
+	}
 	return NewRemoteContainerStore(containersapi.NewContainersClient(c.conn))
 }
 
 // ContentStore returns the underlying content Store
 func (c *Client) ContentStore() content.Store {
+	if c.contentStore != nil {
+		return c.contentStore
+	}
 	return NewContentStoreFromClient(contentapi.NewContentClient(c.conn))
 }
 
 // SnapshotService returns the underlying snapshotter for the provided snapshotter name
 func (c *Client) SnapshotService(snapshotterName string) snapshots.Snapshotter {
+	if c.snapshotters != nil {
+		return c.snapshotters[snapshotterName]
+	}
 	return NewSnapshotterFromClient(snapshotsapi.NewSnapshotsClient(c.conn), snapshotterName)
 }
 
 // TaskService returns the underlying TasksClient
 func (c *Client) TaskService() tasks.TasksClient {
+	if c.taskService != nil {
+		return c.taskService
+	}
 	return tasks.NewTasksClient(c.conn)
 }
 
 // ImageService returns the underlying image Store
 func (c *Client) ImageService() images.Store {
+	if c.imageStore != nil {
+		return c.imageStore
+	}
 	return NewImageStoreFromClient(imagesapi.NewImagesClient(c.conn))
 }
 
 // DiffService returns the underlying Differ
 func (c *Client) DiffService() DiffService {
+	if c.diffService != nil {
+		return c.diffService
+	}
 	return NewDiffServiceFromClient(diffapi.NewDiffClient(c.conn))
 }
 
@@ -427,14 +488,25 @@ func (c *Client) IntrospectionService() introspectionapi.IntrospectionClient {
 	return introspectionapi.NewIntrospectionClient(c.conn)
 }
 
+// LeasesService returns the underlying Leases Client
+func (c *Client) LeasesService() leasesapi.LeasesClient {
+	if c.leasesService != nil {
+		return c.leasesService
+	}
+	return leasesapi.NewLeasesClient(c.conn)
+}
+
 // HealthService returns the underlying GRPC HealthClient
 func (c *Client) HealthService() grpc_health_v1.HealthClient {
 	return grpc_health_v1.NewHealthClient(c.conn)
 }
 
-// EventService returns the underlying EventsClient
-func (c *Client) EventService() eventsapi.EventsClient {
-	return eventsapi.NewEventsClient(c.conn)
+// EventService returns the underlying event service
+func (c *Client) EventService() EventService {
+	if c.eventService != nil {
+		return c.eventService
+	}
+	return NewEventServiceFromClient(eventsapi.NewEventsClient(c.conn))
 }
 
 // VersionService returns the underlying VersionClient
@@ -452,6 +524,9 @@ type Version struct {
 
 // Version returns the version of containerd that the client is connected to
 func (c *Client) Version(ctx context.Context) (Version, error) {
+	if c.conn == nil {
+		return Version{}, errors.New("no grpc connection available")
+	}
 	response, err := c.VersionService().Version(ctx, &ptypes.Empty{})
 	if err != nil {
 		return Version{}, err
@@ -491,7 +566,7 @@ func (c *Client) Import(ctx context.Context, importer images.Importer, reader io
 	if err != nil {
 		return nil, err
 	}
-	defer done()
+	defer done(ctx)
 
 	imgrecs, err := importer.Import(ctx, c.ContentStore(), reader)
 	if err != nil {
