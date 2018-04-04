@@ -64,6 +64,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 	_, isDevel := opts[keyDevel]
 	var img ocispec.Image
 	var rootFS cache.ImmutableRef
+	var readonly bool // TODO: try to switch to read-only by default.
 
 	if isDevel {
 		ref, exp, err := llbBridge.Solve(session.NewContext(ctx, "gateway:"+sid),
@@ -154,9 +155,10 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 	}()
 
 	err = llbBridge.Exec(ctx, executor.Meta{
-		Env:  env,
-		Args: args,
-		Cwd:  cwd,
+		Env:            env,
+		Args:           args,
+		Cwd:            cwd,
+		ReadonlyRootFS: readonly,
 	}, rootFS, lbf.Stdin, lbf.Stdout, os.Stderr)
 
 	if err != nil {

@@ -8,11 +8,12 @@ import (
 )
 
 type Meta struct {
-	Args []string
-	Env  []string
-	User string
-	Cwd  string
-	Tty  bool
+	Args           []string
+	Env            []string
+	User           string
+	Cwd            string
+	Tty            bool
+	ReadonlyRootFS bool
 	// DisableNetworking bool
 }
 
