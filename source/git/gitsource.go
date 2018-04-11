@@ -374,13 +374,15 @@ func git(ctx context.Context, dir string, args ...string) (*bytes.Buffer, error)
 		stdout, stderr := logs.NewLogStreams(ctx)
 		defer stdout.Close()
 		defer stderr.Close()
-		cmd := exec.CommandContext(ctx, "git", args...)
+		cmd := exec.Command("git", args...)
 		cmd.Dir = dir // some commands like submodule require this
 		buf := bytes.NewBuffer(nil)
 		errbuf := bytes.NewBuffer(nil)
 		cmd.Stdout = io.MultiWriter(stdout, buf)
 		cmd.Stderr = io.MultiWriter(stderr, errbuf)
-		err := cmd.Run()
+		// remote git commands spawn helper processes that inherit FDs and don't
+		// handle parent death signal so exec.CommandContext can't be used
+		err := runProcessGroup(ctx, cmd)
 		if err != nil {
 			if strings.Contains(errbuf.String(), "--depth") || strings.Contains(errbuf.String(), "shallow") {
 				if newArgs := argsNoDepth(args); len(args) > len(newArgs) {
