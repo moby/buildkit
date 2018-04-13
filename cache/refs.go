@@ -204,7 +204,7 @@ func (sr *immutableRef) Release(ctx context.Context) error {
 }
 
 func (sr *immutableRef) release(ctx context.Context) error {
-	updateLastUsed(sr.md)
+	// updateLastUsed(sr.md)
 
 	delete(sr.refs, sr)
 
@@ -325,7 +325,7 @@ func (sr *mutableRef) Release(ctx context.Context) error {
 
 func (sr *mutableRef) release(ctx context.Context) error {
 	delete(sr.refs, sr)
-	updateLastUsed(sr.md)
+	// updateLastUsed(sr.md)
 	if getCachePolicy(sr.md) != cachePolicyRetain {
 		if sr.equalImmutable != nil {
 			if getCachePolicy(sr.equalImmutable.md) == cachePolicyRetain {
