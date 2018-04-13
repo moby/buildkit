@@ -18,9 +18,6 @@ import (
 	"github.com/docker/distribution/manifest/schema2"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/blobs"
-	"github.com/moby/buildkit/cache/cacheimport"
-	"github.com/moby/buildkit/cache/instructioncache"
-	localcache "github.com/moby/buildkit/cache/instructioncache/local"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/executor"
@@ -73,11 +70,8 @@ type Worker struct {
 	WorkerOpt
 	CacheManager  cache.Manager
 	SourceManager *source.Manager
-	Cache         instructioncache.InstructionCache
 	Exporters     map[string]exporter.Exporter
 	ImageSource   source.Source
-	CacheExporter *cacheimport.CacheExporter // TODO: remove
-	// no frontend here
 }
 
 // NewWorker instantiates a local worker
@@ -88,11 +82,6 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 	})
 	if err != nil {
 		return nil, err
-	}
-
-	ic := &localcache.LocalStore{
-		MetadataStore: opt.MetadataStore,
-		Cache:         cm,
 	}
 
 	sm, err := source.NewManager()
@@ -193,18 +182,12 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 	}
 	exporters[client.ExporterDocker] = dockerExporter
 
-	ce := cacheimport.NewCacheExporter(cacheimport.ExporterOpt{
-		SessionManager: opt.SessionManager,
-	})
-
 	return &Worker{
 		WorkerOpt:     opt,
 		CacheManager:  cm,
 		SourceManager: sm,
-		Cache:         ic,
 		Exporters:     exporters,
 		ImageSource:   is,
-		CacheExporter: ce,
 	}, nil
 }
 
@@ -351,10 +334,6 @@ func (w *Worker) unpack(ctx context.Context, descs []ocispec.Descriptor) (string
 	}
 
 	return string(ociidentity.ChainID(chain)), nil
-}
-
-func (w *Worker) InstructionCache() instructioncache.InstructionCache {
-	return w.Cache
 }
 
 // utility function. could be moved to the constructor logic?
