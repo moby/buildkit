@@ -10,16 +10,17 @@ import (
 // Controller holds worker instances.
 // Currently, only local workers are supported.
 type Controller struct {
-	mu sync.Mutex
 	// TODO: define worker interface and support remote ones
-	workers []Worker
+	workers   sync.Map
+	defaultID string
 }
 
 // Add adds a local worker
 func (c *Controller) Add(w Worker) error {
-	c.mu.Lock()
-	c.workers = append(c.workers, w)
-	c.mu.Unlock()
+	c.workers.Store(w.ID(), w)
+	if c.defaultID == "" {
+		c.defaultID = w.ID()
+	}
 	return nil
 }
 
@@ -29,30 +30,31 @@ func (c *Controller) List(filterStrings ...string) ([]Worker, error) {
 	if err != nil {
 		return nil, err
 	}
-	c.mu.Lock()
-	allWorkers := c.workers
-	c.mu.Unlock()
 	var workers []Worker
-	for _, w := range allWorkers {
+	c.workers.Range(func(k, v interface{}) bool {
+		w := v.(Worker)
 		if filter.Match(adaptWorker(w)) {
 			workers = append(workers, w)
 		}
-	}
+		return true
+	})
 	return workers, nil
 }
 
 // GetDefault returns the default local worker
 func (c *Controller) GetDefault() (Worker, error) {
-	var w Worker
-	c.mu.Lock()
-	if len(c.workers) > 0 {
-		w = c.workers[0]
+	if c.defaultID == "" {
+		return nil, errors.Errorf("no default worker")
 	}
-	c.mu.Unlock()
-	if w == nil {
-		return nil, errors.New("no worker registered")
+	return c.Get(c.defaultID)
+}
+
+func (c *Controller) Get(id string) (Worker, error) {
+	v, ok := c.workers.Load(id)
+	if !ok {
+		return nil, errors.Errorf("worker %s not found", id)
 	}
-	return w, nil
+	return v.(Worker), nil
 }
 
 // TODO: add Get(Constraint) (*Worker, error)
