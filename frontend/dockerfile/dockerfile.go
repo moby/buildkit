@@ -3,10 +3,9 @@ package dockerfile
 import (
 	"context"
 
-	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/frontend/dockerfile/builder"
-	"github.com/pkg/errors"
+	solver "github.com/moby/buildkit/solver-next"
 )
 
 func NewDockerfileFrontend() frontend.Frontend {
@@ -15,7 +14,7 @@ func NewDockerfileFrontend() frontend.Frontend {
 
 type dfFrontend struct{}
 
-func (f *dfFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string) (retRef cache.ImmutableRef, exporterAttr map[string][]byte, retErr error) {
+func (f *dfFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string) (retRef solver.CachedResult, exporterAttr map[string][]byte, retErr error) {
 
 	c, err := llbBridgeToGatewayClient(ctx, llbBridge, opts)
 	if err != nil {
@@ -34,9 +33,9 @@ func (f *dfFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBr
 		return nil, nil, err
 	}
 
-	if c.final == nil {
-		return nil, nil, errors.Errorf("invalid empty return") // shouldn't happen
+	if c.final == nil || c.final.CachedResult == nil {
+		return nil, c.exporterAttr, nil
 	}
 
-	return c.final.ImmutableRef, c.exporterAttr, nil
+	return c.final, c.exporterAttr, nil
 }
