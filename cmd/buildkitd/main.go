@@ -23,6 +23,7 @@ import (
 	"github.com/moby/buildkit/frontend/dockerfile"
 	"github.com/moby/buildkit/frontend/gateway"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/solver-next/boltdbcachestorage"
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/moby/buildkit/util/profiler"
@@ -351,20 +352,26 @@ func newController(c *cli.Context, root string) (*control.Controller, error) {
 	frontends["dockerfile.v0"] = dockerfile.NewDockerfileFrontend()
 	frontends["gateway.v0"] = gateway.NewGatewayFrontend()
 
-	// cache exporter and importer are manager concepts but as there is no
-	// way to pull data into specific worker yet we currently set them up
-	// as part of default worker
-	var ce *cacheimport.CacheExporter
-	var ci *cacheimport.CacheImporter
-
 	w, err := wc.GetDefault()
 	if err != nil {
 		return nil, err
 	}
 
+	// cache exporter and importer are manager concepts but as there is no
+	// way to pull data into specific worker yet we currently set them up
+	// as part of default worker
 	wt := w.(*base.Worker)
-	ce = wt.CacheExporter
-	ci = wt.CacheImporter
+	ce := wt.CacheExporter
+
+	ci := cacheimport.NewCacheImporter(cacheimport.ImportOpt{
+		Worker:         w,
+		SessionManager: sessionManager,
+	})
+
+	cacheStorage, err := boltdbcachestorage.NewStore(filepath.Join(root, "cache.db"))
+	if err != nil {
+		return nil, err
+	}
 
 	return control.NewController(control.Opt{
 		SessionManager:   sessionManager,
@@ -372,6 +379,7 @@ func newController(c *cli.Context, root string) (*control.Controller, error) {
 		Frontends:        frontends,
 		CacheExporter:    ce,
 		CacheImporter:    ci,
+		CacheKeyStorage:  cacheStorage,
 	})
 }
 

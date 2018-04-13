@@ -11,7 +11,8 @@ import (
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/grpchijack"
-	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/solver-next"
+	"github.com/moby/buildkit/solver-next/llbsolver"
 	"github.com/moby/buildkit/worker"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -23,24 +24,22 @@ type Opt struct {
 	SessionManager   *session.Manager
 	WorkerController *worker.Controller
 	Frontends        map[string]frontend.Frontend
+	CacheKeyStorage  solver.CacheKeyStorage
 	CacheExporter    *cacheimport.CacheExporter
 	CacheImporter    *cacheimport.CacheImporter
 }
 
 type Controller struct { // TODO: ControlService
 	opt    Opt
-	solver *solver.Solver
+	solver *llbsolver.Solver
 }
 
 func NewController(opt Opt) (*Controller, error) {
+	solver := llbsolver.New(opt.WorkerController, opt.Frontends, opt.CacheKeyStorage, opt.CacheImporter)
+
 	c := &Controller{
-		opt: opt,
-		solver: solver.NewLLBOpSolver(solver.LLBOpt{
-			WorkerController: opt.WorkerController,
-			Frontends:        opt.Frontends,
-			CacheExporter:    opt.CacheExporter,
-			CacheImporter:    opt.CacheImporter,
-		}),
+		opt:    opt,
+		solver: solver,
 	}
 	return c, nil
 }
@@ -130,15 +129,6 @@ func (c *Controller) Prune(req *controlapi.PruneRequest, stream controlapi.Contr
 }
 
 func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*controlapi.SolveResponse, error) {
-	var frontend frontend.Frontend
-	if req.Frontend != "" {
-		var ok bool
-		frontend, ok = c.opt.Frontends[req.Frontend]
-		if !ok {
-			return nil, errors.Errorf("frontend %s not found", req.Frontend)
-		}
-	}
-
 	ctx = session.NewContext(ctx, req.Session)
 
 	var expi exporter.ExporterInstance
@@ -159,13 +149,15 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		}
 	}
 
-	exportCacheRef := ""
+	var cacheExporter *cacheimport.RegistryCacheExporter
 	if ref := req.Cache.ExportRef; ref != "" {
 		parsed, err := reference.ParseNormalizedNamed(ref)
 		if err != nil {
 			return nil, err
 		}
-		exportCacheRef = reference.TagNameOnly(parsed).String()
+		exportCacheRef := reference.TagNameOnly(parsed).String()
+
+		cacheExporter = c.opt.CacheExporter.ExporterForTarget(exportCacheRef)
 	}
 
 	importCacheRef := ""
@@ -177,13 +169,14 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		importCacheRef = reference.TagNameOnly(parsed).String()
 	}
 
-	if err := c.solver.Solve(ctx, req.Ref, solver.SolveRequest{
-		Frontend:       frontend,
+	if err := c.solver.Solve(ctx, req.Ref, frontend.SolveRequest{
+		Frontend:       req.Frontend,
 		Definition:     req.Definition,
-		Exporter:       expi,
 		FrontendOpt:    req.FrontendAttrs,
-		ExportCacheRef: exportCacheRef,
 		ImportCacheRef: importCacheRef,
+	}, llbsolver.ExporterRequest{
+		Exporter:      expi,
+		CacheExporter: cacheExporter,
 	}); err != nil {
 		return nil, err
 	}
