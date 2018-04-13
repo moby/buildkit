@@ -7,8 +7,11 @@ import (
 	"time"
 
 	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/progress"
+	"github.com/moby/buildkit/util/tracing"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
@@ -18,6 +21,7 @@ type ResolveOpFunc func(Vertex, Builder) (Op, error)
 
 type Builder interface {
 	Build(ctx context.Context, e Edge) (CachedResult, error)
+	Call(ctx context.Context, name string, fn func(ctx context.Context) error) error
 }
 
 // JobList provides a shared graph of all the vertexes currently being
@@ -58,7 +62,35 @@ type state struct {
 	jobList   *JobList
 }
 
-func (s *state) builder() Builder {
+func (s *state) getSessionID() string {
+	// TODO: connect with sessionmanager to avoid getting dropped sessions
+	s.mu.Lock()
+	for j := range s.jobs {
+		if j.SessionID != "" {
+			s.mu.Unlock()
+			return j.SessionID
+		}
+	}
+	parents := map[digest.Digest]struct{}{}
+	for p := range s.parents {
+		parents[p] = struct{}{}
+	}
+	s.mu.Unlock()
+
+	for p := range parents {
+		s.jobList.mu.Lock()
+		pst, ok := s.jobList.actives[p]
+		s.jobList.mu.Unlock()
+		if ok {
+			if sessionID := pst.getSessionID(); sessionID != "" {
+				return sessionID
+			}
+		}
+	}
+	return ""
+}
+
+func (s *state) builder() *subBuilder {
 	return &subBuilder{state: s}
 }
 
@@ -113,14 +145,31 @@ func (s *state) Release() {
 	for _, e := range s.edges {
 		e.release()
 	}
+	if s.op != nil {
+		s.op.release()
+	}
 }
 
 type subBuilder struct {
 	*state
+	mu        sync.Mutex
+	exporters []ExportableCacheKey
 }
 
 func (sb *subBuilder) Build(ctx context.Context, e Edge) (CachedResult, error) {
-	return sb.jobList.subBuild(ctx, e, sb.vtx)
+	res, err := sb.jobList.subBuild(ctx, e, sb.vtx)
+	if err != nil {
+		return nil, err
+	}
+	sb.mu.Lock()
+	sb.exporters = append(sb.exporters, res.CacheKey())
+	sb.mu.Unlock()
+	return res, nil
+}
+
+func (sb *subBuilder) Call(ctx context.Context, name string, fn func(ctx context.Context) error) error {
+	ctx = progress.WithProgress(ctx, sb.mpw)
+	return inVertexContext(ctx, name, fn)
 }
 
 type Job struct {
@@ -129,6 +178,7 @@ type Job struct {
 	pw   progress.Writer
 
 	progressCloser func()
+	SessionID      string
 }
 
 type SolverOpt struct {
@@ -258,13 +308,13 @@ func (jl *JobList) loadUnlocked(v, parent Vertex, j *Job, cache map[Vertex]Verte
 	if cache := v.Options().CacheSource; cache != nil && cache.ID() != st.mainCache.ID() {
 		st.cache[cache.ID()] = cache
 	}
-	st.mu.Unlock()
 
 	if j != nil {
 		if _, ok := st.jobs[j]; !ok {
 			st.jobs[j] = struct{}{}
 		}
 	}
+	st.mu.Unlock()
 
 	if parent != nil {
 		if _, ok := st.parents[parent.Digest()]; !ok {
@@ -274,6 +324,10 @@ func (jl *JobList) loadUnlocked(v, parent Vertex, j *Job, cache map[Vertex]Verte
 				return nil, errors.Errorf("inactive parent %s", parent.Digest())
 			}
 			parentState.childVtx[dgst] = struct{}{}
+
+			for id, c := range parentState.cache {
+				st.cache[id] = c
+			}
 		}
 	}
 
@@ -387,8 +441,15 @@ func (j *Job) Discard() error {
 	return nil
 }
 
+func (j *Job) Call(ctx context.Context, name string, fn func(ctx context.Context) error) error {
+	ctx = progress.WithProgress(ctx, j.pw)
+	return inVertexContext(ctx, name, fn)
+}
+
 type activeOp interface {
-	Op
+	CacheMap(context.Context) (*CacheMap, error)
+	LoadCache(ctx context.Context, rec *CacheRecord) (Result, error)
+	Exec(ctx context.Context, inputs []Result) (outputs []Result, exporters []ExportableCacheKey, err error)
 	IgnoreCache() bool
 	Cache() CacheManager
 	CalcSlowCache(context.Context, Index, ResultBasedCacheFunc, Result) (digest.Digest, error)
@@ -404,16 +465,22 @@ func newSharedOp(resolver ResolveOpFunc, cacheManager CacheManager, st *state) *
 	return so
 }
 
+type execRes struct {
+	execRes       []*SharedResult
+	execExporters []ExportableCacheKey
+}
+
 type sharedOp struct {
 	resolver ResolveOpFunc
 	st       *state
 	g        flightcontrol.Group
 
-	opOnce sync.Once
-	op     Op
-	err    error
+	opOnce     sync.Once
+	op         Op
+	subBuilder *subBuilder
+	err        error
 
-	execRes []*SharedResult
+	execRes *execRes
 	execErr error
 
 	cacheRes *CacheMap
@@ -430,6 +497,17 @@ func (s *sharedOp) IgnoreCache() bool {
 
 func (s *sharedOp) Cache() CacheManager {
 	return s.st.combinedCacheManager()
+}
+
+func (s *sharedOp) LoadCache(ctx context.Context, rec *CacheRecord) (Result, error) {
+	ctx = progress.WithProgress(ctx, s.st.mpw)
+	// no cache hit. start evaluating the node
+	span, ctx := tracing.StartSpan(ctx, "load cache: "+s.st.vtx.Name())
+	notifyStarted(ctx, &s.st.clientVertex, true)
+	res, err := s.Cache().Load(ctx, rec)
+	tracing.FinishWithError(span, err)
+	notifyCompleted(ctx, &s.st.clientVertex, err, true)
+	return res, err
 }
 
 func (s *sharedOp) CalcSlowCache(ctx context.Context, index Index, f ResultBasedCacheFunc, res Result) (digest.Digest, error) {
@@ -480,7 +558,7 @@ func (s *sharedOp) CacheMap(ctx context.Context) (*CacheMap, error) {
 	if err != nil {
 		return nil, err
 	}
-	res, err := s.g.Do(ctx, "cachemap", func(ctx context.Context) (interface{}, error) {
+	res, err := s.g.Do(ctx, "cachemap", func(ctx context.Context) (ret interface{}, retErr error) {
 		if s.cacheRes != nil {
 			return s.cacheRes, nil
 		}
@@ -488,6 +566,16 @@ func (s *sharedOp) CacheMap(ctx context.Context) (*CacheMap, error) {
 			return nil, s.cacheErr
 		}
 		ctx = progress.WithProgress(ctx, s.st.mpw)
+		ctx = session.NewContext(ctx, s.st.getSessionID())
+		if len(s.st.vtx.Inputs()) == 0 {
+			// no cache hit. start evaluating the node
+			span, ctx := tracing.StartSpan(ctx, "cache request: "+s.st.vtx.Name())
+			notifyStarted(ctx, &s.st.clientVertex, false)
+			defer func() {
+				tracing.FinishWithError(span, retErr)
+				notifyCompleted(ctx, &s.st.clientVertex, retErr, false)
+			}()
+		}
 		res, err := op.CacheMap(ctx)
 		complete := true
 		if err != nil {
@@ -515,16 +603,27 @@ func (s *sharedOp) CacheMap(ctx context.Context) (*CacheMap, error) {
 	return res.(*CacheMap), nil
 }
 
-func (s *sharedOp) Exec(ctx context.Context, inputs []Result) (outputs []Result, err error) {
+func (s *sharedOp) Exec(ctx context.Context, inputs []Result) (outputs []Result, exporters []ExportableCacheKey, err error) {
 	op, err := s.getOp()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	res, err := s.g.Do(ctx, "exec", func(ctx context.Context) (interface{}, error) {
+	res, err := s.g.Do(ctx, "exec", func(ctx context.Context) (ret interface{}, retErr error) {
 		if s.execRes != nil || s.execErr != nil {
 			return s.execRes, s.execErr
 		}
+
 		ctx = progress.WithProgress(ctx, s.st.mpw)
+		ctx = session.NewContext(ctx, s.st.getSessionID())
+
+		// no cache hit. start evaluating the node
+		span, ctx := tracing.StartSpan(ctx, s.st.vtx.Name())
+		notifyStarted(ctx, &s.st.clientVertex, false)
+		defer func() {
+			tracing.FinishWithError(span, retErr)
+			notifyCompleted(ctx, &s.st.clientVertex, retErr, false)
+		}()
+
 		res, err := op.Exec(ctx, inputs)
 		complete := true
 		if err != nil {
@@ -540,21 +639,30 @@ func (s *sharedOp) Exec(ctx context.Context, inputs []Result) (outputs []Result,
 		}
 		if complete {
 			if res != nil {
-				s.execRes = wrapShared(res)
+				var subExporters []ExportableCacheKey
+				s.subBuilder.mu.Lock()
+				if len(s.subBuilder.exporters) > 0 {
+					subExporters = append(subExporters, s.subBuilder.exporters...)
+				}
+				s.subBuilder.mu.Unlock()
+
+				s.execRes = &execRes{execRes: wrapShared(res), execExporters: subExporters}
 			}
 			s.execErr = err
 		}
 		return s.execRes, err
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return unwrapShared(res.([]*SharedResult)), nil
+	r := res.(*execRes)
+	return unwrapShared(r.execRes), r.execExporters, nil
 }
 
 func (s *sharedOp) getOp() (Op, error) {
 	s.opOnce.Do(func() {
-		s.op, s.err = s.resolver(s.st.vtx, s.st.builder())
+		s.subBuilder = s.st.builder()
+		s.op, s.err = s.resolver(s.st.vtx, s.subBuilder)
 	})
 	if s.err != nil {
 		return nil, s.err
@@ -564,7 +672,7 @@ func (s *sharedOp) getOp() (Op, error) {
 
 func (s *sharedOp) release() {
 	if s.execRes != nil {
-		for _, r := range s.execRes {
+		for _, r := range s.execRes.execRes {
 			r.Release(context.TODO())
 		}
 	}
@@ -610,4 +718,42 @@ func (v *vertexWithCacheOptions) Digest() digest.Digest {
 
 func (v *vertexWithCacheOptions) Inputs() []Edge {
 	return v.inputs
+}
+
+func notifyStarted(ctx context.Context, v *client.Vertex, cached bool) {
+	pw, _, _ := progress.FromContext(ctx)
+	defer pw.Close()
+	now := time.Now()
+	v.Started = &now
+	v.Completed = nil
+	v.Cached = cached
+	pw.Write(v.Digest.String(), *v)
+}
+
+func notifyCompleted(ctx context.Context, v *client.Vertex, err error, cached bool) {
+	pw, _, _ := progress.FromContext(ctx)
+	defer pw.Close()
+	now := time.Now()
+	if v.Started == nil {
+		v.Started = &now
+	}
+	v.Completed = &now
+	v.Cached = cached
+	if err != nil {
+		v.Error = err.Error()
+	}
+	pw.Write(v.Digest.String(), *v)
+}
+
+func inVertexContext(ctx context.Context, name string, f func(ctx context.Context) error) error {
+	v := client.Vertex{
+		Digest: digest.FromBytes([]byte(identity.NewID())),
+		Name:   name,
+	}
+	pw, _, ctx := progress.FromContext(ctx, progress.WithMetadata("vertex", v.Digest))
+	notifyStarted(ctx, &v, false)
+	defer pw.Close()
+	err := f(ctx)
+	notifyCompleted(ctx, &v, err, false)
+	return err
 }

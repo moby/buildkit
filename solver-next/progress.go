@@ -18,7 +18,9 @@ func (j *Job) Status(ctx context.Context, ch chan *client.SolveStatus) error {
 		if enc := vs.encore(); len(enc) > 0 {
 			ch <- &client.SolveStatus{Vertexes: enc}
 		}
+		close(ch)
 	}()
+
 	for {
 		p, err := pr.Read(ctx)
 		if err != nil {
@@ -76,16 +78,16 @@ type vertexStream struct {
 func (vs *vertexStream) append(v client.Vertex) []*client.Vertex {
 	var out []*client.Vertex
 	vs.cache[v.Digest] = &v
-	if v.Cached {
+	if v.Started != nil {
 		for _, inp := range v.Inputs {
 			if inpv, ok := vs.cache[inp]; ok {
 				if !inpv.Cached && inpv.Completed == nil {
 					inpv.Cached = true
-					inpv.Started = v.Completed
-					inpv.Completed = v.Completed
+					inpv.Started = v.Started
+					inpv.Completed = v.Started
+					out = append(out, vs.append(*inpv)...)
+					delete(vs.cache, inp)
 				}
-				delete(vs.cache, inp)
-				out = append(out, vs.append(*inpv)...)
 			}
 		}
 	}
