@@ -40,7 +40,7 @@ func getCredentialsFunc(ctx context.Context, sm *session.Manager) func(string) (
 	}
 }
 
-func Push(ctx context.Context, sm *session.Manager, cs content.Store, dgst digest.Digest, ref string, insecure bool) error {
+func Push(ctx context.Context, sm *session.Manager, cs content.Provider, dgst digest.Digest, ref string, insecure bool) error {
 
 	parsed, err := reference.ParseNormalizedNamed(ref)
 	if err != nil {
@@ -83,11 +83,6 @@ func Push(ctx context.Context, sm *session.Manager, cs content.Store, dgst diges
 		pushHandler,
 	)
 
-	info, err := cs.Info(ctx, dgst)
-	if err != nil {
-		return err
-	}
-
 	ra, err := cs.ReaderAt(ctx, dgst)
 	if err != nil {
 		return err
@@ -101,7 +96,7 @@ func Push(ctx context.Context, sm *session.Manager, cs content.Store, dgst diges
 	layersDone := oneOffProgress(ctx, "pushing layers")
 	err = images.Dispatch(ctx, images.Handlers(handlers...), ocispec.Descriptor{
 		Digest:    dgst,
-		Size:      info.Size,
+		Size:      ra.Size(),
 		MediaType: mtype,
 	})
 	layersDone(err)
