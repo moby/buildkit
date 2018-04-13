@@ -2,16 +2,22 @@ package base
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/diff"
 	"github.com/containerd/containerd/images"
+	"github.com/containerd/containerd/rootfs"
+	cdsnapshot "github.com/containerd/containerd/snapshots"
+	"github.com/docker/distribution/manifest/schema2"
 	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/cache/blobs"
 	"github.com/moby/buildkit/cache/cacheimport"
 	"github.com/moby/buildkit/cache/instructioncache"
 	localcache "github.com/moby/buildkit/cache/instructioncache/local"
@@ -22,20 +28,26 @@ import (
 	imageexporter "github.com/moby/buildkit/exporter/containerimage"
 	localexporter "github.com/moby/buildkit/exporter/local"
 	ociexporter "github.com/moby/buildkit/exporter/oci"
+	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
-	"github.com/moby/buildkit/solver"
-	"github.com/moby/buildkit/solver/llbop"
+	"github.com/moby/buildkit/solver-next"
+	"github.com/moby/buildkit/solver-next/llbsolver/ops"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/source/containerimage"
 	"github.com/moby/buildkit/source/git"
 	"github.com/moby/buildkit/source/http"
 	"github.com/moby/buildkit/source/local"
+	"github.com/moby/buildkit/util/contentutil"
+	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
+	ociidentity "github.com/opencontainers/image-spec/identity"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 // TODO: this file should be removed. containerd defines ContainerdWorker, oci defines OCIWorker. There is no base worker.
@@ -65,7 +77,6 @@ type Worker struct {
 	Exporters     map[string]exporter.Exporter
 	ImageSource   source.Source
 	CacheExporter *cacheimport.CacheExporter // TODO: remove
-	CacheImporter *cacheimport.CacheImporter // TODO: remove
 	// no frontend here
 }
 
@@ -183,17 +194,6 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 	exporters[client.ExporterDocker] = dockerExporter
 
 	ce := cacheimport.NewCacheExporter(cacheimport.ExporterOpt{
-		Snapshotter:    opt.Snapshotter,
-		ContentStore:   opt.ContentStore,
-		SessionManager: opt.SessionManager,
-		Differ:         opt.Differ,
-	})
-
-	ci := cacheimport.NewCacheImporter(cacheimport.ImportOpt{
-		Snapshotter:    opt.Snapshotter,
-		ContentStore:   opt.ContentStore,
-		Applier:        opt.Applier,
-		CacheAccessor:  cm,
 		SessionManager: opt.SessionManager,
 	})
 
@@ -205,7 +205,6 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 		Exporters:     exporters,
 		ImageSource:   is,
 		CacheExporter: ce,
-		CacheImporter: ci,
 	}, nil
 }
 
@@ -217,14 +216,18 @@ func (w *Worker) Labels() map[string]string {
 	return w.WorkerOpt.Labels
 }
 
-func (w *Worker) ResolveOp(v solver.Vertex, s worker.SubBuilder) (solver.Op, error) {
+func (w *Worker) LoadRef(id string) (cache.ImmutableRef, error) {
+	return w.CacheManager.Get(context.TODO(), id)
+}
+
+func (w *Worker) ResolveOp(v solver.Vertex, s frontend.FrontendLLBBridge) (solver.Op, error) {
 	switch op := v.Sys().(type) {
 	case *pb.Op_Source:
-		return llbop.NewSourceOp(v, op, w.SourceManager)
+		return ops.NewSourceOp(v, op, w.SourceManager, w)
 	case *pb.Op_Exec:
-		return llbop.NewExecOp(v, op, w.CacheManager, w.Executor)
+		return ops.NewExecOp(v, op, w.CacheManager, w.Executor, w)
 	case *pb.Op_Build:
-		return llbop.NewBuildOp(v, op, s)
+		return ops.NewBuildOp(v, op, s, w)
 	default:
 		return nil, errors.Errorf("could not resolve %v", v)
 	}
@@ -268,6 +271,91 @@ func (w *Worker) Exporter(name string) (exporter.Exporter, error) {
 	return exp, nil
 }
 
+func (w *Worker) GetRemote(ctx context.Context, ref cache.ImmutableRef) (*solver.Remote, error) {
+	diffPairs, err := blobs.GetDiffPairs(ctx, w.ContentStore, w.Snapshotter, w.Differ, ref)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed calculaing diff pairs for exported snapshot")
+	}
+	if len(diffPairs) == 0 {
+		return nil, nil
+	}
+
+	descs := make([]ocispec.Descriptor, len(diffPairs))
+
+	for i, dp := range diffPairs {
+		info, err := w.ContentStore.Info(ctx, dp.Blobsum)
+		if err != nil {
+			return nil, err
+		}
+		descs[i] = ocispec.Descriptor{
+			Digest:    dp.Blobsum,
+			Size:      info.Size,
+			MediaType: schema2.MediaTypeLayer,
+			Annotations: map[string]string{
+				"containerd.io/uncompressed": dp.DiffID.String(),
+			},
+		}
+	}
+
+	return &solver.Remote{
+		Descriptors: descs,
+		Provider:    w.ContentStore,
+	}, nil
+}
+
+func (w *Worker) FromRemote(ctx context.Context, remote *solver.Remote) (cache.ImmutableRef, error) {
+	eg, gctx := errgroup.WithContext(ctx)
+	for _, desc := range remote.Descriptors {
+		func(desc ocispec.Descriptor) {
+			eg.Go(func() error {
+				done := oneOffProgress(ctx, fmt.Sprintf("pulling %s", desc.Digest))
+				return done(contentutil.Copy(gctx, w.ContentStore, remote.Provider, desc))
+			})
+		}(desc)
+	}
+
+	if err := eg.Wait(); err != nil {
+		return nil, err
+	}
+
+	cs, release := snapshot.NewContainerdSnapshotter(w.Snapshotter)
+	defer release()
+
+	unpackProgressDone := oneOffProgress(ctx, "unpacking")
+	chainID, err := w.unpack(ctx, remote.Descriptors, cs)
+	if err != nil {
+		return nil, unpackProgressDone(err)
+	}
+	unpackProgressDone(nil)
+
+	return w.CacheManager.Get(ctx, chainID, cache.WithDescription(fmt.Sprintf("imported %s", remote.Descriptors[len(remote.Descriptors)-1].Digest)))
+}
+
+func (w *Worker) unpack(ctx context.Context, descs []ocispec.Descriptor, s cdsnapshot.Snapshotter) (string, error) {
+	layers, err := getLayers(ctx, descs)
+	if err != nil {
+		return "", err
+	}
+
+	var chain []digest.Digest
+	for _, layer := range layers {
+		labels := map[string]string{
+			"containerd.io/uncompressed": layer.Diff.Digest.String(),
+		}
+		if _, err := rootfs.ApplyLayer(ctx, layer, chain, s, w.Applier, cdsnapshot.WithLabels(labels)); err != nil {
+			return "", err
+		}
+		chain = append(chain, layer.Diff.Digest)
+
+		chainID := ociidentity.ChainID(chain)
+		if err := w.Snapshotter.SetBlob(ctx, string(chainID), layer.Diff.Digest, layer.Blob.Digest); err != nil {
+			return "", err
+		}
+	}
+
+	return string(ociidentity.ChainID(chain)), nil
+}
+
 func (w *Worker) InstructionCache() instructioncache.InstructionCache {
 	return w.Cache
 }
@@ -303,4 +391,45 @@ func ID(root string) (string, error) {
 		}
 	}
 	return string(b), nil
+}
+
+func getLayers(ctx context.Context, descs []ocispec.Descriptor) ([]rootfs.Layer, error) {
+	layers := make([]rootfs.Layer, len(descs))
+	for i, desc := range descs {
+		diffIDStr := desc.Annotations["containerd.io/uncompressed"]
+		if diffIDStr == "" {
+			return nil, errors.Errorf("%s missing uncompressed digest", desc.Digest)
+		}
+		diffID, err := digest.Parse(diffIDStr)
+		if err != nil {
+			return nil, err
+		}
+		layers[i].Diff = ocispec.Descriptor{
+			MediaType: ocispec.MediaTypeImageLayer,
+			Digest:    diffID,
+		}
+		layers[i].Blob = ocispec.Descriptor{
+			MediaType: desc.MediaType,
+			Digest:    desc.Digest,
+			Size:      desc.Size,
+		}
+	}
+	return layers, nil
+}
+
+func oneOffProgress(ctx context.Context, id string) func(err error) error {
+	pw, _, _ := progress.FromContext(ctx)
+	now := time.Now()
+	st := progress.Status{
+		Started: &now,
+	}
+	pw.Write(id, st)
+	return func(err error) error {
+		// TODO: set error on status
+		now := time.Now()
+		st.Completed = &now
+		pw.Write(id, st)
+		pw.Close()
+		return err
+	}
 }
