@@ -185,22 +185,24 @@ func getLastUsed(si *metadata.StorageItem) (int, *time.Time) {
 	return usageCount, &tm
 }
 
-func updateLastUsed(si *metadata.StorageItem) error {
-	count, _ := getLastUsed(si)
-	count++
-
-	v, err := metadata.NewValue(count)
-	if err != nil {
-		return errors.Wrap(err, "failed to create usageCount value")
-	}
-	v2, err := metadata.NewValue(time.Now().UnixNano())
-	if err != nil {
-		return errors.Wrap(err, "failed to create lastUsedAt value")
-	}
-	return si.Update(func(b *bolt.Bucket) error {
-		if err := si.SetValue(b, keyUsageCount, v); err != nil {
-			return err
-		}
-		return si.SetValue(b, keyLastUsedAt, v2)
-	})
-}
+// TODO: temporarily removed until there is an implementation that can do this
+// on background or one that doesn't get new refs for every operation
+// func updateLastUsed(si *metadata.StorageItem) error {
+// 	count, _ := getLastUsed(si)
+// 	count++
+//
+// 	v, err := metadata.NewValue(count)
+// 	if err != nil {
+// 		return errors.Wrap(err, "failed to create usageCount value")
+// 	}
+// 	v2, err := metadata.NewValue(time.Now().UnixNano())
+// 	if err != nil {
+// 		return errors.Wrap(err, "failed to create lastUsedAt value")
+// 	}
+// 	return si.Update(func(b *bolt.Bucket) error {
+// 		if err := si.SetValue(b, keyUsageCount, v); err != nil {
+// 			return err
+// 		}
+// 		return si.SetValue(b, keyLastUsedAt, v2)
+// 	})
+// }
