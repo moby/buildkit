@@ -28,7 +28,6 @@ import (
 	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/moby/buildkit/util/profiler"
 	"github.com/moby/buildkit/worker"
-	"github.com/moby/buildkit/worker/base"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -353,17 +352,16 @@ func newController(c *cli.Context, root string) (*control.Controller, error) {
 	frontends["dockerfile.v0"] = dockerfile.NewDockerfileFrontend()
 	frontends["gateway.v0"] = gateway.NewGatewayFrontend()
 
+	ce := cacheimport.NewCacheExporter(cacheimport.ExporterOpt{
+		SessionManager: sessionManager,
+	})
+
+	// cache importer is a manager concept but as there is no way to pull data
+	// into specific worker yet we currently set it up as part of default worker
 	w, err := wc.GetDefault()
 	if err != nil {
 		return nil, err
 	}
-
-	// cache exporter and importer are manager concepts but as there is no
-	// way to pull data into specific worker yet we currently set them up
-	// as part of default worker
-	wt := w.(*base.Worker)
-	ce := wt.CacheExporter
-
 	ci := cacheimport.NewCacheImporter(cacheimport.ImportOpt{
 		Worker:         w,
 		SessionManager: sessionManager,
