@@ -18,6 +18,7 @@ func RunCacheStorageTests(t *testing.T, st func() (CacheKeyStorage, func())) {
 		testLinks,
 		testResultReleaseSingleLevel,
 		testResultReleaseMultiLevel,
+		testBacklinks,
 	} {
 		runStorageTest(t, tc, st)
 	}
@@ -199,6 +200,38 @@ func testResultReleaseSingleLevel(t *testing.T, st CacheKeyStorage) {
 	})
 
 	require.Equal(t, len(m), 0)
+}
+
+func testBacklinks(t *testing.T, st CacheKeyStorage) {
+	t.Parallel()
+
+	err := st.AddResult("foo", CacheResult{
+		ID:        "foo-result",
+		CreatedAt: time.Now(),
+	})
+	require.NoError(t, err)
+
+	err = st.AddResult("sub0", CacheResult{
+		ID:        "sub0-result",
+		CreatedAt: time.Now(),
+	})
+	require.NoError(t, err)
+
+	l0 := CacheInfoLink{
+		Input: 0, Output: 1, Digest: digest.FromBytes([]byte("to-sub0")),
+	}
+	err = st.AddLink("foo", l0, "sub0")
+	require.NoError(t, err)
+
+	backlinks := 0
+	st.WalkBacklinks("sub0", func(id string, link CacheInfoLink) error {
+		require.Equal(t, id, "foo")
+		require.Equal(t, link.Input, Index(0))
+		require.Equal(t, link.Digest, rootKey(digest.FromBytes([]byte("to-sub0")), 1))
+		backlinks++
+		return nil
+	})
+	require.Equal(t, backlinks, 1)
 }
 
 func testResultReleaseMultiLevel(t *testing.T, st CacheKeyStorage) {

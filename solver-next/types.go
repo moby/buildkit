@@ -2,7 +2,6 @@ package solver
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"github.com/containerd/containerd/content"
@@ -51,23 +50,29 @@ type Result interface {
 type CachedResult interface {
 	Result
 	CacheKey() ExportableCacheKey
-	Export(ctx context.Context, converter func(context.Context, Result) (*Remote, error)) ([]ExportRecord, error)
 }
 
 // Exporter can export the artifacts of the build chain
 type Exporter interface {
-	Export(ctx context.Context, m map[digest.Digest]*ExportRecord, converter func(context.Context, Result) (*Remote, error)) (*ExportRecord, error)
+	ExportTo(ctx context.Context, t ExporterTarget, converter func(context.Context, Result) (*Remote, error)) ([]ExporterRecord, error)
 }
 
-// ExportRecord defines a single record in the exported cache chain
-type ExportRecord struct {
-	Digest digest.Digest
-	Links  map[CacheLink]struct{}
-	Remote *Remote
+// ExporterTarget defines object capable of receiving exports
+type ExporterTarget interface {
+	Add(dgst digest.Digest) ExporterRecord
+	Visit(interface{})
+	Visited(interface{}) bool
+}
+
+// ExporterRecord is a single object being exported
+type ExporterRecord interface {
+	AddResult(createdAt time.Time, result *Remote)
+	LinkFrom(src ExporterRecord, index int, selector string)
 }
 
 // Remote is a descriptor or a list of stacked descriptors that can be pulled
 // from a content provider
+// TODO: add closer to keep referenced data from getting deleted
 type Remote struct {
 	Descriptors []ocispec.Descriptor
 	Provider    content.Provider
@@ -75,11 +80,11 @@ type Remote struct {
 
 // CacheLink is a link between two cache records
 type CacheLink struct {
-	Source   digest.Digest
-	Input    Index
-	Output   Index
-	Base     digest.Digest
-	Selector digest.Digest
+	Source   digest.Digest `json:",omitempty"`
+	Input    Index         `json:",omitempty"`
+	Output   Index         `json:",omitempty"`
+	Base     digest.Digest `json:",omitempty"`
+	Selector digest.Digest `json:",omitempty"`
 }
 
 // Op is an implementation for running a vertex
@@ -108,32 +113,19 @@ type CacheMap struct {
 // ExportableCacheKey is a cache key connected with an exporter that can export
 // a chain of cacherecords pointing to that key
 type ExportableCacheKey struct {
-	CacheKey
+	*CacheKey
 	Exporter
-}
-
-// CacheKey is an identifier for storing/loading build cache
-type CacheKey interface {
-	// Deps are dependant cache keys
-	Deps() []CacheKeyWithSelector
-	// Base digest for operation. Usually CacheMap.Digest
-	Digest() digest.Digest
-	// Index for the output that is cached
-	Output() Index
-	// Helpers for implementations for adding internal metadata
-	SetValue(key, value interface{})
-	GetValue(key interface{}) interface{}
 }
 
 // CacheRecord is an identifier for loading in cache
 type CacheRecord struct {
-	ID           string
-	CacheKey     ExportableCacheKey
-	CacheManager CacheManager
-	Loadable     bool
-	// Size int
+	ID        string
+	Size      int
 	CreatedAt time.Time
 	Priority  int
+
+	cacheManager *cacheManager
+	key          *CacheKey
 }
 
 // CacheManager implements build cache backend
@@ -143,58 +135,10 @@ type CacheManager interface {
 	ID() string
 	// Query searches for cache paths from one cache key to the output of a
 	// possible match.
-	Query(inp []CacheKeyWithSelector, inputIndex Index, dgst digest.Digest, outputIndex Index) ([]*CacheRecord, error)
+	Query(inp []CacheKeyWithSelector, inputIndex Index, dgst digest.Digest, outputIndex Index) ([]*CacheKey, error)
+	Records(ck *CacheKey) ([]*CacheRecord, error)
 	// Load pulls and returns the cached result
 	Load(ctx context.Context, rec *CacheRecord) (Result, error)
 	// Save saves a result based on a cache key
-	Save(key CacheKey, s Result) (ExportableCacheKey, error)
-}
-
-// NewCacheKey creates a new cache key for a specific output index
-func NewCacheKey(dgst digest.Digest, index Index, deps []CacheKeyWithSelector) CacheKey {
-	return &cacheKey{
-		dgst:   dgst,
-		deps:   deps,
-		index:  index,
-		values: &sync.Map{},
-	}
-}
-
-// CacheKeyWithSelector combines a cache key with an optional selector digest.
-// Used to limit the matches for dependency cache key.
-type CacheKeyWithSelector struct {
-	Selector digest.Digest
-	CacheKey ExportableCacheKey
-}
-
-type cacheKey struct {
-	dgst   digest.Digest
-	index  Index
-	deps   []CacheKeyWithSelector
-	values *sync.Map
-}
-
-func (ck *cacheKey) SetValue(key, value interface{}) {
-	ck.values.Store(key, value)
-}
-
-func (ck *cacheKey) GetValue(key interface{}) interface{} {
-	v, _ := ck.values.Load(key)
-	return v
-}
-
-func (ck *cacheKey) Deps() []CacheKeyWithSelector {
-	return ck.deps
-}
-
-func (ck *cacheKey) Digest() digest.Digest {
-	return ck.dgst
-}
-
-func (ck *cacheKey) Output() Index {
-	return ck.index
-}
-
-func (ck *cacheKey) Export(ctx context.Context, converter func(context.Context, Result) ([]ocispec.Descriptor, content.Provider, error)) ([]ExportRecord, content.Provider, error) {
-	return nil, nil, nil
+	Save(key *CacheKey, s Result) (*ExportableCacheKey, error)
 }
