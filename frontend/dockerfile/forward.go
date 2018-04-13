@@ -2,13 +2,14 @@ package dockerfile
 
 import (
 	"context"
-	"os"
 
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/session"
+	solver "github.com/moby/buildkit/solver-next"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/worker"
 	"github.com/pkg/errors"
 )
 
@@ -55,12 +56,21 @@ func (c *bridgeClient) SessionID() string {
 }
 
 type ref struct {
-	cache.ImmutableRef
+	solver.CachedResult
 }
 
 func (r *ref) ReadFile(ctx context.Context, fp string) ([]byte, error) {
-	if r.ImmutableRef == nil {
-		return nil, errors.Wrapf(os.ErrNotExist, "%s no found", fp)
+	ref, err := r.getImmutableRef()
+	if err != nil {
+		return nil, err
 	}
-	return cache.ReadFile(ctx, r.ImmutableRef, fp)
+	return cache.ReadFile(ctx, ref, fp)
+}
+
+func (r *ref) getImmutableRef() (cache.ImmutableRef, error) {
+	ref, ok := r.CachedResult.Sys().(*worker.WorkerRef)
+	if !ok {
+		return nil, errors.Errorf("invalid ref: %T", r.CachedResult.Sys())
+	}
+	return ref.ImmutableRef, nil
 }
