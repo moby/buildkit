@@ -3,9 +3,11 @@ package boltdbcachestorage
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 
 	"github.com/boltdb/bolt"
 	solver "github.com/moby/buildkit/solver-next"
+	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
 
@@ -35,6 +37,7 @@ func NewStore(dbPath string) (*Store, error) {
 	}); err != nil {
 		return nil, err
 	}
+	db.NoSync = true
 	return &Store{db: db}, nil
 }
 
@@ -327,7 +330,94 @@ func (s *Store) WalkLinks(id string, link solver.CacheInfoLink, fn func(id strin
 	return nil
 }
 
+func (s *Store) HasLink(id string, link solver.CacheInfoLink, target string) bool {
+	var v bool
+	if err := s.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(linksBucket))
+		if b == nil {
+			return nil
+		}
+		b = b.Bucket([]byte(id))
+		if b == nil {
+			return nil
+		}
+
+		dt, err := json.Marshal(link)
+		if err != nil {
+			return err
+		}
+		v = b.Get(bytes.Join([][]byte{dt, []byte(target)}, []byte("@"))) != nil
+		return nil
+	}); err != nil {
+		return false
+	}
+	return v
+}
+
+func (s *Store) WalkBacklinks(id string, fn func(id string, link solver.CacheInfoLink) error) error {
+	var outIDs []string
+	var outLinks []solver.CacheInfoLink
+
+	if err := s.db.View(func(tx *bolt.Tx) error {
+		links := tx.Bucket([]byte(linksBucket))
+		if links == nil {
+			return nil
+		}
+		backLinks := tx.Bucket([]byte(backlinksBucket))
+		if backLinks == nil {
+			return nil
+		}
+		b := backLinks.Bucket([]byte(id))
+		if b == nil {
+			return nil
+		}
+
+		if err := b.ForEach(func(bid, v []byte) error {
+			b = links.Bucket(bid)
+			if b == nil {
+				return nil
+			}
+			if err := b.ForEach(func(k, v []byte) error {
+				parts := bytes.Split(k, []byte("@"))
+				if len(parts) == 2 {
+					if string(parts[1]) != id {
+						return nil
+					}
+					var l solver.CacheInfoLink
+					if err := json.Unmarshal(parts[0], &l); err != nil {
+						return err
+					}
+					l.Digest = digest.FromBytes([]byte(fmt.Sprintf("%s@%d", l.Digest, l.Output)))
+					l.Output = 0
+					outIDs = append(outIDs, string(bid))
+					outLinks = append(outLinks, l)
+				}
+				return nil
+			}); err != nil {
+				return err
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	for i := range outIDs {
+		if err := fn(outIDs[i], outLinks[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func isEmptyBucket(b *bolt.Bucket) bool {
+	if b == nil {
+		return true
+	}
 	k, _ := b.Cursor().First()
 	return k == nil
 }
