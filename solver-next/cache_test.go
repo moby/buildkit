@@ -22,7 +22,6 @@ func testCacheKey(dgst digest.Digest, output Index, deps ...ExportableCacheKey) 
 	k.deps = make([][]CacheKeyWithSelector, len(deps))
 	for i, dep := range deps {
 		k.deps[i] = depKeys(dep)
-		// k.deps[i] = append(k.deps[i], CacheKeyWithSelector{CacheKey: dep})
 	}
 	return k
 }
@@ -126,8 +125,8 @@ func TestInMemoryCache(t *testing.T) {
 	require.Equal(t, len(matches), 2)
 
 	k = testCacheKeyWithDeps(dgst("bax"), 0, [][]CacheKeyWithSelector{
-		[]CacheKeyWithSelector{{CacheKey: *cacheFoo}, {CacheKey: *cacheBaz}},
-		[]CacheKeyWithSelector{{CacheKey: *cacheBar}},
+		{{CacheKey: *cacheFoo}, {CacheKey: *cacheBaz}},
+		{{CacheKey: *cacheBar}},
 	})
 	_, err = m.Save(k, testResult("result4"))
 	require.NoError(t, err)
@@ -159,7 +158,7 @@ func TestInMemoryCacheSelector(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = m.Save(testCacheKeyWithDeps(dgst("bar"), 0, [][]CacheKeyWithSelector{
-		[]CacheKeyWithSelector{{CacheKey: *cacheFoo, Selector: dgst("sel0")}},
+		{{CacheKey: *cacheFoo, Selector: dgst("sel0")}},
 	}), testResult("result1"))
 	require.NoError(t, err)
 
@@ -193,7 +192,7 @@ func TestInMemoryCacheSelectorNested(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = m.Save(testCacheKeyWithDeps(dgst("bar"), 0, [][]CacheKeyWithSelector{
-		[]CacheKeyWithSelector{{CacheKey: *cacheFoo, Selector: dgst("sel0")}, {CacheKey: expKey(NewCacheKey(dgst("second"), 0))}},
+		{{CacheKey: *cacheFoo, Selector: dgst("sel0")}, {CacheKey: expKey(NewCacheKey(dgst("second"), 0))}},
 	}), testResult("result1"))
 	require.NoError(t, err)
 
@@ -333,7 +332,7 @@ func TestCarryOverFromSublink(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = m.Save(testCacheKeyWithDeps(dgst("res"), 0, [][]CacheKeyWithSelector{
-		[]CacheKeyWithSelector{{CacheKey: *cacheFoo, Selector: dgst("sel0")}, {CacheKey: expKey(NewCacheKey(dgst("content0"), 0))}},
+		{{CacheKey: *cacheFoo, Selector: dgst("sel0")}, {CacheKey: expKey(NewCacheKey(dgst("content0"), 0))}},
 	}), testResult("result0"))
 	require.NoError(t, err)
 
