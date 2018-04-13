@@ -4,36 +4,24 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/containerd/containerd/content"
-	"github.com/containerd/containerd/diff"
 	"github.com/containerd/containerd/images"
 	"github.com/docker/distribution/manifest"
-	"github.com/docker/distribution/manifest/schema2"
-	"github.com/moby/buildkit/cache"
-	"github.com/moby/buildkit/cache/blobs"
+	v1 "github.com/moby/buildkit/cache/cacheimport/v1"
 	"github.com/moby/buildkit/session"
-	"github.com/moby/buildkit/snapshot"
+	solver "github.com/moby/buildkit/solver-next"
+	"github.com/moby/buildkit/util/contentutil"
+	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/push"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
-const mediaTypeConfig = "application/vnd.buildkit.cacheconfig.v0"
-
-type CacheRecord struct {
-	CacheKey   digest.Digest
-	Reference  cache.ImmutableRef
-	ContentKey digest.Digest
-}
-
 type ExporterOpt struct {
-	Snapshotter    snapshot.Snapshotter
-	ContentStore   content.Store
-	Differ         diff.Comparer
 	SessionManager *session.Manager
 }
 
@@ -45,41 +33,15 @@ type CacheExporter struct {
 	opt ExporterOpt
 }
 
-func (ce *CacheExporter) Export(ctx context.Context, rec []CacheRecord, target string) error {
-	allBlobs := map[digest.Digest][]blobs.DiffPair{}
-	currentBlobs := map[digest.Digest]struct{}{}
-	type cr struct {
-		CacheRecord
-		dgst digest.Digest
-	}
+func (ce *CacheExporter) ExporterForTarget(target string) *RegistryCacheExporter {
+	cc := v1.NewCacheChains()
+	return &RegistryCacheExporter{target: target, ExporterTarget: cc, chains: cc, exporter: ce}
+}
 
-	list := make([]cr, 0, len(rec))
-
-	for _, r := range rec {
-		ref := r.Reference
-		if ref == nil {
-			list = append(list, cr{CacheRecord: r})
-			continue
-		}
-
-		dpairs, err := blobs.GetDiffPairs(ctx, ce.opt.ContentStore, ce.opt.Snapshotter, ce.opt.Differ, ref)
-		if err != nil {
-			return err
-		}
-
-		for i, dp := range dpairs {
-			allBlobs[dp.Blobsum] = dpairs[:i+1]
-		}
-
-		dgst := dpairs[len(dpairs)-1].Blobsum
-		list = append(list, cr{CacheRecord: r, dgst: dgst})
-		currentBlobs[dgst] = struct{}{}
-	}
-
-	for b := range allBlobs {
-		if _, ok := currentBlobs[b]; !ok {
-			list = append(list, cr{dgst: b})
-		}
+func (ce *CacheExporter) Finalize(ctx context.Context, cc *v1.CacheChains, target string) error {
+	config, descs, err := cc.Marshal()
+	if err != nil {
+		return err
 	}
 
 	// own type because oci type can't be pushed and docker type doesn't have annotations
@@ -90,61 +52,42 @@ func (ce *CacheExporter) Export(ctx context.Context, rec []CacheRecord, target s
 		Manifests []ocispec.Descriptor `json:"manifests"`
 	}
 
-	var config cacheConfig
-
 	var mfst manifestList
 	mfst.SchemaVersion = 2
 	mfst.MediaType = images.MediaTypeDockerSchema2ManifestList
 
-	for _, l := range list {
-		var size int64
-		var parent digest.Digest
-		var diffID digest.Digest
-		if l.dgst != "" {
-			info, err := ce.opt.ContentStore.Info(ctx, l.dgst)
-			if err != nil {
-				return err
-			}
-			size = info.Size
-			chain := allBlobs[l.dgst]
-			if len(chain) > 1 {
-				parent = chain[len(chain)-2].Blobsum
-			}
-			diffID = chain[len(chain)-1].DiffID
-
-			mfst.Manifests = append(mfst.Manifests, ocispec.Descriptor{
-				MediaType: schema2.MediaTypeLayer,
-				Size:      size,
-				Digest:    l.dgst,
-			})
+	allBlobs := map[digest.Digest]struct{}{}
+	mp := contentutil.NewMultiProvider(nil)
+	for _, l := range config.Layers {
+		if _, ok := allBlobs[l.Blob]; ok {
+			continue
 		}
+		dgstPair, ok := descs[l.Blob]
+		if !ok {
+			return errors.Errorf("missing blob %s", l.Blob)
+		}
+		allBlobs[l.Blob] = struct{}{}
+		mp.Add(l.Blob, dgstPair.Provider)
 
-		config.Items = append(config.Items, configItem{
-			Blobsum:    l.dgst,
-			CacheKey:   l.CacheKey,
-			ContentKey: l.ContentKey,
-			Parent:     parent,
-			DiffID:     diffID,
-		})
+		mfst.Manifests = append(mfst.Manifests, dgstPair.Descriptor)
 	}
 
 	dt, err := json.Marshal(config)
 	if err != nil {
 		return err
 	}
-
 	dgst := digest.FromBytes(dt)
 
-	addAsRoot := content.WithLabels(map[string]string{
-		"containerd.io/gc.root": time.Now().UTC().Format(time.RFC3339Nano),
-	})
-
-	if err := content.WriteBlob(ctx, ce.opt.ContentStore, dgst.String(), bytes.NewReader(dt), int64(len(dt)), dgst, addAsRoot); err != nil {
-		return errors.Wrap(err, "error writing config blob")
+	configDone := oneOffProgress(ctx, fmt.Sprintf("writing config %s", dgst))
+	buf := contentutil.NewBuffer()
+	if err := content.WriteBlob(ctx, buf, dgst.String(), bytes.NewReader(dt), int64(len(dt)), dgst); err != nil {
+		return configDone(errors.Wrap(err, "error writing config blob"))
 	}
+	configDone(nil)
 
+	mp.Add(dgst, buf)
 	mfst.Manifests = append(mfst.Manifests, ocispec.Descriptor{
-		MediaType: mediaTypeConfig,
+		MediaType: v1.CacheConfigMediaTypeV0,
 		Size:      int64(len(dt)),
 		Digest:    dgst,
 	})
@@ -153,26 +96,42 @@ func (ce *CacheExporter) Export(ctx context.Context, rec []CacheRecord, target s
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal manifest")
 	}
-
 	dgst = digest.FromBytes(dt)
 
-	if err := content.WriteBlob(ctx, ce.opt.ContentStore, dgst.String(), bytes.NewReader(dt), int64(len(dt)), dgst, addAsRoot); err != nil {
-		return errors.Wrap(err, "error writing manifest blob")
+	buf = contentutil.NewBuffer()
+	mfstDone := oneOffProgress(ctx, fmt.Sprintf("writing manifest %s", dgst))
+	if err := content.WriteBlob(ctx, buf, dgst.String(), bytes.NewReader(dt), int64(len(dt)), dgst); err != nil {
+		return mfstDone(errors.Wrap(err, "error writing manifest blob"))
 	}
+	mfstDone(nil)
+	mp.Add(dgst, buf)
 
-	logrus.Debugf("cache-manifest: %s", dgst)
-
-	return push.Push(ctx, ce.opt.SessionManager, ce.opt.ContentStore, dgst, target, false)
+	return push.Push(ctx, ce.opt.SessionManager, mp, dgst, target, false)
 }
 
-type configItem struct {
-	Blobsum    digest.Digest
-	CacheKey   digest.Digest
-	ContentKey digest.Digest
-	Parent     digest.Digest
-	DiffID     digest.Digest
+type RegistryCacheExporter struct {
+	solver.ExporterTarget
+	chains   *v1.CacheChains
+	target   string
+	exporter *CacheExporter
 }
 
-type cacheConfig struct {
-	Items []configItem
+func (ce *RegistryCacheExporter) Finalize(ctx context.Context) error {
+	return ce.exporter.Finalize(ctx, ce.chains, ce.target)
+}
+
+func oneOffProgress(ctx context.Context, id string) func(err error) error {
+	pw, _, _ := progress.FromContext(ctx)
+	now := time.Now()
+	st := progress.Status{
+		Started: &now,
+	}
+	pw.Write(id, st)
+	return func(err error) error {
+		now := time.Now()
+		st.Completed = &now
+		pw.Write(id, st)
+		pw.Close()
+		return err
+	}
 }
