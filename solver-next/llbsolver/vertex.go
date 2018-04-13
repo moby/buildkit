@@ -1,4 +1,4 @@
-package llb
+package llbsolver
 
 import (
 	"strings"
