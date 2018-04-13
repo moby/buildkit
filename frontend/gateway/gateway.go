@@ -18,7 +18,9 @@ import (
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
+	solver "github.com/moby/buildkit/solver-next"
 	"github.com/moby/buildkit/util/tracing"
+	"github.com/moby/buildkit/worker"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -51,8 +53,7 @@ func filterPrefix(opts map[string]string, pfx string) map[string]string {
 	return m
 }
 
-func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string) (retRef cache.ImmutableRef, exporterAttr map[string][]byte, retErr error) {
-
+func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string) (retRef solver.CachedResult, exporterAttr map[string][]byte, retErr error) {
 	source, ok := opts[keySource]
 	if !ok {
 		return nil, nil, errors.Errorf("no source specified for gateway")
@@ -75,7 +76,12 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 			return nil, nil, err
 		}
 		defer ref.Release(context.TODO())
-		rootFS = ref
+
+		workerRef, ok := ref.Sys().(*worker.WorkerRef)
+		if !ok {
+			return nil, nil, errors.Errorf("invalid ref: %T", ref.Sys())
+		}
+		rootFS = workerRef.ImmutableRef
 		config, ok := exp[exporterImageConfig]
 		if ok {
 			if err := json.Unmarshal(config, &img); err != nil {
@@ -116,7 +122,11 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 			return nil, nil, err
 		}
 		defer ref.Release(context.TODO())
-		rootFS = ref
+		workerRef, ok := ref.Sys().(*worker.WorkerRef)
+		if !ok {
+			return nil, nil, errors.Errorf("invalid ref: %T", ref.Sys())
+		}
+		rootFS = workerRef.ImmutableRef
 	}
 
 	lbf, err := newLLBBridgeForwarder(ctx, llbBridge)
@@ -171,7 +181,7 @@ func newLLBBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBr
 	lbf := &llbBridgeForwarder{
 		callCtx:   ctx,
 		llbBridge: llbBridge,
-		refs:      map[string]cache.ImmutableRef{},
+		refs:      map[string]solver.Result{},
 		pipe:      newPipe(),
 	}
 
@@ -240,8 +250,8 @@ func (d dummyAddr) String() string {
 type llbBridgeForwarder struct {
 	callCtx      context.Context
 	llbBridge    frontend.FrontendLLBBridge
-	refs         map[string]cache.ImmutableRef
-	lastRef      cache.ImmutableRef
+	refs         map[string]solver.Result
+	lastRef      solver.CachedResult
 	exporterAttr map[string][]byte
 	*pipe
 }
@@ -299,7 +309,11 @@ func (lbf *llbBridgeForwarder) ReadFile(ctx context.Context, req *pb.ReadFileReq
 	if ref == nil {
 		return nil, errors.Wrapf(os.ErrNotExist, "%s no found", req.FilePath)
 	}
-	dt, err := cache.ReadFile(ctx, ref, req.FilePath)
+	workerRef, ok := ref.Sys().(*worker.WorkerRef)
+	if !ok {
+		return nil, errors.Errorf("invalid ref: %T", ref.Sys())
+	}
+	dt, err := cache.ReadFile(ctx, workerRef.ImmutableRef, req.FilePath)
 	if err != nil {
 		return nil, err
 	}
