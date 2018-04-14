@@ -421,7 +421,7 @@ func (cc *cacheContext) checksum(ctx context.Context, root *iradix.Node, txn *ir
 	v, ok := root.Get(k)
 
 	if !ok {
-		return nil, false, errors.Wrapf(errNotFound, "%s not found", string(k))
+		return nil, false, errors.Wrapf(errNotFound, "%s not found", convertKeyToPath(k))
 	}
 	cr := v.(*CacheRecord)
 
