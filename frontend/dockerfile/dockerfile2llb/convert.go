@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"path"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -120,8 +121,10 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		}
 	}
 
+	ctxPaths := map[string]struct{}{}
 	eg, ctx := errgroup.WithContext(ctx)
 	for i, d := range allDispatchStates {
+		reachable := isReachable(target, d)
 		// resolve image config for every stage
 		if d.base == nil {
 			if d.stage.BaseName == emptyImageName {
@@ -136,7 +139,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 						return err
 					}
 					d.stage.BaseName = reference.TagNameOnly(ref).String()
-					if metaResolver != nil && isReachable(target, d) {
+					if metaResolver != nil && reachable {
 						dgst, dt, err := metaResolver.ResolveImageConfig(ctx, d.stage.BaseName)
 						if err == nil { // handle the error while builder is actually running
 							var img Image
@@ -157,21 +160,47 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 				})
 			}(i, d)
 		}
+
+		if reachable {
+			for _, cmd := range d.commands {
+				switch c := cmd.Command.(type) {
+				case *instructions.CopyCommand:
+					if c.From != "" {
+						continue
+					}
+					for _, src := range c.Sources() {
+						ctxPaths[path.Join("/", filepath.ToSlash(src))] = struct{}{}
+					}
+				case *instructions.AddCommand:
+					for _, src := range c.Sources() {
+						ctxPaths[path.Join("/", filepath.ToSlash(src))] = struct{}{}
+					}
+				}
+			}
+		}
 	}
 
 	if err := eg.Wait(); err != nil {
 		return nil, nil, err
 	}
-	buildContext := llb.Local(localNameContext,
+
+	opts := []llb.LocalOption{
 		llb.SessionID(opt.SessionID),
 		llb.ExcludePatterns(opt.Excludes),
 		llb.SharedKeyHint(localNameContext),
-	)
+	}
+	if includePatterns := normalizeContextPaths(ctxPaths); includePatterns != nil {
+		opts = append(opts, llb.IncludePatterns(includePatterns))
+	}
+	buildContext := llb.Local(localNameContext, opts...)
 	if opt.BuildContext != nil {
 		buildContext = *opt.BuildContext
 	}
 
 	for _, d := range allDispatchStates {
+		if !isReachable(target, d) {
+			continue
+		}
 		if d.base != nil {
 			d.state = d.base.state
 			d.image = clone(d.base.image)
@@ -756,4 +785,37 @@ func parseUID(str string) (uint32, error) {
 		return 0, err
 	}
 	return uint32(uid), nil
+}
+
+func normalizeContextPaths(paths map[string]struct{}) []string {
+	pathSlice := make([]string, 0, len(paths))
+	for p := range paths {
+		if p == "/" {
+			return nil
+		}
+		pathSlice = append(pathSlice, p)
+	}
+
+	toDelete := map[string]struct{}{}
+	for i := range pathSlice {
+		for j := range pathSlice {
+			if i == j {
+				continue
+			}
+			if strings.HasPrefix(pathSlice[j], pathSlice[i]+"/") {
+				delete(paths, pathSlice[j])
+			}
+		}
+	}
+
+	toSort := make([]string, 0, len(paths))
+	for p := range paths {
+		if _, ok := toDelete[p]; !ok {
+			toSort = append(toSort, path.Join(".", p))
+		}
+	}
+	sort.Slice(toSort, func(i, j int) bool {
+		return toSort[i] < toSort[j]
+	})
+	return toSort
 }
