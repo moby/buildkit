@@ -49,19 +49,33 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 
 	sm := &submounts{}
 
+	var releasers []func() error
+	releaseAll := func() {
+		sm.cleanup()
+		for _, f := range releasers {
+			f()
+		}
+	}
+
 	for _, m := range mounts {
 		if m.Src == nil {
 			return nil, nil, errors.Errorf("mount %s has no source", m.Dest)
 		}
-		mounts, err := m.Src.Mount(ctx, m.Readonly)
+		mountable, err := m.Src.Mount(ctx, m.Readonly)
 		if err != nil {
-			sm.cleanup()
+			releaseAll()
 			return nil, nil, errors.Wrapf(err, "failed to mount %s", m.Dest)
 		}
+		mounts, err := mountable.Mount()
+		if err != nil {
+			releaseAll()
+			return nil, nil, errors.WithStack(err)
+		}
+		releasers = append(releasers, mountable.Release)
 		for _, mount := range mounts {
 			mount, err = sm.subMount(mount, m.Selector)
 			if err != nil {
-				sm.cleanup()
+				releaseAll()
 				return nil, nil, err
 			}
 			s.Mounts = append(s.Mounts, specs.Mount{
@@ -73,7 +87,7 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 		}
 	}
 
-	return s, sm.cleanup, nil
+	return s, releaseAll, nil
 }
 
 func withROBind(src, dest string) func(_ context.Context, _ oci.Client, _ *containers.Container, s *specs.Spec) error {
@@ -112,7 +126,7 @@ func (s *submounts) subMount(m mount.Mount, subPath string) (mount.Mount, error)
 		return sub(mr.mount, subPath), nil
 	}
 
-	lm := snapshot.LocalMounter([]mount.Mount{m})
+	lm := snapshot.LocalMounterWithMounts([]mount.Mount{m})
 
 	mp, err := lm.Mount()
 	if err != nil {

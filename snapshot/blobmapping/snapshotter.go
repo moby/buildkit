@@ -16,7 +16,7 @@ const blobKey = "blobmapping.blob"
 
 type Opt struct {
 	Content       content.Store
-	Snapshotter   snapshots.Snapshotter
+	Snapshotter   snapshot.SnapshotterBase
 	MetadataStore *metadata.Store
 }
 
@@ -33,14 +33,14 @@ type DiffPair struct {
 // this snapshotter keeps an internal mapping between a snapshot and a blob
 
 type Snapshotter struct {
-	snapshots.Snapshotter
+	snapshot.SnapshotterBase
 	opt Opt
 }
 
 func NewSnapshotter(opt Opt) snapshot.Snapshotter {
 	s := &Snapshotter{
-		Snapshotter: opt.Snapshotter,
-		opt:         opt,
+		SnapshotterBase: opt.Snapshotter,
+		opt:             opt,
 	}
 
 	return s
@@ -59,7 +59,7 @@ func (s *Snapshotter) Remove(ctx context.Context, key string) error {
 		return err
 	}
 
-	if err := s.Snapshotter.Remove(ctx, key); err != nil {
+	if err := s.SnapshotterBase.Remove(ctx, key); err != nil {
 		return err
 	}
 
@@ -72,7 +72,7 @@ func (s *Snapshotter) Remove(ctx context.Context, key string) error {
 }
 
 func (s *Snapshotter) Usage(ctx context.Context, key string) (snapshots.Usage, error) {
-	u, err := s.Snapshotter.Usage(ctx, key)
+	u, err := s.SnapshotterBase.Usage(ctx, key)
 	if err != nil {
 		return snapshots.Usage{}, err
 	}

@@ -21,5 +21,9 @@ func (lm *localMounter) Unmount() error {
 		lm.target = ""
 	}
 
+	if lm.mountable != nil {
+		return lm.mountable.Release()
+	}
+
 	return nil
 }

@@ -374,7 +374,7 @@ func getCacheManager(t *testing.T, tmpdir string, snapshotter snapshots.Snapshot
 	require.NoError(t, err)
 
 	cm, err := NewManager(ManagerOpt{
-		Snapshotter:   snapshotter,
+		Snapshotter:   snapshot.FromContainerdSnapshotter(snapshotter),
 		MetadataStore: md,
 	})
 	require.NoError(t, err, fmt.Sprintf("error: %+v", err))

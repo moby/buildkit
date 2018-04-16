@@ -252,7 +252,10 @@ func (ii *importInfo) fetch(ctx context.Context, chain []blobs.DiffPair) (cache.
 		return nil, err
 	}
 
-	chainid, err := ii.unpack(ctx, chain)
+	cs, release := snapshot.NewContainerdSnapshotter(ii.opt.Snapshotter)
+	defer release()
+
+	chainid, err := ii.unpack(ctx, chain, cs)
 	if err != nil {
 		return nil, err
 	}
@@ -260,7 +263,7 @@ func (ii *importInfo) fetch(ctx context.Context, chain []blobs.DiffPair) (cache.
 	return ii.opt.CacheAccessor.Get(ctx, chainid, cache.WithDescription("imported cache")) // TODO: more descriptive name
 }
 
-func (ii *importInfo) unpack(ctx context.Context, dpairs []blobs.DiffPair) (string, error) {
+func (ii *importInfo) unpack(ctx context.Context, dpairs []blobs.DiffPair, s cdsnapshot.Snapshotter) (string, error) {
 	layers, err := ii.getLayers(ctx, dpairs)
 	if err != nil {
 		return "", err
@@ -271,7 +274,7 @@ func (ii *importInfo) unpack(ctx context.Context, dpairs []blobs.DiffPair) (stri
 		labels := map[string]string{
 			"containerd.io/uncompressed": layer.Diff.Digest.String(),
 		}
-		if _, err := rootfs.ApplyLayer(ctx, layer, chain, ii.opt.Snapshotter, ii.opt.Applier, cdsnapshot.WithLabels(labels)); err != nil {
+		if _, err := rootfs.ApplyLayer(ctx, layer, chain, s, ii.opt.Applier, cdsnapshot.WithLabels(labels)); err != nil {
 			return "", err
 		}
 		chain = append(chain, layer.Diff.Digest)

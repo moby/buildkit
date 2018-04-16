@@ -442,7 +442,7 @@ func setupCacheManager(t *testing.T, tmpdir string, snapshotter snapshots.Snapsh
 	require.NoError(t, err)
 
 	cm, err := cache.NewManager(cache.ManagerOpt{
-		Snapshotter:   snapshotter,
+		Snapshotter:   snapshot.FromContainerdSnapshotter(snapshotter),
 		MetadataStore: md,
 	})
 	require.NoError(t, err)
