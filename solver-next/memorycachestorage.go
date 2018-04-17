@@ -32,12 +32,12 @@ func (s *inMemoryStore) Exists(id string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if k, ok := s.byID[id]; ok {
-		return len(k.links) > 0
+		return len(k.links) > 0 || len(k.results) > 0
 	}
 	return false
 }
 
-func newKey(id string) *inMemoryKey {
+func newInMemoryKey(id string) *inMemoryKey {
 	return &inMemoryKey{
 		results:   map[string]CacheResult{},
 		links:     map[CacheInfoLink]map[string]struct{}{},
@@ -103,7 +103,7 @@ func (s *inMemoryStore) AddResult(id string, res CacheResult) error {
 	defer s.mu.Unlock()
 	k, ok := s.byID[id]
 	if !ok {
-		k = newKey(id)
+		k = newInMemoryKey(id)
 		s.byID[id] = k
 	}
 	k.results[res.ID] = res
@@ -169,12 +169,12 @@ func (s *inMemoryStore) AddLink(id string, link CacheInfoLink, target string) er
 	defer s.mu.Unlock()
 	k, ok := s.byID[id]
 	if !ok {
-		k = newKey(id)
+		k = newInMemoryKey(id)
 		s.byID[id] = k
 	}
 	k2, ok := s.byID[target]
 	if !ok {
-		k2 = newKey(target)
+		k2 = newInMemoryKey(target)
 		s.byID[target] = k2
 	}
 	m, ok := k.links[link]
@@ -203,6 +203,55 @@ func (s *inMemoryStore) WalkLinks(id string, link CacheInfoLink, fn func(id stri
 
 	for _, t := range links {
 		if err := fn(t); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *inMemoryStore) HasLink(id string, link CacheInfoLink, target string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if k, ok := s.byID[id]; ok {
+		if v, ok := k.links[link]; ok {
+			if _, ok := v[target]; ok {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (s *inMemoryStore) WalkBacklinks(id string, fn func(id string, link CacheInfoLink) error) error {
+	s.mu.RLock()
+	k, ok := s.byID[id]
+	if !ok {
+		s.mu.RUnlock()
+		return nil
+	}
+	var outIDs []string
+	var outLinks []CacheInfoLink
+	for bid := range k.backlinks {
+		b, ok := s.byID[bid]
+		if !ok {
+			continue
+		}
+		for l, m := range b.links {
+			if _, ok := m[id]; !ok {
+				continue
+			}
+			outIDs = append(outIDs, bid)
+			outLinks = append(outLinks, CacheInfoLink{
+				Digest:   rootKey(l.Digest, l.Output),
+				Input:    l.Input,
+				Selector: l.Selector,
+			})
+		}
+	}
+	s.mu.RUnlock()
+
+	for i := range outIDs {
+		if err := fn(outIDs[i], outLinks[i]); err != nil {
 			return err
 		}
 	}

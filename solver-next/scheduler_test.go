@@ -2129,10 +2129,20 @@ func TestCacheExporting(t *testing.T) {
 	require.NoError(t, j0.Discard())
 	j0 = nil
 
-	rec, err := res.Export(ctx, testConvertToRemote)
+	expTarget := newTestExporterTarget()
+
+	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testConvertToRemote)
 	require.NoError(t, err)
 
-	require.Equal(t, 3, len(rec))
+	expTarget.normalize()
+
+	require.Equal(t, len(expTarget.records), 3)
+	require.Equal(t, expTarget.records[0].results, 0)
+	require.Equal(t, expTarget.records[1].results, 0)
+	require.Equal(t, expTarget.records[2].results, 1)
+	require.Equal(t, expTarget.records[0].links, 0)
+	require.Equal(t, expTarget.records[1].links, 0)
+	require.Equal(t, expTarget.records[2].links, 2)
 
 	j1, err := l.NewJob("j1")
 	require.NoError(t, err)
@@ -2150,10 +2160,20 @@ func TestCacheExporting(t *testing.T) {
 	require.NoError(t, j1.Discard())
 	j1 = nil
 
-	rec2, err := res.Export(ctx, testConvertToRemote)
+	expTarget = newTestExporterTarget()
+
+	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testConvertToRemote)
 	require.NoError(t, err)
 
-	require.Equal(t, 3, len(rec2))
+	expTarget.normalize()
+	// the order of the records isn't really significant
+	require.Equal(t, len(expTarget.records), 3)
+	require.Equal(t, expTarget.records[0].results, 0)
+	require.Equal(t, expTarget.records[1].results, 0)
+	require.Equal(t, expTarget.records[2].results, 1)
+	require.Equal(t, expTarget.records[0].links, 0)
+	require.Equal(t, expTarget.records[1].links, 0)
+	require.Equal(t, expTarget.records[2].links, 2)
 }
 
 func TestSlowCacheAvoidAccess(t *testing.T) {
@@ -2293,13 +2313,21 @@ func TestCacheExportingPartialSelector(t *testing.T) {
 	require.NoError(t, j0.Discard())
 	j0 = nil
 
-	rec, err := res.Export(ctx, testConvertToRemote)
+	expTarget := newTestExporterTarget()
+
+	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testConvertToRemote)
 	require.NoError(t, err)
 
-	require.Equal(t, len(rec), 4) // v1 creates 3 records
+	expTarget.normalize()
+	require.Equal(t, len(expTarget.records), 3)
+	require.Equal(t, expTarget.records[0].results, 0)
+	require.Equal(t, expTarget.records[1].results, 0)
+	require.Equal(t, expTarget.records[2].results, 1)
+	require.Equal(t, expTarget.records[0].links, 0)
+	require.Equal(t, expTarget.records[1].links, 0)
+	require.Equal(t, expTarget.records[2].links, 2)
 
 	// repeat so that all coming from cache are retained
-
 	j1, err := l.NewJob("j1")
 	require.NoError(t, err)
 
@@ -2309,25 +2337,221 @@ func TestCacheExportingPartialSelector(t *testing.T) {
 		}
 	}()
 
-	g1 := Edge{
-		Vertex: vtx(vtxOpt{
-			name:         "v2",
-			cacheKeySeed: "seed2",
-			value:        "result2",
-			inputs:       []Edge{g0},
-		},
-		),
-	}
+	g1 := g0
 
 	res, err = j1.Build(ctx, g1)
 	require.NoError(t, err)
-	require.Equal(t, unwrap(res), "result2")
+	require.Equal(t, unwrap(res), "result0")
 
 	require.NoError(t, j1.Discard())
 	j1 = nil
 
-	_, err = res.Export(ctx, testConvertToRemote)
+	expTarget = newTestExporterTarget()
+
+	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testConvertToRemote)
 	require.NoError(t, err)
+
+	expTarget.normalize()
+
+	// the order of the records isn't really significant
+	require.Equal(t, len(expTarget.records), 3)
+	require.Equal(t, expTarget.records[0].results, 0)
+	require.Equal(t, expTarget.records[1].results, 1)
+	require.Equal(t, expTarget.records[2].results, 0)
+	require.Equal(t, expTarget.records[0].links, 0)
+	require.Equal(t, expTarget.records[1].links, 2)
+	require.Equal(t, expTarget.records[2].links, 0)
+
+	// repeat with forcing a slow key recomputation
+	j2, err := l.NewJob("j2")
+	require.NoError(t, err)
+
+	defer func() {
+		if j2 != nil {
+			j2.Discard()
+		}
+	}()
+
+	g2 := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "v0",
+			cacheKeySeed: "seed0",
+			value:        "result0",
+			inputs: []Edge{
+				{Vertex: vtx(vtxOpt{
+					name:         "v1",
+					cacheKeySeed: "seed1-net",
+					value:        "result1",
+				})},
+			},
+			selectors: map[int]digest.Digest{
+				0: dgst("sel0"),
+			},
+			slowCacheCompute: map[int]ResultBasedCacheFunc{
+				0: digestFromResult,
+			},
+		}),
+	}
+
+	res, err = j2.Build(ctx, g2)
+	require.NoError(t, err)
+	require.Equal(t, unwrap(res), "result0")
+
+	require.NoError(t, j2.Discard())
+	j2 = nil
+
+	expTarget = newTestExporterTarget()
+
+	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testConvertToRemote)
+	require.NoError(t, err)
+
+	expTarget.normalize()
+
+	// the order of the records isn't really significant
+	// adds one
+	require.Equal(t, len(expTarget.records), 4)
+	require.Equal(t, expTarget.records[0].results, 0)
+	require.Equal(t, expTarget.records[1].results, 0)
+	require.Equal(t, expTarget.records[2].results, 1)
+	require.Equal(t, expTarget.records[3].results, 0)
+	require.Equal(t, expTarget.records[0].links, 0)
+	require.Equal(t, expTarget.records[1].links, 0)
+	require.Equal(t, expTarget.records[2].links, 3)
+	require.Equal(t, expTarget.records[3].links, 0)
+
+	// repeat with a wrapper
+	j3, err := l.NewJob("j3")
+	require.NoError(t, err)
+
+	defer func() {
+		if j3 != nil {
+			j3.Discard()
+		}
+	}()
+
+	g3 := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "v2",
+			cacheKeySeed: "seed2",
+			value:        "result2",
+			inputs:       []Edge{g2},
+		},
+		),
+	}
+
+	res, err = j3.Build(ctx, g3)
+	require.NoError(t, err)
+	require.Equal(t, unwrap(res), "result2")
+
+	require.NoError(t, j3.Discard())
+	j3 = nil
+
+	expTarget = newTestExporterTarget()
+
+	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testConvertToRemote)
+	require.NoError(t, err)
+
+	expTarget.normalize()
+
+	// adds one extra result
+	// the order of the records isn't really significant
+	require.Equal(t, len(expTarget.records), 5)
+	require.Equal(t, expTarget.records[0].results, 0)
+	require.Equal(t, expTarget.records[1].results, 0)
+	require.Equal(t, expTarget.records[2].results, 1)
+	require.Equal(t, expTarget.records[3].results, 0)
+	require.Equal(t, expTarget.records[4].results, 1)
+	require.Equal(t, expTarget.records[0].links, 0)
+	require.Equal(t, expTarget.records[1].links, 0)
+	require.Equal(t, expTarget.records[2].links, 3)
+	require.Equal(t, expTarget.records[3].links, 0)
+	require.Equal(t, expTarget.records[4].links, 1)
+}
+
+func TestCacheExportingMergedKey(t *testing.T) {
+	t.Parallel()
+	ctx := context.TODO()
+
+	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
+
+	l := NewJobList(SolverOpt{
+		ResolveOpFunc: testOpResolver,
+		DefaultCache:  cacheManager,
+	})
+	defer l.Close()
+
+	j0, err := l.NewJob("j0")
+	require.NoError(t, err)
+
+	defer func() {
+		if j0 != nil {
+			j0.Discard()
+		}
+	}()
+
+	g0 := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "v0",
+			cacheKeySeed: "seed0",
+			value:        "result0",
+			inputs: []Edge{
+				{
+					Vertex: vtx(vtxOpt{
+						name:         "v1",
+						cacheKeySeed: "seed1",
+						value:        "result1",
+						inputs: []Edge{
+							{
+								Vertex: vtx(vtxOpt{
+									name:         "v2",
+									cacheKeySeed: "seed2",
+									value:        "result2",
+								}),
+							},
+						},
+						slowCacheCompute: map[int]ResultBasedCacheFunc{
+							0: digestFromResult,
+						},
+					}),
+				},
+				{
+					Vertex: vtx(vtxOpt{
+						name:         "v1-diff",
+						cacheKeySeed: "seed1",
+						value:        "result1",
+						inputs: []Edge{
+							{
+								Vertex: vtx(vtxOpt{
+									name:         "v3",
+									cacheKeySeed: "seed3",
+									value:        "result2",
+								}),
+							},
+						},
+						slowCacheCompute: map[int]ResultBasedCacheFunc{
+							0: digestFromResult,
+						},
+					}),
+				},
+			},
+		}),
+	}
+
+	res, err := j0.Build(ctx, g0)
+	require.NoError(t, err)
+	require.Equal(t, unwrap(res), "result0")
+
+	require.NoError(t, j0.Discard())
+	j0 = nil
+
+	expTarget := newTestExporterTarget()
+
+	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testConvertToRemote)
+	require.NoError(t, err)
+
+	expTarget.normalize()
+
+	require.Equal(t, len(expTarget.records), 5)
 }
 
 func generateSubGraph(nodes int) (Edge, int) {
@@ -2548,7 +2772,7 @@ func (v *vertexConst) Exec(ctx context.Context, inputs []Result) (outputs []Resu
 // vtxSum returns a vertex that ourputs sum of its inputs plus a constant
 func vtxSum(v int, opt vtxOpt) *vertexSum {
 	if opt.cacheKeySeed == "" {
-		opt.cacheKeySeed = fmt.Sprintf("sum-%d", v)
+		opt.cacheKeySeed = fmt.Sprintf("sum-%d-%d", v, len(opt.inputs))
 	}
 	if opt.name == "" {
 		opt.name = opt.cacheKeySeed + "-" + identity.NewID()
@@ -2687,7 +2911,75 @@ func digestFromResult(ctx context.Context, res Result) (digest.Digest, error) {
 }
 
 func testConvertToRemote(ctx context.Context, res Result) (*Remote, error) {
-	return &Remote{Descriptors: []ocispec.Descriptor{{
-		Annotations: map[string]string{"value": fmt.Sprintf("%d", unwrapInt(res))},
-	}}}, nil
+	if dr, ok := res.Sys().(*dummyResult); ok {
+		return &Remote{Descriptors: []ocispec.Descriptor{{
+			Annotations: map[string]string{"value": fmt.Sprintf("%d", dr.intValue)},
+		}}}, nil
+	}
+	return nil, nil
+}
+
+func newTestExporterTarget() *testExporterTarget {
+	return &testExporterTarget{
+		visited: map[interface{}]struct{}{},
+	}
+}
+
+type testExporterTarget struct {
+	visited map[interface{}]struct{}
+	records []*testExporterRecord
+}
+
+func (t *testExporterTarget) Add(dgst digest.Digest) ExporterRecord {
+	r := &testExporterRecord{dgst: dgst}
+	t.records = append(t.records, r)
+	return r
+}
+func (t *testExporterTarget) Visit(v interface{}) {
+	t.visited[v] = struct{}{}
+
+}
+func (t *testExporterTarget) Visited(v interface{}) bool {
+	_, ok := t.visited[v]
+	return ok
+}
+
+func (t *testExporterTarget) normalize() {
+	m := map[digest.Digest]struct{}{}
+	rec := make([]*testExporterRecord, 0, len(t.records))
+	for _, r := range t.records {
+		if _, ok := m[r.dgst]; ok {
+			for _, r2 := range t.records {
+				delete(r2.linkMap, r.dgst)
+				r2.links = len(r2.linkMap)
+			}
+			continue
+		}
+		m[r.dgst] = struct{}{}
+		rec = append(rec, r)
+	}
+	t.records = rec
+}
+
+type testExporterRecord struct {
+	dgst    digest.Digest
+	results int
+	links   int
+	linkMap map[digest.Digest]struct{}
+}
+
+func (r *testExporterRecord) AddResult(createdAt time.Time, result *Remote) {
+	r.results++
+}
+
+func (r *testExporterRecord) LinkFrom(src ExporterRecord, index int, selector string) {
+	if s, ok := src.(*testExporterRecord); ok {
+		if r.linkMap == nil {
+			r.linkMap = map[digest.Digest]struct{}{}
+		}
+		if _, ok := r.linkMap[s.dgst]; !ok {
+			r.linkMap[s.dgst] = struct{}{}
+			r.links++
+		}
+	}
 }

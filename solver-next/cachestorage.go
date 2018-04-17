@@ -22,11 +22,12 @@ type CacheKeyStorage interface {
 
 	AddLink(id string, link CacheInfoLink, target string) error
 	WalkLinks(id string, link CacheInfoLink, fn func(id string) error) error
+	HasLink(id string, link CacheInfoLink, target string) bool
+	WalkBacklinks(id string, fn func(id string, link CacheInfoLink) error) error
 }
 
 // CacheResult is a record for a single solve result
 type CacheResult struct {
-	// Payload   []byte
 	CreatedAt time.Time
 	ID        string
 }

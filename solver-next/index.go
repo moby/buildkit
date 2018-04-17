@@ -1,200 +1,243 @@
 package solver
 
 import (
-	"fmt"
 	"sync"
 
-	digest "github.com/opencontainers/go-digest"
+	"github.com/moby/buildkit/identity"
 )
 
 // EdgeIndex is a synchronous map for detecting edge collisions.
 type EdgeIndex struct {
 	mu sync.Mutex
 
-	items    map[indexedDigest]map[indexedDigest]map[*edge]struct{}
-	backRefs map[*edge]map[indexedDigest]map[indexedDigest]struct{}
+	items    map[string]*indexItem
+	backRefs map[*edge]map[string]struct{}
+}
+
+type indexItem struct {
+	edge  *edge
+	links map[CacheInfoLink]map[string]struct{}
+	deps  map[string]struct{}
 }
 
 func NewEdgeIndex() *EdgeIndex {
 	return &EdgeIndex{
-		items:    map[indexedDigest]map[indexedDigest]map[*edge]struct{}{},
-		backRefs: map[*edge]map[indexedDigest]map[indexedDigest]struct{}{},
+		items:    map[string]*indexItem{},
+		backRefs: map[*edge]map[string]struct{}{},
 	}
-}
-
-func (ei *EdgeIndex) LoadOrStore(e *edge, dgst digest.Digest, index Index, deps [][]CacheKey) *edge {
-	ei.mu.Lock()
-	defer ei.mu.Unlock()
-
-	if old := ei.load(e, dgst, index, deps); old != nil && !(!old.edge.Vertex.Options().IgnoreCache && e.edge.Vertex.Options().IgnoreCache) {
-		return old
-	}
-
-	ei.store(e, dgst, index, deps)
-
-	return nil
 }
 
 func (ei *EdgeIndex) Release(e *edge) {
 	ei.mu.Lock()
 	defer ei.mu.Unlock()
 
-	for id, backRefs := range ei.backRefs[e] {
-		for id2 := range backRefs {
-			delete(ei.items[id][id2], e)
-			if len(ei.items[id][id2]) == 0 {
-				delete(ei.items[id], id2)
-			}
-		}
-		if len(ei.items[id]) == 0 {
-			delete(ei.items, id)
-		}
+	for id := range ei.backRefs[e] {
+		ei.releaseEdge(id, e)
 	}
 	delete(ei.backRefs, e)
 }
 
-func (ei *EdgeIndex) load(ignore *edge, dgst digest.Digest, index Index, deps [][]CacheKey) *edge {
-	id := indexedDigest{dgst: dgst, index: index, depsCount: len(deps)}
-	m, ok := ei.items[id]
+func (ei *EdgeIndex) releaseEdge(id string, e *edge) {
+	item, ok := ei.items[id]
 	if !ok {
-		return nil
-	}
-	if len(deps) == 0 {
-		m2, ok := m[indexedDigest{}]
-		if !ok {
-			return nil
-		}
-		// prioritize edges with ignoreCache
-		for e := range m2 {
-			if e.edge.Vertex.Options().IgnoreCache && e != ignore {
-				return e
-			}
-		}
-		for e := range m2 {
-			if e != ignore {
-				return e
-			}
-		}
-		return nil
-	}
-
-	matches := map[*edge]struct{}{}
-	for i, keys := range deps {
-		if i == 0 {
-			for _, key := range keys {
-				id := indexedDigest{dgst: getUniqueID(key), index: Index(i)}
-				for e := range m[id] {
-					if e != ignore {
-						matches[e] = struct{}{}
-					}
-				}
-			}
-		} else {
-		loop0:
-			for match := range matches {
-				for _, key := range keys {
-					id := indexedDigest{dgst: getUniqueID(key), index: Index(i)}
-					if m[id] != nil {
-						if _, ok := m[id][match]; ok {
-							continue loop0
-						}
-					}
-				}
-				delete(matches, match)
-			}
-		}
-		if len(matches) == 0 {
-			break
-		}
-	}
-
-	// prioritize edges with ignoreCache
-	for m := range matches {
-		if m.edge.Vertex.Options().IgnoreCache {
-			return m
-		}
-	}
-
-	for m := range matches {
-		return m
-	}
-	return nil
-}
-
-func (ei *EdgeIndex) store(e *edge, dgst digest.Digest, index Index, deps [][]CacheKey) {
-	id := indexedDigest{dgst: dgst, index: index, depsCount: len(deps)}
-	m, ok := ei.items[id]
-	if !ok {
-		m = map[indexedDigest]map[*edge]struct{}{}
-		ei.items[id] = m
-	}
-
-	backRefsMain, ok := ei.backRefs[e]
-	if !ok {
-		backRefsMain = map[indexedDigest]map[indexedDigest]struct{}{}
-		ei.backRefs[e] = backRefsMain
-	}
-
-	backRefs, ok := backRefsMain[id]
-	if !ok {
-		backRefs = map[indexedDigest]struct{}{}
-		backRefsMain[id] = backRefs
-	}
-
-	if len(deps) == 0 {
-		m2, ok := m[indexedDigest{}]
-		if !ok {
-			m2 = map[*edge]struct{}{}
-			m[indexedDigest{}] = m2
-		}
-		m2[e] = struct{}{}
-
-		backRefs[indexedDigest{}] = struct{}{}
-
 		return
 	}
 
-	for i, keys := range deps {
-		for _, key := range keys {
-			id := indexedDigest{dgst: getUniqueID(key), index: Index(i)}
-			m2, ok := m[id]
-			if !ok {
-				m2 = map[*edge]struct{}{}
-				m[id] = m2
+	item.edge = nil
+
+	if len(item.links) == 0 {
+		for d := range item.deps {
+			ei.releaseLink(d, id)
+		}
+		delete(ei.items, id)
+	}
+}
+
+func (ei *EdgeIndex) releaseLink(id, target string) {
+	item, ok := ei.items[id]
+	if !ok {
+		return
+	}
+
+	for lid, links := range item.links {
+		for check := range links {
+			if check == target {
+				delete(links, check)
 			}
-			m2[e] = struct{}{}
-			backRefs[id] = struct{}{}
+		}
+		if len(links) == 0 {
+			delete(item.links, lid)
+		}
+	}
+
+	if item.edge == nil && len(item.links) == 0 {
+		for d := range item.deps {
+			ei.releaseLink(d, id)
+		}
+		delete(ei.items, id)
+	}
+}
+
+func (ei *EdgeIndex) LoadOrStore(k *CacheKey, e *edge) *edge {
+	ei.mu.Lock()
+	defer ei.mu.Unlock()
+
+	// get all current edges that match the cachekey
+	ids := ei.getAllMatches(k)
+
+	var oldID string
+	var old *edge
+
+	for _, id := range ids {
+		if item, ok := ei.items[id]; ok {
+			if item.edge != e {
+				oldID = id
+				old = item.edge
+			}
+		}
+	}
+
+	if old != nil && !(!isIgnoreCache(old) && isIgnoreCache(e)) {
+		ei.enforceLinked(oldID, k)
+		return old
+	}
+
+	id := identity.NewID()
+	if len(ids) > 0 {
+		id = ids[0]
+	}
+
+	ei.enforceLinked(id, k)
+
+	ei.items[id].edge = e
+	backRefs, ok := ei.backRefs[e]
+	if !ok {
+		backRefs = map[string]struct{}{}
+		ei.backRefs[e] = backRefs
+	}
+	backRefs[id] = struct{}{}
+
+	return nil
+}
+
+// enforceLinked adds links from current ID to all dep keys
+func (er *EdgeIndex) enforceLinked(id string, k *CacheKey) {
+	main, ok := er.items[id]
+	if !ok {
+		main = &indexItem{
+			links: map[CacheInfoLink]map[string]struct{}{},
+			deps:  map[string]struct{}{},
+		}
+		er.items[id] = main
+	}
+
+	deps := k.Deps()
+
+	for i, dd := range deps {
+		for _, d := range dd {
+			ck := d.CacheKey.CacheKey
+			er.enforceIndexID(ck)
+			ll := CacheInfoLink{Input: Index(i), Digest: k.Digest(), Output: k.Output(), Selector: d.Selector}
+			for _, ckID := range ck.indexIDs {
+				if item, ok := er.items[ckID]; ok {
+					links, ok := item.links[ll]
+					if !ok {
+						links = map[string]struct{}{}
+						item.links[ll] = links
+					}
+					links[id] = struct{}{}
+					main.deps[ckID] = struct{}{}
+				}
+			}
 		}
 	}
 }
 
-type indexedDigest struct {
-	dgst      digest.Digest
-	index     Index
-	depsCount int
+func (ei *EdgeIndex) enforceIndexID(k *CacheKey) {
+	if len(k.indexIDs) > 0 {
+		return
+	}
+
+	matches := ei.getAllMatches(k)
+
+	if len(matches) > 0 {
+		k.indexIDs = matches
+	} else {
+		k.indexIDs = []string{identity.NewID()}
+	}
+
+	for _, id := range k.indexIDs {
+		ei.enforceLinked(id, k)
+	}
 }
 
-type internalKeyT string
+func (ei *EdgeIndex) getAllMatches(k *CacheKey) []string {
+	deps := k.Deps()
 
-var internalKey = internalKeyT("buildkit/unique-cache-id")
-
-func getUniqueID(k CacheKey) digest.Digest {
-	internalV := k.GetValue(internalKey)
-	if internalV != nil {
-		return internalV.(digest.Digest)
+	if len(deps) == 0 {
+		return []string{rootKey(k.Digest(), k.Output()).String()}
 	}
 
-	dgstr := digest.SHA256.Digester()
-	for _, inp := range k.Deps() {
-		dgstr.Hash().Write([]byte(getUniqueID(inp.CacheKey)))
-		dgstr.Hash().Write([]byte(inp.Selector))
+	for _, dd := range deps {
+		for _, k := range dd {
+			ei.enforceIndexID(k.CacheKey.CacheKey)
+		}
 	}
 
-	dgstr.Hash().Write([]byte(k.Digest()))
-	dgstr.Hash().Write([]byte(fmt.Sprintf("%d", k.Output())))
+	matches := map[string]struct{}{}
 
-	dgst := dgstr.Digest()
-	k.SetValue(internalKey, dgst)
+	for i, dd := range deps {
+		if i == 0 {
+			for _, d := range dd {
+				ll := CacheInfoLink{Input: Index(i), Digest: k.Digest(), Output: k.Output(), Selector: d.Selector}
+				for _, ckID := range d.CacheKey.CacheKey.indexIDs {
+					item, ok := ei.items[ckID]
+					if ok {
+						for l := range item.links[ll] {
+							matches[l] = struct{}{}
+						}
+					}
+				}
+			}
+			continue
+		}
 
-	return dgst
+		if len(matches) == 0 {
+			break
+		}
+
+		for m := range matches {
+			found := false
+			for _, d := range dd {
+				ll := CacheInfoLink{Input: Index(i), Digest: k.Digest(), Output: k.Output(), Selector: d.Selector}
+				for _, ckID := range d.CacheKey.CacheKey.indexIDs {
+					if l, ok := ei.items[ckID].links[ll]; ok {
+						if _, ok := l[m]; ok {
+							found = true
+							break
+						}
+					}
+				}
+			}
+
+			if !found {
+				delete(matches, m)
+			}
+		}
+	}
+
+	out := make([]string, 0, len(matches))
+
+	for m := range matches {
+		out = append(out, m)
+	}
+
+	return out
+}
+
+func isIgnoreCache(e *edge) bool {
+	if e.edge.Vertex == nil {
+		return false
+	}
+	return e.edge.Vertex.Options().IgnoreCache
 }

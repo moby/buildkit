@@ -5,7 +5,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -59,30 +58,17 @@ func (r *splitResult) Release(ctx context.Context) error {
 }
 
 // NewCachedResult combines a result and cache key into cached result
-func NewCachedResult(res Result, k CacheKey, exp Exporter) CachedResult {
-	return &cachedResult{res, k, exp}
+func NewCachedResult(res Result, k ExportableCacheKey) CachedResult {
+	return &cachedResult{res, k}
 }
 
 type cachedResult struct {
 	Result
-	k   CacheKey
-	exp Exporter
+	k ExportableCacheKey
 }
 
 func (cr *cachedResult) CacheKey() ExportableCacheKey {
-	return ExportableCacheKey{CacheKey: cr.k, Exporter: cr.exp}
-}
-
-func (cr *cachedResult) Export(ctx context.Context, converter func(context.Context, Result) (*Remote, error)) ([]ExportRecord, error) {
-	m := make(map[digest.Digest]*ExportRecord)
-	if _, err := cr.exp.Export(ctx, m, converter); err != nil {
-		return nil, err
-	}
-	out := make([]ExportRecord, 0, len(m))
-	for _, r := range m {
-		out = append(out, *r)
-	}
-	return out, nil
+	return cr.k
 }
 
 func NewSharedCachedResult(res CachedResult) *SharedCachedResult {
@@ -111,10 +97,6 @@ func (r *clonedCachedResult) ID() string {
 
 func (cr *clonedCachedResult) CacheKey() ExportableCacheKey {
 	return cr.cr.CacheKey()
-}
-
-func (cr *clonedCachedResult) Export(ctx context.Context, converter func(context.Context, Result) (*Remote, error)) ([]ExportRecord, error) {
-	return cr.cr.Export(ctx, converter)
 }
 
 type SharedCachedResult struct {
