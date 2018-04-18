@@ -22,15 +22,38 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+type Opt struct {
+	Root              string
+	CommandCandidates []string
+}
+
+var defaultCommandCandidates = []string{"buildkit-runc", "runc"}
+
 type runcExecutor struct {
 	runc *runc.Runc
 	root string
+	cmd  string
 }
 
-func New(root string) (executor.Executor, error) {
-	if err := exec.Command("runc", "--version").Run(); err != nil {
-		return nil, errors.Wrap(err, "failed to find runc binary")
+func New(opt Opt) (executor.Executor, error) {
+	cmds := opt.CommandCandidates
+	if cmds == nil {
+		cmds = defaultCommandCandidates
 	}
+
+	var cmd string
+	var found bool
+	for _, cmd = range cmds {
+		if _, err := exec.LookPath(cmd); err == nil {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return nil, errors.Errorf("failed to find %s binary", cmd)
+	}
+
+	root := opt.Root
 
 	if err := os.MkdirAll(root, 0700); err != nil {
 		return nil, errors.Wrapf(err, "failed to create %s", root)

@@ -40,7 +40,7 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, labels map[string]s
 	if err != nil {
 		return opt, err
 	}
-	exe, err := runcexecutor.New(filepath.Join(root, "executor"))
+	exe, err := runcexecutor.New(runcexecutor.Opt{Root: filepath.Join(root, "executor")})
 	if err != nil {
 		return opt, err
 	}
