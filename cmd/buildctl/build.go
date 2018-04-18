@@ -11,6 +11,8 @@ import (
 	"github.com/containerd/console"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/session/auth/authprovider"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/progress/progressui"
 	"github.com/opencontainers/go-digest"
@@ -125,6 +127,7 @@ func build(clicontext *cli.Context) error {
 		// FrontendAttrs is set later
 		ExportCache: clicontext.String("export-cache"),
 		ImportCache: clicontext.String("import-cache"),
+		Session:     []session.Attachable{authprovider.NewDockerAuthProvider()},
 	}
 	solveOpt.ExporterAttrs, err = attrMap(clicontext.StringSlice("exporter-opt"))
 	if err != nil {
