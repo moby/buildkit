@@ -66,6 +66,7 @@ func New(opt Opt) (executor.Executor, error) {
 	// TODO: check that root is not symlink to fail early
 
 	runtime := &runc.Runc{
+		Command:      cmd,
 		Log:          filepath.Join(root, "runc-log.json"),
 		LogFormat:    runc.JSON,
 		PdeathSignal: syscall.SIGKILL,
