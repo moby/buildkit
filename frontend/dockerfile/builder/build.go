@@ -57,7 +57,7 @@ func Build(ctx context.Context, c client.Client) error {
 	eg, ctx2 := errgroup.WithContext(ctx)
 	var dtDockerfile []byte
 	eg.Go(func() error {
-		ref, err := c.Solve(ctx2, def.ToPB(), "", nil, false)
+		ref, err := c.Solve(ctx2, def.ToPB(), "", "", nil, false)
 		if err != nil {
 			return err
 		}
@@ -83,7 +83,7 @@ func Build(ctx context.Context, c client.Client) error {
 		if err != nil {
 			return err
 		}
-		ref, err := c.Solve(ctx2, def.ToPB(), "", nil, false)
+		ref, err := c.Solve(ctx2, def.ToPB(), "", "", nil, false)
 		if err != nil {
 			return err
 		}
@@ -125,7 +125,7 @@ func Build(ctx context.Context, c client.Client) error {
 		return err
 	}
 
-	_, err = c.Solve(ctx, def.ToPB(), "", map[string][]byte{
+	_, err = c.Solve(ctx, def.ToPB(), "", opts["cache-from"], map[string][]byte{
 		exporterImageConfig: config,
 	}, true)
 	if err != nil {
