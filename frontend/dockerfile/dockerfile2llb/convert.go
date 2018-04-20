@@ -147,9 +147,11 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 								return err
 							}
 							d.image = img
-							ref, err := reference.WithDigest(ref, dgst)
-							if err != nil {
-								return err
+							if dgst != "" {
+								ref, err = reference.WithDigest(ref, dgst)
+								if err != nil {
+									return err
+								}
 							}
 							d.stage.BaseName = ref.String()
 							_ = ref
