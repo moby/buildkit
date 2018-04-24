@@ -49,6 +49,7 @@ func TestIntegration(t *testing.T) {
 		testCopyWildcards,
 		testCopyOverrideFiles,
 		testMultiStageImplicitFrom,
+		testCopyVarSubstitution,
 	})
 }
 
@@ -850,6 +851,47 @@ COPY files dest
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "dest/foo.go"))
 	require.NoError(t, err)
 	require.Equal(t, string(dt), "foo.go-contents")
+}
+
+func testCopyVarSubstitution(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	dockerfile := []byte(`
+FROM scratch AS base
+ENV FOO bar
+COPY $FOO baz
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("bar", []byte(`bar-contents`), 0600),
+	)
+
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	err = c.Solve(context.TODO(), nil, client.SolveOpt{
+		Frontend:          "dockerfile.v0",
+		Exporter:          client.ExporterLocal,
+		ExporterOutputDir: destDir,
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "baz"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), "bar-contents")
 }
 
 func testCopyWildcards(t *testing.T, sb integration.Sandbox) {

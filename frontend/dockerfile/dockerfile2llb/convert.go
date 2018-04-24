@@ -21,7 +21,6 @@ import (
 	"github.com/docker/go-connections/nat"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/client/llb/imagemetaresolver"
-	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -80,8 +79,9 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		st.BaseName = name
 
 		ds := &dispatchState{
-			stage: st,
-			deps:  make(map[*dispatchState]struct{}),
+			stage:    st,
+			deps:     make(map[*dispatchState]struct{}),
+			ctxPaths: make(map[string]struct{}),
 		}
 		if d, ok := dispatchStatesByName[st.BaseName]; ok {
 			ds.base = d
@@ -121,7 +121,6 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		}
 	}
 
-	ctxPaths := map[string]struct{}{}
 	eg, ctx := errgroup.WithContext(ctx)
 	for i, d := range allDispatchStates {
 		reachable := isReachable(target, d)
@@ -162,42 +161,14 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 				})
 			}(i, d)
 		}
-
-		if reachable {
-			for _, cmd := range d.commands {
-				switch c := cmd.Command.(type) {
-				case *instructions.CopyCommand:
-					if c.From != "" {
-						continue
-					}
-					for _, src := range c.Sources() {
-						ctxPaths[path.Join("/", filepath.ToSlash(src))] = struct{}{}
-					}
-				case *instructions.AddCommand:
-					for _, src := range c.Sources() {
-						ctxPaths[path.Join("/", filepath.ToSlash(src))] = struct{}{}
-					}
-				}
-			}
-		}
 	}
 
 	if err := eg.Wait(); err != nil {
 		return nil, nil, err
 	}
 
-	opts := []llb.LocalOption{
-		llb.SessionID(opt.SessionID),
-		llb.ExcludePatterns(opt.Excludes),
-		llb.SharedKeyHint(localNameContext),
-	}
-	if includePatterns := normalizeContextPaths(ctxPaths); includePatterns != nil {
-		opts = append(opts, llb.IncludePatterns(includePatterns))
-	}
-	buildContext := llb.Local(localNameContext, opts...)
-	if opt.BuildContext != nil {
-		buildContext = *opt.BuildContext
-	}
+	buildContext := &mutableOutput{}
+	ctxPaths := map[string]struct{}{}
 
 	for _, d := range allDispatchStates {
 		if !isReachable(target, d) {
@@ -237,7 +208,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 			buildArgValues:       opt.BuildArgs,
 			shlex:                shlex,
 			sessionID:            opt.SessionID,
-			buildContext:         buildContext,
+			buildContext:         llb.NewState(buildContext),
 		}
 
 		if err = dispatchOnBuild(d, d.image.Config.OnBuild, opt); err != nil {
@@ -249,7 +220,25 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 				return nil, nil, err
 			}
 		}
+
+		for p := range d.ctxPaths {
+			ctxPaths[p] = struct{}{}
+		}
 	}
+
+	opts := []llb.LocalOption{
+		llb.SessionID(opt.SessionID),
+		llb.ExcludePatterns(opt.Excludes),
+		llb.SharedKeyHint(localNameContext),
+	}
+	if includePatterns := normalizeContextPaths(ctxPaths); includePatterns != nil {
+		opts = append(opts, llb.IncludePatterns(includePatterns))
+	}
+	bc := llb.Local(localNameContext, opts...)
+	if opt.BuildContext != nil {
+		bc = *opt.BuildContext
+	}
+	buildContext.Output = bc.Output()
 
 	return &target.state, &target.image, nil
 }
@@ -314,6 +303,11 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 		err = dispatchWorkdir(d, c, true)
 	case *instructions.AddCommand:
 		err = dispatchCopy(d, c.SourcesAndDest, opt.buildContext, true, c, "")
+		if err == nil {
+			for _, src := range c.Sources() {
+				d.ctxPaths[path.Join("/", filepath.ToSlash(src))] = struct{}{}
+			}
+		}
 	case *instructions.LabelCommand:
 		err = dispatchLabel(d, c)
 	case *instructions.OnbuildCommand:
@@ -342,6 +336,11 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 			l = cmd.copySource.state
 		}
 		err = dispatchCopy(d, c.SourcesAndDest, l, false, c, c.Chown)
+		if err == nil && cmd.copySource == nil {
+			for _, src := range c.Sources() {
+				d.ctxPaths[path.Join("/", filepath.ToSlash(src))] = struct{}{}
+			}
+		}
 	default:
 	}
 	return err
@@ -355,6 +354,7 @@ type dispatchState struct {
 	deps      map[*dispatchState]struct{}
 	buildArgs []instructions.ArgCommand
 	commands  []command
+	ctxPaths  map[string]struct{}
 }
 
 type command struct {
@@ -721,11 +721,7 @@ func runCommandString(args []string, buildArgs []instructions.ArgCommand) string
 
 func commitToHistory(img *Image, msg string, withLayer bool, st *llb.State) error {
 	if st != nil {
-		def, err := st.Marshal()
-		if err != nil {
-			return err
-		}
-		msg += " # buildkit:" + digest.FromBytes(def.Def[len(def.Def)-1]).String()
+		msg += " # buildkit"
 	}
 
 	tm := time.Now().UTC()
@@ -820,4 +816,8 @@ func normalizeContextPaths(paths map[string]struct{}) []string {
 		return toSort[i] < toSort[j]
 	})
 	return toSort
+}
+
+type mutableOutput struct {
+	llb.Output
 }
