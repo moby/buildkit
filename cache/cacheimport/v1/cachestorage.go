@@ -6,14 +6,16 @@ import (
 	"github.com/moby/buildkit/identity"
 	solver "github.com/moby/buildkit/solver-next"
 	"github.com/moby/buildkit/worker"
+	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
 func NewCacheKeyStorage(cc *CacheChains, w worker.Worker) (solver.CacheKeyStorage, solver.CacheResultStorage, error) {
 	storage := &cacheKeyStorage{
-		byID:   map[string]*itemWithOutgoingLinks{},
-		byItem: map[*item]string{},
+		byID:     map[string]*itemWithOutgoingLinks{},
+		byItem:   map[*item]string{},
+		byResult: map[string]map[string]struct{}{},
 	}
 
 	for _, it := range cc.items {
@@ -70,12 +72,23 @@ func addItemToStorage(k *cacheKeyStorage, it *item) (*itemWithOutgoingLinks, err
 	}
 
 	k.byID[id] = itl
+
+	if res := it.result; res != nil {
+		resultID := remoteID(res)
+		ids, ok := k.byResult[resultID]
+		if !ok {
+			ids = map[string]struct{}{}
+			k.byResult[resultID] = ids
+		}
+		ids[id] = struct{}{}
+	}
 	return itl, nil
 }
 
 type cacheKeyStorage struct {
-	byID   map[string]*itemWithOutgoingLinks
-	byItem map[*item]string
+	byID     map[string]*itemWithOutgoingLinks
+	byItem   map[*item]string
+	byResult map[string]map[string]struct{}
 }
 
 type itemWithOutgoingLinks struct {
@@ -99,17 +112,20 @@ func (cs *cacheKeyStorage) WalkResults(id string, fn func(solver.CacheResult) er
 		return nil
 	}
 	if res := it.result; res != nil {
-		return fn(solver.CacheResult{ID: id, CreatedAt: it.resultTime})
+		return fn(solver.CacheResult{ID: remoteID(res), CreatedAt: it.resultTime})
 	}
 	return nil
 }
 
 func (cs *cacheKeyStorage) Load(id string, resultID string) (solver.CacheResult, error) {
-	_, ok := cs.byID[id]
+	it, ok := cs.byID[id]
 	if !ok {
 		return solver.CacheResult{}, nil
 	}
-	return solver.CacheResult{ID: id}, nil
+	if res := it.result; res != nil {
+		return solver.CacheResult{ID: remoteID(res), CreatedAt: it.resultTime}, nil
+	}
+	return solver.CacheResult{}, nil
 }
 
 func (cs *cacheKeyStorage) AddResult(id string, res solver.CacheResult) error {
@@ -141,6 +157,16 @@ func (cs *cacheKeyStorage) WalkLinks(id string, link solver.CacheInfoLink, fn fu
 
 // TODO:
 func (cs *cacheKeyStorage) WalkBacklinks(id string, fn func(id string, link solver.CacheInfoLink) error) error {
+	return nil
+}
+
+func (cs *cacheKeyStorage) WalkIDsByResult(id string, fn func(id string) error) error {
+	ids := cs.byResult[id]
+	for id := range ids {
+		if err := fn(id); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -202,4 +228,13 @@ func (cs *cacheResultStorage) Exists(id string) bool {
 		return false
 	}
 	return it.result != nil
+}
+
+// unique ID per remote. this ID is not stable.
+func remoteID(r *solver.Remote) string {
+	dgstr := digest.Canonical.Digester()
+	for _, desc := range r.Descriptors {
+		dgstr.Hash().Write([]byte(desc.Digest))
+	}
+	return dgstr.Digest().String()
 }
