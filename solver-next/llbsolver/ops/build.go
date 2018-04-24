@@ -32,7 +32,7 @@ func NewBuildOp(v solver.Vertex, op *pb.Op_Build, b frontend.FrontendLLBBridge, 
 	}, nil
 }
 
-func (b *buildOp) CacheMap(ctx context.Context) (*solver.CacheMap, error) {
+func (b *buildOp) CacheMap(ctx context.Context, index int) (*solver.CacheMap, bool, error) {
 	dt, err := json.Marshal(struct {
 		Type string
 		Exec *pb.BuildOp
@@ -41,7 +41,7 @@ func (b *buildOp) CacheMap(ctx context.Context) (*solver.CacheMap, error) {
 		Exec: b.op,
 	})
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	return &solver.CacheMap{
@@ -50,7 +50,7 @@ func (b *buildOp) CacheMap(ctx context.Context) (*solver.CacheMap, error) {
 			Selector          digest.Digest
 			ComputeDigestFunc solver.ResultBasedCacheFunc
 		}, len(b.v.Inputs())),
-	}, nil
+	}, true, nil
 }
 
 func (b *buildOp) Exec(ctx context.Context, inputs []solver.Result) (outputs []solver.Result, retErr error) {
