@@ -156,6 +156,32 @@ func (s *Store) AddResult(id string, res solver.CacheResult) error {
 	})
 }
 
+func (s *Store) WalkIDsByResult(resultID string, fn func(string) error) error {
+	ids := map[string]struct{}{}
+	if err := s.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(byResultBucket))
+		if b == nil {
+			return nil
+		}
+		b = b.Bucket([]byte(resultID))
+		if b == nil {
+			return nil
+		}
+		return b.ForEach(func(k, v []byte) error {
+			ids[string(k)] = struct{}{}
+			return nil
+		})
+	}); err != nil {
+		return err
+	}
+	for id := range ids {
+		if err := fn(id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (s *Store) Release(resultID string) error {
 	return s.db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(byResultBucket))

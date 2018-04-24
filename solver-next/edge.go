@@ -43,11 +43,14 @@ type edge struct {
 	depRequests map[pipe.Receiver]*dep
 	deps        []*dep
 
-	cacheMapReq  pipe.Receiver
-	execReq      pipe.Receiver
-	err          error
-	cacheRecords map[string]*CacheRecord
-	keyMap       map[string]*CacheKey
+	cacheMapReq     pipe.Receiver
+	cacheMapDone    bool
+	cacheMapIndex   int
+	cacheMapDigests []digest.Digest
+	execReq         pipe.Receiver
+	err             error
+	cacheRecords    map[string]*CacheRecord
+	keyMap          map[string]*CacheKey
 
 	noCacheMatchPossible      bool
 	allDepsCompletedCacheFast bool
@@ -132,10 +135,14 @@ func (e *edge) release() {
 }
 
 // commitOptions returns parameters for the op execution
-func (e *edge) commitOptions() (*CacheKey, []CachedResult) {
+func (e *edge) commitOptions() ([]*CacheKey, []CachedResult) {
 	k := NewCacheKey(e.cacheMap.Digest, e.edge.Index)
-	if e.deps == nil {
-		return k, nil
+	if len(e.deps) == 0 {
+		keys := make([]*CacheKey, 0, len(e.cacheMapDigests))
+		for _, dgst := range e.cacheMapDigests {
+			keys = append(keys, NewCacheKey(dgst, e.edge.Index))
+		}
+		return keys, nil
 	}
 
 	inputs := make([][]CacheKeyWithSelector, len(e.deps))
@@ -149,7 +156,7 @@ func (e *edge) commitOptions() (*CacheKey, []CachedResult) {
 	}
 
 	k.deps = inputs
-	return k, results
+	return []*CacheKey{k}, results
 }
 
 // isComplete returns true if edge state is final and will never change
@@ -315,9 +322,10 @@ func (e *edge) unpark(incoming []pipe.Sender, updates, allPipes []pipe.Receiver,
 	}
 
 	// set up new outgoing requests if needed
-	if e.cacheMapReq == nil {
+	if e.cacheMapReq == nil && (e.cacheMap == nil || len(e.cacheRecords) == 0) {
+		index := e.cacheMapIndex
 		e.cacheMapReq = f.NewFuncRequest(func(ctx context.Context) (interface{}, error) {
-			return e.op.CacheMap(ctx)
+			return e.op.CacheMap(ctx, index)
 		})
 	}
 
@@ -359,8 +367,12 @@ func (e *edge) processUpdate(upt pipe.Receiver) (depChanged bool) {
 				e.err = err
 			}
 		} else {
-			e.cacheMap = upt.Status().Value.(*CacheMap)
+			resp := upt.Status().Value.(*cacheMapResp)
+			e.cacheMap = resp.CacheMap
+			e.cacheMapDone = resp.complete
+			e.cacheMapIndex++
 			if len(e.deps) == 0 {
+				e.cacheMapDigests = append(e.cacheMapDigests, e.cacheMap.Digest)
 				if !e.op.IgnoreCache() {
 					keys, err := e.op.Cache().Query(nil, 0, e.cacheMap.Digest, e.edge.Index)
 					if err != nil {
@@ -390,6 +402,9 @@ func (e *edge) processUpdate(upt pipe.Receiver) (depChanged bool) {
 			for i, dep := range e.deps {
 				e.probeCache(dep, withSelector(dep.keys, e.cacheMap.Deps[i].Selector))
 				e.checkDepMatchPossible(dep)
+			}
+			if !e.cacheMapDone {
+				e.cacheMapReq = nil
 			}
 		}
 		return true
@@ -573,11 +588,14 @@ func (e *edge) recalcCurrentState() {
 		if stHigh > e.state {
 			e.state = stHigh
 		}
+		if !e.cacheMapDone && len(e.keys) == 0 {
+			e.state = edgeStatusInitial
+		}
 
-		e.allDepsCompletedCacheFast = allDepsCompletedCacheFast
-		e.allDepsCompletedCacheSlow = allDepsCompletedCacheSlow
-		e.allDepsStateCacheSlow = allDepsStateCacheSlow
-		e.allDepsCompleted = allDepsCompleted
+		e.allDepsCompletedCacheFast = e.cacheMapDone && allDepsCompletedCacheFast
+		e.allDepsCompletedCacheSlow = e.cacheMapDone && allDepsCompletedCacheSlow
+		e.allDepsStateCacheSlow = e.cacheMapDone && allDepsStateCacheSlow
+		e.allDepsCompleted = e.cacheMapDone && allDepsCompleted
 	}
 }
 
@@ -784,7 +802,7 @@ func (e *edge) loadCache(ctx context.Context) (interface{}, error) {
 
 // execOp creates a request to execute the vertex operation
 func (e *edge) execOp(ctx context.Context) (interface{}, error) {
-	cacheKey, inputs := e.commitOptions()
+	cacheKeys, inputs := e.commitOptions()
 	results, subExporters, err := e.op.Exec(ctx, toResultSlice(inputs))
 	if err != nil {
 		return nil, err
@@ -802,21 +820,27 @@ func (e *edge) execOp(ctx context.Context) (interface{}, error) {
 			go results[i].Release(context.TODO())
 		}
 	}
-	ck, err := e.op.Cache().Save(cacheKey, res)
-	if err != nil {
-		return nil, err
-	}
 
-	exps := make([]Exporter, 0, len(subExporters))
-	for _, exp := range subExporters {
-		exps = append(exps, exp.Exporter)
-	}
+	var exporters []Exporter
 
-	if len(subExporters) > 0 {
-		ck = &ExportableCacheKey{
-			CacheKey: ck.CacheKey,
-			Exporter: &mergedExporter{exporters: append([]Exporter{ck.Exporter}, exps...)},
+	for _, cacheKey := range cacheKeys {
+		ck, err := e.op.Cache().Save(cacheKey, res)
+		if err != nil {
+			return nil, err
 		}
+
+		exps := make([]Exporter, 0, len(subExporters))
+		for _, exp := range subExporters {
+			exps = append(exps, exp.Exporter)
+		}
+
+		exporters = append(exporters, ck.Exporter)
+		exporters = append(exporters, exps...)
+	}
+
+	ck := &ExportableCacheKey{
+		CacheKey: cacheKeys[0],
+		Exporter: &mergedExporter{exporters: exporters},
 	}
 
 	return NewCachedResult(res, *ck), nil
