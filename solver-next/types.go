@@ -89,8 +89,9 @@ type CacheLink struct {
 
 // Op is an implementation for running a vertex
 type Op interface {
-	// CacheMap returns structure describing how the operation is cached
-	CacheMap(context.Context) (*CacheMap, error)
+	// CacheMap returns structure describing how the operation is cached.
+	// Currently only roots are allowed to return multiple cache maps per op.
+	CacheMap(context.Context, int) (*CacheMap, bool, error)
 	// Exec runs an operation given results from previous operations.
 	Exec(ctx context.Context, inputs []Result) (outputs []Result, err error)
 }

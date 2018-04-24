@@ -2264,6 +2264,125 @@ func TestSlowCacheAvoidAccess(t *testing.T) {
 	require.Equal(t, int64(1), cacheManager.loadCounter)
 }
 
+func TestCacheMultipleMaps(t *testing.T) {
+	t.Parallel()
+	ctx := context.TODO()
+
+	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
+
+	l := NewJobList(SolverOpt{
+		ResolveOpFunc: testOpResolver,
+		DefaultCache:  cacheManager,
+	})
+	defer l.Close()
+
+	j0, err := l.NewJob("j0")
+	require.NoError(t, err)
+
+	defer func() {
+		if j0 != nil {
+			j0.Discard()
+		}
+	}()
+
+	g0 := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "v0",
+			cacheKeySeed: "seed0",
+			cacheKeySeeds: []func() string{
+				func() string { return "seed1" },
+				func() string { return "seed2" },
+			},
+			value: "result0",
+		}),
+	}
+	res, err := j0.Build(ctx, g0)
+	require.NoError(t, err)
+	require.Equal(t, unwrap(res), "result0")
+
+	require.NoError(t, j0.Discard())
+	j0 = nil
+
+	expTarget := newTestExporterTarget()
+
+	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testConvertToRemote)
+	require.NoError(t, err)
+
+	expTarget.normalize()
+	require.Equal(t, len(expTarget.records), 3)
+
+	j1, err := l.NewJob("j1")
+	require.NoError(t, err)
+
+	defer func() {
+		if j1 != nil {
+			j1.Discard()
+		}
+	}()
+
+	called := false
+	g1 := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "v1",
+			cacheKeySeed: "seed1",
+			cacheKeySeeds: []func() string{
+				func() string { called = true; return "seed3" },
+			},
+			value: "result0-not-cached",
+		}),
+	}
+
+	res, err = j1.Build(ctx, g1)
+	require.NoError(t, err)
+	require.Equal(t, unwrap(res), "result0")
+
+	require.NoError(t, j1.Discard())
+	j1 = nil
+
+	expTarget = newTestExporterTarget()
+
+	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testConvertToRemote)
+	require.NoError(t, err)
+
+	require.Equal(t, len(expTarget.records), 3)
+	require.Equal(t, called, false)
+
+	j2, err := l.NewJob("j2")
+	require.NoError(t, err)
+
+	defer func() {
+		if j2 != nil {
+			j2.Discard()
+		}
+	}()
+
+	g2 := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "v2",
+			cacheKeySeed: "seed3",
+			cacheKeySeeds: []func() string{
+				func() string { called = true; return "seed2" },
+			},
+			value: "result0-not-cached",
+		}),
+	}
+
+	res, err = j2.Build(ctx, g2)
+	require.NoError(t, err)
+	require.Equal(t, unwrap(res), "result0")
+
+	require.NoError(t, j2.Discard())
+	j2 = nil
+
+	expTarget = newTestExporterTarget()
+
+	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testConvertToRemote)
+	require.NoError(t, err)
+
+	require.Equal(t, len(expTarget.records), 3)
+	require.Equal(t, called, true)
+}
+
 func TestCacheExportingPartialSelector(t *testing.T) {
 	t.Parallel()
 	ctx := context.TODO()
@@ -2589,6 +2708,7 @@ func generateSubGraph(nodes int) (Edge, int) {
 type vtxOpt struct {
 	name             string
 	cacheKeySeed     string
+	cacheKeySeeds    []func() string
 	execDelay        time.Duration
 	cacheDelay       time.Duration
 	cachePreFunc     func(context.Context) error
@@ -2686,11 +2806,16 @@ func (v *vertex) cacheMap(ctx context.Context) error {
 	return nil
 }
 
-func (v *vertex) CacheMap(ctx context.Context) (*CacheMap, error) {
-	if err := v.cacheMap(ctx); err != nil {
-		return nil, err
+func (v *vertex) CacheMap(ctx context.Context, index int) (*CacheMap, bool, error) {
+	if index == 0 {
+		if err := v.cacheMap(ctx); err != nil {
+			return nil, false, err
+		}
+		return v.makeCacheMap(), len(v.opt.cacheKeySeeds) == index, nil
 	}
-	return v.makeCacheMap(), nil
+	return &CacheMap{
+		Digest: digest.FromBytes([]byte(fmt.Sprintf("seed:%s", v.opt.cacheKeySeeds[index-1]()))),
+	}, len(v.opt.cacheKeySeeds) == index, nil
 }
 
 func (v *vertex) exec(ctx context.Context, inputs []Result) error {
