@@ -2,7 +2,9 @@ package containerimage
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"runtime"
 	"sync"
 	"time"
 
@@ -16,6 +18,7 @@ import (
 	"github.com/containerd/containerd/remotes/docker/schema1"
 	"github.com/containerd/containerd/rootfs"
 	"github.com/containerd/containerd/snapshots"
+	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/auth"
@@ -202,11 +205,51 @@ func (p *puller) resolve(ctx context.Context) error {
 	return p.resolveErr
 }
 
-func (p *puller) CacheKey(ctx context.Context) (string, error) {
+func (p *puller) mainManifestKey(ctx context.Context) (digest.Digest, error) {
 	if err := p.resolve(ctx); err != nil {
 		return "", err
 	}
-	return p.desc.Digest.String(), nil
+	dt, err := json.Marshal(struct {
+		Digest digest.Digest
+		OS     string
+		Arch   string
+	}{
+		Digest: p.desc.Digest,
+		OS:     runtime.GOOS,
+		Arch:   runtime.GOARCH,
+	})
+	if err != nil {
+		return "", err
+	}
+	return digest.FromBytes(dt), nil
+}
+
+func (p *puller) CacheKey(ctx context.Context, index int) (string, bool, error) {
+	if index == 0 || p.desc.Digest == "" {
+		k, err := p.mainManifestKey(ctx)
+		if err != nil {
+			return "", false, err
+		}
+		return k.String(), false, nil
+	}
+	ref, err := reference.ParseNormalizedNamed(p.src.Reference.String())
+	if err != nil {
+		return "", false, err
+	}
+	ref, err = reference.WithDigest(ref, p.desc.Digest)
+	if err != nil {
+		return "", false, nil
+	}
+	_, dt, err := imageutil.Config(ctx, ref.String(), p.resolver, p.is.ContentStore)
+	if err != nil {
+		// this happens on schema1 images
+		k, err := p.mainManifestKey(ctx)
+		if err != nil {
+			return "", false, err
+		}
+		return k.String(), true, nil
+	}
+	return cacheKeyFromConfig(dt).String(), true, nil
 }
 
 func (p *puller) Snapshot(ctx context.Context) (cache.ImmutableRef, error) {
@@ -504,6 +547,20 @@ func showProgress(ctx context.Context, ongoing *jobs, cs content.Store) {
 			return
 		}
 	}
+}
+
+// cacheKeyFromConfig returns a stable digest from image config. If image config
+// is a known oci image we will use chainID of layers.
+func cacheKeyFromConfig(dt []byte) digest.Digest {
+	var img ocispec.Image
+	err := json.Unmarshal(dt, &img)
+	if err != nil {
+		return digest.FromBytes(dt)
+	}
+	if img.RootFS.Type != "layers" {
+		return digest.FromBytes(dt)
+	}
+	return identity.ChainID(img.RootFS.DiffIDs)
 }
 
 // jobs provides a way of identifying the download keys for a particular task
