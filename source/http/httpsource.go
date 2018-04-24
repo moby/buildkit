@@ -106,26 +106,26 @@ func (hs *httpSourceHandler) formatCacheKey(filename string, dgst digest.Digest)
 	return digest.FromBytes(dt)
 }
 
-func (hs *httpSourceHandler) CacheKey(ctx context.Context) (string, error) {
+func (hs *httpSourceHandler) CacheKey(ctx context.Context, index int) (string, bool, error) {
 	if hs.src.Checksum != "" {
 		hs.cacheKey = hs.src.Checksum
-		return hs.formatCacheKey(getFileName(hs.src.URL, hs.src.Filename, nil), hs.src.Checksum).String(), nil
+		return hs.formatCacheKey(getFileName(hs.src.URL, hs.src.Filename, nil), hs.src.Checksum).String(), true, nil
 	}
 
 	uh, err := hs.urlHash()
 	if err != nil {
-		return "", nil
+		return "", false, nil
 	}
 
 	// look up metadata(previously stored headers) for that URL
 	sis, err := hs.md.Search(uh.String())
 	if err != nil {
-		return "", errors.Wrapf(err, "failed to search metadata for %s", uh)
+		return "", false, errors.Wrapf(err, "failed to search metadata for %s", uh)
 	}
 
 	req, err := http.NewRequest("GET", hs.src.URL, nil)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	req = req.WithContext(ctx)
 	m := map[string]*metadata.StorageItem{}
@@ -145,35 +145,35 @@ func (hs *httpSourceHandler) CacheKey(ctx context.Context) (string, error) {
 
 	resp, err := tracing.DefaultClient.Do(req)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
-		return "", errors.Errorf("invalid response status %d", resp.StatusCode)
+		return "", false, errors.Errorf("invalid response status %d", resp.StatusCode)
 	}
 	if resp.StatusCode == http.StatusNotModified {
 		respETag := resp.Header.Get("ETag")
 		si, ok := m[respETag]
 		if !ok {
-			return "", errors.Errorf("invalid not-modified ETag: %v", respETag)
+			return "", false, errors.Errorf("invalid not-modified ETag: %v", respETag)
 		}
 		hs.refID = si.ID()
 		dgst := getChecksum(si)
 		if dgst == "" {
-			return "", errors.Errorf("invalid metadata change")
+			return "", false, errors.Errorf("invalid metadata change")
 		}
 		resp.Body.Close()
-		return hs.formatCacheKey(getFileName(hs.src.URL, hs.src.Filename, resp), dgst).String(), nil
+		return hs.formatCacheKey(getFileName(hs.src.URL, hs.src.Filename, resp), dgst).String(), true, nil
 	}
 
 	ref, dgst, err := hs.save(ctx, resp)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	ref.Release(context.TODO())
 
 	hs.cacheKey = dgst
 
-	return hs.formatCacheKey(getFileName(hs.src.URL, hs.src.Filename, resp), dgst).String(), nil
+	return hs.formatCacheKey(getFileName(hs.src.URL, hs.src.Filename, resp), dgst).String(), true, nil
 }
 
 func (hs *httpSourceHandler) save(ctx context.Context, resp *http.Response) (ref cache.ImmutableRef, dgst digest.Digest, retErr error) {

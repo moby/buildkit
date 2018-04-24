@@ -43,7 +43,7 @@ func TestHTTPSource(t *testing.T) {
 	h, err := hs.Resolve(ctx, id)
 	require.NoError(t, err)
 
-	k, err := h.CacheKey(ctx)
+	k, _, err := h.CacheKey(ctx, 0)
 	require.NoError(t, err)
 
 	expectedContent1 := "sha256:0b1a154faa3003c1fbe7fda9c8a42d55fde2df2a2c405c32038f8ac7ed6b044a"
@@ -72,7 +72,7 @@ func TestHTTPSource(t *testing.T) {
 	h, err = hs.Resolve(ctx, id)
 	require.NoError(t, err)
 
-	k, err = h.CacheKey(ctx)
+	k, _, err = h.CacheKey(ctx, 0)
 	require.NoError(t, err)
 
 	require.Equal(t, expectedContent1, k)
@@ -108,7 +108,7 @@ func TestHTTPSource(t *testing.T) {
 	h, err = hs.Resolve(ctx, id)
 	require.NoError(t, err)
 
-	k, err = h.CacheKey(ctx)
+	k, _, err = h.CacheKey(ctx, 0)
 	require.NoError(t, err)
 
 	require.Equal(t, expectedContent2, k)
@@ -157,7 +157,7 @@ func TestHTTPDefaultName(t *testing.T) {
 	h, err := hs.Resolve(ctx, id)
 	require.NoError(t, err)
 
-	k, err := h.CacheKey(ctx)
+	k, _, err := h.CacheKey(ctx, 0)
 	require.NoError(t, err)
 
 	require.Equal(t, "sha256:146f16ec8810a62a57ce314aba391f95f7eaaf41b8b1ebaf2ab65fd63b1ad437", k)
@@ -200,7 +200,7 @@ func TestHTTPInvalidURL(t *testing.T) {
 	h, err := hs.Resolve(ctx, id)
 	require.NoError(t, err)
 
-	_, err = h.CacheKey(ctx)
+	_, _, err = h.CacheKey(ctx, 0)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "invalid response")
 }
@@ -230,7 +230,7 @@ func TestHTTPChecksum(t *testing.T) {
 	h, err := hs.Resolve(ctx, id)
 	require.NoError(t, err)
 
-	k, err := h.CacheKey(ctx)
+	k, _, err := h.CacheKey(ctx, 0)
 	require.NoError(t, err)
 
 	expectedContentDifferent := "sha256:f25996f463dca69cffb580f8273ffacdda43332b5f0a8bea2ead33900616d44b"
@@ -252,7 +252,7 @@ func TestHTTPChecksum(t *testing.T) {
 	h, err = hs.Resolve(ctx, id)
 	require.NoError(t, err)
 
-	k, err = h.CacheKey(ctx)
+	k, _, err = h.CacheKey(ctx, 0)
 	require.NoError(t, err)
 
 	require.Equal(t, expectedContentCorrect, k)

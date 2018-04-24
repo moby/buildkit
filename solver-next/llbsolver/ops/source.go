@@ -47,20 +47,20 @@ func (s *sourceOp) instance(ctx context.Context) (source.SourceInstance, error) 
 	return s.src, nil
 }
 
-func (s *sourceOp) CacheMap(ctx context.Context) (*solver.CacheMap, error) {
+func (s *sourceOp) CacheMap(ctx context.Context, index int) (*solver.CacheMap, bool, error) {
 	src, err := s.instance(ctx)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	k, err := src.CacheKey(ctx)
+	k, done, err := src.CacheKey(ctx, index)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	return &solver.CacheMap{
 		// TODO: add os/arch
 		Digest: digest.FromBytes([]byte(sourceCacheType + ":" + k)),
-	}, nil
+	}, done, nil
 }
 
 func (s *sourceOp) Exec(ctx context.Context, _ []solver.Result) (outputs []solver.Result, err error) {
