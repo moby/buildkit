@@ -51,7 +51,7 @@ func cloneExecOp(old *pb.ExecOp) pb.ExecOp {
 	return n
 }
 
-func (e *execOp) CacheMap(ctx context.Context) (*solver.CacheMap, error) {
+func (e *execOp) CacheMap(ctx context.Context, index int) (*solver.CacheMap, bool, error) {
 	op := cloneExecOp(e.op)
 	for i := range op.Mounts {
 		op.Mounts[i].Selector = ""
@@ -69,7 +69,7 @@ func (e *execOp) CacheMap(ctx context.Context) (*solver.CacheMap, error) {
 		Arch: runtime.GOARCH,
 	})
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	cm := &solver.CacheMap{
@@ -82,7 +82,7 @@ func (e *execOp) CacheMap(ctx context.Context) (*solver.CacheMap, error) {
 
 	deps, err := e.getMountDeps()
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	for i, dep := range deps {
@@ -98,7 +98,7 @@ func (e *execOp) CacheMap(ctx context.Context) (*solver.CacheMap, error) {
 		}
 	}
 
-	return cm, nil
+	return cm, true, nil
 }
 
 func dedupePaths(inp []string) []string {
