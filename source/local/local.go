@@ -66,13 +66,13 @@ type localSourceHandler struct {
 	*localSource
 }
 
-func (ls *localSourceHandler) CacheKey(ctx context.Context) (string, error) {
+func (ls *localSourceHandler) CacheKey(ctx context.Context, index int) (string, bool, error) {
 	sessionID := ls.src.SessionID
 
 	if sessionID == "" {
 		id := session.FromContext(ctx)
 		if id == "" {
-			return "", errors.New("could not access local files without session")
+			return "", false, errors.New("could not access local files without session")
 		}
 		sessionID = id
 	}
@@ -82,9 +82,9 @@ func (ls *localSourceHandler) CacheKey(ctx context.Context) (string, error) {
 		ExcludePatterns []string
 	}{SessionID: sessionID, IncludePatterns: ls.src.IncludePatterns, ExcludePatterns: ls.src.ExcludePatterns})
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
-	return "session:" + ls.src.Name + ":" + digest.FromBytes(dt).String(), nil
+	return "session:" + ls.src.Name + ":" + digest.FromBytes(dt).String(), true, nil
 }
 
 func (ls *localSourceHandler) Snapshot(ctx context.Context) (out cache.ImmutableRef, retErr error) {
