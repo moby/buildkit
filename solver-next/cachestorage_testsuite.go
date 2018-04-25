@@ -19,6 +19,7 @@ func RunCacheStorageTests(t *testing.T, st func() (CacheKeyStorage, func())) {
 		testResultReleaseSingleLevel,
 		testResultReleaseMultiLevel,
 		testBacklinks,
+		testWalkIDsByResult,
 	} {
 		runStorageTest(t, tc, st)
 	}
@@ -324,6 +325,44 @@ func testResultReleaseMultiLevel(t *testing.T, st CacheKeyStorage) {
 
 	require.False(t, st.Exists("sub1"))
 	require.False(t, st.Exists("foo"))
+}
+
+func testWalkIDsByResult(t *testing.T, st CacheKeyStorage) {
+	t.Parallel()
+
+	err := st.AddResult("foo", CacheResult{
+		ID:        "foo-result",
+		CreatedAt: time.Now(),
+	})
+	require.NoError(t, err)
+
+	err = st.AddResult("foo2", CacheResult{
+		ID:        "foo-result",
+		CreatedAt: time.Now(),
+	})
+	require.NoError(t, err)
+
+	err = st.AddResult("bar", CacheResult{
+		ID:        "bar-result",
+		CreatedAt: time.Now(),
+	})
+	require.NoError(t, err)
+
+	m := map[string]struct{}{}
+	err = st.WalkIDsByResult("foo-result", func(id string) error {
+		m[id] = struct{}{}
+		return nil
+	})
+	require.NoError(t, err)
+
+	_, ok := m["foo"]
+	require.True(t, ok)
+
+	_, ok = m["foo2"]
+	require.True(t, ok)
+
+	_, ok = m["bar"]
+	require.False(t, ok)
 }
 
 func getFunctionName(i interface{}) string {
