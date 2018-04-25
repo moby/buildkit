@@ -22,8 +22,8 @@ type FrontendLLBBridge interface {
 }
 
 type SolveRequest struct {
-	Definition     *pb.Definition
-	Frontend       string
-	FrontendOpt    map[string]string
-	ImportCacheRef string
+	Definition      *pb.Definition
+	Frontend        string
+	FrontendOpt     map[string]string
+	ImportCacheRefs []string
 }

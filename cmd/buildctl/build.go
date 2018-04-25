@@ -63,7 +63,7 @@ var buildCommand = cli.Command{
 			Name:  "export-cache",
 			Usage: "Reference to export build cache to",
 		},
-		cli.StringFlag{
+		cli.StringSliceFlag{
 			Name:  "import-cache",
 			Usage: "Reference to import build cache from",
 		},
@@ -126,7 +126,7 @@ func build(clicontext *cli.Context) error {
 		Frontend: clicontext.String("frontend"),
 		// FrontendAttrs is set later
 		ExportCache: clicontext.String("export-cache"),
-		ImportCache: clicontext.String("import-cache"),
+		ImportCache: clicontext.StringSlice("import-cache"),
 		Session:     []session.Attachable{authprovider.NewDockerAuthProvider()},
 	}
 	solveOpt.ExporterAttrs, err = attrMap(clicontext.StringSlice("exporter-opt"))
