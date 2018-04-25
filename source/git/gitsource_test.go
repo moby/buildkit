@@ -167,8 +167,9 @@ func testFetchBySHA(t *testing.T, keepGitDir bool) {
 	g, err := gs.Resolve(ctx, id)
 	require.NoError(t, err)
 
-	key1, _, err := g.CacheKey(ctx, 0)
+	key1, done, err := g.CacheKey(ctx, 0)
 	require.NoError(t, err)
+	require.True(t, done)
 
 	require.Equal(t, 40, len(key1))
 
