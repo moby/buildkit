@@ -40,9 +40,9 @@ func (v *vertex) Name() string {
 
 type LoadOpt func(*solver.VertexOptions)
 
-func WithCacheSource(cm solver.CacheManager) LoadOpt {
+func WithCacheSources(cms []solver.CacheManager) LoadOpt {
 	return func(opt *solver.VertexOptions) {
-		opt.CacheSource = cm
+		opt.CacheSources = cms
 	}
 }
 

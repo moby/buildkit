@@ -2751,9 +2751,13 @@ func (v *vertex) Name() string {
 	return v.opt.name
 }
 func (v *vertex) Options() VertexOptions {
+	var cache []CacheManager
+	if v.opt.cacheSource != nil {
+		cache = append(cache, v.opt.cacheSource)
+	}
 	return VertexOptions{
-		CacheSource: v.opt.cacheSource,
-		IgnoreCache: v.opt.ignoreCache,
+		CacheSources: cache,
+		IgnoreCache:  v.opt.ignoreCache,
 	}
 }
 
