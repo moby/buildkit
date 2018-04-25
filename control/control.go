@@ -160,20 +160,20 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		cacheExporter = c.opt.CacheExporter.ExporterForTarget(exportCacheRef)
 	}
 
-	importCacheRef := ""
-	if ref := req.Cache.ImportRef; ref != "" {
+	var importCacheRefs []string
+	for _, ref := range req.Cache.ImportRefs {
 		parsed, err := reference.ParseNormalizedNamed(ref)
 		if err != nil {
 			return nil, err
 		}
-		importCacheRef = reference.TagNameOnly(parsed).String()
+		importCacheRefs = append(importCacheRefs, reference.TagNameOnly(parsed).String())
 	}
 
 	if err := c.solver.Solve(ctx, req.Ref, frontend.SolveRequest{
-		Frontend:       req.Frontend,
-		Definition:     req.Definition,
-		FrontendOpt:    req.FrontendAttrs,
-		ImportCacheRef: importCacheRef,
+		Frontend:        req.Frontend,
+		Definition:      req.Definition,
+		FrontendOpt:     req.FrontendAttrs,
+		ImportCacheRefs: importCacheRefs,
 	}, llbsolver.ExporterRequest{
 		Exporter:      expi,
 		CacheExporter: cacheExporter,

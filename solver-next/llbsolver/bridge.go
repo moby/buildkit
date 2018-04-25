@@ -27,9 +27,10 @@ type llbBridge struct {
 }
 
 func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (res solver.CachedResult, exp map[string][]byte, err error) {
-	var cm solver.CacheManager
-	if ref := req.ImportCacheRef; ref != "" {
+	var cms []solver.CacheManager
+	for _, ref := range req.ImportCacheRefs {
 		b.cmsMu.Lock()
+		var cm solver.CacheManager
 		if prevCm, ok := b.cms[ref]; !ok {
 			cm = newLazyCacheManager(ref, func() (solver.CacheManager, error) {
 				var cmNew solver.CacheManager
@@ -45,11 +46,12 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (res s
 		} else {
 			cm = prevCm
 		}
+		cms = append(cms, cm)
 		b.cmsMu.Unlock()
 	}
 
 	if req.Definition != nil && req.Definition.Def != nil {
-		edge, err := Load(req.Definition, WithCacheSource(cm))
+		edge, err := Load(req.Definition, WithCacheSources(cms))
 		if err != nil {
 			return nil, nil, err
 		}

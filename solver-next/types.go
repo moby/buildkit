@@ -33,9 +33,9 @@ type Edge struct {
 
 // VertexOptions has optional metadata for the vertex that is not contained in digest
 type VertexOptions struct {
-	IgnoreCache bool
-	CacheSource CacheManager
-	Description map[string]string // text values with no special meaning for solver
+	IgnoreCache  bool
+	CacheSources []CacheManager
+	Description  map[string]string // text values with no special meaning for solver
 	// WorkerConstraint
 }
 

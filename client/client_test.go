@@ -610,7 +610,7 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	err = c.Solve(context.TODO(), def, SolveOpt{
 		Exporter:          ExporterLocal,
 		ExporterOutputDir: destDir,
-		ImportCache:       target,
+		ImportCache:       []string{target},
 	}, nil)
 	require.NoError(t, err)
 
