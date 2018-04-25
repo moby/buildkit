@@ -116,6 +116,24 @@ func (s *inMemoryStore) AddResult(id string, res CacheResult) error {
 	return nil
 }
 
+func (s *inMemoryStore) WalkIDsByResult(resultID string, fn func(string) error) error {
+	s.mu.Lock()
+
+	ids := map[string]struct{}{}
+	for id := range s.byResult[resultID] {
+		ids[id] = struct{}{}
+	}
+	s.mu.Unlock()
+
+	for id := range ids {
+		if err := fn(id); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (s *inMemoryStore) Release(resultID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

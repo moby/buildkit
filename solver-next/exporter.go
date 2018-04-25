@@ -100,6 +100,7 @@ func (e *exporter) ExportTo(ctx context.Context, t ExporterTarget, converter fun
 	}
 
 	rec := t.Add(rootKey(e.k.Digest(), e.k.Output()))
+	allRec := []ExporterRecord{rec}
 
 	for i, srcs := range srcs {
 		for _, src := range srcs {
@@ -119,9 +120,24 @@ func (e *exporter) ExportTo(ctx context.Context, t ExporterTarget, converter fun
 
 	var remote *Remote
 
+	if v := e.record; v != nil && len(deps) == 0 {
+		cm := v.cacheManager
+		key := cm.getID(v.key)
+		if err := cm.backend.WalkIDsByResult(v.ID, func(id string) error {
+			if id == key {
+				return nil
+			}
+			allRec = append(allRec, t.Add(digest.Digest(id)))
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+	}
+
 	if v := e.record; v != nil && len(e.k.Deps()) > 0 {
 		cm := v.cacheManager
-		res, err := cm.backend.Load(cm.getID(v.key), v.ID)
+		key := cm.getID(v.key)
+		res, err := cm.backend.Load(key, v.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -144,10 +160,12 @@ func (e *exporter) ExportTo(ctx context.Context, t ExporterTarget, converter fun
 		}
 
 		if remote != nil {
-			rec.AddResult(v.CreatedAt, remote)
+			for _, rec := range allRec {
+				rec.AddResult(v.CreatedAt, remote)
+			}
 		}
 	}
-	e.res = []ExporterRecord{rec}
+	e.res = allRec
 	t.Visit(e)
 
 	return e.res, nil

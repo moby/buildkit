@@ -446,8 +446,13 @@ func (j *Job) Call(ctx context.Context, name string, fn func(ctx context.Context
 	return inVertexContext(ctx, name, fn)
 }
 
+type cacheMapResp struct {
+	*CacheMap
+	complete bool
+}
+
 type activeOp interface {
-	CacheMap(context.Context) (*CacheMap, error)
+	CacheMap(context.Context, int) (*cacheMapResp, error)
 	LoadCache(ctx context.Context, rec *CacheRecord) (Result, error)
 	Exec(ctx context.Context, inputs []Result) (outputs []Result, exporters []ExportableCacheKey, err error)
 	IgnoreCache() bool
@@ -483,8 +488,9 @@ type sharedOp struct {
 	execRes *execRes
 	execErr error
 
-	cacheRes *CacheMap
-	cacheErr error
+	cacheRes  []*CacheMap
+	cacheDone bool
+	cacheErr  error
 
 	slowMu       sync.Mutex
 	slowCacheRes map[Index]digest.Digest
@@ -553,13 +559,13 @@ func (s *sharedOp) CalcSlowCache(ctx context.Context, index Index, f ResultBased
 	return key.(digest.Digest), nil
 }
 
-func (s *sharedOp) CacheMap(ctx context.Context) (*CacheMap, error) {
+func (s *sharedOp) CacheMap(ctx context.Context, index int) (*cacheMapResp, error) {
 	op, err := s.getOp()
 	if err != nil {
 		return nil, err
 	}
 	res, err := s.g.Do(ctx, "cachemap", func(ctx context.Context) (ret interface{}, retErr error) {
-		if s.cacheRes != nil {
+		if s.cacheRes != nil && s.cacheDone || index < len(s.cacheRes) {
 			return s.cacheRes, nil
 		}
 		if s.cacheErr != nil {
@@ -576,7 +582,7 @@ func (s *sharedOp) CacheMap(ctx context.Context) (*CacheMap, error) {
 				notifyCompleted(ctx, &s.st.clientVertex, retErr, false)
 			}()
 		}
-		res, err := op.CacheMap(ctx)
+		res, done, err := op.CacheMap(ctx, len(s.cacheRes))
 		complete := true
 		if err != nil {
 			canceled := false
@@ -591,16 +597,22 @@ func (s *sharedOp) CacheMap(ctx context.Context) (*CacheMap, error) {
 		}
 		if complete {
 			if err == nil {
-				s.cacheRes = res
+				s.cacheRes = append(s.cacheRes, res)
+				s.cacheDone = done
 			}
 			s.cacheErr = err
 		}
-		return res, err
+		return s.cacheRes, err
 	})
 	if err != nil {
 		return nil, err
 	}
-	return res.(*CacheMap), nil
+
+	if len(res.([]*CacheMap)) <= index {
+		return s.CacheMap(ctx, index)
+	}
+
+	return &cacheMapResp{CacheMap: res.([]*CacheMap)[index], complete: s.cacheDone}, nil
 }
 
 func (s *sharedOp) Exec(ctx context.Context, inputs []Result) (outputs []Result, exporters []ExportableCacheKey, err error) {
