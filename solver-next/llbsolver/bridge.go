@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/cacheimport"
 	"github.com/moby/buildkit/executor"
@@ -32,16 +33,23 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (res s
 		b.cmsMu.Lock()
 		var cm solver.CacheManager
 		if prevCm, ok := b.cms[ref]; !ok {
-			cm = newLazyCacheManager(ref, func() (solver.CacheManager, error) {
-				var cmNew solver.CacheManager
-				if err := b.builder.Call(ctx, "importing cache manifest from "+ref, func(ctx context.Context) error {
-					cmNew, err = b.ci.Resolve(ctx, ref)
-					return err
-				}); err != nil {
-					return nil, err
-				}
-				return cmNew, nil
-			})
+			r, err := reference.ParseNormalizedNamed(ref)
+			if err != nil {
+				return nil, nil, err
+			}
+			ref = reference.TagNameOnly(r).String()
+			func(ref string) {
+				cm = newLazyCacheManager(ref, func() (solver.CacheManager, error) {
+					var cmNew solver.CacheManager
+					if err := b.builder.Call(ctx, "importing cache manifest from "+ref, func(ctx context.Context) error {
+						cmNew, err = b.ci.Resolve(ctx, ref)
+						return err
+					}); err != nil {
+						return nil, err
+					}
+					return cmNew, nil
+				})
+			}(ref)
 			b.cms[ref] = cm
 		} else {
 			cm = prevCm
