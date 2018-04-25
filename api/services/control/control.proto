@@ -56,7 +56,7 @@ message SolveRequest {
 
 message CacheOptions {
 	string ExportRef = 1;
-	string ImportRef = 2;
+	repeated string ImportRefs = 2;
 }
 
 message SolveResponse {

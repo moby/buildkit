@@ -584,7 +584,7 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox) {
 
 	target := registry + "/buildkit/testexport:latest"
 
-	err = c.Solve(context.TODO(), def, SolveOpt{
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
 		Exporter:          ExporterLocal,
 		ExporterOutputDir: destDir,
 		ExportCache:       target,
@@ -607,10 +607,10 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	err = c.Solve(context.TODO(), def, SolveOpt{
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
 		Exporter:          ExporterLocal,
 		ExporterOutputDir: destDir,
-		ImportCache:       target,
+		ImportCache:       []string{target},
 	}, nil)
 	require.NoError(t, err)
 
