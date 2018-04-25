@@ -305,8 +305,12 @@ func (jl *JobList) loadUnlocked(v, parent Vertex, j *Job, cache map[Vertex]Verte
 	}
 
 	st.mu.Lock()
-	if cache := v.Options().CacheSource; cache != nil && cache.ID() != st.mainCache.ID() {
-		st.cache[cache.ID()] = cache
+	for _, cache := range v.Options().CacheSources {
+		if cache.ID() != st.mainCache.ID() {
+			if _, ok := st.cache[cache.ID()]; !ok {
+				st.cache[cache.ID()] = cache
+			}
+		}
 	}
 
 	if j != nil {
