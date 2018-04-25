@@ -171,7 +171,7 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, index int) (string, bo
 
 	if isCommitSHA(ref) {
 		gs.cacheKey = ref
-		return ref, false, nil
+		return ref, true, nil
 	}
 
 	gitDir, unmountGitDir, err := gs.mountRemote(ctx, remote)
