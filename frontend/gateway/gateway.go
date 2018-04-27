@@ -271,8 +271,10 @@ func (lbf *llbBridgeForwarder) ResolveImageConfig(ctx context.Context, req *pb.R
 func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) (*pb.SolveResponse, error) {
 	ctx = tracing.ContextWithSpanFromContext(ctx, lbf.callCtx)
 	ref, expResp, err := lbf.llbBridge.Solve(ctx, frontend.SolveRequest{
-		Definition: req.Definition,
-		Frontend:   req.Frontend,
+		Definition:      req.Definition,
+		Frontend:        req.Frontend,
+		FrontendOpt:     req.FrontendOpt,
+		ImportCacheRefs: req.ImportCacheRefs,
 	})
 	if err != nil {
 		return nil, err

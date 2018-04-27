@@ -11,7 +11,6 @@ import (
 
 	"github.com/moby/buildkit/frontend/gateway/client"
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
-	opspb "github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
@@ -41,12 +40,19 @@ type grpcClient struct {
 	sessionID string
 }
 
-func (c *grpcClient) Solve(ctx context.Context, def *opspb.Definition, frontend string, exporterAttr map[string][]byte, final bool) (client.Reference, error) {
+func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest, exporterAttr map[string][]byte, final bool) (client.Reference, error) {
 	dt, err := json.Marshal(exporterAttr)
 	if err != nil {
 		return nil, err
 	}
-	req := &pb.SolveRequest{Definition: def, Frontend: frontend, Final: final, ExporterAttr: dt}
+	req := &pb.SolveRequest{
+		Definition:      creq.Definition,
+		Frontend:        creq.Frontend,
+		FrontendOpt:     creq.FrontendOpt,
+		ImportCacheRefs: creq.ImportCacheRefs,
+		Final:           final,
+		ExporterAttr:    dt,
+	}
 	resp, err := c.client.Solve(ctx, req)
 	if err != nil {
 		return nil, err
