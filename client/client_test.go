@@ -560,7 +560,6 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox) {
 		t.Skip(err.Error())
 	}
 	require.NoError(t, err)
-	_ = registry
 
 	c, err := New(sb.Address())
 	require.NoError(t, err)
@@ -568,7 +567,6 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox) {
 
 	busybox := llb.Image("busybox:latest")
 	st := llb.Scratch()
-	busybox.Run(llb.Shlex(`sh -c ""`))
 
 	run := func(cmd string) {
 		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
@@ -882,7 +880,6 @@ func readTarToMap(dt []byte, compressed bool) (map[string]*tarItem, error) {
 
 func checkAllRemoved(t *testing.T, c *Client, sb integration.Sandbox) {
 	retries := 0
-loop0:
 	for {
 		require.True(t, 20 > retries)
 		retries++
@@ -890,7 +887,7 @@ loop0:
 		require.NoError(t, err)
 		if len(du) > 0 {
 			time.Sleep(500 * time.Millisecond)
-			continue loop0
+			continue
 		}
 		break
 	}
