@@ -50,6 +50,7 @@ func TestIntegration(t *testing.T) {
 		testCopyOverrideFiles,
 		testMultiStageImplicitFrom,
 		testCopyVarSubstitution,
+		testMultiStageCaseInsensitive,
 	})
 }
 
@@ -1147,6 +1148,51 @@ COPY --from=golang /usr/bin/go go
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "go"))
 	require.NoError(t, err)
 	require.Contains(t, string(dt), "foo")
+}
+
+func testMultiStageCaseInsensitive(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	dockerfile := []byte(`
+FROM scratch AS STAge0
+COPY foo bar
+FROM scratch AS staGE1
+COPY --from=staGE0 bar baz
+FROM scratch
+COPY --from=stage1 baz bax
+`)
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("foo", []byte("foo-contents"), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	err = c.Solve(context.TODO(), nil, client.SolveOpt{
+		Frontend:          "dockerfile.v0",
+		Exporter:          client.ExporterLocal,
+		ExporterOutputDir: destDir,
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+		FrontendAttrs: map[string]string{
+			"target": "Stage1",
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "baz"))
+	require.NoError(t, err)
+	require.Contains(t, string(dt), "foo-contents")
 }
 
 func tmpdir(appliers ...fstest.Applier) (string, error) {
