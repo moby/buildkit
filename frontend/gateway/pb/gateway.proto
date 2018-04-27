@@ -28,6 +28,8 @@ message ResolveImageConfigResponse {
 message SolveRequest {
 	pb.Definition Definition = 1;
 	string Frontend = 2;
+	map<string, string> FrontendOpt = 3;
+	repeated string ImportCacheRefs = 4;
 	bool Final = 10;
 	bytes ExporterAttr = 11;
 }
