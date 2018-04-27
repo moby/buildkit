@@ -8,7 +8,6 @@ import (
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 func NewCacheKeyStorage(cc *CacheChains, w worker.Worker) (solver.CacheKeyStorage, solver.CacheResultStorage, error) {
@@ -25,8 +24,9 @@ func NewCacheKeyStorage(cc *CacheChains, w worker.Worker) (solver.CacheKeyStorag
 	}
 
 	results := &cacheResultStorage{
-		w:    w,
-		byID: storage.byID,
+		w:        w,
+		byID:     storage.byID,
+		byResult: storage.byResult,
 	}
 
 	return storage, results, nil
@@ -98,7 +98,6 @@ type itemWithOutgoingLinks struct {
 
 func (cs *cacheKeyStorage) Exists(id string) bool {
 	_, ok := cs.byID[id]
-	logrus.Debugf("exists-check %s %v", id, ok)
 	return ok
 }
 
@@ -187,8 +186,9 @@ func (cs *cacheKeyStorage) HasLink(id string, link solver.CacheInfoLink, target 
 }
 
 type cacheResultStorage struct {
-	w    worker.Worker
-	byID map[string]*itemWithOutgoingLinks
+	w        worker.Worker
+	byID     map[string]*itemWithOutgoingLinks
+	byResult map[string]map[string]struct{}
 }
 
 func (cs *cacheResultStorage) Save(res solver.Result) (solver.CacheResult, error) {
@@ -209,25 +209,32 @@ func (cs *cacheResultStorage) Load(ctx context.Context, res solver.CacheResult) 
 }
 
 func (cs *cacheResultStorage) LoadRemote(ctx context.Context, res solver.CacheResult) (*solver.Remote, error) {
-	it, ok := cs.byID[res.ID]
-	if !ok {
-		return nil, errors.WithStack(solver.ErrNotFound)
+	if r := cs.byResultID(res.ID); r != nil {
+		return r, nil
 	}
-
-	r := it.result
-	if r == nil {
-		return nil, errors.WithStack(solver.ErrNotFound)
-	}
-
-	return r, nil
+	return nil, errors.WithStack(solver.ErrNotFound)
 }
 
 func (cs *cacheResultStorage) Exists(id string) bool {
-	it, ok := cs.byID[id]
-	if !ok {
-		return false
+	return cs.byResultID(id) != nil
+}
+
+func (cs *cacheResultStorage) byResultID(resultID string) *solver.Remote {
+	m, ok := cs.byResult[resultID]
+	if !ok || len(m) == 0 {
+		return nil
 	}
-	return it.result != nil
+
+	for id := range m {
+		it, ok := cs.byID[id]
+		if ok {
+			if r := it.result; r != nil {
+				return r
+			}
+		}
+	}
+
+	return nil
 }
 
 // unique ID per remote. this ID is not stable.
