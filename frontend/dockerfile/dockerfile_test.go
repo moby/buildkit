@@ -52,6 +52,7 @@ func TestIntegration(t *testing.T) {
 		testCopyVarSubstitution,
 		testMultiStageCaseInsensitive,
 		testLabels,
+		testCacheImportExport,
 		testReproducibleIDs,
 	})
 }
@@ -1272,6 +1273,97 @@ LABEL foo=bar
 	require.Equal(t, v, "baz")
 }
 
+func testCacheImportExport(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	registry, err := sb.NewRegistry()
+	if errors.Cause(err) == integration.ErrorRequirements {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	dockerfile := []byte(`
+FROM busybox AS base
+COPY foo const
+#RUN echo -n foobar > const
+RUN cat /dev/urandom | head -c 100 | sha256sum > unique
+FROM scratch
+COPY --from=base const /
+COPY --from=base unique /
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("foo", []byte("foobar"), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	target := registry + "/buildkit/testexportdf:latest"
+
+	err = c.Solve(context.TODO(), nil, client.SolveOpt{
+		Frontend:          "dockerfile.v0",
+		Exporter:          client.ExporterLocal,
+		ExporterOutputDir: destDir,
+		ExportCache:       target,
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "const"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), "foobar")
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "unique"))
+	require.NoError(t, err)
+
+	err = c.Prune(context.TODO(), nil)
+	require.NoError(t, err)
+
+	checkAllRemoved(t, c, sb)
+
+	destDir, err = ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	err = c.Solve(context.TODO(), nil, client.SolveOpt{
+		Frontend: "dockerfile.v0",
+		FrontendAttrs: map[string]string{
+			"cache-from": target,
+		},
+		Exporter:          client.ExporterLocal,
+		ExporterOutputDir: destDir,
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt2, err := ioutil.ReadFile(filepath.Join(destDir, "const"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt2), "foobar")
+
+	dt2, err = ioutil.ReadFile(filepath.Join(destDir, "unique"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), string(dt2))
+
+	destDir, err = ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+}
+
 func testReproducibleIDs(t *testing.T, sb integration.Sandbox) {
 	t.Parallel()
 
@@ -1367,4 +1459,19 @@ func runShell(dir string, cmds ...string) error {
 		}
 	}
 	return nil
+}
+
+func checkAllRemoved(t *testing.T, c *client.Client, sb integration.Sandbox) {
+	retries := 0
+	for {
+		require.True(t, 20 > retries)
+		retries++
+		du, err := c.DiskUsage(context.TODO())
+		require.NoError(t, err)
+		if len(du) > 0 {
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
+		break
+	}
 }
