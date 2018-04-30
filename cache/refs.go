@@ -93,8 +93,10 @@ func (cr *cacheRecord) Size(ctx context.Context) (int64, error) {
 		cr.mu.Unlock()
 		usage, err := cr.cm.ManagerOpt.Snapshotter.Usage(ctx, driverID)
 		if err != nil {
-			if cr.isDead() {
-				cr.mu.Unlock()
+			cr.mu.Lock()
+			isDead := cr.isDead()
+			cr.mu.Unlock()
+			if isDead {
 				return int64(0), nil
 			}
 			return s, errors.Wrapf(err, "failed to get usage for %s", cr.ID())
@@ -102,6 +104,7 @@ func (cr *cacheRecord) Size(ctx context.Context) (int64, error) {
 		cr.mu.Lock()
 		setSize(cr.md, usage.Size)
 		if err := cr.md.Commit(); err != nil {
+			cr.mu.Unlock()
 			return s, err
 		}
 		cr.mu.Unlock()
