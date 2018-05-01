@@ -29,7 +29,16 @@ type nsSnapshotter struct {
 
 func (s *nsSnapshotter) Stat(ctx context.Context, key string) (ctdsnapshot.Info, error) {
 	ctx = namespaces.WithNamespace(ctx, s.ns)
-	return s.Snapshotter.Stat(ctx, key)
+	info, err := s.Snapshotter.Stat(ctx, key)
+	if err == nil {
+		if _, ok := info.Labels["labels.containerd.io/gc.root"]; !ok {
+			if err := addRootLabel()(&info); err != nil {
+				return info, err
+			}
+			return s.Update(ctx, info, "labels.containerd.io/gc.root")
+		}
+	}
+	return info, err
 }
 
 func (s *nsSnapshotter) Update(ctx context.Context, info ctdsnapshot.Info, fieldpaths ...string) (ctdsnapshot.Info, error) {
