@@ -22,7 +22,6 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	netcontext "golang.org/x/net/context"
 	"golang.org/x/net/http2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
@@ -247,7 +246,7 @@ type llbBridgeForwarder struct {
 	*pipe
 }
 
-func (lbf *llbBridgeForwarder) ResolveImageConfig(ctx netcontext.Context, req *pb.ResolveImageConfigRequest) (*pb.ResolveImageConfigResponse, error) {
+func (lbf *llbBridgeForwarder) ResolveImageConfig(ctx context.Context, req *pb.ResolveImageConfigRequest) (*pb.ResolveImageConfigResponse, error) {
 	ctx = tracing.ContextWithSpanFromContext(ctx, lbf.callCtx)
 	dgst, dt, err := lbf.llbBridge.ResolveImageConfig(ctx, req.Ref)
 	if err != nil {
@@ -259,7 +258,7 @@ func (lbf *llbBridgeForwarder) ResolveImageConfig(ctx netcontext.Context, req *p
 	}, nil
 }
 
-func (lbf *llbBridgeForwarder) Solve(ctx netcontext.Context, req *pb.SolveRequest) (*pb.SolveResponse, error) {
+func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) (*pb.SolveResponse, error) {
 	ctx = tracing.ContextWithSpanFromContext(ctx, lbf.callCtx)
 	ref, expResp, err := lbf.llbBridge.Solve(ctx, frontend.SolveRequest{
 		Definition: req.Definition,
@@ -291,7 +290,7 @@ func (lbf *llbBridgeForwarder) Solve(ctx netcontext.Context, req *pb.SolveReques
 	}
 	return &pb.SolveResponse{Ref: id}, nil
 }
-func (lbf *llbBridgeForwarder) ReadFile(ctx netcontext.Context, req *pb.ReadFileRequest) (*pb.ReadFileResponse, error) {
+func (lbf *llbBridgeForwarder) ReadFile(ctx context.Context, req *pb.ReadFileRequest) (*pb.ReadFileResponse, error) {
 	ctx = tracing.ContextWithSpanFromContext(ctx, lbf.callCtx)
 	ref, ok := lbf.refs[req.Ref]
 	if !ok {
@@ -308,7 +307,7 @@ func (lbf *llbBridgeForwarder) ReadFile(ctx netcontext.Context, req *pb.ReadFile
 	return &pb.ReadFileResponse{Data: dt}, nil
 }
 
-func (lbf *llbBridgeForwarder) Ping(netcontext.Context, *pb.PingRequest) (*pb.PongResponse, error) {
+func (lbf *llbBridgeForwarder) Ping(context.Context, *pb.PingRequest) (*pb.PongResponse, error) {
 	return &pb.PongResponse{}, nil
 }
 
