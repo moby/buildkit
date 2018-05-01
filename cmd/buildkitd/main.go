@@ -31,7 +31,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
-	netcontext "golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -278,7 +277,7 @@ func getListener(c *cli.Context, addr string) (net.Listener, error) {
 func unaryInterceptor(globalCtx context.Context) grpc.ServerOption {
 	withTrace := otgrpc.OpenTracingServerInterceptor(tracer, otgrpc.LogPayloads())
 
-	return grpc.UnaryInterceptor(func(ctx netcontext.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+	return grpc.UnaryInterceptor(func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 

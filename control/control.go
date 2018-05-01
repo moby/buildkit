@@ -15,7 +15,6 @@ import (
 	"github.com/moby/buildkit/worker"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	netcontext "golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 )
@@ -51,7 +50,7 @@ func (c *Controller) Register(server *grpc.Server) error {
 	return nil
 }
 
-func (c *Controller) DiskUsage(ctx netcontext.Context, r *controlapi.DiskUsageRequest) (*controlapi.DiskUsageResponse, error) {
+func (c *Controller) DiskUsage(ctx context.Context, r *controlapi.DiskUsageRequest) (*controlapi.DiskUsageResponse, error) {
 	resp := &controlapi.DiskUsageResponse{}
 	workers, err := c.opt.WorkerController.List()
 	if err != nil {
@@ -130,7 +129,7 @@ func (c *Controller) Prune(req *controlapi.PruneRequest, stream controlapi.Contr
 	return eg2.Wait()
 }
 
-func (c *Controller) Solve(ctx netcontext.Context, req *controlapi.SolveRequest) (*controlapi.SolveResponse, error) {
+func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*controlapi.SolveResponse, error) {
 	var frontend frontend.Frontend
 	if req.Frontend != "" {
 		var ok bool
@@ -262,7 +261,7 @@ func (c *Controller) Session(stream controlapi.Control_SessionServer) error {
 	return err
 }
 
-func (c *Controller) ListWorkers(ctx netcontext.Context, r *controlapi.ListWorkersRequest) (*controlapi.ListWorkersResponse, error) {
+func (c *Controller) ListWorkers(ctx context.Context, r *controlapi.ListWorkersRequest) (*controlapi.ListWorkersResponse, error) {
 	resp := &controlapi.ListWorkersResponse{}
 	workers, err := c.opt.WorkerController.List(r.Filter...)
 	if err != nil {

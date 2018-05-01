@@ -4,6 +4,7 @@ package runc
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"io/ioutil"
 	"os"
@@ -21,7 +22,6 @@ import (
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/worker/base"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
 
 func TestRuncWorker(t *testing.T) {
