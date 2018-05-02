@@ -14,32 +14,47 @@ type Mounter interface {
 	Unmount() error
 }
 
-// LocalMounter is a helper for mounting to temporary path. In addition it can
-// mount binds without privileges
-func LocalMounter(m []mount.Mount) Mounter {
-	return &localMounter{m: m}
+// LocalMounter is a helper for mounting mountfactory to temporary path. In
+// addition it can mount binds without privileges
+func LocalMounter(mountable Mountable) Mounter {
+	return &localMounter{mountable: mountable}
+}
+
+// LocalMounterWithMounts is a helper for mounting to temporary path. In
+// addition it can mount binds without privileges
+func LocalMounterWithMounts(mounts []mount.Mount) Mounter {
+	return &localMounter{mounts: mounts}
 }
 
 type localMounter struct {
-	mu     sync.Mutex
-	m      []mount.Mount
-	target string
+	mu        sync.Mutex
+	mounts    []mount.Mount
+	mountable Mountable
+	target    string
 }
 
 func (lm *localMounter) Mount() (string, error) {
 	lm.mu.Lock()
 	defer lm.mu.Unlock()
 
-	if len(lm.m) == 1 && lm.m[0].Type == "bind" {
+	if lm.mounts == nil {
+		mounts, err := lm.mountable.Mount()
+		if err != nil {
+			return "", err
+		}
+		lm.mounts = mounts
+	}
+
+	if len(lm.mounts) == 1 && (lm.mounts[0].Type == "bind" || lm.mounts[0].Type == "rbind") {
 		ro := false
-		for _, opt := range lm.m[0].Options {
+		for _, opt := range lm.mounts[0].Options {
 			if opt == "ro" {
 				ro = true
 				break
 			}
 		}
 		if !ro {
-			return lm.m[0].Source, nil
+			return lm.mounts[0].Source, nil
 		}
 	}
 
@@ -48,7 +63,7 @@ func (lm *localMounter) Mount() (string, error) {
 		return "", errors.Wrap(err, "failed to create temp dir")
 	}
 
-	if err := mount.All(lm.m, dir); err != nil {
+	if err := mount.All(lm.mounts, dir); err != nil {
 		os.RemoveAll(dir)
 		return "", err
 	}

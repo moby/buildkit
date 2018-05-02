@@ -333,8 +333,11 @@ func (p *puller) Snapshot(ctx context.Context) (cache.ImmutableRef, error) {
 		}
 	}
 
+	csh, release := snapshot.NewContainerdSnapshotter(p.is.Snapshotter)
+	defer release()
+
 	unpackProgressDone := oneOffProgress(ctx, "unpacking "+p.src.Reference.String())
-	chainid, err := p.is.unpack(ctx, p.desc)
+	chainid, err := p.is.unpack(ctx, p.desc, csh)
 	if err != nil {
 		return nil, unpackProgressDone(err)
 	}
@@ -343,7 +346,7 @@ func (p *puller) Snapshot(ctx context.Context) (cache.ImmutableRef, error) {
 	return p.is.CacheAccessor.Get(ctx, chainid, cache.WithDescription(fmt.Sprintf("pulled from %s", p.ref)))
 }
 
-func (is *imageSource) unpack(ctx context.Context, desc ocispec.Descriptor) (string, error) {
+func (is *imageSource) unpack(ctx context.Context, desc ocispec.Descriptor, s snapshots.Snapshotter) (string, error) {
 	layers, err := getLayers(ctx, is.ContentStore, desc)
 	if err != nil {
 		return "", err
@@ -355,7 +358,7 @@ func (is *imageSource) unpack(ctx context.Context, desc ocispec.Descriptor) (str
 			"containerd.io/gc.root":      time.Now().UTC().Format(time.RFC3339Nano),
 			"containerd.io/uncompressed": layer.Diff.Digest.String(),
 		}
-		if _, err := rootfs.ApplyLayer(ctx, layer, chain, is.Snapshotter, is.Applier, snapshots.WithLabels(labels)); err != nil {
+		if _, err := rootfs.ApplyLayer(ctx, layer, chain, s, is.Applier, snapshots.WithLabels(labels)); err != nil {
 			return "", err
 		}
 		chain = append(chain, layer.Diff.Digest)

@@ -16,7 +16,7 @@ import (
 func NewSnapshotter(snapshotter ctdsnapshot.Snapshotter, store content.Store, mdstore *metadata.Store, ns string, gc func(context.Context) error) snapshot.Snapshotter {
 	return blobmapping.NewSnapshotter(blobmapping.Opt{
 		Content:       store,
-		Snapshotter:   &nsSnapshotter{ns, snapshotter, gc},
+		Snapshotter:   snapshot.FromContainerdSnapshotter(&nsSnapshotter{ns, snapshotter, gc}),
 		MetadataStore: mdstore,
 	})
 }

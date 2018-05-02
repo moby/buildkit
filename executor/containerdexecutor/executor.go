@@ -42,14 +42,20 @@ func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root c
 		return err
 	}
 
-	rootMounts, err := root.Mount(ctx, false)
+	mountable, err := root.Mount(ctx, false)
 	if err != nil {
 		return err
 	}
 
+	rootMounts, err := mountable.Mount()
+	if err != nil {
+		return err
+	}
+	defer mountable.Release()
+
 	uid, gid, err := oci.ParseUser(meta.User)
 	if err != nil {
-		lm := snapshot.LocalMounter(rootMounts)
+		lm := snapshot.LocalMounterWithMounts(rootMounts)
 		rootfsPath, err := lm.Mount()
 		if err != nil {
 			return err

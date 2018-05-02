@@ -10,6 +10,7 @@ import (
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/snapshot"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
@@ -22,7 +23,7 @@ var (
 )
 
 type ManagerOpt struct {
-	Snapshotter   snapshots.Snapshotter
+	Snapshotter   snapshot.SnapshotterBase
 	GCPolicy      GCPolicy
 	MetadataStore *metadata.Store
 }
@@ -219,7 +220,7 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, opts ...RefOpti
 		parentID = parent.ID()
 	}
 
-	if _, err := cm.Snapshotter.Prepare(ctx, id, parentID); err != nil {
+	if err := cm.Snapshotter.Prepare(ctx, id, parentID); err != nil {
 		if parent != nil {
 			parent.Release(context.TODO())
 		}

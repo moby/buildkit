@@ -59,15 +59,25 @@ func GetDiffPairs(ctx context.Context, contentStore content.Store, snapshotter s
 			var lower []mount.Mount
 			if parent != nil {
 				defer parent.Release(context.TODO())
-				lower, err = parent.Mount(ctx, true)
+				m, err := parent.Mount(ctx, true)
 				if err != nil {
 					return nil, err
 				}
+				lower, err = m.Mount()
+				if err != nil {
+					return nil, err
+				}
+				defer m.Release()
 			}
-			upper, err := ref.Mount(ctx, true)
+			m, err := ref.Mount(ctx, true)
 			if err != nil {
 				return nil, err
 			}
+			upper, err := m.Mount()
+			if err != nil {
+				return nil, err
+			}
+			defer m.Release()
 			descr, err := differ.Compare(ctx, lower, upper,
 				diff.WithMediaType(ocispec.MediaTypeImageLayerGzip),
 				diff.WithReference(ref.ID()),
