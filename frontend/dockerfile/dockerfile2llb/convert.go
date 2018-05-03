@@ -36,6 +36,7 @@ type ConvertOpt struct {
 	Target       string
 	MetaResolver llb.ImageMetaResolver
 	BuildArgs    map[string]string
+	Labels       map[string]string
 	SessionID    string
 	BuildContext *llb.State
 	Excludes     []string
@@ -224,6 +225,10 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		for p := range d.ctxPaths {
 			ctxPaths[p] = struct{}{}
 		}
+	}
+
+	for k, v := range opt.Labels {
+		target.image.Config.Labels[k] = v
 	}
 
 	opts := []llb.LocalOption{
