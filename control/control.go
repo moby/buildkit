@@ -177,17 +177,20 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		importCacheRef = reference.TagNameOnly(parsed).String()
 	}
 
-	if err := c.solver.Solve(ctx, req.Ref, solver.SolveRequest{
+	resp, err := c.solver.Solve(ctx, req.Ref, solver.SolveRequest{
 		Frontend:       frontend,
 		Definition:     req.Definition,
 		Exporter:       expi,
 		FrontendOpt:    req.FrontendAttrs,
 		ExportCacheRef: exportCacheRef,
 		ImportCacheRef: importCacheRef,
-	}); err != nil {
+	})
+	if err != nil {
 		return nil, err
 	}
-	return &controlapi.SolveResponse{}, nil
+	return &controlapi.SolveResponse{
+		ExporterResponse: resp.ExporterResponse,
+	}, nil
 }
 
 func (c *Controller) Status(req *controlapi.StatusRequest, stream controlapi.Control_StatusServer) error {

@@ -74,7 +74,7 @@ func testBuildMultiMount(t *testing.T, sb integration.Sandbox) {
 	def, err := cp.Marshal()
 	require.NoError(t, err)
 
-	err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
 	require.NoError(t, err)
 
 	checkAllReleasable(t, c, sb, true)
@@ -106,7 +106,7 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal()
 	require.NoError(t, err)
 
-	err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "invalid response status 404")
 
@@ -116,7 +116,7 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 	def, err = st.Marshal()
 	require.NoError(t, err)
 
-	err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
 	require.NoError(t, err)
 
 	require.Equal(t, server.Stats("/foo").AllRequests, 1)
@@ -126,7 +126,7 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
-	err = c.Solve(context.TODO(), def, SolveOpt{
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
 		Exporter:          ExporterLocal,
 		ExporterOutputDir: tmpdir,
 	}, nil)
@@ -145,7 +145,7 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 	def, err = st.Marshal()
 	require.NoError(t, err)
 
-	err = c.Solve(context.TODO(), def, SolveOpt{
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
 		Exporter:          ExporterLocal,
 		ExporterOutputDir: tmpdir,
 	}, nil)
@@ -192,7 +192,7 @@ func testResolveAndHosts(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	err = c.Solve(context.TODO(), def, SolveOpt{
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
 		Exporter:          ExporterLocal,
 		ExporterOutputDir: destDir,
 	}, nil)
@@ -236,7 +236,7 @@ func testUser(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	err = c.Solve(context.TODO(), def, SolveOpt{
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
 		Exporter:          ExporterLocal,
 		ExporterOutputDir: destDir,
 	}, nil)
@@ -292,7 +292,7 @@ func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 		require.NoError(t, err)
 		target := "example.com/buildkit/testoci:latest"
 
-		err = c.Solve(context.TODO(), def, SolveOpt{
+		_, err = c.Solve(context.TODO(), def, SolveOpt{
 			Exporter: exp,
 			ExporterAttrs: map[string]string{
 				"name": target,
@@ -389,7 +389,7 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 
 	target := registry + "/buildkit/testpush:latest"
 
-	err = c.Solve(context.TODO(), def, SolveOpt{
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
 		Exporter: ExporterImage,
 		ExporterAttrs: map[string]string{
 			"name": target,
@@ -408,7 +408,7 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	err = c.Solve(context.TODO(), def, SolveOpt{
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
 		Exporter:          ExporterLocal,
 		ExporterOutputDir: destDir,
 	}, nil)
@@ -579,7 +579,7 @@ func testDuplicateWhiteouts(t *testing.T, sb integration.Sandbox) {
 	outW, err := os.Create(out)
 	require.NoError(t, err)
 
-	err = c.Solve(context.TODO(), def, SolveOpt{
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
 		Exporter:       ExporterOCI,
 		ExporterOutput: outW,
 	}, nil)
@@ -646,7 +646,7 @@ func testWhiteoutParentDir(t *testing.T, sb integration.Sandbox) {
 	out := filepath.Join(destDir, "out.tar")
 	outW, err := os.Create(out)
 	require.NoError(t, err)
-	err = c.Solve(context.TODO(), def, SolveOpt{
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
 		Exporter:       ExporterOCI,
 		ExporterOutput: outW,
 	}, nil)
@@ -693,7 +693,7 @@ func testSchema1Image(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal()
 	require.NoError(t, err)
 
-	err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
 	require.NoError(t, err)
 
 	checkAllReleasable(t, c, sb, true)
@@ -723,7 +723,7 @@ func testMountWithNoSource(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal()
 	require.NoError(t, err)
 
-	err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "has no input")
 
@@ -749,7 +749,7 @@ func testReadonlyRootFS(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal()
 	require.NoError(t, err)
 
-	err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
 	require.Error(t, err)
 	// Would prefer to detect more specifically "Read-only file
 	// system" but that isn't exposed here (it is on the stdio
@@ -904,13 +904,13 @@ func testInvalidExporter(t *testing.T, sb integration.Sandbox) {
 		"name": target,
 	}
 	for _, exp := range []string{ExporterOCI, ExporterDocker} {
-		err = c.Solve(context.TODO(), def, SolveOpt{
+		_, err = c.Solve(context.TODO(), def, SolveOpt{
 			Exporter:      exp,
 			ExporterAttrs: attrs,
 		}, nil)
 		// output file writer is required
 		require.Error(t, err)
-		err = c.Solve(context.TODO(), def, SolveOpt{
+		_, err = c.Solve(context.TODO(), def, SolveOpt{
 			Exporter:          exp,
 			ExporterAttrs:     attrs,
 			ExporterOutputDir: destDir,
@@ -919,7 +919,7 @@ func testInvalidExporter(t *testing.T, sb integration.Sandbox) {
 		require.Error(t, err)
 	}
 
-	err = c.Solve(context.TODO(), def, SolveOpt{
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
 		Exporter:      ExporterLocal,
 		ExporterAttrs: attrs,
 	}, nil)
@@ -929,7 +929,7 @@ func testInvalidExporter(t *testing.T, sb integration.Sandbox) {
 	f, err := os.Create(filepath.Join(destDir, "a"))
 	require.NoError(t, err)
 	defer f.Close()
-	err = c.Solve(context.TODO(), def, SolveOpt{
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
 		Exporter:       ExporterLocal,
 		ExporterAttrs:  attrs,
 		ExporterOutput: f,

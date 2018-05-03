@@ -12,5 +12,5 @@ type Exporter interface {
 
 type ExporterInstance interface {
 	Name() string
-	Export(context.Context, cache.ImmutableRef, map[string][]byte) error
+	Export(context.Context, cache.ImmutableRef, map[string][]byte) (map[string]string, error)
 }

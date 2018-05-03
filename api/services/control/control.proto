@@ -60,7 +60,7 @@ message CacheOptions {
 }
 
 message SolveResponse {
-	repeated Vertex vtx = 1;
+	map<string, string> ExporterResponse = 1;
 }
 
 message StatusRequest {

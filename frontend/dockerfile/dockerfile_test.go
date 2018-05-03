@@ -461,7 +461,7 @@ EXPOSE 5000
 	defer c.Close()
 
 	target := "example.com/moby/dockerfileexpansion:test"
-	err = c.Solve(context.TODO(), nil, client.SolveOpt{
+	_, err = c.Solve(context.TODO(), nil, client.SolveOpt{
 		Frontend: "dockerfile.v0",
 		Exporter: client.ExporterImage,
 		ExporterAttrs: map[string]string{
@@ -550,7 +550,7 @@ Dockerfile
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	err = c.Solve(context.TODO(), nil, client.SolveOpt{
+	_, err = c.Solve(context.TODO(), nil, client.SolveOpt{
 		Frontend:          "dockerfile.v0",
 		Exporter:          client.ExporterLocal,
 		ExporterOutputDir: destDir,
@@ -688,7 +688,7 @@ USER nobody
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	err = c.Solve(context.TODO(), nil, client.SolveOpt{
+	_, err = c.Solve(context.TODO(), nil, client.SolveOpt{
 		Frontend:          "dockerfile.v0",
 		Exporter:          client.ExporterLocal,
 		ExporterOutputDir: destDir,
@@ -709,7 +709,7 @@ USER nobody
 
 	// test user in exported
 	target := "example.com/moby/dockerfileuser:test"
-	err = c.Solve(context.TODO(), nil, client.SolveOpt{
+	_, err = c.Solve(context.TODO(), nil, client.SolveOpt{
 		Frontend: "dockerfile.v0",
 		Exporter: client.ExporterImage,
 		ExporterAttrs: map[string]string{
@@ -784,7 +784,7 @@ COPY --from=base /out /
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	err = c.Solve(context.TODO(), nil, client.SolveOpt{
+	_, err = c.Solve(context.TODO(), nil, client.SolveOpt{
 		Frontend:          "dockerfile.v0",
 		Exporter:          client.ExporterLocal,
 		ExporterOutputDir: destDir,
@@ -836,7 +836,7 @@ COPY files dest
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	err = c.Solve(context.TODO(), nil, client.SolveOpt{
+	_, err = c.Solve(context.TODO(), nil, client.SolveOpt{
 		Frontend:          "dockerfile.v0",
 		Exporter:          client.ExporterLocal,
 		ExporterOutputDir: destDir,
@@ -881,7 +881,7 @@ COPY $FOO baz
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	err = c.Solve(context.TODO(), nil, client.SolveOpt{
+	_, err = c.Solve(context.TODO(), nil, client.SolveOpt{
 		Frontend:          "dockerfile.v0",
 		Exporter:          client.ExporterLocal,
 		ExporterOutputDir: destDir,
@@ -933,7 +933,7 @@ COPY sub/dir1 subdest6
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	err = c.Solve(context.TODO(), nil, client.SolveOpt{
+	_, err = c.Solve(context.TODO(), nil, client.SolveOpt{
 		Frontend:          "dockerfile.v0",
 		Exporter:          client.ExporterLocal,
 		ExporterOutputDir: destDir,
@@ -1037,7 +1037,7 @@ COPY --from=build foo bar2
 	require.NoError(t, err)
 	defer c.Close()
 
-	err = c.Solve(context.TODO(), nil, client.SolveOpt{
+	_, err = c.Solve(context.TODO(), nil, client.SolveOpt{
 		Frontend: "dockerfile.v0",
 		FrontendAttrs: map[string]string{
 			"context": "git://" + server.URL + "/#first",
@@ -1060,7 +1060,7 @@ COPY --from=build foo bar2
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	err = c.Solve(context.TODO(), nil, client.SolveOpt{
+	_, err = c.Solve(context.TODO(), nil, client.SolveOpt{
 		Frontend: "dockerfile.v0",
 		FrontendAttrs: map[string]string{
 			"context": "git://" + server.URL + "/",
@@ -1101,7 +1101,7 @@ COPY --from=busybox /etc/passwd test
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	err = c.Solve(context.TODO(), nil, client.SolveOpt{
+	_, err = c.Solve(context.TODO(), nil, client.SolveOpt{
 		Frontend:          "dockerfile.v0",
 		Exporter:          client.ExporterLocal,
 		ExporterOutputDir: destDir,
@@ -1136,7 +1136,7 @@ COPY --from=golang /usr/bin/go go
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	err = c.Solve(context.TODO(), nil, client.SolveOpt{
+	_, err = c.Solve(context.TODO(), nil, client.SolveOpt{
 		Frontend:          "dockerfile.v0",
 		Exporter:          client.ExporterLocal,
 		ExporterOutputDir: destDir,
@@ -1178,7 +1178,7 @@ COPY --from=stage1 baz bax
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	err = c.Solve(context.TODO(), nil, client.SolveOpt{
+	_, err = c.Solve(context.TODO(), nil, client.SolveOpt{
 		Frontend:          "dockerfile.v0",
 		Exporter:          client.ExporterLocal,
 		ExporterOutputDir: destDir,
@@ -1219,7 +1219,7 @@ LABEL foo=bar
 	defer os.RemoveAll(destDir)
 
 	target := "example.com/moby/dockerfilelabels:test"
-	err = c.Solve(context.TODO(), nil, client.SolveOpt{
+	_, err = c.Solve(context.TODO(), nil, client.SolveOpt{
 		Frontend: "dockerfile.v0",
 		FrontendAttrs: map[string]string{
 			"label:bar": "baz",
@@ -1310,13 +1310,13 @@ RUN echo bar > bar
 		},
 	}
 
-	err = c.Solve(context.TODO(), nil, opt, nil)
+	_, err = c.Solve(context.TODO(), nil, opt, nil)
 	require.NoError(t, err)
 
 	target2 := "example.com/moby/dockerfileids2:test"
 	opt.ExporterAttrs["name"] = target2
 
-	err = c.Solve(context.TODO(), nil, opt, nil)
+	_, err = c.Solve(context.TODO(), nil, opt, nil)
 	require.NoError(t, err)
 
 	var cdAddress string

@@ -86,13 +86,13 @@ func (e *imageExporterInstance) Name() string {
 	return "exporting to oci image format"
 }
 
-func (e *imageExporterInstance) Export(ctx context.Context, ref cache.ImmutableRef, opt map[string][]byte) error {
+func (e *imageExporterInstance) Export(ctx context.Context, ref cache.ImmutableRef, opt map[string][]byte) (map[string]string, error) {
 	if config, ok := opt[exporterImageConfig]; ok {
 		e.config = config
 	}
 	desc, err := e.opt.ImageWriter.Commit(ctx, ref, e.config)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer func() {
 		e.opt.ImageWriter.ContentStore().Delete(context.TODO(), desc.Digest)
@@ -104,19 +104,19 @@ func (e *imageExporterInstance) Export(ctx context.Context, ref cache.ImmutableR
 
 	exp, err := getExporter(e.opt.Variant, e.name)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	w, err := filesync.CopyFileWriter(ctx, e.caller)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	report := oneOffProgress(ctx, "sending tarball")
 	if err := exp.Export(ctx, e.opt.ImageWriter.ContentStore(), *desc, w); err != nil {
 		w.Close()
-		return report(err)
+		return nil, report(err)
 	}
-	return report(w.Close())
+	return nil, report(w.Close())
 }
 
 func oneOffProgress(ctx context.Context, id string) func(err error) error {

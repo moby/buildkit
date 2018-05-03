@@ -81,7 +81,8 @@ func action(clicontext *cli.Context) error {
 	ch := make(chan *client.SolveStatus)
 	eg, ctx := errgroup.WithContext(appcontext.Context())
 	eg.Go(func() error {
-		return c.Solve(ctx, nil, *solveOpt, ch)
+		_, err := c.Solve(ctx, nil, *solveOpt, ch)
+		return err
 	})
 	eg.Go(func() error {
 		if c, err := console.ConsoleFromFile(os.Stderr); err == nil {

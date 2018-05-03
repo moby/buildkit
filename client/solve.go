@@ -37,7 +37,7 @@ type SolveOpt struct {
 
 // Solve calls Solve on the controller.
 // def must be nil if (and only if) opt.Frontend is set.
-func (c *Client) Solve(ctx context.Context, def *llb.Definition, opt SolveOpt, statusChan chan *SolveStatus) error {
+func (c *Client) Solve(ctx context.Context, def *llb.Definition, opt SolveOpt, statusChan chan *SolveStatus) (*SolveResponse, error) {
 	defer func() {
 		if statusChan != nil {
 			close(statusChan)
@@ -45,15 +45,15 @@ func (c *Client) Solve(ctx context.Context, def *llb.Definition, opt SolveOpt, s
 	}()
 
 	if opt.Frontend == "" && def == nil {
-		return errors.New("invalid empty definition")
+		return nil, errors.New("invalid empty definition")
 	}
 	if opt.Frontend != "" && def != nil {
-		return errors.Errorf("invalid definition for frontend %s", opt.Frontend)
+		return nil, errors.Errorf("invalid definition for frontend %s", opt.Frontend)
 	}
 
 	syncedDirs, err := prepareSyncedDirs(def, opt.LocalDirs)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	ref := identity.NewID()
@@ -68,7 +68,7 @@ func (c *Client) Solve(ctx context.Context, def *llb.Definition, opt SolveOpt, s
 
 	s, err := session.NewSession(statusContext, defaultSessionName(), opt.SharedKey)
 	if err != nil {
-		return errors.Wrap(err, "failed to create session")
+		return nil, errors.Wrap(err, "failed to create session")
 	}
 
 	if len(syncedDirs) > 0 {
@@ -82,26 +82,26 @@ func (c *Client) Solve(ctx context.Context, def *llb.Definition, opt SolveOpt, s
 	switch opt.Exporter {
 	case ExporterLocal:
 		if opt.ExporterOutput != nil {
-			return errors.New("output file writer is not supported by local exporter")
+			return nil, errors.New("output file writer is not supported by local exporter")
 		}
 		if opt.ExporterOutputDir == "" {
-			return errors.New("output directory is required for local exporter")
+			return nil, errors.New("output directory is required for local exporter")
 		}
 		s.Allow(filesync.NewFSSyncTargetDir(opt.ExporterOutputDir))
 	case ExporterOCI, ExporterDocker:
 		if opt.ExporterOutputDir != "" {
-			return errors.Errorf("output directory %s is not supported by %s exporter", opt.ExporterOutputDir, opt.Exporter)
+			return nil, errors.Errorf("output directory %s is not supported by %s exporter", opt.ExporterOutputDir, opt.Exporter)
 		}
 		if opt.ExporterOutput == nil {
-			return errors.Errorf("output file writer is required for %s exporter", opt.Exporter)
+			return nil, errors.Errorf("output file writer is required for %s exporter", opt.Exporter)
 		}
 		s.Allow(filesync.NewFSSyncTarget(opt.ExporterOutput))
 	default:
 		if opt.ExporterOutput != nil {
-			return errors.Errorf("output file writer is not supported by %s exporter", opt.Exporter)
+			return nil, errors.Errorf("output file writer is not supported by %s exporter", opt.Exporter)
 		}
 		if opt.ExporterOutputDir != "" {
-			return errors.Errorf("output directory %s is not supported by %s exporter", opt.ExporterOutputDir, opt.Exporter)
+			return nil, errors.Errorf("output directory %s is not supported by %s exporter", opt.ExporterOutputDir, opt.Exporter)
 		}
 	}
 
@@ -109,6 +109,7 @@ func (c *Client) Solve(ctx context.Context, def *llb.Definition, opt SolveOpt, s
 		return s.Run(statusContext, grpchijack.Dialer(c.controlClient()))
 	})
 
+	var res *SolveResponse
 	eg.Go(func() error {
 		defer func() { // make sure the Status ends cleanly on build errors
 			go func() {
@@ -122,7 +123,7 @@ func (c *Client) Solve(ctx context.Context, def *llb.Definition, opt SolveOpt, s
 		if def != nil {
 			pbd = def.ToPB()
 		}
-		_, err = c.controlClient().Solve(ctx, &controlapi.SolveRequest{
+		resp, err := c.controlClient().Solve(ctx, &controlapi.SolveRequest{
 			Ref:           ref,
 			Definition:    pbd,
 			Exporter:      opt.Exporter,
@@ -137,6 +138,9 @@ func (c *Client) Solve(ctx context.Context, def *llb.Definition, opt SolveOpt, s
 		})
 		if err != nil {
 			return errors.Wrap(err, "failed to solve")
+		}
+		res = &SolveResponse{
+			ExporterResponse: resp.ExporterResponse,
 		}
 		return nil
 	})
@@ -194,7 +198,10 @@ func (c *Client) Solve(ctx context.Context, def *llb.Definition, opt SolveOpt, s
 		}
 	})
 
-	return eg.Wait()
+	if err := eg.Wait(); err != nil {
+		return nil, err
+	}
+	return res, nil
 }
 
 func prepareSyncedDirs(def *llb.Definition, localDirs map[string]string) ([]filesync.SyncedDir, error) {
