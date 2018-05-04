@@ -11,7 +11,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/docker/distribution/reference"
 	"github.com/docker/docker/builder/dockerfile/instructions"
@@ -146,6 +145,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 							if err := json.Unmarshal(dt, &img); err != nil {
 								return err
 							}
+							img.Created = nil
 							d.image = img
 							if dgst != "" {
 								ref, err = reference.WithDigest(ref, dgst)
@@ -729,9 +729,7 @@ func commitToHistory(img *Image, msg string, withLayer bool, st *llb.State) erro
 		msg += " # buildkit"
 	}
 
-	tm := time.Now().UTC()
 	img.History = append(img.History, ocispec.History{
-		Created:    &tm,
 		CreatedBy:  msg,
 		Comment:    historyComment,
 		EmptyLayer: !withLayer,

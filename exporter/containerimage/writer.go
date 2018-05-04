@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"runtime"
-	"strings"
 	"time"
 
 	"github.com/containerd/containerd/content"
@@ -179,24 +178,35 @@ func patchImageConfig(dt []byte, dps []blobs.DiffPair, history []ocispec.History
 	}
 	m["history"] = dt
 
-	now := time.Now()
-	dt, err = json.Marshal(&now)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to marshal creation time")
+	if _, ok := m["created"]; !ok {
+		var tm *time.Time
+		for _, h := range history {
+			if h.Created != nil {
+				tm = h.Created
+			}
+		}
+		dt, err = json.Marshal(&tm)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to marshal creation time")
+		}
+		m["created"] = dt
 	}
-	m["created"] = dt
 
 	dt, err = json.Marshal(m)
 	return dt, errors.Wrap(err, "failed to marshal config after patch")
 }
 
 func normalizeLayersAndHistory(diffs []blobs.DiffPair, history []ocispec.History, ref cache.ImmutableRef) ([]blobs.DiffPair, []ocispec.History) {
+
+	refMeta := getRefMetadata(ref, len(diffs))
+
 	var historyLayers int
 	for _, h := range history {
 		if !h.EmptyLayer {
 			historyLayers += 1
 		}
 	}
+
 	if historyLayers > len(diffs) {
 		// this case shouldn't happen but if it does force set history layers empty
 		// from the bottom
@@ -217,11 +227,10 @@ func normalizeLayersAndHistory(diffs []blobs.DiffPair, history []ocispec.History
 
 	if len(diffs) > historyLayers {
 		// some history items are missing. add them based on the ref metadata
-		for _, msg := range getRefDesciptions(ref, len(diffs)-historyLayers) {
-			tm := time.Now().UTC()
+		for _, md := range refMeta[historyLayers:] {
 			history = append(history, ocispec.History{
-				Created:   &tm,
-				CreatedBy: msg,
+				Created:   &md.createdAt,
+				CreatedBy: md.description,
 				Comment:   "buildkit.exporter.image.v0",
 			})
 		}
@@ -230,6 +239,9 @@ func normalizeLayersAndHistory(diffs []blobs.DiffPair, history []ocispec.History
 	var layerIndex int
 	for i, h := range history {
 		if !h.EmptyLayer {
+			if h.Created == nil {
+				h.Created = &refMeta[layerIndex].createdAt
+			}
 			if diffs[layerIndex].Blobsum == emptyGZLayer {
 				h.EmptyLayer = true
 				diffs = append(diffs[:layerIndex], diffs[layerIndex+1:]...)
@@ -243,23 +255,31 @@ func normalizeLayersAndHistory(diffs []blobs.DiffPair, history []ocispec.History
 	return diffs, history
 }
 
-func getRefDesciptions(ref cache.ImmutableRef, limit int) []string {
+type refMetadata struct {
+	description string
+	createdAt   time.Time
+}
+
+func getRefMetadata(ref cache.ImmutableRef, limit int) []refMetadata {
 	if limit <= 0 {
 		return nil
 	}
-	defaultMsg := "created by buildkit" // shouldn't happen but don't fail build
+	meta := refMetadata{
+		description: "created by buildkit", // shouldn't be shown but don't fail build
+		createdAt:   time.Now(),
+	}
 	if ref == nil {
-		strings.Repeat(defaultMsg, limit)
+		return append(getRefMetadata(nil, limit-1), meta)
 	}
-	descr := cache.GetDescription(ref.Metadata())
-	if descr == "" {
-		descr = defaultMsg
+	if descr := cache.GetDescription(ref.Metadata()); descr != "" {
+		meta.description = descr
 	}
+	meta.createdAt = cache.GetCreatedAt(ref.Metadata())
 	p := ref.Parent()
 	if p != nil {
 		defer p.Release(context.TODO())
 	}
-	return append(getRefDesciptions(p, limit-1), descr)
+	return append(getRefMetadata(p, limit-1), meta)
 }
 
 func oneOffProgress(ctx context.Context, id string) func(err error) error {
