@@ -52,6 +52,7 @@ func TestIntegration(t *testing.T) {
 		testCopyVarSubstitution,
 		testMultiStageCaseInsensitive,
 		testLabels,
+		testReproducibleIDs,
 	})
 }
 
@@ -1269,6 +1270,76 @@ LABEL foo=bar
 	v, ok = ociimg.Config.Labels["bar"]
 	require.True(t, ok)
 	require.Equal(t, v, "baz")
+}
+
+func testReproducibleIDs(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	dockerfile := []byte(`
+FROM busybox
+ENV foo=bar
+COPY foo /
+RUN echo bar > bar
+`)
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("foo", []byte("foo-contents"), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	target := "example.com/moby/dockerfileids:test"
+	opt := client.SolveOpt{
+		Frontend:      "dockerfile.v0",
+		FrontendAttrs: map[string]string{},
+		Exporter:      client.ExporterImage,
+		ExporterAttrs: map[string]string{
+			"name": target,
+		},
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+	}
+
+	err = c.Solve(context.TODO(), nil, opt, nil)
+	require.NoError(t, err)
+
+	target2 := "example.com/moby/dockerfileids2:test"
+	opt.ExporterAttrs["name"] = target2
+
+	err = c.Solve(context.TODO(), nil, opt, nil)
+	require.NoError(t, err)
+
+	var cdAddress string
+	if cd, ok := sb.(interface {
+		ContainerdAddress() string
+	}); !ok {
+		t.Skip("only for containerd worker")
+	} else {
+		cdAddress = cd.ContainerdAddress()
+	}
+
+	client, err := containerd.New(cdAddress)
+	require.NoError(t, err)
+	defer client.Close()
+
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit")
+
+	img, err := client.ImageService().Get(ctx, target)
+	require.NoError(t, err)
+	img2, err := client.ImageService().Get(ctx, target2)
+	require.NoError(t, err)
+
+	require.Equal(t, img.Target, img2.Target)
 }
 
 func tmpdir(appliers ...fstest.Applier) (string, error) {
