@@ -51,6 +51,7 @@ func TestIntegration(t *testing.T) {
 		testMultiStageImplicitFrom,
 		testCopyVarSubstitution,
 		testMultiStageCaseInsensitive,
+		testLabels,
 	})
 }
 
@@ -1193,6 +1194,81 @@ COPY --from=stage1 baz bax
 	dt, err := ioutil.ReadFile(filepath.Join(destDir, "baz"))
 	require.NoError(t, err)
 	require.Contains(t, string(dt), "foo-contents")
+}
+
+func testLabels(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	dockerfile := []byte(`
+FROM scratch
+LABEL foo=bar
+`)
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	target := "example.com/moby/dockerfilelabels:test"
+	err = c.Solve(context.TODO(), nil, client.SolveOpt{
+		Frontend: "dockerfile.v0",
+		FrontendAttrs: map[string]string{
+			"label:bar": "baz",
+		},
+		Exporter: client.ExporterImage,
+		ExporterAttrs: map[string]string{
+			"name": target,
+		},
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	var cdAddress string
+	if cd, ok := sb.(interface {
+		ContainerdAddress() string
+	}); !ok {
+		t.Skip("only for containerd worker")
+	} else {
+		cdAddress = cd.ContainerdAddress()
+	}
+
+	client, err := containerd.New(cdAddress)
+	require.NoError(t, err)
+	defer client.Close()
+
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit")
+
+	img, err := client.ImageService().Get(ctx, target)
+	require.NoError(t, err)
+
+	desc, err := img.Config(ctx, client.ContentStore(), platforms.Default())
+	require.NoError(t, err)
+
+	dt, err := content.ReadBlob(ctx, client.ContentStore(), desc.Digest)
+	require.NoError(t, err)
+
+	var ociimg ocispec.Image
+	err = json.Unmarshal(dt, &ociimg)
+	require.NoError(t, err)
+
+	v, ok := ociimg.Config.Labels["foo"]
+	require.True(t, ok)
+	require.Equal(t, v, "bar")
+
+	v, ok = ociimg.Config.Labels["bar"]
+	require.True(t, ok)
+	require.Equal(t, v, "baz")
 }
 
 func tmpdir(appliers ...fstest.Applier) (string, error) {

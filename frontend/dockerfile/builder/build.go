@@ -24,6 +24,7 @@ const (
 	defaultDockerfileName = "Dockerfile"
 	dockerignoreFilename  = ".dockerignore"
 	buildArgPrefix        = "build-arg:"
+	labelPrefix           = "label:"
 	gitPrefix             = "git://"
 )
 
@@ -103,7 +104,8 @@ func Build(ctx context.Context, c client.Client) error {
 	st, img, err := dockerfile2llb.Dockerfile2LLB(ctx, dtDockerfile, dockerfile2llb.ConvertOpt{
 		Target:       opts[keyTarget],
 		MetaResolver: c,
-		BuildArgs:    filterBuildArgs(opts),
+		BuildArgs:    filter(opts, buildArgPrefix),
+		Labels:       filter(opts, labelPrefix),
 		SessionID:    c.SessionID(),
 		BuildContext: buildContext,
 		Excludes:     excludes,
@@ -132,11 +134,11 @@ func Build(ctx context.Context, c client.Client) error {
 	return nil
 }
 
-func filterBuildArgs(opt map[string]string) map[string]string {
+func filter(opt map[string]string, key string) map[string]string {
 	m := map[string]string{}
 	for k, v := range opt {
-		if strings.HasPrefix(k, buildArgPrefix) {
-			m[strings.TrimPrefix(k, buildArgPrefix)] = v
+		if strings.HasPrefix(k, key) {
+			m[strings.TrimPrefix(k, key)] = v
 		}
 	}
 	return m
