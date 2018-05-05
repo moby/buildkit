@@ -7,7 +7,8 @@ package cacheimport
 // Manifests array contains descriptors to the cache layers and one instance of
 // build cache config with media type application/vnd.buildkit.cacheconfig.v0 .
 // The cache layer descripts need to have an annotation with uncompressed digest
-// to allow deduplication on extraction.
+// to allow deduplication on extraction and optionally "buildkit/createdat"
+// annotation to support maintaining original timestamps.
 //
 // Cache config file layout:
 //
