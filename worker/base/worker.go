@@ -47,6 +47,8 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+const labelCreatedAt = "buildkit/createdat"
+
 // TODO: this file should be removed. containerd defines ContainerdWorker, oci defines OCIWorker. There is no base worker.
 
 // WorkerOpt is specific to a worker.
@@ -263,6 +265,11 @@ func (w *Worker) GetRemote(ctx context.Context, ref cache.ImmutableRef) (*solver
 		return nil, nil
 	}
 
+	createdTimes := getCreatedTimes(ref)
+	if len(createdTimes) != len(diffPairs) {
+		return nil, errors.Errorf("invalid createdtimes/diffpairs")
+	}
+
 	descs := make([]ocispec.Descriptor, len(diffPairs))
 
 	for i, dp := range diffPairs {
@@ -270,12 +277,19 @@ func (w *Worker) GetRemote(ctx context.Context, ref cache.ImmutableRef) (*solver
 		if err != nil {
 			return nil, err
 		}
+
+		tm, err := createdTimes[i].MarshalText()
+		if err != nil {
+			return nil, err
+		}
+
 		descs[i] = ocispec.Descriptor{
 			Digest:    dp.Blobsum,
 			Size:      info.Size,
 			MediaType: schema2.MediaTypeLayer,
 			Annotations: map[string]string{
 				"containerd.io/uncompressed": dp.DiffID.String(),
+				labelCreatedAt:               string(tm),
 			},
 		}
 	}
@@ -284,6 +298,15 @@ func (w *Worker) GetRemote(ctx context.Context, ref cache.ImmutableRef) (*solver
 		Descriptors: descs,
 		Provider:    w.ContentStore,
 	}, nil
+}
+
+func getCreatedTimes(ref cache.ImmutableRef) (out []time.Time) {
+	parent := ref.Parent()
+	if parent != nil {
+		defer parent.Release(context.TODO())
+		out = getCreatedTimes(parent)
+	}
+	return append(out, cache.GetCreatedAt(ref.Metadata()))
 }
 
 func (w *Worker) FromRemote(ctx context.Context, remote *solver.Remote) (cache.ImmutableRef, error) {
@@ -305,19 +328,35 @@ func (w *Worker) FromRemote(ctx context.Context, remote *solver.Remote) (cache.I
 	defer release()
 
 	unpackProgressDone := oneOffProgress(ctx, "unpacking")
-	chainID, err := w.unpack(ctx, remote.Descriptors, cs)
+	chainIDs, err := w.unpack(ctx, remote.Descriptors, cs)
 	if err != nil {
 		return nil, unpackProgressDone(err)
 	}
 	unpackProgressDone(nil)
 
-	return w.CacheManager.Get(ctx, chainID, cache.WithDescription(fmt.Sprintf("imported %s", remote.Descriptors[len(remote.Descriptors)-1].Digest)))
+	for i, chainID := range chainIDs {
+		tm := time.Now()
+		if tmstr, ok := remote.Descriptors[i].Annotations[labelCreatedAt]; ok {
+			if err := (&tm).UnmarshalText([]byte(tmstr)); err != nil {
+				return nil, err
+			}
+		}
+		ref, err := w.CacheManager.Get(ctx, chainID, cache.WithDescription(fmt.Sprintf("imported %s", remote.Descriptors[i].Digest)), cache.WithCreationTime(tm))
+		if err != nil {
+			return nil, err
+		}
+		if i == len(remote.Descriptors)-1 {
+			return ref, nil
+		}
+		ref.Release(context.TODO())
+	}
+	return nil, errors.Errorf("unreachable")
 }
 
-func (w *Worker) unpack(ctx context.Context, descs []ocispec.Descriptor, s cdsnapshot.Snapshotter) (string, error) {
+func (w *Worker) unpack(ctx context.Context, descs []ocispec.Descriptor, s cdsnapshot.Snapshotter) ([]string, error) {
 	layers, err := getLayers(ctx, descs)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	var chain []digest.Digest
@@ -326,17 +365,22 @@ func (w *Worker) unpack(ctx context.Context, descs []ocispec.Descriptor, s cdsna
 			"containerd.io/uncompressed": layer.Diff.Digest.String(),
 		}
 		if _, err := rootfs.ApplyLayer(ctx, layer, chain, s, w.Applier, cdsnapshot.WithLabels(labels)); err != nil {
-			return "", err
+			return nil, err
 		}
 		chain = append(chain, layer.Diff.Digest)
 
 		chainID := ociidentity.ChainID(chain)
 		if err := w.Snapshotter.SetBlob(ctx, string(chainID), layer.Diff.Digest, layer.Blob.Digest); err != nil {
-			return "", err
+			return nil, err
 		}
 	}
 
-	return string(ociidentity.ChainID(chain)), nil
+	ids := make([]string, len(chain))
+	for i := range chain {
+		ids[i] = string(ociidentity.ChainID(chain[:i+1]))
+	}
+
+	return ids, nil
 }
 
 // utility function. could be moved to the constructor logic?
