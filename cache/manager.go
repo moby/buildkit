@@ -536,6 +536,12 @@ func WithDescription(descr string) RefOption {
 	}
 }
 
+func WithCreationTime(tm time.Time) RefOption {
+	return func(m withMetadata) error {
+		return queueCreatedAt(m.Metadata(), tm)
+	}
+}
+
 func initializeMetadata(m withMetadata, opts ...RefOption) error {
 	md := m.Metadata()
 	if tm := GetCreatedAt(md); !tm.IsZero() {
