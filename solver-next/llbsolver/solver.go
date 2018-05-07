@@ -112,7 +112,9 @@ func (s *Solver) Solve(ctx context.Context, id string, req frontend.SolveRequest
 	if exp := exp.CacheExporter; exp != nil {
 		if err := j.Call(ctx, "exporting cache", func(ctx context.Context) error {
 			prepareDone := oneOffProgress(ctx, "preparing build cache for export")
-			if _, err := res.CacheKey().ExportTo(ctx, exp, workerRefConverter); err != nil {
+			if _, err := res.CacheKey().Exporter.ExportTo(ctx, exp, solver.CacheExportOpt{
+				Convert: workerRefConverter,
+			}); err != nil {
 				return prepareDone(err)
 			}
 			prepareDone(nil)
