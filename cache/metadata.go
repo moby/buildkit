@@ -141,8 +141,8 @@ func GetDescription(si *metadata.StorageItem) string {
 	return str
 }
 
-func queueCreatedAt(si *metadata.StorageItem) error {
-	v, err := metadata.NewValue(time.Now().UnixNano())
+func queueCreatedAt(si *metadata.StorageItem, tm time.Time) error {
+	v, err := metadata.NewValue(tm.UnixNano())
 	if err != nil {
 		return errors.Wrap(err, "failed to create createdAt value")
 	}
@@ -152,7 +152,7 @@ func queueCreatedAt(si *metadata.StorageItem) error {
 	return nil
 }
 
-func getCreatedAt(si *metadata.StorageItem) time.Time {
+func GetCreatedAt(si *metadata.StorageItem) time.Time {
 	v := si.Get(keyCreatedAt)
 	if v == nil {
 		return time.Time{}

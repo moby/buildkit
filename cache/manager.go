@@ -340,7 +340,7 @@ func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo) err
 			Mutable:     cr.mutable,
 			InUse:       len(cr.refs) > 0,
 			Size:        getSize(cr.md),
-			CreatedAt:   getCreatedAt(cr.md),
+			CreatedAt:   GetCreatedAt(cr.md),
 			Description: GetDescription(cr.md),
 			LastUsedAt:  lastUsedAt,
 			UsageCount:  usageCount,
@@ -417,7 +417,7 @@ func (cm *cacheManager) DiskUsage(ctx context.Context, opt client.DiskUsageInfo)
 			refs:        len(cr.refs),
 			mutable:     cr.mutable,
 			size:        getSize(cr.md),
-			createdAt:   getCreatedAt(cr.md),
+			createdAt:   GetCreatedAt(cr.md),
 			usageCount:  usageCount,
 			lastUsedAt:  lastUsedAt,
 			description: GetDescription(cr.md),
@@ -538,18 +538,18 @@ func WithDescription(descr string) RefOption {
 
 func initializeMetadata(m withMetadata, opts ...RefOption) error {
 	md := m.Metadata()
-	if tm := getCreatedAt(md); !tm.IsZero() {
+	if tm := GetCreatedAt(md); !tm.IsZero() {
 		return nil
+	}
+
+	if err := queueCreatedAt(md, time.Now()); err != nil {
+		return err
 	}
 
 	for _, opt := range opts {
 		if err := opt(m); err != nil {
 			return err
 		}
-	}
-
-	if err := queueCreatedAt(md); err != nil {
-		return err
 	}
 
 	return md.Commit()
