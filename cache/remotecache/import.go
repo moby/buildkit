@@ -1,4 +1,4 @@
-package cacheimport
+package remotecache
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
-	v1 "github.com/moby/buildkit/cache/cacheimport/v1"
+	v1 "github.com/moby/buildkit/cache/remotecache/v1"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/auth"
 	solver "github.com/moby/buildkit/solver-next"
