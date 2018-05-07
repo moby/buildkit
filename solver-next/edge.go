@@ -353,7 +353,7 @@ func withSelector(keys []ExportableCacheKey, selector digest.Digest) []CacheKeyW
 func (e *edge) makeExportable(k *CacheKey, records []*CacheRecord) ExportableCacheKey {
 	return ExportableCacheKey{
 		CacheKey: k,
-		Exporter: &exporter{k: k, records: records},
+		Exporter: &exporter{k: k, records: records, override: e.edge.Vertex.Options().ExportCache},
 	}
 }
 

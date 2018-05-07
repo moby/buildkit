@@ -11,8 +11,9 @@ type exporter struct {
 	records []*CacheRecord
 	record  *CacheRecord
 
-	res  []CacheExporterRecord
-	edge *edge // for secondaryExporters
+	res      []CacheExporterRecord
+	edge     *edge // for secondaryExporters
+	override *bool
 }
 
 func addBacklinks(t CacheExporterTarget, rec CacheExporterRecord, cm *cacheManager, id string, bkm map[string]CacheExporterRecord) (CacheExporterRecord, error) {
@@ -73,6 +74,52 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 		selector digest.Digest
 	}
 
+	rec := t.Add(rootKey(e.k.Digest(), e.k.Output()))
+	allRec := []CacheExporterRecord{rec}
+
+	addRecord := true
+
+	if e.override != nil {
+		addRecord = *e.override
+	}
+
+	var remote *Remote
+	if v := e.record; v != nil && len(e.k.Deps()) > 0 && addRecord {
+		cm := v.cacheManager
+		key := cm.getID(v.key)
+		res, err := cm.backend.Load(key, v.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		remote, err = cm.results.LoadRemote(ctx, res)
+		if err != nil {
+			return nil, err
+		}
+
+		if remote == nil && opt.Mode != CacheExportModeRemoteOnly {
+			res, err := cm.results.Load(ctx, res)
+			if err != nil {
+				return nil, err
+			}
+			remote, err = opt.Convert(ctx, res)
+			if err != nil {
+				return nil, err
+			}
+			res.Release(context.TODO())
+		}
+
+		if remote != nil {
+			for _, rec := range allRec {
+				rec.AddResult(v.CreatedAt, remote)
+			}
+		}
+	}
+
+	if remote != nil && opt.Mode == CacheExportModeMin {
+		opt.Mode = CacheExportModeRemoteOnly
+	}
+
 	srcs := make([][]expr, len(deps))
 
 	for i, deps := range deps {
@@ -99,9 +146,6 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 		}
 	}
 
-	rec := t.Add(rootKey(e.k.Digest(), e.k.Output()))
-	allRec := []CacheExporterRecord{rec}
-
 	for i, srcs := range srcs {
 		for _, src := range srcs {
 			rec.LinkFrom(src.r, i, src.selector.String())
@@ -118,8 +162,6 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 		e.record = getBestResult(e.records)
 	}
 
-	var remote *Remote
-
 	if v := e.record; v != nil && len(deps) == 0 {
 		cm := v.cacheManager
 		key := cm.getID(v.key)
@@ -134,37 +176,6 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 		}
 	}
 
-	if v := e.record; v != nil && len(e.k.Deps()) > 0 {
-		cm := v.cacheManager
-		key := cm.getID(v.key)
-		res, err := cm.backend.Load(key, v.ID)
-		if err != nil {
-			return nil, err
-		}
-
-		remote, err = cm.results.LoadRemote(ctx, res)
-		if err != nil {
-			return nil, err
-		}
-
-		if remote == nil {
-			res, err := cm.results.Load(ctx, res)
-			if err != nil {
-				return nil, err
-			}
-			remote, err = opt.Convert(ctx, res)
-			if err != nil {
-				return nil, err
-			}
-			res.Release(context.TODO())
-		}
-
-		if remote != nil {
-			for _, rec := range allRec {
-				rec.AddResult(v.CreatedAt, remote)
-			}
-		}
-	}
 	e.res = allRec
 	t.Visit(e)
 

@@ -58,6 +58,7 @@ type CacheExportMode int
 const (
 	CacheExportModeMin CacheExportMode = iota
 	CacheExportModeMax
+	CacheExportModeRemoteOnly
 )
 
 type CacheExportOpt struct {
