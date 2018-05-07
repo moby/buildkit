@@ -17,8 +17,9 @@ import (
 )
 
 type ExporterRequest struct {
-	Exporter      exporter.ExporterInstance
-	CacheExporter *remotecache.RegistryCacheExporter
+	Exporter        exporter.ExporterInstance
+	CacheExporter   *remotecache.RegistryCacheExporter
+	CacheExportMode solver.CacheExportMode
 }
 
 // ResolveWorkerFunc returns default worker for the temporary default non-distributed use cases
@@ -109,17 +110,18 @@ func (s *Solver) Solve(ctx context.Context, id string, req frontend.SolveRequest
 		}
 	}
 
-	if exp := exp.CacheExporter; exp != nil {
+	if e := exp.CacheExporter; e != nil {
 		if err := j.Call(ctx, "exporting cache", func(ctx context.Context) error {
 			prepareDone := oneOffProgress(ctx, "preparing build cache for export")
-			if _, err := res.CacheKey().Exporter.ExportTo(ctx, exp, solver.CacheExportOpt{
+			if _, err := res.CacheKey().Exporter.ExportTo(ctx, e, solver.CacheExportOpt{
 				Convert: workerRefConverter,
+				Mode:    exp.CacheExportMode,
 			}); err != nil {
 				return prepareDone(err)
 			}
 			prepareDone(nil)
 
-			return exp.Finalize(ctx)
+			return e.Finalize(ctx)
 		}); err != nil {
 			return nil, err
 		}
