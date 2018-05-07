@@ -156,7 +156,6 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 			return nil, err
 		}
 		exportCacheRef := reference.TagNameOnly(parsed).String()
-
 		cacheExporter = c.opt.CacheExporter.ExporterForTarget(exportCacheRef)
 	}
 
@@ -175,8 +174,9 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		FrontendOpt:     req.FrontendAttrs,
 		ImportCacheRefs: importCacheRefs,
 	}, llbsolver.ExporterRequest{
-		Exporter:      expi,
-		CacheExporter: cacheExporter,
+		Exporter:        expi,
+		CacheExporter:   cacheExporter,
+		CacheExportMode: parseCacheExporterOpt(req.Cache.ExportAttrs),
 	})
 	if err != nil {
 		return nil, err
@@ -270,4 +270,23 @@ func (c *Controller) ListWorkers(ctx context.Context, r *controlapi.ListWorkersR
 		})
 	}
 	return resp, nil
+}
+
+func parseCacheExporterOpt(opt map[string]string) solver.CacheExportMode {
+	for k, v := range opt {
+		switch k {
+		case "mode":
+			switch v {
+			case "min":
+				return solver.CacheExportModeMin
+			case "max":
+				return solver.CacheExportModeMax
+			default:
+				logrus.Debugf("skipping incalid cache export mode: %s", v)
+			}
+		default:
+			logrus.Warnf("skipping invalid cache export opt: %s", v)
+		}
+	}
+	return solver.CacheExportModeMin
 }
