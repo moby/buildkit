@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/containerd/containerd/content"
+	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/opencontainers/go-digest"
 )
@@ -70,8 +71,26 @@ func (c *nsContent) ReaderAt(ctx context.Context, dgst digest.Digest) (content.R
 }
 
 func (c *nsContent) Writer(ctx context.Context, ref string, size int64, expected digest.Digest) (content.Writer, error) {
+	return c.writer(ctx, ref, size, expected, 3)
+}
+
+func (c *nsContent) writer(ctx context.Context, ref string, size int64, expected digest.Digest, retries int) (content.Writer, error) {
 	ctx = namespaces.WithNamespace(ctx, c.ns)
-	return c.Store.Writer(ctx, ref, size, expected)
+	w, err := c.Store.Writer(ctx, ref, size, expected)
+	if err != nil {
+		if errdefs.IsAlreadyExists(err) && expected != "" && retries > 0 {
+			_, err2 := c.Update(ctx, content.Info{
+				Digest: expected,
+				Labels: map[string]string{
+					"containerd.io/gc.root": time.Now().UTC().Format(time.RFC3339Nano),
+				},
+			}, "labels.containerd.io/gc.root")
+			if err2 != nil {
+				return c.writer(ctx, ref, size, expected, retries-1)
+			}
+		}
+	}
+	return w, err
 }
 
 type noGCContentStore struct {
