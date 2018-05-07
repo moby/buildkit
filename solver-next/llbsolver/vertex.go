@@ -62,6 +62,9 @@ func newVertex(dgst digest.Digest, op *pb.Op, opMeta *pb.OpMetadata, load func(d
 	if opMeta != nil {
 		opt.IgnoreCache = opMeta.IgnoreCache
 		opt.Description = opMeta.Description
+		if opMeta.ExportCache != nil {
+			opt.ExportCache = &opMeta.ExportCache.Value
+		}
 	}
 	for _, fn := range opts {
 		fn(&opt)
