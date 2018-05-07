@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/moby/buildkit/cache"
-	"github.com/moby/buildkit/cache/cacheimport"
+	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/frontend"
@@ -18,7 +18,7 @@ import (
 
 type ExporterRequest struct {
 	Exporter      exporter.ExporterInstance
-	CacheExporter *cacheimport.RegistryCacheExporter
+	CacheExporter *remotecache.RegistryCacheExporter
 }
 
 // ResolveWorkerFunc returns default worker for the temporary default non-distributed use cases
@@ -28,10 +28,10 @@ type Solver struct {
 	solver        *solver.Solver
 	resolveWorker ResolveWorkerFunc
 	frontends     map[string]frontend.Frontend
-	ci            *cacheimport.CacheImporter
+	ci            *remotecache.CacheImporter
 }
 
-func New(wc *worker.Controller, f map[string]frontend.Frontend, cacheStore solver.CacheKeyStorage, ci *cacheimport.CacheImporter) *Solver {
+func New(wc *worker.Controller, f map[string]frontend.Frontend, cacheStore solver.CacheKeyStorage, ci *remotecache.CacheImporter) *Solver {
 	s := &Solver{
 		resolveWorker: defaultResolver(wc),
 		frontends:     f,
