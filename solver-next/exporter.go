@@ -11,11 +11,11 @@ type exporter struct {
 	records []*CacheRecord
 	record  *CacheRecord
 
-	res  []ExporterRecord
+	res  []CacheExporterRecord
 	edge *edge // for secondaryExporters
 }
 
-func addBacklinks(t ExporterTarget, rec ExporterRecord, cm *cacheManager, id string, bkm map[string]ExporterRecord) (ExporterRecord, error) {
+func addBacklinks(t CacheExporterTarget, rec CacheExporterRecord, cm *cacheManager, id string, bkm map[string]CacheExporterRecord) (CacheExporterRecord, error) {
 	if rec == nil {
 		var ok bool
 		rec, ok = bkm[id]
@@ -52,14 +52,14 @@ type backlinkT struct{}
 
 var backlinkKey = backlinkT{}
 
-func (e *exporter) ExportTo(ctx context.Context, t ExporterTarget, converter func(context.Context, Result) (*Remote, error)) ([]ExporterRecord, error) {
-	var bkm map[string]ExporterRecord
+func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt CacheExportOpt) ([]CacheExporterRecord, error) {
+	var bkm map[string]CacheExporterRecord
 
 	if bk := ctx.Value(backlinkKey); bk == nil {
-		bkm = map[string]ExporterRecord{}
+		bkm = map[string]CacheExporterRecord{}
 		ctx = context.WithValue(ctx, backlinkKey, bkm)
 	} else {
-		bkm = bk.(map[string]ExporterRecord)
+		bkm = bk.(map[string]CacheExporterRecord)
 	}
 
 	if t.Visited(e) {
@@ -69,7 +69,7 @@ func (e *exporter) ExportTo(ctx context.Context, t ExporterTarget, converter fun
 	deps := e.k.Deps()
 
 	type expr struct {
-		r        ExporterRecord
+		r        CacheExporterRecord
 		selector digest.Digest
 	}
 
@@ -77,7 +77,7 @@ func (e *exporter) ExportTo(ctx context.Context, t ExporterTarget, converter fun
 
 	for i, deps := range deps {
 		for _, dep := range deps {
-			recs, err := dep.CacheKey.ExportTo(ctx, t, converter)
+			recs, err := dep.CacheKey.Exporter.ExportTo(ctx, t, opt)
 			if err != nil {
 				return nil, nil
 			}
@@ -89,7 +89,7 @@ func (e *exporter) ExportTo(ctx context.Context, t ExporterTarget, converter fun
 
 	if e.edge != nil {
 		for _, de := range e.edge.secondaryExporters {
-			recs, err := de.cacheKey.CacheKey.ExportTo(ctx, t, converter)
+			recs, err := de.cacheKey.CacheKey.Exporter.ExportTo(ctx, t, opt)
 			if err != nil {
 				return nil, nil
 			}
@@ -100,7 +100,7 @@ func (e *exporter) ExportTo(ctx context.Context, t ExporterTarget, converter fun
 	}
 
 	rec := t.Add(rootKey(e.k.Digest(), e.k.Output()))
-	allRec := []ExporterRecord{rec}
+	allRec := []CacheExporterRecord{rec}
 
 	for i, srcs := range srcs {
 		for _, src := range srcs {
@@ -152,7 +152,7 @@ func (e *exporter) ExportTo(ctx context.Context, t ExporterTarget, converter fun
 			if err != nil {
 				return nil, err
 			}
-			remote, err = converter(ctx, res)
+			remote, err = opt.Convert(ctx, res)
 			if err != nil {
 				return nil, err
 			}
@@ -182,12 +182,12 @@ func getBestResult(records []*CacheRecord) *CacheRecord {
 }
 
 type mergedExporter struct {
-	exporters []Exporter
+	exporters []CacheExporter
 }
 
-func (e *mergedExporter) ExportTo(ctx context.Context, t ExporterTarget, converter func(context.Context, Result) (*Remote, error)) (er []ExporterRecord, err error) {
+func (e *mergedExporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt CacheExportOpt) (er []CacheExporterRecord, err error) {
 	for _, e := range e.exporters {
-		r, err := e.ExportTo(ctx, t, converter)
+		r, err := e.ExportTo(ctx, t, opt)
 		if err != nil {
 			return nil, err
 		}

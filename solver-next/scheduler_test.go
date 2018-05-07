@@ -2131,18 +2131,18 @@ func TestCacheExporting(t *testing.T) {
 
 	expTarget := newTestExporterTarget()
 
-	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testConvertToRemote)
+	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
 	expTarget.normalize()
 
 	require.Equal(t, len(expTarget.records), 3)
-	require.Equal(t, expTarget.records[0].results, 0)
+	require.Equal(t, expTarget.records[0].results, 1)
 	require.Equal(t, expTarget.records[1].results, 0)
-	require.Equal(t, expTarget.records[2].results, 1)
-	require.Equal(t, expTarget.records[0].links, 0)
+	require.Equal(t, expTarget.records[2].results, 0)
+	require.Equal(t, expTarget.records[0].links, 2)
 	require.Equal(t, expTarget.records[1].links, 0)
-	require.Equal(t, expTarget.records[2].links, 2)
+	require.Equal(t, expTarget.records[2].links, 0)
 
 	j1, err := l.NewJob("j1")
 	require.NoError(t, err)
@@ -2162,18 +2162,18 @@ func TestCacheExporting(t *testing.T) {
 
 	expTarget = newTestExporterTarget()
 
-	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testConvertToRemote)
+	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
 	expTarget.normalize()
 	// the order of the records isn't really significant
 	require.Equal(t, len(expTarget.records), 3)
-	require.Equal(t, expTarget.records[0].results, 0)
+	require.Equal(t, expTarget.records[0].results, 1)
 	require.Equal(t, expTarget.records[1].results, 0)
-	require.Equal(t, expTarget.records[2].results, 1)
-	require.Equal(t, expTarget.records[0].links, 0)
+	require.Equal(t, expTarget.records[2].results, 0)
+	require.Equal(t, expTarget.records[0].links, 2)
 	require.Equal(t, expTarget.records[1].links, 0)
-	require.Equal(t, expTarget.records[2].links, 2)
+	require.Equal(t, expTarget.records[2].links, 0)
 }
 
 func TestSlowCacheAvoidAccess(t *testing.T) {
@@ -2305,7 +2305,7 @@ func TestCacheMultipleMaps(t *testing.T) {
 
 	expTarget := newTestExporterTarget()
 
-	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testConvertToRemote)
+	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
 	expTarget.normalize()
@@ -2341,7 +2341,7 @@ func TestCacheMultipleMaps(t *testing.T) {
 
 	expTarget = newTestExporterTarget()
 
-	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testConvertToRemote)
+	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
 	require.Equal(t, len(expTarget.records), 3)
@@ -2376,7 +2376,7 @@ func TestCacheMultipleMaps(t *testing.T) {
 
 	expTarget = newTestExporterTarget()
 
-	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testConvertToRemote)
+	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
 	require.Equal(t, len(expTarget.records), 3)
@@ -2434,17 +2434,17 @@ func TestCacheExportingPartialSelector(t *testing.T) {
 
 	expTarget := newTestExporterTarget()
 
-	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testConvertToRemote)
+	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
 	expTarget.normalize()
 	require.Equal(t, len(expTarget.records), 3)
-	require.Equal(t, expTarget.records[0].results, 0)
+	require.Equal(t, expTarget.records[0].results, 1)
 	require.Equal(t, expTarget.records[1].results, 0)
-	require.Equal(t, expTarget.records[2].results, 1)
-	require.Equal(t, expTarget.records[0].links, 0)
+	require.Equal(t, expTarget.records[2].results, 0)
+	require.Equal(t, expTarget.records[0].links, 2)
 	require.Equal(t, expTarget.records[1].links, 0)
-	require.Equal(t, expTarget.records[2].links, 2)
+	require.Equal(t, expTarget.records[2].links, 0)
 
 	// repeat so that all coming from cache are retained
 	j1, err := l.NewJob("j1")
@@ -2467,18 +2467,18 @@ func TestCacheExportingPartialSelector(t *testing.T) {
 
 	expTarget = newTestExporterTarget()
 
-	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testConvertToRemote)
+	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
 	expTarget.normalize()
 
 	// the order of the records isn't really significant
 	require.Equal(t, len(expTarget.records), 3)
-	require.Equal(t, expTarget.records[0].results, 0)
-	require.Equal(t, expTarget.records[1].results, 1)
+	require.Equal(t, expTarget.records[0].results, 1)
+	require.Equal(t, expTarget.records[1].results, 0)
 	require.Equal(t, expTarget.records[2].results, 0)
-	require.Equal(t, expTarget.records[0].links, 0)
-	require.Equal(t, expTarget.records[1].links, 2)
+	require.Equal(t, expTarget.records[0].links, 2)
+	require.Equal(t, expTarget.records[1].links, 0)
 	require.Equal(t, expTarget.records[2].links, 0)
 
 	// repeat with forcing a slow key recomputation
@@ -2521,7 +2521,7 @@ func TestCacheExportingPartialSelector(t *testing.T) {
 
 	expTarget = newTestExporterTarget()
 
-	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testConvertToRemote)
+	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
 	expTarget.normalize()
@@ -2529,13 +2529,13 @@ func TestCacheExportingPartialSelector(t *testing.T) {
 	// the order of the records isn't really significant
 	// adds one
 	require.Equal(t, len(expTarget.records), 4)
-	require.Equal(t, expTarget.records[0].results, 0)
+	require.Equal(t, expTarget.records[0].results, 1)
 	require.Equal(t, expTarget.records[1].results, 0)
-	require.Equal(t, expTarget.records[2].results, 1)
+	require.Equal(t, expTarget.records[2].results, 0)
 	require.Equal(t, expTarget.records[3].results, 0)
-	require.Equal(t, expTarget.records[0].links, 0)
+	require.Equal(t, expTarget.records[0].links, 3)
 	require.Equal(t, expTarget.records[1].links, 0)
-	require.Equal(t, expTarget.records[2].links, 3)
+	require.Equal(t, expTarget.records[2].links, 0)
 	require.Equal(t, expTarget.records[3].links, 0)
 
 	// repeat with a wrapper
@@ -2567,7 +2567,7 @@ func TestCacheExportingPartialSelector(t *testing.T) {
 
 	expTarget = newTestExporterTarget()
 
-	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testConvertToRemote)
+	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
 	expTarget.normalize()
@@ -2575,16 +2575,16 @@ func TestCacheExportingPartialSelector(t *testing.T) {
 	// adds one extra result
 	// the order of the records isn't really significant
 	require.Equal(t, len(expTarget.records), 5)
-	require.Equal(t, expTarget.records[0].results, 0)
-	require.Equal(t, expTarget.records[1].results, 0)
-	require.Equal(t, expTarget.records[2].results, 1)
+	require.Equal(t, expTarget.records[0].results, 1)
+	require.Equal(t, expTarget.records[1].results, 1)
+	require.Equal(t, expTarget.records[2].results, 0)
 	require.Equal(t, expTarget.records[3].results, 0)
-	require.Equal(t, expTarget.records[4].results, 1)
-	require.Equal(t, expTarget.records[0].links, 0)
-	require.Equal(t, expTarget.records[1].links, 0)
-	require.Equal(t, expTarget.records[2].links, 3)
+	require.Equal(t, expTarget.records[4].results, 0)
+	require.Equal(t, expTarget.records[0].links, 1)
+	require.Equal(t, expTarget.records[1].links, 3)
+	require.Equal(t, expTarget.records[2].links, 0)
 	require.Equal(t, expTarget.records[3].links, 0)
-	require.Equal(t, expTarget.records[4].links, 1)
+	require.Equal(t, expTarget.records[4].links, 0)
 }
 
 func TestCacheExportingMergedKey(t *testing.T) {
@@ -2665,7 +2665,7 @@ func TestCacheExportingMergedKey(t *testing.T) {
 
 	expTarget := newTestExporterTarget()
 
-	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testConvertToRemote)
+	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
 	expTarget.normalize()
@@ -3035,13 +3035,22 @@ func digestFromResult(ctx context.Context, res Result) (digest.Digest, error) {
 	return digest.FromBytes([]byte(unwrap(res))), nil
 }
 
-func testConvertToRemote(ctx context.Context, res Result) (*Remote, error) {
-	if dr, ok := res.Sys().(*dummyResult); ok {
-		return &Remote{Descriptors: []ocispec.Descriptor{{
-			Annotations: map[string]string{"value": fmt.Sprintf("%d", dr.intValue)},
-		}}}, nil
+func testExporterOpts(all bool) CacheExportOpt {
+	mode := CacheExportModeMin
+	if all {
+		mode = CacheExportModeMax
 	}
-	return nil, nil
+	return CacheExportOpt{
+		Convert: func(ctx context.Context, res Result) (*Remote, error) {
+			if dr, ok := res.Sys().(*dummyResult); ok {
+				return &Remote{Descriptors: []ocispec.Descriptor{{
+					Annotations: map[string]string{"value": fmt.Sprintf("%d", dr.intValue)},
+				}}}, nil
+			}
+			return nil, nil
+		},
+		Mode: mode,
+	}
 }
 
 func newTestExporterTarget() *testExporterTarget {
@@ -3055,7 +3064,7 @@ type testExporterTarget struct {
 	records []*testExporterRecord
 }
 
-func (t *testExporterTarget) Add(dgst digest.Digest) ExporterRecord {
+func (t *testExporterTarget) Add(dgst digest.Digest) CacheExporterRecord {
 	r := &testExporterRecord{dgst: dgst}
 	t.records = append(t.records, r)
 	return r
@@ -3097,7 +3106,7 @@ func (r *testExporterRecord) AddResult(createdAt time.Time, result *Remote) {
 	r.results++
 }
 
-func (r *testExporterRecord) LinkFrom(src ExporterRecord, index int, selector string) {
+func (r *testExporterRecord) LinkFrom(src CacheExporterRecord, index int, selector string) {
 	if s, ok := src.(*testExporterRecord); ok {
 		if r.linkMap == nil {
 			r.linkMap = map[digest.Digest]struct{}{}
