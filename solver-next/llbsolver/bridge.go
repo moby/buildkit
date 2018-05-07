@@ -8,7 +8,7 @@ import (
 
 	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/cache"
-	"github.com/moby/buildkit/cache/cacheimport"
+	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/frontend"
 	solver "github.com/moby/buildkit/solver-next"
@@ -22,7 +22,7 @@ type llbBridge struct {
 	builder       solver.Builder
 	frontends     map[string]frontend.Frontend
 	resolveWorker func() (worker.Worker, error)
-	ci            *cacheimport.CacheImporter
+	ci            *remotecache.CacheImporter
 	cms           map[string]solver.CacheManager
 	cmsMu         sync.Mutex
 }
