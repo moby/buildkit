@@ -17,7 +17,7 @@ import (
 	"github.com/containerd/containerd/sys"
 	"github.com/docker/go-connections/sockets"
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
-	"github.com/moby/buildkit/cache/cacheimport"
+	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/control"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/frontend/dockerfile"
@@ -351,7 +351,7 @@ func newController(c *cli.Context, root string) (*control.Controller, error) {
 	frontends["dockerfile.v0"] = dockerfile.NewDockerfileFrontend()
 	frontends["gateway.v0"] = gateway.NewGatewayFrontend()
 
-	ce := cacheimport.NewCacheExporter(cacheimport.ExporterOpt{
+	ce := remotecache.NewCacheExporter(remotecache.ExporterOpt{
 		SessionManager: sessionManager,
 	})
 
@@ -361,7 +361,7 @@ func newController(c *cli.Context, root string) (*control.Controller, error) {
 	if err != nil {
 		return nil, err
 	}
-	ci := cacheimport.NewCacheImporter(cacheimport.ImportOpt{
+	ci := remotecache.NewCacheImporter(remotecache.ImportOpt{
 		Worker:         w,
 		SessionManager: sessionManager,
 	})
