@@ -83,6 +83,10 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 		addRecord = *e.override
 	}
 
+	if e.record == nil && len(e.k.Deps()) > 0 {
+		e.record = getBestResult(e.records)
+	}
+
 	var remote *Remote
 	if v := e.record; v != nil && len(e.k.Deps()) > 0 && addRecord {
 		cm := v.cacheManager
@@ -156,10 +160,6 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 		if _, err := addBacklinks(t, rec, cm, id, bkm); err != nil {
 			return nil, err
 		}
-	}
-
-	if e.record == nil && len(e.k.Deps()) > 0 {
-		e.record = getBestResult(e.records)
 	}
 
 	if v := e.record; v != nil && len(deps) == 0 {

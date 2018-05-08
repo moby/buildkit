@@ -2176,6 +2176,132 @@ func TestCacheExporting(t *testing.T) {
 	require.Equal(t, expTarget.records[2].links, 0)
 }
 
+func TestCacheExportingModeMin(t *testing.T) {
+	t.Parallel()
+	ctx := context.TODO()
+
+	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
+
+	l := NewJobList(SolverOpt{
+		ResolveOpFunc: testOpResolver,
+		DefaultCache:  cacheManager,
+	})
+	defer l.Close()
+
+	j0, err := l.NewJob("j0")
+	require.NoError(t, err)
+
+	defer func() {
+		if j0 != nil {
+			j0.Discard()
+		}
+	}()
+
+	g0 := Edge{
+		Vertex: vtxSum(1, vtxOpt{
+			inputs: []Edge{
+				{Vertex: vtxSum(2, vtxOpt{
+					inputs: []Edge{
+						{Vertex: vtxConst(3, vtxOpt{})},
+					},
+				})},
+				{Vertex: vtxConst(5, vtxOpt{})},
+			},
+		}),
+	}
+
+	res, err := j0.Build(ctx, g0)
+	require.NoError(t, err)
+	require.Equal(t, unwrapInt(res), 11)
+
+	require.NoError(t, j0.Discard())
+	j0 = nil
+
+	expTarget := newTestExporterTarget()
+
+	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testExporterOpts(false))
+	require.NoError(t, err)
+
+	expTarget.normalize()
+
+	require.Equal(t, len(expTarget.records), 4)
+	require.Equal(t, expTarget.records[0].results, 1)
+	require.Equal(t, expTarget.records[1].results, 0)
+	require.Equal(t, expTarget.records[2].results, 0)
+	require.Equal(t, expTarget.records[3].results, 0)
+	require.Equal(t, expTarget.records[0].links, 2)
+	require.Equal(t, expTarget.records[1].links, 1)
+	require.Equal(t, expTarget.records[2].links, 0)
+	require.Equal(t, expTarget.records[3].links, 0)
+
+	j1, err := l.NewJob("j1")
+	require.NoError(t, err)
+
+	defer func() {
+		if j1 != nil {
+			j1.Discard()
+		}
+	}()
+
+	res, err = j1.Build(ctx, g0)
+	require.NoError(t, err)
+	require.Equal(t, unwrapInt(res), 11)
+
+	require.NoError(t, j1.Discard())
+	j1 = nil
+
+	expTarget = newTestExporterTarget()
+
+	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testExporterOpts(false))
+	require.NoError(t, err)
+
+	expTarget.normalize()
+	// the order of the records isn't really significant
+	require.Equal(t, len(expTarget.records), 4)
+	require.Equal(t, expTarget.records[0].results, 1)
+	require.Equal(t, expTarget.records[1].results, 0)
+	require.Equal(t, expTarget.records[2].results, 0)
+	require.Equal(t, expTarget.records[3].results, 0)
+	require.Equal(t, expTarget.records[0].links, 2)
+	require.Equal(t, expTarget.records[1].links, 1)
+	require.Equal(t, expTarget.records[2].links, 0)
+	require.Equal(t, expTarget.records[3].links, 0)
+
+	// one more check with all mode
+	j2, err := l.NewJob("j2")
+	require.NoError(t, err)
+
+	defer func() {
+		if j2 != nil {
+			j2.Discard()
+		}
+	}()
+
+	res, err = j2.Build(ctx, g0)
+	require.NoError(t, err)
+	require.Equal(t, unwrapInt(res), 11)
+
+	require.NoError(t, j2.Discard())
+	j2 = nil
+
+	expTarget = newTestExporterTarget()
+
+	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
+	require.NoError(t, err)
+
+	expTarget.normalize()
+	// the order of the records isn't really significant
+	require.Equal(t, len(expTarget.records), 4)
+	require.Equal(t, expTarget.records[0].results, 1)
+	require.Equal(t, expTarget.records[1].results, 1)
+	require.Equal(t, expTarget.records[2].results, 0)
+	require.Equal(t, expTarget.records[3].results, 0)
+	require.Equal(t, expTarget.records[0].links, 2)
+	require.Equal(t, expTarget.records[1].links, 1)
+	require.Equal(t, expTarget.records[2].links, 0)
+	require.Equal(t, expTarget.records[3].links, 0)
+}
+
 func TestSlowCacheAvoidAccess(t *testing.T) {
 	t.Parallel()
 	ctx := context.TODO()
