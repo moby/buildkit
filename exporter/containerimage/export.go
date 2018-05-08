@@ -50,6 +50,7 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 		case keyPush:
 			if v == "" {
 				i.push = true
+				continue
 			}
 			b, err := strconv.ParseBool(v)
 			if err != nil {
@@ -59,6 +60,7 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 		case keyInsecure:
 			if v == "" {
 				i.insecure = true
+				continue
 			}
 			b, err := strconv.ParseBool(v)
 			if err != nil {
