@@ -80,15 +80,24 @@ func (s *cacheResultStorage) Load(ctx context.Context, res solver.CacheResult) (
 	return s.load(res.ID)
 }
 
-func (s *cacheResultStorage) load(id string) (solver.Result, error) {
+func (s *cacheResultStorage) getWorkerRef(id string) (worker.Worker, string, error) {
 	workerID, refID, err := parseWorkerRef(id)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	w, err := s.wc.Get(workerID)
 	if err != nil {
+		return nil, "", err
+	}
+	return w, refID, nil
+}
+
+func (s *cacheResultStorage) load(id string) (solver.Result, error) {
+	w, refID, err := s.getWorkerRef(id)
+	if err != nil {
 		return nil, err
 	}
+
 	ref, err := w.LoadRef(refID)
 	if err != nil {
 		return nil, err
@@ -97,7 +106,20 @@ func (s *cacheResultStorage) load(id string) (solver.Result, error) {
 }
 
 func (s *cacheResultStorage) LoadRemote(ctx context.Context, res solver.CacheResult) (*solver.Remote, error) {
-	return nil, nil
+	w, refID, err := s.getWorkerRef(res.ID)
+	if err != nil {
+		return nil, err
+	}
+	ref, err := w.LoadRef(refID)
+	if err != nil {
+		return nil, err
+	}
+	defer ref.Release(context.TODO())
+	remote, err := w.GetRemote(ctx, ref, false)
+	if err != nil {
+		return nil, nil // ignore error. loadRemote is best effort
+	}
+	return remote, nil
 }
 func (s *cacheResultStorage) Exists(id string) bool {
 	ref, err := s.load(id)
@@ -122,5 +144,5 @@ func workerRefConverter(ctx context.Context, res solver.Result) (*solver.Remote,
 		return nil, errors.Errorf("invalid result: %T", res.Sys())
 	}
 
-	return ref.Worker.GetRemote(ctx, ref.ImmutableRef)
+	return ref.Worker.GetRemote(ctx, ref.ImmutableRef, true)
 }

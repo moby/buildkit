@@ -256,8 +256,8 @@ func (w *Worker) Exporter(name string) (exporter.Exporter, error) {
 	return exp, nil
 }
 
-func (w *Worker) GetRemote(ctx context.Context, ref cache.ImmutableRef) (*solver.Remote, error) {
-	diffPairs, err := blobs.GetDiffPairs(ctx, w.ContentStore, w.Snapshotter, w.Differ, ref)
+func (w *Worker) GetRemote(ctx context.Context, ref cache.ImmutableRef, createIfNeeded bool) (*solver.Remote, error) {
+	diffPairs, err := blobs.GetDiffPairs(ctx, w.ContentStore, w.Snapshotter, w.Differ, ref, createIfNeeded)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed calculaing diff pairs for exported snapshot")
 	}
