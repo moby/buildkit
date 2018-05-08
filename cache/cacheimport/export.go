@@ -35,7 +35,7 @@ type CacheExporter struct {
 
 func (ce *CacheExporter) ExporterForTarget(target string) *RegistryCacheExporter {
 	cc := v1.NewCacheChains()
-	return &RegistryCacheExporter{target: target, ExporterTarget: cc, chains: cc, exporter: ce}
+	return &RegistryCacheExporter{target: target, CacheExporterTarget: cc, chains: cc, exporter: ce}
 }
 
 func (ce *CacheExporter) Finalize(ctx context.Context, cc *v1.CacheChains, target string) error {
@@ -110,7 +110,7 @@ func (ce *CacheExporter) Finalize(ctx context.Context, cc *v1.CacheChains, targe
 }
 
 type RegistryCacheExporter struct {
-	solver.ExporterTarget
+	solver.CacheExporterTarget
 	chains   *v1.CacheChains
 	target   string
 	exporter *CacheExporter
