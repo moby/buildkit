@@ -64,6 +64,10 @@ var buildCommand = cli.Command{
 			Usage: "Reference to export build cache to",
 		},
 		cli.StringSliceFlag{
+			Name:  "export-cache-opt",
+			Usage: "Define custom options for cache exporting",
+		},
+		cli.StringSliceFlag{
 			Name:  "import-cache",
 			Usage: "Reference to import build cache from",
 		},
@@ -145,6 +149,15 @@ func build(clicontext *cli.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "invalid frontend-opt")
 	}
+
+	exportCacheAttrs, err := attrMap(clicontext.StringSlice("export-cache-opt"))
+	if err != nil {
+		return errors.Wrap(err, "invalid export-cache-opt")
+	}
+	if len(exportCacheAttrs) == 0 {
+		exportCacheAttrs = map[string]string{"mode": "min"}
+	}
+	solveOpt.ExportCacheAttrs = exportCacheAttrs
 
 	solveOpt.LocalDirs, err = attrMap(clicontext.StringSlice("local"))
 	if err != nil {
