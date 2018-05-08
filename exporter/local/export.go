@@ -57,32 +57,35 @@ func (e *localExporterInstance) Name() string {
 	return "exporting to client"
 }
 
-func (e *localExporterInstance) Export(ctx context.Context, ref cache.ImmutableRef, opt map[string][]byte) error {
+func (e *localExporterInstance) Export(ctx context.Context, ref cache.ImmutableRef, opt map[string][]byte) (map[string]string, error) {
 	var src string
 	var err error
 	if ref == nil {
 		src, err = ioutil.TempDir("", "buildkit")
 		if err != nil {
-			return err
+			return nil, err
 		}
 		defer os.RemoveAll(src)
 	} else {
 		mount, err := ref.Mount(ctx, true)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		lm := snapshot.LocalMounter(mount)
 
 		src, err = lm.Mount()
 		if err != nil {
-			return err
+			return nil, err
 		}
 		defer lm.Unmount()
 	}
 
 	progress := newProgressHandler(ctx, "copying files")
-	return filesync.CopyToCaller(ctx, src, e.caller, progress)
+	if err := filesync.CopyToCaller(ctx, src, e.caller, progress); err != nil {
+		return nil, err
+	}
+	return nil, nil
 }
 
 func newProgressHandler(ctx context.Context, id string) func(int, bool) {

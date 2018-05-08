@@ -39,3 +39,7 @@ type SolveStatus struct {
 	Statuses []*VertexStatus
 	Logs     []*VertexLog
 }
+
+type SolveResponse struct {
+	ExporterResponse map[string]string
+}

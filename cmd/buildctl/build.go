@@ -164,7 +164,14 @@ func build(clicontext *cli.Context) error {
 	}
 
 	eg.Go(func() error {
-		return c.Solve(ctx, def, solveOpt, ch)
+		resp, err := c.Solve(ctx, def, solveOpt, ch)
+		if err != nil {
+			return err
+		}
+		for k, v := range resp.ExporterResponse {
+			logrus.Debugf("solve response: %s=%s", k, v)
+		}
+		return err
 	})
 
 	eg.Go(func() error {

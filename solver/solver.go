@@ -80,7 +80,7 @@ func (s *Solver) llbBridge(j *job) *llbBridge {
 	return &llbBridge{job: j, Solver: s, Worker: worker}
 }
 
-func (s *Solver) Solve(ctx context.Context, id string, req SolveRequest) error {
+func (s *Solver) Solve(ctx context.Context, id string, req SolveRequest) (*client.SolveResponse, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -90,13 +90,13 @@ func (s *Solver) Solve(ctx context.Context, id string, req SolveRequest) error {
 	// TODO: multiworker. This should take union cache of all workers
 	defaultWorker, err := s.workerController.GetDefault()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	mainCache := defaultWorker.InstructionCache()
 	if importRef := req.ImportCacheRef; importRef != "" {
 		cache, err := s.ci.Import(ctx, importRef)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		mainCache = instructioncache.Union(mainCache, cache)
 	}
@@ -104,13 +104,13 @@ func (s *Solver) Solve(ctx context.Context, id string, req SolveRequest) error {
 	// register a build job. vertex needs to be loaded to a job to run
 	ctx, j, err := s.jobs.new(ctx, id, pr, mainCache)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	ref, exporterOpt, err := s.solve(ctx, j, req)
 	defer j.discard()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	defer func() {
@@ -124,18 +124,20 @@ func (s *Solver) Solve(ctx context.Context, id string, req SolveRequest) error {
 		var ok bool
 		immutable, ok = ToImmutableRef(ref)
 		if !ok {
-			return errors.Errorf("invalid reference for exporting: %T", ref)
+			return nil, errors.Errorf("invalid reference for exporting: %T", ref)
 		}
 		if err := immutable.Finalize(ctx); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
+	var exporterResponse map[string]string
 	if exp := req.Exporter; exp != nil {
 		if err := inVertexContext(ctx, exp.Name(), func(ctx context.Context) error {
-			return exp.Export(ctx, immutable, exporterOpt)
-		}); err != nil {
+			exporterResponse, err = exp.Export(ctx, immutable, exporterOpt)
 			return err
+		}); err != nil {
+			return nil, err
 		}
 	}
 
@@ -154,11 +156,13 @@ func (s *Solver) Solve(ctx context.Context, id string, req SolveRequest) error {
 			// TODO: multiworker
 			return s.ce.Export(ctx, records, exportName)
 		}); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
-	return err
+	return &client.SolveResponse{
+		ExporterResponse: exporterResponse,
+	}, nil
 }
 
 func (s *Solver) Status(ctx context.Context, id string, statusChan chan *client.SolveStatus) error {
