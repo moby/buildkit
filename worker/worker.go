@@ -26,7 +26,7 @@ type Worker interface {
 	DiskUsage(ctx context.Context, opt client.DiskUsageInfo) ([]*client.UsageInfo, error)
 	Exporter(name string) (exporter.Exporter, error)
 	Prune(ctx context.Context, ch chan client.UsageInfo) error
-	GetRemote(ctx context.Context, ref cache.ImmutableRef) (*solver.Remote, error)
+	GetRemote(ctx context.Context, ref cache.ImmutableRef, createIfNeeded bool) (*solver.Remote, error)
 	FromRemote(ctx context.Context, remote *solver.Remote) (cache.ImmutableRef, error)
 }
 

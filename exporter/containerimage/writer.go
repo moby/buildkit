@@ -43,7 +43,7 @@ type ImageWriter struct {
 
 func (ic *ImageWriter) Commit(ctx context.Context, ref cache.ImmutableRef, config []byte) (*ocispec.Descriptor, error) {
 	layersDone := oneOffProgress(ctx, "exporting layers")
-	diffPairs, err := blobs.GetDiffPairs(ctx, ic.opt.ContentStore, ic.opt.Snapshotter, ic.opt.Differ, ref)
+	diffPairs, err := blobs.GetDiffPairs(ctx, ic.opt.ContentStore, ic.opt.Snapshotter, ic.opt.Differ, ref, true)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed calculaing diff pairs for exported snapshot")
 	}
