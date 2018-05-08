@@ -2,6 +2,7 @@ package containerimage
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/containerd/containerd/errdefs"
@@ -10,6 +11,7 @@ import (
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/util/push"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -46,9 +48,23 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 		case keyImageName:
 			i.targetName = v
 		case keyPush:
-			i.push = true
+			if v == "" {
+				i.push = true
+			}
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
+			}
+			i.push = b
 		case keyInsecure:
-			i.insecure = true
+			if v == "" {
+				i.insecure = true
+			}
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
+			}
+			i.insecure = b
 		case exporterImageConfig:
 			i.config = []byte(v)
 		default:
