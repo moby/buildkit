@@ -18,7 +18,7 @@ type CacheChains struct {
 	visited map[interface{}]struct{}
 }
 
-func (c *CacheChains) Add(dgst digest.Digest) solver.ExporterRecord {
+func (c *CacheChains) Add(dgst digest.Digest) solver.CacheExporterRecord {
 	it := &item{c: c, dgst: dgst}
 	c.items = append(c.items, it)
 	return it
@@ -108,7 +108,7 @@ func (c *item) AddResult(createdAt time.Time, result *solver.Remote) {
 	c.result = result
 }
 
-func (c *item) LinkFrom(rec solver.ExporterRecord, index int, selector string) {
+func (c *item) LinkFrom(rec solver.CacheExporterRecord, index int, selector string) {
 	src, ok := rec.(*item)
 	if !ok {
 		return
@@ -124,4 +124,4 @@ func (c *item) LinkFrom(rec solver.ExporterRecord, index int, selector string) {
 	c.links[index][link{src: src, selector: selector}] = struct{}{}
 }
 
-var _ solver.ExporterTarget = &CacheChains{}
+var _ solver.CacheExporterTarget = &CacheChains{}
