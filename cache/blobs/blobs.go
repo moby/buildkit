@@ -25,7 +25,9 @@ type DiffPair struct {
 	Blobsum digest.Digest
 }
 
-func GetDiffPairs(ctx context.Context, contentStore content.Store, snapshotter snapshot.Snapshotter, differ diff.Comparer, ref cache.ImmutableRef) ([]DiffPair, error) {
+var ErrNoBlobs = errors.Errorf("no blobs for snapshot")
+
+func GetDiffPairs(ctx context.Context, contentStore content.Store, snapshotter snapshot.Snapshotter, differ diff.Comparer, ref cache.ImmutableRef, createBlobs bool) ([]DiffPair, error) {
 	if ref == nil {
 		return nil, nil
 	}
@@ -37,7 +39,7 @@ func GetDiffPairs(ctx context.Context, contentStore content.Store, snapshotter s
 	if parent != nil {
 		defer parent.Release(context.TODO())
 		eg.Go(func() error {
-			dp, err := GetDiffPairs(ctx, contentStore, snapshotter, differ, parent)
+			dp, err := GetDiffPairs(ctx, contentStore, snapshotter, differ, parent, createBlobs)
 			if err != nil {
 				return err
 			}
@@ -53,6 +55,8 @@ func GetDiffPairs(ctx context.Context, contentStore content.Store, snapshotter s
 			}
 			if blob != "" {
 				return DiffPair{DiffID: diffID, Blobsum: blob}, nil
+			} else if !createBlobs {
+				return nil, errors.WithStack(ErrNoBlobs)
 			}
 			// reference needs to be committed
 			parent := ref.Parent()
