@@ -39,6 +39,9 @@ type ConvertOpt struct {
 	SessionID    string
 	BuildContext *llb.State
 	Excludes     []string
+	// IgnoreCache contains names of the stages that should not use build cache.
+	// Empty slice means ignore cache for all stages. Nil doesn't disable cache.
+	IgnoreCache []string
 }
 
 func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State, *Image, error) {
@@ -89,6 +92,17 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		allDispatchStates = append(allDispatchStates, ds)
 		if st.Name != "" {
 			dispatchStatesByName[strings.ToLower(st.Name)] = ds
+		}
+		if opt.IgnoreCache != nil {
+			if len(opt.IgnoreCache) == 0 {
+				ds.ignoreCache = true
+			} else if st.Name != "" {
+				for _, n := range opt.IgnoreCache {
+					if strings.EqualFold(n, st.Name) {
+						ds.ignoreCache = true
+					}
+				}
+			}
 		}
 	}
 
@@ -352,14 +366,15 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 }
 
 type dispatchState struct {
-	state     llb.State
-	image     Image
-	stage     instructions.Stage
-	base      *dispatchState
-	deps      map[*dispatchState]struct{}
-	buildArgs []instructions.ArgCommand
-	commands  []command
-	ctxPaths  map[string]struct{}
+	state       llb.State
+	image       Image
+	stage       instructions.Stage
+	base        *dispatchState
+	deps        map[*dispatchState]struct{}
+	buildArgs   []instructions.ArgCommand
+	commands    []command
+	ctxPaths    map[string]struct{}
+	ignoreCache bool
 }
 
 type command struct {
@@ -416,6 +431,9 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand) error {
 		opt = append(opt, llb.AddEnv(arg.Key, getArgValue(arg)))
 	}
 	opt = append(opt, dfCmd(c))
+	if d.ignoreCache {
+		opt = append(opt, llb.IgnoreCache)
+	}
 	d.state = d.state.Run(opt...).Root()
 	return commitToHistory(&d.image, "RUN "+runCommandString(args, d.buildArgs), true, &d.state)
 }
