@@ -24,20 +24,19 @@ type Builder interface {
 	Call(ctx context.Context, name string, fn func(ctx context.Context) error) error
 }
 
-// JobList provides a shared graph of all the vertexes currently being
+// Solver provides a shared graph of all the vertexes currently being
 // processed. Every vertex that is being solved needs to be loaded into job
 // first. Vertex operations are invoked and progress tracking happends through
 // jobs.
-// TODO: s/JobList/Solver
-type JobList struct {
+type Solver struct {
 	mu      sync.RWMutex
 	jobs    map[string]*Job
 	actives map[digest.Digest]*state
 	opts    SolverOpt
 
 	updateCond *sync.Cond
-	s          *Scheduler
-	index      *EdgeIndex
+	s          *scheduler
+	index      *edgeIndex
 }
 
 type state struct {
@@ -55,11 +54,11 @@ type state struct {
 	op    *sharedOp
 	edges map[Index]*edge
 	opts  SolverOpt
-	index *EdgeIndex
+	index *edgeIndex
 
 	cache     map[string]CacheManager
 	mainCache CacheManager
-	jobList   *JobList
+	solver    *Solver
 }
 
 func (s *state) getSessionID() string {
@@ -78,9 +77,9 @@ func (s *state) getSessionID() string {
 	s.mu.Unlock()
 
 	for p := range parents {
-		s.jobList.mu.Lock()
-		pst, ok := s.jobList.actives[p]
-		s.jobList.mu.Unlock()
+		s.solver.mu.Lock()
+		pst, ok := s.solver.actives[p]
+		s.solver.mu.Unlock()
 		if ok {
 			if sessionID := pst.getSessionID(); sessionID != "" {
 				return sessionID
@@ -157,7 +156,7 @@ type subBuilder struct {
 }
 
 func (sb *subBuilder) Build(ctx context.Context, e Edge) (CachedResult, error) {
-	res, err := sb.jobList.subBuild(ctx, e, sb.vtx)
+	res, err := sb.solver.subBuild(ctx, e, sb.vtx)
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +172,7 @@ func (sb *subBuilder) Call(ctx context.Context, name string, fn func(ctx context
 }
 
 type Job struct {
-	list *JobList
+	list *Solver
 	pr   *progress.MultiReader
 	pw   progress.Writer
 
@@ -186,22 +185,22 @@ type SolverOpt struct {
 	DefaultCache  CacheManager
 }
 
-func NewJobList(opts SolverOpt) *JobList {
+func NewSolver(opts SolverOpt) *Solver {
 	if opts.DefaultCache == nil {
 		opts.DefaultCache = NewInMemoryCacheManager()
 	}
-	jl := &JobList{
+	jl := &Solver{
 		jobs:    make(map[string]*Job),
 		actives: make(map[digest.Digest]*state),
 		opts:    opts,
-		index:   NewEdgeIndex(),
+		index:   newEdgeIndex(),
 	}
-	jl.s = NewScheduler(jl)
+	jl.s = newScheduler(jl)
 	jl.updateCond = sync.NewCond(jl.mu.RLocker())
 	return jl
 }
 
-func (jl *JobList) SetEdge(e Edge, newEdge *edge) {
+func (jl *Solver) setEdge(e Edge, newEdge *edge) {
 	jl.mu.RLock()
 	defer jl.mu.RUnlock()
 
@@ -213,7 +212,7 @@ func (jl *JobList) SetEdge(e Edge, newEdge *edge) {
 	st.setEdge(e.Index, newEdge)
 }
 
-func (jl *JobList) GetEdge(e Edge) *edge {
+func (jl *Solver) getEdge(e Edge) *edge {
 	jl.mu.RLock()
 	defer jl.mu.RUnlock()
 
@@ -224,7 +223,7 @@ func (jl *JobList) GetEdge(e Edge) *edge {
 	return st.getEdge(e.Index)
 }
 
-func (jl *JobList) subBuild(ctx context.Context, e Edge, parent Vertex) (CachedResult, error) {
+func (jl *Solver) subBuild(ctx context.Context, e Edge, parent Vertex) (CachedResult, error) {
 	v, err := jl.load(e.Vertex, parent, nil)
 	if err != nil {
 		return nil, err
@@ -233,11 +232,11 @@ func (jl *JobList) subBuild(ctx context.Context, e Edge, parent Vertex) (CachedR
 	return jl.s.build(ctx, e)
 }
 
-func (jl *JobList) Close() {
+func (jl *Solver) Close() {
 	jl.s.Stop()
 }
 
-func (jl *JobList) load(v, parent Vertex, j *Job) (Vertex, error) {
+func (jl *Solver) load(v, parent Vertex, j *Job) (Vertex, error) {
 	jl.mu.Lock()
 	defer jl.mu.Unlock()
 
@@ -246,7 +245,7 @@ func (jl *JobList) load(v, parent Vertex, j *Job) (Vertex, error) {
 	return jl.loadUnlocked(v, parent, j, cache)
 }
 
-func (jl *JobList) loadUnlocked(v, parent Vertex, j *Job, cache map[Vertex]Vertex) (Vertex, error) {
+func (jl *Solver) loadUnlocked(v, parent Vertex, j *Job, cache map[Vertex]Vertex) (Vertex, error) {
 	if v, ok := cache[v]; ok {
 		return v, nil
 	}
@@ -299,7 +298,7 @@ func (jl *JobList) loadUnlocked(v, parent Vertex, j *Job, cache map[Vertex]Verte
 			index:        jl.index,
 			mainCache:    jl.opts.DefaultCache,
 			cache:        map[string]CacheManager{},
-			jobList:      jl,
+			solver:       jl,
 		}
 		jl.actives[dgst] = st
 	}
@@ -336,7 +335,7 @@ func (jl *JobList) loadUnlocked(v, parent Vertex, j *Job, cache map[Vertex]Verte
 	return v, nil
 }
 
-func (jl *JobList) connectProgressFromState(target, src *state) {
+func (jl *Solver) connectProgressFromState(target, src *state) {
 	for j := range src.jobs {
 		if _, ok := target.allPw[j.pw]; !ok {
 			target.mpw.Add(j.pw)
@@ -349,7 +348,7 @@ func (jl *JobList) connectProgressFromState(target, src *state) {
 	}
 }
 
-func (jl *JobList) NewJob(id string) (*Job, error) {
+func (jl *Solver) NewJob(id string) (*Job, error) {
 	jl.mu.Lock()
 	defer jl.mu.Unlock()
 
@@ -373,7 +372,7 @@ func (jl *JobList) NewJob(id string) (*Job, error) {
 	return j, nil
 }
 
-func (jl *JobList) Get(id string) (*Job, error) {
+func (jl *Solver) Get(id string) (*Job, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
@@ -399,8 +398,8 @@ func (jl *JobList) Get(id string) (*Job, error) {
 	}
 }
 
-// called with joblist lock
-func (jl *JobList) deleteIfUnreferenced(k digest.Digest, st *state) {
+// called with solver lock
+func (jl *Solver) deleteIfUnreferenced(k digest.Digest, st *state) {
 	if len(st.jobs) == 0 && len(st.parents) == 0 {
 		for chKey := range st.childVtx {
 			chState := jl.actives[chKey]

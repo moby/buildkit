@@ -6,8 +6,8 @@ import (
 	"github.com/moby/buildkit/identity"
 )
 
-// EdgeIndex is a synchronous map for detecting edge collisions.
-type EdgeIndex struct {
+// edgeIndex is a synchronous map for detecting edge collisions.
+type edgeIndex struct {
 	mu sync.Mutex
 
 	items    map[string]*indexItem
@@ -20,14 +20,14 @@ type indexItem struct {
 	deps  map[string]struct{}
 }
 
-func NewEdgeIndex() *EdgeIndex {
-	return &EdgeIndex{
+func newEdgeIndex() *edgeIndex {
+	return &edgeIndex{
 		items:    map[string]*indexItem{},
 		backRefs: map[*edge]map[string]struct{}{},
 	}
 }
 
-func (ei *EdgeIndex) Release(e *edge) {
+func (ei *edgeIndex) Release(e *edge) {
 	ei.mu.Lock()
 	defer ei.mu.Unlock()
 
@@ -37,7 +37,7 @@ func (ei *EdgeIndex) Release(e *edge) {
 	delete(ei.backRefs, e)
 }
 
-func (ei *EdgeIndex) releaseEdge(id string, e *edge) {
+func (ei *edgeIndex) releaseEdge(id string, e *edge) {
 	item, ok := ei.items[id]
 	if !ok {
 		return
@@ -53,7 +53,7 @@ func (ei *EdgeIndex) releaseEdge(id string, e *edge) {
 	}
 }
 
-func (ei *EdgeIndex) releaseLink(id, target string) {
+func (ei *edgeIndex) releaseLink(id, target string) {
 	item, ok := ei.items[id]
 	if !ok {
 		return
@@ -78,7 +78,7 @@ func (ei *EdgeIndex) releaseLink(id, target string) {
 	}
 }
 
-func (ei *EdgeIndex) LoadOrStore(k *CacheKey, e *edge) *edge {
+func (ei *edgeIndex) LoadOrStore(k *CacheKey, e *edge) *edge {
 	ei.mu.Lock()
 	defer ei.mu.Unlock()
 
@@ -121,7 +121,7 @@ func (ei *EdgeIndex) LoadOrStore(k *CacheKey, e *edge) *edge {
 }
 
 // enforceLinked adds links from current ID to all dep keys
-func (er *EdgeIndex) enforceLinked(id string, k *CacheKey) {
+func (er *edgeIndex) enforceLinked(id string, k *CacheKey) {
 	main, ok := er.items[id]
 	if !ok {
 		main = &indexItem{
@@ -153,7 +153,7 @@ func (er *EdgeIndex) enforceLinked(id string, k *CacheKey) {
 	}
 }
 
-func (ei *EdgeIndex) enforceIndexID(k *CacheKey) {
+func (ei *edgeIndex) enforceIndexID(k *CacheKey) {
 	if len(k.indexIDs) > 0 {
 		return
 	}
@@ -171,7 +171,7 @@ func (ei *EdgeIndex) enforceIndexID(k *CacheKey) {
 	}
 }
 
-func (ei *EdgeIndex) getAllMatches(k *CacheKey) []string {
+func (ei *edgeIndex) getAllMatches(k *CacheKey) []string {
 	deps := k.Deps()
 
 	if len(deps) == 0 {

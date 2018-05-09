@@ -23,7 +23,7 @@ func (t edgeStatusType) String() string {
 	return []string{"initial", "cache-fast", "cache-slow", "complete"}[t]
 }
 
-func newEdge(ed Edge, op activeOp, index *EdgeIndex) *edge {
+func newEdge(ed Edge, op activeOp, index *edgeIndex) *edge {
 	e := &edge{
 		edge:         ed,
 		op:           op,
@@ -61,7 +61,7 @@ type edge struct {
 
 	releaserCount int
 	keysDidChange bool
-	index         *EdgeIndex
+	index         *edgeIndex
 
 	secondaryExporters []expDep
 }

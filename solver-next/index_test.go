@@ -6,13 +6,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func checkEmpty(t *testing.T, ei *EdgeIndex) {
+func checkEmpty(t *testing.T, ei *edgeIndex) {
 	require.Equal(t, len(ei.items), 0)
 	require.Equal(t, len(ei.backRefs), 0)
 }
 
 func TestIndexSimple(t *testing.T) {
-	idx := NewEdgeIndex()
+	idx := newEdgeIndex()
 
 	e1 := &edge{}
 	e2 := &edge{}
@@ -41,7 +41,7 @@ func TestIndexSimple(t *testing.T) {
 }
 
 func TestIndexMultiLevelSimple(t *testing.T) {
-	idx := NewEdgeIndex()
+	idx := newEdgeIndex()
 
 	e1 := &edge{}
 	e2 := &edge{}
@@ -133,7 +133,7 @@ func TestIndexMultiLevelSimple(t *testing.T) {
 }
 
 func TestIndexThreeLevels(t *testing.T) {
-	idx := NewEdgeIndex()
+	idx := newEdgeIndex()
 
 	e1 := &edge{}
 	e2 := &edge{}
