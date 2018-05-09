@@ -829,6 +829,10 @@ func (e *edge) execOp(ctx context.Context) (interface{}, error) {
 			return nil, err
 		}
 
+		if exp, ok := ck.Exporter.(*exporter); ok {
+			exp.edge = e
+		}
+
 		exps := make([]Exporter, 0, len(subExporters))
 		for _, exp := range subExporters {
 			exps = append(exps, exp.Exporter)
