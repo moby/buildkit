@@ -30,6 +30,11 @@ func NewScheduler(ef EdgeFactory) *Scheduler {
 	return s
 }
 
+type dispatcher struct {
+	next *dispatcher
+	e    *edge
+}
+
 type Scheduler struct {
 	cond *cond.StatefulCond
 	mu   sync.Mutex
@@ -38,6 +43,8 @@ type Scheduler struct {
 	ef EdgeFactory
 
 	waitq       map[*edge]struct{}
+	next        *dispatcher
+	last        *dispatcher
 	stopped     chan struct{}
 	stoppedOnce sync.Once
 	closed      chan struct{}
@@ -74,17 +81,20 @@ func (s *Scheduler) loop() {
 		default:
 		}
 		s.muQ.Lock()
-		q := s.waitq
-		s.waitq = map[*edge]struct{}{}
+		l := s.next
+		if l != nil {
+			if l == s.last {
+				s.last = nil
+			}
+			s.next = l.next
+			delete(s.waitq, l.e)
+		}
 		s.muQ.Unlock()
-		if len(q) == 0 {
+		if l == nil {
 			s.cond.Wait()
 			continue
 		}
-
-		for e := range q {
-			s.dispatch(e)
-		}
+		s.dispatch(l.e)
 	}
 }
 
@@ -171,6 +181,13 @@ func (s *Scheduler) dispatch(e *edge) {
 func (s *Scheduler) signal(e *edge) {
 	s.muQ.Lock()
 	if _, ok := s.waitq[e]; !ok {
+		d := &dispatcher{e: e}
+		if s.last == nil {
+			s.next = d
+		} else {
+			s.last.next = d
+		}
+		s.last = d
 		s.waitq[e] = struct{}{}
 		s.cond.Signal()
 	}
