@@ -53,17 +53,26 @@ type CachedResult interface {
 	CacheKey() ExportableCacheKey
 }
 
+// CacheExportMode is the type for setting cache exporting modes
 type CacheExportMode int
 
 const (
+	// CacheExportModeMin exports a topmost allowed vertex and its dependencies
+	// that already have transferable layers
 	CacheExportModeMin CacheExportMode = iota
+	// CacheExportModeMax exports all possible non-root vertexes
 	CacheExportModeMax
+	// CacheExportModeRemoteOnly only exports vertexes that already have
+	// transferable layers
 	CacheExportModeRemoteOnly
 )
 
+// CacheExportOpt defines options for exporting build cache
 type CacheExportOpt struct {
+	// Convert can convert a build result to transferable object
 	Convert func(context.Context, Result) (*Remote, error)
-	Mode    CacheExportMode
+	// Mode defines a cache export algorithm
+	Mode CacheExportMode
 }
 
 // CacheExporter can export the artifacts of the build chain
