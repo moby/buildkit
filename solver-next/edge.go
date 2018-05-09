@@ -353,7 +353,7 @@ func withSelector(keys []ExportableCacheKey, selector digest.Digest) []CacheKeyW
 func (e *edge) makeExportable(k *CacheKey, records []*CacheRecord) ExportableCacheKey {
 	return ExportableCacheKey{
 		CacheKey: k,
-		Exporter: &exporter{k: k, records: records},
+		Exporter: &exporter{k: k, records: records, override: e.edge.Vertex.Options().ExportCache},
 	}
 }
 
@@ -821,7 +821,7 @@ func (e *edge) execOp(ctx context.Context) (interface{}, error) {
 		}
 	}
 
-	var exporters []Exporter
+	var exporters []CacheExporter
 
 	for _, cacheKey := range cacheKeys {
 		ck, err := e.op.Cache().Save(cacheKey, res)
@@ -833,7 +833,7 @@ func (e *edge) execOp(ctx context.Context) (interface{}, error) {
 			exp.edge = e
 		}
 
-		exps := make([]Exporter, 0, len(subExporters))
+		exps := make([]CacheExporter, 0, len(subExporters))
 		for _, exp := range subExporters {
 			exps = append(exps, exp.Exporter)
 		}

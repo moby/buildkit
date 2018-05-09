@@ -36,6 +36,7 @@ type VertexOptions struct {
 	IgnoreCache bool
 	CacheSource CacheManager
 	Description map[string]string // text values with no special meaning for solver
+	ExportCache *bool
 	// WorkerConstraint
 }
 
@@ -52,22 +53,44 @@ type CachedResult interface {
 	CacheKey() ExportableCacheKey
 }
 
-// Exporter can export the artifacts of the build chain
-type Exporter interface {
-	ExportTo(ctx context.Context, t ExporterTarget, converter func(context.Context, Result) (*Remote, error)) ([]ExporterRecord, error)
+// CacheExportMode is the type for setting cache exporting modes
+type CacheExportMode int
+
+const (
+	// CacheExportModeMin exports a topmost allowed vertex and its dependencies
+	// that already have transferable layers
+	CacheExportModeMin CacheExportMode = iota
+	// CacheExportModeMax exports all possible non-root vertexes
+	CacheExportModeMax
+	// CacheExportModeRemoteOnly only exports vertexes that already have
+	// transferable layers
+	CacheExportModeRemoteOnly
+)
+
+// CacheExportOpt defines options for exporting build cache
+type CacheExportOpt struct {
+	// Convert can convert a build result to transferable object
+	Convert func(context.Context, Result) (*Remote, error)
+	// Mode defines a cache export algorithm
+	Mode CacheExportMode
 }
 
-// ExporterTarget defines object capable of receiving exports
-type ExporterTarget interface {
-	Add(dgst digest.Digest) ExporterRecord
+// CacheExporter can export the artifacts of the build chain
+type CacheExporter interface {
+	ExportTo(ctx context.Context, t CacheExporterTarget, opt CacheExportOpt) ([]CacheExporterRecord, error)
+}
+
+// CacheExporterTarget defines object capable of receiving exports
+type CacheExporterTarget interface {
+	Add(dgst digest.Digest) CacheExporterRecord
 	Visit(interface{})
 	Visited(interface{}) bool
 }
 
-// ExporterRecord is a single object being exported
-type ExporterRecord interface {
+// CacheExporterRecord is a single object being exported
+type CacheExporterRecord interface {
 	AddResult(createdAt time.Time, result *Remote)
-	LinkFrom(src ExporterRecord, index int, selector string)
+	LinkFrom(src CacheExporterRecord, index int, selector string)
 }
 
 // Remote is a descriptor or a list of stacked descriptors that can be pulled
@@ -115,7 +138,7 @@ type CacheMap struct {
 // a chain of cacherecords pointing to that key
 type ExportableCacheKey struct {
 	*CacheKey
-	Exporter
+	Exporter CacheExporter
 }
 
 // CacheRecord is an identifier for loading in cache
