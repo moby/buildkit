@@ -343,7 +343,7 @@ func (p *puller) Snapshot(ctx context.Context) (cache.ImmutableRef, error) {
 	}
 	unpackProgressDone(nil)
 
-	return p.is.CacheAccessor.Get(ctx, chainid, cache.WithDescription(fmt.Sprintf("pulled from %s", p.ref)))
+	return p.is.CacheAccessor.GetFromSnapshotter(ctx, chainid, cache.WithDescription(fmt.Sprintf("pulled from %s", p.ref)))
 }
 
 func (is *imageSource) unpack(ctx context.Context, desc ocispec.Descriptor, s snapshots.Snapshotter) (string, error) {
