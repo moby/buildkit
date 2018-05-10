@@ -31,6 +31,7 @@ type SolveOpt struct {
 	Frontend          string
 	FrontendAttrs     map[string]string
 	ExportCache       string
+	ExportCacheAttrs  map[string]string
 	ImportCache       []string
 	Session           []session.Attachable
 }
@@ -132,8 +133,9 @@ func (c *Client) Solve(ctx context.Context, def *llb.Definition, opt SolveOpt, s
 			Frontend:      opt.Frontend,
 			FrontendAttrs: opt.FrontendAttrs,
 			Cache: controlapi.CacheOptions{
-				ExportRef:  opt.ExportCache,
-				ImportRefs: opt.ImportCache,
+				ExportRef:   opt.ExportCache,
+				ImportRefs:  opt.ImportCache,
+				ExportAttrs: opt.ExportCacheAttrs,
 			},
 		})
 		if err != nil {

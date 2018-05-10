@@ -1,4 +1,4 @@
-package cacheimport
+package remotecache
 
 import (
 	"bytes"
@@ -10,7 +10,7 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/images"
 	"github.com/docker/distribution/manifest"
-	v1 "github.com/moby/buildkit/cache/cacheimport/v1"
+	v1 "github.com/moby/buildkit/cache/remotecache/v1"
 	"github.com/moby/buildkit/session"
 	solver "github.com/moby/buildkit/solver-next"
 	"github.com/moby/buildkit/util/contentutil"
@@ -35,7 +35,7 @@ type CacheExporter struct {
 
 func (ce *CacheExporter) ExporterForTarget(target string) *RegistryCacheExporter {
 	cc := v1.NewCacheChains()
-	return &RegistryCacheExporter{target: target, ExporterTarget: cc, chains: cc, exporter: ce}
+	return &RegistryCacheExporter{target: target, CacheExporterTarget: cc, chains: cc, exporter: ce}
 }
 
 func (ce *CacheExporter) Finalize(ctx context.Context, cc *v1.CacheChains, target string) error {
@@ -110,7 +110,7 @@ func (ce *CacheExporter) Finalize(ctx context.Context, cc *v1.CacheChains, targe
 }
 
 type RegistryCacheExporter struct {
-	solver.ExporterTarget
+	solver.CacheExporterTarget
 	chains   *v1.CacheChains
 	target   string
 	exporter *CacheExporter

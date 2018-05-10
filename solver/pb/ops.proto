@@ -93,7 +93,12 @@ message OpMetadata {
 	// Description can be used for keeping any text fields that builder doesn't parse
 	map<string, string> description = 2;  
 	WorkerConstraint worker_constraint = 3;
+	ExportCache export_cache = 4;
 }
+
+message ExportCache {
+	bool Value = 1;
+};
 
 // WorkerConstraint is experimental and likely to be changed.
 message WorkerConstraint {

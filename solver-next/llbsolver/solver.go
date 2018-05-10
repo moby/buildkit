@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/moby/buildkit/cache"
-	"github.com/moby/buildkit/cache/cacheimport"
+	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/frontend"
@@ -17,8 +17,9 @@ import (
 )
 
 type ExporterRequest struct {
-	Exporter      exporter.ExporterInstance
-	CacheExporter *cacheimport.RegistryCacheExporter
+	Exporter        exporter.ExporterInstance
+	CacheExporter   *remotecache.RegistryCacheExporter
+	CacheExportMode solver.CacheExportMode
 }
 
 // ResolveWorkerFunc returns default worker for the temporary default non-distributed use cases
@@ -28,10 +29,10 @@ type Solver struct {
 	solver        *solver.JobList // TODO: solver.Solver
 	resolveWorker ResolveWorkerFunc
 	frontends     map[string]frontend.Frontend
-	ci            *cacheimport.CacheImporter
+	ci            *remotecache.CacheImporter
 }
 
-func New(wc *worker.Controller, f map[string]frontend.Frontend, cacheStore solver.CacheKeyStorage, ci *cacheimport.CacheImporter) *Solver {
+func New(wc *worker.Controller, f map[string]frontend.Frontend, cacheStore solver.CacheKeyStorage, ci *remotecache.CacheImporter) *Solver {
 	s := &Solver{
 		resolveWorker: defaultResolver(wc),
 		frontends:     f,
@@ -109,15 +110,18 @@ func (s *Solver) Solve(ctx context.Context, id string, req frontend.SolveRequest
 		}
 	}
 
-	if exp := exp.CacheExporter; exp != nil {
+	if e := exp.CacheExporter; e != nil {
 		if err := j.Call(ctx, "exporting cache", func(ctx context.Context) error {
 			prepareDone := oneOffProgress(ctx, "preparing build cache for export")
-			if _, err := res.CacheKey().ExportTo(ctx, exp, workerRefConverter); err != nil {
+			if _, err := res.CacheKey().Exporter.ExportTo(ctx, e, solver.CacheExportOpt{
+				Convert: workerRefConverter,
+				Mode:    exp.CacheExportMode,
+			}); err != nil {
 				return prepareDone(err)
 			}
 			prepareDone(nil)
 
-			return exp.Finalize(ctx)
+			return e.Finalize(ctx)
 		}); err != nil {
 			return nil, err
 		}

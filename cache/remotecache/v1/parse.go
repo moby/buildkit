@@ -9,13 +9,13 @@ import (
 	"github.com/pkg/errors"
 )
 
-func Parse(configJSON []byte, provider DescriptorProvider, t solver.ExporterTarget) error {
+func Parse(configJSON []byte, provider DescriptorProvider, t solver.CacheExporterTarget) error {
 	var config CacheConfig
 	if err := json.Unmarshal(configJSON, &config); err != nil {
 		return err
 	}
 
-	cache := map[int]solver.ExporterRecord{}
+	cache := map[int]solver.CacheExporterRecord{}
 
 	for i := range config.Records {
 		if _, err := parseRecord(config, i, provider, t, cache); err != nil {
@@ -26,7 +26,7 @@ func Parse(configJSON []byte, provider DescriptorProvider, t solver.ExporterTarg
 	return nil
 }
 
-func parseRecord(cc CacheConfig, idx int, provider DescriptorProvider, t solver.ExporterTarget, cache map[int]solver.ExporterRecord) (solver.ExporterRecord, error) {
+func parseRecord(cc CacheConfig, idx int, provider DescriptorProvider, t solver.CacheExporterTarget, cache map[int]solver.CacheExporterRecord) (solver.CacheExporterRecord, error) {
 	if r, ok := cache[idx]; ok {
 		if r == nil {
 			return nil, errors.Errorf("invalid looping record")
