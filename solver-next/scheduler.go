@@ -12,8 +12,8 @@ import (
 
 const debugScheduler = false // TODO: replace with logs in build trace
 
-func NewScheduler(ef EdgeFactory) *Scheduler {
-	s := &Scheduler{
+func newScheduler(ef edgeFactory) *scheduler {
+	s := &scheduler{
 		waitq:    map[*edge]struct{}{},
 		incoming: map[*edge][]*edgePipe{},
 		outgoing: map[*edge][]*edgePipe{},
@@ -30,14 +30,21 @@ func NewScheduler(ef EdgeFactory) *Scheduler {
 	return s
 }
 
-type Scheduler struct {
+type dispatcher struct {
+	next *dispatcher
+	e    *edge
+}
+
+type scheduler struct {
 	cond *cond.StatefulCond
 	mu   sync.Mutex
 	muQ  sync.Mutex
 
-	ef EdgeFactory
+	ef edgeFactory
 
 	waitq       map[*edge]struct{}
+	next        *dispatcher
+	last        *dispatcher
 	stopped     chan struct{}
 	stoppedOnce sync.Once
 	closed      chan struct{}
@@ -46,14 +53,14 @@ type Scheduler struct {
 	outgoing map[*edge][]*edgePipe
 }
 
-func (s *Scheduler) Stop() {
+func (s *scheduler) Stop() {
 	s.stoppedOnce.Do(func() {
 		close(s.stopped)
 	})
 	<-s.closed
 }
 
-func (s *Scheduler) loop() {
+func (s *scheduler) loop() {
 	defer func() {
 		close(s.closed)
 	}()
@@ -74,22 +81,25 @@ func (s *Scheduler) loop() {
 		default:
 		}
 		s.muQ.Lock()
-		q := s.waitq
-		s.waitq = map[*edge]struct{}{}
+		l := s.next
+		if l != nil {
+			if l == s.last {
+				s.last = nil
+			}
+			s.next = l.next
+			delete(s.waitq, l.e)
+		}
 		s.muQ.Unlock()
-		if len(q) == 0 {
+		if l == nil {
 			s.cond.Wait()
 			continue
 		}
-
-		for e := range q {
-			s.dispatch(e)
-		}
+		s.dispatch(l.e)
 	}
 }
 
 // dispatch schedules an edge to be processed
-func (s *Scheduler) dispatch(e *edge) {
+func (s *scheduler) dispatch(e *edge) {
 	inc := make([]pipe.Sender, len(s.incoming[e]))
 	for i, p := range s.incoming[e] {
 		inc[i] = p.Sender
@@ -148,7 +158,7 @@ func (s *Scheduler) dispatch(e *edge) {
 			if origEdge != nil {
 				logrus.Debugf("merging edge %s to %s\n", e.edge.Vertex.Name(), origEdge.edge.Vertex.Name())
 				if s.mergeTo(origEdge, e) {
-					s.ef.SetEdge(e.edge, origEdge)
+					s.ef.setEdge(e.edge, origEdge)
 				}
 			}
 		}
@@ -168,9 +178,16 @@ func (s *Scheduler) dispatch(e *edge) {
 }
 
 // signal notifies that an edge needs to be processed again
-func (s *Scheduler) signal(e *edge) {
+func (s *scheduler) signal(e *edge) {
 	s.muQ.Lock()
 	if _, ok := s.waitq[e]; !ok {
+		d := &dispatcher{e: e}
+		if s.last == nil {
+			s.next = d
+		} else {
+			s.last.next = d
+		}
+		s.last = d
 		s.waitq[e] = struct{}{}
 		s.cond.Signal()
 	}
@@ -178,9 +195,9 @@ func (s *Scheduler) signal(e *edge) {
 }
 
 // build evaluates edge into a result
-func (s *Scheduler) build(ctx context.Context, edge Edge) (CachedResult, error) {
+func (s *scheduler) build(ctx context.Context, edge Edge) (CachedResult, error) {
 	s.mu.Lock()
-	e := s.ef.GetEdge(edge)
+	e := s.ef.getEdge(edge)
 	if e == nil {
 		s.mu.Unlock()
 		return nil, errors.Errorf("invalid request %v for build", edge)
@@ -215,7 +232,7 @@ func (s *Scheduler) build(ctx context.Context, edge Edge) (CachedResult, error) 
 }
 
 // newPipe creates a new request pipe between two edges
-func (s *Scheduler) newPipe(target, from *edge, req pipe.Request) *pipe.Pipe {
+func (s *scheduler) newPipe(target, from *edge, req pipe.Request) *pipe.Pipe {
 	p := &edgePipe{
 		Pipe:   pipe.New(req),
 		Target: target,
@@ -241,7 +258,7 @@ func (s *Scheduler) newPipe(target, from *edge, req pipe.Request) *pipe.Pipe {
 }
 
 // newRequestWithFunc creates a new request pipe that invokes a async function
-func (s *Scheduler) newRequestWithFunc(e *edge, f func(context.Context) (interface{}, error)) pipe.Receiver {
+func (s *scheduler) newRequestWithFunc(e *edge, f func(context.Context) (interface{}, error)) pipe.Receiver {
 	pp, start := pipe.NewWithFunction(f)
 	p := &edgePipe{
 		Pipe: pp,
@@ -258,7 +275,7 @@ func (s *Scheduler) newRequestWithFunc(e *edge, f func(context.Context) (interfa
 }
 
 // mergeTo merges the state from one edge to another. source edge is discarded.
-func (s *Scheduler) mergeTo(target, src *edge) bool {
+func (s *scheduler) mergeTo(target, src *edge) bool {
 	if !target.edge.Vertex.Options().IgnoreCache && src.edge.Vertex.Options().IgnoreCache {
 		return false
 	}
@@ -298,19 +315,19 @@ func (s *Scheduler) mergeTo(target, src *edge) bool {
 	return true
 }
 
-// EdgeFactory allows access to the edges from a shared graph
-type EdgeFactory interface {
-	GetEdge(Edge) *edge
-	SetEdge(Edge, *edge)
+// edgeFactory allows access to the edges from a shared graph
+type edgeFactory interface {
+	getEdge(Edge) *edge
+	setEdge(Edge, *edge)
 }
 
 type pipeFactory struct {
 	e *edge
-	s *Scheduler
+	s *scheduler
 }
 
 func (pf *pipeFactory) NewInputRequest(ee Edge, req *edgeRequest) pipe.Receiver {
-	target := pf.s.ef.GetEdge(ee)
+	target := pf.s.ef.getEdge(ee)
 	if target == nil {
 		panic("failed to get edge") // TODO: return errored pipe
 	}

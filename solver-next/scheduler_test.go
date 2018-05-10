@@ -31,7 +31,7 @@ func TestSingleLevelActiveGraph(t *testing.T) {
 	t.Parallel()
 	ctx := context.TODO()
 
-	s := NewJobList(SolverOpt{
+	s := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
 	})
 	defer s.Close()
@@ -210,7 +210,7 @@ func TestSingleLevelCache(t *testing.T) {
 	t.Parallel()
 	ctx := context.TODO()
 
-	s := NewJobList(SolverOpt{
+	s := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
 	})
 	defer s.Close()
@@ -307,7 +307,7 @@ func TestSingleLevelCacheParallel(t *testing.T) {
 	t.Parallel()
 	ctx := context.TODO()
 
-	s := NewJobList(SolverOpt{
+	s := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
 	})
 	defer s.Close()
@@ -383,7 +383,7 @@ func TestMultiLevelCacheParallel(t *testing.T) {
 	t.Parallel()
 	ctx := context.TODO()
 
-	s := NewJobList(SolverOpt{
+	s := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
 	})
 	defer s.Close()
@@ -474,7 +474,7 @@ func TestSingleCancelCache(t *testing.T) {
 	t.Parallel()
 	ctx := context.TODO()
 
-	s := NewJobList(SolverOpt{
+	s := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
 	})
 	defer s.Close()
@@ -517,7 +517,7 @@ func TestSingleCancelExec(t *testing.T) {
 	t.Parallel()
 	ctx := context.TODO()
 
-	s := NewJobList(SolverOpt{
+	s := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
 	})
 	defer s.Close()
@@ -560,7 +560,7 @@ func TestSingleCancelParallel(t *testing.T) {
 	t.Parallel()
 	ctx := context.TODO()
 
-	s := NewJobList(SolverOpt{
+	s := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
 	})
 	defer s.Close()
@@ -635,7 +635,7 @@ func TestMultiLevelCalculation(t *testing.T) {
 	t.Parallel()
 	ctx := context.TODO()
 
-	l := NewJobList(SolverOpt{
+	l := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
 	})
 	defer l.Close()
@@ -723,7 +723,7 @@ func TestHugeGraph(t *testing.T) {
 
 	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
 
-	l := NewJobList(SolverOpt{
+	l := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
 		DefaultCache:  cacheManager,
 	})
@@ -783,7 +783,7 @@ func TestOptimizedCacheAccess(t *testing.T) {
 
 	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
 
-	l := NewJobList(SolverOpt{
+	l := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
 		DefaultCache:  cacheManager,
 	})
@@ -890,7 +890,7 @@ func TestOptimizedCacheAccess2(t *testing.T) {
 
 	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
 
-	l := NewJobList(SolverOpt{
+	l := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
 		DefaultCache:  cacheManager,
 	})
@@ -1041,7 +1041,7 @@ func TestSlowCache(t *testing.T) {
 
 	rand.Seed(time.Now().UnixNano())
 
-	l := NewJobList(SolverOpt{
+	l := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
 	})
 	defer l.Close()
@@ -1123,7 +1123,7 @@ func TestParallelInputs(t *testing.T) {
 
 	rand.Seed(time.Now().UnixNano())
 
-	l := NewJobList(SolverOpt{
+	l := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
 	})
 	defer l.Close()
@@ -1182,7 +1182,7 @@ func TestErrorReturns(t *testing.T) {
 
 	rand.Seed(time.Now().UnixNano())
 
-	l := NewJobList(SolverOpt{
+	l := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
 	})
 	defer l.Close()
@@ -1316,7 +1316,7 @@ func TestMultipleCacheSources(t *testing.T) {
 
 	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
 
-	l := NewJobList(SolverOpt{
+	l := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
 		DefaultCache:  cacheManager,
 	})
@@ -1356,7 +1356,7 @@ func TestMultipleCacheSources(t *testing.T) {
 
 	cacheManager2 := newTrackingCacheManager(NewInMemoryCacheManager())
 
-	l2 := NewJobList(SolverOpt{
+	l2 := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
 		DefaultCache:  cacheManager2,
 	})
@@ -1430,7 +1430,7 @@ func TestRepeatBuildWithIgnoreCache(t *testing.T) {
 	t.Parallel()
 	ctx := context.TODO()
 
-	l := NewJobList(SolverOpt{
+	l := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
 	})
 	defer l.Close()
@@ -1551,7 +1551,7 @@ func TestIgnoreCacheResumeFromSlowCache(t *testing.T) {
 	t.Parallel()
 	ctx := context.TODO()
 
-	l := NewJobList(SolverOpt{
+	l := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
 	})
 	defer l.Close()
@@ -1638,7 +1638,7 @@ func TestParallelBuildsIgnoreCache(t *testing.T) {
 	t.Parallel()
 	ctx := context.TODO()
 
-	l := NewJobList(SolverOpt{
+	l := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
 	})
 	defer l.Close()
@@ -1801,7 +1801,7 @@ func TestSubbuild(t *testing.T) {
 	t.Parallel()
 	ctx := context.TODO()
 
-	l := NewJobList(SolverOpt{
+	l := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
 	})
 	defer l.Close()
@@ -1865,7 +1865,7 @@ func TestCacheWithSelector(t *testing.T) {
 
 	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
 
-	l := NewJobList(SolverOpt{
+	l := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
 		DefaultCache:  cacheManager,
 	})
@@ -1999,7 +1999,7 @@ func TestCacheSlowWithSelector(t *testing.T) {
 
 	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
 
-	l := NewJobList(SolverOpt{
+	l := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
 		DefaultCache:  cacheManager,
 	})
@@ -2098,7 +2098,7 @@ func TestCacheExporting(t *testing.T) {
 
 	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
 
-	l := NewJobList(SolverOpt{
+	l := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
 		DefaultCache:  cacheManager,
 	})
@@ -2182,7 +2182,7 @@ func TestCacheExportingModeMin(t *testing.T) {
 
 	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
 
-	l := NewJobList(SolverOpt{
+	l := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
 		DefaultCache:  cacheManager,
 	})
@@ -2308,7 +2308,7 @@ func TestSlowCacheAvoidAccess(t *testing.T) {
 
 	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
 
-	l := NewJobList(SolverOpt{
+	l := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
 		DefaultCache:  cacheManager,
 	})
@@ -2396,7 +2396,7 @@ func TestCacheMultipleMaps(t *testing.T) {
 
 	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
 
-	l := NewJobList(SolverOpt{
+	l := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
 		DefaultCache:  cacheManager,
 	})
@@ -2515,7 +2515,7 @@ func TestCacheExportingPartialSelector(t *testing.T) {
 
 	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
 
-	l := NewJobList(SolverOpt{
+	l := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
 		DefaultCache:  cacheManager,
 	})
@@ -2719,7 +2719,7 @@ func TestCacheExportingMergedKey(t *testing.T) {
 
 	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
 
-	l := NewJobList(SolverOpt{
+	l := NewSolver(SolverOpt{
 		ResolveOpFunc: testOpResolver,
 		DefaultCache:  cacheManager,
 	})

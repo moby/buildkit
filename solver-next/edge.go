@@ -23,7 +23,7 @@ func (t edgeStatusType) String() string {
 	return []string{"initial", "cache-fast", "cache-slow", "complete"}[t]
 }
 
-func newEdge(ed Edge, op activeOp, index *EdgeIndex) *edge {
+func newEdge(ed Edge, op activeOp, index *edgeIndex) *edge {
 	e := &edge{
 		edge:         ed,
 		op:           op,
@@ -61,7 +61,7 @@ type edge struct {
 
 	releaserCount int
 	keysDidChange bool
-	index         *EdgeIndex
+	index         *edgeIndex
 
 	secondaryExporters []expDep
 }
@@ -74,13 +74,14 @@ type dep struct {
 	keyMap            map[string]*CacheKey
 	desiredState      edgeStatusType
 	e                 *edge
-	slowCacheReq      pipe.Receiver // TODO: reuse req
+	slowCacheReq      pipe.Receiver
 	slowCacheComplete bool
 	slowCacheFoundKey bool
 	slowCacheKey      *ExportableCacheKey
 	err               error
 }
 
+// expDep holds secorndary exporter info for dependency
 type expDep struct {
 	index    int
 	cacheKey CacheKeyWithSelector
@@ -90,24 +91,19 @@ func newDep(i Index) *dep {
 	return &dep{index: i, keyMap: map[string]*CacheKey{}}
 }
 
+// edgePipe is a pipe for requests between two edges
 type edgePipe struct {
 	*pipe.Pipe
 	From, Target *edge
 	mu           sync.Mutex
 }
 
+// edgeState hold basic mutable state info for an edge
 type edgeState struct {
 	state    edgeStatusType
 	result   *SharedCachedResult
 	cacheMap *CacheMap
 	keys     []ExportableCacheKey
-}
-
-func isEqualState(s1, s2 edgeState) bool {
-	if s1.state != s2.state || s1.result != s2.result || s1.cacheMap != s2.cacheMap || len(s1.keys) != len(s2.keys) {
-		return false
-	}
-	return true
 }
 
 type edgeRequest struct {
@@ -340,14 +336,6 @@ func (e *edge) unpark(incoming []pipe.Sender, updates, allPipes []pipe.Receiver,
 		e.createInputRequests(desiredState, f)
 	}
 
-}
-
-func withSelector(keys []ExportableCacheKey, selector digest.Digest) []CacheKeyWithSelector {
-	out := make([]CacheKeyWithSelector, len(keys))
-	for i, k := range keys {
-		out[i] = CacheKeyWithSelector{Selector: selector, CacheKey: k}
-	}
-	return out
 }
 
 func (e *edge) makeExportable(k *CacheKey, records []*CacheRecord) ExportableCacheKey {
@@ -854,6 +842,21 @@ func toResultSlice(cres []CachedResult) (out []Result) {
 	out = make([]Result, len(cres))
 	for i := range cres {
 		out[i] = cres[i].(Result)
+	}
+	return out
+}
+
+func isEqualState(s1, s2 edgeState) bool {
+	if s1.state != s2.state || s1.result != s2.result || s1.cacheMap != s2.cacheMap || len(s1.keys) != len(s2.keys) {
+		return false
+	}
+	return true
+}
+
+func withSelector(keys []ExportableCacheKey, selector digest.Digest) []CacheKeyWithSelector {
+	out := make([]CacheKeyWithSelector, len(keys))
+	for i, k := range keys {
+		out[i] = CacheKeyWithSelector{Selector: selector, CacheKey: k}
 	}
 	return out
 }
