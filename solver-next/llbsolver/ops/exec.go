@@ -186,16 +186,12 @@ func (e *execOp) Exec(ctx context.Context, inputs []solver.Result) ([]solver.Res
 
 		activate := func(cache.ImmutableRef) (cache.MutableRef, error) {
 			desc := fmt.Sprintf("mount %s from exec %s", m.Dest, strings.Join(e.op.Meta.Args, " "))
-			return e.cm.New(ctx, ref, cache.WithDescription(desc)) // TODO: should be method `immutableRef.New() mutableRef`
+			return e.cm.New(ctx, ref, cache.WithDescription(desc))
 		}
 
 		if m.Output != pb.SkipOutput {
 			if m.Readonly && ref != nil && m.Dest != pb.RootMount { // exclude read-only rootfs
-				out, err := e.cm.Get(ctx, ref.ID()) // TODO: add dup to immutableRef
-				if err != nil {
-					return nil, err
-				}
-				outputs = append(outputs, out)
+				outputs = append(outputs, ref.Clone())
 			} else {
 				active, err := activate(ref)
 				if err != nil {
