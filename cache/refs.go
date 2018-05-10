@@ -26,6 +26,7 @@ type ImmutableRef interface {
 	Ref
 	Parent() ImmutableRef
 	Finalize(ctx context.Context) error // Make sure reference is flushed to driver
+	Clone() ImmutableRef
 }
 
 type MutableRef interface {
@@ -191,6 +192,13 @@ type immutableRef struct {
 
 type mutableRef struct {
 	*cacheRecord
+}
+
+func (sr *immutableRef) Clone() ImmutableRef {
+	sr.mu.Lock()
+	ref := sr.ref()
+	sr.mu.Unlock()
+	return ref
 }
 
 func (sr *immutableRef) Release(ctx context.Context) error {
