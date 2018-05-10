@@ -1,5 +1,7 @@
 ARG RUNC_VERSION=9f9c96235cc97674e935002fc3d78361b696a69e
-ARG CONTAINERD_VERSION=v1.0.3
+ARG CONTAINERD_VERSION=v1.1.0
+# containerd v1.0 for integration tests
+ARG CONTAINERD10_VERSION=v1.0.3
 # available targets: buildkitd, buildkitd.oci_only, buildkitd.containerd_only
 ARG BUILDKIT_TARGET=buildkitd
 ARG REGISTRY_VERSION=2.6
@@ -33,15 +35,24 @@ RUN git clone https://github.com/opencontainers/runc.git "$GOPATH/src/github.com
 	&& git checkout -q "$RUNC_VERSION" \
 	&& go build -installsuffix netgo -ldflags '-w -extldflags -static' -tags 'seccomp netgo cgo static_build' -o /usr/bin/runc ./
 
-FROM gobuild-base AS containerd
+FROM gobuild-base AS containerd-base
 RUN apk add --no-cache btrfs-progs-dev
+RUN git clone https://github.com/containerd/containerd.git /go/src/github.com/containerd/containerd
+WORKDIR /go/src/github.com/containerd/containerd
+
+FROM containerd-base as containerd
 ARG CONTAINERD_VERSION
-RUN git clone https://github.com/containerd/containerd.git "$GOPATH/src/github.com/containerd/containerd" \
-	&& cd "$GOPATH/src/github.com/containerd/containerd" \
-	&& git checkout -q "$CONTAINERD_VERSION" \
-	&& make bin/containerd \
-	&& make bin/containerd-shim \
-	&& make bin/ctr
+RUN git checkout -q "$CONTAINERD_VERSION" \
+  && make bin/containerd \
+  && make bin/containerd-shim \
+  && make bin/ctr
+
+# containerd v1.0 for integration tests
+FROM containerd-base as containerd10
+ARG CONTAINERD10_VERSION
+RUN git checkout -q "$CONTAINERD10_VERSION" \
+  && make bin/containerd \
+  && make bin/containerd-shim
 
 FROM buildkit-base AS unit-tests
 COPY --from=runc /usr/bin/runc /usr/bin/runc
@@ -59,6 +70,7 @@ RUN go build -ldflags '-d'  -o /usr/bin/buildkitd.containerd_only -tags no_oci_w
 FROM registry:$REGISTRY_VERSION AS registry
 
 FROM unit-tests AS integration-tests
+COPY --from=containerd10 /go/src/github.com/containerd/containerd/bin/containerd* /opt/containerd-1.0/bin/
 COPY --from=buildctl /usr/bin/buildctl /usr/bin/
 COPY --from=buildkitd /usr/bin/buildkitd /usr/bin
 COPY --from=registry /bin/registry /usr/bin

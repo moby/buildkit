@@ -2,6 +2,7 @@ package integration
 
 import (
 	"bytes"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -10,18 +11,30 @@ import (
 )
 
 func init() {
-	register(&containerd{})
+	// empty value stands for system-wide PATH, which would contain containerd v1.1.
+	paths := []string{"", "/opt/containerd-1.0/bin"}
+	for _, path := range paths {
+		register(&containerd{
+			containerd:     filepath.Join(path, "containerd"),
+			containerdShim: filepath.Join(path, "containerd-shim"),
+		})
+	}
 }
 
 type containerd struct {
+	containerd     string
+	containerdShim string
 }
 
 func (c *containerd) Name() string {
-	return "containerd"
+	return c.containerd
 }
 
 func (c *containerd) New() (sb Sandbox, cl func() error, err error) {
-	if err := lookupBinary("containerd"); err != nil {
+	if err := lookupBinary(c.containerd); err != nil {
+		return nil, nil, err
+	}
+	if err := lookupBinary(c.containerdShim); err != nil {
 		return nil, nil, err
 	}
 	if err := lookupBinary("buildkitd"); err != nil {
@@ -49,9 +62,25 @@ func (c *containerd) New() (sb Sandbox, cl func() error, err error) {
 	deferF.append(func() error { return os.RemoveAll(tmpdir) })
 
 	address := filepath.Join(tmpdir, "containerd.sock")
-	args := append([]string{}, "containerd", "--root", filepath.Join(tmpdir, "root"), "--log-level", "debug", "--root", filepath.Join(tmpdir, "state"), "--address", address)
+	config := fmt.Sprintf(`root = %q
+state = %q
 
-	cmd := exec.Command(args[0], args[1:]...)
+[grpc]
+  address = %q
+
+[debug]
+  level = "debug"
+
+[plugins]
+  [plugins.linux]
+    shim = %q
+`, filepath.Join(tmpdir, "root"), filepath.Join(tmpdir, "state"), address, c.containerdShim)
+	configFile := filepath.Join(tmpdir, "config.toml")
+	if err := ioutil.WriteFile(configFile, []byte(config), 0644); err != nil {
+		return nil, nil, err
+	}
+
+	cmd := exec.Command(c.containerd, "--config", configFile)
 
 	logs := map[string]*bytes.Buffer{}
 
