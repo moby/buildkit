@@ -474,7 +474,11 @@ func (e *edge) processUpdate(upt pipe.Receiver) (depChanged bool) {
 				dep.slowCacheKey = &ExportableCacheKey{CacheKey: k, Exporter: &exporter{k: k}}
 				slowKeyExp := CacheKeyWithSelector{CacheKey: *dep.slowCacheKey}
 				defKeyExp := CacheKeyWithSelector{CacheKey: dep.result.CacheKey(), Selector: e.cacheMap.Deps[i].Selector}
-				dep.slowCacheFoundKey = e.probeCache(dep, []CacheKeyWithSelector{defKeyExp, slowKeyExp})
+				dep.slowCacheFoundKey = e.probeCache(dep, []CacheKeyWithSelector{slowKeyExp})
+
+				// connect def key to slow key
+				e.op.Cache().Query([]CacheKeyWithSelector{defKeyExp, slowKeyExp}, dep.index, e.cacheMap.Digest, e.edge.Index)
+
 				dep.slowCacheComplete = true
 				e.keysDidChange = true
 				e.checkDepMatchPossible(dep) // not matching key here doesn't set nocachematch possible to true

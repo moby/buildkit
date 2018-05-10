@@ -27,6 +27,7 @@ const (
 	buildArgPrefix        = "build-arg:"
 	labelPrefix           = "label:"
 	gitPrefix             = "git://"
+	keyNoCache            = "no-cache"
 )
 
 func Build(ctx context.Context, c client.Client) error {
@@ -38,6 +39,15 @@ func Build(ctx context.Context, c client.Client) error {
 	}
 	if path.Base(filename) != filename {
 		return errors.Errorf("invalid filename: %s", filename)
+	}
+
+	var ignoreCache []string
+	if v, ok := opts[keyNoCache]; ok {
+		if v == "" {
+			ignoreCache = []string{} // means all stages
+		} else {
+			ignoreCache = strings.Split(v, ",")
+		}
 	}
 
 	src := llb.Local(LocalNameDockerfile,
@@ -114,6 +124,7 @@ func Build(ctx context.Context, c client.Client) error {
 		SessionID:    c.SessionID(),
 		BuildContext: buildContext,
 		Excludes:     excludes,
+		IgnoreCache:  ignoreCache,
 	})
 
 	if err != nil {

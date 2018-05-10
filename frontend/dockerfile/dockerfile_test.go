@@ -55,6 +55,7 @@ func TestIntegration(t *testing.T) {
 		testCacheImportExport,
 		testReproducibleIDs,
 		testImportExportReproducibleIDs,
+		testNoCache,
 	})
 }
 
@@ -1523,6 +1524,91 @@ RUN echo bar > bar
 	require.NoError(t, err)
 
 	require.Equal(t, img.Target, img2.Target)
+}
+
+func testNoCache(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	dockerfile := []byte(`
+FROM busybox AS s0
+RUN cat /dev/urandom | head -c 100 | sha256sum | tee unique
+FROM busybox AS s1
+RUN cat /dev/urandom | head -c 100 | sha256sum | tee unique2
+FROM scratch
+COPY --from=s0 unique /
+COPY --from=s1 unique2 /
+`)
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	opt := client.SolveOpt{
+		Frontend:          "dockerfile.v0",
+		FrontendAttrs:     map[string]string{},
+		Exporter:          client.ExporterLocal,
+		ExporterOutputDir: destDir,
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+	}
+
+	_, err = c.Solve(context.TODO(), nil, opt, nil)
+	require.NoError(t, err)
+
+	destDir2, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	opt.FrontendAttrs["no-cache"] = ""
+	opt.ExporterOutputDir = destDir2
+
+	_, err = c.Solve(context.TODO(), nil, opt, nil)
+	require.NoError(t, err)
+
+	unique1Dir1, err := ioutil.ReadFile(filepath.Join(destDir, "unique"))
+	require.NoError(t, err)
+
+	unique1Dir2, err := ioutil.ReadFile(filepath.Join(destDir2, "unique"))
+	require.NoError(t, err)
+
+	unique2Dir1, err := ioutil.ReadFile(filepath.Join(destDir, "unique2"))
+	require.NoError(t, err)
+
+	unique2Dir2, err := ioutil.ReadFile(filepath.Join(destDir2, "unique2"))
+	require.NoError(t, err)
+
+	require.NotEqual(t, string(unique1Dir1), string(unique1Dir2))
+	require.NotEqual(t, string(unique2Dir1), string(unique2Dir2))
+
+	destDir3, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	opt.FrontendAttrs["no-cache"] = "s1"
+	opt.ExporterOutputDir = destDir3
+
+	_, err = c.Solve(context.TODO(), nil, opt, nil)
+	require.NoError(t, err)
+
+	unique1Dir3, err := ioutil.ReadFile(filepath.Join(destDir3, "unique"))
+	require.NoError(t, err)
+
+	unique2Dir3, err := ioutil.ReadFile(filepath.Join(destDir3, "unique2"))
+	require.NoError(t, err)
+
+	require.Equal(t, string(unique1Dir2), string(unique1Dir3))
+	require.NotEqual(t, string(unique2Dir1), string(unique2Dir3))
 }
 
 func tmpdir(appliers ...fstest.Applier) (string, error) {
