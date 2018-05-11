@@ -212,11 +212,10 @@ func (sr *immutableRef) Release(ctx context.Context) error {
 }
 
 func (sr *immutableRef) release(ctx context.Context) error {
-	// updateLastUsed(sr.md)
-
 	delete(sr.refs, sr)
 
 	if len(sr.refs) == 0 {
+		updateLastUsed(sr.md)
 		if sr.viewMount != nil { // TODO: release viewMount earlier if possible
 			if err := sr.cm.Snapshotter.Remove(ctx, sr.view); err != nil {
 				return err
@@ -333,7 +332,6 @@ func (sr *mutableRef) Release(ctx context.Context) error {
 
 func (sr *mutableRef) release(ctx context.Context) error {
 	delete(sr.refs, sr)
-	// updateLastUsed(sr.md)
 	if getCachePolicy(sr.md) != cachePolicyRetain {
 		if sr.equalImmutable != nil {
 			if getCachePolicy(sr.equalImmutable.md) == cachePolicyRetain {
@@ -349,6 +347,8 @@ func (sr *mutableRef) release(ctx context.Context) error {
 			}
 		}
 		return sr.remove(ctx, true)
+	} else {
+		updateLastUsed(sr.md)
 	}
 	return nil
 }
