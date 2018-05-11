@@ -37,12 +37,10 @@ import pb "github.com/moby/buildkit/solver/pb"
 import time "time"
 import github_com_opencontainers_go_digest "github.com/opencontainers/go-digest"
 
-import (
-	context "golang.org/x/net/context"
-	grpc "google.golang.org/grpc"
-)
+import context "golang.org/x/net/context"
+import grpc "google.golang.org/grpc"
 
-import github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
+import types "github.com/gogo/protobuf/types"
 
 import io "io"
 
@@ -1028,8 +1026,8 @@ func (m *UsageRecord) MarshalTo(dAtA []byte) (int, error) {
 	}
 	dAtA[i] = 0x32
 	i++
-	i = encodeVarintControl(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(m.CreatedAt)))
-	n1, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.CreatedAt, dAtA[i:])
+	i = encodeVarintControl(dAtA, i, uint64(types.SizeOfStdTime(m.CreatedAt)))
+	n1, err := types.StdTimeMarshalTo(m.CreatedAt, dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -1037,8 +1035,8 @@ func (m *UsageRecord) MarshalTo(dAtA []byte) (int, error) {
 	if m.LastUsedAt != nil {
 		dAtA[i] = 0x3a
 		i++
-		i = encodeVarintControl(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(*m.LastUsedAt)))
-		n2, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.LastUsedAt, dAtA[i:])
+		i = encodeVarintControl(dAtA, i, uint64(types.SizeOfStdTime(*m.LastUsedAt)))
+		n2, err := types.StdTimeMarshalTo(*m.LastUsedAt, dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
@@ -1350,8 +1348,8 @@ func (m *Vertex) MarshalTo(dAtA []byte) (int, error) {
 	if m.Started != nil {
 		dAtA[i] = 0x2a
 		i++
-		i = encodeVarintControl(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(*m.Started)))
-		n5, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.Started, dAtA[i:])
+		i = encodeVarintControl(dAtA, i, uint64(types.SizeOfStdTime(*m.Started)))
+		n5, err := types.StdTimeMarshalTo(*m.Started, dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
@@ -1360,8 +1358,8 @@ func (m *Vertex) MarshalTo(dAtA []byte) (int, error) {
 	if m.Completed != nil {
 		dAtA[i] = 0x32
 		i++
-		i = encodeVarintControl(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(*m.Completed)))
-		n6, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.Completed, dAtA[i:])
+		i = encodeVarintControl(dAtA, i, uint64(types.SizeOfStdTime(*m.Completed)))
+		n6, err := types.StdTimeMarshalTo(*m.Completed, dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
@@ -1421,8 +1419,8 @@ func (m *VertexStatus) MarshalTo(dAtA []byte) (int, error) {
 	}
 	dAtA[i] = 0x32
 	i++
-	i = encodeVarintControl(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(m.Timestamp)))
-	n7, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.Timestamp, dAtA[i:])
+	i = encodeVarintControl(dAtA, i, uint64(types.SizeOfStdTime(m.Timestamp)))
+	n7, err := types.StdTimeMarshalTo(m.Timestamp, dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -1430,8 +1428,8 @@ func (m *VertexStatus) MarshalTo(dAtA []byte) (int, error) {
 	if m.Started != nil {
 		dAtA[i] = 0x3a
 		i++
-		i = encodeVarintControl(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(*m.Started)))
-		n8, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.Started, dAtA[i:])
+		i = encodeVarintControl(dAtA, i, uint64(types.SizeOfStdTime(*m.Started)))
+		n8, err := types.StdTimeMarshalTo(*m.Started, dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
@@ -1440,8 +1438,8 @@ func (m *VertexStatus) MarshalTo(dAtA []byte) (int, error) {
 	if m.Completed != nil {
 		dAtA[i] = 0x42
 		i++
-		i = encodeVarintControl(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(*m.Completed)))
-		n9, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.Completed, dAtA[i:])
+		i = encodeVarintControl(dAtA, i, uint64(types.SizeOfStdTime(*m.Completed)))
+		n9, err := types.StdTimeMarshalTo(*m.Completed, dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
@@ -1473,8 +1471,8 @@ func (m *VertexLog) MarshalTo(dAtA []byte) (int, error) {
 	}
 	dAtA[i] = 0x12
 	i++
-	i = encodeVarintControl(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdTime(m.Timestamp)))
-	n10, err := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.Timestamp, dAtA[i:])
+	i = encodeVarintControl(dAtA, i, uint64(types.SizeOfStdTime(m.Timestamp)))
+	n10, err := types.StdTimeMarshalTo(m.Timestamp, dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -1678,10 +1676,10 @@ func (m *UsageRecord) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovControl(uint64(l))
 	}
-	l = github_com_gogo_protobuf_types.SizeOfStdTime(m.CreatedAt)
+	l = types.SizeOfStdTime(m.CreatedAt)
 	n += 1 + l + sovControl(uint64(l))
 	if m.LastUsedAt != nil {
-		l = github_com_gogo_protobuf_types.SizeOfStdTime(*m.LastUsedAt)
+		l = types.SizeOfStdTime(*m.LastUsedAt)
 		n += 1 + l + sovControl(uint64(l))
 	}
 	if m.UsageCount != 0 {
@@ -1821,11 +1819,11 @@ func (m *Vertex) Size() (n int) {
 		n += 2
 	}
 	if m.Started != nil {
-		l = github_com_gogo_protobuf_types.SizeOfStdTime(*m.Started)
+		l = types.SizeOfStdTime(*m.Started)
 		n += 1 + l + sovControl(uint64(l))
 	}
 	if m.Completed != nil {
-		l = github_com_gogo_protobuf_types.SizeOfStdTime(*m.Completed)
+		l = types.SizeOfStdTime(*m.Completed)
 		n += 1 + l + sovControl(uint64(l))
 	}
 	l = len(m.Error)
@@ -1856,14 +1854,14 @@ func (m *VertexStatus) Size() (n int) {
 	if m.Total != 0 {
 		n += 1 + sovControl(uint64(m.Total))
 	}
-	l = github_com_gogo_protobuf_types.SizeOfStdTime(m.Timestamp)
+	l = types.SizeOfStdTime(m.Timestamp)
 	n += 1 + l + sovControl(uint64(l))
 	if m.Started != nil {
-		l = github_com_gogo_protobuf_types.SizeOfStdTime(*m.Started)
+		l = types.SizeOfStdTime(*m.Started)
 		n += 1 + l + sovControl(uint64(l))
 	}
 	if m.Completed != nil {
-		l = github_com_gogo_protobuf_types.SizeOfStdTime(*m.Completed)
+		l = types.SizeOfStdTime(*m.Completed)
 		n += 1 + l + sovControl(uint64(l))
 	}
 	return n
@@ -1876,7 +1874,7 @@ func (m *VertexLog) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovControl(uint64(l))
 	}
-	l = github_com_gogo_protobuf_types.SizeOfStdTime(m.Timestamp)
+	l = types.SizeOfStdTime(m.Timestamp)
 	n += 1 + l + sovControl(uint64(l))
 	if m.Stream != 0 {
 		n += 1 + sovControl(uint64(m.Stream))
@@ -2335,7 +2333,7 @@ func (m *UsageRecord) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(&m.CreatedAt, dAtA[iNdEx:postIndex]); err != nil {
+			if err := types.StdTimeUnmarshal(&m.CreatedAt, dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -2368,7 +2366,7 @@ func (m *UsageRecord) Unmarshal(dAtA []byte) error {
 			if m.LastUsedAt == nil {
 				m.LastUsedAt = new(time.Time)
 			}
-			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(m.LastUsedAt, dAtA[iNdEx:postIndex]); err != nil {
+			if err := types.StdTimeUnmarshal(m.LastUsedAt, dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -3569,7 +3567,7 @@ func (m *Vertex) Unmarshal(dAtA []byte) error {
 			if m.Started == nil {
 				m.Started = new(time.Time)
 			}
-			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(m.Started, dAtA[iNdEx:postIndex]); err != nil {
+			if err := types.StdTimeUnmarshal(m.Started, dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -3602,7 +3600,7 @@ func (m *Vertex) Unmarshal(dAtA []byte) error {
 			if m.Completed == nil {
 				m.Completed = new(time.Time)
 			}
-			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(m.Completed, dAtA[iNdEx:postIndex]); err != nil {
+			if err := types.StdTimeUnmarshal(m.Completed, dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -3836,7 +3834,7 @@ func (m *VertexStatus) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(&m.Timestamp, dAtA[iNdEx:postIndex]); err != nil {
+			if err := types.StdTimeUnmarshal(&m.Timestamp, dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -3869,7 +3867,7 @@ func (m *VertexStatus) Unmarshal(dAtA []byte) error {
 			if m.Started == nil {
 				m.Started = new(time.Time)
 			}
-			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(m.Started, dAtA[iNdEx:postIndex]); err != nil {
+			if err := types.StdTimeUnmarshal(m.Started, dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -3902,7 +3900,7 @@ func (m *VertexStatus) Unmarshal(dAtA []byte) error {
 			if m.Completed == nil {
 				m.Completed = new(time.Time)
 			}
-			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(m.Completed, dAtA[iNdEx:postIndex]); err != nil {
+			if err := types.StdTimeUnmarshal(m.Completed, dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -4011,7 +4009,7 @@ func (m *VertexLog) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(&m.Timestamp, dAtA[iNdEx:postIndex]); err != nil {
+			if err := types.StdTimeUnmarshal(&m.Timestamp, dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex

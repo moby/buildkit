@@ -1,3 +1,5 @@
+// +build !windows
+
 /*
    Copyright The containerd Authors.
 
@@ -14,4 +16,18 @@
    limitations under the License.
 */
 
-package rpc
+package sys
+
+import "golang.org/x/sys/unix"
+
+// RunningPrivileged returns true if the effective user ID of the
+// calling process is 0
+func RunningPrivileged() bool {
+	return unix.Geteuid() == 0
+}
+
+// RunningUnprivileged returns true if the effective user ID of the
+// calling process is not 0
+func RunningUnprivileged() bool {
+	return !RunningPrivileged()
+}

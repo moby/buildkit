@@ -27,9 +27,29 @@ import (
 // SpecOpts sets spec specific information to a newly generated OCI spec
 type SpecOpts func(context.Context, Client, *containers.Container, *specs.Spec) error
 
+// Compose converts a sequence of spec operations into a single operation
+func Compose(opts ...SpecOpts) SpecOpts {
+	return func(ctx context.Context, client Client, c *containers.Container, s *specs.Spec) error {
+		for _, o := range opts {
+			if err := o(ctx, client, c, s); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+}
+
+// setProcess sets Process to empty if unset
+func setProcess(s *specs.Spec) {
+	if s.Process == nil {
+		s.Process = &specs.Process{}
+	}
+}
+
 // WithProcessArgs replaces the args on the generated spec
 func WithProcessArgs(args ...string) SpecOpts {
 	return func(_ context.Context, _ Client, _ *containers.Container, s *specs.Spec) error {
+		setProcess(s)
 		s.Process.Args = args
 		return nil
 	}
@@ -38,6 +58,7 @@ func WithProcessArgs(args ...string) SpecOpts {
 // WithProcessCwd replaces the current working directory on the generated spec
 func WithProcessCwd(cwd string) SpecOpts {
 	return func(_ context.Context, _ Client, _ *containers.Container, s *specs.Spec) error {
+		setProcess(s)
 		s.Process.Cwd = cwd
 		return nil
 	}
@@ -55,6 +76,7 @@ func WithHostname(name string) SpecOpts {
 func WithEnv(environmentVariables []string) SpecOpts {
 	return func(_ context.Context, _ Client, _ *containers.Container, s *specs.Spec) error {
 		if len(environmentVariables) > 0 {
+			setProcess(s)
 			s.Process.Env = replaceOrAppendEnvValues(s.Process.Env, environmentVariables)
 		}
 		return nil
