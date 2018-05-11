@@ -11,7 +11,7 @@ import (
 	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/frontend"
-	solver "github.com/moby/buildkit/solver-next"
+	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/tracing"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"

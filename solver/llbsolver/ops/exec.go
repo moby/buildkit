@@ -12,8 +12,8 @@ import (
 
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/executor"
-	"github.com/moby/buildkit/solver-next"
-	"github.com/moby/buildkit/solver-next/llbsolver"
+	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/solver/llbsolver"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/progress/logs"
 	"github.com/moby/buildkit/worker"

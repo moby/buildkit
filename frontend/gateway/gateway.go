@@ -18,7 +18,7 @@ import (
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
-	solver "github.com/moby/buildkit/solver-next"
+	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/tracing"
 	"github.com/moby/buildkit/worker"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"

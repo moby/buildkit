@@ -9,7 +9,7 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/snapshot"
-	"github.com/moby/buildkit/solver-next"
+	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"

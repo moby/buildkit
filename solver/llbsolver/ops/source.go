@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/moby/buildkit/solver-next"
+	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/worker"

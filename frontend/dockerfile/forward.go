@@ -7,7 +7,7 @@ import (
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/session"
-	solver "github.com/moby/buildkit/solver-next"
+	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/worker"
 	"github.com/pkg/errors"
 )

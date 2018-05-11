@@ -12,7 +12,7 @@ import (
 	v1 "github.com/moby/buildkit/cache/remotecache/v1"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/auth"
-	solver "github.com/moby/buildkit/solver-next"
+	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/worker"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"

@@ -5,7 +5,7 @@ import (
 
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/frontend/dockerfile/builder"
-	solver "github.com/moby/buildkit/solver-next"
+	"github.com/moby/buildkit/solver"
 )
 
 func NewDockerfileFrontend() frontend.Frontend {

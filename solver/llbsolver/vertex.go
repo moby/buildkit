@@ -3,7 +3,7 @@ package llbsolver
 import (
 	"strings"
 
-	"github.com/moby/buildkit/solver-next"
+	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/source"
 	digest "github.com/opencontainers/go-digest"

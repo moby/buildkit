@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/moby/buildkit/solver-next/internal/pipe"
+	"github.com/moby/buildkit/solver/internal/pipe"
 	"github.com/moby/buildkit/util/cond"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"

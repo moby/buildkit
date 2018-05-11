@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	solver "github.com/moby/buildkit/solver-next"
+	"github.com/moby/buildkit/solver"
 	"github.com/stretchr/testify/require"
 )
 

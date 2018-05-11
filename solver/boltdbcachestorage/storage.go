@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/boltdb/bolt"
-	solver "github.com/moby/buildkit/solver-next"
+	"github.com/moby/buildkit/solver"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
