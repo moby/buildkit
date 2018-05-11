@@ -688,7 +688,7 @@ func (s *sharedOp) getOp() (Op, error) {
 func (s *sharedOp) release() {
 	if s.execRes != nil {
 		for _, r := range s.execRes.execRes {
-			r.Release(context.TODO())
+			go r.Release(context.TODO())
 		}
 	}
 }

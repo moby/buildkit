@@ -126,7 +126,7 @@ func (e *edge) release() {
 	}
 	e.index.Release(e)
 	if e.result != nil {
-		e.result.Release(context.TODO())
+		go e.result.Release(context.TODO())
 	}
 }
 
