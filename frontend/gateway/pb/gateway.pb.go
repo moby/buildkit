@@ -27,10 +27,8 @@ import pb "github.com/moby/buildkit/solver/pb"
 
 import github_com_opencontainers_go_digest "github.com/opencontainers/go-digest"
 
-import (
-	context "golang.org/x/net/context"
-	grpc "google.golang.org/grpc"
-)
+import context "golang.org/x/net/context"
+import grpc "google.golang.org/grpc"
 
 import io "io"
 
