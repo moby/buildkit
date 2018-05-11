@@ -9,7 +9,7 @@ import (
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/frontend"
-	"github.com/moby/buildkit/solver-next"
+	"github.com/moby/buildkit/solver"
 	digest "github.com/opencontainers/go-digest"
 )
 

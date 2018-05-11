@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/moby/buildkit/cache"
-	solver "github.com/moby/buildkit/solver-next"
+	"github.com/moby/buildkit/solver"
 )
 
 func NewWorkerRefResult(ref cache.ImmutableRef, worker Worker) solver.Result {

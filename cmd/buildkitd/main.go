@@ -23,7 +23,7 @@ import (
 	"github.com/moby/buildkit/frontend/dockerfile"
 	"github.com/moby/buildkit/frontend/gateway"
 	"github.com/moby/buildkit/session"
-	"github.com/moby/buildkit/solver-next/boltdbcachestorage"
+	"github.com/moby/buildkit/solver/boltdbcachestorage"
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/moby/buildkit/util/profiler"
