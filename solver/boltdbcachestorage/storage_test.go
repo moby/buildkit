@@ -7,11 +7,12 @@ import (
 	"testing"
 
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/solver/testutil"
 	"github.com/stretchr/testify/require"
 )
 
 func TestBoltCacheStorage(t *testing.T) {
-	solver.RunCacheStorageTests(t, func() (solver.CacheKeyStorage, func()) {
+	testutil.RunCacheStorageTests(t, func() (solver.CacheKeyStorage, func()) {
 		tmpDir, err := ioutil.TempDir("", "storage")
 		require.NoError(t, err)
 
