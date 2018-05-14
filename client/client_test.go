@@ -939,13 +939,21 @@ loop0:
 	retries = 0
 	for {
 		count := 0
-		err = snapshotService.Walk(ctx, func(context.Context, snapshots.Info) error {
+		var infos []snapshots.Info
+		err = snapshotService.Walk(ctx, func(ctx context.Context, info snapshots.Info) error {
+			infos = append(infos, info)
 			count++
 			return nil
 		})
 		require.NoError(t, err)
 		if count == 0 {
 			break
+		}
+		if retries >= 20 {
+			t.Logf("leftover spanshots: %d", count)
+			for i, info := range infos {
+				t.Logf("%d %+v", i, info)
+			}
 		}
 		require.True(t, 20 > retries)
 		retries++
@@ -959,13 +967,21 @@ loop0:
 	retries = 0
 	for {
 		count := 0
-		err = client.ContentStore().Walk(ctx, func(content.Info) error {
+		var infos []content.Info
+		err = client.ContentStore().Walk(ctx, func(info content.Info) error {
+			infos = append(infos, info)
 			count++
 			return nil
 		})
 		require.NoError(t, err)
 		if count == 0 {
 			break
+		}
+		if retries >= 20 {
+			t.Logf("leftover content: %d", count)
+			for i, info := range infos {
+				t.Logf("%d %+v", i, info)
+			}
 		}
 		require.True(t, 20 > retries)
 		retries++

@@ -635,6 +635,19 @@ RUN ["ls"]
 
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit")
 
+	defer func() {
+		if !t.Failed() {
+			return
+		}
+		i := 0
+		t.Logf("debugging content blobs")
+		client.ContentStore().Walk(ctx, func(info content.Info) error {
+			t.Logf("%d %+v", i, info)
+			i++
+			return nil
+		})
+	}()
+
 	img, err := client.ImageService().Get(ctx, target)
 	require.NoError(t, err)
 
