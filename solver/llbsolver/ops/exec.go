@@ -10,7 +10,9 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/boltdb/bolt"
 	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/llbsolver"
@@ -19,6 +21,7 @@ import (
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 const execCacheType = "buildkit.exec.v0"
@@ -26,15 +29,17 @@ const execCacheType = "buildkit.exec.v0"
 type execOp struct {
 	op        *pb.ExecOp
 	cm        cache.Manager
+	md        *metadata.Store
 	exec      executor.Executor
 	w         worker.Worker
 	numInputs int
 }
 
-func NewExecOp(v solver.Vertex, op *pb.Op_Exec, cm cache.Manager, exec executor.Executor, w worker.Worker) (solver.Op, error) {
+func NewExecOp(v solver.Vertex, op *pb.Op_Exec, cm cache.Manager, md *metadata.Store, exec executor.Executor, w worker.Worker) (solver.Op, error) {
 	return &execOp{
 		op:        op.Exec,
 		cm:        cm,
+		md:        md,
 		exec:      exec,
 		numInputs: len(v.Inputs()),
 		w:         w,
@@ -153,6 +158,47 @@ func (e *execOp) getMountDeps() ([]dep, error) {
 	return deps, nil
 }
 
+func (e *execOp) getRefCacheDir(ctx context.Context, ref cache.ImmutableRef, id string, m *pb.Mount) (cache.MutableRef, error) {
+	makeMutable := func(cache.ImmutableRef) (cache.MutableRef, error) {
+		desc := fmt.Sprintf("cached mount %s from exec %s", m.Dest, strings.Join(e.op.Meta.Args, " "))
+		return e.cm.New(ctx, ref, cache.WithDescription(desc), cache.CachePolicyRetain)
+	}
+
+	key := "cache-dir:" + id
+	if ref != nil {
+		key += ":" + ref.ID()
+	}
+	sis, err := e.md.Search(key)
+	if err != nil {
+		return nil, err
+	}
+	for _, si := range sis {
+		if mRef, err := e.cm.GetMutable(ctx, si.ID()); err == nil {
+			logrus.Debugf("reusing ref for cache dir: %s", mRef.ID())
+			return mRef, nil
+		}
+	}
+	mRef, err := makeMutable(ref)
+	if err != nil {
+		return nil, err
+	}
+
+	si, _ := e.md.Get(mRef.ID())
+	v, err := metadata.NewValue(key)
+	if err != nil {
+		mRef.Release(context.TODO())
+		return nil, err
+	}
+	v.Index = key
+	if err := si.Update(func(b *bolt.Bucket) error {
+		return si.SetValue(b, key, v)
+	}); err != nil {
+		mRef.Release(context.TODO())
+		return nil, err
+	}
+	return mRef, nil
+}
+
 func (e *execOp) Exec(ctx context.Context, inputs []solver.Result) ([]solver.Result, error) {
 	var mounts []executor.Mount
 	var root cache.Mountable
@@ -173,6 +219,10 @@ func (e *execOp) Exec(ctx context.Context, inputs []solver.Result) ([]solver.Res
 		var mountable cache.Mountable
 		var ref cache.ImmutableRef
 
+		if m.Dest == pb.RootMount && m.MountType != pb.MountType_BIND {
+			return nil, errors.Errorf("invalid mount type %s for %s", m.MountType.String(), m.Dest)
+		}
+
 		// if mount is based on input validate and load it
 		if m.Input != pb.Empty {
 			if int(m.Input) > len(inputs) {
@@ -192,20 +242,40 @@ func (e *execOp) Exec(ctx context.Context, inputs []solver.Result) ([]solver.Res
 			return e.cm.New(ctx, ref, cache.WithDescription(desc))
 		}
 
-		// if mount creates an output
-		if m.Output != pb.SkipOutput {
-			// it it is readonly and not root then output is the input
-			if m.Readonly && ref != nil && m.Dest != pb.RootMount {
-				outputs = append(outputs, ref.Clone())
-			} else {
-				// otherwise output and mount is the mutable child
-				active, err := makeMutable(ref)
-				if err != nil {
-					return nil, err
+		switch m.MountType {
+		case pb.MountType_BIND:
+			// if mount creates an output
+			if m.Output != pb.SkipOutput {
+				// it it is readonly and not root then output is the input
+				if m.Readonly && ref != nil && m.Dest != pb.RootMount {
+					outputs = append(outputs, ref.Clone())
+				} else {
+					// otherwise output and mount is the mutable child
+					active, err := makeMutable(ref)
+					if err != nil {
+						return nil, err
+					}
+					outputs = append(outputs, active)
+					mountable = active
 				}
-				outputs = append(outputs, active)
-				mountable = active
 			}
+		case pb.MountType_CACHE:
+			if m.CacheOpt == nil {
+				return nil, errors.Errorf("missing cache mount options")
+			}
+			mRef, err := e.getRefCacheDir(ctx, ref, m.CacheOpt.ID, m)
+			if err != nil {
+				return nil, err
+			}
+			mountable = mRef
+			defer func() {
+				go mRef.Release(context.TODO())
+			}()
+			if m.Output != pb.SkipOutput && ref != nil {
+				outputs = append(outputs, ref.Clone())
+			}
+		default:
+			return nil, errors.Errorf("mount type %s not implemented", m.MountType)
 		}
 
 		// validate that there is a mount
