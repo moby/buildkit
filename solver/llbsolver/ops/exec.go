@@ -168,9 +168,12 @@ func (e *execOp) Exec(ctx context.Context, inputs []solver.Result) ([]solver.Res
 		}
 	}()
 
+	// loop over all mounts, fill in mounts, root and outputs
 	for _, m := range e.op.Mounts {
 		var mountable cache.Mountable
 		var ref cache.ImmutableRef
+
+		// if mount is based on input validate and load it
 		if m.Input != pb.Empty {
 			if int(m.Input) > len(inputs) {
 				return nil, errors.Errorf("missing input %d", m.Input)
@@ -184,16 +187,19 @@ func (e *execOp) Exec(ctx context.Context, inputs []solver.Result) ([]solver.Res
 			mountable = ref
 		}
 
-		activate := func(cache.ImmutableRef) (cache.MutableRef, error) {
+		makeMutable := func(cache.ImmutableRef) (cache.MutableRef, error) {
 			desc := fmt.Sprintf("mount %s from exec %s", m.Dest, strings.Join(e.op.Meta.Args, " "))
 			return e.cm.New(ctx, ref, cache.WithDescription(desc))
 		}
 
+		// if mount creates an output
 		if m.Output != pb.SkipOutput {
-			if m.Readonly && ref != nil && m.Dest != pb.RootMount { // exclude read-only rootfs
+			// it it is readonly and not root then output is the input
+			if m.Readonly && ref != nil && m.Dest != pb.RootMount {
 				outputs = append(outputs, ref.Clone())
 			} else {
-				active, err := activate(ref)
+				// otherwise output and mount is the mutable child
+				active, err := makeMutable(ref)
 				if err != nil {
 					return nil, err
 				}
@@ -202,15 +208,17 @@ func (e *execOp) Exec(ctx context.Context, inputs []solver.Result) ([]solver.Res
 			}
 		}
 
+		// validate that there is a mount
 		if mountable == nil {
 			return nil, errors.Errorf("mount %s has no input", m.Dest)
 		}
 
+		// if dest is root we need mutable ref even if there is no output
 		if m.Dest == pb.RootMount {
 			root = mountable
 			readonlyRootFS = m.Readonly
 			if m.Output == pb.SkipOutput && readonlyRootFS {
-				active, err := activate(ref)
+				active, err := makeMutable(ref)
 				if err != nil {
 					return nil, err
 				}
@@ -224,6 +232,7 @@ func (e *execOp) Exec(ctx context.Context, inputs []solver.Result) ([]solver.Res
 		}
 	}
 
+	// sort mounts so parents are mounted first
 	sort.Slice(mounts, func(i, j int) bool {
 		return mounts[i].Dest < mounts[j].Dest
 	})
