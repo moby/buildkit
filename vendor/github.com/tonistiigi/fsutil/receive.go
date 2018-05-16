@@ -158,6 +158,8 @@ func (r *receiver) run(ctx context.Context) error {
 			}
 
 			switch p.Type {
+			case PACKET_ERR:
+				return errors.Errorf("error from sender: %s", p.Data)
 			case PACKET_STAT:
 				if p.Stat == nil {
 					if err := w.update(nil); err != nil {

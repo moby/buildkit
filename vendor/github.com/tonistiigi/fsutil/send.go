@@ -57,7 +57,11 @@ func (s *sender) run(ctx context.Context) error {
 	defer s.updateProgress(0, true)
 
 	g.Go(func() error {
-		return s.walk(ctx)
+		err := s.walk(ctx)
+		if err != nil {
+			s.conn.SendMsg(&Packet{Type: PACKET_ERR, Data: []byte(err.Error())})
+		}
+		return err
 	})
 
 	for i := 0; i < 4; i++ {
