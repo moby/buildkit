@@ -241,6 +241,9 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		}
 	}
 
+	if len(opt.Labels) != 0 && target.image.Config.Labels == nil {
+		target.image.Config.Labels = make(map[string]string, len(opt.Labels))
+	}
 	for k, v := range opt.Labels {
 		target.image.Config.Labels[k] = v
 	}
@@ -525,7 +528,7 @@ func dispatchMaintainer(d *dispatchState, c *instructions.MaintainerCommand) err
 func dispatchLabel(d *dispatchState, c *instructions.LabelCommand) error {
 	commitMessage := bytes.NewBufferString("LABEL")
 	if d.image.Config.Labels == nil {
-		d.image.Config.Labels = make(map[string]string)
+		d.image.Config.Labels = make(map[string]string, len(c.Labels))
 	}
 	for _, v := range c.Labels {
 		d.image.Config.Labels[v.Key] = v.Value
