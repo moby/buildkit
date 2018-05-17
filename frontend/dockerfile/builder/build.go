@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"path"
+	"regexp"
 	"strings"
 
 	"github.com/docker/docker/builder/dockerignore"
@@ -30,15 +30,14 @@ const (
 	keyNoCache            = "no-cache"
 )
 
+var httpPrefix = regexp.MustCompile("^https?://")
+
 func Build(ctx context.Context, c client.Client) error {
 	opts := c.Opts()
 
 	filename := opts[keyFilename]
 	if filename == "" {
 		filename = defaultDockerfileName
-	}
-	if path.Base(filename) != filename {
-		return errors.Errorf("invalid filename: %s", filename)
 	}
 
 	var ignoreCache []string
@@ -60,6 +59,14 @@ func Build(ctx context.Context, c client.Client) error {
 		src = parseGitSource(opts[LocalNameContext])
 		buildContext = &src
 	}
+
+	if httpPrefix.MatchString(opts[LocalNameContext]) {
+		unpack := llb.Image(dockerfile2llb.CopyImage).Run(llb.Shlex("copy --unpack /src/context /out/"), llb.ReadonlyRootFS())
+		unpack.AddMount("/src", llb.HTTP(opts[LocalNameContext], llb.Filename("context")), llb.Readonly)
+		src = unpack.AddMount("/out", llb.Scratch())
+		buildContext = &src
+	}
+
 	def, err := src.Marshal()
 	if err != nil {
 		return err

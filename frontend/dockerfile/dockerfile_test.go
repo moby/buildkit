@@ -57,6 +57,7 @@ func TestIntegration(t *testing.T) {
 		testReproducibleIDs,
 		testImportExportReproducibleIDs,
 		testNoCache,
+		testDockerfileFromHTTP,
 	})
 }
 
@@ -1118,6 +1119,66 @@ COPY --from=build foo bar2
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "bar2"))
 	require.NoError(t, err)
 	require.Equal(t, "fromgit", string(dt))
+}
+
+func testDockerfileFromHTTP(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	buf := bytes.NewBuffer(nil)
+	w := tar.NewWriter(buf)
+
+	writeFile := func(fn, dt string) {
+		err := w.WriteHeader(&tar.Header{
+			Name:     fn,
+			Mode:     0600,
+			Size:     int64(len(dt)),
+			Typeflag: tar.TypeReg,
+		})
+		require.NoError(t, err)
+		_, err = w.Write([]byte(dt))
+		require.NoError(t, err)
+	}
+
+	writeFile("mydockerfile", `FROM scratch
+COPY foo bar
+`)
+
+	writeFile("foo", "foo-contents")
+
+	require.NoError(t, w.Flush())
+
+	resp := httpserver.Response{
+		Etag:    identity.NewID(),
+		Content: buf.Bytes(),
+	}
+
+	server := httpserver.NewTestServer(map[string]httpserver.Response{
+		"/myurl": resp,
+	})
+	defer server.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	c, err := client.New(sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	_, err = c.Solve(context.TODO(), nil, client.SolveOpt{
+		Frontend: "dockerfile.v0",
+		FrontendAttrs: map[string]string{
+			"context":  server.URL + "/myurl",
+			"filename": "mydockerfile",
+		},
+		Exporter:          client.ExporterLocal,
+		ExporterOutputDir: destDir,
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "bar"))
+	require.NoError(t, err)
+	require.Equal(t, "foo-contents", string(dt))
 }
 
 func testMultiStageImplicitFrom(t *testing.T, sb integration.Sandbox) {
