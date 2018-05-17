@@ -2,13 +2,13 @@ package dockerfile
 
 import (
 	"context"
-	"os"
 
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/session"
-	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/worker"
 	"github.com/pkg/errors"
 )
 
@@ -25,10 +25,12 @@ type bridgeClient struct {
 	refs         []*ref
 }
 
-func (c *bridgeClient) Solve(ctx context.Context, def *pb.Definition, f string, exporterAttr map[string][]byte, final bool) (client.Reference, error) {
+func (c *bridgeClient) Solve(ctx context.Context, req client.SolveRequest, exporterAttr map[string][]byte, final bool) (client.Reference, error) {
 	r, exporterAttrRes, err := c.FrontendLLBBridge.Solve(ctx, frontend.SolveRequest{
-		Definition: def,
-		Frontend:   f,
+		Definition:      req.Definition,
+		Frontend:        req.Frontend,
+		FrontendOpt:     req.FrontendOpt,
+		ImportCacheRefs: req.ImportCacheRefs,
 	})
 	if err != nil {
 		return nil, err
@@ -55,12 +57,21 @@ func (c *bridgeClient) SessionID() string {
 }
 
 type ref struct {
-	cache.ImmutableRef
+	solver.CachedResult
 }
 
 func (r *ref) ReadFile(ctx context.Context, fp string) ([]byte, error) {
-	if r.ImmutableRef == nil {
-		return nil, errors.Wrapf(os.ErrNotExist, "%s no found", fp)
+	ref, err := r.getImmutableRef()
+	if err != nil {
+		return nil, err
 	}
-	return cache.ReadFile(ctx, r.ImmutableRef, fp)
+	return cache.ReadFile(ctx, ref, fp)
+}
+
+func (r *ref) getImmutableRef() (cache.ImmutableRef, error) {
+	ref, ok := r.CachedResult.Sys().(*worker.WorkerRef)
+	if !ok {
+		return nil, errors.Errorf("invalid ref: %T", r.CachedResult.Sys())
+	}
+	return ref.ImmutableRef, nil
 }

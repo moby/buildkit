@@ -20,12 +20,14 @@ const (
 	LocalNameDockerfile   = "dockerfile"
 	keyTarget             = "target"
 	keyFilename           = "filename"
+	keyCacheFrom          = "cache-from"
 	exporterImageConfig   = "containerimage.config"
 	defaultDockerfileName = "Dockerfile"
 	dockerignoreFilename  = ".dockerignore"
 	buildArgPrefix        = "build-arg:"
 	labelPrefix           = "label:"
 	gitPrefix             = "git://"
+	keyNoCache            = "no-cache"
 )
 
 func Build(ctx context.Context, c client.Client) error {
@@ -37,6 +39,15 @@ func Build(ctx context.Context, c client.Client) error {
 	}
 	if path.Base(filename) != filename {
 		return errors.Errorf("invalid filename: %s", filename)
+	}
+
+	var ignoreCache []string
+	if v, ok := opts[keyNoCache]; ok {
+		if v == "" {
+			ignoreCache = []string{} // means all stages
+		} else {
+			ignoreCache = strings.Split(v, ",")
+		}
 	}
 
 	src := llb.Local(LocalNameDockerfile,
@@ -57,7 +68,9 @@ func Build(ctx context.Context, c client.Client) error {
 	eg, ctx2 := errgroup.WithContext(ctx)
 	var dtDockerfile []byte
 	eg.Go(func() error {
-		ref, err := c.Solve(ctx2, def.ToPB(), "", nil, false)
+		ref, err := c.Solve(ctx2, client.SolveRequest{
+			Definition: def.ToPB(),
+		}, nil, false)
 		if err != nil {
 			return err
 		}
@@ -83,7 +96,9 @@ func Build(ctx context.Context, c client.Client) error {
 		if err != nil {
 			return err
 		}
-		ref, err := c.Solve(ctx2, def.ToPB(), "", nil, false)
+		ref, err := c.Solve(ctx2, client.SolveRequest{
+			Definition: def.ToPB(),
+		}, nil, false)
 		if err != nil {
 			return err
 		}
@@ -109,6 +124,7 @@ func Build(ctx context.Context, c client.Client) error {
 		SessionID:    c.SessionID(),
 		BuildContext: buildContext,
 		Excludes:     excludes,
+		IgnoreCache:  ignoreCache,
 	})
 
 	if err != nil {
@@ -125,7 +141,15 @@ func Build(ctx context.Context, c client.Client) error {
 		return err
 	}
 
-	_, err = c.Solve(ctx, def.ToPB(), "", map[string][]byte{
+	var cacheFrom []string
+	if cacheFromStr := opts[keyCacheFrom]; cacheFromStr != "" {
+		cacheFrom = strings.Split(cacheFromStr, ",")
+	}
+
+	_, err = c.Solve(ctx, client.SolveRequest{
+		Definition:      def.ToPB(),
+		ImportCacheRefs: cacheFrom,
+	}, map[string][]byte{
 		exporterImageConfig: config,
 	}, true)
 	if err != nil {

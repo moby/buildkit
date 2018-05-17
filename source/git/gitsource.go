@@ -160,7 +160,7 @@ func (gs *gitSource) Resolve(ctx context.Context, id source.Identifier) (source.
 	}, nil
 }
 
-func (gs *gitSourceHandler) CacheKey(ctx context.Context) (string, error) {
+func (gs *gitSourceHandler) CacheKey(ctx context.Context, index int) (string, bool, error) {
 	remote := gs.src.Remote
 	ref := gs.src.Ref
 	if ref == "" {
@@ -171,12 +171,12 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context) (string, error) {
 
 	if isCommitSHA(ref) {
 		gs.cacheKey = ref
-		return ref, nil
+		return ref, true, nil
 	}
 
 	gitDir, unmountGitDir, err := gs.mountRemote(ctx, remote)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	defer unmountGitDir()
 
@@ -184,20 +184,20 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context) (string, error) {
 
 	buf, err := gitWithinDir(ctx, gitDir, "", "ls-remote", "origin", ref)
 	if err != nil {
-		return "", errors.Wrapf(err, "failed to fetch remote %s", remote)
+		return "", false, errors.Wrapf(err, "failed to fetch remote %s", remote)
 	}
 	out := buf.String()
 	idx := strings.Index(out, "\t")
 	if idx == -1 {
-		return "", errors.Errorf("failed to find commit SHA from output: %s", string(out))
+		return "", false, errors.Errorf("failed to find commit SHA from output: %s", string(out))
 	}
 
 	sha := string(out[:idx])
 	if !isCommitSHA(sha) {
-		return "", errors.Errorf("invalid commit sha %q", sha)
+		return "", false, errors.Errorf("invalid commit sha %q", sha)
 	}
 	gs.cacheKey = sha
-	return sha, nil
+	return sha, true, nil
 }
 
 func (gs *gitSourceHandler) Snapshot(ctx context.Context) (out cache.ImmutableRef, retErr error) {
@@ -209,7 +209,7 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context) (out cache.ImmutableRe
 	cacheKey := gs.cacheKey
 	if cacheKey == "" {
 		var err error
-		cacheKey, err = gs.CacheKey(ctx)
+		cacheKey, _, err = gs.CacheKey(ctx, 0)
 		if err != nil {
 			return nil, err
 		}

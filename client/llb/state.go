@@ -269,6 +269,31 @@ func WithDescription(m map[string]string) MetadataOpt {
 	})
 }
 
+// WithExportCache forces results for this vertex to be exported with the cache
+func WithExportCache() MetadataOpt {
+	return metadataOptFunc(func(md *OpMetadata) {
+		md.ExportCache = &pb.ExportCache{Value: true}
+	})
+}
+
+// WithoutExportCache sets results for this vertex to be not exported with
+// the cache
+func WithoutExportCache() MetadataOpt {
+	return metadataOptFunc(func(md *OpMetadata) {
+		// ExportCache with value false means to disable exporting
+		md.ExportCache = &pb.ExportCache{Value: false}
+	})
+}
+
+// WithoutDefaultExportCache resets the cache export for the vertex to use
+// the default defined by the build configuration.
+func WithoutDefaultExportCache() MetadataOpt {
+	return metadataOptFunc(func(md *OpMetadata) {
+		// nil means no vertex based config has been set
+		md.ExportCache = nil
+	})
+}
+
 type opMetaWrapper struct {
 	OpMetadata
 }

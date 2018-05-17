@@ -26,6 +26,7 @@ type ImmutableRef interface {
 	Ref
 	Parent() ImmutableRef
 	Finalize(ctx context.Context) error // Make sure reference is flushed to driver
+	Clone() ImmutableRef
 }
 
 type MutableRef interface {
@@ -193,6 +194,13 @@ type mutableRef struct {
 	*cacheRecord
 }
 
+func (sr *immutableRef) Clone() ImmutableRef {
+	sr.mu.Lock()
+	ref := sr.ref()
+	sr.mu.Unlock()
+	return ref
+}
+
 func (sr *immutableRef) Release(ctx context.Context) error {
 	sr.cm.mu.Lock()
 	defer sr.cm.mu.Unlock()
@@ -204,11 +212,10 @@ func (sr *immutableRef) Release(ctx context.Context) error {
 }
 
 func (sr *immutableRef) release(ctx context.Context) error {
-	updateLastUsed(sr.md)
-
 	delete(sr.refs, sr)
 
 	if len(sr.refs) == 0 {
+		updateLastUsed(sr.md)
 		if sr.viewMount != nil { // TODO: release viewMount earlier if possible
 			if err := sr.cm.Snapshotter.Remove(ctx, sr.view); err != nil {
 				return err
@@ -325,7 +332,6 @@ func (sr *mutableRef) Release(ctx context.Context) error {
 
 func (sr *mutableRef) release(ctx context.Context) error {
 	delete(sr.refs, sr)
-	updateLastUsed(sr.md)
 	if getCachePolicy(sr.md) != cachePolicyRetain {
 		if sr.equalImmutable != nil {
 			if getCachePolicy(sr.equalImmutable.md) == cachePolicyRetain {
@@ -341,6 +347,8 @@ func (sr *mutableRef) release(ctx context.Context) error {
 			}
 		}
 		return sr.remove(ctx, true)
+	} else {
+		updateLastUsed(sr.md)
 	}
 	return nil
 }

@@ -46,6 +46,7 @@ func TestClientIntegration(t *testing.T) {
 		testMountWithNoSource,
 		testInvalidExporter,
 		testReadonlyRootFS,
+		testBasicCacheImportExport,
 	})
 }
 
@@ -550,6 +551,78 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	require.False(t, ok)
 }
 
+func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	t.Parallel()
+
+	registry, err := sb.NewRegistry()
+	if errors.Cause(err) == integration.ErrorRequirements {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	c, err := New(sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("busybox:latest")
+	st := llb.Scratch()
+
+	run := func(cmd string) {
+		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+	}
+
+	run(`sh -c "echo -n foobar > const"`)
+	run(`sh -c "cat /dev/urandom | head -c 100 | sha256sum > unique"`)
+
+	def, err := st.Marshal()
+	require.NoError(t, err)
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	target := registry + "/buildkit/testexport:latest"
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		Exporter:          ExporterLocal,
+		ExporterOutputDir: destDir,
+		ExportCache:       target,
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "const"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), "foobar")
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "unique"))
+	require.NoError(t, err)
+
+	err = c.Prune(context.TODO(), nil)
+	require.NoError(t, err)
+
+	checkAllRemoved(t, c, sb)
+
+	destDir, err = ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		Exporter:          ExporterLocal,
+		ExporterOutputDir: destDir,
+		ImportCache:       []string{target},
+	}, nil)
+	require.NoError(t, err)
+
+	dt2, err := ioutil.ReadFile(filepath.Join(destDir, "const"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt2), "foobar")
+
+	dt2, err = ioutil.ReadFile(filepath.Join(destDir, "unique"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), string(dt2))
+}
+
 // containerd/containerd#2119
 func testDuplicateWhiteouts(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
@@ -802,6 +875,21 @@ func readTarToMap(dt []byte, compressed bool) (map[string]*tarItem, error) {
 			}
 		}
 		m[h.Name] = &tarItem{header: h, data: dt}
+	}
+}
+
+func checkAllRemoved(t *testing.T, c *Client, sb integration.Sandbox) {
+	retries := 0
+	for {
+		require.True(t, 20 > retries)
+		retries++
+		du, err := c.DiskUsage(context.TODO())
+		require.NoError(t, err)
+		if len(du) > 0 {
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
+		break
 	}
 }
 

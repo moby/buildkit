@@ -53,7 +53,10 @@ func TestIntegration(t *testing.T) {
 		testCopyVarSubstitution,
 		testMultiStageCaseInsensitive,
 		testLabels,
+		testCacheImportExport,
 		testReproducibleIDs,
+		testImportExportReproducibleIDs,
+		testNoCache,
 	})
 }
 
@@ -1310,6 +1313,97 @@ LABEL foo=bar
 	require.Equal(t, v, "baz")
 }
 
+func testCacheImportExport(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	registry, err := sb.NewRegistry()
+	if errors.Cause(err) == integration.ErrorRequirements {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	dockerfile := []byte(`
+FROM busybox AS base
+COPY foo const
+#RUN echo -n foobar > const
+RUN cat /dev/urandom | head -c 100 | sha256sum > unique
+FROM scratch
+COPY --from=base const /
+COPY --from=base unique /
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("foo", []byte("foobar"), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	target := registry + "/buildkit/testexportdf:latest"
+
+	_, err = c.Solve(context.TODO(), nil, client.SolveOpt{
+		Frontend:          "dockerfile.v0",
+		Exporter:          client.ExporterLocal,
+		ExporterOutputDir: destDir,
+		ExportCache:       target,
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "const"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), "foobar")
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "unique"))
+	require.NoError(t, err)
+
+	err = c.Prune(context.TODO(), nil)
+	require.NoError(t, err)
+
+	checkAllRemoved(t, c, sb)
+
+	destDir, err = ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = c.Solve(context.TODO(), nil, client.SolveOpt{
+		Frontend: "dockerfile.v0",
+		FrontendAttrs: map[string]string{
+			"cache-from": target,
+		},
+		Exporter:          client.ExporterLocal,
+		ExporterOutputDir: destDir,
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt2, err := ioutil.ReadFile(filepath.Join(destDir, "const"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt2), "foobar")
+
+	dt2, err = ioutil.ReadFile(filepath.Join(destDir, "unique"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), string(dt2))
+
+	destDir, err = ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+}
+
 func testReproducibleIDs(t *testing.T, sb integration.Sandbox) {
 	t.Parallel()
 
@@ -1380,6 +1474,181 @@ RUN echo bar > bar
 	require.Equal(t, img.Target, img2.Target)
 }
 
+func testImportExportReproducibleIDs(t *testing.T, sb integration.Sandbox) {
+	var cdAddress string
+	if cd, ok := sb.(interface {
+		ContainerdAddress() string
+	}); !ok {
+		t.Skip("only for containerd worker")
+	} else {
+		cdAddress = cd.ContainerdAddress()
+	}
+
+	t.Parallel()
+
+	registry, err := sb.NewRegistry()
+	if errors.Cause(err) == integration.ErrorRequirements {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	dockerfile := []byte(`
+FROM busybox
+ENV foo=bar
+COPY foo /
+RUN echo bar > bar
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("foo", []byte("foobar"), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	target := "example.com/moby/dockerfileexpids:test"
+	cacheTarget := registry + "/test/dockerfileexpids:cache"
+	opt := client.SolveOpt{
+		Frontend:      "dockerfile.v0",
+		FrontendAttrs: map[string]string{},
+		Exporter:      client.ExporterImage,
+		ExportCache:   cacheTarget,
+		ExporterAttrs: map[string]string{
+			"name": target,
+		},
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+	}
+
+	client, err := containerd.New(cdAddress)
+	require.NoError(t, err)
+	defer client.Close()
+
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit")
+
+	_, err = c.Solve(context.TODO(), nil, opt, nil)
+	require.NoError(t, err)
+
+	img, err := client.ImageService().Get(ctx, target)
+	require.NoError(t, err)
+
+	err = client.ImageService().Delete(ctx, target)
+	require.NoError(t, err)
+
+	err = c.Prune(context.TODO(), nil)
+	require.NoError(t, err)
+
+	checkAllRemoved(t, c, sb)
+
+	target2 := "example.com/moby/dockerfileexpids2:test"
+
+	opt.ExporterAttrs["name"] = target2
+	opt.FrontendAttrs["cache-from"] = cacheTarget
+
+	_, err = c.Solve(context.TODO(), nil, opt, nil)
+	require.NoError(t, err)
+
+	img2, err := client.ImageService().Get(ctx, target2)
+	require.NoError(t, err)
+
+	require.Equal(t, img.Target, img2.Target)
+}
+
+func testNoCache(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	dockerfile := []byte(`
+FROM busybox AS s0
+RUN cat /dev/urandom | head -c 100 | sha256sum | tee unique
+FROM busybox AS s1
+RUN cat /dev/urandom | head -c 100 | sha256sum | tee unique2
+FROM scratch
+COPY --from=s0 unique /
+COPY --from=s1 unique2 /
+`)
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	opt := client.SolveOpt{
+		Frontend:          "dockerfile.v0",
+		FrontendAttrs:     map[string]string{},
+		Exporter:          client.ExporterLocal,
+		ExporterOutputDir: destDir,
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+	}
+
+	_, err = c.Solve(context.TODO(), nil, opt, nil)
+	require.NoError(t, err)
+
+	destDir2, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	opt.FrontendAttrs["no-cache"] = ""
+	opt.ExporterOutputDir = destDir2
+
+	_, err = c.Solve(context.TODO(), nil, opt, nil)
+	require.NoError(t, err)
+
+	unique1Dir1, err := ioutil.ReadFile(filepath.Join(destDir, "unique"))
+	require.NoError(t, err)
+
+	unique1Dir2, err := ioutil.ReadFile(filepath.Join(destDir2, "unique"))
+	require.NoError(t, err)
+
+	unique2Dir1, err := ioutil.ReadFile(filepath.Join(destDir, "unique2"))
+	require.NoError(t, err)
+
+	unique2Dir2, err := ioutil.ReadFile(filepath.Join(destDir2, "unique2"))
+	require.NoError(t, err)
+
+	require.NotEqual(t, string(unique1Dir1), string(unique1Dir2))
+	require.NotEqual(t, string(unique2Dir1), string(unique2Dir2))
+
+	destDir3, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	opt.FrontendAttrs["no-cache"] = "s1"
+	opt.ExporterOutputDir = destDir3
+
+	_, err = c.Solve(context.TODO(), nil, opt, nil)
+	require.NoError(t, err)
+
+	unique1Dir3, err := ioutil.ReadFile(filepath.Join(destDir3, "unique"))
+	require.NoError(t, err)
+
+	unique2Dir3, err := ioutil.ReadFile(filepath.Join(destDir3, "unique2"))
+	require.NoError(t, err)
+
+	require.Equal(t, string(unique1Dir2), string(unique1Dir3))
+	require.NotEqual(t, string(unique2Dir1), string(unique2Dir3))
+}
+
 func tmpdir(appliers ...fstest.Applier) (string, error) {
 	tmpdir, err := ioutil.TempDir("", "buildkit-dockerfile")
 	if err != nil {
@@ -1405,4 +1674,19 @@ func runShell(dir string, cmds ...string) error {
 		}
 	}
 	return nil
+}
+
+func checkAllRemoved(t *testing.T, c *client.Client, sb integration.Sandbox) {
+	retries := 0
+	for {
+		require.True(t, 20 > retries)
+		retries++
+		du, err := c.DiskUsage(context.TODO())
+		require.NoError(t, err)
+		if len(du) > 0 {
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
+		break
+	}
 }

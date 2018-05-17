@@ -2,19 +2,22 @@ package base
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/diff"
 	"github.com/containerd/containerd/images"
+	"github.com/containerd/containerd/rootfs"
+	cdsnapshot "github.com/containerd/containerd/snapshots"
+	"github.com/docker/distribution/manifest/schema2"
 	"github.com/moby/buildkit/cache"
-	"github.com/moby/buildkit/cache/cacheimport"
-	"github.com/moby/buildkit/cache/instructioncache"
-	localcache "github.com/moby/buildkit/cache/instructioncache/local"
+	"github.com/moby/buildkit/cache/blobs"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/executor"
@@ -22,21 +25,29 @@ import (
 	imageexporter "github.com/moby/buildkit/exporter/containerimage"
 	localexporter "github.com/moby/buildkit/exporter/local"
 	ociexporter "github.com/moby/buildkit/exporter/oci"
+	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver"
-	"github.com/moby/buildkit/solver/llbop"
+	"github.com/moby/buildkit/solver/llbsolver/ops"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/source/containerimage"
 	"github.com/moby/buildkit/source/git"
 	"github.com/moby/buildkit/source/http"
 	"github.com/moby/buildkit/source/local"
+	"github.com/moby/buildkit/util/contentutil"
+	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
+	ociidentity "github.com/opencontainers/image-spec/identity"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
+
+const labelCreatedAt = "buildkit/createdat"
 
 // TODO: this file should be removed. containerd defines ContainerdWorker, oci defines OCIWorker. There is no base worker.
 
@@ -61,12 +72,8 @@ type Worker struct {
 	WorkerOpt
 	CacheManager  cache.Manager
 	SourceManager *source.Manager
-	Cache         instructioncache.InstructionCache
 	Exporters     map[string]exporter.Exporter
 	ImageSource   source.Source
-	CacheExporter *cacheimport.CacheExporter // TODO: remove
-	CacheImporter *cacheimport.CacheImporter // TODO: remove
-	// no frontend here
 }
 
 // NewWorker instantiates a local worker
@@ -77,11 +84,6 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 	})
 	if err != nil {
 		return nil, err
-	}
-
-	ic := &localcache.LocalStore{
-		MetadataStore: opt.MetadataStore,
-		Cache:         cm,
 	}
 
 	sm, err := source.NewManager()
@@ -182,30 +184,12 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 	}
 	exporters[client.ExporterDocker] = dockerExporter
 
-	ce := cacheimport.NewCacheExporter(cacheimport.ExporterOpt{
-		Snapshotter:    opt.Snapshotter,
-		ContentStore:   opt.ContentStore,
-		SessionManager: opt.SessionManager,
-		Differ:         opt.Differ,
-	})
-
-	ci := cacheimport.NewCacheImporter(cacheimport.ImportOpt{
-		Snapshotter:    opt.Snapshotter,
-		ContentStore:   opt.ContentStore,
-		Applier:        opt.Applier,
-		CacheAccessor:  cm,
-		SessionManager: opt.SessionManager,
-	})
-
 	return &Worker{
 		WorkerOpt:     opt,
 		CacheManager:  cm,
 		SourceManager: sm,
-		Cache:         ic,
 		Exporters:     exporters,
 		ImageSource:   is,
-		CacheExporter: ce,
-		CacheImporter: ci,
 	}, nil
 }
 
@@ -217,14 +201,18 @@ func (w *Worker) Labels() map[string]string {
 	return w.WorkerOpt.Labels
 }
 
-func (w *Worker) ResolveOp(v solver.Vertex, s worker.SubBuilder) (solver.Op, error) {
+func (w *Worker) LoadRef(id string) (cache.ImmutableRef, error) {
+	return w.CacheManager.Get(context.TODO(), id)
+}
+
+func (w *Worker) ResolveOp(v solver.Vertex, s frontend.FrontendLLBBridge) (solver.Op, error) {
 	switch op := v.Sys().(type) {
 	case *pb.Op_Source:
-		return llbop.NewSourceOp(v, op, w.SourceManager)
+		return ops.NewSourceOp(v, op, w.SourceManager, w)
 	case *pb.Op_Exec:
-		return llbop.NewExecOp(v, op, w.CacheManager, w.Executor)
+		return ops.NewExecOp(v, op, w.CacheManager, w.Executor, w)
 	case *pb.Op_Build:
-		return llbop.NewBuildOp(v, op, s)
+		return ops.NewBuildOp(v, op, s, w)
 	default:
 		return nil, errors.Errorf("could not resolve %v", v)
 	}
@@ -268,8 +256,131 @@ func (w *Worker) Exporter(name string) (exporter.Exporter, error) {
 	return exp, nil
 }
 
-func (w *Worker) InstructionCache() instructioncache.InstructionCache {
-	return w.Cache
+func (w *Worker) GetRemote(ctx context.Context, ref cache.ImmutableRef, createIfNeeded bool) (*solver.Remote, error) {
+	diffPairs, err := blobs.GetDiffPairs(ctx, w.ContentStore, w.Snapshotter, w.Differ, ref, createIfNeeded)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed calculaing diff pairs for exported snapshot")
+	}
+	if len(diffPairs) == 0 {
+		return nil, nil
+	}
+
+	createdTimes := getCreatedTimes(ref)
+	if len(createdTimes) != len(diffPairs) {
+		return nil, errors.Errorf("invalid createdtimes/diffpairs")
+	}
+
+	descs := make([]ocispec.Descriptor, len(diffPairs))
+
+	for i, dp := range diffPairs {
+		info, err := w.ContentStore.Info(ctx, dp.Blobsum)
+		if err != nil {
+			return nil, err
+		}
+
+		tm, err := createdTimes[i].MarshalText()
+		if err != nil {
+			return nil, err
+		}
+
+		descs[i] = ocispec.Descriptor{
+			Digest:    dp.Blobsum,
+			Size:      info.Size,
+			MediaType: schema2.MediaTypeLayer,
+			Annotations: map[string]string{
+				"containerd.io/uncompressed": dp.DiffID.String(),
+				labelCreatedAt:               string(tm),
+			},
+		}
+	}
+
+	return &solver.Remote{
+		Descriptors: descs,
+		Provider:    w.ContentStore,
+	}, nil
+}
+
+func getCreatedTimes(ref cache.ImmutableRef) (out []time.Time) {
+	parent := ref.Parent()
+	if parent != nil {
+		defer parent.Release(context.TODO())
+		out = getCreatedTimes(parent)
+	}
+	return append(out, cache.GetCreatedAt(ref.Metadata()))
+}
+
+func (w *Worker) FromRemote(ctx context.Context, remote *solver.Remote) (cache.ImmutableRef, error) {
+	eg, gctx := errgroup.WithContext(ctx)
+	for _, desc := range remote.Descriptors {
+		func(desc ocispec.Descriptor) {
+			eg.Go(func() error {
+				done := oneOffProgress(ctx, fmt.Sprintf("pulling %s", desc.Digest))
+				return done(contentutil.Copy(gctx, w.ContentStore, remote.Provider, desc))
+			})
+		}(desc)
+	}
+
+	if err := eg.Wait(); err != nil {
+		return nil, err
+	}
+
+	cs, release := snapshot.NewContainerdSnapshotter(w.Snapshotter)
+	defer release()
+
+	unpackProgressDone := oneOffProgress(ctx, "unpacking")
+	chainIDs, err := w.unpack(ctx, remote.Descriptors, cs)
+	if err != nil {
+		return nil, unpackProgressDone(err)
+	}
+	unpackProgressDone(nil)
+
+	for i, chainID := range chainIDs {
+		tm := time.Now()
+		if tmstr, ok := remote.Descriptors[i].Annotations[labelCreatedAt]; ok {
+			if err := (&tm).UnmarshalText([]byte(tmstr)); err != nil {
+				return nil, err
+			}
+		}
+		ref, err := w.CacheManager.Get(ctx, chainID, cache.WithDescription(fmt.Sprintf("imported %s", remote.Descriptors[i].Digest)), cache.WithCreationTime(tm))
+		if err != nil {
+			return nil, err
+		}
+		if i == len(remote.Descriptors)-1 {
+			return ref, nil
+		}
+		ref.Release(context.TODO())
+	}
+	return nil, errors.Errorf("unreachable")
+}
+
+func (w *Worker) unpack(ctx context.Context, descs []ocispec.Descriptor, s cdsnapshot.Snapshotter) ([]string, error) {
+	layers, err := getLayers(ctx, descs)
+	if err != nil {
+		return nil, err
+	}
+
+	var chain []digest.Digest
+	for _, layer := range layers {
+		labels := map[string]string{
+			"containerd.io/uncompressed": layer.Diff.Digest.String(),
+		}
+		if _, err := rootfs.ApplyLayer(ctx, layer, chain, s, w.Applier, cdsnapshot.WithLabels(labels)); err != nil {
+			return nil, err
+		}
+		chain = append(chain, layer.Diff.Digest)
+
+		chainID := ociidentity.ChainID(chain)
+		if err := w.Snapshotter.SetBlob(ctx, string(chainID), layer.Diff.Digest, layer.Blob.Digest); err != nil {
+			return nil, err
+		}
+	}
+
+	ids := make([]string, len(chain))
+	for i := range chain {
+		ids[i] = string(ociidentity.ChainID(chain[:i+1]))
+	}
+
+	return ids, nil
 }
 
 // utility function. could be moved to the constructor logic?
@@ -303,4 +414,45 @@ func ID(root string) (string, error) {
 		}
 	}
 	return string(b), nil
+}
+
+func getLayers(ctx context.Context, descs []ocispec.Descriptor) ([]rootfs.Layer, error) {
+	layers := make([]rootfs.Layer, len(descs))
+	for i, desc := range descs {
+		diffIDStr := desc.Annotations["containerd.io/uncompressed"]
+		if diffIDStr == "" {
+			return nil, errors.Errorf("%s missing uncompressed digest", desc.Digest)
+		}
+		diffID, err := digest.Parse(diffIDStr)
+		if err != nil {
+			return nil, err
+		}
+		layers[i].Diff = ocispec.Descriptor{
+			MediaType: ocispec.MediaTypeImageLayer,
+			Digest:    diffID,
+		}
+		layers[i].Blob = ocispec.Descriptor{
+			MediaType: desc.MediaType,
+			Digest:    desc.Digest,
+			Size:      desc.Size,
+		}
+	}
+	return layers, nil
+}
+
+func oneOffProgress(ctx context.Context, id string) func(err error) error {
+	pw, _, _ := progress.FromContext(ctx)
+	now := time.Now()
+	st := progress.Status{
+		Started: &now,
+	}
+	pw.Write(id, st)
+	return func(err error) error {
+		// TODO: set error on status
+		now := time.Now()
+		st.Completed = &now
+		pw.Write(id, st)
+		pw.Close()
+		return err
+	}
 }

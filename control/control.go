@@ -5,13 +5,14 @@ import (
 
 	"github.com/docker/distribution/reference"
 	controlapi "github.com/moby/buildkit/api/services/control"
-	"github.com/moby/buildkit/cache/cacheimport"
+	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/grpchijack"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/solver/llbsolver"
 	"github.com/moby/buildkit/worker"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -23,24 +24,22 @@ type Opt struct {
 	SessionManager   *session.Manager
 	WorkerController *worker.Controller
 	Frontends        map[string]frontend.Frontend
-	CacheExporter    *cacheimport.CacheExporter
-	CacheImporter    *cacheimport.CacheImporter
+	CacheKeyStorage  solver.CacheKeyStorage
+	CacheExporter    *remotecache.CacheExporter
+	CacheImporter    *remotecache.CacheImporter
 }
 
 type Controller struct { // TODO: ControlService
 	opt    Opt
-	solver *solver.Solver
+	solver *llbsolver.Solver
 }
 
 func NewController(opt Opt) (*Controller, error) {
+	solver := llbsolver.New(opt.WorkerController, opt.Frontends, opt.CacheKeyStorage, opt.CacheImporter)
+
 	c := &Controller{
-		opt: opt,
-		solver: solver.NewLLBOpSolver(solver.LLBOpt{
-			WorkerController: opt.WorkerController,
-			Frontends:        opt.Frontends,
-			CacheExporter:    opt.CacheExporter,
-			CacheImporter:    opt.CacheImporter,
-		}),
+		opt:    opt,
+		solver: solver,
 	}
 	return c, nil
 }
@@ -130,15 +129,6 @@ func (c *Controller) Prune(req *controlapi.PruneRequest, stream controlapi.Contr
 }
 
 func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*controlapi.SolveResponse, error) {
-	var frontend frontend.Frontend
-	if req.Frontend != "" {
-		var ok bool
-		frontend, ok = c.opt.Frontends[req.Frontend]
-		if !ok {
-			return nil, errors.Errorf("frontend %s not found", req.Frontend)
-		}
-	}
-
 	ctx = session.NewContext(ctx, req.Session)
 
 	var expi exporter.ExporterInstance
@@ -159,31 +149,34 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		}
 	}
 
-	exportCacheRef := ""
+	var cacheExporter *remotecache.RegistryCacheExporter
 	if ref := req.Cache.ExportRef; ref != "" {
 		parsed, err := reference.ParseNormalizedNamed(ref)
 		if err != nil {
 			return nil, err
 		}
-		exportCacheRef = reference.TagNameOnly(parsed).String()
+		exportCacheRef := reference.TagNameOnly(parsed).String()
+		cacheExporter = c.opt.CacheExporter.ExporterForTarget(exportCacheRef)
 	}
 
-	importCacheRef := ""
-	if ref := req.Cache.ImportRef; ref != "" {
+	var importCacheRefs []string
+	for _, ref := range req.Cache.ImportRefs {
 		parsed, err := reference.ParseNormalizedNamed(ref)
 		if err != nil {
 			return nil, err
 		}
-		importCacheRef = reference.TagNameOnly(parsed).String()
+		importCacheRefs = append(importCacheRefs, reference.TagNameOnly(parsed).String())
 	}
 
-	resp, err := c.solver.Solve(ctx, req.Ref, solver.SolveRequest{
-		Frontend:       frontend,
-		Definition:     req.Definition,
-		Exporter:       expi,
-		FrontendOpt:    req.FrontendAttrs,
-		ExportCacheRef: exportCacheRef,
-		ImportCacheRef: importCacheRef,
+	resp, err := c.solver.Solve(ctx, req.Ref, frontend.SolveRequest{
+		Frontend:        req.Frontend,
+		Definition:      req.Definition,
+		FrontendOpt:     req.FrontendAttrs,
+		ImportCacheRefs: importCacheRefs,
+	}, llbsolver.ExporterRequest{
+		Exporter:        expi,
+		CacheExporter:   cacheExporter,
+		CacheExportMode: parseCacheExporterOpt(req.Cache.ExportAttrs),
 	})
 	if err != nil {
 		return nil, err
@@ -277,4 +270,23 @@ func (c *Controller) ListWorkers(ctx context.Context, r *controlapi.ListWorkersR
 		})
 	}
 	return resp, nil
+}
+
+func parseCacheExporterOpt(opt map[string]string) solver.CacheExportMode {
+	for k, v := range opt {
+		switch k {
+		case "mode":
+			switch v {
+			case "min":
+				return solver.CacheExportModeMin
+			case "max":
+				return solver.CacheExportModeMax
+			default:
+				logrus.Debugf("skipping incalid cache export mode: %s", v)
+			}
+		default:
+			logrus.Warnf("skipping invalid cache export opt: %s", v)
+		}
+	}
+	return solver.CacheExportModeMin
 }

@@ -63,7 +63,11 @@ var buildCommand = cli.Command{
 			Name:  "export-cache",
 			Usage: "Reference to export build cache to",
 		},
-		cli.StringFlag{
+		cli.StringSliceFlag{
+			Name:  "export-cache-opt",
+			Usage: "Define custom options for cache exporting",
+		},
+		cli.StringSliceFlag{
 			Name:  "import-cache",
 			Usage: "Reference to import build cache from",
 		},
@@ -126,7 +130,7 @@ func build(clicontext *cli.Context) error {
 		Frontend: clicontext.String("frontend"),
 		// FrontendAttrs is set later
 		ExportCache: clicontext.String("export-cache"),
-		ImportCache: clicontext.String("import-cache"),
+		ImportCache: clicontext.StringSlice("import-cache"),
 		Session:     []session.Attachable{authprovider.NewDockerAuthProvider()},
 	}
 	solveOpt.ExporterAttrs, err = attrMap(clicontext.StringSlice("exporter-opt"))
@@ -145,6 +149,15 @@ func build(clicontext *cli.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "invalid frontend-opt")
 	}
+
+	exportCacheAttrs, err := attrMap(clicontext.StringSlice("export-cache-opt"))
+	if err != nil {
+		return errors.Wrap(err, "invalid export-cache-opt")
+	}
+	if len(exportCacheAttrs) == 0 {
+		exportCacheAttrs = map[string]string{"mode": "min"}
+	}
+	solveOpt.ExportCacheAttrs = exportCacheAttrs
 
 	solveOpt.LocalDirs, err = attrMap(clicontext.StringSlice("local"))
 	if err != nil {
