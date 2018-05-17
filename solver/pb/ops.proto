@@ -49,6 +49,19 @@ message Mount {
 	string dest = 3;
 	int64 output = 4 [(gogoproto.customtype) = "OutputIndex", (gogoproto.nullable) = false];
 	bool readonly = 5;
+	MountType mountType = 6;
+	CacheOpt cacheOpt = 20;
+}
+
+enum MountType {
+	BIND = 0;
+	SECRET = 1;
+	SSH = 2;
+	CACHE = 3;
+}
+
+message CacheOpt {
+	string ID = 1;
 }
 
 // CopyOp copies files across Ops.

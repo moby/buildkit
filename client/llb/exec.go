@@ -40,6 +40,7 @@ type mount struct {
 	source   Output
 	output   Output
 	selector string
+	cacheID  string
 	// hasOutput bool
 }
 
@@ -156,7 +157,7 @@ func (e *ExecOp) Marshal() (digest.Digest, []byte, *OpMetadata, error) {
 		}
 
 		outputIndex := pb.OutputIndex(-1)
-		if !m.readonly {
+		if !m.readonly && m.cacheID == "" {
 			outputIndex = pb.OutputIndex(outIndex)
 			outIndex++
 		}
@@ -167,6 +168,12 @@ func (e *ExecOp) Marshal() (digest.Digest, []byte, *OpMetadata, error) {
 			Readonly: m.readonly,
 			Output:   outputIndex,
 			Selector: m.selector,
+		}
+		if m.cacheID != "" {
+			pm.MountType = pb.MountType_CACHE
+			pm.CacheOpt = &pb.CacheOpt{
+				ID: m.cacheID,
+			}
 		}
 		peo.Mounts = append(peo.Mounts, pm)
 	}
@@ -206,7 +213,7 @@ func (e *ExecOp) getMountIndexFn(m *mount) func() (pb.OutputIndex, error) {
 
 		i := 0
 		for _, m2 := range e.mounts {
-			if m2.readonly {
+			if m2.readonly || m2.cacheID != "" {
 				continue
 			}
 			if m == m2 {
@@ -214,7 +221,7 @@ func (e *ExecOp) getMountIndexFn(m *mount) func() (pb.OutputIndex, error) {
 			}
 			i++
 		}
-		return pb.OutputIndex(0), errors.Errorf("invalid mount")
+		return pb.OutputIndex(0), errors.Errorf("invalid mount: %s", m.target)
 	}
 }
 
@@ -244,6 +251,12 @@ func Readonly(m *mount) {
 func SourcePath(src string) MountOption {
 	return func(m *mount) {
 		m.selector = src
+	}
+}
+
+func AsPersistentCacheDir(id string) MountOption {
+	return func(m *mount) {
+		m.cacheID = id
 	}
 }
 

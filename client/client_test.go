@@ -47,6 +47,7 @@ func TestClientIntegration(t *testing.T) {
 		testInvalidExporter,
 		testReadonlyRootFS,
 		testBasicCacheImportExport,
+		testCachedMounts,
 	})
 }
 
@@ -621,6 +622,68 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	dt2, err = ioutil.ReadFile(filepath.Join(destDir, "unique"))
 	require.NoError(t, err)
 	require.Equal(t, string(dt), string(dt2))
+}
+
+func testCachedMounts(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	t.Parallel()
+	c, err := New(sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("busybox:latest")
+	// setup base for one of the cache sources
+	st := busybox.Run(llb.Shlex(`sh -c "echo -n base > baz"`), llb.Dir("/wd"))
+	base := st.AddMount("/wd", llb.Scratch())
+
+	st = busybox.Run(llb.Shlex(`sh -c "echo -n first > foo"`), llb.Dir("/wd"))
+	st.AddMount("/wd", llb.Scratch(), llb.AsPersistentCacheDir("mycache1"))
+	st = st.Run(llb.Shlex(`sh -c "cat foo && echo -n second > /wd2/bar"`), llb.Dir("/wd"))
+	st.AddMount("/wd", llb.Scratch(), llb.AsPersistentCacheDir("mycache1"))
+	st.AddMount("/wd2", base, llb.AsPersistentCacheDir("mycache2"))
+
+	def, err := st.Marshal()
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	require.NoError(t, err)
+
+	// repeat to make sure cache works
+	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	require.NoError(t, err)
+
+	// second build using cache directories
+	st = busybox.Run(llb.Shlex(`sh -c "cp /src0/foo . && cp /src1/bar . && cp /src1/baz ."`), llb.Dir("/wd"))
+	out := st.AddMount("/wd", llb.Scratch())
+	st.AddMount("/src0", llb.Scratch(), llb.AsPersistentCacheDir("mycache1"))
+	st.AddMount("/src1", base, llb.AsPersistentCacheDir("mycache2"))
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	def, err = out.Marshal()
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		Exporter:          ExporterLocal,
+		ExporterOutputDir: destDir,
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "foo"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), "first")
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "bar"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), "second")
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "baz"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), "base")
+
+	checkAllReleasable(t, c, sb, true)
 }
 
 // containerd/containerd#2119
