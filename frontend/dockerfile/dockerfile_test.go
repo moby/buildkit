@@ -44,6 +44,7 @@ func TestIntegration(t *testing.T) {
 		testExposeExpansion,
 		testUser,
 		testDockerignore,
+		testDockerignoreInvalid,
 		testDockerfileFromGit,
 		testCopyChown,
 		testCopyWildcards,
@@ -584,6 +585,43 @@ Dockerfile
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "bay"))
 	require.NoError(t, err)
 	require.Equal(t, "bay-contents", string(dt))
+}
+
+func testDockerignoreInvalid(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	dockerfile := []byte(`
+FROM scratch
+COPY . .
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile(".dockerignore", []byte("!\n"), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	_, err = c.Solve(ctx, nil, client.SolveOpt{
+		Frontend: "dockerfile.v0",
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+	}, nil)
+	// err is either the expected error due to invalid dockerignore or error from the timeout
+	require.Error(t, err)
+	select {
+	case <-ctx.Done():
+		t.Fatal("timed out")
+	default:
+	}
 }
 
 func testExportedHistory(t *testing.T, sb integration.Sandbox) {
