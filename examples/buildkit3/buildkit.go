@@ -37,7 +37,7 @@ func goBuildBase() llb.State {
 	return goAlpine.
 		AddEnv("PATH", "/usr/local/go/bin:"+system.DefaultPathEnv).
 		AddEnv("GOPATH", "/go").
-		Run(llb.Shlex("apk add --no-cache g++ linux-headers make")).Root()
+		Run(llb.Shlex("apk add --no-cache g++ linux-headers libseccomp-dev make")).Root()
 }
 
 func goRepo(s llb.State, repo string, src llb.State) func(ro ...llb.RunOption) llb.State {
