@@ -116,6 +116,13 @@ func Build(ctx context.Context, c client.Client) error {
 		return err
 	}
 
+	if _, ok := c.Opts()["cmdline"]; !ok {
+		ref, cmdline, ok := dockerfile2llb.DetectSyntax(bytes.NewBuffer(dtDockerfile))
+		if ok {
+			return forwardGateway(ctx, c, ref, cmdline)
+		}
+	}
+
 	st, img, err := dockerfile2llb.Dockerfile2LLB(ctx, dtDockerfile, dockerfile2llb.ConvertOpt{
 		Target:       opts[keyTarget],
 		MetaResolver: c,
@@ -156,6 +163,20 @@ func Build(ctx context.Context, c client.Client) error {
 		return err
 	}
 	return nil
+}
+
+func forwardGateway(ctx context.Context, c client.Client, ref string, cmdline string) error {
+	opts := c.Opts()
+	if opts == nil {
+		opts = map[string]string{}
+	}
+	opts["cmdline"] = cmdline
+	opts["source"] = ref
+	_, err := c.Solve(ctx, client.SolveRequest{
+		Frontend:    "gateway.v0",
+		FrontendOpt: opts,
+	}, nil, true)
+	return err
 }
 
 func filter(opt map[string]string, key string) map[string]string {
