@@ -30,19 +30,28 @@ import (
 type Opt struct {
 	CacheAccessor cache.Accessor
 	MetadataStore *metadata.Store
+	Transport     http.RoundTripper
 }
 
 type httpSource struct {
 	md     *metadata.Store
 	cache  cache.Accessor
 	locker *locker.Locker
+	client *http.Client
 }
 
 func NewSource(opt Opt) (source.Source, error) {
+	transport := opt.Transport
+	if transport == nil {
+		transport = tracing.DefaultTransport
+	}
 	hs := &httpSource{
 		md:     opt.MetadataStore,
 		cache:  opt.CacheAccessor,
 		locker: locker.NewLocker(),
+		client: &http.Client{
+			Transport: transport,
+		},
 	}
 	return hs, nil
 }
@@ -143,7 +152,7 @@ func (hs *httpSourceHandler) CacheKey(ctx context.Context, index int) (string, b
 		}
 	}
 
-	resp, err := tracing.DefaultClient.Do(req)
+	resp, err := hs.client.Do(req)
 	if err != nil {
 		return "", false, err
 	}
@@ -295,7 +304,7 @@ func (hs *httpSourceHandler) Snapshot(ctx context.Context) (cache.ImmutableRef, 
 	}
 	req = req.WithContext(ctx)
 
-	resp, err := tracing.DefaultClient.Do(req)
+	resp, err := hs.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
