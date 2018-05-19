@@ -2,7 +2,7 @@
 
 The solver is a component in BuildKit responsible for parsing the build definition and scheduling the operations to the workers for execution.
 
-Solver package is heavily optimized for deduplication of work, concurrent requests, remote and local caching and different caching modes. It also allows operations and frontends to, call back with new definition what they have generated.
+Solver package is heavily optimized for deduplication of work, concurrent requests, remote and local caching and different per-vertex caching modes. It also allows operations and frontends to call back to itself with new definition that they have generated.
 
 The implementation of the solver is quite complicated, mostly because it is supposed to be performant with snapshot-based storage layer and distribution model using layer tarballs. It is expected that calculating the content based checksum of snapshots between every operation or after every command execution is too slow for common use cases and needs to be postponed to when it is likely to have a meaningful impact. Ideally, the user shouldn't realize that these optimizations are taking place and just get intuitive caching. It is also hoped that if some implementations can provide better cache capabilities, the solver would take advantage of that without requiring significant modification.
 
@@ -44,7 +44,7 @@ Options contain extra information that can be associated with the vertex but wha
 
 ### Operation interface
 
-Operation interface is how the solver can evaluate the properties the actual vertex operation. These methods run on the worker, and their implementation is determined by the value of `vertex.Sys()`. The solver is configured with a "resolve" function that can convert a `vertex.Sys()` into an `Op`.
+Operation interface is how the solver can evaluate the properties of the actual vertex operation. These methods run on the worker, and their implementation is determined by the value of `vertex.Sys()`. The solver is configured with a "resolve" function that can convert a `vertex.Sys()` into an `Op`.
 
 ```go
 // Op is an implementation for running a vertex
@@ -53,6 +53,7 @@ type Op interface {
     // Currently only roots are allowed to return multiple cache maps per op.
     CacheMap(context.Context, int) (*CacheMap, bool, error)
     // Exec runs an operation given results from previous operations.
+    // Note that this is not the process execution but can have any definition.
     Exec(ctx context.Context, inputs []Result) (outputs []Result, err error)
 }
 
@@ -80,7 +81,7 @@ type Result interface {
 }
 ```
 
-There are two functions that every operation defines. One describes for to calculate a cache key for a vertex and another how to execute it.
+There are two functions that every operation defines. One describes how to calculate a cache key for a vertex and another how to execute it.
 
 `CacheMap` is a description for calculating the cache key. It contains a digest that is combined with the cache keys of the inputs to determine the stable checksum that can be used to cache the operation result. For the vertexes that don't have inputs(roots), it is important that this digest is a stable secure checksum. For example, in LLB this digest is a manifest digest for container images or a commit SHA for git sources.
 
@@ -99,9 +100,9 @@ After vertexes have been loaded to the job, it is safe to request a result from 
 
 ### Scheduler
 
-The scheduler is a component responsible for invoking the individual operations needed to find the result for the graph. While the build definition is defined with vertexes, the scheduler is solving edges. In the case of LLB solver, a result of a solved edge is associated with a snapshot. Usually, to solve an edge, the input edges need to be solved first and this can be done concurrently, but there are many exceptions like edge may be cached but its input might be not, or solving one input might cause a cache hit while solving others would just be wasteful. Scheduler tried so handle all these cases.
+The scheduler is a component responsible for invoking the individual operations needed to find the result for the graph. While the build definition is defined with vertexes, the scheduler is solving edges. In the case of LLB solver, a result of a solved edge is associated with a snapshot. Usually, to solve an edge, the input edges need to be solved first and this can be done concurrently, but there are many exceptions like edge may be cached but its input might be not, or solving one input might cause a cache hit while solving others would just be wasteful. Scheduler tries do handle all these cases.
 
-The scheduler is implemented as a single threaded non-blocking event loop. The single threaded constraint is for simplicity and might be removed in the future - currently, it is not known if this would have any performance impact. All the events in the scheduler have one fixed sender and receiver. The interface for interacting with the scheduler is to create a "pipe" between sender and a receiver parties. One or both sides of the pipe may be an edge instance of the graph. If a pipe is added it to the scheduler and an edge receives an event from the pipe, the scheduler will "unpark" that edge so it can process all the events it had received.
+The scheduler is implemented as a single threaded non-blocking event loop. The single threaded constraint is for simplicity and might be removed in the future - currently, it is not known if this would have any performance impact. All the events in the scheduler have one fixed sender and receiver. The interface for interacting with the scheduler is to create a "pipe" between a sender and a receiver. One or both sides of the pipe may be an edge instance of the graph. If a pipe is added it to the scheduler and an edge receives an event from the pipe, the scheduler will "unpark" that edge so it can process all the events it had received.
 
 The unpark handler for an edge needs to be non-blocking and execute quickly. The edge will process the data from the incoming events and update its internal state. When calling unpark, the scheduler has already separated out the sender and receiver sides of the pipes that in the code are referred as incoming and outgoing requests. The incoming requests are usually requests to retrieve a result or a cache key from an edge. If it appears that an edge doesn't have enough internal state to satisfy the requests, it can make new pipes and register them with the scheduler. These new pipes are generally of two types: ones asking for some async function to be completed and others that request an input edge to reach a specific state first.
 
