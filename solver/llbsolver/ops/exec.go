@@ -36,6 +36,8 @@ type execOp struct {
 }
 
 func NewExecOp(v solver.Vertex, op *pb.Op_Exec, cm cache.Manager, md *metadata.Store, exec executor.Executor, w worker.Worker) (solver.Op, error) {
+	logrus.Debugf("newexecop %#v", op.Exec.Meta)
+
 	return &execOp{
 		op:        op.Exec,
 		cm:        cm,
@@ -48,6 +50,8 @@ func NewExecOp(v solver.Vertex, op *pb.Op_Exec, cm cache.Manager, md *metadata.S
 
 func cloneExecOp(old *pb.ExecOp) pb.ExecOp {
 	n := *old
+	meta := *n.Meta
+	n.Meta = &meta
 	n.Mounts = nil
 	for i := range n.Mounts {
 		m := *n.Mounts[i]
@@ -61,6 +65,7 @@ func (e *execOp) CacheMap(ctx context.Context, index int) (*solver.CacheMap, boo
 	for i := range op.Mounts {
 		op.Mounts[i].Selector = ""
 	}
+	op.Meta.ProxyEnv = nil
 
 	dt, err := json.Marshal(struct {
 		Type string
@@ -315,6 +320,10 @@ func (e *execOp) Exec(ctx context.Context, inputs []solver.Result) ([]solver.Res
 		ReadonlyRootFS: readonlyRootFS,
 	}
 
+	if e.op.Meta.ProxyEnv != nil {
+		meta.Env = append(meta.Env, proxyEnvList(e.op.Meta.ProxyEnv)...)
+	}
+
 	stdout, stderr := logs.NewLogStreams(ctx)
 	defer stdout.Close()
 	defer stderr.Close()
@@ -337,4 +346,21 @@ func (e *execOp) Exec(ctx context.Context, inputs []solver.Result) ([]solver.Res
 		outputs[i] = nil
 	}
 	return refs, nil
+}
+
+func proxyEnvList(p *pb.ProxyEnv) []string {
+	out := []string{}
+	if v := p.HttpProxy; v != "" {
+		out = append(out, "HTTP_PROXY="+v, "http_proxy="+v)
+	}
+	if v := p.HttpsProxy; v != "" {
+		out = append(out, "HTTPS_PROXY="+v, "https_proxy="+v)
+	}
+	if v := p.FtpProxy; v != "" {
+		out = append(out, "FTP_PROXY="+v, "ftp_proxy="+v)
+	}
+	if v := p.NoProxy; v != "" {
+		out = append(out, "NO_PROXY="+v, "no_proxy="+v)
+	}
+	return out
 }

@@ -40,6 +40,7 @@ message Meta {
 	repeated string env = 2;
 	string cwd = 3;
 	string user = 4;
+	ProxyEnv proxy_env = 5;
 }
 
 // Mount specifies how to mount an input Op as a filesystem.
@@ -111,7 +112,14 @@ message OpMetadata {
 
 message ExportCache {
 	bool Value = 1;
-};
+}
+
+message ProxyEnv {
+	string http_proxy = 1;
+	string https_proxy = 2;
+	string ftp_proxy = 3;
+	string no_proxy = 4;
+}
 
 // WorkerConstraint is experimental and likely to be changed.
 message WorkerConstraint {

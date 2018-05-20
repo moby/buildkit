@@ -48,6 +48,7 @@ func TestClientIntegration(t *testing.T) {
 		testReadonlyRootFS,
 		testBasicCacheImportExport,
 		testCachedMounts,
+		testProxyEnv,
 	})
 }
 
@@ -893,6 +894,65 @@ func testReadonlyRootFS(t *testing.T, sb integration.Sandbox) {
 	require.Contains(t, err.Error(), "executor failed running [/bin/touch /foo]:")
 
 	checkAllReleasable(t, c, sb, true)
+}
+
+func testProxyEnv(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	c, err := New(sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	base := llb.Image("docker.io/library/busybox:latest").Dir("/out")
+	cmd := `sh -c "echo -n $HTTP_PROXY-$HTTPS_PROXY-$NO_PROXY-$no_proxy > env"`
+
+	st := base.Run(llb.Shlex(cmd), llb.WithProxy(llb.ProxyEnv{
+		HttpProxy:  "httpvalue",
+		HttpsProxy: "httpsvalue",
+		NoProxy:    "noproxyvalue",
+	}))
+	out := st.AddMount("/out", llb.Scratch())
+
+	def, err := out.Marshal()
+	require.NoError(t, err)
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		Exporter:          ExporterLocal,
+		ExporterOutputDir: destDir,
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "env"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), "httpvalue-httpsvalue-noproxyvalue-noproxyvalue")
+
+	// repeat to make sure proxy doesn't change cache
+	st = base.Run(llb.Shlex(cmd), llb.WithProxy(llb.ProxyEnv{
+		HttpsProxy: "httpsvalue2",
+		NoProxy:    "noproxyvalue2",
+	}))
+	out = st.AddMount("/out", llb.Scratch())
+
+	def, err = out.Marshal()
+	require.NoError(t, err)
+
+	destDir, err = ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		Exporter:          ExporterLocal,
+		ExporterOutputDir: destDir,
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "env"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), "httpvalue-httpsvalue-noproxyvalue-noproxyvalue")
 }
 
 func requiresLinux(t *testing.T) {
