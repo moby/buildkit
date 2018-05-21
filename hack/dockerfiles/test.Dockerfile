@@ -1,5 +1,5 @@
 ARG RUNC_VERSION=69663f0bd4b60df09991c08812a60108003fa340
-ARG CONTAINERD_VERSION=v1.1.0
+ARG CONTAINERD_VERSION=430969e9fac6c57eb115a9fcb6c2e92ea44344c0
 # containerd v1.0 for integration tests
 ARG CONTAINERD10_VERSION=v1.0.3
 # available targets: buildkitd, buildkitd.oci_only, buildkitd.containerd_only
@@ -37,7 +37,7 @@ RUN git clone https://github.com/opencontainers/runc.git "$GOPATH/src/github.com
 
 FROM gobuild-base AS containerd-base
 RUN apk add --no-cache btrfs-progs-dev
-RUN git clone https://github.com/containerd/containerd.git /go/src/github.com/containerd/containerd
+RUN git clone https://github.com/dmcgowan/containerd.git /go/src/github.com/containerd/containerd
 WORKDIR /go/src/github.com/containerd/containerd
 
 FROM containerd-base as containerd

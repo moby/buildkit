@@ -8,7 +8,7 @@ docker build --iidfile $iidfile --target integration-tests -f ./hack/dockerfiles
 
 iid=$(cat $iidfile)
 
-docker run --rm -v /tmp --privileged $iid go test ${TESTFLAGS:--v} ${TESTPKGS:-./...}
+docker run --rm -v /tmp --privileged $iid go test -count=5 ${TESTFLAGS:--v} ${TESTPKGS:-./...}
 
 docker run --rm $iid go build ./frontend/gateway/client
 docker run --rm $iid go build ./frontend/dockerfile/cmd/dockerfile-frontend
