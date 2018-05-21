@@ -56,6 +56,8 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		return nil, nil, err
 	}
 
+	proxyEnv := proxyEnvFromBuildArgs(opt.BuildArgs)
+
 	stages, metaArgs, err := instructions.Parse(dockerfile.AST)
 	if err != nil {
 		return nil, nil, err
@@ -226,6 +228,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 			shlex:                shlex,
 			sessionID:            opt.SessionID,
 			buildContext:         llb.NewState(buildContext),
+			proxyEnv:             proxyEnv,
 		}
 
 		if err = dispatchOnBuild(d, d.image.Config.OnBuild, opt); err != nil {
@@ -303,6 +306,7 @@ type dispatchOpt struct {
 	shlex                *shell.Lex
 	sessionID            string
 	buildContext         llb.State
+	proxyEnv             *llb.ProxyEnv
 }
 
 func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
@@ -322,7 +326,7 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 	case *instructions.EnvCommand:
 		err = dispatchEnv(d, c, true)
 	case *instructions.RunCommand:
-		err = dispatchRun(d, c)
+		err = dispatchRun(d, c, opt.proxyEnv)
 	case *instructions.WorkdirCommand:
 		err = dispatchWorkdir(d, c, true)
 	case *instructions.AddCommand:
@@ -424,7 +428,7 @@ func dispatchEnv(d *dispatchState, c *instructions.EnvCommand, commit bool) erro
 	return nil
 }
 
-func dispatchRun(d *dispatchState, c *instructions.RunCommand) error {
+func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyEnv) error {
 	var args []string = c.CmdLine
 	if c.PrependShell {
 		args = append(defaultShell(), strings.Join(args, " "))
@@ -438,6 +442,9 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand) error {
 	opt = append(opt, dfCmd(c))
 	if d.ignoreCache {
 		opt = append(opt, llb.IgnoreCache)
+	}
+	if proxy != nil {
+		opt = append(opt, llb.WithProxy(*proxy))
 	}
 	d.state = d.state.Run(opt...).Root()
 	return commitToHistory(&d.image, "RUN "+runCommandString(args, d.buildArgs), true, &d.state)
@@ -849,6 +856,33 @@ func normalizeContextPaths(paths map[string]struct{}) []string {
 		return toSort[i] < toSort[j]
 	})
 	return toSort
+}
+
+func proxyEnvFromBuildArgs(args map[string]string) *llb.ProxyEnv {
+	pe := &llb.ProxyEnv{}
+	isNil := true
+	for k, v := range args {
+		if strings.EqualFold(k, "http_proxy") {
+			pe.HttpProxy = v
+			isNil = false
+		}
+		if strings.EqualFold(k, "https_proxy") {
+			pe.HttpsProxy = v
+			isNil = false
+		}
+		if strings.EqualFold(k, "ftp_proxy") {
+			pe.FtpProxy = v
+			isNil = false
+		}
+		if strings.EqualFold(k, "no_proxy") {
+			pe.NoProxy = v
+			isNil = false
+		}
+	}
+	if isNil {
+		return nil
+	}
+	return pe
 }
 
 type mutableOutput struct {
