@@ -27,6 +27,7 @@ import (
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/moby/buildkit/util/profiler"
+	"github.com/moby/buildkit/version"
 	"github.com/moby/buildkit/worker"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -62,6 +63,9 @@ func registerWorkerInitializer(wi workerInitializer, flags ...cli.Flag) {
 }
 
 func main() {
+	cli.VersionPrinter = func(c *cli.Context) {
+		fmt.Println(c.App.Name, version.Package, c.App.Version, version.Revision)
+	}
 	app := cli.NewApp()
 	app.Name = "buildkitd"
 	app.Usage = "build daemon"

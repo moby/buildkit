@@ -16,15 +16,18 @@ RUN apk add --no-cache git libseccomp-dev make
 FROM gobuild-base AS buildkit-base
 WORKDIR /go/src/github.com/moby/buildkit
 COPY . .
+RUN mkdir .tmp; \
+  PKG=github.com/moby/buildkit VERSION=$(git describe --match 'v[0-9]*' --dirty='.m' --always) REVISION=$(git rev-parse HEAD)$(if ! git diff --no-ext-diff --quiet --exit-code; then echo .m; fi); \
+  echo "-X ${PKG}/version.Version=${VERSION} -X ${PKG}/version.Revision=${REVISION} -X ${PKG}/version.Package=${PKG}" | tee .tmp/ldflags
 
 FROM buildkit-base AS buildctl
 ENV CGO_ENABLED=0
 ARG GOOS=linux
-RUN go build -ldflags '-d' -o /usr/bin/buildctl ./cmd/buildctl
+RUN go build -ldflags "$(cat .tmp/ldflags) -d" -o /usr/bin/buildctl ./cmd/buildctl
 
 FROM buildkit-base AS buildkitd
 ENV CGO_ENABLED=1
-RUN go build -installsuffix netgo -ldflags '-w -extldflags -static' -tags 'seccomp netgo cgo static_build' -o /usr/bin/buildkitd ./cmd/buildkitd
+RUN go build -installsuffix netgo -ldflags "$(cat .tmp/ldflags) -w -extldflags -static" -tags 'seccomp netgo cgo static_build' -o /usr/bin/buildkitd ./cmd/buildkitd
 
 # test dependencies begin here
 FROM gobuild-base AS runc
@@ -61,11 +64,11 @@ COPY --from=containerd /go/src/github.com/containerd/containerd/bin/containerd* 
 
 FROM buildkit-base AS buildkitd.oci_only
 ENV CGO_ENABLED=1
-RUN go build -installsuffix netgo -ldflags '-w -extldflags -static' -tags 'no_containerd_worker seccomp netgo cgo static_build' -o /usr/bin/buildkitd.oci_only ./cmd/buildkitd
+RUN go build -installsuffix netgo -ldflags "$(cat .tmp/ldflags) -w -extldflags -static" -tags 'no_containerd_worker seccomp netgo cgo static_build' -o /usr/bin/buildkitd.oci_only ./cmd/buildkitd
 
 FROM buildkit-base AS buildkitd.containerd_only
 ENV CGO_ENABLED=0
-RUN go build -ldflags '-d'  -o /usr/bin/buildkitd.containerd_only -tags no_oci_worker ./cmd/buildkitd
+RUN go build -ldflags "$(cat .tmp/ldflags) -d"  -o /usr/bin/buildkitd.containerd_only -tags no_oci_worker ./cmd/buildkitd
 
 FROM registry:$REGISTRY_VERSION AS registry
 
@@ -81,11 +84,11 @@ WORKDIR /go/src/github.com/moby/buildkit
 COPY . .
 
 FROM cross-windows AS buildctl.exe
-RUN go build -o /buildctl.exe ./cmd/buildctl
+RUN go build -ldflags "$(cat .tmp/ldflags)" -o /buildctl.exe ./cmd/buildctl
 
 FROM cross-windows AS buildkitd.exe
 ENV CGO_ENABLED=0
-RUN go build -o /buildkitd.exe ./cmd/buildkitd
+RUN go build -ldflags "$(cat .tmp/ldflags)" -o /buildkitd.exe ./cmd/buildkitd
 
 FROM alpine AS buildkit-export
 RUN apk add --no-cache git
