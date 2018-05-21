@@ -465,9 +465,7 @@ func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState l
 		dest += string(filepath.Separator)
 	}
 	args := []string{"copy"}
-	if isAddCommand {
-		args = append(args, "--unpack")
-	}
+	unpack := isAddCommand
 
 	mounts := make([]llb.RunOption, 0, len(c.Sources()))
 	if chown != "" {
@@ -489,6 +487,12 @@ func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState l
 	for i, src := range c.Sources() {
 		commitMessage.WriteString(" " + src)
 		if isAddCommand && (strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://")) {
+			// Resources from remote URLs are not decompressed.
+			// https://docs.docker.com/engine/reference/builder/#add
+			//
+			// Note: mixing up remote archives and local archives in a single ADD instruction
+			// would result in undefined behavior: https://github.com/moby/buildkit/pull/387#discussion_r189494717
+			unpack = false
 			u, err := url.Parse(src)
 			f := "__unnamed__"
 			if err == nil {
@@ -498,7 +502,7 @@ func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState l
 			}
 			target := path.Join(fmt.Sprintf("/src-%d", i), f)
 			args = append(args, target)
-			mounts = append(mounts, llb.AddMount(target, llb.HTTP(src, llb.Filename(f), dfCmd(c)), llb.Readonly))
+			mounts = append(mounts, llb.AddMount(path.Dir(target), llb.HTTP(src, llb.Filename(f), dfCmd(c)), llb.Readonly))
 		} else {
 			d, f := splitWildcards(src)
 			targetCmd := fmt.Sprintf("/src-%d", i)
@@ -516,6 +520,9 @@ func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState l
 	commitMessage.WriteString(" " + c.Dest())
 
 	args = append(args, dest)
+	if unpack {
+		args = append(args[:1], append([]string{"--unpack"}, args[1:]...)...)
+	}
 	run := img.Run(append([]llb.RunOption{llb.Args(args), llb.ReadonlyRootFS(), dfCmd(cmdToPrint)}, mounts...)...)
 	d.state = run.AddMount("/dest", d.state)
 
