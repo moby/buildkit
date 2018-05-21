@@ -373,6 +373,32 @@ ADD %s /
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "t.tar.gz"))
 	require.NoError(t, err)
 	require.Equal(t, buf2.Bytes(), dt)
+
+	// https://github.com/moby/buildkit/issues/386
+	dockerfile = []byte(fmt.Sprintf(`
+FROM scratch
+ADD %s /newname.tar.gz
+`, server.URL+"/t.tar.gz"))
+
+	dir, err = tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	args, trace = dfCmdArgs(dir, dir)
+	defer os.RemoveAll(trace)
+
+	destDir, err = tmpdir()
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	cmd = sb.Cmd(args + fmt.Sprintf(" --exporter=local --exporter-opt output=%s", destDir))
+	require.NoError(t, cmd.Run())
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "newname.tar.gz"))
+	require.NoError(t, err)
+	require.Equal(t, buf2.Bytes(), dt)
 }
 
 func testDockerfileScratchConfig(t *testing.T, sb integration.Sandbox) {
