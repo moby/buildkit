@@ -530,7 +530,12 @@ func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState l
 	if unpack {
 		args = append(args[:1], append([]string{"--unpack"}, args[1:]...)...)
 	}
-	run := img.Run(append([]llb.RunOption{llb.Args(args), llb.ReadonlyRootFS(), dfCmd(cmdToPrint)}, mounts...)...)
+
+	opt := []llb.RunOption{llb.Args(args), llb.ReadonlyRootFS(), dfCmd(cmdToPrint)}
+	if d.ignoreCache {
+		opt = append(opt, llb.IgnoreCache)
+	}
+	run := img.Run(append(opt, mounts...)...)
 	d.state = run.AddMount("/dest", d.state)
 
 	return commitToHistory(&d.image, commitMessage.String(), true, &d.state)
