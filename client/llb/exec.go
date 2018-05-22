@@ -10,10 +10,11 @@ import (
 )
 
 type Meta struct {
-	Args []string
-	Env  EnvList
-	Cwd  string
-	User string
+	Args     []string
+	Env      EnvList
+	Cwd      string
+	User     string
+	ProxyEnv *ProxyEnv
 }
 
 func NewExecOp(root Output, meta Meta, readOnly bool, md OpMetadata) *ExecOp {
@@ -122,6 +123,15 @@ func (e *ExecOp) Marshal() (digest.Digest, []byte, *OpMetadata, error) {
 			Cwd:  e.meta.Cwd,
 			User: e.meta.User,
 		},
+	}
+
+	if p := e.meta.ProxyEnv; p != nil {
+		peo.Meta.ProxyEnv = &pb.ProxyEnv{
+			HttpProxy:  p.HttpProxy,
+			HttpsProxy: p.HttpsProxy,
+			FtpProxy:   p.FtpProxy,
+			NoProxy:    p.NoProxy,
+		}
 	}
 
 	pop := &pb.Op{
@@ -334,15 +344,29 @@ func ReadonlyRootFS() RunOption {
 	})
 }
 
+func WithProxy(ps ProxyEnv) RunOption {
+	return runOptionFunc(func(ei *ExecInfo) {
+		ei.ProxyEnv = &ps
+	})
+}
+
 type ExecInfo struct {
 	opMetaWrapper
 	State          State
 	Mounts         []MountInfo
 	ReadonlyRootFS bool
+	ProxyEnv       *ProxyEnv
 }
 
 type MountInfo struct {
 	Target string
 	Source Output
 	Opts   []MountOption
+}
+
+type ProxyEnv struct {
+	HttpProxy  string
+	HttpsProxy string
+	FtpProxy   string
+	NoProxy    string
 }

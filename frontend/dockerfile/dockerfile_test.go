@@ -59,6 +59,7 @@ func TestIntegration(t *testing.T) {
 		testImportExportReproducibleIDs,
 		testNoCache,
 		testDockerfileFromHTTP,
+		testBuiltinArgs,
 	})
 }
 
@@ -1765,6 +1766,108 @@ COPY --from=s1 unique2 /
 
 	require.Equal(t, string(unique1Dir2), string(unique1Dir3))
 	require.NotEqual(t, string(unique2Dir1), string(unique2Dir3))
+}
+
+func testBuiltinArgs(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	dockerfile := []byte(`
+FROM busybox AS build
+ARG FOO
+ARG BAR
+ARG BAZ=bazcontent
+RUN echo -n $HTTP_PROXY::$NO_PROXY::$FOO::$BAR::$BAZ > /out
+FROM scratch
+COPY --from=build /out /
+
+`)
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	opt := client.SolveOpt{
+		Frontend: "dockerfile.v0",
+		FrontendAttrs: map[string]string{
+			"build-arg:FOO":        "foocontents",
+			"build-arg:http_proxy": "hpvalue",
+			"build-arg:NO_PROXY":   "npvalue",
+		},
+		Exporter:          client.ExporterLocal,
+		ExporterOutputDir: destDir,
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+	}
+
+	_, err = c.Solve(context.TODO(), nil, opt, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "out"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), "hpvalue::npvalue::foocontents::::bazcontent")
+
+	// repeat with changed default args should match the old cache
+	destDir, err = ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	opt = client.SolveOpt{
+		Frontend: "dockerfile.v0",
+		FrontendAttrs: map[string]string{
+			"build-arg:FOO":        "foocontents",
+			"build-arg:http_proxy": "hpvalue2",
+		},
+		Exporter:          client.ExporterLocal,
+		ExporterOutputDir: destDir,
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+	}
+
+	_, err = c.Solve(context.TODO(), nil, opt, nil)
+	require.NoError(t, err)
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "out"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), "hpvalue::npvalue::foocontents::::bazcontent")
+
+	// changing actual value invalidates cache
+	destDir, err = ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	opt = client.SolveOpt{
+		Frontend: "dockerfile.v0",
+		FrontendAttrs: map[string]string{
+			"build-arg:FOO":        "foocontents2",
+			"build-arg:http_proxy": "hpvalue2",
+		},
+		Exporter:          client.ExporterLocal,
+		ExporterOutputDir: destDir,
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+	}
+
+	_, err = c.Solve(context.TODO(), nil, opt, nil)
+	require.NoError(t, err)
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "out"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), "hpvalue2::::foocontents2::::bazcontent")
 }
 
 func tmpdir(appliers ...fstest.Applier) (string, error) {

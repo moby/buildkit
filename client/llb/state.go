@@ -125,10 +125,11 @@ func (s State) Run(ro ...RunOption) ExecState {
 		o.SetRunOption(ei)
 	}
 	meta := Meta{
-		Args: getArgs(ei.State),
-		Cwd:  getDir(ei.State),
-		Env:  getEnv(ei.State),
-		User: getUser(ei.State),
+		Args:     getArgs(ei.State),
+		Cwd:      getDir(ei.State),
+		Env:      getEnv(ei.State),
+		User:     getUser(ei.State),
+		ProxyEnv: ei.ProxyEnv,
 	}
 
 	exec := NewExecOp(s.Output(), meta, ei.ReadonlyRootFS, ei.Metadata())
@@ -256,6 +257,10 @@ func mergeMetadata(m1, m2 OpMetadata) OpMetadata {
 			m1.Description[k] = v
 		}
 	}
+	if m2.ExportCache != nil {
+		m1.ExportCache = m2.ExportCache
+	}
+
 	return m1
 }
 
