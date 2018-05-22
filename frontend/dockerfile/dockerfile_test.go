@@ -35,6 +35,7 @@ import (
 
 func TestIntegration(t *testing.T) {
 	integration.Run(t, []integration.Test{
+		testGlobalArg,
 		testDockerfileDirs,
 		testDockerfileInvalidCommand,
 		testDockerfileADDFromURL,
@@ -59,6 +60,36 @@ func TestIntegration(t *testing.T) {
 		testNoCache,
 		testDockerfileFromHTTP,
 	})
+}
+
+func testGlobalArg(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+	dockerfile := []byte(`
+ARG tag=nosuchtag
+FROM busybox:${tag}
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	_, err = c.Solve(context.TODO(), nil, client.SolveOpt{
+		Frontend: "dockerfile.v0",
+		FrontendAttrs: map[string]string{
+			"build-arg:tag": "latest",
+		},
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
 }
 
 func testDockerfileDirs(t *testing.T, sb integration.Sandbox) {
