@@ -21,14 +21,31 @@ var WithDefault = llb.ImageOptionFunc(func(ii *llb.ImageInfo) {
 	llb.WithMetaResolver(Default()).SetImageOption(ii)
 })
 
-func New() llb.ImageMetaResolver {
+type imageMetaResolverOpts struct {
+	platform string
+}
+
+type ImageMetaResolverOpt func(o *imageMetaResolverOpts)
+
+func WithPlatform(p string) ImageMetaResolverOpt {
+	return func(o *imageMetaResolverOpts) {
+		o.platform = p
+	}
+}
+
+func New(with ...ImageMetaResolverOpt) llb.ImageMetaResolver {
+	var opts imageMetaResolverOpts
+	for _, f := range with {
+		f(&opts)
+	}
 	return &imageMetaResolver{
 		resolver: docker.NewResolver(docker.ResolverOptions{
 			Client: http.DefaultClient,
 		}),
-		buffer: contentutil.NewBuffer(),
-		cache:  map[string]resolveResult{},
-		locker: locker.NewLocker(),
+		platform: opts.platform,
+		buffer:   contentutil.NewBuffer(),
+		cache:    map[string]resolveResult{},
+		locker:   locker.NewLocker(),
 	}
 }
 
@@ -42,6 +59,7 @@ func Default() llb.ImageMetaResolver {
 type imageMetaResolver struct {
 	resolver remotes.Resolver
 	buffer   contentutil.Buffer
+	platform string
 	locker   *locker.Locker
 	cache    map[string]resolveResult
 }
@@ -59,7 +77,7 @@ func (imr *imageMetaResolver) ResolveImageConfig(ctx context.Context, ref string
 		return res.dgst, res.config, nil
 	}
 
-	dgst, config, err := imageutil.Config(ctx, ref, imr.resolver, imr.buffer)
+	dgst, config, err := imageutil.Config(ctx, ref, imr.resolver, imr.buffer, imr.platform)
 	if err != nil {
 		return "", nil, err
 	}

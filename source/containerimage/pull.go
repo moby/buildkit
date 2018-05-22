@@ -58,7 +58,7 @@ func (is *imageSource) ResolveImageConfig(ctx context.Context, ref string) (dige
 		dt   []byte
 	}
 	res, err := is.g.Do(ctx, ref, func(ctx context.Context) (interface{}, error) {
-		dgst, dt, err := imageutil.Config(ctx, ref, pull.NewResolver(ctx, is.SessionManager, is.ImageStore), is.ContentStore)
+		dgst, dt, err := imageutil.Config(ctx, ref, pull.NewResolver(ctx, is.SessionManager, is.ImageStore), is.ContentStore, "")
 		if err != nil {
 			return nil, err
 		}
@@ -132,7 +132,7 @@ func (p *puller) CacheKey(ctx context.Context, index int) (string, bool, error) 
 	if err != nil {
 		return "", false, nil
 	}
-	_, dt, err := imageutil.Config(ctx, ref.String(), p.Resolver, p.ContentStore)
+	_, dt, err := imageutil.Config(ctx, ref.String(), p.Resolver, p.ContentStore, "")
 	if err != nil {
 		// this happens on schema1 images
 		k, err := mainManifestKey(ctx, desc)
