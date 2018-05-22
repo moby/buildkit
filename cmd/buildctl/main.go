@@ -8,12 +8,16 @@ import (
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/moby/buildkit/util/profiler"
+	"github.com/moby/buildkit/version"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )
 
 func main() {
+	cli.VersionPrinter = func(c *cli.Context) {
+		fmt.Println(c.App.Name, version.Package, c.App.Version, version.Revision)
+	}
 	app := cli.NewApp()
 	app.Name = "buildctl"
 	app.Usage = "build utility"
