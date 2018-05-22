@@ -33,6 +33,7 @@ import (
 
 func TestClientIntegration(t *testing.T) {
 	integration.Run(t, []integration.Test{
+		testRelativeWorkDir,
 		testCallDiskUsage,
 		testBuildMultiMount,
 		testBuildHTTPSource,
@@ -49,6 +50,37 @@ func TestClientIntegration(t *testing.T) {
 		testBasicCacheImportExport,
 		testCachedMounts,
 	})
+}
+
+func testRelativeWorkDir(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+	requiresLinux(t)
+	c, err := New(sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	pwd := llb.Image("docker.io/library/busybox:latest").
+		Dir("test1").
+		Dir("test2").
+		Run(llb.Shlex(`sh -c "pwd > /out/pwd"`)).
+		AddMount("/out", llb.Scratch())
+
+	def, err := pwd.Marshal()
+	require.NoError(t, err)
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		Exporter:          ExporterLocal,
+		ExporterOutputDir: destDir,
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "pwd"))
+	require.NoError(t, err)
+	require.Equal(t, []byte("/test1/test2\n"), dt)
 }
 
 func testCallDiskUsage(t *testing.T, sb integration.Sandbox) {
