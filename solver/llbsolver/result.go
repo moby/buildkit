@@ -68,11 +68,13 @@ func (s *cacheResultStorage) Save(res solver.Result) (solver.CacheResult, error)
 	if !ok {
 		return solver.CacheResult{}, errors.Errorf("invalid result: %T", res.Sys())
 	}
-	if !cache.HasCachePolicyRetain(ref.ImmutableRef) {
-		if err := cache.CachePolicyRetain(ref.ImmutableRef); err != nil {
-			return solver.CacheResult{}, err
+	if ref.ImmutableRef != nil {
+		if !cache.HasCachePolicyRetain(ref.ImmutableRef) {
+			if err := cache.CachePolicyRetain(ref.ImmutableRef); err != nil {
+				return solver.CacheResult{}, err
+			}
+			ref.ImmutableRef.Metadata().Commit()
 		}
-		ref.ImmutableRef.Metadata().Commit()
 	}
 	return solver.CacheResult{ID: ref.ID(), CreatedAt: time.Now()}, nil
 }
@@ -97,7 +99,9 @@ func (s *cacheResultStorage) load(id string) (solver.Result, error) {
 	if err != nil {
 		return nil, err
 	}
-
+	if refID == "" {
+		return worker.NewWorkerRefResult(nil, w), nil
+	}
 	ref, err := w.LoadRef(refID)
 	if err != nil {
 		return nil, err

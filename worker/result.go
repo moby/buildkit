@@ -17,7 +17,11 @@ type WorkerRef struct {
 }
 
 func (wr *WorkerRef) ID() string {
-	return wr.Worker.ID() + "::" + wr.ImmutableRef.ID()
+	refID := ""
+	if wr.ImmutableRef != nil {
+		refID = wr.ImmutableRef.ID()
+	}
+	return wr.Worker.ID() + "::" + refID
 }
 
 type workerRefResult struct {
@@ -25,6 +29,9 @@ type workerRefResult struct {
 }
 
 func (r *workerRefResult) Release(ctx context.Context) error {
+	if r.ImmutableRef == nil {
+		return nil
+	}
 	return r.ImmutableRef.Release(ctx)
 }
 
