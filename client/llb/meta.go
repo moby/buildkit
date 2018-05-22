@@ -2,6 +2,7 @@ package llb
 
 import (
 	"fmt"
+	"path"
 
 	"github.com/google/shlex"
 )
@@ -31,7 +32,15 @@ func dir(str string) StateOption {
 
 func dirf(str string, v ...interface{}) StateOption {
 	return func(s State) State {
-		return s.WithValue(keyDir, fmt.Sprintf(str, v...))
+		value := fmt.Sprintf(str, v...)
+		if !path.IsAbs(value) {
+			prev := getDir(s)
+			if prev == "" {
+				prev = "/"
+			}
+			value = path.Join(prev, value)
+		}
+		return s.WithValue(keyDir, value)
 	}
 }
 
