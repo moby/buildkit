@@ -440,7 +440,7 @@ func dispatchEnv(d *dispatchState, c *instructions.EnvCommand, commit bool) erro
 func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyEnv) error {
 	var args []string = c.CmdLine
 	if c.PrependShell {
-		args = append(defaultShell(), strings.Join(args, " "))
+		args = withShell(d.image, args)
 	} else if d.image.Config.Entrypoint != nil {
 		args = append(d.image.Config.Entrypoint, args...)
 	}
@@ -570,7 +570,7 @@ func dispatchOnbuild(d *dispatchState, c *instructions.OnbuildCommand) error {
 func dispatchCmd(d *dispatchState, c *instructions.CmdCommand) error {
 	var args []string = c.CmdLine
 	if c.PrependShell {
-		args = append(defaultShell(), strings.Join(args, " "))
+		args = withShell(d.image, args)
 	}
 	d.image.Config.Cmd = args
 	d.image.Config.ArgsEscaped = true
@@ -581,7 +581,7 @@ func dispatchCmd(d *dispatchState, c *instructions.CmdCommand) error {
 func dispatchEntrypoint(d *dispatchState, c *instructions.EntrypointCommand) error {
 	var args []string = c.CmdLine
 	if c.PrependShell {
-		args = append(defaultShell(), strings.Join(args, " "))
+		args = withShell(d.image, args)
 	}
 	d.image.Config.Entrypoint = args
 	if !d.cmdSet {
@@ -900,4 +900,14 @@ func proxyEnvFromBuildArgs(args map[string]string) *llb.ProxyEnv {
 
 type mutableOutput struct {
 	llb.Output
+}
+
+func withShell(img Image, args []string) []string {
+	var shell []string
+	if len(img.Config.Shell) > 0 {
+		shell = append([]string{}, img.Config.Shell...)
+	} else {
+		shell = defaultShell()
+	}
+	return append(shell, strings.Join(args, " "))
 }
