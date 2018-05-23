@@ -36,6 +36,7 @@ import (
 
 func TestIntegration(t *testing.T) {
 	integration.Run(t, []integration.Test{
+		testCmdShell,
 		testGlobalArg,
 		testDockerfileDirs,
 		testDockerfileInvalidCommand,
@@ -63,6 +64,96 @@ func TestIntegration(t *testing.T) {
 		testBuiltinArgs,
 		testPullScratch,
 	})
+}
+
+func testCmdShell(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	var cdAddress string
+	if cd, ok := sb.(interface {
+		ContainerdAddress() string
+	}); !ok {
+		t.Skip("requires local image store")
+	} else {
+		cdAddress = cd.ContainerdAddress()
+	}
+
+	dockerfile := []byte(`
+FROM scratch
+CMD ["test"]
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	target := "docker.io/moby/cmdoverridetest:latest"
+	_, err = c.Solve(context.TODO(), nil, client.SolveOpt{
+		Frontend: "dockerfile.v0",
+		Exporter: client.ExporterImage,
+		ExporterAttrs: map[string]string{
+			"name": target,
+		},
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dockerfile = []byte(`
+FROM docker.io/moby/cmdoverridetest:latest
+SHELL ["ls"]
+ENTRYPOINT my entrypoint
+`)
+
+	dir, err = tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	target = "docker.io/moby/cmdoverridetest2:latest"
+	_, err = c.Solve(context.TODO(), nil, client.SolveOpt{
+		Frontend: "dockerfile.v0",
+		Exporter: client.ExporterImage,
+		ExporterAttrs: map[string]string{
+			"name": target,
+		},
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	ctr, err := containerd.New(cdAddress)
+	require.NoError(t, err)
+	defer ctr.Close()
+
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit")
+
+	img, err := ctr.ImageService().Get(ctx, target)
+	require.NoError(t, err)
+
+	desc, err := img.Config(ctx, ctr.ContentStore(), platforms.Default())
+	require.NoError(t, err)
+
+	dt, err := content.ReadBlob(ctx, ctr.ContentStore(), desc.Digest)
+	require.NoError(t, err)
+
+	var ociimg ocispec.Image
+	err = json.Unmarshal(dt, &ociimg)
+	require.NoError(t, err)
+
+	require.Equal(t, ociimg.Config.Cmd, []string(nil))
+	require.Equal(t, ociimg.Config.Entrypoint, []string{"ls", "my entrypoint"})
 }
 
 func testPullScratch(t *testing.T, sb integration.Sandbox) {
