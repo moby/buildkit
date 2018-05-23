@@ -392,6 +392,7 @@ type dispatchState struct {
 	commands    []command
 	ctxPaths    map[string]struct{}
 	ignoreCache bool
+	cmdSet      bool
 }
 
 type command struct {
@@ -573,6 +574,7 @@ func dispatchCmd(d *dispatchState, c *instructions.CmdCommand) error {
 	}
 	d.image.Config.Cmd = args
 	d.image.Config.ArgsEscaped = true
+	d.cmdSet = true
 	return commitToHistory(&d.image, fmt.Sprintf("CMD %q", args), false, nil)
 }
 
@@ -582,6 +584,9 @@ func dispatchEntrypoint(d *dispatchState, c *instructions.EntrypointCommand) err
 		args = append(defaultShell(), strings.Join(args, " "))
 	}
 	d.image.Config.Entrypoint = args
+	if !d.cmdSet {
+		d.image.Config.Cmd = nil
+	}
 	return commitToHistory(&d.image, fmt.Sprintf("ENTRYPOINT %q", args), false, nil)
 }
 
