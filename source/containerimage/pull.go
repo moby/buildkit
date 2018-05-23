@@ -149,6 +149,9 @@ func (p *puller) Snapshot(ctx context.Context) (cache.ImmutableRef, error) {
 	if err != nil {
 		return nil, err
 	}
+	if pulled.ChainID == "" {
+		return nil, nil
+	}
 	return p.CacheAccessor.GetFromSnapshotter(ctx, string(pulled.ChainID), cache.WithDescription(fmt.Sprintf("pulled from %s", pulled.Ref)))
 }
 
