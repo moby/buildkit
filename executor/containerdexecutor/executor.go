@@ -8,12 +8,14 @@ import (
 
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/cio"
+	"github.com/containerd/containerd/contrib/seccomp"
 	containerdoci "github.com/containerd/containerd/oci"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/executor/oci"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/snapshot"
+	"github.com/moby/buildkit/util/system"
 	"github.com/pkg/errors"
 )
 
@@ -71,6 +73,9 @@ func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root c
 	opts := []containerdoci.SpecOpts{containerdoci.WithUIDGID(uid, gid)}
 	if meta.ReadonlyRootFS {
 		opts = append(opts, containerdoci.WithRootFSReadonly())
+	}
+	if system.SeccompSupported() {
+		opts = append(opts, seccomp.WithDefaultProfile())
 	}
 	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, opts...)
 	if err != nil {
