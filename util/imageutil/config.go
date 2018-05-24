@@ -19,7 +19,10 @@ type IngesterProvider interface {
 	content.Provider
 }
 
-func Config(ctx context.Context, str string, resolver remotes.Resolver, ingester IngesterProvider) (digest.Digest, []byte, error) {
+func Config(ctx context.Context, str string, resolver remotes.Resolver, ingester IngesterProvider, platform string) (digest.Digest, []byte, error) {
+	if platform == "" {
+		platform = platforms.Default()
+	}
 	ref, err := reference.Parse(str)
 	if err != nil {
 		return "", nil, errors.WithStack(err)
@@ -56,12 +59,12 @@ func Config(ctx context.Context, str string, resolver remotes.Resolver, ingester
 
 	handlers := []images.Handler{
 		remotes.FetchHandler(ingester, fetcher),
-		childrenConfigHandler(ingester, platforms.Default()),
+		childrenConfigHandler(ingester, platform),
 	}
 	if err := images.Dispatch(ctx, images.Handlers(handlers...), *desc); err != nil {
 		return "", nil, err
 	}
-	config, err := images.Config(ctx, ingester, *desc, platforms.Default())
+	config, err := images.Config(ctx, ingester, *desc, platform)
 	if err != nil {
 		return "", nil, err
 	}
