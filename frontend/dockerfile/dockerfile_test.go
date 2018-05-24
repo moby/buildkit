@@ -63,6 +63,7 @@ func TestIntegration(t *testing.T) {
 		testDockerfileFromHTTP,
 		testBuiltinArgs,
 		testPullScratch,
+		testSymlinkDestination,
 	})
 }
 
@@ -646,6 +647,51 @@ ADD %s /newname.tar.gz
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "newname.tar.gz"))
 	require.NoError(t, err)
 	require.Equal(t, buf2.Bytes(), dt)
+}
+
+func testSymlinkDestination(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	buf := bytes.NewBuffer(nil)
+	tw := tar.NewWriter(buf)
+	expectedContent := []byte("content0")
+	err := tw.WriteHeader(&tar.Header{
+		Name:     "symlink",
+		Typeflag: tar.TypeSymlink,
+		Linkname: "../tmp/symlink-target",
+		Mode:     0755,
+	})
+	require.NoError(t, err)
+	err = tw.Close()
+	require.NoError(t, err)
+
+	dockerfile := []byte(`
+FROM scratch
+ADD t.tar /
+COPY foo /symlink/
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("foo", expectedContent, 0600),
+		fstest.CreateFile("t.tar", buf.Bytes(), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	args, trace := dfCmdArgs(dir, dir)
+	defer os.RemoveAll(trace)
+
+	destDir, err := tmpdir()
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	cmd := sb.Cmd(args + fmt.Sprintf(" --exporter=local --exporter-opt output=%s", destDir))
+	require.NoError(t, cmd.Run())
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "tmp/symlink-target/foo"))
+	require.NoError(t, err)
+	require.Equal(t, expectedContent, dt)
 }
 
 func testDockerfileScratchConfig(t *testing.T, sb integration.Sandbox) {

@@ -30,7 +30,7 @@ const (
 	localNameContext = "context"
 	historyComment   = "buildkit.dockerfile.v0"
 
-	CopyImage = "tonistiigi/copy@sha256:476e0a67a1e4650c6adaf213269a2913deb7c52cbc77f954026f769d51e1a14e"
+	CopyImage = "tonistiigi/copy:v0.1.1@sha256:854cee92ccab4c6d63183d147389ed9ab2e8a6b36891e4bdf92d895a38429840"
 )
 
 type ConvertOpt struct {
@@ -476,7 +476,7 @@ func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState l
 	// TODO: this should use CopyOp instead. Current implementation is inefficient
 	img := llb.Image(CopyImage)
 
-	dest := path.Join("/dest", pathRelativeToWorkingDir(d.state, c.Dest()))
+	dest := path.Join(".", pathRelativeToWorkingDir(d.state, c.Dest()))
 	if c.Dest() == "." || c.Dest()[len(c.Dest())-1] == filepath.Separator {
 		dest += string(filepath.Separator)
 	}
@@ -540,7 +540,7 @@ func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState l
 		args = append(args[:1], append([]string{"--unpack"}, args[1:]...)...)
 	}
 
-	opt := []llb.RunOption{llb.Args(args), llb.ReadonlyRootFS(), dfCmd(cmdToPrint)}
+	opt := []llb.RunOption{llb.Args(args), llb.Dir("/dest"), llb.ReadonlyRootFS(), dfCmd(cmdToPrint)}
 	if d.ignoreCache {
 		opt = append(opt, llb.IgnoreCache)
 	}
