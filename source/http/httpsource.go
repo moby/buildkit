@@ -24,7 +24,6 @@ import (
 	"github.com/moby/buildkit/util/tracing"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 type Opt struct {
@@ -97,17 +96,19 @@ func (hs *httpSourceHandler) urlHash() (digest.Digest, error) {
 	return digest.FromBytes(dt), nil
 }
 
-func (hs *httpSourceHandler) formatCacheKey(filename string, dgst digest.Digest) digest.Digest {
+func (hs *httpSourceHandler) formatCacheKey(filename string, dgst digest.Digest, lastModTime string) digest.Digest {
 	dt, err := json.Marshal(struct {
 		Filename       string
 		Perm, UID, GID int
 		Checksum       digest.Digest
+		LastModTime    string `json:",omitempty"`
 	}{
-		Filename: filename,
-		Perm:     hs.src.Perm,
-		UID:      hs.src.UID,
-		GID:      hs.src.GID,
-		Checksum: dgst,
+		Filename:    filename,
+		Perm:        hs.src.Perm,
+		UID:         hs.src.UID,
+		GID:         hs.src.GID,
+		Checksum:    dgst,
+		LastModTime: lastModTime,
 	})
 	if err != nil {
 		return dgst
@@ -118,7 +119,7 @@ func (hs *httpSourceHandler) formatCacheKey(filename string, dgst digest.Digest)
 func (hs *httpSourceHandler) CacheKey(ctx context.Context, index int) (string, bool, error) {
 	if hs.src.Checksum != "" {
 		hs.cacheKey = hs.src.Checksum
-		return hs.formatCacheKey(getFileName(hs.src.URL, hs.src.Filename, nil), hs.src.Checksum).String(), true, nil
+		return hs.formatCacheKey(getFileName(hs.src.URL, hs.src.Filename, nil), hs.src.Checksum, "").String(), true, nil
 	}
 
 	uh, err := hs.urlHash()
@@ -170,8 +171,9 @@ func (hs *httpSourceHandler) CacheKey(ctx context.Context, index int) (string, b
 		if dgst == "" {
 			return "", false, errors.Errorf("invalid metadata change")
 		}
+		modTime := getModTime(si)
 		resp.Body.Close()
-		return hs.formatCacheKey(getFileName(hs.src.URL, hs.src.Filename, resp), dgst).String(), true, nil
+		return hs.formatCacheKey(getFileName(hs.src.URL, hs.src.Filename, resp), dgst, modTime).String(), true, nil
 	}
 
 	ref, dgst, err := hs.save(ctx, resp)
@@ -182,7 +184,7 @@ func (hs *httpSourceHandler) CacheKey(ctx context.Context, index int) (string, b
 
 	hs.cacheKey = dgst
 
-	return hs.formatCacheKey(getFileName(hs.src.URL, hs.src.Filename, resp), dgst).String(), true, nil
+	return hs.formatCacheKey(getFileName(hs.src.URL, hs.src.Filename, resp), dgst, resp.Header.Get("Last-Modified")).String(), true, nil
 }
 
 func (hs *httpSourceHandler) save(ctx context.Context, resp *http.Response) (ref cache.ImmutableRef, dgst digest.Digest, retErr error) {
@@ -222,7 +224,6 @@ func (hs *httpSourceHandler) save(ctx context.Context, resp *http.Response) (ref
 		perm = hs.src.Perm
 	}
 	fp := filepath.Join(dir, getFileName(hs.src.URL, hs.src.Filename, resp))
-	logrus.Debugf("write to  %v", fp)
 
 	f, err := os.OpenFile(fp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, os.FileMode(perm))
 	if err != nil {
@@ -287,6 +288,10 @@ func (hs *httpSourceHandler) save(ctx context.Context, resp *http.Response) (ref
 		}
 	}
 
+	if modTime := resp.Header.Get("Last-Modified"); modTime != "" {
+		setModTime(ref.Metadata(), modTime)
+	}
+
 	return ref, dgst, nil
 }
 
@@ -323,6 +328,7 @@ func (hs *httpSourceHandler) Snapshot(ctx context.Context) (cache.ImmutableRef, 
 
 const keyETag = "etag"
 const keyChecksum = "http.checksum"
+const keyModTime = "http.modtime"
 
 func setETag(si *metadata.StorageItem, s string) error {
 	v, err := metadata.NewValue(s)
@@ -345,6 +351,29 @@ func getETag(si *metadata.StorageItem) string {
 		return ""
 	}
 	return etag
+}
+
+func setModTime(si *metadata.StorageItem, s string) error {
+	v, err := metadata.NewValue(s)
+	if err != nil {
+		return errors.Wrap(err, "failed to create modtime value")
+	}
+	si.Queue(func(b *bolt.Bucket) error {
+		return si.SetValue(b, keyModTime, v)
+	})
+	return nil
+}
+
+func getModTime(si *metadata.StorageItem) string {
+	v := si.Get(keyModTime)
+	if v == nil {
+		return ""
+	}
+	var modTime string
+	if err := v.Unmarshal(&modTime); err != nil {
+		return ""
+	}
+	return modTime
 }
 
 func setChecksum(si *metadata.StorageItem, url string, d digest.Digest) error {
