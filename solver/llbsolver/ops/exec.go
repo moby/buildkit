@@ -36,8 +36,6 @@ type execOp struct {
 }
 
 func NewExecOp(v solver.Vertex, op *pb.Op_Exec, cm cache.Manager, md *metadata.Store, exec executor.Executor, w worker.Worker) (solver.Op, error) {
-	logrus.Debugf("newexecop %#v", op.Exec.Meta)
-
 	return &execOp{
 		op:        op.Exec,
 		cm:        cm,
