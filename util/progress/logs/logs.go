@@ -11,21 +11,23 @@ import (
 	"github.com/pkg/errors"
 )
 
-func NewLogStreams(ctx context.Context) (io.WriteCloser, io.WriteCloser) {
-	return newStreamWriter(ctx, 1), newStreamWriter(ctx, 2)
+func NewLogStreams(ctx context.Context, printOutput bool) (io.WriteCloser, io.WriteCloser) {
+	return newStreamWriter(ctx, 1, printOutput), newStreamWriter(ctx, 2, printOutput)
 }
 
-func newStreamWriter(ctx context.Context, stream int) io.WriteCloser {
+func newStreamWriter(ctx context.Context, stream int, printOutput bool) io.WriteCloser {
 	pw, _, _ := progress.FromContext(ctx)
 	return &streamWriter{
-		pw:     pw,
-		stream: stream,
+		pw:          pw,
+		stream:      stream,
+		printOutput: printOutput,
 	}
 }
 
 type streamWriter struct {
-	pw     progress.Writer
-	stream int
+	pw          progress.Writer
+	stream      int
+	printOutput bool
 }
 
 func (sw *streamWriter) Write(dt []byte) (int, error) {
@@ -33,15 +35,17 @@ func (sw *streamWriter) Write(dt []byte) (int, error) {
 		Stream: sw.stream,
 		Data:   append([]byte{}, dt...),
 	})
-	// TODO: remove debug
-	switch sw.stream {
-	case 1:
-		return os.Stdout.Write(dt)
-	case 2:
-		return os.Stderr.Write(dt)
-	default:
-		return 0, errors.Errorf("invalid stream %d", sw.stream)
+	if sw.printOutput {
+		switch sw.stream {
+		case 1:
+			return os.Stdout.Write(dt)
+		case 2:
+			return os.Stderr.Write(dt)
+		default:
+			return 0, errors.Errorf("invalid stream %d", sw.stream)
+		}
 	}
+	return len(dt), nil
 }
 
 func (sw *streamWriter) Close() error {

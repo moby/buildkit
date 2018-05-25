@@ -371,7 +371,7 @@ func gitWithinDir(ctx context.Context, gitDir, workDir string, args ...string) (
 
 func git(ctx context.Context, dir string, args ...string) (*bytes.Buffer, error) {
 	for {
-		stdout, stderr := logs.NewLogStreams(ctx)
+		stdout, stderr := logs.NewLogStreams(ctx, false)
 		defer stdout.Close()
 		defer stderr.Close()
 		cmd := exec.Command("git", args...)
