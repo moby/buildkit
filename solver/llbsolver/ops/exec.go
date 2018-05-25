@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path"
 	"runtime"
 	"sort"
@@ -322,7 +323,7 @@ func (e *execOp) Exec(ctx context.Context, inputs []solver.Result) ([]solver.Res
 		meta.Env = append(meta.Env, proxyEnvList(e.op.Meta.ProxyEnv)...)
 	}
 
-	stdout, stderr := logs.NewLogStreams(ctx)
+	stdout, stderr := logs.NewLogStreams(ctx, os.Getenv("BUILDKIT_DEBUG_EXEC_OUTPUT") == "1")
 	defer stdout.Close()
 	defer stderr.Close()
 
