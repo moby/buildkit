@@ -18,6 +18,7 @@ import (
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/executor/oci"
 	"github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/util/system"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -129,7 +130,10 @@ func (w *runcExecutor) Exec(ctx context.Context, meta executor.Meta, root cache.
 		return err
 	}
 	defer f.Close()
-	opts := []containerdoci.SpecOpts{containerdoci.WithUIDGID(uid, gid), seccomp.WithDefaultProfile()}
+	opts := []containerdoci.SpecOpts{containerdoci.WithUIDGID(uid, gid)}
+	if system.SeccompSupported() {
+		opts = append(opts, seccomp.WithDefaultProfile())
+	}
 	if meta.ReadonlyRootFS {
 		opts = append(opts, containerdoci.WithRootFSReadonly())
 	}
