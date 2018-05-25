@@ -215,7 +215,7 @@ func (disp *display) print(d displayInfo, all bool) {
 	width := 80
 	height := 10
 	size, err := disp.c.Size()
-	if err == nil {
+	if err == nil && size.Width > 0 && size.Height > 0 {
 		width = int(size.Width)
 		height = int(size.Height)
 	}
