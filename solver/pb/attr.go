@@ -1,6 +1,7 @@
 package pb
 
 const AttrKeepGitDir = "git.keepgitdir"
+const AttrFullRemoteURL = "git.fullurl"
 const AttrLocalSessionID = "local.session"
 const AttrIncludePatterns = "local.includepattern"
 const AttrExcludePatterns = "local.excludepatterns"

@@ -62,6 +62,8 @@ func FromLLB(op *pb.Op_Source) (Identifier, error) {
 				if v == "true" {
 					id.KeepGitDir = true
 				}
+			case pb.AttrFullRemoteURL:
+				id.Remote = v
 			}
 		}
 	}
