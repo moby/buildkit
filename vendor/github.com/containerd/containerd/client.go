@@ -38,17 +38,19 @@ import (
 	versionservice "github.com/containerd/containerd/api/services/version/v1"
 	"github.com/containerd/containerd/containers"
 	"github.com/containerd/containerd/content"
+	contentproxy "github.com/containerd/containerd/content/proxy"
 	"github.com/containerd/containerd/defaults"
-	"github.com/containerd/containerd/dialer"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/events"
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/namespaces"
+	"github.com/containerd/containerd/pkg/dialer"
 	"github.com/containerd/containerd/plugin"
 	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/remotes/docker/schema1"
 	"github.com/containerd/containerd/snapshots"
+	snproxy "github.com/containerd/containerd/snapshots/proxy"
 	"github.com/containerd/typeurl"
 	ptypes "github.com/gogo/protobuf/types"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -338,38 +340,43 @@ func (c *Client) Pull(ctx context.Context, ref string, opts ...RemoteOpt) (Image
 		}
 	}
 
-	imgrec := images.Image{
-		Name:   name,
-		Target: desc,
-		Labels: pullCtx.Labels,
-	}
-
-	is := c.ImageService()
-	if created, err := is.Create(ctx, imgrec); err != nil {
-		if !errdefs.IsAlreadyExists(err) {
-			return nil, err
-		}
-
-		updated, err := is.Update(ctx, imgrec)
-		if err != nil {
-			return nil, err
-		}
-
-		imgrec = updated
-	} else {
-		imgrec = created
-	}
-
 	img := &image{
 		client: c,
-		i:      imgrec,
+		i: images.Image{
+			Name:   name,
+			Target: desc,
+			Labels: pullCtx.Labels,
+		},
 	}
+
 	if pullCtx.Unpack {
 		if err := img.Unpack(ctx, pullCtx.Snapshotter); err != nil {
 			return nil, errors.Wrapf(err, "failed to unpack image on snapshotter %s", pullCtx.Snapshotter)
 		}
 	}
-	return img, nil
+
+	is := c.ImageService()
+	for {
+		if created, err := is.Create(ctx, img.i); err != nil {
+			if !errdefs.IsAlreadyExists(err) {
+				return nil, err
+			}
+
+			updated, err := is.Update(ctx, img.i)
+			if err != nil {
+				// if image was removed, try create again
+				if errdefs.IsNotFound(err) {
+					continue
+				}
+				return nil, err
+			}
+
+			img.i = updated
+		} else {
+			img.i = created
+		}
+		return img, nil
+	}
 }
 
 // Push uploads the provided content to a remote resource
@@ -459,7 +466,7 @@ func (c *Client) ContentStore() content.Store {
 	if c.contentStore != nil {
 		return c.contentStore
 	}
-	return NewContentStoreFromClient(contentapi.NewContentClient(c.conn))
+	return contentproxy.NewContentStore(contentapi.NewContentClient(c.conn))
 }
 
 // SnapshotService returns the underlying snapshotter for the provided snapshotter name
@@ -467,7 +474,7 @@ func (c *Client) SnapshotService(snapshotterName string) snapshots.Snapshotter {
 	if c.snapshotters != nil {
 		return c.snapshotters[snapshotterName]
 	}
-	return NewSnapshotterFromClient(snapshotsapi.NewSnapshotsClient(c.conn), snapshotterName)
+	return snproxy.NewSnapshotter(snapshotsapi.NewSnapshotsClient(c.conn), snapshotterName)
 }
 
 // TaskService returns the underlying TasksClient
