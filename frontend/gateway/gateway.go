@@ -315,7 +315,18 @@ func (lbf *llbBridgeForwarder) ReadFile(ctx context.Context, req *pb.ReadFileReq
 	if !ok {
 		return nil, errors.Errorf("invalid ref: %T", ref.Sys())
 	}
-	dt, err := cache.ReadFile(ctx, workerRef.ImmutableRef, req.FilePath)
+
+	newReq := cache.ReadRequest{
+		Filename: req.FilePath,
+	}
+	if r := req.Range; r != nil {
+		newReq.Range = &cache.FileRange{
+			Offset: int(r.Offset),
+			Length: int(r.Length),
+		}
+	}
+
+	dt, err := cache.ReadFile(ctx, workerRef.ImmutableRef, newReq)
 	if err != nil {
 		return nil, err
 	}

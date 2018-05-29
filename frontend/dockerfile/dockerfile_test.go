@@ -64,7 +64,60 @@ func TestIntegration(t *testing.T) {
 		testBuiltinArgs,
 		testPullScratch,
 		testSymlinkDestination,
+		testHTTPDockerfile,
 	})
+}
+
+func testHTTPDockerfile(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	dockerfile := []byte(`
+FROM busybox
+RUN echo -n "foo-contents" > /foo
+FROM scratch
+COPY --from=0 /foo /foo
+`)
+
+	srcDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(srcDir)
+
+	err = ioutil.WriteFile(filepath.Join(srcDir, "Dockerfile"), dockerfile, 0600)
+	require.NoError(t, err)
+
+	resp := httpserver.Response{
+		Etag:    identity.NewID(),
+		Content: dockerfile,
+	}
+
+	server := httpserver.NewTestServer(map[string]httpserver.Response{
+		"/df": resp,
+	})
+	defer server.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	c, err := client.New(sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	_, err = c.Solve(context.TODO(), nil, client.SolveOpt{
+		Frontend: "dockerfile.v0",
+		FrontendAttrs: map[string]string{
+			"context":  server.URL + "/df",
+			"filename": "mydockerfile", // this is bogus, any name should work
+		},
+		Exporter:          client.ExporterLocal,
+		ExporterOutputDir: destDir,
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "foo"))
+	require.NoError(t, err)
+	require.Equal(t, "foo-contents", string(dt))
+
 }
 
 func testCmdShell(t *testing.T, sb integration.Sandbox) {
