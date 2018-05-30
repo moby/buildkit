@@ -1,6 +1,7 @@
 package progressui
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -15,16 +16,20 @@ import (
 	"golang.org/x/time/rate"
 )
 
-func DisplaySolveStatus(ctx context.Context, c console.Console, ch chan *client.SolveStatus) error {
-	disp := &display{c: c}
+func DisplaySolveStatus(ctx context.Context, c console.Console, w io.Writer, ch chan *client.SolveStatus) error {
 
-	t := newTrace()
+	modeConsole := c != nil
+
+	disp := &display{c: c}
+	printer := &textMux{w: w}
+
+	t := newTrace(w)
+
+	var done bool
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
 	displayLimiter := rate.NewLimiter(rate.Every(70*time.Millisecond), 1)
-
-	var done bool
 
 	for {
 		select {
@@ -39,12 +44,21 @@ func DisplaySolveStatus(ctx context.Context, c console.Console, ch chan *client.
 			}
 		}
 
-		if done {
-			disp.print(t.displayInfo(), true)
-			t.printErrorLogs(c)
-			return nil
-		} else if displayLimiter.Allow() {
-			disp.print(t.displayInfo(), false)
+		if modeConsole {
+			if done {
+				disp.print(t.displayInfo(), true)
+				t.printErrorLogs(c)
+				return nil
+			} else if displayLimiter.Allow() {
+				disp.print(t.displayInfo(), false)
+			}
+		} else {
+			if done || displayLimiter.Allow() {
+				printer.print(t)
+				if done {
+					return nil
+				}
+			}
 		}
 	}
 }
@@ -66,37 +80,108 @@ type job struct {
 }
 
 type trace struct {
+	w             io.Writer
 	localTimeDiff time.Duration
 	vertexes      []*vertex
 	byDigest      map[digest.Digest]*vertex
+	nextIndex     int
+	updates       map[digest.Digest]struct{}
 }
 
 type vertex struct {
 	*client.Vertex
 	statuses []*status
 	byID     map[string]*status
-	logs     []*client.VertexLog
 	indent   string
+	index    int
+
+	logs          [][]byte
+	logsPartial   bool
+	logsOffset    int
+	prev          *client.Vertex
+	events        []string
+	lastBlockTime *time.Time
+	count         int
+	statusUpdates map[string]struct{}
+}
+
+func (v *vertex) update(c int) {
+	if v.count == 0 {
+		now := time.Now()
+		v.lastBlockTime = &now
+	}
+	v.count += c
 }
 
 type status struct {
 	*client.VertexStatus
 }
 
-func newTrace() *trace {
+func newTrace(w io.Writer) *trace {
 	return &trace{
 		byDigest: make(map[digest.Digest]*vertex),
+		updates:  make(map[digest.Digest]struct{}),
+		w:        w,
 	}
+}
+
+func (t *trace) triggerVertexEvent(v *client.Vertex) {
+	if v.Started == nil {
+		return
+	}
+
+	var old client.Vertex
+	vtx := t.byDigest[v.Digest]
+	if v := vtx.prev; v != nil {
+		old = *v
+	}
+
+	var ev []string
+	if v.Digest != old.Digest {
+		ev = append(ev, fmt.Sprintf("%13s %s", "digest:", v.Digest))
+	}
+	if v.Name != old.Name {
+		ev = append(ev, fmt.Sprintf("%13s %q", "name:", v.Name))
+	}
+	if v.Started != old.Started {
+		if v.Started != nil && old.Started == nil || !v.Started.Equal(*old.Started) {
+			ev = append(ev, fmt.Sprintf("%13s %v", "started:", v.Started))
+		}
+	}
+	if v.Completed != old.Completed && v.Completed != nil {
+		ev = append(ev, fmt.Sprintf("%13s %v", "completed:", v.Completed))
+		if v.Started != nil {
+			ev = append(ev, fmt.Sprintf("%13s %v", "duration:", v.Completed.Sub(*v.Started)))
+		}
+	}
+	if v.Cached != old.Cached {
+		ev = append(ev, fmt.Sprintf("%13s %v", "cached:", v.Cached))
+	}
+	if v.Error != old.Error {
+		ev = append(ev, fmt.Sprintf("%13s %q", "error:", v.Error))
+	}
+
+	if len(ev) > 0 {
+		vtx.events = append(vtx.events, ev...)
+		vtx.update(len(ev))
+		t.updates[v.Digest] = struct{}{}
+	}
+
+	t.byDigest[v.Digest].prev = v
 }
 
 func (t *trace) update(s *client.SolveStatus) {
 	for _, v := range s.Vertexes {
 		prev, ok := t.byDigest[v.Digest]
 		if !ok {
+			t.nextIndex++
 			t.byDigest[v.Digest] = &vertex{
-				byID: make(map[string]*status),
+				byID:          make(map[string]*status),
+				statusUpdates: make(map[string]struct{}),
+				index:         t.nextIndex,
 			}
 		}
+		t.triggerVertexEvent(v)
 		if v.Started != nil && (prev == nil || prev.Started == nil) {
 			if t.localTimeDiff == 0 {
 				t.localTimeDiff = time.Since(*v.Started)
@@ -118,13 +203,29 @@ func (t *trace) update(s *client.SolveStatus) {
 			v.statuses = append(v.statuses, v.byID[s.ID])
 		}
 		v.byID[s.ID].VertexStatus = s
+		v.statusUpdates[s.ID] = struct{}{}
+		t.updates[v.Digest] = struct{}{}
+		v.update(1)
 	}
 	for _, l := range s.Logs {
 		v, ok := t.byDigest[l.Vertex]
 		if !ok {
 			continue // shouldn't happen
 		}
-		v.logs = append(v.logs, l)
+		complete := split(l.Data, byte('\n'), func(dt []byte) {
+			if v.logsPartial && len(v.logs) != 0 {
+				v.logs[len(v.logs)-1] = append(v.logs[len(v.logs)-1], dt...)
+			} else {
+				ts := time.Duration(0)
+				if v.Started != nil {
+					ts = l.Timestamp.Sub(*v.Started)
+				}
+				v.logs = append(v.logs, []byte(fmt.Sprintf("%s %s", fmt.Sprintf("%#.4g", ts.Seconds())[:5], dt)))
+			}
+		})
+		v.logsPartial = !complete
+		t.updates[v.Digest] = struct{}{}
+		v.update(1)
 	}
 }
 
@@ -134,12 +235,8 @@ func (t *trace) printErrorLogs(f io.Writer) {
 			fmt.Fprintln(f, "------")
 			fmt.Fprintf(f, " > %s:\n", v.Name)
 			for _, l := range v.logs {
-				switch l.Stream {
-				case 1:
-					f.Write(l.Data)
-				case 2:
-					f.Write(l.Data)
-				}
+				f.Write(l)
+				fmt.Fprintln(f)
 			}
 			fmt.Fprintln(f, "------")
 		}
@@ -194,6 +291,24 @@ func (t *trace) displayInfo() (d displayInfo) {
 	}
 
 	return d
+}
+
+func split(dt []byte, sep byte, fn func([]byte)) bool {
+	if len(dt) == 0 {
+		return false
+	}
+	for {
+		if len(dt) == 0 {
+			return true
+		}
+		idx := bytes.IndexByte(dt, sep)
+		if idx == -1 {
+			fn(dt)
+			return false
+		}
+		fn(dt[:idx])
+		dt = dt[idx+1:]
+	}
 }
 
 func addTime(tm *time.Time, d time.Duration) *time.Time {
