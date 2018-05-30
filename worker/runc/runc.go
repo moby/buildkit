@@ -29,7 +29,7 @@ type SnapshotterFactory struct {
 // NewWorkerOpt creates a WorkerOpt.
 // But it does not set the following fields:
 //  - SessionManager
-func NewWorkerOpt(root string, snFactory SnapshotterFactory, labels map[string]string) (base.WorkerOpt, error) {
+func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, labels map[string]string) (base.WorkerOpt, error) {
 	var opt base.WorkerOpt
 	name := "runc-" + snFactory.Name
 	root = filepath.Join(root, name)
@@ -40,7 +40,12 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, labels map[string]s
 	if err != nil {
 		return opt, err
 	}
-	exe, err := runcexecutor.New(runcexecutor.Opt{Root: filepath.Join(root, "executor")})
+	exe, err := runcexecutor.New(runcexecutor.Opt{
+		// Root directory
+		Root: filepath.Join(root, "executor"),
+		// without root privileges
+		Rootless: rootless,
+	})
 	if err != nil {
 		return opt, err
 	}

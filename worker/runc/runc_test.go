@@ -46,7 +46,8 @@ func TestRuncWorker(t *testing.T) {
 			return overlay.NewSnapshotter(root)
 		},
 	}
-	workerOpt, err := NewWorkerOpt(tmpdir, snFactory, nil)
+	rootless := false
+	workerOpt, err := NewWorkerOpt(tmpdir, snFactory, rootless, nil)
 	require.NoError(t, err)
 
 	workerOpt.SessionManager, err = session.NewManager()
