@@ -1387,7 +1387,7 @@ COPY --from=build foo bar2
 	)
 	require.NoError(t, err)
 
-	server := httptest.NewServer(http.FileServer(http.Dir(filepath.Join(gitDir, ".git"))))
+	server := httptest.NewServer(http.FileServer(http.Dir(filepath.Join(gitDir))))
 	defer server.Close()
 
 	destDir, err := ioutil.TempDir("", "buildkit")
@@ -1401,7 +1401,7 @@ COPY --from=build foo bar2
 	_, err = c.Solve(context.TODO(), nil, client.SolveOpt{
 		Frontend: "dockerfile.v0",
 		FrontendAttrs: map[string]string{
-			"context": "git://" + server.URL + "/#first",
+			"context": server.URL + "/.git#first",
 		},
 		Exporter:          client.ExporterLocal,
 		ExporterOutputDir: destDir,
@@ -1424,7 +1424,7 @@ COPY --from=build foo bar2
 	_, err = c.Solve(context.TODO(), nil, client.SolveOpt{
 		Frontend: "dockerfile.v0",
 		FrontendAttrs: map[string]string{
-			"context": "git://" + server.URL + "/",
+			"context": server.URL + "/.git",
 		},
 		Exporter:          client.ExporterLocal,
 		ExporterOutputDir: destDir,

@@ -26,11 +26,11 @@ const (
 	dockerignoreFilename  = ".dockerignore"
 	buildArgPrefix        = "build-arg:"
 	labelPrefix           = "label:"
-	gitPrefix             = "git://"
 	keyNoCache            = "no-cache"
 )
 
 var httpPrefix = regexp.MustCompile("^https?://")
+var gitUrlPathWithFragmentSuffix = regexp.MustCompile(".git(?:#.+)?$")
 
 func Build(ctx context.Context, c client.Client) error {
 	opts := c.Opts()
@@ -55,12 +55,10 @@ func Build(ctx context.Context, c client.Client) error {
 		llb.SharedKeyHint(defaultDockerfileName),
 	)
 	var buildContext *llb.State
-	if strings.HasPrefix(opts[LocalNameContext], gitPrefix) {
-		src = parseGitSource(opts[LocalNameContext])
+	if st, ok := detectGitContext(opts[LocalNameContext]); ok {
+		src = *st
 		buildContext = &src
-	}
-
-	if httpPrefix.MatchString(opts[LocalNameContext]) {
+	} else if httpPrefix.MatchString(opts[LocalNameContext]) {
 		unpack := llb.Image(dockerfile2llb.CopyImage).Run(llb.Shlex("copy --unpack /src/context /out/"), llb.ReadonlyRootFS())
 		unpack.AddMount("/src", llb.HTTP(opts[LocalNameContext], llb.Filename("context")), llb.Readonly)
 		src = unpack.AddMount("/out", llb.Scratch())
@@ -196,12 +194,27 @@ func filter(opt map[string]string, key string) map[string]string {
 	return m
 }
 
-func parseGitSource(ref string) llb.State {
-	ref = strings.TrimPrefix(ref, gitPrefix)
+func detectGitContext(ref string) (*llb.State, bool) {
+	found := false
+	if httpPrefix.MatchString(ref) && gitUrlPathWithFragmentSuffix.MatchString(ref) {
+		found = true
+	}
+
+	for _, prefix := range []string{"git://", "github.com/", "git@"} {
+		if strings.HasPrefix(ref, prefix) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return nil, false
+	}
+
 	parts := strings.SplitN(ref, "#", 2)
 	branch := ""
 	if len(parts) > 1 {
 		branch = parts[1]
 	}
-	return llb.Git(parts[0], branch)
+	st := llb.Git(parts[0], branch)
+	return &st, true
 }

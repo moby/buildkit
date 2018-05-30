@@ -141,7 +141,19 @@ type ImageInfo struct {
 }
 
 func Git(remote, ref string, opts ...GitOption) State {
+	url := ""
+
+	for _, prefix := range []string{
+		"http://", "https://", "git://", "git@",
+	} {
+		if strings.HasPrefix(remote, prefix) {
+			url = strings.Split(remote, "#")[0]
+			remote = strings.TrimPrefix(remote, prefix)
+		}
+	}
+
 	id := remote
+
 	if ref != "" {
 		id += "#" + ref
 	}
@@ -153,6 +165,9 @@ func Git(remote, ref string, opts ...GitOption) State {
 	attrs := map[string]string{}
 	if gi.KeepGitDir {
 		attrs[pb.AttrKeepGitDir] = "true"
+	}
+	if url != "" {
+		attrs[pb.AttrFullRemoteURL] = url
 	}
 	source := NewSource("git://"+id, attrs, gi.Metadata())
 	return NewState(source.Output())
