@@ -64,7 +64,15 @@ func New(opt Opt) (executor.Executor, error) {
 	if err != nil {
 		return nil, err
 	}
-	// TODO: check that root is not symlink to fail early
+	
+	// Check that root is not symlink to fail early
+ 	rootInfo, err := os.Lstat(root)
+	if err != nil {
+		return nil, err
+	}
+	if rootInfo.Mode() & os.ModeSymlink != 0 {
+		return nil, errors.Errorf("%s is a symlink", root)
+    }
 
 	runtime := &runc.Runc{
 		Command:      cmd,
