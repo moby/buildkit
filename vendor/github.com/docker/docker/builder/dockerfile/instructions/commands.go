@@ -1,15 +1,15 @@
-package instructions
+package instructions // import "github.com/docker/docker/builder/dockerfile/instructions"
 
 import (
 	"errors"
-
 	"strings"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/strslice"
+	specs "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
-// KeyValuePair represent an arbitrary named value (useful in slice insted of map[string] string to preserve ordering)
+// KeyValuePair represent an arbitrary named value (useful in slice instead of map[string] string to preserve ordering)
 type KeyValuePair struct {
 	Key   string
 	Value string
@@ -109,17 +109,37 @@ type MaintainerCommand struct {
 	Maintainer string
 }
 
+// NewLabelCommand creates a new 'LABEL' command
+func NewLabelCommand(k string, v string, NoExp bool) *LabelCommand {
+	kvp := KeyValuePair{Key: k, Value: v}
+	c := "LABEL "
+	c += kvp.String()
+	nc := withNameAndCode{code: c, name: "label"}
+	cmd := &LabelCommand{
+		withNameAndCode: nc,
+		Labels: KeyValuePairs{
+			kvp,
+		},
+		noExpand: NoExp,
+	}
+	return cmd
+}
+
 // LabelCommand : LABEL some json data describing the image
 //
 // Sets the Label variable foo to bar,
 //
 type LabelCommand struct {
 	withNameAndCode
-	Labels KeyValuePairs // kvp slice instead of map to preserve ordering
+	Labels   KeyValuePairs // kvp slice instead of map to preserve ordering
+	noExpand bool
 }
 
 // Expand variables
 func (c *LabelCommand) Expand(expander SingleWordExpander) error {
+	if c.noExpand {
+		return nil
+	}
 	return expandKvpsInPlace(c.Labels, expander)
 }
 
@@ -195,7 +215,7 @@ func (c *WorkdirCommand) Expand(expander SingleWordExpander) error {
 	return nil
 }
 
-// ShellDependantCmdLine represents a cmdline optionaly prepended with the shell
+// ShellDependantCmdLine represents a cmdline optionally prepended with the shell
 type ShellDependantCmdLine struct {
 	CmdLine      strslice.StrSlice
 	PrependShell bool
@@ -361,6 +381,7 @@ type Stage struct {
 	Commands   []Command
 	BaseName   string
 	SourceCode string
+	Platform   specs.Platform
 }
 
 // AddCommand to the stage
@@ -388,7 +409,8 @@ func CurrentStage(s []Stage) (*Stage, error) {
 // HasStage looks for the presence of a given stage name
 func HasStage(s []Stage, name string) (int, bool) {
 	for i, stage := range s {
-		if stage.Name == name {
+		// Stage name is case-insensitive by design
+		if strings.EqualFold(stage.Name, name) {
 			return i, true
 		}
 	}
