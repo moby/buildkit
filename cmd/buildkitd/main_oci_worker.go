@@ -17,11 +17,7 @@ import (
 )
 
 func init() {
-	registerWorkerInitializer(
-		workerInitializer{
-			fn:       ociWorkerInitializer,
-			priority: 0,
-		},
+	flags := []cli.Flag{
 		cli.StringFlag{
 			Name:  "oci-worker",
 			Usage: "enable oci workers (true/false/auto)",
@@ -34,11 +30,30 @@ func init() {
 		cli.StringFlag{
 			Name:  "oci-worker-snapshotter",
 			Usage: "name of snapshotter (overlayfs or native)",
-			// TODO(AkihiroSuda): autodetect overlayfs availability when the value is set to "auto"?
-			Value: "overlayfs",
+			Value: "auto",
 		},
+	}
+	n := "oci-worker-rootless"
+	u := "enable rootless mode"
+	if runningAsUnprivilegedUser() {
+		flags = append(flags, cli.BoolTFlag{
+			Name:  n,
+			Usage: u,
+		})
+	} else {
+		flags = append(flags, cli.BoolFlag{
+			Name:  n,
+			Usage: u,
+		})
+	}
+	registerWorkerInitializer(
+		workerInitializer{
+			fn:       ociWorkerInitializer,
+			priority: 0,
+		},
+		flags...,
 	)
-	// TODO: allow multiple oci runtimes and snapshotters
+	// TODO: allow multiple oci runtimes
 }
 
 func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker.Worker, error) {
@@ -57,7 +72,12 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 	if err != nil {
 		return nil, err
 	}
-	opt, err := runc.NewWorkerOpt(common.root, snFactory, labels)
+	// GlobalBool works for BoolT as well
+	rootless := c.GlobalBool("oci-worker-rootless") || c.GlobalBool("rootless")
+	if rootless {
+		logrus.Debugf("running in rootless mode")
+	}
+	opt, err := runc.NewWorkerOpt(common.root, snFactory, rootless, labels)
 	if err != nil {
 		return nil, err
 	}
@@ -75,6 +95,16 @@ func snapshotterFactory(name string) (runc.SnapshotterFactory, error) {
 	}
 	var err error
 	switch name {
+	case "auto":
+		snFactory.New = func(root string) (ctdsnapshot.Snapshotter, error) {
+			err := overlay.Supported(root)
+			if err == nil {
+				logrus.Debug("auto snapshotter: using overlayfs")
+				return overlay.NewSnapshotter(root)
+			}
+			logrus.Debugf("auto snapshotter: using native for %s: %v", root, err)
+			return native.NewSnapshotter(root)
+		}
 	case "native":
 		snFactory.New = native.NewSnapshotter
 	case "overlayfs": // not "overlay", for consistency with containerd snapshotter plugin ID.

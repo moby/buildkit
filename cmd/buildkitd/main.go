@@ -69,8 +69,24 @@ func main() {
 	app := cli.NewApp()
 	app.Name = "buildkitd"
 	app.Usage = "build daemon"
-
-	app.Flags = []cli.Flag{
+	defaultRoot := appdefaults.Root
+	defaultAddress := appdefaults.Address
+	rootlessUsage := "set all the default options to be compatible with rootless containers"
+	if runningAsUnprivilegedUser() {
+		app.Flags = append(app.Flags, cli.BoolTFlag{
+			Name:  "rootless",
+			Usage: rootlessUsage + " (default: true)",
+		})
+		defaultRoot = appdefaults.UserRoot()
+		defaultAddress = appdefaults.UserAddress()
+		appdefaults.EnsureUserAddressDir()
+	} else {
+		app.Flags = append(app.Flags, cli.BoolFlag{
+			Name:  "rootless",
+			Usage: rootlessUsage,
+		})
+	}
+	app.Flags = append(app.Flags,
 		cli.BoolFlag{
 			Name:  "debug",
 			Usage: "enable debug output in logs",
@@ -78,12 +94,12 @@ func main() {
 		cli.StringFlag{
 			Name:  "root",
 			Usage: "path to state directory",
-			Value: appdefaults.Root,
+			Value: defaultRoot,
 		},
 		cli.StringSliceFlag{
 			Name:  "addr",
 			Usage: "listening address (socket or tcp)",
-			Value: &cli.StringSlice{appdefaults.Address},
+			Value: &cli.StringSlice{defaultAddress},
 		},
 		cli.StringFlag{
 			Name:  "group",
@@ -107,8 +123,7 @@ func main() {
 			Name:  "tlscacert",
 			Usage: "ca certificate to verify clients",
 		},
-	}
-
+	)
 	app.Flags = append(app.Flags, appFlags...)
 
 	app.Action = func(c *cli.Context) error {

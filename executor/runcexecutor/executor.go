@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/containerd/containerd/contrib/seccomp"
@@ -18,22 +21,28 @@ import (
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/executor/oci"
 	"github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/util/libcontainer_specconv"
 	"github.com/moby/buildkit/util/system"
+	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
 type Opt struct {
+	// root directory
 	Root              string
 	CommandCandidates []string
+	// without root privileges (has nothing to do with Opt.Root directory)
+	Rootless bool
 }
 
 var defaultCommandCandidates = []string{"buildkit-runc", "runc"}
 
 type runcExecutor struct {
-	runc *runc.Runc
-	root string
-	cmd  string
+	runc     *runc.Runc
+	root     string
+	cmd      string
+	rootless bool
 }
 
 func New(opt Opt) (executor.Executor, error) {
@@ -75,8 +84,9 @@ func New(opt Opt) (executor.Executor, error) {
 	}
 
 	w := &runcExecutor{
-		runc: runtime,
-		root: root,
+		runc:     runtime,
+		root:     root,
+		rootless: opt.Rootless,
 	}
 	return w, nil
 }
@@ -156,6 +166,19 @@ func (w *runcExecutor) Exec(ctx context.Context, meta executor.Meta, root cache.
 		return errors.Wrapf(err, "failed to create working directory %s", newp)
 	}
 
+	if w.rootless {
+		specconv.ToRootless(spec, &specconv.RootlessOpts{
+			MapSubUIDGID: true,
+		})
+		// TODO(AkihiroSuda): keep Cgroups enabled if /sys/fs/cgroup/cpuset/buildkit exists and writable
+		spec.Linux.CgroupsPath = ""
+		// TODO(AkihiroSuda): ToRootless removes netns, but we should readd netns here
+		// if either SUID or userspace NAT is configured on the host.
+		if err := setOOMScoreAdj(spec); err != nil {
+			return err
+		}
+	}
+
 	if err := json.NewEncoder(f).Encode(spec); err != nil {
 		return err
 	}
@@ -203,5 +226,21 @@ func (s *forwardIO) Stdout() io.ReadCloser {
 }
 
 func (s *forwardIO) Stderr() io.ReadCloser {
+	return nil
+}
+
+// setOOMScoreAdj comes from https://github.com/genuinetools/img/blob/2fabe60b7dc4623aa392b515e013bbc69ad510ab/executor/runc/executor.go#L182-L192
+func setOOMScoreAdj(spec *specs.Spec) error {
+	// Set the oom_score_adj of our children containers to that of the current process.
+	b, err := ioutil.ReadFile("/proc/self/oom_score_adj")
+	if err != nil {
+		return errors.Wrap(err, "failed to read /proc/self/oom_score_adj")
+	}
+	s := strings.TrimSpace(string(b))
+	oom, err := strconv.Atoi(s)
+	if err != nil {
+		return errors.Wrapf(err, "failed to parse %s as int", s)
+	}
+	spec.Process.OOMScoreAdj = &oom
 	return nil
 }

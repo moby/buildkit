@@ -22,6 +22,7 @@ Key features:
 - Distributable workers
 - Multiple output formats
 - Pluggable architecture
+- Execution without root privileges
 
 
 Read the proposal from https://github.com/moby/moby/issues/32925
@@ -225,6 +226,9 @@ export JAEGER_TRACE=0.0.0.0:6831
 
 During development, BuildKit is tested with the version of runc that is being used by the containerd repository. Please refer to [runc.md](https://github.com/containerd/containerd/blob/v1.1.0/RUNC.md) for more information.
 
+### Running BuildKit without root privileges
+
+Please refer to `[docs/rootless.md]`(docs/rootless.md).
 
 ### Contributing
 
