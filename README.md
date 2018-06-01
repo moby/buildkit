@@ -228,7 +228,7 @@ During development, BuildKit is tested with the version of runc that is being us
 
 ### Running BuildKit without root privileges
 
-Please refer to `[docs/rootless.md]`(docs/rootless.md).
+Please refer to [`docs/rootless.md`](docs/rootless.md).
 
 ### Contributing
 
