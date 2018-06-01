@@ -16,7 +16,19 @@ type Client interface {
 }
 
 type Reference interface {
-	ReadFile(ctx context.Context, fp string) ([]byte, error)
+	ReadFile(ctx context.Context, req ReadRequest) ([]byte, error)
+	// StatFile(ctx context.Context, req StatRequest) (*StatResponse, error)
+	// ReadDir(ctx context.Context, req ReadDirRequest) ([]*StatResponse, error)
+}
+
+type ReadRequest struct {
+	Filename string
+	Range    *FileRange
+}
+
+type FileRange struct {
+	Offset int
+	Length int
 }
 
 // SolveRequest is same as frontend.SolveRequest but avoiding dependency

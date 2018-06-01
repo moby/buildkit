@@ -1,6 +1,7 @@
 package builder
 
 import (
+	"archive/tar"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -55,14 +56,44 @@ func Build(ctx context.Context, c client.Client) error {
 		llb.SharedKeyHint(defaultDockerfileName),
 	)
 	var buildContext *llb.State
+	isScratchContext := false
 	if st, ok := detectGitContext(opts[LocalNameContext]); ok {
 		src = *st
 		buildContext = &src
 	} else if httpPrefix.MatchString(opts[LocalNameContext]) {
-		unpack := llb.Image(dockerfile2llb.CopyImage).Run(llb.Shlex("copy --unpack /src/context /out/"), llb.ReadonlyRootFS())
-		unpack.AddMount("/src", llb.HTTP(opts[LocalNameContext], llb.Filename("context")), llb.Readonly)
-		src = unpack.AddMount("/out", llb.Scratch())
-		buildContext = &src
+		httpContext := llb.HTTP(opts[LocalNameContext], llb.Filename("context"))
+		def, err := httpContext.Marshal()
+		if err != nil {
+			return err
+		}
+		ref, err := c.Solve(ctx, client.SolveRequest{
+			Definition: def.ToPB(),
+		}, nil, false)
+		if err != nil {
+			return err
+		}
+
+		dt, err := ref.ReadFile(ctx, client.ReadRequest{
+			Filename: "context",
+			Range: &client.FileRange{
+				Length: 1024,
+			},
+		})
+		if err != nil {
+			return err
+		}
+		if isArchive(dt) {
+			unpack := llb.Image(dockerfile2llb.CopyImage).
+				Run(llb.Shlex("copy --unpack /src/context /out/"), llb.ReadonlyRootFS())
+			unpack.AddMount("/src", httpContext, llb.Readonly)
+			src = unpack.AddMount("/out", llb.Scratch())
+			buildContext = &src
+		} else {
+			filename = "context"
+			src = httpContext
+			buildContext = &src
+			isScratchContext = true
+		}
 	}
 
 	def, err := src.Marshal()
@@ -80,42 +111,48 @@ func Build(ctx context.Context, c client.Client) error {
 			return err
 		}
 
-		dtDockerfile, err = ref.ReadFile(ctx2, filename)
+		dtDockerfile, err = ref.ReadFile(ctx2, client.ReadRequest{
+			Filename: filename,
+		})
 		if err != nil {
 			return err
 		}
 		return nil
 	})
 	var excludes []string
-	eg.Go(func() error {
-		dockerignoreState := buildContext
-		if dockerignoreState == nil {
-			st := llb.Local(LocalNameContext,
-				llb.SessionID(c.SessionID()),
-				llb.IncludePatterns([]string{dockerignoreFilename}),
-				llb.SharedKeyHint(dockerignoreFilename),
-			)
-			dockerignoreState = &st
-		}
-		def, err := dockerignoreState.Marshal()
-		if err != nil {
-			return err
-		}
-		ref, err := c.Solve(ctx2, client.SolveRequest{
-			Definition: def.ToPB(),
-		}, nil, false)
-		if err != nil {
-			return err
-		}
-		dtDockerignore, err := ref.ReadFile(ctx2, dockerignoreFilename)
-		if err == nil {
-			excludes, err = dockerignore.ReadAll(bytes.NewBuffer(dtDockerignore))
-			if err != nil {
-				return errors.Wrap(err, "failed to parse dockerignore")
+	if !isScratchContext {
+		eg.Go(func() error {
+			dockerignoreState := buildContext
+			if dockerignoreState == nil {
+				st := llb.Local(LocalNameContext,
+					llb.SessionID(c.SessionID()),
+					llb.IncludePatterns([]string{dockerignoreFilename}),
+					llb.SharedKeyHint(dockerignoreFilename),
+				)
+				dockerignoreState = &st
 			}
-		}
-		return nil
-	})
+			def, err := dockerignoreState.Marshal()
+			if err != nil {
+				return err
+			}
+			ref, err := c.Solve(ctx2, client.SolveRequest{
+				Definition: def.ToPB(),
+			}, nil, false)
+			if err != nil {
+				return err
+			}
+			dtDockerignore, err := ref.ReadFile(ctx2, client.ReadRequest{
+				Filename: dockerignoreFilename,
+			})
+			if err == nil {
+				excludes, err = dockerignore.ReadAll(bytes.NewBuffer(dtDockerignore))
+				if err != nil {
+					return errors.Wrap(err, "failed to parse dockerignore")
+				}
+			}
+			return nil
+		})
+	}
 
 	if err := eg.Wait(); err != nil {
 		return err
@@ -217,4 +254,23 @@ func detectGitContext(ref string) (*llb.State, bool) {
 	}
 	st := llb.Git(parts[0], branch)
 	return &st, true
+}
+
+func isArchive(header []byte) bool {
+	for _, m := range [][]byte{
+		{0x42, 0x5A, 0x68},                   // bzip2
+		{0x1F, 0x8B, 0x08},                   // gzip
+		{0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00}, // xz
+	} {
+		if len(header) < len(m) {
+			continue
+		}
+		if bytes.Equal(m, header[:len(m)]) {
+			return true
+		}
+	}
+
+	r := tar.NewReader(bytes.NewBuffer(header))
+	_, err := r.Next()
+	return err == nil
 }

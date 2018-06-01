@@ -60,12 +60,21 @@ type ref struct {
 	solver.CachedResult
 }
 
-func (r *ref) ReadFile(ctx context.Context, fp string) ([]byte, error) {
+func (r *ref) ReadFile(ctx context.Context, req client.ReadRequest) ([]byte, error) {
 	ref, err := r.getImmutableRef()
 	if err != nil {
 		return nil, err
 	}
-	return cache.ReadFile(ctx, ref, fp)
+	newReq := cache.ReadRequest{
+		Filename: req.Filename,
+	}
+	if r := req.Range; r != nil {
+		newReq.Range = &cache.FileRange{
+			Offset: r.Offset,
+			Length: r.Length,
+		}
+	}
+	return cache.ReadFile(ctx, ref, newReq)
 }
 
 func (r *ref) getImmutableRef() (cache.ImmutableRef, error) {

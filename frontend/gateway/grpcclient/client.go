@@ -84,8 +84,15 @@ type reference struct {
 	c  *grpcClient
 }
 
-func (r *reference) ReadFile(ctx context.Context, fp string) ([]byte, error) {
-	resp, err := r.c.client.ReadFile(ctx, &pb.ReadFileRequest{FilePath: fp, Ref: r.id})
+func (r *reference) ReadFile(ctx context.Context, req client.ReadRequest) ([]byte, error) {
+	rfr := &pb.ReadFileRequest{FilePath: req.Filename, Ref: r.id}
+	if r := req.Range; r != nil {
+		rfr.Range = &pb.FileRange{
+			Offset: int64(r.Offset),
+			Length: int64(r.Length),
+		}
+	}
+	resp, err := r.c.client.ReadFile(ctx, rfr)
 	if err != nil {
 		return nil, err
 	}
