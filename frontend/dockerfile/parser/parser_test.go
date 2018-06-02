@@ -1,4 +1,4 @@
-package parser // import "github.com/docker/docker/builder/dockerfile/parser"
+package parser
 
 import (
 	"bufio"

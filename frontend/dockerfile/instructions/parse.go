@@ -1,4 +1,4 @@
-package instructions // import "github.com/docker/docker/builder/dockerfile/instructions"
+package instructions
 
 import (
 	"fmt"
@@ -10,9 +10,9 @@ import (
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/strslice"
-	"github.com/docker/docker/builder/dockerfile/command"
-	"github.com/docker/docker/builder/dockerfile/parser"
 	"github.com/docker/docker/pkg/system"
+	"github.com/moby/buildkit/frontend/dockerfile/command"
+	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"github.com/pkg/errors"
 )
 

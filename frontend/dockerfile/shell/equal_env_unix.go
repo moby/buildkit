@@ -1,6 +1,6 @@
 // +build !windows
 
-package shell // import "github.com/docker/docker/builder/dockerfile/shell"
+package shell
 
 // EqualEnvKeys compare two strings and returns true if they are equal. On
 // Windows this comparison is case insensitive.
