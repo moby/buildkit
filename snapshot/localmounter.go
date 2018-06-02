@@ -65,7 +65,7 @@ func (lm *localMounter) Mount() (string, error) {
 
 	if err := mount.All(lm.mounts, dir); err != nil {
 		os.RemoveAll(dir)
-		return "", err
+		return "", errors.Wrapf(err, "failed to mount %s: %+v", dir, lm.mounts)
 	}
 	lm.target = dir
 	return dir, nil
