@@ -1,10 +1,11 @@
-ARG RUNC_VERSION=69663f0bd4b60df09991c08812a60108003fa340
+ARG RUNC_VERSION=dd56ece8236d6d9e5bed4ea0c31fe53c7b873ff4
 ARG CONTAINERD_VERSION=v1.1.0
 # containerd v1.0 for integration tests
 ARG CONTAINERD10_VERSION=v1.0.3
 # available targets: buildkitd, buildkitd.oci_only, buildkitd.containerd_only
 ARG BUILDKIT_TARGET=buildkitd
 ARG REGISTRY_VERSION=2.6
+ARG ROOTLESSKIT_VERSION=1e79dc31d71ea8c1a27f15086be2be2b1d99acaa
 
 # The `buildkitd` stage and the `buildctl` stage are placed here
 # so that they can be built quickly with legacy DAG-unaware `docker build --target=...`
@@ -121,6 +122,33 @@ COPY --from=containerd /go/src/github.com/containerd/containerd/bin/ctr /usr/bin
 VOLUME /var/lib/containerd
 VOLUME /run/containerd
 ENTRYPOINT ["containerd"]
+
+FROM gobuild-base AS rootlesskit-base
+RUN git clone https://github.com/AkihiroSuda/rootlesskit.git /go/src/github.com/AkihiroSuda/rootlesskit
+WORKDIR /go/src/github.com/AkihiroSuda/rootlesskit
+
+FROM rootlesskit-base as rootlesskit
+ARG ROOTLESSKIT_VERSION
+RUN git checkout -q "$ROOTLESSKIT_VERSION" \
+  && go build -o /rootlesskit ./cmd/rootlesskit
+
+# Rootless mode.
+# Still requires `--privileged`.
+FROM buildkit-buildkitd AS rootless
+RUN apk add --no-cache shadow shadow-uidmap \
+  && useradd --create-home --home-dir /home/user --uid 1000 user \
+  && mkdir -p /home/user/.local/run /home/user/.local/tmp /home/user/.local/share/buildkit \
+  && chown -R user /home/user
+COPY --from=rootlesskit /rootlesskit /usr/bin/
+USER user
+ENV HOME /home/user
+ENV USER user
+# WORKAROUND: this should be typically /run/user/1000,
+# but mkdir under /run is not captured when built using BuildKit. (#429)
+ENV XDG_RUNTIME_DIR=/home/user/.local/run
+ENV TMPDIR=/home/user/.local/tmp
+VOLUME /home/user/.local/share/buildkit
+ENTRYPOINT ["rootlesskit", "buildkitd"]
 
 FROM buildkit-${BUILDKIT_TARGET}
 
