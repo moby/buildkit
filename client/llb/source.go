@@ -210,6 +210,9 @@ func Local(name string, opts ...LocalOption) State {
 	if gi.IncludePatterns != "" {
 		attrs[pb.AttrIncludePatterns] = gi.IncludePatterns
 	}
+	if gi.FollowPaths != "" {
+		attrs[pb.AttrFollowPaths] = gi.FollowPaths
+	}
 	if gi.ExcludePatterns != "" {
 		attrs[pb.AttrExcludePatterns] = gi.ExcludePatterns
 	}
@@ -248,6 +251,17 @@ func IncludePatterns(p []string) LocalOption {
 	})
 }
 
+func FollowPaths(p []string) LocalOption {
+	return localOptionFunc(func(li *LocalInfo) {
+		if len(p) == 0 {
+			li.FollowPaths = ""
+			return
+		}
+		dt, _ := json.Marshal(p) // empty on error
+		li.FollowPaths = string(dt)
+	})
+}
+
 func ExcludePatterns(p []string) LocalOption {
 	return localOptionFunc(func(li *LocalInfo) {
 		if len(p) == 0 {
@@ -270,6 +284,7 @@ type LocalInfo struct {
 	SessionID       string
 	IncludePatterns string
 	ExcludePatterns string
+	FollowPaths     string
 	SharedKeyHint   string
 }
 

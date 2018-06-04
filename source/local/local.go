@@ -159,6 +159,7 @@ func (ls *localSourceHandler) Snapshot(ctx context.Context) (out cache.Immutable
 		Name:             ls.src.Name,
 		IncludePatterns:  ls.src.IncludePatterns,
 		ExcludePatterns:  ls.src.ExcludePatterns,
+		FollowPaths:      ls.src.FollowPaths,
 		OverrideExcludes: false,
 		DestDir:          dest,
 		CacheUpdater:     &cacheUpdater{cc},
