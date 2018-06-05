@@ -68,7 +68,7 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 	if err != nil {
 		return nil, err
 	}
-	snFactory, err := snapshotterFactory(c.GlobalString("oci-worker-snapshotter"))
+	snFactory, err := snapshotterFactory(common.root, c.GlobalString("oci-worker-snapshotter"))
 	if err != nil {
 		return nil, err
 	}
@@ -89,22 +89,20 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 	return []worker.Worker{w}, nil
 }
 
-func snapshotterFactory(name string) (runc.SnapshotterFactory, error) {
+func snapshotterFactory(commonRoot, name string) (runc.SnapshotterFactory, error) {
+	if name == "auto" {
+		if err := overlay.Supported(commonRoot); err == nil {
+			logrus.Debug("auto snapshotter: using overlayfs")
+			name = "overlayfs"
+		} else {
+			logrus.Debugf("auto snapshotter: using native, because overlayfs is not available for %s: %v", commonRoot, err)
+			name = "native"
+		}
+	}
 	snFactory := runc.SnapshotterFactory{
 		Name: name,
 	}
-	var err error
 	switch name {
-	case "auto":
-		snFactory.New = func(root string) (ctdsnapshot.Snapshotter, error) {
-			err := overlay.Supported(root)
-			if err == nil {
-				logrus.Debug("auto snapshotter: using overlayfs")
-				return overlay.NewSnapshotter(root)
-			}
-			logrus.Debugf("auto snapshotter: using native for %s: %v", root, err)
-			return native.NewSnapshotter(root)
-		}
 	case "native":
 		snFactory.New = native.NewSnapshotter
 	case "overlayfs": // not "overlay", for consistency with containerd snapshotter plugin ID.
@@ -112,9 +110,9 @@ func snapshotterFactory(name string) (runc.SnapshotterFactory, error) {
 			return overlay.NewSnapshotter(root)
 		}
 	default:
-		err = errors.Errorf("unknown snapshotter name: %q", name)
+		return snFactory, errors.Errorf("unknown snapshotter name: %q", name)
 	}
-	return snFactory, err
+	return snFactory, nil
 }
 
 func validOCIBinary() bool {
