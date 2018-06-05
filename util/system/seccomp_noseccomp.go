@@ -1,4 +1,4 @@
-// +build !linux,seccomp
+// +build !seccomp
 
 package system
 
