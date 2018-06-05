@@ -65,6 +65,8 @@ COPY --from=containerd /go/src/github.com/containerd/containerd/bin/containerd* 
 
 FROM buildkit-base AS buildkitd.oci_only
 ENV CGO_ENABLED=1
+# mitigate https://github.com/moby/moby/pull/35456
+WORKDIR /go/src/github.com/moby/buildkit
 RUN go build -installsuffix netgo -ldflags "$(cat .tmp/ldflags) -w -extldflags -static" -tags 'no_containerd_worker seccomp netgo cgo static_build' -o /usr/bin/buildkitd.oci_only ./cmd/buildkitd
 
 FROM buildkit-base AS buildkitd.containerd_only
@@ -129,6 +131,8 @@ WORKDIR /go/src/github.com/AkihiroSuda/rootlesskit
 
 FROM rootlesskit-base as rootlesskit
 ARG ROOTLESSKIT_VERSION
+# mitigate https://github.com/moby/moby/pull/35456
+ENV GOOS=linux
 RUN git checkout -q "$ROOTLESSKIT_VERSION" \
   && go build -o /rootlesskit ./cmd/rootlesskit
 
