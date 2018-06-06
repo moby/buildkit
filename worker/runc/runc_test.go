@@ -98,12 +98,11 @@ func TestRuncWorker(t *testing.T) {
 	}
 
 	meta := executor.Meta{
-		Args: []string{"/bin/sh", "-c", "echo \"foo\" > /bar"},
+		Args: []string{"/bin/sh", "-c", "mkdir /run && echo \"foo\" > /run/bar"},
 		Cwd:  "/",
 	}
 
 	stderr := bytes.NewBuffer(nil)
-
 	err = w.Executor.Exec(ctx, meta, snap, nil, nil, nil, &nopCloser{stderr})
 	require.Error(t, err) // Read-only root
 	// typical error is like `mkdir /.../rootfs/proc: read-only file system`.
@@ -114,6 +113,14 @@ func TestRuncWorker(t *testing.T) {
 	require.NoError(t, err)
 
 	err = w.Executor.Exec(ctx, meta, root, nil, nil, nil, nil)
+	require.NoError(t, err)
+
+	meta = executor.Meta{
+		Args: []string{"/bin/ls", "/etc/resolv.conf"},
+		Cwd:  "/",
+	}
+
+	err = w.Executor.Exec(ctx, meta, root, nil, nil, nil, &nopCloser{stderr})
 	require.NoError(t, err)
 
 	rf, err := root.Commit(ctx)
@@ -127,7 +134,9 @@ func TestRuncWorker(t *testing.T) {
 	target, err = lm.Mount()
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(target, "bar"))
+	//Verifies fix for issue https://github.com/moby/buildkit/issues/429
+	dt, err := ioutil.ReadFile(filepath.Join(target, "run", "bar"))
+
 	require.NoError(t, err)
 	require.Equal(t, string(dt), "foo\n")
 
