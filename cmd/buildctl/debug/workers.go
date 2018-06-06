@@ -28,7 +28,7 @@ var WorkersCommand = cli.Command{
 }
 
 func resolveClient(c *cli.Context) (*client.Client, error) {
-	return client.New(c.GlobalString("addr"), client.WithBlock())
+	return client.New(commandContext(c), c.GlobalString("addr"), client.WithBlock())
 }
 
 func listWorkers(clicontext *cli.Context) error {

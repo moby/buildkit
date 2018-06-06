@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"os"
+	"time"
 
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/util/appdefaults"
@@ -57,6 +59,11 @@ func main() {
 			Usage: "client key",
 			Value: "",
 		},
+		cli.IntFlag{
+			Name:  "timeout",
+			Usage: "timeout backend connection after value seconds",
+			Value: 5,
+		},
 	}
 
 	app.Commands = []cli.Command{
@@ -106,12 +113,19 @@ func resolveClient(c *cli.Context) (*client.Client, error) {
 
 	opts := []client.ClientOpt{client.WithBlock()}
 
-	if span := opentracing.SpanFromContext(commandContext(c)); span != nil {
+	ctx := commandContext(c)
+
+	if span := opentracing.SpanFromContext(ctx); span != nil {
 		opts = append(opts, client.WithTracer(span.Tracer()))
 	}
 
 	if caCert != "" || cert != "" || key != "" {
 		opts = append(opts, client.WithCredentials(serverName, caCert, cert, key))
 	}
-	return client.New(c.GlobalString("addr"), opts...)
+
+	timeout := time.Duration(c.GlobalInt("timeout"))
+	ctx, cancel := context.WithTimeout(ctx, timeout*time.Second)
+	defer cancel()
+
+	return client.New(ctx, c.GlobalString("addr"), opts...)
 }

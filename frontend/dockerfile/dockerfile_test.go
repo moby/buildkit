@@ -93,7 +93,7 @@ COPY sub/l* alllinks/
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	c, err := client.New(sb.Address())
+	c, err := client.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -138,7 +138,7 @@ COPY --from=0 /foo /foo
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	c, err := client.New(sb.Address())
+	c, err := client.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -182,7 +182,7 @@ CMD ["test"]
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	c, err := client.New(sb.Address())
+	c, err := client.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -272,7 +272,7 @@ LABEL foo=bar
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	c, err := client.New(sb.Address())
+	c, err := client.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -384,7 +384,7 @@ FROM busybox:${tag}
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	c, err := client.New(sb.Address())
+	c, err := client.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -872,7 +872,7 @@ EXPOSE 5000
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	c, err := client.New(sb.Address())
+	c, err := client.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -958,7 +958,7 @@ Dockerfile
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	c, err := client.New(sb.Address())
+	c, err := client.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -1017,12 +1017,13 @@ COPY . .
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	c, err := client.New(sb.Address())
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	c, err := client.New(ctx, sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
 	_, err = c.Solve(ctx, nil, client.SolveOpt{
 		Frontend: "dockerfile.v0",
 		LocalDirs: map[string]string{
@@ -1133,7 +1134,7 @@ USER nobody
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	c, err := client.New(sb.Address())
+	c, err := client.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -1229,7 +1230,7 @@ COPY --from=base /out /
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	c, err := client.New(sb.Address())
+	c, err := client.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -1281,7 +1282,7 @@ COPY files dest
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	c, err := client.New(sb.Address())
+	c, err := client.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -1326,7 +1327,7 @@ COPY $FOO baz
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	c, err := client.New(sb.Address())
+	c, err := client.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -1378,7 +1379,7 @@ COPY sub/dir1 subdest6
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	c, err := client.New(sb.Address())
+	c, err := client.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -1486,7 +1487,7 @@ COPY --from=build foo bar2
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	c, err := client.New(sb.Address())
+	c, err := client.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -1572,7 +1573,7 @@ COPY foo bar
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	c, err := client.New(sb.Address())
+	c, err := client.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -1606,7 +1607,7 @@ COPY --from=busybox /etc/passwd test
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	c, err := client.New(sb.Address())
+	c, err := client.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -1683,7 +1684,7 @@ COPY --from=stage1 baz bax
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	c, err := client.New(sb.Address())
+	c, err := client.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -1723,7 +1724,7 @@ LABEL foo=bar
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	c, err := client.New(sb.Address())
+	c, err := client.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -1811,7 +1812,7 @@ COPY --from=base unique /
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	c, err := client.New(sb.Address())
+	c, err := client.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -1892,7 +1893,7 @@ RUN echo bar > bar
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	c, err := client.New(sb.Address())
+	c, err := client.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -1978,7 +1979,7 @@ RUN echo bar > bar
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	c, err := client.New(sb.Address())
+	c, err := client.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -2054,7 +2055,7 @@ COPY --from=s1 unique2 /
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	c, err := client.New(sb.Address())
+	c, err := client.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -2140,7 +2141,7 @@ COPY --from=build /out /
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	c, err := client.New(sb.Address())
+	c, err := client.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 

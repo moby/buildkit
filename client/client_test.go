@@ -59,7 +59,7 @@ func TestClientIntegration(t *testing.T) {
 func testTmpfsMounts(t *testing.T, sb integration.Sandbox) {
 	t.Parallel()
 	requiresLinux(t)
-	c, err := New(sb.Address())
+	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -76,7 +76,7 @@ func testTmpfsMounts(t *testing.T, sb integration.Sandbox) {
 func testLocalSymlinkEscape(t *testing.T, sb integration.Sandbox) {
 	t.Parallel()
 	requiresLinux(t)
-	c, err := New(sb.Address())
+	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -134,7 +134,7 @@ func testLocalSymlinkEscape(t *testing.T, sb integration.Sandbox) {
 func testRelativeWorkDir(t *testing.T, sb integration.Sandbox) {
 	t.Parallel()
 	requiresLinux(t)
-	c, err := New(sb.Address())
+	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -164,7 +164,7 @@ func testRelativeWorkDir(t *testing.T, sb integration.Sandbox) {
 
 func testCallDiskUsage(t *testing.T, sb integration.Sandbox) {
 	t.Parallel()
-	c, err := New(sb.Address())
+	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 	_, err = c.DiskUsage(context.TODO())
@@ -174,7 +174,7 @@ func testCallDiskUsage(t *testing.T, sb integration.Sandbox) {
 func testBuildMultiMount(t *testing.T, sb integration.Sandbox) {
 	t.Parallel()
 	requiresLinux(t)
-	c, err := New(sb.Address())
+	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -196,7 +196,7 @@ func testBuildMultiMount(t *testing.T, sb integration.Sandbox) {
 func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 	t.Parallel()
 
-	c, err := New(sb.Address())
+	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -284,7 +284,7 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 func testResolveAndHosts(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 	t.Parallel()
-	c, err := New(sb.Address())
+	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -324,7 +324,7 @@ func testResolveAndHosts(t *testing.T, sb integration.Sandbox) {
 func testUser(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 	t.Parallel()
-	c, err := New(sb.Address())
+	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -377,7 +377,7 @@ func testUser(t *testing.T, sb integration.Sandbox) {
 func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 	t.Parallel()
-	c, err := New(sb.Address())
+	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -476,7 +476,7 @@ func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 	t.Parallel()
-	c, err := New(sb.Address())
+	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -673,7 +673,7 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	}
 	require.NoError(t, err)
 
-	c, err := New(sb.Address())
+	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -738,7 +738,7 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox) {
 func testCachedMounts(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 	t.Parallel()
-	c, err := New(sb.Address())
+	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -801,7 +801,7 @@ func testCachedMounts(t *testing.T, sb integration.Sandbox) {
 func testDuplicateWhiteouts(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 	t.Parallel()
-	c, err := New(sb.Address())
+	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -869,7 +869,7 @@ func testDuplicateWhiteouts(t *testing.T, sb integration.Sandbox) {
 func testWhiteoutParentDir(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 	t.Parallel()
-	c, err := New(sb.Address())
+	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -931,7 +931,7 @@ func testWhiteoutParentDir(t *testing.T, sb integration.Sandbox) {
 // #296
 func testSchema1Image(t *testing.T, sb integration.Sandbox) {
 	t.Parallel()
-	c, err := New(sb.Address())
+	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -949,7 +949,7 @@ func testSchema1Image(t *testing.T, sb integration.Sandbox) {
 // #319
 func testMountWithNoSource(t *testing.T, sb integration.Sandbox) {
 	t.Parallel()
-	c, err := New(sb.Address())
+	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -979,7 +979,7 @@ func testMountWithNoSource(t *testing.T, sb integration.Sandbox) {
 // #324
 func testReadonlyRootFS(t *testing.T, sb integration.Sandbox) {
 	t.Parallel()
-	c, err := New(sb.Address())
+	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -1008,7 +1008,7 @@ func testReadonlyRootFS(t *testing.T, sb integration.Sandbox) {
 func testProxyEnv(t *testing.T, sb integration.Sandbox) {
 	t.Parallel()
 
-	c, err := New(sb.Address())
+	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -1208,7 +1208,7 @@ loop0:
 func testInvalidExporter(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 	t.Parallel()
-	c, err := New(sb.Address())
+	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
