@@ -47,20 +47,20 @@ func (p *Puller) Resolve(ctx context.Context) (string, ocispec.Descriptor, error
 	p.resolveOnce.Do(func() {
 		resolveProgressDone := oneOffProgress(ctx, "resolve "+p.Src.String())
 
-		dgst := p.Src.Digest()
-		if dgst != "" {
-			info, err := p.ContentStore.Info(ctx, dgst)
+		desc := ocispec.Descriptor{
+			Digest: p.Src.Digest(),
+		}
+		if desc.Digest != "" {
+			info, err := p.ContentStore.Info(ctx, desc.Digest)
 			if err == nil {
+				desc.Size = info.Size
 				p.ref = p.Src.String()
-				ra, err := p.ContentStore.ReaderAt(ctx, dgst)
+				ra, err := p.ContentStore.ReaderAt(ctx, desc)
 				if err == nil {
 					mt, err := imageutil.DetectManifestMediaType(ra)
 					if err == nil {
-						p.desc = ocispec.Descriptor{
-							Size:      info.Size,
-							Digest:    dgst,
-							MediaType: mt,
-						}
+						desc.MediaType = mt
+						p.desc = desc
 						resolveProgressDone(nil)
 						return
 					}

@@ -73,7 +73,7 @@ func (ci *CacheImporter) Resolve(ctx context.Context, ref string) (solver.CacheM
 		return nil, err
 	}
 
-	dt, err := content.ReadBlob(ctx, b, desc.Digest)
+	dt, err := content.ReadBlob(ctx, b, desc)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +106,7 @@ func (ci *CacheImporter) Resolve(ctx context.Context, ref string) (solver.CacheM
 		return nil, err
 	}
 
-	dt, err = content.ReadBlob(ctx, b, configDesc.Digest)
+	dt, err = content.ReadBlob(ctx, b, configDesc)
 	if err != nil {
 		return nil, err
 	}

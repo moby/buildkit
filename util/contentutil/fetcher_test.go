@@ -19,7 +19,7 @@ func TestFetcher(t *testing.T) {
 
 	b0 := NewBuffer()
 
-	err := content.WriteBlob(ctx, b0, "foo", bytes.NewBuffer([]byte("foobar")), -1, "")
+	err := content.WriteBlob(ctx, b0, "foo", bytes.NewBuffer([]byte("foobar")), ocispec.Descriptor{Size: -1})
 	require.NoError(t, err)
 
 	f := &localFetcher{b0}
@@ -29,11 +29,11 @@ func TestFetcher(t *testing.T) {
 	err = Copy(ctx, b1, p, ocispec.Descriptor{Digest: digest.FromBytes([]byte("foobar")), Size: -1})
 	require.NoError(t, err)
 
-	dt, err := content.ReadBlob(ctx, b1, digest.FromBytes([]byte("foobar")))
+	dt, err := content.ReadBlob(ctx, b1, ocispec.Descriptor{Digest: digest.FromBytes([]byte("foobar"))})
 	require.NoError(t, err)
 	require.Equal(t, string(dt), "foobar")
 
-	rdr, err := p.ReaderAt(ctx, digest.FromBytes([]byte("foobar")))
+	rdr, err := p.ReaderAt(ctx, ocispec.Descriptor{Digest: digest.FromBytes([]byte("foobar"))})
 	require.NoError(t, err)
 
 	buf := make([]byte, 3)
@@ -55,7 +55,7 @@ func TestSlowFetch(t *testing.T) {
 	f := &dummySlowFetcher{}
 	p := FromFetcher(f, ocispec.Descriptor{Digest: digest.FromBytes([]byte("foobar")), Size: -1})
 
-	rdr, err := p.ReaderAt(ctx, digest.FromBytes([]byte("foobar")))
+	rdr, err := p.ReaderAt(ctx, ocispec.Descriptor{Digest: digest.FromBytes([]byte("foobar"))})
 	require.NoError(t, err)
 
 	buf := make([]byte, 3)

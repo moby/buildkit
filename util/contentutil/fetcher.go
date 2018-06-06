@@ -7,7 +7,6 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/remotes"
-	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
@@ -24,9 +23,9 @@ type fetchedProvider struct {
 	desc ocispec.Descriptor
 }
 
-func (p *fetchedProvider) ReaderAt(ctx context.Context, dgst digest.Digest) (content.ReaderAt, error) {
-	if dgst != p.desc.Digest {
-		return nil, errors.Wrapf(errdefs.ErrNotFound, "content %v", dgst)
+func (p *fetchedProvider) ReaderAt(ctx context.Context, desc ocispec.Descriptor) (content.ReaderAt, error) {
+	if desc.Digest != p.desc.Digest {
+		return nil, errors.Wrapf(errdefs.ErrNotFound, "content %v", desc.Digest)
 	}
 
 	rc, err := p.f.Fetch(ctx, p.desc)

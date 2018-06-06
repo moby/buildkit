@@ -199,7 +199,7 @@ ENTRYPOINT my entrypoint
 	desc, err := img.Config(ctx, ctr.ContentStore(), platforms.Default())
 	require.NoError(t, err)
 
-	dt, err := content.ReadBlob(ctx, ctr.ContentStore(), desc.Digest)
+	dt, err := content.ReadBlob(ctx, ctr.ContentStore(), desc)
 	require.NoError(t, err)
 
 	var ociimg ocispec.Image
@@ -290,7 +290,7 @@ COPY foo .
 	desc, err := img.Config(ctx, ctr.ContentStore(), platforms.Default())
 	require.NoError(t, err)
 
-	dt, err := content.ReadBlob(ctx, ctr.ContentStore(), desc.Digest)
+	dt, err := content.ReadBlob(ctx, ctr.ContentStore(), desc)
 	require.NoError(t, err)
 
 	var ociimg ocispec.Image
@@ -789,7 +789,7 @@ ENV foo=bar
 	desc, err := img.Config(ctx, client.ContentStore(), platforms.Default())
 	require.NoError(t, err)
 
-	dt, err := content.ReadBlob(ctx, client.ContentStore(), desc.Digest)
+	dt, err := content.ReadBlob(ctx, client.ContentStore(), desc)
 	require.NoError(t, err)
 
 	var ociimg ocispec.Image
@@ -872,7 +872,7 @@ EXPOSE 5000
 	desc, err := img.Config(ctx, client.ContentStore(), platforms.Default())
 	require.NoError(t, err)
 
-	dt, err := content.ReadBlob(ctx, client.ContentStore(), desc.Digest)
+	dt, err := content.ReadBlob(ctx, client.ContentStore(), desc)
 	require.NoError(t, err)
 
 	var ociimg ocispec.Image
@@ -1052,7 +1052,7 @@ RUN ["ls"]
 	desc, err := img.Config(ctx, client.ContentStore(), platforms.Default())
 	require.NoError(t, err)
 
-	dt, err := content.ReadBlob(ctx, client.ContentStore(), desc.Digest)
+	dt, err := content.ReadBlob(ctx, client.ContentStore(), desc)
 	require.NoError(t, err)
 
 	var ociimg ocispec.Image
@@ -1157,7 +1157,7 @@ USER nobody
 	desc, err := img.Config(ctx, client.ContentStore(), platforms.Default())
 	require.NoError(t, err)
 
-	dt, err = content.ReadBlob(ctx, client.ContentStore(), desc.Digest)
+	dt, err = content.ReadBlob(ctx, client.ContentStore(), desc)
 	require.NoError(t, err)
 
 	var ociimg ocispec.Image
@@ -1730,7 +1730,7 @@ LABEL foo=bar
 	desc, err := img.Config(ctx, client.ContentStore(), platforms.Default())
 	require.NoError(t, err)
 
-	dt, err := content.ReadBlob(ctx, client.ContentStore(), desc.Digest)
+	dt, err := content.ReadBlob(ctx, client.ContentStore(), desc)
 	require.NoError(t, err)
 
 	var ociimg ocispec.Image

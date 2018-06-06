@@ -8,6 +8,7 @@ import (
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/opencontainers/go-digest"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 type garbageCollectFn func(context.Context) error
@@ -65,28 +66,34 @@ func (c *nsContent) Abort(ctx context.Context, ref string) error {
 	return c.Store.Abort(ctx, ref)
 }
 
-func (c *nsContent) ReaderAt(ctx context.Context, dgst digest.Digest) (content.ReaderAt, error) {
+func (c *nsContent) ReaderAt(ctx context.Context, desc ocispec.Descriptor) (content.ReaderAt, error) {
 	ctx = namespaces.WithNamespace(ctx, c.ns)
-	return c.Store.ReaderAt(ctx, dgst)
+	return c.Store.ReaderAt(ctx, desc)
 }
 
-func (c *nsContent) Writer(ctx context.Context, ref string, size int64, expected digest.Digest) (content.Writer, error) {
-	return c.writer(ctx, ref, size, expected, 3)
+func (c *nsContent) Writer(ctx context.Context, opts ...content.WriterOpt) (content.Writer, error) {
+	return c.writer(ctx, 3, opts...)
 }
 
-func (c *nsContent) writer(ctx context.Context, ref string, size int64, expected digest.Digest, retries int) (content.Writer, error) {
+func (c *nsContent) writer(ctx context.Context, retries int, opts ...content.WriterOpt) (content.Writer, error) {
+	var wOpts content.WriterOpts
+	for _, opt := range opts {
+		if err := opt(&wOpts); err != nil {
+			return nil, err
+		}
+	}
 	ctx = namespaces.WithNamespace(ctx, c.ns)
-	w, err := c.Store.Writer(ctx, ref, size, expected)
+	w, err := c.Store.Writer(ctx, opts...)
 	if err != nil {
-		if errdefs.IsAlreadyExists(err) && expected != "" && retries > 0 {
+		if errdefs.IsAlreadyExists(err) && wOpts.Desc.Digest != "" && retries > 0 {
 			_, err2 := c.Update(ctx, content.Info{
-				Digest: expected,
+				Digest: wOpts.Desc.Digest,
 				Labels: map[string]string{
 					"containerd.io/gc.root": time.Now().UTC().Format(time.RFC3339Nano),
 				},
 			}, "labels.containerd.io/gc.root")
 			if err2 != nil {
-				return c.writer(ctx, ref, size, expected, retries-1)
+				return c.writer(ctx, retries-1, opts...)
 			}
 		}
 	}
@@ -100,8 +107,8 @@ type noGCWriter struct {
 	content.Writer
 }
 
-func (cs *noGCContentStore) Writer(ctx context.Context, ref string, size int64, expected digest.Digest) (content.Writer, error) {
-	w, err := cs.Store.Writer(ctx, ref, size, expected)
+func (cs *noGCContentStore) Writer(ctx context.Context, opts ...content.WriterOpt) (content.Writer, error) {
+	w, err := cs.Store.Writer(ctx, opts...)
 	return &noGCWriter{w}, err
 }
 

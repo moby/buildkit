@@ -41,7 +41,9 @@ func getCredentialsFunc(ctx context.Context, sm *session.Manager) func(string) (
 }
 
 func Push(ctx context.Context, sm *session.Manager, cs content.Provider, dgst digest.Digest, ref string, insecure bool) error {
-
+	desc := ocispec.Descriptor{
+		Digest: dgst,
+	}
 	parsed, err := reference.ParseNormalizedNamed(ref)
 	if err != nil {
 		return err
@@ -83,7 +85,7 @@ func Push(ctx context.Context, sm *session.Manager, cs content.Provider, dgst di
 		pushHandler,
 	)
 
-	ra, err := cs.ReaderAt(ctx, dgst)
+	ra, err := cs.ReaderAt(ctx, desc)
 	if err != nil {
 		return err
 	}
@@ -138,7 +140,7 @@ func childrenHandler(provider content.Provider) images.HandlerFunc {
 		var descs []ocispec.Descriptor
 		switch desc.MediaType {
 		case images.MediaTypeDockerSchema2Manifest, ocispec.MediaTypeImageManifest:
-			p, err := content.ReadBlob(ctx, provider, desc.Digest)
+			p, err := content.ReadBlob(ctx, provider, desc)
 			if err != nil {
 				return nil, err
 			}
@@ -153,7 +155,7 @@ func childrenHandler(provider content.Provider) images.HandlerFunc {
 			descs = append(descs, manifest.Config)
 			descs = append(descs, manifest.Layers...)
 		case images.MediaTypeDockerSchema2ManifestList, ocispec.MediaTypeImageIndex:
-			p, err := content.ReadBlob(ctx, provider, desc.Digest)
+			p, err := content.ReadBlob(ctx, provider, desc)
 			if err != nil {
 				return nil, err
 			}

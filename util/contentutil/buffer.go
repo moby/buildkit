@@ -10,6 +10,7 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
 	digest "github.com/opencontainers/go-digest"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
 
@@ -33,27 +34,33 @@ type buffer struct {
 	refs    map[string]struct{}
 }
 
-func (b *buffer) Writer(ctx context.Context, ref string, size int64, expected digest.Digest) (content.Writer, error) {
+func (b *buffer) Writer(ctx context.Context, opts ...content.WriterOpt) (content.Writer, error) {
+	var wOpts content.WriterOpts
+	for _, opt := range opts {
+		if err := opt(&wOpts); err != nil {
+			return nil, err
+		}
+	}
 	b.mu.Lock()
-	if _, ok := b.refs[ref]; ok {
-		return nil, errors.Wrapf(errdefs.ErrUnavailable, "ref %s locked", ref)
+	if _, ok := b.refs[wOpts.Ref]; ok {
+		return nil, errors.Wrapf(errdefs.ErrUnavailable, "ref %s locked", wOpts.Ref)
 	}
 	b.mu.Unlock()
 	return &bufferedWriter{
 		main:     b,
 		digester: digest.Canonical.Digester(),
 		buffer:   bytes.NewBuffer(nil),
-		expected: expected,
+		expected: wOpts.Desc.Digest,
 		releaseRef: func() {
 			b.mu.Lock()
-			delete(b.refs, ref)
+			delete(b.refs, wOpts.Ref)
 			b.mu.Unlock()
 		},
 	}, nil
 }
 
-func (b *buffer) ReaderAt(ctx context.Context, dgst digest.Digest) (content.ReaderAt, error) {
-	r, err := b.getBytesReader(ctx, dgst)
+func (b *buffer) ReaderAt(ctx context.Context, desc ocispec.Descriptor) (content.ReaderAt, error) {
+	r, err := b.getBytesReader(ctx, desc.Digest)
 	if err != nil {
 		return nil, err
 	}

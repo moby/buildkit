@@ -497,7 +497,7 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	desc, err := img.Config(ctx)
 	require.NoError(t, err)
 
-	dt, err = content.ReadBlob(ctx, img.ContentStore(), desc.Digest)
+	dt, err = content.ReadBlob(ctx, img.ContentStore(), desc)
 	require.NoError(t, err)
 
 	var ociimg ocispec.Image
@@ -528,7 +528,7 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	require.True(t, ociimg.History[1].EmptyLayer)
 	require.False(t, ociimg.History[2].EmptyLayer)
 
-	dt, err = content.ReadBlob(ctx, img.ContentStore(), img.Target().Digest)
+	dt, err = content.ReadBlob(ctx, img.ContentStore(), img.Target())
 	require.NoError(t, err)
 
 	var mfst schema2.Manifest
@@ -538,7 +538,7 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, schema2.MediaTypeManifest, mfst.MediaType)
 	require.Equal(t, 2, len(mfst.Layers))
 
-	dt, err = content.ReadBlob(ctx, img.ContentStore(), mfst.Layers[0].Digest)
+	dt, err = content.ReadBlob(ctx, img.ContentStore(), ocispec.Descriptor{Digest: mfst.Layers[0].Digest})
 	require.NoError(t, err)
 
 	m, err := readTarToMap(dt, true)
@@ -561,7 +561,7 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	_, ok = m["foo/sub/baz"]
 	require.False(t, ok)
 
-	dt, err = content.ReadBlob(ctx, img.ContentStore(), mfst.Layers[1].Digest)
+	dt, err = content.ReadBlob(ctx, img.ContentStore(), ocispec.Descriptor{Digest: mfst.Layers[1].Digest})
 	require.NoError(t, err)
 
 	m, err = readTarToMap(dt, true)

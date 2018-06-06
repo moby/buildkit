@@ -9,6 +9,7 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
 	digest "github.com/opencontainers/go-digest"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -19,26 +20,26 @@ func TestReadWrite(t *testing.T) {
 
 	b := NewBuffer()
 
-	err := content.WriteBlob(ctx, b, "foo", bytes.NewBuffer([]byte("foo0")), -1, "")
+	err := content.WriteBlob(ctx, b, "foo", bytes.NewBuffer([]byte("foo0")), ocispec.Descriptor{Size: -1})
 	require.NoError(t, err)
 
-	err = content.WriteBlob(ctx, b, "foo", bytes.NewBuffer([]byte("foo1")), 4, "")
+	err = content.WriteBlob(ctx, b, "foo", bytes.NewBuffer([]byte("foo1")), ocispec.Descriptor{Size: 4})
 	require.NoError(t, err)
 
-	err = content.WriteBlob(ctx, b, "foo", bytes.NewBuffer([]byte("foo2")), 3, "")
+	err = content.WriteBlob(ctx, b, "foo", bytes.NewBuffer([]byte("foo2")), ocispec.Descriptor{Size: 3})
 	require.Error(t, err)
 
-	err = content.WriteBlob(ctx, b, "foo", bytes.NewBuffer([]byte("foo3")), -1, digest.FromBytes([]byte("foo4")))
+	err = content.WriteBlob(ctx, b, "foo", bytes.NewBuffer([]byte("foo3")), ocispec.Descriptor{Size: -1, Digest: digest.FromBytes([]byte("foo4"))})
 	require.Error(t, err)
 
-	err = content.WriteBlob(ctx, b, "foo", bytes.NewBuffer([]byte("foo4")), -1, digest.FromBytes([]byte("foo4")))
+	err = content.WriteBlob(ctx, b, "foo", bytes.NewBuffer([]byte("foo4")), ocispec.Descriptor{Size: -1, Digest: digest.FromBytes([]byte("foo4"))})
 	require.NoError(t, err)
 
-	dt, err := content.ReadBlob(ctx, b, digest.FromBytes([]byte("foo1")))
+	dt, err := content.ReadBlob(ctx, b, ocispec.Descriptor{Digest: digest.FromBytes([]byte("foo1"))})
 	require.NoError(t, err)
 	require.Equal(t, string(dt), "foo1")
 
-	_, err = content.ReadBlob(ctx, b, digest.FromBytes([]byte("foo3")))
+	_, err = content.ReadBlob(ctx, b, ocispec.Descriptor{Digest: digest.FromBytes([]byte("foo3"))})
 	require.Error(t, err)
 	require.Equal(t, errors.Cause(err), errdefs.ErrNotFound)
 }
@@ -49,10 +50,10 @@ func TestReaderAt(t *testing.T) {
 
 	b := NewBuffer()
 
-	err := content.WriteBlob(ctx, b, "foo", bytes.NewBuffer([]byte("foobar")), -1, "")
+	err := content.WriteBlob(ctx, b, "foo", bytes.NewBuffer([]byte("foobar")), ocispec.Descriptor{Size: -1})
 	require.NoError(t, err)
 
-	rdr, err := b.ReaderAt(ctx, digest.FromBytes([]byte("foobar")))
+	rdr, err := b.ReaderAt(ctx, ocispec.Descriptor{Digest: digest.FromBytes([]byte("foobar"))})
 	require.NoError(t, err)
 
 	require.Equal(t, int64(6), rdr.Size())

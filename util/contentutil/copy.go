@@ -21,7 +21,7 @@ type localFetcher struct {
 }
 
 func (f *localFetcher) Fetch(ctx context.Context, desc ocispec.Descriptor) (io.ReadCloser, error) {
-	r, err := f.Provider.ReaderAt(ctx, desc.Digest)
+	r, err := f.Provider.ReaderAt(ctx, desc)
 	if err != nil {
 		return nil, err
 	}

@@ -28,28 +28,25 @@ func Config(ctx context.Context, str string, resolver remotes.Resolver, ingester
 		return "", nil, errors.WithStack(err)
 	}
 
-	dgst := ref.Digest()
-	var desc *ocispec.Descriptor
-	if dgst != "" {
-		ra, err := ingester.ReaderAt(ctx, dgst)
+	desc := ocispec.Descriptor{
+		Digest: ref.Digest(),
+	}
+	if desc.Digest != "" {
+		ra, err := ingester.ReaderAt(ctx, desc)
 		if err == nil {
+			desc.Size = ra.Size()
 			mt, err := DetectManifestMediaType(ra)
 			if err == nil {
-				desc = &ocispec.Descriptor{
-					Size:      ra.Size(),
-					Digest:    dgst,
-					MediaType: mt,
-				}
+				desc.MediaType = mt
 			}
 		}
 	}
-
-	if desc == nil {
-		_, desc2, err := resolver.Resolve(ctx, ref.String())
+	// use resolver if desc is incomplete
+	if desc.MediaType == "" {
+		_, desc, err = resolver.Resolve(ctx, ref.String())
 		if err != nil {
 			return "", nil, err
 		}
-		desc = &desc2
 	}
 
 	fetcher, err := resolver.Fetcher(ctx, ref.String())
@@ -61,15 +58,15 @@ func Config(ctx context.Context, str string, resolver remotes.Resolver, ingester
 		remotes.FetchHandler(ingester, fetcher),
 		childrenConfigHandler(ingester, platform),
 	}
-	if err := images.Dispatch(ctx, images.Handlers(handlers...), *desc); err != nil {
+	if err := images.Dispatch(ctx, images.Handlers(handlers...), desc); err != nil {
 		return "", nil, err
 	}
-	config, err := images.Config(ctx, ingester, *desc, platform)
+	config, err := images.Config(ctx, ingester, desc, platform)
 	if err != nil {
 		return "", nil, err
 	}
 
-	dt, err := content.ReadBlob(ctx, ingester, config.Digest)
+	dt, err := content.ReadBlob(ctx, ingester, config)
 	if err != nil {
 		return "", nil, err
 	}
@@ -82,7 +79,7 @@ func childrenConfigHandler(provider content.Provider, platform string) images.Ha
 		var descs []ocispec.Descriptor
 		switch desc.MediaType {
 		case images.MediaTypeDockerSchema2Manifest, ocispec.MediaTypeImageManifest:
-			p, err := content.ReadBlob(ctx, provider, desc.Digest)
+			p, err := content.ReadBlob(ctx, provider, desc)
 			if err != nil {
 				return nil, err
 			}
@@ -96,7 +93,7 @@ func childrenConfigHandler(provider content.Provider, platform string) images.Ha
 
 			descs = append(descs, manifest.Config)
 		case images.MediaTypeDockerSchema2ManifestList, ocispec.MediaTypeImageIndex:
-			p, err := content.ReadBlob(ctx, provider, desc.Digest)
+			p, err := content.ReadBlob(ctx, provider, desc)
 			if err != nil {
 				return nil, err
 			}

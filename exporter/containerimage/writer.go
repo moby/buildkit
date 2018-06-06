@@ -103,16 +103,24 @@ func (ic *ImageWriter) Commit(ctx context.Context, ref cache.ImmutableRef, confi
 	}
 
 	mfstDigest := digest.FromBytes(mfstJSON)
+	mfstDesc := ocispec.Descriptor{
+		Digest: mfstDigest,
+		Size:   int64(len(mfstJSON)),
+	}
 	mfstDone := oneOffProgress(ctx, "exporting manifest "+mfstDigest.String())
 
-	if err := content.WriteBlob(ctx, ic.opt.ContentStore, mfstDigest.String(), bytes.NewReader(mfstJSON), int64(len(mfstJSON)), mfstDigest, content.WithLabels(labels)); err != nil {
+	if err := content.WriteBlob(ctx, ic.opt.ContentStore, mfstDigest.String(), bytes.NewReader(mfstJSON), mfstDesc, content.WithLabels(labels)); err != nil {
 		return nil, mfstDone(errors.Wrapf(err, "error writing manifest blob %s", mfstDigest))
 	}
 	mfstDone(nil)
 
+	configDesc := ocispec.Descriptor{
+		Digest: configDigest,
+		Size:   int64(len(config)),
+	}
 	configDone := oneOffProgress(ctx, "exporting config "+configDigest.String())
 
-	if err := content.WriteBlob(ctx, ic.opt.ContentStore, configDigest.String(), bytes.NewReader(config), int64(len(config)), configDigest); err != nil {
+	if err := content.WriteBlob(ctx, ic.opt.ContentStore, configDigest.String(), bytes.NewReader(config), configDesc); err != nil {
 		return nil, configDone(errors.Wrap(err, "error writing config blob"))
 	}
 	configDone(nil)
