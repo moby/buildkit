@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"io/ioutil"
@@ -24,7 +25,6 @@ type ClientOpt interface{}
 // New returns a new buildkit client. Address can be empty for the system-default address.
 func New(address string, opts ...ClientOpt) (*Client, error) {
 	gopts := []grpc.DialOption{
-		grpc.WithTimeout(30 * time.Second),
 		grpc.WithDialer(dialer),
 		grpc.FailOnNonTempDialError(true),
 	}
@@ -53,7 +53,11 @@ func New(address string, opts ...ClientOpt) (*Client, error) {
 	if address == "" {
 		address = appdefaults.Address
 	}
-	conn, err := grpc.Dial(address, gopts...)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	conn, err := grpc.DialContext(ctx, address, gopts...)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to dial %q . make sure buildkitd is running", address)
 	}
