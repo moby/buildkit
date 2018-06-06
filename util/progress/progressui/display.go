@@ -220,7 +220,7 @@ func (t *trace) update(s *client.SolveStatus) {
 				if v.Started != nil {
 					ts = l.Timestamp.Sub(*v.Started)
 				}
-				v.logs = append(v.logs, []byte(fmt.Sprintf("%s %s", fmt.Sprintf("%#.4g", ts.Seconds())[:5], dt)))
+				v.logs = append(v.logs, []byte(fmt.Sprintf("#%d %s %s", v.index, fmt.Sprintf("%#.4g", ts.Seconds())[:5], dt)))
 			}
 		})
 		v.logsPartial = !complete

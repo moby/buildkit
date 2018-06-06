@@ -31,17 +31,17 @@ func (p *textMux) printVtx(t *trace, dgst digest.Digest) {
 			}
 			old.logsOffset = 0
 			old.count = 0
-			fmt.Fprintf(p.w, "# ...\n")
+			fmt.Fprintf(p.w, "#%d ...\n", v.index)
 		}
 
-		fmt.Fprintf(p.w, "\n# %d %s\n", v.index, limitString(v.Name, 72))
+		fmt.Fprintf(p.w, "\n#%d %s\n", v.index, limitString(v.Name, 72))
 	}
 
 	if len(v.events) != 0 {
 		v.logsOffset = 0
 	}
 	for _, ev := range v.events {
-		fmt.Fprintf(p.w, "# %s\n", ev)
+		fmt.Fprintf(p.w, "#%d %s\n", v.index, ev)
 	}
 	v.events = v.events[:0]
 
@@ -67,7 +67,7 @@ func (p *textMux) printVtx(t *trace, dgst digest.Digest) {
 			if s.Completed != nil {
 				tm += " done"
 			}
-			fmt.Fprintf(p.w, "# %s%s%s\n", s.ID, bytes, tm)
+			fmt.Fprintf(p.w, "#%d %s%s%s\n", v.index, s.ID, bytes, tm)
 		}
 	}
 	v.statusUpdates = map[string]struct{}{}
