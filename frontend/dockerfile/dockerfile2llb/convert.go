@@ -44,6 +44,8 @@ type ConvertOpt struct {
 	// IgnoreCache contains names of the stages that should not use build cache.
 	// Empty slice means ignore cache for all stages. Nil doesn't disable cache.
 	IgnoreCache []string
+	// CacheIDNamespace scopes the IDs for different cache mounts
+	CacheIDNamespace string
 }
 
 func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State, *Image, error) {
@@ -125,15 +127,17 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 	for _, d := range allDispatchStates {
 		d.commands = make([]command, len(d.stage.Commands))
 		for i, cmd := range d.stage.Commands {
-			newCmd, created, err := toCommand(cmd, dispatchStatesByName, allDispatchStates)
+			newCmd, err := toCommand(cmd, dispatchStatesByName, allDispatchStates)
 			if err != nil {
 				return nil, nil, err
 			}
 			d.commands[i] = newCmd
-			if newCmd.copySource != nil {
-				d.deps[newCmd.copySource] = struct{}{}
-				if created {
-					allDispatchStates = append(allDispatchStates, newCmd.copySource)
+			for _, src := range newCmd.sources {
+				if src != nil {
+					d.deps[src] = struct{}{}
+					if src.unregistered {
+						allDispatchStates = append(allDispatchStates, src)
+					}
 				}
 			}
 		}
@@ -237,6 +241,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 			sessionID:            opt.SessionID,
 			buildContext:         llb.NewState(buildContext),
 			proxyEnv:             proxyEnv,
+			cacheIDNamespace:     opt.CacheIDNamespace,
 		}
 
 		if err = dispatchOnBuild(d, d.image.Config.OnBuild, opt); err != nil {
@@ -278,9 +283,8 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 	return &target.state, &target.image, nil
 }
 
-func toCommand(ic instructions.Command, dispatchStatesByName map[string]*dispatchState, allDispatchStates []*dispatchState) (command, bool, error) {
+func toCommand(ic instructions.Command, dispatchStatesByName map[string]*dispatchState, allDispatchStates []*dispatchState) (command, error) {
 	cmd := command{Command: ic}
-	created := false
 	if c, ok := ic.(*instructions.CopyCommand); ok {
 		if c.From != "" {
 			var stn *dispatchState
@@ -289,21 +293,26 @@ func toCommand(ic instructions.Command, dispatchStatesByName map[string]*dispatc
 				stn, ok = dispatchStatesByName[strings.ToLower(c.From)]
 				if !ok {
 					stn = &dispatchState{
-						stage: instructions.Stage{BaseName: c.From},
-						deps:  make(map[*dispatchState]struct{}),
+						stage:        instructions.Stage{BaseName: c.From},
+						deps:         make(map[*dispatchState]struct{}),
+						unregistered: true,
 					}
-					created = true
 				}
 			} else {
 				if index < 0 || index >= len(allDispatchStates) {
-					return command{}, false, errors.Errorf("invalid stage index %d", index)
+					return command{}, errors.Errorf("invalid stage index %d", index)
 				}
 				stn = allDispatchStates[index]
 			}
-			cmd.copySource = stn
+			cmd.sources = []*dispatchState{stn}
 		}
 	}
-	return cmd, created, nil
+
+	if ok := detectRunMount(&cmd, dispatchStatesByName, allDispatchStates); ok {
+		return cmd, nil
+	}
+
+	return cmd, nil
 }
 
 type dispatchOpt struct {
@@ -315,6 +324,7 @@ type dispatchOpt struct {
 	sessionID            string
 	buildContext         llb.State
 	proxyEnv             *llb.ProxyEnv
+	cacheIDNamespace     string
 }
 
 func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
@@ -334,7 +344,7 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 	case *instructions.EnvCommand:
 		err = dispatchEnv(d, c, true)
 	case *instructions.RunCommand:
-		err = dispatchRun(d, c, opt.proxyEnv)
+		err = dispatchRun(d, c, opt.proxyEnv, cmd.sources, opt)
 	case *instructions.WorkdirCommand:
 		err = dispatchWorkdir(d, c, true)
 	case *instructions.AddCommand:
@@ -368,11 +378,11 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 		err = dispatchArg(d, c, opt.metaArgs, opt.buildArgValues)
 	case *instructions.CopyCommand:
 		l := opt.buildContext
-		if cmd.copySource != nil {
-			l = cmd.copySource.state
+		if len(cmd.sources) != 0 {
+			l = cmd.sources[0].state
 		}
 		err = dispatchCopy(d, c.SourcesAndDest, l, false, c, c.Chown)
-		if err == nil && cmd.copySource == nil {
+		if err == nil && len(cmd.sources) == 0 {
 			for _, src := range c.Sources() {
 				d.ctxPaths[path.Join("/", filepath.ToSlash(src))] = struct{}{}
 			}
@@ -383,21 +393,22 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 }
 
 type dispatchState struct {
-	state       llb.State
-	image       Image
-	stage       instructions.Stage
-	base        *dispatchState
-	deps        map[*dispatchState]struct{}
-	buildArgs   []instructions.ArgCommand
-	commands    []command
-	ctxPaths    map[string]struct{}
-	ignoreCache bool
-	cmdSet      bool
+	state        llb.State
+	image        Image
+	stage        instructions.Stage
+	base         *dispatchState
+	deps         map[*dispatchState]struct{}
+	buildArgs    []instructions.ArgCommand
+	commands     []command
+	ctxPaths     map[string]struct{}
+	ignoreCache  bool
+	cmdSet       bool
+	unregistered bool
 }
 
 type command struct {
 	instructions.Command
-	copySource *dispatchState
+	sources []*dispatchState
 }
 
 func dispatchOnBuild(d *dispatchState, triggers []string, opt dispatchOpt) error {
@@ -413,7 +424,7 @@ func dispatchOnBuild(d *dispatchState, triggers []string, opt dispatchOpt) error
 		if err != nil {
 			return err
 		}
-		cmd, _, err := toCommand(ic, opt.dispatchStatesByName, opt.allDispatchStates)
+		cmd, err := toCommand(ic, opt.dispatchStatesByName, opt.allDispatchStates)
 		if err != nil {
 			return err
 		}
@@ -437,7 +448,7 @@ func dispatchEnv(d *dispatchState, c *instructions.EnvCommand, commit bool) erro
 	return nil
 }
 
-func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyEnv) error {
+func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyEnv, sources []*dispatchState, dopt dispatchOpt) error {
 	var args []string = c.CmdLine
 	if c.PrependShell {
 		args = withShell(d.image, args)
@@ -455,6 +466,9 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 	if proxy != nil {
 		opt = append(opt, llb.WithProxy(*proxy))
 	}
+
+	opt = append(opt, dispatchRunMounts(d, c, sources, dopt)...)
+
 	d.state = d.state.Run(opt...).Root()
 	return commitToHistory(&d.image, "RUN "+runCommandString(args, d.buildArgs), true, &d.state)
 }

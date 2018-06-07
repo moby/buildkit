@@ -418,11 +418,6 @@ func HasStage(s []Stage, name string) (int, bool) {
 	return -1, false
 }
 
-type cmdWithExternalData interface {
-	getExternalValue(k interface{}) interface{}
-	setExternalValue(k, v interface{})
-}
-
 type withExternalData struct {
 	m map[interface{}]interface{}
 }

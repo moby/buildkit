@@ -156,7 +156,7 @@ func (bf *BFlags) Parse() error {
 			return fmt.Errorf("Unknown flag: %s", arg)
 		}
 
-		if _, ok = bf.used[arg]; ok || flag.flagType != stringsType {
+		if _, ok = bf.used[arg]; ok && flag.flagType != stringsType {
 			return fmt.Errorf("Duplicate flag specified: %s", arg)
 		}
 

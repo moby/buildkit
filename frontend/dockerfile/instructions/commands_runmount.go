@@ -1,4 +1,4 @@
-// +build dfrunmount dfall
+// +build dfrunmount dfextall
 
 package instructions
 
@@ -21,17 +21,16 @@ func init() {
 
 func runMountPreHook(cmd *RunCommand, req parseRequest) error {
 	st := &mountState{}
-	st.flag = req.flags.AddString("mount", "")
+	st.flag = req.flags.AddStrings("mount")
 	cmd.setExternalValue(mountsKey, st)
 	return nil
 }
 
 func runMountPostHook(cmd *RunCommand, req parseRequest) error {
-	v := cmd.getExternalValue(mountsKey)
-	if v != nil {
+	st := getMountState(cmd)
+	if st == nil {
 		return errors.Errorf("no mount state")
 	}
-	st := v.(*mountState)
 	var mounts []*Mount
 	for _, str := range st.flag.StringValues {
 		m, err := parseMount(str)
@@ -40,7 +39,20 @@ func runMountPostHook(cmd *RunCommand, req parseRequest) error {
 		}
 		mounts = append(mounts, m)
 	}
+	st.mounts = mounts
 	return nil
+}
+
+func getMountState(cmd *RunCommand) *mountState {
+	v := cmd.getExternalValue(mountsKey)
+	if v == nil {
+		return nil
+	}
+	return v.(*mountState)
+}
+
+func GetMounts(cmd *RunCommand) []*Mount {
+	return getMountState(cmd).mounts
 }
 
 type mountState struct {
@@ -64,7 +76,9 @@ func parseMount(value string) (*Mount, error) {
 		return nil, errors.Wrap(err, "failed to parse csv mounts")
 	}
 
-	m := &Mount{ReadOnly: true}
+	m := &Mount{Type: "bind"}
+
+	roAuto := true
 
 	for _, field := range fields {
 		parts := strings.SplitN(field, "=", 2)
@@ -74,9 +88,11 @@ func parseMount(value string) (*Mount, error) {
 			switch key {
 			case "readonly", "ro":
 				m.ReadOnly = true
+				roAuto = false
 				continue
 			case "readwrite", "rw":
 				m.ReadOnly = false
+				roAuto = false
 				continue
 			}
 		}
@@ -88,7 +104,11 @@ func parseMount(value string) (*Mount, error) {
 		value := parts[1]
 		switch key {
 		case "type":
-			if value != "" && strings.EqualFold(value, "cache") {
+			allowedTypes := map[string]struct{}{
+				"cache": {},
+				"bind":  {},
+			}
+			if _, ok := allowedTypes[strings.ToLower(value)]; !ok {
 				return nil, errors.Errorf("invalid mount type %q", value)
 			}
 			m.Type = strings.ToLower(value)
@@ -103,12 +123,14 @@ func parseMount(value string) (*Mount, error) {
 			if err != nil {
 				return nil, errors.Errorf("invalid value for %s: %s", key, value)
 			}
+			roAuto = false
 		case "readwrite", "rw":
 			rw, err := strconv.ParseBool(value)
 			if err != nil {
 				return nil, errors.Errorf("invalid value for %s: %s", key, value)
 			}
 			m.ReadOnly = !rw
+			roAuto = false
 		case "id":
 			m.CacheID = value
 		default:
@@ -116,5 +138,13 @@ func parseMount(value string) (*Mount, error) {
 		}
 	}
 
-	return nil, errors.Errorf("not-implemented")
+	if roAuto {
+		if m.Type == "cache" {
+			m.ReadOnly = false
+		} else {
+			m.ReadOnly = true
+		}
+	}
+
+	return m, nil
 }
