@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"io/ioutil"
 	"os"
 	"strings"
 
@@ -41,7 +40,7 @@ var buildCommand = cli.Command{
 		},
 		cli.StringFlag{
 			Name:  "trace",
-			Usage: "Path to trace file. e.g. /dev/null. Defaults to /tmp/buildctlXXXXXXXXX.",
+			Usage: "Path to trace file. Defaults to no tracing.",
 		},
 		cli.StringSliceFlag{
 			Name:  "local",
@@ -101,7 +100,7 @@ func openTraceFile(clicontext *cli.Context) (*os.File, error) {
 	if traceFileName := clicontext.String("trace"); traceFileName != "" {
 		return os.OpenFile(traceFileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 	}
-	return ioutil.TempFile("", "buildctl")
+	return nil, nil
 }
 
 func build(clicontext *cli.Context) error {
@@ -114,13 +113,15 @@ func build(clicontext *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	defer traceFile.Close()
-	traceEnc := json.NewEncoder(traceFile)
+	var traceEnc *json.Encoder
+	if traceFile != nil {
+		defer traceFile.Close()
+		traceEnc = json.NewEncoder(traceFile)
 
-	logrus.Infof("tracing logs to %s", traceFile.Name())
+		logrus.Infof("tracing logs to %s", traceFile.Name())
+	}
 
 	ch := make(chan *client.SolveStatus)
-	displayCh := make(chan *client.SolveStatus)
 	eg, ctx := errgroup.WithContext(commandContext(clicontext))
 
 	solveOpt := client.SolveOpt{
@@ -187,16 +188,20 @@ func build(clicontext *cli.Context) error {
 		return err
 	})
 
-	eg.Go(func() error {
-		defer close(displayCh)
-		for s := range ch {
-			if err := traceEnc.Encode(s); err != nil {
-				logrus.Error(err)
+	displayCh := ch
+	if traceEnc != nil {
+		displayCh = make(chan *client.SolveStatus)
+		eg.Go(func() error {
+			defer close(displayCh)
+			for s := range ch {
+				if err := traceEnc.Encode(s); err != nil {
+					logrus.Error(err)
+				}
+				displayCh <- s
 			}
-			displayCh <- s
-		}
-		return nil
-	})
+			return nil
+		})
+	}
 
 	eg.Go(func() error {
 		if !clicontext.Bool("no-progress") {
