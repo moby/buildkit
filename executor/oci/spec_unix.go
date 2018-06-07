@@ -32,8 +32,6 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 
 	opts = append(opts,
 		oci.WithHostNamespace(specs.NetworkNamespace),
-		withROBind(resolvConf, "/etc/resolv.conf"),
-		withROBind(hostsFile, "/etc/hosts"),
 	)
 
 	// Note that containerd.GenerateSpec is namespaced so as to make
@@ -45,6 +43,11 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 	s.Process.Args = meta.Args
 	s.Process.Env = meta.Env
 	s.Process.Cwd = meta.Cwd
+
+	s.Mounts = GetMounts(ctx,
+		withROBind(resolvConf, "/etc/resolv.conf"),
+		withROBind(hostsFile, "/etc/hosts"),
+	)
 	// TODO: User
 
 	sm := &submounts{}
@@ -88,18 +91,6 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 	}
 
 	return s, releaseAll, nil
-}
-
-func withROBind(src, dest string) func(_ context.Context, _ oci.Client, _ *containers.Container, s *specs.Spec) error {
-	return func(_ context.Context, _ oci.Client, _ *containers.Container, s *specs.Spec) error {
-		s.Mounts = append(s.Mounts, specs.Mount{
-			Destination: dest,
-			Type:        "bind",
-			Source:      src,
-			Options:     []string{"rbind", "ro"},
-		})
-		return nil
-	}
 }
 
 type mountRef struct {
