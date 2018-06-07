@@ -73,7 +73,10 @@ func New(opt Opt) (executor.Executor, error) {
 	if err != nil {
 		return nil, err
 	}
-	// TODO: check that root is not symlink to fail early
+	root, err = filepath.EvalSymlinks(root)
+	if err != nil {
+		return nil, err
+	}
 
 	runtime := &runc.Runc{
 		Command:      cmd,
