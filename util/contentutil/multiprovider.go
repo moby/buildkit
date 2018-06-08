@@ -7,6 +7,7 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
 	digest "github.com/opencontainers/go-digest"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
 
@@ -23,17 +24,17 @@ type MultiProvider struct {
 	sub  map[digest.Digest]content.Provider
 }
 
-func (mp *MultiProvider) ReaderAt(ctx context.Context, dgst digest.Digest) (content.ReaderAt, error) {
+func (mp *MultiProvider) ReaderAt(ctx context.Context, desc ocispec.Descriptor) (content.ReaderAt, error) {
 	mp.mu.RLock()
-	if p, ok := mp.sub[dgst]; ok {
+	if p, ok := mp.sub[desc.Digest]; ok {
 		mp.mu.RUnlock()
-		return p.ReaderAt(ctx, dgst)
+		return p.ReaderAt(ctx, desc)
 	}
 	mp.mu.RUnlock()
 	if mp.base == nil {
-		return nil, errors.Wrapf(errdefs.ErrNotFound, "content %v", dgst)
+		return nil, errors.Wrapf(errdefs.ErrNotFound, "content %v", desc.Digest)
 	}
-	return mp.base.ReaderAt(ctx, dgst)
+	return mp.base.ReaderAt(ctx, desc)
 }
 
 func (mp *MultiProvider) Add(dgst digest.Digest, p content.Provider) {

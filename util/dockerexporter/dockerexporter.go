@@ -83,7 +83,7 @@ type tarRecord struct {
 func dockerManifestRecord(ctx context.Context, provider content.Provider, desc ocispec.Descriptor, name string) (*tarRecord, error) {
 	switch desc.MediaType {
 	case images.MediaTypeDockerSchema2Manifest, ocispec.MediaTypeImageManifest:
-		p, err := content.ReadBlob(ctx, provider, desc.Digest)
+		p, err := content.ReadBlob(ctx, provider, desc)
 		if err != nil {
 			return nil, err
 		}
@@ -141,7 +141,7 @@ func blobRecord(cs content.Provider, desc ocispec.Descriptor) tarRecord {
 			Typeflag: tar.TypeReg,
 		},
 		CopyTo: func(ctx context.Context, w io.Writer) (int64, error) {
-			r, err := cs.ReaderAt(ctx, desc.Digest)
+			r, err := cs.ReaderAt(ctx, desc)
 			if err != nil {
 				return 0, err
 			}

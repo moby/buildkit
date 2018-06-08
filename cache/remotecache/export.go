@@ -77,20 +77,20 @@ func (ce *CacheExporter) Finalize(ctx context.Context, cc *v1.CacheChains, targe
 		return err
 	}
 	dgst := digest.FromBytes(dt)
-
+	desc := ocispec.Descriptor{
+		Digest:    dgst,
+		Size:      int64(len(dt)),
+		MediaType: v1.CacheConfigMediaTypeV0,
+	}
 	configDone := oneOffProgress(ctx, fmt.Sprintf("writing config %s", dgst))
 	buf := contentutil.NewBuffer()
-	if err := content.WriteBlob(ctx, buf, dgst.String(), bytes.NewReader(dt), int64(len(dt)), dgst); err != nil {
+	if err := content.WriteBlob(ctx, buf, dgst.String(), bytes.NewReader(dt), desc); err != nil {
 		return configDone(errors.Wrap(err, "error writing config blob"))
 	}
 	configDone(nil)
 
 	mp.Add(dgst, buf)
-	mfst.Manifests = append(mfst.Manifests, ocispec.Descriptor{
-		MediaType: v1.CacheConfigMediaTypeV0,
-		Size:      int64(len(dt)),
-		Digest:    dgst,
-	})
+	mfst.Manifests = append(mfst.Manifests, desc)
 
 	dt, err = json.Marshal(mfst)
 	if err != nil {
@@ -99,8 +99,12 @@ func (ce *CacheExporter) Finalize(ctx context.Context, cc *v1.CacheChains, targe
 	dgst = digest.FromBytes(dt)
 
 	buf = contentutil.NewBuffer()
+	desc = ocispec.Descriptor{
+		Digest: dgst,
+		Size:   int64(len(dt)),
+	}
 	mfstDone := oneOffProgress(ctx, fmt.Sprintf("writing manifest %s", dgst))
-	if err := content.WriteBlob(ctx, buf, dgst.String(), bytes.NewReader(dt), int64(len(dt)), dgst); err != nil {
+	if err := content.WriteBlob(ctx, buf, dgst.String(), bytes.NewReader(dt), desc); err != nil {
 		return mfstDone(errors.Wrap(err, "error writing manifest blob"))
 	}
 	mfstDone(nil)
