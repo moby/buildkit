@@ -267,7 +267,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		llb.SharedKeyHint(localNameContext),
 	}
 	if includePatterns := normalizeContextPaths(ctxPaths); includePatterns != nil {
-		opts = append(opts, llb.IncludePatterns(includePatterns))
+		opts = append(opts, llb.FollowPaths(includePatterns))
 	}
 	bc := llb.Local(localNameContext, opts...)
 	if opt.BuildContext != nil {

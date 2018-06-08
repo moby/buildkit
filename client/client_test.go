@@ -21,6 +21,7 @@ import (
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/snapshots"
+	"github.com/containerd/continuity/fs/fstest"
 	"github.com/docker/distribution/manifest/schema2"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/identity"
@@ -50,7 +51,62 @@ func TestClientIntegration(t *testing.T) {
 		testBasicCacheImportExport,
 		testCachedMounts,
 		testProxyEnv,
+		testLocalSymlinkEscape,
 	})
+}
+
+func testLocalSymlinkEscape(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+	requiresLinux(t)
+	c, err := New(sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	test := []byte(`set -x
+[[ -L /mount/foo ]]
+[[ -L /mount/sub/bar ]]
+[[ -L /mount/bax ]]
+[[ -f /mount/bay ]]
+[[ ! -f /mount/baz ]]
+[[ ! -f /mount/etc/passwd ]]
+[[ ! -f /mount/etc/group ]]
+[[ $(readlink /mount/foo) == "/etc/passwd" ]]
+[[ $(readlink /mount/sub/bar) == "../../../etc/group" ]]
+`)
+
+	dir, err := tmpdir(
+		// point to absolute path that is not part of dir
+		fstest.Symlink("/etc/passwd", "foo"),
+		fstest.CreateDir("sub", 0700),
+		// point outside of the dir
+		fstest.Symlink("../../../etc/group", "sub/bar"),
+		// regular valid symlink
+		fstest.Symlink("bay", "bax"),
+		// target for symlink (not requested)
+		fstest.CreateFile("bay", []byte{}, 0600),
+		// unused file that shouldn't be included
+		fstest.CreateFile("baz", []byte{}, 0600),
+		fstest.CreateFile("test.sh", test, 0700),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	local := llb.Local("mylocal", llb.FollowPaths([]string{
+		"test.sh", "foo", "sub/bar", "bax",
+	}))
+
+	st := llb.Image("busybox:latest").
+		Run(llb.Shlex(`sh /mount/test.sh`), llb.AddMount("/mount", local, llb.Readonly))
+
+	def, err := st.Marshal()
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		LocalDirs: map[string]string{
+			"mylocal": dir,
+		},
+	}, nil)
+	require.NoError(t, err)
 }
 
 func testRelativeWorkDir(t *testing.T, sb integration.Sandbox) {
@@ -1181,4 +1237,15 @@ func testInvalidExporter(t *testing.T, sb integration.Sandbox) {
 	require.Error(t, err)
 
 	checkAllReleasable(t, c, sb, true)
+}
+
+func tmpdir(appliers ...fstest.Applier) (string, error) {
+	tmpdir, err := ioutil.TempDir("", "buildkit-client")
+	if err != nil {
+		return "", err
+	}
+	if err := fstest.Apply(appliers...).Apply(tmpdir); err != nil {
+		return "", err
+	}
+	return tmpdir, nil
 }
