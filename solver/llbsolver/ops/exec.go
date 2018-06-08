@@ -262,7 +262,16 @@ func (e *execOp) Exec(ctx context.Context, inputs []solver.Result) ([]solver.Res
 					outputs = append(outputs, active)
 					mountable = active
 				}
+			} else if ref == nil {
+				// this case is empty readonly scratch without output that is not really useful for anything but don't error
+				active, err := makeMutable(ref)
+				if err != nil {
+					return nil, err
+				}
+				defer active.Release(context.TODO())
+				mountable = active
 			}
+
 		case pb.MountType_CACHE:
 			if m.CacheOpt == nil {
 				return nil, errors.Errorf("missing cache mount options")

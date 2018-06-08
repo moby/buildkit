@@ -949,8 +949,7 @@ func testMountWithNoSource(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "has no input")
+	require.NoError(t, err)
 
 	checkAllReleasable(t, c, sb, true)
 }
