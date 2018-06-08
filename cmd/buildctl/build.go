@@ -204,25 +204,14 @@ func build(clicontext *cli.Context) error {
 	}
 
 	eg.Go(func() error {
+		var c console.Console
 		if !clicontext.Bool("no-progress") {
-			if c, err := console.ConsoleFromFile(os.Stderr); err == nil {
-				// not using shared context to not disrupt display but let is finish reporting errors
-				return progressui.DisplaySolveStatus(context.TODO(), c, displayCh)
+			if cf, err := console.ConsoleFromFile(os.Stderr); err == nil {
+				c = cf
 			}
 		}
-
-		for s := range displayCh {
-			for _, v := range s.Vertexes {
-				logrus.Debugf("vertex: %s %s %v %v", v.Digest, v.Name, v.Started, v.Completed)
-			}
-			for _, s := range s.Statuses {
-				logrus.Debugf("status: %s %s %d", s.Vertex, s.ID, s.Current)
-			}
-			for _, l := range s.Logs {
-				logrus.Debugf("log: %s\n%s", l.Vertex, l.Data)
-			}
-		}
-		return nil
+		// not using shared context to not disrupt display but let is finish reporting errors
+		return progressui.DisplaySolveStatus(context.TODO(), c, os.Stdout, displayCh)
 	})
 
 	return eg.Wait()

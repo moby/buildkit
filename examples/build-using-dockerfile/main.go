@@ -85,11 +85,12 @@ func action(clicontext *cli.Context) error {
 		return err
 	})
 	eg.Go(func() error {
-		if c, err := console.ConsoleFromFile(os.Stderr); err == nil {
-			// not using shared context to not disrupt display but let is finish reporting errors
-			return progressui.DisplaySolveStatus(context.TODO(), c, ch)
+		var c console.Console
+		if cn, err := console.ConsoleFromFile(os.Stderr); err == nil {
+			c = cn
 		}
-		return nil
+		// not using shared context to not disrupt display but let is finish reporting errors
+		return progressui.DisplaySolveStatus(context.TODO(), c, os.Stdout, ch)
 	})
 	eg.Go(func() error {
 		if err := loadDockerTar(pipeR); err != nil {
