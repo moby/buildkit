@@ -15,8 +15,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BurntSushi/locker"
 	"github.com/boltdb/bolt"
+	"github.com/docker/docker/pkg/locker"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/snapshot"
@@ -47,7 +47,7 @@ func NewSource(opt Opt) (source.Source, error) {
 	hs := &httpSource{
 		md:     opt.MetadataStore,
 		cache:  opt.CacheAccessor,
-		locker: locker.NewLocker(),
+		locker: locker.New(),
 		client: &http.Client{
 			Transport: transport,
 		},

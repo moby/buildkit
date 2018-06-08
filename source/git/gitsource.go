@@ -11,8 +11,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/BurntSushi/locker"
 	"github.com/boltdb/bolt"
+	"github.com/docker/docker/pkg/locker"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/identity"
@@ -40,7 +40,7 @@ func NewSource(opt Opt) (source.Source, error) {
 	gs := &gitSource{
 		md:     opt.MetadataStore,
 		cache:  opt.CacheAccessor,
-		locker: locker.NewLocker(),
+		locker: locker.New(),
 	}
 
 	if err := exec.Command("git", "version").Run(); err != nil {
