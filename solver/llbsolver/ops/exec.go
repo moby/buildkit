@@ -401,7 +401,7 @@ func (m *tmpfsMount) Mount() ([]mount.Mount, error) {
 	}
 	return []mount.Mount{{
 		Type:    "tmpfs",
-		Source:  "none",
+		Source:  "tmpfs",
 		Options: opt,
 	}}, nil
 }

@@ -10,6 +10,16 @@ import (
 	"github.com/pkg/errors"
 )
 
+const MountTypeBind = "bind"
+const MountTypeCache = "cache"
+const MountTypeTmpfs = "tmpfs"
+
+var allowedMountTypes = map[string]struct{}{
+	MountTypeBind:  {},
+	MountTypeCache: {},
+	MountTypeTmpfs: {},
+}
+
 type mountsKeyT string
 
 var mountsKey = mountsKeyT("dockerfile/run/mounts")
@@ -17,6 +27,11 @@ var mountsKey = mountsKeyT("dockerfile/run/mounts")
 func init() {
 	parseRunPreHooks = append(parseRunPreHooks, runMountPreHook)
 	parseRunPostHooks = append(parseRunPostHooks, runMountPostHook)
+}
+
+func isValidMountType(s string) bool {
+	_, ok := allowedMountTypes[s]
+	return ok
 }
 
 func runMountPreHook(cmd *RunCommand, req parseRequest) error {
@@ -76,7 +91,7 @@ func parseMount(value string) (*Mount, error) {
 		return nil, errors.Wrap(err, "failed to parse csv mounts")
 	}
 
-	m := &Mount{Type: "bind"}
+	m := &Mount{Type: MountTypeBind}
 
 	roAuto := true
 
@@ -104,11 +119,7 @@ func parseMount(value string) (*Mount, error) {
 		value := parts[1]
 		switch key {
 		case "type":
-			allowedTypes := map[string]struct{}{
-				"cache": {},
-				"bind":  {},
-			}
-			if _, ok := allowedTypes[strings.ToLower(value)]; !ok {
+			if !isValidMountType(strings.ToLower(value)) {
 				return nil, errors.Errorf("invalid mount type %q", value)
 			}
 			m.Type = strings.ToLower(value)
@@ -139,7 +150,7 @@ func parseMount(value string) (*Mount, error) {
 	}
 
 	if roAuto {
-		if m.Type == "cache" {
+		if m.Type == MountTypeCache {
 			m.ReadOnly = false
 		} else {
 			m.ReadOnly = true
