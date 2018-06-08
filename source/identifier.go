@@ -2,7 +2,6 @@ package source
 
 import (
 	"encoding/json"
-	"fmt"
 	"strconv"
 	"strings"
 
@@ -70,7 +69,6 @@ func FromLLB(op *pb.Op_Source) (Identifier, error) {
 	}
 	if id, ok := id.(*LocalIdentifier); ok {
 		for k, v := range op.Source.Attrs {
-			fmt.Printf("kv %q %q\n", k, v)
 			switch k {
 			case pb.AttrLocalSessionID:
 				id.SessionID = v
@@ -96,7 +94,6 @@ func FromLLB(op *pb.Op_Source) (Identifier, error) {
 					return nil, err
 				}
 				id.FollowPaths = paths
-				fmt.Printf("FollowPaths %#v\n", paths)
 			case pb.AttrSharedKeyHint:
 				id.SharedKeyHint = v
 			}
