@@ -42,6 +42,7 @@ type mount struct {
 	output   Output
 	selector string
 	cacheID  string
+	tmpfs    bool
 	// hasOutput bool
 }
 
@@ -66,6 +67,8 @@ func (e *ExecOp) AddMount(target string, source Output, opt ...MountOption) Outp
 	e.mounts = append(e.mounts, m)
 	if m.readonly {
 		m.output = source
+	} else if m.tmpfs {
+		m.output = &output{vertex: e, err: errors.Errorf("tmpfs mount for %s can't be used as a parent", target)}
 	} else {
 		m.output = &output{vertex: e, getIndex: e.getMountIndexFn(m)}
 	}
@@ -144,6 +147,9 @@ func (e *ExecOp) Marshal() (digest.Digest, []byte, *OpMetadata, error) {
 	for _, m := range e.mounts {
 		inputIndex := pb.InputIndex(len(pop.Inputs))
 		if m.source != nil {
+			if m.tmpfs {
+				return "", nil, nil, errors.Errorf("tmpfs mounts must use scratch")
+			}
 			inp, err := m.source.ToInput()
 			if err != nil {
 				return "", nil, nil, err
@@ -167,7 +173,7 @@ func (e *ExecOp) Marshal() (digest.Digest, []byte, *OpMetadata, error) {
 		}
 
 		outputIndex := pb.OutputIndex(-1)
-		if !m.readonly && m.cacheID == "" {
+		if !m.readonly && m.cacheID == "" && !m.tmpfs {
 			outputIndex = pb.OutputIndex(outIndex)
 			outIndex++
 		}
@@ -184,6 +190,9 @@ func (e *ExecOp) Marshal() (digest.Digest, []byte, *OpMetadata, error) {
 			pm.CacheOpt = &pb.CacheOpt{
 				ID: m.cacheID,
 			}
+		}
+		if m.tmpfs {
+			pm.MountType = pb.MountType_TMPFS
 		}
 		peo.Mounts = append(peo.Mounts, pm)
 	}
@@ -267,6 +276,12 @@ func SourcePath(src string) MountOption {
 func AsPersistentCacheDir(id string) MountOption {
 	return func(m *mount) {
 		m.cacheID = id
+	}
+}
+
+func Tmpfs() MountOption {
+	return func(m *mount) {
+		m.tmpfs = true
 	}
 }
 

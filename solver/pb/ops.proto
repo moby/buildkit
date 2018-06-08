@@ -59,6 +59,7 @@ enum MountType {
 	SECRET = 1;
 	SSH = 2;
 	CACHE = 3;
+	TMPFS = 4;
 }
 
 message CacheOpt {

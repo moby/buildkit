@@ -12,9 +12,11 @@ import (
 	"strings"
 
 	"github.com/boltdb/bolt"
+	"github.com/containerd/containerd/mount"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/executor"
+	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/llbsolver"
 	"github.com/moby/buildkit/solver/pb"
@@ -287,6 +289,10 @@ func (e *execOp) Exec(ctx context.Context, inputs []solver.Result) ([]solver.Res
 			if m.Output != pb.SkipOutput && ref != nil {
 				outputs = append(outputs, ref.Clone())
 			}
+
+		case pb.MountType_TMPFS:
+			mountable = newTmpfs()
+
 		default:
 			return nil, errors.Errorf("mount type %s not implemented", m.MountType)
 		}
@@ -371,4 +377,34 @@ func proxyEnvList(p *pb.ProxyEnv) []string {
 		out = append(out, "NO_PROXY="+v, "no_proxy="+v)
 	}
 	return out
+}
+
+func newTmpfs() cache.Mountable {
+	return &tmpfs{}
+}
+
+type tmpfs struct {
+}
+
+func (f *tmpfs) Mount(ctx context.Context, readonly bool) (snapshot.Mountable, error) {
+	return &tmpfsMount{readonly: readonly}, nil
+}
+
+type tmpfsMount struct {
+	readonly bool
+}
+
+func (m *tmpfsMount) Mount() ([]mount.Mount, error) {
+	opt := []string{"nosuid"}
+	if m.readonly {
+		opt = append(opt, "ro")
+	}
+	return []mount.Mount{{
+		Type:    "tmpfs",
+		Source:  "none",
+		Options: opt,
+	}}, nil
+}
+func (m *tmpfsMount) Release() error {
+	return nil
 }
