@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/BurntSushi/locker"
 	"github.com/containerd/continuity/fs"
+	"github.com/docker/docker/pkg/locker"
 	iradix "github.com/hashicorp/go-immutable-radix"
 	"github.com/hashicorp/golang-lru/simplelru"
 	"github.com/moby/buildkit/cache"
@@ -32,7 +32,7 @@ const keyContentHash = "buildkit.contenthash.v0"
 func getDefaultManager() *cacheManager {
 	defaultManagerOnce.Do(func() {
 		lru, _ := simplelru.NewLRU(20, nil) // error is impossible on positive size
-		defaultManager = &cacheManager{lru: lru, locker: locker.NewLocker()}
+		defaultManager = &cacheManager{lru: lru, locker: locker.New()}
 	})
 	return defaultManager
 }

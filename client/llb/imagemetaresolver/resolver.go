@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/BurntSushi/locker"
 	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
+	"github.com/docker/docker/pkg/locker"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/imageutil"
@@ -45,7 +45,7 @@ func New(with ...ImageMetaResolverOpt) llb.ImageMetaResolver {
 		platform: opts.platform,
 		buffer:   contentutil.NewBuffer(),
 		cache:    map[string]resolveResult{},
-		locker:   locker.NewLocker(),
+		locker:   locker.New(),
 	}
 }
 
