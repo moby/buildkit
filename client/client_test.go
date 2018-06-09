@@ -52,7 +52,25 @@ func TestClientIntegration(t *testing.T) {
 		testCachedMounts,
 		testProxyEnv,
 		testLocalSymlinkEscape,
+		testTmpfsMounts,
 	})
+}
+
+func testTmpfsMounts(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+	requiresLinux(t)
+	c, err := New(sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Image("busybox:latest").
+		Run(llb.Shlex(`sh -c 'mount | grep /foobar | grep "type tmpfs" && touch /foobar/test'`), llb.AddMount("/foobar", llb.Scratch(), llb.Tmpfs()))
+
+	def, err := st.Marshal()
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	require.NoError(t, err)
 }
 
 func testLocalSymlinkEscape(t *testing.T, sb integration.Sandbox) {

@@ -188,9 +188,13 @@ func (s State) With(so ...StateOption) State {
 type output struct {
 	vertex   Vertex
 	getIndex func() (pb.OutputIndex, error)
+	err      error
 }
 
 func (o *output) ToInput() (*pb.Input, error) {
+	if o.err != nil {
+		return nil, o.err
+	}
 	var index pb.OutputIndex
 	if o.getIndex != nil {
 		var err error

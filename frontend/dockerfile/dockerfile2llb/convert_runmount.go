@@ -16,11 +16,11 @@ func detectRunMount(cmd *command, dispatchStatesByName map[string]*dispatchState
 		mounts := instructions.GetMounts(c)
 		sources := make([]*dispatchState, len(mounts))
 		for i, mount := range mounts {
-			if mount.From == "" && mount.Type == "cache" {
+			if mount.From == "" && mount.Type == instructions.MountTypeCache {
 				mount.From = emptyImageName
 			}
 			from := mount.From
-			if from == "" {
+			if from == "" || mount.Type == instructions.MountTypeTmpfs {
 				continue
 			}
 			stn, ok := dispatchStatesByName[strings.ToLower(from)]
@@ -45,7 +45,7 @@ func dispatchRunMounts(d *dispatchState, c *instructions.RunCommand, sources []*
 	mounts := instructions.GetMounts(c)
 
 	for i, mount := range mounts {
-		if mount.From == "" && mount.Type == "cache" {
+		if mount.From == "" && mount.Type == instructions.MountTypeCache {
 			mount.From = emptyImageName
 		}
 		st := opt.buildContext
@@ -53,10 +53,14 @@ func dispatchRunMounts(d *dispatchState, c *instructions.RunCommand, sources []*
 			st = sources[i].state
 		}
 		var mountOpts []llb.MountOption
+		if mount.Type == instructions.MountTypeTmpfs {
+			st = llb.Scratch()
+			mountOpts = append(mountOpts, llb.Tmpfs())
+		}
 		if mount.ReadOnly {
 			mountOpts = append(mountOpts, llb.Readonly)
 		}
-		if mount.Type == "cache" {
+		if mount.Type == instructions.MountTypeCache {
 			mountOpts = append(mountOpts, llb.AsPersistentCacheDir(opt.cacheIDNamespace+"/"+mount.CacheID))
 		}
 		if src := path.Join("/", mount.Source); src != "/" {
