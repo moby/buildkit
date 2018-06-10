@@ -80,11 +80,12 @@ func testLocalSymlinkEscape(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	test := []byte(`set -x
+	test := []byte(`set -ex
 [[ -L /mount/foo ]]
 [[ -L /mount/sub/bar ]]
 [[ -L /mount/bax ]]
 [[ -f /mount/bay ]]
+[[ -f /mount/sub/sub2/file ]]
 [[ ! -f /mount/baz ]]
 [[ ! -f /mount/etc/passwd ]]
 [[ ! -f /mount/etc/group ]]
@@ -102,6 +103,9 @@ func testLocalSymlinkEscape(t *testing.T, sb integration.Sandbox) {
 		fstest.Symlink("bay", "bax"),
 		// target for symlink (not requested)
 		fstest.CreateFile("bay", []byte{}, 0600),
+		// file with many subdirs
+		fstest.CreateDir("sub/sub2", 0700),
+		fstest.CreateFile("sub/sub2/file", []byte{}, 0600),
 		// unused file that shouldn't be included
 		fstest.CreateFile("baz", []byte{}, 0600),
 		fstest.CreateFile("test.sh", test, 0700),
@@ -110,7 +114,7 @@ func testLocalSymlinkEscape(t *testing.T, sb integration.Sandbox) {
 	defer os.RemoveAll(dir)
 
 	local := llb.Local("mylocal", llb.FollowPaths([]string{
-		"test.sh", "foo", "sub/bar", "bax",
+		"test.sh", "foo", "sub/bar", "bax", "sub/sub2/file",
 	}))
 
 	st := llb.Image("busybox:latest").
