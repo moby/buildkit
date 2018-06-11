@@ -8,7 +8,7 @@ comparison fails. The one difference is that Assert() will end the test executio
 immediately (using t.FailNow()) whereas Check() will fail the test (using t.Fail()),
 return the value of the comparison, then proceed with the rest of the test case.
 
-Example Usage
+Example usage
 
 The example below shows assert used with some common types.
 
@@ -16,8 +16,8 @@ The example below shows assert used with some common types.
 	import (
 	    "testing"
 
-	    "github.com/gotestyourself/gotestyourself/assert"
-	    is "github.com/gotestyourself/gotestyourself/assert/cmp"
+	    "gotest.tools/assert"
+	    is "gotest.tools/assert/cmp"
 	)
 
 	func TestEverything(t *testing.T) {
@@ -49,12 +49,20 @@ The example below shows assert used with some common types.
 
 Comparisons
 
-https://godoc.org/github.com/gotestyourself/gotestyourself/assert/cmp provides
+Package https://godoc.org/gotest.tools/assert/cmp provides
 many common comparisons. Additional comparisons can be written to compare
 values in other ways. See the example Assert (CustomComparison).
 
+Automated migration from testify
+
+gty-migrate-from-testify is a binary which can update source code which uses
+testify assertions to use the assertions provided by this package.
+
+See http://bit.do/cmd-gty-migrate-from-testify.
+
+
 */
-package assert
+package assert // import "gotest.tools/assert"
 
 import (
 	"fmt"
@@ -62,9 +70,9 @@ import (
 	"go/token"
 
 	gocmp "github.com/google/go-cmp/cmp"
-	"github.com/gotestyourself/gotestyourself/assert/cmp"
-	"github.com/gotestyourself/gotestyourself/internal/format"
-	"github.com/gotestyourself/gotestyourself/internal/source"
+	"gotest.tools/assert/cmp"
+	"gotest.tools/internal/format"
+	"gotest.tools/internal/source"
 )
 
 // BoolOrComparison can be a bool, or cmp.Comparison. See Assert() for usage.
@@ -234,7 +242,17 @@ func NilError(t TestingT, err error, msgAndArgs ...interface{}) {
 }
 
 // Equal uses the == operator to assert two values are equal and fails the test
-// if they are not equal. This is equivalent to Assert(t, cmp.Equal(x, y)).
+// if they are not equal.
+//
+// If the comparison fails Equal will use the variable names for x and y as part
+// of the failure message to identify the actual and expected values.
+//
+// If either x or y are a multi-line string the failure message will include a
+// unified diff of the two values. If the values only differ by whitespace
+// the unified diff will be augmented by replacing whitespace characters with
+// visible characters to identify the whitespace difference.
+//
+// This is equivalent to Assert(t, cmp.Equal(x, y)).
 func Equal(t TestingT, x, y interface{}, msgAndArgs ...interface{}) {
 	if ht, ok := t.(helperT); ok {
 		ht.Helper()
@@ -242,8 +260,12 @@ func Equal(t TestingT, x, y interface{}, msgAndArgs ...interface{}) {
 	assert(t, t.FailNow, argsAfterT, cmp.Equal(x, y), msgAndArgs...)
 }
 
-// DeepEqual uses https://github.com/google/go-cmp/cmp to assert two values
-// are equal and fails the test if they are not equal.
+// DeepEqual uses google/go-cmp (http://bit.do/go-cmp) to assert two values are
+// equal and fails the test if they are not equal.
+//
+// Package https://godoc.org/gotest.tools/assert/opt provides some additional
+// commonly used Options.
+//
 // This is equivalent to Assert(t, cmp.DeepEqual(x, y)).
 func DeepEqual(t TestingT, x, y interface{}, opts ...gocmp.Option) {
 	if ht, ok := t.(helperT); ok {
@@ -276,7 +298,7 @@ func ErrorContains(t TestingT, err error, substring string, msgAndArgs ...interf
 //
 // Expected can be one of:
 // a func(error) bool which returns true if the error is the expected type,
-// an instance of a struct of the expected type,
+// an instance of (or a pointer to) a struct of the expected type,
 // a pointer to an interface the error is expected to implement,
 // a reflect.Type of the expected struct or interface.
 //
