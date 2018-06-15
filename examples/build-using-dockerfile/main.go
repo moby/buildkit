@@ -66,10 +66,12 @@ By default, the built image is loaded to Docker.
 }
 
 func action(clicontext *cli.Context) error {
+	ctx := appcontext.Context()
+
 	if tag := clicontext.String("tag"); tag == "" {
 		return errors.New("tag is not specified")
 	}
-	c, err := client.New(clicontext.String("buildkit-addr"), client.WithBlock())
+	c, err := client.New(ctx, clicontext.String("buildkit-addr"), client.WithBlock())
 	if err != nil {
 		return err
 	}
@@ -79,7 +81,7 @@ func action(clicontext *cli.Context) error {
 		return err
 	}
 	ch := make(chan *client.SolveStatus)
-	eg, ctx := errgroup.WithContext(appcontext.Context())
+	eg, ctx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
 		_, err := c.Solve(ctx, nil, *solveOpt, ch)
 		return err
