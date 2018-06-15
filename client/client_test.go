@@ -55,6 +55,7 @@ func TestClientIntegration(t *testing.T) {
 		testSharedCacheMounts,
 		testLockedCacheMounts,
 		testDuplicateCacheMount,
+		testResolveImageConfig,
 	})
 }
 
@@ -871,6 +872,29 @@ func testDuplicateCacheMount(t *testing.T, sb integration.Sandbox) {
 
 	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
 	require.NoError(t, err)
+}
+
+func testResolveImageConfig(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := "docker.io/library/busybox:latest"
+
+	for _, expected := range []*ocispec.Platform{
+		{OS: "linux", Architecture: "amd64"},
+		{OS: "linux", Architecture: "arm", Variant: "v7"},
+	} {
+		var cfg ocispec.Image
+
+		_, b, err := c.ResolveImageConfig(context.TODO(), busybox, expected)
+		require.NoError(t, err)
+		err = json.Unmarshal(b, &cfg)
+		require.NoError(t, err)
+		require.Equal(t, expected.OS, cfg.OS)
+		require.Equal(t, expected.Architecture, cfg.Architecture)
+	}
 }
 
 // containerd/containerd#2119
