@@ -61,7 +61,7 @@ func dispatchRunMounts(d *dispatchState, c *instructions.RunCommand, sources []*
 			mountOpts = append(mountOpts, llb.Readonly)
 		}
 		if mount.Type == instructions.MountTypeCache {
-			mountOpts = append(mountOpts, llb.AsPersistentCacheDir(opt.cacheIDNamespace+"/"+mount.CacheID))
+			mountOpts = append(mountOpts, llb.AsPersistentCacheDir(opt.cacheIDNamespace+"/"+mount.CacheID, llb.CacheMountShared))
 		}
 		if src := path.Join("/", mount.Source); src != "/" {
 			mountOpts = append(mountOpts, llb.SourcePath(src))

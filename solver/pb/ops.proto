@@ -54,6 +54,7 @@ message Mount {
 	CacheOpt cacheOpt = 20;
 }
 
+// MountType defines a type of a mount from a supported set
 enum MountType {
 	BIND = 0;
 	SECRET = 1;
@@ -62,8 +63,22 @@ enum MountType {
 	TMPFS = 4;
 }
 
+// CacheOpt defines options specific to cache mounts
 message CacheOpt {
+	// ID is an optional namespace for the mount
 	string ID = 1;
+	// Sharing is the sharing mode for the mount 
+	CacheSharingOpt sharing = 2;
+}
+
+// CacheSharingOpt defines different sharing modes for cache mount
+enum CacheSharingOpt {
+	// SHARED cache mount can be used concurrently by multiple writers
+	SHARED = 0;
+	// PRIVATE creates a new mount if there are multiple writers
+	PRIVATE = 1;
+	// LOCKED pauses second writer until first one releases the mount
+	LOCKED = 2;
 }
 
 // CopyOp copies files across Ops.
