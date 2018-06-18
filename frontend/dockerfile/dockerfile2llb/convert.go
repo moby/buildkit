@@ -467,7 +467,11 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 		opt = append(opt, llb.WithProxy(*proxy))
 	}
 
-	opt = append(opt, dispatchRunMounts(d, c, sources, dopt)...)
+	runMounts, err := dispatchRunMounts(d, c, sources, dopt)
+	if err != nil {
+		return err
+	}
+	opt = append(opt, runMounts...)
 
 	d.state = d.state.Run(opt...).Root()
 	return commitToHistory(&d.image, "RUN "+runCommandString(args, d.buildArgs), true, &d.state)
