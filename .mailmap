@@ -1,0 +1,26 @@
+# Generate AUTHORS: scripts/generate-authors.sh
+
+# Tip for finding duplicates (besides scanning the output of AUTHORS for name
+# duplicates that aren't also email duplicates): scan the output of:
+#   git log --format='%aE - %aN' | sort -uf
+#
+# For explanation on this file format: man git-shortlog
+
+Aaron L. Xu <likexu@harmonycloud.cn>
+Akihiro Suda <suda.akihiro@lab.ntt.co.jp>
+Akihiro Suda <suda.akihiro@lab.ntt.co.jp> <suda.kyoto@gmail.com>
+Allen Sun <allen.sun@daocloud.io>
+Bin Liu <liubin0329@gmail.com>
+Daniel Nephin <dnephin@gmail.com>
+Daniel Nephin <dnephin@gmail.com> <dnephin@docker.com>
+Helen Xie <chenjg@harmonycloud.cn>
+Jessica Frazelle <acidburn@microsoft.com>
+Jessica Frazelle <acidburn@microsoft.com> <acidburn@docker.com>
+Sebastiaan van Stijn <github@gone.nl>
+Sebastiaan van Stijn <github@gone.nl> <thaJeztah@users.noreply.github.com>
+Tibor Vass <tibor@docker.com>
+Tibor Vass <tibor@docker.com> <tiborvass@users.noreply.github.com>
+Tõnis Tiigi <tonistiigi@gmail.com>
+Vincent Demeester <vincent.demeester@docker.com>
+Vincent Demeester <vincent.demeester@docker.com> <vincent@sbr.pm>
+郑泽宇 <perhapszzy@sina.com>
