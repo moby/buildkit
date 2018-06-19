@@ -31,7 +31,7 @@ const (
 )
 
 var httpPrefix = regexp.MustCompile("^https?://")
-var gitUrlPathWithFragmentSuffix = regexp.MustCompile(".git(?:#.+)?$")
+var gitUrlPathWithFragmentSuffix = regexp.MustCompile("\\.git(?:#.+)?$")
 
 func Build(ctx context.Context, c client.Client) error {
 	opts := c.Opts()
