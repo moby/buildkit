@@ -103,9 +103,11 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 			return nil, nil, err
 		}
 
-		sourceRef, err = reference.WithDigest(sourceRef, dgst)
-		if err != nil {
-			return nil, nil, err
+		if dgst != "" {
+			sourceRef, err = reference.WithDigest(sourceRef, dgst)
+			if err != nil {
+				return nil, nil, err
+			}
 		}
 
 		src := llb.Image(sourceRef.String())
