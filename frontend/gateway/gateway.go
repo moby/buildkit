@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/docker/distribution/reference"
@@ -248,6 +249,7 @@ func (d dummyAddr) String() string {
 }
 
 type llbBridgeForwarder struct {
+	mu           sync.Mutex
 	callCtx      context.Context
 	llbBridge    frontend.FrontendLLBBridge
 	refs         map[string]solver.Result
@@ -292,7 +294,9 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 	}
 
 	id := identity.NewID()
+	lbf.mu.Lock()
 	lbf.refs[id] = ref
+	lbf.mu.Unlock()
 	if req.Final {
 		lbf.lastRef = ref
 		lbf.exporterAttr = exp
@@ -304,7 +308,9 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 }
 func (lbf *llbBridgeForwarder) ReadFile(ctx context.Context, req *pb.ReadFileRequest) (*pb.ReadFileResponse, error) {
 	ctx = tracing.ContextWithSpanFromContext(ctx, lbf.callCtx)
+	lbf.mu.Lock()
 	ref, ok := lbf.refs[req.Ref]
+	lbf.mu.Unlock()
 	if !ok {
 		return nil, errors.Errorf("no such ref: %v", req.Ref)
 	}
