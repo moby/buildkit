@@ -36,13 +36,14 @@ func NewExecOp(root Output, meta Meta, readOnly bool, md OpMetadata) *ExecOp {
 }
 
 type mount struct {
-	target   string
-	readonly bool
-	source   Output
-	output   Output
-	selector string
-	cacheID  string
-	tmpfs    bool
+	target       string
+	readonly     bool
+	source       Output
+	output       Output
+	selector     string
+	cacheID      string
+	tmpfs        bool
+	cacheSharing CacheMountSharingMode
 	// hasOutput bool
 }
 
@@ -190,6 +191,14 @@ func (e *ExecOp) Marshal() (digest.Digest, []byte, *OpMetadata, error) {
 			pm.CacheOpt = &pb.CacheOpt{
 				ID: m.cacheID,
 			}
+			switch m.cacheSharing {
+			case CacheMountShared:
+				pm.CacheOpt.Sharing = pb.CacheSharingOpt_SHARED
+			case CacheMountPrivate:
+				pm.CacheOpt.Sharing = pb.CacheSharingOpt_PRIVATE
+			case CacheMountLocked:
+				pm.CacheOpt.Sharing = pb.CacheSharingOpt_LOCKED
+			}
 		}
 		if m.tmpfs {
 			pm.MountType = pb.MountType_TMPFS
@@ -273,9 +282,10 @@ func SourcePath(src string) MountOption {
 	}
 }
 
-func AsPersistentCacheDir(id string) MountOption {
+func AsPersistentCacheDir(id string, sharing CacheMountSharingMode) MountOption {
 	return func(m *mount) {
 		m.cacheID = id
+		m.cacheSharing = sharing
 	}
 }
 
@@ -385,3 +395,11 @@ type ProxyEnv struct {
 	FtpProxy   string
 	NoProxy    string
 }
+
+type CacheMountSharingMode int
+
+const (
+	CacheMountShared CacheMountSharingMode = iota
+	CacheMountPrivate
+	CacheMountLocked
+)
