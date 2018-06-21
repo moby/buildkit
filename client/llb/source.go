@@ -15,20 +15,19 @@ import (
 )
 
 type SourceOp struct {
-	id               string
-	attrs            map[string]string
-	output           Output
-	cachedPBDigest   digest.Digest
-	cachedPB         []byte
-	cachedOpMetadata OpMetadata
-	err              error
+	MarshalCache
+	id          string
+	attrs       map[string]string
+	output      Output
+	constraints Constraints
+	err         error
 }
 
-func NewSource(id string, attrs map[string]string, md OpMetadata) *SourceOp {
+func NewSource(id string, attrs map[string]string, c Constraints) *SourceOp {
 	s := &SourceOp{
-		id:               id,
-		attrs:            attrs,
-		cachedOpMetadata: md,
+		id:          id,
+		attrs:       attrs,
+		constraints: c,
 	}
 	s.output = &output{vertex: s}
 	return s
@@ -44,26 +43,26 @@ func (s *SourceOp) Validate() error {
 	return nil
 }
 
-func (s *SourceOp) Marshal() (digest.Digest, []byte, *OpMetadata, error) {
-	if s.cachedPB != nil {
-		return s.cachedPBDigest, s.cachedPB, &s.cachedOpMetadata, nil
+func (s *SourceOp) Marshal(constraints *Constraints) (digest.Digest, []byte, *pb.OpMetadata, error) {
+	if s.Cached(constraints) {
+		return s.Load()
 	}
 	if err := s.Validate(); err != nil {
 		return "", nil, nil, err
 	}
 
-	proto := &pb.Op{
-		Op: &pb.Op_Source{
-			Source: &pb.SourceOp{Identifier: s.id, Attrs: s.attrs},
-		},
+	proto, md := MarshalConstraints(constraints, &s.constraints)
+
+	proto.Op = &pb.Op_Source{
+		Source: &pb.SourceOp{Identifier: s.id, Attrs: s.attrs},
 	}
 	dt, err := proto.Marshal()
 	if err != nil {
 		return "", nil, nil, err
 	}
-	s.cachedPB = dt
-	s.cachedPBDigest = digest.FromBytes(dt)
-	return s.cachedPBDigest, dt, &s.cachedOpMetadata, nil
+
+	s.Store(dt, md, constraints)
+	return s.Load()
 }
 
 func (s *SourceOp) Output() Output {
@@ -72,10 +71,6 @@ func (s *SourceOp) Output() Output {
 
 func (s *SourceOp) Inputs() []Output {
 	return nil
-}
-
-func Source(id string) State {
-	return NewState(NewSource(id, nil, OpMetadata{}).Output())
 }
 
 func Image(ref string, opts ...ImageOption) State {
@@ -136,7 +131,7 @@ func (fn ImageOptionFunc) SetImageOption(ii *ImageInfo) {
 }
 
 type ImageInfo struct {
-	opMetaWrapper
+	constraintsWrapper
 	metaResolver ImageMetaResolver
 }
 
@@ -183,7 +178,7 @@ func (fn gitOptionFunc) SetGitOption(gi *GitInfo) {
 }
 
 type GitInfo struct {
-	opMetaWrapper
+	constraintsWrapper
 	KeepGitDir bool
 }
 
@@ -280,7 +275,7 @@ func SharedKeyHint(h string) LocalOption {
 }
 
 type LocalInfo struct {
-	opMetaWrapper
+	constraintsWrapper
 	SessionID       string
 	IncludePatterns string
 	ExcludePatterns string
@@ -315,7 +310,7 @@ func HTTP(url string, opts ...HTTPOption) State {
 }
 
 type HTTPInfo struct {
-	opMetaWrapper
+	constraintsWrapper
 	Checksum digest.Digest
 	Filename string
 	Perm     int

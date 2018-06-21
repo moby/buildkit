@@ -771,7 +771,7 @@ func getArgValue(arg instructions.ArgCommand) string {
 	return v
 }
 
-func dfCmd(cmd interface{}) llb.MetadataOpt {
+func dfCmd(cmd interface{}) llb.ConstraintsOpt {
 	// TODO: add fmt.Stringer to instructions.Command to remove interface{}
 	var cmdStr string
 	if cmd, ok := cmd.(fmt.Stringer); ok {

@@ -17,19 +17,20 @@ func NewBuildOp(source llb.Output, opt ...BuildOption) llb.Vertex {
 	for _, o := range opt {
 		o(info)
 	}
-	return &build{source: source, info: info, cachedOpMetadata: info.OpMetadata}
+	return &build{source: source, info: info, constraints: info.Constraints}
 }
 
 type build struct {
-	source           llb.Output
-	info             *BuildInfo
-	cachedPBDigest   digest.Digest
-	cachedPB         []byte
-	cachedOpMetadata llb.OpMetadata
+	llb.MarshalCache
+	source         llb.Output
+	info           *BuildInfo
+	cachedPBDigest digest.Digest
+	cachedPB       []byte
+	constraints    llb.Constraints
 }
 
-func (b *build) ToInput() (*pb.Input, error) {
-	dgst, _, _, err := b.Marshal()
+func (b *build) ToInput(c *llb.Constraints) (*pb.Input, error) {
+	dgst, _, _, err := b.Marshal(c)
 	if err != nil {
 		return nil, err
 	}
@@ -44,9 +45,9 @@ func (b *build) Validate() error {
 	return nil
 }
 
-func (b *build) Marshal() (digest.Digest, []byte, *llb.OpMetadata, error) {
-	if b.cachedPB != nil {
-		return b.cachedPBDigest, b.cachedPB, &b.cachedOpMetadata, nil
+func (b *build) Marshal(c *llb.Constraints) (digest.Digest, []byte, *pb.OpMetadata, error) {
+	if b.Cached(c) {
+		return b.Load()
 	}
 	pbo := &pb.BuildOp{
 		Builder: pb.LLBBuilder,
@@ -60,13 +61,12 @@ func (b *build) Marshal() (digest.Digest, []byte, *llb.OpMetadata, error) {
 		pbo.Attrs[pb.AttrLLBDefinitionFilename] = b.info.DefinitionFilename
 	}
 
-	pop := &pb.Op{
-		Op: &pb.Op_Build{
-			Build: pbo,
-		},
+	pop, md := llb.MarshalConstraints(c, &b.constraints)
+	pop.Op = &pb.Op_Build{
+		Build: pbo,
 	}
 
-	inp, err := b.source.ToInput()
+	inp, err := b.source.ToInput(c)
 	if err != nil {
 		return "", nil, nil, err
 	}
@@ -77,9 +77,8 @@ func (b *build) Marshal() (digest.Digest, []byte, *llb.OpMetadata, error) {
 	if err != nil {
 		return "", nil, nil, err
 	}
-	b.cachedPB = dt
-	b.cachedPBDigest = digest.FromBytes(dt)
-	return b.cachedPBDigest, dt, &b.cachedOpMetadata, nil
+	b.Store(dt, md, c)
+	return b.Load()
 }
 
 func (b *build) Output() llb.Output {
@@ -91,7 +90,7 @@ func (b *build) Inputs() []llb.Output {
 }
 
 type BuildInfo struct {
-	llb.OpMetadata
+	llb.Constraints
 	DefinitionFilename string
 }
 
@@ -103,8 +102,8 @@ func WithFilename(fn string) BuildOption {
 	}
 }
 
-func WithMetadata(md llb.MetadataOpt) BuildOption {
+func WithConstraints(co llb.ConstraintsOpt) BuildOption {
 	return func(b *BuildInfo) {
-		md.SetMetadataOption(&b.OpMetadata)
+		co.SetConstraintsOption(&b.Constraints)
 	}
 }

@@ -3,21 +3,23 @@ package llb
 import (
 	"context"
 
+	"github.com/containerd/containerd/platforms"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/system"
 	digest "github.com/opencontainers/go-digest"
+	specs "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 type StateOption func(State) State
 
 type Output interface {
-	ToInput() (*pb.Input, error)
+	ToInput(*Constraints) (*pb.Input, error)
 	Vertex() Vertex
 }
 
 type Vertex interface {
 	Validate() error
-	Marshal() (digest.Digest, []byte, *OpMetadata, error)
+	Marshal(*Constraints) (digest.Digest, []byte, *pb.OpMetadata, error)
 	Output() Output
 	Inputs() []Output
 }
@@ -48,18 +50,27 @@ func (s State) Value(k interface{}) interface{} {
 	return s.ctx.Value(k)
 }
 
-func (s State) Marshal(md ...MetadataOpt) (*Definition, error) {
+func (s State) Marshal(co ...ConstraintsOpt) (*Definition, error) {
 	def := &Definition{
-		Metadata: make(map[digest.Digest]OpMetadata, 0),
+		Metadata: make(map[digest.Digest]pb.OpMetadata, 0),
 	}
 	if s.Output() == nil {
 		return def, nil
 	}
-	def, err := marshal(s.Output().Vertex(), def, map[digest.Digest]struct{}{}, map[Vertex]struct{}{}, md)
+
+	defaultPlatform := platforms.Normalize(platforms.DefaultSpec())
+	c := &Constraints{
+		Platform: &defaultPlatform,
+	}
+	for _, o := range co {
+		o.SetConstraintsOption(c)
+	}
+
+	def, err := marshal(s.Output().Vertex(), def, map[digest.Digest]struct{}{}, map[Vertex]struct{}{}, c)
 	if err != nil {
 		return def, err
 	}
-	inp, err := s.Output().ToInput()
+	inp, err := s.Output().ToInput(c)
 	if err != nil {
 		return def, err
 	}
@@ -72,29 +83,25 @@ func (s State) Marshal(md ...MetadataOpt) (*Definition, error) {
 	return def, nil
 }
 
-func marshal(v Vertex, def *Definition, cache map[digest.Digest]struct{}, vertexCache map[Vertex]struct{}, md []MetadataOpt) (*Definition, error) {
+func marshal(v Vertex, def *Definition, cache map[digest.Digest]struct{}, vertexCache map[Vertex]struct{}, c *Constraints) (*Definition, error) {
 	if _, ok := vertexCache[v]; ok {
 		return def, nil
 	}
 	for _, inp := range v.Inputs() {
 		var err error
-		def, err = marshal(inp.Vertex(), def, cache, vertexCache, md)
+		def, err = marshal(inp.Vertex(), def, cache, vertexCache, c)
 		if err != nil {
 			return def, err
 		}
 	}
 
-	dgst, dt, opMeta, err := v.Marshal()
+	dgst, dt, opMeta, err := v.Marshal(c)
 	if err != nil {
 		return def, err
 	}
 	vertexCache[v] = struct{}{}
 	if opMeta != nil {
-		m := mergeMetadata(def.Metadata[dgst], *opMeta)
-		for _, f := range md {
-			f.SetMetadataOption(&m)
-		}
-		def.Metadata[dgst] = m
+		def.Metadata[dgst] = mergeMetadata(def.Metadata[dgst], *opMeta)
 	}
 	if _, ok := cache[dgst]; ok {
 		return def, nil
@@ -191,7 +198,7 @@ type output struct {
 	err      error
 }
 
-func (o *output) ToInput() (*pb.Input, error) {
+func (o *output) ToInput(c *Constraints) (*pb.Input, error) {
 	if o.err != nil {
 		return nil, o.err
 	}
@@ -203,7 +210,7 @@ func (o *output) ToInput() (*pb.Input, error) {
 			return nil, err
 		}
 	}
-	dgst, _, _, err := o.vertex.Marshal()
+	dgst, _, _, err := o.vertex.Marshal(c)
 	if err != nil {
 		return nil, err
 	}
@@ -214,8 +221,8 @@ func (o *output) Vertex() Vertex {
 	return o.vertex
 }
 
-type MetadataOpt interface {
-	SetMetadataOption(*OpMetadata)
+type ConstraintsOpt interface {
+	SetConstraintsOption(*Constraints)
 	RunOption
 	LocalOption
 	HTTPOption
@@ -223,33 +230,33 @@ type MetadataOpt interface {
 	GitOption
 }
 
-type metadataOptFunc func(m *OpMetadata)
+type constraintsOptFunc func(m *Constraints)
 
-func (fn metadataOptFunc) SetMetadataOption(m *OpMetadata) {
+func (fn constraintsOptFunc) SetConstraintsOption(m *Constraints) {
 	fn(m)
 }
 
-func (fn metadataOptFunc) SetRunOption(ei *ExecInfo) {
-	ei.ApplyMetadata(fn)
+func (fn constraintsOptFunc) SetRunOption(ei *ExecInfo) {
+	ei.applyConstraints(fn)
 }
 
-func (fn metadataOptFunc) SetLocalOption(li *LocalInfo) {
-	li.ApplyMetadata(fn)
+func (fn constraintsOptFunc) SetLocalOption(li *LocalInfo) {
+	li.applyConstraints(fn)
 }
 
-func (fn metadataOptFunc) SetHTTPOption(hi *HTTPInfo) {
-	hi.ApplyMetadata(fn)
+func (fn constraintsOptFunc) SetHTTPOption(hi *HTTPInfo) {
+	hi.applyConstraints(fn)
 }
 
-func (fn metadataOptFunc) SetImageOption(ii *ImageInfo) {
-	ii.ApplyMetadata(fn)
+func (fn constraintsOptFunc) SetImageOption(ii *ImageInfo) {
+	ii.applyConstraints(fn)
 }
 
-func (fn metadataOptFunc) SetGitOption(gi *GitInfo) {
-	gi.ApplyMetadata(fn)
+func (fn constraintsOptFunc) SetGitOption(gi *GitInfo) {
+	gi.applyConstraints(fn)
 }
 
-func mergeMetadata(m1, m2 OpMetadata) OpMetadata {
+func mergeMetadata(m1, m2 pb.OpMetadata) pb.OpMetadata {
 	if m2.IgnoreCache {
 		m1.IgnoreCache = true
 	}
@@ -268,49 +275,81 @@ func mergeMetadata(m1, m2 OpMetadata) OpMetadata {
 	return m1
 }
 
-var IgnoreCache = metadataOptFunc(func(md *OpMetadata) {
-	md.IgnoreCache = true
+var IgnoreCache = constraintsOptFunc(func(c *Constraints) {
+	c.Metadata.IgnoreCache = true
 })
 
-func WithDescription(m map[string]string) MetadataOpt {
-	return metadataOptFunc(func(md *OpMetadata) {
-		md.Description = m
+func WithDescription(m map[string]string) ConstraintsOpt {
+	return constraintsOptFunc(func(c *Constraints) {
+		c.Metadata.Description = m
 	})
 }
 
 // WithExportCache forces results for this vertex to be exported with the cache
-func WithExportCache() MetadataOpt {
-	return metadataOptFunc(func(md *OpMetadata) {
-		md.ExportCache = &pb.ExportCache{Value: true}
+func WithExportCache() ConstraintsOpt {
+	return constraintsOptFunc(func(c *Constraints) {
+		c.Metadata.ExportCache = &pb.ExportCache{Value: true}
 	})
 }
 
 // WithoutExportCache sets results for this vertex to be not exported with
 // the cache
-func WithoutExportCache() MetadataOpt {
-	return metadataOptFunc(func(md *OpMetadata) {
+func WithoutExportCache() ConstraintsOpt {
+	return constraintsOptFunc(func(c *Constraints) {
 		// ExportCache with value false means to disable exporting
-		md.ExportCache = &pb.ExportCache{Value: false}
+		c.Metadata.ExportCache = &pb.ExportCache{Value: false}
 	})
 }
 
 // WithoutDefaultExportCache resets the cache export for the vertex to use
 // the default defined by the build configuration.
-func WithoutDefaultExportCache() MetadataOpt {
-	return metadataOptFunc(func(md *OpMetadata) {
+func WithoutDefaultExportCache() ConstraintsOpt {
+	return constraintsOptFunc(func(c *Constraints) {
 		// nil means no vertex based config has been set
-		md.ExportCache = nil
+		c.Metadata.ExportCache = nil
 	})
 }
 
-type opMetaWrapper struct {
-	OpMetadata
+type constraintsWrapper struct {
+	Constraints
 }
 
-func (mw *opMetaWrapper) ApplyMetadata(f func(m *OpMetadata)) {
-	f(&mw.OpMetadata)
+func (cw *constraintsWrapper) applyConstraints(f func(c *Constraints)) {
+	f(&cw.Constraints)
 }
 
-func (mw *opMetaWrapper) Metadata() OpMetadata {
-	return mw.OpMetadata
+func (cw *constraintsWrapper) Metadata() Constraints {
+	return cw.Constraints
+}
+
+type Constraints struct {
+	Platform          *specs.Platform
+	WorkerConstraints []string
+	Metadata          pb.OpMetadata
+}
+
+func Platform(p specs.Platform) ConstraintsOpt {
+	return constraintsOptFunc(func(c *Constraints) {
+		c.Platform = &p
+	})
+}
+
+var (
+	LinuxAmd64   = Platform(specs.Platform{OS: "linux", Architecture: "amd64"})
+	LinuxArmhf   = Platform(specs.Platform{OS: "linux", Architecture: "arm", Variant: "v7"})
+	LinuxArm     = LinuxArmhf
+	LinuxArmel   = Platform(specs.Platform{OS: "linux", Architecture: "arm", Variant: "v6"})
+	LinuxArm64   = Platform(specs.Platform{OS: "linux", Architecture: "arm64"})
+	LinuxS390x   = Platform(specs.Platform{OS: "linux", Architecture: "s390x"})
+	LinuxPpc64le = Platform(specs.Platform{OS: "linux", Architecture: "ppc64le"})
+	Darwin       = Platform(specs.Platform{OS: "darwin", Architecture: "amd64"})
+	Windows      = Platform(specs.Platform{OS: "windows", Architecture: "amd64"})
+)
+
+func Require(filters ...string) ConstraintsOpt {
+	return constraintsOptFunc(func(c *Constraints) {
+		for _, f := range filters {
+			c.WorkerConstraints = append(c.WorkerConstraints, f)
+		}
+	})
 }

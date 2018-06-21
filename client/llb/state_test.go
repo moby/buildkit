@@ -9,7 +9,7 @@ import (
 func TestStateMeta(t *testing.T) {
 	t.Parallel()
 
-	s := Source("foo")
+	s := Image("foo")
 	s = s.AddEnv("BAR", "abc").Dir("/foo/bar")
 
 	v, ok := s.GetEnv("BAR")
@@ -18,7 +18,7 @@ func TestStateMeta(t *testing.T) {
 
 	assert.Equal(t, "/foo/bar", s.GetDir())
 
-	s2 := Source("foo2")
+	s2 := Image("foo2")
 	s2 = s2.AddEnv("BAZ", "def").Reset(s)
 
 	_, ok = s2.GetEnv("BAZ")
