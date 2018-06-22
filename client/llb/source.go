@@ -11,6 +11,7 @@ import (
 	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
+	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
 
@@ -31,6 +32,10 @@ func NewSource(id string, attrs map[string]string, c Constraints) *SourceOp {
 	}
 	s.output = &output{vertex: s}
 	return s
+}
+
+func (s *SourceOp) Platform() *specs.Platform {
+	return s.constraints.Platform
 }
 
 func (s *SourceOp) Validate() error {
@@ -82,7 +87,7 @@ func Image(ref string, opts ...ImageOption) State {
 	for _, opt := range opts {
 		opt.SetImageOption(&info)
 	}
-	src := NewSource("docker-image://"+ref, nil, info.Metadata()) // controversial
+	src := NewSource("docker-image://"+ref, nil, info.Constraints) // controversial
 	if err != nil {
 		src.err = err
 	}
@@ -164,7 +169,7 @@ func Git(remote, ref string, opts ...GitOption) State {
 	if url != "" {
 		attrs[pb.AttrFullRemoteURL] = url
 	}
-	source := NewSource("git://"+id, attrs, gi.Metadata())
+	source := NewSource("git://"+id, attrs, gi.Constraints)
 	return NewState(source.Output())
 }
 
@@ -215,7 +220,7 @@ func Local(name string, opts ...LocalOption) State {
 		attrs[pb.AttrSharedKeyHint] = gi.SharedKeyHint
 	}
 
-	source := NewSource("local://"+name, attrs, gi.Metadata())
+	source := NewSource("local://"+name, attrs, gi.Constraints)
 	return NewState(source.Output())
 }
 
@@ -305,7 +310,7 @@ func HTTP(url string, opts ...HTTPOption) State {
 		attrs[pb.AttrHTTPGID] = strconv.Itoa(hi.GID)
 	}
 
-	source := NewSource(url, attrs, hi.Metadata())
+	source := NewSource(url, attrs, hi.Constraints)
 	return NewState(source.Output())
 }
 

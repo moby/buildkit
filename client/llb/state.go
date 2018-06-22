@@ -31,6 +31,14 @@ func NewState(o Output) State {
 	}
 	s = dir("/")(s)
 	s = addEnv("PATH", system.DefaultPathEnv)(s)
+
+	if o, ok := o.(interface {
+		Platform() *specs.Platform
+	}); ok {
+		if p := o.Platform(); p != nil {
+			s = platform(*p)(s)
+		}
+	}
 	return s
 }
 
@@ -128,6 +136,9 @@ func (s State) WithOutput(o Output) State {
 
 func (s State) Run(ro ...RunOption) ExecState {
 	ei := &ExecInfo{State: s}
+	if p := s.GetPlatform(); p != nil {
+		ei.Constraints.Platform = p
+	}
 	for _, o := range ro {
 		o.SetRunOption(ei)
 	}
@@ -139,7 +150,7 @@ func (s State) Run(ro ...RunOption) ExecState {
 		ProxyEnv: ei.ProxyEnv,
 	}
 
-	exec := NewExecOp(s.Output(), meta, ei.ReadonlyRootFS, ei.Metadata())
+	exec := NewExecOp(s.Output(), meta, ei.ReadonlyRootFS, ei.Constraints)
 	for _, m := range ei.Mounts {
 		exec.AddMount(m.Target, m.Source, m.Opts...)
 	}
@@ -185,6 +196,14 @@ func (s State) User(v string) State {
 	return user(v)(s)
 }
 
+func (s State) Platform(p specs.Platform) State {
+	return platform(p)(s)
+}
+
+func (s State) GetPlatform() *specs.Platform {
+	return getPlatform(s)
+}
+
 func (s State) With(so ...StateOption) State {
 	for _, o := range so {
 		s = o(s)
@@ -196,6 +215,7 @@ type output struct {
 	vertex   Vertex
 	getIndex func() (pb.OutputIndex, error)
 	err      error
+	platform *specs.Platform
 }
 
 func (o *output) ToInput(c *Constraints) (*pb.Input, error) {
@@ -219,6 +239,10 @@ func (o *output) ToInput(c *Constraints) (*pb.Input, error) {
 
 func (o *output) Vertex() Vertex {
 	return o.vertex
+}
+
+func (o *output) Platform() *specs.Platform {
+	return o.platform
 }
 
 type ConstraintsOpt interface {
@@ -316,10 +340,6 @@ type constraintsWrapper struct {
 
 func (cw *constraintsWrapper) applyConstraints(f func(c *Constraints)) {
 	f(&cw.Constraints)
-}
-
-func (cw *constraintsWrapper) Metadata() Constraints {
-	return cw.Constraints
 }
 
 type Constraints struct {

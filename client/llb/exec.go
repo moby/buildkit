@@ -28,10 +28,13 @@ func NewExecOp(root Output, meta Meta, readOnly bool, c Constraints) *ExecOp {
 	if readOnly {
 		e.root = root
 	} else {
-		e.root = &output{vertex: e, getIndex: e.getMountIndexFn(rootMount)}
+		o := &output{vertex: e, getIndex: e.getMountIndexFn(rootMount)}
+		if p := c.Platform; p != nil {
+			o.platform = p
+		}
+		e.root = o
 	}
 	rootMount.output = e.root
-
 	return e
 }
 
@@ -70,7 +73,11 @@ func (e *ExecOp) AddMount(target string, source Output, opt ...MountOption) Outp
 	} else if m.tmpfs {
 		m.output = &output{vertex: e, err: errors.Errorf("tmpfs mount for %s can't be used as a parent", target)}
 	} else {
-		m.output = &output{vertex: e, getIndex: e.getMountIndexFn(m)}
+		o := &output{vertex: e, getIndex: e.getMountIndexFn(m)}
+		if p := e.constraints.Platform; p != nil {
+			o.platform = p
+		}
+		m.output = o
 	}
 	e.Store(nil, nil, nil)
 	e.isValidated = false
