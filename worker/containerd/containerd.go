@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/containerd/containerd"
+	introspection "github.com/containerd/containerd/api/services/introspection/v1"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/snapshots"
 	"github.com/moby/buildkit/cache/metadata"
@@ -16,6 +17,7 @@ import (
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/util/throttle"
 	"github.com/moby/buildkit/worker/base"
+	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -81,6 +83,25 @@ func newContainerd(root string, client *containerd.Client, snapshotterName strin
 
 	cs := containerdsnapshot.NewContentStore(client.ContentStore(), "buildkit", gc)
 
+	resp, err := client.IntrospectionService().Plugins(context.TODO(), &introspection.PluginsRequest{Filters: []string{"type==io.containerd.runtime.v1"}})
+	if err != nil {
+		return base.WorkerOpt{}, errors.Wrap(err, "failed to list runtime plugin")
+	}
+	if len(resp.Plugins) == 0 {
+		return base.WorkerOpt{}, errors.Wrap(err, "failed to get runtime plugin")
+	}
+
+	var platforms []specs.Platform
+	for _, plugin := range resp.Plugins {
+		for _, p := range plugin.Platforms {
+			platforms = append(platforms, specs.Platform{
+				OS:           p.OS,
+				Architecture: p.Architecture,
+				Variant:      p.Variant,
+			})
+		}
+	}
+
 	opt := base.WorkerOpt{
 		ID:            id,
 		Labels:        xlabels,
@@ -91,6 +112,7 @@ func newContainerd(root string, client *containerd.Client, snapshotterName strin
 		Applier:       df,
 		Differ:        df,
 		ImageStore:    client.ImageService(),
+		Platforms:     platforms,
 	}
 	return opt, nil
 }

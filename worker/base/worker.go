@@ -43,6 +43,7 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	ociidentity "github.com/opencontainers/image-spec/identity"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -56,6 +57,7 @@ const labelCreatedAt = "buildkit/createdat"
 type WorkerOpt struct {
 	ID             string
 	Labels         map[string]string
+	Platforms      []specs.Platform
 	SessionManager *session.Manager
 	MetadataStore  *metadata.Store
 	Executor       executor.Executor
@@ -199,6 +201,10 @@ func (w *Worker) ID() string {
 
 func (w *Worker) Labels() map[string]string {
 	return w.WorkerOpt.Labels
+}
+
+func (w *Worker) Platforms() []specs.Platform {
+	return w.WorkerOpt.Platforms
 }
 
 func (w *Worker) LoadRef(id string) (cache.ImmutableRef, error) {

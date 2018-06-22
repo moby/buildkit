@@ -11,12 +11,14 @@ import (
 	"github.com/containerd/containerd/diff/apply"
 	"github.com/containerd/containerd/diff/walking"
 	ctdmetadata "github.com/containerd/containerd/metadata"
+	"github.com/containerd/containerd/platforms"
 	ctdsnapshot "github.com/containerd/containerd/snapshots"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/executor/runcexecutor"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/util/throttle"
 	"github.com/moby/buildkit/worker/base"
+	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/sirupsen/logrus"
 )
 
@@ -102,6 +104,7 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, labe
 		Applier:       apply.NewFileSystemApplier(c),
 		Differ:        walking.NewWalkingDiff(c),
 		ImageStore:    nil, // explicitly
+		Platforms:     []specs.Platform{platforms.Normalize(platforms.DefaultSpec())},
 	}
 	return opt, nil
 }
