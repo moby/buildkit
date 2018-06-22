@@ -59,7 +59,7 @@ func ReadFrom(r io.Reader) (*Definition, error) {
 }
 
 func MarshalConstraints(base, override *Constraints) (*pb.Op, *pb.OpMetadata) {
-	c := base
+	c := *base
 	c.WorkerConstraints = append([]string{}, c.WorkerConstraints...)
 
 	if p := override.Platform; p != nil {

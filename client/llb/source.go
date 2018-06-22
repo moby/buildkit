@@ -11,7 +11,6 @@ import (
 	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
-	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
 
@@ -30,12 +29,8 @@ func NewSource(id string, attrs map[string]string, c Constraints) *SourceOp {
 		attrs:       attrs,
 		constraints: c,
 	}
-	s.output = &output{vertex: s}
+	s.output = &output{vertex: s, platform: c.Platform}
 	return s
-}
-
-func (s *SourceOp) Platform() *specs.Platform {
-	return s.constraints.Platform
 }
 
 func (s *SourceOp) Validate() error {

@@ -31,8 +31,17 @@ func NewState(o Output) State {
 	}
 	s = dir("/")(s)
 	s = addEnv("PATH", system.DefaultPathEnv)(s)
+	s = s.ensurePlatform()
+	return s
+}
 
-	if o, ok := o.(interface {
+type State struct {
+	out Output
+	ctx context.Context
+}
+
+func (s State) ensurePlatform() State {
+	if o, ok := s.out.(interface {
 		Platform() *specs.Platform
 	}); ok {
 		if p := o.Platform(); p != nil {
@@ -40,11 +49,6 @@ func NewState(o Output) State {
 		}
 	}
 	return s
-}
-
-type State struct {
-	out Output
-	ctx context.Context
 }
 
 func (s State) WithValue(k, v interface{}) State {
@@ -128,10 +132,12 @@ func (s State) Output() Output {
 }
 
 func (s State) WithOutput(o Output) State {
-	return State{
+	s = State{
 		out: o,
 		ctx: s.ctx,
 	}
+	s = s.ensurePlatform()
+	return s
 }
 
 func (s State) Run(ro ...RunOption) ExecState {

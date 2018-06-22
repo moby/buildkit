@@ -206,16 +206,18 @@ func (w *Worker) LoadRef(id string) (cache.ImmutableRef, error) {
 }
 
 func (w *Worker) ResolveOp(v solver.Vertex, s frontend.FrontendLLBBridge) (solver.Op, error) {
-	switch op := v.Sys().(type) {
-	case *pb.Op_Source:
-		return ops.NewSourceOp(v, op, w.SourceManager, w)
-	case *pb.Op_Exec:
-		return ops.NewExecOp(v, op, w.CacheManager, w.MetadataStore, w.Executor, w)
-	case *pb.Op_Build:
-		return ops.NewBuildOp(v, op, s, w)
-	default:
-		return nil, errors.Errorf("could not resolve %v", v)
+	// TODO: update this to send full op
+	if op, ok := v.Sys().(*pb.Op); ok {
+		switch op := op.Op.(type) {
+		case *pb.Op_Source:
+			return ops.NewSourceOp(v, op, w.SourceManager, w)
+		case *pb.Op_Exec:
+			return ops.NewExecOp(v, op, w.CacheManager, w.MetadataStore, w.Executor, w)
+		case *pb.Op_Build:
+			return ops.NewBuildOp(v, op, s, w)
+		}
 	}
+	return nil, errors.Errorf("could not resolve %v", v)
 }
 
 func (w *Worker) ResolveImageConfig(ctx context.Context, ref string) (digest.Digest, []byte, error) {
