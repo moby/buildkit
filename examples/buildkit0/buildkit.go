@@ -24,7 +24,7 @@ func main() {
 	bk := buildkit(opt)
 	out := bk.Run(llb.Shlex("ls -l /bin")) // debug output
 
-	dt, err := out.Marshal()
+	dt, err := out.Marshal(llb.LinuxAmd64)
 	if err != nil {
 		panic(err)
 	}
