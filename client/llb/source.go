@@ -87,7 +87,7 @@ func Image(ref string, opts ...ImageOption) State {
 		src.err = err
 	}
 	if info.metaResolver != nil {
-		_, dt, err := info.metaResolver.ResolveImageConfig(context.TODO(), ref)
+		_, dt, err := info.metaResolver.ResolveImageConfig(context.TODO(), ref, info.Constraints.Platform)
 		if err != nil {
 			src.err = err
 		} else {

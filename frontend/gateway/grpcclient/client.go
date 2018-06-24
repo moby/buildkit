@@ -11,7 +11,9 @@ import (
 
 	"github.com/moby/buildkit/frontend/gateway/client"
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
+	opspb "github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
+	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 )
@@ -63,8 +65,18 @@ func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest, export
 	return &reference{id: resp.Ref, c: c}, nil
 }
 
-func (c *grpcClient) ResolveImageConfig(ctx context.Context, ref string) (digest.Digest, []byte, error) {
-	resp, err := c.client.ResolveImageConfig(ctx, &pb.ResolveImageConfigRequest{Ref: ref})
+func (c *grpcClient) ResolveImageConfig(ctx context.Context, ref string, platform *specs.Platform) (digest.Digest, []byte, error) {
+	var p *opspb.Platform
+	if platform != nil {
+		p = &opspb.Platform{
+			OS:           platform.OS,
+			Architecture: platform.Architecture,
+			Variant:      platform.Variant,
+			OSVersion:    platform.OSVersion,
+			OSFeatures:   platform.OSFeatures,
+		}
+	}
+	resp, err := c.client.ResolveImageConfig(ctx, &pb.ResolveImageConfigRequest{Ref: ref, Platform: p})
 	if err != nil {
 		return "", nil, err
 	}

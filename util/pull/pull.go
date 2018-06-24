@@ -29,6 +29,7 @@ type Puller struct {
 	ContentStore content.Store
 	Applier      diff.Applier
 	Src          reference.Spec
+	Platform     *ocispec.Platform
 	// See NewResolver()
 	Resolver    remotes.Resolver
 	resolveOnce sync.Once
@@ -86,6 +87,11 @@ func (p *Puller) Pull(ctx context.Context) (*Pulled, error) {
 		return nil, err
 	}
 
+	platformStr := platforms.Default()
+	if p.Platform != nil {
+		platformStr = platforms.Format(*p.Platform)
+	}
+
 	ongoing := newJobs(p.ref)
 
 	pctx, stopProgress := context.WithCancel(ctx)
@@ -117,7 +123,7 @@ func (p *Puller) Pull(ctx context.Context) (*Pulled, error) {
 		// Set any children labels for that content
 		childrenHandler = images.SetChildrenLabels(p.ContentStore, childrenHandler)
 		// Filter the childen by the platform
-		childrenHandler = images.FilterPlatforms(childrenHandler, platforms.Default())
+		childrenHandler = images.FilterPlatforms(childrenHandler, platformStr)
 
 		handlers = append(handlers,
 			remotes.FetchHandler(p.ContentStore, fetcher),
@@ -155,7 +161,7 @@ func (p *Puller) Pull(ctx context.Context) (*Pulled, error) {
 				delete(allBlobs, desc.Digest)
 				return nil, nil
 			}),
-			images.FilterPlatforms(images.ChildrenHandler(p.ContentStore), platforms.Default()),
+			images.FilterPlatforms(images.ChildrenHandler(p.ContentStore), platformStr),
 		}
 
 		if err := images.Dispatch(ctx, images.Handlers(handlers...), p.desc); err != nil {
@@ -209,7 +215,7 @@ func (p *Puller) Pull(ctx context.Context) (*Pulled, error) {
 	defer release()
 
 	unpackProgressDone := oneOffProgress(ctx, "unpacking "+p.Src.String())
-	chainid, err := unpack(ctx, p.desc, p.ContentStore, csh, p.Snapshotter, p.Applier)
+	chainid, err := unpack(ctx, p.desc, p.ContentStore, csh, p.Snapshotter, p.Applier, platformStr)
 	if err != nil {
 		return nil, unpackProgressDone(err)
 	}
@@ -222,8 +228,8 @@ func (p *Puller) Pull(ctx context.Context) (*Pulled, error) {
 	}, nil
 }
 
-func unpack(ctx context.Context, desc ocispec.Descriptor, cs content.Store, csh ctdsnapshot.Snapshotter, s snapshot.Snapshotter, applier diff.Applier) (digest.Digest, error) {
-	layers, err := getLayers(ctx, cs, desc)
+func unpack(ctx context.Context, desc ocispec.Descriptor, cs content.Store, csh ctdsnapshot.Snapshotter, s snapshot.Snapshotter, applier diff.Applier, platform string) (digest.Digest, error) {
+	layers, err := getLayers(ctx, cs, desc, platform)
 	if err != nil {
 		return "", err
 	}
@@ -263,13 +269,13 @@ func fillBlobMapping(ctx context.Context, s snapshot.Snapshotter, layers []rootf
 	return nil
 }
 
-func getLayers(ctx context.Context, provider content.Provider, desc ocispec.Descriptor) ([]rootfs.Layer, error) {
-	manifest, err := images.Manifest(ctx, provider, desc, platforms.Default())
+func getLayers(ctx context.Context, provider content.Provider, desc ocispec.Descriptor, platform string) ([]rootfs.Layer, error) {
+	manifest, err := images.Manifest(ctx, provider, desc, platform)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 	image := images.Image{Target: desc}
-	diffIDs, err := image.RootFS(ctx, provider, platforms.Default())
+	diffIDs, err := image.RootFS(ctx, provider, platform)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to resolve rootfs")
 	}

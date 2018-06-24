@@ -211,11 +211,10 @@ func (w *Worker) LoadRef(id string) (cache.ImmutableRef, error) {
 }
 
 func (w *Worker) ResolveOp(v solver.Vertex, s frontend.FrontendLLBBridge) (solver.Op, error) {
-	// TODO: update this to send full op
-	if op, ok := v.Sys().(*pb.Op); ok {
-		switch op := op.Op.(type) {
+	if baseOp, ok := v.Sys().(*pb.Op); ok {
+		switch op := baseOp.Op.(type) {
 		case *pb.Op_Source:
-			return ops.NewSourceOp(v, op, w.SourceManager, w)
+			return ops.NewSourceOp(v, op, baseOp.Platform, w.SourceManager, w)
 		case *pb.Op_Exec:
 			return ops.NewExecOp(v, op, w.CacheManager, w.MetadataStore, w.Executor, w)
 		case *pb.Op_Build:
@@ -225,17 +224,17 @@ func (w *Worker) ResolveOp(v solver.Vertex, s frontend.FrontendLLBBridge) (solve
 	return nil, errors.Errorf("could not resolve %v", v)
 }
 
-func (w *Worker) ResolveImageConfig(ctx context.Context, ref string) (digest.Digest, []byte, error) {
+func (w *Worker) ResolveImageConfig(ctx context.Context, ref string, platform *specs.Platform) (digest.Digest, []byte, error) {
 	// ImageSource is typically source/containerimage
 	resolveImageConfig, ok := w.ImageSource.(resolveImageConfig)
 	if !ok {
 		return "", nil, errors.Errorf("worker %q does not implement ResolveImageConfig", w.ID())
 	}
-	return resolveImageConfig.ResolveImageConfig(ctx, ref)
+	return resolveImageConfig.ResolveImageConfig(ctx, ref, platform)
 }
 
 type resolveImageConfig interface {
-	ResolveImageConfig(ctx context.Context, ref string) (digest.Digest, []byte, error)
+	ResolveImageConfig(ctx context.Context, ref string, platform *specs.Platform) (digest.Digest, []byte, error)
 }
 
 func (w *Worker) Exec(ctx context.Context, meta executor.Meta, rootFS cache.ImmutableRef, stdin io.ReadCloser, stdout, stderr io.WriteCloser) error {

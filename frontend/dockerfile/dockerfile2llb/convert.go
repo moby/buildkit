@@ -162,8 +162,8 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 					d.stage.BaseName = reference.TagNameOnly(ref).String()
 					var isScratch bool
 					if metaResolver != nil && reachable {
-						dgst, dt, err := metaResolver.ResolveImageConfig(ctx, d.stage.BaseName)
-						if err == nil { // handle the error while builder is actually running
+						dgst, dt, err := metaResolver.ResolveImageConfig(ctx, d.stage.BaseName, nil) // TODO: platform
+						if err == nil {                                                              // handle the error while builder is actually running
 							var img Image
 							if err := json.Unmarshal(dt, &img); err != nil {
 								return err

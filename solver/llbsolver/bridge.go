@@ -108,12 +108,12 @@ func (s *llbBridge) Exec(ctx context.Context, meta executor.Meta, root cache.Imm
 	return err
 }
 
-func (s *llbBridge) ResolveImageConfig(ctx context.Context, ref string) (digest.Digest, []byte, error) {
+func (s *llbBridge) ResolveImageConfig(ctx context.Context, ref string, platform *specs.Platform) (digest.Digest, []byte, error) {
 	w, err := s.resolveWorker()
 	if err != nil {
 		return "", nil, err
 	}
-	return w.ResolveImageConfig(ctx, ref)
+	return w.ResolveImageConfig(ctx, ref, platform)
 }
 
 type lazyCacheManager struct {
