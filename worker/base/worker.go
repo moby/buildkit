@@ -7,7 +7,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"runtime"
 	"time"
 
 	"github.com/containerd/containerd/content"
@@ -389,6 +388,7 @@ func (w *Worker) unpack(ctx context.Context, descs []ocispec.Descriptor, s cdsna
 	return ids, nil
 }
 
+// Labels returns default labels
 // utility function. could be moved to the constructor logic?
 func Labels(executor, snapshotter string) map[string]string {
 	hostname, err := os.Hostname()
@@ -396,8 +396,6 @@ func Labels(executor, snapshotter string) map[string]string {
 		hostname = "unknown"
 	}
 	labels := map[string]string{
-		worker.LabelOS:          runtime.GOOS,
-		worker.LabelArch:        runtime.GOARCH,
 		worker.LabelExecutor:    executor,
 		worker.LabelSnapshotter: snapshotter,
 		worker.LabelHostname:    hostname,

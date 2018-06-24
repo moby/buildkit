@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/sys"
 	"github.com/docker/go-connections/sockets"
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
@@ -29,6 +30,7 @@ import (
 	"github.com/moby/buildkit/util/profiler"
 	"github.com/moby/buildkit/version"
 	"github.com/moby/buildkit/worker"
+	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -409,7 +411,7 @@ func newWorkerController(c *cli.Context, wiOpt workerInitializerOpt) (*worker.Co
 			return nil, err
 		}
 		for _, w := range ws {
-			logrus.Infof("found worker %q, labels=%v", w.ID(), w.Labels())
+			logrus.Infof("found worker %q, labels=%v, platforms=%v", w.ID(), w.Labels(), formatPlatforms(w.Platforms()))
 			if err = wc.Add(w); err != nil {
 				return nil, err
 			}
@@ -438,4 +440,12 @@ func attrMap(sl []string) (map[string]string, error) {
 		m[parts[0]] = parts[1]
 	}
 	return m, nil
+}
+
+func formatPlatforms(p []specs.Platform) []string {
+	str := make([]string, 0, len(p))
+	for _, pp := range p {
+		str = append(str, platforms.Format(platforms.Normalize(pp)))
+	}
+	return str
 }

@@ -35,8 +35,6 @@ type Worker interface {
 // Pre-defined label keys
 const (
 	labelPrefix      = "org.mobyproject.buildkit.worker."
-	LabelOS          = labelPrefix + "os"          // GOOS
-	LabelArch        = labelPrefix + "arch"        // GOARCH
 	LabelExecutor    = labelPrefix + "executor"    // "oci" or "containerd"
 	LabelSnapshotter = labelPrefix + "snapshotter" // containerd snapshotter name ("overlay", "native", ...)
 	LabelHostname    = labelPrefix + "hostname"
