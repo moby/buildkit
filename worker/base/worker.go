@@ -7,7 +7,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"runtime"
 	"time"
 
 	"github.com/containerd/containerd/content"
@@ -43,6 +42,7 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	ociidentity "github.com/opencontainers/image-spec/identity"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -56,6 +56,7 @@ const labelCreatedAt = "buildkit/createdat"
 type WorkerOpt struct {
 	ID             string
 	Labels         map[string]string
+	Platforms      []specs.Platform
 	SessionManager *session.Manager
 	MetadataStore  *metadata.Store
 	Executor       executor.Executor
@@ -199,6 +200,10 @@ func (w *Worker) ID() string {
 
 func (w *Worker) Labels() map[string]string {
 	return w.WorkerOpt.Labels
+}
+
+func (w *Worker) Platforms() []specs.Platform {
+	return w.WorkerOpt.Platforms
 }
 
 func (w *Worker) LoadRef(id string) (cache.ImmutableRef, error) {
@@ -383,6 +388,7 @@ func (w *Worker) unpack(ctx context.Context, descs []ocispec.Descriptor, s cdsna
 	return ids, nil
 }
 
+// Labels returns default labels
 // utility function. could be moved to the constructor logic?
 func Labels(executor, snapshotter string) map[string]string {
 	hostname, err := os.Hostname()
@@ -390,8 +396,6 @@ func Labels(executor, snapshotter string) map[string]string {
 		hostname = "unknown"
 	}
 	labels := map[string]string{
-		worker.LabelOS:          runtime.GOOS,
-		worker.LabelArch:        runtime.GOARCH,
 		worker.LabelExecutor:    executor,
 		worker.LabelSnapshotter: snapshotter,
 		worker.LabelHostname:    hostname,

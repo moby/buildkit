@@ -5,12 +5,14 @@ package main
 import (
 	"os/exec"
 
+	"github.com/containerd/containerd/platforms"
 	ctdsnapshot "github.com/containerd/containerd/snapshots"
 	"github.com/containerd/containerd/snapshots/native"
 	"github.com/containerd/containerd/snapshots/overlay"
 	"github.com/moby/buildkit/worker"
 	"github.com/moby/buildkit/worker/base"
 	"github.com/moby/buildkit/worker/runc"
+	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -31,6 +33,10 @@ func init() {
 			Name:  "oci-worker-snapshotter",
 			Usage: "name of snapshotter (overlayfs or native)",
 			Value: "auto",
+		},
+		cli.StringSliceFlag{
+			Name:  "oci-worker-platform",
+			Usage: "override supported platforms for worker",
 		},
 	}
 	n := "oci-worker-rootless"
@@ -82,11 +88,31 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 		return nil, err
 	}
 	opt.SessionManager = common.sessionManager
+	platformsStr := c.GlobalStringSlice("oci-worker-platform")
+	if len(platformsStr) != 0 {
+		platforms, err := parsePlatforms(platformsStr)
+		if err != nil {
+			return nil, errors.Wrap(err, "invalid platforms")
+		}
+		opt.Platforms = platforms
+	}
 	w, err := base.NewWorker(opt)
 	if err != nil {
 		return nil, err
 	}
 	return []worker.Worker{w}, nil
+}
+
+func parsePlatforms(platformsStr []string) ([]specs.Platform, error) {
+	out := make([]specs.Platform, 0, len(platformsStr))
+	for _, s := range platformsStr {
+		p, err := platforms.Parse(s)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, platforms.Normalize(p))
+	}
+	return out, nil
 }
 
 func snapshotterFactory(commonRoot, name string) (runc.SnapshotterFactory, error) {

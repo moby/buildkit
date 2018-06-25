@@ -11,12 +11,14 @@ import (
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/solver"
 	digest "github.com/opencontainers/go-digest"
+	specs "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 type Worker interface {
 	// ID needs to be unique in the cluster
 	ID() string
 	Labels() map[string]string
+	Platforms() []specs.Platform
 	LoadRef(id string) (cache.ImmutableRef, error)
 	// ResolveOp resolves Vertex.Sys() to Op implementation.
 	ResolveOp(v solver.Vertex, s frontend.FrontendLLBBridge) (solver.Op, error)
@@ -33,8 +35,6 @@ type Worker interface {
 // Pre-defined label keys
 const (
 	labelPrefix      = "org.mobyproject.buildkit.worker."
-	LabelOS          = labelPrefix + "os"          // GOOS
-	LabelArch        = labelPrefix + "arch"        // GOARCH
 	LabelExecutor    = labelPrefix + "executor"    // "oci" or "containerd"
 	LabelSnapshotter = labelPrefix + "snapshotter" // containerd snapshotter name ("overlay", "native", ...)
 	LabelHostname    = labelPrefix + "hostname"

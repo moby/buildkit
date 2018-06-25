@@ -5,9 +5,12 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"text/tabwriter"
 
+	"github.com/containerd/containerd/platforms"
 	"github.com/moby/buildkit/client"
+	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/urfave/cli"
 )
 
@@ -54,6 +57,7 @@ func listWorkers(clicontext *cli.Context) error {
 func printWorkersVerbose(tw *tabwriter.Writer, winfo []*client.WorkerInfo) {
 	for _, wi := range winfo {
 		fmt.Fprintf(tw, "ID:\t%s\n", wi.ID)
+		fmt.Fprintf(tw, "Platforms:\t%s\n", joinPlatforms(wi.Platforms))
 		fmt.Fprintf(tw, "Labels:\n")
 		for _, k := range sortedKeys(wi.Labels) {
 			v := wi.Labels[k]
@@ -66,11 +70,11 @@ func printWorkersVerbose(tw *tabwriter.Writer, winfo []*client.WorkerInfo) {
 }
 
 func printWorkersTable(tw *tabwriter.Writer, winfo []*client.WorkerInfo) {
-	fmt.Fprintln(tw, "ID")
+	fmt.Fprintln(tw, "ID\tPLATFORMS")
 
 	for _, wi := range winfo {
 		id := wi.ID
-		fmt.Fprintf(tw, "%s\n", id)
+		fmt.Fprintf(tw, "%s\t%s\n", id, joinPlatforms(wi.Platforms))
 	}
 
 	tw.Flush()
@@ -89,4 +93,12 @@ func sortedKeys(m map[string]string) []string {
 
 func commandContext(c *cli.Context) context.Context {
 	return c.App.Metadata["context"].(context.Context)
+}
+
+func joinPlatforms(p []specs.Platform) string {
+	str := make([]string, 0, len(p))
+	for _, pp := range p {
+		str = append(str, platforms.Format(platforms.Normalize(pp)))
+	}
+	return strings.Join(str, ",")
 }
