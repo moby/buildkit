@@ -12,6 +12,7 @@ import (
 	"github.com/moby/buildkit/frontend/gateway/client"
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
 	opspb "github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/apicaps"
 	digest "github.com/opencontainers/go-digest"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -28,18 +29,39 @@ func Current() (client.Client, error) {
 
 	c := pb.NewLLBBridgeClient(conn)
 
-	_, err = c.Ping(ctx, &pb.PingRequest{})
+	resp, err := c.Ping(ctx, &pb.PingRequest{})
 	if err != nil {
 		return nil, err
 	}
 
-	return &grpcClient{client: c, opts: opts(), sessionID: sessionID()}, nil
+	if resp.FrontendAPICaps == nil {
+		resp.FrontendAPICaps = defaultCaps()
+	}
+
+	return &grpcClient{
+		client:    c,
+		opts:      opts(),
+		sessionID: sessionID(),
+		caps:      pb.Caps.CapSet(resp.FrontendAPICaps),
+	}, nil
+}
+
+// defaultCaps returns the capabilities that were implemented when capabilities
+// support was added. This list is frozen and should never be changed.
+func defaultCaps() []apicaps.PBCap {
+	return []apicaps.PBCap{
+		{ID: string(pb.CapSolveBase), Enabled: true},
+		{ID: string(pb.CapSolveInlineReturn), Enabled: true},
+		{ID: string(pb.CapResolveImage), Enabled: true},
+		{ID: string(pb.CapReadFile), Enabled: true},
+	}
 }
 
 type grpcClient struct {
 	client    pb.LLBBridgeClient
 	opts      map[string]string
 	sessionID string
+	caps      apicaps.CapSet
 }
 
 func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest, exporterAttr map[string][]byte, final bool) (client.Reference, error) {

@@ -65,7 +65,7 @@ message ReadFileResponse {
 message PingRequest{
 }
 message PongResponse{
-	repeated moby.buildkit.v1.apicaps.APICap FrontendAPICaps = 1;
-	repeated moby.buildkit.v1.apicaps.APICap LLBCaps = 2;
+	repeated moby.buildkit.v1.apicaps.APICap FrontendAPICaps = 1 [(gogoproto.nullable) = false];
+	repeated moby.buildkit.v1.apicaps.APICap LLBCaps = 2 [(gogoproto.nullable) = false];
 	repeated moby.buildkit.v1.WorkerRecord Workers = 3;
 }

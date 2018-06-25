@@ -353,7 +353,10 @@ func (lbf *llbBridgeForwarder) ReadFile(ctx context.Context, req *pb.ReadFileReq
 }
 
 func (lbf *llbBridgeForwarder) Ping(context.Context, *pb.PingRequest) (*pb.PongResponse, error) {
-	return &pb.PongResponse{}, nil
+	return &pb.PongResponse{
+		FrontendAPICaps: pb.Caps.All(),
+		// FIXME: do not merge before llb & worker info
+	}, nil
 }
 
 func serve(ctx context.Context, grpcServer *grpc.Server, conn net.Conn) {

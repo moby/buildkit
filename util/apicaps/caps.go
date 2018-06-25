@@ -9,6 +9,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+type PBCap = pb.APICap
+
 // ExportedProduct is the name of the product using this package.
 // Users vendoring this library may override it to provide better versioning hints
 // for their users (or set it with a flag to buildkitd).
@@ -80,8 +82,8 @@ func (l *CapList) All() []pb.APICap {
 	return out
 }
 
-// ToCapSet returns a CapSet for an capability configuration
-func (l *CapList) ToCapSet(caps []pb.APICap) CapSet {
+// CapSet returns a CapSet for an capability configuration
+func (l *CapList) CapSet(caps []pb.APICap) CapSet {
 	m := make(map[string]*pb.APICap, len(caps))
 	for _, c := range caps {
 		if c.ID != "" {
@@ -142,13 +144,13 @@ func (e CapError) Error() string {
 		name = "(" + e.Definition.Name + ")"
 	}
 	b := &strings.Builder{}
-	fmt.Fprint(b, "requested %sfeature %s %s", typ, e.ID, name)
+	fmt.Fprintf(b, "requested %sfeature %s %s", typ, e.ID, name)
 	if e.State == nil {
 		fmt.Fprint(b, " is not supported by build server")
 		if hint, ok := e.Definition.SupportedHint[ExportedProduct]; ok {
 			fmt.Fprintf(b, " (added in %s)", hint)
 		}
-		fmt.Fprint(b, ", please update %s", ExportedProduct)
+		fmt.Fprintf(b, ", please update %s", ExportedProduct)
 	} else {
 		fmt.Fprint(b, " has been disabled on the build server")
 		if e.State.DisabledReasonMsg != "" {
