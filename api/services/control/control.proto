@@ -17,6 +17,7 @@ service Control {
 	rpc Status(StatusRequest) returns (stream StatusResponse);
 	rpc Session(stream BytesMessage) returns (stream BytesMessage);
 	rpc ListWorkers(ListWorkersRequest) returns (ListWorkersResponse);
+	// rpc Info(InfoRequest) returns (InfoResponse);
 }
 
 message PruneRequest {
