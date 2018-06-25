@@ -12,8 +12,11 @@ option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
 
 service LLBBridge {
+	// apicaps:CapResolveImage
 	rpc ResolveImageConfig(ResolveImageConfigRequest) returns (ResolveImageConfigResponse);
+	// apicaps:CapSolveBase
 	rpc Solve(SolveRequest) returns (SolveResponse);
+	// apicaps:CapReadFile
 	rpc ReadFile(ReadFileRequest) returns (ReadFileResponse);
 	rpc Ping(PingRequest) returns (PongResponse);
 }
@@ -33,6 +36,8 @@ message SolveRequest {
 	string Frontend = 2;
 	map<string, string> FrontendOpt = 3;
 	repeated string ImportCacheRefs = 4;
+	
+	// apicaps.CapSolveInlineReturn deprecated
 	bool Final = 10;
 	bytes ExporterAttr = 11;
 }
