@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/containerd/containerd/platforms"
 	"github.com/docker/docker/builder/dockerignore"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend/dockerfile/dockerfile2llb"
@@ -35,6 +36,10 @@ var gitUrlPathWithFragmentSuffix = regexp.MustCompile("\\.git(?:#.+)?$")
 
 func Build(ctx context.Context, c client.Client) error {
 	opts := c.Opts()
+
+	// TODO: read these from options
+	buildPlatform := platforms.DefaultSpec()
+	targetPlatform := platforms.DefaultSpec()
 
 	filename := opts[keyFilename]
 	if filename == "" {
@@ -166,14 +171,16 @@ func Build(ctx context.Context, c client.Client) error {
 	}
 
 	st, img, err := dockerfile2llb.Dockerfile2LLB(ctx, dtDockerfile, dockerfile2llb.ConvertOpt{
-		Target:       opts[keyTarget],
-		MetaResolver: c,
-		BuildArgs:    filter(opts, buildArgPrefix),
-		Labels:       filter(opts, labelPrefix),
-		SessionID:    c.SessionID(),
-		BuildContext: buildContext,
-		Excludes:     excludes,
-		IgnoreCache:  ignoreCache,
+		Target:         opts[keyTarget],
+		MetaResolver:   c,
+		BuildArgs:      filter(opts, buildArgPrefix),
+		Labels:         filter(opts, labelPrefix),
+		SessionID:      c.SessionID(),
+		BuildContext:   buildContext,
+		Excludes:       excludes,
+		IgnoreCache:    ignoreCache,
+		TargetPlatform: &targetPlatform,
+		BuildPlatform:  &buildPlatform,
 	})
 
 	if err != nil {

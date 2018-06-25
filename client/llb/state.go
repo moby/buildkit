@@ -36,8 +36,9 @@ func NewState(o Output) State {
 }
 
 type State struct {
-	out Output
-	ctx context.Context
+	out  Output
+	ctx  context.Context
+	opts []ConstraintsOpt
 }
 
 func (s State) ensurePlatform() State {
@@ -62,6 +63,11 @@ func (s State) Value(k interface{}) interface{} {
 	return s.ctx.Value(k)
 }
 
+func (s State) SetMarhalDefaults(co ...ConstraintsOpt) State {
+	s.opts = co
+	return s
+}
+
 func (s State) Marshal(co ...ConstraintsOpt) (*Definition, error) {
 	def := &Definition{
 		Metadata: make(map[digest.Digest]pb.OpMetadata, 0),
@@ -74,7 +80,7 @@ func (s State) Marshal(co ...ConstraintsOpt) (*Definition, error) {
 	c := &Constraints{
 		Platform: &defaultPlatform,
 	}
-	for _, o := range co {
+	for _, o := range append(s.opts, co...) {
 		o.SetConstraintsOption(c)
 	}
 
