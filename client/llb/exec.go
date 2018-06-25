@@ -17,8 +17,8 @@ type Meta struct {
 	ProxyEnv *ProxyEnv
 }
 
-func NewExecOp(root Output, meta Meta, readOnly bool, md OpMetadata) *ExecOp {
-	e := &ExecOp{meta: meta, cachedOpMetadata: md}
+func NewExecOp(root Output, meta Meta, readOnly bool, c Constraints) *ExecOp {
+	e := &ExecOp{meta: meta, constraints: c}
 	rootMount := &mount{
 		target:   pb.RootMount,
 		source:   root,
@@ -28,10 +28,13 @@ func NewExecOp(root Output, meta Meta, readOnly bool, md OpMetadata) *ExecOp {
 	if readOnly {
 		e.root = root
 	} else {
-		e.root = &output{vertex: e, getIndex: e.getMountIndexFn(rootMount)}
+		o := &output{vertex: e, getIndex: e.getMountIndexFn(rootMount)}
+		if p := c.Platform; p != nil {
+			o.platform = p
+		}
+		e.root = o
 	}
 	rootMount.output = e.root
-
 	return e
 }
 
@@ -48,13 +51,12 @@ type mount struct {
 }
 
 type ExecOp struct {
-	root             Output
-	mounts           []*mount
-	meta             Meta
-	cachedPBDigest   digest.Digest
-	cachedPB         []byte
-	cachedOpMetadata OpMetadata
-	isValidated      bool
+	MarshalCache
+	root        Output
+	mounts      []*mount
+	meta        Meta
+	constraints Constraints
+	isValidated bool
 }
 
 func (e *ExecOp) AddMount(target string, source Output, opt ...MountOption) Output {
@@ -71,9 +73,13 @@ func (e *ExecOp) AddMount(target string, source Output, opt ...MountOption) Outp
 	} else if m.tmpfs {
 		m.output = &output{vertex: e, err: errors.Errorf("tmpfs mount for %s can't be used as a parent", target)}
 	} else {
-		m.output = &output{vertex: e, getIndex: e.getMountIndexFn(m)}
+		o := &output{vertex: e, getIndex: e.getMountIndexFn(m)}
+		if p := e.constraints.Platform; p != nil {
+			o.platform = p
+		}
+		m.output = o
 	}
-	e.cachedPB = nil
+	e.Store(nil, nil, nil)
 	e.isValidated = false
 	return m.output
 }
@@ -108,9 +114,9 @@ func (e *ExecOp) Validate() error {
 	return nil
 }
 
-func (e *ExecOp) Marshal() (digest.Digest, []byte, *OpMetadata, error) {
-	if e.cachedPB != nil {
-		return e.cachedPBDigest, e.cachedPB, &e.cachedOpMetadata, nil
+func (e *ExecOp) Marshal(c *Constraints) (digest.Digest, []byte, *pb.OpMetadata, error) {
+	if e.Cached(c) {
+		return e.Load()
 	}
 	if err := e.Validate(); err != nil {
 		return "", nil, nil, err
@@ -138,10 +144,9 @@ func (e *ExecOp) Marshal() (digest.Digest, []byte, *OpMetadata, error) {
 		}
 	}
 
-	pop := &pb.Op{
-		Op: &pb.Op_Exec{
-			Exec: peo,
-		},
+	pop, md := MarshalConstraints(c, &e.constraints)
+	pop.Op = &pb.Op_Exec{
+		Exec: peo,
 	}
 
 	outIndex := 0
@@ -151,7 +156,7 @@ func (e *ExecOp) Marshal() (digest.Digest, []byte, *OpMetadata, error) {
 			if m.tmpfs {
 				return "", nil, nil, errors.Errorf("tmpfs mounts must use scratch")
 			}
-			inp, err := m.source.ToInput()
+			inp, err := m.source.ToInput(c)
 			if err != nil {
 				return "", nil, nil, err
 			}
@@ -210,9 +215,8 @@ func (e *ExecOp) Marshal() (digest.Digest, []byte, *OpMetadata, error) {
 	if err != nil {
 		return "", nil, nil, err
 	}
-	e.cachedPBDigest = digest.FromBytes(dt)
-	e.cachedPB = dt
-	return e.cachedPBDigest, dt, &e.cachedOpMetadata, nil
+	e.Store(dt, md, c)
+	return e.Load()
 }
 
 func (e *ExecOp) Output() Output {
@@ -376,7 +380,7 @@ func WithProxy(ps ProxyEnv) RunOption {
 }
 
 type ExecInfo struct {
-	opMetaWrapper
+	constraintsWrapper
 	State          State
 	Mounts         []MountInfo
 	ReadonlyRootFS bool

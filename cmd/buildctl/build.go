@@ -87,10 +87,11 @@ func read(r io.Reader, clicontext *cli.Context) (*llb.Definition, error) {
 			dgst := digest.FromBytes(dt)
 			opMetadata, ok := def.Metadata[dgst]
 			if !ok {
-				opMetadata = llb.OpMetadata{}
+				opMetadata = pb.OpMetadata{}
 			}
-			llb.IgnoreCache(&opMetadata)
-			def.Metadata[dgst] = opMetadata
+			c := llb.Constraints{Metadata: opMetadata}
+			llb.IgnoreCache(&c)
+			def.Metadata[dgst] = c.Metadata
 		}
 	}
 	return def, nil

@@ -69,7 +69,7 @@ func newVertex(dgst digest.Digest, op *pb.Op, opMeta *pb.OpMetadata, load func(d
 	for _, fn := range opts {
 		fn(&opt)
 	}
-	vtx := &vertex{sys: op.Op, options: opt, digest: dgst, name: llbOpName(op)}
+	vtx := &vertex{sys: op, options: opt, digest: dgst, name: llbOpName(op)}
 	for _, in := range op.Inputs {
 		sub, err := load(in.Digest)
 		if err != nil {
