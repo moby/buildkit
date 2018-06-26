@@ -14,7 +14,6 @@ import (
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/rootfs"
 	cdsnapshot "github.com/containerd/containerd/snapshots"
-	"github.com/docker/distribution/manifest/schema2"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/blobs"
 	"github.com/moby/buildkit/cache/metadata"
@@ -293,7 +292,7 @@ func (w *Worker) GetRemote(ctx context.Context, ref cache.ImmutableRef, createIf
 		descs[i] = ocispec.Descriptor{
 			Digest:    dp.Blobsum,
 			Size:      info.Size,
-			MediaType: schema2.MediaTypeLayer,
+			MediaType: images.MediaTypeDockerSchema2LayerGzip,
 			Annotations: map[string]string{
 				"containerd.io/uncompressed": dp.DiffID.String(),
 				labelCreatedAt:               string(tm),

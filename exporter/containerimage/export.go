@@ -20,6 +20,7 @@ const (
 	keyPush             = "push"
 	keyInsecure         = "registry.insecure"
 	exporterImageConfig = "containerimage.config"
+	ociTypes            = "oci-mediatypes"
 )
 
 type Opt struct {
@@ -69,6 +70,16 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 			i.insecure = b
 		case exporterImageConfig:
 			i.config = []byte(v)
+		case ociTypes:
+			if v == "" {
+				i.ociTypes = true
+				continue
+			}
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
+			}
+			i.ociTypes = b
 		default:
 			logrus.Warnf("image exporter: unknown option %s", k)
 		}
@@ -81,6 +92,7 @@ type imageExporterInstance struct {
 	targetName string
 	push       bool
 	insecure   bool
+	ociTypes   bool
 	config     []byte
 }
 
@@ -92,7 +104,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, ref cache.ImmutableR
 	if config, ok := opt[exporterImageConfig]; ok {
 		e.config = config
 	}
-	desc, err := e.opt.ImageWriter.Commit(ctx, ref, e.config)
+	desc, err := e.opt.ImageWriter.Commit(ctx, ref, e.config, e.ociTypes)
 	if err != nil {
 		return nil, err
 	}
