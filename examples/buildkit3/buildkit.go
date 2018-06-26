@@ -25,7 +25,7 @@ func main() {
 
 	bk := buildkit(opt)
 	out := bk
-	dt, err := out.Marshal()
+	dt, err := out.Marshal(llb.LinuxAmd64)
 	if err != nil {
 		panic(err)
 	}

@@ -37,7 +37,10 @@ type Controller struct { // TODO: ControlService
 }
 
 func NewController(opt Opt) (*Controller, error) {
-	solver := llbsolver.New(opt.WorkerController, opt.Frontends, opt.CacheKeyStorage, opt.CacheImporter)
+	solver, err := llbsolver.New(opt.WorkerController, opt.Frontends, opt.CacheKeyStorage, opt.CacheImporter)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create solver")
+	}
 
 	c := &Controller{
 		opt:    opt,

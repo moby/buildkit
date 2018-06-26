@@ -68,7 +68,7 @@ func run() error {
 		// With(copyAll(*buildkitd, "/")).
 		With(copyAll(*runc, "/"))
 
-	dt, err := sc.Marshal()
+	dt, err := sc.Marshal(llb.LinuxAmd64)
 	if err != nil {
 		panic(err)
 	}

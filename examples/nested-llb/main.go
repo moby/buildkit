@@ -23,7 +23,7 @@ func main() {
 
 	built := pb.With(llbbuild.Build())
 
-	dt, err := llb.Image("docker.io/library/alpine:latest").Run(llb.Shlex("ls -l /out"), llb.AddMount("/out", built, llb.Readonly)).Marshal()
+	dt, err := llb.Image("docker.io/library/alpine:latest").Run(llb.Shlex("ls -l /out"), llb.AddMount("/out", built, llb.Readonly)).Marshal(llb.LinuxAmd64)
 	if err != nil {
 		panic(err)
 	}

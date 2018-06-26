@@ -15,6 +15,7 @@ import (
 	"github.com/moby/buildkit/util/tracing"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
+	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
 
@@ -25,6 +26,7 @@ type llbBridge struct {
 	ci            *remotecache.CacheImporter
 	cms           map[string]solver.CacheManager
 	cmsMu         sync.Mutex
+	platforms     []specs.Platform
 }
 
 func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (res solver.CachedResult, exp map[string][]byte, err error) {
@@ -59,7 +61,7 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (res s
 	}
 
 	if req.Definition != nil && req.Definition.Def != nil {
-		edge, err := Load(req.Definition, WithCacheSources(cms))
+		edge, err := Load(req.Definition, WithCacheSources(cms), RuntimePlatforms(b.platforms))
 		if err != nil {
 			return nil, nil, err
 		}
