@@ -48,7 +48,7 @@ type ConvertOpt struct {
 	// CacheIDNamespace scopes the IDs for different cache mounts
 	CacheIDNamespace string
 	TargetPlatform   *specs.Platform
-	BuildPlatform    *specs.Platform
+	BuildPlatforms   []specs.Platform
 }
 
 func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State, *Image, error) {
@@ -56,15 +56,16 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		return nil, nil, errors.Errorf("the Dockerfile cannot be empty")
 	}
 
-	if opt.TargetPlatform != nil && opt.BuildPlatform == nil {
-		opt.BuildPlatform = opt.TargetPlatform
+	if opt.TargetPlatform != nil && opt.BuildPlatforms == nil {
+		opt.BuildPlatforms = []specs.Platform{*opt.TargetPlatform}
 	}
-	if opt.BuildPlatform == nil {
-		defaultPlatform := platforms.DefaultSpec()
-		opt.BuildPlatform = &defaultPlatform
+	if len(opt.BuildPlatforms) == 0 {
+		opt.BuildPlatforms = []specs.Platform{platforms.DefaultSpec()}
 	}
+	implicitTargetPlatform := false
 	if opt.TargetPlatform == nil {
-		opt.TargetPlatform = opt.BuildPlatform
+		implicitTargetPlatform = true
+		opt.TargetPlatform = &opt.BuildPlatforms[0]
 	}
 
 	dockerfile, err := parser.Parse(bytes.NewReader(dt))
@@ -178,7 +179,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		if d.base == nil {
 			if d.stage.BaseName == emptyImageName {
 				d.state = llb.Scratch()
-				d.image = emptyImage()
+				d.image = emptyImage(*opt.TargetPlatform)
 				continue
 			}
 			func(i int, d *dispatchState) {
@@ -201,6 +202,11 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 								return err
 							}
 							img.Created = nil
+							// if there is no explicit target platform, try to match based on image config
+							if d.platform == nil && implicitTargetPlatform {
+								p := autoDetectPlatform(img, *platform, opt.BuildPlatforms)
+								platform = &p
+							}
 							d.image = img
 							if dgst != "" {
 								ref, err = reference.WithDigest(ref, dgst)
@@ -274,7 +280,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 			buildContext:         llb.NewState(buildContext),
 			proxyEnv:             proxyEnv,
 			cacheIDNamespace:     opt.CacheIDNamespace,
-			buildPlatform:        *opt.BuildPlatform,
+			buildPlatforms:       opt.BuildPlatforms,
 			targetPlatform:       *opt.TargetPlatform,
 		}
 
@@ -316,8 +322,10 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 
 	st := target.state.SetMarhalDefaults(llb.Platform(*opt.TargetPlatform))
 
-	target.image.OS = opt.TargetPlatform.OS
-	target.image.Architecture = opt.TargetPlatform.Architecture
+	if !implicitTargetPlatform {
+		target.image.OS = opt.TargetPlatform.OS
+		target.image.Architecture = opt.TargetPlatform.Architecture
+	}
 
 	return &st, &target.image, nil
 }
@@ -365,7 +373,7 @@ type dispatchOpt struct {
 	proxyEnv             *llb.ProxyEnv
 	cacheIDNamespace     string
 	targetPlatform       specs.Platform
-	buildPlatform        specs.Platform
+	buildPlatforms       []specs.Platform
 }
 
 func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
@@ -534,7 +542,7 @@ func dispatchWorkdir(d *dispatchState, c *instructions.WorkdirCommand, commit bo
 
 func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState llb.State, isAddCommand bool, cmdToPrint interface{}, chown string, opt dispatchOpt) error {
 	// TODO: this should use CopyOp instead. Current implementation is inefficient
-	img := llb.Image(CopyImage, llb.Platform(opt.buildPlatform))
+	img := llb.Image(CopyImage, llb.Platform(opt.buildPlatforms[0]))
 
 	dest := path.Join(".", pathRelativeToWorkingDir(d.state, c.Dest()))
 	if c.Dest() == "." || c.Dest()[len(c.Dest())-1] == filepath.Separator {
@@ -975,4 +983,18 @@ func withShell(img Image, args []string) []string {
 		shell = defaultShell()
 	}
 	return append(shell, strings.Join(args, " "))
+}
+
+func autoDetectPlatform(img Image, target specs.Platform, supported []specs.Platform) specs.Platform {
+	os := img.OS
+	arch := img.Architecture
+	if target.OS == os && target.Architecture == arch {
+		return target
+	}
+	for _, p := range supported {
+		if p.OS == os && p.Architecture == arch {
+			return p
+		}
+	}
+	return target
 }

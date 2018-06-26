@@ -13,6 +13,7 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend/dockerfile/dockerfile2llb"
 	"github.com/moby/buildkit/frontend/gateway/client"
+	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -38,7 +39,7 @@ func Build(ctx context.Context, c client.Client) error {
 	opts := c.Opts()
 
 	// TODO: read these from options
-	buildPlatform := platforms.DefaultSpec()
+	buildPlatforms := []specs.Platform{platforms.DefaultSpec()}
 	targetPlatform := platforms.DefaultSpec()
 
 	filename := opts[keyFilename]
@@ -180,7 +181,7 @@ func Build(ctx context.Context, c client.Client) error {
 		Excludes:       excludes,
 		IgnoreCache:    ignoreCache,
 		TargetPlatform: &targetPlatform,
-		BuildPlatform:  &buildPlatform,
+		BuildPlatforms: buildPlatforms,
 	})
 
 	if err != nil {
