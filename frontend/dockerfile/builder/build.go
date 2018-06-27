@@ -30,6 +30,7 @@ const (
 	buildArgPrefix        = "build-arg:"
 	labelPrefix           = "label:"
 	keyNoCache            = "no-cache"
+	keyTargetPlatform     = "platform"
 )
 
 var httpPrefix = regexp.MustCompile("^https?://")
@@ -38,9 +39,16 @@ var gitUrlPathWithFragmentSuffix = regexp.MustCompile("\\.git(?:#.+)?$")
 func Build(ctx context.Context, c client.Client) error {
 	opts := c.Opts()
 
-	// TODO: read these from options
+	// TODO: read buildPlatforms from workers
 	buildPlatforms := []specs.Platform{platforms.DefaultSpec()}
 	targetPlatform := platforms.DefaultSpec()
+	if v := opts[keyTargetPlatform]; v != "" {
+		var err error
+		targetPlatform, err = platforms.Parse(v)
+		if err != nil {
+			return errors.Wrapf(err, "failed to parse target platform %s", v)
+		}
+	}
 
 	filename := opts[keyFilename]
 	if filename == "" {
