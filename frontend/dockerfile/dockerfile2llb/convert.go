@@ -31,7 +31,7 @@ const (
 	localNameContext = "context"
 	historyComment   = "buildkit.dockerfile.v0"
 
-	CopyImage = "tonistiigi/copy:v0.1.3@sha256:87c46e7b413cdd2c2702902b481b390ce263ac9d942253d366f3b1a3c16f96d6"
+	CopyImage = "tonistiigi/copy:v0.1.3@sha256:e57a3b4d6240f55bac26b655d2cfb751f8b9412d6f7bb1f787e946391fb4b21b"
 )
 
 type ConvertOpt struct {
