@@ -41,4 +41,12 @@ COPY --from=0 f2 /
 		Target: "nosuch",
 	})
 	assert.Error(t, err)
+
+	df = `FROM "" AS foo`
+	_, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	assert.Error(t, err)
+
+	df = `FROM ${BLANK} AS foo`
+	_, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	assert.Error(t, err)
 }

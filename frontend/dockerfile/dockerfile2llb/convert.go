@@ -85,6 +85,9 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		if err != nil {
 			return nil, nil, err
 		}
+		if name == "" {
+			return nil, nil, errors.Errorf("base name (%s) should not be blank", st.BaseName)
+		}
 		st.BaseName = name
 
 		ds := &dispatchState{
