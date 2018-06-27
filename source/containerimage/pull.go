@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"runtime"
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/diff"
 	"github.com/containerd/containerd/images"
+	"github.com/containerd/containerd/platforms"
 	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/session"
@@ -19,7 +19,7 @@ import (
 	"github.com/moby/buildkit/util/pull"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/identity"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
 
@@ -52,13 +52,13 @@ func (is *imageSource) ID() string {
 	return source.DockerImageScheme
 }
 
-func (is *imageSource) ResolveImageConfig(ctx context.Context, ref string) (digest.Digest, []byte, error) {
+func (is *imageSource) ResolveImageConfig(ctx context.Context, ref string, platform *specs.Platform) (digest.Digest, []byte, error) {
 	type t struct {
 		dgst digest.Digest
 		dt   []byte
 	}
 	res, err := is.g.Do(ctx, ref, func(ctx context.Context) (interface{}, error) {
-		dgst, dt, err := imageutil.Config(ctx, ref, pull.NewResolver(ctx, is.SessionManager, is.ImageStore), is.ContentStore, "")
+		dgst, dt, err := imageutil.Config(ctx, ref, pull.NewResolver(ctx, is.SessionManager, is.ImageStore), is.ContentStore, platform)
 		if err != nil {
 			return nil, err
 		}
@@ -77,34 +77,44 @@ func (is *imageSource) Resolve(ctx context.Context, id source.Identifier) (sourc
 		return nil, errors.Errorf("invalid image identifier %v", id)
 	}
 
+	platform := platforms.DefaultSpec()
+	if imageIdentifier.Platform != nil {
+		platform = *imageIdentifier.Platform
+	}
+
 	pullerUtil := &pull.Puller{
 		Snapshotter:  is.Snapshotter,
 		ContentStore: is.ContentStore,
 		Applier:      is.Applier,
 		Src:          imageIdentifier.Reference,
 		Resolver:     pull.NewResolver(ctx, is.SessionManager, is.ImageStore),
+		Platform:     &platform,
 	}
 	p := &puller{
 		CacheAccessor: is.CacheAccessor,
 		Puller:        pullerUtil,
+		Platform:      platform,
 	}
 	return p, nil
 }
 
 type puller struct {
 	CacheAccessor cache.Accessor
+	Platform      specs.Platform
 	*pull.Puller
 }
 
-func mainManifestKey(ctx context.Context, desc ocispec.Descriptor) (digest.Digest, error) {
+func mainManifestKey(ctx context.Context, desc specs.Descriptor, platform specs.Platform) (digest.Digest, error) {
 	dt, err := json.Marshal(struct {
-		Digest digest.Digest
-		OS     string
-		Arch   string
+		Digest  digest.Digest
+		OS      string
+		Arch    string
+		Variant string `json:",omitempty"`
 	}{
-		Digest: desc.Digest,
-		OS:     runtime.GOOS,
-		Arch:   runtime.GOARCH,
+		Digest:  desc.Digest,
+		OS:      platform.OS,
+		Arch:    platform.Architecture,
+		Variant: platform.Variant,
 	})
 	if err != nil {
 		return "", err
@@ -118,7 +128,7 @@ func (p *puller) CacheKey(ctx context.Context, index int) (string, bool, error) 
 		return "", false, err
 	}
 	if index == 0 || desc.Digest == "" {
-		k, err := mainManifestKey(ctx, desc)
+		k, err := mainManifestKey(ctx, desc, p.Platform)
 		if err != nil {
 			return "", false, err
 		}
@@ -132,10 +142,10 @@ func (p *puller) CacheKey(ctx context.Context, index int) (string, bool, error) 
 	if err != nil {
 		return "", false, nil
 	}
-	_, dt, err := imageutil.Config(ctx, ref.String(), p.Resolver, p.ContentStore, "")
+	_, dt, err := imageutil.Config(ctx, ref.String(), p.Resolver, p.ContentStore, nil) // TODO
 	if err != nil {
 		// this happens on schema1 images
-		k, err := mainManifestKey(ctx, desc)
+		k, err := mainManifestKey(ctx, desc, p.Platform)
 		if err != nil {
 			return "", false, err
 		}
@@ -158,7 +168,7 @@ func (p *puller) Snapshot(ctx context.Context) (cache.ImmutableRef, error) {
 // cacheKeyFromConfig returns a stable digest from image config. If image config
 // is a known oci image we will use chainID of layers.
 func cacheKeyFromConfig(dt []byte) digest.Digest {
-	var img ocispec.Image
+	var img specs.Image
 	err := json.Unmarshal(dt, &img)
 	if err != nil {
 		return digest.FromBytes(dt)
