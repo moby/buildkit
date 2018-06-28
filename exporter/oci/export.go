@@ -2,6 +2,7 @@ package oci
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/containerd/containerd/images"
@@ -26,6 +27,7 @@ const (
 	keyImageName        = "name"
 	VariantOCI          = "oci"
 	VariantDocker       = "docker"
+	ociTypes            = "oci-mediatypes"
 )
 
 type Opt struct {
@@ -57,6 +59,7 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 		return nil, err
 	}
 
+	var ot *bool
 	i := &imageExporterInstance{imageExporter: e, caller: caller}
 	for k, v := range opt {
 		switch k {
@@ -68,18 +71,35 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 				return nil, errors.Wrapf(err, "failed to parse %s", v)
 			}
 			i.name = reference.TagNameOnly(parsed).String()
+		case ociTypes:
+			ot = new(bool)
+			if v == "" {
+				*ot = true
+				continue
+			}
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
+			}
+			*ot = b
 		default:
 			logrus.Warnf("oci exporter: unknown option %s", k)
 		}
+	}
+	if ot == nil {
+		i.ociTypes = e.opt.Variant == VariantOCI
+	} else {
+		i.ociTypes = *ot
 	}
 	return i, nil
 }
 
 type imageExporterInstance struct {
 	*imageExporter
-	config []byte
-	caller session.Caller
-	name   string
+	config   []byte
+	caller   session.Caller
+	name     string
+	ociTypes bool
 }
 
 func (e *imageExporterInstance) Name() string {
@@ -90,7 +110,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, ref cache.ImmutableR
 	if config, ok := opt[exporterImageConfig]; ok {
 		e.config = config
 	}
-	desc, err := e.opt.ImageWriter.Commit(ctx, ref, e.config)
+	desc, err := e.opt.ImageWriter.Commit(ctx, ref, e.config, e.ociTypes)
 	if err != nil {
 		return nil, err
 	}

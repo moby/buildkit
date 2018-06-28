@@ -10,14 +10,14 @@ import (
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/diff"
-	"github.com/docker/distribution"
-	"github.com/docker/distribution/manifest/schema2"
+	"github.com/containerd/containerd/images"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/blobs"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/system"
 	digest "github.com/opencontainers/go-digest"
+	specs "github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -41,7 +41,7 @@ type ImageWriter struct {
 	opt WriterOpt
 }
 
-func (ic *ImageWriter) Commit(ctx context.Context, ref cache.ImmutableRef, config []byte) (*ocispec.Descriptor, error) {
+func (ic *ImageWriter) Commit(ctx context.Context, ref cache.ImmutableRef, config []byte, oci bool) (*ocispec.Descriptor, error) {
 	layersDone := oneOffProgress(ctx, "exporting layers")
 	diffPairs, err := blobs.GetDiffPairs(ctx, ic.opt.ContentStore, ic.opt.Snapshotter, ic.opt.Differ, ref, true)
 	if err != nil {
@@ -68,17 +68,39 @@ func (ic *ImageWriter) Commit(ctx context.Context, ref cache.ImmutableRef, confi
 		return nil, err
 	}
 
-	configDigest := digest.FromBytes(config)
+	var (
+		configDigest = digest.FromBytes(config)
+		manifestType = ocispec.MediaTypeImageManifest
+		configType   = ocispec.MediaTypeImageConfig
+		layerType    = ocispec.MediaTypeImageLayerGzip
+	)
 
-	mfst := schema2.Manifest{
-		Config: distribution.Descriptor{
-			Digest:    configDigest,
-			Size:      int64(len(config)),
-			MediaType: schema2.MediaTypeImageConfig,
+	// Use docker media types for older Docker versions and registries
+	if !oci {
+		manifestType = images.MediaTypeDockerSchema2Manifest
+		configType = images.MediaTypeDockerSchema2Config
+		layerType = images.MediaTypeDockerSchema2LayerGzip
+	}
+
+	mfst := struct {
+		// MediaType is reserved in the OCI spec but
+		// excluded from go types.
+		MediaType string `json:"mediaType,omitempty"`
+
+		ocispec.Manifest
+	}{
+		MediaType: manifestType,
+		Manifest: ocispec.Manifest{
+			Versioned: specs.Versioned{
+				SchemaVersion: 2,
+			},
+			Config: ocispec.Descriptor{
+				Digest:    configDigest,
+				Size:      int64(len(config)),
+				MediaType: configType,
+			},
 		},
 	}
-	mfst.SchemaVersion = 2
-	mfst.MediaType = schema2.MediaTypeManifest
 
 	labels := map[string]string{
 		"containerd.io/gc.ref.content.0": configDigest.String(),
@@ -89,15 +111,15 @@ func (ic *ImageWriter) Commit(ctx context.Context, ref cache.ImmutableRef, confi
 		if err != nil {
 			return nil, errors.Wrapf(err, "could not find blob %s from contentstore", dp.Blobsum)
 		}
-		mfst.Layers = append(mfst.Layers, distribution.Descriptor{
+		mfst.Layers = append(mfst.Layers, ocispec.Descriptor{
 			Digest:    dp.Blobsum,
 			Size:      info.Size,
-			MediaType: schema2.MediaTypeLayer,
+			MediaType: layerType,
 		})
 		labels[fmt.Sprintf("containerd.io/gc.ref.content.%d", i+1)] = dp.Blobsum.String()
 	}
 
-	mfstJSON, err := json.Marshal(mfst)
+	mfstJSON, err := json.MarshalIndent(mfst, "", "   ")
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to marshal manifest")
 	}
@@ -115,8 +137,9 @@ func (ic *ImageWriter) Commit(ctx context.Context, ref cache.ImmutableRef, confi
 	mfstDone(nil)
 
 	configDesc := ocispec.Descriptor{
-		Digest: configDigest,
-		Size:   int64(len(config)),
+		Digest:    configDigest,
+		Size:      int64(len(config)),
+		MediaType: configType,
 	}
 	configDone := oneOffProgress(ctx, "exporting config "+configDigest.String())
 
@@ -133,7 +156,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, ref cache.ImmutableRef, confi
 	return &ocispec.Descriptor{
 		Digest:    mfstDigest,
 		Size:      int64(len(mfstJSON)),
-		MediaType: ocispec.MediaTypeImageManifest,
+		MediaType: manifestType,
 	}, nil
 }
 

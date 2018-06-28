@@ -22,7 +22,6 @@ import (
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/continuity/fs/fstest"
-	"github.com/docker/distribution/manifest/schema2"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/util/testutil/httpserver"
@@ -612,11 +611,15 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	dt, err = content.ReadBlob(ctx, img.ContentStore(), img.Target())
 	require.NoError(t, err)
 
-	var mfst schema2.Manifest
+	var mfst = struct {
+		MediaType string `json:"mediaType,omitempty"`
+		ocispec.Manifest
+	}{}
+
 	err = json.Unmarshal(dt, &mfst)
 	require.NoError(t, err)
 
-	require.Equal(t, schema2.MediaTypeManifest, mfst.MediaType)
+	require.Equal(t, images.MediaTypeDockerSchema2Manifest, mfst.MediaType)
 	require.Equal(t, 2, len(mfst.Layers))
 
 	dt, err = content.ReadBlob(ctx, img.ContentStore(), ocispec.Descriptor{Digest: mfst.Layers[0].Digest})
