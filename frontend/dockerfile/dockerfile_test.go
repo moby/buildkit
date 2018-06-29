@@ -1121,6 +1121,55 @@ func testUser(t *testing.T, sb integration.Sandbox) {
 FROM busybox AS base
 RUN mkdir -m 0777 /out
 RUN id -un > /out/rootuser
+
+# Make sure our defaults work
+RUN [ "$(id -u):$(id -g)/$(id -un):$(id -gn)" = '0:0/root:root' ]
+
+# TODO decide if "args.user = strconv.Itoa(syscall.Getuid())" is acceptable behavior for changeUser in sysvinit instead of "return nil" when "USER" isn't specified (so that we get the proper group list even if that is the empty list, even in the default case of not supplying an explicit USER to run as, which implies USER 0)
+USER root
+RUN [ "$(id -G):$(id -Gn)" = '0 10:root wheel' ]
+
+# Setup dockerio user and group
+RUN echo 'dockerio:x:1001:1001::/bin:/bin/false' >> /etc/passwd && \
+	echo 'dockerio:x:1001:' >> /etc/group
+
+# Make sure we can switch to our user and all the information is exactly as we expect it to be
+USER dockerio
+RUN [ "$(id -u):$(id -g)/$(id -un):$(id -gn)/$(id -G):$(id -Gn)" = '1001:1001/dockerio:dockerio/1001:dockerio' ]
+
+# Switch back to root and double check that worked exactly as we might expect it to
+USER root
+RUN [ "$(id -u):$(id -g)/$(id -un):$(id -gn)/$(id -G):$(id -Gn)" = '0:0/root:root/0 10:root wheel' ] && \
+        # Add a "supplementary" group for our dockerio user
+	echo 'supplementary:x:1002:dockerio' >> /etc/group
+
+# ... and then go verify that we get it like we expect
+USER dockerio
+RUN [ "$(id -u):$(id -g)/$(id -un):$(id -gn)/$(id -G):$(id -Gn)" = '1001:1001/dockerio:dockerio/1001 1002:dockerio supplementary' ]
+USER 1001
+RUN [ "$(id -u):$(id -g)/$(id -un):$(id -gn)/$(id -G):$(id -Gn)" = '1001:1001/dockerio:dockerio/1001 1002:dockerio supplementary' ]
+
+# super test the new "user:group" syntax
+USER dockerio:dockerio
+RUN [ "$(id -u):$(id -g)/$(id -un):$(id -gn)/$(id -G):$(id -Gn)" = '1001:1001/dockerio:dockerio/1001:dockerio' ]
+USER 1001:dockerio
+RUN [ "$(id -u):$(id -g)/$(id -un):$(id -gn)/$(id -G):$(id -Gn)" = '1001:1001/dockerio:dockerio/1001:dockerio' ]
+USER dockerio:1001
+RUN [ "$(id -u):$(id -g)/$(id -un):$(id -gn)/$(id -G):$(id -Gn)" = '1001:1001/dockerio:dockerio/1001:dockerio' ]
+USER 1001:1001
+RUN [ "$(id -u):$(id -g)/$(id -un):$(id -gn)/$(id -G):$(id -Gn)" = '1001:1001/dockerio:dockerio/1001:dockerio' ]
+USER dockerio:supplementary
+RUN [ "$(id -u):$(id -g)/$(id -un):$(id -gn)/$(id -G):$(id -Gn)" = '1001:1002/dockerio:supplementary/1002:supplementary' ]
+USER dockerio:1002
+RUN [ "$(id -u):$(id -g)/$(id -un):$(id -gn)/$(id -G):$(id -Gn)" = '1001:1002/dockerio:supplementary/1002:supplementary' ]
+USER 1001:supplementary
+RUN [ "$(id -u):$(id -g)/$(id -un):$(id -gn)/$(id -G):$(id -Gn)" = '1001:1002/dockerio:supplementary/1002:supplementary' ]
+USER 1001:1002
+RUN [ "$(id -u):$(id -g)/$(id -un):$(id -gn)/$(id -G):$(id -Gn)" = '1001:1002/dockerio:supplementary/1002:supplementary' ]
+
+# make sure unknown uid/gid still works properly
+USER 1042:1043
+RUN [ "$(id -u):$(id -g)/$(id -un):$(id -gn)/$(id -G):$(id -Gn)" = '1042:1043/1042:1043/1043:1043' ]
 USER daemon
 RUN id -un > /out/daemonuser
 FROM scratch
