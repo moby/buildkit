@@ -81,10 +81,8 @@ COPY --from=buildctl /usr/bin/buildctl /usr/bin/
 COPY --from=buildkitd /usr/bin/buildkitd /usr/bin
 COPY --from=registry /bin/registry /usr/bin
 
-FROM gobuild-base AS cross-windows
+FROM buildkit-base AS cross-windows
 ENV GOOS=windows
-WORKDIR /go/src/github.com/moby/buildkit
-COPY . .
 
 FROM cross-windows AS buildctl.exe
 RUN go build -ldflags "$(cat .tmp/ldflags)" -o /buildctl.exe ./cmd/buildctl
