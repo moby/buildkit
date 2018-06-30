@@ -5,6 +5,7 @@ import (
 	"io"
 
 	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/pb"
@@ -27,4 +28,8 @@ type SolveRequest struct {
 	Frontend        string
 	FrontendOpt     map[string]string
 	ImportCacheRefs []string // TODO: map[string]string for supporting non-registry ref?
+}
+
+type WorkerInfos interface {
+	WorkerInfos() []client.WorkerInfo
 }

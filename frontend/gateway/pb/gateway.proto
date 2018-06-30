@@ -4,7 +4,7 @@ package moby.buildkit.v1.frontend;
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 import "github.com/moby/buildkit/solver/pb/ops.proto";
-import "github.com/moby/buildkit/api/services/control/control.proto";
+import "github.com/moby/buildkit/api/types/worker.proto";
 import "github.com/moby/buildkit/util/apicaps/pb/caps.proto";
 
 option (gogoproto.sizer_all) = true;
@@ -67,5 +67,5 @@ message PingRequest{
 message PongResponse{
 	repeated moby.buildkit.v1.apicaps.APICap FrontendAPICaps = 1 [(gogoproto.nullable) = false];
 	repeated moby.buildkit.v1.apicaps.APICap LLBCaps = 2 [(gogoproto.nullable) = false];
-	repeated moby.buildkit.v1.WorkerRecord Workers = 3;
+	repeated moby.buildkit.v1.types.WorkerRecord Workers = 3;
 }

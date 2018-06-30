@@ -5,6 +5,7 @@ import (
 
 	"github.com/docker/distribution/reference"
 	controlapi "github.com/moby/buildkit/api/services/control"
+	apitypes "github.com/moby/buildkit/api/types"
 	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/exporter"
@@ -15,7 +16,6 @@ import (
 	"github.com/moby/buildkit/solver/llbsolver"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/worker"
-	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
@@ -275,10 +275,10 @@ func (c *Controller) ListWorkers(ctx context.Context, r *controlapi.ListWorkersR
 		return nil, err
 	}
 	for _, w := range workers {
-		resp.Record = append(resp.Record, &controlapi.WorkerRecord{
+		resp.Record = append(resp.Record, &apitypes.WorkerRecord{
 			ID:        w.ID(),
 			Labels:    w.Labels(),
-			Platforms: toPBPlatforms(w.Platforms()),
+			Platforms: pb.PlatformsFromSpec(w.Platforms()),
 		})
 	}
 	return resp, nil
@@ -301,18 +301,4 @@ func parseCacheExporterOpt(opt map[string]string) solver.CacheExportMode {
 		}
 	}
 	return solver.CacheExportModeMin
-}
-
-func toPBPlatforms(p []specs.Platform) []pb.Platform {
-	out := make([]pb.Platform, 0, len(p))
-	for _, pp := range p {
-		out = append(out, pb.Platform{
-			OS:           pp.OS,
-			Architecture: pp.Architecture,
-			Variant:      pp.Variant,
-			OSVersion:    pp.OSVersion,
-			OSFeatures:   pp.OSFeatures,
-		})
-	}
-	return out
 }
