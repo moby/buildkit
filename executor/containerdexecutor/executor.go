@@ -55,14 +55,15 @@ func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root c
 	}
 	defer mountable.Release()
 
-	uid, gid, err := oci.ParseUser(meta.User)
+	var sgids []uint32
+	uid, gid, err := oci.ParseUIDGID(meta.User)
 	if err != nil {
 		lm := snapshot.LocalMounterWithMounts(rootMounts)
 		rootfsPath, err := lm.Mount()
 		if err != nil {
 			return err
 		}
-		uid, gid, err = oci.GetUser(ctx, rootfsPath, meta.User)
+		uid, gid, sgids, err = oci.GetUser(ctx, rootfsPath, meta.User)
 		if err != nil {
 			lm.Unmount()
 			return err
@@ -70,7 +71,7 @@ func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root c
 		lm.Unmount()
 	}
 
-	opts := []containerdoci.SpecOpts{containerdoci.WithUIDGID(uid, gid)}
+	opts := []containerdoci.SpecOpts{oci.WithUIDGID(uid, gid, sgids)}
 	if meta.ReadonlyRootFS {
 		opts = append(opts, containerdoci.WithRootFSReadonly())
 	}
