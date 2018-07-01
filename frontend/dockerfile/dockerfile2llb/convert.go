@@ -152,7 +152,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 	for _, d := range allDispatchStates.states {
 		d.commands = make([]command, len(d.stage.Commands))
 		for i, cmd := range d.stage.Commands {
-			newCmd, err := toCommand(cmd, allDispatchStates.statesByName, allDispatchStates.states)
+			newCmd, err := toCommand(cmd, allDispatchStates)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -325,14 +325,14 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 	return &st, &target.image, nil
 }
 
-func toCommand(ic instructions.Command, dispatchStatesByName map[string]*dispatchState, allDispatchStates []*dispatchState) (command, error) {
+func toCommand(ic instructions.Command, allDispatchStates *dispatchStates) (command, error) {
 	cmd := command{Command: ic}
 	if c, ok := ic.(*instructions.CopyCommand); ok {
 		if c.From != "" {
 			var stn *dispatchState
 			index, err := strconv.Atoi(c.From)
 			if err != nil {
-				stn, ok = dispatchStatesByName[strings.ToLower(c.From)]
+				stn, ok = allDispatchStates.findStateByName(c.From)
 				if !ok {
 					stn = &dispatchState{
 						stage:        instructions.Stage{BaseName: c.From},
@@ -341,16 +341,16 @@ func toCommand(ic instructions.Command, dispatchStatesByName map[string]*dispatc
 					}
 				}
 			} else {
-				if index < 0 || index >= len(allDispatchStates) {
-					return command{}, errors.Errorf("invalid stage index %d", index)
+				stn, err = allDispatchStates.findStateByIndex(index)
+				if err != nil {
+					return command{}, err
 				}
-				stn = allDispatchStates[index]
 			}
 			cmd.sources = []*dispatchState{stn}
 		}
 	}
 
-	if ok := detectRunMount(&cmd, dispatchStatesByName, allDispatchStates); ok {
+	if ok := detectRunMount(&cmd, allDispatchStates); ok {
 		return cmd, nil
 	}
 
@@ -505,7 +505,7 @@ func dispatchOnBuild(d *dispatchState, triggers []string, opt dispatchOpt) error
 		if err != nil {
 			return err
 		}
-		cmd, err := toCommand(ic, opt.allDispatchStates.statesByName, opt.allDispatchStates.states)
+		cmd, err := toCommand(ic, opt.allDispatchStates)
 		if err != nil {
 			return err
 		}
