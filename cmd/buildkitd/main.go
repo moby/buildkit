@@ -31,6 +31,7 @@ import (
 	"github.com/moby/buildkit/version"
 	"github.com/moby/buildkit/worker"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/opencontainers/runc/libcontainer/system"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -74,14 +75,19 @@ func main() {
 	defaultRoot := appdefaults.Root
 	defaultAddress := appdefaults.Address
 	rootlessUsage := "set all the default options to be compatible with rootless containers"
-	if runningAsUnprivilegedUser() {
+	if system.RunningInUserNS() {
 		app.Flags = append(app.Flags, cli.BoolTFlag{
 			Name:  "rootless",
 			Usage: rootlessUsage + " (default: true)",
 		})
-		defaultRoot = appdefaults.UserRoot()
-		defaultAddress = appdefaults.UserAddress()
-		appdefaults.EnsureUserAddressDir()
+		// if buildkitd is being executed as the mapped-root (not only EUID==0 but also $USER==root)
+		// in a user namespace, we need to enable the rootless mode but
+		// we don't want to honor $HOME for setting up default paths.
+		if u := os.Getenv("USER"); u != "" && u != "root" {
+			defaultRoot = appdefaults.UserRoot()
+			defaultAddress = appdefaults.UserAddress()
+			appdefaults.EnsureUserAddressDir()
+		}
 	} else {
 		app.Flags = append(app.Flags, cli.BoolFlag{
 			Name:  "rootless",
