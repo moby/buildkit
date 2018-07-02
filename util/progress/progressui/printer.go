@@ -11,13 +11,25 @@ import (
 
 const antiFlicker = 5 * time.Second
 const maxDelay = 10 * time.Second
+const minTimeDelta = 5 * time.Second
+const minProgressDelta = 0.05 // %
+
+type lastStatus struct {
+	Current   int64
+	Timestamp time.Time
+}
 
 type textMux struct {
 	w       io.Writer
 	current digest.Digest
+	last    map[string]lastStatus
 }
 
 func (p *textMux) printVtx(t *trace, dgst digest.Digest) {
+	if p.last == nil {
+		p.last = make(map[string]lastStatus)
+	}
+
 	v, ok := t.byDigest[dgst]
 	if !ok {
 		return
@@ -47,6 +59,28 @@ func (p *textMux) printVtx(t *trace, dgst digest.Digest) {
 
 	for _, s := range v.statuses {
 		if _, ok := v.statusUpdates[s.ID]; ok {
+			doPrint := true
+
+			if last, ok := p.last[s.ID]; ok && s.Completed == nil {
+				var progressDelta float64
+				if s.Total > 0 {
+					progressDelta = float64(s.Current-last.Current) / float64(s.Total)
+				}
+				timeDelta := s.Timestamp.Sub(last.Timestamp)
+				if progressDelta < minProgressDelta && timeDelta < minTimeDelta {
+					doPrint = false
+				}
+			}
+
+			if !doPrint {
+				continue
+			}
+
+			p.last[s.ID] = lastStatus{
+				Timestamp: s.Timestamp,
+				Current:   s.Current,
+			}
+
 			var bytes string
 			if s.Total != 0 {
 				bytes = fmt.Sprintf(" %.2f / %.2f", units.Bytes(s.Current), units.Bytes(s.Total))
