@@ -109,6 +109,7 @@ func runBuildkitd(args []string, logs map[string]*bytes.Buffer) (address string,
 
 	args = append(args, "--root", tmpdir, "--addr", address, "--debug")
 	cmd := exec.Command(args[0], args[1:]...)
+	cmd.Env = append(os.Environ(), "BUILDKIT_DEBUG_EXEC_OUTPUT=1")
 
 	if stop, err := startCmd(cmd, logs); err != nil {
 		return "", nil, err
