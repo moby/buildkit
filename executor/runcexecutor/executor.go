@@ -170,9 +170,7 @@ func (w *runcExecutor) Exec(ctx context.Context, meta executor.Meta, root cache.
 	}
 
 	if w.rootless {
-		specconv.ToRootless(spec, &specconv.RootlessOpts{
-			MapSubUIDGID: true,
-		})
+		specconv.ToRootless(spec, nil)
 		// TODO(AkihiroSuda): keep Cgroups enabled if /sys/fs/cgroup/cpuset/buildkit exists and writable
 		spec.Linux.CgroupsPath = ""
 		// TODO(AkihiroSuda): ToRootless removes netns, but we should readd netns here

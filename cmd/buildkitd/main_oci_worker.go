@@ -13,6 +13,7 @@ import (
 	"github.com/moby/buildkit/worker/base"
 	"github.com/moby/buildkit/worker/runc"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/opencontainers/runc/libcontainer/system"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -41,7 +42,7 @@ func init() {
 	}
 	n := "oci-worker-rootless"
 	u := "enable rootless mode"
-	if runningAsUnprivilegedUser() {
+	if system.RunningInUserNS() {
 		flags = append(flags, cli.BoolTFlag{
 			Name:  n,
 			Usage: u,
