@@ -91,8 +91,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		metaResolver = imagemetaresolver.Default()
 	}
 
-	var allDispatchStates []*dispatchState
-	dispatchStatesByName := map[string]*dispatchState{}
+	allDispatchStates := newDispatchStates()
 
 	// set base state for every image
 	for _, st := range stages {
@@ -124,13 +123,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 			ds.platform = &p
 		}
 
-		if d, ok := dispatchStatesByName[st.BaseName]; ok {
-			ds.base = d
-		}
-		allDispatchStates = append(allDispatchStates, ds)
-		if st.Name != "" {
-			dispatchStatesByName[strings.ToLower(st.Name)] = ds
-		}
+		allDispatchStates.addState(ds)
 		if opt.IgnoreCache != nil {
 			if len(opt.IgnoreCache) == 0 {
 				ds.ignoreCache = true
@@ -146,20 +139,20 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 
 	var target *dispatchState
 	if opt.Target == "" {
-		target = allDispatchStates[len(allDispatchStates)-1]
+		target = allDispatchStates.lastTarget()
 	} else {
 		var ok bool
-		target, ok = dispatchStatesByName[strings.ToLower(opt.Target)]
+		target, ok = allDispatchStates.findStateByName(opt.Target)
 		if !ok {
 			return nil, nil, errors.Errorf("target stage %s could not be found", opt.Target)
 		}
 	}
 
 	// fill dependencies to stages so unreachable ones can avoid loading image configs
-	for _, d := range allDispatchStates {
+	for _, d := range allDispatchStates.states {
 		d.commands = make([]command, len(d.stage.Commands))
 		for i, cmd := range d.stage.Commands {
-			newCmd, err := toCommand(cmd, dispatchStatesByName, allDispatchStates)
+			newCmd, err := toCommand(cmd, allDispatchStates)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -168,7 +161,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 				if src != nil {
 					d.deps[src] = struct{}{}
 					if src.unregistered {
-						allDispatchStates = append(allDispatchStates, src)
+						allDispatchStates.addState(src)
 					}
 				}
 			}
@@ -176,7 +169,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 	}
 
 	eg, ctx := errgroup.WithContext(ctx)
-	for i, d := range allDispatchStates {
+	for i, d := range allDispatchStates.states {
 		reachable := isReachable(target, d)
 		// resolve image config for every stage
 		if d.base == nil {
@@ -242,7 +235,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 	buildContext := &mutableOutput{}
 	ctxPaths := map[string]struct{}{}
 
-	for _, d := range allDispatchStates {
+	for _, d := range allDispatchStates.states {
 		if !isReachable(target, d) {
 			continue
 		}
@@ -274,17 +267,16 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		}
 
 		opt := dispatchOpt{
-			allDispatchStates:    allDispatchStates,
-			dispatchStatesByName: dispatchStatesByName,
-			metaArgs:             metaArgs,
-			buildArgValues:       opt.BuildArgs,
-			shlex:                shlex,
-			sessionID:            opt.SessionID,
-			buildContext:         llb.NewState(buildContext),
-			proxyEnv:             proxyEnv,
-			cacheIDNamespace:     opt.CacheIDNamespace,
-			buildPlatforms:       opt.BuildPlatforms,
-			targetPlatform:       *opt.TargetPlatform,
+			allDispatchStates: allDispatchStates,
+			metaArgs:          metaArgs,
+			buildArgValues:    opt.BuildArgs,
+			shlex:             shlex,
+			sessionID:         opt.SessionID,
+			buildContext:      llb.NewState(buildContext),
+			proxyEnv:          proxyEnv,
+			cacheIDNamespace:  opt.CacheIDNamespace,
+			buildPlatforms:    opt.BuildPlatforms,
+			targetPlatform:    *opt.TargetPlatform,
 		}
 
 		if err = dispatchOnBuild(d, d.image.Config.OnBuild, opt); err != nil {
@@ -333,14 +325,14 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 	return &st, &target.image, nil
 }
 
-func toCommand(ic instructions.Command, dispatchStatesByName map[string]*dispatchState, allDispatchStates []*dispatchState) (command, error) {
+func toCommand(ic instructions.Command, allDispatchStates *dispatchStates) (command, error) {
 	cmd := command{Command: ic}
 	if c, ok := ic.(*instructions.CopyCommand); ok {
 		if c.From != "" {
 			var stn *dispatchState
 			index, err := strconv.Atoi(c.From)
 			if err != nil {
-				stn, ok = dispatchStatesByName[strings.ToLower(c.From)]
+				stn, ok = allDispatchStates.findStateByName(c.From)
 				if !ok {
 					stn = &dispatchState{
 						stage:        instructions.Stage{BaseName: c.From},
@@ -349,16 +341,16 @@ func toCommand(ic instructions.Command, dispatchStatesByName map[string]*dispatc
 					}
 				}
 			} else {
-				if index < 0 || index >= len(allDispatchStates) {
-					return command{}, errors.Errorf("invalid stage index %d", index)
+				stn, err = allDispatchStates.findStateByIndex(index)
+				if err != nil {
+					return command{}, err
 				}
-				stn = allDispatchStates[index]
 			}
 			cmd.sources = []*dispatchState{stn}
 		}
 	}
 
-	if ok := detectRunMount(&cmd, dispatchStatesByName, allDispatchStates); ok {
+	if ok := detectRunMount(&cmd, allDispatchStates); ok {
 		return cmd, nil
 	}
 
@@ -366,17 +358,16 @@ func toCommand(ic instructions.Command, dispatchStatesByName map[string]*dispatc
 }
 
 type dispatchOpt struct {
-	allDispatchStates    []*dispatchState
-	dispatchStatesByName map[string]*dispatchState
-	metaArgs             []instructions.ArgCommand
-	buildArgValues       map[string]string
-	shlex                *shell.Lex
-	sessionID            string
-	buildContext         llb.State
-	proxyEnv             *llb.ProxyEnv
-	cacheIDNamespace     string
-	targetPlatform       specs.Platform
-	buildPlatforms       []specs.Platform
+	allDispatchStates *dispatchStates
+	metaArgs          []instructions.ArgCommand
+	buildArgValues    map[string]string
+	shlex             *shell.Lex
+	sessionID         string
+	buildContext      llb.State
+	proxyEnv          *llb.ProxyEnv
+	cacheIDNamespace  string
+	targetPlatform    specs.Platform
+	buildPlatforms    []specs.Platform
 }
 
 func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
@@ -459,6 +450,43 @@ type dispatchState struct {
 	unregistered bool
 }
 
+type dispatchStates struct {
+	states       []*dispatchState
+	statesByName map[string]*dispatchState
+}
+
+func newDispatchStates() *dispatchStates {
+	return &dispatchStates{statesByName: map[string]*dispatchState{}}
+}
+
+func (dss *dispatchStates) addState(ds *dispatchState) {
+	dss.states = append(dss.states, ds)
+
+	if d, ok := dss.statesByName[ds.stage.BaseName]; ok {
+		ds.base = d
+	}
+	if ds.stage.Name != "" {
+		dss.statesByName[strings.ToLower(ds.stage.Name)] = ds
+	}
+}
+
+func (dss *dispatchStates) findStateByName(name string) (*dispatchState, bool) {
+	ds, ok := dss.statesByName[strings.ToLower(name)]
+	return ds, ok
+}
+
+func (dss *dispatchStates) findStateByIndex(index int) (*dispatchState, error) {
+	if index < 0 || index >= len(dss.states) {
+		return nil, errors.Errorf("invalid stage index %d", index)
+	}
+
+	return dss.states[index], nil
+}
+
+func (dss *dispatchStates) lastTarget() *dispatchState {
+	return dss.states[len(dss.states)-1]
+}
+
 type command struct {
 	instructions.Command
 	sources []*dispatchState
@@ -477,7 +505,7 @@ func dispatchOnBuild(d *dispatchState, triggers []string, opt dispatchOpt) error
 		if err != nil {
 			return err
 		}
-		cmd, err := toCommand(ic, opt.dispatchStatesByName, opt.allDispatchStates)
+		cmd, err := toCommand(ic, opt.allDispatchStates)
 		if err != nil {
 			return err
 		}
