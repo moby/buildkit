@@ -86,7 +86,7 @@ func writeDot(ops []llbOp, w io.Writer) {
 	defer fmt.Fprintln(w, "}")
 	for _, op := range ops {
 		name, shape := attr(op.Digest, op.Op)
-		fmt.Fprintf(w, "  \"%s\" [label=\"%s\" shape=\"%s\"];\n", op.Digest, name, shape)
+		fmt.Fprintf(w, "  %q [label=%q shape=%q];\n", op.Digest, name, shape)
 	}
 	for _, op := range ops {
 		for i, inp := range op.Op.Inputs {
@@ -98,7 +98,7 @@ func writeDot(ops []llbOp, w io.Writer) {
 					}
 				}
 			}
-			fmt.Fprintf(w, "  \"%s\" -> \"%s\" [label=\"%s\"];\n", inp.Digest, op.Digest, label)
+			fmt.Fprintf(w, "  %q -> %q [label=%q];\n", inp.Digest, op.Digest, label)
 		}
 	}
 }
