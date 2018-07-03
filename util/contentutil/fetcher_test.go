@@ -23,7 +23,7 @@ func TestFetcher(t *testing.T) {
 	require.NoError(t, err)
 
 	f := &localFetcher{b0}
-	p := FromFetcher(f, ocispec.Descriptor{Digest: digest.FromBytes([]byte("foobar")), Size: -1})
+	p := FromFetcher(f)
 
 	b1 := NewBuffer()
 	err = Copy(ctx, b1, p, ocispec.Descriptor{Digest: digest.FromBytes([]byte("foobar")), Size: -1})
@@ -53,7 +53,7 @@ func TestSlowFetch(t *testing.T) {
 	ctx := context.TODO()
 
 	f := &dummySlowFetcher{}
-	p := FromFetcher(f, ocispec.Descriptor{Digest: digest.FromBytes([]byte("foobar")), Size: -1})
+	p := FromFetcher(f)
 
 	rdr, err := p.ReaderAt(ctx, ocispec.Descriptor{Digest: digest.FromBytes([]byte("foobar"))})
 	require.NoError(t, err)
