@@ -601,7 +601,11 @@ func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState l
 
 	for i, src := range c.Sources() {
 		commitMessage.WriteString(" " + src)
-		if isAddCommand && (strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://")) {
+		if strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://") {
+			if !isAddCommand {
+				return errors.New("source can't be a URL for COPY")
+			}
+
 			// Resources from remote URLs are not decompressed.
 			// https://docs.docker.com/engine/reference/builder/#add
 			//

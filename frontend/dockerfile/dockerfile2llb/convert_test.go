@@ -42,6 +42,18 @@ COPY --from=0 f2 /
 	})
 	assert.Error(t, err)
 
+	df = `FROM busybox
+	ADD http://github.com/moby/buildkit/blob/master/README.md /
+		`
+	_, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	assert.NoError(t, err)
+
+	df = `FROM busybox
+	COPY http://github.com/moby/buildkit/blob/master/README.md /
+		`
+	_, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	assert.EqualError(t, err, "source can't be a URL for COPY")
+
 	df = `FROM "" AS foo`
 	_, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
 	assert.Error(t, err)
