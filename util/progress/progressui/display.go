@@ -212,8 +212,9 @@ func (t *trace) update(s *client.SolveStatus) {
 		if !ok {
 			continue // shouldn't happen
 		}
+		i := 0
 		complete := split(l.Data, byte('\n'), func(dt []byte) {
-			if v.logsPartial && len(v.logs) != 0 {
+			if v.logsPartial && len(v.logs) != 0 && i == 0 {
 				v.logs[len(v.logs)-1] = append(v.logs[len(v.logs)-1], dt...)
 			} else {
 				ts := time.Duration(0)
@@ -222,6 +223,7 @@ func (t *trace) update(s *client.SolveStatus) {
 				}
 				v.logs = append(v.logs, []byte(fmt.Sprintf("#%d %s %s", v.index, fmt.Sprintf("%#.4g", ts.Seconds())[:5], dt)))
 			}
+			i++
 		})
 		v.logsPartial = !complete
 		t.updates[v.Digest] = struct{}{}
