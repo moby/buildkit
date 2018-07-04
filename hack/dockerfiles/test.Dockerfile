@@ -5,7 +5,7 @@ ARG CONTAINERD10_VERSION=v1.0.3
 # available targets: buildkitd, buildkitd.oci_only, buildkitd.containerd_only
 ARG BUILDKIT_TARGET=buildkitd
 ARG REGISTRY_VERSION=2.6
-ARG ROOTLESSKIT_VERSION=1e79dc31d71ea8c1a27f15086be2be2b1d99acaa
+ARG ROOTLESSKIT_VERSION=20b0fc24b305b031a61ef1a1ca456aadafaf5e77
 
 # The `buildkitd` stage and the `buildctl` stage are placed here
 # so that they can be built quickly with legacy DAG-unaware `docker build --target=...`
@@ -124,8 +124,8 @@ VOLUME /run/containerd
 ENTRYPOINT ["containerd"]
 
 FROM gobuild-base AS rootlesskit-base
-RUN git clone https://github.com/AkihiroSuda/rootlesskit.git /go/src/github.com/AkihiroSuda/rootlesskit
-WORKDIR /go/src/github.com/AkihiroSuda/rootlesskit
+RUN git clone https://github.com/rootless-containers/rootlesskit.git /go/src/github.com/rootless-containers/rootlesskit
+WORKDIR /go/src/github.com/rootless-containers/rootlesskit
 
 FROM rootlesskit-base as rootlesskit
 ARG ROOTLESSKIT_VERSION
@@ -139,15 +139,13 @@ RUN git checkout -q "$ROOTLESSKIT_VERSION" \
 FROM buildkit-buildkitd AS rootless
 RUN apk add --no-cache shadow shadow-uidmap \
   && useradd --create-home --home-dir /home/user --uid 1000 user \
-  && mkdir -p /home/user/.local/run /home/user/.local/tmp /home/user/.local/share/buildkit \
-  && chown -R user /home/user
+  && mkdir -p /run/user/1000 /home/user/.local/tmp /home/user/.local/share/buildkit \
+  && chown -R user /run/user/1000 /home/user
 COPY --from=rootlesskit /rootlesskit /usr/bin/
 USER user
 ENV HOME /home/user
 ENV USER user
-# WORKAROUND: this should be typically /run/user/1000,
-# but mkdir under /run is not captured when built using BuildKit. (#429)
-ENV XDG_RUNTIME_DIR=/home/user/.local/run
+ENV XDG_RUNTIME_DIR=/run/user/1000
 ENV TMPDIR=/home/user/.local/tmp
 VOLUME /home/user/.local/share/buildkit
 ENTRYPOINT ["rootlesskit", "buildkitd"]
