@@ -3,6 +3,7 @@ package integration
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -12,16 +13,31 @@ import (
 	"time"
 
 	"github.com/google/shlex"
+	"github.com/pkg/errors"
 )
 
 func init() {
 	register(&oci{})
+
+	// the rootless uid is defined in hack/dockerfiles/test.Dockerfile
+	if s := os.Getenv("BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR"); s != "" {
+		var uid, gid int
+		if _, err := fmt.Sscanf(s, "%d:%d", &uid, &gid); err != nil {
+			panic(errors.Errorf("unexpected BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR: %q", s))
+		}
+		register(&oci{uid: uid, gid: gid})
+	}
 }
 
 type oci struct {
+	uid int
+	gid int
 }
 
 func (s *oci) Name() string {
+	if s.uid != 0 {
+		return "oci-rootless"
+	}
 	return "oci"
 }
 
@@ -33,7 +49,15 @@ func (s *oci) New() (Sandbox, func() error, error) {
 		return nil, nil, err
 	}
 	logs := map[string]*bytes.Buffer{}
-	buildkitdSock, stop, err := runBuildkitd([]string{"buildkitd", "--oci-worker=true", "--containerd-worker=false"}, logs)
+	buildkitdArgs := []string{"buildkitd", "--oci-worker=true", "--containerd-worker=false"}
+	if s.uid != 0 {
+		if s.gid == 0 {
+			return nil, nil, errors.Errorf("unsupported id pair: uid=%d, gid=%d", s.uid, s.gid)
+		}
+		// TODO: make sure the user exists and subuid/subgid are configured.
+		buildkitdArgs = append([]string{"sudo", "-u", fmt.Sprintf("#%d", s.uid), "-i", "--", "rootlesskit"}, buildkitdArgs...)
+	}
+	buildkitdSock, stop, err := runBuildkitd(buildkitdArgs, logs, s.uid, s.gid)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -41,13 +65,14 @@ func (s *oci) New() (Sandbox, func() error, error) {
 	deferF := &multiCloser{}
 	deferF.append(stop)
 
-	return &sandbox{address: buildkitdSock, logs: logs, cleanup: deferF}, deferF.F(), nil
+	return &sandbox{address: buildkitdSock, logs: logs, cleanup: deferF, rootless: s.uid != 0}, deferF.F(), nil
 }
 
 type sandbox struct {
-	address string
-	logs    map[string]*bytes.Buffer
-	cleanup *multiCloser
+	address  string
+	logs     map[string]*bytes.Buffer
+	cleanup  *multiCloser
+	rootless bool
 }
 
 func (sb *sandbox) Address() string {
@@ -85,7 +110,11 @@ func (sb *sandbox) Cmd(args ...string) *exec.Cmd {
 	return cmd
 }
 
-func runBuildkitd(args []string, logs map[string]*bytes.Buffer) (address string, cl func() error, err error) {
+func (sb *sandbox) Rootless() bool {
+	return sb.rootless
+}
+
+func runBuildkitd(args []string, logs map[string]*bytes.Buffer, uid, gid int) (address string, cl func() error, err error) {
 	deferF := &multiCloser{}
 	cl = deferF.F()
 
@@ -98,6 +127,9 @@ func runBuildkitd(args []string, logs map[string]*bytes.Buffer) (address string,
 
 	tmpdir, err := ioutil.TempDir("", "bktest_buildkitd")
 	if err != nil {
+		return "", nil, err
+	}
+	if err := os.Chown(tmpdir, uid, gid); err != nil {
 		return "", nil, err
 	}
 	deferF.append(func() error { return os.RemoveAll(tmpdir) })

@@ -96,13 +96,13 @@ state = %q
 	buildkitdSock, stop, err := runBuildkitd([]string{"buildkitd",
 		"--oci-worker=false",
 		"--containerd-worker=true",
-		"--containerd-worker-addr", address}, logs)
+		"--containerd-worker-addr", address}, logs, 0, 0)
 	if err != nil {
 		return nil, nil, err
 	}
 	deferF.append(stop)
 
-	return &cdsandbox{address: address, sandbox: sandbox{address: buildkitdSock, logs: logs, cleanup: deferF}}, cl, nil
+	return &cdsandbox{address: address, sandbox: sandbox{address: buildkitdSock, logs: logs, cleanup: deferF, rootless: false}}, cl, nil
 }
 
 type cdsandbox struct {
