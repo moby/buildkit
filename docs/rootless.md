@@ -2,7 +2,7 @@
 
 Requirements:
 - runc `ecd55a4135e0a26de884ce436442914f945b1e76` (May 30, 2018) or later
-- Some distros such as Debian and Arch Linux require `echo 1 > /proc/sys/kernel/unprivileged_userns_clone`
+- Some distros such as Debian (excluding Ubuntu) and Arch Linux require `echo 1 > /proc/sys/kernel/unprivileged_userns_clone`
 - `newuidmap` and `newgidmap` need to be installed on the host. These commands are provided by the `uidmap` package.
 - `/etc/subuid` and `/etc/subgid` should contain >= 65536 sub-IDs. e.g. `penguin:231072:65536`.
 - To run in a Docker container with non-root `USER`, `docker run --privileged` is still required. See also Jessie's blog: https://blog.jessfraz.com/post/building-container-images-securely-on-kubernetes/
@@ -10,7 +10,7 @@ Requirements:
 
 ## Set up
 
-Setting up rootless mode also requires some bothersome steps as follows, but you can also use [`rootlesskit`](https://github.com/AkihiroSuda/rootlesskit) for automating these steps.
+Setting up rootless mode also requires some bothersome steps as follows, but you can also use [`rootlesskit`](https://github.com/rootless-containers/rootlesskit) for automating these steps.
 
 ### Terminal 1:
 
