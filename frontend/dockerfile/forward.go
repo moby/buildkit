@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/moby/buildkit/cache"
+	clienttypes "github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/session"
@@ -12,8 +13,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-func llbBridgeToGatewayClient(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string) (*bridgeClient, error) {
-	return &bridgeClient{opts: opts, FrontendLLBBridge: llbBridge, sid: session.FromContext(ctx)}, nil
+func llbBridgeToGatewayClient(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string, workerInfos []clienttypes.WorkerInfo) (*bridgeClient, error) {
+	return &bridgeClient{opts: opts, FrontendLLBBridge: llbBridge, sid: session.FromContext(ctx), workerInfos: workerInfos}, nil
 }
 
 type bridgeClient struct {
@@ -23,6 +24,7 @@ type bridgeClient struct {
 	sid          string
 	exporterAttr map[string][]byte
 	refs         []*ref
+	workerInfos  []clienttypes.WorkerInfo
 }
 
 func (c *bridgeClient) Solve(ctx context.Context, req client.SolveRequest, exporterAttr map[string][]byte, final bool) (client.Reference, error) {
@@ -54,6 +56,13 @@ func (c *bridgeClient) Opts() map[string]string {
 }
 func (c *bridgeClient) SessionID() string {
 	return c.sid
+}
+func (c *bridgeClient) WorkerInfos() []client.WorkerInfo {
+	out := make([]client.WorkerInfo, 0, len(c.workerInfos))
+	for _, w := range c.workerInfos {
+		out = append(out, client.WorkerInfo(w))
+	}
+	return out
 }
 
 type ref struct {

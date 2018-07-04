@@ -163,6 +163,12 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 
 	env = append(env, "BUILDKIT_SESSION_ID="+sid)
 
+	dt, err := json.Marshal(gf.workers.WorkerInfos())
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to marshal workers array")
+	}
+	env = append(env, "BUILDKIT_WORKERS="+string(dt))
+
 	defer func() {
 		for _, r := range lbf.refs {
 			if r != nil && (lbf.lastRef != r || retErr != nil) {

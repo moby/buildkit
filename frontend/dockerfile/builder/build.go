@@ -39,8 +39,12 @@ var gitUrlPathWithFragmentSuffix = regexp.MustCompile("\\.git(?:#.+)?$")
 func Build(ctx context.Context, c client.Client) error {
 	opts := c.Opts()
 
-	// TODO: read buildPlatforms from workers
-	buildPlatforms := []specs.Platform{platforms.DefaultSpec()}
+	defaultBuildPlatform := platforms.DefaultSpec()
+	if workers := c.WorkerInfos(); len(workers) > 0 && len(workers[0].Platforms) > 0 {
+		defaultBuildPlatform = workers[0].Platforms[0]
+	}
+
+	buildPlatforms := []specs.Platform{defaultBuildPlatform}
 	targetPlatform := platforms.DefaultSpec()
 	if v := opts[keyTargetPlatform]; v != "" {
 		var err error

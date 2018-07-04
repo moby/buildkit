@@ -378,7 +378,7 @@ func newController(c *cli.Context, root string) (*control.Controller, error) {
 		return nil, err
 	}
 	frontends := map[string]frontend.Frontend{}
-	frontends["dockerfile.v0"] = dockerfile.NewDockerfileFrontend()
+	frontends["dockerfile.v0"] = dockerfile.NewDockerfileFrontend(wc)
 	frontends["gateway.v0"] = gateway.NewGatewayFrontend(wc)
 
 	cacheStorage, err := boltdbcachestorage.NewStore(filepath.Join(root, "cache.db"))

@@ -42,6 +42,7 @@ func Current() (client.Client, error) {
 		client:    c,
 		opts:      opts(),
 		sessionID: sessionID(),
+		workers:   workers(),
 		caps:      pb.Caps.CapSet(resp.FrontendAPICaps),
 	}, nil
 }
@@ -61,6 +62,7 @@ type grpcClient struct {
 	client    pb.LLBBridgeClient
 	opts      map[string]string
 	sessionID string
+	workers   []client.WorkerInfo
 	caps      apicaps.CapSet
 }
 
@@ -111,6 +113,10 @@ func (c *grpcClient) Opts() map[string]string {
 
 func (c *grpcClient) SessionID() string {
 	return c.sessionID
+}
+
+func (c *grpcClient) WorkerInfos() []client.WorkerInfo {
+	return c.workers
 }
 
 type reference struct {
@@ -211,4 +217,12 @@ func opts() map[string]string {
 
 func sessionID() string {
 	return os.Getenv("BUILDKIT_SESSION_ID")
+}
+
+func workers() []client.WorkerInfo {
+	var c []client.WorkerInfo
+	if err := json.Unmarshal([]byte(os.Getenv("BUILDKIT_WORKERS")), &c); err != nil {
+		return nil
+	}
+	return c
 }
