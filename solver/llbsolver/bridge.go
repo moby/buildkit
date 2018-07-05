@@ -20,16 +20,20 @@ import (
 )
 
 type llbBridge struct {
-	builder       solver.Builder
-	frontends     map[string]frontend.Frontend
-	resolveWorker func() (worker.Worker, error)
-	ci            *remotecache.CacheImporter
-	cms           map[string]solver.CacheManager
-	cmsMu         sync.Mutex
-	platforms     []specs.Platform
+	builder              solver.Builder
+	frontends            map[string]frontend.Frontend
+	resolveWorker        func() (worker.Worker, error)
+	resolveCacheImporter remotecache.ResolveCacheImporterFunc
+	cms                  map[string]solver.CacheManager
+	cmsMu                sync.Mutex
+	platforms            []specs.Platform
 }
 
 func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (res solver.CachedResult, exp map[string][]byte, err error) {
+	w, err := b.resolveWorker()
+	if err != nil {
+		return nil, nil, err
+	}
 	var cms []solver.CacheManager
 	for _, ref := range req.ImportCacheRefs {
 		b.cmsMu.Lock()
@@ -44,7 +48,15 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (res s
 				cm = newLazyCacheManager(ref, func() (solver.CacheManager, error) {
 					var cmNew solver.CacheManager
 					if err := b.builder.Call(ctx, "importing cache manifest from "+ref, func(ctx context.Context) error {
-						cmNew, err = b.ci.Resolve(ctx, ref)
+						if b.resolveCacheImporter == nil {
+							return errors.New("no cache importer is available")
+						}
+						typ := "" // TODO: support non-registry type
+						ci, desc, err := b.resolveCacheImporter(ctx, typ, ref)
+						if err != nil {
+							return err
+						}
+						cmNew, err = ci.Resolve(ctx, desc, ref, w)
 						return err
 					}); err != nil {
 						return nil, err

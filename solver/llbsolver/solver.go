@@ -19,7 +19,7 @@ import (
 
 type ExporterRequest struct {
 	Exporter        exporter.ExporterInstance
-	CacheExporter   *remotecache.RegistryCacheExporter
+	CacheExporter   remotecache.Exporter
 	CacheExportMode solver.CacheExportMode
 }
 
@@ -27,18 +27,18 @@ type ExporterRequest struct {
 type ResolveWorkerFunc func() (worker.Worker, error)
 
 type Solver struct {
-	solver        *solver.Solver
-	resolveWorker ResolveWorkerFunc
-	frontends     map[string]frontend.Frontend
-	ci            *remotecache.CacheImporter
-	platforms     []specs.Platform
+	solver               *solver.Solver
+	resolveWorker        ResolveWorkerFunc
+	frontends            map[string]frontend.Frontend
+	resolveCacheImporter remotecache.ResolveCacheImporterFunc
+	platforms            []specs.Platform
 }
 
-func New(wc *worker.Controller, f map[string]frontend.Frontend, cacheStore solver.CacheKeyStorage, ci *remotecache.CacheImporter) (*Solver, error) {
+func New(wc *worker.Controller, f map[string]frontend.Frontend, cacheStore solver.CacheKeyStorage, resolveCI remotecache.ResolveCacheImporterFunc) (*Solver, error) {
 	s := &Solver{
-		resolveWorker: defaultResolver(wc),
-		frontends:     f,
-		ci:            ci,
+		resolveWorker:        defaultResolver(wc),
+		frontends:            f,
+		resolveCacheImporter: resolveCI,
 	}
 
 	results := newCacheResultStorage(wc)
@@ -71,12 +71,12 @@ func (s *Solver) resolver() solver.ResolveOpFunc {
 
 func (s *Solver) Bridge(b solver.Builder) frontend.FrontendLLBBridge {
 	return &llbBridge{
-		builder:       b,
-		frontends:     s.frontends,
-		resolveWorker: s.resolveWorker,
-		ci:            s.ci,
-		cms:           map[string]solver.CacheManager{},
-		platforms:     s.platforms,
+		builder:              b,
+		frontends:            s.frontends,
+		resolveWorker:        s.resolveWorker,
+		resolveCacheImporter: s.resolveCacheImporter,
+		cms:                  map[string]solver.CacheManager{},
+		platforms:            s.platforms,
 	}
 }
 

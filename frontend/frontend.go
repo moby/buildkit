@@ -26,5 +26,5 @@ type SolveRequest struct {
 	Definition      *pb.Definition
 	Frontend        string
 	FrontendOpt     map[string]string
-	ImportCacheRefs []string
+	ImportCacheRefs []string // TODO: map[string]string for supporting non-registry ref?
 }

@@ -18,7 +18,7 @@ import (
 	"github.com/containerd/containerd/sys"
 	"github.com/docker/go-connections/sockets"
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
-	"github.com/moby/buildkit/cache/remotecache"
+	registryremotecache "github.com/moby/buildkit/cache/remotecache/registry"
 	"github.com/moby/buildkit/control"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/frontend/dockerfile"
@@ -381,21 +381,6 @@ func newController(c *cli.Context, root string) (*control.Controller, error) {
 	frontends["dockerfile.v0"] = dockerfile.NewDockerfileFrontend()
 	frontends["gateway.v0"] = gateway.NewGatewayFrontend()
 
-	ce := remotecache.NewCacheExporter(remotecache.ExporterOpt{
-		SessionManager: sessionManager,
-	})
-
-	// cache importer is a manager concept but as there is no way to pull data
-	// into specific worker yet we currently set it up as part of default worker
-	w, err := wc.GetDefault()
-	if err != nil {
-		return nil, err
-	}
-	ci := remotecache.NewCacheImporter(remotecache.ImportOpt{
-		Worker:         w,
-		SessionManager: sessionManager,
-	})
-
 	cacheStorage, err := boltdbcachestorage.NewStore(filepath.Join(root, "cache.db"))
 	if err != nil {
 		return nil, err
@@ -405,9 +390,10 @@ func newController(c *cli.Context, root string) (*control.Controller, error) {
 		SessionManager:   sessionManager,
 		WorkerController: wc,
 		Frontends:        frontends,
-		CacheExporter:    ce,
-		CacheImporter:    ci,
-		CacheKeyStorage:  cacheStorage,
+		// TODO: support non-registry remote cache
+		ResolveCacheExporterFunc: registryremotecache.ResolveCacheExporterFunc(sessionManager),
+		ResolveCacheImporterFunc: registryremotecache.ResolveCacheImporterFunc(sessionManager),
+		CacheKeyStorage:          cacheStorage,
 	})
 }
 
