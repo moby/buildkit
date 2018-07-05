@@ -245,8 +245,8 @@ ENTRYPOINT my entrypoint
 	err = json.Unmarshal(dt, &ociimg)
 	require.NoError(t, err)
 
-	require.Equal(t, ociimg.Config.Cmd, []string(nil))
-	require.Equal(t, ociimg.Config.Entrypoint, []string{"ls", "my entrypoint"})
+	require.Equal(t, []string(nil), ociimg.Config.Cmd)
+	require.Equal(t, []string{"ls", "my entrypoint"}, ociimg.Config.Entrypoint)
 }
 
 func testPullScratch(t *testing.T, sb integration.Sandbox) {
@@ -340,10 +340,10 @@ COPY foo .
 	require.Equal(t, 1, len(ociimg.RootFS.DiffIDs))
 	v, ok := ociimg.Config.Labels["foo"]
 	require.True(t, ok)
-	require.Equal(t, v, "bar")
+	require.Equal(t, "bar", v)
 	v, ok = ociimg.Config.Labels["bar"]
 	require.True(t, ok)
-	require.Equal(t, v, "baz")
+	require.Equal(t, "baz", v)
 
 	echo := llb.Image("busybox").
 		Run(llb.Shlex(`sh -c "echo -n foo0 > /empty/foo"`)).
@@ -570,7 +570,7 @@ ADD %s /dest/
 
 	fi, err := os.Stat(destFile)
 	require.NoError(t, err)
-	require.Equal(t, fi.ModTime().Format(http.TimeFormat), modTime.Format(http.TimeFormat))
+	require.Equal(t, modTime.Format(http.TimeFormat), fi.ModTime().Format(http.TimeFormat))
 }
 
 func testDockerfileAddArchive(t *testing.T, sb integration.Sandbox) {
@@ -1204,11 +1204,11 @@ USER nobody
 
 	dt, err := ioutil.ReadFile(filepath.Join(destDir, "rootuser"))
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "root\n")
+	require.Equal(t, "root\n", string(dt))
 
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "daemonuser"))
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "daemon\n")
+	require.Equal(t, "daemon\n", string(dt))
 
 	// test user in exported
 	target := "example.com/moby/dockerfileuser:test"
@@ -1300,11 +1300,11 @@ COPY --from=base /out /
 
 	dt, err := ioutil.ReadFile(filepath.Join(destDir, "fooowner"))
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "daemon daemon\n")
+	require.Equal(t, "daemon daemon\n", string(dt))
 
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "subowner"))
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "1000 nogroup\n")
+	require.Equal(t, "1000 nogroup\n", string(dt))
 }
 
 func testCopyOverrideFiles(t *testing.T, sb integration.Sandbox) {
@@ -1352,11 +1352,11 @@ COPY files dest
 
 	dt, err := ioutil.ReadFile(filepath.Join(destDir, "sub/dir1/dir2/foo"))
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "foo-contents")
+	require.Equal(t, "foo-contents", string(dt))
 
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "dest/foo.go"))
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "foo.go-contents")
+	require.Equal(t, "foo.go-contents", string(dt))
 }
 
 func testCopyVarSubstitution(t *testing.T, sb integration.Sandbox) {
@@ -1397,7 +1397,7 @@ COPY $FOO baz
 
 	dt, err := ioutil.ReadFile(filepath.Join(destDir, "baz"))
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "bar-contents")
+	require.Equal(t, "bar-contents", string(dt))
 }
 
 func testCopyWildcards(t *testing.T, sb integration.Sandbox) {
@@ -1449,43 +1449,43 @@ COPY sub/dir1 subdest6
 
 	dt, err := ioutil.ReadFile(filepath.Join(destDir, "gofiles/foo.go"))
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "foo-contents")
+	require.Equal(t, "foo-contents", string(dt))
 
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "gofiles/bar.go"))
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "bar-contents")
+	require.Equal(t, "bar-contents", string(dt))
 
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "foo2.go"))
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "foo-contents")
+	require.Equal(t, "foo-contents", string(dt))
 
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "subdest/dir1/dir2/foo"))
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "foo-contents")
+	require.Equal(t, "foo-contents", string(dt))
 
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "subdest2/foo"))
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "foo-contents")
+	require.Equal(t, "foo-contents", string(dt))
 
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "subdest3/bar"))
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "foo-contents")
+	require.Equal(t, "foo-contents", string(dt))
 
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "all/foo.go"))
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "foo-contents")
+	require.Equal(t, "foo-contents", string(dt))
 
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "subdest4/dir2/foo"))
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "foo-contents")
+	require.Equal(t, "foo-contents", string(dt))
 
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "subdest5/dir2/foo"))
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "foo-contents")
+	require.Equal(t, "foo-contents", string(dt))
 
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "subdest6/dir2/foo"))
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "foo-contents")
+	require.Equal(t, "foo-contents", string(dt))
 }
 
 func testDockerfileFromGit(t *testing.T, sb integration.Sandbox) {
@@ -1828,11 +1828,11 @@ LABEL foo=bar
 
 	v, ok := ociimg.Config.Labels["foo"]
 	require.True(t, ok)
-	require.Equal(t, v, "bar")
+	require.Equal(t, "bar", v)
 
 	v, ok = ociimg.Config.Labels["bar"]
 	require.True(t, ok)
-	require.Equal(t, v, "baz")
+	require.Equal(t, "baz", v)
 }
 
 func testCacheImportExport(t *testing.T, sb integration.Sandbox) {
@@ -1885,7 +1885,7 @@ COPY --from=base unique /
 
 	dt, err := ioutil.ReadFile(filepath.Join(destDir, "const"))
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "foobar")
+	require.Equal(t, "foobar", string(dt))
 
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "unique"))
 	require.NoError(t, err)
@@ -1915,7 +1915,7 @@ COPY --from=base unique /
 
 	dt2, err := ioutil.ReadFile(filepath.Join(destDir, "const"))
 	require.NoError(t, err)
-	require.Equal(t, string(dt2), "foobar")
+	require.Equal(t, "foobar", string(dt2))
 
 	dt2, err = ioutil.ReadFile(filepath.Join(destDir, "unique"))
 	require.NoError(t, err)
@@ -2218,7 +2218,7 @@ COPY --from=build /out /
 
 	dt, err := ioutil.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "hpvalue::npvalue::foocontents::::bazcontent")
+	require.Equal(t, "hpvalue::npvalue::foocontents::::bazcontent", string(dt))
 
 	// repeat with changed default args should match the old cache
 	destDir, err = ioutil.TempDir("", "buildkit")
@@ -2244,7 +2244,7 @@ COPY --from=build /out /
 
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "hpvalue::npvalue::foocontents::::bazcontent")
+	require.Equal(t, "hpvalue::npvalue::foocontents::::bazcontent", string(dt))
 
 	// changing actual value invalidates cache
 	destDir, err = ioutil.TempDir("", "buildkit")
@@ -2270,7 +2270,7 @@ COPY --from=build /out /
 
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "hpvalue2::::foocontents2::::bazcontent")
+	require.Equal(t, "hpvalue2::::foocontents2::::bazcontent", string(dt))
 }
 
 func tmpdir(appliers ...fstest.Applier) (string, error) {
