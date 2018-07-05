@@ -19,6 +19,23 @@ service LLBBridge {
 	// apicaps:CapReadFile
 	rpc ReadFile(ReadFileRequest) returns (ReadFileResponse);
 	rpc Ping(PingRequest) returns (PongResponse);
+	rpc Return(ReturnRequest) returns (ReturnResponse);
+}
+
+message ReturnRequest {
+	map<string, string> exporterRefs = 1;
+	map<string, bytes> exporterMeta = 2;
+	Error error = 3;
+	
+}
+
+message ReturnResponse {
+}
+
+message Error {
+	string text = 1;
+	int64 code = 2;
+	string stack = 3;
 }
 
 message ResolveImageConfigRequest {

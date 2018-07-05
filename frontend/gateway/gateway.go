@@ -387,6 +387,10 @@ func (lbf *llbBridgeForwarder) Ping(context.Context, *pb.PingRequest) (*pb.PongR
 	}, nil
 }
 
+func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest) (*pb.ReturnResponse, error) {
+	return nil, errors.Errorf("return not implemented yet")
+}
+
 func serve(ctx context.Context, grpcServer *grpc.Server, conn net.Conn) {
 	go func() {
 		<-ctx.Done()

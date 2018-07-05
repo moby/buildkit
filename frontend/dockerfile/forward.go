@@ -10,6 +10,7 @@ import (
 	"github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/worker"
 	"github.com/pkg/errors"
 )
@@ -29,7 +30,7 @@ type bridgeClient struct {
 	workerInfos  []clienttypes.WorkerInfo
 }
 
-func (c *bridgeClient) Solve(ctx context.Context, req client.SolveRequest, exporterAttr map[string][]byte, final bool) (client.Reference, error) {
+func (c *bridgeClient) Solve(ctx context.Context, req client.SolveRequest) (client.Reference, error) {
 	r, exporterAttrRes, err := c.FrontendLLBBridge.Solve(ctx, frontend.SolveRequest{
 		Definition:      req.Definition,
 		Frontend:        req.Frontend,
@@ -42,31 +43,32 @@ func (c *bridgeClient) Solve(ctx context.Context, req client.SolveRequest, expor
 	rr := &ref{r}
 	c.mu.Lock()
 	c.refs = append(c.refs, rr)
-	if final {
-		c.final = rr
-		if exporterAttr == nil {
-			exporterAttr = make(map[string][]byte)
-		}
-		for k, v := range exporterAttrRes {
-			exporterAttr[k] = v
-		}
-		c.exporterAttr = exporterAttr
-	}
+	_ = exporterAttrRes
+	// if final {
+	// 	c.final = rr
+	// 	if exporterAttr == nil {
+	// 		exporterAttr = make(map[string][]byte)
+	// 	}
+	// 	for k, v := range exporterAttrRes {
+	// 		exporterAttr[k] = v
+	// 	}
+	// 	c.exporterAttr = exporterAttr
+	// }
 	c.mu.Unlock()
 	return rr, nil
 }
-func (c *bridgeClient) Opts() map[string]string {
-	return c.opts
-}
-func (c *bridgeClient) SessionID() string {
-	return c.sid
-}
-func (c *bridgeClient) WorkerInfos() []client.WorkerInfo {
-	out := make([]client.WorkerInfo, 0, len(c.workerInfos))
+func (c *bridgeClient) BuildOpts() client.BuildOpts {
+	workers := make([]client.WorkerInfo, 0, len(c.workerInfos))
 	for _, w := range c.workerInfos {
-		out = append(out, client.WorkerInfo(w))
+		workers = append(workers, client.WorkerInfo(w))
 	}
-	return out
+
+	return client.BuildOpts{
+		Opts:      c.opts,
+		SessionID: c.sid,
+		Workers:   workers,
+		Product:   apicaps.ExportedProduct,
+	}
 }
 
 type ref struct {

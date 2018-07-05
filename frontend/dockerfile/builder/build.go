@@ -37,10 +37,10 @@ var httpPrefix = regexp.MustCompile("^https?://")
 var gitUrlPathWithFragmentSuffix = regexp.MustCompile("\\.git(?:#.+)?$")
 
 func Build(ctx context.Context, c client.Client) error {
-	opts := c.Opts()
+	opts := c.BuildOpts().Opts
 
 	defaultBuildPlatform := platforms.DefaultSpec()
-	if workers := c.WorkerInfos(); len(workers) > 0 && len(workers[0].Platforms) > 0 {
+	if workers := c.BuildOpts().Workers; len(workers) > 0 && len(workers[0].Platforms) > 0 {
 		defaultBuildPlatform = workers[0].Platforms[0]
 	}
 
@@ -70,7 +70,7 @@ func Build(ctx context.Context, c client.Client) error {
 
 	src := llb.Local(LocalNameDockerfile,
 		llb.IncludePatterns([]string{filename}),
-		llb.SessionID(c.SessionID()),
+		llb.SessionID(c.BuildOpts().SessionID),
 		llb.SharedKeyHint(defaultDockerfileName),
 	)
 	var buildContext *llb.State
@@ -86,7 +86,7 @@ func Build(ctx context.Context, c client.Client) error {
 		}
 		ref, err := c.Solve(ctx, client.SolveRequest{
 			Definition: def.ToPB(),
-		}, nil, false)
+		})
 		if err != nil {
 			return err
 		}
@@ -124,7 +124,7 @@ func Build(ctx context.Context, c client.Client) error {
 	eg.Go(func() error {
 		ref, err := c.Solve(ctx2, client.SolveRequest{
 			Definition: def.ToPB(),
-		}, nil, false)
+		})
 		if err != nil {
 			return err
 		}
@@ -143,7 +143,7 @@ func Build(ctx context.Context, c client.Client) error {
 			dockerignoreState := buildContext
 			if dockerignoreState == nil {
 				st := llb.Local(LocalNameContext,
-					llb.SessionID(c.SessionID()),
+					llb.SessionID(c.BuildOpts().SessionID),
 					llb.IncludePatterns([]string{dockerignoreFilename}),
 					llb.SharedKeyHint(dockerignoreFilename),
 				)
@@ -155,7 +155,7 @@ func Build(ctx context.Context, c client.Client) error {
 			}
 			ref, err := c.Solve(ctx2, client.SolveRequest{
 				Definition: def.ToPB(),
-			}, nil, false)
+			})
 			if err != nil {
 				return err
 			}
@@ -176,7 +176,7 @@ func Build(ctx context.Context, c client.Client) error {
 		return err
 	}
 
-	if _, ok := c.Opts()["cmdline"]; !ok {
+	if _, ok := opts["cmdline"]; !ok {
 		ref, cmdline, ok := dockerfile2llb.DetectSyntax(bytes.NewBuffer(dtDockerfile))
 		if ok {
 			return forwardGateway(ctx, c, ref, cmdline)
@@ -188,7 +188,7 @@ func Build(ctx context.Context, c client.Client) error {
 		MetaResolver:   c,
 		BuildArgs:      filter(opts, buildArgPrefix),
 		Labels:         filter(opts, labelPrefix),
-		SessionID:      c.SessionID(),
+		SessionID:      c.BuildOpts().SessionID,
 		BuildContext:   buildContext,
 		Excludes:       excludes,
 		IgnoreCache:    ignoreCache,
@@ -218,17 +218,21 @@ func Build(ctx context.Context, c client.Client) error {
 	_, err = c.Solve(ctx, client.SolveRequest{
 		Definition:      def.ToPB(),
 		ImportCacheRefs: cacheFrom,
-	}, map[string][]byte{
-		exporterImageConfig: config,
-	}, true)
+	})
 	if err != nil {
 		return err
 	}
+
+	_ = config
+	// map[string][]byte{
+	//  		exporterImageConfig: config,
+	//  	}, true
+
 	return nil
 }
 
 func forwardGateway(ctx context.Context, c client.Client, ref string, cmdline string) error {
-	opts := c.Opts()
+	opts := c.BuildOpts().Opts
 	if opts == nil {
 		opts = map[string]string{}
 	}
@@ -237,7 +241,8 @@ func forwardGateway(ctx context.Context, c client.Client, ref string, cmdline st
 	_, err := c.Solve(ctx, client.SolveRequest{
 		Frontend:    "gateway.v0",
 		FrontendOpt: opts,
-	}, nil, true)
+	})
+	// nil, true
 	return err
 }
 
