@@ -17,6 +17,7 @@ type Sandbox interface {
 	PrintLogs(*testing.T)
 	Cmd(...string) *exec.Cmd
 	NewRegistry() (string, error)
+	Rootless() bool
 }
 
 type Worker interface {
