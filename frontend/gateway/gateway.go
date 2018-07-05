@@ -60,7 +60,7 @@ func filterPrefix(opts map[string]string, pfx string) map[string]string {
 	return m
 }
 
-func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string) (retRef solver.CachedResult, exporterAttr map[string][]byte, retErr error) {
+func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string) (retRef map[string]solver.CachedResult, exporterAttr map[string][]byte, retErr error) {
 	source, ok := opts[keySource]
 	if !ok {
 		return nil, nil, errors.Errorf("no source specified for gateway")
@@ -74,7 +74,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 	var readonly bool // TODO: try to switch to read-only by default.
 
 	if isDevel {
-		ref, exp, err := llbBridge.Solve(session.NewContext(ctx, "gateway:"+sid),
+		res, exp, err := llbBridge.Solve(session.NewContext(ctx, "gateway:"+sid),
 			frontend.SolveRequest{
 				Frontend:    source,
 				FrontendOpt: filterPrefix(opts, "gateway-"),
@@ -82,7 +82,18 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 		if err != nil {
 			return nil, nil, err
 		}
-		defer ref.Release(context.TODO())
+		defer func() {
+			for _, ref := range res {
+				ref.Release(context.TODO())
+			}
+		}()
+		if l := len(res); l != 1 {
+			return nil, nil, errors.Errorf("development gateway returned invalid length of results: %d", l)
+		}
+		if _, ok := res["default"]; !ok {
+			return nil, nil, errors.Errorf("development gateway didn't return default result")
+		}
+		ref := res["default"]
 
 		workerRef, ok := ref.Sys().(*worker.WorkerRef)
 		if !ok {
@@ -124,13 +135,24 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 			return nil, nil, err
 		}
 
-		ref, _, err := llbBridge.Solve(ctx, frontend.SolveRequest{
+		res, _, err := llbBridge.Solve(ctx, frontend.SolveRequest{
 			Definition: def.ToPB(),
 		})
 		if err != nil {
 			return nil, nil, err
 		}
-		defer ref.Release(context.TODO())
+		defer func() {
+			for _, ref := range res {
+				ref.Release(context.TODO())
+			}
+		}()
+		if l := len(res); l != 1 {
+			return nil, nil, errors.Errorf("frontend image returned invalid length of results: %d", l)
+		}
+		if _, ok := res["default"]; !ok {
+			return nil, nil, errors.Errorf("frontend image gateway didn't return default result")
+		}
+		ref := res["default"]
 		workerRef, ok := ref.Sys().(*worker.WorkerRef)
 		if !ok {
 			return nil, nil, errors.Errorf("invalid ref: %T", ref.Sys())
@@ -191,14 +213,14 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 		return nil, nil, err
 	}
 
-	return lbf.lastRef, lbf.exporterAttr, nil
+	return map[string]solver.CachedResult{"default": lbf.lastRef}, lbf.exporterAttr, nil
 }
 
 func newLLBBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, workers frontend.WorkerInfos) (*llbBridgeForwarder, error) {
 	lbf := &llbBridgeForwarder{
 		callCtx:   ctx,
 		llbBridge: llbBridge,
-		refs:      map[string]solver.Result{},
+		refs:      map[string]solver.CachedResult{},
 		pipe:      newPipe(),
 		workers:   workers,
 	}
@@ -269,7 +291,7 @@ type llbBridgeForwarder struct {
 	mu           sync.Mutex
 	callCtx      context.Context
 	llbBridge    frontend.FrontendLLBBridge
-	refs         map[string]solver.Result
+	refs         map[string]solver.CachedResult
 	lastRef      solver.CachedResult
 	exporterAttr map[string][]byte
 	workers      frontend.WorkerInfos
@@ -300,7 +322,7 @@ func (lbf *llbBridgeForwarder) ResolveImageConfig(ctx context.Context, req *pb.R
 
 func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) (*pb.SolveResponse, error) {
 	ctx = tracing.ContextWithSpanFromContext(ctx, lbf.callCtx)
-	ref, expResp, err := lbf.llbBridge.Solve(ctx, frontend.SolveRequest{
+	res, expResp, err := lbf.llbBridge.Solve(ctx, frontend.SolveRequest{
 		Definition:      req.Definition,
 		Frontend:        req.Frontend,
 		FrontendOpt:     req.FrontendOpt,
@@ -310,29 +332,51 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 		return nil, err
 	}
 
-	exp := map[string][]byte{}
-	if err := json.Unmarshal(req.ExporterAttr, &exp); err != nil {
-		return nil, err
-	}
+	ids := make(map[string]string)
 
-	if expResp != nil {
-		for k, v := range expResp {
-			exp[k] = v
-		}
-	}
-
-	id := identity.NewID()
 	lbf.mu.Lock()
-	lbf.refs[id] = ref
+	for k, ref := range res {
+		id := identity.NewID()
+		if ref == nil {
+			id = ""
+		}
+		lbf.refs[id] = ref
+		ids[k] = id
+	}
 	lbf.mu.Unlock()
+
+	if _, ok := res["default"]; !ok && len(res) != 0 && !req.AllowMapReturn {
+		// this should never happen because old client shouldn't make a map request
+		return nil, errors.Errorf("solve did not return default result")
+	}
+
+	exp := map[string][]byte{}
+	// compatibility mode for older clients
 	if req.Final {
-		lbf.lastRef = ref
+		if err := json.Unmarshal(req.ExporterAttr, &exp); err != nil {
+			return nil, err
+		}
+
+		if expResp != nil {
+			for k, v := range expResp {
+				exp[k] = v
+			}
+		}
+
+		lbf.lastRef = lbf.refs[ids["default"]]
 		lbf.exporterAttr = exp
 	}
-	if ref == nil {
-		id = ""
+
+	resp := &pb.SolveResponse{}
+
+	if req.AllowMapReturn {
+		resp.Refs = ids
+		resp.Metadata = expResp
+	} else {
+		resp.Ref = ids["default"]
 	}
-	return &pb.SolveResponse{Ref: id}, nil
+
+	return resp, nil
 }
 func (lbf *llbBridgeForwarder) ReadFile(ctx context.Context, req *pb.ReadFileRequest) (*pb.ReadFileResponse, error) {
 	ctx = tracing.ContextWithSpanFromContext(ctx, lbf.callCtx)

@@ -36,11 +36,7 @@ const (
 var httpPrefix = regexp.MustCompile("^https?://")
 var gitUrlPathWithFragmentSuffix = regexp.MustCompile("\\.git(?:#.+)?$")
 
-func Build2(ctx context.Context, c client.Client) (*client.Result, error) {
-	return nil, errors.Errorf("not-implemented")
-}
-
-func Build(ctx context.Context, c client.Client) error {
+func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 	opts := c.BuildOpts().Opts
 
 	defaultBuildPlatform := platforms.DefaultSpec()
@@ -54,7 +50,7 @@ func Build(ctx context.Context, c client.Client) error {
 		var err error
 		targetPlatform, err = platforms.Parse(v)
 		if err != nil {
-			return errors.Wrapf(err, "failed to parse target platform %s", v)
+			return nil, errors.Wrapf(err, "failed to parse target platform %s", v)
 		}
 	}
 
@@ -86,13 +82,18 @@ func Build(ctx context.Context, c client.Client) error {
 		httpContext := llb.HTTP(opts[LocalNameContext], llb.Filename("context"))
 		def, err := httpContext.Marshal()
 		if err != nil {
-			return err
+			return nil, errors.Wrapf(err, "failed to marshal httpcontext")
 		}
-		ref, err := c.Solve(ctx, client.SolveRequest{
+		res, err := c.Solve(ctx, client.SolveRequest{
 			Definition: def.ToPB(),
 		})
 		if err != nil {
-			return err
+			return nil, errors.Wrapf(err, "failed to resolve httpcontext")
+		}
+
+		ref, err := res.SingleRef()
+		if err != nil {
+			return nil, err
 		}
 
 		dt, err := ref.ReadFile(ctx, client.ReadRequest{
@@ -102,7 +103,7 @@ func Build(ctx context.Context, c client.Client) error {
 			},
 		})
 		if err != nil {
-			return err
+			return nil, errors.Errorf("failed to read downloaded context")
 		}
 		if isArchive(dt) {
 			unpack := llb.Image(dockerfile2llb.CopyImage).
@@ -120,15 +121,20 @@ func Build(ctx context.Context, c client.Client) error {
 
 	def, err := src.Marshal()
 	if err != nil {
-		return err
+		return nil, errors.Wrapf(err, "failed to marshal local source")
 	}
 
 	eg, ctx2 := errgroup.WithContext(ctx)
 	var dtDockerfile []byte
 	eg.Go(func() error {
-		ref, err := c.Solve(ctx2, client.SolveRequest{
+		res, err := c.Solve(ctx2, client.SolveRequest{
 			Definition: def.ToPB(),
 		})
+		if err != nil {
+			return errors.Wrapf(err, "failed to resolve dockerfile")
+		}
+
+		ref, err := res.SingleRef()
 		if err != nil {
 			return err
 		}
@@ -137,7 +143,7 @@ func Build(ctx context.Context, c client.Client) error {
 			Filename: filename,
 		})
 		if err != nil {
-			return err
+			return errors.Wrapf(err, "failed to read dockerfile")
 		}
 		return nil
 	})
@@ -157,9 +163,13 @@ func Build(ctx context.Context, c client.Client) error {
 			if err != nil {
 				return err
 			}
-			ref, err := c.Solve(ctx2, client.SolveRequest{
+			res, err := c.Solve(ctx2, client.SolveRequest{
 				Definition: def.ToPB(),
 			})
+			if err != nil {
+				return err
+			}
+			ref, err := res.SingleRef()
 			if err != nil {
 				return err
 			}
@@ -177,7 +187,7 @@ func Build(ctx context.Context, c client.Client) error {
 	}
 
 	if err := eg.Wait(); err != nil {
-		return err
+		return nil, err
 	}
 
 	if _, ok := opts["cmdline"]; !ok {
@@ -201,17 +211,17 @@ func Build(ctx context.Context, c client.Client) error {
 	})
 
 	if err != nil {
-		return err
+		return nil, errors.Wrapf(err, "failed to create LLB definition")
 	}
 
 	def, err = st.Marshal()
 	if err != nil {
-		return err
+		return nil, errors.Wrapf(err, "failed to marshal LLB definition")
 	}
 
 	config, err := json.Marshal(img)
 	if err != nil {
-		return err
+		return nil, errors.Wrapf(err, "failed to marshal image config")
 	}
 
 	var cacheFrom []string
@@ -219,35 +229,30 @@ func Build(ctx context.Context, c client.Client) error {
 		cacheFrom = strings.Split(cacheFromStr, ",")
 	}
 
-	_, err = c.Solve(ctx, client.SolveRequest{
+	res, err := c.Solve(ctx, client.SolveRequest{
 		Definition:      def.ToPB(),
 		ImportCacheRefs: cacheFrom,
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	_ = config
-	// map[string][]byte{
-	//  		exporterImageConfig: config,
-	//  	}, true
+	res.AddMeta(exporterImageConfig, config)
 
-	return nil
+	return res, nil
 }
 
-func forwardGateway(ctx context.Context, c client.Client, ref string, cmdline string) error {
+func forwardGateway(ctx context.Context, c client.Client, ref string, cmdline string) (*client.Result, error) {
 	opts := c.BuildOpts().Opts
 	if opts == nil {
 		opts = map[string]string{}
 	}
 	opts["cmdline"] = cmdline
 	opts["source"] = ref
-	_, err := c.Solve(ctx, client.SolveRequest{
+	return c.Solve(ctx, client.SolveRequest{
 		Frontend:    "gateway.v0",
 		FrontendOpt: opts,
 	})
-	// nil, true
-	return err
 }
 
 func filter(opt map[string]string, key string) map[string]string {

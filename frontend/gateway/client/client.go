@@ -9,7 +9,7 @@ import (
 )
 
 type Client interface {
-	Solve(ctx context.Context, req SolveRequest) (Reference, error)
+	Solve(ctx context.Context, req SolveRequest) (*Result, error)
 	ResolveImageConfig(ctx context.Context, ref string, platform *specs.Platform) (digest.Digest, []byte, error)
 	BuildOpts() BuildOpts
 }

@@ -29,7 +29,7 @@ type llbBridge struct {
 	platforms            []specs.Platform
 }
 
-func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (res solver.CachedResult, exp map[string][]byte, err error) {
+func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (res map[string]solver.CachedResult, exp map[string][]byte, err error) {
 	w, err := b.resolveWorker()
 	if err != nil {
 		return nil, nil, err
@@ -77,10 +77,12 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (res s
 		if err != nil {
 			return nil, nil, err
 		}
-		res, err = b.builder.Build(ctx, edge)
+		ref, err := b.builder.Build(ctx, edge)
 		if err != nil {
 			return nil, nil, err
 		}
+		res = map[string]solver.CachedResult{}
+		res["default"] = ref
 	}
 	if req.Frontend != "" {
 		f, ok := b.frontends[req.Frontend]
@@ -97,14 +99,16 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (res s
 		}
 	}
 
-	if res != nil {
-		wr, ok := res.Sys().(*worker.WorkerRef)
-		if !ok {
-			return nil, nil, errors.Errorf("invalid reference for exporting: %T", res.Sys())
-		}
-		if wr.ImmutableRef != nil {
-			if err := wr.ImmutableRef.Finalize(ctx, false); err != nil {
-				return nil, nil, err
+	for _, r := range res {
+		if r != nil {
+			wr, ok := r.Sys().(*worker.WorkerRef)
+			if !ok {
+				return nil, nil, errors.Errorf("invalid reference for exporting: %T", r.Sys())
+			}
+			if wr.ImmutableRef != nil {
+				if err := wr.ImmutableRef.Finalize(ctx, false); err != nil {
+					return nil, nil, err
+				}
 			}
 		}
 	}

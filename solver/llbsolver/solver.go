@@ -96,20 +96,25 @@ func (s *Solver) Solve(ctx context.Context, id string, req frontend.SolveRequest
 	}
 
 	defer func() {
-		if res != nil {
-			go res.Release(context.TODO())
+		for _, ref := range res {
+			if ref != nil {
+				go ref.Release(context.TODO())
+			}
 		}
 	}()
 
 	var exporterResponse map[string]string
 	if exp := exp.Exporter; exp != nil {
 		var immutable cache.ImmutableRef
-		if res != nil {
-			workerRef, ok := res.Sys().(*worker.WorkerRef)
-			if !ok {
-				return nil, errors.Errorf("invalid reference: %T", res.Sys())
+		for _, res := range res { // FIXME(tonistiigi):
+			if res != nil {
+				workerRef, ok := res.Sys().(*worker.WorkerRef)
+				if !ok {
+					return nil, errors.Errorf("invalid reference: %T", res.Sys())
+				}
+				immutable = workerRef.ImmutableRef
+				break
 			}
-			immutable = workerRef.ImmutableRef
 		}
 
 		if err := j.Call(ctx, exp.Name(), func(ctx context.Context) error {
@@ -123,11 +128,13 @@ func (s *Solver) Solve(ctx context.Context, id string, req frontend.SolveRequest
 	if e := exp.CacheExporter; e != nil {
 		if err := j.Call(ctx, "exporting cache", func(ctx context.Context) error {
 			prepareDone := oneOffProgress(ctx, "preparing build cache for export")
-			if _, err := res.CacheKey().Exporter.ExportTo(ctx, e, solver.CacheExportOpt{
-				Convert: workerRefConverter,
-				Mode:    exp.CacheExportMode,
-			}); err != nil {
-				return prepareDone(err)
+			for _, res := range res {
+				if _, err := res.CacheKey().Exporter.ExportTo(ctx, e, solver.CacheExportOpt{
+					Convert: workerRefConverter,
+					Mode:    exp.CacheExportMode,
+				}); err != nil {
+					return prepareDone(err)
+				}
 			}
 			prepareDone(nil)
 

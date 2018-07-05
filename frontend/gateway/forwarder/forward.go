@@ -16,22 +16,28 @@ import (
 )
 
 func llbBridgeToGatewayClient(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string, workerInfos []clienttypes.WorkerInfo) (*bridgeClient, error) {
-	return &bridgeClient{opts: opts, FrontendLLBBridge: llbBridge, sid: session.FromContext(ctx), workerInfos: workerInfos}, nil
+	return &bridgeClient{
+		opts:              opts,
+		FrontendLLBBridge: llbBridge,
+		sid:               session.FromContext(ctx),
+		workerInfos:       workerInfos,
+		final:             map[*ref]struct{}{},
+	}, nil
 }
 
 type bridgeClient struct {
 	frontend.FrontendLLBBridge
 	mu           sync.Mutex
 	opts         map[string]string
-	final        *ref
+	final        map[*ref]struct{}
 	sid          string
 	exporterAttr map[string][]byte
 	refs         []*ref
 	workerInfos  []clienttypes.WorkerInfo
 }
 
-func (c *bridgeClient) Solve(ctx context.Context, req client.SolveRequest) (client.Reference, error) {
-	r, exporterAttrRes, err := c.FrontendLLBBridge.Solve(ctx, frontend.SolveRequest{
+func (c *bridgeClient) Solve(ctx context.Context, req client.SolveRequest) (*client.Result, error) {
+	refs, exporterAttrRes, err := c.FrontendLLBBridge.Solve(ctx, frontend.SolveRequest{
 		Definition:      req.Definition,
 		Frontend:        req.Frontend,
 		FrontendOpt:     req.FrontendOpt,
@@ -40,22 +46,18 @@ func (c *bridgeClient) Solve(ctx context.Context, req client.SolveRequest) (clie
 	if err != nil {
 		return nil, err
 	}
-	rr := &ref{r}
+
+	res := &client.Result{}
 	c.mu.Lock()
-	c.refs = append(c.refs, rr)
-	_ = exporterAttrRes
-	// if final {
-	// 	c.final = rr
-	// 	if exporterAttr == nil {
-	// 		exporterAttr = make(map[string][]byte)
-	// 	}
-	// 	for k, v := range exporterAttrRes {
-	// 		exporterAttr[k] = v
-	// 	}
-	// 	c.exporterAttr = exporterAttr
-	// }
+	for k, r := range refs {
+		rr := &ref{r}
+		c.refs = append(c.refs, rr)
+		res.AddRef(k, rr)
+	}
 	c.mu.Unlock()
-	return rr, nil
+	res.Metadata = exporterAttrRes
+
+	return res, nil
 }
 func (c *bridgeClient) BuildOpts() client.BuildOpts {
 	workers := make([]client.WorkerInfo, 0, len(c.workerInfos))
@@ -68,6 +70,29 @@ func (c *bridgeClient) BuildOpts() client.BuildOpts {
 		SessionID: c.sid,
 		Workers:   workers,
 		Product:   apicaps.ExportedProduct,
+	}
+}
+
+func (c *bridgeClient) result(r *client.Result) (map[string]solver.CachedResult, map[string][]byte, error) {
+	refs := map[string]solver.CachedResult{}
+	for k, r := range r.Refs {
+		rr, ok := r.(*ref)
+		if !ok {
+			return nil, nil, errors.Errorf("invalid reference type for forward %T", r)
+		}
+		c.final[rr] = struct{}{}
+		refs[k] = rr.CachedResult
+	}
+	return refs, r.Metadata, nil
+}
+
+func (c *bridgeClient) discard(err error) {
+	for _, r := range c.refs {
+		if r != nil {
+			if _, ok := c.final[r]; !ok || err != nil {
+				r.Release(context.TODO())
+			}
+		}
 	}
 }
 
