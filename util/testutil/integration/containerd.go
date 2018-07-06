@@ -7,27 +7,45 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
+
+	"github.com/pkg/errors"
 )
 
 func init() {
-	// empty value stands for system-wide PATH, which would contain containerd v1.1.
-	paths := []string{"", "/opt/containerd-1.0/bin"}
-	for _, path := range paths {
-		register(&containerd{
-			containerd:     filepath.Join(path, "containerd"),
-			containerdShim: filepath.Join(path, "containerd-shim"),
-		})
+	register(&containerd{
+		name:           "containerd",
+		containerd:     "containerd",
+		containerdShim: "containerd-shim",
+	})
+	// defined in hack/dockerfiles/test.Dockerfile.
+	// e.g. `containerd-1.0=/opt/containerd-1.0/bin,containerd-42.0=/opt/containerd-42.0/bin`
+	if s := os.Getenv("BUILDKIT_INTEGRATION_CONTAINERD_EXTRA"); s != "" {
+		entries := strings.Split(s, ",")
+		for _, entry := range entries {
+			pair := strings.Split(strings.TrimSpace(entry), "=")
+			if len(pair) != 2 {
+				panic(errors.Errorf("unexpected BUILDKIT_INTEGRATION_CONTAINERD_EXTRA: %q", s))
+			}
+			name, bin := pair[0], pair[1]
+			register(&containerd{
+				name:           name,
+				containerd:     filepath.Join(bin, "containerd"),
+				containerdShim: filepath.Join(bin, "containerd-shim"),
+			})
+		}
 	}
 }
 
 type containerd struct {
+	name           string
 	containerd     string
 	containerdShim string
 }
 
 func (c *containerd) Name() string {
-	return c.containerd
+	return c.name
 }
 
 func (c *containerd) New() (sb Sandbox, cl func() error, err error) {
