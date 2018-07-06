@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -29,6 +30,7 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
 
 func TestClientIntegration(t *testing.T) {
@@ -55,6 +57,7 @@ func TestClientIntegration(t *testing.T) {
 		testSharedCacheMounts,
 		testLockedCacheMounts,
 		testDuplicateCacheMount,
+		testParallelBuilds,
 	})
 }
 
@@ -1345,4 +1348,73 @@ func tmpdir(appliers ...fstest.Applier) (string, error) {
 		return "", err
 	}
 	return tmpdir, nil
+}
+
+func testParallelBuilds(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.TODO())
+	defer cancel()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	eg, ctx := errgroup.WithContext(ctx)
+
+	for i := 0; i < 3; i++ {
+		i := i
+
+		eg.Go(func() error {
+			srcDir, err := ioutil.TempDir("", "buildkit")
+			require.NoError(t, err)
+			defer os.RemoveAll(srcDir)
+
+			fn := fmt.Sprintf("test%d.txt", i)
+			exp := fmt.Sprintf("This is iteration %d\n", i)
+			err = ioutil.WriteFile(filepath.Join(srcDir, fn), []byte(exp), 0666)
+			require.NoError(t, err)
+
+			src := llb.Local("source")
+
+			run := llb.Image("busybox:latest").Dir("/src").Run(
+				llb.ReadonlyRootFS(),
+				// Everything goes to stderr for coherent/ordered logging.
+				// The `ls` records inodes in order to more easily spot clashes.
+				llb.Args([]string{"/bin/sh", "-c", "set -x ; 1>&2 echo Start " + fn + " 1>&2; ls -ilRt /src /out 1>&2 ; cat " + fn + " 1>&2 ; cat test*.txt 1>&2 ; stat test*.txt 1>&2 ; /bin/cp -v  " + fn + " /out/test.txt 1>&2 ; echo End " + fn + " 1>&2"}),
+				llb.AddMount("/src", src, llb.Readonly),
+			)
+			st := run.AddMount("/out", llb.Scratch())
+
+			def, err := st.Marshal()
+			require.NoError(t, err)
+
+			destDir, err := ioutil.TempDir("", "buildkit")
+			require.NoError(t, err)
+			defer os.RemoveAll(destDir)
+
+			t.Logf(`Iteration %d is copying %q to %q`, i, filepath.Join(srcDir, fn), filepath.Join(destDir, "test.txt"))
+
+			rsp, err := c.Solve(ctx, def, SolveOpt{
+				Exporter:          ExporterLocal,
+				ExporterOutputDir: destDir,
+				SharedKey:         srcDir,
+				LocalDirs: map[string]string{
+					"source": srcDir,
+				},
+			}, nil)
+			require.NoError(t, err)
+			for k, v := range rsp.ExporterResponse {
+				t.Logf("solve response: %s=%s", k, v)
+			}
+
+			act, err := ioutil.ReadFile(filepath.Join(destDir, "test.txt"))
+			require.NoError(t, err)
+
+			require.Equal(t, exp, string(act))
+			return nil
+		})
+	}
+
+	err = eg.Wait()
+	require.NoError(t, err)
 }
