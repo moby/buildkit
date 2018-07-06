@@ -63,7 +63,7 @@ func configureUserNS(spec *specs.Spec, uidMap, gidMap []user.IDMap) error {
 				ContainerID: uint32(uNextContainerID),
 				Size:        uint32(u.Count),
 			})
-		uNextContainerID += u.Count
+		uNextContainerID += int64(u.Count)
 	}
 	sort.Slice(gidMap, func(i, j int) bool { return gidMap[i].ID < gidMap[j].ID })
 	gNextContainerID := int64(0)
@@ -74,7 +74,7 @@ func configureUserNS(spec *specs.Spec, uidMap, gidMap []user.IDMap) error {
 				ContainerID: uint32(gNextContainerID),
 				Size:        uint32(g.Count),
 			})
-		gNextContainerID += g.Count
+		gNextContainerID += int64(g.Count)
 	}
 	return nil
 }
