@@ -197,6 +197,34 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 	}, nil
 }
 
+func (c *Controller) ResolveImageConfig(ctx context.Context, req *controlapi.ResolveImageConfigRequest) (*controlapi.ResolveImageConfigResponse, error) {
+	w, err := c.opt.WorkerController.GetDefault()
+	if err != nil {
+		return nil, err
+	}
+
+	var platform *specs.Platform
+	if p := req.Platform; p != nil {
+		platform = &specs.Platform{
+			OS:           p.OS,
+			Architecture: p.Architecture,
+			Variant:      p.Variant,
+			OSVersion:    p.OSVersion,
+			OSFeatures:   p.OSFeatures,
+		}
+	}
+
+	digest, config, err := w.ResolveImageConfig(ctx, req.Ref, platform)
+	if err != nil {
+		return nil, err
+	}
+
+	return &controlapi.ResolveImageConfigResponse{
+		Digest: digest,
+		Config: config,
+	}, nil
+}
+
 func (c *Controller) Status(req *controlapi.StatusRequest, stream controlapi.Control_StatusServer) error {
 	ch := make(chan *client.SolveStatus, 8)
 

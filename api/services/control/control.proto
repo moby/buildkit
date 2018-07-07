@@ -14,6 +14,7 @@ service Control {
 	rpc DiskUsage(DiskUsageRequest) returns (DiskUsageResponse);
 	rpc Prune(PruneRequest) returns (stream UsageRecord);
 	rpc Solve(SolveRequest) returns (SolveResponse);
+	rpc ResolveImageConfig(ResolveImageConfigRequest) returns (ResolveImageConfigResponse);
 	rpc Status(StatusRequest) returns (stream StatusResponse);
 	rpc Session(stream BytesMessage) returns (stream BytesMessage);
 	rpc ListWorkers(ListWorkersRequest) returns (ListWorkersResponse);
@@ -62,6 +63,16 @@ message CacheOptions {
 
 message SolveResponse {
 	map<string, string> ExporterResponse = 1;
+}
+
+message ResolveImageConfigRequest {
+	string Ref = 1;
+	pb.Platform Platform = 2;
+}
+
+message ResolveImageConfigResponse {
+	string Digest = 1 [(gogoproto.customtype) = "github.com/opencontainers/go-digest.Digest", (gogoproto.nullable) = false];
+	bytes Config =2;
 }
 
 message StatusRequest {
