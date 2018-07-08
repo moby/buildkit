@@ -3,6 +3,7 @@ package grpcclient
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -53,38 +54,87 @@ func current() (*grpcClient, error) {
 	}, nil
 }
 
-func Run(ctx context.Context, f client.BuildFunc) error {
+func convertRefs(refs map[string]client.Reference) (map[string]string, error) {
+	out := make(map[string]string, len(refs))
+	for k, v := range refs {
+		if v == nil {
+			out[k] = ""
+		} else {
+			r, ok := v.(*reference)
+			if !ok {
+				return nil, errors.Errorf("invalid return reference type %T", v)
+			}
+			out[k] = r.id
+		}
+	}
+	return out, nil
+}
+
+func Run(ctx context.Context, f client.BuildFunc) (retError error) {
 	client, err := current()
 	if err != nil {
 		return errors.Wrapf(err, "failed to initialize client from environment")
 	}
 
 	res, err := f(ctx, client)
+
+	export := client.caps.Supports(pb.CapReturnResult) == nil
+
+	if export {
+		defer func() {
+			req := &pb.ReturnRequest{}
+			if retError == nil {
+				refs, err := convertRefs(res.Refs)
+				if err != nil {
+					retError = err
+				} else {
+					req.ExporterRefs = refs
+					req.ExporterMeta = res.Metadata
+				}
+			}
+			if retError != nil {
+				req.Error = &pb.Error{
+					Text:  retError.Error(),
+					Code:  -1,
+					Stack: fmt.Sprintf("%+v", retError),
+				}
+			}
+			if _, err := client.client.Return(ctx, req); err != nil && retError == nil {
+				retError = err
+			}
+		}()
+	}
+
 	if err != nil {
-		// FIXME(tonistiigi): return error
 		return err
 	}
 
-	defaultRef, ok := res.Refs["default"]
-	if !ok {
-		return errors.Errorf("no default ref returned")
+	if err := client.caps.Supports(pb.CapReturnMap); len(res.Refs) > 1 && err != nil {
+		return err
 	}
 
-	exportedAttrBytes, err := json.Marshal(res.Metadata)
-	if err != nil {
-		return errors.Wrapf(err, "failed to marshal return metadata")
-	}
+	if !export {
+		defaultRef, ok := res.Refs["default"]
+		if !ok {
+			return errors.Errorf("no default ref returned")
+		}
 
-	req, err := client.requestForRef(defaultRef)
-	if err != nil {
-		return errors.Wrapf(err, "failed to find return ref")
-	}
+		exportedAttrBytes, err := json.Marshal(res.Metadata)
+		if err != nil {
+			return errors.Wrapf(err, "failed to marshal return metadata")
+		}
 
-	req.Final = true
-	req.ExporterAttr = exportedAttrBytes
+		req, err := client.requestForRef(defaultRef)
+		if err != nil {
+			return errors.Wrapf(err, "failed to find return ref")
+		}
 
-	if _, err := client.client.Solve(ctx, req); err != nil {
-		return errors.Wrapf(err, "failed to solve ")
+		req.Final = true
+		req.ExporterAttr = exportedAttrBytes
+
+		if _, err := client.client.Solve(ctx, req); err != nil {
+			return errors.Wrapf(err, "failed to solve ")
+		}
 	}
 
 	return nil
@@ -137,8 +187,10 @@ func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (*clie
 		AllowMapReturn:  true,
 	}
 
-	// IF !supports_export
-	req.ExporterAttr = []byte("{}")
+	// backwards compatibility with inline return
+	if c.caps.Supports(pb.CapReturnResult) != nil {
+		req.ExporterAttr = []byte("{}")
+	}
 
 	resp, err := c.client.Solve(ctx, req)
 	if err != nil {
