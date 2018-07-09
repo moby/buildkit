@@ -22,6 +22,10 @@ import (
 const frontendPrefix = "BUILDKIT_FRONTEND_OPT_"
 
 func Current() (client.Client, error) {
+	if ep := os.Getenv("BUILDKIT_EXPORTEDPRODUCT"); ep != "" {
+		apicaps.ExportedProduct = ep
+	}
+
 	ctx, conn, err := grpcClientConn(context.Background())
 	if err != nil {
 		return nil, err

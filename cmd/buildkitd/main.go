@@ -25,6 +25,7 @@ import (
 	"github.com/moby/buildkit/frontend/gateway"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver/boltdbcachestorage"
+	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/moby/buildkit/util/profiler"
@@ -39,6 +40,10 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
+
+func init() {
+	apicaps.ExportedProduct = "buildkit"
+}
 
 type workerInitializerOpt struct {
 	sessionManager *session.Manager

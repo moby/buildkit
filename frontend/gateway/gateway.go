@@ -22,6 +22,7 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	opspb "github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/tracing"
 	"github.com/moby/buildkit/worker"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -176,6 +177,8 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 			}
 		}
 	}()
+
+	env = append(env, "BUILDKIT_EXPORTEDPRODUCT=", apicaps.ExportedProduct)
 
 	err = llbBridge.Exec(ctx, executor.Meta{
 		Env:            env,
