@@ -194,6 +194,13 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 
 	defer func() {
 		for _, r := range lbf.refs {
+			if retErr != nil && len(lbf.lastRefs) > 0 {
+				for _, ref := range lbf.lastRefs {
+					if ref == r {
+						continue
+					}
+				}
+			}
 			if r != nil && (lbf.lastRef != r || retErr != nil) {
 				r.Release(context.TODO())
 			}
@@ -209,8 +216,16 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 		ReadonlyRootFS: readonly,
 	}, rootFS, lbf.Stdin, lbf.Stdout, os.Stderr)
 
+	if lbf.err != nil {
+		return nil, nil, lbf.err
+	}
+
 	if err != nil {
 		return nil, nil, err
+	}
+
+	if lbf.lastRefs != nil {
+		return lbf.lastRefs, lbf.exporterAttr, nil
 	}
 
 	return map[string]solver.CachedResult{"default": lbf.lastRef}, lbf.exporterAttr, nil
@@ -293,6 +308,8 @@ type llbBridgeForwarder struct {
 	llbBridge    frontend.FrontendLLBBridge
 	refs         map[string]solver.CachedResult
 	lastRef      solver.CachedResult
+	lastRefs     map[string]solver.CachedResult
+	err          error
 	exporterAttr map[string][]byte
 	workers      frontend.WorkerInfos
 	*pipe
@@ -432,7 +449,34 @@ func (lbf *llbBridgeForwarder) Ping(context.Context, *pb.PingRequest) (*pb.PongR
 }
 
 func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest) (*pb.ReturnResponse, error) {
-	return nil, errors.Errorf("return not implemented yet")
+	if in.Error != nil {
+		lbf.err = errors.Errorf(in.Error.Text)
+	} else {
+		lbf.exporterAttr = in.ExporterMeta
+		refs, err := lbf.convertRefs(in.ExporterRefs)
+		if err != nil {
+			lbf.err = err
+		} else {
+			lbf.lastRefs = refs
+		}
+	}
+
+	return &pb.ReturnResponse{}, nil
+}
+
+func (lbf *llbBridgeForwarder) convertRefs(refs map[string]string) (map[string]solver.CachedResult, error) {
+	out := make(map[string]solver.CachedResult, len(refs))
+	for k, v := range refs {
+		if v == "" {
+			out[k] = nil
+		}
+		r, ok := lbf.refs[v]
+		if !ok {
+			return nil, errors.Errorf("return reference %s not found", v)
+		}
+		out[k] = r
+	}
+	return out, nil
 }
 
 func serve(ctx context.Context, grpcServer *grpc.Server, conn net.Conn) {
