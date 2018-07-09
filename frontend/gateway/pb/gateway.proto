@@ -4,14 +4,19 @@ package moby.buildkit.v1.frontend;
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 import "github.com/moby/buildkit/solver/pb/ops.proto";
+import "github.com/moby/buildkit/api/types/worker.proto";
+import "github.com/moby/buildkit/util/apicaps/pb/caps.proto";
 
 option (gogoproto.sizer_all) = true;
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
 
 service LLBBridge {
+	// apicaps:CapResolveImage
 	rpc ResolveImageConfig(ResolveImageConfigRequest) returns (ResolveImageConfigResponse);
+	// apicaps:CapSolveBase
 	rpc Solve(SolveRequest) returns (SolveResponse);
+	// apicaps:CapReadFile
 	rpc ReadFile(ReadFileRequest) returns (ReadFileResponse);
 	rpc Ping(PingRequest) returns (PongResponse);
 }
@@ -31,6 +36,8 @@ message SolveRequest {
 	string Frontend = 2;
 	map<string, string> FrontendOpt = 3;
 	repeated string ImportCacheRefs = 4;
+	
+	// apicaps.CapSolveInlineReturn deprecated
 	bool Final = 10;
 	bytes ExporterAttr = 11;
 }
@@ -58,4 +65,7 @@ message ReadFileResponse {
 message PingRequest{
 }
 message PongResponse{
+	repeated moby.buildkit.v1.apicaps.APICap FrontendAPICaps = 1 [(gogoproto.nullable) = false];
+	repeated moby.buildkit.v1.apicaps.APICap LLBCaps = 2 [(gogoproto.nullable) = false];
+	repeated moby.buildkit.v1.types.WorkerRecord Workers = 3;
 }

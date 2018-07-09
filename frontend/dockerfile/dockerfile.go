@@ -8,15 +8,19 @@ import (
 	"github.com/moby/buildkit/solver"
 )
 
-func NewDockerfileFrontend() frontend.Frontend {
-	return &dfFrontend{}
+func NewDockerfileFrontend(w frontend.WorkerInfos) frontend.Frontend {
+	return &dfFrontend{
+		workers: w,
+	}
 }
 
-type dfFrontend struct{}
+type dfFrontend struct {
+	workers frontend.WorkerInfos
+}
 
 func (f *dfFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string) (retRef solver.CachedResult, exporterAttr map[string][]byte, retErr error) {
 
-	c, err := llbBridgeToGatewayClient(ctx, llbBridge, opts)
+	c, err := llbBridgeToGatewayClient(ctx, llbBridge, opts, f.workers.WorkerInfos())
 	if err != nil {
 		return nil, nil, err
 	}

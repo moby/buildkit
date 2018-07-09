@@ -12,6 +12,7 @@ import (
 	"github.com/moby/buildkit/frontend/gateway/client"
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
 	opspb "github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/apicaps"
 	digest "github.com/opencontainers/go-digest"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -21,6 +22,10 @@ import (
 const frontendPrefix = "BUILDKIT_FRONTEND_OPT_"
 
 func Current() (client.Client, error) {
+	if ep := os.Getenv("BUILDKIT_EXPORTEDPRODUCT"); ep != "" {
+		apicaps.ExportedProduct = ep
+	}
+
 	ctx, conn, err := grpcClientConn(context.Background())
 	if err != nil {
 		return nil, err
@@ -28,18 +33,41 @@ func Current() (client.Client, error) {
 
 	c := pb.NewLLBBridgeClient(conn)
 
-	_, err = c.Ping(ctx, &pb.PingRequest{})
+	resp, err := c.Ping(ctx, &pb.PingRequest{})
 	if err != nil {
 		return nil, err
 	}
 
-	return &grpcClient{client: c, opts: opts(), sessionID: sessionID()}, nil
+	if resp.FrontendAPICaps == nil {
+		resp.FrontendAPICaps = defaultCaps()
+	}
+
+	return &grpcClient{
+		client:    c,
+		opts:      opts(),
+		sessionID: sessionID(),
+		workers:   workers(),
+		caps:      pb.Caps.CapSet(resp.FrontendAPICaps),
+	}, nil
+}
+
+// defaultCaps returns the capabilities that were implemented when capabilities
+// support was added. This list is frozen and should never be changed.
+func defaultCaps() []apicaps.PBCap {
+	return []apicaps.PBCap{
+		{ID: string(pb.CapSolveBase), Enabled: true},
+		{ID: string(pb.CapSolveInlineReturn), Enabled: true},
+		{ID: string(pb.CapResolveImage), Enabled: true},
+		{ID: string(pb.CapReadFile), Enabled: true},
+	}
 }
 
 type grpcClient struct {
 	client    pb.LLBBridgeClient
 	opts      map[string]string
 	sessionID string
+	workers   []client.WorkerInfo
+	caps      apicaps.CapSet
 }
 
 func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest, exporterAttr map[string][]byte, final bool) (client.Reference, error) {
@@ -89,6 +117,10 @@ func (c *grpcClient) Opts() map[string]string {
 
 func (c *grpcClient) SessionID() string {
 	return c.sessionID
+}
+
+func (c *grpcClient) WorkerInfos() []client.WorkerInfo {
+	return c.workers
 }
 
 type reference struct {
@@ -189,4 +221,12 @@ func opts() map[string]string {
 
 func sessionID() string {
 	return os.Getenv("BUILDKIT_SESSION_ID")
+}
+
+func workers() []client.WorkerInfo {
+	var c []client.WorkerInfo
+	if err := json.Unmarshal([]byte(os.Getenv("BUILDKIT_WORKERS")), &c); err != nil {
+		return nil
+	}
+	return c
 }

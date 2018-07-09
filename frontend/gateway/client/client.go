@@ -14,6 +14,7 @@ type Client interface {
 	ResolveImageConfig(ctx context.Context, ref string, platform *specs.Platform) (digest.Digest, []byte, error)
 	Opts() map[string]string
 	SessionID() string
+	WorkerInfos() []WorkerInfo // TODO: remove and combine these to single opt
 }
 
 type Reference interface {
@@ -38,4 +39,10 @@ type SolveRequest struct {
 	Frontend        string
 	FrontendOpt     map[string]string
 	ImportCacheRefs []string
+}
+
+type WorkerInfo struct {
+	ID        string
+	Labels    map[string]string
+	Platforms []specs.Platform
 }

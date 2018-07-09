@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/docker/distribution/reference"
+	apitypes "github.com/moby/buildkit/api/types"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/executor"
@@ -20,6 +21,8 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
+	opspb "github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/tracing"
 	"github.com/moby/buildkit/worker"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -37,11 +40,14 @@ const (
 	exporterImageConfig = "containerimage.config"
 )
 
-func NewGatewayFrontend() frontend.Frontend {
-	return &gatewayFrontend{}
+func NewGatewayFrontend(w frontend.WorkerInfos) frontend.Frontend {
+	return &gatewayFrontend{
+		workers: w,
+	}
 }
 
 type gatewayFrontend struct {
+	workers frontend.WorkerInfos
 }
 
 func filterPrefix(opts map[string]string, pfx string) map[string]string {
@@ -132,7 +138,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 		rootFS = workerRef.ImmutableRef
 	}
 
-	lbf, err := newLLBBridgeForwarder(ctx, llbBridge)
+	lbf, err := newLLBBridgeForwarder(ctx, llbBridge, gf.workers)
 	defer lbf.conn.Close()
 	if err != nil {
 		return nil, nil, err
@@ -158,6 +164,12 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 
 	env = append(env, "BUILDKIT_SESSION_ID="+sid)
 
+	dt, err := json.Marshal(gf.workers.WorkerInfos())
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to marshal workers array")
+	}
+	env = append(env, "BUILDKIT_WORKERS="+string(dt))
+
 	defer func() {
 		for _, r := range lbf.refs {
 			if r != nil && (lbf.lastRef != r || retErr != nil) {
@@ -165,6 +177,8 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 			}
 		}
 	}()
+
+	env = append(env, "BUILDKIT_EXPORTEDPRODUCT=", apicaps.ExportedProduct)
 
 	err = llbBridge.Exec(ctx, executor.Meta{
 		Env:            env,
@@ -180,12 +194,13 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 	return lbf.lastRef, lbf.exporterAttr, nil
 }
 
-func newLLBBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge) (*llbBridgeForwarder, error) {
+func newLLBBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, workers frontend.WorkerInfos) (*llbBridgeForwarder, error) {
 	lbf := &llbBridgeForwarder{
 		callCtx:   ctx,
 		llbBridge: llbBridge,
 		refs:      map[string]solver.Result{},
 		pipe:      newPipe(),
+		workers:   workers,
 	}
 
 	server := grpc.NewServer()
@@ -257,6 +272,7 @@ type llbBridgeForwarder struct {
 	refs         map[string]solver.Result
 	lastRef      solver.CachedResult
 	exporterAttr map[string][]byte
+	workers      frontend.WorkerInfos
 	*pipe
 }
 
@@ -353,7 +369,22 @@ func (lbf *llbBridgeForwarder) ReadFile(ctx context.Context, req *pb.ReadFileReq
 }
 
 func (lbf *llbBridgeForwarder) Ping(context.Context, *pb.PingRequest) (*pb.PongResponse, error) {
-	return &pb.PongResponse{}, nil
+
+	workers := lbf.workers.WorkerInfos()
+	pbWorkers := make([]*apitypes.WorkerRecord, 0, len(workers))
+	for _, w := range workers {
+		pbWorkers = append(pbWorkers, &apitypes.WorkerRecord{
+			ID:        w.ID,
+			Labels:    w.Labels,
+			Platforms: opspb.PlatformsFromSpec(w.Platforms),
+		})
+	}
+
+	return &pb.PongResponse{
+		FrontendAPICaps: pb.Caps.All(),
+		Workers:         pbWorkers,
+		// TODO: add LLB info
+	}, nil
 }
 
 func serve(ctx context.Context, grpcServer *grpc.Server, conn net.Conn) {

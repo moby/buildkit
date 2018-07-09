@@ -25,6 +25,7 @@ import (
 	"github.com/moby/buildkit/frontend/gateway"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver/boltdbcachestorage"
+	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/moby/buildkit/util/profiler"
@@ -39,6 +40,10 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
+
+func init() {
+	apicaps.ExportedProduct = "buildkit"
+}
 
 type workerInitializerOpt struct {
 	sessionManager *session.Manager
@@ -378,8 +383,8 @@ func newController(c *cli.Context, root string) (*control.Controller, error) {
 		return nil, err
 	}
 	frontends := map[string]frontend.Frontend{}
-	frontends["dockerfile.v0"] = dockerfile.NewDockerfileFrontend()
-	frontends["gateway.v0"] = gateway.NewGatewayFrontend()
+	frontends["dockerfile.v0"] = dockerfile.NewDockerfileFrontend(wc)
+	frontends["gateway.v0"] = gateway.NewGatewayFrontend(wc)
 
 	cacheStorage, err := boltdbcachestorage.NewStore(filepath.Join(root, "cache.db"))
 	if err != nil {

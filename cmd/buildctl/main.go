@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/moby/buildkit/util/profiler"
 	"github.com/moby/buildkit/version"
@@ -15,6 +16,10 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )
+
+func init() {
+	apicaps.ExportedProduct = "buildkit"
+}
 
 func main() {
 	cli.VersionPrinter = func(c *cli.Context) {
