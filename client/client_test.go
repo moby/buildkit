@@ -57,7 +57,7 @@ func TestClientIntegration(t *testing.T) {
 		testSharedCacheMounts,
 		testLockedCacheMounts,
 		testDuplicateCacheMount,
-		testParallelBuilds,
+		testParallelLocalBuilds,
 	})
 }
 
@@ -1339,18 +1339,8 @@ func testInvalidExporter(t *testing.T, sb integration.Sandbox) {
 	checkAllReleasable(t, c, sb, true)
 }
 
-func tmpdir(appliers ...fstest.Applier) (string, error) {
-	tmpdir, err := ioutil.TempDir("", "buildkit-client")
-	if err != nil {
-		return "", err
-	}
-	if err := fstest.Apply(appliers...).Apply(tmpdir); err != nil {
-		return "", err
-	}
-	return tmpdir, nil
-}
-
-func testParallelBuilds(t *testing.T, sb integration.Sandbox) {
+// moby/buildkit#492
+func testParallelLocalBuilds(t *testing.T, sb integration.Sandbox) {
 	t.Parallel()
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
@@ -1362,59 +1352,51 @@ func testParallelBuilds(t *testing.T, sb integration.Sandbox) {
 	eg, ctx := errgroup.WithContext(ctx)
 
 	for i := 0; i < 3; i++ {
-		i := i
+		func(i int) {
+			eg.Go(func() error {
+				fn := fmt.Sprintf("test%d", i)
+				srcDir, err := tmpdir(
+					fstest.CreateFile(fn, []byte("contents"), 0600),
+				)
+				require.NoError(t, err)
+				defer os.RemoveAll(srcDir)
 
-		eg.Go(func() error {
-			srcDir, err := ioutil.TempDir("", "buildkit")
-			require.NoError(t, err)
-			defer os.RemoveAll(srcDir)
+				def, err := llb.Local("source").Marshal()
+				require.NoError(t, err)
 
-			fn := fmt.Sprintf("test%d.txt", i)
-			exp := fmt.Sprintf("This is iteration %d\n", i)
-			err = ioutil.WriteFile(filepath.Join(srcDir, fn), []byte(exp), 0666)
-			require.NoError(t, err)
+				destDir, err := ioutil.TempDir("", "buildkit")
+				require.NoError(t, err)
+				defer os.RemoveAll(destDir)
 
-			src := llb.Local("source")
+				_, err = c.Solve(ctx, def, SolveOpt{
+					Exporter:          ExporterLocal,
+					ExporterOutputDir: destDir,
+					LocalDirs: map[string]string{
+						"source": srcDir,
+					},
+				}, nil)
+				require.NoError(t, err)
 
-			run := llb.Image("busybox:latest").Dir("/src").Run(
-				llb.ReadonlyRootFS(),
-				// Everything goes to stderr for coherent/ordered logging.
-				// The `ls` records inodes in order to more easily spot clashes.
-				llb.Args([]string{"/bin/sh", "-c", "set -x ; 1>&2 echo Start " + fn + " 1>&2; ls -ilRt /src /out 1>&2 ; cat " + fn + " 1>&2 ; cat test*.txt 1>&2 ; stat test*.txt 1>&2 ; /bin/cp -v  " + fn + " /out/test.txt 1>&2 ; echo End " + fn + " 1>&2"}),
-				llb.AddMount("/src", src, llb.Readonly),
-			)
-			st := run.AddMount("/out", llb.Scratch())
+				act, err := ioutil.ReadFile(filepath.Join(destDir, fn))
+				require.NoError(t, err)
 
-			def, err := st.Marshal()
-			require.NoError(t, err)
-
-			destDir, err := ioutil.TempDir("", "buildkit")
-			require.NoError(t, err)
-			defer os.RemoveAll(destDir)
-
-			t.Logf(`Iteration %d is copying %q to %q`, i, filepath.Join(srcDir, fn), filepath.Join(destDir, "test.txt"))
-
-			rsp, err := c.Solve(ctx, def, SolveOpt{
-				Exporter:          ExporterLocal,
-				ExporterOutputDir: destDir,
-				SharedKey:         srcDir,
-				LocalDirs: map[string]string{
-					"source": srcDir,
-				},
-			}, nil)
-			require.NoError(t, err)
-			for k, v := range rsp.ExporterResponse {
-				t.Logf("solve response: %s=%s", k, v)
-			}
-
-			act, err := ioutil.ReadFile(filepath.Join(destDir, "test.txt"))
-			require.NoError(t, err)
-
-			require.Equal(t, exp, string(act))
-			return nil
-		})
+				require.Equal(t, "contents", string(act))
+				return nil
+			})
+		}(i)
 	}
 
 	err = eg.Wait()
 	require.NoError(t, err)
+}
+
+func tmpdir(appliers ...fstest.Applier) (string, error) {
+	tmpdir, err := ioutil.TempDir("", "buildkit-client")
+	if err != nil {
+		return "", err
+	}
+	if err := fstest.Apply(appliers...).Apply(tmpdir); err != nil {
+		return "", err
+	}
+	return tmpdir, nil
 }
