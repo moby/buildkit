@@ -5,12 +5,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/containerd/containerd/platforms"
 	"github.com/docker/docker/builder/dockerignore"
 	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/frontend/dockerfile/dockerfile2llb"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -24,13 +27,13 @@ const (
 	keyTarget             = "target"
 	keyFilename           = "filename"
 	keyCacheFrom          = "cache-from"
-	exporterImageConfig   = "containerimage.config"
 	defaultDockerfileName = "Dockerfile"
 	dockerignoreFilename  = ".dockerignore"
 	buildArgPrefix        = "build-arg:"
 	labelPrefix           = "label:"
 	keyNoCache            = "no-cache"
 	keyTargetPlatform     = "platform"
+	keyMultiPlatform      = "multi-platform"
 )
 
 var httpPrefix = regexp.MustCompile("^https?://")
@@ -45,12 +48,12 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 	}
 
 	buildPlatforms := []specs.Platform{defaultBuildPlatform}
-	targetPlatform := platforms.DefaultSpec()
+	targetPlatforms := []*specs.Platform{nil}
 	if v := opts[keyTargetPlatform]; v != "" {
 		var err error
-		targetPlatform, err = platforms.Parse(v)
+		targetPlatforms, err = parsePlatforms(v)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to parse target platform %s", v)
+			return nil, err
 		}
 	}
 
@@ -197,47 +200,107 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 		}
 	}
 
-	st, img, err := dockerfile2llb.Dockerfile2LLB(ctx, dtDockerfile, dockerfile2llb.ConvertOpt{
-		Target:         opts[keyTarget],
-		MetaResolver:   c,
-		BuildArgs:      filter(opts, buildArgPrefix),
-		Labels:         filter(opts, labelPrefix),
-		SessionID:      c.BuildOpts().SessionID,
-		BuildContext:   buildContext,
-		Excludes:       excludes,
-		IgnoreCache:    ignoreCache,
-		TargetPlatform: &targetPlatform,
-		BuildPlatforms: buildPlatforms,
-	})
+	exportMap := len(targetPlatforms) > 1
 
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to create LLB definition")
+	if v := opts[keyMultiPlatform]; v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return nil, errors.Errorf("invalid boolean value %s", v)
+		}
+		if !b && exportMap {
+			return nil, errors.Errorf("returning multiple target plaforms is not allowed")
+		}
+		exportMap = b
 	}
 
-	def, err = st.Marshal()
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to marshal LLB definition")
+	expPlatforms := &exptypes.Platforms{
+		Platforms: make([]exptypes.Platform, len(targetPlatforms)),
+	}
+	res := client.NewResult()
+
+	eg, ctx = errgroup.WithContext(ctx)
+
+	for i, tp := range targetPlatforms {
+		func(i int, tp *specs.Platform) {
+			eg.Go(func() error {
+				st, img, err := dockerfile2llb.Dockerfile2LLB(ctx, dtDockerfile, dockerfile2llb.ConvertOpt{
+					Target:         opts[keyTarget],
+					MetaResolver:   c,
+					BuildArgs:      filter(opts, buildArgPrefix),
+					Labels:         filter(opts, labelPrefix),
+					SessionID:      c.BuildOpts().SessionID,
+					BuildContext:   buildContext,
+					Excludes:       excludes,
+					IgnoreCache:    ignoreCache,
+					TargetPlatform: tp,
+					BuildPlatforms: buildPlatforms,
+				})
+
+				if err != nil {
+					return errors.Wrapf(err, "failed to create LLB definition")
+				}
+
+				def, err := st.Marshal()
+				if err != nil {
+					return errors.Wrapf(err, "failed to marshal LLB definition")
+				}
+
+				config, err := json.Marshal(img)
+				if err != nil {
+					return errors.Wrapf(err, "failed to marshal image config")
+				}
+
+				var cacheFrom []string
+				if cacheFromStr := opts[keyCacheFrom]; cacheFromStr != "" {
+					cacheFrom = strings.Split(cacheFromStr, ",")
+				}
+
+				r, err := c.Solve(ctx, client.SolveRequest{
+					Definition:      def.ToPB(),
+					ImportCacheRefs: cacheFrom,
+				})
+				if err != nil {
+					return err
+				}
+
+				ref, err := r.SingleRef()
+				if err != nil {
+					return err
+				}
+
+				if !exportMap {
+					res.AddMeta(exptypes.ExporterImageConfigKey, config)
+					res.SetRef(ref)
+				} else {
+					p := platforms.DefaultSpec()
+					if tp != nil {
+						p = *tp
+					}
+
+					k := platforms.Format(p)
+					res.AddMeta(fmt.Sprintf("%s/%s", exptypes.ExporterImageConfigKey, k), config)
+					res.AddRef(k, ref)
+					expPlatforms.Platforms[i] = exptypes.Platform{
+						ID:       k,
+						Platform: p,
+					}
+				}
+				return nil
+			})
+		}(i, tp)
 	}
 
-	config, err := json.Marshal(img)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to marshal image config")
-	}
-
-	var cacheFrom []string
-	if cacheFromStr := opts[keyCacheFrom]; cacheFromStr != "" {
-		cacheFrom = strings.Split(cacheFromStr, ",")
-	}
-
-	res, err := c.Solve(ctx, client.SolveRequest{
-		Definition:      def.ToPB(),
-		ImportCacheRefs: cacheFrom,
-	})
-	if err != nil {
+	if err := eg.Wait(); err != nil {
 		return nil, err
 	}
 
-	res.AddMeta(exporterImageConfig, config)
+	if exportMap {
+		dt, err := json.Marshal(expPlatforms)
+		if err != nil {
+			return nil, err
+		}
+		res.AddMeta(exptypes.ExporterPlatformsKey, dt)
+	}
 
 	return res, nil
 }
@@ -307,4 +370,17 @@ func isArchive(header []byte) bool {
 	r := tar.NewReader(bytes.NewBuffer(header))
 	_, err := r.Next()
 	return err == nil
+}
+
+func parsePlatforms(v string) ([]*specs.Platform, error) {
+	var pp []*specs.Platform
+	for _, v := range strings.Split(v, ",") {
+		p, err := platforms.Parse(v)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to parse target platform %s", v)
+		}
+		p = platforms.Normalize(p)
+		pp = append(pp, &p)
+	}
+	return pp, nil
 }
