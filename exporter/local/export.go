@@ -13,6 +13,7 @@ import (
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/pkg/errors"
+	"github.com/tonistiigi/fsutil"
 	"golang.org/x/time/rate"
 )
 
@@ -82,7 +83,7 @@ func (e *localExporterInstance) Export(ctx context.Context, ref cache.ImmutableR
 	}
 
 	progress := newProgressHandler(ctx, "copying files")
-	if err := filesync.CopyToCaller(ctx, src, e.caller, progress); err != nil {
+	if err := filesync.CopyToCaller(ctx, fsutil.NewFS(src, nil), e.caller, progress); err != nil {
 		return nil, err
 	}
 	return nil, nil
