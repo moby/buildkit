@@ -6,7 +6,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/filesync"
@@ -58,7 +57,8 @@ func (e *localExporterInstance) Name() string {
 	return "exporting to client"
 }
 
-func (e *localExporterInstance) Export(ctx context.Context, ref cache.ImmutableRef, opt map[string][]byte) (map[string]string, error) {
+func (e *localExporterInstance) Export(ctx context.Context, inp exporter.Source) (map[string]string, error) {
+	ref := inp.Ref
 	var src string
 	var err error
 	if ref == nil {

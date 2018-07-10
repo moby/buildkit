@@ -8,7 +8,6 @@ import (
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/images/oci"
 	"github.com/docker/distribution/reference"
-	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage"
 	"github.com/moby/buildkit/session"
@@ -106,7 +105,9 @@ func (e *imageExporterInstance) Name() string {
 	return "exporting to oci image format"
 }
 
-func (e *imageExporterInstance) Export(ctx context.Context, ref cache.ImmutableRef, opt map[string][]byte) (map[string]string, error) {
+func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source) (map[string]string, error) {
+	ref := src.Ref
+	opt := src.Metadata
 	if config, ok := opt[exporterImageConfig]; ok {
 		e.config = config
 	}

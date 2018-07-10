@@ -100,17 +100,34 @@ func (s *Solver) Solve(ctx context.Context, id string, req frontend.SolveRequest
 
 	var exporterResponse map[string]string
 	if exp := exp.Exporter; exp != nil {
-		var immutable cache.ImmutableRef
-		if res := res.Ref; res != nil { // FIXME(tonistiigi):
+		inp := exporter.Source{
+			Metadata: res.Metadata,
+		}
+		if res := res.Ref; res != nil {
 			workerRef, ok := res.Sys().(*worker.WorkerRef)
 			if !ok {
 				return nil, errors.Errorf("invalid reference: %T", res.Sys())
 			}
-			immutable = workerRef.ImmutableRef
+			inp.Ref = workerRef.ImmutableRef
+		}
+		if res.Refs != nil {
+			m := make(map[string]cache.ImmutableRef, len(res.Refs))
+			for k, res := range res.Refs {
+				if res == nil {
+					m[k] = nil
+				} else {
+					workerRef, ok := res.Sys().(*worker.WorkerRef)
+					if !ok {
+						return nil, errors.Errorf("invalid reference: %T", res.Sys())
+					}
+					m[k] = workerRef.ImmutableRef
+				}
+			}
+			inp.Refs = m
 		}
 
 		if err := j.Call(ctx, exp.Name(), func(ctx context.Context) error {
-			exporterResponse, err = exp.Export(ctx, immutable, res.Metadata)
+			exporterResponse, err = exp.Export(ctx, inp)
 			return err
 		}); err != nil {
 			return nil, err
