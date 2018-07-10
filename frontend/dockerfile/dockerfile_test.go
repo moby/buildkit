@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -69,6 +70,8 @@ func TestIntegration(t *testing.T) {
 		testNoSnapshotLeak,
 		testCopySymlinks,
 		testContextChangeDirToFile,
+		testPlatformArgsImplicit,
+		testPlatformArgsExplicit,
 	})
 }
 
@@ -2279,6 +2282,106 @@ COPY --from=s1 unique2 /
 
 	require.Equal(t, string(unique1Dir2), string(unique1Dir3))
 	require.NotEqual(t, string(unique2Dir1), string(unique2Dir3))
+}
+
+func testPlatformArgsImplicit(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	dockerfile := []byte(fmt.Sprintf(`
+FROM scratch AS build-%s
+COPY foo bar
+FROM build-${TARGETOS}
+COPY foo2 bar2
+`, runtime.GOOS))
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("foo", []byte("d0"), 0600),
+		fstest.CreateFile("foo2", []byte("d1"), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	opt := client.SolveOpt{
+		Frontend:          "dockerfile.v0",
+		Exporter:          client.ExporterLocal,
+		ExporterOutputDir: destDir,
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+	}
+
+	_, err = c.Solve(context.TODO(), nil, opt, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "bar"))
+	require.NoError(t, err)
+	require.Equal(t, "d0", string(dt))
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "bar2"))
+	require.NoError(t, err)
+	require.Equal(t, "d1", string(dt))
+}
+
+func testPlatformArgsExplicit(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	dockerfile := []byte(`
+FROM --platform=$BUILDPLATFORM busybox AS build
+ARG TARGETPLATFORM
+ARG TARGETOS
+RUN mkdir /out && echo -n $TARGETPLATFORM > /out/platform && echo -n $TARGETOS > /out/os
+FROM scratch
+COPY --from=build out .
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	opt := client.SolveOpt{
+		Frontend: "dockerfile.v0",
+		Exporter: client.ExporterLocal,
+		FrontendAttrs: map[string]string{
+			"platform":           "darwin/ppc64le",
+			"build-arg:TARGETOS": "freebsd",
+		},
+		ExporterOutputDir: destDir,
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+	}
+
+	_, err = c.Solve(context.TODO(), nil, opt, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "platform"))
+	require.NoError(t, err)
+	require.Equal(t, "darwin/ppc64le", string(dt))
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "os"))
+	require.NoError(t, err)
+	require.Equal(t, "freebsd", string(dt))
 }
 
 func testBuiltinArgs(t *testing.T, sb integration.Sandbox) {

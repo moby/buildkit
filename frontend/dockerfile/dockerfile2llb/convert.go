@@ -58,6 +58,11 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 
 	platformOpt := buildPlatformOpt(&opt)
 
+	optMetaArgs := getPlatformArgs(platformOpt)
+	for i, arg := range optMetaArgs {
+		optMetaArgs[i] = setKVValue(arg, opt.BuildArgs)
+	}
+
 	dockerfile, err := parser.Parse(bytes.NewReader(dt))
 	if err != nil {
 		return nil, nil, err
@@ -70,7 +75,6 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		return nil, nil, err
 	}
 
-	optMetaArgs := []instructions.KeyValuePairOptional{}
 	for _, metaArg := range metaArgs {
 		optMetaArgs = append(optMetaArgs, setKVValue(metaArg.KeyValuePairOptional, opt.BuildArgs))
 	}

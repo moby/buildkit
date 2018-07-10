@@ -2,6 +2,7 @@ package dockerfile2llb
 
 import (
 	"github.com/containerd/containerd/platforms"
+	"github.com/moby/buildkit/frontend/dockerfile/instructions"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
@@ -33,4 +34,25 @@ func buildPlatformOpt(opt *ConvertOpt) *platformOpt {
 		buildPlatforms: buildPlatforms,
 		implicitTarget: implicitTargetPlatform,
 	}
+}
+
+func getPlatformArgs(po *platformOpt) []instructions.KeyValuePairOptional {
+	bp := po.buildPlatforms[0]
+	tp := po.targetPlatform
+	m := map[string]string{
+		"BUILDPLATFORM":  platforms.Format(bp),
+		"BUILDOS":        bp.OS,
+		"BUILDARCH":      bp.Architecture,
+		"BUILDVARIANT":   bp.Variant,
+		"TARGETPLATFORM": platforms.Format(tp),
+		"TARGETOS":       tp.OS,
+		"TARGETARCH":     tp.Architecture,
+		"TARGETVARIANT":  tp.Variant,
+	}
+	opts := make([]instructions.KeyValuePairOptional, 0, len(m))
+	for k, v := range m {
+		s := v
+		opts = append(opts, instructions.KeyValuePairOptional{Key: k, Value: &s})
+	}
+	return opts
 }
