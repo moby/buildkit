@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -29,6 +30,7 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
 
 func TestClientIntegration(t *testing.T) {
@@ -55,6 +57,7 @@ func TestClientIntegration(t *testing.T) {
 		testSharedCacheMounts,
 		testLockedCacheMounts,
 		testDuplicateCacheMount,
+		testParallelLocalBuilds,
 	})
 }
 
@@ -1334,6 +1337,57 @@ func testInvalidExporter(t *testing.T, sb integration.Sandbox) {
 	require.Error(t, err)
 
 	checkAllReleasable(t, c, sb, true)
+}
+
+// moby/buildkit#492
+func testParallelLocalBuilds(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.TODO())
+	defer cancel()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	eg, ctx := errgroup.WithContext(ctx)
+
+	for i := 0; i < 3; i++ {
+		func(i int) {
+			eg.Go(func() error {
+				fn := fmt.Sprintf("test%d", i)
+				srcDir, err := tmpdir(
+					fstest.CreateFile(fn, []byte("contents"), 0600),
+				)
+				require.NoError(t, err)
+				defer os.RemoveAll(srcDir)
+
+				def, err := llb.Local("source").Marshal()
+				require.NoError(t, err)
+
+				destDir, err := ioutil.TempDir("", "buildkit")
+				require.NoError(t, err)
+				defer os.RemoveAll(destDir)
+
+				_, err = c.Solve(ctx, def, SolveOpt{
+					Exporter:          ExporterLocal,
+					ExporterOutputDir: destDir,
+					LocalDirs: map[string]string{
+						"source": srcDir,
+					},
+				}, nil)
+				require.NoError(t, err)
+
+				act, err := ioutil.ReadFile(filepath.Join(destDir, fn))
+				require.NoError(t, err)
+
+				require.Equal(t, "contents", string(act))
+				return nil
+			})
+		}(i)
+	}
+
+	err = eg.Wait()
+	require.NoError(t, err)
 }
 
 func tmpdir(appliers ...fstest.Applier) (string, error) {
