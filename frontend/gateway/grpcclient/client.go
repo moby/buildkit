@@ -3,13 +3,13 @@ package grpcclient
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/gogo/googleapis/google/rpc"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
 	opspb "github.com/moby/buildkit/solver/pb"
@@ -18,6 +18,7 @@ import (
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/status"
 )
 
 const frontendPrefix = "BUILDKIT_FRONTEND_OPT_"
@@ -54,20 +55,15 @@ func current() (*grpcClient, error) {
 	}, nil
 }
 
-func convertRefs(refs map[string]client.Reference) (map[string]string, error) {
-	out := make(map[string]string, len(refs))
-	for k, v := range refs {
-		if v == nil {
-			out[k] = ""
-		} else {
-			r, ok := v.(*reference)
-			if !ok {
-				return nil, errors.Errorf("invalid return reference type %T", v)
-			}
-			out[k] = r.id
-		}
+func convertRef(ref client.Reference) (string, error) {
+	if ref == nil {
+		return "", nil
 	}
-	return out, nil
+	r, ok := ref.(*reference)
+	if !ok {
+		return "", errors.Errorf("invalid return reference type %T", ref)
+	}
+	return r.id, nil
 }
 
 func Run(ctx context.Context, f client.BuildFunc) (retError error) {
@@ -84,19 +80,39 @@ func Run(ctx context.Context, f client.BuildFunc) (retError error) {
 		defer func() {
 			req := &pb.ReturnRequest{}
 			if retError == nil {
-				refs, err := convertRefs(res.Refs)
-				if err != nil {
-					retError = err
+				pbRes := &pb.Result{
+					Metadata: res.Metadata,
+				}
+				if res.Refs != nil {
+					m := map[string]string{}
+					for k, r := range res.Refs {
+						id, err := convertRef(r)
+						if err != nil {
+							retError = err
+							continue
+						}
+						m[k] = id
+					}
+					pbRes.Result = &pb.Result_Refs{Refs: &pb.RefMap{Refs: m}}
 				} else {
-					req.ExporterRefs = refs
-					req.ExporterMeta = res.Metadata
+					id, err := convertRef(res.Ref)
+					if err != nil {
+						retError = err
+					} else {
+						pbRes.Result = &pb.Result_Ref{Ref: id}
+					}
+				}
+				if retError == nil {
+					req.Result = pbRes
 				}
 			}
 			if retError != nil {
-				req.Error = &pb.Error{
-					Text:  retError.Error(),
-					Code:  -1,
-					Stack: fmt.Sprintf("%+v", retError),
+				st, _ := status.FromError(retError)
+				stp := st.Proto()
+				req.Error = &rpc.Status{
+					Code:    stp.Code,
+					Message: stp.Message,
+					// Details: stp.Details,
 				}
 			}
 			if _, err := client.client.Return(ctx, req); err != nil && retError == nil {
@@ -114,17 +130,12 @@ func Run(ctx context.Context, f client.BuildFunc) (retError error) {
 	}
 
 	if !export {
-		defaultRef, ok := res.Refs["default"]
-		if !ok {
-			return errors.Errorf("no default ref returned")
-		}
-
 		exportedAttrBytes, err := json.Marshal(res.Metadata)
 		if err != nil {
 			return errors.Wrapf(err, "failed to marshal return metadata")
 		}
 
-		req, err := client.requestForRef(defaultRef)
+		req, err := client.requestForRef(res.Ref)
 		if err != nil {
 			return errors.Wrapf(err, "failed to find return ref")
 		}
@@ -133,7 +144,7 @@ func Run(ctx context.Context, f client.BuildFunc) (retError error) {
 		req.ExporterAttr = exportedAttrBytes
 
 		if _, err := client.client.Solve(ctx, req); err != nil {
-			return errors.Wrapf(err, "failed to solve ")
+			return errors.Wrapf(err, "failed to solve")
 		}
 	}
 
@@ -162,14 +173,18 @@ type grpcClient struct {
 }
 
 func (c *grpcClient) requestForRef(ref client.Reference) (*pb.SolveRequest, error) {
+	emptyReq := &pb.SolveRequest{
+		Definition: &opspb.Definition{},
+	}
 	if ref == nil {
-		return &pb.SolveRequest{
-			Definition: &opspb.Definition{},
-		}, nil
+		return emptyReq, nil
 	}
 	r, ok := ref.(*reference)
 	if !ok {
 		return nil, errors.Errorf("return reference has invalid type %T", ref)
+	}
+	if r.id == "" {
+		return emptyReq, nil
 	}
 	req, ok := c.requests[r.id]
 	if !ok {
@@ -180,11 +195,11 @@ func (c *grpcClient) requestForRef(ref client.Reference) (*pb.SolveRequest, erro
 
 func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (*client.Result, error) {
 	req := &pb.SolveRequest{
-		Definition:      creq.Definition,
-		Frontend:        creq.Frontend,
-		FrontendOpt:     creq.FrontendOpt,
-		ImportCacheRefs: creq.ImportCacheRefs,
-		AllowMapReturn:  true,
+		Definition:        creq.Definition,
+		Frontend:          creq.Frontend,
+		FrontendOpt:       creq.FrontendOpt,
+		ImportCacheRefs:   creq.ImportCacheRefs,
+		AllowResultReturn: true,
 	}
 
 	// backwards compatibility with inline return
@@ -197,22 +212,29 @@ func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (*clie
 		return nil, err
 	}
 
-	refs := map[string]string{}
-	if len(resp.Refs) == 0 {
-		refs["default"] = resp.Ref
-	} else {
-		refs = resp.Refs
-	}
-
 	res := &client.Result{}
-	res.Metadata = resp.Metadata
 
-	for k, v := range refs {
-		res.AddRef(k, &reference{id: v, c: c})
-	}
-
-	if id, ok := refs["default"]; ok {
-		c.requests[id] = req
+	if resp.Result == nil {
+		if id := resp.Ref; id != "" {
+			c.requests[id] = req
+		}
+		res.SetRef(&reference{id: resp.Ref, c: c})
+	} else {
+		res.Metadata = resp.Result.Metadata
+		switch pbRes := resp.Result.Result.(type) {
+		case *pb.Result_Ref:
+			if id := pbRes.Ref; id != "" {
+				res.SetRef(&reference{id: id, c: c})
+			}
+		case *pb.Result_Refs:
+			for k, v := range pbRes.Refs.Refs {
+				ref := &reference{id: v, c: c}
+				if v == "" {
+					ref = nil
+				}
+				res.AddRef(k, ref)
+			}
+		}
 	}
 
 	return res, nil

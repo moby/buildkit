@@ -5,7 +5,6 @@ import (
 
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/frontend/gateway/client"
-	"github.com/moby/buildkit/solver"
 )
 
 func NewGatewayForwarder(w frontend.WorkerInfos, f client.BuildFunc) frontend.Frontend {
@@ -20,10 +19,10 @@ type GatewayForwarder struct {
 	f       client.BuildFunc
 }
 
-func (gf *GatewayForwarder) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string) (retRes map[string]solver.CachedResult, exporterAttr map[string][]byte, retErr error) {
+func (gf *GatewayForwarder) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string) (retRes *frontend.Result, retErr error) {
 	c, err := llbBridgeToGatewayClient(ctx, llbBridge, opts, gf.workers.WorkerInfos())
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	defer func() {
@@ -32,8 +31,8 @@ func (gf *GatewayForwarder) Solve(ctx context.Context, llbBridge frontend.Fronte
 
 	res, err := gf.f(ctx, c)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	return c.result(res)
+	return c.toFrontendResult(res)
 }

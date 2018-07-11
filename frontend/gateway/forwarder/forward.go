@@ -37,7 +37,7 @@ type bridgeClient struct {
 }
 
 func (c *bridgeClient) Solve(ctx context.Context, req client.SolveRequest) (*client.Result, error) {
-	refs, exporterAttrRes, err := c.FrontendLLBBridge.Solve(ctx, frontend.SolveRequest{
+	res, err := c.FrontendLLBBridge.Solve(ctx, frontend.SolveRequest{
 		Definition:      req.Definition,
 		Frontend:        req.Frontend,
 		FrontendOpt:     req.FrontendOpt,
@@ -47,17 +47,22 @@ func (c *bridgeClient) Solve(ctx context.Context, req client.SolveRequest) (*cli
 		return nil, err
 	}
 
-	res := &client.Result{}
+	cRes := &client.Result{}
 	c.mu.Lock()
-	for k, r := range refs {
+	for k, r := range res.Refs {
 		rr := &ref{r}
 		c.refs = append(c.refs, rr)
-		res.AddRef(k, rr)
+		cRes.AddRef(k, rr)
+	}
+	if r := res.Ref; r != nil {
+		rr := &ref{r}
+		c.refs = append(c.refs, rr)
+		cRes.SetRef(rr)
 	}
 	c.mu.Unlock()
-	res.Metadata = exporterAttrRes
+	cRes.Metadata = res.Metadata
 
-	return res, nil
+	return cRes, nil
 }
 func (c *bridgeClient) BuildOpts() client.BuildOpts {
 	workers := make([]client.WorkerInfo, 0, len(c.workerInfos))
@@ -73,17 +78,35 @@ func (c *bridgeClient) BuildOpts() client.BuildOpts {
 	}
 }
 
-func (c *bridgeClient) result(r *client.Result) (map[string]solver.CachedResult, map[string][]byte, error) {
-	refs := map[string]solver.CachedResult{}
-	for k, r := range r.Refs {
+func (c *bridgeClient) toFrontendResult(r *client.Result) (*frontend.Result, error) {
+	if r == nil {
+		return nil, nil
+	}
+
+	res := &frontend.Result{}
+
+	if r.Refs != nil {
+		res.Refs = make(map[string]solver.CachedResult, len(r.Refs))
+		for k, r := range r.Refs {
+			rr, ok := r.(*ref)
+			if !ok {
+				return nil, errors.Errorf("invalid reference type for forward %T", r)
+			}
+			c.final[rr] = struct{}{}
+			res.Refs[k] = rr.CachedResult
+		}
+	}
+	if r := r.Ref; r != nil {
 		rr, ok := r.(*ref)
 		if !ok {
-			return nil, nil, errors.Errorf("invalid reference type for forward %T", r)
+			return nil, errors.Errorf("invalid reference type for forward %T", r)
 		}
 		c.final[rr] = struct{}{}
-		refs[k] = rr.CachedResult
+		res.Ref = rr.CachedResult
 	}
-	return refs, r.Metadata, nil
+	res.Metadata = r.Metadata
+
+	return res, nil
 }
 
 func (c *bridgeClient) discard(err error) {

@@ -29,10 +29,10 @@ type llbBridge struct {
 	platforms            []specs.Platform
 }
 
-func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (res map[string]solver.CachedResult, exp map[string][]byte, err error) {
+func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (res *frontend.Result, err error) {
 	w, err := b.resolveWorker()
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	var cms []solver.CacheManager
 	for _, ref := range req.ImportCacheRefs {
@@ -41,7 +41,7 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (res m
 		if prevCm, ok := b.cms[ref]; !ok {
 			r, err := reference.ParseNormalizedNamed(ref)
 			if err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 			ref = reference.TagNameOnly(r).String()
 			func(ref string) {
@@ -75,42 +75,43 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (res m
 	if req.Definition != nil && req.Definition.Def != nil {
 		edge, err := Load(req.Definition, WithCacheSources(cms), RuntimePlatforms(b.platforms))
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		ref, err := b.builder.Build(ctx, edge)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
-		res = map[string]solver.CachedResult{}
-		res["default"] = ref
+
+		res = &frontend.Result{Ref: ref}
 	}
 	if req.Frontend != "" {
 		f, ok := b.frontends[req.Frontend]
 		if !ok {
-			return nil, nil, errors.Errorf("invalid frontend: %s", req.Frontend)
+			return nil, errors.Errorf("invalid frontend: %s", req.Frontend)
 		}
-		res, exp, err = f.Solve(ctx, b, req.FrontendOpt)
+		res, err = f.Solve(ctx, b, req.FrontendOpt)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 	} else {
 		if req.Definition == nil || req.Definition.Def == nil {
-			return nil, nil, nil
+			return &frontend.Result{}, nil
 		}
 	}
 
-	for _, r := range res {
-		if r != nil {
-			wr, ok := r.Sys().(*worker.WorkerRef)
-			if !ok {
-				return nil, nil, errors.Errorf("invalid reference for exporting: %T", r.Sys())
-			}
-			if wr.ImmutableRef != nil {
-				if err := wr.ImmutableRef.Finalize(ctx, false); err != nil {
-					return nil, nil, err
-				}
+	if err := res.EachRef(func(r solver.CachedResult) error {
+		wr, ok := r.Sys().(*worker.WorkerRef)
+		if !ok {
+			return errors.Errorf("invalid reference for exporting: %T", r.Sys())
+		}
+		if wr.ImmutableRef != nil {
+			if err := wr.ImmutableRef.Finalize(ctx, false); err != nil {
+				return err
 			}
 		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 	return
 }
