@@ -2,6 +2,7 @@ package dockerfile
 
 import (
 	"context"
+	"sync"
 
 	"github.com/moby/buildkit/cache"
 	clienttypes "github.com/moby/buildkit/client"
@@ -19,6 +20,7 @@ func llbBridgeToGatewayClient(ctx context.Context, llbBridge frontend.FrontendLL
 
 type bridgeClient struct {
 	frontend.FrontendLLBBridge
+	mu           sync.Mutex
 	opts         map[string]string
 	final        *ref
 	sid          string
@@ -38,6 +40,7 @@ func (c *bridgeClient) Solve(ctx context.Context, req client.SolveRequest, expor
 		return nil, err
 	}
 	rr := &ref{r}
+	c.mu.Lock()
 	c.refs = append(c.refs, rr)
 	if final {
 		c.final = rr
@@ -49,6 +52,7 @@ func (c *bridgeClient) Solve(ctx context.Context, req client.SolveRequest, expor
 		}
 		c.exporterAttr = exporterAttr
 	}
+	c.mu.Unlock()
 	return rr, nil
 }
 func (c *bridgeClient) Opts() map[string]string {
