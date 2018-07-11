@@ -32,6 +32,10 @@ func GetDiffPairs(ctx context.Context, contentStore content.Store, snapshotter s
 		return nil, nil
 	}
 
+	if err := ref.Finalize(ctx, true); err != nil {
+		return nil, err
+	}
+
 	eg, ctx := errgroup.WithContext(ctx)
 	var diffPairs []DiffPair
 	var currentPair DiffPair
