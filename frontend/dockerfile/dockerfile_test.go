@@ -36,6 +36,7 @@ import (
 
 func TestIntegration(t *testing.T) {
 	integration.Run(t, []integration.Test{
+		testNoSnapshotLeak,
 		testCmdShell,
 		testGlobalArg,
 		testDockerfileDirs,
@@ -65,8 +66,55 @@ func TestIntegration(t *testing.T) {
 		testPullScratch,
 		testSymlinkDestination,
 		testHTTPDockerfile,
+		testNoSnapshotLeak,
 		testCopySymlinks,
 	})
+}
+
+func testNoSnapshotLeak(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	dockerfile := []byte(`
+FROM scratch
+COPY foo /
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("foo", []byte(`contents`), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	_, err = c.Solve(context.TODO(), nil, client.SolveOpt{
+		Frontend: "dockerfile.v0",
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	du, err := c.DiskUsage(context.TODO())
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), nil, client.SolveOpt{
+		Frontend: "dockerfile.v0",
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	du2, err := c.DiskUsage(context.TODO())
+	require.NoError(t, err)
+
+	require.Equal(t, len(du), len(du2))
 }
 
 func testCopySymlinks(t *testing.T, sb integration.Sandbox) {

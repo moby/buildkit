@@ -103,7 +103,7 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (res s
 			return nil, nil, errors.Errorf("invalid reference for exporting: %T", res.Sys())
 		}
 		if wr.ImmutableRef != nil {
-			if err := wr.ImmutableRef.Finalize(ctx); err != nil {
+			if err := wr.ImmutableRef.Finalize(ctx, false); err != nil {
 				return nil, nil, err
 			}
 		}
