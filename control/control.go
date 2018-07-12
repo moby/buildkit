@@ -105,7 +105,7 @@ func (c *Controller) Prune(req *controlapi.PruneRequest, stream controlapi.Contr
 		}(w)
 	}
 
-	eg2, ctx := errgroup.WithContext(stream.Context())
+	eg2, _ := errgroup.WithContext(stream.Context())
 
 	eg2.Go(func() error {
 		defer close(ch)
