@@ -67,7 +67,7 @@ func (b Bytes) Format(f fmt.State, c rune) {
 	case 'f', 'g':
 		fv, unit, ok := b.floatValue(f.Flag('#'))
 		if !ok {
-			b.formatInt(f, 'd', true)
+			b.formatInt(&noPrecision{f}, 'd', true)
 			return
 		}
 		big.NewFloat(fv).Format(f, c)
@@ -114,4 +114,12 @@ func (b Bytes) floatValue(binary bool) (float64, string, bool) {
 
 		return float64(b) / math.Abs(float64(baseUnit)), units[binary][i], true
 	}
+}
+
+type noPrecision struct {
+	fmt.State
+}
+
+func (*noPrecision) Precision() (prec int, ok bool) {
+	return 0, false
 }
