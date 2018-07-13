@@ -13,6 +13,8 @@ import (
 	"github.com/containerd/containerd/images"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/blobs"
+	"github.com/moby/buildkit/exporter"
+	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/system"
@@ -21,6 +23,7 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -41,15 +44,138 @@ type ImageWriter struct {
 	opt WriterOpt
 }
 
-func (ic *ImageWriter) Commit(ctx context.Context, ref cache.ImmutableRef, config []byte, oci bool) (*ocispec.Descriptor, error) {
-	layersDone := oneOffProgress(ctx, "exporting layers")
-	diffPairs, err := blobs.GetDiffPairs(ctx, ic.opt.ContentStore, ic.opt.Snapshotter, ic.opt.Differ, ref, true)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed calculaing diff pairs for exported snapshot")
-	}
-	layersDone(nil)
+func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool) (*ocispec.Descriptor, error) {
+	platformsBytes, ok := inp.Metadata[exptypes.ExporterPlatformsKey]
 
+	if len(inp.Refs) > 0 && !ok {
+		return nil, errors.Errorf("unable to export multiple refs, missing platforms mapping")
+	}
+
+	if len(inp.Refs) == 0 {
+		layers, err := ic.exportLayers(ctx, inp.Ref)
+		if err != nil {
+			return nil, err
+		}
+		return ic.commitDistributionManifest(ctx, inp.Ref, inp.Metadata[exptypes.ExporterImageConfigKey], layers[0], oci)
+	}
+
+	var p exptypes.Platforms
+	if err := json.Unmarshal(platformsBytes, &p); err != nil {
+		return nil, errors.Wrapf(err, "failed to parse platforms passed to exporter")
+	}
+
+	if len(p.Platforms) != len(inp.Refs) {
+		return nil, errors.Errorf("number of platforms does not match references %d %d", len(p.Platforms), len(inp.Refs))
+	}
+
+	refs := make([]cache.ImmutableRef, 0, len(inp.Refs))
+	layersMap := make(map[string]int, len(inp.Refs))
+	for id, r := range inp.Refs {
+		layersMap[id] = len(refs)
+		refs = append(refs, r)
+	}
+
+	layers, err := ic.exportLayers(ctx, refs...)
+	if err != nil {
+		return nil, err
+	}
+
+	idx := struct {
+		// MediaType is reserved in the OCI spec but
+		// excluded from go types.
+		MediaType string `json:"mediaType,omitempty"`
+
+		ocispec.Index
+	}{
+		MediaType: ocispec.MediaTypeImageIndex,
+		Index: ocispec.Index{
+			Versioned: specs.Versioned{
+				SchemaVersion: 2,
+			},
+		},
+	}
+
+	if !oci {
+		idx.MediaType = images.MediaTypeDockerSchema2ManifestList
+	}
+
+	labels := map[string]string{}
+
+	for i, p := range p.Platforms {
+		r, ok := inp.Refs[p.ID]
+		if !ok {
+			return nil, errors.Errorf("failed to find ref for ID %s", p.ID)
+		}
+		config := inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterImageConfigKey, p.ID)]
+
+		desc, err := ic.commitDistributionManifest(ctx, r, config, layers[layersMap[p.ID]], oci)
+		if err != nil {
+			return nil, err
+		}
+		dp := p.Platform
+		desc.Platform = &dp
+		idx.Manifests = append(idx.Manifests, *desc)
+
+		labels[fmt.Sprintf("containerd.io/gc.ref.content.%d", i)] = desc.Digest.String()
+	}
+
+	idxBytes, err := json.MarshalIndent(idx, "", "   ")
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to marshal index")
+	}
+
+	idxDigest := digest.FromBytes(idxBytes)
+	idxDesc := ocispec.Descriptor{
+		Digest:    idxDigest,
+		Size:      int64(len(idxBytes)),
+		MediaType: idx.MediaType,
+	}
+	idxDone := oneOffProgress(ctx, "exporting manifest list "+idxDigest.String())
+
+	if err := content.WriteBlob(ctx, ic.opt.ContentStore, idxDigest.String(), bytes.NewReader(idxBytes), idxDesc, content.WithLabels(labels)); err != nil {
+		return nil, idxDone(errors.Wrapf(err, "error writing manifest list blob %s", idxDigest))
+	}
+	idxDone(nil)
+
+	for _, desc := range idx.Manifests {
+		// delete manifest root. manifest will remain linked to the index
+		if err := ic.opt.ContentStore.Delete(context.TODO(), desc.Digest); err != nil {
+			return nil, errors.Wrap(err, "error removing manifest root")
+		}
+	}
+
+	return &idxDesc, nil
+}
+
+func (ic *ImageWriter) exportLayers(ctx context.Context, refs ...cache.ImmutableRef) ([][]blobs.DiffPair, error) {
+	eg, ctx := errgroup.WithContext(ctx)
+	layersDone := oneOffProgress(ctx, "exporting layers")
+
+	out := make([][]blobs.DiffPair, len(refs))
+
+	for i, ref := range refs {
+		func(i int, ref cache.ImmutableRef) {
+			eg.Go(func() error {
+				diffPairs, err := blobs.GetDiffPairs(ctx, ic.opt.ContentStore, ic.opt.Snapshotter, ic.opt.Differ, ref, true)
+				if err != nil {
+					return errors.Wrap(err, "failed calculaing diff pairs for exported snapshot")
+				}
+				out[i] = diffPairs
+				return nil
+			})
+		}(i, ref)
+	}
+
+	if err := layersDone(eg.Wait()); err != nil {
+		return nil, err
+	}
+
+	return out, nil
+}
+
+func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache.ImmutableRef, config []byte, layers []blobs.DiffPair, oci bool) (*ocispec.Descriptor, error) {
 	if len(config) == 0 {
+		var err error
 		config, err = emptyImageConfig()
 		if err != nil {
 			return nil, err
@@ -61,7 +187,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, ref cache.ImmutableRef, confi
 		return nil, err
 	}
 
-	diffPairs, history = normalizeLayersAndHistory(diffPairs, history, ref)
+	diffPairs, history := normalizeLayersAndHistory(layers, history, ref)
 
 	config, err = patchImageConfig(config, diffPairs, history)
 	if err != nil {

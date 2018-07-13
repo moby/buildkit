@@ -8,11 +8,9 @@ import (
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
 	"github.com/moby/buildkit/exporter"
-	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/util/push"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -67,8 +65,6 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
 			}
 			i.insecure = b
-		case exptypes.ExporterImageConfigKey:
-			i.config = []byte(v)
 		case ociTypes:
 			if v == "" {
 				i.ociTypes = true
@@ -80,7 +76,10 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 			}
 			i.ociTypes = b
 		default:
-			logrus.Warnf("image exporter: unknown option %s", k)
+			if i.meta == nil {
+				i.meta = make(map[string][]byte)
+				i.meta[k] = []byte(v)
+			}
 		}
 	}
 	return i, nil
@@ -92,7 +91,7 @@ type imageExporterInstance struct {
 	push       bool
 	insecure   bool
 	ociTypes   bool
-	config     []byte
+	meta       map[string][]byte
 }
 
 func (e *imageExporterInstance) Name() string {
@@ -100,12 +99,10 @@ func (e *imageExporterInstance) Name() string {
 }
 
 func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source) (map[string]string, error) {
-	ref := src.Ref
-	opt := src.Metadata
-	if config, ok := opt[exptypes.ExporterImageConfigKey]; ok {
-		e.config = config
+	for k, v := range e.meta {
+		src.Metadata[k] = v
 	}
-	desc, err := e.opt.ImageWriter.Commit(ctx, ref, e.config, e.ociTypes)
+	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes)
 	if err != nil {
 		return nil, err
 	}

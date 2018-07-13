@@ -10,7 +10,6 @@ import (
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/images"
-	"github.com/containerd/containerd/platforms"
 	ocispecs "github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -51,8 +50,6 @@ func (de *DockerExporter) Export(ctx context.Context, store content.Provider, de
 
 	// Get all the children for a descriptor
 	childrenHandler := images.ChildrenHandler(store)
-	// Filter the childen by the platform
-	childrenHandler = images.FilterPlatforms(childrenHandler, platforms.Default())
 
 	handlers := images.Handlers(
 		childrenHandler,
