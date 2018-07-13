@@ -2,8 +2,9 @@
 
 #Install CNI default plugins
 function install_cni() {
-    go get github.com/containernetworking/plugins
-    cd $GOPATH/src/github.com/containernetworking/plugins && ./build.sh
+    wget https://github.com/containernetworking/plugins/releases/download/v0.7.1/cni-plugins-amd64-v0.7.1.tgz
+    mkdir -p /opt/cni/bin
+    tar vxf cni-plugins-amd64-v0.7.1.tgz -C /opt/cni/bin
     return $?
 }
 

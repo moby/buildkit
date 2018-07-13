@@ -50,7 +50,7 @@ validate-generated-files:
 
 test-with-cni:
 	./hack/cni-setup
-	./hack/test
+	./hack/test-cni
 
 validate-all: test test-with-cni lint validate-vendor validate-generated-files
 
