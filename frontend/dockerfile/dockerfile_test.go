@@ -2634,7 +2634,7 @@ func tmpdir(appliers ...fstest.Applier) (string, error) {
 
 func dfCmdArgs(ctx, dockerfile string) (string, string) {
 	traceFile := filepath.Join(os.TempDir(), "trace"+identity.NewID())
-	return fmt.Sprintf("build --no-progress --frontend dockerfile.v0 --local context=%s --local dockerfile=%s --trace=%s", ctx, dockerfile, traceFile), traceFile
+	return fmt.Sprintf("build --progress=plain --frontend dockerfile.v0 --local context=%s --local dockerfile=%s --trace=%s", ctx, dockerfile, traceFile), traceFile
 }
 
 func runShell(dir string, cmds ...string) error {

@@ -37,9 +37,10 @@ var buildCommand = cli.Command{
 			Name:  "exporter-opt",
 			Usage: "Define custom options for exporter",
 		},
-		cli.BoolFlag{
-			Name:  "no-progress",
-			Usage: "Don't show interactive progress",
+		cli.StringFlag{
+			Name:  "progress",
+			Usage: "Set type of progress (auto, plain, tty). Use plain to show container output",
+			Value: "auto",
 		},
 		cli.StringFlag{
 			Name:  "trace",
@@ -233,11 +234,20 @@ func build(clicontext *cli.Context) error {
 
 	eg.Go(func() error {
 		var c console.Console
-		if !clicontext.Bool("no-progress") {
-			if cf, err := console.ConsoleFromFile(os.Stderr); err == nil {
-				c = cf
+		progressOpt := clicontext.String("progress")
+
+		switch progressOpt {
+		case "auto", "tty":
+			cf, err := console.ConsoleFromFile(os.Stderr)
+			if err != nil && progressOpt == "tty" {
+				return err
 			}
+			c = cf
+		case "plain":
+		default:
+			return errors.Errorf("invalid progress value : %s", progressOpt)
 		}
+
 		// not using shared context to not disrupt display but let is finish reporting errors
 		return progressui.DisplaySolveStatus(context.TODO(), "", c, os.Stdout, displayCh)
 	})

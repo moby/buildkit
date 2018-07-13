@@ -35,7 +35,7 @@ func testBuildWithLocalFiles(t *testing.T, sb integration.Sandbox) {
 	rdr, err := marshal(st.Root())
 	require.NoError(t, err)
 
-	cmd := sb.Cmd(fmt.Sprintf("build --no-progress --local src=%s", dir))
+	cmd := sb.Cmd(fmt.Sprintf("build --progress=plain --local src=%s", dir))
 	cmd.Stdin = rdr
 
 	err = cmd.Run()
@@ -56,7 +56,7 @@ func testBuildLocalExporter(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
-	cmd := sb.Cmd(fmt.Sprintf("build --no-progress --exporter=local --exporter-opt output=%s", tmpdir))
+	cmd := sb.Cmd(fmt.Sprintf("build --progress=plain --exporter=local --exporter-opt output=%s", tmpdir))
 	cmd.Stdin = rdr
 	err = cmd.Run()
 
@@ -85,7 +85,7 @@ func testBuildContainerdExporter(t *testing.T, sb integration.Sandbox) {
 	rdr, err := marshal(st.Root())
 	require.NoError(t, err)
 
-	cmd := sb.Cmd("build --no-progress --exporter=image --exporter-opt name=example.com/moby/imageexporter:test")
+	cmd := sb.Cmd("build --progress=plain --exporter=image --exporter-opt name=example.com/moby/imageexporter:test")
 	cmd.Stdin = rdr
 	err = cmd.Run()
 	require.NoError(t, err)
