@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gogo/googleapis/google/rpc"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
 	opspb "github.com/moby/buildkit/solver/pb"
@@ -17,12 +18,13 @@ import (
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/status"
 )
 
 const frontendPrefix = "BUILDKIT_FRONTEND_OPT_"
 
-func Current() (client.Client, error) {
-	if ep := os.Getenv("BUILDKIT_EXPORTEDPRODUCT"); ep != "" {
+func current() (*grpcClient, error) {
+	if ep := product(); ep != "" {
 		apicaps.ExportedProduct = ep
 	}
 
@@ -47,8 +49,106 @@ func Current() (client.Client, error) {
 		opts:      opts(),
 		sessionID: sessionID(),
 		workers:   workers(),
+		product:   product(),
 		caps:      pb.Caps.CapSet(resp.FrontendAPICaps),
+		requests:  map[string]*pb.SolveRequest{},
 	}, nil
+}
+
+func convertRef(ref client.Reference) (string, error) {
+	if ref == nil {
+		return "", nil
+	}
+	r, ok := ref.(*reference)
+	if !ok {
+		return "", errors.Errorf("invalid return reference type %T", ref)
+	}
+	return r.id, nil
+}
+
+func Run(ctx context.Context, f client.BuildFunc) (retError error) {
+	client, err := current()
+	if err != nil {
+		return errors.Wrapf(err, "failed to initialize client from environment")
+	}
+
+	res, err := f(ctx, client)
+
+	export := client.caps.Supports(pb.CapReturnResult) == nil
+
+	if export {
+		defer func() {
+			req := &pb.ReturnRequest{}
+			if retError == nil {
+				pbRes := &pb.Result{
+					Metadata: res.Metadata,
+				}
+				if res.Refs != nil {
+					m := map[string]string{}
+					for k, r := range res.Refs {
+						id, err := convertRef(r)
+						if err != nil {
+							retError = err
+							continue
+						}
+						m[k] = id
+					}
+					pbRes.Result = &pb.Result_Refs{Refs: &pb.RefMap{Refs: m}}
+				} else {
+					id, err := convertRef(res.Ref)
+					if err != nil {
+						retError = err
+					} else {
+						pbRes.Result = &pb.Result_Ref{Ref: id}
+					}
+				}
+				if retError == nil {
+					req.Result = pbRes
+				}
+			}
+			if retError != nil {
+				st, _ := status.FromError(retError)
+				stp := st.Proto()
+				req.Error = &rpc.Status{
+					Code:    stp.Code,
+					Message: stp.Message,
+					// Details: stp.Details,
+				}
+			}
+			if _, err := client.client.Return(ctx, req); err != nil && retError == nil {
+				retError = err
+			}
+		}()
+	}
+
+	if err != nil {
+		return err
+	}
+
+	if err := client.caps.Supports(pb.CapReturnMap); len(res.Refs) > 1 && err != nil {
+		return err
+	}
+
+	if !export {
+		exportedAttrBytes, err := json.Marshal(res.Metadata)
+		if err != nil {
+			return errors.Wrapf(err, "failed to marshal return metadata")
+		}
+
+		req, err := client.requestForRef(res.Ref)
+		if err != nil {
+			return errors.Wrapf(err, "failed to find return ref")
+		}
+
+		req.Final = true
+		req.ExporterAttr = exportedAttrBytes
+
+		if _, err := client.client.Solve(ctx, req); err != nil {
+			return errors.Wrapf(err, "failed to solve")
+		}
+	}
+
+	return nil
 }
 
 // defaultCaps returns the capabilities that were implemented when capabilities
@@ -66,31 +166,78 @@ type grpcClient struct {
 	client    pb.LLBBridgeClient
 	opts      map[string]string
 	sessionID string
+	product   string
 	workers   []client.WorkerInfo
 	caps      apicaps.CapSet
+	requests  map[string]*pb.SolveRequest
 }
 
-func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest, exporterAttr map[string][]byte, final bool) (client.Reference, error) {
-	dt, err := json.Marshal(exporterAttr)
-	if err != nil {
-		return nil, err
+func (c *grpcClient) requestForRef(ref client.Reference) (*pb.SolveRequest, error) {
+	emptyReq := &pb.SolveRequest{
+		Definition: &opspb.Definition{},
 	}
+	if ref == nil {
+		return emptyReq, nil
+	}
+	r, ok := ref.(*reference)
+	if !ok {
+		return nil, errors.Errorf("return reference has invalid type %T", ref)
+	}
+	if r.id == "" {
+		return emptyReq, nil
+	}
+	req, ok := c.requests[r.id]
+	if !ok {
+		return nil, errors.Errorf("did not find request for return reference %s", r.id)
+	}
+	return req, nil
+}
+
+func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (*client.Result, error) {
 	req := &pb.SolveRequest{
-		Definition:      creq.Definition,
-		Frontend:        creq.Frontend,
-		FrontendOpt:     creq.FrontendOpt,
-		ImportCacheRefs: creq.ImportCacheRefs,
-		Final:           final,
-		ExporterAttr:    dt,
+		Definition:        creq.Definition,
+		Frontend:          creq.Frontend,
+		FrontendOpt:       creq.FrontendOpt,
+		ImportCacheRefs:   creq.ImportCacheRefs,
+		AllowResultReturn: true,
 	}
+
+	// backwards compatibility with inline return
+	if c.caps.Supports(pb.CapReturnResult) != nil {
+		req.ExporterAttr = []byte("{}")
+	}
+
 	resp, err := c.client.Solve(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	if resp.Ref == "" {
-		return nil, nil
+
+	res := &client.Result{}
+
+	if resp.Result == nil {
+		if id := resp.Ref; id != "" {
+			c.requests[id] = req
+		}
+		res.SetRef(&reference{id: resp.Ref, c: c})
+	} else {
+		res.Metadata = resp.Result.Metadata
+		switch pbRes := resp.Result.Result.(type) {
+		case *pb.Result_Ref:
+			if id := pbRes.Ref; id != "" {
+				res.SetRef(&reference{id: id, c: c})
+			}
+		case *pb.Result_Refs:
+			for k, v := range pbRes.Refs.Refs {
+				ref := &reference{id: v, c: c}
+				if v == "" {
+					ref = nil
+				}
+				res.AddRef(k, ref)
+			}
+		}
 	}
-	return &reference{id: resp.Ref, c: c}, nil
+
+	return res, nil
 }
 
 func (c *grpcClient) ResolveImageConfig(ctx context.Context, ref string, platform *specs.Platform) (digest.Digest, []byte, error) {
@@ -109,6 +256,15 @@ func (c *grpcClient) ResolveImageConfig(ctx context.Context, ref string, platfor
 		return "", nil, err
 	}
 	return resp.Digest, resp.Config, nil
+}
+
+func (c *grpcClient) BuildOpts() client.BuildOpts {
+	return client.BuildOpts{
+		Opts:      c.opts,
+		SessionID: c.sessionID,
+		Workers:   c.workers,
+		Product:   c.product,
+	}
 }
 
 func (c *grpcClient) Opts() map[string]string {
@@ -229,4 +385,8 @@ func workers() []client.WorkerInfo {
 		return nil
 	}
 	return c
+}
+
+func product() string {
+	return os.Getenv("BUILDKIT_EXPORTEDPRODUCT")
 }

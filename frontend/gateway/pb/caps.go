@@ -13,6 +13,8 @@ const (
 	CapSolveInlineReturn apicaps.CapID = "solve.inlinereturn"
 	CapResolveImage      apicaps.CapID = "resolveimage"
 	CapReadFile          apicaps.CapID = "readfile"
+	CapReturnResult      apicaps.CapID = "return"
+	CapReturnMap         apicaps.CapID = "returnmap"
 )
 
 func init() {
@@ -41,6 +43,20 @@ func init() {
 	Caps.Init(apicaps.Cap{
 		ID:      CapReadFile,
 		Name:    "read static file",
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapReturnResult,
+		Name:    "return solve result",
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapReturnMap,
+		Name:    "return reference map",
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})

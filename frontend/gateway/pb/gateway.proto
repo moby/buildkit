@@ -3,6 +3,7 @@ syntax = "proto3";
 package moby.buildkit.v1.frontend;
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+import "github.com/gogo/googleapis/google/rpc/status.proto";
 import "github.com/moby/buildkit/solver/pb/ops.proto";
 import "github.com/moby/buildkit/api/types/worker.proto";
 import "github.com/moby/buildkit/util/apicaps/pb/caps.proto";
@@ -19,6 +20,27 @@ service LLBBridge {
 	// apicaps:CapReadFile
 	rpc ReadFile(ReadFileRequest) returns (ReadFileResponse);
 	rpc Ping(PingRequest) returns (PongResponse);
+	rpc Return(ReturnRequest) returns (ReturnResponse);
+}
+
+message Result {
+	oneof result {
+		string ref = 1;
+		RefMap refs = 2;
+	}
+	map<string, bytes> metadata = 10;
+}
+
+message RefMap {
+	map<string, string> refs = 1;
+}
+
+message ReturnRequest {
+	Result result = 1;
+	google.rpc.Status error = 2;
+}
+
+message ReturnResponse {
 }
 
 message ResolveImageConfigRequest {
@@ -36,6 +58,7 @@ message SolveRequest {
 	string Frontend = 2;
 	map<string, string> FrontendOpt = 3;
 	repeated string ImportCacheRefs = 4;
+	bool allowResultReturn = 5;
 	
 	// apicaps.CapSolveInlineReturn deprecated
 	bool Final = 10;
@@ -43,8 +66,13 @@ message SolveRequest {
 }
 
 message SolveResponse {
-	string Ref = 1; // can be used by readfile request
-	bytes ExporterAttr = 2;
+	// deprecated
+	string ref = 1; // can be used by readfile request
+	// deprecated
+/*	bytes ExporterAttr = 2;*/
+	
+	// these fields are returned when allowMapReturn was set
+	Result result = 3;
 }
 
 message ReadFileRequest {
