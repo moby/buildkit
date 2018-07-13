@@ -10,6 +10,7 @@ import (
 	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage"
+	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/util/dockerexporter"
@@ -22,11 +23,10 @@ import (
 type ExporterVariant string
 
 const (
-	exporterImageConfig = "containerimage.config"
-	keyImageName        = "name"
-	VariantOCI          = "oci"
-	VariantDocker       = "docker"
-	ociTypes            = "oci-mediatypes"
+	keyImageName  = "name"
+	VariantOCI    = "oci"
+	VariantDocker = "docker"
+	ociTypes      = "oci-mediatypes"
 )
 
 type Opt struct {
@@ -62,7 +62,7 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 	i := &imageExporterInstance{imageExporter: e, caller: caller}
 	for k, v := range opt {
 		switch k {
-		case exporterImageConfig:
+		case exptypes.ExporterImageConfigKey:
 			i.config = []byte(v)
 		case keyImageName:
 			parsed, err := reference.ParseNormalizedNamed(v)
@@ -108,7 +108,7 @@ func (e *imageExporterInstance) Name() string {
 func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source) (map[string]string, error) {
 	ref := src.Ref
 	opt := src.Metadata
-	if config, ok := opt[exporterImageConfig]; ok {
+	if config, ok := opt[exptypes.ExporterImageConfigKey]; ok {
 		e.config = config
 	}
 	desc, err := e.opt.ImageWriter.Commit(ctx, ref, e.config, e.ociTypes)

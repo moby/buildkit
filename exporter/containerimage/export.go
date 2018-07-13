@@ -8,6 +8,7 @@ import (
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
 	"github.com/moby/buildkit/exporter"
+	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/util/push"
 	"github.com/pkg/errors"
@@ -15,11 +16,10 @@ import (
 )
 
 const (
-	keyImageName        = "name"
-	keyPush             = "push"
-	keyInsecure         = "registry.insecure"
-	exporterImageConfig = "containerimage.config"
-	ociTypes            = "oci-mediatypes"
+	keyImageName = "name"
+	keyPush      = "push"
+	keyInsecure  = "registry.insecure"
+	ociTypes     = "oci-mediatypes"
 )
 
 type Opt struct {
@@ -67,7 +67,7 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
 			}
 			i.insecure = b
-		case exporterImageConfig:
+		case exptypes.ExporterImageConfigKey:
 			i.config = []byte(v)
 		case ociTypes:
 			if v == "" {
@@ -102,7 +102,7 @@ func (e *imageExporterInstance) Name() string {
 func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source) (map[string]string, error) {
 	ref := src.Ref
 	opt := src.Metadata
-	if config, ok := opt[exporterImageConfig]; ok {
+	if config, ok := opt[exptypes.ExporterImageConfigKey]; ok {
 		e.config = config
 	}
 	desc, err := e.opt.ImageWriter.Commit(ctx, ref, e.config, e.ociTypes)
