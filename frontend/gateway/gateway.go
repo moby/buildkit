@@ -178,7 +178,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 		}
 	}()
 
-	env = append(env, "BUILDKIT_EXPORTEDPRODUCT=", apicaps.ExportedProduct)
+	env = append(env, "BUILDKIT_EXPORTEDPRODUCT="+apicaps.ExportedProduct)
 
 	err = llbBridge.Exec(ctx, executor.Meta{
 		Env:            env,
