@@ -16,6 +16,7 @@ const keyDescription = "cache.description"
 const keyCreatedAt = "cache.createdAt"
 const keyLastUsedAt = "cache.lastUsedAt"
 const keyUsageCount = "cache.usageCount"
+const keyLayerType = "cache.layerType"
 
 const keyDeleted = "cache.deleted"
 
@@ -203,4 +204,27 @@ func updateLastUsed(si *metadata.StorageItem) error {
 		}
 		return si.SetValue(b, keyLastUsedAt, v2)
 	})
+}
+
+func SetLayerType(m withMetadata, value string) error {
+	v, err := metadata.NewValue(value)
+	if err != nil {
+		return errors.Wrap(err, "failed to create layertype value")
+	}
+	m.Metadata().Queue(func(b *bolt.Bucket) error {
+		return m.Metadata().SetValue(b, keyLayerType, v)
+	})
+	return m.Metadata().Commit()
+}
+
+func GetLayerType(m withMetadata) string {
+	v := m.Metadata().Get(keyLayerType)
+	if v == nil {
+		return ""
+	}
+	var str string
+	if err := v.Unmarshal(&str); err != nil {
+		return ""
+	}
+	return str
 }

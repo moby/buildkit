@@ -17,6 +17,7 @@ import (
 	"github.com/moby/buildkit/executor/runcexecutor"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/util/throttle"
+	"github.com/moby/buildkit/util/winlayers"
 	"github.com/moby/buildkit/worker/base"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/sirupsen/logrus"
@@ -101,8 +102,8 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, labe
 		Executor:      exe,
 		Snapshotter:   containerdsnapshot.NewSnapshotter(mdb.Snapshotter(snFactory.Name), c, md, "buildkit", gc),
 		ContentStore:  c,
-		Applier:       apply.NewFileSystemApplier(c),
-		Differ:        walking.NewWalkingDiff(c),
+		Applier:       winlayers.NewFileSystemApplierWithWindows(c, apply.NewFileSystemApplier(c)),
+		Differ:        winlayers.NewWalkingDiffWithWindows(c, walking.NewWalkingDiff(c)),
 		ImageStore:    nil, // explicitly
 		Platforms:     []specs.Platform{platforms.Normalize(platforms.DefaultSpec())},
 	}
