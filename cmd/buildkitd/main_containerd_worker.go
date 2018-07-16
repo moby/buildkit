@@ -10,6 +10,7 @@ import (
 	"github.com/moby/buildkit/worker"
 	"github.com/moby/buildkit/worker/base"
 	"github.com/moby/buildkit/worker/containerd"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )
@@ -34,6 +35,13 @@ func init() {
 		cli.StringSliceFlag{
 			Name:  "containerd-worker-labels",
 			Usage: "user-specific annotation labels (com.example.foo=bar)",
+		},
+		// TODO: containerd-worker-platform should be replaced by ability
+		// to set these from containerd configuration
+		cli.StringSliceFlag{
+			Name:   "containerd-worker-platform",
+			Usage:  "override supported platforms for worker",
+			Hidden: true,
 		},
 	)
 	// TODO(AkihiroSuda): allow using multiple snapshotters. should be useful for some applications that does not work with the default overlay snapshotter. e.g. mysql (docker/for-linux#72)",
@@ -63,6 +71,14 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 		return nil, err
 	}
 	opt.SessionManager = common.sessionManager
+
+	if platformsStr := c.GlobalStringSlice("containerd-worker-platform"); len(platformsStr) != 0 {
+		platforms, err := parsePlatforms(platformsStr)
+		if err != nil {
+			return nil, errors.Wrap(err, "invalid platforms")
+		}
+		opt.Platforms = platforms
+	}
 	w, err := base.NewWorker(opt)
 	if err != nil {
 		return nil, err

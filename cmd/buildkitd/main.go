@@ -450,3 +450,15 @@ func formatPlatforms(p []specs.Platform) []string {
 	}
 	return str
 }
+
+func parsePlatforms(platformsStr []string) ([]specs.Platform, error) {
+	out := make([]specs.Platform, 0, len(platformsStr))
+	for _, s := range platformsStr {
+		p, err := platforms.Parse(s)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, platforms.Normalize(p))
+	}
+	return out, nil
+}
