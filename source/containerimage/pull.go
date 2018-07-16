@@ -142,7 +142,7 @@ func (p *puller) CacheKey(ctx context.Context, index int) (string, bool, error) 
 	if err != nil {
 		return "", false, nil
 	}
-	_, dt, err := imageutil.Config(ctx, ref.String(), p.Resolver, p.ContentStore, nil) // TODO
+	_, dt, err := imageutil.Config(ctx, ref.String(), p.Resolver, p.ContentStore, &p.Platform)
 	if err != nil {
 		// this happens on schema1 images
 		k, err := mainManifestKey(ctx, desc, p.Platform)
