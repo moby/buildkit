@@ -44,6 +44,13 @@ func (s *Lex) ProcessWords(word string, env []string) ([]string, error) {
 	return words, err
 }
 
+// ProcessWordWithMap will use the 'env' list of environment variables,
+// and replace any env var references in 'word'.
+func (s *Lex) ProcessWordWithMap(word string, env map[string]string) (string, error) {
+	word, _, err := s.process(word, env)
+	return word, err
+}
+
 func (s *Lex) process(word string, env map[string]string) (string, []string, error) {
 	sw := &shellWord{
 		envs:        env,

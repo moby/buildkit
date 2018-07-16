@@ -22,6 +22,7 @@ func TestShellParser4EnvVars(t *testing.T) {
 	shlex := NewLex('\\')
 	scanner := bufio.NewScanner(file)
 	envs := []string{"PWD=/home", "SHELL=bash", "KOREAN=한국어"}
+	envsMap := buildEnvs(envs)
 	for scanner.Scan() {
 		line := scanner.Text()
 		lineCount++
@@ -50,6 +51,14 @@ func TestShellParser4EnvVars(t *testing.T) {
 		if ((platform == "W" || platform == "A") && runtime.GOOS == "windows") ||
 			((platform == "U" || platform == "A") && runtime.GOOS != "windows") {
 			newWord, err := shlex.ProcessWord(source, envs)
+			if expected == "error" {
+				assert.Check(t, is.ErrorContains(err, ""), "input: %q, result: %q", source, newWord)
+			} else {
+				assert.Check(t, err, "at line %d of %s", lineCount, fn)
+				assert.Check(t, is.Equal(newWord, expected), "at line %d of %s", lineCount, fn)
+			}
+
+			newWord, err = shlex.ProcessWordWithMap(source, envsMap)
 			if expected == "error" {
 				assert.Check(t, is.ErrorContains(err, ""), "input: %q, result: %q", source, newWord)
 			} else {
