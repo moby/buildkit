@@ -65,6 +65,11 @@ func (s *SourceOp) Marshal(constraints *Constraints) (digest.Digest, []byte, *pb
 	proto.Op = &pb.Op_Source{
 		Source: &pb.SourceOp{Identifier: s.id, Attrs: s.attrs},
 	}
+
+	if !platformSpecificSource(s.id) {
+		proto.Platform = nil
+	}
+
 	dt, err := proto.Marshal()
 	if err != nil {
 		return "", nil, nil, err
@@ -360,4 +365,8 @@ func Chown(uid, gid int) HTTPOption {
 		hi.UID = uid
 		hi.GID = gid
 	})
+}
+
+func platformSpecificSource(id string) bool {
+	return strings.HasPrefix(id, "docker-image://")
 }
