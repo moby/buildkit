@@ -5,14 +5,12 @@ package main
 import (
 	"os/exec"
 
-	"github.com/containerd/containerd/platforms"
 	ctdsnapshot "github.com/containerd/containerd/snapshots"
 	"github.com/containerd/containerd/snapshots/native"
 	"github.com/containerd/containerd/snapshots/overlay"
 	"github.com/moby/buildkit/worker"
 	"github.com/moby/buildkit/worker/base"
 	"github.com/moby/buildkit/worker/runc"
-	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/opencontainers/runc/libcontainer/system"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -102,18 +100,6 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 		return nil, err
 	}
 	return []worker.Worker{w}, nil
-}
-
-func parsePlatforms(platformsStr []string) ([]specs.Platform, error) {
-	out := make([]specs.Platform, 0, len(platformsStr))
-	for _, s := range platformsStr {
-		p, err := platforms.Parse(s)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, platforms.Normalize(p))
-	}
-	return out, nil
 }
 
 func snapshotterFactory(commonRoot, name string) (runc.SnapshotterFactory, error) {
