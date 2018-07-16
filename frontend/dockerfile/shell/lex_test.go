@@ -22,6 +22,7 @@ func TestShellParser4EnvVars(t *testing.T) {
 	shlex := NewLex('\\')
 	scanner := bufio.NewScanner(file)
 	envs := []string{"PWD=/home", "SHELL=bash", "KOREAN=한국어"}
+	envsMap := buildEnvs(envs)
 	for scanner.Scan() {
 		line := scanner.Text()
 		lineCount++
@@ -50,6 +51,14 @@ func TestShellParser4EnvVars(t *testing.T) {
 		if ((platform == "W" || platform == "A") && runtime.GOOS == "windows") ||
 			((platform == "U" || platform == "A") && runtime.GOOS != "windows") {
 			newWord, err := shlex.ProcessWord(source, envs)
+			if expected == "error" {
+				assert.Check(t, is.ErrorContains(err, ""), "input: %q, result: %q", source, newWord)
+			} else {
+				assert.Check(t, err, "at line %d of %s", lineCount, fn)
+				assert.Check(t, is.Equal(newWord, expected), "at line %d of %s", lineCount, fn)
+			}
+
+			newWord, err = shlex.ProcessWordWithMap(source, envsMap)
 			if expected == "error" {
 				assert.Check(t, is.ErrorContains(err, ""), "input: %q, result: %q", source, newWord)
 			} else {
@@ -114,27 +123,27 @@ func TestShellParser4Words(t *testing.T) {
 func TestGetEnv(t *testing.T) {
 	sw := &shellWord{envs: nil}
 
-	sw.envs = []string{}
+	sw.envs = buildEnvs([]string{})
 	if sw.getEnv("foo") != "" {
 		t.Fatal("2 - 'foo' should map to ''")
 	}
 
-	sw.envs = []string{"foo"}
+	sw.envs = buildEnvs([]string{"foo"})
 	if sw.getEnv("foo") != "" {
 		t.Fatal("3 - 'foo' should map to ''")
 	}
 
-	sw.envs = []string{"foo="}
+	sw.envs = buildEnvs([]string{"foo="})
 	if sw.getEnv("foo") != "" {
 		t.Fatal("4 - 'foo' should map to ''")
 	}
 
-	sw.envs = []string{"foo=bar"}
+	sw.envs = buildEnvs([]string{"foo=bar"})
 	if sw.getEnv("foo") != "bar" {
 		t.Fatal("5 - 'foo' should map to 'bar'")
 	}
 
-	sw.envs = []string{"foo=bar", "car=hat"}
+	sw.envs = buildEnvs([]string{"foo=bar", "car=hat"})
 	if sw.getEnv("foo") != "bar" {
 		t.Fatal("6 - 'foo' should map to 'bar'")
 	}
@@ -143,7 +152,7 @@ func TestGetEnv(t *testing.T) {
 	}
 
 	// Make sure we grab the first 'car' in the list
-	sw.envs = []string{"foo=bar", "car=hat", "car=bike"}
+	sw.envs = buildEnvs([]string{"foo=bar", "car=hat", "car=bike"})
 	if sw.getEnv("car") != "hat" {
 		t.Fatal("8 - 'car' should map to 'hat'")
 	}
