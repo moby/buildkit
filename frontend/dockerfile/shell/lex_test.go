@@ -114,27 +114,27 @@ func TestShellParser4Words(t *testing.T) {
 func TestGetEnv(t *testing.T) {
 	sw := &shellWord{envs: nil}
 
-	sw.envs = []string{}
+	sw.envs = buildEnvs([]string{})
 	if sw.getEnv("foo") != "" {
 		t.Fatal("2 - 'foo' should map to ''")
 	}
 
-	sw.envs = []string{"foo"}
+	sw.envs = buildEnvs([]string{"foo"})
 	if sw.getEnv("foo") != "" {
 		t.Fatal("3 - 'foo' should map to ''")
 	}
 
-	sw.envs = []string{"foo="}
+	sw.envs = buildEnvs([]string{"foo="})
 	if sw.getEnv("foo") != "" {
 		t.Fatal("4 - 'foo' should map to ''")
 	}
 
-	sw.envs = []string{"foo=bar"}
+	sw.envs = buildEnvs([]string{"foo=bar"})
 	if sw.getEnv("foo") != "bar" {
 		t.Fatal("5 - 'foo' should map to 'bar'")
 	}
 
-	sw.envs = []string{"foo=bar", "car=hat"}
+	sw.envs = buildEnvs([]string{"foo=bar", "car=hat"})
 	if sw.getEnv("foo") != "bar" {
 		t.Fatal("6 - 'foo' should map to 'bar'")
 	}
@@ -143,7 +143,7 @@ func TestGetEnv(t *testing.T) {
 	}
 
 	// Make sure we grab the first 'car' in the list
-	sw.envs = []string{"foo=bar", "car=hat", "car=bike"}
+	sw.envs = buildEnvs([]string{"foo=bar", "car=hat", "car=bike"})
 	if sw.getEnv("car") != "hat" {
 		t.Fatal("8 - 'car' should map to 'hat'")
 	}
