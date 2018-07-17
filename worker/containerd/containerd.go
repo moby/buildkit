@@ -16,6 +16,7 @@ import (
 	"github.com/moby/buildkit/identity"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/util/throttle"
+	"github.com/moby/buildkit/util/winlayers"
 	"github.com/moby/buildkit/worker/base"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -109,8 +110,8 @@ func newContainerd(root string, client *containerd.Client, snapshotterName strin
 		Executor:      containerdexecutor.New(client, root),
 		Snapshotter:   containerdsnapshot.NewSnapshotter(client.SnapshotService(snapshotterName), cs, md, "buildkit", gc),
 		ContentStore:  cs,
-		Applier:       df,
-		Differ:        df,
+		Applier:       winlayers.NewFileSystemApplierWithWindows(cs, df),
+		Differ:        winlayers.NewWalkingDiffWithWindows(cs, df),
 		ImageStore:    client.ImageService(),
 		Platforms:     platforms,
 	}
