@@ -2,12 +2,9 @@ package client
 
 import (
 	"archive/tar"
-	"bytes"
-	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -27,6 +24,7 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/secrets/secretsprovider"
+	"github.com/moby/buildkit/util/testutil"
 	"github.com/moby/buildkit/util/testutil/httpserver"
 	"github.com/moby/buildkit/util/testutil/integration"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -486,25 +484,25 @@ func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 		dt, err := ioutil.ReadFile(out)
 		require.NoError(t, err)
 
-		m, err := readTarToMap(dt, false)
+		m, err := testutil.ReadTarToMap(dt, false)
 		require.NoError(t, err)
 
 		_, ok := m["oci-layout"]
 		require.True(t, ok)
 
 		var index ocispec.Index
-		err = json.Unmarshal(m["index.json"].data, &index)
+		err = json.Unmarshal(m["index.json"].Data, &index)
 		require.NoError(t, err)
 		require.Equal(t, 2, index.SchemaVersion)
 		require.Equal(t, 1, len(index.Manifests))
 
 		var mfst ocispec.Manifest
-		err = json.Unmarshal(m["blobs/sha256/"+index.Manifests[0].Digest.Hex()].data, &mfst)
+		err = json.Unmarshal(m["blobs/sha256/"+index.Manifests[0].Digest.Hex()].Data, &mfst)
 		require.NoError(t, err)
 		require.Equal(t, 2, len(mfst.Layers))
 
 		var ociimg ocispec.Image
-		err = json.Unmarshal(m["blobs/sha256/"+mfst.Config.Digest.Hex()].data, &ociimg)
+		err = json.Unmarshal(m["blobs/sha256/"+mfst.Config.Digest.Hex()].Data, &ociimg)
 		require.NoError(t, err)
 		require.Equal(t, "layers", ociimg.RootFS.Type)
 		require.Equal(t, 2, len(ociimg.RootFS.DiffIDs))
@@ -523,7 +521,7 @@ func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 			RepoTags []string
 			Layers   []string
 		}
-		err = json.Unmarshal(m["manifest.json"].data, &dockerMfst)
+		err = json.Unmarshal(m["manifest.json"].Data, &dockerMfst)
 		require.NoError(t, err)
 		require.Equal(t, 1, len(dockerMfst))
 
@@ -692,22 +690,22 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	dt, err = content.ReadBlob(ctx, img.ContentStore(), ocispec.Descriptor{Digest: mfst.Layers[0].Digest})
 	require.NoError(t, err)
 
-	m, err := readTarToMap(dt, true)
+	m, err := testutil.ReadTarToMap(dt, true)
 	require.NoError(t, err)
 
 	item, ok := m["foo/"]
 	require.True(t, ok)
-	require.Equal(t, int32(item.header.Typeflag), tar.TypeDir)
-	require.Equal(t, 0741, int(item.header.Mode&0777))
+	require.Equal(t, int32(item.Header.Typeflag), tar.TypeDir)
+	require.Equal(t, 0741, int(item.Header.Mode&0777))
 
 	item, ok = m["foo/sub/"]
 	require.True(t, ok)
-	require.Equal(t, int32(item.header.Typeflag), tar.TypeDir)
+	require.Equal(t, int32(item.Header.Typeflag), tar.TypeDir)
 
 	item, ok = m["foo/sub/bar"]
 	require.True(t, ok)
-	require.Equal(t, int32(item.header.Typeflag), tar.TypeReg)
-	require.Equal(t, []byte("first"), item.data)
+	require.Equal(t, int32(item.Header.Typeflag), tar.TypeReg)
+	require.Equal(t, []byte("first"), item.Data)
 
 	_, ok = m["foo/sub/baz"]
 	require.False(t, ok)
@@ -715,22 +713,22 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	dt, err = content.ReadBlob(ctx, img.ContentStore(), ocispec.Descriptor{Digest: mfst.Layers[1].Digest})
 	require.NoError(t, err)
 
-	m, err = readTarToMap(dt, true)
+	m, err = testutil.ReadTarToMap(dt, true)
 	require.NoError(t, err)
 
 	item, ok = m["foo/sub/baz"]
 	require.True(t, ok)
-	require.Equal(t, int32(item.header.Typeflag), tar.TypeReg)
-	require.Equal(t, []byte("second"), item.data)
+	require.Equal(t, int32(item.Header.Typeflag), tar.TypeReg)
+	require.Equal(t, []byte("second"), item.Data)
 
 	item, ok = m["foo/"]
 	require.True(t, ok)
-	require.Equal(t, int32(item.header.Typeflag), tar.TypeDir)
-	require.Equal(t, 0741, int(item.header.Mode&0777))
+	require.Equal(t, int32(item.Header.Typeflag), tar.TypeDir)
+	require.Equal(t, 0741, int(item.Header.Mode&0777))
 
 	item, ok = m["foo/sub/"]
 	require.True(t, ok)
-	require.Equal(t, int32(item.header.Typeflag), tar.TypeDir)
+	require.Equal(t, int32(item.Header.Typeflag), tar.TypeDir)
 
 	_, ok = m["foo/sub/bar"]
 	require.False(t, ok)
@@ -978,15 +976,15 @@ func testDuplicateWhiteouts(t *testing.T, sb integration.Sandbox) {
 	dt, err := ioutil.ReadFile(out)
 	require.NoError(t, err)
 
-	m, err := readTarToMap(dt, false)
+	m, err := testutil.ReadTarToMap(dt, false)
 	require.NoError(t, err)
 
 	var index ocispec.Index
-	err = json.Unmarshal(m["index.json"].data, &index)
+	err = json.Unmarshal(m["index.json"].Data, &index)
 	require.NoError(t, err)
 
 	var mfst ocispec.Manifest
-	err = json.Unmarshal(m["blobs/sha256/"+index.Manifests[0].Digest.Hex()].data, &mfst)
+	err = json.Unmarshal(m["blobs/sha256/"+index.Manifests[0].Digest.Hex()].Data, &mfst)
 	require.NoError(t, err)
 
 	lastLayer := mfst.Layers[len(mfst.Layers)-1]
@@ -994,7 +992,7 @@ func testDuplicateWhiteouts(t *testing.T, sb integration.Sandbox) {
 	layer, ok := m["blobs/sha256/"+lastLayer.Digest.Hex()]
 	require.True(t, ok)
 
-	m, err = readTarToMap(layer.data, true)
+	m, err = testutil.ReadTarToMap(layer.Data, true)
 	require.NoError(t, err)
 
 	_, ok = m[".wh.d0"]
@@ -1045,15 +1043,15 @@ func testWhiteoutParentDir(t *testing.T, sb integration.Sandbox) {
 	dt, err := ioutil.ReadFile(out)
 	require.NoError(t, err)
 
-	m, err := readTarToMap(dt, false)
+	m, err := testutil.ReadTarToMap(dt, false)
 	require.NoError(t, err)
 
 	var index ocispec.Index
-	err = json.Unmarshal(m["index.json"].data, &index)
+	err = json.Unmarshal(m["index.json"].Data, &index)
 	require.NoError(t, err)
 
 	var mfst ocispec.Manifest
-	err = json.Unmarshal(m["blobs/sha256/"+index.Manifests[0].Digest.Hex()].data, &mfst)
+	err = json.Unmarshal(m["blobs/sha256/"+index.Manifests[0].Digest.Hex()].Data, &mfst)
 	require.NoError(t, err)
 
 	lastLayer := mfst.Layers[len(mfst.Layers)-1]
@@ -1061,7 +1059,7 @@ func testWhiteoutParentDir(t *testing.T, sb integration.Sandbox) {
 	layer, ok := m["blobs/sha256/"+lastLayer.Digest.Hex()]
 	require.True(t, ok)
 
-	m, err = readTarToMap(layer.data, true)
+	m, err = testutil.ReadTarToMap(layer.Data, true)
 	require.NoError(t, err)
 
 	_, ok = m["foo/.wh.bar"]
@@ -1210,46 +1208,6 @@ func testProxyEnv(t *testing.T, sb integration.Sandbox) {
 func requiresLinux(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skipf("unsupported GOOS: %s", runtime.GOOS)
-	}
-}
-
-type tarItem struct {
-	header *tar.Header
-	data   []byte
-}
-
-func readTarToMap(dt []byte, compressed bool) (map[string]*tarItem, error) {
-	m := map[string]*tarItem{}
-	var r io.Reader = bytes.NewBuffer(dt)
-	if compressed {
-		gz, err := gzip.NewReader(r)
-		if err != nil {
-			return nil, err
-		}
-		defer gz.Close()
-		r = gz
-	}
-	tr := tar.NewReader(r)
-	for {
-		h, err := tr.Next()
-		if err != nil {
-			if err == io.EOF {
-				return m, nil
-			}
-			return nil, err
-		}
-		if _, ok := m[h.Name]; ok {
-			return nil, errors.Errorf("duplicate entries for %s", h.Name)
-		}
-
-		var dt []byte
-		if h.Typeflag == tar.TypeReg {
-			dt, err = ioutil.ReadAll(tr)
-			if err != nil {
-				return nil, err
-			}
-		}
-		m[h.Name] = &tarItem{header: h, data: dt}
 	}
 }
 
