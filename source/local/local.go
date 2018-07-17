@@ -80,7 +80,8 @@ func (ls *localSourceHandler) CacheKey(ctx context.Context, index int) (string, 
 		SessionID       string
 		IncludePatterns []string
 		ExcludePatterns []string
-	}{SessionID: sessionID, IncludePatterns: ls.src.IncludePatterns, ExcludePatterns: ls.src.ExcludePatterns})
+		FollowPaths     []string
+	}{SessionID: sessionID, IncludePatterns: ls.src.IncludePatterns, ExcludePatterns: ls.src.ExcludePatterns, FollowPaths: ls.src.FollowPaths})
 	if err != nil {
 		return "", false, err
 	}
