@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/containerd/containerd/pkg/seed"
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/sys"
 	"github.com/docker/go-connections/sockets"
@@ -44,6 +45,7 @@ import (
 
 func init() {
 	apicaps.ExportedProduct = "buildkit"
+	seed.WithTimeAndRand()
 }
 
 type workerInitializerOpt struct {
