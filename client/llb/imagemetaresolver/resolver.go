@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/docker/docker/pkg/locker"
@@ -74,12 +75,14 @@ func (imr *imageMetaResolver) ResolveImageConfig(ctx context.Context, ref string
 	imr.locker.Lock(ref)
 	defer imr.locker.Unlock(ref)
 
-	if res, ok := imr.cache[ref]; ok {
-		return res.dgst, res.config, nil
-	}
-
 	if platform == nil {
 		platform = imr.platform
+	}
+
+	k := imr.key(ref, platform)
+
+	if res, ok := imr.cache[k]; ok {
+		return res.dgst, res.config, nil
 	}
 
 	dgst, config, err := imageutil.Config(ctx, ref, imr.resolver, imr.buffer, platform)
@@ -87,6 +90,13 @@ func (imr *imageMetaResolver) ResolveImageConfig(ctx context.Context, ref string
 		return "", nil, err
 	}
 
-	imr.cache[ref] = resolveResult{dgst: dgst, config: config}
+	imr.cache[k] = resolveResult{dgst: dgst, config: config}
 	return dgst, config, nil
+}
+
+func (imr *imageMetaResolver) key(ref string, platform *specs.Platform) string {
+	if platform != nil {
+		ref += platforms.Format(*platform)
+	}
+	return ref
 }
