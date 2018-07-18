@@ -453,7 +453,7 @@ func (lbf *llbBridgeForwarder) Ping(context.Context, *pb.PingRequest) (*pb.PongR
 	return &pb.PongResponse{
 		FrontendAPICaps: pb.Caps.All(),
 		Workers:         pbWorkers,
-		// TODO: add LLB info
+		LLBCaps:         opspb.Caps.All(),
 	}, nil
 }
 

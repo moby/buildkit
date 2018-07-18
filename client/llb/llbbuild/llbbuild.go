@@ -3,6 +3,7 @@ package llbbuild
 import (
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/apicaps"
 	digest "github.com/opencontainers/go-digest"
 )
 
@@ -60,6 +61,11 @@ func (b *build) Marshal(c *llb.Constraints) (digest.Digest, []byte, *pb.OpMetada
 	if b.info.DefinitionFilename != "" {
 		pbo.Attrs[pb.AttrLLBDefinitionFilename] = b.info.DefinitionFilename
 	}
+
+	if b.constraints.Metadata.Caps == nil {
+		b.constraints.Metadata.Caps = make(map[apicaps.CapID]bool)
+	}
+	b.constraints.Metadata.Caps[pb.CapBuildOpLLBFileName] = true
 
 	pop, md := llb.MarshalConstraints(c, &b.constraints)
 	pop.Op = &pb.Op_Build{
