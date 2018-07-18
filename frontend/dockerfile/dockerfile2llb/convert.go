@@ -96,7 +96,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 
 	// set base state for every image
 	for _, st := range stages {
-		name, err := shlex.ProcessWord(st.BaseName, toEnvList(optMetaArgs, nil))
+		name, err := shlex.ProcessWordWithMap(st.BaseName, metaArgsToMap(optMetaArgs))
 		if err != nil {
 			return nil, nil, err
 		}
@@ -112,7 +112,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		}
 
 		if v := st.Platform; v != "" {
-			v, err := shlex.ProcessWord(v, toEnvList(optMetaArgs, nil))
+			v, err := shlex.ProcessWordWithMap(v, metaArgsToMap(optMetaArgs))
 			if err != nil {
 				return nil, nil, errors.Wrapf(err, "failed to process arguments for platform %s", v)
 			}
@@ -324,6 +324,16 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 	}
 
 	return &st, &target.image, nil
+}
+
+func metaArgsToMap(metaArgs []instructions.KeyValuePairOptional) map[string]string {
+	m := map[string]string{}
+
+	for _, arg := range metaArgs {
+		m[arg.Key] = arg.ValueString()
+	}
+
+	return m
 }
 
 func toCommand(ic instructions.Command, allDispatchStates *dispatchStates) (command, error) {
