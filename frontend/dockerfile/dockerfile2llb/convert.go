@@ -252,9 +252,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 			if len(parts) > 1 {
 				v = parts[1]
 			}
-			if err := dispatchEnv(d, &instructions.EnvCommand{Env: []instructions.KeyValuePair{{Key: parts[0], Value: v}}}, false); err != nil {
-				return nil, nil, err
-			}
+			d.state = d.state.AddEnv(parts[0], v)
 		}
 		if d.image.Config.WorkingDir != "" {
 			if err = dispatchWorkdir(d, &instructions.WorkdirCommand{Path: d.image.Config.WorkingDir}, false); err != nil {
