@@ -394,7 +394,7 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 	case *instructions.MaintainerCommand:
 		err = dispatchMaintainer(d, c)
 	case *instructions.EnvCommand:
-		err = dispatchEnv(d, c, true)
+		err = dispatchEnv(d, c)
 	case *instructions.RunCommand:
 		err = dispatchRun(d, c, opt.proxyEnv, cmd.sources, opt)
 	case *instructions.WorkdirCommand:
@@ -525,17 +525,14 @@ func dispatchOnBuild(d *dispatchState, triggers []string, opt dispatchOpt) error
 	return nil
 }
 
-func dispatchEnv(d *dispatchState, c *instructions.EnvCommand, commit bool) error {
+func dispatchEnv(d *dispatchState, c *instructions.EnvCommand) error {
 	commitMessage := bytes.NewBufferString("ENV")
 	for _, e := range c.Env {
 		commitMessage.WriteString(" " + e.String())
 		d.state = d.state.AddEnv(e.Key, e.Value)
 		d.image.Config.Env = addEnv(d.image.Config.Env, e.Key, e.Value, true)
 	}
-	if commit {
-		return commitToHistory(&d.image, commitMessage.String(), false, nil)
-	}
-	return nil
+	return commitToHistory(&d.image, commitMessage.String(), false, nil)
 }
 
 func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyEnv, sources []*dispatchState, dopt dispatchOpt) error {
