@@ -42,6 +42,20 @@ func (v *vertex) Name() string {
 
 type LoadOpt func(*pb.Op, *pb.OpMetadata, *solver.VertexOptions) error
 
+func WithValidateCaps() LoadOpt {
+	cs := pb.Caps.CapSet(pb.Caps.All())
+	return func(_ *pb.Op, md *pb.OpMetadata, opt *solver.VertexOptions) error {
+		if md != nil {
+			for c := range md.Caps {
+				if err := cs.Supports(c); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+}
+
 func WithCacheSources(cms []solver.CacheManager) LoadOpt {
 	return func(_ *pb.Op, _ *pb.OpMetadata, opt *solver.VertexOptions) error {
 		opt.CacheSources = cms
