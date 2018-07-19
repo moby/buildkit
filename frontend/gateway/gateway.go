@@ -230,6 +230,10 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 	return lbf.Result()
 }
 
+func (lbf *llbBridgeForwarder) Done() <-chan struct{} {
+	return lbf.doneCh
+}
+
 func (lbf *llbBridgeForwarder) setResult(r *frontend.Result, err error) (*pb.ReturnResponse, error) {
 	lbf.mu.Lock()
 	defer lbf.mu.Unlock()
@@ -244,6 +248,7 @@ func (lbf *llbBridgeForwarder) setResult(r *frontend.Result, err error) (*pb.Ret
 
 	lbf.result = r
 	lbf.err = err
+	close(lbf.doneCh)
 	return &pb.ReturnResponse{}, nil
 }
 
@@ -262,15 +267,20 @@ func (lbf *llbBridgeForwarder) Result() (*frontend.Result, error) {
 	return lbf.result, nil
 }
 
-func newLLBBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, workers frontend.WorkerInfos) (*llbBridgeForwarder, error) {
+func NewBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, workers frontend.WorkerInfos) *llbBridgeForwarder {
 	lbf := &llbBridgeForwarder{
 		callCtx:   ctx,
 		llbBridge: llbBridge,
 		refs:      map[string]solver.CachedResult{},
+		doneCh:    make(chan struct{}),
 		pipe:      newPipe(),
 		workers:   workers,
 	}
+	return lbf
+}
 
+func newLLBBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, workers frontend.WorkerInfos) (*llbBridgeForwarder, error) {
+	lbf := NewBridgeForwarder(ctx, llbBridge, workers)
 	server := grpc.NewServer()
 	grpc_health_v1.RegisterHealthServer(server, health.NewServer())
 	pb.RegisterLLBBridgeServer(server, lbf)
@@ -333,6 +343,12 @@ func (d dummyAddr) String() string {
 	return "localhost"
 }
 
+type LLBBridgeForwarder interface {
+	pb.LLBBridgeServer
+	Done() <-chan struct{}
+	Result() (*frontend.Result, error)
+}
+
 type llbBridgeForwarder struct {
 	mu        sync.Mutex
 	callCtx   context.Context
@@ -341,6 +357,7 @@ type llbBridgeForwarder struct {
 	// lastRef      solver.CachedResult
 	// lastRefs     map[string]solver.CachedResult
 	// err          error
+	doneCh       chan struct{} // closed when result or err become valid through a call to a Return
 	result       *frontend.Result
 	err          error
 	exporterAttr map[string][]byte
