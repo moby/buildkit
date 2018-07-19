@@ -247,12 +247,8 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 
 		// initialize base metadata from image conf
 		for _, env := range d.image.Config.Env {
-			parts := strings.SplitN(env, "=", 2)
-			v := ""
-			if len(parts) > 1 {
-				v = parts[1]
-			}
-			d.state = d.state.AddEnv(parts[0], v)
+			k, v := parseKeyValue(env)
+			d.state = d.state.AddEnv(k, v)
 		}
 		if d.image.Config.WorkingDir != "" {
 			if err = dispatchWorkdir(d, &instructions.WorkdirCommand{Path: d.image.Config.WorkingDir}, false); err != nil {
@@ -826,9 +822,8 @@ func splitWildcards(name string) (string, string) {
 func addEnv(env []string, k, v string, override bool) []string {
 	gotOne := false
 	for i, envVar := range env {
-		envParts := strings.SplitN(envVar, "=", 2)
-		compareFrom := envParts[0]
-		if shell.EqualEnvKeys(compareFrom, k) {
+		key, _ := parseKeyValue(envVar)
+		if shell.EqualEnvKeys(key, k) {
 			if override {
 				env[i] = k + "=" + v
 			}
@@ -840,6 +835,16 @@ func addEnv(env []string, k, v string, override bool) []string {
 		env = append(env, k+"="+v)
 	}
 	return env
+}
+
+func parseKeyValue(env string) (string, string) {
+	parts := strings.SplitN(env, "=", 2)
+	v := ""
+	if len(parts) > 1 {
+		v = parts[1]
+	}
+
+	return parts[0], v
 }
 
 func setKVValue(kvpo instructions.KeyValuePairOptional, values map[string]string) instructions.KeyValuePairOptional {

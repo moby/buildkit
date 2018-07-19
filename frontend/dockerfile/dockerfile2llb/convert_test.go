@@ -112,3 +112,17 @@ func TestAddEnv(t *testing.T) {
 	result = addEnv(env, "key3", "val3", true)
 	assert.Equal(t, []string{"key1=val1", "key2=val2", "key3=val3"}, result)
 }
+
+func TestParseKeyValue(t *testing.T) {
+	k, v := parseKeyValue("key=val")
+	assert.Equal(t, "key", k)
+	assert.Equal(t, "val", v)
+
+	k, v = parseKeyValue("key=")
+	assert.Equal(t, "key", k)
+	assert.Equal(t, "", v)
+
+	k, v = parseKeyValue("key")
+	assert.Equal(t, "key", k)
+	assert.Equal(t, "", v)
+}
