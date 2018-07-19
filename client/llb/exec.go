@@ -57,6 +57,7 @@ type ExecOp struct {
 	meta        Meta
 	constraints Constraints
 	isValidated bool
+	secrets     []SecretInfo
 }
 
 func (e *ExecOp) AddMount(target string, source Output, opt ...MountOption) Output {
@@ -228,6 +229,25 @@ func (e *ExecOp) Marshal(c *Constraints) (digest.Digest, []byte, *pb.OpMetadata,
 		peo.Mounts = append(peo.Mounts, pm)
 	}
 
+	if len(e.secrets) > 0 {
+		addCap(&e.constraints, pb.CapMountSecret)
+	}
+
+	for _, s := range e.secrets {
+		pm := &pb.Mount{
+			Dest:      s.Target,
+			MountType: pb.MountType_SECRET,
+			SecretOpt: &pb.SecretOpt{
+				ID:       s.ID,
+				Uid:      uint32(s.UID),
+				Gid:      uint32(s.GID),
+				Optional: s.Optional,
+				Mode:     uint32(s.Mode),
+			},
+		}
+		peo.Mounts = append(peo.Mounts, pm)
+	}
+
 	dt, err := pop.Marshal()
 	if err != nil {
 		return "", nil, nil, err
@@ -384,6 +404,53 @@ func AddMount(dest string, mountState State, opts ...MountOption) RunOption {
 	})
 }
 
+func AddSecret(dest string, opts ...SecretOption) RunOption {
+	return runOptionFunc(func(ei *ExecInfo) {
+		s := &SecretInfo{ID: dest, Target: dest, Mode: 0400}
+		for _, opt := range opts {
+			opt.SetSecretOption(s)
+		}
+		ei.Secrets = append(ei.Secrets, *s)
+	})
+}
+
+type SecretOption interface {
+	SetSecretOption(*SecretInfo)
+}
+
+type secretOptionFunc func(*SecretInfo)
+
+func (fn secretOptionFunc) SetSecretOption(si *SecretInfo) {
+	fn(si)
+}
+
+type SecretInfo struct {
+	ID       string
+	Target   string
+	Mode     int
+	UID      int
+	GID      int
+	Optional bool
+}
+
+var SecretOptional = secretOptionFunc(func(si *SecretInfo) {
+	si.Optional = true
+})
+
+func SecretID(id string) SecretOption {
+	return secretOptionFunc(func(si *SecretInfo) {
+		si.ID = id
+	})
+}
+
+func SecretFileOpt(uid, gid, mode int) SecretOption {
+	return secretOptionFunc(func(si *SecretInfo) {
+		si.UID = uid
+		si.GID = gid
+		si.Mode = mode
+	})
+}
+
 func ReadonlyRootFS() RunOption {
 	return runOptionFunc(func(ei *ExecInfo) {
 		ei.ReadonlyRootFS = true
@@ -402,6 +469,7 @@ type ExecInfo struct {
 	Mounts         []MountInfo
 	ReadonlyRootFS bool
 	ProxyEnv       *ProxyEnv
+	Secrets        []SecretInfo
 }
 
 type MountInfo struct {
