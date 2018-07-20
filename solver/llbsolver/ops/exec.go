@@ -31,6 +31,7 @@ import (
 	"github.com/moby/buildkit/util/progress/logs"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
+	"github.com/opencontainers/runc/libcontainer/system"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -325,11 +326,17 @@ func (sm *secretMountInstance) Mount() ([]mount.Mount, error) {
 		return nil, err
 	}
 
-	if err := mount.All([]mount.Mount{{
+	tmpMount := mount.Mount{
 		Type:    "tmpfs",
 		Source:  "tmpfs",
-		Options: []string{"nodev", "nosuid", "noexec", fmt.Sprintf("uid=%d,gid=%d", os.Getuid(), os.Getgid())},
-	}}, dir); err != nil {
+		Options: []string{"nodev", "nosuid", "noexec", fmt.Sprintf("uid=%d,gid=%d", os.Geteuid(), os.Getegid())},
+	}
+
+	if system.RunningInUserNS() {
+		tmpMount.Options = nil
+	}
+
+	if err := mount.All([]mount.Mount{tmpMount}, dir); err != nil {
 		return nil, errors.Wrap(err, "unable to setup secret mount")
 	}
 	sm.root = dir
