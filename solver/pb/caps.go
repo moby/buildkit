@@ -187,7 +187,7 @@ func init() {
 
 	Caps.Init(apicaps.Cap{
 		ID:      CapMountSecret,
-		Enabled: false, // example for future
+		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})
 

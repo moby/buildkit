@@ -215,7 +215,7 @@ func (w *Worker) ResolveOp(v solver.Vertex, s frontend.FrontendLLBBridge) (solve
 		case *pb.Op_Source:
 			return ops.NewSourceOp(v, op, baseOp.Platform, w.SourceManager, w)
 		case *pb.Op_Exec:
-			return ops.NewExecOp(v, op, w.CacheManager, w.MetadataStore, w.Executor, w)
+			return ops.NewExecOp(v, op, w.CacheManager, w.SessionManager, w.MetadataStore, w.Executor, w)
 		case *pb.Op_Build:
 			return ops.NewBuildOp(v, op, s, w)
 		}

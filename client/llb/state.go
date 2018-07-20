@@ -191,6 +191,7 @@ func (s State) Run(ro ...RunOption) ExecState {
 	for _, m := range ei.Mounts {
 		exec.AddMount(m.Target, m.Source, m.Opts...)
 	}
+	exec.secrets = ei.Secrets
 
 	return ExecState{
 		State: s.WithOutput(exec.Output()),
