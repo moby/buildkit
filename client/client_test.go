@@ -25,6 +25,8 @@ import (
 	"github.com/containerd/continuity/fs/fstest"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/session/secrets/secretsprovider"
 	"github.com/moby/buildkit/util/testutil/httpserver"
 	"github.com/moby/buildkit/util/testutil/integration"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -58,7 +60,69 @@ func TestClientIntegration(t *testing.T) {
 		testLockedCacheMounts,
 		testDuplicateCacheMount,
 		testParallelLocalBuilds,
+		testSecretMounts,
 	})
+}
+
+func testSecretMounts(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Image("busybox:latest").
+		Run(llb.Shlex(`sh -c 'mount | grep mysecret | grep "type tmpfs" && [ "$(cat /run/secrets/mysecret)" = 'foo-secret' ]'`), llb.AddSecret("/run/secrets/mysecret"))
+
+	def, err := st.Marshal()
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		Session: []session.Attachable{secretsprovider.FromMap(map[string][]byte{
+			"/run/secrets/mysecret": []byte("foo-secret"),
+		})},
+	}, nil)
+	require.NoError(t, err)
+
+	// test optional
+	st = llb.Image("busybox:latest").
+		Run(llb.Shlex(`echo secret2`), llb.AddSecret("/run/secrets/mysecret2", llb.SecretOptional))
+
+	def, err = st.Marshal()
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		Session: []session.Attachable{secretsprovider.FromMap(map[string][]byte{})},
+	}, nil)
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	require.NoError(t, err)
+
+	st = llb.Image("busybox:latest").
+		Run(llb.Shlex(`echo secret3`), llb.AddSecret("/run/secrets/mysecret3"))
+
+	def, err = st.Marshal()
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		Session: []session.Attachable{secretsprovider.FromMap(map[string][]byte{})},
+	}, nil)
+	require.Error(t, err)
+
+	// test id,perm,uid
+	st = llb.Image("busybox:latest").
+		Run(llb.Shlex(`sh -c '[ "$(stat -c "%%u %%g %%f" /run/secrets/mysecret4)" = "1 1 81ff" ]' `), llb.AddSecret("/run/secrets/mysecret4", llb.SecretID("mysecret"), llb.SecretFileOpt(1, 1, 0777)))
+
+	def, err = st.Marshal()
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		Session: []session.Attachable{secretsprovider.FromMap(map[string][]byte{
+			"mysecret": []byte("pw"),
+		})},
+	}, nil)
+	require.NoError(t, err)
 }
 
 func testTmpfsMounts(t *testing.T, sb integration.Sandbox) {
