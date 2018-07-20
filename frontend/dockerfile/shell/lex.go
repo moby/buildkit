@@ -28,7 +28,7 @@ func NewLex(escapeToken rune) *Lex {
 // ProcessWord will use the 'env' list of environment variables,
 // and replace any env var references in 'word'.
 func (s *Lex) ProcessWord(word string, env []string) (string, error) {
-	word, _, err := s.process(word, buildEnvs(env))
+	word, _, err := s.process(word, BuildEnvs(env))
 	return word, err
 }
 
@@ -40,7 +40,7 @@ func (s *Lex) ProcessWord(word string, env []string) (string, error) {
 // Note, each one is trimmed to remove leading and trailing spaces (unless
 // they are quoted", but ProcessWord retains spaces between words.
 func (s *Lex) ProcessWords(word string, env []string) ([]string, error) {
-	_, words, err := s.process(word, buildEnvs(env))
+	_, words, err := s.process(word, BuildEnvs(env))
 	return words, err
 }
 
@@ -373,7 +373,7 @@ func (sw *shellWord) getEnv(name string) string {
 	return ""
 }
 
-func buildEnvs(env []string) map[string]string {
+func BuildEnvs(env []string) map[string]string {
 	envs := map[string]string{}
 
 	for _, e := range env {
