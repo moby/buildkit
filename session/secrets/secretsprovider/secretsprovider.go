@@ -11,6 +11,9 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// MaxSecretSize is the maximum byte length allowed for a secret
+const MaxSecretSize = 500 * 1024 // 500KB
+
 func NewSecretProvider(store secrets.SecretStore) session.Attachable {
 	return &secretProvider{
 		store: store,
@@ -32,6 +35,9 @@ func (sp *secretProvider) GetSecret(ctx context.Context, req *secrets.GetSecretR
 			return nil, status.Errorf(codes.NotFound, err.Error())
 		}
 		return nil, err
+	}
+	if l := len(dt); l > MaxSecretSize {
+		return nil, errors.Errorf("invalid secret size %d", l)
 	}
 
 	return &secrets.GetSecretResponse{
