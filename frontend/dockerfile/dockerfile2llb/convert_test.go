@@ -3,6 +3,7 @@ package dockerfile2llb
 import (
 	"testing"
 
+	"github.com/moby/buildkit/frontend/dockerfile/instructions"
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/stretchr/testify/assert"
 )
@@ -125,4 +126,53 @@ func TestParseKeyValue(t *testing.T) {
 	k, v = parseKeyValue("key")
 	assert.Equal(t, "key", k)
 	assert.Equal(t, "", v)
+}
+
+func TestToEnvList(t *testing.T) {
+	// args has no duplicated key with env
+	v := "val2"
+	args := []instructions.KeyValuePairOptional{{Key: "key2", Value: &v}}
+	env := []string{"key1=val1"}
+	resutl := toEnvList(args, env)
+	assert.Equal(t, []string{"key1=val1", "key2=val2"}, resutl)
+
+	// value of args is nil
+	args = []instructions.KeyValuePairOptional{{Key: "key2", Value: nil}}
+	env = []string{"key1=val1"}
+	resutl = toEnvList(args, env)
+	assert.Equal(t, []string{"key1=val1", "key2="}, resutl)
+
+	// args has duplicated key with env
+	v = "val2"
+	args = []instructions.KeyValuePairOptional{{Key: "key1", Value: &v}}
+	env = []string{"key1=val1"}
+	resutl = toEnvList(args, env)
+	assert.Equal(t, []string{"key1=val1"}, resutl)
+
+	v = "val2"
+	args = []instructions.KeyValuePairOptional{{Key: "key1", Value: &v}}
+	env = []string{"key1="}
+	resutl = toEnvList(args, env)
+	assert.Equal(t, []string{"key1="}, resutl)
+
+	v = "val2"
+	args = []instructions.KeyValuePairOptional{{Key: "key1", Value: &v}}
+	env = []string{"key1"}
+	resutl = toEnvList(args, env)
+	assert.Equal(t, []string{"key1"}, resutl)
+
+	// env has duplicated keys
+	v = "val2"
+	args = []instructions.KeyValuePairOptional{{Key: "key2", Value: &v}}
+	env = []string{"key1=val1", "key1=val1_2"}
+	resutl = toEnvList(args, env)
+	assert.Equal(t, []string{"key1=val1", "key1=val1_2", "key2=val2"}, resutl)
+
+	// args has duplicated keys
+	v1 := "v1"
+	v2 := "v2"
+	args = []instructions.KeyValuePairOptional{{Key: "key2", Value: &v1}, {Key: "key2", Value: &v2}}
+	env = []string{"key1=val1"}
+	resutl = toEnvList(args, env)
+	assert.Equal(t, []string{"key1=val1", "key2=v1"}, resutl)
 }
