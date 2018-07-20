@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/shlex"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 func init() {
@@ -23,9 +24,11 @@ func init() {
 	if s := os.Getenv("BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR"); s != "" {
 		var uid, gid int
 		if _, err := fmt.Sscanf(s, "%d:%d", &uid, &gid); err != nil {
-			panic(errors.Errorf("unexpected BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR: %q", s))
+			logrus.Fatalf("unexpected BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR: %q", s)
 		}
-		register(&oci{uid: uid, gid: gid})
+		if rootlessSupported(uid) {
+			register(&oci{uid: uid, gid: gid})
+		}
 	}
 }
 
@@ -154,4 +157,14 @@ func runBuildkitd(args []string, logs map[string]*bytes.Buffer, uid, gid int) (a
 	}
 
 	return
+}
+
+func rootlessSupported(uid int) bool {
+	cmd := exec.Command("sudo", "-u", fmt.Sprintf("#%d", uid), "-i", "--", "unshare", "-U", "true")
+	b, err := cmd.CombinedOutput()
+	if err != nil {
+		logrus.Warnf("rootless mode is not supported on this host: %v (%s)", err, string(b))
+		return false
+	}
+	return true
 }
