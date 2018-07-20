@@ -526,7 +526,7 @@ func dispatchEnv(d *dispatchState, c *instructions.EnvCommand) error {
 	for _, e := range c.Env {
 		commitMessage.WriteString(" " + e.String())
 		d.state = d.state.AddEnv(e.Key, e.Value)
-		d.image.Config.Env = addEnv(d.image.Config.Env, e.Key, e.Value, true)
+		d.image.Config.Env = addEnv(d.image.Config.Env, e.Key, e.Value)
 	}
 	return commitToHistory(&d.image, commitMessage.String(), false, nil)
 }
@@ -819,14 +819,12 @@ func splitWildcards(name string) (string, string) {
 	return path.Dir(name[:i]), base + name[i:]
 }
 
-func addEnv(env []string, k, v string, override bool) []string {
+func addEnv(env []string, k, v string) []string {
 	gotOne := false
 	for i, envVar := range env {
 		key, _ := parseKeyValue(envVar)
 		if shell.EqualEnvKeys(key, k) {
-			if override {
-				env[i] = k + "=" + v
-			}
+			env[i] = k + "=" + v
 			gotOne = true
 			break
 		}
