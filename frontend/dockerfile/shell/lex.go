@@ -51,6 +51,11 @@ func (s *Lex) ProcessWordWithMap(word string, env map[string]string) (string, er
 	return word, err
 }
 
+func (s *Lex) ProcessWordsWithMap(word string, env map[string]string) ([]string, error) {
+	_, words, err := s.process(word, env)
+	return words, err
+}
+
 func (s *Lex) process(word string, env map[string]string) (string, []string, error) {
 	sw := &shellWord{
 		envs:        env,

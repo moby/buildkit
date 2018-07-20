@@ -103,7 +103,24 @@ func TestShellParser4Words(t *testing.T) {
 		test := strings.TrimSpace(words[0])
 		expected := strings.Split(strings.TrimLeft(words[1], " "), ",")
 
+		// test for ProcessWords
 		result, err := shlex.ProcessWords(test, envs)
+
+		if err != nil {
+			result = []string{"error"}
+		}
+
+		if len(result) != len(expected) {
+			t.Fatalf("Error on line %d. %q was suppose to result in %q, but got %q instead", lineNum, test, expected, result)
+		}
+		for i, w := range expected {
+			if w != result[i] {
+				t.Fatalf("Error on line %d. %q was suppose to result in %q, but got %q instead", lineNum, test, expected, result)
+			}
+		}
+
+		// test for ProcessWordsWithMap
+		result, err = shlex.ProcessWordsWithMap(test, buildEnvs(envs))
 
 		if err != nil {
 			result = []string{"error"}
