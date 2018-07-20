@@ -44,6 +44,10 @@ func current() (*grpcClient, error) {
 		resp.FrontendAPICaps = defaultCaps()
 	}
 
+	if resp.LLBCaps == nil {
+		resp.LLBCaps = defaultLLBCaps()
+	}
+
 	return &grpcClient{
 		client:    c,
 		opts:      opts(),
@@ -51,6 +55,7 @@ func current() (*grpcClient, error) {
 		workers:   workers(),
 		product:   product(),
 		caps:      pb.Caps.CapSet(resp.FrontendAPICaps),
+		llbCaps:   opspb.Caps.CapSet(resp.LLBCaps),
 		requests:  map[string]*pb.SolveRequest{},
 	}, nil
 }
@@ -162,6 +167,42 @@ func defaultCaps() []apicaps.PBCap {
 	}
 }
 
+// defaultLLBCaps returns the LLB capabilities that were implemented when capabilities
+// support was added. This list is frozen and should never be changed.
+func defaultLLBCaps() []apicaps.PBCap {
+	return []apicaps.PBCap{
+		{ID: string(opspb.CapSourceImage), Enabled: true},
+		{ID: string(opspb.CapSourceLocal), Enabled: true},
+		{ID: string(opspb.CapSourceLocalUnique), Enabled: true},
+		{ID: string(opspb.CapSourceLocalSessionID), Enabled: true},
+		{ID: string(opspb.CapSourceLocalIncludePatterns), Enabled: true},
+		{ID: string(opspb.CapSourceLocalFollowPaths), Enabled: true},
+		{ID: string(opspb.CapSourceLocalExcludePatterns), Enabled: true},
+		{ID: string(opspb.CapSourceLocalSharedKeyHint), Enabled: true},
+		{ID: string(opspb.CapSourceGit), Enabled: true},
+		{ID: string(opspb.CapSourceGitKeepDir), Enabled: true},
+		{ID: string(opspb.CapSourceGitFullURL), Enabled: true},
+		{ID: string(opspb.CapSourceHTTP), Enabled: true},
+		{ID: string(opspb.CapSourceHTTPChecksum), Enabled: true},
+		{ID: string(opspb.CapSourceHTTPPerm), Enabled: true},
+		{ID: string(opspb.CapSourceHTTPUIDGID), Enabled: true},
+		{ID: string(opspb.CapBuildOpLLBFileName), Enabled: true},
+		{ID: string(opspb.CapExecMetaBase), Enabled: true},
+		{ID: string(opspb.CapExecMetaProxy), Enabled: true},
+		{ID: string(opspb.CapExecMountBind), Enabled: true},
+		{ID: string(opspb.CapExecMountCache), Enabled: true},
+		{ID: string(opspb.CapExecMountCacheSharing), Enabled: true},
+		{ID: string(opspb.CapExecMountSelector), Enabled: true},
+		{ID: string(opspb.CapExecMountTmpfs), Enabled: true},
+		{ID: string(opspb.CapMountSecret), Enabled: true},
+		{ID: string(opspb.CapConstraints), Enabled: true},
+		{ID: string(opspb.CapPlatform), Enabled: true},
+		{ID: string(opspb.CapMetaIgnoreCache), Enabled: true},
+		{ID: string(opspb.CapMetaDescription), Enabled: true},
+		{ID: string(opspb.CapMetaExportCache), Enabled: true},
+	}
+}
+
 type grpcClient struct {
 	client    pb.LLBBridgeClient
 	opts      map[string]string
@@ -169,6 +210,7 @@ type grpcClient struct {
 	product   string
 	workers   []client.WorkerInfo
 	caps      apicaps.CapSet
+	llbCaps   apicaps.CapSet
 	requests  map[string]*pb.SolveRequest
 }
 
@@ -194,6 +236,14 @@ func (c *grpcClient) requestForRef(ref client.Reference) (*pb.SolveRequest, erro
 }
 
 func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (*client.Result, error) {
+	for _, md := range creq.Definition.Metadata {
+		for cap := range md.Caps {
+			if err := c.llbCaps.Supports(cap); err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	req := &pb.SolveRequest{
 		Definition:        creq.Definition,
 		Frontend:          creq.Frontend,

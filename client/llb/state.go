@@ -6,6 +6,7 @@ import (
 	"github.com/containerd/containerd/platforms"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/system"
 	digest "github.com/opencontainers/go-digest"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -100,6 +101,28 @@ func (s State) Marshal(co ...ConstraintsOpt) (*Definition, error) {
 		return def, err
 	}
 	def.Def = append(def.Def, dt)
+
+	dgst := digest.FromBytes(dt)
+	md := def.Metadata[dgst]
+	md.Caps = map[apicaps.CapID]bool{
+		pb.CapConstraints: true,
+		pb.CapPlatform:    true,
+	}
+
+	for _, m := range def.Metadata {
+		if m.IgnoreCache {
+			md.Caps[pb.CapMetaIgnoreCache] = true
+		}
+		if m.Description != nil {
+			md.Caps[pb.CapMetaDescription] = true
+		}
+		if m.ExportCache != nil {
+			md.Caps[pb.CapMetaExportCache] = true
+		}
+	}
+
+	def.Metadata[dgst] = md
+
 	return def, nil
 }
 
@@ -308,6 +331,13 @@ func mergeMetadata(m1, m2 pb.OpMetadata) pb.OpMetadata {
 	}
 	if m2.ExportCache != nil {
 		m1.ExportCache = m2.ExportCache
+	}
+
+	for k := range m2.Caps {
+		if m1.Caps == nil {
+			m1.Caps = make(map[apicaps.CapID]bool, len(m2.Caps))
+		}
+		m1.Caps[k] = true
 	}
 
 	return m1

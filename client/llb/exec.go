@@ -142,6 +142,23 @@ func (e *ExecOp) Marshal(c *Constraints) (digest.Digest, []byte, *pb.OpMetadata,
 			FtpProxy:   p.FtpProxy,
 			NoProxy:    p.NoProxy,
 		}
+		addCap(&e.constraints, pb.CapExecMetaProxy)
+	}
+
+	addCap(&e.constraints, pb.CapExecMetaBase)
+
+	for _, m := range e.mounts {
+		if m.selector != "" {
+			addCap(&e.constraints, pb.CapExecMountSelector)
+		}
+		if m.cacheID != "" {
+			addCap(&e.constraints, pb.CapExecMountCache)
+			addCap(&e.constraints, pb.CapExecMountCacheSharing)
+		} else if m.tmpfs {
+			addCap(&e.constraints, pb.CapExecMountTmpfs)
+		} else if m.source != nil {
+			addCap(&e.constraints, pb.CapExecMountBind)
+		}
 	}
 
 	pop, md := MarshalConstraints(c, &e.constraints)

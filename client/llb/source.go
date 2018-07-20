@@ -10,6 +10,7 @@ import (
 
 	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/apicaps"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
@@ -58,6 +59,7 @@ func (s *SourceOp) Marshal(constraints *Constraints) (digest.Digest, []byte, *pb
 				uid = constraints.LocalUniqueID
 			}
 			s.attrs[pb.AttrLocalUniqueID] = uid
+			addCap(&s.constraints, pb.CapSourceLocalUnique)
 		}
 	}
 	proto, md := MarshalConstraints(constraints, &s.constraints)
@@ -96,6 +98,9 @@ func Image(ref string, opts ...ImageOption) State {
 	for _, opt := range opts {
 		opt.SetImageOption(&info)
 	}
+
+	addCap(&info.Constraints, pb.CapSourceImage)
+
 	src := NewSource("docker-image://"+ref, nil, info.Constraints) // controversial
 	if err != nil {
 		src.err = err
@@ -174,10 +179,15 @@ func Git(remote, ref string, opts ...GitOption) State {
 	attrs := map[string]string{}
 	if gi.KeepGitDir {
 		attrs[pb.AttrKeepGitDir] = "true"
+		addCap(&gi.Constraints, pb.CapSourceGitKeepDir)
 	}
 	if url != "" {
 		attrs[pb.AttrFullRemoteURL] = url
+		addCap(&gi.Constraints, pb.CapSourceGitFullURL)
 	}
+
+	addCap(&gi.Constraints, pb.CapSourceGit)
+
 	source := NewSource("git://"+id, attrs, gi.Constraints)
 	return NewState(source.Output())
 }
@@ -215,19 +225,26 @@ func Local(name string, opts ...LocalOption) State {
 	attrs := map[string]string{}
 	if gi.SessionID != "" {
 		attrs[pb.AttrLocalSessionID] = gi.SessionID
+		addCap(&gi.Constraints, pb.CapSourceLocalSessionID)
 	}
 	if gi.IncludePatterns != "" {
 		attrs[pb.AttrIncludePatterns] = gi.IncludePatterns
+		addCap(&gi.Constraints, pb.CapSourceLocalIncludePatterns)
 	}
 	if gi.FollowPaths != "" {
 		attrs[pb.AttrFollowPaths] = gi.FollowPaths
+		addCap(&gi.Constraints, pb.CapSourceLocalFollowPaths)
 	}
 	if gi.ExcludePatterns != "" {
 		attrs[pb.AttrExcludePatterns] = gi.ExcludePatterns
+		addCap(&gi.Constraints, pb.CapSourceLocalExcludePatterns)
 	}
 	if gi.SharedKeyHint != "" {
 		attrs[pb.AttrSharedKeyHint] = gi.SharedKeyHint
+		addCap(&gi.Constraints, pb.CapSourceLocalSharedKeyHint)
 	}
+
+	addCap(&gi.Constraints, pb.CapSourceLocal)
 
 	source := NewSource("local://"+name, attrs, gi.Constraints)
 	return NewState(source.Output())
@@ -305,20 +322,25 @@ func HTTP(url string, opts ...HTTPOption) State {
 	attrs := map[string]string{}
 	if hi.Checksum != "" {
 		attrs[pb.AttrHTTPChecksum] = hi.Checksum.String()
+		addCap(&hi.Constraints, pb.CapSourceHTTPChecksum)
 	}
 	if hi.Filename != "" {
 		attrs[pb.AttrHTTPFilename] = hi.Filename
 	}
 	if hi.Perm != 0 {
 		attrs[pb.AttrHTTPPerm] = "0" + strconv.FormatInt(int64(hi.Perm), 8)
+		addCap(&hi.Constraints, pb.CapSourceHTTPPerm)
 	}
 	if hi.UID != 0 {
 		attrs[pb.AttrHTTPUID] = strconv.Itoa(hi.UID)
+		addCap(&hi.Constraints, pb.CapSourceHTTPUIDGID)
 	}
-	if hi.UID != 0 {
+	if hi.GID != 0 {
 		attrs[pb.AttrHTTPGID] = strconv.Itoa(hi.GID)
+		addCap(&hi.Constraints, pb.CapSourceHTTPUIDGID)
 	}
 
+	addCap(&hi.Constraints, pb.CapSourceHTTP)
 	source := NewSource(url, attrs, hi.Constraints)
 	return NewState(source.Output())
 }
@@ -369,4 +391,11 @@ func Chown(uid, gid int) HTTPOption {
 
 func platformSpecificSource(id string) bool {
 	return strings.HasPrefix(id, "docker-image://")
+}
+
+func addCap(c *Constraints, id apicaps.CapID) {
+	if c.Metadata.Caps == nil {
+		c.Metadata.Caps = make(map[apicaps.CapID]bool)
+	}
+	c.Metadata.Caps[id] = true
 }
