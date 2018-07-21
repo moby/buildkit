@@ -378,7 +378,7 @@ type dispatchOpt struct {
 func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 	if ex, ok := cmd.Command.(instructions.SupportsSingleWordExpansion); ok {
 		err := ex.Expand(func(word string) (string, error) {
-			return opt.shlex.ProcessWord(word, toEnvList(d.buildArgs, d.image.Config.Env))
+			return opt.shlex.ProcessWordWithMap(word, toEnvMap(d.buildArgs, d.image.Config.Env))
 		})
 		if err != nil {
 			return err
@@ -526,7 +526,7 @@ func dispatchEnv(d *dispatchState, c *instructions.EnvCommand) error {
 	for _, e := range c.Env {
 		commitMessage.WriteString(" " + e.String())
 		d.state = d.state.AddEnv(e.Key, e.Value)
-		d.image.Config.Env = addEnv(d.image.Config.Env, e.Key, e.Value, true)
+		d.image.Config.Env = addEnv(d.image.Config.Env, e.Key, e.Value)
 	}
 	return commitToHistory(&d.image, commitMessage.String(), false, nil)
 }
@@ -714,7 +714,7 @@ func dispatchHealthcheck(d *dispatchState, c *instructions.HealthCheckCommand) e
 func dispatchExpose(d *dispatchState, c *instructions.ExposeCommand, shlex *shell.Lex) error {
 	ports := []string{}
 	for _, p := range c.Ports {
-		ps, err := shlex.ProcessWords(p, toEnvList(d.buildArgs, d.image.Config.Env))
+		ps, err := shlex.ProcessWordsWithMap(p, toEnvMap(d.buildArgs, d.image.Config.Env))
 		if err != nil {
 			return err
 		}
@@ -819,14 +819,12 @@ func splitWildcards(name string) (string, string) {
 	return path.Dir(name[:i]), base + name[i:]
 }
 
-func addEnv(env []string, k, v string, override bool) []string {
+func addEnv(env []string, k, v string) []string {
 	gotOne := false
 	for i, envVar := range env {
 		key, _ := parseKeyValue(envVar)
 		if shell.EqualEnvKeys(key, k) {
-			if override {
-				env[i] = k + "=" + v
-			}
+			env[i] = k + "=" + v
 			gotOne = true
 			break
 		}
@@ -854,11 +852,17 @@ func setKVValue(kvpo instructions.KeyValuePairOptional, values map[string]string
 	return kvpo
 }
 
-func toEnvList(args []instructions.KeyValuePairOptional, env []string) []string {
+func toEnvMap(args []instructions.KeyValuePairOptional, env []string) map[string]string {
+	m := shell.BuildEnvs(env)
+
 	for _, arg := range args {
-		env = addEnv(env, arg.Key, arg.ValueString(), false)
+		// If key already exists, keep previous value.
+		if _, ok := m[arg.Key]; ok {
+			continue
+		}
+		m[arg.Key] = arg.ValueString()
 	}
-	return env
+	return m
 }
 
 func dfCmd(cmd interface{}) llb.ConstraintsOpt {
