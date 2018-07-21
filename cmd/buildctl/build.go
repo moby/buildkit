@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"io"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/auth/authprovider"
+	"github.com/moby/buildkit/session/secrets/secretsprovider"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/progress/progressui"
 	"github.com/opencontainers/go-digest"
@@ -70,6 +72,10 @@ var buildCommand = cli.Command{
 			Name:  "import-cache",
 			Usage: "Reference to import build cache from",
 		},
+		cli.StringSliceFlag{
+			Name:  "secret",
+			Usage: "Secret value exposed to the build. Format id=secretname,src=filepath",
+		},
 	},
 }
 
@@ -122,6 +128,16 @@ func build(clicontext *cli.Context) error {
 		logrus.Infof("tracing logs to %s", traceFile.Name())
 	}
 
+	attachable := []session.Attachable{authprovider.NewDockerAuthProvider()}
+
+	if secrets := clicontext.StringSlice("secret"); len(secrets) > 0 {
+		secretProvider, err := parseSecretSpecs(secrets)
+		if err != nil {
+			return err
+		}
+		attachable = append(attachable, secretProvider)
+	}
+
 	ch := make(chan *client.SolveStatus)
 	eg, ctx := errgroup.WithContext(commandContext(clicontext))
 
@@ -133,7 +149,7 @@ func build(clicontext *cli.Context) error {
 		// FrontendAttrs is set later
 		ExportCache: clicontext.String("export-cache"),
 		ImportCache: clicontext.StringSlice("import-cache"),
-		Session:     []session.Attachable{authprovider.NewDockerAuthProvider()},
+		Session:     attachable,
 	}
 	solveOpt.ExporterAttrs, err = attrMap(clicontext.StringSlice("exporter-opt"))
 	if err != nil {
@@ -228,6 +244,56 @@ func attrMap(sl []string) (map[string]string, error) {
 		m[parts[0]] = parts[1]
 	}
 	return m, nil
+}
+
+func parseSecretSpecs(sl []string) (session.Attachable, error) {
+	fs := make([]secretsprovider.FileSource, 0, len(sl))
+	for _, v := range sl {
+		s, err := parseSecret(v)
+		if err != nil {
+			return nil, err
+		}
+		fs = append(fs, *s)
+	}
+	store, err := secretsprovider.NewFileStore(fs)
+	if err != nil {
+		return nil, err
+	}
+	return secretsprovider.NewSecretProvider(store), nil
+}
+
+func parseSecret(value string) (*secretsprovider.FileSource, error) {
+	csvReader := csv.NewReader(strings.NewReader(value))
+	fields, err := csvReader.Read()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to parse csv secret")
+	}
+
+	fs := secretsprovider.FileSource{}
+
+	for _, field := range fields {
+		parts := strings.SplitN(field, "=", 2)
+		key := strings.ToLower(parts[0])
+
+		if len(parts) != 2 {
+			return nil, errors.Errorf("invalid field '%s' must be a key=value pair", field)
+		}
+
+		value := parts[1]
+		switch key {
+		case "type":
+			if value != "file" {
+				return nil, errors.Errorf("unsupported secret type %q", value)
+			}
+		case "id":
+			fs.ID = value
+		case "source", "src":
+			fs.FilePath = value
+		default:
+			return nil, errors.Errorf("unexpected key '%s' in '%s'", key, field)
+		}
+	}
+	return &fs, nil
 }
 
 // resolveExporterOutput returns at most either one of io.WriteCloser (single file) or a string (directory path).
