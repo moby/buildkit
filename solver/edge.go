@@ -413,7 +413,7 @@ func (e *edge) processUpdate(upt pipe.Receiver) (depChanged bool) {
 	}
 
 	// response for requests to dependencies
-	if dep, ok := e.depRequests[upt]; ok { // TODO: ignore canceled
+	if dep, ok := e.depRequests[upt]; ok {
 		if err := upt.Status().Err; !upt.Status().Canceled && upt.Status().Completed && err != nil {
 			if e.err == nil {
 				e.err = err
@@ -427,6 +427,7 @@ func (e *edge) processUpdate(upt pipe.Receiver) (depChanged bool) {
 			newKeys := state.keys[len(dep.keys):]
 			if e.cacheMap != nil {
 				e.probeCache(dep, withSelector(newKeys, e.cacheMap.Deps[dep.index].Selector))
+				dep.edgeState.keys = state.keys
 				if e.allDepsHaveKeys() {
 					e.keysDidChange = true
 				}
