@@ -161,7 +161,7 @@ func (sb *subBuilder) Build(ctx context.Context, e Edge) (CachedResult, error) {
 		return nil, err
 	}
 	sb.mu.Lock()
-	sb.exporters = append(sb.exporters, res.CacheKey())
+	sb.exporters = append(sb.exporters, res.CacheKeys()[0]) // all keys already have full export chain
 	sb.mu.Unlock()
 	return res, nil
 }

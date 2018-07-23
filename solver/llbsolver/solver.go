@@ -125,7 +125,8 @@ func (s *Solver) Solve(ctx context.Context, id string, req frontend.SolveRequest
 		if err := j.Call(ctx, "exporting cache", func(ctx context.Context) error {
 			prepareDone := oneOffProgress(ctx, "preparing build cache for export")
 			if err := res.EachRef(func(res solver.CachedResult) error {
-				_, err := res.CacheKey().Exporter.ExportTo(ctx, e, solver.CacheExportOpt{
+				// all keys have same export chain so exporting others is not needed
+				_, err := res.CacheKeys()[0].Exporter.ExportTo(ctx, e, solver.CacheExportOpt{
 					Convert: workerRefConverter,
 					Mode:    exp.CacheExportMode,
 				})
