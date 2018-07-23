@@ -34,16 +34,12 @@ type Solver struct {
 	platforms            []specs.Platform
 }
 
-func New(wc *worker.Controller, f map[string]frontend.Frontend, cacheStore solver.CacheKeyStorage, resolveCI remotecache.ResolveCacheImporterFunc) (*Solver, error) {
+func New(wc *worker.Controller, f map[string]frontend.Frontend, cache solver.CacheManager, resolveCI remotecache.ResolveCacheImporterFunc) (*Solver, error) {
 	s := &Solver{
 		resolveWorker:        defaultResolver(wc),
 		frontends:            f,
 		resolveCacheImporter: resolveCI,
 	}
-
-	results := newCacheResultStorage(wc)
-
-	cache := solver.NewCacheManager("local", cacheStore, results)
 
 	// executing is currently only allowed on default worker
 	w, err := wc.GetDefault()
