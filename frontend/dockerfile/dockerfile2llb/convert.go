@@ -56,17 +56,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		return nil, nil, errors.Errorf("the Dockerfile cannot be empty")
 	}
 
-	if opt.TargetPlatform != nil && opt.BuildPlatforms == nil {
-		opt.BuildPlatforms = []specs.Platform{*opt.TargetPlatform}
-	}
-	if len(opt.BuildPlatforms) == 0 {
-		opt.BuildPlatforms = []specs.Platform{platforms.DefaultSpec()}
-	}
-	implicitTargetPlatform := false
-	if opt.TargetPlatform == nil {
-		implicitTargetPlatform = true
-		opt.TargetPlatform = &opt.BuildPlatforms[0]
-	}
+	platformOpt := buildPlatformOpt(&opt)
 
 	dockerfile, err := parser.Parse(bytes.NewReader(dt))
 	if err != nil {
@@ -176,7 +166,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		if d.base == nil {
 			if d.stage.BaseName == emptyImageName {
 				d.state = llb.Scratch()
-				d.image = emptyImage(*opt.TargetPlatform)
+				d.image = emptyImage(platformOpt.targetPlatform)
 				continue
 			}
 			func(i int, d *dispatchState) {
@@ -187,7 +177,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 					}
 					platform := d.platform
 					if platform == nil {
-						platform = opt.TargetPlatform
+						platform = &platformOpt.targetPlatform
 					}
 					d.stage.BaseName = reference.TagNameOnly(ref).String()
 					var isScratch bool
@@ -200,8 +190,8 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 							}
 							img.Created = nil
 							// if there is no explicit target platform, try to match based on image config
-							if d.platform == nil && implicitTargetPlatform {
-								p := autoDetectPlatform(img, *platform, opt.BuildPlatforms)
+							if d.platform == nil && platformOpt.implicitTarget {
+								p := autoDetectPlatform(img, *platform, platformOpt.buildPlatforms)
 								platform = &p
 							}
 							d.image = img
@@ -270,8 +260,8 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 			buildContext:      llb.NewState(buildContext),
 			proxyEnv:          proxyEnv,
 			cacheIDNamespace:  opt.CacheIDNamespace,
-			buildPlatforms:    opt.BuildPlatforms,
-			targetPlatform:    *opt.TargetPlatform,
+			buildPlatforms:    platformOpt.buildPlatforms,
+			targetPlatform:    platformOpt.targetPlatform,
 		}
 
 		if err = dispatchOnBuild(d, d.image.Config.OnBuild, opt); err != nil {
@@ -310,11 +300,11 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 	}
 	buildContext.Output = bc.Output()
 
-	st := target.state.SetMarhalDefaults(llb.Platform(*opt.TargetPlatform))
+	st := target.state.SetMarhalDefaults(llb.Platform(platformOpt.targetPlatform))
 
-	if !implicitTargetPlatform {
-		target.image.OS = opt.TargetPlatform.OS
-		target.image.Architecture = opt.TargetPlatform.Architecture
+	if !platformOpt.implicitTarget {
+		target.image.OS = platformOpt.targetPlatform.OS
+		target.image.Architecture = platformOpt.targetPlatform.Architecture
 	}
 
 	return &st, &target.image, nil
