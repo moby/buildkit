@@ -20,6 +20,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/tonistiigi/fsutil"
 	"golang.org/x/time/rate"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const keySharedKey = "local.sharedKey"
@@ -168,6 +170,9 @@ func (ls *localSourceHandler) Snapshot(ctx context.Context) (out cache.Immutable
 	}
 
 	if err := filesync.FSSync(ctx, caller, opt); err != nil {
+		if status.Code(err) == codes.NotFound {
+			return nil, errors.Errorf("local source %s not enabled from the client", ls.src.Name)
+		}
 		return nil, err
 	}
 

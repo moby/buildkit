@@ -11,7 +11,9 @@ import (
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -79,7 +81,7 @@ func (sp *fsSyncProvider) handle(method string, stream grpc.ServerStream) (retEr
 
 	dir, ok := sp.dirs[dirName]
 	if !ok {
-		return errors.Errorf("no access allowed to dir %q", dirName)
+		return status.Errorf(codes.NotFound, "no access allowed to dir %q", dirName)
 	}
 
 	excludes := opts[keyExcludePatterns]
@@ -174,7 +176,7 @@ func FSSync(ctx context.Context, c session.Caller, opt FSSendRequestOpt) error {
 		}
 	}
 	if pr == nil {
-		return errors.New("no fssync handlers")
+		return errors.New("no local sources enabled")
 	}
 
 	opts := make(map[string][]string)

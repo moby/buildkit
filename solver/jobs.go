@@ -557,6 +557,9 @@ func (s *sharedOp) CalcSlowCache(ctx context.Context, index Index, f ResultBased
 		return key, err
 	})
 	if err != nil {
+		ctx = progress.WithProgress(ctx, s.st.mpw)
+		notifyStarted(ctx, &s.st.clientVertex, false)
+		notifyCompleted(ctx, &s.st.clientVertex, err, false)
 		return "", err
 	}
 	return key.(digest.Digest), nil
