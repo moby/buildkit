@@ -2892,6 +2892,61 @@ func TestCacheExportingMergedKey(t *testing.T) {
 	require.Equal(t, len(expTarget.records), 5)
 }
 
+// moby/buildkit#434
+func TestMergedEdgesLookup(t *testing.T) {
+	t.Parallel()
+
+	rand.Seed(time.Now().UnixNano())
+
+	// this test requires multiple runs to trigger the race
+	for i := 0; i < 20; i++ {
+		func() {
+			ctx := context.TODO()
+
+			cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
+
+			l := NewSolver(SolverOpt{
+				ResolveOpFunc: testOpResolver,
+				DefaultCache:  cacheManager,
+			})
+			defer l.Close()
+
+			j0, err := l.NewJob("j0")
+			require.NoError(t, err)
+
+			defer func() {
+				if j0 != nil {
+					j0.Discard()
+				}
+			}()
+
+			g := Edge{
+				Vertex: vtxSum(3, vtxOpt{inputs: []Edge{
+					{Vertex: vtxSum(0, vtxOpt{inputs: []Edge{
+						{Vertex: vtxSum(2, vtxOpt{inputs: []Edge{
+							{Vertex: vtxConst(2, vtxOpt{})},
+						}})},
+						{Vertex: vtxConst(0, vtxOpt{})},
+					}})},
+					{Vertex: vtxSum(2, vtxOpt{inputs: []Edge{
+						{Vertex: vtxConst(2, vtxOpt{})},
+					}})},
+				}}),
+			}
+			g.Vertex.(*vertexSum).setupCallCounters()
+
+			res, err := j0.Build(ctx, g)
+			require.NoError(t, err)
+			require.Equal(t, unwrapInt(res), 11)
+			require.Equal(t, int64(7), *g.Vertex.(*vertexSum).cacheCallCount)
+			require.Equal(t, int64(0), cacheManager.loadCounter)
+
+			require.NoError(t, j0.Discard())
+			j0 = nil
+		}()
+	}
+}
+
 func generateSubGraph(nodes int) (Edge, int) {
 	if nodes == 1 {
 		value := rand.Int() % 500
