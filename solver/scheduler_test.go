@@ -2131,7 +2131,7 @@ func TestCacheExporting(t *testing.T) {
 
 	expTarget := newTestExporterTarget()
 
-	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
+	_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
 	expTarget.normalize()
@@ -2162,7 +2162,7 @@ func TestCacheExporting(t *testing.T) {
 
 	expTarget = newTestExporterTarget()
 
-	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
+	_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
 	expTarget.normalize()
@@ -2219,7 +2219,7 @@ func TestCacheExportingModeMin(t *testing.T) {
 
 	expTarget := newTestExporterTarget()
 
-	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testExporterOpts(false))
+	_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, expTarget, testExporterOpts(false))
 	require.NoError(t, err)
 
 	expTarget.normalize()
@@ -2252,7 +2252,7 @@ func TestCacheExportingModeMin(t *testing.T) {
 
 	expTarget = newTestExporterTarget()
 
-	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testExporterOpts(false))
+	_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, expTarget, testExporterOpts(false))
 	require.NoError(t, err)
 
 	expTarget.normalize()
@@ -2286,7 +2286,7 @@ func TestCacheExportingModeMin(t *testing.T) {
 
 	expTarget = newTestExporterTarget()
 
-	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
+	_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
 	expTarget.normalize()
@@ -2431,7 +2431,7 @@ func TestCacheMultipleMaps(t *testing.T) {
 
 	expTarget := newTestExporterTarget()
 
-	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
+	_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
 	expTarget.normalize()
@@ -2467,7 +2467,7 @@ func TestCacheMultipleMaps(t *testing.T) {
 
 	expTarget = newTestExporterTarget()
 
-	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
+	_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
 	require.Equal(t, len(expTarget.records), 3)
@@ -2502,11 +2502,104 @@ func TestCacheMultipleMaps(t *testing.T) {
 
 	expTarget = newTestExporterTarget()
 
-	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
+	_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
 	require.Equal(t, len(expTarget.records), 3)
 	require.Equal(t, called, true)
+}
+
+func TestCacheInputMultipleMaps(t *testing.T) {
+	t.Parallel()
+	ctx := context.TODO()
+
+	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
+
+	l := NewSolver(SolverOpt{
+		ResolveOpFunc: testOpResolver,
+		DefaultCache:  cacheManager,
+	})
+	defer l.Close()
+
+	j0, err := l.NewJob("j0")
+	require.NoError(t, err)
+
+	defer func() {
+		if j0 != nil {
+			j0.Discard()
+		}
+	}()
+
+	g0 := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "v0",
+			cacheKeySeed: "seed0",
+			value:        "result0",
+			inputs: []Edge{{
+				Vertex: vtx(vtxOpt{
+					name:         "v1",
+					cacheKeySeed: "seed1",
+					cacheKeySeeds: []func() string{
+						func() string { return "seed2" },
+					},
+					value: "result1",
+				}),
+			}},
+		}),
+	}
+	res, err := j0.Build(ctx, g0)
+	require.NoError(t, err)
+	require.Equal(t, unwrap(res), "result0")
+
+	expTarget := newTestExporterTarget()
+
+	_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
+	require.NoError(t, err)
+
+	expTarget.normalize()
+	require.Equal(t, len(expTarget.records), 3)
+
+	require.NoError(t, j0.Discard())
+	j0 = nil
+
+	j1, err := l.NewJob("j1")
+	require.NoError(t, err)
+
+	defer func() {
+		if j1 != nil {
+			j1.Discard()
+		}
+	}()
+
+	g1 := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "v0",
+			cacheKeySeed: "seed0",
+			value:        "result0-no-cache",
+			inputs: []Edge{{
+				Vertex: vtx(vtxOpt{
+					name:         "v1",
+					cacheKeySeed: "seed1.changed",
+					cacheKeySeeds: []func() string{
+						func() string { return "seed2" },
+					},
+					value: "result1-no-cache",
+				}),
+			}},
+		}),
+	}
+	res, err = j1.Build(ctx, g1)
+	require.NoError(t, err)
+	require.Equal(t, unwrap(res), "result0")
+
+	_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
+	require.NoError(t, err)
+
+	expTarget.normalize()
+	require.Equal(t, len(expTarget.records), 3)
+
+	require.NoError(t, j1.Discard())
+	j1 = nil
 }
 
 func TestCacheExportingPartialSelector(t *testing.T) {
@@ -2560,7 +2653,7 @@ func TestCacheExportingPartialSelector(t *testing.T) {
 
 	expTarget := newTestExporterTarget()
 
-	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
+	_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
 	expTarget.normalize()
@@ -2593,7 +2686,7 @@ func TestCacheExportingPartialSelector(t *testing.T) {
 
 	expTarget = newTestExporterTarget()
 
-	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
+	_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
 	expTarget.normalize()
@@ -2647,7 +2740,7 @@ func TestCacheExportingPartialSelector(t *testing.T) {
 
 	expTarget = newTestExporterTarget()
 
-	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
+	_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
 	expTarget.normalize()
@@ -2693,7 +2786,7 @@ func TestCacheExportingPartialSelector(t *testing.T) {
 
 	expTarget = newTestExporterTarget()
 
-	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
+	_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
 	expTarget.normalize()
@@ -2791,7 +2884,7 @@ func TestCacheExportingMergedKey(t *testing.T) {
 
 	expTarget := newTestExporterTarget()
 
-	_, err = res.CacheKey().Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
+	_, err = res.CacheKeys()[0].Exporter.ExportTo(ctx, expTarget, testExporterOpts(true))
 	require.NoError(t, err)
 
 	expTarget.normalize()
