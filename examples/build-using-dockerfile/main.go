@@ -11,6 +11,7 @@ import (
 
 	"github.com/containerd/console"
 	"github.com/moby/buildkit/client"
+	dockerfile "github.com/moby/buildkit/frontend/dockerfile/builder"
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/moby/buildkit/util/progress/progressui"
@@ -38,6 +39,11 @@ By default, the built image is loaded to Docker.
 			Usage:  "buildkit daemon address",
 			EnvVar: "BUILDKIT_HOST",
 			Value:  appdefaults.Address,
+		},
+		cli.BoolFlag{
+			Name:   "clientside-frontend",
+			Usage:  "run dockerfile frontend client side, rather than builtin to buildkitd",
+			EnvVar: "BUILDKIT_CLIENTSIDE_FRONTEND",
 		},
 	}
 	app.Flags = append([]cli.Flag{
@@ -83,7 +89,12 @@ func action(clicontext *cli.Context) error {
 	ch := make(chan *client.SolveStatus)
 	eg, ctx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
-		_, err := c.Solve(ctx, nil, *solveOpt, ch)
+		var err error
+		if clicontext.Bool("clientside-frontend") {
+			_, err = c.Build(ctx, *solveOpt, "", dockerfile.Build, ch)
+		} else {
+			_, err = c.Solve(ctx, nil, *solveOpt, ch)
+		}
 		return err
 	})
 	eg.Go(func() error {
@@ -124,6 +135,10 @@ func newSolveOpt(clicontext *cli.Context, w io.WriteCloser) (*client.SolveOpt, e
 		"dockerfile": filepath.Dir(file),
 	}
 
+	frontend := "dockerfile.v0" // TODO: use gateway
+	if clicontext.Bool("clientside-frontend") {
+		frontend = ""
+	}
 	frontendAttrs := map[string]string{
 		"filename": filepath.Base(file),
 	}
@@ -145,7 +160,7 @@ func newSolveOpt(clicontext *cli.Context, w io.WriteCloser) (*client.SolveOpt, e
 		},
 		ExporterOutput: w,
 		LocalDirs:      localDirs,
-		Frontend:       "dockerfile.v0", // TODO: use gateway
+		Frontend:       frontend,
 		FrontendAttrs:  frontendAttrs,
 	}, nil
 }
