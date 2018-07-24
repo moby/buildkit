@@ -203,6 +203,11 @@ func testResultReleaseSingleLevel(t *testing.T, st solver.CacheKeyStorage) {
 	})
 
 	require.Equal(t, len(m), 0)
+
+	st.Walk(func(id string) error {
+		require.False(t, true, fmt.Sprintf("id %s should have been released", id))
+		return nil
+	})
 }
 
 func testBacklinks(t *testing.T, st solver.CacheKeyStorage) {
@@ -321,12 +326,16 @@ func testResultReleaseMultiLevel(t *testing.T, st solver.CacheKeyStorage) {
 	require.Equal(t, len(m), 1)
 
 	// release sub1 now releases foo as well
-
 	err = st.Release("sub1-result")
 	require.NoError(t, err)
 
 	require.False(t, st.Exists("sub1"))
 	require.False(t, st.Exists("foo"))
+
+	st.Walk(func(id string) error {
+		require.False(t, true, fmt.Sprintf("id %s should have been released", id))
+		return nil
+	})
 }
 
 func testWalkIDsByResult(t *testing.T, st solver.CacheKeyStorage) {
