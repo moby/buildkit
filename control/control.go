@@ -36,10 +36,13 @@ type Opt struct {
 type Controller struct { // TODO: ControlService
 	opt    Opt
 	solver *llbsolver.Solver
+	cache  solver.CacheManager
 }
 
 func NewController(opt Opt) (*Controller, error) {
-	solver, err := llbsolver.New(opt.WorkerController, opt.Frontends, opt.CacheKeyStorage, opt.ResolveCacheImporterFunc)
+	cache := solver.NewCacheManager("local", opt.CacheKeyStorage, worker.NewCacheResultStorage(opt.WorkerController))
+
+	solver, err := llbsolver.New(opt.WorkerController, opt.Frontends, cache, opt.ResolveCacheImporterFunc)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create solver")
 	}
@@ -47,6 +50,7 @@ func NewController(opt Opt) (*Controller, error) {
 	c := &Controller{
 		opt:    opt,
 		solver: solver,
+		cache:  cache,
 	}
 	return c, nil
 }
@@ -97,6 +101,19 @@ func (c *Controller) Prune(req *controlapi.PruneRequest, stream controlapi.Contr
 		return errors.Wrap(err, "failed to list workers for prune")
 	}
 
+	didPrune := false
+	defer func() {
+		if didPrune {
+			if c, ok := c.cache.(interface {
+				ReleaseUnreferenced() error
+			}); ok {
+				if err := c.ReleaseUnreferenced(); err != nil {
+					logrus.Errorf("failed to release cache metadata: %+v")
+				}
+			}
+		}
+	}()
+
 	for _, w := range workers {
 		func(w worker.Worker) {
 			eg.Go(func() error {
@@ -114,6 +131,7 @@ func (c *Controller) Prune(req *controlapi.PruneRequest, stream controlapi.Contr
 
 	eg2.Go(func() error {
 		for r := range ch {
+			didPrune = true
 			if err := stream.Send(&controlapi.UsageRecord{
 				// TODO: add worker info
 				ID:          r.ID,
