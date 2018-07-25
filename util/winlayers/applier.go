@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/containerd/containerd/archive"
 	"github.com/containerd/containerd/archive/compression"
@@ -69,7 +70,7 @@ func (s *winApplier) Apply(ctx context.Context, desc ocispec.Descriptor, mounts 
 			r: io.TeeReader(r, digester.Hash()),
 		}
 
-		rc2 := filter(rc, func(hdr *tar.Header) bool {
+		rc2, discard := filter(rc, func(hdr *tar.Header) bool {
 			if strings.HasPrefix(hdr.Name, "Files/") {
 				hdr.Name = strings.TrimPrefix(hdr.Name, "Files/")
 				hdr.Linkname = strings.TrimPrefix(hdr.Linkname, "Files/")
@@ -81,11 +82,13 @@ func (s *winApplier) Apply(ctx context.Context, desc ocispec.Descriptor, mounts 
 		})
 
 		if _, err := archive.Apply(ctx, root, rc2); err != nil {
+			discard(err)
 			return err
 		}
 
 		// Read any trailing data
 		if _, err := io.Copy(ioutil.Discard, rc); err != nil {
+			discard(err)
 			return err
 		}
 
@@ -113,11 +116,13 @@ func (rc *readCounter) Read(p []byte) (n int, err error) {
 	return
 }
 
-func filter(in io.Reader, f func(*tar.Header) bool) io.Reader {
+func filter(in io.Reader, f func(*tar.Header) bool) (io.Reader, func(error)) {
 	pr, pw := io.Pipe()
 
+	rc := &readCanceler{Reader: in}
+
 	go func() {
-		tarReader := tar.NewReader(in)
+		tarReader := tar.NewReader(rc)
 		tarWriter := tar.NewWriter(pw)
 
 		pw.CloseWithError(func() error {
@@ -149,5 +154,34 @@ func filter(in io.Reader, f func(*tar.Header) bool) io.Reader {
 			return tarWriter.Close()
 		}())
 	}()
-	return pr
+
+	discard := func(err error) {
+		rc.cancel(err)
+		pw.CloseWithError(err)
+	}
+
+	return pr, discard
+}
+
+type readCanceler struct {
+	mu sync.Mutex
+	io.Reader
+	err error
+}
+
+func (r *readCanceler) Read(b []byte) (int, error) {
+	r.mu.Lock()
+	if r.err != nil {
+		r.mu.Unlock()
+		return 0, r.err
+	}
+	n, err := r.Reader.Read(b)
+	r.mu.Unlock()
+	return n, err
+}
+
+func (r *readCanceler) cancel(err error) {
+	r.mu.Lock()
+	r.err = err
+	r.mu.Unlock()
 }
