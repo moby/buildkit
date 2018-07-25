@@ -25,8 +25,8 @@ import (
 
 const (
 	dgstFileData0     = digest.Digest("sha256:cd8e75bca50f2d695f220d0cb0997d8ead387e4f926e8669a92d7f104cc9885b")
-	dgstDirD0         = digest.Digest("sha256:311457c20a9b6bfc7b368282be86a0c98b7be882a268967605559c9b5acd7068")
-	dgstDirD0Modified = digest.Digest("sha256:a0da3975efcd81ddec35ba1481f7b57a46af1c1e42a14b6024323d3fe2e7b2d8")
+	dgstDirD0         = digest.Digest("sha256:d47454417d2c554067fbefe5f5719edc49f3cfe969c36b62e34a187a4da0cc9a")
+	dgstDirD0Modified = digest.Digest("sha256:555ffa3028630d97ba37832b749eda85ab676fd64ffb629fbf0f4ec8c1e3bff1")
 )
 
 func TestChecksumBasicFile(t *testing.T) {
@@ -96,7 +96,7 @@ func TestChecksumBasicFile(t *testing.T) {
 	dgst, err = cc.Checksum(context.TODO(), ref, "/")
 	assert.NoError(t, err)
 
-	assert.Equal(t, digest.Digest("sha256:f57ab28e15b8dadb573ef097f2f99967f3acc4c44accc4888f4df510f9e9d2de"), dgst)
+	assert.Equal(t, digest.Digest("sha256:427c9cf9ae98c0f81fb57a3076b965c7c149b6b0a85625ad4e884236649a42c6"), dgst)
 
 	dgst, err = cc.Checksum(context.TODO(), ref, "d0")
 	assert.NoError(t, err)
@@ -336,7 +336,7 @@ func TestChecksumUnorderedFiles(t *testing.T) {
 	dgst, err := cc.Checksum(context.TODO(), ref, "d0")
 	assert.NoError(t, err)
 
-	assert.Equal(t, dgst, digest.Digest("sha256:67bed5f4c5ec9cd367b89962f6b1836740e1694e35a127fa4af58b0c339a7b7b"))
+	assert.Equal(t, dgst, digest.Digest("sha256:14276c302c940a80f82ca5477bf766c98a24702d6a9948ee71bb277cdad3ae05"))
 
 	// check regression from earier version that didn't track some files
 	ch = []string{
@@ -498,7 +498,7 @@ func parseChange(str string) *change {
 		st.Mode |= 0644
 	case "dir":
 		st.Mode |= uint32(os.ModeDir)
-		st.Mode |= 0700
+		st.Mode |= 0755
 	case "symlink":
 		if len(f) < 4 {
 			panic(errStr)
@@ -554,7 +554,9 @@ func writeChanges(p string, inp []*change) error {
 				return errors.Errorf("invalid non-stat change %s", p)
 			}
 			if c.fi.IsDir() {
-				if err := os.Mkdir(p, 0700); err != nil {
+				// The snapshot root ('/') is always created with 0755.
+				// We use the same permission mode here.
+				if err := os.Mkdir(p, 0755); err != nil {
 					return err
 				}
 			} else if c.fi.Mode()&os.ModeSymlink != 0 {
