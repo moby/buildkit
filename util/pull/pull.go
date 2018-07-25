@@ -182,7 +182,7 @@ func (p *Puller) Pull(ctx context.Context) (*Pulled, error) {
 	var layerBlobs []ocispec.Descriptor
 	for _, j := range usedBlobs {
 		switch j.MediaType {
-		case ocispec.MediaTypeImageLayer, images.MediaTypeDockerSchema2Layer, ocispec.MediaTypeImageLayerGzip, images.MediaTypeDockerSchema2LayerGzip:
+		case ocispec.MediaTypeImageLayer, images.MediaTypeDockerSchema2Layer, ocispec.MediaTypeImageLayerGzip, images.MediaTypeDockerSchema2LayerGzip, images.MediaTypeDockerSchema2LayerForeign, images.MediaTypeDockerSchema2LayerForeignGzip:
 			layerBlobs = append(layerBlobs, j)
 		default:
 			notLayerBlobs = append(notLayerBlobs, j)

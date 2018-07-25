@@ -8,7 +8,6 @@ import (
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/images/oci"
 	"github.com/docker/distribution/reference"
-	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage"
 	"github.com/moby/buildkit/session"
@@ -17,17 +16,15 @@ import (
 	"github.com/moby/buildkit/util/progress"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 type ExporterVariant string
 
 const (
-	exporterImageConfig = "containerimage.config"
-	keyImageName        = "name"
-	VariantOCI          = "oci"
-	VariantDocker       = "docker"
-	ociTypes            = "oci-mediatypes"
+	keyImageName  = "name"
+	VariantOCI    = "oci"
+	VariantDocker = "docker"
+	ociTypes      = "oci-mediatypes"
 )
 
 type Opt struct {
@@ -63,8 +60,6 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 	i := &imageExporterInstance{imageExporter: e, caller: caller}
 	for k, v := range opt {
 		switch k {
-		case exporterImageConfig:
-			i.config = []byte(v)
 		case keyImageName:
 			parsed, err := reference.ParseNormalizedNamed(v)
 			if err != nil {
@@ -83,7 +78,10 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 			}
 			*ot = b
 		default:
-			logrus.Warnf("oci exporter: unknown option %s", k)
+			if i.meta == nil {
+				i.meta = make(map[string][]byte)
+				i.meta[k] = []byte(v)
+			}
 		}
 	}
 	if ot == nil {
@@ -96,7 +94,7 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 
 type imageExporterInstance struct {
 	*imageExporter
-	config   []byte
+	meta     map[string][]byte
 	caller   session.Caller
 	name     string
 	ociTypes bool
@@ -106,11 +104,16 @@ func (e *imageExporterInstance) Name() string {
 	return "exporting to oci image format"
 }
 
-func (e *imageExporterInstance) Export(ctx context.Context, ref cache.ImmutableRef, opt map[string][]byte) (map[string]string, error) {
-	if config, ok := opt[exporterImageConfig]; ok {
-		e.config = config
+func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source) (map[string]string, error) {
+	if e.opt.Variant == VariantDocker && len(src.Refs) > 0 {
+		return nil, errors.Errorf("docker exporter does not currently support exporting manifest lists")
 	}
-	desc, err := e.opt.ImageWriter.Commit(ctx, ref, e.config, e.ociTypes)
+
+	for k, v := range e.meta {
+		src.Metadata[k] = v
+	}
+
+	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes)
 	if err != nil {
 		return nil, err
 	}

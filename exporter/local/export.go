@@ -4,6 +4,7 @@ import (
 	"context"
 	"io/ioutil"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/moby/buildkit/cache"
@@ -14,6 +15,7 @@ import (
 	"github.com/moby/buildkit/util/progress"
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
+	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
 )
 
@@ -58,32 +60,63 @@ func (e *localExporterInstance) Name() string {
 	return "exporting to client"
 }
 
-func (e *localExporterInstance) Export(ctx context.Context, ref cache.ImmutableRef, opt map[string][]byte) (map[string]string, error) {
-	var src string
-	var err error
-	if ref == nil {
-		src, err = ioutil.TempDir("", "buildkit")
-		if err != nil {
-			return nil, err
-		}
-		defer os.RemoveAll(src)
-	} else {
-		mount, err := ref.Mount(ctx, true)
-		if err != nil {
-			return nil, err
-		}
+func (e *localExporterInstance) Export(ctx context.Context, inp exporter.Source) (map[string]string, error) {
+	isMap := len(inp.Refs) > 0
 
-		lm := snapshot.LocalMounter(mount)
+	export := func(ctx context.Context, k string, ref cache.ImmutableRef) func() error {
+		return func() error {
+			var src string
+			var err error
+			if ref == nil {
+				src, err = ioutil.TempDir("", "buildkit")
+				if err != nil {
+					return err
+				}
+				defer os.RemoveAll(src)
+			} else {
+				mount, err := ref.Mount(ctx, true)
+				if err != nil {
+					return err
+				}
 
-		src, err = lm.Mount()
-		if err != nil {
-			return nil, err
+				lm := snapshot.LocalMounter(mount)
+
+				src, err = lm.Mount()
+				if err != nil {
+					return err
+				}
+				defer lm.Unmount()
+			}
+
+			fs := fsutil.NewFS(src, nil)
+			lbl := "copying files"
+			if isMap {
+				lbl += " " + k
+				fs = fsutil.SubDirFS(fs, fsutil.Stat{
+					Mode: uint32(os.ModeDir | 0755),
+					Path: strings.Replace(k, "/", "_", -1),
+				})
+			}
+
+			progress := newProgressHandler(ctx, lbl)
+			if err := filesync.CopyToCaller(ctx, fs, e.caller, progress); err != nil {
+				return err
+			}
+			return nil
 		}
-		defer lm.Unmount()
 	}
 
-	progress := newProgressHandler(ctx, "copying files")
-	if err := filesync.CopyToCaller(ctx, fsutil.NewFS(src, nil), e.caller, progress); err != nil {
+	eg, ctx := errgroup.WithContext(ctx)
+
+	if isMap {
+		for k, ref := range inp.Refs {
+			eg.Go(export(ctx, k, ref))
+		}
+	} else {
+		eg.Go(export(ctx, "", inp.Ref))
+	}
+
+	if err := eg.Wait(); err != nil {
 		return nil, err
 	}
 	return nil, nil

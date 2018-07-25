@@ -58,6 +58,11 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 
 	platformOpt := buildPlatformOpt(&opt)
 
+	optMetaArgs := getPlatformArgs(platformOpt)
+	for i, arg := range optMetaArgs {
+		optMetaArgs[i] = setKVValue(arg, opt.BuildArgs)
+	}
+
 	dockerfile, err := parser.Parse(bytes.NewReader(dt))
 	if err != nil {
 		return nil, nil, err
@@ -70,7 +75,6 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		return nil, nil, err
 	}
 
-	optMetaArgs := []instructions.KeyValuePairOptional{}
 	for _, metaArg := range metaArgs {
 		optMetaArgs = append(optMetaArgs, setKVValue(metaArg.KeyValuePairOptional, opt.BuildArgs))
 	}
@@ -213,6 +217,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 					} else {
 						d.state = llb.Image(d.stage.BaseName, dfCmd(d.stage.SourceCode), llb.Platform(*platform))
 					}
+					d.platform = platform
 					return nil
 				})
 			}(i, d)
@@ -232,6 +237,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		}
 		if d.base != nil {
 			d.state = d.base.state
+			d.platform = d.base.platform
 			d.image = clone(d.base.image)
 		}
 
@@ -641,6 +647,10 @@ func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState l
 	}
 	run := img.Run(append(runOpt, mounts...)...)
 	d.state = run.AddMount("/dest", d.state).Platform(opt.targetPlatform)
+
+	if d.platform != nil {
+		d.state = d.state.Platform(*d.platform)
+	}
 
 	return commitToHistory(&d.image, commitMessage.String(), true, &d.state)
 }

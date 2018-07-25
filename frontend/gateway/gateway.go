@@ -16,6 +16,7 @@ import (
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/executor"
+	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/frontend"
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
@@ -37,9 +38,8 @@ import (
 )
 
 const (
-	keySource           = "source"
-	keyDevel            = "gateway-devel"
-	exporterImageConfig = "containerimage.config"
+	keySource = "source"
+	keyDevel  = "gateway-devel"
 )
 
 func NewGatewayFrontend(w frontend.WorkerInfos) frontend.Frontend {
@@ -97,7 +97,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 			return nil, errors.Errorf("invalid ref: %T", devRes.Ref.Sys())
 		}
 		rootFS = workerRef.ImmutableRef
-		config, ok := devRes.Metadata[exporterImageConfig]
+		config, ok := devRes.Metadata[exptypes.ExporterImageConfigKey]
 		if ok {
 			if err := json.Unmarshal(config, &img); err != nil {
 				return nil, err

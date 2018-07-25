@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -27,6 +28,7 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend/dockerfile/builder"
 	"github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/util/testutil"
 	"github.com/moby/buildkit/util/testutil/httpserver"
 	"github.com/moby/buildkit/util/testutil/integration"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -69,7 +71,143 @@ func TestIntegration(t *testing.T) {
 		testNoSnapshotLeak,
 		testCopySymlinks,
 		testContextChangeDirToFile,
+		testPlatformArgsImplicit,
+		testPlatformArgsExplicit,
+		testExportMultiPlatform,
 	})
+}
+
+func testExportMultiPlatform(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	dockerfile := []byte(`
+FROM scratch
+ARG TARGETARCH
+ARG TARGETPLATFORM
+LABEL target=$TARGETPLATFORM
+COPY arch-$TARGETARCH whoami
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("arch-arm", []byte(`i am arm`), 0600),
+		fstest.CreateFile("arch-amd64", []byte(`i am amd64`), 0600),
+		fstest.CreateFile("arch-s390x", []byte(`i am s390x`), 0600),
+		fstest.CreateFile("arch-ppc64le", []byte(`i am ppc64le`), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = c.Solve(context.TODO(), nil, client.SolveOpt{
+		Frontend: "dockerfile.v0",
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+		FrontendAttrs: map[string]string{
+			"platform": "windows/amd64,linux/arm,linux/s390x",
+		},
+		Exporter:          client.ExporterLocal,
+		ExporterOutputDir: destDir,
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "windows_amd64/whoami"))
+	require.NoError(t, err)
+	require.Equal(t, "i am amd64", string(dt))
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "linux_arm_v7/whoami"))
+	require.NoError(t, err)
+	require.Equal(t, "i am arm", string(dt))
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "linux_s390x/whoami"))
+	require.NoError(t, err)
+	require.Equal(t, "i am s390x", string(dt))
+
+	// repeat with oci exporter
+
+	destDir, err = ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	out := filepath.Join(destDir, "out.tar")
+	outW, err := os.Create(out)
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), nil, client.SolveOpt{
+		Frontend: "dockerfile.v0",
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+		FrontendAttrs: map[string]string{
+			"platform": "windows/amd64,linux/arm/v6,linux/ppc64le",
+		},
+		Exporter:       client.ExporterOCI,
+		ExporterOutput: outW,
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "out.tar"))
+	require.NoError(t, err)
+
+	m, err := testutil.ReadTarToMap(dt, false)
+	require.NoError(t, err)
+
+	var idx ocispec.Index
+	err = json.Unmarshal(m["index.json"].Data, &idx)
+	require.NoError(t, err)
+
+	mlistHex := idx.Manifests[0].Digest.Hex()
+
+	idx = ocispec.Index{}
+	err = json.Unmarshal(m["blobs/sha256/"+mlistHex].Data, &idx)
+	require.NoError(t, err)
+
+	require.Equal(t, 3, len(idx.Manifests))
+
+	for i, exp := range []struct {
+		p    string
+		os   string
+		arch string
+		dt   string
+	}{
+		{p: "windows/amd64", os: "windows", arch: "amd64", dt: "i am amd64"},
+		{p: "linux/arm/v6", os: "linux", arch: "arm", dt: "i am arm"},
+		{p: "linux/ppc64le", os: "linux", arch: "ppc64le", dt: "i am ppc64le"},
+	} {
+		t.Run(exp.p, func(t *testing.T) {
+			require.Equal(t, exp.p, platforms.Format(*idx.Manifests[i].Platform))
+
+			var mfst ocispec.Manifest
+			err = json.Unmarshal(m["blobs/sha256/"+idx.Manifests[i].Digest.Hex()].Data, &mfst)
+			require.NoError(t, err)
+
+			require.Equal(t, 1, len(mfst.Layers))
+
+			m2, err := testutil.ReadTarToMap(m["blobs/sha256/"+mfst.Layers[0].Digest.Hex()].Data, true)
+			require.NoError(t, err)
+			require.Equal(t, exp.dt, string(m2["whoami"].Data))
+
+			var img ocispec.Image
+			err = json.Unmarshal(m["blobs/sha256/"+mfst.Config.Digest.Hex()].Data, &img)
+			require.NoError(t, err)
+
+			require.Equal(t, exp.os, img.OS)
+			require.Equal(t, exp.arch, img.Architecture)
+			v, ok := img.Config.Labels["target"]
+			require.True(t, ok)
+			require.Equal(t, exp.p, v)
+		})
+	}
 }
 
 // tonistiigi/fsutil#46
@@ -2279,6 +2417,106 @@ COPY --from=s1 unique2 /
 
 	require.Equal(t, string(unique1Dir2), string(unique1Dir3))
 	require.NotEqual(t, string(unique2Dir1), string(unique2Dir3))
+}
+
+func testPlatformArgsImplicit(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	dockerfile := []byte(fmt.Sprintf(`
+FROM scratch AS build-%s
+COPY foo bar
+FROM build-${TARGETOS}
+COPY foo2 bar2
+`, runtime.GOOS))
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("foo", []byte("d0"), 0600),
+		fstest.CreateFile("foo2", []byte("d1"), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	opt := client.SolveOpt{
+		Frontend:          "dockerfile.v0",
+		Exporter:          client.ExporterLocal,
+		ExporterOutputDir: destDir,
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+	}
+
+	_, err = c.Solve(context.TODO(), nil, opt, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "bar"))
+	require.NoError(t, err)
+	require.Equal(t, "d0", string(dt))
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "bar2"))
+	require.NoError(t, err)
+	require.Equal(t, "d1", string(dt))
+}
+
+func testPlatformArgsExplicit(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	dockerfile := []byte(`
+FROM --platform=$BUILDPLATFORM busybox AS build
+ARG TARGETPLATFORM
+ARG TARGETOS
+RUN mkdir /out && echo -n $TARGETPLATFORM > /out/platform && echo -n $TARGETOS > /out/os
+FROM scratch
+COPY --from=build out .
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	opt := client.SolveOpt{
+		Frontend: "dockerfile.v0",
+		Exporter: client.ExporterLocal,
+		FrontendAttrs: map[string]string{
+			"platform":           "darwin/ppc64le",
+			"build-arg:TARGETOS": "freebsd",
+		},
+		ExporterOutputDir: destDir,
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+	}
+
+	_, err = c.Solve(context.TODO(), nil, opt, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "platform"))
+	require.NoError(t, err)
+	require.Equal(t, "darwin/ppc64le", string(dt))
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "os"))
+	require.NoError(t, err)
+	require.Equal(t, "freebsd", string(dt))
 }
 
 func testBuiltinArgs(t *testing.T, sb integration.Sandbox) {

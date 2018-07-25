@@ -58,7 +58,11 @@ func (is *imageSource) ResolveImageConfig(ctx context.Context, ref string, platf
 		dgst digest.Digest
 		dt   []byte
 	}
-	res, err := is.g.Do(ctx, ref, func(ctx context.Context) (interface{}, error) {
+	key := ref
+	if platform != nil {
+		key += platforms.Format(*platform)
+	}
+	res, err := is.g.Do(ctx, key, func(ctx context.Context) (interface{}, error) {
 		dgst, dt, err := imageutil.Config(ctx, ref, pull.NewResolver(ctx, is.SessionManager, is.ImageStore), is.ContentStore, platform)
 		if err != nil {
 			return nil, err
