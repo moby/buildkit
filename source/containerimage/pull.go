@@ -63,7 +63,7 @@ func (is *imageSource) ResolveImageConfig(ctx context.Context, ref string, platf
 		key += platforms.Format(*platform)
 	}
 	res, err := is.g.Do(ctx, key, func(ctx context.Context) (interface{}, error) {
-		dgst, dt, err := imageutil.Config(ctx, ref, pull.NewResolver(ctx, is.SessionManager, is.ImageStore), is.ContentStore, platform)
+		dgst, dt, err := imageutil.Config(ctx, ref, pull.NewResolver(ctx, is.SessionManager, is.ImageStore, source.ResolveModeDefault), is.ContentStore, platform)
 		if err != nil {
 			return nil, err
 		}
@@ -92,7 +92,7 @@ func (is *imageSource) Resolve(ctx context.Context, id source.Identifier) (sourc
 		ContentStore: is.ContentStore,
 		Applier:      is.Applier,
 		Src:          imageIdentifier.Reference,
-		Resolver:     pull.NewResolver(ctx, is.SessionManager, is.ImageStore),
+		Resolver:     pull.NewResolver(ctx, is.SessionManager, is.ImageStore, imageIdentifier.ResolveMode),
 		Platform:     &platform,
 	}
 	p := &puller{
