@@ -101,7 +101,15 @@ func Image(ref string, opts ...ImageOption) State {
 
 	addCap(&info.Constraints, pb.CapSourceImage)
 
-	src := NewSource("docker-image://"+ref, nil, info.Constraints) // controversial
+	attrs := map[string]string{}
+	if info.resolveMode != 0 {
+		attrs[pb.AttrImageResolveMode] = info.resolveMode.String()
+		if info.resolveMode == ResolveModeForcePull {
+			addCap(&info.Constraints, pb.CapSourceImageResolveMode) // only require cap for security enforced mode
+		}
+	}
+
+	src := NewSource("docker-image://"+ref, attrs, info.Constraints) // controversial
 	if err != nil {
 		src.err = err
 	}
@@ -143,15 +151,41 @@ type ImageOption interface {
 	SetImageOption(*ImageInfo)
 }
 
-type ImageOptionFunc func(*ImageInfo)
+type imageOptionFunc func(*ImageInfo)
 
-func (fn ImageOptionFunc) SetImageOption(ii *ImageInfo) {
+func (fn imageOptionFunc) SetImageOption(ii *ImageInfo) {
 	fn(ii)
+}
+
+type ResolveMode int
+
+const (
+	ResolveModeDefault ResolveMode = iota
+	ResolveModeForcePull
+	ResolveModePreferLocal
+)
+
+func (r ResolveMode) SetImageOption(ii *ImageInfo) {
+	ii.resolveMode = r
+}
+
+func (r ResolveMode) String() string {
+	switch r {
+	case ResolveModeDefault:
+		return pb.AttrImageResolveModeDefault
+	case ResolveModeForcePull:
+		return pb.AttrImageResolveModeForcePull
+	case ResolveModePreferLocal:
+		return pb.AttrImageResolveModePreferLocal
+	default:
+		return ""
+	}
 }
 
 type ImageInfo struct {
 	constraintsWrapper
 	metaResolver ImageMetaResolver
+	resolveMode  ResolveMode
 }
 
 func Git(remote, ref string, opts ...GitOption) State {

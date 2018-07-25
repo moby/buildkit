@@ -17,6 +17,14 @@ var (
 	errNotFound = errors.New("not found")
 )
 
+type ResolveMode int
+
+const (
+	ResolveModeDefault ResolveMode = iota
+	ResolveModeForcePull
+	ResolveModePreferLocal
+)
+
 const (
 	DockerImageScheme = "docker-image"
 	GitScheme         = "git"
@@ -56,13 +64,31 @@ func FromLLB(op *pb.Op_Source, platform *pb.Platform) (Identifier, error) {
 	if err != nil {
 		return nil, err
 	}
-	if id, ok := id.(*ImageIdentifier); ok && platform != nil {
-		id.Platform = &specs.Platform{
-			OS:           platform.OS,
-			Architecture: platform.Architecture,
-			Variant:      platform.Variant,
-			OSVersion:    platform.OSVersion,
-			OSFeatures:   platform.OSFeatures,
+
+	if id, ok := id.(*ImageIdentifier); ok {
+		if platform != nil {
+			id.Platform = &specs.Platform{
+				OS:           platform.OS,
+				Architecture: platform.Architecture,
+				Variant:      platform.Variant,
+				OSVersion:    platform.OSVersion,
+				OSFeatures:   platform.OSFeatures,
+			}
+		}
+		for k, v := range op.Source.Attrs {
+			switch k {
+			case pb.AttrImageResolveMode:
+				switch v {
+				case pb.AttrImageResolveModeDefault, "":
+					id.ResolveMode = ResolveModeDefault
+				case pb.AttrImageResolveModeForcePull:
+					id.ResolveMode = ResolveModeForcePull
+				case pb.AttrImageResolveModePreferLocal:
+					id.ResolveMode = ResolveModePreferLocal
+				default:
+					return nil, errors.Errorf("invalid resolvemode: %s", v)
+				}
+			}
 		}
 	}
 	if id, ok := id.(*GitIdentifier); ok {
@@ -145,8 +171,9 @@ func FromLLB(op *pb.Op_Source, platform *pb.Platform) (Identifier, error) {
 }
 
 type ImageIdentifier struct {
-	Reference reference.Spec
-	Platform  *specs.Platform
+	Reference   reference.Spec
+	Platform    *specs.Platform
+	ResolveMode ResolveMode
 }
 
 func NewImageIdentifier(str string) (*ImageIdentifier, error) {

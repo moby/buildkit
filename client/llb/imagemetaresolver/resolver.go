@@ -19,7 +19,7 @@ import (
 var defaultImageMetaResolver llb.ImageMetaResolver
 var defaultImageMetaResolverOnce sync.Once
 
-var WithDefault = llb.ImageOptionFunc(func(ii *llb.ImageInfo) {
+var WithDefault = imageOptionFunc(func(ii *llb.ImageInfo) {
 	llb.WithMetaResolver(Default()).SetImageOption(ii)
 })
 
@@ -99,4 +99,10 @@ func (imr *imageMetaResolver) key(ref string, platform *specs.Platform) string {
 		ref += platforms.Format(*platform)
 	}
 	return ref
+}
+
+type imageOptionFunc func(*llb.ImageInfo)
+
+func (fn imageOptionFunc) SetImageOption(ii *llb.ImageInfo) {
+	fn(ii)
 }

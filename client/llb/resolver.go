@@ -8,7 +8,7 @@ import (
 )
 
 func WithMetaResolver(mr ImageMetaResolver) ImageOption {
-	return ImageOptionFunc(func(ii *ImageInfo) {
+	return imageOptionFunc(func(ii *ImageInfo) {
 		ii.metaResolver = mr
 	})
 }
