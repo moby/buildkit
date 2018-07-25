@@ -59,6 +59,7 @@ func FromString(s string) (Identifier, error) {
 		return nil, errors.Wrapf(errNotFound, "unknown schema %s", parts[0])
 	}
 }
+
 func FromLLB(op *pb.Op_Source, platform *pb.Platform) (Identifier, error) {
 	id, err := FromString(op.Source.Identifier)
 	if err != nil {
@@ -78,16 +79,11 @@ func FromLLB(op *pb.Op_Source, platform *pb.Platform) (Identifier, error) {
 		for k, v := range op.Source.Attrs {
 			switch k {
 			case pb.AttrImageResolveMode:
-				switch v {
-				case pb.AttrImageResolveModeDefault, "":
-					id.ResolveMode = ResolveModeDefault
-				case pb.AttrImageResolveModeForcePull:
-					id.ResolveMode = ResolveModeForcePull
-				case pb.AttrImageResolveModePreferLocal:
-					id.ResolveMode = ResolveModePreferLocal
-				default:
-					return nil, errors.Errorf("invalid resolvemode: %s", v)
+				rm, err := ParseImageResolveMode(v)
+				if err != nil {
+					return nil, err
 				}
+				id.ResolveMode = rm
 			}
 		}
 	}
@@ -229,4 +225,17 @@ type HttpIdentifier struct {
 
 func (_ *HttpIdentifier) ID() string {
 	return HttpsScheme
+}
+
+func ParseImageResolveMode(v string) (ResolveMode, error) {
+	switch v {
+	case pb.AttrImageResolveModeDefault, "":
+		return ResolveModeDefault, nil
+	case pb.AttrImageResolveModeForcePull:
+		return ResolveModeForcePull, nil
+	case pb.AttrImageResolveModePreferLocal:
+		return ResolveModePreferLocal, nil
+	default:
+		return 0, errors.Errorf("invalid resolvemode: %s", v)
+	}
 }

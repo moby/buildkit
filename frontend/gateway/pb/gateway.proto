@@ -46,6 +46,8 @@ message ReturnResponse {
 message ResolveImageConfigRequest {
 	string Ref = 1;
 	pb.Platform Platform = 2;
+	string ResolveMode = 3;
+/*	bytes Definition = 4;*/
 }
 
 message ResolveImageConfigResponse {

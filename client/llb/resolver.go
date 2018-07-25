@@ -3,8 +3,8 @@ package llb
 import (
 	"context"
 
+	gw "github.com/moby/buildkit/frontend/gateway/client"
 	digest "github.com/opencontainers/go-digest"
-	specs "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 func WithMetaResolver(mr ImageMetaResolver) ImageOption {
@@ -14,5 +14,5 @@ func WithMetaResolver(mr ImageMetaResolver) ImageOption {
 }
 
 type ImageMetaResolver interface {
-	ResolveImageConfig(ctx context.Context, ref string, platform *specs.Platform) (digest.Digest, []byte, error)
+	ResolveImageConfig(ctx context.Context, ref string, opt gw.ResolveImageConfigOpt) (digest.Digest, []byte, error)
 }
