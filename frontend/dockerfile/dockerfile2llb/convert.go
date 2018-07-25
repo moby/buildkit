@@ -48,6 +48,7 @@ type ConvertOpt struct {
 	IgnoreCache []string
 	// CacheIDNamespace scopes the IDs for different cache mounts
 	CacheIDNamespace string
+	ImageResolveMode llb.ResolveMode
 	TargetPlatform   *specs.Platform
 	BuildPlatforms   []specs.Platform
 }
@@ -188,7 +189,8 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 					var isScratch bool
 					if metaResolver != nil && reachable {
 						dgst, dt, err := metaResolver.ResolveImageConfig(ctx, d.stage.BaseName, gw.ResolveImageConfigOpt{
-							Platform: platform,
+							Platform:    platform,
+							ResolveMode: opt.ImageResolveMode.String(),
 						})
 						if err == nil { // handle the error while builder is actually running
 							var img Image
@@ -218,7 +220,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 					if isScratch {
 						d.state = llb.Scratch()
 					} else {
-						d.state = llb.Image(d.stage.BaseName, dfCmd(d.stage.SourceCode), llb.Platform(*platform))
+						d.state = llb.Image(d.stage.BaseName, dfCmd(d.stage.SourceCode), llb.Platform(*platform), opt.ImageResolveMode)
 					}
 					d.platform = platform
 					return nil

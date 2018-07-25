@@ -16,6 +16,7 @@ import (
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/frontend/dockerfile/dockerfile2llb"
 	"github.com/moby/buildkit/frontend/gateway/client"
+	"github.com/moby/buildkit/solver/pb"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -34,6 +35,7 @@ const (
 	keyNoCache            = "no-cache"
 	keyTargetPlatform     = "platform"
 	keyMultiPlatform      = "multi-platform"
+	keyImageResolveMode   = "image-resolve-mode"
 )
 
 var httpPrefix = regexp.MustCompile("^https?://")
@@ -55,6 +57,11 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	resolveMode, err := parseResolveMode(opts[keyImageResolveMode])
+	if err != nil {
+		return nil, err
 	}
 
 	filename := opts[keyFilename]
@@ -224,16 +231,17 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 		func(i int, tp *specs.Platform) {
 			eg.Go(func() error {
 				st, img, err := dockerfile2llb.Dockerfile2LLB(ctx, dtDockerfile, dockerfile2llb.ConvertOpt{
-					Target:         opts[keyTarget],
-					MetaResolver:   c,
-					BuildArgs:      filter(opts, buildArgPrefix),
-					Labels:         filter(opts, labelPrefix),
-					SessionID:      c.BuildOpts().SessionID,
-					BuildContext:   buildContext,
-					Excludes:       excludes,
-					IgnoreCache:    ignoreCache,
-					TargetPlatform: tp,
-					BuildPlatforms: buildPlatforms,
+					Target:           opts[keyTarget],
+					MetaResolver:     c,
+					BuildArgs:        filter(opts, buildArgPrefix),
+					Labels:           filter(opts, labelPrefix),
+					SessionID:        c.BuildOpts().SessionID,
+					BuildContext:     buildContext,
+					Excludes:         excludes,
+					IgnoreCache:      ignoreCache,
+					TargetPlatform:   tp,
+					BuildPlatforms:   buildPlatforms,
+					ImageResolveMode: resolveMode,
 				})
 
 				if err != nil {
@@ -383,4 +391,17 @@ func parsePlatforms(v string) ([]*specs.Platform, error) {
 		pp = append(pp, &p)
 	}
 	return pp, nil
+}
+
+func parseResolveMode(v string) (llb.ResolveMode, error) {
+	switch v {
+	case pb.AttrImageResolveModeDefault, "":
+		return llb.ResolveModeDefault, nil
+	case pb.AttrImageResolveModeForcePull:
+		return llb.ResolveModeForcePull, nil
+	case pb.AttrImageResolveModePreferLocal:
+		return llb.ResolveModePreferLocal, nil
+	default:
+		return 0, errors.Errorf("invalid image-resolve-mode: %s", v)
+	}
 }
