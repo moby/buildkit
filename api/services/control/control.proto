@@ -26,6 +26,7 @@ service Control {
 
 message PruneRequest {
 	repeated string filter = 1; // FIXME: not implemented
+	bool all = 2;
 }
 
 message DiskUsageRequest {

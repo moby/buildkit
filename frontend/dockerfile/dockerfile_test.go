@@ -2138,7 +2138,7 @@ COPY --from=base unique /
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "unique"))
 	require.NoError(t, err)
 
-	err = c.Prune(context.TODO(), nil)
+	err = c.Prune(context.TODO(), nil, client.PruneAll)
 	require.NoError(t, err)
 
 	checkAllRemoved(t, c, sb)
@@ -2300,22 +2300,22 @@ RUN echo bar > bar
 		},
 	}
 
-	client, err := containerd.New(cdAddress)
+	ctd, err := containerd.New(cdAddress)
 	require.NoError(t, err)
-	defer client.Close()
+	defer ctd.Close()
 
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit")
 
 	_, err = c.Solve(context.TODO(), nil, opt, nil)
 	require.NoError(t, err)
 
-	img, err := client.ImageService().Get(ctx, target)
+	img, err := ctd.ImageService().Get(ctx, target)
 	require.NoError(t, err)
 
-	err = client.ImageService().Delete(ctx, target)
+	err = ctd.ImageService().Delete(ctx, target)
 	require.NoError(t, err)
 
-	err = c.Prune(context.TODO(), nil)
+	err = c.Prune(context.TODO(), nil, client.PruneAll)
 	require.NoError(t, err)
 
 	checkAllRemoved(t, c, sb)
@@ -2328,7 +2328,7 @@ RUN echo bar > bar
 	_, err = c.Solve(context.TODO(), nil, opt, nil)
 	require.NoError(t, err)
 
-	img2, err := client.ImageService().Get(ctx, target2)
+	img2, err := ctd.ImageService().Get(ctx, target2)
 	require.NoError(t, err)
 
 	require.Equal(t, img.Target, img2.Target)

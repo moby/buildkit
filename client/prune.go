@@ -15,6 +15,9 @@ func (c *Client) Prune(ctx context.Context, ch chan UsageInfo, opts ...PruneOpti
 	}
 
 	req := &controlapi.PruneRequest{Filter: info.Filter}
+	if info.All {
+		req.All = true
+	}
 	cl, err := c.controlClient().Prune(ctx, req)
 	if err != nil {
 		return errors.Wrap(err, "failed to call prune")
@@ -50,4 +53,15 @@ type PruneOption interface {
 
 type PruneInfo struct {
 	Filter []string
+	All    bool
 }
+
+type pruneOptionFunc func(*PruneInfo)
+
+func (f pruneOptionFunc) SetPruneOption(pi *PruneInfo) {
+	f(pi)
+}
+
+var PruneAll = pruneOptionFunc(func(pi *PruneInfo) {
+	pi.All = true
+})

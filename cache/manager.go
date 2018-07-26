@@ -305,10 +305,10 @@ func (cm *cacheManager) Prune(ctx context.Context, ch chan client.UsageInfo, opt
 		return err
 	}
 
-	return cm.prune(ctx, ch, filter)
+	return cm.prune(ctx, ch, filter, opt.All)
 }
 
-func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, filter filters.Filter) error {
+func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, filter filters.Filter, all bool) error {
 	var toDelete []*cacheRecord
 	cm.mu.Lock()
 
@@ -330,6 +330,11 @@ func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, fil
 			recordType := GetRecordType(cr)
 			if recordType == "" {
 				recordType = client.UsageRecordTypeRegular
+			}
+
+			if !all && (recordType == client.UsageRecordTypeInternal || recordType == client.UsageRecordTypeFrontend) {
+				cr.mu.Unlock()
+				continue
 			}
 
 			c := &client.UsageInfo{
@@ -414,7 +419,7 @@ func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, fil
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
-		return cm.prune(ctx, ch, filter)
+		return cm.prune(ctx, ch, filter, all)
 	}
 }
 

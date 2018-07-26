@@ -120,6 +120,7 @@ func (c *Controller) Prune(req *controlapi.PruneRequest, stream controlapi.Contr
 			eg.Go(func() error {
 				return w.Prune(ctx, ch, client.PruneInfo{
 					Filter: req.Filter,
+					All:    req.All,
 				})
 			})
 		}(w)
