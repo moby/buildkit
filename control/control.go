@@ -86,6 +86,7 @@ func (c *Controller) DiskUsage(ctx context.Context, r *controlapi.DiskUsageReque
 				Description: r.Description,
 				CreatedAt:   r.CreatedAt,
 				LastUsedAt:  r.LastUsedAt,
+				RecordType:  string(r.RecordType),
 			})
 		}
 	}

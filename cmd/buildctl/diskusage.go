@@ -74,6 +74,9 @@ func printVerbose(tw *tabwriter.Writer, du []*client.UsageInfo) {
 		if di.LastUsedAt != nil {
 			printKV(tw, "Last used", di.LastUsedAt)
 		}
+		if di.RecordType != "" {
+			printKV(tw, "Type", di.RecordType)
+		}
 
 		fmt.Fprintf(tw, "\n")
 	}

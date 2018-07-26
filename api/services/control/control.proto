@@ -46,6 +46,7 @@ message UsageRecord {
 	google.protobuf.Timestamp LastUsedAt = 7 [(gogoproto.stdtime) = true];
 	int64 UsageCount = 8;
 	string Description = 9;
+	string RecordType = 10;
 }
 
 message SolveRequest {
