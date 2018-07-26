@@ -11,6 +11,7 @@ import (
 	"github.com/containerd/containerd/platforms"
 	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/cache"
+	gw "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/source"
@@ -53,17 +54,23 @@ func (is *imageSource) ID() string {
 	return source.DockerImageScheme
 }
 
-func (is *imageSource) ResolveImageConfig(ctx context.Context, ref string, platform *specs.Platform) (digest.Digest, []byte, error) {
+func (is *imageSource) ResolveImageConfig(ctx context.Context, ref string, opt gw.ResolveImageConfigOpt) (digest.Digest, []byte, error) {
 	type t struct {
 		dgst digest.Digest
 		dt   []byte
 	}
 	key := ref
-	if platform != nil {
+	if platform := opt.Platform; platform != nil {
 		key += platforms.Format(*platform)
 	}
+
+	rm, err := source.ParseImageResolveMode(opt.ResolveMode)
+	if err != nil {
+		return "", nil, err
+	}
+
 	res, err := is.g.Do(ctx, key, func(ctx context.Context) (interface{}, error) {
-		dgst, dt, err := imageutil.Config(ctx, ref, pull.NewResolver(ctx, is.SessionManager, is.ImageStore), is.ContentStore, platform)
+		dgst, dt, err := imageutil.Config(ctx, ref, pull.NewResolver(ctx, is.SessionManager, is.ImageStore, rm), is.ContentStore, opt.Platform)
 		if err != nil {
 			return nil, err
 		}
@@ -92,7 +99,7 @@ func (is *imageSource) Resolve(ctx context.Context, id source.Identifier) (sourc
 		ContentStore: is.ContentStore,
 		Applier:      is.Applier,
 		Src:          imageIdentifier.Reference,
-		Resolver:     pull.NewResolver(ctx, is.SessionManager, is.ImageStore),
+		Resolver:     pull.NewResolver(ctx, is.SessionManager, is.ImageStore, imageIdentifier.ResolveMode),
 		Platform:     &platform,
 	}
 	p := &puller{

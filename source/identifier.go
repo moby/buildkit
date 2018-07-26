@@ -17,6 +17,14 @@ var (
 	errNotFound = errors.New("not found")
 )
 
+type ResolveMode int
+
+const (
+	ResolveModeDefault ResolveMode = iota
+	ResolveModeForcePull
+	ResolveModePreferLocal
+)
+
 const (
 	DockerImageScheme = "docker-image"
 	GitScheme         = "git"
@@ -51,18 +59,32 @@ func FromString(s string) (Identifier, error) {
 		return nil, errors.Wrapf(errNotFound, "unknown schema %s", parts[0])
 	}
 }
+
 func FromLLB(op *pb.Op_Source, platform *pb.Platform) (Identifier, error) {
 	id, err := FromString(op.Source.Identifier)
 	if err != nil {
 		return nil, err
 	}
-	if id, ok := id.(*ImageIdentifier); ok && platform != nil {
-		id.Platform = &specs.Platform{
-			OS:           platform.OS,
-			Architecture: platform.Architecture,
-			Variant:      platform.Variant,
-			OSVersion:    platform.OSVersion,
-			OSFeatures:   platform.OSFeatures,
+
+	if id, ok := id.(*ImageIdentifier); ok {
+		if platform != nil {
+			id.Platform = &specs.Platform{
+				OS:           platform.OS,
+				Architecture: platform.Architecture,
+				Variant:      platform.Variant,
+				OSVersion:    platform.OSVersion,
+				OSFeatures:   platform.OSFeatures,
+			}
+		}
+		for k, v := range op.Source.Attrs {
+			switch k {
+			case pb.AttrImageResolveMode:
+				rm, err := ParseImageResolveMode(v)
+				if err != nil {
+					return nil, err
+				}
+				id.ResolveMode = rm
+			}
 		}
 	}
 	if id, ok := id.(*GitIdentifier); ok {
@@ -145,8 +167,9 @@ func FromLLB(op *pb.Op_Source, platform *pb.Platform) (Identifier, error) {
 }
 
 type ImageIdentifier struct {
-	Reference reference.Spec
-	Platform  *specs.Platform
+	Reference   reference.Spec
+	Platform    *specs.Platform
+	ResolveMode ResolveMode
 }
 
 func NewImageIdentifier(str string) (*ImageIdentifier, error) {
@@ -202,4 +225,17 @@ type HttpIdentifier struct {
 
 func (_ *HttpIdentifier) ID() string {
 	return HttpsScheme
+}
+
+func ParseImageResolveMode(v string) (ResolveMode, error) {
+	switch v {
+	case pb.AttrImageResolveModeDefault, "":
+		return ResolveModeDefault, nil
+	case pb.AttrImageResolveModeForcePull:
+		return ResolveModeForcePull, nil
+	case pb.AttrImageResolveModePreferLocal:
+		return ResolveModePreferLocal, nil
+	default:
+		return 0, errors.Errorf("invalid resolvemode: %s", v)
+	}
 }

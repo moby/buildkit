@@ -10,6 +10,7 @@ var Caps apicaps.CapList
 
 const (
 	CapSourceImage                apicaps.CapID = "source.image"
+	CapSourceImageResolveMode     apicaps.CapID = "source.image.resolvemode"
 	CapSourceLocal                apicaps.CapID = "source.local"
 	CapSourceLocalUnique          apicaps.CapID = "source.local.unique"
 	CapSourceLocalSessionID       apicaps.CapID = "source.local.sessionid"
@@ -50,6 +51,12 @@ func init() {
 
 	Caps.Init(apicaps.Cap{
 		ID:      CapSourceImage,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapSourceImageResolveMode,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})

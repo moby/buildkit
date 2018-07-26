@@ -10,6 +10,7 @@ import (
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/docker/docker/pkg/locker"
 	"github.com/moby/buildkit/client/llb"
+	gw "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/imageutil"
 	digest "github.com/opencontainers/go-digest"
@@ -19,7 +20,7 @@ import (
 var defaultImageMetaResolver llb.ImageMetaResolver
 var defaultImageMetaResolverOnce sync.Once
 
-var WithDefault = llb.ImageOptionFunc(func(ii *llb.ImageInfo) {
+var WithDefault = imageOptionFunc(func(ii *llb.ImageInfo) {
 	llb.WithMetaResolver(Default()).SetImageOption(ii)
 })
 
@@ -71,10 +72,11 @@ type resolveResult struct {
 	dgst   digest.Digest
 }
 
-func (imr *imageMetaResolver) ResolveImageConfig(ctx context.Context, ref string, platform *specs.Platform) (digest.Digest, []byte, error) {
+func (imr *imageMetaResolver) ResolveImageConfig(ctx context.Context, ref string, opt gw.ResolveImageConfigOpt) (digest.Digest, []byte, error) {
 	imr.locker.Lock(ref)
 	defer imr.locker.Unlock(ref)
 
+	platform := opt.Platform
 	if platform == nil {
 		platform = imr.platform
 	}
@@ -99,4 +101,10 @@ func (imr *imageMetaResolver) key(ref string, platform *specs.Platform) string {
 		ref += platforms.Format(*platform)
 	}
 	return ref
+}
+
+type imageOptionFunc func(*llb.ImageInfo)
+
+func (fn imageOptionFunc) SetImageOption(ii *llb.ImageInfo) {
+	fn(ii)
 }
