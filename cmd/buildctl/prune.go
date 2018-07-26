@@ -15,6 +15,10 @@ var pruneCommand = cli.Command{
 	Usage:  "clean up build cache",
 	Action: prune,
 	Flags: []cli.Flag{
+		cli.StringSliceFlag{
+			Name:  "filter, f",
+			Usage: "Filter records",
+		},
 		cli.BoolFlag{
 			Name:  "verbose, v",
 			Usage: "Verbose output",
@@ -52,7 +56,7 @@ func prune(clicontext *cli.Context) error {
 		}
 	}()
 
-	err = c.Prune(commandContext(clicontext), ch)
+	err = c.Prune(commandContext(clicontext), ch, client.WithFilter(clicontext.StringSlice("filter")))
 	close(ch)
 	<-printed
 	if err != nil {

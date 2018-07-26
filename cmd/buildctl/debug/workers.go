@@ -40,7 +40,7 @@ func listWorkers(clicontext *cli.Context) error {
 		return err
 	}
 
-	workers, err := c.ListWorkers(commandContext(clicontext), client.WithWorkerFilter(clicontext.StringSlice("filter")))
+	workers, err := c.ListWorkers(commandContext(clicontext), client.WithFilter(clicontext.StringSlice("filter")))
 	if err != nil {
 		return err
 	}
