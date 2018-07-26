@@ -117,7 +117,9 @@ func (c *Controller) Prune(req *controlapi.PruneRequest, stream controlapi.Contr
 	for _, w := range workers {
 		func(w worker.Worker) {
 			eg.Go(func() error {
-				return w.Prune(ctx, ch)
+				return w.Prune(ctx, ch, client.PruneInfo{
+					Filter: req.Filter,
+				})
 			})
 		}(w)
 	}

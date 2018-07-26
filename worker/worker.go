@@ -27,7 +27,7 @@ type Worker interface {
 	Exec(ctx context.Context, meta executor.Meta, rootFS cache.ImmutableRef, stdin io.ReadCloser, stdout, stderr io.WriteCloser) error
 	DiskUsage(ctx context.Context, opt client.DiskUsageInfo) ([]*client.UsageInfo, error)
 	Exporter(name string) (exporter.Exporter, error)
-	Prune(ctx context.Context, ch chan client.UsageInfo) error
+	Prune(ctx context.Context, ch chan client.UsageInfo, opt client.PruneInfo) error
 	GetRemote(ctx context.Context, ref cache.ImmutableRef, createIfNeeded bool) (*solver.Remote, error)
 	FromRemote(ctx context.Context, remote *solver.Remote) (cache.ImmutableRef, error)
 }

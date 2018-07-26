@@ -126,7 +126,7 @@ func TestManager(t *testing.T) {
 	checkDiskUsage(ctx, t, cm, 0, 2)
 
 	buf := pruneResultBuffer()
-	err = cm.Prune(ctx, buf.C)
+	err = cm.Prune(ctx, buf.C, client.PruneInfo{})
 	buf.close()
 	require.NoError(t, err)
 
@@ -170,7 +170,7 @@ func TestPrune(t *testing.T) {
 
 	// prune with keeping refs does nothing
 	buf := pruneResultBuffer()
-	err = cm.Prune(ctx, buf.C)
+	err = cm.Prune(ctx, buf.C, client.PruneInfo{})
 	buf.close()
 	require.NoError(t, err)
 
@@ -188,7 +188,7 @@ func TestPrune(t *testing.T) {
 
 	// prune with keeping single refs deletes one
 	buf = pruneResultBuffer()
-	err = cm.Prune(ctx, buf.C)
+	err = cm.Prune(ctx, buf.C, client.PruneInfo{})
 	buf.close()
 	require.NoError(t, err)
 
@@ -215,7 +215,7 @@ func TestPrune(t *testing.T) {
 
 	// prune with parent released does nothing
 	buf = pruneResultBuffer()
-	err = cm.Prune(ctx, buf.C)
+	err = cm.Prune(ctx, buf.C, client.PruneInfo{})
 	buf.close()
 	require.NoError(t, err)
 
@@ -228,7 +228,7 @@ func TestPrune(t *testing.T) {
 	checkDiskUsage(ctx, t, cm, 0, 2)
 
 	buf = pruneResultBuffer()
-	err = cm.Prune(ctx, buf.C)
+	err = cm.Prune(ctx, buf.C, client.PruneInfo{})
 	buf.close()
 	require.NoError(t, err)
 

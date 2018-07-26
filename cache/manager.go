@@ -37,7 +37,7 @@ type Accessor interface {
 
 type Controller interface {
 	DiskUsage(ctx context.Context, info client.DiskUsageInfo) ([]*client.UsageInfo, error)
-	Prune(ctx context.Context, ch chan client.UsageInfo) error
+	Prune(ctx context.Context, ch chan client.UsageInfo, info client.PruneInfo) error
 	GC(ctx context.Context) error
 }
 
@@ -296,13 +296,19 @@ func (cm *cacheManager) GetMutable(ctx context.Context, id string) (MutableRef, 
 	return rec.mref(), nil
 }
 
-func (cm *cacheManager) Prune(ctx context.Context, ch chan client.UsageInfo) error {
+func (cm *cacheManager) Prune(ctx context.Context, ch chan client.UsageInfo, opt client.PruneInfo) error {
 	cm.muPrune.Lock()
 	defer cm.muPrune.Unlock()
-	return cm.prune(ctx, ch)
+
+	filter, err := filters.ParseAll(opt.Filter...)
+	if err != nil {
+		return err
+	}
+
+	return cm.prune(ctx, ch, filter)
 }
 
-func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo) error {
+func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, filter filters.Filter) error {
 	var toDelete []*cacheRecord
 	cm.mu.Lock()
 
@@ -321,16 +327,25 @@ func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo) err
 		}
 
 		if len(cr.refs) == 0 {
-			cr.dead = true
-			toDelete = append(toDelete, cr)
+			c := &client.UsageInfo{
+				ID:      cr.ID(),
+				Mutable: cr.mutable,
+			}
+
+			if filter.Match(adaptUsageInfo(c)) {
+				cr.dead = true
+
+				toDelete = append(toDelete, cr)
+
+				// mark metadata as deleted in case we crash before cleanup finished
+				if err := setDeleted(cr.md); err != nil {
+					cr.mu.Unlock()
+					cm.mu.Unlock()
+					return err
+				}
+			}
 		}
 
-		// mark metadata as deleted in case we crash before cleanup finished
-		if err := setDeleted(cr.md); err != nil {
-			cr.mu.Unlock()
-			cm.mu.Unlock()
-			return err
-		}
 		cr.mu.Unlock()
 	}
 
@@ -393,7 +408,7 @@ func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo) err
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
-		return cm.prune(ctx, ch)
+		return cm.prune(ctx, ch, filter)
 	}
 }
 
