@@ -25,7 +25,7 @@ type UsageInfo struct {
 func (c *Client) DiskUsage(ctx context.Context, opts ...DiskUsageOption) ([]*UsageInfo, error) {
 	info := &DiskUsageInfo{}
 	for _, o := range opts {
-		o(info)
+		o.SetDiskUsageOption(info)
 	}
 
 	req := &controlapi.DiskUsageRequest{Filter: info.Filter}
@@ -60,14 +60,10 @@ func (c *Client) DiskUsage(ctx context.Context, opts ...DiskUsageOption) ([]*Usa
 	return du, nil
 }
 
-type DiskUsageOption func(*DiskUsageInfo)
-
-type DiskUsageInfo struct {
-	Filter string
+type DiskUsageOption interface {
+	SetDiskUsageOption(*DiskUsageInfo)
 }
 
-func WithFilter(f string) DiskUsageOption {
-	return func(di *DiskUsageInfo) {
-		di.Filter = f
-	}
+type DiskUsageInfo struct {
+	Filter []string
 }

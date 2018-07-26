@@ -2,10 +2,10 @@ package cache
 
 import (
 	"context"
-	"strings"
 	"sync"
 	"time"
 
+	"github.com/containerd/containerd/filters"
 	"github.com/containerd/containerd/snapshots"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
@@ -37,7 +37,7 @@ type Accessor interface {
 
 type Controller interface {
 	DiskUsage(ctx context.Context, info client.DiskUsageInfo) ([]*client.UsageInfo, error)
-	Prune(ctx context.Context, ch chan client.UsageInfo) error
+	Prune(ctx context.Context, ch chan client.UsageInfo, info client.PruneInfo) error
 	GC(ctx context.Context) error
 }
 
@@ -296,13 +296,19 @@ func (cm *cacheManager) GetMutable(ctx context.Context, id string) (MutableRef, 
 	return rec.mref(), nil
 }
 
-func (cm *cacheManager) Prune(ctx context.Context, ch chan client.UsageInfo) error {
+func (cm *cacheManager) Prune(ctx context.Context, ch chan client.UsageInfo, opt client.PruneInfo) error {
 	cm.muPrune.Lock()
 	defer cm.muPrune.Unlock()
-	return cm.prune(ctx, ch)
+
+	filter, err := filters.ParseAll(opt.Filter...)
+	if err != nil {
+		return err
+	}
+
+	return cm.prune(ctx, ch, filter)
 }
 
-func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo) error {
+func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, filter filters.Filter) error {
 	var toDelete []*cacheRecord
 	cm.mu.Lock()
 
@@ -321,16 +327,25 @@ func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo) err
 		}
 
 		if len(cr.refs) == 0 {
-			cr.dead = true
-			toDelete = append(toDelete, cr)
+			c := &client.UsageInfo{
+				ID:      cr.ID(),
+				Mutable: cr.mutable,
+			}
+
+			if filter.Match(adaptUsageInfo(c)) {
+				cr.dead = true
+
+				toDelete = append(toDelete, cr)
+
+				// mark metadata as deleted in case we crash before cleanup finished
+				if err := setDeleted(cr.md); err != nil {
+					cr.mu.Unlock()
+					cm.mu.Unlock()
+					return err
+				}
+			}
 		}
 
-		// mark metadata as deleted in case we crash before cleanup finished
-		if err := setDeleted(cr.md); err != nil {
-			cr.mu.Unlock()
-			cm.mu.Unlock()
-			return err
-		}
 		cr.mu.Unlock()
 	}
 
@@ -393,11 +408,16 @@ func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo) err
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
-		return cm.prune(ctx, ch)
+		return cm.prune(ctx, ch, filter)
 	}
 }
 
 func (cm *cacheManager) DiskUsage(ctx context.Context, opt client.DiskUsageInfo) ([]*client.UsageInfo, error) {
+	filter, err := filters.ParseAll(opt.Filter...)
+	if err != nil {
+		return nil, err
+	}
+
 	cm.mu.Lock()
 
 	type cacheUsageInfo struct {
@@ -465,10 +485,6 @@ func (cm *cacheManager) DiskUsage(ctx context.Context, opt client.DiskUsageInfo)
 
 	var du []*client.UsageInfo
 	for id, cr := range m {
-		if opt.Filter != "" && !strings.HasPrefix(id, opt.Filter) {
-			continue
-		}
-
 		c := &client.UsageInfo{
 			ID:          id,
 			Mutable:     cr.mutable,
@@ -480,7 +496,9 @@ func (cm *cacheManager) DiskUsage(ctx context.Context, opt client.DiskUsageInfo)
 			LastUsedAt:  cr.lastUsedAt,
 			UsageCount:  cr.usageCount,
 		}
-		du = append(du, c)
+		if filter.Match(adaptUsageInfo(c)) {
+			du = append(du, c)
+		}
 	}
 
 	eg, ctx := errgroup.WithContext(ctx)
@@ -570,4 +588,31 @@ func initializeMetadata(m withMetadata, opts ...RefOption) error {
 	}
 
 	return md.Commit()
+}
+
+func adaptUsageInfo(info *client.UsageInfo) filters.Adaptor {
+	return filters.AdapterFunc(func(fieldpath []string) (string, bool) {
+		if len(fieldpath) == 0 {
+			return "", false
+		}
+
+		switch fieldpath[0] {
+		case "id":
+			return info.ID, info.ID != ""
+		case "parent":
+			return info.Parent, info.Parent != ""
+		case "description":
+			return info.Description, info.Description != ""
+		case "inuse":
+			return "", info.InUse
+		case "mutable":
+			return "", info.Mutable
+		case "immutable":
+			return "", !info.Mutable
+		}
+
+		// TODO: add int/datetime/bytes support for more fields
+
+		return "", false
+	})
 }

@@ -249,8 +249,8 @@ func (w *Worker) DiskUsage(ctx context.Context, opt client.DiskUsageInfo) ([]*cl
 	return w.CacheManager.DiskUsage(ctx, opt)
 }
 
-func (w *Worker) Prune(ctx context.Context, ch chan client.UsageInfo) error {
-	return w.CacheManager.Prune(ctx, ch)
+func (w *Worker) Prune(ctx context.Context, ch chan client.UsageInfo, opt client.PruneInfo) error {
+	return w.CacheManager.Prune(ctx, ch, opt)
 }
 
 func (w *Worker) Exporter(name string) (exporter.Exporter, error) {
