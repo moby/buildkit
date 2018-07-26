@@ -2,10 +2,10 @@ package cache
 
 import (
 	"context"
-	"strings"
 	"sync"
 	"time"
 
+	"github.com/containerd/containerd/filters"
 	"github.com/containerd/containerd/snapshots"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
@@ -398,6 +398,11 @@ func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo) err
 }
 
 func (cm *cacheManager) DiskUsage(ctx context.Context, opt client.DiskUsageInfo) ([]*client.UsageInfo, error) {
+	filter, err := filters.ParseAll(opt.Filter...)
+	if err != nil {
+		return nil, err
+	}
+
 	cm.mu.Lock()
 
 	type cacheUsageInfo struct {
@@ -465,10 +470,6 @@ func (cm *cacheManager) DiskUsage(ctx context.Context, opt client.DiskUsageInfo)
 
 	var du []*client.UsageInfo
 	for id, cr := range m {
-		if opt.Filter != "" && !strings.HasPrefix(id, opt.Filter) {
-			continue
-		}
-
 		c := &client.UsageInfo{
 			ID:          id,
 			Mutable:     cr.mutable,
@@ -480,7 +481,9 @@ func (cm *cacheManager) DiskUsage(ctx context.Context, opt client.DiskUsageInfo)
 			LastUsedAt:  cr.lastUsedAt,
 			UsageCount:  cr.usageCount,
 		}
-		du = append(du, c)
+		if filter.Match(adaptUsageInfo(c)) {
+			du = append(du, c)
+		}
 	}
 
 	eg, ctx := errgroup.WithContext(ctx)
@@ -570,4 +573,31 @@ func initializeMetadata(m withMetadata, opts ...RefOption) error {
 	}
 
 	return md.Commit()
+}
+
+func adaptUsageInfo(info *client.UsageInfo) filters.Adaptor {
+	return filters.AdapterFunc(func(fieldpath []string) (string, bool) {
+		if len(fieldpath) == 0 {
+			return "", false
+		}
+
+		switch fieldpath[0] {
+		case "id":
+			return info.ID, info.ID != ""
+		case "parent":
+			return info.Parent, info.Parent != ""
+		case "description":
+			return info.Description, info.Description != ""
+		case "inuse":
+			return "", info.InUse
+		case "mutable":
+			return "", info.Mutable
+		case "immutable":
+			return "", !info.Mutable
+		}
+
+		// TODO: add int/datetime/bytes support for more fields
+
+		return "", false
+	})
 }

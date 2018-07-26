@@ -16,9 +16,9 @@ var diskUsageCommand = cli.Command{
 	Usage:  "disk usage",
 	Action: diskUsage,
 	Flags: []cli.Flag{
-		cli.StringFlag{
+		cli.StringSliceFlag{
 			Name:  "filter, f",
-			Usage: "Filter snapshot ID",
+			Usage: "Filter records",
 		},
 		cli.BoolFlag{
 			Name:  "verbose, v",
@@ -33,7 +33,7 @@ func diskUsage(clicontext *cli.Context) error {
 		return err
 	}
 
-	du, err := c.DiskUsage(commandContext(clicontext), client.WithFilter(clicontext.String("filter")))
+	du, err := c.DiskUsage(commandContext(clicontext), client.WithFilter(clicontext.StringSlice("filter")))
 	if err != nil {
 		return err
 	}

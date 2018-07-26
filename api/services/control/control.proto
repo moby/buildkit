@@ -25,11 +25,11 @@ service Control {
 }
 
 message PruneRequest {
-	// TODO: filter
+	repeated string filter = 1; // FIXME: not implemented
 }
 
 message DiskUsageRequest {
-	string filter = 1; // FIXME: this should be containerd-compatible repeated string?
+	repeated string filter = 1; 
 }
 
 message DiskUsageResponse {

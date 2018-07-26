@@ -63,10 +63,10 @@ func (c *Client) DiskUsage(ctx context.Context, opts ...DiskUsageOption) ([]*Usa
 type DiskUsageOption func(*DiskUsageInfo)
 
 type DiskUsageInfo struct {
-	Filter string
+	Filter []string
 }
 
-func WithFilter(f string) DiskUsageOption {
+func WithFilter(f []string) DiskUsageOption {
 	return func(di *DiskUsageInfo) {
 		di.Filter = f
 	}
