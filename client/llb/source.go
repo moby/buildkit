@@ -110,6 +110,10 @@ func Image(ref string, opts ...ImageOption) State {
 		}
 	}
 
+	if info.RecordType != "" {
+		attrs[pb.AttrImageRecordType] = info.RecordType
+	}
+
 	src := NewSource("docker-image://"+ref, attrs, info.Constraints) // controversial
 	if err != nil {
 		src.err = err
@@ -161,6 +165,10 @@ func (fn imageOptionFunc) SetImageOption(ii *ImageInfo) {
 	fn(ii)
 }
 
+var MarkImageInternal = imageOptionFunc(func(ii *ImageInfo) {
+	ii.RecordType = "internal"
+})
+
 type ResolveMode int
 
 const (
@@ -190,6 +198,7 @@ type ImageInfo struct {
 	constraintsWrapper
 	metaResolver ImageMetaResolver
 	resolveMode  ResolveMode
+	RecordType   string
 }
 
 func Git(remote, ref string, opts ...GitOption) State {

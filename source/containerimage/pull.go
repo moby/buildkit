@@ -106,6 +106,7 @@ func (is *imageSource) Resolve(ctx context.Context, id source.Identifier) (sourc
 		CacheAccessor: is.CacheAccessor,
 		Puller:        pullerUtil,
 		Platform:      platform,
+		id:            imageIdentifier,
 	}
 	return p, nil
 }
@@ -113,6 +114,7 @@ func (is *imageSource) Resolve(ctx context.Context, id source.Identifier) (sourc
 type puller struct {
 	CacheAccessor cache.Accessor
 	Platform      specs.Platform
+	id            *source.ImageIdentifier
 	*pull.Puller
 }
 
@@ -193,6 +195,14 @@ func (p *puller) Snapshot(ctx context.Context) (cache.ImmutableRef, error) {
 			return nil, err
 		}
 	}
+
+	if p.id.RecordType != "" && cache.GetRecordType(ref) == "" {
+		if err := cache.SetRecordType(ref, p.id.RecordType); err != nil {
+			ref.Release(context.TODO())
+			return nil, err
+		}
+	}
+
 	return ref, nil
 }
 

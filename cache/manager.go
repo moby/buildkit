@@ -327,9 +327,15 @@ func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, fil
 		}
 
 		if len(cr.refs) == 0 {
+			recordType := GetRecordType(cr)
+			if recordType == "" {
+				recordType = client.UsageRecordTypeRegular
+			}
+
 			c := &client.UsageInfo{
-				ID:      cr.ID(),
-				Mutable: cr.mutable,
+				ID:         cr.ID(),
+				Mutable:    cr.mutable,
+				RecordType: recordType,
 			}
 
 			if filter.Match(adaptUsageInfo(c)) {

@@ -234,13 +234,20 @@ func GetLayerType(m withMetadata) string {
 func GetRecordType(m withMetadata) client.UsageRecordType {
 	v := m.Metadata().Get(keyRecordType)
 	if v == nil {
-		return client.UsageRecordTypeRegular
+		return ""
 	}
 	var str string
 	if err := v.Unmarshal(&str); err != nil {
 		return ""
 	}
 	return client.UsageRecordType(str)
+}
+
+func SetRecordType(m withMetadata, value client.UsageRecordType) error {
+	if err := queueRecordType(m.Metadata(), value); err != nil {
+		return err
+	}
+	return m.Metadata().Commit()
 }
 
 func queueRecordType(si *metadata.StorageItem, value client.UsageRecordType) error {
