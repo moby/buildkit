@@ -2,6 +2,7 @@ package llbsolver
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -128,12 +129,16 @@ func (s *llbBridge) Exec(ctx context.Context, meta executor.Meta, root cache.Imm
 	return err
 }
 
-func (s *llbBridge) ResolveImageConfig(ctx context.Context, ref string, opt gw.ResolveImageConfigOpt) (digest.Digest, []byte, error) {
+func (s *llbBridge) ResolveImageConfig(ctx context.Context, ref string, opt gw.ResolveImageConfigOpt) (dgst digest.Digest, config []byte, err error) {
 	w, err := s.resolveWorker()
 	if err != nil {
 		return "", nil, err
 	}
-	return w.ResolveImageConfig(ctx, ref, opt)
+	err = inVertexContext(s.builder.Context(ctx), fmt.Sprintf("resolve image config for %s", ref), func(ctx context.Context) error {
+		dgst, config, err = w.ResolveImageConfig(ctx, ref, opt)
+		return err
+	})
+	return dgst, config, err
 }
 
 type lazyCacheManager struct {
