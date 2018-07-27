@@ -42,6 +42,8 @@ func (c *Client) Prune(ctx context.Context, ch chan UsageInfo, opts ...PruneOpti
 				Description: d.Description,
 				UsageCount:  int(d.UsageCount),
 				LastUsedAt:  d.LastUsedAt,
+				RecordType:  UsageRecordType(d.RecordType),
+				Shared:      d.Shared,
 			}
 		}
 	}

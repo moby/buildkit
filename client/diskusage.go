@@ -21,6 +21,7 @@ type UsageInfo struct {
 	Parent      string
 	Description string
 	RecordType  UsageRecordType
+	Shared      bool
 }
 
 func (c *Client) DiskUsage(ctx context.Context, opts ...DiskUsageOption) ([]*UsageInfo, error) {
@@ -49,6 +50,7 @@ func (c *Client) DiskUsage(ctx context.Context, opts ...DiskUsageOption) ([]*Usa
 			UsageCount:  int(d.UsageCount),
 			LastUsedAt:  d.LastUsedAt,
 			RecordType:  UsageRecordType(d.RecordType),
+			Shared:      d.Shared,
 		})
 	}
 
