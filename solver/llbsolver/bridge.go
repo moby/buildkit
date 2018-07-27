@@ -48,7 +48,7 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (res *
 			func(ref string) {
 				cm = newLazyCacheManager(ref, func() (solver.CacheManager, error) {
 					var cmNew solver.CacheManager
-					if err := b.builder.Call(ctx, "importing cache manifest from "+ref, func(ctx context.Context) error {
+					if err := inVertexContext(b.builder.Context(ctx), "importing cache manifest from "+ref, func(ctx context.Context) error {
 						if b.resolveCacheImporter == nil {
 							return errors.New("no cache importer is available")
 						}
