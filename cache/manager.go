@@ -305,10 +305,10 @@ func (cm *cacheManager) Prune(ctx context.Context, ch chan client.UsageInfo, opt
 		return err
 	}
 
-	return cm.prune(ctx, ch, filter)
+	return cm.prune(ctx, ch, filter, opt.All)
 }
 
-func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, filter filters.Filter) error {
+func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, filter filters.Filter, all bool) error {
 	var toDelete []*cacheRecord
 	cm.mu.Lock()
 
@@ -327,9 +327,20 @@ func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, fil
 		}
 
 		if len(cr.refs) == 0 {
+			recordType := GetRecordType(cr)
+			if recordType == "" {
+				recordType = client.UsageRecordTypeRegular
+			}
+
+			if !all && (recordType == client.UsageRecordTypeInternal || recordType == client.UsageRecordTypeFrontend) {
+				cr.mu.Unlock()
+				continue
+			}
+
 			c := &client.UsageInfo{
-				ID:      cr.ID(),
-				Mutable: cr.mutable,
+				ID:         cr.ID(),
+				Mutable:    cr.mutable,
+				RecordType: recordType,
 			}
 
 			if filter.Match(adaptUsageInfo(c)) {
@@ -408,7 +419,7 @@ func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, fil
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
-		return cm.prune(ctx, ch, filter)
+		return cm.prune(ctx, ch, filter, all)
 	}
 }
 
@@ -430,6 +441,7 @@ func (cm *cacheManager) DiskUsage(ctx context.Context, opt client.DiskUsageInfo)
 		lastUsedAt  *time.Time
 		description string
 		doubleRef   bool
+		recordType  client.UsageRecordType
 	}
 
 	m := make(map[string]*cacheUsageInfo, len(cm.records))
@@ -453,6 +465,10 @@ func (cm *cacheManager) DiskUsage(ctx context.Context, opt client.DiskUsageInfo)
 			lastUsedAt:  lastUsedAt,
 			description: GetDescription(cr.md),
 			doubleRef:   cr.equalImmutable != nil,
+			recordType:  GetRecordType(cr),
+		}
+		if c.recordType == "" {
+			c.recordType = client.UsageRecordTypeRegular
 		}
 		if cr.parent != nil {
 			c.parent = cr.parent.ID()
@@ -495,6 +511,7 @@ func (cm *cacheManager) DiskUsage(ctx context.Context, opt client.DiskUsageInfo)
 			Description: cr.description,
 			LastUsedAt:  cr.lastUsedAt,
 			UsageCount:  cr.usageCount,
+			RecordType:  cr.recordType,
 		}
 		if filter.Match(adaptUsageInfo(c)) {
 			du = append(du, c)
@@ -565,6 +582,12 @@ func WithDescription(descr string) RefOption {
 	}
 }
 
+func WithRecordType(t client.UsageRecordType) RefOption {
+	return func(m withMetadata) error {
+		return queueRecordType(m.Metadata(), t)
+	}
+}
+
 func WithCreationTime(tm time.Time) RefOption {
 	return func(m withMetadata) error {
 		return queueCreatedAt(m.Metadata(), tm)
@@ -609,6 +632,8 @@ func adaptUsageInfo(info *client.UsageInfo) filters.Adaptor {
 			return "", info.Mutable
 		case "immutable":
 			return "", !info.Mutable
+		case "type":
+			return string(info.RecordType), info.RecordType != ""
 		}
 
 		// TODO: add int/datetime/bytes support for more fields

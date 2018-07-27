@@ -20,6 +20,10 @@ var pruneCommand = cli.Command{
 			Usage: "Filter records",
 		},
 		cli.BoolFlag{
+			Name:  "all",
+			Usage: "Include internal/frontend references",
+		},
+		cli.BoolFlag{
 			Name:  "verbose, v",
 			Usage: "Verbose output",
 		},
@@ -56,7 +60,13 @@ func prune(clicontext *cli.Context) error {
 		}
 	}()
 
-	err = c.Prune(commandContext(clicontext), ch, client.WithFilter(clicontext.StringSlice("filter")))
+	opts := []client.PruneOption{client.WithFilter(clicontext.StringSlice("filter"))}
+
+	if clicontext.Bool("all") {
+		opts = append(opts, client.PruneAll)
+	}
+
+	err = c.Prune(commandContext(clicontext), ch, opts...)
 	close(ch)
 	<-printed
 	if err != nil {

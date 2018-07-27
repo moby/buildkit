@@ -26,6 +26,7 @@ service Control {
 
 message PruneRequest {
 	repeated string filter = 1; // FIXME: not implemented
+	bool all = 2;
 }
 
 message DiskUsageRequest {
@@ -46,6 +47,7 @@ message UsageRecord {
 	google.protobuf.Timestamp LastUsedAt = 7 [(gogoproto.stdtime) = true];
 	int64 UsageCount = 8;
 	string Description = 9;
+	string RecordType = 10;
 }
 
 message SolveRequest {

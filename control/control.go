@@ -86,6 +86,7 @@ func (c *Controller) DiskUsage(ctx context.Context, r *controlapi.DiskUsageReque
 				Description: r.Description,
 				CreatedAt:   r.CreatedAt,
 				LastUsedAt:  r.LastUsedAt,
+				RecordType:  string(r.RecordType),
 			})
 		}
 	}
@@ -119,6 +120,7 @@ func (c *Controller) Prune(req *controlapi.PruneRequest, stream controlapi.Contr
 			eg.Go(func() error {
 				return w.Prune(ctx, ch, client.PruneInfo{
 					Filter: req.Filter,
+					All:    req.All,
 				})
 			})
 		}(w)

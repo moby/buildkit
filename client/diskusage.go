@@ -20,6 +20,7 @@ type UsageInfo struct {
 	UsageCount  int
 	Parent      string
 	Description string
+	RecordType  UsageRecordType
 }
 
 func (c *Client) DiskUsage(ctx context.Context, opts ...DiskUsageOption) ([]*UsageInfo, error) {
@@ -47,6 +48,7 @@ func (c *Client) DiskUsage(ctx context.Context, opts ...DiskUsageOption) ([]*Usa
 			Description: d.Description,
 			UsageCount:  int(d.UsageCount),
 			LastUsedAt:  d.LastUsedAt,
+			RecordType:  UsageRecordType(d.RecordType),
 		})
 	}
 
@@ -67,3 +69,14 @@ type DiskUsageOption interface {
 type DiskUsageInfo struct {
 	Filter []string
 }
+
+type UsageRecordType string
+
+const (
+	UsageRecordTypeInternal    UsageRecordType = "internal"
+	UsageRecordTypeFrontend    UsageRecordType = "frontend"
+	UsageRecordTypeLocalSource UsageRecordType = "source.local"
+	UsageRecordTypeGitCheckout UsageRecordType = "source.git.checkout"
+	UsageRecordTypeCacheMount  UsageRecordType = "exec.cachemount"
+	UsageRecordTypeRegular     UsageRecordType = "regular"
+)

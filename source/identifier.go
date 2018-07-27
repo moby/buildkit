@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/containerd/containerd/reference"
+	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -84,6 +85,12 @@ func FromLLB(op *pb.Op_Source, platform *pb.Platform) (Identifier, error) {
 					return nil, err
 				}
 				id.ResolveMode = rm
+			case pb.AttrImageRecordType:
+				rt, err := parseImageRecordType(v)
+				if err != nil {
+					return nil, err
+				}
+				id.RecordType = rt
 			}
 		}
 	}
@@ -170,6 +177,7 @@ type ImageIdentifier struct {
 	Reference   reference.Spec
 	Platform    *specs.Platform
 	ResolveMode ResolveMode
+	RecordType  client.UsageRecordType
 }
 
 func NewImageIdentifier(str string) (*ImageIdentifier, error) {
@@ -237,5 +245,18 @@ func ParseImageResolveMode(v string) (ResolveMode, error) {
 		return ResolveModePreferLocal, nil
 	default:
 		return 0, errors.Errorf("invalid resolvemode: %s", v)
+	}
+}
+
+func parseImageRecordType(v string) (client.UsageRecordType, error) {
+	switch client.UsageRecordType(v) {
+	case "", client.UsageRecordTypeRegular:
+		return client.UsageRecordTypeRegular, nil
+	case client.UsageRecordTypeInternal:
+		return client.UsageRecordTypeInternal, nil
+	case client.UsageRecordTypeFrontend:
+		return client.UsageRecordTypeFrontend, nil
+	default:
+		return "", errors.Errorf("invalid record type %s", v)
 	}
 }

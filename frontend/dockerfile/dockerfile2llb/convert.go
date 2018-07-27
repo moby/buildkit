@@ -576,7 +576,7 @@ func dispatchWorkdir(d *dispatchState, c *instructions.WorkdirCommand, commit bo
 
 func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState llb.State, isAddCommand bool, cmdToPrint interface{}, chown string, opt dispatchOpt) error {
 	// TODO: this should use CopyOp instead. Current implementation is inefficient
-	img := llb.Image(CopyImage, llb.Platform(opt.buildPlatforms[0]))
+	img := llb.Image(CopyImage, llb.MarkImageInternal, llb.Platform(opt.buildPlatforms[0]))
 
 	dest := path.Join(".", pathRelativeToWorkingDir(d.state, c.Dest()))
 	if c.Dest() == "." || c.Dest()[len(c.Dest())-1] == filepath.Separator {

@@ -10,6 +10,7 @@ import (
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/contenthash"
 	"github.com/moby/buildkit/cache/metadata"
+	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/snapshot"
@@ -121,7 +122,7 @@ func (ls *localSourceHandler) Snapshot(ctx context.Context) (out cache.Immutable
 	}
 
 	if mutable == nil {
-		m, err := ls.cm.New(ctx, nil, cache.CachePolicyRetain, cache.WithDescription(fmt.Sprintf("local source for %s", ls.src.Name)))
+		m, err := ls.cm.New(ctx, nil, cache.CachePolicyRetain, cache.WithRecordType(client.UsageRecordTypeLocalSource), cache.WithDescription(fmt.Sprintf("local source for %s", ls.src.Name)))
 		if err != nil {
 			return nil, err
 		}

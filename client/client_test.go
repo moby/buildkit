@@ -781,7 +781,7 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "unique"))
 	require.NoError(t, err)
 
-	err = c.Prune(context.TODO(), nil)
+	err = c.Prune(context.TODO(), nil, PruneAll)
 	require.NoError(t, err)
 
 	checkAllRemoved(t, c, sb)
@@ -1243,7 +1243,7 @@ loop0:
 		break
 	}
 
-	err := c.Prune(context.TODO(), nil)
+	err := c.Prune(context.TODO(), nil, PruneAll)
 	require.NoError(t, err)
 
 	du, err := c.DiskUsage(context.TODO())

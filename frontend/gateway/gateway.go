@@ -14,6 +14,7 @@ import (
 	"github.com/docker/distribution/reference"
 	apitypes "github.com/moby/buildkit/api/types"
 	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
@@ -126,7 +127,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 			}
 		}
 
-		src := llb.Image(sourceRef.String())
+		src := llb.Image(sourceRef.String(), &markTypeFrontend{})
 
 		def, err := src.Marshal()
 		if err != nil {
@@ -514,4 +515,10 @@ func serve(ctx context.Context, grpcServer *grpc.Server, conn net.Conn) {
 	}()
 	logrus.Debugf("serving grpc connection")
 	(&http2.Server{}).ServeConn(conn, &http2.ServeConnOpts{Handler: grpcServer})
+}
+
+type markTypeFrontend struct{}
+
+func (*markTypeFrontend) SetImageOption(ii *llb.ImageInfo) {
+	ii.RecordType = string(client.UsageRecordTypeFrontend)
 }
