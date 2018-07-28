@@ -78,10 +78,16 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 		}
 	}
 
+	name := "load Dockerfile"
+	if filename != "Dockerfile" {
+		name += " from " + filename
+	}
+
 	src := llb.Local(LocalNameDockerfile,
 		llb.IncludePatterns([]string{filename}),
 		llb.SessionID(c.BuildOpts().SessionID),
 		llb.SharedKeyHint(defaultDockerfileName),
+		dockerfile2llb.WithInternalName(name),
 	)
 	var buildContext *llb.State
 	isScratchContext := false
@@ -89,7 +95,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 		src = *st
 		buildContext = &src
 	} else if httpPrefix.MatchString(opts[LocalNameContext]) {
-		httpContext := llb.HTTP(opts[LocalNameContext], llb.Filename("context"))
+		httpContext := llb.HTTP(opts[LocalNameContext], llb.Filename("context"), dockerfile2llb.WithInternalName("load remote build context"))
 		def, err := httpContext.Marshal()
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to marshal httpcontext")
@@ -116,8 +122,8 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 			return nil, errors.Errorf("failed to read downloaded context")
 		}
 		if isArchive(dt) {
-			unpack := llb.Image(dockerfile2llb.CopyImage).
-				Run(llb.Shlex("copy --unpack /src/context /out/"), llb.ReadonlyRootFS())
+			unpack := llb.Image(dockerfile2llb.CopyImage, dockerfile2llb.WithInternalName("helper image for file operations")).
+				Run(llb.Shlex("copy --unpack /src/context /out/"), llb.ReadonlyRootFS(), dockerfile2llb.WithInternalName("extracting build context"))
 			unpack.AddMount("/src", httpContext, llb.Readonly)
 			src = unpack.AddMount("/out", llb.Scratch())
 			buildContext = &src
@@ -166,6 +172,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 					llb.SessionID(c.BuildOpts().SessionID),
 					llb.IncludePatterns([]string{dockerignoreFilename}),
 					llb.SharedKeyHint(dockerignoreFilename),
+					dockerfile2llb.WithInternalName("load "+dockerignoreFilename),
 				)
 				dockerignoreState = &st
 			}
@@ -357,7 +364,7 @@ func detectGitContext(ref string) (*llb.State, bool) {
 	if len(parts) > 1 {
 		branch = parts[1]
 	}
-	st := llb.Git(parts[0], branch)
+	st := llb.Git(parts[0], branch, dockerfile2llb.WithInternalName("load git source "+ref))
 	return &st, true
 }
 

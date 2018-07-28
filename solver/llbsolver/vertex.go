@@ -37,6 +37,9 @@ func (v *vertex) Inputs() []solver.Edge {
 }
 
 func (v *vertex) Name() string {
+	if name, ok := v.options.Description["llb.customname"]; ok {
+		return name
+	}
 	return v.name
 }
 

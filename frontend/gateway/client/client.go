@@ -54,5 +54,5 @@ type BuildOpts struct {
 type ResolveImageConfigOpt struct {
 	Platform    *specs.Platform
 	ResolveMode string
-	// Definition []byte
+	LogName     string
 }

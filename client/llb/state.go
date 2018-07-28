@@ -2,6 +2,7 @@ package llb
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/containerd/containerd/platforms"
 	"github.com/moby/buildkit/identity"
@@ -218,6 +219,10 @@ func (s State) GetEnv(key string) (string, bool) {
 	return getEnv(s).Get(key)
 }
 
+func (s State) Env() []string {
+	return getEnv(s).ToArray()
+}
+
 func (s State) GetDir() string {
 	return getDir(s)
 }
@@ -350,7 +355,18 @@ var IgnoreCache = constraintsOptFunc(func(c *Constraints) {
 
 func WithDescription(m map[string]string) ConstraintsOpt {
 	return constraintsOptFunc(func(c *Constraints) {
-		c.Metadata.Description = m
+		if c.Metadata.Description == nil {
+			c.Metadata.Description = map[string]string{}
+		}
+		for k, v := range m {
+			c.Metadata.Description[k] = v
+		}
+	})
+}
+
+func WithCustomName(name string, a ...interface{}) ConstraintsOpt {
+	return WithDescription(map[string]string{
+		"llb.customname": fmt.Sprintf(name, a...),
 	})
 }
 
