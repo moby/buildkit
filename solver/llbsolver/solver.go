@@ -9,10 +9,12 @@ import (
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/frontend"
+	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/worker"
+	digest "github.com/opencontainers/go-digest"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
@@ -126,7 +128,7 @@ func (s *Solver) Solve(ctx context.Context, id string, req frontend.SolveRequest
 			inp.Refs = m
 		}
 
-		if err := j.Call(ctx, exp.Name(), func(ctx context.Context) error {
+		if err := inVertexContext(j.Context(ctx), exp.Name(), func(ctx context.Context) error {
 			exporterResponse, err = exp.Export(ctx, inp)
 			return err
 		}); err != nil {
@@ -135,7 +137,7 @@ func (s *Solver) Solve(ctx context.Context, id string, req frontend.SolveRequest
 	}
 
 	if e := exp.CacheExporter; e != nil {
-		if err := j.Call(ctx, "exporting cache", func(ctx context.Context) error {
+		if err := inVertexContext(j.Context(ctx), "exporting cache", func(ctx context.Context) error {
 			prepareDone := oneOffProgress(ctx, "preparing build cache for export")
 			if err := res.EachRef(func(res solver.CachedResult) error {
 				// all keys have same export chain so exporting others is not needed
@@ -188,4 +190,42 @@ func oneOffProgress(ctx context.Context, id string) func(err error) error {
 		pw.Close()
 		return err
 	}
+}
+
+func inVertexContext(ctx context.Context, name string, f func(ctx context.Context) error) error {
+	v := client.Vertex{
+		Digest: digest.FromBytes([]byte(identity.NewID())),
+		Name:   name,
+	}
+	pw, _, ctx := progress.FromContext(ctx, progress.WithMetadata("vertex", v.Digest))
+	notifyStarted(ctx, &v, false)
+	defer pw.Close()
+	err := f(ctx)
+	notifyCompleted(ctx, &v, err, false)
+	return err
+}
+
+func notifyStarted(ctx context.Context, v *client.Vertex, cached bool) {
+	pw, _, _ := progress.FromContext(ctx)
+	defer pw.Close()
+	now := time.Now()
+	v.Started = &now
+	v.Completed = nil
+	v.Cached = cached
+	pw.Write(v.Digest.String(), *v)
+}
+
+func notifyCompleted(ctx context.Context, v *client.Vertex, err error, cached bool) {
+	pw, _, _ := progress.FromContext(ctx)
+	defer pw.Close()
+	now := time.Now()
+	if v.Started == nil {
+		v.Started = &now
+	}
+	v.Completed = &now
+	v.Cached = cached
+	if err != nil {
+		v.Error = err.Error()
+	}
+	pw.Write(v.Digest.String(), *v)
 }
