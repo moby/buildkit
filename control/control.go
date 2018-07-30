@@ -87,6 +87,7 @@ func (c *Controller) DiskUsage(ctx context.Context, r *controlapi.DiskUsageReque
 				CreatedAt:   r.CreatedAt,
 				LastUsedAt:  r.LastUsedAt,
 				RecordType:  string(r.RecordType),
+				Shared:      r.Shared,
 			})
 		}
 	}
@@ -147,6 +148,8 @@ func (c *Controller) Prune(req *controlapi.PruneRequest, stream controlapi.Contr
 				Description: r.Description,
 				CreatedAt:   r.CreatedAt,
 				LastUsedAt:  r.LastUsedAt,
+				RecordType:  string(r.RecordType),
+				Shared:      r.Shared,
 			}); err != nil {
 				return err
 			}

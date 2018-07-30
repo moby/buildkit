@@ -48,6 +48,7 @@ message UsageRecord {
 	int64 UsageCount = 8;
 	string Description = 9;
 	string RecordType = 10;
+	bool Shared = 11;
 }
 
 message SolveRequest {

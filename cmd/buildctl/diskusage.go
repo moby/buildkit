@@ -46,7 +46,7 @@ func diskUsage(clicontext *cli.Context) error {
 		printTable(tw, du)
 	}
 
-	if clicontext.String("filter") == "" {
+	if len(clicontext.StringSlice("filter")) == 0 {
 		printSummary(tw, du)
 	}
 
@@ -66,6 +66,7 @@ func printVerbose(tw *tabwriter.Writer, du []*client.UsageInfo) {
 		printKV(tw, "Created at", di.CreatedAt)
 		printKV(tw, "Mutable", di.Mutable)
 		printKV(tw, "Reclaimable", !di.InUse)
+		printKV(tw, "Shared", di.Shared)
 		printKV(tw, "Size", fmt.Sprintf("%.2f", units.Bytes(di.Size)))
 		if di.Description != "" {
 			printKV(tw, "Description", di.Description)
@@ -103,12 +104,17 @@ func printTableRow(tw *tabwriter.Writer, di *client.UsageInfo) {
 	if di.Mutable {
 		id += "*"
 	}
-	fmt.Fprintf(tw, "%-71s\t%-11v\t%.2f\t\n", id, !di.InUse, units.Bytes(di.Size))
+	size := fmt.Sprintf("%.2f", units.Bytes(di.Size))
+	if di.Shared {
+		size += "*"
+	}
+	fmt.Fprintf(tw, "%-71s\t%-11v\t%s\t\n", id, !di.InUse, size)
 }
 
 func printSummary(tw *tabwriter.Writer, du []*client.UsageInfo) {
 	total := int64(0)
 	reclaimable := int64(0)
+	shared := int64(0)
 
 	for _, di := range du {
 		if di.Size > 0 {
@@ -117,9 +123,18 @@ func printSummary(tw *tabwriter.Writer, du []*client.UsageInfo) {
 				reclaimable += di.Size
 			}
 		}
+		if di.Shared {
+			shared += di.Size
+		}
 	}
 
 	tw = tabwriter.NewWriter(os.Stdout, 1, 8, 1, '\t', 0)
+
+	if shared > 0 {
+		fmt.Fprintf(tw, "Shared:\t%.2f\n", units.Bytes(shared))
+		fmt.Fprintf(tw, "Private:\t%.2f\n", units.Bytes(total-shared))
+	}
+
 	fmt.Fprintf(tw, "Reclaimable:\t%.2f\n", units.Bytes(reclaimable))
 	fmt.Fprintf(tw, "Total:\t%.2f\n", units.Bytes(total))
 	tw.Flush()

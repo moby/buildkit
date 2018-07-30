@@ -23,9 +23,10 @@ var (
 )
 
 type ManagerOpt struct {
-	Snapshotter   snapshot.SnapshotterBase
-	GCPolicy      GCPolicy
-	MetadataStore *metadata.Store
+	Snapshotter     snapshot.SnapshotterBase
+	GCPolicy        GCPolicy
+	MetadataStore   *metadata.Store
+	PruneRefChecker ExternalRefCheckerFunc
 }
 
 type Accessor interface {
@@ -45,6 +46,12 @@ type Manager interface {
 	Accessor
 	Controller
 	Close() error
+}
+
+type ExternalRefCheckerFunc func() (ExternalRefChecker, error)
+
+type ExternalRefChecker interface {
+	Exists(key string) bool
 }
 
 type cacheManager struct {
@@ -305,10 +312,19 @@ func (cm *cacheManager) Prune(ctx context.Context, ch chan client.UsageInfo, opt
 		return err
 	}
 
-	return cm.prune(ctx, ch, filter, opt.All)
+	var check ExternalRefChecker
+	if f := cm.PruneRefChecker; f != nil && (!opt.All || len(opt.Filter) > 0) {
+		c, err := f()
+		if err != nil {
+			return err
+		}
+		check = c
+	}
+
+	return cm.prune(ctx, ch, filter, opt.All, check)
 }
 
-func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, filter filters.Filter, all bool) error {
+func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, filter filters.Filter, all bool, checkShared ExternalRefChecker) error {
 	var toDelete []*cacheRecord
 	cm.mu.Lock()
 
@@ -332,15 +348,23 @@ func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, fil
 				recordType = client.UsageRecordTypeRegular
 			}
 
-			if !all && (recordType == client.UsageRecordTypeInternal || recordType == client.UsageRecordTypeFrontend) {
-				cr.mu.Unlock()
-				continue
+			shared := false
+			if checkShared != nil {
+				shared = checkShared.Exists(cr.ID())
+			}
+
+			if !all {
+				if recordType == client.UsageRecordTypeInternal || recordType == client.UsageRecordTypeFrontend || shared {
+					cr.mu.Unlock()
+					continue
+				}
 			}
 
 			c := &client.UsageInfo{
 				ID:         cr.ID(),
 				Mutable:    cr.mutable,
 				RecordType: recordType,
+				Shared:     shared,
 			}
 
 			if filter.Match(adaptUsageInfo(c)) {
@@ -419,8 +443,52 @@ func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, fil
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
-		return cm.prune(ctx, ch, filter, all)
+		return cm.prune(ctx, ch, filter, all, checkShared)
 	}
+}
+
+func (cm *cacheManager) markShared(m map[string]*cacheUsageInfo) error {
+	if cm.PruneRefChecker == nil {
+		return nil
+	}
+	c, err := cm.PruneRefChecker()
+	if err != nil {
+		return err
+	}
+
+	var markAllParentsShared func(string)
+	markAllParentsShared = func(id string) {
+		if v, ok := m[id]; ok {
+			v.shared = true
+			if v.parent != "" {
+				markAllParentsShared(v.parent)
+			}
+		}
+	}
+
+	for id := range m {
+		if m[id].shared {
+			continue
+		}
+		if b := c.Exists(id); b {
+			markAllParentsShared(id)
+		}
+	}
+	return nil
+}
+
+type cacheUsageInfo struct {
+	refs        int
+	parent      string
+	size        int64
+	mutable     bool
+	createdAt   time.Time
+	usageCount  int
+	lastUsedAt  *time.Time
+	description string
+	doubleRef   bool
+	recordType  client.UsageRecordType
+	shared      bool
 }
 
 func (cm *cacheManager) DiskUsage(ctx context.Context, opt client.DiskUsageInfo) ([]*client.UsageInfo, error) {
@@ -430,19 +498,6 @@ func (cm *cacheManager) DiskUsage(ctx context.Context, opt client.DiskUsageInfo)
 	}
 
 	cm.mu.Lock()
-
-	type cacheUsageInfo struct {
-		refs        int
-		parent      string
-		size        int64
-		mutable     bool
-		createdAt   time.Time
-		usageCount  int
-		lastUsedAt  *time.Time
-		description string
-		doubleRef   bool
-		recordType  client.UsageRecordType
-	}
 
 	m := make(map[string]*cacheUsageInfo, len(cm.records))
 	rescan := make(map[string]struct{}, len(cm.records))
@@ -499,6 +554,10 @@ func (cm *cacheManager) DiskUsage(ctx context.Context, opt client.DiskUsageInfo)
 		}
 	}
 
+	if err := cm.markShared(m); err != nil {
+		return nil, err
+	}
+
 	var du []*client.UsageInfo
 	for id, cr := range m {
 		c := &client.UsageInfo{
@@ -512,6 +571,7 @@ func (cm *cacheManager) DiskUsage(ctx context.Context, opt client.DiskUsageInfo)
 			LastUsedAt:  cr.lastUsedAt,
 			UsageCount:  cr.usageCount,
 			RecordType:  cr.recordType,
+			Shared:      cr.shared,
 		}
 		if filter.Match(adaptUsageInfo(c)) {
 			du = append(du, c)
@@ -634,6 +694,10 @@ func adaptUsageInfo(info *client.UsageInfo) filters.Adaptor {
 			return "", !info.Mutable
 		case "type":
 			return string(info.RecordType), info.RecordType != ""
+		case "shared":
+			return "", info.Shared
+		case "private":
+			return "", !info.Shared
 		}
 
 		// TODO: add int/datetime/bytes support for more fields

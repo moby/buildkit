@@ -28,6 +28,7 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
+	"github.com/moby/buildkit/snapshot/imagerefchecker"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/llbsolver/ops"
 	"github.com/moby/buildkit/solver/pb"
@@ -79,9 +80,16 @@ type Worker struct {
 
 // NewWorker instantiates a local worker
 func NewWorker(opt WorkerOpt) (*Worker, error) {
+	imageRefChecker := imagerefchecker.New(imagerefchecker.Opt{
+		ImageStore:   opt.ImageStore,
+		Snapshotter:  opt.Snapshotter,
+		ContentStore: opt.ContentStore,
+	})
+
 	cm, err := cache.NewManager(cache.ManagerOpt{
-		Snapshotter:   opt.Snapshotter,
-		MetadataStore: opt.MetadataStore,
+		Snapshotter:     opt.Snapshotter,
+		MetadataStore:   opt.MetadataStore,
+		PruneRefChecker: imageRefChecker,
 	})
 	if err != nil {
 		return nil, err
