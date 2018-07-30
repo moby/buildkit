@@ -215,12 +215,48 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 		ReadonlyRootFS: readonly,
 	}, rootFS, lbf.Stdin, lbf.Stdout, os.Stderr)
 
-	if lbf.err != nil {
-		return nil, lbf.err
+	if err != nil {
+		// An existing error (set via Return rpc) takes
+		// precedence over this error, which in turn takes
+		// precedence over a success reported via Return.
+		lbf.mu.Lock()
+		if lbf.err == nil {
+			lbf.result = nil
+			lbf.err = err
+		}
+		lbf.mu.Unlock()
 	}
 
-	if err != nil {
-		return nil, err
+	return lbf.Result()
+}
+
+func (lbf *llbBridgeForwarder) setResult(r *frontend.Result, err error) (*pb.ReturnResponse, error) {
+	lbf.mu.Lock()
+	defer lbf.mu.Unlock()
+
+	if (r == nil) == (err == nil) {
+		return nil, errors.New("gateway return must be either result or err")
+	}
+
+	if lbf.result != nil || lbf.err != nil {
+		return nil, errors.New("gateway result is already set")
+	}
+
+	lbf.result = r
+	lbf.err = err
+	return &pb.ReturnResponse{}, nil
+}
+
+func (lbf *llbBridgeForwarder) Result() (*frontend.Result, error) {
+	lbf.mu.Lock()
+	defer lbf.mu.Unlock()
+
+	if lbf.result == nil && lbf.err == nil {
+		return nil, errors.New("no result for incomplete build")
+	}
+
+	if lbf.err != nil {
+		return nil, lbf.err
 	}
 
 	return lbf.result, nil
@@ -465,13 +501,13 @@ func (lbf *llbBridgeForwarder) Ping(context.Context, *pb.PingRequest) (*pb.PongR
 
 func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest) (*pb.ReturnResponse, error) {
 	if in.Error != nil {
-		lbf.err = status.ErrorProto(&spb.Status{
+		return lbf.setResult(nil, status.ErrorProto(&spb.Status{
 			Code:    in.Error.Code,
 			Message: in.Error.Message,
 			// Details: in.Error.Details,
-		})
+		}))
 	} else {
-		lbf.result = &frontend.Result{
+		r := &frontend.Result{
 			Metadata: in.Result.Metadata,
 		}
 
@@ -481,7 +517,7 @@ func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest)
 			if err != nil {
 				return nil, err
 			}
-			lbf.result.Ref = ref
+			r.Ref = ref
 		case *pb.Result_Refs:
 			m := map[string]solver.CachedResult{}
 			for k, v := range res.Refs.Refs {
@@ -491,11 +527,10 @@ func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest)
 				}
 				m[k] = ref
 			}
-			lbf.result.Refs = m
+			r.Refs = m
 		}
+		return lbf.setResult(r, nil)
 	}
-
-	return &pb.ReturnResponse{}, nil
 }
 
 func (lbf *llbBridgeForwarder) convertRef(id string) (solver.CachedResult, error) {
