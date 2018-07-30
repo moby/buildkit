@@ -51,6 +51,7 @@ type ConvertOpt struct {
 	ImageResolveMode llb.ResolveMode
 	TargetPlatform   *specs.Platform
 	BuildPlatforms   []specs.Platform
+	PrefixPlatform   bool
 }
 
 func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State, *Image, error) {
@@ -102,10 +103,11 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		st.BaseName = name
 
 		ds := &dispatchState{
-			stage:     st,
-			deps:      make(map[*dispatchState]struct{}),
-			ctxPaths:  make(map[string]struct{}),
-			stageName: st.Name,
+			stage:          st,
+			deps:           make(map[*dispatchState]struct{}),
+			ctxPaths:       make(map[string]struct{}),
+			stageName:      st.Name,
+			prefixPlatform: opt.PrefixPlatform,
 		}
 
 		if st.Name == "" {
@@ -239,7 +241,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 					if isScratch {
 						d.state = llb.Scratch()
 					} else {
-						d.state = llb.Image(d.stage.BaseName, dfCmd(d.stage.SourceCode), llb.Platform(*platform), opt.ImageResolveMode, llb.WithCustomName(prefixCommand(d, "FROM "+d.stage.BaseName)))
+						d.state = llb.Image(d.stage.BaseName, dfCmd(d.stage.SourceCode), llb.Platform(*platform), opt.ImageResolveMode, llb.WithCustomName(prefixCommand(d, "FROM "+d.stage.BaseName, opt.PrefixPlatform, platform)))
 					}
 					d.platform = platform
 					return nil
@@ -463,21 +465,22 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 }
 
 type dispatchState struct {
-	state        llb.State
-	image        Image
-	platform     *specs.Platform
-	stage        instructions.Stage
-	base         *dispatchState
-	deps         map[*dispatchState]struct{}
-	buildArgs    []instructions.KeyValuePairOptional
-	commands     []command
-	ctxPaths     map[string]struct{}
-	ignoreCache  bool
-	cmdSet       bool
-	unregistered bool
-	stageName    string
-	cmdIndex     int
-	cmdTotal     int
+	state          llb.State
+	image          Image
+	platform       *specs.Platform
+	stage          instructions.Stage
+	base           *dispatchState
+	deps           map[*dispatchState]struct{}
+	buildArgs      []instructions.KeyValuePairOptional
+	commands       []command
+	ctxPaths       map[string]struct{}
+	ignoreCache    bool
+	cmdSet         bool
+	unregistered   bool
+	stageName      string
+	cmdIndex       int
+	cmdTotal       int
+	prefixPlatform bool
 }
 
 type dispatchStates struct {
@@ -580,7 +583,7 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 		return err
 	}
 	opt = append(opt, runMounts...)
-	opt = append(opt, llb.WithCustomName(prefixCommand(d, uppercaseCmd(processCmdEnv(dopt.shlex, c.String(), d.state.Run(opt...).Env())))))
+	opt = append(opt, llb.WithCustomName(prefixCommand(d, uppercaseCmd(processCmdEnv(dopt.shlex, c.String(), d.state.Run(opt...).Env())), d.prefixPlatform, d.state.GetPlatform())))
 	d.state = d.state.Run(opt...).Root()
 	return commitToHistory(&d.image, "RUN "+runCommandString(args, d.buildArgs), true, &d.state)
 }
@@ -670,7 +673,7 @@ func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState l
 		args = append(args[:1], append([]string{"--unpack"}, args[1:]...)...)
 	}
 
-	runOpt := []llb.RunOption{llb.Args(args), llb.Dir("/dest"), llb.ReadonlyRootFS(), dfCmd(cmdToPrint), llb.WithCustomName(prefixCommand(d, uppercaseCmd(processCmdEnv(opt.shlex, cmdToPrint.String(), d.state.Env()))))}
+	runOpt := []llb.RunOption{llb.Args(args), llb.Dir("/dest"), llb.ReadonlyRootFS(), dfCmd(cmdToPrint), llb.WithCustomName(prefixCommand(d, uppercaseCmd(processCmdEnv(opt.shlex, cmdToPrint.String(), d.state.Env())), d.prefixPlatform, d.state.GetPlatform()))}
 	if d.ignoreCache {
 		runOpt = append(runOpt, llb.IgnoreCache)
 	}
@@ -1090,15 +1093,18 @@ func processCmdEnv(shlex *shell.Lex, cmd string, env []string) string {
 	return w
 }
 
-func prefixCommand(ds *dispatchState, str string) string {
-	out := ""
-	if ds.cmdTotal != 0 {
-		out = "["
-		if ds.stageName != "" {
-			out += ds.stageName + " "
-		}
-		ds.cmdIndex++
-		out += fmt.Sprintf("%d/%d] ", ds.cmdIndex, ds.cmdTotal)
+func prefixCommand(ds *dispatchState, str string, prefixPlatform bool, platform *specs.Platform) string {
+	if ds.cmdTotal == 0 {
+		return str
 	}
+	out := "["
+	if prefixPlatform && platform != nil {
+		out += platforms.Format(*platform) + " "
+	}
+	if ds.stageName != "" {
+		out += ds.stageName + " "
+	}
+	ds.cmdIndex++
+	out += fmt.Sprintf("%d/%d] ", ds.cmdIndex, ds.cmdTotal)
 	return out + str
 }

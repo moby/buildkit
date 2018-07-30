@@ -249,6 +249,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 					TargetPlatform:   tp,
 					BuildPlatforms:   buildPlatforms,
 					ImageResolveMode: resolveMode,
+					PrefixPlatform:   exportMap,
 				})
 
 				if err != nil {
