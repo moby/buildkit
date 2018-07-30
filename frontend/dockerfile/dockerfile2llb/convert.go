@@ -91,7 +91,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 	allDispatchStates := newDispatchStates()
 
 	// set base state for every image
-	for _, st := range stages {
+	for i, st := range stages {
 		name, err := shlex.ProcessWordWithMap(st.BaseName, metaArgsToMap(optMetaArgs))
 		if err != nil {
 			return nil, nil, err
@@ -102,9 +102,14 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		st.BaseName = name
 
 		ds := &dispatchState{
-			stage:    st,
-			deps:     make(map[*dispatchState]struct{}),
-			ctxPaths: make(map[string]struct{}),
+			stage:     st,
+			deps:      make(map[*dispatchState]struct{}),
+			ctxPaths:  make(map[string]struct{}),
+			stageName: st.Name,
+		}
+
+		if st.Name == "" {
+			ds.stageName = fmt.Sprintf("stage-%d", i)
 		}
 
 		if v := st.Platform; v != "" {
@@ -120,6 +125,15 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 			ds.platform = &p
 		}
 
+		total := 1
+		for _, cmd := range ds.stage.Commands {
+			switch cmd.(type) {
+			case *instructions.AddCommand, *instructions.CopyCommand, *instructions.RunCommand:
+				total++
+			}
+		}
+		ds.cmdTotal = total
+
 		allDispatchStates.addState(ds)
 		if opt.IgnoreCache != nil {
 			if len(opt.IgnoreCache) == 0 {
@@ -132,6 +146,10 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 				}
 			}
 		}
+	}
+
+	if len(allDispatchStates.states) == 1 {
+		allDispatchStates.states[0].stageName = ""
 	}
 
 	var target *dispatchState
@@ -221,7 +239,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 					if isScratch {
 						d.state = llb.Scratch()
 					} else {
-						d.state = llb.Image(d.stage.BaseName, dfCmd(d.stage.SourceCode), llb.Platform(*platform), opt.ImageResolveMode, llb.WithCustomName("FROM "+d.stage.BaseName))
+						d.state = llb.Image(d.stage.BaseName, dfCmd(d.stage.SourceCode), llb.Platform(*platform), opt.ImageResolveMode, llb.WithCustomName(prefixCommand(d, "FROM "+d.stage.BaseName)))
 					}
 					d.platform = platform
 					return nil
@@ -457,6 +475,9 @@ type dispatchState struct {
 	ignoreCache  bool
 	cmdSet       bool
 	unregistered bool
+	stageName    string
+	cmdIndex     int
+	cmdTotal     int
 }
 
 type dispatchStates struct {
@@ -559,7 +580,7 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 		return err
 	}
 	opt = append(opt, runMounts...)
-	opt = append(opt, llb.WithCustomName(uppercaseCmd(processCmdEnv(dopt.shlex, c.String(), d.state.Run(opt...).Env()))))
+	opt = append(opt, llb.WithCustomName(prefixCommand(d, uppercaseCmd(processCmdEnv(dopt.shlex, c.String(), d.state.Run(opt...).Env())))))
 	d.state = d.state.Run(opt...).Root()
 	return commitToHistory(&d.image, "RUN "+runCommandString(args, d.buildArgs), true, &d.state)
 }
@@ -649,7 +670,7 @@ func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState l
 		args = append(args[:1], append([]string{"--unpack"}, args[1:]...)...)
 	}
 
-	runOpt := []llb.RunOption{llb.Args(args), llb.Dir("/dest"), llb.ReadonlyRootFS(), dfCmd(cmdToPrint), llb.WithCustomName(uppercaseCmd(processCmdEnv(opt.shlex, cmdToPrint.String(), d.state.Env())))}
+	runOpt := []llb.RunOption{llb.Args(args), llb.Dir("/dest"), llb.ReadonlyRootFS(), dfCmd(cmdToPrint), llb.WithCustomName(prefixCommand(d, uppercaseCmd(processCmdEnv(opt.shlex, cmdToPrint.String(), d.state.Env()))))}
 	if d.ignoreCache {
 		runOpt = append(runOpt, llb.IgnoreCache)
 	}
@@ -1067,4 +1088,17 @@ func processCmdEnv(shlex *shell.Lex, cmd string, env []string) string {
 		return cmd
 	}
 	return w
+}
+
+func prefixCommand(ds *dispatchState, str string) string {
+	out := ""
+	if ds.cmdTotal != 0 {
+		out = "["
+		if ds.stageName != "" {
+			out += ds.stageName + " "
+		}
+		ds.cmdIndex++
+		out += fmt.Sprintf("%d/%d] ", ds.cmdIndex, ds.cmdTotal)
+	}
+	return out + str
 }
