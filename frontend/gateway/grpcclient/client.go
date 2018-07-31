@@ -300,7 +300,7 @@ func (c *grpcClient) ResolveImageConfig(ctx context.Context, ref string, opt cli
 			OSFeatures:   platform.OSFeatures,
 		}
 	}
-	resp, err := c.client.ResolveImageConfig(ctx, &pb.ResolveImageConfigRequest{Ref: ref, Platform: p, ResolveMode: opt.ResolveMode})
+	resp, err := c.client.ResolveImageConfig(ctx, &pb.ResolveImageConfigRequest{Ref: ref, Platform: p, ResolveMode: opt.ResolveMode, LogName: opt.LogName})
 	if err != nil {
 		return "", nil, err
 	}

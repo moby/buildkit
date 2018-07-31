@@ -134,7 +134,10 @@ func (s *llbBridge) ResolveImageConfig(ctx context.Context, ref string, opt gw.R
 	if err != nil {
 		return "", nil, err
 	}
-	err = inVertexContext(s.builder.Context(ctx), fmt.Sprintf("resolve image config for %s", ref), func(ctx context.Context) error {
+	if opt.LogName == "" {
+		opt.LogName = fmt.Sprintf("resolve image config for %s", ref)
+	}
+	err = inVertexContext(s.builder.Context(ctx), opt.LogName, func(ctx context.Context) error {
 		dgst, config, err = w.ResolveImageConfig(ctx, ref, opt)
 		return err
 	})

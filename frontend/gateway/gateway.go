@@ -327,6 +327,7 @@ func (lbf *llbBridgeForwarder) ResolveImageConfig(ctx context.Context, req *pb.R
 	dgst, dt, err := lbf.llbBridge.ResolveImageConfig(ctx, req.Ref, gw.ResolveImageConfigOpt{
 		Platform:    platform,
 		ResolveMode: req.ResolveMode,
+		LogName:     req.LogName,
 	})
 	if err != nil {
 		return nil, err
