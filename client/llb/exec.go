@@ -2,6 +2,7 @@ package llb
 
 import (
 	_ "crypto/sha256"
+	"net"
 	"sort"
 
 	"github.com/moby/buildkit/solver/pb"
@@ -10,11 +11,12 @@ import (
 )
 
 type Meta struct {
-	Args     []string
-	Env      EnvList
-	Cwd      string
-	User     string
-	ProxyEnv *ProxyEnv
+	Args       []string
+	Env        EnvList
+	Cwd        string
+	User       string
+	ProxyEnv   *ProxyEnv
+	ExtraHosts []HostIP
 }
 
 func NewExecOp(root Output, meta Meta, readOnly bool, c Constraints) *ExecOp {
@@ -127,13 +129,22 @@ func (e *ExecOp) Marshal(c *Constraints) (digest.Digest, []byte, *pb.OpMetadata,
 		return e.mounts[i].target < e.mounts[j].target
 	})
 
+	meta := &pb.Meta{
+		Args: e.meta.Args,
+		Env:  e.meta.Env.ToArray(),
+		Cwd:  e.meta.Cwd,
+		User: e.meta.User,
+	}
+	if len(e.meta.ExtraHosts) > 0 {
+		hosts := make([]*pb.HostIP, len(e.meta.ExtraHosts))
+		for i, h := range e.meta.ExtraHosts {
+			hosts[i] = &pb.HostIP{Host: h.Host, IP: h.IP.String()}
+		}
+		meta.ExtraHosts = hosts
+	}
+
 	peo := &pb.ExecOp{
-		Meta: &pb.Meta{
-			Args: e.meta.Args,
-			Env:  e.meta.Env.ToArray(),
-			Cwd:  e.meta.Cwd,
-			User: e.meta.User,
-		},
+		Meta: meta,
 	}
 
 	if p := e.meta.ProxyEnv; p != nil {
@@ -383,6 +394,12 @@ func Dir(str string) RunOption {
 func Dirf(str string, v ...interface{}) RunOption {
 	return runOptionFunc(func(ei *ExecInfo) {
 		ei.State = ei.State.Dirf(str, v...)
+	})
+}
+
+func AddExtraHost(host string, ip net.IP) RunOption {
+	return runOptionFunc(func(ei *ExecInfo) {
+		ei.State = ei.State.AddExtraHost(host, ip)
 	})
 }
 
