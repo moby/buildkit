@@ -52,6 +52,7 @@ message Meta {
 	string cwd = 3;
 	string user = 4;
 	ProxyEnv proxy_env = 5;
+	repeated HostIP extraHosts = 6;
 }
 
 // Mount specifies how to mount an input Op as a filesystem.
@@ -180,4 +181,9 @@ message Definition {
 	// metadata contains metadata for the each of the Op messages.
 	// A key must be an LLB op digest string. Currently, empty string is not expected as a key, but it may change in the future.
 	map<string, OpMetadata> metadata = 2 [(gogoproto.castkey) = "github.com/opencontainers/go-digest.Digest", (gogoproto.nullable) = false];
+}
+
+message HostIP {
+	string Host = 1;
+	string IP = 2;
 }

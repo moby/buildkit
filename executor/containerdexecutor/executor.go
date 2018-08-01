@@ -3,6 +3,7 @@ package containerdexecutor
 import (
 	"context"
 	"io"
+	"os"
 	"syscall"
 	"time"
 
@@ -39,9 +40,12 @@ func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root c
 		return err
 	}
 
-	hostsFile, err := oci.GetHostsFile(ctx, w.root)
+	hostsFile, err := oci.GetHostsFile(ctx, w.root, meta.ExtraHosts)
 	if err != nil {
 		return err
+	}
+	if len(meta.ExtraHosts) > 0 {
+		defer os.RemoveAll(hostsFile)
 	}
 
 	mountable, err := root.Mount(ctx, false)
