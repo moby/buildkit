@@ -68,7 +68,6 @@ func TestIntegration(t *testing.T) {
 		testPullScratch,
 		testSymlinkDestination,
 		testHTTPDockerfile,
-		testNoSnapshotLeak,
 		testCopySymlinks,
 		testContextChangeDirToFile,
 		testPlatformArgsImplicit,
