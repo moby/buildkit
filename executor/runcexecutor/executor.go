@@ -106,6 +106,23 @@ func New(opt Opt, networkProvider network.Provider) (executor.Executor, error) {
 }
 
 func (w *runcExecutor) Exec(ctx context.Context, meta executor.Meta, root cache.Mountable, mounts []executor.Mount, stdin io.ReadCloser, stdout, stderr io.WriteCloser) error {
+	hostNetworkEnabled := true
+	var iface network.Interface
+	if w.networkProvider != nil {
+		var err error
+		iface, err = w.networkProvider.NewInterface()
+		if err == nil && iface != nil {
+			hostNetworkEnabled = false
+		}
+	}
+	if hostNetworkEnabled {
+		logrus.Info("enabling HostNetworking")
+	}
+	defer func() {
+		if iface != nil {
+			w.networkProvider.Release(iface)
+		}
+	}()
 
 	resolvConf, err := oci.GetResolvConf(ctx, w.root)
 	if err != nil {
@@ -158,13 +175,6 @@ func (w *runcExecutor) Exec(ctx context.Context, meta executor.Meta, root cache.
 	}
 	defer f.Close()
 
-	hostNetworkEnabled := false
-	iface, err := w.networkProvider.NewInterface()
-	if err != nil || iface == nil {
-		logrus.Info("enabling HostNetworking")
-		hostNetworkEnabled = true
-	}
-
 	opts := []containerdoci.SpecOpts{oci.WithUIDGID(uid, gid, sgids)}
 	if system.SeccompSupported() {
 		opts = append(opts, seccomp.WithDefaultProfile())
@@ -204,8 +214,6 @@ func (w *runcExecutor) Exec(ctx context.Context, meta executor.Meta, root cache.
 		return err
 	}
 
-	f.Sync()
-
 	forwardIO, err := newForwardIO(stdin, stdout, stderr)
 	if err != nil {
 		return errors.Wrap(err, "creating new forwarding IO")
@@ -216,13 +224,22 @@ func (w *runcExecutor) Exec(ctx context.Context, meta executor.Meta, root cache.
 	defer os.RemoveAll(pidFilePath)
 
 	logrus.Debugf("> creating %s %v", id, meta.Args)
-	if err := w.runc.Create(ctx, id, bundle, &runc.CreateOpts{
+	err = w.runc.Create(ctx, id, bundle, &runc.CreateOpts{
 		PidFile: pidFilePath,
 		IO:      forwardIO,
-	}); err != nil {
+	})
+	if err != nil {
 		return err
 	}
 	forwardIO.release()
+
+	defer func() {
+		go func() {
+			if err := w.runc.Delete(context.TODO(), id, &runc.DeleteOpts{}); err != nil {
+				logrus.Errorf("failed to delete %s: %+v", id, err)
+			}
+		}()
+	}()
 
 	dt, err := ioutil.ReadFile(pidFilePath)
 	if err != nil {
@@ -233,21 +250,25 @@ func (w *runcExecutor) Exec(ctx context.Context, meta executor.Meta, root cache.
 		return err
 	}
 
+	done := make(chan struct{})
+	defer close(done)
+
+	go func() {
+		select {
+		case <-done:
+		case <-ctx.Done():
+			syscall.Kill(-pid, syscall.SIGKILL)
+		}
+	}()
+
 	if iface != nil {
 		if err := iface.Set(pid); err != nil {
 			return errors.Wrap(err, "could not set the network")
 		}
-	}
-
-	defer func() {
-		if iface != nil {
+		defer func() {
 			iface.Remove(pid)
-			w.networkProvider.Release(iface)
-		}
-		if err := w.runc.Delete(context.TODO(), id, &runc.DeleteOpts{}); err != nil {
-			logrus.Errorf("failed to delete %s: %+v", id, err)
-		}
-	}()
+		}()
+	}
 
 	err = w.runc.Start(ctx, id)
 	if err != nil {

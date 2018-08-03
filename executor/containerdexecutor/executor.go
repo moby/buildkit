@@ -78,11 +78,16 @@ func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root c
 		lm.Unmount()
 	}
 
-	hostNetworkEnabled := false
-	iface, err := w.networkProvider.NewInterface()
-	if err != nil || iface == nil {
+	hostNetworkEnabled := true
+	var iface network.Interface
+	if w.networkProvider != nil {
+		iface, err = w.networkProvider.NewInterface()
+		if err == nil && iface != nil {
+			hostNetworkEnabled = false
+		}
+	}
+	if hostNetworkEnabled {
 		logrus.Info("enabling HostNetworking")
-		hostNetworkEnabled = true
 	}
 
 	opts := []containerdoci.SpecOpts{oci.WithUIDGID(uid, gid, sgids)}
