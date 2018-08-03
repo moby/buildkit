@@ -105,6 +105,9 @@ func (s *Solver) Solve(ctx context.Context, id string, req frontend.SolveRequest
 		inp := exporter.Source{
 			Metadata: res.Metadata,
 		}
+		if inp.Metadata == nil {
+			inp.Metadata = make(map[string][]byte)
+		}
 		if res := res.Ref; res != nil {
 			workerRef, ok := res.Sys().(*worker.WorkerRef)
 			if !ok {
