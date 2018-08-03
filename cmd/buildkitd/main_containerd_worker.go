@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	ctd "github.com/containerd/containerd"
+	"github.com/moby/buildkit/util/network"
 	"github.com/moby/buildkit/worker"
 	"github.com/moby/buildkit/worker/base"
 	"github.com/moby/buildkit/worker/containerd"
@@ -66,10 +67,18 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 		logrus.Warn("rootless mode is not supported for containerd workers. disabling containerd worker.")
 		return nil, nil
 	}
-	opt, err := containerd.NewWorkerOpt(common.root, socket, ctd.DefaultSnapshotter, labels)
+
+	workerNet := c.GlobalString("worker-net")
+	cniConfig := c.GlobalString("cni-config")
+	cniBin := c.GlobalString("cni-bin")
+
+	networkOpts := network.NetworkOpts{Type: workerNet, CNIConfigPath: cniConfig, CNIPluginPath: cniBin}
+
+	opt, err := containerd.NewWorkerOpt(common.root, socket, ctd.DefaultSnapshotter, labels, networkOpts)
 	if err != nil {
 		return nil, err
 	}
+
 	opt.SessionManager = common.sessionManager
 
 	if platformsStr := c.GlobalStringSlice("containerd-worker-platform"); len(platformsStr) != 0 {

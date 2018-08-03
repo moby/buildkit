@@ -10,7 +10,7 @@ ARG ROOTLESSKIT_VERSION=20b0fc24b305b031a61ef1a1ca456aadafaf5e77
 # The `buildkitd` stage and the `buildctl` stage are placed here
 # so that they can be built quickly with legacy DAG-unaware `docker build --target=...`
 
-FROM golang:1.10-alpine AS gobuild-base
+FROM golang:alpine AS gobuild-base
 RUN apk add --no-cache g++ linux-headers
 RUN apk add --no-cache git libseccomp-dev make
 
@@ -75,19 +75,8 @@ RUN go build -ldflags "$(cat .tmp/ldflags) -d"  -o /usr/bin/buildkitd.containerd
 
 FROM registry:$REGISTRY_VERSION AS registry
 
-FROM gobuild-base AS rootlesskit-base
-RUN git clone https://github.com/rootless-containers/rootlesskit.git /go/src/github.com/rootless-containers/rootlesskit
-WORKDIR /go/src/github.com/rootless-containers/rootlesskit
-
-FROM rootlesskit-base as rootlesskit
-ARG ROOTLESSKIT_VERSION
-# mitigate https://github.com/moby/moby/pull/35456
-ENV GOOS=linux
-RUN git checkout -q "$ROOTLESSKIT_VERSION" \
-&& go build -o /rootlesskit ./cmd/rootlesskit
 
 FROM unit-tests AS integration-tests
-ENV BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR="1000:1000"
 RUN apk add --no-cache shadow shadow-uidmap sudo iptables \
   && useradd --create-home --home-dir /home/user --uid 1000 -s /bin/sh user \
   && echo "XDG_RUNTIME_DIR=/run/user/1000; export XDG_RUNTIME_DIR" >> /home/user/.profile \
@@ -98,7 +87,6 @@ COPY --from=containerd10 /go/src/github.com/containerd/containerd/bin/containerd
 COPY --from=buildctl /usr/bin/buildctl /usr/bin/
 COPY --from=buildkitd /usr/bin/buildkitd /usr/bin
 COPY --from=registry /bin/registry /usr/bin
-COPY --from=rootlesskit /rootlesskit /usr/bin/
 
 FROM buildkit-base AS cross-windows
 ENV GOOS=windows
@@ -142,21 +130,7 @@ VOLUME /var/lib/containerd
 VOLUME /run/containerd
 ENTRYPOINT ["containerd"]
 
-# Rootless mode.
-# Still requires `--privileged`.
-FROM buildkit-buildkitd AS rootless
-RUN apk add --no-cache shadow shadow-uidmap \
-  && useradd --create-home --home-dir /home/user --uid 1000 user \
-  && mkdir -p /run/user/1000 /home/user/.local/tmp /home/user/.local/share/buildkit \
-  && chown -R user /run/user/1000 /home/user
-COPY --from=rootlesskit /rootlesskit /usr/bin/
-USER user
-ENV HOME /home/user
-ENV USER user
-ENV XDG_RUNTIME_DIR=/run/user/1000
-ENV TMPDIR=/home/user/.local/tmp
-VOLUME /home/user/.local/share/buildkit
-ENTRYPOINT ["rootlesskit", "buildkitd"]
+
 
 FROM buildkit-${BUILDKIT_TARGET}
 

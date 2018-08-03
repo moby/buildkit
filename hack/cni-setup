@@ -1,0 +1,58 @@
+#!/bin/bash
+
+#Install CNI default plugins
+function install_cni() {
+    wget https://github.com/containernetworking/plugins/releases/download/v0.7.1/cni-plugins-amd64-v0.7.1.tgz
+    mkdir -p /opt/cni/bin
+    tar vxf cni-plugins-amd64-v0.7.1.tgz -C /opt/cni/bin
+    return $?
+}
+
+#install bridge and loopback configs
+function install_cni_configs() {
+    BRIDGE_CONFIG="/etc/cni/net.d/bridge-buildkit.conf"
+    LOOPBACK_CONFIG="/etc/cni/net.d/99-loopback-buildkit.conf"
+    sudo mkdir -p /etc/cni/net.d
+    sudo tee $BRIDGE_CONFIG <<EOM 
+{
+	"cniVersion": "0.3.0",
+	"name": "buildkit",
+	"type": "bridge",
+	"bridge": "cni0",
+	"isGateway": true,
+	"ipMasq": true,
+	"ipam": {
+		"type": "host-local",
+		"subnet": "10.22.0.0/16",
+		"routes": [
+			{ "dst": "0.0.0.0/0" }
+		]
+	}
+}
+EOM
+
+    sudo tee $LOOPBACK_CONFIG <<EOM
+{
+	"cniVersion": "0.3.0",
+	"type": "loopback"
+}
+EOM
+
+}
+
+#Check if CNI is installed in standard folders.
+if [ ! -d "/opt/cni/bin/" ]; then
+    sudo sysctl net.ipv4.conf.all.forwarding=1
+    sudo iptables -P FORWARD ACCEPT
+    install_cni  
+    if [ $? -eq 0 ]; then
+        echo "CNI plugins installed successfully"
+    fi
+    install_cni_configs
+    if [ $? -eq 0 ]; then
+        echo "CNI configuration installed"
+    fi
+else   
+    echo "CNI already installed.. Skipping.."
+fi
+
