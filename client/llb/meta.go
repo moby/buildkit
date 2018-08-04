@@ -7,6 +7,7 @@ import (
 
 	"github.com/containerd/containerd/platforms"
 	"github.com/google/shlex"
+	"github.com/moby/buildkit/solver/pb"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
@@ -19,6 +20,7 @@ var (
 	keyUser      = contextKeyT("llb.exec.user")
 	keyExtraHost = contextKeyT("llb.exec.extrahost")
 	keyPlatform  = contextKeyT("llb.platform")
+	keyNetwork   = contextKeyT("llb.network")
 )
 
 func addEnv(key, value string) StateOption {
@@ -143,6 +145,21 @@ func getExtraHosts(s State) []HostIP {
 type HostIP struct {
 	Host string
 	IP   net.IP
+}
+
+func network(v pb.NetMode) StateOption {
+	return func(s State) State {
+		return s.WithValue(keyNetwork, v)
+	}
+}
+
+func getNetwork(s State) pb.NetMode {
+	v := s.Value(keyNetwork)
+	if v != nil {
+		n := v.(pb.NetMode)
+		return n
+	}
+	return NetModeSandbox
 }
 
 type EnvList []KeyValue

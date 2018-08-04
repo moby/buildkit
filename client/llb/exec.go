@@ -17,6 +17,7 @@ type Meta struct {
 	User       string
 	ProxyEnv   *ProxyEnv
 	ExtraHosts []HostIP
+	Network    pb.NetMode
 }
 
 func NewExecOp(root Output, meta Meta, readOnly bool, c Constraints) *ExecOp {
@@ -144,7 +145,11 @@ func (e *ExecOp) Marshal(c *Constraints) (digest.Digest, []byte, *pb.OpMetadata,
 	}
 
 	peo := &pb.ExecOp{
-		Meta: meta,
+		Meta:    meta,
+		Network: e.meta.Network,
+	}
+	if e.meta.Network != NetModeSandbox {
+		addCap(&e.constraints, pb.CapExecMetaNetwork)
 	}
 
 	if p := e.meta.ProxyEnv; p != nil {
@@ -357,6 +362,12 @@ func (fn runOptionFunc) SetRunOption(ei *ExecInfo) {
 	fn(ei)
 }
 
+func Network(n pb.NetMode) RunOption {
+	return runOptionFunc(func(ei *ExecInfo) {
+		ei.State = network(n)(ei.State)
+	})
+}
+
 func Shlex(str string) RunOption {
 	return Shlexf(str)
 }
@@ -508,4 +519,10 @@ const (
 	CacheMountShared CacheMountSharingMode = iota
 	CacheMountPrivate
 	CacheMountLocked
+)
+
+const (
+	NetModeSandbox = pb.NetMode_UNSET
+	NetModeHost    = pb.NetMode_HOST
+	NetModeNone    = pb.NetMode_NONE
 )

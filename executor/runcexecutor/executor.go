@@ -22,6 +22,7 @@ import (
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/executor/oci"
 	"github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/network"
 	rootlessspecconv "github.com/moby/buildkit/util/rootless/specconv"
 	"github.com/moby/buildkit/util/system"
@@ -106,16 +107,20 @@ func New(opt Opt, networkProvider network.Provider) (executor.Executor, error) {
 }
 
 func (w *runcExecutor) Exec(ctx context.Context, meta executor.Meta, root cache.Mountable, mounts []executor.Mount, stdin io.ReadCloser, stdout, stderr io.WriteCloser) error {
-	hostNetworkEnabled := true
 	var iface network.Interface
-	if w.networkProvider != nil {
-		var err error
-		iface, err = w.networkProvider.NewInterface()
-		if err == nil && iface != nil {
-			hostNetworkEnabled = false
+	// FIXME: still uses host if no provider configured
+	if meta.NetMode == pb.NetMode_UNSET {
+		if w.networkProvider != nil {
+			var err error
+			iface, err = w.networkProvider.NewInterface()
+			if err != nil || iface == nil {
+				meta.NetMode = pb.NetMode_HOST
+			}
+		} else {
+			meta.NetMode = pb.NetMode_HOST
 		}
 	}
-	if hostNetworkEnabled {
+	if meta.NetMode == pb.NetMode_HOST {
 		logrus.Info("enabling HostNetworking")
 	}
 	defer func() {
@@ -182,7 +187,7 @@ func (w *runcExecutor) Exec(ctx context.Context, meta executor.Meta, root cache.
 	if meta.ReadonlyRootFS {
 		opts = append(opts, containerdoci.WithRootFSReadonly())
 	}
-	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, hostNetworkEnabled, opts...)
+	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, meta.NetMode == pb.NetMode_HOST, opts...)
 	if err != nil {
 		return err
 	}

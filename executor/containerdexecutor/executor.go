@@ -15,6 +15,7 @@ import (
 	"github.com/moby/buildkit/executor/oci"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/snapshot"
+	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/network"
 	"github.com/moby/buildkit/util/system"
 	"github.com/pkg/errors"
@@ -78,17 +79,27 @@ func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root c
 		lm.Unmount()
 	}
 
-	hostNetworkEnabled := true
 	var iface network.Interface
-	if w.networkProvider != nil {
-		iface, err = w.networkProvider.NewInterface()
-		if err == nil && iface != nil {
-			hostNetworkEnabled = false
+	// FIXME: still uses host if no provider configured
+	if meta.NetMode == pb.NetMode_UNSET {
+		if w.networkProvider != nil {
+			var err error
+			iface, err = w.networkProvider.NewInterface()
+			if err != nil || iface == nil {
+				meta.NetMode = pb.NetMode_HOST
+			}
+		} else {
+			meta.NetMode = pb.NetMode_HOST
 		}
 	}
-	if hostNetworkEnabled {
+	if meta.NetMode == pb.NetMode_HOST {
 		logrus.Info("enabling HostNetworking")
 	}
+	defer func() {
+		if iface != nil {
+			w.networkProvider.Release(iface)
+		}
+	}()
 
 	opts := []containerdoci.SpecOpts{oci.WithUIDGID(uid, gid, sgids)}
 	if meta.ReadonlyRootFS {
@@ -97,7 +108,7 @@ func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root c
 	if system.SeccompSupported() {
 		opts = append(opts, seccomp.WithDefaultProfile())
 	}
-	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, hostNetworkEnabled, opts...)
+	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, meta.NetMode == pb.NetMode_HOST, opts...)
 	if err != nil {
 		return err
 	}
@@ -134,7 +145,6 @@ func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root c
 	defer func() {
 		if iface != nil {
 			iface.Remove(int(task.Pid()))
-			w.networkProvider.Release(iface)
 		}
 
 		if _, err1 := task.Delete(context.TODO()); err == nil && err1 != nil {
