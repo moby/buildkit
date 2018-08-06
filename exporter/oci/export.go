@@ -80,8 +80,8 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 		default:
 			if i.meta == nil {
 				i.meta = make(map[string][]byte)
-				i.meta[k] = []byte(v)
 			}
+			i.meta[k] = []byte(v)
 		}
 	}
 	if ot == nil {
