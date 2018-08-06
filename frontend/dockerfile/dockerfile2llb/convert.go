@@ -52,6 +52,7 @@ type ConvertOpt struct {
 	TargetPlatform   *specs.Platform
 	BuildPlatforms   []specs.Platform
 	PrefixPlatform   bool
+	ExtraHosts       []llb.HostIP
 }
 
 func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State, *Image, error) {
@@ -294,6 +295,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 			cacheIDNamespace:  opt.CacheIDNamespace,
 			buildPlatforms:    platformOpt.buildPlatforms,
 			targetPlatform:    platformOpt.targetPlatform,
+			extraHosts:        opt.ExtraHosts,
 		}
 
 		if err = dispatchOnBuild(d, d.image.Config.OnBuild, opt); err != nil {
@@ -397,6 +399,7 @@ type dispatchOpt struct {
 	cacheIDNamespace  string
 	targetPlatform    specs.Platform
 	buildPlatforms    []specs.Platform
+	extraHosts        []llb.HostIP
 }
 
 func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
@@ -584,6 +587,9 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 	}
 	opt = append(opt, runMounts...)
 	opt = append(opt, llb.WithCustomName(prefixCommand(d, uppercaseCmd(processCmdEnv(dopt.shlex, c.String(), d.state.Run(opt...).Env())), d.prefixPlatform, d.state.GetPlatform())))
+	for _, h := range dopt.extraHosts {
+		opt = append(opt, llb.AddExtraHost(h.Host, h.IP))
+	}
 	d.state = d.state.Run(opt...).Root()
 	return commitToHistory(&d.image, "RUN "+runCommandString(args, d.buildArgs), true, &d.state)
 }

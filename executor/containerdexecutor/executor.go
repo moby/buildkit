@@ -39,9 +39,12 @@ func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root c
 		return err
 	}
 
-	hostsFile, err := oci.GetHostsFile(ctx, w.root)
+	hostsFile, clean, err := oci.GetHostsFile(ctx, w.root, meta.ExtraHosts)
 	if err != nil {
 		return err
+	}
+	if clean != nil {
+		defer clean()
 	}
 
 	mountable, err := root.Mount(ctx, false)

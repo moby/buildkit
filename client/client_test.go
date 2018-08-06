@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -59,7 +60,25 @@ func TestClientIntegration(t *testing.T) {
 		testDuplicateCacheMount,
 		testParallelLocalBuilds,
 		testSecretMounts,
+		testExtraHosts,
 	})
+}
+
+func testExtraHosts(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Image("busybox:latest").
+		Run(llb.Shlex(`sh -c 'cat /etc/hosts | grep myhost | grep 1.2.3.4'`), llb.AddExtraHost("myhost", net.ParseIP("1.2.3.4")))
+
+	def, err := st.Marshal()
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	require.NoError(t, err)
 }
 
 func testSecretMounts(t *testing.T, sb integration.Sandbox) {

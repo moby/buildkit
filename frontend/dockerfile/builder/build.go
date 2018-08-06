@@ -4,8 +4,10 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"net"
 	"regexp"
 	"strconv"
 	"strings"
@@ -36,6 +38,7 @@ const (
 	keyTargetPlatform     = "platform"
 	keyMultiPlatform      = "multi-platform"
 	keyImageResolveMode   = "image-resolve-mode"
+	keyGlobalAddHosts     = "add-hosts"
 )
 
 var httpPrefix = regexp.MustCompile("^https?://")
@@ -62,6 +65,11 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 	resolveMode, err := parseResolveMode(opts[keyImageResolveMode])
 	if err != nil {
 		return nil, err
+	}
+
+	extraHosts, err := parseExtraHosts(opts[keyGlobalAddHosts])
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to parse additional hosts")
 	}
 
 	filename := opts[keyFilename]
@@ -250,6 +258,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 					BuildPlatforms:   buildPlatforms,
 					ImageResolveMode: resolveMode,
 					PrefixPlatform:   exportMap,
+					ExtraHosts:       extraHosts,
 				})
 
 				if err != nil {
@@ -412,4 +421,30 @@ func parseResolveMode(v string) (llb.ResolveMode, error) {
 	default:
 		return 0, errors.Errorf("invalid image-resolve-mode: %s", v)
 	}
+}
+
+func parseExtraHosts(v string) ([]llb.HostIP, error) {
+	if v == "" {
+		return nil, nil
+	}
+	out := make([]llb.HostIP, 0)
+	csvReader := csv.NewReader(strings.NewReader(v))
+	fields, err := csvReader.Read()
+	if err != nil {
+		return nil, err
+	}
+	for _, field := range fields {
+		parts := strings.SplitN(field, "=", 2)
+		if len(parts) != 2 {
+			return nil, errors.Errorf("invalid key-value pair %s", field)
+		}
+		key := strings.ToLower(parts[0])
+		val := strings.ToLower(parts[1])
+		ip := net.ParseIP(val)
+		if ip == nil {
+			return nil, errors.Errorf("failed to parse IP %s", val)
+		}
+		out = append(out, llb.HostIP{Host: key, IP: ip})
+	}
+	return out, nil
 }
