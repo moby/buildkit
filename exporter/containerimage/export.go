@@ -99,6 +99,9 @@ func (e *imageExporterInstance) Name() string {
 }
 
 func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source) (map[string]string, error) {
+	if src.Metadata == nil {
+		src.Metadata = make(map[string][]byte)
+	}
 	for k, v := range e.meta {
 		src.Metadata[k] = v
 	}
