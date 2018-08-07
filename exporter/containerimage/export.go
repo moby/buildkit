@@ -3,6 +3,7 @@ package containerimage
 import (
 	"context"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/containerd/containerd/errdefs"
@@ -115,28 +116,31 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 	}()
 
 	if e.targetName != "" {
-		if e.opt.Images != nil {
-			tagDone := oneOffProgress(ctx, "naming to "+e.targetName)
-			img := images.Image{
-				Name:      e.targetName,
-				Target:    *desc,
-				CreatedAt: time.Now(),
-			}
-
-			if _, err := e.opt.Images.Update(ctx, img); err != nil {
-				if !errdefs.IsNotFound(err) {
-					return nil, tagDone(err)
+		targetNames := strings.Split(e.targetName, ",")
+		for _, targetName := range targetNames {
+			if e.opt.Images != nil {
+				tagDone := oneOffProgress(ctx, "naming to "+targetName)
+				img := images.Image{
+					Name:      targetName,
+					Target:    *desc,
+					CreatedAt: time.Now(),
 				}
 
-				if _, err := e.opt.Images.Create(ctx, img); err != nil {
-					return nil, tagDone(err)
+				if _, err := e.opt.Images.Update(ctx, img); err != nil {
+					if !errdefs.IsNotFound(err) {
+						return nil, tagDone(err)
+					}
+
+					if _, err := e.opt.Images.Create(ctx, img); err != nil {
+						return nil, tagDone(err)
+					}
 				}
+				tagDone(nil)
 			}
-			tagDone(nil)
-		}
-		if e.push {
-			if err := push.Push(ctx, e.opt.SessionManager, e.opt.ImageWriter.ContentStore(), desc.Digest, e.targetName, e.insecure); err != nil {
-				return nil, err
+			if e.push {
+				if err := push.Push(ctx, e.opt.SessionManager, e.opt.ImageWriter.ContentStore(), desc.Digest, targetName, e.insecure); err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
