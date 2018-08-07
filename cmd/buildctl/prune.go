@@ -15,6 +15,14 @@ var pruneCommand = cli.Command{
 	Usage:  "clean up build cache",
 	Action: prune,
 	Flags: []cli.Flag{
+		cli.DurationFlag{
+			Name:  "keep-duration",
+			Usage: "Keep data newer than this limit",
+		},
+		cli.Float64Flag{
+			Name:  "keep-storage",
+			Usage: "Keep data below this limit (in MB)",
+		},
 		cli.StringSliceFlag{
 			Name:  "filter, f",
 			Usage: "Filter records",
@@ -60,7 +68,10 @@ func prune(clicontext *cli.Context) error {
 		}
 	}()
 
-	opts := []client.PruneOption{client.WithFilter(clicontext.StringSlice("filter"))}
+	opts := []client.PruneOption{
+		client.WithFilter(clicontext.StringSlice("filter")),
+		client.WithKeepOpt(clicontext.Duration("keep-duration"), int64(clicontext.Float64("keep-storage")*1e6)),
+	}
 
 	if clicontext.Bool("all") {
 		opts = append(opts, client.PruneAll)

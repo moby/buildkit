@@ -2,6 +2,7 @@ package control
 
 import (
 	"context"
+	"time"
 
 	"github.com/docker/distribution/reference"
 	controlapi "github.com/moby/buildkit/api/services/control"
@@ -120,8 +121,10 @@ func (c *Controller) Prune(req *controlapi.PruneRequest, stream controlapi.Contr
 		func(w worker.Worker) {
 			eg.Go(func() error {
 				return w.Prune(ctx, ch, client.PruneInfo{
-					Filter: req.Filter,
-					All:    req.All,
+					Filter:       req.Filter,
+					All:          req.All,
+					KeepDuration: time.Duration(req.KeepDuration),
+					KeepBytes:    req.KeepBytes,
 				})
 			})
 		}(w)
