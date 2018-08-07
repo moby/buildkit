@@ -191,7 +191,7 @@ func (bf *BFlags) Parse() error {
 			flag.StringValues = append(flag.StringValues, value)
 
 		default:
-			panic("No idea what kind of flag we have! Should never get here!")
+			return fmt.Errorf("invalid flag type %v", flag.flagType)
 		}
 
 	}

@@ -170,7 +170,7 @@ func TestErrorCases(t *testing.T) {
 		},
 		{
 			name:          "MAINTAINER unknown flag",
-			dockerfile:    "MAINTAINER --boo joe@example.com",
+			dockerfile:    "MAINTAINER --boo=ba joe@example.com",
 			expectedError: "Unknown flag: boo",
 		},
 		{

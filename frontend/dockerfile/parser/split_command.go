@@ -37,10 +37,12 @@ func extractBuilderFlags(line string) (string, []string, error) {
 
 	words := []string{}
 	phase := inSpaces
-	word := ""
+	var word strings.Builder
 	quote := '\000'
 	blankOK := false
 	var ch rune
+	parsingFlagArg := false
+	needFlagArg := true
 
 	for pos := 0; pos <= len(line); pos++ {
 		if pos != len(line) {
@@ -55,31 +57,43 @@ func extractBuilderFlags(line string) (string, []string, error) {
 				continue
 			}
 
-			// Only keep going if the next word starts with --
-			if ch != '-' || pos+1 == len(line) || rune(line[pos+1]) != '-' {
+			// Only keep going if the next word starts with -- or if we're parsing a flag argument
+			if !parsingFlagArg && (ch != '-' || pos+1 == len(line) || rune(line[pos+1]) != '-') {
 				return line[pos:], words, nil
 			}
 
 			phase = inWord // found something with "--", fall through
 		}
 		if (phase == inWord || phase == inQuote) && (pos == len(line)) {
-			if word != "--" && (blankOK || len(word) > 0) {
-				words = append(words, word)
+			if word.String() != "--" && (blankOK || word.Len() > 0) {
+				words = append(words, word.String())
 			}
 			break
 		}
 		if phase == inWord {
 			if unicode.IsSpace(ch) {
 				phase = inSpaces
-				if word == "--" {
-					return line[pos:], words, nil
+				if parsingFlagArg {
+					words[len(words)-1] += "=" + word.String()
+					parsingFlagArg = false
+					needFlagArg = true
+				} else {
+					if word.String() == "--" {
+						return line[pos:], words, nil
+					}
+					if blankOK || word.Len() > 0 {
+						if needFlagArg {
+							parsingFlagArg = true
+						}
+						words = append(words, word.String())
+					}
 				}
-				if blankOK || len(word) > 0 {
-					words = append(words, word)
-				}
-				word = ""
+				word.Reset()
 				blankOK = false
 				continue
+			}
+			if ch == '=' && needFlagArg {
+				needFlagArg = false
 			}
 			if ch == '\'' || ch == '"' {
 				quote = ch
@@ -94,7 +108,7 @@ func extractBuilderFlags(line string) (string, []string, error) {
 				pos++
 				ch = rune(line[pos])
 			}
-			word += string(ch)
+			word.WriteRune(ch)
 			continue
 		}
 		if phase == inQuote {
@@ -110,7 +124,7 @@ func extractBuilderFlags(line string) (string, []string, error) {
 				pos++
 				ch = rune(line[pos])
 			}
-			word += string(ch)
+			word.WriteRune(ch)
 		}
 	}
 
