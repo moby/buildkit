@@ -82,19 +82,18 @@ func (s *Solver) Bridge(b solver.Builder) frontend.FrontendLLBBridge {
 }
 
 func (s *Solver) Solve(ctx context.Context, id string, req frontend.SolveRequest, exp ExporterRequest, ent []entitlements.Entitlement) (*client.SolveResponse, error) {
-	set, err := entitlements.WhiteList(ent, supportedEntitlements())
-	if err != nil {
-		return nil, err
-	}
-
 	j, err := s.solver.NewJob(id)
 	if err != nil {
 		return nil, err
 	}
 
-	j.SetValue(keyEntitlements, set)
-
 	defer j.Discard()
+
+	set, err := entitlements.WhiteList(ent, supportedEntitlements())
+	if err != nil {
+		return nil, err
+	}
+	j.SetValue(keyEntitlements, set)
 
 	j.SessionID = session.FromContext(ctx)
 
@@ -177,6 +176,7 @@ func (s *Solver) Solve(ctx context.Context, id string, req frontend.SolveRequest
 func (s *Solver) Status(ctx context.Context, id string, statusChan chan *client.SolveStatus) error {
 	j, err := s.solver.Get(id)
 	if err != nil {
+		close(statusChan)
 		return err
 	}
 	return j.Status(ctx, statusChan)

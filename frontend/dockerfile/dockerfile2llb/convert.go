@@ -22,6 +22,7 @@ import (
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"github.com/moby/buildkit/frontend/dockerfile/shell"
 	gw "github.com/moby/buildkit/frontend/gateway/client"
+	"github.com/moby/buildkit/solver/pb"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -53,6 +54,7 @@ type ConvertOpt struct {
 	BuildPlatforms   []specs.Platform
 	PrefixPlatform   bool
 	ExtraHosts       []llb.HostIP
+	ForceNetMode     pb.NetMode
 }
 
 func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State, *Image, error) {
@@ -283,6 +285,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 				return nil, nil, err
 			}
 		}
+		d.state = d.state.Network(opt.ForceNetMode)
 
 		opt := dispatchOpt{
 			allDispatchStates: allDispatchStates,

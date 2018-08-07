@@ -15,6 +15,7 @@ import (
 	"github.com/moby/buildkit/session/auth/authprovider"
 	"github.com/moby/buildkit/session/secrets/secretsprovider"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/entitlements"
 	"github.com/moby/buildkit/util/progress/progressui"
 	"github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
@@ -75,6 +76,10 @@ var buildCommand = cli.Command{
 		cli.StringSliceFlag{
 			Name:  "secret",
 			Usage: "Secret value exposed to the build. Format id=secretname,src=filepath",
+		},
+		cli.StringSliceFlag{
+			Name:  "allow",
+			Usage: "Allow extra privileged entitlement, e.g. network.host, security.unconfined",
 		},
 	},
 }
@@ -138,6 +143,11 @@ func build(clicontext *cli.Context) error {
 		attachable = append(attachable, secretProvider)
 	}
 
+	allowed, err := parseEntitlements(clicontext.StringSlice("allow"))
+	if err != nil {
+		return err
+	}
+
 	ch := make(chan *client.SolveStatus)
 	eg, ctx := errgroup.WithContext(commandContext(clicontext))
 
@@ -147,9 +157,10 @@ func build(clicontext *cli.Context) error {
 		// LocalDirs is set later
 		Frontend: clicontext.String("frontend"),
 		// FrontendAttrs is set later
-		ExportCache: clicontext.String("export-cache"),
-		ImportCache: clicontext.StringSlice("import-cache"),
-		Session:     attachable,
+		ExportCache:         clicontext.String("export-cache"),
+		ImportCache:         clicontext.StringSlice("import-cache"),
+		Session:             attachable,
+		AllowedEntitlements: allowed,
 	}
 	solveOpt.ExporterAttrs, err = attrMap(clicontext.StringSlice("exporter-opt"))
 	if err != nil {
@@ -327,4 +338,16 @@ func resolveExporterOutput(exporter, output string) (io.WriteCloser, string, err
 		}
 		return nil, "", nil
 	}
+}
+
+func parseEntitlements(inp []string) ([]entitlements.Entitlement, error) {
+	ent := make([]entitlements.Entitlement, 0, len(inp))
+	for _, v := range inp {
+		e, err := entitlements.Parse(v)
+		if err != nil {
+			return nil, err
+		}
+		ent = append(ent, e)
+	}
+	return ent, nil
 }
