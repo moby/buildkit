@@ -85,14 +85,19 @@ func RunFromEnvironment(ctx context.Context, f client.BuildFunc) error {
 }
 
 func (c *grpcClient) Run(ctx context.Context, f client.BuildFunc) (retError error) {
-	res, err := f(ctx, c)
-
 	export := c.caps.Supports(pb.CapReturnResult) == nil
 
+	var (
+		res *client.Result
+		err error
+	)
 	if export {
 		defer func() {
 			req := &pb.ReturnRequest{}
 			if retError == nil {
+				if res == nil {
+					res = &client.Result{}
+				}
 				pbRes := &pb.Result{
 					Metadata: res.Metadata,
 				}
@@ -134,7 +139,7 @@ func (c *grpcClient) Run(ctx context.Context, f client.BuildFunc) (retError erro
 		}()
 	}
 
-	if err != nil {
+	if res, err = f(ctx, c); err != nil {
 		return err
 	}
 
