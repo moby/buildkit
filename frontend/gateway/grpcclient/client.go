@@ -244,10 +244,12 @@ func (c *grpcClient) requestForRef(ref client.Reference) (*pb.SolveRequest, erro
 }
 
 func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (*client.Result, error) {
-	for _, md := range creq.Definition.Metadata {
-		for cap := range md.Caps {
-			if err := c.llbCaps.Supports(cap); err != nil {
-				return nil, err
+	if creq.Definition != nil {
+		for _, md := range creq.Definition.Metadata {
+			for cap := range md.Caps {
+				if err := c.llbCaps.Supports(cap); err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
