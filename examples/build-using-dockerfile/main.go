@@ -92,7 +92,7 @@ func action(clicontext *cli.Context) error {
 			c = cn
 		}
 		// not using shared context to not disrupt display but let is finish reporting errors
-		return progressui.DisplaySolveStatus(context.TODO(), c, os.Stdout, ch)
+		return progressui.DisplaySolveStatus(context.TODO(), "", c, os.Stdout, ch)
 	})
 	eg.Go(func() error {
 		if err := loadDockerTar(pipeR); err != nil {
