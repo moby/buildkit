@@ -112,7 +112,7 @@ func TestRuncWorker(t *testing.T) {
 	root, err := w.CacheManager.New(ctx, snap)
 	require.NoError(t, err)
 
-	err = w.Executor.Exec(ctx, meta, root, nil, nil, nil, nil)
+	err = w.Executor.Exec(ctx, meta, root, nil, nil, nil, &nopCloser{stderr})
 	require.NoError(t, err)
 
 	meta = executor.Meta{

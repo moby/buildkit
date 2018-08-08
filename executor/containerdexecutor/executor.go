@@ -15,19 +15,23 @@ import (
 	"github.com/moby/buildkit/executor/oci"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/snapshot"
+	"github.com/moby/buildkit/util/network"
 	"github.com/moby/buildkit/util/system"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 type containerdExecutor struct {
-	client *containerd.Client
-	root   string
+	client          *containerd.Client
+	root            string
+	networkProvider network.Provider
 }
 
-func New(client *containerd.Client, root string) executor.Executor {
+func New(client *containerd.Client, root string, networkProvider network.Provider) executor.Executor {
 	return containerdExecutor{
-		client: client,
-		root:   root,
+		client:          client,
+		root:            root,
+		networkProvider: networkProvider,
 	}
 }
 
@@ -74,6 +78,18 @@ func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root c
 		lm.Unmount()
 	}
 
+	hostNetworkEnabled := true
+	var iface network.Interface
+	if w.networkProvider != nil {
+		iface, err = w.networkProvider.NewInterface()
+		if err == nil && iface != nil {
+			hostNetworkEnabled = false
+		}
+	}
+	if hostNetworkEnabled {
+		logrus.Info("enabling HostNetworking")
+	}
+
 	opts := []containerdoci.SpecOpts{oci.WithUIDGID(uid, gid, sgids)}
 	if meta.ReadonlyRootFS {
 		opts = append(opts, containerdoci.WithRootFSReadonly())
@@ -81,7 +97,7 @@ func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root c
 	if system.SeccompSupported() {
 		opts = append(opts, seccomp.WithDefaultProfile())
 	}
-	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, opts...)
+	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, hostNetworkEnabled, opts...)
 	if err != nil {
 		return err
 	}
@@ -108,13 +124,23 @@ func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root c
 	if err != nil {
 		return err
 	}
+
+	if iface != nil {
+		if err := iface.Set(int(task.Pid())); err != nil {
+			return errors.Wrap(err, "could not set the network")
+		}
+	}
+
 	defer func() {
+		if iface != nil {
+			iface.Remove(int(task.Pid()))
+			w.networkProvider.Release(iface)
+		}
+
 		if _, err1 := task.Delete(context.TODO()); err == nil && err1 != nil {
 			err = errors.Wrapf(err1, "failed to delete task %s", id)
 		}
 	}()
-
-	// TODO: Configure bridge networking
 
 	if err := task.Start(ctx); err != nil {
 		return err
