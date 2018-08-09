@@ -22,7 +22,11 @@ import (
 
 const frontendPrefix = "BUILDKIT_FRONTEND_OPT_"
 
-func New(ctx context.Context, opts map[string]string, session, product string, c pb.LLBBridgeClient, w []client.WorkerInfo) (*grpcClient, error) {
+type GrpcClient interface {
+	Run(context.Context, client.BuildFunc) error
+}
+
+func New(ctx context.Context, opts map[string]string, session, product string, c pb.LLBBridgeClient, w []client.WorkerInfo) (GrpcClient, error) {
 	resp, err := c.Ping(ctx, &pb.PingRequest{})
 	if err != nil {
 		return nil, err
@@ -48,7 +52,7 @@ func New(ctx context.Context, opts map[string]string, session, product string, c
 	}, nil
 }
 
-func current() (*grpcClient, error) {
+func current() (GrpcClient, error) {
 	if ep := product(); ep != "" {
 		apicaps.ExportedProduct = ep
 	}
