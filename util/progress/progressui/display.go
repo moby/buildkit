@@ -16,12 +16,16 @@ import (
 	"golang.org/x/time/rate"
 )
 
-func DisplaySolveStatus(ctx context.Context, c console.Console, w io.Writer, ch chan *client.SolveStatus) error {
+func DisplaySolveStatus(ctx context.Context, phase string, c console.Console, w io.Writer, ch chan *client.SolveStatus) error {
 
 	modeConsole := c != nil
 
-	disp := &display{c: c}
+	disp := &display{c: c, phase: phase}
 	printer := &textMux{w: w}
+
+	if disp.phase == "" {
+		disp.phase = "Building"
+	}
 
 	t := newTrace(w)
 
@@ -323,6 +327,7 @@ func addTime(tm *time.Time, d time.Duration) *time.Time {
 
 type display struct {
 	c         console.Console
+	phase     string
 	lineCount int
 	repeated  bool
 }
@@ -359,7 +364,7 @@ func (disp *display) print(d displayInfo, all bool) {
 	fmt.Fprint(disp.c, aec.Hide)
 	defer fmt.Fprint(disp.c, aec.Show)
 
-	out := fmt.Sprintf("[+] Building %.1fs (%d/%d) %s", time.Since(d.startTime).Seconds(), d.countCompleted, d.countTotal, statusStr)
+	out := fmt.Sprintf("[+] %s %.1fs (%d/%d) %s", disp.phase, time.Since(d.startTime).Seconds(), d.countCompleted, d.countTotal, statusStr)
 	out = align(out, "", width)
 	fmt.Fprintln(disp.c, out)
 	lineCount := 0
