@@ -15,10 +15,11 @@ import (
 )
 
 const (
-	keyImageName = "name"
-	keyPush      = "push"
-	keyInsecure  = "registry.insecure"
-	ociTypes     = "oci-mediatypes"
+	keyImageName         = "name"
+	keyImageNameTemplate = "name.template"
+	keyPush              = "push"
+	keyInsecure          = "registry.insecure"
+	ociTypes             = "oci-mediatypes"
 )
 
 type Opt struct {
@@ -46,6 +47,8 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 		switch k {
 		case keyImageName:
 			i.targetName = v
+		case keyImageNameTemplate:
+			i.targetTmpl = v
 		case keyPush:
 			if v == "" {
 				i.push = true
@@ -89,6 +92,7 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 type imageExporterInstance struct {
 	*imageExporter
 	targetName string
+	targetTmpl string
 	push       bool
 	insecure   bool
 	ociTypes   bool
@@ -114,6 +118,13 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 	defer func() {
 		e.opt.ImageWriter.ContentStore().Delete(context.TODO(), desc.Digest)
 	}()
+
+	if e.targetName == "" && e.targetTmpl != "" {
+		e.targetName, err = exporter.ResolveNameTemplate(e.targetTmpl, src.Metadata)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	if e.targetName != "" {
 		targetNames := strings.Split(e.targetName, ",")

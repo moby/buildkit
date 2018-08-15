@@ -21,10 +21,11 @@ import (
 type ExporterVariant string
 
 const (
-	keyImageName  = "name"
-	VariantOCI    = "oci"
-	VariantDocker = "docker"
-	ociTypes      = "oci-mediatypes"
+	keyImageName         = "name"
+	keyImageNameTemplate = "name.template"
+	VariantOCI           = "oci"
+	VariantDocker        = "docker"
+	ociTypes             = "oci-mediatypes"
 )
 
 type Opt struct {
@@ -40,6 +41,17 @@ type imageExporter struct {
 func New(opt Opt) (exporter.Exporter, error) {
 	im := &imageExporter{opt: opt}
 	return im, nil
+}
+
+func normalize(name string) (string, error) {
+	if name == "" {
+		return "", nil
+	}
+	parsed, err := reference.ParseNormalizedNamed(name)
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to parse %s", name)
+	}
+	return reference.TagNameOnly(parsed).String(), nil
 }
 
 func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exporter.ExporterInstance, error) {
@@ -61,11 +73,12 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 	for k, v := range opt {
 		switch k {
 		case keyImageName:
-			parsed, err := reference.ParseNormalizedNamed(v)
+			i.name, err = normalize(v)
 			if err != nil {
-				return nil, errors.Wrapf(err, "failed to parse %s", v)
+				return nil, err
 			}
-			i.name = reference.TagNameOnly(parsed).String()
+		case keyImageNameTemplate:
+			i.nameTmpl = v
 		case ociTypes:
 			ot = new(bool)
 			if v == "" {
@@ -97,6 +110,7 @@ type imageExporterInstance struct {
 	meta     map[string][]byte
 	caller   session.Caller
 	name     string
+	nameTmpl string
 	ociTypes bool
 }
 
@@ -127,6 +141,16 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 		desc.Annotations = map[string]string{}
 	}
 	desc.Annotations[ocispec.AnnotationCreated] = time.Now().UTC().Format(time.RFC3339)
+
+	if e.name == "" && e.nameTmpl != "" {
+		n, err := exporter.ResolveNameTemplate(e.nameTmpl, src.Metadata)
+		if err != nil {
+			return nil, err
+		}
+		if e.name, err = normalize(n); err != nil {
+			return nil, err
+		}
+	}
 
 	exp, err := getExporter(e.opt.Variant, e.name)
 	if err != nil {
