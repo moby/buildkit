@@ -42,6 +42,17 @@ func New(opt Opt) (exporter.Exporter, error) {
 	return im, nil
 }
 
+func normalize(name string) (string, error) {
+	if name == "" {
+		return "", nil
+	}
+	parsed, err := reference.ParseNormalizedNamed(name)
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to parse %s", name)
+	}
+	return reference.TagNameOnly(parsed).String(), nil
+}
+
 func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exporter.ExporterInstance, error) {
 	id := session.FromContext(ctx)
 	if id == "" {
@@ -61,11 +72,10 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 	for k, v := range opt {
 		switch k {
 		case keyImageName:
-			parsed, err := reference.ParseNormalizedNamed(v)
+			i.name, err = normalize(v)
 			if err != nil {
-				return nil, errors.Wrapf(err, "failed to parse %s", v)
+				return nil, err
 			}
-			i.name = reference.TagNameOnly(parsed).String()
 		case ociTypes:
 			ot = new(bool)
 			if v == "" {
@@ -127,6 +137,12 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 		desc.Annotations = map[string]string{}
 	}
 	desc.Annotations[ocispec.AnnotationCreated] = time.Now().UTC().Format(time.RFC3339)
+
+	if n, ok := src.Metadata["image.name"]; e.name == "" && ok {
+		if e.name, err = normalize(string(n)); err != nil {
+			return nil, err
+		}
+	}
 
 	exp, err := getExporter(e.opt.Variant, e.name)
 	if err != nil {

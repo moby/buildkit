@@ -22,6 +22,7 @@ import (
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/continuity/fs/fstest"
 	"github.com/moby/buildkit/client/llb"
+	gateway "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/secrets/secretsprovider"
@@ -45,6 +46,7 @@ func TestClientIntegration(t *testing.T) {
 		testUser,
 		testOCIExporter,
 		testWhiteoutParentDir,
+		testFrontendImageNameTemplating,
 		testDuplicateWhiteouts,
 		testSchema1Image,
 		testMountWithNoSource,
@@ -110,6 +112,133 @@ func testNetworkMode(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "network.host is not allowed")
+}
+
+func testFrontendImageNameTemplating(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	t.Parallel()
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	registry, err := sb.NewRegistry()
+	if errors.Cause(err) == integration.ErrorRequirements {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	checkImageName := map[string]func(out, imageName string){
+		ExporterOCI: func(out, imageName string) {
+			// Nothing to check
+			return
+		},
+		ExporterDocker: func(out, imageName string) {
+			dt, err := ioutil.ReadFile(out)
+			require.NoError(t, err)
+
+			m, err := testutil.ReadTarToMap(dt, false)
+			require.NoError(t, err)
+
+			_, ok := m["oci-layout"]
+			require.True(t, ok)
+
+			var index ocispec.Index
+			err = json.Unmarshal(m["index.json"].Data, &index)
+			require.NoError(t, err)
+			require.Equal(t, 2, index.SchemaVersion)
+			require.Equal(t, 1, len(index.Manifests))
+
+			var dockerMfst []struct {
+				RepoTags []string
+			}
+			err = json.Unmarshal(m["manifest.json"].Data, &dockerMfst)
+			require.NoError(t, err)
+			require.Equal(t, 1, len(dockerMfst))
+			require.Equal(t, 1, len(dockerMfst[0].RepoTags))
+			require.Equal(t, "docker.io/library/"+imageName, dockerMfst[0].RepoTags[0])
+		},
+		ExporterImage: func(_, imageName string) {
+			// check if we can pull (requires containerd)
+			var cdAddress string
+			if cd, ok := sb.(interface {
+				ContainerdAddress() string
+			}); !ok {
+				return
+			} else {
+				cdAddress = cd.ContainerdAddress()
+			}
+
+			// TODO: make public pull helper function so this can be checked for standalone as well
+
+			client, err := containerd.New(cdAddress)
+			require.NoError(t, err)
+			defer client.Close()
+
+			ctx := namespaces.WithNamespace(context.Background(), "buildkit")
+
+			// check image in containerd
+			_, err = client.ImageService().Get(ctx, imageName)
+			require.NoError(t, err)
+
+			// deleting image should release all content
+			err = client.ImageService().Delete(ctx, imageName, images.SynchronousDelete())
+			require.NoError(t, err)
+
+			checkAllReleasable(t, c, sb, true)
+
+			_, err = client.Pull(ctx, imageName)
+			require.NoError(t, err)
+
+			err = client.ImageService().Delete(ctx, imageName, images.SynchronousDelete())
+			require.NoError(t, err)
+		},
+	}
+
+	// ctrl takes precedence over fe
+	for _, winner := range []string{"fe", "ctrl"} {
+		for _, exp := range []string{ExporterOCI, ExporterDocker, ExporterImage} {
+			destDir, err := ioutil.TempDir("", "buildkit")
+			require.NoError(t, err)
+			defer os.RemoveAll(destDir)
+
+			so := SolveOpt{
+				Exporter:      exp,
+				ExporterAttrs: map[string]string{},
+			}
+
+			out := filepath.Join(destDir, "out.tar")
+
+			imageName := "image-" + exp + "-fe:latest"
+
+			switch exp {
+			case ExporterOCI, ExporterDocker:
+				outW, err := os.Create(out)
+				require.NoError(t, err)
+				so.ExporterOutput = outW
+			case ExporterImage:
+				imageName = registry + "/" + imageName
+				so.ExporterAttrs["push"] = "true"
+			}
+
+			feName := imageName
+			if winner == "ctrl" {
+				feName = "loser:latest"
+				so.ExporterAttrs["name"] = imageName
+			}
+			frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+				res := gateway.NewResult()
+				res.AddMeta("image.name", []byte(feName))
+				return res, nil
+			}
+
+			_, err = c.Build(context.TODO(), so, "", frontend, nil)
+			require.NoError(t, err)
+
+			checkImageName[exp](out, imageName)
+		}
+	}
+
+	checkAllReleasable(t, c, sb, true)
 }
 
 func testSecretMounts(t *testing.T, sb integration.Sandbox) {
