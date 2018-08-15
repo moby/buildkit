@@ -85,8 +85,7 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (res *
 		}
 
 		res = &frontend.Result{Ref: ref}
-	}
-	if req.Frontend != "" {
+	} else if req.Frontend != "" {
 		f, ok := b.frontends[req.Frontend]
 		if !ok {
 			return nil, errors.Errorf("invalid frontend: %s", req.Frontend)
