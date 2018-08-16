@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -22,6 +23,7 @@ import (
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/continuity/fs/fstest"
 	"github.com/moby/buildkit/client/llb"
+	gateway "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/secrets/secretsprovider"
@@ -33,6 +35,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
+
+type nopWriteCloser struct {
+	io.Writer
+}
+
+func (nopWriteCloser) Close() error { return nil }
 
 func TestClientIntegration(t *testing.T) {
 	integration.Run(t, []integration.Test{
@@ -62,6 +70,7 @@ func TestClientIntegration(t *testing.T) {
 		testSecretMounts,
 		testExtraHosts,
 		testNetworkMode,
+		testFrontendMetadataReturn,
 	})
 }
 
@@ -587,6 +596,34 @@ func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 		}
 	}
 
+	checkAllReleasable(t, c, sb, true)
+}
+
+func testFrontendMetadataReturn(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	t.Parallel()
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		res := gateway.NewResult()
+		res.AddMeta("frontend.returned", []byte("true"))
+		res.AddMeta("not-frontend.not-returned", []byte("false"))
+		res.AddMeta("frontendnot.returned.either", []byte("false"))
+		return res, nil
+	}
+
+	res, err := c.Build(context.TODO(), SolveOpt{
+		Exporter:       ExporterOCI,
+		ExporterAttrs:  map[string]string{},
+		ExporterOutput: nopWriteCloser{ioutil.Discard},
+	}, "", frontend, nil)
+	require.NoError(t, err)
+	require.Contains(t, res.ExporterResponse, "frontend.returned")
+	require.Equal(t, res.ExporterResponse["frontend.returned"], "true")
+	require.NotContains(t, res.ExporterResponse, "not-frontend.not-returned")
+	require.NotContains(t, res.ExporterResponse, "frontendnot.returned.either")
 	checkAllReleasable(t, c, sb, true)
 }
 

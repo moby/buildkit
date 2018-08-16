@@ -2,6 +2,7 @@ package llbsolver
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/moby/buildkit/cache"
@@ -191,6 +192,16 @@ func (s *Solver) Solve(ctx context.Context, id string, req frontend.SolveRequest
 			return e.Finalize(ctx)
 		}); err != nil {
 			return nil, err
+		}
+	}
+
+	if exporterResponse == nil {
+		exporterResponse = make(map[string]string)
+	}
+
+	for k, v := range res.Metadata {
+		if strings.HasPrefix(k, "frontend.") {
+			exporterResponse[k] = string(v)
 		}
 	}
 
