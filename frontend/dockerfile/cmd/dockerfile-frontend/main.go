@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	if err := grpcclient.Run(appcontext.Context(), dockerfile.Build); err != nil {
+	if err := grpcclient.RunFromEnvironment(appcontext.Context(), dockerfile.Build); err != nil {
 		logrus.Errorf("fatal error: %+v", err)
 		panic(err)
 	}

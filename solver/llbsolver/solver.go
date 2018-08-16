@@ -7,8 +7,10 @@ import (
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/client"
+	controlgateway "github.com/moby/buildkit/control/gateway"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/frontend"
+	"github.com/moby/buildkit/frontend/gateway"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
@@ -32,18 +34,22 @@ type ExporterRequest struct {
 type ResolveWorkerFunc func() (worker.Worker, error)
 
 type Solver struct {
+	workerController     *worker.Controller
 	solver               *solver.Solver
 	resolveWorker        ResolveWorkerFunc
 	frontends            map[string]frontend.Frontend
 	resolveCacheImporter remotecache.ResolveCacheImporterFunc
 	platforms            []specs.Platform
+	gatewayForwarder     *controlgateway.GatewayForwarder
 }
 
-func New(wc *worker.Controller, f map[string]frontend.Frontend, cache solver.CacheManager, resolveCI remotecache.ResolveCacheImporterFunc) (*Solver, error) {
+func New(wc *worker.Controller, f map[string]frontend.Frontend, cache solver.CacheManager, resolveCI remotecache.ResolveCacheImporterFunc, gatewayForwarder *controlgateway.GatewayForwarder) (*Solver, error) {
 	s := &Solver{
+		workerController:     wc,
 		resolveWorker:        defaultResolver(wc),
 		frontends:            f,
 		resolveCacheImporter: resolveCI,
+		gatewayForwarder:     gatewayForwarder,
 	}
 
 	// executing is currently only allowed on default worker
@@ -97,9 +103,29 @@ func (s *Solver) Solve(ctx context.Context, id string, req frontend.SolveRequest
 
 	j.SessionID = session.FromContext(ctx)
 
-	res, err := s.Bridge(j).Solve(ctx, req)
-	if err != nil {
-		return nil, err
+	var res *frontend.Result
+	if s.gatewayForwarder != nil && req.Definition == nil && req.Frontend == "" {
+		fwd := gateway.NewBridgeForwarder(ctx, s.Bridge(j), s.workerController)
+		if err := s.gatewayForwarder.RegisterBuild(ctx, id, fwd); err != nil {
+			return nil, err
+		}
+		defer s.gatewayForwarder.UnregisterBuild(ctx, id)
+
+		var err error
+		select {
+		case <-fwd.Done():
+			res, err = fwd.Result()
+		case <-ctx.Done():
+			err = ctx.Err()
+		}
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		res, err = s.Bridge(j).Solve(ctx, req)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	defer func() {

@@ -9,6 +9,7 @@ import (
 	apitypes "github.com/moby/buildkit/api/types"
 	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/client"
+	controlgateway "github.com/moby/buildkit/control/gateway"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/session"
@@ -35,29 +36,34 @@ type Opt struct {
 }
 
 type Controller struct { // TODO: ControlService
-	opt    Opt
-	solver *llbsolver.Solver
-	cache  solver.CacheManager
+	opt              Opt
+	solver           *llbsolver.Solver
+	cache            solver.CacheManager
+	gatewayForwarder *controlgateway.GatewayForwarder
 }
 
 func NewController(opt Opt) (*Controller, error) {
 	cache := solver.NewCacheManager("local", opt.CacheKeyStorage, worker.NewCacheResultStorage(opt.WorkerController))
 
-	solver, err := llbsolver.New(opt.WorkerController, opt.Frontends, cache, opt.ResolveCacheImporterFunc)
+	gatewayForwarder := controlgateway.NewGatewayForwarder()
+
+	solver, err := llbsolver.New(opt.WorkerController, opt.Frontends, cache, opt.ResolveCacheImporterFunc, gatewayForwarder)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create solver")
 	}
 
 	c := &Controller{
-		opt:    opt,
-		solver: solver,
-		cache:  cache,
+		opt:              opt,
+		solver:           solver,
+		cache:            cache,
+		gatewayForwarder: gatewayForwarder,
 	}
 	return c, nil
 }
 
 func (c *Controller) Register(server *grpc.Server) error {
 	controlapi.RegisterControlServer(server, c)
+	c.gatewayForwarder.Register(server)
 	return nil
 }
 

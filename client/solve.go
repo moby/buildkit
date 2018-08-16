@@ -54,6 +54,16 @@ func (c *Client) Solve(ctx context.Context, def *llb.Definition, opt SolveOpt, s
 		return nil, errors.Errorf("invalid definition for frontend %s", opt.Frontend)
 	}
 
+	return c.solve(ctx, def, nil, opt, statusChan)
+}
+
+type runGatewayCB func(ref string, s *session.Session) error
+
+func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runGatewayCB, opt SolveOpt, statusChan chan *SolveStatus) (*SolveResponse, error) {
+	if def != nil && runGateway != nil {
+		return nil, errors.New("invalid with def and cb")
+	}
+
 	syncedDirs, err := prepareSyncedDirs(def, opt.LocalDirs)
 	if err != nil {
 		return nil, err
@@ -112,8 +122,12 @@ func (c *Client) Solve(ctx context.Context, def *llb.Definition, opt SolveOpt, s
 		return s.Run(statusContext, grpchijack.Dialer(c.controlClient()))
 	})
 
+	solveCtx, cancelSolve := context.WithCancel(ctx)
 	var res *SolveResponse
 	eg.Go(func() error {
+		ctx := solveCtx
+		defer cancelSolve()
+
 		defer func() { // make sure the Status ends cleanly on build errors
 			go func() {
 				<-time.After(3 * time.Second)
@@ -149,6 +163,28 @@ func (c *Client) Solve(ctx context.Context, def *llb.Definition, opt SolveOpt, s
 		}
 		return nil
 	})
+
+	if runGateway != nil {
+		eg.Go(func() error {
+			err := runGateway(ref, s)
+			if err == nil {
+				return nil
+			}
+
+			// If the callback failed then the main
+			// `Solve` (called above) should error as
+			// well. However as a fallback we wait up to
+			// 5s for that to happen before failing this
+			// goroutine.
+			select {
+			case <-solveCtx.Done():
+			case <-time.After(5 * time.Second):
+				cancelSolve()
+			}
+
+			return err
+		})
+	}
 
 	eg.Go(func() error {
 		stream, err := c.controlClient().Status(statusContext, &controlapi.StatusRequest{

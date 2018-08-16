@@ -22,18 +22,11 @@ import (
 
 const frontendPrefix = "BUILDKIT_FRONTEND_OPT_"
 
-func current() (*grpcClient, error) {
-	if ep := product(); ep != "" {
-		apicaps.ExportedProduct = ep
-	}
+type GrpcClient interface {
+	Run(context.Context, client.BuildFunc) error
+}
 
-	ctx, conn, err := grpcClientConn(context.Background())
-	if err != nil {
-		return nil, err
-	}
-
-	c := pb.NewLLBBridgeClient(conn)
-
+func New(ctx context.Context, opts map[string]string, session, product string, c pb.LLBBridgeClient, w []client.WorkerInfo) (GrpcClient, error) {
 	resp, err := c.Ping(ctx, &pb.PingRequest{})
 	if err != nil {
 		return nil, err
@@ -49,14 +42,27 @@ func current() (*grpcClient, error) {
 
 	return &grpcClient{
 		client:    c,
-		opts:      opts(),
-		sessionID: sessionID(),
-		workers:   workers(),
-		product:   product(),
+		opts:      opts,
+		sessionID: session,
+		workers:   w,
+		product:   product,
 		caps:      pb.Caps.CapSet(resp.FrontendAPICaps),
 		llbCaps:   opspb.Caps.CapSet(resp.LLBCaps),
 		requests:  map[string]*pb.SolveRequest{},
 	}, nil
+}
+
+func current() (GrpcClient, error) {
+	if ep := product(); ep != "" {
+		apicaps.ExportedProduct = ep
+	}
+
+	ctx, conn, err := grpcClientConn(context.Background())
+	if err != nil {
+		return nil, err
+	}
+
+	return New(ctx, opts(), sessionID(), product(), pb.NewLLBBridgeClient(conn), workers())
 }
 
 func convertRef(ref client.Reference) (string, error) {
@@ -70,20 +76,28 @@ func convertRef(ref client.Reference) (string, error) {
 	return r.id, nil
 }
 
-func Run(ctx context.Context, f client.BuildFunc) (retError error) {
+func RunFromEnvironment(ctx context.Context, f client.BuildFunc) error {
 	client, err := current()
 	if err != nil {
 		return errors.Wrapf(err, "failed to initialize client from environment")
 	}
+	return client.Run(ctx, f)
+}
 
-	res, err := f(ctx, client)
+func (c *grpcClient) Run(ctx context.Context, f client.BuildFunc) (retError error) {
+	export := c.caps.Supports(pb.CapReturnResult) == nil
 
-	export := client.caps.Supports(pb.CapReturnResult) == nil
-
+	var (
+		res *client.Result
+		err error
+	)
 	if export {
 		defer func() {
 			req := &pb.ReturnRequest{}
 			if retError == nil {
+				if res == nil {
+					res = &client.Result{}
+				}
 				pbRes := &pb.Result{
 					Metadata: res.Metadata,
 				}
@@ -119,17 +133,17 @@ func Run(ctx context.Context, f client.BuildFunc) (retError error) {
 					// Details: stp.Details,
 				}
 			}
-			if _, err := client.client.Return(ctx, req); err != nil && retError == nil {
+			if _, err := c.client.Return(ctx, req); err != nil && retError == nil {
 				retError = err
 			}
 		}()
 	}
 
-	if err != nil {
+	if res, err = f(ctx, c); err != nil {
 		return err
 	}
 
-	if err := client.caps.Supports(pb.CapReturnMap); len(res.Refs) > 1 && err != nil {
+	if err := c.caps.Supports(pb.CapReturnMap); len(res.Refs) > 1 && err != nil {
 		return err
 	}
 
@@ -139,7 +153,7 @@ func Run(ctx context.Context, f client.BuildFunc) (retError error) {
 			return errors.Wrapf(err, "failed to marshal return metadata")
 		}
 
-		req, err := client.requestForRef(res.Ref)
+		req, err := c.requestForRef(res.Ref)
 		if err != nil {
 			return errors.Wrapf(err, "failed to find return ref")
 		}
@@ -147,7 +161,7 @@ func Run(ctx context.Context, f client.BuildFunc) (retError error) {
 		req.Final = true
 		req.ExporterAttr = exportedAttrBytes
 
-		if _, err := client.client.Solve(ctx, req); err != nil {
+		if _, err := c.client.Solve(ctx, req); err != nil {
 			return errors.Wrapf(err, "failed to solve")
 		}
 	}
@@ -235,10 +249,12 @@ func (c *grpcClient) requestForRef(ref client.Reference) (*pb.SolveRequest, erro
 }
 
 func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (*client.Result, error) {
-	for _, md := range creq.Definition.Metadata {
-		for cap := range md.Caps {
-			if err := c.llbCaps.Supports(cap); err != nil {
-				return nil, err
+	if creq.Definition != nil {
+		for _, md := range creq.Definition.Metadata {
+			for cap := range md.Caps {
+				if err := c.llbCaps.Supports(cap); err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
