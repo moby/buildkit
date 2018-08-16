@@ -61,6 +61,7 @@ func TestClientIntegration(t *testing.T) {
 		testParallelLocalBuilds,
 		testSecretMounts,
 		testExtraHosts,
+		testNetworkMode,
 	})
 }
 
@@ -79,6 +80,36 @@ func testExtraHosts(t *testing.T, sb integration.Sandbox) {
 
 	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
 	require.NoError(t, err)
+}
+
+func testNetworkMode(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Image("busybox:latest").
+		Run(llb.Shlex(`sh -c 'wget https://example.com 2>&1 | grep "wget: bad address"'`), llb.Network(llb.NetModeNone))
+
+	def, err := st.Marshal()
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	require.NoError(t, err)
+
+	st2 := llb.Image("busybox:latest").
+		Run(llb.Shlex(`ifconfig`), llb.Network(llb.NetModeHost))
+
+	def, err = st2.Marshal()
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		// Currently disabled globally by default
+		// AllowedEntitlements: []entitlements.Entitlement{entitlements.EntitlementNetworkHost},
+	}, nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "network.host is not allowed")
 }
 
 func testSecretMounts(t *testing.T, sb integration.Sandbox) {

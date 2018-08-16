@@ -39,6 +39,7 @@ const (
 	keyMultiPlatform      = "multi-platform"
 	keyImageResolveMode   = "image-resolve-mode"
 	keyGlobalAddHosts     = "add-hosts"
+	keyForceNetwork       = "force-network-mode"
 )
 
 var httpPrefix = regexp.MustCompile("^https?://")
@@ -70,6 +71,11 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 	extraHosts, err := parseExtraHosts(opts[keyGlobalAddHosts])
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to parse additional hosts")
+	}
+
+	defaultNetMode, err := parseNetMode(opts[keyForceNetwork])
+	if err != nil {
+		return nil, err
 	}
 
 	filename := opts[keyFilename]
@@ -259,6 +265,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 					ImageResolveMode: resolveMode,
 					PrefixPlatform:   exportMap,
 					ExtraHosts:       extraHosts,
+					ForceNetMode:     defaultNetMode,
 				})
 
 				if err != nil {
@@ -447,4 +454,20 @@ func parseExtraHosts(v string) ([]llb.HostIP, error) {
 		out = append(out, llb.HostIP{Host: key, IP: ip})
 	}
 	return out, nil
+}
+
+func parseNetMode(v string) (pb.NetMode, error) {
+	if v == "" {
+		return llb.NetModeSandbox, nil
+	}
+	switch v {
+	case "none":
+		return llb.NetModeNone, nil
+	case "host":
+		return llb.NetModeHost, nil
+	case "sandbox":
+		return llb.NetModeSandbox, nil
+	default:
+		return 0, errors.Errorf("invalid netmode %s", v)
+	}
 }

@@ -41,6 +41,7 @@ message Input {
 message ExecOp {
 	Meta meta = 1;
 	repeated Mount mounts = 2;
+	NetMode network = 3;
 }
 
 // Meta is a set of arguments for ExecOp.
@@ -53,6 +54,12 @@ message Meta {
 	string user = 4;
 	ProxyEnv proxy_env = 5;
 	repeated HostIP extraHosts = 6;
+}
+
+enum NetMode {
+	UNSET = 0; // sandbox
+	HOST = 1;
+	NONE = 2;
 }
 
 // Mount specifies how to mount an input Op as a filesystem.

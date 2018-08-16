@@ -12,12 +12,15 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/util/entitlements"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
+
+const keyEntitlements = "llb.entitlements"
 
 type ExporterRequest struct {
 	Exporter        exporter.ExporterInstance
@@ -78,13 +81,19 @@ func (s *Solver) Bridge(b solver.Builder) frontend.FrontendLLBBridge {
 	}
 }
 
-func (s *Solver) Solve(ctx context.Context, id string, req frontend.SolveRequest, exp ExporterRequest) (*client.SolveResponse, error) {
+func (s *Solver) Solve(ctx context.Context, id string, req frontend.SolveRequest, exp ExporterRequest, ent []entitlements.Entitlement) (*client.SolveResponse, error) {
 	j, err := s.solver.NewJob(id)
 	if err != nil {
 		return nil, err
 	}
 
 	defer j.Discard()
+
+	set, err := entitlements.WhiteList(ent, supportedEntitlements())
+	if err != nil {
+		return nil, err
+	}
+	j.SetValue(keyEntitlements, set)
 
 	j.SessionID = session.FromContext(ctx)
 
@@ -167,6 +176,7 @@ func (s *Solver) Solve(ctx context.Context, id string, req frontend.SolveRequest
 func (s *Solver) Status(ctx context.Context, id string, statusChan chan *client.SolveStatus) error {
 	j, err := s.solver.Get(id)
 	if err != nil {
+		close(statusChan)
 		return err
 	}
 	return j.Status(ctx, statusChan)
@@ -231,4 +241,32 @@ func notifyCompleted(ctx context.Context, v *client.Vertex, err error, cached bo
 		v.Error = err.Error()
 	}
 	pw.Write(v.Digest.String(), *v)
+}
+
+var AllowNetworkHostUnstable = false // TODO: enable in constructor
+
+func supportedEntitlements() []entitlements.Entitlement {
+	out := []entitlements.Entitlement{} // nil means no filter
+	if AllowNetworkHostUnstable {
+		out = append(out, entitlements.EntitlementNetworkHost)
+	}
+	return out
+}
+
+func loadEntitlements(b solver.Builder) (entitlements.Set, error) {
+	var ent entitlements.Set = map[entitlements.Entitlement]struct{}{}
+	err := b.EachValue(context.TODO(), keyEntitlements, func(v interface{}) error {
+		set, ok := v.(entitlements.Set)
+		if !ok {
+			return errors.Errorf("invalid entitlements %T", v)
+		}
+		for k := range set {
+			ent[k] = struct{}{}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return ent, nil
 }

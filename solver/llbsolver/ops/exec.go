@@ -527,6 +527,7 @@ func (e *execOp) Exec(ctx context.Context, inputs []solver.Result) ([]solver.Res
 		User:           e.op.Meta.User,
 		ReadonlyRootFS: readonlyRootFS,
 		ExtraHosts:     extraHosts,
+		NetMode:        e.op.Network,
 	}
 
 	if e.op.Meta.ProxyEnv != nil {

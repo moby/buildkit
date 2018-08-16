@@ -15,6 +15,7 @@ import (
 	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/session/grpchijack"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/entitlements"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -22,18 +23,19 @@ import (
 )
 
 type SolveOpt struct {
-	Exporter          string
-	ExporterAttrs     map[string]string
-	ExporterOutput    io.WriteCloser // for ExporterOCI and ExporterDocker
-	ExporterOutputDir string         // for ExporterLocal
-	LocalDirs         map[string]string
-	SharedKey         string
-	Frontend          string
-	FrontendAttrs     map[string]string
-	ExportCache       string
-	ExportCacheAttrs  map[string]string
-	ImportCache       []string
-	Session           []session.Attachable
+	Exporter            string
+	ExporterAttrs       map[string]string
+	ExporterOutput      io.WriteCloser // for ExporterOCI and ExporterDocker
+	ExporterOutputDir   string         // for ExporterLocal
+	LocalDirs           map[string]string
+	SharedKey           string
+	Frontend            string
+	FrontendAttrs       map[string]string
+	ExportCache         string
+	ExportCacheAttrs    map[string]string
+	ImportCache         []string
+	Session             []session.Attachable
+	AllowedEntitlements []entitlements.Entitlement
 }
 
 // Solve calls Solve on the controller.
@@ -137,6 +139,7 @@ func (c *Client) Solve(ctx context.Context, def *llb.Definition, opt SolveOpt, s
 				ImportRefs:  opt.ImportCache,
 				ExportAttrs: opt.ExportCacheAttrs,
 			},
+			Entitlements: opt.AllowedEntitlements,
 		})
 		if err != nil {
 			return errors.Wrap(err, "failed to solve")
