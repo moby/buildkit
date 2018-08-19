@@ -3,6 +3,8 @@ package containerdexecutor
 import (
 	"context"
 	"io"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -26,13 +28,15 @@ type containerdExecutor struct {
 	client           *containerd.Client
 	root             string
 	networkProviders map[pb.NetMode]network.Provider
+	cgroupParent     string
 }
 
-func New(client *containerd.Client, root string, networkProviders map[pb.NetMode]network.Provider) executor.Executor {
+func New(client *containerd.Client, root, cgroup string, networkProviders map[pb.NetMode]network.Provider) executor.Executor {
 	return containerdExecutor{
 		client:           client,
 		root:             root,
 		networkProviders: networkProviders,
+		cgroupParent:     cgroup,
 	}
 }
 
@@ -99,6 +103,16 @@ func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root c
 	}
 	if system.SeccompSupported() {
 		opts = append(opts, seccomp.WithDefaultProfile())
+	}
+	if w.cgroupParent != "" {
+		var cgroupsPath string
+		lastSeparator := w.cgroupParent[len(w.cgroupParent)-1:]
+		if strings.Contains(w.cgroupParent, ".slice") && lastSeparator == ":" {
+			cgroupsPath = w.cgroupParent + id
+		} else {
+			cgroupsPath = filepath.Join("/", w.cgroupParent, "buildkit", id)
+		}
+		opts = append(opts, containerdoci.WithCgroup(cgroupsPath))
 	}
 	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, namespace, opts...)
 	if err != nil {
