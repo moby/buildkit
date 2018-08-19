@@ -1,5 +1,3 @@
-// +build !windows
-
 /*
    Copyright The containerd Authors.
 
@@ -15,10 +13,3 @@
    See the License for the specific language governing permissions and
    limitations under the License.
 */
-
-package archive
-
-// ApplyOptions provides additional options for an Apply operation
-type ApplyOptions struct {
-	Filter Filter // Filter tar headers
-}
