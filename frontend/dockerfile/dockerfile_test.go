@@ -151,14 +151,23 @@ func dispatchAll(t *testing.T, m Mode) {
 }
 
 func TestDockerfileBuiltinIntegration(t *testing.T) {
+	if m := os.Getenv("BUILDKIT_DOCKERFILE_INTEGRATION_MODE"); m != "" && m != "builtin" {
+		t.Skip("skipping Dockerfile integration in builtin mode")
+	}
 	dispatchAll(t, ModeBuiltin)
 }
 
 func TestDockerfileMasterGatewayIntegration(t *testing.T) {
+	if m := os.Getenv("BUILDKIT_DOCKERFILE_INTEGRATION_MODE"); m != "master-gateway" {
+		t.Skip("skipping Dockerfile integration in master-gateway mode")
+	}
 	dispatchAll(t, ModeMasterGateway)
 }
 
 func TestDockerfileClientIntegration(t *testing.T) {
+	if m := os.Getenv("BUILDKIT_DOCKERFILE_INTEGRATION_MODE"); m != "client" {
+		t.Skip("skipping Dockerfile integration in client mode")
+	}
 	dispatchAll(t, ModeClient)
 }
 
