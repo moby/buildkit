@@ -16,6 +16,7 @@ import (
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/executor/runcexecutor"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
+	"github.com/moby/buildkit/util/network"
 	"github.com/moby/buildkit/util/throttle"
 	"github.com/moby/buildkit/util/winlayers"
 	"github.com/moby/buildkit/worker/base"
@@ -48,7 +49,7 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, labe
 		Root: filepath.Join(root, "executor"),
 		// without root privileges
 		Rootless: rootless,
-	}, nil)
+	}, network.Default())
 	if err != nil {
 		return opt, err
 	}

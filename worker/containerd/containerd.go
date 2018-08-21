@@ -15,6 +15,7 @@ import (
 	"github.com/moby/buildkit/executor/containerdexecutor"
 	"github.com/moby/buildkit/identity"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
+	"github.com/moby/buildkit/util/network"
 	"github.com/moby/buildkit/util/throttle"
 	"github.com/moby/buildkit/util/winlayers"
 	"github.com/moby/buildkit/worker/base"
@@ -107,7 +108,7 @@ func newContainerd(root string, client *containerd.Client, snapshotterName strin
 		ID:            id,
 		Labels:        xlabels,
 		MetadataStore: md,
-		Executor:      containerdexecutor.New(client, root, nil),
+		Executor:      containerdexecutor.New(client, root, network.Default()),
 		Snapshotter:   containerdsnapshot.NewSnapshotter(client.SnapshotService(snapshotterName), cs, md, "buildkit", gc),
 		ContentStore:  cs,
 		Applier:       winlayers.NewFileSystemApplierWithWindows(cs, df),
