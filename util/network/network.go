@@ -10,8 +10,10 @@ import (
 // Default returns the default network provider set
 func Default() map[pb.NetMode]Provider {
 	return map[pb.NetMode]Provider{
-		pb.NetMode_HOST: NewHostProvider(),
-		pb.NetMode_NONE: NewNoneProvider(),
+		// FIXME: still uses host if no provider configured
+		pb.NetMode_UNSET: NewHostProvider(),
+		pb.NetMode_HOST:  NewHostProvider(),
+		pb.NetMode_NONE:  NewNoneProvider(),
 	}
 }
 

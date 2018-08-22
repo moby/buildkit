@@ -79,10 +79,6 @@ func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root c
 		lm.Unmount()
 	}
 
-	// FIXME: still uses host if no provider configured
-	if meta.NetMode == pb.NetMode_UNSET {
-		meta.NetMode = pb.NetMode_HOST
-	}
 	provider, ok := w.networkProviders[meta.NetMode]
 	if !ok {
 		return errors.Errorf("unknown network mode %s", meta.NetMode)
