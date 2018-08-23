@@ -23,16 +23,16 @@ import (
 )
 
 type containerdExecutor struct {
-	client          *containerd.Client
-	root            string
-	networkProvider network.Provider
+	client           *containerd.Client
+	root             string
+	networkProviders map[pb.NetMode]network.Provider
 }
 
-func New(client *containerd.Client, root string, networkProvider network.Provider) executor.Executor {
+func New(client *containerd.Client, root string, networkProviders map[pb.NetMode]network.Provider) executor.Executor {
 	return containerdExecutor{
-		client:          client,
-		root:            root,
-		networkProvider: networkProvider,
+		client:           client,
+		root:             root,
+		networkProviders: networkProviders,
 	}
 }
 
@@ -79,27 +79,19 @@ func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root c
 		lm.Unmount()
 	}
 
-	var iface network.Interface
-	// FIXME: still uses host if no provider configured
-	if meta.NetMode == pb.NetMode_UNSET {
-		if w.networkProvider != nil {
-			var err error
-			iface, err = w.networkProvider.NewInterface()
-			if err != nil || iface == nil {
-				meta.NetMode = pb.NetMode_HOST
-			}
-		} else {
-			meta.NetMode = pb.NetMode_HOST
-		}
+	provider, ok := w.networkProviders[meta.NetMode]
+	if !ok {
+		return errors.Errorf("unknown network mode %s", meta.NetMode)
 	}
+	namespace, err := provider.New()
+	if err != nil {
+		return err
+	}
+	defer namespace.Close()
+
 	if meta.NetMode == pb.NetMode_HOST {
 		logrus.Info("enabling HostNetworking")
 	}
-	defer func() {
-		if iface != nil {
-			w.networkProvider.Release(iface)
-		}
-	}()
 
 	opts := []containerdoci.SpecOpts{oci.WithUIDGID(uid, gid, sgids)}
 	if meta.ReadonlyRootFS {
@@ -108,7 +100,7 @@ func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root c
 	if system.SeccompSupported() {
 		opts = append(opts, seccomp.WithDefaultProfile())
 	}
-	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, meta.NetMode == pb.NetMode_HOST, opts...)
+	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, namespace, opts...)
 	if err != nil {
 		return err
 	}
@@ -135,18 +127,7 @@ func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root c
 	if err != nil {
 		return err
 	}
-
-	if iface != nil {
-		if err := iface.Set(int(task.Pid())); err != nil {
-			return errors.Wrap(err, "could not set the network")
-		}
-	}
-
 	defer func() {
-		if iface != nil {
-			iface.Remove(int(task.Pid()))
-		}
-
 		if _, err1 := task.Delete(context.TODO()); err == nil && err1 != nil {
 			err = errors.Wrapf(err1, "failed to delete task %s", id)
 		}
