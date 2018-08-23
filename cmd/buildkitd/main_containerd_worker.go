@@ -5,6 +5,7 @@ package main
 import (
 	"os"
 	"strings"
+	"time"
 
 	ctd "github.com/containerd/containerd"
 	"github.com/moby/buildkit/worker"
@@ -66,7 +67,7 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 		logrus.Warn("rootless mode is not supported for containerd workers. disabling containerd worker.")
 		return nil, nil
 	}
-	opt, err := containerd.NewWorkerOpt(common.root, socket, ctd.DefaultSnapshotter, labels)
+	opt, err := containerd.NewWorkerOpt(common.root, socket, ctd.DefaultSnapshotter, labels, ctd.WithTimeout(60*time.Second))
 	if err != nil {
 		return nil, err
 	}

@@ -77,6 +77,10 @@ func TestIntegration(t *testing.T) {
 	})
 }
 
+func newContainerd(cdAddress string) (*containerd.Client, error) {
+	return containerd.New(cdAddress, containerd.WithTimeout(60*time.Second))
+}
+
 func testExportMultiPlatform(t *testing.T, sb integration.Sandbox) {
 	t.Parallel()
 
@@ -470,7 +474,7 @@ ENTRYPOINT my entrypoint
 	}, nil)
 	require.NoError(t, err)
 
-	ctr, err := containerd.New(cdAddress)
+	ctr, err := newContainerd(cdAddress)
 	require.NoError(t, err)
 	defer ctr.Close()
 
@@ -561,7 +565,7 @@ COPY foo .
 	}, nil)
 	require.NoError(t, err)
 
-	ctr, err := containerd.New(cdAddress)
+	ctr, err := newContainerd(cdAddress)
 	require.NoError(t, err)
 	defer ctr.Close()
 
@@ -1060,7 +1064,7 @@ ENV foo=bar
 	err = cmd.Run()
 	require.NoError(t, err)
 
-	client, err := containerd.New(cdAddress)
+	client, err := newContainerd(cdAddress)
 	require.NoError(t, err)
 	defer client.Close()
 
@@ -1143,7 +1147,7 @@ EXPOSE 5000
 		cdAddress = cd.ContainerdAddress()
 	}
 
-	client, err := containerd.New(cdAddress)
+	client, err := newContainerd(cdAddress)
 	require.NoError(t, err)
 	defer client.Close()
 
@@ -1324,7 +1328,7 @@ RUN ["ls"]
 		cdAddress = cd.ContainerdAddress()
 	}
 
-	client, err := containerd.New(cdAddress)
+	client, err := newContainerd(cdAddress)
 	require.NoError(t, err)
 	defer client.Close()
 
@@ -1482,7 +1486,7 @@ USER nobody
 		cdAddress = cd.ContainerdAddress()
 	}
 
-	client, err := containerd.New(cdAddress)
+	client, err := newContainerd(cdAddress)
 	require.NoError(t, err)
 	defer client.Close()
 
@@ -2055,7 +2059,7 @@ LABEL foo=bar
 		cdAddress = cd.ContainerdAddress()
 	}
 
-	client, err := containerd.New(cdAddress)
+	client, err := newContainerd(cdAddress)
 	require.NoError(t, err)
 	defer client.Close()
 
@@ -2230,7 +2234,7 @@ RUN echo bar > bar
 		cdAddress = cd.ContainerdAddress()
 	}
 
-	client, err := containerd.New(cdAddress)
+	client, err := newContainerd(cdAddress)
 	require.NoError(t, err)
 	defer client.Close()
 
@@ -2300,7 +2304,7 @@ RUN echo bar > bar
 		},
 	}
 
-	ctd, err := containerd.New(cdAddress)
+	ctd, err := newContainerd(cdAddress)
 	require.NoError(t, err)
 	defer ctd.Close()
 
