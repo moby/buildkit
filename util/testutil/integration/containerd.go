@@ -82,6 +82,9 @@ func (c *containerd) New() (sb Sandbox, cl func() error, err error) {
 	address := filepath.Join(tmpdir, "containerd.sock")
 	config := fmt.Sprintf(`root = %q
 state = %q
+# CRI plugins listens on 10010/tcp for stream server.
+# We disable CRI plugin so that multiple instance can run simultaneously.
+disabled_plugins = ["cri"]
 
 [grpc]
   address = %q
