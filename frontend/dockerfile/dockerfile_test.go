@@ -74,11 +74,52 @@ func TestIntegration(t *testing.T) {
 		testPlatformArgsImplicit,
 		testPlatformArgsExplicit,
 		testExportMultiPlatform,
+		testQuotedMetaArgs,
 	})
 }
 
-func newContainerd(cdAddress string) (*containerd.Client, error) {
-	return containerd.New(cdAddress, containerd.WithTimeout(60*time.Second))
+func testQuotedMetaArgs(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	dockerfile := []byte(`
+ARG a1="box"
+ARG a2="$a1-foo"
+FROM busy$a1 AS build
+ARG a2
+ARG a3="bar-$a2"
+RUN echo -n $a3 > /out
+FROM scratch
+COPY --from=build /out .
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = c.Solve(context.TODO(), nil, client.SolveOpt{
+		Frontend: "dockerfile.v0",
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+		Exporter:          client.ExporterLocal,
+		ExporterOutputDir: destDir,
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "out"))
+	require.NoError(t, err)
+	require.Equal(t, "bar-box-foo", string(dt))
 }
 
 func testExportMultiPlatform(t *testing.T, sb integration.Sandbox) {
@@ -2665,4 +2706,8 @@ func checkAllRemoved(t *testing.T, c *client.Client, sb integration.Sandbox) {
 		}
 		break
 	}
+}
+
+func newContainerd(cdAddress string) (*containerd.Client, error) {
+	return containerd.New(cdAddress, containerd.WithTimeout(60*time.Second))
 }

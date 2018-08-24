@@ -81,11 +81,14 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		return nil, nil, err
 	}
 
+	shlex := shell.NewLex(dockerfile.EscapeToken)
+
 	for _, metaArg := range metaArgs {
+		if metaArg.Value != nil {
+			*metaArg.Value, _ = shlex.ProcessWordWithMap(*metaArg.Value, metaArgsToMap(optMetaArgs))
+		}
 		optMetaArgs = append(optMetaArgs, setKVValue(metaArg.KeyValuePairOptional, opt.BuildArgs))
 	}
-
-	shlex := shell.NewLex(dockerfile.EscapeToken)
 
 	metaResolver := opt.MetaResolver
 	if metaResolver == nil {
