@@ -65,6 +65,10 @@ func TestClientIntegration(t *testing.T) {
 	})
 }
 
+func newContainerd(cdAddress string) (*containerd.Client, error) {
+	return containerd.New(cdAddress, containerd.WithTimeout(60*time.Second))
+}
+
 func testExtraHosts(t *testing.T, sb integration.Sandbox) {
 	t.Parallel()
 
@@ -670,7 +674,7 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 
 	// TODO: make public pull helper function so this can be checked for standalone as well
 
-	client, err := containerd.New(cdAddress)
+	client, err := newContainerd(cdAddress)
 	require.NoError(t, err)
 	defer client.Close()
 
@@ -1312,7 +1316,7 @@ loop0:
 
 	// TODO: make public pull helper function so this can be checked for standalone as well
 
-	client, err := containerd.New(cdAddress)
+	client, err := newContainerd(cdAddress)
 	require.NoError(t, err)
 	defer client.Close()
 

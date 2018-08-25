@@ -82,6 +82,9 @@ func (c *containerd) New() (sb Sandbox, cl func() error, err error) {
 	address := filepath.Join(tmpdir, "containerd.sock")
 	config := fmt.Sprintf(`root = %q
 state = %q
+# CRI plugins listens on 10010/tcp for stream server.
+# We disable CRI plugin so that multiple instance can run simultaneously.
+disabled_plugins = ["cri"]
 
 [grpc]
   address = %q
@@ -102,14 +105,15 @@ state = %q
 
 	logs := map[string]*bytes.Buffer{}
 
-	if stop, err := startCmd(cmd, logs); err != nil {
+	ctdStop, err := startCmd(cmd, logs)
+	if err != nil {
 		return nil, nil, err
-	} else {
-		deferF.append(stop)
 	}
 	if err := waitUnix(address, 5*time.Second); err != nil {
-		return nil, nil, err
+		ctdStop()
+		return nil, nil, errors.Wrapf(err, "containerd did not start up: %s", formatLogs(logs))
 	}
+	deferF.append(ctdStop)
 
 	buildkitdSock, stop, err := runBuildkitd([]string{"buildkitd",
 		"--oci-worker=false",
@@ -121,6 +125,16 @@ state = %q
 	deferF.append(stop)
 
 	return &cdsandbox{address: address, sandbox: sandbox{address: buildkitdSock, logs: logs, cleanup: deferF, rootless: false}}, cl, nil
+}
+
+func formatLogs(m map[string]*bytes.Buffer) string {
+	var ss []string
+	for k, b := range m {
+		if b != nil {
+			ss = append(ss, fmt.Sprintf("%q:%q", k, b.String()))
+		}
+	}
+	return strings.Join(ss, ",")
 }
 
 type cdsandbox struct {
