@@ -2,6 +2,7 @@ package solver
 
 import (
 	"context"
+	"os"
 	"sync"
 
 	"github.com/moby/buildkit/solver/internal/pipe"
@@ -10,7 +11,13 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-const debugScheduler = false // TODO: replace with logs in build trace
+var debugScheduler = false // TODO: replace with logs in build trace
+
+func init() {
+	if os.Getenv("BUILDKIT_SCHEDULER_DEBUG") == "1" {
+		debugScheduler = true
+	}
+}
 
 func newScheduler(ef edgeFactory) *scheduler {
 	s := &scheduler{
