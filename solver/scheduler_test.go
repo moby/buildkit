@@ -2947,6 +2947,133 @@ func TestMergedEdgesLookup(t *testing.T) {
 	}
 }
 
+func TestInputRequestDeadlock(t *testing.T) {
+	t.Parallel()
+	ctx := context.TODO()
+
+	s := NewSolver(SolverOpt{
+		ResolveOpFunc: testOpResolver,
+	})
+	defer s.Close()
+
+	j0, err := s.NewJob("job0")
+	require.NoError(t, err)
+
+	defer func() {
+		if j0 != nil {
+			j0.Discard()
+		}
+	}()
+
+	g0 := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "v0",
+			cacheKeySeed: "seed0",
+			value:        "result0",
+			inputs: []Edge{
+				{
+					Vertex: vtx(vtxOpt{
+						name:         "v1",
+						cacheKeySeed: "seed1",
+						value:        "result1",
+					}),
+				},
+				{
+					Vertex: vtx(vtxOpt{
+						name:         "v2",
+						cacheKeySeed: "seed2",
+						value:        "result2",
+					}),
+				},
+			},
+		}),
+	}
+
+	_, err = j0.Build(ctx, g0)
+	require.NoError(t, err)
+	require.NoError(t, j0.Discard())
+	j0 = nil
+
+	j1, err := s.NewJob("job1")
+	require.NoError(t, err)
+
+	defer func() {
+		if j1 != nil {
+			j1.Discard()
+		}
+	}()
+
+	g1 := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "v0",
+			cacheKeySeed: "seed0-1",
+			value:        "result0",
+			inputs: []Edge{
+				{
+					Vertex: vtx(vtxOpt{
+						name:         "v1",
+						cacheKeySeed: "seed1-1",
+						value:        "result1",
+					}),
+				},
+				{
+					Vertex: vtx(vtxOpt{
+						name:         "v2",
+						cacheKeySeed: "seed2-1",
+						value:        "result2",
+					}),
+				},
+			},
+		}),
+	}
+
+	_, err = j1.Build(ctx, g1)
+	require.NoError(t, err)
+	require.NoError(t, j1.Discard())
+	j1 = nil
+
+	j2, err := s.NewJob("job2")
+	require.NoError(t, err)
+
+	defer func() {
+		if j2 != nil {
+			j2.Discard()
+		}
+	}()
+
+	g2 := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "v0",
+			cacheKeySeed: "seed0-1",
+			value:        "result0",
+			inputs: []Edge{
+				{
+					Vertex: vtx(vtxOpt{
+						name:         "v1",
+						cacheKeySeed: "seed1",
+						value:        "result1",
+					}),
+				},
+				{
+					Vertex: vtx(vtxOpt{
+						name:         "v2",
+						cacheKeySeed: "seed2-1",
+						value:        "result2",
+					}),
+				},
+			},
+			slowCacheCompute: map[int]ResultBasedCacheFunc{
+				1: digestFromResult,
+			},
+		}),
+	}
+
+	_, err = j2.Build(ctx, g2)
+	require.NoError(t, err)
+	require.NoError(t, j2.Discard())
+	j2 = nil
+}
+
 func generateSubGraph(nodes int) (Edge, int) {
 	if nodes == 1 {
 		value := rand.Int() % 500
