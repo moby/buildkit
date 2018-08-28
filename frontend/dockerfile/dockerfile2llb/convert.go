@@ -572,8 +572,6 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 	var args []string = c.CmdLine
 	if c.PrependShell {
 		args = withShell(d.image, args)
-	} else if d.image.Config.Entrypoint != nil {
-		args = append(d.image.Config.Entrypoint, args...)
 	}
 	opt := []llb.RunOption{llb.Args(args)}
 	for _, arg := range d.buildArgs {
