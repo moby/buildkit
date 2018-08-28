@@ -75,7 +75,37 @@ func TestIntegration(t *testing.T) {
 		testPlatformArgsExplicit,
 		testExportMultiPlatform,
 		testQuotedMetaArgs,
+		testIgnoreEntrypoint,
 	})
+}
+
+func testIgnoreEntrypoint(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	dockerfile := []byte(`
+FROM busybox
+ENTRYPOINT ["/nosuchcmd"]
+RUN ["ls"]
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	_, err = c.Solve(context.TODO(), nil, client.SolveOpt{
+		Frontend: "dockerfile.v0",
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
 }
 
 func testQuotedMetaArgs(t *testing.T, sb integration.Sandbox) {
