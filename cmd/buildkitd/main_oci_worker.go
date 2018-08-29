@@ -4,10 +4,12 @@ package main
 
 import (
 	"os/exec"
+	"strconv"
 
 	ctdsnapshot "github.com/containerd/containerd/snapshots"
 	"github.com/containerd/containerd/snapshots/native"
 	"github.com/containerd/containerd/snapshots/overlay"
+	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/worker"
 	"github.com/moby/buildkit/worker/base"
 	"github.com/moby/buildkit/worker/runc"
@@ -18,11 +20,24 @@ import (
 )
 
 func init() {
+	defaultConf, _ := defaultConf()
+
+	enabledValue := func(b *bool) string {
+		if b == nil {
+			return "auto"
+		}
+		return strconv.FormatBool(*b)
+	}
+
+	if defaultConf.Workers.OCI.Snapshotter == "" {
+		defaultConf.Workers.OCI.Snapshotter = "auto"
+	}
+
 	flags := []cli.Flag{
 		cli.StringFlag{
 			Name:  "oci-worker",
 			Usage: "enable oci workers (true/false/auto)",
-			Value: "auto",
+			Value: enabledValue(defaultConf.Workers.OCI.Enabled),
 		},
 		cli.StringSliceFlag{
 			Name:  "oci-worker-labels",
@@ -31,7 +46,7 @@ func init() {
 		cli.StringFlag{
 			Name:  "oci-worker-snapshotter",
 			Usage: "name of snapshotter (overlayfs or native)",
-			Value: "auto",
+			Value: defaultConf.Workers.OCI.Snapshotter,
 		},
 		cli.StringSliceFlag{
 			Name:  "oci-worker-platform",
@@ -61,34 +76,70 @@ func init() {
 	// TODO: allow multiple oci runtimes
 }
 
-func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker.Worker, error) {
-	boolOrAuto, err := parseBoolOrAuto(c.GlobalString("oci-worker"))
-	if err != nil {
-		return nil, err
+func applyOCIFlags(c *cli.Context, cfg *config.Config) error {
+	if cfg.Workers.OCI.Snapshotter == "" {
+		cfg.Workers.OCI.Snapshotter = "auto"
 	}
-	if (boolOrAuto == nil && !validOCIBinary()) || (boolOrAuto != nil && !*boolOrAuto) {
-		return nil, nil
+
+	if c.GlobalIsSet("oci-worker") {
+		boolOrAuto, err := parseBoolOrAuto(c.GlobalString("oci-worker"))
+		if err != nil {
+			return err
+		}
+		cfg.Workers.OCI.Enabled = boolOrAuto
 	}
+
 	labels, err := attrMap(c.GlobalStringSlice("oci-worker-labels"))
 	if err != nil {
+		return err
+	}
+	for k, v := range labels {
+		cfg.Workers.OCI.Labels[k] = v
+	}
+	if c.GlobalIsSet("oci-worker-snapshotter") {
+		cfg.Workers.OCI.Snapshotter = c.GlobalString("oci-worker-snapshotter")
+	}
+
+	if c.GlobalIsSet("rootless") || c.GlobalBool("rootless") {
+		cfg.Workers.OCI.Rootless = c.GlobalBool("rootless")
+	}
+	if c.GlobalIsSet("oci-worker-rootless") {
+		cfg.Workers.OCI.Rootless = c.GlobalBool("oci-worker-rootless")
+	}
+
+	if platforms := c.GlobalStringSlice("oci-worker-platform"); len(platforms) != 0 {
+		cfg.Workers.OCI.Platforms = platforms
+	}
+
+	return nil
+}
+
+func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker.Worker, error) {
+	if err := applyOCIFlags(c, common.config); err != nil {
 		return nil, err
 	}
-	snFactory, err := snapshotterFactory(common.root, c.GlobalString("oci-worker-snapshotter"))
+
+	cfg := common.config.Workers.OCI
+
+	if (cfg.Enabled == nil && !validOCIBinary()) || (cfg.Enabled != nil && !*cfg.Enabled) {
+		return nil, nil
+	}
+
+	snFactory, err := snapshotterFactory(common.config.Root, cfg.Snapshotter)
 	if err != nil {
 		return nil, err
 	}
-	// GlobalBool works for BoolT as well
-	rootless := c.GlobalBool("oci-worker-rootless") || c.GlobalBool("rootless")
-	if rootless {
+
+	if cfg.Rootless {
 		logrus.Debugf("running in rootless mode")
 	}
-	opt, err := runc.NewWorkerOpt(common.root, snFactory, rootless, labels)
+	opt, err := runc.NewWorkerOpt(common.config.Root, snFactory, cfg.Rootless, cfg.Labels)
 	if err != nil {
 		return nil, err
 	}
 	opt.SessionManager = common.sessionManager
-	platformsStr := c.GlobalStringSlice("oci-worker-platform")
-	if len(platformsStr) != 0 {
+
+	if platformsStr := cfg.Platforms; len(platformsStr) != 0 {
 		platforms, err := parsePlatforms(platformsStr)
 		if err != nil {
 			return nil, errors.Wrap(err, "invalid platforms")

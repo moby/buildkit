@@ -1,0 +1,61 @@
+package config
+
+import (
+	"bytes"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
+
+func TestConfig(t *testing.T) {
+
+	const testConfig = `
+root = "/foo/bar"
+debug=true
+
+[grpc]
+address=["buildkit.sock"]
+debugAddress="debug.sock"
+gid=1234
+[grpc.tls]
+cert="mycert.pem"
+
+[worker.oci]
+enabled=true
+snapshotter="overlay"
+rootless=true
+[worker.oci.labels]
+foo="bar"
+"aa.bb.cc"="baz"
+
+[worker.containerd]
+platforms=["linux/amd64"]
+address="containerd.sock"
+`
+
+	cfg, md, err := Load(bytes.NewBuffer([]byte(testConfig)))
+	require.NoError(t, err)
+
+	require.Equal(t, "/foo/bar", cfg.Root)
+	require.Equal(t, true, cfg.Debug)
+
+	require.Equal(t, "buildkit.sock", cfg.GRPC.Address[0])
+	require.Equal(t, "debug.sock", cfg.GRPC.DebugAddress)
+	require.Equal(t, 1234, cfg.GRPC.GID)
+	require.Equal(t, "mycert.pem", cfg.GRPC.TLS.Cert)
+
+	require.True(t, md.IsDefined("grpc", "gid"))
+	require.False(t, md.IsDefined("grpc", "uid"))
+
+	require.NotNil(t, cfg.Workers.OCI.Enabled)
+	require.Equal(t, true, *cfg.Workers.OCI.Enabled)
+	require.Equal(t, "overlay", cfg.Workers.OCI.Snapshotter)
+	require.Equal(t, true, cfg.Workers.OCI.Rootless)
+
+	require.Equal(t, "bar", cfg.Workers.OCI.Labels["foo"])
+	require.Equal(t, "baz", cfg.Workers.OCI.Labels["aa.bb.cc"])
+
+	require.Nil(t, cfg.Workers.Containerd.Enabled)
+	require.Equal(t, 1, len(cfg.Workers.Containerd.Platforms))
+	require.Equal(t, "containerd.sock", cfg.Workers.Containerd.Address)
+}
