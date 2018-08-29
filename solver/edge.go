@@ -340,7 +340,7 @@ func (e *edge) unpark(incoming []pipe.Sender, updates, allPipes []pipe.Receiver,
 
 	if e.execReq == nil {
 		if added := e.createInputRequests(desiredState, f, false); !added && !e.hasActiveOutgoing && !cacheMapReq {
-			logrus.Errorf("buildkit scheluding error: leaving incoming open. forcing solve. please report this with BUILDKIT_SCHEDULER_DEBUG=1")
+			logrus.Errorf("buildkit scheluding error: leaving incoming open. forcing solve. Please report this with BUILDKIT_SCHEDULER_DEBUG=1")
 			e.createInputRequests(desiredState, f, true)
 		}
 	}
@@ -352,6 +352,11 @@ func (e *edge) makeExportable(k *CacheKey, records []*CacheRecord) ExportableCac
 		CacheKey: k,
 		Exporter: &exporter{k: k, records: records, override: e.edge.Vertex.Options().ExportCache},
 	}
+}
+
+func (e *edge) markFailed(f *pipeFactory, err error) {
+	e.err = err
+	e.postpone(f)
 }
 
 // processUpdate is called by unpark for every updated pipe request
