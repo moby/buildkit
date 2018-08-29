@@ -321,12 +321,14 @@ func (e *edge) unpark(incoming []pipe.Sender, updates, allPipes []pipe.Receiver,
 		return
 	}
 
+	cacheMapReq := false
 	// set up new outgoing requests if needed
 	if e.cacheMapReq == nil && (e.cacheMap == nil || len(e.cacheRecords) == 0) {
 		index := e.cacheMapIndex
 		e.cacheMapReq = f.NewFuncRequest(func(ctx context.Context) (interface{}, error) {
 			return e.op.CacheMap(ctx, index)
 		})
+		cacheMapReq = true
 	}
 
 	// execute op
@@ -337,7 +339,10 @@ func (e *edge) unpark(incoming []pipe.Sender, updates, allPipes []pipe.Receiver,
 	}
 
 	if e.execReq == nil {
-		e.createInputRequests(desiredState, f)
+		if added := e.createInputRequests(desiredState, f, false); !added && !e.hasActiveOutgoing && !cacheMapReq {
+			logrus.Errorf("buildkit scheluding error: leaving incoming open. forcing solve. please report this with BUILDKIT_SCHEDULER_DEBUG=1")
+			e.createInputRequests(desiredState, f, true)
+		}
 	}
 
 }
@@ -682,7 +687,9 @@ func (e *edge) respondToIncoming(incoming []pipe.Sender, allPipes []pipe.Receive
 
 // createInputRequests creates new requests for dependencies or async functions
 // that need to complete to continue processing the edge
-func (e *edge) createInputRequests(desiredState edgeStatusType, f *pipeFactory) {
+func (e *edge) createInputRequests(desiredState edgeStatusType, f *pipeFactory, force bool) bool {
+	addedNew := false
+
 	// initialize deps state
 	if e.deps == nil {
 		e.depRequests = make(map[pipe.Receiver]*dep)
@@ -696,7 +703,7 @@ func (e *edge) createInputRequests(desiredState edgeStatusType, f *pipeFactory) 
 	for _, dep := range e.deps {
 		desiredStateDep := dep.state
 
-		if e.noCacheMatchPossible {
+		if e.noCacheMatchPossible || force {
 			desiredStateDep = edgeStatusComplete
 		} else if dep.state == edgeStatusInitial && desiredState > dep.state {
 			desiredStateDep = edgeStatusCacheFast
@@ -738,6 +745,7 @@ func (e *edge) createInputRequests(desiredState edgeStatusType, f *pipeFactory) 
 				})
 				e.depRequests[req] = dep
 				dep.req = req
+				addedNew = true
 			}
 		}
 		// initialize function to compute cache key based on dependency result
@@ -749,8 +757,10 @@ func (e *edge) createInputRequests(desiredState edgeStatusType, f *pipeFactory) 
 					return e.op.CalcSlowCache(ctx, index, fn, res)
 				})
 			}(fn, res, dep.index)
+			addedNew = true
 		}
 	}
+	return addedNew
 }
 
 // execIfPossible creates a request for getting the edge result if there is
