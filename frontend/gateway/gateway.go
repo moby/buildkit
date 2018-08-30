@@ -217,7 +217,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 func (lbf *llbBridgeForwarder) Discard() {
 	lbf.mu.Lock()
 	defer lbf.mu.Unlock()
-	for _, r := range lbf.refs {
+	for id, r := range lbf.refs {
 		if lbf.err == nil && lbf.result != nil {
 			keep := false
 			lbf.result.EachRef(func(r2 solver.CachedResult) error {
@@ -231,6 +231,7 @@ func (lbf *llbBridgeForwarder) Discard() {
 			}
 		}
 		r.Release(context.TODO())
+		delete(lbf.refs, id)
 	}
 }
 
