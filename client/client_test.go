@@ -194,8 +194,8 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 		},
 	}
 
-	// ctrl takes precedence over fe
-	for _, winner := range []string{"fe", "ctrl"} {
+	// A caller provided name takes precedence over one returned by the frontend. Iterate over both options.
+	for _, winner := range []string{"frontend", "caller"} {
 		for _, exp := range []string{ExporterOCI, ExporterDocker, ExporterImage} {
 			destDir, err := ioutil.TempDir("", "buildkit")
 			require.NoError(t, err)
@@ -221,10 +221,11 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 			}
 
 			feName := imageName
-			if winner == "ctrl" {
+			switch winner {
+			case "caller":
 				feName = "loser:latest"
 				so.ExporterAttrs["name"] = imageName
-			} else {
+			case "frontend":
 				so.ExporterAttrs["name"] = "%s"
 			}
 
