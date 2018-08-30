@@ -205,7 +205,7 @@ func (e *edge) probeCache(d *dep, depKeys []CacheKeyWithSelector) bool {
 // checkDepMatchPossible checks if any cache matches are possible past this point
 func (e *edge) checkDepMatchPossible(dep *dep) {
 	depHasSlowCache := e.cacheMap.Deps[dep.index].ComputeDigestFunc != nil
-	if !e.noCacheMatchPossible && (((!dep.slowCacheFoundKey && dep.slowCacheComplete && depHasSlowCache) || (!depHasSlowCache && dep.state >= edgeStatusCacheSlow)) && len(dep.keys) == 0) {
+	if !e.noCacheMatchPossible && (((!dep.slowCacheFoundKey && dep.slowCacheComplete && depHasSlowCache) || (!depHasSlowCache && dep.state >= edgeStatusCacheSlow)) && len(dep.keyMap) == 0) {
 		e.noCacheMatchPossible = true
 	}
 }
@@ -220,12 +220,16 @@ func (e *edge) slowCacheFunc(dep *dep) ResultBasedCacheFunc {
 
 // allDepsHaveKeys checks if all dependencies have at least one key. used for
 // determining if there is enough data for combining cache key for edge
-func (e *edge) allDepsHaveKeys() bool {
+func (e *edge) allDepsHaveKeys(matching bool) bool {
 	if e.cacheMap == nil {
 		return false
 	}
 	for _, d := range e.deps {
-		if len(d.keys) == 0 && d.slowCacheKey == nil && d.result == nil {
+		cond := len(d.keys) == 0
+		if matching {
+			cond = len(d.keyMap) == 0
+		}
+		if cond && d.slowCacheKey == nil && d.result == nil {
 			return false
 		}
 	}
@@ -387,7 +391,7 @@ func (e *edge) processUpdate(upt pipe.Receiver) (depChanged bool) {
 				}
 				e.state = edgeStatusCacheSlow
 			}
-			if e.allDepsHaveKeys() {
+			if e.allDepsHaveKeys(false) {
 				e.keysDidChange = true
 			}
 			// probe keys that were loaded before cache map
@@ -432,7 +436,7 @@ func (e *edge) processUpdate(upt pipe.Receiver) (depChanged bool) {
 			if e.cacheMap != nil {
 				e.probeCache(dep, withSelector(newKeys, e.cacheMap.Deps[dep.index].Selector))
 				dep.edgeState.keys = state.keys
-				if e.allDepsHaveKeys() {
+				if e.allDepsHaveKeys(false) {
 					e.keysDidChange = true
 				}
 			}
@@ -580,7 +584,7 @@ func (e *edge) recalcCurrentState() {
 			if isSlowIncomplete || dep.state < edgeStatusCacheSlow {
 				allDepsCompletedCacheSlow = false
 			}
-			if dep.state < edgeStatusCacheSlow && len(dep.keys) == 0 {
+			if dep.state < edgeStatusCacheSlow && len(dep.keyMap) == 0 {
 				allDepsStateCacheSlow = false
 			}
 		}
@@ -702,20 +706,20 @@ func (e *edge) createInputRequests(desiredState edgeStatusType, f *pipeFactory) 
 			desiredStateDep = edgeStatusCacheFast
 		} else if dep.state == edgeStatusCacheFast && desiredState > dep.state {
 			// wait all deps to complete cache fast before continuing with slow cache
-			if (e.allDepsCompletedCacheFast && len(e.keys) == 0) || len(dep.keys) == 0 || e.allDepsHaveKeys() {
-				if !e.skipPhase2FastCache(dep) {
+			if (e.allDepsCompletedCacheFast && len(e.keys) == 0) || len(dep.keyMap) == 0 || e.allDepsHaveKeys(true) {
+				if !e.skipPhase2FastCache(dep) && e.cacheMap != nil {
 					desiredStateDep = edgeStatusCacheSlow
 				}
 			}
-		} else if dep.state == edgeStatusCacheSlow && desiredState == edgeStatusComplete {
+		} else if e.cacheMap != nil && dep.state == edgeStatusCacheSlow && desiredState == edgeStatusComplete {
 			// if all deps have completed cache-slow or content based cache for input is available
-			if (len(dep.keys) == 0 || e.allDepsCompletedCacheSlow || (!e.skipPhase2FastCache(dep) && e.slowCacheFunc(dep) != nil)) && (len(e.cacheRecords) == 0) {
-				if len(dep.keys) == 0 || !e.skipPhase2SlowCache(dep) && e.allDepsStateCacheSlow {
+			if (len(dep.keyMap) == 0 || e.allDepsCompletedCacheSlow || (!e.skipPhase2FastCache(dep) && e.slowCacheFunc(dep) != nil)) && (len(e.cacheRecords) == 0) {
+				if len(dep.keyMap) == 0 || !e.skipPhase2SlowCache(dep) {
 					desiredStateDep = edgeStatusComplete
 				}
 			}
-		} else if dep.state == edgeStatusCacheSlow && e.slowCacheFunc(dep) != nil && desiredState == edgeStatusCacheSlow {
-			if len(dep.keys) == 0 || !e.skipPhase2SlowCache(dep) && e.allDepsStateCacheSlow {
+		} else if e.cacheMap != nil && dep.state == edgeStatusCacheSlow && e.slowCacheFunc(dep) != nil && desiredState == edgeStatusCacheSlow {
+			if len(dep.keyMap) == 0 || !e.skipPhase2SlowCache(dep) {
 				desiredStateDep = edgeStatusComplete
 			}
 		}
