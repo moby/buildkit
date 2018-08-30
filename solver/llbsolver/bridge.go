@@ -74,6 +74,10 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (res *
 		b.cmsMu.Unlock()
 	}
 
+	if req.Definition != nil && req.Definition.Def != nil && req.Frontend != "" {
+		return nil, errors.New("cannot solve with both Definition and Frontend specified")
+	}
+
 	if req.Definition != nil && req.Definition.Def != nil {
 		edge, err := Load(req.Definition, WithCacheSources(cms), RuntimePlatforms(b.platforms), WithValidateCaps())
 		if err != nil {
