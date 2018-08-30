@@ -115,7 +115,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 		e.opt.ImageWriter.ContentStore().Delete(context.TODO(), desc.Digest)
 	}()
 
-	if n, ok := src.Metadata["image.name"]; e.targetName == "" && ok {
+	if n, ok := src.Metadata["image.name"]; e.targetName == "%s" && ok {
 		e.targetName = string(n)
 	}
 

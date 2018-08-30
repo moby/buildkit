@@ -72,9 +72,12 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 	for k, v := range opt {
 		switch k {
 		case keyImageName:
-			i.name, err = normalize(v)
-			if err != nil {
-				return nil, err
+			i.name = v
+			if i.name != "%s" {
+				i.name, err = normalize(i.name)
+				if err != nil {
+					return nil, err
+				}
 			}
 		case ociTypes:
 			ot = new(bool)
@@ -138,7 +141,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 	}
 	desc.Annotations[ocispec.AnnotationCreated] = time.Now().UTC().Format(time.RFC3339)
 
-	if n, ok := src.Metadata["image.name"]; e.name == "" && ok {
+	if n, ok := src.Metadata["image.name"]; e.name == "%s" && ok {
 		if e.name, err = normalize(string(n)); err != nil {
 			return nil, err
 		}

@@ -46,7 +46,7 @@ func TestClientIntegration(t *testing.T) {
 		testUser,
 		testOCIExporter,
 		testWhiteoutParentDir,
-		testFrontendImageNameTemplating,
+		testFrontendImageNaming,
 		testDuplicateWhiteouts,
 		testSchema1Image,
 		testMountWithNoSource,
@@ -114,7 +114,7 @@ func testNetworkMode(t *testing.T, sb integration.Sandbox) {
 	require.Contains(t, err.Error(), "network.host is not allowed")
 }
 
-func testFrontendImageNameTemplating(t *testing.T, sb integration.Sandbox) {
+func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 	t.Parallel()
 	c, err := New(context.TODO(), sb.Address())
@@ -224,7 +224,10 @@ func testFrontendImageNameTemplating(t *testing.T, sb integration.Sandbox) {
 			if winner == "ctrl" {
 				feName = "loser:latest"
 				so.ExporterAttrs["name"] = imageName
+			} else {
+				so.ExporterAttrs["name"] = "%s"
 			}
+
 			frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
 				res := gateway.NewResult()
 				res.AddMeta("image.name", []byte(feName))
