@@ -99,9 +99,7 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (res *
 			return nil, err
 		}
 	} else {
-		if req.Definition == nil || req.Definition.Def == nil {
-			return &frontend.Result{}, nil
-		}
+		return &frontend.Result{}, nil
 	}
 
 	if err := res.EachRef(func(r solver.CachedResult) error {
