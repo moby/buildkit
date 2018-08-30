@@ -215,6 +215,8 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 }
 
 func (lbf *llbBridgeForwarder) Discard() {
+	lbf.mu.Lock()
+	defer lbf.mu.Unlock()
 	for _, r := range lbf.refs {
 		if lbf.err == nil && lbf.result != nil {
 			keep := false
@@ -449,10 +451,12 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 			exp[k] = v
 		}
 
+		lbf.mu.Lock()
 		lbf.result = &frontend.Result{
 			Ref:      lbf.refs[defaultID],
 			Metadata: exp,
 		}
+		lbf.mu.Unlock()
 	}
 
 	resp := &pb.SolveResponse{
@@ -556,6 +560,8 @@ func (lbf *llbBridgeForwarder) convertRef(id string) (solver.CachedResult, error
 	if id == "" {
 		return nil, nil
 	}
+	lbf.mu.Lock()
+	defer lbf.mu.Unlock()
 	r, ok := lbf.refs[id]
 	if !ok {
 		return nil, errors.Errorf("return reference %s not found", id)
