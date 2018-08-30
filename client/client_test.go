@@ -196,50 +196,61 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 
 	// A caller provided name takes precedence over one returned by the frontend. Iterate over both options.
 	for _, winner := range []string{"frontend", "caller"} {
-		for _, exp := range []string{ExporterOCI, ExporterDocker, ExporterImage} {
-			destDir, err := ioutil.TempDir("", "buildkit")
-			require.NoError(t, err)
-			defer os.RemoveAll(destDir)
+		winner := winner // capture loop variable.
 
-			so := SolveOpt{
-				Exporter:      exp,
-				ExporterAttrs: map[string]string{},
+		// The double layer of `t.Run` here is required so
+		// that the inner-most tests (with the actual
+		// functionality) have definitely completed before the
+		// sandbox and registry cleanups (defered above) are run.
+		t.Run(winner, func(t *testing.T) {
+			for _, exp := range []string{ExporterOCI, ExporterDocker, ExporterImage} {
+				exp := exp // capture loop variable.
+				t.Run(exp, func(t *testing.T) {
+					destDir, err := ioutil.TempDir("", "buildkit")
+					require.NoError(t, err)
+					defer os.RemoveAll(destDir)
+
+					so := SolveOpt{
+						Exporter:      exp,
+						ExporterAttrs: map[string]string{},
+					}
+
+					out := filepath.Join(destDir, "out.tar")
+
+					imageName := "image-" + exp + "-fe:latest"
+
+					switch exp {
+					case ExporterOCI, ExporterDocker:
+						outW, err := os.Create(out)
+						require.NoError(t, err)
+						so.ExporterOutput = outW
+					case ExporterImage:
+						imageName = registry + "/" + imageName
+						so.ExporterAttrs["push"] = "true"
+					}
+
+					feName := imageName
+					switch winner {
+					case "caller":
+						feName = "loser:latest"
+						so.ExporterAttrs["name"] = imageName
+					case "frontend":
+						so.ExporterAttrs["name"] = "%s"
+					}
+
+					frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+						res := gateway.NewResult()
+						res.AddMeta("image.name", []byte(feName))
+						return res, nil
+					}
+
+					_, err = c.Build(context.TODO(), so, "", frontend, nil)
+					require.NoError(t, err)
+
+					checkImageName[exp](out, imageName)
+				})
 			}
-
-			out := filepath.Join(destDir, "out.tar")
-
-			imageName := "image-" + exp + "-fe:latest"
-
-			switch exp {
-			case ExporterOCI, ExporterDocker:
-				outW, err := os.Create(out)
-				require.NoError(t, err)
-				so.ExporterOutput = outW
-			case ExporterImage:
-				imageName = registry + "/" + imageName
-				so.ExporterAttrs["push"] = "true"
-			}
-
-			feName := imageName
-			switch winner {
-			case "caller":
-				feName = "loser:latest"
-				so.ExporterAttrs["name"] = imageName
-			case "frontend":
-				so.ExporterAttrs["name"] = "%s"
-			}
-
-			frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
-				res := gateway.NewResult()
-				res.AddMeta("image.name", []byte(feName))
-				return res, nil
-			}
-
-			_, err = c.Build(context.TODO(), so, "", frontend, nil)
-			require.NoError(t, err)
-
-			checkImageName[exp](out, imageName)
-		}
+		})
 	}
 
 	checkAllReleasable(t, c, sb, true)
