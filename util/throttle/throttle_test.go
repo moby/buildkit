@@ -54,3 +54,25 @@ func TestThrottle(t *testing.T) {
 	}
 
 }
+
+func TestThrottleAfter(t *testing.T) {
+	t.Parallel()
+
+	var i int64
+	f := func() {
+		atomic.AddInt64(&i, 1)
+	}
+
+	f = ThrottleAfter(100*time.Millisecond, f)
+
+	f()
+
+	time.Sleep(10 * time.Millisecond)
+	require.Equal(t, int64(1), atomic.LoadInt64(&i))
+	f()
+	time.Sleep(10 * time.Millisecond)
+	require.Equal(t, int64(1), atomic.LoadInt64(&i))
+
+	time.Sleep(200 * time.Millisecond)
+	require.Equal(t, int64(2), atomic.LoadInt64(&i))
+}
