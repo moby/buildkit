@@ -33,7 +33,7 @@ const (
 	localNameContext = "context"
 	historyComment   = "buildkit.dockerfile.v0"
 
-	CopyImage = "tonistiigi/copy:v0.1.3@sha256:e57a3b4d6240f55bac26b655d2cfb751f8b9412d6f7bb1f787e946391fb4b21b"
+	DefaultCopyImage = "tonistiigi/copy:v0.1.3@sha256:e57a3b4d6240f55bac26b655d2cfb751f8b9412d6f7bb1f787e946391fb4b21b"
 )
 
 type ConvertOpt struct {
@@ -48,13 +48,14 @@ type ConvertOpt struct {
 	// Empty slice means ignore cache for all stages. Nil doesn't disable cache.
 	IgnoreCache []string
 	// CacheIDNamespace scopes the IDs for different cache mounts
-	CacheIDNamespace string
-	ImageResolveMode llb.ResolveMode
-	TargetPlatform   *specs.Platform
-	BuildPlatforms   []specs.Platform
-	PrefixPlatform   bool
-	ExtraHosts       []llb.HostIP
-	ForceNetMode     pb.NetMode
+	CacheIDNamespace  string
+	ImageResolveMode  llb.ResolveMode
+	TargetPlatform    *specs.Platform
+	BuildPlatforms    []specs.Platform
+	PrefixPlatform    bool
+	ExtraHosts        []llb.HostIP
+	ForceNetMode      pb.NetMode
+	OverrideCopyImage string
 }
 
 func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State, *Image, error) {
@@ -302,6 +303,10 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 			buildPlatforms:    platformOpt.buildPlatforms,
 			targetPlatform:    platformOpt.targetPlatform,
 			extraHosts:        opt.ExtraHosts,
+			copyImage:         opt.OverrideCopyImage,
+		}
+		if opt.copyImage == "" {
+			opt.copyImage = DefaultCopyImage
 		}
 
 		if err = dispatchOnBuild(d, d.image.Config.OnBuild, opt); err != nil {
@@ -406,6 +411,7 @@ type dispatchOpt struct {
 	targetPlatform    specs.Platform
 	buildPlatforms    []specs.Platform
 	extraHosts        []llb.HostIP
+	copyImage         string
 }
 
 func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
@@ -613,7 +619,7 @@ func dispatchWorkdir(d *dispatchState, c *instructions.WorkdirCommand, commit bo
 
 func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState llb.State, isAddCommand bool, cmdToPrint fmt.Stringer, chown string, opt dispatchOpt) error {
 	// TODO: this should use CopyOp instead. Current implementation is inefficient
-	img := llb.Image(CopyImage, llb.MarkImageInternal, llb.Platform(opt.buildPlatforms[0]), WithInternalName("helper image for file operations"))
+	img := llb.Image(opt.copyImage, llb.MarkImageInternal, llb.Platform(opt.buildPlatforms[0]), WithInternalName("helper image for file operations"))
 
 	dest := path.Join(".", pathRelativeToWorkingDir(d.state, c.Dest()))
 	if c.Dest() == "." || c.Dest()[len(c.Dest())-1] == filepath.Separator {
