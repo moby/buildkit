@@ -190,6 +190,9 @@ func oneOffProgress(ctx context.Context, id string) func(err error) error {
 func getExporter(variant ExporterVariant, name string) (images.Exporter, error) {
 	switch variant {
 	case VariantOCI:
+		if name != "" {
+			return nil, errors.New("oci exporter cannot export named image")
+		}
 		return &oci.V1Exporter{}, nil
 	case VariantDocker:
 		return &dockerexporter.DockerExporter{Name: name}, nil

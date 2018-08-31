@@ -226,7 +226,9 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 					imageName := "image-" + exp + "-fe:latest"
 
 					switch exp {
-					case ExporterOCI, ExporterDocker:
+					case ExporterOCI:
+						t.Skip("oci exporter does not support named images")
+					case ExporterDocker:
 						outW, err := os.Create(out)
 						require.NoError(t, err)
 						so.ExporterOutput = outW
@@ -671,12 +673,13 @@ func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 		outW, err := os.Create(out)
 		require.NoError(t, err)
 		target := "example.com/buildkit/testoci:latest"
-
+		attrs := map[string]string{}
+		if exp == ExporterDocker {
+			attrs["name"] = target
+		}
 		_, err = c.Solve(context.TODO(), def, SolveOpt{
-			Exporter: exp,
-			ExporterAttrs: map[string]string{
-				"name": target,
-			},
+			Exporter:       exp,
+			ExporterAttrs:  attrs,
 			ExporterOutput: outW,
 		}, nil)
 		require.NoError(t, err)
