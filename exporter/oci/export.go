@@ -141,10 +141,16 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 	}
 	desc.Annotations[ocispec.AnnotationCreated] = time.Now().UTC().Format(time.RFC3339)
 
+	resp := make(map[string]string)
+
 	if n, ok := src.Metadata["image.name"]; e.name == "%s" && ok {
 		if e.name, err = normalize(string(n)); err != nil {
 			return nil, err
 		}
+	}
+
+	if e.name != "" {
+		resp["image.name"] = e.name
 	}
 
 	exp, err := getExporter(e.opt.Variant, e.name)
@@ -161,7 +167,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 		w.Close()
 		return nil, report(err)
 	}
-	return nil, report(w.Close())
+	return resp, report(w.Close())
 }
 
 func oneOffProgress(ctx context.Context, id string) func(err error) error {

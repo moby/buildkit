@@ -127,12 +127,15 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 	}
 	require.NoError(t, err)
 
-	checkImageName := map[string]func(out, imageName string){
-		ExporterOCI: func(out, imageName string) {
+	checkImageName := map[string]func(out, imageName string, exporterResponse map[string]string){
+		ExporterOCI: func(out, imageName string, exporterResponse map[string]string) {
 			// Nothing to check
 			return
 		},
-		ExporterDocker: func(out, imageName string) {
+		ExporterDocker: func(out, imageName string, exporterResponse map[string]string) {
+			require.Contains(t, exporterResponse, "image.name")
+			require.Equal(t, exporterResponse["image.name"], "docker.io/library/"+imageName)
+
 			dt, err := ioutil.ReadFile(out)
 			require.NoError(t, err)
 
@@ -157,7 +160,10 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 			require.Equal(t, 1, len(dockerMfst[0].RepoTags))
 			require.Equal(t, "docker.io/library/"+imageName, dockerMfst[0].RepoTags[0])
 		},
-		ExporterImage: func(_, imageName string) {
+		ExporterImage: func(_, imageName string, exporterResponse map[string]string) {
+			require.Contains(t, exporterResponse, "image.name")
+			require.Equal(t, exporterResponse["image.name"], imageName)
+
 			// check if we can pull (requires containerd)
 			var cdAddress string
 			if cd, ok := sb.(interface {
@@ -244,10 +250,10 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 						return res, nil
 					}
 
-					_, err = c.Build(context.TODO(), so, "", frontend, nil)
+					resp, err := c.Build(context.TODO(), so, "", frontend, nil)
 					require.NoError(t, err)
 
-					checkImageName[exp](out, imageName)
+					checkImageName[exp](out, imageName, resp.ExporterResponse)
 				})
 			}
 		})

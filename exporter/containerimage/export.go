@@ -115,6 +115,8 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 		e.opt.ImageWriter.ContentStore().Delete(context.TODO(), desc.Digest)
 	}()
 
+	resp := make(map[string]string)
+
 	if n, ok := src.Metadata["image.name"]; e.targetName == "%s" && ok {
 		e.targetName = string(n)
 	}
@@ -147,9 +149,9 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 				}
 			}
 		}
+		resp["image.name"] = e.targetName
 	}
 
-	return map[string]string{
-		"containerimage.digest": desc.Digest.String(),
-	}, nil
+	resp["containerimage.digest"] = desc.Digest.String()
+	return resp, nil
 }
