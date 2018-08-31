@@ -243,7 +243,7 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 						feName = "loser:latest"
 						so.ExporterAttrs["name"] = imageName
 					case "frontend":
-						so.ExporterAttrs["name"] = "%s"
+						so.ExporterAttrs["name"] = "*"
 					}
 
 					frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {

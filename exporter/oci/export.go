@@ -73,7 +73,7 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 		switch k {
 		case keyImageName:
 			i.name = v
-			if i.name != "%s" {
+			if i.name != "*" {
 				i.name, err = normalize(i.name)
 				if err != nil {
 					return nil, err
@@ -143,7 +143,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 
 	resp := make(map[string]string)
 
-	if n, ok := src.Metadata["image.name"]; e.name == "%s" && ok {
+	if n, ok := src.Metadata["image.name"]; e.name == "*" && ok {
 		if e.name, err = normalize(string(n)); err != nil {
 			return nil, err
 		}

@@ -117,7 +117,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 
 	resp := make(map[string]string)
 
-	if n, ok := src.Metadata["image.name"]; e.targetName == "%s" && ok {
+	if n, ok := src.Metadata["image.name"]; e.targetName == "*" && ok {
 		e.targetName = string(n)
 	}
 
