@@ -42,6 +42,17 @@ func New(opt Opt) (exporter.Exporter, error) {
 	return im, nil
 }
 
+func normalize(name string) (string, error) {
+	if name == "" {
+		return "", nil
+	}
+	parsed, err := reference.ParseNormalizedNamed(name)
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to parse %s", name)
+	}
+	return reference.TagNameOnly(parsed).String(), nil
+}
+
 func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exporter.ExporterInstance, error) {
 	id := session.FromContext(ctx)
 	if id == "" {
@@ -61,11 +72,13 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 	for k, v := range opt {
 		switch k {
 		case keyImageName:
-			parsed, err := reference.ParseNormalizedNamed(v)
-			if err != nil {
-				return nil, errors.Wrapf(err, "failed to parse %s", v)
+			i.name = v
+			if i.name != "*" {
+				i.name, err = normalize(i.name)
+				if err != nil {
+					return nil, err
+				}
 			}
-			i.name = reference.TagNameOnly(parsed).String()
 		case ociTypes:
 			ot = new(bool)
 			if v == "" {
@@ -128,6 +141,18 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 	}
 	desc.Annotations[ocispec.AnnotationCreated] = time.Now().UTC().Format(time.RFC3339)
 
+	resp := make(map[string]string)
+
+	if n, ok := src.Metadata["image.name"]; e.name == "*" && ok {
+		if e.name, err = normalize(string(n)); err != nil {
+			return nil, err
+		}
+	}
+
+	if e.name != "" {
+		resp["image.name"] = e.name
+	}
+
 	exp, err := getExporter(e.opt.Variant, e.name)
 	if err != nil {
 		return nil, err
@@ -142,7 +167,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 		w.Close()
 		return nil, report(err)
 	}
-	return nil, report(w.Close())
+	return resp, report(w.Close())
 }
 
 func oneOffProgress(ctx context.Context, id string) func(err error) error {
@@ -165,6 +190,9 @@ func oneOffProgress(ctx context.Context, id string) func(err error) error {
 func getExporter(variant ExporterVariant, name string) (images.Exporter, error) {
 	switch variant {
 	case VariantOCI:
+		if name != "" {
+			return nil, errors.New("oci exporter cannot export named image")
+		}
 		return &oci.V1Exporter{}, nil
 	case VariantDocker:
 		return &dockerexporter.DockerExporter{Name: name}, nil
