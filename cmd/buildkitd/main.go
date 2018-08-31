@@ -14,12 +14,14 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/BurntSushi/toml"
 	"github.com/containerd/containerd/pkg/seed"
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/sys"
 	"github.com/docker/go-connections/sockets"
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
 	registryremotecache "github.com/moby/buildkit/cache/remotecache/registry"
+	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/control"
 	"github.com/moby/buildkit/frontend"
 	dockerfile "github.com/moby/buildkit/frontend/dockerfile/builder"
@@ -50,7 +52,7 @@ func init() {
 
 type workerInitializerOpt struct {
 	sessionManager *session.Manager
-	root           string
+	config         *config.Config
 }
 
 type workerInitializer struct {
@@ -80,29 +82,35 @@ func main() {
 	app := cli.NewApp()
 	app.Name = "buildkitd"
 	app.Usage = "build daemon"
-	defaultRoot := appdefaults.Root
-	defaultAddress := appdefaults.Address
+
+	defaultConf, md := defaultConf()
+
 	rootlessUsage := "set all the default options to be compatible with rootless containers"
 	if system.RunningInUserNS() {
 		app.Flags = append(app.Flags, cli.BoolTFlag{
 			Name:  "rootless",
 			Usage: rootlessUsage + " (default: true)",
 		})
-		// if buildkitd is being executed as the mapped-root (not only EUID==0 but also $USER==root)
-		// in a user namespace, we need to enable the rootless mode but
-		// we don't want to honor $HOME for setting up default paths.
-		if u := os.Getenv("USER"); u != "" && u != "root" {
-			defaultRoot = appdefaults.UserRoot()
-			defaultAddress = appdefaults.UserAddress()
-			appdefaults.EnsureUserAddressDir()
-		}
 	} else {
 		app.Flags = append(app.Flags, cli.BoolFlag{
 			Name:  "rootless",
 			Usage: rootlessUsage,
 		})
 	}
+
+	groupValue := func(gid int) string {
+		if md == nil || !md.IsDefined("grpc", "gid") {
+			return ""
+		}
+		return strconv.Itoa(gid)
+	}
+
 	app.Flags = append(app.Flags,
+		cli.StringFlag{
+			Name:  "config",
+			Usage: "path to config file",
+			Value: defaultConfigPath(),
+		},
 		cli.BoolFlag{
 			Name:  "debug",
 			Usage: "enable debug output in logs",
@@ -110,34 +118,37 @@ func main() {
 		cli.StringFlag{
 			Name:  "root",
 			Usage: "path to state directory",
-			Value: defaultRoot,
+			Value: defaultConf.Root,
 		},
 		cli.StringSliceFlag{
 			Name:  "addr",
 			Usage: "listening address (socket or tcp)",
-			Value: &cli.StringSlice{defaultAddress},
+			Value: &cli.StringSlice{defaultConf.GRPC.Address[0]},
 		},
 		cli.StringFlag{
 			Name:  "group",
 			Usage: "group (name or gid) which will own all Unix socket listening addresses",
-			Value: "",
+			Value: groupValue(defaultConf.GRPC.GID),
 		},
 		cli.StringFlag{
 			Name:  "debugaddr",
 			Usage: "debugging address (eg. 0.0.0.0:6060)",
-			Value: "",
+			Value: defaultConf.GRPC.DebugAddress,
 		},
 		cli.StringFlag{
 			Name:  "tlscert",
 			Usage: "certificate file to use",
+			Value: defaultConf.GRPC.TLS.Cert,
 		},
 		cli.StringFlag{
 			Name:  "tlskey",
 			Usage: "key file to use",
+			Value: defaultConf.GRPC.TLS.Key,
 		},
 		cli.StringFlag{
 			Name:  "tlscacert",
 			Usage: "ca certificate to verify clients",
+			Value: defaultConf.GRPC.TLS.CA,
 		},
 	)
 	app.Flags = append(app.Flags, appFlags...)
@@ -149,13 +160,27 @@ func main() {
 		ctx, cancel := context.WithCancel(appcontext.Context())
 		defer cancel()
 
-		if debugAddr := c.GlobalString("debugaddr"); debugAddr != "" {
-			if err := setupDebugHandlers(debugAddr); err != nil {
+		cfg, md, err := config.LoadFile(c.GlobalString("config"))
+		if err != nil {
+			return err
+		}
+
+		setDefaultConfig(&cfg)
+		if err := applyMainFlags(c, &cfg, md); err != nil {
+			return err
+		}
+
+		if cfg.Debug {
+			logrus.SetLevel(logrus.DebugLevel)
+		}
+
+		if cfg.GRPC.DebugAddress != "" {
+			if err := setupDebugHandlers(cfg.GRPC.DebugAddress); err != nil {
 				return err
 			}
 		}
 		opts := []grpc.ServerOption{unaryInterceptor(ctx), grpc.StreamInterceptor(otgrpc.OpenTracingStreamServerInterceptor(tracer))}
-		creds, err := serverCredentials(c)
+		creds, err := serverCredentials(cfg.GRPC.TLS)
 		if err != nil {
 			return err
 		}
@@ -165,16 +190,17 @@ func main() {
 		server := grpc.NewServer(opts...)
 
 		// relative path does not work with nightlyone/lockfile
-		root, err := filepath.Abs(c.GlobalString("root"))
+		root, err := filepath.Abs(cfg.Root)
 		if err != nil {
 			return err
 		}
+		cfg.Root = root
 
 		if err := os.MkdirAll(root, 0700); err != nil {
 			return errors.Wrapf(err, "failed to create %s", root)
 		}
 
-		controller, err := newController(c, root)
+		controller, err := newController(c, &cfg)
 		if err != nil {
 			return err
 		}
@@ -182,11 +208,7 @@ func main() {
 		controller.Register(server)
 
 		errCh := make(chan error, 1)
-		addrs := c.GlobalStringSlice("addr")
-		if len(addrs) > 1 {
-			addrs = addrs[1:] // https://github.com/urfave/cli/issues/160
-		}
-		if err := serveGRPC(c, server, addrs, errCh); err != nil {
+		if err := serveGRPC(cfg.GRPC, server, errCh); err != nil {
 			return err
 		}
 
@@ -202,12 +224,6 @@ func main() {
 		server.GracefulStop()
 
 		return err
-	}
-	app.Before = func(context *cli.Context) error {
-		if context.GlobalBool("debug") {
-			logrus.SetLevel(logrus.DebugLevel)
-		}
-		return nil
 	}
 
 	app.After = func(context *cli.Context) error {
@@ -225,14 +241,15 @@ func main() {
 	}
 }
 
-func serveGRPC(c *cli.Context, server *grpc.Server, addrs []string, errCh chan error) error {
+func serveGRPC(cfg config.GRPCConfig, server *grpc.Server, errCh chan error) error {
+	addrs := cfg.Address
 	if len(addrs) == 0 {
 		return errors.New("--addr cannot be empty")
 	}
 	eg, _ := errgroup.WithContext(context.Background())
 	listeners := make([]net.Listener, 0, len(addrs))
 	for _, addr := range addrs {
-		l, err := getListener(c, addr)
+		l, err := getListener(cfg, addr)
 		if err != nil {
 			for _, l := range listeners {
 				l.Close()
@@ -253,6 +270,102 @@ func serveGRPC(c *cli.Context, server *grpc.Server, addrs []string, errCh chan e
 	go func() {
 		errCh <- eg.Wait()
 	}()
+	return nil
+}
+
+func defaultConfigPath() string {
+	if system.RunningInUserNS() {
+		return filepath.Join(appdefaults.UserConfigDir(), "buildkitd.toml")
+	}
+	return filepath.Join(appdefaults.ConfigDir, "buildkitd.toml")
+}
+
+func defaultConf() (config.Config, *toml.MetaData) {
+	cfg, md, err := config.LoadFile(defaultConfigPath())
+	if err != nil {
+		return cfg, nil
+	}
+	setDefaultConfig(&cfg)
+
+	return cfg, md
+}
+
+func setDefaultConfig(cfg *config.Config) {
+	orig := *cfg
+
+	if cfg.Root == "" {
+		cfg.Root = appdefaults.Root
+	}
+
+	if len(cfg.GRPC.Address) == 0 {
+		cfg.GRPC.Address = []string{appdefaults.Address}
+	}
+
+	if system.RunningInUserNS() {
+		// if buildkitd is being executed as the mapped-root (not only EUID==0 but also $USER==root)
+		// in a user namespace, we need to enable the rootless mode but
+		// we don't want to honor $HOME for setting up default paths.
+		if u := os.Getenv("USER"); u != "" && u != "root" {
+			if orig.Root == "" {
+				cfg.Root = appdefaults.UserRoot()
+			}
+			if len(orig.GRPC.Address) == 0 {
+				cfg.GRPC.Address = []string{appdefaults.UserAddress()}
+			}
+			appdefaults.EnsureUserAddressDir()
+		}
+	}
+}
+
+func applyMainFlags(c *cli.Context, cfg *config.Config, md *toml.MetaData) error {
+	if c.IsSet("debug") {
+		cfg.Debug = c.Bool("debug")
+	}
+	if c.IsSet("root") {
+		cfg.Root = c.String("root")
+	}
+
+	if c.IsSet("addr") || len(cfg.GRPC.Address) == 0 {
+		addrs := c.StringSlice("addr")
+		if len(addrs) > 1 {
+			addrs = addrs[1:] // https://github.com/urfave/cli/issues/160
+		}
+
+		cfg.GRPC.Address = make([]string, 0, len(addrs))
+		for _, v := range addrs {
+			cfg.GRPC.Address = append(cfg.GRPC.Address, v)
+		}
+	}
+
+	if c.IsSet("debugaddr") {
+		cfg.GRPC.DebugAddress = c.String("debugaddr")
+	}
+
+	if md == nil || !md.IsDefined("grpc", "uid") {
+		cfg.GRPC.UID = os.Getuid()
+	}
+
+	if md == nil || !md.IsDefined("grpc", "gid") {
+		cfg.GRPC.GID = os.Getgid()
+	}
+
+	if group := c.String("group"); group != "" {
+		gid, err := groupToGid(group)
+		if err != nil {
+			return err
+		}
+		cfg.GRPC.GID = gid
+	}
+
+	if tlscert := c.String("tlscert"); tlscert != "" {
+		cfg.GRPC.TLS.Cert = tlscert
+	}
+	if tlskey := c.String("tlskey"); tlskey != "" {
+		cfg.GRPC.TLS.Key = tlskey
+	}
+	if tlsca := c.String("tlsca"); tlsca != "" {
+		cfg.GRPC.TLS.CA = tlsca
+	}
 	return nil
 }
 
@@ -289,7 +402,7 @@ func groupToGid(group string) (int, error) {
 	return id, nil
 }
 
-func getListener(c *cli.Context, addr string) (net.Listener, error) {
+func getListener(cfg config.GRPCConfig, addr string) (net.Listener, error) {
 	addrSlice := strings.SplitN(addr, "://", 2)
 	if len(addrSlice) < 2 {
 		return nil, errors.Errorf("address %s does not contain proto, you meant unix://%s ?",
@@ -299,12 +412,7 @@ func getListener(c *cli.Context, addr string) (net.Listener, error) {
 	listenAddr := addrSlice[1]
 	switch proto {
 	case "unix", "npipe":
-		uid := os.Getuid()
-		gid, err := groupToGid(c.GlobalString("group"))
-		if err != nil {
-			return nil, err
-		}
-		return sys.GetLocalListener(listenAddr, uid, gid)
+		return sys.GetLocalListener(listenAddr, cfg.UID, cfg.GID)
 	case "tcp":
 		return sockets.NewTCPSocket(listenAddr, nil)
 	default:
@@ -335,10 +443,10 @@ func unaryInterceptor(globalCtx context.Context) grpc.ServerOption {
 	})
 }
 
-func serverCredentials(c *cli.Context) (grpc.ServerOption, error) {
-	certFile := c.GlobalString("tlscert")
-	keyFile := c.GlobalString("tlskey")
-	caFile := c.GlobalString("tlscacert")
+func serverCredentials(cfg config.TLSConfig) (grpc.ServerOption, error) {
+	certFile := cfg.Cert
+	keyFile := cfg.Key
+	caFile := cfg.CA
 	if certFile == "" && keyFile == "" {
 		return nil, nil
 	}
@@ -373,14 +481,14 @@ func serverCredentials(c *cli.Context) (grpc.ServerOption, error) {
 	return creds, nil
 }
 
-func newController(c *cli.Context, root string) (*control.Controller, error) {
+func newController(c *cli.Context, cfg *config.Config) (*control.Controller, error) {
 	sessionManager, err := session.NewManager()
 	if err != nil {
 		return nil, err
 	}
 	wc, err := newWorkerController(c, workerInitializerOpt{
 		sessionManager: sessionManager,
-		root:           root,
+		config:         cfg,
 	})
 	if err != nil {
 		return nil, err
@@ -389,7 +497,7 @@ func newController(c *cli.Context, root string) (*control.Controller, error) {
 	frontends["dockerfile.v0"] = forwarder.NewGatewayForwarder(wc, dockerfile.Build)
 	frontends["gateway.v0"] = gateway.NewGatewayFrontend(wc)
 
-	cacheStorage, err := boltdbcachestorage.NewStore(filepath.Join(root, "cache.db"))
+	cacheStorage, err := boltdbcachestorage.NewStore(filepath.Join(cfg.Root, "cache.db"))
 	if err != nil {
 		return nil, err
 	}
