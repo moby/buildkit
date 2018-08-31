@@ -360,10 +360,10 @@ func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, opt
 	gcMode := opt.keepBytes != 0
 	cutOff := time.Now().Add(-opt.keepDuration)
 
-	locked := map[*cacheRecord]struct{}{}
+	locked := map[*sync.Mutex]struct{}{}
 
 	for _, cr := range cm.records {
-		if _, ok := locked[cr]; ok {
+		if _, ok := locked[cr.mu]; ok {
 			continue
 		}
 		cr.mu.Lock()
@@ -431,7 +431,7 @@ func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, opt
 						return err
 					}
 				} else {
-					locked[cr] = struct{}{}
+					locked[cr.mu] = struct{}{}
 					continue // leave the record locked
 				}
 			}
