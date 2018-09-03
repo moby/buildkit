@@ -52,7 +52,8 @@ func (s *oci) New() (Sandbox, func() error, error) {
 		return nil, nil, err
 	}
 	logs := map[string]*bytes.Buffer{}
-	buildkitdArgs := []string{"buildkitd", "--oci-worker=true", "--containerd-worker=false"}
+	// Include use of --oci-worker-labels to trigger https://github.com/moby/buildkit/pull/603
+	buildkitdArgs := []string{"buildkitd", "--oci-worker=true", "--containerd-worker=false", "--oci-worker-labels=org.mobyproject.buildkit.worker.sandbox=true"}
 	if s.uid != 0 {
 		if s.gid == 0 {
 			return nil, nil, errors.Errorf("unsupported id pair: uid=%d, gid=%d", s.uid, s.gid)

@@ -93,6 +93,9 @@ func applyOCIFlags(c *cli.Context, cfg *config.Config) error {
 	if err != nil {
 		return err
 	}
+	if cfg.Workers.OCI.Labels == nil {
+		cfg.Workers.OCI.Labels = make(map[string]string)
+	}
 	for k, v := range labels {
 		cfg.Workers.OCI.Labels[k] = v
 	}
