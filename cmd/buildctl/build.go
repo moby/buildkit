@@ -14,6 +14,7 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/auth/authprovider"
 	"github.com/moby/buildkit/session/secrets/secretsprovider"
+	"github.com/moby/buildkit/session/sshforward/sshprovider"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/entitlements"
 	"github.com/moby/buildkit/util/progress/progressui"
@@ -82,6 +83,10 @@ var buildCommand = cli.Command{
 			Name:  "allow",
 			Usage: "Allow extra privileged entitlement, e.g. network.host, security.unconfined",
 		},
+		cli.StringSliceFlag{
+			Name:  "ssh",
+			Usage: "Allow forwarding SSH agent to the builder. Format default|<id>[=<socket_path>]",
+		},
 	},
 }
 
@@ -135,6 +140,18 @@ func build(clicontext *cli.Context) error {
 	}
 
 	attachable := []session.Attachable{authprovider.NewDockerAuthProvider()}
+
+	if ssh := clicontext.StringSlice("ssh"); len(ssh) > 0 {
+		configs, err := parseSSHSpecs(ssh)
+		if err != nil {
+			return err
+		}
+		sp, err := sshprovider.NewSSHAgentProvider(configs)
+		if err != nil {
+			return err
+		}
+		attachable = append(attachable, sp)
+	}
 
 	if secrets := clicontext.StringSlice("secret"); len(secrets) > 0 {
 		secretProvider, err := parseSecretSpecs(secrets)
@@ -360,4 +377,19 @@ func parseEntitlements(inp []string) ([]entitlements.Entitlement, error) {
 		ent = append(ent, e)
 	}
 	return ent, nil
+}
+
+func parseSSHSpecs(inp []string) ([]sshprovider.AgentConfig, error) {
+	configs := make([]sshprovider.AgentConfig, 0, len(inp))
+	for _, v := range inp {
+		parts := strings.SplitN(v, "=", 2)
+		cfg := sshprovider.AgentConfig{
+			ID: parts[0],
+		}
+		if len(parts) > 1 {
+			cfg.Socket = parts[1]
+		}
+		configs = append(configs, cfg)
+	}
+	return configs, nil
 }
