@@ -118,7 +118,9 @@ disabled_plugins = ["cri"]
 	buildkitdSock, stop, err := runBuildkitd([]string{"buildkitd",
 		"--oci-worker=false",
 		"--containerd-worker=true",
-		"--containerd-worker-addr", address}, logs, 0, 0)
+		"--containerd-worker-addr", address,
+		"--containerd-worker-labels=org.mobyproject.buildkit.worker.sandbox=true", // Include use of --containerd-worker-labels to trigger https://github.com/moby/buildkit/pull/603
+	}, logs, 0, 0)
 	if err != nil {
 		return nil, nil, err
 	}

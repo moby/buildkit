@@ -91,6 +91,9 @@ func applyContainerdFlags(c *cli.Context, cfg *config.Config) error {
 	if err != nil {
 		return err
 	}
+	if cfg.Workers.Containerd.Labels == nil {
+		cfg.Workers.Containerd.Labels = make(map[string]string)
+	}
 	for k, v := range labels {
 		cfg.Workers.Containerd.Labels[k] = v
 	}
