@@ -47,6 +47,7 @@ type OCIConfig struct {
 	Platforms   []string          `toml:"platforms"`
 	Snapshotter string            `toml:"snapshotter"`
 	Rootless    bool              `toml:"rootless"`
+	GCPolicy    []GCPolicy        `toml:"gcpolicy"`
 }
 
 type ContainerdConfig struct {
@@ -54,6 +55,14 @@ type ContainerdConfig struct {
 	Enabled   *bool             `toml:"enabled"`
 	Labels    map[string]string `toml:"labels"`
 	Platforms []string          `toml:"platforms"`
+	GCPolicy  []GCPolicy        `toml:"gcpolicy"`
+}
+
+type GCPolicy struct {
+	All          bool     `toml:"all"`
+	KeepBytes    int64    `toml:"keepBytes"`
+	KeepDuration int64    `toml:"keepDuration"`
+	Filters      []string `toml:"filters"`
 }
 
 func Load(r io.Reader) (Config, *toml.MetaData, error) {

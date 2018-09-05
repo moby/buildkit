@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/containerd/containerd/pkg/seed"
@@ -21,6 +22,7 @@ import (
 	"github.com/docker/go-connections/sockets"
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
 	registryremotecache "github.com/moby/buildkit/cache/remotecache/registry"
+	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/control"
 	"github.com/moby/buildkit/frontend"
@@ -571,4 +573,20 @@ func parsePlatforms(platformsStr []string) ([]specs.Platform, error) {
 		out = append(out, platforms.Normalize(p))
 	}
 	return out, nil
+}
+
+func getGCPolicy(rules []config.GCPolicy, root string) []client.PruneInfo {
+	if len(rules) == 0 {
+		rules = config.DefaultGCPolicy(root)
+	}
+	out := make([]client.PruneInfo, 0, len(rules))
+	for _, rule := range rules {
+		out = append(out, client.PruneInfo{
+			Filter:       rule.Filters,
+			All:          rule.All,
+			KeepBytes:    rule.KeepBytes,
+			KeepDuration: time.Duration(rule.KeepDuration) * time.Second,
+		})
+	}
+	return out
 }

@@ -31,6 +31,14 @@ foo="bar"
 [worker.containerd]
 platforms=["linux/amd64"]
 address="containerd.sock"
+[[worker.containerd.gcpolicy]]
+all=true
+filters=["foo==bar"]
+keepBytes=20
+keepDuration=3600
+[[worker.containerd.gcpolicy]]
+keepBytes=40
+keepDuration=7200
 `
 
 	cfg, md, err := Load(bytes.NewBuffer([]byte(testConfig)))
@@ -58,4 +66,16 @@ address="containerd.sock"
 	require.Nil(t, cfg.Workers.Containerd.Enabled)
 	require.Equal(t, 1, len(cfg.Workers.Containerd.Platforms))
 	require.Equal(t, "containerd.sock", cfg.Workers.Containerd.Address)
+
+	require.Equal(t, 0, len(cfg.Workers.OCI.GCPolicy))
+	require.Equal(t, 2, len(cfg.Workers.Containerd.GCPolicy))
+
+	require.Equal(t, true, cfg.Workers.Containerd.GCPolicy[0].All)
+	require.Equal(t, false, cfg.Workers.Containerd.GCPolicy[1].All)
+	require.Equal(t, int64(20), cfg.Workers.Containerd.GCPolicy[0].KeepBytes)
+	require.Equal(t, int64(40), cfg.Workers.Containerd.GCPolicy[1].KeepBytes)
+	require.Equal(t, int64(3600), cfg.Workers.Containerd.GCPolicy[0].KeepDuration)
+	require.Equal(t, int64(7200), cfg.Workers.Containerd.GCPolicy[1].KeepDuration)
+	require.Equal(t, 1, len(cfg.Workers.Containerd.GCPolicy[0].Filters))
+	require.Equal(t, 0, len(cfg.Workers.Containerd.GCPolicy[1].Filters))
 }

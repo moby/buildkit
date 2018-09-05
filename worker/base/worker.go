@@ -58,6 +58,7 @@ type WorkerOpt struct {
 	ID             string
 	Labels         map[string]string
 	Platforms      []specs.Platform
+	GCPolicy       []client.PruneInfo
 	SessionManager *session.Manager
 	MetadataStore  *metadata.Store
 	Executor       executor.Executor
@@ -214,6 +215,10 @@ func (w *Worker) Platforms() []specs.Platform {
 	return w.WorkerOpt.Platforms
 }
 
+func (w *Worker) GCPolicy() []client.PruneInfo {
+	return w.WorkerOpt.GCPolicy
+}
+
 func (w *Worker) LoadRef(id string) (cache.ImmutableRef, error) {
 	return w.CacheManager.Get(context.TODO(), id)
 }
@@ -258,8 +263,8 @@ func (w *Worker) DiskUsage(ctx context.Context, opt client.DiskUsageInfo) ([]*cl
 	return w.CacheManager.DiskUsage(ctx, opt)
 }
 
-func (w *Worker) Prune(ctx context.Context, ch chan client.UsageInfo, opt client.PruneInfo) error {
-	return w.CacheManager.Prune(ctx, ch, opt)
+func (w *Worker) Prune(ctx context.Context, ch chan client.UsageInfo, opt ...client.PruneInfo) error {
+	return w.CacheManager.Prune(ctx, ch, opt...)
 }
 
 func (w *Worker) Exporter(name string) (exporter.Exporter, error) {

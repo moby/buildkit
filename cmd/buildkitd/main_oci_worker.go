@@ -141,6 +141,7 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 		return nil, err
 	}
 	opt.SessionManager = common.sessionManager
+	opt.GCPolicy = getGCPolicy(cfg.GCPolicy, common.config.Root)
 
 	if platformsStr := cfg.Platforms; len(platformsStr) != 0 {
 		platforms, err := parsePlatforms(platformsStr)

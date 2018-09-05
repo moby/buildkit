@@ -11,6 +11,7 @@ import (
 	"github.com/containerd/containerd/platforms"
 	"github.com/moby/buildkit/client"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/tonistiigi/units"
 	"github.com/urfave/cli"
 )
 
@@ -62,6 +63,19 @@ func printWorkersVerbose(tw *tabwriter.Writer, winfo []*client.WorkerInfo) {
 		for _, k := range sortedKeys(wi.Labels) {
 			v := wi.Labels[k]
 			fmt.Fprintf(tw, "\t%s:\t%s\n", k, v)
+		}
+		for i, rule := range wi.GCPolicy {
+			fmt.Fprintf(tw, "GC Policy rule#%d:\n", i)
+			fmt.Fprintf(tw, "\tAll:\t%v\n", rule.All)
+			if len(rule.Filter) > 0 {
+				fmt.Fprintf(tw, "\tFilters:\t%s\n", strings.Join(rule.Filter, " "))
+			}
+			if rule.KeepDuration > 0 {
+				fmt.Fprintf(tw, "\tKeep Duration:\t%v\n", rule.KeepDuration.String())
+			}
+			if rule.KeepBytes > 0 {
+				fmt.Fprintf(tw, "\tKeep Bytes:\t%g\n", units.Bytes(rule.KeepBytes))
+			}
 		}
 		fmt.Fprintf(tw, "\n")
 	}
