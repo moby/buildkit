@@ -56,6 +56,7 @@ type ContainerdConfig struct {
 	Labels    map[string]string `toml:"labels"`
 	Platforms []string          `toml:"platforms"`
 	GCPolicy  []GCPolicy        `toml:"gcpolicy"`
+	Namespace string            `toml:"namespace"`
 }
 
 type GCPolicy struct {

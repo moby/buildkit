@@ -27,17 +27,16 @@ import (
 // NewWorkerOpt creates a WorkerOpt.
 // But it does not set the following fields:
 //  - SessionManager
-func NewWorkerOpt(root string, address, snapshotterName string, labels map[string]string, opts ...containerd.ClientOpt) (base.WorkerOpt, error) {
-	// TODO: take lock to make sure there are no duplicates
-	opts = append([]containerd.ClientOpt{containerd.WithDefaultNamespace("buildkit")}, opts...)
+func NewWorkerOpt(root string, address, snapshotterName, ns string, labels map[string]string, opts ...containerd.ClientOpt) (base.WorkerOpt, error) {
+	opts = append(opts, containerd.WithDefaultNamespace(ns))
 	client, err := containerd.New(address, opts...)
 	if err != nil {
 		return base.WorkerOpt{}, errors.Wrapf(err, "failed to connect client to %q . make sure containerd is running", address)
 	}
-	return newContainerd(root, client, snapshotterName, labels)
+	return newContainerd(root, client, snapshotterName, ns, labels)
 }
 
-func newContainerd(root string, client *containerd.Client, snapshotterName string, labels map[string]string) (base.WorkerOpt, error) {
+func newContainerd(root string, client *containerd.Client, snapshotterName, ns string, labels map[string]string) (base.WorkerOpt, error) {
 	if strings.Contains(snapshotterName, "/") {
 		return base.WorkerOpt{}, errors.Errorf("bad snapshotter name: %q", snapshotterName)
 	}
@@ -66,7 +65,7 @@ func newContainerd(root string, client *containerd.Client, snapshotterName strin
 		// TODO: how to avoid this?
 		ctx := context.TODO()
 		snapshotter := client.SnapshotService(snapshotterName)
-		ctx = namespaces.WithNamespace(ctx, "buildkit")
+		ctx = namespaces.WithNamespace(ctx, ns)
 		key := identity.NewID()
 		if _, err := snapshotter.Prepare(ctx, key, "", snapshots.WithLabels(map[string]string{
 			"containerd.io/gc.root": time.Now().UTC().Format(time.RFC3339Nano),
@@ -83,7 +82,7 @@ func newContainerd(root string, client *containerd.Client, snapshotterName strin
 		return nil
 	}
 
-	cs := containerdsnapshot.NewContentStore(client.ContentStore(), "buildkit", gc)
+	cs := containerdsnapshot.NewContentStore(client.ContentStore(), ns, gc)
 
 	resp, err := client.IntrospectionService().Plugins(context.TODO(), &introspection.PluginsRequest{Filters: []string{"type==io.containerd.runtime.v1"}})
 	if err != nil {
@@ -109,7 +108,7 @@ func newContainerd(root string, client *containerd.Client, snapshotterName strin
 		Labels:        xlabels,
 		MetadataStore: md,
 		Executor:      containerdexecutor.New(client, root, "", network.Default()),
-		Snapshotter:   containerdsnapshot.NewSnapshotter(client.SnapshotService(snapshotterName), cs, md, "buildkit", gc),
+		Snapshotter:   containerdsnapshot.NewSnapshotter(client.SnapshotService(snapshotterName), cs, md, ns, gc),
 		ContentStore:  cs,
 		Applier:       winlayers.NewFileSystemApplierWithWindows(cs, df),
 		Differ:        winlayers.NewWalkingDiffWithWindows(cs, df),
