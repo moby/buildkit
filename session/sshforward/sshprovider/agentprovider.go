@@ -2,8 +2,8 @@ package sshprovider
 
 import (
 	"context"
-	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"os"
 	"time"
@@ -19,22 +19,23 @@ import (
 )
 
 type AgentConfig struct {
-	ID     string
-	Socket string
+	ID    string
+	Paths []string
 }
 
 func NewSSHAgentProvider(confs []AgentConfig) (session.Attachable, error) {
-	m := map[string]string{}
+	m := map[string]source{}
 	for _, conf := range confs {
-		if conf.Socket == "" {
-			conf.Socket = os.Getenv("SSH_AUTH_SOCK")
+		if len(conf.Paths) == 0 || len(conf.Paths) == 1 && conf.Paths[0] == "" {
+			conf.Paths = []string{os.Getenv("SSH_AUTH_SOCK")}
 		}
 
-		if conf.Socket == "" {
+		if conf.Paths[0] == "" {
 			return nil, errors.Errorf("invalid empty ssh agent socket, make sure SSH_AUTH_SOCK is set")
 		}
 
-		if err := validateSSHAgentSocket(conf.Socket); err != nil {
+		src, err := toAgentSource(conf.Paths)
+		if err != nil {
 			return nil, err
 		}
 		if conf.ID == "" {
@@ -43,14 +44,19 @@ func NewSSHAgentProvider(confs []AgentConfig) (session.Attachable, error) {
 		if _, ok := m[conf.ID]; ok {
 			return nil, errors.Errorf("invalid duplicate ID %s", conf.ID)
 		}
-		m[conf.ID] = conf.Socket
+		m[conf.ID] = src
 	}
 
 	return &socketProvider{m: m}, nil
 }
 
+type source struct {
+	agent  agent.Agent
+	socket string
+}
+
 type socketProvider struct {
-	m map[string]string
+	m map[string]source
 }
 
 func (sp *socketProvider) Register(server *grpc.Server) {
@@ -77,20 +83,26 @@ func (sp *socketProvider) ForwardAgent(stream sshforward.SSH_ForwardAgentServer)
 		id = v[0]
 	}
 
-	socket, ok := sp.m[id]
+	src, ok := sp.m[id]
 	if !ok {
-		fmt.Printf("unset11 %s\n", id)
 		return errors.Errorf("unset ssh forward key %s", id)
 	}
 
-	conn, err := net.DialTimeout("unix", socket, time.Second)
-	if err != nil {
-		return errors.Wrapf(err, "failed to connect to %s", socket)
-	}
-	s1, s2 := sockPair()
-	a := &readOnlyAgent{agent.NewClient(conn)}
+	var a agent.Agent
 
-	defer conn.Close()
+	if src.socket != "" {
+		conn, err := net.DialTimeout("unix", src.socket, time.Second)
+		if err != nil {
+			return errors.Wrapf(err, "failed to connect to %s", src.socket)
+		}
+
+		a = &readOnlyAgent{agent.NewClient(conn)}
+		defer conn.Close()
+	} else {
+		a = src.agent
+	}
+
+	s1, s2 := sockPair()
 
 	eg, ctx := errgroup.WithContext(context.TODO())
 
@@ -106,16 +118,49 @@ func (sp *socketProvider) ForwardAgent(stream sshforward.SSH_ForwardAgentServer)
 	return eg.Wait()
 }
 
-func validateSSHAgentSocket(socket string) error {
-	conn, err := net.DialTimeout("unix", socket, time.Second)
-	if err != nil {
-		return errors.Wrapf(err, "failed to connect to %s", socket)
+func toAgentSource(paths []string) (source, error) {
+	var keys bool
+	var socket string
+	a := agent.NewKeyring()
+	for _, p := range paths {
+		if socket != "" {
+			return source{}, errors.New("only single socket allowed")
+		}
+		fi, err := os.Stat(p)
+		if err != nil {
+			return source{}, errors.WithStack(err)
+		}
+		if fi.Mode()&os.ModeSocket > 0 {
+			if keys {
+				return source{}, errors.Errorf("invalid combination of keys and sockets")
+			}
+			socket = p
+			continue
+		}
+		keys = true
+		f, err := os.Open(p)
+		if err != nil {
+			return source{}, errors.Wrapf(err, "failed to open %s", p)
+		}
+		dt, err := ioutil.ReadAll(&io.LimitedReader{R: f, N: 100 * 1024})
+		if err != nil {
+			return source{}, errors.Wrapf(err, "failed to read %s", p)
+		}
+
+		k, err := ssh.ParseRawPrivateKey(dt)
+		if err != nil {
+			return source{}, errors.Wrapf(err, "failed to parse %s", p) // TODO: prompt passphrase?
+		}
+		if err := a.Add(agent.AddedKey{PrivateKey: k}); err != nil {
+			return source{}, errors.Wrapf(err, "failed to add %s to agent", p)
+		}
 	}
-	defer conn.Close()
-	if _, err := agent.NewClient(conn).List(); err != nil {
-		return errors.Wrapf(err, "failed to verify %s as ssh agent socket", socket)
+
+	if socket != "" {
+		return source{socket: socket}, nil
 	}
-	return nil
+
+	return source{agent: a}, nil
 }
 
 func sockPair() (io.ReadWriteCloser, io.ReadWriteCloser) {

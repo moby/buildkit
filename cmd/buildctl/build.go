@@ -85,7 +85,7 @@ var buildCommand = cli.Command{
 		},
 		cli.StringSliceFlag{
 			Name:  "ssh",
-			Usage: "Allow forwarding SSH agent to the builder. Format default|<id>[=<socket_path>]",
+			Usage: "Allow forwarding SSH agent to the builder. Format default|<id>[=<socket>|<key>[,<key>]]",
 		},
 	},
 }
@@ -387,7 +387,7 @@ func parseSSHSpecs(inp []string) ([]sshprovider.AgentConfig, error) {
 			ID: parts[0],
 		}
 		if len(parts) > 1 {
-			cfg.Socket = parts[1]
+			cfg.Paths = strings.Split(parts[1], ",")
 		}
 		configs = append(configs, cfg)
 	}

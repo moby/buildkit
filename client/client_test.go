@@ -5,7 +5,9 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -104,7 +106,7 @@ func testSSHMount(t *testing.T, sb integration.Sandbox) {
 	defer clean()
 
 	ssh, err := sshprovider.NewSSHAgentProvider([]sshprovider.AgentConfig{{
-		Socket: sockPath,
+		Paths: []string{sockPath},
 	}})
 	require.NoError(t, err)
 
@@ -190,6 +192,54 @@ func testSSHMount(t *testing.T, sb integration.Sandbox) {
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
 	require.Contains(t, string(dt), "agent refused operation")
+
+	// valid socket from key on disk
+	st = llb.Image("alpine:latest").
+		Run(llb.Shlex(`apk add --no-cache openssh`)).
+		Run(llb.Shlex(`sh -c 'ssh-add -l > /out/out'`),
+			llb.AddSSHSocket())
+
+	out = st.AddMount("/out", llb.Scratch())
+	def, err = out.Marshal()
+	require.NoError(t, err)
+
+	k, err = rsa.GenerateKey(rand.Reader, 1024)
+	require.NoError(t, err)
+
+	dt = pem.EncodeToMemory(
+		&pem.Block{
+			Type:  "RSA PRIVATE KEY",
+			Bytes: x509.MarshalPKCS1PrivateKey(k),
+		},
+	)
+
+	tmpDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	err = ioutil.WriteFile(filepath.Join(tmpDir, "key"), dt, 0600)
+	require.NoError(t, err)
+
+	ssh, err = sshprovider.NewSSHAgentProvider([]sshprovider.AgentConfig{{
+		Paths: []string{filepath.Join(tmpDir, "key")},
+	}})
+	require.NoError(t, err)
+
+	destDir, err = ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		Exporter:          ExporterLocal,
+		ExporterOutputDir: destDir,
+		Session:           []session.Attachable{ssh},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "out"))
+	require.NoError(t, err)
+	require.Contains(t, string(dt), "1024")
+	require.Contains(t, string(dt), "(RSA)")
 }
 
 func testExtraHosts(t *testing.T, sb integration.Sandbox) {

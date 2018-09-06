@@ -97,7 +97,7 @@ func MountSSHSocket(ctx context.Context, c session.Caller, opt SocketOpt) (sockP
 		id = DefaultID
 	}
 
-	go s.run(ctx, l, id)
+	go s.run(ctx, l, id) // erroring per connection allowed
 
 	return sockPath, func() error {
 		err := l.Close()
