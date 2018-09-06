@@ -3,6 +3,8 @@ package client
 import (
 	"archive/tar"
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -27,12 +29,14 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/secrets/secretsprovider"
+	"github.com/moby/buildkit/session/sshforward/sshprovider"
 	"github.com/moby/buildkit/util/testutil"
 	"github.com/moby/buildkit/util/testutil/httpserver"
 	"github.com/moby/buildkit/util/testutil/integration"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/ssh/agent"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -72,11 +76,120 @@ func TestClientIntegration(t *testing.T) {
 		testExtraHosts,
 		testNetworkMode,
 		testFrontendMetadataReturn,
+		testSSHMount,
 	})
 }
 
 func newContainerd(cdAddress string) (*containerd.Client, error) {
 	return containerd.New(cdAddress, containerd.WithTimeout(60*time.Second))
+}
+
+func testSSHMount(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	a := agent.NewKeyring()
+
+	k, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	err = a.Add(agent.AddedKey{PrivateKey: k})
+	require.NoError(t, err)
+
+	sockPath, clean, err := makeSSHAgentSock(a)
+	require.NoError(t, err)
+	defer clean()
+
+	ssh, err := sshprovider.NewSSHAgentProvider([]sshprovider.AgentConfig{{
+		Socket: sockPath,
+	}})
+	require.NoError(t, err)
+
+	// no ssh exposed
+	st := llb.Image("busybox:latest").Run(llb.Shlex(`nosuchcmd`), llb.AddSSHSocket())
+	def, err := st.Marshal()
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "no ssh forwarded from the client")
+
+	// custom ID not exposed
+	st = llb.Image("busybox:latest").Run(llb.Shlex(`nosuchcmd`), llb.AddSSHSocket(llb.SSHID("customID")))
+	def, err = st.Marshal()
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		Session: []session.Attachable{ssh},
+	}, nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unset ssh forward key customID")
+
+	// missing custom ID ignored on optional
+	st = llb.Image("busybox:latest").Run(llb.Shlex(`ls`), llb.AddSSHSocket(llb.SSHID("customID"), llb.SSHOptional))
+	def, err = st.Marshal()
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		Session: []session.Attachable{ssh},
+	}, nil)
+	require.NoError(t, err)
+
+	// valid socket
+	st = llb.Image("alpine:latest").
+		Run(llb.Shlex(`apk add --no-cache openssh`)).
+		Run(llb.Shlex(`sh -c 'echo -n $SSH_AUTH_SOCK > /out/sock && ssh-add -l > /out/out'`),
+			llb.AddSSHSocket())
+
+	out := st.AddMount("/out", llb.Scratch())
+	def, err = out.Marshal()
+	require.NoError(t, err)
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		Exporter:          ExporterLocal,
+		ExporterOutputDir: destDir,
+		Session:           []session.Attachable{ssh},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "sock"))
+	require.NoError(t, err)
+	require.Equal(t, "/run/buildkit/ssh_agent.0", string(dt))
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "out"))
+	require.NoError(t, err)
+	require.Contains(t, string(dt), "2048")
+	require.Contains(t, string(dt), "(RSA)")
+
+	// forbidden command
+	st = llb.Image("alpine:latest").
+		Run(llb.Shlex(`apk add --no-cache openssh`)).
+		Run(llb.Shlex(`sh -c 'ssh-keygen -f /tmp/key -N "" && ssh-add -k /tmp/key 2> /out/out || true'`),
+			llb.AddSSHSocket())
+
+	out = st.AddMount("/out", llb.Scratch())
+	def, err = out.Marshal()
+	require.NoError(t, err)
+
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		Exporter:          ExporterLocal,
+		ExporterOutputDir: destDir,
+		Session:           []session.Attachable{ssh},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "out"))
+	require.NoError(t, err)
+	require.Contains(t, string(dt), "agent refused operation")
 }
 
 func testExtraHosts(t *testing.T, sb integration.Sandbox) {
@@ -1664,4 +1777,46 @@ func tmpdir(appliers ...fstest.Applier) (string, error) {
 		return "", err
 	}
 	return tmpdir, nil
+}
+
+func makeSSHAgentSock(agent agent.Agent) (p string, cleanup func() error, err error) {
+	tmpDir, err := ioutil.TempDir("", "buildkit")
+	if err != nil {
+		return "", nil, err
+	}
+	defer func() {
+		if err != nil {
+			os.RemoveAll(tmpDir)
+		}
+	}()
+
+	sockPath := filepath.Join(tmpDir, "ssh_auth_sock")
+
+	l, err := net.Listen("unix", sockPath)
+	if err != nil {
+		return "", nil, err
+	}
+
+	s := &server{l: l}
+	go s.run(agent)
+
+	return sockPath, func() error {
+		l.Close()
+		return os.RemoveAll(tmpDir)
+	}, nil
+}
+
+type server struct {
+	l net.Listener
+}
+
+func (s *server) run(a agent.Agent) error {
+	for {
+		c, err := s.l.Accept()
+		if err != nil {
+			return err
+		}
+
+		go agent.ServeAgent(a, c)
+	}
 }
