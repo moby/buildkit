@@ -35,6 +35,7 @@ import (
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/moby/buildkit/util/profiler"
+	"github.com/moby/buildkit/util/resolver"
 	"github.com/moby/buildkit/version"
 	"github.com/moby/buildkit/worker"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -504,15 +505,28 @@ func newController(c *cli.Context, cfg *config.Config) (*control.Controller, err
 		return nil, err
 	}
 
+	resolverFn := resolverFunc(cfg)
+
 	return control.NewController(control.Opt{
 		SessionManager:   sessionManager,
 		WorkerController: wc,
 		Frontends:        frontends,
 		// TODO: support non-registry remote cache
-		ResolveCacheExporterFunc: registryremotecache.ResolveCacheExporterFunc(sessionManager),
-		ResolveCacheImporterFunc: registryremotecache.ResolveCacheImporterFunc(sessionManager),
+		ResolveCacheExporterFunc: registryremotecache.ResolveCacheExporterFunc(sessionManager, resolverFn),
+		ResolveCacheImporterFunc: registryremotecache.ResolveCacheImporterFunc(sessionManager, resolverFn),
 		CacheKeyStorage:          cacheStorage,
 	})
+}
+
+func resolverFunc(cfg *config.Config) resolver.ResolveOptionsFunc {
+	m := map[string]resolver.RegistryConf{}
+	for k, v := range cfg.Registries {
+		m[k] = resolver.RegistryConf{
+			Mirrors:   v.Mirrors,
+			PlainHTTP: v.PlainHTTP,
+		}
+	}
+	return resolver.NewResolveOptionsFunc(m)
 }
 
 func newWorkerController(c *cli.Context, wiOpt workerInitializerOpt) (*worker.Controller, error) {

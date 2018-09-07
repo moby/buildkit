@@ -39,6 +39,7 @@ import (
 	"github.com/moby/buildkit/source/local"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/progress"
+	"github.com/moby/buildkit/util/resolver"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	ociidentity "github.com/opencontainers/image-spec/identity"
@@ -55,18 +56,19 @@ const labelCreatedAt = "buildkit/createdat"
 // WorkerOpt is specific to a worker.
 // See also CommonOpt.
 type WorkerOpt struct {
-	ID             string
-	Labels         map[string]string
-	Platforms      []specs.Platform
-	GCPolicy       []client.PruneInfo
-	SessionManager *session.Manager
-	MetadataStore  *metadata.Store
-	Executor       executor.Executor
-	Snapshotter    snapshot.Snapshotter
-	ContentStore   content.Store
-	Applier        diff.Applier
-	Differ         diff.Comparer
-	ImageStore     images.Store // optional
+	ID                 string
+	Labels             map[string]string
+	Platforms          []specs.Platform
+	GCPolicy           []client.PruneInfo
+	SessionManager     *session.Manager
+	MetadataStore      *metadata.Store
+	Executor           executor.Executor
+	Snapshotter        snapshot.Snapshotter
+	ContentStore       content.Store
+	Applier            diff.Applier
+	Differ             diff.Comparer
+	ImageStore         images.Store // optional
+	ResolveOptionsFunc resolver.ResolveOptionsFunc
 }
 
 // Worker is a local worker instance with dedicated snapshotter, cache, and so on.
@@ -108,6 +110,7 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 		Applier:        opt.Applier,
 		ImageStore:     opt.ImageStore,
 		CacheAccessor:  cm,
+		ResolverOpt:    opt.ResolveOptionsFunc,
 	})
 	if err != nil {
 		return nil, err
@@ -160,6 +163,7 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 		Images:         opt.ImageStore,
 		SessionManager: opt.SessionManager,
 		ImageWriter:    iw,
+		ResolverOpt:    opt.ResolveOptionsFunc,
 	})
 	if err != nil {
 		return nil, err
