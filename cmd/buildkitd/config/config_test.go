@@ -39,6 +39,10 @@ keepDuration=3600
 [[worker.containerd.gcpolicy]]
 keepBytes=40
 keepDuration=7200
+
+[registry."docker.io"]
+mirrors=["hub.docker.io"]
+http=true
 `
 
 	cfg, md, err := Load(bytes.NewBuffer([]byte(testConfig)))
@@ -78,4 +82,7 @@ keepDuration=7200
 	require.Equal(t, int64(7200), cfg.Workers.Containerd.GCPolicy[1].KeepDuration)
 	require.Equal(t, 1, len(cfg.Workers.Containerd.GCPolicy[0].Filters))
 	require.Equal(t, 0, len(cfg.Workers.Containerd.GCPolicy[1].Filters))
+
+	require.Equal(t, cfg.Registries["docker.io"].PlainHTTP, true)
+	require.Equal(t, cfg.Registries["docker.io"].Mirrors[0], "hub.docker.io")
 }

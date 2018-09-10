@@ -11,6 +11,7 @@ import (
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/util/push"
+	"github.com/moby/buildkit/util/resolver"
 	"github.com/pkg/errors"
 )
 
@@ -25,6 +26,7 @@ type Opt struct {
 	SessionManager *session.Manager
 	ImageWriter    *ImageWriter
 	Images         images.Store
+	ResolverOpt    resolver.ResolveOptionsFunc
 }
 
 type imageExporter struct {
@@ -144,7 +146,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 				tagDone(nil)
 			}
 			if e.push {
-				if err := push.Push(ctx, e.opt.SessionManager, e.opt.ImageWriter.ContentStore(), desc.Digest, targetName, e.insecure); err != nil {
+				if err := push.Push(ctx, e.opt.SessionManager, e.opt.ImageWriter.ContentStore(), desc.Digest, targetName, e.insecure, e.opt.ResolverOpt); err != nil {
 					return nil, err
 				}
 			}

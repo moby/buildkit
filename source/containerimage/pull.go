@@ -18,6 +18,7 @@ import (
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/imageutil"
 	"github.com/moby/buildkit/util/pull"
+	"github.com/moby/buildkit/util/resolver"
 	"github.com/moby/buildkit/util/winlayers"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/identity"
@@ -35,6 +36,7 @@ type SourceOpt struct {
 	Applier        diff.Applier
 	CacheAccessor  cache.Accessor
 	ImageStore     images.Store // optional
+	ResolverOpt    resolver.ResolveOptionsFunc
 }
 
 type imageSource struct {
@@ -70,7 +72,7 @@ func (is *imageSource) ResolveImageConfig(ctx context.Context, ref string, opt g
 	}
 
 	res, err := is.g.Do(ctx, key, func(ctx context.Context) (interface{}, error) {
-		dgst, dt, err := imageutil.Config(ctx, ref, pull.NewResolver(ctx, is.SessionManager, is.ImageStore, rm), is.ContentStore, opt.Platform)
+		dgst, dt, err := imageutil.Config(ctx, ref, pull.NewResolver(ctx, is.ResolverOpt, is.SessionManager, is.ImageStore, rm, ref), is.ContentStore, opt.Platform)
 		if err != nil {
 			return nil, err
 		}
@@ -99,7 +101,7 @@ func (is *imageSource) Resolve(ctx context.Context, id source.Identifier) (sourc
 		ContentStore: is.ContentStore,
 		Applier:      is.Applier,
 		Src:          imageIdentifier.Reference,
-		Resolver:     pull.NewResolver(ctx, is.SessionManager, is.ImageStore, imageIdentifier.ResolveMode),
+		Resolver:     pull.NewResolver(ctx, is.ResolverOpt, is.SessionManager, is.ImageStore, imageIdentifier.ResolveMode, imageIdentifier.Reference.String()),
 		Platform:     &platform,
 	}
 	p := &puller{

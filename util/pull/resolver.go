@@ -2,6 +2,7 @@ package pull
 
 import (
 	"context"
+	"net/http"
 	"time"
 
 	"github.com/containerd/containerd/images"
@@ -10,15 +11,21 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/auth"
 	"github.com/moby/buildkit/source"
+	"github.com/moby/buildkit/util/resolver"
 	"github.com/moby/buildkit/util/tracing"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
-func NewResolver(ctx context.Context, sm *session.Manager, imageStore images.Store, mode source.ResolveMode) remotes.Resolver {
-	r := docker.NewResolver(docker.ResolverOptions{
-		Client:      tracing.DefaultClient,
-		Credentials: getCredentialsFromSession(ctx, sm),
-	})
+func NewResolver(ctx context.Context, rfn resolver.ResolveOptionsFunc, sm *session.Manager, imageStore images.Store, mode source.ResolveMode, ref string) remotes.Resolver {
+	opt := docker.ResolverOptions{
+		Client: http.DefaultClient,
+	}
+	if rfn != nil {
+		opt = rfn(ref)
+	}
+	opt.Credentials = getCredentialsFromSession(ctx, sm)
+
+	r := docker.NewResolver(opt)
 
 	if imageStore == nil || mode == source.ResolveModeForcePull {
 		return r

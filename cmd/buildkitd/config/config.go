@@ -22,6 +22,8 @@ type Config struct {
 		OCI        OCIConfig        `toml:"oci"`
 		Containerd ContainerdConfig `toml:"containerd"`
 	} `toml:"worker"`
+
+	Registries map[string]RegistryConfig `toml:"registry"`
 }
 
 type GRPCConfig struct {
@@ -33,6 +35,11 @@ type GRPCConfig struct {
 	TLS TLSConfig `toml:"tls"`
 	// MaxRecvMsgSize int    `toml:"max_recv_message_size"`
 	// MaxSendMsgSize int    `toml:"max_send_message_size"`
+}
+
+type RegistryConfig struct {
+	Mirrors   []string `toml:"mirrors"`
+	PlainHTTP bool     `toml:"http"`
 }
 
 type TLSConfig struct {

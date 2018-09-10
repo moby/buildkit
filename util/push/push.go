@@ -16,7 +16,7 @@ import (
 	"github.com/moby/buildkit/session/auth"
 	"github.com/moby/buildkit/util/imageutil"
 	"github.com/moby/buildkit/util/progress"
-	"github.com/moby/buildkit/util/tracing"
+	"github.com/moby/buildkit/util/resolver"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/sirupsen/logrus"
@@ -40,7 +40,7 @@ func getCredentialsFunc(ctx context.Context, sm *session.Manager) func(string) (
 	}
 }
 
-func Push(ctx context.Context, sm *session.Manager, cs content.Provider, dgst digest.Digest, ref string, insecure bool) error {
+func Push(ctx context.Context, sm *session.Manager, cs content.Provider, dgst digest.Digest, ref string, insecure bool, rfn resolver.ResolveOptionsFunc) error {
 	desc := ocispec.Descriptor{
 		Digest: dgst,
 	}
@@ -50,11 +50,13 @@ func Push(ctx context.Context, sm *session.Manager, cs content.Provider, dgst di
 	}
 	ref = reference.TagNameOnly(parsed).String()
 
-	resolver := docker.NewResolver(docker.ResolverOptions{
-		Client:      tracing.DefaultClient,
-		Credentials: getCredentialsFunc(ctx, sm),
-		PlainHTTP:   insecure,
-	})
+	opt := rfn(ref)
+	opt.Credentials = getCredentialsFunc(ctx, sm)
+	if insecure {
+		opt.PlainHTTP = insecure
+	}
+
+	resolver := docker.NewResolver(opt)
 
 	pusher, err := resolver.Pusher(ctx, ref)
 	if err != nil {
