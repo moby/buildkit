@@ -79,11 +79,29 @@ func TestClientIntegration(t *testing.T) {
 		testNetworkMode,
 		testFrontendMetadataReturn,
 		testSSHMount,
+		testStdinClosed,
 	})
 }
 
 func newContainerd(cdAddress string) (*containerd.Client, error) {
 	return containerd.New(cdAddress, containerd.WithTimeout(60*time.Second))
+}
+
+// moby/buildkit#614
+func testStdinClosed(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Image("busybox:latest").Run(llb.Shlex("cat"))
+
+	def, err := st.Marshal()
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	require.NoError(t, err)
 }
 
 func testSSHMount(t *testing.T, sb integration.Sandbox) {
