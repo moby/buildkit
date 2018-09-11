@@ -2381,7 +2381,12 @@ COPY --from=base unique /
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
 		Exporter:          client.ExporterLocal,
 		ExporterOutputDir: destDir,
-		ExportCache:       target,
+		CacheExports: []client.CacheOptionsEntry{
+			{
+				Type:  "registry",
+				Attrs: map[string]string{"ref": target},
+			},
+		},
 		LocalDirs: map[string]string{
 			builder.LocalNameDockerfile: dir,
 			builder.LocalNameContext:    dir,
@@ -2545,7 +2550,12 @@ RUN echo bar > bar
 	opt := client.SolveOpt{
 		FrontendAttrs: map[string]string{},
 		Exporter:      client.ExporterImage,
-		ExportCache:   cacheTarget,
+		CacheExports: []client.CacheOptionsEntry{
+			{
+				Type:  "registry",
+				Attrs: map[string]string{"ref": cacheTarget},
+			},
+		},
 		ExporterAttrs: map[string]string{
 			"name": target,
 		},

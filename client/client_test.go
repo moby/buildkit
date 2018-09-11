@@ -65,7 +65,8 @@ func TestClientIntegration(t *testing.T) {
 		testMountWithNoSource,
 		testInvalidExporter,
 		testReadonlyRootFS,
-		testBasicCacheImportExport,
+		testBasicRegistryCacheImportExport,
+		testBasicLocalCacheImportExport,
 		testCachedMounts,
 		testProxyEnv,
 		testLocalSymlinkEscape,
@@ -1156,14 +1157,8 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	require.False(t, ok)
 }
 
-func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox) {
+func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptionsEntry CacheOptionsEntry) {
 	requiresLinux(t)
-	registry, err := sb.NewRegistry()
-	if errors.Cause(err) == integration.ErrorRequirements {
-		t.Skip(err.Error())
-	}
-	require.NoError(t, err)
-
 	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -1185,12 +1180,12 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	target := registry + "/buildkit/testexport:latest"
-
 	_, err = c.Solve(context.TODO(), def, SolveOpt{
 		Exporter:          ExporterLocal,
 		ExporterOutputDir: destDir,
-		ExportCache:       target,
+		CacheExports: []CacheOptionsEntry{
+			cacheOptionsEntry,
+		},
 	}, nil)
 	require.NoError(t, err)
 
@@ -1213,7 +1208,9 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	_, err = c.Solve(context.TODO(), def, SolveOpt{
 		Exporter:          ExporterLocal,
 		ExporterOutputDir: destDir,
-		ImportCache:       []string{target},
+		CacheImports: []CacheOptionsEntry{
+			cacheOptionsEntry,
+		},
 	}, nil)
 	require.NoError(t, err)
 
@@ -1224,6 +1221,35 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	dt2, err = ioutil.ReadFile(filepath.Join(destDir, "unique"))
 	require.NoError(t, err)
 	require.Equal(t, string(dt), string(dt2))
+}
+
+func testBasicRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
+	registry, err := sb.NewRegistry()
+	if errors.Cause(err) == integration.ErrorRequirements {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+	target := registry + "/buildkit/testexport:latest"
+	o := CacheOptionsEntry{
+		Type: "registry",
+		Attrs: map[string]string{
+			"ref": target,
+		},
+	}
+	testBasicCacheImportExport(t, sb, o)
+}
+
+func testBasicLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
+	dir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+	o := CacheOptionsEntry{
+		Type: "local",
+		Attrs: map[string]string{
+			"store": dir,
+		},
+	}
+	testBasicCacheImportExport(t, sb, o)
 }
 
 func testCachedMounts(t *testing.T, sb integration.Sandbox) {

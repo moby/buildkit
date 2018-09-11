@@ -198,6 +198,35 @@ buildctl build ... --exporter=oci --exporter-opt output=path/to/output.tar
 buildctl build ... --exporter=oci > output.tar
 ```
 
+### Exporting/Importing build cache (not image itself)
+
+#### To/From registry
+
+```
+buildctl build ... --export-cache type=registry,ref=localhost:5000/myrepo:buildcache
+buildctl build ... --import-cache type=registry,ref=localhost:5000/myrepo:buildcache
+```
+
+#### To/From local filesystem
+
+```
+buildctl build ... --export-cache type=local,store=path/to/input-dir
+buildctl build ... --import-cache type=local,store=path/to/output-dir
+```
+
+The directory layout conforms to OCI Image Spec v1.0.
+
+#### `--export-cache` options
+* `mode=min` (default): only export layers for the resulting image
+* `mode=max`: export all the layers of all intermediate steps
+* `ref=docker.io/user/image:tag`: reference for `registry` cache exporter
+* `store=path/to/output-dir`: directory for `local` cache exporter
+
+#### `--import-cache` options
+* `ref=docker.io/user/image:tag`: reference for `registry` cache importer
+* `store=path/to/input-dir`: directory for `local` cache importer
+* `digest=sha256:deadbeef`: digest of the manifest list to import for `local` cache importer. Defaults to the digest of "latest" tag in `index.json`
+
 ### Other
 
 #### View build cache

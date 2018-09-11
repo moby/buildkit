@@ -21,6 +21,8 @@ import (
 	"github.com/containerd/containerd/sys"
 	"github.com/docker/go-connections/sockets"
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
+	"github.com/moby/buildkit/cache/remotecache"
+	localremotecache "github.com/moby/buildkit/cache/remotecache/local"
 	registryremotecache "github.com/moby/buildkit/cache/remotecache/registry"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
@@ -508,14 +510,21 @@ func newController(c *cli.Context, cfg *config.Config) (*control.Controller, err
 
 	resolverFn := resolverFunc(cfg)
 
+	remoteCacheExporterFuncs := map[string]remotecache.ResolveCacheExporterFunc{
+		"registry": registryremotecache.ResolveCacheExporterFunc(sessionManager, resolverFn),
+		"local":    localremotecache.ResolveCacheExporterFunc(sessionManager),
+	}
+	remoteCacheImporterFuncs := map[string]remotecache.ResolveCacheImporterFunc{
+		"registry": registryremotecache.ResolveCacheImporterFunc(sessionManager, resolverFn),
+		"local":    localremotecache.ResolveCacheImporterFunc(sessionManager),
+	}
 	return control.NewController(control.Opt{
-		SessionManager:   sessionManager,
-		WorkerController: wc,
-		Frontends:        frontends,
-		// TODO: support non-registry remote cache
-		ResolveCacheExporterFunc: registryremotecache.ResolveCacheExporterFunc(sessionManager, resolverFn),
-		ResolveCacheImporterFunc: registryremotecache.ResolveCacheImporterFunc(sessionManager, resolverFn),
-		CacheKeyStorage:          cacheStorage,
+		SessionManager:            sessionManager,
+		WorkerController:          wc,
+		Frontends:                 frontends,
+		ResolveCacheExporterFuncs: remoteCacheExporterFuncs,
+		ResolveCacheImporterFuncs: remoteCacheImporterFuncs,
+		CacheKeyStorage:           cacheStorage,
 	})
 }
 
