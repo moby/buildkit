@@ -29,6 +29,7 @@ foo="bar"
 "aa.bb.cc"="baz"
 
 [worker.containerd]
+namespace="non-default"
 platforms=["linux/amd64"]
 address="containerd.sock"
 [[worker.containerd.gcpolicy]]
@@ -72,6 +73,7 @@ http=true
 	require.Equal(t, "containerd.sock", cfg.Workers.Containerd.Address)
 
 	require.Equal(t, 0, len(cfg.Workers.OCI.GCPolicy))
+	require.Equal(t, "non-default", cfg.Workers.Containerd.Namespace)
 	require.Equal(t, 2, len(cfg.Workers.Containerd.GCPolicy))
 
 	require.Equal(t, true, cfg.Workers.Containerd.GCPolicy[0].All)

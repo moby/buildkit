@@ -18,7 +18,10 @@ import (
 	"github.com/urfave/cli"
 )
 
-const defaultContainerdAddress = "/run/containerd/containerd.sock"
+const (
+	defaultContainerdAddress   = "/run/containerd/containerd.sock"
+	defaultContainerdNamespace = "buildkit"
+)
 
 func init() {
 	defaultConf, _ := defaultConf()
@@ -32,6 +35,10 @@ func init() {
 
 	if defaultConf.Workers.Containerd.Address == "" {
 		defaultConf.Workers.Containerd.Address = defaultContainerdAddress
+	}
+
+	if defaultConf.Workers.Containerd.Namespace == "" {
+		defaultConf.Workers.Containerd.Namespace = defaultContainerdNamespace
 	}
 
 	registerWorkerInitializer(
@@ -59,6 +66,12 @@ func init() {
 		cli.StringSliceFlag{
 			Name:   "containerd-worker-platform",
 			Usage:  "override supported platforms for worker",
+			Hidden: true,
+		},
+		cli.StringFlag{
+			Name:   "containerd-worker-namespace",
+			Usage:  "override containerd namespace",
+			Value:  defaultConf.Workers.Containerd.Namespace,
 			Hidden: true,
 		},
 	)
@@ -105,6 +118,10 @@ func applyContainerdFlags(c *cli.Context, cfg *config.Config) error {
 		cfg.Workers.Containerd.Platforms = platforms
 	}
 
+	if c.GlobalIsSet("containerd-worker-namespace") || cfg.Workers.Containerd.Namespace == "" {
+		cfg.Workers.Containerd.Namespace = c.GlobalString("containerd-worker-namespace")
+	}
+
 	return nil
 }
 
@@ -119,7 +136,7 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 		return nil, nil
 	}
 
-	opt, err := containerd.NewWorkerOpt(common.config.Root, cfg.Address, ctd.DefaultSnapshotter, cfg.Labels, ctd.WithTimeout(60*time.Second))
+	opt, err := containerd.NewWorkerOpt(common.config.Root, cfg.Address, ctd.DefaultSnapshotter, cfg.Namespace, cfg.Labels, ctd.WithTimeout(60*time.Second))
 	if err != nil {
 		return nil, err
 	}
