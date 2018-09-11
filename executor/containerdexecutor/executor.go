@@ -133,10 +133,6 @@ func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root c
 		}
 	}()
 
-	if stdin == nil {
-		stdin = &emptyReadCloser{}
-	}
-
 	task, err := container.NewTask(ctx, cio.NewCreator(cio.WithStreams(stdin, stdout, stderr)), containerd.WithRootFS(rootMounts))
 	if err != nil {
 		return err
@@ -176,14 +172,4 @@ func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root c
 		}
 	}
 
-}
-
-type emptyReadCloser struct{}
-
-func (*emptyReadCloser) Read([]byte) (int, error) {
-	return 0, io.EOF
-}
-
-func (*emptyReadCloser) Close() error {
-	return nil
 }
