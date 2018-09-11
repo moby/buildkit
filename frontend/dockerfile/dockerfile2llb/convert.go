@@ -23,6 +23,7 @@ import (
 	"github.com/moby/buildkit/frontend/dockerfile/shell"
 	gw "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/system"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -272,6 +273,11 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 			d.state = d.base.state
 			d.platform = d.base.platform
 			d.image = clone(d.base.image)
+		}
+
+		// make sure that PATH is always set
+		if _, ok := shell.BuildEnvs(d.image.Config.Env)["PATH"]; !ok {
+			d.image.Config.Env = append(d.image.Config.Env, "PATH="+system.DefaultPathEnv)
 		}
 
 		// initialize base metadata from image conf
