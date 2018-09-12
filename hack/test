@@ -9,7 +9,12 @@ docker build --iidfile $iidfile --target integration-tests -f ./hack/dockerfiles
 iid=$(cat $iidfile)
 rm -f $iidfile
 
-docker run --rm -v /tmp --privileged $iid go test ${TESTFLAGS:--v} ${TESTPKGS:-./...}
+docker run --rm -v /tmp --privileged -e BUILDKIT_DOCKERFILE_INTEGRATION_MODE=${BUILDKIT_DOCKERFILE_INTEGRATION_MODE:-} $iid go test ${TESTFLAGS:--v} ${TESTPKGS:-./...}
+if [ -z "${BUILDKIT_DOCKERFILE_INTEGRATION_MODE:+x}" ] ; then
+    for mode in "master-gateway" "client" ; do
+	docker run --rm -v /tmp --privileged -e BUILDKIT_DOCKERFILE_INTEGRATION_MODE=$mode $iid go test ${TESTFLAGS:--v -test.run 'TestDockerfile.*Integration'} ${TESTPKGS:-./frontend/dockerfile}
+    done
+fi
 
 docker run --rm $iid go build ./frontend/gateway/client
 docker run --rm $iid go build ./frontend/dockerfile/cmd/dockerfile-frontend

@@ -25,7 +25,22 @@ type Worker interface {
 	Name() string
 }
 
+type TestDispatcher interface {
+	Call(*testing.T, Sandbox)
+	// NamingFunc returns a function which is used by the
+	// dispatcher to name the test. Used if the `TestDispatcher`
+	// is actually an anonymous wrapper.
+	NamingFunc() interface{}
+}
+
 type Test func(*testing.T, Sandbox)
+
+func (test Test) Call(t *testing.T, sb Sandbox) {
+	test(t, sb)
+}
+func (test Test) NamingFunc() interface{} {
+	return test
+}
 
 var defaultWorkers []Worker
 
@@ -37,13 +52,13 @@ func List() []Worker {
 	return defaultWorkers
 }
 
-func Run(t *testing.T, testCases []Test) {
+func Dispatch(t *testing.T, testCases []TestDispatcher) {
 	if testing.Short() {
 		t.Skip("skipping in short mode")
 	}
 	for _, br := range List() {
 		for _, tc := range testCases {
-			ok := t.Run(getFunctionName(tc)+"/worker="+br.Name(), func(t *testing.T) {
+			ok := t.Run(getFunctionName(tc.NamingFunc())+"/worker="+br.Name(), func(t *testing.T) {
 				sb, close, err := br.New()
 				if err != nil {
 					if errors.Cause(err) == ErrorRequirements {
@@ -57,11 +72,19 @@ func Run(t *testing.T, testCases []Test) {
 						sb.PrintLogs(t)
 					}
 				}()
-				tc(t, sb)
+				tc.Call(t, sb)
 			})
 			require.True(t, ok)
 		}
 	}
+}
+
+func Run(t *testing.T, testCases []Test) {
+	tc := make([]TestDispatcher, 0, len(testCases))
+	for _, t := range testCases {
+		tc = append(tc, TestDispatcher(t))
+	}
+	Dispatch(t, tc)
 }
 
 func getFunctionName(i interface{}) string {
