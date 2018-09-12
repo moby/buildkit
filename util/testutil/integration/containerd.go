@@ -144,7 +144,7 @@ disabled_plugins = ["cri"]
 	}
 	deferF.append(stop)
 
-	return &cdsandbox{address: address, sandbox: sandbox{address: buildkitdSock, logs: logs, cleanup: deferF, rootless: false}}, cl, nil
+	return &cdsandbox{address: address, sandbox: sandbox{mv: conf.mv, address: buildkitdSock, logs: logs, cleanup: deferF, rootless: false}}, cl, nil
 }
 
 func formatLogs(m map[string]*bytes.Buffer) string {
