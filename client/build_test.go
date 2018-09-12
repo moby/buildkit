@@ -23,7 +23,7 @@ func TestClientGatewayIntegration(t *testing.T) {
 		testClientGatewayEmptySolve,
 		testNoBuildID,
 		testUnknownBuildID,
-	})
+	}, integration.WithMirroredImages(integration.OfficialImages("busybox:latest")))
 }
 
 func testClientGatewaySolve(t *testing.T, sb integration.Sandbox) {

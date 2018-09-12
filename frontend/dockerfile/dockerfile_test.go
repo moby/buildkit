@@ -27,6 +27,7 @@ import (
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend/dockerfile/builder"
+	"github.com/moby/buildkit/frontend/dockerfile/dockerfile2llb"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/util/testutil"
 	"github.com/moby/buildkit/util/testutil/httpserver"
@@ -76,7 +77,12 @@ func TestIntegration(t *testing.T) {
 		testExportMultiPlatform,
 		testQuotedMetaArgs,
 		testIgnoreEntrypoint,
-	})
+	},
+		integration.WithMirroredImages(integration.OfficialImages("busybox:latest")),
+		integration.WithMirroredImages(map[string]string{
+			"tonistiigi/copy:v0.1.4": "docker.io/" + dockerfile2llb.DefaultCopyImage,
+		}),
+	)
 }
 
 func testIgnoreEntrypoint(t *testing.T, sb integration.Sandbox) {

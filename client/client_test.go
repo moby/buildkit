@@ -80,7 +80,9 @@ func TestClientIntegration(t *testing.T) {
 		testFrontendMetadataReturn,
 		testSSHMount,
 		testStdinClosed,
-	})
+	},
+		integration.WithMirroredImages(integration.OfficialImages("busybox:latest", "alpine:latest")),
+	)
 }
 
 func newContainerd(cdAddress string) (*containerd.Client, error) {
