@@ -220,15 +220,9 @@ func (w *runcExecutor) Exec(ctx context.Context, meta executor.Meta, root cache.
 		return err
 	}
 
-	forwardIO, err := newForwardIO(stdin, stdout, stderr)
-	if err != nil {
-		return errors.Wrap(err, "creating new forwarding IO")
-	}
-	defer forwardIO.Close()
-
 	logrus.Debugf("> creating %s %v", id, meta.Args)
 	status, err := w.runc.Run(ctx, id, bundle, &runc.CreateOpts{
-		IO: forwardIO,
+		IO: &forwardIO{stdin: stdin, stdout: stdout, stderr: stderr},
 	})
 	if err != nil {
 		return err
@@ -242,57 +236,11 @@ func (w *runcExecutor) Exec(ctx context.Context, meta executor.Meta, root cache.
 }
 
 type forwardIO struct {
-	stdin, stdout, stderr *os.File
-	toRelease             []io.Closer
-	toClose               []io.Closer
-}
-
-func newForwardIO(stdin io.ReadCloser, stdout, stderr io.WriteCloser) (f *forwardIO, err error) {
-	fio := &forwardIO{}
-	defer func() {
-		if err != nil {
-			fio.Close()
-		}
-	}()
-	if stdin != nil {
-		fio.stdin, err = fio.readCloserToFile(stdin)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if stdout != nil {
-		fio.stdout, err = fio.writeCloserToFile(stdout)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if stderr != nil {
-		fio.stderr, err = fio.writeCloserToFile(stderr)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return fio, nil
+	stdin          io.ReadCloser
+	stdout, stderr io.WriteCloser
 }
 
 func (s *forwardIO) Close() error {
-	s.CloseAfterStart()
-	var err error
-	for _, cl := range s.toClose {
-		if err1 := cl.Close(); err == nil {
-			err = err1
-		}
-	}
-	s.toClose = nil
-	return err
-}
-
-// release releases active FDs if the process doesn't need them any more
-func (s *forwardIO) CloseAfterStart() error {
-	for _, cl := range s.toRelease {
-		cl.Close()
-	}
-	s.toRelease = nil
 	return nil
 }
 
@@ -300,46 +248,6 @@ func (s *forwardIO) Set(cmd *exec.Cmd) {
 	cmd.Stdin = s.stdin
 	cmd.Stdout = s.stdout
 	cmd.Stderr = s.stderr
-}
-
-func (s *forwardIO) readCloserToFile(rc io.ReadCloser) (*os.File, error) {
-	if f, ok := rc.(*os.File); ok {
-		return f, nil
-	}
-	pr, pw, err := os.Pipe()
-	if err != nil {
-		return nil, err
-	}
-	s.toClose = append(s.toClose, pw)
-	s.toRelease = append(s.toRelease, pr)
-	go func() {
-		_, err := io.Copy(pw, rc)
-		if err1 := pw.Close(); err == nil {
-			err = err1
-		}
-		_ = err
-	}()
-	return pr, nil
-}
-
-func (s *forwardIO) writeCloserToFile(wc io.WriteCloser) (*os.File, error) {
-	if f, ok := wc.(*os.File); ok {
-		return f, nil
-	}
-	pr, pw, err := os.Pipe()
-	if err != nil {
-		return nil, err
-	}
-	s.toClose = append(s.toClose, pr)
-	s.toRelease = append(s.toRelease, pw)
-	go func() {
-		_, err := io.Copy(wc, pr)
-		if err1 := pw.Close(); err == nil {
-			err = err1
-		}
-		_ = err
-	}()
-	return pw, nil
 }
 
 func (s *forwardIO) Stdin() io.WriteCloser {
