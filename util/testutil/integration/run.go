@@ -146,10 +146,13 @@ func configWithMirror(mirror string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if err := os.Chmod(tmpdir, 0711); err != nil {
+		return "", err
+	}
 	if err := ioutil.WriteFile(filepath.Join(tmpdir, "buildkitd.toml"), []byte(fmt.Sprintf(`
 [registry."docker.io"]
 mirrors=["%s"]
-`, mirror)), 0600); err != nil {
+`, mirror)), 0644); err != nil {
 		return "", err
 	}
 	return tmpdir, nil
