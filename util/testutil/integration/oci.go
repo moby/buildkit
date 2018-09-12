@@ -61,16 +61,22 @@ func (s *oci) New(opt ...SandboxOpt) (Sandbox, func() error, error) {
 	// Include use of --oci-worker-labels to trigger https://github.com/moby/buildkit/pull/603
 	buildkitdArgs := []string{"buildkitd", "--oci-worker=true", "--containerd-worker=false", "--oci-worker-labels=org.mobyproject.buildkit.worker.sandbox=true"}
 
+	deferF := &multiCloser{}
+
 	if c.mirror != "" {
 		dir, err := configWithMirror(c.mirror)
 		if err != nil {
 			return nil, nil, err
 		}
+		deferF.append(func() error {
+			return os.RemoveAll(dir)
+		})
 		buildkitdArgs = append(buildkitdArgs, "--config="+filepath.Join(dir, "buildkitd.toml"))
 	}
 
 	if s.uid != 0 {
 		if s.gid == 0 {
+			deferF.F()()
 			return nil, nil, errors.Errorf("unsupported id pair: uid=%d, gid=%d", s.uid, s.gid)
 		}
 		// TODO: make sure the user exists and subuid/subgid are configured.
@@ -78,10 +84,10 @@ func (s *oci) New(opt ...SandboxOpt) (Sandbox, func() error, error) {
 	}
 	buildkitdSock, stop, err := runBuildkitd(buildkitdArgs, logs, s.uid, s.gid)
 	if err != nil {
+		deferF.F()()
 		return nil, nil, err
 	}
 
-	deferF := &multiCloser{}
 	deferF.append(stop)
 
 	return &sandbox{address: buildkitdSock, logs: logs, cleanup: deferF, rootless: s.uid != 0}, deferF.F(), nil

@@ -10,9 +10,11 @@ import (
 	"reflect"
 	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 
+	"github.com/moby/buildkit/frontend/dockerfile/dockerfile2llb"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
@@ -61,35 +63,28 @@ func Run(t *testing.T, testCases []Test) {
 		t.Skip("skipping in short mode")
 	}
 
-	mirrorDir := os.Getenv("BUILDKIT_REGISTRY_MIRROR_DIR")
-
-	var f *os.File
-	if mirrorDir != "" {
-		var err error
-		f, err = os.Create(filepath.Join(mirrorDir, "lock"))
-		require.NoError(t, err)
-		// defer f.Close() // this defer runs after subtest, cleanup on exit
-
-		err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX)
-		require.NoError(t, err)
-	}
-
-	mirror, cleanup, err := newRegistry(mirrorDir)
-	require.NoError(t, err)
-	_ = cleanup
-	// defer cleanup() // this defer runs after subtest, cleanup on exit
-
-	err = copyImagesLocal(t, mirror)
+	mirror, cleanup, err := runMirror(t)
 	require.NoError(t, err)
 
-	if mirrorDir != "" {
-		err = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
-		require.NoError(t, err)
+	var mu sync.Mutex
+	var count int
+	cleanOnComplete := func() func() {
+		count++
+		return func() {
+			mu.Lock()
+			count--
+			if count == 0 {
+				cleanup()
+			}
+			mu.Unlock()
+		}
 	}
+	defer cleanOnComplete()()
 
 	for _, br := range List() {
 		for _, tc := range testCases {
 			ok := t.Run(getFunctionName(tc)+"/worker="+br.Name(), func(t *testing.T) {
+				defer cleanOnComplete()()
 				sb, close, err := br.New(WithMirror(mirror))
 				if err != nil {
 					if errors.Cause(err) == ErrorRequirements {
@@ -142,6 +137,7 @@ func offlineImages() map[string]string {
 	return map[string]string{
 		"library/busybox:latest": "docker.io/" + arch + "/busybox:latest",
 		"library/alpine:latest":  "docker.io/" + arch + "/alpine:latest",
+		"tonistiigi/copy:v0.1.4": "docker.io/" + dockerfile2llb.DefaultCopyImage,
 	}
 }
 
@@ -157,4 +153,46 @@ mirrors=["%s"]
 		return "", err
 	}
 	return tmpdir, nil
+}
+
+func runMirror(t *testing.T) (host string, cleanup func() error, err error) {
+	mirrorDir := os.Getenv("BUILDKIT_REGISTRY_MIRROR_DIR")
+
+	var f *os.File
+	if mirrorDir != "" {
+		f, err = os.Create(filepath.Join(mirrorDir, "lock"))
+		if err != nil {
+			return "", nil, err
+		}
+		defer func() {
+			if err != nil {
+				f.Close()
+			}
+		}()
+		if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+			return "", nil, err
+		}
+	}
+
+	mirror, cleanup, err := newRegistry(mirrorDir)
+	if err != nil {
+		return "", nil, err
+	}
+	defer func() {
+		if err != nil {
+			cleanup()
+		}
+	}()
+
+	if err := copyImagesLocal(t, mirror); err != nil {
+		return "", nil, err
+	}
+
+	if mirrorDir != "" {
+		if err := syscall.Flock(int(f.Fd()), syscall.LOCK_UN); err != nil {
+			return "", nil, err
+		}
+	}
+
+	return mirror, cleanup, err
 }

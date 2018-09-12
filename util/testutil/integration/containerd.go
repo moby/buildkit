@@ -132,6 +132,9 @@ disabled_plugins = ["cri"]
 		if err != nil {
 			return nil, nil, err
 		}
+		deferF.append(func() error {
+			return os.RemoveAll(dir)
+		})
 		buildkitdArgs = append(buildkitdArgs, "--config="+filepath.Join(dir, "buildkitd.toml"))
 	}
 
