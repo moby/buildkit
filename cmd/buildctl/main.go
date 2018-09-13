@@ -116,7 +116,7 @@ func resolveClient(c *cli.Context) (*client.Client, error) {
 	cert := c.GlobalString("tlscert")
 	key := c.GlobalString("tlskey")
 
-	opts := []client.ClientOpt{client.WithBlock()}
+	opts := []client.ClientOpt{client.WithFailFast()}
 
 	ctx := commandContext(c)
 

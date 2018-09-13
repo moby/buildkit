@@ -77,7 +77,7 @@ func action(clicontext *cli.Context) error {
 	if tag := clicontext.String("tag"); tag == "" {
 		return errors.New("tag is not specified")
 	}
-	c, err := client.New(ctx, clicontext.String("buildkit-addr"), client.WithBlock())
+	c, err := client.New(ctx, clicontext.String("buildkit-addr"), client.WithFailFast())
 	if err != nil {
 		return err
 	}
