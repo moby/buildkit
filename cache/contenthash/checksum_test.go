@@ -508,7 +508,7 @@ func parseChange(str string) *change {
 		st.Mode |= 0777
 	}
 
-	c.fi = &fsutil.StatInfo{st}
+	c.fi = &fsutil.StatInfo{Stat: st}
 	return c
 }
 

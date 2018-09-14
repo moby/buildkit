@@ -53,7 +53,7 @@ func (b *build) Marshal(c *llb.Constraints) (digest.Digest, []byte, *pb.OpMetada
 	pbo := &pb.BuildOp{
 		Builder: pb.LLBBuilder,
 		Inputs: map[string]*pb.BuildInput{
-			pb.LLBDefinitionInput: {pb.InputIndex(0)}},
+			pb.LLBDefinitionInput: {Input: pb.InputIndex(0)}},
 	}
 
 	pbo.Attrs = map[string]string{}

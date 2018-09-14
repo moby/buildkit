@@ -10,7 +10,7 @@ ARG ROOTLESSKIT_VERSION=20b0fc24b305b031a61ef1a1ca456aadafaf5e77
 # The `buildkitd` stage and the `buildctl` stage are placed here
 # so that they can be built quickly with legacy DAG-unaware `docker build --target=...`
 
-FROM golang:1.10-alpine AS gobuild-base
+FROM golang:1.11-alpine AS gobuild-base
 RUN apk add --no-cache g++ linux-headers
 RUN apk add --no-cache git libseccomp-dev make
 
@@ -23,8 +23,14 @@ RUN mkdir .tmp; \
 
 FROM buildkit-base AS buildctl
 ENV CGO_ENABLED=0
-ARG GOOS=linux
 RUN go build -ldflags "$(cat .tmp/ldflags) -d" -o /usr/bin/buildctl ./cmd/buildctl
+
+FROM buildkit-base AS buildctl-darwin
+ENV CGO_ENABLED=0
+ENV GOOS=darwin
+RUN go build -ldflags "$(cat .tmp/ldflags)" -o /usr/bin/buildctl-darwin ./cmd/buildctl
+# reset GOOS for legacy builder
+ENV GOOS=linux
 
 FROM buildkit-base AS buildkitd
 ENV CGO_ENABLED=1
