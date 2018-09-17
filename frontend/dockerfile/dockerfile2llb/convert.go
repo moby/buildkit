@@ -134,8 +134,12 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 			}
 			ds.platform = &p
 		}
+		allDispatchStates.addState(ds)
 
-		total := 1
+		total := 0
+		if ds.stage.BaseName != emptyImageName && ds.base == nil {
+			total = 1
+		}
 		for _, cmd := range ds.stage.Commands {
 			switch cmd.(type) {
 			case *instructions.AddCommand, *instructions.CopyCommand, *instructions.RunCommand:
@@ -144,7 +148,6 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		}
 		ds.cmdTotal = total
 
-		allDispatchStates.addState(ds)
 		if opt.IgnoreCache != nil {
 			if len(opt.IgnoreCache) == 0 {
 				ds.ignoreCache = true
@@ -700,7 +703,7 @@ func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState l
 		args = append(args[:1], append([]string{"--unpack"}, args[1:]...)...)
 	}
 
-	runOpt := []llb.RunOption{llb.Args(args), llb.Dir("/dest"), llb.ReadonlyRootFS(), dfCmd(cmdToPrint), llb.WithCustomName(prefixCommand(d, uppercaseCmd(processCmdEnv(opt.shlex, cmdToPrint.String(), d.state.Env())), d.prefixPlatform, d.state.GetPlatform()))}
+	runOpt := []llb.RunOption{llb.Args(args), llb.Dir("/dest"), llb.ReadonlyRootFS(), dfCmd(cmdToPrint), llb.WithCustomName(prefixCommand(d, uppercaseCmd(processCmdEnv(opt.shlex, cmdToPrint.String(), d.state.Env())), d.prefixPlatform, &opt.targetPlatform))}
 	if d.ignoreCache {
 		runOpt = append(runOpt, llb.IgnoreCache)
 	}
