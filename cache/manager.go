@@ -128,17 +128,24 @@ func (cm *cacheManager) get(ctx context.Context, id string, fromSnapshotter bool
 	rec.mu.Lock()
 	defer rec.mu.Unlock()
 
+	triggerUpdate := true
+	for _, o := range opts {
+		if o == NoUpdateLastUsed {
+			triggerUpdate = false
+		}
+	}
+
 	if rec.mutable {
 		if len(rec.refs) != 0 {
 			return nil, errors.Wrapf(ErrLocked, "%s is locked", id)
 		}
 		if rec.equalImmutable != nil {
-			return rec.equalImmutable.ref(), nil
+			return rec.equalImmutable.ref(triggerUpdate), nil
 		}
-		return rec.mref().commit(ctx)
+		return rec.mref(triggerUpdate).commit(ctx)
 	}
 
-	return rec.ref(), nil
+	return rec.ref(triggerUpdate), nil
 }
 
 // getRecord returns record for id. Requires manager lock.
@@ -166,8 +173,8 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, fromSnapshotte
 		rec := &cacheRecord{
 			mu:           &sync.Mutex{},
 			cm:           cm,
-			refs:         make(map[Mountable]struct{}),
-			parent:       mutable.Parent(),
+			refs:         make(map[ref]struct{}),
+			parent:       mutable.parentRef(false),
 			md:           md,
 			equalMutable: &mutableRef{cacheRecord: mutable},
 		}
@@ -183,7 +190,7 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, fromSnapshotte
 
 	var parent ImmutableRef
 	if info.Parent != "" {
-		parent, err = cm.get(ctx, info.Parent, fromSnapshotter, opts...)
+		parent, err = cm.get(ctx, info.Parent, fromSnapshotter, append(opts, NoUpdateLastUsed)...)
 		if err != nil {
 			return nil, err
 		}
@@ -198,7 +205,7 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, fromSnapshotte
 		mu:      &sync.Mutex{},
 		mutable: info.Kind != snapshots.KindCommitted,
 		cm:      cm,
-		refs:    make(map[Mountable]struct{}),
+		refs:    make(map[ref]struct{}),
 		parent:  parent,
 		md:      md,
 	}
@@ -229,7 +236,7 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, opts ...RefOpti
 	var parentID string
 	if s != nil {
 		var err error
-		parent, err = cm.Get(ctx, s.ID())
+		parent, err = cm.Get(ctx, s.ID(), NoUpdateLastUsed)
 		if err != nil {
 			return nil, err
 		}
@@ -252,7 +259,7 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, opts ...RefOpti
 		mu:      &sync.Mutex{},
 		mutable: true,
 		cm:      cm,
-		refs:    make(map[Mountable]struct{}),
+		refs:    make(map[ref]struct{}),
 		parent:  parent,
 		md:      md,
 	}
@@ -269,7 +276,7 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, opts ...RefOpti
 
 	cm.records[id] = rec // TODO: save to db
 
-	return rec.mref(), nil
+	return rec.mref(true), nil
 }
 func (cm *cacheManager) GetMutable(ctx context.Context, id string) (MutableRef, error) {
 	cm.mu.Lock()
@@ -301,7 +308,7 @@ func (cm *cacheManager) GetMutable(ctx context.Context, id string) (MutableRef, 
 		rec.equalImmutable = nil
 	}
 
-	return rec.mref(), nil
+	return rec.mref(true), nil
 }
 
 func (cm *cacheManager) Prune(ctx context.Context, ch chan client.UsageInfo, opts ...client.PruneInfo) error {
@@ -669,7 +676,7 @@ func (cm *cacheManager) DiskUsage(ctx context.Context, opt client.DiskUsageInfo)
 		if d.Size == sizeUnknown {
 			func(d *client.UsageInfo) {
 				eg.Go(func() error {
-					ref, err := cm.Get(ctx, d.ID)
+					ref, err := cm.Get(ctx, d.ID, NoUpdateLastUsed)
 					if err != nil {
 						d.Size = 0
 						return nil
@@ -700,7 +707,7 @@ func IsNotFound(err error) bool {
 	return errors.Cause(err) == errNotFound
 }
 
-type RefOption func(withMetadata) error
+type RefOption interface{}
 
 type cachePolicy int
 
@@ -712,6 +719,10 @@ const (
 type withMetadata interface {
 	Metadata() *metadata.StorageItem
 }
+
+type noUpdateLastUsed struct{}
+
+var NoUpdateLastUsed noUpdateLastUsed
 
 func HasCachePolicyRetain(m withMetadata) bool {
 	return getCachePolicy(m.Metadata()) == cachePolicyRetain
@@ -750,8 +761,10 @@ func initializeMetadata(m withMetadata, opts ...RefOption) error {
 	}
 
 	for _, opt := range opts {
-		if err := opt(m); err != nil {
-			return err
+		if fn, ok := opt.(func(withMetadata) error); ok {
+			if err := fn(m); err != nil {
+				return err
+			}
 		}
 	}
 
