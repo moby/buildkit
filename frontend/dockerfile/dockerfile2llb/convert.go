@@ -216,10 +216,15 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 					d.stage.BaseName = reference.TagNameOnly(ref).String()
 					var isScratch bool
 					if metaResolver != nil && reachable && !d.unregistered {
+						prefix := "["
+						if opt.PrefixPlatform && platform != nil {
+							prefix += platforms.Format(*platform) + " "
+						}
+						prefix += "internal]"
 						dgst, dt, err := metaResolver.ResolveImageConfig(ctx, d.stage.BaseName, gw.ResolveImageConfigOpt{
 							Platform:    platform,
 							ResolveMode: opt.ImageResolveMode.String(),
-							LogName:     fmt.Sprintf("[internal] load metadata for %s", d.stage.BaseName),
+							LogName:     fmt.Sprintf("%s load metadata for %s", prefix, d.stage.BaseName),
 						})
 						if err == nil { // handle the error while builder is actually running
 							var img Image
