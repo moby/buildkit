@@ -5,14 +5,6 @@ DESTDIR=/usr/local
 binaries: $(BINARIES)
 binaries-all: $(BINARIES) $(BINARIES_EXTRA)
 
-bin/buildctl-darwin: FORCE
-	mkdir -p bin
-	docker build --build-arg GOOS=darwin -t buildkit:buildctl-darwin --target buildctl -f ./hack/dockerfiles/test.Dockerfile --force-rm .
-	( containerID=$$(docker create buildkit:buildctl-darwin noop); \
-		docker cp $$containerID:/usr/bin/buildctl $@; \
-		docker rm $$containerID )
-	chmod +x $@
-
 bin/%.exe: FORCE
 	mkdir -p bin
 	docker build -t buildkit:$*.exe --target $*.exe -f ./hack/dockerfiles/test.Dockerfile --force-rm .
