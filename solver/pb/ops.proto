@@ -6,6 +6,8 @@ package pb;
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
+option (gogoproto.stable_marshaler_all) = true;
+
 // Op represents a vertex of the LLB DAG.
 message Op {
 	// inputs is a set of input edges.
