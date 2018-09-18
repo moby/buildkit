@@ -18,7 +18,7 @@ import (
 // DockerExporter implements containerd/images.Exporter to
 // Docker Combined Image JSON + Filesystem Changeset Format v1.1
 // https://github.com/moby/moby/blob/master/image/spec/v1.1.md#combined-image-json--filesystem-changeset-format
-// The outputed tarball is also compatible wih OCI Image Format Specification
+// The output tarball is also compatible with OCI Image Format Specification
 type DockerExporter struct {
 	Name string
 }
