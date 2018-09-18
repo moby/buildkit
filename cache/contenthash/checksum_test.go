@@ -401,7 +401,7 @@ func TestPersistence(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond) // saving happens on the background
 
-	// we can't close snapshotter and open it twice (especially, its internal boltdb store)
+	// we can't close snapshotter and open it twice (especially, its internal bbolt store)
 	cm.Close()
 	getDefaultManager().lru.Purge()
 	cm = setupCacheManager(t, tmpdir, snapshotter)

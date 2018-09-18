@@ -30,7 +30,7 @@ import (
 	"github.com/moby/buildkit/frontend/gateway"
 	"github.com/moby/buildkit/frontend/gateway/forwarder"
 	"github.com/moby/buildkit/session"
-	"github.com/moby/buildkit/solver/boltdbcachestorage"
+	"github.com/moby/buildkit/solver/bboltcachestorage"
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/moby/buildkit/util/appdefaults"
@@ -500,7 +500,7 @@ func newController(c *cli.Context, cfg *config.Config) (*control.Controller, err
 	frontends["dockerfile.v0"] = forwarder.NewGatewayForwarder(wc, dockerfile.Build)
 	frontends["gateway.v0"] = gateway.NewGatewayFrontend(wc)
 
-	cacheStorage, err := boltdbcachestorage.NewStore(filepath.Join(cfg.Root, "cache.db"))
+	cacheStorage, err := bboltcachestorage.NewStore(filepath.Join(cfg.Root, "cache.db"))
 	if err != nil {
 		return nil, err
 	}

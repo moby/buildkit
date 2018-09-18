@@ -133,7 +133,7 @@ Edge state is cleaned up when a final job that loaded the vertexes that they are
 
 Cache providers determine if there is a result that matches the cache keys generated during the build that could be reused instead of fully reevaluating the vertex and its inputs. There can be multiple cache providers, and specific providers can be defined per vertex using the vertex options.
 
-There are multiple backend implementations for cache providers, in-memory one used in unit tests, the default local one using boltdb and one based on cache manifests in a remote registry.
+There are multiple backend implementations for cache providers, in-memory one used in unit tests, the default local one using bbolt and one based on cache manifests in a remote registry.
 
 Simplified cache provider has following methods:
 

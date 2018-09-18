@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/boltdb/bolt"
 	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/urfave/cli"
+	bolt "go.etcd.io/bbolt"
 )
 
 var DumpMetadataCommand = cli.Command{

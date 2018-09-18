@@ -331,7 +331,7 @@ func TestLazyCommit(t *testing.T) {
 	err = cm.Close()
 	require.NoError(t, err)
 
-	// we can't close snapshotter and open it twice (especially, its internal boltdb store)
+	// we can't close snapshotter and open it twice (especially, its internal bbolt store)
 	cm = getCacheManager(t, tmpdir, snapshotter)
 
 	snap2, err = cm.Get(ctx, snap.ID())
