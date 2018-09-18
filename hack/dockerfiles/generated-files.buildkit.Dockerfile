@@ -1,4 +1,6 @@
-# protoc is dynamically linked to glibc to can't use golang:1.11-alpine
+# syntax=tonistiigi/dockerfile:runmount20180828
+
+# protoc is dynamically linked to glibc to can't use golang:1.10-alpine
 FROM golang:1.11 AS gobuild-base
 ARG PROTOC_VERSION=3.1.0
 ARG GOGO_VERSION=master
@@ -14,8 +16,6 @@ RUN go get -d github.com/gogo/protobuf/protoc-gen-gogofaster \
         && go install ./protoc-gen-gogo ./protoc-gen-gogofaster ./protoc-gen-gogoslick
 
 WORKDIR /go/src/github.com/moby/buildkit
-COPY . .
-RUN go generate ./...
 
 # Generate into a subdirectory because if it is in the root then the
 # extraction with `docker export` ends up putting `.dockerenv`, `dev`,
@@ -24,12 +24,16 @@ RUN go generate ./...
 # export`.
 FROM gobuild-base AS generated
 RUN mkdir /generated-files
-RUN find . -name "*.pb.go" ! -path ./vendor/\* | tar -cf - --files-from - | tar -C /generated-files -xf -
+RUN --mount=target=/tmp/src \
+	cp -r /tmp/src/. . && \
+	git add -A && \
+	go generate ./... && \
+	git ls-files -m --others -- **/*.pb.go | tar -cf - --files-from - | tar -C /generated-files -xf -
 
 FROM scratch AS update
-
-COPY --from=generated generated-files /generated-files
+COPY --from=generated generated-files /
 
 FROM gobuild-base AS validate
-
-RUN ./hack/validate-generated-files check
+RUN --mount=target=/tmp/src \
+	cp -r /tmp/src/. . && \
+	go generate ./... && git diff && ./hack/validate-generated-files check
