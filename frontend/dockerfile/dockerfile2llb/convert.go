@@ -251,6 +251,13 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 							_ = ref
 							if len(img.RootFS.DiffIDs) == 0 {
 								isScratch = true
+								// schema1 images can't return diffIDs so double check :(
+								for _, h := range img.History {
+									if !h.EmptyLayer {
+										isScratch = false
+										break
+									}
+								}
 							}
 						}
 					}
