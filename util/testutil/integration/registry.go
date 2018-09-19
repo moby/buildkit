@@ -15,7 +15,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func newRegistry() (url string, cl func() error, err error) {
+func newRegistry(dir string) (url string, cl func() error, err error) {
 	if err := lookupBinary("registry"); err != nil {
 		return "", nil, err
 	}
@@ -30,26 +30,34 @@ func newRegistry() (url string, cl func() error, err error) {
 		}
 	}()
 
-	tmpdir, err := ioutil.TempDir("", "test-registry")
-	if err != nil {
-		return "", nil, err
+	if dir == "" {
+		tmpdir, err := ioutil.TempDir("", "test-registry")
+		if err != nil {
+			return "", nil, err
+		}
+		deferF.append(func() error { return os.RemoveAll(tmpdir) })
+		dir = tmpdir
 	}
-	deferF.append(func() error { return os.RemoveAll(tmpdir) })
 
-	template := fmt.Sprintf(`version: 0.1
+	if _, err := os.Stat(filepath.Join(dir, "config.yaml")); err != nil {
+		if !os.IsNotExist(err) {
+			return "", nil, err
+		}
+		template := fmt.Sprintf(`version: 0.1
 loglevel: debug
 storage:
     filesystem:
         rootdirectory: %s
 http:
     addr: 127.0.0.1:0
-`, filepath.Join(tmpdir, "data"))
+`, filepath.Join(dir, "data"))
 
-	if err := ioutil.WriteFile(filepath.Join(tmpdir, "config.yaml"), []byte(template), 0600); err != nil {
-		return "", nil, err
+		if err := ioutil.WriteFile(filepath.Join(dir, "config.yaml"), []byte(template), 0600); err != nil {
+			return "", nil, err
+		}
 	}
 
-	cmd := exec.Command("registry", "serve", filepath.Join(tmpdir, "config.yaml"))
+	cmd := exec.Command("registry", "serve", filepath.Join(dir, "config.yaml"))
 	rc, err := cmd.StdoutPipe()
 	if err != nil {
 		return "", nil, err

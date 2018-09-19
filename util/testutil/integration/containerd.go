@@ -48,7 +48,12 @@ func (c *containerd) Name() string {
 	return c.name
 }
 
-func (c *containerd) New() (sb Sandbox, cl func() error, err error) {
+func (c *containerd) New(opt ...SandboxOpt) (sb Sandbox, cl func() error, err error) {
+	var conf SandboxConf
+	for _, o := range opt {
+		o(&conf)
+	}
+
 	if err := lookupBinary(c.containerd); err != nil {
 		return nil, nil, err
 	}
@@ -115,12 +120,25 @@ disabled_plugins = ["cri"]
 	}
 	deferF.append(ctdStop)
 
-	buildkitdSock, stop, err := runBuildkitd([]string{"buildkitd",
+	buildkitdArgs := []string{"buildkitd",
 		"--oci-worker=false",
 		"--containerd-worker=true",
 		"--containerd-worker-addr", address,
 		"--containerd-worker-labels=org.mobyproject.buildkit.worker.sandbox=true", // Include use of --containerd-worker-labels to trigger https://github.com/moby/buildkit/pull/603
-	}, logs, 0, 0)
+	}
+
+	if conf.mirror != "" {
+		dir, err := configWithMirror(conf.mirror)
+		if err != nil {
+			return nil, nil, err
+		}
+		deferF.append(func() error {
+			return os.RemoveAll(dir)
+		})
+		buildkitdArgs = append(buildkitdArgs, "--config="+filepath.Join(dir, "buildkitd.toml"))
+	}
+
+	buildkitdSock, stop, err := runBuildkitd(buildkitdArgs, logs, 0, 0)
 	if err != nil {
 		return nil, nil, err
 	}
