@@ -18,11 +18,13 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
+// AgentConfig is the config for a single exposed SSH agent
 type AgentConfig struct {
 	ID    string
 	Paths []string
 }
 
+// NewSSHAgentProvider creates a session provider that allows access to ssh agent
 func NewSSHAgentProvider(confs []AgentConfig) (session.Attachable, error) {
 	m := map[string]source{}
 	for _, conf := range confs {

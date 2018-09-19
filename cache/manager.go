@@ -25,7 +25,6 @@ var (
 
 type ManagerOpt struct {
 	Snapshotter     snapshot.SnapshotterBase
-	GCPolicy        GCPolicy
 	MetadataStore   *metadata.Store
 	PruneRefChecker ExternalRefCheckerFunc
 }
@@ -40,7 +39,6 @@ type Accessor interface {
 type Controller interface {
 	DiskUsage(ctx context.Context, info client.DiskUsageInfo) ([]*client.UsageInfo, error)
 	Prune(ctx context.Context, ch chan client.UsageInfo, info ...client.PruneInfo) error
-	GC(ctx context.Context) error
 }
 
 type Manager interface {

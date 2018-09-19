@@ -31,6 +31,7 @@ type containerdExecutor struct {
 	cgroupParent     string
 }
 
+// New creates a new executor backed by connection to containerd API
 func New(client *containerd.Client, root, cgroup string, networkProviders map[pb.NetMode]network.Provider) executor.Executor {
 	return containerdExecutor{
 		client:           client,
