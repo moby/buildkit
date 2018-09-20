@@ -23,10 +23,6 @@ var (
 	keyNetwork   = contextKeyT("llb.network")
 )
 
-func addEnv(key, value string) StateOption {
-	return addEnvf(key, value)
-}
-
 func addEnvf(key, value string, v ...interface{}) StateOption {
 	return func(s State) State {
 		return s.WithValue(keyEnv, getEnv(s).AddOrReplace(key, fmt.Sprintf(value, v...)))

@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/system"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
@@ -140,6 +141,13 @@ func (e *ExecOp) Marshal(c *Constraints) (digest.Digest, []byte, *pb.OpMetadata,
 		}
 		if _, ok := e.meta.Env.Get("SSH_AUTH_SOCK"); !ok {
 			e.meta.Env = e.meta.Env.AddOrReplace("SSH_AUTH_SOCK", e.ssh[0].Target)
+		}
+	}
+	if c.Caps != nil {
+		if err := c.Caps.Supports(pb.CapExecMetaSetsDefaultPath); err != nil {
+			e.meta.Env = e.meta.Env.SetDefault("PATH", system.DefaultPathEnv)
+		} else {
+			addCap(&e.constraints, pb.CapExecMetaSetsDefaultPath)
 		}
 	}
 
