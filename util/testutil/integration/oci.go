@@ -90,7 +90,7 @@ func (s *oci) New(opt ...SandboxOpt) (Sandbox, func() error, error) {
 
 	deferF.append(stop)
 
-	return &sandbox{address: buildkitdSock, logs: logs, cleanup: deferF, rootless: s.uid != 0}, deferF.F(), nil
+	return &sandbox{address: buildkitdSock, mv: c.mv, logs: logs, cleanup: deferF, rootless: s.uid != 0}, deferF.F(), nil
 }
 
 type sandbox struct {
@@ -98,6 +98,7 @@ type sandbox struct {
 	logs     map[string]*bytes.Buffer
 	cleanup  *multiCloser
 	rootless bool
+	mv       matrixValue
 }
 
 func (sb *sandbox) Address() string {
@@ -137,6 +138,10 @@ func (sb *sandbox) Cmd(args ...string) *exec.Cmd {
 
 func (sb *sandbox) Rootless() bool {
 	return sb.rootless
+}
+
+func (sb *sandbox) Value(k string) interface{} {
+	return sb.mv.values[k].value
 }
 
 func runBuildkitd(args []string, logs map[string]*bytes.Buffer, uid, gid int) (address string, cl func() error, err error) {
