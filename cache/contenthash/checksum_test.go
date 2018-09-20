@@ -358,6 +358,133 @@ func TestChecksumUnorderedFiles(t *testing.T) {
 	require.NotEqual(t, dgst, dgst2)
 }
 
+func TestSymlinkInPathScan(t *testing.T) {
+	t.Parallel()
+	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	cm := setupCacheManager(t, tmpdir, snapshotter)
+	defer cm.Close()
+
+	ch := []string{
+		"ADD d0 dir",
+		"ADD d0/sub dir",
+		"ADD d0/sub/foo file data0",
+		"ADD d0/def symlink sub",
+	}
+	ref := createRef(t, cm, ch)
+
+	dgst, err := Checksum(context.TODO(), ref, "d0/def/foo")
+	require.NoError(t, err)
+	require.Equal(t, dgstFileData0, dgst)
+
+	dgst, err = Checksum(context.TODO(), ref, "d0/def/foo")
+	require.NoError(t, err)
+	require.Equal(t, dgstFileData0, dgst)
+
+	err = ref.Release(context.TODO())
+	require.NoError(t, err)
+}
+
+func TestSymlinkNeedsScan(t *testing.T) {
+	t.Parallel()
+	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	cm := setupCacheManager(t, tmpdir, snapshotter)
+	defer cm.Close()
+
+	ch := []string{
+		"ADD c0 dir",
+		"ADD c0/sub dir",
+		"ADD c0/sub/foo file data0",
+		"ADD d0 dir",
+		"ADD d0/d1 dir",
+		"ADD d0/d1/def symlink ../../c0/sub",
+	}
+	ref := createRef(t, cm, ch)
+
+	// scan the d0 path containing the symlink that doesn't get followed
+	_, err = Checksum(context.TODO(), ref, "d0/d1")
+	require.NoError(t, err)
+
+	dgst, err := Checksum(context.TODO(), ref, "d0/d1/def/foo")
+	require.NoError(t, err)
+	require.Equal(t, dgstFileData0, dgst)
+
+	err = ref.Release(context.TODO())
+	require.NoError(t, err)
+}
+
+func TestSymlinkInPathHandleChange(t *testing.T) {
+	t.Parallel()
+	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	cm := setupCacheManager(t, tmpdir, snapshotter)
+	defer cm.Close()
+
+	ch := []string{
+		"ADD d1 dir",
+		"ADD d1/sub dir",
+		"ADD d1/sub/foo file data0",
+		"ADD d1/sub/bar symlink /link",
+		"ADD d1/sub/baz symlink ../../../link",
+		"ADD d1/sub/bay symlink ../../../../link/.", // weird link
+		"ADD d1/def symlink sub",
+		"ADD sub dir",
+		"ADD sub/d0 dir",
+		"ADD sub/d0/abc file data0",
+		"ADD sub/d0/def symlink abc",
+		"ADD sub/d0/ghi symlink nosuchfile",
+		"ADD link symlink sub/d0",
+	}
+
+	ref := createRef(t, cm, nil)
+
+	cc, err := newCacheContext(ref.Metadata())
+	require.NoError(t, err)
+
+	err = emit(cc.HandleChange, changeStream(ch))
+	require.NoError(t, err)
+
+	dgst, err := cc.Checksum(context.TODO(), ref, "d1/def/foo")
+	require.NoError(t, err)
+	require.Equal(t, dgstFileData0, dgst)
+
+	dgst, err = cc.Checksum(context.TODO(), ref, "d1/def/bar/abc")
+	require.NoError(t, err)
+	require.Equal(t, dgstFileData0, dgst)
+
+	dgstFileData0, err := cc.Checksum(context.TODO(), ref, "sub/d0")
+	require.NoError(t, err)
+	require.Equal(t, dgstFileData0, dgstDirD0)
+
+	dgstFileData0, err = cc.Checksum(context.TODO(), ref, "d1/def/baz")
+	require.NoError(t, err)
+	require.Equal(t, dgstFileData0, dgstDirD0)
+
+	dgstFileData0, err = cc.Checksum(context.TODO(), ref, "d1/def/bay")
+	require.NoError(t, err)
+	require.Equal(t, dgstFileData0, dgstDirD0)
+
+	dgstFileData0, err = cc.Checksum(context.TODO(), ref, "link")
+	require.NoError(t, err)
+	require.Equal(t, dgstFileData0, dgstDirD0)
+
+	err = ref.Release(context.TODO())
+	require.NoError(t, err)
+}
+
 func TestPersistence(t *testing.T) {
 	t.Parallel()
 	tmpdir, err := ioutil.TempDir("", "buildkit-state")
