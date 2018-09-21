@@ -112,7 +112,90 @@ func TestIntegration(t *testing.T) {
 		testExportMultiPlatform,
 		testQuotedMetaArgs,
 		testIgnoreEntrypoint,
+		testCopyThroughSymlinkContext,
+		testCopyThroughSymlinkMultiStage,
 	}, opts...)
+}
+
+func testCopyThroughSymlinkContext(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM scratch
+COPY link/foo .
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.Symlink("sub", "link"),
+		fstest.CreateDir("sub", 0700),
+		fstest.CreateFile("sub/foo", []byte(`contents`), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		Exporter:          client.ExporterLocal,
+		ExporterOutputDir: destDir,
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "foo"))
+	require.NoError(t, err)
+	require.Equal(t, "contents", string(dt))
+}
+
+func testCopyThroughSymlinkMultiStage(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM busybox AS build
+RUN mkdir -p /out/sub && ln -s out/sub /sub && echo -n "data" > /sub/foo
+FROM scratch
+COPY --from=build /sub/foo .
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		Exporter:          client.ExporterLocal,
+		ExporterOutputDir: destDir,
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "foo"))
+	require.NoError(t, err)
+	require.Equal(t, "data", string(dt))
 }
 
 func testIgnoreEntrypoint(t *testing.T, sb integration.Sandbox) {
