@@ -20,17 +20,17 @@ type FileRange struct {
 	Length int
 }
 
-func ReadFile(ctx context.Context, ref ImmutableRef, req ReadRequest) ([]byte, error) {
+func withMount(ctx context.Context, ref ImmutableRef, cb func(string) error) error {
 	mount, err := ref.Mount(ctx, true)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	lm := snapshot.LocalMounter(mount)
 
 	root, err := lm.Mount()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	defer func() {
@@ -39,33 +39,43 @@ func ReadFile(ctx context.Context, ref ImmutableRef, req ReadRequest) ([]byte, e
 		}
 	}()
 
-	fp, err := fs.RootPath(root, req.Filename)
-	if err != nil {
-		return nil, err
-	}
-
-	var dt []byte
-
-	if req.Range == nil {
-		dt, err = ioutil.ReadFile(fp)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		f, err := os.Open(fp)
-		if err != nil {
-			return nil, err
-		}
-		dt, err = ioutil.ReadAll(io.NewSectionReader(f, int64(req.Range.Offset), int64(req.Range.Length)))
-		f.Close()
-		if err != nil {
-			return nil, err
-		}
+	if err := cb(root); err != nil {
+		return err
 	}
 
 	if err := lm.Unmount(); err != nil {
-		return nil, err
+		return err
 	}
 	lm = nil
+	return nil
+}
+
+func ReadFile(ctx context.Context, ref ImmutableRef, req ReadRequest) ([]byte, error) {
+	var dt []byte
+
+	err := withMount(ctx, ref, func(root string) error {
+		fp, err := fs.RootPath(root, req.Filename)
+		if err != nil {
+			return err
+		}
+
+		if req.Range == nil {
+			dt, err = ioutil.ReadFile(fp)
+			if err != nil {
+				return err
+			}
+		} else {
+			f, err := os.Open(fp)
+			if err != nil {
+				return err
+			}
+			dt, err = ioutil.ReadAll(io.NewSectionReader(f, int64(req.Range.Offset), int64(req.Range.Length)))
+			f.Close()
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 	return dt, err
 }
