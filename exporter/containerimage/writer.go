@@ -158,7 +158,7 @@ func (ic *ImageWriter) exportLayers(ctx context.Context, refs ...cache.Immutable
 			eg.Go(func() error {
 				diffPairs, err := blobs.GetDiffPairs(ctx, ic.opt.ContentStore, ic.opt.Snapshotter, ic.opt.Differ, ref, true)
 				if err != nil {
-					return errors.Wrap(err, "failed calculaing diff pairs for exported snapshot")
+					return errors.Wrap(err, "failed calculating diff pairs for exported snapshot")
 				}
 				out[i] = diffPairs
 				return nil
