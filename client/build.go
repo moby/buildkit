@@ -84,6 +84,11 @@ func (g *gatewayClientForBuild) ReadFile(ctx context.Context, in *gatewayapi.Rea
 	return g.gateway.ReadFile(ctx, in, opts...)
 }
 
+func (g *gatewayClientForBuild) ReadDir(ctx context.Context, in *gatewayapi.ReadDirRequest, opts ...grpc.CallOption) (*gatewayapi.ReadDirResponse, error) {
+	ctx = buildid.AppendToOutgoingContext(ctx, g.buildID)
+	return g.gateway.ReadDir(ctx, in, opts...)
+}
+
 func (g *gatewayClientForBuild) Ping(ctx context.Context, in *gatewayapi.PingRequest, opts ...grpc.CallOption) (*gatewayapi.PongResponse, error) {
 	ctx = buildid.AppendToOutgoingContext(ctx, g.buildID)
 	return g.gateway.Ping(ctx, in, opts...)

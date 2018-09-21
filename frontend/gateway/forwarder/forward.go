@@ -15,6 +15,7 @@ import (
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/worker"
 	"github.com/pkg/errors"
+	fstypes "github.com/tonistiigi/fsutil/types"
 )
 
 func llbBridgeToGatewayClient(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string, workerInfos []clienttypes.WorkerInfo) (*bridgeClient, error) {
@@ -146,6 +147,18 @@ func (r *ref) ReadFile(ctx context.Context, req client.ReadRequest) ([]byte, err
 		}
 	}
 	return cache.ReadFile(ctx, ref, newReq)
+}
+
+func (r *ref) ReadDir(ctx context.Context, req client.ReadDirRequest) ([]*fstypes.Stat, error) {
+	ref, err := r.getImmutableRef()
+	if err != nil {
+		return nil, err
+	}
+	newReq := cache.ReadDirRequest{
+		Path:           req.Path,
+		IncludePattern: req.IncludePattern,
+	}
+	return cache.ReadDir(ctx, ref, newReq)
 }
 
 func (r *ref) getImmutableRef() (cache.ImmutableRef, error) {

@@ -16,6 +16,7 @@ const (
 	CapReadFile                apicaps.CapID = "readfile"
 	CapReturnResult            apicaps.CapID = "return"
 	CapReturnMap               apicaps.CapID = "returnmap"
+	CapReadDir                 apicaps.CapID = "readdir"
 )
 
 func init() {
@@ -69,4 +70,10 @@ func init() {
 		Status:  apicaps.CapStatusExperimental,
 	})
 
+	Caps.Init(apicaps.Cap{
+		ID:      CapReadDir,
+		Name:    "read static directory",
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
 }

@@ -479,7 +479,7 @@ func (lbf *llbBridgeForwarder) ReadFile(ctx context.Context, req *pb.ReadFileReq
 		return nil, errors.Errorf("no such ref: %v", req.Ref)
 	}
 	if ref == nil {
-		return nil, errors.Wrapf(os.ErrNotExist, "%s no found", req.FilePath)
+		return nil, errors.Wrapf(os.ErrNotExist, "%s not found", req.FilePath)
 	}
 	workerRef, ok := ref.Sys().(*worker.WorkerRef)
 	if !ok {
@@ -502,6 +502,34 @@ func (lbf *llbBridgeForwarder) ReadFile(ctx context.Context, req *pb.ReadFileReq
 	}
 
 	return &pb.ReadFileResponse{Data: dt}, nil
+}
+
+func (lbf *llbBridgeForwarder) ReadDir(ctx context.Context, req *pb.ReadDirRequest) (*pb.ReadDirResponse, error) {
+	ctx = tracing.ContextWithSpanFromContext(ctx, lbf.callCtx)
+	lbf.mu.Lock()
+	ref, ok := lbf.refs[req.Ref]
+	lbf.mu.Unlock()
+	if !ok {
+		return nil, errors.Errorf("no such ref: %v", req.Ref)
+	}
+	if ref == nil {
+		return nil, errors.Wrapf(os.ErrNotExist, "%s not found", req.DirPath)
+	}
+	workerRef, ok := ref.Sys().(*worker.WorkerRef)
+	if !ok {
+		return nil, errors.Errorf("invalid ref: %T", ref.Sys())
+	}
+
+	newReq := cache.ReadDirRequest{
+		Path:           req.DirPath,
+		IncludePattern: req.IncludePattern,
+	}
+	entries, err := cache.ReadDir(ctx, workerRef.ImmutableRef, newReq)
+	if err != nil {
+		return nil, err
+	}
+
+	return &pb.ReadDirResponse{Entries: entries}, nil
 }
 
 func (lbf *llbBridgeForwarder) Ping(context.Context, *pb.PingRequest) (*pb.PongResponse, error) {

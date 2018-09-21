@@ -125,3 +125,11 @@ func (gwf *GatewayForwarder) Return(ctx context.Context, req *gwapi.ReturnReques
 	res, err := fwd.Return(ctx, req)
 	return res, err
 }
+
+func (gwf *GatewayForwarder) ReadDir(ctx context.Context, req *gwapi.ReadDirRequest) (*gwapi.ReadDirResponse, error) {
+	fwd, err := gwf.lookupForwarder(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "forwarding ReadDir")
+	}
+	return fwd.ReadDir(ctx, req)
+}
