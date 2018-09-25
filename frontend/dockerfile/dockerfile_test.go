@@ -164,9 +164,10 @@ func testCopyThroughSymlinkMultiStage(t *testing.T, sb integration.Sandbox) {
 
 	dockerfile := []byte(`
 FROM busybox AS build
-RUN mkdir -p /out/sub && ln -s out/sub /sub && echo -n "data" > /sub/foo
+RUN mkdir -p /out/sub && ln -s /out/sub /sub && ln -s out/sub /sub2 && echo -n "data" > /sub/foo
 FROM scratch
 COPY --from=build /sub/foo .
+COPY --from=build /sub2/foo bar
 `)
 
 	dir, err := tmpdir(
