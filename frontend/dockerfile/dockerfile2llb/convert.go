@@ -23,6 +23,7 @@ import (
 	"github.com/moby/buildkit/frontend/dockerfile/shell"
 	gw "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/system"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -57,6 +58,7 @@ type ConvertOpt struct {
 	ExtraHosts        []llb.HostIP
 	ForceNetMode      pb.NetMode
 	OverrideCopyImage string
+	LLBCaps           *apicaps.CapSet
 }
 
 func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State, *Image, error) {
@@ -368,7 +370,13 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 	}
 	buildContext.Output = bc.Output()
 
-	st := target.state.SetMarshalDefaults(llb.Platform(platformOpt.targetPlatform))
+	defaults := []llb.ConstraintsOpt{
+		llb.Platform(platformOpt.targetPlatform),
+	}
+	if opt.LLBCaps != nil {
+		defaults = append(defaults, llb.WithCaps(*opt.LLBCaps))
+	}
+	st := target.state.SetMarshalDefaults(defaults...)
 
 	if !platformOpt.implicitTarget {
 		target.image.OS = platformOpt.targetPlatform.OS
