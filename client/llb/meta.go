@@ -175,6 +175,13 @@ func (e EnvList) AddOrReplace(k, v string) EnvList {
 	return e
 }
 
+func (e EnvList) SetDefault(k, v string) EnvList {
+	if _, ok := e.Get(k); !ok {
+		e = append(e, KeyValue{key: k, value: v})
+	}
+	return e
+}
+
 func (e EnvList) Delete(k string) EnvList {
 	e = append([]KeyValue(nil), e...)
 	if i, ok := e.Index(k); ok {
