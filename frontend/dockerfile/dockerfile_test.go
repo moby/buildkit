@@ -51,7 +51,7 @@ func init() {
 	opts = []integration.TestOpt{
 		integration.WithMirroredImages(integration.OfficialImages("busybox:latest")),
 		integration.WithMirroredImages(map[string]string{
-			"tonistiigi/copy:v0.1.4": "docker.io/" + dockerfile2llb.DefaultCopyImage,
+			"tonistiigi/copy:v0.1.5": "docker.io/" + dockerfile2llb.DefaultCopyImage,
 		}),
 		integration.WithMatrix("frontend", frontends),
 	}
@@ -114,7 +114,38 @@ func TestIntegration(t *testing.T) {
 		testIgnoreEntrypoint,
 		testCopyThroughSymlinkContext,
 		testCopyThroughSymlinkMultiStage,
+		testCopyChownCreateDest,
 	}, opts...)
+}
+
+func testCopyChownCreateDest(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM busybox
+RUN adduser -D user
+COPY --chown=user:user . /dest
+RUN [ "$(stat -c "%U %G" /dest)" == "user user" ]
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
 }
 
 func testCopyThroughSymlinkContext(t *testing.T, sb integration.Sandbox) {
