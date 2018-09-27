@@ -167,7 +167,13 @@ func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root c
 				cancel()
 			}
 			if status.ExitCode() != 0 {
-				return errors.Errorf("process returned non-zero exit code: %d", status.ExitCode())
+				err := errors.Errorf("process returned non-zero exit code: %d", status.ExitCode())
+				select {
+				case <-ctx.Done():
+					err = errors.Wrap(ctx.Err(), err.Error())
+				default:
+				}
+				return err
 			}
 			return nil
 		}
