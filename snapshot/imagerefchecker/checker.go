@@ -90,9 +90,13 @@ func (c *checker) init() {
 		return
 	}
 
+	var mu sync.Mutex
+
 	for _, img := range imgs {
 		if err := images.Dispatch(context.TODO(), images.Handlers(layersHandler(c.opt.ContentStore, func(layers []specs.Descriptor) {
+			mu.Lock()
 			c.registerLayers(layers)
+			mu.Unlock()
 		})), img.Target); err != nil {
 			return
 		}
