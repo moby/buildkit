@@ -1379,7 +1379,7 @@ Keep the following things in mind about volumes in the `Dockerfile`.
   data within the volume after it has been declared, those changes will be discarded.
 
 - **JSON formatting**: The list is parsed as a JSON array.
-  You must enclose words with double quotes (`"`)rather than single quotes (`'`).
+  You must enclose words with double quotes (`"`) rather than single quotes (`'`).
 
 - **The host directory is declared at container run-time**: The host directory
   (the mountpoint) is, by its nature, host-dependent. This is to preserve image
