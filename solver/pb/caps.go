@@ -30,15 +30,16 @@ const (
 
 	CapBuildOpLLBFileName apicaps.CapID = "source.buildop.llbfilename"
 
-	CapExecMetaBase          apicaps.CapID = "exec.meta.base"
-	CapExecMetaProxy         apicaps.CapID = "exec.meta.proxyenv"
-	CapExecMetaNetwork       apicaps.CapID = "exec.meta.network"
-	CapExecMountBind         apicaps.CapID = "exec.mount.bind"
-	CapExecMountCache        apicaps.CapID = "exec.mount.cache"
-	CapExecMountCacheSharing apicaps.CapID = "exec.mount.cache.sharing"
-	CapExecMountSelector     apicaps.CapID = "exec.mount.selector"
-	CapExecMountTmpfs        apicaps.CapID = "exec.mount.tmpfs"
-	CapMountSecret           apicaps.CapID = "exec.mount.secret"
+	CapExecMetaBase            apicaps.CapID = "exec.meta.base"
+	CapExecMetaProxy           apicaps.CapID = "exec.meta.proxyenv"
+	CapExecMetaNetwork         apicaps.CapID = "exec.meta.network"
+	CapExecMetaSetsDefaultPath apicaps.CapID = "exec.meta.setsdefaultpath"
+	CapExecMountBind           apicaps.CapID = "exec.mount.bind"
+	CapExecMountCache          apicaps.CapID = "exec.mount.cache"
+	CapExecMountCacheSharing   apicaps.CapID = "exec.mount.cache.sharing"
+	CapExecMountSelector       apicaps.CapID = "exec.mount.selector"
+	CapExecMountTmpfs          apicaps.CapID = "exec.mount.tmpfs"
+	CapMountSecret             apicaps.CapID = "exec.mount.secret"
 
 	CapConstraints apicaps.CapID = "constraints"
 	CapPlatform    apicaps.CapID = "platform"
@@ -165,6 +166,12 @@ func init() {
 
 	Caps.Init(apicaps.Cap{
 		ID:      CapExecMetaNetwork,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapExecMetaSetsDefaultPath,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})

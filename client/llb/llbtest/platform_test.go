@@ -1,6 +1,7 @@
 package llbtest
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/containerd/containerd/platforms"
@@ -116,6 +117,64 @@ func TestPlatformMixed(t *testing.T) {
 	require.Equal(t, expectedArm, platform(e2))
 }
 
+func TestFallbackPath(t *testing.T) {
+	t.Parallel()
+
+	// With no caps we expect no PATH but also no requirement for
+	// the cap.
+	def, err := llb.Scratch().Run(llb.Shlex("cmd")).Marshal(llb.LinuxAmd64)
+	require.NoError(t, err)
+	e, err := llbsolver.Load(def.ToPB())
+	require.NoError(t, err)
+	require.False(t, def.Metadata[e.Vertex.Digest()].Caps[pb.CapExecMetaSetsDefaultPath])
+	_, ok := getenv(e, "PATH")
+	require.False(t, ok)
+
+	// For an empty capset we expect a default non-empty PATH, and
+	// no requirement for the cap.
+	cs := pb.Caps.CapSet(nil)
+	require.Error(t, cs.Supports(pb.CapExecMetaSetsDefaultPath))
+	def, err = llb.Scratch().Run(llb.Shlex("cmd")).Marshal(llb.LinuxAmd64, llb.WithCaps(cs))
+	require.NoError(t, err)
+	e, err = llbsolver.Load(def.ToPB())
+	require.NoError(t, err)
+	require.False(t, def.Metadata[e.Vertex.Digest()].Caps[pb.CapExecMetaSetsDefaultPath])
+	v, ok := getenv(e, "PATH")
+	require.True(t, ok)
+	require.NotEqual(t, "", v)
+
+	// All capabilities, including pb.CapExecMetaSetsDefaultPath,
+	// so should get no PATH (not present at all, rather than
+	// present and empty), but also require the cap.
+	cs = pb.Caps.CapSet(pb.Caps.All())
+	require.NoError(t, cs.Supports(pb.CapExecMetaSetsDefaultPath))
+	def, err = llb.Scratch().Run(llb.Shlex("cmd")).Marshal(llb.LinuxAmd64, llb.WithCaps(cs))
+	require.NoError(t, err)
+	e, err = llbsolver.Load(def.ToPB())
+	require.NoError(t, err)
+	require.True(t, def.Metadata[e.Vertex.Digest()].Caps[pb.CapExecMetaSetsDefaultPath])
+	_, ok = getenv(e, "PATH")
+	require.False(t, ok)
+
+	// If we provide a path it should not be touched, no matter
+	// what caps we pass in. Whether the cap becomes required is
+	// irrelevant.
+	for _, cos := range [][]llb.ConstraintsOpt{
+		nil,
+		{llb.WithCaps(pb.Caps.CapSet(nil))},
+		{llb.WithCaps(pb.Caps.CapSet(pb.Caps.All()))},
+	} {
+		def, err = llb.Scratch().AddEnv("PATH", "foo").Run(llb.Shlex("cmd")).Marshal(append(cos, llb.LinuxAmd64)...)
+		require.NoError(t, err)
+		e, err = llbsolver.Load(def.ToPB())
+		require.NoError(t, err)
+		// pb.CapExecMetaSetsDefaultPath setting is irrelevant (and variable).
+		v, ok = getenv(e, "PATH")
+		require.True(t, ok)
+		require.Equal(t, "foo", v)
+	}
+}
+
 func toOp(e solver.Edge) *pb.Op {
 	return e.Vertex.Sys().(*pb.Op)
 }
@@ -160,4 +219,15 @@ func mount(e solver.Edge, target string) solver.Edge {
 		}
 	}
 	panic("could not find mount " + target)
+}
+
+func getenv(e solver.Edge, k string) (string, bool) {
+	env := toOp(e).GetExec().Meta.Env
+	k = k + "="
+	for _, e := range env {
+		if strings.HasPrefix(e, k) {
+			return strings.TrimPrefix(e, k), true
+		}
+	}
+	return "", false
 }
