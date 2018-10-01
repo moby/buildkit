@@ -15,6 +15,7 @@ import (
 	"github.com/moby/buildkit/util/progress"
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
+	fstypes "github.com/tonistiigi/fsutil/types"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
 )
@@ -92,7 +93,7 @@ func (e *localExporterInstance) Export(ctx context.Context, inp exporter.Source)
 			lbl := "copying files"
 			if isMap {
 				lbl += " " + k
-				fs = fsutil.SubDirFS(fs, fsutil.Stat{
+				fs = fsutil.SubDirFS(fs, fstypes.Stat{
 					Mode: uint32(os.ModeDir | 0755),
 					Path: strings.Replace(k, "/", "_", -1),
 				})
