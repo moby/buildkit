@@ -2390,6 +2390,161 @@ func TestSlowCacheAvoidAccess(t *testing.T) {
 	require.Equal(t, int64(1), cacheManager.loadCounter)
 }
 
+// TestSlowCacheAvoidExecOnCache tests a regression where an input with
+// possible matches and a content based checksum should not try to checksum
+// before other inputs with no keys have at least made into a slow state.
+// moby/buildkit#648
+func TestSlowCacheAvoidLoadOnCache(t *testing.T) {
+	t.Parallel()
+	ctx := context.TODO()
+
+	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
+
+	l := NewSolver(SolverOpt{
+		ResolveOpFunc: testOpResolver,
+		DefaultCache:  cacheManager,
+	})
+	defer l.Close()
+
+	j0, err := l.NewJob("j0")
+	require.NoError(t, err)
+
+	defer func() {
+		if j0 != nil {
+			j0.Discard()
+		}
+	}()
+
+	g0 := Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "vmain",
+			cacheKeySeed: "seedmain",
+			value:        "resultmain",
+			inputs: []Edge{{
+				Vertex: vtx(vtxOpt{
+					name:         "v0",
+					cacheKeySeed: "seed0",
+					value:        "result0",
+					inputs: []Edge{
+						{
+							Vertex: vtx(vtxOpt{
+								name:         "v1",
+								cacheKeySeed: "seed1",
+								value:        "result1",
+								inputs: []Edge{{
+									Vertex: vtx(vtxOpt{
+										name:         "v3",
+										cacheKeySeed: "seed3",
+										value:        "result3",
+									}),
+								}},
+								slowCacheCompute: map[int]ResultBasedCacheFunc{
+									0: digestFromResult,
+								},
+							}),
+						},
+						{
+							Vertex: vtx(vtxOpt{
+								name:         "v2",
+								cacheKeySeed: "seed2",
+								value:        "result2",
+							}),
+						},
+					},
+					slowCacheCompute: map[int]ResultBasedCacheFunc{
+						1: digestFromResult,
+					},
+				}),
+			}},
+		}),
+	}
+	g0.Vertex.(*vertex).setupCallCounters()
+
+	res, err := j0.Build(ctx, g0)
+	require.NoError(t, err)
+	require.Equal(t, unwrap(res), "resultmain")
+	require.Equal(t, int64(0), cacheManager.loadCounter)
+
+	require.NoError(t, j0.Discard())
+	j0 = nil
+
+	j1, err := l.NewJob("j1")
+	require.NoError(t, err)
+
+	// the switch of the cache key for v3 forcing it to be reexecuted
+	// testing that this does not cause v2 to be reloaded for cache for its
+	// checksum recalculation
+	g0 = Edge{
+		Vertex: vtx(vtxOpt{
+			name:         "vmain",
+			cacheKeySeed: "seedmain",
+			value:        "resultmain",
+			inputs: []Edge{{
+				Vertex: vtx(vtxOpt{
+					name:         "v0",
+					cacheKeySeed: "seed0",
+					value:        "result0",
+					inputs: []Edge{
+						{
+							Vertex: vtx(vtxOpt{
+								name:         "v1",
+								cacheKeySeed: "seed1",
+								value:        "result1",
+								inputs: []Edge{{
+									Vertex: vtx(vtxOpt{
+										name:         "v3",
+										cacheKeySeed: "seed3-new",
+										value:        "result3",
+									}),
+								}},
+								execPreFunc: func(context.Context) error {
+									select {
+									case <-time.After(50 * time.Millisecond):
+									case <-ctx.Done():
+									}
+									return nil
+								},
+								slowCacheCompute: map[int]ResultBasedCacheFunc{
+									0: digestFromResult,
+								},
+							}),
+						},
+						{
+							Vertex: vtx(vtxOpt{
+								name:         "v2",
+								cacheKeySeed: "seed2",
+								value:        "result2",
+							}),
+						},
+					},
+					slowCacheCompute: map[int]ResultBasedCacheFunc{
+						1: digestFromResult,
+					},
+				}),
+			}},
+		}),
+	}
+
+	g0.Vertex.(*vertex).setupCallCounters()
+
+	defer func() {
+		if j1 != nil {
+			j1.Discard()
+		}
+	}()
+
+	res, err = j1.Build(ctx, g0)
+	require.NoError(t, err)
+	require.Equal(t, unwrap(res), "resultmain")
+
+	require.NoError(t, j1.Discard())
+	j1 = nil
+
+	require.Equal(t, int64(5), *g0.Vertex.(*vertex).cacheCallCount)
+	require.Equal(t, int64(1), *g0.Vertex.(*vertex).execCallCount)
+	require.Equal(t, int64(1), cacheManager.loadCounter)
+}
+
 func TestCacheMultipleMaps(t *testing.T) {
 	t.Parallel()
 	ctx := context.TODO()
