@@ -1,4 +1,4 @@
-package cache
+package util
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/containerd/continuity/fs"
+	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
@@ -24,7 +25,7 @@ type FileRange struct {
 	Length int
 }
 
-func withMount(ctx context.Context, ref ImmutableRef, cb func(string) error) error {
+func withMount(ctx context.Context, ref cache.ImmutableRef, cb func(string) error) error {
 	mount, err := ref.Mount(ctx, true)
 	if err != nil {
 		return err
@@ -54,7 +55,7 @@ func withMount(ctx context.Context, ref ImmutableRef, cb func(string) error) err
 	return nil
 }
 
-func ReadFile(ctx context.Context, ref ImmutableRef, req ReadRequest) ([]byte, error) {
+func ReadFile(ctx context.Context, ref cache.ImmutableRef, req ReadRequest) ([]byte, error) {
 	var dt []byte
 
 	err := withMount(ctx, ref, func(root string) error {
@@ -89,7 +90,7 @@ type ReadDirRequest struct {
 	IncludePattern string
 }
 
-func ReadDir(ctx context.Context, ref ImmutableRef, req ReadDirRequest) ([]*fstypes.Stat, error) {
+func ReadDir(ctx context.Context, ref cache.ImmutableRef, req ReadDirRequest) ([]*fstypes.Stat, error) {
 	var (
 		rd []*fstypes.Stat
 		wo fsutil.WalkOpt

@@ -14,6 +14,7 @@ import (
 	"github.com/docker/distribution/reference"
 	apitypes "github.com/moby/buildkit/api/types"
 	"github.com/moby/buildkit/cache"
+	cacheutil "github.com/moby/buildkit/cache/util"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/executor"
@@ -486,17 +487,17 @@ func (lbf *llbBridgeForwarder) ReadFile(ctx context.Context, req *pb.ReadFileReq
 		return nil, errors.Errorf("invalid ref: %T", ref.Sys())
 	}
 
-	newReq := cache.ReadRequest{
+	newReq := cacheutil.ReadRequest{
 		Filename: req.FilePath,
 	}
 	if r := req.Range; r != nil {
-		newReq.Range = &cache.FileRange{
+		newReq.Range = &cacheutil.FileRange{
 			Offset: int(r.Offset),
 			Length: int(r.Length),
 		}
 	}
 
-	dt, err := cache.ReadFile(ctx, workerRef.ImmutableRef, newReq)
+	dt, err := cacheutil.ReadFile(ctx, workerRef.ImmutableRef, newReq)
 	if err != nil {
 		return nil, err
 	}
@@ -520,11 +521,11 @@ func (lbf *llbBridgeForwarder) ReadDir(ctx context.Context, req *pb.ReadDirReque
 		return nil, errors.Errorf("invalid ref: %T", ref.Sys())
 	}
 
-	newReq := cache.ReadDirRequest{
+	newReq := cacheutil.ReadDirRequest{
 		Path:           req.DirPath,
 		IncludePattern: req.IncludePattern,
 	}
-	entries, err := cache.ReadDir(ctx, workerRef.ImmutableRef, newReq)
+	entries, err := cacheutil.ReadDir(ctx, workerRef.ImmutableRef, newReq)
 	if err != nil {
 		return nil, err
 	}

@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/moby/buildkit/cache"
+	cacheutil "github.com/moby/buildkit/cache/util"
 	clienttypes "github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/frontend/gateway/client"
@@ -137,16 +138,16 @@ func (r *ref) ReadFile(ctx context.Context, req client.ReadRequest) ([]byte, err
 	if err != nil {
 		return nil, err
 	}
-	newReq := cache.ReadRequest{
+	newReq := cacheutil.ReadRequest{
 		Filename: req.Filename,
 	}
 	if r := req.Range; r != nil {
-		newReq.Range = &cache.FileRange{
+		newReq.Range = &cacheutil.FileRange{
 			Offset: r.Offset,
 			Length: r.Length,
 		}
 	}
-	return cache.ReadFile(ctx, ref, newReq)
+	return cacheutil.ReadFile(ctx, ref, newReq)
 }
 
 func (r *ref) ReadDir(ctx context.Context, req client.ReadDirRequest) ([]*fstypes.Stat, error) {
@@ -154,11 +155,11 @@ func (r *ref) ReadDir(ctx context.Context, req client.ReadDirRequest) ([]*fstype
 	if err != nil {
 		return nil, err
 	}
-	newReq := cache.ReadDirRequest{
+	newReq := cacheutil.ReadDirRequest{
 		Path:           req.Path,
 		IncludePattern: req.IncludePattern,
 	}
-	return cache.ReadDir(ctx, ref, newReq)
+	return cacheutil.ReadDir(ctx, ref, newReq)
 }
 
 func (r *ref) getImmutableRef() (cache.ImmutableRef, error) {
