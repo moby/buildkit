@@ -496,6 +496,12 @@ func SSHID(id string) SSHOption {
 	})
 }
 
+func SSHSocketTarget(target string) SSHOption {
+	return sshOptionFunc(func(si *SSHInfo) {
+		si.Target = target
+	})
+}
+
 func SSHSocketOpt(target string, uid, gid, mode int) SSHOption {
 	return sshOptionFunc(func(si *SSHInfo) {
 		si.Target = target

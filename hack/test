@@ -16,4 +16,5 @@ docker run --rm $iid go build ./frontend/dockerfile/cmd/dockerfile-frontend
 
 docker run --rm $iid go build -tags dfrunmount ./frontend/dockerfile/cmd/dockerfile-frontend
 docker run --rm $iid go build -tags "dfrunmount dfsecrets" ./frontend/dockerfile/cmd/dockerfile-frontend
+docker run --rm $iid go build -tags "dfrunmount dfssh" ./frontend/dockerfile/cmd/dockerfile-frontend
 docker run --rm $iid go build -tags dfextall ./frontend/dockerfile/cmd/dockerfile-frontend
