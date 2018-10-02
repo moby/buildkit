@@ -1,20 +1,90 @@
 #!/usr/bin/env bash
 
-set -eu -o pipefail -x
+. $(dirname $0)/util
+set -eu -o pipefail
 
+: ${TEST_INTEGRATION=}
+: ${TEST_GATEWAY=}
+: ${TEST_DOCKERFILE=}
+: ${CONTINUOUS_INTEGRATION=}
+
+progressFlag=""
+if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"; fi
+
+if [ "$#" == 0 ]; then TEST_INTEGRATION=1; fi
+
+while test $# -gt 0
+  do
+    case "$1" in
+        gateway)
+          TEST_GATEWAY=1
+        ;;
+        dockerfile)
+          TEST_DOCKERFILE=1
+        ;;
+        integration)
+          TEST_INTEGRATION=1
+        ;;
+        *)
+          echo "unknown arg $1"
+        ;;
+    esac
+    shift
+done
+
+
+iid="buildkit-tests"
 iidfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
+set -x
 
-docker build --iidfile $iidfile --target integration-tests -f ./hack/dockerfiles/test.Dockerfile --force-rm .
+case $buildmode in
+"buildkit")
+  tmpfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
+  buildctl build $progressFlag --frontend=dockerfile.v0 --local context=. --local dockerfile=. \
+    --frontend-opt target=integration-tests \
+    --frontend-opt filename=./hack/dockerfiles/test.buildkit.Dockerfile \
+    --exporter=docker --exporter-opt name=$iid --exporter-opt output=$tmpfile
+  docker load -i $tmpfile
+  rm $tmpfile
+  ;;
+*)
+  case $buildmode in
+  "docker-buildkit")
+    export DOCKER_BUILDKIT=1
+    docker build --iidfile $iidfile -f ./hack/dockerfiles/test.buildkit.Dockerfile --target integration-tests --force-rm .
+    ;;
+  *)
+    docker build --iidfile $iidfile -f ./hack/dockerfiles/test.Dockerfile --target integration-tests --force-rm .
+    ;;
+  esac
+  iid=$(cat $iidfile)
+  ;;
+esac
 
-iid=$(cat $iidfile)
-rm -f $iidfile
+if [ "$TEST_INTEGRATION" == 1 ]; then
+  docker run --rm -v /tmp --privileged $iid go test ${TESTFLAGS:--v} ${TESTPKGS:-./...}
+fi
 
-docker run --rm -v /tmp --privileged $iid go test ${TESTFLAGS:--v} ${TESTPKGS:-./...}
 
-docker run --rm $iid go build ./frontend/gateway/client
-docker run --rm $iid go build ./frontend/dockerfile/cmd/dockerfile-frontend
+if [ "$TEST_GATEWAY" == 1 ]; then
+  docker run --rm $iid go build ./frontend/gateway/client
+fi
 
-docker run --rm $iid go build -tags dfrunmount ./frontend/dockerfile/cmd/dockerfile-frontend
-docker run --rm $iid go build -tags "dfrunmount dfsecrets" ./frontend/dockerfile/cmd/dockerfile-frontend
-docker run --rm $iid go build -tags "dfrunmount dfssh" ./frontend/dockerfile/cmd/dockerfile-frontend
-docker run --rm $iid go build -tags dfextall ./frontend/dockerfile/cmd/dockerfile-frontend
+
+if [ "$TEST_DOCKERFILE" == 1 ]; then
+  docker run --rm $iid go build ./frontend/dockerfile/cmd/dockerfile-frontend
+  docker run --rm $iid go build -tags dfrunmount ./frontend/dockerfile/cmd/dockerfile-frontend
+  docker run --rm $iid go build -tags "dfrunmount dfsecrets" ./frontend/dockerfile/cmd/dockerfile-frontend
+  docker run --rm $iid go build -tags "dfrunmount dfssh" ./frontend/dockerfile/cmd/dockerfile-frontend
+  docker run --rm $iid go build -tags dfextall ./frontend/dockerfile/cmd/dockerfile-frontend
+fi
+
+case $buildmode in
+"docker-buildkit")
+  rm "$iidfile"
+  docker rmi $iid
+  ;;
+"legacy")
+  rm "$iidfile"
+  ;;
+esac

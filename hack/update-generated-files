@@ -3,10 +3,15 @@
 . $(dirname $0)/util
 set -eu -o pipefail -x
 
+: ${CONTINUOUS_INTEGRATION=}
+
+progressFlag=""
+if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"; fi
+
 gogo_version=$(awk '$1 == "github.com/gogo/protobuf" { print $2 }' vendor.conf)
 case $buildmode in
 "buildkit")
-  buildctl build --frontend=dockerfile.v0 --local context=. --local dockerfile=. \
+  buildctl build $progressFlag --frontend=dockerfile.v0 --local context=. --local dockerfile=. \
     --frontend-opt build-arg:GOGO_VERSION=$gogo_version \
     --frontend-opt target=update \
     --frontend-opt filename=./hack/dockerfiles/generated-files.buildkit.Dockerfile \

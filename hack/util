@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-: ${PREFER_DOCKER=}
+: ${PREFER_BUILDCTL=}
 : ${PREFER_LEGACY=}
 
 newerEqualThan() { # $1=minimum wanted version $2=actual-version
@@ -8,7 +8,7 @@ newerEqualThan() { # $1=minimum wanted version $2=actual-version
 }
 
 buildmode="legacy"
-if [ "$PREFER_DOCKER" != "1" ] && [ "$PREFER_LEGACY" != "1" ] && buildctl debug workers 2>/dev/null >/dev/null; then
+if [ "$PREFER_BUILDCTL" == "1" ]; then
   buildmode="buildkit";
 else
   serverVersion=$(docker info --format '{{.ServerVersion}}')

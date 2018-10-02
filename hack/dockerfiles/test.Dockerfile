@@ -1,4 +1,4 @@
-ARG RUNC_VERSION=dd56ece8236d6d9e5bed4ea0c31fe53c7b873ff4
+ARG RUNC_VERSION=00dc70017d222b178a002ed30e9321b12647af2d
 ARG CONTAINERD_VERSION=v1.1.3
 # containerd v1.0 for integration tests
 ARG CONTAINERD10_VERSION=v1.0.3
@@ -28,7 +28,7 @@ RUN go build -ldflags "$(cat .tmp/ldflags) -d" -o /usr/bin/buildctl ./cmd/buildc
 FROM buildkit-base AS buildctl-darwin
 ENV CGO_ENABLED=0
 ENV GOOS=darwin
-RUN go build -ldflags "$(cat .tmp/ldflags)" -o /usr/bin/buildctl-darwin ./cmd/buildctl
+RUN go build -ldflags "$(cat .tmp/ldflags)" -o /out/buildctl-darwin ./cmd/buildctl
 # reset GOOS for legacy builder
 ENV GOOS=linux
 
@@ -64,11 +64,6 @@ RUN git checkout -q "$CONTAINERD10_VERSION" \
   && make bin/containerd \
   && make bin/containerd-shim
 
-FROM buildkit-base AS unit-tests
-COPY --from=runc /usr/bin/runc /usr/bin/runc
-COPY --from=containerd /go/src/github.com/containerd/containerd/bin/containerd* /usr/bin/
-
-
 FROM buildkit-base AS buildkitd.oci_only
 ENV CGO_ENABLED=1
 # mitigate https://github.com/moby/moby/pull/35456
@@ -92,7 +87,12 @@ ENV GOOS=linux
 RUN git checkout -q "$ROOTLESSKIT_VERSION" \
 && go build -o /rootlesskit ./cmd/rootlesskit
 
-FROM unit-tests AS integration-tests
+FROM scratch AS buildkit-binaries
+COPY --from=runc /usr/bin/runc /usr/bin/buildkit-runc
+COPY --from=buildctl /usr/bin/buildctl /usr/bin/
+COPY --from=buildkitd /usr/bin/buildkitd /usr/bin
+
+FROM buildkit-base AS integration-tests
 ENV BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR="1000:1000"
 RUN apk add --no-cache shadow shadow-uidmap sudo \
   && useradd --create-home --home-dir /home/user --uid 1000 -s /bin/sh user \
@@ -100,6 +100,8 @@ RUN apk add --no-cache shadow shadow-uidmap sudo \
   && mkdir -m 0700 -p /run/user/1000 \
   && chown -R user /run/user/1000 /home/user
 ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.0=/opt/containerd-1.0/bin"
+COPY --from=runc /usr/bin/runc /usr/bin/buildkit-runc
+COPY --from=containerd /go/src/github.com/containerd/containerd/bin/containerd* /usr/bin/
 COPY --from=containerd10 /go/src/github.com/containerd/containerd/bin/containerd* /opt/containerd-1.0/bin/
 COPY --from=buildctl /usr/bin/buildctl /usr/bin/
 COPY --from=buildkitd /usr/bin/buildkitd /usr/bin
@@ -110,11 +112,11 @@ FROM buildkit-base AS cross-windows
 ENV GOOS=windows
 
 FROM cross-windows AS buildctl.exe
-RUN go build -ldflags "$(cat .tmp/ldflags)" -o /buildctl.exe ./cmd/buildctl
+RUN go build -ldflags "$(cat .tmp/ldflags)" -o /out/buildctl.exe ./cmd/buildctl
 
 FROM cross-windows AS buildkitd.exe
 ENV CGO_ENABLED=0
-RUN go build -ldflags "$(cat .tmp/ldflags)" -o /buildkitd.exe ./cmd/buildkitd
+RUN go build -ldflags "$(cat .tmp/ldflags)" -o /out/buildkitd.exe ./cmd/buildkitd
 
 FROM alpine AS buildkit-export
 RUN apk add --no-cache git
@@ -135,7 +137,6 @@ ENTRYPOINT ["buildkitd.oci_only"]
 
 # Copy together all binaries for containerd worker mode
 FROM buildkit-export AS buildkit-buildkitd.containerd_only
-COPY --from=runc /usr/bin/runc /usr/bin/
 COPY --from=buildkitd.containerd_only /usr/bin/buildkitd.containerd_only /usr/bin/
 COPY --from=buildctl /usr/bin/buildctl /usr/bin/
 ENTRYPOINT ["buildkitd.containerd_only"]
@@ -154,7 +155,8 @@ FROM buildkit-buildkitd AS rootless
 RUN apk add --no-cache shadow shadow-uidmap \
   && useradd --create-home --home-dir /home/user --uid 1000 user \
   && mkdir -p /run/user/1000 /home/user/.local/tmp /home/user/.local/share/buildkit \
-  && chown -R user /run/user/1000 /home/user
+  && chown -R user /run/user/1000 /home/user \
+  && rm /bin/su && ln -s /bin/busybox /bin/su
 COPY --from=rootlesskit /rootlesskit /usr/bin/
 USER user
 ENV HOME /home/user

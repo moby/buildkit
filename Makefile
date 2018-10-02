@@ -1,35 +1,17 @@
-BINARIES=bin/buildkitd bin/buildctl
-BINARIES_EXTRA=bin/buildkitd.oci_only bin/buildkitd.containerd_only bin/buildctl-darwin bin/buildkitd.exe bin/buildctl.exe
 DESTDIR=/usr/local
 
-binaries: $(BINARIES)
-binaries-all: $(BINARIES) $(BINARIES_EXTRA)
-
-bin/%.exe: FORCE
-	mkdir -p bin
-	docker build -t buildkit:$*.exe --target $*.exe -f ./hack/dockerfiles/test.Dockerfile --force-rm .
-	( containerID=$$(docker create buildkit:$*.exe noop); \
-		docker cp $$containerID:/$*.exe $@; \
-		docker rm $$containerID )
-	chmod +x $@
-
-bin/%: FORCE
-	mkdir -p bin
-	docker build -t buildkit:$* --target $* -f ./hack/dockerfiles/test.Dockerfile --force-rm .
-	( containerID=$$(docker create buildkit:$* noop); \
-		docker cp $$containerID:/usr/bin/$* $@; \
-		docker rm $$containerID )
-	chmod +x $@
+binaries: FORCE
+	hack/binaries
 
 install: FORCE
 	mkdir -p $(DESTDIR)/bin
-	install $(BINARIES) $(DESTDIR)/bin
+	install bin/* $(DESTDIR)/bin
 
 clean: FORCE
 	rm -rf ./bin
 
 test:
-	./hack/test
+	./hack/test integration gateway dockerfile
 
 lint:
 	./hack/lint
@@ -48,5 +30,5 @@ vendor:
 generated-files:
 	./hack/update-generated-files
 
-.PHONY: vendor generated-files test binaries binaries-all install clean lint validate-all validate-vendor validate-generated-files
+.PHONY: vendor generated-files test binaries install clean lint validate-all validate-vendor validate-generated-files
 FORCE:

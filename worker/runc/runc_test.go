@@ -29,8 +29,11 @@ func TestRuncWorker(t *testing.T) {
 	if os.Getuid() != 0 {
 		t.Skip("requires root")
 	}
+
 	if _, err := exec.LookPath("runc"); err != nil {
-		t.Skipf("no runc found: %s", err.Error())
+		if _, err := exec.LookPath("buildkit-runc"); err != nil {
+			t.Skipf("no runc found: %s", err.Error())
+		}
 	}
 
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
