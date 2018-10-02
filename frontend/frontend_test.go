@@ -27,6 +27,7 @@ func TestFrontendIntegration(t *testing.T) {
 	integration.Run(t, []integration.Test{
 		testRefReadFile,
 		testRefReadDir,
+		testRefStatFile,
 	})
 }
 
@@ -202,6 +203,60 @@ func testRefReadDir(t *testing.T, sb integration.Sandbox) {
 			})
 		}
 
+		return gateway.NewResult(), nil
+	}
+
+	_, err = c.Build(ctx, client.SolveOpt{
+		LocalDirs: map[string]string{
+			"mylocal": dir,
+		},
+	}, "", frontend, nil)
+	require.NoError(t, err)
+}
+
+func testRefStatFile(t *testing.T, sb integration.Sandbox) {
+	t.Parallel()
+	ctx := context.TODO()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	testcontent := []byte(`foobar`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("test", testcontent, 0666),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	exp, err := fsutil.Stat(filepath.Join(dir, "test"))
+	require.NoError(t, err)
+
+	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		def, err := llb.Local("mylocal").Marshal()
+		if err != nil {
+			return nil, err
+		}
+
+		res, err := c.Solve(ctx, gateway.SolveRequest{
+			Definition: def.ToPB(),
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		ref, err := res.SingleRef()
+		if err != nil {
+			return nil, err
+		}
+
+		st, err := ref.StatFile(ctx, gateway.StatRequest{
+			Path: "test",
+		})
+		require.NoError(t, err)
+		require.NotNil(t, st)
+		assert.Equal(t, exp, st)
 		return gateway.NewResult(), nil
 	}
 

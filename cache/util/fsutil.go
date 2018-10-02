@@ -122,3 +122,18 @@ func ReadDir(ctx context.Context, ref cache.ImmutableRef, req ReadDirRequest) ([
 	})
 	return rd, err
 }
+
+func StatFile(ctx context.Context, ref cache.ImmutableRef, path string) (*fstypes.Stat, error) {
+	var st *fstypes.Stat
+	err := withMount(ctx, ref, func(root string) error {
+		fp, err := fs.RootPath(root, path)
+		if err != nil {
+			return err
+		}
+		if st, err = fsutil.Stat(fp); err != nil {
+			return err
+		}
+		return nil
+	})
+	return st, err
+}

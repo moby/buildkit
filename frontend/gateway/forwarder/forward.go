@@ -162,6 +162,14 @@ func (r *ref) ReadDir(ctx context.Context, req client.ReadDirRequest) ([]*fstype
 	return cacheutil.ReadDir(ctx, ref, newReq)
 }
 
+func (r *ref) StatFile(ctx context.Context, req client.StatRequest) (*fstypes.Stat, error) {
+	ref, err := r.getImmutableRef()
+	if err != nil {
+		return nil, err
+	}
+	return cacheutil.StatFile(ctx, ref, req.Path)
+}
+
 func (r *ref) getImmutableRef() (cache.ImmutableRef, error) {
 	ref, ok := r.CachedResult.Sys().(*worker.WorkerRef)
 	if !ok {

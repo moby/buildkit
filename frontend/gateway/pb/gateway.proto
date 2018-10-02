@@ -22,6 +22,8 @@ service LLBBridge {
 	rpc ReadFile(ReadFileRequest) returns (ReadFileResponse);
 	// apicaps:CapReadDir
 	rpc ReadDir(ReadDirRequest) returns (ReadDirResponse);
+	// apicaps:CapStatFile
+	rpc StatFile(StatFileRequest) returns (StatFileResponse);
 	rpc Ping(PingRequest) returns (PongResponse);
 	rpc Return(ReturnRequest) returns (ReturnResponse);
 }
@@ -103,6 +105,15 @@ message ReadDirRequest {
 
 message ReadDirResponse {
 	repeated fsutil.types.Stat entries = 1;
+}
+
+message StatFileRequest {
+	string Ref = 1;
+	string Path = 2;
+}
+
+message StatFileResponse {
+	fsutil.types.Stat stat = 1;
 }
 
 message PingRequest{

@@ -133,3 +133,11 @@ func (gwf *GatewayForwarder) ReadDir(ctx context.Context, req *gwapi.ReadDirRequ
 	}
 	return fwd.ReadDir(ctx, req)
 }
+
+func (gwf *GatewayForwarder) StatFile(ctx context.Context, req *gwapi.StatFileRequest) (*gwapi.StatFileResponse, error) {
+	fwd, err := gwf.lookupForwarder(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "forwarding StatFile")
+	}
+	return fwd.StatFile(ctx, req)
+}
