@@ -270,6 +270,10 @@ func (e *ExecOp) Marshal(c *Constraints) (digest.Digest, []byte, *pb.OpMetadata,
 		addCap(&e.constraints, pb.CapMountSecret)
 	}
 
+	if len(e.ssh) > 0 {
+		addCap(&e.constraints, pb.CapMountSSH)
+	}
+
 	for _, s := range e.secrets {
 		pm := &pb.Mount{
 			Dest:      s.Target,
