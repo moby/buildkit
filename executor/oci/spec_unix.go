@@ -49,6 +49,14 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 		withROBind(resolvConf, "/etc/resolv.conf"),
 		withROBind(hostsFile, "/etc/hosts"),
 	)
+
+	s.Mounts = append(s.Mounts, specs.Mount{
+		Destination: "/sys/fs/cgroup",
+		Type:        "cgroup",
+		Source:      "cgroup",
+		Options:     []string{"ro", "nosuid", "noexec", "nodev"},
+	})
+
 	// TODO: User
 
 	sm := &submounts{}
