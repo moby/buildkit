@@ -13,4 +13,7 @@ docker run --rm -v /tmp --privileged $iid go test ${TESTFLAGS:--v} ${TESTPKGS:-.
 
 docker run --rm $iid go build ./frontend/gateway/client
 docker run --rm $iid go build ./frontend/dockerfile/cmd/dockerfile-frontend
+
 docker run --rm $iid go build -tags dfrunmount ./frontend/dockerfile/cmd/dockerfile-frontend
+docker run --rm $iid go build -tags "dfrunmount dfsecrets" ./frontend/dockerfile/cmd/dockerfile-frontend
+docker run --rm $iid go build -tags dfextall ./frontend/dockerfile/cmd/dockerfile-frontend
