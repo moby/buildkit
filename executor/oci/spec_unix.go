@@ -44,6 +44,7 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 	s.Process.Args = meta.Args
 	s.Process.Env = meta.Env
 	s.Process.Cwd = meta.Cwd
+	s.Process.Rlimits = nil // reset open files limit
 	s.Hostname = "buildkitsandbox"
 
 	s.Mounts = GetMounts(ctx,
