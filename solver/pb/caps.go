@@ -39,7 +39,8 @@ const (
 	CapExecMountCacheSharing   apicaps.CapID = "exec.mount.cache.sharing"
 	CapExecMountSelector       apicaps.CapID = "exec.mount.selector"
 	CapExecMountTmpfs          apicaps.CapID = "exec.mount.tmpfs"
-	CapMountSecret             apicaps.CapID = "exec.mount.secret"
+	CapExecMountSecret         apicaps.CapID = "exec.mount.secret"
+	CapExecMountSSH            apicaps.CapID = "exec.mount.ssh"
 
 	CapConstraints apicaps.CapID = "constraints"
 	CapPlatform    apicaps.CapID = "platform"
@@ -207,7 +208,13 @@ func init() {
 	})
 
 	Caps.Init(apicaps.Cap{
-		ID:      CapMountSecret,
+		ID:      CapExecMountSecret,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapExecMountSSH,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})

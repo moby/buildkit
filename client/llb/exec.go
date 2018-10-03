@@ -199,6 +199,14 @@ func (e *ExecOp) Marshal(c *Constraints) (digest.Digest, []byte, *pb.OpMetadata,
 		}
 	}
 
+	if len(e.secrets) > 0 {
+		addCap(&e.constraints, pb.CapExecMountSecret)
+	}
+
+	if len(e.ssh) > 0 {
+		addCap(&e.constraints, pb.CapExecMountSSH)
+	}
+
 	pop, md := MarshalConstraints(c, &e.constraints)
 	pop.Op = &pb.Op_Exec{
 		Exec: peo,
@@ -264,10 +272,6 @@ func (e *ExecOp) Marshal(c *Constraints) (digest.Digest, []byte, *pb.OpMetadata,
 			pm.MountType = pb.MountType_TMPFS
 		}
 		peo.Mounts = append(peo.Mounts, pm)
-	}
-
-	if len(e.secrets) > 0 {
-		addCap(&e.constraints, pb.CapMountSecret)
 	}
 
 	for _, s := range e.secrets {
