@@ -44,6 +44,7 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 	s.Process.Args = meta.Args
 	s.Process.Env = meta.Env
 	s.Process.Cwd = meta.Cwd
+	s.Hostname = "buildkitsandbox"
 
 	s.Mounts = GetMounts(ctx,
 		withROBind(resolvConf, "/etc/resolv.conf"),

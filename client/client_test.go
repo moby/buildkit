@@ -80,6 +80,7 @@ func TestClientIntegration(t *testing.T) {
 		testFrontendMetadataReturn,
 		testSSHMount,
 		testStdinClosed,
+		testHostnameLookup,
 	},
 		integration.WithMirroredImages(integration.OfficialImages("busybox:latest", "alpine:latest")),
 	)
@@ -87,6 +88,25 @@ func TestClientIntegration(t *testing.T) {
 
 func newContainerd(cdAddress string) (*containerd.Client, error) {
 	return containerd.New(cdAddress, containerd.WithTimeout(60*time.Second))
+}
+
+func testHostnameLookup(t *testing.T, sb integration.Sandbox) {
+	if sb.Rootless() {
+		t.SkipNow()
+	}
+	t.Parallel()
+
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Image("busybox:latest").Run(llb.Shlex(`sh -c "ping -c 1 $(hostname)"`))
+
+	def, err := st.Marshal()
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	require.NoError(t, err)
 }
 
 // moby/buildkit#614
