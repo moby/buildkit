@@ -207,7 +207,7 @@ func defaultLLBCaps() []apicaps.PBCap {
 		{ID: string(opspb.CapExecMountCacheSharing), Enabled: true},
 		{ID: string(opspb.CapExecMountSelector), Enabled: true},
 		{ID: string(opspb.CapExecMountTmpfs), Enabled: true},
-		{ID: string(opspb.CapMountSecret), Enabled: true},
+		{ID: string(opspb.CapExecMountSecret), Enabled: true},
 		{ID: string(opspb.CapConstraints), Enabled: true},
 		{ID: string(opspb.CapPlatform), Enabled: true},
 		{ID: string(opspb.CapMetaIgnoreCache), Enabled: true},

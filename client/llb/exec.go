@@ -200,11 +200,11 @@ func (e *ExecOp) Marshal(c *Constraints) (digest.Digest, []byte, *pb.OpMetadata,
 	}
 
 	if len(e.secrets) > 0 {
-		addCap(&e.constraints, pb.CapMountSecret)
+		addCap(&e.constraints, pb.CapExecMountSecret)
 	}
 
 	if len(e.ssh) > 0 {
-		addCap(&e.constraints, pb.CapMountSSH)
+		addCap(&e.constraints, pb.CapExecMountSSH)
 	}
 
 	pop, md := MarshalConstraints(c, &e.constraints)
