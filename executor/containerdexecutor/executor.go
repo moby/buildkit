@@ -3,6 +3,7 @@ package containerdexecutor
 import (
 	"context"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -33,6 +34,10 @@ type containerdExecutor struct {
 
 // New creates a new executor backed by connection to containerd API
 func New(client *containerd.Client, root, cgroup string, networkProviders map[pb.NetMode]network.Provider) executor.Executor {
+	// clean up old hosts/resolv.conf file. ignore errors
+	os.RemoveAll(filepath.Join(root, "hosts"))
+	os.RemoveAll(filepath.Join(root, "resolv.conf"))
+
 	return containerdExecutor{
 		client:           client,
 		root:             root,
