@@ -20,6 +20,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"github.com/tonistiigi/fsutil"
+	fstypes "github.com/tonistiigi/fsutil/types"
 )
 
 const (
@@ -610,7 +611,7 @@ func parseChange(str string) *change {
 		panic(errStr)
 	}
 	c.path = f[1]
-	st := &fsutil.Stat{}
+	st := &fstypes.Stat{}
 	switch f[2] {
 	case "file":
 		if len(f) > 3 {
@@ -640,7 +641,7 @@ func parseChange(str string) *change {
 
 func emit(fn fsutil.HandleChangeFn, inp []*change) error {
 	for _, c := range inp {
-		stat, ok := c.fi.Sys().(*fsutil.Stat)
+		stat, ok := c.fi.Sys().(*fstypes.Stat)
 		if !ok {
 			return errors.Errorf("invalid non-stat change %s", c.fi.Name())
 		}
@@ -675,7 +676,7 @@ func writeChanges(p string, inp []*change) error {
 	for _, c := range inp {
 		if c.kind == fsutil.ChangeKindAdd {
 			p := filepath.Join(p, c.path)
-			stat, ok := c.fi.Sys().(*fsutil.Stat)
+			stat, ok := c.fi.Sys().(*fstypes.Stat)
 			if !ok {
 				return errors.Errorf("invalid non-stat change %s", p)
 			}
