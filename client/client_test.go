@@ -157,7 +157,7 @@ func testSSHMount(t *testing.T, sb integration.Sandbox) {
 
 	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "no ssh forwarded from the client")
+	require.Contains(t, err.Error(), "no SSH key ")
 
 	// custom ID not exposed
 	st = llb.Image("busybox:latest").Run(llb.Shlex(`nosuchcmd`), llb.AddSSHSocket(llb.SSHID("customID")))
