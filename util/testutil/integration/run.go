@@ -217,7 +217,7 @@ mirrors=["%s"]
 	return tmpdir, nil
 }
 
-func runMirror(t *testing.T, mirroredImages map[string]string) (host string, cleanup func() error, err error) {
+func runMirror(t *testing.T, mirroredImages map[string]string) (host string, _ func() error, err error) {
 	mirrorDir := os.Getenv("BUILDKIT_REGISTRY_MIRROR_DIR")
 
 	var f *os.File
