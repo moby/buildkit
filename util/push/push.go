@@ -2,8 +2,12 @@ package push
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"net/http"
 	"sync"
 	"time"
 
@@ -40,7 +44,7 @@ func getCredentialsFunc(ctx context.Context, sm *session.Manager) func(string) (
 	}
 }
 
-func Push(ctx context.Context, sm *session.Manager, cs content.Provider, dgst digest.Digest, ref string, insecure bool, rfn resolver.ResolveOptionsFunc) error {
+func Push(ctx context.Context, sm *session.Manager, cs content.Provider, dgst digest.Digest, ref string, insecure bool, customCA string, rfn resolver.ResolveOptionsFunc) error {
 	desc := ocispec.Descriptor{
 		Digest: dgst,
 	}
@@ -55,7 +59,26 @@ func Push(ctx context.Context, sm *session.Manager, cs content.Provider, dgst di
 	if insecure {
 		opt.PlainHTTP = insecure
 	}
-
+	if customCA != "" {
+		rootCAs, _ := x509.SystemCertPool()
+		if rootCAs == nil {
+			rootCAs = x509.NewCertPool()
+		}
+		certs, err := ioutil.ReadFile(customCA)
+		if err != nil {
+			return fmt.Errorf("Failed to append %q to RootCAs: %v", customCA, err)
+		}
+		rootCAs.AppendCertsFromPEM(certs)
+		config := &tls.Config{
+			RootCAs: rootCAs,
+		}
+		tr := &http.Transport{TLSClientConfig: config}
+		if opt.Client == nil {
+			opt.Client = &http.Client{Transport: tr}
+		} else {
+			opt.Client.Transport = tr
+		}
+	}
 	resolver := docker.NewResolver(opt)
 
 	pusher, err := resolver.Pusher(ctx, ref)
