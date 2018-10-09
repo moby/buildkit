@@ -388,10 +388,7 @@ func (w *Worker) unpack(ctx context.Context, descs []ocispec.Descriptor, s cdsna
 
 	var chain []digest.Digest
 	for _, layer := range layers {
-		labels := map[string]string{
-			"containerd.io/uncompressed": layer.Diff.Digest.String(),
-		}
-		if _, err := rootfs.ApplyLayer(ctx, layer, chain, s, w.Applier, cdsnapshot.WithLabels(labels)); err != nil {
+		if _, err := rootfs.ApplyLayer(ctx, layer, chain, s, w.Applier); err != nil {
 			return nil, err
 		}
 		chain = append(chain, layer.Diff.Digest)

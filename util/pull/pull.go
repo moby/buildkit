@@ -241,8 +241,7 @@ func unpack(ctx context.Context, desc ocispec.Descriptor, cs content.Store, csh 
 	var chain []digest.Digest
 	for _, layer := range layers {
 		labels := map[string]string{
-			"containerd.io/gc.root":      time.Now().UTC().Format(time.RFC3339Nano),
-			"containerd.io/uncompressed": layer.Diff.Digest.String(),
+			"containerd.io/gc.root": time.Now().UTC().Format(time.RFC3339Nano),
 		}
 		if _, err := rootfs.ApplyLayer(ctx, layer, chain, csh, applier, ctdsnapshot.WithLabels(labels)); err != nil {
 			return "", err
