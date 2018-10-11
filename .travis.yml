@@ -13,3 +13,19 @@ env:
 
 script:
   - make binaries validate-all && ./hack/cross
+
+before_deploy:
+  - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+
+deploy:
+  - provider: script
+    script: ./hack/release master tonistiigi/buildkit push
+    on:
+      repo: moby/buildkit
+      branch: master
+  - provider: script
+    script: ./hack/release $TRAVIS_TAG tonistiigi/buildkit push
+    on:
+      repo: moby/buildkit
+      tags: true
+      condition: $TRAVIS_TAG =~ ^v[0-9]

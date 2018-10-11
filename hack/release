@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+
+TAG=$1
+REPO=$2
+PUSH=$3
+
+set -eu -o pipefail
+
+: ${PLATFORMS=linux/amd64}
+: ${CONTINUOUS_INTEGRATION=}
+
+progressFlag=""
+if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"; fi
+
+
+usage() {
+  echo "usage: ./hack/test <tag> <repo> [push]"
+  exit 1
+}
+
+if [ -z "$TAG" ] || [ -z "$REPO" ]; then 
+  usage
+fi
+
+pushFlag=""
+if [ "$PUSH" = "push" ]; then
+  pushFlag="--exporter-opt push=true"
+fi
+
+tagLatest=""
+tagLatestRootless=""
+if [[ "$(git describe --tags --match "v[0-9]*")" == "$TAG" ]]; then
+  tagLatest=",$REPO:latest"
+  tagLatestRootless=",$REPO:rootless"
+fi
+
+set -x
+
+buildctl build $progressFlag --frontend=dockerfile.v0 \
+  --local context=. --local dockerfile=. \
+  --frontend-opt filename=./hack/dockerfiles/test.buildkit.Dockerfile \
+  --frontend-opt platform=$PLATFORMS \
+  --exporter image \
+  --exporter-opt name=$REPO:$TAG$tagLatest $pushFlag
+
+buildctl build $progressFlag --frontend=dockerfile.v0 \
+  --local context=. --local dockerfile=. \
+  --frontend-opt target=rootless \
+  --frontend-opt filename=./hack/dockerfiles/test.buildkit.Dockerfile \
+  --frontend-opt platform=$PLATFORMS \
+  --exporter image \
+  --exporter-opt name=$REPO:$TAG-rootless$tagLatestRootless $pushFlag
