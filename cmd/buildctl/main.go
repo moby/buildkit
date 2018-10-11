@@ -28,6 +28,7 @@ func main() {
 	app := cli.NewApp()
 	app.Name = "buildctl"
 	app.Usage = "build utility"
+	app.Version = version.Version
 
 	defaultAddress := os.Getenv("BUILDKIT_HOST")
 	if defaultAddress == "" {

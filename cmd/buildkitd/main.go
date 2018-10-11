@@ -85,6 +85,7 @@ func main() {
 	app := cli.NewApp()
 	app.Name = "buildkitd"
 	app.Usage = "build daemon"
+	app.Version = version.Version
 
 	defaultConf, md := defaultConf()
 
