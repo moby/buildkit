@@ -115,7 +115,7 @@ func getDiffPairs(ctx context.Context, contentStore content.Store, snapshotter s
 			}
 			diffIDStr, ok := info.Labels[containerdUncompressed]
 			if !ok {
-				return nil, errors.Errorf("invalid differ response with no diffID")
+				return nil, errors.Errorf("invalid differ response with no diffID: %v", descr.Digest)
 			}
 			diffIDDigest, err := digest.Parse(diffIDStr)
 			if err != nil {
