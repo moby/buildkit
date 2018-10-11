@@ -70,7 +70,7 @@ WORKDIR /go/src/github.com/moby/buildkit
 
 # scan the version/revision info
 FROM buildkit-base AS buildkit-version
-RUN --mount=target=.git,src=.git \
+RUN --mount=target=. \
   PKG=github.com/moby/buildkit VERSION=$(git describe --match 'v[0-9]*' --dirty='.m' --always) REVISION=$(git rev-parse HEAD)$(if ! git diff --no-ext-diff --quiet --exit-code; then echo .m; fi); \
   echo "-X ${PKG}/version.Version=${VERSION} -X ${PKG}/version.Revision=${REVISION} -X ${PKG}/version.Package=${PKG}" | tee /tmp/.ldflags; \
   echo -n "${VERSION}" | tee /tmp/.version;
@@ -204,14 +204,14 @@ COPY --from=binaries / /usr/bin/
 COPY . .
 
 FROM alpine AS rootless-base-internal
-RUN apk add --no-cache shadow shadow-uidmap \
+RUN apk add --no-cache git shadow shadow-uidmap \
   && useradd --create-home --home-dir /home/user --uid 1000 user \
   && mkdir -p /run/user/1000 /home/user/.local/tmp /home/user/.local/share/buildkit \
   && chown -R user /run/user/1000 /home/user \
   && rm /bin/su && ln -s /bin/busybox /bin/su
 
 # tonistiigi/buildkit:rootless-base is a pre-built multi-arch version of rootless-base-internal https://github.com/moby/buildkit/pull/666#pullrequestreview-161872350
-FROM tonistiigi/buildkit:rootless-base@sha256:a4999bc477416206973f93046ccfd9d82019f25bbc6400213bb2d27253e13c59 AS rootless-base-external
+FROM tonistiigi/buildkit:rootless-base@sha256:6d9c50e2d006c2a8745e9d7f2bc075e4469191eccada41936ec0c6070361d45a AS rootless-base-external
 FROM rootless-base-$ROOTLESS_BASE_MODE AS rootless-base
 
 # Rootless mode.
