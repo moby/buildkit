@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+
+TAG=$1
+OUT=$2
+
+set -eu -o pipefail
+
+: ${PLATFORMS=linux/amd64}
+: ${CONTINUOUS_INTEGRATION=}
+
+progressFlag=""
+if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"; fi
+
+
+usage() {
+  echo "usage: ./hack/release-tar <tag> <out>"
+  exit 1
+}
+
+if [ -z "$TAG" ] || [ -z "$OUT" ]; then 
+  usage
+fi
+
+
+set -x
+
+buildctl build $progressFlag --frontend=dockerfile.v0 \
+  --local context=. --local dockerfile=. \
+  --frontend-opt filename=./hack/dockerfiles/test.buildkit.Dockerfile \
+  --frontend-opt target=release \
+  --frontend-opt platform=$PLATFORMS \
+  --exporter local \
+  --exporter-opt output=$OUT

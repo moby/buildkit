@@ -14,7 +14,7 @@ if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"
 
 
 usage() {
-  echo "usage: ./hack/test <tag> <repo> [push]"
+  echo "usage: ./hack/release <tag> <repo> [push]"
   exit 1
 }
 
