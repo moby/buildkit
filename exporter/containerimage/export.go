@@ -16,10 +16,11 @@ import (
 )
 
 const (
-	keyImageName = "name"
-	keyPush      = "push"
-	keyInsecure  = "registry.insecure"
-	ociTypes     = "oci-mediatypes"
+	keyImageName  = "name"
+	keyPush       = "push"
+	keyInsecure   = "registry.insecure"
+	keyRegistryCA = "registry.ca"
+	ociTypes      = "oci-mediatypes"
 )
 
 type Opt struct {
@@ -48,6 +49,8 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 		switch k {
 		case keyImageName:
 			i.targetName = v
+		case keyRegistryCA:
+			i.customCA = v
 		case keyPush:
 			if v == "" {
 				i.push = true
@@ -93,6 +96,7 @@ type imageExporterInstance struct {
 	targetName string
 	push       bool
 	insecure   bool
+	customCA   string
 	ociTypes   bool
 	meta       map[string][]byte
 }
@@ -146,8 +150,9 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 				tagDone(nil)
 			}
 			if e.push {
-				if err := push.Push(ctx, e.opt.SessionManager, e.opt.ImageWriter.ContentStore(), desc.Digest, targetName, e.insecure, e.opt.ResolverOpt); err != nil {
+				if err := push.Push(ctx, e.opt.SessionManager, e.opt.ImageWriter.ContentStore(), desc.Digest, targetName, e.insecure, e.customCA, e.opt.ResolverOpt); err != nil {
 					return nil, err
+
 				}
 			}
 		}
