@@ -2,10 +2,9 @@ dist: trusty
 sudo: required
 
 install:
-  - docker run --name buildkit --rm -d --privileged -p 1234:1234 tonistiigi/buildkit --addr tcp://0.0.0.0:1234
+  - docker run --name buildkit --rm -d --privileged -p 1234:1234 $REPO_SLUG_ORIGIN --addr tcp://0.0.0.0:1234
   - sudo docker cp buildkit:/usr/bin/buildctl /usr/bin/
   - export BUILDKIT_HOST=tcp://0.0.0.0:1234
-  - git fetch --tags --unshallow
 
 env:
   global:
@@ -20,12 +19,12 @@ before_deploy:
 
 deploy:
   - provider: script
-    script: ./hack/release master tonistiigi/buildkit push
+    script: ./hack/release master $REPO_SLUG_TARGET push
     on:
       repo: moby/buildkit
       branch: master
   - provider: script
-    script: ./hack/release $TRAVIS_TAG tonistiigi/buildkit push && PLATFORMS="${PLATFORMS},darwin/amd64,windows/amd64" ./hack/release-tar $TRAVIS_TAG release-out
+    script: ./hack/release $TRAVIS_TAG $REPO_SLUG_TARGET push && PLATFORMS="${PLATFORMS},darwin/amd64,windows/amd64" ./hack/release-tar $TRAVIS_TAG release-out
     on:
       repo: moby/buildkit
       tags: true
