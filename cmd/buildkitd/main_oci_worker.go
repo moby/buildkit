@@ -186,7 +186,8 @@ func snapshotterFactory(commonRoot, name string) (runc.SnapshotterFactory, error
 
 func validOCIBinary() bool {
 	_, err := exec.LookPath("runc")
-	if err != nil {
+	_, err1 := exec.LookPath("buildkit-runc")
+	if err != nil && err1 != nil {
 		logrus.Warnf("skipping oci worker, as runc does not exist")
 		return false
 	}

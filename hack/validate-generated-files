@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
 
+: ${CONTINUOUS_INTEGRATION=}
+
+progressFlag=""
+if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"; fi
+
 case ${1:-} in
 '')
   . $(dirname $0)/util
   gogo_version=$(awk '$1 == "github.com/gogo/protobuf" { print $2 }' vendor.conf)
   case $buildmode in
   "buildkit")
-    buildctl build --frontend=dockerfile.v0 --local context=. --local dockerfile=. --frontend-opt build-arg:GOGO_VERSION=$gogo_version --frontend-opt filename=./hack/dockerfiles/generated-files.buildkit.Dockerfile
+    buildctl build $progressFlag --frontend=dockerfile.v0 --local context=. --local dockerfile=. --frontend-opt build-arg:GOGO_VERSION=$gogo_version --frontend-opt filename=./hack/dockerfiles/generated-files.buildkit.Dockerfile
     ;;
   "docker-buildkit")
     export DOCKER_BUILDKIT=1
