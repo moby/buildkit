@@ -1,16 +1,23 @@
 package resolver
 
 import (
+	"crypto/tls"
+	"crypto/x509"
+	"io/ioutil"
+	"log"
 	"math/rand"
+	"net/http"
 
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/util/tracing"
+	"github.com/opentracing-contrib/go-stdlib/nethttp"
 )
 
 type RegistryConf struct {
 	Mirrors   []string
 	PlainHTTP bool
+	CA        string
 }
 
 type ResolveOptionsFunc func(string) docker.ResolverOptions
@@ -35,6 +42,31 @@ func NewResolveOptionsFunc(m map[string]RegistryConf) ResolveOptionsFunc {
 		if len(c.Mirrors) > 0 {
 			def.Host = func(string) (string, error) {
 				return c.Mirrors[rand.Intn(len(c.Mirrors))], nil
+			}
+		}
+
+		if c.CA != "" {
+			// if a CA is specified for this registry, add it to the trusted CA pool.
+			rootCAs, _ := x509.SystemCertPool()
+			if rootCAs == nil {
+				rootCAs = x509.NewCertPool()
+			}
+			certs, err := ioutil.ReadFile(c.CA)
+			if err != nil {
+				log.Fatalf("Failed to append %q to RootCAs: %v", c.CA, err)
+			}
+			if ok := rootCAs.AppendCertsFromPEM(certs); !ok {
+				log.Println("No certs appended, using system certs only")
+			}
+			config := &tls.Config{
+				RootCAs: rootCAs,
+			}
+			def.Client = &http.Client{
+				Transport: &tracing.Transport{
+					RoundTripper: &nethttp.Transport{RoundTripper: &http.Transport{
+						TLSClientConfig: config,
+					}},
+				},
 			}
 		}
 
