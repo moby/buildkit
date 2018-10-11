@@ -27,7 +27,6 @@ func TestClientGatewayIntegration(t *testing.T) {
 }
 
 func testClientGatewaySolve(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	requiresLinux(t)
 
 	ctx := context.TODO()
@@ -102,7 +101,6 @@ func testClientGatewaySolve(t *testing.T, sb integration.Sandbox) {
 }
 
 func testClientGatewayFailedSolve(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	requiresLinux(t)
 
 	ctx := context.TODO()
@@ -121,7 +119,6 @@ func testClientGatewayFailedSolve(t *testing.T, sb integration.Sandbox) {
 }
 
 func testClientGatewayEmptySolve(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	requiresLinux(t)
 
 	ctx := context.TODO()
@@ -146,7 +143,6 @@ func testClientGatewayEmptySolve(t *testing.T, sb integration.Sandbox) {
 }
 
 func testNoBuildID(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	requiresLinux(t)
 
 	ctx := context.TODO()
@@ -162,7 +158,6 @@ func testNoBuildID(t *testing.T, sb integration.Sandbox) {
 }
 
 func testUnknownBuildID(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	requiresLinux(t)
 
 	ctx := context.TODO()

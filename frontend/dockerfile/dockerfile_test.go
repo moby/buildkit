@@ -119,7 +119,6 @@ func TestIntegration(t *testing.T) {
 }
 
 func testCopyChownCreateDest(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -149,7 +148,6 @@ RUN [ "$(stat -c "%U %G" /dest)" == "user user" ]
 }
 
 func testCopyThroughSymlinkContext(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -190,7 +188,6 @@ COPY link/foo .
 }
 
 func testCopyThroughSymlinkMultiStage(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -231,7 +228,6 @@ COPY --from=build /sub2/foo bar
 }
 
 func testIgnoreEntrypoint(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -260,7 +256,6 @@ RUN ["ls"]
 }
 
 func testQuotedMetaArgs(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -304,7 +299,6 @@ COPY --from=build /out .
 }
 
 func testExportMultiPlatform(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -437,7 +431,6 @@ COPY arch-$TARGETARCH whoami
 
 // tonistiigi/fsutil#46
 func testContextChangeDirToFile(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -492,7 +485,6 @@ COPY foo /
 }
 
 func testNoSnapshotLeak(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -537,7 +529,6 @@ COPY foo /
 }
 
 func testCopySymlinks(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -575,7 +566,6 @@ COPY sub/l* alllinks/
 }
 
 func testHTTPDockerfile(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -627,7 +617,6 @@ COPY --from=0 /foo /foo
 }
 
 func testCmdShell(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	f := getFrontend(t, sb)
 
 	var cdAddress string
@@ -716,7 +705,6 @@ ENTRYPOINT my entrypoint
 }
 
 func testPullScratch(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	f := getFrontend(t, sb)
 
 	var cdAddress string
@@ -837,7 +825,6 @@ COPY foo .
 }
 
 func testGlobalArg(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -868,7 +855,6 @@ FROM busybox:${tag}
 }
 
 func testDockerfileDirs(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
 
@@ -937,7 +923,6 @@ func testDockerfileDirs(t *testing.T, sb integration.Sandbox) {
 }
 
 func testDockerfileInvalidCommand(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
 	dockerfile := []byte(`
@@ -964,7 +949,6 @@ func testDockerfileInvalidCommand(t *testing.T, sb integration.Sandbox) {
 }
 
 func testDockerfileADDFromURL(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
 
@@ -1047,7 +1031,6 @@ ADD %s /dest/
 }
 
 func testDockerfileAddArchive(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
 
@@ -1217,7 +1200,6 @@ ADD %s /newname.tar.gz
 }
 
 func testSymlinkDestination(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
 
@@ -1273,7 +1255,6 @@ func testDockerfileScratchConfig(t *testing.T, sb integration.Sandbox) {
 		cdAddress = cd.ContainerdAddress()
 	}
 
-	t.Parallel()
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
 	dockerfile := []byte(`
@@ -1336,7 +1317,6 @@ ENV foo=bar
 }
 
 func testExposeExpansion(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -1412,7 +1392,6 @@ EXPOSE 5000
 }
 
 func testDockerignore(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -1482,7 +1461,6 @@ Dockerfile
 }
 
 func testDockerignoreInvalid(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -1520,7 +1498,6 @@ COPY . .
 }
 
 func testExportedHistory(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
 
@@ -1600,7 +1577,6 @@ func testUser(t *testing.T, sb integration.Sandbox) {
 		t.Skip("only for rootful worker, due to lack of support for additional gids (https://github.com/opencontainers/runc/issues/1835)")
 	}
 
-	t.Parallel()
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -1741,7 +1717,6 @@ USER nobody
 }
 
 func testCopyChown(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -1792,7 +1767,6 @@ COPY --from=base /out /
 }
 
 func testCopyOverrideFiles(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -1844,7 +1818,6 @@ COPY files dest
 }
 
 func testCopyVarSubstitution(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -1885,7 +1858,6 @@ COPY $FOO baz
 }
 
 func testCopyWildcards(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -1973,7 +1945,6 @@ COPY sub/dir1 subdest6
 }
 
 func testDockerfileFromGit(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	f := getFrontend(t, sb)
 
 	gitDir, err := ioutil.TempDir("", "buildkit")
@@ -2066,7 +2037,6 @@ COPY --from=build foo bar2
 }
 
 func testDockerfileFromHTTP(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	f := getFrontend(t, sb)
 
 	buf := bytes.NewBuffer(nil)
@@ -2126,7 +2096,6 @@ COPY foo bar
 }
 
 func testMultiStageImplicitFrom(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -2198,7 +2167,6 @@ COPY --from=golang /usr/bin/go go
 }
 
 func testMultiStageCaseInsensitive(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -2243,7 +2211,6 @@ COPY --from=stage1 baz bax
 }
 
 func testLabels(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -2318,7 +2285,6 @@ LABEL foo=bar
 }
 
 func testCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	f := getFrontend(t, sb)
 
 	registry, err := sb.NewRegistry()
@@ -2408,7 +2374,6 @@ COPY --from=base unique /
 }
 
 func testReproducibleIDs(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -2487,7 +2452,6 @@ func testImportExportReproducibleIDs(t *testing.T, sb integration.Sandbox) {
 		cdAddress = cd.ContainerdAddress()
 	}
 
-	t.Parallel()
 	f := getFrontend(t, sb)
 
 	registry, err := sb.NewRegistry()
@@ -2568,7 +2532,6 @@ RUN echo bar > bar
 }
 
 func testNoCache(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -2653,7 +2616,6 @@ COPY --from=s1 unique2 /
 }
 
 func testPlatformArgsImplicit(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(fmt.Sprintf(`
@@ -2701,7 +2663,6 @@ COPY foo2 bar2
 }
 
 func testPlatformArgsExplicit(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -2753,7 +2714,6 @@ COPY --from=build out .
 }
 
 func testBuiltinArgs(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`

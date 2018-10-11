@@ -21,8 +21,6 @@ func TestCLIIntegration(t *testing.T) {
 }
 
 func testUsage(t *testing.T, sb integration.Sandbox) {
-	t.Parallel()
-
 	require.NoError(t, sb.Cmd().Run())
 
 	require.NoError(t, sb.Cmd("--help").Run())

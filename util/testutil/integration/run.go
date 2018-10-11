@@ -126,24 +126,31 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 	for _, br := range List() {
 		for _, tc := range testCases {
 			for _, mv := range matrix {
-				ok := t.Run(getFunctionName(tc)+"/worker="+br.Name()+mv.functionSuffix(), func(t *testing.T) {
-					defer cleanOnComplete()()
-					sb, close, err := br.New(WithMirror(mirror), withMatrixValues(mv))
-					if err != nil {
-						if errors.Cause(err) == ErrorRequirements {
-							t.Skip(err.Error())
+				fn := getFunctionName(tc)
+				name := fn + "/worker=" + br.Name() + mv.functionSuffix()
+				func(fn, testName string, br Worker, tc Test, mv matrixValue) {
+					ok := t.Run(testName, func(t *testing.T) {
+						defer cleanOnComplete()()
+						if !strings.HasSuffix(fn, "NoParallel") {
+							t.Parallel()
 						}
-						require.NoError(t, err)
-					}
-					defer func() {
-						assert.NoError(t, close())
-						if t.Failed() {
-							sb.PrintLogs(t)
+						sb, close, err := br.New(WithMirror(mirror), withMatrixValues(mv))
+						if err != nil {
+							if errors.Cause(err) == ErrorRequirements {
+								t.Skip(err.Error())
+							}
+							require.NoError(t, err)
 						}
-					}()
-					tc(t, sb)
-				})
-				require.True(t, ok)
+						defer func() {
+							assert.NoError(t, close())
+							if t.Failed() {
+								sb.PrintLogs(t)
+							}
+						}()
+						tc(t, sb)
+					})
+					require.True(t, ok)
+				}(fn, name, br, tc, mv)
 			}
 		}
 	}
