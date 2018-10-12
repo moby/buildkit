@@ -15,7 +15,9 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/containerd/containerd/content"
 	"github.com/moby/buildkit/util/contentutil"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -177,9 +179,23 @@ func copyImagesLocal(t *testing.T, host string, images map[string]string) error 
 		}
 		localImageCache[host][to] = struct{}{}
 
-		desc, provider, err := contentutil.ProviderFromRef(from)
-		if err != nil {
-			return err
+		var desc ocispec.Descriptor
+		var provider content.Provider
+		var err error
+		if strings.HasPrefix(from, "local:") {
+			var closer func()
+			desc, provider, closer, err = providerFromBinary(strings.TrimPrefix(from, "local:"))
+			if err != nil {
+				return err
+			}
+			if closer != nil {
+				defer closer()
+			}
+		} else {
+			desc, provider, err = contentutil.ProviderFromRef(from)
+			if err != nil {
+				return err
+			}
 		}
 		ingester, err := contentutil.IngesterFromRef(host + "/" + to)
 		if err != nil {

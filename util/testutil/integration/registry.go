@@ -58,7 +58,7 @@ http:
 	}
 
 	cmd := exec.Command("registry", "serve", filepath.Join(dir, "config.yaml"))
-	rc, err := cmd.StdoutPipe()
+	rc, err := cmd.StderrPipe()
 	if err != nil {
 		return "", nil, err
 	}

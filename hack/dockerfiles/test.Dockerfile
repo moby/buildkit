@@ -4,7 +4,7 @@ ARG CONTAINERD_VERSION=v1.2.0-rc.1
 ARG CONTAINERD10_VERSION=v1.0.3
 # available targets: buildkitd, buildkitd.oci_only, buildkitd.containerd_only
 ARG BUILDKIT_TARGET=buildkitd
-ARG REGISTRY_VERSION=2.6
+ARG REGISTRY_VERSION=v2.7.0-rc.0
 ARG ROOTLESSKIT_VERSION=4f7ae4607d626f0a22fb495056d55b17cce8c01b
 
 # The `buildkitd` stage and the `buildctl` stage are placed here
@@ -74,7 +74,7 @@ FROM buildkit-base AS buildkitd.containerd_only
 ENV CGO_ENABLED=0
 RUN go build -ldflags "$(cat .tmp/ldflags) -d"  -o /usr/bin/buildkitd.containerd_only -tags no_oci_worker ./cmd/buildkitd
 
-FROM registry:$REGISTRY_VERSION AS registry
+FROM tonistiigi/registry:$REGISTRY_VERSION AS registry
 
 FROM gobuild-base AS rootlesskit-base
 RUN git clone https://github.com/rootless-containers/rootlesskit.git /go/src/github.com/rootless-containers/rootlesskit

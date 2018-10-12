@@ -6,7 +6,9 @@ set -eu -o pipefail
 : ${TEST_INTEGRATION=}
 : ${TEST_GATEWAY=}
 : ${TEST_DOCKERFILE=}
+: ${DOCKERFILE_RELEASES=}
 : ${CONTINUOUS_INTEGRATION=}
+: ${BUILDKIT_REGISTRY_MIRROR_DIR=}
 
 progressFlag=""
 if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"; fi
@@ -32,6 +34,11 @@ while test $# -gt 0
     shift
 done
 
+mirrorCreated=""
+if [ -z $BUILDKIT_REGISTRY_MIRROR_DIR ]; then
+  BUILDKIT_REGISTRY_MIRROR_DIR=$(mktemp -t buildkit.mirror.XXXXXXXXXX)
+  mirrorCreated="1"
+fi
 
 iid="buildkit-tests"
 iidfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
@@ -72,11 +79,38 @@ fi
 
 
 if [ "$TEST_DOCKERFILE" == 1 ]; then
-  docker run --rm $iid go build ./frontend/dockerfile/cmd/dockerfile-frontend
-  docker run --rm $iid go build -tags dfrunmount ./frontend/dockerfile/cmd/dockerfile-frontend
-  docker run --rm $iid go build -tags "dfrunmount dfsecrets" ./frontend/dockerfile/cmd/dockerfile-frontend
-  docker run --rm $iid go build -tags "dfrunmount dfssh" ./frontend/dockerfile/cmd/dockerfile-frontend
-  docker run --rm $iid go build -tags dfextall ./frontend/dockerfile/cmd/dockerfile-frontend
+  if [ -z $DOCKERFILE_RELEASES ]; then
+    DOCKERFILE_RELEASES="mainline experimental mounts secrets ssh"
+  fi
+  
+  
+  for release in $DOCKERFILE_RELEASES; do
+    buildtags=$(cat ./frontend/dockerfile/release/$release/tags)
+    tarout=$(mktemp -t dockerfile-frontend.XXXXXXXXXX)
+    case $buildmode in
+    "buildkit")
+      buildctl build $progressFlag --frontend=dockerfile.v0 --local context=. --local dockerfile=. \
+        --frontend-opt filename=./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile \
+        --frontend-opt build-arg:BUILDTAGS="$buildtags" \
+        --exporter=oci --exporter-opt output=$tarout
+      ;;
+    "docker-buildkit")
+      dfiidfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
+      docker build --iidfile=$dfiidfile -f ./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile --build-arg BUILDTAGS="$buildtags" .
+      dfiid=$(cat $dfiidfile)
+      docker save -o $tarout $dfiid
+      docker rmi $dfiid
+      rm $dfiidfile
+      ;;
+    esac
+
+    if [ -s $tarout ]; then
+      cid=$(docker create -v /tmp --rm --privileged -e FRONTEND_GATEWAY_ONLY=local:/frontend.tar -e EXTERNAL_DF_FRONTEND=/dockerfile-frontend $iid go test -tags "$buildtags" ${TESTFLAGS:--v} ./frontend/dockerfile)
+      docker cp $tarout $cid:/frontend.tar
+      docker start -a $cid
+    fi
+    rm $tarout
+  done
 fi
 
 case $buildmode in
@@ -88,3 +122,7 @@ case $buildmode in
   rm "$iidfile"
   ;;
 esac
+
+if [ ! -z $mirrorCreated ] && [ ! -z $BUILDKIT_REGISTRY_MIRROR_DIR ]; then
+  rm -rf $BUILDKIT_REGISTRY_MIRROR_DIR
+fi
