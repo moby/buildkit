@@ -18,7 +18,7 @@ type buildOpt struct {
 func main() {
 	var opt buildOpt
 	flag.BoolVar(&opt.withContainerd, "with-containerd", true, "enable containerd worker")
-	flag.StringVar(&opt.containerd, "containerd", "v1.1.3", "containerd version")
+	flag.StringVar(&opt.containerd, "containerd", "v1.2.0-rc.1", "containerd version")
 	flag.StringVar(&opt.runc, "runc", "dd56ece8236d6d9e5bed4ea0c31fe53c7b873ff4", "runc version")
 	flag.StringVar(&opt.buildkit, "buildkit", "master", "buildkit version")
 	flag.Parse()
