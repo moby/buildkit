@@ -37,6 +37,51 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var allTests = []integration.Test{
+	testNoSnapshotLeak,
+	testCmdShell,
+	testGlobalArg,
+	testDockerfileDirs,
+	testDockerfileInvalidCommand,
+	testDockerfileADDFromURL,
+	testDockerfileAddArchive,
+	testDockerfileScratchConfig,
+	testExportedHistory,
+	testExposeExpansion,
+	testUser,
+	testDockerignore,
+	testDockerignoreInvalid,
+	testDockerfileFromGit,
+	testCopyChown,
+	testCopyWildcards,
+	testCopyOverrideFiles,
+	testMultiStageImplicitFrom,
+	testCopyVarSubstitution,
+	testMultiStageCaseInsensitive,
+	testLabels,
+	testCacheImportExport,
+	testReproducibleIDs,
+	testImportExportReproducibleIDs,
+	testNoCache,
+	testDockerfileFromHTTP,
+	testBuiltinArgs,
+	testPullScratch,
+	testSymlinkDestination,
+	testHTTPDockerfile,
+	testNoSnapshotLeak,
+	testCopySymlinks,
+	testContextChangeDirToFile,
+	testPlatformArgsImplicit,
+	testPlatformArgsExplicit,
+	testExportMultiPlatform,
+	testQuotedMetaArgs,
+	testIgnoreEntrypoint,
+	testCopyThroughSymlinkContext,
+	testCopyThroughSymlinkMultiStage,
+	testCopyChownCreateDest,
+	testEmptyDestDir,
+}
+
 var opts []integration.TestOpt
 
 type frontend interface {
@@ -73,50 +118,7 @@ func init() {
 }
 
 func TestIntegration(t *testing.T) {
-	integration.Run(t, []integration.Test{
-		testNoSnapshotLeak,
-		testCmdShell,
-		testGlobalArg,
-		testDockerfileDirs,
-		testDockerfileInvalidCommand,
-		testDockerfileADDFromURL,
-		testDockerfileAddArchive,
-		testDockerfileScratchConfig,
-		testExportedHistory,
-		testExposeExpansion,
-		testUser,
-		testDockerignore,
-		testDockerignoreInvalid,
-		testDockerfileFromGit,
-		testCopyChown,
-		testCopyWildcards,
-		testCopyOverrideFiles,
-		testMultiStageImplicitFrom,
-		testCopyVarSubstitution,
-		testMultiStageCaseInsensitive,
-		testLabels,
-		testCacheImportExport,
-		testReproducibleIDs,
-		testImportExportReproducibleIDs,
-		testNoCache,
-		testDockerfileFromHTTP,
-		testBuiltinArgs,
-		testPullScratch,
-		testSymlinkDestination,
-		testHTTPDockerfile,
-		testNoSnapshotLeak,
-		testCopySymlinks,
-		testContextChangeDirToFile,
-		testPlatformArgsImplicit,
-		testPlatformArgsExplicit,
-		testExportMultiPlatform,
-		testQuotedMetaArgs,
-		testIgnoreEntrypoint,
-		testCopyThroughSymlinkContext,
-		testCopyThroughSymlinkMultiStage,
-		testCopyChownCreateDest,
-		testEmptyDestDir,
-	}, opts...)
+	integration.Run(t, allTests, opts...)
 }
 
 func testEmptyDestDir(t *testing.T, sb integration.Sandbox) {
