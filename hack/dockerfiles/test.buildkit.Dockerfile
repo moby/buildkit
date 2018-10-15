@@ -188,7 +188,7 @@ ENTRYPOINT ["containerd"]
 
 FROM buildkit-base AS integration-tests
 ENV BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR="1000:1000"
-RUN apt-get install -y --no-install-recommends uidmap sudo musl \ 
+RUN apt-get install -y --no-install-recommends uidmap sudo \ 
   && useradd --create-home --home-dir /home/user --uid 1000 -s /bin/sh user \
   && echo "XDG_RUNTIME_DIR=/run/user/1000; export XDG_RUNTIME_DIR" >> /home/user/.profile \
   && mkdir -m 0700 -p /run/user/1000 \
