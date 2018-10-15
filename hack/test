@@ -105,8 +105,8 @@ if [ "$TEST_DOCKERFILE" == 1 ]; then
     esac
 
     if [ -s $tarout ]; then
-      cid=$(docker create -v /tmp --rm --privileged -e FRONTEND_GATEWAY_ONLY=local:/frontend.tar -e EXTERNAL_DF_FRONTEND=/dockerfile-frontend $iid go test -tags "$buildtags" ${TESTFLAGS:--v} ./frontend/dockerfile)
-      docker cp $tarout $cid:/frontend.tar
+      cid=$(docker create -v /tmp --rm --privileged -e BUILDKIT_WORKER_RANDOM=1 -e FRONTEND_GATEWAY_ONLY=local:/$release.tar -e EXTERNAL_DF_FRONTEND=/dockerfile-frontend $iid go test -tags "$buildtags" ${TESTFLAGS:--v} ./frontend/dockerfile)
+      docker cp $tarout $cid:/$release.tar
       docker start -a $cid
     fi
     rm $tarout

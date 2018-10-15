@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"sync"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/containerd/containerd/content"
 	"github.com/moby/buildkit/util/contentutil"
@@ -125,7 +127,13 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 
 	matrix := prepareValueMatrix(tc)
 
-	for _, br := range List() {
+	list := List()
+	if os.Getenv("BUILDKIT_WORKER_RANDOM") == "1" && len(list) > 0 {
+		rand.Seed(time.Now().UnixNano())
+		list = []Worker{list[rand.Intn(len(list))]}
+	}
+
+	for _, br := range list {
 		for _, tc := range testCases {
 			for _, mv := range matrix {
 				fn := getFunctionName(tc)
