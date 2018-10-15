@@ -149,14 +149,30 @@ VOLUME /var/lib/containerd
 VOLUME /run/containerd
 ENTRYPOINT ["containerd"]
 
+# Apply https://github.com/shadow-maint/shadow/pull/132 so that we don't need CAP_SYS_ADMIN for newuidmap/newgidmap
+# (Note: we don't use the patched idmap for the testsuite image)
+FROM alpine:3.8 AS idmap
+RUN apk add --no-cache autoconf automake build-base byacc gettext gettext-dev gcc git libcap-dev libtool libxslt
+RUN ( git clone -b no-cap-sys-admin https://github.com/giuseppe/shadow.git /shadow && cd /shadow )
+WORKDIR /shadow
+RUN ./autogen.sh --disable-nls --disable-man --without-audit --without-selinux --without-acl --without-attr --without-tcb --without-nscd \
+  && make \
+  && cp src/newuidmap src/newgidmap /usr/bin
+
 # Rootless mode.
 # Still requires `--privileged`.
 FROM buildkit-buildkitd AS rootless
-RUN apk add --no-cache shadow shadow-uidmap \
-  && useradd --create-home --home-dir /home/user --uid 1000 user \
+COPY --from=idmap /usr/bin/newuidmap /usr/bin/newuidmap
+COPY --from=idmap /usr/bin/newgidmap /usr/bin/newgidmap
+RUN chmod u+s /usr/bin/newuidmap /usr/bin/newgidmap \
+  && adduser -D -u 1000 user \
   && mkdir -p /run/user/1000 /home/user/.local/tmp /home/user/.local/share/buildkit \
   && chown -R user /run/user/1000 /home/user \
-  && rm /bin/su && ln -s /bin/busybox /bin/su
+  && echo user:100000:65536 | tee /etc/subuid | tee /etc/subgid \
+  && passwd -l root
+# As of v3.8.1, Alpine does not set SUID bit on the busybox version of /bin/su.
+# However, future version may set SUID bit on /bin/su.
+# We lock the root account by `passwd -l root`, so as to disable su completely.
 COPY --from=rootlesskit /rootlesskit /usr/bin/
 USER user
 ENV HOME /home/user
