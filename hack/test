@@ -34,12 +34,6 @@ while test $# -gt 0
     shift
 done
 
-mirrorCreated=""
-if [ -z $BUILDKIT_REGISTRY_MIRROR_DIR ]; then
-  BUILDKIT_REGISTRY_MIRROR_DIR=$(mktemp -t buildkit.mirror.XXXXXXXXXX)
-  mirrorCreated="1"
-fi
-
 iid="buildkit-tests"
 iidfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
 set -x
@@ -68,8 +62,10 @@ case $buildmode in
   ;;
 esac
 
+cacheVolume=$(docker create -v /root/.cache -v /root/.cache/registry alpine)
+
 if [ "$TEST_INTEGRATION" == 1 ]; then
-  docker run --rm -v /tmp --privileged $iid go test ${TESTFLAGS:--v} ${TESTPKGS:-./...}
+  docker run --rm -v /tmp --volumes-from=$cacheVolume -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry --privileged $iid go test ${TESTFLAGS:--v} ${TESTPKGS:-./...}
 fi
 
 
@@ -105,13 +101,15 @@ if [ "$TEST_DOCKERFILE" == 1 ]; then
     esac
 
     if [ -s $tarout ]; then
-      cid=$(docker create -v /tmp --rm --privileged -e BUILDKIT_WORKER_RANDOM=1 -e FRONTEND_GATEWAY_ONLY=local:/$release.tar -e EXTERNAL_DF_FRONTEND=/dockerfile-frontend $iid go test -tags "$buildtags" ${TESTFLAGS:--v} ./frontend/dockerfile)
+      cid=$(docker create -v /tmp --rm --privileged --volumes-from=$cacheVolume -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry -e BUILDKIT_WORKER_RANDOM=1 -e FRONTEND_GATEWAY_ONLY=local:/$release.tar -e EXTERNAL_DF_FRONTEND=/dockerfile-frontend $iid go test --count=1 -tags "$buildtags" ${TESTFLAGS:--v} ./frontend/dockerfile)
       docker cp $tarout $cid:/$release.tar
       docker start -a $cid
     fi
     rm $tarout
   done
 fi
+
+docker rm -v $cacheVolume
 
 case $buildmode in
 "docker-buildkit")
@@ -122,7 +120,3 @@ case $buildmode in
   rm "$iidfile"
   ;;
 esac
-
-if [ ! -z $mirrorCreated ] && [ ! -z $BUILDKIT_REGISTRY_MIRROR_DIR ]; then
-  rm -rf $BUILDKIT_REGISTRY_MIRROR_DIR
-fi
