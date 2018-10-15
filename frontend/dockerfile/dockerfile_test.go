@@ -115,7 +115,38 @@ func TestIntegration(t *testing.T) {
 		testCopyThroughSymlinkContext,
 		testCopyThroughSymlinkMultiStage,
 		testCopyChownCreateDest,
+		testEmptyDestDir,
 	}, opts...)
+}
+
+func testEmptyDestDir(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM busybox
+ENV empty=""
+COPY testfile $empty
+RUN [ "$(cat testfile)" == "contents0" ]
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("testfile", []byte("contents0"), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
 }
 
 func testCopyChownCreateDest(t *testing.T, sb integration.Sandbox) {
