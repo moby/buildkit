@@ -1604,10 +1604,6 @@ RUN ["ls"]
 }
 
 func testUser(t *testing.T, sb integration.Sandbox) {
-	if sb.Rootless() {
-		t.Skip("only for rootful worker, due to lack of support for additional gids (https://github.com/opencontainers/runc/issues/1835)")
-	}
-
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
