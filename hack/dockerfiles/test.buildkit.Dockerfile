@@ -228,7 +228,7 @@ RUN chmod u+s /usr/bin/newuidmap /usr/bin/newgidmap \
 # We lock the root account by `passwd -l root`, so as to disable su completely.
 
 # tonistiigi/buildkit:rootless-base is a pre-built multi-arch version of rootless-base-internal https://github.com/moby/buildkit/pull/666#pullrequestreview-161872350
-FROM tonistiigi/buildkit:rootless-base@sha256:51a8017db80e9757fc05071996947abb5d3e91508c3d641b01cfcaeff77e676e
+FROM tonistiigi/buildkit:rootless-base@sha256:51a8017db80e9757fc05071996947abb5d3e91508c3d641b01cfcaeff77e676e AS rootless-base-external
 FROM rootless-base-$ROOTLESS_BASE_MODE AS rootless-base
 
 # Rootless mode.
