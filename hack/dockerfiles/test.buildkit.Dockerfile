@@ -203,15 +203,32 @@ COPY --from=containerd /out/containerd* /usr/bin/
 COPY --from=binaries / /usr/bin/
 COPY . .
 
+# Apply https://github.com/shadow-maint/shadow/pull/132 so that we don't need CAP_SYS_ADMIN for newuidmap/newgidmap
+# (Note: we don't use the patched idmap for the testsuite image)
+FROM alpine:3.8 AS idmap
+RUN apk add --no-cache autoconf automake build-base byacc gettext gettext-dev gcc git libcap-dev libtool libxslt
+RUN ( git clone -b no-cap-sys-admin https://github.com/giuseppe/shadow.git /shadow && cd /shadow )
+WORKDIR /shadow
+RUN ./autogen.sh --disable-nls --disable-man --without-audit --without-selinux --without-acl --without-attr --without-tcb --without-nscd \
+  && make \
+  && cp src/newuidmap src/newgidmap /usr/bin
+
 FROM alpine AS rootless-base-internal
-RUN apk add --no-cache git shadow shadow-uidmap \
-  && useradd --create-home --home-dir /home/user --uid 1000 user \
+RUN apk add --no-cache git
+COPY --from=idmap /usr/bin/newuidmap /usr/bin/newuidmap
+COPY --from=idmap /usr/bin/newgidmap /usr/bin/newgidmap
+RUN chmod u+s /usr/bin/newuidmap /usr/bin/newgidmap \
+  && adduser -D -u 1000 user \
   && mkdir -p /run/user/1000 /home/user/.local/tmp /home/user/.local/share/buildkit \
   && chown -R user /run/user/1000 /home/user \
-  && rm /bin/su && ln -s /bin/busybox /bin/su
+  && echo user:100000:65536 | tee /etc/subuid | tee /etc/subgid \
+  && passwd -l root
+# As of v3.8.1, Alpine does not set SUID bit on the busybox version of /bin/su.
+# However, future version may set SUID bit on /bin/su.
+# We lock the root account by `passwd -l root`, so as to disable su completely.
 
 # tonistiigi/buildkit:rootless-base is a pre-built multi-arch version of rootless-base-internal https://github.com/moby/buildkit/pull/666#pullrequestreview-161872350
-FROM tonistiigi/buildkit:rootless-base@sha256:6d9c50e2d006c2a8745e9d7f2bc075e4469191eccada41936ec0c6070361d45a AS rootless-base-external
+FROM tonistiigi/buildkit:rootless-base@sha256:51a8017db80e9757fc05071996947abb5d3e91508c3d641b01cfcaeff77e676e
 FROM rootless-base-$ROOTLESS_BASE_MODE AS rootless-base
 
 # Rootless mode.
