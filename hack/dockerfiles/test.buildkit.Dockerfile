@@ -6,7 +6,7 @@ ARG CONTAINERD_VERSION=v1.2.0-rc.1
 ARG CONTAINERD10_VERSION=v1.0.3
 # available targets: buildkitd, buildkitd.oci_only, buildkitd.containerd_only
 ARG BUILDKIT_TARGET=buildkitd
-ARG REGISTRY_VERSION=2.6
+ARG REGISTRY_VERSION=v2.7.0-rc.0
 ARG ROOTLESSKIT_VERSION=4f7ae4607d626f0a22fb495056d55b17cce8c01b
 ARG ROOTLESS_BASE_MODE=external
 
@@ -149,7 +149,7 @@ RUN --mount=from=containerd-src,src=/usr/src/containerd,readwrite --mount=target
   && make bin/containerd-shim \
   && mv bin /out
 
-FROM registry:$REGISTRY_VERSION AS registry
+FROM tonistiigi/registry:$REGISTRY_VERSION AS registry
 
 FROM gobuild-base AS rootlesskit
 ARG ROOTLESSKIT_VERSION
@@ -188,7 +188,7 @@ ENTRYPOINT ["containerd"]
 
 FROM buildkit-base AS integration-tests
 ENV BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR="1000:1000"
-RUN apt-get install -y --no-install-recommends uidmap sudo musl \ 
+RUN apt-get install -y --no-install-recommends uidmap sudo \ 
   && useradd --create-home --home-dir /home/user --uid 1000 -s /bin/sh user \
   && echo "XDG_RUNTIME_DIR=/run/user/1000; export XDG_RUNTIME_DIR" >> /home/user/.profile \
   && mkdir -m 0700 -p /run/user/1000 \

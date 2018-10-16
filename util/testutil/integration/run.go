@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,8 +15,11 @@ import (
 	"sync"
 	"syscall"
 	"testing"
+	"time"
 
+	"github.com/containerd/containerd/content"
 	"github.com/moby/buildkit/util/contentutil"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -123,7 +127,13 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 
 	matrix := prepareValueMatrix(tc)
 
-	for _, br := range List() {
+	list := List()
+	if os.Getenv("BUILDKIT_WORKER_RANDOM") == "1" && len(list) > 0 {
+		rand.Seed(time.Now().UnixNano())
+		list = []Worker{list[rand.Intn(len(list))]}
+	}
+
+	for _, br := range list {
 		for _, tc := range testCases {
 			for _, mv := range matrix {
 				fn := getFunctionName(tc)
@@ -177,9 +187,23 @@ func copyImagesLocal(t *testing.T, host string, images map[string]string) error 
 		}
 		localImageCache[host][to] = struct{}{}
 
-		desc, provider, err := contentutil.ProviderFromRef(from)
-		if err != nil {
-			return err
+		var desc ocispec.Descriptor
+		var provider content.Provider
+		var err error
+		if strings.HasPrefix(from, "local:") {
+			var closer func()
+			desc, provider, closer, err = providerFromBinary(strings.TrimPrefix(from, "local:"))
+			if err != nil {
+				return err
+			}
+			if closer != nil {
+				defer closer()
+			}
+		} else {
+			desc, provider, err = contentutil.ProviderFromRef(from)
+			if err != nil {
+				return err
+			}
 		}
 		ingester, err := contentutil.IngesterFromRef(host + "/" + to)
 		if err != nil {
