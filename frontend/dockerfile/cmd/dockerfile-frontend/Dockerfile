@@ -1,16 +1,28 @@
 # syntax = tonistiigi/dockerfile:runmount20181002
 
-FROM --platform=$BUILDPLATFORM golang:1.11 AS builder
+FROM --platform=$BUILDPLATFORM tonistiigi/xx:golang@sha256:6f7d999551dd471b58f70716754290495690efa8421e0a1fcf18eb11d0c0a537 AS xgo
+
+FROM --platform=$BUILDPLATFORM golang:1.11 AS base
+COPY --from=xgo / /
+WORKDIR /go/src/github.com/moby/buildkit
+
+FROM base AS version
+ARG CHANNEL
+RUN --mount=target=. \ 
+  PKG=github.com/moby/buildkit/frontend/dockerfile/cmd/dockerfile-frontend VERSION=$(./frontend/dockerfile/cmd/dockerfile-frontend/hack/detect "$CHANNEL") REVISION=$(git rev-parse HEAD)$(if ! git diff --no-ext-diff --quiet --exit-code; then echo .m; fi); \
+  echo "-X main.Version=${VERSION} -X main.Revision=${REVISION} -X main.Package=${PKG}" | tee /tmp/.ldflags; \
+  echo -n "${VERSION}" | tee /tmp/.version;
+
+FROM base AS build
 RUN apt-get update && apt-get install -y --no-install-recommends file
 ARG BUILDTAGS=""
-ARG TARGETOS
-ARG TARGETARCH
-ENV GOOS=$TARGETOS GOARCH=$TARGETARCH
-WORKDIR /go/src/github.com/moby/buildkit
+ARG TARGETPLATFORM
+ENV TARGETPLATFORM=$TARGETPLATFORM
 RUN --mount=target=. --mount=type=cache,target=/root/.cache \
-  CGO_ENABLED=0 go build -o /dockerfile-frontend -tags "$BUILDTAGS" --ldflags '-extldflags "-static"' ./frontend/dockerfile/cmd/dockerfile-frontend && \
+  --mount=source=/tmp/.ldflags,target=/tmp/.ldflags,from=version \
+  CGO_ENABLED=0 go build -o /dockerfile-frontend -ldflags "-d $(cat /tmp/.ldflags)" -tags "$BUILDTAGS netgo static_build osusergo" ./frontend/dockerfile/cmd/dockerfile-frontend && \
   file /dockerfile-frontend | grep "statically linked"
 
 FROM scratch
-COPY --from=builder /dockerfile-frontend /bin/dockerfile-frontend
+COPY --from=build /dockerfile-frontend /bin/dockerfile-frontend
 ENTRYPOINT ["/bin/dockerfile-frontend"]

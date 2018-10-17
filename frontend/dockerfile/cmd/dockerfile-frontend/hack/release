@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+
+: ${PLATFORMS=linux/amd64}
+: ${CONTINUOUS_INTEGRATION=}
+
+progressFlag=""
+if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"; fi
+
+usage() {
+  echo "$0 (master|tag|daily) (tag|channel) <repo> [push]"
+  exit 1
+}
+
+if [ $# != 4 ]; then
+  usage
+fi
+
+
+TYP=$1
+TAG=$2
+REPO=$3
+PUSH=$4
+
+pushFlag=""
+if [ "$PUSH" = "push" ]; then
+  pushFlag="--exporter-opt push=true"
+fi
+
+if [ "$TYP" == "master" ]; then
+  tagf=./frontend/dockerfile/release/$TAG/tags
+  if [ ! -f $tagf ]; then
+    echo "invalid release $TAG"
+    exit 1
+  fi
+  buildTags=$(cat $tagf)
+  pushTag="master"
+  if [ "$TAG" != "mainline" ]; then
+    pushTag=${pushTag}-$TAG
+  fi
+  set -x
+  buildctl build $progressFlag --frontend=dockerfile.v0 \
+    --local context=. --local dockerfile=. \
+    --frontend-opt filename=./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile \
+    --frontend-opt platform=$PLATFORMS \
+    --frontend-opt "build-arg:CHANNEL=$TAG" \
+    --frontend-opt "build-arg:BUILDTAGS=$buildTags" \
+    --exporter image \
+    --exporter-opt name=$REPO:$pushTag $pushFlag
+fi
+
