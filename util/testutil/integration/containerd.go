@@ -96,11 +96,12 @@ disabled_plugins = ["cri"]
 
 [debug]
   level = "debug"
+  address = %q
 
 [plugins]
   [plugins.linux]
     shim = %q
-`, filepath.Join(tmpdir, "root"), filepath.Join(tmpdir, "state"), address, c.containerdShim)
+`, filepath.Join(tmpdir, "root"), filepath.Join(tmpdir, "state"), address, filepath.Join(tmpdir, "debug.sock"), c.containerdShim)
 	configFile := filepath.Join(tmpdir, "config.toml")
 	if err := ioutil.WriteFile(configFile, []byte(config), 0644); err != nil {
 		return nil, nil, err
