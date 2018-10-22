@@ -327,6 +327,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 			targetPlatform:    platformOpt.targetPlatform,
 			extraHosts:        opt.ExtraHosts,
 			copyImage:         opt.OverrideCopyImage,
+			llbCaps:           opt.LLBCaps,
 		}
 		if opt.copyImage == "" {
 			opt.copyImage = DefaultCopyImage
@@ -441,6 +442,7 @@ type dispatchOpt struct {
 	buildPlatforms    []specs.Platform
 	extraHosts        []llb.HostIP
 	copyImage         string
+	llbCaps           *apicaps.CapSet
 }
 
 func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
@@ -729,6 +731,13 @@ func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState l
 	if d.ignoreCache {
 		runOpt = append(runOpt, llb.IgnoreCache)
 	}
+
+	if opt.llbCaps != nil {
+		if err := opt.llbCaps.Supports(pb.CapExecMetaNetwork); err == nil {
+			runOpt = append(runOpt, llb.Network(llb.NetModeNone))
+		}
+	}
+
 	run := img.Run(append(runOpt, mounts...)...)
 	d.state = run.AddMount("/dest", d.state).Platform(platform)
 
