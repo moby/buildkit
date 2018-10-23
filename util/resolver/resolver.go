@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"io/ioutil"
-	"log"
 	"math/rand"
 	"net/http"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/util/tracing"
 	"github.com/opentracing-contrib/go-stdlib/nethttp"
+	"github.com/sirupsen/logrus"
 )
 
 type RegistryConf struct {
@@ -53,10 +53,10 @@ func NewResolveOptionsFunc(m map[string]RegistryConf) ResolveOptionsFunc {
 			}
 			certs, err := ioutil.ReadFile(c.ExtraCA)
 			if err != nil {
-				log.Fatalf("Failed to append %q to RootCAs: %v", c.ExtraCA, err)
+				logrus.Errorf("Failed to append %q to RootCAs: %v", c.ExtraCA, err)
 			}
 			if ok := rootCAs.AppendCertsFromPEM(certs); !ok {
-				log.Println("No certs appended, using system certs only")
+				logrus.Infof("No certs appended, using system certs only")
 			}
 			config := &tls.Config{
 				RootCAs: rootCAs,
