@@ -15,6 +15,45 @@ if [ $# != 4 ]; then
   usage
 fi
 
+parseTag() {
+  local prefix=$(echo $1 | cut -d/ -f 1)
+  if [[ "$prefix" != "dockerfile" ]]; then
+    echo "invalid tag $1"
+    exit 1
+  fi
+  local suffix=$(echo $1 | awk -F- '{print $NF}')
+  local tagf=./frontend/dockerfile/release/$suffix/tags
+  if [ "$sufffix" == "$1" ] || [ ! -f $tagf ]; then
+    suffix="mainline"
+  fi
+
+  local mainTag=$(echo $1 | cut -d/ -f 2)
+
+  publishedNames=$REPO:$mainTag
+
+  local versioned=""
+  # \d.\d.\d becomes latest
+  if [[ "$mainTag" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    publishedNames=${publishedNames},$REPO:latest
+    versioned=1
+  fi
+
+  # \d.\d.\d-channel becomes <channel>
+  if [[ "$mainTag" =~ ^[0-9]+\.[0-9]+\.[0-9]+-$suffix$ ]] && [ -f $tagf ]; then
+    publishedNames=${publishedNames},$REPO:$suffix
+    versioned=1
+  fi
+
+  # \d.\d.\d* -> \d.\d* -> \d* (except "0")
+  if [ "$versioned" == "1" ]; then
+    publishedNames=${publishedNames},$REPO:$(echo $mainTag | sed -E 's#^([0-9]+\.[0-9]+)\.[0-9]+#\1#')
+    if [ "$(echo $mainTag | sed -E 's#^([0-9]+)\.[0-9]+\.[0-9]+.*$#\1#')" != "0" ]; then
+      publishedNames=${publishedNames},$REPO:$(echo $mainTag | sed -E 's#^([0-9]+)\.[0-9]+\.[0-9]+#\1#')
+    fi
+  fi
+
+  TAG=$suffix
+}
 
 TYP=$1
 TAG=$2
@@ -26,7 +65,8 @@ if [ "$PUSH" = "push" ]; then
   pushFlag="--exporter-opt push=true"
 fi
 
-if [ "$TYP" == "master" ]; then
+case $TYP in
+"master")
   tagf=./frontend/dockerfile/release/$TAG/tags
   if [ ! -f $tagf ]; then
     echo "invalid release $TAG"
@@ -46,5 +86,25 @@ if [ "$TYP" == "master" ]; then
     --frontend-opt "build-arg:BUILDTAGS=$buildTags" \
     --exporter image \
     --exporter-opt name=$REPO:$pushTag $pushFlag
-fi
+  ;;
+"tag")
+  publishedNames=""
+  parseTag $TAG
+  tagf=./frontend/dockerfile/release/$TAG/tags
+  if [ ! -f $tagf ]; then
+    echo "no build tags found for $TAG"
+    exit 1
+  fi
+  buildTags=$(cat $tagf)
 
+  set -x
+  buildctl build $progressFlag --frontend=dockerfile.v0 \
+    --local context=. --local dockerfile=. \
+    --frontend-opt filename=./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile \
+    --frontend-opt platform=$PLATFORMS \
+    --frontend-opt "build-arg:CHANNEL=$TAG" \
+    --frontend-opt "build-arg:BUILDTAGS=$buildTags" \
+    --exporter image \
+    --exporter-opt name=$publishedNames $pushFlag
+  ;;
+esac

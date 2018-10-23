@@ -49,3 +49,9 @@ deploy:
     on:
       repo: moby/buildkit
       branch: master
+  - provider: script
+    script: ./frontend/dockerfile/cmd/dockerfile-frontend/hack/release tag $TRAVIS_TAG $DF_REPO_SLUG_TARGET push
+    on:
+      repo: moby/buildkit
+      tags: true
+      condition: $TRAVIS_TAG =~ ^dockerfile/[0-9]
