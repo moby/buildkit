@@ -2,6 +2,7 @@
 
 : ${PLATFORMS=linux/amd64}
 : ${CONTINUOUS_INTEGRATION=}
+: ${DAILY_TARGETS=}
 
 progressFlag=""
 if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"; fi
@@ -106,5 +107,54 @@ case $TYP in
     --frontend-opt "build-arg:BUILDTAGS=$buildTags" \
     --exporter image \
     --exporter-opt name=$publishedNames $pushFlag
+  ;;
+"daily")
+  if [ -z $DAILY_TARGETS ]; then
+    DAILY_TARGETS="mounts secrets ssh"
+  fi
+  
+  for TAG in $DAILY_TARGETS; do
+  
+    tagf=./frontend/dockerfile/release/$TAG/tags
+    if [ ! -f $tagf ]; then
+      echo "invalid release $TAG"
+      exit 1
+    fi
+    buildTags=$(cat $tagf)
+  
+    # find the buildID of the last pushed image
+    # returns a BuildID if rebuild needed
+  
+    tmp=$(mktemp -d -t buildid.XXXXXXXXXX)
+    set -x
+    dt=$(date +%Y%m%d)
+    buildctl build $progressFlag --progress=plain --frontend=dockerfile.v0 \
+      --local context=. --local dockerfile=. \
+      --frontend-opt filename=./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile \
+      --frontend-opt "build-arg:CHANNEL=$TAG" \
+      --frontend-opt "build-arg:REPO=$REPO" \
+      --frontend-opt "build-arg:DATE=$dt" \
+      --frontend-opt "build-arg:BUILDTAGS=$buildTags" \
+      --frontend-opt target=buildid\
+      --exporter=local --exporter-opt=output=$tmp
+    
+    if [ -f $tmp/buildid ]; then
+      buildid=$(cat $tmp/buildid)
+      echo "buildid: $buildid"
+      
+      buildctl build $progressFlag --frontend=dockerfile.v0 \
+        --local context=. --local dockerfile=. \
+        --frontend-opt filename=./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile \
+        --frontend-opt platform=$PLATFORMS \
+        --frontend-opt "build-arg:CHANNEL=$TAG" \
+        --frontend-opt "build-arg:BUILDTAGS=$buildTags" \
+        --exporter image \
+        --exporter-opt name=$REPO:$dt-$TAG $pushFlag
+      rm $tmp/buildid
+    fi
+    rm -r $tmp
+
+  done
+  
   ;;
 esac
