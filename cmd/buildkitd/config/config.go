@@ -80,7 +80,7 @@ func Load(r io.Reader) (Config, *toml.MetaData, error) {
 	if err != nil {
 		return c, nil, errors.Wrap(err, "failed to parse config")
 	}
-	return c, &md, nil
+	return c, &md, c.checkFileReferences()
 }
 
 func LoadFile(fp string) (Config, *toml.MetaData, error) {
@@ -93,4 +93,47 @@ func LoadFile(fp string) (Config, *toml.MetaData, error) {
 	}
 	defer f.Close()
 	return Load(f)
+}
+
+// checkFileReferences iterates over all files mentioned in the config and checks if they are readable
+func (cfg Config) checkFileReferences() error {
+	// collect file references from config
+	fileReferences := []string{
+		cfg.GRPC.TLS.CA,
+		cfg.GRPC.TLS.Cert,
+		cfg.GRPC.TLS.Key,
+	}
+	for _, registryConfig := range cfg.Registries {
+		fileReferences = append(fileReferences, registryConfig.ExtraCA)
+	}
+	// check all references for readability
+	for _, file := range fileReferences {
+		if file != "" {
+			if err := checkFile(file); err != nil {
+				return errors.Wrapf(err, "file '%v' not valid", file)
+			}
+		}
+	}
+	return nil
+}
+
+func checkFile(file string) error {
+	// check existence
+	stat, err := os.Stat(file)
+	if err != nil {
+		return err
+	}
+	// check if regular
+	if stat.Mode().IsRegular() {
+		return errors.New("expect regular file, got something else (mode: " + stat.Mode().String() + ")")
+	}
+	// check if readable
+	f, err := os.OpenFile(file, os.O_RDONLY, 0400)
+	if err != nil {
+		return errors.Wrap(err, "failed to open file for reading")
+	}
+	if err = f.Close(); err != nil {
+		return errors.Wrap(err, "failed to close file")
+	}
+	return nil
 }
