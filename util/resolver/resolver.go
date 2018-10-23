@@ -17,7 +17,7 @@ import (
 type RegistryConf struct {
 	Mirrors   []string
 	PlainHTTP bool
-	CA        string
+	ExtraCA   string
 }
 
 type ResolveOptionsFunc func(string) docker.ResolverOptions
@@ -45,15 +45,15 @@ func NewResolveOptionsFunc(m map[string]RegistryConf) ResolveOptionsFunc {
 			}
 		}
 
-		if c.CA != "" {
+		if c.ExtraCA != "" {
 			// if a CA is specified for this registry, add it to the trusted CA pool.
 			rootCAs, _ := x509.SystemCertPool()
 			if rootCAs == nil {
 				rootCAs = x509.NewCertPool()
 			}
-			certs, err := ioutil.ReadFile(c.CA)
+			certs, err := ioutil.ReadFile(c.ExtraCA)
 			if err != nil {
-				log.Fatalf("Failed to append %q to RootCAs: %v", c.CA, err)
+				log.Fatalf("Failed to append %q to RootCAs: %v", c.ExtraCA, err)
 			}
 			if ok := rootCAs.AppendCertsFromPEM(certs); !ok {
 				log.Println("No certs appended, using system certs only")

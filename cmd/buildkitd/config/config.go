@@ -40,7 +40,7 @@ type GRPCConfig struct {
 type RegistryConfig struct {
 	Mirrors   []string `toml:"mirrors"`
 	PlainHTTP bool     `toml:"http"`
-	CA        string   `toml:"ca"`
+	ExtraCA   string   `toml:"ca"`
 }
 
 type TLSConfig struct {

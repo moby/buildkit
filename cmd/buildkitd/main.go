@@ -525,7 +525,7 @@ func resolverFunc(cfg *config.Config) resolver.ResolveOptionsFunc {
 		m[k] = resolver.RegistryConf{
 			Mirrors:   v.Mirrors,
 			PlainHTTP: v.PlainHTTP,
-			CA:        v.CA,
+			ExtraCA:   v.ExtraCA,
 		}
 	}
 	return resolver.NewResolveOptionsFunc(m)
