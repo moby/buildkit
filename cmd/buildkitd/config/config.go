@@ -40,7 +40,7 @@ type GRPCConfig struct {
 type RegistryConfig struct {
 	Mirrors   []string `toml:"mirrors"`
 	PlainHTTP bool     `toml:"http"`
-	ExtraCA   string   `toml:"ca"`
+	ExtraCA   string   `toml:"extraca"`
 }
 
 type TLSConfig struct {
@@ -110,7 +110,7 @@ func (cfg Config) checkFileReferences() error {
 	for _, file := range fileReferences {
 		if file != "" {
 			if err := checkFile(file); err != nil {
-				return errors.Wrapf(err, "file '%v' not valid", file)
+				return errors.Wrapf(err, "file '%v' from config is not readable", file)
 			}
 		}
 	}
