@@ -23,6 +23,7 @@ deploy:
     on:
       repo: moby/buildkit
       branch: master
+      condition: $TRAVIS_EVENT_TYPE != "cron"
   - provider: script
     script: ./hack/release $TRAVIS_TAG $REPO_SLUG_TARGET push && PLATFORMS="${PLATFORMS},darwin/amd64,windows/amd64" ./hack/release-tar $TRAVIS_TAG release-out
     on:
@@ -44,14 +45,22 @@ deploy:
     on:
       repo: moby/buildkit
       branch: master
+      condition: $TRAVIS_EVENT_TYPE != "cron"
   - provider: script
     script: ./frontend/dockerfile/cmd/dockerfile-frontend/hack/release master experimental $DF_REPO_SLUG_TARGET push
     on:
       repo: moby/buildkit
       branch: master
+      condition: $TRAVIS_EVENT_TYPE != "cron"
   - provider: script
     script: ./frontend/dockerfile/cmd/dockerfile-frontend/hack/release tag $TRAVIS_TAG $DF_REPO_SLUG_TARGET push
     on:
       repo: moby/buildkit
       tags: true
       condition: $TRAVIS_TAG =~ ^dockerfile/[0-9]
+  - provider: script
+    script: ./frontend/dockerfile/cmd/dockerfile-frontend/hack/release daily _ $DF_REPO_SLUG_TARGET push
+    on:
+      repo: moby/buildkit
+      branch: master
+      condition: $TRAVIS_EVENT_TYPE == "cron"

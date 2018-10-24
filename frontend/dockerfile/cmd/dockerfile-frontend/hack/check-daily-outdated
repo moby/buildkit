@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+
+usage() {
+  echo "./check-daily-outdated channel repo date outdir"
+  exit 1
+}
+
+if [ "$#" != 4 ]; then
+  usage
+fi
+
+CHANNEL=$1
+REPO=$2
+DATE=$3
+OUTDIR=$4
+
+mkdir -p $OUTDIR
+
+if [ ! -d "$OUTDIR" ]; then
+  echo "invalid output directory $OUTDIR"
+  exit 1
+fi
+
+set -x
+
+reg digest "$REPO:$DATE-$CHANNEL"
+if [[ $? == 0 ]]; then
+  exit 0
+fi
+
+lastTag=$(reg tags $REPO | grep "\-$CHANNEL" | sort -r | head -n 1)
+
+oldBuildID=""
+
+if [ ! -z "$lastTag" ]; then
+  layer=$(reg manifest $REPO:$lastTag | jq -r ".layers[0].digest")
+  tmpdir=$(mktemp -d -t frontend.XXXXXXXXXX)
+  reg layer "$REPO@$layer" | tar xvz --strip-components=1 -C $tmpdir
+  oldBuildID=$(go tool buildid $tmpdir/dockerfile-frontend)
+  rm $tmpdir/dockerfile-frontend
+  rm -r $tmpdir
+fi
+
+newBuildID=$(go tool buildid dockerfile-frontend)
+
+if [ "$oldBuildID" != "$newBuildID" ]; then
+  echo -n $newBuildID > $OUTDIR/buildid
+fi
