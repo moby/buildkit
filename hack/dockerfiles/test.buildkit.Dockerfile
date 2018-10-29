@@ -203,12 +203,17 @@ COPY --from=containerd /out/containerd* /usr/bin/
 COPY --from=binaries / /usr/bin/
 COPY . .
 
-# Apply https://github.com/shadow-maint/shadow/pull/132 so that we don't need CAP_SYS_ADMIN for newuidmap/newgidmap
+# To allow running buildkit in a container without CAP_SYS_ADMIN, we need to do either
+#  a) install newuidmap/newgidmap with file capabilities rather than SETUID (requires kernel >= 4.14)
+#  b) install newuidmap/newgidmap >= 20181028
+# We choose b) until kernel >= 4.14 gets widely adopted.
+# See https://github.com/shadow-maint/shadow/pull/132 https://github.com/shadow-maint/shadow/pull/138
 # (Note: we don't use the patched idmap for the testsuite image)
 FROM alpine:3.8 AS idmap
 RUN apk add --no-cache autoconf automake build-base byacc gettext gettext-dev gcc git libcap-dev libtool libxslt
-RUN ( git clone -b no-cap-sys-admin https://github.com/giuseppe/shadow.git /shadow && cd /shadow )
+RUN git clone https://github.com/shadow-maint/shadow.git /shadow
 WORKDIR /shadow
+RUN git checkout 42324e501768675993235e03f7e4569135802d18
 RUN ./autogen.sh --disable-nls --disable-man --without-audit --without-selinux --without-acl --without-attr --without-tcb --without-nscd \
   && make \
   && cp src/newuidmap src/newgidmap /usr/bin
