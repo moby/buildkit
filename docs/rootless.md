@@ -2,8 +2,9 @@
 
 Requirements:
 - runc `a00bf0190895aa465a5fbed0268888e2c8ddfe85` (Oct 15, 2018) or later
-- Some distros such as Debian (excluding Ubuntu) and Arch Linux require `echo 1 > /proc/sys/kernel/unprivileged_userns_clone`
-- `newuidmap` and `newgidmap` need to be installed on the host. These commands are provided by the `uidmap` package.
+- Some distros such as Debian (excluding Ubuntu) and Arch Linux require `sudo sh -c "echo 1 > /proc/sys/kernel/unprivileged_userns_clone"`.
+- RHEL/CentOS 7 requires `sudo sh -c "echo 28633 > /proc/sys/user/max_user_namespaces"`. You may also need `sudo grubby --args="namespace.unpriv_enable=1 user_namespace.enable=1" --update-kernel="$(grubby --default-kernel)"`.
+- `newuidmap` and `newgidmap` need to be installed on the host. These commands are provided by the `uidmap` package. For RHEL/CentOS 7, RPM is not officially provided but available at https://copr.fedorainfracloud.org/coprs/vbatts/shadow-utils-newxidmap/ .
 - `/etc/subuid` and `/etc/subgid` should contain >= 65536 sub-IDs. e.g. `penguin:231072:65536`.
 - To run in a Docker container with non-root `USER`, `docker run --privileged` is still required. See also Jessie's blog: https://blog.jessfraz.com/post/building-container-images-securely-on-kubernetes/
 
@@ -56,9 +57,10 @@ $ build-using-dockerfile --buildkit-addr unix:///run/user/1001/buildkit/buildkit
 
 ## Set up (using a container)
 
+Docker image is available as [`moby/buildkit:rootless`](https://hub.docker.com/r/moby/buildkit/tags/).
+
 ```
-$ docker build -t buildkit-rootless --target rootless -f hack/dockerfiles/test.Dockerfile .
-$ docker run --name buildkitd -d --privileged -p 1234:1234  buildkit-rootless --addr tcp://0.0.0.0:1234
+$ docker run --name buildkitd -d --privileged -p 1234:1234  moby/buildkit:rootless --addr tcp://0.0.0.0:1234
 ```
 
 `docker run` requires `--privileged` but the BuildKit daemon is executed as a normal user.
