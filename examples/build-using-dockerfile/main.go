@@ -63,6 +63,10 @@ By default, the built image is loaded to Docker.
 			Name:  "target",
 			Usage: "Set the target build stage to build.",
 		},
+		cli.BoolFlag{
+			Name:  "no-cache",
+			Usage: "Do not use cache when building the image",
+		},
 	}, dockerIncompatibleFlags...)
 	app.Action = action
 	if err := app.Run(os.Args); err != nil {
@@ -145,7 +149,9 @@ func newSolveOpt(clicontext *cli.Context, w io.WriteCloser) (*client.SolveOpt, e
 	if target := clicontext.String("target"); target != "" {
 		frontendAttrs["target"] = target
 	}
-
+	if clicontext.Bool("no-cache") {
+		frontendAttrs["no-cache"] = ""
+	}
 	for _, buildArg := range clicontext.StringSlice("build-arg") {
 		kv := strings.SplitN(buildArg, "=", 2)
 		if len(kv) != 2 {

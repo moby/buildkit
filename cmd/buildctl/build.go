@@ -61,7 +61,7 @@ var buildCommand = cli.Command{
 		},
 		cli.BoolFlag{
 			Name:  "no-cache",
-			Usage: "Disable cache for all the vertices. Frontend is not supported.",
+			Usage: "Disable cache for all the vertices",
 		},
 		cli.StringFlag{
 			Name:  "export-cache",
@@ -218,9 +218,7 @@ func build(clicontext *cli.Context) error {
 			return err
 		}
 	} else {
-		if clicontext.Bool("no-cache") {
-			return errors.New("no-cache is not supported for frontends")
-		}
+		solveOpt.FrontendAttrs["no-cache"] = ""
 	}
 
 	eg.Go(func() error {
