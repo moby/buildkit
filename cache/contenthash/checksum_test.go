@@ -423,6 +423,33 @@ func TestSymlinkNeedsScan(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestSymlinkAbsDirSuffix(t *testing.T) {
+	t.Parallel()
+	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	cm := setupCacheManager(t, tmpdir, snapshotter)
+	defer cm.Close()
+
+	ch := []string{
+		"ADD c0 dir",
+		"ADD c0/sub dir",
+		"ADD c0/sub/foo file data0",
+		"ADD link symlink /c0/sub/",
+	}
+	ref := createRef(t, cm, ch)
+
+	dgst, err := Checksum(context.TODO(), ref, "link/foo")
+	require.NoError(t, err)
+	require.Equal(t, dgstFileData0, dgst)
+
+	err = ref.Release(context.TODO())
+	require.NoError(t, err)
+}
+
 func TestSymlinkInPathHandleChange(t *testing.T) {
 	t.Parallel()
 	tmpdir, err := ioutil.TempDir("", "buildkit-state")
