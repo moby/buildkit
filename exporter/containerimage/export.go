@@ -8,6 +8,7 @@ import (
 
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
+	"github.com/containerd/containerd/namespaces"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/util/push"
@@ -19,6 +20,7 @@ const (
 	keyImageName = "name"
 	keyPush      = "push"
 	keyInsecure  = "registry.insecure"
+	keyNamespace = "containerd.namespace"
 	ociTypes     = "oci-mediatypes"
 )
 
@@ -68,6 +70,8 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
 			}
 			i.insecure = b
+		case keyNamespace:
+			i.namespace = v
 		case ociTypes:
 			if v == "" {
 				i.ociTypes = true
@@ -95,6 +99,7 @@ type imageExporterInstance struct {
 	insecure   bool
 	ociTypes   bool
 	meta       map[string][]byte
+	namespace  string
 }
 
 func (e *imageExporterInstance) Name() string {
@@ -108,6 +113,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 	for k, v := range e.meta {
 		src.Metadata[k] = v
 	}
+	ctx = namespaces.WithNamespace(ctx, e.namespace)
 	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes)
 	if err != nil {
 		return nil, err
@@ -134,6 +140,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 					CreatedAt: time.Now(),
 				}
 
+				ctx = namespaces.WithNamespace(ctx, e.namespace)
 				if _, err := e.opt.Images.Update(ctx, img); err != nil {
 					if !errdefs.IsNotFound(err) {
 						return nil, tagDone(err)
