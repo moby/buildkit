@@ -96,7 +96,7 @@ func init() {
 	opts = []integration.TestOpt{
 		integration.WithMirroredImages(integration.OfficialImages("busybox:latest")),
 		integration.WithMirroredImages(map[string]string{
-			"tonistiigi/copy:v0.1.9": "docker.io/" + dockerfile2llb.DefaultCopyImage,
+			"docker/dockerfile-copy:v0.1.9": "docker.io/" + dockerfile2llb.DefaultCopyImage,
 		}),
 		integration.WithMatrix("frontend", frontends),
 	}
