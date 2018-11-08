@@ -9,9 +9,9 @@ You need to use `docker build` CLI instead of `buildctl` CLI mentioned in this d
 See [the `docker build` document](https://docs.docker.com/engine/reference/commandline/build/) for the usage.
 
 ## Use experimental Dockerfile frontend
-The features mentioned in this document are experimentally available as [`docker/dockerfile-upstream:experimental`](https://hub.docker.com/r/docker/dockerfile-upstream/tags/) image.
+The features mentioned in this document are experimentally available as [`docker/dockerfile:experimental`](https://hub.docker.com/r/docker/dockerfile/tags/) image.
 
-To use the experimental features, the first line of your Dockerfile needs to be `# syntax=docker/dockerfile-upstream:experimental`.
+To use the experimental features, the first line of your Dockerfile needs to be `# syntax=docker/dockerfile:experimental`.
 As the experimental syntaxes may change in future revisions, you may want to pin the image to a specific revision.
 
 See also [#528](https://github.com/moby/buildkit/issues/528) for further information about planned `docker/dockerfile` releases.
@@ -44,7 +44,7 @@ This mount type allows the build container to cache directories for compilers an
 #### Example: cache Go packages
 
 ```dockerfile
-# syntax = docker/dockerfile-upstream:experimental
+# syntax = docker/dockerfile:experimental
 FROM golang
 ...
 RUN --mount=type=cache,target=/root/.cache/go-build go build ...
@@ -53,7 +53,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build go build ...
 #### Example: cache apt packages
 
 ```dockerfile
-# syntax = docker/dockerfile-upstream:experimental
+# syntax = docker/dockerfile:experimental
 FROM ubuntu
 RUN rm -f /etc/apt/apt.conf.d/docker-clean; echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
 RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/apt \
@@ -83,7 +83,7 @@ This mount type allows the build container to access secure files such as privat
 #### Example: access to S3
 
 ```dockerfile
-# syntax = docker/dockerfile-upstream:experimental
+# syntax = docker/dockerfile:experimental
 FROM python:3
 RUN pip install awscli
 RUN --mount=type=secret,id=aws,target=/root/.aws/credentials aws s3 cp s3://... ...
@@ -108,7 +108,7 @@ This mount type allows the build container to access SSH keys via SSH agents, wi
 #### Example: access to Gitlab
 
 ```dockerfile
-# syntax = docker/dockerfile-upstream:experimental
+# syntax = docker/dockerfile:experimental
 FROM alpine
 RUN apk add --no-cache openssh-client
 RUN mkdir -p -m 0700 ~/.ssh && ssh-keyscan gitlab.com >> ~/.ssh/known_hosts
