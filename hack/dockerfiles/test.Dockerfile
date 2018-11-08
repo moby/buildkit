@@ -28,6 +28,7 @@ RUN go build -ldflags "$(cat .tmp/ldflags) -d" -o /usr/bin/buildctl ./cmd/buildc
 FROM buildkit-base AS buildctl-darwin
 ENV CGO_ENABLED=0
 ENV GOOS=darwin
+ENV GOARCH=amd64
 RUN go build -ldflags "$(cat .tmp/ldflags)" -o /out/buildctl-darwin ./cmd/buildctl
 # reset GOOS for legacy builder
 ENV GOOS=linux
@@ -110,6 +111,7 @@ COPY --from=rootlesskit /rootlesskit /usr/bin/
 
 FROM buildkit-base AS cross-windows
 ENV GOOS=windows
+ENV GOARCH=amd64
 
 FROM cross-windows AS buildctl.exe
 RUN go build -ldflags "$(cat .tmp/ldflags)" -o /out/buildctl.exe ./cmd/buildctl
