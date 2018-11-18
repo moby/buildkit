@@ -469,7 +469,9 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 		err = dispatchCopy(d, c.SourcesAndDest, opt.buildContext, true, c, "", opt)
 		if err == nil {
 			for _, src := range c.Sources() {
-				d.ctxPaths[path.Join("/", filepath.ToSlash(src))] = struct{}{}
+				if !strings.HasPrefix(src, "http://") && !strings.HasPrefix(src, "https://") {
+					d.ctxPaths[path.Join("/", filepath.ToSlash(src))] = struct{}{}
+				}
 			}
 		}
 	case *instructions.LabelCommand:
