@@ -54,7 +54,7 @@ FROM gobuild-$BUILDARCH-$TARGETARCH AS gobuild-base
 FROM git AS runc-src
 ARG RUNC_VERSION
 WORKDIR /usr/src
-RUN git clone git://github.com/opencontainers/runc.git runc \
+RUN git clone https://github.com/opencontainers/runc.git runc \
 	&& cd runc && git checkout -q "$RUNC_VERSION"
 
 # build runc binary
