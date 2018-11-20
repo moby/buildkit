@@ -218,7 +218,9 @@ func build(clicontext *cli.Context) error {
 			return err
 		}
 	} else {
-		solveOpt.FrontendAttrs["no-cache"] = ""
+		if clicontext.Bool("no-cache") {
+			solveOpt.FrontendAttrs["no-cache"] = ""
+		}
 	}
 
 	eg.Go(func() error {
