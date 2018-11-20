@@ -1339,6 +1339,10 @@ The table below shows what command is executed for different `ENTRYPOINT` / `CMD
 | **CMD ["p1_cmd", "p2_cmd"]**   | p1_cmd p2_cmd              | /bin/sh -c exec_entry p1_entry | exec_entry p1_entry p1_cmd p2_cmd              |
 | **CMD exec_cmd p1_cmd**        | /bin/sh -c exec_cmd p1_cmd | /bin/sh -c exec_entry p1_entry | exec_entry p1_entry /bin/sh -c exec_cmd p1_cmd |
 
+> **Note**: If `CMD` is defined from the base image, setting `ENTRYPOINT` will
+> reset `CMD` to an empty value. In this scenario, `CMD` must be defined in the
+> current image to have a value.
+
 ## VOLUME
 
     VOLUME ["/data"]
