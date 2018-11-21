@@ -221,6 +221,10 @@ func build(clicontext *cli.Context) error {
 		solveOpt.FrontendAttrs["no-cache"] = ""
 	}
 
+	if clicontext.String("frontend") != "" && len(clicontext.StringSlice("import-cache")) != 0 {
+		solveOpt.FrontendAttrs["cache-from"] = strings.Join(clicontext.StringSlice("import-cache"), ",")
+	}
+
 	eg.Go(func() error {
 		resp, err := c.Solve(ctx, def, solveOpt, ch)
 		if err != nil {
