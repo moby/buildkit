@@ -80,6 +80,7 @@ var allTests = []integration.Test{
 	testCopyThroughSymlinkMultiStage,
 	testCopyChownCreateDest,
 	testEmptyDestDir,
+	testSymlinkedDockerfile,
 }
 
 var opts []integration.TestOpt
@@ -134,6 +135,34 @@ RUN [ "$(cat testfile)" == "contents0" ]
 	dir, err := tmpdir(
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile("testfile", []byte("contents0"), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.LocalNameDockerfile: dir,
+			builder.LocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+}
+
+func testSymlinkedDockerfile(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM scratch
+ENV foo bar
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile.web", dockerfile, 0600),
+		fstest.Symlink("Dockerfile.web", "Dockerfile"),
 	)
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
