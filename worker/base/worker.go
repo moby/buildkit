@@ -46,6 +46,7 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -118,15 +119,18 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 
 	sm.Register(is)
 
-	gs, err := git.NewSource(git.Opt{
-		CacheAccessor: cm,
-		MetadataStore: opt.MetadataStore,
-	})
-	if err != nil {
-		return nil, err
+	if err := git.Supported(); err == nil {
+		gs, err := git.NewSource(git.Opt{
+			CacheAccessor: cm,
+			MetadataStore: opt.MetadataStore,
+		})
+		if err != nil {
+			return nil, err
+		}
+		sm.Register(gs)
+	} else {
+		logrus.Warnf("git source cannot be enabled: %v", err)
 	}
-
-	sm.Register(gs)
 
 	hs, err := http.NewSource(http.Opt{
 		CacheAccessor: cm,
