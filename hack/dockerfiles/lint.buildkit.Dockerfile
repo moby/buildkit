@@ -1,4 +1,4 @@
-# syntax=tonistiigi/dockerfile:runmount20180828
+# syntax=docker/dockerfile:1.0-experimental
 
 FROM golang:1.11-alpine
 RUN  apk add --no-cache git
