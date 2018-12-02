@@ -205,15 +205,15 @@ COPY . .
 
 # To allow running buildkit in a container without CAP_SYS_ADMIN, we need to do either
 #  a) install newuidmap/newgidmap with file capabilities rather than SETUID (requires kernel >= 4.14)
-#  b) install newuidmap/newgidmap >= 20181028
+#  b) install newuidmap/newgidmap >= 20181125 (59c2dabb264ef7b3137f5edb52c0b31d5af0cf76)
 # We choose b) until kernel >= 4.14 gets widely adopted.
-# See https://github.com/shadow-maint/shadow/pull/132 https://github.com/shadow-maint/shadow/pull/138
+# See https://github.com/shadow-maint/shadow/pull/132 https://github.com/shadow-maint/shadow/pull/138 https://github.com/shadow-maint/shadow/pull/141
 # (Note: we don't use the patched idmap for the testsuite image)
 FROM alpine:3.8 AS idmap
 RUN apk add --no-cache autoconf automake build-base byacc gettext gettext-dev gcc git libcap-dev libtool libxslt
 RUN git clone https://github.com/shadow-maint/shadow.git /shadow
 WORKDIR /shadow
-RUN git checkout 42324e501768675993235e03f7e4569135802d18
+RUN git checkout 59c2dabb264ef7b3137f5edb52c0b31d5af0cf76
 RUN ./autogen.sh --disable-nls --disable-man --without-audit --without-selinux --without-acl --without-attr --without-tcb --without-nscd \
   && make \
   && cp src/newuidmap src/newgidmap /usr/bin
@@ -233,7 +233,7 @@ RUN chmod u+s /usr/bin/newuidmap /usr/bin/newgidmap \
 # We lock the root account by `passwd -l root`, so as to disable su completely.
 
 # tonistiigi/buildkit:rootless-base is a pre-built multi-arch version of rootless-base-internal https://github.com/moby/buildkit/pull/666#pullrequestreview-161872350
-FROM tonistiigi/buildkit:rootless-base@sha256:51a8017db80e9757fc05071996947abb5d3e91508c3d641b01cfcaeff77e676e AS rootless-base-external
+FROM tonistiigi/buildkit:rootless-base@sha256:7e87da0f64e4987b4b6620f7b27b62d7178fc27964fcc3afeb8412f4231aa425 AS rootless-base-external
 FROM rootless-base-$ROOTLESS_BASE_MODE AS rootless-base
 
 # Rootless mode.
