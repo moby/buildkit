@@ -1,4 +1,4 @@
-# syntax = tonistiigi/dockerfile:runmount20180925
+# syntax = docker/dockerfile:1.0-experimental
 
 ARG RUNC_VERSION=a00bf0190895aa465a5fbed0268888e2c8ddfe85
 ARG CONTAINERD_VERSION=v1.2.0-rc.1
