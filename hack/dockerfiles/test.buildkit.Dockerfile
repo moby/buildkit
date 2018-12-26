@@ -1,7 +1,7 @@
 # syntax = tonistiigi/dockerfile:runmount20180925
 
-ARG RUNC_VERSION=a00bf0190895aa465a5fbed0268888e2c8ddfe85
-ARG CONTAINERD_VERSION=v1.2.0-rc.1
+ARG RUNC_VERSION=v1.0.0-rc6
+ARG CONTAINERD_VERSION=v1.2.1
 # containerd v1.0 for integration tests
 ARG CONTAINERD10_VERSION=v1.0.3
 # available targets: buildkitd, buildkitd.oci_only, buildkitd.containerd_only
