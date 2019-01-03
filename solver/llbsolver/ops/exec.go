@@ -331,7 +331,7 @@ func (sm *sshMountInstance) Mount() ([]mount.Mount, error) {
 		ID:   sm.sm.mount.SSHOpt.ID,
 		UID:  int(sm.sm.mount.SSHOpt.Uid),
 		GID:  int(sm.sm.mount.SSHOpt.Gid),
-		Mode: int(sm.sm.mount.SSHOpt.Mode),
+		Mode: int(sm.sm.mount.SSHOpt.Mode & 0777),
 	})
 	if err != nil {
 		cancel()
