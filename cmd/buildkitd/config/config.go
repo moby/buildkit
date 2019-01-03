@@ -49,12 +49,13 @@ type TLSConfig struct {
 }
 
 type OCIConfig struct {
-	Enabled     *bool             `toml:"enabled"`
-	Labels      map[string]string `toml:"labels"`
-	Platforms   []string          `toml:"platforms"`
-	Snapshotter string            `toml:"snapshotter"`
-	Rootless    bool              `toml:"rootless"`
-	GCPolicy    []GCPolicy        `toml:"gcpolicy"`
+	Enabled          *bool             `toml:"enabled"`
+	Labels           map[string]string `toml:"labels"`
+	Platforms        []string          `toml:"platforms"`
+	Snapshotter      string            `toml:"snapshotter"`
+	Rootless         bool              `toml:"rootless"`
+	NoProcessSandbox bool              `toml:"noProcessSandbox"`
+	GCPolicy         []GCPolicy        `toml:"gcpolicy"`
 }
 
 type ContainerdConfig struct {
