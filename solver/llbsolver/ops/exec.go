@@ -447,7 +447,7 @@ func (sm *secretMountInstance) Mount() ([]mount.Mount, error) {
 		return nil, err
 	}
 
-	if err := os.Chmod(fp, os.FileMode(sm.sm.mount.SecretOpt.Mode)); err != nil {
+	if err := os.Chmod(fp, os.FileMode(sm.sm.mount.SecretOpt.Mode&0777)); err != nil {
 		return nil, err
 	}
 

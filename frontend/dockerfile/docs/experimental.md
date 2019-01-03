@@ -79,6 +79,9 @@ This mount type allows the build container to access secure files such as privat
 |`id`                 | ID of the secret. Defaults to basename of the target path.|
 |`target`             | Mount path. Defaults to `/run/secrets/` + `id`.|
 |`required`           | If set to `true`, the instruction errors out when the secret is unavailable. Defaults to `false`.|
+|`mode`               | File mode for secret file in octal. Default 0400.|
+|`uid`                | User ID for secret file. Default 0.|
+|`gid`                | Group ID for secret file. Default 0.|
 
 
 #### Example: access to S3
