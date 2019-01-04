@@ -4,13 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"sync"
 
 	"github.com/containerd/containerd/content"
+	"github.com/containerd/containerd/images"
 	v1 "github.com/moby/buildkit/cache/remotecache/v1"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/util/imageutil"
 	"github.com/moby/buildkit/worker"
+	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+	"golang.org/x/sync/errgroup"
 )
 
 // ResolveCacheImporterFunc returns importer and descriptor.
@@ -55,7 +61,7 @@ func (ci *contentCacheImporter) Resolve(ctx context.Context, desc ocispec.Descri
 	}
 
 	if configDesc.Digest == "" {
-		return nil, errors.Errorf("invalid build cache from %+v, lacks manifest with MediaType=%s", desc, v1.CacheConfigMediaTypeV0)
+		return ci.importInlineCache(ctx, dt, id, w)
 	}
 
 	dt, err = readBlob(ctx, ci.provider, configDesc)
@@ -94,4 +100,127 @@ func readBlob(ctx context.Context, provider content.Provider, desc ocispec.Descr
 		}
 	}
 	return dt, err
+}
+
+func (ci *contentCacheImporter) importInlineCache(ctx context.Context, dt []byte, id string, w worker.Worker) (solver.CacheManager, error) {
+	m := map[digest.Digest][]byte{}
+
+	if err := ci.allDistributionManifests(ctx, dt, m); err != nil {
+		return nil, err
+	}
+
+	var mu sync.Mutex
+	cc := v1.NewCacheChains()
+
+	eg, ctx := errgroup.WithContext(ctx)
+	for dgst, dt := range m {
+		func(dgst digest.Digest, dt []byte) {
+			eg.Go(func() error {
+				var m ocispec.Manifest
+
+				if err := json.Unmarshal(dt, &m); err != nil {
+					return err
+				}
+
+				if m.Config.Digest == "" || len(m.Layers) == 0 {
+					return nil
+				}
+
+				p, err := content.ReadBlob(ctx, ci.provider, m.Config)
+				if err != nil {
+					return err
+				}
+
+				var img struct {
+					Rootfs struct {
+						DiffIDs []digest.Digest `json:"diff_ids"`
+					} `json:"rootfs"`
+					Cache json.RawMessage `json:"moby.buildkit.cache.v0"`
+				}
+
+				if err := json.Unmarshal(p, &img); err != nil {
+					return err
+				}
+
+				if len(img.Rootfs.DiffIDs) != len(m.Layers) {
+					logrus.Warnf("invalid image with mismatching manifest and config")
+					return nil
+				}
+
+				if img.Cache == nil {
+					return nil
+				}
+
+				var config v1.CacheConfig
+				if err := json.Unmarshal(img.Cache, &config.Records); err != nil {
+					return err
+				}
+
+				layers := v1.DescriptorProvider{}
+				for i, m := range m.Layers {
+					if m.Annotations == nil {
+						m.Annotations = map[string]string{}
+					}
+					m.Annotations["containerd.io/uncompressed"] = img.Rootfs.DiffIDs[i].String()
+					layers[m.Digest] = v1.DescriptorProviderPair{
+						Descriptor: m,
+						Provider:   ci.provider,
+					}
+					config.Layers = append(config.Layers, v1.CacheLayer{
+						Blob:        m.Digest,
+						ParentIndex: i - 1,
+					})
+				}
+
+				mu.Lock()
+				if err := v1.ParseConfig(config, layers, cc); err != nil {
+					return err
+				}
+				mu.Unlock()
+				return nil
+			})
+		}(dgst, dt)
+	}
+
+	if err := eg.Wait(); err != nil {
+		return nil, err
+	}
+
+	keysStorage, resultStorage, err := v1.NewCacheKeyStorage(cc, w)
+	if err != nil {
+		return nil, err
+	}
+	return solver.NewCacheManager(id, keysStorage, resultStorage), nil
+}
+
+func (ci *contentCacheImporter) allDistributionManifests(ctx context.Context, dt []byte, m map[digest.Digest][]byte) error {
+	mt, err := imageutil.DetectManifestBlobMediaType(dt)
+	if err != nil {
+		return err
+	}
+
+	switch mt {
+	case images.MediaTypeDockerSchema2Manifest, ocispec.MediaTypeImageManifest:
+		m[digest.FromBytes(dt)] = dt
+	case images.MediaTypeDockerSchema2ManifestList, ocispec.MediaTypeImageIndex:
+		var index ocispec.Index
+		if err := json.Unmarshal(dt, &index); err != nil {
+			return err
+		}
+
+		for _, d := range index.Manifests {
+			if _, ok := m[d.Digest]; ok {
+				continue
+			}
+			p, err := content.ReadBlob(ctx, ci.provider, d)
+			if err != nil {
+				return err
+			}
+			if err := ci.allDistributionManifests(ctx, p, m); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }

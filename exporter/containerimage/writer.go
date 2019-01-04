@@ -56,7 +56,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 		if err != nil {
 			return nil, err
 		}
-		return ic.commitDistributionManifest(ctx, inp.Ref, inp.Metadata[exptypes.ExporterImageConfigKey], layers[0], oci)
+		return ic.commitDistributionManifest(ctx, inp.Ref, inp.Metadata[exptypes.ExporterImageConfigKey], layers[0], oci, inp.Metadata[exptypes.ExporterInlineCache])
 	}
 
 	var p exptypes.Platforms
@@ -108,7 +108,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 		}
 		config := inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterImageConfigKey, p.ID)]
 
-		desc, err := ic.commitDistributionManifest(ctx, r, config, layers[layersMap[p.ID]], oci)
+		desc, err := ic.commitDistributionManifest(ctx, r, config, layers[layersMap[p.ID]], oci, inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterInlineCache, p.ID)])
 		if err != nil {
 			return nil, err
 		}
@@ -173,7 +173,7 @@ func (ic *ImageWriter) exportLayers(ctx context.Context, refs ...cache.Immutable
 	return out, nil
 }
 
-func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache.ImmutableRef, config []byte, layers []blobs.DiffPair, oci bool) (*ocispec.Descriptor, error) {
+func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache.ImmutableRef, config []byte, layers []blobs.DiffPair, oci bool, cache []byte) (*ocispec.Descriptor, error) {
 	if len(config) == 0 {
 		var err error
 		config, err = emptyImageConfig()
@@ -189,7 +189,7 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache
 
 	diffPairs, history := normalizeLayersAndHistory(layers, history, ref)
 
-	config, err = patchImageConfig(config, diffPairs, history)
+	config, err = patchImageConfig(config, diffPairs, history, cache)
 	if err != nil {
 		return nil, err
 	}
@@ -312,7 +312,7 @@ func parseHistoryFromConfig(dt []byte) ([]ocispec.History, error) {
 	return config.History, nil
 }
 
-func patchImageConfig(dt []byte, dps []blobs.DiffPair, history []ocispec.History) ([]byte, error) {
+func patchImageConfig(dt []byte, dps []blobs.DiffPair, history []ocispec.History, cache []byte) ([]byte, error) {
 	m := map[string]json.RawMessage{}
 	if err := json.Unmarshal(dt, &m); err != nil {
 		return nil, errors.Wrap(err, "failed to parse image config for patch")
@@ -347,6 +347,10 @@ func patchImageConfig(dt []byte, dps []blobs.DiffPair, history []ocispec.History
 			return nil, errors.Wrap(err, "failed to marshal creation time")
 		}
 		m["created"] = dt
+	}
+
+	if cache != nil {
+		m["moby.buildkit.cache.v0"] = cache
 	}
 
 	dt, err = json.Marshal(m)

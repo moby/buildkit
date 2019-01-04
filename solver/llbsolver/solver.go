@@ -2,6 +2,7 @@ package llbsolver
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/moby/buildkit/client"
 	controlgateway "github.com/moby/buildkit/control/gateway"
 	"github.com/moby/buildkit/exporter"
+	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/frontend/gateway"
 	"github.com/moby/buildkit/identity"
@@ -138,7 +140,7 @@ func (s *Solver) Solve(ctx context.Context, id string, req frontend.SolveRequest
 	}()
 
 	var exporterResponse map[string]string
-	if exp := exp.Exporter; exp != nil {
+	if e := exp.Exporter; e != nil {
 		inp := exporter.Source{
 			Metadata: res.Metadata,
 		}
@@ -151,6 +153,14 @@ func (s *Solver) Solve(ctx context.Context, id string, req frontend.SolveRequest
 				return nil, errors.Errorf("invalid reference: %T", res.Sys())
 			}
 			inp.Ref = workerRef.ImmutableRef
+
+			dt, err := inlineCache(ctx, exp.CacheExporter, res)
+			if err != nil {
+				return nil, err
+			}
+			if dt != nil {
+				inp.Metadata[exptypes.ExporterInlineCache] = dt
+			}
 		}
 		if res.Refs != nil {
 			m := make(map[string]cache.ImmutableRef, len(res.Refs))
@@ -163,13 +173,21 @@ func (s *Solver) Solve(ctx context.Context, id string, req frontend.SolveRequest
 						return nil, errors.Errorf("invalid reference: %T", res.Sys())
 					}
 					m[k] = workerRef.ImmutableRef
+
+					dt, err := inlineCache(ctx, exp.CacheExporter, res)
+					if err != nil {
+						return nil, err
+					}
+					if dt != nil {
+						inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterInlineCache, k)] = dt
+					}
 				}
 			}
 			inp.Refs = m
 		}
 
-		if err := inVertexContext(j.Context(ctx), exp.Name(), "", func(ctx context.Context) error {
-			exporterResponse, err = exp.Export(ctx, inp)
+		if err := inVertexContext(j.Context(ctx), e.Name(), "", func(ctx context.Context) error {
+			exporterResponse, err = e.Export(ctx, inp)
 			return err
 		}); err != nil {
 			return nil, err
@@ -216,6 +234,37 @@ func (s *Solver) Solve(ctx context.Context, id string, req frontend.SolveRequest
 	return &client.SolveResponse{
 		ExporterResponse: exporterResponse,
 	}, nil
+}
+
+func inlineCache(ctx context.Context, e remotecache.Exporter, res solver.CachedResult) ([]byte, error) {
+	if efl, ok := e.(interface {
+		ExportForLayers([]digest.Digest) ([]byte, error)
+	}); ok {
+		workerRef, ok := res.Sys().(*worker.WorkerRef)
+		if !ok {
+			return nil, errors.Errorf("invalid reference: %T", res.Sys())
+		}
+
+		remote, err := workerRef.Worker.GetRemote(ctx, workerRef.ImmutableRef, true)
+		if err != nil || remote == nil {
+			return nil, nil
+		}
+
+		digests := make([]digest.Digest, 0, len(remote.Descriptors))
+		for _, desc := range remote.Descriptors {
+			digests = append(digests, desc.Digest)
+		}
+
+		if _, err := res.CacheKeys()[0].Exporter.ExportTo(ctx, e, solver.CacheExportOpt{
+			Convert: workerRefConverter,
+			Mode:    solver.CacheExportModeMin,
+		}); err != nil {
+			return nil, err
+		}
+
+		return efl.ExportForLayers(digests)
+	}
+	return nil, nil
 }
 
 func (s *Solver) Status(ctx context.Context, id string, statusChan chan *client.SolveStatus) error {
