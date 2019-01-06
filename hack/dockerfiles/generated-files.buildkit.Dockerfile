@@ -31,7 +31,7 @@ RUN --mount=target=/tmp/src \
 	git ls-files -m --others -- **/*.pb.go | tar -cf - --files-from - | tar -C /generated-files -xf -
 
 FROM scratch AS update
-COPY --from=generated generated-files /
+COPY --from=generated /generated-files /generated-files
 
 FROM gobuild-base AS validate
 RUN --mount=target=/tmp/src \
