@@ -11,11 +11,14 @@ if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"
 gogo_version=$(awk '$1 == "github.com/gogo/protobuf" { print $2 }' vendor.conf)
 case $buildmode in
 "buildkit")
+  output=$(mktemp -d -t buildctl-output.XXXXXXXXXX)
   buildctl build $progressFlag --frontend=dockerfile.v0 --local context=. --local dockerfile=. \
     --frontend-opt build-arg:GOGO_VERSION=$gogo_version \
     --frontend-opt target=update \
     --frontend-opt filename=./hack/dockerfiles/generated-files.buildkit.Dockerfile \
-    --exporter=local --exporter-opt output=.
+    --exporter=local --exporter-opt output=$output
+  cp -R "$output/generated-files/" .
+  rm -rf $output
   ;;
 *)
   iidfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
@@ -31,14 +34,7 @@ case $buildmode in
   iid=$(cat $iidfile)
   cid=$(docker create $iid noop)
 
-  case $buildmode in
-  "docker-buildkit")
-    docker export $cid | tar -xf - 
-    ;;
-  *)
-    docker export $cid | tar -xf - --strip-components=1 generated-files
-    ;;
-  esac
+  docker export $cid | tar -xf - --strip-components=1 generated-files
 
   docker rm $cid
 
