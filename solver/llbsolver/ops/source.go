@@ -2,6 +2,7 @@ package ops
 
 import (
 	"context"
+	"strings"
 	"sync"
 
 	"github.com/moby/buildkit/solver"
@@ -59,9 +60,15 @@ func (s *sourceOp) CacheMap(ctx context.Context, index int) (*solver.CacheMap, b
 		return nil, false, err
 	}
 
+	dgst := digest.FromBytes([]byte(sourceCacheType + ":" + k))
+
+	if strings.HasPrefix(k, "session:") {
+		dgst = digest.Digest("random:" + strings.TrimPrefix(dgst.String(), dgst.Algorithm().String()+":"))
+	}
+
 	return &solver.CacheMap{
 		// TODO: add os/arch
-		Digest: digest.FromBytes([]byte(sourceCacheType + ":" + k)),
+		Digest: dgst,
 	}, done, nil
 }
 
