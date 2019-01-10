@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/moby/buildkit/identity"
 	digest "github.com/opencontainers/go-digest"
@@ -143,15 +144,14 @@ func (c *cacheManager) Load(ctx context.Context, rec *CacheRecord) (Result, erro
 	return c.results.Load(ctx, res)
 }
 
-func (c *cacheManager) Save(k *CacheKey, r Result) (*ExportableCacheKey, error) {
+func (c *cacheManager) Save(k *CacheKey, r Result, createdAt time.Time) (*ExportableCacheKey, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	res, err := c.results.Save(r)
+	res, err := c.results.Save(r, createdAt)
 	if err != nil {
 		return nil, err
 	}
-
 	if err := c.backend.AddResult(c.getID(k), res); err != nil {
 		return nil, err
 	}

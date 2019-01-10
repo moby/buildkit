@@ -3,6 +3,7 @@ package solver
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/moby/buildkit/solver/internal/pipe"
 	digest "github.com/opencontainers/go-digest"
@@ -845,7 +846,7 @@ func (e *edge) execOp(ctx context.Context) (interface{}, error) {
 	var exporters []CacheExporter
 
 	for _, cacheKey := range cacheKeys {
-		ck, err := e.op.Cache().Save(cacheKey, res)
+		ck, err := e.op.Cache().Save(cacheKey, res, time.Now())
 		if err != nil {
 			return nil, err
 		}

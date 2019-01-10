@@ -2,6 +2,7 @@ package cacheimport
 
 import (
 	"context"
+	"time"
 
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/solver"
@@ -191,7 +192,7 @@ type cacheResultStorage struct {
 	byResult map[string]map[string]struct{}
 }
 
-func (cs *cacheResultStorage) Save(res solver.Result) (solver.CacheResult, error) {
+func (cs *cacheResultStorage) Save(res solver.Result, createdAt time.Time) (solver.CacheResult, error) {
 	return solver.CacheResult{}, errors.Errorf("importer is immutable")
 }
 

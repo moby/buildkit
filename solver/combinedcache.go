@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"time"
 
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
@@ -71,14 +72,14 @@ func (cm *combinedCacheManager) Load(ctx context.Context, rec *CacheRecord) (Res
 	if err != nil {
 		return nil, err
 	}
-	if _, err := cm.main.Save(rec.key, res); err != nil {
+	if _, err := cm.main.Save(rec.key, res, rec.CreatedAt); err != nil {
 		return nil, err
 	}
 	return res, nil
 }
 
-func (cm *combinedCacheManager) Save(key *CacheKey, s Result) (*ExportableCacheKey, error) {
-	return cm.main.Save(key, s)
+func (cm *combinedCacheManager) Save(key *CacheKey, s Result, createdAt time.Time) (*ExportableCacheKey, error) {
+	return cm.main.Save(key, s, createdAt)
 }
 
 func (cm *combinedCacheManager) Records(ck *CacheKey) ([]*CacheRecord, error) {
