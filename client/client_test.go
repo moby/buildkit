@@ -88,7 +88,7 @@ func TestClientIntegration(t *testing.T) {
 		testHostnameLookup,
 		testPushByDigest,
 		testBasicInlineCacheImportExport,
-		testExportBusyboxLocal,
+		testSecurityMode,
 	},
 		integration.WithMirroredImages(integration.OfficialImages("busybox:latest", "alpine:latest")),
 	)
@@ -417,6 +417,35 @@ func testPushByDigest(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, resp.ExporterResponse["containerimage.digest"], desc.Digest.String())
 	require.Equal(t, images.MediaTypeDockerSchema2Manifest, desc.MediaType)
 	require.True(t, desc.Size > 0)
+}
+
+func testSecurityMode(t *testing.T, sb integration.Sandbox) {
+
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Image("busybox:latest").
+		Run(llb.Shlex(`sh -c 'echo confined'`))
+
+	def, err := st.Marshal()
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	require.NoError(t, err)
+
+	st2 := llb.Image("busybox:latest").
+		Run(llb.Shlex(`sh -c 'echo unconfined'`), llb.Security(llb.SecurityModeUnconfined))
+
+	def, err = st2.Marshal()
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		// Currently disabled globally by default
+		//AllowedEntitlements: []entitlements.Entitlement{entitlements.EntitlementSecurityUnconfined},
+	}, nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "security.unconfined is not allowed")
 }
 
 func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
