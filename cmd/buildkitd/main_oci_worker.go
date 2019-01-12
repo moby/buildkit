@@ -10,6 +10,7 @@ import (
 	"github.com/containerd/containerd/snapshots/native"
 	"github.com/containerd/containerd/snapshots/overlay"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
+	"github.com/moby/buildkit/executor/oci"
 	"github.com/moby/buildkit/worker"
 	"github.com/moby/buildkit/worker/base"
 	"github.com/moby/buildkit/worker/runc"
@@ -66,6 +67,11 @@ func init() {
 			Usage: u,
 		})
 	}
+	flags = append(flags, cli.BoolFlag{
+		Name:  "oci-worker-no-process-sandbox",
+		Usage: "use the host PID namespace and procfs (WARNING: allows build containers to kill (and potentially ptrace) an arbitrary process in the host namespace)",
+	})
+
 	registerWorkerInitializer(
 		workerInitializer{
 			fn:       ociWorkerInitializer,
@@ -109,6 +115,9 @@ func applyOCIFlags(c *cli.Context, cfg *config.Config) error {
 	if c.GlobalIsSet("oci-worker-rootless") {
 		cfg.Workers.OCI.Rootless = c.GlobalBool("oci-worker-rootless")
 	}
+	if c.GlobalIsSet("oci-worker-no-process-sandbox") {
+		cfg.Workers.OCI.NoProcessSandbox = c.GlobalBool("oci-worker-no-process-sandbox")
+	}
 
 	if platforms := c.GlobalStringSlice("oci-worker-platform"); len(platforms) != 0 {
 		cfg.Workers.OCI.Platforms = platforms
@@ -136,7 +145,17 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 	if cfg.Rootless {
 		logrus.Debugf("running in rootless mode")
 	}
-	opt, err := runc.NewWorkerOpt(common.config.Root, snFactory, cfg.Rootless, cfg.Labels)
+
+	processMode := oci.ProcessSandbox
+	if cfg.NoProcessSandbox {
+		logrus.Warn("NoProcessSandbox is enabled. Note that NoProcessSandbox allows build containers to kill (and potentially ptrace) an arbitrary process in the BuildKit host namespace. NoProcessSandbox should be enabled only when the BuildKit is running in a container as an unprivileged user.")
+		if !cfg.Rootless {
+			return nil, errors.New("can't enable NoProcessSandbox without Rootless")
+		}
+		processMode = oci.NoProcessSandbox
+	}
+
+	opt, err := runc.NewWorkerOpt(common.config.Root, snFactory, cfg.Rootless, processMode, cfg.Labels)
 	if err != nil {
 		return nil, err
 	}

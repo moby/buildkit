@@ -5,6 +5,7 @@ package runc
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
@@ -15,8 +16,10 @@ import (
 	"github.com/containerd/containerd/namespaces"
 	ctdsnapshot "github.com/containerd/containerd/snapshots"
 	"github.com/containerd/containerd/snapshots/overlay"
+	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/executor"
+	"github.com/moby/buildkit/executor/oci"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/source"
@@ -24,8 +27,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRuncWorker(t *testing.T) {
-	t.Parallel()
+func newWorkerOpt(t *testing.T, processMode oci.ProcessMode) (base.WorkerOpt, func()) {
+	tmpdir, err := ioutil.TempDir("", "workertest")
+	require.NoError(t, err)
+	cleanup := func() { os.RemoveAll(tmpdir) }
+
+	snFactory := SnapshotterFactory{
+		Name: "overlayfs",
+		New: func(root string) (ctdsnapshot.Snapshotter, error) {
+			return overlay.NewSnapshotter(root)
+		},
+	}
+	rootless := false
+	workerOpt, err := NewWorkerOpt(tmpdir, snFactory, rootless, processMode, nil)
+	require.NoError(t, err)
+
+	workerOpt.SessionManager, err = session.NewManager()
+	require.NoError(t, err)
+	return workerOpt, cleanup
+}
+
+func checkRequirement(t *testing.T) {
 	if os.Getuid() != 0 {
 		t.Skip("requires root")
 	}
@@ -35,38 +57,33 @@ func TestRuncWorker(t *testing.T) {
 			t.Skipf("no runc found: %s", err.Error())
 		}
 	}
+}
 
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+func newCtx(s string) context.Context {
+	return namespaces.WithNamespace(context.Background(), s)
+}
 
-	// this should be an example or e2e test
-	tmpdir, err := ioutil.TempDir("", "workertest")
+func newBusyboxSourceSnapshot(ctx context.Context, t *testing.T, w *base.Worker) cache.ImmutableRef {
+	img, err := source.NewImageIdentifier("docker.io/library/busybox:latest")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpdir)
-
-	snFactory := SnapshotterFactory{
-		Name: "overlayfs",
-		New: func(root string) (ctdsnapshot.Snapshotter, error) {
-			return overlay.NewSnapshotter(root)
-		},
-	}
-	rootless := false
-	workerOpt, err := NewWorkerOpt(tmpdir, snFactory, rootless, nil)
+	src, err := w.SourceManager.Resolve(ctx, img)
 	require.NoError(t, err)
-
-	workerOpt.SessionManager, err = session.NewManager()
+	snap, err := src.Snapshot(ctx)
 	require.NoError(t, err)
+	return snap
+}
 
+func TestRuncWorker(t *testing.T) {
+	t.Parallel()
+	checkRequirement(t)
+
+	workerOpt, cleanupWorkerOpt := newWorkerOpt(t, oci.ProcessSandbox)
+	defer cleanupWorkerOpt()
 	w, err := base.NewWorker(workerOpt)
 	require.NoError(t, err)
 
-	img, err := source.NewImageIdentifier("docker.io/library/busybox:latest")
-	require.NoError(t, err)
-
-	src, err := w.SourceManager.Resolve(ctx, img)
-	require.NoError(t, err)
-
-	snap, err := src.Snapshot(ctx)
-	require.NoError(t, err)
+	ctx := newCtx("buildkit-test")
+	snap := newBusyboxSourceSnapshot(ctx, t, w)
 
 	mounts, err := snap.Mount(ctx, false)
 	require.NoError(t, err)
@@ -156,6 +173,35 @@ func TestRuncWorker(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, len(du2)-len(du))
 
+}
+
+func TestRuncWorkerNoProcessSandbox(t *testing.T) {
+	t.Parallel()
+	checkRequirement(t)
+
+	workerOpt, cleanupWorkerOpt := newWorkerOpt(t, oci.NoProcessSandbox)
+	defer cleanupWorkerOpt()
+	w, err := base.NewWorker(workerOpt)
+	require.NoError(t, err)
+
+	ctx := newCtx("buildkit-test")
+	snap := newBusyboxSourceSnapshot(ctx, t, w)
+	root, err := w.CacheManager.New(ctx, snap)
+	require.NoError(t, err)
+
+	// ensure the procfs is shared
+	selfPID := os.Getpid()
+	selfCmdline, err := ioutil.ReadFile(fmt.Sprintf("/proc/%d/cmdline", selfPID))
+	require.NoError(t, err)
+	meta := executor.Meta{
+		Args: []string{"/bin/cat", fmt.Sprintf("/proc/%d/cmdline", selfPID)},
+		Cwd:  "/",
+	}
+	stdout := bytes.NewBuffer(nil)
+	stderr := bytes.NewBuffer(nil)
+	err = w.Executor.Exec(ctx, meta, root, nil, nil, &nopCloser{stdout}, &nopCloser{stderr})
+	require.NoError(t, err, fmt.Sprintf("stdout=%q, stderr=%q", stdout.String(), stderr.String()))
+	require.Equal(t, string(selfCmdline), stdout.String())
 }
 
 type nopCloser struct {
