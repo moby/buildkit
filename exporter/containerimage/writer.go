@@ -350,7 +350,11 @@ func patchImageConfig(dt []byte, dps []blobs.DiffPair, history []ocispec.History
 	}
 
 	if cache != nil {
-		m["moby.buildkit.cache.v0"] = cache
+		dt, err := json.Marshal(cache)
+		if err != nil {
+			return nil, err
+		}
+		m["moby.buildkit.cache.v0"] = dt
 	}
 
 	dt, err = json.Marshal(m)

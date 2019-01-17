@@ -45,7 +45,7 @@ func (ce *exporter) ExportForLayers(layers []digest.Digest) ([]byte, error) {
 	}
 
 	cc := v1.NewCacheChains()
-	if err := v1.ParseConfig(*config, descs, cc); err != nil {
+	if err := v1.ParseConfig(*config, descs2, cc); err != nil {
 		return nil, err
 	}
 
@@ -59,7 +59,17 @@ func (ce *exporter) ExportForLayers(layers []digest.Digest) ([]byte, error) {
 		return nil, nil
 	}
 
-	// TODO: are the layers always ordered already or should we check?
+	cache := map[digest.Digest]int{}
+
+	// reorder layers based on the order in the image
+	for i, r := range cfg.Records {
+		for j, rr := range r.Results {
+			n := getSortedLayerIndex(rr.LayerIndex, cfg.Layers, cache)
+			rr.LayerIndex = n
+			r.Results[j] = rr
+			cfg.Records[i] = r
+		}
+	}
 
 	dt, err := json.Marshal(cfg.Records)
 	if err != nil {
@@ -67,4 +77,16 @@ func (ce *exporter) ExportForLayers(layers []digest.Digest) ([]byte, error) {
 	}
 
 	return dt, nil
+}
+
+func getSortedLayerIndex(idx int, layers []v1.CacheLayer, cache map[digest.Digest]int) int {
+	if idx == -1 {
+		return -1
+	}
+	l := layers[idx]
+	if i, ok := cache[l.Blob]; ok {
+		return i
+	}
+	cache[l.Blob] = getSortedLayerIndex(l.ParentIndex, layers, cache) + 1
+	return cache[l.Blob]
 }

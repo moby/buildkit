@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"sync"
+	"time"
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/images"
@@ -131,12 +132,7 @@ func (ci *contentCacheImporter) importInlineCache(ctx context.Context, dt []byte
 					return err
 				}
 
-				var img struct {
-					Rootfs struct {
-						DiffIDs []digest.Digest `json:"diff_ids"`
-					} `json:"rootfs"`
-					Cache json.RawMessage `json:"moby.buildkit.cache.v0"`
-				}
+				var img image
 
 				if err := json.Unmarshal(p, &img); err != nil {
 					return err
@@ -156,10 +152,18 @@ func (ci *contentCacheImporter) importInlineCache(ctx context.Context, dt []byte
 					return err
 				}
 
+				createdDates, err := parseCreatedLayerDates(img)
+				if err != nil {
+					return err
+				}
+
 				layers := v1.DescriptorProvider{}
 				for i, m := range m.Layers {
 					if m.Annotations == nil {
 						m.Annotations = map[string]string{}
+					}
+					if createdAt := createdDates[i]; createdAt != "" {
+						m.Annotations["buildkit/createdat"] = createdAt
 					}
 					m.Annotations["containerd.io/uncompressed"] = img.Rootfs.DiffIDs[i].String()
 					layers[m.Digest] = v1.DescriptorProviderPair{
@@ -170,6 +174,11 @@ func (ci *contentCacheImporter) importInlineCache(ctx context.Context, dt []byte
 						Blob:        m.Digest,
 						ParentIndex: i - 1,
 					})
+				}
+
+				dt, err := json.Marshal(config)
+				if err != nil {
+					return err
 				}
 
 				mu.Lock()
@@ -223,4 +232,33 @@ func (ci *contentCacheImporter) allDistributionManifests(ctx context.Context, dt
 	}
 
 	return nil
+}
+
+type image struct {
+	Rootfs struct {
+		DiffIDs []digest.Digest `json:"diff_ids"`
+	} `json:"rootfs"`
+	Cache   []byte `json:"moby.buildkit.cache.v0"`
+	History []struct {
+		Created    *time.Time `json:"created,omitempty"`
+		EmptyLayer bool       `json:"empty_layer,omitempty"`
+	} `json:"history,omitempty"`
+}
+
+func parseCreatedLayerDates(img image) ([]string, error) {
+	dates := make([]string, 0, len(img.Rootfs.DiffIDs))
+	for _, h := range img.History {
+		if !h.EmptyLayer {
+			str := ""
+			if h.Created != nil {
+				dt, err := h.Created.MarshalText()
+				if err != nil {
+					return nil, err
+				}
+				str = string(dt)
+			}
+			dates = append(dates, str)
+		}
+	}
+	return dates, nil
 }
