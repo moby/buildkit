@@ -155,8 +155,22 @@ func (cs *cacheKeyStorage) WalkLinks(id string, link solver.CacheInfoLink, fn fu
 	return nil
 }
 
-// TODO:
 func (cs *cacheKeyStorage) WalkBacklinks(id string, fn func(id string, link solver.CacheInfoLink) error) error {
+	for k, it := range cs.byID {
+		for nl, ids := range it.links {
+			for _, id2 := range ids {
+				if id == id2 {
+					if err := fn(k, solver.CacheInfoLink{
+						Input:    solver.Index(nl.input),
+						Selector: digest.Digest(nl.selector),
+						Digest:   nl.dgst,
+					}); err != nil {
+						return err
+					}
+				}
+			}
+		}
+	}
 	return nil
 }
 
