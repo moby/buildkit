@@ -1569,6 +1569,7 @@ FROM busybox AS base
 ENV foo=bar
 COPY foo /foo2
 FROM busybox
+LABEL lbl=val
 COPY --from=base foo2 foo3
 WORKDIR /
 RUN echo bar > foo4
@@ -1623,15 +1624,22 @@ RUN ["ls"]
 	// this depends on busybox. should be ok after freezing images
 	require.Equal(t, 3, len(ociimg.RootFS.DiffIDs))
 
-	require.Equal(t, 6, len(ociimg.History))
-	require.Contains(t, ociimg.History[2].CreatedBy, "COPY foo2 foo3")
-	require.Equal(t, false, ociimg.History[2].EmptyLayer)
-	require.Contains(t, ociimg.History[3].CreatedBy, "WORKDIR /")
-	require.Equal(t, true, ociimg.History[3].EmptyLayer)
-	require.Contains(t, ociimg.History[4].CreatedBy, "echo bar > foo4")
-	require.Equal(t, false, ociimg.History[4].EmptyLayer)
-	require.Contains(t, ociimg.History[5].CreatedBy, "RUN ls")
-	require.Equal(t, true, ociimg.History[5].EmptyLayer)
+	require.Equal(t, 7, len(ociimg.History))
+	require.Contains(t, ociimg.History[2].CreatedBy, "lbl=val")
+	require.Equal(t, true, ociimg.History[2].EmptyLayer)
+	require.NotNil(t, ociimg.History[2].Created)
+	require.Contains(t, ociimg.History[3].CreatedBy, "COPY foo2 foo3")
+	require.Equal(t, false, ociimg.History[3].EmptyLayer)
+	require.NotNil(t, ociimg.History[3].Created)
+	require.Contains(t, ociimg.History[4].CreatedBy, "WORKDIR /")
+	require.Equal(t, true, ociimg.History[4].EmptyLayer)
+	require.NotNil(t, ociimg.History[4].Created)
+	require.Contains(t, ociimg.History[5].CreatedBy, "echo bar > foo4")
+	require.Equal(t, false, ociimg.History[5].EmptyLayer)
+	require.NotNil(t, ociimg.History[5].Created)
+	require.Contains(t, ociimg.History[6].CreatedBy, "RUN ls")
+	require.Equal(t, true, ociimg.History[6].EmptyLayer)
+	require.NotNil(t, ociimg.History[6].Created)
 }
 
 func testUser(t *testing.T, sb integration.Sandbox) {
