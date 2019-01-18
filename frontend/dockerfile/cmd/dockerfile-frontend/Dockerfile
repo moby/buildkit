@@ -24,6 +24,7 @@ RUN --mount=target=. --mount=type=cache,target=/root/.cache \
   file /dockerfile-frontend | grep "statically linked"
 
 FROM scratch AS release
+LABEL moby.buildkit.frontend.network.none="true"
 COPY --from=build /dockerfile-frontend /bin/dockerfile-frontend
 ENTRYPOINT ["/bin/dockerfile-frontend"]
 
