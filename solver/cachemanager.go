@@ -144,6 +144,79 @@ func (c *cacheManager) Load(ctx context.Context, rec *CacheRecord) (Result, erro
 	return c.results.Load(ctx, res)
 }
 
+type LoadedResult struct {
+	Result      Result
+	CacheResult CacheResult
+	CacheKey    *CacheKey
+}
+
+func (c *cacheManager) filterResults(m map[string]Result, ck *CacheKey) (results []LoadedResult, err error) {
+	id := c.getID(ck)
+	if err := c.backend.WalkResults(id, func(cr CacheResult) error {
+		res, ok := m[id]
+		if ok {
+			results = append(results, LoadedResult{
+				Result:      res,
+				CacheKey:    ck,
+				CacheResult: cr,
+			})
+			delete(m, id)
+		}
+		return nil
+	}); err != nil {
+		for _, r := range results {
+			r.Result.Release(context.TODO())
+		}
+	}
+	for _, keys := range ck.Deps() {
+		for _, key := range keys {
+			res, err := c.filterResults(m, key.CacheKey.CacheKey)
+			if err != nil {
+				for _, r := range results {
+					r.Result.Release(context.TODO())
+				}
+				return nil, err
+			}
+			results = append(results, res...)
+		}
+	}
+	return
+}
+
+func (c *cacheManager) LoadWithParents(ctx context.Context, rec *CacheRecord) ([]LoadedResult, error) {
+	lwp, ok := c.results.(interface {
+		LoadWithParents(context.Context, CacheResult) (map[string]Result, error)
+	})
+	if !ok {
+		res, err := c.Load(ctx, rec)
+		if err != nil {
+			return nil, err
+		}
+		return []LoadedResult{{Result: res, CacheKey: rec.key, CacheResult: CacheResult{ID: c.getID(rec.key), CreatedAt: rec.CreatedAt}}}, nil
+	}
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	cr, err := c.backend.Load(c.getID(rec.key), rec.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	m, err := lwp.LoadWithParents(ctx, cr)
+	if err != nil {
+		return nil, err
+	}
+
+	results, err := c.filterResults(m, rec.key)
+	if err != nil {
+		for _, r := range m {
+			r.Release(context.TODO())
+		}
+	}
+
+	return results, nil
+}
+
 func (c *cacheManager) Save(k *CacheKey, r Result, createdAt time.Time) (*ExportableCacheKey, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
