@@ -8,28 +8,29 @@ import (
 	"sync"
 
 	"github.com/containerd/containerd/platforms"
-	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/frontend"
 	gw "github.com/moby/buildkit/frontend/gateway/client"
+	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/tracing"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 type llbBridge struct {
-	builder              solver.Builder
-	frontends            map[string]frontend.Frontend
-	resolveWorker        func() (worker.Worker, error)
-	resolveCacheImporter remotecache.ResolveCacheImporterFunc
-	cms                  map[string]solver.CacheManager
-	cmsMu                sync.Mutex
-	platforms            []specs.Platform
+	builder                   solver.Builder
+	frontends                 map[string]frontend.Frontend
+	resolveWorker             func() (worker.Worker, error)
+	resolveCacheImporterFuncs map[string]remotecache.ResolveCacheImporterFunc
+	cms                       map[string]solver.CacheManager
+	cmsMu                     sync.Mutex
+	platforms                 []specs.Platform
 }
 
 func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (res *frontend.Result, err error) {
@@ -38,36 +39,39 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (res *
 		return nil, err
 	}
 	var cms []solver.CacheManager
-	for _, ref := range req.ImportCacheRefs {
+	for _, im := range req.CacheImports {
 		b.cmsMu.Lock()
 		var cm solver.CacheManager
-		if prevCm, ok := b.cms[ref]; !ok {
-			r, err := reference.ParseNormalizedNamed(ref)
-			if err != nil {
-				return nil, err
+		cmId := identity.NewID()
+		if im.Type == "registry" {
+			// For compatibility with < v0.4.0
+			if ref := im.Attrs["ref"]; ref != "" {
+				cmId = ref
 			}
-			ref = reference.TagNameOnly(r).String()
-			func(ref string) {
-				cm = newLazyCacheManager(ref, func() (solver.CacheManager, error) {
+		}
+		if prevCm, ok := b.cms[cmId]; !ok {
+			func(cmId string) {
+				cm = newLazyCacheManager(cmId, func() (solver.CacheManager, error) {
 					var cmNew solver.CacheManager
-					if err := inVertexContext(b.builder.Context(ctx), "importing cache manifest from "+ref, "", func(ctx context.Context) error {
-						if b.resolveCacheImporter == nil {
-							return errors.New("no cache importer is available")
+					if err := inVertexContext(b.builder.Context(ctx), "importing cache manifest from "+cmId, "", func(ctx context.Context) error {
+						resolveCI, ok := b.resolveCacheImporterFuncs[im.Type]
+						if !ok {
+							return errors.Errorf("unknown cache importer: %s", im.Type)
 						}
-						typ := "" // TODO: support non-registry type
-						ci, desc, err := b.resolveCacheImporter(ctx, typ, ref)
+						ci, desc, err := resolveCI(ctx, im.Attrs)
 						if err != nil {
 							return err
 						}
-						cmNew, err = ci.Resolve(ctx, desc, ref, w)
+						cmNew, err = ci.Resolve(ctx, desc, cmId, w)
 						return err
 					}); err != nil {
+						logrus.Debugf("error while importing cache manifest from cmId=%s: %v", cmId, err)
 						return nil, err
 					}
 					return cmNew, nil
 				})
-			}(ref)
-			b.cms[ref] = cm
+			}(cmId)
+			b.cms[cmId] = cm
 		} else {
 			cm = prevCm
 		}

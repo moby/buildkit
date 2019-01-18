@@ -2,20 +2,26 @@ package client
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/containerd/containerd/content"
+	contentlocal "github.com/containerd/containerd/content/local"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/client/ociindex"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
+	sessioncontent "github.com/moby/buildkit/session/content"
 	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/session/grpchijack"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/entitlements"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -32,11 +38,15 @@ type SolveOpt struct {
 	SharedKey           string
 	Frontend            string
 	FrontendAttrs       map[string]string
-	ExportCache         string
-	ExportCacheAttrs    map[string]string
-	ImportCache         []string
+	CacheExports        []CacheOptionsEntry
+	CacheImports        []CacheOptionsEntry
 	Session             []session.Attachable
 	AllowedEntitlements []entitlements.Entitlement
+}
+
+type CacheOptionsEntry struct {
+	Type  string
+	Attrs map[string]string
 }
 
 // Solve calls Solve on the controller.
@@ -119,6 +129,17 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		}
 	}
 
+	cacheOpt, err := parseCacheOptions(opt)
+	if err != nil {
+		return nil, err
+	}
+	if len(cacheOpt.contentStores) > 0 {
+		s.Allow(sessioncontent.NewAttachable(cacheOpt.contentStores))
+	}
+	for k, v := range cacheOpt.frontendAttrs {
+		opt.FrontendAttrs[k] = v
+	}
+
 	eg.Go(func() error {
 		return s.Run(statusContext, grpchijack.Dialer(c.controlClient()))
 	})
@@ -149,12 +170,8 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			Session:       s.ID(),
 			Frontend:      opt.Frontend,
 			FrontendAttrs: opt.FrontendAttrs,
-			Cache: controlapi.CacheOptions{
-				ExportRef:   opt.ExportCache,
-				ImportRefs:  opt.ImportCache,
-				ExportAttrs: opt.ExportCacheAttrs,
-			},
-			Entitlements: opt.AllowedEntitlements,
+			Cache:         cacheOpt.options,
+			Entitlements:  opt.AllowedEntitlements,
 		})
 		if err != nil {
 			return errors.Wrap(err, "failed to solve")
@@ -243,6 +260,19 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 	if err := eg.Wait(); err != nil {
 		return nil, err
 	}
+	// Update index.json of exported cache content store
+	// FIXME(AkihiroSuda): dedupe const definition of cache/remotecache.ExporterResponseManifestDesc = "cache.manifest"
+	if manifestDescJSON := res.ExporterResponse["cache.manifest"]; manifestDescJSON != "" {
+		var manifestDesc ocispec.Descriptor
+		if err = json.Unmarshal([]byte(manifestDescJSON), &manifestDesc); err != nil {
+			return nil, err
+		}
+		for indexJSONPath, tag := range cacheOpt.indicesToUpdate {
+			if err = ociindex.PutDescToIndexJSONFileLocked(indexJSONPath, manifestDesc, tag); err != nil {
+				return nil, err
+			}
+		}
+	}
 	return res, nil
 }
 
@@ -294,4 +324,129 @@ func defaultSessionName() string {
 		return "unknown"
 	}
 	return filepath.Base(wd)
+}
+
+type cacheOptions struct {
+	options         controlapi.CacheOptions
+	contentStores   map[string]content.Store // key: ID of content store ("local:" + csDir)
+	indicesToUpdate map[string]string        // key: index.JSON file name, value: tag
+	frontendAttrs   map[string]string
+}
+
+func parseCacheOptions(opt SolveOpt) (*cacheOptions, error) {
+	var (
+		cacheExports []*controlapi.CacheOptionsEntry
+		cacheImports []*controlapi.CacheOptionsEntry
+		// legacy API is used for registry caches, because the daemon might not support the new API
+		legacyExportRef   string
+		legacyExportAttrs map[string]string
+		legacyImportRefs  []string
+	)
+	contentStores := make(map[string]content.Store)
+	indicesToUpdate := make(map[string]string) // key: index.JSON file name, value: tag
+	frontendAttrs := make(map[string]string)
+	for _, ex := range opt.CacheExports {
+		if ex.Type == "local" {
+			csDir := ex.Attrs["store"]
+			if csDir == "" {
+				return nil, errors.New("local cache exporter requires store")
+			}
+			if err := os.MkdirAll(csDir, 0755); err != nil {
+				return nil, err
+			}
+			cs, err := contentlocal.NewStore(csDir)
+			if err != nil {
+				return nil, err
+			}
+			contentStores["local:"+csDir] = cs
+			// TODO(AkihiroSuda): support custom index JSON path and tag
+			indexJSONPath := filepath.Join(csDir, "index.json")
+			indicesToUpdate[indexJSONPath] = "latest"
+		}
+		if ex.Type == "registry" && legacyExportRef == "" {
+			legacyExportRef = ex.Attrs["ref"]
+			for k, v := range ex.Attrs {
+				if k != "ref" {
+					legacyExportAttrs[k] = v
+				}
+			}
+		} else {
+			cacheExports = append(cacheExports, &controlapi.CacheOptionsEntry{
+				Type:  ex.Type,
+				Attrs: ex.Attrs,
+			})
+		}
+	}
+	for _, im := range opt.CacheImports {
+		attrs := im.Attrs
+		if im.Type == "local" {
+			csDir := im.Attrs["store"]
+			if csDir == "" {
+				return nil, errors.New("local cache importer requires store")
+			}
+			if err := os.MkdirAll(csDir, 0755); err != nil {
+				return nil, err
+			}
+			cs, err := contentlocal.NewStore(csDir)
+			if err != nil {
+				return nil, err
+			}
+			contentStores["local:"+csDir] = cs
+
+			// if digest is not specified, load from "latest" tag
+			if attrs["digest"] == "" {
+				idx, err := ociindex.ReadIndexJSONFileLocked(filepath.Join(csDir, "index.json"))
+				if err != nil {
+					return nil, err
+				}
+				for _, m := range idx.Manifests {
+					if m.Annotations[ocispec.AnnotationRefName] == "latest" {
+						attrs["digest"] = string(m.Digest)
+						break
+					}
+				}
+				if attrs["digest"] == "" {
+					return nil, errors.New("local cache importer requires either explicit digest or \"latest\" tag on index.json")
+				}
+			}
+		}
+		if im.Type == "registry" {
+			legacyImportRef := attrs["ref"]
+			legacyImportRefs = append(legacyImportRefs, legacyImportRef)
+		} else {
+			cacheImports = append(cacheImports, &controlapi.CacheOptionsEntry{
+				Type:  im.Type,
+				Attrs: attrs,
+			})
+		}
+	}
+	if opt.Frontend != "" {
+		// use legacy API for registry importers, because the frontend might not support the new API
+		if len(legacyImportRefs) > 0 {
+			frontendAttrs["cache-from"] = strings.Join(legacyImportRefs, ",")
+		}
+		// use new API for other importers
+		if len(cacheImports) > 0 {
+			s, err := json.Marshal(cacheImports)
+			if err != nil {
+				return nil, err
+			}
+			frontendAttrs["cache-imports"] = string(s)
+		}
+	}
+	res := cacheOptions{
+		options: controlapi.CacheOptions{
+			// old API (for registry caches, planned to be removed in early 2019)
+			ExportRefDeprecated:   legacyExportRef,
+			ExportAttrsDeprecated: legacyExportAttrs,
+			ImportRefsDeprecated:  legacyImportRefs,
+			// new API
+			Exports: cacheExports,
+			Imports: cacheImports,
+		},
+		contentStores:   contentStores,
+		indicesToUpdate: indicesToUpdate,
+		frontendAttrs:   frontendAttrs,
+	}
+	return &res, nil
 }

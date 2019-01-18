@@ -14,8 +14,7 @@ import (
 )
 
 // ResolveCacheImporterFunc returns importer and descriptor.
-// Currently typ needs to be an empty string.
-type ResolveCacheImporterFunc func(ctx context.Context, typ, ref string) (Importer, ocispec.Descriptor, error)
+type ResolveCacheImporterFunc func(ctx context.Context, attrs map[string]string) (Importer, ocispec.Descriptor, error)
 
 type Importer interface {
 	Resolve(ctx context.Context, desc ocispec.Descriptor, id string, w worker.Worker) (solver.CacheManager, error)
@@ -56,7 +55,7 @@ func (ci *contentCacheImporter) Resolve(ctx context.Context, desc ocispec.Descri
 	}
 
 	if configDesc.Digest == "" {
-		return nil, errors.Errorf("invalid build cache from %+v", desc)
+		return nil, errors.Errorf("invalid build cache from %+v, lacks manifest with MediaType=%s", desc, v1.CacheConfigMediaTypeV0)
 	}
 
 	dt, err = readBlob(ctx, ci.provider, configDesc)

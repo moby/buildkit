@@ -35,22 +35,22 @@ type ExporterRequest struct {
 type ResolveWorkerFunc func() (worker.Worker, error)
 
 type Solver struct {
-	workerController     *worker.Controller
-	solver               *solver.Solver
-	resolveWorker        ResolveWorkerFunc
-	frontends            map[string]frontend.Frontend
-	resolveCacheImporter remotecache.ResolveCacheImporterFunc
-	platforms            []specs.Platform
-	gatewayForwarder     *controlgateway.GatewayForwarder
+	workerController          *worker.Controller
+	solver                    *solver.Solver
+	resolveWorker             ResolveWorkerFunc
+	frontends                 map[string]frontend.Frontend
+	resolveCacheImporterFuncs map[string]remotecache.ResolveCacheImporterFunc
+	platforms                 []specs.Platform
+	gatewayForwarder          *controlgateway.GatewayForwarder
 }
 
-func New(wc *worker.Controller, f map[string]frontend.Frontend, cache solver.CacheManager, resolveCI remotecache.ResolveCacheImporterFunc, gatewayForwarder *controlgateway.GatewayForwarder) (*Solver, error) {
+func New(wc *worker.Controller, f map[string]frontend.Frontend, cache solver.CacheManager, resolveCI map[string]remotecache.ResolveCacheImporterFunc, gatewayForwarder *controlgateway.GatewayForwarder) (*Solver, error) {
 	s := &Solver{
-		workerController:     wc,
-		resolveWorker:        defaultResolver(wc),
-		frontends:            f,
-		resolveCacheImporter: resolveCI,
-		gatewayForwarder:     gatewayForwarder,
+		workerController:          wc,
+		resolveWorker:             defaultResolver(wc),
+		frontends:                 f,
+		resolveCacheImporterFuncs: resolveCI,
+		gatewayForwarder:          gatewayForwarder,
 	}
 
 	// executing is currently only allowed on default worker
@@ -79,12 +79,12 @@ func (s *Solver) resolver() solver.ResolveOpFunc {
 
 func (s *Solver) Bridge(b solver.Builder) frontend.FrontendLLBBridge {
 	return &llbBridge{
-		builder:              b,
-		frontends:            s.frontends,
-		resolveWorker:        s.resolveWorker,
-		resolveCacheImporter: s.resolveCacheImporter,
-		cms:                  map[string]solver.CacheManager{},
-		platforms:            s.platforms,
+		builder:                   b,
+		frontends:                 s.frontends,
+		resolveWorker:             s.resolveWorker,
+		resolveCacheImporterFuncs: s.resolveCacheImporterFuncs,
+		cms:                       map[string]solver.CacheManager{},
+		platforms:                 s.platforms,
 	}
 }
 
@@ -176,6 +176,7 @@ func (s *Solver) Solve(ctx context.Context, id string, req frontend.SolveRequest
 		}
 	}
 
+	var cacheExporterResponse map[string]string
 	if e := exp.CacheExporter; e != nil {
 		if err := inVertexContext(j.Context(ctx), "exporting cache", "", func(ctx context.Context) error {
 			prepareDone := oneOffProgress(ctx, "preparing build cache for export")
@@ -190,7 +191,8 @@ func (s *Solver) Solve(ctx context.Context, id string, req frontend.SolveRequest
 				return prepareDone(err)
 			}
 			prepareDone(nil)
-			return e.Finalize(ctx)
+			cacheExporterResponse, err = e.Finalize(ctx)
+			return err
 		}); err != nil {
 			return nil, err
 		}
@@ -203,6 +205,11 @@ func (s *Solver) Solve(ctx context.Context, id string, req frontend.SolveRequest
 	for k, v := range res.Metadata {
 		if strings.HasPrefix(k, "frontend.") {
 			exporterResponse[k] = string(v)
+		}
+	}
+	for k, v := range cacheExporterResponse {
+		if strings.HasPrefix(k, "cache.") {
+			exporterResponse[k] = v
 		}
 	}
 

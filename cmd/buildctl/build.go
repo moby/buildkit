@@ -63,17 +63,18 @@ var buildCommand = cli.Command{
 			Name:  "no-cache",
 			Usage: "Disable cache for all the vertices",
 		},
-		cli.StringFlag{
+		cli.StringSliceFlag{
 			Name:  "export-cache",
-			Usage: "Reference to export build cache to",
+			Usage: "Export build cache, e.g. type=registry,ref=example.com/foo/bar, or type=local,store=path/to/dir",
 		},
 		cli.StringSliceFlag{
-			Name:  "export-cache-opt",
-			Usage: "Define custom options for cache exporting",
+			Name:   "export-cache-opt",
+			Usage:  "Define custom options for cache exporting (DEPRECATED: use --export-cache type=<type>,<opt>=<optval>[,<opt>=<optval>]",
+			Hidden: true,
 		},
 		cli.StringSliceFlag{
 			Name:  "import-cache",
-			Usage: "Reference to import build cache from",
+			Usage: "Import build cache",
 		},
 		cli.StringSliceFlag{
 			Name:  "secret",
@@ -166,6 +167,15 @@ func build(clicontext *cli.Context) error {
 		return err
 	}
 
+	cacheExports, err := parseExportCache(clicontext.StringSlice("export-cache"), clicontext.StringSlice("export-cache-opt"))
+	if err != nil {
+		return nil
+	}
+	cacheImports, err := parseImportCache(clicontext.StringSlice("import-cache"))
+	if err != nil {
+		return nil
+	}
+
 	ch := make(chan *client.SolveStatus)
 	eg, ctx := errgroup.WithContext(commandContext(clicontext))
 
@@ -175,8 +185,8 @@ func build(clicontext *cli.Context) error {
 		// LocalDirs is set later
 		Frontend: clicontext.String("frontend"),
 		// FrontendAttrs is set later
-		ExportCache:         clicontext.String("export-cache"),
-		ImportCache:         clicontext.StringSlice("import-cache"),
+		CacheExports:        cacheExports,
+		CacheImports:        cacheImports,
 		Session:             attachable,
 		AllowedEntitlements: allowed,
 	}
@@ -197,15 +207,6 @@ func build(clicontext *cli.Context) error {
 		return errors.Wrap(err, "invalid frontend-opt")
 	}
 
-	exportCacheAttrs, err := attrMap(clicontext.StringSlice("export-cache-opt"))
-	if err != nil {
-		return errors.Wrap(err, "invalid export-cache-opt")
-	}
-	if len(exportCacheAttrs) == 0 {
-		exportCacheAttrs = map[string]string{"mode": "min"}
-	}
-	solveOpt.ExportCacheAttrs = exportCacheAttrs
-
 	solveOpt.LocalDirs, err = attrMap(clicontext.StringSlice("local"))
 	if err != nil {
 		return errors.Wrap(err, "invalid local")
@@ -223,17 +224,13 @@ func build(clicontext *cli.Context) error {
 		}
 	}
 
-	if clicontext.String("frontend") != "" && len(clicontext.StringSlice("import-cache")) != 0 {
-		solveOpt.FrontendAttrs["cache-from"] = strings.Join(clicontext.StringSlice("import-cache"), ",")
-	}
-
 	eg.Go(func() error {
 		resp, err := c.Solve(ctx, def, solveOpt, ch)
 		if err != nil {
 			return err
 		}
 		for k, v := range resp.ExporterResponse {
-			logrus.Debugf("solve response: %s=%s", k, v)
+			logrus.Debugf("exporter response: %s=%s", k, v)
 		}
 		return err
 	})
@@ -274,6 +271,122 @@ func build(clicontext *cli.Context) error {
 	})
 
 	return eg.Wait()
+}
+
+func parseExportCacheCSV(s string) (client.CacheOptionsEntry, error) {
+	ex := client.CacheOptionsEntry{
+		Type:  "",
+		Attrs: map[string]string{},
+	}
+	csvReader := csv.NewReader(strings.NewReader(s))
+	fields, err := csvReader.Read()
+	if err != nil {
+		return ex, err
+	}
+	for _, field := range fields {
+		parts := strings.SplitN(field, "=", 2)
+		key := strings.ToLower(parts[0])
+		value := parts[1]
+		switch key {
+		case "type":
+			ex.Type = value
+		default:
+			ex.Attrs[key] = value
+		}
+	}
+	if ex.Type == "" {
+		return ex, errors.New("--export-cache requires type=<type>")
+	}
+	if _, ok := ex.Attrs["mode"]; !ok {
+		ex.Attrs["mode"] = "min"
+	}
+	return ex, nil
+}
+
+func parseExportCache(exportCaches, legacyExportCacheOpts []string) ([]client.CacheOptionsEntry, error) {
+	var exports []client.CacheOptionsEntry
+	if len(legacyExportCacheOpts) > 0 {
+		if len(exportCaches) != 1 {
+			return nil, errors.New("--export-cache-opt requires exactly single --export-cache")
+		}
+	}
+	for _, exportCache := range exportCaches {
+		legacy := !strings.Contains(exportCache, "type=")
+		if legacy {
+			logrus.Warnf("--export-cache <ref> --export-cache-opt <opt>=<optval> is deprecated. Please use --export-cache type=registry,ref=<ref>,<opt>=<optval>[,<opt>=<optval>] instead.")
+			attrs, err := attrMap(legacyExportCacheOpts)
+			if err != nil {
+				return nil, err
+			}
+			if _, ok := attrs["mode"]; !ok {
+				attrs["mode"] = "min"
+			}
+			attrs["ref"] = exportCache
+			exports = append(exports, client.CacheOptionsEntry{
+				Type:  "registry",
+				Attrs: attrs,
+			})
+		} else {
+			if len(legacyExportCacheOpts) > 0 {
+				return nil, errors.New("--export-cache-opt is not supported for the specified --export-cache. Please use --export-cache type=<type>,<opt>=<optval>[,<opt>=<optval>] instead.")
+			}
+			ex, err := parseExportCacheCSV(exportCache)
+			if err != nil {
+				return nil, err
+			}
+			exports = append(exports, ex)
+		}
+	}
+	return exports, nil
+
+}
+
+func parseImportCacheCSV(s string) (client.CacheOptionsEntry, error) {
+	im := client.CacheOptionsEntry{
+		Type:  "",
+		Attrs: map[string]string{},
+	}
+	csvReader := csv.NewReader(strings.NewReader(s))
+	fields, err := csvReader.Read()
+	if err != nil {
+		return im, err
+	}
+	for _, field := range fields {
+		parts := strings.SplitN(field, "=", 2)
+		key := strings.ToLower(parts[0])
+		value := parts[1]
+		switch key {
+		case "type":
+			im.Type = value
+		default:
+			im.Attrs[key] = value
+		}
+	}
+	if im.Type == "" {
+		return im, errors.New("--import-cache requires type=<type>")
+	}
+	return im, nil
+}
+
+func parseImportCache(importCaches []string) ([]client.CacheOptionsEntry, error) {
+	var imports []client.CacheOptionsEntry
+	for _, importCache := range importCaches {
+		legacy := !strings.Contains(importCache, "type=")
+		if legacy {
+			logrus.Warnf("--import-cache <ref> is deprecated. Please use --import-cache type=registry,ref=<ref>,<opt>=<optval>[,<opt>=<optval>] instead.")
+			imports = append(imports, client.CacheOptionsEntry{
+				Type:  "registry",
+				Attrs: map[string]string{"ref": importCache},
+			})
+		} else {
+			im, err := parseImportCacheCSV(importCache)
+			if err != nil {
+				return nil, err
+			}
+			imports = append(imports, im)
+		}
+	}
+	return imports, nil
 }
 
 func attrMap(sl []string) (map[string]string, error) {
