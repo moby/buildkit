@@ -152,7 +152,7 @@ func (ci *contentCacheImporter) importInlineCache(ctx context.Context, dt []byte
 					return err
 				}
 
-				createdDates, err := parseCreatedLayerDates(img)
+				createdDates, createdMsg, err := parseCreatedLayerInfo(img)
 				if err != nil {
 					return err
 				}
@@ -165,6 +165,9 @@ func (ci *contentCacheImporter) importInlineCache(ctx context.Context, dt []byte
 					if createdAt := createdDates[i]; createdAt != "" {
 						m.Annotations["buildkit/createdat"] = createdAt
 					}
+					if createdBy := createdMsg[i]; createdBy != "" {
+						m.Annotations["buildkit/description"] = createdBy
+					}
 					m.Annotations["containerd.io/uncompressed"] = img.Rootfs.DiffIDs[i].String()
 					layers[m.Digest] = v1.DescriptorProviderPair{
 						Descriptor: m,
@@ -176,7 +179,7 @@ func (ci *contentCacheImporter) importInlineCache(ctx context.Context, dt []byte
 					})
 				}
 
-				dt, err := json.Marshal(config)
+				dt, err = json.Marshal(config)
 				if err != nil {
 					return err
 				}
@@ -241,24 +244,27 @@ type image struct {
 	Cache   []byte `json:"moby.buildkit.cache.v0"`
 	History []struct {
 		Created    *time.Time `json:"created,omitempty"`
+		CreatedBy  string     `json:"created_by,omitempty"`
 		EmptyLayer bool       `json:"empty_layer,omitempty"`
 	} `json:"history,omitempty"`
 }
 
-func parseCreatedLayerDates(img image) ([]string, error) {
+func parseCreatedLayerInfo(img image) ([]string, []string, error) {
 	dates := make([]string, 0, len(img.Rootfs.DiffIDs))
+	createdBy := make([]string, 0, len(img.Rootfs.DiffIDs))
 	for _, h := range img.History {
 		if !h.EmptyLayer {
 			str := ""
 			if h.Created != nil {
 				dt, err := h.Created.MarshalText()
 				if err != nil {
-					return nil, err
+					return nil, nil, err
 				}
 				str = string(dt)
 			}
 			dates = append(dates, str)
+			createdBy = append(createdBy, h.CreatedBy)
 		}
 	}
-	return dates, nil
+	return dates, createdBy, nil
 }
