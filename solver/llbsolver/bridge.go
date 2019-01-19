@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/containerd/containerd/platforms"
 	"github.com/moby/buildkit/cache"
@@ -190,11 +191,11 @@ func (lcm *lazyCacheManager) Load(ctx context.Context, rec *solver.CacheRecord) 
 	}
 	return lcm.main.Load(ctx, rec)
 }
-func (lcm *lazyCacheManager) Save(key *solver.CacheKey, s solver.Result) (*solver.ExportableCacheKey, error) {
+func (lcm *lazyCacheManager) Save(key *solver.CacheKey, s solver.Result, createdAt time.Time) (*solver.ExportableCacheKey, error) {
 	if err := lcm.wait(); err != nil {
 		return nil, err
 	}
-	return lcm.main.Save(key, s)
+	return lcm.main.Save(key, s, createdAt)
 }
 
 func (lcm *lazyCacheManager) wait() error {

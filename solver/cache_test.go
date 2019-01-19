@@ -3,6 +3,7 @@ package solver
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/moby/buildkit/identity"
 	digest "github.com/opencontainers/go-digest"
@@ -41,7 +42,7 @@ func TestInMemoryCache(t *testing.T) {
 
 	m := NewInMemoryCacheManager()
 
-	cacheFoo, err := m.Save(NewCacheKey(dgst("foo"), 0), testResult("result0"))
+	cacheFoo, err := m.Save(NewCacheKey(dgst("foo"), 0), testResult("result0"), time.Now())
 	require.NoError(t, err)
 
 	keys, err := m.Query(nil, 0, dgst("foo"), 0)
@@ -57,7 +58,7 @@ func TestInMemoryCache(t *testing.T) {
 	require.Equal(t, "result0", unwrap(res))
 
 	// another record
-	cacheBar, err := m.Save(NewCacheKey(dgst("bar"), 0), testResult("result1"))
+	cacheBar, err := m.Save(NewCacheKey(dgst("bar"), 0), testResult("result1"), time.Now())
 	require.NoError(t, err)
 
 	keys, err = m.Query(nil, 0, dgst("bar"), 0)
@@ -79,7 +80,7 @@ func TestInMemoryCache(t *testing.T) {
 
 	// second level
 	k := testCacheKey(dgst("baz"), Index(1), *cacheFoo, *cacheBar)
-	cacheBaz, err := m.Save(k, testResult("result2"))
+	cacheBaz, err := m.Save(k, testResult("result2"), time.Now())
 	require.NoError(t, err)
 
 	keys, err = m.Query(nil, 0, dgst("baz"), 0)
@@ -113,7 +114,7 @@ func TestInMemoryCache(t *testing.T) {
 	require.Equal(t, keys[0].ID, keys2[0].ID)
 
 	k = testCacheKey(dgst("baz"), Index(1), *cacheFoo)
-	_, err = m.Save(k, testResult("result3"))
+	_, err = m.Save(k, testResult("result3"), time.Now())
 	require.NoError(t, err)
 
 	keys, err = m.Query(depKeys(*cacheFoo), 0, dgst("baz"), Index(1))
@@ -128,7 +129,7 @@ func TestInMemoryCache(t *testing.T) {
 		{{CacheKey: *cacheFoo}, {CacheKey: *cacheBaz}},
 		{{CacheKey: *cacheBar}},
 	})
-	_, err = m.Save(k, testResult("result4"))
+	_, err = m.Save(k, testResult("result4"), time.Now())
 	require.NoError(t, err)
 
 	// foo, bar, baz should all point to result4
@@ -154,12 +155,12 @@ func TestInMemoryCacheSelector(t *testing.T) {
 
 	m := NewInMemoryCacheManager()
 
-	cacheFoo, err := m.Save(NewCacheKey(dgst("foo"), 0), testResult("result0"))
+	cacheFoo, err := m.Save(NewCacheKey(dgst("foo"), 0), testResult("result0"), time.Now())
 	require.NoError(t, err)
 
 	_, err = m.Save(testCacheKeyWithDeps(dgst("bar"), 0, [][]CacheKeyWithSelector{
 		{{CacheKey: *cacheFoo, Selector: dgst("sel0")}},
-	}), testResult("result1"))
+	}), testResult("result1"), time.Now())
 	require.NoError(t, err)
 
 	keys, err := m.Query(depKeys(*cacheFoo), 0, dgst("bar"), 0)
@@ -188,12 +189,12 @@ func TestInMemoryCacheSelectorNested(t *testing.T) {
 
 	m := NewInMemoryCacheManager()
 
-	cacheFoo, err := m.Save(NewCacheKey(dgst("foo"), 0), testResult("result0"))
+	cacheFoo, err := m.Save(NewCacheKey(dgst("foo"), 0), testResult("result0"), time.Now())
 	require.NoError(t, err)
 
 	_, err = m.Save(testCacheKeyWithDeps(dgst("bar"), 0, [][]CacheKeyWithSelector{
 		{{CacheKey: *cacheFoo, Selector: dgst("sel0")}, {CacheKey: expKey(NewCacheKey(dgst("second"), 0))}},
-	}), testResult("result1"))
+	}), testResult("result1"), time.Now())
 	require.NoError(t, err)
 
 	keys, err := m.Query(
@@ -241,11 +242,11 @@ func TestInMemoryCacheReleaseParent(t *testing.T) {
 	m := NewCacheManager(identity.NewID(), storage, results)
 
 	res0 := testResult("result0")
-	cacheFoo, err := m.Save(NewCacheKey(dgst("foo"), 0), res0)
+	cacheFoo, err := m.Save(NewCacheKey(dgst("foo"), 0), res0, time.Now())
 	require.NoError(t, err)
 
 	res1 := testResult("result1")
-	_, err = m.Save(testCacheKey(dgst("bar"), 0, *cacheFoo), res1)
+	_, err = m.Save(testCacheKey(dgst("bar"), 0, *cacheFoo), res1, time.Now())
 	require.NoError(t, err)
 
 	keys, err := m.Query(nil, 0, dgst("foo"), 0)
@@ -293,15 +294,15 @@ func TestInMemoryCacheRestoreOfflineDeletion(t *testing.T) {
 	m := NewCacheManager(identity.NewID(), storage, results)
 
 	res0 := testResult("result0")
-	cacheFoo, err := m.Save(NewCacheKey(dgst("foo"), 0), res0)
+	cacheFoo, err := m.Save(NewCacheKey(dgst("foo"), 0), res0, time.Now())
 	require.NoError(t, err)
 
 	res1 := testResult("result1")
-	_, err = m.Save(testCacheKey(dgst("bar"), 0, *cacheFoo), res1)
+	_, err = m.Save(testCacheKey(dgst("bar"), 0, *cacheFoo), res1, time.Now())
 	require.NoError(t, err)
 
 	results2 := NewInMemoryResultStorage()
-	_, err = results2.Save(res1) // only add bar
+	_, err = results2.Save(res1, time.Now()) // only add bar
 	require.NoError(t, err)
 
 	m = NewCacheManager(identity.NewID(), storage, results2)
@@ -328,15 +329,15 @@ func TestCarryOverFromSublink(t *testing.T) {
 	results := NewInMemoryResultStorage()
 	m := NewCacheManager(identity.NewID(), storage, results)
 
-	cacheFoo, err := m.Save(NewCacheKey(dgst("foo"), 0), testResult("resultFoo"))
+	cacheFoo, err := m.Save(NewCacheKey(dgst("foo"), 0), testResult("resultFoo"), time.Now())
 	require.NoError(t, err)
 
 	_, err = m.Save(testCacheKeyWithDeps(dgst("res"), 0, [][]CacheKeyWithSelector{
 		{{CacheKey: *cacheFoo, Selector: dgst("sel0")}, {CacheKey: expKey(NewCacheKey(dgst("content0"), 0))}},
-	}), testResult("result0"))
+	}), testResult("result0"), time.Now())
 	require.NoError(t, err)
 
-	cacheBar, err := m.Save(NewCacheKey(dgst("bar"), 0), testResult("resultBar"))
+	cacheBar, err := m.Save(NewCacheKey(dgst("bar"), 0), testResult("resultBar"), time.Now())
 	require.NoError(t, err)
 
 	keys, err := m.Query([]CacheKeyWithSelector{
