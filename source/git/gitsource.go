@@ -248,6 +248,9 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context) (out cache.ImmutableRe
 	}
 
 	if doFetch {
+		// make sure no old lock files have leaked
+		os.RemoveAll(filepath.Join(gitDir, "shallow.lock"))
+
 		args := []string{"fetch"}
 		if !isCommitSHA(ref) { // TODO: find a branch from ls-remote?
 			args = append(args, "--depth=1", "--no-tags")
