@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 #
 # Take from https://github.com/moby/moby/blob/master/hack/validate/dco
-set -eu
 set -e -o pipefail
 
 if [ -z "$VALIDATE_UPSTREAM"  ]; then
