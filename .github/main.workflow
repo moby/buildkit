@@ -1,5 +1,5 @@
 workflow "DCO" {
-  on = "push"
+  on = "pull_request"
   resolves = ["dco-check"]
 }
 
