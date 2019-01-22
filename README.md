@@ -94,7 +94,7 @@ You can use `buildctl debug dump-llb` to see what data is in this definition. Ad
 go run examples/buildkit0/buildkit.go | buildctl debug dump-llb | jq .
 ```
 
-To start building use `buildctl build` command. The example script accepts `--with-containerd` flag to choose if containerd binaries and support should be included in the end result as well. 
+To start building use `buildctl build` command. The example script accepts `--with-containerd` flag to choose if containerd binaries and support should be included in the end result as well.
 
 ```bash
 go run examples/buildkit0/buildkit.go | buildctl build
@@ -107,7 +107,7 @@ Different versions of the example scripts show different ways of describing the 
 - `./examples/buildkit0` - uses only exec operations, defines a full stage per component.
 - `./examples/buildkit1` - cloning git repositories has been separated for extra concurrency.
 - `./examples/buildkit2` - uses git sources directly instead of running `git clone`, allowing better performance and much safer caching.
-- `./examples/buildkit3` - allows using local source files for separate components eg. `./buildkit3 --runc=local | buildctl build --local runc-src=some/local/path`  
+- `./examples/buildkit3` - allows using local source files for separate components eg. `./buildkit3 --runc=local | buildctl build --local runc-src=some/local/path`
 - `./examples/dockerfile2llb` - can be used to convert a Dockerfile to LLB for debugging purposes
 - `./examples/gobuild` - shows how to use nested invocation to generate LLB for Go package internal dependencies
 
@@ -258,3 +258,5 @@ Please refer to [`docs/rootless.md`](docs/rootless.md).
 
 Want to contribute to BuildKit? Awesome! You can find information about
 contributing to this project in the [CONTRIBUTING.md](/.github/CONTRIBUTING.md)
+
+
