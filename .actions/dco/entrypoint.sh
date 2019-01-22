@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+#
+# Take from https://github.com/moby/moby/blob/master/hack/validate/dco
 
 export SCRIPTDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 source "${SCRIPTDIR}/.validate"
