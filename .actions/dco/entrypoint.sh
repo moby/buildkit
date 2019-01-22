@@ -1,9 +1,37 @@
 #!/usr/bin/env bash
 #
 # Take from https://github.com/moby/moby/blob/master/hack/validate/dco
+set -eu
+set -e -o pipefail
 
-export SCRIPTDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-source "${SCRIPTDIR}/.validate"
+if [ -z "$VALIDATE_UPSTREAM"  ]; then
+	# this is kind of an expensive check, so let's not do this twice if we
+	# are running more than one validate bundlescript
+
+	VALIDATE_REPO='https://github.com/moby/buildkit.git'
+	VALIDATE_BRANCH='master'
+
+	VALIDATE_HEAD="$(git rev-parse --verify HEAD)"
+
+	git fetch -q "$VALIDATE_REPO" "refs/heads/$VALIDATE_BRANCH"
+	VALIDATE_UPSTREAM="$(git rev-parse --verify FETCH_HEAD)"
+
+	VALIDATE_COMMIT_LOG="$VALIDATE_UPSTREAM..$VALIDATE_HEAD"
+	VALIDATE_COMMIT_DIFF="$VALIDATE_UPSTREAM...$VALIDATE_HEAD"
+
+	validate_diff() {
+		if [ "$VALIDATE_UPSTREAM" != "$VALIDATE_HEAD"  ]; then
+			git diff "$VALIDATE_COMMIT_DIFF" "$@"
+		fi
+
+	}
+validate_log() {
+		if [ "$VALIDATE_UPSTREAM" != "$VALIDATE_HEAD"  ]; then
+			git log "$VALIDATE_COMMIT_LOG" "$@"
+		fi
+
+}
+fi
 
 adds=$(validate_diff --numstat | awk '{ s += $1 } END { print s }')
 dels=$(validate_diff --numstat | awk '{ s += $2 } END { print s }')

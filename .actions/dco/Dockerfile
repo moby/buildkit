@@ -1,7 +1,7 @@
 FROM alpine:latest
 LABEL "com.github.actions.name"="Validate DCO"
 LABEL "com.github.actions.description"="Validate commits include DCO"
-LABEL "com.github.actions.icon"="mic"
+LABEL "com.github.actions.icon"="code"
 LABEL "com.github.actions.color"="blue"
 
 LABEL "repository"="http://github.com/moby/buildkit"
