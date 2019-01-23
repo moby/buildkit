@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -193,12 +194,20 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 
 	env = append(env, "BUILDKIT_EXPORTEDPRODUCT="+apicaps.ExportedProduct)
 
-	err = llbBridge.Exec(ctx, executor.Meta{
+	meta := executor.Meta{
 		Env:            env,
 		Args:           args,
 		Cwd:            cwd,
 		ReadonlyRootFS: readonly,
-	}, rootFS, lbf.Stdin, lbf.Stdout, os.Stderr)
+	}
+
+	if v, ok := img.Config.Labels["moby.buildkit.frontend.network.none"]; ok {
+		if ok, _ := strconv.ParseBool(v); ok {
+			meta.NetMode = opspb.NetMode_NONE
+		}
+	}
+
+	err = llbBridge.Exec(ctx, meta, rootFS, lbf.Stdin, lbf.Stdout, os.Stderr)
 
 	if err != nil {
 		// An existing error (set via Return rpc) takes
