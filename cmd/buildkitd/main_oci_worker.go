@@ -71,6 +71,28 @@ func init() {
 		Name:  "oci-worker-no-process-sandbox",
 		Usage: "use the host PID namespace and procfs (WARNING: allows build containers to kill (and potentially ptrace) an arbitrary process in the host namespace)",
 	})
+	if defaultConf.Workers.OCI.GC == nil || *defaultConf.Workers.OCI.GC {
+		flags = append(flags, cli.BoolTFlag{
+			Name:  "oci-worker-gc",
+			Usage: "Enable automatic garbage collection on worker",
+		})
+	} else {
+		flags = append(flags, cli.BoolFlag{
+			Name:  "oci-worker-gc",
+			Usage: "Enable automatic garbage collection on worker",
+		})
+	}
+	flags = append(flags, cli.Int64Flag{
+		Name:  "oci-worker-gc-keepstorage",
+		Usage: "Amount of storage GC keep locally (MB)",
+		Value: func() int64 {
+			if defaultConf.Workers.OCI.GCKeepStorage != 0 {
+				return defaultConf.Workers.OCI.GCKeepStorage / 1e6
+			}
+			return config.DetectDefaultGCCap(defaultConf.Root) / 1e6
+		}(),
+		Hidden: len(defaultConf.Workers.OCI.GCPolicy) != 0,
+	})
 
 	registerWorkerInitializer(
 		workerInitializer{
@@ -123,6 +145,15 @@ func applyOCIFlags(c *cli.Context, cfg *config.Config) error {
 		cfg.Workers.OCI.Platforms = platforms
 	}
 
+	if c.GlobalIsSet("oci-worker-gc") {
+		v := c.GlobalBool("oci-worker-gc")
+		cfg.Workers.OCI.GC = &v
+	}
+
+	if c.GlobalIsSet("oci-worker-gc-keepstorage") {
+		cfg.Workers.OCI.GCKeepStorage = c.GlobalInt64("oci-worker-gc-keepstorage") * 1e6
+	}
+
 	return nil
 }
 
@@ -160,7 +191,7 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 		return nil, err
 	}
 	opt.SessionManager = common.sessionManager
-	opt.GCPolicy = getGCPolicy(cfg.GCPolicy, common.config.Root)
+	opt.GCPolicy = getGCPolicy(cfg.GCConfig, common.config.Root)
 	opt.ResolveOptionsFunc = resolverFunc(common.config)
 
 	if platformsStr := cfg.Platforms; len(platformsStr) != 0 {
