@@ -1138,8 +1138,8 @@ func autoDetectPlatform(img Image, target specs.Platform, supported []specs.Plat
 	return target
 }
 
-func WithInternalName(name string, a ...interface{}) llb.ConstraintsOpt {
-	return llb.WithCustomName("[internal] "+name, a...)
+func WithInternalName(name string) llb.ConstraintsOpt {
+	return llb.WithCustomName("[internal] " + name)
 }
 
 func uppercaseCmd(str string) string {
