@@ -141,7 +141,7 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 		return nil, err
 	}
 	opt.SessionManager = common.sessionManager
-	opt.GCPolicy = getGCPolicy(cfg.GCPolicy, common.config.Root)
+	opt.GCPolicy = getGCPolicy(cfg.GCConfig, common.config.Root)
 	opt.ResolveOptionsFunc = resolverFunc(common.config)
 
 	if platformsStr := cfg.Platforms; len(platformsStr) != 0 {

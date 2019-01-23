@@ -2,8 +2,10 @@ package config
 
 const defaultCap int64 = 2e9 // 2GB
 
-func DefaultGCPolicy(p string) []GCPolicy {
-	keep := detectDefaultGCCap(p)
+func DefaultGCPolicy(p string, keep int64) []GCPolicy {
+	if keep == 0 {
+		keep = DetectDefaultGCCap(p)
+	}
 	return []GCPolicy{
 		// if build cache uses more than 512MB delete the most easily reproducible data after it has not been used for 2 days
 		{
