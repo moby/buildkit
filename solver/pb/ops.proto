@@ -15,7 +15,7 @@ message Op {
 	oneof op {
 		ExecOp exec = 2;
 		SourceOp source = 3;
-		CopyOp copy = 4;
+		FileOp file = 4;
 		BuildOp build = 5;
 	}
 	Platform platform = 10;
@@ -134,18 +134,6 @@ message SSHOpt {
 	bool optional = 5;
 }
 
-// CopyOp copies files across Ops.
-message CopyOp {
-	repeated CopySource src = 1;
-	string dest = 2;
-}
-
-// CopySource specifies a source for CopyOp.
-message CopySource {
-	int64 input = 1 [(gogoproto.customtype) = "InputIndex", (gogoproto.nullable) = false];
-	string selector = 2;
-}
-
 // SourceOp specifies a source such as build contexts and images.
 message SourceOp {
 	// TODO: use source type or any type instead of URL protocol.
@@ -211,4 +199,64 @@ message Definition {
 message HostIP {
 	string Host = 1;
 	string IP = 2;
+}
+
+message FileOp {
+	repeated FileAction actions = 2;
+}
+
+message FileAction {
+	int64 input = 1 [(gogoproto.customtype) = "InputIndex", (gogoproto.nullable) = false]; // could be real input or target (target index + max input index)
+	int64 secondaryInput = 2 [(gogoproto.customtype) = "InputIndex", (gogoproto.nullable) = false]; // --//--
+  int64 output = 3 [(gogoproto.customtype) = "OutputIndex", (gogoproto.nullable) = false];
+	oneof action {
+		FileActionCopy copy = 4;
+		FileActionMkFile mkfile = 5;
+		FileActionMkDir mkdir = 6;
+		FileActionRm rm = 7;
+	}
+}
+
+message FileActionCopy {
+	string src = 1;
+	string dest = 2;
+	ChownOpt owner = 4;
+  int32 mode = 5;
+	bool followSymlink = 6;
+	bool dirCopyContents = 7;
+  bool attemptUnpack = 8;
+  bool createDestPath = 9;
+  bool allowWildcard = 10;
+  bool allowEmptyWildcard = 11;
+}
+
+message FileActionMkFile {
+	string path = 1;
+	int32 mode = 2;
+	bytes data = 3;
+	ChownOpt owner = 4;
+}
+
+message FileActionMkDir {
+	string path = 1;
+	int32 mode = 2;
+  bool makeParents = 3;
+	ChownOpt owner = 4;
+}
+
+message FileActionRm {
+	string path = 1;
+  bool allowNotFound = 2;
+  bool allowWildcard = 3;
+}
+
+message ChownOpt {
+	UserOpt user = 1;
+	UserOpt group = 2;
+}
+
+message UserOpt {
+	string name = 1;
+	int64 input = 2 [(gogoproto.customtype) = "InputIndex", (gogoproto.nullable) = false]; // input that contains /etc/passwd if using a name
+	int32 id = 3;
 }
