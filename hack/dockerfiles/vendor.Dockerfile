@@ -1,13 +1,8 @@
-FROM golang:1.11-alpine AS vndr
+FROM golang:1.11-alpine AS update
 RUN  apk add --no-cache git
-# NOTE: hack scripts override VNDR_VERSION to a specific revision
-ARG VNDR_VERSION=master
-RUN go get -d github.com/LK4D4/vndr \
-  && cd /go/src/github.com/LK4D4/vndr \
-	&& git checkout $VNDR_VERSION \
-	&& go install ./
-WORKDIR /go/src/github.com/moby/buildkit
+WORKDIR /src
 COPY . .
-# Remove vendor first to workaround  https://github.com/LK4D4/vndr/issues/63.
-RUN rm -rf vendor
-RUN vndr --verbose --strict
+RUN go mod tidy && go mod vendor && rm -rf /go/pkg/mod && ln -s /src /out
+
+FROM update AS validate
+RUN ./hack/validate-vendor check

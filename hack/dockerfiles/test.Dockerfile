@@ -15,11 +15,13 @@ RUN apk add --no-cache g++ linux-headers
 RUN apk add --no-cache git libseccomp-dev make
 
 FROM gobuild-base AS buildkit-base
-WORKDIR /go/src/github.com/moby/buildkit
+WORKDIR /src
 COPY . .
+# TODO: PKG should be inferred from go modules
 RUN mkdir .tmp; \
   PKG=github.com/moby/buildkit VERSION=$(git describe --match 'v[0-9]*' --dirty='.m' --always) REVISION=$(git rev-parse HEAD)$(if ! git diff --no-ext-diff --quiet --exit-code; then echo .m; fi); \
   echo "-X ${PKG}/version.Version=${VERSION} -X ${PKG}/version.Revision=${REVISION} -X ${PKG}/version.Package=${PKG}" | tee .tmp/ldflags
+ENV GOFLAGS=-mod=vendor
 
 FROM buildkit-base AS buildctl
 ENV CGO_ENABLED=0
@@ -68,7 +70,7 @@ RUN git checkout -q "$CONTAINERD10_VERSION" \
 FROM buildkit-base AS buildkitd.oci_only
 ENV CGO_ENABLED=1
 # mitigate https://github.com/moby/moby/pull/35456
-WORKDIR /go/src/github.com/moby/buildkit
+WORKDIR /src
 RUN go build -installsuffix netgo -ldflags "$(cat .tmp/ldflags) -w -extldflags -static" -tags 'no_containerd_worker seccomp netgo cgo static_build' -o /usr/bin/buildkitd.oci_only ./cmd/buildkitd
 
 FROM buildkit-base AS buildkitd.containerd_only
