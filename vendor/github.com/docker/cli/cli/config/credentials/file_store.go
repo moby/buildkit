@@ -9,6 +9,7 @@ import (
 type store interface {
 	Save() error
 	GetAuthConfigs() map[string]types.AuthConfig
+	GetFilename() string
 }
 
 // fileStore implements a credentials store using
@@ -53,6 +54,14 @@ func (c *fileStore) GetAll() (map[string]types.AuthConfig, error) {
 func (c *fileStore) Store(authConfig types.AuthConfig) error {
 	c.file.GetAuthConfigs()[authConfig.ServerAddress] = authConfig
 	return c.file.Save()
+}
+
+func (c *fileStore) GetFilename() string {
+	return c.file.GetFilename()
+}
+
+func (c *fileStore) IsFileStore() bool {
+	return true
 }
 
 // ConvertToHostname converts a registry url which has http|https prepended

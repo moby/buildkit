@@ -1,3 +1,5 @@
 package credentials
 
-const defaultCredentialsStore = "osxkeychain"
+func defaultCredentialsStore() string {
+	return "osxkeychain"
+}
