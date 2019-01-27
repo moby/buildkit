@@ -372,7 +372,11 @@ func (w *Worker) FromRemote(ctx context.Context, remote *solver.Remote) (cache.I
 				return nil, err
 			}
 		}
-		ref, err := w.CacheManager.Get(ctx, chainID, cache.WithDescription(fmt.Sprintf("imported %s", remote.Descriptors[i].Digest)), cache.WithCreationTime(tm))
+		descr := fmt.Sprintf("imported %s", remote.Descriptors[i].Digest)
+		if v, ok := remote.Descriptors[i].Annotations["buildkit/description"]; ok {
+			descr = v
+		}
+		ref, err := w.CacheManager.Get(ctx, chainID, cache.WithDescription(descr), cache.WithCreationTime(tm))
 		if err != nil {
 			return nil, err
 		}

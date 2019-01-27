@@ -135,17 +135,21 @@ func childrenConfigHandler(provider content.Provider, platform platforms.MatchCo
 func DetectManifestMediaType(ra content.ReaderAt) (string, error) {
 	// TODO: schema1
 
-	p := make([]byte, ra.Size())
-	if _, err := ra.ReadAt(p, 0); err != nil {
+	dt := make([]byte, ra.Size())
+	if _, err := ra.ReadAt(dt, 0); err != nil {
 		return "", err
 	}
 
+	return DetectManifestBlobMediaType(dt)
+}
+
+func DetectManifestBlobMediaType(dt []byte) (string, error) {
 	var mfst struct {
 		MediaType string          `json:"mediaType"`
 		Config    json.RawMessage `json:"config"`
 	}
 
-	if err := json.Unmarshal(p, &mfst); err != nil {
+	if err := json.Unmarshal(dt, &mfst); err != nil {
 		return "", err
 	}
 

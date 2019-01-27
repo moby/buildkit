@@ -22,6 +22,7 @@ import (
 	"github.com/docker/go-connections/sockets"
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
 	"github.com/moby/buildkit/cache/remotecache"
+	inlineremotecache "github.com/moby/buildkit/cache/remotecache/inline"
 	localremotecache "github.com/moby/buildkit/cache/remotecache/local"
 	registryremotecache "github.com/moby/buildkit/cache/remotecache/registry"
 	"github.com/moby/buildkit/client"
@@ -513,6 +514,7 @@ func newController(c *cli.Context, cfg *config.Config) (*control.Controller, err
 	remoteCacheExporterFuncs := map[string]remotecache.ResolveCacheExporterFunc{
 		"registry": registryremotecache.ResolveCacheExporterFunc(sessionManager, resolverFn),
 		"local":    localremotecache.ResolveCacheExporterFunc(sessionManager),
+		"inline":   inlineremotecache.ResolveCacheExporterFunc(),
 	}
 	remoteCacheImporterFuncs := map[string]remotecache.ResolveCacheImporterFunc{
 		"registry": registryremotecache.ResolveCacheImporterFunc(sessionManager, resolverFn),

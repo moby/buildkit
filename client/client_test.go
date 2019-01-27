@@ -82,6 +82,7 @@ func TestClientIntegration(t *testing.T) {
 		testSSHMount,
 		testStdinClosed,
 		testHostnameLookup,
+		testBasicInlineCacheImportExport,
 	},
 		integration.WithMirroredImages(integration.OfficialImages("busybox:latest", "alpine:latest")),
 	)
@@ -1250,6 +1251,79 @@ func testBasicLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
 		},
 	}
 	testBasicCacheImportExport(t, sb, o)
+}
+
+func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	registry, err := sb.NewRegistry()
+	if errors.Cause(err) == integration.ErrorRequirements {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("busybox:latest")
+	st := llb.Scratch()
+
+	run := func(cmd string) {
+		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+	}
+
+	run(`sh -c "echo -n foobar > const"`)
+	run(`sh -c "cat /dev/urandom | head -c 100 | sha256sum > unique"`)
+
+	def, err := st.Marshal()
+	require.NoError(t, err)
+
+	target := registry + "/buildkit/testexportinline:latest"
+
+	resp, err := c.Solve(context.TODO(), def, SolveOpt{
+		Exporter: ExporterImage,
+		ExporterAttrs: map[string]string{
+			"name": target,
+			"push": "true",
+		},
+		CacheExports: []CacheOptionsEntry{
+			{
+				Type: "inline",
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dgst, ok := resp.ExporterResponse["containerimage.digest"]
+	require.Equal(t, ok, true)
+
+	err = c.Prune(context.TODO(), nil, PruneAll)
+	require.NoError(t, err)
+
+	checkAllRemoved(t, c, sb)
+
+	resp, err = c.Solve(context.TODO(), def, SolveOpt{
+		Exporter: ExporterImage,
+		CacheExports: []CacheOptionsEntry{
+			{
+				Type: "inline",
+			},
+		},
+		CacheImports: []CacheOptionsEntry{
+			{
+				Type: "registry",
+				Attrs: map[string]string{
+					"ref": target,
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dgst2, ok := resp.ExporterResponse["containerimage.digest"]
+	require.Equal(t, ok, true)
+
+	require.Equal(t, dgst, dgst2)
 }
 
 func testCachedMounts(t *testing.T, sb integration.Sandbox) {
