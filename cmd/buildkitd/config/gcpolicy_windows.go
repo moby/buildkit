@@ -2,6 +2,6 @@
 
 package config
 
-func detectDefaultGCCap(root string) int64 {
+func DetectDefaultGCCap(root string) int64 {
 	return defaultCap
 }

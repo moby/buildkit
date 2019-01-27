@@ -48,6 +48,12 @@ type TLSConfig struct {
 	CA   string `toml:"ca"`
 }
 
+type GCConfig struct {
+	GC            *bool      `toml:"gc"`
+	GCKeepStorage int64      `toml:"gckeepstorage"`
+	GCPolicy      []GCPolicy `toml:"gcpolicy"`
+}
+
 type OCIConfig struct {
 	Enabled          *bool             `toml:"enabled"`
 	Labels           map[string]string `toml:"labels"`
@@ -55,7 +61,7 @@ type OCIConfig struct {
 	Snapshotter      string            `toml:"snapshotter"`
 	Rootless         bool              `toml:"rootless"`
 	NoProcessSandbox bool              `toml:"noProcessSandbox"`
-	GCPolicy         []GCPolicy        `toml:"gcpolicy"`
+	GCConfig
 }
 
 type ContainerdConfig struct {
@@ -63,8 +69,8 @@ type ContainerdConfig struct {
 	Enabled   *bool             `toml:"enabled"`
 	Labels    map[string]string `toml:"labels"`
 	Platforms []string          `toml:"platforms"`
-	GCPolicy  []GCPolicy        `toml:"gcpolicy"`
 	Namespace string            `toml:"namespace"`
+	GCConfig
 }
 
 type GCPolicy struct {

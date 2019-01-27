@@ -13,6 +13,10 @@ func TestConfig(t *testing.T) {
 root = "/foo/bar"
 debug=true
 
+[gc]
+enabled=true
+
+
 [grpc]
 address=["buildkit.sock"]
 debugAddress="debug.sock"
@@ -24,6 +28,8 @@ cert="mycert.pem"
 enabled=true
 snapshotter="overlay"
 rootless=true
+gc=false
+gckeepstorage=123456789
 [worker.oci.labels]
 foo="bar"
 "aa.bb.cc"="baz"
@@ -61,9 +67,11 @@ http=true
 	require.False(t, md.IsDefined("grpc", "uid"))
 
 	require.NotNil(t, cfg.Workers.OCI.Enabled)
+	require.Equal(t, int64(123456789), cfg.Workers.OCI.GCKeepStorage)
 	require.Equal(t, true, *cfg.Workers.OCI.Enabled)
 	require.Equal(t, "overlay", cfg.Workers.OCI.Snapshotter)
 	require.Equal(t, true, cfg.Workers.OCI.Rootless)
+	require.Equal(t, false, *cfg.Workers.OCI.GC)
 
 	require.Equal(t, "bar", cfg.Workers.OCI.Labels["foo"])
 	require.Equal(t, "baz", cfg.Workers.OCI.Labels["aa.bb.cc"])
@@ -76,6 +84,7 @@ http=true
 	require.Equal(t, "non-default", cfg.Workers.Containerd.Namespace)
 	require.Equal(t, 2, len(cfg.Workers.Containerd.GCPolicy))
 
+	require.Nil(t, cfg.Workers.Containerd.GC)
 	require.Equal(t, true, cfg.Workers.Containerd.GCPolicy[0].All)
 	require.Equal(t, false, cfg.Workers.Containerd.GCPolicy[1].All)
 	require.Equal(t, int64(20), cfg.Workers.Containerd.GCPolicy[0].KeepBytes)

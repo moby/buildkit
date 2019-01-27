@@ -6,7 +6,7 @@ import (
 	"syscall"
 )
 
-func detectDefaultGCCap(root string) int64 {
+func DetectDefaultGCCap(root string) int64 {
 	var st syscall.Statfs_t
 	if err := syscall.Statfs(root, &st); err != nil {
 		return defaultCap

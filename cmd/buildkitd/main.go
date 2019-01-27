@@ -601,12 +601,15 @@ func parsePlatforms(platformsStr []string) ([]specs.Platform, error) {
 	return out, nil
 }
 
-func getGCPolicy(rules []config.GCPolicy, root string) []client.PruneInfo {
-	if len(rules) == 0 {
-		rules = config.DefaultGCPolicy(root)
+func getGCPolicy(cfg config.GCConfig, root string) []client.PruneInfo {
+	if cfg.GC != nil && !*cfg.GC {
+		return nil
 	}
-	out := make([]client.PruneInfo, 0, len(rules))
-	for _, rule := range rules {
+	if len(cfg.GCPolicy) == 0 {
+		cfg.GCPolicy = config.DefaultGCPolicy(root, cfg.GCKeepStorage)
+	}
+	out := make([]client.PruneInfo, 0, len(cfg.GCPolicy))
+	for _, rule := range cfg.GCPolicy {
 		out = append(out, client.PruneInfo{
 			Filter:       rule.Filters,
 			All:          rule.All,

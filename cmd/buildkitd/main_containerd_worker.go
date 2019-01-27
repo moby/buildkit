@@ -41,12 +41,7 @@ func init() {
 		defaultConf.Workers.Containerd.Namespace = defaultContainerdNamespace
 	}
 
-	registerWorkerInitializer(
-		workerInitializer{
-			fn: containerdWorkerInitializer,
-			// 1 is less preferred than 0 (runcCtor)
-			priority: 1,
-		},
+	flags := []cli.Flag{
 		cli.StringFlag{
 			Name:  "containerd-worker",
 			Usage: "enable containerd workers (true/false/auto)",
@@ -74,6 +69,38 @@ func init() {
 			Value:  defaultConf.Workers.Containerd.Namespace,
 			Hidden: true,
 		},
+	}
+
+	if defaultConf.Workers.Containerd.GC == nil || *defaultConf.Workers.Containerd.GC {
+		flags = append(flags, cli.BoolTFlag{
+			Name:  "containerd-worker-gc",
+			Usage: "Enable automatic garbage collection on worker",
+		})
+	} else {
+		flags = append(flags, cli.BoolFlag{
+			Name:  "containerd-worker-gc",
+			Usage: "Enable automatic garbage collection on worker",
+		})
+	}
+	flags = append(flags, cli.Int64Flag{
+		Name:  "containerd-worker-gc-keepstorage",
+		Usage: "Amount of storage GC keep locally (MB)",
+		Value: func() int64 {
+			if defaultConf.Workers.Containerd.GCKeepStorage != 0 {
+				return defaultConf.Workers.Containerd.GCKeepStorage / 1e6
+			}
+			return config.DetectDefaultGCCap(defaultConf.Root) / 1e6
+		}(),
+		Hidden: len(defaultConf.Workers.Containerd.GCPolicy) != 0,
+	})
+
+	registerWorkerInitializer(
+		workerInitializer{
+			fn: containerdWorkerInitializer,
+			// 1 is less preferred than 0 (runcCtor)
+			priority: 1,
+		},
+		flags...,
 	)
 	// TODO(AkihiroSuda): allow using multiple snapshotters. should be useful for some applications that does not work with the default overlay snapshotter. e.g. mysql (docker/for-linux#72)",
 }
@@ -122,6 +149,15 @@ func applyContainerdFlags(c *cli.Context, cfg *config.Config) error {
 		cfg.Workers.Containerd.Namespace = c.GlobalString("containerd-worker-namespace")
 	}
 
+	if c.GlobalIsSet("containerd-worker-gc") {
+		v := c.GlobalBool("containerd-worker-gc")
+		cfg.Workers.Containerd.GC = &v
+	}
+
+	if c.GlobalIsSet("containerd-worker-gc-keepstorage") {
+		cfg.Workers.Containerd.GCKeepStorage = c.GlobalInt64("containerd-worker-gc-keepstorage") * 1e6
+	}
+
 	return nil
 }
 
@@ -141,7 +177,7 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 		return nil, err
 	}
 	opt.SessionManager = common.sessionManager
-	opt.GCPolicy = getGCPolicy(cfg.GCPolicy, common.config.Root)
+	opt.GCPolicy = getGCPolicy(cfg.GCConfig, common.config.Root)
 	opt.ResolveOptionsFunc = resolverFunc(common.config)
 
 	if platformsStr := cfg.Platforms; len(platformsStr) != 0 {
