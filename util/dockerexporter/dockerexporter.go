@@ -20,7 +20,7 @@ import (
 // https://github.com/moby/moby/blob/master/image/spec/v1.1.md#combined-image-json--filesystem-changeset-format
 // The output tarball is also compatible with OCI Image Format Specification
 type DockerExporter struct {
-	Name string
+	Names []string
 }
 
 var _ images.Exporter = &DockerExporter{}
@@ -30,7 +30,7 @@ func (de *DockerExporter) Export(ctx context.Context, store content.Provider, de
 	tw := tar.NewWriter(writer)
 	defer tw.Close()
 
-	dockerManifest, err := dockerManifestRecord(ctx, store, desc, de.Name)
+	dockerManifest, err := dockerManifestRecord(ctx, store, desc, de.Names)
 	if err != nil {
 		return err
 	}
@@ -77,7 +77,7 @@ type tarRecord struct {
 	CopyTo func(context.Context, io.Writer) (int64, error)
 }
 
-func dockerManifestRecord(ctx context.Context, provider content.Provider, desc ocispec.Descriptor, name string) (*tarRecord, error) {
+func dockerManifestRecord(ctx context.Context, provider content.Provider, desc ocispec.Descriptor, names []string) (*tarRecord, error) {
 	switch desc.MediaType {
 	case images.MediaTypeDockerSchema2Manifest, ocispec.MediaTypeImageManifest:
 		p, err := content.ReadBlob(ctx, provider, desc)
@@ -101,8 +101,9 @@ func dockerManifestRecord(ctx context.Context, provider content.Provider, desc o
 			item.Layers = append(item.Layers, path.Join("blobs", l.Digest.Algorithm().String(), l.Digest.Hex()))
 		}
 
-		if name != "" {
-			item.RepoTags = append(item.RepoTags, name)
+		if len(names) > 0 {
+			item.RepoTags = names
+
 		}
 
 		dt, err := json.Marshal([]mfstItem{item})

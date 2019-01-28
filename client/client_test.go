@@ -341,7 +341,7 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 		},
 		ExporterDocker: func(out, imageName string, exporterResponse map[string]string) {
 			require.Contains(t, exporterResponse, "image.name")
-			require.Equal(t, exporterResponse["image.name"], "docker.io/library/"+imageName)
+			require.Equal(t, exporterResponse["image.name"], imageName)
 
 			dt, err := ioutil.ReadFile(out)
 			require.NoError(t, err)
