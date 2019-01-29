@@ -48,6 +48,7 @@ type ConfigFile struct {
 	StackOrchestrator    string                      `json:"stackOrchestrator,omitempty"`
 	Kubernetes           *KubernetesConfig           `json:"kubernetes,omitempty"`
 	CurrentContext       string                      `json:"currentContext,omitempty"`
+	CLIPluginsExtraDirs  []string                    `json:"cliPluginsExtraDirs,omitempty"`
 }
 
 // ProxyConfig contains proxy configuration settings

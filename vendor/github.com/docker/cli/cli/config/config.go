@@ -46,6 +46,11 @@ func SetDir(dir string) {
 	configDir = dir
 }
 
+// Path returns the path to a file relative to the config dir
+func Path(p ...string) string {
+	return filepath.Join(append([]string{Dir()}, p...)...)
+}
+
 // LegacyLoadFromReader is a convenience function that creates a ConfigFile object from
 // a non-nested reader
 func LegacyLoadFromReader(configData io.Reader) (*configfile.ConfigFile, error) {

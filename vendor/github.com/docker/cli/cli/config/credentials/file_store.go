@@ -66,6 +66,7 @@ func (c *fileStore) IsFileStore() bool {
 
 // ConvertToHostname converts a registry url which has http|https prepended
 // to just an hostname.
+// Copied from github.com/docker/docker/registry.ConvertToHostname to reduce dependencies.
 func ConvertToHostname(url string) string {
 	stripped := url
 	if strings.HasPrefix(url, "http://") {
