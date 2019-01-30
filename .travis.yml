@@ -12,7 +12,7 @@ env:
     - PREFER_BUILDCTL="1"
 
 script:
-  - make binaries validate-all && ./hack/cross
+  - make binaries validate-all && PLATFORMS="${PLATFORMS},darwin/amd64,windows/amd64" ./hack/cross
 
 before_deploy:
   - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin

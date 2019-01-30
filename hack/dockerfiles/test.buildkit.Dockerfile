@@ -174,9 +174,14 @@ COPY --from=buildctl /usr/bin/buildctl /usr/bin/
 ENTRYPOINT ["buildkitd.containerd_only"]
 
 # Copy together all binaries for oci+containerd mode
-FROM buildkit-export AS buildkit-buildkitd
+FROM buildkit-export AS buildkit-buildkitd-linux
 COPY --from=binaries / /usr/bin/
 ENTRYPOINT ["buildkitd"]
+
+FROM binaries AS buildkit-buildkitd-darwin
+FROM binaries AS buildkit-buildkitd-windows
+
+FROM buildkit-buildkitd-$TARGETOS AS buildkit-buildkitd
 
 FROM alpine AS containerd-runtime
 COPY --from=runc /usr/bin/runc /usr/bin/
