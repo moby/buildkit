@@ -169,11 +169,11 @@ func build(clicontext *cli.Context) error {
 
 	cacheExports, err := parseExportCache(clicontext.StringSlice("export-cache"), clicontext.StringSlice("export-cache-opt"))
 	if err != nil {
-		return nil
+		return err
 	}
 	cacheImports, err := parseImportCache(clicontext.StringSlice("import-cache"))
 	if err != nil {
-		return nil
+		return err
 	}
 
 	ch := make(chan *client.SolveStatus)
