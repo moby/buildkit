@@ -30,10 +30,7 @@ import (
 )
 
 type SolveOpt struct {
-	Exporter            string
-	ExporterAttrs       map[string]string
-	ExporterOutput      io.WriteCloser // for ExporterOCI and ExporterDocker
-	ExporterOutputDir   string         // for ExporterLocal
+	Exports             []ExportEntry
 	LocalDirs           map[string]string
 	SharedKey           string
 	Frontend            string
@@ -42,6 +39,13 @@ type SolveOpt struct {
 	CacheImports        []CacheOptionsEntry
 	Session             []session.Attachable
 	AllowedEntitlements []entitlements.Entitlement
+}
+
+type ExportEntry struct {
+	Type      string
+	Attrs     map[string]string
+	Output    io.WriteCloser // for ExporterOCI and ExporterDocker
+	OutputDir string         // for ExporterLocal
 }
 
 type CacheOptionsEntry struct {
@@ -103,29 +107,37 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		s.Allow(a)
 	}
 
-	switch opt.Exporter {
+	var ex ExportEntry
+	if len(opt.Exports) > 1 {
+		return nil, errors.New("currently only single Exports can be specified")
+	}
+	if len(opt.Exports) == 1 {
+		ex = opt.Exports[0]
+	}
+
+	switch ex.Type {
 	case ExporterLocal:
-		if opt.ExporterOutput != nil {
+		if ex.Output != nil {
 			return nil, errors.New("output file writer is not supported by local exporter")
 		}
-		if opt.ExporterOutputDir == "" {
+		if ex.OutputDir == "" {
 			return nil, errors.New("output directory is required for local exporter")
 		}
-		s.Allow(filesync.NewFSSyncTargetDir(opt.ExporterOutputDir))
+		s.Allow(filesync.NewFSSyncTargetDir(ex.OutputDir))
 	case ExporterOCI, ExporterDocker:
-		if opt.ExporterOutputDir != "" {
-			return nil, errors.Errorf("output directory %s is not supported by %s exporter", opt.ExporterOutputDir, opt.Exporter)
+		if ex.OutputDir != "" {
+			return nil, errors.Errorf("output directory %s is not supported by %s exporter", ex.OutputDir, ex.Type)
 		}
-		if opt.ExporterOutput == nil {
-			return nil, errors.Errorf("output file writer is required for %s exporter", opt.Exporter)
+		if ex.Output == nil {
+			return nil, errors.Errorf("output file writer is required for %s exporter", ex.Type)
 		}
-		s.Allow(filesync.NewFSSyncTarget(opt.ExporterOutput))
+		s.Allow(filesync.NewFSSyncTarget(ex.Output))
 	default:
-		if opt.ExporterOutput != nil {
-			return nil, errors.Errorf("output file writer is not supported by %s exporter", opt.Exporter)
+		if ex.Output != nil {
+			return nil, errors.Errorf("output file writer is not supported by %s exporter", ex.Type)
 		}
-		if opt.ExporterOutputDir != "" {
-			return nil, errors.Errorf("output directory %s is not supported by %s exporter", opt.ExporterOutputDir, opt.Exporter)
+		if ex.OutputDir != "" {
+			return nil, errors.Errorf("output directory %s is not supported by %s exporter", ex.OutputDir, ex.Type)
 		}
 	}
 
@@ -165,8 +177,8 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		resp, err := c.controlClient().Solve(ctx, &controlapi.SolveRequest{
 			Ref:           ref,
 			Definition:    pbd,
-			Exporter:      opt.Exporter,
-			ExporterAttrs: opt.ExporterAttrs,
+			Exporter:      ex.Type,
+			ExporterAttrs: ex.Attrs,
 			Session:       s.ID(),
 			Frontend:      opt.Frontend,
 			FrontendAttrs: opt.FrontendAttrs,
@@ -347,9 +359,9 @@ func parseCacheOptions(opt SolveOpt) (*cacheOptions, error) {
 	frontendAttrs := make(map[string]string)
 	for _, ex := range opt.CacheExports {
 		if ex.Type == "local" {
-			csDir := ex.Attrs["store"]
+			csDir := ex.Attrs["dest"]
 			if csDir == "" {
-				return nil, errors.New("local cache exporter requires store")
+				return nil, errors.New("local cache exporter requires dest")
 			}
 			if err := os.MkdirAll(csDir, 0755); err != nil {
 				return nil, err
@@ -380,9 +392,9 @@ func parseCacheOptions(opt SolveOpt) (*cacheOptions, error) {
 	for _, im := range opt.CacheImports {
 		attrs := im.Attrs
 		if im.Type == "local" {
-			csDir := im.Attrs["store"]
+			csDir := im.Attrs["src"]
 			if csDir == "" {
-				return nil, errors.New("local cache importer requires store")
+				return nil, errors.New("local cache importer requires src")
 			}
 			if err := os.MkdirAll(csDir, 0755); err != nil {
 				return nil, err

@@ -2,22 +2,19 @@ package main
 
 import (
 	"context"
-	"encoding/csv"
 	"encoding/json"
 	"io"
 	"os"
-	"strings"
 
 	"github.com/containerd/console"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/cmd/buildctl/build"
 	bccommon "github.com/moby/buildkit/cmd/buildctl/common"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/auth/authprovider"
-	"github.com/moby/buildkit/session/secrets/secretsprovider"
 	"github.com/moby/buildkit/session/sshforward/sshprovider"
 	"github.com/moby/buildkit/solver/pb"
-	"github.com/moby/buildkit/util/entitlements"
 	"github.com/moby/buildkit/util/progress/progressui"
 	"github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
@@ -30,15 +27,25 @@ var buildCommand = cli.Command{
 	Name:    "build",
 	Aliases: []string{"b"},
 	Usage:   "build",
-	Action:  build,
+	UsageText: `
+	To build and push an image using Dockerfile:
+	  $ buildctl build --frontend dockerfile.v0 --opt target=foo --opt build-arg:foo=bar --local context=. --local dockerfile=. --output type=image,name=docker.io/username/image,push=true
+	`,
+	Action: buildAction,
 	Flags: []cli.Flag{
+		cli.StringSliceFlag{
+			Name:  "output,o",
+			Usage: "Define exports for build result, e.g. --output type=image,name=docker.io/username/image,push=true",
+		},
 		cli.StringFlag{
-			Name:  "exporter",
-			Usage: "Define exporter for build result",
+			Name:   "exporter",
+			Usage:  "Define exporter for build result (DEPRECATED: use --export type=<type>[,<opt>=<optval>]",
+			Hidden: true,
 		},
 		cli.StringSliceFlag{
-			Name:  "exporter-opt",
-			Usage: "Define custom options for exporter",
+			Name:   "exporter-opt",
+			Usage:  "Define custom options for exporter (DEPRECATED: use --output type=<type>[,<opt>=<optval>]",
+			Hidden: true,
 		},
 		cli.StringFlag{
 			Name:  "progress",
@@ -58,8 +65,13 @@ var buildCommand = cli.Command{
 			Usage: "Define frontend used for build",
 		},
 		cli.StringSliceFlag{
-			Name:  "frontend-opt",
-			Usage: "Define custom options for frontend",
+			Name:  "opt",
+			Usage: "Define custom options for frontend, e.g. --opt target=foo --opt build-arg:foo=bar",
+		},
+		cli.StringSliceFlag{
+			Name:   "frontend-opt",
+			Usage:  "Define custom options for frontend, e.g. --frontend-opt target=foo --frontend-opt build-arg:foo=bar (DEPRECATED: use --opt)",
+			Hidden: true,
 		},
 		cli.BoolFlag{
 			Name:  "no-cache",
@@ -67,7 +79,7 @@ var buildCommand = cli.Command{
 		},
 		cli.StringSliceFlag{
 			Name:  "export-cache",
-			Usage: "Export build cache, e.g. type=registry,ref=example.com/foo/bar, or type=local,store=path/to/dir",
+			Usage: "Export build cache, e.g. type=registry,ref=example.com/foo/bar, or type=local,dest=path/to/dir",
 		},
 		cli.StringSliceFlag{
 			Name:   "export-cache-opt",
@@ -76,7 +88,7 @@ var buildCommand = cli.Command{
 		},
 		cli.StringSliceFlag{
 			Name:  "import-cache",
-			Usage: "Import build cache",
+			Usage: "Import build cache, e.g. type=registry,ref=example.com/foo/bar, or type=local,src=path/to/dir",
 		},
 		cli.StringSliceFlag{
 			Name:  "secret",
@@ -124,7 +136,7 @@ func openTraceFile(clicontext *cli.Context) (*os.File, error) {
 	return nil, nil
 }
 
-func build(clicontext *cli.Context) error {
+func buildAction(clicontext *cli.Context) error {
 	c, err := bccommon.ResolveClient(clicontext)
 	if err != nil {
 		return err
@@ -145,7 +157,7 @@ func build(clicontext *cli.Context) error {
 	attachable := []session.Attachable{authprovider.NewDockerAuthProvider()}
 
 	if ssh := clicontext.StringSlice("ssh"); len(ssh) > 0 {
-		configs, err := parseSSHSpecs(ssh)
+		configs, err := build.ParseSSH(ssh)
 		if err != nil {
 			return err
 		}
@@ -157,23 +169,37 @@ func build(clicontext *cli.Context) error {
 	}
 
 	if secrets := clicontext.StringSlice("secret"); len(secrets) > 0 {
-		secretProvider, err := parseSecretSpecs(secrets)
+		secretProvider, err := build.ParseSecret(secrets)
 		if err != nil {
 			return err
 		}
 		attachable = append(attachable, secretProvider)
 	}
 
-	allowed, err := parseEntitlements(clicontext.StringSlice("allow"))
+	allowed, err := build.ParseAllow(clicontext.StringSlice("allow"))
 	if err != nil {
 		return err
 	}
 
-	cacheExports, err := parseExportCache(clicontext.StringSlice("export-cache"), clicontext.StringSlice("export-cache-opt"))
+	var exports []client.ExportEntry
+	if legacyExporter := clicontext.String("exporter"); legacyExporter != "" {
+		logrus.Warnf("--exporter <exporter> is deprecated. Please use --output type=<exporter>[,<opt>=<optval>] instead.")
+		if len(clicontext.StringSlice("output")) > 0 {
+			return errors.New("--exporter cannot be used with --output")
+		}
+		exports, err = build.ParseLegacyExporter(clicontext.String("exporter"), clicontext.StringSlice("exporter-opt"))
+	} else {
+		exports, err = build.ParseOutput(clicontext.StringSlice("output"))
+	}
 	if err != nil {
 		return err
 	}
-	cacheImports, err := parseImportCache(clicontext.StringSlice("import-cache"))
+
+	cacheExports, err := build.ParseExportCache(clicontext.StringSlice("export-cache"), clicontext.StringSlice("export-cache-opt"))
+	if err != nil {
+		return err
+	}
+	cacheImports, err := build.ParseImportCache(clicontext.StringSlice("import-cache"))
 	if err != nil {
 		return err
 	}
@@ -182,8 +208,7 @@ func build(clicontext *cli.Context) error {
 	eg, ctx := errgroup.WithContext(bccommon.CommandContext(clicontext))
 
 	solveOpt := client.SolveOpt{
-		Exporter: clicontext.String("exporter"),
-		// ExporterAttrs is set later
+		Exports: exports,
 		// LocalDirs is set later
 		Frontend: clicontext.String("frontend"),
 		// FrontendAttrs is set later
@@ -192,24 +217,13 @@ func build(clicontext *cli.Context) error {
 		Session:             attachable,
 		AllowedEntitlements: allowed,
 	}
-	solveOpt.ExporterAttrs, err = attrMap(clicontext.StringSlice("exporter-opt"))
+
+	solveOpt.FrontendAttrs, err = build.ParseOpt(clicontext.StringSlice("opt"), clicontext.StringSlice("frontend-opt"))
 	if err != nil {
-		return errors.Wrap(err, "invalid exporter-opt")
-	}
-	solveOpt.ExporterOutput, solveOpt.ExporterOutputDir, err = resolveExporterOutput(solveOpt.Exporter, solveOpt.ExporterAttrs["output"])
-	if err != nil {
-		return errors.Wrap(err, "invalid exporter-opt: output")
-	}
-	if solveOpt.ExporterOutput != nil || solveOpt.ExporterOutputDir != "" {
-		delete(solveOpt.ExporterAttrs, "output")
+		return errors.Wrap(err, "invalid opt")
 	}
 
-	solveOpt.FrontendAttrs, err = attrMap(clicontext.StringSlice("frontend-opt"))
-	if err != nil {
-		return errors.Wrap(err, "invalid frontend-opt")
-	}
-
-	solveOpt.LocalDirs, err = attrMap(clicontext.StringSlice("local"))
+	solveOpt.LocalDirs, err = build.ParseLocal(clicontext.StringSlice("local"))
 	if err != nil {
 		return errors.Wrap(err, "invalid local")
 	}
@@ -279,242 +293,4 @@ func build(clicontext *cli.Context) error {
 	})
 
 	return eg.Wait()
-}
-
-func parseExportCacheCSV(s string) (client.CacheOptionsEntry, error) {
-	ex := client.CacheOptionsEntry{
-		Type:  "",
-		Attrs: map[string]string{},
-	}
-	csvReader := csv.NewReader(strings.NewReader(s))
-	fields, err := csvReader.Read()
-	if err != nil {
-		return ex, err
-	}
-	for _, field := range fields {
-		parts := strings.SplitN(field, "=", 2)
-		key := strings.ToLower(parts[0])
-		value := parts[1]
-		switch key {
-		case "type":
-			ex.Type = value
-		default:
-			ex.Attrs[key] = value
-		}
-	}
-	if ex.Type == "" {
-		return ex, errors.New("--export-cache requires type=<type>")
-	}
-	if _, ok := ex.Attrs["mode"]; !ok {
-		ex.Attrs["mode"] = "min"
-	}
-	return ex, nil
-}
-
-func parseExportCache(exportCaches, legacyExportCacheOpts []string) ([]client.CacheOptionsEntry, error) {
-	var exports []client.CacheOptionsEntry
-	if len(legacyExportCacheOpts) > 0 {
-		if len(exportCaches) != 1 {
-			return nil, errors.New("--export-cache-opt requires exactly single --export-cache")
-		}
-	}
-	for _, exportCache := range exportCaches {
-		legacy := !strings.Contains(exportCache, "type=")
-		if legacy {
-			logrus.Warnf("--export-cache <ref> --export-cache-opt <opt>=<optval> is deprecated. Please use --export-cache type=registry,ref=<ref>,<opt>=<optval>[,<opt>=<optval>] instead.")
-			attrs, err := attrMap(legacyExportCacheOpts)
-			if err != nil {
-				return nil, err
-			}
-			if _, ok := attrs["mode"]; !ok {
-				attrs["mode"] = "min"
-			}
-			attrs["ref"] = exportCache
-			exports = append(exports, client.CacheOptionsEntry{
-				Type:  "registry",
-				Attrs: attrs,
-			})
-		} else {
-			if len(legacyExportCacheOpts) > 0 {
-				return nil, errors.New("--export-cache-opt is not supported for the specified --export-cache. Please use --export-cache type=<type>,<opt>=<optval>[,<opt>=<optval>] instead.")
-			}
-			ex, err := parseExportCacheCSV(exportCache)
-			if err != nil {
-				return nil, err
-			}
-			exports = append(exports, ex)
-		}
-	}
-	return exports, nil
-
-}
-
-func parseImportCacheCSV(s string) (client.CacheOptionsEntry, error) {
-	im := client.CacheOptionsEntry{
-		Type:  "",
-		Attrs: map[string]string{},
-	}
-	csvReader := csv.NewReader(strings.NewReader(s))
-	fields, err := csvReader.Read()
-	if err != nil {
-		return im, err
-	}
-	for _, field := range fields {
-		parts := strings.SplitN(field, "=", 2)
-		key := strings.ToLower(parts[0])
-		value := parts[1]
-		switch key {
-		case "type":
-			im.Type = value
-		default:
-			im.Attrs[key] = value
-		}
-	}
-	if im.Type == "" {
-		return im, errors.New("--import-cache requires type=<type>")
-	}
-	return im, nil
-}
-
-func parseImportCache(importCaches []string) ([]client.CacheOptionsEntry, error) {
-	var imports []client.CacheOptionsEntry
-	for _, importCache := range importCaches {
-		legacy := !strings.Contains(importCache, "type=")
-		if legacy {
-			logrus.Warnf("--import-cache <ref> is deprecated. Please use --import-cache type=registry,ref=<ref>,<opt>=<optval>[,<opt>=<optval>] instead.")
-			imports = append(imports, client.CacheOptionsEntry{
-				Type:  "registry",
-				Attrs: map[string]string{"ref": importCache},
-			})
-		} else {
-			im, err := parseImportCacheCSV(importCache)
-			if err != nil {
-				return nil, err
-			}
-			imports = append(imports, im)
-		}
-	}
-	return imports, nil
-}
-
-func attrMap(sl []string) (map[string]string, error) {
-	m := map[string]string{}
-	for _, v := range sl {
-		parts := strings.SplitN(v, "=", 2)
-		if len(parts) != 2 {
-			return nil, errors.Errorf("invalid value %s", v)
-		}
-		m[parts[0]] = parts[1]
-	}
-	return m, nil
-}
-
-func parseSecretSpecs(sl []string) (session.Attachable, error) {
-	fs := make([]secretsprovider.FileSource, 0, len(sl))
-	for _, v := range sl {
-		s, err := parseSecret(v)
-		if err != nil {
-			return nil, err
-		}
-		fs = append(fs, *s)
-	}
-	store, err := secretsprovider.NewFileStore(fs)
-	if err != nil {
-		return nil, err
-	}
-	return secretsprovider.NewSecretProvider(store), nil
-}
-
-func parseSecret(value string) (*secretsprovider.FileSource, error) {
-	csvReader := csv.NewReader(strings.NewReader(value))
-	fields, err := csvReader.Read()
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to parse csv secret")
-	}
-
-	fs := secretsprovider.FileSource{}
-
-	for _, field := range fields {
-		parts := strings.SplitN(field, "=", 2)
-		key := strings.ToLower(parts[0])
-
-		if len(parts) != 2 {
-			return nil, errors.Errorf("invalid field '%s' must be a key=value pair", field)
-		}
-
-		value := parts[1]
-		switch key {
-		case "type":
-			if value != "file" {
-				return nil, errors.Errorf("unsupported secret type %q", value)
-			}
-		case "id":
-			fs.ID = value
-		case "source", "src":
-			fs.FilePath = value
-		default:
-			return nil, errors.Errorf("unexpected key '%s' in '%s'", key, field)
-		}
-	}
-	return &fs, nil
-}
-
-// resolveExporterOutput returns at most either one of io.WriteCloser (single file) or a string (directory path).
-func resolveExporterOutput(exporter, output string) (io.WriteCloser, string, error) {
-	switch exporter {
-	case client.ExporterLocal:
-		if output == "" {
-			return nil, "", errors.New("output directory is required for local exporter")
-		}
-		return nil, output, nil
-	case client.ExporterOCI, client.ExporterDocker:
-		if output != "" {
-			fi, err := os.Stat(output)
-			if err != nil && !os.IsNotExist(err) {
-				return nil, "", errors.Wrapf(err, "invalid destination file: %s", output)
-			}
-			if err == nil && fi.IsDir() {
-				return nil, "", errors.Errorf("destination file is a directory")
-			}
-			w, err := os.Create(output)
-			return w, "", err
-		}
-		// if no output file is specified, use stdout
-		if _, err := console.ConsoleFromFile(os.Stdout); err == nil {
-			return nil, "", errors.Errorf("output file is required for %s exporter. refusing to write to console", exporter)
-		}
-		return os.Stdout, "", nil
-	default: // e.g. client.ExporterImage
-		if output != "" {
-			return nil, "", errors.Errorf("output %s is not supported by %s exporter", output, exporter)
-		}
-		return nil, "", nil
-	}
-}
-
-func parseEntitlements(inp []string) ([]entitlements.Entitlement, error) {
-	ent := make([]entitlements.Entitlement, 0, len(inp))
-	for _, v := range inp {
-		e, err := entitlements.Parse(v)
-		if err != nil {
-			return nil, err
-		}
-		ent = append(ent, e)
-	}
-	return ent, nil
-}
-
-func parseSSHSpecs(inp []string) ([]sshprovider.AgentConfig, error) {
-	configs := make([]sshprovider.AgentConfig, 0, len(inp))
-	for _, v := range inp {
-		parts := strings.SplitN(v, "=", 2)
-		cfg := sshprovider.AgentConfig{
-			ID: parts[0],
-		}
-		if len(parts) > 1 {
-			cfg.Paths = strings.Split(parts[1], ",")
-		}
-		configs = append(configs, cfg)
-	}
-	return configs, nil
 }

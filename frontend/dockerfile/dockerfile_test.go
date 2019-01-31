@@ -235,8 +235,12 @@ COPY link/foo .
 	defer os.RemoveAll(destDir)
 
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
-		Exporter:          client.ExporterLocal,
-		ExporterOutputDir: destDir,
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -275,8 +279,12 @@ COPY --from=build /sub2/foo bar
 	defer os.RemoveAll(destDir)
 
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
-		Exporter:          client.ExporterLocal,
-		ExporterOutputDir: destDir,
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -350,8 +358,12 @@ COPY --from=build /out .
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
 		},
-		Exporter:          client.ExporterLocal,
-		ExporterOutputDir: destDir,
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 	}, nil)
 	require.NoError(t, err)
 
@@ -397,8 +409,12 @@ COPY arch-$TARGETARCH whoami
 		FrontendAttrs: map[string]string{
 			"platform": "windows/amd64,linux/arm,linux/s390x",
 		},
-		Exporter:          client.ExporterLocal,
-		ExporterOutputDir: destDir,
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 	}, nil)
 	require.NoError(t, err)
 
@@ -432,8 +448,12 @@ COPY arch-$TARGETARCH whoami
 		FrontendAttrs: map[string]string{
 			"platform": "windows/amd64,linux/arm/v6,linux/ppc64le",
 		},
-		Exporter:       client.ExporterOCI,
-		ExporterOutput: outW,
+		Exports: []client.ExportEntry{
+			{
+				Type:   client.ExporterOCI,
+				Output: outW,
+			},
+		},
 	}, nil)
 	require.NoError(t, err)
 
@@ -532,8 +552,12 @@ COPY foo /
 	defer os.RemoveAll(destDir)
 
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
-		Exporter:          client.ExporterLocal,
-		ExporterOutputDir: destDir,
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -667,8 +691,12 @@ COPY --from=0 /foo /foo
 			"context":  server.URL + "/df",
 			"filename": "mydockerfile", // this is bogus, any name should work
 		},
-		Exporter:          client.ExporterLocal,
-		ExporterOutputDir: destDir,
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 	}, nil)
 	require.NoError(t, err)
 
@@ -707,9 +735,13 @@ CMD ["test"]
 
 	target := "docker.io/moby/cmdoverridetest:latest"
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
-		Exporter: client.ExporterImage,
-		ExporterAttrs: map[string]string{
-			"name": target,
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+				},
+			},
 		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
@@ -732,9 +764,13 @@ ENTRYPOINT my entrypoint
 
 	target = "docker.io/moby/cmdoverridetest2:latest"
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
-		Exporter: client.ExporterImage,
-		ExporterAttrs: map[string]string{
-			"name": target,
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+				},
+			},
 		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
@@ -795,9 +831,13 @@ LABEL foo=bar
 
 	target := "docker.io/moby/testpullscratch:latest"
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
-		Exporter: client.ExporterImage,
-		ExporterAttrs: map[string]string{
-			"name": target,
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+				},
+			},
 		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
@@ -821,9 +861,13 @@ COPY foo .
 
 	target = "docker.io/moby/testpullscratch2:latest"
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
-		Exporter: client.ExporterImage,
-		ExporterAttrs: map[string]string{
-			"name": target,
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+				},
+			},
 		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
@@ -872,8 +916,12 @@ COPY foo .
 	defer os.RemoveAll(destDir)
 
 	_, err = c.Solve(context.TODO(), def, client.SolveOpt{
-		Exporter:          client.ExporterLocal,
-		ExporterOutputDir: destDir,
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -1400,9 +1448,13 @@ EXPOSE 5000
 
 	target := "example.com/moby/dockerfileexpansion:test"
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
-		Exporter: client.ExporterImage,
-		ExporterAttrs: map[string]string{
-			"name": target,
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+				},
+			},
 		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
@@ -1488,8 +1540,12 @@ Dockerfile
 	defer os.RemoveAll(destDir)
 
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
-		Exporter:          client.ExporterLocal,
-		ExporterOutputDir: destDir,
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -1720,8 +1776,12 @@ USER nobody
 	defer os.RemoveAll(destDir)
 
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
-		Exporter:          client.ExporterLocal,
-		ExporterOutputDir: destDir,
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -1740,9 +1800,13 @@ USER nobody
 	// test user in exported
 	target := "example.com/moby/dockerfileuser:test"
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
-		Exporter: client.ExporterImage,
-		ExporterAttrs: map[string]string{
-			"name": target,
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+				},
+			},
 		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
@@ -1814,8 +1878,12 @@ COPY --from=base /out /
 	defer os.RemoveAll(destDir)
 
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
-		Exporter:          client.ExporterLocal,
-		ExporterOutputDir: destDir,
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -1865,8 +1933,12 @@ COPY files dest
 	defer os.RemoveAll(destDir)
 
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
-		Exporter:          client.ExporterLocal,
-		ExporterOutputDir: destDir,
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -1909,8 +1981,12 @@ COPY $FOO baz
 	defer os.RemoveAll(destDir)
 
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
-		Exporter:          client.ExporterLocal,
-		ExporterOutputDir: destDir,
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -1960,8 +2036,12 @@ COPY sub/dir1 subdest6
 	defer os.RemoveAll(destDir)
 
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
-		Exporter:          client.ExporterLocal,
-		ExporterOutputDir: destDir,
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -2066,8 +2146,12 @@ COPY --from=build foo bar2
 		FrontendAttrs: map[string]string{
 			"context": server.URL + "/.git#first",
 		},
-		Exporter:          client.ExporterLocal,
-		ExporterOutputDir: destDir,
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 	}, nil)
 	require.NoError(t, err)
 
@@ -2088,8 +2172,12 @@ COPY --from=build foo bar2
 		FrontendAttrs: map[string]string{
 			"context": server.URL + "/.git",
 		},
-		Exporter:          client.ExporterLocal,
-		ExporterOutputDir: destDir,
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 	}, nil)
 	require.NoError(t, err)
 
@@ -2151,8 +2239,12 @@ COPY foo bar
 			"context":  server.URL + "/myurl",
 			"filename": "mydockerfile",
 		},
-		Exporter:          client.ExporterLocal,
-		ExporterOutputDir: destDir,
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 	}, nil)
 	require.NoError(t, err)
 
@@ -2184,8 +2276,12 @@ COPY --from=busybox /etc/passwd test
 	defer os.RemoveAll(destDir)
 
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
-		Exporter:          client.ExporterLocal,
-		ExporterOutputDir: destDir,
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -2218,8 +2314,12 @@ COPY --from=golang /usr/bin/go go
 	defer os.RemoveAll(destDir)
 
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
-		Exporter:          client.ExporterLocal,
-		ExporterOutputDir: destDir,
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -2259,8 +2359,12 @@ COPY --from=stage1 baz bax
 	defer os.RemoveAll(destDir)
 
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
-		Exporter:          client.ExporterLocal,
-		ExporterOutputDir: destDir,
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -2302,9 +2406,13 @@ LABEL foo=bar
 		FrontendAttrs: map[string]string{
 			"label:bar": "baz",
 		},
-		Exporter: client.ExporterImage,
-		ExporterAttrs: map[string]string{
-			"name": target,
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+				},
+			},
 		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
@@ -2387,8 +2495,12 @@ COPY --from=base unique /
 	target := registry + "/buildkit/testexportdf:latest"
 
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
-		Exporter:          client.ExporterLocal,
-		ExporterOutputDir: destDir,
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 		CacheExports: []client.CacheOptionsEntry{
 			{
 				Type:  "registry",
@@ -2422,8 +2534,12 @@ COPY --from=base unique /
 		FrontendAttrs: map[string]string{
 			"cache-from": target,
 		},
-		Exporter:          client.ExporterLocal,
-		ExporterOutputDir: destDir,
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -2471,9 +2587,13 @@ RUN echo bar > bar
 	target := "example.com/moby/dockerfileids:test"
 	opt := client.SolveOpt{
 		FrontendAttrs: map[string]string{},
-		Exporter:      client.ExporterImage,
-		ExporterAttrs: map[string]string{
-			"name": target,
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+				},
+			},
 		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
@@ -2485,7 +2605,7 @@ RUN echo bar > bar
 	require.NoError(t, err)
 
 	target2 := "example.com/moby/dockerfileids2:test"
-	opt.ExporterAttrs["name"] = target2
+	opt.Exports[0].Attrs["name"] = target2
 
 	_, err = f.Solve(context.TODO(), c, opt, nil)
 	require.NoError(t, err)
@@ -2557,15 +2677,19 @@ RUN echo bar > bar
 	cacheTarget := registry + "/test/dockerfileexpids:cache"
 	opt := client.SolveOpt{
 		FrontendAttrs: map[string]string{},
-		Exporter:      client.ExporterImage,
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+				},
+			},
+		},
 		CacheExports: []client.CacheOptionsEntry{
 			{
 				Type:  "registry",
 				Attrs: map[string]string{"ref": cacheTarget},
 			},
-		},
-		ExporterAttrs: map[string]string{
-			"name": target,
 		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
@@ -2595,7 +2719,7 @@ RUN echo bar > bar
 
 	target2 := "example.com/moby/dockerfileexpids2:test"
 
-	opt.ExporterAttrs["name"] = target2
+	opt.Exports[0].Attrs["name"] = target2
 	opt.FrontendAttrs["cache-from"] = cacheTarget
 
 	_, err = f.Solve(context.TODO(), c, opt, nil)
@@ -2634,9 +2758,13 @@ COPY --from=s1 unique2 /
 	defer os.RemoveAll(destDir)
 
 	opt := client.SolveOpt{
-		FrontendAttrs:     map[string]string{},
-		Exporter:          client.ExporterLocal,
-		ExporterOutputDir: destDir,
+		FrontendAttrs: map[string]string{},
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -2651,7 +2779,7 @@ COPY --from=s1 unique2 /
 	defer os.RemoveAll(destDir)
 
 	opt.FrontendAttrs["no-cache"] = ""
-	opt.ExporterOutputDir = destDir2
+	opt.Exports[0].OutputDir = destDir2
 
 	_, err = f.Solve(context.TODO(), c, opt, nil)
 	require.NoError(t, err)
@@ -2676,7 +2804,7 @@ COPY --from=s1 unique2 /
 	defer os.RemoveAll(destDir)
 
 	opt.FrontendAttrs["no-cache"] = "s1"
-	opt.ExporterOutputDir = destDir3
+	opt.Exports[0].OutputDir = destDir3
 
 	_, err = f.Solve(context.TODO(), c, opt, nil)
 	require.NoError(t, err)
@@ -2718,8 +2846,12 @@ COPY foo2 bar2
 	defer os.RemoveAll(destDir)
 
 	opt := client.SolveOpt{
-		Exporter:          client.ExporterLocal,
-		ExporterOutputDir: destDir,
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -2765,12 +2897,16 @@ COPY --from=build out .
 	defer os.RemoveAll(destDir)
 
 	opt := client.SolveOpt{
-		Exporter: client.ExporterLocal,
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 		FrontendAttrs: map[string]string{
 			"platform":           "darwin/ppc64le",
 			"build-arg:TARGETOS": "freebsd",
 		},
-		ExporterOutputDir: destDir,
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -2822,8 +2958,12 @@ COPY --from=build /out /
 			"build-arg:http_proxy": "hpvalue",
 			"build-arg:NO_PROXY":   "npvalue",
 		},
-		Exporter:          client.ExporterLocal,
-		ExporterOutputDir: destDir,
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -2847,8 +2987,12 @@ COPY --from=build /out /
 			"build-arg:FOO":        "foocontents",
 			"build-arg:http_proxy": "hpvalue2",
 		},
-		Exporter:          client.ExporterLocal,
-		ExporterOutputDir: destDir,
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -2872,8 +3016,12 @@ COPY --from=build /out /
 			"build-arg:FOO":        "foocontents2",
 			"build-arg:http_proxy": "hpvalue2",
 		},
-		Exporter:          client.ExporterLocal,
-		ExporterOutputDir: destDir,
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,

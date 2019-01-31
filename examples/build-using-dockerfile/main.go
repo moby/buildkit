@@ -160,14 +160,18 @@ func newSolveOpt(clicontext *cli.Context, w io.WriteCloser) (*client.SolveOpt, e
 		frontendAttrs["build-arg:"+kv[0]] = kv[1]
 	}
 	return &client.SolveOpt{
-		Exporter: "docker", // TODO: use containerd image store when it is integrated to Docker
-		ExporterAttrs: map[string]string{
-			"name": clicontext.String("tag"),
+		Exports: []client.ExportEntry{
+			{
+				Type: "docker", // TODO: use containerd image store when it is integrated to Docker
+				Attrs: map[string]string{
+					"name": clicontext.String("tag"),
+				},
+				Output: w,
+			},
 		},
-		ExporterOutput: w,
-		LocalDirs:      localDirs,
-		Frontend:       frontend,
-		FrontendAttrs:  frontendAttrs,
+		LocalDirs:     localDirs,
+		Frontend:      frontend,
+		FrontendAttrs: frontendAttrs,
 	}, nil
 }
 

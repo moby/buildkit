@@ -192,9 +192,13 @@ func testSSHMount(t *testing.T, sb integration.Sandbox) {
 	defer os.RemoveAll(destDir)
 
 	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exporter:          ExporterLocal,
-		ExporterOutputDir: destDir,
-		Session:           []session.Attachable{ssh},
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		Session: []session.Attachable{ssh},
 	}, nil)
 	require.NoError(t, err)
 
@@ -220,9 +224,13 @@ func testSSHMount(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exporter:          ExporterLocal,
-		ExporterOutputDir: destDir,
-		Session:           []session.Attachable{ssh},
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		Session: []session.Attachable{ssh},
 	}, nil)
 	require.NoError(t, err)
 
@@ -267,9 +275,13 @@ func testSSHMount(t *testing.T, sb integration.Sandbox) {
 	defer os.RemoveAll(destDir)
 
 	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exporter:          ExporterLocal,
-		ExporterOutputDir: destDir,
-		Session:           []session.Attachable{ssh},
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		Session: []session.Attachable{ssh},
 	}, nil)
 	require.NoError(t, err)
 
@@ -424,8 +436,12 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 					defer os.RemoveAll(destDir)
 
 					so := SolveOpt{
-						Exporter:      exp,
-						ExporterAttrs: map[string]string{},
+						Exports: []ExportEntry{
+							{
+								Type:  exp,
+								Attrs: map[string]string{},
+							},
+						},
 					}
 
 					out := filepath.Join(destDir, "out.tar")
@@ -438,19 +454,19 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 					case ExporterDocker:
 						outW, err := os.Create(out)
 						require.NoError(t, err)
-						so.ExporterOutput = outW
+						so.Exports[0].Output = outW
 					case ExporterImage:
 						imageName = registry + "/" + imageName
-						so.ExporterAttrs["push"] = "true"
+						so.Exports[0].Attrs["push"] = "true"
 					}
 
 					feName := imageName
 					switch winner {
 					case "caller":
 						feName = "loser:latest"
-						so.ExporterAttrs["name"] = imageName
+						so.Exports[0].Attrs["name"] = imageName
 					case "frontend":
-						so.ExporterAttrs["name"] = "*"
+						so.Exports[0].Attrs["name"] = "*"
 					}
 
 					frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
@@ -623,8 +639,12 @@ func testRelativeWorkDir(t *testing.T, sb integration.Sandbox) {
 	defer os.RemoveAll(destDir)
 
 	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exporter:          ExporterLocal,
-		ExporterOutputDir: destDir,
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 	}, nil)
 	require.NoError(t, err)
 
@@ -707,8 +727,12 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 	defer os.RemoveAll(tmpdir)
 
 	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exporter:          ExporterLocal,
-		ExporterOutputDir: tmpdir,
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: tmpdir,
+			},
+		},
 	}, nil)
 	require.NoError(t, err)
 
@@ -726,8 +750,12 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exporter:          ExporterLocal,
-		ExporterOutputDir: tmpdir,
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: tmpdir,
+			},
+		},
 	}, nil)
 	require.NoError(t, err)
 
@@ -772,8 +800,12 @@ func testResolveAndHosts(t *testing.T, sb integration.Sandbox) {
 	defer os.RemoveAll(destDir)
 
 	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exporter:          ExporterLocal,
-		ExporterOutputDir: destDir,
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 	}, nil)
 	require.NoError(t, err)
 
@@ -815,8 +847,12 @@ func testUser(t *testing.T, sb integration.Sandbox) {
 	defer os.RemoveAll(destDir)
 
 	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exporter:          ExporterLocal,
-		ExporterOutputDir: destDir,
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 	}, nil)
 	require.NoError(t, err)
 
@@ -873,9 +909,13 @@ func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 			attrs["name"] = target
 		}
 		_, err = c.Solve(context.TODO(), def, SolveOpt{
-			Exporter:       exp,
-			ExporterAttrs:  attrs,
-			ExporterOutput: outW,
+			Exports: []ExportEntry{
+				{
+					Type:   exp,
+					Attrs:  attrs,
+					Output: outW,
+				},
+			},
 		}, nil)
 		require.NoError(t, err)
 
@@ -953,9 +993,13 @@ func testFrontendMetadataReturn(t *testing.T, sb integration.Sandbox) {
 	}
 
 	res, err := c.Build(context.TODO(), SolveOpt{
-		Exporter:       ExporterOCI,
-		ExporterAttrs:  map[string]string{},
-		ExporterOutput: nopWriteCloser{ioutil.Discard},
+		Exports: []ExportEntry{
+			{
+				Type:   ExporterOCI,
+				Attrs:  map[string]string{},
+				Output: nopWriteCloser{ioutil.Discard},
+			},
+		},
 	}, "", frontend, nil)
 	require.NoError(t, err)
 	require.Contains(t, res.ExporterResponse, "frontend.returned")
@@ -994,10 +1038,14 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	target := registry + "/buildkit/testpush:latest"
 
 	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exporter: ExporterImage,
-		ExporterAttrs: map[string]string{
-			"name": target,
-			"push": "true",
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -1013,8 +1061,12 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	defer os.RemoveAll(destDir)
 
 	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exporter:          ExporterLocal,
-		ExporterOutputDir: destDir,
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 	}, nil)
 	require.NoError(t, err)
 
@@ -1158,7 +1210,7 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	require.False(t, ok)
 }
 
-func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptionsEntry CacheOptionsEntry) {
+func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptionsEntryImport, cacheOptionsEntryExport CacheOptionsEntry) {
 	requiresLinux(t)
 	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
@@ -1182,10 +1234,14 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptio
 	defer os.RemoveAll(destDir)
 
 	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exporter:          ExporterLocal,
-		ExporterOutputDir: destDir,
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 		CacheExports: []CacheOptionsEntry{
-			cacheOptionsEntry,
+			cacheOptionsEntryExport,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -1207,10 +1263,13 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptio
 	defer os.RemoveAll(destDir)
 
 	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exporter:          ExporterLocal,
-		ExporterOutputDir: destDir,
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			}},
 		CacheImports: []CacheOptionsEntry{
-			cacheOptionsEntry,
+			cacheOptionsEntryImport,
 		},
 	}, nil)
 	require.NoError(t, err)
@@ -1237,20 +1296,26 @@ func testBasicRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
 			"ref": target,
 		},
 	}
-	testBasicCacheImportExport(t, sb, o)
+	testBasicCacheImportExport(t, sb, o, o)
 }
 
 func testBasicLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	dir, err := ioutil.TempDir("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
-	o := CacheOptionsEntry{
+	im := CacheOptionsEntry{
 		Type: "local",
 		Attrs: map[string]string{
-			"store": dir,
+			"src": dir,
 		},
 	}
-	testBasicCacheImportExport(t, sb, o)
+	ex := CacheOptionsEntry{
+		Type: "local",
+		Attrs: map[string]string{
+			"dest": dir,
+		},
+	}
+	testBasicCacheImportExport(t, sb, im, ex)
 }
 
 func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
@@ -1281,10 +1346,14 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	target := registry + "/buildkit/testexportinline:latest"
 
 	resp, err := c.Solve(context.TODO(), def, SolveOpt{
-		Exporter: ExporterImage,
-		ExporterAttrs: map[string]string{
-			"name": target,
-			"push": "true",
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
 		},
 		CacheExports: []CacheOptionsEntry{
 			{
@@ -1306,9 +1375,13 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	checkAllRemoved(t, c, sb)
 
 	resp, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exporter: ExporterImage,
 		// specifying inline cache exporter is needed for reproducing containerimage.digest
 		// (not needed for reproducing rootfs/unique)
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+			},
+		},
 		CacheExports: []CacheOptionsEntry{
 			{
 				Type: "inline",
@@ -1336,7 +1409,11 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	checkAllRemoved(t, c, sb)
 
 	resp, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exporter: ExporterImage,
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+			},
+		},
 		CacheImports: []CacheOptionsEntry{
 			{
 				Type: "registry",
@@ -1369,8 +1446,12 @@ func readFileInImage(c *Client, ref, path string) ([]byte, error) {
 	defer os.RemoveAll(destDir)
 
 	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exporter:          ExporterLocal,
-		ExporterOutputDir: destDir,
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 	}, nil)
 	if err != nil {
 		return nil, err
@@ -1419,8 +1500,12 @@ func testCachedMounts(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exporter:          ExporterLocal,
-		ExporterOutputDir: destDir,
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 	}, nil)
 	require.NoError(t, err)
 
@@ -1535,8 +1620,12 @@ func testDuplicateWhiteouts(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exporter:       ExporterOCI,
-		ExporterOutput: outW,
+		Exports: []ExportEntry{
+			{
+				Type:   ExporterOCI,
+				Output: outW,
+			},
+		},
 	}, nil)
 	require.NoError(t, err)
 
@@ -1601,8 +1690,12 @@ func testWhiteoutParentDir(t *testing.T, sb integration.Sandbox) {
 	outW, err := os.Create(out)
 	require.NoError(t, err)
 	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exporter:       ExporterOCI,
-		ExporterOutput: outW,
+		Exports: []ExportEntry{
+			{
+				Type:   ExporterOCI,
+				Output: outW,
+			},
+		},
 	}, nil)
 	require.NoError(t, err)
 
@@ -1732,8 +1825,12 @@ func testProxyEnv(t *testing.T, sb integration.Sandbox) {
 	defer os.RemoveAll(destDir)
 
 	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exporter:          ExporterLocal,
-		ExporterOutputDir: destDir,
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 	}, nil)
 	require.NoError(t, err)
 
@@ -1756,8 +1853,12 @@ func testProxyEnv(t *testing.T, sb integration.Sandbox) {
 	defer os.RemoveAll(destDir)
 
 	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exporter:          ExporterLocal,
-		ExporterOutputDir: destDir,
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 	}, nil)
 	require.NoError(t, err)
 
@@ -1886,23 +1987,35 @@ func testInvalidExporter(t *testing.T, sb integration.Sandbox) {
 	}
 	for _, exp := range []string{ExporterOCI, ExporterDocker} {
 		_, err = c.Solve(context.TODO(), def, SolveOpt{
-			Exporter:      exp,
-			ExporterAttrs: attrs,
+			Exports: []ExportEntry{
+				{
+					Type:  exp,
+					Attrs: attrs,
+				},
+			},
 		}, nil)
 		// output file writer is required
 		require.Error(t, err)
 		_, err = c.Solve(context.TODO(), def, SolveOpt{
-			Exporter:          exp,
-			ExporterAttrs:     attrs,
-			ExporterOutputDir: destDir,
+			Exports: []ExportEntry{
+				{
+					Type:      exp,
+					Attrs:     attrs,
+					OutputDir: destDir,
+				},
+			},
 		}, nil)
 		// output directory is not supported
 		require.Error(t, err)
 	}
 
 	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exporter:      ExporterLocal,
-		ExporterAttrs: attrs,
+		Exports: []ExportEntry{
+			{
+				Type:  ExporterLocal,
+				Attrs: attrs,
+			},
+		},
 	}, nil)
 	// output directory is required
 	require.Error(t, err)
@@ -1911,9 +2024,13 @@ func testInvalidExporter(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer f.Close()
 	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exporter:       ExporterLocal,
-		ExporterAttrs:  attrs,
-		ExporterOutput: f,
+		Exports: []ExportEntry{
+			{
+				Type:   ExporterLocal,
+				Attrs:  attrs,
+				Output: f,
+			},
+		},
 	}, nil)
 	// output file writer is not supported
 	require.Error(t, err)
@@ -1950,8 +2067,12 @@ func testParallelLocalBuilds(t *testing.T, sb integration.Sandbox) {
 				defer os.RemoveAll(destDir)
 
 				_, err = c.Solve(ctx, def, SolveOpt{
-					Exporter:          ExporterLocal,
-					ExporterOutputDir: destDir,
+					Exports: []ExportEntry{
+						{
+							Type:      ExporterLocal,
+							OutputDir: destDir,
+						},
+					},
 					LocalDirs: map[string]string{
 						"source": srcDir,
 					},

@@ -85,8 +85,12 @@ func testClientGatewaySolve(t *testing.T, sb integration.Sandbox) {
 	testStr := "This is a test"
 
 	_, err = c.Build(ctx, SolveOpt{
-		Exporter:          ExporterLocal,
-		ExporterOutputDir: tmpdir,
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: tmpdir,
+			},
+		},
 		FrontendAttrs: map[string]string{
 			optKey: testStr,
 		},
