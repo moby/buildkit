@@ -66,10 +66,12 @@ RUN --mount=from=runc-src,src=/usr/src/runc,target=. --mount=target=/root/.cache
   file /usr/bin/runc | grep "statically linked"
 
 FROM gobuild-base AS buildkit-base
-WORKDIR /go/src/github.com/moby/buildkit
+WORKDIR /src
+ENV GOFLAGS=-mod=vendor
 
 # scan the version/revision info
 FROM buildkit-base AS buildkit-version
+# TODO: PKG should be inferred from go modules
 RUN --mount=target=. \
   PKG=github.com/moby/buildkit VERSION=$(git describe --match 'v[0-9]*' --dirty='.m' --always --tags) REVISION=$(git rev-parse HEAD)$(if ! git diff --no-ext-diff --quiet --exit-code; then echo .m; fi); \
   echo "-X ${PKG}/version.Version=${VERSION} -X ${PKG}/version.Revision=${REVISION} -X ${PKG}/version.Package=${PKG}" | tee /tmp/.ldflags; \
@@ -80,6 +82,7 @@ FROM buildkit-base AS buildctl
 ENV CGO_ENABLED=0
 ARG TARGETPLATFORM
 RUN --mount=target=. --mount=target=/root/.cache,type=cache \
+  --mount=target=/go/pkg/mod,type=cache \
   --mount=source=/tmp/.ldflags,target=/tmp/.ldflags,from=buildkit-version \
   set -x; go build -ldflags "$(cat /tmp/.ldflags)" -o /usr/bin/buildctl ./cmd/buildctl && \
   file /usr/bin/buildctl && file /usr/bin/buildctl | egrep "statically linked|Mach-O|Windows"
@@ -89,6 +92,7 @@ FROM buildkit-base AS buildkitd
 ENV CGO_ENABLED=1
 ARG TARGETPLATFORM
 RUN --mount=target=. --mount=target=/root/.cache,type=cache \
+  --mount=target=/go/pkg/mod,type=cache \
   --mount=source=/tmp/.ldflags,target=/tmp/.ldflags,from=buildkit-version \
   go build -ldflags "$(cat /tmp/.ldflags) -w -extldflags -static" -tags 'osusergo seccomp netgo cgo static_build ' -o /usr/bin/buildkitd ./cmd/buildkitd && \
   file /usr/bin/buildkitd | grep "statically linked"

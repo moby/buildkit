@@ -9,6 +9,7 @@ import (
 type store interface {
 	Save() error
 	GetAuthConfigs() map[string]types.AuthConfig
+	GetFilename() string
 }
 
 // fileStore implements a credentials store using
@@ -55,8 +56,17 @@ func (c *fileStore) Store(authConfig types.AuthConfig) error {
 	return c.file.Save()
 }
 
+func (c *fileStore) GetFilename() string {
+	return c.file.GetFilename()
+}
+
+func (c *fileStore) IsFileStore() bool {
+	return true
+}
+
 // ConvertToHostname converts a registry url which has http|https prepended
 // to just an hostname.
+// Copied from github.com/docker/docker/registry.ConvertToHostname to reduce dependencies.
 func ConvertToHostname(url string) string {
 	stripped := url
 	if strings.HasPrefix(url, "http://") {

@@ -1,0 +1,15 @@
+language: go
+
+go:
+  - 1.6.x
+  - 1.7.x
+  - 1.8.x
+  - 1.9.x
+  - tip
+
+install:
+  - go get -d -t github.com/opentracing/opentracing-go/...
+  - go get -u github.com/golang/lint/...
+script:
+  - make test lint
+  - go build ./...

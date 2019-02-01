@@ -1,3 +1,5 @@
 package credentials
 
-const defaultCredentialsStore = "wincred"
+func defaultCredentialsStore() string {
+	return "wincred"
+}

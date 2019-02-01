@@ -62,7 +62,7 @@ case $buildmode in
   ;;
 esac
 
-cacheVolume=$(docker create -v /root/.cache -v /root/.cache/registry alpine)
+cacheVolume=$(docker create -v /root/.cache -v /root/.cache/registry -v /go/pkg/mod alpine)
 
 if [ "$TEST_INTEGRATION" == 1 ]; then
   docker run --rm -v /tmp --volumes-from=$cacheVolume -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry --privileged $iid go test ${TESTFLAGS:--v} ${TESTPKGS:-./...}
@@ -70,7 +70,7 @@ fi
 
 
 if [ "$TEST_GATEWAY" == 1 ]; then
-  docker run --rm $iid go build ./frontend/gateway/client
+  docker run --rm --volumes-from=$cacheVolume $iid go build ./frontend/gateway/client
 fi
 
 
