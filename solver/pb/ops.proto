@@ -261,5 +261,5 @@ message ChownOpt {
 message UserOpt {
 	string name = 1;
 	int64 input = 2 [(gogoproto.customtype) = "InputIndex", (gogoproto.nullable) = false]; // input that contains /etc/passwd if using a name
-	int32 id = 3;
+	uint32 id = 3;
 }

@@ -239,7 +239,7 @@ func (up *UserOpt) marshal(base pb.InputIndex) *pb.UserOpt {
 	if up.Name != "" {
 		return &pb.UserOpt{Name: up.Name, Input: base}
 	}
-	return &pb.UserOpt{Id: int32(up.UID), Input: -1}
+	return &pb.UserOpt{Id: uint32(up.UID), Input: -1}
 }
 
 func Mkfile(p string, m os.FileMode, dt []byte, opts ...MkfileOption) *FileAction {
