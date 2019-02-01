@@ -221,13 +221,14 @@ message FileActionCopy {
 	string src = 1;
 	string dest = 2;
 	ChownOpt owner = 4;
-  int32 mode = 5;
+	int32 mode = 5;
 	bool followSymlink = 6;
 	bool dirCopyContents = 7;
-  bool attemptUnpack = 8;
-  bool createDestPath = 9;
-  bool allowWildcard = 10;
-  bool allowEmptyWildcard = 11;
+	bool attemptUnpack = 8;
+	bool createDestPath = 9;
+	bool allowWildcard = 10;
+	bool allowEmptyWildcard = 11;
+	int64 timestamp = 12;
 }
 
 message FileActionMkFile {
@@ -235,19 +236,21 @@ message FileActionMkFile {
 	int32 mode = 2;
 	bytes data = 3;
 	ChownOpt owner = 4;
+	int64 timestamp = 5;
 }
 
 message FileActionMkDir {
 	string path = 1;
 	int32 mode = 2;
-  bool makeParents = 3;
+	bool makeParents = 3;
 	ChownOpt owner = 4;
+	int64 timestamp = 5;
 }
 
 message FileActionRm {
 	string path = 1;
-  bool allowNotFound = 2;
-  bool allowWildcard = 3;
+	bool allowNotFound = 2;
+	bool allowWildcard = 3;
 }
 
 message ChownOpt {

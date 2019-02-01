@@ -2,6 +2,7 @@ package llb
 
 import (
 	"testing"
+	"time"
 
 	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
@@ -39,6 +40,7 @@ func TestFileMkdir(t *testing.T) {
 
 	require.Equal(t, "/foo", mkdir.Path)
 	require.Equal(t, 0700, int(mkdir.Mode))
+	require.Equal(t, int64(-1), mkdir.Timestamp)
 }
 
 func TestFileMkdirChain(t *testing.T) {
@@ -126,6 +128,7 @@ func TestFileMkfile(t *testing.T) {
 	require.Equal(t, "/foo", mkdir.Path)
 	require.Equal(t, 0700, int(mkdir.Mode))
 	require.Equal(t, "data", string(mkdir.Data))
+	require.Equal(t, int64(-1), mkdir.Timestamp)
 }
 
 func TestFileRm(t *testing.T) {
@@ -270,6 +273,7 @@ func TestFileCopy(t *testing.T) {
 
 	require.Equal(t, "/etc/foo", copy.Src)
 	require.Equal(t, "/tmp/bar", copy.Dest)
+	require.Equal(t, int64(-1), copy.Timestamp)
 }
 
 func TestFileCopyFromAction(t *testing.T) {
@@ -558,6 +562,48 @@ func TestFileCopyOwner(t *testing.T) {
 	require.Equal(t, 2, int(copy.Owner.Group.Id))
 	require.Equal(t, "", copy.Owner.Group.Name)
 	require.Equal(t, -1, int(copy.Owner.Group.Input))
+}
+
+func TestFileCreatedTime(t *testing.T) {
+	t.Parallel()
+
+	dt := time.Now()
+	dt2 := time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC)
+	dt3 := time.Date(2019, time.November, 10, 23, 0, 0, 0, time.UTC)
+
+	st := Image("foo").File(
+		Mkdir("/foo", 0700, WithCreatedTime(dt)).
+			Mkfile("bar", 0600, []byte{}, WithCreatedTime(dt2)).
+			Copy(Scratch(), "src", "dst", WithCreatedTime(dt3)))
+	def, err := st.Marshal()
+
+	require.NoError(t, err)
+
+	m, arr := parseDef(t, def.Def)
+	require.Equal(t, 3, len(arr))
+
+	dgst, idx := last(t, arr)
+	require.Equal(t, 0, idx)
+	require.Equal(t, m[dgst], arr[1])
+
+	f := arr[1].Op.(*pb.Op_File).File
+	require.Equal(t, len(arr[1].Inputs), 1)
+	require.Equal(t, m[arr[1].Inputs[0].Digest], arr[0])
+	require.Equal(t, 0, int(arr[1].Inputs[0].Index))
+
+	require.Equal(t, 3, len(f.Actions))
+
+	action := f.Actions[0]
+	mkdir := action.Action.(*pb.FileAction_Mkdir).Mkdir
+	require.Equal(t, dt.UnixNano(), mkdir.Timestamp)
+
+	action = f.Actions[1]
+	mkfile := action.Action.(*pb.FileAction_Mkfile).Mkfile
+	require.Equal(t, dt2.UnixNano(), mkfile.Timestamp)
+
+	action = f.Actions[2]
+	copy := action.Action.(*pb.FileAction_Copy).Copy
+	require.Equal(t, dt3.UnixNano(), copy.Timestamp)
 }
 
 func parseDef(t *testing.T, def [][]byte) (map[digest.Digest]pb.Op, []pb.Op) {

@@ -4,6 +4,7 @@ import (
 	_ "crypto/sha256"
 	"os"
 	"path"
+	"time"
 
 	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
@@ -149,6 +150,7 @@ func (a *fileActionMkdir) toProtoAction(parent string, base pb.InputIndex) pb.Is
 			Mode:        int32(a.mode & 0777),
 			MakeParents: a.info.MakeParents,
 			Owner:       a.info.ChownOpt.marshal(base),
+			Timestamp:   marshalTime(a.info.CreatedTime),
 		},
 	}
 }
@@ -180,6 +182,7 @@ func WithParents(b bool) MkdirOption {
 type MkdirInfo struct {
 	MakeParents bool
 	ChownOpt    *ChownOpt
+	CreatedTime *time.Time
 }
 
 func (mi *MkdirInfo) SetMkdirOption(mi2 *MkdirInfo) {
@@ -260,7 +263,8 @@ type MkfileOption interface {
 }
 
 type MkfileInfo struct {
-	ChownOpt *ChownOpt
+	ChownOpt    *ChownOpt
+	CreatedTime *time.Time
 }
 
 func (mi *MkfileInfo) SetMkfileOption(mi2 *MkfileInfo) {
@@ -279,10 +283,11 @@ type fileActionMkfile struct {
 func (a *fileActionMkfile) toProtoAction(parent string, base pb.InputIndex) pb.IsFileAction {
 	return &pb.FileAction_Mkfile{
 		Mkfile: &pb.FileActionMkFile{
-			Path:  normalizePath(parent, a.file),
-			Mode:  int32(a.mode & 0777),
-			Data:  a.dt,
-			Owner: a.info.ChownOpt.marshal(base),
+			Path:      normalizePath(parent, a.file),
+			Mode:      int32(a.mode & 0777),
+			Data:      a.dt,
+			Owner:     a.info.ChownOpt.marshal(base),
+			Timestamp: marshalTime(a.info.CreatedTime),
 		},
 	}
 }
@@ -391,6 +396,7 @@ type CopyInfo struct {
 	AllowWildcard       bool
 	AllowEmptyWildcard  bool
 	ChownOpt            *ChownOpt
+	CreatedTime         *time.Time
 }
 
 func (mi *CopyInfo) SetCopyOption(mi2 *CopyInfo) {
@@ -418,6 +424,7 @@ func (a *fileActionCopy) toProtoAction(parent string, base pb.InputIndex) pb.IsF
 		DirCopyContents:    a.info.CopyDirContentsOnly,
 		AttemptUnpack:      a.info.AttemptUnpack,
 		CreateDestPath:     a.info.CreateDestPath,
+		Timestamp:          marshalTime(a.info.CreatedTime),
 	}
 	if a.info.Mode != nil {
 		c.Mode = int32(*a.info.Mode)
@@ -439,6 +446,31 @@ func (c *fileActionCopy) sourcePath() string {
 		}
 	}
 	return p
+}
+
+type CreatedTime time.Time
+
+func WithCreatedTime(t time.Time) CreatedTime {
+	return CreatedTime(t)
+}
+
+func (c CreatedTime) SetMkdirOption(mi *MkdirInfo) {
+	mi.CreatedTime = (*time.Time)(&c)
+}
+
+func (c CreatedTime) SetMkfileOption(mi *MkfileInfo) {
+	mi.CreatedTime = (*time.Time)(&c)
+}
+
+func (c CreatedTime) SetCopyOption(mi *CopyInfo) {
+	mi.CreatedTime = (*time.Time)(&c)
+}
+
+func marshalTime(t *time.Time) int64 {
+	if t == nil {
+		return -1
+	}
+	return t.UnixNano()
 }
 
 type FileOp struct {
