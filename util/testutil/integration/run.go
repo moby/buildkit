@@ -58,6 +58,10 @@ func withMatrixValues(mv matrixValue) SandboxOpt {
 	}
 }
 
+type ConfigUpdater interface {
+	UpdateConfigFile(string) string
+}
+
 type Test func(*testing.T, Sandbox)
 
 var defaultWorkers []Worker
@@ -231,7 +235,21 @@ func OfficialImages(names ...string) map[string]string {
 	return m
 }
 
-func configWithMirror(mirror string) (string, error) {
+func withMirrorConfig(mirror string) ConfigUpdater {
+	return mirrorConfig(mirror)
+}
+
+type mirrorConfig string
+
+func (mc mirrorConfig) UpdateConfigFile(in string) string {
+	return fmt.Sprintf(`%s
+
+[registry."docker.io"]
+mirrors=["%s"]
+`, in, mc)
+}
+
+func writeConfig(updaters []ConfigUpdater) (string, error) {
 	tmpdir, err := ioutil.TempDir("", "bktest_config")
 	if err != nil {
 		return "", err
@@ -239,10 +257,13 @@ func configWithMirror(mirror string) (string, error) {
 	if err := os.Chmod(tmpdir, 0711); err != nil {
 		return "", err
 	}
-	if err := ioutil.WriteFile(filepath.Join(tmpdir, "buildkitd.toml"), []byte(fmt.Sprintf(`
-[registry."docker.io"]
-mirrors=["%s"]
-`, mirror)), 0644); err != nil {
+
+	s := ""
+	for _, upt := range updaters {
+		s = upt.UpdateConfigFile(s)
+	}
+
+	if err := ioutil.WriteFile(filepath.Join(tmpdir, "buildkitd.toml"), []byte(s), 0644); err != nil {
 		return "", err
 	}
 	return tmpdir, nil

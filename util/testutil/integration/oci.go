@@ -64,8 +64,20 @@ func (s *oci) New(opt ...SandboxOpt) (Sandbox, func() error, error) {
 
 	deferF := &multiCloser{}
 
+	var upt []ConfigUpdater
+
+	for _, v := range c.mv.values {
+		if u, ok := v.value.(ConfigUpdater); ok {
+			upt = append(upt, u)
+		}
+	}
+
 	if c.mirror != "" {
-		dir, err := configWithMirror(c.mirror)
+		upt = append(upt, withMirrorConfig(c.mirror))
+	}
+
+	if len(upt) > 0 {
+		dir, err := writeConfig(upt)
 		if err != nil {
 			return nil, nil, err
 		}
