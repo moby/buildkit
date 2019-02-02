@@ -214,9 +214,15 @@ func build(clicontext *cli.Context) error {
 
 	var def *llb.Definition
 	if clicontext.String("frontend") == "" {
+		if fi, _ := os.Stdin.Stat(); (fi.Mode() & os.ModeCharDevice) != 0 {
+			return errors.Errorf("please specify --frontend or pipe LLB definition to stdin")
+		}
 		def, err = read(os.Stdin, clicontext)
 		if err != nil {
 			return err
+		}
+		if len(def.Def) == 0 {
+			return errors.Errorf("empty definition sent to build. Specify --frontend instead?")
 		}
 	} else {
 		if clicontext.Bool("no-cache") {
