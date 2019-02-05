@@ -186,7 +186,11 @@ func loadLLB(def *pb.Definition, fn func(digest.Digest, *pb.Op, func(digest.Dige
 		if v, ok := cache[dgst]; ok {
 			return v, nil
 		}
-		v, err := fn(dgst, allOps[dgst], rec)
+		op, ok := allOps[dgst]
+		if !ok {
+			return nil, errors.Errorf("invalid missing input digest %s", dgst)
+		}
+		v, err := fn(dgst, op, rec)
 		if err != nil {
 			return nil, err
 		}
