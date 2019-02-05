@@ -478,18 +478,14 @@ func TestFileOwner(t *testing.T) {
 
 	action = f.Actions[1]
 	mkdir = action.Action.(*pb.FileAction_Mkdir).Mkdir
-	require.Equal(t, 123, int(mkdir.Owner.User.Id))
-	require.Equal(t, "", mkdir.Owner.User.Name)
-	require.Equal(t, -1, int(mkdir.Owner.User.Input))
-	require.Equal(t, 456, int(mkdir.Owner.Group.Id))
-	require.Equal(t, "", mkdir.Owner.Group.Name)
-	require.Equal(t, -1, int(mkdir.Owner.Group.Input))
+	require.Equal(t, 123, int(mkdir.Owner.User.User.(*pb.UserOpt_ByID).ByID))
+	require.Equal(t, 456, int(mkdir.Owner.Group.User.(*pb.UserOpt_ByID).ByID))
 
 	action = f.Actions[2]
 	mkdir = action.Action.(*pb.FileAction_Mkdir).Mkdir
-	require.Equal(t, 0, int(mkdir.Owner.User.Id))
-	require.Equal(t, "foouser", mkdir.Owner.User.Name)
-	require.Equal(t, 0, int(mkdir.Owner.User.Input))
+
+	require.Equal(t, "foouser", mkdir.Owner.User.User.(*pb.UserOpt_ByName).ByName.Name)
+	require.Equal(t, 0, int(mkdir.Owner.User.User.(*pb.UserOpt_ByName).ByName.Input))
 	require.Nil(t, mkdir.Owner.Group)
 }
 
@@ -524,44 +520,36 @@ func TestFileCopyOwner(t *testing.T) {
 
 	action := f.Actions[0]
 	mkdir := action.Action.(*pb.FileAction_Mkdir).Mkdir
-	require.Equal(t, 0, int(mkdir.Owner.User.Id))
-	require.Equal(t, "user1", mkdir.Owner.User.Name)
-	require.Equal(t, -1, int(mkdir.Owner.User.Input))
+	require.Equal(t, "user1", mkdir.Owner.User.User.(*pb.UserOpt_ByName).ByName.Name)
+	require.Equal(t, -1, int(mkdir.Owner.User.User.(*pb.UserOpt_ByName).ByName.Input))
 	require.Nil(t, mkdir.Owner.Group)
 
 	action = f.Actions[1]
 	copy := action.Action.(*pb.FileAction_Copy).Copy
 	require.Equal(t, "/src1", copy.Src)
-	require.Equal(t, 0, int(copy.Owner.User.Id))
-	require.Equal(t, "user2", copy.Owner.User.Name)
-	require.Equal(t, -1, int(copy.Owner.User.Input))
+	require.Equal(t, "user2", copy.Owner.User.User.(*pb.UserOpt_ByName).ByName.Name)
+	require.Equal(t, -1, int(copy.Owner.User.User.(*pb.UserOpt_ByName).ByName.Input))
 	require.Nil(t, copy.Owner.Group)
 
 	action = f.Actions[2]
 	copy = action.Action.(*pb.FileAction_Copy).Copy
 	require.Equal(t, "/src0", copy.Src)
-	require.Equal(t, 0, int(copy.Owner.User.Id))
-	require.Equal(t, "user3", copy.Owner.User.Name)
-	require.Equal(t, 0, int(copy.Owner.User.Input))
+	require.Equal(t, "user3", copy.Owner.User.User.(*pb.UserOpt_ByName).ByName.Name)
+	require.Equal(t, 0, int(copy.Owner.User.User.(*pb.UserOpt_ByName).ByName.Input))
 	require.Nil(t, copy.Owner.Group)
 
 	action = f.Actions[3]
 	copy = action.Action.(*pb.FileAction_Copy).Copy
 	require.Equal(t, "/src2", copy.Src)
-	require.Equal(t, 0, int(copy.Owner.User.Id))
-	require.Equal(t, "user4", copy.Owner.User.Name)
-	require.Equal(t, -1, int(copy.Owner.User.Input))
+	require.Equal(t, "user4", copy.Owner.User.User.(*pb.UserOpt_ByName).ByName.Name)
+	require.Equal(t, -1, int(copy.Owner.User.User.(*pb.UserOpt_ByName).ByName.Input))
 	require.Nil(t, copy.Owner.Group)
 
 	action = f.Actions[4]
 	copy = action.Action.(*pb.FileAction_Copy).Copy
 	require.Equal(t, "/src3", copy.Src)
-	require.Equal(t, 1, int(copy.Owner.User.Id))
-	require.Equal(t, "", copy.Owner.User.Name)
-	require.Equal(t, -1, int(copy.Owner.User.Input))
-	require.Equal(t, 2, int(copy.Owner.Group.Id))
-	require.Equal(t, "", copy.Owner.Group.Name)
-	require.Equal(t, -1, int(copy.Owner.Group.Input))
+	require.Equal(t, 1, int(copy.Owner.User.User.(*pb.UserOpt_ByID).ByID))
+	require.Equal(t, 2, int(copy.Owner.Group.User.(*pb.UserOpt_ByID).ByID))
 }
 
 func TestFileCreatedTime(t *testing.T) {

@@ -237,9 +237,10 @@ func (up *UserOpt) marshal(base pb.InputIndex) *pb.UserOpt {
 		return nil
 	}
 	if up.Name != "" {
-		return &pb.UserOpt{Name: up.Name, Input: base}
+		return &pb.UserOpt{User: &pb.UserOpt_ByName{ByName: &pb.NamedUserOpt{
+			Name: up.Name, Input: base}}}
 	}
-	return &pb.UserOpt{Id: uint32(up.UID), Input: -1}
+	return &pb.UserOpt{User: &pb.UserOpt_ByID{ByID: uint32(up.UID)}}
 }
 
 func Mkfile(p string, m os.FileMode, dt []byte, opts ...MkfileOption) *FileAction {
@@ -415,16 +416,16 @@ type fileActionCopy struct {
 
 func (a *fileActionCopy) toProtoAction(parent string, base pb.InputIndex) pb.IsFileAction {
 	c := &pb.FileActionCopy{
-		Src:                a.sourcePath(),
-		Dest:               normalizePath(parent, a.dest),
-		Owner:              a.info.ChownOpt.marshal(base),
-		AllowWildcard:      a.info.AllowWildcard,
-		AllowEmptyWildcard: a.info.AllowEmptyWildcard,
-		FollowSymlink:      a.info.FollowSymlinks,
-		DirCopyContents:    a.info.CopyDirContentsOnly,
-		AttemptUnpack:      a.info.AttemptUnpack,
-		CreateDestPath:     a.info.CreateDestPath,
-		Timestamp:          marshalTime(a.info.CreatedTime),
+		Src:                              a.sourcePath(),
+		Dest:                             normalizePath(parent, a.dest),
+		Owner:                            a.info.ChownOpt.marshal(base),
+		AllowWildcard:                    a.info.AllowWildcard,
+		AllowEmptyWildcard:               a.info.AllowEmptyWildcard,
+		FollowSymlink:                    a.info.FollowSymlinks,
+		DirCopyContents:                  a.info.CopyDirContentsOnly,
+		AttemptUnpackDockerCompatibility: a.info.AttemptUnpack,
+		CreateDestPath:                   a.info.CreateDestPath,
+		Timestamp:                        marshalTime(a.info.CreatedTime),
 	}
 	if a.info.Mode != nil {
 		c.Mode = int32(*a.info.Mode)
