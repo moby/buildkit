@@ -135,7 +135,7 @@ func (p *Puller) Pull(ctx context.Context) (*Pulled, error) {
 		)
 	}
 
-	if err := images.Dispatch(ctx, images.Handlers(handlers...), p.desc); err != nil {
+	if err := images.Dispatch(ctx, images.Handlers(handlers...), nil, p.desc); err != nil {
 		stopProgress()
 		return nil, err
 	}
@@ -168,7 +168,7 @@ func (p *Puller) Pull(ctx context.Context) (*Pulled, error) {
 			images.FilterPlatforms(images.ChildrenHandler(p.ContentStore), platform),
 		}
 
-		if err := images.Dispatch(ctx, images.Handlers(handlers...), p.desc); err != nil {
+		if err := images.Dispatch(ctx, images.Handlers(handlers...), nil, p.desc); err != nil {
 			return nil, err
 		}
 

@@ -10,16 +10,15 @@ require (
 	github.com/codahale/hdrhistogram v0.0.0-20160425231609-f8ad88b59a58 // indirect
 	github.com/containerd/cgroups v0.0.0-20181219155423-39b18af02c41 // indirect
 	github.com/containerd/console v0.0.0-20180822173158-c12b1e7919c1
-	github.com/containerd/containerd v0.0.0-20181221132743-47b328aab791
+	github.com/containerd/containerd v1.2.1-0.20190212172151-f5b0fa220df8
 	github.com/containerd/continuity v0.0.0-20181001140422-bd77b46c8352
-	github.com/containerd/cri v0.0.0-20181012222137-f913714917d2 // indirect
 	github.com/containerd/fifo v0.0.0-20180307165137-3d5202aec260 // indirect
 	github.com/containerd/go-runc v0.0.0-20180907222934-5a6d9f37cfa3
 	github.com/containerd/typeurl v0.0.0-20180627222232-a93fcdb778cd // indirect
 	github.com/coreos/go-systemd v0.0.0-20181031085051-9002847aa142 // indirect
 	github.com/davecgh/go-spew v1.1.0 // indirect
 	github.com/docker/cli v0.0.0-20190131223713-234462756460
-	github.com/docker/distribution v0.0.0-20170825220652-30578ca32960
+	github.com/docker/distribution v2.7.1-0.20190205005809-0d3efadf0154+incompatible
 	github.com/docker/docker v0.0.0-20180531152204-71cd53e4a197
 	github.com/docker/docker-credential-helpers v0.6.0 // indirect
 	github.com/docker/go-connections v0.3.0
