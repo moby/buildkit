@@ -41,7 +41,7 @@ RUN	apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -yq \
 	--no-install-recommends
 
 # Get lvm2 source for compiling statically
-RUN	git clone --no-checkout https://git.fedorahosted.org/git/lvm2.git /usr/local/lvm2 && cd /usr/local/lvm2 && git checkout -q v2_02_103
+RUN	git clone --no-checkout https://sourceware.org/git/lvm2.git /usr/local/lvm2 && cd /usr/local/lvm2 && git checkout -q v2_02_103
 # see https://git.fedorahosted.org/cgit/lvm2.git/refs/tags for release tags
 # note: we don't use "git clone -b" above because it then spews big nasty warnings about 'detached HEAD' state that we can't silence as easily as we can silence them using "git checkout" directly
 
