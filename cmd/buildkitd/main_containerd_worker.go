@@ -145,7 +145,7 @@ func applyContainerdFlags(c *cli.Context, cfg *config.Config) error {
 		cfg.Workers.Containerd.Platforms = platforms
 	}
 
-	if c.GlobalIsSet("containerd-worker-namespace") || cfg.Workers.Containerd.Namespace == "" {
+	if c.GlobalIsSet("containerd-worker-namespace") && cfg.Workers.Containerd.Namespace == "" {
 		cfg.Workers.Containerd.Namespace = c.GlobalString("containerd-worker-namespace")
 	}
 
