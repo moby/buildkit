@@ -11,8 +11,8 @@ type Ref interface {
 }
 
 type Mount interface {
-	Release(context.Context) error
 	IsFileOpMount()
+	Release(context.Context) error
 }
 
 type Backend interface {

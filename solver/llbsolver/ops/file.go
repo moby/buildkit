@@ -78,6 +78,14 @@ func (s *FileOpSolver) Solve(ctx context.Context, inputs []fileoptypes.Ref, acti
 		}
 	}
 
+	defer func() {
+		for _, in := range s.ins {
+			if in.ref == nil && in.mount != nil {
+				in.mount.Release(context.TODO())
+			}
+		}
+	}()
+
 	outs := make([]fileoptypes.Ref, len(s.outs))
 
 	eg, ctx := errgroup.WithContext(ctx)
@@ -98,6 +106,11 @@ func (s *FileOpSolver) Solve(ctx context.Context, inputs []fileoptypes.Ref, acti
 	}
 
 	if err := eg.Wait(); err != nil {
+		for _, r := range outs {
+			if r != nil {
+				r.Release(context.TODO())
+			}
+		}
 		return nil, err
 	}
 
