@@ -26,8 +26,7 @@ import (
 
 const keyEntitlements = "llb.entitlements"
 
-type ExporterRequest struct {
-	Exporter        exporter.ExporterInstance
+type CacheExporterRequest struct {
 	CacheExporter   remotecache.Exporter
 	CacheExportMode solver.CacheExportMode
 }
@@ -94,7 +93,7 @@ func (s *Solver) Bridge(b solver.Builder) frontend.FrontendLLBBridge {
 	}
 }
 
-func (s *Solver) Solve(ctx context.Context, id string, req frontend.SolveRequest, exp ExporterRequest, ent []entitlements.Entitlement) (*client.SolveResponse, error) {
+func (s *Solver) Solve(ctx context.Context, id string, req frontend.SolveRequest, exporterInstance exporter.ExporterInstance, cacheExporterRequests []CacheExporterRequest, ent []entitlements.Entitlement) (*client.SolveResponse, error) {
 	j, err := s.solver.NewJob(id)
 	if err != nil {
 		return nil, err
@@ -143,8 +142,21 @@ func (s *Solver) Solve(ctx context.Context, id string, req frontend.SolveRequest
 		})
 	}()
 
-	var exporterResponse map[string]string
-	if e := exp.Exporter; e != nil {
+	var (
+		exporterResponse    map[string]string
+		inlineCacheExporter inlineCacheExporterIntf
+	)
+	for _, cer := range cacheExporterRequests {
+		if x, ok := cer.CacheExporter.(inlineCacheExporterIntf); ok {
+			inlineCacheExporter = x
+			if cer.CacheExportMode != solver.CacheExportModeMin {
+				return nil, errors.Errorf("expected mode %v for inline cache exporter, got %v",
+					solver.CacheExportModeMin, cer.CacheExportMode)
+			}
+			break
+		}
+	}
+	if exporterInstance != nil {
 		inp := exporter.Source{
 			Metadata: res.Metadata,
 		}
@@ -158,12 +170,14 @@ func (s *Solver) Solve(ctx context.Context, id string, req frontend.SolveRequest
 			}
 			inp.Ref = workerRef.ImmutableRef
 
-			dt, err := inlineCache(ctx, exp.CacheExporter, res)
-			if err != nil {
-				return nil, err
-			}
-			if dt != nil {
-				inp.Metadata[exptypes.ExporterInlineCache] = dt
+			if inlineCacheExporter != nil {
+				dt, err := inlineCache(ctx, inlineCacheExporter, res)
+				if err != nil {
+					return nil, err
+				}
+				if dt != nil {
+					inp.Metadata[exptypes.ExporterInlineCache] = dt
+				}
 			}
 		}
 		if res.Refs != nil {
@@ -178,42 +192,45 @@ func (s *Solver) Solve(ctx context.Context, id string, req frontend.SolveRequest
 					}
 					m[k] = workerRef.ImmutableRef
 
-					dt, err := inlineCache(ctx, exp.CacheExporter, res)
-					if err != nil {
-						return nil, err
-					}
-					if dt != nil {
-						inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterInlineCache, k)] = dt
+					if inlineCacheExporter != nil {
+						dt, err := inlineCache(ctx, inlineCacheExporter, res)
+						if err != nil {
+							return nil, err
+						}
+						if dt != nil {
+							inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterInlineCache, k)] = dt
+						}
 					}
 				}
 			}
 			inp.Refs = m
 		}
 
-		if err := inVertexContext(j.Context(ctx), e.Name(), "", func(ctx context.Context) error {
-			exporterResponse, err = e.Export(ctx, inp)
+		if err := inVertexContext(j.Context(ctx), exporterInstance.Name(), "", func(ctx context.Context) error {
+			exporterResponse, err = exporterInstance.Export(ctx, inp)
 			return err
 		}); err != nil {
 			return nil, err
 		}
 	}
 
-	var cacheExporterResponse map[string]string
-	if e := exp.CacheExporter; e != nil {
+	var cacheExporterResponses []map[string]string
+	for _, cer := range cacheExporterRequests {
 		if err := inVertexContext(j.Context(ctx), "exporting cache", "", func(ctx context.Context) error {
 			prepareDone := oneOffProgress(ctx, "preparing build cache for export")
 			if err := res.EachRef(func(res solver.CachedResult) error {
 				// all keys have same export chain so exporting others is not needed
-				_, err := res.CacheKeys()[0].Exporter.ExportTo(ctx, e, solver.CacheExportOpt{
+				_, err := res.CacheKeys()[0].Exporter.ExportTo(ctx, cer.CacheExporter, solver.CacheExportOpt{
 					Convert: workerRefConverter,
-					Mode:    exp.CacheExportMode,
+					Mode:    cer.CacheExportMode,
 				})
 				return err
 			}); err != nil {
 				return prepareDone(err)
 			}
 			prepareDone(nil)
-			cacheExporterResponse, err = e.Finalize(ctx)
+			resp, err := cer.CacheExporter.Finalize(ctx)
+			cacheExporterResponses = append(cacheExporterResponses, resp)
 			return err
 		}); err != nil {
 			return nil, err
@@ -229,9 +246,11 @@ func (s *Solver) Solve(ctx context.Context, id string, req frontend.SolveRequest
 			exporterResponse[k] = string(v)
 		}
 	}
-	for k, v := range cacheExporterResponse {
-		if strings.HasPrefix(k, "cache.") {
-			exporterResponse[k] = v
+	for _, cacheExporterResponse := range cacheExporterResponses {
+		for k, v := range cacheExporterResponse {
+			if strings.HasPrefix(k, "cache.") {
+				exporterResponse[k] = v
+			}
 		}
 	}
 
@@ -240,35 +259,35 @@ func (s *Solver) Solve(ctx context.Context, id string, req frontend.SolveRequest
 	}, nil
 }
 
-func inlineCache(ctx context.Context, e remotecache.Exporter, res solver.CachedResult) ([]byte, error) {
-	if efl, ok := e.(interface {
-		ExportForLayers([]digest.Digest) ([]byte, error)
-	}); ok {
-		workerRef, ok := res.Sys().(*worker.WorkerRef)
-		if !ok {
-			return nil, errors.Errorf("invalid reference: %T", res.Sys())
-		}
+type inlineCacheExporterIntf interface {
+	remotecache.Exporter
+	ExportForLayers([]digest.Digest) ([]byte, error)
+}
 
-		remote, err := workerRef.Worker.GetRemote(ctx, workerRef.ImmutableRef, true)
-		if err != nil || remote == nil {
-			return nil, nil
-		}
-
-		digests := make([]digest.Digest, 0, len(remote.Descriptors))
-		for _, desc := range remote.Descriptors {
-			digests = append(digests, desc.Digest)
-		}
-
-		if _, err := res.CacheKeys()[0].Exporter.ExportTo(ctx, e, solver.CacheExportOpt{
-			Convert: workerRefConverter,
-			Mode:    solver.CacheExportModeMin,
-		}); err != nil {
-			return nil, err
-		}
-
-		return efl.ExportForLayers(digests)
+func inlineCache(ctx context.Context, inlineCacheExporter inlineCacheExporterIntf, res solver.CachedResult) ([]byte, error) {
+	workerRef, ok := res.Sys().(*worker.WorkerRef)
+	if !ok {
+		return nil, errors.Errorf("invalid reference: %T", res.Sys())
 	}
-	return nil, nil
+
+	remote, err := workerRef.Worker.GetRemote(ctx, workerRef.ImmutableRef, true)
+	if err != nil || remote == nil {
+		return nil, nil
+	}
+
+	digests := make([]digest.Digest, 0, len(remote.Descriptors))
+	for _, desc := range remote.Descriptors {
+		digests = append(digests, desc.Digest)
+	}
+
+	if _, err := res.CacheKeys()[0].Exporter.ExportTo(ctx, inlineCacheExporter, solver.CacheExportOpt{
+		Convert: workerRefConverter,
+		Mode:    solver.CacheExportModeMin,
+	}); err != nil {
+		return nil, err
+	}
+
+	return inlineCacheExporter.ExportForLayers(digests)
 }
 
 func (s *Solver) Status(ctx context.Context, id string, statusChan chan *client.SolveStatus) error {

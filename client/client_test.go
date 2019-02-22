@@ -79,6 +79,8 @@ func TestClientIntegration(t *testing.T) {
 		testReadonlyRootFS,
 		testBasicRegistryCacheImportExport,
 		testBasicLocalCacheImportExport,
+		testBasicInlineCacheImportExport,
+		testMultiCacheImportExport,
 		testCachedMounts,
 		testProxyEnv,
 		testLocalSymlinkEscape,
@@ -1750,6 +1752,140 @@ func readFileInImage(c *Client, ref, path string) ([]byte, error) {
 		return nil, err
 	}
 	return ioutil.ReadFile(filepath.Join(destDir, filepath.Clean(path)))
+}
+
+func testMultiCacheImportExport(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	registry, err := sb.NewRegistry()
+	if errors.Cause(err) == integration.ErrorRequirements {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("busybox:latest")
+	st := llb.Scratch()
+
+	run := func(cmd string) {
+		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+	}
+
+	run(`sh -c "echo -n foobar > const"`)
+	run(`sh -c "cat /dev/urandom | head -c 100 | sha256sum > unique"`)
+
+	def, err := st.Marshal()
+	require.NoError(t, err)
+
+	target := registry + "/buildkit/testmultiexportinline:latest"
+
+	localCacheDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(localCacheDir)
+	resp, err := c.Solve(context.TODO(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+		CacheExports: []CacheOptionsEntry{
+			{
+				Type: "inline",
+			},
+			{
+				Type: "local",
+				Attrs: map[string]string{
+					"dest": localCacheDir,
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dgst, ok := resp.ExporterResponse["containerimage.digest"]
+	require.Equal(t, ok, true)
+
+	err = c.Prune(context.TODO(), nil, PruneAll)
+	require.NoError(t, err)
+
+	checkAllRemoved(t, c, sb)
+
+	resp, err = c.Solve(context.TODO(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+			},
+		},
+		CacheExports: []CacheOptionsEntry{
+			{
+				Type: "inline",
+			},
+			{
+				Type: "local",
+				Attrs: map[string]string{
+					"dest": localCacheDir,
+				},
+			},
+		},
+		CacheImports: []CacheOptionsEntry{
+			{
+				Type: "registry",
+				Attrs: map[string]string{
+					"ref": target,
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dgst2, ok := resp.ExporterResponse["containerimage.digest"]
+	require.Equal(t, ok, true)
+
+	require.Equal(t, dgst, dgst2)
+
+	err = c.Prune(context.TODO(), nil, PruneAll)
+	require.NoError(t, err)
+
+	checkAllRemoved(t, c, sb)
+
+	resp, err = c.Solve(context.TODO(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+			},
+		},
+		CacheExports: []CacheOptionsEntry{
+			{
+				Type: "inline",
+			},
+			{
+				Type: "local",
+				Attrs: map[string]string{
+					"dest": localCacheDir,
+				},
+			},
+		},
+		CacheImports: []CacheOptionsEntry{
+			{
+				Type: "local",
+				Attrs: map[string]string{
+					"src": localCacheDir,
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dgst3, ok := resp.ExporterResponse["containerimage.digest"]
+	require.Equal(t, ok, true)
+
+	require.Equal(t, dgst, dgst3)
 }
 
 func testCachedMounts(t *testing.T, sb integration.Sandbox) {

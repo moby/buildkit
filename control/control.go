@@ -245,26 +245,24 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 	}
 
 	var (
-		cacheExporter   remotecache.Exporter
-		cacheExportMode solver.CacheExportMode
-		cacheImports    []frontend.CacheOptionsEntry
+		cacheExporterRequests []llbsolver.CacheExporterRequest
+		cacheImports          []frontend.CacheOptionsEntry
 	)
-	if len(req.Cache.Exports) > 1 {
-		// TODO(AkihiroSuda): this should be fairly easy
-		return nil, errors.New("specifying multiple cache exports is not supported currently")
-	}
 
-	if len(req.Cache.Exports) == 1 {
-		e := req.Cache.Exports[0]
+	for _, e := range req.Cache.Exports {
 		cacheExporterFunc, ok := c.opt.ResolveCacheExporterFuncs[e.Type]
 		if !ok {
 			return nil, errors.Errorf("unknown cache exporter: %q", e.Type)
 		}
-		cacheExporter, err = cacheExporterFunc(ctx, e.Attrs)
+		cacheExporter, err := cacheExporterFunc(ctx, e.Attrs)
 		if err != nil {
 			return nil, err
 		}
-		cacheExportMode = parseCacheExportMode(e.Attrs["mode"])
+		cacheExportMode := parseCacheExportMode(e.Attrs["mode"])
+		cacheExporterRequests = append(cacheExporterRequests,
+			llbsolver.CacheExporterRequest{
+				CacheExporter:   cacheExporter,
+				CacheExportMode: cacheExportMode})
 	}
 	for _, im := range req.Cache.Imports {
 		cacheImports = append(cacheImports, frontend.CacheOptionsEntry{
@@ -278,11 +276,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		Definition:   req.Definition,
 		FrontendOpt:  req.FrontendAttrs,
 		CacheImports: cacheImports,
-	}, llbsolver.ExporterRequest{
-		Exporter:        expi,
-		CacheExporter:   cacheExporter,
-		CacheExportMode: cacheExportMode,
-	}, req.Entitlements)
+	}, expi, cacheExporterRequests, req.Entitlements)
 	if err != nil {
 		return nil, err
 	}
