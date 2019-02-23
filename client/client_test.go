@@ -1297,6 +1297,9 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	dgst, ok := resp.ExporterResponse["containerimage.digest"]
 	require.Equal(t, ok, true)
 
+	unique, err := readFileInImage(c, "dummy@"+dgst, "/unique")
+	require.NoError(t, err)
+
 	err = c.Prune(context.TODO(), nil, PruneAll)
 	require.NoError(t, err)
 
@@ -1304,6 +1307,8 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 
 	resp, err = c.Solve(context.TODO(), def, SolveOpt{
 		Exporter: ExporterImage,
+		// specifying inline cache exporter is needed for reproducing containerimage.digest
+		// (not needed for reproducing rootfs/unique)
 		CacheExports: []CacheOptionsEntry{
 			{
 				Type: "inline",
@@ -1324,6 +1329,53 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, ok, true)
 
 	require.Equal(t, dgst, dgst2)
+
+	err = c.Prune(context.TODO(), nil, PruneAll)
+	require.NoError(t, err)
+
+	checkAllRemoved(t, c, sb)
+
+	resp, err = c.Solve(context.TODO(), def, SolveOpt{
+		Exporter: ExporterImage,
+		CacheImports: []CacheOptionsEntry{
+			{
+				Type: "registry",
+				Attrs: map[string]string{
+					"ref": target,
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dgst3, ok := resp.ExporterResponse["containerimage.digest"]
+	require.Equal(t, ok, true)
+
+	// dgst3 != dgst, because inline cache is not exported for dgst3
+	unique3, err := readFileInImage(c, "dummy@"+dgst3, "/unique")
+	require.NoError(t, err)
+	require.EqualValues(t, unique, unique3)
+}
+
+func readFileInImage(c *Client, ref, path string) ([]byte, error) {
+	def, err := llb.Image(ref).Marshal()
+	if err != nil {
+		return nil, err
+	}
+	destDir, err := ioutil.TempDir("", "buildkit")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(destDir)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		Exporter:          ExporterLocal,
+		ExporterOutputDir: destDir,
+	}, nil)
+	if err != nil {
+		return nil, err
+	}
+	return ioutil.ReadFile(filepath.Join(destDir, filepath.Clean(path)))
 }
 
 func testCachedMounts(t *testing.T, sb integration.Sandbox) {
