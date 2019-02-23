@@ -48,7 +48,7 @@ func NewController(opt Opt) (*Controller, error) {
 
 	gatewayForwarder := controlgateway.NewGatewayForwarder()
 
-	solver, err := llbsolver.New(opt.WorkerController, opt.Frontends, cache, opt.ResolveCacheImporterFuncs, gatewayForwarder)
+	solver, err := llbsolver.New(opt.WorkerController, opt.Frontends, cache, opt.ResolveCacheImporterFuncs, gatewayForwarder, opt.SessionManager)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create solver")
 	}
@@ -223,7 +223,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		return nil, err
 	}
 	if req.Exporter != "" {
-		exp, err := w.Exporter(req.Exporter)
+		exp, err := w.Exporter(req.Exporter, c.opt.SessionManager)
 		if err != nil {
 			return nil, err
 		}

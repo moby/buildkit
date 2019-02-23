@@ -61,7 +61,6 @@ type WorkerOpt struct {
 	Labels             map[string]string
 	Platforms          []specs.Platform
 	GCPolicy           []client.PruneInfo
-	SessionManager     *session.Manager
 	MetadataStore      *metadata.Store
 	Executor           executor.Executor
 	Snapshotter        snapshot.Snapshotter
@@ -78,7 +77,7 @@ type Worker struct {
 	WorkerOpt
 	CacheManager  cache.Manager
 	SourceManager *source.Manager
-	Exporters     map[string]exporter.Exporter
+	imageWriter   *imageexporter.ImageWriter
 	ImageSource   source.Source
 }
 
@@ -105,13 +104,12 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 	}
 
 	is, err := containerimage.NewSource(containerimage.SourceOpt{
-		Snapshotter:    opt.Snapshotter,
-		ContentStore:   opt.ContentStore,
-		SessionManager: opt.SessionManager,
-		Applier:        opt.Applier,
-		ImageStore:     opt.ImageStore,
-		CacheAccessor:  cm,
-		ResolverOpt:    opt.ResolveOptionsFunc,
+		Snapshotter:   opt.Snapshotter,
+		ContentStore:  opt.ContentStore,
+		Applier:       opt.Applier,
+		ImageStore:    opt.ImageStore,
+		CacheAccessor: cm,
+		ResolverOpt:   opt.ResolveOptionsFunc,
 	})
 	if err != nil {
 		return nil, err
@@ -143,16 +141,13 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 	sm.Register(hs)
 
 	ss, err := local.NewSource(local.Opt{
-		SessionManager: opt.SessionManager,
-		CacheAccessor:  cm,
-		MetadataStore:  opt.MetadataStore,
+		CacheAccessor: cm,
+		MetadataStore: opt.MetadataStore,
 	})
 	if err != nil {
 		return nil, err
 	}
 	sm.Register(ss)
-
-	exporters := map[string]exporter.Exporter{}
 
 	iw, err := imageexporter.NewImageWriter(imageexporter.WriterOpt{
 		Snapshotter:  opt.Snapshotter,
@@ -163,50 +158,11 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 		return nil, err
 	}
 
-	imageExporter, err := imageexporter.New(imageexporter.Opt{
-		Images:         opt.ImageStore,
-		SessionManager: opt.SessionManager,
-		ImageWriter:    iw,
-		ResolverOpt:    opt.ResolveOptionsFunc,
-	})
-	if err != nil {
-		return nil, err
-	}
-	exporters[client.ExporterImage] = imageExporter
-
-	localExporter, err := localexporter.New(localexporter.Opt{
-		SessionManager: opt.SessionManager,
-	})
-	if err != nil {
-		return nil, err
-	}
-	exporters[client.ExporterLocal] = localExporter
-
-	ociExporter, err := ociexporter.New(ociexporter.Opt{
-		SessionManager: opt.SessionManager,
-		ImageWriter:    iw,
-		Variant:        ociexporter.VariantOCI,
-	})
-	if err != nil {
-		return nil, err
-	}
-	exporters[client.ExporterOCI] = ociExporter
-
-	dockerExporter, err := ociexporter.New(ociexporter.Opt{
-		SessionManager: opt.SessionManager,
-		ImageWriter:    iw,
-		Variant:        ociexporter.VariantDocker,
-	})
-	if err != nil {
-		return nil, err
-	}
-	exporters[client.ExporterDocker] = dockerExporter
-
 	return &Worker{
 		WorkerOpt:     opt,
 		CacheManager:  cm,
 		SourceManager: sm,
-		Exporters:     exporters,
+		imageWriter:   iw,
 		ImageSource:   is,
 	}, nil
 }
@@ -235,13 +191,13 @@ func (w *Worker) LoadRef(id string, hidden bool) (cache.ImmutableRef, error) {
 	return w.CacheManager.Get(context.TODO(), id, opts...)
 }
 
-func (w *Worker) ResolveOp(v solver.Vertex, s frontend.FrontendLLBBridge) (solver.Op, error) {
+func (w *Worker) ResolveOp(v solver.Vertex, s frontend.FrontendLLBBridge, sm *session.Manager) (solver.Op, error) {
 	if baseOp, ok := v.Sys().(*pb.Op); ok {
 		switch op := baseOp.Op.(type) {
 		case *pb.Op_Source:
-			return ops.NewSourceOp(v, op, baseOp.Platform, w.SourceManager, w)
+			return ops.NewSourceOp(v, op, baseOp.Platform, w.SourceManager, sm, w)
 		case *pb.Op_Exec:
-			return ops.NewExecOp(v, op, w.CacheManager, w.SessionManager, w.MetadataStore, w.Executor, w)
+			return ops.NewExecOp(v, op, w.CacheManager, sm, w.MetadataStore, w.Executor, w)
 		case *pb.Op_Build:
 			return ops.NewBuildOp(v, op, s, w)
 		}
@@ -249,17 +205,17 @@ func (w *Worker) ResolveOp(v solver.Vertex, s frontend.FrontendLLBBridge) (solve
 	return nil, errors.Errorf("could not resolve %v", v)
 }
 
-func (w *Worker) ResolveImageConfig(ctx context.Context, ref string, opt gw.ResolveImageConfigOpt) (digest.Digest, []byte, error) {
+func (w *Worker) ResolveImageConfig(ctx context.Context, ref string, opt gw.ResolveImageConfigOpt, sm *session.Manager) (digest.Digest, []byte, error) {
 	// ImageSource is typically source/containerimage
 	resolveImageConfig, ok := w.ImageSource.(resolveImageConfig)
 	if !ok {
 		return "", nil, errors.Errorf("worker %q does not implement ResolveImageConfig", w.ID())
 	}
-	return resolveImageConfig.ResolveImageConfig(ctx, ref, opt)
+	return resolveImageConfig.ResolveImageConfig(ctx, ref, opt, sm)
 }
 
 type resolveImageConfig interface {
-	ResolveImageConfig(ctx context.Context, ref string, opt gw.ResolveImageConfigOpt) (digest.Digest, []byte, error)
+	ResolveImageConfig(ctx context.Context, ref string, opt gw.ResolveImageConfigOpt, sm *session.Manager) (digest.Digest, []byte, error)
 }
 
 func (w *Worker) Exec(ctx context.Context, meta executor.Meta, rootFS cache.ImmutableRef, stdin io.ReadCloser, stdout, stderr io.WriteCloser) error {
@@ -279,12 +235,34 @@ func (w *Worker) Prune(ctx context.Context, ch chan client.UsageInfo, opt ...cli
 	return w.CacheManager.Prune(ctx, ch, opt...)
 }
 
-func (w *Worker) Exporter(name string) (exporter.Exporter, error) {
-	exp, ok := w.Exporters[name]
-	if !ok {
+func (w *Worker) Exporter(name string, sm *session.Manager) (exporter.Exporter, error) {
+	switch name {
+	case client.ExporterImage:
+		return imageexporter.New(imageexporter.Opt{
+			Images:         w.ImageStore,
+			SessionManager: sm,
+			ImageWriter:    w.imageWriter,
+			ResolverOpt:    w.ResolveOptionsFunc,
+		})
+	case client.ExporterLocal:
+		return localexporter.New(localexporter.Opt{
+			SessionManager: sm,
+		})
+	case client.ExporterOCI:
+		return ociexporter.New(ociexporter.Opt{
+			SessionManager: sm,
+			ImageWriter:    w.imageWriter,
+			Variant:        ociexporter.VariantOCI,
+		})
+	case client.ExporterDocker:
+		return ociexporter.New(ociexporter.Opt{
+			SessionManager: sm,
+			ImageWriter:    w.imageWriter,
+			Variant:        ociexporter.VariantDocker,
+		})
+	default:
 		return nil, errors.Errorf("exporter %q could not be found", name)
 	}
-	return exp, nil
 }
 
 func (w *Worker) GetRemote(ctx context.Context, ref cache.ImmutableRef, createIfNeeded bool) (*solver.Remote, error) {

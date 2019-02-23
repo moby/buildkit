@@ -15,6 +15,7 @@ import (
 	"github.com/moby/buildkit/frontend"
 	gw "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/tracing"
 	"github.com/moby/buildkit/worker"
@@ -32,6 +33,7 @@ type llbBridge struct {
 	cms                       map[string]solver.CacheManager
 	cmsMu                     sync.Mutex
 	platforms                 []specs.Platform
+	sm                        *session.Manager
 }
 
 func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (res *frontend.Result, err error) {
@@ -156,7 +158,7 @@ func (s *llbBridge) ResolveImageConfig(ctx context.Context, ref string, opt gw.R
 		id += platforms.Format(*platform)
 	}
 	err = inVertexContext(s.builder.Context(ctx), opt.LogName, id, func(ctx context.Context) error {
-		dgst, config, err = w.ResolveImageConfig(ctx, ref, opt)
+		dgst, config, err = w.ResolveImageConfig(ctx, ref, opt, s.sm)
 		return err
 	})
 	return dgst, config, err

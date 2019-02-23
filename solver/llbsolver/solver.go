@@ -44,15 +44,17 @@ type Solver struct {
 	resolveCacheImporterFuncs map[string]remotecache.ResolveCacheImporterFunc
 	platforms                 []specs.Platform
 	gatewayForwarder          *controlgateway.GatewayForwarder
+	sm                        *session.Manager
 }
 
-func New(wc *worker.Controller, f map[string]frontend.Frontend, cache solver.CacheManager, resolveCI map[string]remotecache.ResolveCacheImporterFunc, gatewayForwarder *controlgateway.GatewayForwarder) (*Solver, error) {
+func New(wc *worker.Controller, f map[string]frontend.Frontend, cache solver.CacheManager, resolveCI map[string]remotecache.ResolveCacheImporterFunc, gatewayForwarder *controlgateway.GatewayForwarder, sm *session.Manager) (*Solver, error) {
 	s := &Solver{
 		workerController:          wc,
 		resolveWorker:             defaultResolver(wc),
 		frontends:                 f,
 		resolveCacheImporterFuncs: resolveCI,
 		gatewayForwarder:          gatewayForwarder,
+		sm:                        sm,
 	}
 
 	// executing is currently only allowed on default worker
@@ -75,7 +77,7 @@ func (s *Solver) resolver() solver.ResolveOpFunc {
 		if err != nil {
 			return nil, err
 		}
-		return w.ResolveOp(v, s.Bridge(b))
+		return w.ResolveOp(v, s.Bridge(b), s.sm)
 	}
 }
 
@@ -87,6 +89,7 @@ func (s *Solver) Bridge(b solver.Builder) frontend.FrontendLLBBridge {
 		resolveCacheImporterFuncs: s.resolveCacheImporterFuncs,
 		cms:                       map[string]solver.CacheManager{},
 		platforms:                 s.platforms,
+		sm:                        s.sm,
 	}
 }
 
