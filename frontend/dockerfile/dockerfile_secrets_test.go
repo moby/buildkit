@@ -44,8 +44,8 @@ RUN --mount=type=secret,mode=741,uid=100,gid=102,target=/mysecret [ "$(stat -c "
 
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.LocalNameDockerfile: dir,
-			builder.LocalNameContext:    dir,
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
 		},
 		Session: []session.Attachable{secretsprovider.FromMap(map[string][]byte{
 			"mysecret": []byte("pw"),

@@ -26,23 +26,25 @@ import (
 )
 
 const (
-	LocalNameContext      = "context"
-	LocalNameDockerfile   = "dockerfile"
-	keyTarget             = "target"
-	keyFilename           = "filename"
-	keyCacheFrom          = "cache-from"    // for registry only. deprecated in favor of keyCacheImports
-	keyCacheImports       = "cache-imports" // JSON representation of []CacheOptionsEntry
-	defaultDockerfileName = "Dockerfile"
-	dockerignoreFilename  = ".dockerignore"
-	buildArgPrefix        = "build-arg:"
-	labelPrefix           = "label:"
-	keyNoCache            = "no-cache"
-	keyTargetPlatform     = "platform"
-	keyMultiPlatform      = "multi-platform"
-	keyImageResolveMode   = "image-resolve-mode"
-	keyGlobalAddHosts     = "add-hosts"
-	keyForceNetwork       = "force-network-mode"
-	keyOverrideCopyImage  = "override-copy-image" // remove after CopyOp implemented
+	DefaultLocalNameContext    = "context"
+	DefaultLocalNameDockerfile = "dockerfile"
+	keyTarget                  = "target"
+	keyFilename                = "filename"
+	keyCacheFrom               = "cache-from"    // for registry only. deprecated in favor of keyCacheImports
+	keyCacheImports            = "cache-imports" // JSON representation of []CacheOptionsEntry
+	defaultDockerfileName      = "Dockerfile"
+	dockerignoreFilename       = ".dockerignore"
+	buildArgPrefix             = "build-arg:"
+	labelPrefix                = "label:"
+	keyNoCache                 = "no-cache"
+	keyTargetPlatform          = "platform"
+	keyMultiPlatform           = "multi-platform"
+	keyImageResolveMode        = "image-resolve-mode"
+	keyGlobalAddHosts          = "add-hosts"
+	keyForceNetwork            = "force-network-mode"
+	keyOverrideCopyImage       = "override-copy-image" // remove after CopyOp implemented
+	keyNameContext             = "contextkey"
+	keyNameDockerfile          = "dockerfilekey"
 )
 
 var httpPrefix = regexp.MustCompile("^https?://")
@@ -53,6 +55,16 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 	caps := c.BuildOpts().LLBCaps
 
 	marshalOpts := []llb.ConstraintsOpt{llb.WithCaps(caps)}
+
+	localNameContext := DefaultLocalNameContext
+	if v, ok := opts[keyNameContext]; ok {
+		localNameContext = v
+	}
+
+	localNameDockerfile := DefaultLocalNameDockerfile
+	if v, ok := opts[keyNameDockerfile]; ok {
+		localNameDockerfile = v
+	}
 
 	defaultBuildPlatform := platforms.DefaultSpec()
 	if workers := c.BuildOpts().Workers; len(workers) > 0 && len(workers[0].Platforms) > 0 {
@@ -100,19 +112,19 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 
 	name := "load build definition from " + filename
 
-	src := llb.Local(LocalNameDockerfile,
+	src := llb.Local(localNameDockerfile,
 		llb.FollowPaths([]string{filename}),
 		llb.SessionID(c.BuildOpts().SessionID),
-		llb.SharedKeyHint(defaultDockerfileName),
+		llb.SharedKeyHint(localNameDockerfile),
 		dockerfile2llb.WithInternalName(name),
 	)
 	var buildContext *llb.State
 	isScratchContext := false
-	if st, ok := detectGitContext(opts[LocalNameContext]); ok {
+	if st, ok := detectGitContext(opts[localNameContext]); ok {
 		src = *st
 		buildContext = &src
-	} else if httpPrefix.MatchString(opts[LocalNameContext]) {
-		httpContext := llb.HTTP(opts[LocalNameContext], llb.Filename("context"), dockerfile2llb.WithInternalName("load remote build context"))
+	} else if httpPrefix.MatchString(opts[localNameContext]) {
+		httpContext := llb.HTTP(opts[localNameContext], llb.Filename("context"), dockerfile2llb.WithInternalName("load remote build context"))
 		def, err := httpContext.Marshal(marshalOpts...)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to marshal httpcontext")
@@ -189,10 +201,10 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 		eg.Go(func() error {
 			dockerignoreState := buildContext
 			if dockerignoreState == nil {
-				st := llb.Local(LocalNameContext,
+				st := llb.Local(localNameContext,
 					llb.SessionID(c.BuildOpts().SessionID),
 					llb.FollowPaths([]string{dockerignoreFilename}),
-					llb.SharedKeyHint(dockerignoreFilename),
+					llb.SharedKeyHint(localNameContext+"-"+dockerignoreFilename),
 					dockerfile2llb.WithInternalName("load "+dockerignoreFilename),
 				)
 				dockerignoreState = &st

@@ -72,8 +72,8 @@ RUN --mount=type=ssh,mode=741,uid=100,gid=102 [ "$(stat -c "%u %g %f" $SSH_AUTH_
 
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.LocalNameDockerfile: dir,
-			builder.LocalNameContext:    dir,
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
 		},
 		Session: []session.Attachable{ssh},
 	}, nil)
