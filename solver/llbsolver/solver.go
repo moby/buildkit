@@ -21,7 +21,6 @@ import (
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
-	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
 
@@ -42,25 +41,17 @@ type Solver struct {
 	resolveWorker             ResolveWorkerFunc
 	frontends                 map[string]frontend.Frontend
 	resolveCacheImporterFuncs map[string]remotecache.ResolveCacheImporterFunc
-	platforms                 []specs.Platform
 	gatewayForwarder          *controlgateway.GatewayForwarder
 }
 
-func New(wc *worker.Controller, f map[string]frontend.Frontend, cache solver.CacheManager, resolveCI map[string]remotecache.ResolveCacheImporterFunc, gatewayForwarder *controlgateway.GatewayForwarder) (*Solver, error) {
+func New(wc *worker.Controller, resolveWorker ResolveWorkerFunc, f map[string]frontend.Frontend, cache solver.CacheManager, resolveCI map[string]remotecache.ResolveCacheImporterFunc, gatewayForwarder *controlgateway.GatewayForwarder) (*Solver, error) {
 	s := &Solver{
 		workerController:          wc,
-		resolveWorker:             defaultResolver(wc),
+		resolveWorker:             resolveWorker,
 		frontends:                 f,
 		resolveCacheImporterFuncs: resolveCI,
 		gatewayForwarder:          gatewayForwarder,
 	}
-
-	// executing is currently only allowed on default worker
-	w, err := wc.GetDefault()
-	if err != nil {
-		return nil, err
-	}
-	s.platforms = w.Platforms()
 
 	s.solver = solver.NewSolver(solver.SolverOpt{
 		ResolveOpFunc: s.resolver(),
@@ -86,7 +77,6 @@ func (s *Solver) Bridge(b solver.Builder) frontend.FrontendLLBBridge {
 		resolveWorker:             s.resolveWorker,
 		resolveCacheImporterFuncs: s.resolveCacheImporterFuncs,
 		cms:                       map[string]solver.CacheManager{},
-		platforms:                 s.platforms,
 	}
 }
 
@@ -274,12 +264,6 @@ func (s *Solver) Status(ctx context.Context, id string, statusChan chan *client.
 		return err
 	}
 	return j.Status(ctx, statusChan)
-}
-
-func defaultResolver(wc *worker.Controller) ResolveWorkerFunc {
-	return func() (worker.Worker, error) {
-		return wc.GetDefault()
-	}
 }
 
 func oneOffProgress(ctx context.Context, id string) func(err error) error {
