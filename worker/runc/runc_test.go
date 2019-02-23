@@ -42,8 +42,6 @@ func newWorkerOpt(t *testing.T, processMode oci.ProcessMode) (base.WorkerOpt, fu
 	workerOpt, err := NewWorkerOpt(tmpdir, snFactory, rootless, processMode, nil)
 	require.NoError(t, err)
 
-	workerOpt.SessionManager, err = session.NewManager()
-	require.NoError(t, err)
 	return workerOpt, cleanup
 }
 
@@ -63,10 +61,10 @@ func newCtx(s string) context.Context {
 	return namespaces.WithNamespace(context.Background(), s)
 }
 
-func newBusyboxSourceSnapshot(ctx context.Context, t *testing.T, w *base.Worker) cache.ImmutableRef {
+func newBusyboxSourceSnapshot(ctx context.Context, t *testing.T, w *base.Worker, sm *session.Manager) cache.ImmutableRef {
 	img, err := source.NewImageIdentifier("docker.io/library/busybox:latest")
 	require.NoError(t, err)
-	src, err := w.SourceManager.Resolve(ctx, img)
+	src, err := w.SourceManager.Resolve(ctx, img, sm)
 	require.NoError(t, err)
 	snap, err := src.Snapshot(ctx)
 	require.NoError(t, err)
@@ -83,7 +81,9 @@ func TestRuncWorker(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := newCtx("buildkit-test")
-	snap := newBusyboxSourceSnapshot(ctx, t, w)
+	sm, err := session.NewManager()
+	require.NoError(t, err)
+	snap := newBusyboxSourceSnapshot(ctx, t, w, sm)
 
 	mounts, err := snap.Mount(ctx, false)
 	require.NoError(t, err)
@@ -185,7 +185,9 @@ func TestRuncWorkerNoProcessSandbox(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := newCtx("buildkit-test")
-	snap := newBusyboxSourceSnapshot(ctx, t, w)
+	sm, err := session.NewManager()
+	require.NoError(t, err)
+	snap := newBusyboxSourceSnapshot(ctx, t, w, sm)
 	root, err := w.CacheManager.New(ctx, snap)
 	require.NoError(t, err)
 

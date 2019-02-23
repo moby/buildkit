@@ -18,6 +18,7 @@ import (
 	"github.com/docker/docker/pkg/locker"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/metadata"
+	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/util/tracing"
@@ -66,7 +67,7 @@ type httpSourceHandler struct {
 	cacheKey digest.Digest
 }
 
-func (hs *httpSource) Resolve(ctx context.Context, id source.Identifier) (source.SourceInstance, error) {
+func (hs *httpSource) Resolve(ctx context.Context, id source.Identifier, _ *session.Manager) (source.SourceInstance, error) {
 	httpIdentifier, ok := id.(*source.HttpIdentifier)
 	if !ok {
 		return nil, errors.Errorf("invalid http identifier %v", id)

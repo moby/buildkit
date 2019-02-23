@@ -25,8 +25,6 @@ import (
 )
 
 // NewWorkerOpt creates a WorkerOpt.
-// But it does not set the following fields:
-//  - SessionManager
 func NewWorkerOpt(root string, address, snapshotterName, ns string, labels map[string]string, opts ...containerd.ClientOpt) (base.WorkerOpt, error) {
 	opts = append(opts, containerd.WithDefaultNamespace(ns))
 	client, err := containerd.New(address, opts...)
