@@ -20,6 +20,7 @@ const (
 	keyPush      = "push"
 	keyInsecure  = "registry.insecure"
 	ociTypes     = "oci-mediatypes"
+	keySquash    = "squash"
 )
 
 type Opt struct {
@@ -78,6 +79,16 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
 			}
 			i.ociTypes = b
+		case keySquash:
+			if v == "" {
+				i.squash = true
+				continue
+			}
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
+			}
+			i.squash = b
 		default:
 			if i.meta == nil {
 				i.meta = make(map[string][]byte)
@@ -94,6 +105,7 @@ type imageExporterInstance struct {
 	push       bool
 	insecure   bool
 	ociTypes   bool
+	squash     bool
 	meta       map[string][]byte
 }
 
@@ -108,7 +120,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 	for k, v := range e.meta {
 		src.Metadata[k] = v
 	}
-	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes)
+	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes, e.squash)
 	if err != nil {
 		return nil, err
 	}

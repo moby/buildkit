@@ -5,12 +5,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"os"
 	"runtime"
 	"time"
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/diff"
 	"github.com/containerd/containerd/images"
+	"github.com/containerd/containerd/mount"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/blobs"
 	"github.com/moby/buildkit/exporter"
@@ -44,7 +47,7 @@ type ImageWriter struct {
 	opt WriterOpt
 }
 
-func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool) (*ocispec.Descriptor, error) {
+func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci, squash bool) (*ocispec.Descriptor, error) {
 	platformsBytes, ok := inp.Metadata[exptypes.ExporterPlatformsKey]
 
 	if len(inp.Refs) > 0 && !ok {
@@ -52,7 +55,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 	}
 
 	if len(inp.Refs) == 0 {
-		layers, err := ic.exportLayers(ctx, inp.Ref)
+		layers, err := ic.exportLayers(ctx, squash, inp.Ref)
 		if err != nil {
 			return nil, err
 		}
@@ -75,7 +78,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 		refs = append(refs, r)
 	}
 
-	layers, err := ic.exportLayers(ctx, refs...)
+	layers, err := ic.exportLayers(ctx, squash, refs...)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +150,59 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 	return &idxDesc, nil
 }
 
-func (ic *ImageWriter) exportLayers(ctx context.Context, refs ...cache.ImmutableRef) ([][]blobs.DiffPair, error) {
+func (ic *ImageWriter) exportLayer(ctx context.Context, squash bool, ref cache.ImmutableRef) ([]blobs.DiffPair, error) {
+	if squash {
+		emptyDir, err := ioutil.TempDir("", "imagewriter-squash-emptydir")
+		if err != nil {
+			return nil, err
+		}
+		defer os.RemoveAll(emptyDir)
+		emptyMount := []mount.Mount{
+			{
+				Type:    "bind",
+				Source:  emptyDir,
+				Options: []string{"bind", "ro"},
+			},
+		}
+		mountable, err := ref.Mount(ctx, true)
+		if err != nil {
+			return nil, err
+		}
+		defer mountable.Release()
+		m, err := mountable.Mount()
+		if err != nil {
+			return nil, err
+		}
+		descr, err := ic.opt.Differ.Compare(ctx, emptyMount, m,
+			diff.WithMediaType(ocispec.MediaTypeImageLayerGzip),
+			diff.WithReference(ref.ID()),
+			diff.WithLabels(map[string]string{
+				// TODO(AkihiroSuda): squashed blob should be GC-ed
+				"containerd.io/gc.root": time.Now().UTC().Format(time.RFC3339Nano),
+			}),
+		)
+		info, err := ic.opt.ContentStore.Info(ctx, descr.Digest)
+		if err != nil {
+			return nil, err
+		}
+		diffIDStr, ok := info.Labels["containerd.io/uncompressed"]
+		if !ok {
+			return nil, errors.Errorf("invalid differ response with no diffID: %v", descr.Digest)
+		}
+		diffIDDigest, err := digest.Parse(diffIDStr)
+		if err != nil {
+			return nil, err
+		}
+		return []blobs.DiffPair{{DiffID: diffIDDigest, Blobsum: descr.Digest}}, nil
+	}
+	diffPairs, err := blobs.GetDiffPairs(ctx, ic.opt.ContentStore, ic.opt.Snapshotter, ic.opt.Differ, ref, true)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed calculating diff pairs for exported snapshot")
+	}
+	return diffPairs, nil
+}
+
+func (ic *ImageWriter) exportLayers(ctx context.Context, squash bool, refs ...cache.ImmutableRef) ([][]blobs.DiffPair, error) {
 	eg, ctx := errgroup.WithContext(ctx)
 	layersDone := oneOffProgress(ctx, "exporting layers")
 
@@ -156,9 +211,9 @@ func (ic *ImageWriter) exportLayers(ctx context.Context, refs ...cache.Immutable
 	for i, ref := range refs {
 		func(i int, ref cache.ImmutableRef) {
 			eg.Go(func() error {
-				diffPairs, err := blobs.GetDiffPairs(ctx, ic.opt.ContentStore, ic.opt.Snapshotter, ic.opt.Differ, ref, true)
+				diffPairs, err := ic.exportLayer(ctx, squash, ref)
 				if err != nil {
-					return errors.Wrap(err, "failed calculating diff pairs for exported snapshot")
+					return err
 				}
 				out[i] = diffPairs
 				return nil
