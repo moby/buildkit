@@ -43,8 +43,8 @@ RUN --mount=target=/context [ "$(cat /context/testfile)" == "contents0" ]
 
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
-			builder.LocalNameDockerfile: dir,
-			builder.LocalNameContext:    dir,
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
