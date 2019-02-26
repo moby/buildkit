@@ -159,14 +159,18 @@ func (p *puller) CacheKey(ctx context.Context, index int) (string, bool, error) 
 	}
 	_, dt, err := imageutil.Config(ctx, ref.String(), p.Resolver, p.ContentStore, &p.Platform)
 	if err != nil {
-		// this happens on schema1 images
+		return "", false, err
+	}
+
+	k := cacheKeyFromConfig(dt).String()
+	if k == "" {
 		k, err := mainManifestKey(ctx, desc, p.Platform)
 		if err != nil {
 			return "", false, err
 		}
 		return k.String(), true, nil
 	}
-	return cacheKeyFromConfig(dt).String(), true, nil
+	return k, true, nil
 }
 
 func (p *puller) Snapshot(ctx context.Context) (cache.ImmutableRef, error) {
@@ -225,8 +229,8 @@ func cacheKeyFromConfig(dt []byte) digest.Digest {
 	if err != nil {
 		return digest.FromBytes(dt)
 	}
-	if img.RootFS.Type != "layers" {
-		return digest.FromBytes(dt)
+	if img.RootFS.Type != "layers" || len(img.RootFS.DiffIDs) == 0 {
+		return ""
 	}
 	return identity.ChainID(img.RootFS.DiffIDs)
 }
