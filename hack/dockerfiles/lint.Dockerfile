@@ -1,4 +1,4 @@
-FROM golang:1.11-alpine
+FROM golang:1.12-alpine
 RUN  apk add --no-cache git
 RUN  go get -u gopkg.in/alecthomas/gometalinter.v1 \
   && mv /go/bin/gometalinter.v1 /go/bin/gometalinter \

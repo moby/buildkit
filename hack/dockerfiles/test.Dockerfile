@@ -10,7 +10,7 @@ ARG ROOTLESSKIT_VERSION=4f7ae4607d626f0a22fb495056d55b17cce8c01b
 # The `buildkitd` stage and the `buildctl` stage are placed here
 # so that they can be built quickly with legacy DAG-unaware `docker build --target=...`
 
-FROM golang:1.11-alpine AS gobuild-base
+FROM golang:1.12-alpine AS gobuild-base
 RUN apk add --no-cache g++ linux-headers
 RUN apk add --no-cache git libseccomp-dev make
 

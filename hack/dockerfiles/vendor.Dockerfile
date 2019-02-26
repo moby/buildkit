@@ -1,4 +1,4 @@
-FROM golang:1.11-alpine AS update
+FROM golang:1.12-alpine AS update
 RUN  apk add --no-cache git
 WORKDIR /src
 COPY . .
