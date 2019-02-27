@@ -118,10 +118,10 @@ func docopy(ctx context.Context, src, dest string, action pb.FileActionCopy) err
 	return nil
 }
 
-type FileBackend struct {
+type Backend struct {
 }
 
-func (fb *FileBackend) Mkdir(ctx context.Context, m fileoptypes.Mount, action pb.FileActionMkDir) error {
+func (fb *Backend) Mkdir(ctx context.Context, m fileoptypes.Mount, action pb.FileActionMkDir) error {
 	mnt, ok := m.(*Mount)
 	if !ok {
 		return errors.Errorf("invalid mount type %T", m)
@@ -137,26 +137,37 @@ func (fb *FileBackend) Mkdir(ctx context.Context, m fileoptypes.Mount, action pb
 	return mkdir(ctx, dir, action)
 }
 
-func (fb *FileBackend) Mkfile(ctx context.Context, m fileoptypes.Mount, action pb.FileActionMkFile) error {
+func (fb *Backend) Mkfile(ctx context.Context, m fileoptypes.Mount, action pb.FileActionMkFile) error {
 	mnt, ok := m.(*Mount)
 	if !ok {
 		return errors.Errorf("invalid mount type %T", m)
 	}
 
-	_ = mnt
+	lm := snapshot.LocalMounter(mnt.m)
+	dir, err := lm.Mount()
+	if err != nil {
+		return err
+	}
+	defer lm.Unmount()
 
-	return errors.Errorf("mkfile not implemented")
+	return mkfile(ctx, dir, action)
 }
-func (fb *FileBackend) Rm(ctx context.Context, m fileoptypes.Mount, action pb.FileActionRm) error {
+func (fb *Backend) Rm(ctx context.Context, m fileoptypes.Mount, action pb.FileActionRm) error {
 	mnt, ok := m.(*Mount)
 	if !ok {
 		return errors.Errorf("invalid mount type %T", m)
 	}
-	_ = mnt
 
-	return errors.Errorf("rm not implemented")
+	lm := snapshot.LocalMounter(mnt.m)
+	dir, err := lm.Mount()
+	if err != nil {
+		return err
+	}
+	defer lm.Unmount()
+
+	return rm(ctx, dir, action)
 }
-func (fb *FileBackend) Copy(ctx context.Context, m1 fileoptypes.Mount, m2 fileoptypes.Mount, action pb.FileActionCopy) error {
+func (fb *Backend) Copy(ctx context.Context, m1 fileoptypes.Mount, m2 fileoptypes.Mount, action pb.FileActionCopy) error {
 	mnt1, ok := m1.(*Mount)
 	if !ok {
 		return errors.Errorf("invalid mount type %T", m1)
@@ -166,14 +177,19 @@ func (fb *FileBackend) Copy(ctx context.Context, m1 fileoptypes.Mount, m2 fileop
 		return errors.Errorf("invalid mount type %T", m2)
 	}
 
-	_ = mnt1
-	_ = mnt2
-	return errors.Errorf("copy not implemented")
-}
+	lm := snapshot.LocalMounter(mnt1.m)
+	src, err := lm.Mount()
+	if err != nil {
+		return err
+	}
+	defer lm.Unmount()
 
-// type Backend interface {
-// 	Mkdir(context.Context, Mount, pb.FileActionMkDir) error
-// 	Mkfile(context.Context, Mount, pb.FileActionMkFile) error
-// 	Rm(context.Context, Mount, pb.FileActionRm) error
-// 	Copy(context.Context, Mount, Mount, pb.FileActionCopy) error
-// }
+	lm2 := snapshot.LocalMounter(mnt2.m)
+	dest, err := lm2.Mount()
+	if err != nil {
+		return err
+	}
+	defer lm2.Unmount()
+
+	return docopy(ctx, src, dest, action)
+}

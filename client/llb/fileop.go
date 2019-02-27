@@ -634,8 +634,8 @@ func (f *FileOp) Marshal(c *Constraints) (digest.Digest, []byte, *pb.OpMetadata,
 		}
 
 		pfo.Actions = append(pfo.Actions, &pb.FileAction{
-			Input:          getIndex(st.input, len(state.actions), st.inputRelative),
-			SecondaryInput: getIndex(st.input2, len(state.actions), st.input2Relative),
+			Input:          getIndex(st.input, len(state.inputs), st.inputRelative),
+			SecondaryInput: getIndex(st.input2, len(state.inputs), st.input2Relative),
 			Output:         output,
 			Action:         st.action.toProtoAction(parent, st.base),
 		})

@@ -9,13 +9,17 @@ import (
 	"github.com/pkg/errors"
 )
 
+func NewRefManager(cm cache.Manager) *RefManager {
+	return &RefManager{cm: cm}
+}
+
 type RefManager struct {
 	cm cache.Manager
 }
 
 func (rm *RefManager) Prepare(ctx context.Context, ref fileoptypes.Ref, readonly bool) (fileoptypes.Mount, error) {
 	ir, ok := ref.(cache.ImmutableRef)
-	if !ok {
+	if !ok && ref != nil {
 		return nil, errors.Errorf("invalid ref type: %T", ref)
 	}
 
@@ -43,7 +47,7 @@ func (rm *RefManager) Commit(ctx context.Context, mount fileoptypes.Mount) (file
 	if !ok {
 		return nil, errors.Errorf("invalid mount type %T", mount)
 	}
-	if err := m.Release(context.TODO()); err != nil {
+	if err := m.m.Release(); err != nil {
 		return nil, err
 	}
 	if m.mr == nil {
