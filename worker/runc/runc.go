@@ -104,7 +104,7 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		Snapshotter:   containerdsnapshot.NewSnapshotter(mdb.Snapshotter(snFactory.Name), c, md, "buildkit", gc),
 		ContentStore:  c,
 		Applier:       winlayers.NewFileSystemApplierWithWindows(c, apply.NewFileSystemApplier(c)),
-		Differ:        winlayers.NewWalkingDiffWithWindows(c, walking.NewWalkingDiff(c)),
+		Differ:        winlayers.NewWalkingDiffWithWindows(c, walking.NewWalkingDiff(c), ""),
 		ImageStore:    nil, // explicitly
 		Platforms:     []specs.Platform{platforms.Normalize(platforms.DefaultSpec())},
 	}

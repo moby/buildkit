@@ -101,6 +101,13 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 		}
 	}
 
+	is := client.ImageService()
+	if ns != "" {
+		is = &nsImageStore{
+			Store: is,
+			ns:    ns,
+		}
+	}
 	opt := base.WorkerOpt{
 		ID:            id,
 		Labels:        xlabels,
@@ -109,8 +116,8 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 		Snapshotter:   containerdsnapshot.NewSnapshotter(client.SnapshotService(snapshotterName), cs, md, ns, gc),
 		ContentStore:  cs,
 		Applier:       winlayers.NewFileSystemApplierWithWindows(cs, df),
-		Differ:        winlayers.NewWalkingDiffWithWindows(cs, df),
-		ImageStore:    client.ImageService(),
+		Differ:        winlayers.NewWalkingDiffWithWindows(cs, df, ns),
+		ImageStore:    is,
 		Platforms:     platforms,
 	}
 	return opt, nil

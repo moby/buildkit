@@ -16,6 +16,7 @@ import (
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/mount"
+	"github.com/containerd/containerd/namespaces"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -28,10 +29,11 @@ const (
 	keyCreationTime = "LIBARCHIVE.creationtime"
 )
 
-func NewWalkingDiffWithWindows(store content.Store, d diff.Comparer) diff.Comparer {
+func NewWalkingDiffWithWindows(store content.Store, d diff.Comparer, ns string) diff.Comparer {
 	return &winDiffer{
 		store: store,
 		d:     d,
+		ns:    ns,
 	}
 }
 
@@ -40,11 +42,15 @@ var emptyDesc = ocispec.Descriptor{}
 type winDiffer struct {
 	store content.Store
 	d     diff.Comparer
+	ns    string
 }
 
 // Compare creates a diff between the given mounts and uploads the result
 // to the content store.
 func (s *winDiffer) Compare(ctx context.Context, lower, upper []mount.Mount, opts ...diff.Opt) (d ocispec.Descriptor, err error) {
+	if s.ns != "" {
+		ctx = namespaces.WithNamespace(ctx, s.ns)
+	}
 	if !hasWindowsLayerMode(ctx) {
 		return s.d.Compare(ctx, lower, upper, opts...)
 	}
