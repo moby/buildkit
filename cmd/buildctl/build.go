@@ -26,9 +26,10 @@ import (
 )
 
 var buildCommand = cli.Command{
-	Name:   "build",
-	Usage:  "build",
-	Action: build,
+	Name:    "build",
+	Aliases: []string{"b"},
+	Usage:   "build",
+	Action:  build,
 	Flags: []cli.Flag{
 		cli.StringFlag{
 			Name:  "exporter",
