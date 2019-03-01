@@ -3,6 +3,10 @@ DESTDIR=/usr/local
 binaries: FORCE
 	hack/binaries
 
+images: FORCE
+# moby/buildkit:local and moby/buildkit:local-rootless are created on Docker
+	hack/images local moby/buildkit
+
 install: FORCE
 	mkdir -p $(DESTDIR)/bin
 	install bin/* $(DESTDIR)/bin
@@ -30,5 +34,5 @@ vendor:
 generated-files:
 	./hack/update-generated-files
 
-.PHONY: vendor generated-files test binaries install clean lint validate-all validate-vendor validate-generated-files
+.PHONY: vendor generated-files test binaries images install clean lint validate-all validate-vendor validate-generated-files
 FORCE:

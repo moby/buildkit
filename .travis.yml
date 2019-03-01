@@ -19,13 +19,13 @@ before_deploy:
 
 deploy:
   - provider: script
-    script: ./hack/release master $REPO_SLUG_TARGET push
+    script: ./hack/images master $REPO_SLUG_TARGET push
     on:
       repo: moby/buildkit
       branch: master
       condition: $TRAVIS_EVENT_TYPE != "cron"
   - provider: script
-    script: ./hack/release $TRAVIS_TAG $REPO_SLUG_TARGET push && PLATFORMS="${PLATFORMS},darwin/amd64,windows/amd64" ./hack/release-tar $TRAVIS_TAG release-out
+    script: ./hack/images $TRAVIS_TAG $REPO_SLUG_TARGET push && PLATFORMS="${PLATFORMS},darwin/amd64,windows/amd64" ./hack/release-tar $TRAVIS_TAG release-out
     on:
       repo: moby/buildkit
       tags: true
