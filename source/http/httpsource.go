@@ -147,11 +147,42 @@ func (hs *httpSourceHandler) CacheKey(ctx context.Context, index int) (string, b
 			if etag := getETag(si); etag != "" {
 				if dgst := getChecksum(si); dgst != "" {
 					m[etag] = si
-					req.Header.Add("If-None-Match", etag)
 				}
 			}
 			// }
 		}
+		if len(m) > 0 {
+			etags := make([]string, 0, len(m))
+			for t := range m {
+				etags = append(etags, t)
+			}
+			req.Header.Add("If-None-Match", strings.Join(etags, ", "))
+		}
+	}
+
+	// Some servers seem to have trouble supporting If-None-Match properly even
+	// though they return ETag-s. So first, optionally try a HEAD request with
+	// manual ETag value comparison.
+	if len(m) > 0 {
+		req.Method = "HEAD"
+		resp, err := hs.client.Do(req)
+		if err == nil {
+			if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNotModified {
+				respETag := resp.Header.Get("ETag")
+				si, ok := m[respETag]
+				if ok {
+					hs.refID = si.ID()
+					dgst := getChecksum(si)
+					if dgst != "" {
+						modTime := getModTime(si)
+						resp.Body.Close()
+						return hs.formatCacheKey(getFileName(hs.src.URL, hs.src.Filename, resp), dgst, modTime).String(), true, nil
+					}
+				}
+			}
+			resp.Body.Close()
+		}
+		req.Method = "GET"
 	}
 
 	resp, err := hs.client.Do(req)

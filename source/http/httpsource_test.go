@@ -112,7 +112,7 @@ func TestHTTPSource(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, expectedContent2, k)
-	require.Equal(t, server.Stats("/foo").AllRequests, 3)
+	require.Equal(t, server.Stats("/foo").AllRequests, 4)
 	require.Equal(t, server.Stats("/foo").CachedRequests, 1)
 
 	ref, err = h.Snapshot(ctx)
