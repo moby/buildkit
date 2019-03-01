@@ -12,12 +12,10 @@ github.com/containerd/cgroups v0.0.0-20181219155423-39b18af02c41 h1:5yg0k8gqOssN
 github.com/containerd/cgroups v0.0.0-20181219155423-39b18af02c41/go.mod h1:X9rLEHIqSf/wfK8NsPqxJmeZgW4pcfzdXITDrUSJ6uI=
 github.com/containerd/console v0.0.0-20180822173158-c12b1e7919c1 h1:uict5mhHFTzKLUCufdSLym7z/J0CbBJT59lYbP9wtbg=
 github.com/containerd/console v0.0.0-20180822173158-c12b1e7919c1/go.mod h1:Tj/on1eG8kiEhd0+fhSDzsPAFESxzBBvdyEgyryXffw=
-github.com/containerd/containerd v0.0.0-20181221132743-47b328aab791 h1:OIy72YW2pMCTiNjU3/Xp7EsEENwF93Ut/Cv0/ZzqoK4=
-github.com/containerd/containerd v0.0.0-20181221132743-47b328aab791/go.mod h1:bC6axHOhabU15QhwfG7w5PipXdVtMXFTttgp+kVtyUA=
+github.com/containerd/containerd v1.2.1-0.20190212172151-f5b0fa220df8 h1:yQ2FlAgqy/BIbMTIsRZTaGYwcl9v2F40i7zCGSoWac0=
+github.com/containerd/containerd v1.2.1-0.20190212172151-f5b0fa220df8/go.mod h1:bC6axHOhabU15QhwfG7w5PipXdVtMXFTttgp+kVtyUA=
 github.com/containerd/continuity v0.0.0-20181001140422-bd77b46c8352 h1:CdBoaTKPl60tksFVWYc5QnLWwXBcU+XcLiXx8+NcZ9o=
 github.com/containerd/continuity v0.0.0-20181001140422-bd77b46c8352/go.mod h1:GL3xCUCBDV3CZiTSEKksMWbLE66hEyuu9qyDOOqM47Y=
-github.com/containerd/cri v0.0.0-20181012222137-f913714917d2 h1:mHD+PpAfUzqhtVFsD89SR6mfIBdiJsgz6bkIuSl5Beg=
-github.com/containerd/cri v0.0.0-20181012222137-f913714917d2/go.mod h1:DavH5Qa8+6jOmeOMO3dhWoqksucZDe06LfuhBz/xPZs=
 github.com/containerd/fifo v0.0.0-20180307165137-3d5202aec260 h1:XGyg7oTtD0DoRFhbpV6x1WfV0flKC4UxXU7ab1zC08U=
 github.com/containerd/fifo v0.0.0-20180307165137-3d5202aec260/go.mod h1:ODA38xgv3Kuk8dQz2ZQXpnv/UZZUHUCL7pnLehbXgQI=
 github.com/containerd/go-runc v0.0.0-20180907222934-5a6d9f37cfa3 h1:esQOJREg8nw8aXj6uCN5dfW5cKUBiEJ/+nni1Q/D/sw=
@@ -30,8 +28,8 @@ github.com/davecgh/go-spew v1.1.0 h1:ZDRjVQ15GmhC3fiQ8ni8+OwkZQO4DARzQgrnXU1Liz8
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/docker/cli v0.0.0-20190131223713-234462756460 h1:pil/Gt3dlnN7WIX+6uS3Ok3firOdyzmxqUtYrIik27I=
 github.com/docker/cli v0.0.0-20190131223713-234462756460/go.mod h1:JLrzqnKDaYBop7H2jaqPtU4hHvMKP+vjCwu2uszcLI8=
-github.com/docker/distribution v0.0.0-20170825220652-30578ca32960 h1:j9nMdxPlKU5EU0NQsaltj3xN9b+xhC4P9dwklwY9Ukc=
-github.com/docker/distribution v0.0.0-20170825220652-30578ca32960/go.mod h1:J2gT2udsDAN96Uj4KfcMRqY0/ypR+oyYUYmja8H+y+w=
+github.com/docker/distribution v2.7.1-0.20190205005809-0d3efadf0154+incompatible h1:dvc1KSkIYTVjZgHf/CTC2diTYC8PzhaA5sFISRfNVrE=
+github.com/docker/distribution v2.7.1-0.20190205005809-0d3efadf0154+incompatible/go.mod h1:J2gT2udsDAN96Uj4KfcMRqY0/ypR+oyYUYmja8H+y+w=
 github.com/docker/docker v0.0.0-20180531152204-71cd53e4a197 h1:raQhUHOMIAZAWHmo3hLEwoIy0aVkKb2uxZdWw/Up+HI=
 github.com/docker/docker v0.0.0-20180531152204-71cd53e4a197/go.mod h1:eEKB0N0r5NX/I1kEveEz05bcu8tLC/8azJZsviup8Sk=
 github.com/docker/docker-credential-helpers v0.6.0 h1:5bhDRLn1roGiNjz8IezRngHxMfoeaXGyr0BeMHq4rD8=

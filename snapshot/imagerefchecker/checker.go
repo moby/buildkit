@@ -97,7 +97,7 @@ func (c *checker) init() {
 			mu.Lock()
 			c.registerLayers(layers)
 			mu.Unlock()
-		})), img.Target); err != nil {
+		})), nil, img.Target); err != nil {
 			return
 		}
 	}

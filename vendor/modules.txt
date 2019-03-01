@@ -21,7 +21,7 @@ github.com/apache/thrift/lib/go/thrift
 github.com/codahale/hdrhistogram
 # github.com/containerd/console v0.0.0-20180822173158-c12b1e7919c1
 github.com/containerd/console
-# github.com/containerd/containerd v0.0.0-20181221132743-47b328aab791
+# github.com/containerd/containerd v1.2.1-0.20190212172151-f5b0fa220df8
 github.com/containerd/containerd/filters
 github.com/containerd/containerd/mount
 github.com/containerd/containerd/snapshots
@@ -97,8 +97,6 @@ github.com/containerd/continuity/devices
 github.com/containerd/continuity/driver
 github.com/containerd/continuity/pathdriver
 github.com/containerd/continuity/proto
-# github.com/containerd/cri v0.0.0-20181012222137-f913714917d2
-github.com/containerd/cri/pkg/util
 # github.com/containerd/fifo v0.0.0-20180307165137-3d5202aec260
 github.com/containerd/fifo
 # github.com/containerd/go-runc v0.0.0-20180907222934-5a6d9f37cfa3
@@ -112,7 +110,7 @@ github.com/docker/cli/cli/config
 github.com/docker/cli/cli/config/configfile
 github.com/docker/cli/cli/config/credentials
 github.com/docker/cli/cli/config/types
-# github.com/docker/distribution v0.0.0-20170825220652-30578ca32960
+# github.com/docker/distribution v2.7.1-0.20190205005809-0d3efadf0154+incompatible
 github.com/docker/distribution/reference
 github.com/docker/distribution/digestset
 # github.com/docker/docker v0.0.0-20180531152204-71cd53e4a197
@@ -253,6 +251,7 @@ golang.org/x/net/idna
 golang.org/x/net/internal/socks
 # golang.org/x/sync v0.0.0-20180314180146-1d60e4601c6f
 golang.org/x/sync/errgroup
+golang.org/x/sync/semaphore
 # golang.org/x/sys v0.0.0-20180909124046-d0be0721c37e
 golang.org/x/sys/unix
 golang.org/x/sys/windows

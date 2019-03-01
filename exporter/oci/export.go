@@ -193,7 +193,7 @@ func getExporter(variant ExporterVariant, name string) (images.Exporter, error) 
 		if name != "" {
 			return nil, errors.New("oci exporter cannot export named image")
 		}
-		return &oci.V1Exporter{}, nil
+		return oci.ResolveV1ExportOpt(oci.WithAllPlatforms(true))
 	case VariantDocker:
 		return &dockerexporter.DockerExporter{Name: name}, nil
 	default:

@@ -98,7 +98,7 @@ func Push(ctx context.Context, sm *session.Manager, cs content.Provider, dgst di
 	}
 
 	layersDone := oneOffProgress(ctx, "pushing layers")
-	err = images.Dispatch(ctx, images.Handlers(handlers...), ocispec.Descriptor{
+	err = images.Dispatch(ctx, images.Handlers(handlers...), nil, ocispec.Descriptor{
 		Digest:    dgst,
 		Size:      ra.Size(),
 		MediaType: mtype,
