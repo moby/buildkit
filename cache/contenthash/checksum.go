@@ -43,8 +43,8 @@ func getDefaultManager() *cacheManager {
 // header, "/dir" is for contents. For the root node "" (empty string) is the
 // key for root, "/" for the root header
 
-func Checksum(ctx context.Context, ref cache.ImmutableRef, path string) (digest.Digest, error) {
-	return getDefaultManager().Checksum(ctx, ref, path)
+func Checksum(ctx context.Context, ref cache.ImmutableRef, path string, followLinks bool) (digest.Digest, error) {
+	return getDefaultManager().Checksum(ctx, ref, path, followLinks)
 }
 
 func GetCacheContext(ctx context.Context, md *metadata.StorageItem) (CacheContext, error) {
@@ -56,7 +56,8 @@ func SetCacheContext(ctx context.Context, md *metadata.StorageItem, cc CacheCont
 }
 
 type CacheContext interface {
-	Checksum(ctx context.Context, ref cache.Mountable, p string) (digest.Digest, error)
+	Checksum(ctx context.Context, ref cache.Mountable, p string, followLinks bool) (digest.Digest, error)
+	ChecksumWildcard(ctx context.Context, ref cache.Mountable, p string, followLinks bool) (digest.Digest, error)
 	HandleChange(kind fsutil.ChangeKind, p string, fi os.FileInfo, err error) error
 }
 
@@ -75,12 +76,12 @@ type cacheManager struct {
 	lruMu  sync.Mutex
 }
 
-func (cm *cacheManager) Checksum(ctx context.Context, ref cache.ImmutableRef, p string) (digest.Digest, error) {
+func (cm *cacheManager) Checksum(ctx context.Context, ref cache.ImmutableRef, p string, followLinks bool) (digest.Digest, error) {
 	cc, err := cm.GetCacheContext(ctx, ensureOriginMetadata(ref.Metadata()))
 	if err != nil {
 		return "", nil
 	}
-	return cc.Checksum(ctx, ref, p)
+	return cc.Checksum(ctx, ref, p, followLinks)
 }
 
 func (cm *cacheManager) GetCacheContext(ctx context.Context, md *metadata.StorageItem) (CacheContext, error) {
@@ -334,10 +335,11 @@ func (cc *cacheContext) ChecksumWildcard(ctx context.Context, mountable cache.Mo
 	if followLinks {
 		for i, w := range wildcards {
 			if w.Record.Type == CacheRecordTypeSymlink {
-				dgst, err := cc.checksumFollow(ctx, m, w.Path)
-				if err == nil {
-					wildcards[i].Record = &CacheRecord{Digest: dgst}
+				dgst, err := cc.checksumFollow(ctx, m, w.Path, followLinks)
+				if err != nil {
+					return "", err
 				}
+				wildcards[i].Record = &CacheRecord{Digest: dgst}
 			}
 		}
 	}
@@ -360,10 +362,10 @@ func (cc *cacheContext) Checksum(ctx context.Context, mountable cache.Mountable,
 	m := &mount{mountable: mountable}
 	defer m.clean()
 
-	return cc.checksumFollow(ctx, m, p)
+	return cc.checksumFollow(ctx, m, p, followLinks)
 }
 
-func (cc *cacheContext) checksumFollow(ctx context.Context, m *mount, p string) (digest.Digest, error) {
+func (cc *cacheContext) checksumFollow(ctx context.Context, m *mount, p string, follow bool) (digest.Digest, error) {
 	const maxSymlinkLimit = 255
 	i := 0
 	for {
@@ -374,7 +376,7 @@ func (cc *cacheContext) checksumFollow(ctx context.Context, m *mount, p string) 
 		if err != nil {
 			return "", err
 		}
-		if cr.Type == CacheRecordTypeSymlink {
+		if cr.Type == CacheRecordTypeSymlink && follow {
 			link := cr.Linkname
 			if !path.IsAbs(cr.Linkname) {
 				link = path.Join(path.Dir(p), link)
