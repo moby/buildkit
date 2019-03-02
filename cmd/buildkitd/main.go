@@ -37,6 +37,7 @@ import (
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/moby/buildkit/util/appdefaults"
+	"github.com/moby/buildkit/util/binfmt_misc"
 	"github.com/moby/buildkit/util/profiler"
 	"github.com/moby/buildkit/util/resolver"
 	"github.com/moby/buildkit/version"
@@ -306,6 +307,9 @@ func setDefaultConfig(cfg *config.Config) {
 	if len(cfg.GRPC.Address) == 0 {
 		cfg.GRPC.Address = []string{appdefaults.Address}
 	}
+
+	cfg.Workers.OCI.Platforms = binfmt_misc.SupportedPlatforms()
+	cfg.Workers.Containerd.Platforms = binfmt_misc.SupportedPlatforms()
 
 	if system.RunningInUserNS() {
 		// if buildkitd is being executed as the mapped-root (not only EUID==0 but also $USER==root)
