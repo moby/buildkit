@@ -29,6 +29,61 @@ const (
 	dgstDirD0Modified = digest.Digest("sha256:555ffa3028630d97ba37832b749eda85ab676fd64ffb629fbf0f4ec8c1e3bff1")
 )
 
+func TestChecksumWildcard(t *testing.T) {
+	t.Parallel()
+	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	cm := setupCacheManager(t, tmpdir, snapshotter)
+	defer cm.Close()
+
+	ch := []string{
+		"ADD bar file data1",
+		"ADD foo file data0",
+		"ADD fox file data2",
+		"ADD x dir",
+		"ADD x/d0 dir",
+		"ADD x/d0/abc file data0",
+		"ADD x/d0/def symlink abc",
+		"ADD x/d0/ghi symlink nosuchfile",
+		"ADD y1 symlink foo",
+		"ADD y2 symlink fox",
+	}
+
+	ref := createRef(t, cm, ch)
+
+	cc, err := newCacheContext(ref.Metadata())
+	require.NoError(t, err)
+
+	dgst, err := cc.ChecksumWildcard(context.TODO(), ref, "f*o", false)
+	require.NoError(t, err)
+	require.Equal(t, dgstFileData0, dgst)
+
+	expFoos := digest.Digest("sha256:c9f914ad7ad8fe6092ce67484b43ca39c2087aabf9e4a1b223249b0f8b09b9f2")
+
+	dgst, err = cc.ChecksumWildcard(context.TODO(), ref, "f*", false)
+	require.NoError(t, err)
+	require.Equal(t, expFoos, dgst)
+
+	dgst, err = cc.ChecksumWildcard(context.TODO(), ref, "x/d?", false)
+	require.NoError(t, err)
+	require.Equal(t, dgstDirD0, dgst)
+
+	dgst, err = cc.ChecksumWildcard(context.TODO(), ref, "x/d?/def", true)
+	require.NoError(t, err)
+	require.Equal(t, dgstFileData0, dgst)
+
+	dgst, err = cc.ChecksumWildcard(context.TODO(), ref, "y*", true)
+	require.NoError(t, err)
+	require.Equal(t, expFoos, dgst)
+
+	err = ref.Release(context.TODO())
+	require.NoError(t, err)
+}
+
 func TestChecksumBasicFile(t *testing.T) {
 	t.Parallel()
 	tmpdir, err := ioutil.TempDir("", "buildkit-state")
