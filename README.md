@@ -261,6 +261,7 @@ buildctl build --help
 ```
 
 The images can be also built locally using `./hack/dockerfiles/test.Dockerfile` (or `./hack/dockerfiles/test.buildkit.Dockerfile` if you already have BuildKit).
+Run `make images` to build the images as `moby/buildkit:local` and `moby/buildkit:local-rootless`.
 
 ### Opentracing support
 

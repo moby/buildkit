@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+
+. $(dirname $0)/util
+
+TAG=$1
+REPO=$2
+PUSH=$3
+
+set -eu -o pipefail
+
+: ${PLATFORMS=linux/amd64}
+: ${CONTINUOUS_INTEGRATION=}
+
+progressFlag=""
+if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"; fi
+
+gitTag=$(git describe --tags --match "v[0-9]*")
+
+usage() {
+	echo "usage: $0 <tag> <repo> [push]"
+	exit 1
+}
+
+if [ -z "$TAG" ] || [ -z "$REPO" ]; then
+	usage
+fi
+
+imageDockerCommon() {
+	if echo $PLATFORMS | grep , >/dev/null; then
+		echo "PREFER_BUILDCTL=1 needs to be set to build images for $PLATFORMS"
+		exit 1
+	fi
+	set -x
+	docker build $@ --platform=$PLATFORMS -t $REPO:$TAG .
+	docker build $@ --platform=$PLATFORMS -t $REPO:$TAG-rootless --target rootless .
+	set +x
+
+	if [ "$PUSH" = "push" ]; then
+		set -x
+		docker push $REPO:$TAG
+		docker push $REPO:$TAG-rootless
+		set +x
+	fi
+	if [[ "gitTag" == "$TAG" ]]; then
+		set -x
+		docker tag $REPO:$TAG $REPO:latest
+		docker tag $REPO:$TAG-rootless $REPO:rootless
+		set +x
+		if [ "$PUSH" = "push" ]; then
+			set -x
+			docker push $REPO:latest
+			docker push $REPO:rootless
+			set +x
+		fi
+	fi
+}
+
+imageLegacy() {
+	imageDockerCommon -f ./hack/dockerfiles/test.Dockerfile
+}
+
+imageDocker() {
+	imageDockerCommon $progressFlag -f ./hack/dockerfiles/test.buildkit.Dockerfile
+}
+
+image() {
+	pushFlag=""
+	if [ "$PUSH" = "push" ]; then
+		pushFlag="--exporter-opt push=true"
+	fi
+
+	tagLatest=""
+	tagLatestRootless=""
+	if [[ "gitTag" == "$TAG" ]]; then
+		tagLatest=",$REPO:latest"
+		tagLatestRootless=",$REPO:rootless"
+	fi
+
+	set -x
+
+	buildctl build $progressFlag --frontend=dockerfile.v0 \
+		--local context=. --local dockerfile=. \
+		--frontend-opt filename=./hack/dockerfiles/test.buildkit.Dockerfile \
+		--frontend-opt platform=$PLATFORMS \
+		--exporter image \
+		--exporter-opt name=$REPO:$TAG$tagLatest $pushFlag
+
+	buildctl build $progressFlag --frontend=dockerfile.v0 \
+		--local context=. --local dockerfile=. \
+		--frontend-opt target=rootless \
+		--frontend-opt filename=./hack/dockerfiles/test.buildkit.Dockerfile \
+		--frontend-opt platform=$PLATFORMS \
+		--exporter image \
+		--exporter-opt name=$REPO:$TAG-rootless$tagLatestRootless $pushFlag
+}
+
+case $buildmode in
+"buildkit")
+	image
+	;;
+"docker-buildkit")
+	imageDocker
+	;;
+*)
+	imageLegacy
+	;;
+esac
