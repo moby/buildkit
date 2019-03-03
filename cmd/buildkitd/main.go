@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -55,6 +56,7 @@ import (
 func init() {
 	apicaps.ExportedProduct = "buildkit"
 	seed.WithTimeAndRand()
+	syscall.Umask(0)
 }
 
 type workerInitializerOpt struct {

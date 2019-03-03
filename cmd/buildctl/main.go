@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"syscall"
 
 	bccommon "github.com/moby/buildkit/cmd/buildctl/common"
 	"github.com/moby/buildkit/util/apicaps"
@@ -15,6 +16,7 @@ import (
 
 func init() {
 	apicaps.ExportedProduct = "buildkit"
+	syscall.Umask(0)
 }
 
 func main() {

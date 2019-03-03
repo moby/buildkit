@@ -183,7 +183,7 @@ func dedupePaths(inp []string) []string {
 func toSelectors(p []string) []llbsolver.Selector {
 	sel := make([]llbsolver.Selector, 0, len(p))
 	for _, p := range p {
-		sel = append(sel, llbsolver.Selector{Path: p})
+		sel = append(sel, llbsolver.Selector{Path: p, FollowLinks: true})
 	}
 	return sel
 }

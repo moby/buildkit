@@ -31,7 +31,7 @@ func (rm *RefManager) Prepare(ctx context.Context, ref fileoptypes.Ref, readonly
 		return &Mount{m: m}, nil
 	}
 
-	mr, err := rm.cm.New(ctx, ir, cache.WithDescription("fileop target"))
+	mr, err := rm.cm.New(ctx, ir, cache.WithDescription("fileop target"), cache.CachePolicyRetain)
 	if err != nil {
 		return nil, err
 	}

@@ -21,11 +21,10 @@ import (
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
 
-const fileCacheType = "buildkit.exec.v0"
+const fileCacheType = "buildkit.file.v0"
 
 type fileOp struct {
 	op        *pb.FileOp
@@ -48,7 +47,7 @@ func NewFileOp(v solver.Vertex, op *pb.Op_File, cm cache.Manager, md *metadata.S
 func (f *fileOp) CacheMap(ctx context.Context, index int) (*solver.CacheMap, bool, error) {
 	selectors := map[int]map[llbsolver.Selector]struct{}{}
 
-	digester := digest.Canonical.Digester()
+	actions := make([][]byte, 0, len(f.op.Actions))
 
 	for _, action := range f.op.Actions {
 		var dt []byte
@@ -79,7 +78,7 @@ func (f *fileOp) CacheMap(ctx context.Context, index int) (*solver.CacheMap, boo
 			p.Owner = nil
 			if action.SecondaryInput != -1 && int(action.SecondaryInput) < f.numInputs {
 				p.Src = path.Base(p.Src)
-				addSelector(selectors, int(action.SecondaryInput), p.Src, p.AllowWildcard)
+				addSelector(selectors, int(action.SecondaryInput), p.Src, p.AllowWildcard, p.FollowSymlink)
 			}
 			dt, err = json.Marshal(p)
 			if err != nil {
@@ -87,13 +86,22 @@ func (f *fileOp) CacheMap(ctx context.Context, index int) (*solver.CacheMap, boo
 			}
 		}
 
-		if _, err = digester.Hash().Write(dt); err != nil {
-			return nil, false, err
-		}
+		actions = append(actions, dt)
+	}
+
+	dt, err := json.Marshal(struct {
+		Type    string
+		Actions [][]byte
+	}{
+		Type:    fileCacheType,
+		Actions: actions,
+	})
+	if err != nil {
+		return nil, false, err
 	}
 
 	cm := &solver.CacheMap{
-		Digest: digester.Digest(),
+		Digest: digest.FromBytes(dt),
 		Deps: make([]struct {
 			Selector          digest.Digest
 			ComputeDigestFunc solver.ResultBasedCacheFunc
@@ -117,15 +125,13 @@ func (f *fileOp) CacheMap(ctx context.Context, index int) (*solver.CacheMap, boo
 }
 
 func (f *fileOp) Exec(ctx context.Context, inputs []solver.Result) ([]solver.Result, error) {
-
 	inpRefs := make([]fileoptypes.Ref, 0, len(inputs))
-	for i, inp := range inputs {
+	for _, inp := range inputs {
 		workerRef, ok := inp.Sys().(*worker.WorkerRef)
 		if !ok {
 			return nil, errors.Errorf("invalid reference for exec %T", inp.Sys())
 		}
 		inpRefs = append(inpRefs, workerRef.ImmutableRef)
-		logrus.Debugf("inp %d : %+v", i, workerRef.ImmutableRef)
 	}
 
 	outs, err := f.solver.Solve(ctx, inpRefs, f.op.Actions)
@@ -141,17 +147,21 @@ func (f *fileOp) Exec(ctx context.Context, inputs []solver.Result) ([]solver.Res
 	return outResults, nil
 }
 
-func addSelector(m map[int]map[llbsolver.Selector]struct{}, idx int, sel string, wildcard bool) {
+func addSelector(m map[int]map[llbsolver.Selector]struct{}, idx int, sel string, wildcard, followLinks bool) {
 	mm, ok := m[idx]
 	if !ok {
 		mm = map[llbsolver.Selector]struct{}{}
 		m[idx] = mm
 	}
+	s := llbsolver.Selector{Path: sel}
+
 	if wildcard && containsWildcards(sel) {
-		mm[llbsolver.Selector{Path: sel, Wildcard: wildcard}] = struct{}{}
-	} else {
-		mm[llbsolver.Selector{Path: sel}] = struct{}{}
+		s.Wildcard = true
 	}
+	if followLinks {
+		s.FollowLinks = true
+	}
+	mm[s] = struct{}{}
 }
 
 func containsWildcards(name string) bool {
@@ -169,16 +179,25 @@ func containsWildcards(name string) bool {
 
 func dedupeSelectors(m map[llbsolver.Selector]struct{}) []llbsolver.Selector {
 	paths := make([]string, 0, len(m))
+	pathsFollow := make([]string, 0, len(m))
 	for sel := range m {
 		if !sel.Wildcard {
-			paths = append(paths, sel.Path)
+			if sel.FollowLinks {
+				pathsFollow = append(pathsFollow, sel.Path)
+			} else {
+				paths = append(paths, sel.Path)
+			}
 		}
 	}
 	paths = dedupePaths(paths)
+	pathsFollow = dedupePaths(pathsFollow)
 	selectors := make([]llbsolver.Selector, 0, len(m))
 
 	for _, p := range paths {
 		selectors = append(selectors, llbsolver.Selector{Path: p})
+	}
+	for _, p := range pathsFollow {
+		selectors = append(selectors, llbsolver.Selector{Path: p, FollowLinks: true})
 	}
 
 	for sel := range m {
@@ -221,7 +240,6 @@ type input struct {
 
 func (s *FileOpSolver) Solve(ctx context.Context, inputs []fileoptypes.Ref, actions []*pb.FileAction) ([]fileoptypes.Ref, error) {
 	for i, a := range actions {
-		logrus.Debugf("action: %+v", a)
 		if int(a.Input) < -1 || int(a.Input) >= len(inputs)+len(actions) {
 			return nil, errors.Errorf("invalid input index %d, %d provided", a.Input, len(inputs)+len(actions))
 		}

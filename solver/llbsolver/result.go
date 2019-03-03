@@ -14,8 +14,9 @@ import (
 )
 
 type Selector struct {
-	Path     string
-	Wildcard bool
+	Path        string
+	Wildcard    bool
+	FollowLinks bool
 }
 
 func NewContentHashFunc(selectors []Selector) solver.ResultBasedCacheFunc {
@@ -26,7 +27,7 @@ func NewContentHashFunc(selectors []Selector) solver.ResultBasedCacheFunc {
 		}
 
 		if len(selectors) == 0 {
-			selectors = []Selector{Selector{}}
+			selectors = []Selector{{}}
 		}
 
 		dgsts := make([][]byte, len(selectors))
@@ -37,11 +38,19 @@ func NewContentHashFunc(selectors []Selector) solver.ResultBasedCacheFunc {
 			// FIXME(tonistiigi): enabling this parallelization seems to create wrong results for some big inputs(like gobuild)
 			// func(i int) {
 			// 	eg.Go(func() error {
-			dgst, err := contenthash.Checksum(ctx, ref.ImmutableRef, path.Join("/", sel.Path), true)
-			if err != nil {
-				return "", err
+			if !sel.Wildcard {
+				dgst, err := contenthash.Checksum(ctx, ref.ImmutableRef, path.Join("/", sel.Path), sel.FollowLinks)
+				if err != nil {
+					return "", err
+				}
+				dgsts[i] = []byte(dgst)
+			} else {
+				dgst, err := contenthash.ChecksumWildcard(ctx, ref.ImmutableRef, path.Join("/", sel.Path), sel.FollowLinks)
+				if err != nil {
+					return "", err
+				}
+				dgsts[i] = []byte(dgst)
 			}
-			dgsts[i] = []byte(dgst)
 			// return nil
 			// })
 			// }(i)

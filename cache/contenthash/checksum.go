@@ -47,6 +47,10 @@ func Checksum(ctx context.Context, ref cache.ImmutableRef, path string, followLi
 	return getDefaultManager().Checksum(ctx, ref, path, followLinks)
 }
 
+func ChecksumWildcard(ctx context.Context, ref cache.ImmutableRef, path string, followLinks bool) (digest.Digest, error) {
+	return getDefaultManager().ChecksumWildcard(ctx, ref, path, followLinks)
+}
+
 func GetCacheContext(ctx context.Context, md *metadata.StorageItem) (CacheContext, error) {
 	return getDefaultManager().GetCacheContext(ctx, md)
 }
@@ -82,6 +86,14 @@ func (cm *cacheManager) Checksum(ctx context.Context, ref cache.ImmutableRef, p 
 		return "", nil
 	}
 	return cc.Checksum(ctx, ref, p, followLinks)
+}
+
+func (cm *cacheManager) ChecksumWildcard(ctx context.Context, ref cache.ImmutableRef, p string, followLinks bool) (digest.Digest, error) {
+	cc, err := cm.GetCacheContext(ctx, ensureOriginMetadata(ref.Metadata()))
+	if err != nil {
+		return "", nil
+	}
+	return cc.ChecksumWildcard(ctx, ref, p, followLinks)
 }
 
 func (cm *cacheManager) GetCacheContext(ctx context.Context, md *metadata.StorageItem) (CacheContext, error) {
@@ -342,6 +354,9 @@ func (cc *cacheContext) ChecksumWildcard(ctx context.Context, mountable cache.Mo
 				wildcards[i].Record = &CacheRecord{Digest: dgst}
 			}
 		}
+	}
+	if len(wildcards) == 0 {
+		return digest.FromBytes([]byte{}), nil
 	}
 
 	if len(wildcards) > 1 {

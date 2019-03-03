@@ -22,11 +22,11 @@ func mkdir(ctx context.Context, d string, action pb.FileActionMkDir) error {
 	}
 
 	if action.MakeParents {
-		if err := os.MkdirAll(p, os.FileMode(action.Mode&0777)); err != nil {
+		if err := os.MkdirAll(p, os.FileMode(action.Mode)&0777); err != nil {
 			return err
 		}
 	} else {
-		if err := os.Mkdir(p, os.FileMode(action.Mode&0777)); err != nil {
+		if err := os.Mkdir(p, os.FileMode(action.Mode)&0777); err != nil {
 			return err
 		}
 	}
@@ -38,6 +38,7 @@ func mkdir(ctx context.Context, d string, action pb.FileActionMkDir) error {
 			return errors.Wrapf(err, "failed to utime %s", p)
 		}
 	}
+
 	return nil
 }
 
@@ -47,7 +48,7 @@ func mkfile(ctx context.Context, d string, action pb.FileActionMkFile) error {
 		return err
 	}
 
-	if err := ioutil.WriteFile(p, action.Data, os.FileMode(action.Mode)|0777); err != nil {
+	if err := ioutil.WriteFile(p, action.Data, os.FileMode(action.Mode)&0777); err != nil {
 		return err
 	}
 
@@ -111,7 +112,13 @@ func docopy(ctx context.Context, src, dest string, action pb.FileActionCopy) err
 		return err
 	}
 
-	if err := copy.Copy(ctx, srcp, destp); err != nil {
+	var opt []copy.Opt
+
+	if action.AllowWildcard {
+		opt = append(opt, copy.AllowWildcards)
+	}
+
+	if err := copy.Copy(ctx, srcp, destp, opt...); err != nil {
 		return err
 	}
 
