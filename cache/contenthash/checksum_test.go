@@ -29,6 +29,120 @@ const (
 	dgstDirD0Modified = digest.Digest("sha256:555ffa3028630d97ba37832b749eda85ab676fd64ffb629fbf0f4ec8c1e3bff1")
 )
 
+func TestChecksumWildcard(t *testing.T) {
+	t.Parallel()
+	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	cm := setupCacheManager(t, tmpdir, snapshotter)
+	defer cm.Close()
+
+	ch := []string{
+		"ADD bar file data1",
+		"ADD foo file data0",
+		"ADD fox file data2",
+		"ADD x dir",
+		"ADD x/d0 dir",
+		"ADD x/d0/abc file data0",
+		"ADD x/d0/def symlink abc",
+		"ADD x/d0/ghi symlink nosuchfile",
+		"ADD y1 symlink foo",
+		"ADD y2 symlink fox",
+	}
+
+	ref := createRef(t, cm, ch)
+
+	cc, err := newCacheContext(ref.Metadata())
+	require.NoError(t, err)
+
+	dgst, err := cc.ChecksumWildcard(context.TODO(), ref, "f*o", false)
+	require.NoError(t, err)
+	require.Equal(t, dgstFileData0, dgst)
+
+	expFoos := digest.Digest("sha256:c9f914ad7ad8fe6092ce67484b43ca39c2087aabf9e4a1b223249b0f8b09b9f2")
+
+	dgst, err = cc.ChecksumWildcard(context.TODO(), ref, "f*", false)
+	require.NoError(t, err)
+	require.Equal(t, expFoos, dgst)
+
+	dgst, err = cc.ChecksumWildcard(context.TODO(), ref, "x/d?", false)
+	require.NoError(t, err)
+	require.Equal(t, dgstDirD0, dgst)
+
+	dgst, err = cc.ChecksumWildcard(context.TODO(), ref, "x/d?/def", true)
+	require.NoError(t, err)
+	require.Equal(t, dgstFileData0, dgst)
+
+	dgst, err = cc.ChecksumWildcard(context.TODO(), ref, "y*", true)
+	require.NoError(t, err)
+	require.Equal(t, expFoos, dgst)
+
+	err = ref.Release(context.TODO())
+	require.NoError(t, err)
+}
+
+func TestSymlinksNoFollow(t *testing.T) {
+	t.Parallel()
+	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	cm := setupCacheManager(t, tmpdir, snapshotter)
+	defer cm.Close()
+
+	ch := []string{
+		"ADD target file data0",
+		"ADD sym symlink target",
+		"ADD sym2 symlink target2",
+		"ADD foo dir",
+		"ADD foo/ghi symlink target",
+		"ADD y1 symlink foo/ghi",
+	}
+
+	ref := createRef(t, cm, ch)
+
+	cc, err := newCacheContext(ref.Metadata())
+	require.NoError(t, err)
+
+	expectedSym := digest.Digest("sha256:a2ba571981f48ec34eb79c9a3ab091b6491e825c2f7e9914ea86e8e958be7fae")
+
+	dgst, err := cc.ChecksumWildcard(context.TODO(), ref, "sym", false)
+	require.NoError(t, err)
+	require.Equal(t, expectedSym, dgst)
+
+	dgst, err = cc.ChecksumWildcard(context.TODO(), ref, "sym2", false)
+	require.NoError(t, err)
+	require.NotEqual(t, expectedSym, dgst)
+
+	dgst, err = cc.ChecksumWildcard(context.TODO(), ref, "foo/ghi", false)
+	require.NoError(t, err)
+	require.Equal(t, expectedSym, dgst)
+
+	_, err = cc.ChecksumWildcard(context.TODO(), ref, "foo/ghi", true) // same because broken symlink
+	require.Error(t, err)
+	require.Equal(t, errNotFound, errors.Cause(err))
+
+	_, err = cc.ChecksumWildcard(context.TODO(), ref, "y1", true)
+	require.Error(t, err)
+	require.Equal(t, errNotFound, errors.Cause(err))
+
+	dgst, err = cc.Checksum(context.TODO(), ref, "sym", false)
+	require.NoError(t, err)
+	require.Equal(t, expectedSym, dgst)
+
+	dgst, err = cc.Checksum(context.TODO(), ref, "foo/ghi", false)
+	require.NoError(t, err)
+	require.Equal(t, expectedSym, dgst)
+
+	err = ref.Release(context.TODO())
+	require.NoError(t, err)
+}
+
 func TestChecksumBasicFile(t *testing.T) {
 	t.Parallel()
 	tmpdir, err := ioutil.TempDir("", "buildkit-state")
@@ -57,48 +171,48 @@ func TestChecksumBasicFile(t *testing.T) {
 	cc, err := newCacheContext(ref.Metadata())
 	require.NoError(t, err)
 
-	_, err = cc.Checksum(context.TODO(), ref, "nosuch")
+	_, err = cc.Checksum(context.TODO(), ref, "nosuch", true)
 	require.Error(t, err)
 
-	dgst, err := cc.Checksum(context.TODO(), ref, "foo")
+	dgst, err := cc.Checksum(context.TODO(), ref, "foo", true)
 	require.NoError(t, err)
 
 	require.Equal(t, dgstFileData0, dgst)
 
 	// second file returns different hash
-	dgst, err = cc.Checksum(context.TODO(), ref, "bar")
+	dgst, err = cc.Checksum(context.TODO(), ref, "bar", true)
 	require.NoError(t, err)
 
 	require.Equal(t, digest.Digest("sha256:c2b5e234f5f38fc5864da7def04782f82501a40d46192e4207d5b3f0c3c4732b"), dgst)
 
 	// same file inside a directory
-	dgst, err = cc.Checksum(context.TODO(), ref, "d0/abc")
+	dgst, err = cc.Checksum(context.TODO(), ref, "d0/abc", true)
 	require.NoError(t, err)
 
 	require.Equal(t, dgstFileData0, dgst)
 
 	// repeat because codepath is different
-	dgst, err = cc.Checksum(context.TODO(), ref, "d0/abc")
+	dgst, err = cc.Checksum(context.TODO(), ref, "d0/abc", true)
 	require.NoError(t, err)
 
 	require.Equal(t, dgstFileData0, dgst)
 
 	// symlink to the same file is followed, returns same hash
-	dgst, err = cc.Checksum(context.TODO(), ref, "d0/def")
+	dgst, err = cc.Checksum(context.TODO(), ref, "d0/def", true)
 	require.NoError(t, err)
 
 	require.Equal(t, dgstFileData0, dgst)
 
-	_, err = cc.Checksum(context.TODO(), ref, "d0/ghi")
+	_, err = cc.Checksum(context.TODO(), ref, "d0/ghi", true)
 	require.Error(t, err)
 	require.Equal(t, errNotFound, errors.Cause(err))
 
-	dgst, err = cc.Checksum(context.TODO(), ref, "/")
+	dgst, err = cc.Checksum(context.TODO(), ref, "/", true)
 	require.NoError(t, err)
 
 	require.Equal(t, digest.Digest("sha256:427c9cf9ae98c0f81fb57a3076b965c7c149b6b0a85625ad4e884236649a42c6"), dgst)
 
-	dgst, err = cc.Checksum(context.TODO(), ref, "d0")
+	dgst, err = cc.Checksum(context.TODO(), ref, "d0", true)
 	require.NoError(t, err)
 
 	require.Equal(t, dgstDirD0, dgst)
@@ -118,7 +232,7 @@ func TestChecksumBasicFile(t *testing.T) {
 	cc, err = newCacheContext(ref.Metadata())
 	require.NoError(t, err)
 
-	dgst, err = cc.Checksum(context.TODO(), ref, "/")
+	dgst, err = cc.Checksum(context.TODO(), ref, "/", true)
 	require.NoError(t, err)
 
 	require.Equal(t, dgstDirD0, dgst)
@@ -137,7 +251,7 @@ func TestChecksumBasicFile(t *testing.T) {
 	cc, err = newCacheContext(ref.Metadata())
 	require.NoError(t, err)
 
-	dgst, err = cc.Checksum(context.TODO(), ref, "/")
+	dgst, err = cc.Checksum(context.TODO(), ref, "/", true)
 	require.NoError(t, err)
 
 	require.Equal(t, dgstDirD0Modified, dgst)
@@ -163,14 +277,14 @@ func TestChecksumBasicFile(t *testing.T) {
 	cc, err = newCacheContext(ref.Metadata())
 	require.NoError(t, err)
 
-	dgst, err = cc.Checksum(context.TODO(), ref, "abc/aa/foo")
+	dgst, err = cc.Checksum(context.TODO(), ref, "abc/aa/foo", true)
 	require.NoError(t, err)
 
 	require.Equal(t, digest.Digest("sha256:1c67653c3cf95b12a0014e2c4cd1d776b474b3218aee54155d6ae27b9b999c54"), dgst)
 	require.NotEqual(t, dgstDirD0, dgst)
 
 	// this will force rescan
-	dgst, err = cc.Checksum(context.TODO(), ref, "d0")
+	dgst, err = cc.Checksum(context.TODO(), ref, "d0", true)
 	require.NoError(t, err)
 
 	require.Equal(t, dgstDirD0, dgst)
@@ -210,19 +324,19 @@ func TestHandleChange(t *testing.T) {
 	err = emit(cc.HandleChange, changeStream(ch))
 	require.NoError(t, err)
 
-	dgstFoo, err := cc.Checksum(context.TODO(), ref, "foo")
+	dgstFoo, err := cc.Checksum(context.TODO(), ref, "foo", true)
 	require.NoError(t, err)
 
 	require.Equal(t, dgstFileData0, dgstFoo)
 
 	// symlink to the same file is followed, returns same hash
-	dgst, err := cc.Checksum(context.TODO(), ref, "d0/def")
+	dgst, err := cc.Checksum(context.TODO(), ref, "d0/def", true)
 	require.NoError(t, err)
 
 	require.Equal(t, dgstFoo, dgst)
 
 	// symlink to the same file is followed, returns same hash
-	dgst, err = cc.Checksum(context.TODO(), ref, "d0")
+	dgst, err = cc.Checksum(context.TODO(), ref, "d0", true)
 	require.NoError(t, err)
 
 	require.Equal(t, dgstDirD0, dgst)
@@ -234,7 +348,7 @@ func TestHandleChange(t *testing.T) {
 	err = emit(cc.HandleChange, changeStream(ch))
 	require.NoError(t, err)
 
-	dgst, err = cc.Checksum(context.TODO(), ref, "d0")
+	dgst, err = cc.Checksum(context.TODO(), ref, "d0", true)
 	require.NoError(t, err)
 	require.Equal(t, dgstDirD0Modified, dgst)
 
@@ -245,11 +359,11 @@ func TestHandleChange(t *testing.T) {
 	err = emit(cc.HandleChange, changeStream(ch))
 	require.NoError(t, err)
 
-	_, err = cc.Checksum(context.TODO(), ref, "d0")
+	_, err = cc.Checksum(context.TODO(), ref, "d0", true)
 	require.Error(t, err)
 	require.Equal(t, errNotFound, errors.Cause(err))
 
-	_, err = cc.Checksum(context.TODO(), ref, "d0/abc")
+	_, err = cc.Checksum(context.TODO(), ref, "d0/abc", true)
 	require.Error(t, err)
 	require.Equal(t, errNotFound, errors.Cause(err))
 
@@ -286,7 +400,7 @@ func TestHandleRecursiveDir(t *testing.T) {
 	err = emit(cc.HandleChange, changeStream(ch))
 	require.NoError(t, err)
 
-	dgst, err := cc.Checksum(context.TODO(), ref, "d0/foo/bar")
+	dgst, err := cc.Checksum(context.TODO(), ref, "d0/foo/bar", true)
 	require.NoError(t, err)
 
 	ch = []string{
@@ -298,11 +412,11 @@ func TestHandleRecursiveDir(t *testing.T) {
 	err = emit(cc.HandleChange, changeStream(ch))
 	require.NoError(t, err)
 
-	dgst2, err := cc.Checksum(context.TODO(), ref, "d1")
+	dgst2, err := cc.Checksum(context.TODO(), ref, "d1", true)
 	require.NoError(t, err)
 	require.Equal(t, dgst2, dgst)
 
-	_, err = cc.Checksum(context.TODO(), ref, "")
+	_, err = cc.Checksum(context.TODO(), ref, "", true)
 	require.NoError(t, err)
 }
 
@@ -333,7 +447,7 @@ func TestChecksumUnorderedFiles(t *testing.T) {
 	err = emit(cc.HandleChange, changeStream(ch))
 	require.NoError(t, err)
 
-	dgst, err := cc.Checksum(context.TODO(), ref, "d0")
+	dgst, err := cc.Checksum(context.TODO(), ref, "d0", true)
 	require.NoError(t, err)
 
 	require.Equal(t, dgst, digest.Digest("sha256:14276c302c940a80f82ca5477bf766c98a24702d6a9948ee71bb277cdad3ae05"))
@@ -353,7 +467,7 @@ func TestChecksumUnorderedFiles(t *testing.T) {
 	err = emit(cc.HandleChange, changeStream(ch))
 	require.NoError(t, err)
 
-	dgst2, err := cc.Checksum(context.TODO(), ref, "d0")
+	dgst2, err := cc.Checksum(context.TODO(), ref, "d0", true)
 	require.NoError(t, err)
 
 	require.NotEqual(t, dgst, dgst2)
@@ -378,11 +492,11 @@ func TestSymlinkInPathScan(t *testing.T) {
 	}
 	ref := createRef(t, cm, ch)
 
-	dgst, err := Checksum(context.TODO(), ref, "d0/def/foo")
+	dgst, err := Checksum(context.TODO(), ref, "d0/def/foo", true)
 	require.NoError(t, err)
 	require.Equal(t, dgstFileData0, dgst)
 
-	dgst, err = Checksum(context.TODO(), ref, "d0/def/foo")
+	dgst, err = Checksum(context.TODO(), ref, "d0/def/foo", true)
 	require.NoError(t, err)
 	require.Equal(t, dgstFileData0, dgst)
 
@@ -412,10 +526,10 @@ func TestSymlinkNeedsScan(t *testing.T) {
 	ref := createRef(t, cm, ch)
 
 	// scan the d0 path containing the symlink that doesn't get followed
-	_, err = Checksum(context.TODO(), ref, "d0/d1")
+	_, err = Checksum(context.TODO(), ref, "d0/d1", true)
 	require.NoError(t, err)
 
-	dgst, err := Checksum(context.TODO(), ref, "d0/d1/def/foo")
+	dgst, err := Checksum(context.TODO(), ref, "d0/d1/def/foo", true)
 	require.NoError(t, err)
 	require.Equal(t, dgstFileData0, dgst)
 
@@ -442,7 +556,7 @@ func TestSymlinkAbsDirSuffix(t *testing.T) {
 	}
 	ref := createRef(t, cm, ch)
 
-	dgst, err := Checksum(context.TODO(), ref, "link/foo")
+	dgst, err := Checksum(context.TODO(), ref, "link/foo", true)
 	require.NoError(t, err)
 	require.Equal(t, dgstFileData0, dgst)
 
@@ -485,27 +599,27 @@ func TestSymlinkInPathHandleChange(t *testing.T) {
 	err = emit(cc.HandleChange, changeStream(ch))
 	require.NoError(t, err)
 
-	dgst, err := cc.Checksum(context.TODO(), ref, "d1/def/foo")
+	dgst, err := cc.Checksum(context.TODO(), ref, "d1/def/foo", true)
 	require.NoError(t, err)
 	require.Equal(t, dgstFileData0, dgst)
 
-	dgst, err = cc.Checksum(context.TODO(), ref, "d1/def/bar/abc")
+	dgst, err = cc.Checksum(context.TODO(), ref, "d1/def/bar/abc", true)
 	require.NoError(t, err)
 	require.Equal(t, dgstFileData0, dgst)
 
-	dgstFileData0, err := cc.Checksum(context.TODO(), ref, "sub/d0")
+	dgstFileData0, err := cc.Checksum(context.TODO(), ref, "sub/d0", true)
 	require.NoError(t, err)
 	require.Equal(t, dgstFileData0, dgstDirD0)
 
-	dgstFileData0, err = cc.Checksum(context.TODO(), ref, "d1/def/baz")
+	dgstFileData0, err = cc.Checksum(context.TODO(), ref, "d1/def/baz", true)
 	require.NoError(t, err)
 	require.Equal(t, dgstFileData0, dgstDirD0)
 
-	dgstFileData0, err = cc.Checksum(context.TODO(), ref, "d1/def/bay")
+	dgstFileData0, err = cc.Checksum(context.TODO(), ref, "d1/def/bay", true)
 	require.NoError(t, err)
 	require.Equal(t, dgstFileData0, dgstDirD0)
 
-	dgstFileData0, err = cc.Checksum(context.TODO(), ref, "link")
+	dgstFileData0, err = cc.Checksum(context.TODO(), ref, "link", true)
 	require.NoError(t, err)
 	require.Equal(t, dgstFileData0, dgstDirD0)
 
@@ -536,7 +650,7 @@ func TestPersistence(t *testing.T) {
 	ref := createRef(t, cm, ch)
 	id := ref.ID()
 
-	dgst, err := Checksum(context.TODO(), ref, "foo")
+	dgst, err := Checksum(context.TODO(), ref, "foo", true)
 	require.NoError(t, err)
 	require.Equal(t, dgstFileData0, dgst)
 
@@ -546,7 +660,7 @@ func TestPersistence(t *testing.T) {
 	ref, err = cm.Get(context.TODO(), id)
 	require.NoError(t, err)
 
-	dgst, err = Checksum(context.TODO(), ref, "foo")
+	dgst, err = Checksum(context.TODO(), ref, "foo", true)
 	require.NoError(t, err)
 	require.Equal(t, dgstFileData0, dgst)
 
@@ -564,7 +678,7 @@ func TestPersistence(t *testing.T) {
 	ref, err = cm.Get(context.TODO(), id)
 	require.NoError(t, err)
 
-	dgst, err = Checksum(context.TODO(), ref, "foo")
+	dgst, err = Checksum(context.TODO(), ref, "foo", true)
 	require.NoError(t, err)
 	require.Equal(t, dgstFileData0, dgst)
 }
