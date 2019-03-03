@@ -24,31 +24,32 @@ const (
 
 // ConfigFile ~/.docker/config.json file info
 type ConfigFile struct {
-	AuthConfigs          map[string]types.AuthConfig `json:"auths"`
-	HTTPHeaders          map[string]string           `json:"HttpHeaders,omitempty"`
-	PsFormat             string                      `json:"psFormat,omitempty"`
-	ImagesFormat         string                      `json:"imagesFormat,omitempty"`
-	NetworksFormat       string                      `json:"networksFormat,omitempty"`
-	PluginsFormat        string                      `json:"pluginsFormat,omitempty"`
-	VolumesFormat        string                      `json:"volumesFormat,omitempty"`
-	StatsFormat          string                      `json:"statsFormat,omitempty"`
-	DetachKeys           string                      `json:"detachKeys,omitempty"`
-	CredentialsStore     string                      `json:"credsStore,omitempty"`
-	CredentialHelpers    map[string]string           `json:"credHelpers,omitempty"`
-	Filename             string                      `json:"-"` // Note: for internal use only
-	ServiceInspectFormat string                      `json:"serviceInspectFormat,omitempty"`
-	ServicesFormat       string                      `json:"servicesFormat,omitempty"`
-	TasksFormat          string                      `json:"tasksFormat,omitempty"`
-	SecretFormat         string                      `json:"secretFormat,omitempty"`
-	ConfigFormat         string                      `json:"configFormat,omitempty"`
-	NodesFormat          string                      `json:"nodesFormat,omitempty"`
-	PruneFilters         []string                    `json:"pruneFilters,omitempty"`
-	Proxies              map[string]ProxyConfig      `json:"proxies,omitempty"`
-	Experimental         string                      `json:"experimental,omitempty"`
-	StackOrchestrator    string                      `json:"stackOrchestrator,omitempty"`
-	Kubernetes           *KubernetesConfig           `json:"kubernetes,omitempty"`
-	CurrentContext       string                      `json:"currentContext,omitempty"`
-	CLIPluginsExtraDirs  []string                    `json:"cliPluginsExtraDirs,omitempty"`
+	AuthConfigs          map[string]types.AuthConfig  `json:"auths"`
+	HTTPHeaders          map[string]string            `json:"HttpHeaders,omitempty"`
+	PsFormat             string                       `json:"psFormat,omitempty"`
+	ImagesFormat         string                       `json:"imagesFormat,omitempty"`
+	NetworksFormat       string                       `json:"networksFormat,omitempty"`
+	PluginsFormat        string                       `json:"pluginsFormat,omitempty"`
+	VolumesFormat        string                       `json:"volumesFormat,omitempty"`
+	StatsFormat          string                       `json:"statsFormat,omitempty"`
+	DetachKeys           string                       `json:"detachKeys,omitempty"`
+	CredentialsStore     string                       `json:"credsStore,omitempty"`
+	CredentialHelpers    map[string]string            `json:"credHelpers,omitempty"`
+	Filename             string                       `json:"-"` // Note: for internal use only
+	ServiceInspectFormat string                       `json:"serviceInspectFormat,omitempty"`
+	ServicesFormat       string                       `json:"servicesFormat,omitempty"`
+	TasksFormat          string                       `json:"tasksFormat,omitempty"`
+	SecretFormat         string                       `json:"secretFormat,omitempty"`
+	ConfigFormat         string                       `json:"configFormat,omitempty"`
+	NodesFormat          string                       `json:"nodesFormat,omitempty"`
+	PruneFilters         []string                     `json:"pruneFilters,omitempty"`
+	Proxies              map[string]ProxyConfig       `json:"proxies,omitempty"`
+	Experimental         string                       `json:"experimental,omitempty"`
+	StackOrchestrator    string                       `json:"stackOrchestrator,omitempty"`
+	Kubernetes           *KubernetesConfig            `json:"kubernetes,omitempty"`
+	CurrentContext       string                       `json:"currentContext,omitempty"`
+	CLIPluginsExtraDirs  []string                     `json:"cliPluginsExtraDirs,omitempty"`
+	Plugins              map[string]map[string]string `json:"plugins,omitempty"`
 }
 
 // ProxyConfig contains proxy configuration settings
@@ -70,6 +71,7 @@ func New(fn string) *ConfigFile {
 		AuthConfigs: make(map[string]types.AuthConfig),
 		HTTPHeaders: make(map[string]string),
 		Filename:    fn,
+		Plugins:     make(map[string]map[string]string),
 	}
 }
 
@@ -328,6 +330,42 @@ func (configFile *ConfigFile) GetAllCredentials() (map[string]types.AuthConfig, 
 // GetFilename returns the file name that this config file is based on.
 func (configFile *ConfigFile) GetFilename() string {
 	return configFile.Filename
+}
+
+// PluginConfig retrieves the requested option for the given plugin.
+func (configFile *ConfigFile) PluginConfig(pluginname, option string) (string, bool) {
+	if configFile.Plugins == nil {
+		return "", false
+	}
+	pluginConfig, ok := configFile.Plugins[pluginname]
+	if !ok {
+		return "", false
+	}
+	value, ok := pluginConfig[option]
+	return value, ok
+}
+
+// SetPluginConfig sets the option to the given value for the given
+// plugin. Passing a value of "" will remove the option. If removing
+// the final config item for a given plugin then also cleans up the
+// overall plugin entry.
+func (configFile *ConfigFile) SetPluginConfig(pluginname, option, value string) {
+	if configFile.Plugins == nil {
+		configFile.Plugins = make(map[string]map[string]string)
+	}
+	pluginConfig, ok := configFile.Plugins[pluginname]
+	if !ok {
+		pluginConfig = make(map[string]string)
+		configFile.Plugins[pluginname] = pluginConfig
+	}
+	if value != "" {
+		pluginConfig[option] = value
+	} else {
+		delete(pluginConfig, option)
+	}
+	if len(pluginConfig) == 0 {
+		delete(configFile.Plugins, pluginname)
+	}
 }
 
 func checkKubernetesConfiguration(kubeConfig *KubernetesConfig) error {

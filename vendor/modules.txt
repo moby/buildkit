@@ -1,27 +1,30 @@
 # github.com/BurntSushi/toml v0.3.1
 github.com/BurntSushi/toml
-# github.com/Microsoft/go-winio v0.4.11
+# github.com/Microsoft/go-winio v0.4.12
 github.com/Microsoft/go-winio
-# github.com/Microsoft/hcsshim v0.7.9
+# github.com/Microsoft/hcsshim v0.8.6
 github.com/Microsoft/hcsshim
 github.com/Microsoft/hcsshim/internal/guid
 github.com/Microsoft/hcsshim/internal/hcs
 github.com/Microsoft/hcsshim/internal/hcserror
 github.com/Microsoft/hcsshim/internal/hns
-github.com/Microsoft/hcsshim/internal/interop
 github.com/Microsoft/hcsshim/internal/mergemaps
 github.com/Microsoft/hcsshim/internal/schema1
 github.com/Microsoft/hcsshim/internal/wclayer
+github.com/Microsoft/hcsshim/internal/guestrequest
+github.com/Microsoft/hcsshim/internal/interop
+github.com/Microsoft/hcsshim/internal/logfields
 github.com/Microsoft/hcsshim/internal/timeout
+github.com/Microsoft/hcsshim/internal/schema2
 github.com/Microsoft/hcsshim/internal/longpath
 github.com/Microsoft/hcsshim/internal/safefile
 # github.com/apache/thrift v0.0.0-20161221203622-b2a4d4ae21c7
 github.com/apache/thrift/lib/go/thrift
-# github.com/codahale/hdrhistogram v0.0.0-20160425231609-f8ad88b59a58
+# github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd
 github.com/codahale/hdrhistogram
-# github.com/containerd/console v0.0.0-20180822173158-c12b1e7919c1
+# github.com/containerd/console v0.0.0-20181022165439-0650fd9eeb50
 github.com/containerd/console
-# github.com/containerd/containerd v1.2.1-0.20190212172151-f5b0fa220df8
+# github.com/containerd/containerd v1.2.1-0.20190301012700-5840ecc3d80f
 github.com/containerd/containerd/filters
 github.com/containerd/containerd/mount
 github.com/containerd/containerd/snapshots
@@ -87,7 +90,7 @@ github.com/containerd/containerd/labels
 github.com/containerd/containerd/metadata/boltutil
 github.com/containerd/containerd/api/types/task
 github.com/containerd/containerd/events/exchange
-# github.com/containerd/continuity v0.0.0-20181001140422-bd77b46c8352
+# github.com/containerd/continuity v0.0.0-20181203112020-004b46473808
 github.com/containerd/continuity/sysx
 github.com/containerd/continuity/fs
 github.com/containerd/continuity/syscallx
@@ -97,15 +100,15 @@ github.com/containerd/continuity/devices
 github.com/containerd/continuity/driver
 github.com/containerd/continuity/pathdriver
 github.com/containerd/continuity/proto
-# github.com/containerd/fifo v0.0.0-20180307165137-3d5202aec260
+# github.com/containerd/fifo v0.0.0-20190226154929-a9fb20d87448
 github.com/containerd/fifo
-# github.com/containerd/go-runc v0.0.0-20180907222934-5a6d9f37cfa3
+# github.com/containerd/go-runc v0.0.0-20190226155025-7d11b49dc076
 github.com/containerd/go-runc
 # github.com/containerd/typeurl v0.0.0-20180627222232-a93fcdb778cd
 github.com/containerd/typeurl
-# github.com/davecgh/go-spew v1.1.0
+# github.com/davecgh/go-spew v1.1.1
 github.com/davecgh/go-spew/spew
-# github.com/docker/cli v0.0.0-20190131223713-234462756460
+# github.com/docker/cli v0.0.0-20190303104010-8ddde26af67f
 github.com/docker/cli/cli/config
 github.com/docker/cli/cli/config/configfile
 github.com/docker/cli/cli/config/credentials
@@ -113,7 +116,7 @@ github.com/docker/cli/cli/config/types
 # github.com/docker/distribution v2.7.1-0.20190205005809-0d3efadf0154+incompatible
 github.com/docker/distribution/reference
 github.com/docker/distribution/digestset
-# github.com/docker/docker v0.0.0-20180531152204-71cd53e4a197
+# github.com/docker/docker v0.7.3-0.20190301231049-8aca18d631f3
 github.com/docker/docker/pkg/locker
 github.com/docker/docker/builder/dockerignore
 github.com/docker/docker/api/types/strslice
@@ -128,10 +131,10 @@ github.com/docker/docker/pkg/longpath
 github.com/docker/docker/pkg/idtools
 github.com/docker/docker/pkg/system
 github.com/docker/docker/pkg/mount
-# github.com/docker/docker-credential-helpers v0.6.0
+# github.com/docker/docker-credential-helpers v0.6.1
 github.com/docker/docker-credential-helpers/client
 github.com/docker/docker-credential-helpers/credentials
-# github.com/docker/go-connections v0.3.0
+# github.com/docker/go-connections v0.4.0
 github.com/docker/go-connections/sockets
 github.com/docker/go-connections/nat
 # github.com/docker/go-events v0.0.0-20170721190031-9461782956ad
@@ -146,13 +149,13 @@ github.com/docker/libnetwork/types
 github.com/gofrs/flock
 # github.com/gogo/googleapis v0.0.0-20180501115203-b23578765ee5
 github.com/gogo/googleapis/google/rpc
-# github.com/gogo/protobuf v1.0.0
+# github.com/gogo/protobuf v1.2.1
 github.com/gogo/protobuf/gogoproto
 github.com/gogo/protobuf/proto
 github.com/gogo/protobuf/types
 github.com/gogo/protobuf/sortkeys
 github.com/gogo/protobuf/protoc-gen-gogo/descriptor
-# github.com/golang/protobuf v1.2.0
+# github.com/golang/protobuf v1.3.0
 github.com/golang/protobuf/ptypes/timestamp
 github.com/golang/protobuf/proto
 github.com/golang/protobuf/ptypes/any
@@ -173,7 +176,9 @@ github.com/hashicorp/go-immutable-radix
 github.com/hashicorp/golang-lru/simplelru
 # github.com/ishidawataru/sctp v0.0.0-20180213033435-07191f837fed
 github.com/ishidawataru/sctp
-# github.com/mitchellh/hashstructure v0.0.0-20170609045927-2bca23e0e452
+# github.com/konsorten/go-windows-terminal-sequences v1.0.2
+github.com/konsorten/go-windows-terminal-sequences
+# github.com/mitchellh/hashstructure v1.0.0
 github.com/mitchellh/hashstructure
 # github.com/morikuni/aec v0.0.0-20170113033406-39771216ff4c
 github.com/morikuni/aec
@@ -194,15 +199,15 @@ github.com/opentracing-contrib/go-stdlib/nethttp
 github.com/opentracing/opentracing-go
 github.com/opentracing/opentracing-go/ext
 github.com/opentracing/opentracing-go/log
-# github.com/pkg/errors v0.8.0
+# github.com/pkg/errors v0.8.1
 github.com/pkg/errors
 # github.com/pkg/profile v1.2.1
 github.com/pkg/profile
 # github.com/pmezard/go-difflib v1.0.0
 github.com/pmezard/go-difflib/difflib
-# github.com/sirupsen/logrus v1.0.3
+# github.com/sirupsen/logrus v1.3.0
 github.com/sirupsen/logrus
-# github.com/stretchr/testify v1.1.4
+# github.com/stretchr/testify v1.3.0
 github.com/stretchr/testify/require
 github.com/stretchr/testify/assert
 # github.com/syndtr/gocapability v0.0.0-20170704070218-db04d3cc01c8
@@ -226,9 +231,9 @@ github.com/uber/jaeger-client-go/thrift-gen/agent
 github.com/uber/jaeger-lib/metrics
 # github.com/urfave/cli v0.0.0-20171014202726-7bc6a0acffa5
 github.com/urfave/cli
-# go.etcd.io/bbolt v1.3.1-etcd.8
+# go.etcd.io/bbolt v1.3.2
 go.etcd.io/bbolt
-# golang.org/x/crypto v0.0.0-20180904163835-0709b304e793
+# golang.org/x/crypto v0.0.0-20190228161510-8dd112bcdc25
 golang.org/x/crypto/ssh
 golang.org/x/crypto/ssh/agent
 golang.org/x/crypto/ssh/terminal
@@ -238,10 +243,10 @@ golang.org/x/crypto/internal/chacha20
 golang.org/x/crypto/poly1305
 golang.org/x/crypto/ed25519/internal/edwards25519
 golang.org/x/crypto/internal/subtle
-# golang.org/x/net v0.0.0-20180906233101-161cd47e91fd
-golang.org/x/net/context
+# golang.org/x/net v0.0.0-20190301231341-16b79f2e4e95
 golang.org/x/net/trace
 golang.org/x/net/http2
+golang.org/x/net/context
 golang.org/x/net/context/ctxhttp
 golang.org/x/net/proxy
 golang.org/x/net/internal/timeseries
@@ -249,20 +254,21 @@ golang.org/x/net/http/httpguts
 golang.org/x/net/http2/hpack
 golang.org/x/net/idna
 golang.org/x/net/internal/socks
-# golang.org/x/sync v0.0.0-20180314180146-1d60e4601c6f
+# golang.org/x/sync v0.0.0-20190227155943-e225da77a7e6
 golang.org/x/sync/errgroup
 golang.org/x/sync/semaphore
-# golang.org/x/sys v0.0.0-20180909124046-d0be0721c37e
+# golang.org/x/sys v0.0.0-20190302025703-b6889370fb10
 golang.org/x/sys/unix
 golang.org/x/sys/windows
-# golang.org/x/text v0.3.0
+golang.org/x/sys/cpu
+# golang.org/x/text v0.3.1-0.20180807135948-17ff2d5776d2
 golang.org/x/text/secure/bidirule
 golang.org/x/text/unicode/bidi
 golang.org/x/text/unicode/norm
 golang.org/x/text/transform
-# golang.org/x/time v0.0.0-20161028155119-f51c12702a4d
+# golang.org/x/time v0.0.0-20181108054448-85acf8d2951c
 golang.org/x/time/rate
-# google.golang.org/genproto v0.0.0-20170523043604-d80a6e20e776
+# google.golang.org/genproto v0.0.0-20180831171423-11092d34479b
 google.golang.org/genproto/googleapis/rpc/status
 # google.golang.org/grpc v1.12.0
 google.golang.org/grpc
@@ -291,7 +297,7 @@ google.golang.org/grpc/stats
 google.golang.org/grpc/tap
 google.golang.org/grpc/transport
 google.golang.org/grpc/balancer/base
-# gotest.tools v2.1.0+incompatible
+# gotest.tools v2.2.0+incompatible
 gotest.tools/assert
 gotest.tools/assert/cmp
 gotest.tools/internal/format
