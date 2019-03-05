@@ -736,26 +736,33 @@ func getFollowLinksWalk(root *iradix.Node, k []byte, follow bool, linksWalked *i
 
 	dir, file := splitKey(k)
 
-	_, parent, err := getFollowLinksWalk(root, dir, follow, linksWalked)
+	k, parent, err := getFollowLinksWalk(root, dir, follow, linksWalked)
 	if err != nil {
 		return nil, nil, err
 	}
-	if parent != nil && parent.Type == CacheRecordTypeSymlink {
-		*linksWalked++
-		if *linksWalked > 255 {
-			return nil, nil, errors.Errorf("too many links")
+	if parent != nil {
+		if parent.Type == CacheRecordTypeSymlink {
+			*linksWalked++
+			if *linksWalked > 255 {
+				return nil, nil, errors.Errorf("too many links")
+			}
+			dirPath := path.Clean(string(convertKeyToPath(dir)))
+			if dirPath == "." || dirPath == "/" {
+				dirPath = ""
+			}
+			link := path.Clean(parent.Linkname)
+			if !path.IsAbs(link) {
+				link = path.Join("/", path.Join(path.Dir(dirPath), link))
+			}
+			return getFollowLinksWalk(root, append(convertPathToKey([]byte(link)), file...), follow, linksWalked)
 		}
-		dirPath := path.Clean(string(convertKeyToPath(dir)))
-		if dirPath == "." || dirPath == "/" {
-			dirPath = ""
-		}
-		link := path.Clean(parent.Linkname)
-		if !path.IsAbs(link) {
-			link = path.Join("/", path.Join(path.Dir(dirPath), link))
-		}
-		return getFollowLinksWalk(root, append(convertPathToKey([]byte(link)), file...), follow, linksWalked)
-	}
 
+		k = append(k, file...)
+		v, ok = root.Get(k)
+		if ok {
+			return k, v.(*CacheRecord), nil
+		}
+	}
 	return nil, nil, nil
 }
 
