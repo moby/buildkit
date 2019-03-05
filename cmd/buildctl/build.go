@@ -11,6 +11,7 @@ import (
 	"github.com/containerd/console"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
+	bccommon "github.com/moby/buildkit/cmd/buildctl/common"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/auth/authprovider"
 	"github.com/moby/buildkit/session/secrets/secretsprovider"
@@ -123,7 +124,7 @@ func openTraceFile(clicontext *cli.Context) (*os.File, error) {
 }
 
 func build(clicontext *cli.Context) error {
-	c, err := resolveClient(clicontext)
+	c, err := bccommon.ResolveClient(clicontext)
 	if err != nil {
 		return err
 	}
@@ -177,7 +178,7 @@ func build(clicontext *cli.Context) error {
 	}
 
 	ch := make(chan *client.SolveStatus)
-	eg, ctx := errgroup.WithContext(commandContext(clicontext))
+	eg, ctx := errgroup.WithContext(bccommon.CommandContext(clicontext))
 
 	solveOpt := client.SolveOpt{
 		Exporter: clicontext.String("exporter"),

@@ -7,6 +7,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/moby/buildkit/client"
+	bccommon "github.com/moby/buildkit/cmd/buildctl/common"
 	"github.com/tonistiigi/units"
 	"github.com/urfave/cli"
 )
@@ -28,12 +29,12 @@ var diskUsageCommand = cli.Command{
 }
 
 func diskUsage(clicontext *cli.Context) error {
-	c, err := resolveClient(clicontext)
+	c, err := bccommon.ResolveClient(clicontext)
 	if err != nil {
 		return err
 	}
 
-	du, err := c.DiskUsage(commandContext(clicontext), client.WithFilter(clicontext.StringSlice("filter")))
+	du, err := c.DiskUsage(bccommon.CommandContext(clicontext), client.WithFilter(clicontext.StringSlice("filter")))
 	if err != nil {
 		return err
 	}

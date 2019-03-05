@@ -1,4 +1,4 @@
-package main
+package common
 
 import (
 	"context"
@@ -32,7 +32,7 @@ func getTracer() (opentracing.Tracer, io.Closer) {
 	return opentracing.NoopTracer{}, &nopCloser{}
 }
 
-func attachAppContext(app *cli.App) {
+func AttachAppContext(app *cli.App) {
 	ctx := appcontext.Context()
 
 	tracer, closer := getTracer()
@@ -82,7 +82,7 @@ func attachAppContext(app *cli.App) {
 
 }
 
-func commandContext(c *cli.Context) context.Context {
+func CommandContext(c *cli.Context) context.Context {
 	return c.App.Metadata["context"].(context.Context)
 }
 
