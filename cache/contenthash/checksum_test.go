@@ -564,6 +564,61 @@ func TestSymlinkAbsDirSuffix(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestSymlinkThroughParent(t *testing.T) {
+	t.Parallel()
+	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	cm := setupCacheManager(t, tmpdir, snapshotter)
+	defer cm.Close()
+
+	ch := []string{
+		"ADD lib dir",
+		"ADD lib/sub dir",
+		"ADD lib/sub/foo file data0",
+		"ADD lib/sub/link symlink ../../lib2",
+		"ADD lib2 dir",
+		"ADD lib2/sub dir",
+		"ADD lib2/sub/foo file data0",
+		"ADD link1 symlink /lib",
+		"ADD link2 symlink /lib/",
+		"ADD link3 symlink /lib/.",
+		"ADD link4 symlink /lib/../lib",
+		"ADD link5 symlink ../lib",
+	}
+	ref := createRef(t, cm, ch)
+
+	dgst, err := Checksum(context.TODO(), ref, "link1/sub/foo", true)
+	require.NoError(t, err)
+	require.Equal(t, dgstFileData0, dgst)
+
+	dgst, err = Checksum(context.TODO(), ref, "link2/sub/foo", true)
+	require.NoError(t, err)
+	require.Equal(t, dgstFileData0, dgst)
+
+	dgst, err = Checksum(context.TODO(), ref, "link3/sub/foo", true)
+	require.NoError(t, err)
+	require.Equal(t, dgstFileData0, dgst)
+
+	dgst, err = Checksum(context.TODO(), ref, "link4/sub/foo", true)
+	require.NoError(t, err)
+	require.Equal(t, dgstFileData0, dgst)
+
+	dgst, err = Checksum(context.TODO(), ref, "link5/sub/foo", true)
+	require.NoError(t, err)
+	require.Equal(t, dgstFileData0, dgst)
+
+	dgst, err = Checksum(context.TODO(), ref, "link1/sub/link/sub/foo", true)
+	require.NoError(t, err)
+	require.Equal(t, dgstFileData0, dgst)
+
+	err = ref.Release(context.TODO())
+	require.NoError(t, err)
+}
+
 func TestSymlinkInPathHandleChange(t *testing.T) {
 	t.Parallel()
 	tmpdir, err := ioutil.TempDir("", "buildkit-state")
