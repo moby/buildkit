@@ -558,7 +558,9 @@ func newWorkerController(c *cli.Context, wiOpt workerInitializerOpt) (*worker.Co
 			return nil, err
 		}
 		for _, w := range ws {
-			logrus.Infof("found worker %q, labels=%v, platforms=%v", w.ID(), w.Labels(), formatPlatforms(w.Platforms()))
+			p := formatPlatforms(w.Platforms())
+			logrus.Infof("found worker %q, labels=%v, platforms=%v", w.ID(), w.Labels(), p)
+			binfmt_misc.WarnIfUnsupported(p)
 			if err = wc.Add(w); err != nil {
 				return nil, err
 			}
