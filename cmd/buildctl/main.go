@@ -1,18 +1,14 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"net/url"
 	"os"
-	"time"
 
-	"github.com/moby/buildkit/client"
+	bccommon "github.com/moby/buildkit/cmd/buildctl/common"
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/moby/buildkit/util/profiler"
 	"github.com/moby/buildkit/version"
-	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )
@@ -89,7 +85,7 @@ func main() {
 		return nil
 	}
 
-	attachAppContext(app)
+	bccommon.AttachAppContext(app)
 
 	profiler.Attach(app)
 
@@ -101,37 +97,4 @@ func main() {
 		}
 		os.Exit(1)
 	}
-}
-
-func resolveClient(c *cli.Context) (*client.Client, error) {
-	serverName := c.GlobalString("tlsservername")
-	if serverName == "" {
-		// guess servername as hostname of target address
-		uri, err := url.Parse(c.GlobalString("addr"))
-		if err != nil {
-			return nil, err
-		}
-		serverName = uri.Hostname()
-	}
-	caCert := c.GlobalString("tlscacert")
-	cert := c.GlobalString("tlscert")
-	key := c.GlobalString("tlskey")
-
-	opts := []client.ClientOpt{client.WithFailFast()}
-
-	ctx := commandContext(c)
-
-	if span := opentracing.SpanFromContext(ctx); span != nil {
-		opts = append(opts, client.WithTracer(span.Tracer()))
-	}
-
-	if caCert != "" || cert != "" || key != "" {
-		opts = append(opts, client.WithCredentials(serverName, caCert, cert, key))
-	}
-
-	timeout := time.Duration(c.GlobalInt("timeout"))
-	ctx, cancel := context.WithTimeout(ctx, timeout*time.Second)
-	defer cancel()
-
-	return client.New(ctx, c.GlobalString("addr"), opts...)
 }

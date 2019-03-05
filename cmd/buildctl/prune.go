@@ -6,6 +6,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/moby/buildkit/client"
+	bccommon "github.com/moby/buildkit/cmd/buildctl/common"
 	"github.com/tonistiigi/units"
 	"github.com/urfave/cli"
 )
@@ -39,7 +40,7 @@ var pruneCommand = cli.Command{
 }
 
 func prune(clicontext *cli.Context) error {
-	c, err := resolveClient(clicontext)
+	c, err := bccommon.ResolveClient(clicontext)
 	if err != nil {
 		return err
 	}
@@ -77,7 +78,7 @@ func prune(clicontext *cli.Context) error {
 		opts = append(opts, client.PruneAll)
 	}
 
-	err = c.Prune(commandContext(clicontext), ch, opts...)
+	err = c.Prune(bccommon.CommandContext(clicontext), ch, opts...)
 	close(ch)
 	<-printed
 	if err != nil {

@@ -373,7 +373,7 @@ func applyMainFlags(c *cli.Context, cfg *config.Config, md *toml.MetaData) error
 	if tlskey := c.String("tlskey"); tlskey != "" {
 		cfg.GRPC.TLS.Key = tlskey
 	}
-	if tlsca := c.String("tlsca"); tlsca != "" {
+	if tlsca := c.String("tlscacert"); tlsca != "" {
 		cfg.GRPC.TLS.CA = tlsca
 	}
 	return nil

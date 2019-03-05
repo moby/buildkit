@@ -10,6 +10,7 @@ import (
 
 	"github.com/containerd/containerd/platforms"
 	"github.com/moby/buildkit/client"
+	bccommon "github.com/moby/buildkit/cmd/buildctl/common"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/tonistiigi/units"
 	"github.com/urfave/cli"
@@ -31,12 +32,8 @@ var WorkersCommand = cli.Command{
 	},
 }
 
-func resolveClient(c *cli.Context) (*client.Client, error) {
-	return client.New(commandContext(c), c.GlobalString("addr"), client.WithFailFast())
-}
-
 func listWorkers(clicontext *cli.Context) error {
-	c, err := resolveClient(clicontext)
+	c, err := bccommon.ResolveClient(clicontext)
 	if err != nil {
 		return err
 	}
