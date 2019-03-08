@@ -15,16 +15,17 @@ import (
 
 const (
 	attrDigest           = "digest"
-	attrStore            = "store"
+	attrSrc              = "src"
+	attrDest             = "dest"
 	contentStoreIDPrefix = "local:"
 )
 
 // ResolveCacheExporterFunc for "local" cache exporter.
 func ResolveCacheExporterFunc(sm *session.Manager) remotecache.ResolveCacheExporterFunc {
 	return func(ctx context.Context, attrs map[string]string) (remotecache.Exporter, error) {
-		store := attrs[attrStore]
+		store := attrs[attrDest]
 		if store == "" {
-			return nil, errors.New("local cache exporter requires store")
+			return nil, errors.New("local cache exporter requires dest")
 		}
 		csID := contentStoreIDPrefix + store
 		cs, err := getContentStore(ctx, sm, csID)
@@ -43,9 +44,9 @@ func ResolveCacheImporterFunc(sm *session.Manager) remotecache.ResolveCacheImpor
 			return nil, specs.Descriptor{}, errors.New("local cache importer requires explicit digest")
 		}
 		dgst := digest.Digest(dgstStr)
-		store := attrs[attrStore]
+		store := attrs[attrSrc]
 		if store == "" {
-			return nil, specs.Descriptor{}, errors.New("local cache importer requires store")
+			return nil, specs.Descriptor{}, errors.New("local cache importer requires src")
 		}
 		csID := contentStoreIDPrefix + store
 		cs, err := getContentStore(ctx, sm, csID)
