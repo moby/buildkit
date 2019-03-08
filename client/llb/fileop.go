@@ -4,6 +4,8 @@ import (
 	_ "crypto/sha256"
 	"os"
 	"path"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/moby/buildkit/solver/pb"
@@ -29,11 +31,12 @@ import (
 // filestate = state.File(c)
 // filestate.GetOutput(id).Exec()
 
-func NewFileOp(s State, action *FileAction) *FileOp {
+func NewFileOp(s State, action *FileAction, c Constraints) *FileOp {
 	action = action.bind(s)
 
 	f := &FileOp{
-		action: action,
+		action:      action,
+		constraints: c,
 	}
 
 	f.output = &output{vertex: f, getIndex: func() (pb.OutputIndex, error) {
@@ -190,9 +193,40 @@ func (mi *MkdirInfo) SetMkdirOption(mi2 *MkdirInfo) {
 }
 
 func WithUser(name string) ChownOption {
-	return ChownOpt{
-		User: &UserOpt{Name: name},
+	opt := ChownOpt{}
+
+	parts := strings.SplitN(name, ":", 2)
+	for i, v := range parts {
+		switch i {
+		case 0:
+			uid, err := parseUID(v)
+			if err != nil {
+				opt.User = &UserOpt{Name: v}
+			} else {
+				opt.User = &UserOpt{UID: uid}
+			}
+		case 1:
+			gid, err := parseUID(v)
+			if err != nil {
+				opt.Group = &UserOpt{Name: v}
+			} else {
+				opt.Group = &UserOpt{UID: gid}
+			}
+		}
 	}
+
+	return opt
+}
+
+func parseUID(str string) (int, error) {
+	if str == "root" {
+		return 0, nil
+	}
+	uid, err := strconv.ParseInt(str, 10, 32)
+	if err != nil {
+		return 0, err
+	}
+	return int(uid), nil
 }
 
 func WithUIDGID(uid, gid int) ChownOption {
@@ -479,7 +513,7 @@ type FileOp struct {
 	action *FileAction
 	output Output
 
-	// constraints Constraints
+	constraints Constraints
 	isValidated bool
 }
 
@@ -610,7 +644,7 @@ func (f *FileOp) Marshal(c *Constraints) (digest.Digest, []byte, *pb.OpMetadata,
 
 	pfo := &pb.FileOp{}
 
-	pop, md := MarshalConstraints(c, &Constraints{})
+	pop, md := MarshalConstraints(c, &f.constraints)
 	pop.Op = &pb.Op_File{
 		File: pfo,
 	}

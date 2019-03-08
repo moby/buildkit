@@ -46,8 +46,15 @@ func NewFileOp(v solver.Vertex, op *pb.Op_File, cm cache.Manager, md *metadata.S
 
 func (f *fileOp) CacheMap(ctx context.Context, index int) (*solver.CacheMap, bool, error) {
 	selectors := map[int]map[llbsolver.Selector]struct{}{}
+	invalidSelectors := map[int]struct{}{}
 
 	actions := make([][]byte, 0, len(f.op.Actions))
+
+	markInvalid := func(idx pb.InputIndex) {
+		if idx != -1 {
+			invalidSelectors[int(idx)] = struct{}{}
+		}
+	}
 
 	for _, action := range f.op.Actions {
 		var dt []byte
@@ -55,6 +62,7 @@ func (f *fileOp) CacheMap(ctx context.Context, index int) (*solver.CacheMap, boo
 		switch a := action.Action.(type) {
 		case *pb.FileAction_Mkdir:
 			p := *a.Mkdir
+			markInvalid(action.Input)
 			processOwner(p.Owner, selectors)
 			dt, err = json.Marshal(p)
 			if err != nil {
@@ -62,7 +70,7 @@ func (f *fileOp) CacheMap(ctx context.Context, index int) (*solver.CacheMap, boo
 			}
 		case *pb.FileAction_Mkfile:
 			p := *a.Mkfile
-			p.Owner = nil
+			markInvalid(action.Input)
 			processOwner(p.Owner, selectors)
 			dt, err = json.Marshal(p)
 			if err != nil {
@@ -70,14 +78,15 @@ func (f *fileOp) CacheMap(ctx context.Context, index int) (*solver.CacheMap, boo
 			}
 		case *pb.FileAction_Rm:
 			p := *a.Rm
+			markInvalid(action.Input)
 			dt, err = json.Marshal(p)
 			if err != nil {
 				return nil, false, err
 			}
 		case *pb.FileAction_Copy:
 			p := *a.Copy
+			markInvalid(action.Input)
 			processOwner(p.Owner, selectors)
-			p.Owner = nil
 			if action.SecondaryInput != -1 && int(action.SecondaryInput) < f.numInputs {
 				p.Src = path.Base(p.Src)
 				addSelector(selectors, int(action.SecondaryInput), p.Src, p.AllowWildcard, p.FollowSymlink)
@@ -111,6 +120,9 @@ func (f *fileOp) CacheMap(ctx context.Context, index int) (*solver.CacheMap, boo
 	}
 
 	for idx, m := range selectors {
+		if _, ok := invalidSelectors[idx]; ok {
+			continue
+		}
 		dgsts := make([][]byte, 0, len(m))
 		for k := range m {
 			dgsts = append(dgsts, []byte(k.Path))

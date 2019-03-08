@@ -43,6 +43,8 @@ const (
 	CapExecMountSSH            apicaps.CapID = "exec.mount.ssh"
 	CapExecCgroupsMounted      apicaps.CapID = "exec.cgroup"
 
+	CapFileBase apicaps.CapID = "file.base"
+
 	CapConstraints apicaps.CapID = "constraints"
 	CapPlatform    apicaps.CapID = "platform"
 
@@ -224,6 +226,12 @@ func init() {
 		ID:      CapExecCgroupsMounted,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapFileBase,
+		Enabled: true,
+		Status:  apicaps.CapStatusPrerelease,
 	})
 
 	Caps.Init(apicaps.Cap{

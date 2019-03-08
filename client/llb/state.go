@@ -229,8 +229,13 @@ func (s State) Run(ro ...RunOption) ExecState {
 	}
 }
 
-func (s State) File(a *FileAction) State {
-	return s.WithOutput(NewFileOp(s, a).Output())
+func (s State) File(a *FileAction, opts ...ConstraintsOpt) State {
+	var c Constraints
+	for _, o := range opts {
+		o.SetConstraintsOption(&c)
+	}
+
+	return s.WithOutput(NewFileOp(s, a, c).Output())
 }
 
 func (s State) AddEnv(key, value string) State {
