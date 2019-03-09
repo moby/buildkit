@@ -558,12 +558,13 @@ func (cc *cacheContext) lazyChecksum(ctx context.Context, m *mount, p string) (*
 }
 
 func (cc *cacheContext) checksum(ctx context.Context, root *iradix.Node, txn *iradix.Txn, m *mount, k []byte, follow bool) (*CacheRecord, bool, error) {
+	origk := k
 	k, cr, err := getFollowLinks(root, k, follow)
 	if err != nil {
 		return nil, false, err
 	}
 	if cr == nil {
-		return nil, false, errors.Wrapf(errNotFound, "%s not found", convertKeyToPath(k))
+		return nil, false, errors.Wrapf(errNotFound, "%q not found", convertKeyToPath(origk))
 	}
 	if cr.Digest != "" {
 		return cr, false, nil

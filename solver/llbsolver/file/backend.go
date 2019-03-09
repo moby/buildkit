@@ -6,25 +6,33 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/containerd/continuity/fs"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver/llbsolver/ops/fileoptypes"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	copy "github.com/tonistiigi/fsutil/copy"
-	"golang.org/x/sys/unix"
 )
 
-func mkdir(ctx context.Context, d string, action pb.FileActionMkDir, user *uidgid) error {
+func timestampToTime(ts int64) *time.Time {
+	if ts == -1 {
+		return nil
+	}
+	tm := time.Unix(ts/1e9, ts%1e9)
+	return &tm
+}
+
+func mkdir(ctx context.Context, d string, action pb.FileActionMkDir, user *copy.ChownOpt) error {
 	p, err := fs.RootPath(d, filepath.Join(filepath.Join("/", action.Path)))
 	if err != nil {
 		return err
 	}
 
 	if action.MakeParents {
-		if err := mkdirAll(p, os.FileMode(action.Mode)&0777, user); err != nil {
+		if err := copy.MkdirAll(p, os.FileMode(action.Mode)&0777, user, timestampToTime(action.Timestamp)); err != nil {
 			return err
 		}
 	} else {
@@ -34,26 +42,18 @@ func mkdir(ctx context.Context, d string, action pb.FileActionMkDir, user *uidgi
 			}
 			return err
 		}
-		if user != nil {
-			if err := os.Chown(p, user.uid, user.gid); err != nil {
-				return err
-			}
+		if err := copy.Chown(p, user); err != nil {
+			return err
 		}
-
-	}
-
-	if action.Timestamp != -1 {
-		st := unix.Timespec{Sec: action.Timestamp / 1e9, Nsec: action.Timestamp % 1e9}
-		timespec := []unix.Timespec{st, st}
-		if err := unix.UtimesNanoAt(unix.AT_FDCWD, p, timespec, unix.AT_SYMLINK_NOFOLLOW); err != nil {
-			return errors.Wrapf(err, "failed to utime %s", p)
+		if err := copy.Utimes(p, timestampToTime(action.Timestamp)); err != nil {
+			return err
 		}
 	}
 
 	return nil
 }
 
-func mkfile(ctx context.Context, d string, action pb.FileActionMkFile, user *uidgid) error {
+func mkfile(ctx context.Context, d string, action pb.FileActionMkFile, user *copy.ChownOpt) error {
 	p, err := fs.RootPath(d, filepath.Join(filepath.Join("/", action.Path)))
 	if err != nil {
 		return err
@@ -63,18 +63,12 @@ func mkfile(ctx context.Context, d string, action pb.FileActionMkFile, user *uid
 		return err
 	}
 
-	if user != nil {
-		if err := os.Chown(p, user.uid, user.gid); err != nil {
-			return err
-		}
+	if err := copy.Chown(p, user); err != nil {
+		return err
 	}
 
-	if action.Timestamp != -1 {
-		st := unix.Timespec{Sec: action.Timestamp / 1e9, Nsec: action.Timestamp % 1e9}
-		timespec := []unix.Timespec{st, st}
-		if err := unix.UtimesNanoAt(unix.AT_FDCWD, p, timespec, unix.AT_SYMLINK_NOFOLLOW); err != nil {
-			return errors.Wrapf(err, "failed to utime %s", p)
-		}
+	if err := copy.Utimes(p, timestampToTime(action.Timestamp)); err != nil {
+		return err
 	}
 
 	return nil
@@ -96,50 +90,18 @@ func rm(ctx context.Context, d string, action pb.FileActionRm) error {
 	return nil
 }
 
-func docopy(ctx context.Context, src, dest string, action pb.FileActionCopy, u *uidgid) error {
-	// // src is the source path
-	// Src string `protobuf:"bytes,1,opt,name=src,proto3" json:"src,omitempty"`
-	// // dest path
-	// Dest string `protobuf:"bytes,2,opt,name=dest,proto3" json:"dest,omitempty"`
-	// // optional owner override
-	// Owner *ChownOpt `protobuf:"bytes,4,opt,name=owner" json:"owner,omitempty"`
-	// // optional permission bits override
-	// Mode int32 `protobuf:"varint,5,opt,name=mode,proto3" json:"mode,omitempty"`
-	// // followSymlink resolves symlinks in src
-	// FollowSymlink bool `protobuf:"varint,6,opt,name=followSymlink,proto3" json:"followSymlink,omitempty"`
-	// // dirCopyContents only copies contents if src is a directory
-	// DirCopyContents bool `protobuf:"varint,7,opt,name=dirCopyContents,proto3" json:"dirCopyContents,omitempty"`
-	// // attemptUnpackDockerCompatibility detects if src is an archive to unpack it instead
-	// AttemptUnpackDockerCompatibility bool `protobuf:"varint,8,opt,name=attemptUnpackDockerCompatibility,proto3" json:"attemptUnpackDockerCompatibility,omitempty"`
-	// // createDestPath creates dest path directories if needed
-	// CreateDestPath bool `protobuf:"varint,9,opt,name=createDestPath,proto3" json:"createDestPath,omitempty"`
-	// // allowWildcard allows filepath.Match wildcards in src path
-	// AllowWildcard bool `protobuf:"varint,10,opt,name=allowWildcard,proto3" json:"allowWildcard,omitempty"`
-	// // allowEmptyWildcard doesn't fail the whole copy if wildcard doesn't resolve to files
-	// AllowEmptyWildcard bool `protobuf:"varint,11,opt,name=allowEmptyWildcard,proto3" json:"allowEmptyWildcard,omitempty"`
-	// // optional created time override
-	// Timestamp int64 `protobuf:"varint,12,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+func docopy(ctx context.Context, src, dest string, action pb.FileActionCopy, u *copy.ChownOpt) error {
+	srcPath := cleanPath(action.Src)
+	destPath := cleanPath(action.Dest)
 
-	srcp, err := fs.RootPath(src, filepath.Join(filepath.Join("/", action.Src)))
-	if err != nil {
-		return err
-	}
-
-	destp, err := fs.RootPath(dest, filepath.Join(filepath.Join("/", action.Dest)))
-	if err != nil {
-		return err
-	}
-
-	var opt []copy.Opt
-
-	if action.AllowWildcard {
-		opt = append(opt, copy.AllowWildcards)
-	}
-
-	if u != nil {
-		opt = append(opt, func(ci *copy.CopyInfo) {
-			ci.Chown = &copy.ChownOpt{Uid: u.uid, Gid: u.gid}
-		})
+	if !action.CreateDestPath {
+		p, err := fs.RootPath(dest, filepath.Join(filepath.Join("/", action.Dest)))
+		if err != nil {
+			return err
+		}
+		if _, err := os.Lstat(filepath.Dir(p)); err != nil {
+			return errors.Wrapf(err, "failed to stat %s", action.Dest)
+		}
 	}
 
 	xattrErrorHandler := func(dst, src, key string, err error) error {
@@ -147,13 +109,69 @@ func docopy(ctx context.Context, src, dest string, action pb.FileActionCopy, u *
 		return nil
 	}
 
-	opt = append(opt, copy.WithXAttrErrorHandler(xattrErrorHandler))
+	opt := []copy.Opt{
+		func(ci *copy.CopyInfo) {
+			ci.Chown = u
+			ci.Utime = timestampToTime(action.Timestamp)
+			if m := int(action.Mode); m != -1 {
+				ci.Mode = &m
+			}
+			ci.CopyDirContents = action.DirCopyContents
+			ci.FollowLinks = action.FollowSymlink
+		},
+		copy.WithXAttrErrorHandler(xattrErrorHandler),
+	}
 
-	if err := copy.Copy(ctx, srcp, destp, opt...); err != nil {
+	if !action.AllowWildcard {
+		if action.AttemptUnpackDockerCompatibility {
+			if ok, err := unpack(ctx, src, srcPath, dest, destPath, u, timestampToTime(action.Timestamp)); err != nil {
+				return err
+			} else if ok {
+				return nil
+			}
+		}
+		return copy.Copy(ctx, src, srcPath, dest, destPath, opt...)
+	}
+
+	m, err := copy.ResolveWildcards(src, srcPath, action.FollowSymlink)
+	if err != nil {
 		return err
 	}
 
+	if len(m) == 0 {
+		if action.AllowEmptyWildcard {
+			return nil
+		}
+		return errors.Errorf("%s not found", srcPath)
+	}
+
+	for _, s := range m {
+		if action.AttemptUnpackDockerCompatibility {
+			if ok, err := unpack(ctx, src, s, dest, destPath, u, timestampToTime(action.Timestamp)); err != nil {
+				return err
+			} else if ok {
+				continue
+			}
+		}
+		if err := copy.Copy(ctx, src, s, dest, destPath, opt...); err != nil {
+			return err
+		}
+	}
+
 	return nil
+}
+
+func cleanPath(s string) string {
+	s2 := filepath.Join("/", s)
+	if strings.HasSuffix(s, "/.") {
+		if s2 != "/" {
+			s2 += "/"
+		}
+		s2 += "."
+	} else if strings.HasSuffix(s, "/") && s2 != "/" {
+		s2 += "/"
+	}
+	return s2
 }
 
 type Backend struct {
@@ -243,8 +261,6 @@ func (fb *Backend) Copy(ctx context.Context, m1, m2, user, group fileoptypes.Mou
 	if err != nil {
 		return err
 	}
-
-	logrus.Debugf("copy %+v %+v %+v", action.Owner, user, group)
 
 	return docopy(ctx, src, dest, action, u)
 }

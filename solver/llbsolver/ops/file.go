@@ -88,8 +88,8 @@ func (f *fileOp) CacheMap(ctx context.Context, index int) (*solver.CacheMap, boo
 			markInvalid(action.Input)
 			processOwner(p.Owner, selectors)
 			if action.SecondaryInput != -1 && int(action.SecondaryInput) < f.numInputs {
-				p.Src = path.Base(p.Src)
 				addSelector(selectors, int(action.SecondaryInput), p.Src, p.AllowWildcard, p.FollowSymlink)
+				p.Src = path.Base(p.Src)
 			}
 			dt, err = json.Marshal(p)
 			if err != nil {
@@ -375,7 +375,7 @@ func (s *FileOpSolver) validate(idx int, inputs []fileoptypes.Ref, actions []*pb
 }
 
 func (s *FileOpSolver) getInput(ctx context.Context, idx int, inputs []fileoptypes.Ref, actions []*pb.FileAction) (input, error) {
-	inp, err := s.g.Do(ctx, fmt.Sprintf("inp-%d", idx), func(ctx context.Context) (interface{}, error) {
+	inp, err := s.g.Do(ctx, fmt.Sprintf("inp-%d", idx), func(ctx context.Context) (_ interface{}, err error) {
 		s.mu.Lock()
 		inp := s.ins[idx]
 		s.mu.Unlock()
@@ -391,14 +391,18 @@ func (s *FileOpSolver) getInput(ctx context.Context, idx int, inputs []fileoptyp
 			return inp, nil
 		}
 
+		var inpMount, inpMountSecondary fileoptypes.Mount
 		var toRelease []fileoptypes.Mount
+		var inpMountPrepared bool
 		defer func() {
 			for _, m := range toRelease {
 				m.Release(context.TODO())
 			}
+			if err != nil && inpMount != nil && inpMountPrepared {
+				inpMount.Release(context.TODO())
+			}
 		}()
 
-		var inpMount, inpMountSecondary fileoptypes.Mount
 		action := actions[idx-len(inputs)]
 
 		loadInput := func(ctx context.Context) func() error {
@@ -413,6 +417,7 @@ func (s *FileOpSolver) getInput(ctx context.Context, idx int, inputs []fileoptyp
 						return err
 					}
 					inpMount = m
+					inpMountPrepared = true
 					return nil
 				}
 				inpMount = inp.mount
@@ -511,6 +516,7 @@ func (s *FileOpSolver) getInput(ctx context.Context, idx int, inputs []fileoptyp
 				return nil, err
 			}
 			inpMount = m
+			inpMountPrepared = true
 		}
 
 		switch a := action.Action.(type) {

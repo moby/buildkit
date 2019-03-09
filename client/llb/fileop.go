@@ -149,7 +149,7 @@ type fileActionMkdir struct {
 func (a *fileActionMkdir) toProtoAction(parent string, base pb.InputIndex) pb.IsFileAction {
 	return &pb.FileAction_Mkdir{
 		Mkdir: &pb.FileActionMkDir{
-			Path:        normalizePath(parent, a.file),
+			Path:        normalizePath(parent, a.file, false),
 			Mode:        int32(a.mode & 0777),
 			MakeParents: a.info.MakeParents,
 			Owner:       a.info.ChownOpt.marshal(base),
@@ -318,7 +318,7 @@ type fileActionMkfile struct {
 func (a *fileActionMkfile) toProtoAction(parent string, base pb.InputIndex) pb.IsFileAction {
 	return &pb.FileAction_Mkfile{
 		Mkfile: &pb.FileActionMkFile{
-			Path:      normalizePath(parent, a.file),
+			Path:      normalizePath(parent, a.file, false),
 			Mode:      int32(a.mode & 0777),
 			Data:      a.dt,
 			Owner:     a.info.ChownOpt.marshal(base),
@@ -382,7 +382,7 @@ type fileActionRm struct {
 func (a *fileActionRm) toProtoAction(parent string, base pb.InputIndex) pb.IsFileAction {
 	return &pb.FileAction_Rm{
 		Rm: &pb.FileActionRm{
-			Path:          normalizePath(parent, a.file),
+			Path:          normalizePath(parent, a.file, false),
 			AllowNotFound: a.info.AllowNotFound,
 			AllowWildcard: a.info.AllowWildcard,
 		},
@@ -451,7 +451,7 @@ type fileActionCopy struct {
 func (a *fileActionCopy) toProtoAction(parent string, base pb.InputIndex) pb.IsFileAction {
 	c := &pb.FileActionCopy{
 		Src:                              a.sourcePath(),
-		Dest:                             normalizePath(parent, a.dest),
+		Dest:                             normalizePath(parent, a.dest, true),
 		Owner:                            a.info.ChownOpt.marshal(base),
 		AllowWildcard:                    a.info.AllowWildcard,
 		AllowEmptyWildcard:               a.info.AllowEmptyWildcard,
@@ -683,10 +683,21 @@ func (f *FileOp) Marshal(c *Constraints) (digest.Digest, []byte, *pb.OpMetadata,
 	return f.Load()
 }
 
-func normalizePath(parent, p string) string {
+func normalizePath(parent, p string, keepSlash bool) string {
+	origPath := p
 	p = path.Clean(p)
 	if !path.IsAbs(p) {
 		p = path.Join("/", parent, p)
+	}
+	if keepSlash {
+		if strings.HasSuffix(origPath, "/") && !strings.HasSuffix(p, "/") {
+			p += "/"
+		} else if strings.HasSuffix(origPath, "/.") {
+			if p != "/" {
+				p += "/"
+			}
+			p += "."
+		}
 	}
 	return p
 }

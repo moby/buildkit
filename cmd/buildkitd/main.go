@@ -19,6 +19,7 @@ import (
 	"github.com/containerd/containerd/pkg/seed"
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/sys"
+	"github.com/docker/docker/pkg/reexec"
 	"github.com/docker/go-connections/sockets"
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
 	"github.com/moby/buildkit/cache/remotecache"
@@ -55,6 +56,7 @@ import (
 func init() {
 	apicaps.ExportedProduct = "buildkit"
 	seed.WithTimeAndRand()
+	reexec.Init()
 }
 
 type workerInitializerOpt struct {

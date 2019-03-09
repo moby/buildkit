@@ -81,6 +81,7 @@ var allTests = []integration.Test{
 	testCopyChownCreateDest,
 	testEmptyDestDir,
 	testSymlinkedDockerfile,
+	testDockerfileAddArchiveWildcard,
 }
 
 var opts []integration.TestOpt
@@ -1309,6 +1310,79 @@ ADD %s /newname.tar.gz
 	require.Equal(t, buf2.Bytes(), dt)
 }
 
+func testDockerfileAddArchiveWildcard(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	buf := bytes.NewBuffer(nil)
+	tw := tar.NewWriter(buf)
+	expectedContent := []byte("content0")
+	err := tw.WriteHeader(&tar.Header{
+		Name:     "foo",
+		Typeflag: tar.TypeReg,
+		Size:     int64(len(expectedContent)),
+		Mode:     0644,
+	})
+	require.NoError(t, err)
+	_, err = tw.Write(expectedContent)
+	require.NoError(t, err)
+	err = tw.Close()
+	require.NoError(t, err)
+
+	buf2 := bytes.NewBuffer(nil)
+	tw = tar.NewWriter(buf2)
+	expectedContent = []byte("content1")
+	err = tw.WriteHeader(&tar.Header{
+		Name:     "bar",
+		Typeflag: tar.TypeReg,
+		Size:     int64(len(expectedContent)),
+		Mode:     0644,
+	})
+	require.NoError(t, err)
+	_, err = tw.Write(expectedContent)
+	require.NoError(t, err)
+	err = tw.Close()
+	require.NoError(t, err)
+
+	dockerfile := []byte(`
+FROM scratch
+ADD *.tar /dest
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("t.tar", buf.Bytes(), 0600),
+		fstest.CreateFile("b.tar", buf2.Bytes(), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		Exporter:          client.ExporterLocal,
+		ExporterOutputDir: destDir,
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "dest/foo"))
+	require.NoError(t, err)
+	require.Equal(t, "content0", string(dt))
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "dest/bar"))
+	require.NoError(t, err)
+	require.Equal(t, "content1", string(dt))
+}
+
 func testSymlinkDestination(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
@@ -2061,7 +2135,7 @@ COPY sub/dir1 subdest6
 	require.NoError(t, err)
 	require.Equal(t, "foo-contents", string(dt))
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "subdest/dir1/dir2/foo"))
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "subdest/dir2/foo"))
 	require.NoError(t, err)
 	require.Equal(t, "foo-contents", string(dt))
 

@@ -474,7 +474,7 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 	case *instructions.WorkdirCommand:
 		err = dispatchWorkdir(d, c, true, &opt)
 	case *instructions.AddCommand:
-		err = dispatchCopy(d, c.SourcesAndDest, opt.buildContext, true, c, "", opt)
+		err = dispatchCopy(d, c.SourcesAndDest, opt.buildContext, true, c, c.Chown, opt)
 		if err == nil {
 			for _, src := range c.Sources() {
 				if !strings.HasPrefix(src, "http://") && !strings.HasPrefix(src, "https://") {
@@ -660,7 +660,8 @@ func dispatchWorkdir(d *dispatchState, c *instructions.WorkdirCommand, commit bo
 	}
 	d.image.Config.WorkingDir = wd
 	if commit {
-		if opt != nil && useFileOp(opt.buildArgValues, opt.llbCaps) {
+		withLayer := false
+		if wd != "/" && opt != nil && useFileOp(opt.buildArgValues, opt.llbCaps) {
 			mkdirOpt := []llb.MkdirOption{llb.WithParents(true)}
 			if user := d.image.Config.User; user != "" {
 				mkdirOpt = append(mkdirOpt, llb.WithUser(user))
@@ -670,9 +671,9 @@ func dispatchWorkdir(d *dispatchState, c *instructions.WorkdirCommand, commit bo
 				platform = *d.platform
 			}
 			d.state = d.state.File(llb.Mkdir(wd, 0755, mkdirOpt...), llb.WithCustomName(prefixCommand(d, uppercaseCmd(processCmdEnv(opt.shlex, c.String(), d.state.Env())), d.prefixPlatform, &platform)))
+			withLayer = true
 		}
-
-		return commitToHistory(&d.image, "WORKDIR "+wd, false, nil)
+		return commitToHistory(&d.image, "WORKDIR "+wd, withLayer, nil)
 	}
 	return nil
 }
@@ -1285,7 +1286,7 @@ func prefixCommand(ds *dispatchState, str string, prefixPlatform bool, platform 
 func useFileOp(args map[string]string, caps *apicaps.CapSet) bool {
 	enabled := fileOpEnabled
 	if v, ok := args["BUILDKIT_USE_FILEOP"]; ok {
-		if b, err := strconv.ParseBool(v); err != nil {
+		if b, err := strconv.ParseBool(v); err == nil {
 			enabled = b
 		}
 	}

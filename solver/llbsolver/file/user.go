@@ -9,17 +9,14 @@ import (
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/opencontainers/runc/libcontainer/user"
 	"github.com/pkg/errors"
+	copy "github.com/tonistiigi/fsutil/copy"
 )
 
-type uidgid struct {
-	uid, gid int
-}
-
-func readUser(chopt *pb.ChownOpt, mu, mg fileoptypes.Mount) (*uidgid, error) {
+func readUser(chopt *pb.ChownOpt, mu, mg fileoptypes.Mount) (*copy.ChownOpt, error) {
 	if chopt == nil {
 		return nil, nil
 	}
-	var us uidgid
+	var us copy.ChownOpt
 	if chopt.User != nil {
 		switch u := chopt.User.User.(type) {
 		case *pb.UserOpt_ByName:
@@ -61,12 +58,12 @@ func readUser(chopt *pb.ChownOpt, mu, mg fileoptypes.Mount) (*uidgid, error) {
 			}
 
 			if len(users) > 0 {
-				us.uid = users[0].Uid
-				us.gid = users[0].Gid
+				us.Uid = users[0].Uid
+				us.Gid = users[0].Gid
 			}
 		case *pb.UserOpt_ByID:
-			us.uid = int(u.ByID)
-			us.gid = int(u.ByID)
+			us.Uid = int(u.ByID)
+			us.Gid = int(u.ByID)
 		}
 	}
 
@@ -111,10 +108,10 @@ func readUser(chopt *pb.ChownOpt, mu, mg fileoptypes.Mount) (*uidgid, error) {
 			}
 
 			if len(groups) > 0 {
-				us.gid = groups[0].Gid
+				us.Gid = groups[0].Gid
 			}
 		case *pb.UserOpt_ByID:
-			us.gid = int(u.ByID)
+			us.Gid = int(u.ByID)
 		}
 	}
 

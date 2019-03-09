@@ -672,8 +672,12 @@ func testFileOpMkdirMkfile(t *testing.T, sb integration.Sandbox) {
 	defer os.RemoveAll(destDir)
 
 	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exporter:          ExporterLocal,
-		ExporterOutputDir: destDir,
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 	}, nil)
 	require.NoError(t, err)
 
@@ -722,8 +726,12 @@ func testFileOpCopyRm(t *testing.T, sb integration.Sandbox) {
 	defer os.RemoveAll(destDir)
 
 	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exporter:          ExporterLocal,
-		ExporterOutputDir: destDir,
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 		LocalDirs: map[string]string{
 			"mylocal":  dir,
 			"mylocal2": dir2,
