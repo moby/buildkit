@@ -83,6 +83,7 @@ var allTests = []integration.Test{
 	testSymlinkedDockerfile,
 	testDockerfileAddArchiveWildcard,
 	testEmptyWildcard,
+	testWorkdirCreatesDir,
 }
 
 var opts []integration.TestOpt
@@ -152,6 +153,44 @@ RUN [ "$(cat testfile)" == "contents0" ]
 		},
 	}, nil)
 	require.NoError(t, err)
+}
+
+func testWorkdirCreatesDir(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM scratch
+WORKDIR /foo
+WORKDIR /
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		Exporter:          client.ExporterLocal,
+		ExporterOutputDir: destDir,
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	fi, err := os.Lstat(filepath.Join(destDir, "foo"))
+	require.NoError(t, err)
+	require.Equal(t, true, fi.IsDir())
 }
 
 func testSymlinkedDockerfile(t *testing.T, sb integration.Sandbox) {
