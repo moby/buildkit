@@ -86,6 +86,7 @@ var allTests = []integration.Test{
 	testWorkdirCreatesDir,
 	testDockerfileAddArchiveWildcard,
 	testCopyChownExistingDir,
+	testCopyWildcardCache,
 }
 
 var opts []integration.TestOpt
@@ -315,6 +316,91 @@ RUN e="300:400"; p="/file"                         ; a=` + "`" + `stat -c "%u:%g
 		},
 	}, nil)
 	require.NoError(t, err)
+}
+
+func testCopyWildcardCache(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM busybox AS base
+COPY foo* files/
+RUN cat /dev/urandom | head -c 100 | sha256sum > unique
+COPY bar files/
+FROM scratch
+COPY --from=base unique /
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("foo1", []byte("foo1-data"), 0600),
+		fstest.CreateFile("foo2", []byte("foo2-data"), 0600),
+		fstest.CreateFile("bar", []byte("bar-data"), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		Exporter:          client.ExporterLocal,
+		ExporterOutputDir: destDir,
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "unique"))
+	require.NoError(t, err)
+
+	err = ioutil.WriteFile(filepath.Join(dir, "bar"), []byte("bar-data-mod"), 0600)
+	require.NoError(t, err)
+
+	destDir, err = ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		Exporter:          client.ExporterLocal,
+		ExporterOutputDir: destDir,
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt2, err := ioutil.ReadFile(filepath.Join(destDir, "unique"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), string(dt2))
+
+	err = ioutil.WriteFile(filepath.Join(dir, "foo2"), []byte("foo2-data-mod"), 0600)
+	require.NoError(t, err)
+
+	destDir, err = ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		Exporter:          client.ExporterLocal,
+		ExporterOutputDir: destDir,
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt2, err = ioutil.ReadFile(filepath.Join(destDir, "unique"))
+	require.NoError(t, err)
+	require.NotEqual(t, string(dt), string(dt2))
 }
 
 func testEmptyWildcard(t *testing.T, sb integration.Sandbox) {
