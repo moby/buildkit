@@ -84,6 +84,7 @@ var allTests = []integration.Test{
 	testDockerfileAddArchiveWildcard,
 	testEmptyWildcard,
 	testWorkdirCreatesDir,
+	testDockerfileAddArchiveWildcard,
 }
 
 var opts []integration.TestOpt
