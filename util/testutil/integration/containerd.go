@@ -123,6 +123,7 @@ disabled_plugins = ["cri"]
 
 	buildkitdArgs := []string{"buildkitd",
 		"--oci-worker=false",
+		"--containerd-worker-gc=false",
 		"--containerd-worker=true",
 		"--containerd-worker-addr", address,
 		"--containerd-worker-labels=org.mobyproject.buildkit.worker.sandbox=true", // Include use of --containerd-worker-labels to trigger https://github.com/moby/buildkit/pull/603
