@@ -308,8 +308,12 @@ func setDefaultConfig(cfg *config.Config) {
 		cfg.GRPC.Address = []string{appdefaults.Address}
 	}
 
-	cfg.Workers.OCI.Platforms = binfmt_misc.SupportedPlatforms()
-	cfg.Workers.Containerd.Platforms = binfmt_misc.SupportedPlatforms()
+	if cfg.Workers.OCI.Platforms == nil {
+		cfg.Workers.OCI.Platforms = binfmt_misc.SupportedPlatforms()
+	}
+	if cfg.Workers.Containerd.Platforms == nil {
+		cfg.Workers.Containerd.Platforms = binfmt_misc.SupportedPlatforms()
+	}
 
 	if system.RunningInUserNS() {
 		// if buildkitd is being executed as the mapped-root (not only EUID==0 but also $USER==root)
