@@ -1284,7 +1284,7 @@ func prefixCommand(ds *dispatchState, str string, prefixPlatform bool, platform 
 }
 
 func useFileOp(args map[string]string, caps *apicaps.CapSet) bool {
-	enabled := fileOpEnabled
+	enabled := true
 	if v, ok := args["BUILDKIT_USE_FILEOP"]; ok {
 		if b, err := strconv.ParseBool(v); err == nil {
 			enabled = b
