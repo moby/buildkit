@@ -159,7 +159,7 @@ RUN [ "$(cat testfile)" == "contents0" ]
 
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_USE_FILEOP": strconv.FormatBool(isFileOp),
+			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
 		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
@@ -495,7 +495,7 @@ RUN [ "$(stat -c "%U %G" /dest)" == "user user" ]
 
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_USE_FILEOP": strconv.FormatBool(isFileOp),
+			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
 		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
@@ -539,7 +539,7 @@ COPY link/foo .
 			},
 		},
 		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_USE_FILEOP": strconv.FormatBool(isFileOp),
+			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
 		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
@@ -587,7 +587,7 @@ COPY --from=build /sub2/foo bar
 			},
 		},
 		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_USE_FILEOP": strconv.FormatBool(isFileOp),
+			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
 		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
@@ -839,7 +839,7 @@ COPY foo /
 
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_USE_FILEOP": strconv.FormatBool(isFileOp),
+			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
 		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
@@ -867,7 +867,7 @@ COPY foo /
 			},
 		},
 		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_USE_FILEOP": strconv.FormatBool(isFileOp),
+			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
 		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
@@ -903,7 +903,7 @@ COPY foo /
 
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_USE_FILEOP": strconv.FormatBool(isFileOp),
+			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
 		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
@@ -917,7 +917,7 @@ COPY foo /
 
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_USE_FILEOP": strconv.FormatBool(isFileOp),
+			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
 		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
@@ -963,7 +963,7 @@ COPY sub/l* alllinks/
 
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_USE_FILEOP": strconv.FormatBool(isFileOp),
+			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
 		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
@@ -2285,7 +2285,7 @@ COPY --from=base /out /
 			},
 		},
 		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_USE_FILEOP": strconv.FormatBool(isFileOp),
+			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
 		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
@@ -2344,7 +2344,7 @@ COPY files dest
 			},
 		},
 		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_USE_FILEOP": strconv.FormatBool(isFileOp),
+			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
 		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
@@ -2396,7 +2396,7 @@ COPY $FOO baz
 			},
 		},
 		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_USE_FILEOP": strconv.FormatBool(isFileOp),
+			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
 		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
@@ -2455,7 +2455,7 @@ COPY sub/dir1 subdest6
 			},
 		},
 		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_USE_FILEOP": strconv.FormatBool(isFileOp),
+			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
 		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,

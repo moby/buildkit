@@ -208,7 +208,7 @@ message FileOp {
 message FileAction {
 	int64 input = 1 [(gogoproto.customtype) = "InputIndex", (gogoproto.nullable) = false]; // could be real input or target (target index + max input index)
 	int64 secondaryInput = 2 [(gogoproto.customtype) = "InputIndex", (gogoproto.nullable) = false]; // --//--
-  int64 output = 3 [(gogoproto.customtype) = "OutputIndex", (gogoproto.nullable) = false];
+	int64 output = 3 [(gogoproto.customtype) = "OutputIndex", (gogoproto.nullable) = false];
 	oneof action {
 		// FileActionCopy copies files from secondaryInput on top of input
 		FileActionCopy copy = 4;
@@ -227,23 +227,23 @@ message FileActionCopy {
 	// dest path
 	string dest = 2;
 	// optional owner override
-	ChownOpt owner = 4;
+	ChownOpt owner = 3;
 	// optional permission bits override
-	int32 mode = 5;
+	int32 mode = 4;
 	// followSymlink resolves symlinks in src
-	bool followSymlink = 6;
+	bool followSymlink = 5;
 	// dirCopyContents only copies contents if src is a directory
-	bool dirCopyContents = 7;
+	bool dirCopyContents = 6;
 	// attemptUnpackDockerCompatibility detects if src is an archive to unpack it instead
-	bool attemptUnpackDockerCompatibility = 8;
+	bool attemptUnpackDockerCompatibility = 7;
 	// createDestPath creates dest path directories if needed
-	bool createDestPath = 9;
+	bool createDestPath = 8;
 	// allowWildcard allows filepath.Match wildcards in src path
-	bool allowWildcard = 10;
+	bool allowWildcard = 9;
 	// allowEmptyWildcard doesn't fail the whole copy if wildcard doesn't resolve to files
-	bool allowEmptyWildcard = 11;
+	bool allowEmptyWildcard = 10;
 	// optional created time override
-	int64 timestamp = 12;
+	int64 timestamp = 11;
 }
 
 message FileActionMkFile {
