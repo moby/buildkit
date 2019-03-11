@@ -4,7 +4,7 @@
 : ${PREFER_LEGACY=}
 
 newerEqualThan() { # $1=minimum wanted version $2=actual-version
-  [ "$1" = "$(echo -e "$1\n$2" | sort -V | head -n 1)" ]
+  [ "$1" = "$(printf "$1\n$2" | sort -V | head -n 1)" ]
 }
 
 buildmode="legacy"
