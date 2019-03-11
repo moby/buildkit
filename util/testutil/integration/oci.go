@@ -60,7 +60,7 @@ func (s *oci) New(opt ...SandboxOpt) (Sandbox, func() error, error) {
 	}
 	logs := map[string]*bytes.Buffer{}
 	// Include use of --oci-worker-labels to trigger https://github.com/moby/buildkit/pull/603
-	buildkitdArgs := []string{"buildkitd", "--oci-worker=true", "--containerd-worker=false", "--oci-worker-labels=org.mobyproject.buildkit.worker.sandbox=true"}
+	buildkitdArgs := []string{"buildkitd", "--oci-worker=true", "--containerd-worker=false", "--oci-worker-gc=false", "--oci-worker-labels=org.mobyproject.buildkit.worker.sandbox=true"}
 
 	deferF := &multiCloser{}
 
