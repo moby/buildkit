@@ -350,13 +350,13 @@ func parseCacheOptions(opt SolveOpt) (*cacheOptions, error) {
 		cacheExports []*controlapi.CacheOptionsEntry
 		cacheImports []*controlapi.CacheOptionsEntry
 		// legacy API is used for registry caches, because the daemon might not support the new API
-		legacyExportRef   string
-		legacyExportAttrs map[string]string
-		legacyImportRefs  []string
+		legacyExportRef  string
+		legacyImportRefs []string
 	)
 	contentStores := make(map[string]content.Store)
 	indicesToUpdate := make(map[string]string) // key: index.JSON file name, value: tag
 	frontendAttrs := make(map[string]string)
+	legacyExportAttrs := make(map[string]string)
 	for _, ex := range opt.CacheExports {
 		if ex.Type == "local" {
 			csDir := ex.Attrs["dest"]
