@@ -613,6 +613,10 @@ func (e *edge) recalcCurrentState() {
 		e.allDepsCompletedCacheSlow = e.cacheMapDone && allDepsCompletedCacheSlow
 		e.allDepsStateCacheSlow = e.cacheMapDone && allDepsStateCacheSlow
 		e.allDepsCompleted = e.cacheMapDone && allDepsCompleted
+
+		if e.allDepsStateCacheSlow && len(e.cacheRecords) > 0 && e.state == edgeStatusCacheFast {
+			e.state = edgeStatusCacheSlow
+		}
 	}
 }
 
