@@ -41,6 +41,13 @@ func (ce *exporter) ExportForLayers(layers []digest.Digest) ([]byte, error) {
 	for _, k := range layers {
 		if v, ok := descs[k]; ok {
 			descs2[k] = v
+			continue
+		}
+		// fallback for uncompressed digests
+		for _, v := range descs {
+			if uc := v.Descriptor.Annotations["containerd.io/uncompressed"]; uc == string(k) {
+				descs2[v.Descriptor.Digest] = v
+			}
 		}
 	}
 
