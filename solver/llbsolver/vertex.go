@@ -80,10 +80,20 @@ func RuntimePlatforms(p []specs.Platform) LoadOpt {
 				defaultPlatform = &pb.Platform{
 					OS:           p.OS,
 					Architecture: p.Architecture,
+					Variant:      p.Variant,
 				}
 			}
 			op.Platform = defaultPlatform
 		}
+		platform := specs.Platform{OS: op.Platform.OS, Architecture: op.Platform.Architecture, Variant: op.Platform.Variant}
+		normalizedPlatform := platforms.Normalize(platform)
+
+		op.Platform = &pb.Platform{
+			OS:           normalizedPlatform.OS,
+			Architecture: normalizedPlatform.Architecture,
+			Variant:      normalizedPlatform.Variant,
+		}
+
 		if _, ok := op.Op.(*pb.Op_Exec); ok {
 			var found bool
 			for _, pp := range pp {
