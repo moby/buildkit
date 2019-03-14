@@ -12,10 +12,10 @@ if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"
 
 binariesLegacy() {
   mkdir -p bin
-  
+
   iidfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
   copysrc="/usr/bin/."
-  
+
   case "$(echo "$TARGETPLATFORM" | cut -d"/" -f1)" in
   "darwin")
     docker build --iidfile $iidfile --target buildctl-darwin -f ./hack/dockerfiles/test.Dockerfile --force-rm .
@@ -29,7 +29,7 @@ binariesLegacy() {
     docker build --iidfile $iidfile --target buildkit-binaries -f ./hack/dockerfiles/test.Dockerfile --force-rm .
     ;;
   esac
-  
+
   iid=$(cat $iidfile)
   containerID=$(docker create $iid copy)
   docker cp $containerID:$copysrc bin
