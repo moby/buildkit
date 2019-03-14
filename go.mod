@@ -40,7 +40,7 @@ require (
 	github.com/morikuni/aec v0.0.0-20170113033406-39771216ff4c
 	github.com/opencontainers/go-digest v1.0.0-rc1
 	github.com/opencontainers/image-spec v1.0.1
-	github.com/opencontainers/runc v0.0.0-20190115041553-12f6a991201f
+	github.com/opencontainers/runc v1.0.1-0.20190115041553-12f6a991201f
 	github.com/opencontainers/runtime-spec v0.0.0-20180909173843-eba862dc2470
 	github.com/opentracing-contrib/go-stdlib v0.0.0-20171029140428-b1a47cfbdd75
 	github.com/opentracing/opentracing-go v0.0.0-20171003133519-1361b9cd60be
@@ -49,7 +49,7 @@ require (
 	github.com/sirupsen/logrus v1.0.3
 	github.com/stretchr/testify v1.3.0
 	github.com/syndtr/gocapability v0.0.0-20170704070218-db04d3cc01c8 // indirect
-	github.com/tonistiigi/fsutil v0.0.0-20190130224639-b4281fa67095
+	github.com/tonistiigi/fsutil v0.0.0-20190314220245-1ec1983587cd
 	github.com/tonistiigi/units v0.0.0-20180711220420-6950e57a87ea
 	github.com/uber/jaeger-client-go v0.0.0-20180103221425-e02c85f9069e
 	github.com/uber/jaeger-lib v1.2.1 // indirect
