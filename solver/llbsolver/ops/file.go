@@ -55,7 +55,7 @@ func (f *fileOp) CacheMap(ctx context.Context, index int) (*solver.CacheMap, boo
 		switch a := action.Action.(type) {
 		case *pb.FileAction_Mkdir:
 			p := *a.Mkdir
-			p.Owner = nil
+			processOwner(p.Owner, selectors)
 			dt, err = json.Marshal(p)
 			if err != nil {
 				return nil, false, err
@@ -63,6 +63,7 @@ func (f *fileOp) CacheMap(ctx context.Context, index int) (*solver.CacheMap, boo
 		case *pb.FileAction_Mkfile:
 			p := *a.Mkfile
 			p.Owner = nil
+			processOwner(p.Owner, selectors)
 			dt, err = json.Marshal(p)
 			if err != nil {
 				return nil, false, err
@@ -75,6 +76,7 @@ func (f *fileOp) CacheMap(ctx context.Context, index int) (*solver.CacheMap, boo
 			}
 		case *pb.FileAction_Copy:
 			p := *a.Copy
+			processOwner(p.Owner, selectors)
 			p.Owner = nil
 			if action.SecondaryInput != -1 && int(action.SecondaryInput) < f.numInputs {
 				p.Src = path.Base(p.Src)
@@ -211,6 +213,29 @@ func dedupeSelectors(m map[llbsolver.Selector]struct{}) []llbsolver.Selector {
 	})
 
 	return selectors
+}
+
+func processOwner(chopt *pb.ChownOpt, selectors map[int]map[llbsolver.Selector]struct{}) error {
+	if chopt == nil {
+		return nil
+	}
+	if chopt.User != nil {
+		if u, ok := chopt.User.User.(*pb.UserOpt_ByName); ok {
+			if u.ByName.Input < 0 {
+				return errors.Errorf("invalid user index %d", u.ByName.Input)
+			}
+			addSelector(selectors, int(u.ByName.Input), "/etc/passwd", false, true)
+		}
+	}
+	if chopt.Group != nil {
+		if u, ok := chopt.Group.User.(*pb.UserOpt_ByName); ok {
+			if u.ByName.Input < 0 {
+				return errors.Errorf("invalid user index %d", u.ByName.Input)
+			}
+			addSelector(selectors, int(u.ByName.Input), "/etc/group", false, true)
+		}
+	}
+	return nil
 }
 
 func NewFileOpSolver(b fileoptypes.Backend, r fileoptypes.RefManager) *FileOpSolver {
@@ -354,6 +379,13 @@ func (s *FileOpSolver) getInput(ctx context.Context, idx int, inputs []fileoptyp
 			return inp, nil
 		}
 
+		var toRelease []fileoptypes.Mount
+		defer func() {
+			for _, m := range toRelease {
+				m.Release(context.TODO())
+			}
+		}()
+
 		var inpMount, inpMountSecondary fileoptypes.Mount
 		action := actions[idx-len(inputs)]
 
@@ -388,11 +420,57 @@ func (s *FileOpSolver) getInput(ctx context.Context, idx int, inputs []fileoptyp
 						return err
 					}
 					inpMountSecondary = m
+					toRelease = append(toRelease, m)
 					return nil
 				}
 				inpMountSecondary = inp.mount
 				return nil
 			}
+		}
+
+		loadUser := func(ctx context.Context, uopt *pb.UserOpt) (fileoptypes.Mount, error) {
+			if uopt == nil {
+				return nil, nil
+			}
+			switch u := uopt.User.(type) {
+			case *pb.UserOpt_ByName:
+				var m fileoptypes.Mount
+				if u.ByName.Input < 0 {
+					return nil, errors.Errorf("invalid user index: %d", u.ByName.Input)
+				}
+				inp, err := s.getInput(ctx, int(u.ByName.Input), inputs, actions)
+				if err != nil {
+					return nil, err
+				}
+				if inp.ref != nil {
+					mm, err := s.r.Prepare(ctx, inp.ref, true)
+					if err != nil {
+						return nil, err
+					}
+					toRelease = append(toRelease, mm)
+					m = mm
+				} else {
+					m = inp.mount
+				}
+				return m, nil
+			default:
+				return nil, nil
+			}
+		}
+
+		loadOwner := func(ctx context.Context, chopt *pb.ChownOpt) (fileoptypes.Mount, fileoptypes.Mount, error) {
+			if chopt == nil {
+				return nil, nil, nil
+			}
+			um, err := loadUser(ctx, chopt.User)
+			if err != nil {
+				return nil, nil, err
+			}
+			gm, err := loadUser(ctx, chopt.Group)
+			if err != nil {
+				return nil, nil, err
+			}
+			return um, gm, nil
 		}
 
 		if action.Input != -1 && action.SecondaryInput != -1 {
@@ -425,11 +503,19 @@ func (s *FileOpSolver) getInput(ctx context.Context, idx int, inputs []fileoptyp
 
 		switch a := action.Action.(type) {
 		case *pb.FileAction_Mkdir:
-			if err := s.b.Mkdir(ctx, inpMount, *a.Mkdir); err != nil {
+			user, group, err := loadOwner(ctx, a.Mkdir.Owner)
+			if err != nil {
+				return nil, err
+			}
+			if err := s.b.Mkdir(ctx, inpMount, user, group, *a.Mkdir); err != nil {
 				return nil, err
 			}
 		case *pb.FileAction_Mkfile:
-			if err := s.b.Mkfile(ctx, inpMount, *a.Mkfile); err != nil {
+			user, group, err := loadOwner(ctx, a.Mkfile.Owner)
+			if err != nil {
+				return nil, err
+			}
+			if err := s.b.Mkfile(ctx, inpMount, user, group, *a.Mkfile); err != nil {
 				return nil, err
 			}
 		case *pb.FileAction_Rm:
@@ -444,7 +530,11 @@ func (s *FileOpSolver) getInput(ctx context.Context, idx int, inputs []fileoptyp
 				}
 				inpMountSecondary = m
 			}
-			if err := s.b.Copy(ctx, inpMountSecondary, inpMount, *a.Copy); err != nil {
+			user, group, err := loadOwner(ctx, a.Copy.Owner)
+			if err != nil {
+				return nil, err
+			}
+			if err := s.b.Copy(ctx, inpMountSecondary, inpMount, user, group, *a.Copy); err != nil {
 				return nil, err
 			}
 		default:

@@ -3,6 +3,7 @@ package file
 import (
 	"context"
 	"io/ioutil"
+	"log"
 	"os"
 	"path/filepath"
 
@@ -11,24 +12,34 @@ import (
 	"github.com/moby/buildkit/solver/llbsolver/ops/fileoptypes"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	copy "github.com/tonistiigi/fsutil/copy"
 	"golang.org/x/sys/unix"
 )
 
-func mkdir(ctx context.Context, d string, action pb.FileActionMkDir) error {
+func mkdir(ctx context.Context, d string, action pb.FileActionMkDir, user *uidgid) error {
 	p, err := fs.RootPath(d, filepath.Join(filepath.Join("/", action.Path)))
 	if err != nil {
 		return err
 	}
 
 	if action.MakeParents {
-		if err := os.MkdirAll(p, os.FileMode(action.Mode)&0777); err != nil {
+		if err := mkdirAll(p, os.FileMode(action.Mode)&0777, user); err != nil {
 			return err
 		}
 	} else {
 		if err := os.Mkdir(p, os.FileMode(action.Mode)&0777); err != nil {
+			if os.IsExist(err) {
+				return nil
+			}
 			return err
 		}
+		if user != nil {
+			if err := os.Chown(p, user.uid, user.gid); err != nil {
+				return err
+			}
+		}
+
 	}
 
 	if action.Timestamp != -1 {
@@ -42,7 +53,7 @@ func mkdir(ctx context.Context, d string, action pb.FileActionMkDir) error {
 	return nil
 }
 
-func mkfile(ctx context.Context, d string, action pb.FileActionMkFile) error {
+func mkfile(ctx context.Context, d string, action pb.FileActionMkFile, user *uidgid) error {
 	p, err := fs.RootPath(d, filepath.Join(filepath.Join("/", action.Path)))
 	if err != nil {
 		return err
@@ -52,6 +63,12 @@ func mkfile(ctx context.Context, d string, action pb.FileActionMkFile) error {
 		return err
 	}
 
+	if user != nil {
+		if err := os.Chown(p, user.uid, user.gid); err != nil {
+			return err
+		}
+	}
+
 	if action.Timestamp != -1 {
 		st := unix.Timespec{Sec: action.Timestamp / 1e9, Nsec: action.Timestamp % 1e9}
 		timespec := []unix.Timespec{st, st}
@@ -59,6 +76,7 @@ func mkfile(ctx context.Context, d string, action pb.FileActionMkFile) error {
 			return errors.Wrapf(err, "failed to utime %s", p)
 		}
 	}
+
 	return nil
 }
 
@@ -78,7 +96,7 @@ func rm(ctx context.Context, d string, action pb.FileActionRm) error {
 	return nil
 }
 
-func docopy(ctx context.Context, src, dest string, action pb.FileActionCopy) error {
+func docopy(ctx context.Context, src, dest string, action pb.FileActionCopy, u *uidgid) error {
 	// // src is the source path
 	// Src string `protobuf:"bytes,1,opt,name=src,proto3" json:"src,omitempty"`
 	// // dest path
@@ -118,6 +136,19 @@ func docopy(ctx context.Context, src, dest string, action pb.FileActionCopy) err
 		opt = append(opt, copy.AllowWildcards)
 	}
 
+	if u != nil {
+		opt = append(opt, func(ci *copy.CopyInfo) {
+			ci.Chown = &copy.ChownOpt{Uid: u.uid, Gid: u.gid}
+		})
+	}
+
+	xattrErrorHandler := func(dst, src, key string, err error) error {
+		log.Println(err)
+		return nil
+	}
+
+	opt = append(opt, copy.WithXAttrErrorHandler(xattrErrorHandler))
+
 	if err := copy.Copy(ctx, srcp, destp, opt...); err != nil {
 		return err
 	}
@@ -128,7 +159,7 @@ func docopy(ctx context.Context, src, dest string, action pb.FileActionCopy) err
 type Backend struct {
 }
 
-func (fb *Backend) Mkdir(ctx context.Context, m fileoptypes.Mount, action pb.FileActionMkDir) error {
+func (fb *Backend) Mkdir(ctx context.Context, m, user, group fileoptypes.Mount, action pb.FileActionMkDir) error {
 	mnt, ok := m.(*Mount)
 	if !ok {
 		return errors.Errorf("invalid mount type %T", m)
@@ -141,10 +172,15 @@ func (fb *Backend) Mkdir(ctx context.Context, m fileoptypes.Mount, action pb.Fil
 	}
 	defer lm.Unmount()
 
-	return mkdir(ctx, dir, action)
+	u, err := readUser(action.Owner, user, group)
+	if err != nil {
+		return err
+	}
+
+	return mkdir(ctx, dir, action, u)
 }
 
-func (fb *Backend) Mkfile(ctx context.Context, m fileoptypes.Mount, action pb.FileActionMkFile) error {
+func (fb *Backend) Mkfile(ctx context.Context, m, user, group fileoptypes.Mount, action pb.FileActionMkFile) error {
 	mnt, ok := m.(*Mount)
 	if !ok {
 		return errors.Errorf("invalid mount type %T", m)
@@ -157,7 +193,12 @@ func (fb *Backend) Mkfile(ctx context.Context, m fileoptypes.Mount, action pb.Fi
 	}
 	defer lm.Unmount()
 
-	return mkfile(ctx, dir, action)
+	u, err := readUser(action.Owner, user, group)
+	if err != nil {
+		return err
+	}
+
+	return mkfile(ctx, dir, action, u)
 }
 func (fb *Backend) Rm(ctx context.Context, m fileoptypes.Mount, action pb.FileActionRm) error {
 	mnt, ok := m.(*Mount)
@@ -174,7 +215,7 @@ func (fb *Backend) Rm(ctx context.Context, m fileoptypes.Mount, action pb.FileAc
 
 	return rm(ctx, dir, action)
 }
-func (fb *Backend) Copy(ctx context.Context, m1 fileoptypes.Mount, m2 fileoptypes.Mount, action pb.FileActionCopy) error {
+func (fb *Backend) Copy(ctx context.Context, m1, m2, user, group fileoptypes.Mount, action pb.FileActionCopy) error {
 	mnt1, ok := m1.(*Mount)
 	if !ok {
 		return errors.Errorf("invalid mount type %T", m1)
@@ -198,5 +239,12 @@ func (fb *Backend) Copy(ctx context.Context, m1 fileoptypes.Mount, m2 fileoptype
 	}
 	defer lm2.Unmount()
 
-	return docopy(ctx, src, dest, action)
+	u, err := readUser(action.Owner, user, group)
+	if err != nil {
+		return err
+	}
+
+	logrus.Debugf("copy %+v %+v %+v", action.Owner, user, group)
+
+	return docopy(ctx, src, dest, action, u)
 }

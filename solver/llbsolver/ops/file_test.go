@@ -54,6 +54,135 @@ func TestMkdirMkfile(t *testing.T) {
 	require.Equal(t, fo.Actions[1].Action.(*pb.FileAction_Mkfile).Mkfile, o.mount.chain[1].mkfile)
 }
 
+func TestChownOpt(t *testing.T) {
+	fo := &pb.FileOp{
+		Actions: []*pb.FileAction{
+			{
+				Input:          0,
+				SecondaryInput: -1,
+				Output:         -1,
+				Action: &pb.FileAction_Mkdir{
+					Mkdir: &pb.FileActionMkDir{
+						Path:        "/foo/bar",
+						MakeParents: true,
+						Mode:        0700,
+						Owner: &pb.ChownOpt{
+							User: &pb.UserOpt{
+								User: &pb.UserOpt_ByName{
+									ByName: &pb.NamedUserOpt{
+										Input: 1,
+										Name:  "myuser",
+									},
+								},
+							},
+							Group: &pb.UserOpt{
+								User: &pb.UserOpt_ByName{
+									ByName: &pb.NamedUserOpt{
+										Input: 1,
+										Name:  "myuser",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			{
+				Input:          2,
+				SecondaryInput: -1,
+				Output:         0,
+				Action: &pb.FileAction_Mkfile{
+					Mkfile: &pb.FileActionMkFile{
+						Path: "/foo/bar/baz",
+						Mode: 0700,
+						Owner: &pb.ChownOpt{
+							User: &pb.UserOpt{
+								User: &pb.UserOpt_ByID{
+									ByID: 100,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	s, rb := newTestFileSolver()
+	inp := rb.NewRef("ref1")
+	inp2 := rb.NewRef("usermount")
+	outs, err := s.Solve(context.TODO(), []fileoptypes.Ref{inp, inp2}, fo.Actions)
+	require.NoError(t, err)
+	require.Equal(t, len(outs), 1)
+	rb.checkReleased(t, append(outs, inp, inp2))
+
+	o := outs[0].(*testFileRef)
+	require.Equal(t, "mount-ref1-mkdir#u(mount-usermount)#g(mount-usermount)-mkfile-commit", o.id)
+	require.Equal(t, 2, len(o.mount.chain))
+	require.Equal(t, fo.Actions[0].Action.(*pb.FileAction_Mkdir).Mkdir, o.mount.chain[0].mkdir)
+	require.Equal(t, fo.Actions[1].Action.(*pb.FileAction_Mkfile).Mkfile, o.mount.chain[1].mkfile)
+}
+
+func TestChownCopy(t *testing.T) {
+	fo := &pb.FileOp{
+		Actions: []*pb.FileAction{
+			{
+				Input:          -1,
+				SecondaryInput: -1,
+				Output:         -1,
+				Action: &pb.FileAction_Mkfile{
+					Mkfile: &pb.FileActionMkFile{
+						Path: "/foo/bar/baz",
+						Mode: 0700,
+					},
+				},
+			},
+			{
+				Input:          1,
+				SecondaryInput: 0,
+				Output:         0,
+				Action: &pb.FileAction_Copy{
+					Copy: &pb.FileActionCopy{
+						Src:  "/src",
+						Dest: "/dest",
+						Owner: &pb.ChownOpt{
+							User: &pb.UserOpt{
+								User: &pb.UserOpt_ByName{
+									ByName: &pb.NamedUserOpt{
+										Input: 1,
+										Name:  "myuser",
+									},
+								},
+							},
+							Group: &pb.UserOpt{
+								User: &pb.UserOpt_ByName{
+									ByName: &pb.NamedUserOpt{
+										Input: 2,
+										Name:  "mygroup",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	s, rb := newTestFileSolver()
+	inpSrc := rb.NewRef("src")
+	inpDest := rb.NewRef("dest")
+	outs, err := s.Solve(context.TODO(), []fileoptypes.Ref{inpSrc, inpDest}, fo.Actions)
+	require.NoError(t, err)
+	require.Equal(t, len(outs), 1)
+	rb.checkReleased(t, append(outs, inpSrc, inpDest))
+
+	o := outs[0].(*testFileRef)
+	require.Equal(t, "mount-dest-copy(mount-src)#u(mount-dest)#g(mount-scratch-mkfile)-commit", o.id)
+	require.Equal(t, 1, len(o.mount.chain))
+	require.Equal(t, fo.Actions[1].Action.(*pb.FileAction_Copy).Copy, o.mount.chain[0].copy)
+}
+
 func TestInvalidNoOutput(t *testing.T) {
 	fo := &pb.FileOp{
 		Actions: []*pb.FileAction{
@@ -267,6 +396,37 @@ func TestFileFromScratch(t *testing.T) {
 	require.Equal(t, fo.Actions[1].Action.(*pb.FileAction_Mkfile).Mkfile, o.mount.chain[1].mkfile)
 }
 
+func TestFileCopyInputSrc(t *testing.T) {
+	fo := &pb.FileOp{
+		Actions: []*pb.FileAction{
+			{
+				Input:          1,
+				SecondaryInput: 0,
+				Output:         0,
+				Action: &pb.FileAction_Copy{
+					Copy: &pb.FileActionCopy{
+						Src:  "/src",
+						Dest: "/dest",
+					},
+				},
+			},
+		},
+	}
+
+	s, rb := newTestFileSolver()
+	inp0 := rb.NewRef("srcref")
+	inp1 := rb.NewRef("destref")
+	outs, err := s.Solve(context.TODO(), []fileoptypes.Ref{inp0, inp1}, fo.Actions)
+	require.NoError(t, err)
+	require.Equal(t, len(outs), 1)
+	rb.checkReleased(t, append(outs, inp0, inp1))
+
+	o := outs[0].(*testFileRef)
+	require.Equal(t, "mount-destref-copy(mount-srcref)-commit", o.id)
+	require.Equal(t, 1, len(o.mount.chain))
+	require.Equal(t, fo.Actions[0].Action.(*pb.FileAction_Copy).Copy, o.mount.chain[0].copy)
+}
+
 func TestFileCopyInputRm(t *testing.T) {
 	fo := &pb.FileOp{
 		Actions: []*pb.FileAction{
@@ -409,6 +569,17 @@ type testMount struct {
 	active    *testFileRef
 }
 
+func (tm *testMount) addUser(user, group fileoptypes.Mount) {
+	if user != nil {
+		um := user.(*testMount)
+		tm.id += "#u(" + um.id + ")"
+	}
+	if group != nil {
+		gm := group.(*testMount)
+		tm.id += "#g(" + gm.id + ")"
+	}
+}
+
 type mod struct {
 	mkdir   *pb.FileActionMkDir
 	rm      *pb.FileActionRm
@@ -419,7 +590,7 @@ type mod struct {
 
 func (m *testMount) IsFileOpMount() {}
 func (m *testMount) Release(ctx context.Context) error {
-	if m.initID != m.id {
+	if m.b.mounts[m.initID] != m {
 		return m.b.mounts[m.initID].Release(ctx)
 	}
 	if m.unmounted {
@@ -435,19 +606,21 @@ func (m *testMount) Release(ctx context.Context) error {
 type testFileBackend struct {
 }
 
-func (b *testFileBackend) Mkdir(_ context.Context, m fileoptypes.Mount, a pb.FileActionMkDir) error {
+func (b *testFileBackend) Mkdir(_ context.Context, m, user, group fileoptypes.Mount, a pb.FileActionMkDir) error {
 	mm := m.(*testMount)
 	if mm.callback != nil {
 		mm.callback()
 	}
 	mm.id += "-mkdir"
+	mm.addUser(user, group)
 	mm.chain = append(mm.chain, mod{mkdir: &a})
 	return nil
 }
 
-func (b *testFileBackend) Mkfile(_ context.Context, m fileoptypes.Mount, a pb.FileActionMkFile) error {
+func (b *testFileBackend) Mkfile(_ context.Context, m, user, group fileoptypes.Mount, a pb.FileActionMkFile) error {
 	mm := m.(*testMount)
 	mm.id += "-mkfile"
+	mm.addUser(user, group)
 	mm.chain = append(mm.chain, mod{mkfile: &a})
 	return nil
 }
@@ -457,10 +630,11 @@ func (b *testFileBackend) Rm(_ context.Context, m fileoptypes.Mount, a pb.FileAc
 	mm.chain = append(mm.chain, mod{rm: &a})
 	return nil
 }
-func (b *testFileBackend) Copy(_ context.Context, m1 fileoptypes.Mount, m fileoptypes.Mount, a pb.FileActionCopy) error {
+func (b *testFileBackend) Copy(_ context.Context, m1, m, user, group fileoptypes.Mount, a pb.FileActionCopy) error {
 	mm := m.(*testMount)
 	mm1 := m1.(*testMount)
 	mm.id += "-copy(" + mm1.id + ")"
+	mm.addUser(user, group)
 	mm.chain = append(mm.chain, mod{copy: &a, copySrc: mm1.chain})
 	return nil
 }
@@ -524,6 +698,6 @@ loop0:
 	}
 
 	for _, m := range b.mounts {
-		require.True(t, m.unmounted, "%s still mounted", m.id)
+		require.True(t, m.unmounted, "%s %p still mounted", m.id, m)
 	}
 }
