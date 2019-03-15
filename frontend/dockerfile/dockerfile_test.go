@@ -90,6 +90,7 @@ var fileOpTests = []integration.Test{
 	testCopyOverrideFiles,
 	testCopyVarSubstitution,
 	testCopyWildcards,
+	testCopyRelative,
 }
 
 var opts []integration.TestOpt
@@ -2505,6 +2506,57 @@ COPY sub/dir1 subdest6
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "subdest6/dir2/foo"))
 	require.NoError(t, err)
 	require.Equal(t, "foo-contents", string(dt))
+}
+
+func testCopyRelative(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+	isFileOp := getFileOp(t, sb)
+
+	dockerfile := []byte(`
+FROM busybox
+WORKDIR /test1
+WORKDIR test2
+RUN sh -c "[ "$PWD" = '/test1/test2' ]"
+COPY foo ./
+RUN sh -c "[ $(cat /test1/test2/foo) = 'hello' ]"
+ADD foo ./bar/baz
+RUN sh -c "[ $(cat /test1/test2/bar/baz) = 'hello' ]"
+COPY foo ./bar/baz2
+RUN sh -c "[ $(cat /test1/test2/bar/baz2) = 'hello' ]"
+WORKDIR ..
+COPY foo ./
+RUN sh -c "[ $(cat /test1/foo) = 'hello' ]"
+COPY foo /test3/
+RUN sh -c "[ $(cat /test3/foo) = 'hello' ]"
+WORKDIR /test4
+COPY . .
+RUN sh -c "[ $(cat /test4/foo) = 'hello' ]"
+WORKDIR /test5/test6
+COPY foo ../
+RUN sh -c "[ $(cat /test5/foo) = 'hello' ]"
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("foo", []byte(`hello`), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
 }
 
 func testDockerfileFromGit(t *testing.T, sb integration.Sandbox) {
