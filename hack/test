@@ -78,8 +78,8 @@ if [ "$TEST_DOCKERFILE" == 1 ]; then
   if [ -z $DOCKERFILE_RELEASES ]; then
     DOCKERFILE_RELEASES="mainline experimental mounts secrets ssh"
   fi
-  
-  
+
+
   for release in $DOCKERFILE_RELEASES; do
     buildtags=$(cat ./frontend/dockerfile/release/$release/tags)
     tarout=$(mktemp -t dockerfile-frontend.XXXXXXXXXX)
