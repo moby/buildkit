@@ -948,7 +948,7 @@ COPY sub/l* alllinks/
 		fstest.CreateFile("bar", []byte(`bar-contents`), 0600),
 		fstest.Symlink("bar", "foo"),
 		fstest.CreateDir("sub", 0700),
-		fstest.CreateFile("sub/lfile", []byte(`baz-contents`), 0600),
+		fstest.CreateFile("sub/lfile", []byte(`lfile-contents`), 0600),
 		fstest.Symlink("subfile", "sub/l0"),
 		fstest.CreateFile("sub/subfile", []byte(`subfile-contents`), 0600),
 		fstest.Symlink("second", "sub/l1"),
@@ -962,7 +962,17 @@ COPY sub/l* alllinks/
 	require.NoError(t, err)
 	defer c.Close()
 
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 		FrontendAttrs: map[string]string{
 			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
 		},
@@ -972,6 +982,22 @@ COPY sub/l* alllinks/
 		},
 	}, nil)
 	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "foo"))
+	require.NoError(t, err)
+	require.Equal(t, "bar-contents", string(dt))
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "alllinks/l0"))
+	require.NoError(t, err)
+	require.Equal(t, "subfile-contents", string(dt))
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "alllinks/lfile"))
+	require.NoError(t, err)
+	require.Equal(t, "lfile-contents", string(dt))
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "alllinks/l1"))
+	require.NoError(t, err)
+	require.Equal(t, "baz-contents", string(dt))
 }
 
 func testHTTPDockerfile(t *testing.T, sb integration.Sandbox) {
