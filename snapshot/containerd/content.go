@@ -82,10 +82,13 @@ func (c *nsContent) writer(ctx context.Context, retries int, opts ...content.Wri
 			return nil, err
 		}
 	}
+	_, noRoot := wOpts.Desc.Annotations["buildkit/noroot"]
+	delete(wOpts.Desc.Annotations, "buildkit/noroot")
+	opts = append(opts, content.WithDescriptor(wOpts.Desc))
 	ctx = namespaces.WithNamespace(ctx, c.ns)
 	w, err := c.Store.Writer(ctx, opts...)
 	if err != nil {
-		if errdefs.IsAlreadyExists(err) && wOpts.Desc.Digest != "" && retries > 0 {
+		if !noRoot && errdefs.IsAlreadyExists(err) && wOpts.Desc.Digest != "" && retries > 0 {
 			_, err2 := c.Update(ctx, content.Info{
 				Digest: wOpts.Desc.Digest,
 				Labels: map[string]string{

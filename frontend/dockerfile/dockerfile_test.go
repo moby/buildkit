@@ -24,6 +24,7 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/platforms"
+	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/continuity/fs/fstest"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
@@ -49,6 +50,7 @@ var allTests = []integration.Test{
 	testExportedHistory,
 	testExposeExpansion,
 	testUser,
+	testCacheReleased,
 	testDockerignore,
 	testDockerignoreInvalid,
 	testDockerfileFromGit,
@@ -210,6 +212,42 @@ WORKDIR /
 	fi, err := os.Lstat(filepath.Join(destDir, "foo"))
 	require.NoError(t, err)
 	require.Equal(t, true, fi.IsDir())
+}
+
+func testCacheReleased(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM busybox
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	checkAllReleasable(t, c, sb, true)
 }
 
 func testSymlinkedDockerfile(t *testing.T, sb integration.Sandbox) {
@@ -3565,6 +3603,86 @@ func checkAllRemoved(t *testing.T, c *client.Client, sb integration.Sandbox) {
 			continue
 		}
 		break
+	}
+}
+
+func checkAllReleasable(t *testing.T, c *client.Client, sb integration.Sandbox, checkContent bool) {
+	retries := 0
+loop0:
+	for {
+		require.True(t, 20 > retries)
+		retries++
+		du, err := c.DiskUsage(context.TODO())
+		require.NoError(t, err)
+		for _, d := range du {
+			if d.InUse {
+				time.Sleep(500 * time.Millisecond)
+				continue loop0
+			}
+		}
+		break
+	}
+
+	err := c.Prune(context.TODO(), nil, client.PruneAll)
+	require.NoError(t, err)
+
+	du, err := c.DiskUsage(context.TODO())
+	require.NoError(t, err)
+	require.Equal(t, 0, len(du))
+
+	// examine contents of exported tars (requires containerd)
+	var cdAddress string
+	if cd, ok := sb.(interface {
+		ContainerdAddress() string
+	}); !ok {
+		return
+	} else {
+		cdAddress = cd.ContainerdAddress()
+	}
+
+	// TODO: make public pull helper function so this can be checked for standalone as well
+
+	client, err := newContainerd(cdAddress)
+	require.NoError(t, err)
+	defer client.Close()
+
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit")
+	snapshotService := client.SnapshotService("overlayfs")
+
+	retries = 0
+	for {
+		count := 0
+		err = snapshotService.Walk(ctx, func(context.Context, snapshots.Info) error {
+			count++
+			return nil
+		})
+		require.NoError(t, err)
+		if count == 0 {
+			break
+		}
+		require.True(t, 20 > retries)
+		retries++
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	if !checkContent {
+		return
+	}
+
+	retries = 0
+	for {
+		count := 0
+		err = client.ContentStore().Walk(ctx, func(content.Info) error {
+			count++
+			return nil
+		})
+		require.NoError(t, err)
+		if count == 0 {
+			break
+		}
+		require.True(t, 20 > retries)
+		retries++
+		time.Sleep(500 * time.Millisecond)
 	}
 }
 
