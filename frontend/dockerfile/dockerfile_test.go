@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -38,7 +39,6 @@ import (
 )
 
 var allTests = []integration.Test{
-	testNoSnapshotLeak,
 	testCmdShell,
 	testGlobalArg,
 	testDockerfileDirs,
@@ -52,11 +52,7 @@ var allTests = []integration.Test{
 	testDockerignore,
 	testDockerignoreInvalid,
 	testDockerfileFromGit,
-	testCopyChown,
-	testCopyWildcards,
-	testCopyOverrideFiles,
 	testMultiStageImplicitFrom,
-	testCopyVarSubstitution,
 	testMultiStageCaseInsensitive,
 	testLabels,
 	testCacheImportExport,
@@ -68,19 +64,33 @@ var allTests = []integration.Test{
 	testPullScratch,
 	testSymlinkDestination,
 	testHTTPDockerfile,
-	testNoSnapshotLeak,
-	testCopySymlinks,
-	testContextChangeDirToFile,
 	testPlatformArgsImplicit,
 	testPlatformArgsExplicit,
 	testExportMultiPlatform,
 	testQuotedMetaArgs,
 	testIgnoreEntrypoint,
+	testSymlinkedDockerfile,
+	testDockerfileAddArchiveWildcard,
+	testEmptyWildcard,
+	testWorkdirCreatesDir,
+	testDockerfileAddArchiveWildcard,
+	testCopyChownExistingDir,
+	testCopyWildcardCache,
+}
+
+var fileOpTests = []integration.Test{
+	testEmptyDestDir,
+	testCopyChownCreateDest,
 	testCopyThroughSymlinkContext,
 	testCopyThroughSymlinkMultiStage,
-	testCopyChownCreateDest,
-	testEmptyDestDir,
-	testSymlinkedDockerfile,
+	testContextChangeDirToFile,
+	testNoSnapshotLeak,
+	testCopySymlinks,
+	testCopyChown,
+	testCopyOverrideFiles,
+	testCopyVarSubstitution,
+	testCopyWildcards,
+	testCopyRelative,
 }
 
 var opts []integration.TestOpt
@@ -120,10 +130,15 @@ func init() {
 
 func TestIntegration(t *testing.T) {
 	integration.Run(t, allTests, opts...)
+	integration.Run(t, fileOpTests, append(opts, integration.WithMatrix("fileop", map[string]interface{}{
+		"true":  true,
+		"false": false,
+	}))...)
 }
 
 func testEmptyDestDir(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
+	isFileOp := getFileOp(t, sb)
 
 	dockerfile := []byte(`
 FROM busybox
@@ -144,12 +159,57 @@ RUN [ "$(cat testfile)" == "contents0" ]
 	defer c.Close()
 
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
+		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
+}
+
+func testWorkdirCreatesDir(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM scratch
+WORKDIR /foo
+WORKDIR /
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	fi, err := os.Lstat(filepath.Join(destDir, "foo"))
+	require.NoError(t, err)
+	require.Equal(t, true, fi.IsDir())
 }
 
 func testSymlinkedDockerfile(t *testing.T, sb integration.Sandbox) {
@@ -180,8 +240,242 @@ ENV foo bar
 	require.NoError(t, err)
 }
 
+func testCopyChownExistingDir(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+# Set up files and directories with known ownership
+FROM busybox AS source
+RUN touch /file && chown 100:200 /file \
+ && mkdir -p /dir/subdir \
+ && touch /dir/subdir/nestedfile \
+ && chown 100:200 /dir \
+ && chown 101:201 /dir/subdir \
+ && chown 102:202 /dir/subdir/nestedfile
+
+FROM busybox AS test_base
+RUN mkdir -p /existingdir/existingsubdir \
+ && touch /existingdir/existingfile \
+ && chown 500:600 /existingdir \
+ && chown 501:601 /existingdir/existingsubdir \
+ && chown 501:601 /existingdir/existingfile
+
+
+# Copy files from the source stage
+FROM test_base AS copy_from
+COPY --from=source /file .
+# Copy to a non-existing target directory creates the target directory (as root), then copies the _contents_ of the source directory into it
+COPY --from=source /dir /dir
+# Copying to an existing target directory will copy the _contents_ of the source directory into it
+COPY --from=source /dir/. /existingdir
+
+RUN e="100:200"; p="/file"                         ; a=` + "`" + `stat -c "%u:%g" "$p"` + "`" + `; if [ "$a" != "$e" ]; then echo "incorrect ownership on $p. expected $e, got $a"; exit 1; fi \
+ && e="0:0";     p="/dir"                          ; a=` + "`" + `stat -c "%u:%g" "$p"` + "`" + `; if [ "$a" != "$e" ]; then echo "incorrect ownership on $p. expected $e, got $a"; exit 1; fi \
+ && e="101:201"; p="/dir/subdir"                   ; a=` + "`" + `stat -c "%u:%g" "$p"` + "`" + `; if [ "$a" != "$e" ]; then echo "incorrect ownership on $p. expected $e, got $a"; exit 1; fi \
+ && e="102:202"; p="/dir/subdir/nestedfile"        ; a=` + "`" + `stat -c "%u:%g" "$p"` + "`" + `; if [ "$a" != "$e" ]; then echo "incorrect ownership on $p. expected $e, got $a"; exit 1; fi \
+# Existing files and directories ownership should not be modified
+ && e="500:600"; p="/existingdir"                  ; a=` + "`" + `stat -c "%u:%g" "$p"` + "`" + `; if [ "$a" != "$e" ]; then echo "incorrect ownership on $p. expected $e, got $a"; exit 1; fi \
+ && e="501:601"; p="/existingdir/existingsubdir"   ; a=` + "`" + `stat -c "%u:%g" "$p"` + "`" + `; if [ "$a" != "$e" ]; then echo "incorrect ownership on $p. expected $e, got $a"; exit 1; fi \
+ && e="501:601"; p="/existingdir/existingfile"     ; a=` + "`" + `stat -c "%u:%g" "$p"` + "`" + `; if [ "$a" != "$e" ]; then echo "incorrect ownership on $p. expected $e, got $a"; exit 1; fi \
+# But new files and directories should maintain their ownership
+ && e="101:201"; p="/existingdir/subdir"           ; a=` + "`" + `stat -c "%u:%g" "$p"` + "`" + `; if [ "$a" != "$e" ]; then echo "incorrect ownership on $p. expected $e, got $a"; exit 1; fi \
+ && e="102:202"; p="/existingdir/subdir/nestedfile"; a=` + "`" + `stat -c "%u:%g" "$p"` + "`" + `; if [ "$a" != "$e" ]; then echo "incorrect ownership on $p. expected $e, got $a"; exit 1; fi
+
+
+# Copy files from the source stage and chown them.
+FROM test_base AS copy_from_chowned
+COPY --from=source --chown=300:400 /file .
+# Copy to a non-existing target directory creates the target directory (as root), then copies the _contents_ of the source directory into it
+COPY --from=source --chown=300:400 /dir /dir
+# Copying to an existing target directory copies the _contents_ of the source directory into it
+COPY --from=source --chown=300:400 /dir/. /existingdir
+
+RUN e="300:400"; p="/file"                         ; a=` + "`" + `stat -c "%u:%g" "$p"` + "`" + `; if [ "$a" != "$e" ]; then echo "incorrect ownership on $p. expected $e, got $a"; exit 1; fi \
+ && e="300:400"; p="/dir"                          ; a=` + "`" + `stat -c "%u:%g" "$p"` + "`" + `; if [ "$a" != "$e" ]; then echo "incorrect ownership on $p. expected $e, got $a"; exit 1; fi \
+ && e="300:400"; p="/dir/subdir"                   ; a=` + "`" + `stat -c "%u:%g" "$p"` + "`" + `; if [ "$a" != "$e" ]; then echo "incorrect ownership on $p. expected $e, got $a"; exit 1; fi \
+ && e="300:400"; p="/dir/subdir/nestedfile"        ; a=` + "`" + `stat -c "%u:%g" "$p"` + "`" + `; if [ "$a" != "$e" ]; then echo "incorrect ownership on $p. expected $e, got $a"; exit 1; fi \
+# Existing files and directories ownership should not be modified
+ && e="500:600"; p="/existingdir"                  ; a=` + "`" + `stat -c "%u:%g" "$p"` + "`" + `; if [ "$a" != "$e" ]; then echo "incorrect ownership on $p. expected $e, got $a"; exit 1; fi \
+ && e="501:601"; p="/existingdir/existingsubdir"   ; a=` + "`" + `stat -c "%u:%g" "$p"` + "`" + `; if [ "$a" != "$e" ]; then echo "incorrect ownership on $p. expected $e, got $a"; exit 1; fi \
+ && e="501:601"; p="/existingdir/existingfile"     ; a=` + "`" + `stat -c "%u:%g" "$p"` + "`" + `; if [ "$a" != "$e" ]; then echo "incorrect ownership on $p. expected $e, got $a"; exit 1; fi \
+# But new files and directories should be chowned
+ && e="300:400"; p="/existingdir/subdir"           ; a=` + "`" + `stat -c "%u:%g" "$p"` + "`" + `; if [ "$a" != "$e" ]; then echo "incorrect ownership on $p. expected $e, got $a"; exit 1; fi \
+ && e="300:400"; p="/existingdir/subdir/nestedfile"; a=` + "`" + `stat -c "%u:%g" "$p"` + "`" + `; if [ "$a" != "$e" ]; then echo "incorrect ownership on $p. expected $e, got $a"; exit 1; fi
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile.web", dockerfile, 0600),
+		fstest.Symlink("Dockerfile.web", "Dockerfile"),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"target": "copy_from",
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+}
+
+func testCopyWildcardCache(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM busybox AS base
+COPY foo* files/
+RUN cat /dev/urandom | head -c 100 | sha256sum > unique
+COPY bar files/
+FROM scratch
+COPY --from=base unique /
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("foo1", []byte("foo1-data"), 0600),
+		fstest.CreateFile("foo2", []byte("foo2-data"), 0600),
+		fstest.CreateFile("bar", []byte("bar-data"), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "unique"))
+	require.NoError(t, err)
+
+	err = ioutil.WriteFile(filepath.Join(dir, "bar"), []byte("bar-data-mod"), 0600)
+	require.NoError(t, err)
+
+	destDir, err = ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt2, err := ioutil.ReadFile(filepath.Join(destDir, "unique"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), string(dt2))
+
+	err = ioutil.WriteFile(filepath.Join(dir, "foo2"), []byte("foo2-data-mod"), 0600)
+	require.NoError(t, err)
+
+	destDir, err = ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt2, err = ioutil.ReadFile(filepath.Join(destDir, "unique"))
+	require.NoError(t, err)
+	require.NotEqual(t, string(dt), string(dt2))
+}
+
+func testEmptyWildcard(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM scratch
+COPY foo nomatch* /
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("foo", []byte("contents0"), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "foo"))
+	require.NoError(t, err)
+	require.Equal(t, "contents0", string(dt))
+}
+
 func testCopyChownCreateDest(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
+	isFileOp := getFileOp(t, sb)
 
 	dockerfile := []byte(`
 FROM busybox
@@ -201,6 +495,9 @@ RUN [ "$(stat -c "%U %G" /dest)" == "user user" ]
 	defer c.Close()
 
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
+		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -211,6 +508,7 @@ RUN [ "$(stat -c "%U %G" /dest)" == "user user" ]
 
 func testCopyThroughSymlinkContext(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
+	isFileOp := getFileOp(t, sb)
 
 	dockerfile := []byte(`
 FROM scratch
@@ -241,6 +539,9 @@ COPY link/foo .
 				OutputDir: destDir,
 			},
 		},
+		FrontendAttrs: map[string]string{
+			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
+		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -255,6 +556,7 @@ COPY link/foo .
 
 func testCopyThroughSymlinkMultiStage(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
+	isFileOp := getFileOp(t, sb)
 
 	dockerfile := []byte(`
 FROM busybox AS build
@@ -284,6 +586,9 @@ COPY --from=build /sub2/foo bar
 				Type:      client.ExporterLocal,
 				OutputDir: destDir,
 			},
+		},
+		FrontendAttrs: map[string]string{
+			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
 		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
@@ -514,6 +819,7 @@ COPY arch-$TARGETARCH whoami
 // tonistiigi/fsutil#46
 func testContextChangeDirToFile(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
+	isFileOp := getFileOp(t, sb)
 
 	dockerfile := []byte(`
 FROM scratch
@@ -533,6 +839,9 @@ COPY foo /
 	defer c.Close()
 
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
+		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -558,6 +867,9 @@ COPY foo /
 				OutputDir: destDir,
 			},
 		},
+		FrontendAttrs: map[string]string{
+			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
+		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -572,6 +884,7 @@ COPY foo /
 
 func testNoSnapshotLeak(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
+	isFileOp := getFileOp(t, sb)
 
 	dockerfile := []byte(`
 FROM scratch
@@ -590,6 +903,9 @@ COPY foo /
 	defer c.Close()
 
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
+		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -601,6 +917,9 @@ COPY foo /
 	require.NoError(t, err)
 
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
+		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -616,6 +935,7 @@ COPY foo /
 
 func testCopySymlinks(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
+	isFileOp := getFileOp(t, sb)
 
 	dockerfile := []byte(`
 FROM scratch
@@ -628,7 +948,7 @@ COPY sub/l* alllinks/
 		fstest.CreateFile("bar", []byte(`bar-contents`), 0600),
 		fstest.Symlink("bar", "foo"),
 		fstest.CreateDir("sub", 0700),
-		fstest.CreateFile("sub/lfile", []byte(`baz-contents`), 0600),
+		fstest.CreateFile("sub/lfile", []byte(`lfile-contents`), 0600),
 		fstest.Symlink("subfile", "sub/l0"),
 		fstest.CreateFile("sub/subfile", []byte(`subfile-contents`), 0600),
 		fstest.Symlink("second", "sub/l1"),
@@ -642,13 +962,42 @@ COPY sub/l* alllinks/
 	require.NoError(t, err)
 	defer c.Close()
 
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		FrontendAttrs: map[string]string{
+			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
+		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "foo"))
+	require.NoError(t, err)
+	require.Equal(t, "bar-contents", string(dt))
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "alllinks/l0"))
+	require.NoError(t, err)
+	require.Equal(t, "subfile-contents", string(dt))
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "alllinks/lfile"))
+	require.NoError(t, err)
+	require.Equal(t, "lfile-contents", string(dt))
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "alllinks/l1"))
+	require.NoError(t, err)
+	require.Equal(t, "baz-contents", string(dt))
 }
 
 func testHTTPDockerfile(t *testing.T, sb integration.Sandbox) {
@@ -1309,6 +1658,83 @@ ADD %s /newname.tar.gz
 	require.Equal(t, buf2.Bytes(), dt)
 }
 
+func testDockerfileAddArchiveWildcard(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	buf := bytes.NewBuffer(nil)
+	tw := tar.NewWriter(buf)
+	expectedContent := []byte("content0")
+	err := tw.WriteHeader(&tar.Header{
+		Name:     "foo",
+		Typeflag: tar.TypeReg,
+		Size:     int64(len(expectedContent)),
+		Mode:     0644,
+	})
+	require.NoError(t, err)
+	_, err = tw.Write(expectedContent)
+	require.NoError(t, err)
+	err = tw.Close()
+	require.NoError(t, err)
+
+	buf2 := bytes.NewBuffer(nil)
+	tw = tar.NewWriter(buf2)
+	expectedContent = []byte("content1")
+	err = tw.WriteHeader(&tar.Header{
+		Name:     "bar",
+		Typeflag: tar.TypeReg,
+		Size:     int64(len(expectedContent)),
+		Mode:     0644,
+	})
+	require.NoError(t, err)
+	_, err = tw.Write(expectedContent)
+	require.NoError(t, err)
+	err = tw.Close()
+	require.NoError(t, err)
+
+	dockerfile := []byte(`
+FROM scratch
+ADD *.tar /dest
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("t.tar", buf.Bytes(), 0600),
+		fstest.CreateFile("b.tar", buf2.Bytes(), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "dest/foo"))
+	require.NoError(t, err)
+	require.Equal(t, "content0", string(dt))
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "dest/bar"))
+	require.NoError(t, err)
+	require.Equal(t, "content1", string(dt))
+}
+
 func testSymlinkDestination(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
@@ -1848,6 +2274,7 @@ USER nobody
 
 func testCopyChown(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
+	isFileOp := getFileOp(t, sb)
 
 	dockerfile := []byte(`
 FROM busybox AS base
@@ -1884,6 +2311,9 @@ COPY --from=base /out /
 				OutputDir: destDir,
 			},
 		},
+		FrontendAttrs: map[string]string{
+			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
+		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -1902,6 +2332,7 @@ COPY --from=base /out /
 
 func testCopyOverrideFiles(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
+	isFileOp := getFileOp(t, sb)
 
 	dockerfile := []byte(`
 FROM scratch AS base
@@ -1939,6 +2370,9 @@ COPY files dest
 				OutputDir: destDir,
 			},
 		},
+		FrontendAttrs: map[string]string{
+			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
+		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -1957,6 +2391,7 @@ COPY files dest
 
 func testCopyVarSubstitution(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
+	isFileOp := getFileOp(t, sb)
 
 	dockerfile := []byte(`
 FROM scratch AS base
@@ -1987,6 +2422,9 @@ COPY $FOO baz
 				OutputDir: destDir,
 			},
 		},
+		FrontendAttrs: map[string]string{
+			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
+		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -2001,6 +2439,7 @@ COPY $FOO baz
 
 func testCopyWildcards(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
+	isFileOp := getFileOp(t, sb)
 
 	dockerfile := []byte(`
 FROM scratch AS base
@@ -2042,6 +2481,9 @@ COPY sub/dir1 subdest6
 				OutputDir: destDir,
 			},
 		},
+		FrontendAttrs: map[string]string{
+			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
+		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -2061,9 +2503,11 @@ COPY sub/dir1 subdest6
 	require.NoError(t, err)
 	require.Equal(t, "foo-contents", string(dt))
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "subdest/dir1/dir2/foo"))
-	require.NoError(t, err)
-	require.Equal(t, "foo-contents", string(dt))
+	if isFileOp { // non-fileop implementation is historically buggy
+		dt, err = ioutil.ReadFile(filepath.Join(destDir, "subdest/dir2/foo"))
+		require.NoError(t, err)
+		require.Equal(t, "foo-contents", string(dt))
+	}
 
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "subdest2/foo"))
 	require.NoError(t, err)
@@ -2088,6 +2532,57 @@ COPY sub/dir1 subdest6
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "subdest6/dir2/foo"))
 	require.NoError(t, err)
 	require.Equal(t, "foo-contents", string(dt))
+}
+
+func testCopyRelative(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+	isFileOp := getFileOp(t, sb)
+
+	dockerfile := []byte(`
+FROM busybox
+WORKDIR /test1
+WORKDIR test2
+RUN sh -c "[ "$PWD" = '/test1/test2' ]"
+COPY foo ./
+RUN sh -c "[ $(cat /test1/test2/foo) = 'hello' ]"
+ADD foo ./bar/baz
+RUN sh -c "[ $(cat /test1/test2/bar/baz) = 'hello' ]"
+COPY foo ./bar/baz2
+RUN sh -c "[ $(cat /test1/test2/bar/baz2) = 'hello' ]"
+WORKDIR ..
+COPY foo ./
+RUN sh -c "[ $(cat /test1/foo) = 'hello' ]"
+COPY foo /test3/
+RUN sh -c "[ $(cat /test3/foo) = 'hello' ]"
+WORKDIR /test4
+COPY . .
+RUN sh -c "[ $(cat /test4/foo) = 'hello' ]"
+WORKDIR /test5/test6
+COPY foo ../
+RUN sh -c "[ $(cat /test5/foo) = 'hello' ]"
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("foo", []byte(`hello`), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
 }
 
 func testDockerfileFromGit(t *testing.T, sb integration.Sandbox) {
@@ -3139,4 +3634,12 @@ func getFrontend(t *testing.T, sb integration.Sandbox) frontend {
 	fn, ok := v.(frontend)
 	require.True(t, ok)
 	return fn
+}
+
+func getFileOp(t *testing.T, sb integration.Sandbox) bool {
+	v := sb.Value("fileop")
+	require.NotNil(t, v)
+	vv, ok := v.(bool)
+	require.True(t, ok)
+	return vv
 }

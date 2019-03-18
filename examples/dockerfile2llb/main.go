@@ -9,6 +9,7 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/client/llb/imagemetaresolver"
 	"github.com/moby/buildkit/frontend/dockerfile/dockerfile2llb"
+	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/appcontext"
 )
 
@@ -26,9 +27,12 @@ func main() {
 		panic(err)
 	}
 
+	caps := pb.Caps.CapSet(pb.Caps.All())
+
 	state, img, err := dockerfile2llb.Dockerfile2LLB(appcontext.Context(), df, dockerfile2llb.ConvertOpt{
 		MetaResolver: imagemetaresolver.Default(),
 		Target:       opt.target,
+		LLBCaps:      &caps,
 	})
 	if err != nil {
 		log.Printf("err: %+v", err)

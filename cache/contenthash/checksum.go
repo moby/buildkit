@@ -47,6 +47,10 @@ func Checksum(ctx context.Context, ref cache.ImmutableRef, path string, followLi
 	return getDefaultManager().Checksum(ctx, ref, path, followLinks)
 }
 
+func ChecksumWildcard(ctx context.Context, ref cache.ImmutableRef, path string, followLinks bool) (digest.Digest, error) {
+	return getDefaultManager().ChecksumWildcard(ctx, ref, path, followLinks)
+}
+
 func GetCacheContext(ctx context.Context, md *metadata.StorageItem) (CacheContext, error) {
 	return getDefaultManager().GetCacheContext(ctx, md)
 }
@@ -82,6 +86,14 @@ func (cm *cacheManager) Checksum(ctx context.Context, ref cache.ImmutableRef, p 
 		return "", nil
 	}
 	return cc.Checksum(ctx, ref, p, followLinks)
+}
+
+func (cm *cacheManager) ChecksumWildcard(ctx context.Context, ref cache.ImmutableRef, p string, followLinks bool) (digest.Digest, error) {
+	cc, err := cm.GetCacheContext(ctx, ensureOriginMetadata(ref.Metadata()))
+	if err != nil {
+		return "", nil
+	}
+	return cc.ChecksumWildcard(ctx, ref, p, followLinks)
 }
 
 func (cm *cacheManager) GetCacheContext(ctx context.Context, md *metadata.StorageItem) (CacheContext, error) {
@@ -343,6 +355,9 @@ func (cc *cacheContext) ChecksumWildcard(ctx context.Context, mountable cache.Mo
 			}
 		}
 	}
+	if len(wildcards) == 0 {
+		return digest.FromBytes([]byte{}), nil
+	}
 
 	if len(wildcards) > 1 {
 		digester := digest.Canonical.Digester()
@@ -543,12 +558,13 @@ func (cc *cacheContext) lazyChecksum(ctx context.Context, m *mount, p string) (*
 }
 
 func (cc *cacheContext) checksum(ctx context.Context, root *iradix.Node, txn *iradix.Txn, m *mount, k []byte, follow bool) (*CacheRecord, bool, error) {
+	origk := k
 	k, cr, err := getFollowLinks(root, k, follow)
 	if err != nil {
 		return nil, false, err
 	}
 	if cr == nil {
-		return nil, false, errors.Wrapf(errNotFound, "%s not found", convertKeyToPath(k))
+		return nil, false, errors.Wrapf(errNotFound, "%q not found", convertKeyToPath(origk))
 	}
 	if cr.Digest != "" {
 		return cr, false, nil

@@ -118,17 +118,21 @@ github.com/docker/distribution/reference
 github.com/docker/distribution/digestset
 # github.com/docker/docker v0.7.3-0.20180531152204-71cd53e4a197
 github.com/docker/docker/pkg/locker
+github.com/docker/docker/pkg/reexec
 github.com/docker/docker/builder/dockerignore
 github.com/docker/docker/api/types/strslice
 github.com/docker/docker/pkg/signal
 github.com/docker/docker/api/types/container
+github.com/docker/docker/pkg/archive
+github.com/docker/docker/pkg/chrootarchive
 github.com/docker/docker/pkg/fileutils
 github.com/docker/docker/pkg/ioutils
 github.com/docker/docker/api/types/blkiodev
 github.com/docker/docker/api/types/mount
 github.com/docker/docker/pkg/homedir
-github.com/docker/docker/pkg/longpath
 github.com/docker/docker/pkg/idtools
+github.com/docker/docker/pkg/longpath
+github.com/docker/docker/pkg/pools
 github.com/docker/docker/pkg/system
 github.com/docker/docker/pkg/mount
 # github.com/docker/docker-credential-helpers v0.6.0
@@ -210,9 +214,10 @@ github.com/stretchr/testify/require
 github.com/stretchr/testify/assert
 # github.com/syndtr/gocapability v0.0.0-20170704070218-db04d3cc01c8
 github.com/syndtr/gocapability/capability
-# github.com/tonistiigi/fsutil v0.0.0-20190314220245-1ec1983587cd
+# github.com/tonistiigi/fsutil v0.0.0-20190316003333-2a10686c7e92
 github.com/tonistiigi/fsutil
 github.com/tonistiigi/fsutil/types
+github.com/tonistiigi/fsutil/copy
 # github.com/tonistiigi/units v0.0.0-20180711220420-6950e57a87ea
 github.com/tonistiigi/units
 # github.com/uber/jaeger-client-go v0.0.0-20180103221425-e02c85f9069e
