@@ -32,6 +32,7 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/secrets/secretsprovider"
 	"github.com/moby/buildkit/session/sshforward/sshprovider"
+	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/testutil"
 	"github.com/moby/buildkit/util/testutil/httpserver"
 	"github.com/moby/buildkit/util/testutil/integration"
@@ -84,6 +85,7 @@ func TestClientIntegration(t *testing.T) {
 		testSSHMount,
 		testStdinClosed,
 		testHostnameLookup,
+		testPushByDigest,
 		testBasicInlineCacheImportExport,
 	},
 		integration.WithMirroredImages(integration.OfficialImages("busybox:latest", "alpine:latest")),
@@ -334,6 +336,50 @@ func testNetworkMode(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "network.host is not allowed")
+}
+
+func testPushByDigest(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	registry, err := sb.NewRegistry()
+	if errors.Cause(err) == integration.ErrorRequirements {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	st := llb.Scratch().File(llb.Mkfile("foo", 0600, []byte("data")))
+
+	def, err := st.Marshal()
+	require.NoError(t, err)
+
+	name := registry + "/foo/bar"
+
+	resp, err := c.Solve(context.TODO(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: "image",
+				Attrs: map[string]string{
+					"name":           name,
+					"push":           "true",
+					"push-by-digest": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	_, _, err = contentutil.ProviderFromRef(name + ":latest")
+	require.Error(t, err)
+
+	desc, _, err := contentutil.ProviderFromRef(name + "@" + resp.ExporterResponse["containerimage.digest"])
+	require.NoError(t, err)
+
+	require.Equal(t, resp.ExporterResponse["containerimage.digest"], desc.Digest.String())
+	require.Equal(t, images.MediaTypeDockerSchema2Manifest, desc.MediaType)
+	require.True(t, desc.Size > 0)
 }
 
 func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
