@@ -232,6 +232,10 @@ func init() {
 		ID:      CapFileBase,
 		Enabled: true,
 		Status:  apicaps.CapStatusPrerelease,
+		SupportedHint: map[string]string{
+			"docker":   "Docker v19.03",
+			"buildkit": "BuildKit v0.5.0",
+		},
 	})
 
 	Caps.Init(apicaps.Cap{
