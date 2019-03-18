@@ -2,7 +2,7 @@
 
 FROM --platform=$BUILDPLATFORM tonistiigi/xx:golang@sha256:6f7d999551dd471b58f70716754290495690efa8421e0a1fcf18eb11d0c0a537 AS xgo
 
-FROM --platform=$BUILDPLATFORM golang:1.11 AS base
+FROM --platform=$BUILDPLATFORM golang:1.12 AS base
 COPY --from=xgo / /
 WORKDIR /src
 ENV GOFLAGS=-mod=vendor

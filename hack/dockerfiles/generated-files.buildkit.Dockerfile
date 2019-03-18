@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.0-experimental
 
 # protoc is dynamically linked to glibc to can't use golang:1.10-alpine
-FROM golang:1.11 AS gobuild-base
+FROM golang:1.12 AS gobuild-base
 ARG PROTOC_VERSION=3.1.0
 ARG GOGO_VERSION=master
 RUN apt-get update && apt-get install -y \

@@ -18,7 +18,7 @@ FROM base AS exit-arm
 COPY fixtures/exit.arm.s .
 RUN arm-linux-gnueabihf-as -o exit.o exit.arm.s && arm-linux-gnueabihf-ld -o exit -s exit.o
 
-FROM golang:1.11-alpine AS generate
+FROM golang:1.12-alpine AS generate
 WORKDIR /src
 COPY --from=exit-amd64 /src/exit amd64
 COPY --from=exit-arm64 /src/exit arm64
