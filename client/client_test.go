@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -85,6 +86,7 @@ func TestClientIntegration(t *testing.T) {
 		testStdinClosed,
 		testHostnameLookup,
 		testBasicInlineCacheImportExport,
+		testExportBusyboxLocal,
 	},
 		integration.WithMirroredImages(integration.OfficialImages("busybox:latest", "alpine:latest")),
 	)
@@ -92,6 +94,41 @@ func TestClientIntegration(t *testing.T) {
 
 func newContainerd(cdAddress string) (*containerd.Client, error) {
 	return containerd.New(cdAddress, containerd.WithTimeout(60*time.Second))
+}
+
+// #877
+func testExportBusyboxLocal(t *testing.T, sb integration.Sandbox) {
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	def, err := llb.Image("busybox").Marshal()
+	require.NoError(t, err)
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	fi, err := os.Stat(filepath.Join(destDir, "bin/busybox"))
+	require.NoError(t, err)
+
+	fi2, err := os.Stat(filepath.Join(destDir, "bin/vi"))
+	require.NoError(t, err)
+
+	st1 := fi.Sys().(*syscall.Stat_t)
+	st2 := fi2.Sys().(*syscall.Stat_t)
+
+	require.Equal(t, st1.Ino, st2.Ino)
 }
 
 func testHostnameLookup(t *testing.T, sb integration.Sandbox) {
