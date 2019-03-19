@@ -29,6 +29,89 @@ const (
 	dgstDirD0Modified = digest.Digest("sha256:555ffa3028630d97ba37832b749eda85ab676fd64ffb629fbf0f4ec8c1e3bff1")
 )
 
+func TestChecksumHardlinks(t *testing.T) {
+	t.Parallel()
+	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	cm := setupCacheManager(t, tmpdir, snapshotter)
+	defer cm.Close()
+
+	ch := []string{
+		"ADD abc dir",
+		"ADD abc/foo file data0",
+		"ADD ln file >/abc/foo",
+		"ADD ln2 file >/abc/foo",
+	}
+
+	ref := createRef(t, cm, ch)
+
+	cc, err := newCacheContext(ref.Metadata())
+	require.NoError(t, err)
+
+	dgst, err := cc.Checksum(context.TODO(), ref, "abc/foo", false)
+	require.NoError(t, err)
+	require.Equal(t, dgstFileData0, dgst)
+
+	dgst, err = cc.Checksum(context.TODO(), ref, "ln", false)
+	require.NoError(t, err)
+	require.Equal(t, dgstFileData0, dgst)
+
+	dgst, err = cc.Checksum(context.TODO(), ref, "ln2", false)
+	require.NoError(t, err)
+	require.Equal(t, dgstFileData0, dgst)
+
+	// validate same results with handleChange
+	ref2 := createRef(t, cm, nil)
+
+	cc2, err := newCacheContext(ref2.Metadata())
+	require.NoError(t, err)
+
+	err = emit(cc2.HandleChange, changeStream(ch))
+	require.NoError(t, err)
+
+	dgst, err = cc2.Checksum(context.TODO(), ref, "abc/foo", false)
+	require.NoError(t, err)
+	require.Equal(t, dgstFileData0, dgst)
+
+	dgst, err = cc2.Checksum(context.TODO(), ref, "ln", false)
+	require.NoError(t, err)
+	require.Equal(t, dgstFileData0, dgst)
+
+	dgst, err = cc2.Checksum(context.TODO(), ref, "ln2", false)
+	require.NoError(t, err)
+	require.Equal(t, dgstFileData0, dgst)
+
+	// modify two of the links
+
+	ch = []string{
+		"ADD abc/foo file data1",
+		"ADD ln file >/abc/foo",
+	}
+
+	cc2.linkMap = map[string][][]byte{}
+
+	err = emit(cc2.HandleChange, changeStream(ch))
+	require.NoError(t, err)
+
+	data1Expected := "sha256:c2b5e234f5f38fc5864da7def04782f82501a40d46192e4207d5b3f0c3c4732b"
+
+	dgst, err = cc2.Checksum(context.TODO(), ref, "abc/foo", false)
+	require.NoError(t, err)
+	require.Equal(t, data1Expected, string(dgst))
+
+	dgst, err = cc2.Checksum(context.TODO(), ref, "ln", false)
+	require.NoError(t, err)
+	require.Equal(t, data1Expected, string(dgst))
+
+	dgst, err = cc2.Checksum(context.TODO(), ref, "ln2", false)
+	require.NoError(t, err)
+	require.Equal(t, dgstFileData0, dgst)
+}
+
 func TestChecksumWildcard(t *testing.T) {
 	t.Parallel()
 	tmpdir, err := ioutil.TempDir("", "buildkit-state")
@@ -868,10 +951,10 @@ func (wh *withHash) Digest() digest.Digest {
 	return wh.digest
 }
 
-func writeChanges(p string, inp []*change) error {
+func writeChanges(root string, inp []*change) error {
 	for _, c := range inp {
 		if c.kind == fsutil.ChangeKindAdd {
-			p := filepath.Join(p, c.path)
+			p := filepath.Join(root, c.path)
 			stat, ok := c.fi.Sys().(*fstypes.Stat)
 			if !ok {
 				return errors.Errorf("invalid non-stat change %s", p)
@@ -887,7 +970,11 @@ func writeChanges(p string, inp []*change) error {
 					return err
 				}
 			} else if len(stat.Linkname) > 0 {
-				if err := os.Link(filepath.Join(p, stat.Linkname), p); err != nil {
+				link := filepath.Join(root, stat.Linkname)
+				if !filepath.IsAbs(link) {
+					link = filepath.Join(filepath.Dir(p), stat.Linkname)
+				}
+				if err := os.Link(link, p); err != nil {
 					return err
 				}
 			} else {
