@@ -43,17 +43,6 @@ func New(opt Opt) (exporter.Exporter, error) {
 	return im, nil
 }
 
-func normalize(name string) (string, error) {
-	if name == "" {
-		return "", nil
-	}
-	parsed, err := reference.ParseNormalizedNamed(name)
-	if err != nil {
-		return "", errors.Wrapf(err, "failed to parse %s", name)
-	}
-	return reference.TagNameOnly(parsed).String(), nil
-}
-
 func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exporter.ExporterInstance, error) {
 	id := session.FromContext(ctx)
 	if id == "" {
@@ -142,11 +131,16 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 		e.name = string(n)
 	}
 
-	if e.name != "" {
-		resp["image.name"] = e.name
+	names, err := normalizedNames(e.name)
+	if err != nil {
+		return nil, err
 	}
 
-	exp, err := getExporter(e.opt.Variant, e.name)
+	if len(names) != 0 {
+		resp["image.name"] = strings.Join(names, ",")
+	}
+
+	exp, err := getExporter(e.opt.Variant, names)
 	if err != nil {
 		return nil, err
 	}
@@ -180,25 +174,32 @@ func oneOffProgress(ctx context.Context, id string) func(err error) error {
 	}
 }
 
-func getExporter(variant ExporterVariant, name string) (images.Exporter, error) {
+func getExporter(variant ExporterVariant, names []string) (images.Exporter, error) {
 	switch variant {
 	case VariantOCI:
-		if name != "" {
+		if len(names) != 0 {
 			return nil, errors.New("oci exporter cannot export named image")
 		}
 		return oci.ResolveV1ExportOpt(oci.WithAllPlatforms(true))
 	case VariantDocker:
-		names := strings.Split(name, ",")
-		var tagNames = make([]string, len(names))
-		var err error
-		for i, nm := range names {
-			tagNames[i], err = normalize(nm)
-			if err != nil {
-				return nil, err
-			}
-		}
-		return &dockerexporter.DockerExporter{Names: tagNames}, nil
+		return &dockerexporter.DockerExporter{Names: names}, nil
 	default:
 		return nil, errors.Errorf("invalid variant %q", variant)
 	}
+}
+
+func normalizedNames(name string) ([]string, error) {
+	if name == "" {
+		return nil, nil
+	}
+	names := strings.Split(name, ",")
+	var tagNames = make([]string, len(names))
+	for i, name := range names {
+		parsed, err := reference.ParseNormalizedNamed(name)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to parse %s", name)
+		}
+		tagNames[i] = reference.TagNameOnly(parsed).String()
+	}
+	return tagNames, nil
 }
