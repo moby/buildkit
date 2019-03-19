@@ -3,6 +3,7 @@ package oci
 import (
 	"context"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/containerd/containerd/images"
@@ -42,17 +43,6 @@ func New(opt Opt) (exporter.Exporter, error) {
 	return im, nil
 }
 
-func normalize(name string) (string, error) {
-	if name == "" {
-		return "", nil
-	}
-	parsed, err := reference.ParseNormalizedNamed(name)
-	if err != nil {
-		return "", errors.Wrapf(err, "failed to parse %s", name)
-	}
-	return reference.TagNameOnly(parsed).String(), nil
-}
-
 func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exporter.ExporterInstance, error) {
 	id := session.FromContext(ctx)
 	if id == "" {
@@ -73,12 +63,6 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 		switch k {
 		case keyImageName:
 			i.name = v
-			if i.name != "*" {
-				i.name, err = normalize(i.name)
-				if err != nil {
-					return nil, err
-				}
-			}
 		case ociTypes:
 			ot = new(bool)
 			if v == "" {
@@ -144,16 +128,19 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 	resp := make(map[string]string)
 
 	if n, ok := src.Metadata["image.name"]; e.name == "*" && ok {
-		if e.name, err = normalize(string(n)); err != nil {
-			return nil, err
-		}
+		e.name = string(n)
 	}
 
-	if e.name != "" {
-		resp["image.name"] = e.name
+	names, err := normalizedNames(e.name)
+	if err != nil {
+		return nil, err
 	}
 
-	exp, err := getExporter(e.opt.Variant, e.name)
+	if len(names) != 0 {
+		resp["image.name"] = strings.Join(names, ",")
+	}
+
+	exp, err := getExporter(e.opt.Variant, names)
 	if err != nil {
 		return nil, err
 	}
@@ -187,16 +174,32 @@ func oneOffProgress(ctx context.Context, id string) func(err error) error {
 	}
 }
 
-func getExporter(variant ExporterVariant, name string) (images.Exporter, error) {
+func getExporter(variant ExporterVariant, names []string) (images.Exporter, error) {
 	switch variant {
 	case VariantOCI:
-		if name != "" {
+		if len(names) != 0 {
 			return nil, errors.New("oci exporter cannot export named image")
 		}
 		return oci.ResolveV1ExportOpt(oci.WithAllPlatforms(true))
 	case VariantDocker:
-		return &dockerexporter.DockerExporter{Name: name}, nil
+		return &dockerexporter.DockerExporter{Names: names}, nil
 	default:
 		return nil, errors.Errorf("invalid variant %q", variant)
 	}
+}
+
+func normalizedNames(name string) ([]string, error) {
+	if name == "" {
+		return nil, nil
+	}
+	names := strings.Split(name, ",")
+	var tagNames = make([]string, len(names))
+	for i, name := range names {
+		parsed, err := reference.ParseNormalizedNamed(name)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to parse %s", name)
+		}
+		tagNames[i] = reference.TagNameOnly(parsed).String()
+	}
+	return tagNames, nil
 }
