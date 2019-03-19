@@ -67,7 +67,7 @@ binaries() {
     --local context=. --local dockerfile=. \
     --frontend-opt filename=./hack/dockerfiles/test.buildkit.Dockerfile \
     --frontend-opt target=binaries $platformFlag \
-    --exporter=local --exporter-opt output=./bin/
+    --output type=local,dest=./bin/
 }
 
 case $buildmode in
