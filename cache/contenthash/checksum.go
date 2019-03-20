@@ -103,6 +103,7 @@ func (cm *cacheManager) GetCacheContext(ctx context.Context, md *metadata.Storag
 	cm.lruMu.Unlock()
 	if ok {
 		cm.locker.Unlock(md.ID())
+		v.(*cacheContext).linkMap = map[string][][]byte{}
 		return v.(*cacheContext), nil
 	}
 	cc, err := newCacheContext(md)
@@ -127,6 +128,7 @@ func (cm *cacheManager) SetCacheContext(ctx context.Context, md *metadata.Storag
 			md:       md,
 			tree:     cci.(*cacheContext).tree,
 			dirtyMap: map[string]struct{}{},
+			linkMap:  map[string][][]byte{},
 		}
 	} else {
 		if err := cc.save(); err != nil {
@@ -149,6 +151,7 @@ type cacheContext struct {
 	txn      *iradix.Txn
 	node     *iradix.Node
 	dirtyMap map[string]struct{}
+	linkMap  map[string][][]byte
 }
 
 type mount struct {
@@ -193,6 +196,7 @@ func newCacheContext(md *metadata.StorageItem) (*cacheContext, error) {
 		md:       md,
 		tree:     iradix.New(),
 		dirtyMap: map[string]struct{}{},
+		linkMap:  map[string][][]byte{},
 	}
 	if err := cc.load(); err != nil {
 		return nil, err
@@ -325,7 +329,35 @@ func (cc *cacheContext) HandleChange(kind fsutil.ChangeKind, p string, fi os.Fil
 		p += "/"
 	}
 	cr.Digest = h.Digest()
+
+	// if we receive a hardlink just use the digest of the source
+	// note that the source may be called later because data writing is async
+	if fi.Mode()&os.ModeSymlink == 0 && stat.Linkname != "" {
+		ln := path.Join("/", filepath.ToSlash(stat.Linkname))
+		v, ok := cc.txn.Get(convertPathToKey([]byte(ln)))
+		if ok {
+			cp := *v.(*CacheRecord)
+			cr = &cp
+		}
+		cc.linkMap[ln] = append(cc.linkMap[ln], k)
+	}
+
 	cc.txn.Insert(k, cr)
+	if !fi.IsDir() {
+		if links, ok := cc.linkMap[p]; ok {
+			for _, l := range links {
+				pp := convertKeyToPath(l)
+				cc.txn.Insert(l, cr)
+				d := path.Dir(string(pp))
+				if d == "/" {
+					d = ""
+				}
+				cc.dirtyMap[d] = struct{}{}
+			}
+			delete(cc.linkMap, p)
+		}
+	}
+
 	d := path.Dir(p)
 	if d == "/" {
 		d = ""
