@@ -2,6 +2,7 @@ package ops
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -12,6 +13,7 @@ import (
 )
 
 func TestMkdirMkfile(t *testing.T) {
+	t.Parallel()
 	fo := &pb.FileOp{
 		Actions: []*pb.FileAction{
 			{
@@ -55,6 +57,7 @@ func TestMkdirMkfile(t *testing.T) {
 }
 
 func TestChownOpt(t *testing.T) {
+	t.Parallel()
 	fo := &pb.FileOp{
 		Actions: []*pb.FileAction{
 			{
@@ -124,6 +127,7 @@ func TestChownOpt(t *testing.T) {
 }
 
 func TestChownCopy(t *testing.T) {
+	t.Parallel()
 	fo := &pb.FileOp{
 		Actions: []*pb.FileAction{
 			{
@@ -184,6 +188,7 @@ func TestChownCopy(t *testing.T) {
 }
 
 func TestInvalidNoOutput(t *testing.T) {
+	t.Parallel()
 	fo := &pb.FileOp{
 		Actions: []*pb.FileAction{
 			{
@@ -209,6 +214,7 @@ func TestInvalidNoOutput(t *testing.T) {
 }
 
 func TestInvalidDuplicateOutput(t *testing.T) {
+	t.Parallel()
 	fo := &pb.FileOp{
 		Actions: []*pb.FileAction{
 			{
@@ -245,6 +251,7 @@ func TestInvalidDuplicateOutput(t *testing.T) {
 }
 
 func TestActionInvalidIndex(t *testing.T) {
+	t.Parallel()
 	fo := &pb.FileOp{
 		Actions: []*pb.FileAction{
 			{
@@ -270,6 +277,7 @@ func TestActionInvalidIndex(t *testing.T) {
 }
 
 func TestActionLoop(t *testing.T) {
+	t.Parallel()
 	fo := &pb.FileOp{
 		Actions: []*pb.FileAction{
 			{
@@ -306,6 +314,7 @@ func TestActionLoop(t *testing.T) {
 }
 
 func TestMultiOutput(t *testing.T) {
+	t.Parallel()
 	fo := &pb.FileOp{
 		Actions: []*pb.FileAction{
 			{
@@ -354,6 +363,7 @@ func TestMultiOutput(t *testing.T) {
 }
 
 func TestFileFromScratch(t *testing.T) {
+	t.Parallel()
 	fo := &pb.FileOp{
 		Actions: []*pb.FileAction{
 			{
@@ -397,6 +407,7 @@ func TestFileFromScratch(t *testing.T) {
 }
 
 func TestFileCopyInputSrc(t *testing.T) {
+	t.Parallel()
 	fo := &pb.FileOp{
 		Actions: []*pb.FileAction{
 			{
@@ -428,6 +439,7 @@ func TestFileCopyInputSrc(t *testing.T) {
 }
 
 func TestFileCopyInputRm(t *testing.T) {
+	t.Parallel()
 	fo := &pb.FileOp{
 		Actions: []*pb.FileAction{
 			{
@@ -483,6 +495,7 @@ func TestFileCopyInputRm(t *testing.T) {
 }
 
 func TestFileParallelActions(t *testing.T) {
+	t.Parallel()
 	// two mkdirs from scratch copied over each other. mkdirs should happen in parallel
 	fo := &pb.FileOp{
 		Actions: []*pb.FileAction{
@@ -640,6 +653,7 @@ func (b *testFileBackend) Copy(_ context.Context, m1, m, user, group fileoptypes
 }
 
 type testFileRefBackend struct {
+	mu     sync.Mutex
 	refs   map[*testFileRef]struct{}
 	mounts map[string]*testMount
 }
@@ -663,7 +677,9 @@ func (b *testFileRefBackend) Prepare(ctx context.Context, ref fileoptypes.Ref, r
 	}
 	m.initID = m.id
 	m.active = active
+	b.mu.Lock()
 	b.mounts[m.initID] = m
+	b.mu.Unlock()
 	m2 := *m
 	m2.chain = append([]mod{}, m2.chain...)
 	return &m2, nil
