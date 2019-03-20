@@ -2,6 +2,7 @@ package ops
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -640,6 +641,7 @@ func (b *testFileBackend) Copy(_ context.Context, m1, m, user, group fileoptypes
 }
 
 type testFileRefBackend struct {
+	mu     sync.Mutex
 	refs   map[*testFileRef]struct{}
 	mounts map[string]*testMount
 }
@@ -663,7 +665,9 @@ func (b *testFileRefBackend) Prepare(ctx context.Context, ref fileoptypes.Ref, r
 	}
 	m.initID = m.id
 	m.active = active
+	b.mu.Lock()
 	b.mounts[m.initID] = m
+	b.mu.Unlock()
 	m2 := *m
 	m2.chain = append([]mod{}, m2.chain...)
 	return &m2, nil
