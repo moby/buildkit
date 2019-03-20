@@ -116,7 +116,7 @@ github.com/docker/cli/cli/config/types
 # github.com/docker/distribution v2.7.1-0.20190205005809-0d3efadf0154+incompatible
 github.com/docker/distribution/reference
 github.com/docker/distribution/digestset
-# github.com/docker/docker v0.7.3-0.20180531152204-71cd53e4a197
+# github.com/docker/docker v1.14.0-0.20190319215453-e7b5f7dbe98c
 github.com/docker/docker/pkg/locker
 github.com/docker/docker/pkg/reexec
 github.com/docker/docker/builder/dockerignore
