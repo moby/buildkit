@@ -66,7 +66,7 @@ imageDocker() {
 image() {
 	pushFlag=""
 	if [ "$PUSH" = "push" ]; then
-		pushFlag="--exporter-opt push=true"
+		pushFlag="push=true"
 	fi
 
 	tagLatest=""
@@ -82,16 +82,14 @@ image() {
 		--local context=. --local dockerfile=. \
 		--frontend-opt filename=./hack/dockerfiles/test.buildkit.Dockerfile \
 		--frontend-opt platform=$PLATFORMS \
-		--exporter image \
-		--exporter-opt name=$REPO:$TAG$tagLatest $pushFlag
+		--output type=image,name=$REPO:$TAG$tagLatest,$pushFlag
 
 	buildctl build $progressFlag --frontend=dockerfile.v0 \
 		--local context=. --local dockerfile=. \
 		--frontend-opt target=rootless \
 		--frontend-opt filename=./hack/dockerfiles/test.buildkit.Dockerfile \
 		--frontend-opt platform=$PLATFORMS \
-		--exporter image \
-		--exporter-opt name=$REPO:$TAG-rootless$tagLatestRootless $pushFlag
+		--output type=image,name=$REPO:$TAG-rootless$tagLatestRootless,$pushFlag
 }
 
 case $buildmode in

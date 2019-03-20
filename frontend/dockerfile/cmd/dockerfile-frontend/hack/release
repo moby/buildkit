@@ -63,7 +63,7 @@ PUSH=$4
 
 pushFlag=""
 if [ "$PUSH" = "push" ]; then
-  pushFlag="--exporter-opt push=true"
+  pushFlag="push=true"
 fi
 
 case $TYP in
@@ -85,8 +85,7 @@ case $TYP in
     --frontend-opt platform=$PLATFORMS \
     --frontend-opt "build-arg:CHANNEL=$TAG" \
     --frontend-opt "build-arg:BUILDTAGS=$buildTags" \
-    --exporter image \
-    --exporter-opt name=$REPO:$pushTag $pushFlag
+    --output type=image,name=$REPO:$pushTag,$pushFlag
   ;;
 "tag")
   publishedNames=""
@@ -105,8 +104,7 @@ case $TYP in
     --frontend-opt platform=$PLATFORMS \
     --frontend-opt "build-arg:CHANNEL=$TAG" \
     --frontend-opt "build-arg:BUILDTAGS=$buildTags" \
-    --exporter image \
-    --exporter-opt name=$publishedNames $pushFlag
+    --output type=image,name=$publishedNames,$pushFlag
   ;;
 "daily")
   if [ -z $DAILY_TARGETS ]; then
@@ -136,7 +134,7 @@ case $TYP in
       --frontend-opt "build-arg:DATE=$dt" \
       --frontend-opt "build-arg:BUILDTAGS=$buildTags" \
       --frontend-opt target=buildid\
-      --exporter=local --exporter-opt=output=$tmp
+      --output type=local,dest=$tmp
     
     if [ -f $tmp/buildid ]; then
       buildid=$(cat $tmp/buildid)
@@ -148,8 +146,7 @@ case $TYP in
         --frontend-opt platform=$PLATFORMS \
         --frontend-opt "build-arg:CHANNEL=$TAG" \
         --frontend-opt "build-arg:BUILDTAGS=$buildTags" \
-        --exporter image \
-        --exporter-opt name=$REPO:$dt-$TAG $pushFlag
+        --output type=image,name=$REPO:$dt-$TAG,$pushFlag
       rm $tmp/buildid
     fi
     rm -r $tmp
