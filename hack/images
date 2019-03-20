@@ -80,15 +80,15 @@ image() {
 
 	buildctl build $progressFlag --frontend=dockerfile.v0 \
 		--local context=. --local dockerfile=. \
-		--frontend-opt filename=./hack/dockerfiles/test.buildkit.Dockerfile \
-		--frontend-opt platform=$PLATFORMS \
+		--opt filename=./hack/dockerfiles/test.buildkit.Dockerfile \
+		--opt platform=$PLATFORMS \
 		--output type=image,name=$REPO:$TAG$tagLatest,$pushFlag
 
 	buildctl build $progressFlag --frontend=dockerfile.v0 \
 		--local context=. --local dockerfile=. \
-		--frontend-opt target=rootless \
-		--frontend-opt filename=./hack/dockerfiles/test.buildkit.Dockerfile \
-		--frontend-opt platform=$PLATFORMS \
+		--opt target=rootless \
+		--opt filename=./hack/dockerfiles/test.buildkit.Dockerfile \
+		--opt platform=$PLATFORMS \
 		--output type=image,name=$REPO:$TAG-rootless$tagLatestRootless,$pushFlag
 }
 

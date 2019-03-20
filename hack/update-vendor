@@ -12,8 +12,8 @@ case $buildmode in
 "buildkit")
    output=$(mktemp -d -t buildctl-output.XXXXXXXXXX)
   buildctl build $progressFlag --frontend=dockerfile.v0 --local context=. --local dockerfile=. \
-    --frontend-opt target=update \
-    --frontend-opt filename=./hack/dockerfiles/vendor.buildkit.Dockerfile \
+    --opt target=update \
+    --opt filename=./hack/dockerfiles/vendor.buildkit.Dockerfile \
     --output type=local,dest=$output
   rm -rf ./vendor
   cp -R "$output/out/" .

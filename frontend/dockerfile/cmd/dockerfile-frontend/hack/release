@@ -81,10 +81,10 @@ case $TYP in
   set -x
   buildctl build $progressFlag --frontend=dockerfile.v0 \
     --local context=. --local dockerfile=. \
-    --frontend-opt filename=./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile \
-    --frontend-opt platform=$PLATFORMS \
-    --frontend-opt "build-arg:CHANNEL=$TAG" \
-    --frontend-opt "build-arg:BUILDTAGS=$buildTags" \
+    --opt filename=./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile \
+    --opt platform=$PLATFORMS \
+    --opt "build-arg:CHANNEL=$TAG" \
+    --opt "build-arg:BUILDTAGS=$buildTags" \
     --output type=image,name=$REPO:$pushTag,$pushFlag
   ;;
 "tag")
@@ -100,10 +100,10 @@ case $TYP in
   set -x
   buildctl build $progressFlag --frontend=dockerfile.v0 \
     --local context=. --local dockerfile=. \
-    --frontend-opt filename=./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile \
-    --frontend-opt platform=$PLATFORMS \
-    --frontend-opt "build-arg:CHANNEL=$TAG" \
-    --frontend-opt "build-arg:BUILDTAGS=$buildTags" \
+    --opt filename=./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile \
+    --opt platform=$PLATFORMS \
+    --opt "build-arg:CHANNEL=$TAG" \
+    --opt "build-arg:BUILDTAGS=$buildTags" \
     --output type=image,name=$publishedNames,$pushFlag
   ;;
 "daily")
@@ -128,12 +128,12 @@ case $TYP in
     dt=$(date +%Y%m%d)
     buildctl build $progressFlag --progress=plain --frontend=dockerfile.v0 \
       --local context=. --local dockerfile=. \
-      --frontend-opt filename=./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile \
-      --frontend-opt "build-arg:CHANNEL=$TAG" \
-      --frontend-opt "build-arg:REPO=$REPO" \
-      --frontend-opt "build-arg:DATE=$dt" \
-      --frontend-opt "build-arg:BUILDTAGS=$buildTags" \
-      --frontend-opt target=buildid\
+      --opt filename=./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile \
+      --opt "build-arg:CHANNEL=$TAG" \
+      --opt "build-arg:REPO=$REPO" \
+      --opt "build-arg:DATE=$dt" \
+      --opt "build-arg:BUILDTAGS=$buildTags" \
+      --opt target=buildid\
       --output type=local,dest=$tmp
     
     if [ -f $tmp/buildid ]; then
@@ -142,10 +142,10 @@ case $TYP in
       
       buildctl build $progressFlag --frontend=dockerfile.v0 \
         --local context=. --local dockerfile=. \
-        --frontend-opt filename=./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile \
-        --frontend-opt platform=$PLATFORMS \
-        --frontend-opt "build-arg:CHANNEL=$TAG" \
-        --frontend-opt "build-arg:BUILDTAGS=$buildTags" \
+        --opt filename=./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile \
+        --opt platform=$PLATFORMS \
+        --opt "build-arg:CHANNEL=$TAG" \
+        --opt "build-arg:BUILDTAGS=$buildTags" \
         --output type=image,name=$REPO:$dt-$TAG,$pushFlag
       rm $tmp/buildid
     fi
