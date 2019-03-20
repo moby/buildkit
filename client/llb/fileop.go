@@ -642,6 +642,8 @@ func (f *FileOp) Marshal(c *Constraints) (digest.Digest, []byte, *pb.OpMetadata,
 		return "", nil, nil, err
 	}
 
+	addCap(&f.constraints, pb.CapFileBase)
+
 	pfo := &pb.FileOp{}
 
 	pop, md := MarshalConstraints(c, &f.constraints)
