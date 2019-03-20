@@ -64,6 +64,9 @@ type OCIConfig struct {
 	Rootless         bool              `toml:"rootless"`
 	NoProcessSandbox bool              `toml:"noProcessSandbox"`
 	GCConfig
+	// UserRemapUnsupported is unsupported key for testing. The feature is
+	// incomplete and the intention is to make it default without config.
+	UserRemapUnsupported string `toml:"userRemapUnsupported"`
 }
 
 type ContainerdConfig struct {

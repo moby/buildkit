@@ -14,6 +14,7 @@ import (
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/rootfs"
 	cdsnapshot "github.com/containerd/containerd/snapshots"
+	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/blobs"
 	"github.com/moby/buildkit/cache/metadata"
@@ -70,6 +71,7 @@ type WorkerOpt struct {
 	Differ             diff.Comparer
 	ImageStore         images.Store // optional
 	ResolveOptionsFunc resolver.ResolveOptionsFunc
+	IdentityMapping    *idtools.IdentityMapping
 }
 
 // Worker is a local worker instance with dedicated snapshotter, cache, and so on.

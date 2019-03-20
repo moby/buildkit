@@ -12,6 +12,7 @@ import (
 	ctdmetadata "github.com/containerd/containerd/metadata"
 	"github.com/containerd/containerd/platforms"
 	ctdsnapshot "github.com/containerd/containerd/snapshots"
+	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/executor/oci"
 	"github.com/moby/buildkit/executor/runcexecutor"
@@ -32,7 +33,7 @@ type SnapshotterFactory struct {
 }
 
 // NewWorkerOpt creates a WorkerOpt.
-func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, processMode oci.ProcessMode, labels map[string]string) (base.WorkerOpt, error) {
+func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, processMode oci.ProcessMode, labels map[string]string, idmap *idtools.IdentityMapping) (base.WorkerOpt, error) {
 	var opt base.WorkerOpt
 	name := "runc-" + snFactory.Name
 	root = filepath.Join(root, name)
@@ -97,16 +98,17 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		xlabels[k] = v
 	}
 	opt = base.WorkerOpt{
-		ID:            id,
-		Labels:        xlabels,
-		MetadataStore: md,
-		Executor:      exe,
-		Snapshotter:   containerdsnapshot.NewSnapshotter(mdb.Snapshotter(snFactory.Name), c, md, "buildkit", gc),
-		ContentStore:  c,
-		Applier:       winlayers.NewFileSystemApplierWithWindows(c, apply.NewFileSystemApplier(c)),
-		Differ:        winlayers.NewWalkingDiffWithWindows(c, walking.NewWalkingDiff(c)),
-		ImageStore:    nil, // explicitly
-		Platforms:     []specs.Platform{platforms.Normalize(platforms.DefaultSpec())},
+		ID:              id,
+		Labels:          xlabels,
+		MetadataStore:   md,
+		Executor:        exe,
+		Snapshotter:     containerdsnapshot.NewSnapshotter(mdb.Snapshotter(snFactory.Name), c, md, "buildkit", gc, idmap),
+		ContentStore:    c,
+		Applier:         winlayers.NewFileSystemApplierWithWindows(c, apply.NewFileSystemApplier(c)),
+		Differ:          winlayers.NewWalkingDiffWithWindows(c, walking.NewWalkingDiff(c)),
+		ImageStore:      nil, // explicitly
+		Platforms:       []specs.Platform{platforms.Normalize(platforms.DefaultSpec())},
+		IdentityMapping: idmap,
 	}
 	return opt, nil
 }
