@@ -13,6 +13,7 @@ import (
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/oci"
 	"github.com/containerd/continuity/fs"
+	"github.com/docker/docker/pkg/idtools"
 	"github.com/mitchellh/hashstructure"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/snapshot"
@@ -40,7 +41,7 @@ const (
 
 // GenerateSpec generates spec using containerd functionality.
 // opts are ignored for s.Process, s.Hostname, and s.Mounts .
-func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mount, id, resolvConf, hostsFile string, namespace network.Namespace, processMode ProcessMode, opts ...oci.SpecOpts) (*specs.Spec, func(), error) {
+func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mount, id, resolvConf, hostsFile string, namespace network.Namespace, processMode ProcessMode, idmap *idtools.IdentityMapping, opts ...oci.SpecOpts) (*specs.Spec, func(), error) {
 	c := &containers.Container{
 		ID: id,
 	}
@@ -102,7 +103,14 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 			}
 		}
 	}
-	// TODO: User
+
+	if idmap != nil {
+		s.Linux.Namespaces = append(s.Linux.Namespaces, specs.LinuxNamespace{
+			Type: specs.UserNamespace,
+		})
+		s.Linux.UIDMappings = specMapping(idmap.UIDs())
+		s.Linux.GIDMappings = specMapping(idmap.GIDs())
+	}
 
 	sm := &submounts{}
 
@@ -226,4 +234,16 @@ func sub(m mount.Mount, subPath string) (mount.Mount, error) {
 	}
 	m.Source = src
 	return m, nil
+}
+
+func specMapping(s []idtools.IDMap) []specs.LinuxIDMapping {
+	var ids []specs.LinuxIDMapping
+	for _, item := range s {
+		ids = append(ids, specs.LinuxIDMapping{
+			HostID:      uint32(item.HostID),
+			ContainerID: uint32(item.ContainerID),
+			Size:        uint32(item.Size),
+		})
+	}
+	return ids
 }

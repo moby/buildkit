@@ -48,8 +48,9 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		// Root directory
 		Root: filepath.Join(root, "executor"),
 		// without root privileges
-		Rootless:    rootless,
-		ProcessMode: processMode,
+		Rootless:        rootless,
+		ProcessMode:     processMode,
+		IdentityMapping: idmap,
 	}, network.Default())
 	if err != nil {
 		return opt, err

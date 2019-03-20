@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"hash"
 	"time"
 
+	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/contenthash"
 	"github.com/moby/buildkit/cache/metadata"
@@ -19,6 +21,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/tonistiigi/fsutil"
+	fstypes "github.com/tonistiigi/fsutil/types"
 	bolt "go.etcd.io/bbolt"
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc/codes"
@@ -153,7 +156,7 @@ func (ls *localSourceHandler) Snapshot(ctx context.Context) (out cache.Immutable
 		}
 	}()
 
-	cc, err := contenthash.GetCacheContext(ctx, mutable.Metadata())
+	cc, err := contenthash.GetCacheContext(ctx, mutable.Metadata(), mount.IdentityMapping())
 	if err != nil {
 		return nil, err
 	}
@@ -165,8 +168,23 @@ func (ls *localSourceHandler) Snapshot(ctx context.Context) (out cache.Immutable
 		FollowPaths:      ls.src.FollowPaths,
 		OverrideExcludes: false,
 		DestDir:          dest,
-		CacheUpdater:     &cacheUpdater{cc},
+		CacheUpdater:     &cacheUpdater{cc, mount.IdentityMapping()},
 		ProgressCb:       newProgressHandler(ctx, "transferring "+ls.src.Name+":"),
+	}
+
+	if idmap := mount.IdentityMapping(); idmap != nil {
+		opt.Filter = func(_ string, stat *fstypes.Stat) bool {
+			uid, gid, err := idmap.ToContainer(idtools.Identity{
+				UID: int(stat.Uid),
+				GID: int(stat.Gid),
+			})
+			if err != nil {
+				return false
+			}
+			stat.Uid = uint32(uid)
+			stat.Gid = uint32(gid)
+			return true
+		}
 	}
 
 	if err := filesync.FSSync(ctx, caller, opt); err != nil {
@@ -245,11 +263,27 @@ func newProgressHandler(ctx context.Context, id string) func(int, bool) {
 
 type cacheUpdater struct {
 	contenthash.CacheContext
+	idmap *idtools.IdentityMapping
 }
 
 func (cu *cacheUpdater) MarkSupported(bool) {
 }
 
 func (cu *cacheUpdater) ContentHasher() fsutil.ContentHasher {
+	if cu.idmap != nil {
+		return func(stat *fstypes.Stat) (hash.Hash, error) {
+			s := *stat
+			id, err := cu.idmap.ToHost(idtools.Identity{
+				UID: int(stat.Uid),
+				GID: int(stat.Gid),
+			})
+			if err != nil {
+				return nil, err
+			}
+			s.Uid = uint32(id.UID)
+			s.Gid = uint32(id.GID)
+			return contenthash.NewFromStat(&s)
+		}
+	}
 	return contenthash.NewFromStat
 }
