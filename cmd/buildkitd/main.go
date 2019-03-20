@@ -92,7 +92,11 @@ func main() {
 	app.Usage = "build daemon"
 	app.Version = version.Version
 
-	defaultConf, md := defaultConf()
+	defaultConf, md, err := defaultConf()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%+v\n", err)
+		os.Exit(1)
+	}
 
 	rootlessUsage := "set all the default options to be compatible with rootless containers"
 	if system.RunningInUserNS() {
@@ -289,14 +293,17 @@ func defaultConfigPath() string {
 	return filepath.Join(appdefaults.ConfigDir, "buildkitd.toml")
 }
 
-func defaultConf() (config.Config, *toml.MetaData) {
+func defaultConf() (config.Config, *toml.MetaData, error) {
 	cfg, md, err := config.LoadFile(defaultConfigPath())
 	if err != nil {
-		return cfg, nil
+		if _, ok := errors.Cause(err).(*os.PathError); !ok {
+			return config.Config{}, nil, err
+		}
+		return cfg, nil, nil
 	}
 	setDefaultConfig(&cfg)
 
-	return cfg, md
+	return cfg, md, nil
 }
 
 func setDefaultConfig(cfg *config.Config) {
