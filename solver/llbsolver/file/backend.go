@@ -34,14 +34,14 @@ func mapUser(user *copy.ChownOpt, idmap *idtools.IdentityMapping) (*copy.ChownOp
 		identity := idmap.RootPair()
 		return &copy.ChownOpt{Uid: identity.UID, Gid: identity.GID}, nil
 	}
-	uid, gid, err := idmap.ToContainer(idtools.Identity{
+	identity, err := idmap.ToHost(idtools.Identity{
 		UID: user.Uid,
 		GID: user.Gid,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &copy.ChownOpt{Uid: uid, Gid: gid}, nil
+	return &copy.ChownOpt{Uid: identity.UID, Gid: identity.GID}, nil
 }
 
 func mkdir(ctx context.Context, d string, action pb.FileActionMkDir, user *copy.ChownOpt, idmap *idtools.IdentityMapping) error {

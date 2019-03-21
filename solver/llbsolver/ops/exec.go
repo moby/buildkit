@@ -356,14 +356,15 @@ func (sm *sshMountInstance) Mount() ([]mount.Mount, error) {
 	gid := int(sm.sm.mount.SSHOpt.Gid)
 
 	if sm.idmap != nil {
-		var err error
-		uid, gid, err = sm.idmap.ToContainer(idtools.Identity{
+		identity, err := sm.idmap.ToHost(idtools.Identity{
 			UID: uid,
 			GID: gid,
 		})
 		if err != nil {
 			return nil, err
 		}
+		uid = identity.UID
+		gid = identity.GID
 	}
 
 	sock, cleanup, err := sshforward.MountSSHSocket(ctx, sm.sm.caller, sshforward.SocketOpt{
@@ -492,14 +493,15 @@ func (sm *secretMountInstance) Mount() ([]mount.Mount, error) {
 	gid := int(sm.sm.mount.SecretOpt.Gid)
 
 	if sm.idmap != nil {
-		var err error
-		uid, gid, err = sm.idmap.ToContainer(idtools.Identity{
+		identity, err := sm.idmap.ToHost(idtools.Identity{
 			UID: uid,
 			GID: gid,
 		})
 		if err != nil {
 			return nil, err
 		}
+		uid = identity.UID
+		gid = identity.GID
 	}
 
 	if err := os.Chown(fp, uid, gid); err != nil {

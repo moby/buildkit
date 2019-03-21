@@ -282,14 +282,15 @@ func (hs *httpSourceHandler) save(ctx context.Context, resp *http.Response) (ref
 	uid := hs.src.UID
 	gid := hs.src.GID
 	if idmap := mount.IdentityMapping(); idmap != nil {
-		var err error
-		uid, gid, err = idmap.ToContainer(idtools.Identity{
+		identity, err := idmap.ToHost(idtools.Identity{
 			UID: int(uid),
 			GID: int(gid),
 		})
 		if err != nil {
 			return nil, "", err
 		}
+		uid = identity.UID
+		gid = identity.GID
 	}
 
 	if gid != 0 || uid != 0 {

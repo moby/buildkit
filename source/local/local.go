@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"hash"
 	"time"
 
 	"github.com/docker/docker/pkg/idtools"
@@ -173,16 +172,16 @@ func (ls *localSourceHandler) Snapshot(ctx context.Context) (out cache.Immutable
 	}
 
 	if idmap := mount.IdentityMapping(); idmap != nil {
-		opt.Filter = func(_ string, stat *fstypes.Stat) bool {
-			uid, gid, err := idmap.ToContainer(idtools.Identity{
+		opt.Filter = func(p string, stat *fstypes.Stat) bool {
+			identity, err := idmap.ToHost(idtools.Identity{
 				UID: int(stat.Uid),
 				GID: int(stat.Gid),
 			})
 			if err != nil {
 				return false
 			}
-			stat.Uid = uint32(uid)
-			stat.Gid = uint32(gid)
+			stat.Uid = uint32(identity.UID)
+			stat.Gid = uint32(identity.GID)
 			return true
 		}
 	}
@@ -270,20 +269,5 @@ func (cu *cacheUpdater) MarkSupported(bool) {
 }
 
 func (cu *cacheUpdater) ContentHasher() fsutil.ContentHasher {
-	if cu.idmap != nil {
-		return func(stat *fstypes.Stat) (hash.Hash, error) {
-			s := *stat
-			id, err := cu.idmap.ToHost(idtools.Identity{
-				UID: int(stat.Uid),
-				GID: int(stat.Gid),
-			})
-			if err != nil {
-				return nil, err
-			}
-			s.Uid = uint32(id.UID)
-			s.Gid = uint32(id.GID)
-			return contenthash.NewFromStat(&s)
-		}
-	}
 	return contenthash.NewFromStat
 }
