@@ -19,6 +19,7 @@ import (
 	"github.com/moby/buildkit/util/resolver"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -40,7 +41,7 @@ func getCredentialsFunc(ctx context.Context, sm *session.Manager) func(string) (
 	}
 }
 
-func Push(ctx context.Context, sm *session.Manager, cs content.Provider, dgst digest.Digest, ref string, insecure bool, rfn resolver.ResolveOptionsFunc) error {
+func Push(ctx context.Context, sm *session.Manager, cs content.Provider, dgst digest.Digest, ref string, insecure bool, rfn resolver.ResolveOptionsFunc, byDigest bool) error {
 	desc := ocispec.Descriptor{
 		Digest: dgst,
 	}
@@ -48,7 +49,15 @@ func Push(ctx context.Context, sm *session.Manager, cs content.Provider, dgst di
 	if err != nil {
 		return err
 	}
-	ref = reference.TagNameOnly(parsed).String()
+	if byDigest && !reference.IsNameOnly(parsed) {
+		return errors.Errorf("can't push tagged ref %s by digest", parsed.String())
+	}
+
+	if byDigest {
+		ref = parsed.Name()
+	} else {
+		ref = reference.TagNameOnly(parsed).String()
+	}
 
 	opt := rfn(ref)
 	opt.Credentials = getCredentialsFunc(ctx, sm)

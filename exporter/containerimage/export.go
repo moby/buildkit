@@ -16,10 +16,11 @@ import (
 )
 
 const (
-	keyImageName = "name"
-	keyPush      = "push"
-	keyInsecure  = "registry.insecure"
-	ociTypes     = "oci-mediatypes"
+	keyImageName    = "name"
+	keyPush         = "push"
+	keyPushByDigest = "push-by-digest"
+	keyInsecure     = "registry.insecure"
+	ociTypes        = "oci-mediatypes"
 )
 
 type Opt struct {
@@ -58,6 +59,16 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
 			}
 			i.push = b
+		case keyPushByDigest:
+			if v == "" {
+				i.pushByDigest = true
+				continue
+			}
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
+			}
+			i.pushByDigest = b
 		case keyInsecure:
 			if v == "" {
 				i.insecure = true
@@ -90,11 +101,12 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 
 type imageExporterInstance struct {
 	*imageExporter
-	targetName string
-	push       bool
-	insecure   bool
-	ociTypes   bool
-	meta       map[string][]byte
+	targetName   string
+	push         bool
+	pushByDigest bool
+	insecure     bool
+	ociTypes     bool
+	meta         map[string][]byte
 }
 
 func (e *imageExporterInstance) Name() string {
@@ -146,7 +158,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 				tagDone(nil)
 			}
 			if e.push {
-				if err := push.Push(ctx, e.opt.SessionManager, e.opt.ImageWriter.ContentStore(), desc.Digest, targetName, e.insecure, e.opt.ResolverOpt); err != nil {
+				if err := push.Push(ctx, e.opt.SessionManager, e.opt.ImageWriter.ContentStore(), desc.Digest, targetName, e.insecure, e.opt.ResolverOpt, e.pushByDigest); err != nil {
 					return nil, err
 				}
 			}
