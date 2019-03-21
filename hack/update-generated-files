@@ -13,9 +13,9 @@ case $buildmode in
 "buildkit")
   output=$(mktemp -d -t buildctl-output.XXXXXXXXXX)
   buildctl build $progressFlag --frontend=dockerfile.v0 --local context=. --local dockerfile=. \
-    --frontend-opt build-arg:GOGO_VERSION=$gogo_version \
-    --frontend-opt target=update \
-    --frontend-opt filename=./hack/dockerfiles/generated-files.buildkit.Dockerfile \
+    --opt build-arg:GOGO_VERSION=$gogo_version \
+    --opt target=update \
+    --opt filename=./hack/dockerfiles/generated-files.buildkit.Dockerfile \
     --output type=local,dest=$output
   cp -R "$output/generated-files/" .
   rm -rf $output

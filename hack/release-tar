@@ -26,8 +26,8 @@ set -x
 
 buildctl build $progressFlag --frontend=dockerfile.v0 \
   --local context=. --local dockerfile=. \
-  --frontend-opt filename=./hack/dockerfiles/test.buildkit.Dockerfile \
-  --frontend-opt target=release \
-  --frontend-opt platform=$PLATFORMS \
+  --opt filename=./hack/dockerfiles/test.buildkit.Dockerfile \
+  --opt target=release \
+  --opt platform=$PLATFORMS \
   --exporter local \
   --exporter-opt output=$OUT

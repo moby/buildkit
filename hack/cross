@@ -6,4 +6,4 @@
 
 set -ex
 
-buildctl build --progress=plain --frontend=dockerfile.v0 --local context=. --local dockerfile=. --frontend-opt filename=./hack/dockerfiles/test.buildkit.Dockerfile --frontend-opt platform=$PLATFORMS
+buildctl build --progress=plain --frontend=dockerfile.v0 --local context=. --local dockerfile=. --opt filename=./hack/dockerfiles/test.buildkit.Dockerfile --opt platform=$PLATFORMS

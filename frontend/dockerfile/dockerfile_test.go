@@ -3741,7 +3741,7 @@ func (f *gatewayFrontend) Solve(ctx context.Context, c *client.Client, opt clien
 }
 
 func (f *gatewayFrontend) DFCmdArgs(ctx, dockerfile string) (string, string) {
-	return dfCmdArgs(ctx, dockerfile, "--frontend gateway.v0 --frontend-opt=source="+f.gw)
+	return dfCmdArgs(ctx, dockerfile, "--frontend gateway.v0 --opt=source="+f.gw)
 }
 
 func (f *gatewayFrontend) RequiresBuildctl(t *testing.T) {}

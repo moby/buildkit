@@ -61,12 +61,12 @@ binariesDocker() {
 binaries() {
   platformFlag=""
   if [ ! -z "$TARGETPLATFORM" ]; then
-    platformFlag="--frontend-opt=platform=$TARGETPLATFORM"
+    platformFlag="--opt platform=$TARGETPLATFORM"
   fi
   buildctl build $progressFlag --frontend=dockerfile.v0 \
     --local context=. --local dockerfile=. \
-    --frontend-opt filename=./hack/dockerfiles/test.buildkit.Dockerfile \
-    --frontend-opt target=binaries $platformFlag \
+    --opt filename=./hack/dockerfiles/test.buildkit.Dockerfile \
+    --opt target=binaries $platformFlag \
     --output type=local,dest=./bin/
 }
 

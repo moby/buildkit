@@ -42,8 +42,8 @@ case $buildmode in
 "buildkit")
   tmpfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
   buildctl build $progressFlag --frontend=dockerfile.v0 --local context=. --local dockerfile=. \
-    --frontend-opt target=integration-tests \
-    --frontend-opt filename=./hack/dockerfiles/test.buildkit.Dockerfile \
+    --opt target=integration-tests \
+    --opt filename=./hack/dockerfiles/test.buildkit.Dockerfile \
     --output type=docker,name=$iid,dest=$tmpfile
   docker load -i $tmpfile
   rm $tmpfile
@@ -86,8 +86,8 @@ if [ "$TEST_DOCKERFILE" == 1 ]; then
     case $buildmode in
     "buildkit")
       buildctl build $progressFlag --frontend=dockerfile.v0 --local context=. --local dockerfile=. \
-        --frontend-opt filename=./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile \
-        --frontend-opt build-arg:BUILDTAGS="$buildtags" \
+        --opt filename=./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile \
+        --opt build-arg:BUILDTAGS="$buildtags" \
         --output type=oci,dest=$tarout
       ;;
     "docker-buildkit")

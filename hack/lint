@@ -24,7 +24,7 @@ lintDocker() {
 lint() {
   buildctl build $progressFlag --frontend=dockerfile.v0 \
     --local context=. --local dockerfile=. \
-    --frontend-opt filename=./hack/dockerfiles/lint.buildkit.Dockerfile
+    --opt filename=./hack/dockerfiles/lint.buildkit.Dockerfile
 }
 
 case $buildmode in

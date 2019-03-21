@@ -13,7 +13,7 @@ case ${1:-} in
   . $(dirname $0)/util
   case $buildmode in
   "buildkit")
-    buildctl build $progressFlag --frontend=dockerfile.v0 --local context=. --local dockerfile=. --frontend-opt filename=./hack/dockerfiles/vendor.buildkit.Dockerfile --frontend-opt target=validate
+    buildctl build $progressFlag --frontend=dockerfile.v0 --local context=. --local dockerfile=. --opt filename=./hack/dockerfiles/vendor.buildkit.Dockerfile --opt target=validate
     ;;
   "docker-buildkit")
     export DOCKER_BUILDKIT=1
