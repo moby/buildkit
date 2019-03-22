@@ -1,6 +1,6 @@
 # github.com/BurntSushi/toml v0.3.1
 github.com/BurntSushi/toml
-# github.com/Microsoft/go-winio v0.4.11
+# github.com/Microsoft/go-winio v0.4.12
 github.com/Microsoft/go-winio
 # github.com/Microsoft/hcsshim v0.8.5
 github.com/Microsoft/hcsshim
@@ -24,7 +24,7 @@ github.com/apache/thrift/lib/go/thrift
 github.com/codahale/hdrhistogram
 # github.com/containerd/console v0.0.0-20180822173158-c12b1e7919c1
 github.com/containerd/console
-# github.com/containerd/containerd v1.3.0-0.20190212172151-f5b0fa220df8
+# github.com/containerd/containerd v1.3.0-0.20190321141026-ceba56893a76
 github.com/containerd/containerd/filters
 github.com/containerd/containerd/mount
 github.com/containerd/containerd/snapshots
@@ -49,7 +49,7 @@ github.com/containerd/containerd/errdefs
 github.com/containerd/containerd/images/oci
 github.com/containerd/containerd/api/services/content/v1
 github.com/containerd/containerd/content/proxy
-github.com/containerd/containerd/services/content
+github.com/containerd/containerd/services/content/contentserver
 github.com/containerd/containerd/reference
 github.com/containerd/containerd/remotes/docker/schema1
 github.com/containerd/containerd/rootfs
@@ -61,6 +61,7 @@ github.com/containerd/containerd/api/services/introspection/v1
 github.com/containerd/containerd/diff/apply
 github.com/containerd/containerd/diff/walking
 github.com/containerd/containerd/metadata
+github.com/containerd/containerd/labels
 github.com/containerd/containerd/version
 github.com/containerd/containerd/api/services/containers/v1
 github.com/containerd/containerd/api/services/diff/v1
@@ -82,11 +83,8 @@ github.com/containerd/containerd/runtime/linux/runctypes
 github.com/containerd/containerd/runtime/v2/runc/options
 github.com/containerd/containerd/snapshots/proxy
 github.com/containerd/containerd/snapshots/storage
-github.com/containerd/containerd/api/events
-github.com/containerd/containerd/services
 github.com/containerd/containerd/gc
 github.com/containerd/containerd/identifiers
-github.com/containerd/containerd/labels
 github.com/containerd/containerd/metadata/boltutil
 github.com/containerd/containerd/api/types/task
 github.com/containerd/containerd/events/exchange
@@ -180,6 +178,8 @@ github.com/hashicorp/go-immutable-radix
 github.com/hashicorp/golang-lru/simplelru
 # github.com/ishidawataru/sctp v0.0.0-20180213033435-07191f837fed
 github.com/ishidawataru/sctp
+# github.com/konsorten/go-windows-terminal-sequences v1.0.1
+github.com/konsorten/go-windows-terminal-sequences
 # github.com/mitchellh/hashstructure v0.0.0-20170609045927-2bca23e0e452
 github.com/mitchellh/hashstructure
 # github.com/morikuni/aec v0.0.0-20170113033406-39771216ff4c
@@ -190,7 +190,7 @@ github.com/opencontainers/go-digest
 github.com/opencontainers/image-spec/specs-go/v1
 github.com/opencontainers/image-spec/specs-go
 github.com/opencontainers/image-spec/identity
-# github.com/opencontainers/runc v1.0.1-0.20190115041553-12f6a991201f
+# github.com/opencontainers/runc v1.0.1-0.20190307181833-2b18fe1d885e
 github.com/opencontainers/runc/libcontainer/system
 github.com/opencontainers/runc/libcontainer/user
 # github.com/opencontainers/runtime-spec v0.0.0-20180909173843-eba862dc2470
@@ -207,7 +207,7 @@ github.com/pkg/errors
 github.com/pkg/profile
 # github.com/pmezard/go-difflib v1.0.0
 github.com/pmezard/go-difflib/difflib
-# github.com/sirupsen/logrus v1.0.3
+# github.com/sirupsen/logrus v1.3.0
 github.com/sirupsen/logrus
 # github.com/stretchr/testify v1.3.0
 github.com/stretchr/testify/require
@@ -234,7 +234,7 @@ github.com/uber/jaeger-client-go/thrift-gen/agent
 github.com/uber/jaeger-lib/metrics
 # github.com/urfave/cli v0.0.0-20171014202726-7bc6a0acffa5
 github.com/urfave/cli
-# go.etcd.io/bbolt v1.3.1-etcd.8
+# go.etcd.io/bbolt v1.3.2
 go.etcd.io/bbolt
 # golang.org/x/crypto v0.0.0-20190129210102-ccddf3741a0c
 golang.org/x/crypto/ssh
@@ -260,7 +260,7 @@ golang.org/x/net/internal/socks
 # golang.org/x/sync v0.0.0-20180314180146-1d60e4601c6f
 golang.org/x/sync/errgroup
 golang.org/x/sync/semaphore
-# golang.org/x/sys v0.0.0-20180909124046-d0be0721c37e
+# golang.org/x/sys v0.0.0-20190303122642-d455e41777fc
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 # golang.org/x/text v0.3.0
