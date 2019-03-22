@@ -78,6 +78,7 @@ var allTests = []integration.Test{
 	testDockerfileAddArchiveWildcard,
 	testCopyChownExistingDir,
 	testCopyWildcardCache,
+	testDockerignoreOverride,
 }
 
 var fileOpTests = []integration.Test{
@@ -136,6 +137,63 @@ func TestIntegration(t *testing.T) {
 		"true":  true,
 		"false": false,
 	}))...)
+}
+
+func testDockerignoreOverride(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+	dockerfile := []byte(`
+FROM busybox
+COPY . .
+RUN [ -f foo ] && [ ! -f bar ]
+`)
+
+	ignore := []byte(`
+bar
+`)
+
+	dockerfile2 := []byte(`
+FROM busybox
+COPY . .
+RUN [ ! -f foo ] && [ -f bar ]
+`)
+
+	ignore2 := []byte(`
+foo
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("Dockerfile.dockerignore", ignore, 0600),
+		fstest.CreateFile("Dockerfile2", dockerfile2, 0600),
+		fstest.CreateFile("Dockerfile2.dockerignore", ignore2, 0600),
+		fstest.CreateFile("foo", []byte("contents0"), 0600),
+		fstest.CreateFile("bar", []byte("contents0"), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"filename": "Dockerfile2",
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
 }
 
 func testEmptyDestDir(t *testing.T, sb integration.Sandbox) {
