@@ -39,6 +39,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func init() {
+	integration.InitOCIWorker()
+	integration.InitContainerdWorker()
+}
+
 var allTests = []integration.Test{
 	testCmdShell,
 	testGlobalArg,

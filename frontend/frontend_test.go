@@ -23,6 +23,11 @@ var (
 	errFailed = errors.New("test failed")
 )
 
+func init() {
+	integration.InitOCIWorker()
+	integration.InitContainerdWorker()
+}
+
 func TestFrontendIntegration(t *testing.T) {
 	integration.Run(t, []integration.Test{
 		testRefReadFile,

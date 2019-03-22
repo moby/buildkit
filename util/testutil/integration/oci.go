@@ -18,8 +18,8 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func init() {
-	register(&oci{})
+func InitOCIWorker() {
+	Register(&oci{})
 
 	// the rootless uid is defined in hack/dockerfiles/test.Dockerfile
 	if s := os.Getenv("BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR"); s != "" {
@@ -28,7 +28,7 @@ func init() {
 			logrus.Fatalf("unexpected BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR: %q", s)
 		}
 		if rootlessSupported(uid) {
-			register(&oci{uid: uid, gid: gid})
+			Register(&oci{uid: uid, gid: gid})
 		}
 	}
 
@@ -117,7 +117,7 @@ func (sb *sandbox) PrintLogs(t *testing.T) {
 }
 
 func (sb *sandbox) NewRegistry() (string, error) {
-	url, cl, err := newRegistry("")
+	url, cl, err := NewRegistry("")
 	if err != nil {
 		return "", err
 	}

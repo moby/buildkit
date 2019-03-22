@@ -7,6 +7,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func init() {
+	integration.InitOCIWorker()
+	integration.InitContainerdWorker()
+}
+
 func TestCLIIntegration(t *testing.T) {
 	integration.Run(t, []integration.Test{
 		testDiskUsage,

@@ -44,6 +44,11 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+func init() {
+	integration.InitOCIWorker()
+	integration.InitContainerdWorker()
+}
+
 type nopWriteCloser struct {
 	io.Writer
 }
