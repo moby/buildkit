@@ -73,6 +73,7 @@ func main() {
 		pruneCommand,
 		buildCommand,
 		debugCommand,
+		dialStdioCommand,
 	}
 
 	var debugEnabled bool
