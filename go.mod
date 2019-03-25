@@ -15,7 +15,7 @@ require (
 	github.com/containerd/go-runc v0.0.0-20180907222934-5a6d9f37cfa3
 	github.com/containerd/typeurl v0.0.0-20180627222232-a93fcdb778cd // indirect
 	github.com/coreos/go-systemd v0.0.0-20161114122254-48702e0da86b // indirect
-	github.com/docker/cli v0.0.0-20190131223713-234462756460
+	github.com/docker/cli v0.0.0-20190321234815-f40f9c240ab0
 	github.com/docker/distribution v2.7.1-0.20190205005809-0d3efadf0154+incompatible
 	github.com/docker/docker v1.14.0-0.20190319215453-e7b5f7dbe98c
 	github.com/docker/docker-credential-helpers v0.6.0 // indirect
