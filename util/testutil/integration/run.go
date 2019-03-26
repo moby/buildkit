@@ -44,6 +44,14 @@ type SandboxConf struct {
 	mv     matrixValue
 }
 
+func (sc *SandboxConf) Mirror() string {
+	return sc.mirror
+}
+
+func (sc *SandboxConf) Value(k string) interface{} {
+	return sc.mv.values[k].value
+}
+
 type SandboxOpt func(*SandboxConf)
 
 func WithMirror(h string) SandboxOpt {
@@ -62,7 +70,7 @@ type Test func(*testing.T, Sandbox)
 
 var defaultWorkers []Worker
 
-func register(w Worker) {
+func Register(w Worker) {
 	defaultWorkers = append(defaultWorkers, w)
 }
 
@@ -267,7 +275,7 @@ func runMirror(t *testing.T, mirroredImages map[string]string) (host string, _ f
 		}
 	}
 
-	mirror, cleanup, err := newRegistry(mirrorDir)
+	mirror, cleanup, err := NewRegistry(mirrorDir)
 	if err != nil {
 		return "", nil, err
 	}

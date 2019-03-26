@@ -15,7 +15,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func newRegistry(dir string) (url string, cl func() error, err error) {
+func NewRegistry(dir string) (url string, cl func() error, err error) {
 	if err := lookupBinary("registry"); err != nil {
 		return "", nil, err
 	}

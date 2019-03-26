@@ -13,8 +13,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-func init() {
-	register(&containerd{
+func InitContainerdWorker() {
+	Register(&containerd{
 		name:           "containerd",
 		containerd:     "containerd",
 		containerdShim: "containerd-shim",
@@ -29,7 +29,7 @@ func init() {
 				panic(errors.Errorf("unexpected BUILDKIT_INTEGRATION_CONTAINERD_EXTRA: %q", s))
 			}
 			name, bin := pair[0], pair[1]
-			register(&containerd{
+			Register(&containerd{
 				name:           name,
 				containerd:     filepath.Join(bin, "containerd"),
 				containerdShim: filepath.Join(bin, "containerd-shim"),
