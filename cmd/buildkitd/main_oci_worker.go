@@ -21,7 +21,7 @@ import (
 )
 
 func init() {
-	defaultConf, _ := defaultConf()
+	defaultConf, _, _ := defaultConf()
 
 	enabledValue := func(b *bool) string {
 		if b == nil {
