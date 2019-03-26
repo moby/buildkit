@@ -26,15 +26,8 @@ type ClientOpt interface{}
 
 // New returns a new buildkit client. Address can be empty for the system-default address.
 func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error) {
-	dialFn, err := resolveDialer(address)
-	if err != nil {
-		return nil, err
-	}
-	gopts := []grpc.DialOption{
-		// TODO(AkihiroSuda): use WithContextDialer (requires grpc 1.19)
-		// https://github.com/grpc/grpc-go/commit/40cb5618f475e7b9d61aa7920ae4b04ef9bbaf89
-		grpc.WithDialer(dialFn),
-	}
+	gopts := []grpc.DialOption{}
+	needDialer := true
 	needWithInsecure := true
 	for _, o := range opts {
 		if _, ok := o.(*withFailFast); ok {
@@ -53,6 +46,19 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 				grpc.WithUnaryInterceptor(otgrpc.OpenTracingClientInterceptor(wt.tracer, otgrpc.LogPayloads())),
 				grpc.WithStreamInterceptor(otgrpc.OpenTracingStreamClientInterceptor(wt.tracer)))
 		}
+		if wd, ok := o.(*withDialer); ok {
+			gopts = append(gopts, grpc.WithDialer(wd.dialer))
+			needDialer = false
+		}
+	}
+	if needDialer {
+		dialFn, err := resolveDialer(address)
+		if err != nil {
+			return nil, err
+		}
+		// TODO(AkihiroSuda): use WithContextDialer (requires grpc 1.19)
+		// https://github.com/grpc/grpc-go/commit/40cb5618f475e7b9d61aa7920ae4b04ef9bbaf89
+		gopts = append(gopts, grpc.WithDialer(dialFn))
 	}
 	if needWithInsecure {
 		gopts = append(gopts, grpc.WithInsecure())
@@ -82,6 +88,14 @@ type withFailFast struct{}
 
 func WithFailFast() ClientOpt {
 	return &withFailFast{}
+}
+
+type withDialer struct {
+	dialer func(string, time.Duration) (net.Conn, error)
+}
+
+func WithDialer(df func(string, time.Duration) (net.Conn, error)) ClientOpt {
+	return &withDialer{dialer: df}
 }
 
 type withCredentials struct {
