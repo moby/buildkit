@@ -5,9 +5,12 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"io/ioutil"
+	"net"
+	"time"
 
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
 	controlapi "github.com/moby/buildkit/api/services/control"
+	"github.com/moby/buildkit/client/connhelper"
 	"github.com/moby/buildkit/util/appdefaults"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -23,8 +26,14 @@ type ClientOpt interface{}
 
 // New returns a new buildkit client. Address can be empty for the system-default address.
 func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error) {
+	dialFn, err := resolveDialer(address)
+	if err != nil {
+		return nil, err
+	}
 	gopts := []grpc.DialOption{
-		grpc.WithDialer(dialer),
+		// TODO(AkihiroSuda): use WithContextDialer (requires grpc 1.19)
+		// https://github.com/grpc/grpc-go/commit/40cb5618f475e7b9d61aa7920ae4b04ef9bbaf89
+		grpc.WithDialer(dialFn),
 	}
 	needWithInsecure := true
 	for _, o := range opts {
@@ -127,4 +136,20 @@ func WithTracer(t opentracing.Tracer) ClientOpt {
 
 type withTracer struct {
 	tracer opentracing.Tracer
+}
+
+func resolveDialer(address string) (func(string, time.Duration) (net.Conn, error), error) {
+	ch, err := connhelper.GetConnectionHelper(address)
+	if err != nil {
+		return nil, err
+	}
+	if ch != nil {
+		f := func(a string, _ time.Duration) (net.Conn, error) {
+			ctx := context.Background()
+			return ch.ContextDialer(ctx, a)
+		}
+		return f, nil
+	}
+	// basic dialer
+	return dialer, nil
 }
