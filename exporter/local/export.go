@@ -93,10 +93,13 @@ func (e *localExporterInstance) Export(ctx context.Context, inp exporter.Source)
 			lbl := "copying files"
 			if isMap {
 				lbl += " " + k
-				fs = fsutil.SubDirFS(fs, fstypes.Stat{
+				fs, err = fsutil.SubDirFS([]fsutil.Dir{{FS: fs, Stat: fstypes.Stat{
 					Mode: uint32(os.ModeDir | 0755),
 					Path: strings.Replace(k, "/", "_", -1),
-				})
+				}}})
+				if err != nil {
+					return err
+				}
 			}
 
 			progress := newProgressHandler(ctx, lbl)

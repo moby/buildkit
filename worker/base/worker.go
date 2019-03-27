@@ -23,6 +23,7 @@ import (
 	imageexporter "github.com/moby/buildkit/exporter/containerimage"
 	localexporter "github.com/moby/buildkit/exporter/local"
 	ociexporter "github.com/moby/buildkit/exporter/oci"
+	tarexporter "github.com/moby/buildkit/exporter/tar"
 	"github.com/moby/buildkit/frontend"
 	gw "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/identity"
@@ -250,6 +251,10 @@ func (w *Worker) Exporter(name string, sm *session.Manager) (exporter.Exporter, 
 		})
 	case client.ExporterLocal:
 		return localexporter.New(localexporter.Opt{
+			SessionManager: sm,
+		})
+	case client.ExporterTar:
+		return tarexporter.New(tarexporter.Opt{
 			SessionManager: sm,
 		})
 	case client.ExporterOCI:
