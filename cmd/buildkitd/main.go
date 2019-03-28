@@ -163,6 +163,10 @@ func main() {
 			Usage: "ca certificate to verify clients",
 			Value: defaultConf.GRPC.TLS.CA,
 		},
+		cli.StringSliceFlag{
+			Name:  "allow-insecure-entitlement",
+			Usage: "allows insecure entitlements e.g. network.host, security.insecure",
+		},
 	)
 	app.Flags = append(app.Flags, appFlags...)
 
@@ -220,6 +224,20 @@ func main() {
 
 		controller.Register(server)
 
+		ents := c.GlobalStringSlice("allow-insecure-entitlement")
+		if len(ents) > 0 {
+			cfg.Entitlements = []string{}
+			for _, e := range ents {
+				switch e {
+				case "security.insecure":
+					cfg.Entitlements = append(cfg.Entitlements, e)
+				case "network.host":
+					cfg.Entitlements = append(cfg.Entitlements, e)
+				default:
+					return fmt.Errorf("invalid entitlement : %v", e)
+				}
+			}
+		}
 		errCh := make(chan error, 1)
 		if err := serveGRPC(cfg.GRPC, server, errCh); err != nil {
 			return err
@@ -358,6 +376,11 @@ func applyMainFlags(c *cli.Context, cfg *config.Config, md *toml.MetaData) error
 		for _, v := range addrs {
 			cfg.GRPC.Address = append(cfg.GRPC.Address, v)
 		}
+	}
+
+	if c.IsSet("allow-insecure-entitlement") {
+		//override values from config
+		cfg.Entitlements = c.StringSlice("allow-insecure-entitlement")
 	}
 
 	if c.IsSet("debugaddr") {
@@ -542,6 +565,7 @@ func newController(c *cli.Context, cfg *config.Config) (*control.Controller, err
 		ResolveCacheExporterFuncs: remoteCacheExporterFuncs,
 		ResolveCacheImporterFuncs: remoteCacheImporterFuncs,
 		CacheKeyStorage:           cacheStorage,
+		Entitlements:              cfg.Entitlements,
 	})
 }
 

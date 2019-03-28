@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/containerd/containerd/containers"
+	"github.com/containerd/containerd/contrib/seccomp"
 	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/oci"
@@ -15,7 +16,10 @@ import (
 	"github.com/mitchellh/hashstructure"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/snapshot"
+	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/entitlements"
 	"github.com/moby/buildkit/util/network"
+	"github.com/moby/buildkit/util/system"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 )
@@ -43,6 +47,11 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 	_, ok := namespaces.Namespace(ctx)
 	if !ok {
 		ctx = namespaces.WithNamespace(ctx, "buildkit")
+	}
+	if meta.SecurityMode == pb.SecurityMode_INSECURE {
+		opts = append(opts, entitlements.WithInsecureSpec())
+	} else if system.SeccompSupported() && meta.SecurityMode == pb.SecurityMode_SANDBOX {
+		opts = append(opts, seccomp.WithDefaultProfile())
 	}
 
 	switch processMode {
@@ -85,6 +94,14 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 		Options:     []string{"ro", "nosuid", "noexec", "nodev"},
 	})
 
+	if meta.SecurityMode == pb.SecurityMode_INSECURE {
+		//make sysfs rw mount for insecure mode.
+		for _, m := range s.Mounts {
+			if m.Type == "sysfs" {
+				m.Options = []string{"nosuid", "noexec", "nodev", "rw"}
+			}
+		}
+	}
 	// TODO: User
 
 	sm := &submounts{}

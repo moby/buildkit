@@ -11,7 +11,6 @@ import (
 
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/cio"
-	"github.com/containerd/containerd/contrib/seccomp"
 	containerdoci "github.com/containerd/containerd/oci"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/executor"
@@ -20,7 +19,6 @@ import (
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/network"
-	"github.com/moby/buildkit/util/system"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -107,9 +105,7 @@ func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root c
 	if meta.ReadonlyRootFS {
 		opts = append(opts, containerdoci.WithRootFSReadonly())
 	}
-	if system.SeccompSupported() {
-		opts = append(opts, seccomp.WithDefaultProfile())
-	}
+
 	if w.cgroupParent != "" {
 		var cgroupsPath string
 		lastSeparator := w.cgroupParent[len(w.cgroupParent)-1:]

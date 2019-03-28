@@ -34,6 +34,7 @@ import (
 	"github.com/moby/buildkit/session/secrets/secretsprovider"
 	"github.com/moby/buildkit/session/sshforward/sshprovider"
 	"github.com/moby/buildkit/util/contentutil"
+	"github.com/moby/buildkit/util/entitlements"
 	"github.com/moby/buildkit/util/testutil"
 	"github.com/moby/buildkit/util/testutil/httpserver"
 	"github.com/moby/buildkit/util/testutil/integration"
@@ -56,6 +57,8 @@ type nopWriteCloser struct {
 func (nopWriteCloser) Close() error { return nil }
 
 func TestClientIntegration(t *testing.T) {
+	mirrors := integration.WithMirroredImages(integration.OfficialImages("busybox:latest", "alpine:latest"))
+
 	integration.Run(t, []integration.Test{
 		testRelativeWorkDir,
 		testFileOpMkdirMkfile,
@@ -94,8 +97,17 @@ func TestClientIntegration(t *testing.T) {
 		testPushByDigest,
 		testBasicInlineCacheImportExport,
 		testExportBusyboxLocal,
+	}, mirrors)
+
+	integration.Run(t, []integration.Test{
+		testSecurityMode,
+		testSecurityModeErrors,
 	},
-		integration.WithMirroredImages(integration.OfficialImages("busybox:latest", "alpine:latest")),
+		mirrors,
+		integration.WithMatrix("secmode", map[string]interface{}{
+			"sandbox":  securitySandbox,
+			"insecure": securityInsecure,
+		}),
 	)
 }
 
@@ -422,6 +434,84 @@ func testPushByDigest(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, resp.ExporterResponse["containerimage.digest"], desc.Digest.String())
 	require.Equal(t, images.MediaTypeDockerSchema2Manifest, desc.MediaType)
 	require.True(t, desc.Size > 0)
+}
+
+func testSecurityMode(t *testing.T, sb integration.Sandbox) {
+	var command string
+	mode := llb.SecurityModeSandbox
+	var allowedEntitlements []entitlements.Entitlement
+	secMode := sb.Value("secmode")
+	if secMode == securitySandbox {
+		/*
+			$ capsh --decode=00000000a80425fb
+			0x00000000a80425fb=cap_chown,cap_dac_override,cap_fowner,cap_fsetid,cap_kill,cap_setgid,cap_setuid,cap_setpcap,
+			cap_net_bind_service,cap_net_raw,cap_sys_chroot,cap_mknod,cap_audit_write,cap_setfcap
+		*/
+		command = `sh -c 'cat /proc/self/status | grep CapEff | grep "00000000a80425fb"'`
+		allowedEntitlements = []entitlements.Entitlement{}
+	} else {
+		/*
+			$ capsh --decode=0000003fffffffff
+			0x0000003fffffffff=cap_chown,cap_dac_override,cap_dac_read_search,cap_fowner,cap_fsetid,cap_kill,cap_setgid,
+			cap_setuid,cap_setpcap,cap_linux_immutable,cap_net_bind_service,cap_net_broadcast,cap_net_admin,cap_net_raw,
+			cap_ipc_lock,cap_ipc_owner,cap_sys_module,cap_sys_rawio,cap_sys_chroot,cap_sys_ptrace,cap_sys_pacct,cap_sys_admin,
+			cap_sys_boot,cap_sys_nice,cap_sys_resource,cap_sys_time,cap_sys_tty_config,cap_mknod,cap_lease,cap_audit_write,
+			cap_audit_control,cap_setfcap,cap_mac_override,cap_mac_admin,cap_syslog,cap_wake_alarm,cap_block_suspend,cap_audit_read
+		*/
+		command = `sh -c 'cat /proc/self/status | grep CapEff | grep "0000003fffffffff"'`
+		mode = llb.SecurityModeInsecure
+		allowedEntitlements = []entitlements.Entitlement{entitlements.EntitlementSecurityInsecure}
+	}
+
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Image("busybox:latest").
+		Run(llb.Shlex(command),
+			llb.Security(mode))
+
+	def, err := st.Marshal()
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		AllowedEntitlements: allowedEntitlements,
+	}, nil)
+
+	require.NoError(t, err)
+}
+
+func testSecurityModeErrors(t *testing.T, sb integration.Sandbox) {
+
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+	secMode := sb.Value("secmode")
+	if secMode == securitySandbox {
+
+		st := llb.Image("busybox:latest").
+			Run(llb.Shlex(`sh -c 'echo sandbox'`))
+
+		def, err := st.Marshal()
+		require.NoError(t, err)
+
+		_, err = c.Solve(context.TODO(), def, SolveOpt{
+			AllowedEntitlements: []entitlements.Entitlement{entitlements.EntitlementSecurityInsecure},
+		}, nil)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "security.insecure is not allowed")
+	}
+	if secMode == securityInsecure {
+		st := llb.Image("busybox:latest").
+			Run(llb.Shlex(`sh -c 'echo insecure'`), llb.Security(llb.SecurityModeInsecure))
+
+		def, err := st.Marshal()
+		require.NoError(t, err)
+
+		_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "security.insecure is not allowed")
+	}
 }
 
 func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
@@ -2339,3 +2429,18 @@ func (s *server) run(a agent.Agent) error {
 		go agent.ServeAgent(a, c)
 	}
 }
+
+type secModeSandbox struct{}
+
+func (*secModeSandbox) UpdateConfigFile(in string) string {
+	return in
+}
+
+type secModeInsecure struct{}
+
+func (*secModeInsecure) UpdateConfigFile(in string) string {
+	return in + "\n\ninsecure-entitlements = [\"security.insecure\"]\n"
+}
+
+var securitySandbox integration.ConfigUpdater = &secModeSandbox{}
+var securityInsecure integration.ConfigUpdater = &secModeInsecure{}

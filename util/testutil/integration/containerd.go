@@ -129,8 +129,20 @@ disabled_plugins = ["cri"]
 		"--containerd-worker-labels=org.mobyproject.buildkit.worker.sandbox=true", // Include use of --containerd-worker-labels to trigger https://github.com/moby/buildkit/pull/603
 	}
 
+	var upt []ConfigUpdater
+
+	for _, v := range conf.mv.values {
+		if u, ok := v.value.(ConfigUpdater); ok {
+			upt = append(upt, u)
+		}
+	}
+
 	if conf.mirror != "" {
-		dir, err := configWithMirror(conf.mirror)
+		upt = append(upt, withMirrorConfig(conf.mirror))
+	}
+
+	if len(upt) > 0 {
+		dir, err := writeConfig(upt)
 		if err != nil {
 			return nil, nil, err
 		}

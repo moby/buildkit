@@ -15,6 +15,8 @@ type Config struct {
 	// Root is the path to a directory where buildkit will store persistent data
 	Root string `toml:"root"`
 
+	//Entitlements e.g. security.insecure, network.host
+	Entitlements []string `toml:"insecure-entitlements"`
 	// GRPC configuration settings
 	GRPC GRPCConfig `toml:"grpc"`
 
