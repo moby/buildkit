@@ -33,6 +33,7 @@ const (
 type WriterOpt struct {
 	Snapshotter  snapshot.Snapshotter
 	ContentStore content.Store
+	Applier      diff.Applier
 	Differ       diff.Comparer
 }
 
@@ -288,6 +289,14 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache
 
 func (ic *ImageWriter) ContentStore() content.Store {
 	return ic.opt.ContentStore
+}
+
+func (ic *ImageWriter) Snapshotter() snapshot.Snapshotter {
+	return ic.opt.Snapshotter
+}
+
+func (ic *ImageWriter) Applier() diff.Applier {
+	return ic.opt.Applier
 }
 
 func emptyImageConfig() ([]byte, error) {

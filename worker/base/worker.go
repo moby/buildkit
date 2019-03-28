@@ -155,6 +155,7 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 	iw, err := imageexporter.NewImageWriter(imageexporter.WriterOpt{
 		Snapshotter:  opt.Snapshotter,
 		ContentStore: opt.ContentStore,
+		Applier:      opt.Applier,
 		Differ:       opt.Differ,
 	})
 	if err != nil {

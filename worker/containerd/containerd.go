@@ -106,7 +106,7 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 		Labels:        xlabels,
 		MetadataStore: md,
 		Executor:      containerdexecutor.New(client, root, "", network.Default()),
-		Snapshotter:   containerdsnapshot.NewSnapshotter(client.SnapshotService(snapshotterName), cs, md, ns, gc, nil),
+		Snapshotter:   containerdsnapshot.NewSnapshotter(snapshotterName, client.SnapshotService(snapshotterName), cs, md, ns, gc, nil),
 		ContentStore:  cs,
 		Applier:       winlayers.NewFileSystemApplierWithWindows(cs, df),
 		Differ:        winlayers.NewWalkingDiffWithWindows(cs, df),
