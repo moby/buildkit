@@ -95,8 +95,8 @@ func resolveExporterDest(exporter, dest string) (io.WriteCloser, string, error) 
 			return nil, "", errors.New("output directory is required for local exporter")
 		}
 		return nil, dest, nil
-	case client.ExporterOCI, client.ExporterDocker:
-		if dest != "" {
+	case client.ExporterOCI, client.ExporterDocker, client.ExporterTar:
+		if dest != "" && dest != "-" {
 			fi, err := os.Stat(dest)
 			if err != nil && !os.IsNotExist(err) {
 				return nil, "", errors.Wrapf(err, "invalid destination file: %s", dest)

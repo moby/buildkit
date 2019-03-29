@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -84,6 +85,7 @@ var allTests = []integration.Test{
 	testCopyChownExistingDir,
 	testCopyWildcardCache,
 	testDockerignoreOverride,
+	testTarExporter,
 }
 
 var fileOpTests = []integration.Test{
@@ -233,6 +235,84 @@ RUN [ "$(cat testfile)" == "contents0" ]
 		},
 	}, nil)
 	require.NoError(t, err)
+}
+
+func testTarExporter(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM scratch AS stage-linux
+COPY foo forlinux
+
+FROM scratch AS stage-darwin
+COPY bar fordarwin
+
+FROM stage-$TARGETOS
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("foo", []byte("data"), 0600),
+		fstest.CreateFile("bar", []byte("data2"), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	buf := &bytes.Buffer{}
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:   client.ExporterTar,
+				Output: &nopWriteCloser{buf},
+			},
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	m, err := testutil.ReadTarToMap(buf.Bytes(), false)
+	require.NoError(t, err)
+
+	mi, ok := m["forlinux"]
+	require.Equal(t, true, ok)
+	require.Equal(t, "data", string(mi.Data))
+
+	// repeat multi-platform
+	buf = &bytes.Buffer{}
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:   client.ExporterTar,
+				Output: &nopWriteCloser{buf},
+			},
+		},
+		FrontendAttrs: map[string]string{
+			"platform": "linux/amd64,darwin/amd64",
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	m, err = testutil.ReadTarToMap(buf.Bytes(), false)
+	require.NoError(t, err)
+
+	mi, ok = m["linux_amd64/forlinux"]
+	require.Equal(t, true, ok)
+	require.Equal(t, "data", string(mi.Data))
+
+	mi, ok = m["darwin_amd64/fordarwin"]
+	require.Equal(t, true, ok)
+	require.Equal(t, "data2", string(mi.Data))
 }
 
 func testWorkdirCreatesDir(t *testing.T, sb integration.Sandbox) {
@@ -3824,3 +3904,9 @@ func getFileOp(t *testing.T, sb integration.Sandbox) bool {
 	require.True(t, ok)
 	return vv
 }
+
+type nopWriteCloser struct {
+	io.Writer
+}
+
+func (nopWriteCloser) Close() error { return nil }
