@@ -440,8 +440,30 @@ func align(l, r string, w int) string {
 }
 
 func wrapHeight(j []*job, limit int) []*job {
+	var wrapped []*job
+	wrapped = append(wrapped, j...)
 	if len(j) > limit {
-		j = j[len(j)-limit:]
+		wrapped = wrapped[len(j)-limit:]
+
+		// wrap things around if incomplete jobs were cut
+		var invisible []*job
+		for _, j := range j[:len(j)-limit] {
+			if j.completedTime == nil {
+				invisible = append(invisible, j)
+			}
+		}
+
+		if l := len(invisible); l > 0 {
+			rewrapped := make([]*job, 0, len(wrapped))
+			for _, j := range wrapped {
+				if j.completedTime == nil || l <= 0 {
+					rewrapped = append(rewrapped, j)
+				}
+				l--
+			}
+			freespace := len(wrapped) - len(rewrapped)
+			wrapped = append(invisible[len(invisible)-freespace:], rewrapped...)
+		}
 	}
-	return j
+	return wrapped
 }
