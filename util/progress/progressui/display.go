@@ -69,7 +69,7 @@ func DisplaySolveStatus(ctx context.Context, phase string, c console.Console, w 
 
 type displayInfo struct {
 	startTime      time.Time
-	jobs           []job
+	jobs           []*job
 	countTotal     int
 	countCompleted int
 }
@@ -107,6 +107,9 @@ type vertex struct {
 	lastBlockTime *time.Time
 	count         int
 	statusUpdates map[string]struct{}
+
+	jobs      []*job
+	jobCached bool
 }
 
 func (v *vertex) update(c int) {
@@ -193,12 +196,14 @@ func (t *trace) update(s *client.SolveStatus) {
 			t.vertexes = append(t.vertexes, t.byDigest[v.Digest])
 		}
 		t.byDigest[v.Digest].Vertex = v
+		t.byDigest[v.Digest].jobCached = false
 	}
 	for _, s := range s.Statuses {
 		v, ok := t.byDigest[s.Vertex]
 		if !ok {
 			continue // shouldn't happen
 		}
+		v.jobCached = false
 		prev, ok := v.byID[s.ID]
 		if !ok {
 			v.byID[s.ID] = &status{VertexStatus: s}
@@ -216,6 +221,7 @@ func (t *trace) update(s *client.SolveStatus) {
 		if !ok {
 			continue // shouldn't happen
 		}
+		v.jobCached = false
 		i := 0
 		complete := split(l.Data, byte('\n'), func(dt []byte) {
 			if v.logsPartial && len(v.logs) != 0 && i == 0 {
@@ -262,7 +268,12 @@ func (t *trace) displayInfo() (d displayInfo) {
 	}
 
 	for _, v := range t.vertexes {
-		j := job{
+		if v.jobCached {
+			d.jobs = append(d.jobs, v.jobs...)
+			continue
+		}
+		var jobs []*job
+		j := &job{
 			startTime:     addTime(v.Started, t.localTimeDiff),
 			completedTime: addTime(v.Completed, t.localTimeDiff),
 			name:          strings.Replace(v.Name, "\t", " ", -1),
@@ -280,9 +291,9 @@ func (t *trace) displayInfo() (d displayInfo) {
 			j.name = "CACHED " + j.name
 		}
 		j.name = v.indent + j.name
-		d.jobs = append(d.jobs, j)
+		jobs = append(jobs, j)
 		for _, s := range v.statuses {
-			j := job{
+			j := &job{
 				startTime:     addTime(s.Started, t.localTimeDiff),
 				completedTime: addTime(s.Completed, t.localTimeDiff),
 				name:          v.indent + "=> " + s.ID,
@@ -292,8 +303,11 @@ func (t *trace) displayInfo() (d displayInfo) {
 			} else if s.Current != 0 {
 				j.status = fmt.Sprintf("%.2f", units.Bytes(s.Current))
 			}
-			d.jobs = append(d.jobs, j)
+			jobs = append(jobs, j)
 		}
+		d.jobs = append(d.jobs, jobs...)
+		v.jobs = jobs
+		v.jobCached = true
 	}
 
 	return d
@@ -395,11 +409,12 @@ func (disp *display) print(d displayInfo, all bool) {
 		if left < 12 { // too small screen to show progress
 			continue
 		}
-		if len(j.name) > left {
-			j.name = j.name[:left]
+		name := j.name
+		if len(name) > left {
+			name = name[:left]
 		}
 
-		out := pfx + j.name
+		out := pfx + name
 		if showStatus {
 			out += " " + status
 		}
@@ -424,7 +439,7 @@ func align(l, r string, w int) string {
 	return fmt.Sprintf("%-[2]*[1]s %[3]s", l, w-len(r)-1, r)
 }
 
-func wrapHeight(j []job, limit int) []job {
+func wrapHeight(j []*job, limit int) []*job {
 	if len(j) > limit {
 		j = j[len(j)-limit:]
 	}
