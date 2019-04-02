@@ -179,6 +179,8 @@ github.com/hashicorp/go-immutable-radix
 github.com/hashicorp/golang-lru/simplelru
 # github.com/ishidawataru/sctp v0.0.0-20180213033435-07191f837fed
 github.com/ishidawataru/sctp
+# github.com/jaguilar/vt100 v0.0.0-20150826170717-2703a27b14ea => github.com/tonistiigi/vt100 v0.0.0-20190402012908-ad4c4a574305
+github.com/jaguilar/vt100
 # github.com/konsorten/go-windows-terminal-sequences v1.0.1
 github.com/konsorten/go-windows-terminal-sequences
 # github.com/mitchellh/hashstructure v0.0.0-20170609045927-2bca23e0e452
