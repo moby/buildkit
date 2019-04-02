@@ -5,10 +5,12 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/containerd/console"
+	"github.com/jaguilar/vt100"
 	"github.com/moby/buildkit/client"
 	"github.com/morikuni/aec"
 	digest "github.com/opencontainers/go-digest"
@@ -27,7 +29,7 @@ func DisplaySolveStatus(ctx context.Context, phase string, c console.Console, w 
 		disp.phase = "Building"
 	}
 
-	t := newTrace(w)
+	t := newTrace(w, modeConsole)
 
 	var done bool
 	ticker := time.NewTicker(100 * time.Millisecond)
@@ -35,6 +37,7 @@ func DisplaySolveStatus(ctx context.Context, phase string, c console.Console, w 
 
 	displayLimiter := rate.NewLimiter(rate.Every(70*time.Millisecond), 1)
 
+	width, height := disp.getSize()
 	for {
 		select {
 		case <-ctx.Done():
@@ -42,19 +45,20 @@ func DisplaySolveStatus(ctx context.Context, phase string, c console.Console, w 
 		case <-ticker.C:
 		case ss, ok := <-ch:
 			if ok {
-				t.update(ss)
+				t.update(ss, width)
 			} else {
 				done = true
 			}
 		}
 
 		if modeConsole {
+			width, height = disp.getSize()
 			if done {
-				disp.print(t.displayInfo(), true)
+				disp.print(t.displayInfo(), width, height, true)
 				t.printErrorLogs(c)
 				return nil
 			} else if displayLimiter.Allow() {
-				disp.print(t.displayInfo(), false)
+				disp.print(t.displayInfo(), width, height, false)
 			}
 		} else {
 			if done || displayLimiter.Allow() {
@@ -66,6 +70,9 @@ func DisplaySolveStatus(ctx context.Context, phase string, c console.Console, w 
 		}
 	}
 }
+
+const termHeight = 6
+const termPad = 9
 
 type displayInfo struct {
 	startTime      time.Time
@@ -81,6 +88,8 @@ type job struct {
 	status        string
 	hasError      bool
 	isCanceled    bool
+	vertex        *vertex
+	showTerm      bool
 }
 
 type trace struct {
@@ -90,6 +99,7 @@ type trace struct {
 	byDigest      map[digest.Digest]*vertex
 	nextIndex     int
 	updates       map[digest.Digest]struct{}
+	modeConsole   bool
 }
 
 type vertex struct {
@@ -110,6 +120,10 @@ type vertex struct {
 
 	jobs      []*job
 	jobCached bool
+
+	term      *vt100.VT100
+	termBytes int
+	termCount int
 }
 
 func (v *vertex) update(c int) {
@@ -124,11 +138,12 @@ type status struct {
 	*client.VertexStatus
 }
 
-func newTrace(w io.Writer) *trace {
+func newTrace(w io.Writer, modeConsole bool) *trace {
 	return &trace{
-		byDigest: make(map[digest.Digest]*vertex),
-		updates:  make(map[digest.Digest]struct{}),
-		w:        w,
+		byDigest:    make(map[digest.Digest]*vertex),
+		updates:     make(map[digest.Digest]struct{}),
+		w:           w,
+		modeConsole: modeConsole,
 	}
 }
 
@@ -177,7 +192,7 @@ func (t *trace) triggerVertexEvent(v *client.Vertex) {
 	t.byDigest[v.Digest].prev = v
 }
 
-func (t *trace) update(s *client.SolveStatus) {
+func (t *trace) update(s *client.SolveStatus, termWidth int) {
 	for _, v := range s.Vertexes {
 		prev, ok := t.byDigest[v.Digest]
 		if !ok {
@@ -186,6 +201,9 @@ func (t *trace) update(s *client.SolveStatus) {
 				byID:          make(map[string]*status),
 				statusUpdates: make(map[string]struct{}),
 				index:         t.nextIndex,
+			}
+			if t.modeConsole {
+				t.byDigest[v.Digest].term = vt100.NewVT100(termHeight, termWidth-termPad)
 			}
 		}
 		t.triggerVertexEvent(v)
@@ -222,6 +240,13 @@ func (t *trace) update(s *client.SolveStatus) {
 			continue // shouldn't happen
 		}
 		v.jobCached = false
+		if v.term != nil {
+			if v.term.Width != termWidth {
+				v.term.Resize(termHeight, termWidth-termPad)
+			}
+			v.termBytes += len(l.Data)
+			v.term.Write(l.Data) // error unhandled on purpose. don't trust vt100
+		}
 		i := 0
 		complete := split(l.Data, byte('\n'), func(dt []byte) {
 			if v.logsPartial && len(v.logs) != 0 && i == 0 {
@@ -277,6 +302,7 @@ func (t *trace) displayInfo() (d displayInfo) {
 			startTime:     addTime(v.Started, t.localTimeDiff),
 			completedTime: addTime(v.Completed, t.localTimeDiff),
 			name:          strings.Replace(v.Name, "\t", " ", -1),
+			vertex:        v,
 		}
 		if v.Error != "" {
 			if strings.HasSuffix(v.Error, context.Canceled.Error()) {
@@ -346,20 +372,56 @@ type display struct {
 	repeated  bool
 }
 
-func (disp *display) print(d displayInfo, all bool) {
-	// this output is inspired by Buck
+func (disp *display) getSize() (int, int) {
 	width := 80
 	height := 10
-	size, err := disp.c.Size()
-	if err == nil && size.Width > 0 && size.Height > 0 {
-		width = int(size.Width)
-		height = int(size.Height)
+	if disp.c != nil {
+		size, err := disp.c.Size()
+		if err == nil && size.Width > 0 && size.Height > 0 {
+			width = int(size.Width)
+			height = int(size.Height)
+		}
+	}
+	return width, height
+}
+
+func setupTerminals(jobs []*job, height int, all bool) []*job {
+	var candidates []*job
+	numInUse := 0
+	for _, j := range jobs {
+		if j.vertex != nil && j.vertex.termBytes > 0 && j.completedTime == nil {
+			candidates = append(candidates, j)
+		}
+		if j.completedTime == nil {
+			numInUse++
+		}
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		idxI := candidates[i].vertex.termBytes + candidates[i].vertex.termCount*10
+		idxJ := candidates[j].vertex.termBytes + candidates[j].vertex.termCount*10
+		return idxI > idxJ
+	})
+
+	numFree := height - 2 - numInUse
+	numToHide := 0
+	termLimit := termHeight + 3
+
+	for i := 0; numFree > termLimit && i < len(candidates); i++ {
+		candidates[i].showTerm = true
+		numToHide += candidates[i].vertex.term.UsedHeight()
+		numFree -= termLimit
 	}
 
 	if !all {
-		d.jobs = wrapHeight(d.jobs, height-2)
+		jobs = wrapHeight(jobs, height-2-numToHide)
 	}
 
+	return jobs
+}
+
+func (disp *display) print(d displayInfo, width, height int, all bool) {
+	// this output is inspired by Buck
+	d.jobs = setupTerminals(d.jobs, height, all)
 	b := aec.EmptyBuilder
 	for i := 0; i <= disp.lineCount; i++ {
 		b = b.Up(1)
@@ -431,8 +493,37 @@ func (disp *display) print(d displayInfo, all bool) {
 		}
 		fmt.Fprint(disp.c, out)
 		lineCount++
+		if j.showTerm {
+			term := j.vertex.term
+			term.Resize(termHeight, width-termPad)
+			for _, l := range term.Content {
+				if !isEmpty(l) {
+					out := aec.Apply(fmt.Sprintf(" => => # %s\n", string(l)), aec.Faint)
+					fmt.Fprint(disp.c, out)
+					lineCount++
+				}
+			}
+			j.vertex.termCount++
+			j.showTerm = false
+		}
+	}
+	// override previous content
+	if diff := disp.lineCount - lineCount; diff > 0 {
+		for i := 0; i < diff; i++ {
+			fmt.Fprintln(disp.c, strings.Repeat(" ", width))
+		}
+		fmt.Fprint(disp.c, aec.EmptyBuilder.Up(uint(diff)).Column(0).ANSI)
 	}
 	disp.lineCount = lineCount
+}
+
+func isEmpty(l []rune) bool {
+	for _, r := range l {
+		if r != ' ' {
+			return false
+		}
+	}
+	return true
 }
 
 func align(l, r string, w int) string {
