@@ -79,6 +79,7 @@ func DisplaySolveStatus(ctx context.Context, phase string, c console.Console, w 
 			if done || displayLimiter.Allow() {
 				printer.print(t)
 				if done {
+					t.printErrorLogs(w)
 					return nil
 				}
 				ticker.Stop()
