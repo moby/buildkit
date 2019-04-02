@@ -175,34 +175,30 @@ func (t *trace) triggerVertexEvent(v *client.Vertex) {
 		old = *v
 	}
 
-	var ev []string
+	changed := false
 	if v.Digest != old.Digest {
-		ev = append(ev, fmt.Sprintf("%13s %s", "digest:", v.Digest))
+		changed = true
 	}
 	if v.Name != old.Name {
-		ev = append(ev, fmt.Sprintf("%13s %q", "name:", v.Name))
+		changed = true
 	}
 	if v.Started != old.Started {
 		if v.Started != nil && old.Started == nil || !v.Started.Equal(*old.Started) {
-			ev = append(ev, fmt.Sprintf("%13s %v", "started:", v.Started))
+			changed = true
 		}
 	}
 	if v.Completed != old.Completed && v.Completed != nil {
-		ev = append(ev, fmt.Sprintf("%13s %v", "completed:", v.Completed))
-		if v.Started != nil {
-			ev = append(ev, fmt.Sprintf("%13s %v", "duration:", v.Completed.Sub(*v.Started)))
-		}
+		changed = true
 	}
 	if v.Cached != old.Cached {
-		ev = append(ev, fmt.Sprintf("%13s %v", "cached:", v.Cached))
+		changed = true
 	}
 	if v.Error != old.Error {
-		ev = append(ev, fmt.Sprintf("%13s %q", "error:", v.Error))
+		changed = true
 	}
 
-	if len(ev) > 0 {
-		vtx.events = append(vtx.events, ev...)
-		vtx.update(len(ev))
+	if changed {
+		vtx.update(1)
 		t.updates[v.Digest] = struct{}{}
 	}
 
