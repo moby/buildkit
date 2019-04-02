@@ -89,7 +89,7 @@ func DisplaySolveStatus(ctx context.Context, phase string, c console.Console, w 
 }
 
 const termHeight = 6
-const termPad = 9
+const termPad = 10
 
 type displayInfo struct {
 	startTime      time.Time
