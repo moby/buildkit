@@ -414,8 +414,8 @@ func setupTerminals(jobs []*job, height int, all bool) []*job {
 		}
 	}
 	sort.Slice(candidates, func(i, j int) bool {
-		idxI := candidates[i].vertex.termBytes + candidates[i].vertex.termCount*10
-		idxJ := candidates[j].vertex.termBytes + candidates[j].vertex.termCount*10
+		idxI := candidates[i].vertex.termBytes + candidates[i].vertex.termCount*50
+		idxJ := candidates[j].vertex.termBytes + candidates[j].vertex.termCount*50
 		return idxI > idxJ
 	})
 
