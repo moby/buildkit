@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -56,7 +57,13 @@ func (p *textMux) printVtx(t *trace, dgst digest.Digest) {
 			p.notFirst = true
 		}
 
-		fmt.Fprintf(p.w, "#%d %s\n", v.index, limitString(v.Name, 72))
+		if os.Getenv("PROGRESS_NO_TRUNC") == "1" {
+			fmt.Fprintf(p.w, "#%d %s\n", v.index, v.Name)
+			fmt.Fprintf(p.w, "#%d %s\n", v.index, v.Digest)
+		} else {
+			fmt.Fprintf(p.w, "#%d %s\n", v.index, limitString(v.Name, 72))
+		}
+
 	}
 
 	if len(v.events) != 0 {
