@@ -116,7 +116,7 @@ func TestToEnvList(t *testing.T) {
 	args = []instructions.KeyValuePairOptional{{Key: "key2", Value: nil}}
 	env = []string{"key1=val1"}
 	resutl = toEnvMap(args, env)
-	assert.Equal(t, map[string]string{"key1": "val1", "key2": ""}, resutl)
+	assert.Equal(t, map[string]string{"key1": "val1"}, resutl)
 
 	// args has duplicated key with env
 	v = "val2"
