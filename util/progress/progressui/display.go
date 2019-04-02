@@ -5,7 +5,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -31,13 +33,24 @@ func DisplaySolveStatus(ctx context.Context, phase string, c console.Console, w 
 
 	t := newTrace(w, modeConsole)
 
+	tickerTimeout := 150 * time.Millisecond
+	displayTimeout := 100 * time.Millisecond
+
+	if v := os.Getenv("TTY_DISPLAY_RATE"); v != "" {
+		if r, err := strconv.ParseInt(v, 10, 64); err == nil {
+			tickerTimeout = time.Duration(r) * time.Millisecond
+			displayTimeout = time.Duration(r) * time.Millisecond
+		}
+	}
+
 	var done bool
-	ticker := time.NewTicker(100 * time.Millisecond)
+	ticker := time.NewTicker(tickerTimeout)
 	defer ticker.Stop()
 
-	displayLimiter := rate.NewLimiter(rate.Every(70*time.Millisecond), 1)
+	displayLimiter := rate.NewLimiter(rate.Every(displayTimeout), 1)
 
-	width, height := disp.getSize()
+	var height int
+	width, _ := disp.getSize()
 	for {
 		select {
 		case <-ctx.Done():
@@ -58,6 +71,8 @@ func DisplaySolveStatus(ctx context.Context, phase string, c console.Console, w 
 				t.printErrorLogs(c)
 				return nil
 			} else if displayLimiter.Allow() {
+				ticker.Stop()
+				ticker = time.NewTicker(tickerTimeout)
 				disp.print(t.displayInfo(), width, height, false)
 			}
 		} else {
@@ -66,6 +81,8 @@ func DisplaySolveStatus(ctx context.Context, phase string, c console.Console, w 
 				if done {
 					return nil
 				}
+				ticker.Stop()
+				ticker = time.NewTicker(tickerTimeout)
 			}
 		}
 	}
