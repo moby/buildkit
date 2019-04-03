@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/session"
@@ -71,6 +72,7 @@ func (e *localExporterInstance) Export(ctx context.Context, inp exporter.Source)
 	getDir := func(ctx context.Context, k string, ref cache.ImmutableRef) (*fsutil.Dir, error) {
 		var src string
 		var err error
+		var idmap *idtools.IdentityMapping
 		if ref == nil {
 			src, err = ioutil.TempDir("", "buildkit")
 			if err != nil {
@@ -89,11 +91,31 @@ func (e *localExporterInstance) Export(ctx context.Context, inp exporter.Source)
 			if err != nil {
 				return nil, err
 			}
+
+			idmap = mount.IdentityMapping()
+
 			defers = append(defers, func() { lm.Unmount() })
 		}
 
+		walkOpt := &fsutil.WalkOpt{}
+
+		if idmap != nil {
+			walkOpt.Map = func(p string, st *fstypes.Stat) bool {
+				uid, gid, err := idmap.ToContainer(idtools.Identity{
+					UID: int(st.Uid),
+					GID: int(st.Gid),
+				})
+				if err != nil {
+					return false
+				}
+				st.Uid = uint32(uid)
+				st.Gid = uint32(gid)
+				return true
+			}
+		}
+
 		return &fsutil.Dir{
-			FS: fsutil.NewFS(src, nil),
+			FS: fsutil.NewFS(src, walkOpt),
 			Stat: fstypes.Stat{
 				Mode: uint32(os.ModeDir | 0755),
 				Path: strings.Replace(k, "/", "_", -1),
