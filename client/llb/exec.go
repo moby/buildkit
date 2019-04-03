@@ -53,7 +53,7 @@ type mount struct {
 	cacheID      string
 	tmpfs        bool
 	cacheSharing CacheMountSharingMode
-	// hasOutput bool
+	noOutput     bool
 }
 
 type ExecOp struct {
@@ -80,6 +80,8 @@ func (e *ExecOp) AddMount(target string, source Output, opt ...MountOption) Outp
 		m.output = source
 	} else if m.tmpfs {
 		m.output = &output{vertex: e, err: errors.Errorf("tmpfs mount for %s can't be used as a parent", target)}
+	} else if m.noOutput {
+		m.output = &output{vertex: e, err: errors.Errorf("mount marked no-output and %s can't be used as a parent", target)}
 	} else {
 		o := &output{vertex: e, getIndex: e.getMountIndexFn(m)}
 		if p := e.constraints.Platform; p != nil {
@@ -248,7 +250,7 @@ func (e *ExecOp) Marshal(c *Constraints) (digest.Digest, []byte, *pb.OpMetadata,
 		}
 
 		outputIndex := pb.OutputIndex(-1)
-		if !m.readonly && m.cacheID == "" && !m.tmpfs {
+		if !m.noOutput && !m.readonly && m.cacheID == "" && !m.tmpfs {
 			outputIndex = pb.OutputIndex(outIndex)
 			outIndex++
 		}
@@ -344,7 +346,7 @@ func (e *ExecOp) getMountIndexFn(m *mount) func() (pb.OutputIndex, error) {
 
 		i := 0
 		for _, m2 := range e.mounts {
-			if m2.readonly || m2.cacheID != "" {
+			if m2.noOutput || m2.readonly || m2.cacheID != "" {
 				continue
 			}
 			if m == m2 {
@@ -383,6 +385,10 @@ func SourcePath(src string) MountOption {
 	return func(m *mount) {
 		m.selector = src
 	}
+}
+
+func ForceNoOutput(m *mount) {
+	m.noOutput = true
 }
 
 func AsPersistentCacheDir(id string, sharing CacheMountSharingMode) MountOption {

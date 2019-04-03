@@ -209,7 +209,7 @@ func (e *execOp) getMountDeps() ([]dep, error) {
 			deps[m.Input].Selectors = append(deps[m.Input].Selectors, sel)
 		}
 
-		if !m.Readonly || m.Dest == pb.RootMount { // exclude read-only rootfs
+		if (!m.Readonly || m.Dest == pb.RootMount) && m.Output != -1 { // exclude read-only rootfs && read-write mounts
 			deps[m.Input].NoContentBasedHash = true
 		}
 	}
