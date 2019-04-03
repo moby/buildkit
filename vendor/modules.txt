@@ -94,9 +94,9 @@ github.com/containerd/continuity/fs
 github.com/containerd/continuity/syscallx
 github.com/containerd/continuity
 github.com/containerd/continuity/fs/fstest
+github.com/containerd/continuity/pathdriver
 github.com/containerd/continuity/devices
 github.com/containerd/continuity/driver
-github.com/containerd/continuity/pathdriver
 github.com/containerd/continuity/proto
 # github.com/containerd/fifo v0.0.0-20180307165137-3d5202aec260
 github.com/containerd/fifo
@@ -116,6 +116,7 @@ github.com/docker/cli/cli/config/types
 github.com/docker/distribution/reference
 github.com/docker/distribution/digestset
 # github.com/docker/docker v1.14.0-0.20190319215453-e7b5f7dbe98c
+github.com/docker/docker/pkg/idtools
 github.com/docker/docker/pkg/locker
 github.com/docker/docker/pkg/reexec
 github.com/docker/docker/builder/dockerignore
@@ -124,15 +125,14 @@ github.com/docker/docker/pkg/signal
 github.com/docker/docker/api/types/container
 github.com/docker/docker/pkg/archive
 github.com/docker/docker/pkg/chrootarchive
+github.com/docker/docker/pkg/system
 github.com/docker/docker/pkg/fileutils
 github.com/docker/docker/pkg/ioutils
 github.com/docker/docker/api/types/blkiodev
 github.com/docker/docker/api/types/mount
 github.com/docker/docker/pkg/homedir
-github.com/docker/docker/pkg/idtools
 github.com/docker/docker/pkg/longpath
 github.com/docker/docker/pkg/pools
-github.com/docker/docker/pkg/system
 github.com/docker/docker/pkg/mount
 # github.com/docker/docker-credential-helpers v0.6.0
 github.com/docker/docker-credential-helpers/client
