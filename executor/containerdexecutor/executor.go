@@ -117,7 +117,7 @@ func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root c
 		opts = append(opts, containerdoci.WithCgroup(cgroupsPath))
 	}
 	processMode := oci.ProcessSandbox // FIXME(AkihiroSuda)
-	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, namespace, processMode, opts...)
+	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, namespace, processMode, nil, opts...)
 	if err != nil {
 		return err
 	}

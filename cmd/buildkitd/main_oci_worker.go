@@ -168,6 +168,12 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 		return nil, nil
 	}
 
+	// TODO: this should never change the existing state dir
+	idmapping, err := parseIdentityMapping(cfg.UserRemapUnsupported)
+	if err != nil {
+		return nil, err
+	}
+
 	snFactory, err := snapshotterFactory(common.config.Root, cfg.Snapshotter)
 	if err != nil {
 		return nil, err
@@ -186,7 +192,7 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 		processMode = oci.NoProcessSandbox
 	}
 
-	opt, err := runc.NewWorkerOpt(common.config.Root, snFactory, cfg.Rootless, processMode, cfg.Labels)
+	opt, err := runc.NewWorkerOpt(common.config.Root, snFactory, cfg.Rootless, processMode, cfg.Labels, idmapping)
 	if err != nil {
 		return nil, err
 	}

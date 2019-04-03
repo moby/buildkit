@@ -297,7 +297,7 @@ func setupGitSource(t *testing.T, tmpdir string) source.Source {
 	assert.NoError(t, err)
 
 	cm, err := cache.NewManager(cache.ManagerOpt{
-		Snapshotter:   snapshot.FromContainerdSnapshotter(snapshotter),
+		Snapshotter:   snapshot.FromContainerdSnapshotter(snapshotter, nil),
 		MetadataStore: md,
 	})
 	assert.NoError(t, err)

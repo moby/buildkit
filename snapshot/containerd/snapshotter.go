@@ -8,15 +8,16 @@ import (
 	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/namespaces"
 	ctdsnapshot "github.com/containerd/containerd/snapshots"
+	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/snapshot/blobmapping"
 )
 
-func NewSnapshotter(snapshotter ctdsnapshot.Snapshotter, store content.Store, mdstore *metadata.Store, ns string, gc func(context.Context) error) snapshot.Snapshotter {
+func NewSnapshotter(snapshotter ctdsnapshot.Snapshotter, store content.Store, mdstore *metadata.Store, ns string, gc func(context.Context) error, idmap *idtools.IdentityMapping) snapshot.Snapshotter {
 	return blobmapping.NewSnapshotter(blobmapping.Opt{
 		Content:       store,
-		Snapshotter:   snapshot.FromContainerdSnapshotter(&nsSnapshotter{ns, snapshotter, gc}),
+		Snapshotter:   snapshot.FromContainerdSnapshotter(&nsSnapshotter{ns, snapshotter, gc}, idmap),
 		MetadataStore: mdstore,
 	})
 }

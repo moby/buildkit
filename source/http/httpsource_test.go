@@ -315,7 +315,7 @@ func newHTTPSource(tmpdir string) (source.Source, error) {
 	}
 
 	cm, err := cache.NewManager(cache.ManagerOpt{
-		Snapshotter:   snapshot.FromContainerdSnapshotter(snapshotter),
+		Snapshotter:   snapshot.FromContainerdSnapshotter(snapshotter, nil),
 		MetadataStore: md,
 	})
 	if err != nil {
