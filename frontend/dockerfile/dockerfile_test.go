@@ -86,6 +86,7 @@ var allTests = []integration.Test{
 	testCopyWildcardCache,
 	testDockerignoreOverride,
 	testTarExporter,
+	testDefaultEnvWithArgs,
 }
 
 var fileOpTests = []integration.Test{
@@ -144,6 +145,58 @@ func TestIntegration(t *testing.T) {
 		"true":  true,
 		"false": false,
 	}))...)
+}
+
+func testDefaultEnvWithArgs(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM busybox AS build
+ARG my_arg
+ENV my_arg "${my_arg:-def_val}"
+COPY myscript.sh myscript.sh 
+RUN ./myscript.sh
+FROM scratch
+COPY --from=build /out /out
+`)
+
+	script := []byte(`
+#!/usr/bin/env sh
+echo -n $my_arg > /out
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("myscript.sh", script, 0700),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "out"))
+	require.NoError(t, err)
+	require.Equal(t, "def_val", string(dt))
 }
 
 func testDockerignoreOverride(t *testing.T, sb integration.Sandbox) {
