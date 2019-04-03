@@ -5,9 +5,9 @@ import (
 	"context"
 	"net"
 	"net/url"
-
-	"github.com/docker/cli/cli/connhelper/commandconn"
 )
+
+var helpers = map[string]func(*url.URL) (*ConnectionHelper, error){}
 
 // ConnectionHelper allows to connect to a remote host with custom stream provider binary.
 type ConnectionHelper struct {
@@ -17,21 +17,21 @@ type ConnectionHelper struct {
 
 // GetConnectionHelper returns BuildKit-specific connection helper for the given URL.
 // GetConnectionHelper returns nil without error when no helper is registered for the scheme.
-//
-// docker://<container> URL requires BuildKit v0.5.0 or later in the container.
 func GetConnectionHelper(daemonURL string) (*ConnectionHelper, error) {
 	u, err := url.Parse(daemonURL)
 	if err != nil {
 		return nil, err
 	}
-	switch scheme := u.Scheme; scheme {
-	case "docker":
-		container := u.Host
-		return &ConnectionHelper{
-			ContextDialer: func(ctx context.Context, addr string) (net.Conn, error) {
-				return commandconn.New(ctx, "docker", "exec", "-i", container, "buildctl", "dial-stdio")
-			},
-		}, nil
+
+	fn, ok := helpers[u.Scheme]
+	if !ok {
+		return nil, nil
 	}
-	return nil, err
+
+	return fn(u)
+}
+
+// Register registers new connectionhelper for scheme
+func Register(scheme string, fn func(*url.URL) (*ConnectionHelper, error)) {
+	helpers[scheme] = fn
 }
