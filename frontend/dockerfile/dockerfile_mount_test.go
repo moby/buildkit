@@ -16,6 +16,7 @@ import (
 
 var mountTests = []integration.Test{
 	testMountContext,
+	testMountTmpfs,
 }
 
 func init() {
@@ -33,6 +34,34 @@ RUN --mount=target=/context [ "$(cat /context/testfile)" == "contents0" ]
 	dir, err := tmpdir(
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 		fstest.CreateFile("testfile", []byte("contents0"), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+}
+
+func testMountTmpfs(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM busybox
+RUN --mount=target=/mytmp,type=tmpfs touch /mytmp/foo
+RUN [ ! -f /mytmp/foo ]
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
