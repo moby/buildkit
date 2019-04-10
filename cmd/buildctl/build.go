@@ -79,7 +79,7 @@ var buildCommand = cli.Command{
 		},
 		cli.StringSliceFlag{
 			Name:  "export-cache",
-			Usage: "Export build cache, e.g. type=registry,ref=example.com/foo/bar, or type=local,dest=path/to/dir",
+			Usage: "Export build cache, e.g. --export-cache type=registry,ref=example.com/foo/bar, or --export-cache type=local,dest=path/to/dir",
 		},
 		cli.StringSliceFlag{
 			Name:   "export-cache-opt",
@@ -88,7 +88,7 @@ var buildCommand = cli.Command{
 		},
 		cli.StringSliceFlag{
 			Name:  "import-cache",
-			Usage: "Import build cache, e.g. type=registry,ref=example.com/foo/bar, or type=local,src=path/to/dir",
+			Usage: "Import build cache, e.g. --import-cache type=registry,ref=example.com/foo/bar, or --import-cache type=local,src=path/to/dir",
 		},
 		cli.StringSliceFlag{
 			Name:  "secret",
