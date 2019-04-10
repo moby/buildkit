@@ -100,7 +100,7 @@ To start building use `buildctl build` command. The example script accepts `--wi
 go run examples/buildkit0/buildkit.go | buildctl build
 ```
 
-`buildctl build` will show interactive progress bar by default while the build job is running. It will also show you the path to the trace file that contains all information about the timing of the individual steps and logs.
+`buildctl build` will show interactive progress bar by default while the build job is running. If the path to the trace file is specified, the trace file generated will contain all information about the timing of the individual steps and logs.
 
 Different versions of the example scripts show different ways of describing the build definition for this project to show the capabilities of the library. New versions have been added when new features have become available.
 
@@ -218,8 +218,8 @@ buildctl build ... --import-cache type=registry,ref=localhost:5000/myrepo:buildc
 #### To/From local filesystem
 
 ```
-buildctl build ... --export-cache type=local,dest=path/to/input-dir
-buildctl build ... --import-cache type=local,src=path/to/output-dir
+buildctl build ... --export-cache type=local,dest=path/to/output-dir
+buildctl build ... --import-cache type=local,src=path/to/input-dir
 ```
 
 The directory layout conforms to OCI Image Spec v1.0.
