@@ -227,7 +227,10 @@ func (t *trace) update(s *client.SolveStatus, termWidth int) {
 			}
 			t.vertexes = append(t.vertexes, t.byDigest[v.Digest])
 		}
-		t.byDigest[v.Digest].Vertex = v
+		// allow a duplicate initial vertex that shouldn't reset state
+		if !(prev != nil && prev.Started != nil && v.Started == nil) {
+			t.byDigest[v.Digest].Vertex = v
+		}
 		t.byDigest[v.Digest].jobCached = false
 	}
 	for _, s := range s.Statuses {
