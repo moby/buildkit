@@ -3806,9 +3806,19 @@ COPY --from=base unique /
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
+	importOpt := []client.CacheOptionsEntry{
+		{
+			Type:  "registry",
+			Attrs: map[string]string{"ref": target},
+		},
+	}
+
+	s, err := json.Marshal(importOpt)
+	require.NoError(t, err)
+
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
-			"cache-from": target,
+			"cache-imports": string(s),
 		},
 		Exports: []client.ExportEntry{
 			{
@@ -3996,8 +4006,18 @@ RUN echo bar > bar
 
 	target2 := "example.com/moby/dockerfileexpids2:test"
 
+	importOpt := []client.CacheOptionsEntry{
+		{
+			Type:  "registry",
+			Attrs: map[string]string{"ref": cacheTarget},
+		},
+	}
+
+	s, err := json.Marshal(importOpt)
+	require.NoError(t, err)
+
 	opt.Exports[0].Attrs["name"] = target2
-	opt.FrontendAttrs["cache-from"] = cacheTarget
+	opt.FrontendAttrs["cache-imports"] = string(s)
 
 	_, err = f.Solve(context.TODO(), c, opt, nil)
 	require.NoError(t, err)

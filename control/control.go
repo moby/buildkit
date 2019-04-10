@@ -184,42 +184,10 @@ func (c *Controller) Prune(req *controlapi.PruneRequest, stream controlapi.Contr
 	return eg2.Wait()
 }
 
-func translateLegacySolveRequest(req *controlapi.SolveRequest) error {
-	// translates ExportRef and ExportAttrs to new Exports (v0.4.0)
-	if legacyExportRef := req.Cache.ExportRefDeprecated; legacyExportRef != "" {
-		ex := &controlapi.CacheOptionsEntry{
-			Type:  "registry",
-			Attrs: req.Cache.ExportAttrsDeprecated,
-		}
-		if ex.Attrs == nil {
-			ex.Attrs = make(map[string]string)
-		}
-		ex.Attrs["ref"] = legacyExportRef
-		// FIXME(AkihiroSuda): skip append if already exists
-		req.Cache.Exports = append(req.Cache.Exports, ex)
-		req.Cache.ExportRefDeprecated = ""
-		req.Cache.ExportAttrsDeprecated = nil
-	}
-	// translates ImportRefs to new Imports (v0.4.0)
-	for _, legacyImportRef := range req.Cache.ImportRefsDeprecated {
-		im := &controlapi.CacheOptionsEntry{
-			Type:  "registry",
-			Attrs: map[string]string{"ref": legacyImportRef},
-		}
-		// FIXME(AkihiroSuda): skip append if already exists
-		req.Cache.Imports = append(req.Cache.Imports, im)
-	}
-	req.Cache.ImportRefsDeprecated = nil
-	return nil
-}
-
 func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*controlapi.SolveResponse, error) {
 	atomic.AddInt64(&c.buildCount, 1)
 	defer atomic.AddInt64(&c.buildCount, -1)
 
-	if err := translateLegacySolveRequest(req); err != nil {
-		return nil, err
-	}
 	ctx = session.NewContext(ctx, req.Session)
 
 	defer func() {

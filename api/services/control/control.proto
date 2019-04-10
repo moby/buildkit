@@ -67,19 +67,8 @@ message SolveRequest {
 }
 
 message CacheOptions {
-	// ExportRefDeprecated is deprecated in favor or the new Exports since BuildKit v0.4.0.
-	// When ExportRefDeprecated is set, the solver appends
-	// {.Type = "registry", .Attrs = ExportAttrs.add("ref", ExportRef)}
-	// to Exports for compatibility. (planned to be removed)
-	string ExportRefDeprecated = 1;
-	// ImportRefsDeprecated is deprecated in favor or the new Imports since BuildKit v0.4.0.
-	// When ImportRefsDeprecated is set, the solver appends
-	// {.Type = "registry", .Attrs = {"ref": importRef}}
-	// for each of the ImportRefs entry to Imports for compatibility. (planned to be removed)
-	repeated string ImportRefsDeprecated = 2;
-	// ExportAttrsDeprecated is deprecated since BuildKit v0.4.0.
-	// See the description of ExportRefDeprecated.
-	map<string, string> ExportAttrsDeprecated = 3;
+	// ExportRefDeprecated = 1, ImportRefsDeprecated = 2 and
+	// ExportAttrsDeprecated = 3 were removed in BuildKit v0.8.0 and ignored.
 	// Exports was introduced in BuildKit v0.4.0.
 	repeated CacheOptionsEntry Exports = 4;
 	// Imports was introduced in BuildKit v0.4.0.

@@ -401,7 +401,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 					}
 				}
 				// old API
-				if cacheFromStr := opts[keyCacheFrom]; cacheFromStr != "" {
+				if cacheFromStr := opts[keyCacheFrom]; len(cacheImports) < 1 && cacheFromStr != "" {
 					cacheFrom := strings.Split(cacheFromStr, ",")
 					for _, s := range cacheFrom {
 						im := client.CacheOptionsEntry{
