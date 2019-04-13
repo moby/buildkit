@@ -155,7 +155,7 @@ github.com/docker/libnetwork/resolvconf/dns
 github.com/docker/libnetwork/types
 # github.com/gofrs/flock v0.7.0
 github.com/gofrs/flock
-# github.com/gogo/googleapis v0.0.0-20180501115203-b23578765ee5
+# github.com/gogo/googleapis v1.1.0
 github.com/gogo/googleapis/google/rpc
 # github.com/gogo/protobuf v1.2.0
 github.com/gogo/protobuf/gogoproto
@@ -246,7 +246,7 @@ github.com/uber/jaeger-lib/metrics
 github.com/urfave/cli
 # go.etcd.io/bbolt v1.3.2
 go.etcd.io/bbolt
-# golang.org/x/crypto v0.0.0-20190129210102-ccddf3741a0c
+# golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2
 golang.org/x/crypto/ssh
 golang.org/x/crypto/ssh/agent
 golang.org/x/crypto/ssh/terminal
@@ -256,7 +256,7 @@ golang.org/x/crypto/internal/chacha20
 golang.org/x/crypto/poly1305
 golang.org/x/crypto/ed25519/internal/edwards25519
 golang.org/x/crypto/internal/subtle
-# golang.org/x/net v0.0.0-20180906233101-161cd47e91fd
+# golang.org/x/net v0.0.0-20190311183353-d8887717615a
 golang.org/x/net/context
 golang.org/x/net/trace
 golang.org/x/net/http2
@@ -273,6 +273,7 @@ golang.org/x/sync/semaphore
 # golang.org/x/sys v0.0.0-20190303122642-d455e41777fc
 golang.org/x/sys/unix
 golang.org/x/sys/windows
+golang.org/x/sys/cpu
 # golang.org/x/text v0.3.0
 golang.org/x/text/secure/bidirule
 golang.org/x/text/unicode/bidi
@@ -280,9 +281,9 @@ golang.org/x/text/unicode/norm
 golang.org/x/text/transform
 # golang.org/x/time v0.0.0-20161028155119-f51c12702a4d
 golang.org/x/time/rate
-# google.golang.org/genproto v0.0.0-20170523043604-d80a6e20e776
+# google.golang.org/genproto v0.0.0-20180817151627-c66870c02cf8
 google.golang.org/genproto/googleapis/rpc/status
-# google.golang.org/grpc v1.12.0
+# google.golang.org/grpc v1.20.1
 google.golang.org/grpc
 google.golang.org/grpc/credentials
 google.golang.org/grpc/metadata
@@ -292,13 +293,19 @@ google.golang.org/grpc/status
 google.golang.org/grpc/codes
 google.golang.org/grpc/balancer
 google.golang.org/grpc/balancer/roundrobin
-google.golang.org/grpc/channelz
 google.golang.org/grpc/connectivity
 google.golang.org/grpc/encoding
 google.golang.org/grpc/encoding/proto
-google.golang.org/grpc/grpclb/grpc_lb_v1/messages
 google.golang.org/grpc/grpclog
 google.golang.org/grpc/internal
+google.golang.org/grpc/internal/backoff
+google.golang.org/grpc/internal/balancerload
+google.golang.org/grpc/internal/binarylog
+google.golang.org/grpc/internal/channelz
+google.golang.org/grpc/internal/envconfig
+google.golang.org/grpc/internal/grpcrand
+google.golang.org/grpc/internal/grpcsync
+google.golang.org/grpc/internal/transport
 google.golang.org/grpc/keepalive
 google.golang.org/grpc/naming
 google.golang.org/grpc/peer
@@ -307,8 +314,10 @@ google.golang.org/grpc/resolver/dns
 google.golang.org/grpc/resolver/passthrough
 google.golang.org/grpc/stats
 google.golang.org/grpc/tap
-google.golang.org/grpc/transport
+google.golang.org/grpc/credentials/internal
 google.golang.org/grpc/balancer/base
+google.golang.org/grpc/binarylog/grpc_binarylog_v1
+google.golang.org/grpc/internal/syscall
 # gotest.tools v2.2.0+incompatible
 gotest.tools/assert
 gotest.tools/assert/cmp

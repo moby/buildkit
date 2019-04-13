@@ -25,9 +25,8 @@ require (
 	github.com/docker/libnetwork v0.0.0-20180913200009-36d3bed0e9f4
 	github.com/godbus/dbus v4.1.0+incompatible // indirect
 	github.com/gofrs/flock v0.7.0
-	github.com/gogo/googleapis v0.0.0-20180501115203-b23578765ee5
+	github.com/gogo/googleapis v1.1.0
 	github.com/gogo/protobuf v1.2.0
-	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b // indirect
 	github.com/golang/protobuf v1.2.0
 	github.com/google/go-cmp v0.2.0
 	github.com/google/shlex v0.0.0-20150127133951-6f45313302b9
@@ -60,13 +59,13 @@ require (
 	github.com/vishvananda/netlink v1.0.0 // indirect
 	github.com/vishvananda/netns v0.0.0-20180720170159-13995c7128cc // indirect
 	go.etcd.io/bbolt v1.3.2
-	golang.org/x/crypto v0.0.0-20190129210102-ccddf3741a0c
-	golang.org/x/net v0.0.0-20180906233101-161cd47e91fd
+	golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2
+	golang.org/x/net v0.0.0-20190311183353-d8887717615a
 	golang.org/x/sync v0.0.0-20180314180146-1d60e4601c6f
 	golang.org/x/sys v0.0.0-20190303122642-d455e41777fc
 	golang.org/x/time v0.0.0-20161028155119-f51c12702a4d
-	google.golang.org/genproto v0.0.0-20170523043604-d80a6e20e776
-	google.golang.org/grpc v1.12.0
+	google.golang.org/genproto v0.0.0-20180817151627-c66870c02cf8
+	google.golang.org/grpc v1.20.1
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
 	gotest.tools v2.2.0+incompatible
 )
