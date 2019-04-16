@@ -16,8 +16,8 @@ const (
 
 func New(ctx context.Context, c session.Caller, url *url.URL) (*Upload, error) {
 	opts := map[string][]string{
-		keyPath: []string{url.Path},
-		keyHost: []string{url.Host},
+		keyPath: {url.Path},
+		keyHost: {url.Host},
 	}
 
 	client := NewUploadClient(c.Conn())
