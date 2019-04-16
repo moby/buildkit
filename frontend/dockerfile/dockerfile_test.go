@@ -713,9 +713,14 @@ func testCopyChownCreateDest(t *testing.T, sb integration.Sandbox) {
 
 	dockerfile := []byte(`
 FROM busybox
+ARG group
+ENV owner user01
 RUN adduser -D user
+RUN adduser -D user01
 COPY --chown=user:user . /dest
+COPY --chown=${owner}:${group} . /dest01
 RUN [ "$(stat -c "%U %G" /dest)" == "user user" ]
+RUN [ "$(stat -c "%U %G" /dest01)" == "user01 user" ]
 `)
 
 	dir, err := tmpdir(
@@ -731,6 +736,7 @@ RUN [ "$(stat -c "%U %G" /dest)" == "user user" ]
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
 			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
+			"build-arg:group":                   "user",
 		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
@@ -2512,11 +2518,15 @@ func testCopyChown(t *testing.T, sb integration.Sandbox) {
 
 	dockerfile := []byte(`
 FROM busybox AS base
+ENV owner 1000
 RUN mkdir -m 0777 /out
 COPY --chown=daemon foo /
 COPY --chown=1000:nogroup bar /baz
+ARG group
+COPY --chown=${owner}:${group} foo /foobis
 RUN stat -c "%U %G" /foo  > /out/fooowner
 RUN stat -c "%u %G" /baz/sub  > /out/subowner
+RUN stat -c "%u %G" /foobis  > /out/foobisowner
 FROM scratch
 COPY --from=base /out /
 `)
@@ -2547,6 +2557,7 @@ COPY --from=base /out /
 		},
 		FrontendAttrs: map[string]string{
 			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
+			"build-arg:group":                   "nogroup",
 		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
@@ -2560,6 +2571,10 @@ COPY --from=base /out /
 	require.Equal(t, "daemon daemon\n", string(dt))
 
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "subowner"))
+	require.NoError(t, err)
+	require.Equal(t, "1000 nogroup\n", string(dt))
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "foobisowner"))
 	require.NoError(t, err)
 	require.Equal(t, "1000 nogroup\n", string(dt))
 }
