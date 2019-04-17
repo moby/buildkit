@@ -20,6 +20,7 @@ import (
 	"github.com/moby/buildkit/frontend/dockerfile/dockerfile2llb"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/apicaps"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -151,15 +152,23 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 			return nil, errors.Errorf("failed to read downloaded context")
 		}
 		if isArchive(dt) {
-			copyImage := opts[keyOverrideCopyImage]
-			if copyImage == "" {
-				copyImage = dockerfile2llb.DefaultCopyImage
+			fileop := useFileOp(opts, &caps)
+			if fileop {
+				src = llb.Scratch().File(llb.Copy(httpContext, "/context", "/", &llb.CopyInfo{
+					AttemptUnpack: true,
+				}))
+				buildContext = &src
+			} else {
+				copyImage := opts[keyOverrideCopyImage]
+				if copyImage == "" {
+					copyImage = dockerfile2llb.DefaultCopyImage
+				}
+				unpack := llb.Image(copyImage, dockerfile2llb.WithInternalName("helper image for file operations")).
+					Run(llb.Shlex("copy --unpack /src/context /out/"), llb.ReadonlyRootFS(), dockerfile2llb.WithInternalName("extracting build context"))
+				unpack.AddMount("/src", httpContext, llb.Readonly)
+				src = unpack.AddMount("/out", llb.Scratch())
+				buildContext = &src
 			}
-			unpack := llb.Image(copyImage, dockerfile2llb.WithInternalName("helper image for file operations")).
-				Run(llb.Shlex("copy --unpack /src/context /out/"), llb.ReadonlyRootFS(), dockerfile2llb.WithInternalName("extracting build context"))
-			unpack.AddMount("/src", httpContext, llb.Readonly)
-			src = unpack.AddMount("/out", llb.Scratch())
-			buildContext = &src
 		} else {
 			filename = "context"
 			src = httpContext
@@ -528,4 +537,14 @@ func parseNetMode(v string) (pb.NetMode, error) {
 	default:
 		return 0, errors.Errorf("invalid netmode %s", v)
 	}
+}
+
+func useFileOp(args map[string]string, caps *apicaps.CapSet) bool {
+	enabled := true
+	if v, ok := args["build-arg:BUILDKIT_DISABLE_FILEOP"]; ok {
+		if b, err := strconv.ParseBool(v); err == nil {
+			enabled = !b
+		}
+	}
+	return enabled && caps != nil && caps.Supports(pb.CapFileBase) == nil
 }

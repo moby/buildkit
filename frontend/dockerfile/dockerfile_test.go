@@ -32,6 +32,8 @@ import (
 	"github.com/moby/buildkit/frontend/dockerfile/builder"
 	"github.com/moby/buildkit/frontend/dockerfile/dockerfile2llb"
 	"github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/session/upload/uploadprovider"
 	"github.com/moby/buildkit/util/testutil"
 	"github.com/moby/buildkit/util/testutil/httpserver"
 	"github.com/moby/buildkit/util/testutil/integration"
@@ -102,6 +104,7 @@ var fileOpTests = []integration.Test{
 	testCopyVarSubstitution,
 	testCopyWildcards,
 	testCopyRelative,
+	testTarContext,
 }
 
 var opts []integration.TestOpt
@@ -3778,6 +3781,57 @@ COPY --from=build /out /
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
 	require.Equal(t, "hpvalue2::::foocontents2::::bazcontent", string(dt))
+}
+
+func testTarContext(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+	isFileOp := getFileOp(t, sb)
+
+	dockerfile := []byte(`
+FROM scratch
+COPY foo /
+`)
+
+	foo := []byte("contents")
+
+	buf := bytes.NewBuffer(nil)
+	tw := tar.NewWriter(buf)
+	err := tw.WriteHeader(&tar.Header{
+		Name:     "Dockerfile",
+		Typeflag: tar.TypeReg,
+		Size:     int64(len(dockerfile)),
+		Mode:     0644,
+	})
+	require.NoError(t, err)
+	_, err = tw.Write(dockerfile)
+	require.NoError(t, err)
+	err = tw.WriteHeader(&tar.Header{
+		Name:     "foo",
+		Typeflag: tar.TypeReg,
+		Size:     int64(len(foo)),
+		Mode:     0644,
+	})
+	require.NoError(t, err)
+	_, err = tw.Write(foo)
+	require.NoError(t, err)
+	err = tw.Close()
+	require.NoError(t, err)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	up := uploadprovider.New()
+	url := up.Add(buf)
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
+			"context":                           url,
+		},
+		Session: []session.Attachable{up},
+	}, nil)
+	require.NoError(t, err)
 }
 
 func tmpdir(appliers ...fstest.Applier) (string, error) {
