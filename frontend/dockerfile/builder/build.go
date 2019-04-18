@@ -62,8 +62,10 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 		localNameContext = v
 	}
 
+	forceLocalDockerfile := false
 	localNameDockerfile := DefaultLocalNameDockerfile
 	if v, ok := opts[keyNameDockerfile]; ok {
+		forceLocalDockerfile = true
 		localNameDockerfile = v
 	}
 
@@ -119,11 +121,14 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 		llb.SharedKeyHint(localNameDockerfile),
 		dockerfile2llb.WithInternalName(name),
 	)
+
 	var buildContext *llb.State
 	isScratchContext := false
 	if st, ok := detectGitContext(opts[localNameContext]); ok {
-		src = *st
-		buildContext = &src
+		if !forceLocalDockerfile {
+			src = *st
+		}
+		buildContext = st
 	} else if httpPrefix.MatchString(opts[localNameContext]) {
 		httpContext := llb.HTTP(opts[localNameContext], llb.Filename("context"), dockerfile2llb.WithInternalName("load remote build context"))
 		def, err := httpContext.Marshal(marshalOpts...)
@@ -154,10 +159,13 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 		if isArchive(dt) {
 			fileop := useFileOp(opts, &caps)
 			if fileop {
-				src = llb.Scratch().File(llb.Copy(httpContext, "/context", "/", &llb.CopyInfo{
+				bc := llb.Scratch().File(llb.Copy(httpContext, "/context", "/", &llb.CopyInfo{
 					AttemptUnpack: true,
 				}))
-				buildContext = &src
+				if !forceLocalDockerfile {
+					src = bc
+				}
+				buildContext = &bc
 			} else {
 				copyImage := opts[keyOverrideCopyImage]
 				if copyImage == "" {
@@ -166,13 +174,18 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 				unpack := llb.Image(copyImage, dockerfile2llb.WithInternalName("helper image for file operations")).
 					Run(llb.Shlex("copy --unpack /src/context /out/"), llb.ReadonlyRootFS(), dockerfile2llb.WithInternalName("extracting build context"))
 				unpack.AddMount("/src", httpContext, llb.Readonly)
-				src = unpack.AddMount("/out", llb.Scratch())
-				buildContext = &src
+				bc := unpack.AddMount("/out", llb.Scratch())
+				if !forceLocalDockerfile {
+					src = bc
+				}
+				buildContext = &bc
 			}
 		} else {
 			filename = "context"
-			src = httpContext
-			buildContext = &src
+			if !forceLocalDockerfile {
+				src = httpContext
+			}
+			buildContext = &httpContext
 			isScratchContext = true
 		}
 	}

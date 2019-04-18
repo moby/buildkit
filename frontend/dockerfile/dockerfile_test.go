@@ -105,6 +105,7 @@ var fileOpTests = []integration.Test{
 	testCopyWildcards,
 	testCopyRelative,
 	testTarContext,
+	testTarContextExternalDockerfile,
 }
 
 var opts []integration.TestOpt
@@ -3832,6 +3833,72 @@ COPY foo /
 		Session: []session.Attachable{up},
 	}, nil)
 	require.NoError(t, err)
+}
+
+func testTarContextExternalDockerfile(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+	isFileOp := getFileOp(t, sb)
+
+	foo := []byte("contents")
+
+	buf := bytes.NewBuffer(nil)
+	tw := tar.NewWriter(buf)
+	err := tw.WriteHeader(&tar.Header{
+		Name:     "foo",
+		Typeflag: tar.TypeReg,
+		Size:     int64(len(foo)),
+		Mode:     0644,
+	})
+	require.NoError(t, err)
+	_, err = tw.Write(foo)
+	require.NoError(t, err)
+	err = tw.Close()
+	require.NoError(t, err)
+
+	dockerfile := []byte(`
+FROM scratch
+COPY foo bar
+`)
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	up := uploadprovider.New()
+	url := up.Add(buf)
+
+	// repeat with changed default args should match the old cache
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
+			"context":                           url,
+			"dockerfilekey":                     builder.DefaultLocalNameDockerfile,
+		},
+		Session: []session.Attachable{up},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "bar"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), "contents")
 }
 
 func tmpdir(appliers ...fstest.Applier) (string, error) {
