@@ -271,6 +271,18 @@ buildctl build --help
 The images can be also built locally using `./hack/dockerfiles/test.Dockerfile` (or `./hack/dockerfiles/test.buildkit.Dockerfile` if you already have BuildKit).
 Run `make images` to build the images as `moby/buildkit:local` and `moby/buildkit:local-rootless`.
 
+#### Connection helpers
+
+If you are running `moby/buildkit:master` or `moby/buildkit:master-rootless` as a Docker/Kubernetes container, you can use special `BUILDKIT_HOST` URL for connecting to the BuildKit daemon in the container:
+
+```
+export BUILDKIT_HOST=docker://<container>
+```
+
+```
+export BUILDKIT_HOST=kube-pod://<pod>
+```
+
 ### Opentracing support
 
 BuildKit supports opentracing for buildkitd gRPC API and buildctl commands. To capture the trace to [Jaeger](https://github.com/jaegertracing/jaeger), set `JAEGER_TRACE` environment variable to the collection address.
