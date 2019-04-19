@@ -38,7 +38,7 @@ BuildKit is used by the following projects:
 - [OpenFaaS Cloud](https://github.com/openfaas/openfaas-cloud)
 - [container build interface](https://github.com/containerbuilding/cbi)
 - [Knative Build Templates](https://github.com/knative/build-templates)
-- [boss](https://github.com/crosbymichael/boss)
+- [vab](https://github.com/stellarproject/vab)
 - [Rio](https://github.com/rancher/rio) (on roadmap)
 
 ### Quick start
