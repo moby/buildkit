@@ -16,21 +16,21 @@ if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"
 if [ "$#" == 0 ]; then TEST_INTEGRATION=1; fi
 
 while test $# -gt 0
-  do
-    case "$1" in
-        gateway)
-          TEST_GATEWAY=1
-        ;;
-        dockerfile)
-          TEST_DOCKERFILE=1
-        ;;
-        integration)
-          TEST_INTEGRATION=1
-        ;;
-        *)
-          echo "unknown arg $1"
-        ;;
-    esac
+	 do
+		case "$1" in
+			gateway)
+				TEST_GATEWAY=1
+				;;
+			dockerfile)
+				TEST_DOCKERFILE=1
+				;;
+			integration)
+				TEST_INTEGRATION=1
+				;;
+			*)
+				echo "unknown arg $1"
+				;;
+		esac
     shift
 done
 
@@ -39,84 +39,84 @@ iidfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
 set -x
 
 case $buildmode in
-"buildkit")
-  tmpfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
-  buildctl build $progressFlag --frontend=dockerfile.v0 --local context=. --local dockerfile=. \
-    --opt target=integration-tests \
-    --opt filename=./hack/dockerfiles/test.buildkit.Dockerfile \
-    --output type=docker,name=$iid,dest=$tmpfile
-  docker load -i $tmpfile
-  rm $tmpfile
-  ;;
-*)
-  case $buildmode in
-  "docker-buildkit")
-    export DOCKER_BUILDKIT=1
-    docker build --iidfile $iidfile -f ./hack/dockerfiles/test.buildkit.Dockerfile --target integration-tests --force-rm .
-    ;;
-  *)
-    docker build --iidfile $iidfile -f ./hack/dockerfiles/test.Dockerfile --target integration-tests --force-rm .
-    ;;
-  esac
-  iid=$(cat $iidfile)
-  ;;
+	"buildkit")
+		tmpfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
+		buildctl build $progressFlag --frontend=dockerfile.v0 --local context=. --local dockerfile=. \
+			--opt target=integration-tests \
+			--opt filename=./hack/dockerfiles/test.buildkit.Dockerfile \
+			--output type=docker,name=$iid,dest=$tmpfile
+		docker load -i $tmpfile
+		rm $tmpfile
+		;;
+	*)
+		case $buildmode in
+	 		"docker-buildkit")
+				export DOCKER_BUILDKIT=1
+				docker build --iidfile $iidfile -f ./hack/dockerfiles/test.buildkit.Dockerfile --target integration-tests --force-rm .
+				;;
+			*)
+				docker build --iidfile $iidfile -f ./hack/dockerfiles/test.Dockerfile --target integration-tests --force-rm .
+				;;
+		esac
+		iid=$(cat $iidfile)
+		;;
 esac
 
 cacheVolume=$(docker create -v /root/.cache -v /root/.cache/registry -v /go/pkg/mod alpine)
 
 if [ "$TEST_INTEGRATION" == 1 ]; then
-  docker run --rm -v /tmp --volumes-from=$cacheVolume -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry --privileged $iid go test ${TESTFLAGS:--v} ${TESTPKGS:-./...}
+	docker run --rm -v /tmp --volumes-from=$cacheVolume -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry --privileged $iid go test ${TESTFLAGS:--v} ${TESTPKGS:-./...}
 fi
 
 
 if [ "$TEST_GATEWAY" == 1 ]; then
-  docker run --rm --volumes-from=$cacheVolume $iid go build ./frontend/gateway/client
+	docker run --rm --volumes-from=$cacheVolume $iid go build ./frontend/gateway/client
 fi
 
 
 if [ "$TEST_DOCKERFILE" == 1 ]; then
-  if [ -z $DOCKERFILE_RELEASES ]; then
-    DOCKERFILE_RELEASES="mainline experimental mounts secrets ssh"
-  fi
+	if [ -z $DOCKERFILE_RELEASES ]; then
+		DOCKERFILE_RELEASES="mainline experimental mounts secrets ssh"
+	fi
 
 
-  for release in $DOCKERFILE_RELEASES; do
-    buildtags=$(cat ./frontend/dockerfile/release/$release/tags)
-    tarout=$(mktemp -t dockerfile-frontend.XXXXXXXXXX)
-    case $buildmode in
-    "buildkit")
-      buildctl build $progressFlag --frontend=dockerfile.v0 --local context=. --local dockerfile=. \
-        --opt filename=./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile \
-        --opt build-arg:BUILDTAGS="$buildtags" \
-        --output type=oci,dest=$tarout
-      ;;
-    "docker-buildkit")
-      dfiidfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
-      docker build --iidfile=$dfiidfile -f ./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile --build-arg BUILDTAGS="$buildtags" .
-      dfiid=$(cat $dfiidfile)
-      docker save -o $tarout $dfiid
-      docker rmi $dfiid
-      rm $dfiidfile
-      ;;
-    esac
+	for release in $DOCKERFILE_RELEASES; do
+		buildtags=$(cat ./frontend/dockerfile/release/$release/tags)
+		tarout=$(mktemp -t dockerfile-frontend.XXXXXXXXXX)
+		case $buildmode in
+			"buildkit")
+				buildctl build $progressFlag --frontend=dockerfile.v0 --local context=. --local dockerfile=. \
+					--opt filename=./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile \
+					--opt build-arg:BUILDTAGS="$buildtags" \
+					--output type=oci,dest=$tarout
+				;;
+			"docker-buildkit")
+				dfiidfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
+				docker build --iidfile=$dfiidfile -f ./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile --build-arg BUILDTAGS="$buildtags" .
+				dfiid=$(cat $dfiidfile)
+				docker save -o $tarout $dfiid
+				docker rmi $dfiid
+				rm $dfiidfile
+				;;
+		esac
 
-    if [ -s $tarout ]; then
-      cid=$(docker create -v /tmp --rm --privileged --volumes-from=$cacheVolume -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry -e BUILDKIT_WORKER_RANDOM=1 -e FRONTEND_GATEWAY_ONLY=local:/$release.tar -e EXTERNAL_DF_FRONTEND=/dockerfile-frontend $iid go test --count=1 -tags "$buildtags" ${TESTFLAGS:--v} ./frontend/dockerfile)
-      docker cp $tarout $cid:/$release.tar
-      docker start -a $cid
-    fi
-    rm $tarout
-  done
+		if [ -s $tarout ]; then
+			cid=$(docker create -v /tmp --rm --privileged --volumes-from=$cacheVolume -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry -e BUILDKIT_WORKER_RANDOM=1 -e FRONTEND_GATEWAY_ONLY=local:/$release.tar -e EXTERNAL_DF_FRONTEND=/dockerfile-frontend $iid go test --count=1 -tags "$buildtags" ${TESTFLAGS:--v} ./frontend/dockerfile)
+			docker cp $tarout $cid:/$release.tar
+			docker start -a $cid
+		fi
+		rm $tarout
+	done
 fi
 
 docker rm -v $cacheVolume
 
 case $buildmode in
-"docker-buildkit")
-  rm "$iidfile"
-  docker rmi $iid
-  ;;
-"legacy")
-  rm "$iidfile"
-  ;;
+	"docker-buildkit")
+		rm "$iidfile"
+		docker rmi $iid
+		;;
+	"legacy")
+		rm "$iidfile"
+		;;
 esac

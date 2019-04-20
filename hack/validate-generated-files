@@ -6,40 +6,40 @@ progressFlag=""
 if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"; fi
 
 case ${1:-} in
-'')
-  . $(dirname $0)/util
-  gogo_version=$(awk '$1 == "github.com/gogo/protobuf" { print $2 }' go.mod)
-  case $buildmode in
-  "buildkit")
-    buildctl build $progressFlag --frontend=dockerfile.v0 --local context=. --local dockerfile=. --opt build-arg:GOGO_VERSION=$gogo_version --opt target=validate --opt filename=./hack/dockerfiles/generated-files.buildkit.Dockerfile
-    ;;
-  "docker-buildkit")
-    export DOCKER_BUILDKIT=1
-    iidfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
-    docker build --iidfile $iidfile --build-arg GOGO_VERSION=$gogo_version -f ./hack/dockerfiles/generated-files.buildkit.Dockerfile --target validate --force-rm . || exit 1
-    iid=$(cat $iidfile)
-    docker rmi $iid
-    rm -f $iidfile
-    ;;
-  *)
-    docker build --build-arg GOGO_VERSION=$gogo_version -f ./hack/dockerfiles/generated-files.Dockerfile --target validate --force-rm .
-    ;;
-  esac
-  ;;
-check)
-  diffs="$(git status --porcelain -- **/*.pb.go 2>/dev/null)"
-  set +x
-  if [ "$diffs" ] ; then
-      {
-        echo 'The result of "go generate" differs'
-        echo
-        echo "$diffs"
-        echo
-        echo 'Please update with "make generated-files"'
-        echo
-      } >&2
-      exit 1
-  fi
-  echo 'Congratulations! All auto generated files are correct.'
-  ;;
+	'')
+		. $(dirname $0)/util
+		gogo_version=$(awk '$1 == "github.com/gogo/protobuf" { print $2 }' go.mod)
+		case $buildmode in
+			"buildkit")
+				buildctl build $progressFlag --frontend=dockerfile.v0 --local context=. --local dockerfile=. --opt build-arg:GOGO_VERSION=$gogo_version --opt target=validate --opt filename=./hack/dockerfiles/generated-files.buildkit.Dockerfile
+				;;
+			"docker-buildkit")
+				export DOCKER_BUILDKIT=1
+				iidfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
+				docker build --iidfile $iidfile --build-arg GOGO_VERSION=$gogo_version -f ./hack/dockerfiles/generated-files.buildkit.Dockerfile --target validate --force-rm . || exit 1
+				iid=$(cat $iidfile)
+				docker rmi $iid
+				rm -f $iidfile
+				;;
+			*)
+				docker build --build-arg GOGO_VERSION=$gogo_version -f ./hack/dockerfiles/generated-files.Dockerfile --target validate --force-rm .
+				;;
+		esac
+		;;
+	check)
+		diffs="$(git status --porcelain -- **/*.pb.go 2>/dev/null)"
+		set +x
+		if [ "$diffs" ] ; then
+			{
+				echo 'The result of "go generate" differs'
+				echo
+				echo "$diffs"
+				echo
+				echo 'Please update with "make generated-files"'
+				echo
+			} >&2
+			exit 1
+		fi
+		echo 'Congratulations! All auto generated files are correct.'
+		;;
 esac

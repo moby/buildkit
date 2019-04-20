@@ -4,18 +4,19 @@
 : ${PREFER_LEGACY=}
 
 newerEqualThan() { # $1=minimum wanted version $2=actual-version
-  [ "$1" = "$(printf "$1\n$2" | sort -V | head -n 1)" ]
+	[ "$1" = "$(printf "$1\n$2" | sort -V | head -n 1)" ]
 }
 
 buildmode="legacy"
 if [ "$PREFER_BUILDCTL" = "1" ]; then
-  buildmode="buildkit";
+	buildmode="buildkit";
 else
-  serverVersion=$(docker info --format '{{.ServerVersion}}')
-  experimental=$(docker info --format '{{.ExperimentalBuild}}')
-  if [ "$PREFER_LEGACY" != "1" ] && ( newerEqualThan "18.09" $serverVersion || \
-    ( newerEqualThan "18.06" $serverVersion && [ "true" = "$experimental" ] ) || \
-    [ "$DOCKER_BUILDKIT" = "1" ]); then
-    buildmode="docker-buildkit";
-  fi
+	serverVersion=$(docker info --format '{{.ServerVersion}}')
+	experimental=$(docker info --format '{{.ExperimentalBuild}}')
+	if [ "$PREFER_LEGACY" != "1" ] && ( newerEqualThan "18.09" $serverVersion || \
+		( newerEqualThan "18.06" $serverVersion && [ "true" = "$experimental" ] ) || \
+		[ "$DOCKER_BUILDKIT" = "1" ]); \
+	then
+		buildmode="docker-buildkit";
+	fi
 fi

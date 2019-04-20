@@ -93,13 +93,13 @@ image() {
 }
 
 case $buildmode in
-"buildkit")
-	image
-	;;
-"docker-buildkit")
-	imageDocker
-	;;
-*)
-	imageLegacy
-	;;
+	"buildkit")
+		image
+		;;
+	"docker-buildkit")
+		imageDocker
+		;;
+	*)
+		imageLegacy
+		;;
 esac
