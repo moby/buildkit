@@ -3,7 +3,7 @@
 : ${CONTINUOUS_INTEGRATION=}
 
 progressFlag=""
-if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"; fi
+if [ "$CONTINUOUS_INTEGRATION" = "true" ]; then progressFlag="--progress=plain"; fi
 
 case ${1:-} in
 	'')
@@ -29,7 +29,7 @@ case ${1:-} in
 	check)
 		diffs="$(git status --porcelain -- **/*.pb.go 2>/dev/null)"
 		set +x
-		if [ "$diffs" ] ; then
+		if [ -n "$diffs" ] ; then
 			{
 				echo 'The result of "go generate" differs'
 				echo

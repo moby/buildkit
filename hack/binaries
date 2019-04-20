@@ -8,7 +8,7 @@
 set -ex
 
 progressFlag=""
-if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"; fi
+if [ "$CONTINUOUS_INTEGRATION" = "true" ]; then progressFlag="--progress=plain"; fi
 
 binariesLegacy() {
 	mkdir -p bin

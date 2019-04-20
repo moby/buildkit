@@ -6,7 +6,7 @@ set -eu -o pipefail -x
 : ${CONTINUOUS_INTEGRATION=}
 
 progressFlag=""
-if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"; fi
+if [ "$CONTINUOUS_INTEGRATION" = "true" ]; then progressFlag="--progress=plain"; fi
 
 gogo_version=$(awk '$1 == "github.com/gogo/protobuf" { print $2 }' go.mod)
 case $buildmode in

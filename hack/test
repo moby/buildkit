@@ -11,9 +11,9 @@ set -eu -o pipefail
 : ${BUILDKIT_REGISTRY_MIRROR_DIR=}
 
 progressFlag=""
-if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"; fi
+if [ "$CONTINUOUS_INTEGRATION" = "true" ]; then progressFlag="--progress=plain"; fi
 
-if [ "$#" == 0 ]; then TEST_INTEGRATION=1; fi
+if [ "$#" -eq 0 ]; then TEST_INTEGRATION=1; fi
 
 while test $# -gt 0
 	 do
@@ -64,17 +64,17 @@ esac
 
 cacheVolume=$(docker create -v /root/.cache -v /root/.cache/registry -v /go/pkg/mod alpine)
 
-if [ "$TEST_INTEGRATION" == 1 ]; then
+if [ "$TEST_INTEGRATION" -eq 1 ]; then
 	docker run --rm -v /tmp --volumes-from=$cacheVolume -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry --privileged $iid go test ${TESTFLAGS:--v} ${TESTPKGS:-./...}
 fi
 
 
-if [ "$TEST_GATEWAY" == 1 ]; then
+if [ "$TEST_GATEWAY" -eq 1 ]; then
 	docker run --rm --volumes-from=$cacheVolume $iid go build ./frontend/gateway/client
 fi
 
 
-if [ "$TEST_DOCKERFILE" == 1 ]; then
+if [ "$TEST_DOCKERFILE" -eq 1 ]; then
 	if [ -z $DOCKERFILE_RELEASES ]; then
 		DOCKERFILE_RELEASES="mainline experimental mounts secrets ssh"
 	fi

@@ -31,7 +31,7 @@ case ${1:-} in
 	check)
 		status="$(git status --porcelain -- go.mod go.sum vendor 2>/dev/null)"
 		diffs=$(echo "$status" | grep -v '^[RAD] ' || true)
-		if [ "$diffs" ]; then
+		if [ -n "$diffs" ]; then
 			{
 				set +x
 				echo 'The result of "make vendor" differs'
