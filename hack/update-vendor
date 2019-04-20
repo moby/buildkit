@@ -6,39 +6,39 @@ set -eu -o pipefail -x
 : ${CONTINUOUS_INTEGRATION=}
 
 progressFlag=""
-if [ "$CONTINUOUS_INTEGRATION" = "true" ]; then progressFlag="--progress=plain"; fi
+if [ "${CONTINUOUS_INTEGRATION}" = "true" ]; then progressFlag="--progress=plain"; fi
 
-case $buildmode in
+case "${buildmode}" in
 	"buildkit")
 		output=$(mktemp -d -t buildctl-output.XXXXXXXXXX)
-		buildctl build $progressFlag --frontend=dockerfile.v0 --local context=. --local dockerfile=. \
+		buildctl build ${progressFlag} --frontend=dockerfile.v0 --local context=. --local dockerfile=. \
 			--opt target=update \
 			--opt filename=./hack/dockerfiles/vendor.buildkit.Dockerfile \
-			--output type=local,dest=$output
+			--output "type=local,dest=${output}"
 		rm -rf ./vendor
-		cp -R "$output/out/" .
-		rm -rf $output
+		cp -R "${output}/out/" .
+		rm -rf "${output}"
 		;;
 	*)
 		iidfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
-		case $buildmode in
+		case "${buildmode}" in
 			"docker-buildkit")
 				export DOCKER_BUILDKIT=1
-				docker build --iidfile $iidfile -f ./hack/dockerfiles/vendor.buildkit.Dockerfile --target update --force-rm .
+				docker build --iidfile "${iidfile}"  -f ./hack/dockerfiles/vendor.buildkit.Dockerfile --target update --force-rm .
 				;;
 			*)
-				docker build --iidfile $iidfile -f ./hack/dockerfiles/vendor.Dockerfile --target update --force-rm .
+				docker build --iidfile "${iidfile}"  -f ./hack/dockerfiles/vendor.Dockerfile --target update --force-rm .
 				;;
 		esac
-		iid=$(cat $iidfile)
-		cid=$(docker create $iid noop)
+		iid=$(cat "${iidfile}" )
+		cid=$(docker create "${iid}" noop)
 		rm -rf ./vendor
 
-		docker cp $cid:/out/go.mod .
-		docker cp $cid:/out/go.sum .
-		docker cp $cid:/out/vendor .
+		docker cp "${cid}:/out/go.mod" .
+		docker cp "${cid}:/out/go.sum" .
+		docker cp "${cid}:/out/vendor" .
 
-		docker rm $cid
-		rm -f $iidfile
+		docker rm "${cid}"
+		rm -f "${iidfile}"
 		;;
 esac

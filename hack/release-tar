@@ -9,7 +9,7 @@ set -eu -o pipefail
 : ${CONTINUOUS_INTEGRATION=}
 
 progressFlag=""
-if [ "$CONTINUOUS_INTEGRATION" = "true" ]; then progressFlag="--progress=plain"; fi
+if [ "${CONTINUOUS_INTEGRATION}" = "true" ]; then progressFlag="--progress=plain"; fi
 
 
 usage() {
@@ -17,17 +17,17 @@ usage() {
 	exit 1
 }
 
-if [ -z "$TAG" ] || [ -z "$OUT" ]; then 
+if [ -z "${TAG}" ] || [ -z "${OUT}" ]; then
 	usage
 fi
 
 
 set -x
 
-buildctl build $progressFlag --frontend=dockerfile.v0 \
+buildctl build ${progressFlag} --frontend=dockerfile.v0 \
 	--local context=. --local dockerfile=. \
 	--opt filename=./hack/dockerfiles/test.buildkit.Dockerfile \
 	--opt target=release \
-	--opt platform=$PLATFORMS \
+	--opt "platform=${PLATFORMS}" \
 	--exporter local \
-	--exporter-opt output=$OUT
+	--exporter-opt "output=${OUT}"

@@ -12,7 +12,7 @@ set -eu -o pipefail
 : ${CONTINUOUS_INTEGRATION=}
 
 progressFlag=""
-if [ "$CONTINUOUS_INTEGRATION" = "true" ]; then progressFlag="--progress=plain"; fi
+if [ "${CONTINUOUS_INTEGRATION}" = "true" ]; then progressFlag="--progress=plain"; fi
 
 gitTag=$(git describe --tags --match "v[0-9]*")
 
@@ -21,35 +21,35 @@ usage() {
 	exit 1
 }
 
-if [ -z "$TAG" ] || [ -z "$REPO" ]; then
+if [ -z "${TAG}" ] || [ -z "${REPO}" ]; then
 	usage
 fi
 
 imageDockerCommon() {
-	if echo $PLATFORMS | grep , >/dev/null; then
-		echo "PREFER_BUILDCTL=1 needs to be set to build images for $PLATFORMS"
+	if echo ${PLATFORMS} | grep , >/dev/null; then
+		echo "PREFER_BUILDCTL=1 needs to be set to build images for ${PLATFORMS}"
 		exit 1
 	fi
 	set -x
-	docker build $@ --platform=$PLATFORMS -t $REPO:$TAG .
-	docker build $@ --platform=$PLATFORMS -t $REPO:$TAG-rootless --target rootless .
+	docker build $@ --platform="${PLATFORMS}" -t "${REPO}:${TAG}" .
+	docker build $@ --platform="${PLATFORMS}" -t "${REPO}:${TAG}-rootless" --target rootless .
 	set +x
 
-	if [ "$PUSH" = "push" ]; then
+	if [ "${PUSH}" = "push" ]; then
 		set -x
-		docker push $REPO:$TAG
-		docker push $REPO:$TAG-rootless
+		docker push "${REPO}:${TAG}"
+		docker push "${REPO}:${TAG}-rootless"
 		set +x
 	fi
-	if [ "$gitTag" = "$TAG" ]; then
+	if [ "${gitTag}" = "${TAG}" ]; then
 		set -x
-		docker tag $REPO:$TAG $REPO:latest
-		docker tag $REPO:$TAG-rootless $REPO:rootless
+		docker tag "${REPO}:${TAG}" "${REPO}:latest"
+		docker tag "${REPO}:${TAG}-rootless" "${REPO}:rootless"
 		set +x
-		if [ "$PUSH" = "push" ]; then
+		if [ "${PUSH}" = "push" ]; then
 			set -x
-			docker push $REPO:latest
-			docker push $REPO:rootless
+			docker push "${REPO}:latest"
+			docker push "${REPO}:rootless"
 			set +x
 		fi
 	fi
@@ -60,39 +60,39 @@ imageLegacy() {
 }
 
 imageDocker() {
-	imageDockerCommon $progressFlag -f ./hack/dockerfiles/test.buildkit.Dockerfile
+	imageDockerCommon ${progressFlag} -f ./hack/dockerfiles/test.buildkit.Dockerfile
 }
 
 image() {
 	pushFlag=""
-	if [ "$PUSH" = "push" ]; then
+	if [ "${PUSH}" = "push" ]; then
 		pushFlag="push=true"
 	fi
 
 	tagLatest=""
 	tagLatestRootless=""
-	if [ "$gitTag" = "$TAG" ]; then
-		tagLatest=",$REPO:latest"
-		tagLatestRootless=",$REPO:rootless"
+	if [ "${gitTag}" = "${TAG}" ]; then
+		tagLatest=",${REPO}:latest"
+		tagLatestRootless=",${REPO}:rootless"
 	fi
 
 	set -x
 
-	buildctl build $progressFlag --frontend=dockerfile.v0 \
+	buildctl build ${progressFlag} --frontend=dockerfile.v0 \
 		--local context=. --local dockerfile=. \
 		--opt filename=./hack/dockerfiles/test.buildkit.Dockerfile \
-		--opt platform=$PLATFORMS \
-		--output type=image,name=$REPO:$TAG$tagLatest,$pushFlag
+		--opt "platform=${PLATFORMS}" \
+		--output "type=image,name=${REPO}:${TAG}${tagLatest},${pushFlag}"
 
-	buildctl build $progressFlag --frontend=dockerfile.v0 \
+	buildctl build ${progressFlag} --frontend=dockerfile.v0 \
 		--local context=. --local dockerfile=. \
 		--opt target=rootless \
 		--opt filename=./hack/dockerfiles/test.buildkit.Dockerfile \
-		--opt platform=$PLATFORMS \
-		--output type=image,name=$REPO:$TAG-rootless$tagLatestRootless,$pushFlag
+		--opt "platform=${PLATFORMS}" \
+		--output "type=image,name=${REPO}:${TAG}-rootless${tagLatestRootless},${pushFlag}"
 }
 
-case $buildmode in
+case "${buildmode}" in
 	"buildkit")
 		image
 		;;

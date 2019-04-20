@@ -6,38 +6,38 @@ set -eu -o pipefail -x
 : ${CONTINUOUS_INTEGRATION=}
 
 progressFlag=""
-if [ "$CONTINUOUS_INTEGRATION" = "true" ]; then progressFlag="--progress=plain"; fi
+if [ "${CONTINUOUS_INTEGRATION}" = "true" ]; then progressFlag="--progress=plain"; fi
 
 gogo_version=$(awk '$1 == "github.com/gogo/protobuf" { print $2 }' go.mod)
-case $buildmode in
+case "${buildmode}" in
 	"buildkit")
 		output=$(mktemp -d -t buildctl-output.XXXXXXXXXX)
-		buildctl build $progressFlag --frontend=dockerfile.v0 --local context=. --local dockerfile=. \
-			--opt build-arg:GOGO_VERSION=$gogo_version \
+		buildctl build ${progressFlag} --frontend=dockerfile.v0 --local context=. --local dockerfile=. \
+			--opt "build-arg:GOGO_VERSION=${gogo_version}" \
 			--opt target=update \
 			--opt filename=./hack/dockerfiles/generated-files.buildkit.Dockerfile \
-			--output type=local,dest=$output
-		cp -R "$output/generated-files/" .
-		rm -rf $output
+			--output "type=local,dest=${output}"
+		cp -R "${output}/generated-files/" .
+		rm -rf "${output}"
 		;;
 	*)
 		iidfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
-		case $buildmode in
+		case "${buildmode}" in
 			"docker-buildkit")
 				export DOCKER_BUILDKIT=1
-				docker build --build-arg GOGO_VERSION=$gogo_version --iidfile $iidfile -f ./hack/dockerfiles/generated-files.buildkit.Dockerfile --target update --force-rm .
+				docker build --build-arg "GOGO_VERSION=${gogo_version}" --iidfile "${iidfile}"  -f ./hack/dockerfiles/generated-files.buildkit.Dockerfile --target update --force-rm .
 				;;
 			*)
-				docker build --build-arg GOGO_VERSION=$gogo_version --iidfile $iidfile -f ./hack/dockerfiles/generated-files.Dockerfile --target update --force-rm .
+				docker build --build-arg "GOGO_VERSION=${gogo_version}" --iidfile "${iidfile}"  -f ./hack/dockerfiles/generated-files.Dockerfile --target update --force-rm .
 				;;
 		esac
-		iid=$(cat $iidfile)
-		cid=$(docker create $iid noop)
+		iid=$(cat "${iidfile}" )
+		cid=$(docker create "${iid}" noop)
 
-		docker export $cid | tar -xf - --strip-components=1 generated-files
+		docker export "${cid}" | tar -xf - --strip-components=1 generated-files
 
-		docker rm $cid
+		docker rm "${cid}"
 
-		rm -f $iidfile
+		rm -f "${iidfile}"
 		;;
 esac

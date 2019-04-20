@@ -6,7 +6,7 @@ set -eu -o pipefail -x
 : ${CONTINUOUS_INTEGRATION=}
 
 progressFlag=""
-if [ "$CONTINUOUS_INTEGRATION" = "true" ]; then progressFlag="--progress=plain"; fi
+if [ "${CONTINUOUS_INTEGRATION}" = "true" ]; then progressFlag="--progress=plain"; fi
 
 lintLegacy() {
 	docker build -f ./hack/dockerfiles/lint.Dockerfile --force-rm .
@@ -15,19 +15,19 @@ lintLegacy() {
 lintDocker() {
 	export DOCKER_BUILDKIT=1
 	iidfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
-	docker build --iidfile $iidfile -f ./hack/dockerfiles/lint.buildkit.Dockerfile --force-rm .
-	iid=$(cat $iidfile)
-	docker rmi $iid
-	rm -f $iidfile
+	docker build --iidfile "${iidfile}"  -f ./hack/dockerfiles/lint.buildkit.Dockerfile --force-rm .
+	iid=$(cat "${iidfile}" )
+	docker rmi "${iid}"
+	rm -f "${iidfile}"
 }
 
 lint() {
-	buildctl build $progressFlag --frontend=dockerfile.v0 \
+	buildctl build ${progressFlag} --frontend=dockerfile.v0 \
 		--local context=. --local dockerfile=. \
 		--opt filename=./hack/dockerfiles/lint.buildkit.Dockerfile
 }
 
-case $buildmode in
+case "${buildmode}" in
 	"buildkit")
 		lint
 		;;
