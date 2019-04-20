@@ -16,7 +16,7 @@ binariesLegacy() {
 	iidfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
 	copysrc="/usr/bin/."
 
-	case "$(echo "${TARGETPLATFORM}" | cut -d"/" -f1)" in
+	case "${TARGETPLATFORM%%/*}" in
 		"darwin")
 			docker build --iidfile "${iidfile}"  --target buildctl-darwin -f ./hack/dockerfiles/test.Dockerfile --force-rm .
 			copysrc="/out/."
@@ -42,7 +42,7 @@ binariesDocker() {
 	mkdir -p bin/tmp
 	export DOCKER_BUILDKIT=1
 	iidfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
-	target=$(echo "${TARGETPLATFORM}" | cut -d"/" -f1)
+	target=${TARGETPLATFORM%%/*}
 	if [ -z "$target" ]; then
 		target="linux"
 	fi
