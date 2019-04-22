@@ -5,6 +5,7 @@ import (
 	"os"
 
 	_ "github.com/moby/buildkit/client/connhelper/dockercontainer"
+	_ "github.com/moby/buildkit/client/connhelper/kubepod"
 	bccommon "github.com/moby/buildkit/cmd/buildctl/common"
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/appdefaults"
