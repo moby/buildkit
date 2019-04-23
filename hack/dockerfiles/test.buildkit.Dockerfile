@@ -91,10 +91,11 @@ RUN --mount=target=. --mount=target=/root/.cache,type=cache \
 FROM buildkit-base AS buildkitd
 ENV CGO_ENABLED=1
 ARG TARGETPLATFORM
+ARG BUILDKITD_TAGS
 RUN --mount=target=. --mount=target=/root/.cache,type=cache \
   --mount=target=/go/pkg/mod,type=cache \
   --mount=source=/tmp/.ldflags,target=/tmp/.ldflags,from=buildkit-version \
-  go build -ldflags "$(cat /tmp/.ldflags) -w -extldflags -static" -tags 'osusergo seccomp netgo cgo static_build ' -o /usr/bin/buildkitd ./cmd/buildkitd && \
+  go build -ldflags "$(cat /tmp/.ldflags) -w -extldflags -static" -tags "osusergo seccomp netgo cgo static_build ${BUILDKITD_TAGS}" -o /usr/bin/buildkitd ./cmd/buildkitd && \
   file /usr/bin/buildkitd | grep "statically linked"
 
 FROM scratch AS binaries-linux
