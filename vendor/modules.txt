@@ -210,6 +210,8 @@ github.com/pkg/errors
 github.com/pkg/profile
 # github.com/pmezard/go-difflib v1.0.0
 github.com/pmezard/go-difflib/difflib
+# github.com/serialx/hashring v0.0.0-20190422032157-8b2912629002
+github.com/serialx/hashring
 # github.com/sirupsen/logrus v1.3.0
 github.com/sirupsen/logrus
 # github.com/stretchr/testify v1.3.0

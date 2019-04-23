@@ -47,6 +47,7 @@ require (
 	github.com/opentracing/opentracing-go v0.0.0-20171003133519-1361b9cd60be
 	github.com/pkg/errors v0.8.1
 	github.com/pkg/profile v1.2.1
+	github.com/serialx/hashring v0.0.0-20190422032157-8b2912629002
 	github.com/sirupsen/logrus v1.3.0
 	github.com/stretchr/testify v1.3.0
 	github.com/syndtr/gocapability v0.0.0-20170704070218-db04d3cc01c8 // indirect
