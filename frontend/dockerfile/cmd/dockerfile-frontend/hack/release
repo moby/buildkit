@@ -104,7 +104,7 @@ case $TYP in
     --opt platform=$PLATFORMS \
     --opt "build-arg:CHANNEL=$TAG" \
     --opt "build-arg:BUILDTAGS=$buildTags" \
-    --output type=image,name=$publishedNames,$pushFlag
+    --output type=image,\"name=$publishedNames\",$pushFlag
   ;;
 "daily")
   if [ -z $DAILY_TARGETS ]; then
