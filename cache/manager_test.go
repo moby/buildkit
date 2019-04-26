@@ -28,7 +28,7 @@ func TestManager(t *testing.T) {
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
-	cm := getCacheManager(t, tmpdir, snapshotter)
+	cm := getCacheManager(t, tmpdir, "native", snapshotter)
 
 	_, err = cm.Get(ctx, "foobar")
 	require.Error(t, err)
@@ -152,7 +152,7 @@ func TestPrune(t *testing.T) {
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
-	cm := getCacheManager(t, tmpdir, snapshotter)
+	cm := getCacheManager(t, tmpdir, "native", snapshotter)
 
 	active, err := cm.New(ctx, nil)
 	require.NoError(t, err)
@@ -250,7 +250,7 @@ func TestLazyCommit(t *testing.T) {
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
-	cm := getCacheManager(t, tmpdir, snapshotter)
+	cm := getCacheManager(t, tmpdir, "native", snapshotter)
 
 	active, err := cm.New(ctx, nil, CachePolicyRetain)
 	require.NoError(t, err)
@@ -332,7 +332,7 @@ func TestLazyCommit(t *testing.T) {
 	require.NoError(t, err)
 
 	// we can't close snapshotter and open it twice (especially, its internal bbolt store)
-	cm = getCacheManager(t, tmpdir, snapshotter)
+	cm = getCacheManager(t, tmpdir, "native", snapshotter)
 
 	snap2, err = cm.Get(ctx, snap.ID())
 	require.NoError(t, err)
@@ -353,7 +353,7 @@ func TestLazyCommit(t *testing.T) {
 	err = cm.Close()
 	require.NoError(t, err)
 
-	cm = getCacheManager(t, tmpdir, snapshotter)
+	cm = getCacheManager(t, tmpdir, "native", snapshotter)
 
 	snap2, err = cm.Get(ctx, snap.ID())
 	require.NoError(t, err)
@@ -369,12 +369,12 @@ func TestLazyCommit(t *testing.T) {
 	require.Equal(t, errNotFound, errors.Cause(err))
 }
 
-func getCacheManager(t *testing.T, tmpdir string, snapshotter snapshots.Snapshotter) Manager {
+func getCacheManager(t *testing.T, tmpdir string, snapshotterName string, snapshotter snapshots.Snapshotter) Manager {
 	md, err := metadata.NewStore(filepath.Join(tmpdir, "metadata.db"))
 	require.NoError(t, err)
 
 	cm, err := NewManager(ManagerOpt{
-		Snapshotter:   snapshot.FromContainerdSnapshotter(snapshotter, nil),
+		Snapshotter:   snapshot.FromContainerdSnapshotter(snapshotterName, snapshotter, nil),
 		MetadataStore: md,
 	})
 	require.NoError(t, err, fmt.Sprintf("error: %+v", err))

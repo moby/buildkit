@@ -103,7 +103,7 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		Labels:          xlabels,
 		MetadataStore:   md,
 		Executor:        exe,
-		Snapshotter:     containerdsnapshot.NewSnapshotter(mdb.Snapshotter(snFactory.Name), c, md, "buildkit", gc, idmap),
+		Snapshotter:     containerdsnapshot.NewSnapshotter(snFactory.Name, mdb.Snapshotter(snFactory.Name), c, md, "buildkit", gc, idmap),
 		ContentStore:    c,
 		Applier:         winlayers.NewFileSystemApplierWithWindows(c, apply.NewFileSystemApplier(c)),
 		Differ:          winlayers.NewWalkingDiffWithWindows(c, walking.NewWalkingDiff(c)),

@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -82,7 +83,15 @@ func testBuildContainerdExporter(t *testing.T, sb integration.Sandbox) {
 	rdr, err := marshal(st.Root())
 	require.NoError(t, err)
 
-	cmd := sb.Cmd("build --progress=plain --exporter=image --exporter-opt name=example.com/moby/imageexporter:test")
+	imageName := "example.com/moby/imageexporter:test"
+
+	buildCmd := []string{
+		"build", "--progress=plain",
+		"--exporter=image", "--exporter-opt", "unpack=true",
+		"--exporter-opt", "name=" + imageName,
+	}
+
+	cmd := sb.Cmd(strings.Join(buildCmd, " "))
 	cmd.Stdin = rdr
 	err = cmd.Run()
 	require.NoError(t, err)
@@ -93,8 +102,13 @@ func testBuildContainerdExporter(t *testing.T, sb integration.Sandbox) {
 
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit")
 
-	_, err = client.ImageService().Get(ctx, "example.com/moby/imageexporter:test")
+	img, err := client.GetImage(ctx, imageName)
 	require.NoError(t, err)
+
+	// NOTE: by default, it is overlayfs
+	ok, err := img.IsUnpacked(ctx, "overlayfs")
+	require.NoError(t, err)
+	require.Equal(t, ok, true)
 }
 
 func marshal(st llb.State) (io.Reader, error) {

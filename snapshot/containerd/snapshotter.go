@@ -14,10 +14,10 @@ import (
 	"github.com/moby/buildkit/snapshot/blobmapping"
 )
 
-func NewSnapshotter(snapshotter ctdsnapshot.Snapshotter, store content.Store, mdstore *metadata.Store, ns string, gc func(context.Context) error, idmap *idtools.IdentityMapping) snapshot.Snapshotter {
+func NewSnapshotter(name string, snapshotter ctdsnapshot.Snapshotter, store content.Store, mdstore *metadata.Store, ns string, gc func(context.Context) error, idmap *idtools.IdentityMapping) snapshot.Snapshotter {
 	return blobmapping.NewSnapshotter(blobmapping.Opt{
 		Content:       store,
-		Snapshotter:   snapshot.FromContainerdSnapshotter(&nsSnapshotter{ns, snapshotter, gc}, idmap),
+		Snapshotter:   snapshot.FromContainerdSnapshotter(name, &nsSnapshotter{ns, snapshotter, gc}, idmap),
 		MetadataStore: mdstore,
 	})
 }
