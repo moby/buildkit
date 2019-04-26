@@ -24,7 +24,7 @@ github.com/apache/thrift/lib/go/thrift
 github.com/codahale/hdrhistogram
 # github.com/containerd/console v0.0.0-20180822173158-c12b1e7919c1
 github.com/containerd/console
-# github.com/containerd/containerd v1.3.0-0.20190321141026-ceba56893a76
+# github.com/containerd/containerd v1.3.0-0.20190321141026-ceba56893a76 => github.com/tonistiigi/containerd v1.3.0-0.20190426054108-6a81b2e0dec7
 github.com/containerd/containerd/filters
 github.com/containerd/containerd/mount
 github.com/containerd/containerd/snapshots
@@ -88,7 +88,7 @@ github.com/containerd/containerd/identifiers
 github.com/containerd/containerd/metadata/boltutil
 github.com/containerd/containerd/api/types/task
 github.com/containerd/containerd/events/exchange
-# github.com/containerd/continuity v0.0.0-20181001140422-bd77b46c8352
+# github.com/containerd/continuity v0.0.0-20181001140422-bd77b46c8352 => github.com/tonistiigi/continuity v0.0.0-20190426053957-a7b24d6aacac
 github.com/containerd/continuity/sysx
 github.com/containerd/continuity/fs
 github.com/containerd/continuity/syscallx

@@ -73,3 +73,9 @@ require (
 replace github.com/hashicorp/go-immutable-radix => github.com/tonistiigi/go-immutable-radix v0.0.0-20170803185627-826af9ccf0fe
 
 replace github.com/jaguilar/vt100 => github.com/tonistiigi/vt100 v0.0.0-20190402012908-ad4c4a574305
+
+// containerd/continuity#140
+replace github.com/containerd/continuity => github.com/tonistiigi/continuity v0.0.0-20190426053957-a7b24d6aacac
+
+// containerd/containerd#3241
+replace github.com/containerd/containerd => github.com/tonistiigi/containerd v1.3.0-0.20190426054108-6a81b2e0dec7
