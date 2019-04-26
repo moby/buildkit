@@ -1,6 +1,6 @@
 # github.com/BurntSushi/toml v0.3.1
 github.com/BurntSushi/toml
-# github.com/Microsoft/go-winio v0.4.12
+# github.com/Microsoft/go-winio v0.4.13-0.20190408173621-84b4ab48a507
 github.com/Microsoft/go-winio
 # github.com/Microsoft/hcsshim v0.8.5
 github.com/Microsoft/hcsshim
@@ -22,9 +22,9 @@ github.com/Microsoft/hcsshim/internal/safefile
 github.com/apache/thrift/lib/go/thrift
 # github.com/codahale/hdrhistogram v0.0.0-20160425231609-f8ad88b59a58
 github.com/codahale/hdrhistogram
-# github.com/containerd/console v0.0.0-20180822173158-c12b1e7919c1
+# github.com/containerd/console v0.0.0-20181022165439-0650fd9eeb50
 github.com/containerd/console
-# github.com/containerd/containerd v1.3.0-0.20190321141026-ceba56893a76 => github.com/tonistiigi/containerd v1.3.0-0.20190426054108-6a81b2e0dec7
+# github.com/containerd/containerd v1.3.0-0.20190426060238-3a3f0aac8819
 github.com/containerd/containerd/filters
 github.com/containerd/containerd/mount
 github.com/containerd/containerd/snapshots
@@ -88,7 +88,7 @@ github.com/containerd/containerd/identifiers
 github.com/containerd/containerd/metadata/boltutil
 github.com/containerd/containerd/api/types/task
 github.com/containerd/containerd/events/exchange
-# github.com/containerd/continuity v0.0.0-20181001140422-bd77b46c8352 => github.com/tonistiigi/continuity v0.0.0-20190426053957-a7b24d6aacac
+# github.com/containerd/continuity v0.0.0-20190426062206-aaeac12a7ffc
 github.com/containerd/continuity/sysx
 github.com/containerd/continuity/fs
 github.com/containerd/continuity/syscallx
@@ -102,6 +102,8 @@ github.com/containerd/continuity/proto
 github.com/containerd/fifo
 # github.com/containerd/go-runc v0.0.0-20180907222934-5a6d9f37cfa3
 github.com/containerd/go-runc
+# github.com/containerd/ttrpc v0.0.0-20190411181408-699c4e40d1e7
+github.com/containerd/ttrpc
 # github.com/containerd/typeurl v0.0.0-20180627222232-a93fcdb778cd
 github.com/containerd/typeurl
 # github.com/davecgh/go-spew v1.1.1
@@ -114,6 +116,7 @@ github.com/docker/cli/cli/config/credentials
 github.com/docker/cli/cli/config/types
 # github.com/docker/distribution v2.7.1-0.20190205005809-0d3efadf0154+incompatible
 github.com/docker/distribution/reference
+github.com/docker/distribution/registry/api/errcode
 github.com/docker/distribution/digestset
 # github.com/docker/docker v1.14.0-0.20190319215453-e7b5f7dbe98c
 github.com/docker/docker/pkg/idtools
@@ -217,7 +220,7 @@ github.com/sirupsen/logrus
 # github.com/stretchr/testify v1.3.0
 github.com/stretchr/testify/require
 github.com/stretchr/testify/assert
-# github.com/syndtr/gocapability v0.0.0-20170704070218-db04d3cc01c8
+# github.com/syndtr/gocapability v0.0.0-20180916011248-d98352740cb2
 github.com/syndtr/gocapability/capability
 # github.com/tonistiigi/fsutil v0.0.0-20190327153851-3bbb99cdbd76
 github.com/tonistiigi/fsutil

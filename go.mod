@@ -4,15 +4,16 @@ go 1.11
 
 require (
 	github.com/BurntSushi/toml v0.3.1
-	github.com/Microsoft/go-winio v0.4.12
+	github.com/Microsoft/go-winio v0.4.13-0.20190408173621-84b4ab48a507
 	github.com/apache/thrift v0.0.0-20161221203622-b2a4d4ae21c7 // indirect
 	github.com/codahale/hdrhistogram v0.0.0-20160425231609-f8ad88b59a58 // indirect
 	github.com/containerd/cgroups v0.0.0-20190226200435-dbea6f2bd416 // indirect
-	github.com/containerd/console v0.0.0-20180822173158-c12b1e7919c1
-	github.com/containerd/containerd v1.3.0-0.20190321141026-ceba56893a76
-	github.com/containerd/continuity v0.0.0-20181001140422-bd77b46c8352
+	github.com/containerd/console v0.0.0-20181022165439-0650fd9eeb50
+	github.com/containerd/containerd v1.3.0-0.20190426060238-3a3f0aac8819
+	github.com/containerd/continuity v0.0.0-20190426062206-aaeac12a7ffc
 	github.com/containerd/fifo v0.0.0-20180307165137-3d5202aec260 // indirect
 	github.com/containerd/go-runc v0.0.0-20180907222934-5a6d9f37cfa3
+	github.com/containerd/ttrpc v0.0.0-20190411181408-699c4e40d1e7 // indirect
 	github.com/containerd/typeurl v0.0.0-20180627222232-a93fcdb778cd // indirect
 	github.com/coreos/go-systemd v0.0.0-20161114122254-48702e0da86b // indirect
 	github.com/docker/cli v0.0.0-20190321234815-f40f9c240ab0
@@ -50,7 +51,7 @@ require (
 	github.com/serialx/hashring v0.0.0-20190422032157-8b2912629002
 	github.com/sirupsen/logrus v1.3.0
 	github.com/stretchr/testify v1.3.0
-	github.com/syndtr/gocapability v0.0.0-20170704070218-db04d3cc01c8 // indirect
+	github.com/syndtr/gocapability v0.0.0-20180916011248-d98352740cb2 // indirect
 	github.com/tonistiigi/fsutil v0.0.0-20190327153851-3bbb99cdbd76
 	github.com/tonistiigi/units v0.0.0-20180711220420-6950e57a87ea
 	github.com/uber/jaeger-client-go v0.0.0-20180103221425-e02c85f9069e
@@ -73,9 +74,3 @@ require (
 replace github.com/hashicorp/go-immutable-radix => github.com/tonistiigi/go-immutable-radix v0.0.0-20170803185627-826af9ccf0fe
 
 replace github.com/jaguilar/vt100 => github.com/tonistiigi/vt100 v0.0.0-20190402012908-ad4c4a574305
-
-// containerd/continuity#140
-replace github.com/containerd/continuity => github.com/tonistiigi/continuity v0.0.0-20190426053957-a7b24d6aacac
-
-// containerd/containerd#3241
-replace github.com/containerd/containerd => github.com/tonistiigi/containerd v1.3.0-0.20190426054108-6a81b2e0dec7
