@@ -3844,7 +3844,7 @@ func testTarContextExternalDockerfile(t *testing.T, sb integration.Sandbox) {
 	buf := bytes.NewBuffer(nil)
 	tw := tar.NewWriter(buf)
 	err := tw.WriteHeader(&tar.Header{
-		Name:     "foo",
+		Name:     "sub/dir/foo",
 		Typeflag: tar.TypeReg,
 		Size:     int64(len(foo)),
 		Mode:     0644,
@@ -3882,6 +3882,7 @@ COPY foo bar
 			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
 			"context":                           url,
 			"dockerfilekey":                     builder.DefaultLocalNameDockerfile,
+			"contextsubdir":                     "sub/dir",
 		},
 		Session: []session.Attachable{up},
 		LocalDirs: map[string]string{
