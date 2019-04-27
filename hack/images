@@ -82,14 +82,14 @@ image() {
 		--local context=. --local dockerfile=. \
 		--opt filename=./hack/dockerfiles/test.buildkit.Dockerfile \
 		--opt platform=$PLATFORMS \
-		--output type=image,name=$REPO:$TAG$tagLatest,$pushFlag
+		--output type=image,\"name=$REPO:$TAG$tagLatest\",$pushFlag
 
 	buildctl build $progressFlag --frontend=dockerfile.v0 \
 		--local context=. --local dockerfile=. \
 		--opt target=rootless \
 		--opt filename=./hack/dockerfiles/test.buildkit.Dockerfile \
 		--opt platform=$PLATFORMS \
-		--output type=image,name=$REPO:$TAG-rootless$tagLatestRootless,$pushFlag
+		--output type=image,\"name=$REPO:$TAG-rootless$tagLatestRootless\",$pushFlag
 }
 
 case $buildmode in
