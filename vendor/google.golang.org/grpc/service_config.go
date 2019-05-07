@@ -229,9 +229,6 @@ type jsonSC struct {
 }
 
 func parseServiceConfig(js string) (ServiceConfig, error) {
-	if len(js) == 0 {
-		return ServiceConfig{}, fmt.Errorf("no JSON service config provided")
-	}
 	var rsc jsonSC
 	err := json.Unmarshal([]byte(js), &rsc)
 	if err != nil {
