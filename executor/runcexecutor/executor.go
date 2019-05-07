@@ -41,6 +41,8 @@ type Opt struct {
 	// ProcessMode
 	ProcessMode     oci.ProcessMode
 	IdentityMapping *idtools.IdentityMapping
+	// runc run --no-pivot (unrecommended)
+	NoPivot bool
 }
 
 var defaultCommandCandidates = []string{"buildkit-runc", "runc"}
@@ -54,6 +56,7 @@ type runcExecutor struct {
 	networkProviders map[pb.NetMode]network.Provider
 	processMode      oci.ProcessMode
 	idmap            *idtools.IdentityMapping
+	noPivot          bool
 }
 
 func New(opt Opt, networkProviders map[pb.NetMode]network.Provider) (executor.Executor, error) {
@@ -111,6 +114,7 @@ func New(opt Opt, networkProviders map[pb.NetMode]network.Provider) (executor.Ex
 		networkProviders: networkProviders,
 		processMode:      opt.ProcessMode,
 		idmap:            opt.IdentityMapping,
+		noPivot:          opt.NoPivot,
 	}
 	return w, nil
 }
@@ -269,7 +273,8 @@ func (w *runcExecutor) Exec(ctx context.Context, meta executor.Meta, root cache.
 
 	logrus.Debugf("> creating %s %v", id, meta.Args)
 	status, err := w.runc.Run(runCtx, id, bundle, &runc.CreateOpts{
-		IO: &forwardIO{stdin: stdin, stdout: stdout, stderr: stderr},
+		IO:      &forwardIO{stdin: stdin, stdout: stdout, stderr: stderr},
+		NoPivot: w.noPivot,
 	})
 	close(done)
 	if err != nil {
