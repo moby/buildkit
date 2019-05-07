@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"time"
 
 	_ "github.com/moby/buildkit/client/connhelper/dockercontainer"
 	_ "github.com/moby/buildkit/client/connhelper/kubepod"
@@ -68,6 +69,12 @@ func main() {
 			Usage: "timeout backend connection after value seconds",
 			Value: 5,
 		},
+		cli.StringFlag{
+			Name:   "spawn",
+			Hidden: true,
+			Usage:  "buildkitd flag string for spawn://",
+			Value:  "",
+		},
 	}
 
 	app.Commands = []cli.Command{
@@ -84,6 +91,18 @@ func main() {
 		debugEnabled = context.GlobalBool("debug")
 		if debugEnabled {
 			logrus.SetLevel(logrus.DebugLevel)
+		}
+		if context.GlobalString("addr") == "spawn://" {
+			logrus.Info("Spawn mode (experimental)")
+			dl, err := NewSpawn(context.GlobalString("spawn"))
+			if err != nil {
+				return err
+			}
+			addr, err := dl.GetAddress(time.Duration(context.GlobalInt("timeout")) * time.Second)
+			if err != nil {
+				return err
+			}
+			context.Set("addr", addr)
 		}
 		return nil
 	}

@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -20,6 +21,7 @@ import (
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/sys"
 	sddaemon "github.com/coreos/go-systemd/daemon"
+	"github.com/desertbit/timer"
 	"github.com/docker/docker/pkg/reexec"
 	"github.com/docker/go-connections/sockets"
 	"github.com/gofrs/flock"
@@ -169,6 +171,10 @@ func main() {
 			Name:  "allow-insecure-entitlement",
 			Usage: "allows insecure entitlements e.g. network.host, security.insecure",
 		},
+		cli.IntFlag{
+			Name:  "persistence",
+			Usage: "shutdown if idle in value seconds",
+		},
 	)
 	app.Flags = append(app.Flags, appFlags...)
 
@@ -198,7 +204,19 @@ func main() {
 				return err
 			}
 		}
-		opts := []grpc.ServerOption{unaryInterceptor(ctx), grpc.StreamInterceptor(otgrpc.OpenTracingStreamServerInterceptor(tracer))}
+		persistence := time.Duration(c.GlobalInt("persistence")) * time.Second
+		shutdownTimer := timer.NewStoppedTimer()
+		stopShutdownTimer := func() {
+			logrus.Debugf("stopping timer")
+			shutdownTimer.Stop()
+		}
+		resetShutdownTimer := func() {
+			if persistence != 0 {
+				logrus.Debugf("resetting shutdown timer (persistence=%v)", persistence)
+				shutdownTimer.Reset(persistence)
+			}
+		}
+		opts := []grpc.ServerOption{unaryInterceptor(ctx, stopShutdownTimer, resetShutdownTimer), streamInterceptor(stopShutdownTimer, resetShutdownTimer)}
 		creds, err := serverCredentials(cfg.GRPC.TLS)
 		if err != nil {
 			return err
@@ -265,6 +283,10 @@ func main() {
 			cancel()
 		case <-ctx.Done():
 			err = ctx.Err()
+		case <-shutdownTimer.C:
+			logrus.Infof("shutdown timer fired because no RPC activity in last %v", persistence)
+			if persistence == 0 {
+			}
 		}
 
 		logrus.Infof("stopping server")
@@ -491,10 +513,29 @@ func getListener(cfg config.GRPCConfig, addr string) (net.Listener, error) {
 	}
 }
 
-func unaryInterceptor(globalCtx context.Context) grpc.ServerOption {
+var (
+	currentOps   int64
+	currentOpsMu sync.Mutex
+)
+
+func unaryInterceptor(globalCtx context.Context, stopShutdownTimer, resetShutdownTimer func()) grpc.ServerOption {
 	withTrace := otgrpc.OpenTracingServerInterceptor(tracer, otgrpc.LogPayloads())
 
 	return grpc.UnaryInterceptor(func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+		currentOpsMu.Lock()
+		currentOps++
+		currentOpsMu.Unlock()
+		stopShutdownTimer()
+		defer func() {
+			currentOpsMu.Lock()
+			currentOps--
+			currentOps0 := currentOps == 0
+			currentOpsMu.Unlock()
+			// if there is no other call
+			if currentOps0 {
+				resetShutdownTimer()
+			}
+		}()
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
@@ -511,6 +552,27 @@ func unaryInterceptor(globalCtx context.Context) grpc.ServerOption {
 			logrus.Errorf("%s returned error: %+v", info.FullMethod, err)
 		}
 		return
+	})
+}
+
+func streamInterceptor(stopShutdownTimer, resetShutdownTimer func()) grpc.ServerOption {
+	withTrace := otgrpc.OpenTracingStreamServerInterceptor(tracer)
+	return grpc.StreamInterceptor(func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		currentOpsMu.Lock()
+		currentOps++
+		currentOpsMu.Unlock()
+		stopShutdownTimer()
+		defer func() {
+			currentOpsMu.Lock()
+			currentOps--
+			currentOps0 := currentOps == 0
+			currentOpsMu.Unlock()
+			// if there is no other call
+			if currentOps0 {
+				resetShutdownTimer()
+			}
+		}()
+		return withTrace(srv, ss, info, handler)
 	})
 }
 

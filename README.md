@@ -283,6 +283,16 @@ export BUILDKIT_HOST=docker://<container>
 export BUILDKIT_HOST=kube-pod://<pod>
 ```
 
+### Spawn mode (Daemonless mode)
+
+Spawn mode automatically spawns the daemon on demand:
+
+```
+export BUILDKIT_HOST=spawn://
+```
+
+You can feel as if there were no daemon.
+
 ### Opentracing support
 
 BuildKit supports opentracing for buildkitd gRPC API and buildctl commands. To capture the trace to [Jaeger](https://github.com/jaegertracing/jaeger), set `JAEGER_TRACE` environment variable to the collection address.

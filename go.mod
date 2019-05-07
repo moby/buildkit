@@ -16,6 +16,7 @@ require (
 	github.com/containerd/ttrpc v0.0.0-20190411181408-699c4e40d1e7 // indirect
 	github.com/containerd/typeurl v0.0.0-20180627222232-a93fcdb778cd // indirect
 	github.com/coreos/go-systemd v0.0.0-20190321100706-95778dfbb74e
+	github.com/desertbit/timer v0.0.0-20180107155436-c41aec40b27f
 	github.com/docker/cli v0.0.0-20190321234815-f40f9c240ab0
 	github.com/docker/distribution v2.7.1-0.20190205005809-0d3efadf0154+incompatible
 	github.com/docker/docker v1.14.0-0.20190319215453-e7b5f7dbe98c
