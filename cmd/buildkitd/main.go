@@ -19,6 +19,7 @@ import (
 	"github.com/containerd/containerd/pkg/seed"
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/sys"
+	sddaemon "github.com/coreos/go-systemd/daemon"
 	"github.com/docker/docker/pkg/reexec"
 	"github.com/docker/go-connections/sockets"
 	"github.com/gofrs/flock"
@@ -267,6 +268,10 @@ func main() {
 		}
 
 		logrus.Infof("stopping server")
+		if os.Getenv("NOTIFY_SOCKET") != "" {
+			notified, notifyErr := sddaemon.SdNotify(false, sddaemon.SdNotifyStopping)
+			logrus.Debugf("SdNotifyStopping notified=%v, err=%v", notified, notifyErr)
+		}
 		server.GracefulStop()
 
 		return err
@@ -303,6 +308,11 @@ func serveGRPC(cfg config.GRPCConfig, server *grpc.Server, errCh chan error) err
 			return err
 		}
 		listeners = append(listeners, l)
+	}
+
+	if os.Getenv("NOTIFY_SOCKET") != "" {
+		notified, notifyErr := sddaemon.SdNotify(false, sddaemon.SdNotifyReady)
+		logrus.Debugf("SdNotifyReady notified=%v, err=%v", notified, notifyErr)
 	}
 	for _, l := range listeners {
 		func(l net.Listener) {
