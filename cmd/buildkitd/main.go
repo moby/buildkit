@@ -21,6 +21,7 @@ import (
 	"github.com/containerd/containerd/sys"
 	"github.com/docker/docker/pkg/reexec"
 	"github.com/docker/go-connections/sockets"
+	"github.com/gofrs/flock"
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
 	"github.com/moby/buildkit/cache/remotecache"
 	inlineremotecache "github.com/moby/buildkit/cache/remotecache/inline"
@@ -216,6 +217,20 @@ func main() {
 		if err := os.MkdirAll(root, 0700); err != nil {
 			return errors.Wrapf(err, "failed to create %s", root)
 		}
+
+		lockPath := filepath.Join(root, "buildkitd.lock")
+		lock := flock.New(lockPath)
+		locked, err := lock.TryLock()
+		if err != nil {
+			return errors.Wrapf(err, "could not lock %s", lockPath)
+		}
+		if !locked {
+			return errors.Errorf("could not lock %s, another instance running?", lockPath)
+		}
+		defer func() {
+			lock.Unlock()
+			os.RemoveAll(lockPath)
+		}()
 
 		controller, err := newController(c, &cfg)
 		if err != nil {
