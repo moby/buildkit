@@ -542,10 +542,7 @@ func (cs *clientStream) withRetry(op func(a *csAttempt) error, onSuccess func())
 			// We started another attempt already.
 			continue
 		}
-		if err == io.EOF {
-			<-a.s.Done()
-		}
-		if err == nil || (err == io.EOF && a.s.Status().Code() == codes.OK) {
+		if err == nil || err == io.EOF {
 			onSuccess()
 			cs.mu.Unlock()
 			return err
@@ -619,9 +616,7 @@ func (cs *clientStream) SendMsg(m interface{}) (err error) {
 			cs.finish(err)
 		}
 	}()
-	if cs.sentLast {
-		return status.Errorf(codes.Internal, "SendMsg called after CloseSend")
-	}
+	// TODO: Check cs.sentLast and error if we already ended the stream.
 	if !cs.desc.ClientStreams {
 		cs.sentLast = true
 	}

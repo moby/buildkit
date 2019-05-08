@@ -280,7 +280,7 @@ golang.org/x/text/transform
 golang.org/x/time/rate
 # google.golang.org/genproto v0.0.0-20180817151627-c66870c02cf8
 google.golang.org/genproto/googleapis/rpc/status
-# google.golang.org/grpc v1.2.1-0.20180703210707-40cd6b15e288
+# google.golang.org/grpc v1.2.1-0.20180703161511-a3e99ebee0a4
 google.golang.org/grpc
 google.golang.org/grpc/credentials
 google.golang.org/grpc/metadata
