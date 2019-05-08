@@ -22,7 +22,6 @@ import (
 	"io"
 	"math"
 	"net"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -84,9 +83,6 @@ type http2Client struct {
 	statsHandler stats.Handler
 
 	initialWindowSize int32
-
-	// configured by peer through SETTINGS_MAX_HEADER_LIST_SIZE
-	maxSendHeaderListSize *uint32
 
 	bdpEst *bdpEstimator
 	// onSuccess is a callback that client transport calls upon
@@ -202,10 +198,6 @@ func newHTTP2Client(connectCtx, ctx context.Context, addr TargetInfo, opts Conne
 	}
 	writeBufSize := opts.WriteBufferSize
 	readBufSize := opts.ReadBufferSize
-	maxHeaderListSize := defaultClientMaxHeaderListSize
-	if opts.MaxHeaderListSize != nil {
-		maxHeaderListSize = *opts.MaxHeaderListSize
-	}
 	t := &http2Client{
 		ctx:                   ctx,
 		ctxDone:               ctx.Done(), // Cache Done chan.
@@ -220,7 +212,7 @@ func newHTTP2Client(connectCtx, ctx context.Context, addr TargetInfo, opts Conne
 		writerDone:            make(chan struct{}),
 		goAway:                make(chan struct{}),
 		awakenKeepalive:       make(chan struct{}, 1),
-		framer:                newFramer(conn, writeBufSize, readBufSize, maxHeaderListSize),
+		framer:                newFramer(conn, writeBufSize, readBufSize),
 		fc:                    &trInFlow{limit: uint32(icwz)},
 		scheme:                scheme,
 		activeStreams:         make(map[uint32]*Stream),
@@ -280,21 +272,14 @@ func newHTTP2Client(connectCtx, ctx context.Context, addr TargetInfo, opts Conne
 		t.Close()
 		return nil, connectionErrorf(true, err, "transport: preface mismatch, wrote %d bytes; want %d", n, len(clientPreface))
 	}
-	var ss []http2.Setting
-
 	if t.initialWindowSize != defaultWindowSize {
-		ss = append(ss, http2.Setting{
+		err = t.framer.fr.WriteSettings(http2.Setting{
 			ID:  http2.SettingInitialWindowSize,
 			Val: uint32(t.initialWindowSize),
 		})
+	} else {
+		err = t.framer.fr.WriteSettings()
 	}
-	if opts.MaxHeaderListSize != nil {
-		ss = append(ss, http2.Setting{
-			ID:  http2.SettingMaxHeaderListSize,
-			Val: *opts.MaxHeaderListSize,
-		})
-	}
-	err = t.framer.fr.WriteSettings(ss...)
 	if err != nil {
 		t.Close()
 		return nil, connectionErrorf(true, err, "transport: failed to write initial settings frame: %v", err)
@@ -388,9 +373,6 @@ func (t *http2Client) createHeaderFields(ctx context.Context, callHdr *CallHdr) 
 	headerFields = append(headerFields, hpack.HeaderField{Name: "content-type", Value: contentType(callHdr.ContentSubtype)})
 	headerFields = append(headerFields, hpack.HeaderField{Name: "user-agent", Value: t.userAgent})
 	headerFields = append(headerFields, hpack.HeaderField{Name: "te", Value: "trailers"})
-	if callHdr.PreviousAttempts > 0 {
-		headerFields = append(headerFields, hpack.HeaderField{Name: "grpc-previous-rpc-attempts", Value: strconv.Itoa(callHdr.PreviousAttempts)})
-	}
 
 	if callHdr.SendCompress != "" {
 		headerFields = append(headerFields, hpack.HeaderField{Name: "grpc-encoding", Value: callHdr.SendCompress})
@@ -602,39 +584,13 @@ func (t *http2Client) NewStream(ctx context.Context, callHdr *CallHdr) (_ *Strea
 		}
 		return true
 	}
-	var hdrListSizeErr error
-	checkForHeaderListSize := func(it interface{}) bool {
-		if t.maxSendHeaderListSize == nil {
-			return true
-		}
-		hdrFrame := it.(*headerFrame)
-		var sz int64
-		for _, f := range hdrFrame.hf {
-			if sz += int64(f.Size()); sz > int64(*t.maxSendHeaderListSize) {
-				hdrListSizeErr = streamErrorf(codes.Internal, "header list size to send violates the maximum size (%d bytes) set by server", *t.maxSendHeaderListSize)
-				return false
-			}
-		}
-		return true
-	}
 	for {
-		success, err := t.controlBuf.executeAndPut(func(it interface{}) bool {
-			if !checkForStreamQuota(it) {
-				return false
-			}
-			if !checkForHeaderListSize(it) {
-				return false
-			}
-			return true
-		}, hdr)
+		success, err := t.controlBuf.executeAndPut(checkForStreamQuota, hdr)
 		if err != nil {
 			return nil, err
 		}
 		if success {
 			break
-		}
-		if hdrListSizeErr != nil {
-			return nil, hdrListSizeErr
 		}
 		firstTry = false
 		select {
@@ -671,7 +627,7 @@ func (t *http2Client) CloseStream(s *Stream, err error) {
 		rst = true
 		rstCode = http2.ErrCodeCancel
 	}
-	t.closeStream(s, err, rst, rstCode, status.Convert(err), nil, false)
+	t.closeStream(s, err, rst, rstCode, nil, nil, false)
 }
 
 func (t *http2Client) closeStream(s *Stream, err error, rst bool, rstCode http2.ErrCode, st *status.Status, mdata map[string][]string, eosReceived bool) {
@@ -695,7 +651,6 @@ func (t *http2Client) closeStream(s *Stream, err error, rst bool, rstCode http2.
 	close(s.done)
 	// If headerChan isn't closed, then close it.
 	if atomic.SwapUint32(&s.headerDone, 1) == 0 {
-		s.noHeaders = true
 		close(s.headerChan)
 	}
 	cleanup := &cleanupStream{
@@ -754,7 +709,7 @@ func (t *http2Client) Close() error {
 	}
 	// Notify all active streams.
 	for _, s := range streams {
-		t.closeStream(s, ErrConnClosing, false, http2.ErrCodeNo, status.New(codes.Unavailable, ErrConnClosing.Desc), nil, false)
+		t.closeStream(s, ErrConnClosing, false, http2.ErrCodeNo, nil, nil, false)
 	}
 	if t.statsHandler != nil {
 		connEnd := &stats.ConnEnd{
@@ -948,13 +903,6 @@ func (t *http2Client) handleRSTStream(f *http2.RSTStreamFrame) {
 		warningf("transport: http2Client.handleRSTStream found no mapped gRPC status for the received http2 error %v", f.ErrCode)
 		statusCode = codes.Unknown
 	}
-	if statusCode == codes.Canceled {
-		// Our deadline was already exceeded, and that was likely the cause of
-		// this cancelation.  Alter the status code accordingly.
-		if d, ok := s.ctx.Deadline(); ok && d.After(time.Now()) {
-			statusCode = codes.DeadlineExceeded
-		}
-	}
 	t.closeStream(s, io.EOF, false, http2.ErrCodeNo, status.Newf(statusCode, "stream terminated by RST_STREAM with error code: %v", f.ErrCode), nil, false)
 }
 
@@ -964,20 +912,13 @@ func (t *http2Client) handleSettings(f *http2.SettingsFrame, isFirst bool) {
 	}
 	var maxStreams *uint32
 	var ss []http2.Setting
-	var updateFuncs []func()
 	f.ForeachSetting(func(s http2.Setting) error {
-		switch s.ID {
-		case http2.SettingMaxConcurrentStreams:
+		if s.ID == http2.SettingMaxConcurrentStreams {
 			maxStreams = new(uint32)
 			*maxStreams = s.Val
-		case http2.SettingMaxHeaderListSize:
-			updateFuncs = append(updateFuncs, func() {
-				t.maxSendHeaderListSize = new(uint32)
-				*t.maxSendHeaderListSize = s.Val
-			})
-		default:
-			ss = append(ss, s)
+			return nil
 		}
+		ss = append(ss, s)
 		return nil
 	})
 	if isFirst && maxStreams == nil {
@@ -987,24 +928,21 @@ func (t *http2Client) handleSettings(f *http2.SettingsFrame, isFirst bool) {
 	sf := &incomingSettings{
 		ss: ss,
 	}
-	if maxStreams != nil {
-		updateStreamQuota := func() {
-			delta := int64(*maxStreams) - int64(t.maxConcurrentStreams)
-			t.maxConcurrentStreams = *maxStreams
-			t.streamQuota += delta
-			if delta > 0 && t.waitingStreams > 0 {
-				close(t.streamsQuotaAvailable) // wake all of them up.
-				t.streamsQuotaAvailable = make(chan struct{}, 1)
-			}
-		}
-		updateFuncs = append(updateFuncs, updateStreamQuota)
+	if maxStreams == nil {
+		t.controlBuf.put(sf)
+		return
 	}
-	t.controlBuf.executeAndPut(func(interface{}) bool {
-		for _, f := range updateFuncs {
-			f()
+	updateStreamQuota := func(interface{}) bool {
+		delta := int64(*maxStreams) - int64(t.maxConcurrentStreams)
+		t.maxConcurrentStreams = *maxStreams
+		t.streamQuota += delta
+		if delta > 0 && t.waitingStreams > 0 {
+			close(t.streamsQuotaAvailable) // wake all of them up.
+			t.streamsQuotaAvailable = make(chan struct{}, 1)
 		}
 		return true
-	}, sf)
+	}
+	t.controlBuf.executeAndPut(updateStreamQuota, sf)
 }
 
 func (t *http2Client) handlePing(f *http2.PingFrame) {
@@ -1115,8 +1053,8 @@ func (t *http2Client) operateHeaders(frame *http2.MetaHeadersFrame) {
 	}
 	atomic.StoreUint32(&s.bytesReceived, 1)
 	var state decodeState
-	if err := state.decodeHeader(frame); err != nil {
-		t.closeStream(s, err, true, http2.ErrCodeProtocol, status.New(codes.Internal, err.Error()), nil, false)
+	if err := state.decodeResponseHeader(frame); err != nil {
+		t.closeStream(s, err, true, http2.ErrCodeProtocol, nil, nil, false)
 		// Something wrong. Stops reading even when there is remaining.
 		return
 	}
@@ -1152,8 +1090,6 @@ func (t *http2Client) operateHeaders(frame *http2.MetaHeadersFrame) {
 			if len(state.mdata) > 0 {
 				s.header = state.mdata
 			}
-		} else {
-			s.noHeaders = true
 		}
 		close(s.headerChan)
 	}
@@ -1204,9 +1140,7 @@ func (t *http2Client) reader() {
 				t.mu.Unlock()
 				if s != nil {
 					// use error detail to provide better err message
-					code := http2ErrConvTab[se.Code]
-					msg := t.framer.fr.ErrorDetail().Error()
-					t.closeStream(s, streamError(code, msg), true, http2.ErrCodeProtocol, status.New(code, msg), nil, false)
+					t.closeStream(s, streamErrorf(http2ErrConvTab[se.Code], "%v", t.framer.fr.ErrorDetail()), true, http2.ErrCodeProtocol, nil, nil, false)
 				}
 				continue
 			} else {

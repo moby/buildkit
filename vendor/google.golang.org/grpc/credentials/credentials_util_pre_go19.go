@@ -1,4 +1,4 @@
-// +build go1.9,!appengine
+// +build !go1.9 appengine
 
 /*
  *
@@ -21,15 +21,11 @@
 package credentials
 
 import (
-	"errors"
-	"syscall"
+	"crypto/tls"
+	"net"
 )
 
-// implements the syscall.Conn interface
-func (c tlsConn) SyscallConn() (syscall.RawConn, error) {
-	conn, ok := c.rawConn.(syscall.Conn)
-	if !ok {
-		return nil, errors.New("RawConn does not implement syscall.Conn")
-	}
-	return conn.SyscallConn()
+type tlsConn struct {
+	*tls.Conn
+	rawConn net.Conn
 }

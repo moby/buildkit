@@ -26,7 +26,6 @@ import (
 	"net/http"
 
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	netctx "golang.org/x/net/context"
 )
@@ -36,15 +35,15 @@ func dialContext(ctx context.Context, network, address string) (net.Conn, error)
 	return (&net.Dialer{}).DialContext(ctx, network, address)
 }
 
-// ContextErr converts the error from context package into a status error.
-func ContextErr(err error) error {
+// ContextErr converts the error from context package into a StreamError.
+func ContextErr(err error) StreamError {
 	switch err {
 	case context.DeadlineExceeded, netctx.DeadlineExceeded:
-		return status.Error(codes.DeadlineExceeded, err.Error())
+		return streamErrorf(codes.DeadlineExceeded, "%v", err)
 	case context.Canceled, netctx.Canceled:
-		return status.Error(codes.Canceled, err.Error())
+		return streamErrorf(codes.Canceled, "%v", err)
 	}
-	return status.Errorf(codes.Internal, "Unexpected error from context packet: %v", err)
+	return streamErrorf(codes.Internal, "Unexpected error from context packet: %v", err)
 }
 
 // contextFromRequest returns a context from the HTTP Request.

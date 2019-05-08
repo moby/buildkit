@@ -191,8 +191,6 @@ type Stream struct {
 	header  metadata.MD // the received header metadata.
 	trailer metadata.MD // the key-value map of trailer metadata.
 
-	noHeaders bool // set if the client never received headers (set only after the stream is done).
-
 	// On the server-side, headerSent is atomically set to 1 when the headers are sent out.
 	headerSent uint32
 
@@ -284,19 +282,6 @@ func (s *Stream) Header() (metadata.MD, error) {
 	return nil, err
 }
 
-// TrailersOnly blocks until a header or trailers-only frame is received and
-// then returns true if the stream was trailers-only.  If the stream ends
-// before headers are received, returns true, nil.  If a context error happens
-// first, returns it as a status error.  Client-side only.
-func (s *Stream) TrailersOnly() (bool, error) {
-	err := s.waitOnHeader()
-	if err != nil {
-		return false, err
-	}
-	// if !headerDone, some other connection error occurred.
-	return s.noHeaders && atomic.LoadUint32(&s.headerDone) == 1, nil
-}
-
 // Trailer returns the cached trailer metedata. Note that if it is not called
 // after the entire stream is done, it could return an empty MD. Client
 // side only.
@@ -334,7 +319,7 @@ func (s *Stream) Method() string {
 
 // Status returns the status received from the server.
 // Status can be read safely only after the stream has ended,
-// that is, after Done() is closed.
+// that is, read or write has returned io.EOF.
 func (s *Stream) Status() *status.Status {
 	return s.status
 }
@@ -454,7 +439,6 @@ type ServerConfig struct {
 	WriteBufferSize       int
 	ReadBufferSize        int
 	ChannelzParentID      int64
-	MaxHeaderListSize     *uint32
 }
 
 // NewServerTransport creates a ServerTransport with conn or non-nil error
@@ -492,8 +476,6 @@ type ConnectOptions struct {
 	ReadBufferSize int
 	// ChannelzParentID sets the addrConn id which initiate the creation of this client transport.
 	ChannelzParentID int64
-	// MaxHeaderListSize sets the max (uncompressed) size of header list that is prepared to be received.
-	MaxHeaderListSize *uint32
 }
 
 // TargetInfo contains the information of the target such as network address and metadata.
@@ -552,8 +534,6 @@ type CallHdr struct {
 	// https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md#requests
 	// for more details.
 	ContentSubtype string
-
-	PreviousAttempts int // value of grpc-previous-rpc-attempts header to set
 }
 
 // ClientTransport is the common interface for all gRPC client-side transport
@@ -648,11 +628,6 @@ func streamErrorf(c codes.Code, format string, a ...interface{}) StreamError {
 		Code: c,
 		Desc: fmt.Sprintf(format, a...),
 	}
-}
-
-// streamError creates an StreamError with the specified error code and description.
-func streamError(c codes.Code, desc string) StreamError {
-	return StreamError{Code: c, Desc: desc}
 }
 
 // connectionErrorf creates an ConnectionError with the specified error description.
