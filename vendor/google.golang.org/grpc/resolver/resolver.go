@@ -49,12 +49,8 @@ func Get(scheme string) Builder {
 	return nil
 }
 
-// SetDefaultScheme sets the default scheme that will be used. The default
-// default scheme is "passthrough".
-//
-// NOTE: this function must only be called during initialization time (i.e. in
-// an init() function), and is not thread-safe. The scheme set last overrides
-// previously set values.
+// SetDefaultScheme sets the default scheme that will be used.
+// The default default scheme is "passthrough".
 func SetDefaultScheme(scheme string) {
 	defaultScheme = scheme
 }

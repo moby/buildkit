@@ -33,7 +33,6 @@ import (
 
 	"golang.org/x/net/context"
 	"google.golang.org/grpc/grpclog"
-	"google.golang.org/grpc/internal/backoff"
 	"google.golang.org/grpc/internal/grpcrand"
 	"google.golang.org/grpc/resolver"
 )
@@ -52,23 +51,17 @@ const (
 )
 
 var (
-	errMissingAddr = errors.New("dns resolver: missing address")
-
-	// Addresses ending with a colon that is supposed to be the separator
-	// between host and port is not allowed.  E.g. "::" is a valid address as
-	// it is an IPv6 address (host only) and "[::]:" is invalid as it ends with
-	// a colon as the host and port separator
-	errEndsWithColon = errors.New("dns resolver: missing port after port-separator colon")
+	errMissingAddr = errors.New("missing address")
 )
 
 // NewBuilder creates a dnsBuilder which is used to factory DNS resolvers.
 func NewBuilder() resolver.Builder {
-	return &dnsBuilder{minFreq: defaultFreq}
+	return &dnsBuilder{freq: defaultFreq}
 }
 
 type dnsBuilder struct {
-	// minimum frequency of polling the DNS server.
-	minFreq time.Duration
+	// frequency of polling the DNS server.
+	freq time.Duration
 }
 
 // Build creates and starts a DNS resolver that watches the name resolution of the target.
@@ -99,8 +92,7 @@ func (b *dnsBuilder) Build(target resolver.Target, cc resolver.ClientConn, opts 
 	// DNS address (non-IP).
 	ctx, cancel := context.WithCancel(context.Background())
 	d := &dnsResolver{
-		freq:                 b.minFreq,
-		backoff:              backoff.Exponential{MaxDelay: b.minFreq},
+		freq:                 b.freq,
 		host:                 host,
 		port:                 port,
 		ctx:                  ctx,
@@ -156,14 +148,12 @@ func (i *ipResolver) watcher() {
 
 // dnsResolver watches for the name resolution update for a non-IP target.
 type dnsResolver struct {
-	freq       time.Duration
-	backoff    backoff.Exponential
-	retryCount int
-	host       string
-	port       string
-	ctx        context.Context
-	cancel     context.CancelFunc
-	cc         resolver.ClientConn
+	freq   time.Duration
+	host   string
+	port   string
+	ctx    context.Context
+	cancel context.CancelFunc
+	cc     resolver.ClientConn
 	// rn channel is used by ResolveNow() to force an immediate resolution of the target.
 	rn chan struct{}
 	t  *time.Timer
@@ -202,15 +192,8 @@ func (d *dnsResolver) watcher() {
 		case <-d.rn:
 		}
 		result, sc := d.lookup()
-		// Next lookup should happen within an interval defined by d.freq. It may be
-		// more often due to exponential retry on empty address list.
-		if len(result) == 0 {
-			d.retryCount++
-			d.t.Reset(d.backoff.Backoff(d.retryCount))
-		} else {
-			d.retryCount = 0
-			d.t.Reset(d.freq)
-		}
+		// Next lookup should happen after an interval defined by d.freq.
+		d.t.Reset(d.freq)
 		d.cc.NewServiceConfig(sc)
 		d.cc.NewAddress(result)
 	}
@@ -314,6 +297,7 @@ func formatIP(addr string) (addrIP string, ok bool) {
 // target: "ipv4-host:80" returns host: "ipv4-host", port: "80"
 // target: "[ipv6-host]" returns host: "ipv6-host", port: "443"
 // target: ":80" returns host: "localhost", port: "80"
+// target: ":" returns host: "localhost", port: "443"
 func parseTarget(target string) (host, port string, err error) {
 	if target == "" {
 		return "", "", errMissingAddr
@@ -323,14 +307,14 @@ func parseTarget(target string) (host, port string, err error) {
 		return target, defaultPort, nil
 	}
 	if host, port, err = net.SplitHostPort(target); err == nil {
-		if port == "" {
-			// If the port field is empty (target ends with colon), e.g. "[::1]:", this is an error.
-			return "", "", errEndsWithColon
-		}
 		// target has port, i.e ipv4-host:port, [ipv6-host]:port, host-name:port
 		if host == "" {
 			// Keep consistent with net.Dial(): If the host is empty, as in ":80", the local system is assumed.
 			host = "localhost"
+		}
+		if port == "" {
+			// If the port field is empty(target ends with colon), e.g. "[::1]:", defaultPort is used.
+			port = defaultPort
 		}
 		return host, port, nil
 	}

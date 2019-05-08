@@ -36,11 +36,11 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/encoding"
 	"google.golang.org/grpc/encoding/proto"
-	"google.golang.org/grpc/internal/transport"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/stats"
 	"google.golang.org/grpc/status"
+	"google.golang.org/grpc/transport"
 )
 
 // Compressor defines the interface gRPC uses to compress a message.
@@ -162,15 +162,10 @@ type callInfo struct {
 	creds                 credentials.PerRPCCredentials
 	contentSubtype        string
 	codec                 baseCodec
-	disableRetry          bool
-	maxRetryRPCBufferSize int
 }
 
 func defaultCallInfo() *callInfo {
-	return &callInfo{
-		failFast:              true,
-		maxRetryRPCBufferSize: 256 * 1024, // 256KB
-	}
+	return &callInfo{failFast: true}
 }
 
 // CallOption configures a Call before it starts or extracts information from
@@ -420,27 +415,6 @@ func (o CustomCodecCallOption) before(c *callInfo) error {
 }
 func (o CustomCodecCallOption) after(c *callInfo) {}
 
-// MaxRetryRPCBufferSize returns a CallOption that limits the amount of memory
-// used for buffering this RPC's requests for retry purposes.
-//
-// This API is EXPERIMENTAL.
-func MaxRetryRPCBufferSize(bytes int) CallOption {
-	return MaxRetryRPCBufferSizeCallOption{bytes}
-}
-
-// MaxRetryRPCBufferSizeCallOption is a CallOption indicating the amount of
-// memory to be used for caching this RPC for retry purposes.
-// This is an EXPERIMENTAL API.
-type MaxRetryRPCBufferSizeCallOption struct {
-	MaxRetryRPCBufferSize int
-}
-
-func (o MaxRetryRPCBufferSizeCallOption) before(c *callInfo) error {
-	c.maxRetryRPCBufferSize = o.MaxRetryRPCBufferSize
-	return nil
-}
-func (o MaxRetryRPCBufferSizeCallOption) after(c *callInfo) {}
-
 // The format of the payload: compressed or not?
 type payloadFormat uint8
 
@@ -470,7 +444,7 @@ type parser struct {
 //   * io.EOF, when no messages remain
 //   * io.ErrUnexpectedEOF
 //   * of type transport.ConnectionError
-//   * an error from the status package
+//   * of type transport.StreamError
 // No other error values or types must be returned, which also means
 // that the underlying io.Reader must not return an incompatible
 // error.

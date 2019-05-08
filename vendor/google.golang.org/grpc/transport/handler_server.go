@@ -80,7 +80,7 @@ func NewServerHandlerTransport(w http.ResponseWriter, r *http.Request, stats sta
 	if v := r.Header.Get("grpc-timeout"); v != "" {
 		to, err := decodeTimeout(v)
 		if err != nil {
-			return nil, status.Errorf(codes.Internal, "malformed time-out: %v", err)
+			return nil, streamErrorf(codes.Internal, "malformed time-out: %v", err)
 		}
 		st.timeoutSet = true
 		st.timeout = to
@@ -98,7 +98,7 @@ func NewServerHandlerTransport(w http.ResponseWriter, r *http.Request, stats sta
 		for _, v := range vv {
 			v, err := decodeMetadataHeader(k, v)
 			if err != nil {
-				return nil, status.Errorf(codes.Internal, "malformed binary metadata: %v", err)
+				return nil, streamErrorf(codes.Internal, "malformed binary metadata: %v", err)
 			}
 			metakv = append(metakv, k, v)
 		}
@@ -274,7 +274,9 @@ func (ht *serverHandlerTransport) Write(s *Stream, hdr []byte, data []byte, opts
 		ht.writeCommonHeaders(s)
 		ht.rw.Write(hdr)
 		ht.rw.Write(data)
-		ht.rw.(http.Flusher).Flush()
+		if !opts.Delay {
+			ht.rw.(http.Flusher).Flush()
+		}
 	})
 }
 
@@ -432,14 +434,17 @@ func (ht *serverHandlerTransport) Drain() {
 //   * io.EOF
 //   * io.ErrUnexpectedEOF
 //   * of type transport.ConnectionError
-//   * an error from the status package
+//   * of type transport.StreamError
 func mapRecvMsgError(err error) error {
 	if err == io.EOF || err == io.ErrUnexpectedEOF {
 		return err
 	}
 	if se, ok := err.(http2.StreamError); ok {
 		if code, ok := http2ErrConvTab[se.Code]; ok {
-			return status.Error(code, se.Error())
+			return StreamError{
+				Code: code,
+				Desc: se.Error(),
+			}
 		}
 	}
 	return connectionErrorf(true, err, err.Error())
