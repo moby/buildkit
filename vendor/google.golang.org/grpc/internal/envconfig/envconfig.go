@@ -1,5 +1,3 @@
-// +build go1.9,!appengine
-
 /*
  *
  * Copyright 2018 gRPC authors.
@@ -18,25 +16,20 @@
  *
  */
 
-package credentials
+// Package envconfig contains grpc settings configured by environment variables.
+package envconfig
 
 import (
-	"crypto/tls"
-	"errors"
-	"net"
-	"syscall"
+	"os"
+	"strings"
 )
 
-type tlsConn struct {
-	*tls.Conn
-	rawConn net.Conn
-}
+const (
+	prefix   = "GRPC_GO_"
+	retryStr = prefix + "RETRY"
+)
 
-// implements the syscall.Conn interface
-func (c tlsConn) SyscallConn() (syscall.RawConn, error) {
-	conn, ok := c.rawConn.(syscall.Conn)
-	if !ok {
-		return nil, errors.New("RawConn does not implement syscall.Conn")
-	}
-	return conn.SyscallConn()
-}
+var (
+	// Retry is set if retry is explicitly enabled via "GRPC_GO_RETRY=on".
+	Retry = strings.EqualFold(os.Getenv(retryStr), "on")
+)

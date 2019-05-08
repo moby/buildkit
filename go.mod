@@ -66,7 +66,7 @@ require (
 	golang.org/x/sys v0.0.0-20190303122642-d455e41777fc
 	golang.org/x/time v0.0.0-20161028155119-f51c12702a4d
 	google.golang.org/genproto v0.0.0-20180817151627-c66870c02cf8
-	google.golang.org/grpc v1.2.1-0.20180627181633-3ec535a269c8
+	google.golang.org/grpc v1.2.1-0.20180703210707-40cd6b15e288
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
 	gotest.tools v2.2.0+incompatible
 )
