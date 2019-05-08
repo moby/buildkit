@@ -135,19 +135,25 @@ type options struct {
 	writeBufferSize       int
 	readBufferSize        int
 	connectionTimeout     time.Duration
+	maxHeaderListSize     *uint32
 }
 
 var defaultServerOptions = options{
 	maxReceiveMessageSize: defaultServerMaxReceiveMessageSize,
 	maxSendMessageSize:    defaultServerMaxSendMessageSize,
 	connectionTimeout:     120 * time.Second,
+	writeBufferSize:       defaultWriteBufSize,
+	readBufferSize:        defaultReadBufSize,
 }
 
 // A ServerOption sets options such as credentials, codec and keepalive parameters, etc.
 type ServerOption func(*options)
 
-// WriteBufferSize lets you set the size of write buffer, this determines how much data can be batched
-// before doing a write on the wire.
+// WriteBufferSize determines how much data can be batched before doing a write on the wire.
+// The corresponding memory allocation for this buffer will be twice the size to keep syscalls low.
+// The default value for this buffer is 32KB.
+// Zero will disable the write buffer such that each write will be on underlying connection.
+// Note: A Send call may not directly translate to a write.
 func WriteBufferSize(s int) ServerOption {
 	return func(o *options) {
 		o.writeBufferSize = s
@@ -156,6 +162,9 @@ func WriteBufferSize(s int) ServerOption {
 
 // ReadBufferSize lets you set the size of read buffer, this determines how much data can be read at most
 // for one read syscall.
+// The default value for this buffer is 32KB.
+// Zero will disable read buffer for a connection so data framer can access the underlying
+// conn directly.
 func ReadBufferSize(s int) ServerOption {
 	return func(o *options) {
 		o.readBufferSize = s
@@ -335,6 +344,14 @@ func ConnectionTimeout(d time.Duration) ServerOption {
 	}
 }
 
+// MaxHeaderListSize returns a ServerOption that sets the max (uncompressed) size
+// of header list that the server is prepared to accept.
+func MaxHeaderListSize(s uint32) ServerOption {
+	return func(o *options) {
+		o.maxHeaderListSize = &s
+	}
+}
+
 // NewServer creates a gRPC server which has no service registered and has not
 // started to accept requests yet.
 func NewServer(opt ...ServerOption) *Server {
@@ -481,7 +498,8 @@ type listenSocket struct {
 
 func (l *listenSocket) ChannelzMetric() *channelz.SocketInternalMetric {
 	return &channelz.SocketInternalMetric{
-		LocalAddr: l.Listener.Addr(),
+		SocketOptions: channelz.GetSocketOption(l.Listener),
+		LocalAddr:     l.Listener.Addr(),
 	}
 }
 
@@ -656,6 +674,7 @@ func (s *Server) newHTTP2Transport(c net.Conn, authInfo credentials.AuthInfo) tr
 		WriteBufferSize:       s.opts.writeBufferSize,
 		ReadBufferSize:        s.opts.readBufferSize,
 		ChannelzParentID:      s.channelzID,
+		MaxHeaderListSize:     s.opts.maxHeaderListSize,
 	}
 	st, err := transport.NewServerTransport("http2", c, config)
 	if err != nil {

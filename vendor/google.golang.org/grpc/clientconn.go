@@ -26,6 +26,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/context"
@@ -39,6 +40,7 @@ import (
 	"google.golang.org/grpc/internal"
 	"google.golang.org/grpc/internal/backoff"
 	"google.golang.org/grpc/internal/channelz"
+	"google.golang.org/grpc/internal/envconfig"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/resolver"
 	_ "google.golang.org/grpc/resolver/dns"         // To register dns resolver.
@@ -116,11 +118,15 @@ type dialOptions struct {
 	waitForHandshake     bool
 	channelzParentID     int64
 	disableServiceConfig bool
+	disableRetry         bool
 }
 
 const (
 	defaultClientMaxReceiveMessageSize = 1024 * 1024 * 4
 	defaultClientMaxSendMessageSize    = math.MaxInt32
+	// http2IOBufSize specifies the buffer size for sending frames.
+	defaultWriteBufSize = 32 * 1024
+	defaultReadBufSize  = 32 * 1024
 )
 
 // RegisterChannelz turns on channelz service.
@@ -141,8 +147,11 @@ func WithWaitForHandshake() DialOption {
 	}
 }
 
-// WithWriteBufferSize lets you set the size of write buffer, this determines how much data can be batched
-// before doing a write on the wire.
+// WithWriteBufferSize determines how much data can be batched before doing a write on the wire.
+// The corresponding memory allocation for this buffer will be twice the size to keep syscalls low.
+// The default value for this buffer is 32KB.
+// Zero will disable the write buffer such that each write will be on underlying connection.
+// Note: A Send call may not directly translate to a write.
 func WithWriteBufferSize(s int) DialOption {
 	return func(o *dialOptions) {
 		o.copts.WriteBufferSize = s
@@ -151,6 +160,9 @@ func WithWriteBufferSize(s int) DialOption {
 
 // WithReadBufferSize lets you set the size of read buffer, this determines how much data can be read at most
 // for each read syscall.
+// The default value for this buffer is 32KB
+// Zero will disable read buffer for a connection so data framer can access the underlying
+// conn directly.
 func WithReadBufferSize(s int) DialOption {
 	return func(o *dialOptions) {
 		o.copts.ReadBufferSize = s
@@ -435,6 +447,40 @@ func WithDisableServiceConfig() DialOption {
 	}
 }
 
+// WithDisableRetry returns a DialOption that disables retries, even if the
+// service config enables them.  This does not impact transparent retries,
+// which will happen automatically if no data is written to the wire or if the
+// RPC is unprocessed by the remote server.
+//
+// Retry support is currently disabled by default, but will be enabled by
+// default in the future.  Until then, it may be enabled by setting the
+// environment variable "GRPC_GO_RETRY" to "on".
+//
+// This API is EXPERIMENTAL.
+func WithDisableRetry() DialOption {
+	return func(o *dialOptions) {
+		o.disableRetry = true
+	}
+}
+
+func defaultDialOptions() dialOptions {
+	return dialOptions{
+		disableRetry: !envconfig.Retry,
+		copts: transport.ConnectOptions{
+			WriteBufferSize: defaultWriteBufSize,
+			ReadBufferSize:  defaultReadBufSize,
+		},
+	}
+}
+
+// WithMaxHeaderListSize returns a DialOption that specifies the maximum (uncompressed) size of
+// header list that the client is prepared to accept.
+func WithMaxHeaderListSize(s uint32) DialOption {
+	return func(o *dialOptions) {
+		o.copts.MaxHeaderListSize = &s
+	}
+}
+
 // Dial creates a client connection to the given target.
 func Dial(target string, opts ...DialOption) (*ClientConn, error) {
 	return DialContext(context.Background(), target, opts...)
@@ -458,14 +504,16 @@ func Dial(target string, opts ...DialOption) (*ClientConn, error) {
 // e.g. to use dns resolver, a "dns:///" prefix should be applied to the target.
 func DialContext(ctx context.Context, target string, opts ...DialOption) (conn *ClientConn, err error) {
 	cc := &ClientConn{
-		target: target,
-		csMgr:  &connectivityStateManager{},
-		conns:  make(map[*addrConn]struct{}),
-
+		target:         target,
+		csMgr:          &connectivityStateManager{},
+		conns:          make(map[*addrConn]struct{}),
+		dopts:          defaultDialOptions(),
 		blockingpicker: newPickerWrapper(),
 	}
+	cc.retryThrottler.Store((*retryThrottler)(nil))
 	cc.ctx, cc.cancel = context.WithCancel(context.Background())
 
+	cc.dopts = defaultDialOptions()
 	for _, opt := range opts {
 		opt(&cc.dopts)
 	}
@@ -699,6 +747,7 @@ type ClientConn struct {
 	preBalancerName string // previous balancer name.
 	curAddresses    []resolver.Address
 	balancerWrapper *ccBalancerWrapper
+	retryThrottler  atomic.Value
 
 	channelzID          int64 // channelz unique identification number
 	czmu                sync.RWMutex
@@ -830,8 +879,6 @@ func (cc *ClientConn) switchBalancer(name string) {
 	if cc.balancerWrapper != nil {
 		cc.balancerWrapper.close()
 	}
-	// Clear all stickiness state.
-	cc.blockingpicker.clearStickinessState()
 
 	builder := balancer.Get(name)
 	if builder == nil {
@@ -1033,6 +1080,19 @@ func (cc *ClientConn) handleServiceConfig(js string) error {
 	cc.mu.Lock()
 	cc.scRaw = js
 	cc.sc = sc
+
+	if sc.retryThrottling != nil {
+		newThrottler := &retryThrottler{
+			tokens: sc.retryThrottling.MaxTokens,
+			max:    sc.retryThrottling.MaxTokens,
+			thresh: sc.retryThrottling.MaxTokens / 2,
+			ratio:  sc.retryThrottling.TokenRatio,
+		}
+		cc.retryThrottler.Store(newThrottler)
+	} else {
+		cc.retryThrottler.Store((*retryThrottler)(nil))
+	}
+
 	if sc.LB != nil && *sc.LB != grpclbName { // "grpclb" is not a valid balancer option in service config.
 		if cc.curBalancerName == grpclbName {
 			// If current balancer is grpclb, there's at least one grpclb
@@ -1045,17 +1105,6 @@ func (cc *ClientConn) handleServiceConfig(js string) error {
 			cc.switchBalancer(*sc.LB)
 			cc.balancerWrapper.handleResolvedAddrs(cc.curAddresses, nil)
 		}
-	}
-
-	if envConfigStickinessOn {
-		var newStickinessMDKey string
-		if sc.stickinessMetadataKey != nil && *sc.stickinessMetadataKey != "" {
-			newStickinessMDKey = *sc.stickinessMetadataKey
-		}
-		// newStickinessMDKey is "" if one of the following happens:
-		// - stickinessMetadataKey is set to ""
-		// - stickinessMetadataKey field doesn't exist in service config
-		cc.blockingpicker.updateStickinessMDKey(strings.ToLower(newStickinessMDKey))
 	}
 
 	cc.mu.Unlock()
@@ -1311,7 +1360,7 @@ func (ac *addrConn) createTransport(connectRetryNum, ridx int, backoffDeadline, 
 				// Didn't receive server preface, must kill this new transport now.
 				grpclog.Warningf("grpc: addrConn.createTransport failed to receive server preface before deadline.")
 				newTr.Close()
-				break
+				continue
 			case <-ac.ctx.Done():
 			}
 		}
@@ -1551,13 +1600,6 @@ func (ac *addrConn) getState() connectivity.State {
 	return ac.state
 }
 
-func (ac *addrConn) getCurAddr() (ret resolver.Address) {
-	ac.mu.Lock()
-	ret = ac.curAddr
-	ac.mu.Unlock()
-	return
-}
-
 func (ac *addrConn) ChannelzMetric() *channelz.ChannelInternalMetric {
 	ac.mu.Lock()
 	addr := ac.curAddr.Addr
@@ -1592,6 +1634,43 @@ func (ac *addrConn) incrCallsFailed() {
 	ac.czmu.Lock()
 	ac.callsFailed++
 	ac.czmu.Unlock()
+}
+
+type retryThrottler struct {
+	max    float64
+	thresh float64
+	ratio  float64
+
+	mu     sync.Mutex
+	tokens float64 // TODO(dfawley): replace with atomic and remove lock.
+}
+
+// throttle subtracts a retry token from the pool and returns whether a retry
+// should be throttled (disallowed) based upon the retry throttling policy in
+// the service config.
+func (rt *retryThrottler) throttle() bool {
+	if rt == nil {
+		return false
+	}
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	rt.tokens--
+	if rt.tokens < 0 {
+		rt.tokens = 0
+	}
+	return rt.tokens <= rt.thresh
+}
+
+func (rt *retryThrottler) successfulRPC() {
+	if rt == nil {
+		return
+	}
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	rt.tokens += rt.ratio
+	if rt.tokens > rt.max {
+		rt.tokens = rt.max
+	}
 }
 
 // ErrClientConnTimeout indicates that the ClientConn cannot establish the
