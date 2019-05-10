@@ -2,7 +2,7 @@ package authprovider
 
 import (
 	"context"
-	"io/ioutil"
+	"io"
 	"sync"
 
 	"github.com/docker/cli/cli/config"
@@ -12,9 +12,9 @@ import (
 	"google.golang.org/grpc"
 )
 
-func NewDockerAuthProvider() session.Attachable {
+func NewDockerAuthProvider(stderr io.Writer) session.Attachable {
 	return &authProvider{
-		config: config.LoadDefaultConfigFile(ioutil.Discard),
+		config: config.LoadDefaultConfigFile(stderr),
 	}
 }
 

@@ -154,7 +154,7 @@ func buildAction(clicontext *cli.Context) error {
 		logrus.Infof("tracing logs to %s", traceFile.Name())
 	}
 
-	attachable := []session.Attachable{authprovider.NewDockerAuthProvider()}
+	attachable := []session.Attachable{authprovider.NewDockerAuthProvider(os.Stderr)}
 
 	if ssh := clicontext.StringSlice("ssh"); len(ssh) > 0 {
 		configs, err := build.ParseSSH(ssh)
