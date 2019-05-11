@@ -172,10 +172,6 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		}
 	}
 
-	if len(allDispatchStates.states) == 1 {
-		allDispatchStates.states[0].stageName = ""
-	}
-
 	var target *dispatchState
 	if opt.Target == "" {
 		target = allDispatchStates.lastTarget()
@@ -209,6 +205,10 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 
 	if has, state := hasCircularDependency(allDispatchStates.states); has {
 		return nil, nil, fmt.Errorf("circular dependency detected on stage: %s", state.stageName)
+	}
+
+	if len(allDispatchStates.states) == 1 {
+		allDispatchStates.states[0].stageName = ""
 	}
 
 	eg, ctx := errgroup.WithContext(ctx)
