@@ -209,7 +209,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 
 	if has, state := hasCircularDependency(allDispatchStates.states); has {
 		return nil, nil, fmt.Errorf("circular dependency detected on stage: %s", state.stageName)
-        }
+	}
 
 	eg, ctx := errgroup.WithContext(ctx)
 	for i, d := range allDispatchStates.states {
@@ -1135,38 +1135,38 @@ func isReachable(from, to *dispatchState) (ret bool) {
 }
 
 func hasCircularDependency(states []*dispatchState) (bool, *dispatchState) {
-       var visit func (state *dispatchState) bool
-       if states == nil {
-               return false, nil
-       }
-       visited := make(map[*dispatchState]struct{})
-       path := make(map[*dispatchState]struct{})
+	var visit func(state *dispatchState) bool
+	if states == nil {
+		return false, nil
+	}
+	visited := make(map[*dispatchState]struct{})
+	path := make(map[*dispatchState]struct{})
 
-       visit = func (state *dispatchState) bool {
-               _, ok := visited[state]
-               if ok {
-                       return false
-               }
-               visited[state] = struct{}{}
-               path[state] = struct{}{}
-               for dep := range state.deps {
-                       _, ok = path[dep]
-                       if ok {
-                               return true
-                       }
-                       if visit(dep) {
-                               return true
-                       }
-               }
-               delete(path, state)
-               return false
-       }
-       for _, state := range states {
-               if visit(state) {
-                       return true, state
-               }
-       }
-       return false, nil
+	visit = func(state *dispatchState) bool {
+		_, ok := visited[state]
+		if ok {
+			return false
+		}
+		visited[state] = struct{}{}
+		path[state] = struct{}{}
+		for dep := range state.deps {
+			_, ok = path[dep]
+			if ok {
+				return true
+			}
+			if visit(dep) {
+				return true
+			}
+		}
+		delete(path, state)
+		return false
+	}
+	for _, state := range states {
+		if visit(state) {
+			return true, state
+		}
+	}
+	return false, nil
 }
 
 func parseUser(str string) (uid uint32, gid uint32, err error) {
