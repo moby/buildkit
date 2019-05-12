@@ -111,6 +111,7 @@ func (c *conn) Close() (err error) {
 			err = c.stream.RecvMsg(m)
 			if err != nil {
 				if err != io.EOF {
+					c.readMu.Unlock()
 					return
 				}
 				err = nil
