@@ -12,6 +12,8 @@ import (
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/cio"
 	containerdoci "github.com/containerd/containerd/oci"
+	"github.com/containerd/continuity/fs"
+	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/executor/oci"
@@ -84,6 +86,22 @@ func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root c
 			lm.Unmount()
 			return err
 		}
+
+		identity := idtools.Identity{
+			UID: int(uid),
+			GID: int(gid),
+		}
+
+		newp, err := fs.RootPath(rootfsPath, meta.Cwd)
+		if err != nil {
+			lm.Unmount()
+			return errors.Wrapf(err, "working dir %s points to invalid target", newp)
+		}
+		if err := idtools.MkdirAllAndChown(newp, 0755, identity); err != nil {
+			lm.Unmount()
+			return errors.Wrapf(err, "failed to create working directory %s", newp)
+		}
+
 		lm.Unmount()
 	}
 
