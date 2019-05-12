@@ -152,3 +152,23 @@ func TestToEnvList(t *testing.T) {
 	resutl = toEnvMap(args, env)
 	assert.Equal(t, map[string]string{"key1": "val1", "key2": "v1"}, resutl)
 }
+
+func TestDockerfileCircularDependencies(t *testing.T) {
+	// single stage depends on itself
+	df := `FROM busybox AS stage0
+COPY --from=stage0 f1 /sub/
+`
+	_, _, err := Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	assert.EqualError(t, err, "circular dependency detected on stage: stage0")
+
+	// multiple stages with circular dependency
+	df = `FROM busybox AS stage0
+COPY --from=stage2 f1 /sub/
+FROM busybox AS stage1
+COPY --from=stage0 f2 /sub/
+FROM busybox AS stage2
+COPY --from=stage1 f2 /sub/
+`
+	_, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
+	assert.EqualError(t, err, "circular dependency detected on stage: stage0")
+}
