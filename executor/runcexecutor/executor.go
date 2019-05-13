@@ -197,6 +197,17 @@ func (w *runcExecutor) Exec(ctx context.Context, meta executor.Meta, root cache.
 		opts = append(opts, containerdoci.WithRootFSReadonly())
 	}
 
+	identity = idtools.Identity{
+		UID: int(uid),
+		GID: int(gid),
+	}
+	if w.idmap != nil {
+		identity, err = w.idmap.ToHost(identity)
+		if err != nil {
+			return err
+		}
+	}
+
 	if w.cgroupParent != "" {
 		var cgroupsPath string
 		lastSeparator := w.cgroupParent[len(w.cgroupParent)-1:]
