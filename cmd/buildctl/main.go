@@ -3,10 +3,12 @@ package main
 import (
 	"fmt"
 	"os"
+	"time"
 
 	_ "github.com/moby/buildkit/client/connhelper/dockercontainer"
 	_ "github.com/moby/buildkit/client/connhelper/kubepod"
 	bccommon "github.com/moby/buildkit/cmd/buildctl/common"
+	"github.com/moby/buildkit/cmd/buildctl/spawner"
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/moby/buildkit/util/profiler"
@@ -68,6 +70,12 @@ func main() {
 			Usage: "timeout backend connection after value seconds",
 			Value: 5,
 		},
+		cli.StringFlag{
+			Name:   "spawn",
+			Hidden: true,
+			Usage:  "buildkitd flag string for spawn://",
+			Value:  "",
+		},
 	}
 
 	app.Commands = []cli.Command{
@@ -78,12 +86,35 @@ func main() {
 		dialStdioCommand,
 	}
 
-	var debugEnabled bool
+	var (
+		debugEnabled bool
+		sp           spawner.Spawner
+	)
 
 	app.Before = func(context *cli.Context) error {
 		debugEnabled = context.GlobalBool("debug")
 		if debugEnabled {
 			logrus.SetLevel(logrus.DebugLevel)
+		}
+		if context.GlobalString("addr") == "spawn://" {
+			logrus.Info("Spawn mode (experimental)")
+			var err error
+			sp, err = spawner.New(context.GlobalString("spawn"))
+			if err != nil {
+				return err
+			}
+			addr, err := sp.Spawn(time.Duration(context.GlobalInt("timeout")) * time.Second)
+			if err != nil {
+				sp.Close()
+				return err
+			}
+			context.Set("addr", addr)
+		}
+		return nil
+	}
+	app.After = func(context *cli.Context) error {
+		if sp != nil {
+			return sp.Close()
 		}
 		return nil
 	}
