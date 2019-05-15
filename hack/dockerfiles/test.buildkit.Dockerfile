@@ -1,6 +1,6 @@
 # syntax = docker/dockerfile:1.0-experimental
 
-ARG RUNC_VERSION=6635b4f0c6af3810594d2770f662f34ddc15b40d
+ARG RUNC_VERSION=v1.0.0-rc8
 ARG CONTAINERD_VERSION=v1.2.1
 # containerd v1.0 for integration tests
 ARG CONTAINERD10_VERSION=v1.0.3
