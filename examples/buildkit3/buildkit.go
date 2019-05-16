@@ -19,7 +19,7 @@ func main() {
 	var opt buildOpt
 	flag.BoolVar(&opt.withContainerd, "with-containerd", true, "enable containerd worker")
 	flag.StringVar(&opt.containerd, "containerd", "v1.2.1", "containerd version")
-	flag.StringVar(&opt.runc, "runc", "6635b4f0c6af3810594d2770f662f34ddc15b40d", "runc version")
+	flag.StringVar(&opt.runc, "runc", "v1.0.0-rc8", "runc version")
 	flag.StringVar(&opt.buildkit, "buildkit", "master", "buildkit version")
 	flag.Parse()
 
