@@ -184,7 +184,7 @@ The local client will copy the files directly to the client. This is useful if B
 buildctl build ... --output type=local,dest=path/to/output-dir
 ```
 
-Another use case is to export test result file from the docker image.
+To export specific files use multi-stage builds with a scratch stage and copy the needed files into that stage with `COPY --from`.
 ```dockerfile
 ...
 FROM scratch as testresult
