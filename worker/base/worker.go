@@ -12,6 +12,7 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/diff"
 	"github.com/containerd/containerd/images"
+	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/rootfs"
 	cdsnapshot "github.com/containerd/containerd/snapshots"
 	"github.com/docker/docker/pkg/idtools"
@@ -72,6 +73,7 @@ type WorkerOpt struct {
 	ImageStore         images.Store // optional
 	ResolveOptionsFunc resolver.ResolveOptionsFunc
 	IdentityMapping    *idtools.IdentityMapping
+	LeaseManager       leases.Manager
 }
 
 // Worker is a local worker instance with dedicated snapshotter, cache, and so on.
@@ -113,6 +115,7 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 		ImageStore:    opt.ImageStore,
 		CacheAccessor: cm,
 		ResolverOpt:   opt.ResolveOptionsFunc,
+		LeaseManager:  opt.LeaseManager,
 	})
 	if err != nil {
 		return nil, err

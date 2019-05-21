@@ -100,7 +100,17 @@ func (c *nsContent) writer(ctx context.Context, retries int, opts ...content.Wri
 			}
 		}
 	}
-	return w, err
+	return &nsWriter{Writer: w, ns: c.ns}, err
+}
+
+type nsWriter struct {
+	content.Writer
+	ns string
+}
+
+func (w *nsWriter) Commit(ctx context.Context, size int64, expected digest.Digest, opts ...content.Opt) error {
+	ctx = namespaces.WithNamespace(ctx, w.ns)
+	return w.Writer.Commit(ctx, size, expected, opts...)
 }
 
 type noGCContentStore struct {

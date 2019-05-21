@@ -8,6 +8,7 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/diff"
 	"github.com/containerd/containerd/images"
+	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/platforms"
 	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/cache"
@@ -36,6 +37,7 @@ type SourceOpt struct {
 	CacheAccessor cache.Accessor
 	ImageStore    images.Store // optional
 	ResolverOpt   resolver.ResolveOptionsFunc
+	LeaseManager  leases.Manager
 }
 
 type imageSource struct {
@@ -102,6 +104,7 @@ func (is *imageSource) Resolve(ctx context.Context, id source.Identifier, sm *se
 		Src:          imageIdentifier.Reference,
 		Resolver:     pull.NewResolver(ctx, is.ResolverOpt, sm, is.ImageStore, imageIdentifier.ResolveMode, imageIdentifier.Reference.String()),
 		Platform:     &platform,
+		LeaseManager: is.LeaseManager,
 	}
 	p := &puller{
 		CacheAccessor: is.CacheAccessor,
