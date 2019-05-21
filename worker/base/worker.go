@@ -41,6 +41,7 @@ import (
 	"github.com/moby/buildkit/source/http"
 	"github.com/moby/buildkit/source/local"
 	"github.com/moby/buildkit/util/contentutil"
+	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/resolver"
 	"github.com/moby/buildkit/worker"
@@ -334,6 +335,12 @@ func getCreatedTimes(ref cache.ImmutableRef) (out []time.Time) {
 }
 
 func (w *Worker) FromRemote(ctx context.Context, remote *solver.Remote) (cache.ImmutableRef, error) {
+	ctx, done, err := leaseutil.WithLease(ctx, w.LeaseManager)
+	if err != nil {
+		return nil, err
+	}
+	defer done(ctx)
+
 	eg, gctx := errgroup.WithContext(ctx)
 	for _, desc := range remote.Descriptors {
 		func(desc ocispec.Descriptor) {
