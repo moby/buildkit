@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/containerd/continuity/fs/fstest"
@@ -24,6 +25,8 @@ var mountTests = []integration.Test{
 
 func init() {
 	allTests = append(allTests, mountTests...)
+
+	fileOpTests = append(fileOpTests, testCacheMountUser)
 }
 
 func testMountContext(t *testing.T, sb integration.Sandbox) {
@@ -158,4 +161,35 @@ COPY --from=second /unique /unique
 	dt2, err := ioutil.ReadFile(filepath.Join(destDir, "unique"))
 	require.NoError(t, err)
 	require.Equal(t, dt1, dt2)
+}
+
+func testCacheMountUser(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+	isFileOp := getFileOp(t, sb)
+
+	dockerfile := []byte(`
+FROM busybox
+RUN --mount=type=cache,target=/mycache,uid=1001,gid=1002,mode=0751 [ "$(stat -c "%u %g %f" /mycache)" == "1001 1002 41e9" ]
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
 }
