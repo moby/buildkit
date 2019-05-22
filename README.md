@@ -184,6 +184,19 @@ The local client will copy the files directly to the client. This is useful if B
 buildctl build ... --output type=local,dest=path/to/output-dir
 ```
 
+To export specific files use multi-stage builds with a scratch stage and copy the needed files into that stage with `COPY --from`.
+```dockerfile
+...
+FROM scratch as testresult
+
+COPY --from=builder /usr/src/app/testresult.xml .
+...
+```
+
+```
+buildctl build ... --opt target=testresult --output type=local,dest=path/to/output-dir
+```
+
 Tar exporter is similar to local exporter but transfers the files through a tarball.
 
 ```
