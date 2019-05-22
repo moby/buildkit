@@ -231,7 +231,7 @@ func snapshotterFactory(commonRoot, name string) (runc.SnapshotterFactory, error
 		snFactory.New = native.NewSnapshotter
 	case "overlayfs": // not "overlay", for consistency with containerd snapshotter plugin ID.
 		snFactory.New = func(root string) (ctdsnapshot.Snapshotter, error) {
-			return overlay.NewSnapshotter(root)
+			return overlay.NewSnapshotter(root, overlay.AsynchronousRemove)
 		}
 	default:
 		return snFactory, errors.Errorf("unknown snapshotter name: %q", name)
