@@ -6,9 +6,11 @@ import (
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/images"
+	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/reference"
 	"github.com/containerd/containerd/remotes"
+	"github.com/moby/buildkit/util/leaseutil"
 	digest "github.com/opencontainers/go-digest"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -19,7 +21,7 @@ type ContentCache interface {
 	content.Provider
 }
 
-func Config(ctx context.Context, str string, resolver remotes.Resolver, cache ContentCache, p *specs.Platform) (digest.Digest, []byte, error) {
+func Config(ctx context.Context, str string, resolver remotes.Resolver, cache ContentCache, leaseManager leases.Manager, p *specs.Platform) (digest.Digest, []byte, error) {
 	// TODO: fix buildkit to take interface instead of struct
 	var platform platforms.MatchComparer
 	if p != nil {
@@ -30,6 +32,15 @@ func Config(ctx context.Context, str string, resolver remotes.Resolver, cache Co
 	ref, err := reference.Parse(str)
 	if err != nil {
 		return "", nil, errors.WithStack(err)
+	}
+
+	if leaseManager != nil {
+		ctx2, done, err := leaseutil.WithLease(ctx, leaseManager)
+		if err != nil {
+			return "", nil, errors.WithStack(err)
+		}
+		ctx = ctx2
+		defer done(ctx)
 	}
 
 	desc := specs.Descriptor{
@@ -62,9 +73,14 @@ func Config(ctx context.Context, str string, resolver remotes.Resolver, cache Co
 		return readSchema1Config(ctx, ref.String(), desc, fetcher, cache)
 	}
 
+	children := childrenConfigHandler(cache, platform)
+	if m, ok := cache.(content.Manager); ok {
+		children = images.SetChildrenLabels(m, children)
+	}
+
 	handlers := []images.Handler{
 		fetchWithoutRoot(remotes.FetchHandler(cache, fetcher)),
-		childrenConfigHandler(cache, platform),
+		children,
 	}
 	if err := images.Dispatch(ctx, images.Handlers(handlers...), nil, desc); err != nil {
 		return "", nil, err
