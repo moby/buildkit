@@ -50,6 +50,7 @@ type ConfigFile struct {
 	CurrentContext       string                       `json:"currentContext,omitempty"`
 	CLIPluginsExtraDirs  []string                     `json:"cliPluginsExtraDirs,omitempty"`
 	Plugins              map[string]map[string]string `json:"plugins,omitempty"`
+	Aliases              map[string]string            `json:"aliases,omitempty"`
 }
 
 // ProxyConfig contains proxy configuration settings
@@ -72,6 +73,7 @@ func New(fn string) *ConfigFile {
 		HTTPHeaders: make(map[string]string),
 		Filename:    fn,
 		Plugins:     make(map[string]map[string]string),
+		Aliases:     make(map[string]string),
 	}
 }
 

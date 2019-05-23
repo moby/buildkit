@@ -110,7 +110,7 @@ github.com/containerd/typeurl
 github.com/coreos/go-systemd/daemon
 # github.com/davecgh/go-spew v1.1.1
 github.com/davecgh/go-spew/spew
-# github.com/docker/cli v0.0.0-20190321234815-f40f9c240ab0
+# github.com/docker/cli v0.0.0-20190321234815-ab688a9a79a1
 github.com/docker/cli/cli/connhelper/commandconn
 github.com/docker/cli/cli/config
 github.com/docker/cli/cli/config/configfile
