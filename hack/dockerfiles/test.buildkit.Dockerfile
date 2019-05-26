@@ -124,6 +124,7 @@ FROM scratch AS release
 COPY --from=releaser /out/ /
 
 FROM tonistiigi/git@sha256:704fcc24a17b40833625ee37c4a4acf0e4aa90d0aa276926d63847097134defd AS buildkit-export
+COPY examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
 VOLUME /var/lib/buildkit
 
 FROM git AS containerd-src
@@ -252,6 +253,7 @@ FROM rootless-base-$ROOTLESS_BASE_MODE AS rootless-base
 FROM rootless-base AS rootless
 COPY --from=rootlesskit /rootlesskit /usr/bin/
 COPY --from=binaries / /usr/bin/
+COPY examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
 USER user
 ENV HOME /home/user
 ENV USER user
