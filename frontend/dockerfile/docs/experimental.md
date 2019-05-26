@@ -41,6 +41,9 @@ This mount type allows the build container to cache directories for compilers an
 |`sharing`            | One of `shared`, `private`, or `locked`. Defaults to `shared`. A `shared` cache mount can be used concurrently by multiple writers. `private` creates a new mount if there are multiple writers. `locked` pauses the second writer until the first one releases the mount.|
 |`from`               | Build stage to use as a base of the cache mount. Defaults to empty directory.|
 |`source`             | Subpath in the `from` to mount. Defaults to the root of the `from`.|
+|`mode`               | File mode for new cache directory in octal. Default 0755.|
+|`uid`                | User ID for new cache directory. Default 0.|
+|`gid`                | Group ID for new cache directory. Default 0.|
 
 #### Example: cache Go packages
 
