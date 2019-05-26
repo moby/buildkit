@@ -281,6 +281,16 @@ export BUILDKIT_HOST=tcp://0.0.0.0:1234
 buildctl build --help
 ```
 
+To run client and an ephemeral daemon in a single container ("daemonless mode"):
+
+```
+docker run -it --rm --privileged -v /path/to/dir:/tmp/work --entrypoint buildctl-daemonless.sh moby/buildkit:master build --frontend dockerfile.v0 --local context=/tmp/work --local dockerfile=/tmp/work
+```
+or
+```
+docker run -it --rm --security-opt seccomp=unconfined --security-opt apparmor=unconfined -e BUILDKITD_FLAGS=--oci-worker-no-process-sandbox -v /path/to/dir:/tmp/work --entrypoint buildctl-daemonless.sh moby/buildkit:master-rootless build --frontend dockerfile.v0 --local context=/tmp/work --local dockerfile=/tmp/work
+```
+
 The images can be also built locally using `./hack/dockerfiles/test.Dockerfile` (or `./hack/dockerfiles/test.buildkit.Dockerfile` if you already have BuildKit).
 Run `make images` to build the images as `moby/buildkit:local` and `moby/buildkit:local-rootless`.
 

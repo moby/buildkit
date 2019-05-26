@@ -126,6 +126,7 @@ RUN go build -ldflags "$(cat .tmp/ldflags)" -o /out/buildkitd.exe ./cmd/buildkit
 
 FROM alpine AS buildkit-export
 RUN apk add --no-cache git
+COPY examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
 VOLUME /var/lib/buildkit
 
 # Copy together all binaries for oci+containerd mode
