@@ -737,6 +737,10 @@ func CachePolicyRetain(m withMetadata) error {
 	return queueCachePolicy(m.Metadata(), cachePolicyRetain)
 }
 
+func CachePolicyDefault(m withMetadata) error {
+	return queueCachePolicy(m.Metadata(), cachePolicyDefault)
+}
+
 func WithDescription(descr string) RefOption {
 	return func(m withMetadata) error {
 		return queueDescription(m.Metadata(), descr)
