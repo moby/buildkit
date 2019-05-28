@@ -132,7 +132,7 @@ func (p *Puller) Pull(ctx context.Context) (*Pulled, error) {
 		// Get all the children for a descriptor
 		childrenHandler := images.ChildrenHandler(p.ContentStore)
 		// Set any children labels for that content
-		childrenHandler = images.SetChildrenLabels(p.ContentStore, childrenHandler)
+		childrenHandler = imageutil.SetChildrenLabelsNonBlobs(p.ContentStore, childrenHandler)
 		// Filter the children by the platform
 		childrenHandler = images.FilterPlatforms(childrenHandler, platform)
 		// Limit manifests pulled to the best match in an index

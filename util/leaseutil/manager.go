@@ -10,7 +10,7 @@ import (
 	bolt "go.etcd.io/bbolt"
 )
 
-func WithLease(ctx context.Context, ls leases.Manager) (context.Context, func(context.Context) error, error) {
+func WithLease(ctx context.Context, ls leases.Manager, opts ...leases.Opt) (context.Context, func(context.Context) error, error) {
 	_, ok := leases.FromContext(ctx)
 	if ok {
 		return ctx, func(context.Context) error {
@@ -18,7 +18,7 @@ func WithLease(ctx context.Context, ls leases.Manager) (context.Context, func(co
 		}, nil
 	}
 
-	l, err := ls.Create(ctx, leases.WithRandomID(), leases.WithExpiration(time.Hour))
+	l, err := ls.Create(ctx, append([]leases.Opt{leases.WithRandomID(), leases.WithExpiration(time.Hour)}, opts...)...)
 	if err != nil {
 		return nil, nil, err
 	}
