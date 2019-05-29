@@ -71,10 +71,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 		localNameDockerfile = v
 	}
 
-	defaultBuildPlatform := platforms.DefaultSpec()
-	if workers := c.BuildOpts().Workers; len(workers) > 0 && len(workers[0].Platforms) > 0 {
-		defaultBuildPlatform = workers[0].Platforms[0]
-	}
+	defaultBuildPlatform := platforms.Normalize(platforms.DefaultSpec())
 
 	buildPlatforms := []specs.Platform{defaultBuildPlatform}
 	targetPlatforms := []*specs.Platform{nil}
