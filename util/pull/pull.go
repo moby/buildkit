@@ -9,6 +9,7 @@ import (
 	"github.com/containerd/containerd/diff"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
+	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/reference"
 	"github.com/containerd/containerd/remotes"
@@ -17,6 +18,7 @@ import (
 	ctdsnapshot "github.com/containerd/containerd/snapshots"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/util/imageutil"
+	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/progress"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/identity"
@@ -30,6 +32,7 @@ type Puller struct {
 	Applier      diff.Applier
 	Src          reference.Spec
 	Platform     *ocispec.Platform
+	LeaseManager leases.Manager
 	// See NewResolver()
 	Resolver    remotes.Resolver
 	resolveOnce sync.Once
@@ -94,6 +97,12 @@ func (p *Puller) Pull(ctx context.Context) (*Pulled, error) {
 		platform = platforms.Default()
 	}
 
+	ctx, done, err := leaseutil.WithLease(ctx, p.LeaseManager)
+	if err != nil {
+		return nil, err
+	}
+	defer done(ctx)
+
 	ongoing := newJobs(p.ref)
 
 	pctx, stopProgress := context.WithCancel(ctx)
@@ -123,7 +132,7 @@ func (p *Puller) Pull(ctx context.Context) (*Pulled, error) {
 		// Get all the children for a descriptor
 		childrenHandler := images.ChildrenHandler(p.ContentStore)
 		// Set any children labels for that content
-		childrenHandler = images.SetChildrenLabels(p.ContentStore, childrenHandler)
+		childrenHandler = imageutil.SetChildrenLabelsNonBlobs(p.ContentStore, childrenHandler)
 		// Filter the children by the platform
 		childrenHandler = images.FilterPlatforms(childrenHandler, platform)
 		// Limit manifests pulled to the best match in an index

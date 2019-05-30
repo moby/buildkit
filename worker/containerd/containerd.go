@@ -15,6 +15,7 @@ import (
 	"github.com/moby/buildkit/executor/containerdexecutor"
 	"github.com/moby/buildkit/identity"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
+	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/network"
 	"github.com/moby/buildkit/util/throttle"
 	"github.com/moby/buildkit/util/winlayers"
@@ -112,6 +113,7 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 		Differ:        winlayers.NewWalkingDiffWithWindows(cs, df),
 		ImageStore:    client.ImageService(),
 		Platforms:     platforms,
+		LeaseManager:  leaseutil.WithNamespace(client.LeasesService(), ns),
 	}
 	return opt, nil
 }

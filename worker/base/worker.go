@@ -12,6 +12,7 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/diff"
 	"github.com/containerd/containerd/images"
+	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/rootfs"
 	cdsnapshot "github.com/containerd/containerd/snapshots"
 	"github.com/docker/docker/pkg/idtools"
@@ -40,6 +41,7 @@ import (
 	"github.com/moby/buildkit/source/http"
 	"github.com/moby/buildkit/source/local"
 	"github.com/moby/buildkit/util/contentutil"
+	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/resolver"
 	"github.com/moby/buildkit/worker"
@@ -72,6 +74,7 @@ type WorkerOpt struct {
 	ImageStore         images.Store // optional
 	ResolveOptionsFunc resolver.ResolveOptionsFunc
 	IdentityMapping    *idtools.IdentityMapping
+	LeaseManager       leases.Manager
 }
 
 // Worker is a local worker instance with dedicated snapshotter, cache, and so on.
@@ -113,6 +116,7 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 		ImageStore:    opt.ImageStore,
 		CacheAccessor: cm,
 		ResolverOpt:   opt.ResolveOptionsFunc,
+		LeaseManager:  opt.LeaseManager,
 	})
 	if err != nil {
 		return nil, err
@@ -331,6 +335,12 @@ func getCreatedTimes(ref cache.ImmutableRef) (out []time.Time) {
 }
 
 func (w *Worker) FromRemote(ctx context.Context, remote *solver.Remote) (cache.ImmutableRef, error) {
+	ctx, done, err := leaseutil.WithLease(ctx, w.LeaseManager)
+	if err != nil {
+		return nil, err
+	}
+	defer done(ctx)
+
 	eg, gctx := errgroup.WithContext(ctx)
 	for _, desc := range remote.Descriptors {
 		func(desc ocispec.Descriptor) {

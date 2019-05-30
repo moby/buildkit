@@ -17,6 +17,7 @@ import (
 	"github.com/moby/buildkit/executor/oci"
 	"github.com/moby/buildkit/executor/runcexecutor"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
+	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/network"
 	"github.com/moby/buildkit/util/throttle"
 	"github.com/moby/buildkit/util/winlayers"
@@ -110,6 +111,7 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		ImageStore:      nil, // explicitly
 		Platforms:       []specs.Platform{platforms.Normalize(platforms.DefaultSpec())},
 		IdentityMapping: idmap,
+		LeaseManager:    leaseutil.WithNamespace(leaseutil.NewManager(mdb), "buildkit"),
 	}
 	return opt, nil
 }

@@ -8,6 +8,7 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/diff"
 	"github.com/containerd/containerd/images"
+	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/platforms"
 	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/cache"
@@ -36,6 +37,7 @@ type SourceOpt struct {
 	CacheAccessor cache.Accessor
 	ImageStore    images.Store // optional
 	ResolverOpt   resolver.ResolveOptionsFunc
+	LeaseManager  leases.Manager
 }
 
 type imageSource struct {
@@ -71,7 +73,7 @@ func (is *imageSource) ResolveImageConfig(ctx context.Context, ref string, opt g
 	}
 
 	res, err := is.g.Do(ctx, key, func(ctx context.Context) (interface{}, error) {
-		dgst, dt, err := imageutil.Config(ctx, ref, pull.NewResolver(ctx, is.ResolverOpt, sm, is.ImageStore, rm, ref), is.ContentStore, opt.Platform)
+		dgst, dt, err := imageutil.Config(ctx, ref, pull.NewResolver(ctx, is.ResolverOpt, sm, is.ImageStore, rm, ref), is.ContentStore, is.LeaseManager, opt.Platform)
 		if err != nil {
 			return nil, err
 		}
@@ -102,6 +104,7 @@ func (is *imageSource) Resolve(ctx context.Context, id source.Identifier, sm *se
 		Src:          imageIdentifier.Reference,
 		Resolver:     pull.NewResolver(ctx, is.ResolverOpt, sm, is.ImageStore, imageIdentifier.ResolveMode, imageIdentifier.Reference.String()),
 		Platform:     &platform,
+		LeaseManager: is.LeaseManager,
 	}
 	p := &puller{
 		CacheAccessor: is.CacheAccessor,
@@ -157,7 +160,7 @@ func (p *puller) CacheKey(ctx context.Context, index int) (string, bool, error) 
 	if err != nil {
 		return "", false, nil
 	}
-	_, dt, err := imageutil.Config(ctx, ref.String(), p.Resolver, p.ContentStore, &p.Platform)
+	_, dt, err := imageutil.Config(ctx, ref.String(), p.Resolver, p.ContentStore, p.LeaseManager, &p.Platform)
 	if err != nil {
 		return "", false, err
 	}
