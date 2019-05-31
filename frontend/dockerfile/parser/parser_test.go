@@ -117,7 +117,7 @@ func TestParseIncludesLineNumbers(t *testing.T) {
 
 	ast := result.AST
 	assert.Check(t, is.Equal(5, ast.StartLine))
-	assert.Check(t, is.Equal(31, ast.endLine))
+	assert.Check(t, is.Equal(31, ast.EndLine))
 	assert.Check(t, is.Len(ast.Children, 3))
 	expected := [][]int{
 		{5, 5},
@@ -126,7 +126,7 @@ func TestParseIncludesLineNumbers(t *testing.T) {
 	}
 	for i, child := range ast.Children {
 		msg := fmt.Sprintf("Child %d", i)
-		assert.Check(t, is.DeepEqual(expected[i], []int{child.StartLine, child.endLine}), msg)
+		assert.Check(t, is.DeepEqual(expected[i], []int{child.StartLine, child.EndLine}), msg)
 	}
 }
 
