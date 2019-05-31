@@ -149,7 +149,7 @@ github.com/docker/go-connections/nat
 github.com/docker/go-events
 # github.com/docker/go-units v0.3.1
 github.com/docker/go-units
-# github.com/docker/libnetwork v0.0.0-20180913200009-36d3bed0e9f4
+# github.com/docker/libnetwork v0.8.0-dev.2.0.20190604151032-3c26b4e7495e
 github.com/docker/libnetwork/resolvconf
 github.com/docker/libnetwork/resolvconf/dns
 github.com/docker/libnetwork/types
