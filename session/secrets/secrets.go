@@ -24,7 +24,7 @@ func GetSecret(ctx context.Context, c session.Caller, id string) ([]byte, error)
 		if st, ok := status.FromError(err); ok && (st.Code() == codes.Unimplemented || st.Code() == codes.NotFound) {
 			return nil, errors.Wrapf(ErrNotFound, "secret %s not found", id)
 		}
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 	return resp.Data, nil
 }
