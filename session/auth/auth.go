@@ -17,7 +17,7 @@ func CredentialsFunc(ctx context.Context, c session.Caller) func(string) (string
 			Host: host,
 		})
 		if err != nil {
-			if st, ok := status.FromError(err); ok && st.Code() == codes.Unimplemented {
+			if st, ok := status.FromError(errors.Cause(err)); ok && st.Code() == codes.Unimplemented {
 				return "", "", nil
 			}
 			return "", "", errors.WithStack(err)
