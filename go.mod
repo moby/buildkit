@@ -22,7 +22,7 @@ require (
 	github.com/docker/docker-credential-helpers v0.6.0 // indirect
 	github.com/docker/go-connections v0.3.0
 	github.com/docker/go-events v0.0.0-20170721190031-9461782956ad // indirect
-	github.com/docker/libnetwork v0.0.0-20180913200009-36d3bed0e9f4
+	github.com/docker/libnetwork v0.8.0-dev.2.0.20190604151032-3c26b4e7495e
 	github.com/godbus/dbus v4.1.0+incompatible // indirect
 	github.com/gofrs/flock v0.7.0
 	github.com/gogo/googleapis v1.1.0
