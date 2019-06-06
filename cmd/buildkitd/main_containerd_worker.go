@@ -172,7 +172,9 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 		return nil, nil
 	}
 
-	opt, err := containerd.NewWorkerOpt(common.config.Root, cfg.Address, ctd.DefaultSnapshotter, cfg.Namespace, cfg.Labels, ctd.WithTimeout(60*time.Second))
+	dns := getDNSConfig(common.config.DNS)
+
+	opt, err := containerd.NewWorkerOpt(common.config.Root, cfg.Address, ctd.DefaultSnapshotter, cfg.Namespace, cfg.Labels, dns, ctd.WithTimeout(60*time.Second))
 	if err != nil {
 		return nil, err
 	}

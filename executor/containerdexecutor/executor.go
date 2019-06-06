@@ -30,10 +30,11 @@ type containerdExecutor struct {
 	root             string
 	networkProviders map[pb.NetMode]network.Provider
 	cgroupParent     string
+	dnsConfig        *oci.DNSConfig
 }
 
 // New creates a new executor backed by connection to containerd API
-func New(client *containerd.Client, root, cgroup string, networkProviders map[pb.NetMode]network.Provider) executor.Executor {
+func New(client *containerd.Client, root, cgroup string, networkProviders map[pb.NetMode]network.Provider, dnsConfig *oci.DNSConfig) executor.Executor {
 	// clean up old hosts/resolv.conf file. ignore errors
 	os.RemoveAll(filepath.Join(root, "hosts"))
 	os.RemoveAll(filepath.Join(root, "resolv.conf"))
@@ -43,13 +44,14 @@ func New(client *containerd.Client, root, cgroup string, networkProviders map[pb
 		root:             root,
 		networkProviders: networkProviders,
 		cgroupParent:     cgroup,
+		dnsConfig:        dnsConfig,
 	}
 }
 
 func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root cache.Mountable, mounts []executor.Mount, stdin io.ReadCloser, stdout, stderr io.WriteCloser) (err error) {
 	id := identity.NewID()
 
-	resolvConf, err := oci.GetResolvConf(ctx, w.root, nil)
+	resolvConf, err := oci.GetResolvConf(ctx, w.root, nil, w.dnsConfig)
 	if err != nil {
 		return err
 	}

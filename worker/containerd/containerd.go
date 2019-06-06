@@ -13,6 +13,7 @@ import (
 	"github.com/containerd/containerd/snapshots"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/executor/containerdexecutor"
+	"github.com/moby/buildkit/executor/oci"
 	"github.com/moby/buildkit/identity"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/util/leaseutil"
@@ -26,16 +27,16 @@ import (
 )
 
 // NewWorkerOpt creates a WorkerOpt.
-func NewWorkerOpt(root string, address, snapshotterName, ns string, labels map[string]string, opts ...containerd.ClientOpt) (base.WorkerOpt, error) {
+func NewWorkerOpt(root string, address, snapshotterName, ns string, labels map[string]string, dns *oci.DNSConfig, opts ...containerd.ClientOpt) (base.WorkerOpt, error) {
 	opts = append(opts, containerd.WithDefaultNamespace(ns))
 	client, err := containerd.New(address, opts...)
 	if err != nil {
 		return base.WorkerOpt{}, errors.Wrapf(err, "failed to connect client to %q . make sure containerd is running", address)
 	}
-	return newContainerd(root, client, snapshotterName, ns, labels)
+	return newContainerd(root, client, snapshotterName, ns, labels, dns)
 }
 
-func newContainerd(root string, client *containerd.Client, snapshotterName, ns string, labels map[string]string) (base.WorkerOpt, error) {
+func newContainerd(root string, client *containerd.Client, snapshotterName, ns string, labels map[string]string, dns *oci.DNSConfig) (base.WorkerOpt, error) {
 	if strings.Contains(snapshotterName, "/") {
 		return base.WorkerOpt{}, errors.Errorf("bad snapshotter name: %q", snapshotterName)
 	}
@@ -106,7 +107,7 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 		ID:            id,
 		Labels:        xlabels,
 		MetadataStore: md,
-		Executor:      containerdexecutor.New(client, root, "", network.Default()),
+		Executor:      containerdexecutor.New(client, root, "", network.Default(), dns),
 		Snapshotter:   containerdsnapshot.NewSnapshotter(snapshotterName, client.SnapshotService(snapshotterName), cs, md, ns, gc, nil),
 		ContentStore:  cs,
 		Applier:       winlayers.NewFileSystemApplierWithWindows(cs, df),

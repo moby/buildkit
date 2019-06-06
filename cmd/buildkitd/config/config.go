@@ -26,6 +26,8 @@ type Config struct {
 	} `toml:"worker"`
 
 	Registries map[string]RegistryConfig `toml:"registry"`
+
+	DNS *DNSConfig `toml:"dns"`
 }
 
 type GRPCConfig struct {
@@ -83,6 +85,12 @@ type GCPolicy struct {
 	KeepBytes    int64    `toml:"keepBytes"`
 	KeepDuration int64    `toml:"keepDuration"`
 	Filters      []string `toml:"filters"`
+}
+
+type DNSConfig struct {
+	Nameservers   []string `toml:"nameservers"`
+	Options       []string `toml:"options"`
+	SearchDomains []string `toml:"searchDomains"`
 }
 
 func Load(r io.Reader) (Config, *toml.MetaData, error) {
