@@ -94,11 +94,11 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (res *
 
 		edge, err := Load(req.Definition, ValidateEntitlements(ent), WithCacheSources(cms), RuntimePlatforms(b.platforms), WithValidateCaps())
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to load LLB")
+			return nil, errors.Wrap(err, "failed to load LLB")
 		}
 		ref, err := b.builder.Build(ctx, edge)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to build LLB")
+			return nil, errors.Wrap(err, "failed to build LLB")
 		}
 
 		res = &frontend.Result{Ref: ref}
