@@ -79,7 +79,7 @@ func New(opt Opt, networkProviders map[pb.NetMode]network.Provider) (executor.Ex
 
 	root := opt.Root
 
-	if err := os.MkdirAll(root, 0700); err != nil {
+	if err := os.MkdirAll(root, 0711); err != nil {
 		return nil, errors.Wrapf(err, "failed to create %s", root)
 	}
 
@@ -161,7 +161,7 @@ func (w *runcExecutor) Exec(ctx context.Context, meta executor.Meta, root cache.
 	id := identity.NewID()
 	bundle := filepath.Join(w.root, id)
 
-	if err := os.Mkdir(bundle, 0700); err != nil {
+	if err := os.Mkdir(bundle, 0711); err != nil {
 		return err
 	}
 	defer os.RemoveAll(bundle)
