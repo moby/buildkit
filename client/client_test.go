@@ -1651,7 +1651,7 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	dgst, ok := resp.ExporterResponse["containerimage.digest"]
 	require.Equal(t, ok, true)
 
-	unique, err := readFileInImage(c, "dummy@"+dgst, "/unique")
+	unique, err := readFileInImage(c, target+"@"+dgst, "/unique")
 	require.NoError(t, err)
 
 	err = c.Prune(context.TODO(), nil, PruneAll)
@@ -1665,6 +1665,10 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 		Exports: []ExportEntry{
 			{
 				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
 			},
 		},
 		CacheExports: []CacheOptionsEntry{
@@ -1697,6 +1701,10 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 		Exports: []ExportEntry{
 			{
 				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
 			},
 		},
 		CacheImports: []CacheOptionsEntry{
@@ -1714,7 +1722,7 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, ok, true)
 
 	// dgst3 != dgst, because inline cache is not exported for dgst3
-	unique3, err := readFileInImage(c, "dummy@"+dgst3, "/unique")
+	unique3, err := readFileInImage(c, target+"@"+dgst3, "/unique")
 	require.NoError(t, err)
 	require.EqualValues(t, unique, unique3)
 }
