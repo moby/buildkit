@@ -134,12 +134,12 @@ func (w *runcExecutor) Exec(ctx context.Context, meta executor.Meta, root cache.
 		logrus.Info("enabling HostNetworking")
 	}
 
-	resolvConf, err := oci.GetResolvConf(ctx, w.root)
+	resolvConf, err := oci.GetResolvConf(ctx, w.root, w.idmap)
 	if err != nil {
 		return err
 	}
 
-	hostsFile, clean, err := oci.GetHostsFile(ctx, w.root, meta.ExtraHosts)
+	hostsFile, clean, err := oci.GetHostsFile(ctx, w.root, meta.ExtraHosts, w.idmap)
 	if err != nil {
 		return err
 	}

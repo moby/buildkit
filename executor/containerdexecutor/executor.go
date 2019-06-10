@@ -49,12 +49,12 @@ func New(client *containerd.Client, root, cgroup string, networkProviders map[pb
 func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root cache.Mountable, mounts []executor.Mount, stdin io.ReadCloser, stdout, stderr io.WriteCloser) (err error) {
 	id := identity.NewID()
 
-	resolvConf, err := oci.GetResolvConf(ctx, w.root)
+	resolvConf, err := oci.GetResolvConf(ctx, w.root, nil)
 	if err != nil {
 		return err
 	}
 
-	hostsFile, clean, err := oci.GetHostsFile(ctx, w.root, meta.ExtraHosts)
+	hostsFile, clean, err := oci.GetHostsFile(ctx, w.root, meta.ExtraHosts, nil)
 	if err != nil {
 		return err
 	}
