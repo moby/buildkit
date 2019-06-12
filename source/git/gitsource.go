@@ -1,12 +1,9 @@
 package git
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -23,6 +20,10 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	bolt "go.etcd.io/bbolt"
+	"gopkg.in/src-d/go-billy.v4/osfs"
+	"gopkg.in/src-d/go-git.v4"
+	"gopkg.in/src-d/go-git.v4/config"
+	"gopkg.in/src-d/go-git.v4/plumbing"
 )
 
 var validHex = regexp.MustCompile(`^[a-f0-9]{40}$`)
@@ -36,14 +37,6 @@ type gitSource struct {
 	md     *metadata.Store
 	cache  cache.Accessor
 	locker *locker.Locker
-}
-
-// Supported returns nil if the system supports Git source
-func Supported() error {
-	if err := exec.Command("git", "version").Run(); err != nil {
-		return errors.Wrap(err, "failed to find git binary")
-	}
-	return nil
 }
 
 func NewSource(opt Opt) (source.Source, error) {
@@ -60,12 +53,12 @@ func (gs *gitSource) ID() string {
 }
 
 // needs to be called with repo lock
-func (gs *gitSource) mountRemote(ctx context.Context, remote string) (target string, release func(), retErr error) {
+func (gs *gitSource) mountRemote(ctx context.Context, remote string) (gitDir string, repo *git.Repository, release func(), retErr error) {
 	remoteKey := "git-remote::" + remote
 
 	sis, err := gs.md.Search(remoteKey)
 	if err != nil {
-		return "", nil, errors.Wrapf(err, "failed to search metadata for %s", remote)
+		return "", nil, nil, errors.Wrapf(err, "failed to search metadata for %s", remote)
 	}
 
 	var remoteRef cache.MutableRef
@@ -77,7 +70,7 @@ func (gs *gitSource) mountRemote(ctx context.Context, remote string) (target str
 				logrus.Warnf("mutable ref for %s  %s was locked: %v", remote, si.ID(), err)
 				continue
 			}
-			return "", nil, errors.Wrapf(err, "failed to get mutable ref for %s", remote)
+			return "", nil, nil, errors.Wrapf(err, "failed to get mutable ref for %s", remote)
 		}
 		break
 	}
@@ -86,7 +79,7 @@ func (gs *gitSource) mountRemote(ctx context.Context, remote string) (target str
 	if remoteRef == nil {
 		remoteRef, err = gs.cache.New(ctx, nil, cache.CachePolicyRetain, cache.WithDescription(fmt.Sprintf("shared git repo for %s", remote)))
 		if err != nil {
-			return "", nil, errors.Wrapf(err, "failed to create new mutable for %s", remote)
+			return "", nil, nil, errors.Wrapf(err, "failed to create new mutable for %s", remote)
 		}
 		initializeRepo = true
 	}
@@ -103,13 +96,13 @@ func (gs *gitSource) mountRemote(ctx context.Context, remote string) (target str
 
 	mount, err := remoteRef.Mount(ctx, false)
 	if err != nil {
-		return "", nil, err
+		return "", nil, nil, err
 	}
 
 	lm := snapshot.LocalMounter(mount)
 	dir, err := lm.Mount()
 	if err != nil {
-		return "", nil, err
+		return "", nil, nil, err
 	}
 
 	defer func() {
@@ -119,12 +112,17 @@ func (gs *gitSource) mountRemote(ctx context.Context, remote string) (target str
 	}()
 
 	if initializeRepo {
-		if _, err := gitWithinDir(ctx, dir, "", "init", "--bare"); err != nil {
-			return "", nil, errors.Wrapf(err, "failed to init repo at %s", dir)
+		repo, err = git.PlainInit(dir, true)
+		if err != nil {
+			return "", nil, nil, errors.WithStack(err)
 		}
 
-		if _, err := gitWithinDir(ctx, dir, "", "remote", "add", "origin", remote); err != nil {
-			return "", nil, errors.Wrapf(err, "failed add origin repo at %s", dir)
+		_, err := repo.CreateRemote(&config.RemoteConfig{
+			Name: "origin",
+			URLs: []string{remote},
+		})
+		if err != nil {
+			return "", nil, nil, errors.WithStack(err)
 		}
 
 		// same new remote metadata
@@ -132,16 +130,21 @@ func (gs *gitSource) mountRemote(ctx context.Context, remote string) (target str
 		v, err := metadata.NewValue(remoteKey)
 		v.Index = remoteKey
 		if err != nil {
-			return "", nil, err
+			return "", nil, nil, err
 		}
 
 		if err := si.Update(func(b *bolt.Bucket) error {
 			return si.SetValue(b, "git-remote", v)
 		}); err != nil {
-			return "", nil, err
+			return "", nil, nil, err
+		}
+	} else {
+		repo, err = git.PlainOpen(dir)
+		if err != nil {
+			return "", nil, nil, errors.WithStack(err)
 		}
 	}
-	return dir, func() {
+	return dir, repo, func() {
 		lm.Unmount()
 		releaseRemoteRef()
 	}, nil
@@ -179,7 +182,7 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, index int) (string, bo
 		return ref, true, nil
 	}
 
-	gitDir, unmountGitDir, err := gs.mountRemote(ctx, remote)
+	_, repo, unmountGitDir, err := gs.mountRemote(ctx, remote)
 	if err != nil {
 		return "", false, err
 	}
@@ -187,17 +190,28 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, index int) (string, bo
 
 	// TODO: should we assume that remote tag is immutable? add a timer?
 
-	buf, err := gitWithinDir(ctx, gitDir, "", "ls-remote", "origin", ref)
+	r, err := repo.Remote("origin")
 	if err != nil {
-		return "", false, errors.Wrapf(err, "failed to fetch remote %s", remote)
-	}
-	out := buf.String()
-	idx := strings.Index(out, "\t")
-	if idx == -1 {
-		return "", false, errors.Errorf("failed to find commit SHA from output: %s", string(out))
+		return "", false, errors.Wrap(err, "failed to get origin remote")
 	}
 
-	sha := string(out[:idx])
+	refs, err := r.List(&git.ListOptions{})
+	if err != nil {
+		return "", false, errors.WithStack(err)
+	}
+
+	var h plumbing.Hash
+	for _, r := range refs {
+		if r.Name().Short() == ref {
+			h = r.Hash()
+			break
+		}
+	}
+	if h == plumbing.ZeroHash {
+		return "", false, errors.Errorf("failed to fetch %s from remote %s", ref, remote)
+	}
+
+	sha := h.String()
 	if !isCommitSHA(sha) {
 		return "", false, errors.Errorf("invalid commit sha %q", sha)
 	}
@@ -210,6 +224,10 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context) (out cache.ImmutableRe
 	if ref == "" {
 		ref = "master"
 	}
+
+	stdout, stderr := logs.NewLogStreams(ctx, false)
+	defer stdout.Close()
+	defer stderr.Close()
 
 	cacheKey := gs.cacheKey
 	if cacheKey == "" {
@@ -234,7 +252,7 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context) (out cache.ImmutableRe
 
 	gs.locker.Lock(gs.src.Remote)
 	defer gs.locker.Unlock(gs.src.Remote)
-	gitDir, unmountGitDir, err := gs.mountRemote(ctx, gs.src.Remote)
+	gitDir, repo, unmountGitDir, err := gs.mountRemote(ctx, gs.src.Remote)
 	if err != nil {
 		return nil, err
 	}
@@ -243,31 +261,41 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context) (out cache.ImmutableRe
 	doFetch := true
 	if isCommitSHA(ref) {
 		// skip fetch if commit already exists
-		if _, err := gitWithinDir(ctx, gitDir, "", "cat-file", "-e", ref+"^{commit}"); err == nil {
+		if _, err := repo.CommitObject(plumbing.NewHash(ref)); err == nil {
 			doFetch = false
 		}
 	}
 
 	if doFetch {
 		// make sure no old lock files have leaked
-		os.RemoveAll(filepath.Join(gitDir, "shallow.lock"))
+		// os.RemoveAll(filepath.Join(gitDir, "shallow.lock"))
+		var err error
+		for _, t := range []string{"heads", "tags"} { // refs/*/<ref> do not pass tests for some reason
+			fo := &git.FetchOptions{
+				Progress: stderr,
+			}
 
-		args := []string{"fetch"}
-		if !isCommitSHA(ref) { // TODO: find a branch from ls-remote?
-			args = append(args, "--depth=1", "--no-tags")
-		} else {
-			if _, err := os.Lstat(filepath.Join(gitDir, "shallow")); err == nil {
-				args = append(args, "--unshallow")
+			if !isCommitSHA(ref) { // TODO: find a branch from ls-remote?
+				fo.Tags = git.NoTags
+				fo.Depth = 1
+				rs := config.RefSpec("refs/" + t + "/" + ref + ":refs/" + t + "/" + ref)
+				if strings.HasPrefix(ref, "refs/") {
+					rs = config.RefSpec(ref + ":" + ref)
+				}
+				fo.RefSpecs = []config.RefSpec{
+					rs,
+				}
+				// local refs are needed so they would be advertised on next fetches
+				// TODO: is there a better way to do this?
+			}
+
+			err = errors.WithStack(repo.FetchContext(ctx, fo))
+			if err == nil {
+				break
 			}
 		}
-		args = append(args, "origin")
-		if !isCommitSHA(ref) {
-			args = append(args, ref+":tags/"+ref)
-			// local refs are needed so they would be advertised on next fetches
-			// TODO: is there a better way to do this?
-		}
-		if _, err := gitWithinDir(ctx, gitDir, "", args...); err != nil {
-			return nil, errors.Wrapf(err, "failed to fetch remote %s", gs.src.Remote)
+		if err != nil {
+			return nil, errors.WithStack(err)
 		}
 	}
 
@@ -297,42 +325,99 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context) (out cache.ImmutableRe
 		}
 	}()
 
+	var wt *git.Worktree
+
 	if gs.src.KeepGitDir {
-		_, err = gitWithinDir(ctx, checkoutDir, "", "init")
+		repo2, err := git.PlainInit(checkoutDir, false)
 		if err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
-		_, err = gitWithinDir(ctx, checkoutDir, "", "remote", "add", "origin", gitDir)
+
+		r, err := repo2.CreateRemoteAnonymous(&config.RemoteConfig{
+			Name: "anonymous",
+			URLs: []string{gitDir},
+		})
 		if err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
-		pullref := ref
+
+		rs := config.RefSpec("refs/*/" + ref + ":refs/*/" + ref)
+		if strings.HasPrefix(ref, "refs/") {
+			rs = config.RefSpec(rs + ":" + rs)
+		}
+
+		fo := &git.FetchOptions{
+			Progress: stderr,
+			RefSpecs: []config.RefSpec{rs},
+		}
+
 		if isCommitSHA(ref) {
-			pullref = "refs/buildkit/" + identity.NewID()
-			_, err = gitWithinDir(ctx, gitDir, "", "update-ref", pullref, ref)
-			if err != nil {
+			pullref := "refs/buildkit/" + identity.NewID()
+			rname := plumbing.ReferenceName(pullref)
+			href := plumbing.NewHashReference(rname, plumbing.NewHash(ref))
+			if err = repo.Storer.SetReference(href); err != nil {
 				return nil, err
 			}
+			fo.RefSpecs = []config.RefSpec{config.RefSpec(pullref + ":" + pullref)}
+			ref = pullref
 		}
-		_, err = gitWithinDir(ctx, checkoutDir, "", "fetch", "--depth=1", "origin", pullref)
+
+		if err := r.Fetch(fo); err != nil {
+			return nil, errors.WithStack(err)
+		}
+
+		wt, err = repo2.Worktree()
 		if err != nil {
-			return nil, err
+			return nil, errors.WithStack(err)
 		}
-		_, err = gitWithinDir(ctx, checkoutDir, checkoutDir, "checkout", "FETCH_HEAD")
+
+		h, err := repo.ResolveRevision(plumbing.Revision(ref))
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to checkout remote %s", gs.src.Remote)
+			return nil, errors.WithStack(err)
 		}
-		gitDir = checkoutDir
+
+		if err := wt.Checkout(&git.CheckoutOptions{
+			Hash:  *h,
+			Force: true,
+		}); err != nil {
+			return nil, errors.WithStack(err)
+		}
 	} else {
-		_, err = gitWithinDir(ctx, gitDir, checkoutDir, "checkout", ref, "--", ".")
+		fs := osfs.New(checkoutDir)
+		repo2, err := git.Open(repo.Storer, fs)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to checkout remote %s", gs.src.Remote)
+			return nil, errors.WithStack(err)
+		}
+
+		h, err := repo.ResolveRevision(plumbing.Revision(ref))
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
+
+		wt, err = repo2.Worktree()
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
+		if err := wt.Checkout(&git.CheckoutOptions{
+			Hash:  *h,
+			Force: true,
+		}); err != nil {
+			return nil, errors.WithStack(err)
 		}
 	}
 
-	_, err = gitWithinDir(ctx, gitDir, checkoutDir, "submodule", "update", "--init", "--recursive", "--depth=1")
+	submodules, err := wt.Submodules()
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to update submodules for %s", gs.src.Remote)
+		return nil, errors.WithStack(err)
+	}
+
+	for _, sm := range submodules {
+		if err := sm.Update(&git.SubmoduleUpdateOptions{
+			Init:              true,
+			RecurseSubmodules: git.DefaultSubmoduleRecursionDepth,
+		}); err != nil {
+			return nil, errors.WithStack(err)
+		}
 	}
 
 	if idmap := mount.IdentityMapping(); idmap != nil {
@@ -377,48 +462,4 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context) (out cache.ImmutableRe
 
 func isCommitSHA(str string) bool {
 	return validHex.MatchString(str)
-}
-
-func gitWithinDir(ctx context.Context, gitDir, workDir string, args ...string) (*bytes.Buffer, error) {
-	a := []string{"--git-dir", gitDir}
-	if workDir != "" {
-		a = append(a, "--work-tree", workDir)
-	}
-	return git(ctx, workDir, append(a, args...)...)
-}
-
-func git(ctx context.Context, dir string, args ...string) (*bytes.Buffer, error) {
-	for {
-		stdout, stderr := logs.NewLogStreams(ctx, false)
-		defer stdout.Close()
-		defer stderr.Close()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = dir // some commands like submodule require this
-		buf := bytes.NewBuffer(nil)
-		errbuf := bytes.NewBuffer(nil)
-		cmd.Stdout = io.MultiWriter(stdout, buf)
-		cmd.Stderr = io.MultiWriter(stderr, errbuf)
-		// remote git commands spawn helper processes that inherit FDs and don't
-		// handle parent death signal so exec.CommandContext can't be used
-		err := runProcessGroup(ctx, cmd)
-		if err != nil {
-			if strings.Contains(errbuf.String(), "--depth") || strings.Contains(errbuf.String(), "shallow") {
-				if newArgs := argsNoDepth(args); len(args) > len(newArgs) {
-					args = newArgs
-					continue
-				}
-			}
-		}
-		return buf, err
-	}
-}
-
-func argsNoDepth(args []string) []string {
-	out := make([]string, 0, len(args))
-	for _, a := range args {
-		if a != "--depth=1" {
-			out = append(out, a)
-		}
-	}
-	return out
 }

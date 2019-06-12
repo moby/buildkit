@@ -36,7 +36,6 @@ require (
 	github.com/hashicorp/uuid v0.0.0-20160311170451-ebb0a03e909c // indirect
 	github.com/ishidawataru/sctp v0.0.0-20180213033435-07191f837fed // indirect
 	github.com/jaguilar/vt100 v0.0.0-20150826170717-2703a27b14ea
-	github.com/kr/pretty v0.1.0 // indirect
 	github.com/mitchellh/hashstructure v0.0.0-20170609045927-2bca23e0e452
 	github.com/morikuni/aec v0.0.0-20170113033406-39771216ff4c
 	github.com/opencontainers/go-digest v1.0.0-rc1
@@ -66,7 +65,8 @@ require (
 	golang.org/x/time v0.0.0-20161028155119-f51c12702a4d
 	google.golang.org/genproto v0.0.0-20180817151627-c66870c02cf8
 	google.golang.org/grpc v1.20.1
-	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
+	gopkg.in/src-d/go-billy.v4 v4.2.1
+	gopkg.in/src-d/go-git.v4 v4.11.0
 	gotest.tools v2.2.0+incompatible
 )
 
