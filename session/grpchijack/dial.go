@@ -28,12 +28,12 @@ func Dialer(api controlapi.ControlClient) session.Dialer {
 			return nil, err
 		}
 
-		c, _ := streamToConn(stream)
+		c, _ := StreamToConn(stream)
 		return c, nil
 	}
 }
 
-func streamToConn(stream grpc.Stream) (net.Conn, <-chan struct{}) {
+func StreamToConn(stream grpc.Stream) (net.Conn, <-chan struct{}) {
 	closeCh := make(chan struct{})
 	c := &conn{stream: stream, buf: make([]byte, 32*1<<10), closeCh: closeCh}
 	return c, closeCh

@@ -3,10 +3,12 @@ package git
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/docker/docker/pkg/locker"
 	"github.com/moby/buildkit/cache"
@@ -14,16 +16,22 @@ import (
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/session/sshforward"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/util/progress/logs"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	bolt "go.etcd.io/bbolt"
+	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/agent"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"gopkg.in/src-d/go-billy.v4/osfs"
 	"gopkg.in/src-d/go-git.v4"
 	"gopkg.in/src-d/go-git.v4/config"
 	"gopkg.in/src-d/go-git.v4/plumbing"
+	gitssh "gopkg.in/src-d/go-git.v4/plumbing/transport/ssh"
 )
 
 var validHex = regexp.MustCompile(`^[a-f0-9]{40}$`)
@@ -150,13 +158,40 @@ func (gs *gitSource) mountRemote(ctx context.Context, remote string) (gitDir str
 	}, nil
 }
 
+func getSSHCaller(ctx context.Context, sm *session.Manager) (session.Caller, error) {
+	sessionID := session.FromContext(ctx)
+	if sessionID == "" {
+		return nil, errors.New("could not access ssh agent without session")
+	}
+
+	timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	caller, err := sm.Get(timeoutCtx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	id := "default"
+
+	if err := sshforward.CheckSSHID(ctx, caller, id); err != nil {
+		if st, ok := status.FromError(err); ok && st.Code() == codes.Unimplemented {
+			return nil, errors.Errorf("no SSH key %q forwarded from the client", id)
+		}
+		return nil, err
+	}
+
+	return caller, nil
+}
+
 type gitSourceHandler struct {
 	*gitSource
 	src      source.GitIdentifier
 	cacheKey string
+	sm       *session.Manager
 }
 
-func (gs *gitSource) Resolve(ctx context.Context, id source.Identifier, _ *session.Manager) (source.SourceInstance, error) {
+func (gs *gitSource) Resolve(ctx context.Context, id source.Identifier, sm *session.Manager) (source.SourceInstance, error) {
 	gitIdentifier, ok := id.(*source.GitIdentifier)
 	if !ok {
 		return nil, errors.Errorf("invalid git identifier %v", id)
@@ -165,6 +200,7 @@ func (gs *gitSource) Resolve(ctx context.Context, id source.Identifier, _ *sessi
 	return &gitSourceHandler{
 		src:       *gitIdentifier,
 		gitSource: gs,
+		sm:        sm,
 	}, nil
 }
 
@@ -195,7 +231,22 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, index int) (string, bo
 		return "", false, errors.Wrap(err, "failed to get origin remote")
 	}
 
-	refs, err := r.List(&git.ListOptions{})
+	user, isSSH := parseSSHUser(remote)
+	var getAgent func() (agent.Agent, error)
+	if isSSH {
+		c, err := getSSHCaller(ctx, gs.sm)
+		if err != nil {
+			return "", false, err
+		}
+		getAgent = sshforward.SSHAgentCallback(ctx, c, "default")
+	}
+
+	lo := &git.ListOptions{}
+	if isSSH {
+		lo.Auth = agentCallback(user, getAgent)
+	}
+
+	refs, err := r.List(lo)
 	if err != nil {
 		return "", false, errors.WithStack(err)
 	}
@@ -258,6 +309,16 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context) (out cache.ImmutableRe
 	}
 	defer unmountGitDir()
 
+	user, isSSH := parseSSHUser(gs.src.Remote)
+	var getAgent func() (agent.Agent, error)
+	if isSSH {
+		c, err := getSSHCaller(ctx, gs.sm)
+		if err != nil {
+			return nil, err
+		}
+		getAgent = sshforward.SSHAgentCallback(ctx, c, "default")
+	}
+
 	doFetch := true
 	if isCommitSHA(ref) {
 		// skip fetch if commit already exists
@@ -275,6 +336,10 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context) (out cache.ImmutableRe
 				Progress: stderr,
 			}
 
+			if isSSH {
+				fo.Auth = agentCallback(user, getAgent)
+			}
+
 			if !isCommitSHA(ref) { // TODO: find a branch from ls-remote?
 				fo.Tags = git.NoTags
 				fo.Depth = 1
@@ -290,6 +355,9 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context) (out cache.ImmutableRe
 			}
 
 			err = errors.WithStack(repo.FetchContext(ctx, fo))
+			if errors.Cause(err) == git.NoErrAlreadyUpToDate {
+				err = nil
+			}
 			if err == nil {
 				break
 			}
@@ -363,7 +431,9 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context) (out cache.ImmutableRe
 		}
 
 		if err := r.Fetch(fo); err != nil {
-			return nil, errors.WithStack(err)
+			if errors.Cause(err) != git.NoErrAlreadyUpToDate {
+				return nil, errors.WithStack(err)
+			}
 		}
 
 		wt, err = repo2.Worktree()
@@ -371,9 +441,15 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context) (out cache.ImmutableRe
 			return nil, errors.WithStack(err)
 		}
 
-		h, err := repo.ResolveRevision(plumbing.Revision(ref))
-		if err != nil {
-			return nil, errors.WithStack(err)
+		var h *plumbing.Hash
+		if isCommitSHA(ref) {
+			hh := plumbing.NewHash(ref)
+			h = &hh
+		} else {
+			h, err = repo.ResolveRevision(plumbing.Revision(ref))
+			if err != nil {
+				return nil, errors.WithStack(err)
+			}
 		}
 
 		if err := wt.Checkout(&git.CheckoutOptions{
@@ -389,9 +465,15 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context) (out cache.ImmutableRe
 			return nil, errors.WithStack(err)
 		}
 
-		h, err := repo.ResolveRevision(plumbing.Revision(ref))
-		if err != nil {
-			return nil, errors.WithStack(err)
+		var h *plumbing.Hash
+		if isCommitSHA(ref) {
+			hh := plumbing.NewHash(ref)
+			h = &hh
+		} else {
+			h, err = repo.ResolveRevision(plumbing.Revision(ref))
+			if err != nil {
+				return nil, errors.WithStack(err)
+			}
 		}
 
 		wt, err = repo2.Worktree()
@@ -462,4 +544,53 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context) (out cache.ImmutableRe
 
 func isCommitSHA(str string) bool {
 	return validHex.MatchString(str)
+}
+
+type PublicKeysCallback struct {
+	User     string
+	Callback func() (signers []ssh.Signer, err error)
+}
+
+func (a *PublicKeysCallback) Name() string {
+	return gitssh.PublicKeysCallbackName
+}
+
+func (a *PublicKeysCallback) String() string {
+	return fmt.Sprintf("name: %s", a.Name())
+}
+
+func (a *PublicKeysCallback) ClientConfig() (*ssh.ClientConfig, error) {
+	return &ssh.ClientConfig{
+		User: a.User,
+		Auth: []ssh.AuthMethod{ssh.PublicKeysCallback(a.Callback)},
+		HostKeyCallback: func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+			// logrus.Debugf("HostKeyCallback %s %v %v", hostname, remote, key)
+			return nil
+		},
+	}, nil
+}
+
+func parseSSHUser(url string) (string, bool) {
+	if matchesScheme(url) || !matchesScpLike(url) {
+		return "", false
+	}
+
+	user, _, _, _ := findScpLikeComponents(url)
+	if user == "" {
+		user = "root"
+	}
+	return user, true
+}
+
+func agentCallback(user string, f func() (agent.Agent, error)) *PublicKeysCallback {
+	return &PublicKeysCallback{
+		User: user,
+		Callback: func() (signers []ssh.Signer, err error) {
+			a, err := f()
+			if err != nil {
+				return nil, errors.WithStack(err)
+			}
+			return a.Signers()
+		},
+	}
 }
