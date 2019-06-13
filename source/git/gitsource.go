@@ -342,7 +342,7 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context) (out cache.ImmutableRe
 
 			if !isCommitSHA(ref) { // TODO: find a branch from ls-remote?
 				fo.Tags = git.NoTags
-				fo.Depth = 1
+				// fo.Depth = 1 // unshallow doesn't work properly atm
 				rs := config.RefSpec("refs/" + t + "/" + ref + ":refs/" + t + "/" + ref)
 				if strings.HasPrefix(ref, "refs/") {
 					rs = config.RefSpec(ref + ":" + ref)
