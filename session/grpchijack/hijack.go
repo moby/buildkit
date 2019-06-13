@@ -10,6 +10,6 @@ import (
 // Hijack hijacks session to a connection.
 func Hijack(stream controlapi.Control_SessionServer) (net.Conn, <-chan struct{}, map[string][]string) {
 	md, _ := metadata.FromIncomingContext(stream.Context())
-	c, closeCh := streamToConn(stream)
+	c, closeCh := StreamToConn(stream)
 	return c, closeCh, md
 }

@@ -5,8 +5,11 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/session/grpchijack"
+	"golang.org/x/crypto/ssh/agent"
 	context "golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/metadata"
@@ -60,6 +63,33 @@ type SocketOpt struct {
 	UID  int
 	GID  int
 	Mode int
+}
+
+func SSHAgentCallback(ctx context.Context, c session.Caller, id string) func() (agent.Agent, error) {
+	var once sync.Once
+	var err error
+	var a agent.Agent
+	return func() (agent.Agent, error) {
+		once.Do(func() {
+			client := NewSSHClient(c.Conn())
+			opts := make(map[string][]string)
+			opts[KeySSHID] = []string{id}
+			ctx = metadata.NewOutgoingContext(ctx, opts)
+
+			stream, err1 := client.ForwardAgent(ctx)
+			if err1 != nil {
+				err = err1
+				return
+			}
+
+			conn, _ := grpchijack.StreamToConn(stream)
+			a = agent.NewClient(conn)
+		})
+		if err != nil {
+			return nil, err
+		}
+		return a, nil
+	}
 }
 
 func MountSSHSocket(ctx context.Context, c session.Caller, opt SocketOpt) (sockPath string, closer func() error, err error) {
