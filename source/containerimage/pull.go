@@ -185,6 +185,9 @@ func (p *puller) Snapshot(ctx context.Context) (cache.ImmutableRef, error) {
 		}
 	}
 
+	// workaround for gcr, authentication not supported on blob endpoints
+	pull.EnsureManifestRequested(ctx, p.Puller.Resolver, p.Puller.Src.String())
+
 	pulled, err := p.Puller.Pull(ctx)
 	if err != nil {
 		return nil, err
