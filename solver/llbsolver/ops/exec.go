@@ -324,7 +324,7 @@ func (e *execOp) getSSHMountable(ctx context.Context, m *pb.Mount) (cache.Mounta
 		if m.SSHOpt.Optional {
 			return nil, nil
 		}
-		if st, ok := status.FromError(err); ok && st.Code() == codes.Unimplemented {
+		if st, ok := status.FromError(errors.Cause(err)); ok && st.Code() == codes.Unimplemented {
 			return nil, errors.Errorf("no SSH key %q forwarded from the client", m.SSHOpt.ID)
 		}
 		return nil, err
