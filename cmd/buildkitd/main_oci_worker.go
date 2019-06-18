@@ -192,7 +192,9 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 		processMode = oci.NoProcessSandbox
 	}
 
-	opt, err := runc.NewWorkerOpt(common.config.Root, snFactory, cfg.Rootless, processMode, cfg.Labels, idmapping)
+	dns := getDNSConfig(common.config.DNS)
+
+	opt, err := runc.NewWorkerOpt(common.config.Root, snFactory, cfg.Rootless, processMode, cfg.Labels, idmapping, dns)
 	if err != nil {
 		return nil, err
 	}

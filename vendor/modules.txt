@@ -151,8 +151,8 @@ github.com/docker/go-events
 github.com/docker/go-units
 # github.com/docker/libnetwork v0.8.0-dev.2.0.20190604151032-3c26b4e7495e
 github.com/docker/libnetwork/resolvconf
-github.com/docker/libnetwork/resolvconf/dns
 github.com/docker/libnetwork/types
+github.com/docker/libnetwork/resolvconf/dns
 # github.com/gofrs/flock v0.7.0
 github.com/gofrs/flock
 # github.com/gogo/googleapis v1.1.0

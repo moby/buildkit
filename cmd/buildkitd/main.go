@@ -31,6 +31,7 @@ import (
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/control"
+	"github.com/moby/buildkit/executor/oci"
 	"github.com/moby/buildkit/frontend"
 	dockerfile "github.com/moby/buildkit/frontend/dockerfile/builder"
 	"github.com/moby/buildkit/frontend/gateway"
@@ -684,4 +685,16 @@ func getGCPolicy(cfg config.GCConfig, root string) []client.PruneInfo {
 		})
 	}
 	return out
+}
+
+func getDNSConfig(cfg *config.DNSConfig) *oci.DNSConfig {
+	var dns *oci.DNSConfig
+	if cfg != nil {
+		dns = &oci.DNSConfig{
+			Nameservers:   cfg.Nameservers,
+			Options:       cfg.Options,
+			SearchDomains: cfg.SearchDomains,
+		}
+	}
+	return dns
 }

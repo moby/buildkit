@@ -51,6 +51,11 @@ keepDuration=7200
 [registry."docker.io"]
 mirrors=["hub.docker.io"]
 http=true
+
+[dns]
+nameservers=["1.1.1.1","8.8.8.8"]
+options=["edns0"]
+searchDomains=["example.com"]
 `
 
 	cfg, md, err := Load(bytes.NewBuffer([]byte(testConfig)))
@@ -98,4 +103,9 @@ http=true
 
 	require.Equal(t, cfg.Registries["docker.io"].PlainHTTP, true)
 	require.Equal(t, cfg.Registries["docker.io"].Mirrors[0], "hub.docker.io")
+
+	require.NotNil(t, cfg.DNS)
+	require.Equal(t, cfg.DNS.Nameservers, []string{"1.1.1.1", "8.8.8.8"})
+	require.Equal(t, cfg.DNS.SearchDomains, []string{"example.com"})
+	require.Equal(t, cfg.DNS.Options, []string{"edns0"})
 }
