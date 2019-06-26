@@ -355,14 +355,19 @@ func (w *Worker) FromRemote(ctx context.Context, remote *solver.Remote) (cache.I
 		return nil, err
 	}
 
-	cs, release := snapshot.NewContainerdSnapshotter(w.Snapshotter)
+	cd, release := snapshot.NewContainerdSnapshotter(w.Snapshotter)
 	defer release()
 
 	unpackProgressDone := oneOffProgress(ctx, "unpacking")
-	chainIDs, err := w.unpack(ctx, remote.Descriptors, cs)
+	chainIDs, refs, err := w.unpack(ctx, w.CacheManager, remote.Descriptors, cd)
 	if err != nil {
 		return nil, unpackProgressDone(err)
 	}
+	defer func() {
+		for _, ref := range refs {
+			ref.Release(context.TODO())
+		}
+	}()
 	unpackProgressDone(nil)
 
 	for i, chainID := range chainIDs {
@@ -388,31 +393,46 @@ func (w *Worker) FromRemote(ctx context.Context, remote *solver.Remote) (cache.I
 	return nil, errors.Errorf("unreachable")
 }
 
-func (w *Worker) unpack(ctx context.Context, descs []ocispec.Descriptor, s cdsnapshot.Snapshotter) ([]string, error) {
+func (w *Worker) unpack(ctx context.Context, cm cache.Manager, descs []ocispec.Descriptor, s cdsnapshot.Snapshotter) (ids []string, refs []cache.ImmutableRef, err error) {
+	defer func() {
+		if err != nil {
+			for _, r := range refs {
+				r.Release(context.TODO())
+			}
+		}
+	}()
+
 	layers, err := getLayers(ctx, descs)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var chain []digest.Digest
 	for _, layer := range layers {
-		if _, err := rootfs.ApplyLayer(ctx, layer, chain, s, w.Applier); err != nil {
-			return nil, err
-		}
-		chain = append(chain, layer.Diff.Digest)
+		newChain := append(chain, layer.Diff.Digest)
 
-		chainID := ociidentity.ChainID(chain)
+		chainID := ociidentity.ChainID(newChain)
+		ref, err := cm.Get(ctx, string(chainID))
+		if err == nil {
+			refs = append(refs, ref)
+		} else {
+			if _, err := rootfs.ApplyLayer(ctx, layer, chain, s, w.Applier); err != nil {
+				return nil, nil, err
+			}
+		}
+		chain = newChain
+
 		if err := w.Snapshotter.SetBlob(ctx, string(chainID), layer.Diff.Digest, layer.Blob.Digest); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
-	ids := make([]string, len(chain))
+	ids = make([]string, len(chain))
 	for i := range chain {
 		ids[i] = string(ociidentity.ChainID(chain[:i+1]))
 	}
 
-	return ids, nil
+	return ids, refs, nil
 }
 
 // Labels returns default labels
