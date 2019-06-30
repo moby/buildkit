@@ -79,7 +79,7 @@ http:
 }
 
 func detectPort(ctx context.Context, rc io.ReadCloser) (string, error) {
-	r := regexp.MustCompile("listening on 127\\.0\\.0\\.1:(\\d+)")
+	r := regexp.MustCompile(`listening on 127\.0\.0\.1:(\d+)`)
 	s := bufio.NewScanner(rc)
 	found := make(chan struct{})
 	defer func() {
