@@ -28,3 +28,25 @@ func TestStateMeta(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, "abc", v)
 }
+
+func TestFormattingPatterns(t *testing.T) {
+	t.Parallel()
+
+	s := Image("foo")
+	s = s.AddEnv("FOO", "ab%sc").Dir("/foo/bar%d")
+
+	v, ok := s.GetEnv("FOO")
+	assert.True(t, ok)
+	assert.Equal(t, "ab%sc", v)
+
+	assert.Equal(t, "/foo/bar%d", s.GetDir())
+
+	s2 := Image("foo")
+	s2 = s2.AddEnvf("FOO", "ab%sc", "__").Dirf("/foo/bar%d", 1)
+
+	v, ok = s2.GetEnv("FOO")
+	assert.True(t, ok)
+	assert.Equal(t, "ab__c", v)
+
+	assert.Equal(t, "/foo/bar1", s2.GetDir())
+}
