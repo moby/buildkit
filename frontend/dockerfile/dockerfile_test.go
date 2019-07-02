@@ -89,6 +89,7 @@ var allTests = []integration.Test{
 	testDockerignoreOverride,
 	testTarExporter,
 	testDefaultEnvWithArgs,
+	testEnvEmptyFormatting,
 }
 
 var fileOpTests = []integration.Test{
@@ -202,6 +203,44 @@ echo -n $my_arg > /out
 	dt, err := ioutil.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
 	require.Equal(t, "def_val", string(dt))
+}
+
+func testEnvEmptyFormatting(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM busybox AS build
+ENV myenv foo%sbar
+RUN [ "$myenv" = 'foo%sbar' ]
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
 }
 
 func testDockerignoreOverride(t *testing.T, sb integration.Sandbox) {

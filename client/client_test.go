@@ -713,7 +713,7 @@ func testSecretMounts(t *testing.T, sb integration.Sandbox) {
 
 	// test id,perm,uid
 	st = llb.Image("busybox:latest").
-		Run(llb.Shlex(`sh -c '[ "$(stat -c "%%u %%g %%f" /run/secrets/mysecret4)" = "1 1 81ff" ]' `), llb.AddSecret("/run/secrets/mysecret4", llb.SecretID("mysecret"), llb.SecretFileOpt(1, 1, 0777)))
+		Run(llb.Shlex(`sh -c '[ "$(stat -c "%u %g %f" /run/secrets/mysecret4)" = "1 1 81ff" ]' `), llb.AddSecret("/run/secrets/mysecret4", llb.SecretID("mysecret"), llb.SecretFileOpt(1, 1, 0777)))
 
 	def, err = st.Marshal()
 	require.NoError(t, err)
