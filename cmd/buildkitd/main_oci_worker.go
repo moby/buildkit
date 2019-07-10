@@ -11,6 +11,7 @@ import (
 	"github.com/containerd/containerd/snapshots/overlay"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/executor/oci"
+	"github.com/moby/buildkit/util/network"
 	"github.com/moby/buildkit/worker"
 	"github.com/moby/buildkit/worker/base"
 	"github.com/moby/buildkit/worker/runc"
@@ -52,6 +53,21 @@ func init() {
 		cli.StringSliceFlag{
 			Name:  "oci-worker-platform",
 			Usage: "override supported platforms for worker",
+		},
+		cli.StringFlag{
+			Name:  "oci-worker-net",
+			Usage: "worker network type (auto, cni or host)",
+			Value: defaultConf.Workers.OCI.NetworkConfig.Mode,
+		},
+		cli.StringFlag{
+			Name:  "oci-cni-config-path",
+			Usage: "path of cni config file",
+			Value: defaultConf.Workers.OCI.NetworkConfig.CNIConfigPath,
+		},
+		cli.StringFlag{
+			Name:  "oci-cni-binary-dir",
+			Usage: "path of cni binary files",
+			Value: defaultConf.Workers.OCI.NetworkConfig.CNIBinaryPath,
 		},
 	}
 	n := "oci-worker-rootless"
@@ -154,6 +170,15 @@ func applyOCIFlags(c *cli.Context, cfg *config.Config) error {
 		cfg.Workers.OCI.GCKeepStorage = c.GlobalInt64("oci-worker-gc-keepstorage") * 1e6
 	}
 
+	if c.GlobalIsSet("oci-worker-net") {
+		cfg.Workers.OCI.NetworkConfig.Mode = c.GlobalString("oci-worker-net")
+	}
+	if c.GlobalIsSet("oci-cni-config-path") {
+		cfg.Workers.OCI.NetworkConfig.CNIConfigPath = c.GlobalString("oci-cni-worker-path")
+	}
+	if c.GlobalIsSet("oci-cni-binary-dir") {
+		cfg.Workers.OCI.NetworkConfig.CNIBinaryPath = c.GlobalString("oci-cni-binary-dir")
+	}
 	return nil
 }
 
@@ -194,7 +219,14 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 
 	dns := getDNSConfig(common.config.DNS)
 
-	opt, err := runc.NewWorkerOpt(common.config.Root, snFactory, cfg.Rootless, processMode, cfg.Labels, idmapping, dns)
+	nc := network.Opt{
+		Root:          common.config.Root,
+		Mode:          common.config.Workers.OCI.NetworkConfig.Mode,
+		CNIConfigPath: common.config.Workers.OCI.CNIConfigPath,
+		CNIBinaryDir:  common.config.Workers.OCI.CNIBinaryPath,
+	}
+
+	opt, err := runc.NewWorkerOpt(common.config.Root, snFactory, cfg.Rootless, processMode, cfg.Labels, idmapping, nc, dns)
 	if err != nil {
 		return nil, err
 	}

@@ -198,9 +198,17 @@ VOLUME /var/lib/containerd
 VOLUME /run/containerd
 ENTRYPOINT ["containerd"]
 
+FROM alpine AS cni-plugins
+RUN apk add --no-cache curl
+ENV CNI_VERSION=v0.8.1
+ARG TARGETOS
+ARG TARGETARCH
+WORKDIR /opt/cni/bin
+RUN curl -Ls https://github.com/containernetworking/plugins/releases/download/$CNI_VERSION/cni-plugins-$TARGETOS-$TARGETARCH-$CNI_VERSION.tgz | tar xzv
+
 FROM buildkit-base AS integration-tests
 ENV BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR="1000:1000"
-RUN apt-get install -y --no-install-recommends uidmap sudo \ 
+RUN apt-get install -y --no-install-recommends uidmap sudo vim iptables \ 
   && useradd --create-home --home-dir /home/user --uid 1000 -s /bin/sh user \
   && echo "XDG_RUNTIME_DIR=/run/user/1000; export XDG_RUNTIME_DIR" >> /home/user/.profile \
   && mkdir -m 0700 -p /run/user/1000 \
@@ -212,8 +220,13 @@ COPY --from=containerd10 /out/containerd* /opt/containerd-1.0/bin/
 COPY --from=registry /bin/registry /usr/bin
 COPY --from=runc /usr/bin/runc /usr/bin
 COPY --from=containerd /out/containerd* /usr/bin/
+COPY --from=cni-plugins /opt/cni/bin/bridge /opt/cni/bin/host-local /opt/cni/bin
+COPY hack/fixtures/cni.json /etc/buildkit/cni.json
 COPY --from=binaries / /usr/bin/
 COPY . .
+
+FROM integration-tests AS dev-env
+VOLUME /var/lib/buildkit
 
 # To allow running buildkit in a container without CAP_SYS_ADMIN, we need to do either
 #  a) install newuidmap/newgidmap with file capabilities rather than SETUID (requires kernel >= 4.14)

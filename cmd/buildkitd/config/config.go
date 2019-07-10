@@ -58,6 +58,12 @@ type GCConfig struct {
 	GCPolicy      []GCPolicy `toml:"gcpolicy"`
 }
 
+type NetworkConfig struct {
+	Mode          string `toml:"networkMode"`
+	CNIConfigPath string `toml:"cniConfigPath"`
+	CNIBinaryPath string `toml:"cniBinaryPath"`
+}
+
 type OCIConfig struct {
 	Enabled          *bool             `toml:"enabled"`
 	Labels           map[string]string `toml:"labels"`
@@ -66,6 +72,7 @@ type OCIConfig struct {
 	Rootless         bool              `toml:"rootless"`
 	NoProcessSandbox bool              `toml:"noProcessSandbox"`
 	GCConfig
+	NetworkConfig
 	// UserRemapUnsupported is unsupported key for testing. The feature is
 	// incomplete and the intention is to make it default without config.
 	UserRemapUnsupported string `toml:"userRemapUnsupported"`
@@ -78,6 +85,7 @@ type ContainerdConfig struct {
 	Platforms []string          `toml:"platforms"`
 	Namespace string            `toml:"namespace"`
 	GCConfig
+	NetworkConfig
 }
 
 type GCPolicy struct {
