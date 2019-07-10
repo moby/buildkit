@@ -90,14 +90,14 @@ RUN --mount=target=. --mount=target=/root/.cache,type=cache \
 
 # build buildkitd binary
 FROM buildkit-base AS buildkitd
-ENV CGO_ENABLED=1
 ARG TARGETPLATFORM
 ARG BUILDKITD_TAGS
+ENV BUILDKITD_TAGS="osusergo netgo static_build seccomp ${BUILDKITD_TAGS}"
 RUN --mount=target=. --mount=target=/root/.cache,type=cache \
   --mount=target=/go/pkg/mod,type=cache \
   --mount=source=/tmp/.ldflags,target=/tmp/.ldflags,from=buildkit-version \
-  go build -ldflags "$(cat /tmp/.ldflags) -w -extldflags -static" -tags "osusergo seccomp netgo cgo static_build ${BUILDKITD_TAGS}" -o /usr/bin/buildkitd ./cmd/buildkitd && \
-  file /usr/bin/buildkitd | grep "statically linked"
+  go build -ldflags "$(cat /tmp/.ldflags) -w -extldflags -static" -tags "${BUILDKITD_TAGS}" -o /usr/bin/buildkitd ./cmd/buildkitd && \
+  file /usr/bin/buildkitd | egrep "statically linked|Windows"
 
 FROM scratch AS binaries-linux
 COPY --from=runc /usr/bin/runc /buildkit-runc
@@ -186,7 +186,10 @@ COPY --from=binaries / /usr/bin/
 ENTRYPOINT ["buildkitd"]
 
 FROM binaries AS buildkit-buildkitd-darwin
+
 FROM binaries AS buildkit-buildkitd-windows
+# this is not in binaries-windows because it is not intended for release yet, just CI
+COPY --from=buildkitd /usr/bin/buildkitd /buildkitd.exe
 
 FROM buildkit-buildkitd-$TARGETOS AS buildkit-buildkitd
 
