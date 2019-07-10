@@ -206,6 +206,9 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 
 	if cfg.Rootless {
 		logrus.Debugf("running in rootless mode")
+		if common.config.Workers.OCI.NetworkConfig.Mode == "auto" {
+			common.config.Workers.OCI.NetworkConfig.Mode = "host"
+		}
 	}
 
 	processMode := oci.ProcessSandbox

@@ -36,6 +36,7 @@ import (
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/entitlements"
 	"github.com/moby/buildkit/util/testutil"
+	"github.com/moby/buildkit/util/testutil/echoserver"
 	"github.com/moby/buildkit/util/testutil/httpserver"
 	"github.com/moby/buildkit/util/testutil/integration"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -97,6 +98,7 @@ func TestClientIntegration(t *testing.T) {
 		testPushByDigest,
 		testBasicInlineCacheImportExport,
 		testExportBusyboxLocal,
+		testBridgeNetworking,
 	}, mirrors)
 
 	integration.Run(t, []integration.Test{
@@ -109,10 +111,73 @@ func TestClientIntegration(t *testing.T) {
 			"insecure": securityInsecure,
 		}),
 	)
+
+	integration.Run(t, []integration.Test{
+		testHostNetworking,
+	},
+		mirrors,
+		integration.WithMatrix("netmode", map[string]interface{}{
+			"default": defaultNetwork,
+			"host":    hostNetwork,
+		}),
+	)
 }
 
 func newContainerd(cdAddress string) (*containerd.Client, error) {
 	return containerd.New(cdAddress, containerd.WithTimeout(60*time.Second))
+}
+
+func testBridgeNetworking(t *testing.T, sb integration.Sandbox) {
+	if os.Getenv("BUILDKIT_RUN_NETWORK_INTEGRATION_TESTS") == "" {
+		t.SkipNow()
+	}
+	if sb.Rootless() {
+		t.SkipNow()
+	}
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	s, err := echoserver.NewTestServer("foo")
+	require.NoError(t, err)
+	addrParts := strings.Split(s.Addr().String(), ":")
+
+	def, err := llb.Image("busybox").Run(llb.Shlexf("sh -c 'nc 127.0.0.1 %s | grep foo'", addrParts[len(addrParts)-1])).Marshal()
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	require.Error(t, err)
+}
+func testHostNetworking(t *testing.T, sb integration.Sandbox) {
+	if os.Getenv("BUILDKIT_RUN_NETWORK_INTEGRATION_TESTS") == "" {
+		t.SkipNow()
+	}
+	netMode := sb.Value("netmode")
+	var allowedEntitlements []entitlements.Entitlement
+	if netMode == hostNetwork {
+		allowedEntitlements = []entitlements.Entitlement{entitlements.EntitlementNetworkHost}
+	}
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	s, err := echoserver.NewTestServer("foo")
+	require.NoError(t, err)
+	addrParts := strings.Split(s.Addr().String(), ":")
+
+	def, err := llb.Image("busybox").Run(llb.Shlexf("sh -c 'nc 127.0.0.1 %s | grep foo'", addrParts[len(addrParts)-1]), llb.Network(llb.NetModeHost)).Marshal()
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		AllowedEntitlements: allowedEntitlements,
+	}, nil)
+	if netMode == hostNetwork {
+		require.NoError(t, err)
+		t.Logf("host-noerror")
+	} else {
+		require.Error(t, err)
+		t.Logf("bridge-error")
+	}
 }
 
 // #877
@@ -2452,3 +2517,18 @@ func (*secModeInsecure) UpdateConfigFile(in string) string {
 
 var securitySandbox integration.ConfigUpdater = &secModeSandbox{}
 var securityInsecure integration.ConfigUpdater = &secModeInsecure{}
+
+type netModeHost struct{}
+
+func (*netModeHost) UpdateConfigFile(in string) string {
+	return in + "\n\ninsecure-entitlements = [\"network.host\"]\n"
+}
+
+type netModeDefault struct{}
+
+func (*netModeDefault) UpdateConfigFile(in string) string {
+	return in
+}
+
+var hostNetwork integration.ConfigUpdater = &netModeHost{}
+var defaultNetwork integration.ConfigUpdater = &netModeDefault{}

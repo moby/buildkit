@@ -198,7 +198,7 @@ VOLUME /var/lib/containerd
 VOLUME /run/containerd
 ENTRYPOINT ["containerd"]
 
-FROM alpine AS cni-plugins
+FROM --platform=$BUILDPLATFORM alpine AS cni-plugins
 RUN apk add --no-cache curl
 ENV CNI_VERSION=v0.8.1
 ARG TARGETOS
@@ -220,10 +220,11 @@ COPY --from=containerd10 /out/containerd* /opt/containerd-1.0/bin/
 COPY --from=registry /bin/registry /usr/bin
 COPY --from=runc /usr/bin/runc /usr/bin
 COPY --from=containerd /out/containerd* /usr/bin/
-COPY --from=cni-plugins /opt/cni/bin/bridge /opt/cni/bin/host-local /opt/cni/bin
+COPY --from=cni-plugins /opt/cni/bin/bridge /opt/cni/bin/host-local /opt/cni/bin/loopback /opt/cni/bin/
 COPY hack/fixtures/cni.json /etc/buildkit/cni.json
 COPY --from=binaries / /usr/bin/
 COPY . .
+ENV BUILDKIT_RUN_NETWORK_INTEGRATION_TESTS=1
 
 FROM integration-tests AS dev-env
 VOLUME /var/lib/buildkit
