@@ -224,7 +224,7 @@ COPY --from=cni-plugins /opt/cni/bin/bridge /opt/cni/bin/host-local /opt/cni/bin
 COPY hack/fixtures/cni.json /etc/buildkit/cni.json
 COPY --from=binaries / /usr/bin/
 COPY . .
-ENV BUILDKIT_RUN_NETWORK_INTEGRATION_TESTS=1
+ENV BUILDKIT_RUN_NETWORK_INTEGRATION_TESTS=1 BUILDKIT_CNI_INIT_LOCK_PATH=/run/buildkit_cni_bridge.lock
 
 FROM integration-tests AS dev-env
 VOLUME /var/lib/buildkit

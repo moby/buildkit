@@ -7,6 +7,7 @@ import (
 
 	"github.com/containerd/containerd/oci"
 	"github.com/containerd/go-cni"
+	"github.com/gofrs/flock"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/util/network/netns_create"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
@@ -36,12 +37,31 @@ func NewCNIProvider(opt Opt) (Provider, error) {
 		return nil, err
 	}
 
-	return &cniProvider{CNI: cniHandle, root: opt.Root}, nil
+	cp := &cniProvider{CNI: cniHandle, root: opt.Root}
+	if err := cp.initNetwork(); err != nil {
+		return nil, err
+	}
+	return cp, nil
 }
 
 type cniProvider struct {
 	cni.CNI
 	root string
+}
+
+func (c *cniProvider) initNetwork() error {
+	if v := os.Getenv("BUILDKIT_CNI_INIT_LOCK_PATH"); v != "" {
+		l := flock.New(v)
+		if err := l.Lock(); err != nil {
+			return err
+		}
+		defer l.Unlock()
+	}
+	ns, err := c.New()
+	if err != nil {
+		return err
+	}
+	return ns.Close()
 }
 
 func (c *cniProvider) New() (Namespace, error) {
