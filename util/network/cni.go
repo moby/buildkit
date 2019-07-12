@@ -9,7 +9,6 @@ import (
 	"github.com/containerd/go-cni"
 	"github.com/gofrs/flock"
 	"github.com/moby/buildkit/identity"
-	"github.com/moby/buildkit/util/network/netns_create"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
@@ -71,11 +70,13 @@ func (c *cniProvider) New() (Namespace, error) {
 		return nil, err
 	}
 
-	if err := netns_create.CreateNetNS(nsPath); err != nil {
+	if err := createNetNS(nsPath); err != nil {
+		os.RemoveAll(filepath.Dir(nsPath))
 		return nil, err
 	}
 
 	if _, err := c.CNI.Setup(id, nsPath); err != nil {
+		os.RemoveAll(filepath.Dir(nsPath))
 		return nil, errors.Wrap(err, "CNI setup error")
 	}
 
