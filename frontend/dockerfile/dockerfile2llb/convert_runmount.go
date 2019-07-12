@@ -144,7 +144,9 @@ func dispatchRunMounts(d *dispatchState, c *instructions.RunCommand, sources []*
 
 		out = append(out, llb.AddMount(target, st, mountOpts...))
 
-		d.ctxPaths[path.Join("/", filepath.ToSlash(mount.Source))] = struct{}{}
+		if mount.From == "" {
+			d.ctxPaths[path.Join("/", filepath.ToSlash(mount.Source))] = struct{}{}
+		}
 	}
 	return out, nil
 }
