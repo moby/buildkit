@@ -255,6 +255,7 @@ func (w *Worker) Exporter(name string, sm *session.Manager) (exporter.Exporter, 
 			SessionManager: sm,
 			ImageWriter:    w.imageWriter,
 			ResolverOpt:    w.ResolveOptionsFunc,
+			LeaseManager:   w.LeaseManager,
 		})
 	case client.ExporterLocal:
 		return localexporter.New(localexporter.Opt{
@@ -269,12 +270,14 @@ func (w *Worker) Exporter(name string, sm *session.Manager) (exporter.Exporter, 
 			SessionManager: sm,
 			ImageWriter:    w.imageWriter,
 			Variant:        ociexporter.VariantOCI,
+			LeaseManager:   w.LeaseManager,
 		})
 	case client.ExporterDocker:
 		return ociexporter.New(ociexporter.Opt{
 			SessionManager: sm,
 			ImageWriter:    w.imageWriter,
 			Variant:        ociexporter.VariantDocker,
+			LeaseManager:   w.LeaseManager,
 		})
 	default:
 		return nil, errors.Errorf("exporter %q could not be found", name)
