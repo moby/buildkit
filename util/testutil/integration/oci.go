@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -98,12 +99,23 @@ func (s *oci) New(opt ...SandboxOpt) (Sandbox, func() error, error) {
 	buildkitdSock, stop, err := runBuildkitd(buildkitdArgs, logs, s.uid, s.gid)
 	if err != nil {
 		deferF.F()()
+		printLogs(logs, log.Println)
 		return nil, nil, err
 	}
 
 	deferF.append(stop)
 
 	return &sandbox{address: buildkitdSock, mv: c.mv, logs: logs, cleanup: deferF, rootless: s.uid != 0}, deferF.F(), nil
+}
+
+func printLogs(logs map[string]*bytes.Buffer, f func(args ...interface{})) {
+	for name, l := range logs {
+		f(name)
+		s := bufio.NewScanner(l)
+		for s.Scan() {
+			f(s.Text())
+		}
+	}
 }
 
 type sandbox struct {
@@ -119,13 +131,7 @@ func (sb *sandbox) Address() string {
 }
 
 func (sb *sandbox) PrintLogs(t *testing.T) {
-	for name, l := range sb.logs {
-		t.Log(name)
-		s := bufio.NewScanner(l)
-		for s.Scan() {
-			t.Log(s.Text())
-		}
-	}
+	printLogs(sb.logs, t.Log)
 }
 
 func (sb *sandbox) NewRegistry() (string, error) {
