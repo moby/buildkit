@@ -10,11 +10,13 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
+	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/rootfs"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
+	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/push"
 	"github.com/moby/buildkit/util/resolver"
 	digest "github.com/opencontainers/go-digest"
@@ -37,6 +39,7 @@ type Opt struct {
 	ImageWriter    *ImageWriter
 	Images         images.Store
 	ResolverOpt    resolver.ResolveOptionsFunc
+	LeaseManager   leases.Manager
 }
 
 type imageExporter struct {
@@ -140,6 +143,13 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 	for k, v := range e.meta {
 		src.Metadata[k] = v
 	}
+
+	ctx, done, err := leaseutil.WithLease(ctx, e.opt.LeaseManager)
+	if err != nil {
+		return nil, err
+	}
+	defer done(context.TODO())
+
 	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes)
 	if err != nil {
 		return nil, err

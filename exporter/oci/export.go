@@ -8,12 +8,14 @@ import (
 
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/images/oci"
+	"github.com/containerd/containerd/leases"
 	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/util/dockerexporter"
+	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/progress"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -32,6 +34,7 @@ type Opt struct {
 	SessionManager *session.Manager
 	ImageWriter    *containerimage.ImageWriter
 	Variant        ExporterVariant
+	LeaseManager   leases.Manager
 }
 
 type imageExporter struct {
@@ -112,6 +115,12 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 	for k, v := range e.meta {
 		src.Metadata[k] = v
 	}
+
+	ctx, done, err := leaseutil.WithLease(ctx, e.opt.LeaseManager)
+	if err != nil {
+		return nil, err
+	}
+	defer done(context.TODO())
 
 	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes)
 	if err != nil {
