@@ -7,6 +7,7 @@ import (
 	"github.com/moby/buildkit/solver/pb"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 type Opt struct {
@@ -36,6 +37,7 @@ func Providers(opt Opt) (map[pb.NetMode]Provider, error) {
 			}
 			defaultProvider = cniProvider
 		} else {
+			logrus.Warnf("using host network as the default")
 			defaultProvider = NewHostProvider()
 		}
 	default:
