@@ -138,3 +138,25 @@ $ buildctl build --frontend=dockerfile.v0 --local context=. --local dockerfile=.
 You can also specify a path to `*.pem` file on the host directly instead of `$SSH_AUTH_SOCK`.
 However, pem files with passphrases are not supported.
 
+### RUN --security=insecure|sandbox
+
+With `--security=insecure`, this runs the command without sandbox in insecure mode,
+which allows to run flows requiring elevated privileges (e.g. containerd). This is equivalent
+to running `docker run --privileged`. In order to access this feature, entitlement
+`security.insecure` should be enabled when starting the buildkitd daemon
+(`--allow-insecure-entitlement security.insecure`) and for a build request
+(`--allow security.insecure`).
+
+Default sandbox mode can be activated via `--security=sandbox`, but that is no-op.
+
+#### Example: check entitlements
+
+```dockerfile
+# syntax = docker/dockerfile:experimental
+FROM ubuntu
+RUN --security=insecure cat /proc/self/status | grep CapEff
+```
+
+```
+#84 0.093 CapEff:	0000003fffffffff
+```
