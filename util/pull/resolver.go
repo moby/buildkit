@@ -67,7 +67,7 @@ func withLocal(r remotes.Resolver, imageStore images.Store, mode source.ResolveM
 		return r
 	}
 
-	return withLocalResolver{r, imageStore, mode, 0}
+	return withLocalResolver{Resolver: r, is: imageStore, mode: mode}
 }
 
 func getCredentialsFromSession(ctx context.Context, sm *session.Manager) func(string) (string, string, error) {
@@ -101,10 +101,10 @@ func getCredentialsFromSession(ctx context.Context, sm *session.Manager) func(st
 // - Pusher wouldn't make sense to push locally, so just forward.
 
 type withLocalResolver struct {
+	counter int64 // needs to be 64bit aligned for 32bit systems
 	remotes.Resolver
-	is      images.Store
-	mode    source.ResolveMode
-	counter int64
+	is   images.Store
+	mode source.ResolveMode
 }
 
 func (r withLocalResolver) Resolve(ctx context.Context, ref string) (string, ocispec.Descriptor, error) {
