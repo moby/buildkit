@@ -102,9 +102,9 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 
 	if meta.SecurityMode == pb.SecurityMode_INSECURE {
 		//make sysfs rw mount for insecure mode.
-		for _, m := range s.Mounts {
-			if m.Type == "sysfs" {
-				m.Options = []string{"nosuid", "noexec", "nodev", "rw"}
+		for i, m := range s.Mounts {
+			if m.Destination == "/sys/fs/cgroup" {
+				s.Mounts[i].Options = []string{"nosuid", "noexec", "nodev", "rw"}
 			}
 		}
 	}
