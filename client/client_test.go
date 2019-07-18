@@ -101,6 +101,7 @@ func TestClientIntegration(t *testing.T) {
 
 	integration.Run(t, []integration.Test{
 		testSecurityMode,
+		testSecurityModeSysfs,
 		testSecurityModeErrors,
 	},
 		mirrors,
@@ -479,6 +480,41 @@ func testSecurityMode(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 
 	require.NoError(t, err)
+}
+
+func testSecurityModeSysfs(t *testing.T, sb integration.Sandbox) {
+	mode := llb.SecurityModeSandbox
+	var allowedEntitlements []entitlements.Entitlement
+	secMode := sb.Value("secmode")
+	if secMode == securitySandbox {
+		allowedEntitlements = []entitlements.Entitlement{}
+	} else {
+		mode = llb.SecurityModeInsecure
+		allowedEntitlements = []entitlements.Entitlement{entitlements.EntitlementSecurityInsecure}
+	}
+
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	command := `mkdir /sys/fs/cgroup/cpuset/securitytest`
+	st := llb.Image("busybox:latest").
+		Run(llb.Shlex(command),
+			llb.Security(mode))
+
+	def, err := st.Marshal()
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		AllowedEntitlements: allowedEntitlements,
+	}, nil)
+
+	if secMode == securitySandbox || sb.Rootless() {
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "exit code: 1")
+	} else {
+		require.NoError(t, err)
+	}
 }
 
 func testSecurityModeErrors(t *testing.T, sb integration.Sandbox) {
