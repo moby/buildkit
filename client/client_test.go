@@ -483,6 +483,10 @@ func testSecurityMode(t *testing.T, sb integration.Sandbox) {
 }
 
 func testSecurityModeSysfs(t *testing.T, sb integration.Sandbox) {
+	if sb.Rootless() {
+		t.SkipNow()
+	}
+
 	mode := llb.SecurityModeSandbox
 	var allowedEntitlements []entitlements.Entitlement
 	secMode := sb.Value("secmode")
@@ -509,7 +513,7 @@ func testSecurityModeSysfs(t *testing.T, sb integration.Sandbox) {
 		AllowedEntitlements: allowedEntitlements,
 	}, nil)
 
-	if secMode == securitySandbox || sb.Rootless() {
+	if secMode == securitySandbox {
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "exit code: 1")
 	} else {
