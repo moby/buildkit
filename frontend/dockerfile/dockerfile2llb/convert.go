@@ -1067,21 +1067,6 @@ func setKVValue(kvpo instructions.KeyValuePairOptional, values map[string]string
 	return kvpo
 }
 
-func toEnvMap(args []instructions.KeyValuePairOptional, env []string) map[string]string {
-	m := shell.BuildEnvs(env)
-
-	for _, arg := range args {
-		// If key already exists, keep previous value.
-		if _, ok := m[arg.Key]; ok {
-			continue
-		}
-		if arg.Value != nil {
-			m[arg.Key] = arg.ValueString()
-		}
-	}
-	return m
-}
-
 func dfCmd(cmd interface{}) llb.ConstraintsOpt {
 	// TODO: add fmt.Stringer to instructions.Command to remove interface{}
 	var cmdStr string

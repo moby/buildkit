@@ -9,6 +9,21 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func toEnvMap(args []instructions.KeyValuePairOptional, env []string) map[string]string {
+	m := shell.BuildEnvs(env)
+
+	for _, arg := range args {
+		// If key already exists, keep previous value.
+		if _, ok := m[arg.Key]; ok {
+			continue
+		}
+		if arg.Value != nil {
+			m[arg.Key] = arg.ValueString()
+		}
+	}
+	return m
+}
+
 func TestDockerfileParsing(t *testing.T) {
 	t.Parallel()
 	df := `FROM busybox
