@@ -461,7 +461,7 @@ type dispatchOpt struct {
 func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 	if ex, ok := cmd.Command.(instructions.SupportsSingleWordExpansion); ok {
 		err := ex.Expand(func(word string) (string, error) {
-			return opt.shlex.ProcessWordWithMap(word, toEnvMap(d.buildArgs, d.image.Config.Env))
+			return opt.shlex.ProcessWord(word, d.state.Env())
 		})
 		if err != nil {
 			return err
@@ -626,14 +626,7 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 		args = withShell(d.image, args)
 	}
 	env := d.state.Env()
-	opt := []llb.RunOption{llb.Args(args)}
-	for _, arg := range d.buildArgs {
-		if arg.Value != nil {
-			env = append(env, fmt.Sprintf("%s=%s", arg.Key, arg.ValueString()))
-			opt = append(opt, llb.AddEnv(arg.Key, arg.ValueString()))
-		}
-	}
-	opt = append(opt, dfCmd(c))
+	opt := []llb.RunOption{llb.Args(args), dfCmd(c)}
 	if d.ignoreCache {
 		opt = append(opt, llb.IgnoreCache)
 	}
@@ -932,7 +925,7 @@ func dispatchHealthcheck(d *dispatchState, c *instructions.HealthCheckCommand) e
 func dispatchExpose(d *dispatchState, c *instructions.ExposeCommand, shlex *shell.Lex) error {
 	ports := []string{}
 	for _, p := range c.Ports {
-		ps, err := shlex.ProcessWordsWithMap(p, toEnvMap(d.buildArgs, d.image.Config.Env))
+		ps, err := shlex.ProcessWords(p, d.state.Env())
 		if err != nil {
 			return err
 		}
@@ -1003,6 +996,10 @@ func dispatchArg(d *dispatchState, c *instructions.ArgCommand, metaArgs []instru
 				buildArg.Value = ma.Value
 			}
 		}
+	}
+
+	if buildArg.Value != nil {
+		d.state = d.state.AddEnv(buildArg.Key, *buildArg.Value)
 	}
 
 	d.buildArgs = append(d.buildArgs, buildArg)

@@ -182,9 +182,9 @@ func TestGetEnv(t *testing.T) {
 		t.Fatal("7 - 'car' should map to 'hat'")
 	}
 
-	// Make sure we grab the first 'car' in the list
+	// Make sure we grab the last 'car' in the list
 	sw.envs = BuildEnvs([]string{"foo=bar", "car=hat", "car=bike"})
-	if getEnv("car") != "hat" {
-		t.Fatal("8 - 'car' should map to 'hat'")
+	if getEnv("car") != "bike" {
+		t.Fatal("8 - 'car' should map to 'bike'")
 	}
 }

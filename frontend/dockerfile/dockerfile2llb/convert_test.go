@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
+	"github.com/moby/buildkit/frontend/dockerfile/shell"
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/stretchr/testify/assert"
 )
@@ -142,7 +143,7 @@ func TestToEnvList(t *testing.T) {
 	args = []instructions.KeyValuePairOptional{{Key: "key2", Value: &v}}
 	env = []string{"key1=val1", "key1=val1_2"}
 	resutl = toEnvMap(args, env)
-	assert.Equal(t, map[string]string{"key1": "val1", "key2": "val2"}, resutl)
+	assert.Equal(t, map[string]string{"key1": "val1_2", "key2": "val2"}, resutl)
 
 	// args has duplicated keys
 	v1 := "v1"
