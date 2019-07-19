@@ -1,0 +1,13 @@
+{
+	"name": "buildkit",
+	"type": "bridge",
+	"bridge": "buildkit0",
+	"isDefaultGateway": true,
+	"forceAddress": false,
+	"ipMasq": true,
+	"hairpinMode": true,
+	"ipam": {
+		"type": "host-local",
+		"subnet": "10.10.0.0/16"
+	}
+}

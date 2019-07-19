@@ -23,6 +23,7 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/source"
+	"github.com/moby/buildkit/util/network"
 	"github.com/moby/buildkit/worker/base"
 	"github.com/stretchr/testify/require"
 )
@@ -39,7 +40,7 @@ func newWorkerOpt(t *testing.T, processMode oci.ProcessMode) (base.WorkerOpt, fu
 		},
 	}
 	rootless := false
-	workerOpt, err := NewWorkerOpt(tmpdir, snFactory, rootless, processMode, nil, nil, nil)
+	workerOpt, err := NewWorkerOpt(tmpdir, snFactory, rootless, processMode, nil, nil, network.Opt{Mode: "host"}, nil)
 	require.NoError(t, err)
 
 	return workerOpt, cleanup

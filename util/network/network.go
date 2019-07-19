@@ -2,19 +2,53 @@ package network
 
 import (
 	"io"
+	"os"
 
 	"github.com/moby/buildkit/solver/pb"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
-// Default returns the default network provider set
-func Default() map[pb.NetMode]Provider {
+type Opt struct {
+	Root          string
+	Mode          string
+	CNIConfigPath string
+	CNIBinaryDir  string
+}
+
+// Providers returns the network provider set
+func Providers(opt Opt) (map[pb.NetMode]Provider, error) {
+	var defaultProvider Provider
+	switch opt.Mode {
+	case "cni":
+		cniProvider, err := NewCNIProvider(opt)
+		if err != nil {
+			return nil, err
+		}
+		defaultProvider = cniProvider
+	case "host":
+		defaultProvider = NewHostProvider()
+	case "auto", "":
+		if _, err := os.Stat(opt.CNIConfigPath); err == nil {
+			cniProvider, err := NewCNIProvider(opt)
+			if err != nil {
+				return nil, err
+			}
+			defaultProvider = cniProvider
+		} else {
+			logrus.Warnf("using host network as the default")
+			defaultProvider = NewHostProvider()
+		}
+	default:
+		return nil, errors.Errorf("invalid network mode: %q", opt.Mode)
+	}
+
 	return map[pb.NetMode]Provider{
-		// FIXME: still uses host if no provider configured
-		pb.NetMode_UNSET: NewHostProvider(),
+		pb.NetMode_UNSET: defaultProvider,
 		pb.NetMode_HOST:  NewHostProvider(),
 		pb.NetMode_NONE:  NewNoneProvider(),
-	}
+	}, nil
 }
 
 // Provider interface for Network

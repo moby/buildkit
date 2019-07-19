@@ -350,6 +350,19 @@ func defaultConf() (config.Config, *toml.MetaData, error) {
 	return cfg, md, nil
 }
 
+func setDefaultNetworkConfig(nc config.NetworkConfig) config.NetworkConfig {
+	if nc.Mode == "" {
+		nc.Mode = "auto"
+	}
+	if nc.CNIConfigPath == "" {
+		nc.CNIConfigPath = "/etc/buildkit/cni.json"
+	}
+	if nc.CNIBinaryPath == "" {
+		nc.CNIBinaryPath = "/opt/cni/bin"
+	}
+	return nc
+}
+
 func setDefaultConfig(cfg *config.Config) {
 	orig := *cfg
 
@@ -367,6 +380,9 @@ func setDefaultConfig(cfg *config.Config) {
 	if cfg.Workers.Containerd.Platforms == nil {
 		cfg.Workers.Containerd.Platforms = binfmt_misc.SupportedPlatforms()
 	}
+
+	cfg.Workers.OCI.NetworkConfig = setDefaultNetworkConfig(cfg.Workers.OCI.NetworkConfig)
+	cfg.Workers.Containerd.NetworkConfig = setDefaultNetworkConfig(cfg.Workers.Containerd.NetworkConfig)
 
 	if system.RunningInUserNS() {
 		// if buildkitd is being executed as the mapped-root (not only EUID==0 but also $USER==root)

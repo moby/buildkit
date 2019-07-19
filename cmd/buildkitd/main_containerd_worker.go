@@ -10,6 +10,7 @@ import (
 
 	ctd "github.com/containerd/containerd"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
+	"github.com/moby/buildkit/util/network"
 	"github.com/moby/buildkit/worker"
 	"github.com/moby/buildkit/worker/base"
 	"github.com/moby/buildkit/worker/containerd"
@@ -68,6 +69,21 @@ func init() {
 			Usage:  "override containerd namespace",
 			Value:  defaultConf.Workers.Containerd.Namespace,
 			Hidden: true,
+		},
+		cli.StringFlag{
+			Name:  "containerd-worker-net",
+			Usage: "worker network type (auto, cni or host)",
+			Value: defaultConf.Workers.Containerd.NetworkConfig.Mode,
+		},
+		cli.StringFlag{
+			Name:  "containerd-cni-config-path",
+			Usage: "path of cni config file",
+			Value: defaultConf.Workers.Containerd.NetworkConfig.CNIConfigPath,
+		},
+		cli.StringFlag{
+			Name:  "containerd-cni-binary-dir",
+			Usage: "path of cni binary files",
+			Value: defaultConf.Workers.Containerd.NetworkConfig.CNIBinaryPath,
 		},
 	}
 
@@ -158,6 +174,16 @@ func applyContainerdFlags(c *cli.Context, cfg *config.Config) error {
 		cfg.Workers.Containerd.GCKeepStorage = c.GlobalInt64("containerd-worker-gc-keepstorage") * 1e6
 	}
 
+	if c.GlobalIsSet("containerd-worker-net") {
+		cfg.Workers.Containerd.NetworkConfig.Mode = c.GlobalString("containerd-worker-net")
+	}
+	if c.GlobalIsSet("containerd-cni-config-path") {
+		cfg.Workers.Containerd.NetworkConfig.CNIConfigPath = c.GlobalString("containerd-cni-worker-path")
+	}
+	if c.GlobalIsSet("containerd-cni-binary-dir") {
+		cfg.Workers.Containerd.NetworkConfig.CNIBinaryPath = c.GlobalString("containerd-cni-binary-dir")
+	}
+
 	return nil
 }
 
@@ -174,7 +200,14 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 
 	dns := getDNSConfig(common.config.DNS)
 
-	opt, err := containerd.NewWorkerOpt(common.config.Root, cfg.Address, ctd.DefaultSnapshotter, cfg.Namespace, cfg.Labels, dns, ctd.WithTimeout(60*time.Second))
+	nc := network.Opt{
+		Root:          common.config.Root,
+		Mode:          common.config.Workers.Containerd.NetworkConfig.Mode,
+		CNIConfigPath: common.config.Workers.Containerd.CNIConfigPath,
+		CNIBinaryDir:  common.config.Workers.Containerd.CNIBinaryPath,
+	}
+
+	opt, err := containerd.NewWorkerOpt(common.config.Root, cfg.Address, ctd.DefaultSnapshotter, cfg.Namespace, cfg.Labels, dns, nc, ctd.WithTimeout(60*time.Second))
 	if err != nil {
 		return nil, err
 	}

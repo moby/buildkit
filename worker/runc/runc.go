@@ -34,7 +34,7 @@ type SnapshotterFactory struct {
 }
 
 // NewWorkerOpt creates a WorkerOpt.
-func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, processMode oci.ProcessMode, labels map[string]string, idmap *idtools.IdentityMapping, dns *oci.DNSConfig) (base.WorkerOpt, error) {
+func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, processMode oci.ProcessMode, labels map[string]string, idmap *idtools.IdentityMapping, nopt network.Opt, dns *oci.DNSConfig) (base.WorkerOpt, error) {
 	var opt base.WorkerOpt
 	name := "runc-" + snFactory.Name
 	root = filepath.Join(root, name)
@@ -45,6 +45,12 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 	if err != nil {
 		return opt, err
 	}
+
+	np, err := network.Providers(nopt)
+	if err != nil {
+		return opt, err
+	}
+
 	exe, err := runcexecutor.New(runcexecutor.Opt{
 		// Root directory
 		Root: filepath.Join(root, "executor"),
@@ -53,7 +59,7 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		ProcessMode:     processMode,
 		IdentityMapping: idmap,
 		DNS:             dns,
-	}, network.Default())
+	}, np)
 	if err != nil {
 		return opt, err
 	}

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -154,6 +155,7 @@ disabled_plugins = ["cri"]
 
 	buildkitdSock, stop, err := runBuildkitd(buildkitdArgs, logs, 0, 0)
 	if err != nil {
+		printLogs(logs, log.Println)
 		return nil, nil, err
 	}
 	deferF.append(stop)
