@@ -6,13 +6,17 @@ import (
 	"sync"
 	"time"
 
+	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/filters"
-	"github.com/containerd/containerd/snapshots"
+	"github.com/containerd/containerd/gc"
+	"github.com/containerd/containerd/leases"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/snapshot"
+	"github.com/opencontainers/go-digest"
+	imagespaceidentity "github.com/opencontainers/image-spec/identity"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
@@ -27,13 +31,17 @@ var (
 type ManagerOpt struct {
 	Snapshotter     snapshot.SnapshotterBase
 	MetadataStore   *metadata.Store
+	ContentStore    content.Store
+	LeaseManager    leases.Manager
 	PruneRefChecker ExternalRefCheckerFunc
+	GarbageCollect  func(ctx context.Context) (gc.Stats, error)
 }
 
 type Accessor interface {
+	GetByBlob(ctx context.Context, diffID, blobID digest.Digest, parent ImmutableRef, opts ...RefOption) (ImmutableRef, error)
 	Get(ctx context.Context, id string, opts ...RefOption) (ImmutableRef, error)
-	GetFromSnapshotter(ctx context.Context, id string, opts ...RefOption) (ImmutableRef, error)
-	New(ctx context.Context, s ImmutableRef, opts ...RefOption) (MutableRef, error)
+
+	New(ctx context.Context, parent ImmutableRef, opts ...RefOption) (MutableRef, error)
 	GetMutable(ctx context.Context, id string) (MutableRef, error) // Rebase?
 	IdentityMapping() *idtools.IdentityMapping
 	Metadata(string) *metadata.StorageItem
@@ -81,6 +89,137 @@ func NewManager(opt ManagerOpt) (Manager, error) {
 	return cm, nil
 }
 
+func (cm *cacheManager) GetByBlob(ctx context.Context, diffID, blobID digest.Digest, parent ImmutableRef, opts ...RefOption) (ir ImmutableRef, err error) {
+	chainID := diffID
+	blobChainID := imagespaceidentity.ChainID([]digest.Digest{blobID, diffID})
+
+	if _, err := cm.ContentStore.Info(ctx, blobID); err != nil {
+		return nil, errors.Wrapf(err, "failed to get blob %s", blobID)
+	}
+
+	var p *immutableRef
+	var parentID string
+	if parent != nil {
+		pInfo := parent.Info()
+		if pInfo.ChainID == "" || pInfo.BlobChainID == "" {
+			return nil, errors.Errorf("failed to get ref by blob on non-adressable parent")
+		}
+		chainID = imagespaceidentity.ChainID([]digest.Digest{pInfo.ChainID, chainID})
+		blobChainID = imagespaceidentity.ChainID([]digest.Digest{pInfo.BlobChainID, blobChainID})
+		p = parent.(*immutableRef)
+		parentID = p.ID()
+	}
+
+	defer func() {
+		if err != nil && p != nil {
+			p.Release(context.TODO())
+		}
+	}()
+
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	sis, err := cm.MetadataStore.Search("blobchainid:" + blobChainID.String())
+	if err != nil {
+		return nil, err
+	}
+
+	for _, si := range sis {
+		ref, err := cm.get(ctx, si.ID(), opts...)
+		if err != nil && errors.Cause(err) != errNotFound {
+			return nil, errors.Wrapf(err, "failed to get record %s by blobchainid", si.ID())
+		}
+		return ref, nil
+	}
+
+	sis, err = cm.MetadataStore.Search("chainid:" + chainID.String())
+	if err != nil {
+		return nil, err
+	}
+
+	var link ImmutableRef
+	for _, si := range sis {
+		ref, err := cm.get(ctx, si.ID(), opts...)
+		if err != nil && errors.Cause(err) != errNotFound {
+			return nil, errors.Wrapf(err, "failed to get record %s by chainid", si.ID())
+		}
+		link = ref
+		break
+	}
+
+	id := identity.NewID()
+	snapshotID := chainID.String()
+	blobOnly := true
+	if link != nil {
+		snapshotID = getSnapshotID(link.Metadata())
+		blobOnly = getBlobOnly(link.Metadata())
+	}
+
+	l, err := cm.ManagerOpt.LeaseManager.Create(ctx, func(l *leases.Lease) error {
+		l.ID = id
+		l.Labels = map[string]string{
+			"containerd.io/gc.flat": time.Now().UTC().Format(time.RFC3339Nano),
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create lease")
+	}
+
+	defer func() {
+		if err != nil {
+			if err := cm.ManagerOpt.LeaseManager.Delete(context.TODO(), leases.Lease{
+				ID: l.ID,
+			}); err != nil {
+				logrus.Errorf("failed to remove lease: %+v", err)
+			}
+		}
+	}()
+
+	if err := cm.ManagerOpt.LeaseManager.AddResource(ctx, l, leases.Resource{
+		ID:   id,
+		Type: "snapshots/" + snapshotID,
+	}); err != nil {
+		return nil, errors.Wrapf(err, "failed to add snapshot %s to lease", id)
+	}
+
+	if err := cm.ManagerOpt.LeaseManager.AddResource(ctx, leases.Lease{ID: id}, leases.Resource{
+		ID:   blobID.String(),
+		Type: "content",
+	}); err != nil {
+		return nil, errors.Wrapf(err, "failed to add blob %s to lease", id)
+	}
+
+	md, _ := cm.md.Get(id)
+
+	rec := &cacheRecord{
+		mu:     &sync.Mutex{},
+		cm:     cm,
+		refs:   make(map[ref]struct{}),
+		parent: p,
+		md:     md,
+	}
+
+	if err := initializeMetadata(rec, parentID, opts...); err != nil {
+		return nil, err
+	}
+
+	queueDiffID(rec.md, diffID.String())
+	queueBlob(rec.md, blobID.String())
+	queueChainID(rec.md, chainID.String())
+	queueBlobChainID(rec.md, blobChainID.String())
+	queueSnapshotID(rec.md, snapshotID)
+	queueBlobOnly(rec.md, blobOnly)
+
+	if err := rec.md.Commit(); err != nil {
+		return nil, err
+	}
+
+	cm.records[id] = rec
+
+	return rec.ref(true), nil
+}
+
 // init loads all snapshots from metadata state and tries to load the records
 // from the snapshotter. If snaphot can't be found, metadata is deleted as well.
 func (cm *cacheManager) init(ctx context.Context) error {
@@ -90,7 +229,7 @@ func (cm *cacheManager) init(ctx context.Context) error {
 	}
 
 	for _, si := range items {
-		if _, err := cm.getRecord(ctx, si.ID(), false); err != nil {
+		if _, err := cm.getRecord(ctx, si.ID()); err != nil {
 			logrus.Debugf("could not load snapshot %s: %v", si.ID(), err)
 			cm.md.Clear(si.ID())
 			// TODO: make sure content is deleted as well
@@ -115,15 +254,15 @@ func (cm *cacheManager) Close() error {
 func (cm *cacheManager) Get(ctx context.Context, id string, opts ...RefOption) (ImmutableRef, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
-	return cm.get(ctx, id, false, opts...)
+	return cm.get(ctx, id, opts...)
 }
 
 // Get returns an immutable snapshot reference for ID
-func (cm *cacheManager) GetFromSnapshotter(ctx context.Context, id string, opts ...RefOption) (ImmutableRef, error) {
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
-	return cm.get(ctx, id, true, opts...)
-}
+// func (cm *cacheManager) GetFromSnapshotter(ctx context.Context, id string, opts ...RefOption) (ImmutableRef, error) {
+//   cm.mu.Lock()
+//   defer cm.mu.Unlock()
+//   return cm.get(ctx, id, opts...)
+// }
 
 func (cm *cacheManager) Metadata(id string) *metadata.StorageItem {
 	cm.mu.Lock()
@@ -136,8 +275,8 @@ func (cm *cacheManager) Metadata(id string) *metadata.StorageItem {
 }
 
 // get requires manager lock to be taken
-func (cm *cacheManager) get(ctx context.Context, id string, fromSnapshotter bool, opts ...RefOption) (*immutableRef, error) {
-	rec, err := cm.getRecord(ctx, id, fromSnapshotter, opts...)
+func (cm *cacheManager) get(ctx context.Context, id string, opts ...RefOption) (*immutableRef, error) {
+	rec, err := cm.getRecord(ctx, id, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +304,7 @@ func (cm *cacheManager) get(ctx context.Context, id string, fromSnapshotter bool
 }
 
 // getRecord returns record for id. Requires manager lock.
-func (cm *cacheManager) getRecord(ctx context.Context, id string, fromSnapshotter bool, opts ...RefOption) (cr *cacheRecord, retErr error) {
+func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOption) (cr *cacheRecord, retErr error) {
 	if rec, ok := cm.records[id]; ok {
 		if rec.isDead() {
 			return nil, errors.Wrapf(errNotFound, "failed to get dead record %s", id)
@@ -174,11 +313,11 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, fromSnapshotte
 	}
 
 	md, ok := cm.md.Get(id)
-	if !ok && !fromSnapshotter {
-		return nil, errors.WithStack(errNotFound)
+	if !ok {
+		return nil, errors.Wrapf(errNotFound, "%s not found", id)
 	}
 	if mutableID := getEqualMutable(md); mutableID != "" {
-		mutable, err := cm.getRecord(ctx, mutableID, fromSnapshotter)
+		mutable, err := cm.getRecord(ctx, mutableID)
 		if err != nil {
 			// check loading mutable deleted record from disk
 			if errors.Cause(err) == errNotFound {
@@ -206,7 +345,7 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, fromSnapshotte
 
 	var parent *immutableRef
 	if info.Parent != "" {
-		parent, err = cm.get(ctx, info.Parent, fromSnapshotter, append(opts, NoUpdateLastUsed)...)
+		parent, err = cm.get(ctx, info.Parent, append(opts, NoUpdateLastUsed)...)
 		if err != nil {
 			return nil, err
 		}
@@ -221,7 +360,7 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, fromSnapshotte
 
 	rec := &cacheRecord{
 		mu:      &sync.Mutex{},
-		mutable: info.Kind != snapshots.KindCommitted,
+		mutable: !getCommitted(md),
 		cm:      cm,
 		refs:    make(map[ref]struct{}),
 		parent:  parent,
@@ -236,7 +375,7 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, fromSnapshotte
 		return nil, errors.Wrapf(errNotFound, "failed to get deleted record %s", id)
 	}
 
-	if err := initializeMetadata(rec, opts...); err != nil {
+	if err := initializeMetadata(rec, getParent(md), opts...); err != nil {
 		return nil, err
 	}
 
@@ -244,7 +383,7 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, fromSnapshotte
 	return rec, nil
 }
 
-func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, opts ...RefOption) (MutableRef, error) {
+func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, opts ...RefOption) (mr MutableRef, err error) {
 	id := identity.NewID()
 
 	var parent *immutableRef
@@ -261,11 +400,41 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, opts ...RefOpti
 		parent = p.(*immutableRef)
 	}
 
-	if err := cm.Snapshotter.Prepare(ctx, id, parentID); err != nil {
-		if parent != nil {
+	defer func() {
+		if err != nil && parent != nil {
 			parent.Release(context.TODO())
 		}
+	}()
+
+	if err := cm.Snapshotter.Prepare(ctx, id, parentID); err != nil {
 		return nil, errors.Wrapf(err, "failed to prepare %s", id)
+	}
+	l, err := cm.ManagerOpt.LeaseManager.Create(ctx, func(l *leases.Lease) error {
+		l.ID = id
+		l.Labels = map[string]string{
+			"containerd.io/gc.flat": time.Now().UTC().Format(time.RFC3339Nano),
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create lease")
+	}
+
+	defer func() {
+		if err != nil {
+			if err := cm.ManagerOpt.LeaseManager.Delete(context.TODO(), leases.Lease{
+				ID: l.ID,
+			}); err != nil {
+				logrus.Errorf("failed to remove lease: %+v", err)
+			}
+		}
+	}()
+
+	if err := cm.ManagerOpt.LeaseManager.AddResource(ctx, l, leases.Resource{
+		ID:   id,
+		Type: "snapshots/" + cm.ManagerOpt.Snapshotter.Name(),
+	}); err != nil {
+		return nil, errors.Wrapf(err, "failed to add snapshot %s to lease", id)
 	}
 
 	md, _ := cm.md.Get(id)
@@ -279,10 +448,7 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, opts ...RefOpti
 		md:      md,
 	}
 
-	if err := initializeMetadata(rec, opts...); err != nil {
-		if parent != nil {
-			parent.Release(context.TODO())
-		}
+	if err := initializeMetadata(rec, parentID, opts...); err != nil {
 		return nil, err
 	}
 
@@ -297,7 +463,7 @@ func (cm *cacheManager) GetMutable(ctx context.Context, id string) (MutableRef, 
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	rec, err := cm.getRecord(ctx, id, false)
+	rec, err := cm.getRecord(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -328,13 +494,20 @@ func (cm *cacheManager) GetMutable(ctx context.Context, id string) (MutableRef, 
 
 func (cm *cacheManager) Prune(ctx context.Context, ch chan client.UsageInfo, opts ...client.PruneInfo) error {
 	cm.muPrune.Lock()
-	defer cm.muPrune.Unlock()
 
 	for _, opt := range opts {
 		if err := cm.pruneOnce(ctx, ch, opt); err != nil {
+			cm.muPrune.Unlock()
 			return err
 		}
 	}
+
+	cm.muPrune.Unlock()
+
+	if _, err := cm.ManagerOpt.GarbageCollect(ctx); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -769,10 +942,14 @@ func WithCreationTime(tm time.Time) RefOption {
 	}
 }
 
-func initializeMetadata(m withMetadata, opts ...RefOption) error {
+func initializeMetadata(m withMetadata, parent string, opts ...RefOption) error {
 	md := m.Metadata()
 	if tm := GetCreatedAt(md); !tm.IsZero() {
 		return nil
+	}
+
+	if err := queueParent(md, parent); err != nil {
+		return err
 	}
 
 	if err := queueCreatedAt(md, time.Now()); err != nil {

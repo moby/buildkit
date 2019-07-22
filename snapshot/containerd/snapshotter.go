@@ -2,7 +2,6 @@ package containerd
 
 import (
 	"context"
-	"time"
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/mount"
@@ -12,6 +11,7 @@ import (
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/snapshot/blobmapping"
+	"github.com/pkg/errors"
 )
 
 func NewSnapshotter(name string, snapshotter ctdsnapshot.Snapshotter, store content.Store, mdstore *metadata.Store, ns string, gc func(context.Context) error, idmap *idtools.IdentityMapping) snapshot.Snapshotter {
@@ -20,6 +20,10 @@ func NewSnapshotter(name string, snapshotter ctdsnapshot.Snapshotter, store cont
 		Snapshotter:   snapshot.FromContainerdSnapshotter(name, &nsSnapshotter{ns, snapshotter, gc}, idmap),
 		MetadataStore: mdstore,
 	})
+}
+
+func NSSnapshotter(ns string, snapshotter ctdsnapshot.Snapshotter) ctdsnapshot.Snapshotter {
+	return &nsSnapshotter{ns: ns, Snapshotter: snapshotter}
 }
 
 type nsSnapshotter struct {
@@ -31,14 +35,14 @@ type nsSnapshotter struct {
 func (s *nsSnapshotter) Stat(ctx context.Context, key string) (ctdsnapshot.Info, error) {
 	ctx = namespaces.WithNamespace(ctx, s.ns)
 	info, err := s.Snapshotter.Stat(ctx, key)
-	if err == nil {
+	/*	if err == nil {
 		if _, ok := info.Labels["labels.containerd.io/gc.root"]; !ok {
 			if err := addRootLabel()(&info); err != nil {
 				return info, err
 			}
 			return s.Update(ctx, info, "labels.containerd.io/gc.root")
 		}
-	}
+	}*/
 	return info, err
 }
 
@@ -68,6 +72,7 @@ func (s *nsSnapshotter) Commit(ctx context.Context, name, key string, opts ...ct
 	return s.Snapshotter.Commit(ctx, name, key, addRootLabel(opts...))
 }
 func (s *nsSnapshotter) Remove(ctx context.Context, key string) error {
+	return errors.Errorf("remove should not be called directly")
 	ctx = namespaces.WithNamespace(ctx, s.ns)
 	if _, err := s.Update(ctx, ctdsnapshot.Info{
 		Name: key,
@@ -91,10 +96,10 @@ func addRootLabel(opts ...ctdsnapshot.Opt) ctdsnapshot.Opt {
 				return err
 			}
 		}
-		if info.Labels == nil {
-			info.Labels = map[string]string{}
-		}
-		info.Labels["containerd.io/gc.root"] = time.Now().UTC().Format(time.RFC3339Nano)
+		// if info.Labels == nil {
+		// 	info.Labels = map[string]string{}
+		// }
+		// info.Labels["containerd.io/gc.root"] = time.Now().UTC().Format(time.RFC3339Nano)
 		return nil
 	}
 }

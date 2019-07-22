@@ -4,13 +4,17 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/mount"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/util/flightcontrol"
+	"github.com/opencontainers/go-digest"
+	imagespaceidentity "github.com/opencontainers/image-spec/identity"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -30,6 +34,19 @@ type ImmutableRef interface {
 	Parent() ImmutableRef
 	Finalize(ctx context.Context, commit bool) error // Make sure reference is flushed to driver
 	Clone() ImmutableRef
+
+	Info() RefInfo
+	SetBlob(ctx context.Context, diffID, blob digest.Digest) error
+	Extract(ctx context.Context) error // +progress
+}
+
+type RefInfo struct {
+	SnapshotID  string
+	ChainID     digest.Digest
+	BlobChainID digest.Digest
+	DiffID      digest.Digest
+	Blob        digest.Digest
+	Extracted   bool
 }
 
 type MutableRef interface {
@@ -99,9 +116,9 @@ func (cr *cacheRecord) Size(ctx context.Context) (int64, error) {
 			cr.mu.Unlock()
 			return s, nil
 		}
-		driverID := cr.ID()
+		driverID := getSnapshotID(cr.md)
 		if cr.equalMutable != nil {
-			driverID = cr.equalMutable.ID()
+			driverID = getSnapshotID(cr.equalMutable.md)
 		}
 		cr.mu.Unlock()
 		usage, err := cr.cm.ManagerOpt.Snapshotter.Usage(ctx, driverID)
@@ -148,7 +165,7 @@ func (cr *cacheRecord) Mount(ctx context.Context, readonly bool) (snapshot.Mount
 	defer cr.mu.Unlock()
 
 	if cr.mutable {
-		m, err := cr.cm.Snapshotter.Mounts(ctx, cr.ID())
+		m, err := cr.cm.Snapshotter.Mounts(ctx, getSnapshotID(cr.md))
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to mount %s", cr.ID())
 		}
@@ -159,7 +176,7 @@ func (cr *cacheRecord) Mount(ctx context.Context, readonly bool) (snapshot.Mount
 	}
 
 	if cr.equalMutable != nil && readonly {
-		m, err := cr.cm.Snapshotter.Mounts(ctx, cr.equalMutable.ID())
+		m, err := cr.cm.Snapshotter.Mounts(ctx, getSnapshotID(cr.equalMutable.md))
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to mount %s", cr.equalMutable.ID())
 		}
@@ -171,7 +188,7 @@ func (cr *cacheRecord) Mount(ctx context.Context, readonly bool) (snapshot.Mount
 	}
 	if cr.viewMount == nil { // TODO: handle this better
 		cr.view = identity.NewID()
-		m, err := cr.cm.Snapshotter.View(ctx, cr.view, cr.ID())
+		m, err := cr.cm.Snapshotter.View(ctx, cr.view, getSnapshotID(cr.md))
 		if err != nil {
 			cr.view = ""
 			return nil, errors.Wrapf(err, "failed to mount %s", cr.ID())
@@ -190,7 +207,7 @@ func (cr *cacheRecord) remove(ctx context.Context, removeSnapshot bool) error {
 		}
 	}
 	if removeSnapshot {
-		if err := cr.cm.Snapshotter.Remove(ctx, cr.ID()); err != nil {
+		if err := cr.cm.LeaseManager.Delete(ctx, leases.Lease{ID: cr.ID()}); err != nil { // TODO: handle cancellation, async
 			return errors.Wrapf(err, "failed to remove %s", cr.ID())
 		}
 	}
@@ -219,6 +236,75 @@ func (sr *immutableRef) Clone() ImmutableRef {
 	ref := sr.ref(false)
 	sr.mu.Unlock()
 	return ref
+}
+
+func (sr *immutableRef) Extract(ctx context.Context) error {
+	return errors.Errorf("extract not implemented")
+}
+
+func (sr *immutableRef) Info() RefInfo {
+	return RefInfo{
+		ChainID:     digest.Digest(getChainID(sr.md)),
+		DiffID:      digest.Digest(getDiffID(sr.md)),
+		Blob:        digest.Digest(getBlob(sr.md)),
+		BlobChainID: digest.Digest(getBlobChainID(sr.md)),
+		SnapshotID:  getSnapshotID(sr.md),
+		Extracted:   !getBlobOnly(sr.md),
+	}
+}
+
+// SetBlob associates a blob with the cache record.
+// A lease must be held for the blob when calling this function
+// Caller should call Info() for knowing what current values are actually set
+func (sr *immutableRef) SetBlob(ctx context.Context, diffID, blob digest.Digest) error {
+	if _, err := sr.cm.ContentStore.Info(ctx, blob); err != nil {
+		return err
+	}
+
+	sr.mu.Lock()
+	defer sr.mu.Unlock()
+
+	if getChainID(sr.md) != "" {
+		return nil
+	}
+
+	if err := sr.finalize(ctx, true); err != nil {
+		return err
+	}
+
+	p := sr.parent
+	var parentChainID digest.Digest
+	var parentBlobChainID digest.Digest
+	if p != nil {
+		pInfo := p.Info()
+		if pInfo.ChainID == "" || pInfo.BlobChainID == "" {
+			return errors.Errorf("failed to set blob for reference with non-addressable parent")
+		}
+		parentChainID = pInfo.ChainID
+		parentBlobChainID = pInfo.BlobChainID
+	}
+
+	if err := sr.cm.LeaseManager.AddResource(ctx, leases.Lease{ID: sr.ID()}, leases.Resource{
+		ID:   blob.String(),
+		Type: "content",
+	}); err != nil {
+		return err
+	}
+
+	queueDiffID(sr.md, diffID.String())
+	queueBlob(sr.md, blob.String())
+	chainID := diffID
+	blobChainID := imagespaceidentity.ChainID([]digest.Digest{blob, diffID})
+	if parentChainID != "" {
+		chainID = imagespaceidentity.ChainID([]digest.Digest{parentChainID, chainID})
+		blobChainID = imagespaceidentity.ChainID([]digest.Digest{parentBlobChainID, blobChainID})
+	}
+	queueChainID(sr.md, chainID.String())
+	queueBlobChainID(sr.md, blobChainID.String())
+	if err := sr.md.Commit(); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (sr *immutableRef) Release(ctx context.Context) error {
@@ -306,10 +392,30 @@ func (cr *cacheRecord) finalize(ctx context.Context, commit bool) error {
 	go func() {
 		cr.cm.mu.Lock()
 		defer cr.cm.mu.Unlock()
-		if err := mutable.remove(context.TODO(), false); err != nil {
+		if err := mutable.remove(context.TODO(), true); err != nil {
 			logrus.Error(err)
 		}
 	}()
+
+	// TODO: rollback
+	l, err := cr.cm.ManagerOpt.LeaseManager.Create(ctx, func(l *leases.Lease) error {
+		l.ID = cr.ID()
+		l.Labels = map[string]string{
+			"containerd.io/gc.flat": time.Now().UTC().Format(time.RFC3339Nano),
+		}
+		return nil
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to create lease")
+	}
+
+	if err := cr.cm.ManagerOpt.LeaseManager.AddResource(ctx, l, leases.Resource{
+		ID:   cr.ID(),
+		Type: "snapshots/" + cr.cm.ManagerOpt.Snapshotter.Name(),
+	}); err != nil {
+		return errors.Wrapf(err, "failed to add snapshot %s to lease", cr.ID())
+	}
+
 	cr.equalMutable = nil
 	clearEqualMutable(cr.md)
 	return cr.md.Commit()
@@ -341,7 +447,11 @@ func (sr *mutableRef) commit(ctx context.Context) (*immutableRef, error) {
 		}
 	}
 
-	if err := initializeMetadata(rec); err != nil {
+	parentID := ""
+	if rec.parent != nil {
+		parentID = rec.parent.ID()
+	}
+	if err := initializeMetadata(rec, parentID); err != nil {
 		return nil, err
 	}
 
@@ -351,6 +461,7 @@ func (sr *mutableRef) commit(ctx context.Context) (*immutableRef, error) {
 		return nil, err
 	}
 
+	queueCommitted(md)
 	setSize(md, sizeUnknown)
 	setEqualMutable(md, sr.ID())
 	if err := md.Commit(); err != nil {
