@@ -1720,8 +1720,8 @@ The following `ARG` variables are set automatically:
 * `TARGETVARIANT` - variant component of TARGETPLATFORM
 * `BUILDPLATFORM` - platform of the node performing the build.
 * `BUILDOS` - OS component of BUILDPLATFORM
-* `BUILDARCH` - OS component of BUILDPLATFORM
-* `BUILDVARIANT` - OS component of BUILDPLATFORM
+* `BUILDARCH` - architecture component of BUILDPLATFORM
+* `BUILDVARIANT` - variant component of BUILDPLATFORM
 
 These arguments are defined in the global scope so are not automatically
 available inside build stages or for your `RUN` commands. To expose one of
