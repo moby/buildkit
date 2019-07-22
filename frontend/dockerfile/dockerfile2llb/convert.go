@@ -647,6 +647,11 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 	}
 	opt = append(opt, runMounts...)
 
+	err = dispatchRunSecurity(d, c)
+	if err != nil {
+		return err
+	}
+
 	shlex := *dopt.shlex
 	shlex.RawQuotes = true
 	shlex.SkipUnsetEnv = true

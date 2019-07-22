@@ -110,6 +110,8 @@ var fileOpTests = []integration.Test{
 	testWorkdirUser,
 }
 
+var securityTests = []integration.Test{}
+
 var opts []integration.TestOpt
 
 type frontend interface {
@@ -151,6 +153,11 @@ func TestIntegration(t *testing.T) {
 		"true":  true,
 		"false": false,
 	}))...)
+	integration.Run(t, securityTests, append(opts,
+		integration.WithMatrix("secmode", map[string]interface{}{
+			"sandbox":  securitySandbox,
+			"insecure": securityInsecure,
+		}))...)
 }
 
 func testDefaultEnvWithArgs(t *testing.T, sb integration.Sandbox) {
@@ -160,7 +167,7 @@ func testDefaultEnvWithArgs(t *testing.T, sb integration.Sandbox) {
 FROM busybox AS build
 ARG my_arg
 ENV my_arg "${my_arg:-def_val}"
-COPY myscript.sh myscript.sh 
+COPY myscript.sh myscript.sh
 RUN ./myscript.sh
 FROM scratch
 COPY --from=build /out /out
@@ -2921,7 +2928,7 @@ func testDockerfileFromGit(t *testing.T, sb integration.Sandbox) {
 
 	dockerfile := `
 FROM busybox AS build
-RUN echo -n fromgit > foo	
+RUN echo -n fromgit > foo
 FROM scratch
 COPY --from=build foo bar
 `
@@ -4174,3 +4181,18 @@ type nopWriteCloser struct {
 }
 
 func (nopWriteCloser) Close() error { return nil }
+
+type secModeSandbox struct{}
+
+func (*secModeSandbox) UpdateConfigFile(in string) string {
+	return in
+}
+
+type secModeInsecure struct{}
+
+func (*secModeInsecure) UpdateConfigFile(in string) string {
+	return in + "\n\ninsecure-entitlements = [\"security.insecure\"]\n"
+}
+
+var securitySandbox integration.ConfigUpdater = &secModeSandbox{}
+var securityInsecure integration.ConfigUpdater = &secModeInsecure{}
