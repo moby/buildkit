@@ -654,7 +654,7 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 		opt = append(opt, llb.AddExtraHost(h.Host, h.IP))
 	}
 	d.state = d.state.Run(opt...).Root()
-	return commitToHistory(&d.image, "RUN "+runCommandString(args, d.buildArgs), true, &d.state)
+	return commitToHistory(&d.image, "RUN "+runCommandString(args, d.buildArgs, shell.BuildEnvs(env)), true, &d.state)
 }
 
 func dispatchWorkdir(d *dispatchState, c *instructions.WorkdirCommand, commit bool, opt *dispatchOpt) error {
@@ -1081,10 +1081,14 @@ func dfCmd(cmd interface{}) llb.ConstraintsOpt {
 	})
 }
 
-func runCommandString(args []string, buildArgs []instructions.KeyValuePairOptional) string {
+func runCommandString(args []string, buildArgs []instructions.KeyValuePairOptional, envMap map[string]string) string {
 	var tmpBuildEnv []string
 	for _, arg := range buildArgs {
-		tmpBuildEnv = append(tmpBuildEnv, arg.Key+"="+arg.ValueString())
+		v, ok := envMap[arg.Key]
+		if !ok {
+			v = arg.ValueString()
+		}
+		tmpBuildEnv = append(tmpBuildEnv, arg.Key+"="+v)
 	}
 	if len(tmpBuildEnv) > 0 {
 		tmpBuildEnv = append([]string{fmt.Sprintf("|%d", len(tmpBuildEnv))}, tmpBuildEnv...)
