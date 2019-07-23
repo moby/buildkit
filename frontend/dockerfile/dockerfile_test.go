@@ -166,16 +166,16 @@ func testDefaultEnvWithArgs(t *testing.T, sb integration.Sandbox) {
 	dockerfile := []byte(`
 FROM busybox AS build
 ARG my_arg
-ENV my_arg "${my_arg:-def_val}"
+ENV my_arg "my_arg=${my_arg:-def_val}"
 COPY myscript.sh myscript.sh
-RUN ./myscript.sh
+RUN ./myscript.sh $my_arg
 FROM scratch
 COPY --from=build /out /out
 `)
 
 	script := []byte(`
 #!/usr/bin/env sh
-echo -n $my_arg > /out
+echo -n $my_arg $1 > /out
 `)
 
 	dir, err := tmpdir(
@@ -193,23 +193,36 @@ echo -n $my_arg > /out
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
-		Exports: []client.ExportEntry{
-			{
-				Type:      client.ExporterLocal,
-				OutputDir: destDir,
-			},
-		},
-		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
-		},
-	}, nil)
-	require.NoError(t, err)
+	for _, x := range []struct {
+		name          string
+		frontendAttrs map[string]string
+		expected      string
+	}{
+		{"nil", nil, "my_arg=def_val my_arg=def_val"},
+		{"empty", map[string]string{"build-arg:my_arg": ""}, "my_arg=def_val my_arg=def_val"},
+		{"override", map[string]string{"build-arg:my_arg": "override"}, "my_arg=override my_arg=override"},
+	} {
+		t.Run(x.name, func(t *testing.T) {
+			_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+				FrontendAttrs: x.frontendAttrs,
+				Exports: []client.ExportEntry{
+					{
+						Type:      client.ExporterLocal,
+						OutputDir: destDir,
+					},
+				},
+				LocalDirs: map[string]string{
+					builder.DefaultLocalNameDockerfile: dir,
+					builder.DefaultLocalNameContext:    dir,
+				},
+			}, nil)
+			require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "out"))
-	require.NoError(t, err)
-	require.Equal(t, "def_val", string(dt))
+			dt, err := ioutil.ReadFile(filepath.Join(destDir, "out"))
+			require.NoError(t, err)
+			require.Equal(t, x.expected, string(dt))
+		})
+	}
 }
 
 func testEnvEmptyFormatting(t *testing.T, sb integration.Sandbox) {

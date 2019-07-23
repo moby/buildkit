@@ -4,9 +4,25 @@ import (
 	"testing"
 
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
+	"github.com/moby/buildkit/frontend/dockerfile/shell"
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/stretchr/testify/assert"
 )
+
+func toEnvMap(args []instructions.KeyValuePairOptional, env []string) map[string]string {
+	m := shell.BuildEnvs(env)
+
+	for _, arg := range args {
+		// If key already exists, keep previous value.
+		if _, ok := m[arg.Key]; ok {
+			continue
+		}
+		if arg.Value != nil {
+			m[arg.Key] = arg.ValueString()
+		}
+	}
+	return m
+}
 
 func TestDockerfileParsing(t *testing.T) {
 	t.Parallel()
@@ -142,7 +158,7 @@ func TestToEnvList(t *testing.T) {
 	args = []instructions.KeyValuePairOptional{{Key: "key2", Value: &v}}
 	env = []string{"key1=val1", "key1=val1_2"}
 	resutl = toEnvMap(args, env)
-	assert.Equal(t, map[string]string{"key1": "val1", "key2": "val2"}, resutl)
+	assert.Equal(t, map[string]string{"key1": "val1_2", "key2": "val2"}, resutl)
 
 	// args has duplicated keys
 	v1 := "v1"
