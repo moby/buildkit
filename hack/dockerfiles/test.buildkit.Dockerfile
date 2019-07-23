@@ -19,7 +19,7 @@ RUN apk add --no-cache git
 FROM --platform=$BUILDPLATFORM tonistiigi/xx:golang@sha256:6f7d999551dd471b58f70716754290495690efa8421e0a1fcf18eb11d0c0a537 AS xgo
 
 # gobuild is base stage for compiling go/cgo
-FROM --platform=$BUILDPLATFORM golang:1.12 AS gobuild-minimal
+FROM --platform=$BUILDPLATFORM golang:1.12-buster AS gobuild-minimal
 COPY --from=xgo / /
 RUN apt-get update && apt-get install --no-install-recommends -y libseccomp-dev file
 
@@ -132,7 +132,7 @@ WORKDIR /usr/src
 RUN git clone https://github.com/containerd/containerd.git containerd
 
 FROM gobuild-base AS containerd-base
-RUN apt-get install -y --no-install-recommends btrfs-tools btrfs-progs
+RUN apt-get install -y --no-install-recommends btrfs-progs libbtrfs-dev
 WORKDIR /go/src/github.com/containerd/containerd
 
 FROM containerd-base AS containerd
@@ -214,7 +214,8 @@ RUN apt-get install -y --no-install-recommends uidmap sudo vim iptables \
   && useradd --create-home --home-dir /home/user --uid 1000 -s /bin/sh user \
   && echo "XDG_RUNTIME_DIR=/run/user/1000; export XDG_RUNTIME_DIR" >> /home/user/.profile \
   && mkdir -m 0700 -p /run/user/1000 \
-  && chown -R user /run/user/1000 /home/user
+  && chown -R user /run/user/1000 /home/user \
+  && update-alternatives --set iptables /usr/sbin/iptables-legacy
   # musl is needed to directly use the registry binary that is built on alpine
 ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.0=/opt/containerd-1.0/bin"
 COPY --from=rootlesskit /rootlesskit /usr/bin/
