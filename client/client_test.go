@@ -99,6 +99,7 @@ func TestClientIntegration(t *testing.T) {
 		testBasicInlineCacheImportExport,
 		testExportBusyboxLocal,
 		testBridgeNetworking,
+		testCacheMountNoCache,
 	}, mirrors)
 
 	integration.Run(t, []integration.Test{
@@ -1983,6 +1984,44 @@ func testDuplicateCacheMount(t *testing.T, sb integration.Sandbox) {
 	out.AddMount("/m2", llb.Scratch(), llb.AsPersistentCacheDir("mycache1", llb.CacheMountLocked))
 
 	def, err := out.Marshal()
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	require.NoError(t, err)
+}
+
+func testCacheMountNoCache(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("busybox:latest")
+
+	out := busybox.Run(llb.Shlex(`sh -e -c "touch /m1/foo; touch /m2/bar"`))
+	out.AddMount("/m1", llb.Scratch(), llb.AsPersistentCacheDir("mycache1", llb.CacheMountLocked))
+	out.AddMount("/m2", llb.Scratch(), llb.AsPersistentCacheDir("mycache2", llb.CacheMountLocked))
+
+	def, err := out.Marshal()
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	require.NoError(t, err)
+
+	out = busybox.Run(llb.Shlex(`sh -e -c "[[ ! -f /m1/foo ]]; touch /m1/foo2;"`), llb.IgnoreCache)
+	out.AddMount("/m1", llb.Scratch(), llb.AsPersistentCacheDir("mycache1", llb.CacheMountLocked))
+
+	def, err = out.Marshal()
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	require.NoError(t, err)
+
+	out = busybox.Run(llb.Shlex(`sh -e -c "[[ -f /m1/foo2 ]]; [[ -f /m2/bar ]];"`))
+	out.AddMount("/m1", llb.Scratch(), llb.AsPersistentCacheDir("mycache1", llb.CacheMountLocked))
+	out.AddMount("/m2", llb.Scratch(), llb.AsPersistentCacheDir("mycache2", llb.CacheMountLocked))
+
+	def, err = out.Marshal()
 	require.NoError(t, err)
 
 	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
