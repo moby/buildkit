@@ -176,6 +176,14 @@ func parseMount(value string) (*Mount, error) {
 			}
 			m.ReadOnly = !rw
 			roAuto = false
+		case "required":
+			if m.Type == "secret" || m.Type == "ssh" {
+				v, err := strconv.ParseBool(value)
+				if err != nil {
+					return nil, errors.Errorf("invalid value for %s: %s", key, value)
+				}
+				m.Required = v
+			}
 		case "id":
 			m.CacheID = value
 		case "sharing":
