@@ -21,6 +21,7 @@ var mountTests = []integration.Test{
 	testMountContext,
 	testMountTmpfs,
 	testMountRWCache,
+	testCacheMountDefaultID,
 }
 
 func init() {
@@ -186,6 +187,35 @@ RUN --mount=type=cache,target=/mycache,uid=1001,gid=1002,mode=0751 [ "$(stat -c 
 		FrontendAttrs: map[string]string{
 			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
 		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+}
+
+func testCacheMountDefaultID(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM busybox
+RUN --mount=type=cache,target=/mycache touch /mycache/foo
+RUN --mount=type=cache,target=/mycache2 [ ! -f /mycache2/foo ]
+RUN --mount=type=cache,target=/mycache [ -f /mycache/foo ]
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
