@@ -124,6 +124,9 @@ func dispatchRunMounts(d *dispatchState, c *instructions.RunCommand, sources []*
 			if mount.CacheSharing == instructions.MountSharingLocked {
 				sharing = llb.CacheMountLocked
 			}
+			if mount.CacheID == "" {
+				mount.CacheID = path.Clean(mount.Target)
+			}
 			mountOpts = append(mountOpts, llb.AsPersistentCacheDir(opt.cacheIDNamespace+"/"+mount.CacheID, sharing))
 		}
 		target := mount.Target
