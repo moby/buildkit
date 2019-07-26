@@ -108,6 +108,7 @@ var fileOpTests = []integration.Test{
 	testTarContext,
 	testTarContextExternalDockerfile,
 	testWorkdirUser,
+	testWorkdirExists,
 }
 
 var securityTests = []integration.Test{}
@@ -779,6 +780,40 @@ func testWorkdirUser(t *testing.T, sb integration.Sandbox) {
 FROM busybox
 RUN adduser -D user
 USER user
+WORKDIR /mydir
+RUN [ "$(stat -c "%U %G" /mydir)" == "user user" ]
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+}
+
+func testWorkdirExists(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+	isFileOp := getFileOp(t, sb)
+
+	dockerfile := []byte(`
+FROM busybox
+RUN adduser -D user
+RUN mkdir /mydir && chown user:user /mydir
 WORKDIR /mydir
 RUN [ "$(stat -c "%U %G" /mydir)" == "user user" ]
 `)

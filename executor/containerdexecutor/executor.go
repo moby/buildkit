@@ -99,9 +99,11 @@ func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root c
 			lm.Unmount()
 			return errors.Wrapf(err, "working dir %s points to invalid target", newp)
 		}
-		if err := idtools.MkdirAllAndChown(newp, 0755, identity); err != nil {
-			lm.Unmount()
-			return errors.Wrapf(err, "failed to create working directory %s", newp)
+		if _, err := os.Stat(newp); err != nil {
+			if err := idtools.MkdirAllAndChown(newp, 0755, identity); err != nil {
+				lm.Unmount()
+				return errors.Wrapf(err, "failed to create working directory %s", newp)
+			}
 		}
 
 		lm.Unmount()
