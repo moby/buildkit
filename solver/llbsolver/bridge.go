@@ -105,7 +105,7 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (res *
 				ids = append(ids, id)
 			}
 			if err := b.eachWorker(func(w worker.Worker) error {
-				return w.PruneCacheMounts(ids)
+				return w.PruneCacheMounts(ctx, ids)
 			}); err != nil {
 				return nil, err
 			}

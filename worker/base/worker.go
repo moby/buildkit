@@ -219,7 +219,7 @@ func (w *Worker) ResolveOp(v solver.Vertex, s frontend.FrontendLLBBridge, sm *se
 	return nil, errors.Errorf("could not resolve %v", v)
 }
 
-func (w *Worker) PruneCacheMounts(ids []string) error {
+func (w *Worker) PruneCacheMounts(ctx context.Context, ids []string) error {
 	mu := ops.CacheMountsLocker()
 	mu.Lock()
 	defer mu.Unlock()
@@ -233,6 +233,9 @@ func (w *Worker) PruneCacheMounts(ids []string) error {
 		for _, si := range sis {
 			for _, k := range si.Indexes() {
 				if k == id || strings.HasPrefix(k, id+":") {
+					if siCached := w.CacheManager.Metadata(si.ID()); siCached != nil {
+						si = siCached
+					}
 					if err := cache.CachePolicyDefault(si); err != nil {
 						return err
 					}
@@ -241,6 +244,10 @@ func (w *Worker) PruneCacheMounts(ids []string) error {
 					})
 					if err := si.Commit(); err != nil {
 						return err
+					}
+					// if ref is unused try to clean it up right away by releasing it
+					if mref, err := w.CacheManager.GetMutable(ctx, si.ID()); err == nil {
+						go mref.Release(context.TODO())
 					}
 					break
 				}
