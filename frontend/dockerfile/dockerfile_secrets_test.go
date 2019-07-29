@@ -29,7 +29,7 @@ func testSecretFileParams(t *testing.T, sb integration.Sandbox) {
 
 	dockerfile := []byte(`
 FROM busybox
-RUN --mount=type=secret,mode=741,uid=100,gid=102,target=/mysecret [ "$(stat -c "%u %g %f" /mysecret)" = "100 102 81e1" ]
+RUN --mount=type=secret,required=false,mode=741,uid=100,gid=102,target=/mysecret [ "$(stat -c "%u %g %f" /mysecret)" = "100 102 81e1" ]
 `)
 
 	dir, err := tmpdir(
