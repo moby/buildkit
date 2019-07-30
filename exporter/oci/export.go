@@ -19,6 +19,8 @@ import (
 	"github.com/moby/buildkit/util/progress"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type ExporterVariant string
@@ -135,6 +137,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 	desc.Annotations[ocispec.AnnotationCreated] = time.Now().UTC().Format(time.RFC3339)
 
 	resp := make(map[string]string)
+	resp["containerimage.digest"] = desc.Digest.String()
 
 	if n, ok := src.Metadata["image.name"]; e.name == "*" && ok {
 		e.name = string(n)
@@ -154,16 +157,23 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 		return nil, err
 	}
 
-	w, err := filesync.CopyFileWriter(ctx, e.caller)
+	w, err := filesync.CopyFileWriter(ctx, resp, e.caller)
 	if err != nil {
 		return nil, err
 	}
 	report := oneOffProgress(ctx, "sending tarball")
 	if err := exp.Export(ctx, e.opt.ImageWriter.ContentStore(), *desc, w); err != nil {
 		w.Close()
+		if st, ok := status.FromError(errors.Cause(err)); ok && st.Code() == codes.AlreadyExists {
+			return resp, report(nil)
+		}
 		return nil, report(err)
 	}
-	return resp, report(w.Close())
+	err = w.Close()
+	if st, ok := status.FromError(errors.Cause(err)); ok && st.Code() == codes.AlreadyExists {
+		return resp, report(nil)
+	}
+	return resp, report(err)
 }
 
 func oneOffProgress(ctx context.Context, id string) func(err error) error {

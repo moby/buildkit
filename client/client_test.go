@@ -740,7 +740,7 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 					case ExporterDocker:
 						outW, err := os.Create(out)
 						require.NoError(t, err)
-						so.Exports[0].Output = outW
+						so.Exports[0].Output = fixedWriteCloser(outW)
 					case ExporterImage:
 						imageName = registry + "/" + imageName
 						so.Exports[0].Attrs["push"] = "true"
@@ -1304,7 +1304,7 @@ func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 				{
 					Type:   exp,
 					Attrs:  attrs,
-					Output: outW,
+					Output: fixedWriteCloser(outW),
 				},
 			},
 		}, nil)
@@ -1388,7 +1388,7 @@ func testFrontendMetadataReturn(t *testing.T, sb integration.Sandbox) {
 			{
 				Type:   ExporterOCI,
 				Attrs:  map[string]string{},
-				Output: nopWriteCloser{ioutil.Discard},
+				Output: fixedWriteCloser(nopWriteCloser{ioutil.Discard}),
 			},
 		},
 	}, "", frontend, nil)
@@ -2060,7 +2060,7 @@ func testDuplicateWhiteouts(t *testing.T, sb integration.Sandbox) {
 		Exports: []ExportEntry{
 			{
 				Type:   ExporterOCI,
-				Output: outW,
+				Output: fixedWriteCloser(outW),
 			},
 		},
 	}, nil)
@@ -2130,7 +2130,7 @@ func testWhiteoutParentDir(t *testing.T, sb integration.Sandbox) {
 		Exports: []ExportEntry{
 			{
 				Type:   ExporterOCI,
-				Output: outW,
+				Output: fixedWriteCloser(outW),
 			},
 		},
 	}, nil)
@@ -2465,7 +2465,7 @@ func testInvalidExporter(t *testing.T, sb integration.Sandbox) {
 			{
 				Type:   ExporterLocal,
 				Attrs:  attrs,
-				Output: f,
+				Output: fixedWriteCloser(f),
 			},
 		},
 	}, nil)
@@ -2611,3 +2611,9 @@ func (*netModeDefault) UpdateConfigFile(in string) string {
 
 var hostNetwork integration.ConfigUpdater = &netModeHost{}
 var defaultNetwork integration.ConfigUpdater = &netModeDefault{}
+
+func fixedWriteCloser(wc io.WriteCloser) func(map[string]string) (io.WriteCloser, error) {
+	return func(map[string]string) (io.WriteCloser, error) {
+		return wc, nil
+	}
+}

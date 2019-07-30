@@ -385,7 +385,7 @@ FROM stage-$TARGETOS
 		Exports: []client.ExportEntry{
 			{
 				Type:   client.ExporterTar,
-				Output: &nopWriteCloser{buf},
+				Output: fixedWriteCloser(&nopWriteCloser{buf}),
 			},
 		},
 		LocalDirs: map[string]string{
@@ -408,7 +408,7 @@ FROM stage-$TARGETOS
 		Exports: []client.ExportEntry{
 			{
 				Type:   client.ExporterTar,
-				Output: &nopWriteCloser{buf},
+				Output: fixedWriteCloser(&nopWriteCloser{buf}),
 			},
 		},
 		FrontendAttrs: map[string]string{
@@ -1129,7 +1129,7 @@ COPY arch-$TARGETARCH whoami
 		Exports: []client.ExportEntry{
 			{
 				Type:   client.ExporterOCI,
-				Output: outW,
+				Output: fixedWriteCloser(outW),
 			},
 		},
 	}, nil)
@@ -4244,3 +4244,9 @@ func (*secModeInsecure) UpdateConfigFile(in string) string {
 
 var securitySandbox integration.ConfigUpdater = &secModeSandbox{}
 var securityInsecure integration.ConfigUpdater = &secModeInsecure{}
+
+func fixedWriteCloser(wc io.WriteCloser) func(map[string]string) (io.WriteCloser, error) {
+	return func(map[string]string) (io.WriteCloser, error) {
+		return wc, nil
+	}
+}

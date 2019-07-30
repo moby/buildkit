@@ -88,7 +88,12 @@ func ParseLegacyExporter(legacyExporter string, legacyExporterOpts []string) ([]
 }
 
 // resolveExporterDest returns at most either one of io.WriteCloser (single file) or a string (directory path).
-func resolveExporterDest(exporter, dest string) (io.WriteCloser, string, error) {
+func resolveExporterDest(exporter, dest string) (func(map[string]string) (io.WriteCloser, error), string, error) {
+	wrapWriter := func(wc io.WriteCloser) func(map[string]string) (io.WriteCloser, error) {
+		return func(m map[string]string) (io.WriteCloser, error) {
+			return wc, nil
+		}
+	}
 	switch exporter {
 	case client.ExporterLocal:
 		if dest == "" {
@@ -105,13 +110,13 @@ func resolveExporterDest(exporter, dest string) (io.WriteCloser, string, error) 
 				return nil, "", errors.Errorf("destination file is a directory")
 			}
 			w, err := os.Create(dest)
-			return w, "", err
+			return wrapWriter(w), "", err
 		}
 		// if no output file is specified, use stdout
 		if _, err := console.ConsoleFromFile(os.Stdout); err == nil {
 			return nil, "", errors.Errorf("output file is required for %s exporter. refusing to write to console", exporter)
 		}
-		return os.Stdout, "", nil
+		return wrapWriter(os.Stdout), "", nil
 	default: // e.g. client.ExporterImage
 		if dest != "" {
 			return nil, "", errors.Errorf("output %s is not supported by %s exporter", dest, exporter)
