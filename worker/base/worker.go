@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/containerd/containerd/content"
@@ -51,6 +52,7 @@ import (
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	bolt "go.etcd.io/bbolt"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -215,6 +217,46 @@ func (w *Worker) ResolveOp(v solver.Vertex, s frontend.FrontendLLBBridge, sm *se
 		}
 	}
 	return nil, errors.Errorf("could not resolve %v", v)
+}
+
+func (w *Worker) PruneCacheMounts(ctx context.Context, ids []string) error {
+	mu := ops.CacheMountsLocker()
+	mu.Lock()
+	defer mu.Unlock()
+
+	for _, id := range ids {
+		id = "cache-dir:" + id
+		sis, err := w.MetadataStore.Search(id)
+		if err != nil {
+			return err
+		}
+		for _, si := range sis {
+			for _, k := range si.Indexes() {
+				if k == id || strings.HasPrefix(k, id+":") {
+					if siCached := w.CacheManager.Metadata(si.ID()); siCached != nil {
+						si = siCached
+					}
+					if err := cache.CachePolicyDefault(si); err != nil {
+						return err
+					}
+					si.Queue(func(b *bolt.Bucket) error {
+						return si.SetValue(b, k, nil)
+					})
+					if err := si.Commit(); err != nil {
+						return err
+					}
+					// if ref is unused try to clean it up right away by releasing it
+					if mref, err := w.CacheManager.GetMutable(ctx, si.ID()); err == nil {
+						go mref.Release(context.TODO())
+					}
+					break
+				}
+			}
+		}
+	}
+
+	ops.ClearActiveCacheMounts()
+	return nil
 }
 
 func (w *Worker) ResolveImageConfig(ctx context.Context, ref string, opt gw.ResolveImageConfigOpt, sm *session.Manager) (digest.Digest, []byte, error) {
