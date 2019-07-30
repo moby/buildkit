@@ -16,7 +16,7 @@ case $buildmode in
     --opt filename=./hack/dockerfiles/vendor.buildkit.Dockerfile \
     --output type=local,dest=$output
   rm -rf ./vendor
-  cp -R "$output/out/" .
+  cp -R "$output"/out/* .
   rm -rf $output
   ;;
 *)
