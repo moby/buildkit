@@ -100,6 +100,7 @@ func TestClientIntegration(t *testing.T) {
 		testExportBusyboxLocal,
 		testBridgeNetworking,
 		testCacheMountNoCache,
+		testExporterTargetExists,
 	}, mirrors)
 
 	integration.Run(t, []integration.Test{
@@ -1398,6 +1399,36 @@ func testFrontendMetadataReturn(t *testing.T, sb integration.Sandbox) {
 	require.NotContains(t, res.ExporterResponse, "not-frontend.not-returned")
 	require.NotContains(t, res.ExporterResponse, "frontendnot.returned.either")
 	checkAllReleasable(t, c, sb, true)
+}
+
+func testExporterTargetExists(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Image("busybox:latest")
+	def, err := st.Marshal()
+	require.NoError(t, err)
+
+	var mdDgst string
+	res, err := c.Solve(context.TODO(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:  ExporterOCI,
+				Attrs: map[string]string{},
+				Output: func(m map[string]string) (io.WriteCloser, error) {
+					mdDgst = m["containerimage.digest"]
+					return nil, nil
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+	dgst := res.ExporterResponse["containerimage.digest"]
+
+	require.True(t, strings.HasPrefix(dgst, "sha256:"))
+	require.Equal(t, dgst, mdDgst)
 }
 
 func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
