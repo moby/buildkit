@@ -175,8 +175,8 @@ github.com/gogo/protobuf/protoc-gen-gogo/descriptor
 # github.com/golang/protobuf v1.2.0
 github.com/golang/protobuf/ptypes/timestamp
 github.com/golang/protobuf/proto
-github.com/golang/protobuf/ptypes/any
 github.com/golang/protobuf/ptypes
+github.com/golang/protobuf/ptypes/any
 github.com/golang/protobuf/ptypes/duration
 # github.com/google/go-cmp v0.2.0
 github.com/google/go-cmp/cmp
@@ -296,10 +296,10 @@ google.golang.org/genproto/googleapis/rpc/status
 google.golang.org/grpc
 google.golang.org/grpc/credentials
 google.golang.org/grpc/metadata
+google.golang.org/grpc/codes
+google.golang.org/grpc/status
 google.golang.org/grpc/health
 google.golang.org/grpc/health/grpc_health_v1
-google.golang.org/grpc/status
-google.golang.org/grpc/codes
 google.golang.org/grpc/balancer
 google.golang.org/grpc/balancer/roundrobin
 google.golang.org/grpc/connectivity

@@ -100,6 +100,7 @@ func TestClientIntegration(t *testing.T) {
 		testExportBusyboxLocal,
 		testBridgeNetworking,
 		testCacheMountNoCache,
+		testExporterTargetExists,
 	}, mirrors)
 
 	integration.Run(t, []integration.Test{
@@ -740,7 +741,7 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 					case ExporterDocker:
 						outW, err := os.Create(out)
 						require.NoError(t, err)
-						so.Exports[0].Output = outW
+						so.Exports[0].Output = fixedWriteCloser(outW)
 					case ExporterImage:
 						imageName = registry + "/" + imageName
 						so.Exports[0].Attrs["push"] = "true"
@@ -1304,7 +1305,7 @@ func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 				{
 					Type:   exp,
 					Attrs:  attrs,
-					Output: outW,
+					Output: fixedWriteCloser(outW),
 				},
 			},
 		}, nil)
@@ -1388,7 +1389,7 @@ func testFrontendMetadataReturn(t *testing.T, sb integration.Sandbox) {
 			{
 				Type:   ExporterOCI,
 				Attrs:  map[string]string{},
-				Output: nopWriteCloser{ioutil.Discard},
+				Output: fixedWriteCloser(nopWriteCloser{ioutil.Discard}),
 			},
 		},
 	}, "", frontend, nil)
@@ -1398,6 +1399,36 @@ func testFrontendMetadataReturn(t *testing.T, sb integration.Sandbox) {
 	require.NotContains(t, res.ExporterResponse, "not-frontend.not-returned")
 	require.NotContains(t, res.ExporterResponse, "frontendnot.returned.either")
 	checkAllReleasable(t, c, sb, true)
+}
+
+func testExporterTargetExists(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Image("busybox:latest")
+	def, err := st.Marshal()
+	require.NoError(t, err)
+
+	var mdDgst string
+	res, err := c.Solve(context.TODO(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:  ExporterOCI,
+				Attrs: map[string]string{},
+				Output: func(m map[string]string) (io.WriteCloser, error) {
+					mdDgst = m["containerimage.digest"]
+					return nil, nil
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+	dgst := res.ExporterResponse["containerimage.digest"]
+
+	require.True(t, strings.HasPrefix(dgst, "sha256:"))
+	require.Equal(t, dgst, mdDgst)
 }
 
 func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
@@ -2060,7 +2091,7 @@ func testDuplicateWhiteouts(t *testing.T, sb integration.Sandbox) {
 		Exports: []ExportEntry{
 			{
 				Type:   ExporterOCI,
-				Output: outW,
+				Output: fixedWriteCloser(outW),
 			},
 		},
 	}, nil)
@@ -2130,7 +2161,7 @@ func testWhiteoutParentDir(t *testing.T, sb integration.Sandbox) {
 		Exports: []ExportEntry{
 			{
 				Type:   ExporterOCI,
-				Output: outW,
+				Output: fixedWriteCloser(outW),
 			},
 		},
 	}, nil)
@@ -2465,7 +2496,7 @@ func testInvalidExporter(t *testing.T, sb integration.Sandbox) {
 			{
 				Type:   ExporterLocal,
 				Attrs:  attrs,
-				Output: f,
+				Output: fixedWriteCloser(f),
 			},
 		},
 	}, nil)
@@ -2611,3 +2642,9 @@ func (*netModeDefault) UpdateConfigFile(in string) string {
 
 var hostNetwork integration.ConfigUpdater = &netModeHost{}
 var defaultNetwork integration.ConfigUpdater = &netModeDefault{}
+
+func fixedWriteCloser(wc io.WriteCloser) func(map[string]string) (io.WriteCloser, error) {
+	return func(map[string]string) (io.WriteCloser, error) {
+		return wc, nil
+	}
+}
