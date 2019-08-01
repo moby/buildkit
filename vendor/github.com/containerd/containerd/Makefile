@@ -17,7 +17,7 @@
 ROOTDIR=$(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
 # Base path used to install.
-DESTDIR=/usr/local
+DESTDIR ?= /usr/local
 
 # Used to populate variables in version package.
 VERSION=$(shell git describe --match 'v[0-9]*' --dirty='.m' --always)
@@ -111,7 +111,7 @@ GO_GCFLAGS=$(shell				\
 BINARIES=$(addprefix bin/,$(COMMANDS))
 
 # Flags passed to `go test`
-TESTFLAGS ?= -v $(TESTFLAGS_RACE)
+TESTFLAGS ?= $(TESTFLAGS_RACE)
 TESTFLAGS_PARALLEL ?= 8
 
 .PHONY: clean all AUTHORS build binaries test integration generate protos checkprotos coverage ci check help install uninstall vendor release mandir install-man
@@ -121,7 +121,7 @@ all: binaries
 
 check: proto-fmt ## run all linters
 	@echo "$(WHALE) $@"
-	gometalinter --config .gometalinter.json ./...
+	golangci-lint run
 
 ci: check binaries checkprotos coverage coverage-integration ## to be used by the CI
 
@@ -226,6 +226,7 @@ release: $(BINARIES)
 	@install -d releases/$(RELEASE)/bin
 	@install $(BINARIES) releases/$(RELEASE)/bin
 	@cd releases/$(RELEASE) && tar -czf ../$(RELEASE).tar.gz *
+	@cd releases && sha256sum $(RELEASE).tar.gz >$(RELEASE).tar.gz.sha256sum
 
 clean: ## clean up binaries
 	@echo "$(WHALE) $@"

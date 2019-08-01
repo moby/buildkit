@@ -1,7 +1,8 @@
 # github.com/BurntSushi/toml v0.3.1
 github.com/BurntSushi/toml
-# github.com/Microsoft/go-winio v0.4.13-0.20190408173621-84b4ab48a507
+# github.com/Microsoft/go-winio v0.4.13-0.20190628181719-7cdfd71a950d
 github.com/Microsoft/go-winio
+github.com/Microsoft/go-winio/pkg/guid
 # github.com/Microsoft/hcsshim v0.8.5
 github.com/Microsoft/hcsshim
 github.com/Microsoft/hcsshim/internal/guid
@@ -22,9 +23,11 @@ github.com/Microsoft/hcsshim/internal/safefile
 github.com/apache/thrift/lib/go/thrift
 # github.com/codahale/hdrhistogram v0.0.0-20160425231609-f8ad88b59a58
 github.com/codahale/hdrhistogram
+# github.com/containerd/cgroups v0.0.0-20190717030353-c4b9ac5c7601
+github.com/containerd/cgroups
 # github.com/containerd/console v0.0.0-20181022165439-0650fd9eeb50
 github.com/containerd/console
-# github.com/containerd/containerd v1.3.0-0.20190507210959-7c1e88399ec0
+# github.com/containerd/containerd v1.3.0-beta.0
 github.com/containerd/containerd/filters
 github.com/containerd/containerd/mount
 github.com/containerd/containerd/snapshots
@@ -48,14 +51,13 @@ github.com/containerd/containerd/namespaces
 github.com/containerd/containerd/errdefs
 github.com/containerd/containerd/leases
 github.com/containerd/containerd/rootfs
-github.com/containerd/containerd/images/oci
+github.com/containerd/containerd/images/archive
 github.com/containerd/containerd/api/services/content/v1
 github.com/containerd/containerd/content/proxy
 github.com/containerd/containerd/services/content/contentserver
 github.com/containerd/containerd/reference
 github.com/containerd/containerd/metadata
 github.com/containerd/containerd/remotes/docker/schema1
-github.com/containerd/containerd/images/archive
 github.com/containerd/containerd/archive
 github.com/containerd/containerd/archive/compression
 github.com/containerd/containerd/log
@@ -92,9 +94,9 @@ github.com/containerd/containerd/events/exchange
 github.com/containerd/continuity/sysx
 github.com/containerd/continuity/fs
 github.com/containerd/continuity/syscallx
-github.com/containerd/continuity
 github.com/containerd/continuity/fs/fstest
 github.com/containerd/continuity/pathdriver
+github.com/containerd/continuity
 github.com/containerd/continuity/devices
 github.com/containerd/continuity/driver
 github.com/containerd/continuity/proto
@@ -102,9 +104,9 @@ github.com/containerd/continuity/proto
 github.com/containerd/fifo
 # github.com/containerd/go-cni v0.0.0-20190610170741-5a4663dad645
 github.com/containerd/go-cni
-# github.com/containerd/go-runc v0.0.0-20180907222934-5a6d9f37cfa3
+# github.com/containerd/go-runc v0.0.0-20190603165425-9007c2405372
 github.com/containerd/go-runc
-# github.com/containerd/ttrpc v0.0.0-20190411181408-699c4e40d1e7
+# github.com/containerd/ttrpc v0.0.0-20190613183316-1fb3814edf44
 github.com/containerd/ttrpc
 # github.com/containerd/typeurl v0.0.0-20180627222232-a93fcdb778cd
 github.com/containerd/typeurl
@@ -115,8 +117,9 @@ github.com/containernetworking/cni/pkg/types/current
 github.com/containernetworking/cni/pkg/invoke
 github.com/containernetworking/cni/pkg/version
 github.com/containernetworking/cni/pkg/types/020
-# github.com/coreos/go-systemd v0.0.0-20190321100706-95778dfbb74e
+# github.com/coreos/go-systemd v0.0.0-20190620071333-e64a0ec8b42a
 github.com/coreos/go-systemd/daemon
+github.com/coreos/go-systemd/dbus
 # github.com/davecgh/go-spew v1.1.1
 github.com/davecgh/go-spew/spew
 # github.com/docker/cli v0.0.0-20190321234815-f40f9c240ab0
@@ -162,6 +165,8 @@ github.com/docker/go-units
 github.com/docker/libnetwork/resolvconf
 github.com/docker/libnetwork/types
 github.com/docker/libnetwork/resolvconf/dns
+# github.com/godbus/dbus v0.0.0-20181101234600-2ff6f7ffd60f
+github.com/godbus/dbus
 # github.com/gofrs/flock v0.7.0
 github.com/gofrs/flock
 # github.com/gogo/googleapis v1.1.0
@@ -178,9 +183,10 @@ github.com/golang/protobuf/proto
 github.com/golang/protobuf/ptypes
 github.com/golang/protobuf/ptypes/any
 github.com/golang/protobuf/ptypes/duration
-# github.com/google/go-cmp v0.2.0
+# github.com/google/go-cmp v0.3.0
 github.com/google/go-cmp/cmp
 github.com/google/go-cmp/cmp/internal/diff
+github.com/google/go-cmp/cmp/internal/flags
 github.com/google/go-cmp/cmp/internal/function
 github.com/google/go-cmp/cmp/internal/value
 # github.com/google/shlex v0.0.0-20150127133951-6f45313302b9
@@ -207,7 +213,7 @@ github.com/opencontainers/go-digest
 github.com/opencontainers/image-spec/specs-go/v1
 github.com/opencontainers/image-spec/specs-go
 github.com/opencontainers/image-spec/identity
-# github.com/opencontainers/runc v1.0.0-rc8
+# github.com/opencontainers/runc v1.0.0-rc6
 github.com/opencontainers/runc/libcontainer/system
 github.com/opencontainers/runc/libcontainer/user
 # github.com/opencontainers/runtime-spec v0.0.0-20180909173843-eba862dc2470
@@ -226,7 +232,7 @@ github.com/pkg/profile
 github.com/pmezard/go-difflib/difflib
 # github.com/serialx/hashring v0.0.0-20190422032157-8b2912629002
 github.com/serialx/hashring
-# github.com/sirupsen/logrus v1.3.0
+# github.com/sirupsen/logrus v1.4.1
 github.com/sirupsen/logrus
 # github.com/stretchr/testify v1.3.0
 github.com/stretchr/testify/require
@@ -253,19 +259,18 @@ github.com/uber/jaeger-client-go/thrift-gen/agent
 github.com/uber/jaeger-lib/metrics
 # github.com/urfave/cli v0.0.0-20171014202726-7bc6a0acffa5
 github.com/urfave/cli
-# go.etcd.io/bbolt v1.3.2
+# go.etcd.io/bbolt v1.3.3-0.20190528202153-2eb7227adea1
 go.etcd.io/bbolt
 # golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2
 golang.org/x/crypto/ssh
 golang.org/x/crypto/ssh/agent
-golang.org/x/crypto/ssh/terminal
 golang.org/x/crypto/curve25519
 golang.org/x/crypto/ed25519
 golang.org/x/crypto/internal/chacha20
 golang.org/x/crypto/poly1305
 golang.org/x/crypto/ed25519/internal/edwards25519
 golang.org/x/crypto/internal/subtle
-# golang.org/x/net v0.0.0-20190311183353-d8887717615a
+# golang.org/x/net v0.0.0-20190522155817-f3200d17e092
 golang.org/x/net/context
 golang.org/x/net/trace
 golang.org/x/net/http2
@@ -276,10 +281,10 @@ golang.org/x/net/http/httpguts
 golang.org/x/net/http2/hpack
 golang.org/x/net/idna
 golang.org/x/net/internal/socks
-# golang.org/x/sync v0.0.0-20180314180146-1d60e4601c6f
+# golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4
 golang.org/x/sync/errgroup
 golang.org/x/sync/semaphore
-# golang.org/x/sys v0.0.0-20190303122642-d455e41777fc
+# golang.org/x/sys v0.0.0-20190602015325-4c4f7f33c9ed
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 golang.org/x/sys/cpu

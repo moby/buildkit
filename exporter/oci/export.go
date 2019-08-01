@@ -6,15 +6,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/containerd/containerd/images"
-	"github.com/containerd/containerd/images/oci"
+	archiveexporter "github.com/containerd/containerd/images/archive"
 	"github.com/containerd/containerd/leases"
 	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/filesync"
-	"github.com/moby/buildkit/util/dockerexporter"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/progress"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -152,9 +150,18 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 		resp["image.name"] = strings.Join(names, ",")
 	}
 
-	exp, err := getExporter(e.opt.Variant, names)
-	if err != nil {
-		return nil, err
+	expOpts := []archiveexporter.ExportOpt{}
+	if len(names) > 0 {
+		expOpts = append(expOpts, archiveexporter.WithNamedManifest(*desc, names...))
+	} else {
+		expOpts = append(expOpts, archiveexporter.WithManifest(*desc))
+	}
+	switch e.opt.Variant {
+	case VariantOCI:
+		expOpts = append(expOpts, archiveexporter.WithAllPlatforms(), archiveexporter.WithSkipDockerManifest())
+	case VariantDocker:
+	default:
+		return nil, errors.Errorf("invalid variant %q", e.opt.Variant)
 	}
 
 	w, err := filesync.CopyFileWriter(ctx, resp, e.caller)
@@ -162,7 +169,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 		return nil, err
 	}
 	report := oneOffProgress(ctx, "sending tarball")
-	if err := exp.Export(ctx, e.opt.ImageWriter.ContentStore(), *desc, w); err != nil {
+	if err := archiveexporter.Export(ctx, e.opt.ImageWriter.ContentStore(), w, expOpts...); err != nil {
 		w.Close()
 		if st, ok := status.FromError(errors.Cause(err)); ok && st.Code() == codes.AlreadyExists {
 			return resp, report(nil)
@@ -190,20 +197,6 @@ func oneOffProgress(ctx context.Context, id string) func(err error) error {
 		pw.Write(id, st)
 		pw.Close()
 		return err
-	}
-}
-
-func getExporter(variant ExporterVariant, names []string) (images.Exporter, error) {
-	switch variant {
-	case VariantOCI:
-		if len(names) != 0 {
-			return nil, errors.New("oci exporter cannot export named image")
-		}
-		return oci.ResolveV1ExportOpt(oci.WithAllPlatforms(true))
-	case VariantDocker:
-		return &dockerexporter.DockerExporter{Names: names}, nil
-	default:
-		return nil, errors.Errorf("invalid variant %q", variant)
 	}
 }
 

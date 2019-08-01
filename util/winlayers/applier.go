@@ -37,9 +37,9 @@ type winApplier struct {
 	a  diff.Applier
 }
 
-func (s *winApplier) Apply(ctx context.Context, desc ocispec.Descriptor, mounts []mount.Mount) (d ocispec.Descriptor, err error) {
+func (s *winApplier) Apply(ctx context.Context, desc ocispec.Descriptor, mounts []mount.Mount, opts ...diff.ApplyOpt) (d ocispec.Descriptor, err error) {
 	if !hasWindowsLayerMode(ctx) {
-		return s.a.Apply(ctx, desc, mounts)
+		return s.a.Apply(ctx, desc, mounts, opts...)
 	}
 
 	isCompressed, err := images.IsCompressedDiff(ctx, desc.MediaType)

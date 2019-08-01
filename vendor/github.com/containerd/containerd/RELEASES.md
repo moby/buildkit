@@ -77,8 +77,8 @@ Support horizons will be defined corresponding to a release branch, identified
 by `<major>.<minor>`. Releases branches will be in one of several states:
 
 - __*Next*__: The next planned release branch.
-- __*Active*__: The release is currently supported and accepting patches.
-- __*Extended*__: The release is only accepting security patches.
+- __*Active*__: The release branch is currently supported and accepting patches.
+- __*Extended*__: The release branch is only accepting security patches.
 - __*End of Life*__: The release branch is no longer supported and no new patches will be accepted.
 
 Releases will be supported up to one year after a _minor_ release. This means that
@@ -97,7 +97,7 @@ The current state is available in the following table:
 | [0.1](https://github.com/containerd/containerd/releases/tag/v0.1.0) | End of Life | Mar 21, 2016 | - |
 | [0.2](https://github.com/containerd/containerd/tree/v0.2.x)         | End of Life | Apr 21, 2016      | December 5, 2017 |
 | [1.0](https://github.com/containerd/containerd/releases/tag/v1.0.3) | End of Life | December 5, 2017  | December 5, 2018 |
-| [1.1](https://github.com/containerd/containerd/releases/tag/v1.1.7) | Active   | April 23, 2018  | July 23, 2019 (Active), October 23, 2019 (Extended) |
+| [1.1](https://github.com/containerd/containerd/releases/tag/v1.1.7) | Extended   | April 23, 2018  | October 23, 2019 |
 | [1.2](https://github.com/containerd/containerd/releases/tag/v1.2.6) | Active   | October 24, 2018 | max(October 24, 2019, release of 1.3.0 + 6 months) |
 | [1.3](https://github.com/containerd/containerd/milestone/20)        | Next   | TBD  | max(TBD+1 year, release of 1.4.0 + 6 months) |
 
@@ -173,6 +173,7 @@ containerd versions:
 | GRPC API         | Stable   | 1.0                | [api/](api) |
 | Metrics API      | Stable   | 1.0                | - |
 | Runtime Shim API | Stable   | 1.2                | - |
+| Daemon Config    | Stable   | 1.0			       | - |
 | Go client API    | Unstable | _future_           | [godoc](https://godoc.org/github.com/containerd/containerd) |
 | CRI GRPC API     | Unstable | v1alpha2 _current_ | [api/](https://github.com/kubernetes/kubernetes/tree/master/pkg/kubelet/apis/cri/runtime/v1alpha2) |
 | `ctr` tool       | Unstable | Out of scope       | - |
@@ -197,6 +198,10 @@ enumerating the support services and messages. See [api/](api) for details.
 
 Note that new services may be added in _minor_ releases. New service methods
 and new fields on messages may be added if they are optional.
+
+`*.pb.txt` files are generated at each API release. They prevent unintentional changes
+to the API by having a diff that the CI can run. These files are not intended to be
+consumed or used by clients.
 
 ### Metrics API
 
@@ -270,6 +275,14 @@ API. At this time, it is not considered a primary offering of the project. It
 may be completely refactored or have breaking changes in _minor_ releases.
 
 We will try not break the tool in _patch_ releases.
+
+### Daemon Configuration
+
+The daemon's configuration file, commonly located in `/etc/containerd/config.toml`
+is versioned and backwards compatible.  The `version` field in the config
+file specifies the config's version.  If no version number is specified inside
+the config file then it is assumed to be a version 1 config and parsed as such.
+Use `version = 2` to enable version 2 config.
 
 ### Not Covered
 
