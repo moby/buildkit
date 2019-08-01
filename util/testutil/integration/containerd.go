@@ -21,7 +21,7 @@ func InitContainerdWorker() {
 		containerdShim: "containerd-shim",
 	})
 	// defined in hack/dockerfiles/test.Dockerfile.
-	// e.g. `containerd-1.0=/opt/containerd-1.0/bin,containerd-42.0=/opt/containerd-42.0/bin`
+	// e.g. `containerd-1.1=/opt/containerd-1.1/bin,containerd-42.0=/opt/containerd-42.0/bin`
 	if s := os.Getenv("BUILDKIT_INTEGRATION_CONTAINERD_EXTRA"); s != "" {
 		entries := strings.Split(s, ",")
 		for _, entry := range entries {
