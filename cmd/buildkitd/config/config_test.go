@@ -101,7 +101,7 @@ searchDomains=["example.com"]
 	require.Equal(t, 1, len(cfg.Workers.Containerd.GCPolicy[0].Filters))
 	require.Equal(t, 0, len(cfg.Workers.Containerd.GCPolicy[1].Filters))
 
-	require.Equal(t, cfg.Registries["docker.io"].PlainHTTP, true)
+	require.Equal(t, *cfg.Registries["docker.io"].PlainHTTP, true)
 	require.Equal(t, cfg.Registries["docker.io"].Mirrors[0], "hub.docker.io")
 
 	require.NotNil(t, cfg.DNS)
