@@ -28,7 +28,10 @@ import (
 
 // NewWorkerOpt creates a WorkerOpt.
 func NewWorkerOpt(root string, address, snapshotterName, ns string, labels map[string]string, dns *oci.DNSConfig, nopt network.Opt, opts ...containerd.ClientOpt) (base.WorkerOpt, error) {
-	opts = append(opts, containerd.WithDefaultNamespace(ns))
+	opts = append(opts,
+		containerd.WithDefaultNamespace(ns),
+		containerd.WithDefaultRuntime("io.containerd.runtime.v1.linux"),
+	)
 	client, err := containerd.New(address, opts...)
 	if err != nil {
 		return base.WorkerOpt{}, errors.Wrapf(err, "failed to connect client to %q . make sure containerd is running", address)
