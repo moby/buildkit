@@ -27,7 +27,7 @@ github.com/codahale/hdrhistogram
 github.com/containerd/cgroups
 # github.com/containerd/console v0.0.0-20181022165439-0650fd9eeb50
 github.com/containerd/console
-# github.com/containerd/containerd v1.3.0-beta.0
+# github.com/containerd/containerd v1.3.0-beta.0.0.20190802175917-f0821348b4a8
 github.com/containerd/containerd/filters
 github.com/containerd/containerd/mount
 github.com/containerd/containerd/snapshots
@@ -213,7 +213,7 @@ github.com/opencontainers/go-digest
 github.com/opencontainers/image-spec/specs-go/v1
 github.com/opencontainers/image-spec/specs-go
 github.com/opencontainers/image-spec/identity
-# github.com/opencontainers/runc v1.0.0-rc6
+# github.com/opencontainers/runc v1.0.0-rc8.0.20190621203724-f4982d86f7fd
 github.com/opencontainers/runc/libcontainer/system
 github.com/opencontainers/runc/libcontainer/user
 # github.com/opencontainers/runtime-spec v0.0.0-20180909173843-eba862dc2470

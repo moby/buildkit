@@ -150,12 +150,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 		resp["image.name"] = strings.Join(names, ",")
 	}
 
-	expOpts := []archiveexporter.ExportOpt{}
-	if len(names) > 0 {
-		expOpts = append(expOpts, archiveexporter.WithNamedManifest(*desc, names...))
-	} else {
-		expOpts = append(expOpts, archiveexporter.WithManifest(*desc))
-	}
+	expOpts := []archiveexporter.ExportOpt{archiveexporter.WithManifest(*desc, names...)}
 	switch e.opt.Variant {
 	case VariantOCI:
 		expOpts = append(expOpts, archiveexporter.WithAllPlatforms(), archiveexporter.WithSkipDockerManifest())

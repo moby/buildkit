@@ -9,7 +9,7 @@ require (
 	github.com/codahale/hdrhistogram v0.0.0-20160425231609-f8ad88b59a58 // indirect
 	github.com/containerd/cgroups v0.0.0-20190717030353-c4b9ac5c7601 // indirect
 	github.com/containerd/console v0.0.0-20181022165439-0650fd9eeb50
-	github.com/containerd/containerd v1.3.0-beta.0
+	github.com/containerd/containerd v1.3.0-beta.0.0.20190802175917-f0821348b4a8
 	github.com/containerd/continuity v0.0.0-20190426062206-aaeac12a7ffc
 	github.com/containerd/fifo v0.0.0-20180307165137-3d5202aec260 // indirect
 	github.com/containerd/go-cni v0.0.0-20190610170741-5a4663dad645
@@ -46,7 +46,7 @@ require (
 	github.com/morikuni/aec v0.0.0-20170113033406-39771216ff4c
 	github.com/opencontainers/go-digest v1.0.0-rc1
 	github.com/opencontainers/image-spec v1.0.1
-	github.com/opencontainers/runc v1.0.0-rc6
+	github.com/opencontainers/runc v1.0.0-rc8.0.20190621203724-f4982d86f7fd
 	github.com/opencontainers/runtime-spec v0.0.0-20180909173843-eba862dc2470
 	github.com/opentracing-contrib/go-stdlib v0.0.0-20171029140428-b1a47cfbdd75
 	github.com/opentracing/opentracing-go v0.0.0-20171003133519-1361b9cd60be
