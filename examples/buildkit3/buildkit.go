@@ -9,10 +9,10 @@ import (
 )
 
 type buildOpt struct {
-	withContainerd bool
+	buildkit       string
 	containerd     string
 	runc           string
-	buildkit       string
+	withContainerd bool
 }
 
 func main() {
@@ -112,10 +112,11 @@ func copyFrom(src llb.State, srcPath, destPath string) llb.StateOption {
 	}
 }
 
-// copy copies files between 2 states using cp until there is no copyOp
+// copy copies files between 2 states using cp
 func copy(src llb.State, srcPath string, dest llb.State, destPath string) llb.State {
-	cpImage := llb.Image("docker.io/library/alpine:latest@sha256:1072e499f3f655a032e88542330cf75b02e7bdf673278f701d7ba61629ee3ebe")
-	cp := cpImage.Run(llb.Shlexf("cp -a /src%s /dest%s", srcPath, destPath))
-	cp.AddMount("/src", src, llb.Readonly)
-	return cp.AddMount("/dest", dest)
+	return dest.File(llb.Copy(src, srcPath, destPath, &llb.CopyInfo{
+		AllowWildcard:  true,
+		AttemptUnpack:  true,
+		CreateDestPath: true,
+	}))
 }
