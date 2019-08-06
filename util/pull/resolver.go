@@ -135,9 +135,9 @@ type resolverCache struct {
 }
 
 type cachedResolver struct {
+	counter int64
 	timeout time.Time
 	remotes.Resolver
-	counter int64
 }
 
 func (cr *cachedResolver) Resolve(ctx context.Context, ref string) (name string, desc ocispec.Descriptor, err error) {
