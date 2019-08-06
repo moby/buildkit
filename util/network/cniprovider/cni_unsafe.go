@@ -1,6 +1,6 @@
 // +build linux
 
-package network
+package cniprovider
 
 import (
 	_ "unsafe" // required for go:linkname.

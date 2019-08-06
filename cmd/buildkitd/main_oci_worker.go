@@ -11,7 +11,8 @@ import (
 	"github.com/containerd/containerd/snapshots/overlay"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/executor/oci"
-	"github.com/moby/buildkit/util/network"
+	"github.com/moby/buildkit/util/network/cniprovider"
+	"github.com/moby/buildkit/util/network/netproviders"
 	"github.com/moby/buildkit/worker"
 	"github.com/moby/buildkit/worker/base"
 	"github.com/moby/buildkit/worker/runc"
@@ -222,11 +223,13 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 
 	dns := getDNSConfig(common.config.DNS)
 
-	nc := network.Opt{
-		Root:          common.config.Root,
-		Mode:          common.config.Workers.OCI.NetworkConfig.Mode,
-		CNIConfigPath: common.config.Workers.OCI.CNIConfigPath,
-		CNIBinaryDir:  common.config.Workers.OCI.CNIBinaryPath,
+	nc := netproviders.Opt{
+		Mode: common.config.Workers.OCI.NetworkConfig.Mode,
+		CNI: cniprovider.Opt{
+			Root:       common.config.Root,
+			ConfigPath: common.config.Workers.OCI.CNIConfigPath,
+			BinaryDir:  common.config.Workers.OCI.CNIBinaryPath,
+		},
 	}
 
 	opt, err := runc.NewWorkerOpt(common.config.Root, snFactory, cfg.Rootless, processMode, cfg.Labels, idmapping, nc, dns)

@@ -17,7 +17,7 @@ import (
 	"github.com/moby/buildkit/identity"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/util/leaseutil"
-	"github.com/moby/buildkit/util/network"
+	"github.com/moby/buildkit/util/network/netproviders"
 	"github.com/moby/buildkit/util/throttle"
 	"github.com/moby/buildkit/util/winlayers"
 	"github.com/moby/buildkit/worker/base"
@@ -27,7 +27,7 @@ import (
 )
 
 // NewWorkerOpt creates a WorkerOpt.
-func NewWorkerOpt(root string, address, snapshotterName, ns string, labels map[string]string, dns *oci.DNSConfig, nopt network.Opt, opts ...containerd.ClientOpt) (base.WorkerOpt, error) {
+func NewWorkerOpt(root string, address, snapshotterName, ns string, labels map[string]string, dns *oci.DNSConfig, nopt netproviders.Opt, opts ...containerd.ClientOpt) (base.WorkerOpt, error) {
 	opts = append(opts, containerd.WithDefaultNamespace(ns))
 	client, err := containerd.New(address, opts...)
 	if err != nil {
@@ -36,7 +36,7 @@ func NewWorkerOpt(root string, address, snapshotterName, ns string, labels map[s
 	return newContainerd(root, client, snapshotterName, ns, labels, dns, nopt)
 }
 
-func newContainerd(root string, client *containerd.Client, snapshotterName, ns string, labels map[string]string, dns *oci.DNSConfig, nopt network.Opt) (base.WorkerOpt, error) {
+func newContainerd(root string, client *containerd.Client, snapshotterName, ns string, labels map[string]string, dns *oci.DNSConfig, nopt netproviders.Opt) (base.WorkerOpt, error) {
 	if strings.Contains(snapshotterName, "/") {
 		return base.WorkerOpt{}, errors.Errorf("bad snapshotter name: %q", snapshotterName)
 	}
@@ -103,7 +103,7 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 		}
 	}
 
-	np, err := network.Providers(nopt)
+	np, err := netproviders.Providers(nopt)
 	if err != nil {
 		return base.WorkerOpt{}, err
 	}

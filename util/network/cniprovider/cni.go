@@ -1,4 +1,4 @@
-package network
+package cniprovider
 
 import (
 	"os"
@@ -9,23 +9,30 @@ import (
 	"github.com/containerd/go-cni"
 	"github.com/gofrs/flock"
 	"github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/util/network"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
 )
 
-func NewCNIProvider(opt Opt) (Provider, error) {
-	if _, err := os.Stat(opt.CNIConfigPath); err != nil {
-		return nil, errors.Wrapf(err, "failed to read cni config %q", opt.CNIConfigPath)
+type Opt struct {
+	Root       string
+	ConfigPath string
+	BinaryDir  string
+}
+
+func New(opt Opt) (network.Provider, error) {
+	if _, err := os.Stat(opt.ConfigPath); err != nil {
+		return nil, errors.Wrapf(err, "failed to read cni config %q", opt.ConfigPath)
 	}
-	if _, err := os.Stat(opt.CNIBinaryDir); err != nil {
-		return nil, errors.Wrapf(err, "failed to read cni binary dir %q", opt.CNIBinaryDir)
+	if _, err := os.Stat(opt.BinaryDir); err != nil {
+		return nil, errors.Wrapf(err, "failed to read cni binary dir %q", opt.BinaryDir)
 	}
 
 	cniHandle, err := cni.New(
 		cni.WithMinNetworkCount(2),
-		cni.WithConfFile(opt.CNIConfigPath),
-		cni.WithPluginDir([]string{opt.CNIBinaryDir}),
+		cni.WithConfFile(opt.ConfigPath),
+		cni.WithPluginDir([]string{opt.BinaryDir}),
 		cni.WithLoNetwork,
 		cni.WithInterfacePrefix(("eth")))
 	if err != nil {
@@ -63,7 +70,7 @@ func (c *cniProvider) initNetwork() error {
 	return ns.Close()
 }
 
-func (c *cniProvider) New() (Namespace, error) {
+func (c *cniProvider) New() (network.Namespace, error) {
 	id := identity.NewID()
 	nsPath := filepath.Join(c.root, "net/cni", id)
 	if err := os.MkdirAll(filepath.Dir(nsPath), 0700); err != nil {
