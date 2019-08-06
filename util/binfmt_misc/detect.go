@@ -30,6 +30,9 @@ func SupportedPlatforms() []string {
 		if p := "linux/s390x"; def != p && s390xSupported() == nil {
 			arr = append(arr, p)
 		}
+		if p := "linux/386"; def != p && i386Supported() == nil {
+			arr = append(arr, p)
+		}
 		if !strings.HasPrefix(def, "linux/arm/") && armSupported() == nil {
 			arr = append(arr, "linux/arm/v7", "linux/arm/v6")
 		} else if def == "linux/arm/v7" {
@@ -68,6 +71,11 @@ func WarnIfUnsupported(pfs []string) {
 			}
 			if p == "linux/s390x" {
 				if err := s390xSupported(); err != nil {
+					printPlatfromWarning(p, err)
+				}
+			}
+			if p == "linux/386" {
+				if err := i386Supported(); err != nil {
 					printPlatfromWarning(p, err)
 				}
 			}

@@ -3,6 +3,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   binutils-arm-linux-gnueabihf \
   binutils-aarch64-linux-gnu \
   binutils-x86-64-linux-gnu \
+  binutils-i686-linux-gnu \
   binutils-riscv64-linux-gnu \
   binutils-s390x-linux-gnu \
   binutils-powerpc64le-linux-gnu
@@ -12,6 +13,10 @@ WORKDIR /src
 FROM base AS exit-amd64
 COPY fixtures/exit.amd64.s .
 RUN x86_64-linux-gnu-as -o exit.o exit.amd64.s && x86_64-linux-gnu-ld -o exit -s exit.o
+
+FROM base AS exit-386
+COPY fixtures/exit.386.s .
+RUN i686-linux-gnu-as -o exit.o exit.386.s && i686-linux-gnu-ld -o exit -s exit.o
 
 FROM base AS exit-arm64
 COPY fixtures/exit.arm64.s .
@@ -36,6 +41,7 @@ RUN powerpc64le-linux-gnu-as -o exit.o exit.ppc64le.s && powerpc64le-linux-gnu-l
 FROM golang:1.12-alpine AS generate
 WORKDIR /src
 COPY --from=exit-amd64 /src/exit amd64
+COPY --from=exit-386 /src/exit 386
 COPY --from=exit-arm64 /src/exit arm64
 COPY --from=exit-arm /src/exit arm
 COPY --from=exit-riscv64 /src/exit riscv64
@@ -43,7 +49,7 @@ COPY --from=exit-s390x /src/exit s390x
 COPY --from=exit-ppc64le /src/exit ppc64le
 COPY generate.go .
 
-RUN go run generate.go amd64 arm64 arm riscv64 s390x ppc64le && ls -l
+RUN go run generate.go amd64 386 arm64 arm riscv64 s390x ppc64le && ls -l
 
 
 FROM scratch
