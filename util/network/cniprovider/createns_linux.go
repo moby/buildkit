@@ -1,6 +1,6 @@
 // +build linux
 
-package network
+package cniprovider
 
 import (
 	"os"

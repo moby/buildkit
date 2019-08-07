@@ -10,7 +10,8 @@ import (
 
 	ctd "github.com/containerd/containerd"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
-	"github.com/moby/buildkit/util/network"
+	"github.com/moby/buildkit/util/network/cniprovider"
+	"github.com/moby/buildkit/util/network/netproviders"
 	"github.com/moby/buildkit/worker"
 	"github.com/moby/buildkit/worker/base"
 	"github.com/moby/buildkit/worker/containerd"
@@ -200,11 +201,13 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 
 	dns := getDNSConfig(common.config.DNS)
 
-	nc := network.Opt{
-		Root:          common.config.Root,
-		Mode:          common.config.Workers.Containerd.NetworkConfig.Mode,
-		CNIConfigPath: common.config.Workers.Containerd.CNIConfigPath,
-		CNIBinaryDir:  common.config.Workers.Containerd.CNIBinaryPath,
+	nc := netproviders.Opt{
+		Mode: common.config.Workers.Containerd.NetworkConfig.Mode,
+		CNI: cniprovider.Opt{
+			Root:       common.config.Root,
+			ConfigPath: common.config.Workers.Containerd.CNIConfigPath,
+			BinaryDir:  common.config.Workers.Containerd.CNIBinaryPath,
+		},
 	}
 
 	opt, err := containerd.NewWorkerOpt(common.config.Root, cfg.Address, ctd.DefaultSnapshotter, cfg.Namespace, cfg.Labels, dns, nc, ctd.WithTimeout(60*time.Second))
