@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+
+. $(dirname $0)/util
+
+set -e
+
+if [ -z "$TRAVIS_COMMIT" ]; then
+  echo "TRAVIS_COMMIT_REQURED"
+  exit 0
+fi
+
+exportCacheFlags=""
+exportFlags=""
+
+if [ -f /tmp/buildkit-ci-cache-repo ]; then
+  exportCacheFlags="--export-cache=type=inline"
+  exportFlags="--output=type=image,push=true,name=$(cat /tmp/buildkit-ci-cache-repo)"
+fi
+
+set -x
+buildctl build $progressFlag --frontend=dockerfile.v0 \
+  $currentcontextBuildctl \
+  --opt filename=./hack/dockerfiles/test.buildkit.Dockerfile \
+  --opt target=binaries \
+  --import-cache type=registry,ref=cicache.buildk.it/moby/buildkit/master:binaries \
+  --import-cache type=registry,ref=cicache.buildk.it/moby/buildkit/master:integration-tests \
+  $exportCacheFlags $exportFlags:binaries
+
+buildctl build $progressFlag --frontend=dockerfile.v0 \
+  $currentcontextBuildctl \
+  --opt filename=./hack/dockerfiles/test.buildkit.Dockerfile \
+  --opt target=integration-tests-base \
+  --import-cache cicache.buildk.it/moby/buildkit/master:integration-tests \
+  $exportCacheFlags $exportFlags:integration-tests

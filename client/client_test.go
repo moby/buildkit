@@ -57,7 +57,7 @@ type nopWriteCloser struct {
 
 func (nopWriteCloser) Close() error { return nil }
 
-func TestClientIntegration(t *testing.T) {
+func TestIntegration(t *testing.T) {
 	mirrors := integration.WithMirroredImages(integration.OfficialImages("busybox:latest", "alpine:latest"))
 
 	integration.Run(t, []integration.Test{
