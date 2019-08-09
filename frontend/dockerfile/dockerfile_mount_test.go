@@ -95,7 +95,7 @@ copy cachebust /
 run mkdir out && echo foo > out/foo
 
 from busybox as second
-RUN --mount=from=build,src=out,target=/out,rw cat /dev/urandom | head -c 100 | sha256sum > /unique
+RUN --mount=from=build,src=out,target=/out,rw touch /out/bar && cat /dev/urandom | head -c 100 | sha256sum > /unique
 
 from scratch
 COPY --from=second /unique /unique
