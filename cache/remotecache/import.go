@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"sync"
 	"time"
 
 	"github.com/containerd/containerd/content"
@@ -110,8 +109,7 @@ func (ci *contentCacheImporter) importInlineCache(ctx context.Context, dt []byte
 		return nil, err
 	}
 
-	var mu sync.Mutex
-	cc := v1.NewCacheChains()
+	var cMap = map[digest.Digest]*v1.CacheChains{}
 
 	eg, ctx := errgroup.WithContext(ctx)
 	for dgst, dt := range m {
@@ -183,12 +181,11 @@ func (ci *contentCacheImporter) importInlineCache(ctx context.Context, dt []byte
 				if err != nil {
 					return errors.WithStack(err)
 				}
-
-				mu.Lock()
+				cc := v1.NewCacheChains()
 				if err := v1.ParseConfig(config, layers, cc); err != nil {
 					return err
 				}
-				mu.Unlock()
+				cMap[dgst] = cc
 				return nil
 			})
 		}(dgst, dt)
@@ -198,11 +195,17 @@ func (ci *contentCacheImporter) importInlineCache(ctx context.Context, dt []byte
 		return nil, err
 	}
 
-	keysStorage, resultStorage, err := v1.NewCacheKeyStorage(cc, w)
-	if err != nil {
-		return nil, err
+	cms := make([]solver.CacheManager, 0, len(cMap))
+
+	for _, cc := range cMap {
+		keysStorage, resultStorage, err := v1.NewCacheKeyStorage(cc, w)
+		if err != nil {
+			return nil, err
+		}
+		cms = append(cms, solver.NewCacheManager(id, keysStorage, resultStorage))
 	}
-	return solver.NewCacheManager(id, keysStorage, resultStorage), nil
+
+	return solver.NewCombinedCacheManager(cms, nil), nil
 }
 
 func (ci *contentCacheImporter) allDistributionManifests(ctx context.Context, dt []byte, m map[digest.Digest][]byte) error {
