@@ -34,6 +34,7 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/upload/uploadprovider"
+	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/testutil"
 	"github.com/moby/buildkit/util/testutil/httpserver"
 	"github.com/moby/buildkit/util/testutil/integration"
@@ -90,6 +91,7 @@ var allTests = []integration.Test{
 	testTarExporter,
 	testDefaultEnvWithArgs,
 	testEnvEmptyFormatting,
+	testCacheMultiPlatformImportExport,
 }
 
 var fileOpTests = []integration.Test{
@@ -3371,6 +3373,131 @@ LABEL foo=bar
 	require.Equal(t, "baz", v)
 }
 
+func testCacheMultiPlatformImportExport(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	registry, err := sb.NewRegistry()
+	if errors.Cause(err) == integration.ErrorRequirements {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	dockerfile := []byte(`
+FROM --platform=$BUILDPLATFORM busybox AS base
+ARG TARGETARCH
+RUN echo -n $TARGETARCH> arch && cat /dev/urandom | head -c 100 | sha256sum > unique
+FROM scratch
+COPY --from=base unique /
+COPY --from=base arch /
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	target := registry + "/buildkit/testexportdf:multi"
+
+	// exportCache := []client.CacheOptionsEntry{
+	// 	{
+	// 		Type:  "registry",
+	// 		Attrs: map[string]string{"ref": target},
+	// 	},
+	// }
+	// importCache := target
+
+	exportCache := []client.CacheOptionsEntry{
+		{
+			Type: "inline",
+		},
+	}
+	importCache := target + "-img"
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"push": "true",
+					"name": target + "-img",
+				},
+			},
+		},
+		CacheExports: exportCache,
+		FrontendAttrs: map[string]string{
+			"platform": "linux/amd64,linux/arm/v7",
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	desc, provider, err := contentutil.ProviderFromRef(target + "-img")
+	require.NoError(t, err)
+
+	imgMap, err := readIndex(provider, desc)
+	require.NoError(t, err)
+
+	require.Equal(t, 2, len(imgMap))
+
+	require.Equal(t, "amd64", string(imgMap["linux/amd64"].layers[1]["arch"].Data))
+	dtamd := imgMap["linux/amd64"].layers[0]["unique"].Data
+	dtarm := imgMap["linux/arm/v7"].layers[0]["unique"].Data
+	require.NotEqual(t, dtamd, dtarm)
+
+	for i := 0; i < 2; i++ {
+		err = c.Prune(context.TODO(), nil, client.PruneAll)
+		require.NoError(t, err)
+
+		checkAllRemoved(t, c, sb)
+
+		_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+			FrontendAttrs: map[string]string{
+				"cache-from": importCache,
+				"platform":   "linux/amd64,linux/arm/v7",
+			},
+			Exports: []client.ExportEntry{
+				{
+					Type: client.ExporterImage,
+					Attrs: map[string]string{
+						"push": "true",
+						"name": target + "-img",
+					},
+				},
+			},
+			CacheExports: exportCache,
+			LocalDirs: map[string]string{
+				builder.DefaultLocalNameDockerfile: dir,
+				builder.DefaultLocalNameContext:    dir,
+			},
+		}, nil)
+		require.NoError(t, err)
+
+		desc2, provider, err := contentutil.ProviderFromRef(target + "-img")
+		require.NoError(t, err)
+
+		require.Equal(t, desc.Digest, desc2.Digest)
+
+		imgMap, err = readIndex(provider, desc2)
+		require.NoError(t, err)
+
+		require.Equal(t, 2, len(imgMap))
+
+		require.Equal(t, "arm", string(imgMap["linux/arm/v7"].layers[1]["arch"].Data))
+		dtamd2 := imgMap["linux/amd64"].layers[0]["unique"].Data
+		dtarm2 := imgMap["linux/arm/v7"].layers[0]["unique"].Data
+		require.Equal(t, string(dtamd), string(dtamd2))
+		require.Equal(t, string(dtarm), string(dtarm2))
+	}
+}
+
 func testCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 
@@ -4285,4 +4412,59 @@ func fixedWriteCloser(wc io.WriteCloser) func(map[string]string) (io.WriteCloser
 	return func(map[string]string) (io.WriteCloser, error) {
 		return wc, nil
 	}
+}
+
+type imageInfo struct {
+	desc   ocispec.Descriptor
+	layers []map[string]*testutil.TarItem
+}
+
+func readIndex(p content.Provider, desc ocispec.Descriptor) (map[string]*imageInfo, error) {
+	ctx := context.TODO()
+	dt, err := content.ReadBlob(ctx, p, desc)
+	if err != nil {
+		return nil, err
+	}
+	var idx ocispec.Index
+	if err := json.Unmarshal(dt, &idx); err != nil {
+		return nil, err
+	}
+
+	mi := map[string]*imageInfo{}
+
+	for _, m := range idx.Manifests {
+		img, err := readImage(p, m)
+		if err != nil {
+			return nil, err
+		}
+		mi[platforms.Format(*m.Platform)] = img
+	}
+	return mi, nil
+}
+func readImage(p content.Provider, desc ocispec.Descriptor) (*imageInfo, error) {
+	ii := &imageInfo{desc: desc}
+
+	ctx := context.TODO()
+	dt, err := content.ReadBlob(ctx, p, desc)
+	if err != nil {
+		return nil, err
+	}
+
+	var mfst ocispec.Manifest
+	if err := json.Unmarshal(dt, &mfst); err != nil {
+		return nil, err
+	}
+
+	for _, l := range mfst.Layers {
+		dt, err := content.ReadBlob(ctx, p, l)
+		if err != nil {
+			return nil, err
+		}
+		m, err := testutil.ReadTarToMap(dt, true)
+		if err != nil {
+			return nil, err
+		}
+		ii.layers = append(ii.layers, m)
+	}
+	return ii, nil
 }
