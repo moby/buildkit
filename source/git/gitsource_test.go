@@ -53,7 +53,12 @@ func testRepeatedFetch(t *testing.T, keepGitDir bool) {
 	require.NoError(t, err)
 	require.True(t, done)
 
-	require.Equal(t, 40, len(key1))
+	expLen := 40
+	if keepGitDir {
+		expLen += 4
+	}
+
+	require.Equal(t, expLen, len(key1))
 
 	ref1, err := g.Snapshot(ctx)
 	require.NoError(t, err)
@@ -171,7 +176,12 @@ func testFetchBySHA(t *testing.T, keepGitDir bool) {
 	require.NoError(t, err)
 	require.True(t, done)
 
-	require.Equal(t, 40, len(key1))
+	expLen := 40
+	if keepGitDir {
+		expLen += 4
+	}
+
+	require.Equal(t, expLen, len(key1))
 
 	ref1, err := g.Snapshot(ctx)
 	require.NoError(t, err)
@@ -244,13 +254,18 @@ func testMultipleRepos(t *testing.T, keepGitDir bool) {
 	g2, err := gs.Resolve(ctx, id2, nil)
 	require.NoError(t, err)
 
+	expLen := 40
+	if keepGitDir {
+		expLen += 4
+	}
+
 	key1, _, err := g.CacheKey(ctx, 0)
 	require.NoError(t, err)
-	require.Equal(t, 40, len(key1))
+	require.Equal(t, expLen, len(key1))
 
 	key2, _, err := g2.CacheKey(ctx, 0)
 	require.NoError(t, err)
-	require.Equal(t, 40, len(key2))
+	require.Equal(t, expLen, len(key2))
 
 	require.NotEqual(t, key1, key2)
 
