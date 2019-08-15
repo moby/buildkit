@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"sync"
 	"time"
 
 	"github.com/containerd/containerd/content"
@@ -109,6 +110,7 @@ func (ci *contentCacheImporter) importInlineCache(ctx context.Context, dt []byte
 		return nil, err
 	}
 
+	var mu sync.Mutex
 	var cMap = map[digest.Digest]*v1.CacheChains{}
 
 	eg, ctx := errgroup.WithContext(ctx)
@@ -185,7 +187,9 @@ func (ci *contentCacheImporter) importInlineCache(ctx context.Context, dt []byte
 				if err := v1.ParseConfig(config, layers, cc); err != nil {
 					return err
 				}
+				mu.Lock()
 				cMap[dgst] = cc
+				mu.Unlock()
 				return nil
 			})
 		}(dgst, dt)
