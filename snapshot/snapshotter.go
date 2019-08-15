@@ -12,8 +12,7 @@ import (
 
 type Mountable interface {
 	// ID() string
-	Mount() ([]mount.Mount, error)
-	Release() error
+	Mount() ([]mount.Mount, func() error, error)
 	IdentityMapping() *idtools.IdentityMapping
 }
 
@@ -85,12 +84,8 @@ type staticMountable struct {
 	idmap  *idtools.IdentityMapping
 }
 
-func (m *staticMountable) Mount() ([]mount.Mount, error) {
-	return m.mounts, nil
-}
-
-func (cm *staticMountable) Release() error {
-	return nil
+func (m *staticMountable) Mount() ([]mount.Mount, func() error, error) {
+	return m.mounts, func() error { return nil }, nil
 }
 
 func (cm *staticMountable) IdentityMapping() *idtools.IdentityMapping {
@@ -122,12 +117,12 @@ func (cs *containerdSnapshotter) release() error {
 }
 
 func (cs *containerdSnapshotter) returnMounts(mf Mountable) ([]mount.Mount, error) {
-	mounts, err := mf.Mount()
+	mounts, release, err := mf.Mount()
 	if err != nil {
 		return nil, err
 	}
 	cs.mu.Lock()
-	cs.releasers = append(cs.releasers, mf.Release)
+	cs.releasers = append(cs.releasers, release)
 	cs.mu.Unlock()
 	return mounts, nil
 }
