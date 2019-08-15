@@ -591,13 +591,18 @@ func newController(c *cli.Context, cfg *config.Config) (*control.Controller, err
 
 	resolverFn := resolverFunc(cfg)
 
+	w, err := wc.GetDefault()
+	if err != nil {
+		return nil, err
+	}
+
 	remoteCacheExporterFuncs := map[string]remotecache.ResolveCacheExporterFunc{
 		"registry": registryremotecache.ResolveCacheExporterFunc(sessionManager, resolverFn),
 		"local":    localremotecache.ResolveCacheExporterFunc(sessionManager),
 		"inline":   inlineremotecache.ResolveCacheExporterFunc(),
 	}
 	remoteCacheImporterFuncs := map[string]remotecache.ResolveCacheImporterFunc{
-		"registry": registryremotecache.ResolveCacheImporterFunc(sessionManager, resolverFn),
+		"registry": registryremotecache.ResolveCacheImporterFunc(sessionManager, w.ContentStore(), resolverFn),
 		"local":    localremotecache.ResolveCacheImporterFunc(sessionManager),
 	}
 	return control.NewController(control.Opt{

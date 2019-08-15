@@ -13,6 +13,7 @@ import (
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/reference"
 	"github.com/containerd/containerd/remotes"
+	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/remotes/docker/schema1"
 	"github.com/containerd/containerd/rootfs"
 	ctdsnapshot "github.com/containerd/containerd/snapshots"
@@ -138,9 +139,15 @@ func (p *Puller) Pull(ctx context.Context) (*Pulled, error) {
 		// Limit manifests pulled to the best match in an index
 		childrenHandler = images.LimitManifests(childrenHandler, platform, 1)
 
+		dslHandler, err := docker.AppendDistributionSourceLabel(p.ContentStore, p.ref)
+		if err != nil {
+			stopProgress()
+			return nil, err
+		}
 		handlers = append(handlers,
 			remotes.FetchHandler(p.ContentStore, fetcher),
 			childrenHandler,
+			dslHandler,
 		)
 	}
 
