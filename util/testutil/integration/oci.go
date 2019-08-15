@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -181,6 +182,13 @@ func runBuildkitd(args []string, logs map[string]*bytes.Buffer, uid, gid int) (a
 	if err := os.Chown(tmpdir, uid, gid); err != nil {
 		return "", nil, err
 	}
+	if err := os.MkdirAll(filepath.Join(tmpdir, "tmp"), 0711); err != nil {
+		return "", nil, err
+	}
+	if err := os.Chown(filepath.Join(tmpdir, "tmp"), uid, gid); err != nil {
+		return "", nil, err
+	}
+
 	deferF.append(func() error { return os.RemoveAll(tmpdir) })
 
 	address = "unix://" + filepath.Join(tmpdir, "buildkitd.sock")
@@ -190,7 +198,7 @@ func runBuildkitd(args []string, logs map[string]*bytes.Buffer, uid, gid int) (a
 
 	args = append(args, "--root", tmpdir, "--addr", address, "--debug")
 	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Env = append(os.Environ(), "BUILDKIT_DEBUG_EXEC_OUTPUT=1")
+	cmd.Env = append(os.Environ(), "BUILDKIT_DEBUG_EXEC_OUTPUT=1", "BUILDKIT_DEBUG_PANIC_ON_ERROR=1", "TMPDIR="+filepath.Join(tmpdir, "tmp"))
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Setsid: true, // stretch sudo needs this for sigterm
 	}
@@ -204,6 +212,21 @@ func runBuildkitd(args []string, logs map[string]*bytes.Buffer, uid, gid int) (a
 	if err := waitUnix(address, 5*time.Second); err != nil {
 		return "", nil, err
 	}
+
+	deferF.append(func() error {
+		f, err := os.Open("/proc/self/mountinfo")
+		if err != nil {
+			return errors.Wrap(err, "failed to open mountinfo")
+		}
+		defer f.Close()
+		s := bufio.NewScanner(f)
+		for s.Scan() {
+			if strings.Contains(s.Text(), tmpdir) {
+				return errors.Errorf("leaked mountpoint for %s", tmpdir)
+			}
+		}
+		return s.Err()
+	})
 
 	return
 }
