@@ -5,23 +5,22 @@ package dockerfile2llb
 import (
 	"github.com/pkg/errors"
 
+	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
 	"github.com/moby/buildkit/solver/pb"
 )
 
-func dispatchRunNetwork(d *dispatchState, c *instructions.RunCommand) error {
+func dispatchRunNetwork(c *instructions.RunCommand) (llb.RunOption, error) {
 	network := instructions.GetNetwork(c)
 
 	switch network {
 	case instructions.NetworkDefault:
-		d.state = d.state.Network(pb.NetMode_UNSET)
+		return llb.Network(pb.NetMode_UNSET), nil
 	case instructions.NetworkNone:
-		d.state = d.state.Network(pb.NetMode_NONE)
+		return llb.Network(pb.NetMode_NONE), nil
 	case instructions.NetworkHost:
-		d.state = d.state.Network(pb.NetMode_HOST)
+		return llb.Network(pb.NetMode_HOST), nil
 	default:
-		return errors.Errorf("unsupported network mode %q", network)
+		return nil, errors.Errorf("unsupported network mode %q", network)
 	}
-
-	return nil
 }

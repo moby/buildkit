@@ -32,7 +32,7 @@ func init() {
 
 func runNetworkPreHook(cmd *RunCommand, req parseRequest) error {
 	st := &networkState{}
-	st.flag = req.flags.AddString("network", "default")
+	st.flag = req.flags.AddString("network", NetworkDefault)
 	cmd.setExternalValue(networkKey, st)
 	return nil
 }

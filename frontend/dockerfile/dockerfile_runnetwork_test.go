@@ -4,13 +4,16 @@ package dockerfile
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/containerd/continuity/fs/fstest"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/frontend/dockerfile/builder"
 	"github.com/moby/buildkit/util/entitlements"
+	"github.com/moby/buildkit/util/testutil/echoserver"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/stretchr/testify/require"
 )
@@ -84,13 +87,19 @@ RUN --network=none ! ip link show eth0
 func runHostNetwork(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	s, err := echoserver.NewTestServer("foo")
+	require.NoError(t, err)
+	addrParts := strings.Split(s.Addr().String(), ":")
+	port := addrParts[len(addrParts)-1]
+
+	dockerfile := fmt.Sprintf(`
 FROM busybox
-RUN --network=host ip link list
-`)
+RUN --network=host nc 127.0.0.1 %s | grep foo
+RUN ! nc -z 127.0.0.1 %s
+`, port, port)
 
 	dir, err := tmpdir(
-		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("Dockerfile", []byte(dockerfile), 0600),
 	)
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
