@@ -69,11 +69,13 @@ func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root c
 		return err
 	}
 
-	rootMounts, err := mountable.Mount()
+	rootMounts, release, err := mountable.Mount()
 	if err != nil {
 		return err
 	}
-	defer mountable.Release()
+	if release != nil {
+		defer release()
+	}
 
 	var sgids []uint32
 	uid, gid, err := oci.ParseUIDGID(meta.User)

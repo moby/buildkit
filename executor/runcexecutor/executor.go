@@ -155,11 +155,13 @@ func (w *runcExecutor) Exec(ctx context.Context, meta executor.Meta, root cache.
 		return err
 	}
 
-	rootMount, err := mountable.Mount()
+	rootMount, release, err := mountable.Mount()
 	if err != nil {
 		return err
 	}
-	defer mountable.Release()
+	if release != nil {
+		defer release()
+	}
 
 	id := identity.NewID()
 	bundle := filepath.Join(w.root, id)
