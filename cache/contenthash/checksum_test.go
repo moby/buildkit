@@ -29,6 +29,35 @@ const (
 	dgstDirD0Modified = digest.Digest("sha256:555ffa3028630d97ba37832b749eda85ab676fd64ffb629fbf0f4ec8c1e3bff1")
 )
 
+func TestChecksumSymlinkNoParentScan(t *testing.T) {
+	t.Parallel()
+	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	cm := setupCacheManager(t, tmpdir, "native", snapshotter)
+	defer cm.Close()
+
+	ch := []string{
+		"ADD aa dir",
+		"ADD aa/bb dir",
+		"ADD aa/bb/cc dir",
+		"ADD aa/bb/cc/dd file data0",
+		"ADD aa/ln symlink /aa",
+	}
+
+	ref := createRef(t, cm, ch)
+
+	cc, err := newCacheContext(ref.Metadata(), nil)
+	require.NoError(t, err)
+
+	dgst, err := cc.Checksum(context.TODO(), ref, "aa/ln/bb/cc/dd", true)
+	require.NoError(t, err)
+	require.Equal(t, dgstFileData0, dgst)
+}
+
 func TestChecksumHardlinks(t *testing.T) {
 	t.Parallel()
 	tmpdir, err := ioutil.TempDir("", "buildkit-state")
@@ -963,11 +992,11 @@ func writeChanges(root string, inp []*change) error {
 				// The snapshot root ('/') is always created with 0755.
 				// We use the same permission mode here.
 				if err := os.Mkdir(p, 0755); err != nil {
-					return err
+					return errors.WithStack(err)
 				}
 			} else if c.fi.Mode()&os.ModeSymlink != 0 {
 				if err := os.Symlink(stat.Linkname, p); err != nil {
-					return err
+					return errors.WithStack(err)
 				}
 			} else if len(stat.Linkname) > 0 {
 				link := filepath.Join(root, stat.Linkname)
@@ -975,16 +1004,16 @@ func writeChanges(root string, inp []*change) error {
 					link = filepath.Join(filepath.Dir(p), stat.Linkname)
 				}
 				if err := os.Link(link, p); err != nil {
-					return err
+					return errors.WithStack(err)
 				}
 			} else {
 				f, err := os.Create(p)
 				if err != nil {
-					return err
+					return errors.WithStack(err)
 				}
 				if len(c.data) > 0 {
 					if _, err := f.Write([]byte(c.data)); err != nil {
-						return err
+						return errors.WithStack(err)
 					}
 				}
 				f.Close()
