@@ -15,7 +15,7 @@ func dispatchRunNetwork(c *instructions.RunCommand) (llb.RunOption, error) {
 
 	switch network {
 	case instructions.NetworkDefault:
-		return llb.Network(pb.NetMode_UNSET), nil
+		return nil, nil
 	case instructions.NetworkNone:
 		return llb.Network(pb.NetMode_NONE), nil
 	case instructions.NetworkHost:

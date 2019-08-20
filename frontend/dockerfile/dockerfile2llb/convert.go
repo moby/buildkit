@@ -650,7 +650,9 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 	if err != nil {
 		return err
 	}
-	opt = append(opt, networkOpt)
+	if networkOpt != nil {
+		opt = append(opt, networkOpt)
+	}
 
 	shlex := *dopt.shlex
 	shlex.RawQuotes = true
