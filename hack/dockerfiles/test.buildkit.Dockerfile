@@ -1,4 +1,4 @@
-# syntax = docker/dockerfile:1.0-experimental
+# syntax = docker/dockerfile:1.1-experimental
 
 ARG RUNC_VERSION=v1.0.0-rc8
 ARG CONTAINERD_VERSION=v1.2.1
@@ -56,7 +56,7 @@ FROM git AS runc-src
 ARG RUNC_VERSION
 WORKDIR /usr/src
 RUN git clone https://github.com/opencontainers/runc.git runc \
-	&& cd runc && git checkout -q "$RUNC_VERSION"
+  && cd runc && git checkout -q "$RUNC_VERSION"
 
 # build runc binary
 FROM gobuild-base AS runc
@@ -98,8 +98,9 @@ RUN --mount=target=. --mount=target=/root/.cache,type=cache \
   go build -ldflags "$(cat /tmp/.ldflags) -w -extldflags -static" -tags "osusergo netgo static_build seccomp ${BUILDKITD_TAGS}" -o /usr/bin/buildkitd ./cmd/buildkitd && \
   file /usr/bin/buildkitd | egrep "statically linked|Windows"
 
-FROM scratch AS binaries-linux
+FROM scratch AS binaries-linux-helper
 COPY --from=runc /usr/bin/runc /buildkit-runc
+FROM binaries-linux-helper AS binaries-linux
 COPY --from=buildctl /usr/bin/buildctl /
 COPY --from=buildkitd /usr/bin/buildkitd /
 
@@ -208,7 +209,7 @@ ARG TARGETARCH
 WORKDIR /opt/cni/bin
 RUN curl -Ls https://github.com/containernetworking/plugins/releases/download/$CNI_VERSION/cni-plugins-$TARGETOS-$TARGETARCH-$CNI_VERSION.tgz | tar xzv
 
-FROM buildkit-base AS integration-tests
+FROM buildkit-base AS integration-tests-base
 ENV BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR="1000:1000"
 RUN apt-get install -y --no-install-recommends uidmap sudo vim iptables \ 
   && useradd --create-home --home-dir /home/user --uid 1000 -s /bin/sh user \
@@ -216,7 +217,7 @@ RUN apt-get install -y --no-install-recommends uidmap sudo vim iptables \
   && mkdir -m 0700 -p /run/user/1000 \
   && chown -R user /run/user/1000 /home/user \
   && update-alternatives --set iptables /usr/sbin/iptables-legacy
-  # musl is needed to directly use the registry binary that is built on alpine
+# musl is needed to directly use the registry binary that is built on alpine
 ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.0=/opt/containerd-1.0/bin"
 COPY --from=rootlesskit /rootlesskit /usr/bin/
 COPY --from=containerd10 /out/containerd* /opt/containerd-1.0/bin/
@@ -226,6 +227,8 @@ COPY --from=containerd /out/containerd* /usr/bin/
 COPY --from=cni-plugins /opt/cni/bin/bridge /opt/cni/bin/host-local /opt/cni/bin/loopback /opt/cni/bin/
 COPY hack/fixtures/cni.json /etc/buildkit/cni.json
 COPY --from=binaries / /usr/bin/
+
+FROM integration-tests-base AS integration-tests
 COPY . .
 ENV BUILDKIT_RUN_NETWORK_INTEGRATION_TESTS=1 BUILDKIT_CNI_INIT_LOCK_PATH=/run/buildkit_cni_bridge.lock
 

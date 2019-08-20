@@ -114,6 +114,10 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 		t.Skip("skipping in short mode")
 	}
 
+	if os.Getenv("SKIP_INTEGRATION_TESTS") == "1" {
+		t.Skip("skipping integration tests")
+	}
+
 	var tc TestConf
 	for _, o := range opt {
 		o(&tc)

@@ -82,6 +82,7 @@ image() {
 		--local context=. --local dockerfile=. \
 		--opt filename=./hack/dockerfiles/test.buildkit.Dockerfile \
 		--opt platform=$PLATFORMS \
+		--export-cache type=inline \
 		--output type=image,\"name=$REPO:$TAG$tagLatest\",$pushFlag
 
 	buildctl build $progressFlag --frontend=dockerfile.v0 \
@@ -89,6 +90,7 @@ image() {
 		--opt target=rootless \
 		--opt filename=./hack/dockerfiles/test.buildkit.Dockerfile \
 		--opt platform=$PLATFORMS \
+		--export-cache type=inline \
 		--output type=image,\"name=$REPO:$TAG-rootless$tagLatestRootless\",$pushFlag
 }
 

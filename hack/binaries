@@ -10,6 +10,11 @@ set -ex
 progressFlag=""
 if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"; fi
 
+buildkitdTagsFlags=""
+if [ -n "$BUILDKITD_TAGS" ]; then
+  buildkitdTagsFlags="--opt build-arg:BUILDKITD_TAGS=\"$BUILDKITD_TAGS\""
+fi
+
 binariesLegacy() {
   mkdir -p bin
 
@@ -66,8 +71,7 @@ binaries() {
   buildctl build $progressFlag --frontend=dockerfile.v0 \
     --local context=. --local dockerfile=. \
     --opt filename=./hack/dockerfiles/test.buildkit.Dockerfile \
-    --opt build-arg:BUILDKITD_TAGS="$BUILDKITD_TAGS" \
-    --opt target=binaries $platformFlag \
+    $buildkitdTagsFlags --opt target=binaries $platformFlag \
     --output type=local,dest=./bin/
 }
 

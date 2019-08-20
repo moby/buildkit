@@ -10,6 +10,11 @@ set -eu -o pipefail
 : ${CONTINUOUS_INTEGRATION=}
 : ${BUILDKIT_REGISTRY_MIRROR_DIR=}
 
+importCacheFlags=""
+if [ -n "$cacheref" ]; then
+  importCacheFlags="--import-cache=type=registry,ref=$cacheref:integration-tests"
+fi
+
 progressFlag=""
 if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"; fi
 
@@ -41,10 +46,11 @@ set -x
 case $buildmode in
 "buildkit")
   tmpfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
-  buildctl build $progressFlag --frontend=dockerfile.v0 --local context=. --local dockerfile=. \
+  buildctl build $progressFlag --frontend=dockerfile.v0 $currentcontextBuildctl \
     --opt target=integration-tests \
     --opt filename=./hack/dockerfiles/test.buildkit.Dockerfile \
-    --output type=docker,name=$iid,dest=$tmpfile
+    --output type=docker,name=$iid,dest=$tmpfile \
+    --import-cache type=registry,ref=cicache.buildk.it/moby/buildkit/master:integration-tests $importCacheFlags
   docker load -i $tmpfile
   rm $tmpfile
   ;;
@@ -65,18 +71,21 @@ esac
 cacheVolume=$(docker create -v /root/.cache -v /root/.cache/registry -v /go/pkg/mod alpine)
 
 if [ "$TEST_INTEGRATION" == 1 ]; then
-  docker run --rm -v /tmp --volumes-from=$cacheVolume -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry --privileged $iid go test ${TESTFLAGS:--v} ${TESTPKGS:-./...}
+  docker run --rm -v /tmp --volumes-from=$cacheVolume -e SKIP_INTEGRATION_TESTS -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry --privileged $iid go test ${TESTFLAGS:--v} ${TESTPKGS:-./...}
 fi
 
 
 if [ "$TEST_GATEWAY" == 1 ]; then
-  docker run --rm --volumes-from=$cacheVolume $iid go build ./frontend/gateway/client
+  docker run --rm --volumes-from=$cacheVolume $iid go build -v ./frontend/gateway/client
 fi
 
 
+DOCKERFILE_RELEASES_CUSTOM=""
 if [ "$TEST_DOCKERFILE" == 1 ]; then
   if [ -z $DOCKERFILE_RELEASES ]; then
     DOCKERFILE_RELEASES="mainline experimental mounts secrets ssh"
+  else
+    DOCKERFILE_RELEASES_CUSTOM=1
   fi
 
 
@@ -101,9 +110,11 @@ if [ "$TEST_DOCKERFILE" == 1 ]; then
     esac
 
     if [ -s $tarout ]; then
-      cid=$(docker create -v /tmp --rm --privileged --volumes-from=$cacheVolume -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry -e BUILDKIT_WORKER_RANDOM=1 -e FRONTEND_GATEWAY_ONLY=local:/$release.tar -e EXTERNAL_DF_FRONTEND=/dockerfile-frontend $iid go test --count=1 -tags "$buildtags" ${TESTFLAGS:--v} ./frontend/dockerfile)
-      docker cp $tarout $cid:/$release.tar
-      docker start -a $cid
+      if [ "$release" = "mainline" ] || [ "$release" = "experimental" ] || [ -n "$DOCKERFILE_RELEASES_CUSTOM" ] || [ "$TRAVIS_EVENT_TYPE" = "cron" ]; then
+        cid=$(docker create -v /tmp --rm --privileged --volumes-from=$cacheVolume -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry -e BUILDKIT_WORKER_RANDOM=1 -e FRONTEND_GATEWAY_ONLY=local:/$release.tar -e EXTERNAL_DF_FRONTEND=/dockerfile-frontend $iid go test --count=1 -tags "$buildtags" ${TESTFLAGS:--v} ./frontend/dockerfile)
+        docker cp $tarout $cid:/$release.tar
+        docker start -a $cid
+      fi
     fi
     rm $tarout
   done
