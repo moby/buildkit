@@ -138,7 +138,7 @@ $ buildctl build --frontend=dockerfile.v0 --local context=. --local dockerfile=.
 You can also specify a path to `*.pem` file on the host directly instead of `$SSH_AUTH_SOCK`.
 However, pem files with passphrases are not supported.
 
-### RUN --security=insecure|sandbox
+### `RUN --security=insecure|sandbox`
 
 With `--security=insecure`, this runs the command without sandbox in insecure mode,
 which allows to run flows requiring elevated privileges (e.g. containerd). This is equivalent
@@ -160,3 +160,36 @@ RUN --security=insecure cat /proc/self/status | grep CapEff
 ```
 #84 0.093 CapEff:	0000003fffffffff
 ```
+
+### `RUN --network=none|host|default`
+
+This allows control over which networking environment the command is run in.
+
+The allowed values are:
+
+* `none` - The command is run with no network access (`lo` is still available,
+    but is isolated to this process)
+* `host` - The command is run in the host's network environment (similar to
+    `docker build --network=host`, but on a per-instruction basis)
+* `default` - Equivalent to not supplying a flag at all, the command is run in
+    the default network for the build
+
+The use of `--network=host` is protected by the `network.host` entitlement,
+which needs to be enabled when starting the buildkitd daemon
+(`--allow-insecure-entitlement network.host`) and on the build request
+(`--allow network.host`).
+
+_Note that the `network.host` entitlement is enabled by default when using
+buildkit through the docker daemon._
+
+#### Example: isolating external effects
+
+```dockerfile
+# syntax = docker/dockerfile:experimental
+FROM python:3.6
+ADD mypackage.tgz wheels/
+RUN --network=none pip install --find-links wheels mypackage
+```
+
+`pip` will only be able to install the packages provided in the tarfile, which
+can be controlled by an earlier build stage.
