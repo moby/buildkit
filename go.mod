@@ -10,7 +10,7 @@ require (
 	github.com/containerd/cgroups v0.0.0-20190226200435-dbea6f2bd416 // indirect
 	github.com/containerd/console v0.0.0-20181022165439-0650fd9eeb50
 	github.com/containerd/containerd v1.3.0-0.20190507210959-7c1e88399ec0
-	github.com/containerd/continuity v0.0.0-20190426062206-aaeac12a7ffc
+	github.com/containerd/continuity v0.0.0-20190827140505-75bee3e2ccb6
 	github.com/containerd/fifo v0.0.0-20180307165137-3d5202aec260 // indirect
 	github.com/containerd/go-cni v0.0.0-20190610170741-5a4663dad645
 	github.com/containerd/go-runc v0.0.0-20180907222934-5a6d9f37cfa3
