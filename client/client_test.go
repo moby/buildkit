@@ -101,6 +101,7 @@ func TestClientIntegration(t *testing.T) {
 		testBridgeNetworking,
 		testCacheMountNoCache,
 		testExporterTargetExists,
+		testTarExporterWithSocket,
 	}, mirrors)
 
 	integration.Run(t, []integration.Test{
@@ -1429,6 +1430,30 @@ func testExporterTargetExists(t *testing.T, sb integration.Sandbox) {
 
 	require.True(t, strings.HasPrefix(dgst, "sha256:"))
 	require.Equal(t, dgst, mdDgst)
+}
+
+func testTarExporterWithSocket(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	alpine := llb.Image("docker.io/library/alpine:latest")
+	def, err := alpine.Run(llb.Args([]string{"sh", "-c", "nc -l -s local:/socket.sock & usleep 100000; kill %1"})).Marshal()
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:  ExporterTar,
+				Attrs: map[string]string{},
+				Output: func(m map[string]string) (io.WriteCloser, error) {
+					return nopWriteCloser{ioutil.Discard}, nil
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
 }
 
 func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
