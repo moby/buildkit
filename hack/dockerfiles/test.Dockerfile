@@ -1,7 +1,7 @@
 ARG RUNC_VERSION=v1.0.0-rc8
-ARG CONTAINERD_VERSION=v1.2.1
-# containerd v1.0 for integration tests
-ARG CONTAINERD10_VERSION=v1.0.3
+ARG CONTAINERD_VERSION=v1.2.7
+# containerd v1.1 for integration tests
+ARG CONTAINERD11_VERSION=v1.1.7
 # available targets: buildkitd, buildkitd.oci_only, buildkitd.containerd_only
 ARG BUILDKIT_TARGET=buildkitd
 ARG REGISTRY_VERSION=v2.7.0-rc.0
@@ -61,10 +61,10 @@ RUN git checkout -q "$CONTAINERD_VERSION" \
   && make bin/containerd-shim \
   && make bin/ctr
 
-# containerd v1.0 for integration tests
-FROM containerd-base as containerd10
-ARG CONTAINERD10_VERSION
-RUN git checkout -q "$CONTAINERD10_VERSION" \
+# containerd v1.1 for integration tests
+FROM containerd-base as containerd11
+ARG CONTAINERD11_VERSION
+RUN git checkout -q "$CONTAINERD11_VERSION" \
   && make bin/containerd \
   && make bin/containerd-shim
 
@@ -104,10 +104,10 @@ RUN apk add --no-cache shadow shadow-uidmap sudo \
   && echo "XDG_RUNTIME_DIR=/run/user/1000; export XDG_RUNTIME_DIR" >> /home/user/.profile \
   && mkdir -m 0700 -p /run/user/1000 \
   && chown -R user /run/user/1000 /home/user
-ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.0=/opt/containerd-1.0/bin"
+ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.1=/opt/containerd-1.1/bin"
 COPY --from=runc /usr/bin/runc /usr/bin/buildkit-runc
 COPY --from=containerd /go/src/github.com/containerd/containerd/bin/containerd* /usr/bin/
-COPY --from=containerd10 /go/src/github.com/containerd/containerd/bin/containerd* /opt/containerd-1.0/bin/
+COPY --from=containerd11 /go/src/github.com/containerd/containerd/bin/containerd* /opt/containerd-1.1/bin/
 COPY --from=buildctl /usr/bin/buildctl /usr/bin/
 COPY --from=buildkitd /usr/bin/buildkitd /usr/bin
 COPY --from=registry /bin/registry /usr/bin

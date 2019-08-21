@@ -50,21 +50,46 @@ func (l *local) Create(ctx context.Context, opts ...leases.Opt) (leases.Lease, e
 }
 
 func (l *local) Delete(ctx context.Context, lease leases.Lease, opts ...leases.DeleteOpt) error {
-	var do leases.DeleteOptions
-	for _, opt := range opts {
-		if err := opt(ctx, &do); err != nil {
-			return err
-		}
-	}
-
 	if err := l.db.Update(func(tx *bolt.Tx) error {
-		return metadata.NewLeaseManager(tx).Delete(ctx, lease)
+		return metadata.NewLeaseManager(tx).Delete(ctx, lease, opts...)
 	}); err != nil {
 		return err
 	}
 
 	return nil
+}
 
+func (l *local) AddResource(ctx context.Context, lease leases.Lease, r leases.Resource) error {
+	if err := l.db.Update(func(tx *bolt.Tx) error {
+		return metadata.NewLeaseManager(tx).AddResource(ctx, lease, r)
+	}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (l *local) DeleteResource(ctx context.Context, lease leases.Lease, r leases.Resource) error {
+	if err := l.db.Update(func(tx *bolt.Tx) error {
+		return metadata.NewLeaseManager(tx).AddResource(ctx, lease, r)
+	}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (l *local) ListResources(ctx context.Context, lease leases.Lease) ([]leases.Resource, error) {
+	var res []leases.Resource
+	if err := l.db.Update(func(tx *bolt.Tx) error {
+		var err error
+		res, err = metadata.NewLeaseManager(tx).ListResources(ctx, lease)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+
+	return res, nil
 }
 
 func (l *local) List(ctx context.Context, filters ...string) ([]leases.Lease, error) {

@@ -127,7 +127,7 @@ func TestIntegration(t *testing.T) {
 }
 
 func newContainerd(cdAddress string) (*containerd.Client, error) {
-	return containerd.New(cdAddress, containerd.WithTimeout(60*time.Second))
+	return containerd.New(cdAddress, containerd.WithTimeout(60*time.Second), containerd.WithDefaultRuntime("io.containerd.runtime.v1.linux"))
 }
 
 func testBridgeNetworking(t *testing.T, sb integration.Sandbox) {
@@ -582,7 +582,8 @@ func testSecurityModeSysfs(t *testing.T, sb integration.Sandbox) {
 
 	if secMode == securitySandbox {
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "exit code: 1")
+		require.Contains(t, err.Error(), "executor failed running")
+		require.Contains(t, err.Error(), "mkdir /sys/fs/cgroup/cpuset/securitytest")
 	} else {
 		require.NoError(t, err)
 	}
@@ -664,7 +665,7 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 			require.NoError(t, err)
 			require.Equal(t, 1, len(dockerMfst))
 			require.Equal(t, 1, len(dockerMfst[0].RepoTags))
-			require.Equal(t, "docker.io/library/"+imageName, dockerMfst[0].RepoTags[0])
+			require.Equal(t, imageName, dockerMfst[0].RepoTags[0])
 		},
 		ExporterImage: func(_, imageName string, exporterResponse map[string]string) {
 			require.Contains(t, exporterResponse, "image.name")

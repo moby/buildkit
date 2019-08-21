@@ -25,7 +25,7 @@ import (
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/rootfs"
-	digest "github.com/opencontainers/go-digest"
+	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/identity"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -108,7 +108,10 @@ func (i *image) Config(ctx context.Context) (ocispec.Descriptor, error) {
 }
 
 func (i *image) IsUnpacked(ctx context.Context, snapshotterName string) (bool, error) {
-	sn := i.client.SnapshotService(snapshotterName)
+	sn, err := i.client.getSnapshotter(ctx, snapshotterName)
+	if err != nil {
+		return false, err
+	}
 	cs := i.client.ContentStore()
 
 	diffs, err := i.i.RootFS(ctx, cs, i.platform)
@@ -140,13 +143,20 @@ func (i *image) Unpack(ctx context.Context, snapshotterName string) error {
 	}
 
 	var (
-		sn = i.client.SnapshotService(snapshotterName)
 		a  = i.client.DiffService()
 		cs = i.client.ContentStore()
 
 		chain    []digest.Digest
 		unpacked bool
 	)
+	snapshotterName, err = i.client.resolveSnapshotterName(ctx, snapshotterName)
+	if err != nil {
+		return err
+	}
+	sn, err := i.client.getSnapshotter(ctx, snapshotterName)
+	if err != nil {
+		return err
+	}
 	for _, layer := range layers {
 		unpacked, err = rootfs.ApplyLayer(ctx, layer, chain, sn, a)
 		if err != nil {

@@ -4312,7 +4312,7 @@ loop0:
 }
 
 func newContainerd(cdAddress string) (*containerd.Client, error) {
-	return containerd.New(cdAddress, containerd.WithTimeout(60*time.Second))
+	return containerd.New(cdAddress, containerd.WithTimeout(60*time.Second), containerd.WithDefaultRuntime("io.containerd.runtime.v1.linux"))
 }
 
 func dfCmdArgs(ctx, dockerfile, args string) (string, string) {

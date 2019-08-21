@@ -9,6 +9,9 @@ if [ -z "$TRAVIS_COMMIT" ]; then
   exit 0
 fi
 
+progressFlag=""
+if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"; fi
+
 exportCacheFlags=""
 exportFlags=""
 

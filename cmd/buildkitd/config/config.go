@@ -43,7 +43,7 @@ type GRPCConfig struct {
 
 type RegistryConfig struct {
 	Mirrors   []string `toml:"mirrors"`
-	PlainHTTP bool     `toml:"http"`
+	PlainHTTP *bool    `toml:"http"`
 }
 
 type TLSConfig struct {
