@@ -179,9 +179,6 @@ which needs to be enabled when starting the buildkitd daemon
 (`--allow-insecure-entitlement network.host`) and on the build request
 (`--allow network.host`).
 
-_Note that the `network.host` entitlement is enabled by default when using
-buildkit through the docker daemon._
-
 #### Example: isolating external effects
 
 ```dockerfile
