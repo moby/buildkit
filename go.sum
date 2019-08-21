@@ -19,8 +19,8 @@ github.com/containerd/containerd v1.2.4/go.mod h1:bC6axHOhabU15QhwfG7w5PipXdVtMX
 github.com/containerd/containerd v1.3.0-beta.2 h1:pNq4VOyEjYN11bpJK0EQkWF31vi5LmWLWwGeSD5MRlo=
 github.com/containerd/containerd v1.3.0-beta.2/go.mod h1:bC6axHOhabU15QhwfG7w5PipXdVtMXFTttgp+kVtyUA=
 github.com/containerd/continuity v0.0.0-20181001140422-bd77b46c8352/go.mod h1:GL3xCUCBDV3CZiTSEKksMWbLE66hEyuu9qyDOOqM47Y=
-github.com/containerd/continuity v0.0.0-20190815185530-f2a389ac0a02 h1:tN9D97v5A5QuKdcKHKt+UMKrkQ5YXUnD8iM7IAAjEfI=
-github.com/containerd/continuity v0.0.0-20190815185530-f2a389ac0a02/go.mod h1:GL3xCUCBDV3CZiTSEKksMWbLE66hEyuu9qyDOOqM47Y=
+github.com/containerd/continuity v0.0.0-20190827140505-75bee3e2ccb6 h1:NmTXa/uVnDyp0TY5MKi197+3HWcnYWfnHGyaFthlnGw=
+github.com/containerd/continuity v0.0.0-20190827140505-75bee3e2ccb6/go.mod h1:GL3xCUCBDV3CZiTSEKksMWbLE66hEyuu9qyDOOqM47Y=
 github.com/containerd/fifo v0.0.0-20190816180239-bda0ff6ed73c h1:KFbqHhDeaHM7IfFtXHfUHMDaUStpM2YwBR+iJCIOsKk=
 github.com/containerd/fifo v0.0.0-20190816180239-bda0ff6ed73c/go.mod h1:ODA38xgv3Kuk8dQz2ZQXpnv/UZZUHUCL7pnLehbXgQI=
 github.com/containerd/go-cni v0.0.0-20190813230227-49fbd9b210f3 h1:owkX+hC6Inv1XUep/pAjF7qJpnZWjbtETw5r1DVYFPo=

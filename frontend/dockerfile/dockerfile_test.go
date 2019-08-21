@@ -99,6 +99,7 @@ var fileOpTests = []integration.Test{
 	testCopyChownCreateDest,
 	testCopyThroughSymlinkContext,
 	testCopyThroughSymlinkMultiStage,
+	testCopySocket,
 	testContextChangeDirToFile,
 	testNoSnapshotLeak,
 	testCopySymlinks,
@@ -1011,6 +1012,53 @@ COPY --from=build /sub2/foo bar
 	dt, err := ioutil.ReadFile(filepath.Join(destDir, "foo"))
 	require.NoError(t, err)
 	require.Equal(t, "data", string(dt))
+}
+
+func testCopySocket(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+	isFileOp := getFileOp(t, sb)
+
+	dockerfile := []byte(`
+FROM scratch
+COPY . /
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateSocket("socket.sock", 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		FrontendAttrs: map[string]string{
+			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	fi, err := os.Lstat(filepath.Join(destDir, "socket.sock"))
+	require.NoError(t, err)
+	// make sure socket is converted to regular file.
+	require.Equal(t, fi.Mode().IsRegular(), true)
 }
 
 func testIgnoreEntrypoint(t *testing.T, sb integration.Sandbox) {

@@ -90,7 +90,7 @@ github.com/containerd/containerd/identifiers
 github.com/containerd/containerd/metadata/boltutil
 github.com/containerd/containerd/api/types/task
 github.com/containerd/containerd/events/exchange
-# github.com/containerd/continuity v0.0.0-20190815185530-f2a389ac0a02
+# github.com/containerd/continuity v0.0.0-20190827140505-75bee3e2ccb6
 github.com/containerd/continuity/sysx
 github.com/containerd/continuity/fs
 github.com/containerd/continuity/syscallx
