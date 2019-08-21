@@ -644,7 +644,9 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 	if err != nil {
 		return err
 	}
-	opt = append(opt, securityOpt)
+	if securityOpt != nil {
+		opt = append(opt, securityOpt)
+	}
 
 	networkOpt, err := dispatchRunNetwork(c)
 	if err != nil {
