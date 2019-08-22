@@ -1,6 +1,6 @@
 language: go
 go:
-  - 1.10.x
+  - 1.12.x
   - tip
 
 go_import_path: github.com/containerd/go-cni

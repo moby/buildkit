@@ -137,7 +137,6 @@ func (p dockerPusher) Push(ctx context.Context, desc ocispec.Descriptor) (conten
 			// for the private repo, we should remove mount-from
 			// query and send the request again.
 			resp, err = preq.do(pctx)
-			//resp, err = p.doRequest(pctx, req)
 			if err != nil {
 				return nil, err
 			}
@@ -353,7 +352,7 @@ func (pw *pushWriter) Commit(ctx context.Context, size int64, expected digest.Di
 	}
 
 	if size > 0 && size != status.Offset {
-		return errors.Errorf("unxpected size %d, expected %d", status.Offset, size)
+		return errors.Errorf("unexpected size %d, expected %d", status.Offset, size)
 	}
 
 	if expected == "" {

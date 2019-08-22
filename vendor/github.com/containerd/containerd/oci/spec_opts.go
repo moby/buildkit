@@ -151,6 +151,13 @@ func WithEnv(environmentVariables []string) SpecOpts {
 	}
 }
 
+// WithDefaultPathEnv sets the $PATH environment variable to the
+// default PATH defined in this package.
+func WithDefaultPathEnv(_ context.Context, _ Client, _ *containers.Container, s *Spec) error {
+	s.Process.Env = replaceOrAppendEnvValues(s.Process.Env, defaultUnixEnv)
+	return nil
+}
+
 // replaceOrAppendEnvValues returns the defaults with the overrides either
 // replaced by env key or appended to the list
 func replaceOrAppendEnvValues(defaults, overrides []string) []string {
@@ -326,7 +333,7 @@ func WithImageConfigArgs(image Image, args []string) SpecOpts {
 
 		setProcess(s)
 		if s.Linux != nil {
-			s.Process.Env = replaceOrAppendEnvValues(s.Process.Env, config.Env)
+			s.Process.Env = replaceOrAppendEnvValues(config.Env, s.Process.Env)
 			cmd := config.Cmd
 			if len(args) > 0 {
 				cmd = args
@@ -348,7 +355,7 @@ func WithImageConfigArgs(image Image, args []string) SpecOpts {
 			// even if there is no specified user in the image config
 			return WithAdditionalGIDs("root")(ctx, client, c, s)
 		} else if s.Windows != nil {
-			s.Process.Env = replaceOrAppendEnvValues(s.Process.Env, config.Env)
+			s.Process.Env = replaceOrAppendEnvValues(config.Env, s.Process.Env)
 			cmd := config.Cmd
 			if len(args) > 0 {
 				cmd = args

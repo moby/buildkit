@@ -1,6 +1,7 @@
 package cniprovider
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -82,7 +83,7 @@ func (c *cniProvider) New() (network.Namespace, error) {
 		return nil, err
 	}
 
-	if _, err := c.CNI.Setup(id, nsPath); err != nil {
+	if _, err := c.CNI.Setup(context.TODO(), id, nsPath); err != nil {
 		os.RemoveAll(filepath.Dir(nsPath))
 		return nil, errors.Wrap(err, "CNI setup error")
 	}
@@ -104,7 +105,7 @@ func (ns *cniNS) Set(s *specs.Spec) {
 }
 
 func (ns *cniNS) Close() error {
-	err := ns.handle.Remove(ns.id, ns.path)
+	err := ns.handle.Remove(context.TODO(), ns.id, ns.path)
 
 	if err1 := unix.Unmount(ns.path, unix.MNT_DETACH); err1 != nil {
 		if err1 != syscall.EINVAL && err1 != syscall.ENOENT && err == nil {

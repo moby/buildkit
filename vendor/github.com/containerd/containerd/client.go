@@ -57,6 +57,7 @@ import (
 	"github.com/containerd/containerd/snapshots"
 	snproxy "github.com/containerd/containerd/snapshots/proxy"
 	"github.com/containerd/typeurl"
+	"github.com/gogo/protobuf/types"
 	ptypes "github.com/gogo/protobuf/types"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
@@ -88,7 +89,9 @@ func New(address string, opts ...ClientOpt) (*Client, error) {
 		copts.timeout = 10 * time.Second
 	}
 
-	c := &Client{}
+	c := &Client{
+		defaultns: copts.defaultns,
+	}
 
 	if copts.defaultRuntime != "" {
 		c.runtime = copts.defaultRuntime
@@ -141,9 +144,8 @@ func New(address string, opts ...ClientOpt) (*Client, error) {
 	}
 
 	// check namespace labels for default runtime
-	if copts.defaultRuntime == "" && copts.defaultns != "" {
-		ctx := namespaces.WithNamespace(context.Background(), copts.defaultns)
-		if label, err := c.GetLabel(ctx, defaults.DefaultRuntimeNSLabel); err != nil {
+	if copts.defaultRuntime == "" && c.defaultns != "" {
+		if label, err := c.GetLabel(context.Background(), defaults.DefaultRuntimeNSLabel); err != nil {
 			return nil, err
 		} else if label != "" {
 			c.runtime = label
@@ -163,14 +165,14 @@ func NewWithConn(conn *grpc.ClientConn, opts ...ClientOpt) (*Client, error) {
 		}
 	}
 	c := &Client{
-		conn:    conn,
-		runtime: fmt.Sprintf("%s.%s", plugin.RuntimePlugin, runtime.GOOS),
+		defaultns: copts.defaultns,
+		conn:      conn,
+		runtime:   fmt.Sprintf("%s.%s", plugin.RuntimePlugin, runtime.GOOS),
 	}
 
 	// check namespace labels for default runtime
-	if copts.defaultRuntime == "" && copts.defaultns != "" {
-		ctx := namespaces.WithNamespace(context.Background(), copts.defaultns)
-		if label, err := c.GetLabel(ctx, defaults.DefaultRuntimeNSLabel); err != nil {
+	if copts.defaultRuntime == "" && c.defaultns != "" {
+		if label, err := c.GetLabel(context.Background(), defaults.DefaultRuntimeNSLabel); err != nil {
 			return nil, err
 		} else if label != "" {
 			c.runtime = label
@@ -190,6 +192,7 @@ type Client struct {
 	connMu    sync.Mutex
 	conn      *grpc.ClientConn
 	runtime   string
+	defaultns string
 	connector func() (*grpc.ClientConn, error)
 }
 
@@ -294,6 +297,9 @@ type RemoteContext struct {
 	// If an image is not unpacked on pull, it can be unpacked any time
 	// afterwards. Unpacking is required to run an image.
 	Unpack bool
+
+	// UnpackOpts handles options to the unpack call.
+	UnpackOpts []UnpackOpt
 
 	// Snapshotter used for unpacking
 	Snapshotter string
@@ -496,7 +502,10 @@ func writeIndex(ctx context.Context, index *ocispec.Index, client *Client, ref s
 func (c *Client) GetLabel(ctx context.Context, label string) (string, error) {
 	ns, err := namespaces.NamespaceRequired(ctx)
 	if err != nil {
-		return "", err
+		if c.defaultns == "" {
+			return "", err
+		}
+		ns = c.defaultns
 	}
 
 	srv := c.NamespaceService()
@@ -675,6 +684,27 @@ func (c *Client) Version(ctx context.Context) (Version, error) {
 	return Version{
 		Version:  response.Version,
 		Revision: response.Revision,
+	}, nil
+}
+
+type ServerInfo struct {
+	UUID string
+}
+
+func (c *Client) Server(ctx context.Context) (ServerInfo, error) {
+	c.connMu.Lock()
+	if c.conn == nil {
+		c.connMu.Unlock()
+		return ServerInfo{}, errors.Wrap(errdefs.ErrUnavailable, "no grpc connection available")
+	}
+	c.connMu.Unlock()
+
+	response, err := c.IntrospectionService().Server(ctx, &types.Empty{})
+	if err != nil {
+		return ServerInfo{}, err
+	}
+	return ServerInfo{
+		UUID: response.UUID,
 	}, nil
 }
 

@@ -1,6 +1,6 @@
 # github.com/BurntSushi/toml v0.3.1
 github.com/BurntSushi/toml
-# github.com/Microsoft/go-winio v0.4.13-0.20190628181719-7cdfd71a950d
+# github.com/Microsoft/go-winio v0.4.14
 github.com/Microsoft/go-winio
 github.com/Microsoft/go-winio/pkg/guid
 # github.com/Microsoft/hcsshim v0.8.5
@@ -27,7 +27,7 @@ github.com/codahale/hdrhistogram
 github.com/containerd/cgroups
 # github.com/containerd/console v0.0.0-20181022165439-0650fd9eeb50
 github.com/containerd/console
-# github.com/containerd/containerd v1.3.0-beta.0.0.20190802175917-f0821348b4a8
+# github.com/containerd/containerd v1.3.0-beta.2
 github.com/containerd/containerd/filters
 github.com/containerd/containerd/mount
 github.com/containerd/containerd/snapshots
@@ -90,7 +90,7 @@ github.com/containerd/containerd/identifiers
 github.com/containerd/containerd/metadata/boltutil
 github.com/containerd/containerd/api/types/task
 github.com/containerd/containerd/events/exchange
-# github.com/containerd/continuity v0.0.0-20190426062206-aaeac12a7ffc
+# github.com/containerd/continuity v0.0.0-20190815185530-f2a389ac0a02
 github.com/containerd/continuity/sysx
 github.com/containerd/continuity/fs
 github.com/containerd/continuity/syscallx
@@ -100,9 +100,9 @@ github.com/containerd/continuity
 github.com/containerd/continuity/devices
 github.com/containerd/continuity/driver
 github.com/containerd/continuity/proto
-# github.com/containerd/fifo v0.0.0-20180307165137-3d5202aec260
+# github.com/containerd/fifo v0.0.0-20190816180239-bda0ff6ed73c
 github.com/containerd/fifo
-# github.com/containerd/go-cni v0.0.0-20190610170741-5a4663dad645
+# github.com/containerd/go-cni v0.0.0-20190813230227-49fbd9b210f3
 github.com/containerd/go-cni
 # github.com/containerd/go-runc v0.0.0-20190603165425-9007c2405372
 github.com/containerd/go-runc
@@ -110,7 +110,7 @@ github.com/containerd/go-runc
 github.com/containerd/ttrpc
 # github.com/containerd/typeurl v0.0.0-20180627222232-a93fcdb778cd
 github.com/containerd/typeurl
-# github.com/containernetworking/cni v0.6.1-0.20180218032124-142cde0c766c
+# github.com/containernetworking/cni v0.7.1
 github.com/containernetworking/cni/libcni
 github.com/containernetworking/cni/pkg/types
 github.com/containernetworking/cni/pkg/types/current
@@ -259,7 +259,7 @@ github.com/uber/jaeger-client-go/thrift-gen/agent
 github.com/uber/jaeger-lib/metrics
 # github.com/urfave/cli v0.0.0-20171014202726-7bc6a0acffa5
 github.com/urfave/cli
-# go.etcd.io/bbolt v1.3.3-0.20190528202153-2eb7227adea1
+# go.etcd.io/bbolt v1.3.3
 go.etcd.io/bbolt
 # golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2
 golang.org/x/crypto/ssh
@@ -284,7 +284,7 @@ golang.org/x/net/internal/socks
 # golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4
 golang.org/x/sync/errgroup
 golang.org/x/sync/semaphore
-# golang.org/x/sys v0.0.0-20190602015325-4c4f7f33c9ed
+# golang.org/x/sys v0.0.0-20190812073006-9eafafc0a87e
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 golang.org/x/sys/cpu
