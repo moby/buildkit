@@ -49,12 +49,7 @@ func (c *containerd) Name() string {
 	return c.name
 }
 
-func (c *containerd) New(opt ...SandboxOpt) (sb Sandbox, cl func() error, err error) {
-	var conf SandboxConf
-	for _, o := range opt {
-		o(&conf)
-	}
-
+func (c *containerd) New(cfg *BackendConfig) (b Backend, cl func() error, err error) {
 	if err := lookupBinary(c.containerd); err != nil {
 		return nil, nil, err
 	}
@@ -110,15 +105,13 @@ disabled_plugins = ["cri"]
 
 	cmd := exec.Command(c.containerd, "--config", configFile)
 
-	logs := map[string]*bytes.Buffer{}
-
-	ctdStop, err := startCmd(cmd, logs)
+	ctdStop, err := startCmd(cmd, cfg.Logs)
 	if err != nil {
 		return nil, nil, err
 	}
 	if err := waitUnix(address, 5*time.Second); err != nil {
 		ctdStop()
-		return nil, nil, errors.Wrapf(err, "containerd did not start up: %s", formatLogs(logs))
+		return nil, nil, errors.Wrapf(err, "containerd did not start up: %s", formatLogs(cfg.Logs))
 	}
 	deferF.append(ctdStop)
 
@@ -130,37 +123,19 @@ disabled_plugins = ["cri"]
 		"--containerd-worker-labels=org.mobyproject.buildkit.worker.sandbox=true", // Include use of --containerd-worker-labels to trigger https://github.com/moby/buildkit/pull/603
 	}
 
-	var upt []ConfigUpdater
-
-	for _, v := range conf.mv.values {
-		if u, ok := v.value.(ConfigUpdater); ok {
-			upt = append(upt, u)
-		}
-	}
-
-	if conf.mirror != "" {
-		upt = append(upt, withMirrorConfig(conf.mirror))
-	}
-
-	if len(upt) > 0 {
-		dir, err := writeConfig(upt)
-		if err != nil {
-			return nil, nil, err
-		}
-		deferF.append(func() error {
-			return os.RemoveAll(dir)
-		})
-		buildkitdArgs = append(buildkitdArgs, "--config="+filepath.Join(dir, "buildkitd.toml"))
-	}
-
-	buildkitdSock, stop, err := runBuildkitd(buildkitdArgs, logs, 0, 0)
+	buildkitdSock, stop, err := runBuildkitd(cfg, buildkitdArgs, cfg.Logs, 0, 0)
 	if err != nil {
-		printLogs(logs, log.Println)
+		printLogs(cfg.Logs, log.Println)
 		return nil, nil, err
 	}
 	deferF.append(stop)
 
-	return &cdsandbox{address: address, sandbox: sandbox{mv: conf.mv, address: buildkitdSock, logs: logs, cleanup: deferF, rootless: false}}, cl, nil
+	return cdbackend{
+		containerdAddress: address,
+		backend: backend{
+			address:  buildkitdSock,
+			rootless: false,
+		}}, cl, nil
 }
 
 func formatLogs(m map[string]*bytes.Buffer) string {
@@ -173,11 +148,11 @@ func formatLogs(m map[string]*bytes.Buffer) string {
 	return strings.Join(ss, ",")
 }
 
-type cdsandbox struct {
-	sandbox
-	address string
+type cdbackend struct {
+	backend
+	containerdAddress string
 }
 
-func (s *cdsandbox) ContainerdAddress() string {
-	return s.address
+func (s cdbackend) ContainerdAddress() string {
+	return s.containerdAddress
 }

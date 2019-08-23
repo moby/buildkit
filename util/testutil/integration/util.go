@@ -22,7 +22,6 @@ func startCmd(cmd *exec.Cmd, logs map[string]*bytes.Buffer) (func() error, error
 		b = new(bytes.Buffer)
 		logs["stderr: "+cmd.Path] = b
 		cmd.Stderr = b
-
 	}
 
 	if err := cmd.Start(); err != nil {
