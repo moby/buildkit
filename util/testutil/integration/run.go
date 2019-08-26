@@ -82,10 +82,12 @@ func List() []Worker {
 	return defaultWorkers
 }
 
-type TestOpt func(*TestConf)
+// TestOpt is an option that can be used to configure a set of integration
+// tests.
+type TestOpt func(*testConf)
 
 func WithMatrix(key string, m map[string]interface{}) TestOpt {
-	return func(tc *TestConf) {
+	return func(tc *testConf) {
 		if tc.matrix == nil {
 			tc.matrix = map[string]map[string]interface{}{}
 		}
@@ -94,7 +96,7 @@ func WithMatrix(key string, m map[string]interface{}) TestOpt {
 }
 
 func WithMirroredImages(m map[string]string) TestOpt {
-	return func(tc *TestConf) {
+	return func(tc *testConf) {
 		if tc.mirroredImages == nil {
 			tc.mirroredImages = map[string]string{}
 		}
@@ -104,7 +106,7 @@ func WithMirroredImages(m map[string]string) TestOpt {
 	}
 }
 
-type TestConf struct {
+type testConf struct {
 	matrix         map[string]map[string]interface{}
 	mirroredImages map[string]string
 }
@@ -118,7 +120,7 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 		t.Skip("skipping integration tests")
 	}
 
-	var tc TestConf
+	var tc testConf
 	for _, o := range opt {
 		o(&tc)
 	}
@@ -357,7 +359,7 @@ func newMatrixValue(key, name string, v interface{}) matrixValue {
 	}
 }
 
-func prepareValueMatrix(tc TestConf) []matrixValue {
+func prepareValueMatrix(tc testConf) []matrixValue {
 	m := []matrixValue{}
 	for featureName, values := range tc.matrix {
 		current := m
