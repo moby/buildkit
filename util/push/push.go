@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -41,7 +42,7 @@ func getCredentialsFunc(ctx context.Context, sm *session.Manager) func(string) (
 	}
 }
 
-func Push(ctx context.Context, sm *session.Manager, cs content.Provider, dgst digest.Digest, ref string, insecure bool, rfn resolver.ResolveOptionsFunc, byDigest bool) error {
+func Push(ctx context.Context, sm *session.Manager, cs content.Store, dgst digest.Digest, ref string, insecure bool, rfn resolver.ResolveOptionsFunc, byDigest bool) error {
 	desc := ocispec.Descriptor{
 		Digest: dgst,
 	}
@@ -91,7 +92,7 @@ func Push(ctx context.Context, sm *session.Manager, cs content.Provider, dgst di
 	pushHandler := remotes.PushHandler(pusher, cs)
 
 	handlers := append([]images.Handler{},
-		childrenHandler(cs),
+		images.HandlerFunc(annotateDistributionSourceHandler(cs, childrenHandler(cs))),
 		filterHandler,
 		pushHandler,
 	)
@@ -127,6 +128,46 @@ func Push(ctx context.Context, sm *session.Manager, cs content.Provider, dgst di
 	}
 	mfstDone(nil)
 	return nil
+}
+
+func annotateDistributionSourceHandler(cs content.Store, f images.HandlerFunc) func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
+	return func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
+		children, err := f(ctx, desc)
+		if err != nil {
+			return nil, err
+		}
+
+		// only add distribution source for the config or blob data descriptor
+		switch desc.MediaType {
+		case images.MediaTypeDockerSchema2Manifest, ocispec.MediaTypeImageManifest,
+			images.MediaTypeDockerSchema2ManifestList, ocispec.MediaTypeImageIndex:
+		default:
+			return children, nil
+		}
+
+		for i := range children {
+			child := children[i]
+
+			info, err := cs.Info(ctx, child.Digest)
+			if err != nil {
+				return nil, err
+			}
+
+			for k, v := range info.Labels {
+				if !strings.HasPrefix(k, "containerd.io/distribution.source.") {
+					continue
+				}
+
+				if child.Annotations == nil {
+					child.Annotations = map[string]string{}
+				}
+				child.Annotations[k] = v
+			}
+
+			children[i] = child
+		}
+		return children, nil
+	}
 }
 
 func oneOffProgress(ctx context.Context, id string) func(err error) error {

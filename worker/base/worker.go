@@ -14,6 +14,7 @@ import (
 	"github.com/containerd/containerd/diff"
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/leases"
+	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/rootfs"
 	cdsnapshot "github.com/containerd/containerd/snapshots"
 	"github.com/docker/docker/pkg/idtools"
@@ -177,6 +178,10 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 	}, nil
 }
 
+func (w *Worker) ContentStore() content.Store {
+	return w.WorkerOpt.ContentStore
+}
+
 func (w *Worker) ID() string {
 	return w.WorkerOpt.ID
 }
@@ -327,7 +332,7 @@ func (w *Worker) Exporter(name string, sm *session.Manager) (exporter.Exporter, 
 }
 
 func (w *Worker) GetRemote(ctx context.Context, ref cache.ImmutableRef, createIfNeeded bool) (*solver.Remote, error) {
-	diffPairs, err := blobs.GetDiffPairs(ctx, w.ContentStore, w.Snapshotter, w.Differ, ref, createIfNeeded)
+	diffPairs, err := blobs.GetDiffPairs(ctx, w.ContentStore(), w.Snapshotter, w.Differ, ref, createIfNeeded)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed calculating diff pairs for exported snapshot")
 	}
@@ -343,7 +348,7 @@ func (w *Worker) GetRemote(ctx context.Context, ref cache.ImmutableRef, createIf
 	descs := make([]ocispec.Descriptor, len(diffPairs))
 
 	for i, dp := range diffPairs {
-		info, err := w.ContentStore.Info(ctx, dp.Blobsum)
+		info, err := w.ContentStore().Info(ctx, dp.Blobsum)
 		if err != nil {
 			return nil, err
 		}
@@ -366,7 +371,7 @@ func (w *Worker) GetRemote(ctx context.Context, ref cache.ImmutableRef, createIf
 
 	return &solver.Remote{
 		Descriptors: descs,
-		Provider:    w.ContentStore,
+		Provider:    w.ContentStore(),
 	}, nil
 }
 
@@ -391,7 +396,18 @@ func (w *Worker) FromRemote(ctx context.Context, remote *solver.Remote) (cache.I
 		func(desc ocispec.Descriptor) {
 			eg.Go(func() error {
 				done := oneOffProgress(ctx, fmt.Sprintf("pulling %s", desc.Digest))
-				return done(contentutil.Copy(gctx, w.ContentStore, remote.Provider, desc))
+				if err := contentutil.Copy(gctx, w.ContentStore(), remote.Provider, desc); err != nil {
+					return done(err)
+				}
+				if ref, ok := desc.Annotations["containerd.io/distribution.source.ref"]; ok {
+					hf, err := docker.AppendDistributionSourceLabel(w.ContentStore(), ref)
+					if err != nil {
+						return done(err)
+					}
+					_, err = hf(ctx, desc)
+					return done(err)
+				}
+				return done(nil)
 			})
 		}(desc)
 	}
