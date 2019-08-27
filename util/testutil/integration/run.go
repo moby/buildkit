@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io/ioutil"
@@ -25,45 +26,30 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type Sandbox interface {
+// Backend is the minimal interface that describes a testing backend.
+type Backend interface {
 	Address() string
-	PrintLogs(*testing.T)
-	Cmd(...string) *exec.Cmd
-	NewRegistry() (string, error)
 	Rootless() bool
+}
+
+type Sandbox interface {
+	Backend
+
+	Cmd(...string) *exec.Cmd
+	PrintLogs(*testing.T)
+	NewRegistry() (string, error)
 	Value(string) interface{} // chosen matrix value
 }
 
+// BackendConfig is used to configure backends created by a worker.
+type BackendConfig struct {
+	Logs       map[string]*bytes.Buffer
+	ConfigFile string
+}
+
 type Worker interface {
-	New(...SandboxOpt) (Sandbox, func() error, error)
+	New(*BackendConfig) (Backend, func() error, error)
 	Name() string
-}
-
-type SandboxConf struct {
-	mirror string
-	mv     matrixValue
-}
-
-func (sc *SandboxConf) Mirror() string {
-	return sc.mirror
-}
-
-func (sc *SandboxConf) Value(k string) interface{} {
-	return sc.mv.values[k].value
-}
-
-type SandboxOpt func(*SandboxConf)
-
-func WithMirror(h string) SandboxOpt {
-	return func(c *SandboxConf) {
-		c.mirror = h
-	}
-}
-
-func withMatrixValues(mv matrixValue) SandboxOpt {
-	return func(c *SandboxConf) {
-		c.mv = mv
-	}
 }
 
 type ConfigUpdater interface {
@@ -162,7 +148,7 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 						if !strings.HasSuffix(fn, "NoParallel") {
 							t.Parallel()
 						}
-						sb, close, err := br.New(WithMirror(mirror), withMatrixValues(mv))
+						sb, closer, err := newSandbox(br, mirror, mv)
 						if err != nil {
 							if errors.Cause(err) == ErrorRequirements {
 								t.Skip(err.Error())
@@ -170,7 +156,7 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 							require.NoError(t, err)
 						}
 						defer func() {
-							assert.NoError(t, close())
+							assert.NoError(t, closer())
 							if t.Failed() {
 								sb.PrintLogs(t)
 							}
@@ -277,7 +263,7 @@ func writeConfig(updaters []ConfigUpdater) (string, error) {
 		s = upt.UpdateConfigFile(s)
 	}
 
-	if err := ioutil.WriteFile(filepath.Join(tmpdir, "buildkitd.toml"), []byte(s), 0644); err != nil {
+	if err := ioutil.WriteFile(filepath.Join(tmpdir, buildkitdConfigFile), []byte(s), 0644); err != nil {
 		return "", err
 	}
 	return tmpdir, nil
