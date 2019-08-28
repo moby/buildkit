@@ -114,7 +114,7 @@ func (sp *socketProvider) ForwardAgent(stream sshforward.SSH_ForwardAgentServer)
 
 	eg.Go(func() error {
 		defer s1.Close()
-		return sshforward.Copy(ctx, s2, stream)
+		return sshforward.Copy(ctx, s2, stream, nil)
 	})
 
 	return eg.Wait()
