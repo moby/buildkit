@@ -2,9 +2,13 @@ dist: trusty
 sudo: required
 
 install:
-  - docker run --name buildkit --rm -d --privileged -p 1234:1234 $REPO_SLUG_ORIGIN --addr tcp://0.0.0.0:1234 --oci-worker-gc=false
+  - docker run --name buildkit --rm -d --privileged -p 1234:1234 $REPO_SLUG_ORIGIN --debug --addr tcp://0.0.0.0:1234 --oci-worker-gc=false
   - sudo docker cp buildkit:/usr/bin/buildctl /usr/bin/
   - export BUILDKIT_HOST=tcp://0.0.0.0:1234
+
+after_failure:
+  - docker logs buildkit
+  - sudo dmesg
 
 env:
   global:
