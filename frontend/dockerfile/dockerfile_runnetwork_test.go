@@ -62,11 +62,16 @@ RUN ip link show eth0
 }
 
 func runNoNetwork(t *testing.T, sb integration.Sandbox) {
+	if os.Getenv("BUILDKIT_RUN_NETWORK_INTEGRATION_TESTS") == "" {
+		t.SkipNow()
+	}
+
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
 FROM busybox
 RUN --network=none ! ip link show eth0
+RUN ip link show eth0
 `)
 
 	dir, err := tmpdir(
@@ -138,10 +143,6 @@ RUN ! nc 127.0.0.1 %s | grep foo
 }
 
 func runGlobalNetwork(t *testing.T, sb integration.Sandbox) {
-	if os.Getenv("BUILDKIT_RUN_NETWORK_INTEGRATION_TESTS") == "" {
-		t.SkipNow()
-	}
-
 	f := getFrontend(t, sb)
 
 	s, err := echoserver.NewTestServer("foo")
