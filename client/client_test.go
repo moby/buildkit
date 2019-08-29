@@ -102,6 +102,7 @@ func TestClientIntegration(t *testing.T) {
 		testCacheMountNoCache,
 		testExporterTargetExists,
 		testTarExporterWithSocket,
+		testMultipleRegistryCacheImportExport,
 	}, mirrors)
 
 	integration.Run(t, []integration.Test{
@@ -1657,7 +1658,7 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	require.False(t, ok)
 }
 
-func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptionsEntryImport, cacheOptionsEntryExport CacheOptionsEntry) {
+func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptionsEntryImport, cacheOptionsEntryExport []CacheOptionsEntry) {
 	requiresLinux(t)
 	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
@@ -1687,9 +1688,7 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptio
 				OutputDir: destDir,
 			},
 		},
-		CacheExports: []CacheOptionsEntry{
-			cacheOptionsEntryExport,
-		},
+		CacheExports: cacheOptionsEntryExport,
 	}, nil)
 	require.NoError(t, err)
 
@@ -1715,9 +1714,7 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptio
 				Type:      ExporterLocal,
 				OutputDir: destDir,
 			}},
-		CacheImports: []CacheOptionsEntry{
-			cacheOptionsEntryImport,
-		},
+		CacheImports: cacheOptionsEntryImport,
 	}, nil)
 	require.NoError(t, err)
 
@@ -1743,7 +1740,29 @@ func testBasicRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
 			"ref": target,
 		},
 	}
-	testBasicCacheImportExport(t, sb, o, o)
+	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{o}, []CacheOptionsEntry{o})
+}
+
+func testMultipleRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
+	registry, err := sb.NewRegistry()
+	if errors.Cause(err) == integration.ErrorRequirements {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+	target := registry + "/buildkit/testexport:latest"
+	o := CacheOptionsEntry{
+		Type: "registry",
+		Attrs: map[string]string{
+			"ref": target,
+		},
+	}
+	o2 := CacheOptionsEntry{
+		Type: "registry",
+		Attrs: map[string]string{
+			"ref": target + "notexist",
+		},
+	}
+	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{o, o2}, []CacheOptionsEntry{o})
 }
 
 func testBasicLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
@@ -1762,7 +1781,7 @@ func testBasicLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
 			"dest": dir,
 		},
 	}
-	testBasicCacheImportExport(t, sb, im, ex)
+	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{im}, []CacheOptionsEntry{ex})
 }
 
 func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
