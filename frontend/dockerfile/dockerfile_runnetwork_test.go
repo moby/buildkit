@@ -19,17 +19,17 @@ import (
 )
 
 var runNetworkTests = []integration.Test{
-	runDefaultNetwork,
-	runNoNetwork,
-	runHostNetwork,
-	runGlobalNetwork,
+	testRunDefaultNetwork,
+	testRunNoNetwork,
+	testRunHostNetwork,
+	testRunGlobalNetwork,
 }
 
 func init() {
 	networkTests = append(networkTests, runNetworkTests...)
 }
 
-func runDefaultNetwork(t *testing.T, sb integration.Sandbox) {
+func testRunDefaultNetwork(t *testing.T, sb integration.Sandbox) {
 	if os.Getenv("BUILDKIT_RUN_NETWORK_INTEGRATION_TESTS") == "" {
 		t.SkipNow()
 	}
@@ -61,7 +61,7 @@ RUN ip link show eth0
 	require.NoError(t, err)
 }
 
-func runNoNetwork(t *testing.T, sb integration.Sandbox) {
+func testRunNoNetwork(t *testing.T, sb integration.Sandbox) {
 	if os.Getenv("BUILDKIT_RUN_NETWORK_INTEGRATION_TESTS") == "" {
 		t.SkipNow()
 	}
@@ -94,7 +94,7 @@ RUN ip link show eth0
 	require.NoError(t, err)
 }
 
-func runHostNetwork(t *testing.T, sb integration.Sandbox) {
+func testRunHostNetwork(t *testing.T, sb integration.Sandbox) {
 	if os.Getenv("BUILDKIT_RUN_NETWORK_INTEGRATION_TESTS") == "" {
 		t.SkipNow()
 	}
@@ -142,7 +142,7 @@ RUN ! nc 127.0.0.1 %s | grep foo
 	}
 }
 
-func runGlobalNetwork(t *testing.T, sb integration.Sandbox) {
+func testRunGlobalNetwork(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 
 	s, err := echoserver.NewTestServer("foo")
