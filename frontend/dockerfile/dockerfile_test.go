@@ -115,7 +115,11 @@ var fileOpTests = []integration.Test{
 	testWorkdirCopyIgnoreRelative,
 }
 
+// Tests that depend on the `security.*` entitlements
 var securityTests = []integration.Test{}
+
+// Tests that depend on the `network.*` entitlements
+var networkTests = []integration.Test{}
 
 var opts []integration.TestOpt
 
@@ -159,9 +163,14 @@ func TestIntegration(t *testing.T) {
 		"false": false,
 	}))...)
 	integration.Run(t, securityTests, append(opts,
-		integration.WithMatrix("secmode", map[string]interface{}{
-			"sandbox":  securitySandbox,
-			"insecure": securityInsecure,
+		integration.WithMatrix("security.insecure", map[string]interface{}{
+			"granted": securityInsecureGranted,
+			"denied":  securityInsecureDenied,
+		}))...)
+	integration.Run(t, networkTests, append(opts,
+		integration.WithMatrix("network.host", map[string]interface{}{
+			"granted": networkHostGranted,
+			"denied":  networkHostDenied,
 		}))...)
 }
 
@@ -4453,8 +4462,23 @@ func (*secModeInsecure) UpdateConfigFile(in string) string {
 	return in + "\n\ninsecure-entitlements = [\"security.insecure\"]\n"
 }
 
-var securitySandbox integration.ConfigUpdater = &secModeSandbox{}
-var securityInsecure integration.ConfigUpdater = &secModeInsecure{}
+var securityInsecureGranted integration.ConfigUpdater = &secModeInsecure{}
+var securityInsecureDenied integration.ConfigUpdater = &secModeSandbox{}
+
+type networkModeHost struct{}
+
+func (*networkModeHost) UpdateConfigFile(in string) string {
+	return in + "\n\ninsecure-entitlements = [\"network.host\"]\n"
+}
+
+type networkModeSandbox struct{}
+
+func (*networkModeSandbox) UpdateConfigFile(in string) string {
+	return in
+}
+
+var networkHostGranted integration.ConfigUpdater = &networkModeHost{}
+var networkHostDenied integration.ConfigUpdater = &networkModeSandbox{}
 
 func fixedWriteCloser(wc io.WriteCloser) func(map[string]string) (io.WriteCloser, error) {
 	return func(map[string]string) (io.WriteCloser, error) {

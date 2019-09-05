@@ -32,6 +32,7 @@ func testRunSecurityInsecure(t *testing.T, sb integration.Sandbox) {
 	dockerfile := []byte(`
 FROM busybox
 RUN --security=insecure [ "$(cat /proc/self/status | grep CapBnd)" == "CapBnd:	0000003fffffffff" ]
+RUN [ "$(cat /proc/self/status | grep CapBnd)" == "CapBnd:	00000000a80425fb" ]
 `)
 
 	dir, err := tmpdir(
@@ -52,13 +53,13 @@ RUN --security=insecure [ "$(cat /proc/self/status | grep CapBnd)" == "CapBnd:	0
 		AllowedEntitlements: []entitlements.Entitlement{entitlements.EntitlementSecurityInsecure},
 	}, nil)
 
-	secMode := sb.Value("secmode")
+	secMode := sb.Value("security.insecure")
 	switch secMode {
-	case securitySandbox:
+	case securityInsecureGranted:
+		require.NoError(t, err)
+	case securityInsecureDenied:
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "entitlement security.insecure is not allowed")
-	case securityInsecure:
-		require.NoError(t, err)
 	default:
 		require.Fail(t, "unexpected secmode")
 	}
@@ -118,13 +119,13 @@ RUN [ "$(cat /proc/self/status | grep CapBnd)" == "CapBnd:	00000000a80425fb" ]
 		AllowedEntitlements: []entitlements.Entitlement{entitlements.EntitlementSecurityInsecure},
 	}, nil)
 
-	secMode := sb.Value("secmode")
+	secMode := sb.Value("security.insecure")
 	switch secMode {
-	case securitySandbox:
+	case securityInsecureGranted:
+		require.NoError(t, err)
+	case securityInsecureDenied:
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "entitlement security.insecure is not allowed")
-	case securityInsecure:
-		require.NoError(t, err)
 	default:
 		require.Fail(t, "unexpected secmode")
 	}
