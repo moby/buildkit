@@ -181,7 +181,10 @@ func (hs *httpSourceHandler) CacheKey(ctx context.Context, index int) (string, b
 		if err == nil {
 			if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNotModified {
 				respETag := resp.Header.Get("ETag")
-				if respETag == "" && onlyETag != "" {
+
+				// If a 304 is returned without an ETag and we had only sent one ETag,
+				// the response refers to the ETag we asked about.
+				if respETag == "" && onlyETag != "" && resp.StatusCode == http.StatusNotModified {
 					respETag = onlyETag
 				}
 				si, ok := m[respETag]
