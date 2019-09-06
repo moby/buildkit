@@ -33,6 +33,9 @@ func testRunDefaultNetwork(t *testing.T, sb integration.Sandbox) {
 	if os.Getenv("BUILDKIT_RUN_NETWORK_INTEGRATION_TESTS") == "" {
 		t.SkipNow()
 	}
+	if sb.Rootless() {
+		t.SkipNow()
+	}
 
 	f := getFrontend(t, sb)
 
@@ -68,14 +71,17 @@ func testRunNoNetwork(t *testing.T, sb integration.Sandbox) {
 
 	f := getFrontend(t, sb)
 
-	dockerfile := []byte(`
+	dockerfile := `
 FROM busybox
 RUN --network=none ! ip link show eth0
-RUN ip link show eth0
-`)
+`
+
+	if !sb.Rootless() {
+		dockerfile += "RUN ip link show eth0"
+	}
 
 	dir, err := tmpdir(
-		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("Dockerfile", []byte(dockerfile), 0600),
 	)
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
@@ -109,8 +115,11 @@ func testRunHostNetwork(t *testing.T, sb integration.Sandbox) {
 	dockerfile := fmt.Sprintf(`
 FROM busybox
 RUN --network=host nc 127.0.0.1 %s | grep foo
-RUN ! nc 127.0.0.1 %s | grep foo
-`, port, port)
+`, port)
+
+	if !sb.Rootless() {
+		dockerfile += fmt.Sprintf(`RUN ! nc 127.0.0.1 %s | grep foo`, port)
+	}
 
 	dir, err := tmpdir(
 		fstest.CreateFile("Dockerfile", []byte(dockerfile), 0600),

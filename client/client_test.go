@@ -178,10 +178,8 @@ func testHostNetworking(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	if netMode == hostNetwork {
 		require.NoError(t, err)
-		t.Logf("host-noerror")
 	} else {
 		require.Error(t, err)
-		t.Logf("bridge-error")
 	}
 }
 
