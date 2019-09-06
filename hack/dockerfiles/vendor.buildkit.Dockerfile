@@ -1,4 +1,4 @@
-# syntax = docker/dockerfile:1.0-experimental
+# syntax = docker/dockerfile:1.1-experimental
 FROM golang:1.12-alpine AS vendored
 RUN  apk add --no-cache git
 WORKDIR /src
