@@ -1,3 +1,5 @@
+// +build !linux
+
 /*
    Copyright The containerd Authors.
 
@@ -14,26 +16,11 @@
    limitations under the License.
 */
 
-package cgroups
+package seccomp
 
-import "path/filepath"
+import specs "github.com/opencontainers/runtime-spec/specs-go"
 
-func NewNamed(root string, name Name) *namedController {
-	return &namedController{
-		root: root,
-		name: name,
-	}
-}
-
-type namedController struct {
-	root string
-	name Name
-}
-
-func (n *namedController) Name() Name {
-	return n.name
-}
-
-func (n *namedController) Path(path string) string {
-	return filepath.Join(n.root, string(n.name), path)
+// DefaultProfile defines the whitelist for the default seccomp profile.
+func DefaultProfile(sp *specs.Spec) *specs.LinuxSeccomp {
+	return &specs.LinuxSeccomp{}
 }

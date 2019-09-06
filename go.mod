@@ -9,12 +9,12 @@ require (
 	github.com/codahale/hdrhistogram v0.0.0-20160425231609-f8ad88b59a58 // indirect
 	github.com/containerd/cgroups v0.0.0-20190717030353-c4b9ac5c7601 // indirect
 	github.com/containerd/console v0.0.0-20181022165439-0650fd9eeb50
-	github.com/containerd/containerd v1.3.0-beta.2
+	github.com/containerd/containerd v1.3.0-rc.0
 	github.com/containerd/continuity v0.0.0-20190827140505-75bee3e2ccb6
 	github.com/containerd/fifo v0.0.0-20190816180239-bda0ff6ed73c // indirect
 	github.com/containerd/go-cni v0.0.0-20190813230227-49fbd9b210f3
 	github.com/containerd/go-runc v0.0.0-20190603165425-9007c2405372
-	github.com/containerd/ttrpc v0.0.0-20190613183316-1fb3814edf44 // indirect
+	github.com/containerd/ttrpc v0.0.0-20190828172938-92c8520ef9f8 // indirect
 	github.com/containerd/typeurl v0.0.0-20180627222232-a93fcdb778cd // indirect
 	github.com/containernetworking/cni v0.7.1 // indirect
 	github.com/coreos/go-systemd v0.0.0-20190620071333-e64a0ec8b42a
@@ -36,6 +36,7 @@ require (
 	github.com/hashicorp/go-immutable-radix v1.0.0
 	github.com/hashicorp/golang-lru v0.0.0-20160207214719-a0d98a5f2880
 	github.com/hashicorp/uuid v0.0.0-20160311170451-ebb0a03e909c // indirect
+	github.com/imdario/mergo v0.3.7 // indirect
 	github.com/ishidawataru/sctp v0.0.0-20180213033435-07191f837fed // indirect
 	github.com/jaguilar/vt100 v0.0.0-20150826170717-2703a27b14ea
 	github.com/kr/pretty v0.1.0 // indirect
@@ -64,11 +65,11 @@ require (
 	go.etcd.io/bbolt v1.3.3
 	golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2
 	golang.org/x/net v0.0.0-20190522155817-f3200d17e092
-	golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4
+	golang.org/x/sync v0.0.0-20190423024810-112230192c58
 	golang.org/x/sys v0.0.0-20190812073006-9eafafc0a87e
 	golang.org/x/time v0.0.0-20161028155119-f51c12702a4d
 	google.golang.org/genproto v0.0.0-20180817151627-c66870c02cf8
-	google.golang.org/grpc v1.20.1
+	google.golang.org/grpc v1.23.0
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
 	gotest.tools v2.2.0+incompatible
 )

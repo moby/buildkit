@@ -118,7 +118,7 @@ func WithDefaultSpecForPlatform(platform string) SpecOpts {
 	}
 }
 
-// WithSpecFromBytes loads the the spec from the provided byte slice.
+// WithSpecFromBytes loads the spec from the provided byte slice.
 func WithSpecFromBytes(p []byte) SpecOpts {
 	return func(_ context.Context, _ Client, _ *containers.Container, s *Spec) error {
 		*s = Spec{} // make sure spec is cleared.
@@ -333,7 +333,11 @@ func WithImageConfigArgs(image Image, args []string) SpecOpts {
 
 		setProcess(s)
 		if s.Linux != nil {
-			s.Process.Env = replaceOrAppendEnvValues(config.Env, s.Process.Env)
+			defaults := config.Env
+			if len(defaults) == 0 {
+				defaults = defaultUnixEnv
+			}
+			s.Process.Env = replaceOrAppendEnvValues(defaults, s.Process.Env)
 			cmd := config.Cmd
 			if len(args) > 0 {
 				cmd = args
@@ -628,7 +632,7 @@ func WithUserID(uid uint32) SpecOpts {
 }
 
 // WithUsername sets the correct UID and GID for the container
-// based on the the image's /etc/passwd contents. If /etc/passwd
+// based on the image's /etc/passwd contents. If /etc/passwd
 // does not exist, or the username is not found in /etc/passwd,
 // it returns error.
 func WithUsername(username string) SpecOpts {

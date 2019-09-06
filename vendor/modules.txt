@@ -23,11 +23,9 @@ github.com/Microsoft/hcsshim/internal/safefile
 github.com/apache/thrift/lib/go/thrift
 # github.com/codahale/hdrhistogram v0.0.0-20160425231609-f8ad88b59a58
 github.com/codahale/hdrhistogram
-# github.com/containerd/cgroups v0.0.0-20190717030353-c4b9ac5c7601
-github.com/containerd/cgroups
 # github.com/containerd/console v0.0.0-20181022165439-0650fd9eeb50
 github.com/containerd/console
-# github.com/containerd/containerd v1.3.0-beta.2
+# github.com/containerd/containerd v1.3.0-rc.0
 github.com/containerd/containerd/filters
 github.com/containerd/containerd/mount
 github.com/containerd/containerd/snapshots
@@ -76,6 +74,7 @@ github.com/containerd/containerd/api/services/snapshots/v1
 github.com/containerd/containerd/api/services/tasks/v1
 github.com/containerd/containerd/api/services/version/v1
 github.com/containerd/containerd/api/types
+github.com/containerd/containerd/api/types/task
 github.com/containerd/containerd/defaults
 github.com/containerd/containerd/events
 github.com/containerd/containerd/leases/proxy
@@ -88,7 +87,6 @@ github.com/containerd/containerd/snapshots/storage
 github.com/containerd/containerd/gc
 github.com/containerd/containerd/identifiers
 github.com/containerd/containerd/metadata/boltutil
-github.com/containerd/containerd/api/types/task
 github.com/containerd/containerd/events/exchange
 # github.com/containerd/continuity v0.0.0-20190827140505-75bee3e2ccb6
 github.com/containerd/continuity/sysx
@@ -106,7 +104,7 @@ github.com/containerd/fifo
 github.com/containerd/go-cni
 # github.com/containerd/go-runc v0.0.0-20190603165425-9007c2405372
 github.com/containerd/go-runc
-# github.com/containerd/ttrpc v0.0.0-20190613183316-1fb3814edf44
+# github.com/containerd/ttrpc v0.0.0-20190828172938-92c8520ef9f8
 github.com/containerd/ttrpc
 # github.com/containerd/typeurl v0.0.0-20180627222232-a93fcdb778cd
 github.com/containerd/typeurl
@@ -119,7 +117,6 @@ github.com/containernetworking/cni/pkg/version
 github.com/containernetworking/cni/pkg/types/020
 # github.com/coreos/go-systemd v0.0.0-20190620071333-e64a0ec8b42a
 github.com/coreos/go-systemd/daemon
-github.com/coreos/go-systemd/dbus
 # github.com/davecgh/go-spew v1.1.1
 github.com/davecgh/go-spew/spew
 # github.com/docker/cli v0.0.0-20190321234815-f40f9c240ab0
@@ -165,8 +162,6 @@ github.com/docker/go-units
 github.com/docker/libnetwork/resolvconf
 github.com/docker/libnetwork/types
 github.com/docker/libnetwork/resolvconf/dns
-# github.com/godbus/dbus v0.0.0-20181101234600-2ff6f7ffd60f
-github.com/godbus/dbus
 # github.com/gofrs/flock v0.7.0
 github.com/gofrs/flock
 # github.com/gogo/googleapis v1.1.0
@@ -281,7 +276,7 @@ golang.org/x/net/http/httpguts
 golang.org/x/net/http2/hpack
 golang.org/x/net/idna
 golang.org/x/net/internal/socks
-# golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4
+# golang.org/x/sync v0.0.0-20190423024810-112230192c58
 golang.org/x/sync/errgroup
 golang.org/x/sync/semaphore
 # golang.org/x/sys v0.0.0-20190812073006-9eafafc0a87e
@@ -297,7 +292,7 @@ golang.org/x/text/transform
 golang.org/x/time/rate
 # google.golang.org/genproto v0.0.0-20180817151627-c66870c02cf8
 google.golang.org/genproto/googleapis/rpc/status
-# google.golang.org/grpc v1.20.1
+# google.golang.org/grpc v1.23.0
 google.golang.org/grpc
 google.golang.org/grpc/credentials
 google.golang.org/grpc/metadata
@@ -326,6 +321,7 @@ google.golang.org/grpc/peer
 google.golang.org/grpc/resolver
 google.golang.org/grpc/resolver/dns
 google.golang.org/grpc/resolver/passthrough
+google.golang.org/grpc/serviceconfig
 google.golang.org/grpc/stats
 google.golang.org/grpc/tap
 google.golang.org/grpc/credentials/internal
