@@ -48,8 +48,12 @@ import (
 )
 
 func init() {
-	integration.InitOCIWorker()
-	integration.InitContainerdWorker()
+	if os.Getenv("TEST_DOCKERD") == "1" {
+		integration.InitDockerdWorker()
+	} else {
+		integration.InitOCIWorker()
+		integration.InitContainerdWorker()
+	}
 }
 
 type nopWriteCloser struct {
@@ -512,6 +516,7 @@ func testNetworkMode(t *testing.T, sb integration.Sandbox) {
 }
 
 func testPushByDigest(t *testing.T, sb integration.Sandbox) {
+	skipDockerd(t, sb)
 	requiresLinux(t)
 	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
@@ -569,6 +574,7 @@ func testSecurityMode(t *testing.T, sb integration.Sandbox) {
 		command = `sh -c 'cat /proc/self/status | grep CapEff | grep "00000000a80425fb"'`
 		allowedEntitlements = []entitlements.Entitlement{}
 	} else {
+		skipDockerd(t, sb)
 		/*
 			$ capsh --decode=0000003fffffffff
 			0x0000003fffffffff=cap_chown,cap_dac_override,cap_dac_read_search,cap_fowner,cap_fsetid,cap_kill,cap_setgid,
@@ -611,6 +617,7 @@ func testSecurityModeSysfs(t *testing.T, sb integration.Sandbox) {
 	if secMode == securitySandbox {
 		allowedEntitlements = []entitlements.Entitlement{}
 	} else {
+		skipDockerd(t, sb)
 		mode = llb.SecurityModeInsecure
 		allowedEntitlements = []entitlements.Entitlement{entitlements.EntitlementSecurityInsecure}
 	}
@@ -674,6 +681,7 @@ func testSecurityModeErrors(t *testing.T, sb integration.Sandbox) {
 }
 
 func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
+	skipDockerd(t, sb)
 	requiresLinux(t)
 	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
@@ -1377,6 +1385,7 @@ func testUser(t *testing.T, sb integration.Sandbox) {
 }
 
 func testOCIExporter(t *testing.T, sb integration.Sandbox) {
+	skipDockerd(t, sb)
 	requiresLinux(t)
 	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
@@ -1480,6 +1489,7 @@ func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 }
 
 func testFrontendMetadataReturn(t *testing.T, sb integration.Sandbox) {
+	skipDockerd(t, sb)
 	requiresLinux(t)
 	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
@@ -1576,7 +1586,16 @@ func testFrontendUseSolveResults(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, dt, []byte("data"))
 }
 
+func skipDockerd(t *testing.T, sb integration.Sandbox) {
+	// TODO: remove me once dockerd supports the image and exporter.
+	t.Helper()
+	if os.Getenv("TEST_DOCKERD") == "1" {
+		t.Skip("dockerd missing a required exporter, cache exporter, or entitlement")
+	}
+}
+
 func testExporterTargetExists(t *testing.T, sb integration.Sandbox) {
+	skipDockerd(t, sb)
 	requiresLinux(t)
 	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
@@ -1607,6 +1626,10 @@ func testExporterTargetExists(t *testing.T, sb integration.Sandbox) {
 }
 
 func testTarExporterWithSocket(t *testing.T, sb integration.Sandbox) {
+	if os.Getenv("TEST_DOCKERD") == "1" {
+		t.Skip("tar exporter is temporarily broken on dockerd")
+	}
+
 	requiresLinux(t)
 	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
@@ -1790,6 +1813,7 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
+	skipDockerd(t, sb)
 	requiresLinux(t)
 	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
@@ -2062,6 +2086,7 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptio
 }
 
 func testBasicRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
+	skipDockerd(t, sb)
 	registry, err := sb.NewRegistry()
 	if errors.Cause(err) == integration.ErrorRequirements {
 		t.Skip(err.Error())
@@ -2078,6 +2103,7 @@ func testBasicRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
 }
 
 func testMultipleRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
+	skipDockerd(t, sb)
 	registry, err := sb.NewRegistry()
 	if errors.Cause(err) == integration.ErrorRequirements {
 		t.Skip(err.Error())
@@ -2100,6 +2126,7 @@ func testMultipleRegistryCacheImportExport(t *testing.T, sb integration.Sandbox)
 }
 
 func testBasicLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
+	skipDockerd(t, sb)
 	dir, err := ioutil.TempDir("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
@@ -2119,6 +2146,7 @@ func testBasicLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
+	skipDockerd(t, sb)
 	requiresLinux(t)
 	registry, err := sb.NewRegistry()
 	if errors.Cause(err) == integration.ErrorRequirements {
@@ -2439,6 +2467,7 @@ func testCacheMountNoCache(t *testing.T, sb integration.Sandbox) {
 
 // containerd/containerd#2119
 func testDuplicateWhiteouts(t *testing.T, sb integration.Sandbox) {
+	skipDockerd(t, sb)
 	requiresLinux(t)
 	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
@@ -2510,6 +2539,7 @@ func testDuplicateWhiteouts(t *testing.T, sb integration.Sandbox) {
 
 // #276
 func testWhiteoutParentDir(t *testing.T, sb integration.Sandbox) {
+	skipDockerd(t, sb)
 	requiresLinux(t)
 	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
