@@ -20,7 +20,6 @@
 package thrift
 
 import (
-	"context"
 	"errors"
 	"io"
 )
@@ -31,18 +30,15 @@ type Flusher interface {
 	Flush() (err error)
 }
 
-type ContextFlusher interface {
-	Flush(ctx context.Context) (err error)
-}
-
 type ReadSizeProvider interface {
 	RemainingBytes() (num_bytes uint64)
 }
 
+
 // Encapsulates the I/O layer
 type TTransport interface {
 	io.ReadWriteCloser
-	ContextFlusher
+	Flusher
 	ReadSizeProvider
 
 	// Opens the transport for communication
@@ -56,6 +52,7 @@ type stringWriter interface {
 	WriteString(s string) (n int, err error)
 }
 
+
 // This is "enchanced" transport with extra capabilities. You need to use one of these
 // to construct protocol.
 // Notably, TSocket does not implement this interface, and it is always a mistake to use
@@ -65,6 +62,7 @@ type TRichTransport interface {
 	io.ByteReader
 	io.ByteWriter
 	stringWriter
-	ContextFlusher
+	Flusher
 	ReadSizeProvider
 }
+

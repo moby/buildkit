@@ -45,8 +45,12 @@ import (
 )
 
 func init() {
-	integration.InitOCIWorker()
-	integration.InitContainerdWorker()
+	if os.Getenv("TEST_DOCKERD") == "1" {
+		integration.InitDockerdWorker()
+	} else {
+		integration.InitOCIWorker()
+		integration.InitContainerdWorker()
+	}
 }
 
 var allTests = []integration.Test{
@@ -1152,6 +1156,7 @@ COPY --from=build /out .
 }
 
 func testExportMultiPlatform(t *testing.T, sb integration.Sandbox) {
+	skipDockerd(t, sb)
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -1828,6 +1833,7 @@ FROM busybox:${tag}
 }
 
 func testDockerfileDirs(t *testing.T, sb integration.Sandbox) {
+	skipDockerd(t, sb)
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
 
@@ -1896,6 +1902,7 @@ func testDockerfileDirs(t *testing.T, sb integration.Sandbox) {
 }
 
 func testDockerfileInvalidCommand(t *testing.T, sb integration.Sandbox) {
+	skipDockerd(t, sb)
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
 	dockerfile := []byte(`
@@ -1922,6 +1929,7 @@ func testDockerfileInvalidCommand(t *testing.T, sb integration.Sandbox) {
 }
 
 func testDockerfileADDFromURL(t *testing.T, sb integration.Sandbox) {
+	skipDockerd(t, sb)
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
 
@@ -2004,6 +2012,7 @@ ADD %s /dest/
 }
 
 func testDockerfileAddArchive(t *testing.T, sb integration.Sandbox) {
+	skipDockerd(t, sb)
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
 
@@ -2250,6 +2259,7 @@ ADD *.tar /dest
 }
 
 func testSymlinkDestination(t *testing.T, sb integration.Sandbox) {
+	skipDockerd(t, sb)
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
 
@@ -2367,6 +2377,8 @@ ENV foo=bar
 }
 
 func testExposeExpansion(t *testing.T, sb integration.Sandbox) {
+	skipDockerd(t, sb)
+
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -2556,6 +2568,7 @@ COPY . .
 }
 
 func testExportedHistory(t *testing.T, sb integration.Sandbox) {
+	skipDockerd(t, sb)
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
 
@@ -2638,7 +2651,17 @@ RUN ["ls"]
 	require.NotNil(t, ociimg.History[6].Created)
 }
 
+func skipDockerd(t *testing.T, sb integration.Sandbox) {
+	// TODO: remove me once dockerd supports the image and exporter.
+	t.Helper()
+	if os.Getenv("TEST_DOCKERD") == "1" {
+		t.Skip("dockerd missing a required exporter, cache exporter, or entitlement")
+	}
+}
+
 func testUser(t *testing.T, sb integration.Sandbox) {
+	skipDockerd(t, sb)
+
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -3399,6 +3422,7 @@ COPY --from=stage1 baz bax
 }
 
 func testLabels(t *testing.T, sb integration.Sandbox) {
+	skipDockerd(t, sb)
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -3584,6 +3608,7 @@ ONBUILD RUN mkdir -p /out && echo -n 11 >> /out/foo
 }
 
 func testCacheMultiPlatformImportExport(t *testing.T, sb integration.Sandbox) {
+	skipDockerd(t, sb)
 	f := getFrontend(t, sb)
 
 	registry, err := sb.NewRegistry()
@@ -3709,6 +3734,7 @@ COPY --from=base arch /
 }
 
 func testCacheImportExport(t *testing.T, sb integration.Sandbox) {
+	skipDockerd(t, sb)
 	f := getFrontend(t, sb)
 
 	registry, err := sb.NewRegistry()
@@ -3811,6 +3837,7 @@ COPY --from=base unique /
 }
 
 func testReproducibleIDs(t *testing.T, sb integration.Sandbox) {
+	skipDockerd(t, sb)
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`

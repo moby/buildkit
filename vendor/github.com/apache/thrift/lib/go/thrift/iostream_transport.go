@@ -21,7 +21,6 @@ package thrift
 
 import (
 	"bufio"
-	"context"
 	"io"
 )
 
@@ -39,38 +38,38 @@ type StreamTransportFactory struct {
 	isReadWriter bool
 }
 
-func (p *StreamTransportFactory) GetTransport(trans TTransport) (TTransport, error) {
+func (p *StreamTransportFactory) GetTransport(trans TTransport) TTransport {
 	if trans != nil {
 		t, ok := trans.(*StreamTransport)
 		if ok {
 			if t.isReadWriter {
-				return NewStreamTransportRW(t.Reader.(io.ReadWriter)), nil
+				return NewStreamTransportRW(t.Reader.(io.ReadWriter))
 			}
 			if t.Reader != nil && t.Writer != nil {
-				return NewStreamTransport(t.Reader, t.Writer), nil
+				return NewStreamTransport(t.Reader, t.Writer)
 			}
 			if t.Reader != nil && t.Writer == nil {
-				return NewStreamTransportR(t.Reader), nil
+				return NewStreamTransportR(t.Reader)
 			}
 			if t.Reader == nil && t.Writer != nil {
-				return NewStreamTransportW(t.Writer), nil
+				return NewStreamTransportW(t.Writer)
 			}
-			return &StreamTransport{}, nil
+			return &StreamTransport{}
 		}
 	}
 	if p.isReadWriter {
-		return NewStreamTransportRW(p.Reader.(io.ReadWriter)), nil
+		return NewStreamTransportRW(p.Reader.(io.ReadWriter))
 	}
 	if p.Reader != nil && p.Writer != nil {
-		return NewStreamTransport(p.Reader, p.Writer), nil
+		return NewStreamTransport(p.Reader, p.Writer)
 	}
 	if p.Reader != nil && p.Writer == nil {
-		return NewStreamTransportR(p.Reader), nil
+		return NewStreamTransportR(p.Reader)
 	}
 	if p.Reader == nil && p.Writer != nil {
-		return NewStreamTransportW(p.Writer), nil
+		return NewStreamTransportW(p.Writer)
 	}
-	return &StreamTransport{}, nil
+	return &StreamTransport{}
 }
 
 func NewStreamTransportFactory(reader io.Reader, writer io.Writer, isReadWriter bool) *StreamTransportFactory {
@@ -139,7 +138,7 @@ func (p *StreamTransport) Close() error {
 }
 
 // Flushes the underlying output stream if not null.
-func (p *StreamTransport) Flush(ctx context.Context) error {
+func (p *StreamTransport) Flush() error {
 	if p.Writer == nil {
 		return NewTTransportException(NOT_OPEN, "Cannot flush null outputStream")
 	}
@@ -210,5 +209,6 @@ func (p *StreamTransport) WriteString(s string) (n int, err error) {
 
 func (p *StreamTransport) RemainingBytes() (num_bytes uint64) {
 	const maxSize = ^uint64(0)
-	return maxSize // the thruth is, we just don't know unless framed is used
+	return maxSize  // the thruth is, we just don't know unless framed is used
 }
+

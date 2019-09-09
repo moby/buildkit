@@ -1,9 +1,13 @@
 language: go
 go:
-    - 1.11.x
-    - tip
+    - 1.12.x
+    - 1.13.x
+
+go_import_path: github.com/containerd/fifo
 
 install:
+  - cd $GOPATH/src/github.com/containerd/fifo
+  - GO111MODULE="on" go mod vendor
   - go get -u github.com/vbatts/git-validation
   - go get -u github.com/kunalkushwaha/ltag
 

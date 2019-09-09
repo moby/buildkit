@@ -351,12 +351,11 @@ func (h *Histogram) Export() *Snapshot {
 		LowestTrackableValue:  h.lowestTrackableValue,
 		HighestTrackableValue: h.highestTrackableValue,
 		SignificantFigures:    h.significantFigures,
-		Counts:                append([]int64(nil), h.counts...), // copy
+		Counts:                h.counts,
 	}
 }
 
-// Import returns a new Histogram populated from the Snapshot data (which the
-// caller must stop accessing).
+// Import returns a new Histogram populated from the Snapshot data.
 func Import(s *Snapshot) *Histogram {
 	h := New(s.LowestTrackableValue, s.HighestTrackableValue, int(s.SignificantFigures))
 	h.counts = s.Counts

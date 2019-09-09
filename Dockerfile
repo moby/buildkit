@@ -80,7 +80,7 @@ RUN --mount=target=. \
   echo "-X ${PKG}/version.Version=${VERSION} -X ${PKG}/version.Revision=${REVISION} -X ${PKG}/version.Package=${PKG}" | tee /tmp/.ldflags; \
   echo -n "${VERSION}" | tee /tmp/.version;
 
-# build buildctl binary 
+# build buildctl binary
 FROM buildkit-base AS buildctl
 ENV CGO_ENABLED=0
 ARG TARGETPLATFORM

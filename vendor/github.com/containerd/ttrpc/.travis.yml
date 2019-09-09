@@ -1,7 +1,8 @@
+dist: bionic
 language: go
 
 go:
-  - "1.12.x"
+  - "1.13.x"
 
 install:
   # Don't change local go.{mod, sum} by go get tools.
@@ -13,11 +14,10 @@ install:
 before_script:
   - pushd ..; git clone https://github.com/containerd/project; popd
 
-env:
-  GO111MODULE=on
-
 script:
   - DCO_VERBOSITY=-q ../project/script/validate/dco
   - ../project/script/validate/fileheader ../project/
-  - ../project/script/validate/vendor
-  - go test -race -v ./...
+  - go test -v -race -covermode=atomic -coverprofile=coverage.txt ./...
+
+after_success:
+  - bash <(curl -s https://codecov.io/bash)

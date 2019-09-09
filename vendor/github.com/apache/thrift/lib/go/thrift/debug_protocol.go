@@ -20,7 +20,6 @@
 package thrift
 
 import (
-	"context"
 	"log"
 )
 
@@ -259,8 +258,8 @@ func (tdp *TDebugProtocol) Skip(fieldType TType) (err error) {
 	log.Printf("%sSkip(fieldType=%#v) (err=%#v)", tdp.LogPrefix, fieldType, err)
 	return
 }
-func (tdp *TDebugProtocol) Flush(ctx context.Context) (err error) {
-	err = tdp.Delegate.Flush(ctx)
+func (tdp *TDebugProtocol) Flush() (err error) {
+	err = tdp.Delegate.Flush()
 	log.Printf("%sFlush() (err=%#v)", tdp.LogPrefix, err)
 	return
 }

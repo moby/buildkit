@@ -1,5 +1,8 @@
 # github.com/AkihiroSuda/containerd-fuse-overlayfs v0.0.0-20200220082720-bb896865146c
 github.com/AkihiroSuda/containerd-fuse-overlayfs
+# github.com/Azure/go-ansiterm v0.0.0-20170929234023-d6e3b3328b78
+github.com/Azure/go-ansiterm
+github.com/Azure/go-ansiterm/winterm
 # github.com/BurntSushi/toml v0.3.1
 github.com/BurntSushi/toml
 # github.com/Microsoft/go-winio v0.4.15-0.20190919025122-fc70bd9a86b5
@@ -24,15 +27,15 @@ github.com/Microsoft/hcsshim/internal/timeout
 github.com/Microsoft/hcsshim/internal/vmcompute
 github.com/Microsoft/hcsshim/internal/wclayer
 github.com/Microsoft/hcsshim/osversion
-# github.com/apache/thrift v0.13.0
+# github.com/apache/thrift v0.0.0-20161221203622-b2a4d4ae21c7
 github.com/apache/thrift/lib/go/thrift
-# github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd
+# github.com/codahale/hdrhistogram v0.0.0-20160425231609-f8ad88b59a58
 github.com/codahale/hdrhistogram
-# github.com/containerd/cgroups v0.0.0-20190919134610-bf292b21730f
+# github.com/containerd/cgroups v0.0.0-20200217135630-d732e370d46d
 github.com/containerd/cgroups/stats/v1
-# github.com/containerd/console v0.0.0-20180822173158-c12b1e7919c1
+# github.com/containerd/console v0.0.0-20191219165238-8375c3424e4d
 github.com/containerd/console
-# github.com/containerd/containerd v1.3.1-0.20200219222124-986d06785c4a => github.com/containerd/containerd v1.3.1-0.20200227195959-4d242818bf55
+# github.com/containerd/containerd v1.4.0-0 => github.com/containerd/containerd v1.3.1-0.20200227195959-4d242818bf55
 github.com/containerd/containerd
 github.com/containerd/containerd/api/services/containers/v1
 github.com/containerd/containerd/api/services/content/v1
@@ -108,15 +111,15 @@ github.com/containerd/continuity/pathdriver
 github.com/containerd/continuity/proto
 github.com/containerd/continuity/syscallx
 github.com/containerd/continuity/sysx
-# github.com/containerd/fifo v0.0.0-20190226154929-a9fb20d87448
+# github.com/containerd/fifo v0.0.0-20191213151349-ff969a566b00
 github.com/containerd/fifo
 # github.com/containerd/go-cni v0.0.0-20200107172653-c154a49e2c75
 github.com/containerd/go-cni
-# github.com/containerd/go-runc v0.0.0-20180907222934-5a6d9f37cfa3
+# github.com/containerd/go-runc v0.0.0-20200220073739-7016d3ce2328
 github.com/containerd/go-runc
-# github.com/containerd/ttrpc v0.0.0-20191028202541-4f1b8fe65a5c
+# github.com/containerd/ttrpc v0.0.0-20200121165050-0be804eadb15
 github.com/containerd/ttrpc
-# github.com/containerd/typeurl v0.0.0-20190911142611-5eb25027c9fd
+# github.com/containerd/typeurl v0.0.0-20200205145503-b45ef1f1f737
 github.com/containerd/typeurl
 # github.com/containernetworking/cni v0.7.1
 github.com/containernetworking/cni/libcni
@@ -125,9 +128,11 @@ github.com/containernetworking/cni/pkg/types
 github.com/containernetworking/cni/pkg/types/020
 github.com/containernetworking/cni/pkg/types/current
 github.com/containernetworking/cni/pkg/version
+# github.com/coreos/go-systemd v0.0.0-20190321100706-95778dfbb74e
+github.com/coreos/go-systemd/dbus
 # github.com/coreos/go-systemd/v22 v22.0.0
 github.com/coreos/go-systemd/v22/daemon
-# github.com/cpuguy83/go-md2man/v2 v2.0.0-20190314233015-f79a8a8ca69d
+# github.com/cpuguy83/go-md2man/v2 v2.0.0
 github.com/cpuguy83/go-md2man/v2/md2man
 # github.com/davecgh/go-spew v1.1.1
 github.com/davecgh/go-spew/spew
@@ -137,42 +142,75 @@ github.com/docker/cli/cli/config/configfile
 github.com/docker/cli/cli/config/credentials
 github.com/docker/cli/cli/config/types
 github.com/docker/cli/cli/connhelper/commandconn
-# github.com/docker/distribution v2.7.1-0.20190205005809-0d3efadf0154+incompatible
+# github.com/docker/distribution v0.0.0-20200223014041-6b972e50feee
 github.com/docker/distribution/digestset
 github.com/docker/distribution/reference
-# github.com/docker/docker v1.14.0-0.20191106232431-31abc6c089eb => github.com/docker/docker v1.4.2-0.20200227233006-38f52c9fec82
+github.com/docker/distribution/registry/api/errcode
+# github.com/docker/docker v0.0.0 => github.com/docker/docker v1.4.2-0.20200227233006-38f52c9fec82
+github.com/docker/docker/api
+github.com/docker/docker/api/types
 github.com/docker/docker/api/types/blkiodev
 github.com/docker/docker/api/types/container
+github.com/docker/docker/api/types/events
+github.com/docker/docker/api/types/filters
+github.com/docker/docker/api/types/image
 github.com/docker/docker/api/types/mount
+github.com/docker/docker/api/types/network
+github.com/docker/docker/api/types/registry
 github.com/docker/docker/api/types/strslice
+github.com/docker/docker/api/types/swarm
+github.com/docker/docker/api/types/swarm/runtime
+github.com/docker/docker/api/types/time
+github.com/docker/docker/api/types/versions
+github.com/docker/docker/api/types/volume
 github.com/docker/docker/builder/dockerignore
+github.com/docker/docker/client
+github.com/docker/docker/daemon/cluster/provider
+github.com/docker/docker/daemon/network
+github.com/docker/docker/errdefs
+github.com/docker/docker/opts
 github.com/docker/docker/pkg/archive
 github.com/docker/docker/pkg/chrootarchive
 github.com/docker/docker/pkg/fileutils
 github.com/docker/docker/pkg/homedir
 github.com/docker/docker/pkg/idtools
 github.com/docker/docker/pkg/ioutils
+github.com/docker/docker/pkg/jsonmessage
 github.com/docker/docker/pkg/locker
 github.com/docker/docker/pkg/longpath
 github.com/docker/docker/pkg/mount
+github.com/docker/docker/pkg/parsers
 github.com/docker/docker/pkg/pools
 github.com/docker/docker/pkg/reexec
 github.com/docker/docker/pkg/signal
+github.com/docker/docker/pkg/stringid
+github.com/docker/docker/pkg/sysinfo
 github.com/docker/docker/pkg/system
+github.com/docker/docker/pkg/term
+github.com/docker/docker/pkg/term/windows
+github.com/docker/docker/runconfig
+github.com/docker/docker/testutil/daemon
+github.com/docker/docker/testutil/environment
+github.com/docker/docker/testutil/fixtures/load
+github.com/docker/docker/testutil/request
 # github.com/docker/docker-credential-helpers v0.6.0
 github.com/docker/docker-credential-helpers/client
 github.com/docker/docker-credential-helpers/credentials
 # github.com/docker/go-connections v0.3.0
 github.com/docker/go-connections/nat
 github.com/docker/go-connections/sockets
+github.com/docker/go-connections/tlsconfig
 # github.com/docker/go-events v0.0.0-20190806004212-e31b211e4f1c
 github.com/docker/go-events
 # github.com/docker/go-units v0.4.0
 github.com/docker/go-units
 # github.com/docker/libnetwork v0.8.0-dev.2.0.20200226230617-d8334ccdb9be
+github.com/docker/libnetwork/ipamutils
 github.com/docker/libnetwork/resolvconf
 github.com/docker/libnetwork/resolvconf/dns
 github.com/docker/libnetwork/types
+# github.com/godbus/dbus v0.0.0-20190422162347-ade71ed3457e
+github.com/godbus/dbus
 # github.com/gofrs/flock v0.7.0
 github.com/gofrs/flock
 # github.com/gogo/googleapis v1.3.2
@@ -209,7 +247,7 @@ github.com/hashicorp/golang-lru/simplelru
 github.com/ishidawataru/sctp
 # github.com/jaguilar/vt100 v0.0.0-20150826170717-2703a27b14ea => github.com/tonistiigi/vt100 v0.0.0-20190402012908-ad4c4a574305
 github.com/jaguilar/vt100
-# github.com/konsorten/go-windows-terminal-sequences v1.0.1
+# github.com/konsorten/go-windows-terminal-sequences v1.0.2
 github.com/konsorten/go-windows-terminal-sequences
 # github.com/mitchellh/hashstructure v0.0.0-20170609045927-2bca23e0e452
 github.com/mitchellh/hashstructure
@@ -222,6 +260,8 @@ github.com/opencontainers/image-spec/identity
 github.com/opencontainers/image-spec/specs-go
 github.com/opencontainers/image-spec/specs-go/v1
 # github.com/opencontainers/runc v1.0.0-rc9.0.20200221051241-688cf6d43cc4
+github.com/opencontainers/runc/libcontainer/cgroups
+github.com/opencontainers/runc/libcontainer/configs
 github.com/opencontainers/runc/libcontainer/system
 github.com/opencontainers/runc/libcontainer/user
 # github.com/opencontainers/runtime-spec v1.0.1
@@ -367,3 +407,10 @@ gotest.tools/assert/cmp
 gotest.tools/internal/difflib
 gotest.tools/internal/format
 gotest.tools/internal/source
+# gotest.tools/v3 v3.0.2
+gotest.tools/v3/assert
+gotest.tools/v3/assert/cmp
+gotest.tools/v3/internal/difflib
+gotest.tools/v3/internal/format
+gotest.tools/v3/internal/source
+gotest.tools/v3/poll

@@ -20,9 +20,7 @@
 package thrift
 
 import (
-	"context"
 	"errors"
-	"fmt"
 )
 
 const (
@@ -75,7 +73,7 @@ type TProtocol interface {
 	ReadBinary() (value []byte, err error)
 
 	Skip(fieldType TType) (err error)
-	Flush(ctx context.Context) (err error)
+	Flush() (err error)
 
 	Transport() TTransport
 }
@@ -90,12 +88,14 @@ func SkipDefaultDepth(prot TProtocol, typeId TType) (err error) {
 
 // Skips over the next data element from the provided input TProtocol object.
 func Skip(self TProtocol, fieldType TType, maxDepth int) (err error) {
-
-	if maxDepth <= 0 {
-		return NewTProtocolExceptionWithType(DEPTH_LIMIT, errors.New("Depth limit exceeded"))
+	
+    if maxDepth <= 0 {
+		return NewTProtocolExceptionWithType( DEPTH_LIMIT, errors.New("Depth limit exceeded"))
 	}
 
 	switch fieldType {
+	case STOP:
+		return
 	case BOOL:
 		_, err = self.ReadBool()
 		return
@@ -170,8 +170,6 @@ func Skip(self TProtocol, fieldType TType, maxDepth int) (err error) {
 			}
 		}
 		return self.ReadListEnd()
-	default:
-		return NewTProtocolExceptionWithType(INVALID_DATA, errors.New(fmt.Sprintf("Unknown data type %d", fieldType)))
 	}
 	return nil
 }
