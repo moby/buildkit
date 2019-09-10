@@ -1,4 +1,4 @@
-package client
+package client_test
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	buildkitClient "github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/client/buildid"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	gatewayapi "github.com/moby/buildkit/frontend/gateway/pb"
@@ -36,7 +38,7 @@ func testClientGatewaySolve(t *testing.T, sb integration.Sandbox) {
 
 	ctx := context.TODO()
 
-	c, err := New(ctx, sb.Address())
+	c, err := buildkitClient.New(ctx, sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -89,10 +91,10 @@ func testClientGatewaySolve(t *testing.T, sb integration.Sandbox) {
 
 	testStr := "This is a test"
 
-	_, err = c.Build(ctx, SolveOpt{
-		Exports: []ExportEntry{
+	_, err = c.Build(ctx, buildkitClient.SolveOpt{
+		Exports: []buildkitClient.ExportEntry{
 			{
-				Type:      ExporterLocal,
+				Type:      buildkitClient.ExporterLocal,
 				OutputDir: tmpdir,
 			},
 		},
@@ -114,7 +116,7 @@ func testClientGatewayFailedSolve(t *testing.T, sb integration.Sandbox) {
 
 	ctx := context.TODO()
 
-	c, err := New(ctx, sb.Address())
+	c, err := buildkitClient.New(ctx, sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -122,7 +124,7 @@ func testClientGatewayFailedSolve(t *testing.T, sb integration.Sandbox) {
 		return nil, errors.New("expected to fail")
 	}
 
-	_, err = c.Build(ctx, SolveOpt{}, "", b, nil)
+	_, err = c.Build(ctx, buildkitClient.SolveOpt{}, "", b, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "expected to fail")
 }
@@ -132,7 +134,7 @@ func testClientGatewayEmptySolve(t *testing.T, sb integration.Sandbox) {
 
 	ctx := context.TODO()
 
-	c, err := New(ctx, sb.Address())
+	c, err := buildkitClient.New(ctx, sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -147,7 +149,7 @@ func testClientGatewayEmptySolve(t *testing.T, sb integration.Sandbox) {
 		return r, nil
 	}
 
-	_, err = c.Build(ctx, SolveOpt{}, "", b, nil)
+	_, err = c.Build(ctx, buildkitClient.SolveOpt{}, "", b, nil)
 	require.NoError(t, err)
 }
 
@@ -156,11 +158,11 @@ func testNoBuildID(t *testing.T, sb integration.Sandbox) {
 
 	ctx := context.TODO()
 
-	c, err := New(ctx, sb.Address())
+	c, err := buildkitClient.New(ctx, sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	g := gatewayapi.NewLLBBridgeClient(c.conn)
+	g := gatewayapi.NewLLBBridgeClient(nil)
 	_, err = g.Ping(ctx, &gatewayapi.PingRequest{})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "no buildid found in context")
@@ -171,11 +173,13 @@ func testUnknownBuildID(t *testing.T, sb integration.Sandbox) {
 
 	ctx := context.TODO()
 
-	c, err := New(ctx, sb.Address())
+	c, err := buildkitClient.New(ctx, sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	g := c.gatewayClientForBuild(t.Name() + identity.NewID())
+	//g := c.gatewayClientForBuild(t.Name() + identity.NewID())
+	g := gatewayapi.NewLLBBridgeClient(nil)
+	ctx = buildid.AppendToOutgoingContext(ctx, t.Name()+identity.NewID())
 	_, err = g.Ping(ctx, &gatewayapi.PingRequest{})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "no such job")

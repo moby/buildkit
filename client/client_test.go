@@ -1,4 +1,4 @@
-package client
+package client_test
 
 import (
 	"archive/tar"
@@ -27,6 +27,7 @@ import (
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/continuity/fs/fstest"
+	buildkitClient "github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
 	gateway "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/identity"
@@ -139,7 +140,7 @@ func testBridgeNetworking(t *testing.T, sb integration.Sandbox) {
 	if sb.Rootless() {
 		t.SkipNow()
 	}
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -150,7 +151,7 @@ func testBridgeNetworking(t *testing.T, sb integration.Sandbox) {
 	def, err := llb.Image("busybox").Run(llb.Shlexf("sh -c 'nc 127.0.0.1 %s | grep foo'", addrParts[len(addrParts)-1])).Marshal()
 	require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{}, nil)
 	require.Error(t, err)
 }
 func testHostNetworking(t *testing.T, sb integration.Sandbox) {
@@ -162,7 +163,7 @@ func testHostNetworking(t *testing.T, sb integration.Sandbox) {
 	if netMode == hostNetwork {
 		allowedEntitlements = []entitlements.Entitlement{entitlements.EntitlementNetworkHost}
 	}
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -173,7 +174,7 @@ func testHostNetworking(t *testing.T, sb integration.Sandbox) {
 	def, err := llb.Image("busybox").Run(llb.Shlexf("sh -c 'nc 127.0.0.1 %s | grep foo'", addrParts[len(addrParts)-1]), llb.Network(llb.NetModeHost)).Marshal()
 	require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
 		AllowedEntitlements: allowedEntitlements,
 	}, nil)
 	if netMode == hostNetwork {
@@ -185,7 +186,7 @@ func testHostNetworking(t *testing.T, sb integration.Sandbox) {
 
 // #877
 func testExportBusyboxLocal(t *testing.T, sb integration.Sandbox) {
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -196,10 +197,10 @@ func testExportBusyboxLocal(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exports: []ExportEntry{
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
+		Exports: []buildkitClient.ExportEntry{
 			{
-				Type:      ExporterLocal,
+				Type:      buildkitClient.ExporterLocal,
 				OutputDir: destDir,
 			},
 		},
@@ -223,7 +224,7 @@ func testHostnameLookup(t *testing.T, sb integration.Sandbox) {
 		t.SkipNow()
 	}
 
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -232,13 +233,13 @@ func testHostnameLookup(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal()
 	require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{}, nil)
 	require.NoError(t, err)
 }
 
 // moby/buildkit#614
 func testStdinClosed(t *testing.T, sb integration.Sandbox) {
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -247,12 +248,12 @@ func testStdinClosed(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal()
 	require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{}, nil)
 	require.NoError(t, err)
 }
 
 func testSSHMount(t *testing.T, sb integration.Sandbox) {
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -278,7 +279,7 @@ func testSSHMount(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal()
 	require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{}, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "no SSH key ")
 
@@ -287,7 +288,7 @@ func testSSHMount(t *testing.T, sb integration.Sandbox) {
 	def, err = st.Marshal()
 	require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
 		Session: []session.Attachable{ssh},
 	}, nil)
 	require.Error(t, err)
@@ -298,7 +299,7 @@ func testSSHMount(t *testing.T, sb integration.Sandbox) {
 	def, err = st.Marshal()
 	require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
 		Session: []session.Attachable{ssh},
 	}, nil)
 	require.NoError(t, err)
@@ -317,10 +318,10 @@ func testSSHMount(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exports: []ExportEntry{
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
+		Exports: []buildkitClient.ExportEntry{
 			{
-				Type:      ExporterLocal,
+				Type:      buildkitClient.ExporterLocal,
 				OutputDir: destDir,
 			},
 		},
@@ -349,10 +350,10 @@ func testSSHMount(t *testing.T, sb integration.Sandbox) {
 
 	require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exports: []ExportEntry{
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
+		Exports: []buildkitClient.ExportEntry{
 			{
-				Type:      ExporterLocal,
+				Type:      buildkitClient.ExporterLocal,
 				OutputDir: destDir,
 			},
 		},
@@ -400,10 +401,10 @@ func testSSHMount(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exports: []ExportEntry{
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
+		Exports: []buildkitClient.ExportEntry{
 			{
-				Type:      ExporterLocal,
+				Type:      buildkitClient.ExporterLocal,
 				OutputDir: destDir,
 			},
 		},
@@ -418,7 +419,7 @@ func testSSHMount(t *testing.T, sb integration.Sandbox) {
 }
 
 func testExtraHosts(t *testing.T, sb integration.Sandbox) {
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -428,12 +429,12 @@ func testExtraHosts(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal()
 	require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{}, nil)
 	require.NoError(t, err)
 }
 
 func testNetworkMode(t *testing.T, sb integration.Sandbox) {
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -443,7 +444,7 @@ func testNetworkMode(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal()
 	require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{}, nil)
 	require.NoError(t, err)
 
 	st2 := llb.Image("busybox:latest").
@@ -452,7 +453,7 @@ func testNetworkMode(t *testing.T, sb integration.Sandbox) {
 	def, err = st2.Marshal()
 	require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
 		// Currently disabled globally by default
 		// AllowedEntitlements: []entitlements.Entitlement{entitlements.EntitlementNetworkHost},
 	}, nil)
@@ -462,7 +463,7 @@ func testNetworkMode(t *testing.T, sb integration.Sandbox) {
 
 func testPushByDigest(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -479,8 +480,8 @@ func testPushByDigest(t *testing.T, sb integration.Sandbox) {
 
 	name := registry + "/foo/bar"
 
-	resp, err := c.Solve(context.TODO(), def, SolveOpt{
-		Exports: []ExportEntry{
+	resp, err := c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
+		Exports: []buildkitClient.ExportEntry{
 			{
 				Type: "image",
 				Attrs: map[string]string{
@@ -531,7 +532,7 @@ func testSecurityMode(t *testing.T, sb integration.Sandbox) {
 		allowedEntitlements = []entitlements.Entitlement{entitlements.EntitlementSecurityInsecure}
 	}
 
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -542,7 +543,7 @@ func testSecurityMode(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal()
 	require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
 		AllowedEntitlements: allowedEntitlements,
 	}, nil)
 
@@ -564,7 +565,7 @@ func testSecurityModeSysfs(t *testing.T, sb integration.Sandbox) {
 		allowedEntitlements = []entitlements.Entitlement{entitlements.EntitlementSecurityInsecure}
 	}
 
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -576,7 +577,7 @@ func testSecurityModeSysfs(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal()
 	require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
 		AllowedEntitlements: allowedEntitlements,
 	}, nil)
 
@@ -591,7 +592,7 @@ func testSecurityModeSysfs(t *testing.T, sb integration.Sandbox) {
 
 func testSecurityModeErrors(t *testing.T, sb integration.Sandbox) {
 
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 	secMode := sb.Value("secmode")
@@ -603,7 +604,7 @@ func testSecurityModeErrors(t *testing.T, sb integration.Sandbox) {
 		def, err := st.Marshal()
 		require.NoError(t, err)
 
-		_, err = c.Solve(context.TODO(), def, SolveOpt{
+		_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
 			AllowedEntitlements: []entitlements.Entitlement{entitlements.EntitlementSecurityInsecure},
 		}, nil)
 		require.Error(t, err)
@@ -616,7 +617,7 @@ func testSecurityModeErrors(t *testing.T, sb integration.Sandbox) {
 		def, err := st.Marshal()
 		require.NoError(t, err)
 
-		_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+		_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{}, nil)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "security.insecure is not allowed")
 	}
@@ -624,7 +625,7 @@ func testSecurityModeErrors(t *testing.T, sb integration.Sandbox) {
 
 func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -635,11 +636,11 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	checkImageName := map[string]func(out, imageName string, exporterResponse map[string]string){
-		ExporterOCI: func(out, imageName string, exporterResponse map[string]string) {
+		buildkitClient.ExporterOCI: func(out, imageName string, exporterResponse map[string]string) {
 			// Nothing to check
 			return
 		},
-		ExporterDocker: func(out, imageName string, exporterResponse map[string]string) {
+		buildkitClient.ExporterDocker: func(out, imageName string, exporterResponse map[string]string) {
 			require.Contains(t, exporterResponse, "image.name")
 			require.Equal(t, exporterResponse["image.name"], "docker.io/library/"+imageName)
 
@@ -667,7 +668,7 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 			require.Equal(t, 1, len(dockerMfst[0].RepoTags))
 			require.Equal(t, imageName, dockerMfst[0].RepoTags[0])
 		},
-		ExporterImage: func(_, imageName string, exporterResponse map[string]string) {
+		buildkitClient.ExporterImage: func(_, imageName string, exporterResponse map[string]string) {
 			require.Contains(t, exporterResponse, "image.name")
 			require.Equal(t, exporterResponse["image.name"], imageName)
 
@@ -716,15 +717,15 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 		// functionality) have definitely completed before the
 		// sandbox and registry cleanups (defered above) are run.
 		t.Run(winner, func(t *testing.T) {
-			for _, exp := range []string{ExporterOCI, ExporterDocker, ExporterImage} {
+			for _, exp := range []string{buildkitClient.ExporterOCI, buildkitClient.ExporterDocker, buildkitClient.ExporterImage} {
 				exp := exp // capture loop variable.
 				t.Run(exp, func(t *testing.T) {
 					destDir, err := ioutil.TempDir("", "buildkit")
 					require.NoError(t, err)
 					defer os.RemoveAll(destDir)
 
-					so := SolveOpt{
-						Exports: []ExportEntry{
+					so := buildkitClient.SolveOpt{
+						Exports: []buildkitClient.ExportEntry{
 							{
 								Type:  exp,
 								Attrs: map[string]string{},
@@ -737,13 +738,13 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 					imageName := "image-" + exp + "-fe:latest"
 
 					switch exp {
-					case ExporterOCI:
+					case buildkitClient.ExporterOCI:
 						t.Skip("oci exporter does not support named images")
-					case ExporterDocker:
+					case buildkitClient.ExporterDocker:
 						outW, err := os.Create(out)
 						require.NoError(t, err)
 						so.Exports[0].Output = fixedWriteCloser(outW)
-					case ExporterImage:
+					case buildkitClient.ExporterImage:
 						imageName = registry + "/" + imageName
 						so.Exports[0].Attrs["push"] = "true"
 					}
@@ -776,7 +777,7 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 }
 
 func testSecretMounts(t *testing.T, sb integration.Sandbox) {
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -786,7 +787,7 @@ func testSecretMounts(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal()
 	require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
 		Session: []session.Attachable{secretsprovider.FromMap(map[string][]byte{
 			"/run/secrets/mysecret": []byte("foo-secret"),
 		})},
@@ -800,12 +801,12 @@ func testSecretMounts(t *testing.T, sb integration.Sandbox) {
 	def, err = st.Marshal()
 	require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
 		Session: []session.Attachable{secretsprovider.FromMap(map[string][]byte{})},
 	}, nil)
 	require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{}, nil)
 	require.NoError(t, err)
 
 	st = llb.Image("busybox:latest").
@@ -814,7 +815,7 @@ func testSecretMounts(t *testing.T, sb integration.Sandbox) {
 	def, err = st.Marshal()
 	require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
 		Session: []session.Attachable{secretsprovider.FromMap(map[string][]byte{})},
 	}, nil)
 	require.Error(t, err)
@@ -826,7 +827,7 @@ func testSecretMounts(t *testing.T, sb integration.Sandbox) {
 	def, err = st.Marshal()
 	require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
 		Session: []session.Attachable{secretsprovider.FromMap(map[string][]byte{
 			"mysecret": []byte("pw"),
 		})},
@@ -836,7 +837,7 @@ func testSecretMounts(t *testing.T, sb integration.Sandbox) {
 
 func testTmpfsMounts(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -846,13 +847,13 @@ func testTmpfsMounts(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal()
 	require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{}, nil)
 	require.NoError(t, err)
 }
 
 func testLocalSymlinkEscape(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -899,7 +900,7 @@ func testLocalSymlinkEscape(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal()
 	require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
 		LocalDirs: map[string]string{
 			"mylocal": dir,
 		},
@@ -909,7 +910,7 @@ func testLocalSymlinkEscape(t *testing.T, sb integration.Sandbox) {
 
 func testRelativeWorkDir(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -926,10 +927,10 @@ func testRelativeWorkDir(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exports: []ExportEntry{
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
+		Exports: []buildkitClient.ExportEntry{
 			{
-				Type:      ExporterLocal,
+				Type:      buildkitClient.ExporterLocal,
 				OutputDir: destDir,
 			},
 		},
@@ -943,7 +944,7 @@ func testRelativeWorkDir(t *testing.T, sb integration.Sandbox) {
 
 func testFileOpMkdirMkfile(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -957,10 +958,10 @@ func testFileOpMkdirMkfile(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exports: []ExportEntry{
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
+		Exports: []buildkitClient.ExportEntry{
 			{
-				Type:      ExporterLocal,
+				Type:      buildkitClient.ExporterLocal,
 				OutputDir: destDir,
 			},
 		},
@@ -978,7 +979,7 @@ func testFileOpMkdirMkfile(t *testing.T, sb integration.Sandbox) {
 
 func testFileOpCopyRm(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -1011,10 +1012,10 @@ func testFileOpCopyRm(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exports: []ExportEntry{
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
+		Exports: []buildkitClient.ExportEntry{
 			{
-				Type:      ExporterLocal,
+				Type:      buildkitClient.ExporterLocal,
 				OutputDir: destDir,
 			},
 		},
@@ -1047,7 +1048,7 @@ func testFileOpCopyRm(t *testing.T, sb integration.Sandbox) {
 }
 
 func testCallDiskUsage(t *testing.T, sb integration.Sandbox) {
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 	_, err = c.DiskUsage(context.TODO())
@@ -1056,7 +1057,7 @@ func testCallDiskUsage(t *testing.T, sb integration.Sandbox) {
 
 func testBuildMultiMount(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -1069,14 +1070,14 @@ func testBuildMultiMount(t *testing.T, sb integration.Sandbox) {
 	def, err := cp.Marshal()
 	require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{}, nil)
 	require.NoError(t, err)
 
 	checkAllReleasable(t, c, sb, true)
 }
 
 func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -1099,7 +1100,7 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal()
 	require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{}, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "invalid response status 404")
 
@@ -1109,7 +1110,7 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 	def, err = st.Marshal()
 	require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{}, nil)
 	require.NoError(t, err)
 
 	require.Equal(t, server.Stats("/foo").AllRequests, 1)
@@ -1119,10 +1120,10 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exports: []ExportEntry{
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
+		Exports: []buildkitClient.ExportEntry{
 			{
-				Type:      ExporterLocal,
+				Type:      buildkitClient.ExporterLocal,
 				OutputDir: tmpdir,
 			},
 		},
@@ -1142,10 +1143,10 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 	def, err = st.Marshal()
 	require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exports: []ExportEntry{
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
+		Exports: []buildkitClient.ExportEntry{
 			{
-				Type:      ExporterLocal,
+				Type:      buildkitClient.ExporterLocal,
 				OutputDir: tmpdir,
 			},
 		},
@@ -1171,7 +1172,7 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 
 func testResolveAndHosts(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -1192,10 +1193,10 @@ func testResolveAndHosts(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exports: []ExportEntry{
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
+		Exports: []buildkitClient.ExportEntry{
 			{
-				Type:      ExporterLocal,
+				Type:      buildkitClient.ExporterLocal,
 				OutputDir: destDir,
 			},
 		},
@@ -1214,7 +1215,7 @@ func testResolveAndHosts(t *testing.T, sb integration.Sandbox) {
 
 func testUser(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -1239,10 +1240,10 @@ func testUser(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exports: []ExportEntry{
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
+		Exports: []buildkitClient.ExportEntry{
 			{
-				Type:      ExporterLocal,
+				Type:      buildkitClient.ExporterLocal,
 				OutputDir: destDir,
 			},
 		},
@@ -1270,7 +1271,7 @@ func testUser(t *testing.T, sb integration.Sandbox) {
 
 func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -1287,7 +1288,7 @@ func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal()
 	require.NoError(t, err)
 
-	for _, exp := range []string{ExporterOCI, ExporterDocker} {
+	for _, exp := range []string{buildkitClient.ExporterOCI, buildkitClient.ExporterDocker} {
 
 		destDir, err := ioutil.TempDir("", "buildkit")
 		require.NoError(t, err)
@@ -1298,11 +1299,11 @@ func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 		require.NoError(t, err)
 		target := "example.com/buildkit/testoci:latest"
 		attrs := map[string]string{}
-		if exp == ExporterDocker {
+		if exp == buildkitClient.ExporterDocker {
 			attrs["name"] = target
 		}
-		_, err = c.Solve(context.TODO(), def, SolveOpt{
-			Exports: []ExportEntry{
+		_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
+			Exports: []buildkitClient.ExportEntry{
 				{
 					Type:   exp,
 					Attrs:  attrs,
@@ -1343,7 +1344,7 @@ func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 		_, ok = m["blobs/sha256/"+mfst.Layers[1].Digest.Hex()]
 		require.True(t, ok)
 
-		if exp != ExporterDocker {
+		if exp != buildkitClient.ExporterDocker {
 			continue
 		}
 
@@ -1373,7 +1374,7 @@ func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 
 func testFrontendMetadataReturn(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -1385,10 +1386,10 @@ func testFrontendMetadataReturn(t *testing.T, sb integration.Sandbox) {
 		return res, nil
 	}
 
-	res, err := c.Build(context.TODO(), SolveOpt{
-		Exports: []ExportEntry{
+	res, err := c.Build(context.TODO(), buildkitClient.SolveOpt{
+		Exports: []buildkitClient.ExportEntry{
 			{
-				Type:   ExporterOCI,
+				Type:   buildkitClient.ExporterOCI,
 				Attrs:  map[string]string{},
 				Output: fixedWriteCloser(nopWriteCloser{ioutil.Discard}),
 			},
@@ -1404,7 +1405,7 @@ func testFrontendMetadataReturn(t *testing.T, sb integration.Sandbox) {
 
 func testExporterTargetExists(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -1413,10 +1414,10 @@ func testExporterTargetExists(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	var mdDgst string
-	res, err := c.Solve(context.TODO(), def, SolveOpt{
-		Exports: []ExportEntry{
+	res, err := c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
+		Exports: []buildkitClient.ExportEntry{
 			{
-				Type:  ExporterOCI,
+				Type:  buildkitClient.ExporterOCI,
 				Attrs: map[string]string{},
 				Output: func(m map[string]string) (io.WriteCloser, error) {
 					mdDgst = m["containerimage.digest"]
@@ -1434,7 +1435,7 @@ func testExporterTargetExists(t *testing.T, sb integration.Sandbox) {
 
 func testTarExporterWithSocket(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -1442,10 +1443,10 @@ func testTarExporterWithSocket(t *testing.T, sb integration.Sandbox) {
 	def, err := alpine.Run(llb.Args([]string{"sh", "-c", "nc -l -s local:/socket.sock & usleep 100000; kill %1"})).Marshal()
 	require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exports: []ExportEntry{
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
+		Exports: []buildkitClient.ExportEntry{
 			{
-				Type:  ExporterTar,
+				Type:  buildkitClient.ExporterTar,
 				Attrs: map[string]string{},
 				Output: func(m map[string]string) (io.WriteCloser, error) {
 					return nopWriteCloser{ioutil.Discard}, nil
@@ -1458,7 +1459,7 @@ func testTarExporterWithSocket(t *testing.T, sb integration.Sandbox) {
 
 func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -1484,10 +1485,10 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 
 	target := registry + "/buildkit/testpush:latest"
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exports: []ExportEntry{
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
+		Exports: []buildkitClient.ExportEntry{
 			{
-				Type: ExporterImage,
+				Type: buildkitClient.ExporterImage,
 				Attrs: map[string]string{
 					"name": target,
 					"push": "true",
@@ -1507,10 +1508,10 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exports: []ExportEntry{
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
+		Exports: []buildkitClient.ExportEntry{
 			{
-				Type:      ExporterLocal,
+				Type:      buildkitClient.ExporterLocal,
 				OutputDir: destDir,
 			},
 		},
@@ -1657,9 +1658,9 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	require.False(t, ok)
 }
 
-func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptionsEntryImport, cacheOptionsEntryExport []CacheOptionsEntry) {
+func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptionsEntryImport, cacheOptionsEntryExport []buildkitClient.CacheOptionsEntry) {
 	requiresLinux(t)
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -1680,10 +1681,10 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptio
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exports: []ExportEntry{
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
+		Exports: []buildkitClient.ExportEntry{
 			{
-				Type:      ExporterLocal,
+				Type:      buildkitClient.ExporterLocal,
 				OutputDir: destDir,
 			},
 		},
@@ -1698,7 +1699,7 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptio
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "unique"))
 	require.NoError(t, err)
 
-	err = c.Prune(context.TODO(), nil, PruneAll)
+	err = c.Prune(context.TODO(), nil, buildkitClient.PruneAll)
 	require.NoError(t, err)
 
 	checkAllRemoved(t, c, sb)
@@ -1707,10 +1708,10 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptio
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exports: []ExportEntry{
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
+		Exports: []buildkitClient.ExportEntry{
 			{
-				Type:      ExporterLocal,
+				Type:      buildkitClient.ExporterLocal,
 				OutputDir: destDir,
 			}},
 		CacheImports: cacheOptionsEntryImport,
@@ -1733,13 +1734,13 @@ func testBasicRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	}
 	require.NoError(t, err)
 	target := registry + "/buildkit/testexport:latest"
-	o := CacheOptionsEntry{
+	o := buildkitClient.CacheOptionsEntry{
 		Type: "registry",
 		Attrs: map[string]string{
 			"ref": target,
 		},
 	}
-	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{o}, []CacheOptionsEntry{o})
+	testBasicCacheImportExport(t, sb, []buildkitClient.CacheOptionsEntry{o}, []buildkitClient.CacheOptionsEntry{o})
 }
 
 func testMultipleRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
@@ -1749,38 +1750,38 @@ func testMultipleRegistryCacheImportExport(t *testing.T, sb integration.Sandbox)
 	}
 	require.NoError(t, err)
 	target := registry + "/buildkit/testexport:latest"
-	o := CacheOptionsEntry{
+	o := buildkitClient.CacheOptionsEntry{
 		Type: "registry",
 		Attrs: map[string]string{
 			"ref": target,
 		},
 	}
-	o2 := CacheOptionsEntry{
+	o2 := buildkitClient.CacheOptionsEntry{
 		Type: "registry",
 		Attrs: map[string]string{
 			"ref": target + "notexist",
 		},
 	}
-	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{o, o2}, []CacheOptionsEntry{o})
+	testBasicCacheImportExport(t, sb, []buildkitClient.CacheOptionsEntry{o, o2}, []buildkitClient.CacheOptionsEntry{o})
 }
 
 func testBasicLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	dir, err := ioutil.TempDir("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
-	im := CacheOptionsEntry{
+	im := buildkitClient.CacheOptionsEntry{
 		Type: "local",
 		Attrs: map[string]string{
 			"src": dir,
 		},
 	}
-	ex := CacheOptionsEntry{
+	ex := buildkitClient.CacheOptionsEntry{
 		Type: "local",
 		Attrs: map[string]string{
 			"dest": dir,
 		},
 	}
-	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{im}, []CacheOptionsEntry{ex})
+	testBasicCacheImportExport(t, sb, []buildkitClient.CacheOptionsEntry{im}, []buildkitClient.CacheOptionsEntry{ex})
 }
 
 func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
@@ -1791,7 +1792,7 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	}
 	require.NoError(t, err)
 
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -1810,17 +1811,17 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 
 	target := registry + "/buildkit/testexportinline:latest"
 
-	resp, err := c.Solve(context.TODO(), def, SolveOpt{
-		Exports: []ExportEntry{
+	resp, err := c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
+		Exports: []buildkitClient.ExportEntry{
 			{
-				Type: ExporterImage,
+				Type: buildkitClient.ExporterImage,
 				Attrs: map[string]string{
 					"name": target,
 					"push": "true",
 				},
 			},
 		},
-		CacheExports: []CacheOptionsEntry{
+		CacheExports: []buildkitClient.CacheOptionsEntry{
 			{
 				Type: "inline",
 			},
@@ -1834,29 +1835,29 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	unique, err := readFileInImage(c, target+"@"+dgst, "/unique")
 	require.NoError(t, err)
 
-	err = c.Prune(context.TODO(), nil, PruneAll)
+	err = c.Prune(context.TODO(), nil, buildkitClient.PruneAll)
 	require.NoError(t, err)
 
 	checkAllRemoved(t, c, sb)
 
-	resp, err = c.Solve(context.TODO(), def, SolveOpt{
+	resp, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
 		// specifying inline cache exporter is needed for reproducing containerimage.digest
 		// (not needed for reproducing rootfs/unique)
-		Exports: []ExportEntry{
+		Exports: []buildkitClient.ExportEntry{
 			{
-				Type: ExporterImage,
+				Type: buildkitClient.ExporterImage,
 				Attrs: map[string]string{
 					"name": target,
 					"push": "true",
 				},
 			},
 		},
-		CacheExports: []CacheOptionsEntry{
+		CacheExports: []buildkitClient.CacheOptionsEntry{
 			{
 				Type: "inline",
 			},
 		},
-		CacheImports: []CacheOptionsEntry{
+		CacheImports: []buildkitClient.CacheOptionsEntry{
 			{
 				Type: "registry",
 				Attrs: map[string]string{
@@ -1872,22 +1873,22 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 
 	require.Equal(t, dgst, dgst2)
 
-	err = c.Prune(context.TODO(), nil, PruneAll)
+	err = c.Prune(context.TODO(), nil, buildkitClient.PruneAll)
 	require.NoError(t, err)
 
 	checkAllRemoved(t, c, sb)
 
-	resp, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exports: []ExportEntry{
+	resp, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
+		Exports: []buildkitClient.ExportEntry{
 			{
-				Type: ExporterImage,
+				Type: buildkitClient.ExporterImage,
 				Attrs: map[string]string{
 					"name": target,
 					"push": "true",
 				},
 			},
 		},
-		CacheImports: []CacheOptionsEntry{
+		CacheImports: []buildkitClient.CacheOptionsEntry{
 			{
 				Type: "registry",
 				Attrs: map[string]string{
@@ -1907,7 +1908,7 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	require.EqualValues(t, unique, unique3)
 }
 
-func readFileInImage(c *Client, ref, path string) ([]byte, error) {
+func readFileInImage(c *buildkitClient.Client, ref, path string) ([]byte, error) {
 	def, err := llb.Image(ref).Marshal()
 	if err != nil {
 		return nil, err
@@ -1918,10 +1919,10 @@ func readFileInImage(c *Client, ref, path string) ([]byte, error) {
 	}
 	defer os.RemoveAll(destDir)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exports: []ExportEntry{
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
+		Exports: []buildkitClient.ExportEntry{
 			{
-				Type:      ExporterLocal,
+				Type:      buildkitClient.ExporterLocal,
 				OutputDir: destDir,
 			},
 		},
@@ -1934,7 +1935,7 @@ func readFileInImage(c *Client, ref, path string) ([]byte, error) {
 
 func testCachedMounts(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -1952,11 +1953,11 @@ func testCachedMounts(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal()
 	require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{}, nil)
 	require.NoError(t, err)
 
 	// repeat to make sure cache works
-	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{}, nil)
 	require.NoError(t, err)
 
 	// second build using cache directories
@@ -1972,10 +1973,10 @@ func testCachedMounts(t *testing.T, sb integration.Sandbox) {
 	def, err = out.Marshal()
 	require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exports: []ExportEntry{
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
+		Exports: []buildkitClient.ExportEntry{
 			{
-				Type:      ExporterLocal,
+				Type:      buildkitClient.ExporterLocal,
 				OutputDir: destDir,
 			},
 		},
@@ -1999,7 +2000,7 @@ func testCachedMounts(t *testing.T, sb integration.Sandbox) {
 
 func testSharedCacheMounts(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -2017,13 +2018,13 @@ func testSharedCacheMounts(t *testing.T, sb integration.Sandbox) {
 	def, err := out.Marshal()
 	require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{}, nil)
 	require.NoError(t, err)
 }
 
 func testLockedCacheMounts(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -2041,13 +2042,13 @@ func testLockedCacheMounts(t *testing.T, sb integration.Sandbox) {
 	def, err := out.Marshal()
 	require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{}, nil)
 	require.NoError(t, err)
 }
 
 func testDuplicateCacheMount(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -2060,13 +2061,13 @@ func testDuplicateCacheMount(t *testing.T, sb integration.Sandbox) {
 	def, err := out.Marshal()
 	require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{}, nil)
 	require.NoError(t, err)
 }
 
 func testCacheMountNoCache(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -2079,7 +2080,7 @@ func testCacheMountNoCache(t *testing.T, sb integration.Sandbox) {
 	def, err := out.Marshal()
 	require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{}, nil)
 	require.NoError(t, err)
 
 	out = busybox.Run(llb.Shlex(`sh -e -c "[[ ! -f /m1/foo ]]; touch /m1/foo2;"`), llb.IgnoreCache)
@@ -2088,7 +2089,7 @@ func testCacheMountNoCache(t *testing.T, sb integration.Sandbox) {
 	def, err = out.Marshal()
 	require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{}, nil)
 	require.NoError(t, err)
 
 	out = busybox.Run(llb.Shlex(`sh -e -c "[[ -f /m1/foo2 ]]; [[ -f /m2/bar ]];"`))
@@ -2098,14 +2099,14 @@ func testCacheMountNoCache(t *testing.T, sb integration.Sandbox) {
 	def, err = out.Marshal()
 	require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{}, nil)
 	require.NoError(t, err)
 }
 
 // containerd/containerd#2119
 func testDuplicateWhiteouts(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -2130,10 +2131,10 @@ func testDuplicateWhiteouts(t *testing.T, sb integration.Sandbox) {
 	outW, err := os.Create(out)
 	require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exports: []ExportEntry{
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
+		Exports: []buildkitClient.ExportEntry{
 			{
-				Type:   ExporterOCI,
+				Type:   buildkitClient.ExporterOCI,
 				Output: fixedWriteCloser(outW),
 			},
 		},
@@ -2176,7 +2177,7 @@ func testDuplicateWhiteouts(t *testing.T, sb integration.Sandbox) {
 // #276
 func testWhiteoutParentDir(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -2200,10 +2201,10 @@ func testWhiteoutParentDir(t *testing.T, sb integration.Sandbox) {
 	out := filepath.Join(destDir, "out.tar")
 	outW, err := os.Create(out)
 	require.NoError(t, err)
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exports: []ExportEntry{
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
+		Exports: []buildkitClient.ExportEntry{
 			{
-				Type:   ExporterOCI,
+				Type:   buildkitClient.ExporterOCI,
 				Output: fixedWriteCloser(outW),
 			},
 		},
@@ -2241,7 +2242,7 @@ func testWhiteoutParentDir(t *testing.T, sb integration.Sandbox) {
 
 // #296
 func testSchema1Image(t *testing.T, sb integration.Sandbox) {
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -2250,7 +2251,7 @@ func testSchema1Image(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal()
 	require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{}, nil)
 	require.NoError(t, err)
 
 	checkAllReleasable(t, c, sb, true)
@@ -2258,7 +2259,7 @@ func testSchema1Image(t *testing.T, sb integration.Sandbox) {
 
 // #319
 func testMountWithNoSource(t *testing.T, sb integration.Sandbox) {
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -2279,7 +2280,7 @@ func testMountWithNoSource(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal()
 	require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{}, nil)
 	require.NoError(t, err)
 
 	checkAllReleasable(t, c, sb, true)
@@ -2287,7 +2288,7 @@ func testMountWithNoSource(t *testing.T, sb integration.Sandbox) {
 
 // #324
 func testReadonlyRootFS(t *testing.T, sb integration.Sandbox) {
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -2303,7 +2304,7 @@ func testReadonlyRootFS(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal()
 	require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{}, nil)
 	require.Error(t, err)
 	// Would prefer to detect more specifically "Read-only file
 	// system" but that isn't exposed here (it is on the stdio
@@ -2314,7 +2315,7 @@ func testReadonlyRootFS(t *testing.T, sb integration.Sandbox) {
 }
 
 func testProxyEnv(t *testing.T, sb integration.Sandbox) {
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -2335,10 +2336,10 @@ func testProxyEnv(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exports: []ExportEntry{
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
+		Exports: []buildkitClient.ExportEntry{
 			{
-				Type:      ExporterLocal,
+				Type:      buildkitClient.ExporterLocal,
 				OutputDir: destDir,
 			},
 		},
@@ -2363,10 +2364,10 @@ func testProxyEnv(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exports: []ExportEntry{
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
+		Exports: []buildkitClient.ExportEntry{
 			{
-				Type:      ExporterLocal,
+				Type:      buildkitClient.ExporterLocal,
 				OutputDir: destDir,
 			},
 		},
@@ -2384,7 +2385,7 @@ func requiresLinux(t *testing.T) {
 	}
 }
 
-func checkAllRemoved(t *testing.T, c *Client, sb integration.Sandbox) {
+func checkAllRemoved(t *testing.T, c *buildkitClient.Client, sb integration.Sandbox) {
 	retries := 0
 	for {
 		require.True(t, 20 > retries)
@@ -2399,7 +2400,7 @@ func checkAllRemoved(t *testing.T, c *Client, sb integration.Sandbox) {
 	}
 }
 
-func checkAllReleasable(t *testing.T, c *Client, sb integration.Sandbox, checkContent bool) {
+func checkAllReleasable(t *testing.T, c *buildkitClient.Client, sb integration.Sandbox, checkContent bool) {
 	retries := 0
 loop0:
 	for {
@@ -2416,7 +2417,7 @@ loop0:
 		break
 	}
 
-	err := c.Prune(context.TODO(), nil, PruneAll)
+	err := c.Prune(context.TODO(), nil, buildkitClient.PruneAll)
 	require.NoError(t, err)
 
 	du, err := c.DiskUsage(context.TODO())
@@ -2481,7 +2482,7 @@ loop0:
 
 func testInvalidExporter(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
-	c, err := New(context.TODO(), sb.Address())
+	c, err := buildkitClient.New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -2496,9 +2497,9 @@ func testInvalidExporter(t *testing.T, sb integration.Sandbox) {
 	attrs := map[string]string{
 		"name": target,
 	}
-	for _, exp := range []string{ExporterOCI, ExporterDocker} {
-		_, err = c.Solve(context.TODO(), def, SolveOpt{
-			Exports: []ExportEntry{
+	for _, exp := range []string{buildkitClient.ExporterOCI, buildkitClient.ExporterDocker} {
+		_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
+			Exports: []buildkitClient.ExportEntry{
 				{
 					Type:  exp,
 					Attrs: attrs,
@@ -2507,8 +2508,8 @@ func testInvalidExporter(t *testing.T, sb integration.Sandbox) {
 		}, nil)
 		// output file writer is required
 		require.Error(t, err)
-		_, err = c.Solve(context.TODO(), def, SolveOpt{
-			Exports: []ExportEntry{
+		_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
+			Exports: []buildkitClient.ExportEntry{
 				{
 					Type:      exp,
 					Attrs:     attrs,
@@ -2520,10 +2521,10 @@ func testInvalidExporter(t *testing.T, sb integration.Sandbox) {
 		require.Error(t, err)
 	}
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exports: []ExportEntry{
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
+		Exports: []buildkitClient.ExportEntry{
 			{
-				Type:  ExporterLocal,
+				Type:  buildkitClient.ExporterLocal,
 				Attrs: attrs,
 			},
 		},
@@ -2534,10 +2535,10 @@ func testInvalidExporter(t *testing.T, sb integration.Sandbox) {
 	f, err := os.Create(filepath.Join(destDir, "a"))
 	require.NoError(t, err)
 	defer f.Close()
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		Exports: []ExportEntry{
+	_, err = c.Solve(context.TODO(), def, buildkitClient.SolveOpt{
+		Exports: []buildkitClient.ExportEntry{
 			{
-				Type:   ExporterLocal,
+				Type:   buildkitClient.ExporterLocal,
 				Attrs:  attrs,
 				Output: fixedWriteCloser(f),
 			},
@@ -2554,7 +2555,7 @@ func testParallelLocalBuilds(t *testing.T, sb integration.Sandbox) {
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 
-	c, err := New(ctx, sb.Address())
+	c, err := buildkitClient.New(ctx, sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -2577,10 +2578,10 @@ func testParallelLocalBuilds(t *testing.T, sb integration.Sandbox) {
 				require.NoError(t, err)
 				defer os.RemoveAll(destDir)
 
-				_, err = c.Solve(ctx, def, SolveOpt{
-					Exports: []ExportEntry{
+				_, err = c.Solve(ctx, def, buildkitClient.SolveOpt{
+					Exports: []buildkitClient.ExportEntry{
 						{
-							Type:      ExporterLocal,
+							Type:      buildkitClient.ExporterLocal,
 							OutputDir: destDir,
 						},
 					},
