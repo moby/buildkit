@@ -102,7 +102,7 @@ github.com/containerd/continuity/proto
 github.com/containerd/fifo
 # github.com/containerd/go-cni v0.0.0-20190813230227-49fbd9b210f3
 github.com/containerd/go-cni
-# github.com/containerd/go-runc v0.0.0-20190603165425-9007c2405372
+# github.com/containerd/go-runc v0.0.0-20190911050354-e029b79d8cda
 github.com/containerd/go-runc
 # github.com/containerd/ttrpc v0.0.0-20190828172938-92c8520ef9f8
 github.com/containerd/ttrpc
