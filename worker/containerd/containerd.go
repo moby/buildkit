@@ -5,25 +5,21 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/containerd/containerd"
 	introspection "github.com/containerd/containerd/api/services/introspection/v1"
-	"github.com/containerd/containerd/namespaces"
-	"github.com/containerd/containerd/snapshots"
+	"github.com/containerd/containerd/gc"
+	"github.com/containerd/containerd/leases"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/executor/containerdexecutor"
 	"github.com/moby/buildkit/executor/oci"
-	"github.com/moby/buildkit/identity"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/network/netproviders"
-	"github.com/moby/buildkit/util/throttle"
 	"github.com/moby/buildkit/util/winlayers"
 	"github.com/moby/buildkit/worker/base"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 // NewWorkerOpt creates a WorkerOpt.
@@ -64,28 +60,17 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 		xlabels[k] = v
 	}
 
-	throttledGC := throttle.Throttle(time.Second, func() {
-		// TODO: how to avoid this?
-		ctx := context.TODO()
-		snapshotter := client.SnapshotService(snapshotterName)
-		ctx = namespaces.WithNamespace(ctx, ns)
-		key := identity.NewID()
-		if _, err := snapshotter.Prepare(ctx, key, "", snapshots.WithLabels(map[string]string{
-			"containerd.io/gc.root": time.Now().UTC().Format(time.RFC3339Nano),
-		})); err != nil {
-			logrus.Errorf("GC error: %+v", err)
-		}
-		if err := snapshotter.Remove(ctx, key); err != nil {
-			logrus.Errorf("GC error: %+v", err)
-		}
-	})
+	lm := leaseutil.WithNamespace(client.LeasesService(), ns)
 
-	gc := func(ctx context.Context) error {
-		throttledGC()
-		return nil
+	gc := func(ctx context.Context) (gc.Stats, error) {
+		l, err := lm.Create(ctx)
+		if err != nil {
+			return nil, nil
+		}
+		return nil, lm.Delete(ctx, leases.Lease{ID: l.ID}, leases.SynchronousDelete)
 	}
 
-	cs := containerdsnapshot.NewContentStore(client.ContentStore(), ns, gc)
+	cs := containerdsnapshot.NewContentStore(client.ContentStore(), ns)
 
 	resp, err := client.IntrospectionService().Plugins(context.TODO(), &introspection.PluginsRequest{Filters: []string{"type==io.containerd.runtime.v1"}})
 	if err != nil {
@@ -112,17 +97,18 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 	}
 
 	opt := base.WorkerOpt{
-		ID:            id,
-		Labels:        xlabels,
-		MetadataStore: md,
-		Executor:      containerdexecutor.New(client, root, "", np, dns),
-		Snapshotter:   containerdsnapshot.NewSnapshotter(snapshotterName, client.SnapshotService(snapshotterName), cs, md, ns, gc, nil),
-		ContentStore:  cs,
-		Applier:       winlayers.NewFileSystemApplierWithWindows(cs, df),
-		Differ:        winlayers.NewWalkingDiffWithWindows(cs, df),
-		ImageStore:    client.ImageService(),
-		Platforms:     platforms,
-		LeaseManager:  leaseutil.WithNamespace(client.LeasesService(), ns),
+		ID:             id,
+		Labels:         xlabels,
+		MetadataStore:  md,
+		Executor:       containerdexecutor.New(client, root, "", np, dns),
+		Snapshotter:    containerdsnapshot.NewSnapshotter(snapshotterName, client.SnapshotService(snapshotterName), ns, nil),
+		ContentStore:   cs,
+		Applier:        winlayers.NewFileSystemApplierWithWindows(cs, df),
+		Differ:         winlayers.NewWalkingDiffWithWindows(cs, df),
+		ImageStore:     client.ImageService(),
+		Platforms:      platforms,
+		LeaseManager:   lm,
+		GarbageCollect: gc,
 	}
 	return opt, nil
 }

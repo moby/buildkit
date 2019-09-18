@@ -18,6 +18,7 @@ import (
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/imageutil"
+	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/pull"
 	"github.com/moby/buildkit/util/resolver"
 	"github.com/moby/buildkit/util/winlayers"
@@ -104,19 +105,20 @@ func (is *imageSource) Resolve(ctx context.Context, id source.Identifier, sm *se
 		Src:          imageIdentifier.Reference,
 		Resolver:     pull.NewResolver(ctx, is.ResolverOpt, sm, is.ImageStore, imageIdentifier.ResolveMode, imageIdentifier.Reference.String()),
 		Platform:     &platform,
-		LeaseManager: is.LeaseManager,
 	}
 	p := &puller{
 		CacheAccessor: is.CacheAccessor,
 		Puller:        pullerUtil,
 		Platform:      platform,
 		id:            imageIdentifier,
+		LeaseManager:  is.LeaseManager,
 	}
 	return p, nil
 }
 
 type puller struct {
 	CacheAccessor cache.Accessor
+	LeaseManager  leases.Manager
 	Platform      specs.Platform
 	id            *source.ImageIdentifier
 	*pull.Puller
@@ -188,33 +190,51 @@ func (p *puller) Snapshot(ctx context.Context) (cache.ImmutableRef, error) {
 	// workaround for gcr, authentication not supported on blob endpoints
 	pull.EnsureManifestRequested(ctx, p.Puller.Resolver, p.Puller.Src.String())
 
+	ctx, done, err := leaseutil.WithLease(ctx, p.LeaseManager)
+	if err != nil {
+		return nil, err
+	}
+	defer done(ctx)
+
 	pulled, err := p.Puller.Pull(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if pulled.ChainID == "" {
+	if len(pulled.Layers) == 0 {
 		return nil, nil
 	}
-	ref, err := p.CacheAccessor.GetFromSnapshotter(ctx, string(pulled.ChainID), cache.WithDescription("pulled from "+pulled.Ref))
-	if err != nil {
-		return nil, err
+
+	var current cache.ImmutableRef
+	for _, l := range pulled.Layers {
+		ref, err := p.CacheAccessor.GetByBlob(ctx, l, current, cache.WithDescription("pulled from "+pulled.Ref))
+		if current != nil {
+			current.Release(context.TODO())
+		}
+		if err != nil {
+			return nil, err
+		}
+		if err := ref.Extract(ctx); err != nil {
+			ref.Release(context.TODO())
+			return nil, err
+		}
+		current = ref
 	}
 
-	if layerNeedsTypeWindows && ref != nil {
-		if err := markRefLayerTypeWindows(ref); err != nil {
-			ref.Release(context.TODO())
+	if layerNeedsTypeWindows && current != nil {
+		if err := markRefLayerTypeWindows(current); err != nil {
+			current.Release(context.TODO())
 			return nil, err
 		}
 	}
 
-	if p.id.RecordType != "" && cache.GetRecordType(ref) == "" {
-		if err := cache.SetRecordType(ref, p.id.RecordType); err != nil {
-			ref.Release(context.TODO())
+	if p.id.RecordType != "" && cache.GetRecordType(current) == "" {
+		if err := cache.SetRecordType(current, p.id.RecordType); err != nil {
+			current.Release(context.TODO())
 			return nil, err
 		}
 	}
 
-	return ref, nil
+	return current, nil
 }
 
 func markRefLayerTypeWindows(ref cache.ImmutableRef) error {

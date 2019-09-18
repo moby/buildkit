@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/containerd/containerd/content"
+	"github.com/containerd/containerd/diff"
 	"github.com/containerd/containerd/filters"
 	"github.com/containerd/containerd/gc"
 	"github.com/containerd/containerd/leases"
@@ -17,6 +18,7 @@ import (
 	"github.com/moby/buildkit/snapshot"
 	"github.com/opencontainers/go-digest"
 	imagespaceidentity "github.com/opencontainers/image-spec/identity"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
@@ -29,16 +31,17 @@ var (
 )
 
 type ManagerOpt struct {
-	Snapshotter     snapshot.SnapshotterBase
+	Snapshotter     snapshot.Snapshotter
 	MetadataStore   *metadata.Store
 	ContentStore    content.Store
 	LeaseManager    leases.Manager
 	PruneRefChecker ExternalRefCheckerFunc
 	GarbageCollect  func(ctx context.Context) (gc.Stats, error)
+	Applier         diff.Applier
 }
 
 type Accessor interface {
-	GetByBlob(ctx context.Context, diffID, blobID digest.Digest, parent ImmutableRef, opts ...RefOption) (ImmutableRef, error)
+	GetByBlob(ctx context.Context, desc ocispec.Descriptor, parent ImmutableRef, opts ...RefOption) (ImmutableRef, error)
 	Get(ctx context.Context, id string, opts ...RefOption) (ImmutableRef, error)
 
 	New(ctx context.Context, parent ImmutableRef, opts ...RefOption) (MutableRef, error)
@@ -58,7 +61,7 @@ type Manager interface {
 	Close() error
 }
 
-type ExternalRefCheckerFunc func() (ExternalRefChecker, error)
+type ExternalRefCheckerFunc func(Accessor) (ExternalRefChecker, error)
 
 type ExternalRefChecker interface {
 	Exists(key string) bool
@@ -89,12 +92,16 @@ func NewManager(opt ManagerOpt) (Manager, error) {
 	return cm, nil
 }
 
-func (cm *cacheManager) GetByBlob(ctx context.Context, diffID, blobID digest.Digest, parent ImmutableRef, opts ...RefOption) (ir ImmutableRef, err error) {
+func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispec.Descriptor, parent ImmutableRef, opts ...RefOption) (ir ImmutableRef, err error) {
+	diffID, err := diffIDFromDescriptor(desc)
+	if err != nil {
+		return nil, err
+	}
 	chainID := diffID
-	blobChainID := imagespaceidentity.ChainID([]digest.Digest{blobID, diffID})
+	blobChainID := imagespaceidentity.ChainID([]digest.Digest{desc.Digest, diffID})
 
-	if _, err := cm.ContentStore.Info(ctx, blobID); err != nil {
-		return nil, errors.Wrapf(err, "failed to get blob %s", blobID)
+	if _, err := cm.ContentStore.Info(ctx, desc.Digest); err != nil {
+		return nil, errors.Wrapf(err, "failed to get blob %s", desc.Digest)
 	}
 
 	var p *immutableRef
@@ -106,8 +113,15 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, diffID, blobID digest.Dig
 		}
 		chainID = imagespaceidentity.ChainID([]digest.Digest{pInfo.ChainID, chainID})
 		blobChainID = imagespaceidentity.ChainID([]digest.Digest{pInfo.BlobChainID, blobChainID})
-		p = parent.(*immutableRef)
-		parentID = p.ID()
+		p2, err := cm.Get(ctx, parent.ID(), NoUpdateLastUsed)
+		if err != nil {
+			return nil, err
+		}
+		if err := p2.Finalize(ctx, true); err != nil {
+			return nil, err
+		}
+		parentID = p2.ID()
+		p = p2.(*immutableRef)
 	}
 
 	defer func() {
@@ -177,14 +191,14 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, diffID, blobID digest.Dig
 	}()
 
 	if err := cm.ManagerOpt.LeaseManager.AddResource(ctx, l, leases.Resource{
-		ID:   id,
-		Type: "snapshots/" + snapshotID,
+		ID:   snapshotID,
+		Type: "snapshots/" + cm.ManagerOpt.Snapshotter.Name(),
 	}); err != nil {
 		return nil, errors.Wrapf(err, "failed to add snapshot %s to lease", id)
 	}
 
 	if err := cm.ManagerOpt.LeaseManager.AddResource(ctx, leases.Lease{ID: id}, leases.Resource{
-		ID:   blobID.String(),
+		ID:   desc.Digest.String(),
 		Type: "content",
 	}); err != nil {
 		return nil, errors.Wrapf(err, "failed to add blob %s to lease", id)
@@ -205,11 +219,13 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, diffID, blobID digest.Dig
 	}
 
 	queueDiffID(rec.md, diffID.String())
-	queueBlob(rec.md, blobID.String())
+	queueBlob(rec.md, desc.Digest.String())
 	queueChainID(rec.md, chainID.String())
 	queueBlobChainID(rec.md, blobChainID.String())
 	queueSnapshotID(rec.md, snapshotID)
 	queueBlobOnly(rec.md, blobOnly)
+	queueMediaType(rec.md, desc.MediaType)
+	queueCommitted(rec.md)
 
 	if err := rec.md.Commit(); err != nil {
 		return nil, err
@@ -230,7 +246,7 @@ func (cm *cacheManager) init(ctx context.Context) error {
 
 	for _, si := range items {
 		if _, err := cm.getRecord(ctx, si.ID()); err != nil {
-			logrus.Debugf("could not load snapshot %s: %v", si.ID(), err)
+			logrus.Debugf("could not load snapshot %s: %+v", si.ID(), err)
 			cm.md.Clear(si.ID())
 			// TODO: make sure content is deleted as well
 		}
@@ -338,14 +354,10 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOpt
 		return rec, nil
 	}
 
-	info, err := cm.Snapshotter.Stat(ctx, id)
-	if err != nil {
-		return nil, errors.Wrap(errNotFound, err.Error())
-	}
-
 	var parent *immutableRef
-	if info.Parent != "" {
-		parent, err = cm.get(ctx, info.Parent, append(opts, NoUpdateLastUsed)...)
+	if parentID := getParent(md); parentID != "" {
+		var err error
+		parent, err = cm.get(ctx, parentID, append(opts, NoUpdateLastUsed)...)
 		if err != nil {
 			return nil, err
 		}
@@ -388,6 +400,7 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, opts ...RefOpti
 
 	var parent *immutableRef
 	var parentID string
+	var parentSnapshotID string
 	if s != nil {
 		p, err := cm.Get(ctx, s.ID(), NoUpdateLastUsed)
 		if err != nil {
@@ -396,8 +409,9 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, opts ...RefOpti
 		if err := p.Finalize(ctx, true); err != nil {
 			return nil, err
 		}
-		parentID = p.ID()
 		parent = p.(*immutableRef)
+		parentSnapshotID = getSnapshotID(parent.md)
+		parentID = parent.ID()
 	}
 
 	defer func() {
@@ -406,7 +420,7 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, opts ...RefOpti
 		}
 	}()
 
-	if err := cm.Snapshotter.Prepare(ctx, id, parentID); err != nil {
+	if err := cm.Snapshotter.Prepare(ctx, id, parentSnapshotID); err != nil {
 		return nil, errors.Wrapf(err, "failed to prepare %s", id)
 	}
 	l, err := cm.ManagerOpt.LeaseManager.Create(ctx, func(l *leases.Lease) error {
@@ -504,8 +518,10 @@ func (cm *cacheManager) Prune(ctx context.Context, ch chan client.UsageInfo, opt
 
 	cm.muPrune.Unlock()
 
-	if _, err := cm.ManagerOpt.GarbageCollect(ctx); err != nil {
-		return err
+	if cm.GarbageCollect != nil {
+		if _, err := cm.GarbageCollect(ctx); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -519,7 +535,7 @@ func (cm *cacheManager) pruneOnce(ctx context.Context, ch chan client.UsageInfo,
 
 	var check ExternalRefChecker
 	if f := cm.PruneRefChecker; f != nil && (!opt.All || len(opt.Filter) > 0) {
-		c, err := f()
+		c, err := f(cm)
 		if err != nil {
 			return errors.WithStack(err)
 		}
@@ -731,7 +747,7 @@ func (cm *cacheManager) markShared(m map[string]*cacheUsageInfo) error {
 	if cm.PruneRefChecker == nil {
 		return nil
 	}
-	c, err := cm.PruneRefChecker()
+	c, err := cm.PruneRefChecker(cm)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -1058,4 +1074,16 @@ func sortDeleteRecords(toDelete []*deleteRecord) {
 			float64(toDelete[j].lastUsedAtIndex)/float64(maxLastUsedIndex)+
 				float64(toDelete[j].usageCountIndex)/float64(maxUsageCountIndex)
 	})
+}
+
+func diffIDFromDescriptor(desc ocispec.Descriptor) (digest.Digest, error) {
+	diffIDStr, ok := desc.Annotations["containerd.io/uncompressed"]
+	if !ok {
+		return "", errors.Errorf("missing uncompressed annotation for %s", desc.Digest)
+	}
+	diffID, err := digest.Parse(diffIDStr)
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to parse diffID %q for %s", diffIDStr, desc.Digest)
+	}
+	return diffID, nil
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/containerd/containerd/content/local"
 	"github.com/containerd/containerd/diff/apply"
@@ -19,11 +18,9 @@ import (
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/network/netproviders"
-	"github.com/moby/buildkit/util/throttle"
 	"github.com/moby/buildkit/util/winlayers"
 	"github.com/moby/buildkit/worker/base"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/sirupsen/logrus"
 	bolt "go.etcd.io/bbolt"
 )
 
@@ -85,18 +82,7 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		return opt, err
 	}
 
-	throttledGC := throttle.Throttle(time.Second, func() {
-		if _, err := mdb.GarbageCollect(context.TODO()); err != nil {
-			logrus.Errorf("GC error: %+v", err)
-		}
-	})
-
-	gc := func(ctx context.Context) error {
-		throttledGC()
-		return nil
-	}
-
-	c = containerdsnapshot.NewContentStore(mdb.ContentStore(), "buildkit", gc)
+	c = containerdsnapshot.NewContentStore(mdb.ContentStore(), "buildkit")
 
 	id, err := base.ID(root)
 	if err != nil {
@@ -111,7 +97,7 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		Labels:          xlabels,
 		MetadataStore:   md,
 		Executor:        exe,
-		Snapshotter:     containerdsnapshot.NewSnapshotter(snFactory.Name, mdb.Snapshotter(snFactory.Name), c, md, "buildkit", gc, idmap),
+		Snapshotter:     containerdsnapshot.NewSnapshotter(snFactory.Name, mdb.Snapshotter(snFactory.Name), "buildkit", idmap),
 		ContentStore:    c,
 		Applier:         winlayers.NewFileSystemApplierWithWindows(c, apply.NewFileSystemApplier(c)),
 		Differ:          winlayers.NewWalkingDiffWithWindows(c, walking.NewWalkingDiff(c)),
@@ -119,6 +105,7 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		Platforms:       []specs.Platform{platforms.Normalize(platforms.DefaultSpec())},
 		IdentityMapping: idmap,
 		LeaseManager:    leaseutil.WithNamespace(ctdmetadata.NewLeaseManager(mdb), "buildkit"),
+		GarbageCollect:  mdb.GarbageCollect,
 	}
 	return opt, nil
 }

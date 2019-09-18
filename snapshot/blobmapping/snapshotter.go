@@ -9,6 +9,7 @@ import (
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/snapshot"
 	digest "github.com/opencontainers/go-digest"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	bolt "go.etcd.io/bbolt"
 )
@@ -17,7 +18,7 @@ const blobKey = "blobmapping.blob"
 
 type Opt struct {
 	Content       content.Store
-	Snapshotter   snapshot.SnapshotterBase
+	Snapshotter   snapshot.Snapshotter
 	MetadataStore *metadata.Store
 }
 
@@ -34,14 +35,14 @@ type DiffPair struct {
 // this snapshotter keeps an internal mapping between a snapshot and a blob
 
 type Snapshotter struct {
-	snapshot.SnapshotterBase
+	snapshot.Snapshotter
 	opt Opt
 }
 
 func NewSnapshotter(opt Opt) snapshot.Snapshotter {
 	s := &Snapshotter{
-		SnapshotterBase: opt.Snapshotter,
-		opt:             opt,
+		Snapshotter: opt.Snapshotter,
+		opt:         opt,
 	}
 
 	return s
@@ -60,7 +61,7 @@ func (s *Snapshotter) Remove(ctx context.Context, key string) error {
 		return err
 	}
 
-	if err := s.SnapshotterBase.Remove(ctx, key); err != nil {
+	if err := s.Snapshotter.Remove(ctx, key); err != nil {
 		return err
 	}
 
@@ -73,7 +74,9 @@ func (s *Snapshotter) Remove(ctx context.Context, key string) error {
 }
 
 func (s *Snapshotter) Usage(ctx context.Context, key string) (snapshots.Usage, error) {
-	u, err := s.SnapshotterBase.Usage(ctx, key)
+	return snapshots.Usage{}, errors.Errorf("to-be-removed")
+
+	u, err := s.Snapshotter.Usage(ctx, key)
 	if err != nil {
 		return snapshots.Usage{}, err
 	}
@@ -92,6 +95,8 @@ func (s *Snapshotter) Usage(ctx context.Context, key string) (snapshots.Usage, e
 }
 
 func (s *Snapshotter) GetBlob(ctx context.Context, key string) (digest.Digest, digest.Digest, error) {
+	return "", "", errors.Errorf("to-be-removed")
+
 	md, _ := s.opt.MetadataStore.Get(key)
 	v := md.Get(blobKey)
 	if v == nil {
@@ -108,6 +113,7 @@ func (s *Snapshotter) GetBlob(ctx context.Context, key string) (digest.Digest, d
 // Checks that there is a blob in the content store.
 // If same blob has already been set then this is a noop.
 func (s *Snapshotter) SetBlob(ctx context.Context, key string, diffID, blobsum digest.Digest) error {
+	return errors.Errorf("SetBlob should not be called")
 	info, err := s.opt.Content.Info(ctx, blobsum)
 	if err != nil {
 		return err

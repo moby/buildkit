@@ -27,6 +27,7 @@ const keyBlobChainID = "cache.blobChainID"
 const keyBlob = "cache.blob"
 const keySnapshot = "cache.snapshot"
 const keyBlobOnly = "cache.blobonly"
+const keyMediaType = "cache.mediatype"
 
 const keyDeleted = "cache.deleted"
 
@@ -40,6 +41,32 @@ func queueDiffID(si *metadata.StorageItem, str string) error {
 	}
 	si.Update(func(b *bolt.Bucket) error {
 		return si.SetValue(b, keyDiffID, v)
+	})
+	return nil
+}
+
+func getMediaType(si *metadata.StorageItem) string {
+	v := si.Get(keyMediaType)
+	if v == nil {
+		return si.ID()
+	}
+	var str string
+	if err := v.Unmarshal(&str); err != nil {
+		return ""
+	}
+	return str
+}
+
+func queueMediaType(si *metadata.StorageItem, str string) error {
+	if str == "" {
+		return nil
+	}
+	v, err := metadata.NewValue(str)
+	if err != nil {
+		return errors.Wrap(err, "failed to create mediaType value")
+	}
+	si.Queue(func(b *bolt.Bucket) error {
+		return si.SetValue(b, keyMediaType, v)
 	})
 	return nil
 }
@@ -64,7 +91,7 @@ func queueSnapshotID(si *metadata.StorageItem, str string) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to create chainID value")
 	}
-	si.Update(func(b *bolt.Bucket) error {
+	si.Queue(func(b *bolt.Bucket) error {
 		return si.SetValue(b, keySnapshot, v)
 	})
 	return nil

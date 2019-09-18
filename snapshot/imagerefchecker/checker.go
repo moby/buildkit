@@ -9,7 +9,6 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/images"
 	"github.com/moby/buildkit/cache"
-	"github.com/moby/buildkit/snapshot"
 	digest "github.com/opencontainers/go-digest"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -20,27 +19,27 @@ const (
 )
 
 type Opt struct {
-	Snapshotter  snapshot.Snapshotter
 	ImageStore   images.Store
-	ContentStore content.Provider
+	ContentStore content.Store
 }
 
 // New creates new image reference checker that can be used to see if a reference
 // is being used by any of the images in the image store
 func New(opt Opt) cache.ExternalRefCheckerFunc {
-	return func() (cache.ExternalRefChecker, error) {
-		return &checker{opt: opt}, nil
+	return func(cm cache.Accessor) (cache.ExternalRefChecker, error) {
+		return &Checker{opt: opt, cm: cm}, nil
 	}
 }
 
-type checker struct {
+type Checker struct {
+	cm     cache.Accessor
 	opt    Opt
 	once   sync.Once
 	images map[string]struct{}
 	cache  map[string]bool
 }
 
-func (c *checker) Exists(key string) bool {
+func (c *Checker) Exists(key string) bool {
 	if c.opt.ImageStore == nil {
 		return false
 	}
@@ -62,26 +61,26 @@ func (c *checker) Exists(key string) bool {
 	return ok
 }
 
-func (c *checker) getLayers(key string) ([]specs.Descriptor, error) {
-	_, blob, err := c.opt.Snapshotter.GetBlob(context.TODO(), key)
+func (c *Checker) getLayers(key string) ([]specs.Descriptor, error) {
+	ref, err := c.cm.Get(context.TODO(), key)
 	if err != nil {
 		return nil, err
 	}
-	stat, err := c.opt.Snapshotter.Stat(context.TODO(), key)
-	if err != nil {
-		return nil, err
+	info := ref.Info()
+	if info.Blob == "" {
+		return nil, errors.Errorf("layer without blob")
 	}
 	var layers []specs.Descriptor
-	if parent := stat.Parent; parent != "" {
-		layers, err = c.getLayers(parent)
+	if parent := ref.Parent(); parent != nil {
+		layers, err = c.getLayers(parent.ID())
 		if err != nil {
 			return nil, err
 		}
 	}
-	return append(layers, specs.Descriptor{Digest: blob}), nil
+	return append(layers, specs.Descriptor{Digest: info.Blob}), nil
 }
 
-func (c *checker) init() {
+func (c *Checker) init() {
 	c.images = map[string]struct{}{}
 	c.cache = map[string]bool{}
 
@@ -103,7 +102,7 @@ func (c *checker) init() {
 	}
 }
 
-func (c *checker) registerLayers(l []specs.Descriptor) {
+func (c *Checker) registerLayers(l []specs.Descriptor) {
 	if k := layerKey(l); k != "" {
 		c.images[k] = struct{}{}
 	}

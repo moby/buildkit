@@ -9,20 +9,15 @@ import (
 	"github.com/containerd/containerd/diff"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
-	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/reference"
 	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/remotes/docker/schema1"
-	"github.com/containerd/containerd/rootfs"
-	ctdsnapshot "github.com/containerd/containerd/snapshots"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/util/imageutil"
-	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/progress"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/opencontainers/image-spec/identity"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
@@ -33,7 +28,6 @@ type Puller struct {
 	Applier      diff.Applier
 	Src          reference.Spec
 	Platform     *ocispec.Platform
-	LeaseManager leases.Manager
 	// See NewResolver()
 	Resolver    remotes.Resolver
 	resolveOnce sync.Once
@@ -43,9 +37,10 @@ type Puller struct {
 }
 
 type Pulled struct {
-	Ref        string
-	Descriptor ocispec.Descriptor
-	ChainID    digest.Digest
+	Ref           string
+	Descriptor    ocispec.Descriptor
+	Layers        []ocispec.Descriptor
+	MetadataBlobs []ocispec.Descriptor
 }
 
 func (p *Puller) Resolve(ctx context.Context) (string, ocispec.Descriptor, error) {
@@ -98,12 +93,6 @@ func (p *Puller) Pull(ctx context.Context) (*Pulled, error) {
 		platform = platforms.Default()
 	}
 
-	ctx, done, err := leaseutil.WithLease(ctx, p.LeaseManager)
-	if err != nil {
-		return nil, err
-	}
-	defer done(ctx)
-
 	ongoing := newJobs(p.ref)
 
 	pctx, stopProgress := context.WithCancel(ctx)
@@ -132,8 +121,6 @@ func (p *Puller) Pull(ctx context.Context) (*Pulled, error) {
 	} else {
 		// Get all the children for a descriptor
 		childrenHandler := images.ChildrenHandler(p.ContentStore)
-		// Set any children labels for that content
-		childrenHandler = imageutil.SetChildrenLabelsNonBlobs(p.ContentStore, childrenHandler)
 		// Filter the children by the platform
 		childrenHandler = images.FilterPlatforms(childrenHandler, platform)
 		// Limit manifests pulled to the best match in an index
@@ -209,86 +196,92 @@ func (p *Puller) Pull(ctx context.Context) (*Pulled, error) {
 		}
 	}
 
-	for _, l := range layerBlobs {
-		labels := map[string]string{}
-		var fields []string
-		for _, nl := range notLayerBlobs {
-			k := "containerd.io/gc.ref.content." + nl.Digest.Hex()[:12]
-			labels[k] = nl.Digest.String()
-			fields = append(fields, "labels."+k)
-		}
-		if _, err := p.ContentStore.Update(ctx, content.Info{
-			Digest: l.Digest,
-			Labels: labels,
-		}, fields...); err != nil {
-			return nil, err
-		}
-	}
+	// for _, l := range layerBlobs {
+	// 	labels := map[string]string{}
+	// 	var fields []string
+	// 	for _, nl := range notLayerBlobs {
+	// 		k := "containerd.io/gc.ref.content." + nl.Digest.Hex()[:12]
+	// 		labels[k] = nl.Digest.String()
+	// 		fields = append(fields, "labels."+k)
+	// 	}
+	// 	if _, err := p.ContentStore.Update(ctx, content.Info{
+	// 		Digest: l.Digest,
+	// 		Labels: labels,
+	// 	}, fields...); err != nil {
+	// 		return nil, err
+	// 	}
+	// }
 
-	for _, nl := range append(notLayerBlobs, unusedBlobs...) {
-		if err := p.ContentStore.Delete(ctx, nl.Digest); err != nil {
-			return nil, err
-		}
-	}
+	// for _, nl := range append(notLayerBlobs, unusedBlobs...) {
+	// 	if err := p.ContentStore.Delete(ctx, nl.Digest); err != nil {
+	// 		return nil, err
+	// 	}
+	// }
 
-	csh, release := snapshot.NewContainerdSnapshotter(p.Snapshotter)
-	defer release()
-
-	unpackProgressDone := oneOffProgress(ctx, "unpacking "+p.Src.String())
-	chainid, err := unpack(ctx, p.desc, p.ContentStore, csh, p.Snapshotter, p.Applier, platform)
+	layers, err := getLayers(ctx, p.ContentStore, p.desc, platform)
 	if err != nil {
-		return nil, unpackProgressDone(err)
+		return nil, err
 	}
-	unpackProgressDone(nil)
+
+	// csh, release := snapshot.NewContainerdSnapshotter(p.Snapshotter)
+	// defer release()
+
+	// unpackProgressDone := oneOffProgress(ctx, "unpacking "+p.Src.String())
+	// chainid, err := unpack(ctx, p.desc, p.ContentStore, csh, p.Snapshotter, p.Applier, platform)
+	// if err != nil {
+	// 	return nil, unpackProgressDone(err)
+	// }
+	// unpackProgressDone(nil)
 
 	return &Pulled{
-		Ref:        p.ref,
-		Descriptor: p.desc,
-		ChainID:    chainid,
+		Ref:           p.ref,
+		Descriptor:    p.desc,
+		Layers:        layers,
+		MetadataBlobs: notLayerBlobs,
 	}, nil
 }
 
-func unpack(ctx context.Context, desc ocispec.Descriptor, cs content.Store, csh ctdsnapshot.Snapshotter, s snapshot.Snapshotter, applier diff.Applier, platform platforms.MatchComparer) (digest.Digest, error) {
-	layers, err := getLayers(ctx, cs, desc, platform)
-	if err != nil {
-		return "", err
-	}
+// func unpack(ctx context.Context, desc ocispec.Descriptor, cs content.Store, csh ctdsnapshot.Snapshotter, s snapshot.Snapshotter, applier diff.Applier, platform platforms.MatchComparer) (digest.Digest, error) {
+// 	layers, err := getLayers(ctx, cs, desc, platform)
+// 	if err != nil {
+// 		return "", err
+// 	}
 
-	var chain []digest.Digest
-	for _, layer := range layers {
-		labels := map[string]string{
-			"containerd.io/gc.root": time.Now().UTC().Format(time.RFC3339Nano),
-		}
-		if _, err := rootfs.ApplyLayer(ctx, layer, chain, csh, applier, ctdsnapshot.WithLabels(labels)); err != nil {
-			return "", err
-		}
-		chain = append(chain, layer.Diff.Digest)
-	}
-	chainID := identity.ChainID(chain)
-	if err != nil {
-		return "", err
-	}
+// 	var chain []digest.Digest
+// 	for _, layer := range layers {
+// 		labels := map[string]string{
+// 			"containerd.io/gc.root": time.Now().UTC().Format(time.RFC3339Nano),
+// 		}
+// 		if _, err := rootfs.ApplyLayer(ctx, layer, chain, csh, applier, ctdsnapshot.WithLabels(labels)); err != nil {
+// 			return "", err
+// 		}
+// 		chain = append(chain, layer.Diff.Digest)
+// 	}
+// 	chainID := identity.ChainID(chain)
+// 	if err != nil {
+// 		return "", err
+// 	}
 
-	if err := fillBlobMapping(ctx, s, layers); err != nil {
-		return "", err
-	}
+// 	if err := fillBlobMapping(ctx, s, layers); err != nil {
+// 		return "", err
+// 	}
 
-	return chainID, nil
-}
+// 	return chainID, nil
+// }
 
-func fillBlobMapping(ctx context.Context, s snapshot.Snapshotter, layers []rootfs.Layer) error {
-	var chain []digest.Digest
-	for _, l := range layers {
-		chain = append(chain, l.Diff.Digest)
-		chainID := identity.ChainID(chain)
-		if err := s.SetBlob(ctx, string(chainID), l.Diff.Digest, l.Blob.Digest); err != nil {
-			return err
-		}
-	}
-	return nil
-}
+// func fillBlobMapping(ctx context.Context, s snapshot.Snapshotter, layers []rootfs.Layer) error {
+// 	var chain []digest.Digest
+// 	for _, l := range layers {
+// 		chain = append(chain, l.Diff.Digest)
+// 		chainID := identity.ChainID(chain)
+// 		if err := s.SetBlob(ctx, string(chainID), l.Diff.Digest, l.Blob.Digest); err != nil {
+// 			return err
+// 		}
+// 	}
+// 	return nil
+// }
 
-func getLayers(ctx context.Context, provider content.Provider, desc ocispec.Descriptor, platform platforms.MatchComparer) ([]rootfs.Layer, error) {
+func getLayers(ctx context.Context, provider content.Provider, desc ocispec.Descriptor, platform platforms.MatchComparer) ([]ocispec.Descriptor, error) {
 	manifest, err := images.Manifest(ctx, provider, desc, platform)
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -301,14 +294,14 @@ func getLayers(ctx context.Context, provider content.Provider, desc ocispec.Desc
 	if len(diffIDs) != len(manifest.Layers) {
 		return nil, errors.Errorf("mismatched image rootfs and manifest layers %+v %+v", diffIDs, manifest.Layers)
 	}
-	layers := make([]rootfs.Layer, len(diffIDs))
+	layers := make([]ocispec.Descriptor, len(diffIDs))
 	for i := range diffIDs {
-		layers[i].Diff = ocispec.Descriptor{
-			// TODO: derive media type from compressed type
-			MediaType: ocispec.MediaTypeImageLayer,
-			Digest:    diffIDs[i],
+		desc := manifest.Layers[i]
+		if desc.Annotations == nil {
+			desc.Annotations = map[string]string{}
 		}
-		layers[i].Blob = manifest.Layers[i]
+		desc.Annotations["containerd.io/uncompressed"] = diffIDs[i].String()
+		layers[i] = desc
 	}
 	return layers, nil
 }

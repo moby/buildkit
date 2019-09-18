@@ -2,25 +2,23 @@ package containerd
 
 import (
 	"context"
-	"time"
 
 	"github.com/containerd/containerd/content"
-	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/pkg/errors"
 )
 
 type garbageCollectFn func(context.Context) error
 
-func NewContentStore(store content.Store, ns string, gc func(context.Context) error) content.Store {
-	return &noGCContentStore{&nsContent{ns, store, gc}}
+func NewContentStore(store content.Store, ns string) content.Store {
+	return &nsContent{ns, store}
 }
 
 type nsContent struct {
 	ns string
 	content.Store
-	gc garbageCollectFn
 }
 
 func (c *nsContent) Info(ctx context.Context, dgst digest.Digest) (content.Info, error) {
@@ -39,16 +37,7 @@ func (c *nsContent) Walk(ctx context.Context, fn content.WalkFunc, filters ...st
 }
 
 func (c *nsContent) Delete(ctx context.Context, dgst digest.Digest) error {
-	ctx = namespaces.WithNamespace(ctx, c.ns)
-	if _, err := c.Update(ctx, content.Info{
-		Digest: dgst,
-	}, "labels.containerd.io/gc.root"); err != nil {
-		return err
-	} // calling snapshotter.Remove here causes a race in containerd
-	if c.gc == nil {
-		return nil
-	}
-	return c.gc(ctx)
+	return errors.Errorf("contentstore.Delete usage is forbidden")
 }
 
 func (c *nsContent) Status(ctx context.Context, ref string) (content.Status, error) {
@@ -76,31 +65,12 @@ func (c *nsContent) Writer(ctx context.Context, opts ...content.WriterOpt) (cont
 }
 
 func (c *nsContent) writer(ctx context.Context, retries int, opts ...content.WriterOpt) (content.Writer, error) {
-	var wOpts content.WriterOpts
-	for _, opt := range opts {
-		if err := opt(&wOpts); err != nil {
-			return nil, err
-		}
-	}
-	_, noRoot := wOpts.Desc.Annotations["buildkit/noroot"]
-	delete(wOpts.Desc.Annotations, "buildkit/noroot")
-	opts = append(opts, content.WithDescriptor(wOpts.Desc))
 	ctx = namespaces.WithNamespace(ctx, c.ns)
 	w, err := c.Store.Writer(ctx, opts...)
 	if err != nil {
-		if !noRoot && errdefs.IsAlreadyExists(err) && wOpts.Desc.Digest != "" && retries > 0 {
-			_, err2 := c.Update(ctx, content.Info{
-				Digest: wOpts.Desc.Digest,
-				Labels: map[string]string{
-					"containerd.io/gc.root": time.Now().UTC().Format(time.RFC3339Nano),
-				},
-			}, "labels.containerd.io/gc.root")
-			if err2 != nil {
-				return c.writer(ctx, retries-1, opts...)
-			}
-		}
+		return nil, err
 	}
-	return &nsWriter{Writer: w, ns: c.ns}, err
+	return &nsWriter{Writer: w, ns: c.ns}, nil
 }
 
 type nsWriter struct {
@@ -113,25 +83,25 @@ func (w *nsWriter) Commit(ctx context.Context, size int64, expected digest.Diges
 	return w.Writer.Commit(ctx, size, expected, opts...)
 }
 
-type noGCContentStore struct {
-	content.Store
-}
-type noGCWriter struct {
-	content.Writer
-}
+// type noGCContentStore struct {
+// 	content.Store
+// }
+// type noGCWriter struct {
+// 	content.Writer
+// }
 
-func (cs *noGCContentStore) Writer(ctx context.Context, opts ...content.WriterOpt) (content.Writer, error) {
-	w, err := cs.Store.Writer(ctx, opts...)
-	return &noGCWriter{w}, err
-}
+// func (cs *noGCContentStore) Writer(ctx context.Context, opts ...content.WriterOpt) (content.Writer, error) {
+// 	w, err := cs.Store.Writer(ctx, opts...)
+// 	return &noGCWriter{w}, err
+// }
 
-func (w *noGCWriter) Commit(ctx context.Context, size int64, expected digest.Digest, opts ...content.Opt) error {
-	opts = append(opts, func(info *content.Info) error {
-		if info.Labels == nil {
-			info.Labels = map[string]string{}
-		}
-		info.Labels["containerd.io/gc.root"] = time.Now().UTC().Format(time.RFC3339Nano)
-		return nil
-	})
-	return w.Writer.Commit(ctx, size, expected, opts...)
-}
+// func (w *noGCWriter) Commit(ctx context.Context, size int64, expected digest.Digest, opts ...content.Opt) error {
+// 	opts = append(opts, func(info *content.Info) error {
+// 		if info.Labels == nil {
+// 			info.Labels = map[string]string{}
+// 		}
+// 		info.Labels["containerd.io/gc.root"] = time.Now().UTC().Format(time.RFC3339Nano)
+// 		return nil
+// 	})
+// 	return w.Writer.Commit(ctx, size, expected, opts...)
+// }

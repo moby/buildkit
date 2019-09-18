@@ -2,12 +2,15 @@ package cache
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/mount"
+	"github.com/containerd/containerd/snapshots"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/identity"
@@ -15,6 +18,7 @@ import (
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/opencontainers/go-digest"
 	imagespaceidentity "github.com/opencontainers/image-spec/identity"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -36,7 +40,7 @@ type ImmutableRef interface {
 	Clone() ImmutableRef
 
 	Info() RefInfo
-	SetBlob(ctx context.Context, diffID, blob digest.Digest) error
+	SetBlob(ctx context.Context, desc ocispec.Descriptor) error
 	Extract(ctx context.Context) error // +progress
 }
 
@@ -46,6 +50,7 @@ type RefInfo struct {
 	BlobChainID digest.Digest
 	DiffID      digest.Digest
 	Blob        digest.Digest
+	MediaType   string
 	Extracted   bool
 }
 
@@ -121,15 +126,27 @@ func (cr *cacheRecord) Size(ctx context.Context) (int64, error) {
 			driverID = getSnapshotID(cr.equalMutable.md)
 		}
 		cr.mu.Unlock()
-		usage, err := cr.cm.ManagerOpt.Snapshotter.Usage(ctx, driverID)
-		if err != nil {
-			cr.mu.Lock()
-			isDead := cr.isDead()
-			cr.mu.Unlock()
-			if isDead {
-				return int64(0), nil
+		var usage snapshots.Usage
+		if !getBlobOnly(cr.md) {
+			var err error
+			usage, err = cr.cm.ManagerOpt.Snapshotter.Usage(ctx, driverID)
+			if err != nil {
+				cr.mu.Lock()
+				isDead := cr.isDead()
+				cr.mu.Unlock()
+				if isDead {
+					return int64(0), nil
+				}
+				if !errdefs.IsNotFound(err) {
+					return s, errors.Wrapf(err, "failed to get usage for %s", cr.ID())
+				}
 			}
-			return s, errors.Wrapf(err, "failed to get usage for %s", cr.ID())
+		}
+		if dgst := getBlob(cr.md); dgst != "" {
+			info, err := cr.cm.ContentStore.Info(ctx, digest.Digest(dgst))
+			if err == nil {
+				usage.Size += info.Size
+			}
 		}
 		cr.mu.Lock()
 		setSize(cr.md, usage.Size)
@@ -238,26 +255,84 @@ func (sr *immutableRef) Clone() ImmutableRef {
 	return ref
 }
 
-func (sr *immutableRef) Extract(ctx context.Context) error {
-	return errors.Errorf("extract not implemented")
-}
-
 func (sr *immutableRef) Info() RefInfo {
 	return RefInfo{
 		ChainID:     digest.Digest(getChainID(sr.md)),
 		DiffID:      digest.Digest(getDiffID(sr.md)),
 		Blob:        digest.Digest(getBlob(sr.md)),
+		MediaType:   getMediaType(sr.md),
 		BlobChainID: digest.Digest(getBlobChainID(sr.md)),
 		SnapshotID:  getSnapshotID(sr.md),
 		Extracted:   !getBlobOnly(sr.md),
 	}
 }
 
+func (sr *immutableRef) Extract(ctx context.Context) error {
+	_, err := sr.sizeG.Do(ctx, sr.ID()+"-extract", func(ctx context.Context) (interface{}, error) {
+		snapshotID := getSnapshotID(sr.md)
+		if _, err := sr.cm.Snapshotter.Stat(ctx, snapshotID); err == nil {
+			queueBlobOnly(sr.md, false)
+			return nil, sr.md.Commit()
+		}
+
+		parentID := ""
+		if sr.parent != nil {
+			if err := sr.parent.Extract(ctx); err != nil {
+				return nil, err
+			}
+			parentID = getSnapshotID(sr.parent.md)
+		}
+		info := sr.Info()
+		key := fmt.Sprintf("extract-%s %s", identity.NewID(), info.ChainID)
+
+		err := sr.cm.Snapshotter.Prepare(ctx, key, parentID)
+		if err != nil {
+			return nil, err
+		}
+
+		mountable, err := sr.cm.Snapshotter.Mounts(ctx, key)
+		if err != nil {
+			return nil, err
+		}
+		mounts, unmount, err := mountable.Mount()
+		if err != nil {
+			return nil, err
+		}
+		_, err = sr.cm.Applier.Apply(ctx, ocispec.Descriptor{
+			Digest:    info.Blob,
+			MediaType: info.MediaType,
+		}, mounts)
+		if err != nil {
+			unmount()
+			return nil, err
+		}
+
+		if err := unmount(); err != nil {
+			return nil, err
+		}
+		if err := sr.cm.Snapshotter.Commit(ctx, getSnapshotID(sr.md), key); err != nil {
+			if !errdefs.IsAlreadyExists(err) {
+				return nil, err
+			}
+		}
+		queueBlobOnly(sr.md, false)
+		if err := sr.md.Commit(); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	})
+	return err
+}
+
 // SetBlob associates a blob with the cache record.
 // A lease must be held for the blob when calling this function
 // Caller should call Info() for knowing what current values are actually set
-func (sr *immutableRef) SetBlob(ctx context.Context, diffID, blob digest.Digest) error {
-	if _, err := sr.cm.ContentStore.Info(ctx, blob); err != nil {
+func (sr *immutableRef) SetBlob(ctx context.Context, desc ocispec.Descriptor) error {
+	diffID, err := diffIDFromDescriptor(desc)
+	if err != nil {
+		return err
+	}
+	if _, err := sr.cm.ContentStore.Info(ctx, desc.Digest); err != nil {
 		return err
 	}
 
@@ -285,22 +360,23 @@ func (sr *immutableRef) SetBlob(ctx context.Context, diffID, blob digest.Digest)
 	}
 
 	if err := sr.cm.LeaseManager.AddResource(ctx, leases.Lease{ID: sr.ID()}, leases.Resource{
-		ID:   blob.String(),
+		ID:   desc.Digest.String(),
 		Type: "content",
 	}); err != nil {
 		return err
 	}
 
 	queueDiffID(sr.md, diffID.String())
-	queueBlob(sr.md, blob.String())
+	queueBlob(sr.md, desc.Digest.String())
 	chainID := diffID
-	blobChainID := imagespaceidentity.ChainID([]digest.Digest{blob, diffID})
+	blobChainID := imagespaceidentity.ChainID([]digest.Digest{desc.Digest, diffID})
 	if parentChainID != "" {
 		chainID = imagespaceidentity.ChainID([]digest.Digest{parentChainID, chainID})
 		blobChainID = imagespaceidentity.ChainID([]digest.Digest{parentBlobChainID, blobChainID})
 	}
 	queueChainID(sr.md, chainID.String())
 	queueBlobChainID(sr.md, blobChainID.String())
+	queueMediaType(sr.md, desc.MediaType)
 	if err := sr.md.Commit(); err != nil {
 		return err
 	}
