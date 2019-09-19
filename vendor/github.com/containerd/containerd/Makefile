@@ -114,7 +114,7 @@ BINARIES=$(addprefix bin/,$(COMMANDS))
 TESTFLAGS ?= $(TESTFLAGS_RACE)
 TESTFLAGS_PARALLEL ?= 8
 
-.PHONY: clean all AUTHORS build binaries test integration generate protos checkprotos coverage ci check help install uninstall vendor release mandir install-man
+.PHONY: clean all AUTHORS build binaries test integration generate protos checkprotos coverage ci check help install uninstall vendor release mandir install-man genman
 .DEFAULT: default
 
 all: binaries
@@ -203,6 +203,9 @@ man: mandir $(addprefix man/,$(MANPAGES))
 mandir:
 	@mkdir -p man
 
+genman: FORCE
+	go run cmd/gen-manpages/main.go man/
+
 man/%: docs/man/%.md FORCE
 	@echo "$(WHALE) $<"
 	go-md2man -in "$<" -out "$@"
@@ -216,13 +219,21 @@ install-man:
 	@echo "$(WHALE) $@"
 	$(foreach manpage,$(addprefix man/,$(MANPAGES)), $(call installmanpage,$(manpage),$(subst .,,$(suffix $(manpage))),$(notdir $(manpage))))
 
-release: $(BINARIES)
+releases/$(RELEASE).tar.gz: $(BINARIES)
 	@echo "$(WHALE) $@"
 	@rm -rf releases/$(RELEASE) releases/$(RELEASE).tar.gz
 	@install -d releases/$(RELEASE)/bin
 	@install $(BINARIES) releases/$(RELEASE)/bin
-	@cd releases/$(RELEASE) && tar -czf ../$(RELEASE).tar.gz *
+	@tar -czf releases/$(RELEASE).tar.gz -C releases/$(RELEASE) bin
+	@rm -rf releases/$(RELEASE)
+
+release: $(BINARIES) releases/$(RELEASE).tar.gz
+	@echo "$(WHALE) $@"
 	@cd releases && sha256sum $(RELEASE).tar.gz >$(RELEASE).tar.gz.sha256sum
+
+cri-release: $(BINARIES) releases/$(RELEASE).tar.gz
+	@echo "$(WHALE) $@"
+	@VERSION=$(VERSION:v%=%) script/release/release-cri
 
 clean: ## clean up binaries
 	@echo "$(WHALE) $@"
