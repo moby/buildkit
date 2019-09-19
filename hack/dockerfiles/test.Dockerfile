@@ -1,7 +1,7 @@
 ARG RUNC_VERSION=v1.0.0-rc8
-ARG CONTAINERD_VERSION=v1.2.7
-# containerd v1.1 for integration tests
-ARG CONTAINERD11_VERSION=v1.1.7
+ARG CONTAINERD_VERSION=v1.3.0-rc.2
+# containerd v1.2 for integration tests
+ARG CONTAINERD_OLD_VERSION=v1.2.9
 # available targets: buildkitd, buildkitd.oci_only, buildkitd.containerd_only
 ARG BUILDKIT_TARGET=buildkitd
 ARG REGISTRY_VERSION=v2.7.0-rc.0
@@ -45,9 +45,9 @@ FROM gobuild-base AS runc
 ARG RUNC_VERSION
 ENV CGO_ENABLED=1
 RUN git clone https://github.com/opencontainers/runc.git "$GOPATH/src/github.com/opencontainers/runc" \
-	&& cd "$GOPATH/src/github.com/opencontainers/runc" \
-	&& git checkout -q "$RUNC_VERSION" \
-	&& go build -installsuffix netgo -ldflags '-w -extldflags -static' -tags 'seccomp netgo cgo static_build' -o /usr/bin/runc ./
+  && cd "$GOPATH/src/github.com/opencontainers/runc" \
+  && git checkout -q "$RUNC_VERSION" \
+  && go build -installsuffix netgo -ldflags '-w -extldflags -static' -tags 'seccomp netgo cgo static_build' -o /usr/bin/runc ./
 
 FROM gobuild-base AS containerd-base
 RUN apk add --no-cache btrfs-progs-dev
@@ -61,10 +61,10 @@ RUN git checkout -q "$CONTAINERD_VERSION" \
   && make bin/containerd-shim \
   && make bin/ctr
 
-# containerd v1.1 for integration tests
-FROM containerd-base as containerd11
-ARG CONTAINERD11_VERSION
-RUN git checkout -q "$CONTAINERD11_VERSION" \
+# containerd v1.2 for integration tests
+FROM containerd-base as containerd-old
+ARG CONTAINERD_OLD_VERSION
+RUN git checkout -q "$CONTAINERD_OLD_VERSION" \
   && make bin/containerd \
   && make bin/containerd-shim
 
@@ -89,7 +89,7 @@ ARG ROOTLESSKIT_VERSION
 # mitigate https://github.com/moby/moby/pull/35456
 ENV GOOS=linux
 RUN git checkout -q "$ROOTLESSKIT_VERSION" \
-&& go build -o /rootlesskit ./cmd/rootlesskit
+  && go build -o /rootlesskit ./cmd/rootlesskit
 
 FROM scratch AS buildkit-binaries
 COPY --from=runc /usr/bin/runc /usr/bin/buildkit-runc
@@ -104,10 +104,10 @@ RUN apk add --no-cache shadow shadow-uidmap sudo \
   && echo "XDG_RUNTIME_DIR=/run/user/1000; export XDG_RUNTIME_DIR" >> /home/user/.profile \
   && mkdir -m 0700 -p /run/user/1000 \
   && chown -R user /run/user/1000 /home/user
-ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.1=/opt/containerd-1.1/bin"
+ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.2=/opt/containerd-old/bin"
 COPY --from=runc /usr/bin/runc /usr/bin/buildkit-runc
 COPY --from=containerd /go/src/github.com/containerd/containerd/bin/containerd* /usr/bin/
-COPY --from=containerd11 /go/src/github.com/containerd/containerd/bin/containerd* /opt/containerd-1.1/bin/
+COPY --from=containerd-old /go/src/github.com/containerd/containerd/bin/containerd* /opt/containerd-old/bin/
 COPY --from=buildctl /usr/bin/buildctl /usr/bin/
 COPY --from=buildkitd /usr/bin/buildkitd /usr/bin
 COPY --from=registry /bin/registry /usr/bin

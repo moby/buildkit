@@ -1,9 +1,9 @@
 # syntax = docker/dockerfile:1.1-experimental
 
 ARG RUNC_VERSION=v1.0.0-rc8
-ARG CONTAINERD_VERSION=v1.2.7
-# containerd v1.1 for integration tests
-ARG CONTAINERD11_VERSION=v1.1.7
+ARG CONTAINERD_VERSION=v1.3.0-rc.2
+# containerd v1.2 for integration tests
+ARG CONTAINERD_OLD_VERSION=v1.2.9
 # available targets: buildkitd, buildkitd.oci_only, buildkitd.containerd_only
 ARG BUILDKIT_TARGET=buildkitd
 ARG REGISTRY_VERSION=v2.7.0-rc.0
@@ -146,12 +146,12 @@ RUN --mount=from=containerd-src,src=/usr/src/containerd,readwrite --mount=target
   && make bin/ctr \
   && mv bin /out
 
-# containerd v1.1 for integration tests
-FROM containerd-base as containerd11
-ARG CONTAINERD11_VERSION
+# containerd v1.2 for integration tests
+FROM containerd-base as containerd-old
+ARG CONTAINERD_OLD_VERSION
 RUN --mount=from=containerd-src,src=/usr/src/containerd,readwrite --mount=target=/root/.cache,type=cache \
   git fetch origin \
-  && git checkout -q "$CONTAINERD11_VERSION" \
+  && git checkout -q "$CONTAINERD_OLD_VERSION" \
   && make bin/containerd \
   && make bin/containerd-shim \
   && mv bin /out
@@ -218,9 +218,9 @@ RUN apt-get install -y --no-install-recommends uidmap sudo vim iptables \
   && chown -R user /run/user/1000 /home/user \
   && update-alternatives --set iptables /usr/sbin/iptables-legacy
 # musl is needed to directly use the registry binary that is built on alpine
-ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.1=/opt/containerd-1.1/bin"
+ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.2=/opt/containerd-old/bin"
 COPY --from=rootlesskit /rootlesskit /usr/bin/
-COPY --from=containerd11 /out/containerd* /opt/containerd-1.1/bin/
+COPY --from=containerd-old /out/containerd* /opt/containerd-old/bin/
 COPY --from=registry /bin/registry /usr/bin
 COPY --from=runc /usr/bin/runc /usr/bin
 COPY --from=containerd /out/containerd* /usr/bin/
