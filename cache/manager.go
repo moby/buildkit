@@ -248,7 +248,7 @@ func (cm *cacheManager) init(ctx context.Context) error {
 		if _, err := cm.getRecord(ctx, si.ID()); err != nil {
 			logrus.Debugf("could not load snapshot %s: %+v", si.ID(), err)
 			cm.md.Clear(si.ID())
-			// TODO: make sure content is deleted as well
+			cm.LeaseManager.Delete(ctx, leases.Lease{ID: si.ID()})
 		}
 	}
 	return nil

@@ -237,7 +237,7 @@ func (cr *cacheRecord) remove(ctx context.Context, removeSnapshot bool) error {
 		}
 	}
 	if removeSnapshot {
-		if err := cr.cm.LeaseManager.Delete(ctx, leases.Lease{ID: cr.ID()}); err != nil { // TODO: handle cancellation, async
+		if err := cr.cm.LeaseManager.Delete(context.TODO(), leases.Lease{ID: cr.ID()}); err != nil {
 			return errors.Wrapf(err, "failed to remove %s", cr.ID())
 		}
 	}
@@ -472,20 +472,7 @@ func (cr *cacheRecord) finalize(ctx context.Context, commit bool) error {
 		}
 		return nil
 	}
-	err := cr.cm.Snapshotter.Commit(ctx, cr.ID(), mutable.ID())
-	if err != nil {
-		return errors.Wrapf(err, "failed to commit %s", mutable.ID())
-	}
-	mutable.dead = true
-	go func() {
-		cr.cm.mu.Lock()
-		defer cr.cm.mu.Unlock()
-		if err := mutable.remove(context.TODO(), true); err != nil {
-			logrus.Error(err)
-		}
-	}()
 
-	// TODO: rollback
 	l, err := cr.cm.ManagerOpt.LeaseManager.Create(ctx, func(l *leases.Lease) error {
 		l.ID = cr.ID()
 		l.Labels = map[string]string{
@@ -503,6 +490,20 @@ func (cr *cacheRecord) finalize(ctx context.Context, commit bool) error {
 	}); err != nil {
 		return errors.Wrapf(err, "failed to add snapshot %s to lease", cr.ID())
 	}
+
+	err = cr.cm.Snapshotter.Commit(ctx, cr.ID(), mutable.ID())
+	if err != nil {
+		cr.cm.LeaseManager.Delete(context.TODO(), leases.Lease{ID: cr.ID()})
+		return errors.Wrapf(err, "failed to commit %s", mutable.ID())
+	}
+	mutable.dead = true
+	go func() {
+		cr.cm.mu.Lock()
+		defer cr.cm.mu.Unlock()
+		if err := mutable.remove(context.TODO(), true); err != nil {
+			logrus.Error(err)
+		}
+	}()
 
 	cr.equalMutable = nil
 	clearEqualMutable(cr.md)
