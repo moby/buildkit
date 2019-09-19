@@ -178,7 +178,7 @@ func (p *puller) CacheKey(ctx context.Context, index int) (string, bool, error) 
 	return k, true, nil
 }
 
-func (p *puller) Snapshot(ctx context.Context) (cache.ImmutableRef, error) {
+func (p *puller) Snapshot(ctx context.Context) (ir cache.ImmutableRef, err error) {
 	layerNeedsTypeWindows := false
 	if platform := p.Puller.Platform; platform != nil {
 		if platform.OS == "windows" && runtime.GOOS != "windows" {
@@ -205,11 +205,13 @@ func (p *puller) Snapshot(ctx context.Context) (cache.ImmutableRef, error) {
 	}
 
 	var current cache.ImmutableRef
-	for _, l := range pulled.Layers {
-		ref, err := p.CacheAccessor.GetByBlob(ctx, l, current, cache.WithDescription("pulled from "+pulled.Ref))
-		if current != nil {
+	defer func() {
+		if err != nil && current != nil {
 			current.Release(context.TODO())
 		}
+	}()
+	for _, l := range pulled.Layers {
+		ref, err := p.CacheAccessor.GetByBlob(ctx, l, current, cache.WithDescription("pulled from "+pulled.Ref))
 		if err != nil {
 			return nil, err
 		}
@@ -217,19 +219,29 @@ func (p *puller) Snapshot(ctx context.Context) (cache.ImmutableRef, error) {
 			ref.Release(context.TODO())
 			return nil, err
 		}
+		if current != nil {
+			current.Release(context.TODO())
+		}
 		current = ref
+	}
+
+	for _, desc := range pulled.MetadataBlobs {
+		if err := p.LeaseManager.AddResource(ctx, leases.Lease{ID: current.ID()}, leases.Resource{
+			ID:   desc.Digest.String(),
+			Type: "content",
+		}); err != nil {
+			return nil, err
+		}
 	}
 
 	if layerNeedsTypeWindows && current != nil {
 		if err := markRefLayerTypeWindows(current); err != nil {
-			current.Release(context.TODO())
 			return nil, err
 		}
 	}
 
 	if p.id.RecordType != "" && cache.GetRecordType(current) == "" {
 		if err := cache.SetRecordType(current, p.id.RecordType); err != nil {
-			current.Release(context.TODO())
 			return nil, err
 		}
 	}

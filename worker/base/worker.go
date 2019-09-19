@@ -428,6 +428,9 @@ func (w *Worker) FromRemote(ctx context.Context, remote *solver.Remote) (ref cac
 		tm := time.Now()
 		if tmstr, ok := desc.Annotations[labelCreatedAt]; ok {
 			if err := (&tm).UnmarshalText([]byte(tmstr)); err != nil {
+				if current != nil {
+					current.Release(context.TODO())
+				}
 				return nil, err
 			}
 		}
@@ -443,6 +446,7 @@ func (w *Worker) FromRemote(ctx context.Context, remote *solver.Remote) (ref cac
 			return nil, err
 		}
 		if err := ref.Extract(ctx); err != nil {
+			ref.Release(context.TODO())
 			return nil, err
 		}
 		current = ref
