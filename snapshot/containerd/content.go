@@ -10,8 +10,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-type garbageCollectFn func(context.Context) error
-
 func NewContentStore(store content.Store, ns string) content.Store {
 	return &nsContent{ns, store}
 }
@@ -82,26 +80,3 @@ func (w *nsWriter) Commit(ctx context.Context, size int64, expected digest.Diges
 	ctx = namespaces.WithNamespace(ctx, w.ns)
 	return w.Writer.Commit(ctx, size, expected, opts...)
 }
-
-// type noGCContentStore struct {
-// 	content.Store
-// }
-// type noGCWriter struct {
-// 	content.Writer
-// }
-
-// func (cs *noGCContentStore) Writer(ctx context.Context, opts ...content.WriterOpt) (content.Writer, error) {
-// 	w, err := cs.Store.Writer(ctx, opts...)
-// 	return &noGCWriter{w}, err
-// }
-
-// func (w *noGCWriter) Commit(ctx context.Context, size int64, expected digest.Digest, opts ...content.Opt) error {
-// 	opts = append(opts, func(info *content.Info) error {
-// 		if info.Labels == nil {
-// 			info.Labels = map[string]string{}
-// 		}
-// 		info.Labels["containerd.io/gc.root"] = time.Now().UTC().Format(time.RFC3339Nano)
-// 		return nil
-// 	})
-// 	return w.Writer.Commit(ctx, size, expected, opts...)
-// }

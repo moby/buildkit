@@ -16,7 +16,6 @@ import (
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/remotes/docker"
-	"github.com/containerd/containerd/rootfs"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/blobs"
@@ -468,48 +467,6 @@ func (w *Worker) FromRemote(ctx context.Context, remote *solver.Remote) (ref cac
 	return current, nil
 }
 
-// func (w *Worker) unpack(ctx context.Context, cm cache.Manager, descs []ocispec.Descriptor, s cdsnapshot.Snapshotter) (ids []string, refs []cache.ImmutableRef, err error) {
-// 	defer func() {
-// 		if err != nil {
-// 			for _, r := range refs {
-// 				r.Release(context.TODO())
-// 			}
-// 		}
-// 	}()
-
-// 	layers, err := getLayers(ctx, descs)
-// 	if err != nil {
-// 		return nil, nil, err
-// 	}
-
-// 	var chain []digest.Digest
-// 	for _, layer := range layers {
-// 		newChain := append(chain, layer.Diff.Digest)
-
-// 		chainID := ociidentity.ChainID(newChain)
-// 		ref, err := cm.Get(ctx, string(chainID))
-// 		if err == nil {
-// 			refs = append(refs, ref)
-// 		} else {
-// 			if _, err := rootfs.ApplyLayer(ctx, layer, chain, s, w.Applier); err != nil {
-// 				return nil, nil, err
-// 			}
-// 		}
-// 		chain = newChain
-
-// 		if err := w.Snapshotter.SetBlob(ctx, string(chainID), layer.Diff.Digest, layer.Blob.Digest); err != nil {
-// 			return nil, nil, err
-// 		}
-// 	}
-
-// 	ids = make([]string, len(chain))
-// 	for i := range chain {
-// 		ids[i] = string(ociidentity.ChainID(chain[:i+1]))
-// 	}
-
-// 	return ids, refs, nil
-// }
-
 // Labels returns default labels
 // utility function. could be moved to the constructor logic?
 func Labels(executor, snapshotter string) map[string]string {
@@ -540,30 +497,6 @@ func ID(root string) (string, error) {
 		}
 	}
 	return string(b), nil
-}
-
-func getLayers(ctx context.Context, descs []ocispec.Descriptor) ([]rootfs.Layer, error) {
-	layers := make([]rootfs.Layer, len(descs))
-	for i, desc := range descs {
-		diffIDStr := desc.Annotations["containerd.io/uncompressed"]
-		if diffIDStr == "" {
-			return nil, errors.Errorf("%s missing uncompressed digest", desc.Digest)
-		}
-		diffID, err := digest.Parse(diffIDStr)
-		if err != nil {
-			return nil, err
-		}
-		layers[i].Diff = ocispec.Descriptor{
-			MediaType: ocispec.MediaTypeImageLayer,
-			Digest:    diffID,
-		}
-		layers[i].Blob = ocispec.Descriptor{
-			MediaType: desc.MediaType,
-			Digest:    desc.Digest,
-			Size:      desc.Size,
-		}
-	}
-	return layers, nil
 }
 
 func oneOffProgress(ctx context.Context, id string) func(err error) error {

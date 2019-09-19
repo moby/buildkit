@@ -542,6 +542,8 @@ func TestSetBlob(t *testing.T) {
 	require.Equal(t, info.Extracted, true)
 
 	ctx, clean, err := leaseutil.WithLease(ctx, co.lm)
+	require.NoError(t, err)
+	defer clean(context.TODO())
 
 	b, desc, err := mapToBlob(map[string]string{"foo": "bar"})
 	require.NoError(t, err)

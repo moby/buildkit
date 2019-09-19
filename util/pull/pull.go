@@ -196,42 +196,10 @@ func (p *Puller) Pull(ctx context.Context) (*Pulled, error) {
 		}
 	}
 
-	// for _, l := range layerBlobs {
-	// 	labels := map[string]string{}
-	// 	var fields []string
-	// 	for _, nl := range notLayerBlobs {
-	// 		k := "containerd.io/gc.ref.content." + nl.Digest.Hex()[:12]
-	// 		labels[k] = nl.Digest.String()
-	// 		fields = append(fields, "labels."+k)
-	// 	}
-	// 	if _, err := p.ContentStore.Update(ctx, content.Info{
-	// 		Digest: l.Digest,
-	// 		Labels: labels,
-	// 	}, fields...); err != nil {
-	// 		return nil, err
-	// 	}
-	// }
-
-	// for _, nl := range append(notLayerBlobs, unusedBlobs...) {
-	// 	if err := p.ContentStore.Delete(ctx, nl.Digest); err != nil {
-	// 		return nil, err
-	// 	}
-	// }
-
 	layers, err := getLayers(ctx, p.ContentStore, p.desc, platform)
 	if err != nil {
 		return nil, err
 	}
-
-	// csh, release := snapshot.NewContainerdSnapshotter(p.Snapshotter)
-	// defer release()
-
-	// unpackProgressDone := oneOffProgress(ctx, "unpacking "+p.Src.String())
-	// chainid, err := unpack(ctx, p.desc, p.ContentStore, csh, p.Snapshotter, p.Applier, platform)
-	// if err != nil {
-	// 	return nil, unpackProgressDone(err)
-	// }
-	// unpackProgressDone(nil)
 
 	return &Pulled{
 		Ref:           p.ref,
@@ -240,46 +208,6 @@ func (p *Puller) Pull(ctx context.Context) (*Pulled, error) {
 		MetadataBlobs: notLayerBlobs,
 	}, nil
 }
-
-// func unpack(ctx context.Context, desc ocispec.Descriptor, cs content.Store, csh ctdsnapshot.Snapshotter, s snapshot.Snapshotter, applier diff.Applier, platform platforms.MatchComparer) (digest.Digest, error) {
-// 	layers, err := getLayers(ctx, cs, desc, platform)
-// 	if err != nil {
-// 		return "", err
-// 	}
-
-// 	var chain []digest.Digest
-// 	for _, layer := range layers {
-// 		labels := map[string]string{
-// 			"containerd.io/gc.root": time.Now().UTC().Format(time.RFC3339Nano),
-// 		}
-// 		if _, err := rootfs.ApplyLayer(ctx, layer, chain, csh, applier, ctdsnapshot.WithLabels(labels)); err != nil {
-// 			return "", err
-// 		}
-// 		chain = append(chain, layer.Diff.Digest)
-// 	}
-// 	chainID := identity.ChainID(chain)
-// 	if err != nil {
-// 		return "", err
-// 	}
-
-// 	if err := fillBlobMapping(ctx, s, layers); err != nil {
-// 		return "", err
-// 	}
-
-// 	return chainID, nil
-// }
-
-// func fillBlobMapping(ctx context.Context, s snapshot.Snapshotter, layers []rootfs.Layer) error {
-// 	var chain []digest.Digest
-// 	for _, l := range layers {
-// 		chain = append(chain, l.Diff.Digest)
-// 		chainID := identity.ChainID(chain)
-// 		if err := s.SetBlob(ctx, string(chainID), l.Diff.Digest, l.Blob.Digest); err != nil {
-// 			return err
-// 		}
-// 	}
-// 	return nil
-// }
 
 func getLayers(ctx context.Context, provider content.Provider, desc ocispec.Descriptor, platform platforms.MatchComparer) ([]ocispec.Descriptor, error) {
 	manifest, err := images.Manifest(ctx, provider, desc, platform)

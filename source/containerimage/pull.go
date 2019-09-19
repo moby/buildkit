@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"runtime"
+	"time"
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/diff"
@@ -19,6 +20,7 @@ import (
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/imageutil"
 	"github.com/moby/buildkit/util/leaseutil"
+	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/pull"
 	"github.com/moby/buildkit/util/resolver"
 	"github.com/moby/buildkit/util/winlayers"
@@ -210,11 +212,13 @@ func (p *puller) Snapshot(ctx context.Context) (ir cache.ImmutableRef, err error
 		return nil, nil
 	}
 
+	extractDone := oneOffProgress(ctx, "unpacking "+pulled.Ref)
 	var current cache.ImmutableRef
 	defer func() {
 		if err != nil && current != nil {
 			current.Release(context.TODO())
 		}
+		extractDone(err)
 	}()
 	for _, l := range pulled.Layers {
 		ref, err := p.CacheAccessor.GetByBlob(ctx, l, current, cache.WithDescription("pulled from "+pulled.Ref))
@@ -277,4 +281,21 @@ func cacheKeyFromConfig(dt []byte) digest.Digest {
 		return ""
 	}
 	return identity.ChainID(img.RootFS.DiffIDs)
+}
+
+func oneOffProgress(ctx context.Context, id string) func(err error) error {
+	pw, _, _ := progress.FromContext(ctx)
+	now := time.Now()
+	st := progress.Status{
+		Started: &now,
+	}
+	pw.Write(id, st)
+	return func(err error) error {
+		// TODO: set error on status
+		now := time.Now()
+		st.Completed = &now
+		pw.Write(id, st)
+		pw.Close()
+		return err
+	}
 }

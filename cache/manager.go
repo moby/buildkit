@@ -273,13 +273,6 @@ func (cm *cacheManager) Get(ctx context.Context, id string, opts ...RefOption) (
 	return cm.get(ctx, id, opts...)
 }
 
-// Get returns an immutable snapshot reference for ID
-// func (cm *cacheManager) GetFromSnapshotter(ctx context.Context, id string, opts ...RefOption) (ImmutableRef, error) {
-//   cm.mu.Lock()
-//   defer cm.mu.Unlock()
-//   return cm.get(ctx, id, opts...)
-// }
-
 func (cm *cacheManager) Metadata(id string) *metadata.StorageItem {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
