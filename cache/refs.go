@@ -208,7 +208,8 @@ func (cr *cacheRecord) Mount(ctx context.Context, readonly bool) (snapshot.Mount
 		l, err := cr.cm.LeaseManager.Create(ctx, func(l *leases.Lease) error {
 			l.ID = view
 			l.Labels = map[string]string{
-				"containerd.io/gc.flat": time.Now().UTC().Format(time.RFC3339Nano),
+				"containerd.io/gc.flat":    time.Now().UTC().Format(time.RFC3339Nano),
+				"buildkit/lease.temporary": "",
 			}
 			return nil
 		})

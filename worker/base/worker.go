@@ -172,6 +172,14 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 		return nil, err
 	}
 
+	leases, err := opt.LeaseManager.List(context.TODO(), "labels.\"buildkit/lease.temporary\"")
+	if err != nil {
+		return nil, err
+	}
+	for _, l := range leases {
+		opt.LeaseManager.Delete(context.TODO(), l)
+	}
+
 	return &Worker{
 		WorkerOpt:     opt,
 		CacheManager:  cm,
@@ -388,7 +396,13 @@ func getCreatedTimes(ref cache.ImmutableRef) (out []time.Time) {
 }
 
 func (w *Worker) FromRemote(ctx context.Context, remote *solver.Remote) (ref cache.ImmutableRef, err error) {
-	ctx, done, err := leaseutil.WithLease(ctx, w.LeaseManager)
+	ctx, done, err := leaseutil.WithLease(ctx, w.LeaseManager, func(l *leases.Lease) error {
+		if l.Labels == nil {
+			l.Labels = map[string]string{}
+		}
+		l.Labels["buildkit/lease.temporary"] = ""
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
