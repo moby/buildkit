@@ -204,12 +204,24 @@ func (cr *cacheRecord) Mount(ctx context.Context, readonly bool) (snapshot.Mount
 		return nil, err
 	}
 	if cr.viewMount == nil { // TODO: handle this better
-		cr.view = identity.NewID()
-		m, err := cr.cm.Snapshotter.View(ctx, cr.view, getSnapshotID(cr.md))
+		view := identity.NewID()
+		l, err := cr.cm.LeaseManager.Create(ctx, func(l *leases.Lease) error {
+			l.ID = view
+			l.Labels = map[string]string{
+				"containerd.io/gc.flat": time.Now().UTC().Format(time.RFC3339Nano),
+			}
+			return nil
+		})
 		if err != nil {
-			cr.view = ""
+			return nil, err
+		}
+		ctx = leases.WithLease(ctx, l.ID)
+		m, err := cr.cm.Snapshotter.View(ctx, view, getSnapshotID(cr.md))
+		if err != nil {
+			cr.cm.LeaseManager.Delete(context.TODO(), leases.Lease{ID: l.ID})
 			return nil, errors.Wrapf(err, "failed to mount %s", cr.ID())
 		}
+		cr.view = view
 		cr.viewMount = m
 	}
 	return cr.viewMount, nil
@@ -421,8 +433,8 @@ func (sr *immutableRef) release(ctx context.Context) error {
 
 	if len(sr.refs) == 0 {
 		if sr.viewMount != nil { // TODO: release viewMount earlier if possible
-			if err := sr.cm.Snapshotter.Remove(ctx, sr.view); err != nil {
-				return errors.Wrapf(err, "failed to remove view %s", sr.view)
+			if err := sr.cm.LeaseManager.Delete(ctx, leases.Lease{ID: sr.view}); err != nil {
+				return errors.Wrapf(err, "failed to remove view lease %s", sr.view)
 			}
 			sr.view = ""
 			sr.viewMount = nil
@@ -431,7 +443,6 @@ func (sr *immutableRef) release(ctx context.Context) error {
 		if sr.equalMutable != nil {
 			sr.equalMutable.release(ctx)
 		}
-		// go sr.cm.GC()
 	}
 
 	return nil
