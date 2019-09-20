@@ -2,6 +2,8 @@
 
 : ${PREFER_BUILDCTL=}
 : ${PREFER_LEGACY=}
+: ${TRAVIS_EVENT_TYPE=}
+: ${TRAVIS_BRANCH=}
 
 newerEqualThan() { # $1=minimum wanted version $2=actual-version
   [ "$1" = "$(printf "$1\n$2" | sort -V | head -n 1)" ]
