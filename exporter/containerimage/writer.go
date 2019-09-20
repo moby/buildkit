@@ -100,9 +100,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 		idx.MediaType = images.MediaTypeDockerSchema2ManifestList
 	}
 
-	labels := map[string]string{}
-
-	for i, p := range p.Platforms {
+	for _, p := range p.Platforms {
 		r, ok := inp.Refs[p.ID]
 		if !ok {
 			return nil, errors.Errorf("failed to find ref for ID %s", p.ID)
@@ -116,8 +114,6 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 		dp := p.Platform
 		desc.Platform = &dp
 		idx.Manifests = append(idx.Manifests, *desc)
-
-		labels[fmt.Sprintf("containerd.io/gc.ref.content.%d", i)] = desc.Digest.String()
 	}
 
 	idxBytes, err := json.MarshalIndent(idx, "", "   ")
@@ -133,17 +129,10 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 	}
 	idxDone := oneOffProgress(ctx, "exporting manifest list "+idxDigest.String())
 
-	if err := content.WriteBlob(ctx, ic.opt.ContentStore, idxDigest.String(), bytes.NewReader(idxBytes), idxDesc, content.WithLabels(labels)); err != nil {
+	if err := content.WriteBlob(ctx, ic.opt.ContentStore, idxDigest.String(), bytes.NewReader(idxBytes), idxDesc); err != nil {
 		return nil, idxDone(errors.Wrapf(err, "error writing manifest list blob %s", idxDigest))
 	}
 	idxDone(nil)
-
-	for _, desc := range idx.Manifests {
-		// delete manifest root. manifest will remain linked to the index
-		if err := ic.opt.ContentStore.Delete(context.TODO(), desc.Digest); err != nil {
-			return nil, errors.Wrap(err, "error removing manifest root")
-		}
-	}
 
 	return &idxDesc, nil
 }
@@ -229,11 +218,7 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache
 		},
 	}
 
-	labels := map[string]string{
-		"containerd.io/gc.ref.content.0": configDigest.String(),
-	}
-
-	for i, dp := range diffPairs {
+	for _, dp := range diffPairs {
 		info, err := ic.opt.ContentStore.Info(ctx, dp.Blobsum)
 		if err != nil {
 			return nil, errors.Wrapf(err, "could not find blob %s from contentstore", dp.Blobsum)
@@ -243,7 +228,6 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache
 			Size:      info.Size,
 			MediaType: layerType,
 		})
-		labels[fmt.Sprintf("containerd.io/gc.ref.content.%d", i+1)] = dp.Blobsum.String()
 	}
 
 	mfstJSON, err := json.MarshalIndent(mfst, "", "   ")
@@ -258,7 +242,7 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache
 	}
 	mfstDone := oneOffProgress(ctx, "exporting manifest "+mfstDigest.String())
 
-	if err := content.WriteBlob(ctx, ic.opt.ContentStore, mfstDigest.String(), bytes.NewReader(mfstJSON), mfstDesc, content.WithLabels(labels)); err != nil {
+	if err := content.WriteBlob(ctx, ic.opt.ContentStore, mfstDigest.String(), bytes.NewReader(mfstJSON), mfstDesc); err != nil {
 		return nil, mfstDone(errors.Wrapf(err, "error writing manifest blob %s", mfstDigest))
 	}
 	mfstDone(nil)
@@ -274,11 +258,6 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache
 		return nil, configDone(errors.Wrap(err, "error writing config blob"))
 	}
 	configDone(nil)
-
-	// delete config root. config will remain linked to the manifest
-	if err := ic.opt.ContentStore.Delete(context.TODO(), configDigest); err != nil {
-		return nil, errors.Wrap(err, "error removing config root")
-	}
 
 	return &ocispec.Descriptor{
 		Digest:    mfstDigest,
