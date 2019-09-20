@@ -61,10 +61,10 @@ type Manager interface {
 	Close() error
 }
 
-type ExternalRefCheckerFunc func(Accessor) (ExternalRefChecker, error)
+type ExternalRefCheckerFunc func() (ExternalRefChecker, error)
 
 type ExternalRefChecker interface {
-	Exists(key string) bool
+	Exists(string, []digest.Digest) bool
 }
 
 type cacheManager struct {
@@ -528,7 +528,7 @@ func (cm *cacheManager) pruneOnce(ctx context.Context, ch chan client.UsageInfo,
 
 	var check ExternalRefChecker
 	if f := cm.PruneRefChecker; f != nil && (!opt.All || len(opt.Filter) > 0) {
-		c, err := f(cm)
+		c, err := f()
 		if err != nil {
 			return errors.WithStack(err)
 		}
@@ -542,10 +542,8 @@ func (cm *cacheManager) pruneOnce(ctx context.Context, ch chan client.UsageInfo,
 			return err
 		}
 		for _, ui := range du {
-			if check != nil {
-				if check.Exists(ui.ID) {
-					continue
-				}
+			if ui.Shared {
+				continue
 			}
 			totalSize += ui.Size
 		}
@@ -600,7 +598,7 @@ func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, opt
 
 			shared := false
 			if opt.checkShared != nil {
-				shared = opt.checkShared.Exists(cr.ID())
+				shared = opt.checkShared.Exists(cr.ID(), cr.parentChain())
 			}
 
 			if !opt.all {
@@ -740,7 +738,7 @@ func (cm *cacheManager) markShared(m map[string]*cacheUsageInfo) error {
 	if cm.PruneRefChecker == nil {
 		return nil
 	}
-	c, err := cm.PruneRefChecker(cm)
+	c, err := cm.PruneRefChecker()
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -759,7 +757,7 @@ func (cm *cacheManager) markShared(m map[string]*cacheUsageInfo) error {
 		if m[id].shared {
 			continue
 		}
-		if b := c.Exists(id); b {
+		if b := c.Exists(id, m[id].parentChain); b {
 			markAllParentsShared(id)
 		}
 	}
@@ -778,6 +776,7 @@ type cacheUsageInfo struct {
 	doubleRef   bool
 	recordType  client.UsageRecordType
 	shared      bool
+	parentChain []digest.Digest
 }
 
 func (cm *cacheManager) DiskUsage(ctx context.Context, opt client.DiskUsageInfo) ([]*client.UsageInfo, error) {
@@ -810,6 +809,7 @@ func (cm *cacheManager) DiskUsage(ctx context.Context, opt client.DiskUsageInfo)
 			description: GetDescription(cr.md),
 			doubleRef:   cr.equalImmutable != nil,
 			recordType:  GetRecordType(cr),
+			parentChain: cr.parentChain(),
 		}
 		if c.recordType == "" {
 			c.recordType = client.UsageRecordTypeRegular

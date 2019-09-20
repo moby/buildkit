@@ -87,6 +87,8 @@ type cacheRecord struct {
 	// these are filled if multiple refs point to same data
 	equalMutable   *mutableRef
 	equalImmutable *immutableRef
+
+	parentChainCache []digest.Digest
 }
 
 // hold ref lock before calling
@@ -101,6 +103,26 @@ func (cr *cacheRecord) mref(triggerLastUsed bool) *mutableRef {
 	ref := &mutableRef{cacheRecord: cr, triggerLastUsed: triggerLastUsed}
 	cr.refs[ref] = struct{}{}
 	return ref
+}
+
+func (cr *cacheRecord) parentChain() []digest.Digest {
+	if cr.parentChainCache != nil {
+		return cr.parentChainCache
+	}
+	blob := getBlob(cr.md)
+	if blob == "" {
+		return nil
+	}
+
+	var parent []digest.Digest
+	if cr.parent != nil {
+		parent = cr.parent.parentChain()
+	}
+	pcc := make([]digest.Digest, len(parent)+1)
+	copy(pcc, parent)
+	pcc[len(parent)] = digest.Digest(blob)
+	cr.parentChainCache = pcc
+	return pcc
 }
 
 // hold ref lock before calling
