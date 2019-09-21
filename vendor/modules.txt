@@ -88,7 +88,7 @@ github.com/containerd/containerd/identifiers
 github.com/containerd/containerd/metadata/boltutil
 github.com/containerd/containerd/api/types/task
 github.com/containerd/containerd/events/exchange
-# github.com/containerd/continuity v0.0.0-20190426062206-aaeac12a7ffc
+# github.com/containerd/continuity v0.0.0-20190827140505-75bee3e2ccb6
 github.com/containerd/continuity/sysx
 github.com/containerd/continuity/fs
 github.com/containerd/continuity/syscallx
@@ -102,7 +102,7 @@ github.com/containerd/continuity/proto
 github.com/containerd/fifo
 # github.com/containerd/go-cni v0.0.0-20190610170741-5a4663dad645
 github.com/containerd/go-cni
-# github.com/containerd/go-runc v0.0.0-20180907222934-5a6d9f37cfa3
+# github.com/containerd/go-runc v0.0.0-20190911050354-e029b79d8cda
 github.com/containerd/go-runc
 # github.com/containerd/ttrpc v0.0.0-20190411181408-699c4e40d1e7
 github.com/containerd/ttrpc
@@ -233,7 +233,7 @@ github.com/stretchr/testify/require
 github.com/stretchr/testify/assert
 # github.com/syndtr/gocapability v0.0.0-20180916011248-d98352740cb2
 github.com/syndtr/gocapability/capability
-# github.com/tonistiigi/fsutil v0.0.0-20190327153851-3bbb99cdbd76
+# github.com/tonistiigi/fsutil v0.0.0-20190819224149-3d2716dd0a4d
 github.com/tonistiigi/fsutil
 github.com/tonistiigi/fsutil/types
 github.com/tonistiigi/fsutil/copy
