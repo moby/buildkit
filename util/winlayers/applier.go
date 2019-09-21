@@ -42,7 +42,7 @@ func (s *winApplier) Apply(ctx context.Context, desc ocispec.Descriptor, mounts 
 		return s.a.Apply(ctx, desc, mounts, opts...)
 	}
 
-	isCompressed, err := images.IsCompressedDiff(ctx, desc.MediaType)
+	compressed, err := images.DiffCompression(ctx, desc.MediaType)
 	if err != nil {
 		return ocispec.Descriptor{}, errors.Wrapf(errdefs.ErrNotImplemented, "unsupported diff media type: %v", desc.MediaType)
 	}
@@ -56,7 +56,7 @@ func (s *winApplier) Apply(ctx context.Context, desc ocispec.Descriptor, mounts 
 		defer ra.Close()
 
 		r := content.NewReader(ra)
-		if isCompressed {
+		if compressed != "" {
 			ds, err := compression.DecompressStream(r)
 			if err != nil {
 				return err

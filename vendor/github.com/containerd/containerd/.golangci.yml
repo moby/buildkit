@@ -15,7 +15,9 @@ linters:
     - errcheck
 
 run:
+  deadline: 2m
   skip-dirs:
     - api
     - design
     - docs
+    - docs/man
