@@ -510,6 +510,7 @@ func (cr *cacheRecord) finalize(ctx context.Context, commit bool) error {
 		ID:   cr.ID(),
 		Type: "snapshots/" + cr.cm.ManagerOpt.Snapshotter.Name(),
 	}); err != nil {
+		cr.cm.LeaseManager.Delete(context.TODO(), leases.Lease{ID: cr.ID()})
 		return errors.Wrapf(err, "failed to add snapshot %s to lease", cr.ID())
 	}
 
@@ -620,11 +621,6 @@ func (sr *mutableRef) release(ctx context.Context) error {
 				return nil
 			}
 			if err := sr.equalImmutable.remove(ctx, false); err != nil {
-				return err
-			}
-		}
-		if sr.parent != nil {
-			if err := sr.parent.release(ctx); err != nil {
 				return err
 			}
 		}

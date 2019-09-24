@@ -124,8 +124,9 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispec.Descriptor, 
 		p = p2.(*immutableRef)
 	}
 
+	releaseParent := false
 	defer func() {
-		if err != nil && p != nil {
+		if releaseParent || err != nil && p != nil {
 			p.Release(context.TODO())
 		}
 	}()
@@ -142,6 +143,9 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispec.Descriptor, 
 		ref, err := cm.get(ctx, si.ID(), opts...)
 		if err != nil && errors.Cause(err) != errNotFound {
 			return nil, errors.Wrapf(err, "failed to get record %s by blobchainid", si.ID())
+		}
+		if p != nil {
+			releaseParent = true
 		}
 		return ref, nil
 	}
@@ -167,6 +171,7 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispec.Descriptor, 
 	if link != nil {
 		snapshotID = getSnapshotID(link.Metadata())
 		blobOnly = getBlobOnly(link.Metadata())
+		go link.Release(context.TODO())
 	}
 
 	l, err := cm.ManagerOpt.LeaseManager.Create(ctx, func(l *leases.Lease) error {
@@ -413,9 +418,6 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, opts ...RefOpti
 		}
 	}()
 
-	if err := cm.Snapshotter.Prepare(ctx, id, parentSnapshotID); err != nil {
-		return nil, errors.Wrapf(err, "failed to prepare %s", id)
-	}
 	l, err := cm.ManagerOpt.LeaseManager.Create(ctx, func(l *leases.Lease) error {
 		l.ID = id
 		l.Labels = map[string]string{
@@ -442,6 +444,10 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, opts ...RefOpti
 		Type: "snapshots/" + cm.ManagerOpt.Snapshotter.Name(),
 	}); err != nil {
 		return nil, errors.Wrapf(err, "failed to add snapshot %s to lease", id)
+	}
+
+	if err := cm.Snapshotter.Prepare(ctx, id, parentSnapshotID); err != nil {
+		return nil, errors.Wrapf(err, "failed to prepare %s", id)
 	}
 
 	md, _ := cm.md.Get(id)
