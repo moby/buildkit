@@ -342,6 +342,18 @@ func (w *Worker) Exporter(name string, sm *session.Manager) (exporter.Exporter, 
 }
 
 func (w *Worker) GetRemote(ctx context.Context, ref cache.ImmutableRef, createIfNeeded bool) (*solver.Remote, error) {
+	ctx, done, err := leaseutil.WithLease(ctx, w.LeaseManager, func(l *leases.Lease) error {
+		if l.Labels == nil {
+			l.Labels = map[string]string{}
+		}
+		l.Labels["buildkit/lease.temporary"] = ""
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer done(ctx)
+
 	diffPairs, err := blobs.GetDiffPairs(ctx, w.ContentStore(), w.Differ, ref, createIfNeeded)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed calculating diff pairs for exported snapshot")

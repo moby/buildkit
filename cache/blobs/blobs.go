@@ -5,6 +5,7 @@ import (
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/diff"
+	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/mount"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/util/flightcontrol"
@@ -26,9 +27,15 @@ type DiffPair struct {
 
 var ErrNoBlobs = errors.Errorf("no blobs for snapshot")
 
+// GetDiffPairs returns the DiffID/Blobsum pairs for a giver reference and saves it.
+// Caller must hold a lease when calling this function.
 func GetDiffPairs(ctx context.Context, contentStore content.Store, differ diff.Comparer, ref cache.ImmutableRef, createBlobs bool) ([]DiffPair, error) {
 	if ref == nil {
 		return nil, nil
+	}
+
+	if _, ok := leases.FromContext(ctx); !ok {
+		return nil, errors.Errorf("missing lease requirement for GetDiffPairs")
 	}
 
 	if err := ref.Finalize(ctx, true); err != nil {
