@@ -11,6 +11,42 @@ import (
 	is "gotest.tools/assert/cmp"
 )
 
+func TestShellParserMandatoryEnvVars(t *testing.T) {
+	var newWord string
+	var err error
+	shlex := NewLex('\\')
+	setEnvs := []string{"VAR=plain", "ARG=x"}
+	emptyEnvs := []string{"VAR=", "ARG=x"}
+	unsetEnvs := []string{"ARG=x"}
+
+	noEmpty := "${VAR:?message here$ARG}"
+	noUnset := "${VAR?message here$ARG}"
+
+	// disallow empty
+	newWord, err = shlex.ProcessWord(noEmpty, setEnvs)
+	assert.Check(t, err)
+	assert.Check(t, is.Equal(newWord, "plain"))
+
+	_, err = shlex.ProcessWord(noEmpty, emptyEnvs)
+	assert.Check(t, is.ErrorContains(err, "message herex"))
+
+	_, err = shlex.ProcessWord(noEmpty, unsetEnvs)
+	assert.Check(t, is.ErrorContains(err, "message herex"))
+
+	// disallow unset
+	newWord, err = shlex.ProcessWord(noUnset, setEnvs)
+	assert.Check(t, err)
+	assert.Check(t, is.Equal(newWord, "plain"))
+
+	newWord, err = shlex.ProcessWord(noUnset, emptyEnvs)
+	assert.Check(t, err)
+	assert.Check(t, is.Equal(newWord, ""))
+
+	_, err = shlex.ProcessWord(noUnset, unsetEnvs)
+	assert.Check(t, is.ErrorContains(err, "message herex"))
+
+}
+
 func TestShellParser4EnvVars(t *testing.T) {
 	fn := "envVarTest"
 	lineCount := 0
@@ -21,7 +57,7 @@ func TestShellParser4EnvVars(t *testing.T) {
 
 	shlex := NewLex('\\')
 	scanner := bufio.NewScanner(file)
-	envs := []string{"PWD=/home", "SHELL=bash", "KOREAN=한국어"}
+	envs := []string{"PWD=/home", "SHELL=bash", "KOREAN=한국어", "NULL="}
 	envsMap := BuildEnvs(envs)
 	for scanner.Scan() {
 		line := scanner.Text()
