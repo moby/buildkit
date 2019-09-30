@@ -25,7 +25,7 @@ github.com/apache/thrift/lib/go/thrift
 github.com/codahale/hdrhistogram
 # github.com/containerd/console v0.0.0-20181022165439-0650fd9eeb50
 github.com/containerd/console
-# github.com/containerd/containerd v1.3.0-rc.2
+# github.com/containerd/containerd v1.3.0
 github.com/containerd/containerd/filters
 github.com/containerd/containerd/mount
 github.com/containerd/containerd/snapshots
@@ -54,7 +54,6 @@ github.com/containerd/containerd/api/services/content/v1
 github.com/containerd/containerd/content/proxy
 github.com/containerd/containerd/services/content/contentserver
 github.com/containerd/containerd/reference
-github.com/containerd/containerd/metadata
 github.com/containerd/containerd/remotes/docker/schema1
 github.com/containerd/containerd/archive
 github.com/containerd/containerd/archive/compression
@@ -62,6 +61,7 @@ github.com/containerd/containerd/log
 github.com/containerd/containerd/api/services/introspection/v1
 github.com/containerd/containerd/diff/apply
 github.com/containerd/containerd/diff/walking
+github.com/containerd/containerd/metadata
 github.com/containerd/containerd/labels
 github.com/containerd/containerd/version
 github.com/containerd/containerd/api/services/containers/v1
