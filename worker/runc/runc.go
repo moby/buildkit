@@ -12,6 +12,7 @@ import (
 	"github.com/containerd/containerd/platforms"
 	ctdsnapshot "github.com/containerd/containerd/snapshots"
 	"github.com/docker/docker/pkg/idtools"
+	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/executor/oci"
 	"github.com/moby/buildkit/executor/runcexecutor"
@@ -36,10 +37,6 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 	name := "runc-" + snFactory.Name
 	root = filepath.Join(root, name)
 	if err := os.MkdirAll(root, 0700); err != nil {
-		return opt, err
-	}
-	md, err := metadata.NewStore(filepath.Join(root, "metadata.db"))
-	if err != nil {
 		return opt, err
 	}
 
@@ -92,19 +89,30 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 	for k, v := range labels {
 		xlabels[k] = v
 	}
+	snap := containerdsnapshot.NewSnapshotter(snFactory.Name, mdb.Snapshotter(snFactory.Name), "buildkit", idmap)
+	lm := leaseutil.WithNamespace(ctdmetadata.NewLeaseManager(mdb), "buildkit")
+	if err := cache.MigrateV2(context.TODO(), filepath.Join(root, "metadata.db"), filepath.Join(root, "metadata_v2.db"), c, snap, lm); err != nil {
+		return opt, err
+	}
+
+	md, err := metadata.NewStore(filepath.Join(root, "metadata_v2.db"))
+	if err != nil {
+		return opt, err
+	}
+
 	opt = base.WorkerOpt{
 		ID:              id,
 		Labels:          xlabels,
 		MetadataStore:   md,
 		Executor:        exe,
-		Snapshotter:     containerdsnapshot.NewSnapshotter(snFactory.Name, mdb.Snapshotter(snFactory.Name), "buildkit", idmap),
+		Snapshotter:     snap,
 		ContentStore:    c,
 		Applier:         winlayers.NewFileSystemApplierWithWindows(c, apply.NewFileSystemApplier(c)),
 		Differ:          winlayers.NewWalkingDiffWithWindows(c, walking.NewWalkingDiff(c)),
 		ImageStore:      nil, // explicitly
 		Platforms:       []specs.Platform{platforms.Normalize(platforms.DefaultSpec())},
 		IdentityMapping: idmap,
-		LeaseManager:    leaseutil.WithNamespace(ctdmetadata.NewLeaseManager(mdb), "buildkit"),
+		LeaseManager:    lm,
 		GarbageCollect:  mdb.GarbageCollect,
 	}
 	return opt, nil

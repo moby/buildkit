@@ -495,7 +495,7 @@ func (cr *cacheRecord) finalize(ctx context.Context, commit bool) error {
 		return nil
 	}
 
-	l, err := cr.cm.ManagerOpt.LeaseManager.Create(ctx, func(l *leases.Lease) error {
+	_, err := cr.cm.ManagerOpt.LeaseManager.Create(ctx, func(l *leases.Lease) error {
 		l.ID = cr.ID()
 		l.Labels = map[string]string{
 			"containerd.io/gc.flat": time.Now().UTC().Format(time.RFC3339Nano),
@@ -503,10 +503,12 @@ func (cr *cacheRecord) finalize(ctx context.Context, commit bool) error {
 		return nil
 	})
 	if err != nil {
-		return errors.Wrap(err, "failed to create lease")
+		if !errdefs.IsAlreadyExists(err) { // migrator adds leases for everything
+			return errors.Wrap(err, "failed to create lease")
+		}
 	}
 
-	if err := cr.cm.ManagerOpt.LeaseManager.AddResource(ctx, l, leases.Resource{
+	if err := cr.cm.ManagerOpt.LeaseManager.AddResource(ctx, leases.Lease{ID: cr.ID()}, leases.Resource{
 		ID:   cr.ID(),
 		Type: "snapshots/" + cr.cm.ManagerOpt.Snapshotter.Name(),
 	}); err != nil {

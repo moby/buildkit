@@ -337,7 +337,7 @@ func newHTTPSource(tmpdir string) (source.Source, error) {
 	cm, err := cache.NewManager(cache.ManagerOpt{
 		Snapshotter:    snapshot.FromContainerdSnapshotter("native", containerdsnapshot.NSSnapshotter("buildkit", mdb.Snapshotter("native")), nil),
 		MetadataStore:  md,
-		LeaseManager:   leaseutil.WithNamespace(leaseutil.NewManager(mdb), "buildkit"),
+		LeaseManager:   leaseutil.WithNamespace(ctdmetadata.NewLeaseManager(mdb), "buildkit"),
 		ContentStore:   mdb.ContentStore(),
 		GarbageCollect: mdb.GarbageCollect,
 	})
