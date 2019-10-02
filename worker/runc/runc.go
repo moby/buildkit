@@ -118,7 +118,7 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		ImageStore:      nil, // explicitly
 		Platforms:       []specs.Platform{platforms.Normalize(platforms.DefaultSpec())},
 		IdentityMapping: idmap,
-		LeaseManager:    leaseutil.WithNamespace(leaseutil.NewManager(mdb), "buildkit"),
+		LeaseManager:    leaseutil.WithNamespace(ctdmetadata.NewLeaseManager(mdb), "buildkit"),
 	}
 	return opt, nil
 }
