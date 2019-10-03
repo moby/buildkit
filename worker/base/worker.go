@@ -342,13 +342,7 @@ func (w *Worker) Exporter(name string, sm *session.Manager) (exporter.Exporter, 
 }
 
 func (w *Worker) GetRemote(ctx context.Context, ref cache.ImmutableRef, createIfNeeded bool) (*solver.Remote, error) {
-	ctx, done, err := leaseutil.WithLease(ctx, w.LeaseManager, func(l *leases.Lease) error {
-		if l.Labels == nil {
-			l.Labels = map[string]string{}
-		}
-		l.Labels["buildkit/lease.temporary"] = ""
-		return nil
-	})
+	ctx, done, err := leaseutil.WithLease(ctx, w.LeaseManager, leaseutil.MakeTemporary)
 	if err != nil {
 		return nil, err
 	}
@@ -407,13 +401,7 @@ func getCreatedTimes(ref cache.ImmutableRef) (out []time.Time) {
 }
 
 func (w *Worker) FromRemote(ctx context.Context, remote *solver.Remote) (ref cache.ImmutableRef, err error) {
-	ctx, done, err := leaseutil.WithLease(ctx, w.LeaseManager, func(l *leases.Lease) error {
-		if l.Labels == nil {
-			l.Labels = map[string]string{}
-		}
-		l.Labels["buildkit/lease.temporary"] = ""
-		return nil
-	})
+	ctx, done, err := leaseutil.WithLease(ctx, w.LeaseManager, leaseutil.MakeTemporary)
 	if err != nil {
 		return nil, err
 	}

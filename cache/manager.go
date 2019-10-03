@@ -17,7 +17,7 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/opencontainers/go-digest"
-	imagespaceidentity "github.com/opencontainers/image-spec/identity"
+	imagespecidentity "github.com/opencontainers/image-spec/identity"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -98,7 +98,7 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispec.Descriptor, 
 		return nil, err
 	}
 	chainID := diffID
-	blobChainID := imagespaceidentity.ChainID([]digest.Digest{desc.Digest, diffID})
+	blobChainID := imagespecidentity.ChainID([]digest.Digest{desc.Digest, diffID})
 
 	if _, err := cm.ContentStore.Info(ctx, desc.Digest); err != nil {
 		return nil, errors.Wrapf(err, "failed to get blob %s", desc.Digest)
@@ -111,8 +111,8 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispec.Descriptor, 
 		if pInfo.ChainID == "" || pInfo.BlobChainID == "" {
 			return nil, errors.Errorf("failed to get ref by blob on non-adressable parent")
 		}
-		chainID = imagespaceidentity.ChainID([]digest.Digest{pInfo.ChainID, chainID})
-		blobChainID = imagespaceidentity.ChainID([]digest.Digest{pInfo.BlobChainID, blobChainID})
+		chainID = imagespecidentity.ChainID([]digest.Digest{pInfo.ChainID, chainID})
+		blobChainID = imagespecidentity.ChainID([]digest.Digest{pInfo.BlobChainID, blobChainID})
 		p2, err := cm.Get(ctx, parent.ID(), NoUpdateLastUsed)
 		if err != nil {
 			return nil, err

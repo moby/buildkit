@@ -106,7 +106,6 @@ func MigrateV2(ctx context.Context, from, to string, cs content.Store, s snapsho
 	// add committed, parent, snapshot
 	for id, item := range byID {
 		em := getEqualMutable(item)
-		var parent string
 		if em == "" {
 			info, err := s.Stat(ctx, id)
 			if err != nil {
@@ -115,8 +114,9 @@ func MigrateV2(ctx context.Context, from, to string, cs content.Store, s snapsho
 			if info.Kind == snapshots.KindCommitted {
 				queueCommitted(item)
 			}
-			parent = info.Parent
-			queueParent(item, parent)
+			if info.Parent != "" {
+				queueParent(item, info.Parent)
+			}
 		} else {
 			queueCommitted(item)
 		}

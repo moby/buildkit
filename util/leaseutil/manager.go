@@ -27,6 +27,14 @@ func WithLease(ctx context.Context, ls leases.Manager, opts ...leases.Opt) (cont
 	}, nil
 }
 
+func MakeTemporary(l *leases.Lease) error {
+	if l.Labels == nil {
+		l.Labels = map[string]string{}
+	}
+	l.Labels["buildkit/lease.temporary"] = time.Now().UTC().Format(time.RFC3339Nano)
+	return nil
+}
+
 func WithNamespace(lm leases.Manager, ns string) leases.Manager {
 	return &nsLM{manager: lm, ns: ns}
 }

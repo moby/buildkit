@@ -192,13 +192,7 @@ func (p *puller) Snapshot(ctx context.Context) (ir cache.ImmutableRef, err error
 	// workaround for gcr, authentication not supported on blob endpoints
 	pull.EnsureManifestRequested(ctx, p.Puller.Resolver, p.Puller.Src.String())
 
-	ctx, done, err := leaseutil.WithLease(ctx, p.LeaseManager, func(l *leases.Lease) error {
-		if l.Labels == nil {
-			l.Labels = map[string]string{}
-		}
-		l.Labels["buildkit/lease.temporary"] = ""
-		return nil
-	})
+	ctx, done, err := leaseutil.WithLease(ctx, p.LeaseManager, leaseutil.MakeTemporary)
 	if err != nil {
 		return nil, err
 	}

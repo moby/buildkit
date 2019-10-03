@@ -264,7 +264,7 @@ func queueParent(si *metadata.StorageItem, parent string) error {
 	}
 	v, err := metadata.NewValue(parent)
 	if err != nil {
-		return errors.Wrap(err, "failed to create size value")
+		return errors.Wrap(err, "failed to create parent value")
 	}
 	si.Update(func(b *bolt.Bucket) error {
 		return si.SetValue(b, keyParent, v)

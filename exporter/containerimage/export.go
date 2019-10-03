@@ -144,13 +144,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 		src.Metadata[k] = v
 	}
 
-	ctx, done, err := leaseutil.WithLease(ctx, e.opt.LeaseManager, func(l *leases.Lease) error {
-		if l.Labels == nil {
-			l.Labels = map[string]string{}
-		}
-		l.Labels["buildkit/lease.temporary"] = ""
-		return nil
-	})
+	ctx, done, err := leaseutil.WithLease(ctx, e.opt.LeaseManager, leaseutil.MakeTemporary)
 	if err != nil {
 		return nil, err
 	}

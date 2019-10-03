@@ -16,8 +16,9 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/util/flightcontrol"
+	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/opencontainers/go-digest"
-	imagespaceidentity "github.com/opencontainers/image-spec/identity"
+	imagespecidentity "github.com/opencontainers/image-spec/identity"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -230,11 +231,10 @@ func (cr *cacheRecord) Mount(ctx context.Context, readonly bool) (snapshot.Mount
 		l, err := cr.cm.LeaseManager.Create(ctx, func(l *leases.Lease) error {
 			l.ID = view
 			l.Labels = map[string]string{
-				"containerd.io/gc.flat":    time.Now().UTC().Format(time.RFC3339Nano),
-				"buildkit/lease.temporary": "",
+				"containerd.io/gc.flat": time.Now().UTC().Format(time.RFC3339Nano),
 			}
 			return nil
-		})
+		}, leaseutil.MakeTemporary)
 		if err != nil {
 			return nil, err
 		}
@@ -404,10 +404,10 @@ func (sr *immutableRef) SetBlob(ctx context.Context, desc ocispec.Descriptor) er
 	queueDiffID(sr.md, diffID.String())
 	queueBlob(sr.md, desc.Digest.String())
 	chainID := diffID
-	blobChainID := imagespaceidentity.ChainID([]digest.Digest{desc.Digest, diffID})
+	blobChainID := imagespecidentity.ChainID([]digest.Digest{desc.Digest, diffID})
 	if parentChainID != "" {
-		chainID = imagespaceidentity.ChainID([]digest.Digest{parentChainID, chainID})
-		blobChainID = imagespaceidentity.ChainID([]digest.Digest{parentBlobChainID, blobChainID})
+		chainID = imagespecidentity.ChainID([]digest.Digest{parentChainID, chainID})
+		blobChainID = imagespecidentity.ChainID([]digest.Digest{parentBlobChainID, blobChainID})
 	}
 	queueChainID(sr.md, chainID.String())
 	queueBlobChainID(sr.md, blobChainID.String())

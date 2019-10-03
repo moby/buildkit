@@ -49,13 +49,7 @@ func Config(ctx context.Context, str string, resolver remotes.Resolver, cache Co
 	}
 
 	if leaseManager != nil {
-		ctx2, done, err := leaseutil.WithLease(ctx, leaseManager, leases.WithExpiration(5*time.Minute), func(l *leases.Lease) error {
-			if l.Labels == nil {
-				l.Labels = map[string]string{}
-			}
-			l.Labels["buildkit/lease.temporary"] = ""
-			return nil
-		})
+		ctx2, done, err := leaseutil.WithLease(ctx, leaseManager, leases.WithExpiration(5*time.Minute), leaseutil.MakeTemporary)
 		if err != nil {
 			return "", nil, errors.WithStack(err)
 		}
