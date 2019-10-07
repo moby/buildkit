@@ -203,6 +203,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 	}
 
 	resp["containerimage.digest"] = desc.Digest.String()
+	resp["containerimage.size"] = strconv.FormatInt(desc.Size, 10)
 	return resp, nil
 }
 
