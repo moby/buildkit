@@ -16,6 +16,9 @@ var g flightcontrol.Group
 var notFirstRun bool
 var lastNotEmpty bool
 
+// overridden by tests
+var resolvconfGet = resolvconf.Get
+
 type DNSConfig struct {
 	Nameservers   []string
 	Options       []string
@@ -59,7 +62,7 @@ func GetResolvConf(ctx context.Context, stateDir string, idmap *idtools.Identity
 		}
 
 		var dt []byte
-		f, err := resolvconf.Get()
+		f, err := resolvconfGet()
 		if err != nil {
 			if !os.IsNotExist(err) {
 				return "", err
