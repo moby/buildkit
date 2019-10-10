@@ -157,10 +157,12 @@ be UPPERCASE to distinguish them from arguments more easily.
 
 
 Docker runs instructions in a `Dockerfile` in order. A `Dockerfile` **must
-start with a \`FROM\` instruction**. The `FROM` instruction specifies the [*Base
-Image*](glossary.md#base-image) from which you are building. `FROM` may only be
-preceded by one or more `ARG` instructions, which declare arguments that are used
-in `FROM` lines in the `Dockerfile`.
+begin with a \`FROM\` instruction**. This may be after [parser
+directives](#parser-directives), [comments](#format), and globally scoped
+[ARGs](#arg). The `FROM` instruction specifies the [*Parent
+Image*](glossary.md#parent-image) from which you are building. `FROM`
+may only be preceded by one or more `ARG` instructions, which declare arguments
+that are used in `FROM` lines in the `Dockerfile`.
 
 Docker treats lines that *begin* with `#` as a comment, unless the line is
 a valid [parser directive](#parser-directives). A `#` marker anywhere
