@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: buildkitd
+spec:
+  containers:
+  - name: buildkitd
+    image: moby/buildkit:master
+    securityContext:
+      privileged: true

@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: buildkitd
+  annotations:
+    container.apparmor.security.beta.kubernetes.io/buildkitd: unconfined
+    container.seccomp.security.alpha.kubernetes.io/buildkitd: unconfined
+# see buildkit/docs/rootless.md for caveats of rootless mode
+spec:
+  containers:
+  - name: buildkitd
+    image: moby/buildkit:master-rootless
+    args:
+    - --oci-worker-no-process-sandbox
+    securityContext:
+# To change UID/GID, you need to rebuild the image
+      runAsUser: 1000
+      runAsGroup: 1000
