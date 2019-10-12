@@ -53,7 +53,6 @@ import (
 	"github.com/urfave/cli"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 )
 
 func init() {
@@ -200,13 +199,6 @@ func main() {
 			}
 		}
 		opts := []grpc.ServerOption{unaryInterceptor(ctx), grpc.StreamInterceptor(otgrpc.OpenTracingStreamServerInterceptor(tracer))}
-		creds, err := serverCredentials(cfg.GRPC.TLS)
-		if err != nil {
-			return err
-		}
-		if creds != nil {
-			opts = append(opts, creds)
-		}
 		server := grpc.NewServer(opts...)
 
 		// relative path does not work with nightlyone/lockfile
@@ -298,10 +290,14 @@ func serveGRPC(cfg config.GRPCConfig, server *grpc.Server, errCh chan error) err
 	if len(addrs) == 0 {
 		return errors.New("--addr cannot be empty")
 	}
+	tlsConfig, err := serverCredentials(cfg.TLS)
+	if err != nil {
+		return err
+	}
 	eg, _ := errgroup.WithContext(context.Background())
 	listeners := make([]net.Listener, 0, len(addrs))
 	for _, addr := range addrs {
-		l, err := getListener(cfg, addr)
+		l, err := getListener(addr, cfg.UID, cfg.GID, tlsConfig)
 		if err != nil {
 			for _, l := range listeners {
 				l.Close()
@@ -490,7 +486,7 @@ func groupToGid(group string) (int, error) {
 	return id, nil
 }
 
-func getListener(cfg config.GRPCConfig, addr string) (net.Listener, error) {
+func getListener(addr string, uid, gid int, tlsConfig *tls.Config) (net.Listener, error) {
 	addrSlice := strings.SplitN(addr, "://", 2)
 	if len(addrSlice) < 2 {
 		return nil, errors.Errorf("address %s does not contain proto, you meant unix://%s ?",
@@ -499,11 +495,18 @@ func getListener(cfg config.GRPCConfig, addr string) (net.Listener, error) {
 	proto := addrSlice[0]
 	listenAddr := addrSlice[1]
 	switch proto {
-	case "unix", "npipe":
-		return sys.GetLocalListener(listenAddr, cfg.UID, cfg.GID)
+	case "unix":
+		if tlsConfig != nil {
+			logrus.Warnf("TLS is disabled for %s", addr)
+		}
+		return sys.GetLocalListener(listenAddr, uid, gid)
 	case "tcp":
-		return sockets.NewTCPSocket(listenAddr, nil)
+		if tlsConfig == nil {
+			logrus.Warnf("TLS is not enabled for %s. enabling mutual TLS authentication is highly recommended", addr)
+		}
+		return sockets.NewTCPSocket(listenAddr, tlsConfig)
 	default:
+		// TODO: support npipe (with TLS?)
 		return nil, errors.Errorf("addr %s not supported", addr)
 	}
 }
@@ -531,7 +534,7 @@ func unaryInterceptor(globalCtx context.Context) grpc.ServerOption {
 	})
 }
 
-func serverCredentials(cfg config.TLSConfig) (grpc.ServerOption, error) {
+func serverCredentials(cfg config.TLSConfig) (*tls.Config, error) {
 	certFile := cfg.Cert
 	keyFile := cfg.Key
 	caFile := cfg.CA
@@ -565,8 +568,7 @@ func serverCredentials(cfg config.TLSConfig) (grpc.ServerOption, error) {
 		tlsConf.ClientAuth = tls.RequireAndVerifyClientCert
 		tlsConf.ClientCAs = certPool
 	}
-	creds := grpc.Creds(credentials.NewTLS(tlsConf))
-	return creds, nil
+	return tlsConf, nil
 }
 
 func newController(c *cli.Context, cfg *config.Config) (*control.Controller, error) {
