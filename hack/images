@@ -55,10 +55,6 @@ imageDockerCommon() {
 	fi
 }
 
-imageLegacy() {
-	imageDockerCommon -f ./hack/dockerfiles/test.Dockerfile
-}
-
 imageDocker() {
 	imageDockerCommon $progressFlag -f ./hack/dockerfiles/test.buildkit.Dockerfile
 }
@@ -102,6 +98,7 @@ case $buildmode in
 	imageDocker
 	;;
 *)
-	imageLegacy
+	echo "Unsupported build mode: $buildmode" >&2
+	exit 1
 	;;
 esac

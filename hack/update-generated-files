@@ -20,17 +20,10 @@ case $buildmode in
   cp -R "$output/generated-files/" .
   rm -rf $output
   ;;
-*)
+"docker-buildkt")
   iidfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
-  case $buildmode in
-  "docker-buildkit")
-    export DOCKER_BUILDKIT=1
-    docker build --build-arg GOGO_VERSION=$gogo_version --iidfile $iidfile -f ./hack/dockerfiles/generated-files.buildkit.Dockerfile --target update --force-rm .
-    ;;
-  *)
-    docker build --build-arg GOGO_VERSION=$gogo_version --iidfile $iidfile -f ./hack/dockerfiles/generated-files.Dockerfile --target update --force-rm .
-    ;;
-  esac
+  export DOCKER_BUILDKIT=1
+  docker build --build-arg GOGO_VERSION=$gogo_version --iidfile $iidfile -f ./hack/dockerfiles/generated-files.buildkit.Dockerfile --target update --force-rm .
   iid=$(cat $iidfile)
   cid=$(docker create $iid noop)
 
@@ -39,5 +32,9 @@ case $buildmode in
   docker rm $cid
 
   rm -f $iidfile
+  ;;
+*)
+  echo "Unsupported build mode: $buildmode" >&2
+  exit 1
   ;;
 esac

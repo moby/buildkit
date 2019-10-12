@@ -15,34 +15,6 @@ if [ -n "$BUILDKITD_TAGS" ]; then
   buildkitdTagsFlags="--opt build-arg:BUILDKITD_TAGS=\"$BUILDKITD_TAGS\""
 fi
 
-binariesLegacy() {
-  mkdir -p bin
-
-  iidfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
-  copysrc="/usr/bin/."
-
-  case "$(echo "$TARGETPLATFORM" | cut -d"/" -f1)" in
-  "darwin")
-    docker build --iidfile $iidfile --target buildctl-darwin -f ./hack/dockerfiles/test.Dockerfile --force-rm .
-    copysrc="/out/."
-    ;;
-  "windows")
-    docker build --iidfile $iidfile --build-arg BUILDKITD_TAGS="${BUILDKITD_TAGS}" --target buildctl.exe -f ./hack/dockerfiles/test.Dockerfile --force-rm .
-    copysrc="/out/."
-    ;;
-  *)
-    docker build --iidfile $iidfile --build-arg BUILDKITD_TAGS="${BUILDKITD_TAGS}" --target buildkit-binaries -f ./hack/dockerfiles/test.Dockerfile --force-rm .
-    ;;
-  esac
-
-  iid=$(cat $iidfile)
-  containerID=$(docker create $iid copy)
-  docker cp $containerID:$copysrc bin
-  docker rm $containerID
-  chmod +x bin/*
-  rm -f $iidfile
-}
-
 binariesDocker() {
   mkdir -p bin/tmp
   export DOCKER_BUILDKIT=1
@@ -83,6 +55,7 @@ case $buildmode in
   binariesDocker
   ;;
 *)
-  binariesLegacy
+  echo "Unsupported build mode: $buildmode" >&2
+  exit 1
   ;;
 esac

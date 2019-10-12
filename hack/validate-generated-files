@@ -22,7 +22,8 @@ case ${1:-} in
     rm -f $iidfile
     ;;
   *)
-    docker build --build-arg GOGO_VERSION=$gogo_version -f ./hack/dockerfiles/generated-files.Dockerfile --target validate --force-rm .
+    echo "Unsupported build mode: $buildmode" >&2
+    exit 1
     ;;
   esac
   ;;
