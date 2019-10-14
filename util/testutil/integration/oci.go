@@ -14,7 +14,7 @@ import (
 func InitOCIWorker() {
 	Register(&oci{})
 
-	// the rootless uid is defined in hack/dockerfiles/test.Dockerfile
+	// the rootless uid is defined in hack/dockerfiles/test.buildkit.Dockerfile
 	if s := os.Getenv("BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR"); s != "" {
 		var uid, gid int
 		if _, err := fmt.Sscanf(s, "%d:%d", &uid, &gid); err != nil {

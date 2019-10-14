@@ -8,10 +8,6 @@ set -eu -o pipefail -x
 progressFlag=""
 if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"; fi
 
-lintLegacy() {
-  docker build -f ./hack/dockerfiles/lint.Dockerfile --force-rm .
-}
-
 lintDocker() {
   export DOCKER_BUILDKIT=1
   iidfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
@@ -35,6 +31,7 @@ case $buildmode in
   lintDocker
   ;;
 *)
-  lintLegacy
+  echo "Unsupported build mode: $buildmode" >&2
+  exit 1
   ;;
 esac

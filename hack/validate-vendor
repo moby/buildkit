@@ -24,7 +24,8 @@ case ${1:-} in
     rm -f $iidfile
     ;;
   *)
-    docker build -f ./hack/dockerfiles/vendor.Dockerfile --target validate --force-rm .
+    echo "Unsupported build mode: $buildmode" >&2
+    exit 1
     ;;
   esac
   ;;

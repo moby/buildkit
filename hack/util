@@ -21,7 +21,10 @@ else
     buildmode="docker-buildkit";
   fi
 fi
-
+if [ "$buildmode" = "legacy" ]; then
+  echo "\"legacy\" buildmode is no longer supported. Please enable DOCKER_BUILDKIT or install standalone BuildKit." >&2
+  exit 1
+fi
 
 cacheref=""
 currentref=""

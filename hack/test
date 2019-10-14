@@ -54,17 +54,14 @@ case $buildmode in
   docker load -i $tmpfile
   rm $tmpfile
   ;;
-*)
-  case $buildmode in
-  "docker-buildkit")
-    export DOCKER_BUILDKIT=1
-    docker build --iidfile $iidfile -f ./hack/dockerfiles/test.buildkit.Dockerfile --target integration-tests --force-rm .
-    ;;
-  *)
-    docker build --iidfile $iidfile -f ./hack/dockerfiles/test.Dockerfile --target integration-tests --force-rm .
-    ;;
-  esac
+"docker-buildkit")
+  export DOCKER_BUILDKIT=1
+  docker build --iidfile $iidfile -f ./hack/dockerfiles/test.buildkit.Dockerfile --target integration-tests --force-rm .
   iid=$(cat $iidfile)
+  ;;
+*)
+  echo "Unsupported build mode: $buildmode" >&2
+  exit 1
   ;;
 esac
 
@@ -126,8 +123,5 @@ case $buildmode in
 "docker-buildkit")
   rm "$iidfile"
   docker rmi $iid
-  ;;
-"legacy")
-  rm "$iidfile"
   ;;
 esac
