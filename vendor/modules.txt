@@ -25,7 +25,7 @@ github.com/apache/thrift/lib/go/thrift
 github.com/codahale/hdrhistogram
 # github.com/containerd/console v0.0.0-20181022165439-0650fd9eeb50
 github.com/containerd/console
-# github.com/containerd/containerd v1.3.0
+# github.com/containerd/containerd v1.4.0-0.20191014053712-acdcf13d5eaf
 github.com/containerd/containerd/filters
 github.com/containerd/containerd/mount
 github.com/containerd/containerd/snapshots
@@ -84,6 +84,7 @@ github.com/containerd/containerd/runtime/linux/runctypes
 github.com/containerd/containerd/runtime/v2/runc/options
 github.com/containerd/containerd/snapshots/proxy
 github.com/containerd/containerd/snapshots/storage
+github.com/containerd/containerd/reference/docker
 github.com/containerd/containerd/gc
 github.com/containerd/containerd/identifiers
 github.com/containerd/containerd/metadata/boltutil
@@ -127,7 +128,6 @@ github.com/docker/cli/cli/config/credentials
 github.com/docker/cli/cli/config/types
 # github.com/docker/distribution v2.7.1-0.20190205005809-0d3efadf0154+incompatible
 github.com/docker/distribution/reference
-github.com/docker/distribution/registry/api/errcode
 github.com/docker/distribution/digestset
 # github.com/docker/docker v1.14.0-0.20190319215453-e7b5f7dbe98c
 github.com/docker/docker/pkg/idtools
