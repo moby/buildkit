@@ -61,6 +61,7 @@ type ConvertOpt struct {
 	OverrideCopyImage string
 	LLBCaps           *apicaps.CapSet
 	ContextLocalName  string
+	PrefixArgs        []string
 }
 
 func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State, *Image, error) {
@@ -341,6 +342,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 			extraHosts:        opt.ExtraHosts,
 			copyImage:         opt.OverrideCopyImage,
 			llbCaps:           opt.LLBCaps,
+			prefixArgs:        opt.PrefixArgs,
 		}
 		if opt.copyImage == "" {
 			opt.copyImage = DefaultCopyImage
@@ -457,6 +459,7 @@ type dispatchOpt struct {
 	extraHosts        []llb.HostIP
 	copyImage         string
 	llbCaps           *apicaps.CapSet
+	prefixArgs        []string
 }
 
 func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
@@ -661,7 +664,8 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 	shlex.RawQuotes = true
 	shlex.SkipUnsetEnv = true
 
-	opt = append(opt, llb.WithCustomName(prefixCommand(d, uppercaseCmd(processCmdEnv(&shlex, c.String(), env)), d.prefixPlatform, d.state.GetPlatform())))
+	cmdEnv := processCmdEnv(&shlex, c.String(), env)
+	opt = append(opt, llb.WithCustomName(prefixCommand(d, uppercaseCmd(appendArgs(cmdEnv, d.buildArgs, dopt.prefixArgs)), d.prefixPlatform, d.state.GetPlatform())))
 	for _, h := range dopt.extraHosts {
 		opt = append(opt, llb.AddExtraHost(h.Host, h.IP))
 	}
@@ -1320,4 +1324,16 @@ func useFileOp(args map[string]string, caps *apicaps.CapSet) bool {
 		}
 	}
 	return enabled && caps != nil && caps.Supports(pb.CapFileBase) == nil
+}
+
+func appendArgs(cmd string, buildArgs []instructions.KeyValuePairOptional, definedArgs []string) string {
+	var prefixArgs string
+	for _, arg := range definedArgs {
+		for _, v := range buildArgs {
+			if v.Key == arg {
+				prefixArgs = prefixArgs + " " + arg + "=" + *v.Value
+			}
+		}
+	}
+	return cmd + prefixArgs
 }

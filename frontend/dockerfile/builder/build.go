@@ -54,6 +54,7 @@ const (
 
 var httpPrefix = regexp.MustCompile(`^https?://`)
 var gitUrlPathWithFragmentSuffix = regexp.MustCompile(`\.git(?:#.+)?$`)
+var keyPrefix = []string{"BUILDPLATFORM", "TARGETPLATFORM"} // add other args if needed.
 
 func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 	opts := c.BuildOpts().Opts
@@ -337,6 +338,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 					ForceNetMode:      defaultNetMode,
 					OverrideCopyImage: opts[keyOverrideCopyImage],
 					LLBCaps:           &caps,
+					PrefixArgs:        keyPrefix,
 				})
 
 				if err != nil {
