@@ -203,11 +203,19 @@ man: mandir $(addprefix man/,$(MANPAGES))
 mandir:
 	@mkdir -p man
 
-genman: FORCE
-	go run cmd/gen-manpages/main.go man/
+# Kept for backwards compatability
+genman: man/containerd.1 man/ctr.1
+
+man/containerd.1: FORCE
+	@echo "$(WHALE) $@"
+	go run cmd/gen-manpages/main.go containerd man/
+
+man/ctr.1: FORCE
+	@echo "$(WHALE) $@"
+	go run cmd/gen-manpages/main.go ctr man/
 
 man/%: docs/man/%.md FORCE
-	@echo "$(WHALE) $<"
+	@echo "$(WHALE) $@"
 	go-md2man -in "$<" -out "$@"
 
 define installmanpage
@@ -294,7 +302,7 @@ root-coverage: ## generate coverage profiles for unit tests that require root
 
 vendor:
 	@echo "$(WHALE) $@"
-	@vndr
+	@vndr -whitelist github.com/urfave/cli/autocomplete/
 
 help: ## this help
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST) | sort
