@@ -71,9 +71,11 @@ func (sb *sandbox) Value(k string) interface{} {
 	return sb.mv.values[k].value
 }
 
-func newSandbox(w Worker, mirror string, mv matrixValue) (s Sandbox, cl func() error, err error) {
+func newSandbox(tb testing.TB, w Worker, mirror string, mv matrixValue) (s Sandbox, cl func() error, err error) {
 	cfg := &BackendConfig{
 		Logs: make(map[string]*bytes.Buffer),
+
+		t: tb,
 	}
 
 	var upt []ConfigUpdater

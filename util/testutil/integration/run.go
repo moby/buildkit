@@ -45,6 +45,8 @@ type Sandbox interface {
 type BackendConfig struct {
 	Logs       map[string]*bytes.Buffer
 	ConfigFile string
+
+	t testing.TB
 }
 
 type Worker interface {
@@ -148,7 +150,7 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 						if !strings.HasSuffix(fn, "NoParallel") {
 							t.Parallel()
 						}
-						sb, closer, err := newSandbox(br, mirror, mv)
+						sb, closer, err := newSandbox(t, br, mirror, mv)
 						if err != nil {
 							if errors.Cause(err) == ErrorRequirements {
 								t.Skip(err.Error())
