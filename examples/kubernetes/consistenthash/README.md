@@ -5,7 +5,7 @@ Demo for efficiently using BuildKit daemon-local cache with multi-node cluster
 ## Deploy
 
 ```console
-$ kubectl apply -f buildkitd-rootless-statefulset.yaml
+$ kubectl apply -f ../statefulset.rootless.yaml
 $ kubectl scale --replicas=10 statefulset/buildkitd
 ```
 
@@ -19,7 +19,7 @@ For example, the key can be defined as `<REPO NAME>:<CONTEXT PATH>`, e.g.
 
 Then determine the pod that corresponds to the key:
 ```console
-$ go get ./consistenthash
+$ go build -o consistenthash .
 $ pod=$(./show-running-pods.sh | consistenthash $key)
 ```
 

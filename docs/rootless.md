@@ -1,81 +1,77 @@
 # Rootless mode (Experimental)
 
-Requirements:
-- runc `a00bf0190895aa465a5fbed0268888e2c8ddfe85` (Oct 15, 2018) or later
-- Some distros such as Debian (excluding Ubuntu) and Arch Linux require `sudo sh -c "echo 1 > /proc/sys/kernel/unprivileged_userns_clone"`.
-- RHEL/CentOS 7 requires `sudo sh -c "echo 28633 > /proc/sys/user/max_user_namespaces"`. You may also need `sudo grubby --args="namespace.unpriv_enable=1 user_namespace.enable=1" --update-kernel="$(grubby --default-kernel)"`.
-- `newuidmap` and `newgidmap` need to be installed on the host. These commands are provided by the `uidmap` package. For RHEL/CentOS 7, RPM is not officially provided but available at https://copr.fedorainfracloud.org/coprs/vbatts/shadow-utils-newxidmap/ .
-- `/etc/subuid` and `/etc/subgid` should contain >= 65536 sub-IDs. e.g. `penguin:231072:65536`.
+Rootless mode allows running BuildKit daemon as a non-root user.
 
+## Distribution-specific hint
+Using Ubuntu kernel is recommended.
 
-## Set up
+### Ubuntu
+* No preparation is needed.
+* `overlayfs` snapshotter is enabled by default ([Ubuntu-specific kernel patch](https://kernel.ubuntu.com/git/ubuntu/ubuntu-bionic.git/commit/fs/overlayfs?id=3b7da90f28fe1ed4b79ef2d994c81efbc58f1144)).
 
-Setting up rootless mode also requires some bothersome steps as follows, but you can also use [`rootlesskit`](https://github.com/rootless-containers/rootlesskit) for automating these steps.
+### Debian GNU/Linux
+* Add `kernel.unprivileged_userns_clone=1` to `/etc/sysctl.conf` (or `/etc/sysctl.d`) and run `sudo sysctl -p`
+* To use `overlayfs` snapshotter (recommended), run `sudo modprobe overlay permit_mounts_in_userns=1` ([Debian-specific kernel patch, introduced in Debian 10](https://salsa.debian.org/kernel-team/linux/blob/283390e7feb21b47779b48e0c8eb0cc409d2c815/debian/patches/debian/overlayfs-permit-mounts-in-userns.patch)). Put the configuration to `/etc/modprobe.d` for persistence.
 
-### Terminal 1:
+### Arch Linux
+* Add `kernel.unprivileged_userns_clone=1` to `/etc/sysctl.conf` (or `/etc/sysctl.d`) and run `sudo sysctl -p`
 
-```
-$ unshare -U -m
-unshared$ echo $$ > /tmp/pid
-```
+### Fedora 31 and later
+* Run `sudo grubby --update-kernel=ALL --args="systemd.unified_cgroup_hierarchy=0"` and reboot.
 
-Unsharing mountns (and userns) is required for mounting filesystems without real root privileges.
+### Fedora 30
+* No preparation is needed
 
-### Terminal 2:
+### RHEL/CentOS 8
+* No preparation is needed
 
-```
-$ id -u
-1001
-$ grep $(whoami) /etc/subuid
-penguin:231072:65536
-$ grep $(whoami) /etc/subgid
-penguin:231072:65536
-$ newuidmap $(cat /tmp/pid) 0 1001 1 1 231072 65536
-$ newgidmap $(cat /tmp/pid) 0 1001 1 1 231072 65536
-```
+### RHEL/CentOS 7
+* Add `user.max_user_namespaces=28633` to `/etc/sysctl.conf` (or `/etc/sysctl.d`) and run `sudo sysctl -p`
+* Old releases (<= 7.6) require [extra configuration steps](https://github.com/moby/moby/pull/40076).
 
-### Terminal 1:
+### Container-Optimized OS from Google
+* :warning: Currently unsupported. See [#879](https://github.com/moby/buildkit/issues/879).
 
-```
-unshared# buildkitd
-```
+## Known limitations
+* No support for `overlayfs` snapshotter, except on Ubuntu and Debian kernels. We are planning to support `fuse-overlayfs` snapshotter instead for other kernels.
+* Network mode is always set to `network.host`.
+* No support for `containerd` worker
 
-* The data dir will be set to `/home/penguin/.local/share/buildkit`
-* The address will be set to `unix:///run/user/1001/buildkit/buildkitd.sock`
-* `overlayfs` snapshotter is not supported except Ubuntu-flavored kernel: http://kernel.ubuntu.com/git/ubuntu/ubuntu-artful.git/commit/fs/overlayfs?h=Ubuntu-4.13.0-25.29&id=0a414bdc3d01f3b61ed86cfe3ce8b63a9240eba7
-* containerd worker is not supported ( pending PR: https://github.com/containerd/containerd/pull/2006 )
-* Network namespace is not used at the moment.
-* Cgroups is disabled.
+## Running BuildKit in Rootless mode
 
-### Terminal 2:
+[RootlessKit](https://github.com/rootless-containers/rootlesskit/) needs to be installed.
 
-```
-$ go get ./examples/build-using-dockerfile
-$ build-using-dockerfile --buildkit-addr unix:///run/user/1001/buildkit/buildkitd.sock -t foo /path/to/somewhere
+```console
+$ rootlesskit buildkitd
 ```
 
-## Set up (using a container)
-
-Docker image is available as [`moby/buildkit:rootless`](https://hub.docker.com/r/moby/buildkit/tags/).
-
-```
-$ docker run --name buildkitd -d --privileged -p 1234:1234  moby/buildkit:rootless --addr tcp://0.0.0.0:1234
+```console
+$ buildctl --addr unix:///run/user/$UID/buildkit/buildkitd.sock build ...
 ```
 
+## Containerized deployment
+
+### Kubernetes
+See [`../examples/kubernetes`](../examples/kubernetes).
+
+### Docker
+
+```console
+$ docker run --name buildkitd -d --security-opt seccomp=unconfined --security-opt apparmor=unconfined moby/buildkit:rootless --oci-worker-no-process-sandbox
+$ buildctl --addr docker-container://buildkitd build ...
 ```
-$ go get ./examples/build-using-dockerfile
-$ build-using-dockerfile --buildkit-addr tcp://127.0.0.1:1234 -t foo /path/to/somewhere
-```
+#### About `--oci-worker-no-process-sandbox`
 
-### Security consideration
+By adding `--oci-worker-no-process-sandbox` to the `buildkitd` arguments, BuildKit can be executed in a container without adding `--privileged` to `docker run` arguments.
+However, you still need to pass `--security-opt seccomp=unconfined --security-opt apparmor=unconfined` to `docker run`.
 
-Although `moby/buildkit:rootless` executes the BuildKit daemon as a normal user, `docker run` still requires `--privileged`.
-This is to allow build executor containers to mount `/proc`, by providing "unmasked" `/proc` to the BuildKit daemon container.
+Note that `--oci-worker-no-process-sandbox` allows build executor containers to `kill` (and potentially `ptrace` depending on the seccomp configuration) an arbitrary process in the BuildKit daemon container.
 
-See [`docker/cli#1347`](https://github.com/docker/cli/pull/1347) for the ongoing work to remove this requirement.
-See also [Disabling process sandbox](#disabling-process-sandbox).
+To allow running rootless `buildkitd` without `--oci-worker-no-process-sandbox`, run `docker run` with `--security-opt systempaths=unconfined`. (For Kubernetes, set `securityContext.procMount` to `Unmasked`.)
 
-#### UID/GID
+The `--security-opt systempaths=unconfined` flag disables the masks for the `/proc` mount in the container and potentially allows reading and writing dangerous kernel files, but it is safe when you are running `buildkitd` as non-root.
+
+### Change UID/GID
 
 The `moby/buildkit:rootless` image has the following UID/GID configuration:
 
@@ -101,85 +97,8 @@ user:100000:65536
 
 To change the UID/GID configuration, you need to modify and build the BuildKit image manually.
 ```
-$ vi hack/dockerfiles/test.Dockerfile
-$ docker build -t buildkit-rootless-custom --target rootless -f hack/dockerfiles/test.Dockerfile .
+$ vi hack/dockerfiles/test.buildkit.Dockerfile
+$ make images
+$ docker run ... moby/buildkit:local-rootless ...
 ```
 
-#### Disabling process sandbox
-
-By passing `--oci-worker-no-process-sandbox` to the `buildkitd` arguments, BuildKit can be executed in a container without `--privileged`.
-However, you still need to pass `--security-opt seccomp=unconfined --security-opt apparmor=unconfined` to `docker run`.
-
-```
-$ docker run --name buildkitd -d --security-opt seccomp=unconfined --security-opt apparmor=unconfined -p 1234:1234 moby/buildkit:rootless --addr tcp://0.0.0.0:1234 --oci-worker-no-process-sandbox
-```
-
-Note that `--oci-worker-no-process-sandbox` allows build executor containers to `kill` (and potentially `ptrace` depending on the seccomp configuration) an arbitrary process in the BuildKit daemon container.
-
-
-## Set up (using Kubernetes)
-
-### With `securityContext`
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  labels:
-    app: buildkitd
-  name: buildkitd
-spec:
-  selector:
-    matchLabels:
-      app: buildkitd
-  template:
-    metadata:
-      labels:
-        app: buildkitd
-    spec:
-      containers:
-      - image: moby/buildkit:rootless
-        args:
-        - --addr
-        - tcp://0.0.0.0:1234
-        name: buildkitd
-        ports:
-        - containerPort: 1234
-        securityContext:
-          privileged: true
-```
-
-This configuration requires privileged containers to be enabled.
-
-If you are using Kubernetes v1.12+ with either Docker v18.06+, containerd v1.2+, or CRI-O v1.12+ as the CRI runtime, you can replace `privileged: true` with `procMount: Unmasked`.
-
-### Without `securityContext` but with `--oci-worker-no-process-sandbox`
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  labels:
-    app: buildkitd
-  name: buildkitd
-spec:
-  selector:
-    matchLabels:
-      app: buildkitd
-  template:
-    metadata:
-      labels:
-        app: buildkitd
-    spec:
-      containers:
-      - image: moby/buildkit:rootless
-        args:
-        - --addr
-        - tcp://0.0.0.0:1234
-        - --oci-worker-no-process-sandbox
-        name: buildkitd
-        ports:
-        - containerPort: 1234
-```
-
-See [Disabling process sandbox](#disabling-process-sandbox) for security notice.

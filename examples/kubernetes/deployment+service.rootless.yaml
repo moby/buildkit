@@ -1,11 +1,10 @@
 apiVersion: apps/v1
-kind: StatefulSet
+kind: Deployment
 metadata:
   labels:
     app: buildkitd
   name: buildkitd
 spec:
-  serviceName: buildkitd
   replicas: 1
   selector:
     matchLabels:
@@ -27,9 +26,28 @@ spec:
         - unix:///run/user/1000/buildkit/buildkitd.sock
         - --addr
         - tcp://0.0.0.0:1234
+        - --tlscacert
+        - /certs/ca.pem
+        - --tlscert
+        - /certs/cert.pem
+        - --tlskey
+        - /certs/key.pem
         - --oci-worker-no-process-sandbox
+        securityContext:
+# To change UID/GID, you need to rebuild the image
+          runAsUser: 1000
+          runAsGroup: 1000
         ports:
         - containerPort: 1234
+        volumeMounts:
+        - name: certs
+          readOnly: true
+          mountPath: /certs
+      volumes:
+# buildkit-daemon-certs must contain ca.pem, cert.pem, and key.pem
+      - name: certs
+        secret:
+          secretName: buildkit-daemon-certs
 ---
 apiVersion: v1
 kind: Service
@@ -42,4 +60,4 @@ spec:
   - port: 1234
     protocol: TCP
   selector:
-    app: buildkitd 
+    app: buildkitd
