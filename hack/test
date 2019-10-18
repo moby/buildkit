@@ -48,7 +48,6 @@ case $buildmode in
   tmpfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
   buildctl build $progressFlag --frontend=dockerfile.v0 $currentcontextBuildctl \
     --opt target=integration-tests \
-    --opt filename=./hack/dockerfiles/test.buildkit.Dockerfile \
     --output type=docker,name=$iid,dest=$tmpfile \
     --import-cache type=registry,ref=cicache.buildk.it/moby/buildkit/master:integration-tests $importCacheFlags
   docker load -i $tmpfile
@@ -56,7 +55,7 @@ case $buildmode in
   ;;
 "docker-buildkit")
   export DOCKER_BUILDKIT=1
-  docker build --iidfile $iidfile -f ./hack/dockerfiles/test.buildkit.Dockerfile --target integration-tests --force-rm .
+  docker build --iidfile $iidfile --target integration-tests --force-rm .
   iid=$(cat $iidfile)
   ;;
 *)

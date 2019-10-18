@@ -20,7 +20,7 @@ func InitContainerdWorker() {
 		containerd:     "containerd",
 		containerdShim: "containerd-shim",
 	})
-	// defined in hack/dockerfiles/test.buildkit.Dockerfile.
+	// defined in Dockerfile
 	// e.g. `containerd-1.1=/opt/containerd-1.1/bin,containerd-42.0=/opt/containerd-42.0/bin`
 	if s := os.Getenv("BUILDKIT_INTEGRATION_CONTAINERD_EXTRA"); s != "" {
 		entries := strings.Split(s, ",")

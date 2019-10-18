@@ -24,7 +24,7 @@ binariesDocker() {
     target="linux"
   fi
 
-  docker build $platformFlag --build-arg BUILDKITD_TAGS="${BUILDKITD_TAGS}" --target binaries-$target --iidfile $iidfile -f ./hack/dockerfiles/test.buildkit.Dockerfile --force-rm .
+  docker build $platformFlag --build-arg BUILDKITD_TAGS="${BUILDKITD_TAGS}" --target binaries-$target --iidfile $iidfile --force-rm .
   iid=$(cat $iidfile)
   containerID=$(docker create $iid copy)
   docker cp $containerID:/ bin/tmp
@@ -42,7 +42,6 @@ binaries() {
   fi
   buildctl build $progressFlag --frontend=dockerfile.v0 \
     --local context=. --local dockerfile=. \
-    --opt filename=./hack/dockerfiles/test.buildkit.Dockerfile \
     $buildkitdTagsFlags --opt target=binaries $platformFlag \
     --output type=local,dest=./bin/
 }

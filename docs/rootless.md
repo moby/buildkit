@@ -97,7 +97,7 @@ user:100000:65536
 
 To change the UID/GID configuration, you need to modify and build the BuildKit image manually.
 ```
-$ vi hack/dockerfiles/test.buildkit.Dockerfile
+$ vi Dockerfile
 $ make images
 $ docker run ... moby/buildkit:local-rootless ...
 ```
