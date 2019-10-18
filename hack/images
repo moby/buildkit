@@ -25,14 +25,14 @@ if [ -z "$TAG" ] || [ -z "$REPO" ]; then
 	usage
 fi
 
-imageDockerCommon() {
+imageDocker() {
 	if echo $PLATFORMS | grep , >/dev/null; then
 		echo "PREFER_BUILDCTL=1 needs to be set to build images for $PLATFORMS"
 		exit 1
 	fi
 	set -x
-	docker build $@ --platform=$PLATFORMS -t $REPO:$TAG .
-	docker build $@ --platform=$PLATFORMS -t $REPO:$TAG-rootless --target rootless .
+	docker build $progressFlag --platform=$PLATFORMS -t $REPO:$TAG .
+	docker build $progressFlag --platform=$PLATFORMS -t $REPO:$TAG-rootless --target rootless .
 	set +x
 
 	if [ "$PUSH" = "push" ]; then
@@ -55,10 +55,6 @@ imageDockerCommon() {
 	fi
 }
 
-imageDocker() {
-	imageDockerCommon $progressFlag -f ./hack/dockerfiles/test.buildkit.Dockerfile
-}
-
 image() {
 	pushFlag=""
 	if [ "$PUSH" = "push" ]; then
@@ -76,7 +72,6 @@ image() {
 
 	buildctl build $progressFlag --frontend=dockerfile.v0 \
 		--local context=. --local dockerfile=. \
-		--opt filename=./hack/dockerfiles/test.buildkit.Dockerfile \
 		--opt platform=$PLATFORMS \
 		--export-cache type=inline \
 		--output type=image,\"name=$REPO:$TAG$tagLatest\",$pushFlag
@@ -84,7 +79,6 @@ image() {
 	buildctl build $progressFlag --frontend=dockerfile.v0 \
 		--local context=. --local dockerfile=. \
 		--opt target=rootless \
-		--opt filename=./hack/dockerfiles/test.buildkit.Dockerfile \
 		--opt platform=$PLATFORMS \
 		--export-cache type=inline \
 		--output type=image,\"name=$REPO:$TAG-rootless$tagLatestRootless\",$pushFlag

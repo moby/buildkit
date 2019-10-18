@@ -11,7 +11,7 @@ if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"
 lintDocker() {
   export DOCKER_BUILDKIT=1
   iidfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
-  docker build --iidfile $iidfile -f ./hack/dockerfiles/lint.buildkit.Dockerfile --force-rm .
+  docker build --iidfile $iidfile -f ./hack/dockerfiles/lint.Dockerfile --force-rm .
   iid=$(cat $iidfile)
   docker rmi $iid
   rm -f $iidfile
@@ -20,7 +20,7 @@ lintDocker() {
 lint() {
   buildctl build $progressFlag --frontend=dockerfile.v0 \
     --local context=. --local dockerfile=. \
-    --opt filename=./hack/dockerfiles/lint.buildkit.Dockerfile
+    --opt filename=./hack/dockerfiles/lint.Dockerfile
 }
 
 case $buildmode in

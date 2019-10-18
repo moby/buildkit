@@ -16,7 +16,6 @@ repo="cicache.buildk.it/moby/buildkit/master"
 $(dirname $0)/login_ci_cache
 buildctl build $progressFlag --frontend=dockerfile.v0 \
   $currentcontextBuildctl \
-  --opt filename=./hack/dockerfiles/test.buildkit.Dockerfile \
   --opt target=binaries-linux-helper \
   --opt platform=$RUNC_PLATFORMS \
   --import-cache cicache.buildk.it/moby/buildkit/master:binaries-cross-helper \
@@ -24,6 +23,6 @@ buildctl build $progressFlag --frontend=dockerfile.v0 \
 fi
 
 buildctl build --progress=plain --frontend=dockerfile.v0 \
-   $currentcontextBuildctl --opt filename=./hack/dockerfiles/test.buildkit.Dockerfile \
+   $currentcontextBuildctl \
    --opt platform=$PLATFORMS \
    --import-cache cicache.buildk.it/moby/buildkit/master:binaries-cross-helper
