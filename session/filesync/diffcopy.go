@@ -88,7 +88,6 @@ func syncTargetDiffCopy(ds grpc.Stream, dest string) error {
 		return errors.Wrapf(err, "failed to create synctarget dest dir %s", dest)
 	}
 	return errors.WithStack(fsutil.Receive(ds.Context(), ds, dest, fsutil.ReceiveOpt{
-		Merge: true,
 		Filter: func() func(string, *fstypes.Stat) bool {
 			uid := os.Getuid()
 			gid := os.Getgid()
