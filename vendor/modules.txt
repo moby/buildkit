@@ -26,12 +26,15 @@ github.com/codahale/hdrhistogram
 # github.com/containerd/console v0.0.0-20181022165439-0650fd9eeb50
 github.com/containerd/console
 # github.com/containerd/containerd v1.4.0-0.20191014053712-acdcf13d5eaf
-github.com/containerd/containerd/filters
-github.com/containerd/containerd/mount
-github.com/containerd/containerd/snapshots
 github.com/containerd/containerd/content
 github.com/containerd/containerd/diff
+github.com/containerd/containerd/errdefs
+github.com/containerd/containerd/filters
+github.com/containerd/containerd/gc
 github.com/containerd/containerd/images
+github.com/containerd/containerd/leases
+github.com/containerd/containerd/mount
+github.com/containerd/containerd/snapshots
 github.com/containerd/containerd/remotes
 github.com/containerd/containerd/remotes/docker
 github.com/containerd/containerd/content/local
@@ -46,8 +49,6 @@ github.com/containerd/containerd/oci
 github.com/containerd/containerd/containers
 github.com/containerd/containerd/contrib/seccomp
 github.com/containerd/containerd/namespaces
-github.com/containerd/containerd/errdefs
-github.com/containerd/containerd/leases
 github.com/containerd/containerd/rootfs
 github.com/containerd/containerd/images/archive
 github.com/containerd/containerd/api/services/content/v1
@@ -85,7 +86,6 @@ github.com/containerd/containerd/runtime/v2/runc/options
 github.com/containerd/containerd/snapshots/proxy
 github.com/containerd/containerd/snapshots/storage
 github.com/containerd/containerd/reference/docker
-github.com/containerd/containerd/gc
 github.com/containerd/containerd/identifiers
 github.com/containerd/containerd/metadata/boltutil
 github.com/containerd/containerd/events/exchange
@@ -205,9 +205,9 @@ github.com/morikuni/aec
 # github.com/opencontainers/go-digest v1.0.0-rc1
 github.com/opencontainers/go-digest
 # github.com/opencontainers/image-spec v1.0.1
+github.com/opencontainers/image-spec/identity
 github.com/opencontainers/image-spec/specs-go/v1
 github.com/opencontainers/image-spec/specs-go
-github.com/opencontainers/image-spec/identity
 # github.com/opencontainers/runc v1.0.0-rc8.0.20190621203724-f4982d86f7fd
 github.com/opencontainers/runc/libcontainer/system
 github.com/opencontainers/runc/libcontainer/user

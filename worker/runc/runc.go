@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/containerd/containerd/content/local"
 	"github.com/containerd/containerd/diff/apply"
@@ -13,17 +12,16 @@ import (
 	"github.com/containerd/containerd/platforms"
 	ctdsnapshot "github.com/containerd/containerd/snapshots"
 	"github.com/docker/docker/pkg/idtools"
+	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/executor/oci"
 	"github.com/moby/buildkit/executor/runcexecutor"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/network/netproviders"
-	"github.com/moby/buildkit/util/throttle"
 	"github.com/moby/buildkit/util/winlayers"
 	"github.com/moby/buildkit/worker/base"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/sirupsen/logrus"
 	bolt "go.etcd.io/bbolt"
 )
 
@@ -39,10 +37,6 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 	name := "runc-" + snFactory.Name
 	root = filepath.Join(root, name)
 	if err := os.MkdirAll(root, 0700); err != nil {
-		return opt, err
-	}
-	md, err := metadata.NewStore(filepath.Join(root, "metadata.db"))
-	if err != nil {
 		return opt, err
 	}
 
@@ -85,18 +79,7 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		return opt, err
 	}
 
-	throttledGC := throttle.Throttle(time.Second, func() {
-		if _, err := mdb.GarbageCollect(context.TODO()); err != nil {
-			logrus.Errorf("GC error: %+v", err)
-		}
-	})
-
-	gc := func(ctx context.Context) error {
-		throttledGC()
-		return nil
-	}
-
-	c = containerdsnapshot.NewContentStore(mdb.ContentStore(), "buildkit", gc)
+	c = containerdsnapshot.NewContentStore(mdb.ContentStore(), "buildkit")
 
 	id, err := base.ID(root)
 	if err != nil {
@@ -106,19 +89,31 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 	for k, v := range labels {
 		xlabels[k] = v
 	}
+	snap := containerdsnapshot.NewSnapshotter(snFactory.Name, mdb.Snapshotter(snFactory.Name), "buildkit", idmap)
+	lm := leaseutil.WithNamespace(ctdmetadata.NewLeaseManager(mdb), "buildkit")
+	if err := cache.MigrateV2(context.TODO(), filepath.Join(root, "metadata.db"), filepath.Join(root, "metadata_v2.db"), c, snap, lm); err != nil {
+		return opt, err
+	}
+
+	md, err := metadata.NewStore(filepath.Join(root, "metadata_v2.db"))
+	if err != nil {
+		return opt, err
+	}
+
 	opt = base.WorkerOpt{
 		ID:              id,
 		Labels:          xlabels,
 		MetadataStore:   md,
 		Executor:        exe,
-		Snapshotter:     containerdsnapshot.NewSnapshotter(snFactory.Name, mdb.Snapshotter(snFactory.Name), c, md, "buildkit", gc, idmap),
+		Snapshotter:     snap,
 		ContentStore:    c,
 		Applier:         winlayers.NewFileSystemApplierWithWindows(c, apply.NewFileSystemApplier(c)),
 		Differ:          winlayers.NewWalkingDiffWithWindows(c, walking.NewWalkingDiff(c)),
 		ImageStore:      nil, // explicitly
 		Platforms:       []specs.Platform{platforms.Normalize(platforms.DefaultSpec())},
 		IdentityMapping: idmap,
-		LeaseManager:    leaseutil.WithNamespace(ctdmetadata.NewLeaseManager(mdb), "buildkit"),
+		LeaseManager:    lm,
+		GarbageCollect:  mdb.GarbageCollect,
 	}
 	return opt, nil
 }

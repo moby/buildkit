@@ -144,7 +144,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 		src.Metadata[k] = v
 	}
 
-	ctx, done, err := leaseutil.WithLease(ctx, e.opt.LeaseManager)
+	ctx, done, err := leaseutil.WithLease(ctx, e.opt.LeaseManager, leaseutil.MakeTemporary)
 	if err != nil {
 		return nil, err
 	}

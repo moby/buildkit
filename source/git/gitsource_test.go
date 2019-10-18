@@ -9,15 +9,21 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/containerd/containerd/content/local"
+	ctdmetadata "github.com/containerd/containerd/metadata"
 	"github.com/containerd/containerd/namespaces"
+	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/containerd/snapshots/native"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/snapshot"
+	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/source"
+	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	bolt "go.etcd.io/bbolt"
 )
 
 func TestRepeatedFetch(t *testing.T) {
@@ -311,11 +317,24 @@ func setupGitSource(t *testing.T, tmpdir string) source.Source {
 	md, err := metadata.NewStore(filepath.Join(tmpdir, "metadata.db"))
 	assert.NoError(t, err)
 
-	cm, err := cache.NewManager(cache.ManagerOpt{
-		Snapshotter:   snapshot.FromContainerdSnapshotter("native", snapshotter, nil),
-		MetadataStore: md,
+	store, err := local.NewStore(tmpdir)
+	require.NoError(t, err)
+
+	db, err := bolt.Open(filepath.Join(tmpdir, "containerdmeta.db"), 0644, nil)
+	require.NoError(t, err)
+
+	mdb := ctdmetadata.NewDB(db, store, map[string]snapshots.Snapshotter{
+		"native": snapshotter,
 	})
-	assert.NoError(t, err)
+
+	cm, err := cache.NewManager(cache.ManagerOpt{
+		Snapshotter:    snapshot.FromContainerdSnapshotter("native", containerdsnapshot.NSSnapshotter("buildkit", mdb.Snapshotter("native")), nil),
+		MetadataStore:  md,
+		LeaseManager:   leaseutil.WithNamespace(ctdmetadata.NewLeaseManager(mdb), "buildkit"),
+		ContentStore:   mdb.ContentStore(),
+		GarbageCollect: mdb.GarbageCollect,
+	})
+	require.NoError(t, err)
 
 	gs, err := NewSource(Opt{
 		CacheAccessor: cm,

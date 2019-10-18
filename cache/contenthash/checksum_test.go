@@ -11,16 +11,21 @@ import (
 	"testing"
 	"time"
 
+	"github.com/containerd/containerd/content/local"
+	ctdmetadata "github.com/containerd/containerd/metadata"
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/containerd/snapshots/native"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/snapshot"
+	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
+	"github.com/moby/buildkit/util/leaseutil"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"github.com/tonistiigi/fsutil"
 	fstypes "github.com/tonistiigi/fsutil/types"
+	bolt "go.etcd.io/bbolt"
 )
 
 const (
@@ -37,7 +42,7 @@ func TestChecksumSymlinkNoParentScan(t *testing.T) {
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
-	cm := setupCacheManager(t, tmpdir, "native", snapshotter)
+	cm, _ := setupCacheManager(t, tmpdir, "native", snapshotter)
 	defer cm.Close()
 
 	ch := []string{
@@ -66,7 +71,7 @@ func TestChecksumHardlinks(t *testing.T) {
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
-	cm := setupCacheManager(t, tmpdir, "native", snapshotter)
+	cm, _ := setupCacheManager(t, tmpdir, "native", snapshotter)
 	defer cm.Close()
 
 	ch := []string{
@@ -149,7 +154,7 @@ func TestChecksumWildcard(t *testing.T) {
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
-	cm := setupCacheManager(t, tmpdir, "native", snapshotter)
+	cm, _ := setupCacheManager(t, tmpdir, "native", snapshotter)
 	defer cm.Close()
 
 	ch := []string{
@@ -204,7 +209,7 @@ func TestSymlinksNoFollow(t *testing.T) {
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
-	cm := setupCacheManager(t, tmpdir, "native", snapshotter)
+	cm, _ := setupCacheManager(t, tmpdir, "native", snapshotter)
 	defer cm.Close()
 
 	ch := []string{
@@ -263,7 +268,7 @@ func TestChecksumBasicFile(t *testing.T) {
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
-	cm := setupCacheManager(t, tmpdir, "native", snapshotter)
+	cm, _ := setupCacheManager(t, tmpdir, "native", snapshotter)
 	defer cm.Close()
 
 	ch := []string{
@@ -413,7 +418,7 @@ func TestHandleChange(t *testing.T) {
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
-	cm := setupCacheManager(t, tmpdir, "native", snapshotter)
+	cm, _ := setupCacheManager(t, tmpdir, "native", snapshotter)
 	defer cm.Close()
 
 	ch := []string{
@@ -491,7 +496,7 @@ func TestHandleRecursiveDir(t *testing.T) {
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
-	cm := setupCacheManager(t, tmpdir, "native", snapshotter)
+	cm, _ := setupCacheManager(t, tmpdir, "native", snapshotter)
 	defer cm.Close()
 
 	ch := []string{
@@ -540,7 +545,7 @@ func TestChecksumUnorderedFiles(t *testing.T) {
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
-	cm := setupCacheManager(t, tmpdir, "native", snapshotter)
+	cm, _ := setupCacheManager(t, tmpdir, "native", snapshotter)
 	defer cm.Close()
 
 	ch := []string{
@@ -593,7 +598,7 @@ func TestSymlinkInPathScan(t *testing.T) {
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
-	cm := setupCacheManager(t, tmpdir, "native", snapshotter)
+	cm, _ := setupCacheManager(t, tmpdir, "native", snapshotter)
 	defer cm.Close()
 
 	ch := []string{
@@ -624,7 +629,7 @@ func TestSymlinkNeedsScan(t *testing.T) {
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
-	cm := setupCacheManager(t, tmpdir, "native", snapshotter)
+	cm, _ := setupCacheManager(t, tmpdir, "native", snapshotter)
 	defer cm.Close()
 
 	ch := []string{
@@ -657,7 +662,7 @@ func TestSymlinkAbsDirSuffix(t *testing.T) {
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
-	cm := setupCacheManager(t, tmpdir, "native", snapshotter)
+	cm, _ := setupCacheManager(t, tmpdir, "native", snapshotter)
 	defer cm.Close()
 
 	ch := []string{
@@ -684,7 +689,7 @@ func TestSymlinkThroughParent(t *testing.T) {
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
-	cm := setupCacheManager(t, tmpdir, "native", snapshotter)
+	cm, _ := setupCacheManager(t, tmpdir, "native", snapshotter)
 	defer cm.Close()
 
 	ch := []string{
@@ -739,7 +744,7 @@ func TestSymlinkInPathHandleChange(t *testing.T) {
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
-	cm := setupCacheManager(t, tmpdir, "native", snapshotter)
+	cm, _ := setupCacheManager(t, tmpdir, "native", snapshotter)
 	defer cm.Close()
 
 	ch := []string{
@@ -802,7 +807,7 @@ func TestPersistence(t *testing.T) {
 
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	require.NoError(t, err)
-	cm := setupCacheManager(t, tmpdir, "native", snapshotter)
+	cm, closeBolt := setupCacheManager(t, tmpdir, "native", snapshotter)
 	defer cm.Close()
 
 	ch := []string{
@@ -838,8 +843,10 @@ func TestPersistence(t *testing.T) {
 
 	// we can't close snapshotter and open it twice (especially, its internal bbolt store)
 	cm.Close()
+	closeBolt()
 	getDefaultManager().lru.Purge()
-	cm = setupCacheManager(t, tmpdir, "native", snapshotter)
+	cm, closeBolt = setupCacheManager(t, tmpdir, "native", snapshotter)
+	defer closeBolt()
 	defer cm.Close()
 
 	ref, err = cm.Get(context.TODO(), id)
@@ -872,17 +879,32 @@ func createRef(t *testing.T, cm cache.Manager, files []string) cache.ImmutableRe
 	return ref
 }
 
-func setupCacheManager(t *testing.T, tmpdir string, snapshotterName string, snapshotter snapshots.Snapshotter) cache.Manager {
+func setupCacheManager(t *testing.T, tmpdir string, snapshotterName string, snapshotter snapshots.Snapshotter) (cache.Manager, func()) {
 	md, err := metadata.NewStore(filepath.Join(tmpdir, "metadata.db"))
 	require.NoError(t, err)
 
+	store, err := local.NewStore(tmpdir)
+	require.NoError(t, err)
+
+	db, err := bolt.Open(filepath.Join(tmpdir, "containerdmeta.db"), 0644, nil)
+	require.NoError(t, err)
+
+	mdb := ctdmetadata.NewDB(db, store, map[string]snapshots.Snapshotter{
+		snapshotterName: snapshotter,
+	})
+
 	cm, err := cache.NewManager(cache.ManagerOpt{
-		Snapshotter:   snapshot.FromContainerdSnapshotter(snapshotterName, snapshotter, nil),
-		MetadataStore: md,
+		Snapshotter:    snapshot.FromContainerdSnapshotter(snapshotterName, containerdsnapshot.NSSnapshotter("buildkit", mdb.Snapshotter(snapshotterName)), nil),
+		MetadataStore:  md,
+		LeaseManager:   leaseutil.WithNamespace(ctdmetadata.NewLeaseManager(mdb), "buildkit"),
+		ContentStore:   mdb.ContentStore(),
+		GarbageCollect: mdb.GarbageCollect,
 	})
 	require.NoError(t, err)
 
-	return cm
+	return cm, func() {
+		db.Close()
+	}
 }
 
 // these test helpers are from tonistiigi/fsutil

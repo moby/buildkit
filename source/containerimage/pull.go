@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"runtime"
+	"time"
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/diff"
@@ -18,6 +19,8 @@ import (
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/imageutil"
+	"github.com/moby/buildkit/util/leaseutil"
+	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/pull"
 	"github.com/moby/buildkit/util/resolver"
 	"github.com/moby/buildkit/util/winlayers"
@@ -104,19 +107,20 @@ func (is *imageSource) Resolve(ctx context.Context, id source.Identifier, sm *se
 		Src:          imageIdentifier.Reference,
 		Resolver:     pull.NewResolver(ctx, is.ResolverOpt, sm, is.ImageStore, imageIdentifier.ResolveMode, imageIdentifier.Reference.String()),
 		Platform:     &platform,
-		LeaseManager: is.LeaseManager,
 	}
 	p := &puller{
 		CacheAccessor: is.CacheAccessor,
 		Puller:        pullerUtil,
 		Platform:      platform,
 		id:            imageIdentifier,
+		LeaseManager:  is.LeaseManager,
 	}
 	return p, nil
 }
 
 type puller struct {
 	CacheAccessor cache.Accessor
+	LeaseManager  leases.Manager
 	Platform      specs.Platform
 	id            *source.ImageIdentifier
 	*pull.Puller
@@ -176,7 +180,7 @@ func (p *puller) CacheKey(ctx context.Context, index int) (string, bool, error) 
 	return k, true, nil
 }
 
-func (p *puller) Snapshot(ctx context.Context) (cache.ImmutableRef, error) {
+func (p *puller) Snapshot(ctx context.Context) (ir cache.ImmutableRef, err error) {
 	layerNeedsTypeWindows := false
 	if platform := p.Puller.Platform; platform != nil {
 		if platform.OS == "windows" && runtime.GOOS != "windows" {
@@ -188,33 +192,65 @@ func (p *puller) Snapshot(ctx context.Context) (cache.ImmutableRef, error) {
 	// workaround for gcr, authentication not supported on blob endpoints
 	pull.EnsureManifestRequested(ctx, p.Puller.Resolver, p.Puller.Src.String())
 
+	ctx, done, err := leaseutil.WithLease(ctx, p.LeaseManager, leaseutil.MakeTemporary)
+	if err != nil {
+		return nil, err
+	}
+	defer done(ctx)
+
 	pulled, err := p.Puller.Pull(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if pulled.ChainID == "" {
+	if len(pulled.Layers) == 0 {
 		return nil, nil
 	}
-	ref, err := p.CacheAccessor.GetFromSnapshotter(ctx, string(pulled.ChainID), cache.WithDescription("pulled from "+pulled.Ref))
-	if err != nil {
-		return nil, err
+
+	extractDone := oneOffProgress(ctx, "unpacking "+pulled.Ref)
+	var current cache.ImmutableRef
+	defer func() {
+		if err != nil && current != nil {
+			current.Release(context.TODO())
+		}
+		extractDone(err)
+	}()
+	for _, l := range pulled.Layers {
+		ref, err := p.CacheAccessor.GetByBlob(ctx, l, current, cache.WithDescription("pulled from "+pulled.Ref))
+		if err != nil {
+			return nil, err
+		}
+		if err := ref.Extract(ctx); err != nil {
+			ref.Release(context.TODO())
+			return nil, err
+		}
+		if current != nil {
+			current.Release(context.TODO())
+		}
+		current = ref
 	}
 
-	if layerNeedsTypeWindows && ref != nil {
-		if err := markRefLayerTypeWindows(ref); err != nil {
-			ref.Release(context.TODO())
+	for _, desc := range pulled.MetadataBlobs {
+		if err := p.LeaseManager.AddResource(ctx, leases.Lease{ID: current.ID()}, leases.Resource{
+			ID:   desc.Digest.String(),
+			Type: "content",
+		}); err != nil {
 			return nil, err
 		}
 	}
 
-	if p.id.RecordType != "" && cache.GetRecordType(ref) == "" {
-		if err := cache.SetRecordType(ref, p.id.RecordType); err != nil {
-			ref.Release(context.TODO())
+	if layerNeedsTypeWindows && current != nil {
+		if err := markRefLayerTypeWindows(current); err != nil {
 			return nil, err
 		}
 	}
 
-	return ref, nil
+	if p.id.RecordType != "" && cache.GetRecordType(current) == "" {
+		if err := cache.SetRecordType(current, p.id.RecordType); err != nil {
+			return nil, err
+		}
+	}
+
+	return current, nil
 }
 
 func markRefLayerTypeWindows(ref cache.ImmutableRef) error {
@@ -239,4 +275,21 @@ func cacheKeyFromConfig(dt []byte) digest.Digest {
 		return ""
 	}
 	return identity.ChainID(img.RootFS.DiffIDs)
+}
+
+func oneOffProgress(ctx context.Context, id string) func(err error) error {
+	pw, _, _ := progress.FromContext(ctx)
+	now := time.Now()
+	st := progress.Status{
+		Started: &now,
+	}
+	pw.Write(id, st)
+	return func(err error) error {
+		// TODO: set error on status
+		now := time.Now()
+		st.Completed = &now
+		pw.Write(id, st)
+		pw.Close()
+		return err
+	}
 }

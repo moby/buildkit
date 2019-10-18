@@ -7,15 +7,21 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/containerd/containerd/content/local"
+	ctdmetadata "github.com/containerd/containerd/metadata"
+	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/containerd/snapshots/native"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/snapshot"
+	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/source"
+	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/testutil/httpserver"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
+	bolt "go.etcd.io/bbolt"
 )
 
 func TestHTTPSource(t *testing.T) {
@@ -314,9 +320,26 @@ func newHTTPSource(tmpdir string) (source.Source, error) {
 		return nil, err
 	}
 
+	store, err := local.NewStore(tmpdir)
+	if err != nil {
+		return nil, err
+	}
+
+	db, err := bolt.Open(filepath.Join(tmpdir, "containerdmeta.db"), 0644, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	mdb := ctdmetadata.NewDB(db, store, map[string]snapshots.Snapshotter{
+		"native": snapshotter,
+	})
+
 	cm, err := cache.NewManager(cache.ManagerOpt{
-		Snapshotter:   snapshot.FromContainerdSnapshotter("native", snapshotter, nil),
-		MetadataStore: md,
+		Snapshotter:    snapshot.FromContainerdSnapshotter("native", containerdsnapshot.NSSnapshotter("buildkit", mdb.Snapshotter("native")), nil),
+		MetadataStore:  md,
+		LeaseManager:   leaseutil.WithNamespace(ctdmetadata.NewLeaseManager(mdb), "buildkit"),
+		ContentStore:   mdb.ContentStore(),
+		GarbageCollect: mdb.GarbageCollect,
 	})
 	if err != nil {
 		return nil, err

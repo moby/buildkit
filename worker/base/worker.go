@@ -12,11 +12,10 @@ import (
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/diff"
+	"github.com/containerd/containerd/gc"
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/remotes/docker"
-	"github.com/containerd/containerd/rootfs"
-	cdsnapshot "github.com/containerd/containerd/snapshots"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/blobs"
@@ -48,7 +47,6 @@ import (
 	"github.com/moby/buildkit/util/resolver"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
-	ociidentity "github.com/opencontainers/image-spec/identity"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -78,6 +76,7 @@ type WorkerOpt struct {
 	ResolveOptionsFunc resolver.ResolveOptionsFunc
 	IdentityMapping    *idtools.IdentityMapping
 	LeaseManager       leases.Manager
+	GarbageCollect     func(context.Context) (gc.Stats, error)
 }
 
 // Worker is a local worker instance with dedicated snapshotter, cache, and so on.
@@ -94,7 +93,6 @@ type Worker struct {
 func NewWorker(opt WorkerOpt) (*Worker, error) {
 	imageRefChecker := imagerefchecker.New(imagerefchecker.Opt{
 		ImageStore:   opt.ImageStore,
-		Snapshotter:  opt.Snapshotter,
 		ContentStore: opt.ContentStore,
 	})
 
@@ -102,6 +100,10 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 		Snapshotter:     opt.Snapshotter,
 		MetadataStore:   opt.MetadataStore,
 		PruneRefChecker: imageRefChecker,
+		Applier:         opt.Applier,
+		GarbageCollect:  opt.GarbageCollect,
+		LeaseManager:    opt.LeaseManager,
+		ContentStore:    opt.ContentStore,
 	})
 	if err != nil {
 		return nil, err
@@ -167,6 +169,14 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	leases, err := opt.LeaseManager.List(context.TODO(), "labels.\"buildkit/lease.temporary\"")
+	if err != nil {
+		return nil, err
+	}
+	for _, l := range leases {
+		opt.LeaseManager.Delete(context.TODO(), l)
 	}
 
 	return &Worker{
@@ -332,7 +342,13 @@ func (w *Worker) Exporter(name string, sm *session.Manager) (exporter.Exporter, 
 }
 
 func (w *Worker) GetRemote(ctx context.Context, ref cache.ImmutableRef, createIfNeeded bool) (*solver.Remote, error) {
-	diffPairs, err := blobs.GetDiffPairs(ctx, w.ContentStore(), w.Snapshotter, w.Differ, ref, createIfNeeded)
+	ctx, done, err := leaseutil.WithLease(ctx, w.LeaseManager, leaseutil.MakeTemporary)
+	if err != nil {
+		return nil, err
+	}
+	defer done(ctx)
+
+	diffPairs, err := blobs.GetDiffPairs(ctx, w.ContentStore(), w.Differ, ref, createIfNeeded)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed calculating diff pairs for exported snapshot")
 	}
@@ -384,8 +400,8 @@ func getCreatedTimes(ref cache.ImmutableRef) (out []time.Time) {
 	return append(out, cache.GetCreatedAt(ref.Metadata()))
 }
 
-func (w *Worker) FromRemote(ctx context.Context, remote *solver.Remote) (cache.ImmutableRef, error) {
-	ctx, done, err := leaseutil.WithLease(ctx, w.LeaseManager)
+func (w *Worker) FromRemote(ctx context.Context, remote *solver.Remote) (ref cache.ImmutableRef, err error) {
+	ctx, done, err := leaseutil.WithLease(ctx, w.LeaseManager, leaseutil.MakeTemporary)
 	if err != nil {
 		return nil, err
 	}
@@ -416,84 +432,39 @@ func (w *Worker) FromRemote(ctx context.Context, remote *solver.Remote) (cache.I
 		return nil, err
 	}
 
-	cd, release := snapshot.NewContainerdSnapshotter(w.Snapshotter)
-	defer release()
-
 	unpackProgressDone := oneOffProgress(ctx, "unpacking")
-	chainIDs, refs, err := w.unpack(ctx, w.CacheManager, remote.Descriptors, cd)
-	if err != nil {
-		return nil, unpackProgressDone(err)
-	}
 	defer func() {
-		for _, ref := range refs {
-			ref.Release(context.TODO())
-		}
+		err = unpackProgressDone(err)
 	}()
-	unpackProgressDone(nil)
-
-	for i, chainID := range chainIDs {
+	var current cache.ImmutableRef
+	for i, desc := range remote.Descriptors {
 		tm := time.Now()
-		if tmstr, ok := remote.Descriptors[i].Annotations[labelCreatedAt]; ok {
+		if tmstr, ok := desc.Annotations[labelCreatedAt]; ok {
 			if err := (&tm).UnmarshalText([]byte(tmstr)); err != nil {
+				if current != nil {
+					current.Release(context.TODO())
+				}
 				return nil, err
 			}
 		}
 		descr := fmt.Sprintf("imported %s", remote.Descriptors[i].Digest)
-		if v, ok := remote.Descriptors[i].Annotations["buildkit/description"]; ok {
+		if v, ok := desc.Annotations["buildkit/description"]; ok {
 			descr = v
 		}
-		ref, err := w.CacheManager.Get(ctx, chainID, cache.WithDescription(descr), cache.WithCreationTime(tm))
+		ref, err := w.CacheManager.GetByBlob(ctx, desc, current, cache.WithDescription(descr), cache.WithCreationTime(tm))
+		if current != nil {
+			current.Release(context.TODO())
+		}
 		if err != nil {
 			return nil, err
 		}
-		if i == len(remote.Descriptors)-1 {
-			return ref, nil
+		if err := ref.Extract(ctx); err != nil {
+			ref.Release(context.TODO())
+			return nil, err
 		}
-		ref.Release(context.TODO())
+		current = ref
 	}
-	return nil, errors.Errorf("unreachable")
-}
-
-func (w *Worker) unpack(ctx context.Context, cm cache.Manager, descs []ocispec.Descriptor, s cdsnapshot.Snapshotter) (ids []string, refs []cache.ImmutableRef, err error) {
-	defer func() {
-		if err != nil {
-			for _, r := range refs {
-				r.Release(context.TODO())
-			}
-		}
-	}()
-
-	layers, err := getLayers(ctx, descs)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	var chain []digest.Digest
-	for _, layer := range layers {
-		newChain := append(chain, layer.Diff.Digest)
-
-		chainID := ociidentity.ChainID(newChain)
-		ref, err := cm.Get(ctx, string(chainID))
-		if err == nil {
-			refs = append(refs, ref)
-		} else {
-			if _, err := rootfs.ApplyLayer(ctx, layer, chain, s, w.Applier); err != nil {
-				return nil, nil, err
-			}
-		}
-		chain = newChain
-
-		if err := w.Snapshotter.SetBlob(ctx, string(chainID), layer.Diff.Digest, layer.Blob.Digest); err != nil {
-			return nil, nil, err
-		}
-	}
-
-	ids = make([]string, len(chain))
-	for i := range chain {
-		ids[i] = string(ociidentity.ChainID(chain[:i+1]))
-	}
-
-	return ids, refs, nil
+	return current, nil
 }
 
 // Labels returns default labels
@@ -526,30 +497,6 @@ func ID(root string) (string, error) {
 		}
 	}
 	return string(b), nil
-}
-
-func getLayers(ctx context.Context, descs []ocispec.Descriptor) ([]rootfs.Layer, error) {
-	layers := make([]rootfs.Layer, len(descs))
-	for i, desc := range descs {
-		diffIDStr := desc.Annotations["containerd.io/uncompressed"]
-		if diffIDStr == "" {
-			return nil, errors.Errorf("%s missing uncompressed digest", desc.Digest)
-		}
-		diffID, err := digest.Parse(diffIDStr)
-		if err != nil {
-			return nil, err
-		}
-		layers[i].Diff = ocispec.Descriptor{
-			MediaType: ocispec.MediaTypeImageLayer,
-			Digest:    diffID,
-		}
-		layers[i].Blob = ocispec.Descriptor{
-			MediaType: desc.MediaType,
-			Digest:    desc.Digest,
-			Size:      desc.Size,
-		}
-	}
-	return layers, nil
 }
 
 func oneOffProgress(ctx context.Context, id string) func(err error) error {
