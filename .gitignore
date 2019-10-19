@@ -1,4 +1,5 @@
-bin
-release-out
 .certs
 .tmp
+bin
+release-out
+vendor/pkg/mod/cache
