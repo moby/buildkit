@@ -148,6 +148,9 @@ func MigrateV2(ctx context.Context, from, to string, cs content.Store, s snapsho
 		if err := v.Unmarshal(&blob); err != nil {
 			return errors.WithStack(err)
 		}
+		if _, err := cs.Info(ctx, digest.Digest(blob.Blobsum)); err != nil {
+			continue
+		}
 		queueDiffID(item, blob.DiffID)
 		queueBlob(item, blob.Blobsum)
 		queueMediaType(item, images.MediaTypeDockerSchema2LayerGzip)
