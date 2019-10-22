@@ -100,8 +100,10 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispec.Descriptor, 
 	chainID := diffID
 	blobChainID := imagespecidentity.ChainID([]digest.Digest{desc.Digest, diffID})
 
-	if _, err := cm.ContentStore.Info(ctx, desc.Digest); err != nil {
-		return nil, errors.Wrapf(err, "failed to get blob %s", desc.Digest)
+	if desc.Digest != "" {
+		if _, err := cm.ContentStore.Info(ctx, desc.Digest); err != nil {
+			return nil, errors.Wrapf(err, "failed to get blob %s", desc.Digest)
+		}
 	}
 
 	var p *immutableRef
@@ -202,11 +204,13 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispec.Descriptor, 
 		return nil, errors.Wrapf(err, "failed to add snapshot %s to lease", id)
 	}
 
-	if err := cm.ManagerOpt.LeaseManager.AddResource(ctx, leases.Lease{ID: id}, leases.Resource{
-		ID:   desc.Digest.String(),
-		Type: "content",
-	}); err != nil {
-		return nil, errors.Wrapf(err, "failed to add blob %s to lease", id)
+	if desc.Digest != "" {
+		if err := cm.ManagerOpt.LeaseManager.AddResource(ctx, leases.Lease{ID: id}, leases.Resource{
+			ID:   desc.Digest.String(),
+			Type: "content",
+		}); err != nil {
+			return nil, errors.Wrapf(err, "failed to add blob %s to lease", id)
+		}
 	}
 
 	md, _ := cm.md.Get(id)
