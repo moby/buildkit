@@ -17,7 +17,8 @@ Using Ubuntu kernel is recommended.
 * Add `kernel.unprivileged_userns_clone=1` to `/etc/sysctl.conf` (or `/etc/sysctl.d`) and run `sudo sysctl -p`
 
 ### Fedora 31 and later
-* Run `sudo grubby --update-kernel=ALL --args="systemd.unified_cgroup_hierarchy=0"` and reboot.
+* As runc still does not work on cgroup v2 environment like Fedora 31, you need to substitute runc with crun. Run `rm -f $(which buildkit-runc) && ln -s $(which crun) /usr/local/bin/buildkit-runc` .
+* If you want to use runc, you need to configure the system to use cgroup v1. Run `sudo grubby --update-kernel=ALL --args="systemd.unified_cgroup_hierarchy=0"` and reboot.
 
 ### Fedora 30
 * No preparation is needed

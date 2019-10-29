@@ -94,7 +94,7 @@ BuildKit is composed of the `buildkitd` daemon and the `buildctl` client.
 While the `buildctl` client is available for Linux, macOS, and Windows, the `buildkitd` daemon is only available for Linux currently.
 
 The `buildkitd` daemon requires the following components to be installed:
--   [runc](https://github.com/opencontainers/runc)
+-   [runc](https://github.com/opencontainers/runc) or [crun](https://github.com/containers/crun)
 -   [containerd](https://github.com/containerd/containerd) (if you want to use containerd worker)
 
 The latest binaries of BuildKit are available [here](https://github.com/moby/buildkit/releases) for Linux, macOS, and Windows.
@@ -124,6 +124,11 @@ We are open to adding more backends.
 
 The buildkitd daemon listens gRPC API on `/run/buildkit/buildkitd.sock` by default, but you can also use TCP sockets.
 See [Expose BuildKit as a TCP service](#expose-buildkit-as-a-tcp-service).
+
+:information_source: Notice to Fedora 31 users:
+
+* As runc still does not work on cgroup v2 environment like Fedora 31, you need to substitute runc with crun. Run `rm -f $(which buildkit-runc) && ln -s $(which crun) /usr/local/bin/buildkit-runc` .
+* If you want to use runc, you need to configure the system to use cgroup v1. Run `sudo grubby --update-kernel=ALL --args="systemd.unified_cgroup_hierarchy=0"` and reboot.
 
 ### Exploring LLB
 
