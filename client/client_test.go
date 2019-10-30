@@ -64,6 +64,7 @@ func TestIntegration(t *testing.T) {
 		testRelativeWorkDir,
 		testFileOpMkdirMkfile,
 		testFileOpCopyRm,
+		testFileOpRmWildcard,
 		testCallDiskUsage,
 		testBuildMultiMount,
 		testBuildHTTPSource,
@@ -1044,6 +1045,63 @@ func testFileOpCopyRm(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	require.Equal(t, []byte("file2"), dt)
 
+}
+
+func testFileOpRmWildcard(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	dir, err := tmpdir(
+		fstest.CreateDir("foo", 0700),
+		fstest.CreateDir("bar", 0700),
+		fstest.CreateFile("foo/target", []byte("foo0"), 0600),
+		fstest.CreateFile("bar/target", []byte("bar0"), 0600),
+		fstest.CreateFile("bar/remaining", []byte("bar1"), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	st := llb.Scratch().File(
+		llb.Copy(llb.Local("mylocal"), "foo", "foo").
+			Copy(llb.Local("mylocal"), "bar", "bar"),
+	).File(
+		llb.Rm("*/target", llb.WithAllowWildcard(true)),
+	)
+	def, err := st.Marshal()
+	require.NoError(t, err)
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalDirs: map[string]string{
+			"mylocal": dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "bar/remaining"))
+	require.NoError(t, err)
+	require.Equal(t, []byte("bar1"), dt)
+
+	fi, err := os.Stat(filepath.Join(destDir, "foo"))
+	require.NoError(t, err)
+	require.Equal(t, true, fi.IsDir())
+
+	_, err = os.Stat(filepath.Join(destDir, "foo/target"))
+	require.Equal(t, true, os.IsNotExist(err))
+
+	_, err = os.Stat(filepath.Join(destDir, "bar/target"))
+	require.Equal(t, true, os.IsNotExist(err))
 }
 
 func testCallDiskUsage(t *testing.T, sb integration.Sandbox) {
