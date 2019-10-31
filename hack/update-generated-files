@@ -20,7 +20,7 @@ case $buildmode in
   cp -R "$output/generated-files/" .
   rm -rf $output
   ;;
-"docker-buildkt")
+"docker-buildkit")
   iidfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
   export DOCKER_BUILDKIT=1
   docker build --build-arg GOGO_VERSION=$gogo_version --iidfile $iidfile -f ./hack/dockerfiles/generated-files.Dockerfile --target update --force-rm .
