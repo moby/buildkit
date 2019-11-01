@@ -113,6 +113,7 @@ var fileOpTests = []integration.Test{
 	testWorkdirUser,
 	testWorkdirExists,
 	testWorkdirCopyIgnoreRelative,
+	testCopyFollowAllSymlinks,
 }
 
 // Tests that depend on the `security.*` entitlements
@@ -1399,6 +1400,46 @@ COPY foo /
 	require.NoError(t, err)
 
 	require.Equal(t, len(du), len(du2))
+}
+
+// #1197
+func testCopyFollowAllSymlinks(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+	isFileOp := getFileOp(t, sb)
+
+	dockerfile := []byte(`
+FROM scratch
+COPY foo /
+COPY foo/sub bar
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("bar", []byte(`bar-contents`), 0600),
+		fstest.CreateDir("foo", 0700),
+		fstest.Symlink("../bar", "foo/sub"),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
 }
 
 func testCopySymlinks(t *testing.T, sb integration.Sandbox) {
