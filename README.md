@@ -327,13 +327,10 @@ buildctl build ... \
 
 ```bash
 buildctl build ... --export-cache type=local,dest=path/to/output-dir
-buildctl build ... --import-cache type=local,src=path/to/input-dir,digest=sha256:deadbeef
+buildctl build ... --import-cache type=local,src=path/to/input-dir
 ```
 
 The directory layout conforms to OCI Image Spec v1.0.
-
-Currently, you need to specify the `digest` of the manifest list to import for `local` cache importer. 
-This is planned to default to the digest of "latest" tag in `index.json` in future.
 
 #### `--export-cache` options
 -   `type`: `inline`, `registry`, or `local`
@@ -346,7 +343,8 @@ This is planned to default to the digest of "latest" tag in `index.json` in futu
 -   `type`: `registry` or `local`. Use `registry` to import `inline` cache.
 -   `ref=docker.io/user/image:tag`: reference for `registry` cache importer
 -   `src=path/to/input-dir`: directory for `local` cache importer
--   `digest=sha256:deadbeef`: digest of the manifest list to import for `local` cache importer. 
+-   `digest=sha256:deadbeef`: digest of the manifest list to import for `local` cache importer.
+    Defaults to the digest of "latest" tag in `index.json`
 
 ### Consistent hashing
 
