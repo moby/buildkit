@@ -25,6 +25,10 @@ type DiffPair struct {
 	Blobsum digest.Digest
 }
 
+type CompareWithParent interface {
+	CompareWithParent(ctx context.Context, ref string, opts ...diff.Opt) (ocispec.Descriptor, error)
+}
+
 var ErrNoBlobs = errors.Errorf("no blobs for snapshot")
 
 // GetDiffPairs returns the DiffID/Blobsum pairs for a giver reference and saves it.
@@ -78,41 +82,51 @@ func getDiffPairs(ctx context.Context, contentStore content.Store, differ diff.C
 			} else if !createBlobs {
 				return nil, errors.WithStack(ErrNoBlobs)
 			}
-			// reference needs to be committed
-			parent := ref.Parent()
-			var lower []mount.Mount
-			var release func() error
-			if parent != nil {
-				defer parent.Release(context.TODO())
-				m, err := parent.Mount(ctx, true)
+			var descr ocispec.Descriptor
+			var err error
+			if pc, ok := differ.(CompareWithParent); ok {
+				descr, err = pc.CompareWithParent(ctx, ref.ID(), diff.WithMediaType(ocispec.MediaTypeImageLayerGzip))
 				if err != nil {
 					return nil, err
 				}
-				lower, release, err = m.Mount()
+			}
+			if descr.Digest == "" {
+				// reference needs to be committed
+				parent := ref.Parent()
+				var lower []mount.Mount
+				var release func() error
+				if parent != nil {
+					defer parent.Release(context.TODO())
+					m, err := parent.Mount(ctx, true)
+					if err != nil {
+						return nil, err
+					}
+					lower, release, err = m.Mount()
+					if err != nil {
+						return nil, err
+					}
+					if release != nil {
+						defer release()
+					}
+				}
+				m, err := ref.Mount(ctx, true)
+				if err != nil {
+					return nil, err
+				}
+				upper, release, err := m.Mount()
 				if err != nil {
 					return nil, err
 				}
 				if release != nil {
 					defer release()
 				}
-			}
-			m, err := ref.Mount(ctx, true)
-			if err != nil {
-				return nil, err
-			}
-			upper, release, err := m.Mount()
-			if err != nil {
-				return nil, err
-			}
-			if release != nil {
-				defer release()
-			}
-			descr, err := differ.Compare(ctx, lower, upper,
-				diff.WithMediaType(ocispec.MediaTypeImageLayerGzip),
-				diff.WithReference(ref.ID()),
-			)
-			if err != nil {
-				return nil, err
+				descr, err = differ.Compare(ctx, lower, upper,
+					diff.WithMediaType(ocispec.MediaTypeImageLayerGzip),
+					diff.WithReference(ref.ID()),
+				)
+				if err != nil {
+					return nil, err
+				}
 			}
 			info, err := contentStore.Info(ctx, descr.Digest)
 			if err != nil {
