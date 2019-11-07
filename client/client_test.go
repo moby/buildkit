@@ -1098,10 +1098,14 @@ func testFileOpRmWildcard(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, true, fi.IsDir())
 
 	_, err = os.Stat(filepath.Join(destDir, "foo/target"))
-	require.Equal(t, true, os.IsNotExist(err))
+	if !os.IsNotExist(err) {
+		t.Errorf("expected %s/foo/target to not exist, got error %v", destDir, err)
+	}
 
 	_, err = os.Stat(filepath.Join(destDir, "bar/target"))
-	require.Equal(t, true, os.IsNotExist(err))
+	if !os.IsNotExist(err) {
+		t.Errorf("expected %s/bar/target to not exist, got error %v", destDir, err)
+	}
 }
 
 func testCallDiskUsage(t *testing.T, sb integration.Sandbox) {
