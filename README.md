@@ -45,7 +45,7 @@ You don't need to read this document unless you want to use the full-featured st
     - [Building a Dockerfile using external frontend:](#building-a-dockerfile-using-external-frontend)
     - [Building a Dockerfile with experimental features like `RUN --mount=type=(bind|cache|tmpfs|secret|ssh)`](#building-a-dockerfile-with-experimental-features-like-run---mounttypebindcachetmpfssecretssh)
   - [Output](#output)
-    - [Registry](#registry)
+    - [Image/Registry](#imageregistry)
     - [Local directory](#local-directory)
     - [Docker tarball](#docker-tarball)
     - [OCI tarball](#oci-tarball)
@@ -198,7 +198,7 @@ See [`frontend/dockerfile/docs/experimental.md`](frontend/dockerfile/docs/experi
 
 By default, the build result and intermediate cache will only remain internally in BuildKit. An output needs to be specified to retrieve the result.
 
-#### Registry
+#### Image/Registry
 
 ```bash
 buildctl build ... --output type=image,name=docker.io/username/image,push=true
@@ -213,6 +213,17 @@ buildctl build ...\
   --export-cache type=inline \
   --import-cache type=registry,ref=docker.io/username/image
 ```
+
+Keys supported by image output:
+* `name=[value]`: image name
+* `push=true`: push after creating the image
+* `push-by-digest=true`: push unnamed image
+* `registry.insecure=true`: push to insecure HTTP registry
+* `oci-mediatypes=true`: use OCI mediatypes in configuration JSON instead of Docker's
+* `unpack=true`: unpack image after creation (for use with containerd)
+* `dangling-name-prefix=[value]`: name image with `prefix@<digest>` , used for anonymous images
+* `name-canonical=true`: add additional canonical name `name@<digest>`
+
 
 If credentials are required, `buildctl` will attempt to read Docker configuration file `$DOCKER_CONFIG/config.json`.
 `$DOCKER_CONFIG` defaults to `~/.docker`.
