@@ -3,7 +3,7 @@ github.com/BurntSushi/toml
 # github.com/Microsoft/go-winio v0.4.14
 github.com/Microsoft/go-winio
 github.com/Microsoft/go-winio/pkg/guid
-# github.com/Microsoft/hcsshim v0.8.5
+# github.com/Microsoft/hcsshim v0.8.7-0.20190419161850-2226e083fc39
 github.com/Microsoft/hcsshim
 github.com/Microsoft/hcsshim/internal/guid
 github.com/Microsoft/hcsshim/internal/hcs
@@ -12,7 +12,7 @@ github.com/Microsoft/hcsshim/internal/hns
 github.com/Microsoft/hcsshim/internal/mergemaps
 github.com/Microsoft/hcsshim/internal/schema1
 github.com/Microsoft/hcsshim/internal/wclayer
-github.com/Microsoft/hcsshim/internal/guestrequest
+github.com/Microsoft/hcsshim/osversion
 github.com/Microsoft/hcsshim/internal/interop
 github.com/Microsoft/hcsshim/internal/logfields
 github.com/Microsoft/hcsshim/internal/timeout
@@ -94,10 +94,10 @@ github.com/containerd/continuity/sysx
 github.com/containerd/continuity/fs
 github.com/containerd/continuity/syscallx
 github.com/containerd/continuity/fs/fstest
-github.com/containerd/continuity/pathdriver
 github.com/containerd/continuity
 github.com/containerd/continuity/devices
 github.com/containerd/continuity/driver
+github.com/containerd/continuity/pathdriver
 github.com/containerd/continuity/proto
 # github.com/containerd/fifo v0.0.0-20190816180239-bda0ff6ed73c
 github.com/containerd/fifo
@@ -129,7 +129,7 @@ github.com/docker/cli/cli/config/types
 # github.com/docker/distribution v2.7.1-0.20190205005809-0d3efadf0154+incompatible
 github.com/docker/distribution/reference
 github.com/docker/distribution/digestset
-# github.com/docker/docker v1.14.0-0.20190319215453-e7b5f7dbe98c
+# github.com/docker/docker v1.14.0-0.20191106232431-31abc6c089eb
 github.com/docker/docker/pkg/idtools
 github.com/docker/docker/pkg/locker
 github.com/docker/docker/pkg/reexec

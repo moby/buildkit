@@ -5,6 +5,7 @@ go 1.11
 require (
 	github.com/BurntSushi/toml v0.3.1
 	github.com/Microsoft/go-winio v0.4.14
+	github.com/Microsoft/hcsshim v0.8.7-0.20190419161850-2226e083fc39 // indirect
 	github.com/apache/thrift v0.0.0-20161221203622-b2a4d4ae21c7 // indirect
 	github.com/codahale/hdrhistogram v0.0.0-20160425231609-f8ad88b59a58 // indirect
 	github.com/containerd/cgroups v0.0.0-20190717030353-c4b9ac5c7601 // indirect
@@ -20,7 +21,7 @@ require (
 	github.com/coreos/go-systemd v0.0.0-20190620071333-e64a0ec8b42a
 	github.com/docker/cli v0.0.0-20190321234815-f40f9c240ab0
 	github.com/docker/distribution v2.7.1-0.20190205005809-0d3efadf0154+incompatible
-	github.com/docker/docker v1.14.0-0.20190319215453-e7b5f7dbe98c
+	github.com/docker/docker v1.14.0-0.20191106232431-31abc6c089eb
 	github.com/docker/docker-credential-helpers v0.6.0 // indirect
 	github.com/docker/go-connections v0.3.0
 	github.com/docker/go-events v0.0.0-20170721190031-9461782956ad // indirect
