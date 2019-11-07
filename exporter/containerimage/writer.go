@@ -100,7 +100,9 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 		idx.MediaType = images.MediaTypeDockerSchema2ManifestList
 	}
 
-	for _, p := range p.Platforms {
+	labels := map[string]string{}
+
+	for i, p := range p.Platforms {
 		r, ok := inp.Refs[p.ID]
 		if !ok {
 			return nil, errors.Errorf("failed to find ref for ID %s", p.ID)
@@ -114,6 +116,8 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 		dp := p.Platform
 		desc.Platform = &dp
 		idx.Manifests = append(idx.Manifests, *desc)
+
+		labels[fmt.Sprintf("containerd.io/gc.ref.content.%d", i)] = desc.Digest.String()
 	}
 
 	idxBytes, err := json.MarshalIndent(idx, "", "   ")
@@ -129,7 +133,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 	}
 	idxDone := oneOffProgress(ctx, "exporting manifest list "+idxDigest.String())
 
-	if err := content.WriteBlob(ctx, ic.opt.ContentStore, idxDigest.String(), bytes.NewReader(idxBytes), idxDesc); err != nil {
+	if err := content.WriteBlob(ctx, ic.opt.ContentStore, idxDigest.String(), bytes.NewReader(idxBytes), idxDesc, content.WithLabels(labels)); err != nil {
 		return nil, idxDone(errors.Wrapf(err, "error writing manifest list blob %s", idxDigest))
 	}
 	idxDone(nil)
@@ -218,7 +222,11 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache
 		},
 	}
 
-	for _, dp := range diffPairs {
+	labels := map[string]string{
+		"containerd.io/gc.ref.content.0": configDigest.String(),
+	}
+
+	for i, dp := range diffPairs {
 		info, err := ic.opt.ContentStore.Info(ctx, dp.Blobsum)
 		if err != nil {
 			return nil, errors.Wrapf(err, "could not find blob %s from contentstore", dp.Blobsum)
@@ -228,6 +236,7 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache
 			Size:      info.Size,
 			MediaType: layerType,
 		})
+		labels[fmt.Sprintf("containerd.io/gc.ref.content.%d", i+1)] = dp.Blobsum.String()
 	}
 
 	mfstJSON, err := json.MarshalIndent(mfst, "", "   ")
@@ -242,7 +251,7 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache
 	}
 	mfstDone := oneOffProgress(ctx, "exporting manifest "+mfstDigest.String())
 
-	if err := content.WriteBlob(ctx, ic.opt.ContentStore, mfstDigest.String(), bytes.NewReader(mfstJSON), mfstDesc); err != nil {
+	if err := content.WriteBlob(ctx, ic.opt.ContentStore, mfstDigest.String(), bytes.NewReader(mfstJSON), mfstDesc, content.WithLabels((labels))); err != nil {
 		return nil, mfstDone(errors.Wrapf(err, "error writing manifest blob %s", mfstDigest))
 	}
 	mfstDone(nil)
