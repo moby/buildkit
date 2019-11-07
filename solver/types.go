@@ -9,11 +9,11 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
-// Vertex is a node in a build graph. Vertex defines an interface for a
+// Vertex is a node in a build graph. It defines an interface for a
 // content-addressable operation and its inputs.
 type Vertex interface {
 	// Digest returns a checksum of the definition up to the vertex including
-	// all of inputs.
+	// all of its inputs.
 	Digest() digest.Digest
 
 	// Sys returns an object used to resolve the executor for this vertex.
@@ -153,10 +153,12 @@ type CacheMap struct {
 	// inputs.
 	Deps []struct {
 		// Selector is a digest that is merged with the cache key of the input.
+		// Selectors are not merged with the result of the `ComputeDigestFunc` for
+		// this input.
 		Selector digest.Digest
 
-		// ComputeDigestFunc is a function that returns a digest for the input based
-		// on its return value.
+		// ComputeDigestFunc should return a digest for the input based on its return
+		// value.
 		//
 		// For example, in LLB this is invoked to calculate the cache key based on
 		// the checksum of file contents from input snapshots.
@@ -182,7 +184,7 @@ type CacheRecord struct {
 	key          *CacheKey
 }
 
-// CacheManager determine if there is a result that matches the cache keys
+// CacheManager determines if there is a result that matches the cache keys
 // generated during the build that could be reused instead of fully
 // reevaluating the vertex and its inputs. There can be multiple cache
 // managers, and specific managers can be defined per vertex using
