@@ -19,7 +19,7 @@ import (
 	"github.com/containerd/containerd/pkg/seed"
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/sys"
-	sddaemon "github.com/coreos/go-systemd/daemon"
+	sddaemon "github.com/coreos/go-systemd/v22/daemon"
 	"github.com/docker/docker/pkg/reexec"
 	"github.com/docker/go-connections/sockets"
 	"github.com/gofrs/flock"

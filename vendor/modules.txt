@@ -116,8 +116,8 @@ github.com/containernetworking/cni/pkg/types/current
 github.com/containernetworking/cni/pkg/invoke
 github.com/containernetworking/cni/pkg/version
 github.com/containernetworking/cni/pkg/types/020
-# github.com/coreos/go-systemd v0.0.0-20190620071333-e64a0ec8b42a
-github.com/coreos/go-systemd/daemon
+# github.com/coreos/go-systemd/v22 v22.0.0
+github.com/coreos/go-systemd/v22/daemon
 # github.com/davecgh/go-spew v1.1.1
 github.com/davecgh/go-spew/spew
 # github.com/docker/cli v0.0.0-20190321234815-f40f9c240ab0
