@@ -26,12 +26,14 @@ import (
 )
 
 const (
-	keyImageName    = "name"
-	keyPush         = "push"
-	keyPushByDigest = "push-by-digest"
-	keyInsecure     = "registry.insecure"
-	keyUnpack       = "unpack"
-	ociTypes        = "oci-mediatypes"
+	keyImageName      = "name"
+	keyPush           = "push"
+	keyPushByDigest   = "push-by-digest"
+	keyInsecure       = "registry.insecure"
+	keyUnpack         = "unpack"
+	keyDanglingPrefix = "dangling-name-prefix"
+	keyNameCanonical  = "name-canonical"
+	ociTypes          = "oci-mediatypes"
 )
 
 type Opt struct {
@@ -111,6 +113,18 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
 			}
 			i.ociTypes = b
+		case keyDanglingPrefix:
+			i.danglingPrefix = v
+		case keyNameCanonical:
+			if v == "" {
+				i.nameCanonical = true
+				continue
+			}
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
+			}
+			i.nameCanonical = b
 		default:
 			if i.meta == nil {
 				i.meta = make(map[string][]byte)
@@ -123,13 +137,15 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 
 type imageExporterInstance struct {
 	*imageExporter
-	targetName   string
-	push         bool
-	pushByDigest bool
-	unpack       bool
-	insecure     bool
-	ociTypes     bool
-	meta         map[string][]byte
+	targetName     string
+	push           bool
+	pushByDigest   bool
+	unpack         bool
+	insecure       bool
+	ociTypes       bool
+	nameCanonical  bool
+	danglingPrefix string
+	meta           map[string][]byte
 }
 
 func (e *imageExporterInstance) Name() string {
@@ -165,24 +181,35 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 		e.targetName = string(n)
 	}
 
+	nameCanonical := e.nameCanonical
+	if e.targetName == "" && e.danglingPrefix != "" {
+		e.targetName = e.danglingPrefix + "@" + desc.Digest.String()
+		nameCanonical = false
+	}
+
 	if e.targetName != "" {
 		targetNames := strings.Split(e.targetName, ",")
 		for _, targetName := range targetNames {
 			if e.opt.Images != nil {
 				tagDone := oneOffProgress(ctx, "naming to "+targetName)
 				img := images.Image{
-					Name:      targetName,
 					Target:    *desc,
 					CreatedAt: time.Now(),
 				}
+				sfx := []string{""}
+				if nameCanonical {
+					sfx = append(sfx, "@"+desc.Digest.String())
+				}
+				for _, sfx := range sfx {
+					img.Name = targetName + sfx
+					if _, err := e.opt.Images.Update(ctx, img); err != nil {
+						if !errdefs.IsNotFound(err) {
+							return nil, tagDone(err)
+						}
 
-				if _, err := e.opt.Images.Update(ctx, img); err != nil {
-					if !errdefs.IsNotFound(err) {
-						return nil, tagDone(err)
-					}
-
-					if _, err := e.opt.Images.Create(ctx, img); err != nil {
-						return nil, tagDone(err)
+						if _, err := e.opt.Images.Create(ctx, img); err != nil {
+							return nil, tagDone(err)
+						}
 					}
 				}
 				tagDone(nil)
