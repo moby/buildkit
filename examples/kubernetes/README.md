@@ -67,7 +67,7 @@ $ buildctl \
   build --frontend dockerfile.v0 --local context=/path/to/dir --local dockerfile=/path/to/dir
 ```
 
-See `[./consistenthash`](./consistenthash) for how to use consistent hashing.
+See [`./consistenthash`](./consistenthash) for how to use consistent hashing.
 
 ## `Job`
 

@@ -6,6 +6,7 @@ metadata:
   name: buildkitd
 spec:
   serviceName: buildkitd
+  podManagementPolicy: Parallel
   replicas: 1
   selector:
     matchLabels:
