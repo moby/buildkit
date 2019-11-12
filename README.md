@@ -85,6 +85,7 @@ BuildKit is used by the following projects:
 -   [Rio](https://github.com/rancher/rio)
 -   [PouchContainer](https://github.com/alibaba/pouch)
 -   [Docker buildx](https://github.com/docker/buildx)
+-   [Okteto Cloud](https://okteto.com/)
 
 ## Quick start
 
