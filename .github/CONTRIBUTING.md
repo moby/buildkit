@@ -2,8 +2,8 @@
 
 This page contains information about reporting issues as well as some tips and
 guidelines useful to experienced open source contributors. Finally, make sure
-you read our [community guidelines](#moby-community-guidelines) before you
-start participating.
+you read our [community guidelines](https://github.com/moby/moby/blob/master/CONTRIBUTING.md#moby-community-guidelines)
+before you start participating.
 
 ## Reporting security issues
 
