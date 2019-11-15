@@ -30,14 +30,26 @@ service LLBBridge {
 
 message Result {
 	oneof result {
-		string ref = 1;
-		RefMap refs = 2;
+    		// Deprecated non-array refs.
+		string refDeprecated = 1;
+		RefMapDeprecated refsDeprecated = 2;
+
+		Ref ref = 3;
+		RefMap refs = 4;
 	}
 	map<string, bytes> metadata = 10;
 }
 
-message RefMap {
+message RefMapDeprecated {
 	map<string, string> refs = 1;
+}
+
+message Ref {
+	repeated string ids = 1;
+}
+
+message RefMap {
+	map<string, Ref> refs = 1;
 }
 
 message ReturnRequest {
@@ -70,6 +82,7 @@ message SolveRequest {
         // for each of the ImportCacheRefs entry to CacheImports for compatibility. (planned to be removed)
 	repeated string ImportCacheRefsDeprecated = 4;
 	bool allowResultReturn = 5;
+	bool allowResultArrayRef = 6;
 	
 	// apicaps.CapSolveInlineReturn deprecated
 	bool Final = 10;
