@@ -178,7 +178,7 @@ type sock struct {
 }
 
 type readOnlyAgent struct {
-	agent.Agent
+	agent.ExtendedAgent
 }
 
 func (a *readOnlyAgent) Add(_ agent.AddedKey) error {
