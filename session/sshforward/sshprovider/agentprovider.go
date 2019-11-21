@@ -196,3 +196,7 @@ func (a *readOnlyAgent) RemoveAll() error {
 func (a *readOnlyAgent) Lock(_ []byte) error {
 	return errors.Errorf("locking agent not allowed by buildkit")
 }
+
+func (a *readOnlyAgent) Extension(_ string, _ []byte) ([]byte, error) {
+	return nil, errors.Errorf("extensions not allowed by buildkit")
+}
