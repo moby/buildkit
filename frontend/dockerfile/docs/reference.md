@@ -28,7 +28,7 @@ Practices](https://docs.docker.com/engine/userguide/eng-image/dockerfile_best-pr
 
 ## Usage
 
-The [`docker build`](commandline/build.md) command builds an image from
+The [docker build](commandline/build.md) command builds an image from
 a `Dockerfile` and a *context*. The build's context is the set of files at a
 specified location `PATH` or `URL`. The `PATH` is a directory on your local
 filesystem. The `URL` is a Git repository location.
@@ -93,8 +93,7 @@ instructions.
 Whenever possible, Docker will re-use the intermediate images (cache),
 to accelerate the `docker build` process significantly. This is indicated by
 the `Using cache` message in the console output.
-(For more information, see the [Build cache section](https://docs.docker.com/engine/userguide/eng-image/dockerfile_best-practices/#build-cache) in the
-`Dockerfile` best practices guide):
+(For more information, see the [`Dockerfile` best practices guide](https://docs.docker.com/engine/userguide/eng-image/dockerfile_best-practices/):
 
     $ docker build -t svendowideit/ambassador .
     Sending build context to Docker daemon 15.36 kB
@@ -137,7 +136,7 @@ implementation. For example, BuildKit can:
 * Avoid side-effects with rest of the API (intermediate images and containers)
 * Prioritize your build cache for automatic pruning
 
-To use the BuildKit backend, you need to set an environment variable 
+To use the BuildKit backend, you need to set an environment variable
 `DOCKER_BUILDKIT=1` on the CLI before invoking `docker build`.
 
 To learn about the experimental Dockerfile syntax available to BuildKit-based
@@ -267,7 +266,7 @@ This feature is only enabled if the [BuildKit](#buildkit) backend is used.
 
 The syntax directive defines the location of the Dockerfile builder that is used for
 building the current Dockerfile. The BuildKit backend allows to seamlessly use
-external implementations of builders that are distributed as Docker images and 
+external implementations of builders that are distributed as Docker images and
 execute inside a container sandbox environment.
 
 Custom Dockerfile implementation allows you to:
@@ -278,9 +277,9 @@ Custom Dockerfile implementation allows you to:
 
 ### Official releases
 
-Docker distributes official versions of the images that can be used for building 
-Dockerfiles under `docker/dockerfile` repository on Docker Hub. There are two 
-channels where new images are released: stable and experimental. 
+Docker distributes official versions of the images that can be used for building
+Dockerfiles under `docker/dockerfile` repository on Docker Hub. There are two
+channels where new images are released: stable and experimental.
 
 Stable channel follows semantic versioning. For example:
 
@@ -296,9 +295,9 @@ component from the stable channel on the time of the release. For example:
   - docker/dockerfile:1.0-experimental - latest experimental releases after 1.0
   - docker/dockerfile:experimental - latest release on experimental channel
 
-You should choose a channel that best fits your needs. If you only want 
+You should choose a channel that best fits your needs. If you only want
 bugfixes, you should use `docker/dockerfile:1.0`. If you want to benefit from
-experimental features, you should use the experimental channel. If you are using 
+experimental features, you should use the experimental channel. If you are using
 the experimental channel, newer releases may not be backwards compatible, so it
 is recommended to use an immutable full version variant.
 
@@ -569,7 +568,7 @@ Or
     FROM <image>[@<digest>] [AS <name>]
 
 The `FROM` instruction initializes a new build stage and sets the
-[*Base Image*](glossary.md#base-image) for subsequent instructions. As such, a
+[*Base Image*](../../glossary/#base-image) for subsequent instructions. As such, a
 valid `Dockerfile` must start with a `FROM` instruction. The image can be
 any valid image – it is especially easy to start by **pulling an image** from
 the [*Public Repositories*](https://docs.docker.com/engine/tutorials/dockerrepos/).
@@ -687,7 +686,7 @@ cache for `RUN` instructions can be invalidated by using the `--no-cache`
 flag, for example `docker build --no-cache`.
 
 See the [`Dockerfile` Best Practices
-guide](https://docs.docker.com/engine/userguide/eng-image/dockerfile_best-practices/#/build-cache) for more information.
+guide](https://docs.docker.com/engine/userguide/eng-image/dockerfile_best-practices/) for more information.
 
 The cache for `RUN` instructions can be invalidated by `ADD` instructions. See
 [below](#add) for details.
@@ -1008,7 +1007,7 @@ of whether or not the file has changed and the cache should be updated.
 > following instructions from the Dockerfile if the contents of `<src>` have
 > changed. This includes invalidating the cache for `RUN` instructions.
 > See the [`Dockerfile` Best Practices
-guide](https://docs.docker.com/engine/userguide/eng-image/dockerfile_best-practices/#/build-cache) for more information.
+guide](https://docs.docker.com/engine/userguide/eng-image/dockerfile_best-practices/) for more information.
 
 
 `ADD` obeys the following rules:
@@ -1429,7 +1428,7 @@ containers. The value can be a JSON array, `VOLUME ["/var/log/"]`, or a plain
 string with multiple arguments, such as `VOLUME /var/log` or `VOLUME /var/log
 /var/db`. For more information/examples and mounting instructions via the
 Docker client, refer to
-[*Share Directories via Volumes*](https://docs.docker.com/engine/tutorials/dockervolumes/#/mount-a-host-directory-as-a-data-volume)
+[*Share Directories via Volumes*](https://docs.docker.com/engine/tutorials/dockervolumes/)
 documentation.
 
 The `docker run` command initializes the newly created volume with any data
@@ -2048,13 +2047,12 @@ The `SHELL` feature was added in Docker 1.12.
 This feature is only available when using the  [BuildKit](#buildkit) backend.
 
 Docker build supports experimental features like cache mounts, build secrets and
-ssh forwarding that are enabled by using an external implementation of the 
+ssh forwarding that are enabled by using an external implementation of the
 builder with a syntax directive. To learn about these features, [refer to the documentation in BuildKit repository](https://github.com/moby/buildkit/blob/master/frontend/dockerfile/docs/experimental.md).
 
 ## Dockerfile examples
 
-Below you can see some examples of Dockerfile syntax. If you're interested in
-something more realistic, take a look at the list of [Dockerization examples](https://docs.docker.com/engine/examples/).
+Below you can see some examples of Dockerfile syntax.
 
 ```
 # Nginx
