@@ -33,6 +33,24 @@ spec:
         - --tlskey
         - /certs/key.pem
         - --oci-worker-no-process-sandbox
+# the probe below will only work after Release v0.6.3        
+        readinessProbe:
+          exec:
+            command:
+            - buildctl 
+            - debug 
+            - workers
+          initialDelaySeconds: 5
+          periodSeconds: 30
+# the probe below will only work after Release v0.6.3        
+        livenessProbe:
+          exec:
+            command:
+            - buildctl 
+            - debug 
+            - workers
+          initialDelaySeconds: 5
+          periodSeconds: 30        
         securityContext:
 # To change UID/GID, you need to rebuild the image
           runAsUser: 1000

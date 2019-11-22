@@ -28,6 +28,24 @@ spec:
         - /certs/cert.pem
         - --tlskey
         - /certs/key.pem
+# the probe below will only work after Release v0.6.3
+        readinessProbe:
+          exec:
+            command:
+            - buildctl 
+            - debug 
+            - workers
+          initialDelaySeconds: 5
+          periodSeconds: 30
+# the probe below will only work after Release v0.6.3
+        livenessProbe:
+          exec:
+            command:
+            - buildctl 
+            - debug 
+            - workers
+          initialDelaySeconds: 5
+          periodSeconds: 30
         securityContext:
           privileged: true
         ports:
