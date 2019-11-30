@@ -69,6 +69,7 @@ func TestIntegration(t *testing.T) {
 		testBuildMultiMount,
 		testBuildHTTPSource,
 		testBuildPushAndValidate,
+		testBuildExportWithUncompressed,
 		testResolveAndHosts,
 		testUser,
 		testOCIExporter,
@@ -1514,6 +1515,121 @@ func testTarExporterWithSocket(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 }
 
+func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("busybox:latest")
+	cmd := `sh -e -c "echo uncompressed > data"`
+
+	st := llb.Scratch()
+	st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+
+	def, err := st.Marshal()
+	require.NoError(t, err)
+
+	registry, err := sb.NewRegistry()
+	if errors.Cause(err) == integration.ErrorRequirements {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	target := registry + "/buildkit/build/exporter:withnocompressed"
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name":        target,
+					"push":        "true",
+					"compression": "uncompressed",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	// new layer with gzip compression
+	targetImg := llb.Image(target)
+	cmd = `sh -e -c "echo gzip > data"`
+	st = targetImg.Run(llb.Shlex(cmd), llb.Dir("/wd")).GetMount("/wd")
+
+	target = registry + "/buildkit/build/exporter:withcompressed"
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	var cdAddress string
+	if cd, ok := sb.(interface {
+		ContainerdAddress() string
+	}); !ok {
+		return
+	} else {
+		cdAddress = cd.ContainerdAddress()
+	}
+
+	client, err := newContainerd(cdAddress)
+	require.NoError(t, err)
+	defer client.Close()
+
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit")
+	err = client.ImageService().Delete(ctx, target, images.SynchronousDelete())
+	require.NoError(t, err)
+
+	checkAllReleasable(t, c, sb, true)
+
+	img, err := client.Pull(ctx, target)
+	require.NoError(t, err)
+
+	dt, err := content.ReadBlob(ctx, img.ContentStore(), img.Target())
+	require.NoError(t, err)
+
+	var mfst = struct {
+		MediaType string `json:"mediaType,omitempty"`
+		ocispec.Manifest
+	}{}
+
+	err = json.Unmarshal(dt, &mfst)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(mfst.Layers))
+	require.Equal(t, images.MediaTypeDockerSchema2Layer, mfst.Layers[0].MediaType)
+	require.Equal(t, images.MediaTypeDockerSchema2LayerGzip, mfst.Layers[1].MediaType)
+
+	dt, err = content.ReadBlob(ctx, img.ContentStore(), ocispec.Descriptor{Digest: mfst.Layers[0].Digest})
+	require.NoError(t, err)
+
+	m, err := testutil.ReadTarToMap(dt, false)
+	require.NoError(t, err)
+
+	item, ok := m["data"]
+	require.True(t, ok)
+	require.Equal(t, int32(item.Header.Typeflag), tar.TypeReg)
+	require.Equal(t, []byte("uncompressed"), item.Data)
+
+	dt, err = content.ReadBlob(ctx, img.ContentStore(), ocispec.Descriptor{Digest: mfst.Layers[1].Digest})
+	require.NoError(t, err)
+
+	m, err = testutil.ReadTarToMap(dt, true)
+	require.NoError(t, err)
+
+	item, ok = m["data"]
+	require.True(t, ok)
+	require.Equal(t, int32(item.Header.Typeflag), tar.TypeReg)
+	require.Equal(t, []byte("gzip"), item.Data)
+}
+
 func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 	c, err := New(context.TODO(), sb.Address())
@@ -1667,6 +1783,8 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 
 	require.Equal(t, images.MediaTypeDockerSchema2Manifest, mfst.MediaType)
 	require.Equal(t, 2, len(mfst.Layers))
+	require.Equal(t, images.MediaTypeDockerSchema2LayerGzip, mfst.Layers[0].MediaType)
+	require.Equal(t, images.MediaTypeDockerSchema2LayerGzip, mfst.Layers[1].MediaType)
 
 	dt, err = content.ReadBlob(ctx, img.ContentStore(), ocispec.Descriptor{Digest: mfst.Layers[0].Digest})
 	require.NoError(t, err)

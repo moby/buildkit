@@ -33,7 +33,7 @@ var ErrNoBlobs = errors.Errorf("no blobs for snapshot")
 
 // GetDiffPairs returns the DiffID/Blobsum pairs for a giver reference and saves it.
 // Caller must hold a lease when calling this function.
-func GetDiffPairs(ctx context.Context, contentStore content.Store, differ diff.Comparer, ref cache.ImmutableRef, createBlobs bool) ([]DiffPair, error) {
+func GetDiffPairs(ctx context.Context, contentStore content.Store, differ diff.Comparer, ref cache.ImmutableRef, createBlobs bool, compression CompressionType) ([]DiffPair, error) {
 	if ref == nil {
 		return nil, nil
 	}
@@ -50,10 +50,10 @@ func GetDiffPairs(ctx context.Context, contentStore content.Store, differ diff.C
 		ctx = winlayers.UseWindowsLayerMode(ctx)
 	}
 
-	return getDiffPairs(ctx, contentStore, differ, ref, createBlobs)
+	return getDiffPairs(ctx, contentStore, differ, ref, createBlobs, compression)
 }
 
-func getDiffPairs(ctx context.Context, contentStore content.Store, differ diff.Comparer, ref cache.ImmutableRef, createBlobs bool) ([]DiffPair, error) {
+func getDiffPairs(ctx context.Context, contentStore content.Store, differ diff.Comparer, ref cache.ImmutableRef, createBlobs bool, compression CompressionType) ([]DiffPair, error) {
 	if ref == nil {
 		return nil, nil
 	}
@@ -66,7 +66,7 @@ func getDiffPairs(ctx context.Context, contentStore content.Store, differ diff.C
 	if parent != nil {
 		defer parent.Release(context.TODO())
 		eg.Go(func() error {
-			dp, err := getDiffPairs(ctx, contentStore, differ, parent, createBlobs)
+			dp, err := getDiffPairs(ctx, contentStore, differ, parent, createBlobs, compression)
 			if err != nil {
 				return err
 			}
@@ -82,10 +82,22 @@ func getDiffPairs(ctx context.Context, contentStore content.Store, differ diff.C
 			} else if !createBlobs {
 				return nil, errors.WithStack(ErrNoBlobs)
 			}
+
+			var mediaType string
 			var descr ocispec.Descriptor
 			var err error
+
+			switch compression {
+			case Uncompressed:
+				mediaType = ocispec.MediaTypeImageLayer
+			case Gzip:
+				mediaType = ocispec.MediaTypeImageLayerGzip
+			default:
+				return nil, errors.Errorf("unknown layer compression type")
+			}
+
 			if pc, ok := differ.(CompareWithParent); ok {
-				descr, err = pc.CompareWithParent(ctx, ref.ID(), diff.WithMediaType(ocispec.MediaTypeImageLayerGzip))
+				descr, err = pc.CompareWithParent(ctx, ref.ID(), diff.WithMediaType(mediaType))
 				if err != nil {
 					return nil, err
 				}
@@ -121,24 +133,29 @@ func getDiffPairs(ctx context.Context, contentStore content.Store, differ diff.C
 					defer release()
 				}
 				descr, err = differ.Compare(ctx, lower, upper,
-					diff.WithMediaType(ocispec.MediaTypeImageLayerGzip),
+					diff.WithMediaType(mediaType),
 					diff.WithReference(ref.ID()),
 				)
 				if err != nil {
 					return nil, err
 				}
 			}
+
+			if descr.Annotations == nil {
+				descr.Annotations = map[string]string{}
+			}
+
 			info, err := contentStore.Info(ctx, descr.Digest)
 			if err != nil {
 				return nil, err
 			}
-			if diffID, ok := info.Labels[containerdUncompressed]; !ok {
-				return nil, errors.Errorf("invalid differ response with no diffID: %v", descr.Digest)
-			} else {
-				if descr.Annotations == nil {
-					descr.Annotations = map[string]string{}
-				}
+
+			if diffID, ok := info.Labels[containerdUncompressed]; ok {
 				descr.Annotations[containerdUncompressed] = diffID
+			} else if compression == Uncompressed {
+				descr.Annotations[containerdUncompressed] = descr.Digest.String()
+			} else {
+				return nil, errors.Errorf("unknown layer compression type")
 			}
 			return descr, nil
 

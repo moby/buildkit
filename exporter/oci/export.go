@@ -9,6 +9,7 @@ import (
 	archiveexporter "github.com/containerd/containerd/images/archive"
 	"github.com/containerd/containerd/leases"
 	"github.com/docker/distribution/reference"
+	"github.com/moby/buildkit/cache/blobs"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage"
 	"github.com/moby/buildkit/session"
@@ -24,10 +25,11 @@ import (
 type ExporterVariant string
 
 const (
-	keyImageName  = "name"
-	VariantOCI    = "oci"
-	VariantDocker = "docker"
-	ociTypes      = "oci-mediatypes"
+	keyImageName        = "name"
+	keyLayerCompression = "compression"
+	VariantOCI          = "oci"
+	VariantDocker       = "docker"
+	ociTypes            = "oci-mediatypes"
 )
 
 type Opt struct {
@@ -61,11 +63,24 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 	}
 
 	var ot *bool
-	i := &imageExporterInstance{imageExporter: e, caller: caller}
+	i := &imageExporterInstance{
+		imageExporter:    e,
+		caller:           caller,
+		layerCompression: blobs.DefaultCompression,
+	}
 	for k, v := range opt {
 		switch k {
 		case keyImageName:
 			i.name = v
+		case keyLayerCompression:
+			switch v {
+			case "gzip":
+				i.layerCompression = blobs.Gzip
+			case "uncompressed":
+				i.layerCompression = blobs.Uncompressed
+			default:
+				return nil, errors.Errorf("unsupported layer compression type: %v", v)
+			}
 		case ociTypes:
 			ot = new(bool)
 			if v == "" {
@@ -94,10 +109,11 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 
 type imageExporterInstance struct {
 	*imageExporter
-	meta     map[string][]byte
-	caller   session.Caller
-	name     string
-	ociTypes bool
+	meta             map[string][]byte
+	caller           session.Caller
+	name             string
+	ociTypes         bool
+	layerCompression blobs.CompressionType
 }
 
 func (e *imageExporterInstance) Name() string {
@@ -122,7 +138,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 	}
 	defer done(context.TODO())
 
-	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes)
+	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes, e.layerCompression)
 	if err != nil {
 		return nil, err
 	}

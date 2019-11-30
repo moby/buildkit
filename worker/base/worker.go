@@ -348,7 +348,8 @@ func (w *Worker) GetRemote(ctx context.Context, ref cache.ImmutableRef, createIf
 	}
 	defer done(ctx)
 
-	diffPairs, err := blobs.GetDiffPairs(ctx, w.ContentStore(), w.Differ, ref, createIfNeeded)
+	// TODO(fuweid): add compression option or config for cache exporter.
+	diffPairs, err := blobs.GetDiffPairs(ctx, w.ContentStore(), w.Differ, ref, createIfNeeded, blobs.DefaultCompression)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed calculating diff pairs for exported snapshot")
 	}
@@ -363,8 +364,10 @@ func (w *Worker) GetRemote(ctx context.Context, ref cache.ImmutableRef, createIf
 
 	descs := make([]ocispec.Descriptor, len(diffPairs))
 
+	cs := w.ContentStore()
+	layerMediaTypes := blobs.GetMediaTypeForLayers(diffPairs, ref)
 	for i, dp := range diffPairs {
-		info, err := w.ContentStore().Info(ctx, dp.Blobsum)
+		info, err := cs.Info(ctx, dp.Blobsum)
 		if err != nil {
 			return nil, err
 		}
@@ -374,10 +377,27 @@ func (w *Worker) GetRemote(ctx context.Context, ref cache.ImmutableRef, createIf
 			return nil, err
 		}
 
+		var mediaType string
+		if len(layerMediaTypes) > i {
+			mediaType = layerMediaTypes[i]
+		}
+
+		// NOTE: The media type might be missing for some migrated ones
+		// from before lease based storage. If so, we should detect
+		// the media type from blob data.
+		//
+		// Discussion: https://github.com/moby/buildkit/pull/1277#discussion_r352795429
+		if mediaType == "" {
+			mediaType, err = blobs.DetectLayerMediaType(ctx, cs, dp.Blobsum, false)
+			if err != nil {
+				return nil, err
+			}
+		}
+
 		descs[i] = ocispec.Descriptor{
 			Digest:    dp.Blobsum,
 			Size:      info.Size,
-			MediaType: images.MediaTypeDockerSchema2LayerGzip,
+			MediaType: mediaType,
 			Annotations: map[string]string{
 				"containerd.io/uncompressed": dp.DiffID.String(),
 				labelCreatedAt:               string(tm),
@@ -387,7 +407,7 @@ func (w *Worker) GetRemote(ctx context.Context, ref cache.ImmutableRef, createIf
 
 	return &solver.Remote{
 		Descriptors: descs,
-		Provider:    w.ContentStore(),
+		Provider:    cs,
 	}, nil
 }
 
