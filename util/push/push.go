@@ -90,11 +90,15 @@ func Push(ctx context.Context, sm *session.Manager, cs content.Store, dgst diges
 	})
 
 	pushHandler := remotes.PushHandler(pusher, cs)
+	pushUpdateSourceHandler, err := updateDistributionSourceHandler(cs, pushHandler, ref)
+	if err != nil {
+		return err
+	}
 
 	handlers := append([]images.Handler{},
 		images.HandlerFunc(annotateDistributionSourceHandler(cs, childrenHandler(cs))),
 		filterHandler,
-		pushHandler,
+		pushUpdateSourceHandler,
 	)
 
 	ra, err := cs.ReaderAt(ctx, desc)
@@ -233,4 +237,39 @@ func childrenHandler(provider content.Provider) images.HandlerFunc {
 
 		return descs, nil
 	}
+}
+
+// updateDistributionSourceHandler will update distribution source label after
+// pushing layer successfully.
+//
+// FIXME(fuweid): There is race condition for current design of distribution
+// source label if there are pull/push jobs consuming same layer.
+func updateDistributionSourceHandler(cs content.Store, pushF images.HandlerFunc, ref string) (images.HandlerFunc, error) {
+	updateF, err := docker.AppendDistributionSourceLabel(cs, ref)
+	if err != nil {
+		return nil, err
+	}
+
+	return images.HandlerFunc(func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
+		var islayer bool
+
+		switch desc.MediaType {
+		case images.MediaTypeDockerSchema2Layer, images.MediaTypeDockerSchema2LayerGzip,
+			ocispec.MediaTypeImageLayer, ocispec.MediaTypeImageLayerGzip:
+			islayer = true
+		}
+
+		children, err := pushF(ctx, desc)
+		if err != nil {
+			return nil, err
+		}
+
+		// update distribution source to layer
+		if islayer {
+			if _, err := updateF(ctx, desc); err != nil {
+				logrus.Warnf("failed to update distribution source for layer %v: %v", desc.Digest, err)
+			}
+		}
+		return children, nil
+	}), nil
 }
