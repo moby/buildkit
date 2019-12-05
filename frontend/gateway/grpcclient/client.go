@@ -112,7 +112,7 @@ func (c *grpcClient) Run(ctx context.Context, f client.BuildFunc) (retError erro
 							retError = err
 							continue
 						}
-						m[k] = &pb.Ref{Ids: []string{id}}
+						m[k] = pb.NewRef(id)
 					}
 					pbRes.Result = &pb.Result_Refs{Refs: &pb.RefMap{Refs: m}}
 				} else {
@@ -120,7 +120,7 @@ func (c *grpcClient) Run(ctx context.Context, f client.BuildFunc) (retError erro
 					if err != nil {
 						retError = err
 					} else {
-						pbRes.Result = &pb.Result_Ref{Ref: &pb.Ref{Ids: []string{id}}}
+						pbRes.Result = &pb.Result_Ref{Ref: pb.NewRef(id)}
 					}
 				}
 				if retError == nil {
