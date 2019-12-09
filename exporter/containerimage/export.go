@@ -13,6 +13,7 @@ import (
 	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/rootfs"
+	"github.com/moby/buildkit/cache/blobs"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
@@ -26,14 +27,15 @@ import (
 )
 
 const (
-	keyImageName      = "name"
-	keyPush           = "push"
-	keyPushByDigest   = "push-by-digest"
-	keyInsecure       = "registry.insecure"
-	keyUnpack         = "unpack"
-	keyDanglingPrefix = "dangling-name-prefix"
-	keyNameCanonical  = "name-canonical"
-	ociTypes          = "oci-mediatypes"
+	keyImageName        = "name"
+	keyPush             = "push"
+	keyPushByDigest     = "push-by-digest"
+	keyInsecure         = "registry.insecure"
+	keyUnpack           = "unpack"
+	keyDanglingPrefix   = "dangling-name-prefix"
+	keyNameCanonical    = "name-canonical"
+	keyLayerCompression = "compression"
+	ociTypes            = "oci-mediatypes"
 )
 
 type Opt struct {
@@ -58,7 +60,11 @@ func New(opt Opt) (exporter.Exporter, error) {
 }
 
 func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exporter.ExporterInstance, error) {
-	i := &imageExporterInstance{imageExporter: e}
+	i := &imageExporterInstance{
+		imageExporter:    e,
+		layerCompression: blobs.DefaultCompression,
+	}
+
 	for k, v := range opt {
 		switch k {
 		case keyImageName:
@@ -125,6 +131,15 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
 			}
 			i.nameCanonical = b
+		case keyLayerCompression:
+			switch v {
+			case "gzip":
+				i.layerCompression = blobs.Gzip
+			case "uncompressed":
+				i.layerCompression = blobs.Uncompressed
+			default:
+				return nil, errors.Errorf("unsupported layer compression type: %v", v)
+			}
 		default:
 			if i.meta == nil {
 				i.meta = make(map[string][]byte)
@@ -137,15 +152,16 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 
 type imageExporterInstance struct {
 	*imageExporter
-	targetName     string
-	push           bool
-	pushByDigest   bool
-	unpack         bool
-	insecure       bool
-	ociTypes       bool
-	nameCanonical  bool
-	danglingPrefix string
-	meta           map[string][]byte
+	targetName       string
+	push             bool
+	pushByDigest     bool
+	unpack           bool
+	insecure         bool
+	ociTypes         bool
+	nameCanonical    bool
+	danglingPrefix   string
+	layerCompression blobs.CompressionType
+	meta             map[string][]byte
 }
 
 func (e *imageExporterInstance) Name() string {
@@ -166,7 +182,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 	}
 	defer done(context.TODO())
 
-	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes)
+	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes, e.layerCompression)
 	if err != nil {
 		return nil, err
 	}
