@@ -76,6 +76,8 @@ type OCIConfig struct {
 	// UserRemapUnsupported is unsupported key for testing. The feature is
 	// incomplete and the intention is to make it default without config.
 	UserRemapUnsupported string `toml:"userRemapUnsupported"`
+	// For use in storing the OCI worker binary name that will replace buildkit-runc
+	Binary        	 string            `toml:"binary"`
 }
 
 type ContainerdConfig struct {

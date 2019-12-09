@@ -32,7 +32,7 @@ type SnapshotterFactory struct {
 }
 
 // NewWorkerOpt creates a WorkerOpt.
-func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, processMode oci.ProcessMode, labels map[string]string, idmap *idtools.IdentityMapping, nopt netproviders.Opt, dns *oci.DNSConfig) (base.WorkerOpt, error) {
+func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, processMode oci.ProcessMode, labels map[string]string, idmap *idtools.IdentityMapping, nopt netproviders.Opt, dns *oci.DNSConfig, binary string) (base.WorkerOpt, error) {
 	var opt base.WorkerOpt
 	name := "runc-" + snFactory.Name
 	root = filepath.Join(root, name)
@@ -45,9 +45,18 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		return opt, err
 	}
 
+	// Check if user has specified OCI worker binary; if they have, append it to cmds
+	var cmds []string
+	if binary != "" {
+		cmds = append(cmds, binary)
+	}
+
 	exe, err := runcexecutor.New(runcexecutor.Opt{
 		// Root directory
 		Root: filepath.Join(root, "executor"),
+		// If user has specified OCI worker binary, it will be sent to the runc executor to find and use
+		// Otherwise, a nil array will be sent and the default OCI worker binary will be used
+		CommandCandidates: cmds,
 		// without root privileges
 		Rootless:        rootless,
 		ProcessMode:     processMode,
