@@ -46,6 +46,7 @@ message RefMapDeprecated {
 
 message Ref {
 	repeated string ids = 1;
+	repeated pb.Definition defs = 2;
 }
 
 message RefMap {

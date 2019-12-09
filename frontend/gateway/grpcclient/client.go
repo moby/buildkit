@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gogo/googleapis/google/rpc"
+	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
 	opspb "github.com/moby/buildkit/solver/pb"
@@ -68,15 +69,15 @@ func current() (GrpcClient, error) {
 	return New(ctx, opts(), sessionID(), product(), pb.NewLLBBridgeClient(conn), workers())
 }
 
-func convertRef(ref client.Reference) (string, error) {
+func convertRef(ref client.Reference) (*pb.Ref, error) {
 	if ref == nil {
-		return "", nil
+		return &pb.Ref{}, nil
 	}
 	r, ok := ref.(*reference)
 	if !ok {
-		return "", errors.Errorf("invalid return reference type %T", ref)
+		return nil, errors.Errorf("invalid return reference type %T", ref)
 	}
-	return r.id, nil
+	return &pb.Ref{Ids: []string{r.id}, Defs: []*opspb.Definition{r.def}}, nil
 }
 
 func RunFromEnvironment(ctx context.Context, f client.BuildFunc) error {
@@ -108,12 +109,12 @@ func (c *grpcClient) Run(ctx context.Context, f client.BuildFunc) (retError erro
 					if c.caps.Supports(pb.CapProtoRefArray) == nil {
 						m := map[string]*pb.Ref{}
 						for k, r := range res.Refs {
-							id, err := convertRef(r)
+							pbRef, err := convertRef(r)
 							if err != nil {
 								retError = err
 								continue
 							}
-							m[k] = pb.NewRef(id)
+							m[k] = pbRef
 						}
 						pbRes.Result = &pb.Result_Refs{Refs: &pb.RefMap{Refs: m}}
 					} else {
@@ -129,13 +130,17 @@ func (c *grpcClient) Run(ctx context.Context, f client.BuildFunc) (retError erro
 						pbRes.Result = &pb.Result_RefsDeprecated{RefsDeprecated: &pb.RefMapDeprecated{Refs: m}}
 					}
 				} else {
-					id, err := convertRef(res.Ref)
+					pbRef, err := convertRef(res.Ref)
 					if err != nil {
 						retError = err
 					} else {
 						if c.caps.Supports(pb.CapProtoRefArray) == nil {
-							pbRes.Result = &pb.Result_Ref{Ref: pb.NewRef(id)}
+							pbRes.Result = &pb.Result_Ref{Ref: pbRef}
 						} else {
+							var id string
+							if len(pbRef.Ids) > 0 {
+								id = pbRef.Ids[0]
+							}
 							pbRes.Result = &pb.Result_RefDeprecated{RefDeprecated: id}
 						}
 					}
@@ -343,19 +348,21 @@ func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (*clie
 		case *pb.Result_Ref:
 			ids := pbRes.Ref.Ids
 			if len(ids) > 0 {
-				if len(ids) > 1 {
-					return nil, errors.Errorf("solve returned multi-result array")
+				ref, err := newReference(c, pbRes.Ref)
+				if err != nil {
+					return nil, err
 				}
-				res.SetRef(&reference{id: ids[0], c: c})
+
+				res.SetRef(ref)
 			}
 		case *pb.Result_Refs:
 			for k, v := range pbRes.Refs.Refs {
 				var ref *reference
 				if len(v.Ids) > 0 {
-					if len(v.Ids) > 1 {
-						return nil, errors.Errorf("solve returned multi-result array")
+					ref, err = newReference(c, v)
+					if err != nil {
+						return nil, err
 					}
-					ref = &reference{id: v.Ids[0], c: c}
 				}
 				res.AddRef(k, ref)
 			}
@@ -365,7 +372,7 @@ func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (*clie
 	return res, nil
 }
 
-func (c *grpcClient) ResolveImageConfig(ctx context.Context, ref string, opt client.ResolveImageConfigOpt) (digest.Digest, []byte, error) {
+func (c *grpcClient) ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt) (digest.Digest, []byte, error) {
 	var p *opspb.Platform
 	if platform := opt.Platform; platform != nil {
 		p = &opspb.Platform{
@@ -395,8 +402,27 @@ func (c *grpcClient) BuildOpts() client.BuildOpts {
 }
 
 type reference struct {
-	id string
-	c  *grpcClient
+	llb.Output
+	c   *grpcClient
+	id  string
+	def *opspb.Definition
+}
+
+func newReference(c *grpcClient, ref *pb.Ref) (*reference, error) {
+	if len(ref.Ids) > 1 {
+		return nil, errors.Errorf("cannot create multi-result array reference")
+	}
+
+	if len(ref.Ids) != len(ref.Defs) {
+		return nil, errors.Errorf("reference ids and definitions mismatch length")
+	}
+
+	dop, err := llb.NewDefinitionOp(ref.Defs[0])
+	if err != nil {
+		return nil, err
+	}
+
+	return &reference{Output: dop, c: c, id: ref.Ids[0], def: ref.Defs[0]}, nil
 }
 
 func (r *reference) ReadFile(ctx context.Context, req client.ReadRequest) ([]byte, error) {

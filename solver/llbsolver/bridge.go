@@ -11,6 +11,7 @@ import (
 	"github.com/containerd/containerd/platforms"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/remotecache"
+	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/frontend"
 	gw "github.com/moby/buildkit/frontend/gateway/client"
@@ -116,6 +117,12 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (res *
 			return nil, errors.Wrap(err, "failed to build LLB")
 		}
 
+		wref, ok := ref.Sys().(*worker.WorkerRef)
+		if !ok {
+			return nil, errors.Errorf("invalid ref: %T", ref.Sys())
+		}
+		wref.Definition = req.Definition
+
 		res = &frontend.Result{Ref: ref}
 	} else if req.Frontend != "" {
 		f, ok := b.frontends[req.Frontend]
@@ -158,7 +165,7 @@ func (s *llbBridge) Exec(ctx context.Context, meta executor.Meta, root cache.Imm
 	return err
 }
 
-func (s *llbBridge) ResolveImageConfig(ctx context.Context, ref string, opt gw.ResolveImageConfigOpt) (dgst digest.Digest, config []byte, err error) {
+func (s *llbBridge) ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt) (dgst digest.Digest, config []byte, err error) {
 	w, err := s.resolveWorker()
 	if err != nil {
 		return "", nil, err
