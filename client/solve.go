@@ -407,31 +407,14 @@ func parseCacheOptions(opt SolveOpt) (*cacheOptions, error) {
 		attrs := im.Attrs
 		if im.Type == "local" {
 			csDir := im.Attrs["src"]
-			if csDir == "" {
-				return nil, errors.New("local cache importer requires src")
-			}
-			cs, err := contentlocal.NewStore(csDir)
+			cs, err := loadLocalImportCacheStore(attrs)
 			if err != nil {
-				return nil, err
+				logrus.Warning("local cache import at " + csDir + " not found due to err: " + err.Error())
+				continue
 			}
 			contentStores["local:"+csDir] = cs
 
-			// if digest is not specified, load from "latest" tag
-			if attrs["digest"] == "" {
-				idx, err := ociindex.ReadIndexJSONFileLocked(filepath.Join(csDir, "index.json"))
-				if err != nil {
-					return nil, err
-				}
-				for _, m := range idx.Manifests {
-					if m.Annotations[ocispec.AnnotationRefName] == "latest" {
-						attrs["digest"] = string(m.Digest)
-						break
-					}
-				}
-				if attrs["digest"] == "" {
-					return nil, errors.New("local cache importer requires either explicit digest or \"latest\" tag on index.json")
-				}
-			}
+			
 		}
 		if im.Type == "registry" {
 			legacyImportRef := attrs["ref"]
@@ -472,4 +455,32 @@ func parseCacheOptions(opt SolveOpt) (*cacheOptions, error) {
 		frontendAttrs:   frontendAttrs,
 	}
 	return &res, nil
+}
+
+func loadLocalImportCacheStore(attrs map[string]string) (content.Store, error) {
+	csDir := attrs["src"]
+	if csDir == "" {
+		return nil, errors.New("local cache importer requires src")
+	}
+	cs, err := contentlocal.NewStore(csDir)
+	if err != nil {
+		return nil, err
+	}
+	// if digest is not specified, load from "latest" tag
+	if attrs["digest"] == "" {
+		idx, err := ociindex.ReadIndexJSONFileLocked(filepath.Join(csDir, "index.json"))
+		if err != nil {
+			return nil, err
+		}
+		for _, m := range idx.Manifests {
+			if m.Annotations[ocispec.AnnotationRefName] == "latest" {
+				attrs["digest"] = string(m.Digest)
+				break
+			}
+		}
+		if attrs["digest"] == "" {
+			return nil, errors.New("local cache importer requires either explicit digest or \"latest\" tag on index.json")
+		}
+	}
+	return cs, nil
 }
