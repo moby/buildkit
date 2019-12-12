@@ -46,6 +46,7 @@ insecure-entitlements = [ "network.host", "security.insecure" ]
   noProcessSandbox = false
   gc = true
   gckeepstorage = 9000
+  binary = "" # OCI worker binary name, default binary is buildkit-runc
   [worker.oci.labels]
     "foo" = "bar"
 
