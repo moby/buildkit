@@ -412,15 +412,15 @@ func parseCacheOptions(opt SolveOpt) (*cacheOptions, error) {
 			}
 			cs, err := contentlocal.NewStore(csDir)
 			if err != nil {
-				return nil, err
+				logrus.Warning("local cache import at " + csDir + " not found due to err: " + err.Error())
+				continue
 			}
-			contentStores["local:"+csDir] = cs
-
 			// if digest is not specified, load from "latest" tag
 			if attrs["digest"] == "" {
 				idx, err := ociindex.ReadIndexJSONFileLocked(filepath.Join(csDir, "index.json"))
 				if err != nil {
-					return nil, err
+					logrus.Warning("local cache import at " + csDir + " not found due to err: " + err.Error())
+					continue
 				}
 				for _, m := range idx.Manifests {
 					if m.Annotations[ocispec.AnnotationRefName] == "latest" {
@@ -432,6 +432,8 @@ func parseCacheOptions(opt SolveOpt) (*cacheOptions, error) {
 					return nil, errors.New("local cache importer requires either explicit digest or \"latest\" tag on index.json")
 				}
 			}
+			contentStores["local:"+csDir] = cs
+
 		}
 		if im.Type == "registry" {
 			legacyImportRef := attrs["ref"]
