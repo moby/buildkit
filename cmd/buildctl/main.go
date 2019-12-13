@@ -63,6 +63,11 @@ func main() {
 			Usage: "client key",
 			Value: "",
 		},
+		cli.StringFlag{
+			Name:  "tlsdir",
+			Usage: "directory containing CA certificate, client certificate, and client key",
+			Value: "",
+		},
 		cli.IntFlag{
 			Name:  "timeout",
 			Usage: "timeout backend connection after value seconds",
