@@ -50,7 +50,7 @@ func findMetadataDBFiles(root string) ([]string, error) {
 		if !dir.IsDir() {
 			continue
 		}
-		p := filepath.Join(root, dir.Name(), "metadata.db")
+		p := filepath.Join(root, dir.Name(), "metadata_v2.db")
 		_, err := os.Stat(p)
 		if err == nil {
 			files = append(files, p)
