@@ -324,13 +324,20 @@ func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (*clie
 				res.AddRef(k, ref)
 			}
 		case *pb.Result_Ref:
-			if ids := pbRes.Ref.Ids; len(ids) > 0 {
+			ids := pbRes.Ref.Ids
+			if len(ids) > 0 {
+				if len(ids) > 1 {
+					return nil, errors.Errorf("solve returned multi-result array")
+				}
 				res.SetRef(&reference{id: ids[0], c: c})
 			}
 		case *pb.Result_Refs:
 			for k, v := range pbRes.Refs.Refs {
 				var ref *reference
 				if len(v.Ids) > 0 {
+					if len(v.Ids) > 1 {
+						return nil, errors.Errorf("solve returned multi-result array")
+					}
 					ref = &reference{id: v.Ids[0], c: c}
 				}
 				res.AddRef(k, ref)

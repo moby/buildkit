@@ -701,6 +701,10 @@ func (lbf *llbBridgeForwarder) convertRef(ids []string) (solver.CachedResult, er
 		return nil, nil
 	}
 
+	if len(ids) > 1 {
+		return nil, errors.Errorf("return reference has multi-result array")
+	}
+
 	lbf.mu.Lock()
 	defer lbf.mu.Unlock()
 

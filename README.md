@@ -225,7 +225,7 @@ Keys supported by image output:
 * `dangling-name-prefix=[value]`: name image with `prefix@<digest>` , used for anonymous images
 * `name-canonical=true`: add additional canonical name `name@<digest>`
 * `compression=[uncompressed,gzip]`: choose compression type for layer, gzip is default value
-
+* `metadata-file=[value]`: export image metadata to a json file
 
 If credentials are required, `buildctl` will attempt to read Docker configuration file `$DOCKER_CONFIG/config.json`.
 `$DOCKER_CONFIG` defaults to `~/.docker`.
