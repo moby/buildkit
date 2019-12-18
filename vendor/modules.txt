@@ -12,6 +12,7 @@ github.com/Microsoft/hcsshim/internal/hns
 github.com/Microsoft/hcsshim/internal/mergemaps
 github.com/Microsoft/hcsshim/internal/schema1
 github.com/Microsoft/hcsshim/internal/wclayer
+github.com/Microsoft/hcsshim/osversion
 github.com/Microsoft/hcsshim/internal/guestrequest
 github.com/Microsoft/hcsshim/internal/interop
 github.com/Microsoft/hcsshim/internal/logfields
@@ -25,7 +26,7 @@ github.com/apache/thrift/lib/go/thrift
 github.com/codahale/hdrhistogram
 # github.com/containerd/console v0.0.0-20181022165439-0650fd9eeb50
 github.com/containerd/console
-# github.com/containerd/containerd v1.4.0-0.20191014053712-acdcf13d5eaf
+# github.com/containerd/containerd v1.3.1-0.20191217142032-9b5581cc9c5b => github.com/containerd/containerd v1.4.0-0.20191014053712-acdcf13d5eaf
 github.com/containerd/containerd/content
 github.com/containerd/containerd/diff
 github.com/containerd/containerd/errdefs
@@ -89,15 +90,15 @@ github.com/containerd/containerd/reference/docker
 github.com/containerd/containerd/identifiers
 github.com/containerd/containerd/metadata/boltutil
 github.com/containerd/containerd/events/exchange
-# github.com/containerd/continuity v0.0.0-20200107194136-26c1120b8d41
+# github.com/containerd/continuity v0.0.0-20190827140505-75bee3e2ccb6
 github.com/containerd/continuity/sysx
 github.com/containerd/continuity/fs
 github.com/containerd/continuity/syscallx
 github.com/containerd/continuity/fs/fstest
-github.com/containerd/continuity/pathdriver
 github.com/containerd/continuity
 github.com/containerd/continuity/devices
 github.com/containerd/continuity/driver
+github.com/containerd/continuity/pathdriver
 github.com/containerd/continuity/proto
 # github.com/containerd/fifo v0.0.0-20190816180239-bda0ff6ed73c
 github.com/containerd/fifo
@@ -129,7 +130,7 @@ github.com/docker/cli/cli/config/types
 # github.com/docker/distribution v2.7.1-0.20190205005809-0d3efadf0154+incompatible
 github.com/docker/distribution/reference
 github.com/docker/distribution/digestset
-# github.com/docker/docker v1.14.0-0.20190319215453-e7b5f7dbe98c
+# github.com/docker/docker v1.4.2-0.20190930041903-8498ee7514cf
 github.com/docker/docker/pkg/idtools
 github.com/docker/docker/pkg/locker
 github.com/docker/docker/pkg/reexec
