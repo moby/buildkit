@@ -1,5 +1,3 @@
-// +build linux openbsd
-
 /*
    Copyright The containerd Authors.
 

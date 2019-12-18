@@ -10,8 +10,8 @@ require (
 	github.com/codahale/hdrhistogram v0.0.0-20160425231609-f8ad88b59a58 // indirect
 	github.com/containerd/cgroups v0.0.0-20190717030353-c4b9ac5c7601 // indirect
 	github.com/containerd/console v0.0.0-20181022165439-0650fd9eeb50
-	github.com/containerd/containerd v1.4.0-0.20191014053712-acdcf13d5eaf
-	github.com/containerd/continuity v0.0.0-20200107194136-26c1120b8d41
+	github.com/containerd/containerd v1.3.1-0.20191217142032-9b5581cc9c5b
+	github.com/containerd/continuity v0.0.0-20190827140505-75bee3e2ccb6
 	github.com/containerd/fifo v0.0.0-20190816180239-bda0ff6ed73c // indirect
 	github.com/containerd/go-cni v0.0.0-20190813230227-49fbd9b210f3
 	github.com/containerd/go-runc v0.0.0-20190911050354-e029b79d8cda
@@ -22,7 +22,7 @@ require (
 	github.com/coreos/go-systemd/v22 v22.0.0
 	github.com/docker/cli v0.0.0-20190321234815-f40f9c240ab0
 	github.com/docker/distribution v2.7.1-0.20190205005809-0d3efadf0154+incompatible
-	github.com/docker/docker v1.14.0-0.20190319215453-e7b5f7dbe98c
+	github.com/docker/docker v1.4.2-0.20190930041903-8498ee7514cf
 	github.com/docker/docker-credential-helpers v0.6.0 // indirect
 	github.com/docker/go-connections v0.3.0
 	github.com/docker/go-events v0.0.0-20170721190031-9461782956ad // indirect
@@ -79,3 +79,5 @@ require (
 replace github.com/hashicorp/go-immutable-radix => github.com/tonistiigi/go-immutable-radix v0.0.0-20170803185627-826af9ccf0fe
 
 replace github.com/jaguilar/vt100 => github.com/tonistiigi/vt100 v0.0.0-20190402012908-ad4c4a574305
+
+replace github.com/containerd/containerd => github.com/containerd/containerd v1.4.0-0.20191014053712-acdcf13d5eaf
