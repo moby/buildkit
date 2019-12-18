@@ -105,14 +105,14 @@ func (c *grpcClient) Run(ctx context.Context, f client.BuildFunc) (retError erro
 					Metadata: res.Metadata,
 				}
 				if res.Refs != nil {
-					m := map[string]string{}
+					m := map[string]*pb.Ref{}
 					for k, r := range res.Refs {
 						id, err := convertRef(r)
 						if err != nil {
 							retError = err
 							continue
 						}
-						m[k] = id
+						m[k] = pb.NewRef(id)
 					}
 					pbRes.Result = &pb.Result_Refs{Refs: &pb.RefMap{Refs: m}}
 				} else {
@@ -120,7 +120,7 @@ func (c *grpcClient) Run(ctx context.Context, f client.BuildFunc) (retError erro
 					if err != nil {
 						retError = err
 					} else {
-						pbRes.Result = &pb.Result_Ref{Ref: id}
+						pbRes.Result = &pb.Result_Ref{Ref: pb.NewRef(id)}
 					}
 				}
 				if retError == nil {
@@ -280,10 +280,11 @@ func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (*clie
 	}
 
 	req := &pb.SolveRequest{
-		Definition:        creq.Definition,
-		Frontend:          creq.Frontend,
-		FrontendOpt:       creq.FrontendOpt,
-		AllowResultReturn: true,
+		Definition:          creq.Definition,
+		Frontend:            creq.Frontend,
+		FrontendOpt:         creq.FrontendOpt,
+		AllowResultReturn:   true,
+		AllowResultArrayRef: true,
 		// old API
 		ImportCacheRefsDeprecated: legacyRegistryCacheImports,
 		// new API
@@ -310,15 +311,34 @@ func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (*clie
 	} else {
 		res.Metadata = resp.Result.Metadata
 		switch pbRes := resp.Result.Result.(type) {
-		case *pb.Result_Ref:
-			if id := pbRes.Ref; id != "" {
+		case *pb.Result_RefDeprecated:
+			if id := pbRes.RefDeprecated; id != "" {
 				res.SetRef(&reference{id: id, c: c})
 			}
-		case *pb.Result_Refs:
-			for k, v := range pbRes.Refs.Refs {
+		case *pb.Result_RefsDeprecated:
+			for k, v := range pbRes.RefsDeprecated.Refs {
 				ref := &reference{id: v, c: c}
 				if v == "" {
 					ref = nil
+				}
+				res.AddRef(k, ref)
+			}
+		case *pb.Result_Ref:
+			ids := pbRes.Ref.Ids
+			if len(ids) > 0 {
+				if len(ids) > 1 {
+					return nil, errors.Errorf("solve returned multi-result array")
+				}
+				res.SetRef(&reference{id: ids[0], c: c})
+			}
+		case *pb.Result_Refs:
+			for k, v := range pbRes.Refs.Refs {
+				var ref *reference
+				if len(v.Ids) > 0 {
+					if len(v.Ids) > 1 {
+						return nil, errors.Errorf("solve returned multi-result array")
+					}
+					ref = &reference{id: v.Ids[0], c: c}
 				}
 				res.AddRef(k, ref)
 			}
