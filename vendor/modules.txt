@@ -1,11 +1,10 @@
 # github.com/BurntSushi/toml v0.3.1
 github.com/BurntSushi/toml
-# github.com/Microsoft/go-winio v0.4.14
+# github.com/Microsoft/go-winio v0.4.15-0.20190919025122-fc70bd9a86b5
 github.com/Microsoft/go-winio
 github.com/Microsoft/go-winio/pkg/guid
-# github.com/Microsoft/hcsshim v0.8.5
+# github.com/Microsoft/hcsshim v0.8.7
 github.com/Microsoft/hcsshim
-github.com/Microsoft/hcsshim/internal/guid
 github.com/Microsoft/hcsshim/internal/hcs
 github.com/Microsoft/hcsshim/internal/hcserror
 github.com/Microsoft/hcsshim/internal/hns
@@ -13,20 +12,25 @@ github.com/Microsoft/hcsshim/internal/mergemaps
 github.com/Microsoft/hcsshim/internal/schema1
 github.com/Microsoft/hcsshim/internal/wclayer
 github.com/Microsoft/hcsshim/osversion
-github.com/Microsoft/hcsshim/internal/guestrequest
+github.com/Microsoft/hcsshim/internal/cow
 github.com/Microsoft/hcsshim/internal/interop
+github.com/Microsoft/hcsshim/internal/log
 github.com/Microsoft/hcsshim/internal/logfields
-github.com/Microsoft/hcsshim/internal/timeout
+github.com/Microsoft/hcsshim/internal/oc
 github.com/Microsoft/hcsshim/internal/schema2
+github.com/Microsoft/hcsshim/internal/timeout
+github.com/Microsoft/hcsshim/internal/vmcompute
 github.com/Microsoft/hcsshim/internal/longpath
 github.com/Microsoft/hcsshim/internal/safefile
 # github.com/apache/thrift v0.0.0-20161221203622-b2a4d4ae21c7
 github.com/apache/thrift/lib/go/thrift
 # github.com/codahale/hdrhistogram v0.0.0-20160425231609-f8ad88b59a58
 github.com/codahale/hdrhistogram
+# github.com/containerd/cgroups v0.0.0-20190919134610-bf292b21730f
+github.com/containerd/cgroups/stats/v1
 # github.com/containerd/console v0.0.0-20181022165439-0650fd9eeb50
 github.com/containerd/console
-# github.com/containerd/containerd v1.3.1-0.20191217142032-9b5581cc9c5b => github.com/containerd/containerd v1.4.0-0.20191014053712-acdcf13d5eaf
+# github.com/containerd/containerd v1.4.0-0.20191014053712-acdcf13d5eaf => github.com/containerd/containerd v1.3.1-0.20191217142032-9b5581cc9c5b
 github.com/containerd/containerd/content
 github.com/containerd/containerd/diff
 github.com/containerd/containerd/errdefs
@@ -86,8 +90,8 @@ github.com/containerd/containerd/runtime/linux/runctypes
 github.com/containerd/containerd/runtime/v2/runc/options
 github.com/containerd/containerd/snapshots/proxy
 github.com/containerd/containerd/snapshots/storage
-github.com/containerd/containerd/reference/docker
 github.com/containerd/containerd/identifiers
+github.com/containerd/containerd/reference/docker
 github.com/containerd/containerd/metadata/boltutil
 github.com/containerd/containerd/events/exchange
 # github.com/containerd/continuity v0.0.0-20190827140505-75bee3e2ccb6
@@ -130,7 +134,7 @@ github.com/docker/cli/cli/config/types
 # github.com/docker/distribution v2.7.1-0.20190205005809-0d3efadf0154+incompatible
 github.com/docker/distribution/reference
 github.com/docker/distribution/digestset
-# github.com/docker/docker v1.4.2-0.20190930041903-8498ee7514cf
+# github.com/docker/docker v1.14.0-0.20190319215453-e7b5f7dbe98c => github.com/docker/docker v1.4.2-0.20191210192822-1347481b9eb5
 github.com/docker/docker/pkg/idtools
 github.com/docker/docker/pkg/locker
 github.com/docker/docker/pkg/reexec
@@ -157,7 +161,7 @@ github.com/docker/go-connections/sockets
 github.com/docker/go-connections/nat
 # github.com/docker/go-events v0.0.0-20170721190031-9461782956ad
 github.com/docker/go-events
-# github.com/docker/go-units v0.3.1
+# github.com/docker/go-units v0.4.0
 github.com/docker/go-units
 # github.com/docker/libnetwork v0.8.0-dev.2.0.20190604151032-3c26b4e7495e
 github.com/docker/libnetwork/resolvconf
@@ -167,13 +171,13 @@ github.com/docker/libnetwork/resolvconf/dns
 github.com/gofrs/flock
 # github.com/gogo/googleapis v1.1.0
 github.com/gogo/googleapis/google/rpc
-# github.com/gogo/protobuf v1.2.0
+# github.com/gogo/protobuf v1.2.1
 github.com/gogo/protobuf/gogoproto
 github.com/gogo/protobuf/proto
 github.com/gogo/protobuf/types
 github.com/gogo/protobuf/sortkeys
 github.com/gogo/protobuf/protoc-gen-gogo/descriptor
-# github.com/golang/protobuf v1.2.0
+# github.com/golang/protobuf v1.3.1
 github.com/golang/protobuf/ptypes/timestamp
 github.com/golang/protobuf/proto
 github.com/golang/protobuf/ptypes
@@ -191,7 +195,7 @@ github.com/google/shlex
 github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc
 # github.com/hashicorp/go-immutable-radix v1.0.0 => github.com/tonistiigi/go-immutable-radix v0.0.0-20170803185627-826af9ccf0fe
 github.com/hashicorp/go-immutable-radix
-# github.com/hashicorp/golang-lru v0.0.0-20160207214719-a0d98a5f2880
+# github.com/hashicorp/golang-lru v0.5.1
 github.com/hashicorp/golang-lru/simplelru
 # github.com/ishidawataru/sctp v0.0.0-20180213033435-07191f837fed
 github.com/ishidawataru/sctp
@@ -212,7 +216,7 @@ github.com/opencontainers/image-spec/specs-go
 # github.com/opencontainers/runc v1.0.0-rc8.0.20190621203724-f4982d86f7fd
 github.com/opencontainers/runc/libcontainer/system
 github.com/opencontainers/runc/libcontainer/user
-# github.com/opencontainers/runtime-spec v0.0.0-20180909173843-eba862dc2470
+# github.com/opencontainers/runtime-spec v0.1.2-0.20190507144316-5b71a03e2700
 github.com/opencontainers/runtime-spec/specs-go
 # github.com/opentracing-contrib/go-stdlib v0.0.0-20171029140428-b1a47cfbdd75
 github.com/opentracing-contrib/go-stdlib/nethttp
@@ -257,6 +261,12 @@ github.com/uber/jaeger-lib/metrics
 github.com/urfave/cli
 # go.etcd.io/bbolt v1.3.3
 go.etcd.io/bbolt
+# go.opencensus.io v0.22.0
+go.opencensus.io/trace
+go.opencensus.io/internal
+go.opencensus.io/trace/internal
+go.opencensus.io/trace/tracestate
+go.opencensus.io
 # golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2
 golang.org/x/crypto/ssh
 golang.org/x/crypto/ssh/agent
@@ -267,9 +277,9 @@ golang.org/x/crypto/poly1305
 golang.org/x/crypto/ed25519/internal/edwards25519
 golang.org/x/crypto/internal/subtle
 # golang.org/x/net v0.0.0-20190522155817-f3200d17e092
-golang.org/x/net/context
 golang.org/x/net/trace
 golang.org/x/net/http2
+golang.org/x/net/context
 golang.org/x/net/context/ctxhttp
 golang.org/x/net/proxy
 golang.org/x/net/internal/timeseries
@@ -280,18 +290,18 @@ golang.org/x/net/internal/socks
 # golang.org/x/sync v0.0.0-20190423024810-112230192c58
 golang.org/x/sync/errgroup
 golang.org/x/sync/semaphore
-# golang.org/x/sys v0.0.0-20190812073006-9eafafc0a87e
+# golang.org/x/sys v0.0.0-20191219235734-af0d71d358ab
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 golang.org/x/sys/cpu
-# golang.org/x/text v0.3.0
+# golang.org/x/text v0.3.2
 golang.org/x/text/secure/bidirule
 golang.org/x/text/unicode/bidi
 golang.org/x/text/unicode/norm
 golang.org/x/text/transform
 # golang.org/x/time v0.0.0-20161028155119-f51c12702a4d
 golang.org/x/time/rate
-# google.golang.org/genproto v0.0.0-20180817151627-c66870c02cf8
+# google.golang.org/genproto v0.0.0-20190425155659-357c62f0e4bb
 google.golang.org/genproto/googleapis/rpc/status
 # google.golang.org/grpc v1.23.0
 google.golang.org/grpc
