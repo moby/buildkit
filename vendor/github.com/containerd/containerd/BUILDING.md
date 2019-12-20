@@ -138,7 +138,7 @@ You can build an image from this `Dockerfile`:
 FROM golang
 
 RUN apt-get update && \
-    apt-get install -y btrfs-tools libseccomp-dev
+    apt-get install -y libbtrfs-dev libseccomp-dev
 ```
 
 Let's suppose that you built an image called `containerd/build`. From the
@@ -160,7 +160,7 @@ You are now ready to [build](#build-containerd):
 ```
 
 ## Build containerd and runc
-To have complete core container runtime, you will both `containerd` and `runc`. It is possible to build both of these via Docker container.
+To have complete core container runtime, you will need both `containerd` and `runc`. It is possible to build both of these via Docker container.
 
 You can use `go` to checkout `runc` in your `GOPATH`:
 
@@ -174,7 +174,7 @@ We can build an image from this `Dockerfile`:
 FROM golang
 
 RUN apt-get update && \
-    apt-get install -y btrfs-tools libseccomp-dev
+    apt-get install -y libbtrfs-dev libseccomp-dev
 
 ```
 
