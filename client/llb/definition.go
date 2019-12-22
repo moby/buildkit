@@ -14,7 +14,8 @@ import (
 type DefinitionOp struct {
 	MarshalCache
 	ops       map[digest.Digest]*pb.Op
-	metadata  map[digest.Digest]pb.OpMetadata
+	defs      map[digest.Digest][]byte
+	metas     map[digest.Digest]pb.OpMetadata
 	platforms map[digest.Digest]*specs.Platform
 	dgst      digest.Digest
 	index     pb.OutputIndex
@@ -23,6 +24,7 @@ type DefinitionOp struct {
 // NewDefinitionOp returns a new operation from a marshalled definition.
 func NewDefinitionOp(def *pb.Definition) (*DefinitionOp, error) {
 	ops := make(map[digest.Digest]*pb.Op)
+	defs := make(map[digest.Digest][]byte)
 
 	var dgst digest.Digest
 
@@ -33,6 +35,7 @@ func NewDefinitionOp(def *pb.Definition) (*DefinitionOp, error) {
 		}
 		dgst = digest.FromBytes(dt)
 		ops[dgst] = &op
+		defs[dgst] = dt
 	}
 
 	if dgst != "" {
@@ -41,7 +44,8 @@ func NewDefinitionOp(def *pb.Definition) (*DefinitionOp, error) {
 
 	return &DefinitionOp{
 		ops:       ops,
-		metadata:  def.Metadata,
+		defs:      defs,
+		metas:     def.Metadata,
 		platforms: make(map[digest.Digest]*specs.Platform),
 		dgst:      dgst,
 	}, nil
@@ -56,13 +60,13 @@ func (d *DefinitionOp) Vertex() Vertex {
 }
 
 func (d *DefinitionOp) Validate() error {
-	// Scratch state has no digest, ops or metadata.
+	// Scratch state has no digest, ops or metas.
 	if d.dgst == "" {
 		return nil
 	}
 
-	if len(d.ops) == 0 || len(d.metadata) == 0 {
-		return errors.Errorf("invalid definition op with no ops %d %d", len(d.ops), len(d.metadata))
+	if len(d.ops) == 0 || len(d.defs) == 0 || len(d.metas) == 0 {
+		return errors.Errorf("invalid definition op with no ops %d %d", len(d.ops), len(d.metas))
 	}
 
 	_, ok := d.ops[d.dgst]
@@ -70,9 +74,14 @@ func (d *DefinitionOp) Validate() error {
 		return errors.Errorf("invalid definition op with unknown op %q", d.dgst)
 	}
 
-	_, ok = d.metadata[d.dgst]
+	_, ok = d.defs[d.dgst]
 	if !ok {
-		return errors.Errorf("invalid definition op with unknown metadata %q", d.dgst)
+		return errors.Errorf("invalid definition op with unknown def %q", d.dgst)
+	}
+
+	_, ok = d.metas[d.dgst]
+	if !ok {
+		return errors.Errorf("invalid definition op with unknown metas %q", d.dgst)
 	}
 
 	// It is possible for d.index >= len(d.ops[d.dgst]) when depending on scratch
@@ -88,38 +97,14 @@ func (d *DefinitionOp) Marshal(c *Constraints) (digest.Digest, []byte, *pb.OpMet
 	if d.dgst == "" {
 		return "", nil, nil, errors.Errorf("cannot marshal empty definition op")
 	}
-	if d.Cached(c) {
-		return d.Load()
-	}
+
 	if err := d.Validate(); err != nil {
 		return "", nil, nil, err
 	}
 
-	op := d.ops[d.dgst]
-	override := Constraints{
-		Platform:          d.platform(),
-		WorkerConstraints: op.Constraints.Filter,
-		Metadata:          d.metadata[d.dgst],
-	}
+	meta := d.metas[d.dgst]
+	return d.dgst, d.defs[d.dgst], &meta, nil
 
-	pop, md := MarshalConstraints(c, &override)
-
-	pop.Op = op.Op
-	pop.Inputs = op.Inputs
-
-	switch op := op.Op.(type) {
-	case *pb.Op_Source:
-		if !platformSpecificSource(op.Source.Identifier) {
-			pop.Platform = nil
-		}
-	}
-
-	dt, err := pop.Marshal()
-	if err != nil {
-		return "", nil, nil, err
-	}
-	d.Store(dt, md, c)
-	return d.Load()
 }
 
 func (d *DefinitionOp) Output() Output {
@@ -142,11 +127,11 @@ func (d *DefinitionOp) Inputs() []Output {
 	op := d.ops[d.dgst]
 	for _, input := range op.Inputs {
 		vtx := &DefinitionOp{
-			ops:       d.ops,
-			metadata:  d.metadata,
-			platforms: d.platforms,
-			dgst:      input.Digest,
-			index:     input.Index,
+			ops:   d.ops,
+			defs:  d.defs,
+			metas: d.metas,
+			dgst:  input.Digest,
+			index: input.Index,
 		}
 		inputs = append(inputs, &output{vertex: vtx, platform: d.platform(), getIndex: func() (pb.OutputIndex, error) {
 			return pb.OutputIndex(vtx.index), nil
