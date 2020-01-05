@@ -193,7 +193,12 @@ func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root c
 				cancel()
 			}
 			if status.ExitCode() != 0 {
-				err := errors.Errorf("process returned non-zero exit code: %d", status.ExitCode())
+				var err error
+				if status.ExitCode() == containerd.UnknownExitStatus && status.Error() != nil {
+					err = errors.Wrap(status.Error(), "failure waiting for process")
+				} else {
+					err = errors.Errorf("process returned non-zero exit code: %d", status.ExitCode())
+				}
 				select {
 				case <-ctx.Done():
 					err = errors.Wrap(ctx.Err(), err.Error())
