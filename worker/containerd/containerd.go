@@ -74,7 +74,7 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 		return base.WorkerOpt{}, errors.Wrap(err, "failed to list runtime plugin")
 	}
 	if len(resp.Plugins) == 0 {
-		return base.WorkerOpt{}, errors.Wrap(err, "failed to get runtime plugin")
+		return base.WorkerOpt{}, errors.New("failed to find any runtime plugins")
 	}
 
 	var platforms []specs.Platform
