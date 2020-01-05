@@ -495,7 +495,7 @@ func getListener(addr string, uid, gid int, tlsConfig *tls.Config) (net.Listener
 	proto := addrSlice[0]
 	listenAddr := addrSlice[1]
 	switch proto {
-	case "unix":
+	case "unix", "npipe":
 		if tlsConfig != nil {
 			logrus.Warnf("TLS is disabled for %s", addr)
 		}
@@ -506,7 +506,6 @@ func getListener(addr string, uid, gid int, tlsConfig *tls.Config) (net.Listener
 		}
 		return sockets.NewTCPSocket(listenAddr, tlsConfig)
 	default:
-		// TODO: support npipe (with TLS?)
 		return nil, errors.Errorf("addr %s not supported", addr)
 	}
 }
