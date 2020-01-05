@@ -47,6 +47,16 @@ func (lm *localMounter) Mount() (string, error) {
 		lm.release = release
 	}
 
+	// Windows mounts don't use the target parameter of mount.All, they activate in-place.
+	if len(lm.mounts) == 1 && lm.mounts[0].Type == "windows-layer" {
+		// TODO: How to handle read-only? A local copy would be awfully inefficient.
+		if err := mount.All(lm.mounts, ""); err != nil {
+			return "", errors.Wrapf(err, "failed to mount in-place: %+v", lm.mounts)
+		}
+		lm.target = lm.mounts[0].Source
+		return lm.mounts[0].Source, nil
+	}
+
 	if len(lm.mounts) == 1 && (lm.mounts[0].Type == "bind" || lm.mounts[0].Type == "rbind") {
 		ro := false
 		for _, opt := range lm.mounts[0].Options {

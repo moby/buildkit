@@ -1,8 +1,6 @@
 package snapshot
 
 import (
-	"os"
-
 	"github.com/containerd/containerd/mount"
 )
 
@@ -14,7 +12,6 @@ func (lm *localMounter) Unmount() error {
 		if err := mount.Unmount(lm.target, 0); err != nil {
 			return err
 		}
-		os.RemoveAll(lm.target)
 		lm.target = ""
 	}
 
