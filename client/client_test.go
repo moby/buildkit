@@ -132,7 +132,7 @@ func TestIntegration(t *testing.T) {
 }
 
 func newContainerd(cdAddress string) (*containerd.Client, error) {
-	return containerd.New(cdAddress, containerd.WithTimeout(60*time.Second), containerd.WithDefaultRuntime("io.containerd.runtime.v1.linux"))
+	return containerd.New(cdAddress, containerd.WithTimeout(60*time.Second))
 }
 
 func testBridgeNetworking(t *testing.T, sb integration.Sandbox) {
