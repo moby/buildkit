@@ -205,7 +205,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		res = &SolveResponse{
 			ExporterResponse: resp.ExporterResponse,
 		}
-		return nil
+		return writeMetaDataFile(ex, resp.ExporterResponse)
 	})
 
 	if runGateway != nil {
@@ -474,4 +474,34 @@ func parseCacheOptions(opt SolveOpt) (*cacheOptions, error) {
 		frontendAttrs:   frontendAttrs,
 	}
 	return &res, nil
+}
+
+func writeMetaDataFile(ex ExportEntry, exporterResponse map[string]string) error {
+	if ex.Type == ExporterOCI || ex.Type == ExporterImage {
+		if resultJsonFile, ok := ex.Attrs["metadata-file"]; ok {
+			dir := filepath.Dir(resultJsonFile)
+			if _, err := os.Stat(dir); os.IsNotExist(err) {
+				err = os.MkdirAll(dir, os.ModePerm)
+				if err != nil {
+					return err
+				}
+			}
+			j, err := json.Marshal(exporterResponse)
+			if err != nil {
+				return err
+			}
+			file, err := os.Create(resultJsonFile)
+			if err != nil {
+				return err
+			}
+			defer file.Close()
+
+			_, err = io.WriteString(file, string(j))
+			if err != nil {
+				return err
+			}
+			return file.Sync()
+		}
+	}
+	return nil
 }
