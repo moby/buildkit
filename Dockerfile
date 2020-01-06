@@ -144,6 +144,7 @@ RUN --mount=from=containerd-src,src=/usr/src/containerd,readwrite --mount=target
   && git checkout -q "$CONTAINERD_VERSION" \
   && make bin/containerd \
   && make bin/containerd-shim \
+  && make bin/containerd-shim-runc-v2 \
   && make bin/ctr \
   && mv bin /out
 
