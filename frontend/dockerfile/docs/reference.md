@@ -559,15 +559,15 @@ the first pattern, followed by one or more `!` exception patterns.
 
 ## FROM
 
-    FROM <image> [AS <name>]
+    FROM [--platform=<platform>] <image> [AS <name>]
 
 Or
 
-    FROM <image>[:<tag>] [AS <name>]
+    FROM [--platform=<platform>] <image>[:<tag>] [AS <name>]
 
 Or
 
-    FROM <image>[@<digest>] [AS <name>]
+    FROM [--platform=<platform>] <image>[@<digest>] [AS <name>]
 
 The `FROM` instruction initializes a new build stage and sets the
 [*Base Image*](../../glossary/#base-image) for subsequent instructions. As such, a
@@ -577,20 +577,25 @@ the [*Public Repositories*](https://docs.docker.com/engine/tutorials/dockerrepos
 
 - `ARG` is the only instruction that may precede `FROM` in the `Dockerfile`.
   See [Understand how ARG and FROM interact](#understand-how-arg-and-from-interact).
-
 - `FROM` can appear multiple times within a single `Dockerfile` to
   create multiple images or use one build stage as a dependency for another.
   Simply make a note of the last image ID output by the commit before each new
   `FROM` instruction. Each `FROM` instruction clears any state created by previous
   instructions.
-
 - Optionally a name can be given to a new build stage by adding `AS name` to the
   `FROM` instruction. The name can be used in subsequent `FROM` and
   `COPY --from=<name|index>` instructions to refer to the image built in this stage.
-
 - The `tag` or `digest` values are optional. If you omit either of them, the
   builder assumes a `latest` tag by default. The builder returns an error if it
   cannot find the `tag` value.
+
+The optional `--platform` flag can be used to specify the platform of the image
+in case `FROM` references a multi-platform image. For example, `linux/amd64`,
+`linux/arm64`, or `windows/amd64`. By default, the target platform of the build
+request is used. Global build arguments can be used in the value of this flag,
+for example [automatic platform ARGs](#automatic-platform-args-in-the-global-scope)
+allow you to force a stage to native build platform (`--platform=$BUILDPLATFORM`),
+and use it to cross-compile to the target platform inside the stage.
 
 ### Understand how ARG and FROM interact
 
