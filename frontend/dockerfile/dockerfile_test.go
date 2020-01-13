@@ -31,6 +31,7 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend/dockerfile/builder"
 	"github.com/moby/buildkit/frontend/dockerfile/dockerfile2llb"
+	gateway "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/upload/uploadprovider"
@@ -93,6 +94,7 @@ var allTests = []integration.Test{
 	testEnvEmptyFormatting,
 	testCacheMultiPlatformImportExport,
 	testOnBuildCleared,
+	testFrontendUseForwardedSolveResults,
 }
 
 var fileOpTests = []integration.Test{
@@ -4398,6 +4400,72 @@ COPY foo bar
 	dt, err := ioutil.ReadFile(filepath.Join(destDir, "bar"))
 	require.NoError(t, err)
 	require.Equal(t, string(dt), "contents")
+}
+
+func testFrontendUseForwardedSolveResults(t *testing.T, sb integration.Sandbox) {
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	dockerfile := []byte(`
+FROM scratch
+COPY foo foo2
+`)
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("foo", []byte("data"), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		res, err := c.Solve(ctx, gateway.SolveRequest{
+			Frontend: "dockerfile.v0",
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		ref, err := res.SingleRef()
+		if err != nil {
+			return nil, err
+		}
+
+		st := llb.Scratch().File(
+			llb.Copy(llb.NewState(ref), "foo2", "foo3"),
+		)
+
+		def, err := st.Marshal()
+		if err != nil {
+			return nil, err
+		}
+
+		return c.Solve(ctx, gateway.SolveRequest{
+			Definition: def.ToPB(),
+		})
+	}
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = c.Build(context.TODO(), client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, "", frontend, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "foo3"))
+	require.NoError(t, err)
+	require.Equal(t, dt, []byte("data"))
 }
 
 func tmpdir(appliers ...fstest.Applier) (string, error) {

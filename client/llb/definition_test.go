@@ -19,6 +19,7 @@ func TestDefinitionEquivalence(t *testing.T) {
 		{"git op", Git("remote", "ref")},
 		{"http op", HTTP("url")},
 		{"file op", Scratch().File(Mkdir("foo", 0600).Mkfile("foo/bar", 0600, []byte("data")).Copy(Scratch(), "src", "dst"))},
+		{"platform constraint", Image("ref", LinuxArm64)},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {

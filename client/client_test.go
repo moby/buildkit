@@ -28,7 +28,6 @@ import (
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/continuity/fs/fstest"
 	"github.com/moby/buildkit/client/llb"
-	"github.com/moby/buildkit/frontend/dockerfile/builder"
 	gateway "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
@@ -96,7 +95,6 @@ func TestIntegration(t *testing.T) {
 		testNetworkMode,
 		testFrontendMetadataReturn,
 		testFrontendUseSolveResults,
-		testFrontendUseForwardedSolveResults,
 		testSSHMount,
 		testStdinClosed,
 		testHostnameLookup,
@@ -1516,73 +1514,6 @@ func testFrontendUseSolveResults(t *testing.T, sb integration.Sandbox) {
 				Type:      ExporterLocal,
 				OutputDir: destDir,
 			},
-		},
-	}, "", frontend, nil)
-	require.NoError(t, err)
-
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "foo"))
-	require.NoError(t, err)
-	require.Equal(t, dt, []byte("data"))
-}
-
-func testFrontendUseForwardedSolveResults(t *testing.T, sb integration.Sandbox) {
-	requiresLinux(t)
-	c, err := New(context.TODO(), sb.Address())
-	require.NoError(t, err)
-	defer c.Close()
-
-	dockerfile := []byte(`
-FROM scratch
-COPY foo /
-`)
-	dir, err := tmpdir(
-		fstest.CreateFile("Dockerfile", dockerfile, 0600),
-		fstest.CreateFile("foo", []byte("data"), 0600),
-	)
-	require.NoError(t, err)
-	defer os.RemoveAll(dir)
-
-	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
-		res, err := c.Solve(ctx, gateway.SolveRequest{
-			Frontend: "dockerfile.v0",
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		ref, err := res.SingleRef()
-		if err != nil {
-			return nil, err
-		}
-
-		st := llb.Scratch().File(
-			llb.Copy(llb.NewState(ref), "foo", "foo"),
-		)
-
-		def, err := st.Marshal()
-		if err != nil {
-			return nil, err
-		}
-
-		return c.Solve(ctx, gateway.SolveRequest{
-			Definition: def.ToPB(),
-		})
-	}
-
-	destDir, err := ioutil.TempDir("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
-
-	_, err = c.Build(context.TODO(), SolveOpt{
-		Exports: []ExportEntry{
-			{
-				Type:      ExporterLocal,
-				OutputDir: destDir,
-			},
-		},
-		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
 		},
 	}, "", frontend, nil)
 	require.NoError(t, err)
