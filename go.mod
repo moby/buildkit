@@ -10,7 +10,7 @@ require (
 	github.com/containerd/cgroups v0.0.0-20190226200435-dbea6f2bd416 // indirect
 	github.com/containerd/console v0.0.0-20181022165439-0650fd9eeb50
 	github.com/containerd/containerd v1.3.0-0.20190507210959-7c1e88399ec0
-	github.com/containerd/continuity v0.0.0-20190827140505-75bee3e2ccb6
+	github.com/containerd/continuity v0.0.0-20200107194136-26c1120b8d41
 	github.com/containerd/fifo v0.0.0-20180307165137-3d5202aec260 // indirect
 	github.com/containerd/go-cni v0.0.0-20190610170741-5a4663dad645
 	github.com/containerd/go-runc v0.0.0-20190911050354-e029b79d8cda
@@ -51,7 +51,7 @@ require (
 	github.com/pkg/profile v1.2.1
 	github.com/serialx/hashring v0.0.0-20190422032157-8b2912629002
 	github.com/sirupsen/logrus v1.3.0
-	github.com/stretchr/testify v1.3.0
+	github.com/stretchr/testify v1.4.0
 	github.com/syndtr/gocapability v0.0.0-20180916011248-d98352740cb2 // indirect
 	github.com/tonistiigi/fsutil v0.0.0-20190819224149-3d2716dd0a4d
 	github.com/tonistiigi/units v0.0.0-20180711220420-6950e57a87ea
