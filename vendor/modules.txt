@@ -89,7 +89,7 @@ github.com/containerd/containerd/reference/docker
 github.com/containerd/containerd/identifiers
 github.com/containerd/containerd/metadata/boltutil
 github.com/containerd/containerd/events/exchange
-# github.com/containerd/continuity v0.0.0-20190827140505-75bee3e2ccb6
+# github.com/containerd/continuity v0.0.0-20200107194136-26c1120b8d41
 github.com/containerd/continuity/sysx
 github.com/containerd/continuity/fs
 github.com/containerd/continuity/syscallx
@@ -229,7 +229,7 @@ github.com/pmezard/go-difflib/difflib
 github.com/serialx/hashring
 # github.com/sirupsen/logrus v1.4.1
 github.com/sirupsen/logrus
-# github.com/stretchr/testify v1.3.0
+# github.com/stretchr/testify v1.4.0
 github.com/stretchr/testify/require
 github.com/stretchr/testify/assert
 # github.com/syndtr/gocapability v0.0.0-20180916011248-d98352740cb2
@@ -328,6 +328,8 @@ google.golang.org/grpc/credentials/internal
 google.golang.org/grpc/balancer/base
 google.golang.org/grpc/binarylog/grpc_binarylog_v1
 google.golang.org/grpc/internal/syscall
+# gopkg.in/yaml.v2 v2.2.2
+gopkg.in/yaml.v2
 # gotest.tools v2.2.0+incompatible
 gotest.tools/assert
 gotest.tools/assert/cmp

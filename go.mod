@@ -10,7 +10,7 @@ require (
 	github.com/containerd/cgroups v0.0.0-20190717030353-c4b9ac5c7601 // indirect
 	github.com/containerd/console v0.0.0-20181022165439-0650fd9eeb50
 	github.com/containerd/containerd v1.4.0-0.20191014053712-acdcf13d5eaf
-	github.com/containerd/continuity v0.0.0-20190827140505-75bee3e2ccb6
+	github.com/containerd/continuity v0.0.0-20200107194136-26c1120b8d41
 	github.com/containerd/fifo v0.0.0-20190816180239-bda0ff6ed73c // indirect
 	github.com/containerd/go-cni v0.0.0-20190813230227-49fbd9b210f3
 	github.com/containerd/go-runc v0.0.0-20190911050354-e029b79d8cda
@@ -54,7 +54,7 @@ require (
 	github.com/prometheus/procfs v0.0.3 // indirect
 	github.com/serialx/hashring v0.0.0-20190422032157-8b2912629002
 	github.com/sirupsen/logrus v1.4.1
-	github.com/stretchr/testify v1.3.0
+	github.com/stretchr/testify v1.4.0
 	github.com/syndtr/gocapability v0.0.0-20180916011248-d98352740cb2 // indirect
 	github.com/tonistiigi/fsutil v0.0.0-20191018213012-0f039a052ca1
 	github.com/tonistiigi/units v0.0.0-20180711220420-6950e57a87ea
