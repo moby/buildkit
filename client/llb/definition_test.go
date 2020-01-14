@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/containerd/containerd/platforms"
 	"github.com/stretchr/testify/require"
 )
 
@@ -49,6 +50,16 @@ func TestDefinitionEquivalence(t *testing.T) {
 			for dgst := range def.Metadata {
 				require.Equal(t, def.Metadata[dgst], def2.Metadata[dgst])
 			}
+
+			expectedPlatform := tc.state.GetPlatform()
+			actualPlatform := st2.GetPlatform()
+
+			if expectedPlatform == nil && actualPlatform != nil {
+				defaultPlatform := platforms.Normalize(platforms.DefaultSpec())
+				expectedPlatform = &defaultPlatform
+			}
+
+			require.Equal(t, expectedPlatform, actualPlatform)
 		})
 	}
 }

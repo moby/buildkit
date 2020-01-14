@@ -118,12 +118,19 @@ func (c *grpcClient) Run(ctx context.Context, f client.BuildFunc) (retError erro
 						}
 						pbRes.Result = &pb.Result_Refs{Refs: &pb.RefMap{Refs: m}}
 					} else {
+						// Server doesn't support the new wire format for refs, so we construct
+						// a deprecated result ref map.
 						m := map[string]string{}
 						for k, r := range res.Refs {
-							id, err := convertRef(r)
+							pbRef, err := convertRef(r)
 							if err != nil {
 								retError = err
 								continue
+							}
+
+							var id string
+							if len(pbRef.Ids) > 0 {
+								id = pbRef.Ids[0]
 							}
 							m[k] = id
 						}
@@ -137,6 +144,8 @@ func (c *grpcClient) Run(ctx context.Context, f client.BuildFunc) (retError erro
 						if c.caps.Supports(pb.CapProtoRefArray) == nil {
 							pbRes.Result = &pb.Result_Ref{Ref: pbRef}
 						} else {
+							// Server doesn't support the new wire format for refs, so we construct
+							// a deprecated result ref.
 							var id string
 							if len(pbRef.Ids) > 0 {
 								id = pbRef.Ids[0]
