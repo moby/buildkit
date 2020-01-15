@@ -105,22 +105,39 @@ func (c *grpcClient) Run(ctx context.Context, f client.BuildFunc) (retError erro
 					Metadata: res.Metadata,
 				}
 				if res.Refs != nil {
-					m := map[string]*pb.Ref{}
-					for k, r := range res.Refs {
-						id, err := convertRef(r)
-						if err != nil {
-							retError = err
-							continue
+					if c.caps.Supports(pb.CapProtoRefArray) == nil {
+						m := map[string]*pb.Ref{}
+						for k, r := range res.Refs {
+							id, err := convertRef(r)
+							if err != nil {
+								retError = err
+								continue
+							}
+							m[k] = pb.NewRef(id)
 						}
-						m[k] = pb.NewRef(id)
+						pbRes.Result = &pb.Result_Refs{Refs: &pb.RefMap{Refs: m}}
+					} else {
+						m := map[string]string{}
+						for k, r := range res.Refs {
+							id, err := convertRef(r)
+							if err != nil {
+								retError = err
+								continue
+							}
+							m[k] = id
+						}
+						pbRes.Result = &pb.Result_RefsDeprecated{RefsDeprecated: &pb.RefMapDeprecated{Refs: m}}
 					}
-					pbRes.Result = &pb.Result_Refs{Refs: &pb.RefMap{Refs: m}}
 				} else {
 					id, err := convertRef(res.Ref)
 					if err != nil {
 						retError = err
 					} else {
-						pbRes.Result = &pb.Result_Ref{Ref: pb.NewRef(id)}
+						if c.caps.Supports(pb.CapProtoRefArray) == nil {
+							pbRes.Result = &pb.Result_Ref{Ref: pb.NewRef(id)}
+						} else {
+							pbRes.Result = &pb.Result_RefDeprecated{RefDeprecated: id}
+						}
 					}
 				}
 				if retError == nil {
