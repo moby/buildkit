@@ -19,6 +19,11 @@ const (
 	CapReadDir                 apicaps.CapID = "readdir"
 	CapStatFile                apicaps.CapID = "statfile"
 	CapImportCaches            apicaps.CapID = "importcaches"
+
+	// CapProtoRefArray is a capability to return arrays of refs instead of single
+	// refs. This capability is only for the wire format change and shouldn't be
+	// used in frontends for feature detection.
+	CapProtoRefArray apicaps.CapID = "proto.refarray"
 )
 
 func init() {
@@ -89,6 +94,13 @@ func init() {
 	Caps.Init(apicaps.Cap{
 		ID:      CapImportCaches,
 		Name:    "import caches",
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapProtoRefArray,
+		Name:    "wire format ref arrays",
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})
