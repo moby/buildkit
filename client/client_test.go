@@ -1490,8 +1490,13 @@ func testFrontendUseSolveResults(t *testing.T, sb integration.Sandbox) {
 			return nil, err
 		}
 
+		st2, err := ref.ToState()
+		if err != nil {
+			return nil, err
+		}
+
 		st = llb.Scratch().File(
-			llb.Copy(llb.NewState(ref), "foo", "foo"),
+			llb.Copy(st2, "foo", "foo2"),
 		)
 
 		def, err = st.Marshal()
@@ -1518,7 +1523,7 @@ func testFrontendUseSolveResults(t *testing.T, sb integration.Sandbox) {
 	}, "", frontend, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "foo"))
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "foo2"))
 	require.NoError(t, err)
 	require.Equal(t, dt, []byte("data"))
 }

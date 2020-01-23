@@ -18,7 +18,7 @@ type Client interface {
 }
 
 type Reference interface {
-	llb.Output
+	ToState() (llb.State, error)
 	ReadFile(ctx context.Context, req ReadRequest) ([]byte, error)
 	StatFile(ctx context.Context, req StatRequest) (*fstypes.Stat, error)
 	ReadDir(ctx context.Context, req ReadDirRequest) ([]*fstypes.Stat, error)

@@ -411,13 +411,17 @@ func (c *grpcClient) BuildOpts() client.BuildOpts {
 }
 
 type reference struct {
-	llb.Output
-	c   *grpcClient
-	id  string
-	def *opspb.Definition
+	c      *grpcClient
+	id     string
+	def    *opspb.Definition
+	output llb.Output
 }
 
 func newReference(c *grpcClient, ref *pb.Ref) (*reference, error) {
+	if len(ref.Ids) == 0 {
+		return nil, errors.Errorf("reference has no ids")
+	}
+
 	if len(ref.Ids) > 1 {
 		return nil, errors.Errorf("cannot create multi-result array reference")
 	}
@@ -426,12 +430,25 @@ func newReference(c *grpcClient, ref *pb.Ref) (*reference, error) {
 		return nil, errors.Errorf("reference ids and definitions mismatch length")
 	}
 
-	dop, err := llb.NewDefinitionOp(ref.Defs[0])
+	return &reference{c: c, id: ref.Ids[0], def: ref.Defs[0]}, nil
+}
+
+func (r *reference) ToState() (st llb.State, err error) {
+	err = r.c.caps.Supports(pb.CapReferenceOutput)
 	if err != nil {
-		return nil, err
+		return st, err
 	}
 
-	return &reference{Output: dop, c: c, id: ref.Ids[0], def: ref.Defs[0]}, nil
+	if r.def == nil {
+		return st, errors.Errorf("gateway did not return reference with definition")
+	}
+
+	defop, err := llb.NewDefinitionOp(r.def)
+	if err != nil {
+		return st, err
+	}
+
+	return llb.NewState(defop), nil
 }
 
 func (r *reference) ReadFile(ctx context.Context, req client.ReadRequest) ([]byte, error) {

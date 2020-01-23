@@ -138,7 +138,7 @@ func (c *bridgeClient) discard(err error) {
 
 type ref struct {
 	solver.CachedResult
-	llb.Output
+	def *opspb.Definition
 }
 
 func newRef(r solver.CachedResult) (*ref, error) {
@@ -147,12 +147,15 @@ func newRef(r solver.CachedResult) (*ref, error) {
 		return nil, errors.Errorf("invalid ref: %T", r.Sys())
 	}
 
-	dop, err := llb.NewDefinitionOp(wref.Definition)
-	if err != nil {
-		return nil, err
-	}
+	return &ref{CachedResult: r, def: wref.Definition}, nil
+}
 
-	return &ref{CachedResult: r, Output: dop}, nil
+func (r *ref) ToState() (st llb.State, err error) {
+	defop, err := llb.NewDefinitionOp(r.def)
+	if err != nil {
+		return st, err
+	}
+	return llb.NewState(defop), nil
 }
 
 func (r *ref) ReadFile(ctx context.Context, req client.ReadRequest) ([]byte, error) {

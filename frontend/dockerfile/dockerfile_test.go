@@ -4431,8 +4431,13 @@ COPY foo foo2
 			return nil, err
 		}
 
+		st2, err := ref.ToState()
+		if err != nil {
+			return nil, err
+		}
+
 		st := llb.Scratch().File(
-			llb.Copy(llb.NewState(ref), "foo2", "foo3"),
+			llb.Copy(st2, "foo2", "foo3"),
 		)
 
 		def, err := st.Marshal()
