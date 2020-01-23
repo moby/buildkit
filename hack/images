@@ -31,8 +31,8 @@ imageDocker() {
 		exit 1
 	fi
 	set -x
-	docker build $progressFlag --platform=$PLATFORMS -t $REPO:$TAG .
-	docker build $progressFlag --platform=$PLATFORMS -t $REPO:$TAG-rootless --target rootless .
+	DOCKER_BUILDKIT=1 docker build $progressFlag --platform=$PLATFORMS -t $REPO:$TAG .
+	DOCKER_BUILDKIT=1 docker build $progressFlag --platform=$PLATFORMS -t $REPO:$TAG-rootless --target rootless .
 	set +x
 
 	if [ "$PUSH" = "push" ]; then
