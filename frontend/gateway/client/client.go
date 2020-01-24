@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 
+	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
 	digest "github.com/opencontainers/go-digest"
@@ -12,11 +13,12 @@ import (
 
 type Client interface {
 	Solve(ctx context.Context, req SolveRequest) (*Result, error)
-	ResolveImageConfig(ctx context.Context, ref string, opt ResolveImageConfigOpt) (digest.Digest, []byte, error)
+	ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt) (digest.Digest, []byte, error)
 	BuildOpts() BuildOpts
 }
 
 type Reference interface {
+	ToState() (llb.State, error)
 	ReadFile(ctx context.Context, req ReadRequest) ([]byte, error)
 	StatFile(ctx context.Context, req StatRequest) (*fstypes.Stat, error)
 	ReadDir(ctx context.Context, req ReadDirRequest) ([]*fstypes.Stat, error)
@@ -67,10 +69,4 @@ type BuildOpts struct {
 	Product   string
 	LLBCaps   apicaps.CapSet
 	Caps      apicaps.CapSet
-}
-
-type ResolveImageConfigOpt struct {
-	Platform    *specs.Platform
-	ResolveMode string
-	LogName     string
 }

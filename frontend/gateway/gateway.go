@@ -21,7 +21,6 @@ import (
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/frontend"
-	gw "github.com/moby/buildkit/frontend/gateway/client"
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
@@ -113,7 +112,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 			return nil, err
 		}
 
-		dgst, config, err := llbBridge.ResolveImageConfig(ctx, reference.TagNameOnly(sourceRef).String(), gw.ResolveImageConfigOpt{})
+		dgst, config, err := llbBridge.ResolveImageConfig(ctx, reference.TagNameOnly(sourceRef).String(), llb.ResolveImageConfigOpt{})
 		if err != nil {
 			return nil, err
 		}
@@ -405,7 +404,7 @@ func (lbf *llbBridgeForwarder) ResolveImageConfig(ctx context.Context, req *pb.R
 			OSFeatures:   p.OSFeatures,
 		}
 	}
-	dgst, dt, err := lbf.llbBridge.ResolveImageConfig(ctx, req.Ref, gw.ResolveImageConfigOpt{
+	dgst, dt, err := lbf.llbBridge.ResolveImageConfig(ctx, req.Ref, llb.ResolveImageConfigOpt{
 		Platform:    platform,
 		ResolveMode: req.ResolveMode,
 		LogName:     req.LogName,
@@ -466,6 +465,7 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 	lbf.mu.Lock()
 	if res.Refs != nil {
 		ids := make(map[string]string, len(res.Refs))
+		defs := make(map[string]*opspb.Definition, len(res.Refs))
 		for k, ref := range res.Refs {
 			id := identity.NewID()
 			if ref == nil {
@@ -474,28 +474,43 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 				lbf.refs[id] = ref
 			}
 			ids[k] = id
+
+			wref, ok := ref.Sys().(*worker.WorkerRef)
+			if !ok {
+				return nil, errors.Errorf("invalid ref: %T", ref.Sys())
+			}
+			defs[k] = wref.Definition
 		}
 
 		if req.AllowResultArrayRef {
 			refMap := make(map[string]*pb.Ref, len(res.Refs))
 			for k, id := range ids {
-				refMap[k] = pb.NewRef(id)
+				refMap[k] = pb.NewRef(id, defs[k])
 			}
 			pbRes.Result = &pb.Result_Refs{Refs: &pb.RefMap{Refs: refMap}}
 		} else {
 			pbRes.Result = &pb.Result_RefsDeprecated{RefsDeprecated: &pb.RefMapDeprecated{Refs: ids}}
 		}
 	} else {
+		ref := res.Ref
 		id := identity.NewID()
-		if res.Ref == nil {
+
+		var def *opspb.Definition
+		if ref == nil {
 			id = ""
 		} else {
-			lbf.refs[id] = res.Ref
+			wref, ok := ref.Sys().(*worker.WorkerRef)
+			if !ok {
+				return nil, errors.Errorf("invalid ref: %T", ref.Sys())
+			}
+			def = wref.Definition
+
+			lbf.refs[id] = ref
 		}
 		defaultID = id
 
 		if req.AllowResultArrayRef {
-			pbRes.Result = &pb.Result_Ref{Ref: pb.NewRef(id)}
+			pbRes.Result = &pb.Result_Ref{Ref: pb.NewRef(id, def)}
 		} else {
 			pbRes.Result = &pb.Result_RefDeprecated{RefDeprecated: id}
 		}

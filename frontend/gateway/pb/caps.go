@@ -24,6 +24,10 @@ const (
 	// refs. This capability is only for the wire format change and shouldn't be
 	// used in frontends for feature detection.
 	CapProtoRefArray apicaps.CapID = "proto.refarray"
+
+	// CapReferenceOutput is a capability to use a reference of a solved result as
+	// an llb.Output.
+	CapReferenceOutput apicaps.CapID = "reference.output"
 )
 
 func init() {
@@ -101,6 +105,13 @@ func init() {
 	Caps.Init(apicaps.Cap{
 		ID:      CapProtoRefArray,
 		Name:    "wire format ref arrays",
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapReferenceOutput,
+		Name:    "reference output",
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})

@@ -94,6 +94,7 @@ func TestIntegration(t *testing.T) {
 		testExtraHosts,
 		testNetworkMode,
 		testFrontendMetadataReturn,
+		testFrontendUseSolveResults,
 		testSSHMount,
 		testStdinClosed,
 		testHostnameLookup,
@@ -1459,6 +1460,72 @@ func testFrontendMetadataReturn(t *testing.T, sb integration.Sandbox) {
 	require.NotContains(t, res.ExporterResponse, "not-frontend.not-returned")
 	require.NotContains(t, res.ExporterResponse, "frontendnot.returned.either")
 	checkAllReleasable(t, c, sb, true)
+}
+
+func testFrontendUseSolveResults(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		st := llb.Scratch().File(
+			llb.Mkfile("foo", 0600, []byte("data")),
+		)
+
+		def, err := st.Marshal()
+		if err != nil {
+			return nil, err
+		}
+
+		res, err := c.Solve(ctx, gateway.SolveRequest{
+			Definition: def.ToPB(),
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		ref, err := res.SingleRef()
+		if err != nil {
+			return nil, err
+		}
+
+		st2, err := ref.ToState()
+		if err != nil {
+			return nil, err
+		}
+
+		st = llb.Scratch().File(
+			llb.Copy(st2, "foo", "foo2"),
+		)
+
+		def, err = st.Marshal()
+		if err != nil {
+			return nil, err
+		}
+
+		return c.Solve(ctx, gateway.SolveRequest{
+			Definition: def.ToPB(),
+		})
+	}
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = c.Build(context.TODO(), SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, "", frontend, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "foo2"))
+	require.NoError(t, err)
+	require.Equal(t, dt, []byte("data"))
 }
 
 func testExporterTargetExists(t *testing.T, sb integration.Sandbox) {

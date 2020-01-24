@@ -7,6 +7,7 @@ import (
 	"github.com/moby/buildkit/cache"
 	cacheutil "github.com/moby/buildkit/cache/util"
 	clienttypes "github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	gwpb "github.com/moby/buildkit/frontend/gateway/pb"
@@ -54,12 +55,18 @@ func (c *bridgeClient) Solve(ctx context.Context, req client.SolveRequest) (*cli
 	cRes := &client.Result{}
 	c.mu.Lock()
 	for k, r := range res.Refs {
-		rr := &ref{r}
+		rr, err := newRef(r)
+		if err != nil {
+			return nil, err
+		}
 		c.refs = append(c.refs, rr)
 		cRes.AddRef(k, rr)
 	}
 	if r := res.Ref; r != nil {
-		rr := &ref{r}
+		rr, err := newRef(r)
+		if err != nil {
+			return nil, err
+		}
 		c.refs = append(c.refs, rr)
 		cRes.SetRef(rr)
 	}
@@ -131,6 +138,24 @@ func (c *bridgeClient) discard(err error) {
 
 type ref struct {
 	solver.CachedResult
+	def *opspb.Definition
+}
+
+func newRef(r solver.CachedResult) (*ref, error) {
+	wref, ok := r.Sys().(*worker.WorkerRef)
+	if !ok {
+		return nil, errors.Errorf("invalid ref: %T", r.Sys())
+	}
+
+	return &ref{CachedResult: r, def: wref.Definition}, nil
+}
+
+func (r *ref) ToState() (st llb.State, err error) {
+	defop, err := llb.NewDefinitionOp(r.def)
+	if err != nil {
+		return st, err
+	}
+	return llb.NewState(defop), nil
 }
 
 func (r *ref) ReadFile(ctx context.Context, req client.ReadRequest) ([]byte, error) {
