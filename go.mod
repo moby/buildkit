@@ -9,7 +9,7 @@ require (
 	github.com/codahale/hdrhistogram v0.0.0-20160425231609-f8ad88b59a58 // indirect
 	github.com/containerd/cgroups v0.0.0-20190717030353-c4b9ac5c7601 // indirect
 	github.com/containerd/console v0.0.0-20181022165439-0650fd9eeb50
-	github.com/containerd/containerd v1.4.0-0.20191014053712-acdcf13d5eaf
+	github.com/containerd/containerd v1.4.0-0.20200125045834-5c72f92a5d92
 	github.com/containerd/continuity v0.0.0-20200107194136-26c1120b8d41
 	github.com/containerd/fifo v0.0.0-20190816180239-bda0ff6ed73c // indirect
 	github.com/containerd/go-cni v0.0.0-20190813230227-49fbd9b210f3
@@ -33,6 +33,7 @@ require (
 	github.com/golang/protobuf v1.2.0
 	github.com/google/go-cmp v0.3.0
 	github.com/google/shlex v0.0.0-20150127133951-6f45313302b9
+	github.com/google/uuid v1.1.1 // indirect
 	github.com/grpc-ecosystem/grpc-opentracing v0.0.0-20180507213350-8e809c8a8645
 	github.com/hashicorp/go-immutable-radix v1.0.0
 	github.com/hashicorp/golang-lru v0.0.0-20160207214719-a0d98a5f2880

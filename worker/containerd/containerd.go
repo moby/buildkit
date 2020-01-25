@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/containerd/containerd"
-	introspection "github.com/containerd/containerd/api/services/introspection/v1"
 	"github.com/containerd/containerd/gc"
 	"github.com/containerd/containerd/leases"
 	"github.com/moby/buildkit/cache"
@@ -69,7 +68,7 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 
 	cs := containerdsnapshot.NewContentStore(client.ContentStore(), ns)
 
-	resp, err := client.IntrospectionService().Plugins(context.TODO(), &introspection.PluginsRequest{Filters: []string{"type==io.containerd.runtime.v1"}})
+	resp, err := client.IntrospectionService().Plugins(context.TODO(), []string{"type==io.containerd.runtime.v1"})
 	if err != nil {
 		return base.WorkerOpt{}, errors.Wrap(err, "failed to list runtime plugin")
 	}
