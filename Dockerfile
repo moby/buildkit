@@ -220,7 +220,7 @@ RUN apt-get install -y --no-install-recommends uidmap sudo vim iptables \
   && chown -R user /run/user/1000 /home/user \
   && update-alternatives --set iptables /usr/sbin/iptables-legacy
 # musl is needed to directly use the registry binary that is built on alpine
-#ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.2=/opt/containerd-old/bin"
+ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.2=/opt/containerd-old/bin"
 COPY --from=rootlesskit /rootlesskit /usr/bin/
 COPY --from=containerd-old /out/containerd* /opt/containerd-old/bin/
 COPY --from=registry /bin/registry /usr/bin
