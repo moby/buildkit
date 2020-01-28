@@ -1,15 +1,16 @@
 # syntax = docker/dockerfile:1.1-experimental
 
-ARG RUNC_VERSION=v1.0.0-rc8
-ARG CONTAINERD_VERSION=v1.3.0
+ARG RUNC_VERSION=v1.0.0-rc10
+ARG CONTAINERD_VERSION=v1.3.2
 # containerd v1.2 for integration tests
-ARG CONTAINERD_OLD_VERSION=v1.2.10
+ARG CONTAINERD_OLD_VERSION=v1.2.11
 # available targets: buildkitd, buildkitd.oci_only, buildkitd.containerd_only
 ARG BUILDKIT_TARGET=buildkitd
-ARG REGISTRY_VERSION=v2.7.0-rc.0
-# v0.4.1
-ARG ROOTLESSKIT_VERSION=27a0c7a2483732b33d4192c1d178c83c6b9e202d
+ARG REGISTRY_VERSION=2.7.1
+ARG ROOTLESSKIT_VERSION=v0.7.1
 ARG ROOTLESS_BASE_MODE=external
+ARG CNI_VERSION=v0.8.5
+ARG SHADOW_VERSION=4.8.1
 
 # git stage is used for checking out remote repository sources
 FROM --platform=$BUILDPLATFORM alpine AS git
@@ -156,7 +157,8 @@ RUN --mount=from=containerd-src,src=/usr/src/containerd,readwrite --mount=target
   && make bin/containerd-shim \
   && mv bin /out
 
-FROM tonistiigi/registry:$REGISTRY_VERSION AS registry
+ARG REGISTRY_VERSION
+FROM registry:$REGISTRY_VERSION AS registry
 
 FROM gobuild-base AS rootlesskit
 ARG ROOTLESSKIT_VERSION
@@ -203,7 +205,7 @@ ENTRYPOINT ["containerd"]
 
 FROM --platform=$BUILDPLATFORM alpine AS cni-plugins
 RUN apk add --no-cache curl
-ENV CNI_VERSION=v0.8.1
+ARG CNI_VERSION
 ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /opt/cni/bin
@@ -235,34 +237,29 @@ ENV BUILDKIT_RUN_NETWORK_INTEGRATION_TESTS=1 BUILDKIT_CNI_INIT_LOCK_PATH=/run/bu
 FROM integration-tests AS dev-env
 VOLUME /var/lib/buildkit
 
-# To allow running buildkit in a container without CAP_SYS_ADMIN, we need to do either
-#  a) install newuidmap/newgidmap with file capabilities rather than SETUID (requires kernel >= 4.14)
-#  b) install newuidmap/newgidmap >= 20181125 (59c2dabb264ef7b3137f5edb52c0b31d5af0cf76)
-# We choose b) until kernel >= 4.14 gets widely adopted.
-# See https://github.com/shadow-maint/shadow/pull/132 https://github.com/shadow-maint/shadow/pull/138 https://github.com/shadow-maint/shadow/pull/141
-# (Note: we don't use the patched idmap for the testsuite image)
-FROM alpine:3.8 AS idmap
+# newuidmap & newgidmap binaries (shadow-uidmap 4.7-r1) shipped with alpine:3.11 cannot be executed without CAP_SYS_ADMIN,
+# because the binaries are built without libcap-dev.
+# So we need to build the binaries with libcap enabled.
+FROM alpine:3.11 AS idmap
 RUN apk add --no-cache autoconf automake build-base byacc gettext gettext-dev gcc git libcap-dev libtool libxslt
 RUN git clone https://github.com/shadow-maint/shadow.git /shadow
 WORKDIR /shadow
-RUN git checkout 59c2dabb264ef7b3137f5edb52c0b31d5af0cf76
+ARG SHADOW_VERSION
+RUN git checkout $SHADOW_VERSION
 RUN ./autogen.sh --disable-nls --disable-man --without-audit --without-selinux --without-acl --without-attr --without-tcb --without-nscd \
   && make \
   && cp src/newuidmap src/newgidmap /usr/bin
 
-FROM alpine AS rootless-base-internal
+FROM alpine:3.11 AS rootless-base-internal
 RUN apk add --no-cache git
 COPY --from=idmap /usr/bin/newuidmap /usr/bin/newuidmap
 COPY --from=idmap /usr/bin/newgidmap /usr/bin/newgidmap
+# we could just set CAP_SETUID filecap rather than `chmod u+s`, but requires kernel >= 4.14
 RUN chmod u+s /usr/bin/newuidmap /usr/bin/newgidmap \
   && adduser -D -u 1000 user \
   && mkdir -p /run/user/1000 /home/user/.local/tmp /home/user/.local/share/buildkit \
   && chown -R user /run/user/1000 /home/user \
-  && echo user:100000:65536 | tee /etc/subuid | tee /etc/subgid \
-  && passwd -l root
-# As of v3.8.1, Alpine does not set SUID bit on the busybox version of /bin/su.
-# However, future version may set SUID bit on /bin/su.
-# We lock the root account by `passwd -l root`, so as to disable su completely.
+  && echo user:100000:65536 | tee /etc/subuid | tee /etc/subgid
 
 # tonistiigi/buildkit:rootless-base is a pre-built multi-arch version of rootless-base-internal https://github.com/moby/buildkit/pull/666#pullrequestreview-161872350
 FROM tonistiigi/buildkit:rootless-base@sha256:7e87da0f64e4987b4b6620f7b27b62d7178fc27964fcc3afeb8412f4231aa425 AS rootless-base-external
