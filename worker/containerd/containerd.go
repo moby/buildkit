@@ -69,12 +69,12 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 
 	cs := containerdsnapshot.NewContentStore(client.ContentStore(), ns)
 
-	resp, err := client.IntrospectionService().Plugins(context.TODO(), &introspection.PluginsRequest{Filters: []string{"type==io.containerd.runtime.v1"}})
+	resp, err := client.IntrospectionService().Plugins(context.TODO(), &introspection.PluginsRequest{Filters: []string{"type==io.containerd.runtime.v1", "type==io.containerd.runtime.v2"}})
 	if err != nil {
 		return base.WorkerOpt{}, errors.Wrap(err, "failed to list runtime plugin")
 	}
 	if len(resp.Plugins) == 0 {
-		return base.WorkerOpt{}, errors.Wrap(err, "failed to get runtime plugin")
+		return base.WorkerOpt{}, errors.New("failed to find any runtime plugins")
 	}
 
 	var platforms []specs.Platform

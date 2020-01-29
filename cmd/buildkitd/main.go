@@ -173,7 +173,9 @@ func main() {
 	app.Flags = append(app.Flags, appFlags...)
 
 	app.Action = func(c *cli.Context) error {
-		if os.Geteuid() != 0 {
+		// TODO: On Windows this always returns -1. The actual "are you admin" check is very Windows-specific.
+		// See https://github.com/golang/go/issues/28804#issuecomment-505326268 for the "short" version.
+		if os.Geteuid() > 0 {
 			return errors.New("rootless mode requires to be executed as the mapped root in a user namespace; you may use RootlessKit for setting up the namespace")
 		}
 		ctx, cancel := context.WithCancel(appcontext.Context())
@@ -495,7 +497,7 @@ func getListener(addr string, uid, gid int, tlsConfig *tls.Config) (net.Listener
 	proto := addrSlice[0]
 	listenAddr := addrSlice[1]
 	switch proto {
-	case "unix":
+	case "unix", "npipe":
 		if tlsConfig != nil {
 			logrus.Warnf("TLS is disabled for %s", addr)
 		}
@@ -506,7 +508,6 @@ func getListener(addr string, uid, gid int, tlsConfig *tls.Config) (net.Listener
 		}
 		return sockets.NewTCPSocket(listenAddr, tlsConfig)
 	default:
-		// TODO: support npipe (with TLS?)
 		return nil, errors.Errorf("addr %s not supported", addr)
 	}
 }
