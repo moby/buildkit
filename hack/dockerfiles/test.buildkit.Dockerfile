@@ -271,7 +271,8 @@ FROM rootless-base AS rootless
 COPY --from=rootlesskit /rootlesskit /usr/bin/
 COPY --from=binaries / /usr/bin/
 COPY examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
-USER user
+# Kubernetes runAsNonRoot requires USER to be numeric
+USER 1000:1000
 ENV HOME /home/user
 ENV USER user
 ENV XDG_RUNTIME_DIR=/run/user/1000
