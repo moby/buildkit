@@ -7,6 +7,7 @@ import (
 
 	"github.com/containerd/containerd/containers"
 	"github.com/containerd/containerd/oci"
+	"github.com/opencontainers/runc/libcontainer/system"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -74,70 +75,72 @@ func WithInsecureSpec() oci.SpecOpts {
 				Access: "rwm",
 			},
 			{
-				Allow:  false,
+				Allow:  true,
 				Type:   "b",
 				Access: "rwm",
 			},
 		}
 
-		// Devices automatically mounted on insecure mode
-		s.Linux.Devices = append(s.Linux.Devices, []specs.LinuxDevice{
-			// Writes to this come out as printk's, reads export the buffered printk records. (dmesg)
-			{
-				Path:  "/dev/kmsg",
-				Type:  "c",
-				Major: 1,
-				Minor: 11,
-			},
-			// Cuse (character device in user-space)
-			{
-				Path:  "/dev/cuse",
-				Type:  "c",
-				Major: 10,
-				Minor: 203,
-			},
-			// Fuse (virtual filesystem in user-space)
-			{
-				Path:  "/dev/fuse",
-				Type:  "c",
-				Major: 10,
-				Minor: 229,
-			},
-			// Kernel-based virtual machine (hardware virtualization extensions)
-			{
-				Path:  "/dev/kvm",
-				Type:  "c",
-				Major: 10,
-				Minor: 232,
-			},
-			// TAP/TUN network device
-			{
-				Path:  "/dev/net/tun",
-				Type:  "c",
-				Major: 10,
-				Minor: 200,
-			},
-			// Loopback control device
-			{
-				Path:  "/dev/loop-control",
-				Type:  "c",
-				Major: 10,
-				Minor: 237,
-			},
-		}...)
+		if !system.RunningInUserNS() {
+			// Devices automatically mounted on insecure mode
+			s.Linux.Devices = append(s.Linux.Devices, []specs.LinuxDevice{
+				// Writes to this come out as printk's, reads export the buffered printk records. (dmesg)
+				{
+					Path:  "/dev/kmsg",
+					Type:  "c",
+					Major: 1,
+					Minor: 11,
+				},
+				// Cuse (character device in user-space)
+				{
+					Path:  "/dev/cuse",
+					Type:  "c",
+					Major: 10,
+					Minor: 203,
+				},
+				// Fuse (virtual filesystem in user-space)
+				{
+					Path:  "/dev/fuse",
+					Type:  "c",
+					Major: 10,
+					Minor: 229,
+				},
+				// Kernel-based virtual machine (hardware virtualization extensions)
+				{
+					Path:  "/dev/kvm",
+					Type:  "c",
+					Major: 10,
+					Minor: 232,
+				},
+				// TAP/TUN network device
+				{
+					Path:  "/dev/net/tun",
+					Type:  "c",
+					Major: 10,
+					Minor: 200,
+				},
+				// Loopback control device
+				{
+					Path:  "/dev/loop-control",
+					Type:  "c",
+					Major: 10,
+					Minor: 237,
+				},
+			}...)
 
-		loopID, err := getFreeLoopID()
-		if err != nil {
-			logrus.Debugf("failed to get next free loop device: %v", err)
-		}
+			loopID, err := getFreeLoopID()
+			if err != nil {
+				logrus.Debugf("failed to get next free loop device: %v", err)
+			}
 
-		for i := 0; i <= loopID+7; i++ {
-			s.Linux.Devices = append(s.Linux.Devices, specs.LinuxDevice{
-				Path:  fmt.Sprintf("/dev/loop%d", i),
-				Type:  "b",
-				Major: 7,
-				Minor: int64(i),
-			})
+			for i := 0; i <= loopID+7; i++ {
+				s.Linux.Devices = append(s.Linux.Devices, specs.LinuxDevice{
+					Path:  fmt.Sprintf("/dev/loop%d", i),
+					Type:  "b",
+					Major: 7,
+					Minor: int64(i),
+				})
+			}
 		}
 
 		return nil

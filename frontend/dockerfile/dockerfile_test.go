@@ -126,6 +126,7 @@ var securityTests = []integration.Test{}
 var networkTests = []integration.Test{}
 
 var opts []integration.TestOpt
+var securityOpts []integration.TestOpt
 
 type frontend interface {
 	Solve(context.Context, *client.Client, client.SolveOpt, chan *client.SolveStatus) (*client.SolveResponse, error)
@@ -166,7 +167,7 @@ func TestIntegration(t *testing.T) {
 		"true":  true,
 		"false": false,
 	}))...)
-	integration.Run(t, securityTests, append(opts,
+	integration.Run(t, securityTests, append(append(opts, securityOpts...),
 		integration.WithMatrix("security.insecure", map[string]interface{}{
 			"granted": securityInsecureGranted,
 			"denied":  securityInsecureDenied,
