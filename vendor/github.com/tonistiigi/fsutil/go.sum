@@ -1,9 +1,5 @@
 github.com/Microsoft/go-winio v0.4.11 h1:zoIOcVf0xPN1tnMVbTtEdI+P8OofVk3NObnwOQ6nK2Q=
 github.com/Microsoft/go-winio v0.4.11/go.mod h1:VhR8bwka0BXejwEJY73c50VrPtXAaKcyvVC4A4RozmA=
-github.com/Microsoft/hcsshim v0.8.5 h1:kg/pore5Yyf4DXQ5nelSqfaYQG54YIdNeFRKJaPnFiM=
-github.com/Microsoft/hcsshim v0.8.5/go.mod h1:Op3hHsoHPAvb6lceZHDtd9OkTew38wNoXnJs8iY7rUg=
-github.com/containerd/containerd v1.2.4 h1:qN8LCvw+KA5wVCOnHspD/n2K9cJ34+YOs05qBBWhHiw=
-github.com/containerd/containerd v1.2.4/go.mod h1:bC6axHOhabU15QhwfG7w5PipXdVtMXFTttgp+kVtyUA=
 github.com/containerd/continuity v0.0.0-20181001140422-bd77b46c8352 h1:CdBoaTKPl60tksFVWYc5QnLWwXBcU+XcLiXx8+NcZ9o=
 github.com/containerd/continuity v0.0.0-20181001140422-bd77b46c8352/go.mod h1:GL3xCUCBDV3CZiTSEKksMWbLE66hEyuu9qyDOOqM47Y=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
