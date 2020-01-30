@@ -1,7 +1,8 @@
-package entitlements
+package security
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/containerd/containerd/containers"
 	"github.com/containerd/containerd/oci"
@@ -61,6 +62,74 @@ func WithInsecureSpec() oci.SpecOpts {
 		s.Linux.ReadonlyPaths = []string{}
 		s.Linux.MaskedPaths = []string{}
 		s.Process.ApparmorProfile = ""
+
+		s.Linux.Resources.Devices = []specs.LinuxDeviceCgroup{
+			{
+				Allow:  true,
+				Type:   "c",
+				Access: "rwm",
+			},
+			{
+				Allow:  false,
+				Type:   "b",
+				Access: "rwm",
+			},
+		}
+
+		// Devices automatically mounted on insecure mode
+		s.Linux.Devices = append(s.Linux.Devices, []specs.LinuxDevice{
+			// Writes to this come out as printk's, reads export the buffered printk records. (dmesg)
+			{
+				Path:  "/dev/kmsg",
+				Type:  "c",
+				Major: 1,
+				Minor: 11,
+			},
+			// Cuse (character device in user-space)
+			{
+				Path:  "/dev/cuse",
+				Type:  "c",
+				Major: 10,
+				Minor: 203,
+			},
+			// Fuse (virtual filesystem in user-space)
+			{
+				Path:  "/dev/fuse",
+				Type:  "c",
+				Major: 10,
+				Minor: 229,
+			},
+			// Kernel-based virtual machine (hardware virtualization extensions)
+			{
+				Path:  "/dev/kvm",
+				Type:  "c",
+				Major: 10,
+				Minor: 232,
+			},
+			// TAP/TUN network device
+			{
+				Path:  "/dev/net/tun",
+				Type:  "c",
+				Major: 10,
+				Minor: 200,
+			},
+			// Loopback control device
+			{
+				Path:  "/dev/loop-control",
+				Type:  "c",
+				Major: 10,
+				Minor: 237,
+			},
+		}...)
+
+		for i := 0; i <= 7; i++ {
+			s.Linux.Devices = append(s.Linux.Devices, specs.LinuxDevice{
+				Path:  fmt.Sprintf("/dev/loop%d", i),
+				Type:  "b",
+				Major: 7,
+				Minor: int64(i),
+			})
+		}
 
 		return nil
 	}
