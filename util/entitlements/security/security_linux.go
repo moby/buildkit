@@ -3,10 +3,14 @@ package security
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/containerd/containerd/containers"
 	"github.com/containerd/containerd/oci"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+	"golang.org/x/sys/unix"
 )
 
 // WithInsecureSpec sets spec with All capability.
@@ -122,7 +126,12 @@ func WithInsecureSpec() oci.SpecOpts {
 			},
 		}...)
 
-		for i := 0; i <= 7; i++ {
+		loopID, err := getFreeLoopID()
+		if err != nil {
+			logrus.Debugf("failed to get next free loop device: %v", err)
+		}
+
+		for i := 0; i <= loopID+7; i++ {
 			s.Linux.Devices = append(s.Linux.Devices, specs.LinuxDevice{
 				Path:  fmt.Sprintf("/dev/loop%d", i),
 				Type:  "b",
@@ -133,4 +142,19 @@ func WithInsecureSpec() oci.SpecOpts {
 
 		return nil
 	}
+}
+
+func getFreeLoopID() (int, error) {
+	fd, err := os.OpenFile("/dev/loop-control", os.O_RDWR, 0644)
+	if err != nil {
+		return 0, err
+	}
+	defer fd.Close()
+
+	const _LOOP_CTL_GET_FREE = 0x4C82
+	r1, _, uerr := unix.Syscall(unix.SYS_IOCTL, fd.Fd(), _LOOP_CTL_GET_FREE, 0)
+	if uerr == 0 {
+		return int(r1), nil
+	}
+	return 0, errors.Errorf("error getting free loop device: %v", uerr)
 }
