@@ -26,3 +26,8 @@ buildctl build --progress=plain --frontend=dockerfile.v0 \
    $currentcontextBuildctl \
    --opt platform=$PLATFORMS \
    --import-cache cicache.buildk.it/moby/buildkit/master:binaries-cross-helper
+
+buildctl build --progress=plain --frontend=dockerfile.v0 \
+   $currentcontextBuildctl \
+   --opt platform=windows/amd64 --opt target=buildkit-buildkitd \
+   --import-cache cicache.buildk.it/moby/buildkit/master:binaries
