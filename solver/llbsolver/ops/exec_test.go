@@ -232,6 +232,118 @@ func TestCacheMountPrivateRefs(t *testing.T) {
 	require.Equal(t, ref4.ID(), ref6.ID())
 }
 
+func TestCacheMountSharedRefs(t *testing.T) {
+	t.Parallel()
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+
+	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+
+	co, cleanup, err := newCacheManager(ctx, cmOpt{
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+
+	defer cleanup()
+
+	g1 := newRefGetter(co.manager, co.md, sharedCacheRefs)
+	g2 := newRefGetter(co.manager, co.md, sharedCacheRefs)
+	g3 := newRefGetter(co.manager, co.md, sharedCacheRefs)
+
+	ref, err := g1.getRefCacheDir(ctx, nil, "foo", pb.CacheSharingOpt_SHARED)
+	require.NoError(t, err)
+
+	ref2, err := g1.getRefCacheDir(ctx, nil, "bar", pb.CacheSharingOpt_SHARED)
+	require.NoError(t, err)
+
+	// different ID returns different ref
+	require.NotEqual(t, ref.ID(), ref2.ID())
+
+	// same ID on same mount still shares the reference
+	ref3, err := g1.getRefCacheDir(ctx, nil, "foo", pb.CacheSharingOpt_SHARED)
+	require.NoError(t, err)
+
+	require.Equal(t, ref.ID(), ref3.ID())
+
+	// same ID on different mount gets same ID
+	ref4, err := g2.getRefCacheDir(ctx, nil, "foo", pb.CacheSharingOpt_SHARED)
+	require.NoError(t, err)
+
+	require.Equal(t, ref.ID(), ref4.ID())
+
+	// private gets a new ID
+	ref5, err := g3.getRefCacheDir(ctx, nil, "foo", pb.CacheSharingOpt_PRIVATE)
+	require.NoError(t, err)
+	require.NotEqual(t, ref.ID(), ref5.ID())
+}
+
+func TestCacheMountLockedRefs(t *testing.T) {
+	t.Parallel()
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+
+	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+
+	co, cleanup, err := newCacheManager(ctx, cmOpt{
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+
+	defer cleanup()
+
+	g1 := newRefGetter(co.manager, co.md, sharedCacheRefs)
+	g2 := newRefGetter(co.manager, co.md, sharedCacheRefs)
+
+	ref, err := g1.getRefCacheDir(ctx, nil, "foo", pb.CacheSharingOpt_LOCKED)
+	require.NoError(t, err)
+
+	ref2, err := g1.getRefCacheDir(ctx, nil, "bar", pb.CacheSharingOpt_LOCKED)
+	require.NoError(t, err)
+
+	// different ID returns different ref
+	require.NotEqual(t, ref.ID(), ref2.ID())
+
+	// same ID on same mount still shares the reference
+	ref3, err := g1.getRefCacheDir(ctx, nil, "foo", pb.CacheSharingOpt_LOCKED)
+	require.NoError(t, err)
+
+	require.Equal(t, ref.ID(), ref3.ID())
+
+	// same ID on different mount blocks
+	gotRef4 := make(chan struct{})
+	go func() {
+		ref4, err := g2.getRefCacheDir(ctx, nil, "foo", pb.CacheSharingOpt_LOCKED)
+		require.NoError(t, err)
+		require.Equal(t, ref.ID(), ref4.ID())
+		close(gotRef4)
+	}()
+
+	select {
+	case <-gotRef4:
+		require.FailNow(t, "mount did not lock")
+	case <-time.After(500 * time.Millisecond):
+	}
+
+	ref.Release(ctx)
+	ref3.Release(ctx)
+
+	select {
+	case <-gotRef4:
+	case <-time.After(500 * time.Millisecond):
+		require.FailNow(t, "mount did not unlock")
+	}
+}
+
 // moby/buildkit#1322
 func TestCacheMountSharedRefsDeadlock(t *testing.T) {
 	// not parallel
