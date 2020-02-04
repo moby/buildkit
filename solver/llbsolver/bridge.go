@@ -18,6 +18,8 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/tracing"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
@@ -58,7 +60,7 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (res *
 			func(cmId string, im gw.CacheOptionsEntry) {
 				cm = newLazyCacheManager(cmId, func() (solver.CacheManager, error) {
 					var cmNew solver.CacheManager
-					if err := inVertexContext(b.builder.Context(ctx), "importing cache manifest from "+cmId, "", func(ctx context.Context) error {
+					if err := inVertexContext(b.builder.Context(context.TODO()), "importing cache manifest from "+cmId, "", func(ctx context.Context) error {
 						resolveCI, ok := b.resolveCacheImporterFuncs[im.Type]
 						if !ok {
 							return errors.Errorf("unknown cache importer: %s", im.Type)
@@ -112,18 +114,27 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (res *
 			}
 		}
 
-		ref, err := b.builder.Build(ctx, edge)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to build LLB")
+		res = &frontend.Result{
+			Ref: &resultProxy{
+				def: req.Definition,
+				cb: func(ctx context.Context) (solver.CachedResult, error) {
+					res, err := b.builder.Build(ctx, edge)
+					if err != nil {
+						return nil, err
+					}
+					wr, ok := res.Sys().(*worker.WorkerRef)
+					if !ok {
+						return nil, errors.Errorf("invalid reference for exporting: %T", res.Sys())
+					}
+					if wr.ImmutableRef != nil {
+						if err := wr.ImmutableRef.Finalize(ctx, false); err != nil {
+							return nil, err
+						}
+					}
+					return res, err
+				},
+			},
 		}
-
-		wref, ok := ref.Sys().(*worker.WorkerRef)
-		if !ok {
-			return nil, errors.Errorf("invalid ref: %T", ref.Sys())
-		}
-		wref.Definition = req.Definition
-
-		res = &frontend.Result{Ref: ref}
 	} else if req.Frontend != "" {
 		f, ok := b.frontends[req.Frontend]
 		if !ok {
@@ -137,21 +148,74 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (res *
 		return &frontend.Result{}, nil
 	}
 
-	if err := res.EachRef(func(r solver.CachedResult) error {
-		wr, ok := r.Sys().(*worker.WorkerRef)
-		if !ok {
-			return errors.Errorf("invalid reference for exporting: %T", r.Sys())
+	return
+}
+
+type resultProxy struct {
+	cb       func(context.Context) (solver.CachedResult, error)
+	def      *pb.Definition
+	g        flightcontrol.Group
+	mu       sync.Mutex
+	released bool
+	v        solver.CachedResult
+	err      error
+}
+
+func (rp *resultProxy) Definition() *pb.Definition {
+	return rp.def
+}
+
+func (rp *resultProxy) Release(ctx context.Context) error {
+	rp.mu.Lock()
+	defer rp.mu.Unlock()
+	if rp.v != nil {
+		if err := rp.v.Release(ctx); err != nil {
+			return err
 		}
-		if wr.ImmutableRef != nil {
-			if err := wr.ImmutableRef.Finalize(ctx, false); err != nil {
-				return err
+	}
+	rp.released = true
+	return nil
+}
+
+func (rp *resultProxy) Result(ctx context.Context) (solver.CachedResult, error) {
+	r, err := rp.g.Do(ctx, "result", func(ctx context.Context) (interface{}, error) {
+		rp.mu.Lock()
+		if rp.released {
+			rp.mu.Unlock()
+			return nil, errors.Errorf("accessing released result")
+		}
+		if rp.v != nil || rp.err != nil {
+			rp.mu.Unlock()
+			return rp.v, rp.err
+		}
+		rp.mu.Unlock()
+		v, err := rp.cb(ctx)
+		if err != nil {
+			select {
+			case <-ctx.Done():
+				if strings.Contains(err.Error(), context.Canceled.Error()) {
+					return v, err
+				}
+			default:
 			}
 		}
-		return nil
-	}); err != nil {
-		return nil, err
+		rp.mu.Lock()
+		if rp.released {
+			if v != nil {
+				v.Release(context.TODO())
+			}
+			rp.mu.Unlock()
+			return nil, errors.Errorf("evaluating released result")
+		}
+		rp.v = v
+		rp.err = err
+		rp.mu.Unlock()
+		return v, err
+	})
+	if r != nil {
+		return r.(solver.CachedResult), nil
 	}
-	return
+	return nil, err
 }
 
 func (s *llbBridge) Exec(ctx context.Context, meta executor.Meta, root cache.ImmutableRef, stdin io.ReadCloser, stdout, stderr io.WriteCloser) (err error) {

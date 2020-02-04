@@ -103,14 +103,14 @@ func (c *bridgeClient) toFrontendResult(r *client.Result) (*frontend.Result, err
 	res := &frontend.Result{}
 
 	if r.Refs != nil {
-		res.Refs = make(map[string]solver.CachedResult, len(r.Refs))
+		res.Refs = make(map[string]solver.ResultProxy, len(r.Refs))
 		for k, r := range r.Refs {
 			rr, ok := r.(*ref)
 			if !ok {
 				return nil, errors.Errorf("invalid reference type for forward %T", r)
 			}
 			c.final[rr] = struct{}{}
-			res.Refs[k] = rr.CachedResult
+			res.Refs[k] = rr.ResultProxy
 		}
 	}
 	if r := r.Ref; r != nil {
@@ -119,7 +119,7 @@ func (c *bridgeClient) toFrontendResult(r *client.Result) (*frontend.Result, err
 			return nil, errors.Errorf("invalid reference type for forward %T", r)
 		}
 		c.final[rr] = struct{}{}
-		res.Ref = rr.CachedResult
+		res.Ref = rr.ResultProxy
 	}
 	res.Metadata = r.Metadata
 
@@ -137,21 +137,15 @@ func (c *bridgeClient) discard(err error) {
 }
 
 type ref struct {
-	solver.CachedResult
-	def *opspb.Definition
+	solver.ResultProxy
 }
 
-func newRef(r solver.CachedResult) (*ref, error) {
-	wref, ok := r.Sys().(*worker.WorkerRef)
-	if !ok {
-		return nil, errors.Errorf("invalid ref: %T", r.Sys())
-	}
-
-	return &ref{CachedResult: r, def: wref.Definition}, nil
+func newRef(r solver.ResultProxy) (*ref, error) {
+	return &ref{ResultProxy: r}, nil
 }
 
 func (r *ref) ToState() (st llb.State, err error) {
-	defop, err := llb.NewDefinitionOp(r.def)
+	defop, err := llb.NewDefinitionOp(r.Definition())
 	if err != nil {
 		return st, err
 	}
@@ -159,7 +153,7 @@ func (r *ref) ToState() (st llb.State, err error) {
 }
 
 func (r *ref) ReadFile(ctx context.Context, req client.ReadRequest) ([]byte, error) {
-	ref, err := r.getImmutableRef()
+	ref, err := r.getImmutableRef(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +170,7 @@ func (r *ref) ReadFile(ctx context.Context, req client.ReadRequest) ([]byte, err
 }
 
 func (r *ref) ReadDir(ctx context.Context, req client.ReadDirRequest) ([]*fstypes.Stat, error) {
-	ref, err := r.getImmutableRef()
+	ref, err := r.getImmutableRef(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -188,17 +182,21 @@ func (r *ref) ReadDir(ctx context.Context, req client.ReadDirRequest) ([]*fstype
 }
 
 func (r *ref) StatFile(ctx context.Context, req client.StatRequest) (*fstypes.Stat, error) {
-	ref, err := r.getImmutableRef()
+	ref, err := r.getImmutableRef(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return cacheutil.StatFile(ctx, ref, req.Path)
 }
 
-func (r *ref) getImmutableRef() (cache.ImmutableRef, error) {
-	ref, ok := r.CachedResult.Sys().(*worker.WorkerRef)
+func (r *ref) getImmutableRef(ctx context.Context) (cache.ImmutableRef, error) {
+	rr, err := r.ResultProxy.Result(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ref, ok := rr.Sys().(*worker.WorkerRef)
 	if !ok {
-		return nil, errors.Errorf("invalid ref: %T", r.CachedResult.Sys())
+		return nil, errors.Errorf("invalid ref: %T", rr.Sys())
 	}
 	return ref.ImmutableRef, nil
 }
