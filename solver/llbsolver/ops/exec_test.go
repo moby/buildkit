@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/content/local"
@@ -25,6 +26,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	bolt "go.etcd.io/bbolt"
+	"golang.org/x/sync/errgroup"
 )
 
 type cmOpt struct {
@@ -153,6 +155,16 @@ func TestDedupPaths(t *testing.T) {
 	require.Equal(t, []string{"foo/bar", "foo/bara"}, res)
 }
 
+func newRefGetter(m cache.Manager, md *metadata.Store, shared *cacheRefs) *cacheRefGetter {
+	return &cacheRefGetter{
+		locker:          &sync.Mutex{},
+		cacheMounts:     map[string]*cacheRefShare{},
+		cm:              m,
+		md:              md,
+		globalCacheRefs: shared,
+	}
+}
+
 func TestCacheMountPrivateRefs(t *testing.T) {
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
@@ -172,33 +184,10 @@ func TestCacheMountPrivateRefs(t *testing.T) {
 
 	defer cleanup()
 
-	g1 := &cacheRefGetter{
-		locker:      &sync.Mutex{},
-		cacheMounts: map[string]*cacheRefShare{},
-		cm:          co.manager,
-		md:          co.md,
-	}
-
-	g2 := &cacheRefGetter{
-		locker:      g1.locker,
-		cacheMounts: map[string]*cacheRefShare{},
-		cm:          co.manager,
-		md:          co.md,
-	}
-
-	g3 := &cacheRefGetter{
-		locker:      g1.locker,
-		cacheMounts: map[string]*cacheRefShare{},
-		cm:          co.manager,
-		md:          co.md,
-	}
-
-	g4 := &cacheRefGetter{
-		locker:      g1.locker,
-		cacheMounts: map[string]*cacheRefShare{},
-		cm:          co.manager,
-		md:          co.md,
-	}
+	g1 := newRefGetter(co.manager, co.md, sharedCacheRefs)
+	g2 := newRefGetter(co.manager, co.md, sharedCacheRefs)
+	g3 := newRefGetter(co.manager, co.md, sharedCacheRefs)
+	g4 := newRefGetter(co.manager, co.md, sharedCacheRefs)
 
 	ref, err := g1.getRefCacheDir(ctx, nil, "foo", pb.CacheSharingOpt_PRIVATE)
 	require.NoError(t, err)
@@ -241,4 +230,66 @@ func TestCacheMountPrivateRefs(t *testing.T) {
 	ref6, err := g2.getRefCacheDir(ctx, nil, "foo", pb.CacheSharingOpt_PRIVATE)
 	require.NoError(t, err)
 	require.Equal(t, ref4.ID(), ref6.ID())
+}
+
+// moby/buildkit#1322
+func TestCacheMountSharedRefsDeadlock(t *testing.T) {
+	// not parallel
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+
+	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+
+	co, cleanup, err := newCacheManager(ctx, cmOpt{
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+
+	defer cleanup()
+
+	var sharedCacheRefs = &cacheRefs{}
+
+	g1 := newRefGetter(co.manager, co.md, sharedCacheRefs)
+	g2 := newRefGetter(co.manager, co.md, sharedCacheRefs)
+
+	ref, err := g1.getRefCacheDir(ctx, nil, "foo", pb.CacheSharingOpt_SHARED)
+	require.NoError(t, err)
+
+	cacheRefReleaseHijack = func() {
+		time.Sleep(200 * time.Millisecond)
+	}
+	cacheRefCloneHijack = func() {
+		time.Sleep(400 * time.Millisecond)
+	}
+	defer func() {
+		cacheRefReleaseHijack = nil
+		cacheRefCloneHijack = nil
+	}()
+	eg, _ := errgroup.WithContext(context.TODO())
+
+	eg.Go(func() error {
+		return ref.Release(context.TODO())
+	})
+	eg.Go(func() error {
+		_, err := g2.getRefCacheDir(ctx, nil, "foo", pb.CacheSharingOpt_SHARED)
+		return err
+	})
+
+	done := make(chan struct{})
+	go func() {
+		err = eg.Wait()
+		require.NoError(t, err)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		require.FailNow(t, "deadlock on releasing while getting new ref")
+	}
 }
