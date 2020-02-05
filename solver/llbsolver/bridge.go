@@ -9,13 +9,13 @@ import (
 	"time"
 
 	"github.com/containerd/containerd/platforms"
+	"github.com/mitchellh/hashstructure"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/frontend"
 	gw "github.com/moby/buildkit/frontend/gateway/client"
-	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/pb"
@@ -40,27 +40,28 @@ type llbBridge struct {
 	sm                        *session.Manager
 }
 
-func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (res *frontend.Result, err error) {
+func (b *llbBridge) loadResult(ctx context.Context, def *pb.Definition, cacheImports []gw.CacheOptionsEntry) (solver.CachedResult, error) {
 	w, err := b.resolveWorker()
 	if err != nil {
 		return nil, err
 	}
+	ent, err := loadEntitlements(b.builder)
+	if err != nil {
+		return nil, err
+	}
 	var cms []solver.CacheManager
-	for _, im := range req.CacheImports {
+	for _, im := range cacheImports {
+		cmID, err := cmKey(im)
+		if err != nil {
+			return nil, err
+		}
 		b.cmsMu.Lock()
 		var cm solver.CacheManager
-		cmId := identity.NewID()
-		if im.Type == "registry" {
-			// For compatibility with < v0.4.0
-			if ref := im.Attrs["ref"]; ref != "" {
-				cmId = ref
-			}
-		}
-		if prevCm, ok := b.cms[cmId]; !ok {
-			func(cmId string, im gw.CacheOptionsEntry) {
-				cm = newLazyCacheManager(cmId, func() (solver.CacheManager, error) {
+		if prevCm, ok := b.cms[cmID]; !ok {
+			func(cmID string, im gw.CacheOptionsEntry) {
+				cm = newLazyCacheManager(cmID, func() (solver.CacheManager, error) {
 					var cmNew solver.CacheManager
-					if err := inVertexContext(b.builder.Context(context.TODO()), "importing cache manifest from "+cmId, "", func(ctx context.Context) error {
+					if err := inVertexContext(b.builder.Context(context.TODO()), "importing cache manifest from "+cmID, "", func(ctx context.Context) error {
 						resolveCI, ok := b.resolveCacheImporterFuncs[im.Type]
 						if !ok {
 							return errors.Errorf("unknown cache importer: %s", im.Type)
@@ -69,72 +70,64 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (res *
 						if err != nil {
 							return err
 						}
-						cmNew, err = ci.Resolve(ctx, desc, cmId, w)
+						cmNew, err = ci.Resolve(ctx, desc, cmID, w)
 						return err
 					}); err != nil {
-						logrus.Debugf("error while importing cache manifest from cmId=%s: %v", cmId, err)
+						logrus.Debugf("error while importing cache manifest from cmId=%s: %v", cmID, err)
 						return nil, err
 					}
 					return cmNew, nil
 				})
-			}(cmId, im)
-			b.cms[cmId] = cm
+			}(cmID, im)
+			b.cms[cmID] = cm
 		} else {
 			cm = prevCm
 		}
 		cms = append(cms, cm)
 		b.cmsMu.Unlock()
 	}
+	dpc := &detectPrunedCacheID{}
 
+	edge, err := Load(def, dpc.Load, ValidateEntitlements(ent), WithCacheSources(cms), RuntimePlatforms(b.platforms), WithValidateCaps())
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to load LLB")
+	}
+
+	if len(dpc.ids) > 0 {
+		ids := make([]string, 0, len(dpc.ids))
+		for id := range dpc.ids {
+			ids = append(ids, id)
+		}
+		if err := b.eachWorker(func(w worker.Worker) error {
+			return w.PruneCacheMounts(ctx, ids)
+		}); err != nil {
+			return nil, err
+		}
+	}
+
+	res, err := b.builder.Build(ctx, edge)
+	if err != nil {
+		return nil, err
+	}
+	wr, ok := res.Sys().(*worker.WorkerRef)
+	if !ok {
+		return nil, errors.Errorf("invalid reference for exporting: %T", res.Sys())
+	}
+	if wr.ImmutableRef != nil {
+		if err := wr.ImmutableRef.Finalize(ctx, false); err != nil {
+			return nil, err
+		}
+	}
+	return res, err
+}
+
+func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (res *frontend.Result, err error) {
 	if req.Definition != nil && req.Definition.Def != nil && req.Frontend != "" {
 		return nil, errors.New("cannot solve with both Definition and Frontend specified")
 	}
 
 	if req.Definition != nil && req.Definition.Def != nil {
-		ent, err := loadEntitlements(b.builder)
-		if err != nil {
-			return nil, err
-		}
-		dpc := &detectPrunedCacheID{}
-
-		edge, err := Load(req.Definition, dpc.Load, ValidateEntitlements(ent), WithCacheSources(cms), RuntimePlatforms(b.platforms), WithValidateCaps())
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to load LLB")
-		}
-
-		if len(dpc.ids) > 0 {
-			ids := make([]string, 0, len(dpc.ids))
-			for id := range dpc.ids {
-				ids = append(ids, id)
-			}
-			if err := b.eachWorker(func(w worker.Worker) error {
-				return w.PruneCacheMounts(ctx, ids)
-			}); err != nil {
-				return nil, err
-			}
-		}
-
-		res = &frontend.Result{
-			Ref: &resultProxy{
-				def: req.Definition,
-				cb: func(ctx context.Context) (solver.CachedResult, error) {
-					res, err := b.builder.Build(ctx, edge)
-					if err != nil {
-						return nil, err
-					}
-					wr, ok := res.Sys().(*worker.WorkerRef)
-					if !ok {
-						return nil, errors.Errorf("invalid reference for exporting: %T", res.Sys())
-					}
-					if wr.ImmutableRef != nil {
-						if err := wr.ImmutableRef.Finalize(ctx, false); err != nil {
-							return nil, err
-						}
-					}
-					return res, err
-				},
-			},
-		}
+		res = &frontend.Result{Ref: newResultProxy(b, req)}
 	} else if req.Frontend != "" {
 		f, ok := b.frontends[req.Frontend]
 		if !ok {
@@ -161,6 +154,15 @@ type resultProxy struct {
 	err      error
 }
 
+func newResultProxy(b *llbBridge, req frontend.SolveRequest) *resultProxy {
+	return &resultProxy{
+		def: req.Definition,
+		cb: func(ctx context.Context) (solver.CachedResult, error) {
+			return b.loadResult(ctx, req.Definition, req.CacheImports)
+		},
+	}
+}
+
 func (rp *resultProxy) Definition() *pb.Definition {
 	return rp.def
 }
@@ -169,6 +171,9 @@ func (rp *resultProxy) Release(ctx context.Context) error {
 	rp.mu.Lock()
 	defer rp.mu.Unlock()
 	if rp.v != nil {
+		if rp.released {
+			logrus.Warnf("release of already released result")
+		}
 		if err := rp.v.Release(ctx); err != nil {
 			return err
 		}
@@ -305,4 +310,15 @@ func newLazyCacheManager(id string, fn func() (solver.CacheManager, error)) solv
 		lcm.main = cm
 	}()
 	return lcm
+}
+
+func cmKey(im gw.CacheOptionsEntry) (string, error) {
+	if im.Type == "registry" && im.Attrs["ref"] != "" {
+		return im.Attrs["ref"], nil
+	}
+	i, err := hashstructure.Hash(im, nil)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s:%d", im.Type, i), nil
 }
