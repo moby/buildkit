@@ -3,6 +3,7 @@ package forwarder
 import (
 	"context"
 
+	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/frontend/gateway/client"
 )
@@ -19,8 +20,8 @@ type GatewayForwarder struct {
 	f       client.BuildFunc
 }
 
-func (gf *GatewayForwarder) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string) (retRes *frontend.Result, retErr error) {
-	c, err := llbBridgeToGatewayClient(ctx, llbBridge, opts, gf.workers.WorkerInfos())
+func (gf *GatewayForwarder) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string, inputs map[string]llb.State) (retRes *frontend.Result, retErr error) {
+	c, err := llbBridgeToGatewayClient(ctx, llbBridge, opts, inputs, gf.workers.WorkerInfos())
 	if err != nil {
 		return nil, err
 	}

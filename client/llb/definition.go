@@ -156,3 +156,27 @@ func (d *DefinitionOp) platform() *specs.Platform {
 	d.platforms[d.dgst] = platform
 	return platform
 }
+
+func StatesFromDefinitions(defs map[string]*pb.Definition) (map[string]State, error) {
+	states := make(map[string]State)
+	for key, def := range defs {
+		defop, err := NewDefinitionOp(def)
+		if err != nil {
+			return nil, err
+		}
+		states[key] = NewState(defop)
+	}
+	return states, nil
+}
+
+func DefinitionsFromStates(states map[string]State) (map[string]*pb.Definition, error) {
+	defs := make(map[string]*pb.Definition)
+	for key, state := range states {
+		def, err := state.Marshal()
+		if err != nil {
+			return nil, err
+		}
+		defs[key] = def.ToPB()
+	}
+	return defs, nil
+}

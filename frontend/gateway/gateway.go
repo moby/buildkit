@@ -65,7 +65,7 @@ func filterPrefix(opts map[string]string, pfx string) map[string]string {
 	return m
 }
 
-func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string) (*frontend.Result, error) {
+func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string, inputs map[string]llb.State) (*frontend.Result, error) {
 	source, ok := opts[keySource]
 	if !ok {
 		return nil, errors.Errorf("no source specified for gateway")
@@ -81,8 +81,9 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 	if isDevel {
 		devRes, err := llbBridge.Solve(session.NewContext(ctx, "gateway:"+sid),
 			frontend.SolveRequest{
-				Frontend:    source,
-				FrontendOpt: filterPrefix(opts, "gateway-"),
+				Frontend:       source,
+				FrontendOpt:    filterPrefix(opts, "gateway-"),
+				FrontendInputs: inputs,
 			})
 		if err != nil {
 			return nil, err
@@ -165,7 +166,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 		rootFS = workerRef.ImmutableRef
 	}
 
-	lbf, ctx, err := newLLBBridgeForwarder(ctx, llbBridge, gf.workers)
+	lbf, ctx, err := newLLBBridgeForwarder(ctx, llbBridge, gf.workers, inputs)
 	defer lbf.conn.Close()
 	if err != nil {
 		return nil, err
@@ -292,7 +293,7 @@ func (lbf *llbBridgeForwarder) Result() (*frontend.Result, error) {
 	return lbf.result, nil
 }
 
-func NewBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, workers frontend.WorkerInfos) *llbBridgeForwarder {
+func NewBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, workers frontend.WorkerInfos, inputs map[string]llb.State) *llbBridgeForwarder {
 	lbf := &llbBridgeForwarder{
 		callCtx:   ctx,
 		llbBridge: llbBridge,
@@ -300,13 +301,14 @@ func NewBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridg
 		doneCh:    make(chan struct{}),
 		pipe:      newPipe(),
 		workers:   workers,
+		inputs:    inputs,
 	}
 	return lbf
 }
 
-func newLLBBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, workers frontend.WorkerInfos) (*llbBridgeForwarder, context.Context, error) {
+func newLLBBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, workers frontend.WorkerInfos, inputs map[string]llb.State) (*llbBridgeForwarder, context.Context, error) {
 	ctx, cancel := context.WithCancel(ctx)
-	lbf := NewBridgeForwarder(ctx, llbBridge, workers)
+	lbf := NewBridgeForwarder(ctx, llbBridge, workers, inputs)
 	server := grpc.NewServer()
 	grpc_health_v1.RegisterHealthServer(server, health.NewServer())
 	pb.RegisterLLBBridgeServer(server, lbf)
@@ -396,6 +398,7 @@ type llbBridgeForwarder struct {
 	err               error
 	exporterAttr      map[string][]byte
 	workers           frontend.WorkerInfos
+	inputs            map[string]llb.State
 	isErrServerClosed bool
 	*pipe
 }
@@ -451,12 +454,19 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 			Attrs: e.Attrs,
 		})
 	}
+
+	inputs, err := llb.StatesFromDefinitions(req.FrontendInputs)
+	if err != nil {
+		return nil, err
+	}
+
 	ctx = tracing.ContextWithSpanFromContext(ctx, lbf.callCtx)
 	res, err := lbf.llbBridge.Solve(ctx, frontend.SolveRequest{
-		Definition:   req.Definition,
-		Frontend:     req.Frontend,
-		FrontendOpt:  req.FrontendOpt,
-		CacheImports: cacheImports,
+		Definition:     req.Definition,
+		Frontend:       req.Frontend,
+		FrontendOpt:    req.FrontendOpt,
+		FrontendInputs: inputs,
+		CacheImports:   cacheImports,
 	})
 	if err != nil {
 		return nil, err
@@ -709,6 +719,17 @@ func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest)
 		}
 		return lbf.setResult(r, nil)
 	}
+}
+
+func (lbf *llbBridgeForwarder) Inputs(ctx context.Context, in *pb.InputsRequest) (*pb.InputsResponse, error) {
+	defs, err := llb.DefinitionsFromStates(lbf.inputs)
+	if err != nil {
+		return nil, err
+	}
+
+	return &pb.InputsResponse{
+		Definitions: defs,
+	}, nil
 }
 
 func (lbf *llbBridgeForwarder) convertRef(id string) (solver.ResultProxy, error) {

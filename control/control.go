@@ -10,6 +10,7 @@ import (
 	apitypes "github.com/moby/buildkit/api/types"
 	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/client/llb"
 	controlgateway "github.com/moby/buildkit/control/gateway"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/frontend"
@@ -273,11 +274,17 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		})
 	}
 
+	inputs, err := llb.StatesFromDefinitions(req.FrontendInputs)
+	if err != nil {
+		return nil, err
+	}
+
 	resp, err := c.solver.Solve(ctx, req.Ref, frontend.SolveRequest{
-		Frontend:     req.Frontend,
-		Definition:   req.Definition,
-		FrontendOpt:  req.FrontendAttrs,
-		CacheImports: cacheImports,
+		Frontend:       req.Frontend,
+		Definition:     req.Definition,
+		FrontendOpt:    req.FrontendAttrs,
+		FrontendInputs: inputs,
+		CacheImports:   cacheImports,
 	}, llbsolver.ExporterRequest{
 		Exporter:        expi,
 		CacheExporter:   cacheExporter,

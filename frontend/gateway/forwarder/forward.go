@@ -20,9 +20,10 @@ import (
 	fstypes "github.com/tonistiigi/fsutil/types"
 )
 
-func llbBridgeToGatewayClient(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string, workerInfos []clienttypes.WorkerInfo) (*bridgeClient, error) {
+func llbBridgeToGatewayClient(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string, inputs map[string]llb.State, workerInfos []clienttypes.WorkerInfo) (*bridgeClient, error) {
 	return &bridgeClient{
 		opts:              opts,
+		inputs:            inputs,
 		FrontendLLBBridge: llbBridge,
 		sid:               session.FromContext(ctx),
 		workerInfos:       workerInfos,
@@ -34,6 +35,7 @@ type bridgeClient struct {
 	frontend.FrontendLLBBridge
 	mu           sync.Mutex
 	opts         map[string]string
+	inputs       map[string]llb.State
 	final        map[*ref]struct{}
 	sid          string
 	exporterAttr map[string][]byte
@@ -43,10 +45,11 @@ type bridgeClient struct {
 
 func (c *bridgeClient) Solve(ctx context.Context, req client.SolveRequest) (*client.Result, error) {
 	res, err := c.FrontendLLBBridge.Solve(ctx, frontend.SolveRequest{
-		Definition:   req.Definition,
-		Frontend:     req.Frontend,
-		FrontendOpt:  req.FrontendOpt,
-		CacheImports: req.CacheImports,
+		Definition:     req.Definition,
+		Frontend:       req.Frontend,
+		FrontendOpt:    req.FrontendOpt,
+		FrontendInputs: req.FrontendInputs,
+		CacheImports:   req.CacheImports,
 	})
 	if err != nil {
 		return nil, err
@@ -93,6 +96,10 @@ func (c *bridgeClient) BuildOpts() client.BuildOpts {
 		Caps:      gwpb.Caps.CapSet(gwpb.Caps.All()),
 		LLBCaps:   opspb.Caps.CapSet(opspb.Caps.All()),
 	}
+}
+
+func (c *bridgeClient) Inputs(ctx context.Context) (map[string]llb.State, error) {
+	return c.inputs, nil
 }
 
 func (c *bridgeClient) toFrontendResult(r *client.Result) (*frontend.Result, error) {

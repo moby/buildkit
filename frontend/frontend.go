@@ -13,7 +13,7 @@ import (
 )
 
 type Frontend interface {
-	Solve(ctx context.Context, llb FrontendLLBBridge, opt map[string]string) (*Result, error)
+	Solve(ctx context.Context, llb FrontendLLBBridge, opt map[string]string, inputs map[string]llb.State) (*Result, error)
 }
 
 type FrontendLLBBridge interface {

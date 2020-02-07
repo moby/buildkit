@@ -95,6 +95,7 @@ var allTests = []integration.Test{
 	testCacheMultiPlatformImportExport,
 	testOnBuildCleared,
 	testFrontendUseForwardedSolveResults,
+	testFrontendInputs,
 }
 
 var fileOpTests = []integration.Test{
@@ -4472,6 +4473,69 @@ COPY foo foo2
 	dt, err := ioutil.ReadFile(filepath.Join(destDir, "foo3"))
 	require.NoError(t, err)
 	require.Equal(t, dt, []byte("data"))
+}
+
+func testFrontendInputs(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	outMount := llb.Image("busybox").Run(
+		llb.Shlex(`sh -c "cat /dev/urandom | head -c 100 | sha256sum > /out/foo"`),
+	).AddMount("/out", llb.Scratch())
+
+	def, err := outMount.Marshal()
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	expected, err := ioutil.ReadFile(filepath.Join(destDir, "foo"))
+	require.NoError(t, err)
+
+	dockerfile := []byte(`
+FROM scratch
+COPY foo foo2
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+		},
+		FrontendInputs: map[string]llb.State{
+			builder.DefaultLocalNameContext: outMount,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	actual, err := ioutil.ReadFile(filepath.Join(destDir, "foo2"))
+	require.NoError(t, err)
+	require.Equal(t, expected, actual)
 }
 
 func tmpdir(appliers ...fstest.Applier) (string, error) {
