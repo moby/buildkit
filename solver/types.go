@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/containerd/containerd/content"
+	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
@@ -65,6 +66,12 @@ type Result interface {
 type CachedResult interface {
 	Result
 	CacheKeys() []ExportableCacheKey
+}
+
+type ResultProxy interface {
+	Result(context.Context) (CachedResult, error)
+	Release(context.Context) error
+	Definition() *pb.Definition
 }
 
 // CacheExportMode is the type for setting cache exporting modes

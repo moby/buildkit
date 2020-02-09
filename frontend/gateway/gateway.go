@@ -88,16 +88,20 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 			return nil, err
 		}
 		defer func() {
-			devRes.EachRef(func(ref solver.CachedResult) error {
+			devRes.EachRef(func(ref solver.ResultProxy) error {
 				return ref.Release(context.TODO())
 			})
 		}()
 		if devRes.Ref == nil {
 			return nil, errors.Errorf("development gateway didn't return default result")
 		}
-		workerRef, ok := devRes.Ref.Sys().(*worker.WorkerRef)
+		res, err := devRes.Ref.Result(ctx)
+		if err != nil {
+			return nil, err
+		}
+		workerRef, ok := res.Sys().(*worker.WorkerRef)
 		if !ok {
-			return nil, errors.Errorf("invalid ref: %T", devRes.Ref.Sys())
+			return nil, errors.Errorf("invalid ref: %T", res.Sys())
 		}
 		rootFS = workerRef.ImmutableRef
 		config, ok := devRes.Metadata[exptypes.ExporterImageConfigKey]
@@ -142,7 +146,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 			return nil, err
 		}
 		defer func() {
-			res.EachRef(func(ref solver.CachedResult) error {
+			res.EachRef(func(ref solver.ResultProxy) error {
 				return ref.Release(context.TODO())
 			})
 		}()
@@ -150,9 +154,13 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 			return nil, errors.Errorf("gateway source didn't return default result")
 
 		}
-		workerRef, ok := res.Ref.Sys().(*worker.WorkerRef)
+		r, err := res.Ref.Result(ctx)
+		if err != nil {
+			return nil, err
+		}
+		workerRef, ok := r.Sys().(*worker.WorkerRef)
 		if !ok {
-			return nil, errors.Errorf("invalid ref: %T", res.Ref.Sys())
+			return nil, errors.Errorf("invalid ref: %T", r.Sys())
 		}
 		rootFS = workerRef.ImmutableRef
 	}
@@ -232,7 +240,7 @@ func (lbf *llbBridgeForwarder) Discard() {
 	for id, r := range lbf.refs {
 		if lbf.err == nil && lbf.result != nil {
 			keep := false
-			lbf.result.EachRef(func(r2 solver.CachedResult) error {
+			lbf.result.EachRef(func(r2 solver.ResultProxy) error {
 				if r == r2 {
 					keep = true
 				}
@@ -288,7 +296,7 @@ func NewBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridg
 	lbf := &llbBridgeForwarder{
 		callCtx:   ctx,
 		llbBridge: llbBridge,
-		refs:      map[string]solver.CachedResult{},
+		refs:      map[string]solver.ResultProxy{},
 		doneCh:    make(chan struct{}),
 		pipe:      newPipe(),
 		workers:   workers,
@@ -379,7 +387,7 @@ type llbBridgeForwarder struct {
 	mu        sync.Mutex
 	callCtx   context.Context
 	llbBridge frontend.FrontendLLBBridge
-	refs      map[string]solver.CachedResult
+	refs      map[string]solver.ResultProxy
 	// lastRef      solver.CachedResult
 	// lastRefs     map[string]solver.CachedResult
 	// err          error
@@ -474,12 +482,7 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 				lbf.refs[id] = ref
 			}
 			ids[k] = id
-
-			wref, ok := ref.Sys().(*worker.WorkerRef)
-			if !ok {
-				return nil, errors.Errorf("invalid ref: %T", ref.Sys())
-			}
-			defs[k] = wref.Definition
+			defs[k] = ref.Definition()
 		}
 
 		if req.AllowResultArrayRef {
@@ -499,12 +502,7 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 		if ref == nil {
 			id = ""
 		} else {
-			wref, ok := ref.Sys().(*worker.WorkerRef)
-			if !ok {
-				return nil, errors.Errorf("invalid ref: %T", ref.Sys())
-			}
-			def = wref.Definition
-
+			def = ref.Definition()
 			lbf.refs[id] = ref
 		}
 		defaultID = id
@@ -557,9 +555,13 @@ func (lbf *llbBridgeForwarder) ReadFile(ctx context.Context, req *pb.ReadFileReq
 	if ref == nil {
 		return nil, errors.Wrapf(os.ErrNotExist, "%s not found", req.FilePath)
 	}
-	workerRef, ok := ref.Sys().(*worker.WorkerRef)
+	r, err := ref.Result(ctx)
+	if err != nil {
+		return nil, err
+	}
+	workerRef, ok := r.Sys().(*worker.WorkerRef)
 	if !ok {
-		return nil, errors.Errorf("invalid ref: %T", ref.Sys())
+		return nil, errors.Errorf("invalid ref: %T", r.Sys())
 	}
 
 	newReq := cacheutil.ReadRequest{
@@ -591,9 +593,13 @@ func (lbf *llbBridgeForwarder) ReadDir(ctx context.Context, req *pb.ReadDirReque
 	if ref == nil {
 		return nil, errors.Wrapf(os.ErrNotExist, "%s not found", req.DirPath)
 	}
-	workerRef, ok := ref.Sys().(*worker.WorkerRef)
+	r, err := ref.Result(ctx)
+	if err != nil {
+		return nil, err
+	}
+	workerRef, ok := r.Sys().(*worker.WorkerRef)
 	if !ok {
-		return nil, errors.Errorf("invalid ref: %T", ref.Sys())
+		return nil, errors.Errorf("invalid ref: %T", r.Sys())
 	}
 
 	newReq := cacheutil.ReadDirRequest{
@@ -619,9 +625,13 @@ func (lbf *llbBridgeForwarder) StatFile(ctx context.Context, req *pb.StatFileReq
 	if ref == nil {
 		return nil, errors.Wrapf(os.ErrNotExist, "%s not found", req.Path)
 	}
-	workerRef, ok := ref.Sys().(*worker.WorkerRef)
+	r, err := ref.Result(ctx)
+	if err != nil {
+		return nil, err
+	}
+	workerRef, ok := r.Sys().(*worker.WorkerRef)
 	if !ok {
-		return nil, errors.Errorf("invalid ref: %T", ref.Sys())
+		return nil, errors.Errorf("invalid ref: %T", r.Sys())
 	}
 
 	st, err := cacheutil.StatFile(ctx, workerRef.ImmutableRef, req.Path)
@@ -676,7 +686,7 @@ func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest)
 			}
 			r.Ref = ref
 		case *pb.Result_RefsDeprecated:
-			m := map[string]solver.CachedResult{}
+			m := map[string]solver.ResultProxy{}
 			for k, v := range res.RefsDeprecated.Refs {
 				var ids []string
 				if v != "" {
@@ -697,7 +707,7 @@ func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest)
 			}
 			r.Ref = ref
 		case *pb.Result_Refs:
-			m := map[string]solver.CachedResult{}
+			m := map[string]solver.ResultProxy{}
 			for k, ref := range res.Refs.Refs {
 				ref, err := lbf.convertRef(ref.Ids)
 				if err != nil {
@@ -711,7 +721,7 @@ func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest)
 	}
 }
 
-func (lbf *llbBridgeForwarder) convertRef(ids []string) (solver.CachedResult, error) {
+func (lbf *llbBridgeForwarder) convertRef(ids []string) (solver.ResultProxy, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}

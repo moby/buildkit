@@ -5,7 +5,6 @@ import (
 
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/solver"
-	"github.com/moby/buildkit/solver/pb"
 )
 
 func NewWorkerRefResult(ref cache.ImmutableRef, worker Worker) solver.Result {
@@ -15,7 +14,6 @@ func NewWorkerRefResult(ref cache.ImmutableRef, worker Worker) solver.Result {
 type WorkerRef struct {
 	ImmutableRef cache.ImmutableRef
 	Worker       Worker
-	Definition   *pb.Definition
 }
 
 func (wr *WorkerRef) ID() string {
