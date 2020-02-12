@@ -27,7 +27,6 @@ func NewDefinitionOp(def *pb.Definition) (*DefinitionOp, error) {
 	defs := make(map[digest.Digest][]byte)
 
 	var dgst digest.Digest
-
 	for _, dt := range def.Def {
 		var op pb.Op
 		if err := (&op).Unmarshal(dt); err != nil {
@@ -38,7 +37,9 @@ func NewDefinitionOp(def *pb.Definition) (*DefinitionOp, error) {
 		defs[dgst] = dt
 	}
 
+	var index pb.OutputIndex
 	if dgst != "" {
+		index = ops[dgst].Inputs[0].Index
 		dgst = ops[dgst].Inputs[0].Digest
 	}
 
@@ -48,6 +49,7 @@ func NewDefinitionOp(def *pb.Definition) (*DefinitionOp, error) {
 		metas:     def.Metadata,
 		platforms: make(map[digest.Digest]*specs.Platform),
 		dgst:      dgst,
+		index:     index,
 	}, nil
 }
 
@@ -127,11 +129,12 @@ func (d *DefinitionOp) Inputs() []Output {
 	op := d.ops[d.dgst]
 	for _, input := range op.Inputs {
 		vtx := &DefinitionOp{
-			ops:   d.ops,
-			defs:  d.defs,
-			metas: d.metas,
-			dgst:  input.Digest,
-			index: input.Index,
+			ops:       d.ops,
+			defs:      d.defs,
+			metas:     d.metas,
+			platforms: d.platforms,
+			dgst:      input.Digest,
+			index:     input.Index,
 		}
 		inputs = append(inputs, &output{vertex: vtx, platform: d.platform(), getIndex: func() (pb.OutputIndex, error) {
 			return pb.OutputIndex(vtx.index), nil
