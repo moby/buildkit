@@ -14,7 +14,7 @@ ARG SHADOW_VERSION=4.8.1
 
 # git stage is used for checking out remote repository sources
 FROM --platform=$BUILDPLATFORM alpine AS git
-RUN apk add --no-cache git
+RUN apk add --no-cache git xz
 
 # xgo is a helper for golang cross-compilation
 FROM --platform=$BUILDPLATFORM tonistiigi/xx:golang@sha256:6f7d999551dd471b58f70716754290495690efa8421e0a1fcf18eb11d0c0a537 AS xgo
@@ -124,7 +124,7 @@ RUN --mount=from=binaries \
 FROM scratch AS release
 COPY --from=releaser /out/ /
 
-FROM tonistiigi/git@sha256:704fcc24a17b40833625ee37c4a4acf0e4aa90d0aa276926d63847097134defd AS buildkit-export
+FROM tonistiigi/git@sha256:393483e1cef35f09e1a8fe0a0bd93a78b1b6ecec5b5afa5fa5d600fa3ab1fdd8 AS buildkit-export
 COPY examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
 VOLUME /var/lib/buildkit
 
@@ -251,7 +251,7 @@ RUN ./autogen.sh --disable-nls --disable-man --without-audit --without-selinux -
   && cp src/newuidmap src/newgidmap /usr/bin
 
 FROM alpine:3.11 AS rootless-base-internal
-RUN apk add --no-cache git
+RUN apk add --no-cache git xz
 COPY --from=idmap /usr/bin/newuidmap /usr/bin/newuidmap
 COPY --from=idmap /usr/bin/newgidmap /usr/bin/newgidmap
 # we could just set CAP_SETUID filecap rather than `chmod u+s`, but requires kernel >= 4.14
@@ -262,7 +262,7 @@ RUN chmod u+s /usr/bin/newuidmap /usr/bin/newgidmap \
   && echo user:100000:65536 | tee /etc/subuid | tee /etc/subgid
 
 # tonistiigi/buildkit:rootless-base is a pre-built multi-arch version of rootless-base-internal https://github.com/moby/buildkit/pull/666#pullrequestreview-161872350
-FROM tonistiigi/buildkit:rootless-base@sha256:7e87da0f64e4987b4b6620f7b27b62d7178fc27964fcc3afeb8412f4231aa425 AS rootless-base-external
+FROM tonistiigi/buildkit:rootless-base@sha256:0008b156dedd0220a5a0a1aa8840afe0ea0f01f44dfe1ae850b3970aaa1c5cec AS rootless-base-external
 FROM rootless-base-$ROOTLESS_BASE_MODE AS rootless-base
 
 # Rootless mode.
