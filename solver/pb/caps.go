@@ -45,6 +45,8 @@ const (
 	CapExecMountSSH                  apicaps.CapID = "exec.mount.ssh"
 	CapExecCgroupsMounted            apicaps.CapID = "exec.cgroup"
 
+	CapExecMetaSecurityDeviceWhitelistV1 apicaps.CapID = "exec.meta.security.devices.v1"
+
 	CapFileBase       apicaps.CapID = "file.base"
 	CapFileRmWildcard apicaps.CapID = "file.rm.wildcard"
 
@@ -185,6 +187,12 @@ func init() {
 
 	Caps.Init(apicaps.Cap{
 		ID:      CapExecMetaSecurity,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapExecMetaSecurityDeviceWhitelistV1,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})
