@@ -77,7 +77,7 @@ func convertRef(ref client.Reference) (*pb.Ref, error) {
 	if !ok {
 		return nil, errors.Errorf("invalid return reference type %T", ref)
 	}
-	return &pb.Ref{Ids: []string{r.id}, Defs: []*opspb.Definition{r.def}}, nil
+	return &pb.Ref{Id: r.id, Def: r.def}, nil
 }
 
 func RunFromEnvironment(ctx context.Context, f client.BuildFunc) error {
@@ -127,12 +127,7 @@ func (c *grpcClient) Run(ctx context.Context, f client.BuildFunc) (retError erro
 								retError = err
 								continue
 							}
-
-							var id string
-							if len(pbRef.Ids) > 0 {
-								id = pbRef.Ids[0]
-							}
-							m[k] = id
+							m[k] = pbRef.Id
 						}
 						pbRes.Result = &pb.Result_RefsDeprecated{RefsDeprecated: &pb.RefMapDeprecated{Refs: m}}
 					}
@@ -146,11 +141,7 @@ func (c *grpcClient) Run(ctx context.Context, f client.BuildFunc) (retError erro
 						} else {
 							// Server doesn't support the new wire format for refs, so we construct
 							// a deprecated result ref.
-							var id string
-							if len(pbRef.Ids) > 0 {
-								id = pbRef.Ids[0]
-							}
-							pbRes.Result = &pb.Result_RefDeprecated{RefDeprecated: id}
+							pbRes.Result = &pb.Result_RefDeprecated{RefDeprecated: pbRef.Id}
 						}
 					}
 				}
@@ -355,19 +346,17 @@ func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (*clie
 				res.AddRef(k, ref)
 			}
 		case *pb.Result_Ref:
-			ids := pbRes.Ref.Ids
-			if len(ids) > 0 {
+			if pbRes.Ref.Id != "" {
 				ref, err := newReference(c, pbRes.Ref)
 				if err != nil {
 					return nil, err
 				}
-
 				res.SetRef(ref)
 			}
 		case *pb.Result_Refs:
 			for k, v := range pbRes.Refs.Refs {
 				var ref *reference
-				if len(v.Ids) > 0 {
+				if v.Id != "" {
 					ref, err = newReference(c, v)
 					if err != nil {
 						return nil, err
@@ -418,19 +407,7 @@ type reference struct {
 }
 
 func newReference(c *grpcClient, ref *pb.Ref) (*reference, error) {
-	if len(ref.Ids) == 0 {
-		return nil, errors.Errorf("reference has no ids")
-	}
-
-	if len(ref.Ids) > 1 {
-		return nil, errors.Errorf("cannot create multi-result array reference")
-	}
-
-	if len(ref.Ids) != len(ref.Defs) {
-		return nil, errors.Errorf("reference ids and definitions mismatch length")
-	}
-
-	return &reference{c: c, id: ref.Ids[0], def: ref.Defs[0]}, nil
+	return &reference{c: c, id: ref.Id, def: ref.Def}, nil
 }
 
 func (r *reference) ToState() (st llb.State, err error) {

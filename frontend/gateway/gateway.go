@@ -488,7 +488,7 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 		if req.AllowResultArrayRef {
 			refMap := make(map[string]*pb.Ref, len(res.Refs))
 			for k, id := range ids {
-				refMap[k] = pb.NewRef(id, defs[k])
+				refMap[k] = &pb.Ref{Id: id, Def: defs[k]}
 			}
 			pbRes.Result = &pb.Result_Refs{Refs: &pb.RefMap{Refs: refMap}}
 		} else {
@@ -508,7 +508,7 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 		defaultID = id
 
 		if req.AllowResultArrayRef {
-			pbRes.Result = &pb.Result_Ref{Ref: pb.NewRef(id, def)}
+			pbRes.Result = &pb.Result_Ref{Ref: &pb.Ref{Id: id, Def: def}}
 		} else {
 			pbRes.Result = &pb.Result_RefDeprecated{RefDeprecated: id}
 		}
@@ -675,25 +675,15 @@ func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest)
 
 		switch res := in.Result.Result.(type) {
 		case *pb.Result_RefDeprecated:
-			var ids []string
-			if res.RefDeprecated != "" {
-				ids = append(ids, res.RefDeprecated)
-			}
-
-			ref, err := lbf.convertRef(ids)
+			ref, err := lbf.convertRef(res.RefDeprecated)
 			if err != nil {
 				return nil, err
 			}
 			r.Ref = ref
 		case *pb.Result_RefsDeprecated:
 			m := map[string]solver.ResultProxy{}
-			for k, v := range res.RefsDeprecated.Refs {
-				var ids []string
-				if v != "" {
-					ids = append(ids, v)
-				}
-
-				ref, err := lbf.convertRef(ids)
+			for k, id := range res.RefsDeprecated.Refs {
+				ref, err := lbf.convertRef(id)
 				if err != nil {
 					return nil, err
 				}
@@ -701,7 +691,7 @@ func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest)
 			}
 			r.Refs = m
 		case *pb.Result_Ref:
-			ref, err := lbf.convertRef(res.Ref.Ids)
+			ref, err := lbf.convertRef(res.Ref.Id)
 			if err != nil {
 				return nil, err
 			}
@@ -709,7 +699,7 @@ func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest)
 		case *pb.Result_Refs:
 			m := map[string]solver.ResultProxy{}
 			for k, ref := range res.Refs.Refs {
-				ref, err := lbf.convertRef(ref.Ids)
+				ref, err := lbf.convertRef(ref.Id)
 				if err != nil {
 					return nil, err
 				}
@@ -721,19 +711,14 @@ func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest)
 	}
 }
 
-func (lbf *llbBridgeForwarder) convertRef(ids []string) (solver.ResultProxy, error) {
-	if len(ids) == 0 {
+func (lbf *llbBridgeForwarder) convertRef(id string) (solver.ResultProxy, error) {
+	if id == "" {
 		return nil, nil
-	}
-
-	if len(ids) > 1 {
-		return nil, errors.Errorf("return reference has multi-result array")
 	}
 
 	lbf.mu.Lock()
 	defer lbf.mu.Unlock()
 
-	id := ids[0]
 	r, ok := lbf.refs[id]
 	if !ok {
 		return nil, errors.Errorf("return reference %s not found", id)
