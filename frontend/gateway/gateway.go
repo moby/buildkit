@@ -65,7 +65,7 @@ func filterPrefix(opts map[string]string, pfx string) map[string]string {
 	return m
 }
 
-func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string, inputs map[string]llb.State) (*frontend.Result, error) {
+func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string, inputs map[string]*opspb.Definition) (*frontend.Result, error) {
 	source, ok := opts[keySource]
 	if !ok {
 		return nil, errors.Errorf("no source specified for gateway")
@@ -293,7 +293,7 @@ func (lbf *llbBridgeForwarder) Result() (*frontend.Result, error) {
 	return lbf.result, nil
 }
 
-func NewBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, workers frontend.WorkerInfos, inputs map[string]llb.State) *llbBridgeForwarder {
+func NewBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, workers frontend.WorkerInfos, inputs map[string]*opspb.Definition) *llbBridgeForwarder {
 	lbf := &llbBridgeForwarder{
 		callCtx:   ctx,
 		llbBridge: llbBridge,
@@ -306,7 +306,7 @@ func NewBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridg
 	return lbf
 }
 
-func newLLBBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, workers frontend.WorkerInfos, inputs map[string]llb.State) (*llbBridgeForwarder, context.Context, error) {
+func newLLBBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, workers frontend.WorkerInfos, inputs map[string]*opspb.Definition) (*llbBridgeForwarder, context.Context, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	lbf := NewBridgeForwarder(ctx, llbBridge, workers, inputs)
 	server := grpc.NewServer()
@@ -398,7 +398,7 @@ type llbBridgeForwarder struct {
 	err               error
 	exporterAttr      map[string][]byte
 	workers           frontend.WorkerInfos
-	inputs            map[string]llb.State
+	inputs            map[string]*opspb.Definition
 	isErrServerClosed bool
 	*pipe
 }
@@ -455,17 +455,12 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 		})
 	}
 
-	inputs, err := llb.StatesFromDefinitions(req.FrontendInputs)
-	if err != nil {
-		return nil, err
-	}
-
 	ctx = tracing.ContextWithSpanFromContext(ctx, lbf.callCtx)
 	res, err := lbf.llbBridge.Solve(ctx, frontend.SolveRequest{
 		Definition:     req.Definition,
 		Frontend:       req.Frontend,
 		FrontendOpt:    req.FrontendOpt,
-		FrontendInputs: inputs,
+		FrontendInputs: req.FrontendInputs,
 		CacheImports:   cacheImports,
 	})
 	if err != nil {
@@ -722,13 +717,8 @@ func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest)
 }
 
 func (lbf *llbBridgeForwarder) Inputs(ctx context.Context, in *pb.InputsRequest) (*pb.InputsResponse, error) {
-	defs, err := llb.DefinitionsFromStates(lbf.inputs)
-	if err != nil {
-		return nil, err
-	}
-
 	return &pb.InputsResponse{
-		Definitions: defs,
+		Definitions: lbf.inputs,
 	}, nil
 }
 

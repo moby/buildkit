@@ -9,11 +9,12 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/executor"
 	gw "github.com/moby/buildkit/frontend/gateway/client"
+	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
 )
 
 type Frontend interface {
-	Solve(ctx context.Context, llb FrontendLLBBridge, opt map[string]string, inputs map[string]llb.State) (*Result, error)
+	Solve(ctx context.Context, llb FrontendLLBBridge, opt map[string]string, inputs map[string]*pb.Definition) (*Result, error)
 }
 
 type FrontendLLBBridge interface {

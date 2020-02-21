@@ -49,7 +49,7 @@ type SolveRequest struct {
 	Definition     *pb.Definition
 	Frontend       string
 	FrontendOpt    map[string]string
-	FrontendInputs map[string]llb.State
+	FrontendInputs map[string]*pb.Definition
 	CacheImports   []CacheOptionsEntry
 }
 

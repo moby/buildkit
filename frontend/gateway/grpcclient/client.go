@@ -301,24 +301,11 @@ func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (*clie
 		}
 	}
 
-	var defs map[string]*opspb.Definition
-	if len(creq.FrontendInputs) > 0 {
-		err := c.caps.Supports(pb.CapFrontendInputs)
-		if err != nil {
-			return nil, err
-		}
-
-		defs, err = llb.DefinitionsFromStates(creq.FrontendInputs)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	req := &pb.SolveRequest{
 		Definition:          creq.Definition,
 		Frontend:            creq.Frontend,
 		FrontendOpt:         creq.FrontendOpt,
-		FrontendInputs:      defs,
+		FrontendInputs:      creq.FrontendInputs,
 		AllowResultReturn:   true,
 		AllowResultArrayRef: true,
 		// old API

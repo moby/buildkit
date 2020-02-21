@@ -20,7 +20,7 @@ import (
 	fstypes "github.com/tonistiigi/fsutil/types"
 )
 
-func llbBridgeToGatewayClient(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string, inputs map[string]llb.State, workerInfos []clienttypes.WorkerInfo) (*bridgeClient, error) {
+func llbBridgeToGatewayClient(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string, inputs map[string]*opspb.Definition, workerInfos []clienttypes.WorkerInfo) (*bridgeClient, error) {
 	return &bridgeClient{
 		opts:              opts,
 		inputs:            inputs,
@@ -35,7 +35,7 @@ type bridgeClient struct {
 	frontend.FrontendLLBBridge
 	mu           sync.Mutex
 	opts         map[string]string
-	inputs       map[string]llb.State
+	inputs       map[string]*opspb.Definition
 	final        map[*ref]struct{}
 	sid          string
 	exporterAttr map[string][]byte
@@ -99,7 +99,15 @@ func (c *bridgeClient) BuildOpts() client.BuildOpts {
 }
 
 func (c *bridgeClient) Inputs(ctx context.Context) (map[string]llb.State, error) {
-	return c.inputs, nil
+	inputs := make(map[string]llb.State)
+	for key, def := range c.inputs {
+		defop, err := llb.NewDefinitionOp(def)
+		if err != nil {
+			return nil, err
+		}
+		inputs[key] = llb.NewState(defop)
+	}
+	return inputs, nil
 }
 
 func (c *bridgeClient) toFrontendResult(r *client.Result) (*frontend.Result, error) {

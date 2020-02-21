@@ -190,9 +190,13 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			pbd = def.ToPB()
 		}
 
-		defs, err := llb.DefinitionsFromStates(opt.FrontendInputs)
-		if err != nil {
-			return err
+		frontendInputs := make(map[string]*pb.Definition)
+		for key, st := range opt.FrontendInputs {
+			def, err := st.Marshal()
+			if err != nil {
+				return err
+			}
+			frontendInputs[key] = def.ToPB()
 		}
 
 		resp, err := c.controlClient().Solve(ctx, &controlapi.SolveRequest{
@@ -203,7 +207,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			Session:        s.ID(),
 			Frontend:       opt.Frontend,
 			FrontendAttrs:  opt.FrontendAttrs,
-			FrontendInputs: defs,
+			FrontendInputs: frontendInputs,
 			Cache:          cacheOpt.options,
 			Entitlements:   opt.AllowedEntitlements,
 		})
