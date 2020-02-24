@@ -15,6 +15,7 @@ type Client interface {
 	Solve(ctx context.Context, req SolveRequest) (*Result, error)
 	ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt) (digest.Digest, []byte, error)
 	BuildOpts() BuildOpts
+	Inputs(ctx context.Context) (map[string]llb.State, error)
 }
 
 type Reference interface {
@@ -45,10 +46,11 @@ type StatRequest struct {
 
 // SolveRequest is same as frontend.SolveRequest but avoiding dependency
 type SolveRequest struct {
-	Definition   *pb.Definition
-	Frontend     string
-	FrontendOpt  map[string]string
-	CacheImports []CacheOptionsEntry
+	Definition     *pb.Definition
+	Frontend       string
+	FrontendOpt    map[string]string
+	FrontendInputs map[string]*pb.Definition
+	CacheImports   []CacheOptionsEntry
 }
 
 type CacheOptionsEntry struct {

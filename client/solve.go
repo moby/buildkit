@@ -35,6 +35,7 @@ type SolveOpt struct {
 	SharedKey             string
 	Frontend              string
 	FrontendAttrs         map[string]string
+	FrontendInputs        map[string]llb.State
 	CacheExports          []CacheOptionsEntry
 	CacheImports          []CacheOptionsEntry
 	Session               []session.Attachable
@@ -188,16 +189,27 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		if def != nil {
 			pbd = def.ToPB()
 		}
+
+		frontendInputs := make(map[string]*pb.Definition)
+		for key, st := range opt.FrontendInputs {
+			def, err := st.Marshal()
+			if err != nil {
+				return err
+			}
+			frontendInputs[key] = def.ToPB()
+		}
+
 		resp, err := c.controlClient().Solve(ctx, &controlapi.SolveRequest{
-			Ref:           ref,
-			Definition:    pbd,
-			Exporter:      ex.Type,
-			ExporterAttrs: ex.Attrs,
-			Session:       s.ID(),
-			Frontend:      opt.Frontend,
-			FrontendAttrs: opt.FrontendAttrs,
-			Cache:         cacheOpt.options,
-			Entitlements:  opt.AllowedEntitlements,
+			Ref:            ref,
+			Definition:     pbd,
+			Exporter:       ex.Type,
+			ExporterAttrs:  ex.Attrs,
+			Session:        s.ID(),
+			Frontend:       opt.Frontend,
+			FrontendAttrs:  opt.FrontendAttrs,
+			FrontendInputs: frontendInputs,
+			Cache:          cacheOpt.options,
+			Entitlements:   opt.AllowedEntitlements,
 		})
 		if err != nil {
 			return errors.Wrap(err, "failed to solve")

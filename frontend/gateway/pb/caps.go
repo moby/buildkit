@@ -28,6 +28,10 @@ const (
 	// CapReferenceOutput is a capability to use a reference of a solved result as
 	// an llb.Output.
 	CapReferenceOutput apicaps.CapID = "reference.output"
+
+	// CapFrontendInputs is a capability to request frontend inputs from the
+	// LLBBridge GRPC server.
+	CapFrontendInputs apicaps.CapID = "frontend.inputs"
 )
 
 func init() {
@@ -112,6 +116,13 @@ func init() {
 	Caps.Init(apicaps.Cap{
 		ID:      CapReferenceOutput,
 		Name:    "reference output",
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapFrontendInputs,
+		Name:    "frontend inputs",
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})

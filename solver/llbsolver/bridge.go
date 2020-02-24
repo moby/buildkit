@@ -133,7 +133,7 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest) (res *
 		if !ok {
 			return nil, errors.Errorf("invalid frontend: %s", req.Frontend)
 		}
-		res, err = f.Solve(ctx, b, req.FrontendOpt)
+		res, err = f.Solve(ctx, b, req.FrontendOpt, req.FrontendInputs)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to solve with frontend %s", req.Frontend)
 		}

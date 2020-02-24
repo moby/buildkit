@@ -305,6 +305,7 @@ func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (*clie
 		Definition:          creq.Definition,
 		Frontend:            creq.Frontend,
 		FrontendOpt:         creq.FrontendOpt,
+		FrontendInputs:      creq.FrontendInputs,
 		AllowResultReturn:   true,
 		AllowResultArrayRef: true,
 		// old API
@@ -397,6 +398,29 @@ func (c *grpcClient) BuildOpts() client.BuildOpts {
 		LLBCaps:   c.llbCaps,
 		Caps:      c.caps,
 	}
+}
+
+func (c *grpcClient) Inputs(ctx context.Context) (map[string]llb.State, error) {
+	err := c.caps.Supports(pb.CapFrontendInputs)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.client.Inputs(ctx, &pb.InputsRequest{})
+	if err != nil {
+		return nil, err
+	}
+
+	inputs := make(map[string]llb.State)
+	for key, def := range resp.Definitions {
+		op, err := llb.NewDefinitionOp(def)
+		if err != nil {
+			return nil, err
+		}
+		inputs[key] = llb.NewState(op)
+	}
+	return inputs, nil
+
 }
 
 type reference struct {
