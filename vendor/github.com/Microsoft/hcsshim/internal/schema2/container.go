@@ -10,6 +10,7 @@
 package hcsschema
 
 type Container struct {
+
 	GuestOs *GuestOs `json:"GuestOs,omitempty"`
 
 	Storage *Storage `json:"Storage,omitempty"`

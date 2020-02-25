@@ -57,7 +57,7 @@ func (s *nsSnapshotter) Commit(ctx context.Context, name, key string, opts ...sn
 func (s *nsSnapshotter) Remove(ctx context.Context, key string) error {
 	return errors.Errorf("calling snapshotter.Remove is forbidden")
 }
-func (s *nsSnapshotter) Walk(ctx context.Context, fn snapshots.WalkFunc, filters ...string) error {
+func (s *nsSnapshotter) Walk(ctx context.Context, fn func(context.Context, snapshots.Info) error) error {
 	ctx = namespaces.WithNamespace(ctx, s.ns)
-	return s.Snapshotter.Walk(ctx, fn, filters...)
+	return s.Snapshotter.Walk(ctx, fn)
 }

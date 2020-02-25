@@ -10,6 +10,7 @@
 package hcsschema
 
 type VirtualPMemDevice struct {
+
 	HostPath string `json:"HostPath,omitempty"`
 
 	ReadOnly bool `json:"ReadOnly,omitempty"`

@@ -118,9 +118,6 @@ func (u *Usage) Add(other Usage) {
 	u.Inodes += other.Inodes
 }
 
-// WalkFunc defines the callback for a snapshot walk.
-type WalkFunc func(context.Context, Info) error
-
 // Snapshotter defines the methods required to implement a snapshot snapshotter for
 // allocating, snapshotting and mounting filesystem changesets. The model works
 // by building up sets of changes with parent-child relationships.
@@ -317,15 +314,9 @@ type Snapshotter interface {
 	// removed before proceeding.
 	Remove(ctx context.Context, key string) error
 
-	// Walk will call the provided function for each snapshot in the
-	// snapshotter which match the provided filters. If no filters are
-	// given all items will be walked.
-	// Filters:
-	//  name
-	//  parent
-	//  kind (active,view,committed)
-	//  labels.(label)
-	Walk(ctx context.Context, fn WalkFunc, filters ...string) error
+	// Walk all snapshots in the snapshotter. For each snapshot in the
+	// snapshotter, the function will be called.
+	Walk(ctx context.Context, fn func(context.Context, Info) error) error
 
 	// Close releases the internal resources.
 	//

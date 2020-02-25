@@ -80,7 +80,7 @@ func DurationFromProto(p *Duration) (time.Duration, error) {
 		return 0, fmt.Errorf("duration: %#v is out of range for time.Duration", p)
 	}
 	if p.Nanos != 0 {
-		d += time.Duration(p.Nanos) * time.Nanosecond
+		d += time.Duration(p.Nanos)
 		if (d < 0) != (p.Nanos < 0) {
 			return 0, fmt.Errorf("duration: %#v is out of range for time.Duration", p)
 		}

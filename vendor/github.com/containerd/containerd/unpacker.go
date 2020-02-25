@@ -186,32 +186,8 @@ func (u *unpacker) unpack(ctx context.Context, config ocispec.Descriptor, layers
 	return nil
 }
 
-type errGroup struct {
-	*errgroup.Group
-	cancel context.CancelFunc
-}
-
-func newErrGroup(ctx context.Context) (*errGroup, context.Context) {
-	ctx, cancel := context.WithCancel(ctx)
-	eg, ctx := errgroup.WithContext(ctx)
-	return &errGroup{
-		Group:  eg,
-		cancel: cancel,
-	}, ctx
-}
-
-func (e *errGroup) Cancel() {
-	e.cancel()
-}
-
-func (e *errGroup) Wait() error {
-	err := e.Group.Wait()
-	e.cancel()
-	return err
-}
-
-func (u *unpacker) handlerWrapper(uctx context.Context, unpacks *int32) (func(images.Handler) images.Handler, *errGroup) {
-	eg, uctx := newErrGroup(uctx)
+func (u *unpacker) handlerWrapper(uctx context.Context, unpacks *int32) (func(images.Handler) images.Handler, *errgroup.Group) {
+	eg, uctx := errgroup.WithContext(uctx)
 	return func(f images.Handler) images.Handler {
 		var (
 			lock    sync.Mutex
@@ -258,19 +234,7 @@ func (u *unpacker) handlerWrapper(uctx context.Context, unpacks *int32) (func(im
 				update := !schema1
 				lock.Unlock()
 				if update {
-					select {
-					case <-uctx.Done():
-						// Do not send update if unpacker is not running.
-					default:
-						select {
-						case u.updateCh <- desc:
-						case <-uctx.Done():
-							// Do not send update if unpacker is not running.
-						}
-					}
-					// Checking ctx.Done() prevents the case that unpacker
-					// exits unexpectedly, but update continues to be generated,
-					// and eventually fills up updateCh and blocks forever.
+					u.updateCh <- desc
 				}
 			}
 			return children, nil

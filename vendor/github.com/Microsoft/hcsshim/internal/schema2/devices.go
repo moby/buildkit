@@ -10,6 +10,7 @@
 package hcsschema
 
 type Devices struct {
+
 	ComPorts map[string]ComPort `json:"ComPorts,omitempty"`
 
 	Scsi map[string]Scsi `json:"Scsi,omitempty"`

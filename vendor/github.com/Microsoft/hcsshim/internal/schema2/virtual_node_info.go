@@ -10,6 +10,7 @@
 package hcsschema
 
 type VirtualNodeInfo struct {
+
 	VirtualNodeIndex int32 `json:"VirtualNodeIndex,omitempty"`
 
 	PhysicalNodeNumber int32 `json:"PhysicalNodeNumber,omitempty"`

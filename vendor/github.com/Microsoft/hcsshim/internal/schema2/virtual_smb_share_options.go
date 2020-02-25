@@ -10,6 +10,7 @@
 package hcsschema
 
 type VirtualSmbShareOptions struct {
+
 	ReadOnly bool `json:"ReadOnly,omitempty"`
 
 	//  convert exclusive access to shared read access

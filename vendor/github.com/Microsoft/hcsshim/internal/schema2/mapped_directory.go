@@ -10,6 +10,7 @@
 package hcsschema
 
 type MappedDirectory struct {
+
 	HostPath string `json:"HostPath,omitempty"`
 
 	HostPathType string `json:"HostPathType,omitempty"`

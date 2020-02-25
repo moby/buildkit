@@ -10,6 +10,7 @@
 package hcsschema
 
 type CacheQueryStatsResponse struct {
+
 	L3OccupancyBytes int32 `json:"L3OccupancyBytes,omitempty"`
 
 	L3TotalBwBytes int32 `json:"L3TotalBwBytes,omitempty"`

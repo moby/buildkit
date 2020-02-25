@@ -11,6 +11,7 @@ package hcsschema
 
 //  ComPort specifies the named pipe that will be used for the port, with empty string indicating a disconnected port.
 type ComPort struct {
+
 	NamedPipe string `json:"NamedPipe,omitempty"`
 
 	OptimizeForDebugger bool `json:"OptimizeForDebugger,omitempty"`

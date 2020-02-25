@@ -10,6 +10,7 @@
 package hcsschema
 
 type HostedSystem struct {
+
 	SchemaVersion *Version `json:"SchemaVersion,omitempty"`
 
 	Container *Container `json:"Container,omitempty"`

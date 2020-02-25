@@ -10,5 +10,6 @@
 package hcsschema
 
 type CloseHandle struct {
+
 	Handle string `json:"Handle,omitempty"`
 }

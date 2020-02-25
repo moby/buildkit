@@ -124,7 +124,7 @@ func (r Spec) Hostname() string {
 	i := strings.Index(r.Locator, "/")
 
 	if i < 0 {
-		return r.Locator
+		i = len(r.Locator) + 1
 	}
 	return r.Locator[:i]
 }

@@ -10,6 +10,7 @@
 package hcsschema
 
 type NetworkAdapter struct {
+
 	EndpointId string `json:"EndpointId,omitempty"`
 
 	MacAddress string `json:"MacAddress,omitempty"`

@@ -10,6 +10,7 @@
 package hcsschema
 
 type Processor struct {
+
 	Count int32 `json:"Count,omitempty"`
 
 	Maximum int32 `json:"Maximum,omitempty"`

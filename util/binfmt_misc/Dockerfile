@@ -38,7 +38,7 @@ FROM base AS exit-ppc64le
 COPY fixtures/exit.ppc64le.s .
 RUN powerpc64le-linux-gnu-as -o exit.o exit.ppc64le.s && powerpc64le-linux-gnu-ld -o exit -s exit.o
 
-FROM golang:1.12-alpine AS generate
+FROM golang:1.13-alpine AS generate
 WORKDIR /src
 COPY --from=exit-amd64 /src/exit amd64
 COPY --from=exit-386 /src/exit 386

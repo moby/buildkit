@@ -11,5 +11,6 @@ package hcsschema
 
 //  HvSocket configuration for a VM
 type HvSocket2 struct {
+
 	HvSocketConfig *HvSocketSystemConfig `json:"HvSocketConfig,omitempty"`
 }

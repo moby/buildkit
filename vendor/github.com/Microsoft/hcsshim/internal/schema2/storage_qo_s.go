@@ -10,6 +10,7 @@
 package hcsschema
 
 type StorageQoS struct {
+
 	IopsMaximum int32 `json:"IopsMaximum,omitempty"`
 
 	BandwidthMaximum int32 `json:"BandwidthMaximum,omitempty"`

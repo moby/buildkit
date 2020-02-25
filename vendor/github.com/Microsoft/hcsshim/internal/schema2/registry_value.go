@@ -10,6 +10,7 @@
 package hcsschema
 
 type RegistryValue struct {
+
 	Key *RegistryKey `json:"Key,omitempty"`
 
 	Name string `json:"Name,omitempty"`

@@ -10,6 +10,7 @@
 package hcsschema
 
 type VideoMonitor struct {
+
 	HorizontalResolution int32 `json:"HorizontalResolution,omitempty"`
 
 	VerticalResolution int32 `json:"VerticalResolution,omitempty"`

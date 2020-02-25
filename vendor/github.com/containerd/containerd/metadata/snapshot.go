@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/containerd/containerd/errdefs"
-	"github.com/containerd/containerd/filters"
 	"github.com/containerd/containerd/labels"
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/metadata/boltutil"
@@ -38,7 +37,6 @@ import (
 
 const (
 	inheritedLabelsPrefix = "containerd.io/snapshot/"
-	labelSnapshotRef      = "containerd.io/snapshot.ref"
 )
 
 type snapshotter struct {
@@ -160,7 +158,6 @@ func (s *snapshotter) Update(ctx context.Context, info snapshots.Info, fieldpath
 		local = snapshots.Info{
 			Name: info.Name,
 		}
-		updated bool
 	)
 	if err := update(ctx, s.db, func(tx *bolt.Tx) error {
 		bkt := getSnapshotterBucket(tx, ns, s.name)
@@ -222,19 +219,17 @@ func (s *snapshotter) Update(ctx context.Context, info snapshots.Info, fieldpath
 			Labels: filterInheritedLabels(local.Labels),
 		}
 
-		// NOTE: Perform this inside the transaction to reduce the
-		// chances of out of sync data. The backend snapshotters
-		// should perform the Update as fast as possible.
-		if info, err = s.Snapshotter.Update(ctx, inner, fieldpaths...); err != nil {
+		if _, err := s.Snapshotter.Update(ctx, inner, fieldpaths...); err != nil {
 			return err
 		}
-		updated = true
 
 		return nil
 	}); err != nil {
-		if updated {
-			log.G(ctx).WithField("snapshotter", s.name).WithField("key", local.Name).WithError(err).Error("transaction failed after updating snapshot backend")
-		}
+		return snapshots.Info{}, err
+	}
+
+	info, err = s.Snapshotter.Stat(ctx, bkey)
+	if err != nil {
 		return snapshots.Info{}, err
 	}
 
@@ -301,158 +296,31 @@ func (s *snapshotter) createSnapshot(ctx context.Context, key, parent string, re
 		return nil, err
 	}
 
-	var (
-		target  = base.Labels[labelSnapshotRef]
-		bparent string
-		bkey    string
-		bopts   = []snapshots.Opt{
-			snapshots.WithLabels(filterInheritedLabels(base.Labels)),
-		}
-	)
-
+	var m []mount.Mount
 	if err := update(ctx, s.db, func(tx *bolt.Tx) error {
 		bkt, err := createSnapshotterBucket(tx, ns, s.name)
 		if err != nil {
 			return err
 		}
 
-		// Check if target exists, if so, return already exists
-		if target != "" {
-			if tbkt := bkt.Bucket([]byte(target)); tbkt != nil {
-				return errors.Wrapf(errdefs.ErrAlreadyExists, "target snapshot %q", target)
+		bbkt, err := bkt.CreateBucket([]byte(key))
+		if err != nil {
+			if err == bolt.ErrBucketExists {
+				err = errors.Wrapf(errdefs.ErrAlreadyExists, "snapshot %q", key)
 			}
+			return err
+		}
+		if err := addSnapshotLease(ctx, tx, s.name, key); err != nil {
+			return err
 		}
 
-		if bbkt := bkt.Bucket([]byte(key)); bbkt != nil {
-			return errors.Wrapf(errdefs.ErrAlreadyExists, "snapshot %q", key)
-		}
-
+		var bparent string
 		if parent != "" {
 			pbkt := bkt.Bucket([]byte(parent))
 			if pbkt == nil {
 				return errors.Wrapf(errdefs.ErrNotFound, "parent snapshot %v does not exist", parent)
 			}
 			bparent = string(pbkt.Get(bucketKeyName))
-		}
-
-		sid, err := bkt.NextSequence()
-		if err != nil {
-			return err
-		}
-		bkey = createKey(sid, ns, key)
-
-		return err
-	}); err != nil {
-		return nil, err
-	}
-
-	var (
-		m       []mount.Mount
-		created string
-		rerr    error
-	)
-	if readonly {
-		m, err = s.Snapshotter.View(ctx, bkey, bparent, bopts...)
-	} else {
-		m, err = s.Snapshotter.Prepare(ctx, bkey, bparent, bopts...)
-	}
-
-	// An already exists error should indicate the backend found a snapshot
-	// matching a provided target reference.
-	if errdefs.IsAlreadyExists(err) {
-		if target != "" {
-			var tinfo *snapshots.Info
-			filter := fmt.Sprintf(`labels."containerd.io/snapshot.ref"==%s,parent==%q`, target, bparent)
-			if err := s.Snapshotter.Walk(ctx, func(ctx context.Context, i snapshots.Info) error {
-				if tinfo == nil && i.Kind == snapshots.KindCommitted {
-					if i.Labels["containerd.io/snapshot.ref"] != target {
-						// Walk did not respect filter
-						return nil
-					}
-					if i.Parent != bparent {
-						// Walk did not respect filter
-						return nil
-					}
-					tinfo = &i
-				}
-				return nil
-
-			}, filter); err != nil {
-				return nil, errors.Wrap(err, "failed walking backend snapshots")
-			}
-
-			if tinfo == nil {
-				return nil, errors.Wrapf(errdefs.ErrNotFound, "target snapshot %q in backend", target)
-			}
-
-			key = target
-			bkey = tinfo.Name
-			bparent = tinfo.Parent
-			base.Created = tinfo.Created
-			base.Updated = tinfo.Updated
-			if base.Labels == nil {
-				base.Labels = tinfo.Labels
-			} else {
-				for k, v := range tinfo.Labels {
-					if _, ok := base.Labels[k]; !ok {
-						base.Labels[k] = v
-					}
-				}
-			}
-
-			// Propagate this error after the final update
-			rerr = errors.Wrapf(errdefs.ErrAlreadyExists, "target snapshot %q from snapshotter", target)
-		} else {
-			// This condition is unexpected as the key provided is expected
-			// to be new and unique, return as unknown response from backend
-			// to avoid confusing callers handling already exists.
-			return nil, errors.Wrapf(errdefs.ErrUnknown, "unexpected error from snapshotter: %v", err)
-		}
-	} else if err != nil {
-		return nil, err
-	} else {
-		ts := time.Now().UTC()
-		base.Created = ts
-		base.Updated = ts
-		created = bkey
-	}
-
-	if txerr := update(ctx, s.db, func(tx *bolt.Tx) error {
-		bkt := getSnapshotterBucket(tx, ns, s.name)
-		if bkt == nil {
-			return errors.Wrapf(errdefs.ErrNotFound, "can not find snapshotter %q", s.name)
-		}
-
-		if err := addSnapshotLease(ctx, tx, s.name, key); err != nil {
-			return err
-		}
-
-		bbkt, err := bkt.CreateBucket([]byte(key))
-		if err != nil {
-			if err != bolt.ErrBucketExists {
-				return err
-			}
-			if rerr == nil {
-				rerr = errors.Wrapf(errdefs.ErrAlreadyExists, "snapshot %q", key)
-			}
-			return nil
-		}
-
-		if parent != "" {
-			pbkt := bkt.Bucket([]byte(parent))
-			if pbkt == nil {
-				return errors.Wrapf(errdefs.ErrNotFound, "parent snapshot %v does not exist", parent)
-			}
-
-			// Ensure the backend's parent matches the metadata store's parent
-			// If it is mismatched, then a target was provided for a snapshotter
-			// which has a different parent then requested.
-			// NOTE: The backend snapshotter is responsible for enforcing the
-			// uniqueness of the reference relationships, the metadata store
-			// can only error out to prevent inconsistent data.
-			if bparent != string(pbkt.Get(bucketKeyName)) {
-				return errors.Wrapf(errdefs.ErrInvalidArgument, "mismatched parent %s from target %s", parent, target)
-			}
 
 			cbkt, err := pbkt.CreateBucketIfNotExists(bucketKeyChildren)
 			if err != nil {
@@ -467,28 +335,36 @@ func (s *snapshotter) createSnapshot(ctx context.Context, key, parent string, re
 			}
 		}
 
-		if err := boltutil.WriteTimestamps(bbkt, base.Created, base.Updated); err != nil {
+		sid, err := bkt.NextSequence()
+		if err != nil {
+			return err
+		}
+		bkey := createKey(sid, ns, key)
+		if err := bbkt.Put(bucketKeyName, []byte(bkey)); err != nil {
+			return err
+		}
+
+		ts := time.Now().UTC()
+		if err := boltutil.WriteTimestamps(bbkt, ts, ts); err != nil {
 			return err
 		}
 		if err := boltutil.WriteLabels(bbkt, base.Labels); err != nil {
 			return err
 		}
 
-		return bbkt.Put(bucketKeyName, []byte(bkey))
-	}); txerr != nil {
-		rerr = txerr
-	}
+		inheritedOpt := snapshots.WithLabels(filterInheritedLabels(base.Labels))
 
-	if rerr != nil {
-		// If the created reference is not stored, attempt clean up
-		if created != "" {
-			if err := s.Snapshotter.Remove(ctx, created); err != nil {
-				log.G(ctx).WithField("snapshotter", s.name).WithField("key", created).WithError(err).Error("failed to cleanup unreferenced snapshot")
-			}
+		// TODO: Consider doing this outside of transaction to lessen
+		// metadata lock time
+		if readonly {
+			m, err = s.Snapshotter.View(ctx, bkey, bparent, inheritedOpt)
+		} else {
+			m, err = s.Snapshotter.Prepare(ctx, bkey, bparent, inheritedOpt)
 		}
-		return nil, rerr
+		return err
+	}); err != nil {
+		return nil, err
 	}
-
 	return m, nil
 }
 
@@ -512,8 +388,7 @@ func (s *snapshotter) Commit(ctx context.Context, name, key string, opts ...snap
 		return err
 	}
 
-	var bname string
-	if err := update(ctx, s.db, func(tx *bolt.Tx) error {
+	return update(ctx, s.db, func(tx *bolt.Tx) error {
 		bkt := getSnapshotterBucket(tx, ns, s.name)
 		if bkt == nil {
 			return errors.Wrapf(errdefs.ErrNotFound,
@@ -588,38 +463,10 @@ func (s *snapshotter) Commit(ctx context.Context, name, key string, opts ...snap
 
 		inheritedOpt := snapshots.WithLabels(filterInheritedLabels(base.Labels))
 
-		// NOTE: Backend snapshotters should commit fast and reliably to
-		// prevent metadata store locking and minimizing rollbacks.
-		// This operation should be done in the transaction to minimize the
-		// risk of the committed keys becoming out of sync. If this operation
-		// succeed and the overall transaction fails then the risk of out of
-		// sync data is higher and may require manual cleanup.
-		if err := s.Snapshotter.Commit(ctx, nameKey, bkey, inheritedOpt); err != nil {
-			if errdefs.IsNotFound(err) {
-				log.G(ctx).WithField("snapshotter", s.name).WithField("key", key).WithError(err).Error("uncommittable snapshot: missing in backend, snapshot should be removed")
-			}
-			// NOTE: Consider handling already exists here from the backend. Currently
-			// already exists from the backend may be confusing to the client since it
-			// may require the client to re-attempt from prepare. However, if handling
-			// here it is not clear what happened with the existing backend key and
-			// whether the already prepared snapshot would still be used or must be
-			// discarded. It is best that all implementations of the snapshotter
-			// interface behave the same, in which case the backend should handle the
-			// mapping of duplicates and not error.
-			return err
-		}
-		bname = nameKey
-
-		return nil
-	}); err != nil {
-		if bname != "" {
-			log.G(ctx).WithField("snapshotter", s.name).WithField("key", key).WithField("bname", bname).WithError(err).Error("uncommittable snapshot: transaction failed after commit, snapshot should be removed")
-
-		}
-		return err
-	}
-
-	return nil
+		// TODO: Consider doing this outside of transaction to lessen
+		// metadata lock time
+		return s.Snapshotter.Commit(ctx, nameKey, bkey, inheritedOpt)
+	})
 
 }
 
@@ -683,7 +530,7 @@ type infoPair struct {
 	info snapshots.Info
 }
 
-func (s *snapshotter) Walk(ctx context.Context, fn snapshots.WalkFunc, fs ...string) error {
+func (s *snapshotter) Walk(ctx context.Context, fn func(context.Context, snapshots.Info) error) error {
 	ns, err := namespaces.NamespaceRequired(ctx)
 	if err != nil {
 		return err
@@ -694,11 +541,6 @@ func (s *snapshotter) Walk(ctx context.Context, fn snapshots.WalkFunc, fs ...str
 		pairs     = []infoPair{}
 		lastKey   string
 	)
-
-	filter, err := filters.ParseAll(fs...)
-	if err != nil {
-		return err
-	}
 
 	for {
 		if err := view(ctx, s.db, func(tx *bolt.Tx) error {
@@ -762,11 +604,8 @@ func (s *snapshotter) Walk(ctx context.Context, fn snapshots.WalkFunc, fs ...str
 				return err
 			}
 
-			info = overlayInfo(info, pair.info)
-			if filter.Match(adaptSnapshot(info)) {
-				if err := fn(ctx, info); err != nil {
-					return err
-				}
+			if err := fn(ctx, overlayInfo(info, pair.info)); err != nil {
+				return err
 			}
 		}
 
@@ -940,9 +779,8 @@ func (s *snapshotter) Close() error {
 	return s.Snapshotter.Close()
 }
 
-// filterInheritedLabels filters the provided labels by removing any key which
-// isn't a snapshot label. Snapshot labels have a prefix of "containerd.io/snapshot/"
-// or are the "containerd.io/snapshot.ref" label.
+// filterInheritedLabels filters the provided labels by removing any key which doesn't have
+// a prefix of "containerd.io/snapshot/".
 func filterInheritedLabels(labels map[string]string) map[string]string {
 	if labels == nil {
 		return nil
@@ -950,7 +788,7 @@ func filterInheritedLabels(labels map[string]string) map[string]string {
 
 	filtered := make(map[string]string)
 	for k, v := range labels {
-		if k == labelSnapshotRef || strings.HasPrefix(k, inheritedLabelsPrefix) {
+		if strings.HasPrefix(k, inheritedLabelsPrefix) {
 			filtered[k] = v
 		}
 	}

@@ -10,6 +10,7 @@
 package hcsschema
 
 type Uefi struct {
+
 	EnableDebugger bool `json:"EnableDebugger,omitempty"`
 
 	SecureBootTemplateId string `json:"SecureBootTemplateId,omitempty"`

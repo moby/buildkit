@@ -96,16 +96,16 @@ func getCPUVariant() string {
 		return ""
 	}
 
-	switch strings.ToLower(variant) {
-	case "8", "aarch64":
+	switch variant {
+	case "8", "AArch64":
 		variant = "v8"
-	case "7", "7m", "?(12)", "?(13)", "?(14)", "?(15)", "?(16)", "?(17)":
+	case "7", "7M", "?(12)", "?(13)", "?(14)", "?(15)", "?(16)", "?(17)":
 		variant = "v7"
-	case "6", "6tej":
+	case "6", "6TEJ":
 		variant = "v6"
-	case "5", "5t", "5te", "5tej":
+	case "5", "5T", "5TE", "5TEJ":
 		variant = "v5"
-	case "4", "4t":
+	case "4", "4T":
 		variant = "v4"
 	case "3":
 		variant = "v3"

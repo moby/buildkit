@@ -4,7 +4,7 @@ import (
 	"crypto/sha1"
 	"path/filepath"
 
-	"github.com/Microsoft/go-winio/pkg/guid"
+	"github.com/Microsoft/hcsshim/internal/guid"
 	"github.com/Microsoft/hcsshim/internal/wclayer"
 )
 
@@ -77,7 +77,7 @@ type GUID [16]byte
 
 func NameToGuid(name string) (id GUID, err error) {
 	g, err := wclayer.NameToGuid(name)
-	return g.ToWindowsArray(), err
+	return GUID(g), err
 }
 
 func NewGUID(source string) *GUID {
@@ -88,7 +88,7 @@ func NewGUID(source string) *GUID {
 }
 
 func (g *GUID) ToString() string {
-	return guid.FromWindowsArray(*g).String()
+	return (guid.GUID)(*g).String()
 }
 
 type LayerReader = wclayer.LayerReader

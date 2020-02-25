@@ -10,6 +10,7 @@
 package hcsschema
 
 type FlexibleIoDevice struct {
+
 	EmulatorId string `json:"EmulatorId,omitempty"`
 
 	HostingModel string `json:"HostingModel,omitempty"`

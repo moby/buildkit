@@ -10,6 +10,7 @@
 package hcsschema
 
 type Topology struct {
+
 	Memory *Memory2 `json:"Memory,omitempty"`
 
 	Processor *Processor2 `json:"Processor,omitempty"`

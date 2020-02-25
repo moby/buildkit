@@ -10,6 +10,7 @@
 package hcsschema
 
 type ProcessParameters struct {
+
 	ApplicationName string `json:"ApplicationName,omitempty"`
 
 	CommandLine string `json:"CommandLine,omitempty"`

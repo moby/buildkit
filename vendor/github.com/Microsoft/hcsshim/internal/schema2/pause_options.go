@@ -11,6 +11,7 @@ package hcsschema
 
 //  Options for HcsPauseComputeSystem
 type PauseOptions struct {
+
 	SuspensionLevel string `json:"SuspensionLevel,omitempty"`
 
 	HostedNotification *PauseNotification `json:"HostedNotification,omitempty"`

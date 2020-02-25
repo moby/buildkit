@@ -10,6 +10,7 @@
 package hcsschema
 
 type WindowsCrashReporting struct {
+
 	DumpFileName string `json:"DumpFileName,omitempty"`
 
 	MaxDumpSize int64 `json:"MaxDumpSize,omitempty"`

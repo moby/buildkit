@@ -10,6 +10,7 @@
 package hcsschema
 
 type VirtualSmbShare struct {
+
 	Name string `json:"Name,omitempty"`
 
 	Path string `json:"Path,omitempty"`

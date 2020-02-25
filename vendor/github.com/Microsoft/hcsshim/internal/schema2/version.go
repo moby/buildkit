@@ -10,6 +10,7 @@
 package hcsschema
 
 type Version struct {
+
 	Major int32 `json:"Major,omitempty"`
 
 	Minor int32 `json:"Minor,omitempty"`
