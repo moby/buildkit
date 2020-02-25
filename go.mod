@@ -1,6 +1,6 @@
 module github.com/moby/buildkit
 
-go 1.12
+go 1.13
 
 require (
 	github.com/BurntSushi/toml v0.3.1
@@ -79,3 +79,7 @@ require (
 replace github.com/hashicorp/go-immutable-radix => github.com/tonistiigi/go-immutable-radix v0.0.0-20170803185627-826af9ccf0fe
 
 replace github.com/jaguilar/vt100 => github.com/tonistiigi/vt100 v0.0.0-20190402012908-ad4c4a574305
+
+replace github.com/containerd/containerd => github.com/containerd/containerd v1.3.1-0.20191014053712-acdcf13d5eaf
+
+replace github.com/docker/docker => github.com/docker/docker v1.4.2-0.20190319215453-e7b5f7dbe98c
