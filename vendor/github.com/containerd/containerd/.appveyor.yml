@@ -7,21 +7,22 @@ clone_folder: c:\gopath\src\github.com\containerd\containerd
 branches:
   only:
     - master
+    - /release\/.*/
 
 environment:
   GOPATH: C:\gopath
-  CGO_ENABLED: 1
+  CGO_ENABLED: 0
   matrix:
-    - GO_VERSION: 1.12.10
+    - GO_VERSION: 1.13.8
 
 before_build:
-  - choco install -y mingw --version 5.3.0
+  - choco install --no-progress -y mingw --version 5.3.0
   # Install Go
   - rd C:\Go /s /q
   - appveyor DownloadFile https://storage.googleapis.com/golang/go%GO_VERSION%.windows-amd64.zip
   - 7z x go%GO_VERSION%.windows-amd64.zip -oC:\ >nul
   - go version
-  - choco install codecov
+  - choco install --no-progress codecov
   # Clone hcsshim at the vendored version
   - bash.exe -elc "export PATH=/c/tools/mingw64/bin:$PATH;
        rm -rf /c/gopath/src/github.com/Microsoft/hcsshim;
@@ -50,13 +51,14 @@ build_script:
         mingw32-make.exe check"
   - bash.exe -elc "export PATH=/c/tools/mingw64/bin:$PATH ; mingw32-make.exe build binaries"
 
+# These scripts run with CGO_ENABLED=1 in order to support the Race Detector (-race flag), enabled in Makefile.windows
 test_script:
   # TODO: need an equivalent of TRAVIS_COMMIT_RANGE
   # - GIT_CHECK_EXCLUDE="./vendor" TRAVIS_COMMIT_RANGE="${TRAVIS_COMMIT_RANGE/.../..}" C:\MinGW\bin\mingw32-make.exe dco
-  - bash.exe -lc "export PATH=/c/tools/mingw64/bin:/c/gopath/src/github.com/containerd/containerd/bin:$PATH ; mingw32-make.exe coverage root-coverage"
-  # - bash.exe -elc "export PATH=/c/tools/mingw64/bin:/c/gopath/src/github.com/containerd/containerd/bin:$PATH ; mingw32-make.exe integration"
+  - bash.exe -lc "export CGO_ENABLED=1 PATH=/c/tools/mingw64/bin:/c/gopath/src/github.com/containerd/containerd/bin:$PATH ; mingw32-make.exe coverage root-coverage"
+  # - bash.exe -elc "export CGO_ENABLED=1 PATH=/c/tools/mingw64/bin:/c/gopath/src/github.com/containerd/containerd/bin:$PATH ; mingw32-make.exe integration"
   # Run the integration suite a second time. See discussion in github.com/containerd/containerd/pull/1759
-  # - bash.exe -elc "export PATH=/c/tools/mingw64/bin:/c/gopath/src/github.com/containerd/containerd/bin:$PATH; TESTFLAGS_PARALLEL=1 mingw32-make.exe integration"
+  # - bash.exe -elc "export CGO_ENABLED=1 PATH=/c/tools/mingw64/bin:/c/gopath/src/github.com/containerd/containerd/bin:$PATH; TESTFLAGS_PARALLEL=1 mingw32-make.exe integration"
 
 on_success:
-  codecov --flag windows -f coverage.txt
+  - codecov --flag windows -f coverage.txt
