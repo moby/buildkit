@@ -1,5 +1,5 @@
 # syntax = docker/dockerfile:1.1-experimental
-FROM golang:1.13-alpine AS vendored
+FROM golang:1.14-alpine AS vendored
 RUN  apk add --no-cache git
 WORKDIR /src
 RUN --mount=target=/src,rw \
