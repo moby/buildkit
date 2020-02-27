@@ -16,6 +16,7 @@ func TestCLIIntegration(t *testing.T) {
 	integration.Run(t, []integration.Test{
 		testDiskUsage,
 		testBuildWithLocalFiles,
+		testBuildWithCacheExport,
 		testBuildLocalExporter,
 		testBuildContainerdExporter,
 		testPrune,

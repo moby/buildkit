@@ -67,6 +67,40 @@ func testBuildLocalExporter(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, string(dt), "bar")
 }
 
+func testBuildWithCacheExport(t *testing.T, sb integration.Sandbox) {
+	tmpdir, err := ioutil.TempDir("", "buildkit-buildctl")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	dockerfile := `FROM busybox:latest AS build_base
+COPY foo foo
+
+FROM busybox:latest AS server_builder
+COPY --from=build_base foo foo
+
+FROM scratch
+COPY --from=server_builder foo foo
+ENTRYPOINT [""]
+`
+	err = ioutil.WriteFile(filepath.Join(tmpdir, "Dockerfile"), []byte(dockerfile), 0600)
+	require.NoError(t, err)
+	err = ioutil.WriteFile(filepath.Join(tmpdir, "foo"), []byte("foodata"), 0600)
+	require.NoError(t, err)
+
+
+	buildCmd := []string{
+		"build", "--progress=plain",
+		"--frontend=dockerfile.v0", "--local context=" + tmpdir, "--local dockerfile=" + tmpdir,
+		"--export-cache type=local,dest=" + filepath.Join(tmpdir, "cache"),
+		"--output type=local,dest=" + filepath.Join(tmpdir, "output"),
+	}
+
+	cmd := sb.Cmd(strings.Join(buildCmd, " "))
+	err = cmd.Run()
+
+	require.NoError(t, err)
+}
+
 func testBuildContainerdExporter(t *testing.T, sb integration.Sandbox) {
 	var cdAddress string
 	if cd, ok := sb.(interface {
