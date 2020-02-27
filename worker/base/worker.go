@@ -15,6 +15,7 @@ import (
 	"github.com/containerd/containerd/gc"
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/leases"
+	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/cache"
@@ -41,6 +42,7 @@ import (
 	"github.com/moby/buildkit/source/git"
 	"github.com/moby/buildkit/source/http"
 	"github.com/moby/buildkit/source/local"
+	"github.com/moby/buildkit/util/binfmt_misc"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/progress"
@@ -200,7 +202,19 @@ func (w *Worker) Labels() map[string]string {
 	return w.WorkerOpt.Labels
 }
 
-func (w *Worker) Platforms() []specs.Platform {
+func (w *Worker) Platforms(noCache bool) []specs.Platform {
+	if noCache {
+		pm := make(map[string]struct{}, len(w.WorkerOpt.Platforms))
+		for _, p := range w.WorkerOpt.Platforms {
+			pm[platforms.Format(p)] = struct{}{}
+		}
+		for _, p := range binfmt_misc.SupportedPlatforms(noCache) {
+			if _, ok := pm[p]; !ok {
+				pp, _ := platforms.Parse(p)
+				w.WorkerOpt.Platforms = append(w.WorkerOpt.Platforms, pp)
+			}
+		}
+	}
 	return w.WorkerOpt.Platforms
 }
 
