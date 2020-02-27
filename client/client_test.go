@@ -61,6 +61,7 @@ func TestClientIntegration(t *testing.T) {
 	mirrors := integration.WithMirroredImages(integration.OfficialImages("busybox:latest", "alpine:latest"))
 
 	integration.Run(t, []integration.Test{
+		testLocalCacheExport,
 		testRelativeWorkDir,
 		testFileOpMkdirMkfile,
 		testFileOpCopyRm,
@@ -130,6 +131,41 @@ func TestClientIntegration(t *testing.T) {
 
 func newContainerd(cdAddress string) (*containerd.Client, error) {
 	return containerd.New(cdAddress, containerd.WithTimeout(60*time.Second))
+}
+
+func testLocalCacheExport(t *testing.T, sb integration.Sandbox) {
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	tmpdir, err := ioutil.TempDir("", "buildkit-buildctl")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	err = ioutil.WriteFile(filepath.Join(tmpdir, "foo"), []byte("foodata"), 0600)
+	require.NoError(t, err)
+
+	buildbase := llb.Image("alpine:latest").File(llb.Copy(llb.Local("mylocal"), "foo", "foo"))
+	intermed := llb.Image("alpine:latest").File(llb.Copy(buildbase, "foo", "foo"))
+	final := llb.Scratch().File(llb.Copy(intermed, "foo", "foooooo"))
+
+	def, err := final.Marshal()
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		CacheExports: []CacheOptionsEntry{
+			{
+				Type: "local",
+				Attrs: map[string]string{
+					"dest": filepath.Join(tmpdir, "cache"),
+				},
+			},
+		},
+		LocalDirs: map[string]string{
+			"mylocal": tmpdir,
+		},
+	}, nil)
+	require.NoError(t, err)
 }
 
 func testBridgeNetworking(t *testing.T, sb integration.Sandbox) {
