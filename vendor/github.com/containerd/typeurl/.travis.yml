@@ -1,11 +1,19 @@
+dist: bionic
 language: go
 go:
-    - 1.9.x
-    - 1.10.x
-    - tip
+    - 1.13.x
+
+install:
+    - go get -u github.com/vbatts/git-validation
+    - go get -u github.com/kunalkushwaha/ltag
+
+before_script:
+    - pushd ..; git clone https://github.com/containerd/project; popd
 
 script:
-    - go test -race -coverprofile=coverage.txt -covermode=atomic
+    - DCO_VERBOSITY=-q ../project/script/validate/dco
+    - ../project/script/validate/fileheader ../project/
+    - go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
 
 after_success:
     - bash <(curl -s https://codecov.io/bash)

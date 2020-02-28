@@ -7,8 +7,8 @@ go_import_path: github.com/containerd/go-cni
 
 install:
   - go get -d
-  - go get -u github.com/vbatts/git-validation
-  - go get -u github.com/kunalkushwaha/ltag
+  - env GO111MODULE=off go get -u github.com/vbatts/git-validation
+  - env GO111MODULE=off go get -u github.com/kunalkushwaha/ltag
 
 before_script:
   - pushd ..; git clone https://github.com/containerd/project; popd
@@ -16,6 +16,7 @@ before_script:
 script:
     - DCO_VERBOSITY=-q ../project/script/validate/dco
     - ../project/script/validate/fileheader ../project/
+    - env GO111MODULE=on ../project/script/validate/vendor
     - go test -race -coverprofile=coverage.txt -covermode=atomic
 
 after_success:

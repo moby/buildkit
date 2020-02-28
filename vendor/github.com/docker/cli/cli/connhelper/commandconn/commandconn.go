@@ -41,7 +41,9 @@ func New(ctx context.Context, cmd string, args ...string) (net.Conn, error) {
 	// we assume that args never contains sensitive information
 	logrus.Debugf("commandconn: starting %s with %v", cmd, args)
 	c.cmd.Env = os.Environ()
+	c.cmd.SysProcAttr = &syscall.SysProcAttr{}
 	setPdeathsig(c.cmd)
+	createSession(c.cmd)
 	c.stdin, err = c.cmd.StdinPipe()
 	if err != nil {
 		return nil, err

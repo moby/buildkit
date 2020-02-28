@@ -31,11 +31,11 @@ At this point you can use `go` to checkout `containerd` in your `GOPATH`:
 go get github.com/containerd/containerd
 ```
 
-For proper results, install the `protoc` release into `/usr/local` on your build system. For example, the following commands will download and install the 3.5.0 release for a 64-bit Linux host:
+For proper results, install the `protoc` release into `/usr/local` on your build system. For example, the following commands will download and install the 3.11.4 release for a 64-bit Linux host:
 
 ```
-$ wget -c https://github.com/google/protobuf/releases/download/v3.5.0/protoc-3.5.0-linux-x86_64.zip
-$ sudo unzip protoc-3.5.0-linux-x86_64.zip -d /usr/local
+$ wget -c https://github.com/google/protobuf/releases/download/v3.11.4/protoc-3.11.4-linux-x86_64.zip
+$ sudo unzip protoc-3.11.4-linux-x86_64.zip -d /usr/local
 ```
 
 `containerd` uses [Btrfs](https://en.wikipedia.org/wiki/Btrfs) it means that you
@@ -138,7 +138,7 @@ You can build an image from this `Dockerfile`:
 FROM golang
 
 RUN apt-get update && \
-    apt-get install -y btrfs-tools libseccomp-dev
+    apt-get install -y libbtrfs-dev libseccomp-dev
 ```
 
 Let's suppose that you built an image called `containerd/build`. From the
@@ -160,7 +160,7 @@ You are now ready to [build](#build-containerd):
 ```
 
 ## Build containerd and runc
-To have complete core container runtime, you will both `containerd` and `runc`. It is possible to build both of these via Docker container.
+To have complete core container runtime, you will need both `containerd` and `runc`. It is possible to build both of these via Docker container.
 
 You can use `go` to checkout `runc` in your `GOPATH`:
 
@@ -174,7 +174,7 @@ We can build an image from this `Dockerfile`:
 FROM golang
 
 RUN apt-get update && \
-    apt-get install -y btrfs-tools libseccomp-dev
+    apt-get install -y libbtrfs-dev libseccomp-dev
 
 ```
 

@@ -23,6 +23,7 @@ DESTDIR ?= /usr/local
 VERSION=$(shell git describe --match 'v[0-9]*' --dirty='.m' --always)
 REVISION=$(shell git rev-parse HEAD)$(shell if ! git diff --no-ext-diff --quiet --exit-code; then echo .m; fi)
 PACKAGE=github.com/containerd/containerd
+SHIM_CGO_ENABLED ?= 0
 
 ifneq "$(strip $(shell command -v go 2>/dev/null))" ""
 	GOOS ?= $(shell go env GOOS)
@@ -80,6 +81,11 @@ TEST_REQUIRES_ROOT_PACKAGES=$(filter \
 	done | sort -u) \
     )
 
+ifdef SKIPTESTS
+    PACKAGES:=$(filter-out ${SKIPTESTS},${PACKAGES})
+    TEST_REQUIRES_ROOT_PACKAGES:=$(filter-out ${SKIPTESTS},${TEST_REQUIRES_ROOT_PACKAGES})
+endif
+
 # Project binaries.
 COMMANDS=ctr containerd containerd-stress
 MANPAGES=ctr.1 containerd.1 containerd-config.1 containerd-config.toml.5
@@ -105,13 +111,13 @@ GO_GCFLAGS=$(shell				\
 	echo "-gcflags=-trimpath=$${1}/src";	\
 	)
 
+BINARIES=$(addprefix bin/,$(COMMANDS))
+
 #include platform specific makefile
 -include Makefile.$(GOOS)
 
-BINARIES=$(addprefix bin/,$(COMMANDS))
-
 # Flags passed to `go test`
-TESTFLAGS ?= $(TESTFLAGS_RACE)
+TESTFLAGS ?= $(TESTFLAGS_RACE) $(EXTRA_TESTFLAGS)
 TESTFLAGS_PARALLEL ?= 8
 
 .PHONY: clean all AUTHORS build binaries test integration generate protos checkprotos coverage ci check help install uninstall vendor release mandir install-man genman
@@ -177,22 +183,26 @@ benchmark: ## run benchmarks tests
 
 FORCE:
 
+define BUILD_BINARY =
+@echo "$(WHALE) $@"
+@go build ${DEBUG_GO_GCFLAGS} ${GO_GCFLAGS} ${GO_BUILD_FLAGS} -o $@ ${GO_LDFLAGS} ${GO_TAGS}  ./$<
+endef
+
 # Build a binary from a cmd.
 bin/%: cmd/% FORCE
-	@echo "$(WHALE) $@${BINARY_SUFFIX}"
-	@go build ${DEBUG_GO_GCFLAGS} ${GO_GCFLAGS} ${GO_BUILD_FLAGS} -o $@${BINARY_SUFFIX} ${GO_LDFLAGS} ${GO_TAGS}  ./$<
+	$(BUILD_BINARY)
 
 bin/containerd-shim: cmd/containerd-shim FORCE # set !cgo and omit pie for a static shim build: https://github.com/golang/go/issues/17789#issuecomment-258542220
 	@echo "$(WHALE) bin/containerd-shim"
-	@CGO_ENABLED=0 go build ${GO_BUILD_FLAGS} -o bin/containerd-shim ${SHIM_GO_LDFLAGS} ${GO_TAGS} ./cmd/containerd-shim
+	@CGO_ENABLED=${SHIM_CGO_ENABLED} go build ${GO_BUILD_FLAGS} -o bin/containerd-shim ${SHIM_GO_LDFLAGS} ${GO_TAGS} ./cmd/containerd-shim
 
 bin/containerd-shim-runc-v1: cmd/containerd-shim-runc-v1 FORCE # set !cgo and omit pie for a static shim build: https://github.com/golang/go/issues/17789#issuecomment-258542220
 	@echo "$(WHALE) bin/containerd-shim-runc-v1"
-	@CGO_ENABLED=0 go build ${GO_BUILD_FLAGS} -o bin/containerd-shim-runc-v1 ${SHIM_GO_LDFLAGS} ${GO_TAGS} ./cmd/containerd-shim-runc-v1
+	@CGO_ENABLED=${SHIM_CGO_ENABLED} go build ${GO_BUILD_FLAGS} -o bin/containerd-shim-runc-v1 ${SHIM_GO_LDFLAGS} ${GO_TAGS} ./cmd/containerd-shim-runc-v1
 
 bin/containerd-shim-runc-v2: cmd/containerd-shim-runc-v2 FORCE # set !cgo and omit pie for a static shim build: https://github.com/golang/go/issues/17789#issuecomment-258542220
 	@echo "$(WHALE) bin/containerd-shim-runc-v2"
-	@CGO_ENABLED=0 go build ${GO_BUILD_FLAGS} -o bin/containerd-shim-runc-v2 ${SHIM_GO_LDFLAGS} ${GO_TAGS} ./cmd/containerd-shim-runc-v2
+	@CGO_ENABLED=${SHIM_CGO_ENABLED} go build ${GO_BUILD_FLAGS} -o bin/containerd-shim-runc-v2 ${SHIM_GO_LDFLAGS} ${GO_TAGS} ./cmd/containerd-shim-runc-v2
 
 binaries: $(BINARIES) ## build binaries
 	@echo "$(WHALE) $@"
@@ -302,7 +312,7 @@ root-coverage: ## generate coverage profiles for unit tests that require root
 
 vendor:
 	@echo "$(WHALE) $@"
-	@vndr -whitelist github.com/urfave/cli/autocomplete/
+	@vndr
 
 help: ## this help
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST) | sort
