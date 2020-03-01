@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"syscall"
@@ -44,6 +45,10 @@ type sandbox struct {
 
 func (sb *sandbox) PrintLogs(t *testing.T) {
 	printLogs(sb.logs, t.Log)
+}
+
+func (sb *sandbox) MatchLogs(matchRegexp *regexp.Regexp) bool {
+	return matchLogs(sb.logs, matchRegexp)
 }
 
 func (sb *sandbox) NewRegistry() (string, error) {
@@ -211,4 +216,16 @@ func printLogs(logs map[string]*bytes.Buffer, f func(args ...interface{})) {
 			f(s.Text())
 		}
 	}
+}
+
+func matchLogs(logs map[string]*bytes.Buffer, matchRegexp *regexp.Regexp) bool {
+	for _, l := range logs {
+		s := bufio.NewScanner(l)
+		for s.Scan() {
+			if matchRegexp.MatchString(s.Text()) {
+				return true
+			}
+		}
+	}
+	return false
 }
