@@ -212,3 +212,13 @@ func rootlessSupported(uid int) bool {
 	}
 	return true
 }
+
+func printLogs(logs map[string]*bytes.Buffer, f func(args ...interface{})) {
+	for name, l := range logs {
+		f(name)
+		s := bufio.NewScanner(l)
+		for s.Scan() {
+			f(s.Text())
+		}
+	}
+}
