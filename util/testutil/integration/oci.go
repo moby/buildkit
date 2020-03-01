@@ -1,8 +1,6 @@
 package integration
 
 import (
-	"bufio"
-	"bytes"
 	"fmt"
 	"log"
 	"os"
@@ -67,14 +65,4 @@ func (s *oci) New(cfg *BackendConfig) (Backend, func() error, error) {
 		address:  buildkitdSock,
 		rootless: s.uid != 0,
 	}, stop, nil
-}
-
-func printLogs(logs map[string]*bytes.Buffer, f func(args ...interface{})) {
-	for name, l := range logs {
-		f(name)
-		s := bufio.NewScanner(l)
-		for s.Scan() {
-			f(s.Text())
-		}
-	}
 }
