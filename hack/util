@@ -32,7 +32,7 @@ if [ "$TRAVIS_EVENT_TYPE" = "pull_request" ]; then
   currentref="git://github.com/moby/buildkit#refs/pull/$TRAVIS_PULL_REQUEST/merge"
   cacheref="cicache.buildk.it/moby/buildkit/pr$TRAVIS_BUILD_ID"
 elif [ -n "$TRAVIS_BRANCH" ]; then
-  currentref="git://github.com/moby/buildkit#$TRAVIS_BRANCH"
+  currentref="git://github.com/$TRAVIS_REPO_SLUG#$TRAVIS_BRANCH"
 fi
 
 
