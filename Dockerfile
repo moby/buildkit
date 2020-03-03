@@ -11,6 +11,7 @@ ARG ROOTLESSKIT_VERSION=v0.7.1
 ARG ROOTLESS_BASE_MODE=external
 ARG CNI_VERSION=v0.8.5
 ARG SHADOW_VERSION=4.8.1
+ARG FUSEOVERLAYFS_VERSION=v0.7.6
 
 # git stage is used for checking out remote repository sources
 FROM --platform=$BUILDPLATFORM alpine AS git
@@ -170,6 +171,21 @@ RUN  --mount=target=/root/.cache,type=cache \
   CGO_ENABLED=0 go build -o /rootlesskit ./cmd/rootlesskit && \
   file /rootlesskit | grep "statically linked"
 
+# Based on https://github.com/containers/fuse-overlayfs/blob/v0.7.6/Dockerfile.static.ubuntu .
+# We can't use Alpine here because Alpine does not provide an apk package for libfuse3.a .
+FROM debian:10 AS fuse-overlayfs
+RUN apt-get update && \
+  apt-get install --no-install-recommends -y \
+  git ca-certificates libc6-dev gcc make automake autoconf pkgconf libfuse3-dev file
+RUN git clone https://github.com/containers/fuse-overlayfs
+WORKDIR fuse-overlayfs
+ARG FUSEOVERLAYFS_VERSION
+RUN git pull && git checkout ${FUSEOVERLAYFS_VERSION}
+RUN  ./autogen.sh && \
+  LIBS="-ldl" LDFLAGS="-static" ./configure && \
+  make && mkdir /out && cp fuse-overlayfs /out && \
+  file /out/fuse-overlayfs | grep "statically linked"
+
 # Copy together all binaries needed for oci worker mode
 FROM buildkit-export AS buildkit-buildkitd.oci_only
 COPY --from=buildkitd.oci_only /usr/bin/buildkitd.oci_only /usr/bin/
@@ -268,6 +284,8 @@ FROM rootless-base-$ROOTLESS_BASE_MODE AS rootless-base
 # Rootless mode.
 # Still requires `--privileged`.
 FROM rootless-base AS rootless
+RUN apk add --no-cache fuse3
+COPY --from=fuse-overlayfs /out/fuse-overlayfs /usr/bin/
 COPY --from=rootlesskit /rootlesskit /usr/bin/
 COPY --from=binaries / /usr/bin/
 COPY examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/

@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"strconv"
 
+	fuseoverlayfs "github.com/AkihiroSuda/containerd-fuse-overlayfs"
 	ctdsnapshot "github.com/containerd/containerd/snapshots"
 	"github.com/containerd/containerd/snapshots/native"
 	"github.com/containerd/containerd/snapshots/overlay"
@@ -264,13 +265,19 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 func snapshotterFactory(commonRoot, name string) (runc.SnapshotterFactory, error) {
 	if name == "auto" {
 		if err := overlay.Supported(commonRoot); err == nil {
-			logrus.Debug("auto snapshotter: using overlayfs")
 			name = "overlayfs"
 		} else {
-			logrus.Debugf("auto snapshotter: using native, because overlayfs is not available for %s: %v", commonRoot, err)
-			name = "native"
+			logrus.Debugf("auto snapshotter: overlayfs is not available for %s, trying fuse-overlayfs: %v", commonRoot, err)
+			if err2 := fuseoverlayfs.Supported(commonRoot); err2 == nil {
+				name = "fuse-overlayfs"
+			} else {
+				logrus.Debugf("auto snapshotter: fuse-overlayfs is not available for %s, falling back to native: %v", commonRoot, err2)
+				name = "native"
+			}
 		}
+		logrus.Infof("auto snapshotter: using %s", name)
 	}
+
 	snFactory := runc.SnapshotterFactory{
 		Name: name,
 	}
@@ -280,6 +287,11 @@ func snapshotterFactory(commonRoot, name string) (runc.SnapshotterFactory, error
 	case "overlayfs": // not "overlay", for consistency with containerd snapshotter plugin ID.
 		snFactory.New = func(root string) (ctdsnapshot.Snapshotter, error) {
 			return overlay.NewSnapshotter(root, overlay.AsynchronousRemove)
+		}
+	case "fuse-overlayfs":
+		snFactory.New = func(root string) (ctdsnapshot.Snapshotter, error) {
+			// no Opt (AsynchronousRemove is untested for fuse-overlayfs)
+			return fuseoverlayfs.NewSnapshotter(root)
 		}
 	default:
 		return snFactory, errors.Errorf("unknown snapshotter name: %q", name)
