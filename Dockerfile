@@ -267,9 +267,10 @@ RUN ./autogen.sh --disable-nls --disable-man --without-audit --without-selinux -
   && cp src/newuidmap src/newgidmap /usr/bin
 
 FROM alpine:3.11 AS rootless-base-internal
-RUN apk add --no-cache git xz
+RUN apk add --no-cache fuse3 git xz
 COPY --from=idmap /usr/bin/newuidmap /usr/bin/newuidmap
 COPY --from=idmap /usr/bin/newgidmap /usr/bin/newgidmap
+COPY --from=fuse-overlayfs /out/fuse-overlayfs /usr/bin/
 # we could just set CAP_SETUID filecap rather than `chmod u+s`, but requires kernel >= 4.14
 RUN chmod u+s /usr/bin/newuidmap /usr/bin/newgidmap \
   && adduser -D -u 1000 user \
@@ -282,10 +283,7 @@ FROM tonistiigi/buildkit:rootless-base@sha256:0008b156dedd0220a5a0a1aa8840afe0ea
 FROM rootless-base-$ROOTLESS_BASE_MODE AS rootless-base
 
 # Rootless mode.
-# Still requires `--privileged`.
 FROM rootless-base AS rootless
-RUN apk add --no-cache fuse3
-COPY --from=fuse-overlayfs /out/fuse-overlayfs /usr/bin/
 COPY --from=rootlesskit /rootlesskit /usr/bin/
 COPY --from=binaries / /usr/bin/
 COPY examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
