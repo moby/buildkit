@@ -61,7 +61,7 @@ func TestClientIntegration(t *testing.T) {
 	mirrors := integration.WithMirroredImages(integration.OfficialImages("busybox:latest", "alpine:latest"))
 
 	integration.Run(t, []integration.Test{
-		testLocalCacheExport,
+		testCacheExportCacheKeyLoop,
 		testRelativeWorkDir,
 		testFileOpMkdirMkfile,
 		testFileOpCopyRm,
@@ -133,7 +133,8 @@ func newContainerd(cdAddress string) (*containerd.Client, error) {
 	return containerd.New(cdAddress, containerd.WithTimeout(60*time.Second))
 }
 
-func testLocalCacheExport(t *testing.T, sb integration.Sandbox) {
+// moby/buildkit#1336
+func testCacheExportCacheKeyLoop(t *testing.T, sb integration.Sandbox) {
 	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -145,27 +146,36 @@ func testLocalCacheExport(t *testing.T, sb integration.Sandbox) {
 	err = ioutil.WriteFile(filepath.Join(tmpdir, "foo"), []byte("foodata"), 0600)
 	require.NoError(t, err)
 
-	buildbase := llb.Image("alpine:latest").File(llb.Copy(llb.Local("mylocal"), "foo", "foo"))
-	intermed := llb.Image("alpine:latest").File(llb.Copy(buildbase, "foo", "foo"))
-	final := llb.Scratch().File(llb.Copy(intermed, "foo", "foooooo"))
+	for _, mode := range []bool{false, true} {
+		func(mode bool) {
+			t.Run(fmt.Sprintf("mode=%v", mode), func(t *testing.T) {
+				buildbase := llb.Image("alpine:latest").File(llb.Copy(llb.Local("mylocal"), "foo", "foo"))
+				if mode { // same cache keys with a separating node go to different code-path
+					buildbase = buildbase.Run(llb.Shlex("true")).Root()
+				}
+				intermed := llb.Image("alpine:latest").File(llb.Copy(buildbase, "foo", "foo"))
+				final := llb.Scratch().File(llb.Copy(intermed, "foo", "foooooo"))
 
-	def, err := final.Marshal()
-	require.NoError(t, err)
+				def, err := final.Marshal()
+				require.NoError(t, err)
 
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
-		CacheExports: []CacheOptionsEntry{
-			{
-				Type: "local",
-				Attrs: map[string]string{
-					"dest": filepath.Join(tmpdir, "cache"),
-				},
-			},
-		},
-		LocalDirs: map[string]string{
-			"mylocal": tmpdir,
-		},
-	}, nil)
-	require.NoError(t, err)
+				_, err = c.Solve(context.TODO(), def, SolveOpt{
+					CacheExports: []CacheOptionsEntry{
+						{
+							Type: "local",
+							Attrs: map[string]string{
+								"dest": filepath.Join(tmpdir, "cache"),
+							},
+						},
+					},
+					LocalDirs: map[string]string{
+						"mylocal": tmpdir,
+					},
+				}, nil)
+				require.NoError(t, err)
+			})
+		}(mode)
+	}
 }
 
 func testBridgeNetworking(t *testing.T, sb integration.Sandbox) {
