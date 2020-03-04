@@ -26,7 +26,7 @@ func toEnvMap(args []instructions.KeyValuePairOptional, env []string) map[string
 
 func TestDockerfileParsing(t *testing.T) {
 	t.Parallel()
-	df := `FROM busybox
+	df := `FROM scratch
 ENV FOO bar
 COPY f1 f2 /sub/
 RUN ls -l
@@ -34,7 +34,7 @@ RUN ls -l
 	_, _, err := Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
 	assert.NoError(t, err)
 
-	df = `FROM busybox AS foo
+	df = `FROM scratch AS foo
 ENV FOO bar
 FROM foo
 COPY --from=foo f1 /
@@ -43,7 +43,7 @@ COPY --from=0 f2 /
 	_, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
 	assert.NoError(t, err)
 
-	df = `FROM busybox AS foo
+	df = `FROM scratch AS foo
 ENV FOO bar
 FROM foo
 COPY --from=foo f1 /
@@ -59,13 +59,13 @@ COPY --from=0 f2 /
 	})
 	assert.Error(t, err)
 
-	df = `FROM busybox
+	df = `FROM scratch
 	ADD http://github.com/moby/buildkit/blob/master/README.md /
 		`
 	_, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
 	assert.NoError(t, err)
 
-	df = `FROM busybox
+	df = `FROM scratch
 	COPY http://github.com/moby/buildkit/blob/master/README.md /
 		`
 	_, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
