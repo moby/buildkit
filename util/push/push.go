@@ -14,7 +14,6 @@ import (
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/session"
-	"github.com/moby/buildkit/session/auth"
 	"github.com/moby/buildkit/util/imageutil"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/resolver"
@@ -24,25 +23,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func getCredentialsFunc(ctx context.Context, sm *session.Manager) func(string) (string, string, error) {
-	id := session.FromContext(ctx)
-	if id == "" {
-		return nil
-	}
-	return func(host string) (string, string, error) {
-		timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		caller, err := sm.Get(timeoutCtx, id)
-		if err != nil {
-			return "", "", err
-		}
-
-		return auth.CredentialsFunc(context.TODO(), caller)(host)
-	}
-}
-
-func Push(ctx context.Context, sm *session.Manager, cs content.Store, dgst digest.Digest, ref string, insecure bool, rfn resolver.ResolveOptionsFunc, byDigest bool) error {
+func Push(ctx context.Context, sm *session.Manager, cs content.Store, dgst digest.Digest, ref string, insecure bool, hosts docker.RegistryHosts, byDigest bool) error {
 	desc := ocispec.Descriptor{
 		Digest: dgst,
 	}
@@ -60,13 +41,7 @@ func Push(ctx context.Context, sm *session.Manager, cs content.Store, dgst diges
 		ref = reference.TagNameOnly(parsed).String()
 	}
 
-	opt := rfn(ref)
-	opt.Credentials = getCredentialsFunc(ctx, sm)
-	if insecure {
-		opt.PlainHTTP = insecure
-	}
-
-	resolver := docker.NewResolver(opt)
+	resolver := resolver.New(ctx, hosts, sm)
 
 	pusher, err := resolver.Pusher(ctx, ref)
 	if err != nil {

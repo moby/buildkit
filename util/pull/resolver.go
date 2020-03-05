@@ -2,7 +2,6 @@ package pull
 
 import (
 	"context"
-	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -12,10 +11,8 @@ import (
 	"github.com/containerd/containerd/remotes/docker"
 	distreference "github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/session"
-	"github.com/moby/buildkit/session/auth"
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/util/resolver"
-	"github.com/moby/buildkit/util/tracing"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
@@ -25,20 +22,12 @@ func init() {
 	cache = newResolverCache()
 }
 
-func NewResolver(ctx context.Context, rfn resolver.ResolveOptionsFunc, sm *session.Manager, imageStore images.Store, mode source.ResolveMode, ref string) remotes.Resolver {
+func NewResolver(ctx context.Context, hosts docker.RegistryHosts, sm *session.Manager, imageStore images.Store, mode source.ResolveMode, ref string) remotes.Resolver {
 	if res := cache.Get(ctx, ref); res != nil {
 		return withLocal(res, imageStore, mode)
 	}
 
-	opt := docker.ResolverOptions{
-		Client: http.DefaultClient,
-	}
-	if rfn != nil {
-		opt = rfn(ref)
-	}
-	opt.Credentials = getCredentialsFromSession(ctx, sm)
-
-	r := docker.NewResolver(opt)
+	r := resolver.New(ctx, hosts, sm)
 	r = cache.Add(ctx, ref, r)
 
 	return withLocal(r, imageStore, mode)
@@ -68,24 +57,6 @@ func withLocal(r remotes.Resolver, imageStore images.Store, mode source.ResolveM
 	}
 
 	return withLocalResolver{Resolver: r, is: imageStore, mode: mode}
-}
-
-func getCredentialsFromSession(ctx context.Context, sm *session.Manager) func(string) (string, string, error) {
-	id := session.FromContext(ctx)
-	if id == "" {
-		return nil
-	}
-	return func(host string) (string, string, error) {
-		timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		caller, err := sm.Get(timeoutCtx, id)
-		if err != nil {
-			return "", "", err
-		}
-
-		return auth.CredentialsFunc(tracing.ContextWithSpanFromContext(context.TODO(), ctx), caller)(host)
-	}
 }
 
 // A remotes.Resolver which checks the local image store if the real

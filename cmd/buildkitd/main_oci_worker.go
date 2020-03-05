@@ -246,7 +246,7 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 		return nil, err
 	}
 	opt.GCPolicy = getGCPolicy(cfg.GCConfig, common.config.Root)
-	opt.ResolveOptionsFunc = resolverFunc(common.config)
+	opt.RegistryHosts = resolverFunc(common.config)
 
 	if platformsStr := cfg.Platforms; len(platformsStr) != 0 {
 		platforms, err := parsePlatforms(platformsStr)

@@ -12,6 +12,7 @@ import (
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/platforms"
+	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/rootfs"
 	"github.com/moby/buildkit/cache/blobs"
 	"github.com/moby/buildkit/exporter"
@@ -19,7 +20,6 @@ import (
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/push"
-	"github.com/moby/buildkit/util/resolver"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/identity"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -42,7 +42,7 @@ type Opt struct {
 	SessionManager *session.Manager
 	ImageWriter    *ImageWriter
 	Images         images.Store
-	ResolverOpt    resolver.ResolveOptionsFunc
+	RegistryHosts  docker.RegistryHosts
 	LeaseManager   leases.Manager
 }
 
@@ -237,7 +237,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 				}
 			}
 			if e.push {
-				if err := push.Push(ctx, e.opt.SessionManager, e.opt.ImageWriter.ContentStore(), desc.Digest, targetName, e.insecure, e.opt.ResolverOpt, e.pushByDigest); err != nil {
+				if err := push.Push(ctx, e.opt.SessionManager, e.opt.ImageWriter.ContentStore(), desc.Digest, targetName, e.insecure, e.opt.RegistryHosts, e.pushByDigest); err != nil {
 					return nil, err
 				}
 			}

@@ -11,6 +11,7 @@ import (
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/platforms"
+	"github.com/containerd/containerd/remotes/docker"
 	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/client/llb"
@@ -22,7 +23,6 @@ import (
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/pull"
-	"github.com/moby/buildkit/util/resolver"
 	"github.com/moby/buildkit/util/winlayers"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/identity"
@@ -39,7 +39,7 @@ type SourceOpt struct {
 	Applier       diff.Applier
 	CacheAccessor cache.Accessor
 	ImageStore    images.Store // optional
-	ResolverOpt   resolver.ResolveOptionsFunc
+	RegistryHosts docker.RegistryHosts
 	LeaseManager  leases.Manager
 }
 
@@ -76,7 +76,7 @@ func (is *imageSource) ResolveImageConfig(ctx context.Context, ref string, opt l
 	}
 
 	res, err := is.g.Do(ctx, key, func(ctx context.Context) (interface{}, error) {
-		dgst, dt, err := imageutil.Config(ctx, ref, pull.NewResolver(ctx, is.ResolverOpt, sm, is.ImageStore, rm, ref), is.ContentStore, is.LeaseManager, opt.Platform)
+		dgst, dt, err := imageutil.Config(ctx, ref, pull.NewResolver(ctx, is.RegistryHosts, sm, is.ImageStore, rm, ref), is.ContentStore, is.LeaseManager, opt.Platform)
 		if err != nil {
 			return nil, err
 		}
@@ -105,7 +105,7 @@ func (is *imageSource) Resolve(ctx context.Context, id source.Identifier, sm *se
 		ContentStore: is.ContentStore,
 		Applier:      is.Applier,
 		Src:          imageIdentifier.Reference,
-		Resolver:     pull.NewResolver(ctx, is.ResolverOpt, sm, is.ImageStore, imageIdentifier.ResolveMode, imageIdentifier.Reference.String()),
+		Resolver:     pull.NewResolver(ctx, is.RegistryHosts, sm, is.ImageStore, imageIdentifier.ResolveMode, imageIdentifier.Reference.String()),
 		Platform:     &platform,
 	}
 	p := &puller{

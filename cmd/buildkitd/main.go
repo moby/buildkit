@@ -18,6 +18,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/containerd/containerd/pkg/seed"
 	"github.com/containerd/containerd/platforms"
+	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/sys"
 	sddaemon "github.com/coreos/go-systemd/v22/daemon"
 	"github.com/docker/docker/pkg/reexec"
@@ -619,15 +620,16 @@ func newController(c *cli.Context, cfg *config.Config) (*control.Controller, err
 	})
 }
 
-func resolverFunc(cfg *config.Config) resolver.ResolveOptionsFunc {
+func resolverFunc(cfg *config.Config) docker.RegistryHosts {
 	m := map[string]resolver.RegistryConf{}
 	for k, v := range cfg.Registries {
 		m[k] = resolver.RegistryConf{
 			Mirrors:   v.Mirrors,
 			PlainHTTP: v.PlainHTTP,
+			Insecure:  v.Insecure,
 		}
 	}
-	return resolver.NewResolveOptionsFunc(m)
+	return resolver.NewRegistryConfig(m)
 }
 
 func newWorkerController(c *cli.Context, wiOpt workerInitializerOpt) (*worker.Controller, error) {
