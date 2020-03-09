@@ -1,4 +1,4 @@
-package config
+package main
 
 import (
 	"bytes"
@@ -51,6 +51,12 @@ keepDuration=7200
 [registry."docker.io"]
 mirrors=["hub.docker.io"]
 http=true
+insecure=true
+ca=["myca.pem"]
+tlsconfigdir=["/etc/buildkitd/myregistry"]
+[[registry."docker.io".keypair]]
+key="key.pem"
+cert="cert.pem"
 
 [dns]
 nameservers=["1.1.1.1","8.8.8.8"]
@@ -102,7 +108,12 @@ searchDomains=["example.com"]
 	require.Equal(t, 0, len(cfg.Workers.Containerd.GCPolicy[1].Filters))
 
 	require.Equal(t, *cfg.Registries["docker.io"].PlainHTTP, true)
+	require.Equal(t, *cfg.Registries["docker.io"].Insecure, true)
 	require.Equal(t, cfg.Registries["docker.io"].Mirrors[0], "hub.docker.io")
+	require.Equal(t, cfg.Registries["docker.io"].RootCAs, []string{"myca.pem"})
+	require.Equal(t, cfg.Registries["docker.io"].TLSConfigDir, []string{"/etc/buildkitd/myregistry"})
+	require.Equal(t, cfg.Registries["docker.io"].KeyPairs[0].Key, "key.pem")
+	require.Equal(t, cfg.Registries["docker.io"].KeyPairs[0].Certificate, "cert.pem")
 
 	require.NotNil(t, cfg.DNS)
 	require.Equal(t, cfg.DNS.Nameservers, []string{"1.1.1.1", "8.8.8.8"})
