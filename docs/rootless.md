@@ -1,4 +1,4 @@
-# Rootless mode (Experimental)
+# Rootless mode
 
 Rootless mode allows running BuildKit daemon as a non-root user.
 
