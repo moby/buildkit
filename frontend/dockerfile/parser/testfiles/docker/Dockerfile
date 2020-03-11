@@ -19,7 +19,7 @@ FROM	ubuntu:14.04
 LABEL	maintainer	Tianon Gravi <admwiggin@gmail.com> (@tianon)
 
 # Packaged dependencies
-RUN	apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -yq \
+RUN	apt-get update && DEBIAN_FRONTEND=noninteractive apt-get --no-install-recommends install -yq \
 	apt-utils \
 	aufs-tools \
 	automake \

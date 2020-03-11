@@ -13,7 +13,7 @@ ENTRYPOINT ["/usr/local/bin/consuldock"]
 # Install the packages we need, clean up after them and us
 RUN apt-get update \
 	&& dpkg -l | awk '/^ii/ {print $2}' > /tmp/dpkg.clean \
-    && apt-get install -y --no-install-recommends git golang ca-certificates \
+    && apt-get --no-install-recommends install -y git golang ca-certificates \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists \
 

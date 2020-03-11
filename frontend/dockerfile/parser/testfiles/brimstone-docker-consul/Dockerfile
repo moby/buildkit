@@ -7,7 +7,7 @@ ENTRYPOINT ["/usr/bin/consul", "agent", "-server", "-data-dir=/consul", "-client
 EXPOSE 8500 8600 8400 8301 8302
 
 RUN apt-get update \
-    && apt-get install -y unzip wget \
+    && apt-get --no-install-recommends install -y unzip wget \
 	&& apt-get clean \
 	&& rm -rf /var/lib/apt/lists
 
@@ -20,7 +20,7 @@ RUN cd /tmp \
 
 RUN apt-get update \
 	&& dpkg -l | awk '/^ii/ {print $2}' > /tmp/dpkg.clean \
-    && apt-get install -y --no-install-recommends unzip wget \
+    && apt-get --no-install-recommends install -y unzip wget \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists \
 
@@ -39,7 +39,7 @@ ENV GOPATH /go
 
 RUN apt-get update \
 	&& dpkg -l | awk '/^ii/ {print $2}' > /tmp/dpkg.clean \
-    && apt-get install -y --no-install-recommends git golang ca-certificates build-essential \
+    && apt-get --no-install-recommends install -y git golang ca-certificates build-essential \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists \
 

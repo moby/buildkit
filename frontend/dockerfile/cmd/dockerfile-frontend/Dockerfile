@@ -16,7 +16,7 @@ RUN --mount=target=. \
   echo -n "${VERSION}" | tee /tmp/.version;
 
 FROM base AS build
-RUN apt-get update && apt-get install -y --no-install-recommends file
+RUN apt-get update && apt-get --no-install-recommends install -y file
 ARG BUILDTAGS=""
 ARG TARGETPLATFORM
 ENV TARGETPLATFORM=$TARGETPLATFORM
@@ -33,7 +33,7 @@ ENTRYPOINT ["/bin/dockerfile-frontend"]
 
 
 FROM base AS buildid-check
-RUN apt-get update && apt-get install -y jq
+RUN apt-get update && apt-get --no-install-recommends install -y jq
 COPY /frontend/dockerfile/cmd/dockerfile-frontend/hack/check-daily-outdated .
 COPY --from=r.j3ss.co/reg /usr/bin/reg /bin
 COPY --from=build /dockerfile-frontend .
