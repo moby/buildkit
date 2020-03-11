@@ -14,7 +14,12 @@ set -eu -o pipefail
 progressFlag=""
 if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"; fi
 
-gitTag=$(git describe --tags --match "v[0-9]*")
+
+versionTag=$(git describe --tags --match "v[0-9]*")
+
+if [[ ! "$versionTag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+	versionTag=""
+fi
 
 usage() {
 	echo "usage: $0 <tag> <repo> [push]"
@@ -41,7 +46,7 @@ imageDocker() {
 		docker push $REPO:$TAG-rootless
 		set +x
 	fi
-	if [[ "$gitTag" == "$TAG" ]]; then
+	if [[ "$versionTag" == "$TAG" ]]; then
 		set -x
 		docker tag $REPO:$TAG $REPO:latest
 		docker tag $REPO:$TAG-rootless $REPO:rootless
@@ -63,7 +68,7 @@ image() {
 
 	tagLatest=""
 	tagLatestRootless=""
-	if [[ "$gitTag" == "$TAG" ]]; then
+	if [[ "$versionTag" == "$TAG" ]]; then
 		tagLatest=",$REPO:latest"
 		tagLatestRootless=",$REPO:rootless"
 	fi
