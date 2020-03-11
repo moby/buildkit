@@ -278,8 +278,8 @@ RUN chmod u+s /usr/bin/newuidmap /usr/bin/newgidmap \
   && chown -R user /run/user/1000 /home/user \
   && echo user:100000:65536 | tee /etc/subuid | tee /etc/subgid
 
-# tonistiigi/buildkit:rootless-base is a pre-built multi-arch version of rootless-base-internal https://github.com/moby/buildkit/pull/666#pullrequestreview-161872350
-FROM tonistiigi/buildkit:rootless-base@sha256:0008b156dedd0220a5a0a1aa8840afe0ea0f01f44dfe1ae850b3970aaa1c5cec AS rootless-base-external
+# tonistiigi/buildkit:rootless-base is a pre-built multi-arch version of rootless-base-internal https://github.com/moby/buildkit/pull/1392#issuecomment-597478241 (Mar 11, 2020)
+FROM tonistiigi/buildkit:rootless-base@sha256:4b15b62dadfec92ca6e6633b94ac8e24d2235c9c50c35a7b80e4e951e9f6f735 AS rootless-base-external
 FROM rootless-base-$ROOTLESS_BASE_MODE AS rootless-base
 
 # Rootless mode.
