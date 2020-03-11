@@ -19,12 +19,6 @@
 
 package thrift
 
-// A processor is a generic object which operates upon an input stream and
-// writes to some output stream.
-type TProcessor interface {
-	Process(in, out TProtocol) (bool, TException)
-}
+import "context"
 
-type TProcessorFunction interface {
-	Process(seqId int32, in, out TProtocol) (bool, TException)
-}
+var defaultCtx = context.Background()

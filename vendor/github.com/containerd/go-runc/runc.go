@@ -17,7 +17,6 @@
 package runc
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -73,12 +72,11 @@ type Runc struct {
 // List returns all containers created inside the provided runc root directory
 func (r *Runc) List(context context.Context) ([]*Container, error) {
 	data, err := cmdOutput(r.command(context, "list", "--format=json"), false)
-	defer putBuf(data)
 	if err != nil {
 		return nil, err
 	}
 	var out []*Container
-	if err := json.Unmarshal(data.Bytes(), &out); err != nil {
+	if err := json.Unmarshal(data, &out); err != nil {
 		return nil, err
 	}
 	return out, nil
@@ -87,12 +85,11 @@ func (r *Runc) List(context context.Context) ([]*Container, error) {
 // State returns the state for the container provided by id
 func (r *Runc) State(context context.Context, id string) (*Container, error) {
 	data, err := cmdOutput(r.command(context, "state", id), true)
-	defer putBuf(data)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %s", err, data.String())
+		return nil, fmt.Errorf("%s: %s", err, data)
 	}
 	var c Container
-	if err := json.Unmarshal(data.Bytes(), &c); err != nil {
+	if err := json.Unmarshal(data, &c); err != nil {
 		return nil, err
 	}
 	return &c, nil
@@ -157,9 +154,8 @@ func (r *Runc) Create(context context.Context, id, bundle string, opts *CreateOp
 
 	if cmd.Stdout == nil && cmd.Stderr == nil {
 		data, err := cmdOutput(cmd, true)
-		defer putBuf(data)
 		if err != nil {
-			return fmt.Errorf("%s: %s", err, data.String())
+			return fmt.Errorf("%s: %s", err, data)
 		}
 		return nil
 	}
@@ -176,7 +172,7 @@ func (r *Runc) Create(context context.Context, id, bundle string, opts *CreateOp
 	}
 	status, err := Monitor.Wait(cmd, ec)
 	if err == nil && status != 0 {
-		err = fmt.Errorf("%s did not terminate successfully", cmd.Args[0])
+		err = fmt.Errorf("%s did not terminate sucessfully", cmd.Args[0])
 	}
 	return err
 }
@@ -237,9 +233,8 @@ func (r *Runc) Exec(context context.Context, id string, spec specs.Process, opts
 	}
 	if cmd.Stdout == nil && cmd.Stderr == nil {
 		data, err := cmdOutput(cmd, true)
-		defer putBuf(data)
 		if err != nil {
-			return fmt.Errorf("%s: %s", err, data.String())
+			return fmt.Errorf("%s: %s", err, data)
 		}
 		return nil
 	}
@@ -256,7 +251,7 @@ func (r *Runc) Exec(context context.Context, id string, spec specs.Process, opts
 	}
 	status, err := Monitor.Wait(cmd, ec)
 	if err == nil && status != 0 {
-		err = fmt.Errorf("%s did not terminate successfully", cmd.Args[0])
+		err = fmt.Errorf("%s did not terminate sucessfully", cmd.Args[0])
 	}
 	return err
 }
@@ -280,11 +275,7 @@ func (r *Runc) Run(context context.Context, id, bundle string, opts *CreateOpts)
 	if err != nil {
 		return -1, err
 	}
-	status, err := Monitor.Wait(cmd, ec)
-	if err == nil && status != 0 {
-		err = fmt.Errorf("%s did not terminate successfully", cmd.Args[0])
-	}
-	return status, err
+	return Monitor.Wait(cmd, ec)
 }
 
 type DeleteOpts struct {
@@ -404,12 +395,11 @@ func (r *Runc) Resume(context context.Context, id string) error {
 // Ps lists all the processes inside the container returning their pids
 func (r *Runc) Ps(context context.Context, id string) ([]int, error) {
 	data, err := cmdOutput(r.command(context, "ps", "--format", "json", id), true)
-	defer putBuf(data)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %s", err, data.String())
+		return nil, fmt.Errorf("%s: %s", err, data)
 	}
 	var pids []int
-	if err := json.Unmarshal(data.Bytes(), &pids); err != nil {
+	if err := json.Unmarshal(data, &pids); err != nil {
 		return nil, err
 	}
 	return pids, nil
@@ -418,12 +408,11 @@ func (r *Runc) Ps(context context.Context, id string) ([]int, error) {
 // Top lists all the processes inside the container returning the full ps data
 func (r *Runc) Top(context context.Context, id string, psOptions string) (*TopResults, error) {
 	data, err := cmdOutput(r.command(context, "ps", "--format", "table", id, psOptions), true)
-	defer putBuf(data)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %s", err, data.String())
+		return nil, fmt.Errorf("%s: %s", err, data)
 	}
 
-	topResults, err := ParsePSOutput(data.Bytes())
+	topResults, err := ParsePSOutput(data)
 	if err != nil {
 		return nil, fmt.Errorf("%s: ", err)
 	}
@@ -581,11 +570,7 @@ func (r *Runc) Restore(context context.Context, id, bundle string, opts *Restore
 			}
 		}
 	}
-	status, err := Monitor.Wait(cmd, ec)
-	if err == nil && status != 0 {
-		err = fmt.Errorf("%s did not terminate successfully", cmd.Args[0])
-	}
-	return status, err
+	return Monitor.Wait(cmd, ec)
 }
 
 // Update updates the current container with the provided resource spec
@@ -613,32 +598,41 @@ type Version struct {
 // Version returns the runc and runtime-spec versions
 func (r *Runc) Version(context context.Context) (Version, error) {
 	data, err := cmdOutput(r.command(context, "--version"), false)
-	defer putBuf(data)
 	if err != nil {
 		return Version{}, err
 	}
-	return parseVersion(data.Bytes())
+	return parseVersion(data)
 }
 
 func parseVersion(data []byte) (Version, error) {
 	var v Version
 	parts := strings.Split(strings.TrimSpace(string(data)), "\n")
-
-	if len(parts) > 0 {
-		if !strings.HasPrefix(parts[0], "runc version ") {
-			return v, nil
-		}
-		v.Runc = parts[0][13:]
-
-		for _, part := range parts[1:] {
-			if strings.HasPrefix(part, "commit: ") {
-				v.Commit = part[8:]
-			} else if strings.HasPrefix(part, "spec: ") {
-				v.Spec = part[6:]
-			}
-		}
+	if len(parts) != 3 {
+		return v, nil
 	}
-
+	for i, p := range []struct {
+		dest  *string
+		split string
+	}{
+		{
+			dest:  &v.Runc,
+			split: "version ",
+		},
+		{
+			dest:  &v.Commit,
+			split: ": ",
+		},
+		{
+			dest:  &v.Spec,
+			split: ": ",
+		},
+	} {
+		p2 := strings.Split(parts[i], p.split)
+		if len(p2) != 2 {
+			return v, fmt.Errorf("unable to parse version line %q", parts[i])
+		}
+		*p.dest = p2[1]
+	}
 	return v, nil
 }
 
@@ -680,22 +674,20 @@ func (r *Runc) runOrError(cmd *exec.Cmd) error {
 		}
 		status, err := Monitor.Wait(cmd, ec)
 		if err == nil && status != 0 {
-			err = fmt.Errorf("%s did not terminate successfully", cmd.Args[0])
+			err = fmt.Errorf("%s did not terminate sucessfully", cmd.Args[0])
 		}
 		return err
 	}
 	data, err := cmdOutput(cmd, true)
-	defer putBuf(data)
 	if err != nil {
-		return fmt.Errorf("%s: %s", err, data.String())
+		return fmt.Errorf("%s: %s", err, data)
 	}
 	return nil
 }
 
-// callers of cmdOutput are expected to call putBuf on the returned Buffer
-// to ensure it is released back to the shared pool after use.
-func cmdOutput(cmd *exec.Cmd, combined bool) (*bytes.Buffer, error) {
+func cmdOutput(cmd *exec.Cmd, combined bool) ([]byte, error) {
 	b := getBuf()
+	defer putBuf(b)
 
 	cmd.Stdout = b
 	if combined {
@@ -708,8 +700,8 @@ func cmdOutput(cmd *exec.Cmd, combined bool) (*bytes.Buffer, error) {
 
 	status, err := Monitor.Wait(cmd, ec)
 	if err == nil && status != 0 {
-		err = fmt.Errorf("%s did not terminate successfully", cmd.Args[0])
+		err = fmt.Errorf("%s did not terminate sucessfully", cmd.Args[0])
 	}
 
-	return b, err
+	return b.Bytes(), err
 }

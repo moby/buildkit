@@ -22,6 +22,7 @@ package thrift
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -48,11 +49,15 @@ func NewTFramedTransportFactory(factory TTransportFactory) TTransportFactory {
 }
 
 func NewTFramedTransportFactoryMaxLength(factory TTransportFactory, maxLength uint32) TTransportFactory {
-        return &tFramedTransportFactory{factory: factory, maxLength: maxLength}
+	return &tFramedTransportFactory{factory: factory, maxLength: maxLength}
 }
 
-func (p *tFramedTransportFactory) GetTransport(base TTransport) TTransport {
-	return NewTFramedTransportMaxLength(p.factory.GetTransport(base), p.maxLength)
+func (p *tFramedTransportFactory) GetTransport(base TTransport) (TTransport, error) {
+	tt, err := p.factory.GetTransport(base)
+	if err != nil {
+		return nil, err
+	}
+	return NewTFramedTransportMaxLength(tt, p.maxLength), nil
 }
 
 func NewTFramedTransport(transport TTransport) *TFramedTransport {
@@ -88,7 +93,21 @@ func (p *TFramedTransport) Read(buf []byte) (l int, err error) {
 		l, err = p.Read(tmp)
 		copy(buf, tmp)
 		if err == nil {
-			err = NewTTransportExceptionFromError(fmt.Errorf("Not enough frame size %d to read %d bytes", frameSize, len(buf)))
+			// Note: It's important to only return an error when l
+			// is zero.
+			// In io.Reader.Read interface, it's perfectly fine to
+			// return partial data and nil error, which means
+			// "This is all the data we have right now without
+			// blocking. If you need the full data, call Read again
+			// or use io.ReadFull instead".
+			// Returning partial data with an error actually means
+			// there's no more data after the partial data just
+			// returned, which is not true in this case
+			// (it might be that the other end just haven't written
+			// them yet).
+			if l == 0 {
+				err = NewTTransportExceptionFromError(fmt.Errorf("Not enough frame size %d to read %d bytes", frameSize, len(buf)))
+			}
 			return
 		}
 	}
@@ -131,21 +150,23 @@ func (p *TFramedTransport) WriteString(s string) (n int, err error) {
 	return p.buf.WriteString(s)
 }
 
-func (p *TFramedTransport) Flush() error {
+func (p *TFramedTransport) Flush(ctx context.Context) error {
 	size := p.buf.Len()
 	buf := p.buffer[:4]
 	binary.BigEndian.PutUint32(buf, uint32(size))
 	_, err := p.transport.Write(buf)
 	if err != nil {
+		p.buf.Truncate(0)
 		return NewTTransportExceptionFromError(err)
 	}
 	if size > 0 {
 		if n, err := p.buf.WriteTo(p.transport); err != nil {
 			print("Error while flushing write buffer of size ", size, " to transport, only wrote ", n, " bytes: ", err.Error(), "\n")
+			p.buf.Truncate(0)
 			return NewTTransportExceptionFromError(err)
 		}
 	}
-	err = p.transport.Flush()
+	err = p.transport.Flush(ctx)
 	return NewTTransportExceptionFromError(err)
 }
 
@@ -164,4 +185,3 @@ func (p *TFramedTransport) readFrameHeader() (uint32, error) {
 func (p *TFramedTransport) RemainingBytes() (num_bytes uint64) {
 	return uint64(p.frameSize)
 }
-

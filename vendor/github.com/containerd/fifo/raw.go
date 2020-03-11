@@ -20,6 +20,8 @@ package fifo
 
 import (
 	"syscall"
+
+	"github.com/pkg/errors"
 )
 
 // SyscallConn provides raw access to the fifo's underlying filedescrptor.
@@ -28,13 +30,13 @@ func (f *fifo) SyscallConn() (syscall.RawConn, error) {
 	// deterministic check for closed
 	select {
 	case <-f.closed:
-		return nil, ErrClosed
+		return nil, errors.New("fifo closed")
 	default:
 	}
 
 	select {
 	case <-f.closed:
-		return nil, ErrClosed
+		return nil, errors.New("fifo closed")
 	case <-f.opened:
 		return f.file.SyscallConn()
 	default:
@@ -66,7 +68,7 @@ type rawConn struct {
 func (r *rawConn) Control(f func(fd uintptr)) error {
 	select {
 	case <-r.f.closed:
-		return ErrCtrlClosed
+		return errors.New("control of closed fifo")
 	case <-r.ready:
 	}
 
@@ -79,12 +81,12 @@ func (r *rawConn) Control(f func(fd uintptr)) error {
 
 func (r *rawConn) Read(f func(fd uintptr) (done bool)) error {
 	if r.f.flag&syscall.O_WRONLY > 0 {
-		return ErrRdFrmWRONLY
+		return errors.New("reading from write-only fifo")
 	}
 
 	select {
 	case <-r.f.closed:
-		return ErrReadClosed
+		return errors.New("reading of a closed fifo")
 	case <-r.ready:
 	}
 
@@ -97,12 +99,12 @@ func (r *rawConn) Read(f func(fd uintptr) (done bool)) error {
 
 func (r *rawConn) Write(f func(fd uintptr) (done bool)) error {
 	if r.f.flag&(syscall.O_WRONLY|syscall.O_RDWR) == 0 {
-		return ErrWrToRDONLY
+		return errors.New("writing to read-only fifo")
 	}
 
 	select {
 	case <-r.f.closed:
-		return ErrWriteClosed
+		return errors.New("writing to a closed fifo")
 	case <-r.ready:
 	}
 

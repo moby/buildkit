@@ -24,15 +24,15 @@ github.com/Microsoft/hcsshim/internal/timeout
 github.com/Microsoft/hcsshim/internal/vmcompute
 github.com/Microsoft/hcsshim/internal/wclayer
 github.com/Microsoft/hcsshim/osversion
-# github.com/apache/thrift v0.0.0-20161221203622-b2a4d4ae21c7
+# github.com/apache/thrift v0.13.0
 github.com/apache/thrift/lib/go/thrift
-# github.com/codahale/hdrhistogram v0.0.0-20160425231609-f8ad88b59a58
+# github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd
 github.com/codahale/hdrhistogram
-# github.com/containerd/cgroups v0.0.0-20200217135630-d732e370d46d
+# github.com/containerd/cgroups v0.0.0-20190919134610-bf292b21730f
 github.com/containerd/cgroups/stats/v1
-# github.com/containerd/console v0.0.0-20191219165238-8375c3424e4d
+# github.com/containerd/console v0.0.0-20180822173158-c12b1e7919c1
 github.com/containerd/console
-# github.com/containerd/containerd v1.4.0-0 => github.com/containerd/containerd v1.3.1-0.20200227195959-4d242818bf55
+# github.com/containerd/containerd v1.3.1-0.20200219222124-986d06785c4a => github.com/containerd/containerd v1.3.1-0.20200227195959-4d242818bf55
 github.com/containerd/containerd
 github.com/containerd/containerd/api/services/containers/v1
 github.com/containerd/containerd/api/services/content/v1
@@ -108,15 +108,15 @@ github.com/containerd/continuity/pathdriver
 github.com/containerd/continuity/proto
 github.com/containerd/continuity/syscallx
 github.com/containerd/continuity/sysx
-# github.com/containerd/fifo v0.0.0-20191213151349-ff969a566b00
+# github.com/containerd/fifo v0.0.0-20190226154929-a9fb20d87448
 github.com/containerd/fifo
 # github.com/containerd/go-cni v0.0.0-20200107172653-c154a49e2c75
 github.com/containerd/go-cni
-# github.com/containerd/go-runc v0.0.0-20200220073739-7016d3ce2328
+# github.com/containerd/go-runc v0.0.0-20180907222934-5a6d9f37cfa3
 github.com/containerd/go-runc
-# github.com/containerd/ttrpc v0.0.0-20200121165050-0be804eadb15
+# github.com/containerd/ttrpc v0.0.0-20191028202541-4f1b8fe65a5c
 github.com/containerd/ttrpc
-# github.com/containerd/typeurl v0.0.0-20200205145503-b45ef1f1f737
+# github.com/containerd/typeurl v0.0.0-20190911142611-5eb25027c9fd
 github.com/containerd/typeurl
 # github.com/containernetworking/cni v0.7.1
 github.com/containernetworking/cni/libcni
@@ -127,7 +127,7 @@ github.com/containernetworking/cni/pkg/types/current
 github.com/containernetworking/cni/pkg/version
 # github.com/coreos/go-systemd/v22 v22.0.0
 github.com/coreos/go-systemd/v22/daemon
-# github.com/cpuguy83/go-md2man/v2 v2.0.0
+# github.com/cpuguy83/go-md2man/v2 v2.0.0-20190314233015-f79a8a8ca69d
 github.com/cpuguy83/go-md2man/v2/md2man
 # github.com/davecgh/go-spew v1.1.1
 github.com/davecgh/go-spew/spew
@@ -137,10 +137,10 @@ github.com/docker/cli/cli/config/configfile
 github.com/docker/cli/cli/config/credentials
 github.com/docker/cli/cli/config/types
 github.com/docker/cli/cli/connhelper/commandconn
-# github.com/docker/distribution v0.0.0-20200223014041-6b972e50feee
+# github.com/docker/distribution v2.7.1-0.20190205005809-0d3efadf0154+incompatible
 github.com/docker/distribution/digestset
 github.com/docker/distribution/reference
-# github.com/docker/docker v0.0.0 => github.com/docker/docker v1.4.2-0.20200227233006-38f52c9fec82
+# github.com/docker/docker v1.14.0-0.20191106232431-31abc6c089eb => github.com/docker/docker v1.4.2-0.20200227233006-38f52c9fec82
 github.com/docker/docker/api/types/blkiodev
 github.com/docker/docker/api/types/container
 github.com/docker/docker/api/types/mount
@@ -209,7 +209,7 @@ github.com/hashicorp/golang-lru/simplelru
 github.com/ishidawataru/sctp
 # github.com/jaguilar/vt100 v0.0.0-20150826170717-2703a27b14ea => github.com/tonistiigi/vt100 v0.0.0-20190402012908-ad4c4a574305
 github.com/jaguilar/vt100
-# github.com/konsorten/go-windows-terminal-sequences v1.0.2
+# github.com/konsorten/go-windows-terminal-sequences v1.0.1
 github.com/konsorten/go-windows-terminal-sequences
 # github.com/mitchellh/hashstructure v0.0.0-20170609045927-2bca23e0e452
 github.com/mitchellh/hashstructure

@@ -47,7 +47,7 @@ func NewPty() (Console, string, error) {
 }
 
 type master struct {
-	f        File
+	f        *os.File
 	original *unix.Termios
 }
 
@@ -122,7 +122,7 @@ func (m *master) Name() string {
 }
 
 // checkConsole checks if the provided file is a console
-func checkConsole(f File) error {
+func checkConsole(f *os.File) error {
 	var termios unix.Termios
 	if tcget(f.Fd(), &termios) != nil {
 		return ErrNotAConsole
@@ -130,7 +130,7 @@ func checkConsole(f File) error {
 	return nil
 }
 
-func newMaster(f File) (Console, error) {
+func newMaster(f *os.File) (Console, error) {
 	m := &master{
 		f: f,
 	}

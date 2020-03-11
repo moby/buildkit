@@ -24,17 +24,10 @@ import (
 
 var ErrNotAConsole = errors.New("provided file is not a console")
 
-type File interface {
-	io.ReadWriteCloser
-
-	// Fd returns its file descriptor
-	Fd() uintptr
-	// Name returns its file name
-	Name() string
-}
-
 type Console interface {
-	File
+	io.Reader
+	io.Writer
+	io.Closer
 
 	// Resize resizes the console to the provided window size
 	Resize(WinSize) error
@@ -49,6 +42,10 @@ type Console interface {
 	Reset() error
 	// Size returns the window size of the console
 	Size() (WinSize, error)
+	// Fd returns the console's file descriptor
+	Fd() uintptr
+	// Name returns the console's file name
+	Name() string
 }
 
 // WinSize specifies the window size of the console
@@ -73,7 +70,7 @@ func Current() Console {
 }
 
 // ConsoleFromFile returns a console using the provided file
-func ConsoleFromFile(f File) (Console, error) {
+func ConsoleFromFile(f *os.File) (Console, error) {
 	if err := checkConsole(f); err != nil {
 		return nil, err
 	}

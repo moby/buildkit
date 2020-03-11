@@ -7,21 +7,17 @@ require (
 	github.com/BurntSushi/toml v0.3.1
 	github.com/Microsoft/go-winio v0.4.15-0.20190919025122-fc70bd9a86b5
 	github.com/Microsoft/hcsshim v0.8.7 // indirect
-	github.com/apache/thrift v0.0.0-20161221203622-b2a4d4ae21c7 // indirect
-	github.com/codahale/hdrhistogram v0.0.0-20160425231609-f8ad88b59a58 // indirect
-	github.com/containerd/cgroups v0.0.0-20200217135630-d732e370d46d // indirect
-	github.com/containerd/console v0.0.0-20191219165238-8375c3424e4d
-	github.com/containerd/containerd v1.4.0-0
+	github.com/apache/thrift v0.13.0 // indirect
+	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd // indirect
+	github.com/containerd/console v0.0.0-20180822173158-c12b1e7919c1
+	github.com/containerd/containerd v1.3.1-0.20200219222124-986d06785c4a
 	github.com/containerd/continuity v0.0.0-20200107194136-26c1120b8d41
-	github.com/containerd/fifo v0.0.0-20191213151349-ff969a566b00 // indirect
 	github.com/containerd/go-cni v0.0.0-20200107172653-c154a49e2c75
-	github.com/containerd/go-runc v0.0.0-20200220073739-7016d3ce2328
-	github.com/containerd/ttrpc v0.0.0-20200121165050-0be804eadb15 // indirect
-	github.com/containerd/typeurl v0.0.0-20200205145503-b45ef1f1f737 // indirect
+	github.com/containerd/go-runc v0.0.0-20180907222934-5a6d9f37cfa3
 	github.com/coreos/go-systemd/v22 v22.0.0
 	github.com/docker/cli v0.0.0-20200227165822-2298e6a3fe24
-	github.com/docker/distribution v0.0.0-20200223014041-6b972e50feee
-	github.com/docker/docker v0.0.0
+	github.com/docker/distribution v2.7.1-0.20190205005809-0d3efadf0154+incompatible
+	github.com/docker/docker v1.14.0-0.20191106232431-31abc6c089eb
 	github.com/docker/docker-credential-helpers v0.6.0 // indirect
 	github.com/docker/go-connections v0.3.0
 	github.com/docker/libnetwork v0.8.0-dev.2.0.20200226230617-d8334ccdb9be
@@ -39,6 +35,7 @@ require (
 	github.com/imdario/mergo v0.3.7 // indirect
 	github.com/ishidawataru/sctp v0.0.0-20191218070446-00ab2ac2db07 // indirect
 	github.com/jaguilar/vt100 v0.0.0-20150826170717-2703a27b14ea
+	github.com/kr/pretty v0.1.0 // indirect
 	github.com/mitchellh/hashstructure v0.0.0-20170609045927-2bca23e0e452
 	github.com/morikuni/aec v0.0.0-20170113033406-39771216ff4c
 	github.com/opencontainers/go-digest v1.0.0-rc1

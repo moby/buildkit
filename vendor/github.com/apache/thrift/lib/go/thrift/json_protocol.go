@@ -20,6 +20,7 @@
 package thrift
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 )
@@ -31,10 +32,7 @@ const (
 // for references to _ParseContext see tsimplejson_protocol.go
 
 // JSON protocol implementation for thrift.
-//
-// This protocol produces/consumes a simple output format
-// suitable for parsing by scripting languages.  It should not be
-// confused with the full-featured TJSONProtocol.
+// Utilizes Simple JSON protocol
 //
 type TJSONProtocol struct {
 	*TSimpleJSONProtocol
@@ -438,10 +436,10 @@ func (p *TJSONProtocol) ReadBinary() ([]byte, error) {
 	return v, p.ParsePostValue()
 }
 
-func (p *TJSONProtocol) Flush() (err error) {
+func (p *TJSONProtocol) Flush(ctx context.Context) (err error) {
 	err = p.writer.Flush()
 	if err == nil {
-		err = p.trans.Flush()
+		err = p.trans.Flush(ctx)
 	}
 	return NewTProtocolException(err)
 }
