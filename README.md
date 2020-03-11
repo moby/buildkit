@@ -357,7 +357,8 @@ The directory layout conforms to OCI Image Spec v1.0.
 -   `ref=docker.io/user/image:tag`: reference for `registry` cache importer
 -   `src=path/to/input-dir`: directory for `local` cache importer
 -   `digest=sha256:deadbeef`: digest of the manifest list to import for `local` cache importer.
-    Defaults to the digest of "latest" tag in `index.json`
+-   `tag=customtag`: custom tag of image for `local` cache importer.
+    Defaults to the digest of "latest" tag in `index.json` is for digest, not for tag
 
 ### Consistent hashing
 

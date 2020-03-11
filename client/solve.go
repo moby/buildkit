@@ -435,13 +435,13 @@ func parseCacheOptions(opt SolveOpt) (*cacheOptions, error) {
 					continue
 				}
 				for _, m := range idx.Manifests {
-					if m.Annotations[ocispec.AnnotationRefName] == "latest" {
+					if (m.Annotations[ocispec.AnnotationRefName] == "latest" && attrs["tag"] == "") || (attrs["tag"] != "" && m.Annotations[ocispec.AnnotationRefName] == attrs["tag"]) {
 						attrs["digest"] = string(m.Digest)
 						break
 					}
 				}
 				if attrs["digest"] == "" {
-					return nil, errors.New("local cache importer requires either explicit digest or \"latest\" tag on index.json")
+					return nil, errors.New("local cache importer requires either explicit digest, \"latest\" tag or custom tag on index.json")
 				}
 			}
 			contentStores["local:"+csDir] = cs
