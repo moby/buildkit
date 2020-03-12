@@ -4,7 +4,7 @@
 FROM golang:1.13-buster AS gobuild-base
 ARG PROTOC_VERSION=3.1.0
 ARG GOGO_VERSION=master
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get --no-install-recommends install -y \
  git \
  unzip \
  && true

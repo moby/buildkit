@@ -33,7 +33,7 @@ RUN dpkg --add-architecture s390x && \
   dpkg --add-architecture armhf && \
   dpkg --add-architecture arm64 && \
   apt-get update && \
-  apt-get install -y \
+  apt-get --no-install-recommends install -y \
   gcc-s390x-linux-gnu libc6-dev-s390x-cross libseccomp-dev:s390x \
   crossbuild-essential-ppc64el libseccomp-dev:ppc64el \
   crossbuild-essential-armel libseccomp-dev:armel \
@@ -135,7 +135,7 @@ WORKDIR /usr/src
 RUN git clone https://github.com/containerd/containerd.git containerd
 
 FROM gobuild-base AS containerd-base
-RUN apt-get install -y --no-install-recommends btrfs-progs libbtrfs-dev
+RUN apt-get --no-install-recommends install -y btrfs-progs libbtrfs-dev
 WORKDIR /go/src/github.com/containerd/containerd
 
 FROM containerd-base AS containerd
@@ -229,7 +229,7 @@ RUN curl -Ls https://github.com/containernetworking/plugins/releases/download/$C
 
 FROM buildkit-base AS integration-tests-base
 ENV BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR="1000:1000"
-RUN apt-get install -y --no-install-recommends uidmap sudo vim iptables \ 
+RUN apt-get --no-install-recommends install -y uidmap sudo vim iptables \ 
   && useradd --create-home --home-dir /home/user --uid 1000 -s /bin/sh user \
   && echo "XDG_RUNTIME_DIR=/run/user/1000; export XDG_RUNTIME_DIR" >> /home/user/.profile \
   && mkdir -m 0700 -p /run/user/1000 \

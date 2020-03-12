@@ -1,5 +1,5 @@
 FROM debian:buster-slim AS base
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get --no-install-recommends install -y \
   binutils-arm-linux-gnueabihf \
   binutils-aarch64-linux-gnu \
   binutils-x86-64-linux-gnu \
