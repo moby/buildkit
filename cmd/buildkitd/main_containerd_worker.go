@@ -179,7 +179,7 @@ func applyContainerdFlags(c *cli.Context, cfg *config.Config) error {
 		cfg.Workers.Containerd.NetworkConfig.Mode = c.GlobalString("containerd-worker-net")
 	}
 	if c.GlobalIsSet("containerd-cni-config-path") {
-		cfg.Workers.Containerd.NetworkConfig.CNIConfigPath = c.GlobalString("containerd-cni-worker-path")
+		cfg.Workers.Containerd.NetworkConfig.CNIConfigPath = c.GlobalString("containerd-cni-config-path")
 	}
 	if c.GlobalIsSet("containerd-cni-binary-dir") {
 		cfg.Workers.Containerd.NetworkConfig.CNIBinaryPath = c.GlobalString("containerd-cni-binary-dir")
