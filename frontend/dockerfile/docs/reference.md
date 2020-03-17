@@ -146,7 +146,7 @@ builds [refer to the documentation in the BuildKit repository](https://github.co
 
 Here is the format of the `Dockerfile`:
 
-```Dockerfile
+```dockerfile
 # Comment
 INSTRUCTION arguments
 ```
@@ -167,7 +167,7 @@ Docker treats lines that *begin* with `#` as a comment, unless the line is
 a valid [parser directive](#parser-directives). A `#` marker anywhere
 else in a line is treated as an argument. This allows statements like:
 
-```Dockerfile
+```dockerfile
 # Comment
 RUN echo 'we are running some # of cool things'
 ```
@@ -197,14 +197,14 @@ Due to these rules, the following examples are all invalid:
 
 Invalid due to line continuation:
 
-```Dockerfile
+```dockerfile
 # direc \
 tive=value
 ```
 
 Invalid due to appearing twice:
 
-```Dockerfile
+```dockerfile
 # directive=value1
 # directive=value2
 
@@ -213,7 +213,7 @@ FROM ImageName
 
 Treated as a comment due to appearing after a builder instruction:
 
-```Dockerfile
+```dockerfile
 FROM ImageName
 # directive=value
 ```
@@ -221,7 +221,7 @@ FROM ImageName
 Treated as a comment due to appearing after a comment which is not a parser
 directive:
 
-```Dockerfile
+```dockerfile
 # About my dockerfile
 # directive=value
 FROM ImageName
@@ -231,7 +231,7 @@ The unknown directive is treated as a comment due to not being recognized. In
 addition, the known directive is treated as a comment due to appearing after
 a comment which is not a parser directive.
 
-```Dockerfile
+```dockerfile
 # unknowndirective=value
 # knowndirective=value
 ```
@@ -239,7 +239,7 @@ a comment which is not a parser directive.
 Non line-breaking whitespace is permitted in a parser directive. Hence, the
 following lines are all treated identically:
 
-```Dockerfile
+```dockerfile
 #directive=value
 # directive =value
 #	directive= value
@@ -334,7 +334,7 @@ handled as an instruction, cause it be treated as a line continuation. The resul
 of this dockerfile is that second and third lines are considered a single
 instruction:
 
-```Dockerfile
+```dockerfile
 FROM microsoft/nanoserver
 COPY testfile.txt c:\\
 RUN dir c:\
@@ -602,7 +602,7 @@ and use it to cross-compile to the target platform inside the stage.
 `FROM` instructions support variables that are declared by any `ARG`
 instructions that occur before the first `FROM`.
 
-```Dockerfile
+```dockerfile
 ARG  CODE_VERSION=latest
 FROM base:${CODE_VERSION}
 CMD  /code/run-app
@@ -616,7 +616,7 @@ can't be used in any instruction after a `FROM`. To use the default value of
 an `ARG` declared before the first `FROM` use an `ARG` instruction without
 a value inside of a build stage:
 
-```Dockerfile
+```dockerfile
 ARG VERSION=latest
 FROM busybox:$VERSION
 ARG VERSION
@@ -851,13 +851,13 @@ ports and map them to high-order ports.
 
 By default, `EXPOSE` assumes TCP. You can also specify UDP:
 
-```Dockerfile
+```dockerfile
 EXPOSE 80/udp
 ```
 
 To expose on both TCP and UDP, include two lines:
 
-```Dockerfile
+```dockerfile
 EXPOSE 80/tcp
 EXPOSE 80/udp
 ```
@@ -1494,7 +1494,7 @@ group (or GID) to use when running the image and for any `RUN`, `CMD` and
 > On Windows, the user must be created first if it's not a built-in account.
 > This can be done with the `net user` command called as part of a Dockerfile.
 
-```Dockerfile
+```dockerfile
     FROM microsoft/windowsservercore
     # Create Windows user in the container
     RUN net user /add patrick
@@ -1738,7 +1738,7 @@ these arguments inside the build stage redefine it without value.
 
 For example:
 
-```Dockerfile
+```dockerfile
 FROM alpine
 ARG TARGETPLATFORM
 RUN echo "I'm building for $TARGETPLATFORM"
