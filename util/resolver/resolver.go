@@ -3,37 +3,109 @@ package resolver
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
+	"io/ioutil"
 	"net/http"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"time"
 
 	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
+	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/auth"
 	"github.com/moby/buildkit/util/tracing"
+	"github.com/pkg/errors"
 )
 
-type RegistryConf struct {
-	Mirrors   []string
-	PlainHTTP *bool
-	Insecure  *bool
-}
+func fillInsecureOpts(host string, c config.RegistryConfig, h *docker.RegistryHost) error {
+	tc, err := loadTLSConfig(c)
+	if err != nil {
+		return err
+	}
 
-func fillInsecureOpts(host string, c RegistryConf, h *docker.RegistryHost) {
 	if c.PlainHTTP != nil && *c.PlainHTTP {
 		h.Scheme = "http"
 	} else if c.Insecure != nil && *c.Insecure {
-		h.Client = &http.Client{
-			Transport: tracing.NewTransport(&http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}),
+		if tc == nil {
+			tc = &tls.Config{}
 		}
+		tc.InsecureSkipVerify = true
 	} else if c.PlainHTTP == nil {
 		if ok, _ := docker.MatchLocalhost(host); ok {
 			h.Scheme = "http"
 		}
 	}
+
+	if tc != nil && h.Scheme != "http" {
+		h.Client = &http.Client{
+			Transport: tracing.NewTransport(&http.Transport{TLSClientConfig: tc}),
+		}
+	}
+
+	return nil
 }
 
-func NewRegistryConfig(m map[string]RegistryConf) docker.RegistryHosts {
+func loadTLSConfig(c config.RegistryConfig) (*tls.Config, error) {
+	for _, d := range c.TLSConfigDir {
+		fs, err := ioutil.ReadDir(d)
+		if err != nil && !os.IsNotExist(err) && !os.IsPermission(err) {
+			return nil, errors.WithStack(err)
+		}
+		for _, f := range fs {
+			if strings.HasSuffix(f.Name(), ".crt") {
+				c.RootCAs = append(c.RootCAs, filepath.Join(d, f.Name()))
+			}
+			if strings.HasSuffix(f.Name(), ".cert") {
+				c.KeyPairs = append(c.KeyPairs, config.TLSKeyPair{
+					Certificate: filepath.Join(d, f.Name()),
+					Key:         filepath.Join(d, strings.TrimSuffix(f.Name(), ".cert")+".key"),
+				})
+			}
+		}
+	}
+
+	var tc *tls.Config
+
+	if len(c.RootCAs) > 0 {
+		tc = &tls.Config{}
+		systemPool, err := x509.SystemCertPool()
+		if err != nil {
+			if runtime.GOOS == "windows" {
+				systemPool = x509.NewCertPool()
+			} else {
+				return nil, errors.Wrapf(err, "unable to get system cert pool")
+			}
+		}
+		tc.RootCAs = systemPool
+	}
+
+	for _, p := range c.RootCAs {
+		dt, err := ioutil.ReadFile(p)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to read %s", p)
+		}
+		tc.RootCAs.AppendCertsFromPEM(dt)
+	}
+
+	for _, kp := range c.KeyPairs {
+		cert, err := tls.LoadX509KeyPair(kp.Certificate, kp.Key)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to load keypair for %s", kp.Certificate)
+		}
+		if tc == nil {
+			tc = &tls.Config{}
+		}
+		tc.Certificates = append(tc.Certificates, cert)
+	}
+
+	return tc, nil
+}
+
+func NewRegistryConfig(m map[string]config.RegistryConfig) docker.RegistryHosts {
 	return docker.Registries(
 		func(host string) ([]docker.RegistryHost, error) {
 			c, ok := m[host]
@@ -51,7 +123,10 @@ func NewRegistryConfig(m map[string]RegistryConf) docker.RegistryHosts {
 					Path:         "/v2",
 					Capabilities: docker.HostCapabilityPull | docker.HostCapabilityResolve,
 				}
-				fillInsecureOpts(mirror, m[mirror], &h)
+
+				if err := fillInsecureOpts(mirror, m[mirror], &h); err != nil {
+					return nil, err
+				}
 
 				out = append(out, h)
 			}
@@ -67,7 +142,10 @@ func NewRegistryConfig(m map[string]RegistryConf) docker.RegistryHosts {
 				Path:         "/v2",
 				Capabilities: docker.HostCapabilityPush | docker.HostCapabilityPull | docker.HostCapabilityResolve,
 			}
-			fillInsecureOpts(host, c, &h)
+
+			if err := fillInsecureOpts(host, c, &h); err != nil {
+				return nil, err
+			}
 
 			out = append(out, h)
 			return out, nil

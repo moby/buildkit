@@ -83,4 +83,9 @@ insecure-entitlements = [ "network.host", "security.insecure" ]
 [registry."docker.io"]
   mirrors = ["hub.docker.io"]
   http = true
+  insecure = true
+  ca=["/etc/config/myca.pem"]
+  [[registry."docker.io".keypair]]
+    key="/etc/config/key.pem"
+    cert="/etc/config/cert.pem"
 ```

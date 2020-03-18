@@ -182,7 +182,7 @@ func main() {
 		ctx, cancel := context.WithCancel(appcontext.Context())
 		defer cancel()
 
-		cfg, md, err := config.LoadFile(c.GlobalString("config"))
+		cfg, md, err := LoadFile(c.GlobalString("config"))
 		if err != nil {
 			return err
 		}
@@ -337,7 +337,7 @@ func defaultConfigPath() string {
 }
 
 func defaultConf() (config.Config, *toml.MetaData, error) {
-	cfg, md, err := config.LoadFile(defaultConfigPath())
+	cfg, md, err := LoadFile(defaultConfigPath())
 	if err != nil {
 		if _, ok := errors.Cause(err).(*os.PathError); !ok {
 			return config.Config{}, nil, err
@@ -621,15 +621,7 @@ func newController(c *cli.Context, cfg *config.Config) (*control.Controller, err
 }
 
 func resolverFunc(cfg *config.Config) docker.RegistryHosts {
-	m := map[string]resolver.RegistryConf{}
-	for k, v := range cfg.Registries {
-		m[k] = resolver.RegistryConf{
-			Mirrors:   v.Mirrors,
-			PlainHTTP: v.PlainHTTP,
-			Insecure:  v.Insecure,
-		}
-	}
-	return resolver.NewRegistryConfig(m)
+	return resolver.NewRegistryConfig(cfg.Registries)
 }
 
 func newWorkerController(c *cli.Context, wiOpt workerInitializerOpt) (*worker.Controller, error) {
