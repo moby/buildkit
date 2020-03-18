@@ -173,16 +173,20 @@ RUN  --mount=target=/root/.cache,type=cache \
 
 # Based on https://github.com/containers/fuse-overlayfs/blob/v0.7.6/Dockerfile.static.ubuntu .
 # We can't use Alpine here because Alpine does not provide an apk package for libfuse3.a .
-FROM debian:10 AS fuse-overlayfs
+FROM --platform=$BUILDPLATFORM debian:10 AS fuse-overlayfs
 RUN apt-get update && \
   apt-get install --no-install-recommends -y \
-  git ca-certificates libc6-dev gcc make automake autoconf pkgconf libfuse3-dev file
+  git ca-certificates libc6-dev gcc make automake autoconf pkgconf libfuse3-dev file curl
 RUN git clone https://github.com/containers/fuse-overlayfs
 WORKDIR fuse-overlayfs
 ARG FUSEOVERLAYFS_VERSION
 RUN git pull && git checkout ${FUSEOVERLAYFS_VERSION}
-RUN  ./autogen.sh && \
-  LIBS="-ldl" LDFLAGS="-static" ./configure && \
+ARG TARGETPLATFORM
+RUN curl -o /cross.sh https://raw.githubusercontent.com/AkihiroSuda/tonistiigi-binfmt/c0f14b94cdb5b6de0afd1c4b5118891b1174fefc/binfmt/scripts/cross.sh && \
+  chmod +x /cross.sh && \
+  /cross.sh install gcc pkgconf libfuse3-dev | sh
+RUN ./autogen.sh && \
+  CC=$(/cross.sh cross-prefix)-gcc LD=$(/cross.sh cross-prefix)-ld LIBS="-ldl" LDFLAGS="-static" ./configure && \
   make && mkdir /out && cp fuse-overlayfs /out && \
   file /out/fuse-overlayfs | grep "statically linked"
 
@@ -256,15 +260,21 @@ VOLUME /var/lib/buildkit
 # newuidmap & newgidmap binaries (shadow-uidmap 4.7-r1) shipped with alpine:3.11 cannot be executed without CAP_SYS_ADMIN,
 # because the binaries are built without libcap-dev.
 # So we need to build the binaries with libcap enabled.
-FROM alpine:3.11 AS idmap
-RUN apk add --no-cache autoconf automake build-base byacc gettext gettext-dev gcc git libcap-dev libtool libxslt
+FROM --platform=$BUILDPLATFORM debian:10 AS idmap
+RUN apt-get update && apt-get install --no-install-recommends -y automake autopoint bison ca-certificates curl file gettext git gcc libcap-dev libtool make
 RUN git clone https://github.com/shadow-maint/shadow.git /shadow
 WORKDIR /shadow
 ARG SHADOW_VERSION
 RUN git checkout $SHADOW_VERSION
-RUN ./autogen.sh --disable-nls --disable-man --without-audit --without-selinux --without-acl --without-attr --without-tcb --without-nscd \
+ARG TARGETPLATFORM
+RUN curl -o /cross.sh https://raw.githubusercontent.com/AkihiroSuda/tonistiigi-binfmt/c0f14b94cdb5b6de0afd1c4b5118891b1174fefc/binfmt/scripts/cross.sh && \
+  chmod +x /cross.sh && \
+  /cross.sh install gcc pkgconf libcap-dev | sh
+RUN CC=$(/cross.sh cross-prefix)-gcc LD=$(/cross.sh cross-prefix)-ld ./autogen.sh --disable-nls --disable-man --without-audit --without-selinux --without-acl --without-attr --without-tcb --without-nscd \
   && make \
-  && cp src/newuidmap src/newgidmap /usr/bin
+  && cp src/newuidmap src/newgidmap /usr/bin \
+  && file /usr/bin/newuidmap | grep "statically linked" \
+  && file /usr/bin/newgidmap | grep "statically linked"
 
 FROM alpine:3.11 AS rootless-base-internal
 RUN apk add --no-cache fuse3 git xz
