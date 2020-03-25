@@ -1771,7 +1771,7 @@ COPY foo .
 		Run(llb.Shlex(`sh -c "echo -n foo0 > /empty/foo"`)).
 		AddMount("/empty", llb.Image("docker.io/moby/testpullscratch:latest"))
 
-	def, err := echo.Marshal()
+	def, err := echo.Marshal(context.TODO())
 	require.NoError(t, err)
 
 	destDir, err := ioutil.TempDir("", "buildkit")
@@ -4442,7 +4442,7 @@ COPY foo foo2
 			llb.Copy(st2, "foo2", "foo3"),
 		)
 
-		def, err := st.Marshal()
+		def, err := st.Marshal(context.TODO())
 		if err != nil {
 			return nil, err
 		}
@@ -4490,7 +4490,7 @@ func testFrontendInputs(t *testing.T, sb integration.Sandbox) {
 		llb.Shlex(`sh -c "cat /dev/urandom | head -c 100 | sha256sum > /out/foo"`),
 	).AddMount("/out", llb.Scratch())
 
-	def, err := outMount.Marshal()
+	def, err := outMount.Marshal(context.TODO())
 	require.NoError(t, err)
 
 	_, err = c.Solve(context.TODO(), def, client.SolveOpt{

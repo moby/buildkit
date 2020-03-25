@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"os"
 
@@ -24,7 +25,7 @@ func main() {
 	bk := buildkit(opt)
 	out := bk.Run(llb.Shlex("ls -l /bin")) // debug output
 
-	dt, err := out.Marshal(llb.LinuxAmd64)
+	dt, err := out.Marshal(context.TODO(), llb.LinuxAmd64)
 	if err != nil {
 		panic(err)
 	}
@@ -88,7 +89,14 @@ func goFromGit(repo, tag string) llb.StateOption {
 		Dirf("/go/src/%s", repo).
 		Run(llb.Shlexf("git checkout -q %s", tag)).Root()
 	return func(s llb.State) llb.State {
-		return s.With(copyFrom(src, "/go", "/")).Reset(s).Dir(src.GetDir())
+		return s.With(copyFrom(src, "/go", "/")).Reset(s).Async(func(ctx context.Context, s llb.State) (llb.State, error) {
+			// TODO: add s.With(s2.DirValue) or s.With(llb.Dir(s2)) or s.Reset(s2, llb.DirMask)?
+			dir, err := src.GetDir(ctx)
+			if err != nil {
+				return llb.State{}, err
+			}
+			return s.Dir(dir), nil
+		})
 	}
 }
 

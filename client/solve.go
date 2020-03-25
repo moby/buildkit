@@ -192,7 +192,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 
 		frontendInputs := make(map[string]*pb.Definition)
 		for key, st := range opt.FrontendInputs {
-			def, err := st.Marshal()
+			def, err := st.Marshal(ctx)
 			if err != nil {
 				return err
 			}

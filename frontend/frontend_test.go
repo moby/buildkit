@@ -52,7 +52,7 @@ func testRefReadFile(t *testing.T, sb integration.Sandbox) {
 	defer os.RemoveAll(dir)
 
 	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
-		def, err := llb.Local("mylocal").Marshal()
+		def, err := llb.Local("mylocal").Marshal(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -132,7 +132,7 @@ func testRefReadDir(t *testing.T, sb integration.Sandbox) {
 	})
 
 	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
-		def, err := llb.Local("mylocal").Marshal()
+		def, err := llb.Local("mylocal").Marshal(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -236,7 +236,7 @@ func testRefStatFile(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
-		def, err := llb.Local("mylocal").Marshal()
+		def, err := llb.Local("mylocal").Marshal(ctx)
 		if err != nil {
 			return nil, err
 		}

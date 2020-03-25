@@ -112,7 +112,7 @@ func testBuildContainerdExporter(t *testing.T, sb integration.Sandbox) {
 }
 
 func marshal(st llb.State) (io.Reader, error) {
-	def, err := st.Marshal()
+	def, err := st.Marshal(context.TODO())
 	if err != nil {
 		return nil, err
 	}

@@ -1,6 +1,7 @@
 package llbbuild
 
 import (
+	"context"
 	"testing"
 
 	"github.com/moby/buildkit/client/llb"
@@ -12,7 +13,7 @@ import (
 func TestMarshal(t *testing.T) {
 	t.Parallel()
 	b := NewBuildOp(newDummyOutput("foobar"), WithFilename("myfilename"))
-	dgst, dt, opMeta, err := b.Marshal(&llb.Constraints{})
+	dgst, dt, opMeta, err := b.Marshal(context.TODO(), &llb.Constraints{})
 	_ = opMeta
 	require.NoError(t, err)
 
@@ -42,12 +43,12 @@ type dummyOutput struct {
 	dgst digest.Digest
 }
 
-func (d *dummyOutput) ToInput(*llb.Constraints) (*pb.Input, error) {
+func (d *dummyOutput) ToInput(context.Context, *llb.Constraints) (*pb.Input, error) {
 	return &pb.Input{
 		Digest: d.dgst,
 		Index:  pb.OutputIndex(7), // random constant
 	}, nil
 }
-func (d *dummyOutput) Vertex() llb.Vertex {
+func (d *dummyOutput) Vertex(context.Context) llb.Vertex {
 	return nil
 }

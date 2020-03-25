@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"io/ioutil"
 	"log"
@@ -41,7 +42,7 @@ func main() {
 
 	_ = img
 
-	dt, err := state.Marshal()
+	dt, err := state.Marshal(context.TODO())
 	if err != nil {
 		panic(err)
 	}

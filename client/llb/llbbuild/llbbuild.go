@@ -1,6 +1,8 @@
 package llbbuild
 
 import (
+	"context"
+
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
@@ -30,23 +32,23 @@ type build struct {
 	constraints    llb.Constraints
 }
 
-func (b *build) ToInput(c *llb.Constraints) (*pb.Input, error) {
-	dgst, _, _, err := b.Marshal(c)
+func (b *build) ToInput(ctx context.Context, c *llb.Constraints) (*pb.Input, error) {
+	dgst, _, _, err := b.Marshal(ctx, c)
 	if err != nil {
 		return nil, err
 	}
 	return &pb.Input{Digest: dgst, Index: pb.OutputIndex(0)}, nil
 }
 
-func (b *build) Vertex() llb.Vertex {
+func (b *build) Vertex(context.Context) llb.Vertex {
 	return b
 }
 
-func (b *build) Validate() error {
+func (b *build) Validate(context.Context) error {
 	return nil
 }
 
-func (b *build) Marshal(c *llb.Constraints) (digest.Digest, []byte, *pb.OpMetadata, error) {
+func (b *build) Marshal(ctx context.Context, c *llb.Constraints) (digest.Digest, []byte, *pb.OpMetadata, error) {
 	if b.Cached(c) {
 		return b.Load()
 	}
@@ -72,7 +74,7 @@ func (b *build) Marshal(c *llb.Constraints) (digest.Digest, []byte, *pb.OpMetada
 		Build: pbo,
 	}
 
-	inp, err := b.source.ToInput(c)
+	inp, err := b.source.ToInput(ctx, c)
 	if err != nil {
 		return "", nil, nil, err
 	}

@@ -2,6 +2,7 @@ package llb
 
 import (
 	"bytes"
+	"context"
 	"testing"
 
 	"github.com/containerd/containerd/platforms"
@@ -27,18 +28,20 @@ func TestDefinitionEquivalence(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			def, err := tc.state.Marshal()
+			ctx := context.TODO()
+
+			def, err := tc.state.Marshal(context.TODO())
 			require.NoError(t, err)
 
 			op, err := NewDefinitionOp(def.ToPB())
 			require.NoError(t, err)
 
-			err = op.Validate()
+			err = op.Validate(ctx)
 			require.NoError(t, err)
 
 			st2 := NewState(op.Output())
 
-			def2, err := st2.Marshal()
+			def2, err := st2.Marshal(context.TODO())
 			require.NoError(t, err)
 			require.Equal(t, len(def.Def), len(def2.Def))
 			require.Equal(t, len(def.Metadata), len(def2.Metadata))
@@ -52,8 +55,10 @@ func TestDefinitionEquivalence(t *testing.T) {
 				require.Equal(t, def.Metadata[dgst], def2.Metadata[dgst])
 			}
 
-			expectedPlatform := tc.state.GetPlatform()
-			actualPlatform := st2.GetPlatform()
+			expectedPlatform, err := tc.state.GetPlatform(ctx)
+			require.NoError(t, err)
+			actualPlatform, err := st2.GetPlatform(ctx)
+			require.NoError(t, err)
 
 			if expectedPlatform == nil && actualPlatform != nil {
 				defaultPlatform := platforms.Normalize(platforms.DefaultSpec())

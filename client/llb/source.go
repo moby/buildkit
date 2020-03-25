@@ -34,7 +34,7 @@ func NewSource(id string, attrs map[string]string, c Constraints) *SourceOp {
 	return s
 }
 
-func (s *SourceOp) Validate() error {
+func (s *SourceOp) Validate(ctx context.Context) error {
 	if s.err != nil {
 		return s.err
 	}
@@ -44,11 +44,11 @@ func (s *SourceOp) Validate() error {
 	return nil
 }
 
-func (s *SourceOp) Marshal(constraints *Constraints) (digest.Digest, []byte, *pb.OpMetadata, error) {
+func (s *SourceOp) Marshal(ctx context.Context, constraints *Constraints) (digest.Digest, []byte, *pb.OpMetadata, error) {
 	if s.Cached(constraints) {
 		return s.Load()
 	}
-	if err := s.Validate(); err != nil {
+	if err := s.Validate(ctx); err != nil {
 		return "", nil, nil, err
 	}
 
