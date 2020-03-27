@@ -456,9 +456,29 @@ func forwardGateway(ctx context.Context, c client.Client, ref string, cmdline st
 	}
 	opts["cmdline"] = cmdline
 	opts["source"] = ref
+
+	gwcaps := c.BuildOpts().Caps
+	var frontendInputs map[string]*pb.Definition
+	if (&gwcaps).Supports(gwpb.CapFrontendInputs) == nil {
+		inputs, err := c.Inputs(ctx)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to get frontend inputs")
+		}
+
+		frontendInputs = make(map[string]*pb.Definition)
+		for name, state := range inputs {
+			def, err := state.Marshal()
+			if err != nil {
+				return nil, err
+			}
+			frontendInputs[name] = def.ToPB()
+		}
+	}
+
 	return c.Solve(ctx, client.SolveRequest{
-		Frontend:    "gateway.v0",
-		FrontendOpt: opts,
+		Frontend:       "gateway.v0",
+		FrontendOpt:    opts,
+		FrontendInputs: frontendInputs,
 	})
 }
 
