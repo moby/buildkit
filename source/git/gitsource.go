@@ -273,7 +273,8 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context) (out cache.ImmutableRe
 		args = append(args, "origin")
 		if !isCommitSHA(ref) {
 			args = append(args, "--force", ref+":tags/"+ref)
-			// local refs are needed so they would be advertised on next fetches
+			// local refs are needed so they would be advertised on next fetches. Force is used
+			// in case the ref is a branch and it now points to a different commit sha
 			// TODO: is there a better way to do this?
 		}
 		if _, err := gitWithinDir(ctx, gitDir, "", args...); err != nil {
