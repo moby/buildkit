@@ -272,7 +272,7 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context) (out cache.ImmutableRe
 		}
 		args = append(args, "origin")
 		if !isCommitSHA(ref) {
-			args = append(args, ref+":tags/"+ref)
+			args = append(args, "--force", ref+":tags/"+ref)
 			// local refs are needed so they would be advertised on next fetches
 			// TODO: is there a better way to do this?
 		}
