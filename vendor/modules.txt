@@ -254,7 +254,7 @@ github.com/stretchr/testify/assert
 github.com/stretchr/testify/require
 # github.com/syndtr/gocapability v0.0.0-20180916011248-d98352740cb2
 github.com/syndtr/gocapability/capability
-# github.com/tonistiigi/fsutil v0.0.0-20200225063759-013a9fe6aee2
+# github.com/tonistiigi/fsutil v0.0.0-20200326231323-c2c7d7b0e144
 github.com/tonistiigi/fsutil
 github.com/tonistiigi/fsutil/copy
 github.com/tonistiigi/fsutil/types
