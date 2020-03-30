@@ -2,6 +2,7 @@ package client
 
 import (
 	"archive/tar"
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -106,6 +107,7 @@ func TestIntegration(t *testing.T) {
 		testCacheMountNoCache,
 		testExporterTargetExists,
 		testTarExporterWithSocket,
+		testTarExporterSymlink,
 		testMultipleRegistryCacheImportExport,
 	}, mirrors)
 
@@ -1626,6 +1628,50 @@ func testTarExporterWithSocket(t *testing.T, sb integration.Sandbox) {
 		},
 	}, nil)
 	require.NoError(t, err)
+}
+
+// moby/buildkit#1418
+func testTarExporterSymlink(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("busybox:latest")
+	st := llb.Scratch()
+
+	run := func(cmd string) {
+		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+	}
+
+	run(`sh -c "echo -n first > foo;ln -s foo bar"`)
+
+	def, err := st.Marshal()
+	require.NoError(t, err)
+
+	var buf bytes.Buffer
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:   ExporterTar,
+				Output: fixedWriteCloser(&nopWriteCloser{&buf}),
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	m, err := testutil.ReadTarToMap(buf.Bytes(), false)
+	require.NoError(t, err)
+
+	item, ok := m["foo"]
+	require.True(t, ok)
+	require.Equal(t, int32(item.Header.Typeflag), tar.TypeReg)
+	require.Equal(t, []byte("first"), item.Data)
+
+	item, ok = m["bar"]
+	require.True(t, ok)
+	require.Equal(t, int32(item.Header.Typeflag), tar.TypeSymlink)
+	require.Equal(t, "foo", item.Header.Linkname)
 }
 
 func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
