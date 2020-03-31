@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -30,9 +31,6 @@ func fillInsecureOpts(host string, c config.RegistryConfig, h *docker.RegistryHo
 	if c.PlainHTTP != nil && *c.PlainHTTP {
 		h.Scheme = "http"
 	} else if c.Insecure != nil && *c.Insecure {
-		if tc == nil {
-			tc = &tls.Config{}
-		}
 		tc.InsecureSkipVerify = true
 	} else if c.PlainHTTP == nil {
 		if ok, _ := docker.MatchLocalhost(host); ok {
@@ -40,12 +38,12 @@ func fillInsecureOpts(host string, c config.RegistryConfig, h *docker.RegistryHo
 		}
 	}
 
-	if tc != nil && h.Scheme != "http" {
-		h.Client = &http.Client{
-			Transport: tracing.NewTransport(&http.Transport{TLSClientConfig: tc}),
-		}
-	}
+	transport := newDefaultTransport()
+	transport.TLSClientConfig = tc
 
+	h.Client = &http.Client{
+		Transport: tracing.NewTransport(transport),
+	}
 	return nil
 }
 
@@ -68,10 +66,8 @@ func loadTLSConfig(c config.RegistryConfig) (*tls.Config, error) {
 		}
 	}
 
-	var tc *tls.Config
-
+	tc := &tls.Config{}
 	if len(c.RootCAs) > 0 {
-		tc = &tls.Config{}
 		systemPool, err := x509.SystemCertPool()
 		if err != nil {
 			if runtime.GOOS == "windows" {
@@ -96,12 +92,8 @@ func loadTLSConfig(c config.RegistryConfig) (*tls.Config, error) {
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to load keypair for %s", kp.Certificate)
 		}
-		if tc == nil {
-			tc = &tls.Config{}
-		}
 		tc.Certificates = append(tc.Certificates, cert)
 	}
-
 	return tc, nil
 }
 
@@ -118,7 +110,7 @@ func NewRegistryConfig(m map[string]config.RegistryConfig) docker.RegistryHosts 
 			for _, mirror := range c.Mirrors {
 				h := docker.RegistryHost{
 					Scheme:       "https",
-					Client:       tracing.DefaultClient,
+					Client:       newDefaultClient(),
 					Host:         mirror,
 					Path:         "/v2",
 					Capabilities: docker.HostCapabilityPull | docker.HostCapabilityResolve,
@@ -137,7 +129,7 @@ func NewRegistryConfig(m map[string]config.RegistryConfig) docker.RegistryHosts 
 
 			h := docker.RegistryHost{
 				Scheme:       "https",
-				Client:       tracing.DefaultClient,
+				Client:       newDefaultClient(),
 				Host:         host,
 				Path:         "/v2",
 				Capabilities: docker.HostCapabilityPush | docker.HostCapabilityPull | docker.HostCapabilityResolve,
@@ -150,7 +142,10 @@ func NewRegistryConfig(m map[string]config.RegistryConfig) docker.RegistryHosts 
 			out = append(out, h)
 			return out, nil
 		},
-		docker.ConfigureDefaultRegistries(docker.WithClient(tracing.DefaultClient), docker.WithPlainHTTP(docker.MatchLocalhost)),
+		docker.ConfigureDefaultRegistries(
+			docker.WithClient(newDefaultClient()),
+			docker.WithPlainHTTP(docker.MatchLocalhost),
+		),
 	)
 }
 
@@ -190,5 +185,35 @@ func hostsWithCredentials(ctx context.Context, hosts docker.RegistryHosts, sm *s
 			res[i].Authorizer = a
 		}
 		return res, nil
+	}
+}
+
+func newDefaultClient() *http.Client {
+	return &http.Client{
+		Transport: newDefaultTransport(),
+	}
+}
+
+// newDefaultTransport is for pull or push client
+//
+// NOTE: For push, there must disable http2 for https because the flow control
+// will limit data transfer. The net/http package doesn't provide http2 tunable
+// settings which limits push performance.
+//
+// REF: https://github.com/golang/go/issues/14077
+func newDefaultTransport() *http.Transport {
+	return &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+			DualStack: true,
+		}).DialContext,
+		MaxIdleConns:          10,
+		IdleConnTimeout:       30 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 5 * time.Second,
+		DisableKeepAlives:     true,
+		TLSNextProto:          make(map[string]func(authority string, c *tls.Conn) http.RoundTripper),
 	}
 }
