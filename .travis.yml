@@ -22,7 +22,9 @@ jobs:
       script: ./hack/login_ci_cache && ./hack/build_ci_first_pass
     - stage: testing
       name: "Client integration tests"
-      script: TESTPKGS=./client ./hack/test integration
+      script: 
+        - TESTPKGS=./client ./hack/test integration
+        - TESTPKGS=./cmd/buildctl ./hack/test integration
     - script:
        - ./hack/lint
        - SKIP_INTEGRATION_TESTS=1 ./hack/test integration gateway
