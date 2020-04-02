@@ -11,7 +11,7 @@ require (
 	github.com/codahale/hdrhistogram v0.0.0-20160425231609-f8ad88b59a58 // indirect
 	github.com/containerd/cgroups v0.0.0-20200217135630-d732e370d46d // indirect
 	github.com/containerd/console v0.0.0-20191219165238-8375c3424e4d
-	github.com/containerd/containerd v1.4.0-0
+	github.com/containerd/containerd v1.3.1-0.20200227195959-4d242818bf55
 	github.com/containerd/continuity v0.0.0-20200107194136-26c1120b8d41
 	github.com/containerd/fifo v0.0.0-20191213151349-ff969a566b00 // indirect
 	github.com/containerd/go-cni v0.0.0-20200107172653-c154a49e2c75
@@ -77,7 +77,5 @@ require (
 replace github.com/hashicorp/go-immutable-radix => github.com/tonistiigi/go-immutable-radix v0.0.0-20170803185627-826af9ccf0fe
 
 replace github.com/jaguilar/vt100 => github.com/tonistiigi/vt100 v0.0.0-20190402012908-ad4c4a574305
-
-replace github.com/containerd/containerd => github.com/containerd/containerd v1.3.1-0.20200227195959-4d242818bf55
 
 replace github.com/docker/docker => github.com/docker/docker v1.4.2-0.20200227233006-38f52c9fec82
