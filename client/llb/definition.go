@@ -1,6 +1,8 @@
 package llb
 
 import (
+	"context"
+
 	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -53,15 +55,15 @@ func NewDefinitionOp(def *pb.Definition) (*DefinitionOp, error) {
 	}, nil
 }
 
-func (d *DefinitionOp) ToInput(c *Constraints) (*pb.Input, error) {
-	return d.Output().ToInput(c)
+func (d *DefinitionOp) ToInput(ctx context.Context, c *Constraints) (*pb.Input, error) {
+	return d.Output().ToInput(ctx, c)
 }
 
-func (d *DefinitionOp) Vertex() Vertex {
+func (d *DefinitionOp) Vertex(context.Context) Vertex {
 	return d
 }
 
-func (d *DefinitionOp) Validate() error {
+func (d *DefinitionOp) Validate(context.Context) error {
 	// Scratch state has no digest, ops or metas.
 	if d.dgst == "" {
 		return nil
@@ -95,12 +97,12 @@ func (d *DefinitionOp) Validate() error {
 	return nil
 }
 
-func (d *DefinitionOp) Marshal(c *Constraints) (digest.Digest, []byte, *pb.OpMetadata, error) {
+func (d *DefinitionOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []byte, *pb.OpMetadata, error) {
 	if d.dgst == "" {
 		return "", nil, nil, errors.Errorf("cannot marshal empty definition op")
 	}
 
-	if err := d.Validate(); err != nil {
+	if err := d.Validate(ctx); err != nil {
 		return "", nil, nil, err
 	}
 
