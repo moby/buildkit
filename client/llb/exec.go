@@ -456,17 +456,11 @@ func (fn runOptionFunc) SetRunOption(ei *ExecInfo) {
 	fn(ei)
 }
 
-func Network(n pb.NetMode) RunOption {
-	return runOptionFunc(func(ei *ExecInfo) {
-		ei.State = network(n)(ei.State)
-	})
+func (fn StateOption) SetRunOption(ei *ExecInfo) {
+	ei.State = ei.State.With(fn)
 }
 
-func Security(s pb.SecurityMode) RunOption {
-	return runOptionFunc(func(ei *ExecInfo) {
-		ei.State = security(s)(ei.State)
-	})
-}
+var _ RunOption = StateOption(func(_ State) State { return State{} })
 
 func Shlex(str string) RunOption {
 	return runOptionFunc(func(ei *ExecInfo) {
@@ -485,44 +479,9 @@ func Args(a []string) RunOption {
 	})
 }
 
-func AddEnv(key, value string) RunOption {
-	return runOptionFunc(func(ei *ExecInfo) {
-		ei.State = ei.State.AddEnv(key, value)
-	})
-}
-
-func AddEnvf(key, value string, v ...interface{}) RunOption {
-	return runOptionFunc(func(ei *ExecInfo) {
-		ei.State = ei.State.AddEnvf(key, value, v...)
-	})
-}
-
-func User(str string) RunOption {
-	return runOptionFunc(func(ei *ExecInfo) {
-		ei.State = ei.State.User(str)
-	})
-}
-
-func Dir(str string) RunOption {
-	return runOptionFunc(func(ei *ExecInfo) {
-		ei.State = ei.State.Dir(str)
-	})
-}
-func Dirf(str string, v ...interface{}) RunOption {
-	return runOptionFunc(func(ei *ExecInfo) {
-		ei.State = ei.State.Dirf(str, v...)
-	})
-}
-
 func AddExtraHost(host string, ip net.IP) RunOption {
 	return runOptionFunc(func(ei *ExecInfo) {
 		ei.State = ei.State.AddExtraHost(host, ip)
-	})
-}
-
-func Reset(s State) RunOption {
-	return runOptionFunc(func(ei *ExecInfo) {
-		ei.State = ei.State.Reset(s)
 	})
 }
 

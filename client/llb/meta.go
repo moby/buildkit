@@ -25,6 +25,14 @@ var (
 	keySecurity  = contextKeyT("llb.security")
 )
 
+func AddEnvf(key, value string, v ...interface{}) StateOption {
+	return addEnvf(key, value, true, v...)
+}
+
+func AddEnv(key, value string) StateOption {
+	return addEnvf(key, value, false)
+}
+
 func addEnvf(key, value string, replace bool, v ...interface{}) StateOption {
 	if replace {
 		value = fmt.Sprintf(value, v...)
@@ -40,8 +48,12 @@ func addEnvf(key, value string, replace bool, v ...interface{}) StateOption {
 	}
 }
 
-func dir(str string) StateOption {
+func Dir(str string) StateOption {
 	return dirf(str, false)
+}
+
+func Dirf(str string, v ...interface{}) StateOption {
+	return dirf(str, true, v...)
 }
 
 func dirf(value string, replace bool, v ...interface{}) StateOption {
@@ -65,13 +77,13 @@ func dirf(value string, replace bool, v ...interface{}) StateOption {
 	}
 }
 
-func user(str string) StateOption {
+func User(str string) StateOption {
 	return func(s State) State {
 		return s.WithValue(keyUser, str)
 	}
 }
 
-func reset(other State) StateOption {
+func Reset(other State) StateOption {
 	return func(s State) State {
 		s = NewState(s.Output())
 		s.prev = &other
@@ -200,7 +212,7 @@ type HostIP struct {
 	IP   net.IP
 }
 
-func network(v pb.NetMode) StateOption {
+func Network(v pb.NetMode) StateOption {
 	return func(s State) State {
 		return s.WithValue(keyNetwork, v)
 	}
@@ -219,7 +231,7 @@ func getNetwork(s State) func(context.Context) (pb.NetMode, error) {
 	}
 }
 
-func security(v pb.SecurityMode) StateOption {
+func Security(v pb.SecurityMode) StateOption {
 	return func(s State) State {
 		return s.WithValue(keySecurity, v)
 	}
