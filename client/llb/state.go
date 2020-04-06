@@ -32,8 +32,7 @@ type Vertex interface {
 func NewState(o Output) State {
 	s := State{
 		out: o,
-	}
-	s = dir("/")(s)
+	}.Dir("/")
 	s = s.ensurePlatform()
 	return s
 }
@@ -266,18 +265,18 @@ func (s State) File(a *FileAction, opts ...ConstraintsOpt) State {
 }
 
 func (s State) AddEnv(key, value string) State {
-	return addEnvf(key, value, false)(s)
+	return AddEnv(key, value)(s)
 }
 
 func (s State) AddEnvf(key, value string, v ...interface{}) State {
-	return addEnvf(key, value, true, v...)(s)
+	return AddEnvf(key, value, v...)(s)
 }
 
 func (s State) Dir(str string) State {
-	return dirf(str, false)(s)
+	return Dir(str)(s)
 }
 func (s State) Dirf(str string, v ...interface{}) State {
-	return dirf(str, true, v...)(s)
+	return Dirf(str, v...)(s)
 }
 
 func (s State) GetEnv(ctx context.Context, key string) (string, bool, error) {
@@ -306,11 +305,11 @@ func (s State) GetArgs(ctx context.Context) ([]string, error) {
 }
 
 func (s State) Reset(s2 State) State {
-	return reset(s2)(s)
+	return Reset(s2)(s)
 }
 
 func (s State) User(v string) State {
-	return user(v)(s)
+	return User(v)(s)
 }
 
 func (s State) Platform(p specs.Platform) State {
@@ -322,14 +321,14 @@ func (s State) GetPlatform(ctx context.Context) (*specs.Platform, error) {
 }
 
 func (s State) Network(n pb.NetMode) State {
-	return network(n)(s)
+	return Network(n)(s)
 }
 
 func (s State) GetNetwork(ctx context.Context) (pb.NetMode, error) {
 	return getNetwork(s)(ctx)
 }
 func (s State) Security(n pb.SecurityMode) State {
-	return security(n)(s)
+	return Security(n)(s)
 }
 
 func (s State) GetSecurity(ctx context.Context) (pb.SecurityMode, error) {
