@@ -92,7 +92,8 @@ func (s *SourceOp) Inputs() []Output {
 func Image(ref string, opts ...ImageOption) State {
 	r, err := reference.ParseNormalizedNamed(ref)
 	if err == nil {
-		ref = reference.TagNameOnly(r).String()
+		r = reference.TagNameOnly(r)
+		ref = r.String()
 	}
 	var info ImageInfo
 	for _, opt := range opts {
@@ -116,21 +117,35 @@ func Image(ref string, opts ...ImageOption) State {
 	src := NewSource("docker-image://"+ref, attrs, info.Constraints) // controversial
 	if err != nil {
 		src.err = err
-	}
-	if info.metaResolver != nil {
-		_, dt, err := info.metaResolver.ResolveImageConfig(context.TODO(), ref, ResolveImageConfigOpt{
-			Platform:    info.Constraints.Platform,
-			ResolveMode: info.resolveMode.String(),
-		})
-		if err != nil {
-			src.err = err
-		} else {
-			st, err := NewState(src.Output()).WithImageConfig(dt)
-			if err == nil {
-				return st
-			}
-			src.err = err
+	} else if info.metaResolver != nil {
+		if _, ok := r.(reference.Digested); ok || !info.resolveDigest {
+			return NewState(src.Output()).Async(func(ctx context.Context, st State) (State, error) {
+				_, dt, err := info.metaResolver.ResolveImageConfig(ctx, ref, ResolveImageConfigOpt{
+					Platform:    info.Constraints.Platform,
+					ResolveMode: info.resolveMode.String(),
+				})
+				if err != nil {
+					return State{}, err
+				}
+				return st.WithImageConfig(dt)
+			})
 		}
+		return Scratch().Async(func(ctx context.Context, _ State) (State, error) {
+			dgst, dt, err := info.metaResolver.ResolveImageConfig(context.TODO(), ref, ResolveImageConfigOpt{
+				Platform:    info.Constraints.Platform,
+				ResolveMode: info.resolveMode.String(),
+			})
+			if err != nil {
+				return State{}, err
+			}
+			if dgst != "" {
+				r, err = reference.WithDigest(r, dgst)
+				if err != nil {
+					return State{}, err
+				}
+			}
+			return NewState(NewSource("docker-image://"+r.String(), attrs, info.Constraints).Output()).WithImageConfig(dt)
+		})
 	}
 	return NewState(src.Output())
 }
@@ -176,9 +191,10 @@ func (r ResolveMode) String() string {
 
 type ImageInfo struct {
 	constraintsWrapper
-	metaResolver ImageMetaResolver
-	resolveMode  ResolveMode
-	RecordType   string
+	metaResolver  ImageMetaResolver
+	resolveDigest bool
+	resolveMode   ResolveMode
+	RecordType    string
 }
 
 func Git(remote, ref string, opts ...GitOption) State {
