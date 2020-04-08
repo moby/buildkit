@@ -55,6 +55,9 @@ func (c dockerd) New(cfg *BackendConfig) (b Backend, cl func() error, err error)
 		}
 	}()
 
+	var proxyGroup errgroup.Group
+	deferF.append(proxyGroup.Wait)
+
 	workDir, err := ioutil.TempDir("", "integration")
 	if err != nil {
 		return nil, nil, err
@@ -109,8 +112,6 @@ func (c dockerd) New(cfg *BackendConfig) (b Backend, cl func() error, err error)
 	}
 	deferF.append(listener.Close)
 
-	var proxyGroup errgroup.Group
-	deferF.append(proxyGroup.Wait)
 	proxyGroup.Go(func() error {
 		for {
 			tmpConn, err := listener.Accept()
