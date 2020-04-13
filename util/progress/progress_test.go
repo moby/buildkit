@@ -7,13 +7,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/moby/buildkit/util/testutil"
+
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/sync/errgroup"
 )
 
 func TestProgress(t *testing.T) {
 	t.Parallel()
-	s, err := calc(context.TODO(), 4, "calc")
+	s, err := calc(testutil.GetContext(t), 4, "calc")
 	assert.NoError(t, err)
 	assert.Equal(t, 10, s)
 

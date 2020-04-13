@@ -26,6 +26,8 @@ github.com/Microsoft/hcsshim/internal/wclayer
 github.com/Microsoft/hcsshim/osversion
 # github.com/apache/thrift v0.0.0-20161221203622-b2a4d4ae21c7
 github.com/apache/thrift/lib/go/thrift
+# github.com/beevik/ntp v0.3.0
+github.com/beevik/ntp
 # github.com/codahale/hdrhistogram v0.0.0-20160425231609-f8ad88b59a58
 github.com/codahale/hdrhistogram
 # github.com/containerd/cgroups v0.0.0-20200217135630-d732e370d46d
@@ -173,6 +175,8 @@ github.com/docker/go-units
 github.com/docker/libnetwork/resolvconf
 github.com/docker/libnetwork/resolvconf/dns
 github.com/docker/libnetwork/types
+# github.com/go-errors/errors v1.0.1
+github.com/go-errors/errors
 # github.com/gofrs/flock v0.7.0
 github.com/gofrs/flock
 # github.com/gogo/googleapis v1.3.2
@@ -183,13 +187,15 @@ github.com/gogo/protobuf/proto
 github.com/gogo/protobuf/protoc-gen-gogo/descriptor
 github.com/gogo/protobuf/sortkeys
 github.com/gogo/protobuf/types
-# github.com/golang/protobuf v1.3.3
+# github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e
+github.com/golang/groupcache/lru
+# github.com/golang/protobuf v1.3.5
 github.com/golang/protobuf/proto
 github.com/golang/protobuf/ptypes
 github.com/golang/protobuf/ptypes/any
 github.com/golang/protobuf/ptypes/duration
 github.com/golang/protobuf/ptypes/timestamp
-# github.com/google/go-cmp v0.3.1
+# github.com/google/go-cmp v0.4.0
 github.com/google/go-cmp/cmp
 github.com/google/go-cmp/cmp/internal/diff
 github.com/google/go-cmp/cmp/internal/flags
@@ -203,7 +209,7 @@ github.com/google/uuid
 github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc
 # github.com/hashicorp/go-immutable-radix v1.0.0 => github.com/tonistiigi/go-immutable-radix v0.0.0-20170803185627-826af9ccf0fe
 github.com/hashicorp/go-immutable-radix
-# github.com/hashicorp/golang-lru v0.5.1
+# github.com/hashicorp/golang-lru v0.5.4
 github.com/hashicorp/golang-lru/simplelru
 # github.com/ishidawataru/sctp v0.0.0-20191218070446-00ab2ac2db07
 github.com/ishidawataru/sctp
@@ -211,6 +217,8 @@ github.com/ishidawataru/sctp
 github.com/jaguilar/vt100
 # github.com/konsorten/go-windows-terminal-sequences v1.0.2
 github.com/konsorten/go-windows-terminal-sequences
+# github.com/mitchellh/go-homedir v1.1.0
+github.com/mitchellh/go-homedir
 # github.com/mitchellh/hashstructure v0.0.0-20170609045927-2bca23e0e452
 github.com/mitchellh/hashstructure
 # github.com/morikuni/aec v0.0.0-20170113033406-39771216ff4c
@@ -231,7 +239,7 @@ github.com/opencontainers/selinux/go-selinux
 github.com/opencontainers/selinux/go-selinux/label
 # github.com/opentracing-contrib/go-stdlib v0.0.0-20171029140428-b1a47cfbdd75
 github.com/opentracing-contrib/go-stdlib/nethttp
-# github.com/opentracing/opentracing-go v0.0.0-20171003133519-1361b9cd60be
+# github.com/opentracing/opentracing-go v1.1.0
 github.com/opentracing/opentracing-go
 github.com/opentracing/opentracing-go/ext
 github.com/opentracing/opentracing-go/log
@@ -249,7 +257,7 @@ github.com/serialx/hashring
 github.com/shurcooL/sanitized_anchor_name
 # github.com/sirupsen/logrus v1.4.2
 github.com/sirupsen/logrus
-# github.com/stretchr/testify v1.4.0
+# github.com/stretchr/testify v1.5.1
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/require
 # github.com/syndtr/gocapability v0.0.0-20180916011248-d98352740cb2
@@ -272,17 +280,40 @@ github.com/uber/jaeger-client-go/thrift-gen/zipkincore
 github.com/uber/jaeger-client-go/utils
 # github.com/uber/jaeger-lib v1.2.1
 github.com/uber/jaeger-lib/metrics
+# github.com/undefinedlabs/go-mpatch v0.0.0-20200326085307-1a86426f42a6
+github.com/undefinedlabs/go-mpatch
 # github.com/urfave/cli v1.22.2
 github.com/urfave/cli
+# github.com/vmihailenco/msgpack v4.0.4+incompatible
+github.com/vmihailenco/msgpack
+github.com/vmihailenco/msgpack/codes
 # go.etcd.io/bbolt v1.3.3
 go.etcd.io/bbolt
-# go.opencensus.io v0.22.0
+# go.opencensus.io v0.22.3
 go.opencensus.io
 go.opencensus.io/internal
 go.opencensus.io/trace
 go.opencensus.io/trace/internal
 go.opencensus.io/trace/tracestate
-# golang.org/x/crypto v0.0.0-20200221231518-2aa609cf4a9d
+# go.undefinedlabs.com/scopeagent v0.2.0
+go.undefinedlabs.com/scopeagent
+go.undefinedlabs.com/scopeagent/agent
+go.undefinedlabs.com/scopeagent/ast
+go.undefinedlabs.com/scopeagent/autoinstrument
+go.undefinedlabs.com/scopeagent/env
+go.undefinedlabs.com/scopeagent/errors
+go.undefinedlabs.com/scopeagent/instrumentation
+go.undefinedlabs.com/scopeagent/instrumentation/grpc
+go.undefinedlabs.com/scopeagent/instrumentation/logging
+go.undefinedlabs.com/scopeagent/instrumentation/nethttp
+go.undefinedlabs.com/scopeagent/instrumentation/process
+go.undefinedlabs.com/scopeagent/instrumentation/testing
+go.undefinedlabs.com/scopeagent/reflection
+go.undefinedlabs.com/scopeagent/runner
+go.undefinedlabs.com/scopeagent/tags
+go.undefinedlabs.com/scopeagent/tracer
+go.undefinedlabs.com/scopeagent/tracer/wire
+# golang.org/x/crypto v0.0.0-20200406173513-056763e48d71
 golang.org/x/crypto/blowfish
 golang.org/x/crypto/chacha20
 golang.org/x/crypto/curve25519
@@ -293,21 +324,25 @@ golang.org/x/crypto/poly1305
 golang.org/x/crypto/ssh
 golang.org/x/crypto/ssh/agent
 golang.org/x/crypto/ssh/internal/bcrypt_pbkdf
-# golang.org/x/net v0.0.0-20200226121028-0de0cce0169b
+# golang.org/x/net v0.0.0-20200324143707-d3edc9973b7e
+golang.org/x/net/bpf
 golang.org/x/net/context
 golang.org/x/net/context/ctxhttp
 golang.org/x/net/http/httpguts
 golang.org/x/net/http2
 golang.org/x/net/http2/hpack
 golang.org/x/net/idna
+golang.org/x/net/internal/iana
+golang.org/x/net/internal/socket
 golang.org/x/net/internal/socks
 golang.org/x/net/internal/timeseries
+golang.org/x/net/ipv4
 golang.org/x/net/proxy
 golang.org/x/net/trace
-# golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
+# golang.org/x/sync v0.0.0-20200317015054-43a5402ce75a
 golang.org/x/sync/errgroup
 golang.org/x/sync/semaphore
-# golang.org/x/sys v0.0.0-20200223170610-d5e6a3e2c0ae
+# golang.org/x/sys v0.0.0-20200409092240-59c9f1ba88fa
 golang.org/x/sys/cpu
 golang.org/x/sys/unix
 golang.org/x/sys/windows
@@ -318,9 +353,21 @@ golang.org/x/text/unicode/bidi
 golang.org/x/text/unicode/norm
 # golang.org/x/time v0.0.0-20191024005414-555d28b269f0
 golang.org/x/time/rate
-# google.golang.org/genproto v0.0.0-20200227132054-3f1135a288c9
+# google.golang.org/appengine v1.6.5
+google.golang.org/appengine
+google.golang.org/appengine/datastore
+google.golang.org/appengine/datastore/internal/cloudkey
+google.golang.org/appengine/datastore/internal/cloudpb
+google.golang.org/appengine/internal
+google.golang.org/appengine/internal/app_identity
+google.golang.org/appengine/internal/base
+google.golang.org/appengine/internal/datastore
+google.golang.org/appengine/internal/log
+google.golang.org/appengine/internal/modules
+google.golang.org/appengine/internal/remote_api
+# google.golang.org/genproto v0.0.0-20200407120235-9eb9bb161a06
 google.golang.org/genproto/googleapis/rpc/status
-# google.golang.org/grpc v1.27.1
+# google.golang.org/grpc v1.28.1
 google.golang.org/grpc
 google.golang.org/grpc/attributes
 google.golang.org/grpc/backoff
@@ -344,8 +391,10 @@ google.golang.org/grpc/internal/binarylog
 google.golang.org/grpc/internal/buffer
 google.golang.org/grpc/internal/channelz
 google.golang.org/grpc/internal/envconfig
+google.golang.org/grpc/internal/grpclog
 google.golang.org/grpc/internal/grpcrand
 google.golang.org/grpc/internal/grpcsync
+google.golang.org/grpc/internal/grpcutil
 google.golang.org/grpc/internal/resolver/dns
 google.golang.org/grpc/internal/resolver/passthrough
 google.golang.org/grpc/internal/syscall
@@ -359,7 +408,9 @@ google.golang.org/grpc/serviceconfig
 google.golang.org/grpc/stats
 google.golang.org/grpc/status
 google.golang.org/grpc/tap
-# gopkg.in/yaml.v2 v2.2.4
+# gopkg.in/tomb.v2 v2.0.0-20161208151619-d5d1b5820637
+gopkg.in/tomb.v2
+# gopkg.in/yaml.v2 v2.2.8
 gopkg.in/yaml.v2
 # gotest.tools v2.2.0+incompatible
 gotest.tools/assert

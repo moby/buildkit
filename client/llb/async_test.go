@@ -6,11 +6,12 @@ import (
 	"time"
 
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/testutil"
 	"github.com/stretchr/testify/require"
 )
 
 func TestAsyncNonBlocking(t *testing.T) {
-	ctx := context.TODO()
+	ctx := testutil.GetContext(t)
 
 	wait := make(chan struct{})
 	ran := make(chan struct{})

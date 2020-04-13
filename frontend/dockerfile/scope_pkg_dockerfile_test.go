@@ -1,0 +1,5 @@
+package dockerfile
+
+import (
+	_ "go.undefinedlabs.com/scopeagent/autoinstrument"
+)

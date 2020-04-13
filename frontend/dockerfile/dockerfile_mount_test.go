@@ -3,7 +3,6 @@
 package dockerfile
 
 import (
-	"context"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -13,6 +12,7 @@ import (
 	"github.com/containerd/continuity/fs/fstest"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/frontend/dockerfile/builder"
+	"github.com/moby/buildkit/util/testutil"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/stretchr/testify/require"
 )
@@ -31,6 +31,8 @@ func init() {
 }
 
 func testMountContext(t *testing.T, sb integration.Sandbox) {
+	testutil.SetTestCode(t)
+
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -45,11 +47,11 @@ RUN --mount=target=/context [ "$(cat /context/testfile)" == "contents0" ]
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	c, err := client.New(context.TODO(), sb.Address())
+	c, err := newClient(testutil.GetContext(t), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+	_, err = f.Solve(testutil.GetContext(t), c, client.SolveOpt{
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -59,6 +61,8 @@ RUN --mount=target=/context [ "$(cat /context/testfile)" == "contents0" ]
 }
 
 func testMountTmpfs(t *testing.T, sb integration.Sandbox) {
+	testutil.SetTestCode(t)
+
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -73,11 +77,11 @@ RUN [ ! -f /mytmp/foo ]
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	c, err := client.New(context.TODO(), sb.Address())
+	c, err := newClient(testutil.GetContext(t), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+	_, err = f.Solve(testutil.GetContext(t), c, client.SolveOpt{
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -87,6 +91,8 @@ RUN [ ! -f /mytmp/foo ]
 }
 
 func testMountRWCache(t *testing.T, sb integration.Sandbox) {
+	testutil.SetTestCode(t)
+
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -108,7 +114,7 @@ COPY --from=second /unique /unique
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	c, err := client.New(context.TODO(), sb.Address())
+	c, err := newClient(testutil.GetContext(t), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -116,7 +122,7 @@ COPY --from=second /unique /unique
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+	_, err = f.Solve(testutil.GetContext(t), c, client.SolveOpt{
 		Exports: []client.ExportEntry{
 			{
 				Type:      client.ExporterLocal,
@@ -145,7 +151,7 @@ COPY --from=second /unique /unique
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+	_, err = f.Solve(testutil.GetContext(t), c, client.SolveOpt{
 		Exports: []client.ExportEntry{
 			{
 				Type:      client.ExporterLocal,
@@ -179,11 +185,11 @@ RUN --mount=type=cache,target=/mycache,uid=1001,gid=1002,mode=0751 [ "$(stat -c 
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	c, err := client.New(context.TODO(), sb.Address())
+	c, err := newClient(testutil.GetContext(t), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+	_, err = f.Solve(testutil.GetContext(t), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
 			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
 		},
@@ -196,6 +202,8 @@ RUN --mount=type=cache,target=/mycache,uid=1001,gid=1002,mode=0751 [ "$(stat -c 
 }
 
 func testCacheMountDefaultID(t *testing.T, sb integration.Sandbox) {
+	testutil.SetTestCode(t)
+
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -211,11 +219,11 @@ RUN --mount=type=cache,target=/mycache [ -f /mycache/foo ]
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	c, err := client.New(context.TODO(), sb.Address())
+	c, err := newClient(testutil.GetContext(t), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+	_, err = f.Solve(testutil.GetContext(t), c, client.SolveOpt{
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,

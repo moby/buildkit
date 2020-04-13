@@ -44,7 +44,7 @@ type httpSource struct {
 func NewSource(opt Opt) (source.Source, error) {
 	transport := opt.Transport
 	if transport == nil {
-		transport = tracing.DefaultTransport
+		transport = tracing.GetHttpTransport()
 	}
 	hs := &httpSource{
 		md:        opt.MetadataStore,

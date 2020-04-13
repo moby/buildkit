@@ -52,6 +52,9 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
+	"go.undefinedlabs.com/scopeagent/agent"
+	"go.undefinedlabs.com/scopeagent/env"
+	scopegrpc "go.undefinedlabs.com/scopeagent/instrumentation/grpc"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 )
@@ -174,11 +177,20 @@ func main() {
 	app.Flags = append(app.Flags, appFlags...)
 
 	app.Action = func(c *cli.Context) error {
+		if env.ScopeDsn.Value != "" {
+			scopeAgent, err := agent.NewAgent()
+			if err != nil {
+				panic(err)
+			}
+			defer scopeAgent.Stop()
+		}
+
 		// TODO: On Windows this always returns -1. The actual "are you admin" check is very Windows-specific.
 		// See https://github.com/golang/go/issues/28804#issuecomment-505326268 for the "short" version.
 		if os.Geteuid() > 0 {
 			return errors.New("rootless mode requires to be executed as the mapped root in a user namespace; you may use RootlessKit for setting up the namespace")
 		}
+
 		ctx, cancel := context.WithCancel(appcontext.Context())
 		defer cancel()
 
@@ -201,7 +213,9 @@ func main() {
 				return err
 			}
 		}
-		opts := []grpc.ServerOption{unaryInterceptor(ctx), grpc.StreamInterceptor(otgrpc.OpenTracingStreamServerInterceptor(tracer))}
+
+		//opts := []grpc.ServerOption{unaryInterceptor(ctx), grpc.StreamInterceptor(otgrpc.OpenTracingStreamServerInterceptor(tracer))}
+		opts := []grpc.ServerOption{unaryInterceptor(ctx), streamInterceptor()}
 		server := grpc.NewServer(opts...)
 
 		// relative path does not work with nightlyone/lockfile
@@ -514,7 +528,12 @@ func getListener(addr string, uid, gid int, tlsConfig *tls.Config) (net.Listener
 }
 
 func unaryInterceptor(globalCtx context.Context) grpc.ServerOption {
-	withTrace := otgrpc.OpenTracingServerInterceptor(tracer, otgrpc.LogPayloads())
+	var withTrace grpc.UnaryServerInterceptor
+	if env.ScopeDsn.Value != "" {
+		withTrace = scopegrpc.OpenTracingServerInterceptor(tracer)
+	} else {
+		withTrace = otgrpc.OpenTracingServerInterceptor(tracer, otgrpc.LogPayloads())
+	}
 
 	return grpc.UnaryInterceptor(func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
 		ctx, cancel := context.WithCancel(ctx)
@@ -534,6 +553,14 @@ func unaryInterceptor(globalCtx context.Context) grpc.ServerOption {
 		}
 		return
 	})
+}
+
+func streamInterceptor() grpc.ServerOption {
+	if env.ScopeDsn.Value != "" {
+		return grpc.StreamInterceptor(scopegrpc.OpenTracingStreamServerInterceptor(tracer))
+	}
+
+	return grpc.StreamInterceptor(otgrpc.OpenTracingStreamServerInterceptor(tracer))
 }
 
 func serverCredentials(cfg config.TLSConfig) (*tls.Config, error) {

@@ -16,6 +16,8 @@ import (
 	"github.com/moby/buildkit/util/appdefaults"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
+	"go.undefinedlabs.com/scopeagent/env"
+	scopegrpc "go.undefinedlabs.com/scopeagent/instrumentation/grpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -44,9 +46,14 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 			needWithInsecure = false
 		}
 		if wt, ok := o.(*withTracer); ok {
-			gopts = append(gopts,
-				grpc.WithUnaryInterceptor(otgrpc.OpenTracingClientInterceptor(wt.tracer, otgrpc.LogPayloads())),
-				grpc.WithStreamInterceptor(otgrpc.OpenTracingStreamClientInterceptor(wt.tracer)))
+			//If Scope is running...
+			if env.ScopeDsn.Value != "" {
+				gopts = append(gopts, scopegrpc.GetClientInterceptors()...)
+			} else {
+				gopts = append(gopts,
+					grpc.WithUnaryInterceptor(otgrpc.OpenTracingClientInterceptor(wt.tracer, otgrpc.LogPayloads())),
+					grpc.WithStreamInterceptor(otgrpc.OpenTracingStreamClientInterceptor(wt.tracer)))
+			}
 		}
 		if wd, ok := o.(*withDialer); ok {
 			gopts = append(gopts, grpc.WithDialer(wd.dialer))
@@ -68,6 +75,7 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 	if address == "" {
 		address = appdefaults.Address
 	}
+
 	conn, err := grpc.DialContext(ctx, address, gopts...)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to dial %q . make sure buildkitd is running", address)

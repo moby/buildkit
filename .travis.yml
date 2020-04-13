@@ -33,7 +33,7 @@ jobs:
        - TESTPKGS=./frontend ./hack/test
       name: "Unit Tests & Lint & Vendor & Proto"
     - script:
-       - TESTPKGS=./frontend/dockerfile TESTFLAGS='-v --parallel=6' ./hack/test
+       - TESTPKGS=./frontend/dockerfile ./hack/test
       name: "Dockerfile integration tests"
     - script: TESTPKGS=./frontend/dockerfile ./hack/test dockerfile
       name: "External Dockerfile tests"

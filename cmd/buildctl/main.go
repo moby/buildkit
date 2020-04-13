@@ -13,6 +13,8 @@ import (
 	"github.com/moby/buildkit/version"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
+	"go.undefinedlabs.com/scopeagent/agent"
+	"go.undefinedlabs.com/scopeagent/env"
 )
 
 func init() {
@@ -31,6 +33,14 @@ func main() {
 	defaultAddress := os.Getenv("BUILDKIT_HOST")
 	if defaultAddress == "" {
 		defaultAddress = appdefaults.Address
+	}
+
+	if env.ScopeDsn.Value != "" {
+		scopeAgent, err := agent.NewAgent()
+		if err != nil {
+			panic(err)
+		}
+		defer scopeAgent.Stop()
 	}
 
 	app.Flags = []cli.Flag{

@@ -7,14 +7,15 @@ import (
 	"testing"
 
 	"github.com/moby/buildkit/session"
-	"github.com/moby/buildkit/session/testutil"
+	sessionutil "github.com/moby/buildkit/session/testutil"
+	"github.com/moby/buildkit/util/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
 
 func TestFileSyncIncludePatterns(t *testing.T) {
-	ctx := context.TODO()
+	ctx := testutil.GetContext(t)
 	t.Parallel()
 	tmpDir, err := ioutil.TempDir("", "fsynctest")
 	require.NoError(t, err)
@@ -37,7 +38,7 @@ func TestFileSyncIncludePatterns(t *testing.T) {
 	fs := NewFSSyncProvider([]SyncedDir{{Name: "test0", Dir: tmpDir}})
 	s.Allow(fs)
 
-	dialer := session.Dialer(testutil.TestStream(testutil.Handler(m.HandleConn)))
+	dialer := session.Dialer(sessionutil.TestStream(sessionutil.Handler(m.HandleConn)))
 
 	g, ctx := errgroup.WithContext(context.Background())
 

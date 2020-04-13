@@ -1,9 +1,10 @@
 package llbtest
 
 import (
-	"context"
 	"strings"
 	"testing"
+
+	"github.com/moby/buildkit/util/testutil"
 
 	"github.com/containerd/containerd/platforms"
 	"github.com/moby/buildkit/client/llb"
@@ -23,7 +24,7 @@ func TestCustomPlatform(t *testing.T) {
 		Run(llb.Shlex("bax"), llb.Windows).
 		Run(llb.Shlex("bay"))
 
-	def, err := s.Marshal(context.TODO())
+	def, err := s.Marshal(testutil.GetContext(t))
 	require.NoError(t, err)
 
 	e, err := llbsolver.Load(def.ToPB())
@@ -52,7 +53,7 @@ func TestDefaultPlatform(t *testing.T) {
 
 	s := llb.Image("foo").Run(llb.Shlex("bar"))
 
-	def, err := s.Marshal(context.TODO())
+	def, err := s.Marshal(testutil.GetContext(t))
 	require.NoError(t, err)
 
 	e, err := llbsolver.Load(def.ToPB())
@@ -73,7 +74,7 @@ func TestPlatformOnMarshal(t *testing.T) {
 
 	s := llb.Image("image1").Run(llb.Shlex("bar"))
 
-	def, err := s.Marshal(context.TODO(), llb.Windows)
+	def, err := s.Marshal(testutil.GetContext(t), llb.Windows)
 	require.NoError(t, err)
 
 	e, err := llbsolver.Load(def.ToPB())
@@ -93,7 +94,7 @@ func TestPlatformMixed(t *testing.T) {
 	s2 := llb.Image("image2", llb.LinuxArmel).Run(llb.Shlex("cmd-sub"))
 	s1.AddMount("/mnt", s2.Root())
 
-	def, err := s1.Marshal(context.TODO(), llb.LinuxAmd64)
+	def, err := s1.Marshal(testutil.GetContext(t), llb.LinuxAmd64)
 	require.NoError(t, err)
 
 	e, err := llbsolver.Load(def.ToPB())
@@ -123,7 +124,7 @@ func TestFallbackPath(t *testing.T) {
 
 	// With no caps we expect no PATH but also no requirement for
 	// the cap.
-	def, err := llb.Scratch().Run(llb.Shlex("cmd")).Marshal(context.TODO(), llb.LinuxAmd64)
+	def, err := llb.Scratch().Run(llb.Shlex("cmd")).Marshal(testutil.GetContext(t), llb.LinuxAmd64)
 	require.NoError(t, err)
 	e, err := llbsolver.Load(def.ToPB())
 	require.NoError(t, err)
@@ -135,7 +136,7 @@ func TestFallbackPath(t *testing.T) {
 	// no requirement for the cap.
 	cs := pb.Caps.CapSet(nil)
 	require.Error(t, cs.Supports(pb.CapExecMetaSetsDefaultPath))
-	def, err = llb.Scratch().Run(llb.Shlex("cmd")).Marshal(context.TODO(), llb.LinuxAmd64, llb.WithCaps(cs))
+	def, err = llb.Scratch().Run(llb.Shlex("cmd")).Marshal(testutil.GetContext(t), llb.LinuxAmd64, llb.WithCaps(cs))
 	require.NoError(t, err)
 	e, err = llbsolver.Load(def.ToPB())
 	require.NoError(t, err)
@@ -149,7 +150,7 @@ func TestFallbackPath(t *testing.T) {
 	// present and empty), but also require the cap.
 	cs = pb.Caps.CapSet(pb.Caps.All())
 	require.NoError(t, cs.Supports(pb.CapExecMetaSetsDefaultPath))
-	def, err = llb.Scratch().Run(llb.Shlex("cmd")).Marshal(context.TODO(), llb.LinuxAmd64, llb.WithCaps(cs))
+	def, err = llb.Scratch().Run(llb.Shlex("cmd")).Marshal(testutil.GetContext(t), llb.LinuxAmd64, llb.WithCaps(cs))
 	require.NoError(t, err)
 	e, err = llbsolver.Load(def.ToPB())
 	require.NoError(t, err)
@@ -165,7 +166,7 @@ func TestFallbackPath(t *testing.T) {
 		{llb.WithCaps(pb.Caps.CapSet(nil))},
 		{llb.WithCaps(pb.Caps.CapSet(pb.Caps.All()))},
 	} {
-		def, err = llb.Scratch().AddEnv("PATH", "foo").Run(llb.Shlex("cmd")).Marshal(context.TODO(), append(cos, llb.LinuxAmd64)...)
+		def, err = llb.Scratch().AddEnv("PATH", "foo").Run(llb.Shlex("cmd")).Marshal(testutil.GetContext(t), append(cos, llb.LinuxAmd64)...)
 		require.NoError(t, err)
 		e, err = llbsolver.Load(def.ToPB())
 		require.NoError(t, err)

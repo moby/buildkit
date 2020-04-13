@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/moby/buildkit/util/testutil"
+
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	gatewayapi "github.com/moby/buildkit/frontend/gateway/pb"
@@ -29,9 +31,9 @@ func TestClientGatewayIntegration(t *testing.T) {
 func testClientGatewaySolve(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 
-	ctx := context.TODO()
+	ctx := testutil.GetContext(t)
 
-	c, err := New(ctx, sb.Address())
+	c, err := newClient(ctx, sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -107,9 +109,9 @@ func testClientGatewaySolve(t *testing.T, sb integration.Sandbox) {
 func testClientGatewayFailedSolve(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 
-	ctx := context.TODO()
+	ctx := testutil.GetContext(t)
 
-	c, err := New(ctx, sb.Address())
+	c, err := newClient(ctx, sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -125,9 +127,9 @@ func testClientGatewayFailedSolve(t *testing.T, sb integration.Sandbox) {
 func testClientGatewayEmptySolve(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 
-	ctx := context.TODO()
+	ctx := testutil.GetContext(t)
 
-	c, err := New(ctx, sb.Address())
+	c, err := newClient(ctx, sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -149,9 +151,9 @@ func testClientGatewayEmptySolve(t *testing.T, sb integration.Sandbox) {
 func testNoBuildID(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 
-	ctx := context.TODO()
+	ctx := testutil.GetContext(t)
 
-	c, err := New(ctx, sb.Address())
+	c, err := newClient(ctx, sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -164,9 +166,9 @@ func testNoBuildID(t *testing.T, sb integration.Sandbox) {
 func testUnknownBuildID(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 
-	ctx := context.TODO()
+	ctx := testutil.GetContext(t)
 
-	c, err := New(ctx, sb.Address())
+	c, err := newClient(ctx, sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 

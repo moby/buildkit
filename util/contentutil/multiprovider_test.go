@@ -2,11 +2,11 @@ package contentutil
 
 import (
 	"bytes"
-	"context"
 	"testing"
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
+	"github.com/moby/buildkit/util/testutil"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -15,7 +15,7 @@ import (
 
 func TestMultiProvider(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := testutil.GetContext(t)
 
 	b0 := NewBuffer()
 	b1 := NewBuffer()

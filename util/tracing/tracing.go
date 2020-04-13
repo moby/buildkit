@@ -10,6 +10,8 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
 	"github.com/opentracing/opentracing-go/log"
+	"go.undefinedlabs.com/scopeagent/env"
+	scopenethttp "go.undefinedlabs.com/scopeagent/instrumentation/nethttp"
 )
 
 // StartSpan starts a new span as a child of the span in context.
@@ -62,12 +64,20 @@ func ContextWithSpanFromContext(ctx, ctx2 context.Context) context.Context {
 	return ctx
 }
 
-var DefaultTransport http.RoundTripper = &Transport{
+var scopeTransport http.RoundTripper = &scopenethttp.Transport{
+	RoundTripper:           http.DefaultTransport,
+	PayloadInstrumentation: true,
+	Stacktrace:             true,
+}
+
+var defaultTransport http.RoundTripper = &Transport{
 	RoundTripper: &nethttp.Transport{RoundTripper: http.DefaultTransport},
 }
 
-var DefaultClient = &http.Client{
-	Transport: DefaultTransport,
+var scopeClient = &http.Client{Transport: scopeTransport}
+
+var defaultClient = &http.Client{
+	Transport: defaultTransport,
 }
 
 type Transport struct {
@@ -75,6 +85,14 @@ type Transport struct {
 }
 
 func NewTransport(rt http.RoundTripper) http.RoundTripper {
+	if env.ScopeDsn.Value != "" {
+		return &scopenethttp.Transport{
+			RoundTripper:           rt,
+			PayloadInstrumentation: true,
+			Stacktrace:             true,
+		}
+	}
+
 	return &Transport{
 		RoundTripper: &nethttp.Transport{RoundTripper: rt},
 	}
@@ -112,4 +130,19 @@ func (c closeTracker) Close() error {
 	err := c.ReadCloser.Close()
 	c.finish()
 	return err
+}
+
+func GetHttpClient() *http.Client {
+	if env.ScopeDsn.Value != "" {
+		return scopeClient
+	}
+
+	return defaultClient
+}
+
+func GetHttpTransport() http.RoundTripper {
+	if env.ScopeDsn.Value != "" {
+		return scopeTransport
+	}
+	return defaultTransport
 }

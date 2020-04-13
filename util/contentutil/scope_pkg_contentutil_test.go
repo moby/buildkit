@@ -1,0 +1,5 @@
+package contentutil
+
+import (
+	_ "go.undefinedlabs.com/scopeagent/autoinstrument"
+)

@@ -3,6 +3,8 @@ package main
 import (
 	"testing"
 
+	"github.com/moby/buildkit/util/testutil"
+
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/stretchr/testify/require"
 )
@@ -26,6 +28,8 @@ func TestCLIIntegration(t *testing.T) {
 }
 
 func testUsage(t *testing.T, sb integration.Sandbox) {
+	testutil.SetTestCode(t)
+
 	require.NoError(t, sb.Cmd().Run())
 
 	require.NoError(t, sb.Cmd("--help").Run())

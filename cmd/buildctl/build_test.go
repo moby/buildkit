@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/moby/buildkit/util/testutil"
+
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/continuity/fs/fstest"
@@ -21,6 +23,8 @@ import (
 )
 
 func testBuildWithLocalFiles(t *testing.T, sb integration.Sandbox) {
+	testutil.SetTestCode(t)
+
 	dir, err := tmpdir(
 		fstest.CreateFile("foo", []byte("bar"), 0600),
 	)
@@ -44,6 +48,8 @@ func testBuildWithLocalFiles(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBuildLocalExporter(t *testing.T, sb integration.Sandbox) {
+	testutil.SetTestCode(t)
+
 	st := llb.Image("busybox").
 		Run(llb.Shlex("sh -c 'echo -n bar > /out/foo'"))
 
@@ -68,6 +74,8 @@ func testBuildLocalExporter(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBuildContainerdExporter(t *testing.T, sb integration.Sandbox) {
+	testutil.SetTestCode(t)
+
 	var cdAddress string
 	if cd, ok := sb.(interface {
 		ContainerdAddress() string

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/testutil"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -13,6 +14,8 @@ import (
 
 func TestImageMetaResolver(t *testing.T) {
 	t.Parallel()
+
+	ctx := testutil.GetContext(t)
 	tr := &testResolver{
 		digest: digest.FromBytes([]byte("foo")),
 		dir:    "/bar",
@@ -21,7 +24,7 @@ func TestImageMetaResolver(t *testing.T) {
 
 	require.Equal(t, false, tr.called)
 
-	def, err := st.Marshal(context.TODO())
+	def, err := st.Marshal(ctx)
 	require.NoError(t, err)
 
 	require.Equal(t, true, tr.called)
@@ -35,7 +38,7 @@ func TestImageMetaResolver(t *testing.T) {
 
 	require.Equal(t, "docker-image://docker.io/library/alpine:latest", arr[0].Op.(*pb.Op_Source).Source.GetIdentifier())
 
-	d, err := st.GetDir(context.TODO())
+	d, err := st.GetDir(ctx)
 	require.NoError(t, err)
 	require.Equal(t, "/bar", d)
 }
@@ -43,6 +46,7 @@ func TestImageMetaResolver(t *testing.T) {
 func TestImageResolveDigest(t *testing.T) {
 	t.Parallel()
 
+	ctx := testutil.GetContext(t)
 	st := Image("alpine", WithMetaResolver(&testResolver{
 		digest: digest.FromBytes([]byte("bar")),
 		dir:    "/foo",
@@ -60,7 +64,7 @@ func TestImageResolveDigest(t *testing.T) {
 
 	require.Equal(t, "docker-image://docker.io/library/alpine:latest@"+string(digest.FromBytes([]byte("bar"))), arr[0].Op.(*pb.Op_Source).Source.GetIdentifier())
 
-	d, err := st.GetDir(context.TODO())
+	d, err := st.GetDir(ctx)
 	require.NoError(t, err)
 	require.Equal(t, "/foo", d)
 }

@@ -67,12 +67,12 @@ esac
 cacheVolume=$(docker create -v /root/.cache -v /root/.cache/registry -v /go/pkg/mod alpine)
 
 if [ "$TEST_INTEGRATION" == 1 ]; then
-  docker run --rm -v /tmp --volumes-from=$cacheVolume -e SKIP_INTEGRATION_TESTS -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry --privileged $iid go test ${TESTFLAGS:--v} ${TESTPKGS:-./...}
+  docker run --rm -v /tmp --volumes-from=$cacheVolume -e SCOPE_DEBUG -e SCOPE_LOGGER_ROOT -e SCOPE_DSN -e TRAVIS -e TRAVIS_REPO_SLUG -e TRAVIS_COMMIT -e TRAVIS_BUILD_ID -e TRAVIS_BUILD_NUMBER -e TRAVIS_BUILD_WEB_URL -e SKIP_INTEGRATION_TESTS -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry --privileged $iid go test ${TESTFLAGS:--v} -timeout=20m -covermode=count --parallel=1 ${TESTPKGS:-./...}
 fi
 
 
 if [ "$TEST_GATEWAY" == 1 ]; then
-  docker run --rm --volumes-from=$cacheVolume $iid go build -v ./frontend/gateway/client
+  docker run --rm --volumes-from=$cacheVolume -e SCOPE_DEBUG -e SCOPE_LOGGER_ROOT -e SCOPE_DSN -e TRAVIS -e TRAVIS_REPO_SLUG -e TRAVIS_COMMIT -e TRAVIS_BUILD_ID -e TRAVIS_BUILD_NUMBER -e TRAVIS_BUILD_WEB_URL $iid go build -v ./frontend/gateway/client
 fi
 
 
@@ -107,7 +107,7 @@ if [ "$TEST_DOCKERFILE" == 1 ]; then
 
     if [ -s $tarout ]; then
       if [ "$release" = "mainline" ] || [ "$release" = "experimental" ] || [ -n "$DOCKERFILE_RELEASES_CUSTOM" ] || [ "$TRAVIS_EVENT_TYPE" = "cron" ]; then
-        cid=$(docker create -v /tmp --rm --privileged --volumes-from=$cacheVolume -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry -e BUILDKIT_WORKER_RANDOM=1 -e FRONTEND_GATEWAY_ONLY=local:/$release.tar -e EXTERNAL_DF_FRONTEND=/dockerfile-frontend $iid go test --count=1 -tags "$buildtags" ${TESTFLAGS:--v} ./frontend/dockerfile)
+        cid=$(docker create -v /tmp --rm --privileged --volumes-from=$cacheVolume -e SCOPE_DSN -e TRAVIS -e TRAVIS_REPO_SLUG -e TRAVIS_COMMIT -e TRAVIS_BUILD_ID -e TRAVIS_BUILD_NUMBER -e TRAVIS_BUILD_WEB_URL -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry -e BUILDKIT_WORKER_RANDOM=1 -e FRONTEND_GATEWAY_ONLY=local:/$release.tar -e EXTERNAL_DF_FRONTEND=/dockerfile-frontend $iid go test --count=1 -timeout=20m -covermode=count --parallel=1 -tags "$buildtags" ${TESTFLAGS:--v} ./frontend/dockerfile)
         docker cp $tarout $cid:/$release.tar
         docker start -a $cid
       fi
