@@ -6,9 +6,16 @@ set -eu -o pipefail
 : ${TEST_INTEGRATION=}
 : ${TEST_GATEWAY=}
 : ${TEST_DOCKERFILE=}
+: ${TEST_DOCKERD=}
+: ${TEST_DOCKERD_BINARY=$(which dockerd)}
 : ${DOCKERFILE_RELEASES=}
 : ${CONTINUOUS_INTEGRATION=}
 : ${BUILDKIT_REGISTRY_MIRROR_DIR=}
+
+if ! file $TEST_DOCKERD_BINARY | grep "statically linked" >/dev/null; then
+  echo "dockerd binary needs to be statically linked"
+  exit
+fi
 
 importCacheFlags=""
 if [ -n "$cacheref" ]; then
@@ -67,12 +74,20 @@ esac
 cacheVolume=$(docker create -v /root/.cache -v /root/.cache/registry -v /go/pkg/mod alpine)
 
 if [ "$TEST_INTEGRATION" == 1 ]; then
-  docker run --rm -v /tmp --volumes-from=$cacheVolume -e SKIP_INTEGRATION_TESTS -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry --privileged $iid go test ${TESTFLAGS:--v} ${TESTPKGS:-./...}
+  cid=$(docker create --rm -v /tmp --volumes-from=$cacheVolume -e TEST_DOCKERD -e SKIP_INTEGRATION_TESTS -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry --privileged $iid go test ${TESTFLAGS:--v} ${TESTPKGS:-./...})
+  if [ "$TEST_DOCKERD" = "1" ]; then
+    docker cp "$TEST_DOCKERD_BINARY" $cid:/usr/bin/
+  fi
+  docker start -a $cid
 fi
 
 
 if [ "$TEST_GATEWAY" == 1 ]; then
-  docker run --rm --volumes-from=$cacheVolume $iid go build -v ./frontend/gateway/client
+  cid=$(docker create --rm --volumes-from=$cacheVolume -e TEST_DOCKERD $iid go build -v ./frontend/gateway/client)
+  if [ "$TEST_DOCKERD" = "1" ]; then
+    docker cp "$TEST_DOCKERD_BINARY" $cid:/usr/bin/
+  fi
+  docker start -a $cid
 fi
 
 
@@ -107,8 +122,11 @@ if [ "$TEST_DOCKERFILE" == 1 ]; then
 
     if [ -s $tarout ]; then
       if [ "$release" = "mainline" ] || [ "$release" = "experimental" ] || [ -n "$DOCKERFILE_RELEASES_CUSTOM" ] || [ "$TRAVIS_EVENT_TYPE" = "cron" ]; then
-        cid=$(docker create -v /tmp --rm --privileged --volumes-from=$cacheVolume -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry -e BUILDKIT_WORKER_RANDOM=1 -e FRONTEND_GATEWAY_ONLY=local:/$release.tar -e EXTERNAL_DF_FRONTEND=/dockerfile-frontend $iid go test --count=1 -tags "$buildtags" ${TESTFLAGS:--v} ./frontend/dockerfile)
+        cid=$(docker create -v /tmp --rm --privileged --volumes-from=$cacheVolume -e TEST_DOCKERD -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry -e BUILDKIT_WORKER_RANDOM=1 -e FRONTEND_GATEWAY_ONLY=local:/$release.tar -e EXTERNAL_DF_FRONTEND=/dockerfile-frontend $iid go test --count=1 -tags "$buildtags" ${TESTFLAGS:--v} ./frontend/dockerfile)
         docker cp $tarout $cid:/$release.tar
+        if [ "$TEST_DOCKERD" = "1" ]; then
+          docker cp "$TEST_DOCKERD_BINARY" $cid:/usr/bin/
+        fi
         docker start -a $cid
       fi
     fi
