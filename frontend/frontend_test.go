@@ -27,8 +27,12 @@ var (
 )
 
 func init() {
-	integration.InitOCIWorker()
-	integration.InitContainerdWorker()
+	if os.Getenv("TEST_DOCKERD") == "1" {
+		integration.InitDockerdWorker()
+	} else {
+		integration.InitOCIWorker()
+		integration.InitContainerdWorker()
+	}
 }
 
 func TestFrontendIntegration(t *testing.T) {

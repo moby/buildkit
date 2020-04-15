@@ -49,8 +49,12 @@ import (
 )
 
 func init() {
-	integration.InitOCIWorker()
-	integration.InitContainerdWorker()
+	if os.Getenv("TEST_DOCKERD") == "1" {
+		integration.InitDockerdWorker()
+	} else {
+		integration.InitOCIWorker()
+		integration.InitContainerdWorker()
+	}
 }
 
 type nopWriteCloser struct {
@@ -542,6 +546,7 @@ func testNetworkMode(t *testing.T, sb integration.Sandbox) {
 func testPushByDigest(t *testing.T, sb integration.Sandbox) {
 	testutil.SetTestCode(t)
 
+	skipDockerd(t, sb)
 	requiresLinux(t)
 	c, err := newClient(testutil.GetContext(t), sb.Address())
 	require.NoError(t, err)
@@ -601,6 +606,7 @@ func testSecurityMode(t *testing.T, sb integration.Sandbox) {
 		command = `sh -c 'cat /proc/self/status | grep CapEff | grep "00000000a80425fb"'`
 		allowedEntitlements = []entitlements.Entitlement{}
 	} else {
+		skipDockerd(t, sb)
 		/*
 			$ capsh --decode=0000003fffffffff
 			0x0000003fffffffff=cap_chown,cap_dac_override,cap_dac_read_search,cap_fowner,cap_fsetid,cap_kill,cap_setgid,
@@ -645,6 +651,7 @@ func testSecurityModeSysfs(t *testing.T, sb integration.Sandbox) {
 	if secMode == securitySandbox {
 		allowedEntitlements = []entitlements.Entitlement{}
 	} else {
+		skipDockerd(t, sb)
 		mode = llb.SecurityModeInsecure
 		allowedEntitlements = []entitlements.Entitlement{entitlements.EntitlementSecurityInsecure}
 	}
@@ -711,6 +718,7 @@ func testSecurityModeErrors(t *testing.T, sb integration.Sandbox) {
 func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 	testutil.SetTestCode(t)
 
+	skipDockerd(t, sb)
 	requiresLinux(t)
 	c, err := newClient(testutil.GetContext(t), sb.Address())
 	require.NoError(t, err)
@@ -1440,6 +1448,7 @@ func testUser(t *testing.T, sb integration.Sandbox) {
 func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 	testutil.SetTestCode(t)
 
+	skipDockerd(t, sb)
 	requiresLinux(t)
 	c, err := newClient(testutil.GetContext(t), sb.Address())
 	require.NoError(t, err)
@@ -1545,6 +1554,7 @@ func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 func testFrontendMetadataReturn(t *testing.T, sb integration.Sandbox) {
 	testutil.SetTestCode(t)
 
+	skipDockerd(t, sb)
 	requiresLinux(t)
 	c, err := newClient(testutil.GetContext(t), sb.Address())
 	require.NoError(t, err)
@@ -1643,9 +1653,18 @@ func testFrontendUseSolveResults(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, dt, []byte("data"))
 }
 
+func skipDockerd(t *testing.T, sb integration.Sandbox) {
+	// TODO: remove me once dockerd supports the image and exporter.
+	t.Helper()
+	if os.Getenv("TEST_DOCKERD") == "1" {
+		t.Skip("dockerd missing a required exporter, cache exporter, or entitlement")
+	}
+}
+
 func testExporterTargetExists(t *testing.T, sb integration.Sandbox) {
 	testutil.SetTestCode(t)
 
+	skipDockerd(t, sb)
 	requiresLinux(t)
 	c, err := newClient(testutil.GetContext(t), sb.Address())
 	require.NoError(t, err)
@@ -1678,6 +1697,10 @@ func testExporterTargetExists(t *testing.T, sb integration.Sandbox) {
 func testTarExporterWithSocket(t *testing.T, sb integration.Sandbox) {
 	testutil.SetTestCode(t)
 
+	if os.Getenv("TEST_DOCKERD") == "1" {
+		t.Skip("tar exporter is temporarily broken on dockerd")
+	}
+
 	requiresLinux(t)
 	c, err := newClient(testutil.GetContext(t), sb.Address())
 	require.NoError(t, err)
@@ -1703,8 +1726,12 @@ func testTarExporterWithSocket(t *testing.T, sb integration.Sandbox) {
 
 // moby/buildkit#1418
 func testTarExporterSymlink(t *testing.T, sb integration.Sandbox) {
+	testutil.SetTestCode(t)
+
 	requiresLinux(t)
-	c, err := newClient(context.TODO(), sb.Address())
+	ctx := testutil.GetContext(t)
+
+	c, err := newClient(ctx, sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -1717,11 +1744,11 @@ func testTarExporterSymlink(t *testing.T, sb integration.Sandbox) {
 
 	run(`sh -c "echo -n first > foo;ln -s foo bar"`)
 
-	def, err := st.Marshal(context.TODO())
+	def, err := st.Marshal(ctx)
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
-	_, err = c.Solve(context.TODO(), def, SolveOpt{
+	_, err = c.Solve(ctx, def, SolveOpt{
 		Exports: []ExportEntry{
 			{
 				Type:   ExporterTar,
@@ -1748,8 +1775,14 @@ func testTarExporterSymlink(t *testing.T, sb integration.Sandbox) {
 func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 	testutil.SetTestCode(t)
 
+	if os.Getenv("TEST_DOCKERD") == "1" {
+		t.Skip("image exporter is missing in dockerd")
+	}
+
 	requiresLinux(t)
-	c, err := newClient(testutil.GetContext(t), sb.Address())
+
+	ctx := testutil.GetContext(t)
+	c, err := newClient(ctx, sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -1759,7 +1792,7 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 	st := llb.Scratch()
 	st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
 
-	def, err := st.Marshal(context.TODO())
+	def, err := st.Marshal(ctx)
 	require.NoError(t, err)
 
 	registry, err := sb.NewRegistry()
@@ -1770,7 +1803,7 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 
 	target := registry + "/buildkit/build/exporter:withnocompressed"
 
-	_, err = c.Solve(testutil.GetContext(t), def, SolveOpt{
+	_, err = c.Solve(ctx, def, SolveOpt{
 		Exports: []ExportEntry{
 			{
 				Type: ExporterImage,
@@ -1790,7 +1823,7 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 	st = targetImg.Run(llb.Shlex(cmd), llb.Dir("/wd")).GetMount("/wd")
 
 	target = registry + "/buildkit/build/exporter:withcompressed"
-	_, err = c.Solve(testutil.GetContext(t), def, SolveOpt{
+	_, err = c.Solve(ctx, def, SolveOpt{
 		Exports: []ExportEntry{
 			{
 				Type: ExporterImage,
@@ -1816,7 +1849,7 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer client.Close()
 
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit")
+	ctx = namespaces.WithNamespace(ctx, "buildkit")
 	err = client.ImageService().Delete(ctx, target, images.SynchronousDelete())
 	require.NoError(t, err)
 
@@ -1865,6 +1898,7 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	testutil.SetTestCode(t)
 
+	skipDockerd(t, sb)
 	requiresLinux(t)
 	c, err := newClient(testutil.GetContext(t), sb.Address())
 	require.NoError(t, err)
@@ -2141,6 +2175,7 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptio
 func testBasicRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	testutil.SetTestCode(t)
 
+	skipDockerd(t, sb)
 	registry, err := sb.NewRegistry()
 	if errors.Cause(err) == integration.ErrorRequirements {
 		t.Skip(err.Error())
@@ -2159,6 +2194,7 @@ func testBasicRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
 func testMultipleRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	testutil.SetTestCode(t)
 
+	skipDockerd(t, sb)
 	registry, err := sb.NewRegistry()
 	if errors.Cause(err) == integration.ErrorRequirements {
 		t.Skip(err.Error())
@@ -2183,6 +2219,7 @@ func testMultipleRegistryCacheImportExport(t *testing.T, sb integration.Sandbox)
 func testBasicLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	testutil.SetTestCode(t)
 
+	skipDockerd(t, sb)
 	dir, err := ioutil.TempDir("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
@@ -2204,6 +2241,7 @@ func testBasicLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
 func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	testutil.SetTestCode(t)
 
+	skipDockerd(t, sb)
 	requiresLinux(t)
 	registry, err := sb.NewRegistry()
 	if errors.Cause(err) == integration.ErrorRequirements {
@@ -2536,6 +2574,7 @@ func testCacheMountNoCache(t *testing.T, sb integration.Sandbox) {
 func testDuplicateWhiteouts(t *testing.T, sb integration.Sandbox) {
 	testutil.SetTestCode(t)
 
+	skipDockerd(t, sb)
 	requiresLinux(t)
 	c, err := newClient(testutil.GetContext(t), sb.Address())
 	require.NoError(t, err)
@@ -2609,6 +2648,7 @@ func testDuplicateWhiteouts(t *testing.T, sb integration.Sandbox) {
 func testWhiteoutParentDir(t *testing.T, sb integration.Sandbox) {
 	testutil.SetTestCode(t)
 
+	skipDockerd(t, sb)
 	requiresLinux(t)
 	c, err := newClient(testutil.GetContext(t), sb.Address())
 	require.NoError(t, err)

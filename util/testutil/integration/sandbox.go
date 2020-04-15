@@ -135,6 +135,14 @@ func newSandbox(testCtx context.Context, w Worker, mirror string, mv matrixValue
 	}, cl, nil
 }
 
+func getBuildkitdAddr(tmpdir string) string {
+	address := "unix://" + filepath.Join(tmpdir, "buildkitd.sock")
+	if runtime.GOOS == "windows" {
+		address = "//./pipe/buildkitd-" + filepath.Base(tmpdir)
+	}
+	return address
+}
+
 func runBuildkitd(conf *BackendConfig, args []string, logs map[string]*bytes.Buffer, uid, gid int) (address string, cl func() error, err error) {
 	deferF := &multiCloser{}
 	cl = deferF.F()
@@ -166,10 +174,7 @@ func runBuildkitd(conf *BackendConfig, args []string, logs map[string]*bytes.Buf
 
 	deferF.append(func() error { return os.RemoveAll(tmpdir) })
 
-	address = "unix://" + filepath.Join(tmpdir, "buildkitd.sock")
-	if runtime.GOOS == "windows" {
-		address = "//./pipe/buildkitd-" + filepath.Base(tmpdir)
-	}
+	address = getBuildkitdAddr(tmpdir)
 
 	args = append(args, "--root", tmpdir, "--addr", address, "--debug")
 	cmd := exec.Command(args[0], args[1:]...)
