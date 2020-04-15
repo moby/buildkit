@@ -7,8 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"gotest.tools/assert"
-	is "gotest.tools/assert/cmp"
+	"github.com/stretchr/testify/require"
 )
 
 func TestShellParserMandatoryEnvVars(t *testing.T) {
@@ -24,27 +23,29 @@ func TestShellParserMandatoryEnvVars(t *testing.T) {
 
 	// disallow empty
 	newWord, err = shlex.ProcessWord(noEmpty, setEnvs)
-	assert.Check(t, err)
-	assert.Check(t, is.Equal(newWord, "plain"))
+	require.NoError(t, err)
+	require.Equal(t, "plain", newWord)
 
 	_, err = shlex.ProcessWord(noEmpty, emptyEnvs)
-	assert.Check(t, is.ErrorContains(err, "message herex"))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "message herex")
 
 	_, err = shlex.ProcessWord(noEmpty, unsetEnvs)
-	assert.Check(t, is.ErrorContains(err, "message herex"))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "message herex")
 
 	// disallow unset
 	newWord, err = shlex.ProcessWord(noUnset, setEnvs)
-	assert.Check(t, err)
-	assert.Check(t, is.Equal(newWord, "plain"))
+	require.NoError(t, err)
+	require.Equal(t, "plain", newWord)
 
 	newWord, err = shlex.ProcessWord(noUnset, emptyEnvs)
-	assert.Check(t, err)
-	assert.Check(t, is.Equal(newWord, ""))
+	require.NoError(t, err)
+	require.Equal(t, "", newWord)
 
 	_, err = shlex.ProcessWord(noUnset, unsetEnvs)
-	assert.Check(t, is.ErrorContains(err, "message herex"))
-
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "message herex")
 }
 
 func TestShellParser4EnvVars(t *testing.T) {
@@ -52,7 +53,7 @@ func TestShellParser4EnvVars(t *testing.T) {
 	lineCount := 0
 
 	file, err := os.Open(fn)
-	assert.Check(t, err)
+	require.NoError(t, err)
 	defer file.Close()
 
 	shlex := NewLex('\\')
@@ -73,7 +74,7 @@ func TestShellParser4EnvVars(t *testing.T) {
 		}
 
 		words := strings.Split(line, "|")
-		assert.Check(t, is.Len(words, 3))
+		require.Equal(t, 3, len(words))
 
 		platform := strings.TrimSpace(words[0])
 		source := strings.TrimSpace(words[1])
@@ -88,18 +89,18 @@ func TestShellParser4EnvVars(t *testing.T) {
 			((platform == "U" || platform == "A") && runtime.GOOS != "windows") {
 			newWord, err := shlex.ProcessWord(source, envs)
 			if expected == "error" {
-				assert.Check(t, is.ErrorContains(err, ""), "input: %q, result: %q", source, newWord)
+				require.Errorf(t, err, "input: %q, result: %q", source, newWord)
 			} else {
-				assert.Check(t, err, "at line %d of %s", lineCount, fn)
-				assert.Check(t, is.Equal(newWord, expected), "at line %d of %s", lineCount, fn)
+				require.NoError(t, err, "at line %d of %s", lineCount, fn)
+				require.Equal(t, expected, newWord, "at line %d of %s", lineCount, fn)
 			}
 
 			newWord, err = shlex.ProcessWordWithMap(source, envsMap)
 			if expected == "error" {
-				assert.Check(t, is.ErrorContains(err, ""), "input: %q, result: %q", source, newWord)
+				require.Errorf(t, err, "input: %q, result: %q", source, newWord)
 			} else {
-				assert.Check(t, err, "at line %d of %s", lineCount, fn)
-				assert.Check(t, is.Equal(newWord, expected), "at line %d of %s", lineCount, fn)
+				require.NoError(t, err, "at line %d of %s", lineCount, fn)
+				require.Equal(t, expected, newWord, "at line %d of %s", lineCount, fn)
 			}
 		}
 	}

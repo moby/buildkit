@@ -4,20 +4,19 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"gotest.tools/assert"
-	is "gotest.tools/assert/cmp"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseNameValOldFormat(t *testing.T) {
 	directive := directives{}
 	node, err := parseNameVal("foo bar", "LABEL", &directive)
-	assert.Check(t, err)
+	require.NoError(t, err)
 
 	expected := &Node{
 		Value: "foo",
 		Next:  &Node{Value: "bar"},
 	}
-	assert.DeepEqual(t, expected, node, cmpNodeOpt)
+	require.Equal(t, expected, node, cmpNodeOpt)
 }
 
 var cmpNodeOpt = cmp.AllowUnexported(Node{})
@@ -25,7 +24,7 @@ var cmpNodeOpt = cmp.AllowUnexported(Node{})
 func TestParseNameValNewFormat(t *testing.T) {
 	directive := directives{}
 	node, err := parseNameVal("foo=bar thing=star", "LABEL", &directive)
-	assert.Check(t, err)
+	require.NoError(t, err)
 
 	expected := &Node{
 		Value: "foo",
@@ -39,7 +38,7 @@ func TestParseNameValNewFormat(t *testing.T) {
 			},
 		},
 	}
-	assert.DeepEqual(t, expected, node, cmpNodeOpt)
+	require.Equal(t, expected, node, cmpNodeOpt)
 }
 
 func TestParseNameValWithoutVal(t *testing.T) {
@@ -47,5 +46,5 @@ func TestParseNameValWithoutVal(t *testing.T) {
 	// In Config.Env, a variable without `=` is removed from the environment. (#31634)
 	// However, in Dockerfile, we don't allow "unsetting" an environment variable. (#11922)
 	_, err := parseNameVal("foo", "ENV", &directive)
-	assert.Check(t, is.ErrorContains(err, ""), "ENV must have two arguments")
+	require.Error(t, err, "ENV must have two arguments")
 }
