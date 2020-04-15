@@ -9,7 +9,7 @@ import (
 )
 
 func TestParseNameValOldFormat(t *testing.T) {
-	directive := Directive{}
+	directive := directives{}
 	node, err := parseNameVal("foo bar", "LABEL", &directive)
 	assert.Check(t, err)
 
@@ -23,7 +23,7 @@ func TestParseNameValOldFormat(t *testing.T) {
 var cmpNodeOpt = cmp.AllowUnexported(Node{})
 
 func TestParseNameValNewFormat(t *testing.T) {
-	directive := Directive{}
+	directive := directives{}
 	node, err := parseNameVal("foo=bar thing=star", "LABEL", &directive)
 	assert.Check(t, err)
 
@@ -43,7 +43,7 @@ func TestParseNameValNewFormat(t *testing.T) {
 }
 
 func TestParseNameValWithoutVal(t *testing.T) {
-	directive := Directive{}
+	directive := directives{}
 	// In Config.Env, a variable without `=` is removed from the environment. (#31634)
 	// However, in Dockerfile, we don't allow "unsetting" an environment variable. (#11922)
 	_, err := parseNameVal("foo", "ENV", &directive)

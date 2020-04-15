@@ -102,7 +102,7 @@ func TestParseWords(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		words := parseWords(test["input"][0], NewDefaultDirective())
+		words := parseWords(test["input"][0], newDefaultDirectives())
 		assert.Check(t, is.DeepEqual(test["expect"], words))
 	}
 }
