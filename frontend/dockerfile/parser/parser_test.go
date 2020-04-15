@@ -31,37 +31,41 @@ func getDirs(t *testing.T, dir string) []string {
 
 func TestParseErrorCases(t *testing.T) {
 	for _, dir := range getDirs(t, negativeTestDir) {
-		dockerfile := filepath.Join(negativeTestDir, dir, "Dockerfile")
+		t.Run(dir, func(t *testing.T) {
+			dockerfile := filepath.Join(negativeTestDir, dir, "Dockerfile")
 
-		df, err := os.Open(dockerfile)
-		assert.NilError(t, err, dockerfile)
-		defer df.Close()
+			df, err := os.Open(dockerfile)
+			assert.NilError(t, err, dockerfile)
+			defer df.Close()
 
-		_, err = Parse(df)
-		assert.Check(t, is.ErrorContains(err, ""), dockerfile)
+			_, err = Parse(df)
+			assert.Check(t, is.ErrorContains(err, ""), dockerfile)
+		})
 	}
 }
 
 func TestParseCases(t *testing.T) {
 	for _, dir := range getDirs(t, testDir) {
-		dockerfile := filepath.Join(testDir, dir, "Dockerfile")
-		resultfile := filepath.Join(testDir, dir, "result")
+		t.Run(dir, func(t *testing.T) {
+			dockerfile := filepath.Join(testDir, dir, "Dockerfile")
+			resultfile := filepath.Join(testDir, dir, "result")
 
-		df, err := os.Open(dockerfile)
-		assert.NilError(t, err, dockerfile)
-		defer df.Close()
+			df, err := os.Open(dockerfile)
+			assert.NilError(t, err, dockerfile)
+			defer df.Close()
 
-		result, err := Parse(df)
-		assert.NilError(t, err, dockerfile)
+			result, err := Parse(df)
+			assert.NilError(t, err, dockerfile)
 
-		content, err := ioutil.ReadFile(resultfile)
-		assert.NilError(t, err, resultfile)
+			content, err := ioutil.ReadFile(resultfile)
+			assert.NilError(t, err, resultfile)
 
-		if runtime.GOOS == "windows" {
-			// CRLF --> CR to match Unix behavior
-			content = bytes.Replace(content, []byte{'\x0d', '\x0a'}, []byte{'\x0a'}, -1)
-		}
-		assert.Check(t, is.Equal(result.AST.Dump()+"\n", string(content)), "In "+dockerfile)
+			if runtime.GOOS == "windows" {
+				// CRLF --> CR to match Unix behavior
+				content = bytes.Replace(content, []byte{'\x0d', '\x0a'}, []byte{'\x0a'}, -1)
+			}
+			assert.Check(t, is.Equal(result.AST.Dump()+"\n", string(content)), "In "+dockerfile)
+		})
 	}
 }
 
