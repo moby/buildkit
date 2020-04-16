@@ -405,9 +405,9 @@ google.golang.org/appengine/internal/datastore
 google.golang.org/appengine/internal/log
 google.golang.org/appengine/internal/modules
 google.golang.org/appengine/internal/remote_api
-# google.golang.org/genproto v0.0.0-20200407120235-9eb9bb161a06
+# google.golang.org/genproto v0.0.0-20200227132054-3f1135a288c9
 google.golang.org/genproto/googleapis/rpc/status
-# google.golang.org/grpc v1.28.1
+# google.golang.org/grpc v1.27.1
 google.golang.org/grpc
 google.golang.org/grpc/attributes
 google.golang.org/grpc/backoff
@@ -431,10 +431,8 @@ google.golang.org/grpc/internal/binarylog
 google.golang.org/grpc/internal/buffer
 google.golang.org/grpc/internal/channelz
 google.golang.org/grpc/internal/envconfig
-google.golang.org/grpc/internal/grpclog
 google.golang.org/grpc/internal/grpcrand
 google.golang.org/grpc/internal/grpcsync
-google.golang.org/grpc/internal/grpcutil
 google.golang.org/grpc/internal/resolver/dns
 google.golang.org/grpc/internal/resolver/passthrough
 google.golang.org/grpc/internal/syscall
@@ -452,12 +450,6 @@ google.golang.org/grpc/tap
 gopkg.in/tomb.v2
 # gopkg.in/yaml.v2 v2.2.8
 gopkg.in/yaml.v2
-# gotest.tools v2.2.0+incompatible
-gotest.tools/assert
-gotest.tools/assert/cmp
-gotest.tools/internal/difflib
-gotest.tools/internal/format
-gotest.tools/internal/source
 # gotest.tools/v3 v3.0.2
 gotest.tools/v3/assert
 gotest.tools/v3/assert/cmp

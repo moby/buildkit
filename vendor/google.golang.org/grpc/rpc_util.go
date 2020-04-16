@@ -287,14 +287,13 @@ func (o FailFastCallOption) before(c *callInfo) error {
 }
 func (o FailFastCallOption) after(c *callInfo) {}
 
-// MaxCallRecvMsgSize returns a CallOption which sets the maximum message size
-// in bytes the client can receive.
-func MaxCallRecvMsgSize(bytes int) CallOption {
-	return MaxRecvMsgSizeCallOption{MaxRecvMsgSize: bytes}
+// MaxCallRecvMsgSize returns a CallOption which sets the maximum message size the client can receive.
+func MaxCallRecvMsgSize(s int) CallOption {
+	return MaxRecvMsgSizeCallOption{MaxRecvMsgSize: s}
 }
 
 // MaxRecvMsgSizeCallOption is a CallOption that indicates the maximum message
-// size in bytes the client can receive.
+// size the client can receive.
 // This is an EXPERIMENTAL API.
 type MaxRecvMsgSizeCallOption struct {
 	MaxRecvMsgSize int
@@ -306,14 +305,13 @@ func (o MaxRecvMsgSizeCallOption) before(c *callInfo) error {
 }
 func (o MaxRecvMsgSizeCallOption) after(c *callInfo) {}
 
-// MaxCallSendMsgSize returns a CallOption which sets the maximum message size
-// in bytes the client can send.
-func MaxCallSendMsgSize(bytes int) CallOption {
-	return MaxSendMsgSizeCallOption{MaxSendMsgSize: bytes}
+// MaxCallSendMsgSize returns a CallOption which sets the maximum message size the client can send.
+func MaxCallSendMsgSize(s int) CallOption {
+	return MaxSendMsgSizeCallOption{MaxSendMsgSize: s}
 }
 
 // MaxSendMsgSizeCallOption is a CallOption that indicates the maximum message
-// size in bytes the client can send.
+// size the client can send.
 // This is an EXPERIMENTAL API.
 type MaxSendMsgSizeCallOption struct {
 	MaxSendMsgSize int

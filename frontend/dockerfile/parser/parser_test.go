@@ -11,8 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"gotest.tools/assert"
-	is "gotest.tools/assert/cmp"
+	"github.com/stretchr/testify/require"
 )
 
 const testDir = "testfiles"
@@ -21,47 +20,51 @@ const testFileLineInfo = "testfile-line/Dockerfile"
 
 func getDirs(t *testing.T, dir string) []string {
 	f, err := os.Open(dir)
-	assert.NilError(t, err)
+	require.NoError(t, err)
 	defer f.Close()
 
 	dirs, err := f.Readdirnames(0)
-	assert.NilError(t, err)
+	require.NoError(t, err)
 	return dirs
 }
 
 func TestParseErrorCases(t *testing.T) {
 	for _, dir := range getDirs(t, negativeTestDir) {
-		dockerfile := filepath.Join(negativeTestDir, dir, "Dockerfile")
+		t.Run(dir, func(t *testing.T) {
+			dockerfile := filepath.Join(negativeTestDir, dir, "Dockerfile")
 
-		df, err := os.Open(dockerfile)
-		assert.NilError(t, err, dockerfile)
-		defer df.Close()
+			df, err := os.Open(dockerfile)
+			require.NoError(t, err, dockerfile)
+			defer df.Close()
 
-		_, err = Parse(df)
-		assert.Check(t, is.ErrorContains(err, ""), dockerfile)
+			_, err = Parse(df)
+			require.Error(t, err, dockerfile)
+		})
 	}
 }
 
 func TestParseCases(t *testing.T) {
 	for _, dir := range getDirs(t, testDir) {
-		dockerfile := filepath.Join(testDir, dir, "Dockerfile")
-		resultfile := filepath.Join(testDir, dir, "result")
+		t.Run(dir, func(t *testing.T) {
+			dockerfile := filepath.Join(testDir, dir, "Dockerfile")
+			resultfile := filepath.Join(testDir, dir, "result")
 
-		df, err := os.Open(dockerfile)
-		assert.NilError(t, err, dockerfile)
-		defer df.Close()
+			df, err := os.Open(dockerfile)
+			require.NoError(t, err, dockerfile)
+			defer df.Close()
 
-		result, err := Parse(df)
-		assert.NilError(t, err, dockerfile)
+			result, err := Parse(df)
+			require.NoError(t, err, dockerfile)
 
-		content, err := ioutil.ReadFile(resultfile)
-		assert.NilError(t, err, resultfile)
+			content, err := ioutil.ReadFile(resultfile)
+			require.NoError(t, err, resultfile)
 
-		if runtime.GOOS == "windows" {
-			// CRLF --> CR to match Unix behavior
-			content = bytes.Replace(content, []byte{'\x0d', '\x0a'}, []byte{'\x0a'}, -1)
-		}
-		assert.Check(t, is.Equal(result.AST.Dump()+"\n", string(content)), "In "+dockerfile)
+			if runtime.GOOS == "windows" {
+				// CRLF --> CR to match Unix behavior
+				content = bytes.Replace(content, []byte{'\x0d', '\x0a'}, []byte{'\x0a'}, -1)
+			}
+			require.Equal(t, result.AST.Dump()+"\n", string(content), dockerfile)
+		})
 	}
 }
 
@@ -102,23 +105,23 @@ func TestParseWords(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		words := parseWords(test["input"][0], NewDefaultDirective())
-		assert.Check(t, is.DeepEqual(test["expect"], words))
+		words := parseWords(test["input"][0], newDefaultDirectives())
+		require.Equal(t, test["expect"], words)
 	}
 }
 
 func TestParseIncludesLineNumbers(t *testing.T) {
 	df, err := os.Open(testFileLineInfo)
-	assert.NilError(t, err)
+	require.NoError(t, err)
 	defer df.Close()
 
 	result, err := Parse(df)
-	assert.NilError(t, err)
+	require.NoError(t, err)
 
 	ast := result.AST
-	assert.Check(t, is.Equal(5, ast.StartLine))
-	assert.Check(t, is.Equal(31, ast.EndLine))
-	assert.Check(t, is.Len(ast.Children, 3))
+	require.Equal(t, 5, ast.StartLine)
+	require.Equal(t, 31, ast.EndLine)
+	require.Equal(t, 3, len(ast.Children))
 	expected := [][]int{
 		{5, 5},
 		{11, 12},
@@ -126,7 +129,7 @@ func TestParseIncludesLineNumbers(t *testing.T) {
 	}
 	for i, child := range ast.Children {
 		msg := fmt.Sprintf("Child %d", i)
-		assert.Check(t, is.DeepEqual(expected[i], []int{child.StartLine, child.EndLine}), msg)
+		require.Equal(t, expected[i], []int{child.StartLine, child.EndLine}, msg)
 	}
 }
 
@@ -153,13 +156,13 @@ RUN indented \
 	`)
 
 	result, err := Parse(dockerfile)
-	assert.NilError(t, err)
+	require.NoError(t, err)
 	warnings := result.Warnings
-	assert.Check(t, is.Len(warnings, 3))
-	assert.Check(t, is.Contains(warnings[0], "Empty continuation line found in"))
-	assert.Check(t, is.Contains(warnings[0], "RUN something     following     more"))
-	assert.Check(t, is.Contains(warnings[1], "RUN another     thing"))
-	assert.Check(t, is.Contains(warnings[2], "will become errors in a future release"))
+	require.Equal(t, 3, len(warnings))
+	require.Contains(t, warnings[0], "Empty continuation line found in")
+	require.Contains(t, warnings[0], "RUN something     following     more")
+	require.Contains(t, warnings[1], "RUN another     thing")
+	require.Contains(t, warnings[2], "will become errors in a future release")
 }
 
 func TestParseReturnsScannerErrors(t *testing.T) {
@@ -170,5 +173,5 @@ func TestParseReturnsScannerErrors(t *testing.T) {
 		LABEL test=%s
 `, label))
 	_, err := Parse(dockerfile)
-	assert.Check(t, is.Error(err, "dockerfile line greater than max allowed size of 65535"))
+	require.EqualError(t, err, "dockerfile line greater than max allowed size of 65535")
 }

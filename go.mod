@@ -44,7 +44,6 @@ require (
 	github.com/kr/text v0.2.0 // indirect
 	github.com/mitchellh/hashstructure v0.0.0-20170609045927-2bca23e0e452
 	github.com/morikuni/aec v0.0.0-20170113033406-39771216ff4c
-	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
 	github.com/opencontainers/go-digest v1.0.0-rc1
 	github.com/opencontainers/image-spec v1.0.1
 	github.com/opencontainers/runc v1.0.0-rc9.0.20200221051241-688cf6d43cc4
@@ -74,11 +73,9 @@ require (
 	golang.org/x/sync v0.0.0-20200317015054-43a5402ce75a
 	golang.org/x/sys v0.0.0-20200409092240-59c9f1ba88fa
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0
-	google.golang.org/genproto v0.0.0-20200407120235-9eb9bb161a06
-	google.golang.org/grpc v1.28.1
-	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
+	google.golang.org/genproto v0.0.0-20200227132054-3f1135a288c9
+	google.golang.org/grpc v1.27.1
 	gopkg.in/yaml.v2 v2.2.8 // indirect
-	gotest.tools v2.2.0+incompatible
 	gotest.tools/v3 v3.0.2 // indirect
 )
 
