@@ -179,14 +179,20 @@ func docopy(ctx context.Context, src, dest string, action pb.FileActionCopy, u *
 		return nil
 	}
 
-	ch, err := mapUserToChowner(u, idmap)
-	if err != nil {
-		return err
+	var ch copy.Chowner
+	if action.Owner != nil {
+		var err error
+		ch, err = mapUserToChowner(u, idmap)
+		if err != nil {
+			return err
+		}
 	}
 
 	opt := []copy.Opt{
 		func(ci *copy.CopyInfo) {
-			ci.Chown = ch
+			if ch != nil {
+				ci.Chown = ch
+			}
 			ci.Utime = timestampToTime(action.Timestamp)
 			if m := int(action.Mode); m != -1 {
 				ci.Mode = &m
