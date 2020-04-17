@@ -86,6 +86,7 @@ BuildKit is used by the following projects:
 -   [PouchContainer](https://github.com/alibaba/pouch)
 -   [Docker buildx](https://github.com/docker/buildx)
 -   [Okteto Cloud](https://okteto.com/)
+-   [Earthly earthfiles](https://github.com/vladaionescu/earthly)
 
 ## Quick start
 
