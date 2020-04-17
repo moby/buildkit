@@ -12,9 +12,9 @@ set -eu -o pipefail
 : ${CONTINUOUS_INTEGRATION=}
 : ${BUILDKIT_REGISTRY_MIRROR_DIR=}
 
-if ! file $TEST_DOCKERD_BINARY | grep "statically linked" >/dev/null; then
+if [ "$TEST_DOCKERD" == "1" ] && ! file $TEST_DOCKERD_BINARY | grep "statically linked" >/dev/null; then
   echo "dockerd binary needs to be statically linked"
-  exit
+  exit 1
 fi
 
 importCacheFlags=""
