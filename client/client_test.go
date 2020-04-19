@@ -523,7 +523,7 @@ func testPushByDigest(t *testing.T, sb integration.Sandbox) {
 	defer c.Close()
 
 	registry, err := sb.NewRegistry()
-	if errors.Cause(err) == integration.ErrorRequirements {
+	if errors.Is(err, integration.ErrorRequirements) {
 		t.Skip(err.Error())
 	}
 	require.NoError(t, err)
@@ -688,7 +688,7 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 	defer c.Close()
 
 	registry, err := sb.NewRegistry()
-	if errors.Cause(err) == integration.ErrorRequirements {
+	if errors.Is(err, integration.ErrorRequirements) {
 		t.Skip(err.Error())
 	}
 	require.NoError(t, err)
@@ -1097,7 +1097,7 @@ func testFileOpCopyRm(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, []byte("bar0"), dt)
 
 	_, err = os.Stat(filepath.Join(destDir, "out/foo"))
-	require.Equal(t, true, os.IsNotExist(err))
+	require.Equal(t, true, errors.Is(err, os.ErrNotExist))
 
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "file2"))
 	require.NoError(t, err)
@@ -1156,10 +1156,10 @@ func testFileOpRmWildcard(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, true, fi.IsDir())
 
 	_, err = os.Stat(filepath.Join(destDir, "foo/target"))
-	require.Equal(t, true, os.IsNotExist(err))
+	require.Equal(t, true, errors.Is(err, os.ErrNotExist))
 
 	_, err = os.Stat(filepath.Join(destDir, "bar/target"))
-	require.Equal(t, true, os.IsNotExist(err))
+	require.Equal(t, true, errors.Is(err, os.ErrNotExist))
 }
 
 func testCallDiskUsage(t *testing.T, sb integration.Sandbox) {
@@ -1716,7 +1716,7 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	registry, err := sb.NewRegistry()
-	if errors.Cause(err) == integration.ErrorRequirements {
+	if errors.Is(err, integration.ErrorRequirements) {
 		t.Skip(err.Error())
 	}
 	require.NoError(t, err)
@@ -1837,7 +1837,7 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	registry, err := sb.NewRegistry()
-	if errors.Cause(err) == integration.ErrorRequirements {
+	if errors.Is(err, integration.ErrorRequirements) {
 		t.Skip(err.Error())
 	}
 	require.NoError(t, err)
@@ -2091,7 +2091,7 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptio
 func testBasicRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	skipDockerd(t, sb)
 	registry, err := sb.NewRegistry()
-	if errors.Cause(err) == integration.ErrorRequirements {
+	if errors.Is(err, integration.ErrorRequirements) {
 		t.Skip(err.Error())
 	}
 	require.NoError(t, err)
@@ -2108,7 +2108,7 @@ func testBasicRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
 func testMultipleRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	skipDockerd(t, sb)
 	registry, err := sb.NewRegistry()
-	if errors.Cause(err) == integration.ErrorRequirements {
+	if errors.Is(err, integration.ErrorRequirements) {
 		t.Skip(err.Error())
 	}
 	require.NoError(t, err)
@@ -2152,7 +2152,7 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	skipDockerd(t, sb)
 	requiresLinux(t)
 	registry, err := sb.NewRegistry()
-	if errors.Cause(err) == integration.ErrorRequirements {
+	if errors.Is(err, integration.ErrorRequirements) {
 		t.Skip(err.Error())
 	}
 	require.NoError(t, err)

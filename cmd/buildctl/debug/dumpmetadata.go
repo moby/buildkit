@@ -1,7 +1,6 @@
 package debug
 
 import (
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -9,6 +8,7 @@ import (
 	"time"
 
 	"github.com/moby/buildkit/util/appdefaults"
+	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 	bolt "go.etcd.io/bbolt"
 )
@@ -54,7 +54,7 @@ func findMetadataDBFiles(root string) ([]string, error) {
 		_, err := os.Stat(p)
 		if err == nil {
 			files = append(files, p)
-		} else if !os.IsNotExist(err) {
+		} else if !errors.Is(err, os.ErrNotExist) {
 			return nil, err
 		}
 	}

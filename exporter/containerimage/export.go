@@ -219,7 +219,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 				for _, sfx := range sfx {
 					img.Name = targetName + sfx
 					if _, err := e.opt.Images.Update(ctx, img); err != nil {
-						if !errdefs.IsNotFound(err) {
+						if !errors.Is(err, errdefs.ErrNotFound) {
 							return nil, tagDone(err)
 						}
 

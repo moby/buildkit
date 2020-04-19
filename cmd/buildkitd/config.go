@@ -21,7 +21,7 @@ func Load(r io.Reader) (config.Config, *toml.MetaData, error) {
 func LoadFile(fp string) (config.Config, *toml.MetaData, error) {
 	f, err := os.Open(fp)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			return config.Config{}, nil, nil
 		}
 		return config.Config{}, nil, errors.Wrapf(err, "failed to load config from %s", fp)

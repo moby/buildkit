@@ -82,7 +82,7 @@ func mkdir(ctx context.Context, d string, action pb.FileActionMkDir, user *copy.
 		}
 	} else {
 		if err := os.Mkdir(p, os.FileMode(action.Mode)&0777); err != nil {
-			if os.IsExist(err) {
+			if errors.Is(err, os.ErrExist) {
 				return nil
 			}
 			return err
@@ -151,7 +151,7 @@ func rmPath(root, src string, allowNotFound bool) error {
 	}
 
 	if err := os.RemoveAll(p); err != nil {
-		if os.IsNotExist(errors.Cause(err)) && allowNotFound {
+		if errors.Is(err, os.ErrNotExist) && allowNotFound {
 			return nil
 		}
 		return err

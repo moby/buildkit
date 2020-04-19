@@ -299,7 +299,7 @@ func showProgress(ctx context.Context, ongoing *jobs, cs content.Store) {
 			if !j.done {
 				info, err := cs.Info(context.TODO(), j.Digest)
 				if err != nil {
-					if errdefs.IsNotFound(err) {
+					if errors.Is(err, errdefs.ErrNotFound) {
 						pw.Write(j.Digest.String(), progress.Status{
 							Action: "waiting",
 						})

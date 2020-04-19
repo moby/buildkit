@@ -242,11 +242,11 @@ func TestSymlinksNoFollow(t *testing.T) {
 
 	_, err = cc.ChecksumWildcard(context.TODO(), ref, "foo/ghi", true) // same because broken symlink
 	require.Error(t, err)
-	require.Equal(t, errNotFound, errors.Cause(err))
+	require.Equal(t, true, errors.Is(err, errNotFound))
 
 	_, err = cc.ChecksumWildcard(context.TODO(), ref, "y1", true)
 	require.Error(t, err)
-	require.Equal(t, errNotFound, errors.Cause(err))
+	require.Equal(t, true, errors.Is(err, errNotFound))
 
 	dgst, err = cc.Checksum(context.TODO(), ref, "sym", false)
 	require.NoError(t, err)
@@ -322,7 +322,7 @@ func TestChecksumBasicFile(t *testing.T) {
 
 	_, err = cc.Checksum(context.TODO(), ref, "d0/ghi", true)
 	require.Error(t, err)
-	require.Equal(t, errNotFound, errors.Cause(err))
+	require.Equal(t, true, errors.Is(err, errNotFound))
 
 	dgst, err = cc.Checksum(context.TODO(), ref, "/", true)
 	require.NoError(t, err)
@@ -478,11 +478,11 @@ func TestHandleChange(t *testing.T) {
 
 	_, err = cc.Checksum(context.TODO(), ref, "d0", true)
 	require.Error(t, err)
-	require.Equal(t, errNotFound, errors.Cause(err))
+	require.Equal(t, true, errors.Is(err, errNotFound))
 
 	_, err = cc.Checksum(context.TODO(), ref, "d0/abc", true)
 	require.Error(t, err)
-	require.Equal(t, errNotFound, errors.Cause(err))
+	require.Equal(t, true, errors.Is(err, errNotFound))
 
 	err = ref.Release(context.TODO())
 	require.NoError(t, err)

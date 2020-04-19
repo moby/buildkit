@@ -94,11 +94,11 @@ func testResults(t *testing.T, st solver.CacheKeyStorage) {
 
 	_, err = st.Load("foo1", "foo1")
 	require.Error(t, err)
-	require.Equal(t, errors.Cause(err), solver.ErrNotFound)
+	require.Equal(t, true, errors.Is(err, solver.ErrNotFound))
 
 	_, err = st.Load("foo", "foo2")
 	require.Error(t, err)
-	require.Equal(t, errors.Cause(err), solver.ErrNotFound)
+	require.Equal(t, true, errors.Is(err, solver.ErrNotFound))
 }
 
 func testLinks(t *testing.T, st solver.CacheKeyStorage) {

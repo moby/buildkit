@@ -150,7 +150,7 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 						}
 						sb, closer, err := newSandbox(br, mirror, mv)
 						if err != nil {
-							if errors.Cause(err) == ErrorRequirements {
+							if errors.Is(err, ErrorRequirements) {
 								t.Skip(err.Error())
 							}
 							require.NoError(t, err)

@@ -85,11 +85,11 @@ func testRepeatedFetch(t *testing.T, keepGitDir bool) {
 
 	_, err = os.Lstat(filepath.Join(dir, "ghi"))
 	require.Error(t, err)
-	require.True(t, os.IsNotExist(err))
+	require.True(t, errors.Is(err, os.ErrNotExist))
 
 	_, err = os.Lstat(filepath.Join(dir, "sub/subfile"))
 	require.Error(t, err)
-	require.True(t, os.IsNotExist(err))
+	require.True(t, errors.Is(err, os.ErrNotExist))
 
 	// second fetch returns same dir
 	id = &source.GitIdentifier{Remote: repodir, Ref: "master", KeepGitDir: keepGitDir}

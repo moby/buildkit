@@ -103,7 +103,7 @@ func resolveExporterDest(exporter, dest string) (func(map[string]string) (io.Wri
 	case client.ExporterOCI, client.ExporterDocker, client.ExporterTar:
 		if dest != "" && dest != "-" {
 			fi, err := os.Stat(dest)
-			if err != nil && !os.IsNotExist(err) {
+			if err != nil && !errors.Is(err, os.ErrNotExist) {
 				return nil, "", errors.Wrapf(err, "invalid destination file: %s", dest)
 			}
 			if err == nil && fi.IsDir() {

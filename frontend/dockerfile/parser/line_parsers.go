@@ -8,11 +8,12 @@ package parser
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/pkg/errors"
 )
 
 var (

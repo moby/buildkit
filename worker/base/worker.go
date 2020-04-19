@@ -521,7 +521,7 @@ func ID(root string) (string, error) {
 	f := filepath.Join(root, "workerid")
 	b, err := ioutil.ReadFile(f)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			id := identity.NewID()
 			err := ioutil.WriteFile(f, []byte(id), 0400)
 			return id, err

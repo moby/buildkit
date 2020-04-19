@@ -237,7 +237,7 @@ func validContainerdSocket(socket string) bool {
 		return true
 	}
 	socketPath := strings.TrimPrefix(socket, "unix://")
-	if _, err := os.Stat(socketPath); os.IsNotExist(err) {
+	if _, err := os.Stat(socketPath); errors.Is(err, os.ErrNotExist) {
 		// FIXME(AkihiroSuda): add more conditions
 		logrus.Warnf("skipping containerd worker, as %q does not exist", socketPath)
 		return false

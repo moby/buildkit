@@ -504,7 +504,7 @@ func TestSingleCancelCache(t *testing.T) {
 
 	_, err = j0.Build(ctx, g0)
 	require.Error(t, err)
-	require.Equal(t, errors.Cause(err), context.Canceled)
+	require.Equal(t, true, errors.Is(err, context.Canceled))
 
 	require.Equal(t, *g0.Vertex.(*vertex).cacheCallCount, int64(1))
 	require.Equal(t, *g0.Vertex.(*vertex).execCallCount, int64(0))
@@ -547,7 +547,7 @@ func TestSingleCancelExec(t *testing.T) {
 
 	_, err = j1.Build(ctx, g1)
 	require.Error(t, err)
-	require.Equal(t, errors.Cause(err), context.Canceled)
+	require.Equal(t, true, errors.Is(err, context.Canceled))
 
 	require.Equal(t, *g1.Vertex.(*vertex).cacheCallCount, int64(1))
 	require.Equal(t, *g1.Vertex.(*vertex).execCallCount, int64(1))
@@ -601,7 +601,7 @@ func TestSingleCancelParallel(t *testing.T) {
 		_, err = j.Build(ctx, g)
 		close(firstErrored)
 		require.Error(t, err)
-		require.Equal(t, errors.Cause(err), context.Canceled)
+		require.Equal(t, true, errors.Is(err, context.Canceled))
 		return nil
 	})
 
@@ -1221,7 +1221,7 @@ func TestErrorReturns(t *testing.T) {
 
 	_, err = j0.Build(ctx, g0)
 	require.Error(t, err)
-	require.Contains(t, errors.Cause(err).Error(), "error-from-test")
+	require.Contains(t, err.Error(), "error-from-test")
 
 	require.NoError(t, j0.Discard())
 	j0 = nil
@@ -1262,7 +1262,7 @@ func TestErrorReturns(t *testing.T) {
 
 	_, err = j1.Build(ctx, g1)
 	require.Error(t, err)
-	require.Equal(t, errors.Cause(err), context.Canceled)
+	require.Equal(t, true, errors.Is(err, context.Canceled))
 
 	require.NoError(t, j1.Discard())
 	j1 = nil
@@ -1303,7 +1303,7 @@ func TestErrorReturns(t *testing.T) {
 
 	_, err = j2.Build(ctx, g2)
 	require.Error(t, err)
-	require.Contains(t, errors.Cause(err).Error(), "exec-error-from-test")
+	require.Contains(t, err.Error(), "exec-error-from-test")
 
 	require.NoError(t, j2.Discard())
 	j1 = nil

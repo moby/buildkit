@@ -2511,19 +2511,19 @@ Dockerfile
 
 	_, err = os.Stat(filepath.Join(destDir, ".dockerignore"))
 	require.Error(t, err)
-	require.True(t, os.IsNotExist(err))
+	require.True(t, errors.Is(err, os.ErrNotExist))
 
 	_, err = os.Stat(filepath.Join(destDir, "Dockerfile"))
 	require.Error(t, err)
-	require.True(t, os.IsNotExist(err))
+	require.True(t, errors.Is(err, os.ErrNotExist))
 
 	_, err = os.Stat(filepath.Join(destDir, "bar"))
 	require.Error(t, err)
-	require.True(t, os.IsNotExist(err))
+	require.True(t, errors.Is(err, os.ErrNotExist))
 
 	_, err = os.Stat(filepath.Join(destDir, "baz"))
 	require.Error(t, err)
-	require.True(t, os.IsNotExist(err))
+	require.True(t, errors.Is(err, os.ErrNotExist))
 
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "bay"))
 	require.NoError(t, err)
@@ -3202,7 +3202,7 @@ COPY --from=build foo bar2
 
 	_, err = os.Stat(filepath.Join(destDir, "bar2"))
 	require.Error(t, err)
-	require.True(t, os.IsNotExist(err))
+	require.True(t, errors.Is(err, os.ErrNotExist))
 
 	// second request from master branch contains both files
 	destDir, err = ioutil.TempDir("", "buildkit")
@@ -3504,7 +3504,7 @@ func testOnBuildCleared(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 
 	registry, err := sb.NewRegistry()
-	if errors.Cause(err) == integration.ErrorRequirements {
+	if errors.Is(err, integration.ErrorRequirements) {
 		t.Skip(err.Error())
 	}
 	require.NoError(t, err)
@@ -3612,7 +3612,7 @@ func testCacheMultiPlatformImportExport(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 
 	registry, err := sb.NewRegistry()
-	if errors.Cause(err) == integration.ErrorRequirements {
+	if errors.Is(err, integration.ErrorRequirements) {
 		t.Skip(err.Error())
 	}
 	require.NoError(t, err)
@@ -3738,7 +3738,7 @@ func testCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 
 	registry, err := sb.NewRegistry()
-	if errors.Cause(err) == integration.ErrorRequirements {
+	if errors.Is(err, integration.ErrorRequirements) {
 		t.Skip(err.Error())
 	}
 	require.NoError(t, err)
@@ -3923,7 +3923,7 @@ func testImportExportReproducibleIDs(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 
 	registry, err := sb.NewRegistry()
-	if errors.Cause(err) == integration.ErrorRequirements {
+	if errors.Is(err, integration.ErrorRequirements) {
 		t.Skip(err.Error())
 	}
 	require.NoError(t, err)
