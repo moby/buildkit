@@ -25,6 +25,10 @@ func withLocation(err error, startLine, endLine int) error {
 	if err == nil {
 		return nil
 	}
+	var el ErrorLocation
+	if errors.As(err, &el) {
+		return err
+	}
 	return errors.WithStack(&ErrorLocation{
 		error:  err,
 		Ranges: toRanges(startLine, endLine),

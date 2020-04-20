@@ -63,6 +63,11 @@ func (node *Node) Dump() string {
 	return strings.TrimSpace(str)
 }
 
+// WrapError returns new error that implements ErrorLocation
+func (node *Node) WrapError(err error) error {
+	return withLocation(err, node.StartLine, node.EndLine)
+}
+
 func (node *Node) lines(start, end int) {
 	node.StartLine = start
 	node.EndLine = end
