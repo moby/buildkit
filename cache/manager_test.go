@@ -180,7 +180,7 @@ func TestManager(t *testing.T) {
 
 	_, err = cm.GetMutable(ctx, active.ID())
 	require.Error(t, err)
-	require.Equal(t, ErrLocked, errors.Cause(err))
+	require.Equal(t, true, errors.Is(err, ErrLocked))
 
 	checkDiskUsage(ctx, t, cm, 1, 0)
 
@@ -191,7 +191,7 @@ func TestManager(t *testing.T) {
 
 	_, err = cm.GetMutable(ctx, active.ID())
 	require.Error(t, err)
-	require.Equal(t, ErrLocked, errors.Cause(err))
+	require.Equal(t, true, errors.Is(err, ErrLocked))
 
 	err = snap.Release(ctx)
 	require.NoError(t, err)
@@ -216,11 +216,11 @@ func TestManager(t *testing.T) {
 
 	_, err = cm.GetMutable(ctx, active.ID())
 	require.Error(t, err)
-	require.Equal(t, errNotFound, errors.Cause(err))
+	require.Equal(t, true, errors.Is(err, errNotFound))
 
 	_, err = cm.GetMutable(ctx, snap.ID())
 	require.Error(t, err)
-	require.Equal(t, errInvalid, errors.Cause(err))
+	require.Equal(t, true, errors.Is(err, errInvalid))
 
 	snap, err = cm.Get(ctx, snap.ID())
 	require.NoError(t, err)
@@ -810,7 +810,7 @@ func TestLazyCommit(t *testing.T) {
 
 	_, err = cm.GetMutable(ctx, active.ID())
 	require.Error(t, err)
-	require.Equal(t, ErrLocked, errors.Cause(err))
+	require.Equal(t, true, errors.Is(err, ErrLocked))
 
 	// immutable refs still work
 	snap2, err := cm.Get(ctx, snap.ID())
@@ -831,7 +831,7 @@ func TestLazyCommit(t *testing.T) {
 	// active can't be get while immutable is held
 	_, err = cm.GetMutable(ctx, active.ID())
 	require.Error(t, err)
-	require.Equal(t, ErrLocked, errors.Cause(err))
+	require.Equal(t, true, errors.Is(err, ErrLocked))
 
 	err = snap.Release(ctx)
 	require.NoError(t, err)
@@ -844,7 +844,7 @@ func TestLazyCommit(t *testing.T) {
 	// because ref was took mutable old immutable are cleared
 	_, err = cm.Get(ctx, snap.ID())
 	require.Error(t, err)
-	require.Equal(t, errNotFound, errors.Cause(err))
+	require.Equal(t, true, errors.Is(err, errNotFound))
 
 	snap, err = active2.Commit(ctx)
 	require.NoError(t, err)
@@ -859,7 +859,7 @@ func TestLazyCommit(t *testing.T) {
 	// mutable is gone after finalize
 	_, err = cm.GetMutable(ctx, active2.ID())
 	require.Error(t, err)
-	require.Equal(t, errNotFound, errors.Cause(err))
+	require.Equal(t, true, errors.Is(err, errNotFound))
 
 	// immutable still works
 	snap2, err = cm.Get(ctx, snap.ID())
@@ -902,7 +902,7 @@ func TestLazyCommit(t *testing.T) {
 
 	_, err = cm.Get(ctx, snap.ID())
 	require.Error(t, err)
-	require.Equal(t, errNotFound, errors.Cause(err))
+	require.Equal(t, true, errors.Is(err, errNotFound))
 
 	snap, err = active.Commit(ctx)
 	require.NoError(t, err)
@@ -932,7 +932,7 @@ func TestLazyCommit(t *testing.T) {
 
 	active, err = cm.GetMutable(ctx, active.ID())
 	require.Error(t, err)
-	require.Equal(t, errNotFound, errors.Cause(err))
+	require.Equal(t, true, errors.Is(err, errNotFound))
 }
 
 func checkDiskUsage(ctx context.Context, t *testing.T, cm Manager, inuse, unused int) {

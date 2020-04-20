@@ -160,7 +160,7 @@ func (cr *cacheRecord) Size(ctx context.Context) (int64, error) {
 				if isDead {
 					return int64(0), nil
 				}
-				if !errdefs.IsNotFound(err) {
+				if !errors.Is(err, errdefs.ErrNotFound) {
 					return s, errors.Wrapf(err, "failed to get usage for %s", cr.ID())
 				}
 			}
@@ -349,7 +349,7 @@ func (sr *immutableRef) Extract(ctx context.Context) error {
 			return nil, err
 		}
 		if err := sr.cm.Snapshotter.Commit(ctx, getSnapshotID(sr.md), key); err != nil {
-			if !errdefs.IsAlreadyExists(err) {
+			if !errors.Is(err, errdefs.ErrAlreadyExists) {
 				return nil, err
 			}
 		}
@@ -506,7 +506,7 @@ func (cr *cacheRecord) finalize(ctx context.Context, commit bool) error {
 		return nil
 	})
 	if err != nil {
-		if !errdefs.IsAlreadyExists(err) { // migrator adds leases for everything
+		if !errors.Is(err, errdefs.ErrAlreadyExists) { // migrator adds leases for everything
 			return errors.Wrap(err, "failed to create lease")
 		}
 	}

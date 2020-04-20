@@ -1,11 +1,11 @@
 package instructions
 
 import (
-	"errors"
 	"strings"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/strslice"
+	"github.com/pkg/errors"
 )
 
 // KeyValuePair represent an arbitrary named value (useful in slice instead of map[string] string to preserve ordering)

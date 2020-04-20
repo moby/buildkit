@@ -8,6 +8,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -52,7 +53,7 @@ func TestCancelOne(t *testing.T) {
 	eg.Go(func() error {
 		ret1, err := g.Do(ctx2, "foo", f)
 		assert.Error(t, err)
-		assert.Equal(t, errors.Cause(err), context.Canceled)
+		require.Equal(t, true, errors.Is(err, context.Canceled))
 		if err == nil {
 			r1 = ret1.(string)
 		}
@@ -94,7 +95,7 @@ func TestCancelBoth(t *testing.T) {
 	eg.Go(func() error {
 		ret1, err := g.Do(ctx2, "foo", f)
 		assert.Error(t, err)
-		assert.Equal(t, errors.Cause(err), context.Canceled)
+		require.Equal(t, true, errors.Is(err, context.Canceled))
 		if err == nil {
 			r1 = ret1.(string)
 		}
@@ -103,7 +104,7 @@ func TestCancelBoth(t *testing.T) {
 	eg.Go(func() error {
 		ret2, err := g.Do(ctx3, "foo", f)
 		assert.Error(t, err)
-		assert.Equal(t, errors.Cause(err), context.Canceled)
+		require.Equal(t, true, errors.Is(err, context.Canceled))
 		if err == nil {
 			r2 = ret2.(string)
 		}

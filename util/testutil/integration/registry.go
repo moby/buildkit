@@ -40,7 +40,7 @@ func NewRegistry(dir string) (url string, cl func() error, err error) {
 	}
 
 	if _, err := os.Stat(filepath.Join(dir, "config.yaml")); err != nil {
-		if !os.IsNotExist(err) {
+		if !errors.Is(err, os.ErrNotExist) {
 			return "", nil, err
 		}
 		template := fmt.Sprintf(`version: 0.1

@@ -112,7 +112,7 @@ func (ns *cniNS) Close() error {
 			err = errors.Wrap(err1, "error unmounting network namespace")
 		}
 	}
-	if err1 := os.RemoveAll(filepath.Dir(ns.path)); err1 != nil && !os.IsNotExist(err1) && err == nil {
+	if err1 := os.RemoveAll(filepath.Dir(ns.path)); err1 != nil && !errors.Is(err1, os.ErrNotExist) && err == nil {
 		err = errors.Wrap(err, "error removing network namespace")
 	}
 

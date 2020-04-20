@@ -293,7 +293,7 @@ func (g *cacheRefGetter) getRefCacheDirNoCache(ctx context.Context, key string, 
 			if mRef, err := g.cm.GetMutable(ctx, si.ID()); err == nil {
 				logrus.Debugf("reusing ref for cache dir: %s", mRef.ID())
 				return mRef, nil
-			} else if errors.Cause(err) == cache.ErrLocked {
+			} else if errors.Is(err, cache.ErrLocked) {
 				locked = true
 			}
 		}
@@ -447,7 +447,7 @@ func (e *execOp) getSecretMountable(ctx context.Context, m *pb.Mount) (cache.Mou
 
 	dt, err := secrets.GetSecret(ctx, caller, id)
 	if err != nil {
-		if errors.Cause(err) == secrets.ErrNotFound && m.SecretOpt.Optional {
+		if errors.Is(err, secrets.ErrNotFound) && m.SecretOpt.Optional {
 			return nil, nil
 		}
 		return nil, err

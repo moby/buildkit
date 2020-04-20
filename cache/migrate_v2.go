@@ -56,7 +56,7 @@ func migrateChainID(si *metadata.StorageItem, all map[string]*metadata.StorageIt
 func MigrateV2(ctx context.Context, from, to string, cs content.Store, s snapshot.Snapshotter, lm leases.Manager) error {
 	_, err := os.Stat(to)
 	if err != nil {
-		if !os.IsNotExist(errors.Cause(err)) {
+		if !errors.Is(err, os.ErrNotExist) {
 			return errors.WithStack(err)
 		}
 	} else {
@@ -65,7 +65,7 @@ func MigrateV2(ctx context.Context, from, to string, cs content.Store, s snapsho
 
 	_, err = os.Stat(from)
 	if err != nil {
-		if !os.IsNotExist(errors.Cause(err)) {
+		if !errors.Is(err, os.ErrNotExist) {
 			return errors.WithStack(err)
 		}
 		return nil
@@ -180,7 +180,7 @@ func MigrateV2(ctx context.Context, from, to string, cs content.Store, s snapsho
 		})
 		if err != nil {
 			// if we are running the migration twice
-			if errdefs.IsAlreadyExists(err) {
+			if errors.Is(err, errdefs.ErrAlreadyExists) {
 				continue
 			}
 			return errors.Wrap(err, "failed to create lease")
@@ -208,7 +208,7 @@ func MigrateV2(ctx context.Context, from, to string, cs content.Store, s snapsho
 		if _, err := s.Update(ctx, snapshots.Info{
 			Name: getSnapshotID(item),
 		}, "labels.containerd.io/gc.root"); err != nil {
-			if !errdefs.IsNotFound(errors.Cause(err)) {
+			if !errors.Is(err, errdefs.ErrNotFound) {
 				return err
 			}
 		}
@@ -228,7 +228,7 @@ func MigrateV2(ctx context.Context, from, to string, cs content.Store, s snapsho
 			if _, err := s.Update(ctx, snapshots.Info{
 				Name: info.Name,
 			}, "labels.containerd.io/gc.root"); err != nil {
-				if !errdefs.IsNotFound(errors.Cause(err)) {
+				if !errors.Is(err, errdefs.ErrNotFound) {
 					return err
 				}
 			}

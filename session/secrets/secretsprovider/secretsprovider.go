@@ -31,7 +31,7 @@ func (sp *secretProvider) Register(server *grpc.Server) {
 func (sp *secretProvider) GetSecret(ctx context.Context, req *secrets.GetSecretRequest) (*secrets.GetSecretResponse, error) {
 	dt, err := sp.store.GetSecret(ctx, req.ID)
 	if err != nil {
-		if errors.Cause(err) == secrets.ErrNotFound {
+		if errors.Is(err, secrets.ErrNotFound) {
 			return nil, status.Errorf(codes.NotFound, err.Error())
 		}
 		return nil, err

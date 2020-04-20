@@ -61,7 +61,7 @@ func (as *asyncState) Do(ctx context.Context) error {
 		if err != nil {
 			select {
 			case <-ctx.Done():
-				if errors.Cause(err) == ctx.Err() {
+				if errors.Is(err, ctx.Err()) {
 					return res, err
 				}
 			default:

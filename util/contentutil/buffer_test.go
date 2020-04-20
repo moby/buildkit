@@ -41,7 +41,7 @@ func TestReadWrite(t *testing.T) {
 
 	_, err = content.ReadBlob(ctx, b, ocispec.Descriptor{Digest: digest.FromBytes([]byte("foo3"))})
 	require.Error(t, err)
-	require.Equal(t, errors.Cause(err), errdefs.ErrNotFound)
+	require.Equal(t, true, errors.Is(err, errdefs.ErrNotFound))
 }
 
 func TestReaderAt(t *testing.T) {
