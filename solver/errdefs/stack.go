@@ -40,6 +40,20 @@ func Traces(err error) []*Stack {
 	return st
 }
 
+func hasLocalStackTrace(err error) bool {
+	wrapped, ok := err.(interface {
+		Unwrap() error
+	})
+	if ok && hasLocalStackTrace(wrapped.Unwrap()) {
+		return true
+	}
+
+	_, ok = err.(interface {
+		StackTrace() errors.StackTrace
+	})
+	return ok
+}
+
 func StackFormatter(err error) fmt.Formatter {
 	return &stackFormatter{err}
 }

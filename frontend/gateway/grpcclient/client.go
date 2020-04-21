@@ -10,9 +10,12 @@ import (
 	"time"
 
 	"github.com/gogo/googleapis/google/rpc"
+	gogotypes "github.com/gogo/protobuf/types"
+	"github.com/golang/protobuf/ptypes/any"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
+	"github.com/moby/buildkit/solver/errdefs"
 	opspb "github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
 	digest "github.com/opencontainers/go-digest"
@@ -150,12 +153,12 @@ func (c *grpcClient) Run(ctx context.Context, f client.BuildFunc) (retError erro
 				}
 			}
 			if retError != nil {
-				st, _ := status.FromError(errors.Cause(retError))
+				st, _ := status.FromError(errdefs.ToGRPC(retError))
 				stp := st.Proto()
 				req.Error = &rpc.Status{
 					Code:    stp.Code,
 					Message: stp.Message,
-					// Details: stp.Details,
+					Details: convertToGogoAny(stp.Details),
 				}
 			}
 			if _, err := c.client.Return(ctx, req); err != nil && retError == nil {
@@ -588,4 +591,12 @@ func workers() []client.WorkerInfo {
 
 func product() string {
 	return os.Getenv("BUILDKIT_EXPORTEDPRODUCT")
+}
+
+func convertToGogoAny(in []*any.Any) []*gogotypes.Any {
+	out := make([]*gogotypes.Any, len(in))
+	for i := range in {
+		out[i] = &gogotypes.Any{TypeUrl: in[i].TypeUrl, Value: in[i].Value}
+	}
+	return out
 }

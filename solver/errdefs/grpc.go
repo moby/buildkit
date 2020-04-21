@@ -3,6 +3,7 @@ package errdefs
 import (
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes"
+	"github.com/pkg/errors"
 	spb "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -120,6 +121,10 @@ func FromGRPC(err error) error {
 				err = &withStack{stack: *v, error: err}
 			}
 		}
+	}
+
+	if !hasLocalStackTrace(err) {
+		err = errors.WithStack(err)
 	}
 
 	return err

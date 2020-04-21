@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/docker/distribution/reference"
+	gogotypes "github.com/gogo/protobuf/types"
+	"github.com/golang/protobuf/ptypes/any"
 	apitypes "github.com/moby/buildkit/api/types"
 	"github.com/moby/buildkit/cache"
 	cacheutil "github.com/moby/buildkit/cache/util"
@@ -25,6 +27,7 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/solver/errdefs"
 	opspb "github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/tracing"
@@ -670,11 +673,11 @@ func (lbf *llbBridgeForwarder) Ping(context.Context, *pb.PingRequest) (*pb.PongR
 
 func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest) (*pb.ReturnResponse, error) {
 	if in.Error != nil {
-		return lbf.setResult(nil, status.ErrorProto(&spb.Status{
+		return lbf.setResult(nil, errdefs.FromGRPC(status.ErrorProto(&spb.Status{
 			Code:    in.Error.Code,
 			Message: in.Error.Message,
-			// Details: in.Error.Details,
-		}))
+			Details: convertGogoAny(in.Error.Details),
+		})))
 	} else {
 		r := &frontend.Result{
 			Metadata: in.Result.Metadata,
@@ -753,4 +756,12 @@ type markTypeFrontend struct{}
 
 func (*markTypeFrontend) SetImageOption(ii *llb.ImageInfo) {
 	ii.RecordType = string(client.UsageRecordTypeFrontend)
+}
+
+func convertGogoAny(in []*gogotypes.Any) []*any.Any {
+	out := make([]*any.Any, len(in))
+	for i := range in {
+		out[i] = &any.Any{TypeUrl: in[i].TypeUrl, Value: in[i].Value}
+	}
+	return out
 }
