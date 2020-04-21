@@ -79,7 +79,7 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 }
 
 func (c *Client) controlClient() controlapi.ControlClient {
-	return controlapi.NewControlClient(c.conn)
+	return controlapi.WrapClientErrors(controlapi.NewControlClient(c.conn))
 }
 
 func (c *Client) Dialer() session.Dialer {

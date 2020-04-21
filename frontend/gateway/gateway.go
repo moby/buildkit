@@ -311,7 +311,7 @@ func newLLBBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBr
 	lbf := NewBridgeForwarder(ctx, llbBridge, workers, inputs)
 	server := grpc.NewServer()
 	grpc_health_v1.RegisterHealthServer(server, health.NewServer())
-	pb.RegisterLLBBridgeServer(server, lbf)
+	pb.RegisterLLBBridgeServer(server, pb.WrapServerErrors(lbf))
 
 	go func() {
 		serve(ctx, server, lbf.conn)

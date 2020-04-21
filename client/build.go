@@ -61,7 +61,7 @@ func (c *Client) Build(ctx context.Context, opt SolveOpt, product string, buildF
 
 func (c *Client) gatewayClientForBuild(buildid string) gatewayapi.LLBBridgeClient {
 	g := gatewayapi.NewLLBBridgeClient(c.conn)
-	return &gatewayClientForBuild{g, buildid}
+	return gatewayapi.WrapClientErrors(&gatewayClientForBuild{g, buildid})
 }
 
 type gatewayClientForBuild struct {

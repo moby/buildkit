@@ -66,7 +66,7 @@ func current() (GrpcClient, error) {
 		return nil, err
 	}
 
-	return New(ctx, opts(), sessionID(), product(), pb.NewLLBBridgeClient(conn), workers())
+	return New(ctx, opts(), sessionID(), product(), pb.WrapClientErrors(pb.NewLLBBridgeClient(conn)), workers())
 }
 
 func convertRef(ref client.Reference) (*pb.Ref, error) {
