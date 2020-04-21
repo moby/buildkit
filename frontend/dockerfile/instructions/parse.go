@@ -52,7 +52,10 @@ func newParseRequestFromNode(node *parser.Node) parseRequest {
 }
 
 // ParseInstruction converts an AST to a typed instruction (either a command or a build stage beginning when encountering a `FROM` statement)
-func ParseInstruction(node *parser.Node) (interface{}, error) {
+func ParseInstruction(node *parser.Node) (v interface{}, err error) {
+	defer func() {
+		err = node.WrapError(err)
+	}()
 	req := newParseRequestFromNode(node)
 	switch node.Value {
 	case command.Env:
@@ -105,7 +108,7 @@ func ParseCommand(node *parser.Node) (Command, error) {
 	if c, ok := s.(Command); ok {
 		return c, nil
 	}
-	return nil, errors.Errorf("%T is not a command type", s)
+	return nil, node.WrapError(errors.Errorf("%T is not a command type", s))
 }
 
 // UnknownInstruction represents an error occurring when a command is unresolvable
@@ -136,7 +139,11 @@ type parseError struct {
 }
 
 func (e *parseError) Error() string {
-	return fmt.Sprintf("Dockerfile parse error line %d: %v", e.node.StartLine, e.inner.Error())
+	return fmt.Sprintf("dockerfile parse error line %d: %v", e.node.StartLine, e.inner.Error())
+}
+
+func (e *parseError) Unwarp() error {
+	return e.inner
 }
 
 // Parse a Dockerfile into a collection of buildable stages.
@@ -160,11 +167,11 @@ func Parse(ast *parser.Node) (stages []Stage, metaArgs []ArgCommand, err error) 
 		case Command:
 			stage, err := CurrentStage(stages)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, n.WrapError(err)
 			}
 			stage.AddCommand(c)
 		default:
-			return nil, nil, errors.Errorf("%T is not a command type", cmd)
+			return nil, nil, n.WrapError(errors.Errorf("%T is not a command type", cmd))
 		}
 
 	}

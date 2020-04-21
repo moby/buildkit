@@ -63,6 +63,11 @@ func (node *Node) Dump() string {
 	return strings.TrimSpace(str)
 }
 
+// WrapError returns new error that implements ErrorLocation
+func (node *Node) WrapError(err error) error {
+	return withLocation(err, node.StartLine, node.EndLine)
+}
+
 func (node *Node) lines(start, end int) {
 	node.StartLine = start
 	node.EndLine = end
@@ -244,7 +249,7 @@ func Parse(rwc io.Reader) (*Result, error) {
 		}
 		bytesRead, err = processLine(d, bytesRead, true)
 		if err != nil {
-			return nil, err
+			return nil, withLocation(err, currentLine, 0)
 		}
 		currentLine++
 
@@ -258,7 +263,7 @@ func Parse(rwc io.Reader) (*Result, error) {
 		for !isEndOfLine && scanner.Scan() {
 			bytesRead, err := processLine(d, scanner.Bytes(), false)
 			if err != nil {
-				return nil, err
+				return nil, withLocation(err, currentLine, 0)
 			}
 			currentLine++
 
@@ -282,7 +287,7 @@ func Parse(rwc io.Reader) (*Result, error) {
 
 		child, err := newNodeFromLine(line, d)
 		if err != nil {
-			return nil, err
+			return nil, withLocation(err, startLine, currentLine)
 		}
 		root.AddChild(child, startLine, currentLine)
 	}
@@ -292,14 +297,14 @@ func Parse(rwc io.Reader) (*Result, error) {
 	}
 
 	if root.StartLine < 0 {
-		return nil, errors.New("file with no instructions")
+		return nil, withLocation(errors.New("file with no instructions"), currentLine, 0)
 	}
 
 	return &Result{
 		AST:         root,
 		Warnings:    warnings,
 		EscapeToken: d.escapeToken,
-	}, handleScannerError(scanner.Err())
+	}, withLocation(handleScannerError(scanner.Err()), currentLine, 0)
 }
 
 func trimComments(src []byte) []byte {
