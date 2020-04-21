@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package errdefs;
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+
+option (gogoproto.stable_marshaler_all) = true;
+
+message Stack {
+    repeated Frame frames = 1;
+    repeated string Cmdline = 2;
+    string Checksum = 3;
+    int32 Pid = 4;
+    // go commit, frontend digest
+}
+
+message Frame {
+    string Name = 1;
+    string File = 2;
+    int32 Line = 3;
+}
+
+message Vertex {
+    string digest = 1 [(gogoproto.customtype) = "github.com/opencontainers/go-digest.Digest", (gogoproto.nullable) = false];
+}
+
+message Source {
+    repeated Range locations = 1;
+    string filename = 2;
+    string local = 3;
+    bytes data = 4;
+}
+
+message Range {
+    Position start = 1;
+    Position end = 2;
+}
+
+message Position {
+    int32 Line = 1;
+    int32 Character = 2;
+}

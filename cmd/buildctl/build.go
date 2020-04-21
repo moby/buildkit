@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log"
 	"os"
 
 	"github.com/containerd/console"
@@ -14,6 +15,7 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/auth/authprovider"
 	"github.com/moby/buildkit/session/sshforward/sshprovider"
+	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/progress/progressui"
 	"github.com/opencontainers/go-digest"
@@ -292,5 +294,12 @@ func buildAction(clicontext *cli.Context) error {
 		return progressui.DisplaySolveStatus(context.TODO(), "", c, os.Stderr, displayCh)
 	})
 
-	return eg.Wait()
+	err = eg.Wait()
+
+	// temp test
+	if os.Getenv("BUILDCTL_DEBUG_ERROR_UNSTABLE") == "1" {
+		log.Printf("%+v", errdefs.StackFormatter(err))
+	}
+
+	return err
 }

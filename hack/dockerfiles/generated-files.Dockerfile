@@ -5,15 +5,21 @@ FROM golang:1.13-buster AS gobuild-base
 ARG PROTOC_VERSION=3.1.0
 ARG GOGO_VERSION=master
 RUN apt-get update && apt-get --no-install-recommends install -y \
- git \
- unzip \
- && true
+	git \
+	unzip \
+	&& true
 RUN wget -q https://github.com/google/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip && unzip protoc-${PROTOC_VERSION}-linux-x86_64.zip -d /usr/local
 
 RUN go get -d github.com/gogo/protobuf/protoc-gen-gogofaster \
-  && cd /go/src/github.com/gogo/protobuf \
-        && git checkout -q $GOGO_VERSION \
-        && go install ./protoc-gen-gogo ./protoc-gen-gogofaster ./protoc-gen-gogoslick
+	&& cd /go/src/github.com/gogo/protobuf \
+	&& git checkout -q $GOGO_VERSION \
+	&& go install ./protoc-gen-gogo ./protoc-gen-gogofaster ./protoc-gen-gogoslick
+
+ARG PROTOBUF_VERSION=v1.3.3
+RUN go get -d github.com/golang/protobuf/protoc-gen-go \
+	&& cd /go/src/github.com/golang/protobuf \
+	&& git checkout -q $PROTOBUF_VERSION \
+	&& go install ./protoc-gen-go
 
 WORKDIR /go/src/github.com/moby/buildkit
 
