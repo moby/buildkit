@@ -10,6 +10,14 @@ import (
 	"github.com/pkg/errors"
 )
 
+var version string
+var revision string
+
+func SetVersionInfo(v, r string) {
+	version = v
+	revision = r
+}
+
 type VertexError struct {
 	Vertex
 	error
@@ -68,7 +76,7 @@ func (w *stackFormatter) Format(s fmt.State, verb rune) {
 		if s.Flag('+') {
 			fmt.Fprintf(s, "%+v\n", w.Error())
 			for _, stack := range Traces(w.error) {
-				fmt.Fprintf(s, "%d %s\n", stack.Pid, strings.Join(stack.Cmdline, " "))
+				fmt.Fprintf(s, "%d %s %s\n", stack.Pid, stack.Version, strings.Join(stack.Cmdline, " "))
 				for _, f := range stack.Frames {
 					fmt.Fprintf(s, "%s\n\t%s:%d\n", f.Name, f.File, f.Line)
 				}
@@ -111,6 +119,8 @@ func convertStack(s errors.StackTrace) *Stack {
 	}
 	out.Cmdline = os.Args
 	out.Pid = int32(os.Getpid())
+	out.Version = version
+	out.Revision = revision
 	return &out
 }
 

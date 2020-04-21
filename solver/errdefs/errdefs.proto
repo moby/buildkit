@@ -8,10 +8,10 @@ option (gogoproto.stable_marshaler_all) = true;
 
 message Stack {
     repeated Frame frames = 1;
-    repeated string Cmdline = 2;
-    string Checksum = 3;
-    int32 Pid = 4;
-    // go commit, frontend digest
+    repeated string cmdline = 2;
+    int32 pid = 3;
+    string version = 4;
+    string revision = 5;
 }
 
 message Frame {
