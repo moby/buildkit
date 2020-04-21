@@ -121,18 +121,6 @@ func (e *UnknownInstruction) Error() string {
 	return fmt.Sprintf("unknown instruction: %s", strings.ToUpper(e.Instruction))
 }
 
-// IsUnknownInstruction checks if the error is an UnknownInstruction or a parseError containing an UnknownInstruction
-func IsUnknownInstruction(err error) bool {
-	_, ok := err.(*UnknownInstruction)
-	if !ok {
-		var pe *parseError
-		if pe, ok = err.(*parseError); ok {
-			_, ok = pe.inner.(*UnknownInstruction)
-		}
-	}
-	return ok
-}
-
 type parseError struct {
 	inner error
 	node  *parser.Node
