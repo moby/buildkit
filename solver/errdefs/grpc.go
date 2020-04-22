@@ -30,6 +30,10 @@ func ToGRPC(err error) error {
 		details = append(details, st)
 	}
 
+	for _, st := range Sources(err) {
+		details = append(details, st)
+	}
+
 	var ve *VertexError
 	if errors.As(err, &ve) {
 		details = append(details, &ve.Vertex)
@@ -111,7 +115,7 @@ func FromGRPC(err error) error {
 			continue
 		}
 		switch detail.Message.(type) {
-		case *Stack, *Vertex:
+		case *Stack, *Vertex, *Source:
 			details = append(details, detail.Message)
 		default:
 			n.Details = append(n.Details, d)
@@ -128,6 +132,10 @@ func FromGRPC(err error) error {
 			}
 		case *Vertex:
 			err = WrapVertex(err, digest.Digest(v.Digest))
+		case *Source:
+			if v != nil {
+				err = WithSource(err, *v)
+			}
 		}
 	}
 

@@ -304,6 +304,10 @@ func buildAction(clicontext *cli.Context) error {
 		if errors.As(err, &ve) {
 			log.Printf("error-vertex: %s", ve.Digest)
 		}
+
+		for _, s := range errdefs.Sources(err) {
+			log.Printf("source: %+v", s)
+		}
 	}
 
 	return err
