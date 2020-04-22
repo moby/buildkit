@@ -3,6 +3,7 @@ package errdefs
 import (
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes"
+	"github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	spb "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc/codes"
@@ -27,6 +28,11 @@ func ToGRPC(err error) error {
 
 	for _, st := range Traces(err) {
 		details = append(details, st)
+	}
+
+	var ve *VertexError
+	if errors.As(err, &ve) {
+		details = append(details, &ve.Vertex)
 	}
 
 	if len(details) > 0 {
@@ -105,7 +111,7 @@ func FromGRPC(err error) error {
 			continue
 		}
 		switch detail.Message.(type) {
-		case *Stack:
+		case *Stack, *Vertex:
 			details = append(details, detail.Message)
 		default:
 			n.Details = append(n.Details, d)
@@ -120,6 +126,8 @@ func FromGRPC(err error) error {
 			if v != nil {
 				err = &withStack{stack: *v, error: err}
 			}
+		case *Vertex:
+			err = WrapVertex(err, digest.Digest(v.Digest))
 		}
 	}
 

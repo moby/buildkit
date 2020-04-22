@@ -299,6 +299,11 @@ func buildAction(clicontext *cli.Context) error {
 	// temp test
 	if os.Getenv("BUILDCTL_DEBUG_ERROR_UNSTABLE") == "1" {
 		log.Printf("%+v", errdefs.StackFormatter(err))
+
+		var ve *errdefs.VertexError
+		if errors.As(err, &ve) {
+			log.Printf("error-vertex: %s", ve.Digest)
+		}
 	}
 
 	return err

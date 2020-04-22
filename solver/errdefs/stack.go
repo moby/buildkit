@@ -18,11 +18,6 @@ func SetVersionInfo(v, r string) {
 	revision = r
 }
 
-type VertexError struct {
-	Vertex
-	error
-}
-
 func Traces(err error) []*Stack {
 	var st []*Stack
 

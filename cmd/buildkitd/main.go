@@ -342,7 +342,7 @@ func defaultConfigPath() string {
 func defaultConf() (config.Config, *toml.MetaData, error) {
 	cfg, md, err := LoadFile(defaultConfigPath())
 	if err != nil {
-		var pe os.PathError
+		var pe *os.PathError
 		if !errors.As(err, &pe) {
 			return config.Config{}, nil, err
 		}

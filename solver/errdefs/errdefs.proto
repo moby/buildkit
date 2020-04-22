@@ -2,10 +2,6 @@ syntax = "proto3";
 
 package errdefs;
 
-import "github.com/gogo/protobuf/gogoproto/gogo.proto";
-
-option (gogoproto.stable_marshaler_all) = true;
-
 message Stack {
     repeated Frame frames = 1;
     repeated string cmdline = 2;
@@ -21,7 +17,7 @@ message Frame {
 }
 
 message Vertex {
-    string digest = 1 [(gogoproto.customtype) = "github.com/opencontainers/go-digest.Digest", (gogoproto.nullable) = false];
+    string digest = 1;
 }
 
 message Source {

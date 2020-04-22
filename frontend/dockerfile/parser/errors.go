@@ -25,7 +25,7 @@ func withLocation(err error, startLine, endLine int) error {
 	if err == nil {
 		return nil
 	}
-	var el ErrorLocation
+	var el *ErrorLocation
 	if errors.As(err, &el) {
 		return err
 	}
