@@ -5,6 +5,7 @@ import (
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/strslice"
+	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"github.com/pkg/errors"
 )
 
@@ -35,6 +36,7 @@ func (kvpo *KeyValuePairOptional) ValueString() string {
 // Command is implemented by every command present in a dockerfile
 type Command interface {
 	Name() string
+	Location() []parser.Range
 }
 
 // KeyValuePairs is a slice of KeyValuePair
@@ -42,8 +44,9 @@ type KeyValuePairs []KeyValuePair
 
 // withNameAndCode is the base of every command in a Dockerfile (String() returns its source code)
 type withNameAndCode struct {
-	code string
-	name string
+	code     string
+	name     string
+	location []parser.Range
 }
 
 func (c *withNameAndCode) String() string {
@@ -55,8 +58,13 @@ func (c *withNameAndCode) Name() string {
 	return c.name
 }
 
+// Location of the command in source
+func (c *withNameAndCode) Location() []parser.Range {
+	return c.location
+}
+
 func newWithNameAndCode(req parseRequest) withNameAndCode {
-	return withNameAndCode{code: strings.TrimSpace(req.original), name: req.command}
+	return withNameAndCode{code: strings.TrimSpace(req.original), name: req.command, location: req.location}
 }
 
 // SingleWordExpander is a provider for variable expansion where 1 word => 1 output
@@ -400,6 +408,7 @@ type Stage struct {
 	BaseName   string
 	SourceCode string
 	Platform   string
+	Location   []parser.Range
 }
 
 // AddCommand to the stage

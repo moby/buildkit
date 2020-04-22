@@ -352,7 +352,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 						if isNotLocalDockerfile {
 							localNameDockerfile = ""
 						}
-						err = wrapSource(err, dtDockerfile, filename, localNameDockerfile, el.Ranges)
+						err = wrapSource(err, dtDockerfile, filename, localNameDockerfile, el.Location)
 					}
 				}()
 				st, img, err := dockerfile2llb.Dockerfile2LLB(ctx, dtDockerfile, dockerfile2llb.ConvertOpt{

@@ -38,6 +38,11 @@ type Node struct {
 	EndLine    int             // the line in the original dockerfile where the node ends
 }
 
+// Location return the location of node in source code
+func (node *Node) Location() []Range {
+	return toRanges(node.StartLine, node.EndLine)
+}
+
 // Dump dumps the AST defined by `node` as a list of sexps.
 // Returns a string suitable for printing.
 func (node *Node) Dump() string {
@@ -61,11 +66,6 @@ func (node *Node) Dump() string {
 	}
 
 	return strings.TrimSpace(str)
-}
-
-// WrapError returns new error that implements ErrorLocation
-func (node *Node) WrapError(err error) error {
-	return withLocation(err, node.StartLine, node.EndLine)
 }
 
 func (node *Node) lines(start, end int) {
