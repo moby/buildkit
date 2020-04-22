@@ -27,7 +27,7 @@ func NewGatewayForwarder() *GatewayForwarder {
 }
 
 func (gwf *GatewayForwarder) Register(server *grpc.Server) {
-	gwapi.RegisterLLBBridgeServer(server, gwapi.WrapServerErrors(gwf))
+	gwapi.RegisterLLBBridgeServer(server, gwf)
 }
 
 func (gwf *GatewayForwarder) RegisterBuild(ctx context.Context, id string, bridge gateway.LLBBridgeForwarder) error {

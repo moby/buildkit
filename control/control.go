@@ -73,7 +73,7 @@ func NewController(opt Opt) (*Controller, error) {
 }
 
 func (c *Controller) Register(server *grpc.Server) error {
-	controlapi.RegisterControlServer(server, controlapi.WrapServerErrors(c))
+	controlapi.RegisterControlServer(server, c)
 	c.gatewayForwarder.Register(server)
 	return nil
 }
