@@ -18,6 +18,7 @@ import (
 	"github.com/moby/buildkit/solver/errdefs"
 	opspb "github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
+	"github.com/moby/buildkit/util/grpcerrors"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	fstypes "github.com/tonistiigi/fsutil/types"
@@ -506,7 +507,7 @@ func grpcClientConn(ctx context.Context) (context.Context, *grpc.ClientConn, err
 		return stdioConn(), nil
 	})
 
-	cc, err := grpc.DialContext(ctx, "", dialOpt, grpc.WithInsecure())
+	cc, err := grpc.DialContext(ctx, "", dialOpt, grpc.WithInsecure(), grpc.WithUnaryInterceptor(grpcerrors.UnaryClientInterceptor), grpc.WithStreamInterceptor(grpcerrors.StreamClientInterceptor))
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to create grpc client")
 	}

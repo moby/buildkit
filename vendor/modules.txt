@@ -237,6 +237,8 @@ github.com/google/go-cmp/cmp/internal/value
 github.com/google/shlex
 # github.com/google/uuid v1.1.1
 github.com/google/uuid
+# github.com/grpc-ecosystem/go-grpc-middleware v1.2.0
+github.com/grpc-ecosystem/go-grpc-middleware
 # github.com/grpc-ecosystem/grpc-opentracing v0.0.0-20180507213350-8e809c8a8645
 github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc
 # github.com/hashicorp/go-immutable-radix v1.0.0 => github.com/tonistiigi/go-immutable-radix v0.0.0-20170803185627-826af9ccf0fe
@@ -271,7 +273,7 @@ github.com/opencontainers/selinux/go-selinux
 github.com/opencontainers/selinux/go-selinux/label
 # github.com/opentracing-contrib/go-stdlib v0.0.0-20171029140428-b1a47cfbdd75
 github.com/opentracing-contrib/go-stdlib/nethttp
-# github.com/opentracing/opentracing-go v0.0.0-20171003133519-1361b9cd60be
+# github.com/opentracing/opentracing-go v1.1.0
 github.com/opentracing/opentracing-go
 github.com/opentracing/opentracing-go/ext
 github.com/opentracing/opentracing-go/log

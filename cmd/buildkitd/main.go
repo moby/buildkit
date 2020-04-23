@@ -24,6 +24,7 @@ import (
 	"github.com/docker/docker/pkg/reexec"
 	"github.com/docker/go-connections/sockets"
 	"github.com/gofrs/flock"
+	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
 	"github.com/moby/buildkit/cache/remotecache"
 	inlineremotecache "github.com/moby/buildkit/cache/remotecache/inline"
@@ -44,6 +45,7 @@ import (
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/moby/buildkit/util/binfmt_misc"
+	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/moby/buildkit/util/profiler"
 	"github.com/moby/buildkit/util/resolver"
 	"github.com/moby/buildkit/version"
@@ -204,7 +206,10 @@ func main() {
 				return err
 			}
 		}
-		opts := []grpc.ServerOption{unaryInterceptor(ctx), grpc.StreamInterceptor(otgrpc.OpenTracingStreamServerInterceptor(tracer))}
+		unary := grpc_middleware.ChainUnaryServer(unaryInterceptor(ctx), grpcerrors.UnaryServerInterceptor)
+		stream := grpc_middleware.ChainStreamServer(otgrpc.OpenTracingStreamServerInterceptor(tracer), grpcerrors.StreamServerInterceptor)
+
+		opts := []grpc.ServerOption{grpc.UnaryInterceptor(unary), grpc.StreamInterceptor(stream)}
 		server := grpc.NewServer(opts...)
 
 		// relative path does not work with nightlyone/lockfile
@@ -517,10 +522,10 @@ func getListener(addr string, uid, gid int, tlsConfig *tls.Config) (net.Listener
 	}
 }
 
-func unaryInterceptor(globalCtx context.Context) grpc.ServerOption {
+func unaryInterceptor(globalCtx context.Context) grpc.UnaryServerInterceptor {
 	withTrace := otgrpc.OpenTracingServerInterceptor(tracer, otgrpc.LogPayloads())
 
-	return grpc.UnaryInterceptor(func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
@@ -537,7 +542,7 @@ func unaryInterceptor(globalCtx context.Context) grpc.ServerOption {
 			logrus.Errorf("%s returned error: %+v", info.FullMethod, err)
 		}
 		return
-	})
+	}
 }
 
 func serverCredentials(cfg config.TLSConfig) (*tls.Config, error) {
