@@ -60,6 +60,12 @@ func Code(err error) codes.Code {
 		return se.Code()
 	}
 
+	if se, ok := err.(interface {
+		GRPCStatus() *status.Status
+	}); ok {
+		return se.GRPCStatus().Code()
+	}
+
 	wrapped, ok := err.(interface {
 		Unwrap() error
 	})

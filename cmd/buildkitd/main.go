@@ -40,7 +40,6 @@ import (
 	"github.com/moby/buildkit/frontend/gateway/forwarder"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver/bboltcachestorage"
-	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/moby/buildkit/util/appdefaults"
@@ -48,6 +47,7 @@ import (
 	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/moby/buildkit/util/profiler"
 	"github.com/moby/buildkit/util/resolver"
+	"github.com/moby/buildkit/util/stack"
 	"github.com/moby/buildkit/version"
 	"github.com/moby/buildkit/worker"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -61,7 +61,7 @@ import (
 
 func init() {
 	apicaps.ExportedProduct = "buildkit"
-	errdefs.SetVersionInfo(version.Version, version.Revision)
+	stack.SetVersionInfo(version.Version, version.Revision)
 
 	seed.WithTimeAndRand()
 	reexec.Init()

@@ -1,6 +1,9 @@
 package parser
 
-import "github.com/pkg/errors"
+import (
+	"github.com/moby/buildkit/util/stack"
+	"github.com/pkg/errors"
+)
 
 // ErrorLocation gives a location in source code that caused the error
 type ErrorLocation struct {
@@ -38,14 +41,10 @@ func WithLocation(err error, location []Range) error {
 	if errors.As(err, &el) {
 		return err
 	}
-	var err1 error = &ErrorLocation{
+	return stack.Enable(&ErrorLocation{
 		error:    err,
 		Location: location,
-	}
-	if !hasLocalStackTrace(err) {
-		err1 = errors.WithStack(err1)
-	}
-	return err1
+	})
 }
 
 func toRanges(start, end int) (r []Range) {
@@ -56,18 +55,4 @@ func toRanges(start, end int) (r []Range) {
 		r = append(r, Range{Start: Position{Line: i}, End: Position{Line: i}})
 	}
 	return
-}
-
-func hasLocalStackTrace(err error) bool {
-	wrapped, ok := err.(interface {
-		Unwrap() error
-	})
-	if ok && hasLocalStackTrace(wrapped.Unwrap()) {
-		return true
-	}
-
-	_, ok = err.(interface {
-		StackTrace() errors.StackTrace
-	})
-	return ok
 }

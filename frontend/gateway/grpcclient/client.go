@@ -15,7 +15,6 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
-	"github.com/moby/buildkit/solver/errdefs"
 	opspb "github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/grpcerrors"
@@ -154,7 +153,7 @@ func (c *grpcClient) Run(ctx context.Context, f client.BuildFunc) (retError erro
 				}
 			}
 			if retError != nil {
-				st, _ := status.FromError(errdefs.ToGRPC(retError))
+				st, _ := status.FromError(grpcerrors.ToGRPC(retError))
 				stp := st.Proto()
 				req.Error = &rpc.Status{
 					Code:    stp.Code,

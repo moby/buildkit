@@ -7,10 +7,10 @@ import (
 	_ "github.com/moby/buildkit/client/connhelper/dockercontainer"
 	_ "github.com/moby/buildkit/client/connhelper/kubepod"
 	bccommon "github.com/moby/buildkit/cmd/buildctl/common"
-	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/moby/buildkit/util/profiler"
+	"github.com/moby/buildkit/util/stack"
 	"github.com/moby/buildkit/version"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -19,7 +19,7 @@ import (
 func init() {
 	apicaps.ExportedProduct = "buildkit"
 
-	errdefs.SetVersionInfo(version.Version, version.Revision)
+	stack.SetVersionInfo(version.Version, version.Revision)
 }
 
 func main() {

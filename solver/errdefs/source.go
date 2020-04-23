@@ -1,6 +1,9 @@
 package errdefs
 
-import "github.com/pkg/errors"
+import (
+	"github.com/moby/buildkit/util/grpcerrors"
+	"github.com/pkg/errors"
+)
 
 func WithSource(err error, src Source) error {
 	if err == nil {
@@ -18,6 +21,10 @@ func (e *ErrorSource) Unwrap() error {
 	return e.error
 }
 
+func (e *ErrorSource) ToProto() grpcerrors.TypedErrorProto {
+	return &e.Source
+}
+
 func Sources(err error) []*Source {
 	var out []*Source
 	var es *ErrorSource
@@ -26,4 +33,8 @@ func Sources(err error) []*Source {
 		out = append(out, &es.Source)
 	}
 	return out
+}
+
+func (s *Source) WrapError(err error) error {
+	return &ErrorSource{error: err, Source: *s}
 }

@@ -27,7 +27,6 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
-	"github.com/moby/buildkit/solver/errdefs"
 	opspb "github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/grpcerrors"
@@ -674,7 +673,7 @@ func (lbf *llbBridgeForwarder) Ping(context.Context, *pb.PingRequest) (*pb.PongR
 
 func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest) (*pb.ReturnResponse, error) {
 	if in.Error != nil {
-		return lbf.setResult(nil, errdefs.FromGRPC(status.ErrorProto(&spb.Status{
+		return lbf.setResult(nil, grpcerrors.FromGRPC(status.ErrorProto(&spb.Status{
 			Code:    in.Error.Code,
 			Message: in.Error.Message,
 			Details: convertGogoAny(in.Error.Details),

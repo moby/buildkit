@@ -7,13 +7,13 @@ import (
 
 	dockerfile "github.com/moby/buildkit/frontend/dockerfile/builder"
 	"github.com/moby/buildkit/frontend/gateway/grpcclient"
-	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/util/appcontext"
+	"github.com/moby/buildkit/util/stack"
 	"github.com/sirupsen/logrus"
 )
 
 func init() {
-	errdefs.SetVersionInfo(Version, Revision)
+	stack.SetVersionInfo(Version, Revision)
 }
 
 func main() {

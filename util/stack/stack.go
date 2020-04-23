@@ -71,25 +71,29 @@ func hasLocalStackTrace(err error) bool {
 	return ok
 }
 
-func StackFormatter(err error) fmt.Formatter {
-	return &stackFormatter{err}
+func Formatter(err error) fmt.Formatter {
+	return &formatter{err}
 }
 
-type stackFormatter struct {
+type formatter struct {
 	error
 }
 
-func (w *stackFormatter) Format(s fmt.State, verb rune) {
+func (w *formatter) Format(s fmt.State, verb rune) {
+	if w.error == nil {
+		fmt.Fprintf(s, "%v", w.error)
+		return
+	}
 	switch verb {
 	case 'v':
 		if s.Flag('+') {
-			fmt.Fprintf(s, "%+v\n", w.Error())
+			fmt.Fprintf(s, "%s\n", w.Error())
 			for _, stack := range Traces(w.error) {
 				fmt.Fprintf(s, "%d %s %s\n", stack.Pid, stack.Version, strings.Join(stack.Cmdline, " "))
 				for _, f := range stack.Frames {
 					fmt.Fprintf(s, "%s\n\t%s:%d\n", f.Name, f.File, f.Line)
 				}
-				fmt.Fprintf(s, "\n")
+				fmt.Fprintln(s)
 			}
 			return
 		}
