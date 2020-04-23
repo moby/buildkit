@@ -31,6 +31,7 @@ import (
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/llbsolver"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/moby/buildkit/util/progress/logs"
 	utilsystem "github.com/moby/buildkit/util/system"
 	"github.com/moby/buildkit/worker"
@@ -41,7 +42,6 @@ import (
 	"github.com/sirupsen/logrus"
 	bolt "go.etcd.io/bbolt"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 const execCacheType = "buildkit.exec.v0"
@@ -349,7 +349,7 @@ func (e *execOp) getSSHMountable(ctx context.Context, m *pb.Mount) (cache.Mounta
 		if m.SSHOpt.Optional {
 			return nil, nil
 		}
-		if st, ok := status.FromError(errors.Cause(err)); ok && st.Code() == codes.Unimplemented {
+		if grpcerrors.Code(err) == codes.Unimplemented {
 			return nil, errors.Errorf("no SSH key %q forwarded from the client", m.SSHOpt.ID)
 		}
 		return nil, err
