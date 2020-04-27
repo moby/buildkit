@@ -10,6 +10,7 @@ import (
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/moby/buildkit/util/profiler"
+	"github.com/moby/buildkit/util/stack"
 	"github.com/moby/buildkit/version"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -17,6 +18,8 @@ import (
 
 func init() {
 	apicaps.ExportedProduct = "buildkit"
+
+	stack.SetVersionInfo(version.Version, version.Revision)
 }
 
 func main() {

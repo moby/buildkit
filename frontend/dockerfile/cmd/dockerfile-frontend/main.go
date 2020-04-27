@@ -8,8 +8,13 @@ import (
 	dockerfile "github.com/moby/buildkit/frontend/dockerfile/builder"
 	"github.com/moby/buildkit/frontend/gateway/grpcclient"
 	"github.com/moby/buildkit/util/appcontext"
+	"github.com/moby/buildkit/util/stack"
 	"github.com/sirupsen/logrus"
 )
+
+func init() {
+	stack.SetVersionInfo(Version, Revision)
+}
 
 func main() {
 	var version bool

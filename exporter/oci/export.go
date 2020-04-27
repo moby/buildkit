@@ -14,12 +14,12 @@ import (
 	"github.com/moby/buildkit/exporter/containerimage"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/filesync"
+	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/progress"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 type ExporterVariant string
@@ -182,13 +182,13 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 	report := oneOffProgress(ctx, "sending tarball")
 	if err := archiveexporter.Export(ctx, e.opt.ImageWriter.ContentStore(), w, expOpts...); err != nil {
 		w.Close()
-		if st, ok := status.FromError(errors.Cause(err)); ok && st.Code() == codes.AlreadyExists {
+		if grpcerrors.Code(err) == codes.AlreadyExists {
 			return resp, report(nil)
 		}
 		return nil, report(err)
 	}
 	err = w.Close()
-	if st, ok := status.FromError(errors.Cause(err)); ok && st.Code() == codes.AlreadyExists {
+	if grpcerrors.Code(err) == codes.AlreadyExists {
 		return resp, report(nil)
 	}
 	return resp, report(err)

@@ -19,8 +19,10 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/frontend/dockerfile/dockerfile2llb"
+	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	gwpb "github.com/moby/buildkit/frontend/gateway/pb"
+	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -132,9 +134,11 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 
 	var buildContext *llb.State
 	isNotLocalContext := false
+	isNotLocalDockerfile := false
 	if st, ok := detectGitContext(opts[localNameContext], opts[keyContextKeepGitDir]); ok {
 		if !forceLocalDockerfile {
 			src = *st
+			isNotLocalDockerfile = true
 		}
 		buildContext = st
 	} else if httpPrefix.MatchString(opts[localNameContext]) {
@@ -184,6 +188,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 				bc := unpack.AddMount("/out", llb.Scratch())
 				if !forceLocalDockerfile {
 					src = bc
+					isNotLocalDockerfile = true
 				}
 				buildContext = &bc
 			}
@@ -191,6 +196,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 			filename = "context"
 			if !forceLocalDockerfile {
 				src = httpContext
+				isNotLocalDockerfile = true
 			}
 			buildContext = &httpContext
 			isNotLocalContext = true
@@ -205,6 +211,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 			inputDockerfile, ok := inputs[DefaultLocalNameDockerfile]
 			if ok {
 				src = inputDockerfile
+				isNotLocalDockerfile = true
 			}
 		}
 
@@ -338,7 +345,16 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 
 	for i, tp := range targetPlatforms {
 		func(i int, tp *specs.Platform) {
-			eg.Go(func() error {
+			eg.Go(func() (err error) {
+				defer func() {
+					var el *parser.ErrorLocation
+					if errors.As(err, &el) {
+						if isNotLocalDockerfile {
+							localNameDockerfile = ""
+						}
+						err = wrapSource(err, dtDockerfile, filename, localNameDockerfile, el.Location)
+					}
+				}()
 				st, img, err := dockerfile2llb.Dockerfile2LLB(ctx, dtDockerfile, dockerfile2llb.ConvertOpt{
 					Target:            opts[keyTarget],
 					MetaResolver:      c,
@@ -638,4 +654,26 @@ func scopeToSubDir(c *llb.State, fileop bool, dir string) *llb.State {
 	unpack.AddMount("/src", *c, llb.Readonly)
 	bc := unpack.AddMount("/out", llb.Scratch())
 	return &bc
+}
+
+func wrapSource(err error, dt []byte, filename, local string, locations []parser.Range) error {
+	s := errdefs.Source{
+		Data:      dt,
+		Filename:  filename,
+		Local:     local,
+		Locations: make([]*errdefs.Range, 0, len(locations)),
+	}
+	for _, l := range locations {
+		s.Locations = append(s.Locations, &errdefs.Range{
+			Start: &errdefs.Position{
+				Line:      int32(l.Start.Line),
+				Character: int32(l.Start.Character),
+			},
+			End: &errdefs.Position{
+				Line:      int32(l.End.Line),
+				Character: int32(l.End.Character),
+			},
+		})
+	}
+	return errdefs.WithSource(err, s)
 }

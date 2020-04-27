@@ -21,6 +21,7 @@ type parseRequest struct {
 	attributes map[string]bool
 	flags      *BFlags
 	original   string
+	location   []parser.Range
 }
 
 var parseRunPreHooks []func(*RunCommand, parseRequest) error
@@ -48,13 +49,14 @@ func newParseRequestFromNode(node *parser.Node) parseRequest {
 		attributes: node.Attributes,
 		original:   node.Original,
 		flags:      NewBFlagsWithArgs(node.Flags),
+		location:   node.Location(),
 	}
 }
 
 // ParseInstruction converts an AST to a typed instruction (either a command or a build stage beginning when encountering a `FROM` statement)
 func ParseInstruction(node *parser.Node) (v interface{}, err error) {
 	defer func() {
-		err = node.WrapError(err)
+		err = parser.WithLocation(err, node.Location())
 	}()
 	req := newParseRequestFromNode(node)
 	switch node.Value {
@@ -108,7 +110,7 @@ func ParseCommand(node *parser.Node) (Command, error) {
 	if c, ok := s.(Command); ok {
 		return c, nil
 	}
-	return nil, node.WrapError(errors.Errorf("%T is not a command type", s))
+	return nil, parser.WithLocation(errors.Errorf("%T is not a command type", s), node.Location())
 }
 
 // UnknownInstruction represents an error occurring when a command is unresolvable
@@ -130,7 +132,7 @@ func (e *parseError) Error() string {
 	return fmt.Sprintf("dockerfile parse error line %d: %v", e.node.StartLine, e.inner.Error())
 }
 
-func (e *parseError) Unwarp() error {
+func (e *parseError) Unwrap() error {
 	return e.inner
 }
 
@@ -155,11 +157,11 @@ func Parse(ast *parser.Node) (stages []Stage, metaArgs []ArgCommand, err error) 
 		case Command:
 			stage, err := CurrentStage(stages)
 			if err != nil {
-				return nil, nil, n.WrapError(err)
+				return nil, nil, parser.WithLocation(err, n.Location())
 			}
 			stage.AddCommand(c)
 		default:
-			return nil, nil, n.WrapError(errors.Errorf("%T is not a command type", cmd))
+			return nil, nil, parser.WithLocation(errors.Errorf("%T is not a command type", cmd), n.Location())
 		}
 
 	}
@@ -282,6 +284,7 @@ func parseFrom(req parseRequest) (*Stage, error) {
 		SourceCode: code,
 		Commands:   []Command{},
 		Platform:   flPlatform.Value,
+		Location:   req.location,
 	}, nil
 
 }
