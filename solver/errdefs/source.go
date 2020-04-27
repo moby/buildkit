@@ -5,15 +5,16 @@ import (
 	"io"
 	"strings"
 
+	pb "github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/pkg/errors"
 )
 
-func WithSource(err error, src Source) error {
+func WithSource(err error, src *pb.Source) error {
 	if err == nil {
 		return nil
 	}
-	return &ErrorSource{Source: src, error: err}
+	return &ErrorSource{Source: Source{Source: src}, error: err}
 }
 
 type ErrorSource struct {
@@ -44,9 +45,13 @@ func (s *Source) WrapError(err error) error {
 }
 
 func (s *Source) Print(w io.Writer) error {
-	lines := strings.Split(string(s.Data), "\n")
+	ss := s.Source
+	if ss == nil {
+		return nil
+	}
+	lines := strings.Split(string(ss.Data), "\n")
 
-	start, end, ok := getStartEndLine(s.Locations)
+	start, end, ok := getStartEndLine(ss.Locations)
 	if !ok {
 		return nil
 	}
@@ -79,10 +84,10 @@ func (s *Source) Print(w io.Writer) error {
 		p++
 	}
 
-	fmt.Fprintf(w, "%s:%d\n--------------------\n", s.Filename, prepadStart)
+	fmt.Fprintf(w, "%s:%d\n--------------------\n", ss.Filename, prepadStart)
 	for i := start; i <= end; i++ {
 		pfx := "   "
-		if containsLine(s.Locations, i) {
+		if containsLine(ss.Locations, i) {
 			pfx = ">>>"
 		}
 		fmt.Fprintf(w, " %3d | %s %s\n", i, pfx, lines[i-1])
@@ -91,7 +96,7 @@ func (s *Source) Print(w io.Writer) error {
 	return nil
 }
 
-func containsLine(rr []*Range, l int) bool {
+func containsLine(rr []*pb.Range, l int) bool {
 	for _, r := range rr {
 		var s, e int
 		if r.Start == nil {
@@ -111,7 +116,7 @@ func containsLine(rr []*Range, l int) bool {
 	return false
 }
 
-func getStartEndLine(rr []*Range) (start int, end int, ok bool) {
+func getStartEndLine(rr []*pb.Range) (start int, end int, ok bool) {
 	for _, r := range rr {
 		if r.Start != nil {
 			if !ok || start > int(r.Start.Line) {

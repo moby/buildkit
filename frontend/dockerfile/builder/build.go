@@ -657,19 +657,19 @@ func scopeToSubDir(c *llb.State, fileop bool, dir string) *llb.State {
 }
 
 func wrapSource(err error, dt []byte, filename, local string, locations []parser.Range) error {
-	s := errdefs.Source{
+	s := &pb.Source{
 		Data:      dt,
 		Filename:  filename,
 		Local:     local,
-		Locations: make([]*errdefs.Range, 0, len(locations)),
+		Locations: make([]*pb.Range, 0, len(locations)),
 	}
 	for _, l := range locations {
-		s.Locations = append(s.Locations, &errdefs.Range{
-			Start: &errdefs.Position{
+		s.Locations = append(s.Locations, &pb.Range{
+			Start: &pb.Position{
 				Line:      int32(l.Start.Line),
 				Character: int32(l.Start.Character),
 			},
-			End: &errdefs.Position{
+			End: &pb.Position{
 				Line:      int32(l.End.Line),
 				Character: int32(l.End.Character),
 			},

@@ -2,23 +2,12 @@ syntax = "proto3";
 
 package errdefs;
 
+import "github.com/moby/buildkit/solver/pb/ops.proto";
+
 message Vertex {
     string digest = 1;
 }
 
 message Source {
-    repeated Range locations = 1;
-    string filename = 2;
-    string local = 3;
-    bytes data = 4;
-}
-
-message Range {
-    Position start = 1;
-    Position end = 2;
-}
-
-message Position {
-    int32 Line = 1;
-    int32 Character = 2;
+    pb.Source Source = 1;
 }

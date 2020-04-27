@@ -433,6 +433,10 @@ func mergeMetadata(m1, m2 pb.OpMetadata) pb.OpMetadata {
 		m1.ExportCache = m2.ExportCache
 	}
 
+	if m2.Source != nil {
+		m1.Source = m2.Source
+	}
+
 	for k := range m2.Caps {
 		if m1.Caps == nil {
 			m1.Caps = make(map[apicaps.CapID]bool, len(m2.Caps))
@@ -455,6 +459,12 @@ func WithDescription(m map[string]string) ConstraintsOpt {
 		for k, v := range m {
 			c.Metadata.Description[k] = v
 		}
+	})
+}
+
+func WithSourceMapping(s *pb.Source) ConstraintsOpt {
+	return constraintsOptFunc(func(c *Constraints) {
+		c.Metadata.Source = s
 	})
 }
 

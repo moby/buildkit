@@ -175,6 +175,25 @@ message OpMetadata {
 	ExportCache export_cache = 4;
 	
 	map<string, bool> caps = 5 [(gogoproto.castkey) = "github.com/moby/buildkit/util/apicaps.CapID", (gogoproto.nullable) = false];
+
+	Source source = 6;
+}
+
+message Source {
+    repeated Range locations = 1;
+    string filename = 2;
+    string local = 3;
+    bytes data = 4;
+}
+
+message Range {
+    Position start = 1;
+    Position end = 2;
+}
+
+message Position {
+    int32 Line = 1;
+    int32 Character = 2;
 }
 
 message ExportCache {
