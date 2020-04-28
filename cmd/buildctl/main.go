@@ -7,6 +7,7 @@ import (
 	_ "github.com/moby/buildkit/client/connhelper/dockercontainer"
 	_ "github.com/moby/buildkit/client/connhelper/kubepod"
 	bccommon "github.com/moby/buildkit/cmd/buildctl/common"
+	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/moby/buildkit/util/profiler"
@@ -101,8 +102,11 @@ func main() {
 	profiler.Attach(app)
 
 	if err := app.Run(os.Args); err != nil {
+		for _, s := range errdefs.Sources(err) {
+			s.Print(os.Stderr)
+		}
 		if debugEnabled {
-			fmt.Fprintf(os.Stderr, "error: %+v\n", err)
+			fmt.Fprintf(os.Stderr, "error: %+v", stack.Formatter(err))
 		} else {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		}
