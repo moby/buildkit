@@ -54,6 +54,7 @@ Dockerfile.
 >
 > Do not use your root directory, `/`, as the `PATH` as it causes the build to
 > transfer the entire contents of your hard drive to the Docker daemon.
+{:.warning}
 
 To use a file in the build context, the `Dockerfile` refers to the file specified
 in an instruction, for example,  a `COPY` instruction. To increase the build's
@@ -175,9 +176,9 @@ Docker runs instructions in a `Dockerfile` in order. A `Dockerfile` **must
 begin with a \`FROM\` instruction**. This may be after [parser
 directives](#parser-directives), [comments](#format), and globally scoped
 [ARGs](#arg). The `FROM` instruction specifies the [*Parent
-Image*](glossary.md#parent-image) from which you are building. `FROM`
-may only be preceded by one or more `ARG` instructions, which declare arguments
-that are used in `FROM` lines in the `Dockerfile`.
+Image*](https://docs.docker.com/glossary/#parent_image) from which you are
+building. `FROM` may only be preceded by one or more `ARG` instructions, which
+declare arguments that are used in `FROM` lines in the `Dockerfile`.
 
 Docker treats lines that *begin* with `#` as a comment, unless the line is
 a valid [parser directive](#parser-directives). A `#` marker anywhere
@@ -1758,6 +1759,7 @@ ARG buildno
 > 
 > Refer to the ["build images with BuildKit"](https://docs.docker.com/develop/develop-images/build_enhancements/#new-docker-build-secret-information)
 > section to learn about secure ways to use secrets when building images.
+{:.warning}
 
 ### Default values
 
@@ -2277,7 +2279,8 @@ This feature is only available when using the  [BuildKit](#buildkit) backend.
 
 Docker build supports experimental features like cache mounts, build secrets and
 ssh forwarding that are enabled by using an external implementation of the
-builder with a syntax directive. To learn about these features, [refer to the documentation in BuildKit repository](https://github.com/moby/buildkit/blob/master/frontend/dockerfile/docs/experimental.md).
+builder with a syntax directive. To learn about these features,
+[refer to the documentation in BuildKit repository](https://github.com/moby/buildkit/blob/master/frontend/dockerfile/docs/experimental.md).
 
 ## Dockerfile examples
 
