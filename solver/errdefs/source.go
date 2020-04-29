@@ -1,7 +1,7 @@
 package errdefs
 
 import (
-	fmt "fmt"
+	"fmt"
 	"io"
 	"strings"
 
@@ -63,6 +63,7 @@ func (s *Source) Print(w io.Writer) error {
 	}
 	var p int
 
+	prepadStart := start
 	for {
 		if p >= pad {
 			break
@@ -78,7 +79,7 @@ func (s *Source) Print(w io.Writer) error {
 		p++
 	}
 
-	fmt.Fprintf(w, "%s\n--------------------\n", s.Filename)
+	fmt.Fprintf(w, "%s:%d\n--------------------\n", s.Filename, prepadStart)
 	for i := start; i <= end; i++ {
 		pfx := "   "
 		if containsLine(s.Locations, i) {
