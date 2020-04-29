@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"log"
 	"os"
 
 	"github.com/containerd/console"
@@ -15,10 +14,8 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/auth/authprovider"
 	"github.com/moby/buildkit/session/sshforward/sshprovider"
-	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/progress/progressui"
-	"github.com/moby/buildkit/util/stack"
 	"github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -296,20 +293,6 @@ func buildAction(clicontext *cli.Context) error {
 	})
 
 	err = eg.Wait()
-
-	// temp test
-	if os.Getenv("BUILDCTL_DEBUG_ERROR_UNSTABLE") == "1" {
-		log.Printf("%+v", stack.Formatter(err))
-
-		var ve *errdefs.VertexError
-		if errors.As(err, &ve) {
-			log.Printf("error-vertex: %s", ve.Digest)
-		}
-
-		for _, s := range errdefs.Sources(err) {
-			log.Printf("source: %+v", s)
-		}
-	}
 
 	return err
 }
