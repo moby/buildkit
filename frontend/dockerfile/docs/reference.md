@@ -941,13 +941,12 @@ the `-p` flag. For example
 docker run -p 80:80/tcp -p 80:80/udp ...
 ```
 
-To set up port redirection on the host system, see [using the -P
-flag](run.md#expose-incoming-ports). The `docker network` command supports
-creating networks for communication among containers without the need to
-expose or publish specific ports, because the containers connected to the
-network can communicate with each other over any port. For detailed information,
-see the
-[overview of this feature](https://docs.docker.com/engine/userguide/networking/)).
+To set up port redirection on the host system, see [using the -P flag](run.md#expose-incoming-ports).
+The `docker network` command supports creating networks for communication among
+containers without the need to expose or publish specific ports, because the
+containers connected to the network can communicate with each other over any
+port. For detailed information, see the
+[overview of this feature](https://docs.docker.com/engine/userguide/networking/).
 
 ## ENV
 
