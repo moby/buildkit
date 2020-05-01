@@ -743,8 +743,7 @@ flag, for example `docker build --no-cache`.
 See the [`Dockerfile` Best Practices
 guide](https://docs.docker.com/engine/userguide/eng-image/dockerfile_best-practices/) for more information.
 
-The cache for `RUN` instructions can be invalidated by `ADD` instructions. See
-[below](#add) for details.
+The cache for `RUN` instructions can be invalidated by [`ADD`](#add) and [`COPY`](#copy) instructions.
 
 ### Known issues (RUN)
 
@@ -1114,7 +1113,7 @@ does not support authentication.
 > following instructions from the Dockerfile if the contents of `<src>` have
 > changed. This includes invalidating the cache for `RUN` instructions.
 > See the [`Dockerfile` Best Practices
-guide](https://docs.docker.com/develop/develop-images/dockerfile_best-practices/)
+guide – Leverage build cache](https://docs.docker.com/develop/develop-images/dockerfile_best-practices/#leverage-build-cache)
 > for more information.
 
 
@@ -1303,6 +1302,15 @@ image with the same name is attempted to be used instead.
 
 - If `<dest>` doesn't exist, it is created along with all missing directories
   in its path.
+  
+> **Note**
+>
+> The first encountered `COPY` instruction will invalidate the cache for all
+> following instructions from the Dockerfile if the contents of `<src>` have
+> changed. This includes invalidating the cache for `RUN` instructions.
+> See the [`Dockerfile` Best Practices
+guide – Leverage build cache](https://docs.docker.com/develop/develop-images/dockerfile_best-practices/#leverage-build-cache)
+> for more information.
 
 ## ENTRYPOINT
 
