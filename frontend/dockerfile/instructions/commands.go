@@ -192,6 +192,11 @@ type AddCommand struct {
 
 // Expand variables
 func (c *AddCommand) Expand(expander SingleWordExpander) error {
+	expandedChown, err := expander(c.Chown)
+	if err != nil {
+		return err
+	}
+	c.Chown = expandedChown
 	return expandSliceInPlace(c.SourcesAndDest, expander)
 }
 

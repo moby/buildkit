@@ -122,6 +122,7 @@ var fileOpTests = []integration.Test{
 	testWorkdirExists,
 	testWorkdirCopyIgnoreRelative,
 	testCopyFollowAllSymlinks,
+	testDockerfileAddChownExpand,
 }
 
 // Tests that depend on the `security.*` entitlements
@@ -2256,6 +2257,42 @@ ADD *.tar /dest
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "dest/bar"))
 	require.NoError(t, err)
 	require.Equal(t, "content1", string(dt))
+}
+
+func testDockerfileAddChownExpand(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+	isFileOp := getFileOp(t, sb)
+
+	dockerfile := []byte(`
+FROM busybox
+ARG group
+ENV owner 1000
+ADD --chown=${owner}:${group} foo /
+RUN [ "$(stat -c "%u %G" /foo)" == "1000 nogroup" ]
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("foo", []byte(`foo-contents`), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
+			"build-arg:group":                   "nogroup",
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
 }
 
 func testSymlinkDestination(t *testing.T, sb integration.Sandbox) {
