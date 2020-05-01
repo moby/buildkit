@@ -10,11 +10,11 @@ import (
 	"github.com/pkg/errors"
 )
 
-func WithSource(err error, src *pb.Source) error {
+func WithSource(err error, src Source) error {
 	if err == nil {
 		return nil
 	}
-	return &ErrorSource{Source: Source{Source: src}, error: err}
+	return &ErrorSource{Source: src, error: err}
 }
 
 type ErrorSource struct {
@@ -45,13 +45,13 @@ func (s *Source) WrapError(err error) error {
 }
 
 func (s *Source) Print(w io.Writer) error {
-	ss := s.Source
-	if ss == nil {
+	si := s.Info
+	if si == nil {
 		return nil
 	}
-	lines := strings.Split(string(ss.Data), "\n")
+	lines := strings.Split(string(si.Data), "\n")
 
-	start, end, ok := getStartEndLine(ss.Locations)
+	start, end, ok := getStartEndLine(s.Locations)
 	if !ok {
 		return nil
 	}
@@ -84,10 +84,10 @@ func (s *Source) Print(w io.Writer) error {
 		p++
 	}
 
-	fmt.Fprintf(w, "%s:%d\n--------------------\n", ss.Filename, prepadStart)
+	fmt.Fprintf(w, "%s:%d\n--------------------\n", si.Filename, prepadStart)
 	for i := start; i <= end; i++ {
 		pfx := "   "
-		if containsLine(ss.Locations, i) {
+		if containsLine(s.Locations, i) {
 			pfx = ">>>"
 		}
 		fmt.Fprintf(w, " %3d | %s %s\n", i, pfx, lines[i-1])
@@ -98,18 +98,11 @@ func (s *Source) Print(w io.Writer) error {
 
 func containsLine(rr []*pb.Range, l int) bool {
 	for _, r := range rr {
-		var s, e int
-		if r.Start == nil {
-			continue
+		e := r.End.Line
+		if e < r.Start.Line {
+			e = r.Start.Line
 		}
-		s = int(r.Start.Line)
-		if r.End != nil {
-			e = int(r.End.Line)
-		}
-		if e < s {
-			e = s
-		}
-		if s <= l && e >= l {
+		if r.Start.Line <= int32(l) && e >= int32(l) {
 			return true
 		}
 	}
@@ -117,21 +110,19 @@ func containsLine(rr []*pb.Range, l int) bool {
 }
 
 func getStartEndLine(rr []*pb.Range) (start int, end int, ok bool) {
+	first := true
 	for _, r := range rr {
-		if r.Start != nil {
-			if !ok || start > int(r.Start.Line) {
-				start = int(r.Start.Line)
-			}
-			if end < start {
-				end = start
-			}
-			ok = true
+		e := r.End.Line
+		if e < r.Start.Line {
+			e = r.Start.Line
 		}
-		if r.End != nil {
-			if end < int(r.End.Line) {
-				end = int(r.End.Line)
-			}
+		if first || int(r.Start.Line) < start {
+			start = int(r.Start.Line)
 		}
+		if int(e) > end {
+			end = int(e)
+		}
+		first = false
 	}
-	return
+	return start, end, !first
 }

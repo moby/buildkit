@@ -20,6 +20,7 @@ type DefinitionOp struct {
 	ops       map[digest.Digest]*pb.Op
 	defs      map[digest.Digest][]byte
 	metas     map[digest.Digest]pb.OpMetadata
+	sources   map[digest.Digest]*SourceLocation
 	platforms map[digest.Digest]*specs.Platform
 	dgst      digest.Digest
 	index     pb.OutputIndex
@@ -49,6 +50,28 @@ func NewDefinitionOp(def *pb.Definition) (*DefinitionOp, error) {
 		platforms[dgst] = platform
 	}
 
+	srcs := map[digest.Digest]*SourceLocation{}
+
+	for _, s := range def.Sources {
+		var st *State
+		sdef := s.Info.Definition
+		if sdef != nil {
+			op, err := NewDefinitionOp(sdef)
+			if err != nil {
+				return nil, err
+			}
+			state := NewState(op)
+			st = &state
+		}
+		sm := NewSourceMap(st, s.Info.Filename, s.Info.Data)
+		for dgst, l := range s.Locations {
+			srcs[digest.Digest(dgst)] = &SourceLocation{
+				SourceMap: sm,
+				Location:  l.Locations,
+			}
+		}
+	}
+
 	var index pb.OutputIndex
 	if dgst != "" {
 		index = ops[dgst].Inputs[0].Index
@@ -59,6 +82,7 @@ func NewDefinitionOp(def *pb.Definition) (*DefinitionOp, error) {
 		ops:       ops,
 		defs:      defs,
 		metas:     def.Metadata,
+		sources:   srcs,
 		platforms: platforms,
 		dgst:      dgst,
 		index:     index,
@@ -110,20 +134,20 @@ func (d *DefinitionOp) Validate(context.Context) error {
 	return nil
 }
 
-func (d *DefinitionOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []byte, *pb.OpMetadata, error) {
+func (d *DefinitionOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []byte, *pb.OpMetadata, *SourceLocation, error) {
 	if d.dgst == "" {
-		return "", nil, nil, errors.Errorf("cannot marshal empty definition op")
+		return "", nil, nil, nil, errors.Errorf("cannot marshal empty definition op")
 	}
 
 	if err := d.Validate(ctx); err != nil {
-		return "", nil, nil, err
+		return "", nil, nil, nil, err
 	}
 
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
 	meta := d.metas[d.dgst]
-	return d.dgst, d.defs[d.dgst], &meta, nil
+	return d.dgst, d.defs[d.dgst], &meta, d.sources[d.dgst], nil
 
 }
 

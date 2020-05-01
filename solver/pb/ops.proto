@@ -175,20 +175,26 @@ message OpMetadata {
 	ExportCache export_cache = 4;
 	
 	map<string, bool> caps = 5 [(gogoproto.castkey) = "github.com/moby/buildkit/util/apicaps.CapID", (gogoproto.nullable) = false];
-
-	Source source = 6;
 }
 
 message Source {
-    repeated Range locations = 1;
-    string filename = 2;
-    string local = 3;
-    bytes data = 4;
+    map<string, Location> locations = 1;
+	SourceInfo info = 2;
+}
+
+message SourceInfo {
+    string filename = 1;
+	bytes data = 2;
+	Definition definition = 3;
+}
+
+message Location {
+	repeated Range locations = 1;
 }
 
 message Range {
-    Position start = 1;
-    Position end = 2;
+    Position start = 1 [(gogoproto.nullable) = false];
+    Position end = 2 [(gogoproto.nullable) = false];
 }
 
 message Position {
@@ -219,6 +225,8 @@ message Definition {
 	// metadata contains metadata for the each of the Op messages.
 	// A key must be an LLB op digest string. Currently, empty string is not expected as a key, but it may change in the future.
 	map<string, OpMetadata> metadata = 2 [(gogoproto.castkey) = "github.com/opencontainers/go-digest.Digest", (gogoproto.nullable) = false];
+
+	repeated Source Sources = 3;
 }
 
 message HostIP {

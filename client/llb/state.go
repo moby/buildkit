@@ -24,7 +24,7 @@ type Output interface {
 
 type Vertex interface {
 	Validate(context.Context) error
-	Marshal(context.Context, *Constraints) (digest.Digest, []byte, *pb.OpMetadata, error)
+	Marshal(context.Context, *Constraints) (digest.Digest, []byte, *pb.OpMetadata, *SourceLocation, error)
 	Output() Output
 	Inputs() []Output
 }
@@ -124,7 +124,9 @@ func (s State) Marshal(ctx context.Context, co ...ConstraintsOpt) (*Definition, 
 		o.SetConstraintsOption(c)
 	}
 
-	def, err := marshal(ctx, s.Output().Vertex(ctx), def, map[digest.Digest]struct{}{}, map[Vertex]struct{}{}, c)
+	smc := newSourceMapCollector()
+
+	def, err := marshal(ctx, s.Output().Vertex(ctx), def, smc, map[digest.Digest]struct{}{}, map[Vertex]struct{}{}, c)
 	if err != nil {
 		return def, err
 	}
@@ -159,23 +161,28 @@ func (s State) Marshal(ctx context.Context, co ...ConstraintsOpt) (*Definition, 
 	}
 
 	def.Metadata[dgst] = md
+	sm, err := smc.Marshal(ctx, co...)
+	if err != nil {
+		return nil, err
+	}
+	def.Sources = sm
 
 	return def, nil
 }
 
-func marshal(ctx context.Context, v Vertex, def *Definition, cache map[digest.Digest]struct{}, vertexCache map[Vertex]struct{}, c *Constraints) (*Definition, error) {
+func marshal(ctx context.Context, v Vertex, def *Definition, s *sourceMapCollector, cache map[digest.Digest]struct{}, vertexCache map[Vertex]struct{}, c *Constraints) (*Definition, error) {
 	if _, ok := vertexCache[v]; ok {
 		return def, nil
 	}
 	for _, inp := range v.Inputs() {
 		var err error
-		def, err = marshal(ctx, inp.Vertex(ctx), def, cache, vertexCache, c)
+		def, err = marshal(ctx, inp.Vertex(ctx), def, s, cache, vertexCache, c)
 		if err != nil {
 			return def, err
 		}
 	}
 
-	dgst, dt, opMeta, err := v.Marshal(ctx, c)
+	dgst, dt, opMeta, sl, err := v.Marshal(ctx, c)
 	if err != nil {
 		return def, err
 	}
@@ -185,6 +192,9 @@ func marshal(ctx context.Context, v Vertex, def *Definition, cache map[digest.Di
 	}
 	if _, ok := cache[dgst]; ok {
 		return def, nil
+	}
+	if sl != nil {
+		s.Add(dgst, sl)
 	}
 	def.Def = append(def.Def, dt)
 	cache[dgst] = struct{}{}
@@ -367,7 +377,7 @@ func (o *output) ToInput(ctx context.Context, c *Constraints) (*pb.Input, error)
 			return nil, err
 		}
 	}
-	dgst, _, _, err := o.vertex.Marshal(ctx, c)
+	dgst, _, _, _, err := o.vertex.Marshal(ctx, c)
 	if err != nil {
 		return nil, err
 	}
@@ -433,10 +443,6 @@ func mergeMetadata(m1, m2 pb.OpMetadata) pb.OpMetadata {
 		m1.ExportCache = m2.ExportCache
 	}
 
-	if m2.Source != nil {
-		m1.Source = m2.Source
-	}
-
 	for k := range m2.Caps {
 		if m1.Caps == nil {
 			m1.Caps = make(map[apicaps.CapID]bool, len(m2.Caps))
@@ -459,12 +465,6 @@ func WithDescription(m map[string]string) ConstraintsOpt {
 		for k, v := range m {
 			c.Metadata.Description[k] = v
 		}
-	})
-}
-
-func WithSourceMapping(s *pb.Source) ConstraintsOpt {
-	return constraintsOptFunc(func(c *Constraints) {
-		c.Metadata.Source = s
 	})
 }
 
@@ -524,6 +524,7 @@ type Constraints struct {
 	Metadata          pb.OpMetadata
 	LocalUniqueID     string
 	Caps              *apicaps.CapSet
+	Source            *SourceLocation
 }
 
 func Platform(p specs.Platform) ConstraintsOpt {

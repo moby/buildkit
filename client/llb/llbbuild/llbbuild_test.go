@@ -13,7 +13,7 @@ import (
 func TestMarshal(t *testing.T) {
 	t.Parallel()
 	b := NewBuildOp(newDummyOutput("foobar"), WithFilename("myfilename"))
-	dgst, dt, opMeta, err := b.Marshal(context.TODO(), &llb.Constraints{})
+	dgst, dt, opMeta, _, err := b.Marshal(context.TODO(), &llb.Constraints{})
 	_ = opMeta
 	require.NoError(t, err)
 
