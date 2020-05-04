@@ -294,6 +294,7 @@ func (fb *Backend) Mkfile(ctx context.Context, m, user, group fileoptypes.Mount,
 
 	return mkfile(ctx, dir, action, u, mnt.m.IdentityMapping())
 }
+
 func (fb *Backend) Rm(ctx context.Context, m fileoptypes.Mount, action pb.FileActionRm) error {
 	mnt, ok := m.(*Mount)
 	if !ok {
@@ -309,6 +310,7 @@ func (fb *Backend) Rm(ctx context.Context, m fileoptypes.Mount, action pb.FileAc
 
 	return rm(ctx, dir, action)
 }
+
 func (fb *Backend) Copy(ctx context.Context, m1, m2, user, group fileoptypes.Mount, action pb.FileActionCopy) error {
 	mnt1, ok := m1.(*Mount)
 	if !ok {
