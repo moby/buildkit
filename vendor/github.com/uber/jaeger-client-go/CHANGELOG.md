@@ -1,13 +1,13 @@
 Changes by Version
 ==================
 
-2.11.2 (unreleased)
+2.11.2 (2018-01-12)
 -------------------
 
-- Nothing yet.
+- Add Gopkg.toml to allow using the lib with `dep`
 
 
-2.11.1 (2017-01-03)
+2.11.1 (2018-01-03)
 -------------------
 
 - Do not enqueue spans after Reporter is closed (#235, #245)

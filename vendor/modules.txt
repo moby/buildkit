@@ -302,7 +302,7 @@ github.com/tonistiigi/fsutil/copy
 github.com/tonistiigi/fsutil/types
 # github.com/tonistiigi/units v0.0.0-20180711220420-6950e57a87ea
 github.com/tonistiigi/units
-# github.com/uber/jaeger-client-go v0.0.0-20180103221425-e02c85f9069e
+# github.com/uber/jaeger-client-go v2.11.2+incompatible
 github.com/uber/jaeger-client-go
 github.com/uber/jaeger-client-go/internal/baggage
 github.com/uber/jaeger-client-go/internal/spanlog

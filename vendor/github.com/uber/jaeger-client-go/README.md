@@ -26,7 +26,7 @@ For example, Jaeger backend imports this library like this:
 
 If you instead want to use the latest version in `master`, you can pull it via `go get`.
 Note that during `go get` you may see build errors due to incompatible dependencies, which is why
-we recommend using semantic versions for dependencioes.  The error  may be fixed by running
+we recommend using semantic versions for dependencies.  The error  may be fixed by running
 `make install` (it will install `glide` if you don't have it):
 
 ```shell
@@ -43,7 +43,7 @@ and [config/example_test.go](./config/example_test.go).
 
 ### Closing the tracer via `io.Closer`
 
-The constructor functions for Jaeger Tracer return the tracer itself and an `io.Closer` instance.
+The constructor function for Jaeger Tracer returns the tracer itself and an `io.Closer` instance.
 It is recommended to structure your `main()` so that it calls the `Close()` function on the closer
 before exiting, e.g.
 
@@ -110,7 +110,7 @@ in the [opentracing-go](https://github.com/opentracing/opentracing-go) documenta
 
 ### Reporters
 
-A "reporter" is a component receives the finished spans and reports
+A "reporter" is a component that receives the finished spans and reports
 them to somewhere. Under normal circumstances, the Tracer
 should use the default `RemoteReporter`, which sends the spans out of
 process via configurable "transport". For testing purposes, one can
