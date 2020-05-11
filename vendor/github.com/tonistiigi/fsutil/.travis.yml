@@ -6,8 +6,9 @@ services:
 
 language: go
 
-go: 
- - "1.12.x"
+go:
+  - "1.13.x"
+  - "1.14.x"
 
 install:
  - export GO111MODULE=on
