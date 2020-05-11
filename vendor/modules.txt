@@ -251,7 +251,7 @@ github.com/ishidawataru/sctp
 github.com/jaguilar/vt100
 # github.com/konsorten/go-windows-terminal-sequences v1.0.2
 github.com/konsorten/go-windows-terminal-sequences
-# github.com/mitchellh/hashstructure v0.0.0-20170609045927-2bca23e0e452
+# github.com/mitchellh/hashstructure v1.0.0
 github.com/mitchellh/hashstructure
 # github.com/morikuni/aec v0.0.0-20170113033406-39771216ff4c
 github.com/morikuni/aec
