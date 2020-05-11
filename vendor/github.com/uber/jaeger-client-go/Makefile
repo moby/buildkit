@@ -56,7 +56,11 @@ lint:
 .PHONY: install
 install:
 	glide --version || go get github.com/Masterminds/glide
+ifeq ($(USE_DEP),true)
+	dep ensure
+else
 	glide install
+endif
 
 
 .PHONY: cover
@@ -90,13 +94,17 @@ idl-submodule:
 thrift-image:
 	$(THRIFT) -version
 
+.PHONY: install-dep-ci
+install-dep-ci:
+	- curl -L -s https://github.com/golang/dep/releases/download/v0.3.2/dep-linux-amd64 -o $$GOPATH/bin/dep
+	- chmod +x $$GOPATH/bin/dep
+
 .PHONY: install-ci
-install-ci: install
+install-ci: install-dep-ci install
 	go get github.com/wadey/gocovmerge
 	go get github.com/mattn/goveralls
 	go get golang.org/x/tools/cmd/cover
 	go get github.com/golang/lint/golint
-
 
 .PHONY: test-ci
 test-ci:

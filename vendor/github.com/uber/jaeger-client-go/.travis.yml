@@ -14,6 +14,10 @@ matrix:
   - go: 1.7
     env:
     - CROSSDOCK=true
+  - go: 1.7
+    env:
+    - TESTS=true
+    - USE_DEP=true
 
 services:
   - docker
