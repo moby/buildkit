@@ -31,5 +31,5 @@ buildctl build $progressFlag --frontend=dockerfile.v0 \
 buildctl build $progressFlag --frontend=dockerfile.v0 \
   $currentcontextBuildctl \
   --opt target=integration-tests-base \
-  --import-cache cicache.buildk.it/moby/buildkit/master:integration-tests \
+  --import-cache type=registry,ref=cicache.buildk.it/moby/buildkit/master:integration-tests \
   $exportCacheFlags $exportFlags:integration-tests
