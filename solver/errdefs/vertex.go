@@ -2,7 +2,7 @@ package errdefs
 
 import (
 	"github.com/moby/buildkit/util/grpcerrors"
-	"github.com/opencontainers/go-digest"
+	digest "github.com/opencontainers/go-digest"
 )
 
 type VertexError struct {
