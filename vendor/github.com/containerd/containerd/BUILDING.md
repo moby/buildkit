@@ -43,6 +43,8 @@ need to satisfy this dependencies in your system:
 
 * CentOS/Fedora: `yum install btrfs-progs-devel`
 * Debian/Ubuntu: `apt-get install btrfs-tools`
+	* Debian Buster/Ubuntu 19.10:
+	    `apt-get install btrfs-progs libbtrfs-dev`
 
 If you're building with seccomp, you'll need to install it with the following:
 
@@ -105,6 +107,9 @@ make generate
 > * `no_cri`: A build tag disables building Kubernetes [CRI](http://blog.kubernetes.io/2016/12/container-runtime-interface-cri-in-kubernetes.html) support into containerd.
 > See [here](https://github.com/containerd/cri-containerd#build-tags) for build tags of CRI plugin.
 > * `no_devmapper`: A build tag disables building the device mapper snapshot driver.
+> * `seccomp`: Enables seccomp support in the cri plugin
+> * `apparmor`: Enables apparmor support in the cri plugin
+> * `selinux`: Enables selinux support in the cri plugin
 >
 > For example, adding `BUILDTAGS=no_btrfs` to your environment before calling the **binaries**
 > Makefile target will disable the btrfs driver within the containerd Go build.
@@ -207,7 +212,7 @@ Next, let's build `runc`:
 
 ```sh
 cd /go/src/github.com/opencontainers/runc
-make BUILDTAGS='seccomp apparmor' && make install
+make BUILDTAGS='seccomp apparmor selinux' && make install
 ```
 
 When working with `ctr`, the simple test client we just built, don't forget to start the daemon!

@@ -1,5 +1,5 @@
-ARG FUSEOVERLAYFS_COMMIT=v0.7.6
-ARG ROOTLESSKIT_COMMIT=v0.8.0
+ARG FUSEOVERLAYFS_COMMIT=v0.7.7
+ARG ROOTLESSKIT_COMMIT=v0.9.1
 ARG SHADOW_COMMIT=4.7
 
 FROM golang:1.13-alpine AS containerd-fuse-overlayfs-test
@@ -10,7 +10,7 @@ ENV GO111MODULE=off
 RUN mkdir /out && go test -c -o /out/containerd-fuse-overlayfs.test
 
 # from https://github.com/containers/fuse-overlayfs/blob/53c17dab78b43de1cd121bf9260b20b76371bbaf/Dockerfile.static.ubuntu
-FROM docker.io/ubuntu:rolling AS fuse-overlayfs
+FROM docker.io/debian:10 AS fuse-overlayfs
 RUN apt-get update && \
     apt-get install --no-install-recommends -y \
         git ca-certificates libc6-dev gcc g++ make automake autoconf clang pkgconf libfuse3-dev
