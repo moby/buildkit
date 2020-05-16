@@ -178,12 +178,12 @@ message OpMetadata {
 }
 
 message Source {
-    map<string, Location> locations = 1;
+	map<string, Location> locations = 1;
 	SourceInfo info = 2;
 }
 
 message SourceInfo {
-    string filename = 1;
+ 	string filename = 1;
 	bytes data = 2;
 	Definition definition = 3;
 }
@@ -193,13 +193,13 @@ message Location {
 }
 
 message Range {
-    Position start = 1 [(gogoproto.nullable) = false];
-    Position end = 2 [(gogoproto.nullable) = false];
+	Position start = 1 [(gogoproto.nullable) = false];
+	Position end = 2 [(gogoproto.nullable) = false];
 }
 
 message Position {
-    int32 Line = 1;
-    int32 Character = 2;
+	int32 Line = 1;
+	int32 Character = 2;
 }
 
 message ExportCache {
