@@ -12,7 +12,7 @@ if [[ "$#" -lt 1 ]]; then
 	echo
 	echo "Example: $0 buildkitd.default.svc 127.0.0.1"
 	echo
-	echo "The following iles will be created under ${DIR}"
+	echo "The following files will be created under ${DIR}"
 	echo "- daemon/{ca.pem,cert.pem,key.pem}"
 	echo "- client/{ca.pem,cert.pem,key.pem}"
 	echo "- ${PRODUCT}-daemon-certs.yaml"
