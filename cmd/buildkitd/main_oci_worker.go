@@ -3,6 +3,7 @@
 package main
 
 import (
+	"os"
 	"os/exec"
 	"strconv"
 
@@ -158,6 +159,9 @@ func applyOCIFlags(c *cli.Context, cfg *config.Config) error {
 		cfg.Workers.OCI.Rootless = c.GlobalBool("rootless")
 	}
 	if c.GlobalIsSet("oci-worker-rootless") {
+		if !system.RunningInUserNS() || os.Geteuid() > 0 {
+			return errors.New("rootless mode requires to be executed as the mapped root in a user namespace; you may use RootlessKit for setting up the namespace")
+		}
 		cfg.Workers.OCI.Rootless = c.GlobalBool("oci-worker-rootless")
 	}
 	if c.GlobalIsSet("oci-worker-no-process-sandbox") {
