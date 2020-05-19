@@ -429,7 +429,7 @@ func toCommand(ic instructions.Command, allDispatchStates *dispatchStates) (comm
 				stn, ok = allDispatchStates.findStateByName(c.From)
 				if !ok {
 					stn = &dispatchState{
-						stage:        instructions.Stage{BaseName: c.From},
+						stage:        instructions.Stage{BaseName: c.From, Location: ic.Location()},
 						deps:         make(map[*dispatchState]struct{}),
 						unregistered: true,
 					}

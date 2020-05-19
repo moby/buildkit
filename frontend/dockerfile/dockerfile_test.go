@@ -100,6 +100,7 @@ var allTests = []integration.Test{
 	testOnBuildCleared,
 	testFrontendUseForwardedSolveResults,
 	testFrontendInputs,
+	testErrorsSourceMap,
 }
 
 var fileOpTests = []integration.Test{
