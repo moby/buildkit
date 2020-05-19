@@ -2,6 +2,7 @@ dist: bionic
 sudo: required
 
 install:
+  - docker run --rm --privileged linuxkit/binfmt:v0.8
   - docker run --name buildkit --rm -d --privileged -p 1234:1234 $REPO_SLUG_ORIGIN --debug --addr tcp://0.0.0.0:1234 --oci-worker-gc=false
   - sudo docker cp buildkit:/usr/bin/buildctl /usr/bin/
   - export BUILDKIT_HOST=tcp://0.0.0.0:1234
@@ -39,6 +40,9 @@ jobs:
       name: "External Dockerfile tests"
     - script: RUNC_PLATFORMS=$PLATFORMS PLATFORMS="${PLATFORMS},darwin/amd64,windows/amd64" ./hack/cross
       name: "Cross"
+    - script: ./hack/images local $REPO_SLUG_TARGET
+      name: "Build image"
+      if: type == cron
     - stage: deploy
       script: skip
       name: "Deploy"
