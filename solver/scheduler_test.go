@@ -3102,6 +3102,106 @@ func TestMergedEdgesLookup(t *testing.T) {
 	}
 }
 
+func TestCacheLoadError(t *testing.T) {
+	t.Parallel()
+
+	rand.Seed(time.Now().UnixNano())
+
+	ctx := context.TODO()
+
+	cacheManager := newTrackingCacheManager(NewInMemoryCacheManager())
+
+	l := NewSolver(SolverOpt{
+		ResolveOpFunc: testOpResolver,
+		DefaultCache:  cacheManager,
+	})
+	defer l.Close()
+
+	j0, err := l.NewJob("j0")
+	require.NoError(t, err)
+
+	defer func() {
+		if j0 != nil {
+			j0.Discard()
+		}
+	}()
+
+	g := Edge{
+		Vertex: vtxSum(3, vtxOpt{inputs: []Edge{
+			{Vertex: vtxSum(0, vtxOpt{inputs: []Edge{
+				{Vertex: vtxSum(2, vtxOpt{inputs: []Edge{
+					{Vertex: vtxConst(2, vtxOpt{})},
+				}})},
+				{Vertex: vtxConst(0, vtxOpt{})},
+			}})},
+			{Vertex: vtxSum(2, vtxOpt{inputs: []Edge{
+				{Vertex: vtxConst(2, vtxOpt{})},
+			}})},
+		}}),
+	}
+	g.Vertex.(*vertexSum).setupCallCounters()
+
+	res, err := j0.Build(ctx, g)
+	require.NoError(t, err)
+	require.Equal(t, unwrapInt(res), 11)
+	require.Equal(t, int64(7), *g.Vertex.(*vertexSum).cacheCallCount)
+	require.Equal(t, int64(5), *g.Vertex.(*vertexSum).execCallCount)
+	require.Equal(t, int64(0), cacheManager.loadCounter)
+
+	require.NoError(t, j0.Discard())
+	j0 = nil
+
+	// repeat with cache
+	j1, err := l.NewJob("j1")
+	require.NoError(t, err)
+
+	defer func() {
+		if j1 != nil {
+			j1.Discard()
+		}
+	}()
+
+	g1 := g
+
+	g1.Vertex.(*vertexSum).setupCallCounters()
+
+	res, err = j1.Build(ctx, g1)
+	require.NoError(t, err)
+	require.Equal(t, unwrapInt(res), 11)
+	require.Equal(t, int64(7), *g.Vertex.(*vertexSum).cacheCallCount)
+	require.Equal(t, int64(0), *g.Vertex.(*vertexSum).execCallCount)
+	require.Equal(t, int64(1), cacheManager.loadCounter)
+
+	require.NoError(t, j1.Discard())
+	j1 = nil
+
+	// repeat with cache but loading will now fail
+	j2, err := l.NewJob("j2")
+	require.NoError(t, err)
+
+	defer func() {
+		if j2 != nil {
+			j2.Discard()
+		}
+	}()
+
+	g2 := g
+
+	g2.Vertex.(*vertexSum).setupCallCounters()
+
+	cacheManager.forceFail = true
+
+	res, err = j2.Build(ctx, g2)
+	require.NoError(t, err)
+	require.Equal(t, unwrapInt(res), 11)
+	require.Equal(t, int64(7), *g.Vertex.(*vertexSum).cacheCallCount)
+	require.Equal(t, int64(5), *g.Vertex.(*vertexSum).execCallCount)
+	require.Equal(t, int64(6), cacheManager.loadCounter)
+
+	require.NoError(t, j2.Discard())
+	j2 = nil
+}
+
 func TestInputRequestDeadlock(t *testing.T) {
 	t.Parallel()
 	ctx := context.TODO()
@@ -3584,10 +3684,14 @@ func newTrackingCacheManager(cm CacheManager) *trackingCacheManager {
 type trackingCacheManager struct {
 	CacheManager
 	loadCounter int64
+	forceFail   bool
 }
 
 func (cm *trackingCacheManager) Load(ctx context.Context, rec *CacheRecord) (Result, error) {
 	atomic.AddInt64(&cm.loadCounter, 1)
+	if cm.forceFail {
+		return nil, errors.Errorf("force fail")
+	}
 	return cm.CacheManager.Load(ctx, rec)
 }
 
