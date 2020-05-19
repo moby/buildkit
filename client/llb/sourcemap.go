@@ -75,11 +75,13 @@ func (smc *sourceMapCollector) Marshal(ctx context.Context, co ...ConstraintsOpt
 		}
 		s := &pb.Source{
 			Info: &pb.SourceInfo{
-				Data:       m.Data,
-				Filename:   m.Filename,
-				Definition: def.ToPB(),
+				Data:     m.Data,
+				Filename: m.Filename,
 			},
 			Locations: map[string]*pb.Location{},
+		}
+		if def != nil {
+			s.Info.Definition = def.ToPB()
 		}
 		for dgst, loc := range smc.locations[i] {
 			s.Locations[dgst.String()] = &pb.Location{
