@@ -8,7 +8,6 @@ ARG CONTAINERD_OLD_VERSION=v1.2.11
 ARG BUILDKIT_TARGET=buildkitd
 ARG REGISTRY_VERSION=2.7.1
 ARG ROOTLESSKIT_VERSION=v0.9.1
-ARG ROOTLESS_BASE_MODE=external
 ARG CNI_VERSION=v0.8.5
 ARG SHADOW_VERSION=4.8.1
 ARG FUSEOVERLAYFS_VERSION=v0.7.6
@@ -276,7 +275,8 @@ RUN CC=$(/cross.sh cross-prefix)-gcc LD=$(/cross.sh cross-prefix)-ld ./autogen.s
   && file /usr/bin/newuidmap | grep "statically linked" \
   && file /usr/bin/newgidmap | grep "statically linked"
 
-FROM alpine:3.11 AS rootless-base-internal
+# Rootless mode.
+FROM --platform=$TARGETPLATFORM alpine:3.11 AS rootless
 RUN apk add --no-cache fuse3 git xz
 COPY --from=idmap /usr/bin/newuidmap /usr/bin/newuidmap
 COPY --from=idmap /usr/bin/newgidmap /usr/bin/newgidmap
@@ -287,13 +287,6 @@ RUN chmod u+s /usr/bin/newuidmap /usr/bin/newgidmap \
   && mkdir -p /run/user/1000 /home/user/.local/tmp /home/user/.local/share/buildkit \
   && chown -R user /run/user/1000 /home/user \
   && echo user:100000:65536 | tee /etc/subuid | tee /etc/subgid
-
-# tonistiigi/buildkit:rootless-base is a pre-built multi-arch version of rootless-base-internal https://github.com/moby/buildkit/pull/1392#issuecomment-597478241 (Mar 11, 2020)
-FROM tonistiigi/buildkit:rootless-base@sha256:4b15b62dadfec92ca6e6633b94ac8e24d2235c9c50c35a7b80e4e951e9f6f735 AS rootless-base-external
-FROM rootless-base-$ROOTLESS_BASE_MODE AS rootless-base
-
-# Rootless mode.
-FROM rootless-base AS rootless
 COPY --from=rootlesskit /rootlesskit /usr/bin/
 COPY --from=binaries / /usr/bin/
 COPY examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
