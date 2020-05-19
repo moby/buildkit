@@ -38,6 +38,9 @@ jobs:
       name: "External Dockerfile tests"
     - script: RUNC_PLATFORMS=$PLATFORMS PLATFORMS="${PLATFORMS},darwin/amd64,windows/amd64" ./hack/cross
       name: "Cross"
+    - script: ./hack/images local $REPO_SLUG_TARGET
+      name: "Build image"
+      if: type == cron
     - stage: deploy
       script: skip
       name: "Deploy"
