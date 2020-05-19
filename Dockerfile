@@ -259,24 +259,18 @@ VOLUME /var/lib/buildkit
 # newuidmap & newgidmap binaries (shadow-uidmap 4.7-r1) shipped with alpine:3.11 cannot be executed without CAP_SYS_ADMIN,
 # because the binaries are built without libcap-dev.
 # So we need to build the binaries with libcap enabled.
-FROM --platform=$BUILDPLATFORM debian:10 AS idmap
-RUN apt-get update && apt-get install --no-install-recommends -y automake autopoint bison ca-certificates curl file gettext git gcc libcap-dev libtool make
+FROM alpine:3.11 AS idmap
+RUN apk add --no-cache autoconf automake build-base byacc gettext gettext-dev gcc git libcap-dev libtool libxslt
 RUN git clone https://github.com/shadow-maint/shadow.git /shadow
 WORKDIR /shadow
 ARG SHADOW_VERSION
 RUN git checkout $SHADOW_VERSION
-ARG TARGETPLATFORM
-RUN curl -o /cross.sh https://raw.githubusercontent.com/AkihiroSuda/tonistiigi-binfmt/c0f14b94cdb5b6de0afd1c4b5118891b1174fefc/binfmt/scripts/cross.sh && \
-  chmod +x /cross.sh && \
-  /cross.sh install gcc pkgconf libcap-dev | sh
-RUN CC=$(/cross.sh cross-prefix)-gcc LD=$(/cross.sh cross-prefix)-ld ./autogen.sh --disable-nls --disable-man --without-audit --without-selinux --without-acl --without-attr --without-tcb --without-nscd \
+RUN ./autogen.sh --disable-nls --disable-man --without-audit --without-selinux --without-acl --without-attr --without-tcb --without-nscd \
   && make \
-  && cp src/newuidmap src/newgidmap /usr/bin \
-  && file /usr/bin/newuidmap | grep "statically linked" \
-  && file /usr/bin/newgidmap | grep "statically linked"
+  && cp src/newuidmap src/newgidmap /usr/bin
 
 # Rootless mode.
-FROM --platform=$TARGETPLATFORM alpine:3.11 AS rootless
+FROM alpine:3.11 AS rootless
 RUN apk add --no-cache fuse3 git xz
 COPY --from=idmap /usr/bin/newuidmap /usr/bin/newuidmap
 COPY --from=idmap /usr/bin/newgidmap /usr/bin/newgidmap
