@@ -10,5 +10,5 @@ message Vertex {
 
 message Source {
 	pb.SourceInfo info = 1;
-	repeated pb.Range locations = 2;
+	repeated pb.Range ranges = 2;
 }

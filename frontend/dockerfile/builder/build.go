@@ -658,7 +658,7 @@ func scopeToSubDir(c *llb.State, fileop bool, dir string) *llb.State {
 	return &bc
 }
 
-func wrapSource(err error, sm *llb.SourceMap, locations []parser.Range) error {
+func wrapSource(err error, sm *llb.SourceMap, ranges []parser.Range) error {
 	if sm == nil {
 		return err
 	}
@@ -668,17 +668,17 @@ func wrapSource(err error, sm *llb.SourceMap, locations []parser.Range) error {
 			Filename:   sm.Filename,
 			Definition: sm.Definition.ToPB(),
 		},
-		Locations: make([]*pb.Range, 0, len(locations)),
+		Ranges: make([]*pb.Range, 0, len(ranges)),
 	}
-	for _, l := range locations {
-		s.Locations = append(s.Locations, &pb.Range{
+	for _, r := range ranges {
+		s.Ranges = append(s.Ranges, &pb.Range{
 			Start: pb.Position{
-				Line:      int32(l.Start.Line),
-				Character: int32(l.Start.Character),
+				Line:      int32(r.Start.Line),
+				Character: int32(r.Start.Character),
 			},
 			End: pb.Position{
-				Line:      int32(l.End.Line),
-				Character: int32(l.End.Character),
+				Line:      int32(r.End.Line),
+				Character: int32(r.End.Character),
 			},
 		})
 	}

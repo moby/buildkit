@@ -189,13 +189,15 @@ func (rp *resultProxy) wrapError(err error) error {
 	}
 	var ve *errdefs.VertexError
 	if errors.As(err, &ve) {
-		for _, s := range rp.def.Sources {
-			loc, ok := s.Locations[string(ve.Digest)]
+		if rp.def.Source != nil {
+			locs, ok := rp.def.Source.Locations[string(ve.Digest)]
 			if ok {
-				return errdefs.WithSource(err, errdefs.Source{
-					Info:      s.Info,
-					Locations: loc.Locations,
-				})
+				for _, loc := range locs.Locations {
+					err = errdefs.WithSource(err, errdefs.Source{
+						Info:   rp.def.Source.Infos[loc.SourceIndex],
+						Ranges: loc.Ranges,
+					})
+				}
 			}
 		}
 	}

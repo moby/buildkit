@@ -165,7 +165,7 @@ func (s State) Marshal(ctx context.Context, co ...ConstraintsOpt) (*Definition, 
 	if err != nil {
 		return nil, err
 	}
-	def.Sources = sm
+	def.Source = sm
 
 	return def, nil
 }

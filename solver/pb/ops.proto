@@ -179,8 +179,13 @@ message OpMetadata {
 
 // Source is a source mapping description for a file
 message Source {
-	map<string, Location> locations = 1;
-	SourceInfo info = 2;
+	map<string, Locations> locations = 1;
+	repeated SourceInfo infos = 2;
+}
+
+// Locations is a list of ranges with a index to its source map.
+message Locations {
+	repeated Location locations = 1;
 }
 
 // Source info contains the shared metadata of a source mapping
@@ -192,7 +197,8 @@ message SourceInfo {
 
 // Location defines list of areas in to source file
 message Location {
-	repeated Range locations = 1;
+	int32 sourceIndex = 1;
+	repeated Range ranges = 2;
 }
 
 // Range is an area in the source file
@@ -230,8 +236,8 @@ message Definition {
 	// metadata contains metadata for the each of the Op messages.
 	// A key must be an LLB op digest string. Currently, empty string is not expected as a key, but it may change in the future.
 	map<string, OpMetadata> metadata = 2 [(gogoproto.castkey) = "github.com/opencontainers/go-digest.Digest", (gogoproto.nullable) = false];
-	// Sources contains the source mapping information for the vertexes in the definition
-	repeated Source Sources = 3;
+	// Source contains the source mapping information for the vertexes in the definition
+	Source Source = 3;
 }
 
 message HostIP {

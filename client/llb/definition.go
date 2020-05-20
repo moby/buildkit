@@ -52,22 +52,32 @@ func NewDefinitionOp(def *pb.Definition) (*DefinitionOp, error) {
 
 	srcs := map[digest.Digest]*SourceLocation{}
 
-	for _, s := range def.Sources {
-		var st *State
-		sdef := s.Info.Definition
-		if sdef != nil {
-			op, err := NewDefinitionOp(sdef)
-			if err != nil {
-				return nil, err
+	if def.Source != nil {
+		sourceMaps := make([]*SourceMap, len(def.Source.Infos))
+		for i, info := range def.Source.Infos {
+			var st *State
+			sdef := info.Definition
+			if sdef != nil {
+				op, err := NewDefinitionOp(sdef)
+				if err != nil {
+					return nil, err
+				}
+				state := NewState(op)
+				st = &state
 			}
-			state := NewState(op)
-			st = &state
+			sourceMaps[i] = NewSourceMap(st, info.Filename, info.Data)
 		}
-		sm := NewSourceMap(st, s.Info.Filename, s.Info.Data)
-		for dgst, l := range s.Locations {
-			srcs[digest.Digest(dgst)] = &SourceLocation{
-				SourceMap: sm,
-				Location:  l.Locations,
+
+		for dgst, locs := range def.Source.Locations {
+			for _, loc := range locs.Locations {
+				if loc.SourceIndex < 0 || int(loc.SourceIndex) >= len(sourceMaps) {
+					return nil, errors.Errorf("failed to find source map with index %d", loc.SourceIndex)
+				}
+
+				srcs[digest.Digest(dgst)] = &SourceLocation{
+					SourceMap: sourceMaps[int(loc.SourceIndex)],
+					Ranges:    loc.Ranges,
+				}
 			}
 		}
 	}

@@ -14,7 +14,7 @@ import (
 type Definition struct {
 	Def      [][]byte
 	Metadata map[digest.Digest]pb.OpMetadata
-	Sources  []*pb.Source
+	Source   *pb.Source
 }
 
 func (def *Definition) ToPB() *pb.Definition {
@@ -24,14 +24,14 @@ func (def *Definition) ToPB() *pb.Definition {
 	}
 	return &pb.Definition{
 		Def:      def.Def,
-		Sources:  def.Sources,
+		Source:   def.Source,
 		Metadata: md,
 	}
 }
 
 func (def *Definition) FromPB(x *pb.Definition) {
 	def.Def = x.Def
-	def.Sources = x.Sources
+	def.Source = x.Source
 	def.Metadata = make(map[digest.Digest]pb.OpMetadata)
 	for k, v := range x.Metadata {
 		def.Metadata[k] = v

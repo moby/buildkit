@@ -29,20 +29,20 @@ func (s *SourceMap) Location(r []*pb.Range) ConstraintsOpt {
 		}
 		c.Source = &SourceLocation{
 			SourceMap: s,
-			Location:  r,
+			Ranges:    r,
 		}
 	})
 }
 
 type SourceLocation struct {
 	SourceMap *SourceMap
-	Location  []*pb.Range
+	Ranges    []*pb.Range
 }
 
 type sourceMapCollector struct {
-	locations []map[digest.Digest][]*pb.Range
-	maps      []*SourceMap
-	index     map[*SourceMap]int
+	ranges []map[digest.Digest][]*pb.Range
+	maps   []*SourceMap
+	index  map[*SourceMap]int
 }
 
 func newSourceMapCollector() *sourceMapCollector {
@@ -56,13 +56,15 @@ func (smc *sourceMapCollector) Add(dgst digest.Digest, l *SourceLocation) {
 	if !ok {
 		idx = len(smc.maps)
 		smc.maps = append(smc.maps, l.SourceMap)
-		smc.locations = append(smc.locations, map[digest.Digest][]*pb.Range{})
+		smc.ranges = append(smc.ranges, map[digest.Digest][]*pb.Range{})
 	}
-	smc.locations[idx][dgst] = l.Location
+	smc.ranges[idx][dgst] = l.Ranges
 }
 
-func (smc *sourceMapCollector) Marshal(ctx context.Context, co ...ConstraintsOpt) ([]*pb.Source, error) {
-	out := make([]*pb.Source, 0, len(smc.maps))
+func (smc *sourceMapCollector) Marshal(ctx context.Context, co ...ConstraintsOpt) (*pb.Source, error) {
+	s := &pb.Source{
+		Locations: make(map[string]*pb.Locations),
+	}
 	for i, m := range smc.maps {
 		def := m.Definition
 		if def == nil && m.State != nil {
@@ -73,22 +75,32 @@ func (smc *sourceMapCollector) Marshal(ctx context.Context, co ...ConstraintsOpt
 			}
 			m.Definition = def
 		}
-		s := &pb.Source{
-			Info: &pb.SourceInfo{
-				Data:     m.Data,
-				Filename: m.Filename,
-			},
-			Locations: map[string]*pb.Location{},
+
+		info := &pb.SourceInfo{
+			Data:     m.Data,
+			Filename: m.Filename,
 		}
+
 		if def != nil {
-			s.Info.Definition = def.ToPB()
+			info.Definition = def.ToPB()
 		}
-		for dgst, loc := range smc.locations[i] {
-			s.Locations[dgst.String()] = &pb.Location{
-				Locations: loc,
+
+		s.Infos = append(s.Infos, info)
+
+		for dgst, ranges := range smc.ranges[i] {
+			locs, ok := s.Locations[dgst.String()]
+			if !ok {
+				locs = &pb.Locations{}
 			}
+
+			locs.Locations = append(locs.Locations, &pb.Location{
+				SourceIndex: int32(i),
+				Ranges:      ranges,
+			})
+
+			s.Locations[dgst.String()] = locs
 		}
-		out = append(out, s)
 	}
-	return out, nil
+
+	return s, nil
 }

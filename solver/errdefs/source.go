@@ -51,7 +51,7 @@ func (s *Source) Print(w io.Writer) error {
 	}
 	lines := strings.Split(string(si.Data), "\n")
 
-	start, end, ok := getStartEndLine(s.Locations)
+	start, end, ok := getStartEndLine(s.Ranges)
 	if !ok {
 		return nil
 	}
@@ -87,7 +87,7 @@ func (s *Source) Print(w io.Writer) error {
 	fmt.Fprintf(w, "%s:%d\n--------------------\n", si.Filename, prepadStart)
 	for i := start; i <= end; i++ {
 		pfx := "   "
-		if containsLine(s.Locations, i) {
+		if containsLine(s.Ranges, i) {
 			pfx = ">>>"
 		}
 		fmt.Fprintf(w, " %3d | %s %s\n", i, pfx, lines[i-1])
