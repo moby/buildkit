@@ -2690,9 +2690,14 @@ func testSourceMap(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	sm := llb.NewSourceMap(nil, "foo", []byte("data"))
+	sm1 := llb.NewSourceMap(nil, "foo", []byte("data1"))
+	sm2 := llb.NewSourceMap(nil, "bar", []byte("data2"))
 
-	st := llb.Scratch().Run(llb.Shlex("not-exist"), sm.Location([]*pb.Range{{Start: pb.Position{Line: 7}}}))
+	st := llb.Scratch().Run(
+		llb.Shlex("not-exist"),
+		sm1.Location([]*pb.Range{{Start: pb.Position{Line: 7}}}),
+		sm2.Location([]*pb.Range{{Start: pb.Position{Line: 8}}}),
+	)
 
 	def, err := st.Marshal(context.TODO())
 	require.NoError(t, err)
@@ -2701,15 +2706,27 @@ func testSourceMap(t *testing.T, sb integration.Sandbox) {
 	require.Error(t, err)
 
 	srcs := errdefs.Sources(err)
-	require.Equal(t, 1, len(srcs))
+	require.Equal(t, 2, len(srcs))
 
-	require.Equal(t, "foo", srcs[0].Info.Filename)
-	require.Equal(t, []byte("data"), srcs[0].Info.Data)
+	// Source errors are wrapped in the order provided as llb.ConstraintOpts, so
+	// when they are unwrapped, the first unwrapped error is the last location
+	// provided.
+	require.Equal(t, "bar", srcs[0].Info.Filename)
+	require.Equal(t, []byte("data2"), srcs[0].Info.Data)
 	require.Nil(t, srcs[0].Info.Definition)
 
-	require.Equal(t, 1, len(srcs[0].Locations))
-	require.Equal(t, int32(7), srcs[0].Locations[0].Start.Line)
-	require.Equal(t, int32(0), srcs[0].Locations[0].Start.Character)
+	require.Equal(t, 1, len(srcs[0].Ranges))
+	require.Equal(t, int32(8), srcs[0].Ranges[0].Start.Line)
+	require.Equal(t, int32(0), srcs[0].Ranges[0].Start.Character)
+
+	require.Equal(t, "foo", srcs[1].Info.Filename)
+	require.Equal(t, []byte("data1"), srcs[1].Info.Data)
+	require.Nil(t, srcs[1].Info.Definition)
+
+	require.Equal(t, 1, len(srcs[1].Ranges))
+	require.Equal(t, int32(7), srcs[1].Ranges[0].Start.Line)
+	require.Equal(t, int32(0), srcs[1].Ranges[0].Start.Character)
+
 }
 
 func testSourceMapFromRef(t *testing.T, sb integration.Sandbox) {
@@ -2774,9 +2791,9 @@ func testSourceMapFromRef(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, []byte("bardata"), srcs[0].Info.Data)
 	require.NotNil(t, srcs[0].Info.Definition)
 
-	require.Equal(t, 1, len(srcs[0].Locations))
-	require.Equal(t, int32(3), srcs[0].Locations[0].Start.Line)
-	require.Equal(t, int32(1), srcs[0].Locations[0].Start.Character)
+	require.Equal(t, 1, len(srcs[0].Ranges))
+	require.Equal(t, int32(3), srcs[0].Ranges[0].Start.Line)
+	require.Equal(t, int32(1), srcs[0].Ranges[0].Start.Character)
 }
 
 func testProxyEnv(t *testing.T, sb integration.Sandbox) {

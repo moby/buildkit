@@ -85,7 +85,7 @@ type errVertex struct {
 func (v *errVertex) Validate(context.Context) error {
 	return v.err
 }
-func (v *errVertex) Marshal(context.Context, *Constraints) (digest.Digest, []byte, *pb.OpMetadata, *SourceLocation, error) {
+func (v *errVertex) Marshal(context.Context, *Constraints) (digest.Digest, []byte, *pb.OpMetadata, []*SourceLocation, error) {
 	return "", nil, nil, nil, v.err
 }
 func (v *errVertex) Output() Output {

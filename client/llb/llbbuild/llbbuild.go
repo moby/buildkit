@@ -48,7 +48,7 @@ func (b *build) Validate(context.Context) error {
 	return nil
 }
 
-func (b *build) Marshal(ctx context.Context, c *llb.Constraints) (digest.Digest, []byte, *pb.OpMetadata, *llb.SourceLocation, error) {
+func (b *build) Marshal(ctx context.Context, c *llb.Constraints) (digest.Digest, []byte, *pb.OpMetadata, []*llb.SourceLocation, error) {
 	if b.Cached(c) {
 		return b.Load()
 	}
@@ -85,7 +85,7 @@ func (b *build) Marshal(ctx context.Context, c *llb.Constraints) (digest.Digest,
 	if err != nil {
 		return "", nil, nil, nil, err
 	}
-	b.Store(dt, md, b.constraints.Source, c)
+	b.Store(dt, md, b.constraints.SourceLocations, c)
 	return b.Load()
 }
 

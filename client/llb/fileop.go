@@ -649,7 +649,7 @@ func (ms *marshalState) add(fa *FileAction, c *Constraints) (*fileActionState, e
 	return st, nil
 }
 
-func (f *FileOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []byte, *pb.OpMetadata, *SourceLocation, error) {
+func (f *FileOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []byte, *pb.OpMetadata, []*SourceLocation, error) {
 	if f.Cached(c) {
 		return f.Load()
 	}
@@ -704,7 +704,7 @@ func (f *FileOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 	if err != nil {
 		return "", nil, nil, nil, err
 	}
-	f.Store(dt, md, f.constraints.Source, c)
+	f.Store(dt, md, f.constraints.SourceLocations, c)
 	return f.Load()
 }
 

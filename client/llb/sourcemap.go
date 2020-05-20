@@ -27,10 +27,10 @@ func (s *SourceMap) Location(r []*pb.Range) ConstraintsOpt {
 		if s == nil {
 			return
 		}
-		c.Source = &SourceLocation{
+		c.SourceLocations = append(c.SourceLocations, &SourceLocation{
 			SourceMap: s,
 			Ranges:    r,
-		}
+		})
 	})
 }
 
@@ -51,14 +51,16 @@ func newSourceMapCollector() *sourceMapCollector {
 	}
 }
 
-func (smc *sourceMapCollector) Add(dgst digest.Digest, l *SourceLocation) {
-	idx, ok := smc.index[l.SourceMap]
-	if !ok {
-		idx = len(smc.maps)
-		smc.maps = append(smc.maps, l.SourceMap)
-		smc.ranges = append(smc.ranges, map[digest.Digest][]*pb.Range{})
+func (smc *sourceMapCollector) Add(dgst digest.Digest, ls []*SourceLocation) {
+	for _, l := range ls {
+		idx, ok := smc.index[l.SourceMap]
+		if !ok {
+			idx = len(smc.maps)
+			smc.maps = append(smc.maps, l.SourceMap)
+			smc.ranges = append(smc.ranges, map[digest.Digest][]*pb.Range{})
+		}
+		smc.ranges[idx][dgst] = l.Ranges
 	}
-	smc.ranges[idx][dgst] = l.Ranges
 }
 
 func (smc *sourceMapCollector) Marshal(ctx context.Context, co ...ConstraintsOpt) (*pb.Source, error) {

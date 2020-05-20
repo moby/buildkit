@@ -98,20 +98,20 @@ type MarshalCache struct {
 	digest      digest.Digest
 	dt          []byte
 	md          *pb.OpMetadata
-	src         *SourceLocation
+	srcs        []*SourceLocation
 	constraints *Constraints
 }
 
 func (mc *MarshalCache) Cached(c *Constraints) bool {
 	return mc.dt != nil && mc.constraints == c
 }
-func (mc *MarshalCache) Load() (digest.Digest, []byte, *pb.OpMetadata, *SourceLocation, error) {
-	return mc.digest, mc.dt, mc.md, mc.src, nil
+func (mc *MarshalCache) Load() (digest.Digest, []byte, *pb.OpMetadata, []*SourceLocation, error) {
+	return mc.digest, mc.dt, mc.md, mc.srcs, nil
 }
-func (mc *MarshalCache) Store(dt []byte, md *pb.OpMetadata, src *SourceLocation, c *Constraints) {
+func (mc *MarshalCache) Store(dt []byte, md *pb.OpMetadata, srcs []*SourceLocation, c *Constraints) {
 	mc.digest = digest.FromBytes(dt)
 	mc.dt = dt
 	mc.md = md
 	mc.constraints = c
-	mc.src = src
+	mc.srcs = srcs
 }

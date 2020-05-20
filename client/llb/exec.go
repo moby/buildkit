@@ -124,7 +124,7 @@ func (e *ExecOp) Validate(ctx context.Context) error {
 	return nil
 }
 
-func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []byte, *pb.OpMetadata, *SourceLocation, error) {
+func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []byte, *pb.OpMetadata, []*SourceLocation, error) {
 	if e.Cached(c) {
 		return e.Load()
 	}
@@ -358,7 +358,7 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 	if err != nil {
 		return "", nil, nil, nil, err
 	}
-	e.Store(dt, md, e.constraints.Source, c)
+	e.Store(dt, md, e.constraints.SourceLocations, c)
 	return e.Load()
 }
 

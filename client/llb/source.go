@@ -44,7 +44,7 @@ func (s *SourceOp) Validate(ctx context.Context) error {
 	return nil
 }
 
-func (s *SourceOp) Marshal(ctx context.Context, constraints *Constraints) (digest.Digest, []byte, *pb.OpMetadata, *SourceLocation, error) {
+func (s *SourceOp) Marshal(ctx context.Context, constraints *Constraints) (digest.Digest, []byte, *pb.OpMetadata, []*SourceLocation, error) {
 	if s.Cached(constraints) {
 		return s.Load()
 	}
@@ -77,7 +77,7 @@ func (s *SourceOp) Marshal(ctx context.Context, constraints *Constraints) (diges
 		return "", nil, nil, nil, err
 	}
 
-	s.Store(dt, md, s.constraints.Source, constraints)
+	s.Store(dt, md, s.constraints.SourceLocations, constraints)
 	return s.Load()
 }
 

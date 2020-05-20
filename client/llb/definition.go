@@ -20,7 +20,7 @@ type DefinitionOp struct {
 	ops       map[digest.Digest]*pb.Op
 	defs      map[digest.Digest][]byte
 	metas     map[digest.Digest]pb.OpMetadata
-	sources   map[digest.Digest]*SourceLocation
+	sources   map[digest.Digest][]*SourceLocation
 	platforms map[digest.Digest]*specs.Platform
 	dgst      digest.Digest
 	index     pb.OutputIndex
@@ -50,7 +50,7 @@ func NewDefinitionOp(def *pb.Definition) (*DefinitionOp, error) {
 		platforms[dgst] = platform
 	}
 
-	srcs := map[digest.Digest]*SourceLocation{}
+	srcs := map[digest.Digest][]*SourceLocation{}
 
 	if def.Source != nil {
 		sourceMaps := make([]*SourceMap, len(def.Source.Infos))
@@ -74,10 +74,10 @@ func NewDefinitionOp(def *pb.Definition) (*DefinitionOp, error) {
 					return nil, errors.Errorf("failed to find source map with index %d", loc.SourceIndex)
 				}
 
-				srcs[digest.Digest(dgst)] = &SourceLocation{
+				srcs[digest.Digest(dgst)] = append(srcs[digest.Digest(dgst)], &SourceLocation{
 					SourceMap: sourceMaps[int(loc.SourceIndex)],
 					Ranges:    loc.Ranges,
-				}
+				})
 			}
 		}
 	}
@@ -144,7 +144,7 @@ func (d *DefinitionOp) Validate(context.Context) error {
 	return nil
 }
 
-func (d *DefinitionOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []byte, *pb.OpMetadata, *SourceLocation, error) {
+func (d *DefinitionOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []byte, *pb.OpMetadata, []*SourceLocation, error) {
 	if d.dgst == "" {
 		return "", nil, nil, nil, errors.Errorf("cannot marshal empty definition op")
 	}

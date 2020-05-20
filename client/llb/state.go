@@ -24,7 +24,7 @@ type Output interface {
 
 type Vertex interface {
 	Validate(context.Context) error
-	Marshal(context.Context, *Constraints) (digest.Digest, []byte, *pb.OpMetadata, *SourceLocation, error)
+	Marshal(context.Context, *Constraints) (digest.Digest, []byte, *pb.OpMetadata, []*SourceLocation, error)
 	Output() Output
 	Inputs() []Output
 }
@@ -182,7 +182,7 @@ func marshal(ctx context.Context, v Vertex, def *Definition, s *sourceMapCollect
 		}
 	}
 
-	dgst, dt, opMeta, sl, err := v.Marshal(ctx, c)
+	dgst, dt, opMeta, sls, err := v.Marshal(ctx, c)
 	if err != nil {
 		return def, err
 	}
@@ -193,9 +193,7 @@ func marshal(ctx context.Context, v Vertex, def *Definition, s *sourceMapCollect
 	if _, ok := cache[dgst]; ok {
 		return def, nil
 	}
-	if sl != nil {
-		s.Add(dgst, sl)
-	}
+	s.Add(dgst, sls)
 	def.Def = append(def.Def, dt)
 	cache[dgst] = struct{}{}
 	return def, nil
@@ -524,7 +522,7 @@ type Constraints struct {
 	Metadata          pb.OpMetadata
 	LocalUniqueID     string
 	Caps              *apicaps.CapSet
-	Source            *SourceLocation
+	SourceLocations   []*SourceLocation
 }
 
 func Platform(p specs.Platform) ConstraintsOpt {
