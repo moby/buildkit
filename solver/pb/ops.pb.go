@@ -1054,6 +1054,7 @@ func (m *OpMetadata) GetCaps() map[github_com_moby_buildkit_util_apicaps.CapID]b
 	return nil
 }
 
+// Source is a source mapping description for a file
 type Source struct {
 	Locations map[string]*Location `protobuf:"bytes,1,rep,name=locations,proto3" json:"locations,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	Info      *SourceInfo          `protobuf:"bytes,2,opt,name=info,proto3" json:"info,omitempty"`
@@ -1102,6 +1103,7 @@ func (m *Source) GetInfo() *SourceInfo {
 	return nil
 }
 
+// Source info contains the shared metadata of a source mapping
 type SourceInfo struct {
 	Filename   string      `protobuf:"bytes,1,opt,name=filename,proto3" json:"filename,omitempty"`
 	Data       []byte      `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
@@ -1158,6 +1160,7 @@ func (m *SourceInfo) GetDefinition() *Definition {
 	return nil
 }
 
+// Location defines list of areas in to source file
 type Location struct {
 	Locations []*Range `protobuf:"bytes,1,rep,name=locations,proto3" json:"locations,omitempty"`
 }
@@ -1198,6 +1201,7 @@ func (m *Location) GetLocations() []*Range {
 	return nil
 }
 
+// Range is an area in the source file
 type Range struct {
 	Start Position `protobuf:"bytes,1,opt,name=start,proto3" json:"start"`
 	End   Position `protobuf:"bytes,2,opt,name=end,proto3" json:"end"`
@@ -1246,6 +1250,7 @@ func (m *Range) GetEnd() Position {
 	return Position{}
 }
 
+// Position is single location in a source file
 type Position struct {
 	Line      int32 `protobuf:"varint,1,opt,name=Line,proto3" json:"Line,omitempty"`
 	Character int32 `protobuf:"varint,2,opt,name=Character,proto3" json:"Character,omitempty"`
@@ -1446,7 +1451,8 @@ type Definition struct {
 	// metadata contains metadata for the each of the Op messages.
 	// A key must be an LLB op digest string. Currently, empty string is not expected as a key, but it may change in the future.
 	Metadata map[github_com_opencontainers_go_digest.Digest]OpMetadata `protobuf:"bytes,2,rep,name=metadata,proto3,castkey=github.com/opencontainers/go-digest.Digest" json:"metadata" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
-	Sources  []*Source                                                 `protobuf:"bytes,3,rep,name=Sources,proto3" json:"Sources,omitempty"`
+	// Sources contains the source mapping information for the vertexes in the definition
+	Sources []*Source `protobuf:"bytes,3,rep,name=Sources,proto3" json:"Sources,omitempty"`
 }
 
 func (m *Definition) Reset()         { *m = Definition{} }
