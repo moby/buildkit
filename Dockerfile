@@ -8,7 +8,6 @@ ARG CONTAINERD_OLD_VERSION=v1.2.11
 ARG BUILDKIT_TARGET=buildkitd
 ARG REGISTRY_VERSION=2.7.1
 ARG ROOTLESSKIT_VERSION=v0.9.1
-ARG ROOTLESS_BASE_MODE=external
 ARG CNI_VERSION=v0.8.5
 ARG SHADOW_VERSION=4.8.1
 ARG FUSEOVERLAYFS_VERSION=v0.7.6
@@ -260,23 +259,18 @@ VOLUME /var/lib/buildkit
 # newuidmap & newgidmap binaries (shadow-uidmap 4.7-r1) shipped with alpine:3.11 cannot be executed without CAP_SYS_ADMIN,
 # because the binaries are built without libcap-dev.
 # So we need to build the binaries with libcap enabled.
-FROM --platform=$BUILDPLATFORM debian:10 AS idmap
-RUN apt-get update && apt-get install --no-install-recommends -y automake autopoint bison ca-certificates curl file gettext git gcc libcap-dev libtool make
+FROM alpine:3.11 AS idmap
+RUN apk add --no-cache autoconf automake build-base byacc gettext gettext-dev gcc git libcap-dev libtool libxslt
 RUN git clone https://github.com/shadow-maint/shadow.git /shadow
 WORKDIR /shadow
 ARG SHADOW_VERSION
 RUN git checkout $SHADOW_VERSION
-ARG TARGETPLATFORM
-RUN curl -o /cross.sh https://raw.githubusercontent.com/AkihiroSuda/tonistiigi-binfmt/c0f14b94cdb5b6de0afd1c4b5118891b1174fefc/binfmt/scripts/cross.sh && \
-  chmod +x /cross.sh && \
-  /cross.sh install gcc pkgconf libcap-dev | sh
-RUN CC=$(/cross.sh cross-prefix)-gcc LD=$(/cross.sh cross-prefix)-ld ./autogen.sh --disable-nls --disable-man --without-audit --without-selinux --without-acl --without-attr --without-tcb --without-nscd \
+RUN ./autogen.sh --disable-nls --disable-man --without-audit --without-selinux --without-acl --without-attr --without-tcb --without-nscd \
   && make \
-  && cp src/newuidmap src/newgidmap /usr/bin \
-  && file /usr/bin/newuidmap | grep "statically linked" \
-  && file /usr/bin/newgidmap | grep "statically linked"
+  && cp src/newuidmap src/newgidmap /usr/bin
 
-FROM alpine:3.11 AS rootless-base-internal
+# Rootless mode.
+FROM alpine:3.11 AS rootless
 RUN apk add --no-cache fuse3 git xz
 COPY --from=idmap /usr/bin/newuidmap /usr/bin/newuidmap
 COPY --from=idmap /usr/bin/newgidmap /usr/bin/newgidmap
@@ -287,13 +281,6 @@ RUN chmod u+s /usr/bin/newuidmap /usr/bin/newgidmap \
   && mkdir -p /run/user/1000 /home/user/.local/tmp /home/user/.local/share/buildkit \
   && chown -R user /run/user/1000 /home/user \
   && echo user:100000:65536 | tee /etc/subuid | tee /etc/subgid
-
-# tonistiigi/buildkit:rootless-base is a pre-built multi-arch version of rootless-base-internal https://github.com/moby/buildkit/pull/1392#issuecomment-597478241 (Mar 11, 2020)
-FROM tonistiigi/buildkit:rootless-base@sha256:4b15b62dadfec92ca6e6633b94ac8e24d2235c9c50c35a7b80e4e951e9f6f735 AS rootless-base-external
-FROM rootless-base-$ROOTLESS_BASE_MODE AS rootless-base
-
-# Rootless mode.
-FROM rootless-base AS rootless
 COPY --from=rootlesskit /rootlesskit /usr/bin/
 COPY --from=binaries / /usr/bin/
 COPY examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/

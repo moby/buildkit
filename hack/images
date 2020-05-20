@@ -61,7 +61,7 @@ imageDocker() {
 }
 
 image() {
-	pushFlag=""
+	pushFlag="push=false"
 	if [ "$PUSH" = "push" ]; then
 		pushFlag="push=true"
 	fi
