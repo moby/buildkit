@@ -2697,6 +2697,7 @@ func testSourceMap(t *testing.T, sb integration.Sandbox) {
 		llb.Shlex("not-exist"),
 		sm1.Location([]*pb.Range{{Start: pb.Position{Line: 7}}}),
 		sm2.Location([]*pb.Range{{Start: pb.Position{Line: 8}}}),
+		sm1.Location([]*pb.Range{{Start: pb.Position{Line: 9}}}),
 	)
 
 	def, err := st.Marshal(context.TODO())
@@ -2706,26 +2707,34 @@ func testSourceMap(t *testing.T, sb integration.Sandbox) {
 	require.Error(t, err)
 
 	srcs := errdefs.Sources(err)
-	require.Equal(t, 2, len(srcs))
+	require.Equal(t, 3, len(srcs))
 
 	// Source errors are wrapped in the order provided as llb.ConstraintOpts, so
 	// when they are unwrapped, the first unwrapped error is the last location
 	// provided.
-	require.Equal(t, "bar", srcs[0].Info.Filename)
-	require.Equal(t, []byte("data2"), srcs[0].Info.Data)
+	require.Equal(t, "foo", srcs[0].Info.Filename)
+	require.Equal(t, []byte("data1"), srcs[0].Info.Data)
 	require.Nil(t, srcs[0].Info.Definition)
 
-	require.Equal(t, 1, len(srcs[0].Ranges))
-	require.Equal(t, int32(8), srcs[0].Ranges[0].Start.Line)
-	require.Equal(t, int32(0), srcs[0].Ranges[0].Start.Character)
+	require.Equal(t, 1, len(srcs[2].Ranges))
+	require.Equal(t, int32(9), srcs[2].Ranges[0].Start.Line)
+	require.Equal(t, int32(0), srcs[2].Ranges[0].Start.Character)
 
-	require.Equal(t, "foo", srcs[1].Info.Filename)
-	require.Equal(t, []byte("data1"), srcs[1].Info.Data)
+	require.Equal(t, "bar", srcs[1].Info.Filename)
+	require.Equal(t, []byte("data2"), srcs[1].Info.Data)
 	require.Nil(t, srcs[1].Info.Definition)
 
 	require.Equal(t, 1, len(srcs[1].Ranges))
-	require.Equal(t, int32(7), srcs[1].Ranges[0].Start.Line)
+	require.Equal(t, int32(8), srcs[1].Ranges[0].Start.Line)
 	require.Equal(t, int32(0), srcs[1].Ranges[0].Start.Character)
+
+	require.Equal(t, "foo", srcs[2].Info.Filename)
+	require.Equal(t, []byte("data1"), srcs[2].Info.Data)
+	require.Nil(t, srcs[2].Info.Definition)
+
+	require.Equal(t, 1, len(srcs[2].Ranges))
+	require.Equal(t, int32(7), srcs[2].Ranges[0].Start.Line)
+	require.Equal(t, int32(0), srcs[2].Ranges[0].Start.Character)
 
 }
 

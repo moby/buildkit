@@ -105,7 +105,7 @@ env bar=baz`,
 
 		next:
 			for _, l := range tc.errorLine {
-				for _, l2 := range srcs[0].Locations {
+				for _, l2 := range srcs[0].Ranges {
 					if l2.Start.Line == int32(l) {
 						continue next
 					}

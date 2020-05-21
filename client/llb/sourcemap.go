@@ -40,14 +40,15 @@ type SourceLocation struct {
 }
 
 type sourceMapCollector struct {
-	ranges []map[digest.Digest][]*pb.Range
-	maps   []*SourceMap
-	index  map[*SourceMap]int
+	maps      []*SourceMap
+	index     map[*SourceMap]int
+	locations map[digest.Digest][]*SourceLocation
 }
 
 func newSourceMapCollector() *sourceMapCollector {
 	return &sourceMapCollector{
-		index: map[*SourceMap]int{},
+		index:     map[*SourceMap]int{},
+		locations: map[digest.Digest][]*SourceLocation{},
 	}
 }
 
@@ -57,17 +58,17 @@ func (smc *sourceMapCollector) Add(dgst digest.Digest, ls []*SourceLocation) {
 		if !ok {
 			idx = len(smc.maps)
 			smc.maps = append(smc.maps, l.SourceMap)
-			smc.ranges = append(smc.ranges, map[digest.Digest][]*pb.Range{})
 		}
-		smc.ranges[idx][dgst] = l.Ranges
+		smc.index[l.SourceMap] = idx
 	}
+	smc.locations[dgst] = ls
 }
 
 func (smc *sourceMapCollector) Marshal(ctx context.Context, co ...ConstraintsOpt) (*pb.Source, error) {
 	s := &pb.Source{
 		Locations: make(map[string]*pb.Locations),
 	}
-	for i, m := range smc.maps {
+	for _, m := range smc.maps {
 		def := m.Definition
 		if def == nil && m.State != nil {
 			var err error
@@ -88,20 +89,22 @@ func (smc *sourceMapCollector) Marshal(ctx context.Context, co ...ConstraintsOpt
 		}
 
 		s.Infos = append(s.Infos, info)
+	}
 
-		for dgst, ranges := range smc.ranges[i] {
-			locs, ok := s.Locations[dgst.String()]
-			if !ok {
-				locs = &pb.Locations{}
-			}
-
-			locs.Locations = append(locs.Locations, &pb.Location{
-				SourceIndex: int32(i),
-				Ranges:      ranges,
-			})
-
-			s.Locations[dgst.String()] = locs
+	for dgst, locs := range smc.locations {
+		pbLocs, ok := s.Locations[dgst.String()]
+		if !ok {
+			pbLocs = &pb.Locations{}
 		}
+
+		for _, loc := range locs {
+			pbLocs.Locations = append(pbLocs.Locations, &pb.Location{
+				SourceIndex: int32(smc.index[loc.SourceMap]),
+				Ranges:      loc.Ranges,
+			})
+		}
+
+		s.Locations[dgst.String()] = pbLocs
 	}
 
 	return s, nil
