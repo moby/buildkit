@@ -2716,9 +2716,9 @@ func testSourceMap(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, []byte("data1"), srcs[0].Info.Data)
 	require.Nil(t, srcs[0].Info.Definition)
 
-	require.Equal(t, 1, len(srcs[2].Ranges))
-	require.Equal(t, int32(9), srcs[2].Ranges[0].Start.Line)
-	require.Equal(t, int32(0), srcs[2].Ranges[0].Start.Character)
+	require.Equal(t, 1, len(srcs[0].Ranges))
+	require.Equal(t, int32(9), srcs[0].Ranges[0].Start.Line)
+	require.Equal(t, int32(0), srcs[0].Ranges[0].Start.Character)
 
 	require.Equal(t, "bar", srcs[1].Info.Filename)
 	require.Equal(t, []byte("data2"), srcs[1].Info.Data)
