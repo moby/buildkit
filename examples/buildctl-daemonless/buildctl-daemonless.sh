@@ -54,4 +54,4 @@ waitForBuildkitd() {
 
 startBuildkitd
 waitForBuildkitd
-$BUILDCTL --addr=$(cat $tmp/addr) $@
+$BUILDCTL --addr=$(cat $tmp/addr) "$@"
