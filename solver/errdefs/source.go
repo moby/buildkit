@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 
+	pb "github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/pkg/errors"
 )
@@ -44,9 +45,13 @@ func (s *Source) WrapError(err error) error {
 }
 
 func (s *Source) Print(w io.Writer) error {
-	lines := strings.Split(string(s.Data), "\n")
+	si := s.Info
+	if si == nil {
+		return nil
+	}
+	lines := strings.Split(string(si.Data), "\n")
 
-	start, end, ok := getStartEndLine(s.Locations)
+	start, end, ok := getStartEndLine(s.Ranges)
 	if !ok {
 		return nil
 	}
@@ -79,10 +84,10 @@ func (s *Source) Print(w io.Writer) error {
 		p++
 	}
 
-	fmt.Fprintf(w, "%s:%d\n--------------------\n", s.Filename, prepadStart)
+	fmt.Fprintf(w, "%s:%d\n--------------------\n", si.Filename, prepadStart)
 	for i := start; i <= end; i++ {
 		pfx := "   "
-		if containsLine(s.Locations, i) {
+		if containsLine(s.Ranges, i) {
 			pfx = ">>>"
 		}
 		fmt.Fprintf(w, " %3d | %s %s\n", i, pfx, lines[i-1])
@@ -91,42 +96,33 @@ func (s *Source) Print(w io.Writer) error {
 	return nil
 }
 
-func containsLine(rr []*Range, l int) bool {
+func containsLine(rr []*pb.Range, l int) bool {
 	for _, r := range rr {
-		var s, e int
-		if r.Start == nil {
-			continue
+		e := r.End.Line
+		if e < r.Start.Line {
+			e = r.Start.Line
 		}
-		s = int(r.Start.Line)
-		if r.End != nil {
-			e = int(r.End.Line)
-		}
-		if e < s {
-			e = s
-		}
-		if s <= l && e >= l {
+		if r.Start.Line <= int32(l) && e >= int32(l) {
 			return true
 		}
 	}
 	return false
 }
 
-func getStartEndLine(rr []*Range) (start int, end int, ok bool) {
+func getStartEndLine(rr []*pb.Range) (start int, end int, ok bool) {
+	first := true
 	for _, r := range rr {
-		if r.Start != nil {
-			if !ok || start > int(r.Start.Line) {
-				start = int(r.Start.Line)
-			}
-			if end < start {
-				end = start
-			}
-			ok = true
+		e := r.End.Line
+		if e < r.Start.Line {
+			e = r.Start.Line
 		}
-		if r.End != nil {
-			if end < int(r.End.Line) {
-				end = int(r.End.Line)
-			}
+		if first || int(r.Start.Line) < start {
+			start = int(r.Start.Line)
 		}
+		if int(e) > end {
+			end = int(e)
+		}
+		first = false
 	}
-	return
+	return start, end, !first
 }

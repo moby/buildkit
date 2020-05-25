@@ -134,11 +134,9 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 
 	var buildContext *llb.State
 	isNotLocalContext := false
-	isNotLocalDockerfile := false
 	if st, ok := detectGitContext(opts[localNameContext], opts[keyContextKeepGitDir]); ok {
 		if !forceLocalDockerfile {
 			src = *st
-			isNotLocalDockerfile = true
 		}
 		buildContext = st
 	} else if httpPrefix.MatchString(opts[localNameContext]) {
@@ -188,7 +186,6 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 				bc := unpack.AddMount("/out", llb.Scratch())
 				if !forceLocalDockerfile {
 					src = bc
-					isNotLocalDockerfile = true
 				}
 				buildContext = &bc
 			}
@@ -196,7 +193,6 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 			filename = "context"
 			if !forceLocalDockerfile {
 				src = httpContext
-				isNotLocalDockerfile = true
 			}
 			buildContext = &httpContext
 			isNotLocalContext = true
@@ -211,7 +207,6 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 			inputDockerfile, ok := inputs[DefaultLocalNameDockerfile]
 			if ok {
 				src = inputDockerfile
-				isNotLocalDockerfile = true
 			}
 		}
 
@@ -232,6 +227,8 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to marshal local source")
 	}
+
+	var sourceMap *llb.SourceMap
 
 	eg, ctx2 := errgroup.WithContext(ctx)
 	var dtDockerfile []byte
@@ -256,6 +253,9 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 		if err != nil {
 			return errors.Wrapf(err, "failed to read dockerfile")
 		}
+
+		sourceMap = llb.NewSourceMap(&src, filename, dtDockerfile)
+		sourceMap.Definition = def
 
 		dt, err := ref.ReadFile(ctx2, client.ReadRequest{
 			Filename: filename + ".dockerignore",
@@ -317,9 +317,13 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 	}
 
 	if _, ok := opts["cmdline"]; !ok {
-		ref, cmdline, ok := dockerfile2llb.DetectSyntax(bytes.NewBuffer(dtDockerfile))
+		ref, cmdline, loc, ok := dockerfile2llb.DetectSyntax(bytes.NewBuffer(dtDockerfile))
 		if ok {
-			return forwardGateway(ctx, c, ref, cmdline)
+			res, err := forwardGateway(ctx, c, ref, cmdline)
+			if err != nil && len(errdefs.Sources(err)) == 0 {
+				return nil, wrapSource(err, sourceMap, loc)
+			}
+			return res, err
 		}
 	}
 
@@ -349,10 +353,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 				defer func() {
 					var el *parser.ErrorLocation
 					if errors.As(err, &el) {
-						if isNotLocalDockerfile {
-							localNameDockerfile = ""
-						}
-						err = wrapSource(err, dtDockerfile, filename, localNameDockerfile, el.Location)
+						err = wrapSource(err, sourceMap, el.Location)
 					}
 				}()
 				st, img, err := dockerfile2llb.Dockerfile2LLB(ctx, dtDockerfile, dockerfile2llb.ConvertOpt{
@@ -373,6 +374,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 					ForceNetMode:      defaultNetMode,
 					OverrideCopyImage: opts[keyOverrideCopyImage],
 					LLBCaps:           &caps,
+					SourceMap:         sourceMap,
 				})
 
 				if err != nil {
@@ -656,22 +658,27 @@ func scopeToSubDir(c *llb.State, fileop bool, dir string) *llb.State {
 	return &bc
 }
 
-func wrapSource(err error, dt []byte, filename, local string, locations []parser.Range) error {
-	s := errdefs.Source{
-		Data:      dt,
-		Filename:  filename,
-		Local:     local,
-		Locations: make([]*errdefs.Range, 0, len(locations)),
+func wrapSource(err error, sm *llb.SourceMap, ranges []parser.Range) error {
+	if sm == nil {
+		return err
 	}
-	for _, l := range locations {
-		s.Locations = append(s.Locations, &errdefs.Range{
-			Start: &errdefs.Position{
-				Line:      int32(l.Start.Line),
-				Character: int32(l.Start.Character),
+	s := errdefs.Source{
+		Info: &pb.SourceInfo{
+			Data:       sm.Data,
+			Filename:   sm.Filename,
+			Definition: sm.Definition.ToPB(),
+		},
+		Ranges: make([]*pb.Range, 0, len(ranges)),
+	}
+	for _, r := range ranges {
+		s.Ranges = append(s.Ranges, &pb.Range{
+			Start: pb.Position{
+				Line:      int32(r.Start.Line),
+				Character: int32(r.Start.Character),
 			},
-			End: &errdefs.Position{
-				Line:      int32(l.End.Line),
-				Character: int32(l.End.Character),
+			End: pb.Position{
+				Line:      int32(r.End.Line),
+				Character: int32(r.End.Character),
 			},
 		})
 	}

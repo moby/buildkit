@@ -33,7 +33,7 @@ type build struct {
 }
 
 func (b *build) ToInput(ctx context.Context, c *llb.Constraints) (*pb.Input, error) {
-	dgst, _, _, err := b.Marshal(ctx, c)
+	dgst, _, _, _, err := b.Marshal(ctx, c)
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +48,7 @@ func (b *build) Validate(context.Context) error {
 	return nil
 }
 
-func (b *build) Marshal(ctx context.Context, c *llb.Constraints) (digest.Digest, []byte, *pb.OpMetadata, error) {
+func (b *build) Marshal(ctx context.Context, c *llb.Constraints) (digest.Digest, []byte, *pb.OpMetadata, []*llb.SourceLocation, error) {
 	if b.Cached(c) {
 		return b.Load()
 	}
@@ -76,16 +76,16 @@ func (b *build) Marshal(ctx context.Context, c *llb.Constraints) (digest.Digest,
 
 	inp, err := b.source.ToInput(ctx, c)
 	if err != nil {
-		return "", nil, nil, err
+		return "", nil, nil, nil, err
 	}
 
 	pop.Inputs = append(pop.Inputs, inp)
 
 	dt, err := pop.Marshal()
 	if err != nil {
-		return "", nil, nil, err
+		return "", nil, nil, nil, err
 	}
-	b.Store(dt, md, c)
+	b.Store(dt, md, b.constraints.SourceLocations, c)
 	return b.Load()
 }
 

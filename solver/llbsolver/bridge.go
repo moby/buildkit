@@ -18,6 +18,7 @@ import (
 	gw "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/tracing"
@@ -182,7 +183,31 @@ func (rp *resultProxy) Release(ctx context.Context) error {
 	return nil
 }
 
-func (rp *resultProxy) Result(ctx context.Context) (solver.CachedResult, error) {
+func (rp *resultProxy) wrapError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var ve *errdefs.VertexError
+	if errors.As(err, &ve) {
+		if rp.def.Source != nil {
+			locs, ok := rp.def.Source.Locations[string(ve.Digest)]
+			if ok {
+				for _, loc := range locs.Locations {
+					err = errdefs.WithSource(err, errdefs.Source{
+						Info:   rp.def.Source.Infos[loc.SourceIndex],
+						Ranges: loc.Ranges,
+					})
+				}
+			}
+		}
+	}
+	return err
+}
+
+func (rp *resultProxy) Result(ctx context.Context) (res solver.CachedResult, err error) {
+	defer func() {
+		err = rp.wrapError(err)
+	}()
 	r, err := rp.g.Do(ctx, "result", func(ctx context.Context) (interface{}, error) {
 		rp.mu.Lock()
 		if rp.released {

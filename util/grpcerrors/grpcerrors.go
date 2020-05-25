@@ -1,8 +1,10 @@
 package grpcerrors
 
 import (
+	gogotypes "github.com/gogo/protobuf/types"
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes"
+	"github.com/golang/protobuf/ptypes/any"
 	"github.com/moby/buildkit/util/stack"
 	spb "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc/codes"
@@ -121,13 +123,20 @@ func FromGRPC(err error) error {
 
 	// details that we don't understand are copied as proto
 	for _, d := range pb.Details {
+		var m interface{}
 		detail := &ptypes.DynamicAny{}
 		if err := ptypes.UnmarshalAny(d, detail); err != nil {
-			n.Details = append(n.Details, d)
-			continue
+			detail := &gogotypes.DynamicAny{}
+			if err := gogotypes.UnmarshalAny(gogoAny(d), detail); err != nil {
+				n.Details = append(n.Details, d)
+				continue
+			}
+			m = detail.Message
+		} else {
+			m = detail.Message
 		}
 
-		switch v := detail.Message.(type) {
+		switch v := m.(type) {
 		case *stack.Stack:
 			stacks = append(stacks, v)
 		case TypedErrorProto:
@@ -168,5 +177,12 @@ func each(err error, fn func(error)) {
 		Unwrap() error
 	}); ok {
 		each(wrapped.Unwrap(), fn)
+	}
+}
+
+func gogoAny(in *any.Any) *gogotypes.Any {
+	return &gogotypes.Any{
+		TypeUrl: in.TypeUrl,
+		Value:   in.Value,
 	}
 }

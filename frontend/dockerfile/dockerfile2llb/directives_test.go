@@ -22,11 +22,11 @@ func TestDirectives(t *testing.T) {
 
 	v, ok := d["escape"]
 	require.True(t, ok)
-	require.Equal(t, v, "\\")
+	require.Equal(t, v.Value, "\\")
 
 	v, ok = d["key"]
 	require.True(t, ok)
-	require.Equal(t, v, "FOO bar")
+	require.Equal(t, v.Value, "FOO bar")
 
 	// for some reason Moby implementation in case insensitive for escape
 	dt = `# EScape=\
@@ -40,11 +40,11 @@ func TestDirectives(t *testing.T) {
 
 	v, ok = d["escape"]
 	require.True(t, ok)
-	require.Equal(t, v, "\\")
+	require.Equal(t, v.Value, "\\")
 
 	v, ok = d["key"]
 	require.True(t, ok)
-	require.Equal(t, v, "FOO bar")
+	require.Equal(t, v.Value, "FOO bar")
 }
 
 func TestSyntaxDirective(t *testing.T) {
@@ -54,15 +54,17 @@ func TestSyntaxDirective(t *testing.T) {
 FROM busybox
 `
 
-	ref, cmdline, ok := DetectSyntax(bytes.NewBuffer([]byte(dt)))
+	ref, cmdline, loc, ok := DetectSyntax(bytes.NewBuffer([]byte(dt)))
 	require.True(t, ok)
 	require.Equal(t, ref, "dockerfile:experimental")
 	require.Equal(t, cmdline, "dockerfile:experimental // opts")
+	require.Equal(t, 1, loc[0].Start.Line)
+	require.Equal(t, 1, loc[0].End.Line)
 
 	dt = `FROM busybox
 RUN ls
 `
-	ref, cmdline, ok = DetectSyntax(bytes.NewBuffer([]byte(dt)))
+	ref, cmdline, _, ok = DetectSyntax(bytes.NewBuffer([]byte(dt)))
 	require.False(t, ok)
 	require.Equal(t, ref, "")
 	require.Equal(t, cmdline, "")
