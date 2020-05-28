@@ -865,6 +865,7 @@ func (e *edge) loadCache(ctx context.Context) (interface{}, error) {
 	logrus.Debugf("load cache for %s with %s", e.edge.Vertex.Name(), rec.ID)
 	res, err := e.op.LoadCache(ctx, rec)
 	if err != nil {
+		logrus.Debugf("load cache for %s err: %v", e.edge.Vertex.Name(), err)
 		return nil, errors.Wrap(err, "failed to load cache")
 	}
 

@@ -23,7 +23,9 @@ import (
 func NewBusyboxSourceSnapshot(ctx context.Context, t *testing.T, w *base.Worker, sm *session.Manager) cache.ImmutableRef {
 	img, err := source.NewImageIdentifier("docker.io/library/busybox:latest")
 	require.NoError(t, err)
-	src, err := w.SourceManager.Resolve(ctx, img, sm)
+	src, err := w.SourceManager.Resolve(ctx, img, sm, nil)
+	require.NoError(t, err)
+	_, _, _, err = src.CacheKey(ctx, nil, 0)
 	require.NoError(t, err)
 	snap, err := src.Snapshot(ctx, nil)
 	require.NoError(t, err)

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/containerd/containerd/content"
+	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
@@ -25,7 +26,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func Push(ctx context.Context, sm *session.Manager, sid string, cs content.Store, dgst digest.Digest, ref string, insecure bool, hosts docker.RegistryHosts, byDigest bool) error {
+func Push(ctx context.Context, sm *session.Manager, sid string, provider content.Provider, manager content.Manager, dgst digest.Digest, ref string, insecure bool, hosts docker.RegistryHosts, byDigest bool) error {
 	desc := ocispec.Descriptor{
 		Digest: dgst,
 	}
@@ -77,19 +78,19 @@ func Push(ctx context.Context, sm *session.Manager, sid string, cs content.Store
 		}
 	})
 
-	pushHandler := remotes.PushHandler(pusher, cs)
-	pushUpdateSourceHandler, err := updateDistributionSourceHandler(cs, pushHandler, ref)
+	pushHandler := remotes.PushHandler(pusher, provider)
+	pushUpdateSourceHandler, err := updateDistributionSourceHandler(manager, pushHandler, ref)
 	if err != nil {
 		return err
 	}
 
 	handlers := append([]images.Handler{},
-		images.HandlerFunc(annotateDistributionSourceHandler(cs, childrenHandler(cs))),
+		images.HandlerFunc(annotateDistributionSourceHandler(manager, childrenHandler(provider))),
 		filterHandler,
 		dedupeHandler(pushUpdateSourceHandler),
 	)
 
-	ra, err := cs.ReaderAt(ctx, desc)
+	ra, err := provider.ReaderAt(ctx, desc)
 	if err != nil {
 		return err
 	}
@@ -118,7 +119,7 @@ func Push(ctx context.Context, sm *session.Manager, sid string, cs content.Store
 	return mfstDone(nil)
 }
 
-func annotateDistributionSourceHandler(cs content.Store, f images.HandlerFunc) func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
+func annotateDistributionSourceHandler(manager content.Manager, f images.HandlerFunc) func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
 	return func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
 		children, err := f(ctx, desc)
 		if err != nil {
@@ -135,9 +136,10 @@ func annotateDistributionSourceHandler(cs content.Store, f images.HandlerFunc) f
 
 		for i := range children {
 			child := children[i]
-
-			info, err := cs.Info(ctx, child.Digest)
-			if err != nil {
+			info, err := manager.Info(ctx, child.Digest)
+			if errors.Is(err, errdefs.ErrNotFound) {
+				continue
+			} else if err != nil {
 				return nil, err
 			}
 
@@ -228,8 +230,8 @@ func childrenHandler(provider content.Provider) images.HandlerFunc {
 //
 // FIXME(fuweid): There is race condition for current design of distribution
 // source label if there are pull/push jobs consuming same layer.
-func updateDistributionSourceHandler(cs content.Store, pushF images.HandlerFunc, ref string) (images.HandlerFunc, error) {
-	updateF, err := docker.AppendDistributionSourceLabel(cs, ref)
+func updateDistributionSourceHandler(manager content.Manager, pushF images.HandlerFunc, ref string) (images.HandlerFunc, error) {
+	updateF, err := docker.AppendDistributionSourceLabel(manager, ref)
 	if err != nil {
 		return nil, err
 	}

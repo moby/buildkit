@@ -455,7 +455,11 @@ func TestExtractOnMutable(t *testing.T) {
 	_, err = cm.GetByBlob(ctx, desc2, snap)
 	require.Error(t, err)
 
-	err = snap.SetBlob(ctx, desc)
+	leaseCtx, done, err := leaseutil.WithLease(ctx, co.lm, leases.WithExpiration(0))
+	require.NoError(t, err)
+
+	err = snap.(*immutableRef).setBlob(leaseCtx, desc)
+	done(context.TODO())
 	require.NoError(t, err)
 
 	snap2, err := cm.GetByBlob(ctx, desc2, snap)
@@ -535,6 +539,10 @@ func TestSetBlob(t *testing.T) {
 
 	defer cleanup()
 
+	ctx, done, err := leaseutil.WithLease(ctx, co.lm, leaseutil.MakeTemporary)
+	require.NoError(t, err)
+	defer done(context.TODO())
+
 	cm := co.manager
 
 	active, err := cm.New(ctx, nil)
@@ -560,7 +568,7 @@ func TestSetBlob(t *testing.T) {
 	err = content.WriteBlob(ctx, co.cs, "ref1", bytes.NewBuffer(b), desc)
 	require.NoError(t, err)
 
-	err = snap.SetBlob(ctx, ocispec.Descriptor{
+	err = snap.(*immutableRef).setBlob(ctx, ocispec.Descriptor{
 		Digest: digest.FromBytes([]byte("foobar")),
 		Annotations: map[string]string{
 			"containerd.io/uncompressed": digest.FromBytes([]byte("foobar2")).String(),
@@ -568,7 +576,7 @@ func TestSetBlob(t *testing.T) {
 	})
 	require.Error(t, err)
 
-	err = snap.SetBlob(ctx, desc)
+	err = snap.(*immutableRef).setBlob(ctx, desc)
 	require.NoError(t, err)
 
 	info = snap.Info()
@@ -592,7 +600,7 @@ func TestSetBlob(t *testing.T) {
 	err = content.WriteBlob(ctx, co.cs, "ref2", bytes.NewBuffer(b2), desc2)
 	require.NoError(t, err)
 
-	err = snap2.SetBlob(ctx, desc2)
+	err = snap2.(*immutableRef).setBlob(ctx, desc2)
 	require.NoError(t, err)
 
 	info2 := snap2.Info()

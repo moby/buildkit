@@ -9,11 +9,13 @@ import (
 	archiveexporter "github.com/containerd/containerd/images/archive"
 	"github.com/containerd/containerd/leases"
 	"github.com/docker/distribution/reference"
-	"github.com/moby/buildkit/cache/blobs"
+	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/filesync"
+	"github.com/moby/buildkit/util/compression"
+	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/progress"
@@ -52,7 +54,7 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 	var ot *bool
 	i := &imageExporterInstance{
 		imageExporter:    e,
-		layerCompression: blobs.DefaultCompression,
+		layerCompression: compression.Default,
 	}
 	for k, v := range opt {
 		switch k {
@@ -61,9 +63,9 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 		case keyLayerCompression:
 			switch v {
 			case "gzip":
-				i.layerCompression = blobs.Gzip
+				i.layerCompression = compression.Gzip
 			case "uncompressed":
-				i.layerCompression = blobs.Uncompressed
+				i.layerCompression = compression.Uncompressed
 			default:
 				return nil, errors.Errorf("unsupported layer compression type: %v", v)
 			}
@@ -98,7 +100,7 @@ type imageExporterInstance struct {
 	meta             map[string][]byte
 	name             string
 	ociTypes         bool
-	layerCompression blobs.CompressionType
+	layerCompression compression.Type
 }
 
 func (e *imageExporterInstance) Name() string {
@@ -177,7 +179,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
          ExporterResponse : nil,
     }
 	report := oneOffProgress(ctx, "sending tarball")
-	if err := archiveexporter.Export(ctx, e.opt.ImageWriter.ContentStore(), w, expOpts...); err != nil {
+	if err := archiveexporter.Export(ctx, mprovider, w, expOpts...); err != nil {
 		w.Close()
 		if grpcerrors.Code(err) == codes.AlreadyExists {
             response.ExporterResponse = resp

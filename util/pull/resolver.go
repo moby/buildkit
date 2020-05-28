@@ -16,10 +16,10 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
-var cache *resolverCache
+var resCache *resolverCache
 
 func init() {
-	cache = newResolverCache()
+	resCache = newResolverCache()
 }
 
 type ResolverOpt struct {
@@ -31,12 +31,12 @@ type ResolverOpt struct {
 }
 
 func NewResolver(g session.Group, opt ResolverOpt) remotes.Resolver {
-	if res := cache.Get(opt.Ref, g); res != nil {
+	if res := resCache.Get(opt.Ref, g); res != nil {
 		return withLocal(res, opt.ImageStore, opt.Mode)
 	}
 
 	r := resolver.New(opt.Hosts, opt.Auth)
-	r = cache.Add(opt.Ref, r, opt.Auth, g)
+	r = resCache.Add(opt.Ref, r, opt.Auth, g)
 
 	return withLocal(r, opt.ImageStore, opt.Mode)
 }
