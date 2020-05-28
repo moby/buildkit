@@ -23,6 +23,7 @@ import (
 
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/content"
+	ctderrdefs "github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/snapshots"
@@ -117,6 +118,7 @@ func TestIntegration(t *testing.T) {
 		testMultipleRegistryCacheImportExport,
 		testSourceMap,
 		testSourceMapFromRef,
+		testLazyImagePush,
 	}, mirrors)
 
 	integration.Run(t, []integration.Test{
@@ -2045,6 +2047,140 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 
 	_, ok = m["foo/sub/bar"]
 	require.False(t, ok)
+}
+
+func testLazyImagePush(t *testing.T, sb integration.Sandbox) {
+	skipDockerd(t, sb)
+	requiresLinux(t)
+
+	cdAddress := sb.ContainerdAddress()
+	if cdAddress == "" {
+		t.Skip("test requires containerd worker")
+	}
+
+	client, err := newContainerd(cdAddress)
+	require.NoError(t, err)
+	defer client.Close()
+
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit")
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrorRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	// push the busybox image to the mutable registry
+	sourceImage := "busybox:latest"
+	def, err := llb.Image(sourceImage).Marshal(context.TODO())
+	require.NoError(t, err)
+
+	targetNoTag := registry + "/buildkit/testlazyimage:"
+	target := targetNoTag + "latest"
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	imageService := client.ImageService()
+	contentStore := client.ContentStore()
+
+	img, err := imageService.Get(ctx, target)
+	require.NoError(t, err)
+
+	manifest, err := images.Manifest(ctx, contentStore, img.Target, nil)
+	require.NoError(t, err)
+
+	for _, layer := range manifest.Layers {
+		_, err = contentStore.Info(ctx, layer.Digest)
+		require.NoError(t, err)
+	}
+
+	// clear all local state out
+	err = imageService.Delete(ctx, img.Name, images.SynchronousDelete())
+	require.NoError(t, err)
+	checkAllReleasable(t, c, sb, true)
+
+	// retag the image we just pushed with no actual changes, which
+	// should not result in the image getting un-lazied
+	def, err = llb.Image(target).Marshal(context.TODO())
+	require.NoError(t, err)
+
+	target2 := targetNoTag + "newtag"
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": target2,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	img, err = imageService.Get(ctx, target2)
+	require.NoError(t, err)
+
+	manifest, err = images.Manifest(ctx, contentStore, img.Target, nil)
+	require.NoError(t, err)
+
+	for _, layer := range manifest.Layers {
+		_, err = contentStore.Info(ctx, layer.Digest)
+		require.True(t, errors.Is(err, ctderrdefs.ErrNotFound), "unexpected error %v", err)
+	}
+
+	// clear all local state out again
+	err = imageService.Delete(ctx, img.Name, images.SynchronousDelete())
+	require.NoError(t, err)
+	checkAllReleasable(t, c, sb, true)
+
+	// try a cross-repo push to same registry, which should still result in the
+	// image remaining lazy
+	target3 := registry + "/buildkit/testlazycrossrepo:latest"
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": target3,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	img, err = imageService.Get(ctx, target3)
+	require.NoError(t, err)
+
+	manifest, err = images.Manifest(ctx, contentStore, img.Target, nil)
+	require.NoError(t, err)
+
+	for _, layer := range manifest.Layers {
+		_, err = contentStore.Info(ctx, layer.Digest)
+		require.True(t, errors.Is(err, ctderrdefs.ErrNotFound), "unexpected error %v", err)
+	}
+
+	// check that a subsequent build can use the previously lazy image in an exec
+	def, err = llb.Image(target2).Run(llb.Args([]string{"true"})).Marshal(context.TODO())
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	require.NoError(t, err)
 }
 
 func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptionsEntryImport, cacheOptionsEntryExport []CacheOptionsEntry) {

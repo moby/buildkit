@@ -1,4 +1,4 @@
-package blobs
+package compression
 
 import (
 	"bytes"
@@ -7,30 +7,29 @@ import (
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/images"
-	"github.com/moby/buildkit/cache"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
-// CompressionType represents compression type for blob data.
-type CompressionType int
+// Type represents compression type for blob data.
+type Type int
 
 const (
 	// Uncompressed indicates no compression.
-	Uncompressed CompressionType = iota
+	Uncompressed Type = iota
 
 	// Gzip is used for blob data.
 	Gzip
 
 	// UnknownCompression means not supported yet.
-	UnknownCompression CompressionType = -1
+	UnknownCompression Type = -1
 )
 
-var DefaultCompression = Gzip
+var Default = Gzip
 
-func (ct CompressionType) String() string {
+func (ct Type) String() string {
 	switch ct {
 	case Uncompressed:
 		return "uncompressed"
@@ -41,7 +40,7 @@ func (ct CompressionType) String() string {
 	}
 }
 
-// DetectCompressionType returns media type from existing blob data.
+// DetectLayerMediaType returns media type from existing blob data.
 func DetectLayerMediaType(ctx context.Context, cs content.Store, id digest.Digest, oci bool) (string, error) {
 	ra, err := cs.ReaderAt(ctx, ocispec.Descriptor{Digest: id})
 	if err != nil {
@@ -71,7 +70,7 @@ func DetectLayerMediaType(ctx context.Context, cs content.Store, id digest.Diges
 }
 
 // detectCompressionType detects compression type from real blob data.
-func detectCompressionType(cr io.Reader) (CompressionType, error) {
+func detectCompressionType(cr io.Reader) (Type, error) {
 	var buf [10]byte
 	var n int
 	var err error
@@ -86,7 +85,7 @@ func detectCompressionType(cr io.Reader) (CompressionType, error) {
 		return UnknownCompression, err
 	}
 
-	for c, m := range map[CompressionType][]byte{
+	for c, m := range map[Type][]byte{
 		Gzip: {0x1F, 0x8B, 0x08},
 	} {
 		if n < len(m) {
@@ -97,41 +96,6 @@ func detectCompressionType(cr io.Reader) (CompressionType, error) {
 		}
 	}
 	return Uncompressed, nil
-}
-
-// GetMediaTypeForLayers retrieves media type for layer from ref information.
-// If there is a mismatch in diff IDs or blobsums between the diffPairs and
-// corresponding ref, the returned slice will have an empty media type for
-// that layer and all parents.
-func GetMediaTypeForLayers(diffPairs []DiffPair, ref cache.ImmutableRef) []string {
-	layerTypes := make([]string, len(diffPairs))
-	if ref == nil {
-		return layerTypes
-	}
-
-	tref := ref.Clone()
-	// diffPairs is ordered parent->child, but we iterate over refs from child->parent,
-	// so iterate over diffPairs in reverse
-	for i := range diffPairs {
-		dp := diffPairs[len(diffPairs)-1-i]
-
-		info := tref.Info()
-		if !(info.DiffID == dp.DiffID && info.Blob == dp.Blobsum) {
-			break
-		}
-		layerTypes[len(diffPairs)-1-i] = info.MediaType
-
-		parent := tref.Parent()
-		tref.Release(context.TODO())
-		tref = parent
-		if tref == nil {
-			break
-		}
-	}
-	if tref != nil {
-		tref.Release(context.TODO())
-	}
-	return layerTypes
 }
 
 var toDockerLayerType = map[string]string{
@@ -148,7 +112,7 @@ var toOCILayerType = map[string]string{
 	images.MediaTypeDockerSchema2LayerGzip: ocispec.MediaTypeImageLayerGzip,
 }
 
-func ConvertLayerMediaType(mediaType string, oci bool) string {
+func convertLayerMediaType(mediaType string, oci bool) string {
 	var converted string
 	if oci {
 		converted = toOCILayerType[mediaType]
@@ -158,6 +122,15 @@ func ConvertLayerMediaType(mediaType string, oci bool) string {
 	if converted == "" {
 		logrus.Warnf("unhandled conversion for mediatype %q", mediaType)
 		return mediaType
+	}
+	return converted
+}
+
+func ConvertAllLayerMediaTypes(oci bool, descs ...ocispec.Descriptor) []ocispec.Descriptor {
+	var converted []ocispec.Descriptor
+	for _, desc := range descs {
+		desc.MediaType = convertLayerMediaType(desc.MediaType, oci)
+		converted = append(converted, desc)
 	}
 	return converted
 }

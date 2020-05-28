@@ -29,6 +29,9 @@ const keySnapshot = "cache.snapshot"
 const keyBlobOnly = "cache.blobonly"
 const keyMediaType = "cache.mediatype"
 
+// BlobSize is the packed blob size as specified in the oci descriptor
+const keyBlobSize = "cache.blobsize"
+
 const keyDeleted = "cache.deleted"
 
 func queueDiffID(si *metadata.StorageItem, str string) error {
@@ -297,6 +300,29 @@ func setSize(si *metadata.StorageItem, s int64) error {
 
 func getSize(si *metadata.StorageItem) int64 {
 	v := si.Get(keySize)
+	if v == nil {
+		return sizeUnknown
+	}
+	var size int64
+	if err := v.Unmarshal(&size); err != nil {
+		return sizeUnknown
+	}
+	return size
+}
+
+func queueBlobSize(si *metadata.StorageItem, s int64) error {
+	v, err := metadata.NewValue(s)
+	if err != nil {
+		return errors.Wrap(err, "failed to create blobsize value")
+	}
+	si.Queue(func(b *bolt.Bucket) error {
+		return si.SetValue(b, keyBlobSize, v)
+	})
+	return nil
+}
+
+func getBlobSize(si *metadata.StorageItem) int64 {
+	v := si.Get(keyBlobSize)
 	if v == nil {
 		return sizeUnknown
 	}
