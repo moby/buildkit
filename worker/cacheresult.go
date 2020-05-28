@@ -7,6 +7,7 @@ import (
 
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/util/compression"
 	"github.com/pkg/errors"
 )
 
@@ -36,7 +37,7 @@ func (s *cacheResultStorage) Save(res solver.Result, createdAt time.Time) (solve
 	return solver.CacheResult{ID: ref.ID(), CreatedAt: createdAt}, nil
 }
 func (s *cacheResultStorage) Load(ctx context.Context, res solver.CacheResult) (solver.Result, error) {
-	return s.load(res.ID, false)
+	return s.load(ctx, res.ID, false)
 }
 
 func (s *cacheResultStorage) getWorkerRef(id string) (Worker, string, error) {
@@ -51,7 +52,7 @@ func (s *cacheResultStorage) getWorkerRef(id string) (Worker, string, error) {
 	return w, refID, nil
 }
 
-func (s *cacheResultStorage) load(id string, hidden bool) (solver.Result, error) {
+func (s *cacheResultStorage) load(ctx context.Context, id string, hidden bool) (solver.Result, error) {
 	w, refID, err := s.getWorkerRef(id)
 	if err != nil {
 		return nil, err
@@ -59,7 +60,7 @@ func (s *cacheResultStorage) load(id string, hidden bool) (solver.Result, error)
 	if refID == "" {
 		return NewWorkerRefResult(nil, w), nil
 	}
-	ref, err := w.LoadRef(refID, hidden)
+	ref, err := w.LoadRef(ctx, refID, hidden)
 	if err != nil {
 		return nil, err
 	}
@@ -71,19 +72,19 @@ func (s *cacheResultStorage) LoadRemote(ctx context.Context, res solver.CacheRes
 	if err != nil {
 		return nil, err
 	}
-	ref, err := w.LoadRef(refID, true)
+	ref, err := w.LoadRef(ctx, refID, true)
 	if err != nil {
 		return nil, err
 	}
 	defer ref.Release(context.TODO())
-	remote, err := w.GetRemote(ctx, ref, false)
+	remote, err := ref.GetRemote(ctx, false, compression.Default)
 	if err != nil {
 		return nil, nil // ignore error. loadRemote is best effort
 	}
 	return remote, nil
 }
 func (s *cacheResultStorage) Exists(id string) bool {
-	ref, err := s.load(id, true)
+	ref, err := s.load(context.TODO(), id, true)
 	if err != nil {
 		return false
 	}
