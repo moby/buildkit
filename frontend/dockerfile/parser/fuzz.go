@@ -1,5 +1,3 @@
-// +build gofuzz
-
 package parser
 
 import (
@@ -17,10 +15,7 @@ func Fuzz(data []byte) int {
 	if err != nil {
 		return -1
 	}
-	f, err = os.Open("Dockerfile")
-	if err != nil {
-		return 0
-	}
+	f.Seek(0, 0)
 	_, err = Parse(f)
 	if err != nil {
 		return 0
