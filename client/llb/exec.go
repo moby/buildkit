@@ -388,7 +388,7 @@ func (e *ExecOp) getMountIndexFn(m *mount) func() (pb.OutputIndex, error) {
 
 		i := 0
 		for _, m2 := range e.mounts {
-			if m2.noOutput || m2.readonly || m2.cacheID != "" {
+			if m2.noOutput || m2.readonly || m2.tmpfs || m2.cacheID != "" {
 				continue
 			}
 			if m == m2 {
