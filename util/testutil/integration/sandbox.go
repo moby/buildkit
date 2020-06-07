@@ -176,7 +176,7 @@ func runBuildkitd(conf *BackendConfig, args []string, logs map[string]*bytes.Buf
 		deferF.append(stop)
 	}
 
-	if err := waitUnix(address, 5*time.Second); err != nil {
+	if err := waitUnix(address, 10*time.Second); err != nil {
 		return "", nil, err
 	}
 
