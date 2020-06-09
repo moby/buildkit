@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+HACK_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+BIN_DIR=$HACK_DIR/../../../../../bin
+
+go get -u github.com/dvyukov/go-fuzz/go-fuzz github.com/dvyukov/go-fuzz/go-fuzz-build
+
+cd $HACK_DIR/../frontend/dockerfile/parser
+$BIN_DIR/go-fuzz-build
