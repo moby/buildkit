@@ -708,6 +708,20 @@ func (e *execOp) Exec(ctx context.Context, inputs []solver.Result) ([]solver.Res
 		return nil, err
 	}
 
+	emu, err := getEmulator(e.platform, e.cm.IdentityMapping())
+	if err == nil && emu != nil {
+		e.op.Meta.Args = append([]string{qemuMountName}, e.op.Meta.Args...)
+
+		mounts = append(mounts, executor.Mount{
+			Readonly: true,
+			Src:      emu,
+			Dest:     qemuMountName,
+		})
+	}
+	if err != nil {
+		logrus.Warn(err.Error()) // TODO: remove this with pull support
+	}
+
 	meta := executor.Meta{
 		Args:           e.op.Meta.Args,
 		Env:            e.op.Meta.Env,
