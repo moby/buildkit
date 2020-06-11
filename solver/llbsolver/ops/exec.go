@@ -32,6 +32,7 @@ import (
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/llbsolver"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/moby/buildkit/util/progress/logs"
 	utilsystem "github.com/moby/buildkit/util/system"
@@ -47,33 +48,35 @@ import (
 const execCacheType = "buildkit.exec.v0"
 
 type execOp struct {
-	op        *pb.ExecOp
-	cm        cache.Manager
-	sm        *session.Manager
-	md        *metadata.Store
-	exec      executor.Executor
-	w         worker.Worker
-	platform  *pb.Platform
-	numInputs int
+	op            *pb.ExecOp
+	cm            cache.Manager
+	sm            *session.Manager
+	md            *metadata.Store
+	exec          executor.Executor
+	w             worker.Worker
+	sourceManager *source.Manager
+	platform      *pb.Platform
+	numInputs     int
 
 	cacheMounts   map[string]*cacheRefShare
 	cacheMountsMu sync.Mutex
 }
 
-func NewExecOp(v solver.Vertex, op *pb.Op_Exec, platform *pb.Platform, cm cache.Manager, sm *session.Manager, md *metadata.Store, exec executor.Executor, w worker.Worker) (solver.Op, error) {
+func NewExecOp(v solver.Vertex, op *pb.Op_Exec, platform *pb.Platform, cm cache.Manager, m *source.Manager, sm *session.Manager, md *metadata.Store, exec executor.Executor, w worker.Worker) (solver.Op, error) {
 	if err := llbsolver.ValidateOp(&pb.Op{Op: op}); err != nil {
 		return nil, err
 	}
 	return &execOp{
-		op:          op.Exec,
-		cm:          cm,
-		sm:          sm,
-		md:          md,
-		exec:        exec,
-		numInputs:   len(v.Inputs()),
-		w:           w,
-		platform:    platform,
-		cacheMounts: map[string]*cacheRefShare{},
+		op:            op.Exec,
+		cm:            cm,
+		sm:            sm,
+		md:            md,
+		exec:          exec,
+		numInputs:     len(v.Inputs()),
+		w:             w,
+		platform:      platform,
+		cacheMounts:   map[string]*cacheRefShare{},
+		sourceManager: m,
 	}, nil
 }
 
@@ -708,7 +711,7 @@ func (e *execOp) Exec(ctx context.Context, inputs []solver.Result) ([]solver.Res
 		return nil, err
 	}
 
-	emu, err := getEmulator(e.platform, e.cm.IdentityMapping())
+	emu, err := getEmulator(ctx, e.sourceManager, e.w.ContentStore(), e.sm, e.platform, e.cm.IdentityMapping())
 	if err == nil && emu != nil {
 		e.op.Meta.Args = append([]string{qemuMountName}, e.op.Meta.Args...)
 
@@ -717,6 +720,7 @@ func (e *execOp) Exec(ctx context.Context, inputs []solver.Result) ([]solver.Res
 			Src:      emu,
 			Dest:     qemuMountName,
 		})
+		defer emu.Release(context.TODO())
 	}
 	if err != nil {
 		logrus.Warn(err.Error()) // TODO: remove this with pull support

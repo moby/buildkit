@@ -2,23 +2,33 @@ package ops
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"time"
 
+	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/platforms"
+	"github.com/containerd/containerd/reference"
 	"github.com/docker/docker/pkg/idtools"
+	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/util/binfmt_misc"
+	"github.com/moby/buildkit/util/progress"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	copy "github.com/tonistiigi/fsutil/copy"
 )
 
 const qemuMountName = "/dev/.buildkit_qemu_emulator"
+const emulatorImage = "docker.io/tonistiigi/binfmt:buildkit@sha256:5e7df2cf5373ba557ff2e61994cbc4d16adbd0627db1ed55acde3b7a16a693ba"
 
 var qemuArchMap = map[string]string{
 	"arm64":   "aarch64",
@@ -30,12 +40,50 @@ var qemuArchMap = map[string]string{
 }
 
 type emulator struct {
-	path  string
-	idmap *idtools.IdentityMapping
+	mount   snapshot.Mountable
+	release func(context.Context) error
 }
 
 func (e *emulator) Mount(ctx context.Context, readonly bool) (snapshot.Mountable, error) {
-	return &staticEmulatorMount{path: e.path, idmap: e.idmap}, nil
+	return e.mount, nil
+}
+
+func (e *emulator) Release(ctx context.Context) error {
+	if e.release != nil {
+		return e.release(ctx)
+	}
+	return nil
+}
+
+type refEmulatorMount struct {
+	ref  cache.ImmutableRef
+	name string
+}
+
+func (m *refEmulatorMount) Mount() ([]mount.Mount, func() error, error) {
+	mountable, err := m.ref.Mount(context.TODO(), true)
+	if err != nil {
+		return nil, nil, err
+	}
+	mounter := snapshot.LocalMounter(mountable)
+	release := func() error {
+		return mounter.Unmount()
+	}
+	target, err := mounter.Mount()
+	if err != nil {
+		release()
+		return nil, nil, err
+	}
+
+	return []mount.Mount{{
+		Type:    "bind",
+		Source:  filepath.Join(target, "buildkit-qemu-"+m.name),
+		Options: []string{"ro", "bind"},
+	}}, release, nil
+}
+
+func (m *refEmulatorMount) IdentityMapping() *idtools.IdentityMapping {
+	return m.ref.IdentityMapping()
 }
 
 type staticEmulatorMount struct {
@@ -82,7 +130,7 @@ func (m *staticEmulatorMount) IdentityMapping() *idtools.IdentityMapping {
 	return m.idmap
 }
 
-func getEmulator(p *pb.Platform, idmap *idtools.IdentityMapping) (*emulator, error) {
+func getEmulator(ctx context.Context, src *source.Manager, cs content.Store, sm *session.Manager, p *pb.Platform, idmap *idtools.IdentityMapping) (*emulator, error) {
 	all := binfmt_misc.SupportedPlatforms(false)
 	m := make(map[string]struct{}, len(all))
 
@@ -106,9 +154,73 @@ func getEmulator(p *pb.Platform, idmap *idtools.IdentityMapping) (*emulator, err
 	}
 
 	fn, err := exec.LookPath("buildkit-qemu-" + a)
-	if err != nil {
-		return nil, errors.Errorf("no emulator available for %v", pp.OS)
+	if err == nil {
+		return &emulator{mount: &staticEmulatorMount{path: fn, idmap: idmap}}, nil
 	}
 
-	return &emulator{path: fn}, nil
+	return pullEmulator(ctx, src, cs, sm, pp, a)
+}
+
+func pullEmulator(ctx context.Context, src *source.Manager, cs content.Store, sm *session.Manager, p specs.Platform, name string) (_ *emulator, err error) {
+	id, err := source.NewImageIdentifier(emulatorImage)
+	if err != nil {
+		return nil, err
+	}
+	s := platforms.DefaultSpec()
+	id.Platform = &s
+	id.RecordType = client.UsageRecordTypeInternal
+
+	spec, err := reference.Parse(emulatorImage)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	var exists bool
+	if dgst := spec.Digest(); dgst != "" {
+		if _, err := cs.Info(ctx, dgst); err == nil {
+			exists = true
+		}
+	}
+	if !exists {
+		defer oneOffProgress(ctx, fmt.Sprintf("pulling emulator for %s", platforms.Format(p)))(err)
+	}
+
+	ctx = progress.WithProgress(ctx, &discard{})
+
+	inst, err := src.Resolve(ctx, id, sm)
+	if err != nil {
+		return nil, err
+	}
+
+	ref, err := inst.Snapshot(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return &emulator{mount: &refEmulatorMount{ref: ref, name: name}, release: ref.Release}, nil
+}
+
+func oneOffProgress(ctx context.Context, id string) func(err error) error {
+	pw, _, _ := progress.FromContext(ctx)
+	now := time.Now()
+	st := progress.Status{
+		Started: &now,
+	}
+	pw.Write(id, st)
+	return func(err error) error {
+		now := time.Now()
+		st.Completed = &now
+		pw.Write(id, st)
+		pw.Close()
+		return err
+	}
+}
+
+type discard struct {
+}
+
+func (d *discard) Write(id string, value interface{}) error {
+	return nil
+}
+func (d *discard) Close() error {
+	return nil
 }

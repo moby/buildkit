@@ -2,6 +2,7 @@ package pull
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -34,6 +35,9 @@ func NewResolver(ctx context.Context, hosts docker.RegistryHosts, sm *session.Ma
 }
 
 func EnsureManifestRequested(ctx context.Context, res remotes.Resolver, ref string) {
+	if strings.HasPrefix(ref, "docker.io/") {
+		return
+	}
 	rr := res
 	lr, ok := res.(withLocalResolver)
 	if ok {
