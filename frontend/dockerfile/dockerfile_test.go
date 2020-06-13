@@ -113,6 +113,7 @@ var fileOpTests = []integration.Test{
 	testNoSnapshotLeak,
 	testCopySymlinks,
 	testCopyChown,
+	testCopyChmod,
 	testCopyOverrideFiles,
 	testCopyVarSubstitution,
 	testCopyWildcards,
@@ -2912,6 +2913,77 @@ COPY --from=base /out /
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "foobisowner"))
 	require.NoError(t, err)
 	require.Equal(t, "1000 nogroup\n", string(dt))
+}
+
+func testCopyChmod(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+	isFileOp := getFileOp(t, sb)
+
+	dockerfile := []byte(`
+FROM busybox AS base
+
+RUN mkdir -m 0777 /out
+COPY --chmod=0644 foo /
+COPY --chmod=777 bar /baz
+COPY --chmod=0 foo /foobis
+
+RUN stat -c "%04a" /foo  > /out/fooperm
+RUN stat -c "%04a" /baz  > /out/barperm
+RUN stat -c "%04a" /foobis  > /out/foobisperm
+FROM scratch
+COPY --from=base /out /
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("foo", []byte(`foo-contents`), 0600),
+		fstest.CreateFile("bar", []byte(`bar-contents`), 0700),
+	)
+
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		FrontendAttrs: map[string]string{
+			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+
+	if !isFileOp {
+		require.Contains(t, err.Error(), "chmod is not supported")
+		return
+	}
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "fooperm"))
+	require.NoError(t, err)
+	require.Equal(t, "0644\n", string(dt))
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "barperm"))
+	require.NoError(t, err)
+	require.Equal(t, "0777\n", string(dt))
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "foobisperm"))
+	require.NoError(t, err)
+	require.Equal(t, "0000\n", string(dt))
 }
 
 func testCopyOverrideFiles(t *testing.T, sb integration.Sandbox) {
