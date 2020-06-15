@@ -11,6 +11,7 @@ import (
 	ctdsnapshot "github.com/containerd/containerd/snapshots"
 	"github.com/containerd/containerd/snapshots/native"
 	"github.com/containerd/containerd/snapshots/overlay"
+	"github.com/containerd/containerd/sys"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/executor/oci"
 	"github.com/moby/buildkit/util/network/cniprovider"
@@ -18,7 +19,6 @@ import (
 	"github.com/moby/buildkit/worker"
 	"github.com/moby/buildkit/worker/base"
 	"github.com/moby/buildkit/worker/runc"
-	"github.com/opencontainers/runc/libcontainer/system"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -80,7 +80,7 @@ func init() {
 	}
 	n := "oci-worker-rootless"
 	u := "enable rootless mode"
-	if system.RunningInUserNS() {
+	if sys.RunningInUserNS() {
 		flags = append(flags, cli.BoolTFlag{
 			Name:  n,
 			Usage: u,
@@ -159,7 +159,7 @@ func applyOCIFlags(c *cli.Context, cfg *config.Config) error {
 		cfg.Workers.OCI.Rootless = c.GlobalBool("rootless")
 	}
 	if c.GlobalIsSet("oci-worker-rootless") {
-		if !system.RunningInUserNS() || os.Geteuid() > 0 {
+		if !sys.RunningInUserNS() || os.Geteuid() > 0 {
 			return errors.New("rootless mode requires to be executed as the mapped root in a user namespace; you may use RootlessKit for setting up the namespace")
 		}
 		cfg.Workers.OCI.Rootless = c.GlobalBool("oci-worker-rootless")
