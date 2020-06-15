@@ -205,19 +205,22 @@ func MigrateV2(ctx context.Context, from, to string, cs content.Store, s snapsho
 
 	// remove old root labels
 	for _, item := range byID {
-		if _, err := s.Update(ctx, snapshots.Info{
-			Name: getSnapshotID(item),
-		}, "labels.containerd.io/gc.root"); err != nil {
-			if !errors.Is(err, errdefs.ErrNotFound) {
-				return err
-			}
-		}
-
-		if blob := getBlob(item); blob != "" {
-			if _, err := cs.Update(ctx, content.Info{
-				Digest: digest.Digest(blob),
+		em := getEqualMutable(item)
+		if em == "" {
+			if _, err := s.Update(ctx, snapshots.Info{
+				Name: getSnapshotID(item),
 			}, "labels.containerd.io/gc.root"); err != nil {
-				return err
+				if !errors.Is(err, errdefs.ErrNotFound) {
+					return err
+				}
+			}
+
+			if blob := getBlob(item); blob != "" {
+				if _, err := cs.Update(ctx, content.Info{
+					Digest: digest.Digest(blob),
+				}, "labels.containerd.io/gc.root"); err != nil {
+					return err
+				}
 			}
 		}
 	}
