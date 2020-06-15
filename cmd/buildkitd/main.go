@@ -51,7 +51,6 @@ import (
 	"github.com/moby/buildkit/version"
 	"github.com/moby/buildkit/worker"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/opencontainers/runc/libcontainer/system"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -107,7 +106,7 @@ func main() {
 	}
 
 	rootlessUsage := "set all the default options to be compatible with rootless containers"
-	if system.RunningInUserNS() {
+	if sys.RunningInUserNS() {
 		app.Flags = append(app.Flags, cli.BoolTFlag{
 			Name:  "rootless",
 			Usage: rootlessUsage + " (default: true)",
@@ -338,7 +337,7 @@ func serveGRPC(cfg config.GRPCConfig, server *grpc.Server, errCh chan error) err
 }
 
 func defaultConfigPath() string {
-	if system.RunningInUserNS() {
+	if sys.RunningInUserNS() {
 		return filepath.Join(appdefaults.UserConfigDir(), "buildkitd.toml")
 	}
 	return filepath.Join(appdefaults.ConfigDir, "buildkitd.toml")
@@ -392,7 +391,7 @@ func setDefaultConfig(cfg *config.Config) {
 	cfg.Workers.OCI.NetworkConfig = setDefaultNetworkConfig(cfg.Workers.OCI.NetworkConfig)
 	cfg.Workers.Containerd.NetworkConfig = setDefaultNetworkConfig(cfg.Workers.Containerd.NetworkConfig)
 
-	if system.RunningInUserNS() {
+	if sys.RunningInUserNS() {
 		// if buildkitd is being executed as the mapped-root (not only EUID==0 but also $USER==root)
 		// in a user namespace, we need to enable the rootless mode but
 		// we don't want to honor $HOME for setting up default paths.
