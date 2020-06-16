@@ -168,7 +168,7 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable,
 		return err
 	}
 
-	hostsFile, clean, err := oci.GetHostsFile(ctx, w.root, meta.ExtraHosts, w.idmap)
+	hostsFile, clean, err := oci.GetHostsFile(ctx, w.root, meta.ExtraHosts, w.idmap, meta.Hostname)
 	if err != nil {
 		return err
 	}

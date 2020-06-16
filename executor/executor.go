@@ -14,6 +14,7 @@ type Meta struct {
 	Env            []string
 	User           string
 	Cwd            string
+	Hostname       string
 	Tty            bool
 	ReadonlyRootFS bool
 	ExtraHosts     []HostIP
