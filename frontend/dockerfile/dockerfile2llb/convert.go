@@ -62,6 +62,7 @@ type ConvertOpt struct {
 	LLBCaps           *apicaps.CapSet
 	ContextLocalName  string
 	SourceMap         *llb.SourceMap
+	Hostname          string
 }
 
 func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State, *Image, error) {
@@ -323,6 +324,9 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		for _, env := range d.image.Config.Env {
 			k, v := parseKeyValue(env)
 			d.state = d.state.AddEnv(k, v)
+		}
+		if opt.Hostname != "" {
+			d.state = d.state.Hostname(opt.Hostname)
 		}
 		if d.image.Config.WorkingDir != "" {
 			if err = dispatchWorkdir(d, &instructions.WorkdirCommand{Path: d.image.Config.WorkingDir}, false, nil); err != nil {

@@ -85,7 +85,7 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root cache.Moun
 		return err
 	}
 
-	hostsFile, clean, err := oci.GetHostsFile(ctx, w.root, meta.ExtraHosts, nil)
+	hostsFile, clean, err := oci.GetHostsFile(ctx, w.root, meta.ExtraHosts, nil, meta.Hostname)
 	if err != nil {
 		return err
 	}
