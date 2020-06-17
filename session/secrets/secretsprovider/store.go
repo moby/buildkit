@@ -11,14 +11,14 @@ import (
 	"github.com/pkg/errors"
 )
 
-type FileSource struct {
+type Source struct {
 	ID       string
 	FilePath string
 	Env      string
 }
 
-func NewFileStore(files []FileSource) (secrets.SecretStore, error) {
-	m := map[string]FileSource{}
+func NewStore(files []Source) (secrets.SecretStore, error) {
+	m := map[string]Source{}
 	for _, f := range files {
 		if f.ID == "" {
 			return nil, errors.Errorf("secret missing ID")
@@ -47,7 +47,7 @@ func NewFileStore(files []FileSource) (secrets.SecretStore, error) {
 }
 
 type fileStore struct {
-	m map[string]FileSource
+	m map[string]Source
 }
 
 func (fs *fileStore) GetSecret(ctx context.Context, id string) ([]byte, error) {
@@ -67,14 +67,17 @@ func (fs *fileStore) GetSecret(ctx context.Context, id string) ([]byte, error) {
 
 func hasEnv(name string) bool {
 	for _, entry := range os.Environ() {
-		parts := strings.SplitN(entry, "=", 2)
+		idx := strings.IndexRune(entry, '=')
+		if idx == -1 {
+			continue
+		}
 		if runtime.GOOS == "windows" {
 			// Environment variable are case-insensitive on Windows. PaTh, path and PATH are equivalent.
-			if strings.EqualFold(parts[0], name) {
+			if strings.EqualFold(entry[:idx], name) {
 				return true
 			}
 		}
-		if parts[0] == name {
+		if entry[:idx] == name {
 			return true
 		}
 	}
