@@ -9,6 +9,7 @@ import (
 
 	"github.com/moby/buildkit/session/secrets"
 	"github.com/pkg/errors"
+	"github.com/tonistiigi/units"
 )
 
 type Source struct {
@@ -36,7 +37,7 @@ func NewStore(files []Source) (secrets.SecretStore, error) {
 				return nil, errors.Wrapf(err, "failed to stat %s", f.FilePath)
 			}
 			if fi.Size() > MaxSecretSize {
-				return nil, errors.Errorf("secret %s too big. max size 500KB", f.ID)
+				return nil, errors.Errorf("secret %s too big. max size %#.f", f.ID, MaxSecretSize*units.B)
 			}
 		}
 		m[f.ID] = f
