@@ -735,13 +735,9 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 			require.Equal(t, exporterResponse["image.name"], imageName)
 
 			// check if we can pull (requires containerd)
-			var cdAddress string
-			if cd, ok := sb.(interface {
-				ContainerdAddress() string
-			}); !ok {
+			cdAddress := sb.ContainerdAddress()
+			if cdAddress == "" {
 				return
-			} else {
-				cdAddress = cd.ContainerdAddress()
 			}
 
 			// TODO: make public pull helper function so this can be checked for standalone as well
@@ -1760,13 +1756,9 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	var cdAddress string
-	if cd, ok := sb.(interface {
-		ContainerdAddress() string
-	}); !ok {
-		return
-	} else {
-		cdAddress = cd.ContainerdAddress()
+	cdAddress := sb.ContainerdAddress()
+	if cdAddress == "" {
+		t.Skip("rest of test requires containerd worker")
 	}
 
 	client, err := newContainerd(cdAddress)
@@ -1896,13 +1888,9 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	checkAllReleasable(t, c, sb, false)
 
 	// examine contents of exported tars (requires containerd)
-	var cdAddress string
-	if cd, ok := sb.(interface {
-		ContainerdAddress() string
-	}); !ok {
-		return
-	} else {
-		cdAddress = cd.ContainerdAddress()
+	cdAddress := sb.ContainerdAddress()
+	if cdAddress == "" {
+		t.Skip("rest of test requires containerd worker")
 	}
 
 	// TODO: make public pull helper function so this can be checked for standalone as well
@@ -2916,13 +2904,9 @@ loop0:
 	require.Equal(t, 0, len(du))
 
 	// examine contents of exported tars (requires containerd)
-	var cdAddress string
-	if cd, ok := sb.(interface {
-		ContainerdAddress() string
-	}); !ok {
+	cdAddress := sb.ContainerdAddress()
+	if cdAddress == "" {
 		return
-	} else {
-		cdAddress = cd.ContainerdAddress()
 	}
 
 	// TODO: make public pull helper function so this can be checked for standalone as well
