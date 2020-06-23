@@ -167,7 +167,7 @@ func (ic *ImageWriter) exportLayers(ctx context.Context, compression blobs.Compr
 	return out, nil
 }
 
-func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache.ImmutableRef, config []byte, layers []blobs.DiffPair, oci bool, cache []byte) (*ocispec.Descriptor, error) {
+func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache.ImmutableRef, config []byte, layers []blobs.DiffPair, oci bool, inlineCache []byte) (*ocispec.Descriptor, error) {
 	if len(config) == 0 {
 		var err error
 		config, err = emptyImageConfig()
@@ -183,7 +183,7 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache
 
 	diffPairs, history := normalizeLayersAndHistory(layers, history, ref)
 
-	config, err = patchImageConfig(config, diffPairs, history, cache)
+	config, err = patchImageConfig(config, diffPairs, history, inlineCache)
 	if err != nil {
 		return nil, err
 	}
@@ -232,11 +232,7 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache
 			return nil, errors.Wrapf(err, "could not find blob %s from contentstore", dp.Blobsum)
 		}
 
-		var layerType string
-		if len(layerMediaTypes) > i {
-			layerType = layerMediaTypes[i]
-		}
-
+		layerType := blobs.ConvertLayerMediaType(layerMediaTypes[i], oci)
 		// NOTE: The media type might be missing for some migrated ones
 		// from before lease based storage. If so, we should detect
 		// the media type from blob data.
