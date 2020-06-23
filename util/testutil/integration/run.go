@@ -29,6 +29,7 @@ import (
 // Backend is the minimal interface that describes a testing backend.
 type Backend interface {
 	Address() string
+	ContainerdAddress() string
 	Rootless() bool
 }
 

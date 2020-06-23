@@ -735,13 +735,9 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 			require.Equal(t, exporterResponse["image.name"], imageName)
 
 			// check if we can pull (requires containerd)
-			var cdAddress string
-			if cd, ok := sb.(interface {
-				ContainerdAddress() string
-			}); !ok {
+			cdAddress := sb.ContainerdAddress()
+			if cdAddress == "" {
 				return
-			} else {
-				cdAddress = cd.ContainerdAddress()
 			}
 
 			// TODO: make public pull helper function so this can be checked for standalone as well
@@ -1711,7 +1707,7 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 	defer c.Close()
 
 	busybox := llb.Image("busybox:latest")
-	cmd := `sh -e -c "echo uncompressed > data"`
+	cmd := `sh -e -c "echo -n uncompressed > data"`
 
 	st := llb.Scratch()
 	st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
@@ -1743,16 +1739,19 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 
 	// new layer with gzip compression
 	targetImg := llb.Image(target)
-	cmd = `sh -e -c "echo gzip > data"`
-	st = targetImg.Run(llb.Shlex(cmd), llb.Dir("/wd")).GetMount("/wd")
+	cmd = `sh -e -c "echo -n gzip > data"`
+	st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", targetImg)
 
-	target = registry + "/buildkit/build/exporter:withcompressed"
+	def, err = st.Marshal(context.TODO())
+	require.NoError(t, err)
+
+	compressedTarget := registry + "/buildkit/build/exporter:withcompressed"
 	_, err = c.Solve(context.TODO(), def, SolveOpt{
 		Exports: []ExportEntry{
 			{
 				Type: ExporterImage,
 				Attrs: map[string]string{
-					"name": target,
+					"name": compressedTarget,
 					"push": "true",
 				},
 			},
@@ -1760,13 +1759,9 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	var cdAddress string
-	if cd, ok := sb.(interface {
-		ContainerdAddress() string
-	}); !ok {
-		return
-	} else {
-		cdAddress = cd.ContainerdAddress()
+	cdAddress := sb.ContainerdAddress()
+	if cdAddress == "" {
+		t.Skip("rest of test requires containerd worker")
 	}
 
 	client, err := newContainerd(cdAddress)
@@ -1776,10 +1771,12 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit")
 	err = client.ImageService().Delete(ctx, target, images.SynchronousDelete())
 	require.NoError(t, err)
+	err = client.ImageService().Delete(ctx, compressedTarget, images.SynchronousDelete())
+	require.NoError(t, err)
 
 	checkAllReleasable(t, c, sb, true)
 
-	img, err := client.Pull(ctx, target)
+	img, err := client.Pull(ctx, compressedTarget)
 	require.NoError(t, err)
 
 	dt, err := content.ReadBlob(ctx, img.ContentStore(), img.Target())
@@ -1896,13 +1893,9 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	checkAllReleasable(t, c, sb, false)
 
 	// examine contents of exported tars (requires containerd)
-	var cdAddress string
-	if cd, ok := sb.(interface {
-		ContainerdAddress() string
-	}); !ok {
-		return
-	} else {
-		cdAddress = cd.ContainerdAddress()
+	cdAddress := sb.ContainerdAddress()
+	if cdAddress == "" {
+		t.Skip("rest of test requires containerd worker")
 	}
 
 	// TODO: make public pull helper function so this can be checked for standalone as well
@@ -2916,13 +2909,9 @@ loop0:
 	require.Equal(t, 0, len(du))
 
 	// examine contents of exported tars (requires containerd)
-	var cdAddress string
-	if cd, ok := sb.(interface {
-		ContainerdAddress() string
-	}); !ok {
+	cdAddress := sb.ContainerdAddress()
+	if cdAddress == "" {
 		return
-	} else {
-		cdAddress = cd.ContainerdAddress()
 	}
 
 	// TODO: make public pull helper function so this can be checked for standalone as well

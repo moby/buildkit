@@ -68,13 +68,9 @@ func testBuildLocalExporter(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBuildContainerdExporter(t *testing.T, sb integration.Sandbox) {
-	var cdAddress string
-	if cd, ok := sb.(interface {
-		ContainerdAddress() string
-	}); !ok {
-		t.Skip("only for containerd worker")
-	} else {
-		cdAddress = cd.ContainerdAddress()
+	cdAddress := sb.ContainerdAddress()
+	if cdAddress == "" {
+		t.Skip("test is only for containerd worker")
 	}
 
 	st := llb.Image("busybox").

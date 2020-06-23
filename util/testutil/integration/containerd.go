@@ -130,12 +130,11 @@ disabled_plugins = ["cri"]
 	}
 	deferF.append(stop)
 
-	return cdbackend{
+	return backend{
+		address:           buildkitdSock,
 		containerdAddress: address,
-		backend: backend{
-			address:  buildkitdSock,
-			rootless: false,
-		}}, cl, nil
+		rootless:          false,
+	}, cl, nil
 }
 
 func formatLogs(m map[string]*bytes.Buffer) string {
@@ -146,13 +145,4 @@ func formatLogs(m map[string]*bytes.Buffer) string {
 		}
 	}
 	return strings.Join(ss, ",")
-}
-
-type cdbackend struct {
-	backend
-	containerdAddress string
-}
-
-func (s cdbackend) ContainerdAddress() string {
-	return s.containerdAddress
 }

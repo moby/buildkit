@@ -1580,13 +1580,9 @@ COPY --from=0 /foo /foo
 func testCmdShell(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 
-	var cdAddress string
-	if cd, ok := sb.(interface {
-		ContainerdAddress() string
-	}); !ok {
-		t.Skip("requires local image store")
-	} else {
-		cdAddress = cd.ContainerdAddress()
+	cdAddress := sb.ContainerdAddress()
+	if cdAddress == "" {
+		t.Skip("test is only for containerd worker")
 	}
 
 	dockerfile := []byte(`
@@ -1676,13 +1672,9 @@ ENTRYPOINT my entrypoint
 func testPullScratch(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 
-	var cdAddress string
-	if cd, ok := sb.(interface {
-		ContainerdAddress() string
-	}); !ok {
-		t.Skip("requires local image store")
-	} else {
-		cdAddress = cd.ContainerdAddress()
+	cdAddress := sb.ContainerdAddress()
+	if cdAddress == "" {
+		t.Skip("test is only for containerd worker")
 	}
 
 	dockerfile := []byte(`
@@ -2345,13 +2337,9 @@ COPY foo /symlink/
 }
 
 func testDockerfileScratchConfig(t *testing.T, sb integration.Sandbox) {
-	var cdAddress string
-	if cd, ok := sb.(interface {
-		ContainerdAddress() string
-	}); !ok {
-		t.Skip("only for containerd worker")
-	} else {
-		cdAddress = cd.ContainerdAddress()
+	cdAddress := sb.ContainerdAddress()
+	if cdAddress == "" {
+		t.Skip("test requires containerd worker")
 	}
 
 	f := getFrontend(t, sb)
@@ -2454,13 +2442,9 @@ EXPOSE 5000
 	}, nil)
 	require.NoError(t, err)
 
-	var cdAddress string
-	if cd, ok := sb.(interface {
-		ContainerdAddress() string
-	}); !ok {
-		return
-	} else {
-		cdAddress = cd.ContainerdAddress()
+	cdAddress := sb.ContainerdAddress()
+	if cdAddress == "" {
+		t.Skip("rest of test requires containerd worker")
 	}
 
 	client, err := newContainerd(cdAddress)
@@ -2639,14 +2623,9 @@ RUN ["ls"]
 	require.NoError(t, cmd.Run())
 
 	// TODO: expose this test to OCI worker
-
-	var cdAddress string
-	if cd, ok := sb.(interface {
-		ContainerdAddress() string
-	}); !ok {
-		t.Skip("only for containerd worker")
-	} else {
-		cdAddress = cd.ContainerdAddress()
+	cdAddress := sb.ContainerdAddress()
+	if cdAddress == "" {
+		t.Skip("rest of test requires containerd worker")
 	}
 
 	client, err := newContainerd(cdAddress)
@@ -2817,13 +2796,9 @@ USER nobody
 	}, nil)
 	require.NoError(t, err)
 
-	var cdAddress string
-	if cd, ok := sb.(interface {
-		ContainerdAddress() string
-	}); !ok {
-		return
-	} else {
-		cdAddress = cd.ContainerdAddress()
+	cdAddress := sb.ContainerdAddress()
+	if cdAddress == "" {
+		t.Skip("rest of test requires containerd worker")
 	}
 
 	client, err := newContainerd(cdAddress)
@@ -3573,13 +3548,9 @@ LABEL foo=bar
 	}, nil)
 	require.NoError(t, err)
 
-	var cdAddress string
-	if cd, ok := sb.(interface {
-		ContainerdAddress() string
-	}); !ok {
-		t.Skip("only for containerd worker")
-	} else {
-		cdAddress = cd.ContainerdAddress()
+	cdAddress := sb.ContainerdAddress()
+	if cdAddress == "" {
+		t.Skip("rest of test requires containerd worker")
 	}
 
 	client, err := newContainerd(cdAddress)
@@ -3997,13 +3968,9 @@ RUN echo bar > bar
 	_, err = f.Solve(context.TODO(), c, opt, nil)
 	require.NoError(t, err)
 
-	var cdAddress string
-	if cd, ok := sb.(interface {
-		ContainerdAddress() string
-	}); !ok {
-		t.Skip("only for containerd worker")
-	} else {
-		cdAddress = cd.ContainerdAddress()
+	cdAddress := sb.ContainerdAddress()
+	if cdAddress == "" {
+		t.Skip("rest of test requires containerd worker")
 	}
 
 	client, err := newContainerd(cdAddress)
@@ -4021,13 +3988,9 @@ RUN echo bar > bar
 }
 
 func testImportExportReproducibleIDs(t *testing.T, sb integration.Sandbox) {
-	var cdAddress string
-	if cd, ok := sb.(interface {
-		ContainerdAddress() string
-	}); !ok {
-		t.Skip("only for containerd worker")
-	} else {
-		cdAddress = cd.ContainerdAddress()
+	cdAddress := sb.ContainerdAddress()
+	if cdAddress == "" {
+		t.Skip("test requires containerd worker")
 	}
 
 	f := getFrontend(t, sb)
@@ -4737,13 +4700,9 @@ loop0:
 	require.Equal(t, 0, len(du))
 
 	// examine contents of exported tars (requires containerd)
-	var cdAddress string
-	if cd, ok := sb.(interface {
-		ContainerdAddress() string
-	}); !ok {
+	cdAddress := sb.ContainerdAddress()
+	if cdAddress == "" {
 		return
-	} else {
-		cdAddress = cd.ContainerdAddress()
 	}
 
 	// TODO: make public pull helper function so this can be checked for standalone as well

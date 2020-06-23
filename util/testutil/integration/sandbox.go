@@ -22,12 +22,17 @@ import (
 const buildkitdConfigFile = "buildkitd.toml"
 
 type backend struct {
-	address  string
-	rootless bool
+	address           string
+	containerdAddress string
+	rootless          bool
 }
 
 func (b backend) Address() string {
 	return b.address
+}
+
+func (b backend) ContainerdAddress() string {
+	return b.containerdAddress
 }
 
 func (b backend) Rootless() bool {
