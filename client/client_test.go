@@ -2921,6 +2921,7 @@ loop0:
 	// examine contents of exported tars (requires containerd)
 	cdAddress := sb.ContainerdAddress()
 	if cdAddress == "" {
+		t.Logf("checkAllReleasable: skipping check for exported tars in non-containerd test")
 		return
 	}
 
