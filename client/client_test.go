@@ -1737,6 +1737,22 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit")
+	cdAddress := sb.ContainerdAddress()
+	var client *containerd.Client
+	if cdAddress != "" {
+		client, err = newContainerd(cdAddress)
+		require.NoError(t, err)
+		defer client.Close()
+
+		img, err := client.GetImage(ctx, target)
+		require.NoError(t, err)
+		mfst, err := images.Manifest(ctx, client.ContentStore(), img.Target(), nil)
+		require.NoError(t, err)
+		require.Equal(t, 1, len(mfst.Layers))
+		require.Equal(t, images.MediaTypeDockerSchema2Layer, mfst.Layers[0].MediaType)
+	}
+
 	// new layer with gzip compression
 	targetImg := llb.Image(target)
 	cmd = `sh -e -c "echo -n gzip > data"`
@@ -1759,16 +1775,10 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	cdAddress := sb.ContainerdAddress()
 	if cdAddress == "" {
 		t.Skip("rest of test requires containerd worker")
 	}
 
-	client, err := newContainerd(cdAddress)
-	require.NoError(t, err)
-	defer client.Close()
-
-	ctx := namespaces.WithNamespace(context.Background(), "buildkit")
 	err = client.ImageService().Delete(ctx, target, images.SynchronousDelete())
 	require.NoError(t, err)
 	err = client.ImageService().Delete(ctx, compressedTarget, images.SynchronousDelete())
@@ -2911,6 +2921,7 @@ loop0:
 	// examine contents of exported tars (requires containerd)
 	cdAddress := sb.ContainerdAddress()
 	if cdAddress == "" {
+		t.Logf("checkAllReleasable: skipping check for exported tars in non-containerd test")
 		return
 	}
 

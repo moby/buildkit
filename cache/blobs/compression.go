@@ -11,6 +11,7 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 // CompressionType represents compression type for blob data.
@@ -101,22 +102,64 @@ func detectCompressionType(cr io.Reader) (CompressionType, error) {
 }
 
 // GetMediaTypeForLayers retrieves media type for layer from ref information.
+// If there is a mismatch in diff IDs or blobsums between the diffPairs and
+// corresponding ref, the returned slice will have an empty media type for
+// that layer and all parents.
 func GetMediaTypeForLayers(diffPairs []DiffPair, ref cache.ImmutableRef) []string {
-	tref := ref
+	layerTypes := make([]string, len(diffPairs))
+	if ref == nil {
+		return layerTypes
+	}
 
-	layerTypes := make([]string, 0, len(diffPairs))
-	for _, dp := range diffPairs {
-		if tref == nil {
-			return nil
-		}
+	tref := ref.Clone()
+	// diffPairs is ordered parent->child, but we iterate over refs from child->parent,
+	// so iterate over diffPairs in reverse
+	for i := range diffPairs {
+		dp := diffPairs[len(diffPairs)-1-i]
 
 		info := tref.Info()
 		if !(info.DiffID == dp.DiffID && info.Blob == dp.Blobsum) {
-			return nil
+			break
 		}
+		layerTypes[len(diffPairs)-1-i] = info.MediaType
 
-		layerTypes = append(layerTypes, info.MediaType)
-		tref = tref.Parent()
+		parent := tref.Parent()
+		tref.Release(context.TODO())
+		tref = parent
+		if tref == nil {
+			break
+		}
+	}
+	if tref != nil {
+		tref.Release(context.TODO())
 	}
 	return layerTypes
+}
+
+var toDockerLayerType = map[string]string{
+	ocispec.MediaTypeImageLayer:            images.MediaTypeDockerSchema2Layer,
+	images.MediaTypeDockerSchema2Layer:     images.MediaTypeDockerSchema2Layer,
+	ocispec.MediaTypeImageLayerGzip:        images.MediaTypeDockerSchema2LayerGzip,
+	images.MediaTypeDockerSchema2LayerGzip: images.MediaTypeDockerSchema2LayerGzip,
+}
+
+var toOCILayerType = map[string]string{
+	ocispec.MediaTypeImageLayer:            ocispec.MediaTypeImageLayer,
+	images.MediaTypeDockerSchema2Layer:     ocispec.MediaTypeImageLayer,
+	ocispec.MediaTypeImageLayerGzip:        ocispec.MediaTypeImageLayerGzip,
+	images.MediaTypeDockerSchema2LayerGzip: ocispec.MediaTypeImageLayerGzip,
+}
+
+func ConvertLayerMediaType(mediaType string, oci bool) string {
+	var converted string
+	if oci {
+		converted = toOCILayerType[mediaType]
+	} else {
+		converted = toDockerLayerType[mediaType]
+	}
+	if converted == "" {
+		logrus.Warnf("unhandled conversion for mediatype %q", mediaType)
+		return mediaType
+	}
+	return converted
 }
