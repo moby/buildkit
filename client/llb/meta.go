@@ -17,6 +17,7 @@ type contextKeyT string
 var (
 	keyArgs      = contextKeyT("llb.exec.args")
 	keyDir       = contextKeyT("llb.exec.dir")
+	keyTty       = contextKeyT("llb.exec.tty")
 	keyEnv       = contextKeyT("llb.exec.env")
 	keyUser      = contextKeyT("llb.exec.user")
 	keyExtraHost = contextKeyT("llb.exec.extrahost")
@@ -77,6 +78,14 @@ func dirf(value string, replace bool, v ...interface{}) StateOption {
 	}
 }
 
+func Tty() StateOption {
+	return func(s State) State {
+		return s.withValue(keyTty, func(ctx context.Context) (interface{}, error) {
+			return true, nil
+		})
+	}
+}
+
 func User(str string) StateOption {
 	return func(s State) State {
 		return s.WithValue(keyUser, str)
@@ -114,6 +123,19 @@ func getDir(s State) func(context.Context) (string, error) {
 			return v.(string), nil
 		}
 		return "", nil
+	}
+}
+
+func getTty(s State) func(context.Context) (bool, error) {
+	return func(ctx context.Context) (bool, error) {
+		v, err := s.getValue(keyTty)(ctx)
+		if err != nil {
+			return false, err
+		}
+		if v != nil {
+			return v.(bool), nil
+		}
+		return false, nil
 	}
 }
 

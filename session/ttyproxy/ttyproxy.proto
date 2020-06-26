@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package moby.ttyproxy.v1;
+
+option go_package = "ttyproxy";
+
+service TTYProxy {
+	// backwards: buildctl is the server, buildkitd is client and will send output
+	// (stdout, stderr), buildctl will "return" input (stdin)
+	rpc Proxy(stream BytesMessage) returns (stream BytesMessage);
+
+	rpc Resize(ResizeRequest) returns (stream ResizeResponse);
+
+	// there is only one tty, the server will need to Aquire and Release it.
+	// If parallel solves attempt to Aquire the tty then one will win and
+	// all others will block until it has been Released.
+	rpc Acquire(AcquireRequest) returns (AcquireResponse);
+	rpc Release(ReleaseRequest) returns (ReleaseResponse);
+}
+
+
+message BytesMessage{
+	bytes data = 1;
+}
+
+message ResizeRequest{}
+message ResizeResponse{
+	uint32 rows = 1;
+	uint32 columns = 2;
+	uint32 x = 3;
+	uint32 y = 4;
+}
+
+message AcquireRequest {}
+message AcquireResponse {}
+
+message ReleaseRequest {}
+message ReleaseResponse {}

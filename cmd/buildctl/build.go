@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/containerd/console"
+	"github.com/mattn/go-tty"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/cmd/buildctl/build"
@@ -14,6 +15,7 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/auth/authprovider"
 	"github.com/moby/buildkit/session/sshforward/sshprovider"
+	"github.com/moby/buildkit/session/ttyproxy/ttyprovider"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/progress/progressui"
 	digest "github.com/opencontainers/go-digest"
@@ -102,6 +104,10 @@ var buildCommand = cli.Command{
 			Name:  "ssh",
 			Usage: "Allow forwarding SSH agent to the builder. Format default|<id>[=<socket>|<key>[,<key>]]",
 		},
+		cli.BoolFlag{
+			Name:  "tty",
+			Usage: "Allow tty to be attached to container command executions",
+		},
 	},
 }
 
@@ -174,6 +180,24 @@ func buildAction(clicontext *cli.Context) error {
 			return err
 		}
 		attachable = append(attachable, secretProvider)
+	}
+
+	if clicontext.Bool("tty") {
+		input := os.Stdin
+		if fi, _ := os.Stdin.Stat(); (fi.Mode() & os.ModeCharDevice) == 0 {
+			// stdin is not a tty, we need to reopen /dev/tty
+			t, err := tty.Open()
+			if err != nil {
+				return err
+			}
+			defer t.Close()
+			input = t.Input()
+		}
+		tp, err := ttyprovider.NewTTYProvider(input)
+		if err != nil {
+			return err
+		}
+		attachable = append(attachable, tp)
 	}
 
 	allowed, err := build.ParseAllow(clicontext.StringSlice("allow"))
@@ -275,6 +299,10 @@ func buildAction(clicontext *cli.Context) error {
 	eg.Go(func() error {
 		var c console.Console
 		progressOpt := clicontext.String("progress")
+		if clicontext.Bool("tty") && (progressOpt == "auto" || progressOpt == "tty") {
+			logrus.Debugf("Forcing plain progress output because tty proxy requested")
+			progressOpt = "plain"
+		}
 
 		switch progressOpt {
 		case "auto", "tty":

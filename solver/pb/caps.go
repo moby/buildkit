@@ -35,6 +35,7 @@ const (
 	CapExecMetaNetwork               apicaps.CapID = "exec.meta.network"
 	CapExecMetaSecurity              apicaps.CapID = "exec.meta.security"
 	CapExecMetaSetsDefaultPath       apicaps.CapID = "exec.meta.setsdefaultpath"
+	CapExecMetaTTY                   apicaps.CapID = "exec.meta.tty"
 	CapExecMountBind                 apicaps.CapID = "exec.mount.bind"
 	CapExecMountBindReadWriteNoOuput apicaps.CapID = "exec.mount.bind.readwrite-nooutput"
 	CapExecMountCache                apicaps.CapID = "exec.mount.cache"
@@ -247,6 +248,12 @@ func init() {
 
 	Caps.Init(apicaps.Cap{
 		ID:      CapExecCgroupsMounted,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapExecMetaTTY,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})

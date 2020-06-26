@@ -160,7 +160,12 @@ func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root c
 		}
 	}()
 
-	task, err := container.NewTask(ctx, cio.NewCreator(cio.WithStreams(stdin, stdout, stderr)), containerd.WithRootFS(rootMounts))
+	cioOpts := []cio.Opt{cio.WithStreams(stdin, stdout, stderr)}
+	if meta.Tty {
+		cioOpts = append(cioOpts, cio.WithTerminal)
+	}
+
+	task, err := container.NewTask(ctx, cio.NewCreator(cioOpts...), containerd.WithRootFS(rootMounts))
 	if err != nil {
 		return err
 	}

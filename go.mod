@@ -17,6 +17,7 @@ require (
 	github.com/containerd/go-cni v0.0.0-20200107172653-c154a49e2c75
 	github.com/containerd/go-runc v0.0.0-20200220073739-7016d3ce2328
 	github.com/coreos/go-systemd/v22 v22.0.0
+	github.com/creack/pty v1.1.11
 	github.com/docker/cli v0.0.0-20200227165822-2298e6a3fe24
 	github.com/docker/distribution v2.7.1+incompatible
 	github.com/docker/docker v0.0.0
@@ -39,6 +40,7 @@ require (
 	github.com/imdario/mergo v0.3.9 // indirect
 	github.com/ishidawataru/sctp v0.0.0-20191218070446-00ab2ac2db07 // indirect
 	github.com/jaguilar/vt100 v0.0.0-20150826170717-2703a27b14ea
+	github.com/mattn/go-tty v0.0.3
 	github.com/mitchellh/hashstructure v1.0.0
 	github.com/morikuni/aec v0.0.0-20170113033406-39771216ff4c
 	github.com/opencontainers/go-digest v1.0.0

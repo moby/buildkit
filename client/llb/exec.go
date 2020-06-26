@@ -169,6 +169,15 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 		return "", nil, nil, nil, err
 	}
 
+	tty, err := getTty(e.base)(ctx)
+	if err != nil {
+		return "", nil, nil, nil, err
+	}
+
+	if tty {
+		addCap(&e.constraints, pb.CapExecMetaTTY)
+	}
+
 	user, err := getUser(e.base)(ctx)
 	if err != nil {
 		return "", nil, nil, nil, err
@@ -178,6 +187,7 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 		Args: args,
 		Env:  env.ToArray(),
 		Cwd:  cwd,
+		Tty:  tty,
 		User: user,
 	}
 	extraHosts, err := getExtraHosts(e.base)(ctx)

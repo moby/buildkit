@@ -27,6 +27,7 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/secrets"
 	"github.com/moby/buildkit/session/sshforward"
+	"github.com/moby/buildkit/session/ttyproxy"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/llbsolver"
@@ -726,6 +727,7 @@ func (e *execOp) Exec(ctx context.Context, inputs []solver.Result) ([]solver.Res
 		Args:           e.op.Meta.Args,
 		Env:            e.op.Meta.Env,
 		Cwd:            e.op.Meta.Cwd,
+		Tty:            e.op.Meta.Tty,
 		User:           e.op.Meta.User,
 		ReadonlyRootFS: readonlyRootFS,
 		ExtraHosts:     extraHosts,
@@ -737,12 +739,17 @@ func (e *execOp) Exec(ctx context.Context, inputs []solver.Result) ([]solver.Res
 		meta.Env = append(meta.Env, proxyEnvList(e.op.Meta.ProxyEnv)...)
 	}
 	meta.Env = addDefaultEnvvar(meta.Env, "PATH", utilsystem.DefaultPathEnv)
+	if meta.Tty {
+		meta.Env = addDefaultEnvvar(meta.Env, "TERM", "xterm")
+	}
 
-	stdout, stderr := logs.NewLogStreams(ctx, os.Getenv("BUILDKIT_DEBUG_EXEC_OUTPUT") == "1")
-	defer stdout.Close()
-	defer stderr.Close()
+	stdio, cleanup, err := e.getIO(ctx, meta.Tty)
+	if err != nil {
+		return nil, err
+	}
+	defer cleanup()
 
-	if err := e.exec.Exec(ctx, meta, root, mounts, nil, stdout, stderr); err != nil {
+	if err := e.exec.Exec(ctx, meta, root, mounts, stdio.Stdin, stdio.Stdout, stdio.Stderr); err != nil {
 		return nil, errors.Wrapf(err, "executor failed running %v", meta.Args)
 	}
 
@@ -760,6 +767,42 @@ func (e *execOp) Exec(ctx context.Context, inputs []solver.Result) ([]solver.Res
 		outputs[i] = nil
 	}
 	return refs, nil
+}
+
+func (e *execOp) getIO(ctx context.Context, attachTty bool) (*ttyproxy.TTYIO, func() error, error) {
+	if !attachTty {
+		stdout, stderr := logs.NewLogStreams(ctx, os.Getenv("BUILDKIT_DEBUG_EXEC_OUTPUT") == "1")
+		return &ttyproxy.TTYIO{
+				Stdin:  nil,
+				Stdout: stdout,
+				Stderr: stderr,
+			}, func() error {
+				err := stdout.Close()
+				if err != nil {
+					return errors.WithStack(err)
+				}
+				err = stderr.Close()
+				if err != nil {
+					return errors.WithStack(err)
+				}
+				return nil
+			}, nil
+	}
+
+	sessionID := session.FromContext(ctx)
+	if sessionID == "" {
+		return nil, nil, errors.New("could not access local tty without session")
+	}
+
+	caller, err := e.sm.Get(ctx, sessionID)
+	if err != nil {
+		return nil, nil, err
+	}
+	ttyIO, cleanup, err := ttyproxy.Attach(ctx, caller.Conn())
+	if grpcerrors.Code(err) == codes.Unimplemented {
+		return nil, nil, errors.New("tty forwarding not enabled in the client")
+	}
+	return ttyIO, cleanup, err
 }
 
 func proxyEnvList(p *pb.ProxyEnv) []string {
