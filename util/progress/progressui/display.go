@@ -273,7 +273,14 @@ func (t *trace) update(s *client.SolveStatus, termWidth int) {
 				if v.Started != nil {
 					ts = l.Timestamp.Sub(*v.Started)
 				}
-				v.logs = append(v.logs, []byte(fmt.Sprintf("#%d %s %s", v.index, fmt.Sprintf("%#.4g", ts.Seconds())[:5], dt)))
+				prec := 1
+				sec := ts.Seconds()
+				if sec < 10 {
+					prec = 3
+				} else if sec < 100 {
+					prec = 2
+				}
+				v.logs = append(v.logs, []byte(fmt.Sprintf("#%d %s %s", v.index, fmt.Sprintf("%.[2]*[1]f", sec, prec), dt)))
 			}
 			i++
 		})
