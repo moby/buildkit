@@ -49,23 +49,9 @@ func New(opt Opt) (exporter.Exporter, error) {
 }
 
 func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exporter.ExporterInstance, error) {
-	id := session.FromContext(ctx)
-	if id == "" {
-		return nil, errors.New("could not access local files without session")
-	}
-
-	timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
-	caller, err := e.opt.SessionManager.Get(timeoutCtx, id)
-	if err != nil {
-		return nil, err
-	}
-
 	var ot *bool
 	i := &imageExporterInstance{
 		imageExporter:    e,
-		caller:           caller,
 		layerCompression: blobs.DefaultCompression,
 	}
 	for k, v := range opt {
@@ -110,7 +96,6 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 type imageExporterInstance struct {
 	*imageExporter
 	meta             map[string][]byte
-	caller           session.Caller
 	name             string
 	ociTypes         bool
 	layerCompression blobs.CompressionType
@@ -120,7 +105,7 @@ func (e *imageExporterInstance) Name() string {
 	return "exporting to oci image format"
 }
 
-func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source) (map[string]string, error) {
+func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source, sessionID string) (map[string]string, error) {
 	if e.opt.Variant == VariantDocker && len(src.Refs) > 0 {
 		return nil, errors.Errorf("docker exporter does not currently support exporting manifest lists")
 	}
@@ -175,7 +160,15 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 		return nil, errors.Errorf("invalid variant %q", e.opt.Variant)
 	}
 
-	w, err := filesync.CopyFileWriter(ctx, resp, e.caller)
+	timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	caller, err := e.opt.SessionManager.Get(timeoutCtx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	w, err := filesync.CopyFileWriter(ctx, resp, caller)
 	if err != nil {
 		return nil, err
 	}

@@ -1,7 +1,6 @@
 package resolver
 
 import (
-	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"io/ioutil"
@@ -149,17 +148,13 @@ func NewRegistryConfig(m map[string]config.RegistryConfig) docker.RegistryHosts 
 	)
 }
 
-func New(ctx context.Context, hosts docker.RegistryHosts, sm *session.Manager) remotes.Resolver {
+func New(hosts docker.RegistryHosts, sm *session.Manager, g session.Group) remotes.Resolver {
 	return docker.NewResolver(docker.ResolverOptions{
-		Hosts: hostsWithCredentials(ctx, hosts, sm),
+		Hosts: hostsWithCredentials(hosts, sm, g),
 	})
 }
 
-func hostsWithCredentials(ctx context.Context, hosts docker.RegistryHosts, sm *session.Manager) docker.RegistryHosts {
-	id := session.FromContext(ctx)
-	if id == "" {
-		return hosts
-	}
+func hostsWithCredentials(hosts docker.RegistryHosts, sm *session.Manager, g session.Group) docker.RegistryHosts {
 	return func(domain string) ([]docker.RegistryHost, error) {
 		res, err := hosts(domain)
 		if err != nil {
@@ -169,17 +164,9 @@ func hostsWithCredentials(ctx context.Context, hosts docker.RegistryHosts, sm *s
 			return nil, nil
 		}
 
-		timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		caller, err := sm.Get(timeoutCtx, id)
-		if err != nil {
-			return nil, err
-		}
-
 		a := docker.NewDockerAuthorizer(
 			docker.WithAuthClient(res[0].Client),
-			docker.WithAuthCreds(auth.CredentialsFunc(context.TODO(), caller)),
+			docker.WithAuthCreds(auth.CredentialsFunc(sm, g)),
 		)
 		for i := range res {
 			res[i].Authorizer = a

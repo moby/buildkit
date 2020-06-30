@@ -87,7 +87,7 @@ type Worker struct {
 	CacheManager  cache.Manager
 	SourceManager *source.Manager
 	imageWriter   *imageexporter.ImageWriter
-	ImageSource   source.Source
+	ImageSource   *containerimage.Source
 }
 
 // NewWorker instantiates a local worker
@@ -287,17 +287,8 @@ func (w *Worker) PruneCacheMounts(ctx context.Context, ids []string) error {
 	return nil
 }
 
-func (w *Worker) ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt, sm *session.Manager) (digest.Digest, []byte, error) {
-	// ImageSource is typically source/containerimage
-	resolveImageConfig, ok := w.ImageSource.(resolveImageConfig)
-	if !ok {
-		return "", nil, errors.Errorf("worker %q does not implement ResolveImageConfig", w.ID())
-	}
-	return resolveImageConfig.ResolveImageConfig(ctx, ref, opt, sm)
-}
-
-type resolveImageConfig interface {
-	ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt, sm *session.Manager) (digest.Digest, []byte, error)
+func (w *Worker) ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt, sm *session.Manager, g session.Group) (digest.Digest, []byte, error) {
+	return w.ImageSource.ResolveImageConfig(ctx, ref, opt, sm, g)
 }
 
 func (w *Worker) Exec(ctx context.Context, meta executor.Meta, rootFS cache.ImmutableRef, stdin io.ReadCloser, stdout, stderr io.WriteCloser) error {
