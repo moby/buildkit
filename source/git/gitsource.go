@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/docker/docker/pkg/locker"
 	"github.com/moby/buildkit/cache"
@@ -205,7 +204,7 @@ func (gs *gitSourceHandler) authSecretNames() (sec []authSecret, _ error) {
 	return sec, nil
 }
 
-func (gs *gitSourceHandler) getAuthToken(ctx context.Context) error {
+func (gs *gitSourceHandler) getAuthToken(ctx context.Context, g session.Group) error {
 	if gs.auth != nil {
 		return nil
 	}
@@ -213,38 +212,26 @@ func (gs *gitSourceHandler) getAuthToken(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	id := session.FromContext(ctx)
-	if id == "" {
-		return errors.New("could not access auth tokens without session")
-	}
-
-	timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
-	caller, err := gs.sm.Get(timeoutCtx, id)
-	if err != nil {
-		return err
-	}
-
-	for _, s := range sec {
-		dt, err := secrets.GetSecret(ctx, caller, s.name)
-		if err != nil {
-			if errors.Is(err, secrets.ErrNotFound) {
-				continue
+	return gs.sm.Any(ctx, g, func(ctx context.Context, _ string, caller session.Caller) error {
+		for _, s := range sec {
+			dt, err := secrets.GetSecret(ctx, caller, s.name)
+			if err != nil {
+				if errors.Is(err, secrets.ErrNotFound) {
+					continue
+				}
+				return err
 			}
-			return err
+			if s.token {
+				dt = []byte("basic " + base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("x-access-token:%s", dt))))
+			}
+			gs.auth = []string{"-c", "http.extraheader=Authorization: " + string(dt)}
+			break
 		}
-		if s.token {
-			dt = []byte("basic " + base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("x-access-token:%s", dt))))
-		}
-		gs.auth = []string{"-c", "http.extraheader=Authorization: " + string(dt)}
-		break
-	}
-
-	return nil
+		return nil
+	})
 }
 
-func (gs *gitSourceHandler) CacheKey(ctx context.Context, index int) (string, bool, error) {
+func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index int) (string, bool, error) {
 	remote := gs.src.Remote
 	ref := gs.src.Ref
 	if ref == "" {
@@ -259,7 +246,7 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, index int) (string, bo
 		return ref, true, nil
 	}
 
-	gs.getAuthToken(ctx)
+	gs.getAuthToken(ctx, g)
 
 	gitDir, unmountGitDir, err := gs.mountRemote(ctx, remote, gs.auth)
 	if err != nil {
@@ -288,7 +275,7 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, index int) (string, bo
 	return sha, true, nil
 }
 
-func (gs *gitSourceHandler) Snapshot(ctx context.Context) (out cache.ImmutableRef, retErr error) {
+func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out cache.ImmutableRef, retErr error) {
 	ref := gs.src.Ref
 	if ref == "" {
 		ref = "master"
@@ -297,13 +284,13 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context) (out cache.ImmutableRe
 	cacheKey := gs.cacheKey
 	if cacheKey == "" {
 		var err error
-		cacheKey, _, err = gs.CacheKey(ctx, 0)
+		cacheKey, _, err = gs.CacheKey(ctx, g, 0)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	gs.getAuthToken(ctx)
+	gs.getAuthToken(ctx, g)
 
 	snapshotKey := "git-snapshot::" + cacheKey + ":" + gs.src.Subdir
 	gs.locker.Lock(snapshotKey)

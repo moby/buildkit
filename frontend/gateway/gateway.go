@@ -25,7 +25,6 @@ import (
 	"github.com/moby/buildkit/frontend"
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
-	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	opspb "github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
@@ -68,13 +67,11 @@ func filterPrefix(opts map[string]string, pfx string) map[string]string {
 	return m
 }
 
-func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string, inputs map[string]*opspb.Definition) (*frontend.Result, error) {
+func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string, inputs map[string]*opspb.Definition, sid string) (*frontend.Result, error) {
 	source, ok := opts[keySource]
 	if !ok {
 		return nil, errors.Errorf("no source specified for gateway")
 	}
-
-	sid := session.FromContext(ctx)
 
 	_, isDevel := opts[keyDevel]
 	var img specs.Image
@@ -82,12 +79,12 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 	var readonly bool // TODO: try to switch to read-only by default.
 
 	if isDevel {
-		devRes, err := llbBridge.Solve(session.NewContext(ctx, "gateway:"+sid),
+		devRes, err := llbBridge.Solve(ctx,
 			frontend.SolveRequest{
 				Frontend:       source,
 				FrontendOpt:    filterPrefix(opts, "gateway-"),
 				FrontendInputs: inputs,
-			})
+			}, "gateway:"+sid)
 		if err != nil {
 			return nil, err
 		}
@@ -145,7 +142,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 
 		res, err := llbBridge.Solve(ctx, frontend.SolveRequest{
 			Definition: def.ToPB(),
-		})
+		}, sid)
 		if err != nil {
 			return nil, err
 		}
@@ -169,7 +166,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 		rootFS = workerRef.ImmutableRef
 	}
 
-	lbf, ctx, err := newLLBBridgeForwarder(ctx, llbBridge, gf.workers, inputs)
+	lbf, ctx, err := newLLBBridgeForwarder(ctx, llbBridge, gf.workers, inputs, sid)
 	defer lbf.conn.Close()
 	if err != nil {
 		return nil, err
@@ -296,7 +293,7 @@ func (lbf *llbBridgeForwarder) Result() (*frontend.Result, error) {
 	return lbf.result, nil
 }
 
-func NewBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, workers frontend.WorkerInfos, inputs map[string]*opspb.Definition) *llbBridgeForwarder {
+func NewBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, workers frontend.WorkerInfos, inputs map[string]*opspb.Definition, sid string) *llbBridgeForwarder {
 	lbf := &llbBridgeForwarder{
 		callCtx:   ctx,
 		llbBridge: llbBridge,
@@ -305,13 +302,14 @@ func NewBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridg
 		pipe:      newPipe(),
 		workers:   workers,
 		inputs:    inputs,
+		sid:       sid,
 	}
 	return lbf
 }
 
-func newLLBBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, workers frontend.WorkerInfos, inputs map[string]*opspb.Definition) (*llbBridgeForwarder, context.Context, error) {
+func newLLBBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, workers frontend.WorkerInfos, inputs map[string]*opspb.Definition, sid string) (*llbBridgeForwarder, context.Context, error) {
 	ctx, cancel := context.WithCancel(ctx)
-	lbf := NewBridgeForwarder(ctx, llbBridge, workers, inputs)
+	lbf := NewBridgeForwarder(ctx, llbBridge, workers, inputs, sid)
 	server := grpc.NewServer(grpc.UnaryInterceptor(grpcerrors.UnaryServerInterceptor), grpc.StreamInterceptor(grpcerrors.StreamServerInterceptor))
 	grpc_health_v1.RegisterHealthServer(server, health.NewServer())
 	pb.RegisterLLBBridgeServer(server, lbf)
@@ -403,6 +401,7 @@ type llbBridgeForwarder struct {
 	workers           frontend.WorkerInfos
 	inputs            map[string]*opspb.Definition
 	isErrServerClosed bool
+	sid               string
 	*pipe
 }
 
@@ -465,7 +464,7 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 		FrontendOpt:    req.FrontendOpt,
 		FrontendInputs: req.FrontendInputs,
 		CacheImports:   cacheImports,
-	})
+	}, lbf.sid)
 	if err != nil {
 		return nil, err
 	}
