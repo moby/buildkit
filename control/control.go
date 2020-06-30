@@ -219,7 +219,6 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 	if err := translateLegacySolveRequest(req); err != nil {
 		return nil, err
 	}
-	ctx = session.NewContext(ctx, req.Session)
 
 	defer func() {
 		time.AfterFunc(time.Second, c.throttledGC)
@@ -263,7 +262,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		if !ok {
 			return nil, errors.Errorf("unknown cache exporter: %q", e.Type)
 		}
-		cacheExporter, err = cacheExporterFunc(ctx, e.Attrs)
+		cacheExporter, err = cacheExporterFunc(ctx, session.NewGroup(req.Session), e.Attrs)
 		if err != nil {
 			return nil, err
 		}
@@ -276,7 +275,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		})
 	}
 
-	resp, err := c.solver.Solve(ctx, req.Ref, frontend.SolveRequest{
+	resp, err := c.solver.Solve(ctx, req.Ref, req.Session, frontend.SolveRequest{
 		Frontend:       req.Frontend,
 		Definition:     req.Definition,
 		FrontendOpt:    req.FrontendAttrs,

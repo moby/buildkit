@@ -237,7 +237,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 				}
 			}
 			if e.push {
-				if err := push.Push(ctx, e.opt.SessionManager, e.opt.ImageWriter.ContentStore(), desc.Digest, targetName, e.insecure, e.opt.RegistryHosts, e.pushByDigest); err != nil {
+				if err := push.Push(ctx, e.opt.SessionManager, sessionID, e.opt.ImageWriter.ContentStore(), desc.Digest, targetName, e.insecure, e.opt.RegistryHosts, e.pushByDigest); err != nil {
 					return nil, err
 				}
 			}

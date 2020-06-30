@@ -24,7 +24,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func Push(ctx context.Context, sm *session.Manager, cs content.Store, dgst digest.Digest, ref string, insecure bool, hosts docker.RegistryHosts, byDigest bool) error {
+func Push(ctx context.Context, sm *session.Manager, sid string, cs content.Store, dgst digest.Digest, ref string, insecure bool, hosts docker.RegistryHosts, byDigest bool) error {
 	desc := ocispec.Descriptor{
 		Digest: dgst,
 	}
@@ -42,7 +42,7 @@ func Push(ctx context.Context, sm *session.Manager, cs content.Store, dgst diges
 		ref = reference.TagNameOnly(parsed).String()
 	}
 
-	resolver := resolver.New(ctx, hosts, sm)
+	resolver := resolver.New(hosts, sm, session.NewGroup(sid))
 
 	pusher, err := resolver.Pusher(ctx, ref)
 	if err != nil {
