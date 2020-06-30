@@ -14,6 +14,7 @@ import (
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/imageutil"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/resolver"
@@ -73,7 +74,7 @@ func Push(ctx context.Context, sm *session.Manager, cs content.Store, dgst diges
 	handlers := append([]images.Handler{},
 		images.HandlerFunc(annotateDistributionSourceHandler(cs, childrenHandler(cs))),
 		filterHandler,
-		pushUpdateSourceHandler,
+		dedupeHandler(pushUpdateSourceHandler),
 	)
 
 	ra, err := cs.ReaderAt(ctx, desc)
@@ -247,4 +248,38 @@ func updateDistributionSourceHandler(cs content.Store, pushF images.HandlerFunc,
 		}
 		return children, nil
 	}), nil
+}
+
+func dedupeHandler(h images.HandlerFunc) images.HandlerFunc {
+	var g flightcontrol.Group
+	res := map[digest.Digest][]ocispec.Descriptor{}
+	var mu sync.Mutex
+
+	return images.HandlerFunc(func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
+		res, err := g.Do(ctx, desc.Digest.String(), func(ctx context.Context) (interface{}, error) {
+			mu.Lock()
+			if r, ok := res[desc.Digest]; ok {
+				mu.Unlock()
+				return r, nil
+			}
+			mu.Unlock()
+
+			children, err := h(ctx, desc)
+			if err != nil {
+				return nil, err
+			}
+
+			mu.Lock()
+			res[desc.Digest] = children
+			mu.Unlock()
+			return children, nil
+		})
+		if err != nil {
+			return nil, err
+		}
+		if res == nil {
+			return nil, nil
+		}
+		return res.([]ocispec.Descriptor), nil
+	})
 }
