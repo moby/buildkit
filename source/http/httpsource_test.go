@@ -49,7 +49,7 @@ func TestHTTPSource(t *testing.T) {
 	h, err := hs.Resolve(ctx, id, nil)
 	require.NoError(t, err)
 
-	k, _, err := h.CacheKey(ctx, 0)
+	k, _, err := h.CacheKey(ctx, nil, 0)
 	require.NoError(t, err)
 
 	expectedContent1 := "sha256:0b1a154faa3003c1fbe7fda9c8a42d55fde2df2a2c405c32038f8ac7ed6b044a"
@@ -58,7 +58,7 @@ func TestHTTPSource(t *testing.T) {
 	require.Equal(t, server.Stats("/foo").AllRequests, 1)
 	require.Equal(t, server.Stats("/foo").CachedRequests, 0)
 
-	ref, err := h.Snapshot(ctx)
+	ref, err := h.Snapshot(ctx, nil)
 	require.NoError(t, err)
 	defer func() {
 		if ref != nil {
@@ -78,14 +78,14 @@ func TestHTTPSource(t *testing.T) {
 	h, err = hs.Resolve(ctx, id, nil)
 	require.NoError(t, err)
 
-	k, _, err = h.CacheKey(ctx, 0)
+	k, _, err = h.CacheKey(ctx, nil, 0)
 	require.NoError(t, err)
 
 	require.Equal(t, expectedContent1, k)
 	require.Equal(t, server.Stats("/foo").AllRequests, 2)
 	require.Equal(t, server.Stats("/foo").CachedRequests, 1)
 
-	ref, err = h.Snapshot(ctx)
+	ref, err = h.Snapshot(ctx, nil)
 	require.NoError(t, err)
 	defer func() {
 		if ref != nil {
@@ -114,14 +114,14 @@ func TestHTTPSource(t *testing.T) {
 	h, err = hs.Resolve(ctx, id, nil)
 	require.NoError(t, err)
 
-	k, _, err = h.CacheKey(ctx, 0)
+	k, _, err = h.CacheKey(ctx, nil, 0)
 	require.NoError(t, err)
 
 	require.Equal(t, expectedContent2, k)
 	require.Equal(t, server.Stats("/foo").AllRequests, 4)
 	require.Equal(t, server.Stats("/foo").CachedRequests, 1)
 
-	ref, err = h.Snapshot(ctx)
+	ref, err = h.Snapshot(ctx, nil)
 	require.NoError(t, err)
 	defer func() {
 		if ref != nil {
@@ -163,14 +163,14 @@ func TestHTTPDefaultName(t *testing.T) {
 	h, err := hs.Resolve(ctx, id, nil)
 	require.NoError(t, err)
 
-	k, _, err := h.CacheKey(ctx, 0)
+	k, _, err := h.CacheKey(ctx, nil, 0)
 	require.NoError(t, err)
 
 	require.Equal(t, "sha256:146f16ec8810a62a57ce314aba391f95f7eaaf41b8b1ebaf2ab65fd63b1ad437", k)
 	require.Equal(t, server.Stats("/").AllRequests, 1)
 	require.Equal(t, server.Stats("/").CachedRequests, 0)
 
-	ref, err := h.Snapshot(ctx)
+	ref, err := h.Snapshot(ctx, nil)
 	require.NoError(t, err)
 	defer func() {
 		if ref != nil {
@@ -206,7 +206,7 @@ func TestHTTPInvalidURL(t *testing.T) {
 	h, err := hs.Resolve(ctx, id, nil)
 	require.NoError(t, err)
 
-	_, _, err = h.CacheKey(ctx, 0)
+	_, _, err = h.CacheKey(ctx, nil, 0)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "invalid response")
 }
@@ -236,7 +236,7 @@ func TestHTTPChecksum(t *testing.T) {
 	h, err := hs.Resolve(ctx, id, nil)
 	require.NoError(t, err)
 
-	k, _, err := h.CacheKey(ctx, 0)
+	k, _, err := h.CacheKey(ctx, nil, 0)
 	require.NoError(t, err)
 
 	expectedContentDifferent := "sha256:f25996f463dca69cffb580f8273ffacdda43332b5f0a8bea2ead33900616d44b"
@@ -246,7 +246,7 @@ func TestHTTPChecksum(t *testing.T) {
 	require.Equal(t, server.Stats("/foo").AllRequests, 0)
 	require.Equal(t, server.Stats("/foo").CachedRequests, 0)
 
-	_, err = h.Snapshot(ctx)
+	_, err = h.Snapshot(ctx, nil)
 	require.Error(t, err)
 
 	require.Equal(t, expectedContentDifferent, k)
@@ -258,14 +258,14 @@ func TestHTTPChecksum(t *testing.T) {
 	h, err = hs.Resolve(ctx, id, nil)
 	require.NoError(t, err)
 
-	k, _, err = h.CacheKey(ctx, 0)
+	k, _, err = h.CacheKey(ctx, nil, 0)
 	require.NoError(t, err)
 
 	require.Equal(t, expectedContentCorrect, k)
 	require.Equal(t, server.Stats("/foo").AllRequests, 1)
 	require.Equal(t, server.Stats("/foo").CachedRequests, 0)
 
-	ref, err := h.Snapshot(ctx)
+	ref, err := h.Snapshot(ctx, nil)
 	require.NoError(t, err)
 	defer func() {
 		if ref != nil {

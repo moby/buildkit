@@ -168,7 +168,7 @@ func (e *imageExporterInstance) Name() string {
 	return "exporting to image"
 }
 
-func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source) (*controlapi.ExporterResponse, error) {
+func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source, sessionID string) (map[string]string, error) {
 	if src.Metadata == nil {
 		src.Metadata = make(map[string][]byte)
 	}
@@ -237,7 +237,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 				}
 			}
 			if e.push {
-				if err := push.Push(ctx, e.opt.SessionManager, e.opt.ImageWriter.ContentStore(), desc.Digest, targetName, e.insecure, e.opt.RegistryHosts, e.pushByDigest); err != nil {
+				if err := push.Push(ctx, e.opt.SessionManager, sessionID, e.opt.ImageWriter.ContentStore(), desc.Digest, targetName, e.insecure, e.opt.RegistryHosts, e.pushByDigest); err != nil {
 					return nil, err
 				}
 			}

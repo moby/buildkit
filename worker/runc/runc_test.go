@@ -67,7 +67,7 @@ func newBusyboxSourceSnapshot(ctx context.Context, t *testing.T, w *base.Worker,
 	require.NoError(t, err)
 	src, err := w.SourceManager.Resolve(ctx, img, sm)
 	require.NoError(t, err)
-	snap, err := src.Snapshot(ctx)
+	snap, err := src.Snapshot(ctx, nil)
 	require.NoError(t, err)
 	return snap
 }
