@@ -23,6 +23,7 @@ import (
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/pull"
+	"github.com/moby/buildkit/util/resolver"
 	"github.com/moby/buildkit/util/winlayers"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/identity"
@@ -79,11 +80,11 @@ func (is *Source) ResolveImageConfig(ctx context.Context, ref string, opt llb.Re
 
 	res, err := is.g.Do(ctx, key, func(ctx context.Context) (interface{}, error) {
 		dgst, dt, err := imageutil.Config(ctx, ref, pull.NewResolver(g, pull.ResolverOpt{
-			Hosts:          is.RegistryHosts,
-			SessionManager: sm,
-			ImageStore:     is.ImageStore,
-			Mode:           rm,
-			Ref:            ref,
+			Hosts:      is.RegistryHosts,
+			Auth:       resolver.NewSessionAuthenticator(sm, g),
+			ImageStore: is.ImageStore,
+			Mode:       rm,
+			Ref:        ref,
 		}), is.ContentStore, is.LeaseManager, opt.Platform)
 		if err != nil {
 			return nil, err
@@ -122,11 +123,11 @@ func (is *Source) Resolve(ctx context.Context, id source.Identifier, sm *session
 		id:            imageIdentifier,
 		LeaseManager:  is.LeaseManager,
 		ResolverOpt: pull.ResolverOpt{
-			Hosts:          is.RegistryHosts,
-			SessionManager: sm,
-			ImageStore:     is.ImageStore,
-			Mode:           imageIdentifier.ResolveMode,
-			Ref:            imageIdentifier.Reference.String(),
+			Hosts:      is.RegistryHosts,
+			Auth:       resolver.NewSessionAuthenticator(sm, nil),
+			ImageStore: is.ImageStore,
+			Mode:       imageIdentifier.ResolveMode,
+			Ref:        imageIdentifier.Reference.String(),
 		},
 	}
 	return p, nil
@@ -160,6 +161,7 @@ func mainManifestKey(ctx context.Context, desc specs.Descriptor, platform specs.
 }
 
 func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (string, bool, error) {
+	p.ResolverOpt.Auth.SetSession(g)
 	if p.Puller.Resolver == nil {
 		p.Puller.Resolver = pull.NewResolver(g, p.ResolverOpt)
 	}
@@ -199,6 +201,7 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (stri
 }
 
 func (p *puller) Snapshot(ctx context.Context, g session.Group) (ir cache.ImmutableRef, err error) {
+	p.ResolverOpt.Auth.SetSession(g)
 	if p.Puller.Resolver == nil {
 		p.Puller.Resolver = pull.NewResolver(g, p.ResolverOpt)
 	}
