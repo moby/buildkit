@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/containerd/containerd/remotes"
@@ -148,13 +149,39 @@ func NewRegistryConfig(m map[string]config.RegistryConfig) docker.RegistryHosts 
 	)
 }
 
-func New(hosts docker.RegistryHosts, sm *session.Manager, g session.Group) remotes.Resolver {
+type SessionAuthenticator struct {
+	sm *session.Manager
+	g  session.Group
+	mu sync.Mutex
+}
+
+func NewSessionAuthenticator(sm *session.Manager, g session.Group) *SessionAuthenticator {
+	return &SessionAuthenticator{sm: sm, g: g}
+}
+
+func (a *SessionAuthenticator) credentials(h string) (string, string, error) {
+	a.mu.Lock()
+	g := a.g
+	a.mu.Unlock()
+	return auth.CredentialsFunc(a.sm, g)(h)
+}
+
+func (a *SessionAuthenticator) SetSession(g session.Group) {
+	a.mu.Lock()
+	a.g = g
+	a.mu.Unlock()
+}
+
+func New(hosts docker.RegistryHosts, auth *SessionAuthenticator) remotes.Resolver {
 	return docker.NewResolver(docker.ResolverOptions{
-		Hosts: hostsWithCredentials(hosts, sm, g),
+		Hosts: hostsWithCredentials(hosts, auth),
 	})
 }
 
-func hostsWithCredentials(hosts docker.RegistryHosts, sm *session.Manager, g session.Group) docker.RegistryHosts {
+func hostsWithCredentials(hosts docker.RegistryHosts, auth *SessionAuthenticator) docker.RegistryHosts {
+	if hosts == nil {
+		return nil
+	}
 	return func(domain string) ([]docker.RegistryHost, error) {
 		res, err := hosts(domain)
 		if err != nil {
@@ -166,7 +193,7 @@ func hostsWithCredentials(hosts docker.RegistryHosts, sm *session.Manager, g ses
 
 		a := docker.NewDockerAuthorizer(
 			docker.WithAuthClient(res[0].Client),
-			docker.WithAuthCreds(auth.CredentialsFunc(sm, g)),
+			docker.WithAuthCreds(auth.credentials),
 		)
 		for i := range res {
 			res[i].Authorizer = a
