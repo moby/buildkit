@@ -42,7 +42,7 @@ func Push(ctx context.Context, sm *session.Manager, sid string, cs content.Store
 		ref = reference.TagNameOnly(parsed).String()
 	}
 
-	resolver := resolver.New(hosts, sm, session.NewGroup(sid))
+	resolver := resolver.New(hosts, resolver.NewSessionAuthenticator(sm, session.NewGroup(sid)))
 
 	pusher, err := resolver.Pusher(ctx, ref)
 	if err != nil {

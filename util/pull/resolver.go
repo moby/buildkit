@@ -23,11 +23,11 @@ func init() {
 }
 
 type ResolverOpt struct {
-	Hosts          docker.RegistryHosts
-	SessionManager *session.Manager
-	ImageStore     images.Store
-	Mode           source.ResolveMode
-	Ref            string
+	Hosts      docker.RegistryHosts
+	Auth       *resolver.SessionAuthenticator
+	ImageStore images.Store
+	Mode       source.ResolveMode
+	Ref        string
 }
 
 func NewResolver(g session.Group, opt ResolverOpt) remotes.Resolver {
@@ -35,7 +35,7 @@ func NewResolver(g session.Group, opt ResolverOpt) remotes.Resolver {
 		return withLocal(res, opt.ImageStore, opt.Mode)
 	}
 
-	r := resolver.New(opt.Hosts, opt.SessionManager, g)
+	r := resolver.New(opt.Hosts, opt.Auth)
 	r = cache.Add(opt.Ref, r, g)
 
 	return withLocal(r, opt.ImageStore, opt.Mode)
