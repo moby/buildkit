@@ -173,7 +173,7 @@ be UPPERCASE to distinguish them from arguments more easily.
 
 
 Docker runs instructions in a `Dockerfile` in order. A `Dockerfile` **must
-begin with a \`FROM\` instruction**. This may be after [parser
+begin with a `FROM` instruction**. This may be after [parser
 directives](#parser-directives), [comments](#format), and globally scoped
 [ARGs](#arg). The `FROM` instruction specifies the [*Parent
 Image*](https://docs.docker.com/glossary/#parent_image) from which you are
@@ -189,7 +189,51 @@ else in a line is treated as an argument. This allows statements like:
 RUN echo 'we are running some # of cool things'
 ```
 
+Comment lines are removed before the Dockerfile instructions are executed, which
+means that the comment in the following example is not handled by the shell
+executing the `echo` command, and both examples below are equivalent:
+
+```dockerfile
+RUN echo hello \
+# comment
+world
+```
+
+```dockerfile
+RUN echo hello \
+world
+```
+
 Line continuation characters are not supported in comments.
+
+> **Note on whitespace**
+>
+> For backward compatibility, leading whitespace before comments (`#`) and
+> instructions (such as `RUN`) are ignored, but discouraged. Leading whitespace
+> is not preserved in these cases, and the following examples are therefore
+> equivalent:
+>
+> ```dockerfile
+>         # this is a comment-line
+>     RUN echo hello
+> RUN echo world
+> ```
+> 
+> ```dockerfile
+> # this is a comment-line
+> RUN echo hello
+> RUN echo world
+> ```
+> 
+> Note however, that whitespace in instruction _arguments_, such as the commands
+> following `RUN`, are preserved, so the following example prints `    hello    world`
+> with leading whitespace as specified:
+>
+> ```dockerfile
+> RUN echo "\
+>      hello\
+>      world"
+> ```
 
 ## Parser directives
 
