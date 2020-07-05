@@ -150,16 +150,34 @@ func NewRegistryConfig(m map[string]config.RegistryConfig) docker.RegistryHosts 
 }
 
 type SessionAuthenticator struct {
-	sm     *session.Manager
-	groups []session.Group
-	mu     sync.RWMutex
+	sm      *session.Manager
+	groups  []session.Group
+	mu      sync.RWMutex
+	cache   map[string]credentials
+	cacheMu sync.RWMutex
+}
+
+type credentials struct {
+	user    string
+	secret  string
+	created time.Time
 }
 
 func NewSessionAuthenticator(sm *session.Manager, g session.Group) *SessionAuthenticator {
-	return &SessionAuthenticator{sm: sm, groups: []session.Group{g}}
+	return &SessionAuthenticator{sm: sm, groups: []session.Group{g}, cache: map[string]credentials{}}
 }
 
 func (a *SessionAuthenticator) credentials(h string) (string, string, error) {
+	const credentialsTimeout = time.Minute
+
+	a.cacheMu.RLock()
+	c, ok := a.cache[h]
+	if ok && time.Since(c.created) < credentialsTimeout {
+		a.cacheMu.RUnlock()
+		return c.user, c.secret, nil
+	}
+	a.cacheMu.RUnlock()
+
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
@@ -170,6 +188,9 @@ func (a *SessionAuthenticator) credentials(h string) (string, string, error) {
 		if err != nil {
 			continue
 		}
+		a.cacheMu.Lock()
+		a.cache[h] = credentials{user: user, secret: secret, created: time.Now()}
+		a.cacheMu.Unlock()
 		return user, secret, nil
 	}
 	return "", "", err
