@@ -150,25 +150,34 @@ func NewRegistryConfig(m map[string]config.RegistryConfig) docker.RegistryHosts 
 }
 
 type SessionAuthenticator struct {
-	sm *session.Manager
-	g  session.Group
-	mu sync.Mutex
+	sm     *session.Manager
+	groups []session.Group
+	mu     sync.RWMutex
 }
 
 func NewSessionAuthenticator(sm *session.Manager, g session.Group) *SessionAuthenticator {
-	return &SessionAuthenticator{sm: sm, g: g}
+	return &SessionAuthenticator{sm: sm, groups: []session.Group{g}}
 }
 
 func (a *SessionAuthenticator) credentials(h string) (string, string, error) {
-	a.mu.Lock()
-	g := a.g
-	a.mu.Unlock()
-	return auth.CredentialsFunc(a.sm, g)(h)
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	var err error
+	for i := len(a.groups) - 1; i >= 0; i-- {
+		var user, secret string
+		user, secret, err = auth.CredentialsFunc(a.sm, a.groups[i])(h)
+		if err != nil {
+			continue
+		}
+		return user, secret, nil
+	}
+	return "", "", err
 }
 
-func (a *SessionAuthenticator) SetSession(g session.Group) {
+func (a *SessionAuthenticator) AddSession(g session.Group) {
 	a.mu.Lock()
-	a.g = g
+	a.groups = append(a.groups, g)
 	a.mu.Unlock()
 }
 
