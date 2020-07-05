@@ -36,7 +36,7 @@ func NewResolver(g session.Group, opt ResolverOpt) remotes.Resolver {
 	}
 
 	r := resolver.New(opt.Hosts, opt.Auth)
-	r = cache.Add(opt.Ref, r, g)
+	r = cache.Add(opt.Ref, r, opt.Auth, g)
 
 	return withLocal(r, opt.ImageStore, opt.Mode)
 }
@@ -117,6 +117,7 @@ type cachedResolver struct {
 	counter int64
 	timeout time.Time
 	remotes.Resolver
+	auth *resolver.SessionAuthenticator
 }
 
 func (cr *cachedResolver) Resolve(ctx context.Context, ref string) (name string, desc ocispec.Descriptor, err error) {
@@ -124,26 +125,23 @@ func (cr *cachedResolver) Resolve(ctx context.Context, ref string) (name string,
 	return cr.Resolver.Resolve(ctx, ref)
 }
 
-func (r *resolverCache) Add(ref string, resolver remotes.Resolver, g session.Group) remotes.Resolver {
+func (r *resolverCache) Add(ref string, resolver remotes.Resolver, auth *resolver.SessionAuthenticator, g session.Group) *cachedResolver {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	res := &cachedResolver{Resolver: resolver, timeout: time.Now().Add(time.Minute)}
+	ref = r.repo(ref)
 
-	for _, sid := range session.AllSessionIDs(g) {
-		ref = r.repo(ref) + "-" + sid
-
-		cr, ok := r.m[ref]
-		res = &cr
-		cr.timeout = time.Now().Add(time.Minute)
-		if ok {
-			continue
-		}
-
-		cr.Resolver = resolver
-		r.m[ref] = cr
+	cr, ok := r.m[ref]
+	cr.timeout = time.Now().Add(time.Minute)
+	if ok {
+		cr.auth.AddSession(g)
+		return &cr
 	}
-	return res
+
+	cr.Resolver = resolver
+	cr.auth = auth
+	r.m[ref] = cr
+	return &cr
 }
 
 func (r *resolverCache) repo(refStr string) string {
@@ -154,17 +152,16 @@ func (r *resolverCache) repo(refStr string) string {
 	return ref.Name()
 }
 
-func (r *resolverCache) Get(ref string, g session.Group) remotes.Resolver {
+func (r *resolverCache) Get(ref string, g session.Group) *cachedResolver {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	for _, sid := range session.AllSessionIDs(g) {
-		ref = r.repo(ref) + "-" + sid
+	ref = r.repo(ref)
 
-		cr, ok := r.m[ref]
-		if ok {
-			return &cr
-		}
+	cr, ok := r.m[ref]
+	if ok {
+		cr.auth.AddSession(g)
+		return &cr
 	}
 	return nil
 }
