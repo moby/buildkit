@@ -161,9 +161,10 @@ func mainManifestKey(ctx context.Context, desc specs.Descriptor, platform specs.
 }
 
 func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (string, bool, error) {
-	p.ResolverOpt.Auth.SetSession(g)
 	if p.Puller.Resolver == nil {
 		p.Puller.Resolver = pull.NewResolver(g, p.ResolverOpt)
+	} else {
+		p.ResolverOpt.Auth.AddSession(g)
 	}
 	_, desc, err := p.Puller.Resolve(ctx)
 	if err != nil {
@@ -201,9 +202,10 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (stri
 }
 
 func (p *puller) Snapshot(ctx context.Context, g session.Group) (ir cache.ImmutableRef, err error) {
-	p.ResolverOpt.Auth.SetSession(g)
 	if p.Puller.Resolver == nil {
 		p.Puller.Resolver = pull.NewResolver(g, p.ResolverOpt)
+	} else {
+		p.ResolverOpt.Auth.AddSession(g)
 	}
 
 	layerNeedsTypeWindows := false
