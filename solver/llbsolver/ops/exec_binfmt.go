@@ -28,7 +28,7 @@ import (
 )
 
 const qemuMountName = "/dev/.buildkit_qemu_emulator"
-const emulatorImage = "docker.io/tonistiigi/binfmt:buildkit@sha256:5e7df2cf5373ba557ff2e61994cbc4d16adbd0627db1ed55acde3b7a16a693ba"
+const emulatorImage = "docker.io/tonistiigi/binfmt:buildkit@sha256:15b3561ce399a84f27ddd83b82e10c26c31ebab0b19a49aee584498963cba7af"
 
 var qemuArchMap = map[string]string{
 	"arm64":   "aarch64",
