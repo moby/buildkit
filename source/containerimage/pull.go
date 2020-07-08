@@ -23,6 +23,7 @@ import (
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/pull"
+	"github.com/moby/buildkit/util/resolver"
 	"github.com/moby/buildkit/util/winlayers"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/identity"
@@ -43,24 +44,26 @@ type SourceOpt struct {
 	LeaseManager  leases.Manager
 }
 
-type imageSource struct {
+type Source struct {
 	SourceOpt
 	g flightcontrol.Group
 }
 
-func NewSource(opt SourceOpt) (source.Source, error) {
-	is := &imageSource{
+var _ source.Source = &Source{}
+
+func NewSource(opt SourceOpt) (*Source, error) {
+	is := &Source{
 		SourceOpt: opt,
 	}
 
 	return is, nil
 }
 
-func (is *imageSource) ID() string {
+func (is *Source) ID() string {
 	return source.DockerImageScheme
 }
 
-func (is *imageSource) ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt, sm *session.Manager) (digest.Digest, []byte, error) {
+func (is *Source) ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt, sm *session.Manager, g session.Group) (digest.Digest, []byte, error) {
 	type t struct {
 		dgst digest.Digest
 		dt   []byte
@@ -76,7 +79,13 @@ func (is *imageSource) ResolveImageConfig(ctx context.Context, ref string, opt l
 	}
 
 	res, err := is.g.Do(ctx, key, func(ctx context.Context) (interface{}, error) {
-		dgst, dt, err := imageutil.Config(ctx, ref, pull.NewResolver(ctx, is.RegistryHosts, sm, is.ImageStore, rm, ref), is.ContentStore, is.LeaseManager, opt.Platform)
+		dgst, dt, err := imageutil.Config(ctx, ref, pull.NewResolver(g, pull.ResolverOpt{
+			Hosts:      is.RegistryHosts,
+			Auth:       resolver.NewSessionAuthenticator(sm, g),
+			ImageStore: is.ImageStore,
+			Mode:       rm,
+			Ref:        ref,
+		}), is.ContentStore, is.LeaseManager, opt.Platform)
 		if err != nil {
 			return nil, err
 		}
@@ -89,7 +98,7 @@ func (is *imageSource) ResolveImageConfig(ctx context.Context, ref string, opt l
 	return typed.dgst, typed.dt, nil
 }
 
-func (is *imageSource) Resolve(ctx context.Context, id source.Identifier, sm *session.Manager) (source.SourceInstance, error) {
+func (is *Source) Resolve(ctx context.Context, id source.Identifier, sm *session.Manager) (source.SourceInstance, error) {
 	imageIdentifier, ok := id.(*source.ImageIdentifier)
 	if !ok {
 		return nil, errors.Errorf("invalid image identifier %v", id)
@@ -105,7 +114,6 @@ func (is *imageSource) Resolve(ctx context.Context, id source.Identifier, sm *se
 		ContentStore: is.ContentStore,
 		Applier:      is.Applier,
 		Src:          imageIdentifier.Reference,
-		Resolver:     pull.NewResolver(ctx, is.RegistryHosts, sm, is.ImageStore, imageIdentifier.ResolveMode, imageIdentifier.Reference.String()),
 		Platform:     &platform,
 	}
 	p := &puller{
@@ -114,6 +122,13 @@ func (is *imageSource) Resolve(ctx context.Context, id source.Identifier, sm *se
 		Platform:      platform,
 		id:            imageIdentifier,
 		LeaseManager:  is.LeaseManager,
+		ResolverOpt: pull.ResolverOpt{
+			Hosts:      is.RegistryHosts,
+			Auth:       resolver.NewSessionAuthenticator(sm, nil),
+			ImageStore: is.ImageStore,
+			Mode:       imageIdentifier.ResolveMode,
+			Ref:        imageIdentifier.Reference.String(),
+		},
 	}
 	return p, nil
 }
@@ -122,6 +137,7 @@ type puller struct {
 	CacheAccessor cache.Accessor
 	LeaseManager  leases.Manager
 	Platform      specs.Platform
+	ResolverOpt   pull.ResolverOpt
 	id            *source.ImageIdentifier
 	*pull.Puller
 }
@@ -144,7 +160,12 @@ func mainManifestKey(ctx context.Context, desc specs.Descriptor, platform specs.
 	return digest.FromBytes(dt), nil
 }
 
-func (p *puller) CacheKey(ctx context.Context, index int) (string, bool, error) {
+func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (string, bool, error) {
+	if p.Puller.Resolver == nil {
+		p.Puller.Resolver = pull.NewResolver(g, p.ResolverOpt)
+	} else {
+		p.ResolverOpt.Auth.AddSession(g)
+	}
 	_, desc, err := p.Puller.Resolve(ctx)
 	if err != nil {
 		return "", false, err
@@ -180,7 +201,13 @@ func (p *puller) CacheKey(ctx context.Context, index int) (string, bool, error) 
 	return k, true, nil
 }
 
-func (p *puller) Snapshot(ctx context.Context) (ir cache.ImmutableRef, err error) {
+func (p *puller) Snapshot(ctx context.Context, g session.Group) (ir cache.ImmutableRef, err error) {
+	if p.Puller.Resolver == nil {
+		p.Puller.Resolver = pull.NewResolver(g, p.ResolverOpt)
+	} else {
+		p.ResolverOpt.Auth.AddSession(g)
+	}
+
 	layerNeedsTypeWindows := false
 	if platform := p.Puller.Platform; platform != nil {
 		if platform.OS == "windows" && runtime.GOOS != "windows" {

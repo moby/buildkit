@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/session"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -3466,7 +3467,7 @@ func (v *vertex) cacheMap(ctx context.Context) error {
 	return nil
 }
 
-func (v *vertex) CacheMap(ctx context.Context, index int) (*CacheMap, bool, error) {
+func (v *vertex) CacheMap(ctx context.Context, g session.Group, index int) (*CacheMap, bool, error) {
 	if index == 0 {
 		if err := v.cacheMap(ctx); err != nil {
 			return nil, false, err
@@ -3503,7 +3504,7 @@ func (v *vertex) exec(ctx context.Context, inputs []Result) error {
 	return nil
 }
 
-func (v *vertex) Exec(ctx context.Context, inputs []Result) (outputs []Result, err error) {
+func (v *vertex) Exec(ctx context.Context, g session.Group, inputs []Result) (outputs []Result, err error) {
 	if err := v.exec(ctx, inputs); err != nil {
 		return nil, err
 	}
@@ -3547,7 +3548,7 @@ func (v *vertexConst) Sys() interface{} {
 	return v
 }
 
-func (v *vertexConst) Exec(ctx context.Context, inputs []Result) (outputs []Result, err error) {
+func (v *vertexConst) Exec(ctx context.Context, g session.Group, inputs []Result) (outputs []Result, err error) {
 	if err := v.exec(ctx, inputs); err != nil {
 		return nil, err
 	}
@@ -3574,7 +3575,7 @@ func (v *vertexSum) Sys() interface{} {
 	return v
 }
 
-func (v *vertexSum) Exec(ctx context.Context, inputs []Result) (outputs []Result, err error) {
+func (v *vertexSum) Exec(ctx context.Context, g session.Group, inputs []Result) (outputs []Result, err error) {
 	if err := v.exec(ctx, inputs); err != nil {
 		return nil, err
 	}
@@ -3609,7 +3610,7 @@ func (v *vertexSubBuild) Sys() interface{} {
 	return v
 }
 
-func (v *vertexSubBuild) Exec(ctx context.Context, inputs []Result) (outputs []Result, err error) {
+func (v *vertexSubBuild) Exec(ctx context.Context, g session.Group, inputs []Result) (outputs []Result, err error) {
 	if err := v.exec(ctx, inputs); err != nil {
 		return nil, err
 	}

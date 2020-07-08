@@ -22,15 +22,23 @@ func init() {
 	cache = newResolverCache()
 }
 
-func NewResolver(ctx context.Context, hosts docker.RegistryHosts, sm *session.Manager, imageStore images.Store, mode source.ResolveMode, ref string) remotes.Resolver {
-	if res := cache.Get(ctx, ref); res != nil {
-		return withLocal(res, imageStore, mode)
+type ResolverOpt struct {
+	Hosts      docker.RegistryHosts
+	Auth       *resolver.SessionAuthenticator
+	ImageStore images.Store
+	Mode       source.ResolveMode
+	Ref        string
+}
+
+func NewResolver(g session.Group, opt ResolverOpt) remotes.Resolver {
+	if res := cache.Get(opt.Ref, g); res != nil {
+		return withLocal(res, opt.ImageStore, opt.Mode)
 	}
 
-	r := resolver.New(ctx, hosts, sm)
-	r = cache.Add(ctx, ref, r)
+	r := resolver.New(opt.Hosts, opt.Auth)
+	r = cache.Add(opt.Ref, r, opt.Auth, g)
 
-	return withLocal(r, imageStore, mode)
+	return withLocal(r, opt.ImageStore, opt.Mode)
 }
 
 func EnsureManifestRequested(ctx context.Context, res remotes.Resolver, ref string) {
@@ -109,6 +117,7 @@ type cachedResolver struct {
 	counter int64
 	timeout time.Time
 	remotes.Resolver
+	auth *resolver.SessionAuthenticator
 }
 
 func (cr *cachedResolver) Resolve(ctx context.Context, ref string) (name string, desc ocispec.Descriptor, err error) {
@@ -116,19 +125,21 @@ func (cr *cachedResolver) Resolve(ctx context.Context, ref string) (name string,
 	return cr.Resolver.Resolve(ctx, ref)
 }
 
-func (r *resolverCache) Add(ctx context.Context, ref string, resolver remotes.Resolver) remotes.Resolver {
+func (r *resolverCache) Add(ref string, resolver remotes.Resolver, auth *resolver.SessionAuthenticator, g session.Group) *cachedResolver {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	ref = r.repo(ref) + "-" + session.FromContext(ctx)
+	ref = r.repo(ref)
 
 	cr, ok := r.m[ref]
 	cr.timeout = time.Now().Add(time.Minute)
 	if ok {
+		cr.auth.AddSession(g)
 		return &cr
 	}
 
 	cr.Resolver = resolver
+	cr.auth = auth
 	r.m[ref] = cr
 	return &cr
 }
@@ -141,17 +152,18 @@ func (r *resolverCache) repo(refStr string) string {
 	return ref.Name()
 }
 
-func (r *resolverCache) Get(ctx context.Context, ref string) remotes.Resolver {
+func (r *resolverCache) Get(ref string, g session.Group) *cachedResolver {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	ref = r.repo(ref) + "-" + session.FromContext(ctx)
+	ref = r.repo(ref)
 
 	cr, ok := r.m[ref]
-	if !ok {
-		return nil
+	if ok {
+		cr.auth.AddSession(g)
+		return &cr
 	}
-	return &cr
+	return nil
 }
 
 func (r *resolverCache) clean(now time.Time) {

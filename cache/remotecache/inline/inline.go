@@ -6,13 +6,14 @@ import (
 
 	"github.com/moby/buildkit/cache/remotecache"
 	v1 "github.com/moby/buildkit/cache/remotecache/v1"
+	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/sirupsen/logrus"
 )
 
 func ResolveCacheExporterFunc() remotecache.ResolveCacheExporterFunc {
-	return func(ctx context.Context, _ map[string]string) (remotecache.Exporter, error) {
+	return func(ctx context.Context, _ session.Group, _ map[string]string) (remotecache.Exporter, error) {
 		return NewExporter(), nil
 	}
 }
