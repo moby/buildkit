@@ -24,6 +24,7 @@ import (
 	"github.com/moby/buildkit/util/network"
 	rootlessspecconv "github.com/moby/buildkit/util/rootless/specconv"
 	"github.com/moby/buildkit/util/stack"
+	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -123,7 +124,8 @@ func New(opt Opt, networkProviders map[pb.NetMode]network.Provider) (executor.Ex
 	return w, nil
 }
 
-func (w *runcExecutor) Exec(ctx context.Context, meta executor.Meta, root cache.Mountable, mounts []executor.Mount, stdin io.ReadCloser, stdout, stderr io.WriteCloser) error {
+func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable, mounts []executor.Mount, process executor.ProcessInfo) error {
+	meta := process.Meta
 	provider, ok := w.networkProviders[meta.NetMode]
 	if !ok {
 		return errors.Errorf("unknown network mode %s", meta.NetMode)
@@ -164,7 +166,9 @@ func (w *runcExecutor) Exec(ctx context.Context, meta executor.Meta, root cache.
 		defer release()
 	}
 
-	id := identity.NewID()
+	if id == "" {
+		id = identity.NewID()
+	}
 	bundle := filepath.Join(w.root, id)
 
 	if err := os.Mkdir(bundle, 0711); err != nil {
@@ -245,6 +249,7 @@ func (w *runcExecutor) Exec(ctx context.Context, meta executor.Meta, root cache.
 		}
 	}
 
+	spec.Process.Terminal = meta.Tty
 	spec.Process.OOMScoreAdj = w.oomScoreAdj
 	if w.rootless {
 		if err := rootlessspecconv.ToRootless(spec); err != nil {
@@ -290,7 +295,7 @@ func (w *runcExecutor) Exec(ctx context.Context, meta executor.Meta, root cache.
 
 	logrus.Debugf("> creating %s %v", id, meta.Args)
 	status, err := w.runc.Run(runCtx, id, bundle, &runc.CreateOpts{
-		IO:      &forwardIO{stdin: stdin, stdout: stdout, stderr: stderr},
+		IO:      &forwardIO{stdin: process.Stdin, stdout: process.Stdout, stderr: process.Stderr},
 		NoPivot: w.noPivot,
 	})
 	close(done)
@@ -308,6 +313,62 @@ func (w *runcExecutor) Exec(ctx context.Context, meta executor.Meta, root cache.
 	}
 
 	return nil
+}
+
+func (w *runcExecutor) Exec(ctx context.Context, id string, process executor.ProcessInfo) error {
+	// first verify the container is running, if we get an error assume the container
+	// is in the process of being created and check again every 100ms or until
+	// context is canceled.
+	state, _ := w.runc.State(ctx, id)
+	for {
+		if state != nil && state.Status == "running" {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+			state, _ = w.runc.State(ctx, id)
+		}
+	}
+
+	// load default process spec (for Env, Cwd etc) from bundle
+	f, err := os.Open(filepath.Join(state.Bundle, "config.json"))
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	defer f.Close()
+
+	spec := &specs.Spec{}
+	if err := json.NewDecoder(f).Decode(spec); err != nil {
+		return err
+	}
+
+	if process.Meta.User != "" {
+		uid, gid, sgids, err := oci.GetUser(ctx, state.Rootfs, process.Meta.User)
+		if err != nil {
+			return err
+		}
+		spec.Process.User = specs.User{
+			UID:            uid,
+			GID:            gid,
+			AdditionalGids: sgids,
+		}
+	}
+
+	spec.Process.Terminal = process.Meta.Tty
+	spec.Process.Args = process.Meta.Args
+	if process.Meta.Cwd != "" {
+		spec.Process.Cwd = process.Meta.Cwd
+	}
+	if len(process.Meta.Env) > 0 {
+		// merge exec env with pid1 env
+		spec.Process.Env = append(spec.Process.Env, process.Meta.Env...)
+	}
+
+	return w.runc.Exec(ctx, id, *spec.Process, &runc.ExecOpts{
+		IO: &forwardIO{stdin: process.Stdin, stdout: process.Stdout, stderr: process.Stderr},
+	})
 }
 
 type forwardIO struct {

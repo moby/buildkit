@@ -28,9 +28,15 @@ type Mount struct {
 	Readonly bool
 }
 
+type ProcessInfo struct {
+	Meta           Meta
+	Stdin          io.ReadCloser
+	Stdout, Stderr io.WriteCloser
+}
+
 type Executor interface {
-	// TODO: add stdout/err
-	Exec(ctx context.Context, meta Meta, rootfs cache.Mountable, mounts []Mount, stdin io.ReadCloser, stdout, stderr io.WriteCloser) error
+	Run(ctx context.Context, id string, rootfs cache.Mountable, mounts []Mount, process ProcessInfo) error
+	Exec(ctx context.Context, id string, process ProcessInfo) error
 }
 
 type HostIP struct {
