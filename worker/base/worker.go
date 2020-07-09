@@ -297,7 +297,7 @@ func (w *Worker) Exec(ctx context.Context, meta executor.Meta, rootFS cache.Immu
 		return err
 	}
 	defer active.Release(context.TODO())
-	return w.Executor.Exec(ctx, meta, active, nil, stdin, stdout, stderr)
+	return w.Executor.Run(ctx, "", active, nil, executor.ProcessInfo{Meta: meta, Stdin: stdin, Stdout: stdout, Stderr: stderr})
 }
 
 func (w *Worker) DiskUsage(ctx context.Context, opt client.DiskUsageInfo) ([]*client.UsageInfo, error) {

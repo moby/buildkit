@@ -2,7 +2,6 @@ package containerdexecutor
 
 import (
 	"context"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,6 +20,7 @@ import (
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/network"
+	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -48,8 +48,11 @@ func New(client *containerd.Client, root, cgroup string, networkProviders map[pb
 	}
 }
 
-func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root cache.Mountable, mounts []executor.Mount, stdin io.ReadCloser, stdout, stderr io.WriteCloser) (err error) {
-	id := identity.NewID()
+func (w containerdExecutor) Run(ctx context.Context, id string, root cache.Mountable, mounts []executor.Mount, process executor.ProcessInfo) (err error) {
+	if id == "" {
+		id = identity.NewID()
+	}
+	meta := process.Meta
 
 	resolvConf, err := oci.GetResolvConf(ctx, w.root, nil, w.dnsConfig)
 	if err != nil {
@@ -160,7 +163,12 @@ func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root c
 		}
 	}()
 
-	task, err := container.NewTask(ctx, cio.NewCreator(cio.WithStreams(stdin, stdout, stderr)), containerd.WithRootFS(rootMounts))
+	cioOpts := []cio.Opt{cio.WithStreams(process.Stdin, process.Stdout, process.Stderr)}
+	if meta.Tty {
+		cioOpts = append(cioOpts, cio.WithTerminal)
+	}
+
+	task, err := container.NewTask(ctx, cio.NewCreator(cioOpts...), containerd.WithRootFS(rootMounts))
 	if err != nil {
 		return err
 	}
@@ -209,5 +217,77 @@ func (w containerdExecutor) Exec(ctx context.Context, meta executor.Meta, root c
 			return nil
 		}
 	}
+}
 
+func (w containerdExecutor) Exec(ctx context.Context, id string, process executor.ProcessInfo) error {
+	meta := process.Meta
+
+	// first verify the container is running, if we get an error assume the container
+	// is in the process of being created and check again every 100ms or until
+	// context is canceled.
+
+	var container containerd.Container
+	var task containerd.Task
+	for {
+		if container == nil {
+			container, _ = w.client.LoadContainer(ctx, id)
+		}
+		if container != nil && task == nil {
+			task, _ = container.Task(ctx, nil)
+		}
+		if task != nil {
+			status, _ := task.Status(ctx)
+			if status.Status == containerd.Running {
+				break
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+			continue
+		}
+	}
+
+	spec, err := container.Spec(ctx)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	proc := spec.Process
+
+	// TODO how do we get rootfsPath for oci.GetUser in case user passed in username rather than uid:gid?
+	// For now only support uid:gid
+	if meta.User != "" {
+		uid, gid, err := oci.ParseUIDGID(meta.User)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		proc.User = specs.User{
+			UID:            uid,
+			GID:            gid,
+			AdditionalGids: []uint32{},
+		}
+	}
+
+	proc.Terminal = meta.Tty
+	proc.Args = meta.Args
+	if meta.Cwd != "" {
+		spec.Process.Cwd = meta.Cwd
+	}
+	if len(meta.Env) > 0 {
+		// merge exec env with pid1 env
+		spec.Process.Env = append(spec.Process.Env, meta.Env...)
+	}
+
+	cioOpts := []cio.Opt{cio.WithStreams(process.Stdin, process.Stdout, process.Stderr)}
+	if meta.Tty {
+		cioOpts = append(cioOpts, cio.WithTerminal)
+	}
+
+	taskProcess, err := task.Exec(ctx, identity.NewID(), proc, cio.NewCreator(cioOpts...))
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	return taskProcess.Start(ctx)
 }
