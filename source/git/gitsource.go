@@ -481,6 +481,7 @@ func git(ctx context.Context, dir string, args ...string) (*bytes.Buffer, error)
 		cmd.Env = []string{
 			"PATH=" + os.Getenv("PATH"),
 			"GIT_TERMINAL_PROMPT=0",
+			"SSH_AUTH_SOCK=" + os.Getenv("SSH_AUTH_SOCK"),
 			//	"GIT_TRACE=1",
 		}
 		// remote git commands spawn helper processes that inherit FDs and don't
