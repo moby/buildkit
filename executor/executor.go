@@ -35,7 +35,7 @@ type ProcessInfo struct {
 }
 
 type Executor interface {
-	Run(ctx context.Context, id string, rootfs cache.Mountable, mounts []Mount, process ProcessInfo) error
+	Run(ctx context.Context, id string, rootfs cache.Mountable, mounts []Mount, process ProcessInfo, started chan<- struct{}) error
 	Exec(ctx context.Context, id string, process ProcessInfo) error
 }
 

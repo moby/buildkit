@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -60,6 +61,8 @@ type runcExecutor struct {
 	noPivot          bool
 	dns              *oci.DNSConfig
 	oomScoreAdj      *int
+	running          map[string]chan error
+	mu               sync.Mutex
 }
 
 func New(opt Opt, networkProviders map[pb.NetMode]network.Provider) (executor.Executor, error) {
@@ -120,19 +123,39 @@ func New(opt Opt, networkProviders map[pb.NetMode]network.Provider) (executor.Ex
 		noPivot:          opt.NoPivot,
 		dns:              opt.DNS,
 		oomScoreAdj:      opt.OOMScoreAdj,
+		running:          make(map[string]chan error),
+		mu:               sync.Mutex{},
 	}
 	return w, nil
 }
 
-func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable, mounts []executor.Mount, process executor.ProcessInfo) error {
+func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable, mounts []executor.Mount, process executor.ProcessInfo, started chan<- struct{}) error {
 	meta := process.Meta
+
+	startedOnce := sync.Once{}
+	done := make(chan error, 1)
+	w.mu.Lock()
+	w.running[id] = done
+	w.mu.Unlock()
+	defer func() {
+		w.mu.Lock()
+		delete(w.running, id)
+		w.mu.Unlock()
+		close(done)
+		if started != nil {
+			startedOnce.Do(func() {
+				close(started)
+			})
+		}
+	}()
+
 	provider, ok := w.networkProviders[meta.NetMode]
 	if !ok {
-		return errors.Errorf("unknown network mode %s", meta.NetMode)
+		return sendErr(done, errors.Errorf("unknown network mode %s", meta.NetMode))
 	}
 	namespace, err := provider.New()
 	if err != nil {
-		return err
+		return sendErr(done, err)
 	}
 	defer namespace.Close()
 
@@ -142,12 +165,12 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable,
 
 	resolvConf, err := oci.GetResolvConf(ctx, w.root, w.idmap, w.dns)
 	if err != nil {
-		return err
+		return sendErr(done, err)
 	}
 
 	hostsFile, clean, err := oci.GetHostsFile(ctx, w.root, meta.ExtraHosts, w.idmap)
 	if err != nil {
-		return err
+		return sendErr(done, err)
 	}
 	if clean != nil {
 		defer clean()
@@ -155,12 +178,12 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable,
 
 	mountable, err := root.Mount(ctx, false)
 	if err != nil {
-		return err
+		return sendErr(done, err)
 	}
 
 	rootMount, release, err := mountable.Mount()
 	if err != nil {
-		return err
+		return sendErr(done, err)
 	}
 	if release != nil {
 		defer release()
@@ -172,7 +195,7 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable,
 	bundle := filepath.Join(w.root, id)
 
 	if err := os.Mkdir(bundle, 0711); err != nil {
-		return err
+		return sendErr(done, err)
 	}
 	defer os.RemoveAll(bundle)
 
@@ -183,21 +206,21 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable,
 
 	rootFSPath := filepath.Join(bundle, "rootfs")
 	if err := idtools.MkdirAllAndChown(rootFSPath, 0700, identity); err != nil {
-		return err
+		return sendErr(done, err)
 	}
 	if err := mount.All(rootMount, rootFSPath); err != nil {
-		return err
+		return sendErr(done, err)
 	}
 	defer mount.Unmount(rootFSPath, 0)
 
 	uid, gid, sgids, err := oci.GetUser(ctx, rootFSPath, meta.User)
 	if err != nil {
-		return err
+		return sendErr(done, err)
 	}
 
 	f, err := os.Create(filepath.Join(bundle, "config.json"))
 	if err != nil {
-		return err
+		return sendErr(done, err)
 	}
 	defer f.Close()
 
@@ -214,7 +237,7 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable,
 	if w.idmap != nil {
 		identity, err = w.idmap.ToHost(identity)
 		if err != nil {
-			return err
+			return sendErr(done, err)
 		}
 	}
 
@@ -230,7 +253,7 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable,
 	}
 	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, namespace, w.processMode, w.idmap, opts...)
 	if err != nil {
-		return err
+		return sendErr(done, err)
 	}
 	defer cleanup()
 
@@ -241,11 +264,11 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable,
 
 	newp, err := fs.RootPath(rootFSPath, meta.Cwd)
 	if err != nil {
-		return errors.Wrapf(err, "working dir %s points to invalid target", newp)
+		return sendErr(done, errors.Wrapf(err, "working dir %s points to invalid target", newp))
 	}
 	if _, err := os.Stat(newp); err != nil {
 		if err := idtools.MkdirAllAndChown(newp, 0755, identity); err != nil {
-			return errors.Wrapf(err, "failed to create working directory %s", newp)
+			return sendErr(done, errors.Wrapf(err, "failed to create working directory %s", newp))
 		}
 	}
 
@@ -253,19 +276,19 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable,
 	spec.Process.OOMScoreAdj = w.oomScoreAdj
 	if w.rootless {
 		if err := rootlessspecconv.ToRootless(spec); err != nil {
-			return err
+			return sendErr(done, err)
 		}
 	}
 
 	if err := json.NewEncoder(f).Encode(spec); err != nil {
-		return err
+		return sendErr(done, err)
 	}
 
 	// runCtx/killCtx is used for extra check in case the kill command blocks
 	runCtx, cancelRun := context.WithCancel(context.Background())
 	defer cancelRun()
 
-	done := make(chan struct{})
+	ended := make(chan struct{})
 	go func() {
 		for {
 			select {
@@ -284,21 +307,27 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable,
 				timeout()
 				select {
 				case <-time.After(50 * time.Millisecond):
-				case <-done:
+				case <-ended:
 					return
 				}
-			case <-done:
+			case <-ended:
 				return
 			}
 		}
 	}()
 
 	logrus.Debugf("> creating %s %v", id, meta.Args)
+	// this is a cheat, we have not actually started, but as close as we can get with runc for now
+	if started != nil {
+		startedOnce.Do(func() {
+			close(started)
+		})
+	}
 	status, err := w.runc.Run(runCtx, id, bundle, &runc.CreateOpts{
 		IO:      &forwardIO{stdin: process.Stdin, stdout: process.Stdout, stderr: process.Stderr},
 		NoPivot: w.noPivot,
 	})
-	close(done)
+	close(ended)
 
 	if status != 0 || err != nil {
 		if err == nil {
@@ -306,9 +335,9 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable,
 		}
 		select {
 		case <-ctx.Done():
-			return errors.Wrapf(ctx.Err(), err.Error())
+			return sendErr(done, errors.Wrapf(ctx.Err(), err.Error()))
 		default:
-			return stack.Enable(err)
+			return sendErr(done, stack.Enable(err))
 		}
 	}
 
@@ -319,6 +348,13 @@ func (w *runcExecutor) Exec(ctx context.Context, id string, process executor.Pro
 	// first verify the container is running, if we get an error assume the container
 	// is in the process of being created and check again every 100ms or until
 	// context is canceled.
+	w.mu.Lock()
+	done, ok := w.running[id]
+	w.mu.Unlock()
+	if !ok {
+		return errors.Errorf("container %s not found", id)
+	}
+
 	state, _ := w.runc.State(ctx, id)
 	for {
 		if state != nil && state.Status == "running" {
@@ -327,6 +363,11 @@ func (w *runcExecutor) Exec(ctx context.Context, id string, process executor.Pro
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case err, ok := <-done:
+			if !ok {
+				return errors.Errorf("container %s has stopped", id)
+			}
+			return errors.Wrapf(err, "container %s has exited with error", id)
 		case <-time.After(100 * time.Millisecond):
 			state, _ = w.runc.State(ctx, id)
 		}
@@ -361,9 +402,9 @@ func (w *runcExecutor) Exec(ctx context.Context, id string, process executor.Pro
 	if process.Meta.Cwd != "" {
 		spec.Process.Cwd = process.Meta.Cwd
 	}
+
 	if len(process.Meta.Env) > 0 {
-		// merge exec env with pid1 env
-		spec.Process.Env = append(spec.Process.Env, process.Meta.Env...)
+		spec.Process.Env = process.Meta.Env
 	}
 
 	return w.runc.Exec(ctx, id, *spec.Process, &runc.ExecOpts{
@@ -396,4 +437,9 @@ func (s *forwardIO) Stdout() io.ReadCloser {
 
 func (s *forwardIO) Stderr() io.ReadCloser {
 	return nil
+}
+
+func sendErr(c chan error, err error) error {
+	c <- err
+	return err
 }

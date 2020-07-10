@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -31,6 +32,8 @@ type containerdExecutor struct {
 	networkProviders map[pb.NetMode]network.Provider
 	cgroupParent     string
 	dnsConfig        *oci.DNSConfig
+	running          map[string]chan error
+	mu               *sync.Mutex
 }
 
 // New creates a new executor backed by connection to containerd API
@@ -45,23 +48,43 @@ func New(client *containerd.Client, root, cgroup string, networkProviders map[pb
 		networkProviders: networkProviders,
 		cgroupParent:     cgroup,
 		dnsConfig:        dnsConfig,
+		running:          make(map[string]chan error),
+		mu:               &sync.Mutex{},
 	}
 }
 
-func (w containerdExecutor) Run(ctx context.Context, id string, root cache.Mountable, mounts []executor.Mount, process executor.ProcessInfo) (err error) {
+func (w containerdExecutor) Run(ctx context.Context, id string, root cache.Mountable, mounts []executor.Mount, process executor.ProcessInfo, started chan<- struct{}) (err error) {
 	if id == "" {
 		id = identity.NewID()
 	}
+
+	startedOnce := sync.Once{}
+	done := make(chan error, 1)
+	w.mu.Lock()
+	w.running[id] = done
+	w.mu.Unlock()
+	defer func() {
+		w.mu.Lock()
+		delete(w.running, id)
+		w.mu.Unlock()
+		close(done)
+		if started != nil {
+			startedOnce.Do(func() {
+				close(started)
+			})
+		}
+	}()
+
 	meta := process.Meta
 
 	resolvConf, err := oci.GetResolvConf(ctx, w.root, nil, w.dnsConfig)
 	if err != nil {
-		return err
+		return sendErr(done, err)
 	}
 
 	hostsFile, clean, err := oci.GetHostsFile(ctx, w.root, meta.ExtraHosts, nil)
 	if err != nil {
-		return err
+		return sendErr(done, err)
 	}
 	if clean != nil {
 		defer clean()
@@ -69,12 +92,12 @@ func (w containerdExecutor) Run(ctx context.Context, id string, root cache.Mount
 
 	mountable, err := root.Mount(ctx, false)
 	if err != nil {
-		return err
+		return sendErr(done, err)
 	}
 
 	rootMounts, release, err := mountable.Mount()
 	if err != nil {
-		return err
+		return sendErr(done, err)
 	}
 	if release != nil {
 		defer release()
@@ -86,12 +109,12 @@ func (w containerdExecutor) Run(ctx context.Context, id string, root cache.Mount
 		lm := snapshot.LocalMounterWithMounts(rootMounts)
 		rootfsPath, err := lm.Mount()
 		if err != nil {
-			return err
+			return sendErr(done, err)
 		}
 		uid, gid, sgids, err = oci.GetUser(ctx, rootfsPath, meta.User)
 		if err != nil {
 			lm.Unmount()
-			return err
+			return sendErr(done, err)
 		}
 
 		identity := idtools.Identity{
@@ -102,12 +125,12 @@ func (w containerdExecutor) Run(ctx context.Context, id string, root cache.Mount
 		newp, err := fs.RootPath(rootfsPath, meta.Cwd)
 		if err != nil {
 			lm.Unmount()
-			return errors.Wrapf(err, "working dir %s points to invalid target", newp)
+			return sendErr(done, errors.Wrapf(err, "working dir %s points to invalid target", newp))
 		}
 		if _, err := os.Stat(newp); err != nil {
 			if err := idtools.MkdirAllAndChown(newp, 0755, identity); err != nil {
 				lm.Unmount()
-				return errors.Wrapf(err, "failed to create working directory %s", newp)
+				return sendErr(done, errors.Wrapf(err, "failed to create working directory %s", newp))
 			}
 		}
 
@@ -116,11 +139,11 @@ func (w containerdExecutor) Run(ctx context.Context, id string, root cache.Mount
 
 	provider, ok := w.networkProviders[meta.NetMode]
 	if !ok {
-		return errors.Errorf("unknown network mode %s", meta.NetMode)
+		return sendErr(done, errors.Errorf("unknown network mode %s", meta.NetMode))
 	}
 	namespace, err := provider.New()
 	if err != nil {
-		return err
+		return sendErr(done, err)
 	}
 	defer namespace.Close()
 
@@ -146,7 +169,7 @@ func (w containerdExecutor) Run(ctx context.Context, id string, root cache.Mount
 	processMode := oci.ProcessSandbox // FIXME(AkihiroSuda)
 	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, namespace, processMode, nil, opts...)
 	if err != nil {
-		return err
+		return sendErr(done, err)
 	}
 	defer cleanup()
 
@@ -154,12 +177,13 @@ func (w containerdExecutor) Run(ctx context.Context, id string, root cache.Mount
 		containerd.WithSpec(spec),
 	)
 	if err != nil {
-		return err
+		return sendErr(done, err)
 	}
 
 	defer func() {
 		if err1 := container.Delete(context.TODO()); err == nil && err1 != nil {
 			err = errors.Wrapf(err1, "failed to delete container %s", id)
+			sendErr(done, err)
 		}
 	}()
 
@@ -170,21 +194,27 @@ func (w containerdExecutor) Run(ctx context.Context, id string, root cache.Mount
 
 	task, err := container.NewTask(ctx, cio.NewCreator(cioOpts...), containerd.WithRootFS(rootMounts))
 	if err != nil {
-		return err
+		return sendErr(done, err)
 	}
 	defer func() {
 		if _, err1 := task.Delete(context.TODO()); err == nil && err1 != nil {
 			err = errors.Wrapf(err1, "failed to delete task %s", id)
+			sendErr(done, err)
 		}
 	}()
 
 	if err := task.Start(ctx); err != nil {
-		return err
+		return sendErr(done, err)
 	}
 
+	if started != nil {
+		startedOnce.Do(func() {
+			close(started)
+		})
+	}
 	statusCh, err := task.Wait(context.Background())
 	if err != nil {
-		return err
+		return sendErr(done, err)
 	}
 
 	var cancel func()
@@ -212,7 +242,7 @@ func (w containerdExecutor) Run(ctx context.Context, id string, root cache.Mount
 					err = errors.Wrap(ctx.Err(), err.Error())
 				default:
 				}
-				return err
+				return sendErr(done, err)
 			}
 			return nil
 		}
@@ -225,6 +255,13 @@ func (w containerdExecutor) Exec(ctx context.Context, id string, process executo
 	// first verify the container is running, if we get an error assume the container
 	// is in the process of being created and check again every 100ms or until
 	// context is canceled.
+
+	w.mu.Lock()
+	done, ok := w.running[id]
+	w.mu.Unlock()
+	if !ok {
+		return errors.Errorf("container %s not found", id)
+	}
 
 	var container containerd.Container
 	var task containerd.Task
@@ -244,6 +281,11 @@ func (w containerdExecutor) Exec(ctx context.Context, id string, process executo
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case err, ok := <-done:
+			if !ok {
+				return errors.Errorf("container %s has stopped", id)
+			}
+			return errors.Wrapf(err, "container %s has exited with error", id)
 		case <-time.After(100 * time.Millisecond):
 			continue
 		}
@@ -275,9 +317,8 @@ func (w containerdExecutor) Exec(ctx context.Context, id string, process executo
 	if meta.Cwd != "" {
 		spec.Process.Cwd = meta.Cwd
 	}
-	if len(meta.Env) > 0 {
-		// merge exec env with pid1 env
-		spec.Process.Env = append(spec.Process.Env, meta.Env...)
+	if len(process.Meta.Env) > 0 {
+		spec.Process.Env = process.Meta.Env
 	}
 
 	cioOpts := []cio.Opt{cio.WithStreams(process.Stdin, process.Stdout, process.Stderr)}
@@ -290,4 +331,9 @@ func (w containerdExecutor) Exec(ctx context.Context, id string, process executo
 		return errors.WithStack(err)
 	}
 	return taskProcess.Start(ctx)
+}
+
+func sendErr(c chan error, err error) error {
+	c <- err
+	return err
 }
