@@ -124,12 +124,11 @@ func New(opt Opt, networkProviders map[pb.NetMode]network.Provider) (executor.Ex
 		dns:              opt.DNS,
 		oomScoreAdj:      opt.OOMScoreAdj,
 		running:          make(map[string]chan error),
-		mu:               sync.Mutex{},
 	}
 	return w, nil
 }
 
-func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable, mounts []executor.Mount, process executor.ProcessInfo, started chan<- struct{}) error {
+func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable, mounts []executor.Mount, process executor.ProcessInfo, started chan<- struct{}) (err error) {
 	meta := process.Meta
 
 	startedOnce := sync.Once{}
@@ -141,6 +140,7 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable,
 		w.mu.Lock()
 		delete(w.running, id)
 		w.mu.Unlock()
+		done <- err
 		close(done)
 		if started != nil {
 			startedOnce.Do(func() {
@@ -151,11 +151,11 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable,
 
 	provider, ok := w.networkProviders[meta.NetMode]
 	if !ok {
-		return sendErr(done, errors.Errorf("unknown network mode %s", meta.NetMode))
+		return errors.Errorf("unknown network mode %s", meta.NetMode)
 	}
 	namespace, err := provider.New()
 	if err != nil {
-		return sendErr(done, err)
+		return err
 	}
 	defer namespace.Close()
 
@@ -165,12 +165,12 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable,
 
 	resolvConf, err := oci.GetResolvConf(ctx, w.root, w.idmap, w.dns)
 	if err != nil {
-		return sendErr(done, err)
+		return err
 	}
 
 	hostsFile, clean, err := oci.GetHostsFile(ctx, w.root, meta.ExtraHosts, w.idmap)
 	if err != nil {
-		return sendErr(done, err)
+		return err
 	}
 	if clean != nil {
 		defer clean()
@@ -178,12 +178,12 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable,
 
 	mountable, err := root.Mount(ctx, false)
 	if err != nil {
-		return sendErr(done, err)
+		return err
 	}
 
 	rootMount, release, err := mountable.Mount()
 	if err != nil {
-		return sendErr(done, err)
+		return err
 	}
 	if release != nil {
 		defer release()
@@ -195,7 +195,7 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable,
 	bundle := filepath.Join(w.root, id)
 
 	if err := os.Mkdir(bundle, 0711); err != nil {
-		return sendErr(done, err)
+		return err
 	}
 	defer os.RemoveAll(bundle)
 
@@ -206,21 +206,21 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable,
 
 	rootFSPath := filepath.Join(bundle, "rootfs")
 	if err := idtools.MkdirAllAndChown(rootFSPath, 0700, identity); err != nil {
-		return sendErr(done, err)
+		return err
 	}
 	if err := mount.All(rootMount, rootFSPath); err != nil {
-		return sendErr(done, err)
+		return err
 	}
 	defer mount.Unmount(rootFSPath, 0)
 
 	uid, gid, sgids, err := oci.GetUser(ctx, rootFSPath, meta.User)
 	if err != nil {
-		return sendErr(done, err)
+		return err
 	}
 
 	f, err := os.Create(filepath.Join(bundle, "config.json"))
 	if err != nil {
-		return sendErr(done, err)
+		return err
 	}
 	defer f.Close()
 
@@ -237,7 +237,7 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable,
 	if w.idmap != nil {
 		identity, err = w.idmap.ToHost(identity)
 		if err != nil {
-			return sendErr(done, err)
+			return err
 		}
 	}
 
@@ -253,7 +253,7 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable,
 	}
 	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, namespace, w.processMode, w.idmap, opts...)
 	if err != nil {
-		return sendErr(done, err)
+		return err
 	}
 	defer cleanup()
 
@@ -264,11 +264,11 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable,
 
 	newp, err := fs.RootPath(rootFSPath, meta.Cwd)
 	if err != nil {
-		return sendErr(done, errors.Wrapf(err, "working dir %s points to invalid target", newp))
+		return errors.Wrapf(err, "working dir %s points to invalid target", newp)
 	}
 	if _, err := os.Stat(newp); err != nil {
 		if err := idtools.MkdirAllAndChown(newp, 0755, identity); err != nil {
-			return sendErr(done, errors.Wrapf(err, "failed to create working directory %s", newp))
+			return errors.Wrapf(err, "failed to create working directory %s", newp)
 		}
 	}
 
@@ -276,12 +276,12 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable,
 	spec.Process.OOMScoreAdj = w.oomScoreAdj
 	if w.rootless {
 		if err := rootlessspecconv.ToRootless(spec); err != nil {
-			return sendErr(done, err)
+			return err
 		}
 	}
 
 	if err := json.NewEncoder(f).Encode(spec); err != nil {
-		return sendErr(done, err)
+		return err
 	}
 
 	// runCtx/killCtx is used for extra check in case the kill command blocks
@@ -335,9 +335,9 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable,
 		}
 		select {
 		case <-ctx.Done():
-			return sendErr(done, errors.Wrapf(ctx.Err(), err.Error()))
+			return errors.Wrapf(ctx.Err(), err.Error())
 		default:
-			return sendErr(done, stack.Enable(err))
+			return stack.Enable(err)
 		}
 	}
 
@@ -348,15 +348,16 @@ func (w *runcExecutor) Exec(ctx context.Context, id string, process executor.Pro
 	// first verify the container is running, if we get an error assume the container
 	// is in the process of being created and check again every 100ms or until
 	// context is canceled.
-	w.mu.Lock()
-	done, ok := w.running[id]
-	w.mu.Unlock()
-	if !ok {
-		return errors.Errorf("container %s not found", id)
-	}
-
-	state, _ := w.runc.State(ctx, id)
+	var state *runc.Container
 	for {
+		w.mu.Lock()
+		done, ok := w.running[id]
+		w.mu.Unlock()
+		if !ok {
+			return errors.Errorf("container %s not found", id)
+		}
+
+		state, _ = w.runc.State(ctx, id)
 		if state != nil && state.Status == "running" {
 			break
 		}
@@ -364,12 +365,11 @@ func (w *runcExecutor) Exec(ctx context.Context, id string, process executor.Pro
 		case <-ctx.Done():
 			return ctx.Err()
 		case err, ok := <-done:
-			if !ok {
+			if !ok || err == nil {
 				return errors.Errorf("container %s has stopped", id)
 			}
 			return errors.Wrapf(err, "container %s has exited with error", id)
 		case <-time.After(100 * time.Millisecond):
-			state, _ = w.runc.State(ctx, id)
 		}
 	}
 
@@ -437,9 +437,4 @@ func (s *forwardIO) Stdout() io.ReadCloser {
 
 func (s *forwardIO) Stderr() io.ReadCloser {
 	return nil
-}
-
-func sendErr(c chan error, err error) error {
-	c <- err
-	return err
 }
