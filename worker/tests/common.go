@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"io/ioutil"
 	"testing"
+	"time"
 
 	"github.com/containerd/containerd/namespaces"
 	"github.com/moby/buildkit/cache"
@@ -57,7 +59,11 @@ func TestWorkerExec(t *testing.T, w *base.Worker) {
 		}, started)
 	})
 
-	<-started
+	select {
+	case <-started:
+	case <-time.After(10 * time.Second):
+		t.Error("Unexpected timeout waiting for pid1 to start")
+	}
 
 	stdout := bytes.NewBuffer(nil)
 	stderr := bytes.NewBuffer(nil)
@@ -85,7 +91,7 @@ func TestWorkerExec(t *testing.T, w *base.Worker) {
 		Meta: executor.Meta{
 			Args: []string{"sh", "-c", "cat > /tmp/msg"},
 		},
-		Stdin:  &nopReadCloser{stdin},
+		Stdin:  ioutil.NopCloser(stdin),
 		Stdout: &nopCloser{stdout},
 		Stderr: &nopCloser{stderr},
 	})
@@ -143,7 +149,11 @@ func TestWorkerExecFailures(t *testing.T, w *base.Worker) {
 		}, started)
 	})
 
-	<-started
+	select {
+	case <-started:
+	case <-time.After(10 * time.Second):
+		t.Error("Unexpected timeout waiting for pid1 to start")
+	}
 
 	// this should fail since pid1 has already exited
 	err = w.Executor.Exec(ctx, id, executor.ProcessInfo{
@@ -167,7 +177,11 @@ func TestWorkerExecFailures(t *testing.T, w *base.Worker) {
 		}, started)
 	})
 
-	<-started
+	select {
+	case <-started:
+	case <-time.After(10 * time.Second):
+		t.Error("Unexpected timeout waiting for pid1 to start")
+	}
 
 	// this should fail since pid1 never started
 	err = w.Executor.Exec(ctx, id, executor.ProcessInfo{
@@ -182,14 +196,6 @@ func TestWorkerExecFailures(t *testing.T, w *base.Worker) {
 
 	err = snap.Release(ctx)
 	require.NoError(t, err)
-}
-
-type nopReadCloser struct {
-	io.Reader
-}
-
-func (n *nopReadCloser) Close() error {
-	return nil
 }
 
 type nopCloser struct {
