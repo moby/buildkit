@@ -381,6 +381,7 @@ func (sm *sshMountInstance) Mount() ([]mount.Mount, func() error, error) {
 			GID: gid,
 		})
 		if err != nil {
+			cancel()
 			return nil, nil, err
 		}
 		uid = identity.UID
@@ -731,7 +732,7 @@ func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 	defer stdout.Close()
 	defer stderr.Close()
 
-	if err := e.exec.Exec(ctx, meta, root, mounts, nil, stdout, stderr); err != nil {
+	if err := e.exec.Run(ctx, "", root, mounts, executor.ProcessInfo{Meta: meta, Stdin: nil, Stdout: stdout, Stderr: stderr}, nil); err != nil {
 		return nil, errors.Wrapf(err, "executor failed running %v", meta.Args)
 	}
 
