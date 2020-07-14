@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"io/ioutil"
 	"net"
+	"net/url"
 
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
@@ -70,6 +71,15 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 	if address == "" {
 		address = appdefaults.Address
 	}
+
+	// grpc-go uses a slightly different naming scheme: https://github.com/grpc/grpc/blob/master/doc/naming.md
+	// This will end up setting rfc non-complient :authority header to address string (e.g. tcp://127.0.0.1:1234).
+	// So, here sets right authority header via WithAuthority DialOption.
+	addressURL, err := url.Parse(address)
+	if err != nil {
+		return nil, err
+	}
+	gopts = append(gopts, grpc.WithAuthority(addressURL.Host))
 
 	unary = append(unary, grpcerrors.UnaryClientInterceptor)
 	stream = append(stream, grpcerrors.StreamClientInterceptor)
