@@ -4,9 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"io/ioutil"
-	"net"
-
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
 	controlapi "github.com/moby/buildkit/api/services/control"
@@ -19,6 +16,8 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"io/ioutil"
+	"net"
 )
 
 type Client struct {
@@ -51,6 +50,9 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 		if wt, ok := o.(*withTracer); ok {
 			unary = append(unary, otgrpc.OpenTracingClientInterceptor(wt.tracer, otgrpc.LogPayloads()))
 			stream = append(stream, otgrpc.OpenTracingStreamClientInterceptor(wt.tracer))
+		}
+		if wa, ok := o.(*withCustomAuthorityHeader); ok {
+			gopts = append(gopts, wa.toGrpcDialOption())
 		}
 		if wd, ok := o.(*withDialer); ok {
 			gopts = append(gopts, grpc.WithContextDialer(wd.dialer))
@@ -174,6 +176,18 @@ func WithTracer(t opentracing.Tracer) ClientOpt {
 
 type withTracer struct {
 	tracer opentracing.Tracer
+}
+
+type withCustomAuthorityHeader struct {
+	authority string
+}
+
+func WithCustomAuthorityHeader(authority string) ClientOpt {
+	return &withCustomAuthorityHeader{authority: authority}
+}
+
+func (o *withCustomAuthorityHeader) toGrpcDialOption() grpc.DialOption {
+	return grpc.WithAuthority(o.authority)
 }
 
 func resolveDialer(address string) (func(context.Context, string) (net.Conn, error), error) {

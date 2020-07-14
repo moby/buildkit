@@ -76,5 +76,11 @@ func ResolveClient(c *cli.Context) (*client.Client, error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout*time.Second)
 	defer cancel()
 
+	customAuthorityHaeder := c.GlobalString("custom-authority-header")
+	if customAuthorityHaeder != "" {
+		opts = append(opts, client.WithCustomAuthorityHeader(customAuthorityHaeder))
+
+	}
+	
 	return client.New(ctx, c.GlobalString("addr"), opts...)
 }

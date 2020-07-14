@@ -77,6 +77,11 @@ func main() {
 			Usage: "timeout backend connection after value seconds",
 			Value: 5,
 		},
+		cli.StringFlag{
+			Name:  "custom-authority-header",
+			Usage: "if set, it dials to addr with specified custom authority header",
+			Value: "",
+		},
 	}
 
 	app.Commands = []cli.Command{
