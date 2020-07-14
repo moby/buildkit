@@ -478,12 +478,11 @@ func git(ctx context.Context, dir string, args ...string) (*bytes.Buffer, error)
 		cmd.Stdin = nil
 		cmd.Stdout = io.MultiWriter(stdout, buf)
 		cmd.Stderr = io.MultiWriter(stderr, errbuf)
-		cmd.Env = []string{
-			"PATH=" + os.Getenv("PATH"),
+		cmd.Env = os.Environ()
+		cmd.Env = append(cmd.Env,
 			"GIT_TERMINAL_PROMPT=0",
-			"SSH_AUTH_SOCK=" + os.Getenv("SSH_AUTH_SOCK"),
 			//	"GIT_TRACE=1",
-		}
+		)
 		// remote git commands spawn helper processes that inherit FDs and don't
 		// handle parent death signal so exec.CommandContext can't be used
 		err := runProcessGroup(ctx, cmd)
