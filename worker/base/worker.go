@@ -3,7 +3,6 @@ package base
 import (
 	"context"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -229,6 +228,14 @@ func (w *Worker) LoadRef(id string, hidden bool) (cache.ImmutableRef, error) {
 	return w.CacheManager.Get(context.TODO(), id, opts...)
 }
 
+func (w *Worker) GetExecutor() executor.Executor {
+	return w.Executor
+}
+
+func (w *Worker) GetCacheManager() cache.Manager {
+	return w.CacheManager
+}
+
 func (w *Worker) ResolveOp(v solver.Vertex, s frontend.FrontendLLBBridge, sm *session.Manager) (solver.Op, error) {
 	if baseOp, ok := v.Sys().(*pb.Op); ok {
 		switch op := baseOp.Op.(type) {
@@ -289,15 +296,6 @@ func (w *Worker) PruneCacheMounts(ctx context.Context, ids []string) error {
 
 func (w *Worker) ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt, sm *session.Manager, g session.Group) (digest.Digest, []byte, error) {
 	return w.ImageSource.ResolveImageConfig(ctx, ref, opt, sm, g)
-}
-
-func (w *Worker) Exec(ctx context.Context, meta executor.Meta, rootFS cache.ImmutableRef, stdin io.ReadCloser, stdout, stderr io.WriteCloser) error {
-	active, err := w.CacheManager.New(ctx, rootFS)
-	if err != nil {
-		return err
-	}
-	defer active.Release(context.TODO())
-	return w.Executor.Run(ctx, "", active, nil, executor.ProcessInfo{Meta: meta, Stdin: stdin, Stdout: stdout, Stderr: stderr}, nil)
 }
 
 func (w *Worker) DiskUsage(ctx context.Context, opt client.DiskUsageInfo) ([]*client.UsageInfo, error) {

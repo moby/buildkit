@@ -75,7 +75,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 
 	_, isDevel := opts[keyDevel]
 	var img specs.Image
-	var rootFS cache.ImmutableRef
+	var rootFS cache.MutableRef
 	var readonly bool // TODO: try to switch to read-only by default.
 
 	if isDevel {
@@ -104,7 +104,12 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 		if !ok {
 			return nil, errors.Errorf("invalid ref: %T", res.Sys())
 		}
-		rootFS = workerRef.ImmutableRef
+
+		rootFS, err = workerRef.Worker.GetCacheManager().New(ctx, workerRef.ImmutableRef)
+		if err != nil {
+			return nil, err
+		}
+		defer rootFS.Release(ctx)
 		config, ok := devRes.Metadata[exptypes.ExporterImageConfigKey]
 		if ok {
 			if err := json.Unmarshal(config, &img); err != nil {
@@ -163,7 +168,11 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 		if !ok {
 			return nil, errors.Errorf("invalid ref: %T", r.Sys())
 		}
-		rootFS = workerRef.ImmutableRef
+		rootFS, err = workerRef.Worker.GetCacheManager().New(ctx, workerRef.ImmutableRef)
+		if err != nil {
+			return nil, err
+		}
+		defer rootFS.Release(ctx)
 	}
 
 	lbf, ctx, err := newLLBBridgeForwarder(ctx, llbBridge, gf.workers, inputs, sid)
@@ -215,7 +224,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 		}
 	}
 
-	err = llbBridge.Exec(ctx, meta, rootFS, lbf.Stdin, lbf.Stdout, os.Stderr)
+	err = llbBridge.Run(ctx, "", rootFS, nil, executor.ProcessInfo{Meta: meta, Stdin: lbf.Stdin, Stdout: lbf.Stdout, Stderr: os.Stderr}, nil)
 
 	if err != nil {
 		if errors.Is(err, context.Canceled) && lbf.isErrServerClosed {
