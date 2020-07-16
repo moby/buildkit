@@ -18,7 +18,7 @@ func InitContainerdWorker() {
 	Register(&containerd{
 		name:           "containerd",
 		containerd:     "containerd",
-		containerdShim: "containerd-shim",
+		containerdShim: "containerd-shim-runc-v2",
 	})
 	// defined in Dockerfile
 	// e.g. `containerd-1.1=/opt/containerd-1.1/bin,containerd-42.0=/opt/containerd-42.0/bin`
