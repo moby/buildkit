@@ -21,7 +21,6 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/moby/buildkit/util/contentutil"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -150,12 +149,7 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 							t.Parallel()
 						}
 						sb, closer, err := newSandbox(br, mirror, mv)
-						if err != nil {
-							if errors.Is(err, ErrorRequirements) {
-								t.Skip(err.Error())
-							}
-							require.NoError(t, err)
-						}
+						require.NoError(t, err)
 						defer func() {
 							assert.NoError(t, closer())
 							if t.Failed() {
