@@ -3,14 +3,9 @@ package client
 import (
 	"context"
 	"encoding/json"
-	"io"
-	"os"
-	"path/filepath"
-	"strings"
-	"time"
-
 	"github.com/containerd/containerd/content"
 	contentlocal "github.com/containerd/containerd/content/local"
+	"github.com/moby/buildkit/api/services/control"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/client/ociindex"
@@ -27,6 +22,11 @@ import (
 	"github.com/sirupsen/logrus"
 	fstypes "github.com/tonistiigi/fsutil/types"
 	"golang.org/x/sync/errgroup"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
 )
 
 type SolveOpt struct {
@@ -114,14 +114,6 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		return nil, err
 	}
 
-	var ex ExportEntry
-	if len(opt.Exports) > 1 {
-		return nil, errors.New("currently only single Exports can be specified")
-	}
-	if len(opt.Exports) == 1 {
-		ex = opt.Exports[0]
-	}
-
 	if !opt.SessionPreInitialized {
 		if len(syncedDirs) > 0 {
 			s.Allow(filesync.NewFSSyncProvider(syncedDirs))
@@ -131,29 +123,31 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			s.Allow(a)
 		}
 
-		switch ex.Type {
-		case ExporterLocal:
-			if ex.Output != nil {
-				return nil, errors.New("output file writer is not supported by local exporter")
-			}
-			if ex.OutputDir == "" {
-				return nil, errors.New("output directory is required for local exporter")
-			}
-			s.Allow(filesync.NewFSSyncTargetDir(ex.OutputDir))
-		case ExporterOCI, ExporterDocker, ExporterTar:
-			if ex.OutputDir != "" {
-				return nil, errors.Errorf("output directory %s is not supported by %s exporter", ex.OutputDir, ex.Type)
-			}
-			if ex.Output == nil {
-				return nil, errors.Errorf("output file writer is required for %s exporter", ex.Type)
-			}
-			s.Allow(filesync.NewFSSyncTarget(ex.Output))
-		default:
-			if ex.Output != nil {
-				return nil, errors.Errorf("output file writer is not supported by %s exporter", ex.Type)
-			}
-			if ex.OutputDir != "" {
-				return nil, errors.Errorf("output directory %s is not supported by %s exporter", ex.OutputDir, ex.Type)
+		for _, ex := range opt.Exports {
+			switch ex.Type {
+			case ExporterLocal:
+				if ex.Output != nil {
+					return nil, errors.New("output file writer is not supported by local exporter")
+				}
+				if ex.OutputDir == "" {
+					return nil, errors.New("output directory is required for local exporter")
+				}
+				s.Allow(filesync.NewFSSyncTargetDir(ex.OutputDir))
+			case ExporterOCI, ExporterDocker, ExporterTar:
+				if ex.OutputDir != "" {
+					return nil, errors.Errorf("output directory %s is not supported by %s exporter", ex.OutputDir, ex.Type)
+				}
+				if ex.Output == nil {
+					return nil, errors.Errorf("output file writer is required for %s exporter", ex.Type)
+				}
+				s.Allow(filesync.NewFSSyncTarget(ex.Output))
+			default:
+				if ex.Output != nil {
+					return nil, errors.Errorf("output file writer is not supported by %s exporter", ex.Type)
+				}
+				if ex.OutputDir != "" {
+					return nil, errors.Errorf("output directory %s is not supported by %s exporter", ex.OutputDir, ex.Type)
+				}
 			}
 		}
 
@@ -198,11 +192,23 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			frontendInputs[key] = def.ToPB()
 		}
 
+		exportersTypes := []string{}
+		m := moby_buildkit_v1.SolveRequest{
+			ExportersAttrs: []*moby_buildkit_v1.ExporterAttrs{},
+		}
+
+		for _, ex := range opt.Exports {
+			exportersTypes = append(exportersTypes, ex.Type)
+			expo := &moby_buildkit_v1.ExporterAttrs{
+				ExporterAttrs: ex.Attrs,
+			}
+			m.ExportersAttrs = append(m.ExportersAttrs, expo)
+		}
 		resp, err := c.controlClient().Solve(ctx, &controlapi.SolveRequest{
 			Ref:            ref,
 			Definition:     pbd,
-			Exporter:       ex.Type,
-			ExporterAttrs:  ex.Attrs,
+			Exporters:      exportersTypes,
+			ExportersAttrs: m.ExportersAttrs,
 			Session:        s.ID(),
 			Frontend:       opt.Frontend,
 			FrontendAttrs:  opt.FrontendAttrs,
