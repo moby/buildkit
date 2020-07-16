@@ -53,11 +53,15 @@ message UsageRecord {
 	bool Shared = 11;
 }
 
+message ExporterAttrs {
+    map<string, string> exporterAttrs = 1;
+}
+
 message SolveRequest {
 	string Ref = 1;
 	pb.Definition Definition = 2;
-	string Exporter = 3;
-	map<string, string> ExporterAttrs = 4;
+	repeated string Exporters = 3;
+	repeated ExporterAttrs ExportersAttrs = 4;
 	string Session = 5;
 	string Frontend = 6;
 	map<string, string> FrontendAttrs = 7;

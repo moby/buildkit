@@ -54,8 +54,9 @@ func parseOutputCSV(s string) (client.ExportEntry, error) {
 
 // ParseOutput parses --output
 func ParseOutput(exports []string) ([]client.ExportEntry, error) {
+	exportsField := strings.Fields(exports[0])
 	var entries []client.ExportEntry
-	for _, s := range exports {
+	for _, s := range exportsField {
 		e, err := parseOutputCSV(s)
 		if err != nil {
 			return nil, err

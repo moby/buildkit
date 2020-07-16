@@ -233,12 +233,12 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 	if err != nil {
 		return nil, err
 	}
-	if req.Exporter != "" {
-		exp, err := w.Exporter(req.Exporter, c.opt.SessionManager)
+	if req.Exporters[0] != "" {
+		exp, err := w.Exporter(req.Exporters[0], c.opt.SessionManager)
 		if err != nil {
 			return nil, err
 		}
-		expi, err = exp.Resolve(ctx, req.ExporterAttrs)
+		expi, err = exp.Resolve(ctx, nil)
 		if err != nil {
 			return nil, err
 		}
