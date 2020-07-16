@@ -3,7 +3,6 @@ package llbsolver
 import (
 	"context"
 	"fmt"
-	"io"
 	"strings"
 	"sync"
 	"time"
@@ -246,13 +245,24 @@ func (rp *resultProxy) Result(ctx context.Context) (res solver.CachedResult, err
 	return nil, err
 }
 
-func (s *llbBridge) Exec(ctx context.Context, meta executor.Meta, root cache.ImmutableRef, stdin io.ReadCloser, stdout, stderr io.WriteCloser) (err error) {
+func (s *llbBridge) Run(ctx context.Context, id string, root cache.Mountable, mounts []executor.Mount, process executor.ProcessInfo, started chan<- struct{}) (err error) {
 	w, err := s.resolveWorker()
 	if err != nil {
 		return err
 	}
-	span, ctx := tracing.StartSpan(ctx, strings.Join(meta.Args, " "))
-	err = w.Exec(ctx, meta, root, stdin, stdout, stderr)
+	span, ctx := tracing.StartSpan(ctx, strings.Join(process.Meta.Args, " "))
+	err = w.GetExecutor().Run(ctx, id, root, mounts, process, started)
+	tracing.FinishWithError(span, err)
+	return err
+}
+
+func (s *llbBridge) Exec(ctx context.Context, id string, process executor.ProcessInfo) (err error) {
+	w, err := s.resolveWorker()
+	if err != nil {
+		return err
+	}
+	span, ctx := tracing.StartSpan(ctx, strings.Join(process.Meta.Args, " "))
+	err = w.GetExecutor().Exec(ctx, id, process)
 	tracing.FinishWithError(span, err)
 	return err
 }
