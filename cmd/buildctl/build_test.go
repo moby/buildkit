@@ -92,7 +92,7 @@ func testBuildContainerdExporter(t *testing.T, sb integration.Sandbox) {
 	err = cmd.Run()
 	require.NoError(t, err)
 
-	client, err := containerd.New(cdAddress, containerd.WithTimeout(60*time.Second), containerd.WithDefaultRuntime("io.containerd.runtime.v1.linux"))
+	client, err := containerd.New(cdAddress, containerd.WithTimeout(60*time.Second))
 	require.NoError(t, err)
 	defer client.Close()
 
