@@ -34,8 +34,8 @@ type Worker interface {
 	FromRemote(ctx context.Context, remote *solver.Remote) (cache.ImmutableRef, error)
 	PruneCacheMounts(ctx context.Context, ids []string) error
 	ContentStore() content.Store
-	GetExecutor() executor.Executor
-	GetCacheManager() cache.Manager
+	Executor() executor.Executor
+	CacheManager() cache.Manager
 }
 
 // Pre-defined label keys
