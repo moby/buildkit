@@ -1276,11 +1276,11 @@ COPY test.txt /absoluteDir/
 
 When copying files or directories that contain special characters (such as `[`
 and `]`), you need to escape those paths following the Golang rules to prevent
-them from being treated as a matching pattern. For example, to add a file
+them from being treated as a matching pattern. For example, to copy a file
 named `arr[0].txt`, use the following;
 
 ```dockerfile
-ADD arr[[]0].txt /mydir/
+COPY arr[[]0].txt /mydir/
 ```
 
 All new files and directories are created with a UID and GID of 0, unless the
