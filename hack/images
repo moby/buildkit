@@ -15,7 +15,7 @@ progressFlag=""
 if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"; fi
 
 
-versionTag=$(git describe --tags --match "v[0-9]*")
+versionTag=$(git describe --always --tags --match "v[0-9]*")
 
 if [[ ! "$versionTag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
 	versionTag=""
