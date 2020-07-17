@@ -83,7 +83,7 @@ type WorkerOpt struct {
 // TODO: s/Worker/OpWorker/g ?
 type Worker struct {
 	WorkerOpt
-	CacheManager  cache.Manager
+	CacheMgr      cache.Manager
 	SourceManager *source.Manager
 	imageWriter   *imageexporter.ImageWriter
 	ImageSource   *containerimage.Source
@@ -181,7 +181,7 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 
 	return &Worker{
 		WorkerOpt:     opt,
-		CacheManager:  cm,
+		CacheMgr:      cm,
 		SourceManager: sm,
 		imageWriter:   iw,
 		ImageSource:   is,
@@ -225,15 +225,15 @@ func (w *Worker) LoadRef(id string, hidden bool) (cache.ImmutableRef, error) {
 	if hidden {
 		opts = append(opts, cache.NoUpdateLastUsed)
 	}
-	return w.CacheManager.Get(context.TODO(), id, opts...)
+	return w.CacheMgr.Get(context.TODO(), id, opts...)
 }
 
-func (w *Worker) GetExecutor() executor.Executor {
-	return w.Executor
+func (w *Worker) Executor() executor.Executor {
+	return w.WorkerOpt.Executor
 }
 
-func (w *Worker) GetCacheManager() cache.Manager {
-	return w.CacheManager
+func (w *Worker) CacheManager() cache.Manager {
+	return w.CacheMgr
 }
 
 func (w *Worker) ResolveOp(v solver.Vertex, s frontend.FrontendLLBBridge, sm *session.Manager) (solver.Op, error) {
@@ -242,9 +242,9 @@ func (w *Worker) ResolveOp(v solver.Vertex, s frontend.FrontendLLBBridge, sm *se
 		case *pb.Op_Source:
 			return ops.NewSourceOp(v, op, baseOp.Platform, w.SourceManager, sm, w)
 		case *pb.Op_Exec:
-			return ops.NewExecOp(v, op, baseOp.Platform, w.CacheManager, sm, w.MetadataStore, w.Executor, w)
+			return ops.NewExecOp(v, op, baseOp.Platform, w.CacheMgr, sm, w.MetadataStore, w.WorkerOpt.Executor, w)
 		case *pb.Op_File:
-			return ops.NewFileOp(v, op, w.CacheManager, w.MetadataStore, w)
+			return ops.NewFileOp(v, op, w.CacheMgr, w.MetadataStore, w)
 		case *pb.Op_Build:
 			return ops.NewBuildOp(v, op, s, w)
 		default:
@@ -268,7 +268,7 @@ func (w *Worker) PruneCacheMounts(ctx context.Context, ids []string) error {
 		for _, si := range sis {
 			for _, k := range si.Indexes() {
 				if k == id || strings.HasPrefix(k, id+":") {
-					if siCached := w.CacheManager.Metadata(si.ID()); siCached != nil {
+					if siCached := w.CacheMgr.Metadata(si.ID()); siCached != nil {
 						si = siCached
 					}
 					if err := cache.CachePolicyDefault(si); err != nil {
@@ -281,7 +281,7 @@ func (w *Worker) PruneCacheMounts(ctx context.Context, ids []string) error {
 						return err
 					}
 					// if ref is unused try to clean it up right away by releasing it
-					if mref, err := w.CacheManager.GetMutable(ctx, si.ID()); err == nil {
+					if mref, err := w.CacheMgr.GetMutable(ctx, si.ID()); err == nil {
 						go mref.Release(context.TODO())
 					}
 					break
@@ -299,11 +299,11 @@ func (w *Worker) ResolveImageConfig(ctx context.Context, ref string, opt llb.Res
 }
 
 func (w *Worker) DiskUsage(ctx context.Context, opt client.DiskUsageInfo) ([]*client.UsageInfo, error) {
-	return w.CacheManager.DiskUsage(ctx, opt)
+	return w.CacheMgr.DiskUsage(ctx, opt)
 }
 
 func (w *Worker) Prune(ctx context.Context, ch chan client.UsageInfo, opt ...client.PruneInfo) error {
-	return w.CacheManager.Prune(ctx, ch, opt...)
+	return w.CacheMgr.Prune(ctx, ch, opt...)
 }
 
 func (w *Worker) Exporter(name string, sm *session.Manager) (exporter.Exporter, error) {
@@ -473,7 +473,7 @@ func (w *Worker) FromRemote(ctx context.Context, remote *solver.Remote) (ref cac
 		if v, ok := desc.Annotations["buildkit/description"]; ok {
 			descr = v
 		}
-		ref, err := w.CacheManager.GetByBlob(ctx, desc, current, cache.WithDescription(descr), cache.WithCreationTime(tm))
+		ref, err := w.CacheMgr.GetByBlob(ctx, desc, current, cache.WithDescription(descr), cache.WithCreationTime(tm))
 		if current != nil {
 			current.Release(context.TODO())
 		}

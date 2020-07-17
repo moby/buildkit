@@ -90,7 +90,7 @@ func TestRuncWorker(t *testing.T) {
 	lm.Unmount()
 	require.NoError(t, err)
 
-	du, err := w.CacheManager.DiskUsage(ctx, client.DiskUsageInfo{})
+	du, err := w.CacheMgr.DiskUsage(ctx, client.DiskUsageInfo{})
 	require.NoError(t, err)
 
 	// for _, d := range du {
@@ -107,16 +107,16 @@ func TestRuncWorker(t *testing.T) {
 	}
 
 	stderr := bytes.NewBuffer(nil)
-	err = w.Executor.Run(ctx, "", snap, nil, executor.ProcessInfo{Meta: meta, Stderr: &nopCloser{stderr}}, nil)
+	err = w.WorkerOpt.Executor.Run(ctx, "", snap, nil, executor.ProcessInfo{Meta: meta, Stderr: &nopCloser{stderr}}, nil)
 	require.Error(t, err) // Read-only root
 	// typical error is like `mkdir /.../rootfs/proc: read-only file system`.
 	// make sure the error is caused before running `echo foo > /bar`.
 	require.Contains(t, stderr.String(), "read-only file system")
 
-	root, err := w.CacheManager.New(ctx, snap)
+	root, err := w.CacheMgr.New(ctx, snap)
 	require.NoError(t, err)
 
-	err = w.Executor.Run(ctx, "", root, nil, executor.ProcessInfo{Meta: meta, Stderr: &nopCloser{stderr}}, nil)
+	err = w.WorkerOpt.Executor.Run(ctx, "", root, nil, executor.ProcessInfo{Meta: meta, Stderr: &nopCloser{stderr}}, nil)
 	require.NoError(t, err)
 
 	meta = executor.Meta{
@@ -124,7 +124,7 @@ func TestRuncWorker(t *testing.T) {
 		Cwd:  "/",
 	}
 
-	err = w.Executor.Run(ctx, "", root, nil, executor.ProcessInfo{Meta: meta, Stderr: &nopCloser{stderr}}, nil)
+	err = w.WorkerOpt.Executor.Run(ctx, "", root, nil, executor.ProcessInfo{Meta: meta, Stderr: &nopCloser{stderr}}, nil)
 	require.NoError(t, err)
 
 	rf, err := root.Commit(ctx)
@@ -153,7 +153,7 @@ func TestRuncWorker(t *testing.T) {
 	err = snap.Release(ctx)
 	require.NoError(t, err)
 
-	du2, err := w.CacheManager.DiskUsage(ctx, client.DiskUsageInfo{})
+	du2, err := w.CacheMgr.DiskUsage(ctx, client.DiskUsageInfo{})
 	require.NoError(t, err)
 	require.Equal(t, 1, len(du2)-len(du))
 
@@ -172,7 +172,7 @@ func TestRuncWorkerNoProcessSandbox(t *testing.T) {
 	sm, err := session.NewManager()
 	require.NoError(t, err)
 	snap := tests.NewBusyboxSourceSnapshot(ctx, t, w, sm)
-	root, err := w.CacheManager.New(ctx, snap)
+	root, err := w.CacheMgr.New(ctx, snap)
 	require.NoError(t, err)
 
 	// ensure the procfs is shared
@@ -185,7 +185,7 @@ func TestRuncWorkerNoProcessSandbox(t *testing.T) {
 	}
 	stdout := bytes.NewBuffer(nil)
 	stderr := bytes.NewBuffer(nil)
-	err = w.Executor.Run(ctx, "", root, nil, executor.ProcessInfo{Meta: meta, Stdout: &nopCloser{stdout}, Stderr: &nopCloser{stderr}}, nil)
+	err = w.WorkerOpt.Executor.Run(ctx, "", root, nil, executor.ProcessInfo{Meta: meta, Stdout: &nopCloser{stdout}, Stderr: &nopCloser{stderr}}, nil)
 	require.NoError(t, err, fmt.Sprintf("stdout=%q, stderr=%q", stdout.String(), stderr.String()))
 	require.Equal(t, string(selfCmdline), stdout.String())
 }
