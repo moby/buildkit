@@ -41,7 +41,7 @@ func TestWorkerExec(t *testing.T, w *base.Worker) {
 	require.NoError(t, err)
 
 	snap := NewBusyboxSourceSnapshot(ctx, t, w, sm)
-	root, err := w.CacheManager.New(ctx, snap)
+	root, err := w.CacheMgr.New(ctx, snap)
 	require.NoError(t, err)
 
 	id := identity.NewID()
@@ -50,7 +50,7 @@ func TestWorkerExec(t *testing.T, w *base.Worker) {
 	eg := errgroup.Group{}
 	started := make(chan struct{})
 	eg.Go(func() error {
-		return w.Executor.Run(ctx, id, root, nil, executor.ProcessInfo{
+		return w.WorkerOpt.Executor.Run(ctx, id, root, nil, executor.ProcessInfo{
 			Meta: executor.Meta{
 				Args: []string{"sleep", "10"},
 				Cwd:  "/",
@@ -69,7 +69,7 @@ func TestWorkerExec(t *testing.T, w *base.Worker) {
 	stderr := bytes.NewBuffer(nil)
 
 	// verify pid1 is the sleep command via Exec
-	err = w.Executor.Exec(ctx, id, executor.ProcessInfo{
+	err = w.WorkerOpt.Executor.Exec(ctx, id, executor.ProcessInfo{
 		Meta: executor.Meta{
 			Args: []string{"ps", "-o", "pid,comm"},
 		},
@@ -87,7 +87,7 @@ func TestWorkerExec(t *testing.T, w *base.Worker) {
 	stdin := bytes.NewReader([]byte("hello"))
 	stdout.Reset()
 	stderr.Reset()
-	err = w.Executor.Exec(ctx, id, executor.ProcessInfo{
+	err = w.WorkerOpt.Executor.Exec(ctx, id, executor.ProcessInfo{
 		Meta: executor.Meta{
 			Args: []string{"sh", "-c", "cat > /tmp/msg"},
 		},
@@ -102,7 +102,7 @@ func TestWorkerExec(t *testing.T, w *base.Worker) {
 	// verify contents of /tmp/msg
 	stdout.Reset()
 	stderr.Reset()
-	err = w.Executor.Exec(ctx, id, executor.ProcessInfo{
+	err = w.WorkerOpt.Executor.Exec(ctx, id, executor.ProcessInfo{
 		Meta: executor.Meta{
 			Args: []string{"cat", "/tmp/msg"},
 		},
@@ -132,7 +132,7 @@ func TestWorkerExecFailures(t *testing.T, w *base.Worker) {
 	require.NoError(t, err)
 
 	snap := NewBusyboxSourceSnapshot(ctx, t, w, sm)
-	root, err := w.CacheManager.New(ctx, snap)
+	root, err := w.CacheMgr.New(ctx, snap)
 	require.NoError(t, err)
 
 	id := identity.NewID()
@@ -141,7 +141,7 @@ func TestWorkerExecFailures(t *testing.T, w *base.Worker) {
 	eg := errgroup.Group{}
 	started := make(chan struct{})
 	eg.Go(func() error {
-		return w.Executor.Run(ctx, id, root, nil, executor.ProcessInfo{
+		return w.WorkerOpt.Executor.Run(ctx, id, root, nil, executor.ProcessInfo{
 			Meta: executor.Meta{
 				Args: []string{"/bin/false"},
 				Cwd:  "/",
@@ -156,7 +156,7 @@ func TestWorkerExecFailures(t *testing.T, w *base.Worker) {
 	}
 
 	// this should fail since pid1 has already exited
-	err = w.Executor.Exec(ctx, id, executor.ProcessInfo{
+	err = w.WorkerOpt.Executor.Exec(ctx, id, executor.ProcessInfo{
 		Meta: executor.Meta{
 			Args: []string{"/bin/true"},
 		},
@@ -170,7 +170,7 @@ func TestWorkerExecFailures(t *testing.T, w *base.Worker) {
 	eg = errgroup.Group{}
 	started = make(chan struct{})
 	eg.Go(func() error {
-		return w.Executor.Run(ctx, id, root, nil, executor.ProcessInfo{
+		return w.WorkerOpt.Executor.Run(ctx, id, root, nil, executor.ProcessInfo{
 			Meta: executor.Meta{
 				Args: []string{"bogus"},
 			},
@@ -184,7 +184,7 @@ func TestWorkerExecFailures(t *testing.T, w *base.Worker) {
 	}
 
 	// this should fail since pid1 never started
-	err = w.Executor.Exec(ctx, id, executor.ProcessInfo{
+	err = w.WorkerOpt.Executor.Exec(ctx, id, executor.ProcessInfo{
 		Meta: executor.Meta{
 			Args: []string{"/bin/true"},
 		},

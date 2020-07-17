@@ -251,7 +251,7 @@ func (s *llbBridge) Run(ctx context.Context, id string, root cache.Mountable, mo
 		return err
 	}
 	span, ctx := tracing.StartSpan(ctx, strings.Join(process.Meta.Args, " "))
-	err = w.GetExecutor().Run(ctx, id, root, mounts, process, started)
+	err = w.Executor().Run(ctx, id, root, mounts, process, started)
 	tracing.FinishWithError(span, err)
 	return err
 }
@@ -262,7 +262,7 @@ func (s *llbBridge) Exec(ctx context.Context, id string, process executor.Proces
 		return err
 	}
 	span, ctx := tracing.StartSpan(ctx, strings.Join(process.Meta.Args, " "))
-	err = w.GetExecutor().Exec(ctx, id, process)
+	err = w.Executor().Exec(ctx, id, process)
 	tracing.FinishWithError(span, err)
 	return err
 }
