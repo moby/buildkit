@@ -144,7 +144,7 @@ func (p *Puller) Pull(ctx context.Context) (*Pulled, error) {
 	}
 	stopProgress()
 
-	var usedBlobs, unusedBlobs []ocispec.Descriptor
+	var usedBlobs []ocispec.Descriptor
 
 	if schema1Converter != nil {
 		ongoing.remove(p.desc) // Not left in the content store so this is sufficient.
@@ -174,10 +174,6 @@ func (p *Puller) Pull(ctx context.Context) (*Pulled, error) {
 		if err := images.Dispatch(ctx, images.Handlers(handlers...), nil, p.desc); err != nil {
 			return nil, err
 		}
-
-		for _, j := range allBlobs {
-			unusedBlobs = append(unusedBlobs, j)
-		}
 	} else {
 		for _, j := range ongoing.added {
 			usedBlobs = append(usedBlobs, j.Descriptor)
@@ -186,11 +182,9 @@ func (p *Puller) Pull(ctx context.Context) (*Pulled, error) {
 
 	// split all pulled data to layers and rest. layers remain roots and are deleted with snapshots. rest will be linked to layers.
 	var notLayerBlobs []ocispec.Descriptor
-	var layerBlobs []ocispec.Descriptor
 	for _, j := range usedBlobs {
 		switch j.MediaType {
 		case ocispec.MediaTypeImageLayer, images.MediaTypeDockerSchema2Layer, ocispec.MediaTypeImageLayerGzip, images.MediaTypeDockerSchema2LayerGzip, images.MediaTypeDockerSchema2LayerForeign, images.MediaTypeDockerSchema2LayerForeignGzip:
-			layerBlobs = append(layerBlobs, j)
 		default:
 			notLayerBlobs = append(notLayerBlobs, j)
 		}
