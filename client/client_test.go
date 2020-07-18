@@ -2817,8 +2817,8 @@ func testProxyEnv(t *testing.T, sb integration.Sandbox) {
 	cmd := `sh -c "echo -n $HTTP_PROXY-$HTTPS_PROXY-$NO_PROXY-$no_proxy > env"`
 
 	st := base.Run(llb.Shlex(cmd), llb.WithProxy(llb.ProxyEnv{
-		HttpProxy:  "httpvalue",
-		HttpsProxy: "httpsvalue",
+		HTTPProxy:  "httpvalue",
+		HTTPSProxy: "httpsvalue",
 		NoProxy:    "noproxyvalue",
 	}))
 	out := st.AddMount("/out", llb.Scratch())
@@ -2846,7 +2846,7 @@ func testProxyEnv(t *testing.T, sb integration.Sandbox) {
 
 	// repeat to make sure proxy doesn't change cache
 	st = base.Run(llb.Shlex(cmd), llb.WithProxy(llb.ProxyEnv{
-		HttpsProxy: "httpsvalue2",
+		HTTPSProxy: "httpsvalue2",
 		NoProxy:    "noproxyvalue2",
 	}))
 	out = st.AddMount("/out", llb.Scratch())

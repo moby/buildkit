@@ -1308,15 +1308,15 @@ func proxyEnvFromBuildArgs(args map[string]string) *llb.ProxyEnv {
 	isNil := true
 	for k, v := range args {
 		if strings.EqualFold(k, "http_proxy") {
-			pe.HttpProxy = v
+			pe.HTTPProxy = v
 			isNil = false
 		}
 		if strings.EqualFold(k, "https_proxy") {
-			pe.HttpsProxy = v
+			pe.HTTPSProxy = v
 			isNil = false
 		}
 		if strings.EqualFold(k, "ftp_proxy") {
-			pe.FtpProxy = v
+			pe.FTPProxy = v
 			isNil = false
 		}
 		if strings.EqualFold(k, "no_proxy") {

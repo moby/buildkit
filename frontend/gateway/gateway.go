@@ -685,47 +685,46 @@ func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest)
 			Message: in.Error.Message,
 			Details: convertGogoAny(in.Error.Details),
 		})))
-	} else {
-		r := &frontend.Result{
-			Metadata: in.Result.Metadata,
-		}
-
-		switch res := in.Result.Result.(type) {
-		case *pb.Result_RefDeprecated:
-			ref, err := lbf.convertRef(res.RefDeprecated)
-			if err != nil {
-				return nil, err
-			}
-			r.Ref = ref
-		case *pb.Result_RefsDeprecated:
-			m := map[string]solver.ResultProxy{}
-			for k, id := range res.RefsDeprecated.Refs {
-				ref, err := lbf.convertRef(id)
-				if err != nil {
-					return nil, err
-				}
-				m[k] = ref
-			}
-			r.Refs = m
-		case *pb.Result_Ref:
-			ref, err := lbf.convertRef(res.Ref.Id)
-			if err != nil {
-				return nil, err
-			}
-			r.Ref = ref
-		case *pb.Result_Refs:
-			m := map[string]solver.ResultProxy{}
-			for k, ref := range res.Refs.Refs {
-				ref, err := lbf.convertRef(ref.Id)
-				if err != nil {
-					return nil, err
-				}
-				m[k] = ref
-			}
-			r.Refs = m
-		}
-		return lbf.setResult(r, nil)
 	}
+	r := &frontend.Result{
+		Metadata: in.Result.Metadata,
+	}
+
+	switch res := in.Result.Result.(type) {
+	case *pb.Result_RefDeprecated:
+		ref, err := lbf.convertRef(res.RefDeprecated)
+		if err != nil {
+			return nil, err
+		}
+		r.Ref = ref
+	case *pb.Result_RefsDeprecated:
+		m := map[string]solver.ResultProxy{}
+		for k, id := range res.RefsDeprecated.Refs {
+			ref, err := lbf.convertRef(id)
+			if err != nil {
+				return nil, err
+			}
+			m[k] = ref
+		}
+		r.Refs = m
+	case *pb.Result_Ref:
+		ref, err := lbf.convertRef(res.Ref.Id)
+		if err != nil {
+			return nil, err
+		}
+		r.Ref = ref
+	case *pb.Result_Refs:
+		m := map[string]solver.ResultProxy{}
+		for k, ref := range res.Refs.Refs {
+			ref, err := lbf.convertRef(ref.Id)
+			if err != nil {
+				return nil, err
+			}
+			m[k] = ref
+		}
+		r.Refs = m
+	}
+	return lbf.setResult(r, nil)
 }
 
 func (lbf *llbBridgeForwarder) Inputs(ctx context.Context, in *pb.InputsRequest) (*pb.InputsResponse, error) {

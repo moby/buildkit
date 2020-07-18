@@ -629,11 +629,10 @@ func (sr *mutableRef) release(ctx context.Context) error {
 			}
 		}
 		return sr.remove(ctx, true)
-	} else {
-		if sr.updateLastUsed() {
-			updateLastUsed(sr.md)
-			sr.triggerLastUsed = false
-		}
+	}
+	if sr.updateLastUsed() {
+		updateLastUsed(sr.md)
+		sr.triggerLastUsed = false
 	}
 	return nil
 }

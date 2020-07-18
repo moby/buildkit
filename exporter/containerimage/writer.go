@@ -391,7 +391,7 @@ func normalizeLayersAndHistory(diffs []blobs.DiffPair, history []ocispec.History
 	var historyLayers int
 	for _, h := range history {
 		if !h.EmptyLayer {
-			historyLayers += 1
+			historyLayers++
 		}
 	}
 

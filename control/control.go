@@ -63,7 +63,7 @@ func NewController(opt Opt) (*Controller, error) {
 		cache:            cache,
 		gatewayForwarder: gatewayForwarder,
 	}
-	c.throttledGC = throttle.ThrottleAfter(time.Minute, c.gc)
+	c.throttledGC = throttle.After(time.Minute, c.gc)
 
 	defer func() {
 		time.AfterFunc(time.Second, c.throttledGC)

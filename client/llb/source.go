@@ -2,7 +2,7 @@ package llb
 
 import (
 	"context"
-	_ "crypto/sha256"
+	_ "crypto/sha256" // for opencontainers/go-digest
 	"encoding/json"
 	"os"
 	"strconv"
@@ -233,11 +233,11 @@ func Git(remote, ref string, opts ...GitOption) State {
 	}
 	if gi.AuthTokenSecret != "" {
 		attrs[pb.AttrAuthTokenSecret] = gi.AuthTokenSecret
-		addCap(&gi.Constraints, pb.CapSourceGitHttpAuth)
+		addCap(&gi.Constraints, pb.CapSourceGitHTTPAuth)
 	}
 	if gi.AuthHeaderSecret != "" {
 		attrs[pb.AttrAuthHeaderSecret] = gi.AuthHeaderSecret
-		addCap(&gi.Constraints, pb.CapSourceGitHttpAuth)
+		addCap(&gi.Constraints, pb.CapSourceGitHTTPAuth)
 	}
 
 	addCap(&gi.Constraints, pb.CapSourceGit)
