@@ -501,7 +501,7 @@ func (r *reference) StatFile(ctx context.Context, req client.StatRequest) (*fsty
 }
 
 func grpcClientConn(ctx context.Context) (context.Context, *grpc.ClientConn, error) {
-	dialOpt := grpc.WithDialer(func(addr string, d time.Duration) (net.Conn, error) {
+	dialOpt := grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
 		return stdioConn(), nil
 	})
 
