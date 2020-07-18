@@ -1,4 +1,4 @@
-package binfmt_misc
+package archutil
 
 import (
 	"strings"
@@ -127,7 +127,7 @@ func printPlatfromWarning(p string, err error) {
 	if strings.Contains(err.Error(), "exec format error") {
 		logrus.Warnf("platform %s cannot pass the validation, kernel support for miscellaneous binary may have not enabled.", p)
 	} else if strings.Contains(err.Error(), "no such file or directory") {
-		logrus.Warnf("platforms %s cannot pass the validation, '-F' flag might have not set for 'binfmt_misc'.", p)
+		logrus.Warnf("platforms %s cannot pass the validation, '-F' flag might have not set for 'archutil'.", p)
 	} else {
 		logrus.Warnf("platforms %s cannot pass the validation: %s", p, err.Error())
 	}

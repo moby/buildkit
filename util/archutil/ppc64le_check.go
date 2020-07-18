@@ -1,6 +1,6 @@
 // +build !ppc64le
 
-package binfmt_misc
+package archutil
 
 func ppc64leSupported() error {
 	return check(Binaryppc64le)
