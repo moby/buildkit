@@ -47,7 +47,6 @@ type conn struct {
 	closedOnce sync.Once
 	readMu     sync.Mutex
 	writeMu    sync.Mutex
-	err        error
 	closeCh    chan struct{}
 }
 
