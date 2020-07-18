@@ -3621,6 +3621,7 @@ func (v *vertexSubBuild) Exec(ctx context.Context, g session.Group, inputs []Res
 	return []Result{res}, nil
 }
 
+//nolint:unused
 func printGraph(e Edge, pfx string) {
 	name := e.Vertex.Name()
 	fmt.Printf("%s %d %s\n", pfx, e.Index, name)

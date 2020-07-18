@@ -427,10 +427,9 @@ func (c *grpcClient) Inputs(ctx context.Context) (map[string]llb.State, error) {
 }
 
 type reference struct {
-	c      *grpcClient
-	id     string
-	def    *opspb.Definition
-	output llb.Output
+	c   *grpcClient
+	id  string
+	def *opspb.Definition
 }
 
 func newReference(c *grpcClient, ref *pb.Ref) (*reference, error) {

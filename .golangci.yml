@@ -16,4 +16,7 @@ linters:
     - deadcode
     - goimports
     - ineffassign
+    - misspell
+    - unused
+    - varcheck
   disable-all: true
