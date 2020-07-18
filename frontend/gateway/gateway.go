@@ -406,7 +406,6 @@ type llbBridgeForwarder struct {
 	doneCh            chan struct{} // closed when result or err become valid through a call to a Return
 	result            *frontend.Result
 	err               error
-	exporterAttr      map[string][]byte
 	workers           frontend.WorkerInfos
 	inputs            map[string]*opspb.Definition
 	isErrServerClosed bool

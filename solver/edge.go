@@ -76,8 +76,6 @@ type dep struct {
 	edgeState
 	index             Index
 	keyMap            map[string]*CacheKey
-	desiredState      edgeStatusType
-	e                 *edge
 	slowCacheReq      pipe.Receiver
 	slowCacheComplete bool
 	slowCacheFoundKey bool

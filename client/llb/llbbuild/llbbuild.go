@@ -25,11 +25,9 @@ func NewBuildOp(source llb.Output, opt ...BuildOption) llb.Vertex {
 
 type build struct {
 	llb.MarshalCache
-	source         llb.Output
-	info           *BuildInfo
-	cachedPBDigest digest.Digest
-	cachedPB       []byte
-	constraints    llb.Constraints
+	source      llb.Output
+	info        *BuildInfo
+	constraints llb.Constraints
 }
 
 func (b *build) ToInput(ctx context.Context, c *llb.Constraints) (*pb.Input, error) {
