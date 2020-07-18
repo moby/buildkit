@@ -139,8 +139,6 @@ func (c dockerd) New(cfg *BackendConfig) (b Backend, cl func() error, err error)
 				return conn.Close()
 			})
 		}
-		cancel()
-		return nil
 	})
 
 	return backend{
