@@ -874,12 +874,15 @@ func ensureOriginMetadata(md *metadata.StorageItem) *metadata.StorageItem {
 }
 
 var pool32K = sync.Pool{
-	New: func() interface{} { return make([]byte, 32*1024) }, // 32K
+	New: func() interface{} {
+		buf := make([]byte, 32*1024) // 32K
+		return &buf
+	},
 }
 
 func poolsCopy(dst io.Writer, src io.Reader) (written int64, err error) {
-	buf := pool32K.Get().([]byte)
-	written, err = io.CopyBuffer(dst, src, buf)
+	buf := pool32K.Get().(*[]byte)
+	written, err = io.CopyBuffer(dst, src, *buf)
 	pool32K.Put(buf)
 	return
 }
