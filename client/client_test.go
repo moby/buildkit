@@ -103,6 +103,7 @@ func TestClientIntegration(t *testing.T) {
 		testCacheMountNoCache,
 		testExporterTargetExists,
 		testTarExporterWithSocket,
+		testTarExporterWithSocketCopy,
 		testMultipleRegistryCacheImportExport,
 	}, mirrors)
 
@@ -1501,6 +1502,26 @@ func testTarExporterWithSocket(t *testing.T, sb integration.Sandbox) {
 			},
 		},
 	}, nil)
+	require.NoError(t, err)
+}
+
+func testTarExporterWithSocketCopy(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	alpine := llb.Image("docker.io/library/alpine:latest")
+	state := alpine.Run(llb.Args([]string{"sh", "-c", "nc -l -s local:/root/socket.sock & usleep 100000; kill %1"})).Root()
+
+	fa := llb.Copy(state, "/root", "/roo2", &llb.CopyInfo{})
+
+	scratchCopy := llb.Scratch().File(fa)
+
+	def, err := scratchCopy.Marshal()
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
 	require.NoError(t, err)
 }
 
