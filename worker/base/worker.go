@@ -514,9 +514,8 @@ func ID(root string) (string, error) {
 			id := identity.NewID()
 			err := ioutil.WriteFile(f, []byte(id), 0400)
 			return id, err
-		} else {
-			return "", err
 		}
+		return "", err
 	}
 	return string(b), nil
 }

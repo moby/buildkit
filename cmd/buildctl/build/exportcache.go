@@ -53,7 +53,7 @@ func ParseExportCache(exportCaches, legacyExportCacheOpts []string) ([]client.Ca
 	for _, exportCache := range exportCaches {
 		legacy := !strings.Contains(exportCache, "type=")
 		if legacy {
-			logrus.Warnf("--export-cache <ref> --export-cache-opt <opt>=<optval> is deprecated. Please use --export-cache type=registry,ref=<ref>,<opt>=<optval>[,<opt>=<optval>] instead.")
+			logrus.Warnf("--export-cache <ref> --export-cache-opt <opt>=<optval> is deprecated. Please use --export-cache type=registry,ref=<ref>,<opt>=<optval>[,<opt>=<optval>] instead")
 			attrs, err := attrMap(legacyExportCacheOpts)
 			if err != nil {
 				return nil, err
@@ -68,7 +68,7 @@ func ParseExportCache(exportCaches, legacyExportCacheOpts []string) ([]client.Ca
 			})
 		} else {
 			if len(legacyExportCacheOpts) > 0 {
-				return nil, errors.New("--export-cache-opt is not supported for the specified --export-cache. Please use --export-cache type=<type>,<opt>=<optval>[,<opt>=<optval>] instead.")
+				return nil, errors.New("--export-cache-opt is not supported for the specified --export-cache. Please use --export-cache type=<type>,<opt>=<optval>[,<opt>=<optval>] instead")
 			}
 			ex, err := parseExportCacheCSV(exportCache)
 			if err != nil {

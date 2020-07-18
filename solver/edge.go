@@ -117,7 +117,7 @@ type edgeRequest struct {
 // incrementReferenceCount increases the number of times release needs to be
 // called to release the edge. Called on merging edges.
 func (e *edge) incrementReferenceCount() {
-	e.releaserCount += 1
+	e.releaserCount++
 }
 
 // release releases the edge resources
