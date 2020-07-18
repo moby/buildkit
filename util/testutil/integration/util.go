@@ -3,6 +3,7 @@ package integration
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"net"
 	"os"
 	"os/exec"
@@ -24,6 +25,8 @@ func startCmd(cmd *exec.Cmd, logs map[string]*bytes.Buffer) (func() error, error
 		cmd.Stderr = b
 	}
 
+	fmt.Fprintf(cmd.Stderr, "> startCmd %v %+v\n", time.Now(), cmd.Args)
+
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
@@ -32,7 +35,8 @@ func startCmd(cmd *exec.Cmd, logs map[string]*bytes.Buffer) (func() error, error
 	stopped := make(chan struct{})
 	stop := make(chan struct{})
 	eg.Go(func() error {
-		_, err := cmd.Process.Wait()
+		st, err := cmd.Process.Wait()
+		fmt.Fprintf(cmd.Stderr, "> stopped %v %+v %v\n", time.Now(), st, st.ExitCode())
 		close(stopped)
 		select {
 		case <-stop:
@@ -47,6 +51,7 @@ func startCmd(cmd *exec.Cmd, logs map[string]*bytes.Buffer) (func() error, error
 		case <-ctx.Done():
 		case <-stopped:
 		case <-stop:
+			fmt.Fprintf(cmd.Stderr, "> sending sigterm %v\n", time.Now())
 			cmd.Process.Signal(syscall.SIGTERM)
 			go func() {
 				select {
