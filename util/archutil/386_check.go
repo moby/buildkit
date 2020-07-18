@@ -1,6 +1,6 @@
 // +build !386
 
-package binfmt_misc
+package archutil
 
 func i386Supported() error {
 	return check(Binary386)
