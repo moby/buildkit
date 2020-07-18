@@ -56,19 +56,19 @@ func NewSource(opt Opt) (source.Source, error) {
 }
 
 func (hs *httpSource) ID() string {
-	return source.HttpsScheme
+	return source.HTTPSScheme
 }
 
 type httpSourceHandler struct {
 	*httpSource
-	src      source.HttpIdentifier
+	src      source.HTTPIdentifier
 	refID    string
 	cacheKey digest.Digest
 	sm       *session.Manager
 }
 
 func (hs *httpSource) Resolve(ctx context.Context, id source.Identifier, sm *session.Manager) (source.SourceInstance, error) {
-	httpIdentifier, ok := id.(*source.HttpIdentifier)
+	httpIdentifier, ok := id.(*source.HTTPIdentifier)
 	if !ok {
 		return nil, errors.Errorf("invalid http identifier %v", id)
 	}

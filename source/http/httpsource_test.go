@@ -44,7 +44,7 @@ func TestHTTPSource(t *testing.T) {
 	})
 	defer server.Close()
 
-	id := &source.HttpIdentifier{URL: server.URL + "/foo"}
+	id := &source.HTTPIdentifier{URL: server.URL + "/foo"}
 
 	h, err := hs.Resolve(ctx, id, nil)
 	require.NoError(t, err)
@@ -158,7 +158,7 @@ func TestHTTPDefaultName(t *testing.T) {
 	})
 	defer server.Close()
 
-	id := &source.HttpIdentifier{URL: server.URL}
+	id := &source.HTTPIdentifier{URL: server.URL}
 
 	h, err := hs.Resolve(ctx, id, nil)
 	require.NoError(t, err)
@@ -201,7 +201,7 @@ func TestHTTPInvalidURL(t *testing.T) {
 	server := httpserver.NewTestServer(map[string]httpserver.Response{})
 	defer server.Close()
 
-	id := &source.HttpIdentifier{URL: server.URL + "/foo"}
+	id := &source.HTTPIdentifier{URL: server.URL + "/foo"}
 
 	h, err := hs.Resolve(ctx, id, nil)
 	require.NoError(t, err)
@@ -231,7 +231,7 @@ func TestHTTPChecksum(t *testing.T) {
 	})
 	defer server.Close()
 
-	id := &source.HttpIdentifier{URL: server.URL + "/foo", Checksum: digest.FromBytes([]byte("content-different"))}
+	id := &source.HTTPIdentifier{URL: server.URL + "/foo", Checksum: digest.FromBytes([]byte("content-different"))}
 
 	h, err := hs.Resolve(ctx, id, nil)
 	require.NoError(t, err)
@@ -253,7 +253,7 @@ func TestHTTPChecksum(t *testing.T) {
 	require.Equal(t, server.Stats("/foo").AllRequests, 1)
 	require.Equal(t, server.Stats("/foo").CachedRequests, 0)
 
-	id = &source.HttpIdentifier{URL: server.URL + "/foo", Checksum: digest.FromBytes([]byte("content-correct"))}
+	id = &source.HTTPIdentifier{URL: server.URL + "/foo", Checksum: digest.FromBytes([]byte("content-correct"))}
 
 	h, err = hs.Resolve(ctx, id, nil)
 	require.NoError(t, err)

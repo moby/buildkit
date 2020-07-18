@@ -19,4 +19,11 @@ linters:
     - misspell
     - unused
     - varcheck
+    - golint
   disable-all: true
+
+issues:
+  exclude-rules:
+    - linters:
+      - golint
+      text: "stutters"

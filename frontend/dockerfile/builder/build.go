@@ -56,7 +56,7 @@ const (
 )
 
 var httpPrefix = regexp.MustCompile(`^https?://`)
-var gitUrlPathWithFragmentSuffix = regexp.MustCompile(`\.git(?:#.+)?$`)
+var gitURLPathWithFragmentSuffix = regexp.MustCompile(`\.git(?:#.+)?$`)
 
 func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 	opts := c.BuildOpts().Opts
@@ -512,7 +512,7 @@ func filter(opt map[string]string, key string) map[string]string {
 
 func detectGitContext(ref, gitContext string) (*llb.State, bool) {
 	found := false
-	if httpPrefix.MatchString(ref) && gitUrlPathWithFragmentSuffix.MatchString(ref) {
+	if httpPrefix.MatchString(ref) && gitURLPathWithFragmentSuffix.MatchString(ref) {
 		found = true
 	}
 

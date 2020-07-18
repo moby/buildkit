@@ -62,11 +62,11 @@ http:
 	if err != nil {
 		return "", nil, err
 	}
-	if stop, err := startCmd(cmd, nil); err != nil {
+	stop, err := startCmd(cmd, nil)
+	if err != nil {
 		return "", nil, err
-	} else {
-		deferF.append(stop)
 	}
+	deferF.append(stop)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

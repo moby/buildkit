@@ -175,11 +175,11 @@ func runBuildkitd(conf *BackendConfig, args []string, logs map[string]*bytes.Buf
 		Setsid: true, // stretch sudo needs this for sigterm
 	}
 
-	if stop, err := startCmd(cmd, logs); err != nil {
+	stop, err := startCmd(cmd, logs)
+	if err != nil {
 		return "", nil, err
-	} else {
-		deferF.append(stop)
 	}
+	deferF.append(stop)
 
 	if err := waitUnix(address, 15*time.Second); err != nil {
 		return "", nil, err
