@@ -97,8 +97,8 @@ type cniNS struct {
 	path   string
 }
 
-func (ns *cniNS) Set(s *specs.Spec) {
-	oci.WithLinuxNamespace(specs.LinuxNamespace{
+func (ns *cniNS) Set(s *specs.Spec) error {
+	return oci.WithLinuxNamespace(specs.LinuxNamespace{
 		Type: specs.NetworkNamespace,
 		Path: ns.path,
 	})(nil, nil, nil, s)

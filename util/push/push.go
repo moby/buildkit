@@ -93,21 +93,17 @@ func Push(ctx context.Context, sm *session.Manager, sid string, cs content.Store
 		Size:      ra.Size(),
 		MediaType: mtype,
 	})
-	layersDone(err)
-	if err != nil {
+	if err := layersDone(err); err != nil {
 		return err
 	}
 
 	mfstDone := oneOffProgress(ctx, fmt.Sprintf("pushing manifest for %s", ref))
 	for i := len(manifestStack) - 1; i >= 0; i-- {
-		_, err := pushHandler(ctx, manifestStack[i])
-		if err != nil {
-			mfstDone(err)
-			return err
+		if _, err := pushHandler(ctx, manifestStack[i]); err != nil {
+			return mfstDone(err)
 		}
 	}
-	mfstDone(nil)
-	return nil
+	return mfstDone(nil)
 }
 
 func annotateDistributionSourceHandler(cs content.Store, f images.HandlerFunc) func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
