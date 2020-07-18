@@ -1,6 +1,6 @@
 // +build amd64
 
-package binfmt_misc
+package archutil
 
 func amd64Supported() error {
 	return nil

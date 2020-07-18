@@ -41,7 +41,7 @@ import (
 	"github.com/moby/buildkit/source/git"
 	"github.com/moby/buildkit/source/http"
 	"github.com/moby/buildkit/source/local"
-	"github.com/moby/buildkit/util/binfmt_misc"
+	"github.com/moby/buildkit/util/archutil"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/progress"
@@ -206,7 +206,7 @@ func (w *Worker) Platforms(noCache bool) []specs.Platform {
 		for _, p := range w.WorkerOpt.Platforms {
 			pm[platforms.Format(p)] = struct{}{}
 		}
-		for _, p := range binfmt_misc.SupportedPlatforms(noCache) {
+		for _, p := range archutil.SupportedPlatforms(noCache) {
 			if _, ok := pm[p]; !ok {
 				pp, _ := platforms.Parse(p)
 				w.WorkerOpt.Platforms = append(w.WorkerOpt.Platforms, pp)

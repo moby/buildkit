@@ -43,7 +43,7 @@ import (
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/moby/buildkit/util/appdefaults"
-	"github.com/moby/buildkit/util/binfmt_misc"
+	"github.com/moby/buildkit/util/archutil"
 	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/moby/buildkit/util/profiler"
 	"github.com/moby/buildkit/util/resolver"
@@ -382,10 +382,10 @@ func setDefaultConfig(cfg *config.Config) {
 	}
 
 	if cfg.Workers.OCI.Platforms == nil {
-		cfg.Workers.OCI.Platforms = binfmt_misc.SupportedPlatforms(false)
+		cfg.Workers.OCI.Platforms = archutil.SupportedPlatforms(false)
 	}
 	if cfg.Workers.Containerd.Platforms == nil {
-		cfg.Workers.Containerd.Platforms = binfmt_misc.SupportedPlatforms(false)
+		cfg.Workers.Containerd.Platforms = archutil.SupportedPlatforms(false)
 	}
 
 	cfg.Workers.OCI.NetworkConfig = setDefaultNetworkConfig(cfg.Workers.OCI.NetworkConfig)
@@ -643,7 +643,7 @@ func newWorkerController(c *cli.Context, wiOpt workerInitializerOpt) (*worker.Co
 		for _, w := range ws {
 			p := formatPlatforms(w.Platforms(false))
 			logrus.Infof("found worker %q, labels=%v, platforms=%v", w.ID(), w.Labels(), p)
-			binfmt_misc.WarnIfUnsupported(p)
+			archutil.WarnIfUnsupported(p)
 			if err = wc.Add(w); err != nil {
 				return nil, err
 			}

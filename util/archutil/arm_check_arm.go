@@ -1,6 +1,6 @@
 // +build arm
 
-package binfmt_misc
+package archutil
 
 func armSupported() error {
 	return nil
