@@ -443,13 +443,13 @@ func TestExtractOnMutable(t *testing.T) {
 	err = content.WriteBlob(ctx, co.cs, "ref2", bytes.NewBuffer(b2), desc2)
 	require.NoError(t, err)
 
-	snap2, err := cm.GetByBlob(ctx, desc2, snap)
+	_, err = cm.GetByBlob(ctx, desc2, snap)
 	require.Error(t, err)
 
 	err = snap.SetBlob(ctx, desc)
 	require.NoError(t, err)
 
-	snap2, err = cm.GetByBlob(ctx, desc2, snap)
+	snap2, err := cm.GetByBlob(ctx, desc2, snap)
 	require.NoError(t, err)
 
 	err = snap.Release(context.TODO())
@@ -930,7 +930,7 @@ func TestLazyCommit(t *testing.T) {
 	err = snap2.Release(ctx)
 	require.NoError(t, err)
 
-	active, err = cm.GetMutable(ctx, active.ID())
+	_, err = cm.GetMutable(ctx, active.ID())
 	require.Error(t, err)
 	require.Equal(t, true, errors.Is(err, errNotFound))
 }

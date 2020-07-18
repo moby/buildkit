@@ -141,10 +141,10 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispec.Descriptor, 
 		return nil, err
 	}
 
-	for _, si := range sis {
-		ref, err := cm.get(ctx, si.ID(), opts...)
+	if len(sis) > 0 {
+		ref, err := cm.get(ctx, sis[0].ID(), opts...)
 		if err != nil && !IsNotFound(err) {
-			return nil, errors.Wrapf(err, "failed to get record %s by blobchainid", si.ID())
+			return nil, errors.Wrapf(err, "failed to get record %s by blobchainid", sis[0].ID())
 		}
 		if p != nil {
 			releaseParent = true
@@ -158,13 +158,12 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispec.Descriptor, 
 	}
 
 	var link ImmutableRef
-	for _, si := range sis {
-		ref, err := cm.get(ctx, si.ID(), opts...)
+	if len(sis) > 0 {
+		ref, err := cm.get(ctx, sis[0].ID(), opts...)
 		if err != nil && !IsNotFound(err) {
-			return nil, errors.Wrapf(err, "failed to get record %s by chainid", si.ID())
+			return nil, errors.Wrapf(err, "failed to get record %s by chainid", sis[0].ID())
 		}
 		link = ref
-		break
 	}
 
 	id := identity.NewID()

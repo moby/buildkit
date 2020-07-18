@@ -20,6 +20,9 @@ linters:
     - unused
     - varcheck
     - golint
+    - staticcheck
+    - typecheck
+    - structcheck
   disable-all: true
 
 issues:
