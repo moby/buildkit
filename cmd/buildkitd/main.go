@@ -538,7 +538,7 @@ func unaryInterceptor(globalCtx context.Context) grpc.UnaryServerInterceptor {
 
 		resp, err = withTrace(ctx, req, info, handler)
 		if err != nil {
-			logrus.Errorf("%s returned error: %+v", info.FullMethod, err)
+			logrus.Errorf("%s returned error: %+v", info.FullMethod, stack.Formatter(err))
 		}
 		return
 	}

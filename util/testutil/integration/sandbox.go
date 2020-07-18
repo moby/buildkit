@@ -181,7 +181,7 @@ func runBuildkitd(conf *BackendConfig, args []string, logs map[string]*bytes.Buf
 		deferF.append(stop)
 	}
 
-	if err := waitUnix(address, 10*time.Second); err != nil {
+	if err := waitUnix(address, 15*time.Second); err != nil {
 		return "", nil, err
 	}
 
@@ -204,7 +204,7 @@ func runBuildkitd(conf *BackendConfig, args []string, logs map[string]*bytes.Buf
 }
 
 func rootlessSupported(uid int) bool {
-	cmd := exec.Command("sudo", "-u", fmt.Sprintf("#%d", uid), "-i", "--", "unshare", "-U", "true")
+	cmd := exec.Command("sudo", "-u", fmt.Sprintf("#%d", uid), "-i", "--", "exec", "unshare", "-U", "true")
 	b, err := cmd.CombinedOutput()
 	if err != nil {
 		logrus.Warnf("rootless mode is not supported on this host: %v (%s)", err, string(b))

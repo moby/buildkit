@@ -23,7 +23,14 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/semaphore"
 )
+
+var sandboxLimiter *semaphore.Weighted
+
+func init() {
+	sandboxLimiter = semaphore.NewWeighted(int64(runtime.GOMAXPROCS(0)))
+}
 
 // Backend is the minimal interface that describes a testing backend.
 type Backend interface {
@@ -148,6 +155,9 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 						if !strings.HasSuffix(fn, "NoParallel") {
 							t.Parallel()
 						}
+						require.NoError(t, sandboxLimiter.Acquire(context.TODO(), 1))
+						defer sandboxLimiter.Release(1)
+
 						sb, closer, err := newSandbox(br, mirror, mv)
 						require.NoError(t, err)
 						defer func() {
