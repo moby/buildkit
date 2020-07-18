@@ -1,0 +1,19 @@
+run:
+  timeout: 10m
+  skip-files:
+    - ".*\\.pb\\.go$"
+
+  modules-download-mode: vendor
+
+  build-tags:
+    - dfrunmount
+    - dfssh
+
+linters:
+  enable:
+    - gofmt
+    - govet
+    - deadcode
+    - goimports
+    - ineffassign
+  disable-all: true
