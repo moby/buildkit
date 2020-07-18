@@ -176,7 +176,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 	}
 
 	lbf, ctx, err := serveLLBBridgeForwarder(ctx, llbBridge, gf.workers, inputs, sid)
-	defer lbf.conn.Close()
+	defer lbf.conn.Close() //nolint
 	if err != nil {
 		return nil, err
 	}
