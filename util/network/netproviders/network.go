@@ -7,7 +7,6 @@ import (
 	"github.com/moby/buildkit/util/network"
 	"github.com/moby/buildkit/util/network/cniprovider"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 type Opt struct {
@@ -26,7 +25,11 @@ func Providers(opt Opt) (map[pb.NetMode]network.Provider, error) {
 		}
 		defaultProvider = cniProvider
 	case "host":
-		defaultProvider = network.NewHostProvider()
+		hostProvider, ok := getHostProvider()
+		if !ok {
+			return nil, errors.New("no host network support on this platform")
+		}
+		defaultProvider = hostProvider
 	case "auto", "":
 		if _, err := os.Stat(opt.CNI.ConfigPath); err == nil {
 			cniProvider, err := cniprovider.New(opt.CNI)
@@ -35,16 +38,20 @@ func Providers(opt Opt) (map[pb.NetMode]network.Provider, error) {
 			}
 			defaultProvider = cniProvider
 		} else {
-			logrus.Warnf("using host network as the default")
-			defaultProvider = network.NewHostProvider()
+			defaultProvider = getFallback()
 		}
 	default:
 		return nil, errors.Errorf("invalid network mode: %q", opt.Mode)
 	}
 
-	return map[pb.NetMode]network.Provider{
+	providers := map[pb.NetMode]network.Provider{
 		pb.NetMode_UNSET: defaultProvider,
-		pb.NetMode_HOST:  network.NewHostProvider(),
 		pb.NetMode_NONE:  network.NewNoneProvider(),
-	}, nil
+	}
+
+	if hostProvider, ok := getHostProvider(); ok {
+		providers[pb.NetMode_HOST] = hostProvider
+	}
+
+	return providers, nil
 }
