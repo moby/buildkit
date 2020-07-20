@@ -3,6 +3,7 @@ package cniprovider
 import (
 	"context"
 	"os"
+	"runtime"
 
 	cni "github.com/containerd/go-cni"
 	"github.com/gofrs/flock"
@@ -26,12 +27,17 @@ func New(opt Opt) (network.Provider, error) {
 		return nil, errors.Wrapf(err, "failed to read cni binary dir %q", opt.BinaryDir)
 	}
 
-	cniHandle, err := cni.New(
-		cni.WithMinNetworkCount(2),
-		cni.WithPluginDir([]string{opt.BinaryDir}),
-		cni.WithInterfacePrefix(("eth")),
-		cni.WithLoNetwork,
-		cni.WithConfFile(opt.ConfigPath))
+	cniOptions := []cni.CNIOpt{cni.WithPluginDir([]string{opt.BinaryDir}), cni.WithInterfacePrefix("eth")}
+
+	// Windows doesn't use CNI for loopback.
+	if runtime.GOOS != "windows" {
+		cniOptions = append([]cni.CNIOpt{cni.WithMinNetworkCount(2)}, cniOptions...)
+		cniOptions = append(cniOptions, cni.WithLoNetwork)
+	}
+
+	cniOptions = append(cniOptions, cni.WithConfFile(opt.ConfigPath))
+
+	cniHandle, err := cni.New(cniOptions...)
 	if err != nil {
 		return nil, err
 	}
