@@ -3,17 +3,13 @@ package cniprovider
 import (
 	"context"
 	"os"
-	"path/filepath"
-	"syscall"
 
-	"github.com/containerd/containerd/oci"
 	cni "github.com/containerd/go-cni"
 	"github.com/gofrs/flock"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/util/network"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
-	"golang.org/x/sys/unix"
 )
 
 type Opt struct {
@@ -73,48 +69,36 @@ func (c *cniProvider) initNetwork() error {
 
 func (c *cniProvider) New() (network.Namespace, error) {
 	id := identity.NewID()
-	nsPath := filepath.Join(c.root, "net/cni", id)
-	if err := os.MkdirAll(filepath.Dir(nsPath), 0700); err != nil {
+	nativeID, err := createNetNS(c, id)
+	if err != nil {
 		return nil, err
 	}
 
-	if err := createNetNS(nsPath); err != nil {
-		os.RemoveAll(filepath.Dir(nsPath))
-		return nil, err
-	}
-
-	if _, err := c.CNI.Setup(context.TODO(), id, nsPath); err != nil {
-		os.RemoveAll(filepath.Dir(nsPath))
+	if _, err := c.CNI.Setup(context.TODO(), id, nativeID); err != nil {
+		deleteNetNS(nativeID)
 		return nil, errors.Wrap(err, "CNI setup error")
 	}
 
-	return &cniNS{path: nsPath, id: id, handle: c.CNI}, nil
+	return &cniNS{nativeID: nativeID, id: id, handle: c.CNI}, nil
 }
 
 type cniNS struct {
-	handle cni.CNI
-	id     string
-	path   string
+	handle   cni.CNI
+	id       string
+	nativeID string
 }
 
 func (ns *cniNS) Set(s *specs.Spec) error {
-	return oci.WithLinuxNamespace(specs.LinuxNamespace{
-		Type: specs.NetworkNamespace,
-		Path: ns.path,
-	})(nil, nil, nil, s)
+	return setNetNS(s, ns.nativeID)
 }
 
 func (ns *cniNS) Close() error {
-	err := ns.handle.Remove(context.TODO(), ns.id, ns.path)
-
-	if err1 := unix.Unmount(ns.path, unix.MNT_DETACH); err1 != nil {
-		if err1 != syscall.EINVAL && err1 != syscall.ENOENT && err == nil {
-			err = errors.Wrap(err1, "error unmounting network namespace")
-		}
+	err := ns.handle.Remove(context.TODO(), ns.id, ns.nativeID)
+	if err1 := unmountNetNS(ns.nativeID); err1 != nil && err == nil {
+		err = err1
 	}
-	if err1 := os.RemoveAll(filepath.Dir(ns.path)); err1 != nil && !errors.Is(err1, os.ErrNotExist) && err == nil {
-		err = errors.Wrap(err, "error removing network namespace")
+	if err1 := deleteNetNS(ns.nativeID); err1 != nil && err == nil {
+		err = err1
 	}
-
 	return err
 }

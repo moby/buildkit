@@ -11,6 +11,8 @@ github.com/Microsoft/go-winio/pkg/guid
 github.com/Microsoft/go-winio/vhd
 # github.com/Microsoft/hcsshim v0.8.9
 github.com/Microsoft/hcsshim
+github.com/Microsoft/hcsshim/hcn
+github.com/Microsoft/hcsshim/internal/cni
 github.com/Microsoft/hcsshim/internal/cow
 github.com/Microsoft/hcsshim/internal/hcs
 github.com/Microsoft/hcsshim/internal/hcserror
@@ -21,6 +23,8 @@ github.com/Microsoft/hcsshim/internal/logfields
 github.com/Microsoft/hcsshim/internal/longpath
 github.com/Microsoft/hcsshim/internal/mergemaps
 github.com/Microsoft/hcsshim/internal/oc
+github.com/Microsoft/hcsshim/internal/regstate
+github.com/Microsoft/hcsshim/internal/runhcs
 github.com/Microsoft/hcsshim/internal/safefile
 github.com/Microsoft/hcsshim/internal/schema1
 github.com/Microsoft/hcsshim/internal/schema2
@@ -350,6 +354,7 @@ golang.org/x/sync/semaphore
 golang.org/x/sys/cpu
 golang.org/x/sys/unix
 golang.org/x/sys/windows
+golang.org/x/sys/windows/registry
 # golang.org/x/text v0.3.2
 golang.org/x/text/secure/bidirule
 golang.org/x/text/transform
