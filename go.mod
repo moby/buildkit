@@ -7,6 +7,7 @@ require (
 	github.com/Azure/go-ansiterm v0.0.0-20170929234023-d6e3b3328b78 // indirect
 	github.com/BurntSushi/toml v0.3.1
 	github.com/Microsoft/go-winio v0.4.15-0.20190919025122-fc70bd9a86b5
+	github.com/Microsoft/hcsshim v0.8.9
 	github.com/apache/thrift v0.0.0-20161221203622-b2a4d4ae21c7 // indirect
 	github.com/codahale/hdrhistogram v0.0.0-20160425231609-f8ad88b59a58 // indirect
 	github.com/containerd/cgroups v0.0.0-20200327175542-b44481373989 // indirect
