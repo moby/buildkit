@@ -28,10 +28,10 @@ func New(opt Opt) (network.Provider, error) {
 
 	cniHandle, err := cni.New(
 		cni.WithMinNetworkCount(2),
-		cni.WithConfFile(opt.ConfigPath),
 		cni.WithPluginDir([]string{opt.BinaryDir}),
+		cni.WithInterfacePrefix(("eth")),
 		cni.WithLoNetwork,
-		cni.WithInterfacePrefix(("eth")))
+		cni.WithConfFile(opt.ConfigPath))
 	if err != nil {
 		return nil, err
 	}
