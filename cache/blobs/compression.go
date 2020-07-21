@@ -58,15 +58,13 @@ func DetectLayerMediaType(ctx context.Context, cs content.Store, id digest.Diges
 	case Uncompressed:
 		if oci {
 			return ocispec.MediaTypeImageLayer, nil
-		} else {
-			return images.MediaTypeDockerSchema2Layer, nil
 		}
+		return images.MediaTypeDockerSchema2Layer, nil
 	case Gzip:
 		if oci {
 			return ocispec.MediaTypeImageLayerGzip, nil
-		} else {
-			return images.MediaTypeDockerSchema2LayerGzip, nil
 		}
+		return images.MediaTypeDockerSchema2LayerGzip, nil
 	default:
 		return "", errors.Errorf("failed to detect layer %v compression type", id)
 	}

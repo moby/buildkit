@@ -32,14 +32,13 @@ func llbBridgeToGatewayClient(ctx context.Context, llbBridge frontend.FrontendLL
 
 type bridgeClient struct {
 	frontend.FrontendLLBBridge
-	mu           sync.Mutex
-	opts         map[string]string
-	inputs       map[string]*opspb.Definition
-	final        map[*ref]struct{}
-	sid          string
-	exporterAttr map[string][]byte
-	refs         []*ref
-	workerInfos  []clienttypes.WorkerInfo
+	mu          sync.Mutex
+	opts        map[string]string
+	inputs      map[string]*opspb.Definition
+	final       map[*ref]struct{}
+	sid         string
+	refs        []*ref
+	workerInfos []clienttypes.WorkerInfo
 }
 
 func (c *bridgeClient) Solve(ctx context.Context, req client.SolveRequest) (*client.Result, error) {

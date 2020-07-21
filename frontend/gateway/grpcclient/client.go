@@ -427,10 +427,9 @@ func (c *grpcClient) Inputs(ctx context.Context) (map[string]llb.State, error) {
 }
 
 type reference struct {
-	c      *grpcClient
-	id     string
-	def    *opspb.Definition
-	output llb.Output
+	c   *grpcClient
+	id  string
+	def *opspb.Definition
 }
 
 func newReference(c *grpcClient, ref *pb.Ref) (*reference, error) {
@@ -502,7 +501,7 @@ func (r *reference) StatFile(ctx context.Context, req client.StatRequest) (*fsty
 }
 
 func grpcClientConn(ctx context.Context) (context.Context, *grpc.ClientConn, error) {
-	dialOpt := grpc.WithDialer(func(addr string, d time.Duration) (net.Conn, error) {
+	dialOpt := grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
 		return stdioConn(), nil
 	})
 

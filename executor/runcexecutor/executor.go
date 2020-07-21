@@ -52,7 +52,6 @@ var defaultCommandCandidates = []string{"buildkit-runc", "runc"}
 type runcExecutor struct {
 	runc             *runc.Runc
 	root             string
-	cmd              string
 	cgroupParent     string
 	rootless         bool
 	networkProviders map[pb.NetMode]network.Provider

@@ -1,0 +1,32 @@
+run:
+  timeout: 10m
+  skip-files:
+    - ".*\\.pb\\.go$"
+
+  modules-download-mode: vendor
+
+  build-tags:
+    - dfrunmount
+    - dfssh
+
+linters:
+  enable:
+    - gofmt
+    - govet
+    - deadcode
+    - goimports
+    - ineffassign
+    - misspell
+    - unused
+    - varcheck
+    - golint
+    - staticcheck
+    - typecheck
+    - structcheck
+  disable-all: true
+
+issues:
+  exclude-rules:
+    - linters:
+      - golint
+      text: "stutters"

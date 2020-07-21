@@ -68,7 +68,7 @@ func TestBuilderFlags(t *testing.T) {
 	// ---
 
 	bf = NewBFlags()
-	flStr1 = bf.AddString("str1", "HI")
+	bf.AddString("str1", "HI")
 	bf.Args = []string{"--str1"}
 
 	if err = bf.Parse(); err == nil {
@@ -150,7 +150,7 @@ func TestBuilderFlags(t *testing.T) {
 	// ---
 
 	bf = NewBFlags()
-	flBool1 = bf.AddBool("bool1", false)
+	bf.AddBool("bool1", false)
 	bf.Args = []string{"--bool1=false1"}
 
 	if err = bf.Parse(); err == nil {
@@ -160,7 +160,7 @@ func TestBuilderFlags(t *testing.T) {
 	// ---
 
 	bf = NewBFlags()
-	flBool1 = bf.AddBool("bool1", false)
+	bf.AddBool("bool1", false)
 	bf.Args = []string{"--bool2"}
 
 	if err = bf.Parse(); err == nil {

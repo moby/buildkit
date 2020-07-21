@@ -76,8 +76,6 @@ type dep struct {
 	edgeState
 	index             Index
 	keyMap            map[string]*CacheKey
-	desiredState      edgeStatusType
-	e                 *edge
 	slowCacheReq      pipe.Receiver
 	slowCacheComplete bool
 	slowCacheFoundKey bool
@@ -119,7 +117,7 @@ type edgeRequest struct {
 // incrementReferenceCount increases the number of times release needs to be
 // called to release the edge. Called on merging edges.
 func (e *edge) incrementReferenceCount() {
-	e.releaserCount += 1
+	e.releaserCount++
 }
 
 // release releases the edge resources

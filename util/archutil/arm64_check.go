@@ -1,6 +1,6 @@
 // +build !arm64
 
-package binfmt_misc
+package archutil
 
 func arm64Supported() error {
 	return check(Binaryarm64)

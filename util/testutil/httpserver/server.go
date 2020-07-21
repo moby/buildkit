@@ -44,7 +44,7 @@ func (s *TestServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.stats[r.URL.Path] = &Stat{}
 	}
 
-	s.stats[r.URL.Path].AllRequests += 1
+	s.stats[r.URL.Path].AllRequests++
 
 	if resp.LastModified != nil {
 		w.Header().Set("Last-Modified", resp.LastModified.Format(time.RFC850))

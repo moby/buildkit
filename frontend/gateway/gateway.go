@@ -175,8 +175,8 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 		defer rootFS.Release(context.TODO())
 	}
 
-	lbf, ctx, err := newLLBBridgeForwarder(ctx, llbBridge, gf.workers, inputs, sid)
-	defer lbf.conn.Close()
+	lbf, ctx, err := serveLLBBridgeForwarder(ctx, llbBridge, gf.workers, inputs, sid)
+	defer lbf.conn.Close() //nolint
 	if err != nil {
 		return nil, err
 	}
@@ -302,7 +302,11 @@ func (lbf *llbBridgeForwarder) Result() (*frontend.Result, error) {
 	return lbf.result, nil
 }
 
-func NewBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, workers frontend.WorkerInfos, inputs map[string]*opspb.Definition, sid string) *llbBridgeForwarder {
+func NewBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, workers frontend.WorkerInfos, inputs map[string]*opspb.Definition, sid string) LLBBridgeForwarder {
+	return newBridgeForwarder(ctx, llbBridge, workers, inputs, sid)
+}
+
+func newBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, workers frontend.WorkerInfos, inputs map[string]*opspb.Definition, sid string) *llbBridgeForwarder {
 	lbf := &llbBridgeForwarder{
 		callCtx:   ctx,
 		llbBridge: llbBridge,
@@ -316,9 +320,9 @@ func NewBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridg
 	return lbf
 }
 
-func newLLBBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, workers frontend.WorkerInfos, inputs map[string]*opspb.Definition, sid string) (*llbBridgeForwarder, context.Context, error) {
+func serveLLBBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, workers frontend.WorkerInfos, inputs map[string]*opspb.Definition, sid string) (*llbBridgeForwarder, context.Context, error) {
 	ctx, cancel := context.WithCancel(ctx)
-	lbf := NewBridgeForwarder(ctx, llbBridge, workers, inputs, sid)
+	lbf := newBridgeForwarder(ctx, llbBridge, workers, inputs, sid)
 	server := grpc.NewServer(grpc.UnaryInterceptor(grpcerrors.UnaryServerInterceptor), grpc.StreamInterceptor(grpcerrors.StreamServerInterceptor))
 	grpc_health_v1.RegisterHealthServer(server, health.NewServer())
 	pb.RegisterLLBBridgeServer(server, lbf)
@@ -393,6 +397,7 @@ type LLBBridgeForwarder interface {
 	pb.LLBBridgeServer
 	Done() <-chan struct{}
 	Result() (*frontend.Result, error)
+	Discard()
 }
 
 type llbBridgeForwarder struct {
@@ -406,7 +411,6 @@ type llbBridgeForwarder struct {
 	doneCh            chan struct{} // closed when result or err become valid through a call to a Return
 	result            *frontend.Result
 	err               error
-	exporterAttr      map[string][]byte
 	workers           frontend.WorkerInfos
 	inputs            map[string]*opspb.Definition
 	isErrServerClosed bool
@@ -686,47 +690,46 @@ func (lbf *llbBridgeForwarder) Return(ctx context.Context, in *pb.ReturnRequest)
 			Message: in.Error.Message,
 			Details: convertGogoAny(in.Error.Details),
 		})))
-	} else {
-		r := &frontend.Result{
-			Metadata: in.Result.Metadata,
-		}
-
-		switch res := in.Result.Result.(type) {
-		case *pb.Result_RefDeprecated:
-			ref, err := lbf.convertRef(res.RefDeprecated)
-			if err != nil {
-				return nil, err
-			}
-			r.Ref = ref
-		case *pb.Result_RefsDeprecated:
-			m := map[string]solver.ResultProxy{}
-			for k, id := range res.RefsDeprecated.Refs {
-				ref, err := lbf.convertRef(id)
-				if err != nil {
-					return nil, err
-				}
-				m[k] = ref
-			}
-			r.Refs = m
-		case *pb.Result_Ref:
-			ref, err := lbf.convertRef(res.Ref.Id)
-			if err != nil {
-				return nil, err
-			}
-			r.Ref = ref
-		case *pb.Result_Refs:
-			m := map[string]solver.ResultProxy{}
-			for k, ref := range res.Refs.Refs {
-				ref, err := lbf.convertRef(ref.Id)
-				if err != nil {
-					return nil, err
-				}
-				m[k] = ref
-			}
-			r.Refs = m
-		}
-		return lbf.setResult(r, nil)
 	}
+	r := &frontend.Result{
+		Metadata: in.Result.Metadata,
+	}
+
+	switch res := in.Result.Result.(type) {
+	case *pb.Result_RefDeprecated:
+		ref, err := lbf.convertRef(res.RefDeprecated)
+		if err != nil {
+			return nil, err
+		}
+		r.Ref = ref
+	case *pb.Result_RefsDeprecated:
+		m := map[string]solver.ResultProxy{}
+		for k, id := range res.RefsDeprecated.Refs {
+			ref, err := lbf.convertRef(id)
+			if err != nil {
+				return nil, err
+			}
+			m[k] = ref
+		}
+		r.Refs = m
+	case *pb.Result_Ref:
+		ref, err := lbf.convertRef(res.Ref.Id)
+		if err != nil {
+			return nil, err
+		}
+		r.Ref = ref
+	case *pb.Result_Refs:
+		m := map[string]solver.ResultProxy{}
+		for k, ref := range res.Refs.Refs {
+			ref, err := lbf.convertRef(ref.Id)
+			if err != nil {
+				return nil, err
+			}
+			m[k] = ref
+		}
+		r.Refs = m
+	}
+	return lbf.setResult(r, nil)
 }
 
 func (lbf *llbBridgeForwarder) Inputs(ctx context.Context, in *pb.InputsRequest) (*pb.InputsResponse, error) {

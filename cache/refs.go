@@ -593,10 +593,6 @@ func (sr *mutableRef) commit(ctx context.Context) (*immutableRef, error) {
 	return ref, nil
 }
 
-func (sr *mutableRef) updatesLastUsed() bool {
-	return sr.triggerLastUsed
-}
-
 func (sr *mutableRef) Commit(ctx context.Context) (ImmutableRef, error) {
 	sr.cm.mu.Lock()
 	defer sr.cm.mu.Unlock()
@@ -633,11 +629,10 @@ func (sr *mutableRef) release(ctx context.Context) error {
 			}
 		}
 		return sr.remove(ctx, true)
-	} else {
-		if sr.updateLastUsed() {
-			updateLastUsed(sr.md)
-			sr.triggerLastUsed = false
-		}
+	}
+	if sr.updateLastUsed() {
+		updateLastUsed(sr.md)
+		sr.triggerLastUsed = false
 	}
 	return nil
 }

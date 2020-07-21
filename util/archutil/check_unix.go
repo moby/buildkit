@@ -1,6 +1,6 @@
 // +build !windows
 
-package binfmt_misc
+package archutil
 
 import (
 	"bytes"
