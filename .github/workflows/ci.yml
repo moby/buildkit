@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-      GIT_URL_INSTEAD_OF: "https://github.com/=git@github.com:"
+      DOCKER_BUILDKIT: 1
     steps:
     - uses: actions/checkout@v2
     - name: Put back the git branch into git (Earthly uses it for tagging)
@@ -25,5 +25,7 @@ jobs:
         git checkout -b "$branch" || true
     - name: Docker Login
       run: docker login --username vladaionescu --password "$DOCKERHUB_TOKEN"
-    - name: Download latest earth
-      run: echo hello
+    - name: Build buildkit
+      run: docker build -t earthly/buildkit:`git branch --show-current` --target buildkit-buildkitd-linux .
+    - name: push buildkit docker image
+      run: docker push earthly/buildkit:`git branch --show-current`
