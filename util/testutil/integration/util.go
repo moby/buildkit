@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -19,10 +21,10 @@ func startCmd(cmd *exec.Cmd, logs map[string]*bytes.Buffer) (func() error, error
 	if logs != nil {
 		b := new(bytes.Buffer)
 		logs["stdout: "+cmd.Path] = b
-		cmd.Stdout = b
+		cmd.Stdout = &lockingWriter{Writer: b}
 		b = new(bytes.Buffer)
 		logs["stderr: "+cmd.Path] = b
-		cmd.Stderr = b
+		cmd.Stderr = &lockingWriter{Writer: b}
 	}
 
 	fmt.Fprintf(cmd.Stderr, "> startCmd %v %+v\n", time.Now(), cmd.Args)
@@ -129,4 +131,16 @@ func requireRoot() error {
 		return errors.Wrap(ErrorRequirements, "requires root")
 	}
 	return nil
+}
+
+type lockingWriter struct {
+	mu sync.Mutex
+	io.Writer
+}
+
+func (w *lockingWriter) Write(dt []byte) (int, error) {
+	w.mu.Lock()
+	n, err := w.Writer.Write(dt)
+	w.mu.Unlock()
+	return n, err
 }
