@@ -21,7 +21,7 @@ type ContentHasher func(*types.Stat) (hash.Hash, error)
 
 func GetWalkerFn(root string) walkerFn {
 	return func(ctx context.Context, pathC chan<- *currentPath) error {
-		return Walk(ctx, root, nil, func(path string, f os.FileInfo, err error) error {
+		return errors.Wrap(Walk(ctx, root, nil, func(path string, f os.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
@@ -42,7 +42,7 @@ func GetWalkerFn(root string) walkerFn {
 			case pathC <- p:
 				return nil
 			}
-		})
+		}), "failed to walk")
 	}
 }
 
