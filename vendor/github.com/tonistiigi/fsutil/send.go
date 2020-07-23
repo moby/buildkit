@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"sync"
+	"syscall"
 
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil/types"
@@ -148,7 +149,7 @@ func (s *sender) walk(ctx context.Context) error {
 		}
 		stat, ok := fi.Sys().(*types.Stat)
 		if !ok {
-			return errors.Wrapf(err, "invalid fileinfo without stat info: %s", path)
+			return errors.WithStack(&os.PathError{Path: path, Err: syscall.EBADMSG, Op: "fileinfo without stat info"})
 		}
 
 		p := &types.Packet{
