@@ -39,5 +39,5 @@ jobs:
       - name: Unit test
         env:
           SKIP_INTEGRATION_TESTS: 1
-        run: go test -mod=vendor -v ./cache/... ./client/... ./frontend/dockerfile/... ./session/... ./solver/... ./source/... ./util/...
+        run: go test -mod=vendor -v ./...
         working-directory: src/github.com/moby/buildkit
