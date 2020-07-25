@@ -23,6 +23,12 @@ lint:
 validate-vendor:
 	./hack/validate-vendor
 
+validate-shfmt:
+	./hack/validate-shfmt
+
+shfmt:
+	./hack/shfmt
+
 validate-generated-files:
 	./hack/validate-generated-files
 

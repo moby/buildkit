@@ -47,14 +47,14 @@ binaries() {
 }
 
 case $buildmode in
-"buildkit")
-  binaries
-  ;;
-"docker-buildkit")
-  binariesDocker
-  ;;
-*)
-  echo "Unsupported build mode: $buildmode" >&2
-  exit 1
-  ;;
+  "buildkit")
+    binaries
+    ;;
+  "docker-buildkit")
+    binariesDocker
+    ;;
+  *)
+    echo "Unsupported build mode: $buildmode" >&2
+    exit 1
+    ;;
 esac

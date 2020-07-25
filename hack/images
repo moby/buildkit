@@ -14,90 +14,89 @@ set -eu -o pipefail
 progressFlag=""
 if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"; fi
 
-
 versionTag=$(git describe --always --tags --match "v[0-9]*")
 
 if [[ ! "$versionTag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-	versionTag=""
+  versionTag=""
 fi
 
 usage() {
-	echo "usage: $0 <tag> <repo> [push]"
-	exit 1
+  echo "usage: $0 <tag> <repo> [push]"
+  exit 1
 }
 
 if [ -z "$TAG" ] || [ -z "$REPO" ]; then
-	usage
+  usage
 fi
 
 imageDocker() {
-	if echo $PLATFORMS | grep , >/dev/null; then
-		echo "PREFER_BUILDCTL=1 needs to be set to build images for $PLATFORMS"
-		exit 1
-	fi
-	set -x
-	DOCKER_BUILDKIT=1 docker build $progressFlag --platform=$PLATFORMS -t $REPO:$TAG .
-	DOCKER_BUILDKIT=1 docker build $progressFlag --platform=$PLATFORMS -t $REPO:$TAG-rootless --target rootless .
-	set +x
+  if echo $PLATFORMS | grep , >/dev/null; then
+    echo "PREFER_BUILDCTL=1 needs to be set to build images for $PLATFORMS"
+    exit 1
+  fi
+  set -x
+  DOCKER_BUILDKIT=1 docker build $progressFlag --platform=$PLATFORMS -t $REPO:$TAG .
+  DOCKER_BUILDKIT=1 docker build $progressFlag --platform=$PLATFORMS -t $REPO:$TAG-rootless --target rootless .
+  set +x
 
-	if [ "$PUSH" = "push" ]; then
-		set -x
-		docker push $REPO:$TAG
-		docker push $REPO:$TAG-rootless
-		set +x
-	fi
-	if [[ "$versionTag" == "$TAG" ]]; then
-		set -x
-		docker tag $REPO:$TAG $REPO:latest
-		docker tag $REPO:$TAG-rootless $REPO:rootless
-		set +x
-		if [ "$PUSH" = "push" ]; then
-			set -x
-			docker push $REPO:latest
-			docker push $REPO:rootless
-			set +x
-		fi
-	fi
+  if [ "$PUSH" = "push" ]; then
+    set -x
+    docker push $REPO:$TAG
+    docker push $REPO:$TAG-rootless
+    set +x
+  fi
+  if [[ "$versionTag" == "$TAG" ]]; then
+    set -x
+    docker tag $REPO:$TAG $REPO:latest
+    docker tag $REPO:$TAG-rootless $REPO:rootless
+    set +x
+    if [ "$PUSH" = "push" ]; then
+      set -x
+      docker push $REPO:latest
+      docker push $REPO:rootless
+      set +x
+    fi
+  fi
 }
 
 image() {
-	pushFlag="push=false"
-	if [ "$PUSH" = "push" ]; then
-		pushFlag="push=true"
-	fi
+  pushFlag="push=false"
+  if [ "$PUSH" = "push" ]; then
+    pushFlag="push=true"
+  fi
 
-	tagLatest=""
-	tagLatestRootless=""
-	if [[ "$versionTag" == "$TAG" ]]; then
-		tagLatest=",$REPO:latest"
-		tagLatestRootless=",$REPO:rootless"
-	fi
+  tagLatest=""
+  tagLatestRootless=""
+  if [[ "$versionTag" == "$TAG" ]]; then
+    tagLatest=",$REPO:latest"
+    tagLatestRootless=",$REPO:rootless"
+  fi
 
-	set -x
+  set -x
 
-	buildctl build $progressFlag --frontend=dockerfile.v0 \
-		--local context=. --local dockerfile=. \
-		--opt platform=$PLATFORMS \
-		--export-cache type=inline \
-		--output type=image,\"name=$REPO:$TAG$tagLatest\",$pushFlag
+  buildctl build $progressFlag --frontend=dockerfile.v0 \
+    --local context=. --local dockerfile=. \
+    --opt platform=$PLATFORMS \
+    --export-cache type=inline \
+    --output type=image,\"name=$REPO:$TAG$tagLatest\",$pushFlag
 
-	buildctl build $progressFlag --frontend=dockerfile.v0 \
-		--local context=. --local dockerfile=. \
-		--opt target=rootless \
-		--opt platform=$PLATFORMS \
-		--export-cache type=inline \
-		--output type=image,\"name=$REPO:$TAG-rootless$tagLatestRootless\",$pushFlag
+  buildctl build $progressFlag --frontend=dockerfile.v0 \
+    --local context=. --local dockerfile=. \
+    --opt target=rootless \
+    --opt platform=$PLATFORMS \
+    --export-cache type=inline \
+    --output type=image,\"name=$REPO:$TAG-rootless$tagLatestRootless\",$pushFlag
 }
 
 case $buildmode in
-"buildkit")
-	image
-	;;
-"docker-buildkit")
-	imageDocker
-	;;
-*)
-	echo "Unsupported build mode: $buildmode" >&2
-	exit 1
-	;;
+  "buildkit")
+    image
+    ;;
+  "docker-buildkit")
+    imageDocker
+    ;;
+  *)
+    echo "Unsupported build mode: $buildmode" >&2
+    exit 1
+    ;;
 esac

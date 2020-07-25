@@ -27,23 +27,22 @@ if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"
 
 if [ "$#" == 0 ]; then TEST_INTEGRATION=1; fi
 
-while test $# -gt 0
-  do
-    case "$1" in
-        gateway)
-          TEST_GATEWAY=1
-        ;;
-        dockerfile)
-          TEST_DOCKERFILE=1
-        ;;
-        integration)
-          TEST_INTEGRATION=1
-        ;;
-        *)
-          echo "unknown arg $1"
-        ;;
-    esac
-    shift
+while test $# -gt 0; do
+  case "$1" in
+    gateway)
+      TEST_GATEWAY=1
+      ;;
+    dockerfile)
+      TEST_DOCKERFILE=1
+      ;;
+    integration)
+      TEST_INTEGRATION=1
+      ;;
+    *)
+      echo "unknown arg $1"
+      ;;
+  esac
+  shift
 done
 
 iid="buildkit-tests"
@@ -51,24 +50,24 @@ iidfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
 set -x
 
 case $buildmode in
-"buildkit")
-  tmpfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
-  buildctl build $progressFlag --frontend=dockerfile.v0 $currentcontextBuildctl \
-    --opt target=integration-tests \
-    --output type=docker,name=$iid,dest=$tmpfile \
-    --import-cache type=registry,ref=cicache.buildk.it/moby/buildkit/master:integration-tests $importCacheFlags
-  docker load -i $tmpfile
-  rm $tmpfile
-  ;;
-"docker-buildkit")
-  export DOCKER_BUILDKIT=1
-  docker build --iidfile $iidfile --target integration-tests --force-rm .
-  iid=$(cat $iidfile)
-  ;;
-*)
-  echo "Unsupported build mode: $buildmode" >&2
-  exit 1
-  ;;
+  "buildkit")
+    tmpfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
+    buildctl build $progressFlag --frontend=dockerfile.v0 $currentcontextBuildctl \
+      --opt target=integration-tests \
+      --output type=docker,name=$iid,dest=$tmpfile \
+      --import-cache type=registry,ref=cicache.buildk.it/moby/buildkit/master:integration-tests $importCacheFlags
+    docker load -i $tmpfile
+    rm $tmpfile
+    ;;
+  "docker-buildkit")
+    export DOCKER_BUILDKIT=1
+    docker build --iidfile $iidfile --target integration-tests --force-rm .
+    iid=$(cat $iidfile)
+    ;;
+  *)
+    echo "Unsupported build mode: $buildmode" >&2
+    exit 1
+    ;;
 esac
 
 cacheVolume=$(docker create -v /root/.cache -v /root/.cache/registry -v /go/pkg/mod alpine)
@@ -81,7 +80,6 @@ if [ "$TEST_INTEGRATION" == 1 ]; then
   docker start -a $cid
 fi
 
-
 if [ "$TEST_GATEWAY" == 1 ]; then
   cid=$(docker create --rm --volumes-from=$cacheVolume -e TEST_DOCKERD $iid go build -v ./frontend/gateway/client)
   if [ "$TEST_DOCKERD" = "1" ]; then
@@ -89,7 +87,6 @@ if [ "$TEST_GATEWAY" == 1 ]; then
   fi
   docker start -a $cid
 fi
-
 
 DOCKERFILE_RELEASES_CUSTOM=""
 if [ "$TEST_DOCKERFILE" == 1 ]; then
@@ -99,25 +96,24 @@ if [ "$TEST_DOCKERFILE" == 1 ]; then
     DOCKERFILE_RELEASES_CUSTOM=1
   fi
 
-
   for release in $DOCKERFILE_RELEASES; do
     buildtags=$(cat ./frontend/dockerfile/release/$release/tags)
     tarout=$(mktemp -t dockerfile-frontend.XXXXXXXXXX)
     case $buildmode in
-    "buildkit")
-      buildctl build $progressFlag --frontend=dockerfile.v0 --local context=. --local dockerfile=. \
-        --opt filename=./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile \
-        --opt build-arg:BUILDTAGS="$buildtags" \
-        --output type=oci,dest=$tarout
-      ;;
-    "docker-buildkit")
-      dfiidfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
-      docker build --iidfile=$dfiidfile -f ./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile --build-arg BUILDTAGS="$buildtags" .
-      dfiid=$(cat $dfiidfile)
-      docker save -o $tarout $dfiid
-      docker rmi $dfiid
-      rm $dfiidfile
-      ;;
+      "buildkit")
+        buildctl build $progressFlag --frontend=dockerfile.v0 --local context=. --local dockerfile=. \
+          --opt filename=./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile \
+          --opt build-arg:BUILDTAGS="$buildtags" \
+          --output type=oci,dest=$tarout
+        ;;
+      "docker-buildkit")
+        dfiidfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
+        docker build --iidfile=$dfiidfile -f ./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile --build-arg BUILDTAGS="$buildtags" .
+        dfiid=$(cat $dfiidfile)
+        docker save -o $tarout $dfiid
+        docker rmi $dfiid
+        rm $dfiidfile
+        ;;
     esac
 
     if [ -s $tarout ]; then
@@ -137,8 +133,8 @@ fi
 docker rm -v $cacheVolume
 
 case $buildmode in
-"docker-buildkit")
-  rm "$iidfile"
-  docker rmi $iid
-  ;;
+  "docker-buildkit")
+    rm "$iidfile"
+    docker rmi $iid
+    ;;
 esac
