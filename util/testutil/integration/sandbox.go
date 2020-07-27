@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -171,9 +170,7 @@ func runBuildkitd(conf *BackendConfig, args []string, logs map[string]*bytes.Buf
 	args = append(args, "--root", tmpdir, "--addr", address, "--debug")
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Env = append(os.Environ(), "BUILDKIT_DEBUG_EXEC_OUTPUT=1", "BUILDKIT_DEBUG_PANIC_ON_ERROR=1", "TMPDIR="+filepath.Join(tmpdir, "tmp"))
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Setsid: true, // stretch sudo needs this for sigterm
-	}
+	cmd.SysProcAttr = getSysProcAttr()
 
 	stop, err := startCmd(cmd, logs)
 	if err != nil {
