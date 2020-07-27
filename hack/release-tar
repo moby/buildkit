@@ -11,16 +11,14 @@ set -eu -o pipefail
 progressFlag=""
 if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"; fi
 
-
 usage() {
   echo "usage: ./hack/release-tar <tag> <out>"
   exit 1
 }
 
-if [ -z "$TAG" ] || [ -z "$OUT" ]; then 
+if [ -z "$TAG" ] || [ -z "$OUT" ]; then
   usage
 fi
-
 
 set -x
 

@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+
+. $(dirname $0)/util
+set -eu -o pipefail -x
+
+: ${CONTINUOUS_INTEGRATION=}
+
+progressFlag=""
+if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"; fi
+
+case $buildmode in
+  "buildkit")
+    buildctl build $progressFlag --frontend=dockerfile.v0 --local context=. --local dockerfile=. \
+      --opt target=update \
+      --opt filename=./hack/dockerfiles/shfmt.Dockerfile \
+      --output type=local,dest=.
+    ;;
+  "docker-buildkit")
+    export DOCKER_BUILDKIT=1
+    docker build $progressFlag -f ./hack/dockerfiles/shfmt.Dockerfile --target update -o . .
+    ;;
+  *)
+    echo "Unsupported build mode: $buildmode" >&2
+    exit 1
+    ;;
+esac

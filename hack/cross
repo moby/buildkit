@@ -12,22 +12,22 @@ fi
 set -ex
 
 if [ -n "$MASTERCACHE_PASSWORD" ] && [ -n "$RUNC_PLATFORMS" ]; then
-repo="cicache.buildk.it/moby/buildkit/master"
-$(dirname $0)/login_ci_cache
-buildctl build $progressFlag --frontend=dockerfile.v0 \
-  $currentcontextBuildctl \
-  --opt target=binaries-linux-helper \
-  --opt platform=$RUNC_PLATFORMS \
-  --import-cache type=registry,ref=cicache.buildk.it/moby/buildkit/master:binaries-cross-helper \
-  --export-cache type=inline --output type=image,push=true,name=$repo:binaries-cross-helper
+  repo="cicache.buildk.it/moby/buildkit/master"
+  $(dirname $0)/login_ci_cache
+  buildctl build $progressFlag --frontend=dockerfile.v0 \
+    $currentcontextBuildctl \
+    --opt target=binaries-linux-helper \
+    --opt platform=$RUNC_PLATFORMS \
+    --import-cache type=registry,ref=cicache.buildk.it/moby/buildkit/master:binaries-cross-helper \
+    --export-cache type=inline --output type=image,push=true,name=$repo:binaries-cross-helper
 fi
 
 buildctl build --progress=plain --frontend=dockerfile.v0 \
-   $currentcontextBuildctl \
-   --opt platform=$PLATFORMS \
-   --import-cache type=registry,ref=cicache.buildk.it/moby/buildkit/master:binaries-cross-helper
+  $currentcontextBuildctl \
+  --opt platform=$PLATFORMS \
+  --import-cache type=registry,ref=cicache.buildk.it/moby/buildkit/master:binaries-cross-helper
 
 buildctl build --progress=plain --frontend=dockerfile.v0 \
-   $currentcontextBuildctl \
-   --opt platform=windows/amd64 --opt target=buildkit-buildkitd \
-   --import-cache type=registry,ref=cicache.buildk.it/moby/buildkit/master:binaries
+  $currentcontextBuildctl \
+  --opt platform=windows/amd64 --opt target=buildkit-buildkitd \
+  --import-cache type=registry,ref=cicache.buildk.it/moby/buildkit/master:binaries

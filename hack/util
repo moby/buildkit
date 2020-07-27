@@ -11,14 +11,14 @@ newerEqualThan() { # $1=minimum wanted version $2=actual-version
 
 buildmode="legacy"
 if [ "$PREFER_BUILDCTL" = "1" ]; then
-  buildmode="buildkit";
+  buildmode="buildkit"
 else
   serverVersion=$(docker info --format '{{.ServerVersion}}')
   experimental=$(docker info --format '{{.ExperimentalBuild}}')
-  if [ "$PREFER_LEGACY" != "1" ] && ( newerEqualThan "18.09" $serverVersion || \
-    ( newerEqualThan "18.06" $serverVersion && [ "true" = "$experimental" ] ) || \
+  if [ "$PREFER_LEGACY" != "1" ] && (newerEqualThan "18.09" $serverVersion ||
+    (newerEqualThan "18.06" $serverVersion && [ "true" = "$experimental" ]) ||
     [ "$DOCKER_BUILDKIT" = "1" ]); then
-    buildmode="docker-buildkit";
+    buildmode="docker-buildkit"
   fi
 fi
 if [ "$buildmode" = "legacy" ]; then
@@ -34,7 +34,6 @@ if [ "$TRAVIS_EVENT_TYPE" = "pull_request" ]; then
 elif [ -n "$TRAVIS_BRANCH" ]; then
   currentref="git://github.com/$TRAVIS_REPO_SLUG#$TRAVIS_BRANCH"
 fi
-
 
 currentcontext="."
 currentcontextBuildctl="--local context=. --local dockerfile=."

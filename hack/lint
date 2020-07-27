@@ -24,14 +24,14 @@ lint() {
 }
 
 case $buildmode in
-"buildkit")
-  lint
-  ;;
-"docker-buildkit")
-  lintDocker
-  ;;
-*)
-  echo "Unsupported build mode: $buildmode" >&2
-  exit 1
-  ;;
+  "buildkit")
+    lint
+    ;;
+  "docker-buildkit")
+    lintDocker
+    ;;
+  *)
+    echo "Unsupported build mode: $buildmode" >&2
+    exit 1
+    ;;
 esac
