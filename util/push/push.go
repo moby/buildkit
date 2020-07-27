@@ -13,6 +13,7 @@ import (
 	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/docker/distribution/reference"
+	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/imageutil"
@@ -40,6 +41,17 @@ func Push(ctx context.Context, sm *session.Manager, sid string, cs content.Store
 		ref = parsed.Name()
 	} else {
 		ref = reference.TagNameOnly(parsed).String()
+	}
+
+	if insecure {
+		insecureTrue := true
+		httpTrue := true
+		hosts = resolver.NewRegistryConfig(map[string]config.RegistryConfig{
+			reference.Domain(parsed): {
+				Insecure:  &insecureTrue,
+				PlainHTTP: &httpTrue,
+			},
+		})
 	}
 
 	resolver := resolver.New(hosts, resolver.NewSessionAuthenticator(sm, session.NewGroup(sid)))
