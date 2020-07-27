@@ -49,7 +49,6 @@ func NewFromStat(stat *fstypes.Stat) (hash.Hash, error) {
 		return nil, err
 	}
 	hdr.Name = "" // note: empty name is different from current has in docker build. Name is added on recursive directory scan instead
-	hdr.Mode = int64(chmodWindowsTarEntry(os.FileMode(hdr.Mode)))
 	hdr.Devmajor = stat.Devmajor
 	hdr.Devminor = stat.Devminor
 
