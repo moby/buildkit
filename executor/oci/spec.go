@@ -20,7 +20,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// ProcMode configures PID namespaces
+// ProcessMode configures PID namespaces
 type ProcessMode int
 
 const (
