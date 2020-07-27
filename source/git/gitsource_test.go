@@ -35,6 +35,10 @@ func TestRepeatedFetchKeepGitDir(t *testing.T) {
 }
 
 func testRepeatedFetch(t *testing.T, keepGitDir bool) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+
 	t.Parallel()
 	ctx := context.TODO()
 
@@ -149,6 +153,10 @@ func TestFetchBySHAKeepGitDir(t *testing.T) {
 }
 
 func testFetchBySHA(t *testing.T, keepGitDir bool) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
@@ -222,6 +230,10 @@ func TestMultipleReposKeepGitDir(t *testing.T) {
 }
 
 func testMultipleRepos(t *testing.T, keepGitDir bool) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
