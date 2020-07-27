@@ -12,6 +12,8 @@ func TestCheckSystemDriveAndRemoveDriveLetter(t *testing.T) {
 		t.Fatalf("Expected error for d:")
 	}
 
+	var path string
+
 	// Single character is unchanged
 	if path, err = CheckSystemDriveAndRemoveDriveLetter("z"); err != nil {
 		t.Fatalf("Single character should pass")
