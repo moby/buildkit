@@ -1,6 +1,7 @@
 package oci
 
 import (
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -48,6 +49,45 @@ func TestHasPrefix(t *testing.T) {
 			prefix:   "/foo",
 			expected: false,
 		},
+	}
+	if runtime.GOOS == "windows" {
+		testCases = append(testCases,
+			testCase{
+				path:     "C:\\foo\\bar",
+				prefix:   "C:\\foo",
+				expected: true,
+			},
+			testCase{
+				path:     "C:\\foo\\bar",
+				prefix:   "C:\\foo\\",
+				expected: true,
+			},
+			testCase{
+				path:     "C:\\foo\\bar",
+				prefix:   "C:\\",
+				expected: true,
+			},
+			testCase{
+				path:     "C:\\foo",
+				prefix:   "C:\\foo",
+				expected: true,
+			},
+			testCase{
+				path:     "C:\\foo\\bar",
+				prefix:   "C:\\bar",
+				expected: false,
+			},
+			testCase{
+				path:     "C:\\foo\\bar",
+				prefix:   "foo",
+				expected: false,
+			},
+			testCase{
+				path:     "C:\\foobar",
+				prefix:   "C:\\foo",
+				expected: false,
+			},
+		)
 	}
 	for i, tc := range testCases {
 		actual := hasPrefix(tc.path, tc.prefix)
