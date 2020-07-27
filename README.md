@@ -127,11 +127,6 @@ We are open to adding more backends.
 The buildkitd daemon listens gRPC API on `/run/buildkit/buildkitd.sock` by default, but you can also use TCP sockets.
 See [Expose BuildKit as a TCP service](#expose-buildkit-as-a-tcp-service).
 
-:information_source: Notice to Fedora 31 users:
-
-* As runc still does not work on cgroup v2 environment like Fedora 31, you need to substitute runc with crun. Run `buildkitd` with `--oci-worker-binary=crun`.
-* If you want to use runc, you need to configure the system to use cgroup v1. Run `sudo grubby --update-kernel=ALL --args="systemd.unified_cgroup_hierarchy=0"` and reboot.
-
 ### Exploring LLB
 
 BuildKit builds are based on a binary intermediate format called LLB that is used for defining the dependency graph for processes running part of your build. tl;dr: LLB is to Dockerfile what LLVM IR is to C.
@@ -150,6 +145,9 @@ Currently, the following high-level languages has been implemented for LLB:
 -   [Mockerfile](https://matt-rickard.com/building-a-new-dockerfile-frontend/)
 -   [Gockerfile](https://github.com/po3rin/gockerfile)
 -   [bldr (Pkgfile)](https://github.com/talos-systems/bldr/)
+-   [HLB](https://github.com/openllb/hlb)
+-   [Earthfile (Earthly)](https://github.com/earthly/earthly)
+-   [Cargo Wharf (Rust)](https://github.com/denzp/cargo-wharf)
 -   (open a PR to add your own language)
 
 ### Exploring Dockerfiles
