@@ -1,16 +1,16 @@
 # syntax = docker/dockerfile:1.1-experimental
 
-ARG RUNC_VERSION=v1.0.0-rc10
-ARG CONTAINERD_VERSION=v1.3.2
+ARG RUNC_VERSION=v1.0.0-rc91
+ARG CONTAINERD_VERSION=v1.3.6
 # containerd v1.2 for integration tests
-ARG CONTAINERD_OLD_VERSION=v1.2.11
+ARG CONTAINERD_OLD_VERSION=v1.2.13
 # available targets: buildkitd, buildkitd.oci_only, buildkitd.containerd_only
 ARG BUILDKIT_TARGET=buildkitd
 ARG REGISTRY_VERSION=2.7.1
-ARG ROOTLESSKIT_VERSION=v0.9.1
-ARG CNI_VERSION=v0.8.5
+ARG ROOTLESSKIT_VERSION=v0.9.5
+ARG CNI_VERSION=v0.8.6
 ARG SHADOW_VERSION=4.8.1
-ARG FUSEOVERLAYFS_VERSION=v0.7.6
+ARG FUSEOVERLAYFS_VERSION=v1.1.2
 
 # git stage is used for checking out remote repository sources
 FROM --platform=$BUILDPLATFORM alpine AS git
@@ -170,24 +170,14 @@ RUN  --mount=target=/root/.cache,type=cache \
   CGO_ENABLED=0 go build -o /rootlesskit ./cmd/rootlesskit && \
   file /rootlesskit | grep "statically linked"
 
-# Based on https://github.com/containers/fuse-overlayfs/blob/v0.7.6/Dockerfile.static.ubuntu .
-# We can't use Alpine here because Alpine does not provide an apk package for libfuse3.a .
-FROM --platform=$BUILDPLATFORM debian:10 AS fuse-overlayfs
-RUN apt-get update && \
-  apt-get install --no-install-recommends -y \
-  git ca-certificates libc6-dev gcc make automake autoconf pkgconf libfuse3-dev file curl
-RUN git clone https://github.com/containers/fuse-overlayfs
-WORKDIR fuse-overlayfs
+FROM --platform=$BUILDPLATFORM alpine AS fuse-overlayfs
+RUN apk add --no-cache curl
 ARG FUSEOVERLAYFS_VERSION
-RUN git pull && git checkout ${FUSEOVERLAYFS_VERSION}
-ARG TARGETPLATFORM
-RUN curl -o /cross.sh https://raw.githubusercontent.com/AkihiroSuda/tonistiigi-binfmt/c0f14b94cdb5b6de0afd1c4b5118891b1174fefc/binfmt/scripts/cross.sh && \
-  chmod +x /cross.sh && \
-  /cross.sh install gcc pkgconf libfuse3-dev | sh
-RUN ./autogen.sh && \
-  CC=$(/cross.sh cross-prefix)-gcc LD=$(/cross.sh cross-prefix)-ld LIBS="-ldl" LDFLAGS="-static" ./configure && \
-  make && mkdir /out && cp fuse-overlayfs /out && \
-  file /out/fuse-overlayfs | grep "statically linked"
+ARG TARGETARCH
+RUN echo $TARGETARCH | sed -e s/^amd64$/x86_64/ -e s/^arm64$/aarch64/ -e s/^arm$/armv7l/ > /uname_m && \
+  mkdir /out && \
+  curl -sSL -o /out/fuse-overlayfs https://github.com/containers/fuse-overlayfs/releases/download/${FUSEOVERLAYFS_VERSION}/fuse-overlayfs-$(cat /uname_m) && \
+  chmod +x /out/fuse-overlayfs
 
 # Copy together all binaries needed for oci worker mode
 FROM buildkit-export AS buildkit-buildkitd.oci_only
@@ -256,10 +246,10 @@ ENV BUILDKIT_RUN_NETWORK_INTEGRATION_TESTS=1 BUILDKIT_CNI_INIT_LOCK_PATH=/run/bu
 FROM integration-tests AS dev-env
 VOLUME /var/lib/buildkit
 
-# newuidmap & newgidmap binaries (shadow-uidmap 4.7-r1) shipped with alpine:3.11 cannot be executed without CAP_SYS_ADMIN,
+# newuidmap & newgidmap binaries (shadow-uidmap 4.7-r1) shipped with alpine cannot be executed without CAP_SYS_ADMIN,
 # because the binaries are built without libcap-dev.
 # So we need to build the binaries with libcap enabled.
-FROM alpine:3.11 AS idmap
+FROM alpine:3.12 AS idmap
 RUN apk add --no-cache autoconf automake build-base byacc gettext gettext-dev gcc git libcap-dev libtool libxslt
 RUN git clone https://github.com/shadow-maint/shadow.git /shadow
 WORKDIR /shadow
@@ -270,7 +260,7 @@ RUN ./autogen.sh --disable-nls --disable-man --without-audit --without-selinux -
   && cp src/newuidmap src/newgidmap /usr/bin
 
 # Rootless mode.
-FROM alpine:3.11 AS rootless
+FROM alpine:3.12 AS rootless
 RUN apk add --no-cache fuse3 git xz
 COPY --from=idmap /usr/bin/newuidmap /usr/bin/newuidmap
 COPY --from=idmap /usr/bin/newgidmap /usr/bin/newgidmap
