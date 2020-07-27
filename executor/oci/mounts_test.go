@@ -3,7 +3,7 @@ package oci
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestHasPrefix(t *testing.T) {
@@ -51,6 +51,6 @@ func TestHasPrefix(t *testing.T) {
 	}
 	for i, tc := range testCases {
 		actual := hasPrefix(tc.path, tc.prefix)
-		require.Equal(t, tc.expected, actual, "#%d: under(%q,%q)", i, tc.path, tc.prefix)
+		assert.Equal(t, tc.expected, actual, "#%d: under(%q,%q)", i, tc.path, tc.prefix)
 	}
 }
