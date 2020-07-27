@@ -12,7 +12,7 @@ func createNetNS(_ *cniProvider, id string) (string, error) {
 	nsTemplate := hcn.NewNamespace(hcn.NamespaceTypeGuest)
 	ns, err := nsTemplate.Create()
 	if err != nil {
-		return "", errors.Wrapf(err, "HostComputeNamespace.Create failed for %s", nsTemplate)
+		return "", errors.Wrapf(err, "HostComputeNamespace.Create failed for %s", nsTemplate.Id)
 	}
 
 	return ns.Id, nil
