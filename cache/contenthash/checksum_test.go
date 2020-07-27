@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -858,6 +859,11 @@ func TestPersistence(t *testing.T) {
 }
 
 func createRef(t *testing.T, cm cache.Manager, files []string) cache.ImmutableRef {
+	if runtime.GOOS == "windows" && len(files) > 0 {
+		// lm.Mount() will fail
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+
 	mref, err := cm.New(context.TODO(), nil, cache.CachePolicyRetain)
 	require.NoError(t, err)
 
