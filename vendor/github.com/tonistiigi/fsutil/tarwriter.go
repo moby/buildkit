@@ -41,7 +41,7 @@ func WriteTar(ctx context.Context, fs FS, w io.Writer) error {
 		hdr.Linkname = stat.Linkname
 		if hdr.Linkname != "" {
 			hdr.Size = 0
-			if fi.Mode() & os.ModeSymlink != 0 {
+			if fi.Mode()&os.ModeSymlink != 0 {
 				hdr.Typeflag = tar.TypeSymlink
 			} else {
 				hdr.Typeflag = tar.TypeLink

@@ -14,7 +14,8 @@ import (
 
 var bufPool = sync.Pool{
 	New: func() interface{} {
-		return make([]byte, 32*1<<10)
+		buf := make([]byte, 32*1<<10)
+		return &buf
 	},
 }
 
@@ -132,9 +133,9 @@ func (s *sender) sendFile(h *sendHandle) error {
 	f, err := s.fs.Open(h.path)
 	if err == nil {
 		defer f.Close()
-		buf := bufPool.Get().([]byte)
+		buf := bufPool.Get().(*[]byte)
 		defer bufPool.Put(buf)
-		if _, err := io.CopyBuffer(&fileSender{sender: s, id: h.id}, f, buf); err != nil {
+		if _, err := io.CopyBuffer(&fileSender{sender: s, id: h.id}, f, *buf); err != nil {
 			return err
 		}
 	}

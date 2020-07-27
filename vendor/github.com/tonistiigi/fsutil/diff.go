@@ -19,7 +19,7 @@ type HandleChangeFn func(ChangeKind, string, os.FileInfo, error) error
 
 type ContentHasher func(*types.Stat) (hash.Hash, error)
 
-func GetWalkerFn(root string) walkerFn {
+func getWalkerFn(root string) walkerFn {
 	return func(ctx context.Context, pathC chan<- *currentPath) error {
 		return errors.Wrap(Walk(ctx, root, nil, func(path string, f os.FileInfo, err error) error {
 			if err != nil {
