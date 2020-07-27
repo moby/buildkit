@@ -22,29 +22,51 @@ import (
 	"github.com/pkg/errors"
 )
 
-func fillInsecureOpts(host string, c config.RegistryConfig, h *docker.RegistryHost) error {
+func fillInsecureOpts(host string, c config.RegistryConfig, h docker.RegistryHost) ([]docker.RegistryHost, error) {
+	var hosts []docker.RegistryHost
+
 	tc, err := loadTLSConfig(c)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	var isHTTP bool
 
 	if c.PlainHTTP != nil && *c.PlainHTTP {
-		h.Scheme = "http"
-	} else if c.Insecure != nil && *c.Insecure {
-		tc.InsecureSkipVerify = true
-	} else if c.PlainHTTP == nil {
+		isHTTP = true
+	}
+	if c.PlainHTTP == nil {
 		if ok, _ := docker.MatchLocalhost(host); ok {
-			h.Scheme = "http"
+			isHTTP = true
 		}
 	}
 
-	transport := newDefaultTransport()
-	transport.TLSClientConfig = tc
-
-	h.Client = &http.Client{
-		Transport: tracing.NewTransport(transport),
+	if isHTTP {
+		h2 := h
+		h2.Scheme = "http"
+		hosts = append(hosts, h2)
 	}
-	return nil
+	if c.Insecure != nil && *c.Insecure {
+		h2 := h
+		transport := newDefaultTransport()
+		transport.TLSClientConfig = tc
+		h2.Client = &http.Client{
+			Transport: tracing.NewTransport(transport),
+		}
+		tc.InsecureSkipVerify = true
+		hosts = append(hosts, h2)
+	}
+
+	if len(hosts) == 0 {
+		transport := newDefaultTransport()
+		transport.TLSClientConfig = tc
+
+		h.Client = &http.Client{
+			Transport: tracing.NewTransport(transport),
+		}
+		hosts = append(hosts, h)
+	}
+
+	return hosts, nil
 }
 
 func loadTLSConfig(c config.RegistryConfig) (*tls.Config, error) {
@@ -116,11 +138,12 @@ func NewRegistryConfig(m map[string]config.RegistryConfig) docker.RegistryHosts 
 					Capabilities: docker.HostCapabilityPull | docker.HostCapabilityResolve,
 				}
 
-				if err := fillInsecureOpts(mirror, m[mirror], &h); err != nil {
+				hosts, err := fillInsecureOpts(mirror, m[mirror], h)
+				if err != nil {
 					return nil, err
 				}
 
-				out = append(out, h)
+				out = append(out, hosts...)
 			}
 
 			if host == "docker.io" {
@@ -135,11 +158,12 @@ func NewRegistryConfig(m map[string]config.RegistryConfig) docker.RegistryHosts 
 				Capabilities: docker.HostCapabilityPush | docker.HostCapabilityPull | docker.HostCapabilityResolve,
 			}
 
-			if err := fillInsecureOpts(host, c, &h); err != nil {
+			hosts, err := fillInsecureOpts(host, c, h)
+			if err != nil {
 				return nil, err
 			}
 
-			out = append(out, h)
+			out = append(out, hosts...)
 			return out, nil
 		},
 		docker.ConfigureDefaultRegistries(
