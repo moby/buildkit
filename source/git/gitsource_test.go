@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -392,7 +393,12 @@ func setupGitRepo(dir string) (string, error) {
 
 func runShell(dir string, cmds ...string) error {
 	for _, args := range cmds {
-		cmd := exec.Command("sh", "-c", args)
+		var cmd *exec.Cmd
+		if runtime.GOOS == "windows" {
+			cmd = exec.Command("powershell", "-command", args)
+		} else {
+			cmd = exec.Command("sh", "-c", args)
+		}
 		cmd.Dir = dir
 		if err := cmd.Run(); err != nil {
 			return errors.Wrapf(err, "error running %v", args)
