@@ -76,11 +76,11 @@ func withROBind(src, dest string) func(m []specs.Mount) ([]specs.Mount, error) {
 
 func hasPrefix(p, prefixDir string) bool {
 	prefixDir = filepath.Clean(prefixDir)
-	if prefixDir == "/" {
+	if filepath.Base(prefixDir) == string(filepath.Separator) {
 		return true
 	}
 	p = filepath.Clean(p)
-	return p == prefixDir || strings.HasPrefix(p, prefixDir+"/")
+	return p == prefixDir || strings.HasPrefix(p, prefixDir+string(filepath.Separator))
 }
 
 func removeMountsWithPrefix(mounts []specs.Mount, prefixDir string) []specs.Mount {
