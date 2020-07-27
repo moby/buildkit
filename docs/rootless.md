@@ -9,26 +9,18 @@ Using Ubuntu kernel is recommended.
 * No preparation is needed.
 * `overlayfs` snapshotter is used by default ([Ubuntu-specific kernel patch](https://kernel.ubuntu.com/git/ubuntu/ubuntu-bionic.git/commit/fs/overlayfs?id=3b7da90f28fe1ed4b79ef2d994c81efbc58f1144)).
 
-### Debian GNU/Linux 10
+### Debian GNU/Linux
 * Add `kernel.unprivileged_userns_clone=1` to `/etc/sysctl.conf` (or `/etc/sysctl.d`) and run `sudo sysctl -p`
 * `fuse-overlayfs` snapshotter is used by default.
 * To use `overlayfs` snapshotter (recommended), run `sudo modprobe overlay permit_mounts_in_userns=1` ([Debian-specific kernel patch, introduced in Debian 10](https://salsa.debian.org/kernel-team/linux/blob/283390e7feb21b47779b48e0c8eb0cc409d2c815/debian/patches/debian/overlayfs-permit-mounts-in-userns.patch)). Put the configuration to `/etc/modprobe.d` for persistence.
-
-### Debian GNU/Linux 9
-* Add `kernel.unprivileged_userns_clone=1` to `/etc/sysctl.conf` (or `/etc/sysctl.d`) and run `sudo sysctl -p`
-* Only `native` snapshotter can be used.
 
 ### Arch Linux
 * Add `kernel.unprivileged_userns_clone=1` to `/etc/sysctl.conf` (or `/etc/sysctl.d`) and run `sudo sysctl -p`
 * `fuse-overlayfs` snapshotter is used by default if running kernel >= 4.18.
   Otherwise only `native` snapshotter can be used.
 
-### Fedora 31
-* If you don't have the latest `runc` installed and you have `crun` instead, you need to run `buildkitd` with `--oci-worker-binary=crun`.
-* `fuse-overlayfs` snapshotter is used by default.
-
-### Fedora 30
-* No preparation is needed.
+### Fedora
+* If you don't have the latest `runc` (>= v1.0.0-rc91) installed and you have `crun` instead, you need to run `buildkitd` with `--oci-worker-binary=crun`.
 * `fuse-overlayfs` snapshotter is used by default.
 
 ### RHEL/CentOS 8
