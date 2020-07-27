@@ -145,6 +145,9 @@ Currently, the following high-level languages has been implemented for LLB:
 -   [Mockerfile](https://matt-rickard.com/building-a-new-dockerfile-frontend/)
 -   [Gockerfile](https://github.com/po3rin/gockerfile)
 -   [bldr (Pkgfile)](https://github.com/talos-systems/bldr/)
+-   [HLB](https://github.com/openllb/hlb)
+-   [Earthfile (Earthly)](https://github.com/earthly/earthly)
+-   [Cargo Wharf (Rust)](https://github.com/denzp/cargo-wharf)
 -   (open a PR to add your own language)
 
 ### Exploring Dockerfiles
