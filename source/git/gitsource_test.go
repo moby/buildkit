@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -34,6 +35,10 @@ func TestRepeatedFetchKeepGitDir(t *testing.T) {
 }
 
 func testRepeatedFetch(t *testing.T, keepGitDir bool) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+
 	t.Parallel()
 	ctx := context.TODO()
 
@@ -148,6 +153,10 @@ func TestFetchBySHAKeepGitDir(t *testing.T) {
 }
 
 func testFetchBySHA(t *testing.T, keepGitDir bool) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
@@ -221,6 +230,10 @@ func TestMultipleReposKeepGitDir(t *testing.T) {
 }
 
 func testMultipleRepos(t *testing.T, keepGitDir bool) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
@@ -392,7 +405,12 @@ func setupGitRepo(dir string) (string, error) {
 
 func runShell(dir string, cmds ...string) error {
 	for _, args := range cmds {
-		cmd := exec.Command("sh", "-c", args)
+		var cmd *exec.Cmd
+		if runtime.GOOS == "windows" {
+			cmd = exec.Command("powershell", "-command", args)
+		} else {
+			cmd = exec.Command("sh", "-c", args)
+		}
 		cmd.Dir = dir
 		if err := cmd.Run(); err != nil {
 			return errors.Wrapf(err, "error running %v", args)

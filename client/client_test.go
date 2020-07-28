@@ -18,7 +18,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -272,10 +271,7 @@ func testExportBusyboxLocal(t *testing.T, sb integration.Sandbox) {
 	fi2, err := os.Stat(filepath.Join(destDir, "bin/vi"))
 	require.NoError(t, err)
 
-	st1 := fi.Sys().(*syscall.Stat_t)
-	st2 := fi2.Sys().(*syscall.Stat_t)
-
-	require.Equal(t, st1.Ino, st2.Ino)
+	require.True(t, os.SameFile(fi, fi2))
 }
 
 func testHostnameLookup(t *testing.T, sb integration.Sandbox) {

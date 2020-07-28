@@ -14,11 +14,11 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 
 	"github.com/containerd/containerd/content"
+	"github.com/gofrs/flock"
 	"github.com/moby/buildkit/util/contentutil"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
@@ -277,20 +277,17 @@ func writeConfig(updaters []ConfigUpdater) (string, error) {
 func runMirror(t *testing.T, mirroredImages map[string]string) (host string, _ func() error, err error) {
 	mirrorDir := os.Getenv("BUILDKIT_REGISTRY_MIRROR_DIR")
 
-	var f *os.File
+	var lock *flock.Flock
 	if mirrorDir != "" {
-		f, err = os.Create(filepath.Join(mirrorDir, "lock"))
-		if err != nil {
+		lock = flock.New(filepath.Join(mirrorDir, "lock"))
+		if err := lock.Lock(); err != nil {
 			return "", nil, err
 		}
 		defer func() {
 			if err != nil {
-				f.Close()
+				lock.Unlock()
 			}
 		}()
-		if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
-			return "", nil, err
-		}
 	}
 
 	mirror, cleanup, err := NewRegistry(mirrorDir)
@@ -308,7 +305,7 @@ func runMirror(t *testing.T, mirroredImages map[string]string) (host string, _ f
 	}
 
 	if mirrorDir != "" {
-		if err := syscall.Flock(int(f.Fd()), syscall.LOCK_UN); err != nil {
+		if err := lock.Unlock(); err != nil {
 			return "", nil, err
 		}
 	}

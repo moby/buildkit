@@ -10,6 +10,7 @@ import (
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/llbsolver"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/system"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
 )
@@ -131,7 +132,7 @@ func TestFallbackPath(t *testing.T) {
 	_, ok := getenv(e, "PATH")
 	require.False(t, ok)
 
-	// For an empty capset we expect a default non-empty PATH, and
+	// For an empty capset we expect a system-specific default PATH, and
 	// no requirement for the cap.
 	cs := pb.Caps.CapSet(nil)
 	require.Error(t, cs.Supports(pb.CapExecMetaSetsDefaultPath))
@@ -142,7 +143,7 @@ func TestFallbackPath(t *testing.T) {
 	require.False(t, def.Metadata[e.Vertex.Digest()].Caps[pb.CapExecMetaSetsDefaultPath])
 	v, ok := getenv(e, "PATH")
 	require.True(t, ok)
-	require.NotEqual(t, "", v)
+	require.Equal(t, system.DefaultPathEnv, v)
 
 	// All capabilities, including pb.CapExecMetaSetsDefaultPath,
 	// so should get no PATH (not present at all, rather than
