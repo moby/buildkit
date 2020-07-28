@@ -14,7 +14,6 @@ import (
 	"github.com/mitchellh/hashstructure"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/snapshot"
-	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/network"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -47,6 +46,12 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 		ctx = namespaces.WithNamespace(ctx, "buildkit")
 	}
 
+	if mountOpts, err := generateMountOpts(resolvConf, hostsFile); err == nil {
+		opts = append(opts, mountOpts...)
+	} else {
+		return nil, nil, err
+	}
+
 	if securityOpts, err := generateSecurityOpts(meta.SecurityMode); err == nil {
 		opts = append(opts, securityOpts...)
 	} else {
@@ -59,6 +64,20 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 		return nil, nil, err
 	}
 
+	if idmapOpts, err := generateIDmapOpts(idmap); err == nil {
+		opts = append(opts, idmapOpts...)
+	} else {
+		return nil, nil, err
+	}
+
+	opts = append(opts,
+		oci.WithProcessArgs(meta.Args...),
+		oci.WithEnv(meta.Env),
+		oci.WithProcessCwd(meta.Cwd),
+		oci.WithNewPrivileges,
+		oci.WithHostname("buildkitsandbox"),
+	)
+
 	s, err := oci.GenerateSpec(ctx, nil, c, opts...)
 	if err != nil {
 		return nil, nil, err
@@ -66,65 +85,7 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 	// set the networking information on the spec
 	namespace.Set(s)
 
-	s.Process.Args = meta.Args
-	s.Process.Env = meta.Env
-	s.Process.Cwd = meta.Cwd
-	s.Process.Rlimits = nil           // reset open files limit
-	s.Process.NoNewPrivileges = false // reset nonewprivileges
-	s.Hostname = "buildkitsandbox"
-
-	// Setup for a Linux-based container (includes LCOW)
-	if s.Linux != nil {
-		s.Mounts, err = GetMounts(ctx,
-			withProcessMode(processMode),
-			withROBind(resolvConf, "/etc/resolv.conf"),
-			withROBind(hostsFile, "/etc/hosts"),
-		)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		s.Mounts = append(s.Mounts, specs.Mount{
-			Destination: "/sys/fs/cgroup",
-			Type:        "cgroup",
-			Source:      "cgroup",
-			Options:     []string{"ro", "nosuid", "noexec", "nodev"},
-		})
-
-		if processMode == NoProcessSandbox {
-			var maskedPaths []string
-			for _, s := range s.Linux.MaskedPaths {
-				if !hasPrefix(s, "/proc") {
-					maskedPaths = append(maskedPaths, s)
-				}
-			}
-			s.Linux.MaskedPaths = maskedPaths
-			var readonlyPaths []string
-			for _, s := range s.Linux.ReadonlyPaths {
-				if !hasPrefix(s, "/proc") {
-					readonlyPaths = append(readonlyPaths, s)
-				}
-			}
-			s.Linux.ReadonlyPaths = readonlyPaths
-		}
-
-		if meta.SecurityMode == pb.SecurityMode_INSECURE {
-			if err = oci.WithWriteableCgroupfs(ctx, nil, c, s); err != nil {
-				return nil, nil, err
-			}
-			if err = oci.WithWriteableSysfs(ctx, nil, c, s); err != nil {
-				return nil, nil, err
-			}
-		}
-
-		if idmap != nil {
-			s.Linux.Namespaces = append(s.Linux.Namespaces, specs.LinuxNamespace{
-				Type: specs.UserNamespace,
-			})
-			s.Linux.UIDMappings = specMapping(idmap.UIDs())
-			s.Linux.GIDMappings = specMapping(idmap.GIDs())
-		}
-	}
+	s.Process.Rlimits = nil // reset open files limit
 
 	sm := &submounts{}
 
