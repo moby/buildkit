@@ -386,7 +386,7 @@ func (cc *cacheContext) ChecksumWildcard(ctx context.Context, mountable cache.Mo
 
 	wildcards, err := cc.wildcards(ctx, m, p)
 	if err != nil {
-		return "", nil
+		return "", err
 	}
 
 	if followLinks {
