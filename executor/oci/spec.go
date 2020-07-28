@@ -82,8 +82,11 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 	if err != nil {
 		return nil, nil, err
 	}
+
 	// set the networking information on the spec
-	namespace.Set(s)
+	if err := namespace.Set(s); err != nil {
+		return nil, nil, err
+	}
 
 	s.Process.Rlimits = nil // reset open files limit
 
