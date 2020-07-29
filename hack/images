@@ -78,6 +78,7 @@ image() {
     --local context=. --local dockerfile=. \
     --opt platform=$PLATFORMS \
     --export-cache type=inline \
+    --import-cache type=registry,ref=$REPO:$TAG$tagLatest \
     --output type=image,\"name=$REPO:$TAG$tagLatest\",$pushFlag
 
   buildctl build $progressFlag --frontend=dockerfile.v0 \
@@ -85,6 +86,7 @@ image() {
     --opt target=rootless \
     --opt platform=$PLATFORMS \
     --export-cache type=inline \
+    --import-cache type=registry,ref=$REPO:$TAG-rootless$tagLatestRootless \
     --output type=image,\"name=$REPO:$TAG-rootless$tagLatestRootless\",$pushFlag
 }
 
