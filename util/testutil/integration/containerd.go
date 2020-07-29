@@ -33,7 +33,7 @@ func InitContainerdWorker() {
 			Register(&containerd{
 				name:           name,
 				containerd:     filepath.Join(bin, "containerd"),
-				containerdShim: filepath.Join(bin, "containerd-shim"),
+				containerdShim: filepath.Join(bin, "containerd-shim-runc-v2"),
 			})
 		}
 	}
