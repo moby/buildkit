@@ -271,7 +271,10 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable,
 		}
 	}
 
-	spec.Process.Terminal = meta.Tty
+	if meta.Tty {
+		return errors.New("tty with runc not implemented")
+	}
+
 	spec.Process.OOMScoreAdj = w.oomScoreAdj
 	if w.rootless {
 		if err := rootlessspecconv.ToRootless(spec); err != nil {
@@ -329,8 +332,9 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable,
 	close(ended)
 
 	if status != 0 || err != nil {
-		if err == nil {
-			err = errors.Errorf("exit code: %d", status)
+		err = &executor.ExitError{
+			ExitCode: uint32(status),
+			Err:      err,
 		}
 		select {
 		case <-ctx.Done():
@@ -343,7 +347,7 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable,
 	return nil
 }
 
-func (w *runcExecutor) Exec(ctx context.Context, id string, process executor.ProcessInfo) error {
+func (w *runcExecutor) Exec(ctx context.Context, id string, process executor.ProcessInfo) (err error) {
 	// first verify the container is running, if we get an error assume the container
 	// is in the process of being created and check again every 100ms or until
 	// context is canceled.
@@ -406,9 +410,21 @@ func (w *runcExecutor) Exec(ctx context.Context, id string, process executor.Pro
 		spec.Process.Env = process.Meta.Env
 	}
 
-	return w.runc.Exec(ctx, id, *spec.Process, &runc.ExecOpts{
+	err = w.runc.Exec(ctx, id, *spec.Process, &runc.ExecOpts{
 		IO: &forwardIO{stdin: process.Stdin, stdout: process.Stdout, stderr: process.Stderr},
 	})
+
+	var exitError *exec.ExitError
+	if errors.As(err, &exitError) {
+		err = &executor.ExitError{
+			ExitCode: uint32(exitError.ExitCode()),
+			Err:      err,
+		}
+		return err
+	} else if err != nil {
+		return err
+	}
+	return nil
 }
 
 type forwardIO struct {
