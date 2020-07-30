@@ -111,7 +111,7 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root cache.Moun
 		if err != nil {
 			return err
 		}
-		uid, gid, sgids, err = oci.GetUser(ctx, rootfsPath, meta.User)
+		uid, gid, sgids, err = oci.GetUser(rootfsPath, meta.User)
 		if err != nil {
 			lm.Unmount()
 			return err
