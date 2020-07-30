@@ -212,7 +212,7 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable,
 	}
 	defer mount.Unmount(rootFSPath, 0)
 
-	uid, gid, sgids, err := oci.GetUser(ctx, rootFSPath, meta.User)
+	uid, gid, sgids, err := oci.GetUser(rootFSPath, meta.User)
 	if err != nil {
 		return err
 	}
@@ -385,7 +385,7 @@ func (w *runcExecutor) Exec(ctx context.Context, id string, process executor.Pro
 	}
 
 	if process.Meta.User != "" {
-		uid, gid, sgids, err := oci.GetUser(ctx, state.Rootfs, process.Meta.User)
+		uid, gid, sgids, err := oci.GetUser(state.Rootfs, process.Meta.User)
 		if err != nil {
 			return err
 		}
