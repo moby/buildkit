@@ -258,7 +258,7 @@ func hostsWithCredentials(hosts docker.RegistryHosts, auth *SessionAuthenticator
 
 func newDefaultClient() *http.Client {
 	return &http.Client{
-		Transport: newDefaultTransport(),
+		Transport: tracing.NewTransport(newDefaultTransport()),
 	}
 }
 
