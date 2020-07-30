@@ -47,8 +47,8 @@ require (
 	github.com/opencontainers/runc v1.0.0-rc91
 	github.com/opencontainers/runtime-spec v1.0.3-0.20200520003142-237cc4f519e2
 	github.com/opencontainers/selinux v1.6.0 // indirect
-	github.com/opentracing-contrib/go-stdlib v0.0.0-20171029140428-b1a47cfbdd75
-	github.com/opentracing/opentracing-go v1.1.0
+	github.com/opentracing-contrib/go-stdlib v1.0.0
+	github.com/opentracing/opentracing-go v1.2.0
 	github.com/pkg/errors v0.9.1
 	github.com/pkg/profile v1.2.1
 	github.com/serialx/hashring v0.0.0-20190422032157-8b2912629002
