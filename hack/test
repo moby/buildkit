@@ -81,10 +81,9 @@ if [ "$TEST_INTEGRATION" == 1 ]; then
 fi
 
 if [ "$TEST_GATEWAY" == 1 ]; then
-  cid=$(docker create --rm --volumes-from=$cacheVolume -e TEST_DOCKERD $iid go build -v ./frontend/gateway/client)
-  if [ "$TEST_DOCKERD" = "1" ]; then
-    docker cp "$TEST_DOCKERD_BINARY" $cid:/usr/bin/
-  fi
+  # Build-test "github.com/moby/buildkit/frontend/gateway/client", which isn't otherwise built by CI
+  # It really only needs buildkit-base. We have integration-tests in $iid, which is a direct child of buildkit-base.
+  cid=$(docker create --rm --volumes-from=$cacheVolume $iid go build -v ./frontend/gateway/client)
   docker start -a $cid
 fi
 
