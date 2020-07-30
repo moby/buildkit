@@ -63,7 +63,14 @@ func openUserFile(root, p string) (*os.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	return os.Open(p)
+	fh, err := os.Open(p)
+	if err != nil {
+		// This is needed because a nil *os.File is different to a nil
+		// io.ReadCloser and this causes GetExecUser to not detect that the
+		// container file is missing.
+		return nil, err
+	}
+	return fh, nil
 }
 
 func parseUID(str string) (uint32, error) {
