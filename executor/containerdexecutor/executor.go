@@ -299,8 +299,8 @@ func (w *containerdExecutor) Exec(ctx context.Context, id string, process execut
 	return w.runProcess(ctx, taskProcess, process.Resize, nil)
 }
 
-func (w *containerdExecutor) runProcess(ctx context.Context, p containerd.Process, resize <-chan executor.WinSize, started func()) (err error) {
-	err = p.Start(ctx)
+func (w *containerdExecutor) runProcess(ctx context.Context, p containerd.Process, resize <-chan executor.WinSize, started func()) error {
+	err := p.Start(ctx)
 	if err != nil {
 		return err
 	}
@@ -334,21 +334,19 @@ func (w *containerdExecutor) runProcess(ctx context.Context, p containerd.Proces
 				cancel()
 			}
 			if status.ExitCode() != 0 {
-				var err error
+				exitErr := &executor.ExitError{
+					ExitCode: status.ExitCode(),
+					Err:      status.Error(),
+				}
 				if status.ExitCode() == containerd.UnknownExitStatus && status.Error() != nil {
-					err = errors.Wrap(status.Error(), "failure waiting for process")
-				} else {
-					err = &executor.ExitError{
-						ExitCode: status.ExitCode(),
-						Err:      status.Error(),
-					}
+					exitErr.Err = errors.Wrap(status.Error(), "failure waiting for process")
 				}
 				select {
 				case <-ctx.Done():
-					err = errors.Wrap(ctx.Err(), err.Error())
+					exitErr.Err = errors.Wrap(ctx.Err(), exitErr.Error())
 				default:
 				}
-				return err
+				return exitErr
 			}
 			return nil
 		}
