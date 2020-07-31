@@ -332,13 +332,15 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable,
 	close(ended)
 
 	if status != 0 || err != nil {
-		err = &executor.ExitError{
+		exitErr := &executor.ExitError{
 			ExitCode: uint32(status),
 			Err:      err,
 		}
+		err = exitErr
 		select {
 		case <-ctx.Done():
-			return errors.Wrapf(ctx.Err(), err.Error())
+			exitErr.Err = errors.Wrapf(ctx.Err(), exitErr.Error())
+			return exitErr
 		default:
 			return stack.Enable(err)
 		}

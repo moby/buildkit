@@ -30,10 +30,8 @@ type Mount struct {
 }
 
 type WinSize struct {
-	Rows   uint32
-	Cols   uint32
-	Xpixel uint32
-	Ypixel uint32
+	Rows uint32
+	Cols uint32
 }
 
 type ProcessInfo struct {
