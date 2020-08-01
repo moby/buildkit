@@ -2,6 +2,7 @@ package containerdexecutor
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -318,6 +319,7 @@ func (w *containerdExecutor) runProcess(ctx context.Context, p containerd.Proces
 	p.CloseIO(ctx, containerd.WithStdinCloser)
 
 	var cancel func()
+	var killCtxDone <-chan struct{}
 	ctxDone := ctx.Done()
 	for {
 		select {
@@ -325,13 +327,8 @@ func (w *containerdExecutor) runProcess(ctx context.Context, p containerd.Proces
 			ctxDone = nil
 			var killCtx context.Context
 			killCtx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
+			killCtxDone = killCtx.Done()
 			p.Kill(killCtx, syscall.SIGKILL)
-		case size := <-resize:
-			err := p.Resize(ctx, size.Cols, size.Rows)
-			if err != nil {
-				cancel()
-				return err
-			}
 		case status := <-statusCh:
 			if cancel != nil {
 				cancel()
@@ -352,6 +349,20 @@ func (w *containerdExecutor) runProcess(ctx context.Context, p containerd.Proces
 				return exitErr
 			}
 			return nil
+		case <-killCtxDone:
+			if cancel != nil {
+				cancel()
+			}
+			return fmt.Errorf("failed to kill process on cancel")
+		case size := <-resize:
+			ctxTimeout, cancelTimeout := context.WithTimeout(ctx, time.Second)
+			go func() {
+				defer cancelTimeout()
+				err = p.Resize(ctxTimeout, size.Cols, size.Rows)
+				if err != nil {
+					logrus.Warnf("Failed to resize %s: %s", p.ID(), err)
+				}
+			}()
 		}
 	}
 }
