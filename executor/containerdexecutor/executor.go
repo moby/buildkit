@@ -296,11 +296,17 @@ func (w *containerdExecutor) Exec(ctx context.Context, id string, process execut
 		return errors.WithStack(err)
 	}
 
-	return w.runProcess(ctx, taskProcess, process.Resize, nil)
+	err = w.runProcess(ctx, taskProcess, process.Resize, nil)
+	return err
 }
 
 func (w *containerdExecutor) runProcess(ctx context.Context, p containerd.Process, resize <-chan executor.WinSize, started func()) error {
-	err := p.Start(ctx)
+	statusCh, err := p.Wait(context.Background())
+	if err != nil {
+		return err
+	}
+
+	err = p.Start(ctx)
 	if err != nil {
 		return err
 	}
@@ -309,10 +315,7 @@ func (w *containerdExecutor) runProcess(ctx context.Context, p containerd.Proces
 		started()
 	}
 
-	statusCh, err := p.Wait(context.Background())
-	if err != nil {
-		return err
-	}
+	p.CloseIO(ctx, containerd.WithStdinCloser)
 
 	var cancel func()
 	ctxDone := ctx.Done()
