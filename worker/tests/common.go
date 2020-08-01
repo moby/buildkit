@@ -46,9 +46,41 @@ func TestWorkerExec(t *testing.T, w *base.Worker) {
 
 	id := identity.NewID()
 
+	// verify pid1 exits when stdin sees EOF
+	ctxTimeout, cancelTimeout := context.WithTimeout(ctx, 5*time.Second)
+	started := make(chan struct{})
+	pipeR, pipeW := io.Pipe()
+	go func() {
+		select {
+		case <-ctxTimeout.Done():
+			t.Error("Unexpected timeout waiting for pid1 to start")
+		case <-started:
+			pipeW.Write([]byte("hello"))
+			pipeW.Close()
+		}
+	}()
+	stdout := bytes.NewBuffer(nil)
+	stderr := bytes.NewBuffer(nil)
+	err = w.WorkerOpt.Executor.Run(ctxTimeout, id, root, nil, executor.ProcessInfo{
+		Meta: executor.Meta{
+			Args: []string{"cat"},
+			Cwd:  "/",
+			Env:  []string{"PATH=/bin:/usr/bin:/sbin:/usr/sbin"},
+		},
+		Stdin:  pipeR,
+		Stdout: &nopCloser{stdout},
+		Stderr: &nopCloser{stderr},
+	}, started)
+	cancelTimeout()
+	t.Logf("Stdout: %s", stdout.String())
+	t.Logf("Stderr: %s", stderr.String())
+	require.NoError(t, err)
+	require.Equal(t, "hello", stdout.String())
+	require.Empty(t, stderr.String())
+
 	// first start pid1 in the background
 	eg := errgroup.Group{}
-	started := make(chan struct{})
+	started = make(chan struct{})
 	eg.Go(func() error {
 		return w.WorkerOpt.Executor.Run(ctx, id, root, nil, executor.ProcessInfo{
 			Meta: executor.Meta{
@@ -65,8 +97,8 @@ func TestWorkerExec(t *testing.T, w *base.Worker) {
 		t.Error("Unexpected timeout waiting for pid1 to start")
 	}
 
-	stdout := bytes.NewBuffer(nil)
-	stderr := bytes.NewBuffer(nil)
+	stdout.Reset()
+	stderr.Reset()
 
 	// verify pid1 is the sleep command via Exec
 	err = w.WorkerOpt.Executor.Exec(ctx, id, executor.ProcessInfo{
@@ -120,7 +152,7 @@ func TestWorkerExec(t *testing.T, w *base.Worker) {
 
 	err = eg.Wait()
 	// we expect pid1 to get canceled after we test the exec
-	require.EqualError(t, errors.Cause(err), context.Canceled.Error())
+	require.True(t, errors.Is(err, context.Canceled))
 
 	err = snap.Release(ctx)
 	require.NoError(t, err)
