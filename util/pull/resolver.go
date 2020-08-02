@@ -54,7 +54,7 @@ func EnsureManifestRequested(ctx context.Context, res remotes.Resolver, ref stri
 	if !ok {
 		return
 	}
-	if atomic.LoadInt64(&cr.counter) == 0 {
+	if atomic.LoadInt64(cr.counter) == 0 {
 		res.Resolve(ctx, ref)
 	}
 }
@@ -114,14 +114,14 @@ type resolverCache struct {
 }
 
 type cachedResolver struct {
-	counter int64
+	counter *int64
 	timeout time.Time
 	remotes.Resolver
 	auth *resolver.SessionAuthenticator
 }
 
 func (cr *cachedResolver) Resolve(ctx context.Context, ref string) (name string, desc ocispec.Descriptor, err error) {
-	atomic.AddInt64(&cr.counter, 1)
+	atomic.AddInt64(cr.counter, 1)
 	return cr.Resolver.Resolve(ctx, ref)
 }
 
@@ -138,6 +138,8 @@ func (r *resolverCache) Add(ref string, resolver remotes.Resolver, auth *resolve
 		return &cr
 	}
 
+	var counter int64
+	cr.counter = &counter
 	cr.Resolver = resolver
 	cr.auth = auth
 	r.m[ref] = cr
