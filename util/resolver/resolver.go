@@ -297,14 +297,12 @@ func newDefaultTransport() *http.Transport {
 		Proxy: http.ProxyFromEnvironment,
 		DialContext: (&net.Dialer{
 			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-			DualStack: true,
+			KeepAlive: 60 * time.Second,
 		}).DialContext,
 		MaxIdleConns:          10,
 		IdleConnTimeout:       30 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 5 * time.Second,
-		DisableKeepAlives:     true,
 		TLSNextProto:          make(map[string]func(authority string, c *tls.Conn) http.RoundTripper),
 	}
 }
