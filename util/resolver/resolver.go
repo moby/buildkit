@@ -1,6 +1,7 @@
 package resolver
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"io/ioutil"
@@ -18,6 +19,7 @@ import (
 	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/auth"
+	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/tracing"
 	"github.com/pkg/errors"
 )
@@ -236,23 +238,44 @@ func hostsWithCredentials(hosts docker.RegistryHosts, auth *SessionAuthenticator
 	if hosts == nil {
 		return nil
 	}
+	cache := map[string][]docker.RegistryHost{}
+	var mu sync.Mutex
+	var g flightcontrol.Group
 	return func(domain string) ([]docker.RegistryHost, error) {
-		res, err := hosts(domain)
+		v, err := g.Do(context.TODO(), domain, func(ctx context.Context) (interface{}, error) {
+			mu.Lock()
+			v, ok := cache[domain]
+			mu.Unlock()
+			if ok {
+				return v, nil
+			}
+			res, err := hosts(domain)
+			if err != nil {
+				return nil, err
+			}
+			if len(res) == 0 {
+				return nil, nil
+			}
+
+			a := docker.NewDockerAuthorizer(
+				docker.WithAuthClient(res[0].Client),
+				docker.WithAuthCreds(auth.credentials),
+			)
+			for i := range res {
+				res[i].Authorizer = a
+			}
+			mu.Lock()
+			cache[domain] = res
+			mu.Unlock()
+			return res, nil
+		})
 		if err != nil {
 			return nil, err
 		}
-		if len(res) == 0 {
+		if v == nil {
 			return nil, nil
 		}
-
-		a := docker.NewDockerAuthorizer(
-			docker.WithAuthClient(res[0].Client),
-			docker.WithAuthCreds(auth.credentials),
-		)
-		for i := range res {
-			res[i].Authorizer = a
-		}
-		return res, nil
+		return v.([]docker.RegistryHost), nil
 	}
 }
 
