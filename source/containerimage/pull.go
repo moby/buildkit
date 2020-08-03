@@ -113,7 +113,7 @@ func (is *Source) Resolve(ctx context.Context, id source.Identifier, sm *session
 
 	pullerUtil := &pull.Puller{
 		ContentStore: is.ContentStore,
-		Platform:     &platform,
+		Platform:     platform,
 		Src:          imageIdentifier.Reference,
 	}
 	p := &puller{
@@ -150,22 +150,18 @@ type puller struct {
 	*pull.Puller
 }
 
-func mainManifestKey(ctx context.Context, desc specs.Descriptor, platform *specs.Platform) (digest.Digest, error) {
-	keyStruct := struct {
+func mainManifestKey(ctx context.Context, desc specs.Descriptor, platform specs.Platform) (digest.Digest, error) {
+	dt, err := json.Marshal(struct {
 		Digest  digest.Digest
 		OS      string
 		Arch    string
 		Variant string `json:",omitempty"`
 	}{
-		Digest: desc.Digest,
-	}
-	if platform != nil {
-		keyStruct.OS = platform.OS
-		keyStruct.Arch = platform.Architecture
-		keyStruct.Variant = platform.Variant
-	}
-
-	dt, err := json.Marshal(keyStruct)
+		Digest:  desc.Digest,
+		OS:      platform.OS,
+		Arch:    platform.Architecture,
+		Variant: platform.Variant,
+	})
 	if err != nil {
 		return "", err
 	}
@@ -312,7 +308,7 @@ func (p *puller) Snapshot(ctx context.Context, g session.Group) (ir cache.Immuta
 		}
 	}
 
-	if current != nil && p.Platform != nil && p.Platform.OS == "windows" && runtime.GOOS != "windows" {
+	if current != nil && p.Platform.OS == "windows" && runtime.GOOS != "windows" {
 		if err := markRefLayerTypeWindows(current); err != nil {
 			return nil, err
 		}

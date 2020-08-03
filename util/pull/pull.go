@@ -24,7 +24,7 @@ type Puller struct {
 	ContentStore content.Store
 	Resolver     remotes.Resolver
 	Src          reference.Spec
-	Platform     *ocispec.Platform
+	Platform     ocispec.Platform
 
 	resolveOnce sync.Once
 	resolveErr  error
@@ -99,12 +99,7 @@ func (p *Puller) PullManifests(ctx context.Context) (*PulledManifests, error) {
 	// workaround for gcr, authentication not supported on blob endpoints
 	EnsureManifestRequested(ctx, p.Resolver, p.ref)
 
-	var platform platforms.MatchComparer
-	if p.Platform != nil {
-		platform = platforms.Only(*p.Platform)
-	} else {
-		platform = platforms.Default()
-	}
+	platform := platforms.Only(p.Platform)
 
 	var mu sync.Mutex // images.Dispatch calls handlers in parallel
 	metadata := make(map[digest.Digest]ocispec.Descriptor)
