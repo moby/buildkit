@@ -2,7 +2,6 @@ package containerdexecutor
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -302,6 +301,8 @@ func (w *containerdExecutor) Exec(ctx context.Context, id string, process execut
 }
 
 func (w *containerdExecutor) runProcess(ctx context.Context, p containerd.Process, resize <-chan executor.WinSize, started func()) error {
+	// Not using `ctx` here because the context passed only affects the statusCh which we
+	// don't want cancelled when ctx.Done is sent.  We want to process statusCh on cancel.
 	statusCh, err := p.Wait(context.Background())
 	if err != nil {
 		return err
@@ -317,6 +318,27 @@ func (w *containerdExecutor) runProcess(ctx context.Context, p containerd.Proces
 	}
 
 	p.CloseIO(ctx, containerd.WithStdinCloser)
+
+	// resize in separate go loop so it does not potentially block
+	// the container cancel/exit status loop below.
+	resizeCtx, resizeCancel := context.WithCancel(ctx)
+	defer resizeCancel()
+	go func() {
+		for {
+			select {
+			case <-resizeCtx.Done():
+				return
+			case size, ok := <-resize:
+				if !ok {
+					return // chan closed
+				}
+				err = p.Resize(resizeCtx, size.Cols, size.Rows)
+				if err != nil {
+					logrus.Warnf("Failed to resize %s: %s", p.ID(), err)
+				}
+			}
+		}
+	}()
 
 	var cancel func()
 	var killCtxDone <-chan struct{}
@@ -353,16 +375,7 @@ func (w *containerdExecutor) runProcess(ctx context.Context, p containerd.Proces
 			if cancel != nil {
 				cancel()
 			}
-			return fmt.Errorf("failed to kill process on cancel")
-		case size := <-resize:
-			ctxTimeout, cancelTimeout := context.WithTimeout(ctx, time.Second)
-			go func() {
-				defer cancelTimeout()
-				err = p.Resize(ctxTimeout, size.Cols, size.Rows)
-				if err != nil {
-					logrus.Warnf("Failed to resize %s: %s", p.ID(), err)
-				}
-			}()
+			return errors.Errorf("failed to kill process on cancel")
 		}
 	}
 }
