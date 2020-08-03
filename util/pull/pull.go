@@ -14,6 +14,7 @@ import (
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/imageutil"
+	"github.com/moby/buildkit/util/pull/pullprogress"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -120,7 +121,12 @@ func (p *Puller) PullManifests(ctx context.Context) (*PulledManifests, error) {
 
 	var schema1Converter *schema1.Converter
 	if p.desc.MediaType == images.MediaTypeDockerSchema1Manifest {
-		schema1Converter = schema1.NewConverter(p.ContentStore, fetcher)
+		// schema1 images are not lazy at this time, the converter will pull the whole image
+		// including layer blobs
+		schema1Converter = schema1.NewConverter(p.ContentStore, &pullprogress.FetcherWithProgress{
+			Fetcher: fetcher,
+			Manager: p.ContentStore,
+		})
 		handlers = append(handlers, schema1Converter)
 	} else {
 		// Get all the children for a descriptor
@@ -152,12 +158,12 @@ func (p *Puller) PullManifests(ctx context.Context) (*PulledManifests, error) {
 			return nil, err
 		}
 
-		handlers := []images.Handler{
+		// this just gathers metadata about the converted descriptors making up the image, does
+		// not fetch anything
+		if err := images.Dispatch(ctx, images.Handlers(
 			filterLayerBlobs(metadata, &mu),
 			images.FilterPlatforms(images.ChildrenHandler(p.ContentStore), platform),
-		}
-
-		if err := images.Dispatch(ctx, images.Handlers(handlers...), nil, p.desc); err != nil {
+		), nil, p.desc); err != nil {
 			return nil, err
 		}
 	}
@@ -202,6 +208,8 @@ func (p *Puller) ReaderAt(ctx context.Context, desc ocispec.Descriptor) (content
 	return contentutil.FromFetcher(fetcher).ReaderAt(ctx, desc)
 }
 
+// filterLayerBlobs causes layer blobs to be skipped for fetch, which is required to support lazy blobs.
+// It also stores the non-layer blobs (metadata) it encounters in the provided map.
 func filterLayerBlobs(metadata map[digest.Digest]ocispec.Descriptor, mu sync.Locker) images.HandlerFunc {
 	return func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
 		switch desc.MediaType {
