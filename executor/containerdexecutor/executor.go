@@ -172,6 +172,7 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root cache.Moun
 		return err
 	}
 	defer cleanup()
+	spec.Process.Terminal = meta.Tty
 
 	container, err := w.client.NewContainer(ctx, id,
 		containerd.WithSpec(spec),
@@ -195,59 +196,24 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root cache.Moun
 	if err != nil {
 		return err
 	}
+
 	defer func() {
 		if _, err1 := task.Delete(context.TODO()); err == nil && err1 != nil {
 			err = errors.Wrapf(err1, "failed to delete task %s", id)
 		}
 	}()
 
-	if err := task.Start(ctx); err != nil {
-		return err
-	}
-
-	if started != nil {
+	err = w.runProcess(ctx, task, process.Resize, func() {
 		startedOnce.Do(func() {
-			close(started)
+			if started != nil {
+				close(started)
+			}
 		})
-	}
-	statusCh, err := task.Wait(context.Background())
-	if err != nil {
-		return err
-	}
-
-	var cancel func()
-	ctxDone := ctx.Done()
-	for {
-		select {
-		case <-ctxDone:
-			ctxDone = nil
-			var killCtx context.Context
-			killCtx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
-			task.Kill(killCtx, syscall.SIGKILL)
-		case status := <-statusCh:
-			if cancel != nil {
-				cancel()
-			}
-			if status.ExitCode() != 0 {
-				var err error
-				if status.ExitCode() == containerd.UnknownExitStatus && status.Error() != nil {
-					err = errors.Wrap(status.Error(), "failure waiting for process")
-				} else {
-					err = errors.Errorf("process returned non-zero exit code: %d", status.ExitCode())
-				}
-				select {
-				case <-ctx.Done():
-					err = errors.Wrap(ctx.Err(), err.Error())
-				default:
-				}
-				return err
-			}
-			return nil
-		}
-	}
+	})
+	return err
 }
 
-func (w *containerdExecutor) Exec(ctx context.Context, id string, process executor.ProcessInfo) error {
+func (w *containerdExecutor) Exec(ctx context.Context, id string, process executor.ProcessInfo) (err error) {
 	meta := process.Meta
 
 	// first verify the container is running, if we get an error assume the container
@@ -329,5 +295,87 @@ func (w *containerdExecutor) Exec(ctx context.Context, id string, process execut
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	return taskProcess.Start(ctx)
+
+	err = w.runProcess(ctx, taskProcess, process.Resize, nil)
+	return err
+}
+
+func (w *containerdExecutor) runProcess(ctx context.Context, p containerd.Process, resize <-chan executor.WinSize, started func()) error {
+	// Not using `ctx` here because the context passed only affects the statusCh which we
+	// don't want cancelled when ctx.Done is sent.  We want to process statusCh on cancel.
+	statusCh, err := p.Wait(context.Background())
+	if err != nil {
+		return err
+	}
+
+	err = p.Start(ctx)
+	if err != nil {
+		return err
+	}
+
+	if started != nil {
+		started()
+	}
+
+	p.CloseIO(ctx, containerd.WithStdinCloser)
+
+	// resize in separate go loop so it does not potentially block
+	// the container cancel/exit status loop below.
+	resizeCtx, resizeCancel := context.WithCancel(ctx)
+	defer resizeCancel()
+	go func() {
+		for {
+			select {
+			case <-resizeCtx.Done():
+				return
+			case size, ok := <-resize:
+				if !ok {
+					return // chan closed
+				}
+				err = p.Resize(resizeCtx, size.Cols, size.Rows)
+				if err != nil {
+					logrus.Warnf("Failed to resize %s: %s", p.ID(), err)
+				}
+			}
+		}
+	}()
+
+	var cancel func()
+	var killCtxDone <-chan struct{}
+	ctxDone := ctx.Done()
+	for {
+		select {
+		case <-ctxDone:
+			ctxDone = nil
+			var killCtx context.Context
+			killCtx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
+			killCtxDone = killCtx.Done()
+			p.Kill(killCtx, syscall.SIGKILL)
+		case status := <-statusCh:
+			if cancel != nil {
+				cancel()
+			}
+			if status.ExitCode() != 0 {
+				exitErr := &executor.ExitError{
+					ExitCode: status.ExitCode(),
+					Err:      status.Error(),
+				}
+				if status.ExitCode() == containerd.UnknownExitStatus && status.Error() != nil {
+					exitErr.Err = errors.Wrap(status.Error(), "failure waiting for process")
+				}
+				select {
+				case <-ctx.Done():
+					exitErr.Err = errors.Wrap(ctx.Err(), exitErr.Error())
+				default:
+				}
+				return exitErr
+			}
+			return nil
+		case <-killCtxDone:
+			if cancel != nil {
+				cancel()
+			}
+			return errors.Errorf("failed to kill process on cancel")
+		}
+	}
 }
