@@ -13,6 +13,7 @@ import (
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/leaseutil"
+	"github.com/moby/buildkit/util/pull/pullprogress"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -152,9 +153,9 @@ func (p lazyRefProvider) Unlazy(ctx context.Context) error {
 		// For now, just pull down the whole content and then return a ReaderAt from the local content
 		// store. If efficient partial reads are desired in the future, something more like a "tee"
 		// that caches remote partial reads to a local store may need to replace this.
-		err := contentutil.Copy(ctx, p.ref.cm.ContentStore, &providerWithProgress{
-			provider: p.dh.Provider,
-			manager:  p.ref.cm.ContentStore,
+		err := contentutil.Copy(ctx, p.ref.cm.ContentStore, &pullprogress.ProviderWithProgress{
+			Provider: p.dh.Provider,
+			Manager:  p.ref.cm.ContentStore,
 		}, p.desc)
 		if err != nil {
 			return nil, err
