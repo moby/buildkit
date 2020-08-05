@@ -58,26 +58,46 @@ func (sr *immutableRef) GetRemote(ctx context.Context, createIfNeeded bool, comp
 			}
 		}
 
-		dh := sr.descHandlers[desc.Digest]
+		// update distribution source annotation for lazy-refs (non-lazy refs
+		// will already have their dsl stored in the content store, which is
+		// used by the push handlers)
+		if isLazy, err := ref.isLazy(ctx); err != nil {
+			return nil, err
+		} else if isLazy {
+			imageRefs := getImageRefs(ref.md)
+			for _, imageRef := range imageRefs {
+				refspec, err := reference.Parse(imageRef)
+				if err != nil {
+					return nil, err
+				}
 
-		// update distribution source annotation
-		if dh != nil && dh.ImageRef != "" {
-			refspec, err := reference.Parse(dh.ImageRef)
-			if err != nil {
-				return nil, err
-			}
+				u, err := url.Parse("dummy://" + refspec.Locator)
+				if err != nil {
+					return nil, err
+				}
 
-			u, err := url.Parse("dummy://" + refspec.Locator)
-			if err != nil {
-				return nil, err
-			}
+				source, repo := u.Hostname(), strings.TrimPrefix(u.Path, "/")
+				if desc.Annotations == nil {
+					desc.Annotations = make(map[string]string)
+				}
+				dslKey := fmt.Sprintf("%s.%s", "containerd.io/distribution.source", source)
 
-			source, repo := u.Hostname(), strings.TrimPrefix(u.Path, "/")
-			if desc.Annotations == nil {
-				desc.Annotations = make(map[string]string)
+				var existingRepos []string
+				if existings, ok := desc.Annotations[dslKey]; ok {
+					existingRepos = strings.Split(existings, ",")
+				}
+				addNewRepo := true
+				for _, existing := range existingRepos {
+					if existing == repo {
+						addNewRepo = false
+						break
+					}
+				}
+				if addNewRepo {
+					existingRepos = append(existingRepos, repo)
+				}
+				desc.Annotations[dslKey] = strings.Join(existingRepos, ",")
 			}
-			dslKey := fmt.Sprintf("%s.%s", "containerd.io/distribution.source", source)
-			desc.Annotations[dslKey] = repo
 		}
 
 		remote.Descriptors = append(remote.Descriptors, desc)
@@ -161,9 +181,11 @@ func (p lazyRefProvider) Unlazy(ctx context.Context) error {
 			return nil, err
 		}
 
-		if p.dh.ImageRef != "" {
+		if imageRefs := getImageRefs(p.ref.md); len(imageRefs) > 0 {
+			// just use the first image ref, it's arbitrary
+			imageRef := imageRefs[0]
 			if GetDescription(p.ref.md) == "" {
-				queueDescription(p.ref.md, "pulled from "+p.dh.ImageRef)
+				queueDescription(p.ref.md, "pulled from "+imageRef)
 				err := p.ref.md.Commit()
 				if err != nil {
 					return nil, err

@@ -10,7 +10,6 @@ import (
 
 type DescHandler struct {
 	Provider content.Provider
-	ImageRef string
 	Progress progress.Controller
 }
 
