@@ -108,3 +108,18 @@ func (g *gatewayClientForBuild) Inputs(ctx context.Context, in *gatewayapi.Input
 	ctx = buildid.AppendToOutgoingContext(ctx, g.buildID)
 	return g.gateway.Inputs(ctx, in, opts...)
 }
+
+func (g *gatewayClientForBuild) NewContainer(ctx context.Context, in *gatewayapi.NewContainerRequest, opts ...grpc.CallOption) (*gatewayapi.NewContainerResponse, error) {
+	ctx = buildid.AppendToOutgoingContext(ctx, g.buildID)
+	return g.gateway.NewContainer(ctx, in, opts...)
+}
+
+func (g *gatewayClientForBuild) ReleaseContainer(ctx context.Context, in *gatewayapi.ReleaseContainerRequest, opts ...grpc.CallOption) (*gatewayapi.ReleaseContainerResponse, error) {
+	ctx = buildid.AppendToOutgoingContext(ctx, g.buildID)
+	return g.gateway.ReleaseContainer(ctx, in, opts...)
+}
+
+func (g *gatewayClientForBuild) ExecProcess(ctx context.Context, opts ...grpc.CallOption) (gatewayapi.LLBBridge_ExecProcessClient, error) {
+	ctx = buildid.AppendToOutgoingContext(ctx, g.buildID)
+	return g.gateway.ExecProcess(ctx, opts...)
+}
