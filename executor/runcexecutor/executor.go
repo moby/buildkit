@@ -21,6 +21,7 @@ import (
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/executor/oci"
 	"github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/network"
 	rootlessspecconv "github.com/moby/buildkit/util/rootless/specconv"
@@ -332,7 +333,7 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable,
 	close(ended)
 
 	if status != 0 || err != nil {
-		exitErr := &executor.ExitError{
+		exitErr := &errdefs.ExitError{
 			ExitCode: uint32(status),
 			Err:      err,
 		}
@@ -418,7 +419,7 @@ func (w *runcExecutor) Exec(ctx context.Context, id string, process executor.Pro
 
 	var exitError *exec.ExitError
 	if errors.As(err, &exitError) {
-		err = &executor.ExitError{
+		err = &errdefs.ExitError{
 			ExitCode: uint32(exitError.ExitCode()),
 			Err:      err,
 		}
