@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/containerd/containerd"
 	"github.com/docker/distribution/reference"
 	gogotypes "github.com/gogo/protobuf/types"
 	"github.com/golang/protobuf/ptypes/any"
@@ -23,20 +24,25 @@ import (
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/frontend"
+	gwclient "github.com/moby/buildkit/frontend/gateway/client"
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/solver/errdefs"
 	opspb "github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/grpcerrors"
+	"github.com/moby/buildkit/util/stack"
 	"github.com/moby/buildkit/util/tracing"
 	"github.com/moby/buildkit/worker"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/http2"
+	"golang.org/x/sync/errgroup"
 	spb "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
@@ -316,6 +322,7 @@ func newBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridg
 		workers:   workers,
 		inputs:    inputs,
 		sid:       sid,
+		ctrs:      map[string]Container{},
 	}
 	return lbf
 }
@@ -416,6 +423,8 @@ type llbBridgeForwarder struct {
 	isErrServerClosed bool
 	sid               string
 	*pipe
+	ctrs   map[string]Container
+	ctrsMu sync.Mutex
 }
 
 func (lbf *llbBridgeForwarder) ResolveImageConfig(ctx context.Context, req *pb.ResolveImageConfigRequest) (*pb.ResolveImageConfigResponse, error) {
@@ -736,6 +745,406 @@ func (lbf *llbBridgeForwarder) Inputs(ctx context.Context, in *pb.InputsRequest)
 	return &pb.InputsResponse{
 		Definitions: lbf.inputs,
 	}, nil
+}
+
+func (lbf *llbBridgeForwarder) NewContainer(ctx context.Context, in *pb.NewContainerRequest) (_ *pb.NewContainerResponse, err error) {
+	logrus.Debugf("|<--- NewContainer %s", in.ContainerID)
+	ctrReq := NewContainerRequest{
+		ContainerID:  in.ContainerID,
+		NetMode:      in.Network,
+		SecurityMode: in.Security,
+	}
+
+	for _, m := range in.Mounts {
+		refProxy, err := lbf.convertRef(m.ResultID)
+		if err != nil {
+			return nil, errors.Wrapf(err, "Failed to find ref %s for %q mount", m.ResultID, m.Dest)
+		}
+		ctrReq.Mounts = append(ctrReq.Mounts, Mount{
+			Dest:      m.Dest,
+			Selector:  m.Selector,
+			Readonly:  m.Readonly,
+			MountType: m.MountType,
+			RefProxy:  refProxy,
+		})
+	}
+
+	// Not using `ctx` here because it will get cancelled as soon as NewContainer returns
+	// and we want the context to live for the duration of the container.
+	ctr, err := NewContainer(context.Background(), lbf.llbBridge, ctrReq)
+	if err != nil {
+		return nil, stack.Enable(err)
+	}
+
+	lbf.ctrsMu.Lock()
+	// ensure we are not clobbering a dup container id request
+	if _, ok := lbf.ctrs[in.ContainerID]; ok {
+		lbf.ctrsMu.Unlock()
+		ctr.Release(ctx)
+		return nil, stack.Enable(status.Errorf(codes.AlreadyExists, "Container %s already exists", in.ContainerID))
+	}
+	lbf.ctrs[in.ContainerID] = ctr
+	lbf.ctrsMu.Unlock()
+	return &pb.NewContainerResponse{}, nil
+}
+
+func (lbf *llbBridgeForwarder) ReleaseContainer(ctx context.Context, in *pb.ReleaseContainerRequest) (*pb.ReleaseContainerResponse, error) {
+	logrus.Debugf("|<--- ReleaseContainer %s", in.ContainerID)
+	lbf.ctrsMu.Lock()
+	ctr, ok := lbf.ctrs[in.ContainerID]
+	delete(lbf.ctrs, in.ContainerID)
+	lbf.ctrsMu.Unlock()
+	if !ok {
+		return nil, errors.Errorf("Container details for %s not found", in.ContainerID)
+	}
+	err := ctr.Release(ctx)
+	return &pb.ReleaseContainerResponse{}, stack.Enable(err)
+}
+
+type processIO struct {
+	id       string
+	mu       sync.Mutex
+	resize   func(context.Context, gwclient.WinSize) error
+	done     chan struct{}
+	doneOnce sync.Once
+	// these track the process side of the io pipe for
+	// read (fd=0) and write (fd=1, fd=2)
+	processReaders map[uint32]io.ReadCloser
+	processWriters map[uint32]io.WriteCloser
+	// these track the server side of the io pipe, so
+	// when we receive an EOF over grpc, we will close
+	// this end
+	serverWriters map[uint32]io.WriteCloser
+	serverReaders map[uint32]io.ReadCloser
+}
+
+func newProcessIO(id string, openFds []uint32) *processIO {
+	pio := &processIO{
+		id:             id,
+		processReaders: map[uint32]io.ReadCloser{},
+		processWriters: map[uint32]io.WriteCloser{},
+		serverReaders:  map[uint32]io.ReadCloser{},
+		serverWriters:  map[uint32]io.WriteCloser{},
+		done:           make(chan struct{}),
+	}
+
+	for _, fd := range openFds {
+		// TODO do we know which way to pipe each fd?  For now assume fd0 is for
+		// reading, and the rest are for writing
+		r, w := io.Pipe()
+		if fd == 0 {
+			pio.processReaders[fd] = r
+			pio.serverWriters[fd] = w
+		} else {
+			pio.processWriters[fd] = w
+			pio.serverReaders[fd] = r
+		}
+	}
+
+	return pio
+}
+
+func (pio *processIO) Close() (err error) {
+	pio.mu.Lock()
+	defer pio.mu.Unlock()
+	for fd, r := range pio.processReaders {
+		delete(pio.processReaders, fd)
+		err1 := r.Close()
+		if err1 != nil && err == nil {
+			err = stack.Enable(err1)
+		}
+	}
+	for fd, w := range pio.serverReaders {
+		delete(pio.serverReaders, fd)
+		err1 := w.Close()
+		if err1 != nil && err == nil {
+			err = stack.Enable(err1)
+		}
+	}
+	pio.Done()
+	return err
+}
+
+func (pio *processIO) Done() {
+	stillOpen := len(pio.processReaders) + len(pio.processWriters) + len(pio.serverReaders) + len(pio.serverWriters)
+	if stillOpen == 0 {
+		pio.doneOnce.Do(func() {
+			close(pio.done)
+		})
+	}
+}
+
+func (pio *processIO) Write(f *pb.FdMessage) (err error) {
+	pio.mu.Lock()
+	writer := pio.serverWriters[f.Fd]
+	pio.mu.Unlock()
+	if writer == nil {
+		return status.Errorf(codes.OutOfRange, "fd %d unavailable to write", f.Fd)
+	}
+	defer func() {
+		if err != nil || f.EOF {
+			writer.Close()
+			pio.mu.Lock()
+			defer pio.mu.Unlock()
+			delete(pio.serverWriters, f.Fd)
+			pio.Done()
+		}
+	}()
+	if len(f.Data) > 0 {
+		_, err = writer.Write(f.Data)
+		return stack.Enable(err)
+	}
+	return nil
+}
+
+type outputWriter struct {
+	stream    pb.LLBBridge_ExecProcessServer
+	fd        uint32
+	processID string
+}
+
+func (w *outputWriter) Write(msg []byte) (int, error) {
+	logrus.Debugf("|---> File Message %s, fd=%d, %d bytes", w.processID, w.fd, len(msg))
+	err := w.stream.Send(&pb.ExecMessage{
+		ProcessID: w.processID,
+		Input: &pb.ExecMessage_File{
+			File: &pb.FdMessage{
+				Fd:   w.fd,
+				Data: msg,
+			},
+		},
+	})
+	return len(msg), stack.Enable(err)
+}
+
+func (lbf *llbBridgeForwarder) ExecProcess(srv pb.LLBBridge_ExecProcessServer) error {
+	eg, ctx := errgroup.WithContext(srv.Context())
+
+	msgs := make(chan *pb.ExecMessage)
+
+	eg.Go(func() error {
+		defer close(msgs)
+		for {
+			execMsg, err := srv.Recv()
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					return nil
+				}
+				return stack.Enable(err)
+			}
+			switch m := execMsg.GetInput().(type) {
+			case *pb.ExecMessage_Init:
+				logrus.Debugf("|<--- Init Message %s", execMsg.ProcessID)
+			case *pb.ExecMessage_File:
+				if m.File.EOF {
+					logrus.Debugf("|<--- File Message %s, fd=%d, EOF", execMsg.ProcessID, m.File.Fd)
+				} else {
+					logrus.Debugf("|<--- File Message %s, fd=%d, %d bytes", execMsg.ProcessID, m.File.Fd, len(m.File.Data))
+				}
+			case *pb.ExecMessage_Resize:
+				logrus.Debugf("|<--- Resize Message %s", execMsg.ProcessID)
+			}
+			select {
+			case <-ctx.Done():
+			case msgs <- execMsg:
+			}
+		}
+	})
+
+	eg.Go(func() error {
+		pios := make(map[string]*processIO)
+		// close any stray pios on exit to make sure
+		// all the associated resources get cleaned up
+		defer func() {
+			for _, pio := range pios {
+				pio.Close()
+			}
+		}()
+
+		for {
+			var execMsg *pb.ExecMessage
+			select {
+			case <-ctx.Done():
+				return nil
+			case execMsg = <-msgs:
+			}
+			if execMsg == nil {
+				return nil
+			}
+
+			pid := execMsg.ProcessID
+			if pid == "" {
+				return stack.Enable(status.Errorf(codes.InvalidArgument, "ProcessID required"))
+			}
+
+			pio, pioFound := pios[pid]
+
+			if data := execMsg.GetFile(); data != nil {
+				if !pioFound {
+					return stack.Enable(status.Errorf(codes.NotFound, "IO for process %q not found", pid))
+				}
+				err := pio.Write(data)
+				if err != nil {
+					return stack.Enable(err)
+				}
+			} else if resize := execMsg.GetResize(); resize != nil {
+				if !pioFound {
+					return stack.Enable(status.Errorf(codes.NotFound, "IO for process %q not found", pid))
+				}
+				pio.resize(ctx, gwclient.WinSize{
+					Cols: resize.Cols,
+					Rows: resize.Rows,
+				})
+			} else if init := execMsg.GetInit(); init != nil {
+				if pioFound {
+					return stack.Enable(status.Errorf(codes.AlreadyExists, "Process %s already exists", pid))
+				}
+				id := init.ContainerID
+				lbf.ctrsMu.Lock()
+				ctr, ok := lbf.ctrs[id]
+				lbf.ctrsMu.Unlock()
+				if !ok {
+					return stack.Enable(status.Errorf(codes.NotFound, "container %q previously released or not created", id))
+				}
+
+				initCtx, initCancel := context.WithCancel(context.Background())
+				defer initCancel()
+
+				pio := newProcessIO(pid, init.Fds)
+				pios[pid] = pio
+
+				proc, err := ctr.Start(initCtx, gwclient.StartRequest{
+					Args:   init.Meta.Args,
+					Env:    init.Meta.Env,
+					User:   init.Meta.User,
+					Cwd:    init.Meta.Cwd,
+					Tty:    init.Tty,
+					Stdin:  pio.processReaders[0],
+					Stdout: pio.processWriters[1],
+					Stderr: pio.processWriters[2],
+				})
+				if err != nil {
+					return stack.Enable(err)
+				}
+				pio.resize = proc.Resize
+
+				// ensure process has been canceled if the container is released
+				ctr.OnRelease(func() error {
+					initCancel()
+					return nil
+				})
+
+				eg.Go(func() error {
+					<-pio.done
+					logrus.Debugf("|---> Done Message %s", pid)
+					err := srv.Send(&pb.ExecMessage{
+						ProcessID: pid,
+						Input: &pb.ExecMessage_Done{
+							Done: &pb.DoneMessage{},
+						},
+					})
+					return stack.Enable(err)
+				})
+
+				eg.Go(func() error {
+					defer func() {
+						pio.Close()
+					}()
+					err := proc.Wait()
+
+					var status uint32
+					var exitError *errdefs.ExitError
+					var errMsg string
+					if err != nil {
+						status = containerd.UnknownExitStatus
+						errMsg = err.Error()
+					}
+					if errors.As(err, &exitError) {
+						status = exitError.ExitCode
+					}
+					logrus.Debugf("|---> Exit Message %s, code=%d, error=%s", pid, status, errMsg)
+					sendErr := srv.Send(&pb.ExecMessage{
+						ProcessID: pid,
+						Input: &pb.ExecMessage_Exit{
+							Exit: &pb.ExitMessage{
+								Code:  status,
+								Error: errMsg,
+							},
+						},
+					})
+
+					if sendErr != nil && err != nil {
+						return errors.Wrap(sendErr, err.Error())
+					} else if sendErr != nil {
+						return stack.Enable(sendErr)
+					}
+
+					if err != nil && status != 0 {
+						// this was a container exit error which is "normal" so
+						// don't return this error from the errgroup
+						return nil
+					}
+					return stack.Enable(err)
+				})
+
+				logrus.Debugf("|---> Started Message %s", pid)
+				err = srv.Send(&pb.ExecMessage{
+					ProcessID: pid,
+					Input: &pb.ExecMessage_Started{
+						Started: &pb.StartedMessage{},
+					},
+				})
+				if err != nil {
+					return stack.Enable(err)
+				}
+
+				// start sending Fd output back to client, this is done after
+				// StartedMessage so that Fd output will not potentially arrive
+				// to the client before "Started" as the container starts up.
+				for fd, file := range pio.serverReaders {
+					fd, file := fd, file
+					eg.Go(func() error {
+						defer func() {
+							file.Close()
+							pio.mu.Lock()
+							defer pio.mu.Unlock()
+							w := pio.processWriters[fd]
+							if w != nil {
+								w.Close()
+							}
+							delete(pio.processWriters, fd)
+							pio.Done()
+						}()
+						dest := &outputWriter{
+							stream:    srv,
+							fd:        uint32(fd),
+							processID: pid,
+						}
+						_, err := io.Copy(dest, file)
+						// ignore ErrClosedPipe, it is EOF for our usage.
+						if err != nil && !errors.Is(err, io.ErrClosedPipe) {
+							return stack.Enable(err)
+						}
+						// no error so must be EOF
+						logrus.Debugf("|---> File Message %s, fd=%d, EOF", pid, fd)
+						err = srv.Send(&pb.ExecMessage{
+							ProcessID: pid,
+							Input: &pb.ExecMessage_File{
+								File: &pb.FdMessage{
+									Fd:  uint32(fd),
+									EOF: true,
+								},
+							},
+						})
+						return stack.Enable(err)
+					})
+				}
+			}
+		}
+	})
+
+	err := eg.Wait()
+	return stack.Enable(err)
 }
 
 func (lbf *llbBridgeForwarder) convertRef(id string) (solver.ResultProxy, error) {

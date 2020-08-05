@@ -9,8 +9,10 @@ import (
 	clienttypes "github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend"
+	"github.com/moby/buildkit/frontend/gateway"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	gwpb "github.com/moby/buildkit/frontend/gateway/pb"
+	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/solver"
 	opspb "github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
@@ -147,6 +149,34 @@ func (c *bridgeClient) discard(err error) {
 			}
 		}
 	}
+}
+
+func (c *bridgeClient) NewContainer(ctx context.Context, req client.NewContainerRequest) (client.Container, error) {
+	ctrReq := gateway.NewContainerRequest{
+		ContainerID:  identity.NewID(),
+		NetMode:      req.NetMode,
+		SecurityMode: req.SecurityMode,
+	}
+
+	for _, m := range req.Mounts {
+		refProxy, ok := m.Ref.(*ref)
+		if !ok {
+			return nil, errors.Errorf("Unexpected Ref type: %T", m.Ref)
+		}
+		ctrReq.Mounts = append(ctrReq.Mounts, gateway.Mount{
+			Dest:      m.Dest,
+			Selector:  m.Selector,
+			Readonly:  m.Readonly,
+			MountType: m.MountType,
+			RefProxy:  refProxy,
+		})
+	}
+
+	ctr, err := gateway.NewContainer(ctx, c, ctrReq)
+	if err != nil {
+		return nil, err
+	}
+	return ctr, nil
 }
 
 type ref struct {
