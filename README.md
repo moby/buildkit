@@ -62,6 +62,7 @@ You don't need to read this document unless you want to use the full-featured st
 - [Expose BuildKit as a TCP service](#expose-buildkit-as-a-tcp-service)
   - [Load balancing](#load-balancing)
 - [Containerizing BuildKit](#containerizing-buildkit)
+  - [Podman](#podman)
   - [Kubernetes](#kubernetes)
   - [Daemonless](#daemonless)
 - [Opentracing support](#opentracing-support)
@@ -415,6 +416,16 @@ docker run -d --name buildkitd --privileged moby/buildkit:latest
 export BUILDKIT_HOST=docker-container://buildkitd
 buildctl build --help
 ```
+
+### Podman
+To connect to a BuildKit daemon running in a Podman container, use `podman-container://` instead of `docker-container://` .
+
+```bash
+podman run -d --name buildkitd --privileged moby/buildkit:latest
+buildctl --addr=podman-container://buildkitd build --frontend dockerfile.v0 --local context=. --local dockerfile=. --output type=oci | podman load foo
+```
+
+`sudo` is not required.
 
 ### Kubernetes
 
