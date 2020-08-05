@@ -1,7 +1,6 @@
 package resolver
 
 import (
-	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"io/ioutil"
@@ -14,12 +13,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/session"
-	"github.com/moby/buildkit/session/auth"
-	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/tracing"
 	"github.com/pkg/errors"
 )
@@ -187,96 +183,6 @@ type credentials struct {
 	user    string
 	secret  string
 	created time.Time
-}
-
-func NewSessionAuthenticator(sm *session.Manager, g session.Group) *SessionAuthenticator {
-	return &SessionAuthenticator{sm: sm, groups: []session.Group{g}, cache: map[string]credentials{}}
-}
-
-func (a *SessionAuthenticator) credentials(h string) (string, string, error) {
-	const credentialsTimeout = time.Minute
-
-	a.cacheMu.RLock()
-	c, ok := a.cache[h]
-	if ok && time.Since(c.created) < credentialsTimeout {
-		a.cacheMu.RUnlock()
-		return c.user, c.secret, nil
-	}
-	a.cacheMu.RUnlock()
-
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	var err error
-	for i := len(a.groups) - 1; i >= 0; i-- {
-		var user, secret string
-		user, secret, err = auth.CredentialsFunc(a.sm, a.groups[i])(h)
-		if err != nil {
-			continue
-		}
-		a.cacheMu.Lock()
-		a.cache[h] = credentials{user: user, secret: secret, created: time.Now()}
-		a.cacheMu.Unlock()
-		return user, secret, nil
-	}
-	return "", "", err
-}
-
-func (a *SessionAuthenticator) AddSession(g session.Group) {
-	a.mu.Lock()
-	a.groups = append(a.groups, g)
-	a.mu.Unlock()
-}
-
-func New(hosts docker.RegistryHosts, auth *SessionAuthenticator) remotes.Resolver {
-	return docker.NewResolver(docker.ResolverOptions{
-		Hosts: hostsWithCredentials(hosts, auth),
-	})
-}
-
-func hostsWithCredentials(hosts docker.RegistryHosts, auth *SessionAuthenticator) docker.RegistryHosts {
-	if hosts == nil {
-		return nil
-	}
-	cache := map[string][]docker.RegistryHost{}
-	var mu sync.Mutex
-	var g flightcontrol.Group
-	return func(domain string) ([]docker.RegistryHost, error) {
-		v, err := g.Do(context.TODO(), domain, func(ctx context.Context) (interface{}, error) {
-			mu.Lock()
-			v, ok := cache[domain]
-			mu.Unlock()
-			if ok {
-				return v, nil
-			}
-			res, err := hosts(domain)
-			if err != nil {
-				return nil, err
-			}
-			if len(res) == 0 {
-				return nil, nil
-			}
-
-			a := docker.NewDockerAuthorizer(
-				docker.WithAuthClient(res[0].Client),
-				docker.WithAuthCreds(auth.credentials),
-			)
-			for i := range res {
-				res[i].Authorizer = a
-			}
-			mu.Lock()
-			cache[domain] = res
-			mu.Unlock()
-			return res, nil
-		})
-		if err != nil {
-			return nil, err
-		}
-		if v == nil {
-			return nil, nil
-		}
-		return v.([]docker.RegistryHost), nil
-	}
 }
 
 func newDefaultClient() *http.Client {
