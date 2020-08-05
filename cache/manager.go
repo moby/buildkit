@@ -157,6 +157,9 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispec.Descriptor, 
 		if p != nil {
 			releaseParent = true
 		}
+		if err := setImageRefMetadata(ref, opts...); err != nil {
+			return nil, errors.Wrapf(err, "failed to append image ref metadata to ref %s", ref.ID())
+		}
 		return ref, nil
 	}
 
@@ -232,6 +235,10 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispec.Descriptor, 
 
 	if err := initializeMetadata(rec, parentID, opts...); err != nil {
 		return nil, err
+	}
+
+	if err := setImageRefMetadata(rec, opts...); err != nil {
+		return nil, errors.Wrapf(err, "failed to append image ref metadata to ref %s", rec.ID())
 	}
 
 	queueDiffID(rec.md, diffID.String())
@@ -429,6 +436,10 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOpt
 		return nil, err
 	}
 
+	if err := setImageRefMetadata(rec, opts...); err != nil {
+		return nil, errors.Wrapf(err, "failed to append image ref metadata to ref %s", rec.ID())
+	}
+
 	cm.records[id] = rec
 	if err := checkLazyProviders(rec); err != nil {
 		return nil, err
@@ -513,6 +524,10 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, opts ...RefOpti
 
 	if err := initializeMetadata(rec, parentID, opts...); err != nil {
 		return nil, err
+	}
+
+	if err := setImageRefMetadata(rec, opts...); err != nil {
+		return nil, errors.Wrapf(err, "failed to append image ref metadata to ref %s", rec.ID())
 	}
 
 	cm.mu.Lock()
@@ -1002,6 +1017,31 @@ func WithCreationTime(tm time.Time) RefOption {
 	return func(m withMetadata) error {
 		return queueCreatedAt(m.Metadata(), tm)
 	}
+}
+
+// Need a separate type for imageRef because it needs to be called outside
+// initializeMetadata while still being a RefOption, so wrapping it in a
+// different type ensures initializeMetadata won't catch it too and duplicate
+// setting the metadata.
+type imageRefOption func(m withMetadata) error
+
+// WithImageRef appends the given imageRef to the cache ref's metadata
+func WithImageRef(imageRef string) RefOption {
+	return imageRefOption(func(m withMetadata) error {
+		return appendImageRef(m.Metadata(), imageRef)
+	})
+}
+
+func setImageRefMetadata(m withMetadata, opts ...RefOption) error {
+	md := m.Metadata()
+	for _, opt := range opts {
+		if fn, ok := opt.(imageRefOption); ok {
+			if err := fn(m); err != nil {
+				return err
+			}
+		}
+	}
+	return md.Commit()
 }
 
 func initializeMetadata(m withMetadata, parent string, opts ...RefOption) error {
