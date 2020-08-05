@@ -96,9 +96,6 @@ func (p *Puller) PullManifests(ctx context.Context) (*PulledManifests, error) {
 		return nil, err
 	}
 
-	// workaround for gcr, authentication not supported on blob endpoints
-	EnsureManifestRequested(ctx, p.Resolver, p.ref)
-
 	platform := platforms.Only(p.Platform)
 
 	var mu sync.Mutex // images.Dispatch calls handlers in parallel

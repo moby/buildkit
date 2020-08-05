@@ -81,13 +81,8 @@ func (is *Source) ResolveImageConfig(ctx context.Context, ref string, opt llb.Re
 	}
 
 	res, err := is.g.Do(ctx, key, func(ctx context.Context) (interface{}, error) {
-		dgst, dt, err := imageutil.Config(ctx, ref, pull.NewResolver(g, pull.ResolverOpt{
-			Hosts:      is.RegistryHosts,
-			Auth:       resolver.NewSessionAuthenticator(sm, g),
-			ImageStore: is.ImageStore,
-			Mode:       rm,
-			Ref:        ref,
-		}), is.ContentStore, is.LeaseManager, opt.Platform)
+		res := resolver.DefaultPool.GetResolver(is.RegistryHosts, ref, "pull", sm, g).WithImageStore(is.ImageStore, rm)
+		dgst, dt, err := imageutil.Config(ctx, ref, res, is.ContentStore, is.LeaseManager, opt.Platform)
 		if err != nil {
 			return nil, err
 		}
@@ -117,28 +112,30 @@ func (is *Source) Resolve(ctx context.Context, id source.Identifier, sm *session
 		Src:          imageIdentifier.Reference,
 	}
 	p := &puller{
-		CacheAccessor: is.CacheAccessor,
-		LeaseManager:  is.LeaseManager,
-		Puller:        pullerUtil,
-		id:            imageIdentifier,
-		ResolverOpt: pull.ResolverOpt{
-			Hosts:      is.RegistryHosts,
-			Auth:       resolver.NewSessionAuthenticator(sm, nil),
-			ImageStore: is.ImageStore,
-			Mode:       imageIdentifier.ResolveMode,
-			Ref:        imageIdentifier.Reference.String(),
-		},
-		vtx: vtx,
+		CacheAccessor:  is.CacheAccessor,
+		LeaseManager:   is.LeaseManager,
+		Puller:         pullerUtil,
+		id:             imageIdentifier,
+		RegistryHosts:  is.RegistryHosts,
+		ImageStore:     is.ImageStore,
+		Mode:           imageIdentifier.ResolveMode,
+		Ref:            imageIdentifier.Reference.String(),
+		SessionManager: sm,
+		vtx:            vtx,
 	}
 	return p, nil
 }
 
 type puller struct {
-	CacheAccessor cache.Accessor
-	LeaseManager  leases.Manager
-	ResolverOpt   pull.ResolverOpt
-	id            *source.ImageIdentifier
-	vtx           solver.Vertex
+	CacheAccessor  cache.Accessor
+	LeaseManager   leases.Manager
+	RegistryHosts  docker.RegistryHosts
+	ImageStore     images.Store
+	Mode           source.ResolveMode
+	Ref            string
+	SessionManager *session.Manager
+	id             *source.ImageIdentifier
+	vtx            solver.Vertex
 
 	cacheKeyOnce     sync.Once
 	cacheKeyErr      error
@@ -169,11 +166,7 @@ func mainManifestKey(ctx context.Context, desc specs.Descriptor, platform specs.
 }
 
 func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cacheKey string, cacheOpts solver.CacheOpts, cacheDone bool, err error) {
-	if p.Puller.Resolver == nil {
-		p.Puller.Resolver = pull.NewResolver(g, p.ResolverOpt)
-	} else {
-		p.ResolverOpt.Auth.AddSession(g)
-	}
+	p.Puller.Resolver = resolver.DefaultPool.GetResolver(p.RegistryHosts, p.Ref, "pull", p.SessionManager, g).WithImageStore(p.ImageStore, p.id.ResolveMode)
 
 	p.cacheKeyOnce.Do(func() {
 		ctx, done, err := leaseutil.WithLease(ctx, p.LeaseManager, leases.WithExpiration(5*time.Minute), leaseutil.MakeTemporary)
@@ -253,11 +246,7 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 }
 
 func (p *puller) Snapshot(ctx context.Context, g session.Group) (ir cache.ImmutableRef, err error) {
-	if p.Puller.Resolver == nil {
-		p.Puller.Resolver = pull.NewResolver(g, p.ResolverOpt)
-	} else {
-		p.ResolverOpt.Auth.AddSession(g)
-	}
+	p.Puller.Resolver = resolver.DefaultPool.GetResolver(p.RegistryHosts, p.Ref, "pull", p.SessionManager, g).WithImageStore(p.ImageStore, p.id.ResolveMode)
 
 	if len(p.manifest.Remote.Descriptors) == 0 {
 		return nil, nil

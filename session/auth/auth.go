@@ -8,10 +8,10 @@ import (
 	"google.golang.org/grpc/codes"
 )
 
-func CredentialsFunc(sm *session.Manager, g session.Group) func(string) (string, string, error) {
-	return func(host string) (string, string, error) {
-		var user, secret string
-		err := sm.Any(context.TODO(), g, func(ctx context.Context, _ string, c session.Caller) error {
+func CredentialsFunc(sm *session.Manager, g session.Group) func(string) (session, username, secret string, err error) {
+	return func(host string) (string, string, string, error) {
+		var sessionID, user, secret string
+		err := sm.Any(context.TODO(), g, func(ctx context.Context, id string, c session.Caller) error {
 			client := NewAuthClient(c.Conn())
 
 			resp, err := client.Credentials(ctx, &CredentialsRequest{
@@ -23,13 +23,14 @@ func CredentialsFunc(sm *session.Manager, g session.Group) func(string) (string,
 				}
 				return err
 			}
+			sessionID = id
 			user = resp.Username
 			secret = resp.Secret
 			return nil
 		})
 		if err != nil {
-			return "", "", err
+			return "", "", "", err
 		}
-		return user, secret, nil
+		return sessionID, user, secret, nil
 	}
 }

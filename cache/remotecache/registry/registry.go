@@ -37,7 +37,7 @@ func ResolveCacheExporterFunc(sm *session.Manager, hosts docker.RegistryHosts) r
 		if err != nil {
 			return nil, err
 		}
-		remote := resolver.New(hosts, resolver.NewSessionAuthenticator(sm, g))
+		remote := resolver.DefaultPool.GetResolver(hosts, ref, "push", sm, g)
 		pusher, err := remote.Pusher(ctx, ref)
 		if err != nil {
 			return nil, err
@@ -52,7 +52,7 @@ func ResolveCacheImporterFunc(sm *session.Manager, cs content.Store, hosts docke
 		if err != nil {
 			return nil, specs.Descriptor{}, err
 		}
-		remote := resolver.New(hosts, resolver.NewSessionAuthenticator(sm, g))
+		remote := resolver.DefaultPool.GetResolver(hosts, ref, "pull", sm, g)
 		xref, desc, err := remote.Resolve(ctx, ref)
 		if err != nil {
 			return nil, specs.Descriptor{}, err
