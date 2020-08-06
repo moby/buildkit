@@ -7,8 +7,13 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/containerd/typeurl"
 	"github.com/pkg/errors"
 )
+
+func init() {
+	typeurl.Register((*Stack)(nil), "github.com/moby/buildkit", "stack.Stack+json")
+}
 
 var version string
 var revision string

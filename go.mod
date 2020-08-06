@@ -17,6 +17,7 @@ require (
 	github.com/containerd/fifo v0.0.0-20200410184934-f15a3290365b // indirect
 	github.com/containerd/go-cni v1.0.0
 	github.com/containerd/go-runc v0.0.0-20200220073739-7016d3ce2328
+	github.com/containerd/typeurl v1.0.1
 	github.com/coreos/go-systemd/v22 v22.1.0
 	github.com/docker/cli v0.0.0-20200227165822-2298e6a3fe24
 	github.com/docker/distribution v2.7.1+incompatible
