@@ -28,7 +28,8 @@ func Helper(u *url.URL) (*connhelper.ConnectionHelper, error) {
 			if sp.Context != "" {
 				ctxFlags = append(ctxFlags, "--context="+sp.Context)
 			}
-			return commandconn.New(ctx, "docker", append(ctxFlags, []string{"exec", "-i", sp.Container, "buildctl", "dial-stdio"}...)...)
+			// using background context because context remains active for the duration of the process, after dial has completed
+			return commandconn.New(context.Background(), "docker", append(ctxFlags, []string{"exec", "-i", sp.Container, "buildctl", "dial-stdio"}...)...)
 		},
 	}, nil
 }
