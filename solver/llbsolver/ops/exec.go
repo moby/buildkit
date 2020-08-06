@@ -595,6 +595,9 @@ func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 		}
 
 		switch m.MountType {
+		case pb.MountType_BIND_EXPERIMENTAL:
+			mountable = newBindExp(e.cm.IdentityMapping())
+
 		case pb.MountType_BIND:
 			// if mount creates an output
 			if m.Output != pb.SkipOutput {
@@ -798,6 +801,39 @@ func (m *tmpfsMount) Mount() ([]mount.Mount, func() error, error) {
 }
 
 func (m *tmpfsMount) IdentityMapping() *idtools.IdentityMapping {
+	return m.idmap
+}
+
+func newBindExp(idmap *idtools.IdentityMapping) cache.Mountable {
+	return &bindExp{idmap: idmap}
+}
+
+type bindExp struct {
+	idmap *idtools.IdentityMapping
+}
+
+func (f *bindExp) Mount(ctx context.Context, readonly bool) (snapshot.Mountable, error) {
+	return &bindExpMount{readonly: readonly, idmap: f.idmap}, nil
+}
+
+type bindExpMount struct {
+	readonly bool
+	idmap    *idtools.IdentityMapping
+}
+
+func (m *bindExpMount) Mount() ([]mount.Mount, func() error, error) {
+	opt := []string{}
+	if m.readonly {
+		opt = append(opt, "ro")
+	}
+	return []mount.Mount{{
+		Type:    "bind",
+		Source:  "/tmp/bind-test", // TODO: Change to an actual configurable path.
+		Options: opt,
+	}}, func() error { return nil }, nil
+}
+
+func (m *bindExpMount) IdentityMapping() *idtools.IdentityMapping {
 	return m.idmap
 }
 
