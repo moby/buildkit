@@ -8,6 +8,7 @@ import (
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/diff"
+	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/filters"
 	"github.com/containerd/containerd/gc"
 	"github.com/containerd/containerd/leases"
@@ -16,6 +17,7 @@ import (
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/snapshot"
+	"github.com/moby/buildkit/util/flightcontrol"
 	digest "github.com/opencontainers/go-digest"
 	imagespecidentity "github.com/opencontainers/image-spec/identity"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -38,6 +40,7 @@ type ManagerOpt struct {
 	PruneRefChecker ExternalRefCheckerFunc
 	GarbageCollect  func(ctx context.Context) (gc.Stats, error)
 	Applier         diff.Applier
+	Differ          diff.Comparer
 }
 
 type Accessor interface {
@@ -45,7 +48,7 @@ type Accessor interface {
 	Get(ctx context.Context, id string, opts ...RefOption) (ImmutableRef, error)
 
 	New(ctx context.Context, parent ImmutableRef, opts ...RefOption) (MutableRef, error)
-	GetMutable(ctx context.Context, id string) (MutableRef, error) // Rebase?
+	GetMutable(ctx context.Context, id string, opts ...RefOption) (MutableRef, error) // Rebase?
 	IdentityMapping() *idtools.IdentityMapping
 	Metadata(string) *metadata.StorageItem
 }
@@ -74,6 +77,7 @@ type cacheManager struct {
 	md *metadata.Store
 
 	muPrune sync.Mutex // make sure parallel prune is not allowed so there will not be inconsistent results
+	unlazyG flightcontrol.Group
 }
 
 func NewManager(opt ManagerOpt) (Manager, error) {
@@ -92,7 +96,7 @@ func NewManager(opt ManagerOpt) (Manager, error) {
 	return cm, nil
 }
 
-func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispec.Descriptor, parent ImmutableRef, opts ...RefOption) (ir ImmutableRef, err error) {
+func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispec.Descriptor, parent ImmutableRef, opts ...RefOption) (ir ImmutableRef, rerr error) {
 	diffID, err := diffIDFromDescriptor(desc)
 	if err != nil {
 		return nil, err
@@ -100,9 +104,12 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispec.Descriptor, 
 	chainID := diffID
 	blobChainID := imagespecidentity.ChainID([]digest.Digest{desc.Digest, diffID})
 
-	if desc.Digest != "" {
-		if _, err := cm.ContentStore.Info(ctx, desc.Digest); err != nil {
-			return nil, errors.Wrapf(err, "failed to get blob %s", desc.Digest)
+	descHandlers := descHandlersOf(opts...)
+	if descHandlers == nil || descHandlers[desc.Digest] == nil {
+		if _, err := cm.ContentStore.Info(ctx, desc.Digest); errors.Is(err, errdefs.ErrNotFound) {
+			return nil, NeedsRemoteProvidersError([]digest.Digest{desc.Digest})
+		} else if err != nil {
+			return nil, err
 		}
 	}
 
@@ -115,7 +122,8 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispec.Descriptor, 
 		}
 		chainID = imagespecidentity.ChainID([]digest.Digest{pInfo.ChainID, chainID})
 		blobChainID = imagespecidentity.ChainID([]digest.Digest{pInfo.BlobChainID, blobChainID})
-		p2, err := cm.Get(ctx, parent.ID(), NoUpdateLastUsed)
+
+		p2, err := cm.Get(ctx, parent.ID(), NoUpdateLastUsed, descHandlers)
 		if err != nil {
 			return nil, err
 		}
@@ -128,7 +136,7 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispec.Descriptor, 
 
 	releaseParent := false
 	defer func() {
-		if releaseParent || err != nil && p != nil {
+		if releaseParent || rerr != nil && p != nil {
 			p.Release(context.TODO())
 		}
 	}()
@@ -148,6 +156,9 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispec.Descriptor, 
 		}
 		if p != nil {
 			releaseParent = true
+		}
+		if err := setImageRefMetadata(ref, opts...); err != nil {
+			return nil, errors.Wrapf(err, "failed to append image ref metadata to ref %s", ref.ID())
 		}
 		return ref, nil
 	}
@@ -187,7 +198,7 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispec.Descriptor, 
 	}
 
 	defer func() {
-		if err != nil {
+		if rerr != nil {
 			if err := cm.ManagerOpt.LeaseManager.Delete(context.TODO(), leases.Lease{
 				ID: l.ID,
 			}); err != nil {
@@ -226,6 +237,10 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispec.Descriptor, 
 		return nil, err
 	}
 
+	if err := setImageRefMetadata(rec, opts...); err != nil {
+		return nil, errors.Wrapf(err, "failed to append image ref metadata to ref %s", rec.ID())
+	}
+
 	queueDiffID(rec.md, diffID.String())
 	queueBlob(rec.md, desc.Digest.String())
 	queueChainID(rec.md, chainID.String())
@@ -233,6 +248,7 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispec.Descriptor, 
 	queueSnapshotID(rec.md, snapshotID)
 	queueBlobOnly(rec.md, blobOnly)
 	queueMediaType(rec.md, desc.MediaType)
+	queueBlobSize(rec.md, desc.Size)
 	queueCommitted(rec.md)
 
 	if err := rec.md.Commit(); err != nil {
@@ -241,7 +257,7 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispec.Descriptor, 
 
 	cm.records[id] = rec
 
-	return rec.ref(true), nil
+	return rec.ref(true, descHandlers), nil
 }
 
 // init loads all snapshots from metadata state and tries to load the records
@@ -307,24 +323,51 @@ func (cm *cacheManager) get(ctx context.Context, id string, opts ...RefOption) (
 		}
 	}
 
+	descHandlers := descHandlersOf(opts...)
+
 	if rec.mutable {
 		if len(rec.refs) != 0 {
 			return nil, errors.Wrapf(ErrLocked, "%s is locked", id)
 		}
 		if rec.equalImmutable != nil {
-			return rec.equalImmutable.ref(triggerUpdate), nil
+			return rec.equalImmutable.ref(triggerUpdate, descHandlers), nil
 		}
-		return rec.mref(triggerUpdate).commit(ctx)
+		return rec.mref(triggerUpdate, descHandlers).commit(ctx)
 	}
 
-	return rec.ref(triggerUpdate), nil
+	return rec.ref(triggerUpdate, descHandlers), nil
 }
 
 // getRecord returns record for id. Requires manager lock.
 func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOption) (cr *cacheRecord, retErr error) {
+	checkLazyProviders := func(rec *cacheRecord) error {
+		missing := NeedsRemoteProvidersError(nil)
+		dhs := descHandlersOf(opts...)
+		for {
+			blob := digest.Digest(getBlob(rec.md))
+			if isLazy, err := rec.isLazy(ctx); err != nil {
+				return err
+			} else if isLazy && dhs[blob] == nil {
+				missing = append(missing, blob)
+			}
+
+			if rec.parent == nil {
+				break
+			}
+			rec = rec.parent.cacheRecord
+		}
+		if len(missing) > 0 {
+			return missing
+		}
+		return nil
+	}
+
 	if rec, ok := cm.records[id]; ok {
 		if rec.isDead() {
 			return nil, errors.Wrapf(errNotFound, "failed to get dead record %s", id)
+		}
+		if err := checkLazyProviders(rec); err != nil {
+			return nil, err
 		}
 		return rec, nil
 	}
@@ -343,10 +386,11 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOpt
 			return nil, err
 		}
 		rec := &cacheRecord{
-			mu:           &sync.Mutex{},
-			cm:           cm,
-			refs:         make(map[ref]struct{}),
-			parent:       mutable.parentRef(false),
+			mu:   &sync.Mutex{},
+			cm:   cm,
+			refs: make(map[ref]struct{}),
+			// mutable refs are always non-lazy, so we can set parent desc handlers to nil
+			parent:       mutable.parentRef(false, nil),
 			md:           md,
 			equalMutable: &mutableRef{cacheRecord: mutable},
 		}
@@ -392,7 +436,14 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOpt
 		return nil, err
 	}
 
+	if err := setImageRefMetadata(rec, opts...); err != nil {
+		return nil, errors.Wrapf(err, "failed to append image ref metadata to ref %s", rec.ID())
+	}
+
 	cm.records[id] = rec
+	if err := checkLazyProviders(rec); err != nil {
+		return nil, err
+	}
 	return rec, nil
 }
 
@@ -403,14 +454,21 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, opts ...RefOpti
 	var parentID string
 	var parentSnapshotID string
 	if s != nil {
-		p, err := cm.Get(ctx, s.ID(), NoUpdateLastUsed)
-		if err != nil {
+		if _, ok := s.(*immutableRef); ok {
+			parent = s.Clone().(*immutableRef)
+		} else {
+			p, err := cm.Get(ctx, s.ID(), append(opts, NoUpdateLastUsed)...)
+			if err != nil {
+				return nil, err
+			}
+			parent = p.(*immutableRef)
+		}
+		if err := parent.Finalize(ctx, true); err != nil {
 			return nil, err
 		}
-		if err := p.Finalize(ctx, true); err != nil {
+		if err := parent.Extract(ctx); err != nil {
 			return nil, err
 		}
-		parent = p.(*immutableRef)
 		parentSnapshotID = getSnapshotID(parent.md)
 		parentID = parent.ID()
 	}
@@ -468,18 +526,23 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, opts ...RefOpti
 		return nil, err
 	}
 
+	if err := setImageRefMetadata(rec, opts...); err != nil {
+		return nil, errors.Wrapf(err, "failed to append image ref metadata to ref %s", rec.ID())
+	}
+
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
 	cm.records[id] = rec // TODO: save to db
 
-	return rec.mref(true), nil
+	return rec.mref(true, nil), nil
 }
-func (cm *cacheManager) GetMutable(ctx context.Context, id string) (MutableRef, error) {
+
+func (cm *cacheManager) GetMutable(ctx context.Context, id string, opts ...RefOption) (MutableRef, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	rec, err := cm.getRecord(ctx, id)
+	rec, err := cm.getRecord(ctx, id, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -505,7 +568,7 @@ func (cm *cacheManager) GetMutable(ctx context.Context, id string) (MutableRef, 
 		rec.equalImmutable = nil
 	}
 
-	return rec.mref(true), nil
+	return rec.mref(true, descHandlersOf(opts...)), nil
 }
 
 func (cm *cacheManager) Prune(ctx context.Context, ch chan client.UsageInfo, opts ...client.PruneInfo) error {
@@ -954,6 +1017,31 @@ func WithCreationTime(tm time.Time) RefOption {
 	return func(m withMetadata) error {
 		return queueCreatedAt(m.Metadata(), tm)
 	}
+}
+
+// Need a separate type for imageRef because it needs to be called outside
+// initializeMetadata while still being a RefOption, so wrapping it in a
+// different type ensures initializeMetadata won't catch it too and duplicate
+// setting the metadata.
+type imageRefOption func(m withMetadata) error
+
+// WithImageRef appends the given imageRef to the cache ref's metadata
+func WithImageRef(imageRef string) RefOption {
+	return imageRefOption(func(m withMetadata) error {
+		return appendImageRef(m.Metadata(), imageRef)
+	})
+}
+
+func setImageRefMetadata(m withMetadata, opts ...RefOption) error {
+	md := m.Metadata()
+	for _, opt := range opts {
+		if fn, ok := opt.(imageRefOption); ok {
+			if err := fn(m); err != nil {
+				return err
+			}
+		}
+	}
+	return md.Commit()
 }
 
 func initializeMetadata(m withMetadata, parent string, opts ...RefOption) error {

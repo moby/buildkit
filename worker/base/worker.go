@@ -18,7 +18,6 @@ import (
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/cache"
-	"github.com/moby/buildkit/cache/blobs"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
@@ -42,17 +41,14 @@ import (
 	"github.com/moby/buildkit/source/http"
 	"github.com/moby/buildkit/source/local"
 	"github.com/moby/buildkit/util/archutil"
-	"github.com/moby/buildkit/util/contentutil"
-	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/progress"
+	"github.com/moby/buildkit/util/progress/controller"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	bolt "go.etcd.io/bbolt"
-	"golang.org/x/sync/errgroup"
 )
 
 const labelCreatedAt = "buildkit/createdat"
@@ -104,6 +100,7 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 		GarbageCollect:  opt.GarbageCollect,
 		LeaseManager:    opt.LeaseManager,
 		ContentStore:    opt.ContentStore,
+		Differ:          opt.Differ,
 	})
 	if err != nil {
 		return nil, err
@@ -220,12 +217,31 @@ func (w *Worker) GCPolicy() []client.PruneInfo {
 	return w.WorkerOpt.GCPolicy
 }
 
-func (w *Worker) LoadRef(id string, hidden bool) (cache.ImmutableRef, error) {
+func (w *Worker) LoadRef(ctx context.Context, id string, hidden bool) (cache.ImmutableRef, error) {
 	var opts []cache.RefOption
 	if hidden {
 		opts = append(opts, cache.NoUpdateLastUsed)
 	}
-	return w.CacheMgr.Get(context.TODO(), id, opts...)
+
+	ref, err := w.CacheMgr.Get(ctx, id, opts...)
+	var needsRemoteProviders cache.NeedsRemoteProvidersError
+	if errors.As(err, &needsRemoteProviders) {
+		if optGetter := solver.CacheOptGetterOf(ctx); optGetter != nil {
+			var keys []interface{}
+			for _, dgst := range needsRemoteProviders {
+				keys = append(keys, cache.DescHandlerKey(dgst))
+			}
+			descHandlers := cache.DescHandlers(make(map[digest.Digest]*cache.DescHandler))
+			for k, v := range optGetter(keys...) {
+				if v, ok := v.(*cache.DescHandler); ok {
+					descHandlers[k.(digest.Digest)] = v
+				}
+			}
+			opts = append(opts, descHandlers)
+			ref, err = w.CacheMgr.Get(ctx, id, opts...)
+		}
+	}
+	return ref, err
 }
 
 func (w *Worker) Executor() executor.Executor {
@@ -343,121 +359,17 @@ func (w *Worker) Exporter(name string, sm *session.Manager) (exporter.Exporter, 
 	}
 }
 
-func (w *Worker) GetRemote(ctx context.Context, ref cache.ImmutableRef, createIfNeeded bool) (*solver.Remote, error) {
-	ctx, done, err := leaseutil.WithLease(ctx, w.LeaseManager, leaseutil.MakeTemporary)
-	if err != nil {
-		return nil, err
-	}
-	defer done(ctx)
-
-	// TODO(fuweid): add compression option or config for cache exporter.
-	diffPairs, err := blobs.GetDiffPairs(ctx, w.ContentStore(), w.Differ, ref, createIfNeeded, blobs.DefaultCompression)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed calculating diff pairs for exported snapshot")
-	}
-	if len(diffPairs) == 0 {
-		return nil, nil
-	}
-
-	createdTimes := getCreatedTimes(ref)
-	if len(createdTimes) != len(diffPairs) {
-		return nil, errors.Errorf("invalid createdtimes/diffpairs")
-	}
-
-	descs := make([]ocispec.Descriptor, len(diffPairs))
-
-	cs := w.ContentStore()
-	layerMediaTypes := blobs.GetMediaTypeForLayers(diffPairs, ref)
-	for i, dp := range diffPairs {
-		info, err := cs.Info(ctx, dp.Blobsum)
-		if err != nil {
-			return nil, err
-		}
-
-		tm, err := createdTimes[i].MarshalText()
-		if err != nil {
-			return nil, err
-		}
-
-		var mediaType string
-		if len(layerMediaTypes) > i {
-			mediaType = layerMediaTypes[i]
-		}
-
-		// NOTE: The media type might be missing for some migrated ones
-		// from before lease based storage. If so, we should detect
-		// the media type from blob data.
-		//
-		// Discussion: https://github.com/moby/buildkit/pull/1277#discussion_r352795429
-		if mediaType == "" {
-			mediaType, err = blobs.DetectLayerMediaType(ctx, cs, dp.Blobsum, false)
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		descs[i] = ocispec.Descriptor{
-			Digest:    dp.Blobsum,
-			Size:      info.Size,
-			MediaType: mediaType,
-			Annotations: map[string]string{
-				"containerd.io/uncompressed": dp.DiffID.String(),
-				labelCreatedAt:               string(tm),
-			},
-		}
-	}
-
-	return &solver.Remote{
-		Descriptors: descs,
-		Provider:    cs,
-	}, nil
-}
-
-func getCreatedTimes(ref cache.ImmutableRef) (out []time.Time) {
-	parent := ref.Parent()
-	if parent != nil {
-		defer parent.Release(context.TODO())
-		out = getCreatedTimes(parent)
-	}
-	return append(out, cache.GetCreatedAt(ref.Metadata()))
-}
-
 func (w *Worker) FromRemote(ctx context.Context, remote *solver.Remote) (ref cache.ImmutableRef, err error) {
-	ctx, done, err := leaseutil.WithLease(ctx, w.LeaseManager, leaseutil.MakeTemporary)
-	if err != nil {
-		return nil, err
+	pw, _, _ := progress.FromContext(ctx)
+	descHandler := &cache.DescHandler{
+		Provider: remote.Provider,
+		Progress: &controller.Controller{Writer: pw},
 	}
-	defer done(ctx)
-
-	eg, gctx := errgroup.WithContext(ctx)
+	descHandlers := cache.DescHandlers(make(map[digest.Digest]*cache.DescHandler))
 	for _, desc := range remote.Descriptors {
-		func(desc ocispec.Descriptor) {
-			eg.Go(func() error {
-				done := oneOffProgress(ctx, fmt.Sprintf("pulling %s", desc.Digest))
-				if err := contentutil.Copy(gctx, w.ContentStore(), remote.Provider, desc); err != nil {
-					return done(err)
-				}
-				if ref, ok := desc.Annotations["containerd.io/distribution.source.ref"]; ok {
-					hf, err := docker.AppendDistributionSourceLabel(w.ContentStore(), ref)
-					if err != nil {
-						return done(err)
-					}
-					_, err = hf(ctx, desc)
-					return done(err)
-				}
-				return done(nil)
-			})
-		}(desc)
+		descHandlers[desc.Digest] = descHandler
 	}
 
-	if err := eg.Wait(); err != nil {
-		return nil, err
-	}
-
-	unpackProgressDone := oneOffProgress(ctx, "unpacking")
-	defer func() {
-		err = unpackProgressDone(err)
-	}()
 	var current cache.ImmutableRef
 	for i, desc := range remote.Descriptors {
 		tm := time.Now()
@@ -473,15 +385,14 @@ func (w *Worker) FromRemote(ctx context.Context, remote *solver.Remote) (ref cac
 		if v, ok := desc.Annotations["buildkit/description"]; ok {
 			descr = v
 		}
-		ref, err := w.CacheMgr.GetByBlob(ctx, desc, current, cache.WithDescription(descr), cache.WithCreationTime(tm))
+		ref, err := w.CacheMgr.GetByBlob(ctx, desc, current,
+			cache.WithDescription(descr),
+			cache.WithCreationTime(tm),
+			descHandlers)
 		if current != nil {
 			current.Release(context.TODO())
 		}
 		if err != nil {
-			return nil, err
-		}
-		if err := ref.Extract(ctx); err != nil {
-			ref.Release(context.TODO())
 			return nil, err
 		}
 		current = ref
@@ -518,21 +429,4 @@ func ID(root string) (string, error) {
 		return "", err
 	}
 	return string(b), nil
-}
-
-func oneOffProgress(ctx context.Context, id string) func(err error) error {
-	pw, _, _ := progress.FromContext(ctx)
-	now := time.Now()
-	st := progress.Status{
-		Started: &now,
-	}
-	pw.Write(id, st)
-	return func(err error) error {
-		// TODO: set error on status
-		now := time.Now()
-		st.Completed = &now
-		pw.Write(id, st)
-		pw.Close()
-		return err
-	}
 }

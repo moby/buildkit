@@ -7,6 +7,7 @@ import (
 
 	"github.com/moby/buildkit/cache/contenthash"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
@@ -70,5 +71,5 @@ func workerRefConverter(ctx context.Context, res solver.Result) (*solver.Remote,
 		return nil, errors.Errorf("invalid result: %T", res.Sys())
 	}
 
-	return ref.Worker.GetRemote(ctx, ref.ImmutableRef, true)
+	return ref.ImmutableRef.GetRemote(ctx, true, compression.Default)
 }

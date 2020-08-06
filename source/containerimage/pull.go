@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/containerd/containerd/content"
@@ -12,19 +13,20 @@ import (
 	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/remotes/docker"
-	"github.com/docker/distribution/reference"
+	"github.com/docker/docker/errdefs"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
+	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/imageutil"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/progress"
+	"github.com/moby/buildkit/util/progress/controller"
 	"github.com/moby/buildkit/util/pull"
 	"github.com/moby/buildkit/util/resolver"
-	"github.com/moby/buildkit/util/winlayers"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/identity"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -98,7 +100,7 @@ func (is *Source) ResolveImageConfig(ctx context.Context, ref string, opt llb.Re
 	return typed.dgst, typed.dt, nil
 }
 
-func (is *Source) Resolve(ctx context.Context, id source.Identifier, sm *session.Manager) (source.SourceInstance, error) {
+func (is *Source) Resolve(ctx context.Context, id source.Identifier, sm *session.Manager, vtx solver.Vertex) (source.SourceInstance, error) {
 	imageIdentifier, ok := id.(*source.ImageIdentifier)
 	if !ok {
 		return nil, errors.Errorf("invalid image identifier %v", id)
@@ -110,18 +112,15 @@ func (is *Source) Resolve(ctx context.Context, id source.Identifier, sm *session
 	}
 
 	pullerUtil := &pull.Puller{
-		Snapshotter:  is.Snapshotter,
 		ContentStore: is.ContentStore,
-		Applier:      is.Applier,
+		Platform:     platform,
 		Src:          imageIdentifier.Reference,
-		Platform:     &platform,
 	}
 	p := &puller{
 		CacheAccessor: is.CacheAccessor,
-		Puller:        pullerUtil,
-		Platform:      platform,
-		id:            imageIdentifier,
 		LeaseManager:  is.LeaseManager,
+		Puller:        pullerUtil,
+		id:            imageIdentifier,
 		ResolverOpt: pull.ResolverOpt{
 			Hosts:      is.RegistryHosts,
 			Auth:       resolver.NewSessionAuthenticator(sm, nil),
@@ -129,6 +128,7 @@ func (is *Source) Resolve(ctx context.Context, id source.Identifier, sm *session
 			Mode:       imageIdentifier.ResolveMode,
 			Ref:        imageIdentifier.Reference.String(),
 		},
+		vtx: vtx,
 	}
 	return p, nil
 }
@@ -136,9 +136,17 @@ func (is *Source) Resolve(ctx context.Context, id source.Identifier, sm *session
 type puller struct {
 	CacheAccessor cache.Accessor
 	LeaseManager  leases.Manager
-	Platform      specs.Platform
 	ResolverOpt   pull.ResolverOpt
 	id            *source.ImageIdentifier
+	vtx           solver.Vertex
+
+	cacheKeyOnce     sync.Once
+	cacheKeyErr      error
+	releaseTmpLeases func(context.Context) error
+	descHandlers     cache.DescHandlers
+	manifest         *pull.PulledManifests
+	manifestKey      string
+	configKey        string
 	*pull.Puller
 }
 
@@ -160,45 +168,88 @@ func mainManifestKey(ctx context.Context, desc specs.Descriptor, platform specs.
 	return digest.FromBytes(dt), nil
 }
 
-func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (string, bool, error) {
+func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cacheKey string, cacheOpts solver.CacheOpts, cacheDone bool, err error) {
 	if p.Puller.Resolver == nil {
 		p.Puller.Resolver = pull.NewResolver(g, p.ResolverOpt)
 	} else {
 		p.ResolverOpt.Auth.AddSession(g)
 	}
-	_, desc, err := p.Puller.Resolve(ctx)
-	if err != nil {
-		return "", false, err
-	}
-	if index == 0 || desc.Digest == "" {
+
+	p.cacheKeyOnce.Do(func() {
+		ctx, done, err := leaseutil.WithLease(ctx, p.LeaseManager, leases.WithExpiration(5*time.Minute), leaseutil.MakeTemporary)
+		if err != nil {
+			p.cacheKeyErr = err
+			return
+		}
+		p.releaseTmpLeases = done
+		imageutil.AddLease(p.releaseTmpLeases)
+		defer func() {
+			if p.cacheKeyErr != nil {
+				p.releaseTmpLeases(ctx)
+			}
+		}()
+
+		resolveProgressDone := oneOffProgress(ctx, "resolve "+p.Src.String())
+		defer func() {
+			resolveProgressDone(err)
+		}()
+
+		p.manifest, err = p.PullManifests(ctx)
+		if err != nil {
+			p.cacheKeyErr = err
+			return
+		}
+
+		if len(p.manifest.Remote.Descriptors) > 0 {
+			pw, _, _ := progress.FromContext(ctx)
+			progressController := &controller.Controller{
+				Writer: pw,
+			}
+			if p.vtx != nil {
+				progressController.Digest = p.vtx.Digest()
+				progressController.Name = p.vtx.Name()
+			}
+
+			descHandler := &cache.DescHandler{
+				Provider: p.manifest.Remote.Provider,
+				Progress: progressController,
+			}
+
+			p.descHandlers = cache.DescHandlers(make(map[digest.Digest]*cache.DescHandler))
+			for _, desc := range p.manifest.Remote.Descriptors {
+				p.descHandlers[desc.Digest] = descHandler
+			}
+		}
+
+		desc := p.manifest.MainManifestDesc
 		k, err := mainManifestKey(ctx, desc, p.Platform)
 		if err != nil {
-			return "", false, err
+			p.cacheKeyErr = err
+			return
 		}
-		return k.String(), false, nil
-	}
-	ref, err := reference.ParseNormalizedNamed(p.Src.String())
-	if err != nil {
-		return "", false, err
-	}
-	ref, err = reference.WithDigest(ref, desc.Digest)
-	if err != nil {
-		return "", false, nil
-	}
-	_, dt, err := imageutil.Config(ctx, ref.String(), p.Resolver, p.ContentStore, p.LeaseManager, &p.Platform)
-	if err != nil {
-		return "", false, err
+		p.manifestKey = k.String()
+
+		dt, err := content.ReadBlob(ctx, p.ContentStore, p.manifest.ConfigDesc)
+		if err != nil {
+			p.cacheKeyErr = err
+			return
+		}
+		p.configKey = cacheKeyFromConfig(dt).String()
+	})
+	if p.cacheKeyErr != nil {
+		return "", nil, false, p.cacheKeyErr
 	}
 
-	k := cacheKeyFromConfig(dt).String()
-	if k == "" {
-		k, err := mainManifestKey(ctx, desc, p.Platform)
-		if err != nil {
-			return "", false, err
-		}
-		return k.String(), true, nil
+	cacheOpts = solver.CacheOpts(make(map[interface{}]interface{}))
+	for dgst, descHandler := range p.descHandlers {
+		cacheOpts[cache.DescHandlerKey(dgst)] = descHandler
 	}
-	return k, true, nil
+
+	cacheDone = index > 0
+	if index == 0 || p.configKey == "" {
+		return p.manifestKey, cacheOpts, cacheDone, nil
+	}
+	return p.configKey, cacheOpts, cacheDone, nil
 }
 
 func (p *puller) Snapshot(ctx context.Context, g session.Group) (ir cache.ImmutableRef, err error) {
@@ -208,55 +259,47 @@ func (p *puller) Snapshot(ctx context.Context, g session.Group) (ir cache.Immuta
 		p.ResolverOpt.Auth.AddSession(g)
 	}
 
-	layerNeedsTypeWindows := false
-	if platform := p.Puller.Platform; platform != nil {
-		if platform.OS == "windows" && runtime.GOOS != "windows" {
-			ctx = winlayers.UseWindowsLayerMode(ctx)
-			layerNeedsTypeWindows = true
-		}
-	}
-
-	// workaround for gcr, authentication not supported on blob endpoints
-	pull.EnsureManifestRequested(ctx, p.Puller.Resolver, p.Puller.Src.String())
-
-	ctx, done, err := leaseutil.WithLease(ctx, p.LeaseManager, leaseutil.MakeTemporary)
-	if err != nil {
-		return nil, err
-	}
-	defer done(ctx)
-
-	pulled, err := p.Puller.Pull(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if len(pulled.Layers) == 0 {
+	if len(p.manifest.Remote.Descriptors) == 0 {
 		return nil, nil
 	}
+	defer p.releaseTmpLeases(ctx)
 
-	extractDone := oneOffProgress(ctx, "unpacking "+pulled.Ref)
 	var current cache.ImmutableRef
 	defer func() {
 		if err != nil && current != nil {
 			current.Release(context.TODO())
 		}
-		extractDone(err)
 	}()
-	for _, l := range pulled.Layers {
-		ref, err := p.CacheAccessor.GetByBlob(ctx, l, current, cache.WithDescription("pulled from "+pulled.Ref))
+
+	var parent cache.ImmutableRef
+	for _, layerDesc := range p.manifest.Remote.Descriptors {
+		parent = current
+		current, err = p.CacheAccessor.GetByBlob(ctx, layerDesc, parent,
+			p.descHandlers, cache.WithImageRef(p.manifest.Ref))
+		if parent != nil {
+			parent.Release(context.TODO())
+		}
 		if err != nil {
 			return nil, err
 		}
-		if err := ref.Extract(ctx); err != nil {
-			ref.Release(context.TODO())
-			return nil, err
-		}
-		if current != nil {
-			current.Release(context.TODO())
-		}
-		current = ref
 	}
 
-	for _, desc := range pulled.MetadataBlobs {
+	for _, desc := range p.manifest.Nonlayers {
+		if _, err := p.ContentStore.Info(ctx, desc.Digest); errdefs.IsNotFound(err) {
+			// manifest or config must have gotten gc'd after CacheKey, re-pull them
+			ctx, done, err := leaseutil.WithLease(ctx, p.LeaseManager, leaseutil.MakeTemporary)
+			if err != nil {
+				return nil, err
+			}
+			defer done(ctx)
+
+			if _, err := p.PullManifests(ctx); err != nil {
+				return nil, err
+			}
+		} else if err != nil {
+			return nil, err
+		}
+
 		if err := p.LeaseManager.AddResource(ctx, leases.Lease{ID: current.ID()}, leases.Resource{
 			ID:   desc.Digest.String(),
 			Type: "content",
@@ -265,7 +308,7 @@ func (p *puller) Snapshot(ctx context.Context, g session.Group) (ir cache.Immuta
 		}
 	}
 
-	if layerNeedsTypeWindows && current != nil {
+	if current != nil && p.Platform.OS == "windows" && runtime.GOOS != "windows" {
 		if err := markRefLayerTypeWindows(current); err != nil {
 			return nil, err
 		}
