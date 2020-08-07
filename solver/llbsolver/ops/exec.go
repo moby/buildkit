@@ -822,13 +822,14 @@ type bindExpMount struct {
 }
 
 func (m *bindExpMount) Mount() ([]mount.Mount, func() error, error) {
-	opt := []string{}
+	opt := []string{"rbind"}
 	if m.readonly {
 		opt = append(opt, "ro")
+	} else {
+		opt = append(opt, "rw")
 	}
 	return []mount.Mount{{
 		Type:    "bind",
-		Source:  "/tmp/bind-test", // TODO: Change to an actual configurable path.
 		Options: opt,
 	}}, func() error { return nil }, nil
 }
