@@ -43,6 +43,7 @@ type mount struct {
 	selector     string
 	cacheID      string
 	tmpfs        bool
+	hostBind     bool
 	cacheSharing CacheMountSharingMode
 	noOutput     bool
 }
@@ -321,6 +322,9 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 		if m.tmpfs {
 			pm.MountType = pb.MountType_TMPFS
 		}
+		if m.hostBind {
+			pm.MountType = pb.MountType_HOST_BIND
+		}
 		peo.Mounts = append(peo.Mounts, pm)
 	}
 
@@ -443,6 +447,12 @@ func AsPersistentCacheDir(id string, sharing CacheMountSharingMode) MountOption 
 func Tmpfs() MountOption {
 	return func(m *mount) {
 		m.tmpfs = true
+	}
+}
+
+func HostBind() MountOption {
+	return func(m *mount) {
+		m.hostBind = true
 	}
 }
 

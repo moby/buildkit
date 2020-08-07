@@ -595,6 +595,9 @@ func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 		}
 
 		switch m.MountType {
+		case pb.MountType_HOST_BIND:
+			mountable = newHostBind(e.cm.IdentityMapping())
+
 		case pb.MountType_BIND:
 			// if mount creates an output
 			if m.Output != pb.SkipOutput {
@@ -798,6 +801,40 @@ func (m *tmpfsMount) Mount() ([]mount.Mount, func() error, error) {
 }
 
 func (m *tmpfsMount) IdentityMapping() *idtools.IdentityMapping {
+	return m.idmap
+}
+
+func newHostBind(idmap *idtools.IdentityMapping) cache.Mountable {
+	return &hostBind{idmap: idmap}
+}
+
+type hostBind struct {
+	idmap *idtools.IdentityMapping
+}
+
+func (f *hostBind) Mount(ctx context.Context, readonly bool) (snapshot.Mountable, error) {
+	return &hostBindMount{readonly: readonly, idmap: f.idmap}, nil
+}
+
+type hostBindMount struct {
+	readonly bool
+	idmap    *idtools.IdentityMapping
+}
+
+func (m *hostBindMount) Mount() ([]mount.Mount, func() error, error) {
+	opt := []string{"rbind"}
+	if m.readonly {
+		opt = append(opt, "ro")
+	} else {
+		opt = append(opt, "rw")
+	}
+	return []mount.Mount{{
+		Type:    "bind",
+		Options: opt,
+	}}, func() error { return nil }, nil
+}
+
+func (m *hostBindMount) IdentityMapping() *idtools.IdentityMapping {
 	return m.idmap
 }
 
