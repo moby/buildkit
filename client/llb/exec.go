@@ -36,16 +36,16 @@ func NewExecOp(base State, proxyEnv *ProxyEnv, readOnly bool, c Constraints) *Ex
 }
 
 type mount struct {
-	target           string
-	readonly         bool
-	source           Output
-	output           Output
-	selector         string
-	cacheID          string
-	tmpfs            bool
-	bindExperimental bool
-	cacheSharing     CacheMountSharingMode
-	noOutput         bool
+	target       string
+	readonly     bool
+	source       Output
+	output       Output
+	selector     string
+	cacheID      string
+	tmpfs        bool
+	hostBind     bool
+	cacheSharing CacheMountSharingMode
+	noOutput     bool
 }
 
 type ExecOp struct {
@@ -322,8 +322,8 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 		if m.tmpfs {
 			pm.MountType = pb.MountType_TMPFS
 		}
-		if m.bindExperimental {
-			pm.MountType = pb.MountType_BIND_EXPERIMENTAL
+		if m.hostBind {
+			pm.MountType = pb.MountType_HOST_BIND
 		}
 		peo.Mounts = append(peo.Mounts, pm)
 	}
@@ -450,9 +450,9 @@ func Tmpfs() MountOption {
 	}
 }
 
-func BindExperimental() MountOption {
+func HostBind() MountOption {
 	return func(m *mount) {
-		m.bindExperimental = true
+		m.hostBind = true
 	}
 }
 
