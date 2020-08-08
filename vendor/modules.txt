@@ -40,7 +40,7 @@ github.com/codahale/hdrhistogram
 github.com/containerd/cgroups/stats/v1
 # github.com/containerd/console v1.0.0
 github.com/containerd/console
-# github.com/containerd/containerd v1.4.0-beta.2.0.20200728183644-eb6354a11860 => github.com/containerd/containerd v1.4.0-beta.2.0.20200728183644-eb6354a11860
+# github.com/containerd/containerd v1.4.0-beta.2.0.20200730150746-fa1220fce33f => github.com/containerd/containerd v1.4.0-beta.2.0.20200730150746-fa1220fce33f
 github.com/containerd/containerd
 github.com/containerd/containerd/api/services/containers/v1
 github.com/containerd/containerd/api/services/content/v1
