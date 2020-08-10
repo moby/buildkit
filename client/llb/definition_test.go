@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/containerd/containerd/platforms"
+	"github.com/moby/buildkit/solver/pb"
+	digest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -68,4 +70,51 @@ func TestDefinitionEquivalence(t *testing.T) {
 			require.Equal(t, expectedPlatform, actualPlatform)
 		})
 	}
+}
+
+func TestDefinitionInputCache(t *testing.T) {
+	src := HTTP("url")
+
+	stA := Scratch().Run(
+		Shlex("A"),
+		AddMount("/mnt", src),
+	)
+
+	stB := Scratch().Run(
+		Shlex("B"),
+		AddMount("/mnt", src),
+	)
+
+	st := Scratch().Run(
+		Shlex("args"),
+		AddMount("/a", stA.Root()),
+		AddMount("/a2", stA.GetMount("/mnt")),
+		AddMount("/b", stB.Root()),
+		AddMount("/b2", stB.GetMount("/mnt")),
+	).Root()
+
+	ctx := context.TODO()
+
+	def, err := st.Marshal(context.TODO())
+	require.NoError(t, err)
+
+	op, err := NewDefinitionOp(def.ToPB())
+	require.NoError(t, err)
+
+	err = op.Validate(ctx)
+	require.NoError(t, err)
+
+	st2 := NewState(op.Output())
+	marshalDef := &Definition{
+		Metadata: make(map[digest.Digest]pb.OpMetadata, 0),
+	}
+	constraints := &Constraints{}
+	smc := newSourceMapCollector()
+
+	// verify the expected number of vertexes gets marshalled
+	vertexCache := make(map[Vertex]struct{})
+	_, err = marshal(ctx, st2.Output().Vertex(ctx), marshalDef, smc, map[digest.Digest]struct{}{}, vertexCache, constraints)
+	require.NoError(t, err)
+	// 1 exec + 2x2 mounts from stA and stB + 1 src = 6 vertexes
+	require.Equal(t, 6, len(vertexCache))
 }
