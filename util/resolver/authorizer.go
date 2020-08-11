@@ -8,6 +8,7 @@ import (
 	"path"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/log"
@@ -142,10 +143,8 @@ func (a *dockerAuthorizer) AddResponses(ctx context.Context, responses []*http.R
 	for _, c := range auth.ParseAuthHeader(last.Header) {
 		if c.Scheme == auth.BearerAuth {
 			if err := invalidAuthorization(c, responses); err != nil {
-				//delete(a.handlers, host)
 				a.handlers.delete(handler)
 				handler = nil
-				return err
 			}
 
 			// reuse existing handler
@@ -195,8 +194,9 @@ func (a *dockerAuthorizer) AddResponses(ctx context.Context, responses []*http.R
 // authResult is used to control limit rate.
 type authResult struct {
 	sync.WaitGroup
-	token string
-	err   error
+	token   string
+	err     error
+	expires time.Time
 }
 
 // authHandler is used to handle auth request per registry server.
@@ -260,7 +260,10 @@ func (ah *authHandler) doBearerAuth(ctx context.Context) (token string, err erro
 	if r, exist := ah.scopedTokens[scoped]; exist {
 		ah.Unlock()
 		r.Wait()
-		return r.token, r.err
+		if r.expires.IsZero() || r.expires.After(time.Now()) {
+			return r.token, r.err
+		}
+		ah.Lock()
 	}
 
 	// only one fetch token job
@@ -269,9 +272,19 @@ func (ah *authHandler) doBearerAuth(ctx context.Context) (token string, err erro
 	ah.scopedTokens[scoped] = r
 	ah.Unlock()
 
+	var issuedAt time.Time
+	var expires int
 	defer func() {
 		token = fmt.Sprintf("Bearer %s", token)
 		r.token, r.err = token, err
+		if err == nil {
+			if issuedAt.IsZero() {
+				issuedAt = time.Now()
+			}
+			if exp := issuedAt.Add(time.Duration(float64(expires)*0.9) * time.Second); time.Now().Before(exp) {
+				r.expires = exp
+			}
+		}
 		r.Done()
 	}()
 
@@ -294,6 +307,7 @@ func (ah *authHandler) doBearerAuth(ctx context.Context) (token string, err erro
 					if err != nil {
 						return "", err
 					}
+					issuedAt, expires = resp.IssuedAt, resp.ExpiresIn
 					return resp.Token, nil
 				}
 				log.G(ctx).WithFields(logrus.Fields{
@@ -303,6 +317,7 @@ func (ah *authHandler) doBearerAuth(ctx context.Context) (token string, err erro
 			}
 			return "", err
 		}
+		issuedAt, expires = resp.IssuedAt, resp.ExpiresIn
 		return resp.AccessToken, nil
 	}
 	// do request anonymously
@@ -310,6 +325,8 @@ func (ah *authHandler) doBearerAuth(ctx context.Context) (token string, err erro
 	if err != nil {
 		return "", errors.Wrap(err, "failed to fetch anonymous token")
 	}
+	issuedAt, expires = resp.IssuedAt, resp.ExpiresIn
+
 	return resp.Token, nil
 }
 
