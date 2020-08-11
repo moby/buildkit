@@ -10,12 +10,10 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
-	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/util/tracing"
 	"github.com/pkg/errors"
 )
@@ -117,6 +115,7 @@ func loadTLSConfig(c config.RegistryConfig) (*tls.Config, error) {
 	return tc, nil
 }
 
+// NewRegistryConfig converts registry config to docker.RegistryHosts callback
 func NewRegistryConfig(m map[string]config.RegistryConfig) docker.RegistryHosts {
 	return docker.Registries(
 		func(host string) ([]docker.RegistryHost, error) {
@@ -169,20 +168,6 @@ func NewRegistryConfig(m map[string]config.RegistryConfig) docker.RegistryHosts 
 			docker.WithPlainHTTP(docker.MatchLocalhost),
 		),
 	)
-}
-
-type SessionAuthenticator struct {
-	sm      *session.Manager
-	groups  []session.Group
-	mu      sync.RWMutex
-	cache   map[string]credentials
-	cacheMu sync.RWMutex
-}
-
-type credentials struct {
-	user    string
-	secret  string
-	created time.Time
 }
 
 func newDefaultClient() *http.Client {
