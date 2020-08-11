@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
-	"path"
 	"strings"
 	"sync"
 	"time"
@@ -40,24 +39,19 @@ func newAuthHandlerNS(sm *session.Manager) *authHandlerNS {
 }
 
 func (a *authHandlerNS) get(host string, sm *session.Manager, g session.Group) *authHandler {
-	if g == nil {
-		return nil
-	}
-
-	iter := g.SessionIterator()
-	if iter == nil {
-		return nil
-	}
-
-	for {
-		id := iter.NextSession()
-		if id == "" {
-			break
-		}
-		h, ok := a.handlers[path.Join(host, id)]
-		if ok {
-			h.lastUsed = time.Now()
-			return h
+	if g != nil {
+		if iter := g.SessionIterator(); iter != nil {
+			for {
+				id := iter.NextSession()
+				if id == "" {
+					break
+				}
+				h, ok := a.handlers[host+"/"+id]
+				if ok {
+					h.lastUsed = time.Now()
+					return h
+				}
+			}
 		}
 	}
 
@@ -71,7 +65,7 @@ func (a *authHandlerNS) get(host string, sm *session.Manager, g session.Group) *
 			session, username, password, err := sessionauth.CredentialsFunc(sm, g)(host)
 			if err == nil {
 				if username == h.common.Username && password == h.common.Secret {
-					a.handlers[path.Join(host, session)] = h
+					a.handlers[host+"/"+session] = h
 					h.lastUsed = time.Now()
 					return h
 				}
@@ -83,7 +77,7 @@ func (a *authHandlerNS) get(host string, sm *session.Manager, g session.Group) *
 }
 
 func (a *authHandlerNS) set(host, session string, h *authHandler) {
-	a.handlers[path.Join(host, session)] = h
+	a.handlers[host+"/"+session] = h
 }
 
 func (a *authHandlerNS) delete(h *authHandler) {
