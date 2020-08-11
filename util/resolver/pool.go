@@ -17,13 +17,16 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
+// DefaultPool is the default shared resolver pool instance
 var DefaultPool = NewPool()
 
+// Pool is a cache of recently used resolvers
 type Pool struct {
 	mu sync.Mutex
 	m  map[string]*authHandlerNS
 }
 
+// NewPool creates a new pool for caching resolvers
 func NewPool() *Pool {
 	p := &Pool{
 		m: map[string]*authHandlerNS{},
@@ -61,12 +64,14 @@ func (p *Pool) gc() {
 	time.AfterFunc(5*time.Minute, p.gc)
 }
 
+// Clear deletes currently cached items. This may be called on config changes for example.
 func (p *Pool) Clear() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.m = map[string]*authHandlerNS{}
 }
 
+// GetResolver gets a resolver for a specified scope from the pool
 func (p *Pool) GetResolver(hosts docker.RegistryHosts, ref, scope string, sm *session.Manager, g session.Group) *Resolver {
 	name := ref
 	named, err := distreference.ParseNormalizedNamed(ref)
@@ -105,6 +110,7 @@ func newResolver(hosts docker.RegistryHosts, handler *authHandlerNS, sm *session
 	return r
 }
 
+// Resolver is a wrapper around remotes.Resolver
 type Resolver struct {
 	remotes.Resolver
 	hosts   docker.RegistryHosts
@@ -151,6 +157,7 @@ func (r *Resolver) hostsFunc(host string) ([]docker.RegistryHost, error) {
 	}(host)
 }
 
+// WithSession returns a new resolver that works with new session group
 func (r *Resolver) WithSession(s session.Group) *Resolver {
 	r2 := *r
 	r2.auth = nil
@@ -158,6 +165,7 @@ func (r *Resolver) WithSession(s session.Group) *Resolver {
 	return &r2
 }
 
+// WithImageStore returns new resolver that can also resolve from local images store
 func (r *Resolver) WithImageStore(is images.Store, mode source.ResolveMode) *Resolver {
 	r2 := *r
 	r2.Resolver = r.Resolver
@@ -166,6 +174,7 @@ func (r *Resolver) WithImageStore(is images.Store, mode source.ResolveMode) *Res
 	return &r2
 }
 
+// Fetcher returns a new fetcher for the provided reference.
 func (r *Resolver) Fetcher(ctx context.Context, ref string) (remotes.Fetcher, error) {
 	if atomic.LoadInt64(&r.handler.counter) == 0 {
 		r.Resolve(ctx, ref)
@@ -173,6 +182,7 @@ func (r *Resolver) Fetcher(ctx context.Context, ref string) (remotes.Fetcher, er
 	return r.Resolver.Fetcher(ctx, ref)
 }
 
+// Resolve attempts to resolve the reference into a name and descriptor.
 func (r *Resolver) Resolve(ctx context.Context, ref string) (string, ocispec.Descriptor, error) {
 	if r.mode == source.ResolveModePreferLocal && r.is != nil {
 		if img, err := r.is.Get(ctx, ref); err == nil {
