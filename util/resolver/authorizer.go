@@ -300,22 +300,22 @@ func (ah *authHandler) doBearerAuth(ctx context.Context) (token string, err erro
 		defer func() {
 			err = errors.Wrap(err, "failed to fetch oauth token")
 		}()
-		// credential information is provided, use oauth POST endpoint
-		// TODO: Allow setting client_id
-		resp, err := auth.FetchTokenWithOAuth(ctx, ah.client, nil, "containerd-client", to)
+		// try GET first because Docker Hub does not support POST
+		// switch once support has landed
+		resp, err := auth.FetchToken(ctx, ah.client, nil, to)
 		if err != nil {
 			var errStatus auth.ErrUnexpectedStatus
 			if errors.As(err, &errStatus) {
-				// Registries without support for POST may return 404 for POST /v2/token.
+				// retry with POST request
 				// As of September 2017, GCR is known to return 404.
 				// As of February 2018, JFrog Artifactory is known to return 401.
 				if (errStatus.StatusCode == 405 && to.Username != "") || errStatus.StatusCode == 404 || errStatus.StatusCode == 401 {
-					resp, err := auth.FetchToken(ctx, ah.client, nil, to)
+					resp, err := auth.FetchTokenWithOAuth(ctx, ah.client, nil, "containerd-client", to)
 					if err != nil {
 						return "", err
 					}
 					issuedAt, expires = resp.IssuedAt, resp.ExpiresIn
-					return resp.Token, nil
+					return resp.AccessToken, nil
 				}
 				log.G(ctx).WithFields(logrus.Fields{
 					"status": errStatus.Status,
@@ -325,7 +325,7 @@ func (ah *authHandler) doBearerAuth(ctx context.Context) (token string, err erro
 			return "", err
 		}
 		issuedAt, expires = resp.IssuedAt, resp.ExpiresIn
-		return resp.AccessToken, nil
+		return resp.Token, nil
 	}
 	// do request anonymously
 	resp, err := auth.FetchToken(ctx, ah.client, nil, to)
