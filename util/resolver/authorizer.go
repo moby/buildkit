@@ -27,13 +27,15 @@ type authHandlerNS struct {
 	mu       sync.Mutex
 	handlers map[string]*authHandler
 	hosts    map[string][]docker.RegistryHost
+	sm       *session.Manager
 	g        flightcontrol.Group
 }
 
-func newAuthHandlerNS() *authHandlerNS {
+func newAuthHandlerNS(sm *session.Manager) *authHandlerNS {
 	return &authHandlerNS{
 		handlers: map[string]*authHandler{},
 		hosts:    map[string][]docker.RegistryHost{},
+		sm:       sm,
 	}
 }
 
@@ -54,6 +56,7 @@ func (a *authHandlerNS) get(host string, sm *session.Manager, g session.Group) *
 		}
 		h, ok := a.handlers[path.Join(host, id)]
 		if ok {
+			h.lastUsed = time.Now()
 			return h
 		}
 	}
@@ -69,6 +72,7 @@ func (a *authHandlerNS) get(host string, sm *session.Manager, g session.Group) *
 			if err == nil {
 				if username == h.common.Username && password == h.common.Secret {
 					a.handlers[path.Join(host, session)] = h
+					h.lastUsed = time.Now()
 					return h
 				}
 			}
@@ -214,6 +218,8 @@ type authHandler struct {
 	// scopedTokens caches token indexed by scopes, which used in
 	// bearer auth case
 	scopedTokens map[string]*authResult
+
+	lastUsed time.Time
 }
 
 func newAuthHandler(client *http.Client, scheme auth.AuthenticationScheme, opts auth.TokenOptions) *authHandler {
@@ -222,6 +228,7 @@ func newAuthHandler(client *http.Client, scheme auth.AuthenticationScheme, opts 
 		scheme:       scheme,
 		common:       opts,
 		scopedTokens: map[string]*authResult{},
+		lastUsed:     time.Now(),
 	}
 }
 

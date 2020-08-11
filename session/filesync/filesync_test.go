@@ -46,7 +46,7 @@ func TestFileSyncIncludePatterns(t *testing.T) {
 	})
 
 	g.Go(func() (reterr error) {
-		c, err := m.Get(ctx, s.ID())
+		c, err := m.Get(ctx, s.ID(), false)
 		if err != nil {
 			return err
 		}

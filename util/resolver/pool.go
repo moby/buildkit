@@ -3,8 +3,10 @@ package resolver
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/remotes"
@@ -23,9 +25,40 @@ type Pool struct {
 }
 
 func NewPool() *Pool {
-	return &Pool{
+	p := &Pool{
 		m: map[string]*authHandlerNS{},
 	}
+	time.AfterFunc(5*time.Minute, p.gc)
+	return p
+}
+
+func (p *Pool) gc() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	for k, ns := range p.m {
+		ns.mu.Lock()
+		for key, h := range ns.handlers {
+			if time.Since(h.lastUsed) < 10*time.Minute {
+				continue
+			}
+			parts := strings.SplitN(key, "/", 2)
+			if len(parts) != 2 {
+				delete(ns.handlers, key)
+				continue
+			}
+			c, err := ns.sm.Get(context.TODO(), parts[1], true)
+			if c == nil || err != nil {
+				delete(ns.handlers, key)
+			}
+		}
+		if len(ns.handlers) == 0 {
+			delete(p.m, k)
+		}
+		ns.mu.Unlock()
+	}
+
+	time.AfterFunc(5*time.Minute, p.gc)
 }
 
 func (p *Pool) Clear() {
@@ -47,7 +80,7 @@ func (p *Pool) GetResolver(hosts docker.RegistryHosts, ref, scope string, sm *se
 	defer p.mu.Unlock()
 	h, ok := p.m[key]
 	if !ok {
-		h = newAuthHandlerNS()
+		h = newAuthHandlerNS(sm)
 		p.m[key] = h
 	}
 	return newResolver(hosts, h, sm, g)
