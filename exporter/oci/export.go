@@ -165,7 +165,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 	timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	caller, err := e.opt.SessionManager.Get(timeoutCtx, sessionID)
+	caller, err := e.opt.SessionManager.Get(timeoutCtx, sessionID, false)
 	if err != nil {
 		return nil, err
 	}
