@@ -148,7 +148,17 @@ func (a *dockerAuthorizer) AddResponses(ctx context.Context, responses []*http.R
 		if c.Scheme == auth.BearerAuth {
 			if err := invalidAuthorization(c, responses); err != nil {
 				a.handlers.delete(handler)
+
+				oldScope := ""
+				if handler != nil {
+					oldScope = strings.Join(handler.common.Scopes, " ")
+				}
 				handler = nil
+
+				// this hacky way seems to be best method to detect that error is fatal and should not be retried with a new token
+				if c.Parameters["error"] == "insufficient_scope" && c.Parameters["scope"] == oldScope {
+					return err
+				}
 			}
 
 			// reuse existing handler
