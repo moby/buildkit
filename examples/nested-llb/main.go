@@ -32,7 +32,7 @@ func main() {
 }
 
 func goBuildBase() llb.State {
-	goAlpine := llb.Image("docker.io/library/golang:1.13-alpine")
+	goAlpine := llb.Image("docker.io/library/golang:1.15-alpine")
 	return goAlpine.
 		AddEnv("PATH", "/usr/local/go/bin:"+system.DefaultPathEnv).
 		AddEnv("GOPATH", "/go").

@@ -1,6 +1,6 @@
 module github.com/moby/buildkit
 
-go 1.13
+go 1.15
 
 require (
 	github.com/AkihiroSuda/containerd-fuse-overlayfs v0.0.0-20200512015515-32086ef23a5a
