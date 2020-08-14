@@ -4,8 +4,6 @@ import (
 	"context"
 	"io/ioutil"
 	"os"
-	"runtime"
-	"strings"
 
 	"github.com/moby/buildkit/session/secrets"
 	"github.com/pkg/errors"
@@ -25,7 +23,7 @@ func NewStore(files []Source) (secrets.SecretStore, error) {
 			return nil, errors.Errorf("secret missing ID")
 		}
 		if f.Env == "" && f.FilePath == "" {
-			if hasEnv(f.ID) {
+			if _, ok := os.LookupEnv(f.ID); ok {
 				f.Env = f.ID
 			} else {
 				f.FilePath = f.ID
@@ -64,23 +62,4 @@ func (fs *fileStore) GetSecret(ctx context.Context, id string) ([]byte, error) {
 		return nil, err
 	}
 	return dt, nil
-}
-
-func hasEnv(name string) bool {
-	for _, entry := range os.Environ() {
-		idx := strings.IndexRune(entry, '=')
-		if idx == -1 {
-			continue
-		}
-		if runtime.GOOS == "windows" {
-			// Environment variable are case-insensitive on Windows. PaTh, path and PATH are equivalent.
-			if strings.EqualFold(entry[:idx], name) {
-				return true
-			}
-		}
-		if entry[:idx] == name {
-			return true
-		}
-	}
-	return false
 }
