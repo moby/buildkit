@@ -44,6 +44,7 @@ func Push(ctx context.Context, sm *session.Manager, sid string, provider content
 		ref = reference.TagNameOnly(parsed).String()
 	}
 
+	scope := "push"
 	if insecure {
 		insecureTrue := true
 		httpTrue := true
@@ -53,9 +54,10 @@ func Push(ctx context.Context, sm *session.Manager, sid string, provider content
 				PlainHTTP: &httpTrue,
 			},
 		})
+		scope += ":insecure"
 	}
 
-	resolver := resolver.New(hosts, resolver.NewSessionAuthenticator(sm, session.NewGroup(sid)))
+	resolver := resolver.DefaultPool.GetResolver(hosts, ref, scope, sm, session.NewGroup(sid))
 
 	pusher, err := resolver.Pusher(ctx, ref)
 	if err != nil {
