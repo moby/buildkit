@@ -391,15 +391,69 @@ func (sr *immutableRef) Extract(ctx context.Context) (rerr error) {
 		ctx = winlayers.UseWindowsLayerMode(ctx)
 	}
 
+	if _, err := sr.prepareRemoteSnapshots(ctx, sr.descHandlers); err != nil {
+		return err
+	}
+
 	return sr.extract(ctx, sr.descHandlers)
+}
+
+func (sr *immutableRef) prepareRemoteSnapshots(ctx context.Context, dhs DescHandlers) (bool, error) {
+	ok, err := sr.sizeG.Do(ctx, sr.ID()+"-prepare-remote-snapshot", func(ctx context.Context) (_ interface{}, rerr error) {
+		snapshotID := getSnapshotID(sr.md)
+		if _, err := sr.cm.Snapshotter.Stat(ctx, snapshotID); err == nil {
+			return true, nil
+		}
+		desc, err := sr.ociDesc()
+		if err != nil {
+			return false, err
+		}
+		dh := dhs[desc.Digest]
+		if dh == nil {
+			return false, nil
+		}
+
+		parentID := ""
+		if sr.parent != nil {
+			if ok, err := sr.parent.prepareRemoteSnapshots(ctx, dhs); !ok {
+				return false, err
+			}
+			parentID = getSnapshotID(sr.parent.md)
+		}
+
+		// Hint labels to the snapshotter
+		labels := dh.SnapshotLabels
+		if labels == nil {
+			labels = make(map[string]string)
+		}
+		labels["containerd.io/snapshot.ref"] = snapshotID
+		opt := snapshots.WithLabels(labels)
+
+		// Try to preapre the remote snapshot
+		key := fmt.Sprintf("tmp-%s %s", identity.NewID(), sr.Info().ChainID)
+		if err = sr.cm.Snapshotter.Prepare(ctx, key, parentID, opt); err != nil {
+			if errdefs.IsAlreadyExists(err) {
+				// Check if the targeting snapshot ID has been prepared as a remote
+				// snapshot in the snapshotter.
+				if _, err := sr.cm.Snapshotter.Stat(ctx, snapshotID); err == nil {
+					// We can use this remote snapshot without unlazying.
+					// Try the next layer as well.
+					return true, nil
+				}
+			}
+		}
+
+		// This layer cannot be prepared without unlazying.
+		return false, nil
+	})
+	return ok.(bool), err
 }
 
 func (sr *immutableRef) extract(ctx context.Context, dhs DescHandlers) error {
 	_, err := sr.sizeG.Do(ctx, sr.ID()+"-extract", func(ctx context.Context) (_ interface{}, rerr error) {
 		snapshotID := getSnapshotID(sr.md)
 		if _, err := sr.cm.Snapshotter.Stat(ctx, snapshotID); err == nil {
-			queueBlobOnly(sr.md, false)
-			return nil, sr.md.Commit()
+			return nil, nil
 		}
 
 		eg, egctx := errgroup.WithContext(ctx)
