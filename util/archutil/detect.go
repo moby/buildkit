@@ -82,37 +82,37 @@ func WarnIfUnsupported(pfs []string) {
 		if p != def {
 			if p == "linux/amd64" {
 				if err := amd64Supported(); err != nil {
-					printPlatfromWarning(p, err)
+					printPlatformWarning(p, err)
 				}
 			}
 			if p == "linux/arm64" {
 				if err := arm64Supported(); err != nil {
-					printPlatfromWarning(p, err)
+					printPlatformWarning(p, err)
 				}
 			}
 			if p == "linux/riscv64" {
 				if err := riscv64Supported(); err != nil {
-					printPlatfromWarning(p, err)
+					printPlatformWarning(p, err)
 				}
 			}
 			if p == "linux/ppc64le" {
 				if err := ppc64leSupported(); err != nil {
-					printPlatfromWarning(p, err)
+					printPlatformWarning(p, err)
 				}
 			}
 			if p == "linux/s390x" {
 				if err := s390xSupported(); err != nil {
-					printPlatfromWarning(p, err)
+					printPlatformWarning(p, err)
 				}
 			}
 			if p == "linux/386" {
 				if err := i386Supported(); err != nil {
-					printPlatfromWarning(p, err)
+					printPlatformWarning(p, err)
 				}
 			}
 			if strings.HasPrefix(p, "linux/arm/v6") || strings.HasPrefix(p, "linux/arm/v7") {
 				if err := armSupported(); err != nil {
-					printPlatfromWarning(p, err)
+					printPlatformWarning(p, err)
 				}
 			}
 		}
@@ -123,7 +123,7 @@ func defaultPlatform() string {
 	return platforms.Format(platforms.Normalize(platforms.DefaultSpec()))
 }
 
-func printPlatfromWarning(p string, err error) {
+func printPlatformWarning(p string, err error) {
 	if strings.Contains(err.Error(), "exec format error") {
 		logrus.Warnf("platform %s cannot pass the validation, kernel support for miscellaneous binary may have not enabled.", p)
 	} else if strings.Contains(err.Error(), "no such file or directory") {
