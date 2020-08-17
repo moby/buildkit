@@ -1,9 +1,9 @@
 # syntax = docker/dockerfile:1.1-experimental
 
-ARG RUNC_VERSION=v1.0.0-rc91
-ARG CONTAINERD_VERSION=v1.3.6
-# containerd v1.4 for integration tests
-ARG CONTAINERD_ALT_VERSION=v1.4.0-beta.2
+ARG RUNC_VERSION=v1.0.0-rc92
+ARG CONTAINERD_VERSION=v1.4.0
+# containerd v1.3 for integration tests
+ARG CONTAINERD_ALT_VERSION=v1.3.7
 # available targets: buildkitd, buildkitd.oci_only, buildkitd.containerd_only
 ARG BUILDKIT_TARGET=buildkitd
 ARG REGISTRY_VERSION=2.7.1
@@ -150,7 +150,7 @@ RUN --mount=from=containerd-src,src=/usr/src/containerd,readwrite --mount=target
   && make bin/ctr \
   && mv bin /out
 
-# containerd v1.4 for integration tests
+# containerd v1.3 for integration tests
 FROM containerd-base as containerd-alt
 ARG CONTAINERD_ALT_VERSION
 RUN --mount=from=containerd-src,src=/usr/src/containerd,readwrite --mount=target=/root/.cache,type=cache \
@@ -232,7 +232,7 @@ RUN apt-get --no-install-recommends install -y uidmap sudo vim iptables \
   && chown -R user /run/user/1000 /home/user \
   && update-alternatives --set iptables /usr/sbin/iptables-legacy
 # musl is needed to directly use the registry binary that is built on alpine
-ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.4=/opt/containerd-alt/bin"
+ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.3=/opt/containerd-alt/bin"
 COPY --from=rootlesskit /rootlesskit /usr/bin/
 COPY --from=containerd-alt /out/containerd* /opt/containerd-alt/bin/
 COPY --from=registry /bin/registry /usr/bin
