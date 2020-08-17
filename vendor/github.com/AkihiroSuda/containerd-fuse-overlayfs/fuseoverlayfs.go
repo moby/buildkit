@@ -41,13 +41,6 @@ const (
 	fuseoverlayfsBinary = "fuse-overlayfs"
 )
 
-var (
-	// workaround for the concurrency issue
-	// https://github.com/AkihiroSuda/containerd-fuse-overlayfs/issues/2
-	// https://github.com/containers/fuse-overlayfs/issues/134
-	commonMountOptions = []string{"writeback=0"}
-)
-
 func init() {
 	plugin.Register(&plugin.Registration{
 		Type: plugin.SnapshotPlugin,
@@ -505,7 +498,6 @@ func (o *snapshotter) mounts(s storage.Snapshot, info snapshots.Info) []mount.Mo
 	if mapping, ok := info.Labels["containerd.io/snapshot/gidmapping"]; ok {
 		options = append(options, fmt.Sprintf("gidmapping=%s", mapping))
 	}
-	options = append(options, commonMountOptions...)
 	return []mount.Mount{
 		{
 			Type:    "fuse3." + fuseoverlayfsBinary,

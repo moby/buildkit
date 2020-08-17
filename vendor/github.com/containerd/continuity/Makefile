@@ -33,10 +33,10 @@ TEST_REQUIRES_ROOT_PACKAGES=$(filter \
     done | sort -u) \
     )
 
-.PHONY: clean all fmt vet lint build test binaries
+.PHONY: clean all lint build test binaries
 .DEFAULT: default
-# skip lint at the moment
-all: AUTHORS clean fmt vet fmt build test binaries
+
+all: AUTHORS clean lint build test binaries
 
 AUTHORS: .mailmap .git/HEAD
 	 git log --format='%aN <%aE>' | sort -fu > $@
@@ -52,20 +52,9 @@ ${PREFIX}/bin/continuity: version/version.go $(shell find . -type f -name '*.go'
 generate:
 	go generate -mod=vendor $(PACKAGES)
 
-# Depends on binaries because vet will silently fail if it can't load compiled
-# imports
-vet: binaries
-	@echo "+ $@"
-	@go vet -mod=vendor $(PACKAGES)
-
-fmt:
-	@echo "+ $@"
-	@test -z "$$(gofmt -s -l . | grep -v Godeps/_workspace/src/ | grep -v vendor/ | tee /dev/stderr)" || \
-		echo "+ please format Go code with 'gofmt -s'"
-
 lint:
 	@echo "+ $@"
-	@test -z "$$(golint $(PACKAGES) | grep -v Godeps/_workspace/src/ | grep -v vendor/ |tee /dev/stderr)"
+	@golangci-lint run
 
 build:
 	@echo "+ $@"
