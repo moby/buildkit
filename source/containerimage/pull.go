@@ -3,7 +3,9 @@ package containerimage
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,6 +15,7 @@ import (
 	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/remotes/docker"
+	"github.com/containerd/containerd/snapshots"
 	"github.com/docker/docker/errdefs"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/client/llb"
@@ -203,14 +206,29 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 				progressController.Name = p.vtx.Name()
 			}
 
-			descHandler := &cache.DescHandler{
-				Provider: p.manifest.Remote.Provider,
-				Progress: progressController,
+			var layers string
+			for _, desc := range p.manifest.Remote.Descriptors {
+				layers += fmt.Sprintf("%s,", desc.Digest.String())
 			}
+			layers = strings.TrimSuffix(layers, ",")
 
 			p.descHandlers = cache.DescHandlers(make(map[digest.Digest]*cache.DescHandler))
 			for _, desc := range p.manifest.Remote.Descriptors {
-				p.descHandlers[desc.Digest] = descHandler
+
+				// Hints for remote/stargz snapshotter for searching for remote snapshots
+				labels := snapshots.FilterInheritedLabels(desc.Annotations)
+				if labels == nil {
+					labels = make(map[string]string)
+				}
+				labels["containerd.io/snapshot/remote/stargz.reference"] = p.manifest.Ref
+				labels["containerd.io/snapshot/remote/stargz.digest"] = desc.Digest.String()
+				labels["containerd.io/snapshot/remote/stargz.layers"] = layers
+
+				p.descHandlers[desc.Digest] = &cache.DescHandler{
+					Provider:       p.manifest.Remote.Provider,
+					Progress:       progressController,
+					SnapshotLabels: labels,
+				}
 			}
 		}
 

@@ -6,11 +6,16 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"time"
 
 	fuseoverlayfs "github.com/AkihiroSuda/containerd-fuse-overlayfs"
+	snapshotsapi "github.com/containerd/containerd/api/services/snapshots/v1"
+	"github.com/containerd/containerd/defaults"
+	"github.com/containerd/containerd/pkg/dialer"
 	ctdsnapshot "github.com/containerd/containerd/snapshots"
 	"github.com/containerd/containerd/snapshots/native"
 	"github.com/containerd/containerd/snapshots/overlay"
+	snproxy "github.com/containerd/containerd/snapshots/proxy"
 	"github.com/containerd/containerd/sys"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/executor/oci"
@@ -22,6 +27,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
 )
 
 func init() {
@@ -50,8 +57,12 @@ func init() {
 		},
 		cli.StringFlag{
 			Name:  "oci-worker-snapshotter",
-			Usage: "name of snapshotter (overlayfs or native)",
+			Usage: "name of snapshotter (overlayfs, native, etc.)",
 			Value: defaultConf.Workers.OCI.Snapshotter,
+		},
+		cli.StringFlag{
+			Name:  "oci-worker-proxy-snapshotter-path",
+			Usage: "address of proxy snapshotter socket (do not include 'unix://' prefix)",
 		},
 		cli.StringSliceFlag{
 			Name:  "oci-worker-platform",
@@ -193,6 +204,9 @@ func applyOCIFlags(c *cli.Context, cfg *config.Config) error {
 	if c.GlobalIsSet("oci-worker-binary") {
 		cfg.Workers.OCI.Binary = c.GlobalString("oci-worker-binary")
 	}
+	if c.GlobalIsSet("oci-worker-proxy-snapshotter-path") {
+		cfg.Workers.OCI.ProxySnapshotterPath = c.GlobalString("oci-worker-proxy-snapshotter-path")
+	}
 	return nil
 }
 
@@ -213,7 +227,7 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 		return nil, err
 	}
 
-	snFactory, err := snapshotterFactory(common.config.Root, cfg.Snapshotter)
+	snFactory, err := snapshotterFactory(common.config.Root, cfg.Snapshotter, cfg.ProxySnapshotterPath)
 	if err != nil {
 		return nil, err
 	}
@@ -266,7 +280,36 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 	return []worker.Worker{w}, nil
 }
 
-func snapshotterFactory(commonRoot, name string) (runc.SnapshotterFactory, error) {
+func snapshotterFactory(commonRoot, name, address string) (runc.SnapshotterFactory, error) {
+	if address != "" {
+		snFactory := runc.SnapshotterFactory{
+			Name: name,
+		}
+		if _, err := os.Stat(address); os.IsNotExist(err) {
+			return snFactory, errors.Wrapf(err, "snapshotter doesn't exist on %q (Do not include 'unix://' prefix)", address)
+		}
+		snFactory.New = func(root string) (ctdsnapshot.Snapshotter, error) {
+			backoffConfig := backoff.DefaultConfig
+			backoffConfig.MaxDelay = 3 * time.Second
+			connParams := grpc.ConnectParams{
+				Backoff: backoffConfig,
+			}
+			gopts := []grpc.DialOption{
+				grpc.WithInsecure(),
+				grpc.WithConnectParams(connParams),
+				grpc.WithContextDialer(dialer.ContextDialer),
+				grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(defaults.DefaultMaxRecvMsgSize)),
+				grpc.WithDefaultCallOptions(grpc.MaxCallSendMsgSize(defaults.DefaultMaxSendMsgSize)),
+			}
+			conn, err := grpc.Dial(dialer.DialAddress(address), gopts...)
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to dial %q", address)
+			}
+			return snproxy.NewSnapshotter(snapshotsapi.NewSnapshotsClient(conn), name), nil
+		}
+		return snFactory, nil
+	}
+
 	if name == "auto" {
 		if err := overlay.Supported(commonRoot); err == nil {
 			name = "overlayfs"
