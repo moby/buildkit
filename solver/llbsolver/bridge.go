@@ -3,7 +3,6 @@ package llbsolver
 import (
 	"context"
 	"fmt"
-	"io"
 	"strings"
 	"sync"
 	"time"
@@ -246,19 +245,30 @@ func (rp *resultProxy) Result(ctx context.Context) (res solver.CachedResult, err
 	return nil, err
 }
 
-func (s *llbBridge) Exec(ctx context.Context, meta executor.Meta, root cache.ImmutableRef, stdin io.ReadCloser, stdout, stderr io.WriteCloser) (err error) {
-	w, err := s.resolveWorker()
+func (b *llbBridge) Run(ctx context.Context, id string, root cache.Mountable, mounts []executor.Mount, process executor.ProcessInfo, started chan<- struct{}) (err error) {
+	w, err := b.resolveWorker()
 	if err != nil {
 		return err
 	}
-	span, ctx := tracing.StartSpan(ctx, strings.Join(meta.Args, " "))
-	err = w.Exec(ctx, meta, root, stdin, stdout, stderr)
+	span, ctx := tracing.StartSpan(ctx, strings.Join(process.Meta.Args, " "))
+	err = w.Executor().Run(ctx, id, root, mounts, process, started)
 	tracing.FinishWithError(span, err)
 	return err
 }
 
-func (s *llbBridge) ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt) (dgst digest.Digest, config []byte, err error) {
-	w, err := s.resolveWorker()
+func (b *llbBridge) Exec(ctx context.Context, id string, process executor.ProcessInfo) (err error) {
+	w, err := b.resolveWorker()
+	if err != nil {
+		return err
+	}
+	span, ctx := tracing.StartSpan(ctx, strings.Join(process.Meta.Args, " "))
+	err = w.Executor().Exec(ctx, id, process)
+	tracing.FinishWithError(span, err)
+	return err
+}
+
+func (b *llbBridge) ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt) (dgst digest.Digest, config []byte, err error) {
+	w, err := b.resolveWorker()
 	if err != nil {
 		return "", nil, err
 	}
@@ -271,8 +281,8 @@ func (s *llbBridge) ResolveImageConfig(ctx context.Context, ref string, opt llb.
 	} else {
 		id += platforms.Format(*platform)
 	}
-	err = inBuilderContext(ctx, s.builder, opt.LogName, id, func(ctx context.Context, g session.Group) error {
-		dgst, config, err = w.ResolveImageConfig(ctx, ref, opt, s.sm, g)
+	err = inBuilderContext(ctx, b.builder, opt.LogName, id, func(ctx context.Context, g session.Group) error {
+		dgst, config, err = w.ResolveImageConfig(ctx, ref, opt, b.sm, g)
 		return err
 	})
 	return dgst, config, err

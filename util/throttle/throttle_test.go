@@ -55,7 +55,7 @@ func TestThrottle(t *testing.T) {
 
 }
 
-func TestThrottleAfter(t *testing.T) {
+func TestAfter(t *testing.T) {
 	t.Parallel()
 
 	var i int64
@@ -63,7 +63,7 @@ func TestThrottleAfter(t *testing.T) {
 		atomic.AddInt64(&i, 1)
 	}
 
-	f = ThrottleAfter(100*time.Millisecond, f)
+	f = After(100*time.Millisecond, f)
 
 	f()
 

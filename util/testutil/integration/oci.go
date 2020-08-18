@@ -1,8 +1,6 @@
 package integration
 
 import (
-	"bufio"
-	"bytes"
 	"fmt"
 	"log"
 	"os"
@@ -54,7 +52,7 @@ func (s *oci) New(cfg *BackendConfig) (Backend, func() error, error) {
 			return nil, nil, errors.Errorf("unsupported id pair: uid=%d, gid=%d", s.uid, s.gid)
 		}
 		// TODO: make sure the user exists and subuid/subgid are configured.
-		buildkitdArgs = append([]string{"sudo", "-u", fmt.Sprintf("#%d", s.uid), "-i", "--", "rootlesskit"}, buildkitdArgs...)
+		buildkitdArgs = append([]string{"sudo", "-u", fmt.Sprintf("#%d", s.uid), "-i", "--", "exec", "rootlesskit"}, buildkitdArgs...)
 	}
 
 	buildkitdSock, stop, err := runBuildkitd(cfg, buildkitdArgs, cfg.Logs, s.uid, s.gid)
@@ -67,14 +65,4 @@ func (s *oci) New(cfg *BackendConfig) (Backend, func() error, error) {
 		address:  buildkitdSock,
 		rootless: s.uid != 0,
 	}, stop, nil
-}
-
-func printLogs(logs map[string]*bytes.Buffer, f func(args ...interface{})) {
-	for name, l := range logs {
-		f(name)
-		s := bufio.NewScanner(l)
-		for s.Scan() {
-			f(s.Text())
-		}
-	}
 }

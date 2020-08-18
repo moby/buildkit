@@ -6,7 +6,7 @@ import (
 	"crypto/x509"
 	"io/ioutil"
 	"net"
-	"time"
+	"net/url"
 
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
@@ -54,7 +54,7 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 			stream = append(stream, otgrpc.OpenTracingStreamClientInterceptor(wt.tracer))
 		}
 		if wd, ok := o.(*withDialer); ok {
-			gopts = append(gopts, grpc.WithDialer(wd.dialer))
+			gopts = append(gopts, grpc.WithContextDialer(wd.dialer))
 			needDialer = false
 		}
 	}
@@ -63,9 +63,7 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 		if err != nil {
 			return nil, err
 		}
-		// TODO(AkihiroSuda): use WithContextDialer (requires grpc 1.19)
-		// https://github.com/grpc/grpc-go/commit/40cb5618f475e7b9d61aa7920ae4b04ef9bbaf89
-		gopts = append(gopts, grpc.WithDialer(dialFn))
+		gopts = append(gopts, grpc.WithContextDialer(dialFn))
 	}
 	if needWithInsecure {
 		gopts = append(gopts, grpc.WithInsecure())
@@ -73,6 +71,15 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 	if address == "" {
 		address = appdefaults.Address
 	}
+
+	// grpc-go uses a slightly different naming scheme: https://github.com/grpc/grpc/blob/master/doc/naming.md
+	// This will end up setting rfc non-complient :authority header to address string (e.g. tcp://127.0.0.1:1234).
+	// So, here sets right authority header via WithAuthority DialOption.
+	addressURL, err := url.Parse(address)
+	if err != nil {
+		return nil, err
+	}
+	gopts = append(gopts, grpc.WithAuthority(addressURL.Host))
 
 	unary = append(unary, grpcerrors.UnaryClientInterceptor)
 	stream = append(stream, grpcerrors.StreamClientInterceptor)
@@ -118,10 +125,10 @@ func WithFailFast() ClientOpt {
 }
 
 type withDialer struct {
-	dialer func(string, time.Duration) (net.Conn, error)
+	dialer func(context.Context, string) (net.Conn, error)
 }
 
-func WithDialer(df func(string, time.Duration) (net.Conn, error)) ClientOpt {
+func WithContextDialer(df func(context.Context, string) (net.Conn, error)) ClientOpt {
 	return &withDialer{dialer: df}
 }
 
@@ -179,17 +186,13 @@ type withTracer struct {
 	tracer opentracing.Tracer
 }
 
-func resolveDialer(address string) (func(string, time.Duration) (net.Conn, error), error) {
+func resolveDialer(address string) (func(context.Context, string) (net.Conn, error), error) {
 	ch, err := connhelper.GetConnectionHelper(address)
 	if err != nil {
 		return nil, err
 	}
 	if ch != nil {
-		f := func(a string, _ time.Duration) (net.Conn, error) {
-			ctx := context.Background()
-			return ch.ContextDialer(ctx, a)
-		}
-		return f, nil
+		return ch.ContextDialer, nil
 	}
 	// basic dialer
 	return dialer, nil

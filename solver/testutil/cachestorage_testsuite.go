@@ -37,11 +37,19 @@ func runStorageTest(t *testing.T, fn func(t *testing.T, st solver.CacheKeyStorag
 
 func testResults(t *testing.T, st solver.CacheKeyStorage) {
 	t.Parallel()
+	timeNow := time.Now()
 	err := st.AddResult("foo", solver.CacheResult{
 		ID:        "foo0",
-		CreatedAt: time.Now(),
+		CreatedAt: timeNow,
 	})
 	require.NoError(t, err)
+
+	// Windows time.Now() resolution can be quite coarse, so frequently
+	// time.Now() will be the same between two nearby calls.
+	if time.Now() == timeNow {
+		time.Sleep(time.Duration(100) * time.Millisecond)
+	}
+	require.NotEqual(t, timeNow, time.Now(), "time has stopped")
 
 	err = st.AddResult("foo", solver.CacheResult{
 		ID:        "foo1",
@@ -67,7 +75,7 @@ func testResults(t *testing.T, st solver.CacheKeyStorage) {
 	require.True(t, ok)
 	f1, ok := m["foo1"]
 	require.True(t, ok)
-	require.True(t, f0.CreatedAt.Before(f1.CreatedAt))
+	require.True(t, f0.CreatedAt.Before(f1.CreatedAt), "f0.CreatedAt %v was not Before f1.CreatedAt %v", f0.CreatedAt, f1.CreatedAt)
 
 	m = map[string]solver.CacheResult{}
 	err = st.WalkResults("bar", func(r solver.CacheResult) error {

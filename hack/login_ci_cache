@@ -14,14 +14,12 @@ if [ -n "$MASTERCACHE_PASSWORD" ]; then
 elif [ "$TRAVIS_EVENT_TYPE" == "pull_request" ]; then
   repo="cicache.buildk.it/moby/buildkit/pr$TRAVIS_BUILD_ID"
   session=$(curl -F jobid=$TRAVIS_JOB_ID -F scope=moby/buildkit/pr https://cicache.buildk.it/token/newsession)
-  sessionID=$(echo $session|cut -f 1 -d ' ')
-  echo $session|cut -f 2 -d ' '
+  sessionID=$(echo $session | cut -f 1 -d ' ')
+  echo $session | cut -f 2 -d ' '
   mkdir -p ~/.docker/
-  curl -F sessionid=$sessionID -F scope=moby/buildkit/pr https://cicache.buildk.it/token/credentials > ~/.docker/config.json
+  curl -F sessionid=$sessionID -F scope=moby/buildkit/pr https://cicache.buildk.it/token/credentials >~/.docker/config.json
 fi
-
 
 if [ -n "$repo" ]; then
-  echo -n $repo > /tmp/buildkit-ci-cache-repo
+  echo -n $repo >/tmp/buildkit-ci-cache-repo
 fi
-

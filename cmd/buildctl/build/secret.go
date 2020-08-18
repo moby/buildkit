@@ -61,7 +61,7 @@ func parseSecret(value string) (*secretsprovider.Source, error) {
 			return nil, errors.Errorf("unexpected key '%s' in '%s'", key, field)
 		}
 	}
-	if typ == "env" {
+	if typ == "env" && fs.Env == "" {
 		fs.Env = fs.FilePath
 		fs.FilePath = ""
 	}

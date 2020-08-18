@@ -31,7 +31,7 @@ func grpcClientConn(ctx context.Context, conn net.Conn) (context.Context, *grpc.
 	var stream []grpc.StreamClientInterceptor
 
 	var dialCount int64
-	dialer := grpc.WithDialer(func(addr string, d time.Duration) (net.Conn, error) {
+	dialer := grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
 		if c := atomic.AddInt64(&dialCount, 1); c > 1 {
 			return nil, errors.Errorf("only one connection allowed")
 		}

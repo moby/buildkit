@@ -176,7 +176,7 @@ containerd versions:
 | Runtime Shim API | Stable   | 1.2                | - |
 | Daemon Config    | Stable   | 1.0			       | - |
 | Go client API    | Unstable | _future_           | [godoc](https://godoc.org/github.com/containerd/containerd) |
-| CRI GRPC API     | Unstable | v1alpha2 _current_ | [api/](https://github.com/kubernetes/kubernetes/tree/master/pkg/kubelet/apis/cri/runtime/v1alpha2) |
+| CRI GRPC API     | Unstable | v1alpha2 _current_ | [cri-api](https://github.com/kubernetes/cri-api/tree/master/pkg/apis/runtime/v1alpha2) |
 | `ctr` tool       | Unstable | Out of scope       | - |
 
 From the version stated in the above table, that component must adhere to the
@@ -309,3 +309,12 @@ in that process. Container root file systems will be maintained on upgrade.
 We may make exceptions in the interest of __security patches__. If a break is
 required, it will be communicated clearly and the solution will be considered
 against total impact.
+
+## Deprecated features
+
+The deprecated features are shown in the following table:
+
+| Component                                                            | Deprecation release | Target release for removal |
+|----------------------------------------------------------------------|---------------------|----------------------------|
+| Runtime V1 API and implementation (`io.containerd.runtime.v1.linux`) | containerd v1.4     | containerd v2.0            |
+| Runc V1 implementation of Runtime V2 (`io.containerd.runc.v1`)       | containerd v1.4     | containerd v2.0            |

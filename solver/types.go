@@ -172,6 +172,12 @@ type CacheMap struct {
 		// the checksum of file contents from input snapshots.
 		ComputeDigestFunc ResultBasedCacheFunc
 	}
+
+	// Opts specifies generic options that will be passed to cache load calls if/when
+	// the key associated with this CacheMap is used to load a ref. It allows options
+	// such as oci descriptor content providers and progress writers to be passed to
+	// the cache. Opts should not have any impact on the computed cache key.
+	Opts CacheOpts
 }
 
 // ExportableCacheKey is a cache key connected with an exporter that can export

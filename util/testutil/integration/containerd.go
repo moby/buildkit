@@ -18,7 +18,7 @@ func InitContainerdWorker() {
 	Register(&containerd{
 		name:           "containerd",
 		containerd:     "containerd",
-		containerdShim: "containerd-shim",
+		containerdShim: "containerd-shim-runc-v2",
 	})
 	// defined in Dockerfile
 	// e.g. `containerd-1.1=/opt/containerd-1.1/bin,containerd-42.0=/opt/containerd-42.0/bin`
@@ -33,7 +33,7 @@ func InitContainerdWorker() {
 			Register(&containerd{
 				name:           name,
 				containerd:     filepath.Join(bin, "containerd"),
-				containerdShim: filepath.Join(bin, "containerd-shim"),
+				containerdShim: filepath.Join(bin, "containerd-shim-runc-v2"),
 			})
 		}
 	}

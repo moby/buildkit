@@ -2,7 +2,7 @@ package llb
 
 import (
 	"context"
-	_ "crypto/sha256"
+	_ "crypto/sha256" // for opencontainers/go-digest
 	"fmt"
 	"net"
 	"sort"
@@ -218,9 +218,9 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 
 	if p := e.proxyEnv; p != nil {
 		peo.Meta.ProxyEnv = &pb.ProxyEnv{
-			HttpProxy:  p.HttpProxy,
-			HttpsProxy: p.HttpsProxy,
-			FtpProxy:   p.FtpProxy,
+			HttpProxy:  p.HTTPProxy,
+			HttpsProxy: p.HTTPSProxy,
+			FtpProxy:   p.FTPProxy,
 			NoProxy:    p.NoProxy,
 		}
 		addCap(&e.constraints, pb.CapExecMetaProxy)
@@ -639,9 +639,9 @@ type MountInfo struct {
 }
 
 type ProxyEnv struct {
-	HttpProxy  string
-	HttpsProxy string
-	FtpProxy   string
+	HTTPProxy  string
+	HTTPSProxy string
+	FTPProxy   string
 	NoProxy    string
 }
 

@@ -386,7 +386,7 @@ func (cc *cacheContext) ChecksumWildcard(ctx context.Context, mountable cache.Mo
 
 	wildcards, err := cc.wildcards(ctx, m, p)
 	if err != nil {
-		return "", nil
+		return "", err
 	}
 
 	if followLinks {
@@ -413,9 +413,8 @@ func (cc *cacheContext) ChecksumWildcard(ctx context.Context, mountable cache.Mo
 			digester.Hash().Write([]byte(w.Record.Digest))
 		}
 		return digester.Digest(), nil
-	} else {
-		return wildcards[0].Record.Digest, nil
 	}
+	return wildcards[0].Record.Digest, nil
 }
 
 func (cc *cacheContext) Checksum(ctx context.Context, mountable cache.Mountable, p string, followLinks bool) (digest.Digest, error) {
@@ -688,24 +687,24 @@ func (cc *cacheContext) needsScanFollow(root *iradix.Node, p string, linksWalked
 	if p == "/" {
 		p = ""
 	}
-	if v, ok := root.Get(convertPathToKey([]byte(p))); !ok {
+	v, ok := root.Get(convertPathToKey([]byte(p)))
+	if !ok {
 		if p == "" {
 			return true, nil
 		}
 		return cc.needsScanFollow(root, path.Clean(path.Dir(p)), linksWalked)
-	} else {
-		cr := v.(*CacheRecord)
-		if cr.Type == CacheRecordTypeSymlink {
-			if *linksWalked > 255 {
-				return false, errTooManyLinks
-			}
-			*linksWalked++
-			link := path.Clean(cr.Linkname)
-			if !path.IsAbs(cr.Linkname) {
-				link = path.Join("/", path.Dir(p), link)
-			}
-			return cc.needsScanFollow(root, link, linksWalked)
+	}
+	cr := v.(*CacheRecord)
+	if cr.Type == CacheRecordTypeSymlink {
+		if *linksWalked > 255 {
+			return false, errTooManyLinks
 		}
+		*linksWalked++
+		link := path.Clean(cr.Linkname)
+		if !path.IsAbs(cr.Linkname) {
+			link = path.Join("/", path.Dir(p), link)
+		}
+		return cc.needsScanFollow(root, link, linksWalked)
 	}
 	return false, nil
 }
@@ -875,12 +874,15 @@ func ensureOriginMetadata(md *metadata.StorageItem) *metadata.StorageItem {
 }
 
 var pool32K = sync.Pool{
-	New: func() interface{} { return make([]byte, 32*1024) }, // 32K
+	New: func() interface{} {
+		buf := make([]byte, 32*1024) // 32K
+		return &buf
+	},
 }
 
 func poolsCopy(dst io.Writer, src io.Reader) (written int64, err error) {
-	buf := pool32K.Get().([]byte)
-	written, err = io.CopyBuffer(dst, src, buf)
+	buf := pool32K.Get().(*[]byte)
+	written, err = io.CopyBuffer(dst, src, *buf)
 	pool32K.Put(buf)
 	return
 }

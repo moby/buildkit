@@ -2,8 +2,8 @@
 
 ARG RUNC_VERSION=v1.0.0-rc91
 ARG CONTAINERD_VERSION=v1.3.6
-# containerd v1.2 for integration tests
-ARG CONTAINERD_OLD_VERSION=v1.2.13
+# containerd v1.4 for integration tests
+ARG CONTAINERD_ALT_VERSION=v1.4.0-beta.2
 # available targets: buildkitd, buildkitd.oci_only, buildkitd.containerd_only
 ARG BUILDKIT_TARGET=buildkitd
 ARG REGISTRY_VERSION=2.7.1
@@ -132,6 +132,7 @@ VOLUME /var/lib/buildkit
 
 FROM git AS containerd-src
 ARG CONTAINERD_VERSION
+ARG CONTAINERD_ALT_VERSION
 WORKDIR /usr/src
 RUN git clone https://github.com/containerd/containerd.git containerd
 
@@ -145,18 +146,18 @@ RUN --mount=from=containerd-src,src=/usr/src/containerd,readwrite --mount=target
   git fetch origin \
   && git checkout -q "$CONTAINERD_VERSION" \
   && make bin/containerd \
-  && make bin/containerd-shim \
+  && make bin/containerd-shim-runc-v2 \
   && make bin/ctr \
   && mv bin /out
 
-# containerd v1.2 for integration tests
-FROM containerd-base as containerd-old
-ARG CONTAINERD_OLD_VERSION
+# containerd v1.4 for integration tests
+FROM containerd-base as containerd-alt
+ARG CONTAINERD_ALT_VERSION
 RUN --mount=from=containerd-src,src=/usr/src/containerd,readwrite --mount=target=/root/.cache,type=cache \
   git fetch origin \
-  && git checkout -q "$CONTAINERD_OLD_VERSION" \
+  && git checkout -q "$CONTAINERD_ALT_VERSION" \
   && make bin/containerd \
-  && make bin/containerd-shim \
+  && make bin/containerd-shim-runc-v2 \
   && mv bin /out
 
 ARG REGISTRY_VERSION
@@ -231,9 +232,9 @@ RUN apt-get --no-install-recommends install -y uidmap sudo vim iptables \
   && chown -R user /run/user/1000 /home/user \
   && update-alternatives --set iptables /usr/sbin/iptables-legacy
 # musl is needed to directly use the registry binary that is built on alpine
-#ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.2=/opt/containerd-old/bin"
+ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.4=/opt/containerd-alt/bin"
 COPY --from=rootlesskit /rootlesskit /usr/bin/
-COPY --from=containerd-old /out/containerd* /opt/containerd-old/bin/
+COPY --from=containerd-alt /out/containerd* /opt/containerd-alt/bin/
 COPY --from=registry /bin/registry /usr/bin
 COPY --from=runc /usr/bin/runc /usr/bin
 COPY --from=containerd /out/containerd* /usr/bin/

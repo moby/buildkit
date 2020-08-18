@@ -7,9 +7,8 @@ install:
   - sudo docker cp buildkit:/usr/bin/buildctl /usr/bin/
   - export BUILDKIT_HOST=tcp://0.0.0.0:1234
 
-after_failure:
-  - docker ps -a && docker logs buildkit
-  - sudo dmesg
+after_script:
+  - if [[ "$TRAVIS_TEST_RESULT" == 1 ]]; then docker ps -a && docker logs buildkit && sudo dmesg; fi
 
 env:
   global:
@@ -31,6 +30,7 @@ jobs:
        - SKIP_INTEGRATION_TESTS=1 ./hack/test integration gateway
        - ./hack/validate-vendor
        - ./hack/validate-generated-files
+       - ./hack/validate-shfmt
        - TESTPKGS=./frontend ./hack/test
       name: "Unit Tests & Lint & Vendor & Proto"
     - script:

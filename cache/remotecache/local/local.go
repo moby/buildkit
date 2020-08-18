@@ -76,7 +76,7 @@ func getContentStore(ctx context.Context, sm *session.Manager, g session.Group, 
 	timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	caller, err := sm.Get(timeoutCtx, sessionID)
+	caller, err := sm.Get(timeoutCtx, sessionID, false)
 	if err != nil {
 		return nil, err
 	}

@@ -16,6 +16,7 @@ import (
 	"github.com/moby/buildkit/frontend/gateway"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/entitlements"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/worker"
@@ -267,7 +268,7 @@ func inlineCache(ctx context.Context, e remotecache.Exporter, res solver.CachedR
 			return nil, errors.Errorf("invalid reference: %T", res.Sys())
 		}
 
-		remote, err := workerRef.Worker.GetRemote(ctx, workerRef.ImmutableRef, true)
+		remote, err := workerRef.ImmutableRef.GetRemote(ctx, true, compression.Default)
 		if err != nil || remote == nil {
 			return nil, nil
 		}

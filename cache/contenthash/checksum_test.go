@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -199,6 +200,26 @@ func TestChecksumWildcard(t *testing.T) {
 
 	err = ref.Release(context.TODO())
 	require.NoError(t, err)
+}
+
+func TestChecksumWildcardWithBadMountable(t *testing.T) {
+	t.Parallel()
+	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+	cm, _ := setupCacheManager(t, tmpdir, "native", snapshotter)
+	defer cm.Close()
+
+	ref := createRef(t, cm, nil)
+
+	cc, err := newCacheContext(ref.Metadata(), nil)
+	require.NoError(t, err)
+
+	_, err = cc.ChecksumWildcard(context.TODO(), newBadMountable(), "*", false)
+	require.Error(t, err)
 }
 
 func TestSymlinksNoFollow(t *testing.T) {
@@ -858,6 +879,11 @@ func TestPersistence(t *testing.T) {
 }
 
 func createRef(t *testing.T, cm cache.Manager, files []string) cache.ImmutableRef {
+	if runtime.GOOS == "windows" && len(files) > 0 {
+		// lm.Mount() will fail
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+
 	mref, err := cm.New(context.TODO(), nil, cache.CachePolicyRetain)
 	require.NoError(t, err)
 
@@ -905,6 +931,18 @@ func setupCacheManager(t *testing.T, tmpdir string, snapshotterName string, snap
 	return cm, func() {
 		db.Close()
 	}
+}
+
+type badMountable struct{}
+
+func (bm *badMountable) Mount(ctx context.Context, readonly bool) (snapshot.Mountable, error) {
+	return nil, errors.New("tried to mount bad mountable")
+}
+
+// newBadMountable returns a cache.Mountable that will fail to mount, for use in APIs
+// that require a Mountable, but which should never actually try to access the filesystem.
+func newBadMountable() cache.Mountable {
+	return &badMountable{}
 }
 
 // these test helpers are from tonistiigi/fsutil

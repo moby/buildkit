@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/containerd/containerd/content"
@@ -269,6 +270,10 @@ func TestManager(t *testing.T) {
 }
 
 func TestSnapshotExtract(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
@@ -405,6 +410,10 @@ func TestSnapshotExtract(t *testing.T) {
 }
 
 func TestExtractOnMutable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
@@ -443,13 +452,17 @@ func TestExtractOnMutable(t *testing.T) {
 	err = content.WriteBlob(ctx, co.cs, "ref2", bytes.NewBuffer(b2), desc2)
 	require.NoError(t, err)
 
-	snap2, err := cm.GetByBlob(ctx, desc2, snap)
+	_, err = cm.GetByBlob(ctx, desc2, snap)
 	require.Error(t, err)
 
-	err = snap.SetBlob(ctx, desc)
+	leaseCtx, done, err := leaseutil.WithLease(ctx, co.lm, leases.WithExpiration(0))
 	require.NoError(t, err)
 
-	snap2, err = cm.GetByBlob(ctx, desc2, snap)
+	err = snap.(*immutableRef).setBlob(leaseCtx, desc)
+	done(context.TODO())
+	require.NoError(t, err)
+
+	snap2, err := cm.GetByBlob(ctx, desc2, snap)
 	require.NoError(t, err)
 
 	err = snap.Release(context.TODO())
@@ -526,6 +539,10 @@ func TestSetBlob(t *testing.T) {
 
 	defer cleanup()
 
+	ctx, done, err := leaseutil.WithLease(ctx, co.lm, leaseutil.MakeTemporary)
+	require.NoError(t, err)
+	defer done(context.TODO())
+
 	cm := co.manager
 
 	active, err := cm.New(ctx, nil)
@@ -551,7 +568,7 @@ func TestSetBlob(t *testing.T) {
 	err = content.WriteBlob(ctx, co.cs, "ref1", bytes.NewBuffer(b), desc)
 	require.NoError(t, err)
 
-	err = snap.SetBlob(ctx, ocispec.Descriptor{
+	err = snap.(*immutableRef).setBlob(ctx, ocispec.Descriptor{
 		Digest: digest.FromBytes([]byte("foobar")),
 		Annotations: map[string]string{
 			"containerd.io/uncompressed": digest.FromBytes([]byte("foobar2")).String(),
@@ -559,7 +576,7 @@ func TestSetBlob(t *testing.T) {
 	})
 	require.Error(t, err)
 
-	err = snap.SetBlob(ctx, desc)
+	err = snap.(*immutableRef).setBlob(ctx, desc)
 	require.NoError(t, err)
 
 	info = snap.Info()
@@ -583,7 +600,7 @@ func TestSetBlob(t *testing.T) {
 	err = content.WriteBlob(ctx, co.cs, "ref2", bytes.NewBuffer(b2), desc2)
 	require.NoError(t, err)
 
-	err = snap2.SetBlob(ctx, desc2)
+	err = snap2.(*immutableRef).setBlob(ctx, desc2)
 	require.NoError(t, err)
 
 	info2 := snap2.Info()
@@ -930,7 +947,7 @@ func TestLazyCommit(t *testing.T) {
 	err = snap2.Release(ctx)
 	require.NoError(t, err)
 
-	active, err = cm.GetMutable(ctx, active.ID())
+	_, err = cm.GetMutable(ctx, active.ID())
 	require.Error(t, err)
 	require.Equal(t, true, errors.Is(err, errNotFound))
 }

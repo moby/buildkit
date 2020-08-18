@@ -11,6 +11,8 @@ github.com/Microsoft/go-winio/pkg/guid
 github.com/Microsoft/go-winio/vhd
 # github.com/Microsoft/hcsshim v0.8.9
 github.com/Microsoft/hcsshim
+github.com/Microsoft/hcsshim/hcn
+github.com/Microsoft/hcsshim/internal/cni
 github.com/Microsoft/hcsshim/internal/cow
 github.com/Microsoft/hcsshim/internal/hcs
 github.com/Microsoft/hcsshim/internal/hcserror
@@ -21,6 +23,8 @@ github.com/Microsoft/hcsshim/internal/logfields
 github.com/Microsoft/hcsshim/internal/longpath
 github.com/Microsoft/hcsshim/internal/mergemaps
 github.com/Microsoft/hcsshim/internal/oc
+github.com/Microsoft/hcsshim/internal/regstate
+github.com/Microsoft/hcsshim/internal/runhcs
 github.com/Microsoft/hcsshim/internal/safefile
 github.com/Microsoft/hcsshim/internal/schema1
 github.com/Microsoft/hcsshim/internal/schema2
@@ -32,11 +36,11 @@ github.com/Microsoft/hcsshim/osversion
 github.com/apache/thrift/lib/go/thrift
 # github.com/codahale/hdrhistogram v0.0.0-20160425231609-f8ad88b59a58
 github.com/codahale/hdrhistogram
-# github.com/containerd/cgroups v0.0.0-20200327175542-b44481373989
+# github.com/containerd/cgroups v0.0.0-20200710171044-318312a37340
 github.com/containerd/cgroups/stats/v1
 # github.com/containerd/console v1.0.0
 github.com/containerd/console
-# github.com/containerd/containerd v1.4.0-0 => github.com/containerd/containerd v1.3.1-0.20200512144102-f13ba8f2f2fd
+# github.com/containerd/containerd v1.4.0-beta.2.0.20200730150746-fa1220fce33f => github.com/containerd/containerd v1.4.0-beta.2.0.20200730150746-fa1220fce33f
 github.com/containerd/containerd
 github.com/containerd/containerd/api/services/containers/v1
 github.com/containerd/containerd/api/services/content/v1
@@ -113,7 +117,7 @@ github.com/containerd/continuity/proto
 github.com/containerd/continuity/sysx
 # github.com/containerd/fifo v0.0.0-20200410184934-f15a3290365b
 github.com/containerd/fifo
-# github.com/containerd/go-cni v0.0.0-20200107172653-c154a49e2c75
+# github.com/containerd/go-cni v1.0.0
 github.com/containerd/go-cni
 # github.com/containerd/go-runc v0.0.0-20200220073739-7016d3ce2328
 github.com/containerd/go-runc
@@ -128,8 +132,9 @@ github.com/containernetworking/cni/pkg/types
 github.com/containernetworking/cni/pkg/types/020
 github.com/containernetworking/cni/pkg/types/current
 github.com/containernetworking/cni/pkg/version
-# github.com/coreos/go-systemd/v22 v22.0.0
+# github.com/coreos/go-systemd/v22 v22.1.0
 github.com/coreos/go-systemd/v22/daemon
+github.com/coreos/go-systemd/v22/dbus
 # github.com/cpuguy83/go-md2man/v2 v2.0.0
 github.com/cpuguy83/go-md2man/v2/md2man
 # github.com/davecgh/go-spew v1.1.1
@@ -207,6 +212,8 @@ github.com/docker/libnetwork/ipamutils
 github.com/docker/libnetwork/resolvconf
 github.com/docker/libnetwork/resolvconf/dns
 github.com/docker/libnetwork/types
+# github.com/godbus/dbus/v5 v5.0.3
+github.com/godbus/dbus/v5
 # github.com/gofrs/flock v0.7.0
 github.com/gofrs/flock
 # github.com/gogo/googleapis v1.3.2
@@ -217,7 +224,7 @@ github.com/gogo/protobuf/proto
 github.com/gogo/protobuf/protoc-gen-gogo/descriptor
 github.com/gogo/protobuf/sortkeys
 github.com/gogo/protobuf/types
-# github.com/golang/protobuf v1.3.3
+# github.com/golang/protobuf v1.3.5
 github.com/golang/protobuf/proto
 github.com/golang/protobuf/ptypes
 github.com/golang/protobuf/ptypes/any
@@ -245,7 +252,7 @@ github.com/hashicorp/golang-lru/simplelru
 github.com/ishidawataru/sctp
 # github.com/jaguilar/vt100 v0.0.0-20150826170717-2703a27b14ea => github.com/tonistiigi/vt100 v0.0.0-20190402012908-ad4c4a574305
 github.com/jaguilar/vt100
-# github.com/konsorten/go-windows-terminal-sequences v1.0.2
+# github.com/konsorten/go-windows-terminal-sequences v1.0.3
 github.com/konsorten/go-windows-terminal-sequences
 # github.com/mitchellh/hashstructure v1.0.0
 github.com/mitchellh/hashstructure
@@ -257,20 +264,20 @@ github.com/opencontainers/go-digest
 github.com/opencontainers/image-spec/identity
 github.com/opencontainers/image-spec/specs-go
 github.com/opencontainers/image-spec/specs-go/v1
-# github.com/opencontainers/runc v1.0.0-rc10
+# github.com/opencontainers/runc v1.0.0-rc91
 github.com/opencontainers/runc/libcontainer/cgroups
 github.com/opencontainers/runc/libcontainer/configs
 github.com/opencontainers/runc/libcontainer/system
 github.com/opencontainers/runc/libcontainer/user
-# github.com/opencontainers/runtime-spec v1.0.2
+# github.com/opencontainers/runtime-spec v1.0.3-0.20200520003142-237cc4f519e2
 github.com/opencontainers/runtime-spec/specs-go
-# github.com/opencontainers/selinux v1.5.1
+# github.com/opencontainers/selinux v1.6.0
 github.com/opencontainers/selinux/go-selinux
 github.com/opencontainers/selinux/go-selinux/label
 github.com/opencontainers/selinux/pkg/pwalk
-# github.com/opentracing-contrib/go-stdlib v0.0.0-20171029140428-b1a47cfbdd75
+# github.com/opentracing-contrib/go-stdlib v1.0.0
 github.com/opentracing-contrib/go-stdlib/nethttp
-# github.com/opentracing/opentracing-go v1.1.0
+# github.com/opentracing/opentracing-go v1.2.0
 github.com/opentracing/opentracing-go
 github.com/opentracing/opentracing-go/ext
 github.com/opentracing/opentracing-go/log
@@ -286,14 +293,14 @@ github.com/russross/blackfriday/v2
 github.com/serialx/hashring
 # github.com/shurcooL/sanitized_anchor_name v1.0.0
 github.com/shurcooL/sanitized_anchor_name
-# github.com/sirupsen/logrus v1.4.2
+# github.com/sirupsen/logrus v1.6.0
 github.com/sirupsen/logrus
 # github.com/stretchr/testify v1.5.1
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/require
 # github.com/syndtr/gocapability v0.0.0-20180916011248-d98352740cb2
 github.com/syndtr/gocapability/capability
-# github.com/tonistiigi/fsutil v0.0.0-20200512175118-ae3a8d753069
+# github.com/tonistiigi/fsutil v0.0.0-20200724193237-c3ed55f3b481
 github.com/tonistiigi/fsutil
 github.com/tonistiigi/fsutil/copy
 github.com/tonistiigi/fsutil/types
@@ -313,7 +320,9 @@ github.com/uber/jaeger-client-go/utils
 github.com/uber/jaeger-lib/metrics
 # github.com/urfave/cli v1.22.2
 github.com/urfave/cli
-# go.etcd.io/bbolt v1.3.3
+# github.com/willf/bitset v1.1.11-0.20200630133818-d5bec3311243
+github.com/willf/bitset
+# go.etcd.io/bbolt v1.3.5
 go.etcd.io/bbolt
 # go.opencensus.io v0.22.0
 go.opencensus.io
@@ -346,10 +355,11 @@ golang.org/x/net/trace
 # golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
 golang.org/x/sync/errgroup
 golang.org/x/sync/semaphore
-# golang.org/x/sys v0.0.0-20200302150141-5c8b2ff67527
+# golang.org/x/sys v0.0.0-20200327173247-9dae0f8f5775
 golang.org/x/sys/cpu
 golang.org/x/sys/unix
 golang.org/x/sys/windows
+golang.org/x/sys/windows/registry
 # golang.org/x/text v0.3.2
 golang.org/x/text/secure/bidirule
 golang.org/x/text/transform

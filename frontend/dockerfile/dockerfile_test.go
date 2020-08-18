@@ -4651,7 +4651,12 @@ func tmpdir(appliers ...fstest.Applier) (string, error) {
 
 func runShell(dir string, cmds ...string) error {
 	for _, args := range cmds {
-		cmd := exec.Command("sh", "-c", args)
+		var cmd *exec.Cmd
+		if runtime.GOOS == "windows" {
+			cmd = exec.Command("powershell", "-command", args)
+		} else {
+			cmd = exec.Command("sh", "-c", args)
+		}
 		cmd.Dir = dir
 		if err := cmd.Run(); err != nil {
 			return errors.Wrapf(err, "error running %v", args)
@@ -4752,7 +4757,7 @@ loop0:
 }
 
 func newContainerd(cdAddress string) (*containerd.Client, error) {
-	return containerd.New(cdAddress, containerd.WithTimeout(60*time.Second), containerd.WithDefaultRuntime("io.containerd.runtime.v1.linux"))
+	return containerd.New(cdAddress, containerd.WithTimeout(60*time.Second))
 }
 
 func dfCmdArgs(ctx, dockerfile, args string) (string, string) {

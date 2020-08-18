@@ -76,8 +76,6 @@ type dep struct {
 	edgeState
 	index             Index
 	keyMap            map[string]*CacheKey
-	desiredState      edgeStatusType
-	e                 *edge
 	slowCacheReq      pipe.Receiver
 	slowCacheComplete bool
 	slowCacheFoundKey bool
@@ -119,7 +117,7 @@ type edgeRequest struct {
 // incrementReferenceCount increases the number of times release needs to be
 // called to release the edge. Called on merging edges.
 func (e *edge) incrementReferenceCount() {
-	e.releaserCount += 1
+	e.releaserCount++
 }
 
 // release releases the edge resources
@@ -867,6 +865,7 @@ func (e *edge) loadCache(ctx context.Context) (interface{}, error) {
 	logrus.Debugf("load cache for %s with %s", e.edge.Vertex.Name(), rec.ID)
 	res, err := e.op.LoadCache(ctx, rec)
 	if err != nil {
+		logrus.Debugf("load cache for %s err: %v", e.edge.Vertex.Name(), err)
 		return nil, errors.Wrap(err, "failed to load cache")
 	}
 

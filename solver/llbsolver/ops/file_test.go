@@ -601,17 +601,17 @@ type mod struct {
 	copySrc []mod
 }
 
-func (m *testMount) IsFileOpMount() {}
-func (m *testMount) Release(ctx context.Context) error {
-	if m.b.mounts[m.initID] != m {
-		return m.b.mounts[m.initID].Release(ctx)
+func (tm *testMount) IsFileOpMount() {}
+func (tm *testMount) Release(ctx context.Context) error {
+	if tm.b.mounts[tm.initID] != tm {
+		return tm.b.mounts[tm.initID].Release(ctx)
 	}
-	if m.unmounted {
+	if tm.unmounted {
 		return errors.Errorf("already unmounted")
 	}
-	m.unmounted = true
-	if m.active != nil {
-		return m.active.Release(ctx)
+	tm.unmounted = true
+	if tm.active != nil {
+		return tm.active.Release(ctx)
 	}
 	return nil
 }
