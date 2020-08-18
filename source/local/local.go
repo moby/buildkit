@@ -51,7 +51,7 @@ func (ls *localSource) ID() string {
 	return source.LocalScheme
 }
 
-func (ls *localSource) Resolve(ctx context.Context, id source.Identifier, sm *session.Manager) (source.SourceInstance, error) {
+func (ls *localSource) Resolve(ctx context.Context, id source.Identifier, sm *session.Manager, g session.Group) (source.SourceInstance, error) {
 	localIdentifier, ok := id.(*source.LocalIdentifier)
 	if !ok {
 		return nil, errors.Errorf("invalid local identifier %v", id)

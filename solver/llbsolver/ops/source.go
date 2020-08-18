@@ -39,7 +39,7 @@ func NewSourceOp(_ solver.Vertex, op *pb.Op_Source, platform *pb.Platform, sm *s
 	}, nil
 }
 
-func (s *sourceOp) instance(ctx context.Context) (source.SourceInstance, error) {
+func (s *sourceOp) instance(ctx context.Context, g session.Group) (source.SourceInstance, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.src != nil {
@@ -49,7 +49,7 @@ func (s *sourceOp) instance(ctx context.Context) (source.SourceInstance, error) 
 	if err != nil {
 		return nil, err
 	}
-	src, err := s.sm.Resolve(ctx, id, s.sessM)
+	src, err := s.sm.Resolve(ctx, id, s.sessM, g)
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +58,7 @@ func (s *sourceOp) instance(ctx context.Context) (source.SourceInstance, error) 
 }
 
 func (s *sourceOp) CacheMap(ctx context.Context, g session.Group, index int) (*solver.CacheMap, bool, error) {
-	src, err := s.instance(ctx)
+	src, err := s.instance(ctx, g)
 	if err != nil {
 		return nil, false, err
 	}
@@ -80,7 +80,7 @@ func (s *sourceOp) CacheMap(ctx context.Context, g session.Group, index int) (*s
 }
 
 func (s *sourceOp) Exec(ctx context.Context, g session.Group, _ []solver.Result) (outputs []solver.Result, err error) {
-	src, err := s.instance(ctx)
+	src, err := s.instance(ctx, g)
 	if err != nil {
 		return nil, err
 	}

@@ -11,7 +11,7 @@ import (
 
 type Source interface {
 	ID() string
-	Resolve(ctx context.Context, id Identifier, sm *session.Manager) (SourceInstance, error)
+	Resolve(ctx context.Context, id Identifier, sm *session.Manager, g session.Group) (SourceInstance, error)
 }
 
 type SourceInstance interface {
@@ -36,7 +36,7 @@ func (sm *Manager) Register(src Source) {
 	sm.mu.Unlock()
 }
 
-func (sm *Manager) Resolve(ctx context.Context, id Identifier, sessM *session.Manager) (SourceInstance, error) {
+func (sm *Manager) Resolve(ctx context.Context, id Identifier, sessM *session.Manager, g session.Group) (SourceInstance, error) {
 	sm.mu.Lock()
 	src, ok := sm.sources[id.ID()]
 	sm.mu.Unlock()
@@ -45,5 +45,5 @@ func (sm *Manager) Resolve(ctx context.Context, id Identifier, sessM *session.Ma
 		return nil, errors.Errorf("no handler for %s", id.ID())
 	}
 
-	return src.Resolve(ctx, id, sessM)
+	return src.Resolve(ctx, id, sessM, g)
 }
