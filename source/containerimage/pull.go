@@ -98,7 +98,7 @@ func (is *Source) ResolveImageConfig(ctx context.Context, ref string, opt llb.Re
 	return typed.dgst, typed.dt, nil
 }
 
-func (is *Source) Resolve(ctx context.Context, id source.Identifier, sm *session.Manager) (source.SourceInstance, error) {
+func (is *Source) Resolve(ctx context.Context, id source.Identifier, sm *session.Manager, g session.Group) (source.SourceInstance, error) {
 	imageIdentifier, ok := id.(*source.ImageIdentifier)
 	if !ok {
 		return nil, errors.Errorf("invalid image identifier %v", id)
@@ -124,7 +124,7 @@ func (is *Source) Resolve(ctx context.Context, id source.Identifier, sm *session
 		LeaseManager:  is.LeaseManager,
 		ResolverOpt: pull.ResolverOpt{
 			Hosts:      is.RegistryHosts,
-			Auth:       resolver.NewSessionAuthenticator(sm, nil),
+			Auth:       resolver.NewSessionAuthenticator(sm, g),
 			ImageStore: is.ImageStore,
 			Mode:       imageIdentifier.ResolveMode,
 			Ref:        imageIdentifier.Reference.String(),
