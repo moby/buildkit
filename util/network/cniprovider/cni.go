@@ -42,10 +42,6 @@ func New(opt Opt) (network.Provider, error) {
 		return nil, err
 	}
 
-	if err != nil {
-		return nil, err
-	}
-
 	cp := &cniProvider{CNI: cniHandle, root: opt.Root}
 	if err := cp.initNetwork(); err != nil {
 		return nil, err
