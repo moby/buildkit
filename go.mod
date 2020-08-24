@@ -26,7 +26,7 @@ require (
 	github.com/docker/docker-credential-helpers v0.6.0 // indirect
 	github.com/docker/go-connections v0.3.0
 	github.com/docker/libnetwork v0.8.0-dev.2.0.20200226230617-d8334ccdb9be
-	github.com/gofrs/flock v0.7.0
+	github.com/gofrs/flock v0.7.3
 	github.com/gogo/googleapis v1.3.2
 	github.com/gogo/protobuf v1.3.1
 	// protobuf: the actual version is replaced in replace()
