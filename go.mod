@@ -26,7 +26,7 @@ require (
 	github.com/docker/docker-credential-helpers v0.6.0 // indirect
 	github.com/docker/go-connections v0.3.0
 	github.com/docker/libnetwork v0.8.0-dev.2.0.20200226230617-d8334ccdb9be
-	github.com/gofrs/flock v0.7.0
+	github.com/gofrs/flock v0.7.3
 	github.com/gogo/googleapis v1.3.2
 	github.com/gogo/protobuf v1.3.1
 	// protobuf: the actual version is replaced in replace()
@@ -52,7 +52,7 @@ require (
 	github.com/opentracing-contrib/go-stdlib v1.0.0
 	github.com/opentracing/opentracing-go v1.2.0
 	github.com/pkg/errors v0.9.1
-	github.com/pkg/profile v1.2.1
+	github.com/pkg/profile v1.5.0
 	github.com/serialx/hashring v0.0.0-20190422032157-8b2912629002
 	github.com/sirupsen/logrus v1.6.0
 	github.com/stretchr/testify v1.5.1
