@@ -11,6 +11,7 @@ ARG ROOTLESSKIT_VERSION=v0.9.5
 ARG CNI_VERSION=v0.8.6
 ARG SHADOW_VERSION=4.8.1
 ARG FUSEOVERLAYFS_VERSION=v1.1.2
+ARG STARGZ_SNAPSHOTTER_VERSION=5aca593bd474015005b8832cf9763685d9d4db61
 
 # git stage is used for checking out remote repository sources
 FROM --platform=$BUILDPLATFORM alpine AS git
@@ -173,6 +174,15 @@ RUN  --mount=target=/root/.cache,type=cache \
   CGO_ENABLED=0 go build -o /rootlesskit ./cmd/rootlesskit && \
   file /rootlesskit | grep "statically linked"
 
+FROM gobuild-base AS stargz-snapshotter
+RUN git clone https://github.com/containerd/stargz-snapshotter.git /go/src/github.com/containerd/stargz-snapshotter
+WORKDIR /go/src/github.com/containerd/stargz-snapshotter
+ARG STARGZ_SNAPSHOTTER_VERSION
+RUN git checkout -q "$STARGZ_SNAPSHOTTER_VERSION"  && \
+  mkdir /out && CGO_ENABLED=0 PREFIX=/out/ make && \
+  file /out/containerd-stargz-grpc | grep "statically linked" && \
+  file /out/ctr-remote | grep "statically linked"
+
 FROM --platform=$BUILDPLATFORM alpine AS fuse-overlayfs
 RUN apk add --no-cache curl
 ARG FUSEOVERLAYFS_VERSION
@@ -225,7 +235,7 @@ RUN curl -Ls https://github.com/containernetworking/plugins/releases/download/$C
 
 FROM buildkit-base AS integration-tests-base
 ENV BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR="1000:1000"
-RUN apt-get --no-install-recommends install -y uidmap sudo vim iptables \ 
+RUN apt-get --no-install-recommends install -y uidmap sudo vim iptables fuse \
   && useradd --create-home --home-dir /home/user --uid 1000 -s /bin/sh user \
   && echo "XDG_RUNTIME_DIR=/run/user/1000; export XDG_RUNTIME_DIR" >> /home/user/.profile \
   && mkdir -m 0700 -p /run/user/1000 \
@@ -233,6 +243,8 @@ RUN apt-get --no-install-recommends install -y uidmap sudo vim iptables \
   && update-alternatives --set iptables /usr/sbin/iptables-legacy
 # musl is needed to directly use the registry binary that is built on alpine
 ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.3=/opt/containerd-alt/bin"
+ENV BUILDKIT_INTEGRATION_CONTAINERD_STARGZ=1
+COPY --from=stargz-snapshotter /out/* /usr/bin/
 COPY --from=rootlesskit /rootlesskit /usr/bin/
 COPY --from=containerd-alt /out/containerd* /opt/containerd-alt/bin/
 COPY --from=registry /bin/registry /usr/bin
