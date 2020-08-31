@@ -385,12 +385,17 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOpt
 			}
 			return nil, err
 		}
+
+		// parent refs are possibly lazy so keep it hold the description handlers.
+		var dhs DescHandlers
+		if mutable.parent != nil {
+			dhs = mutable.parent.descHandlers
+		}
 		rec := &cacheRecord{
-			mu:   &sync.Mutex{},
-			cm:   cm,
-			refs: make(map[ref]struct{}),
-			// mutable refs are always non-lazy, so we can set parent desc handlers to nil
-			parent:       mutable.parentRef(false, nil),
+			mu:           &sync.Mutex{},
+			cm:           cm,
+			refs:         make(map[ref]struct{}),
+			parent:       mutable.parentRef(false, dhs),
 			md:           md,
 			equalMutable: &mutableRef{cacheRecord: mutable},
 		}
@@ -535,7 +540,12 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, opts ...RefOpti
 
 	cm.records[id] = rec // TODO: save to db
 
-	return rec.mref(true, nil), nil
+	// parent refs are possibly lazy so keep it hold the description handlers.
+	var dhs DescHandlers
+	if parent != nil {
+		dhs = parent.descHandlers
+	}
+	return rec.mref(true, dhs), nil
 }
 
 func (cm *cacheManager) GetMutable(ctx context.Context, id string, opts ...RefOption) (MutableRef, error) {
