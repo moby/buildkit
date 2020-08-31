@@ -12,10 +12,10 @@ import (
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/remotes/docker"
+	"github.com/containerd/containerd/remotes/docker/auth"
 	"github.com/moby/buildkit/session"
 	sessionauth "github.com/moby/buildkit/session/auth"
 	"github.com/moby/buildkit/util/flightcontrol"
-	"github.com/moby/buildkit/util/resolver/auth"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
