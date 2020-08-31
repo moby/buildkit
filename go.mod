@@ -13,10 +13,10 @@ require (
 	github.com/codahale/hdrhistogram v0.0.0-20160425231609-f8ad88b59a58 // indirect
 	github.com/containerd/cgroups v0.0.0-20200710171044-318312a37340 // indirect
 	github.com/containerd/console v1.0.0
-	github.com/containerd/containerd v1.4.0
+	github.com/containerd/containerd v1.4.1-0.20200827124858-efa0e809135e
 	github.com/containerd/continuity v0.0.0-20200710164510-efbc4488d8fe
 	github.com/containerd/fifo v0.0.0-20200410184934-f15a3290365b // indirect
-	github.com/containerd/go-cni v1.0.0
+	github.com/containerd/go-cni v1.0.1
 	github.com/containerd/go-runc v0.0.0-20200220073739-7016d3ce2328
 	github.com/containerd/typeurl v1.0.1
 	github.com/coreos/go-systemd/v22 v22.1.0
