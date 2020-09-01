@@ -25,6 +25,7 @@ jobs:
       script: 
         - TESTPKGS=./client ./hack/test integration
         - TESTPKGS=./cmd/buildctl ./hack/test integration
+        - TESTPKGS=./worker/containerd ./hack/test integration
     - script:
        - ./hack/lint
        - SKIP_INTEGRATION_TESTS=1 ./hack/test integration gateway

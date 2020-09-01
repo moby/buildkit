@@ -8,18 +8,29 @@ import (
 	"testing"
 
 	"github.com/moby/buildkit/util/network/netproviders"
+	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/moby/buildkit/worker/base"
 	"github.com/moby/buildkit/worker/tests"
 	"github.com/stretchr/testify/require"
 )
 
-const sockFile = "/run/containerd/containerd.sock"
+func init() {
+	integration.InitContainerdWorker()
+}
 
-func newWorkerOpt(t *testing.T) (base.WorkerOpt, func()) {
+func TestContainerdWorkerIntegration(t *testing.T) {
+	checkRequirement(t)
+	integration.Run(t, []integration.Test{
+		testContainerdWorkerExec,
+		testContainerdWorkerExecFailures,
+	})
+}
+
+func newWorkerOpt(t *testing.T, addr string) (base.WorkerOpt, func()) {
 	tmpdir, err := ioutil.TempDir("", "workertest")
 	require.NoError(t, err)
 	cleanup := func() { os.RemoveAll(tmpdir) }
-	workerOpt, err := NewWorkerOpt(tmpdir, sockFile, "overlayfs", "buildkit-test", nil, nil, netproviders.Opt{Mode: "host"})
+	workerOpt, err := NewWorkerOpt(tmpdir, addr, "overlayfs", "buildkit-test", nil, nil, netproviders.Opt{Mode: "host"})
 	require.NoError(t, err)
 	return workerOpt, cleanup
 }
@@ -28,32 +39,19 @@ func checkRequirement(t *testing.T) {
 	if os.Getuid() != 0 {
 		t.Skip("requires root")
 	}
-
-	fi, err := os.Stat(sockFile)
-	if err != nil {
-		t.Skipf("Failed to stat %s: %s", sockFile, err.Error())
-	}
-	if fi.Mode()&os.ModeSocket == 0 {
-		t.Skipf("%s is not a unix domain socket", sockFile)
-	}
 }
 
-func TestContainerdWorkerExec(t *testing.T) {
-	t.Parallel()
-	checkRequirement(t)
-
-	workerOpt, cleanupWorkerOpt := newWorkerOpt(t)
+func testContainerdWorkerExec(t *testing.T, sb integration.Sandbox) {
+	workerOpt, cleanupWorkerOpt := newWorkerOpt(t, sb.ContainerdAddress())
 	defer cleanupWorkerOpt()
 	w, err := base.NewWorker(workerOpt)
 	require.NoError(t, err)
 
 	tests.TestWorkerExec(t, w)
 }
-func TestContainerdWorkerExecFailures(t *testing.T) {
-	t.Parallel()
-	checkRequirement(t)
 
-	workerOpt, cleanupWorkerOpt := newWorkerOpt(t)
+func testContainerdWorkerExecFailures(t *testing.T, sb integration.Sandbox) {
+	workerOpt, cleanupWorkerOpt := newWorkerOpt(t, sb.ContainerdAddress())
 	defer cleanupWorkerOpt()
 	w, err := base.NewWorker(workerOpt)
 	require.NoError(t, err)
