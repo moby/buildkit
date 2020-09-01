@@ -775,16 +775,19 @@ func (lbf *llbBridgeForwarder) NewContainer(ctx context.Context, in *pb.NewConta
 	if err != nil {
 		return nil, stack.Enable(err)
 	}
+	defer func() {
+		if err != nil {
+			ctr.Release(ctx) // ensure release on error
+		}
+	}()
 
 	lbf.ctrsMu.Lock()
+	defer lbf.ctrsMu.Unlock()
 	// ensure we are not clobbering a dup container id request
 	if _, ok := lbf.ctrs[in.ContainerID]; ok {
-		lbf.ctrsMu.Unlock()
-		ctr.Release(ctx)
 		return nil, stack.Enable(status.Errorf(codes.AlreadyExists, "Container %s already exists", in.ContainerID))
 	}
 	lbf.ctrs[in.ContainerID] = ctr
-	lbf.ctrsMu.Unlock()
 	return &pb.NewContainerResponse{}, nil
 }
 
