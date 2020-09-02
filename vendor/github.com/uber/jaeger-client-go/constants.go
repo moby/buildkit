@@ -14,9 +14,15 @@
 
 package jaeger
 
+import (
+	"fmt"
+
+	"github.com/opentracing/opentracing-go"
+)
+
 const (
 	// JaegerClientVersion is the version of the client library reported as Span tag.
-	JaegerClientVersion = "Go-2.11.2"
+	JaegerClientVersion = "Go-2.25.0"
 
 	// JaegerClientVersionTagKey is the name of the tag used to report client version.
 	JaegerClientVersionTagKey = "jaeger.version"
@@ -37,6 +43,9 @@ const (
 
 	// TracerIPTagKey used to report ip of the process.
 	TracerIPTagKey = "ip"
+
+	// TracerUUIDTagKey used to report UUID of the client process.
+	TracerUUIDTagKey = "client-uuid"
 
 	// SamplerTypeTagKey reports which sampler was used on the root span.
 	SamplerTypeTagKey = "sampler.type"
@@ -73,4 +82,25 @@ const (
 	// SamplerTypeLowerBound is the type of sampler that samples
 	// at least a fixed number of traces per second.
 	SamplerTypeLowerBound = "lowerbound"
+
+	// DefaultUDPSpanServerHost is the default host to send the spans to, via UDP
+	DefaultUDPSpanServerHost = "localhost"
+
+	// DefaultUDPSpanServerPort is the default port to send the spans to, via UDP
+	DefaultUDPSpanServerPort = 6831
+
+	// DefaultSamplingServerPort is the default port to fetch sampling config from, via http
+	DefaultSamplingServerPort = 5778
+
+	// DefaultMaxTagValueLength is the default max length of byte array or string allowed in the tag value.
+	DefaultMaxTagValueLength = 256
+
+	// SelfRefType is a jaeger specific reference type that supports creating a span
+	// with an already defined context.
+	selfRefType opentracing.SpanReferenceType = 99
+)
+
+var (
+	// DefaultSamplingServerURL is the default url to fetch sampling config from, via http
+	DefaultSamplingServerURL = fmt.Sprintf("http://127.0.0.1:%d/sampling", DefaultSamplingServerPort)
 )

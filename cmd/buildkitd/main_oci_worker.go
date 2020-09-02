@@ -5,6 +5,7 @@ package main
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -17,6 +18,8 @@ import (
 	"github.com/containerd/containerd/snapshots/overlay"
 	snproxy "github.com/containerd/containerd/snapshots/proxy"
 	"github.com/containerd/containerd/sys"
+	remotesn "github.com/containerd/stargz-snapshotter/snapshot"
+	"github.com/containerd/stargz-snapshotter/stargz"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/executor/oci"
 	"github.com/moby/buildkit/util/network/cniprovider"
@@ -227,7 +230,7 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 		return nil, err
 	}
 
-	snFactory, err := snapshotterFactory(common.config.Root, cfg.Snapshotter, cfg.ProxySnapshotterPath)
+	snFactory, err := snapshotterFactory(common.config.Root, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -280,7 +283,11 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 	return []worker.Worker{w}, nil
 }
 
-func snapshotterFactory(commonRoot, name, address string) (runc.SnapshotterFactory, error) {
+func snapshotterFactory(commonRoot string, cfg config.OCIConfig) (runc.SnapshotterFactory, error) {
+	var (
+		name    = cfg.Snapshotter
+		address = cfg.ProxySnapshotterPath
+	)
 	if address != "" {
 		snFactory := runc.SnapshotterFactory{
 			Name: name,
@@ -339,6 +346,16 @@ func snapshotterFactory(commonRoot, name, address string) (runc.SnapshotterFacto
 		snFactory.New = func(root string) (ctdsnapshot.Snapshotter, error) {
 			// no Opt (AsynchronousRemove is untested for fuse-overlayfs)
 			return fuseoverlayfs.NewSnapshotter(root)
+		}
+	case "stargz":
+		snFactory.New = func(root string) (ctdsnapshot.Snapshotter, error) {
+			fs, err := stargz.NewFilesystem(filepath.Join(root, "stargz"),
+				cfg.StargzSnapshotterConfig)
+			if err != nil {
+				return nil, err
+			}
+			return remotesn.NewSnapshotter(filepath.Join(root, "snapshotter"),
+				fs, remotesn.AsynchronousRemove)
 		}
 	default:
 		return snFactory, errors.Errorf("unknown snapshotter name: %q", name)
