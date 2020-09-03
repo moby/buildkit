@@ -2056,7 +2056,7 @@ func testStargzLazyPull(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 
 	cdAddress := sb.ContainerdAddress()
-	if cdAddress == "" || !sb.Stargz() {
+	if cdAddress == "" || sb.Snapshotter() != "stargz" {
 		t.Skip("test requires containerd worker with stargz snapshotter")
 	}
 
