@@ -1632,7 +1632,7 @@ If you forget to add `exec` to the beginning of your `ENTRYPOINT`:
 ```dockerfile
 FROM ubuntu
 ENTRYPOINT top -b
-CMD --ignored-param1
+CMD -- --ignored-param1
 ```
 
 You can then run it (giving it a name for the next step):
@@ -1640,12 +1640,15 @@ You can then run it (giving it a name for the next step):
 ```console
 $ docker run -it --name test top --ignored-param2
 
-Mem: 1704184K used, 352484K free, 0K shrd, 0K buff, 140621524238337K cached
-CPU:   9% usr   2% sys   0% nic  88% idle   0% io   0% irq   0% sirq
-Load average: 0.01 0.02 0.05 2/101 7
-  PID  PPID USER     STAT   VSZ %VSZ %CPU COMMAND
-    1     0 root     S     3168   0%   0% /bin/sh -c top -b cmd cmd2
-    7     1 root     R     3164   0%   0% top -b
+top - 13:58:24 up 17 min,  0 users,  load average: 0.00, 0.00, 0.00
+Tasks:   2 total,   1 running,   1 sleeping,   0 stopped,   0 zombie
+%Cpu(s): 16.7 us, 33.3 sy,  0.0 ni, 50.0 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st
+MiB Mem :   1990.8 total,   1354.6 free,    231.4 used,    404.7 buff/cache
+MiB Swap:   1024.0 total,   1024.0 free,      0.0 used.   1639.8 avail Mem
+
+  PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+    1 root      20   0    2612    604    536 S   0.0   0.0   0:00.02 sh
+    6 root      20   0    5956   3188   2768 R   0.0   0.2   0:00.00 top
 ```
 
 You can see from the output of `top` that the specified `ENTRYPOINT` is not `PID 1`.
@@ -1654,12 +1657,12 @@ If you then run `docker stop test`, the container will not exit cleanly - the
 `stop` command will be forced to send a `SIGKILL` after the timeout:
 
 ```console
-$ docker exec -it test ps aux
+$ docker exec -it test ps waux
 
-PID   USER     COMMAND
-    1 root     /bin/sh -c top -b cmd cmd2
-    7 root     top -b
-    8 root     ps aux
+USER       PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
+root         1  0.4  0.0   2612   604 pts/0    Ss+  13:58   0:00 /bin/sh -c top -b --ignored-param2
+root         6  0.0  0.1   5956  3188 pts/0    S+   13:58   0:00 top -b
+root         7  0.0  0.1   5884  2816 pts/1    Rs+  13:58   0:00 ps waux
 
 $ /usr/bin/time docker stop test
 
