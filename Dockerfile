@@ -11,7 +11,7 @@ ARG ROOTLESSKIT_VERSION=v0.9.5
 ARG CNI_VERSION=v0.8.6
 ARG SHADOW_VERSION=4.8.1
 ARG FUSEOVERLAYFS_VERSION=v1.1.2
-ARG STARGZ_SNAPSHOTTER_VERSION=5aca593bd474015005b8832cf9763685d9d4db61
+ARG STARGZ_SNAPSHOTTER_VERSION=2ee75e91f8f98f3d324290a2503269812e019fc3
 
 # git stage is used for checking out remote repository sources
 FROM --platform=$BUILDPLATFORM alpine AS git
@@ -175,9 +175,9 @@ RUN  --mount=target=/root/.cache,type=cache \
   file /rootlesskit | grep "statically linked"
 
 FROM gobuild-base AS stargz-snapshotter
+ARG STARGZ_SNAPSHOTTER_VERSION
 RUN git clone https://github.com/containerd/stargz-snapshotter.git /go/src/github.com/containerd/stargz-snapshotter
 WORKDIR /go/src/github.com/containerd/stargz-snapshotter
-ARG STARGZ_SNAPSHOTTER_VERSION
 RUN git checkout -q "$STARGZ_SNAPSHOTTER_VERSION"  && \
   mkdir /out && CGO_ENABLED=0 PREFIX=/out/ make && \
   file /out/containerd-stargz-grpc | grep "statically linked" && \
@@ -243,7 +243,7 @@ RUN apt-get --no-install-recommends install -y uidmap sudo vim iptables fuse \
   && update-alternatives --set iptables /usr/sbin/iptables-legacy
 # musl is needed to directly use the registry binary that is built on alpine
 ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.3=/opt/containerd-alt/bin"
-ENV BUILDKIT_INTEGRATION_CONTAINERD_STARGZ=1
+ENV BUILDKIT_INTEGRATION_SNAPSHOTTER=stargz
 COPY --from=stargz-snapshotter /out/* /usr/bin/
 COPY --from=rootlesskit /rootlesskit /usr/bin/
 COPY --from=containerd-alt /out/containerd* /opt/containerd-alt/bin/
