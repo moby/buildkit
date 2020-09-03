@@ -637,6 +637,10 @@ func (w *msgWriter) Write(msg []byte) (int, error) {
 }
 
 func (c *grpcClient) NewContainer(ctx context.Context, req client.NewContainerRequest) (client.Container, error) {
+	err := c.caps.Supports(pb.CapGatewayExec)
+	if err != nil {
+		return nil, err
+	}
 	id := identity.NewID()
 	var mounts []*opspb.Mount
 	for _, m := range req.Mounts {
@@ -654,7 +658,7 @@ func (c *grpcClient) NewContainer(ctx context.Context, req client.NewContainerRe
 	}
 
 	logrus.Debugf("|---> NewContainer %s", id)
-	_, err := c.client.NewContainer(ctx, &pb.NewContainerRequest{
+	_, err = c.client.NewContainer(ctx, &pb.NewContainerRequest{
 		ContainerID: id,
 		Mounts:      mounts,
 	})
