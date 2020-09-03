@@ -23,7 +23,7 @@ jobs:
     - stage: testing
       name: "Client integration tests"
       script: 
-        - TESTPKGS=./client ./hack/test integration
+        - TESTPKGS=./client TESTFLAGS='-v --timeout=20m' ./hack/test integration
         - TESTPKGS=./cmd/buildctl ./hack/test integration
         - TESTPKGS=./worker/containerd ./hack/test integration
     - script:
@@ -35,7 +35,7 @@ jobs:
        - TESTPKGS=./frontend ./hack/test
       name: "Unit Tests & Lint & Vendor & Proto"
     - script:
-       - TESTPKGS=./frontend/dockerfile TESTFLAGS='-v --parallel=6' ./hack/test
+       - TESTPKGS=./frontend/dockerfile TESTFLAGS='-v --parallel=6 --timeout=20m' ./hack/test
       name: "Dockerfile integration tests"
     - script: TESTPKGS=./frontend/dockerfile ./hack/test dockerfile
       name: "External Dockerfile tests"

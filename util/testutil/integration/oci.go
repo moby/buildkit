@@ -23,16 +23,23 @@ func InitOCIWorker() {
 		}
 	}
 
+	if s := os.Getenv("BUILDKIT_INTEGRATION_SNAPSHOTTER"); s != "" {
+		Register(&oci{snapshotter: s})
+	}
 }
 
 type oci struct {
-	uid int
-	gid int
+	uid         int
+	gid         int
+	snapshotter string
 }
 
 func (s *oci) Name() string {
 	if s.uid != 0 {
 		return "oci-rootless"
+	}
+	if s.snapshotter != "" {
+		return fmt.Sprintf("oci-snapshotter-%s", s.snapshotter)
 	}
 	return "oci"
 }
@@ -46,6 +53,11 @@ func (s *oci) New(cfg *BackendConfig) (Backend, func() error, error) {
 	}
 	// Include use of --oci-worker-labels to trigger https://github.com/moby/buildkit/pull/603
 	buildkitdArgs := []string{"buildkitd", "--oci-worker=true", "--containerd-worker=false", "--oci-worker-gc=false", "--oci-worker-labels=org.mobyproject.buildkit.worker.sandbox=true"}
+
+	if s.snapshotter != "" {
+		buildkitdArgs = append(buildkitdArgs,
+			fmt.Sprintf("--oci-worker-snapshotter=%s", s.snapshotter))
+	}
 
 	if s.uid != 0 {
 		if s.gid == 0 {
@@ -62,7 +74,8 @@ func (s *oci) New(cfg *BackendConfig) (Backend, func() error, error) {
 	}
 
 	return backend{
-		address:  buildkitdSock,
-		rootless: s.uid != 0,
+		address:     buildkitdSock,
+		rootless:    s.uid != 0,
+		snapshotter: s.snapshotter,
 	}, stop, nil
 }

@@ -38,7 +38,7 @@ type Backend interface {
 	Address() string
 	ContainerdAddress() string
 	Rootless() bool
-	Stargz() bool
+	Snapshotter() string
 }
 
 type Sandbox interface {
@@ -374,7 +374,8 @@ func prepareValueMatrix(tc testConf) []matrixValue {
 	return m
 }
 
-func runStargzSnapshotter(cfg *BackendConfig, binary string) (address string, cl func() error, err error) {
+func runStargzSnapshotter(cfg *BackendConfig) (address string, cl func() error, err error) {
+	binary := "containerd-stargz-grpc"
 	if err := lookupBinary(binary); err != nil {
 		return "", nil, err
 	}
@@ -395,19 +396,12 @@ func runStargzSnapshotter(cfg *BackendConfig, binary string) (address string, cl
 	}
 	deferF.append(func() error { return os.RemoveAll(tmpStargzDir) })
 
-	config := `insecure = ["127.0.0.1", "localhost"]`
-	configFile := filepath.Join(tmpStargzDir, "config.toml")
-	if err = ioutil.WriteFile(configFile, []byte(config), 0644); err != nil {
-		return "", nil, err
-	}
-
 	address = filepath.Join(tmpStargzDir, "containerd-stargz-grpc.sock")
 	stargzRootDir := filepath.Join(tmpStargzDir, "root")
 	cmd := exec.Command(binary,
 		"--log-level", "debug",
 		"--address", address,
-		"--root", stargzRootDir,
-		"--config", configFile)
+		"--root", stargzRootDir)
 	snStop, err := startCmd(cmd, cfg.Logs)
 	if err != nil {
 		return "", nil, err

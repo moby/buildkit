@@ -38,21 +38,21 @@ func InitContainerdWorker() {
 		}
 	}
 
-	if s := os.Getenv("BUILDKIT_INTEGRATION_CONTAINERD_STARGZ"); s == "1" {
+	if s := os.Getenv("BUILDKIT_INTEGRATION_SNAPSHOTTER"); s != "" {
 		Register(&containerd{
-			name:              "containerd-stargz",
-			containerd:        "containerd",
-			containerdShim:    "containerd-shim-runc-v2",
-			stargzSnapshotter: "containerd-stargz-grpc",
+			name:           fmt.Sprintf("containerd-snapshotter-%s", s),
+			containerd:     "containerd",
+			containerdShim: "containerd-shim-runc-v2",
+			snapshotter:    s,
 		})
 	}
 }
 
 type containerd struct {
-	name              string
-	containerd        string
-	containerdShim    string
-	stargzSnapshotter string
+	name           string
+	containerd     string
+	containerdShim string
+	snapshotter    string
 }
 
 func (c *containerd) Name() string {
@@ -110,22 +110,23 @@ disabled_plugins = ["cri"]
 `, filepath.Join(tmpdir, "root"), filepath.Join(tmpdir, "state"), address, filepath.Join(tmpdir, "debug.sock"), c.containerdShim)
 
 	var snBuildkitdArgs []string
-	if c.stargzSnapshotter != "" {
-		snPath, snCl, err := runStargzSnapshotter(cfg, c.stargzSnapshotter)
-		if err != nil {
-			return nil, nil, err
-		}
-		deferF.append(snCl)
-
-		config = fmt.Sprintf(`%s
+	if c.snapshotter != "" {
+		snBuildkitdArgs = append(snBuildkitdArgs,
+			fmt.Sprintf("--containerd-worker-snapshotter=%s", c.snapshotter))
+		if c.snapshotter == "stargz" {
+			snPath, snCl, err := runStargzSnapshotter(cfg)
+			if err != nil {
+				return nil, nil, err
+			}
+			deferF.append(snCl)
+			config = fmt.Sprintf(`%s
 
 [proxy_plugins]
   [proxy_plugins.stargz]
     type = "snapshot"
     address = %q
 `, config, snPath)
-
-		snBuildkitdArgs = append(snBuildkitdArgs, "--containerd-worker-snapshotter=stargz")
+		}
 	}
 
 	configFile := filepath.Join(tmpdir, "config.toml")
@@ -164,7 +165,7 @@ disabled_plugins = ["cri"]
 		address:           buildkitdSock,
 		containerdAddress: address,
 		rootless:          false,
-		stargz:            c.stargzSnapshotter != "",
+		snapshotter:       c.snapshotter,
 	}, cl, nil
 }
 

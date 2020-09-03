@@ -103,8 +103,8 @@ func testBuildContainerdExporter(t *testing.T, sb integration.Sandbox) {
 
 	// NOTE: by default, it is overlayfs
 	snapshotter := "overlayfs"
-	if sb.Stargz() {
-		snapshotter = "stargz"
+	if sn := sb.Snapshotter(); sn != "" {
+		snapshotter = sn
 	}
 	ok, err := img.IsUnpacked(ctx, snapshotter)
 	require.NoError(t, err)
