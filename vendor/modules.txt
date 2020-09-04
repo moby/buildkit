@@ -40,7 +40,7 @@ github.com/codahale/hdrhistogram
 github.com/containerd/cgroups/stats/v1
 # github.com/containerd/console v1.0.0
 github.com/containerd/console
-# github.com/containerd/containerd v1.4.1-0.20200827124858-efa0e809135e
+# github.com/containerd/containerd v1.4.1-0.20200903181227-d4e78200d6da
 github.com/containerd/containerd
 github.com/containerd/containerd/api/services/containers/v1
 github.com/containerd/containerd/api/services/content/v1
@@ -94,6 +94,7 @@ github.com/containerd/containerd/remotes
 github.com/containerd/containerd/remotes/docker
 github.com/containerd/containerd/remotes/docker/auth
 github.com/containerd/containerd/remotes/docker/schema1
+github.com/containerd/containerd/remotes/errors
 github.com/containerd/containerd/rootfs
 github.com/containerd/containerd/runtime/linux/runctypes
 github.com/containerd/containerd/runtime/v2/runc/options
