@@ -46,8 +46,8 @@ github.com/containerd/containerd v1.3.0-beta.2.0.20190828155532-0293cbd26c69/go.
 github.com/containerd/containerd v1.3.2/go.mod h1:bC6axHOhabU15QhwfG7w5PipXdVtMXFTttgp+kVtyUA=
 github.com/containerd/containerd v1.4.0 h1:aWJB3lbDEaOxg1mkTBAINY2a+NsoKbAeRYefJPPRY+o=
 github.com/containerd/containerd v1.4.0/go.mod h1:bC6axHOhabU15QhwfG7w5PipXdVtMXFTttgp+kVtyUA=
-github.com/containerd/containerd v1.4.1-0.20200827124858-efa0e809135e h1:q8QVonMeBcHmfTIRpsyo1sD3v3ggdcp55ZwbLsScJeE=
-github.com/containerd/containerd v1.4.1-0.20200827124858-efa0e809135e/go.mod h1:bC6axHOhabU15QhwfG7w5PipXdVtMXFTttgp+kVtyUA=
+github.com/containerd/containerd v1.4.1-0.20200903181227-d4e78200d6da h1:HB+j4bGFoFYkoQIdFPadQiuYWEa5TOGXYghdgSw4VHM=
+github.com/containerd/containerd v1.4.1-0.20200903181227-d4e78200d6da/go.mod h1:bC6axHOhabU15QhwfG7w5PipXdVtMXFTttgp+kVtyUA=
 github.com/containerd/continuity v0.0.0-20190426062206-aaeac12a7ffc/go.mod h1:GL3xCUCBDV3CZiTSEKksMWbLE66hEyuu9qyDOOqM47Y=
 github.com/containerd/continuity v0.0.0-20200710164510-efbc4488d8fe h1:PEmIrUvwG9Yyv+0WKZqjXfSFDeZjs/q15g0m08BYS9k=
 github.com/containerd/continuity v0.0.0-20200710164510-efbc4488d8fe/go.mod h1:cECdGN1O8G9bgKTlLhuPJimka6Xb/Gg7vYzCTNVxhvo=
