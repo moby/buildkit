@@ -13,6 +13,7 @@ import (
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/remotes/docker/auth"
+	remoteserrors "github.com/containerd/containerd/remotes/errors"
 	"github.com/moby/buildkit/session"
 	sessionauth "github.com/moby/buildkit/session/auth"
 	"github.com/moby/buildkit/util/flightcontrol"
@@ -308,7 +309,7 @@ func (ah *authHandler) doBearerAuth(ctx context.Context) (token string, err erro
 		// switch once support has landed
 		resp, err := auth.FetchToken(ctx, ah.client, nil, to)
 		if err != nil {
-			var errStatus auth.ErrUnexpectedStatus
+			var errStatus remoteserrors.ErrUnexpectedStatus
 			if errors.As(err, &errStatus) {
 				// retry with POST request
 				// As of September 2017, GCR is known to return 404.
