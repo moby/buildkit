@@ -1,6 +1,6 @@
 package cacheimport
 
-// Distibutable build cache
+// Distributable build cache
 //
 // Main manifest is OCI image index
 // https://github.com/opencontainers/image-spec/blob/master/image-index.md .
