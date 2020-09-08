@@ -225,6 +225,15 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 			}
 			func(i int, d *dispatchState) {
 				eg.Go(func() error {
+					name, err := shlex.ProcessWordWithMap(d.stage.BaseName, metaArgsToMap(optMetaArgs))
+					if err != nil {
+						return parser.WithLocation(err, d.stage.Location)
+					}
+					if name == "" {
+						return parser.WithLocation(errors.Errorf("base name (%s) should not be blank", d.stage.BaseName), d.stage.Location)
+					}
+					d.stage.BaseName = name
+
 					ref, err := reference.ParseNormalizedNamed(d.stage.BaseName)
 					if err != nil {
 						return parser.WithLocation(errors.Wrapf(err, "failed to parse stage name %q", d.stage.BaseName), d.stage.Location)
