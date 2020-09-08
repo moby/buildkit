@@ -43,6 +43,18 @@ COPY --from=0 f2 /
 	_, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{})
 	assert.NoError(t, err)
 
+	df = `ARG ARGUMENT
+FROM busybox AS foo
+ENV FOO bar
+FROM foo
+COPY --from=$ARGUMENT f1 /
+COPY --from=0 f2 /
+	`
+	buildArgs := make(map[string]string)
+	buildArgs["ARGUMENT"] = "foo"
+	_, _, err = Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{BuildArgs: buildArgs})
+	assert.NoError(t, err)
+
 	df = `FROM busybox AS foo
 ENV FOO bar
 FROM foo

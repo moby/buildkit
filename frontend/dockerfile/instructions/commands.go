@@ -220,6 +220,13 @@ func (c *CopyCommand) Expand(expander SingleWordExpander) error {
 		return err
 	}
 	c.Chown = expandedChown
+
+	expandedFrom, err := expander(c.From)
+	if err != nil {
+		return err
+	}
+	c.From = expandedFrom
+
 	return expandSliceInPlace(c.SourcesAndDest, expander)
 }
 
