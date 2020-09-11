@@ -18,13 +18,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type Container interface {
-	client.Container
-	// OnRelease allows callbacks to free up resources when the container exits.
-	// The functions are called in LIFO order.
-	OnRelease(func() error)
-}
-
 type NewContainerRequest struct {
 	ContainerID  string
 	NetMode      opspb.NetMode
@@ -43,7 +36,7 @@ type Mount struct {
 	RefProxy  solver.ResultProxy
 }
 
-func NewContainer(ctx context.Context, e executor.Executor, req NewContainerRequest) (Container, error) {
+func NewContainer(ctx context.Context, e executor.Executor, req NewContainerRequest) (client.Container, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	eg, ctx := errgroup.WithContext(ctx)
 	ctr := &gatewayContainer{
@@ -77,9 +70,10 @@ func NewContainer(ctx context.Context, e executor.Executor, req NewContainerRequ
 			if err != nil {
 				return nil, stack.Enable(err)
 			}
-			ctr.OnRelease(func() error {
+			ctr.cleanup = append(ctr.cleanup, func() error {
 				return stack.Enable(ref.Release(context.TODO()))
 			})
+
 			execMount.Src = ref
 		}
 
@@ -184,12 +178,6 @@ func (gwCtr *gatewayContainer) Release(ctx context.Context) error {
 		return stack.Enable(err1)
 	}
 	return stack.Enable(err2)
-}
-
-// OnRelease will call the provided function when the Container has been
-// released.  The functions are called in LIFO order.
-func (gwCtr *gatewayContainer) OnRelease(f func() error) {
-	gwCtr.cleanup = append(gwCtr.cleanup, f)
 }
 
 type gatewayContainerProcess struct {
