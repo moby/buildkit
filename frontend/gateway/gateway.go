@@ -322,7 +322,7 @@ func newBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridg
 		workers:   workers,
 		inputs:    inputs,
 		sid:       sid,
-		ctrs:      map[string]Container{},
+		ctrs:      map[string]gwclient.Container{},
 	}
 	return lbf
 }
@@ -423,7 +423,7 @@ type llbBridgeForwarder struct {
 	isErrServerClosed bool
 	sid               string
 	*pipe
-	ctrs   map[string]Container
+	ctrs   map[string]gwclient.Container
 	ctrsMu sync.Mutex
 }
 
@@ -1030,12 +1030,6 @@ func (lbf *llbBridgeForwarder) ExecProcess(srv pb.LLBBridge_ExecProcessServer) e
 					return stack.Enable(err)
 				}
 				pio.resize = proc.Resize
-
-				// ensure process has been canceled if the container is released
-				ctr.OnRelease(func() error {
-					initCancel()
-					return nil
-				})
 
 				eg.Go(func() error {
 					<-pio.done
