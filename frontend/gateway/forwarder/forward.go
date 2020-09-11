@@ -161,7 +161,7 @@ func (c *bridgeClient) NewContainer(ctx context.Context, req client.NewContainer
 	for _, m := range req.Mounts {
 		refProxy, ok := m.Ref.(*ref)
 		if !ok {
-			return nil, errors.Errorf("Unexpected Ref type: %T", m.Ref)
+			return nil, errors.Errorf("unexpected Ref type: %T", m.Ref)
 		}
 		ctrReq.Mounts = append(ctrReq.Mounts, gateway.Mount{
 			Dest:      m.Dest,

@@ -588,7 +588,7 @@ func (m *messageForwarder) Send(msg *pb.ExecMessage) error {
 	_, ok := m.pids[msg.ProcessID]
 	defer m.mu.Unlock()
 	if !ok {
-		return errors.Errorf("Process %s has ended, not sending message %#v", msg.ProcessID, msg.Input)
+		return errors.Errorf("process %s has ended, not sending message %#v", msg.ProcessID, msg.Input)
 	}
 	logrus.Debugf("|---> %s", debugMessage(msg))
 	return m.stream.Send(msg)
@@ -650,7 +650,7 @@ func (c *grpcClient) NewContainer(ctx context.Context, req client.NewContainerRe
 	for _, m := range req.Mounts {
 		ref, ok := m.Ref.(*reference)
 		if !ok {
-			return nil, errors.Errorf("Unexpected type for reference, got %T", m.Ref)
+			return nil, errors.Errorf("unexpected type for reference, got %T", m.Ref)
 		}
 		mounts = append(mounts, &opspb.Mount{
 			Dest:      m.Dest,
@@ -725,11 +725,11 @@ func (ctr *container) Start(ctx context.Context, req client.StartRequest) (clien
 
 	msg := msgs.Recv(ctx)
 	if msg == nil {
-		return nil, errors.Errorf("Failed to receive started message")
+		return nil, errors.Errorf("failed to receive started message")
 	}
 	started := msg.GetStarted()
 	if started == nil {
-		return nil, errors.Errorf("Expecting started message, got %T", msg.GetInput())
+		return nil, errors.Errorf("expecting started message, got %T", msg.GetInput())
 	}
 
 	eg, ctx := errgroup.WithContext(ctx)
@@ -804,7 +804,7 @@ func (ctr *container) Start(ctx context.Context, req client.StartRequest) (clien
 				}
 				if out == nil {
 					// if things are plumbed correctly this should never happen
-					return errors.Errorf("Missing writer for output fd %d", file.Fd)
+					return errors.Errorf("missing writer for output fd %d", file.Fd)
 				}
 				if len(file.Data) > 0 {
 					_, err := out.Write(file.Data)
@@ -828,7 +828,7 @@ func (ctr *container) Start(ctx context.Context, req client.StartRequest) (clien
 			} else if serverDone := msg.GetDone(); serverDone != nil {
 				return exitError
 			} else {
-				return errors.Errorf("Unexpected Exec Message for pid %s: %T", pid, msg.GetInput())
+				return errors.Errorf("unexpected Exec Message for pid %s: %T", pid, msg.GetInput())
 			}
 		}
 	})

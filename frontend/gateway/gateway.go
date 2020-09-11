@@ -758,7 +758,7 @@ func (lbf *llbBridgeForwarder) NewContainer(ctx context.Context, in *pb.NewConta
 	for _, m := range in.Mounts {
 		refProxy, err := lbf.convertRef(m.ResultID)
 		if err != nil {
-			return nil, errors.Wrapf(err, "Failed to find ref %s for %q mount", m.ResultID, m.Dest)
+			return nil, errors.Wrapf(err, "failed to find ref %s for %q mount", m.ResultID, m.Dest)
 		}
 		ctrReq.Mounts = append(ctrReq.Mounts, Mount{
 			Dest:      m.Dest,
@@ -798,7 +798,7 @@ func (lbf *llbBridgeForwarder) ReleaseContainer(ctx context.Context, in *pb.Rele
 	delete(lbf.ctrs, in.ContainerID)
 	lbf.ctrsMu.Unlock()
 	if !ok {
-		return nil, errors.Errorf("Container details for %s not found", in.ContainerID)
+		return nil, errors.Errorf("container details for %s not found", in.ContainerID)
 	}
 	err := ctr.Release(ctx)
 	return &pb.ReleaseContainerResponse{}, stack.Enable(err)
