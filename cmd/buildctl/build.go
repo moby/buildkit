@@ -251,7 +251,7 @@ func buildAction(clicontext *cli.Context) error {
 		if err != nil {
 			return err
 		}
-		for k, v := range resp.ExporterResponse {
+		for k, v := range resp.ExportersResponse {
 			logrus.Debugf("exporter response: %s=%s", k, v)
 		}
 		return err

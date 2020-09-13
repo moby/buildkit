@@ -352,7 +352,7 @@ func (w *Worker) Exporter(name string, sm *session.Manager) (exporter.Exporter, 
 	default:
 		return nil, errors.Errorf("exporter %q could not be found", name)
 	}
-}
+ }
 
 func (w *Worker) GetRemote(ctx context.Context, ref cache.ImmutableRef, createIfNeeded bool) (*solver.Remote, error) {
 	ctx, done, err := leaseutil.WithLease(ctx, w.LeaseManager, leaseutil.MakeTemporary)
