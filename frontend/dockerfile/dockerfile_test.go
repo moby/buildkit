@@ -2262,7 +2262,7 @@ FROM busybox
 ARG group
 ENV owner 1000
 ADD --chown=${owner}:${group} foo /
-RUN [ "$(stat -c "%u %G" /foo)" == "1000 nogroup" ]
+RUN [ "$(stat -c "%u %G" /foo)" == "1000 nobody" ]
 `)
 
 	dir, err := tmpdir(
@@ -2279,7 +2279,7 @@ RUN [ "$(stat -c "%u %G" /foo)" == "1000 nogroup" ]
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
 			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
-			"build-arg:group":                   "nogroup",
+			"build-arg:group":                   "nobody",
 		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
@@ -2832,7 +2832,7 @@ FROM busybox AS base
 ENV owner 1000
 RUN mkdir -m 0777 /out
 COPY --chown=daemon foo /
-COPY --chown=1000:nogroup bar /baz
+COPY --chown=1000:nobody bar /baz
 ARG group
 COPY --chown=${owner}:${group} foo /foobis
 RUN stat -c "%U %G" /foo  > /out/fooowner
@@ -2868,7 +2868,7 @@ COPY --from=base /out /
 		},
 		FrontendAttrs: map[string]string{
 			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
-			"build-arg:group":                   "nogroup",
+			"build-arg:group":                   "nobody",
 		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
@@ -2883,11 +2883,11 @@ COPY --from=base /out /
 
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "subowner"))
 	require.NoError(t, err)
-	require.Equal(t, "1000 nogroup\n", string(dt))
+	require.Equal(t, "1000 nobody\n", string(dt))
 
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "foobisowner"))
 	require.NoError(t, err)
-	require.Equal(t, "1000 nogroup\n", string(dt))
+	require.Equal(t, "1000 nobody\n", string(dt))
 }
 
 func testCopyChmod(t *testing.T, sb integration.Sandbox) {

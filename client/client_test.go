@@ -1343,7 +1343,7 @@ func testUser(t *testing.T, sb integration.Sandbox) {
 
 	run("daemon", `sh -c "id -nu > user"`)
 	run("daemon:daemon", `sh -c "id -ng > group"`)
-	run("daemon:nogroup", `sh -c "id -ng > nogroup"`)
+	run("daemon:nobody", `sh -c "id -ng > nobody"`)
 	run("1:1", `sh -c "id -g > userone"`)
 
 	st = st.Run(llb.Shlex("cp -a /wd/. /out/"))
@@ -1374,9 +1374,9 @@ func testUser(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	require.Contains(t, string(dt), "daemon")
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "nogroup"))
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "nobody"))
 	require.NoError(t, err)
-	require.Contains(t, string(dt), "nogroup")
+	require.Contains(t, string(dt), "nobody")
 
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "userone"))
 	require.NoError(t, err)
