@@ -51,9 +51,7 @@ func (c *Client) Build(ctx context.Context, opt SolveOpt, product string, buildF
 			return err
 		}
 
-		if c, ok := g.(gateway.Client); ok {
-			gwClient.caps = c.BuildOpts().Caps
-		}
+		gwClient.caps = g.BuildOpts().Caps
 
 		if err := g.Run(ctx, buildFunc); err != nil {
 			return errors.Wrap(err, "failed to run Build function")
