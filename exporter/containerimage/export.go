@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
+	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
@@ -168,7 +168,7 @@ func (e *imageExporterInstance) Name() string {
 	return "exporting to image"
 }
 
-func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source) (map[string]string, error) {
+func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source) (*controlapi.ExporterResponse, error) {
 	if src.Metadata == nil {
 		src.Metadata = make(map[string][]byte)
 	}
@@ -246,7 +246,10 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 	}
 
 	resp["containerimage.digest"] = desc.Digest.String()
-	return resp, nil
+	response := &controlapi.ExporterResponse{
+	  ExporterResponse : resp,
+	}
+	return response, nil
 }
 
 func (e *imageExporterInstance) unpackImage(ctx context.Context, img images.Image) (err0 error) {

@@ -5,7 +5,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
 	controlapi "github.com/moby/buildkit/api/services/control"
 	apitypes "github.com/moby/buildkit/api/types"
 	"github.com/moby/buildkit/cache/remotecache"
@@ -227,20 +226,24 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 	}()
 
 	var expi exporter.ExporterInstance
+	var expis []exporter.ExporterInstance
 	// TODO: multiworker
 	// This is actually tricky, as the exporter should come from the worker that has the returned reference. We may need to delay this so that the solver loads this.
 	w, err := c.opt.WorkerController.GetDefault()
 	if err != nil {
 		return nil, err
 	}
-	if req.Exporters[0] != "" {
-		exp, err := w.Exporter(req.Exporters[0], c.opt.SessionManager)
-		if err != nil {
-			return nil, err
-		}
-		expi, err = exp.Resolve(ctx, nil)
-		if err != nil {
-			return nil, err
+	if req.Exporters != nil {
+		for _, exporter := range req.Exporters {
+            exp, err := w.Exporter(exporter, c.opt.SessionManager)
+            if err != nil {
+                return nil, err
+            }
+            expi, err = exp.Resolve(ctx, nil)
+            if err != nil {
+                return nil, err
+		    }
+		    expis = append(expis, expi)
 		}
 	}
 
@@ -280,7 +283,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		FrontendInputs: req.FrontendInputs,
 		CacheImports:   cacheImports,
 	}, llbsolver.ExporterRequest{
-		Exporter:        expi,
+		Exporters:        expis,
 		CacheExporter:   cacheExporter,
 		CacheExportMode: cacheExportMode,
 	}, req.Entitlements)
@@ -288,7 +291,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		return nil, err
 	}
 	return &controlapi.SolveResponse{
-		ExporterResponse: resp.ExporterResponse,
+		ExportersResponse: resp.ExportersResponse,
 	}, nil
 }
 

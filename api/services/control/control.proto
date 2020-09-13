@@ -98,8 +98,12 @@ message CacheOptionsEntry {
 	map<string, string> Attrs = 2;
 }
 
-message SolveResponse {
+message ExporterResponse{
 	map<string, string> ExporterResponse = 1;
+}
+message SolveResponse {
+	ExporterResponse ExporterResponse = 1;
+	repeated ExporterResponse ExportersResponse= 2;
 }
 
 message StatusRequest {

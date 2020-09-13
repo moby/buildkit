@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 	"time"
-
+	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/exporter"
@@ -60,7 +60,7 @@ func (e *localExporterInstance) Name() string {
 	return "exporting to client"
 }
 
-func (e *localExporterInstance) Export(ctx context.Context, inp exporter.Source) (map[string]string, error) {
+func (e *localExporterInstance) Export(ctx context.Context, inp exporter.Source) (*controlapi.ExporterResponse, error) {
 	var defers []func()
 
 	defer func() {

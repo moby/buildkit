@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/moby/buildkit/cache"
+	controlapi "github.com/moby/buildkit/api/services/control"
 )
 
 type Exporter interface {
@@ -12,7 +13,7 @@ type Exporter interface {
 
 type ExporterInstance interface {
 	Name() string
-	Export(context.Context, Source) (map[string]string, error)
+	Export(context.Context, Source) (*controlapi.ExporterResponse, error)
 }
 
 type Source struct {
