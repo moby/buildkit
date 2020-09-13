@@ -32,6 +32,7 @@ func TestClientGatewayIntegration(t *testing.T) {
 		testClientGatewayContainerCancelOnRelease,
 		testClientGatewayContainerPID1Fail,
 		testClientGatewayContainerPID1Exit,
+		testClientGatewayContainerMounts,
 	}, integration.WithMirroredImages(integration.OfficialImages("busybox:latest")))
 }
 
@@ -537,6 +538,116 @@ func testClientGatewayContainerPID1Exit(t *testing.T, sb integration.Sandbox) {
 	// `exit code: 137` (ie sigkill) on containerd
 	require.Error(t, err)
 	require.Regexp(t, "exit code: (255|137)", err.Error())
+
+	checkAllReleasable(t, c, sb, true)
+}
+
+// testClientGatewayContainerMounts is testing mounts derived from various
+// llb.States
+func testClientGatewayContainerMounts(t *testing.T, sb integration.Sandbox) {
+	if sb.Rootless() {
+		// TODO fix this
+		// We get `panic: cannot statfs cgroup root` when running this test
+		// with runc-rootless
+		t.Skip("Skipping runc-rootless for cgroup error")
+	}
+	requiresLinux(t)
+
+	ctx := context.TODO()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	tmpdir, err := ioutil.TempDir("", "buildkit-buildctl")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	err = ioutil.WriteFile(filepath.Join(tmpdir, "local-file"), []byte("local"), 0644)
+	require.NoError(t, err)
+
+	product := "buildkit_test"
+
+	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
+		mounts := map[string]llb.State{
+			"/": llb.Image("busybox:latest").Run(
+				llb.Shlex("touch /root-file"),
+			).Root(),
+			"/foo": llb.Image("busybox:latest").Run(
+				llb.Shlex("touch foo-file"),
+				llb.Dir("/tmp"),
+				llb.AddMount("/tmp", llb.Scratch()),
+			).GetMount("/tmp"),
+			"/local": llb.Local("mylocal"),
+			// TODO How do we get a results.Ref for a cache mount, tmpfs mount
+		}
+
+		containerMounts := []client.Mount{}
+
+		for mountpoint, st := range mounts {
+			def, err := st.Marshal(ctx)
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to marshal state")
+			}
+
+			r, err := c.Solve(ctx, client.SolveRequest{
+				Definition: def.ToPB(),
+			})
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to solve")
+			}
+			containerMounts = append(containerMounts, client.Mount{
+				Dest:      mountpoint,
+				MountType: pb.MountType_BIND,
+				Ref:       r.Ref,
+			})
+		}
+
+		ctr, err := c.NewContainer(ctx, client.NewContainerRequest{Mounts: containerMounts})
+		if err != nil {
+			return nil, err
+		}
+
+		pid1, err := ctr.Start(ctx, client.StartRequest{
+			Args: []string{"sleep", "10"},
+			Cwd:  "/",
+		})
+		require.NoError(t, err)
+		defer pid1.Wait()
+
+		pid, err := ctr.Start(ctx, client.StartRequest{
+			Args: []string{"test", "-f", "/root-file"},
+			Cwd:  "/",
+		})
+		require.NoError(t, err)
+		err = pid.Wait()
+		require.NoError(t, err)
+
+		pid, err = ctr.Start(ctx, client.StartRequest{
+			Args: []string{"test", "-f", "/foo/foo-file"},
+			Cwd:  "/",
+		})
+		require.NoError(t, err)
+		err = pid.Wait()
+		require.NoError(t, err)
+
+		pid, err = ctr.Start(ctx, client.StartRequest{
+			Args: []string{"test", "-f", "/local/local-file"},
+			Cwd:  "/",
+		})
+		require.NoError(t, err)
+		err = pid.Wait()
+		require.NoError(t, err)
+
+		return &client.Result{}, ctr.Release(ctx)
+	}
+
+	_, err = c.Build(ctx, SolveOpt{
+		LocalDirs: map[string]string{
+			"mylocal": tmpdir,
+		},
+	}, product, b, nil)
+	require.Contains(t, err.Error(), context.Canceled.Error())
 
 	checkAllReleasable(t, c, sb, true)
 }
