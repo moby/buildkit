@@ -12,6 +12,7 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/diff"
 	"github.com/containerd/containerd/images"
+	ctdlabels "github.com/containerd/containerd/labels"
 	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/remotes/docker"
@@ -206,14 +207,8 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 				progressController.Name = p.vtx.Name()
 			}
 
-			var layers string
-			for _, desc := range p.manifest.Remote.Descriptors {
-				layers += fmt.Sprintf("%s,", desc.Digest.String())
-			}
-			layers = strings.TrimSuffix(layers, ",")
-
 			p.descHandlers = cache.DescHandlers(make(map[digest.Digest]*cache.DescHandler))
-			for _, desc := range p.manifest.Remote.Descriptors {
+			for i, desc := range p.manifest.Remote.Descriptors {
 
 				// Hints for remote/stargz snapshotter for searching for remote snapshots
 				labels := snapshots.FilterInheritedLabels(desc.Annotations)
@@ -222,7 +217,20 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 				}
 				labels["containerd.io/snapshot/remote/stargz.reference"] = p.manifest.Ref
 				labels["containerd.io/snapshot/remote/stargz.digest"] = desc.Digest.String()
-				labels["containerd.io/snapshot/remote/stargz.layers"] = layers
+				var (
+					layersKey = "containerd.io/snapshot/remote/stargz.layers"
+					layers    string
+				)
+				for _, l := range p.manifest.Remote.Descriptors[i:] {
+					ls := fmt.Sprintf("%s,", l.Digest.String())
+					// This avoids the label hits the size limitation.
+					// Skipping layers is allowed here and only affects performance.
+					if err := ctdlabels.Validate(layersKey, layers+ls); err != nil {
+						break
+					}
+					layers += ls
+				}
+				labels[layersKey] = strings.TrimSuffix(layers, ",")
 
 				p.descHandlers[desc.Digest] = &cache.DescHandler{
 					Provider:       p.manifest.Remote.Provider,
