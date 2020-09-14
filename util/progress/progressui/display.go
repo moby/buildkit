@@ -548,6 +548,9 @@ func align(l, r string, w int) string {
 }
 
 func wrapHeight(j []*job, limit int) []*job {
+	if limit < 0 {
+		return nil
+	}
 	var wrapped []*job
 	wrapped = append(wrapped, j...)
 	if len(j) > limit {
