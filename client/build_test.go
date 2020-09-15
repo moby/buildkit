@@ -571,7 +571,8 @@ func testClientGatewayContainerMounts(t *testing.T, sb integration.Sandbox) {
 	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
 		mounts := map[string]llb.State{
 			"/": llb.Image("busybox:latest").Run(
-				llb.Shlex("touch /root-file"),
+				llb.Shlex("touch /root-file /cached/cache-file"),
+				llb.AddMount("/cached", llb.Scratch(), llb.AsPersistentCacheDir(t.Name(), llb.CacheMountShared)),
 			).Root(),
 			"/foo": llb.Image("busybox:latest").Run(
 				llb.Shlex("touch foo-file"),
@@ -582,7 +583,17 @@ func testClientGatewayContainerMounts(t *testing.T, sb integration.Sandbox) {
 			// TODO How do we get a results.Ref for a cache mount, tmpfs mount
 		}
 
-		containerMounts := []client.Mount{}
+		containerMounts := []client.Mount{{
+			Dest:      "/cached",
+			MountType: pb.MountType_CACHE,
+			CacheOpt: &pb.CacheOpt{
+				ID:      t.Name(),
+				Sharing: pb.CacheSharingOpt_SHARED,
+			},
+		}, {
+			Dest:      "/tmpfs",
+			MountType: pb.MountType_TMPFS,
+		}}
 
 		for mountpoint, st := range mounts {
 			def, err := st.Marshal(ctx)
@@ -633,6 +644,22 @@ func testClientGatewayContainerMounts(t *testing.T, sb integration.Sandbox) {
 
 		pid, err = ctr.Start(ctx, client.StartRequest{
 			Args: []string{"test", "-f", "/local/local-file"},
+			Cwd:  "/",
+		})
+		require.NoError(t, err)
+		err = pid.Wait()
+		require.NoError(t, err)
+
+		pid, err = ctr.Start(ctx, client.StartRequest{
+			Args: []string{"test", "-f", "/cached/cache-file"},
+			Cwd:  "/",
+		})
+		require.NoError(t, err)
+		err = pid.Wait()
+		require.NoError(t, err)
+
+		pid, err = ctr.Start(ctx, client.StartRequest{
+			Args: []string{"test", "-w", "/tmpfs"},
 			Cwd:  "/",
 		})
 		require.NoError(t, err)

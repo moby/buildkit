@@ -103,7 +103,7 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 	opt := base.WorkerOpt{
 		ID:             id,
 		Labels:         xlabels,
-		MetadataStore:  md,
+		MdStore:        md,
 		Executor:       containerdexecutor.New(client, root, "", np, dns),
 		Snapshotter:    snap,
 		ContentStore:   cs,

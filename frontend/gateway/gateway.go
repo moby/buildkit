@@ -27,6 +27,7 @@ import (
 	gwclient "github.com/moby/buildkit/frontend/gateway/client"
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/errdefs"
 	opspb "github.com/moby/buildkit/solver/pb"
@@ -756,9 +757,12 @@ func (lbf *llbBridgeForwarder) NewContainer(ctx context.Context, in *pb.NewConta
 	}
 
 	for _, m := range in.Mounts {
-		refProxy, err := lbf.convertRef(m.ResultID)
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to find ref %s for %q mount", m.ResultID, m.Dest)
+		var refProxy solver.ResultProxy
+		if m.ResultID != "" {
+			refProxy, err = lbf.convertRef(m.ResultID)
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to find ref %s for %q mount", m.ResultID, m.Dest)
+			}
 		}
 		ctrReq.Mounts = append(ctrReq.Mounts, Mount{
 			Dest:      m.Dest,
@@ -766,12 +770,16 @@ func (lbf *llbBridgeForwarder) NewContainer(ctx context.Context, in *pb.NewConta
 			Readonly:  m.Readonly,
 			MountType: m.MountType,
 			RefProxy:  refProxy,
+			CacheOpt:  m.CacheOpt,
+			SecretOpt: m.SecretOpt,
+			SSHOpt:    m.SSHOpt,
 		})
 	}
 
 	// Not using `ctx` here because it will get cancelled as soon as NewContainer returns
 	// and we want the context to live for the duration of the container.
-	ctr, err := NewContainer(context.Background(), lbf.llbBridge, ctrReq)
+	group := session.NewGroup(lbf.sid)
+	ctr, err := NewContainer(context.Background(), lbf.llbBridge, lbf.llbBridge.SessionManager(), group, ctrReq)
 	if err != nil {
 		return nil, stack.Enable(err)
 	}

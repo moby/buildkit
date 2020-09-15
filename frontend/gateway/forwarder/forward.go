@@ -13,6 +13,7 @@ import (
 	"github.com/moby/buildkit/frontend/gateway/client"
 	gwpb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	opspb "github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
@@ -159,9 +160,13 @@ func (c *bridgeClient) NewContainer(ctx context.Context, req client.NewContainer
 	}
 
 	for _, m := range req.Mounts {
-		refProxy, ok := m.Ref.(*ref)
-		if !ok {
-			return nil, errors.Errorf("unexpected Ref type: %T", m.Ref)
+		var refProxy solver.ResultProxy
+		if m.Ref != nil {
+			var ok bool
+			refProxy, ok = m.Ref.(*ref)
+			if !ok {
+				return nil, errors.Errorf("unexpected Ref type: %T", m.Ref)
+			}
 		}
 		ctrReq.Mounts = append(ctrReq.Mounts, gateway.Mount{
 			Dest:      m.Dest,
@@ -169,10 +174,14 @@ func (c *bridgeClient) NewContainer(ctx context.Context, req client.NewContainer
 			Readonly:  m.Readonly,
 			MountType: m.MountType,
 			RefProxy:  refProxy,
+			CacheOpt:  m.CacheOpt,
+			SecretOpt: m.SecretOpt,
+			SSHOpt:    m.SSHOpt,
 		})
 	}
 
-	ctr, err := gateway.NewContainer(ctx, c, ctrReq)
+	group := session.NewGroup(c.sid)
+	ctr, err := gateway.NewContainer(ctx, c, c.SessionManager(), group, ctrReq)
 	if err != nil {
 		return nil, err
 	}

@@ -7,6 +7,7 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/executor"
 	gw "github.com/moby/buildkit/frontend/gateway/client"
+	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
 )
@@ -19,6 +20,7 @@ type FrontendLLBBridge interface {
 	executor.Executor
 	Solve(ctx context.Context, req SolveRequest, sid string) (*Result, error)
 	ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt) (digest.Digest, []byte, error)
+	SessionManager() *session.Manager
 }
 
 type SolveRequest = gw.SolveRequest
