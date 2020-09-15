@@ -649,16 +649,30 @@ func (c *grpcClient) NewContainer(ctx context.Context, req client.NewContainerRe
 	id := identity.NewID()
 	var mounts []*opspb.Mount
 	for _, m := range req.Mounts {
-		ref, ok := m.Ref.(*reference)
-		if !ok {
-			return nil, errors.Errorf("unexpected type for reference, got %T", m.Ref)
+		if m.CacheOpt != nil {
+			mounts = append(mounts, &opspb.Mount{
+				Dest:      m.Dest,
+				Selector:  m.Selector,
+				Readonly:  m.Readonly,
+				MountType: opspb.MountType_CACHE,
+				CacheOpt:  m.CacheOpt,
+			})
+			continue
+		}
+		var resultID string
+		if m.Ref != nil {
+			ref, ok := m.Ref.(*reference)
+			if !ok {
+				return nil, errors.Errorf("unexpected type for reference, got %T", m.Ref)
+			}
+			resultID = ref.id
 		}
 		mounts = append(mounts, &opspb.Mount{
 			Dest:      m.Dest,
 			Selector:  m.Selector,
 			Readonly:  m.Readonly,
 			MountType: m.MountType,
-			ResultID:  ref.id,
+			ResultID:  resultID,
 		})
 	}
 

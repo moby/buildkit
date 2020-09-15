@@ -33,6 +33,7 @@ import (
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/snapshot/imagerefchecker"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/solver/llbsolver/mounts"
 	"github.com/moby/buildkit/solver/llbsolver/ops"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/source"
@@ -62,7 +63,7 @@ type WorkerOpt struct {
 	Labels          map[string]string
 	Platforms       []specs.Platform
 	GCPolicy        []client.PruneInfo
-	MetadataStore   *metadata.Store
+	MdStore         *metadata.Store
 	Executor        executor.Executor
 	Snapshotter     snapshot.Snapshotter
 	ContentStore    content.Store
@@ -94,7 +95,7 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 
 	cm, err := cache.NewManager(cache.ManagerOpt{
 		Snapshotter:     opt.Snapshotter,
-		MetadataStore:   opt.MetadataStore,
+		MetadataStore:   opt.MdStore,
 		PruneRefChecker: imageRefChecker,
 		Applier:         opt.Applier,
 		GarbageCollect:  opt.GarbageCollect,
@@ -129,7 +130,7 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 	if err := git.Supported(); err == nil {
 		gs, err := git.NewSource(git.Opt{
 			CacheAccessor: cm,
-			MetadataStore: opt.MetadataStore,
+			MetadataStore: opt.MdStore,
 		})
 		if err != nil {
 			return nil, err
@@ -141,7 +142,7 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 
 	hs, err := http.NewSource(http.Opt{
 		CacheAccessor: cm,
-		MetadataStore: opt.MetadataStore,
+		MetadataStore: opt.MdStore,
 	})
 	if err != nil {
 		return nil, err
@@ -151,7 +152,7 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 
 	ss, err := local.NewSource(local.Opt{
 		CacheAccessor: cm,
-		MetadataStore: opt.MetadataStore,
+		MetadataStore: opt.MdStore,
 	})
 	if err != nil {
 		return nil, err
@@ -252,15 +253,19 @@ func (w *Worker) CacheManager() cache.Manager {
 	return w.CacheMgr
 }
 
+func (w *Worker) MetadataStore() *metadata.Store {
+	return w.MdStore
+}
+
 func (w *Worker) ResolveOp(v solver.Vertex, s frontend.FrontendLLBBridge, sm *session.Manager) (solver.Op, error) {
 	if baseOp, ok := v.Sys().(*pb.Op); ok {
 		switch op := baseOp.Op.(type) {
 		case *pb.Op_Source:
 			return ops.NewSourceOp(v, op, baseOp.Platform, w.SourceManager, sm, w)
 		case *pb.Op_Exec:
-			return ops.NewExecOp(v, op, baseOp.Platform, w.CacheMgr, sm, w.MetadataStore, w.WorkerOpt.Executor, w)
+			return ops.NewExecOp(v, op, baseOp.Platform, w.CacheMgr, sm, w.MdStore, w.WorkerOpt.Executor, w)
 		case *pb.Op_File:
-			return ops.NewFileOp(v, op, w.CacheMgr, w.MetadataStore, w)
+			return ops.NewFileOp(v, op, w.CacheMgr, w.MdStore, w)
 		case *pb.Op_Build:
 			return ops.NewBuildOp(v, op, s, w)
 		default:
@@ -271,13 +276,13 @@ func (w *Worker) ResolveOp(v solver.Vertex, s frontend.FrontendLLBBridge, sm *se
 }
 
 func (w *Worker) PruneCacheMounts(ctx context.Context, ids []string) error {
-	mu := ops.CacheMountsLocker()
+	mu := mounts.CacheMountsLocker()
 	mu.Lock()
 	defer mu.Unlock()
 
 	for _, id := range ids {
 		id = "cache-dir:" + id
-		sis, err := w.MetadataStore.Search(id)
+		sis, err := w.MdStore.Search(id)
 		if err != nil {
 			return err
 		}
@@ -306,7 +311,7 @@ func (w *Worker) PruneCacheMounts(ctx context.Context, ids []string) error {
 		}
 	}
 
-	ops.ClearActiveCacheMounts()
+	mounts.ClearActiveCacheMounts()
 	return nil
 }
 

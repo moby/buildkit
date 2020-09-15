@@ -2,13 +2,17 @@ package gateway
 
 import (
 	"context"
+	"fmt"
+	"sort"
 	"strings"
 	"sync"
 
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/frontend/gateway/client"
+	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/solver/llbsolver/mounts"
 	opspb "github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/stack"
 	utilsystem "github.com/moby/buildkit/util/system"
@@ -34,9 +38,24 @@ type Mount struct {
 	Readonly  bool
 	MountType opspb.MountType
 	RefProxy  solver.ResultProxy
+	CacheOpt  *opspb.CacheOpt
+	SecretOpt *opspb.SecretOpt
+	SSHOpt    *opspb.SSHOpt
 }
 
-func NewContainer(ctx context.Context, e executor.Executor, req NewContainerRequest) (client.Container, error) {
+func toProtoMount(m Mount) *opspb.Mount {
+	return &opspb.Mount{
+		Selector:  m.Selector,
+		Dest:      m.Dest,
+		Readonly:  m.Readonly,
+		MountType: m.MountType,
+		CacheOpt:  m.CacheOpt,
+		SecretOpt: m.SecretOpt,
+		SSHOpt:    m.SSHOpt,
+	}
+}
+
+func NewContainer(ctx context.Context, e executor.Executor, sm *session.Manager, g session.Group, req NewContainerRequest) (client.Container, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	eg, ctx := errgroup.WithContext(ctx)
 	ctr := &gatewayContainer{
@@ -49,40 +68,129 @@ func NewContainer(ctx context.Context, e executor.Executor, req NewContainerRequ
 		cancel:       cancel,
 	}
 
-	for _, m := range req.Mounts {
-		res, err := m.RefProxy.Result(ctx)
+	makeMutable := func(worker worker.Worker, ref cache.ImmutableRef) (cache.MutableRef, error) {
+		mRef, err := worker.CacheManager().New(ctx, ref)
 		if err != nil {
 			return nil, stack.Enable(err)
 		}
-		workerRef, ok := res.Sys().(*worker.WorkerRef)
-		if !ok {
-			return nil, stack.Enable(errors.Errorf("invalid reference for exec %T", res.Sys()))
+		ctr.cleanup = append(ctr.cleanup, func() error {
+			return stack.Enable(mRef.Release(context.TODO()))
+		})
+		return mRef, nil
+	}
+
+	var mm mounts.MountManager
+	mnts := req.Mounts
+
+	for i, m := range mnts {
+		if m.Dest == opspb.RootMount && m.RefProxy != nil {
+			res, err := m.RefProxy.Result(ctx)
+			if err != nil {
+				return nil, stack.Enable(err)
+			}
+			workerRef, ok := res.Sys().(*worker.WorkerRef)
+			if !ok {
+				return nil, errors.Errorf("invalid reference for exec %T", res.Sys())
+			}
+
+			name := fmt.Sprintf("container %s", req.ContainerID)
+			mm = mounts.NewMountManager(name, workerRef.Worker.CacheManager(), sm, workerRef.Worker.MetadataStore())
+
+			ctr.rootFS = workerRef.ImmutableRef
+			if !m.Readonly {
+				ctr.rootFS, err = makeMutable(workerRef.Worker, workerRef.ImmutableRef)
+				if err != nil {
+					return nil, stack.Enable(err)
+				}
+			}
+
+			// delete root mount from list, handled here
+			mnts = append(mnts[:i], mnts[i+1:]...)
+			break
+		}
+	}
+
+	if ctr.rootFS == nil {
+		return nil, errors.Errorf("root mount required")
+	}
+
+	for _, m := range mnts {
+		var ref cache.ImmutableRef
+		var mountable cache.Mountable
+		if m.RefProxy != nil {
+			res, err := m.RefProxy.Result(ctx)
+			if err != nil {
+				return nil, stack.Enable(err)
+			}
+			workerRef, ok := res.Sys().(*worker.WorkerRef)
+			if !ok {
+				return nil, errors.Errorf("invalid reference for exec %T", res.Sys())
+			}
+			ref = workerRef.ImmutableRef
+			mountable = ref
+
+			if !m.Readonly {
+				mountable, err = makeMutable(workerRef.Worker, ref)
+				if err != nil {
+					return nil, stack.Enable(err)
+				}
+			}
+		}
+		switch m.MountType {
+		case opspb.MountType_BIND:
+			// nothing to do here
+		case opspb.MountType_CACHE:
+			mRef, err := mm.MountableCache(ctx, toProtoMount(m), ref)
+			if err != nil {
+				return nil, err
+			}
+			mountable = mRef
+			ctr.cleanup = append(ctr.cleanup, func() error {
+				return stack.Enable(mRef.Release(context.TODO()))
+			})
+		case opspb.MountType_TMPFS:
+			mountable = mm.MountableTmpFS()
+		case opspb.MountType_SECRET:
+			var err error
+			mountable, err = mm.MountableSecret(ctx, toProtoMount(m), g)
+			if err != nil {
+				return nil, err
+			}
+			if mountable == nil {
+				continue
+			}
+		case opspb.MountType_SSH:
+			var err error
+			mountable, err = mm.MountableSSH(ctx, toProtoMount(m), g)
+			if err != nil {
+				return nil, err
+			}
+			if mountable == nil {
+				continue
+			}
+		default:
+			return nil, errors.Errorf("mount type %s not implemented", m.MountType)
+		}
+
+		// validate that there is a mount
+		if mountable == nil {
+			return nil, errors.Errorf("mount %s has no input", m.Dest)
 		}
 
 		execMount := executor.Mount{
-			Src:      workerRef.ImmutableRef,
+			Src:      mountable,
 			Selector: m.Selector,
 			Dest:     m.Dest,
 			Readonly: m.Readonly,
 		}
-		if !m.Readonly {
-			ref, err := workerRef.Worker.CacheManager().New(ctx, workerRef.ImmutableRef)
-			if err != nil {
-				return nil, stack.Enable(err)
-			}
-			ctr.cleanup = append(ctr.cleanup, func() error {
-				return stack.Enable(ref.Release(context.TODO()))
-			})
 
-			execMount.Src = ref
-		}
-
-		if m.Dest == "/" {
-			ctr.rootFS = execMount.Src
-		} else {
-			ctr.mounts = append(ctr.mounts, execMount)
-		}
+		ctr.mounts = append(ctr.mounts, execMount)
 	}
+
+	// sort mounts so parents are mounted first
+	sort.Slice(ctr.mounts, func(i, j int) bool {
+		return ctr.mounts[i].Dest < ctr.mounts[j].Dest
+	})
 
 	return ctr, nil
 }
