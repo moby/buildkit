@@ -142,6 +142,10 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest, sid st
 	return
 }
 
+func (b *llbBridge) SessionManager() *session.Manager {
+	return b.sm
+}
+
 type resultProxy struct {
 	cb       func(context.Context) (solver.CachedResult, error)
 	def      *pb.Definition

@@ -36,6 +36,9 @@ type Mount struct {
 	Ref       Reference
 	Readonly  bool
 	MountType pb.MountType
+	CacheOpt  *pb.CacheOpt
+	SecretOpt *pb.SecretOpt
+	SSHOpt    *pb.SSHOpt
 }
 
 // Container is used to start new processes inside a container and release the
