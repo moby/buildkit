@@ -171,6 +171,10 @@ func (c *grpcClient) Run(ctx context.Context, f client.BuildFunc) (retError erro
 		return err
 	}
 
+	if res == nil {
+		return nil
+	}
+
 	if err := c.caps.Supports(pb.CapReturnMap); len(res.Refs) > 1 && err != nil {
 		return err
 	}
