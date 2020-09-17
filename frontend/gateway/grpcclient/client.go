@@ -645,16 +645,6 @@ func (c *grpcClient) NewContainer(ctx context.Context, req client.NewContainerRe
 	id := identity.NewID()
 	var mounts []*opspb.Mount
 	for _, m := range req.Mounts {
-		if m.CacheOpt != nil {
-			mounts = append(mounts, &opspb.Mount{
-				Dest:      m.Dest,
-				Selector:  m.Selector,
-				Readonly:  m.Readonly,
-				MountType: opspb.MountType_CACHE,
-				CacheOpt:  m.CacheOpt,
-			})
-			continue
-		}
 		var resultID string
 		if m.Ref != nil {
 			ref, ok := m.Ref.(*reference)
@@ -669,6 +659,9 @@ func (c *grpcClient) NewContainer(ctx context.Context, req client.NewContainerRe
 			Readonly:  m.Readonly,
 			MountType: m.MountType,
 			ResultID:  resultID,
+			CacheOpt:  m.CacheOpt,
+			SecretOpt: m.SecretOpt,
+			SSHOpt:    m.SSHOpt,
 		})
 	}
 
