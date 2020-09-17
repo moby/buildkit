@@ -14,11 +14,15 @@ import (
 	"github.com/moby/buildkit/frontend/gateway/client"
 	gatewayapi "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/session/secrets/secretsprovider"
+	"github.com/moby/buildkit/session/sshforward/sshprovider"
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/ssh/agent"
 )
 
 func TestClientGatewayIntegration(t *testing.T) {
@@ -566,6 +570,17 @@ func testClientGatewayContainerMounts(t *testing.T, sb integration.Sandbox) {
 	err = ioutil.WriteFile(filepath.Join(tmpdir, "local-file"), []byte("local"), 0644)
 	require.NoError(t, err)
 
+	a := agent.NewKeyring()
+	sockPath, clean, err := makeSSHAgentSock(a)
+	require.NoError(t, err)
+	defer clean()
+
+	ssh, err := sshprovider.NewSSHAgentProvider([]sshprovider.AgentConfig{{
+		ID:    t.Name(),
+		Paths: []string{sockPath},
+	}})
+	require.NoError(t, err)
+
 	product := "buildkit_test"
 
 	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
@@ -593,6 +608,18 @@ func testClientGatewayContainerMounts(t *testing.T, sb integration.Sandbox) {
 		}, {
 			Dest:      "/tmpfs",
 			MountType: pb.MountType_TMPFS,
+		}, {
+			Dest:      "/run/secrets/mysecret",
+			MountType: pb.MountType_SECRET,
+			SecretOpt: &pb.SecretOpt{
+				ID: "/run/secrets/mysecret",
+			},
+		}, {
+			Dest:      sockPath,
+			MountType: pb.MountType_SSH,
+			SSHOpt: &pb.SSHOpt{
+				ID: t.Name(),
+			},
 		}}
 
 		for mountpoint, st := range mounts {
@@ -620,8 +647,9 @@ func testClientGatewayContainerMounts(t *testing.T, sb integration.Sandbox) {
 		}
 
 		pid1, err := ctr.Start(ctx, client.StartRequest{
-			Args: []string{"sleep", "10"},
-			Cwd:  "/",
+			Args:   []string{"sleep", "10"},
+			Cwd:    "/",
+			Stderr: os.Stderr,
 		})
 		require.NoError(t, err)
 		defer pid1.Wait()
@@ -666,6 +694,25 @@ func testClientGatewayContainerMounts(t *testing.T, sb integration.Sandbox) {
 		err = pid.Wait()
 		require.NoError(t, err)
 
+		secretOutput := bytes.NewBuffer([]byte{})
+		pid, err = ctr.Start(ctx, client.StartRequest{
+			Args:   []string{"cat", "/run/secrets/mysecret"},
+			Cwd:    "/",
+			Stdout: &nopCloser{secretOutput},
+		})
+		require.NoError(t, err)
+		err = pid.Wait()
+		require.NoError(t, err)
+		require.Equal(t, "foo-secret", secretOutput.String())
+
+		pid, err = ctr.Start(ctx, client.StartRequest{
+			Args: []string{"test", "-S", sockPath},
+			Cwd:  "/",
+		})
+		require.NoError(t, err)
+		err = pid.Wait()
+		require.NoError(t, err)
+
 		return &client.Result{}, ctr.Release(ctx)
 	}
 
@@ -673,7 +720,14 @@ func testClientGatewayContainerMounts(t *testing.T, sb integration.Sandbox) {
 		LocalDirs: map[string]string{
 			"mylocal": tmpdir,
 		},
+		Session: []session.Attachable{
+			ssh,
+			secretsprovider.FromMap(map[string][]byte{
+				"/run/secrets/mysecret": []byte("foo-secret"),
+			}),
+		},
 	}, product, b, nil)
+	require.Error(t, err)
 	require.Contains(t, err.Error(), context.Canceled.Error())
 
 	checkAllReleasable(t, c, sb, true)
