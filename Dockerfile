@@ -178,7 +178,8 @@ FROM gobuild-base AS stargz-snapshotter
 ARG STARGZ_SNAPSHOTTER_VERSION
 RUN git clone https://github.com/containerd/stargz-snapshotter.git /go/src/github.com/containerd/stargz-snapshotter
 WORKDIR /go/src/github.com/containerd/stargz-snapshotter
-RUN git checkout -q "$STARGZ_SNAPSHOTTER_VERSION"  && \
+RUN --mount=target=/root/.cache,type=cache \
+  git checkout -q "$STARGZ_SNAPSHOTTER_VERSION" && \
   mkdir /out && CGO_ENABLED=0 PREFIX=/out/ make && \
   file /out/containerd-stargz-grpc | grep "statically linked" && \
   file /out/ctr-remote | grep "statically linked"
