@@ -579,33 +579,37 @@ func parseStopSignal(req parseRequest) (*StopSignalCommand, error) {
 }
 
 func parseArg(req parseRequest) (*ArgCommand, error) {
-	if len(req.args) != 1 {
-		return nil, errExactlyOneArgument("ARG")
+	if len(req.args) < 1 {
+		return nil, errAtLeastOneArgument("ARG")
 	}
 
-	kvpo := KeyValuePairOptional{}
+	pairs := make([]KeyValuePairOptional, len(req.args))
 
-	arg := req.args[0]
-	// 'arg' can just be a name or name-value pair. Note that this is different
-	// from 'env' that handles the split of name and value at the parser level.
-	// The reason for doing it differently for 'arg' is that we support just
-	// defining an arg and not assign it a value (while 'env' always expects a
-	// name-value pair). If possible, it will be good to harmonize the two.
-	if strings.Contains(arg, "=") {
-		parts := strings.SplitN(arg, "=", 2)
-		if len(parts[0]) == 0 {
-			return nil, errBlankCommandNames("ARG")
+	for i, arg := range req.args {
+		kvpo := KeyValuePairOptional{}
+
+		// 'arg' can just be a name or name-value pair. Note that this is different
+		// from 'env' that handles the split of name and value at the parser level.
+		// The reason for doing it differently for 'arg' is that we support just
+		// defining an arg and not assign it a value (while 'env' always expects a
+		// name-value pair). If possible, it will be good to harmonize the two.
+		if strings.Contains(arg, "=") {
+			parts := strings.SplitN(arg, "=", 2)
+			if len(parts[0]) == 0 {
+				return nil, errBlankCommandNames("ARG")
+			}
+
+			kvpo.Key = parts[0]
+			kvpo.Value = &parts[1]
+		} else {
+			kvpo.Key = arg
 		}
-
-		kvpo.Key = parts[0]
-		kvpo.Value = &parts[1]
-	} else {
-		kvpo.Key = arg
+		pairs[i] = kvpo
 	}
 
 	return &ArgCommand{
-		KeyValuePairOptional: kvpo,
-		withNameAndCode:      newWithNameAndCode(req),
+		Args:            pairs,
+		withNameAndCode: newWithNameAndCode(req),
 	}, nil
 }
 
