@@ -164,11 +164,6 @@ func TestErrorCases(t *testing.T) {
 			expectedError: "MAINTAINER isn't allowed as an ONBUILD trigger",
 		},
 		{
-			name:          "ARG two arguments",
-			dockerfile:    "ARG foo bar",
-			expectedError: "ARG requires exactly one argument",
-		},
-		{
 			name:          "MAINTAINER unknown flag",
 			dockerfile:    "MAINTAINER --boo joe@example.com",
 			expectedError: "Unknown flag: boo",
