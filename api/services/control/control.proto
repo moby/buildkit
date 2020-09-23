@@ -60,14 +60,16 @@ message ExporterAttrs {
 message SolveRequest {
 	string Ref = 1;
 	pb.Definition Definition = 2;
-	repeated string Exporters = 3;
-	repeated ExporterAttrs ExportersAttrs = 4;
-	string Session = 5;
-	string Frontend = 6;
-	map<string, string> FrontendAttrs = 7;
-	CacheOptions Cache = 8 [(gogoproto.nullable) = false];
-	repeated string Entitlements = 9 [(gogoproto.customtype) = "github.com/moby/buildkit/util/entitlements.Entitlement" ];
-	map<string, pb.Definition> FrontendInputs = 10;
+	string Exporter = 3;
+	ExporterAttrs ExporterAttrs = 4;
+	repeated string Exporters = 5;
+	repeated ExporterAttrs ExportersAttrs = 6;
+	string Session = 7;
+	string Frontend = 8;
+	map<string, string> FrontendAttrs = 9;
+	CacheOptions Cache = 10 [(gogoproto.nullable) = false];
+	repeated string Entitlements = 11 [(gogoproto.customtype) = "github.com/moby/buildkit/util/entitlements.Entitlement" ];
+	map<string, pb.Definition> FrontendInputs = 12;
 }
 
 message CacheOptions {
