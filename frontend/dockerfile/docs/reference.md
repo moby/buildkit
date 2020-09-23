@@ -1025,25 +1025,43 @@ The environment variables set using `ENV` will persist when a container is run
 from the resulting image. You can view the values using `docker inspect`, and
 change them using `docker run --env <key>=<value>`.
 
-> **Note**
+Environment variable persistence can cause unexpected side effects. For example,
+setting `ENV DEBIAN_FRONTEND=noninteractive` changes the behavior of `apt-get`,
+and may confuse users of your image.
+
+If an environment variable is only needed during build, and not in the final
+image, consider setting a value for a single command instead:
+
+```dockerfile
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y ...
+```
+ 
+Or using [`ARG`](#arg), which is not persisted in the final image:
+
+```dockerfile
+ARG DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y ...
+```
+
+> **Alternative syntax**
 >
-> Environment variable persistence can cause unexpected side effects. For example,
-> setting `ENV DEBIAN_FRONTEND=noninteractive` changes the behavior of `apt-get`,
-> and may confuse users of your image.
->
-> If an environment variable is only needed during build, and not in the final
-> image, consider setting a value for a single command instead:
+> The `ENV` instruction also allows an alternative syntax `ENV <key> <value>`,
+> omitting the `=`. For example:
 >
 > ```dockerfile
-> RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y ...
+> ENV MY_VAR my-value
 > ```
 > 
-> Or using [`ARG`](#arg), which is not persisted in the final image:
+> This syntax does not allow for multiple environment-variables to be set in a
+> single `ENV` instruction, and can be confusing. For example, the following
+> sets a single environment variable (`ONE`) with value `"TWO= THREE=world"`:
 >
 > ```dockerfile
-> ARG DEBIAN_FRONTEND=noninteractive
-> RUN apt-get update && apt-get install -y ...
+> ENV ONE TWO= THREE=world
 > ```
+> 
+> The alternative syntax is supported for backward compatibility, but discouraged
+> for the reasons outlined above, and may be removed in a future release.
 
 ## ADD
 
