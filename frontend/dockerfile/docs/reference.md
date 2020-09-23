@@ -500,10 +500,10 @@ Example (parsed representation is displayed after the `#`):
 
 ```dockerfile
 FROM busybox
-ENV foo /bar
-WORKDIR ${foo}   # WORKDIR /bar
-ADD . $foo       # ADD . /bar
-COPY \$foo /quux # COPY $foo /quux
+ENV FOO=/bar
+WORKDIR ${FOO}   # WORKDIR /bar
+ADD . $FOO       # ADD . /bar
+COPY \$FOO /quux # COPY $FOO /quux
 ```
 
 Environment variables are supported by the following list of instructions in
@@ -994,53 +994,74 @@ port. For detailed information, see the
 ## ENV
 
 ```dockerfile
-ENV <key> <value>
 ENV <key>=<value> ...
 ```
 
 The `ENV` instruction sets the environment variable `<key>` to the value
 `<value>`. This value will be in the environment for all subsequent instructions
 in the build stage and can be [replaced inline](#environment-replacement) in
-many as well.
-
-The `ENV` instruction has two forms. The first form, `ENV <key> <value>`,
-will set a single variable to a value. The entire string after the first
-space will be treated as the `<value>` - including whitespace characters. The
-value will be interpreted for other environment variables, so quote characters
-will be removed if they are not escaped.
-
-The second form, `ENV <key>=<value> ...`, allows for multiple variables to
-be set at one time. Notice that the second form uses the equals sign (=)
-in the syntax, while the first form does not. Like command line parsing,
+many as well. The value will be interpreted for other environment variables, so
+quote characters will be removed if they are not escaped. Like command line parsing,
 quotes and backslashes can be used to include spaces within values.
 
-For example:
+Example:
 
 ```dockerfile
-ENV myName="John Doe" myDog=Rex\ The\ Dog \
-    myCat=fluffy
+ENV MY_NAME="John Doe"
+ENV MY_DOG=Rex\ The\ Dog
+ENV MY_CAT=fluffy
 ```
 
-and
+The `ENV` instruction allows for multiple `<key>=<value> ...` variables to be set
+at one time, and the example below will yield the same net results in the final
+image:
 
 ```dockerfile
-ENV myName John Doe
-ENV myDog Rex The Dog
-ENV myCat fluffy
+ENV MY_NAME="John Doe" MY_DOG=Rex\ The\ Dog \
+    MY_CAT=fluffy
 ```
-
-will yield the same net results in the final image.
 
 The environment variables set using `ENV` will persist when a container is run
 from the resulting image. You can view the values using `docker inspect`, and
 change them using `docker run --env <key>=<value>`.
 
-> **Note**
+Environment variable persistence can cause unexpected side effects. For example,
+setting `ENV DEBIAN_FRONTEND=noninteractive` changes the behavior of `apt-get`,
+and may confuse users of your image.
+
+If an environment variable is only needed during build, and not in the final
+image, consider setting a value for a single command instead:
+
+```dockerfile
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y ...
+```
+ 
+Or using [`ARG`](#arg), which is not persisted in the final image:
+
+```dockerfile
+ARG DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y ...
+```
+
+> **Alternative syntax**
 >
-> Environment persistence can cause unexpected side effects. For example,
-> setting `ENV DEBIAN_FRONTEND noninteractive` may confuse apt-get
-> users on a Debian-based image. To set a value for a single command, use
-> `RUN <key>=<value> <command>`.
+> The `ENV` instruction also allows an alternative syntax `ENV <key> <value>`,
+> omitting the `=`. For example:
+>
+> ```dockerfile
+> ENV MY_VAR my-value
+> ```
+> 
+> This syntax does not allow for multiple environment-variables to be set in a
+> single `ENV` instruction, and can be confusing. For example, the following
+> sets a single environment variable (`ONE`) with value `"TWO= THREE=world"`:
+>
+> ```dockerfile
+> ENV ONE TWO= THREE=world
+> ```
+> 
+> The alternative syntax is supported for backward compatibility, but discouraged
+> for the reasons outlined above, and may be removed in a future release.
 
 ## ADD
 
@@ -1768,7 +1789,7 @@ The `WORKDIR` instruction can resolve environment variables previously set using
 For example:
 
 ```dockerfile
-ENV DIRPATH /path
+ENV DIRPATH=/path
 WORKDIR $DIRPATH/$DIRNAME
 RUN pwd
 ```
@@ -1873,7 +1894,7 @@ this Dockerfile with an `ENV` and `ARG` instruction.
 ```dockerfile
 FROM ubuntu
 ARG CONT_IMG_VER
-ENV CONT_IMG_VER v1.0.0
+ENV CONT_IMG_VER=v1.0.0
 RUN echo $CONT_IMG_VER
 ```
 
@@ -1894,7 +1915,7 @@ useful interactions between `ARG` and `ENV` instructions:
 ```dockerfile
 FROM ubuntu
 ARG CONT_IMG_VER
-ENV CONT_IMG_VER ${CONT_IMG_VER:-v1.0.0}
+ENV CONT_IMG_VER=${CONT_IMG_VER:-v1.0.0}
 RUN echo $CONT_IMG_VER
 ```
 
@@ -2030,7 +2051,7 @@ Consider another example under the same command line:
 ```dockerfile
 FROM ubuntu
 ARG CONT_IMG_VER
-ENV CONT_IMG_VER $CONT_IMG_VER
+ENV CONT_IMG_VER=$CONT_IMG_VER
 RUN echo $CONT_IMG_VER
 ```
 
@@ -2045,7 +2066,7 @@ this Dockerfile:
 ```dockerfile
 FROM ubuntu
 ARG CONT_IMG_VER
-ENV CONT_IMG_VER hello
+ENV CONT_IMG_VER=hello
 RUN echo $CONT_IMG_VER
 ```
 
