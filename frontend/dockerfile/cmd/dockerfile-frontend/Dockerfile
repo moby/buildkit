@@ -28,6 +28,7 @@ RUN --mount=target=. --mount=type=cache,target=/root/.cache \
 
 FROM scratch AS release
 LABEL moby.buildkit.frontend.network.none="true"
+LABEL moby.buildkit.frontend.caps="moby.buildkit.frontend.inputs"
 COPY --from=build /dockerfile-frontend /bin/dockerfile-frontend
 ENTRYPOINT ["/bin/dockerfile-frontend"]
 

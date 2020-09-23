@@ -64,6 +64,11 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 	caps := c.BuildOpts().LLBCaps
 	gwcaps := c.BuildOpts().Caps
 
+	allowForward, capsError := validateCaps(opts["frontend.caps"])
+	if !allowForward && capsError != nil {
+		return nil, capsError
+	}
+
 	marshalOpts := []llb.ConstraintsOpt{llb.WithCaps(caps)}
 
 	localNameContext := DefaultLocalNameContext
@@ -332,6 +337,10 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 			}
 			return res, err
 		}
+	}
+
+	if capsError != nil {
+		return nil, capsError
 	}
 
 	exportMap := len(targetPlatforms) > 1
