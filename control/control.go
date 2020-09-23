@@ -232,7 +232,18 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 	if err != nil {
 		return nil, err
 	}
-	if req.Exporters != nil {
+
+	if req.Exporter != ""  {
+            exp, err := w.Exporter(req.Exporter, c.opt.SessionManager)
+            if err != nil {
+                return nil, err
+            }
+            expi, err = exp.Resolve(ctx, nil)
+            if err != nil {
+                return nil, err
+		    }
+	}
+	if req.Exporters != nil  {
 		for _, exporter := range req.Exporters {
             exp, err := w.Exporter(exporter, c.opt.SessionManager)
             if err != nil {
@@ -283,6 +294,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		CacheImports:   cacheImports,
 	}, llbsolver.ExporterRequest{
 		Exporters:        expis,
+		Exporter:         expi,
 		CacheExporter:   cacheExporter,
 		CacheExportMode: cacheExportMode,
 	}, req.Entitlements)

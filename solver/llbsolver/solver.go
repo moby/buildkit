@@ -28,7 +28,8 @@ import (
 const keyEntitlements = "llb.entitlements"
 
 type ExporterRequest struct {
-	Exporters        []exporter.ExporterInstance
+    Exporter        exporter.ExporterInstance
+	Exporters       []exporter.ExporterInstance
 	CacheExporter   remotecache.Exporter
 	CacheExportMode solver.CacheExportMode
 }

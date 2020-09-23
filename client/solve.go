@@ -1,12 +1,10 @@
 package client
 
 import (
-    "fmt"
 	"context"
 	"encoding/json"
 	"github.com/containerd/containerd/content"
 	contentlocal "github.com/containerd/containerd/content/local"
-	"github.com/moby/buildkit/api/services/control"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/client/ociindex"
@@ -142,7 +140,6 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 				if ex.OutputDir == "" {
 					return nil, errors.New("output directory is required for local exporter")
 				}
-				fmt.Println(ex)
 				s.Allow(filesync.NewFSSyncTargetDir(ex.OutputDir))
 			case ExporterOCI, ExporterDocker, ExporterTar:
 			    switch ex.Type {
@@ -162,7 +159,6 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 				if ex.Output == nil {
 					return nil, errors.Errorf("output file writer is required for %s exporter", ex.Type)
 				}
-				fmt.Println(ex)
 				s.Allow(filesync.NewFSSyncTarget(ex.Output))
 			default:
 				if ex.Output != nil {
@@ -215,23 +211,38 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			frontendInputs[key] = def.ToPB()
 		}
 
-		exportersTypes := []string{}
-		m := moby_buildkit_v1.SolveRequest{
-			ExportersAttrs: []*moby_buildkit_v1.ExporterAttrs{},
-		}
+		var exportersTypes []string
+		var exporterType string
+		m := &controlapi.SolveRequest{
+			 ExportersAttrs: []*controlapi.ExporterAttrs{},
+			 ExporterAttrs: &controlapi.ExporterAttrs{},
+		     }
+		expo := &controlapi.ExporterAttrs{
+        	     ExporterAttrs: make(map[string]string),
+                }
 
-		for _, ex := range opt.Exports {
-			exportersTypes = append(exportersTypes, ex.Type)
-			expo := &moby_buildkit_v1.ExporterAttrs{
-				ExporterAttrs: ex.Attrs,
-			}
-			m.ExportersAttrs = append(m.ExportersAttrs, expo)
+        if (len(opt.Exports) > 1){
+            exporterType = ""
+            m.ExporterAttrs = nil
+            for _, ex := range opt.Exports {
+                exportersTypes = append(exportersTypes, ex.Type)
+                expo.ExporterAttrs = ex.Attrs
+                m.ExportersAttrs = append(m.ExportersAttrs, expo)
+            }
+		}else{
+		    exportersTypes= nil
+		    m.ExportersAttrs= nil
+            exporterType = opt.Exports[0].Type
+            expo.ExporterAttrs = opt.Exports[0].Attrs
+            m.ExporterAttrs = expo
 		}
 		resp, err := c.controlClient().Solve(ctx, &controlapi.SolveRequest{
 			Ref:            ref,
 			Definition:     pbd,
 			Exporters:      exportersTypes,
 			ExportersAttrs: m.ExportersAttrs,
+			Exporter:       exporterType,
+			ExporterAttrs:  m.ExporterAttrs,
 			Session:        s.ID(),
 			Frontend:       opt.Frontend,
 			FrontendAttrs:  opt.FrontendAttrs,
@@ -332,17 +343,19 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 	}
 	// Update index.json of exported cache content store
 	// FIXME(AkihiroSuda): dedupe const definition of cache/remotecache.ExporterResponseManifestDesc = "cache.manifest"
-	//if manifestDescJSON := res.ExportersResponse[0]["cache.manifest"]; manifestDescJSON != "" {
-		//var manifestDesc ocispec.Descriptor
-		//if err = json.Unmarshal([]byte(manifestDescJSON), &manifestDesc); err != nil {
-		//	return nil, err
-		//}
-		//for indexJSONPath, tag := range cacheOpt.indicesToUpdate {
-		//	if err = ociindex.PutDescToIndexJSONFileLocked(indexJSONPath, manifestDesc, tag); err != nil {
-		//		return nil, err
-		//	}
-		//}
-	//}
+	for _, v := range res.ExportersResponse {
+        if manifestDescJSON := v.ExporterResponse["cache.manifest"]; manifestDescJSON != "" {
+            var manifestDesc ocispec.Descriptor
+            if err = json.Unmarshal([]byte(manifestDescJSON), &manifestDesc); err != nil {
+                return nil, err
+            }
+            for indexJSONPath, tag := range cacheOpt.indicesToUpdate {
+                if err = ociindex.PutDescToIndexJSONFileLocked(indexJSONPath, manifestDesc, tag); err != nil {
+                    return nil, err
+                }
+            }
+        }
+	}
 	return res, nil
 }
 
