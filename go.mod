@@ -8,7 +8,7 @@ require (
 	github.com/Microsoft/go-winio v0.4.15-0.20190919025122-fc70bd9a86b5
 	github.com/Microsoft/hcsshim v0.8.9
 	github.com/codahale/hdrhistogram v0.0.0-20160425231609-f8ad88b59a58 // indirect
-	github.com/containerd/console v1.0.0
+	github.com/containerd/console v1.0.1
 	github.com/containerd/containerd v1.4.1-0.20200903181227-d4e78200d6da
 	github.com/containerd/continuity v0.0.0-20200710164510-efbc4488d8fe
 	github.com/containerd/go-cni v1.0.1
@@ -58,7 +58,7 @@ require (
 	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
 	golang.org/x/net v0.0.0-20200707034311-ab3426394381
 	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
-	golang.org/x/sys v0.0.0-20200728102440-3e129f6d46b1
+	golang.org/x/sys v0.0.0-20200916030750-2334cc1a136f
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0
 	// genproto: the actual version is replaced in replace()
 	google.golang.org/genproto v0.0.0-20200526211855-cb27e3aa2013
