@@ -34,7 +34,7 @@ github.com/Microsoft/hcsshim/internal/wclayer
 github.com/Microsoft/hcsshim/osversion
 # github.com/containerd/cgroups v0.0.0-20200710171044-318312a37340
 github.com/containerd/cgroups/stats/v1
-# github.com/containerd/console v1.0.0
+# github.com/containerd/console v1.0.1
 github.com/containerd/console
 # github.com/containerd/containerd v1.4.1-0.20200903181227-d4e78200d6da
 github.com/containerd/containerd
@@ -388,7 +388,7 @@ golang.org/x/net/trace
 # golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
 golang.org/x/sync/errgroup
 golang.org/x/sync/semaphore
-# golang.org/x/sys v0.0.0-20200728102440-3e129f6d46b1
+# golang.org/x/sys v0.0.0-20200916030750-2334cc1a136f
 golang.org/x/sys/cpu
 golang.org/x/sys/internal/unsafeheader
 golang.org/x/sys/unix
