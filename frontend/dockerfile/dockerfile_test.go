@@ -101,6 +101,7 @@ var allTests = []integration.Test{
 	testFrontendUseForwardedSolveResults,
 	testFrontendInputs,
 	testErrorsSourceMap,
+	testMultiArgs,
 }
 
 var fileOpTests = []integration.Test{
@@ -1156,6 +1157,52 @@ COPY --from=build /out .
 	dt, err := ioutil.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
 	require.Equal(t, "bar-box-foo", string(dt))
+}
+
+func testMultiArgs(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+ARG a1="foo bar" a2=box
+ARG a3="$a2-foo"
+FROM busy$a2 AS build
+ARG a3 a4="123 456" a1
+RUN echo -n "$a1:$a3:$a4" > /out
+FROM scratch
+COPY --from=build /out .
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "out"))
+	require.NoError(t, err)
+	require.Equal(t, "foo bar:box-foo:123 456", string(dt))
 }
 
 func testExportMultiPlatform(t *testing.T, sb integration.Sandbox) {
