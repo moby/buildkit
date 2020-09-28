@@ -252,7 +252,7 @@ func buildAction(clicontext *cli.Context) error {
 			return err
 		}
 		for k, v := range resp.ExportersResponse {
-			logrus.Debugf("exporter response: %s=%s", k, v)
+			logrus.Debugf("exporter response: %d=%s", k, v)
 		}
 		return err
 	})
