@@ -221,7 +221,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
         	     ExporterAttrs: make(map[string]string),
                 }
 
-        if (len(opt.Exports) > 1){
+        if len(opt.Exports) > 1{
             exporterType = ""
             m.ExporterAttrs = nil
             for _, ex := range opt.Exports {
@@ -229,13 +229,15 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
                 expo.ExporterAttrs = ex.Attrs
                 m.ExportersAttrs = append(m.ExportersAttrs, expo)
             }
-		}else{
+		}
+		if len(opt.Exports) == 1 {
 		    exportersTypes= nil
 		    m.ExportersAttrs= nil
             exporterType = opt.Exports[0].Type
             expo.ExporterAttrs = opt.Exports[0].Attrs
             m.ExporterAttrs = expo
 		}
+
 		resp, err := c.controlClient().Solve(ctx, &controlapi.SolveRequest{
 			Ref:            ref,
 			Definition:     pbd,
@@ -343,7 +345,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 	}
 	// Update index.json of exported cache content store
 	// FIXME(AkihiroSuda): dedupe const definition of cache/remotecache.ExporterResponseManifestDesc = "cache.manifest"
-	for _, v := range res.ExportersResponse {
+	/*for _, v := range res.ExportersResponse {
         if manifestDescJSON := v.ExporterResponse["cache.manifest"]; manifestDescJSON != "" {
             var manifestDesc ocispec.Descriptor
             if err = json.Unmarshal([]byte(manifestDescJSON), &manifestDesc); err != nil {
@@ -355,7 +357,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
                 }
             }
         }
-	}
+	}*/
 	return res, nil
 }
 
