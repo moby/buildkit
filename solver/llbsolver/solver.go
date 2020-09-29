@@ -3,7 +3,7 @@ package llbsolver
 import (
 	"context"
 	"fmt"
-	//"strings"
+	"strings"
 	"time"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/cache"
@@ -246,20 +246,22 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
                 }
             }
 
-            //if exporterResponse == nil {
-                //exporterResponse = make(controlapi.ExporterResponse)
-            //}
+            if exporterResponse == nil {
+                exporterResponse = &controlapi.ExporterResponse{
+                   ExporterResponse : map[string]string{},
+                }
+            }
 
-            /*for k, v := range res.Metadata {
+            for k, v := range res.Metadata {
                 if strings.HasPrefix(k, "frontend.") {
-                    exporterResponse[k] = string(v)
-                }
-            }*/
-            /*for k, v := range cacheExporterResponse {
+                    exporterResponse.ExporterResponse[k] = string(v)
+               }
+            }
+            for k, v := range cacheExporterResponse {
                 if strings.HasPrefix(k, "cache.") {
-                    //exporterResponse[k] = v
+                    exporterResponse.ExporterResponse[k] = v
                 }
-            }*/
+            }
          exportersResponse = append(exportersResponse, exporterResponse)
      }
 

@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"fmt"
 )
 
 type SolveOpt struct {
@@ -257,8 +258,10 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		}
 
 		var exportersResponse []*controlapi.ExporterResponse
-        exportersResponse = append(exportersResponse, resp.ExporterResponse)
-
+		fmt.Println(exportersResponse)
+		if (resp.ExporterResponse != nil){
+           exportersResponse = append(exportersResponse, resp.ExporterResponse)
+        }
         res = &SolveResponse{
 			ExportersResponse: exportersResponse,
 		}
@@ -345,19 +348,21 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 	}
 	// Update index.json of exported cache content store
 	// FIXME(AkihiroSuda): dedupe const definition of cache/remotecache.ExporterResponseManifestDesc = "cache.manifest"
-	/*for _, v := range res.ExportersResponse {
-        if manifestDescJSON := v.ExporterResponse["cache.manifest"]; manifestDescJSON != "" {
-            var manifestDesc ocispec.Descriptor
-            if err = json.Unmarshal([]byte(manifestDescJSON), &manifestDesc); err != nil {
-                return nil, err
-            }
-            for indexJSONPath, tag := range cacheOpt.indicesToUpdate {
-                if err = ociindex.PutDescToIndexJSONFileLocked(indexJSONPath, manifestDesc, tag); err != nil {
+	if len(res.ExportersResponse) > 0  {
+        for _, v := range res.ExportersResponse {
+            if manifestDescJSON := v.ExporterResponse["cache.manifest"]; manifestDescJSON != "" {
+                var manifestDesc ocispec.Descriptor
+                if err = json.Unmarshal([]byte(manifestDescJSON), &manifestDesc); err != nil {
                     return nil, err
+                }
+                for indexJSONPath, tag := range cacheOpt.indicesToUpdate {
+                    if err = ociindex.PutDescToIndexJSONFileLocked(indexJSONPath, manifestDesc, tag); err != nil {
+                        return nil, err
+                    }
                 }
             }
         }
-	}*/
+	}
 	return res, nil
 }
 
