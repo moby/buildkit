@@ -1,9 +1,9 @@
 # syntax = docker/dockerfile:1.1-experimental
 
-ARG RUNC_VERSION=v1.0.0-rc91
-ARG CONTAINERD_VERSION=v1.3.6
-# containerd v1.4 for integration tests
-ARG CONTAINERD_ALT_VERSION=v1.4.0-beta.2
+ARG RUNC_VERSION=v1.0.0-rc92
+ARG CONTAINERD_VERSION=v1.4.0
+# containerd v1.3 for integration tests
+ARG CONTAINERD_ALT_VERSION=v1.3.7
 # available targets: buildkitd, buildkitd.oci_only, buildkitd.containerd_only
 ARG BUILDKIT_TARGET=buildkitd
 ARG REGISTRY_VERSION=2.7.1
@@ -11,6 +11,7 @@ ARG ROOTLESSKIT_VERSION=v0.9.5
 ARG CNI_VERSION=v0.8.6
 ARG SHADOW_VERSION=4.8.1
 ARG FUSEOVERLAYFS_VERSION=v1.1.2
+ARG STARGZ_SNAPSHOTTER_VERSION=2ee75e91f8f98f3d324290a2503269812e019fc3
 
 # git stage is used for checking out remote repository sources
 FROM --platform=$BUILDPLATFORM alpine AS git
@@ -150,7 +151,7 @@ RUN --mount=from=containerd-src,src=/usr/src/containerd,readwrite --mount=target
   && make bin/ctr \
   && mv bin /out
 
-# containerd v1.4 for integration tests
+# containerd v1.3 for integration tests
 FROM containerd-base as containerd-alt
 ARG CONTAINERD_ALT_VERSION
 RUN --mount=from=containerd-src,src=/usr/src/containerd,readwrite --mount=target=/root/.cache,type=cache \
@@ -172,6 +173,16 @@ RUN  --mount=target=/root/.cache,type=cache \
   git checkout -q "$ROOTLESSKIT_VERSION"  && \
   CGO_ENABLED=0 go build -o /rootlesskit ./cmd/rootlesskit && \
   file /rootlesskit | grep "statically linked"
+
+FROM gobuild-base AS stargz-snapshotter
+ARG STARGZ_SNAPSHOTTER_VERSION
+RUN git clone https://github.com/containerd/stargz-snapshotter.git /go/src/github.com/containerd/stargz-snapshotter
+WORKDIR /go/src/github.com/containerd/stargz-snapshotter
+RUN --mount=target=/root/.cache,type=cache \
+  git checkout -q "$STARGZ_SNAPSHOTTER_VERSION" && \
+  mkdir /out && CGO_ENABLED=0 PREFIX=/out/ make && \
+  file /out/containerd-stargz-grpc | grep "statically linked" && \
+  file /out/ctr-remote | grep "statically linked"
 
 FROM --platform=$BUILDPLATFORM alpine AS fuse-overlayfs
 RUN apk add --no-cache curl
@@ -225,14 +236,16 @@ RUN curl -Ls https://github.com/containernetworking/plugins/releases/download/$C
 
 FROM buildkit-base AS integration-tests-base
 ENV BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR="1000:1000"
-RUN apt-get --no-install-recommends install -y uidmap sudo vim iptables \ 
+RUN apt-get --no-install-recommends install -y uidmap sudo vim iptables fuse \
   && useradd --create-home --home-dir /home/user --uid 1000 -s /bin/sh user \
   && echo "XDG_RUNTIME_DIR=/run/user/1000; export XDG_RUNTIME_DIR" >> /home/user/.profile \
   && mkdir -m 0700 -p /run/user/1000 \
   && chown -R user /run/user/1000 /home/user \
   && update-alternatives --set iptables /usr/sbin/iptables-legacy
 # musl is needed to directly use the registry binary that is built on alpine
-ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.4=/opt/containerd-alt/bin"
+ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.3=/opt/containerd-alt/bin"
+ENV BUILDKIT_INTEGRATION_SNAPSHOTTER=stargz
+COPY --from=stargz-snapshotter /out/* /usr/bin/
 COPY --from=rootlesskit /rootlesskit /usr/bin/
 COPY --from=containerd-alt /out/containerd* /opt/containerd-alt/bin/
 COPY --from=registry /bin/registry /usr/bin

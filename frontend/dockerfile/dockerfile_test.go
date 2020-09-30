@@ -101,6 +101,7 @@ var allTests = []integration.Test{
 	testFrontendUseForwardedSolveResults,
 	testFrontendInputs,
 	testErrorsSourceMap,
+	testMultiArgs,
 }
 
 var fileOpTests = []integration.Test{
@@ -1156,6 +1157,52 @@ COPY --from=build /out .
 	dt, err := ioutil.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
 	require.Equal(t, "bar-box-foo", string(dt))
+}
+
+func testMultiArgs(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+ARG a1="foo bar" a2=box
+ARG a3="$a2-foo"
+FROM busy$a2 AS build
+ARG a3 a4="123 456" a1
+RUN echo -n "$a1:$a3:$a4" > /out
+FROM scratch
+COPY --from=build /out .
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "out"))
+	require.NoError(t, err)
+	require.Equal(t, "foo bar:box-foo:123 456", string(dt))
 }
 
 func testExportMultiPlatform(t *testing.T, sb integration.Sandbox) {
@@ -2262,7 +2309,7 @@ FROM busybox
 ARG group
 ENV owner 1000
 ADD --chown=${owner}:${group} foo /
-RUN [ "$(stat -c "%u %G" /foo)" == "1000 nogroup" ]
+RUN [ "$(stat -c "%u %G" /foo)" == "1000 nobody" ]
 `)
 
 	dir, err := tmpdir(
@@ -2279,7 +2326,7 @@ RUN [ "$(stat -c "%u %G" /foo)" == "1000 nogroup" ]
 	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
 			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
-			"build-arg:group":                   "nogroup",
+			"build-arg:group":                   "nobody",
 		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
@@ -2832,7 +2879,7 @@ FROM busybox AS base
 ENV owner 1000
 RUN mkdir -m 0777 /out
 COPY --chown=daemon foo /
-COPY --chown=1000:nogroup bar /baz
+COPY --chown=1000:nobody bar /baz
 ARG group
 COPY --chown=${owner}:${group} foo /foobis
 RUN stat -c "%U %G" /foo  > /out/fooowner
@@ -2868,7 +2915,7 @@ COPY --from=base /out /
 		},
 		FrontendAttrs: map[string]string{
 			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
-			"build-arg:group":                   "nogroup",
+			"build-arg:group":                   "nobody",
 		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
@@ -2883,11 +2930,11 @@ COPY --from=base /out /
 
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "subowner"))
 	require.NoError(t, err)
-	require.Equal(t, "1000 nogroup\n", string(dt))
+	require.Equal(t, "1000 nobody\n", string(dt))
 
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "foobisowner"))
 	require.NoError(t, err)
-	require.Equal(t, "1000 nogroup\n", string(dt))
+	require.Equal(t, "1000 nobody\n", string(dt))
 }
 
 func testCopyChmod(t *testing.T, sb integration.Sandbox) {

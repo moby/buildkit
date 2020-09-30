@@ -9,8 +9,9 @@ import (
 )
 
 type DescHandler struct {
-	Provider content.Provider
-	Progress progress.Controller
+	Provider       content.Provider
+	Progress       progress.Controller
+	SnapshotLabels map[string]string
 }
 
 type DescHandlers map[digest.Digest]*DescHandler

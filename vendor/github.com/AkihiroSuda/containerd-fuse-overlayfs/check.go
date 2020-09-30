@@ -50,7 +50,6 @@ func supportsReadonlyMultipleLowerDir(d string) error {
 	}
 
 	opts := []string{fmt.Sprintf("lowerdir=%s:%s", filepath.Join(td, "lower2"), filepath.Join(td, "lower1"))}
-	opts = append(opts, commonMountOptions...)
 	m := mount.Mount{
 		Type:    "fuse3." + fuseoverlayfsBinary,
 		Source:  "overlay",

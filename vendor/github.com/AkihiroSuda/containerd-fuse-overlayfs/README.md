@@ -4,8 +4,8 @@ Unlike `overlayfs`, `fuse-overlayfs` can be used as a non-root user without patc
 
 ## Requirements
 * kernel >= 4.18
-* containerd >= [20200107](https://github.com/containerd/containerd/commit/b9fad5e310fafb453def5f1e7094f4c36a9806d2) (v1.4 pre-alpha)
-* fuse-overlayfs >= v0.7.0
+* containerd >= 1.4
+* fuse-overlayfs >= 0.7.0
 
 ## Setup
 

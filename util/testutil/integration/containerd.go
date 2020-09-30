@@ -37,12 +37,22 @@ func InitContainerdWorker() {
 			})
 		}
 	}
+
+	if s := os.Getenv("BUILDKIT_INTEGRATION_SNAPSHOTTER"); s != "" {
+		Register(&containerd{
+			name:           fmt.Sprintf("containerd-snapshotter-%s", s),
+			containerd:     "containerd",
+			containerdShim: "containerd-shim-runc-v2",
+			snapshotter:    s,
+		})
+	}
 }
 
 type containerd struct {
 	name           string
 	containerd     string
 	containerdShim string
+	snapshotter    string
 }
 
 func (c *containerd) Name() string {
@@ -98,6 +108,27 @@ disabled_plugins = ["cri"]
   [plugins.linux]
     shim = %q
 `, filepath.Join(tmpdir, "root"), filepath.Join(tmpdir, "state"), address, filepath.Join(tmpdir, "debug.sock"), c.containerdShim)
+
+	var snBuildkitdArgs []string
+	if c.snapshotter != "" {
+		snBuildkitdArgs = append(snBuildkitdArgs,
+			fmt.Sprintf("--containerd-worker-snapshotter=%s", c.snapshotter))
+		if c.snapshotter == "stargz" {
+			snPath, snCl, err := runStargzSnapshotter(cfg)
+			if err != nil {
+				return nil, nil, err
+			}
+			deferF.append(snCl)
+			config = fmt.Sprintf(`%s
+
+[proxy_plugins]
+  [proxy_plugins.stargz]
+    type = "snapshot"
+    address = %q
+`, config, snPath)
+		}
+	}
+
 	configFile := filepath.Join(tmpdir, "config.toml")
 	if err := ioutil.WriteFile(configFile, []byte(config), 0644); err != nil {
 		return nil, nil, err
@@ -109,19 +140,19 @@ disabled_plugins = ["cri"]
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := waitUnix(address, 5*time.Second); err != nil {
+	if err := waitUnix(address, 10*time.Second); err != nil {
 		ctdStop()
 		return nil, nil, errors.Wrapf(err, "containerd did not start up: %s", formatLogs(cfg.Logs))
 	}
 	deferF.append(ctdStop)
 
-	buildkitdArgs := []string{"buildkitd",
+	buildkitdArgs := append([]string{"buildkitd",
 		"--oci-worker=false",
 		"--containerd-worker-gc=false",
 		"--containerd-worker=true",
 		"--containerd-worker-addr", address,
 		"--containerd-worker-labels=org.mobyproject.buildkit.worker.sandbox=true", // Include use of --containerd-worker-labels to trigger https://github.com/moby/buildkit/pull/603
-	}
+	}, snBuildkitdArgs...)
 
 	buildkitdSock, stop, err := runBuildkitd(cfg, buildkitdArgs, cfg.Logs, 0, 0)
 	if err != nil {
@@ -134,6 +165,7 @@ disabled_plugins = ["cri"]
 		address:           buildkitdSock,
 		containerdAddress: address,
 		rootless:          false,
+		snapshotter:       c.snapshotter,
 	}, cl, nil
 }
 

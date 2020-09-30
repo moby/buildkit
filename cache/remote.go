@@ -35,7 +35,7 @@ func (sr *immutableRef) GetRemote(ctx context.Context, createIfNeeded bool, comp
 		return nil, err
 	}
 
-	mprovider := lazyMultiProvider{mprovider: contentutil.NewMultiProvider(nil)}
+	mprovider := &lazyMultiProvider{mprovider: contentutil.NewMultiProvider(nil)}
 	remote := &solver.Remote{
 		Provider: mprovider,
 	}
@@ -115,18 +115,19 @@ type lazyMultiProvider struct {
 	plist     []lazyRefProvider
 }
 
-func (mp lazyMultiProvider) Add(p lazyRefProvider) {
+func (mp *lazyMultiProvider) Add(p lazyRefProvider) {
 	mp.mprovider.Add(p.desc.Digest, p)
 	mp.plist = append(mp.plist, p)
 }
 
-func (mp lazyMultiProvider) ReaderAt(ctx context.Context, desc ocispec.Descriptor) (content.ReaderAt, error) {
+func (mp *lazyMultiProvider) ReaderAt(ctx context.Context, desc ocispec.Descriptor) (content.ReaderAt, error) {
 	return mp.mprovider.ReaderAt(ctx, desc)
 }
 
-func (mp lazyMultiProvider) Unlazy(ctx context.Context) error {
+func (mp *lazyMultiProvider) Unlazy(ctx context.Context) error {
 	eg, egctx := errgroup.WithContext(ctx)
 	for _, p := range mp.plist {
+		p := p
 		eg.Go(func() error {
 			return p.Unlazy(egctx)
 		})

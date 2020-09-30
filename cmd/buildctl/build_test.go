@@ -102,7 +102,11 @@ func testBuildContainerdExporter(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	// NOTE: by default, it is overlayfs
-	ok, err := img.IsUnpacked(ctx, "overlayfs")
+	snapshotter := "overlayfs"
+	if sn := sb.Snapshotter(); sn != "" {
+		snapshotter = sn
+	}
+	ok, err := img.IsUnpacked(ctx, snapshotter)
 	require.NoError(t, err)
 	require.Equal(t, ok, true)
 }

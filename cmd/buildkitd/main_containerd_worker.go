@@ -86,6 +86,11 @@ func init() {
 			Usage: "path of cni binary files",
 			Value: defaultConf.Workers.Containerd.NetworkConfig.CNIBinaryPath,
 		},
+		cli.StringFlag{
+			Name:  "containerd-worker-snapshotter",
+			Usage: "snapshotter name to use",
+			Value: ctd.DefaultSnapshotter,
+		},
 	}
 
 	if defaultConf.Workers.Containerd.GC == nil || *defaultConf.Workers.Containerd.GC {
@@ -184,6 +189,9 @@ func applyContainerdFlags(c *cli.Context, cfg *config.Config) error {
 	if c.GlobalIsSet("containerd-cni-binary-dir") {
 		cfg.Workers.Containerd.NetworkConfig.CNIBinaryPath = c.GlobalString("containerd-cni-binary-dir")
 	}
+	if c.GlobalIsSet("containerd-worker-snapshotter") {
+		cfg.Workers.Containerd.Snapshotter = c.GlobalString("containerd-worker-snapshotter")
+	}
 
 	return nil
 }
@@ -210,7 +218,11 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 		},
 	}
 
-	opt, err := containerd.NewWorkerOpt(common.config.Root, cfg.Address, ctd.DefaultSnapshotter, cfg.Namespace, cfg.Labels, dns, nc, ctd.WithTimeout(60*time.Second))
+	snapshotter := ctd.DefaultSnapshotter
+	if cfg.Snapshotter != "" {
+		snapshotter = cfg.Snapshotter
+	}
+	opt, err := containerd.NewWorkerOpt(common.config.Root, cfg.Address, snapshotter, cfg.Namespace, cfg.Labels, dns, nc, ctd.WithTimeout(60*time.Second))
 	if err != nil {
 		return nil, err
 	}

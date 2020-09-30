@@ -24,6 +24,7 @@ type backend struct {
 	address           string
 	containerdAddress string
 	rootless          bool
+	snapshotter       string
 }
 
 func (b backend) Address() string {
@@ -36,6 +37,10 @@ func (b backend) ContainerdAddress() string {
 
 func (b backend) Rootless() bool {
 	return b.rootless
+}
+
+func (b backend) Snapshotter() string {
+	return b.snapshotter
 }
 
 type sandbox struct {
