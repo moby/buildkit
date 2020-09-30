@@ -47,7 +47,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/pkg/profile v1.5.0
 	github.com/serialx/hashring v0.0.0-20190422032157-8b2912629002
-	github.com/sirupsen/logrus v1.6.0
+	github.com/sirupsen/logrus v1.7.0
 	github.com/stretchr/testify v1.5.1
 	github.com/tonistiigi/fsutil v0.0.0-20200724193237-c3ed55f3b481
 	github.com/tonistiigi/units v0.0.0-20180711220420-6950e57a87ea
