@@ -753,9 +753,8 @@ func (lbf *llbBridgeForwarder) Inputs(ctx context.Context, in *pb.InputsRequest)
 func (lbf *llbBridgeForwarder) NewContainer(ctx context.Context, in *pb.NewContainerRequest) (_ *pb.NewContainerResponse, err error) {
 	logrus.Debugf("|<--- NewContainer %s", in.ContainerID)
 	ctrReq := NewContainerRequest{
-		ContainerID:  in.ContainerID,
-		NetMode:      in.Network,
-		SecurityMode: in.Security,
+		ContainerID: in.ContainerID,
+		NetMode:     in.Network,
 	}
 
 	for _, m := range in.Mounts {

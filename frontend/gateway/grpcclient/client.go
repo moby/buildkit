@@ -709,7 +709,8 @@ func (ctr *container) Start(ctx context.Context, req client.StartRequest) (clien
 			Cwd:  req.Cwd,
 			User: req.User,
 		},
-		Tty: req.Tty,
+		Tty:      req.Tty,
+		Security: req.SecurityMode,
 	}
 	if req.Stdin != nil {
 		init.Fds = append(init.Fds, 0)
