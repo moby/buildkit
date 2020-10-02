@@ -239,13 +239,11 @@ func testClientGatewayContainerCancelOnRelease(t *testing.T, sb integration.Sand
 		// background pid1 process that starts container
 		pid1, err := ctr.Start(ctx, client.StartRequest{
 			Args: []string{"sleep", "10"},
-			Cwd:  "/",
 		})
 		require.NoError(t, err)
 
 		pid2, err := ctr.Start(ctx, client.StartRequest{
 			Args: []string{"sleep", "10"},
-			Cwd:  "/",
 		})
 		require.NoError(t, err)
 
@@ -316,7 +314,6 @@ func testClientGatewayContainerExecPipe(t *testing.T, sb integration.Sandbox) {
 		// background pid1 process that starts container
 		pid1, err := ctr.Start(ctx, client.StartRequest{
 			Args: []string{"sleep", "10"},
-			Cwd:  "/",
 		})
 		if err != nil {
 			ctr.Release(ctx)
@@ -348,7 +345,6 @@ func testClientGatewayContainerExecPipe(t *testing.T, sb integration.Sandbox) {
 		// next part is: `| cat > /tmp/test`
 		pid3, err := ctr.Start(ctx, client.StartRequest{
 			Args:  []string{"sh", "-c", "cat > /tmp/test"},
-			Cwd:   "/",
 			Stdin: stdin3,
 		})
 		if err != nil {
@@ -378,7 +374,6 @@ func testClientGatewayContainerExecPipe(t *testing.T, sb integration.Sandbox) {
 
 		pid4, err := ctr.Start(ctx, client.StartRequest{
 			Args:   []string{"cat", "/tmp/test"},
-			Cwd:    "/",
 			Stdout: &nopCloser{output},
 		})
 		if err != nil {
@@ -442,7 +437,6 @@ func testClientGatewayContainerPID1Fail(t *testing.T, sb integration.Sandbox) {
 
 		pid1, err := ctr.Start(ctx, client.StartRequest{
 			Args: []string{"sh", "-c", "exit 99"},
-			Cwd:  "/",
 		})
 		if err != nil {
 			ctr.Release(ctx)
@@ -524,14 +518,12 @@ func testClientGatewayContainerPID1Exit(t *testing.T, sb integration.Sandbox) {
 
 		pid1, err := ctr.Start(ctx, client.StartRequest{
 			Args: []string{"sleep", "1"},
-			Cwd:  "/",
 		})
 		require.NoError(t, err)
 		defer pid1.Wait()
 
 		pid2, err := ctr.Start(ctx, client.StartRequest{
 			Args: []string{"sleep", "10"},
-			Cwd:  "/",
 		})
 		require.NoError(t, err)
 
@@ -649,7 +641,6 @@ func testClientGatewayContainerMounts(t *testing.T, sb integration.Sandbox) {
 
 		pid1, err := ctr.Start(ctx, client.StartRequest{
 			Args:   []string{"sleep", "10"},
-			Cwd:    "/",
 			Stderr: os.Stderr,
 		})
 		require.NoError(t, err)
@@ -657,7 +648,6 @@ func testClientGatewayContainerMounts(t *testing.T, sb integration.Sandbox) {
 
 		pid, err := ctr.Start(ctx, client.StartRequest{
 			Args: []string{"test", "-f", "/root-file"},
-			Cwd:  "/",
 		})
 		require.NoError(t, err)
 		err = pid.Wait()
@@ -665,7 +655,6 @@ func testClientGatewayContainerMounts(t *testing.T, sb integration.Sandbox) {
 
 		pid, err = ctr.Start(ctx, client.StartRequest{
 			Args: []string{"test", "-f", "/foo/foo-file"},
-			Cwd:  "/",
 		})
 		require.NoError(t, err)
 		err = pid.Wait()
@@ -673,7 +662,6 @@ func testClientGatewayContainerMounts(t *testing.T, sb integration.Sandbox) {
 
 		pid, err = ctr.Start(ctx, client.StartRequest{
 			Args: []string{"test", "-f", "/local/local-file"},
-			Cwd:  "/",
 		})
 		require.NoError(t, err)
 		err = pid.Wait()
@@ -681,7 +669,6 @@ func testClientGatewayContainerMounts(t *testing.T, sb integration.Sandbox) {
 
 		pid, err = ctr.Start(ctx, client.StartRequest{
 			Args: []string{"test", "-f", "/cached/cache-file"},
-			Cwd:  "/",
 		})
 		require.NoError(t, err)
 		err = pid.Wait()
@@ -689,7 +676,6 @@ func testClientGatewayContainerMounts(t *testing.T, sb integration.Sandbox) {
 
 		pid, err = ctr.Start(ctx, client.StartRequest{
 			Args: []string{"test", "-w", "/tmpfs"},
-			Cwd:  "/",
 		})
 		require.NoError(t, err)
 		err = pid.Wait()
@@ -698,7 +684,6 @@ func testClientGatewayContainerMounts(t *testing.T, sb integration.Sandbox) {
 		secretOutput := bytes.NewBuffer(nil)
 		pid, err = ctr.Start(ctx, client.StartRequest{
 			Args:   []string{"cat", "/run/secrets/mysecret"},
-			Cwd:    "/",
 			Stdout: &nopCloser{secretOutput},
 		})
 		require.NoError(t, err)
@@ -708,7 +693,6 @@ func testClientGatewayContainerMounts(t *testing.T, sb integration.Sandbox) {
 
 		pid, err = ctr.Start(ctx, client.StartRequest{
 			Args: []string{"test", "-S", sockPath},
-			Cwd:  "/",
 		})
 		require.NoError(t, err)
 		err = pid.Wait()
