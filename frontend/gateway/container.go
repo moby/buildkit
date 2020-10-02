@@ -77,7 +77,7 @@ func NewContainer(ctx context.Context, e executor.Executor, sm *session.Manager,
 		return mRef, nil
 	}
 
-	var mm mounts.MountManager
+	var mm *mounts.MountManager
 	mnts := req.Mounts
 
 	for i, m := range mnts {
