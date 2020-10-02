@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/containerd/containerd"
 	"github.com/gogo/googleapis/google/rpc"
 	gogotypes "github.com/gogo/protobuf/types"
 	"github.com/golang/protobuf/ptypes/any"
@@ -27,6 +28,7 @@ import (
 	"github.com/sirupsen/logrus"
 	fstypes "github.com/tonistiigi/fsutil/types"
 	"golang.org/x/sync/errgroup"
+	spb "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -824,12 +826,20 @@ func (ctr *container) Start(ctx context.Context, req client.StartRequest) (clien
 				if exit.Code == 0 {
 					continue
 				}
-				exitError = errors.Wrap(
-					&errdefs.ExitError{
-						ExitCode: exit.Code,
-					},
-					exit.Error,
-				)
+				if exit.Code == containerd.UnknownExitStatus {
+					exitError = grpcerrors.FromGRPC(status.ErrorProto(&spb.Status{
+						Code:    exit.Error.Code,
+						Message: exit.Error.Message,
+						Details: convertGogoAny(exit.Error.Details),
+					}))
+				} else {
+					exitError = errors.Wrap(
+						&errdefs.ExitError{
+							ExitCode: exit.Code,
+						},
+						exit.Error.GetMessage(),
+					)
+				}
 			} else if serverDone := msg.GetDone(); serverDone != nil {
 				return exitError
 			} else {
@@ -1036,6 +1046,14 @@ func workers() []client.WorkerInfo {
 
 func product() string {
 	return os.Getenv("BUILDKIT_EXPORTEDPRODUCT")
+}
+
+func convertGogoAny(in []*gogotypes.Any) []*any.Any {
+	out := make([]*any.Any, len(in))
+	for i := range in {
+		out[i] = &any.Any{TypeUrl: in[i].TypeUrl, Value: in[i].Value}
+	}
+	return out
 }
 
 func convertToGogoAny(in []*any.Any) []*gogotypes.Any {

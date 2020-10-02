@@ -14,6 +14,7 @@ import (
 
 	"github.com/containerd/containerd"
 	"github.com/docker/distribution/reference"
+	"github.com/gogo/googleapis/google/rpc"
 	gogotypes "github.com/gogo/protobuf/types"
 	"github.com/golang/protobuf/ptypes/any"
 	apitypes "github.com/moby/buildkit/api/types"
@@ -1058,23 +1059,29 @@ func (lbf *llbBridgeForwarder) ExecProcess(srv pb.LLBBridge_ExecProcessServer) e
 					}()
 					err := proc.Wait()
 
-					var status uint32
+					var statusCode uint32
 					var exitError *errdefs.ExitError
-					var errMsg string
+					var statusError *rpc.Status
 					if err != nil {
-						status = containerd.UnknownExitStatus
-						errMsg = err.Error()
+						statusCode = containerd.UnknownExitStatus
+						st, _ := status.FromError(grpcerrors.ToGRPC(err))
+						stp := st.Proto()
+						statusError = &rpc.Status{
+							Code:    stp.Code,
+							Message: stp.Message,
+							Details: convertToGogoAny(stp.Details),
+						}
 					}
 					if errors.As(err, &exitError) {
-						status = exitError.ExitCode
+						statusCode = exitError.ExitCode
 					}
-					logrus.Debugf("|---> Exit Message %s, code=%d, error=%s", pid, status, errMsg)
+					logrus.Debugf("|---> Exit Message %s, code=%d, error=%s", pid, statusCode, err)
 					sendErr := srv.Send(&pb.ExecMessage{
 						ProcessID: pid,
 						Input: &pb.ExecMessage_Exit{
 							Exit: &pb.ExitMessage{
-								Code:  status,
-								Error: errMsg,
+								Code:  statusCode,
+								Error: statusError,
 							},
 						},
 					})
@@ -1085,7 +1092,7 @@ func (lbf *llbBridgeForwarder) ExecProcess(srv pb.LLBBridge_ExecProcessServer) e
 						return stack.Enable(sendErr)
 					}
 
-					if err != nil && status != 0 {
+					if err != nil && statusCode != 0 {
 						// this was a container exit error which is "normal" so
 						// don't return this error from the errgroup
 						return nil
@@ -1188,6 +1195,14 @@ func convertGogoAny(in []*gogotypes.Any) []*any.Any {
 	out := make([]*any.Any, len(in))
 	for i := range in {
 		out[i] = &any.Any{TypeUrl: in[i].TypeUrl, Value: in[i].Value}
+	}
+	return out
+}
+
+func convertToGogoAny(in []*any.Any) []*gogotypes.Any {
+	out := make([]*gogotypes.Any, len(in))
+	for i := range in {
+		out[i] = &gogotypes.Any{TypeUrl: in[i].TypeUrl, Value: in[i].Value}
 	}
 	return out
 }
