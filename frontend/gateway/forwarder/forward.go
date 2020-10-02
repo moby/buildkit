@@ -156,9 +156,8 @@ func (c *bridgeClient) discard(err error) {
 
 func (c *bridgeClient) NewContainer(ctx context.Context, req client.NewContainerRequest) (client.Container, error) {
 	ctrReq := gateway.NewContainerRequest{
-		ContainerID:  identity.NewID(),
-		NetMode:      req.NetMode,
-		SecurityMode: req.SecurityMode,
+		ContainerID: identity.NewID(),
+		NetMode:     req.NetMode,
 	}
 
 	for _, m := range req.Mounts {

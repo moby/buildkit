@@ -23,10 +23,9 @@ import (
 )
 
 type NewContainerRequest struct {
-	ContainerID  string
-	NetMode      opspb.NetMode
-	SecurityMode opspb.SecurityMode
-	Mounts       []Mount
+	ContainerID string
+	NetMode     opspb.NetMode
+	Mounts      []Mount
 }
 
 // Mount used for the gateway.Container is nearly identical to the client.Mount
@@ -59,13 +58,12 @@ func NewContainer(ctx context.Context, e executor.Executor, sm *session.Manager,
 	ctx, cancel := context.WithCancel(ctx)
 	eg, ctx := errgroup.WithContext(ctx)
 	ctr := &gatewayContainer{
-		id:           req.ContainerID,
-		netMode:      req.NetMode,
-		securityMode: req.SecurityMode,
-		executor:     e,
-		errGroup:     eg,
-		ctx:          ctx,
-		cancel:       cancel,
+		id:       req.ContainerID,
+		netMode:  req.NetMode,
+		executor: e,
+		errGroup: eg,
+		ctx:      ctx,
+		cancel:   cancel,
 	}
 
 	makeMutable := func(worker worker.Worker, ref cache.ImmutableRef) (cache.MutableRef, error) {
@@ -220,7 +218,7 @@ func (gwCtr *gatewayContainer) Start(ctx context.Context, req client.StartReques
 			Cwd:          req.Cwd,
 			Tty:          req.Tty,
 			NetMode:      gwCtr.netMode,
-			SecurityMode: gwCtr.securityMode,
+			SecurityMode: req.SecurityMode,
 		},
 		Stdin:  req.Stdin,
 		Stdout: req.Stdout,

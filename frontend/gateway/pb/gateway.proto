@@ -172,7 +172,6 @@ message NewContainerRequest {
 	// For mount input values we can use random identifiers passed with ref
 	repeated pb.Mount Mounts = 2;
 	pb.NetMode Network = 3;
-	pb.SecurityMode Security = 4;
 }
 
 message NewContainerResponse{}
@@ -211,6 +210,7 @@ message InitMessage{
 	pb.Meta Meta = 2;
 	repeated uint32 Fds = 3;
 	bool Tty = 4;
+	pb.SecurityMode Security = 5;
 }
 
 message ExitMessage {

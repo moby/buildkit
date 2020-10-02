@@ -23,9 +23,8 @@ type Client interface {
 // NewContainerRequest encapsulates the requirements for a client to define a
 // new container, without defining the initial process.
 type NewContainerRequest struct {
-	Mounts       []Mount
-	NetMode      pb.NetMode
-	SecurityMode pb.SecurityMode
+	Mounts  []Mount
+	NetMode pb.NetMode
 }
 
 // Mount allows clients to specify a filesystem mount. A Reference to a
@@ -58,6 +57,7 @@ type StartRequest struct {
 	Tty            bool
 	Stdin          io.ReadCloser
 	Stdout, Stderr io.WriteCloser
+	SecurityMode   pb.SecurityMode
 }
 
 // WinSize is same as executor.WinSize, copied here to prevent circular package
