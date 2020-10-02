@@ -259,7 +259,8 @@ func testClientGatewayContainerCancelOnRelease(t *testing.T, sb integration.Sand
 		return &client.Result{}, nil
 	}
 
-	c.Build(ctx, SolveOpt{}, product, b, nil)
+	_, err = c.Build(ctx, SolveOpt{}, product, b, nil)
+	require.NoError(t, err)
 	checkAllReleasable(t, c, sb, true)
 }
 
@@ -283,7 +284,7 @@ func testClientGatewayContainerExecPipe(t *testing.T, sb integration.Sandbox) {
 
 	product := "buildkit_test"
 
-	output := bytes.NewBuffer([]byte{})
+	output := bytes.NewBuffer(nil)
 
 	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
 		st := llb.Image("busybox:latest")
@@ -440,7 +441,7 @@ func testClientGatewayContainerPID1Fail(t *testing.T, sb integration.Sandbox) {
 		}
 
 		pid1, err := ctr.Start(ctx, client.StartRequest{
-			Args: []string{"false"},
+			Args: []string{"sh", "-c", "exit 99"},
 			Cwd:  "/",
 		})
 		if err != nil {
@@ -453,7 +454,7 @@ func testClientGatewayContainerPID1Fail(t *testing.T, sb integration.Sandbox) {
 
 		var exitError *errdefs.ExitError
 		require.True(t, errors.As(err, &exitError))
-		require.Equal(t, uint32(1), exitError.ExitCode)
+		require.Equal(t, uint32(99), exitError.ExitCode)
 
 		return nil, err
 	}
@@ -517,7 +518,7 @@ func testClientGatewayContainerPID1Exit(t *testing.T, sb integration.Sandbox) {
 			// exits naturally
 			require.WithinDuration(t, start, time.Now(), 10*time.Second)
 			// assert this test ran for at least one second for pid1
-			lapse := time.Now().Sub(start)
+			lapse := time.Since(start)
 			require.Greater(t, lapse.Seconds(), float64(1))
 		}()
 
@@ -694,7 +695,7 @@ func testClientGatewayContainerMounts(t *testing.T, sb integration.Sandbox) {
 		err = pid.Wait()
 		require.NoError(t, err)
 
-		secretOutput := bytes.NewBuffer([]byte{})
+		secretOutput := bytes.NewBuffer(nil)
 		pid, err = ctr.Start(ctx, client.StartRequest{
 			Args:   []string{"cat", "/run/secrets/mysecret"},
 			Cwd:    "/",
