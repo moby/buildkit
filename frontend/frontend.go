@@ -13,14 +13,13 @@ import (
 )
 
 type Frontend interface {
-	Solve(ctx context.Context, llb FrontendLLBBridge, opt map[string]string, inputs map[string]*pb.Definition, sid string) (*Result, error)
+	Solve(ctx context.Context, llb FrontendLLBBridge, opt map[string]string, inputs map[string]*pb.Definition, sid string, sm *session.Manager) (*Result, error)
 }
 
 type FrontendLLBBridge interface {
 	executor.Executor
 	Solve(ctx context.Context, req SolveRequest, sid string) (*Result, error)
 	ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt) (digest.Digest, []byte, error)
-	SessionManager() *session.Manager
 }
 
 type SolveRequest = gw.SolveRequest
