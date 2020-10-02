@@ -194,18 +194,17 @@ func NewContainer(ctx context.Context, e executor.Executor, sm *session.Manager,
 }
 
 type gatewayContainer struct {
-	id           string
-	netMode      opspb.NetMode
-	securityMode opspb.SecurityMode
-	rootFS       cache.Mountable
-	mounts       []executor.Mount
-	executor     executor.Executor
-	started      bool
-	errGroup     *errgroup.Group
-	mu           sync.Mutex
-	cleanup      []func() error
-	ctx          context.Context
-	cancel       func()
+	id       string
+	netMode  opspb.NetMode
+	rootFS   cache.Mountable
+	mounts   []executor.Mount
+	executor executor.Executor
+	started  bool
+	errGroup *errgroup.Group
+	mu       sync.Mutex
+	cleanup  []func() error
+	ctx      context.Context
+	cancel   func()
 }
 
 func (gwCtr *gatewayContainer) Start(ctx context.Context, req client.StartRequest) (client.ContainerProcess, error) {
