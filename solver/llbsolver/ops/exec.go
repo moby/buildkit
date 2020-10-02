@@ -34,7 +34,7 @@ const execCacheType = "buildkit.exec.v0"
 type execOp struct {
 	op        *pb.ExecOp
 	cm        cache.Manager
-	mm        mounts.MountManager
+	mm        *mounts.MountManager
 	exec      executor.Executor
 	w         worker.Worker
 	platform  *pb.Platform

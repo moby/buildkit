@@ -29,16 +29,8 @@ import (
 	"google.golang.org/grpc/codes"
 )
 
-type MountManager interface {
-	MountableCache(ctx context.Context, m *pb.Mount, ref cache.ImmutableRef) (cache.MutableRef, error)
-	MountableTmpFS() cache.Mountable
-	MountableSecret(ctx context.Context, m *pb.Mount, g session.Group) (cache.Mountable, error)
-	MountableSSH(ctx context.Context, m *pb.Mount, g session.Group) (cache.Mountable, error)
-}
-
-// NewMountManager(fmt.Sprintf("exec %s",strings.Join(e.op.Meta.Args," ")))
-func NewMountManager(name string, cm cache.Manager, sm *session.Manager, md *metadata.Store) MountManager {
-	return &mountManager{
+func NewMountManager(name string, cm cache.Manager, sm *session.Manager, md *metadata.Store) *MountManager {
+	return &MountManager{
 		cm:          cm,
 		sm:          sm,
 		cacheMounts: map[string]*cacheRefShare{},
@@ -47,7 +39,7 @@ func NewMountManager(name string, cm cache.Manager, sm *session.Manager, md *met
 	}
 }
 
-type mountManager struct {
+type MountManager struct {
 	cm            cache.Manager
 	sm            *session.Manager
 	cacheMountsMu sync.Mutex
@@ -56,7 +48,7 @@ type mountManager struct {
 	managerName   string
 }
 
-func (mm *mountManager) getRefCacheDir(ctx context.Context, ref cache.ImmutableRef, id string, m *pb.Mount, sharing pb.CacheSharingOpt) (mref cache.MutableRef, err error) {
+func (mm *MountManager) getRefCacheDir(ctx context.Context, ref cache.ImmutableRef, id string, m *pb.Mount, sharing pb.CacheSharingOpt) (mref cache.MutableRef, err error) {
 	g := &cacheRefGetter{
 		locker:          &mm.cacheMountsMu,
 		cacheMounts:     mm.cacheMounts,
@@ -166,7 +158,7 @@ func (g *cacheRefGetter) getRefCacheDirNoCache(ctx context.Context, key string, 
 	return mRef, nil
 }
 
-func (mm *mountManager) getSSHMountable(ctx context.Context, m *pb.Mount, g session.Group) (cache.Mountable, error) {
+func (mm *MountManager) getSSHMountable(ctx context.Context, m *pb.Mount, g session.Group) (cache.Mountable, error) {
 	var caller session.Caller
 	err := mm.sm.Any(ctx, g, func(ctx context.Context, _ string, c session.Caller) error {
 		if err := sshforward.CheckSSHID(ctx, c, m.SSHOpt.ID); err != nil {
@@ -253,7 +245,7 @@ func (sm *sshMountInstance) IdentityMapping() *idtools.IdentityMapping {
 	return sm.idmap
 }
 
-func (mm *mountManager) getSecretMountable(ctx context.Context, m *pb.Mount, g session.Group) (cache.Mountable, error) {
+func (mm *MountManager) getSecretMountable(ctx context.Context, m *pb.Mount, g session.Group) (cache.Mountable, error) {
 	if m.SecretOpt == nil {
 		return nil, errors.Errorf("invalid secret mount options")
 	}
@@ -378,22 +370,22 @@ func (sm *secretMountInstance) IdentityMapping() *idtools.IdentityMapping {
 	return sm.idmap
 }
 
-func (mm *mountManager) MountableCache(ctx context.Context, m *pb.Mount, ref cache.ImmutableRef) (cache.MutableRef, error) {
+func (mm *MountManager) MountableCache(ctx context.Context, m *pb.Mount, ref cache.ImmutableRef) (cache.MutableRef, error) {
 	if m.CacheOpt == nil {
 		return nil, errors.Errorf("missing cache mount options")
 	}
 	return mm.getRefCacheDir(ctx, ref, m.CacheOpt.ID, m, m.CacheOpt.Sharing)
 }
 
-func (mm *mountManager) MountableTmpFS() cache.Mountable {
+func (mm *MountManager) MountableTmpFS() cache.Mountable {
 	return newTmpfs(mm.cm.IdentityMapping())
 }
 
-func (mm *mountManager) MountableSecret(ctx context.Context, m *pb.Mount, g session.Group) (cache.Mountable, error) {
+func (mm *MountManager) MountableSecret(ctx context.Context, m *pb.Mount, g session.Group) (cache.Mountable, error) {
 	return mm.getSecretMountable(ctx, m, g)
 }
 
-func (mm *mountManager) MountableSSH(ctx context.Context, m *pb.Mount, g session.Group) (cache.Mountable, error) {
+func (mm *MountManager) MountableSSH(ctx context.Context, m *pb.Mount, g session.Group) (cache.Mountable, error) {
 	return mm.getSSHMountable(ctx, m, g)
 }
 
