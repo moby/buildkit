@@ -131,7 +131,7 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest, sid st
 		if !ok {
 			return nil, errors.Errorf("invalid frontend: %s", req.Frontend)
 		}
-		res, err = f.Solve(ctx, b, req.FrontendOpt, req.FrontendInputs, sid)
+		res, err = f.Solve(ctx, b, req.FrontendOpt, req.FrontendInputs, sid, b.sm)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to solve with frontend %s", req.Frontend)
 		}
@@ -140,10 +140,6 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest, sid st
 	}
 
 	return
-}
-
-func (b *llbBridge) SessionManager() *session.Manager {
-	return b.sm
 }
 
 type resultProxy struct {

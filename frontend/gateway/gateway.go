@@ -74,7 +74,7 @@ func filterPrefix(opts map[string]string, pfx string) map[string]string {
 	return m
 }
 
-func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string, inputs map[string]*opspb.Definition, sid string) (*frontend.Result, error) {
+func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string, inputs map[string]*opspb.Definition, sid string, sm *session.Manager) (*frontend.Result, error) {
 	source, ok := opts[keySource]
 	if !ok {
 		return nil, errors.Errorf("no source specified for gateway")
@@ -182,7 +182,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 		defer rootFS.Release(context.TODO())
 	}
 
-	lbf, ctx, err := serveLLBBridgeForwarder(ctx, llbBridge, gf.workers, inputs, sid)
+	lbf, ctx, err := serveLLBBridgeForwarder(ctx, llbBridge, gf.workers, inputs, sid, sm)
 	defer lbf.conn.Close() //nolint
 	if err != nil {
 		return nil, err
@@ -309,11 +309,11 @@ func (lbf *llbBridgeForwarder) Result() (*frontend.Result, error) {
 	return lbf.result, nil
 }
 
-func NewBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, workers frontend.WorkerInfos, inputs map[string]*opspb.Definition, sid string) LLBBridgeForwarder {
-	return newBridgeForwarder(ctx, llbBridge, workers, inputs, sid)
+func NewBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, workers frontend.WorkerInfos, inputs map[string]*opspb.Definition, sid string, sm *session.Manager) LLBBridgeForwarder {
+	return newBridgeForwarder(ctx, llbBridge, workers, inputs, sid, sm)
 }
 
-func newBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, workers frontend.WorkerInfos, inputs map[string]*opspb.Definition, sid string) *llbBridgeForwarder {
+func newBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, workers frontend.WorkerInfos, inputs map[string]*opspb.Definition, sid string, sm *session.Manager) *llbBridgeForwarder {
 	lbf := &llbBridgeForwarder{
 		callCtx:   ctx,
 		llbBridge: llbBridge,
@@ -323,14 +323,15 @@ func newBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridg
 		workers:   workers,
 		inputs:    inputs,
 		sid:       sid,
+		sm:        sm,
 		ctrs:      map[string]gwclient.Container{},
 	}
 	return lbf
 }
 
-func serveLLBBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, workers frontend.WorkerInfos, inputs map[string]*opspb.Definition, sid string) (*llbBridgeForwarder, context.Context, error) {
+func serveLLBBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, workers frontend.WorkerInfos, inputs map[string]*opspb.Definition, sid string, sm *session.Manager) (*llbBridgeForwarder, context.Context, error) {
 	ctx, cancel := context.WithCancel(ctx)
-	lbf := newBridgeForwarder(ctx, llbBridge, workers, inputs, sid)
+	lbf := newBridgeForwarder(ctx, llbBridge, workers, inputs, sid, sm)
 	server := grpc.NewServer(grpc.UnaryInterceptor(grpcerrors.UnaryServerInterceptor), grpc.StreamInterceptor(grpcerrors.StreamServerInterceptor))
 	grpc_health_v1.RegisterHealthServer(server, health.NewServer())
 	pb.RegisterLLBBridgeServer(server, lbf)
@@ -423,6 +424,7 @@ type llbBridgeForwarder struct {
 	inputs            map[string]*opspb.Definition
 	isErrServerClosed bool
 	sid               string
+	sm                *session.Manager
 	*pipe
 	ctrs   map[string]gwclient.Container
 	ctrsMu sync.Mutex
@@ -779,7 +781,7 @@ func (lbf *llbBridgeForwarder) NewContainer(ctx context.Context, in *pb.NewConta
 	// Not using `ctx` here because it will get cancelled as soon as NewContainer returns
 	// and we want the context to live for the duration of the container.
 	group := session.NewGroup(lbf.sid)
-	ctr, err := NewContainer(context.Background(), lbf.llbBridge, lbf.llbBridge.SessionManager(), group, ctrReq)
+	ctr, err := NewContainer(context.Background(), lbf.llbBridge, lbf.sm, group, ctrReq)
 	if err != nil {
 		return nil, stack.Enable(err)
 	}

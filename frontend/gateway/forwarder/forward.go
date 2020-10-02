@@ -22,12 +22,13 @@ import (
 	fstypes "github.com/tonistiigi/fsutil/types"
 )
 
-func llbBridgeToGatewayClient(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string, inputs map[string]*opspb.Definition, workerInfos []clienttypes.WorkerInfo, sid string) (*bridgeClient, error) {
+func llbBridgeToGatewayClient(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string, inputs map[string]*opspb.Definition, workerInfos []clienttypes.WorkerInfo, sid string, sm *session.Manager) (*bridgeClient, error) {
 	return &bridgeClient{
 		opts:              opts,
 		inputs:            inputs,
 		FrontendLLBBridge: llbBridge,
 		sid:               sid,
+		sm:                sm,
 		workerInfos:       workerInfos,
 		final:             map[*ref]struct{}{},
 	}, nil
@@ -40,6 +41,7 @@ type bridgeClient struct {
 	inputs      map[string]*opspb.Definition
 	final       map[*ref]struct{}
 	sid         string
+	sm          *session.Manager
 	refs        []*ref
 	workerInfos []clienttypes.WorkerInfo
 }
@@ -181,7 +183,7 @@ func (c *bridgeClient) NewContainer(ctx context.Context, req client.NewContainer
 	}
 
 	group := session.NewGroup(c.sid)
-	ctr, err := gateway.NewContainer(ctx, c, c.SessionManager(), group, ctrReq)
+	ctr, err := gateway.NewContainer(ctx, c, c.sm, group, ctrReq)
 	if err != nil {
 		return nil, err
 	}
