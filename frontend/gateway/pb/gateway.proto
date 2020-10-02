@@ -215,7 +215,7 @@ message InitMessage{
 
 message ExitMessage {
 	uint32 Code = 1;
-	string Error = 2;
+	google.rpc.Status Error = 2;
 }
 
 message StartedMessage{}
