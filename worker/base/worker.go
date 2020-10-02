@@ -63,7 +63,7 @@ type WorkerOpt struct {
 	Labels          map[string]string
 	Platforms       []specs.Platform
 	GCPolicy        []client.PruneInfo
-	MdStore         *metadata.Store
+	MetadataStore   *metadata.Store
 	Executor        executor.Executor
 	Snapshotter     snapshot.Snapshotter
 	ContentStore    content.Store
@@ -95,7 +95,7 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 
 	cm, err := cache.NewManager(cache.ManagerOpt{
 		Snapshotter:     opt.Snapshotter,
-		MetadataStore:   opt.MdStore,
+		MetadataStore:   opt.MetadataStore,
 		PruneRefChecker: imageRefChecker,
 		Applier:         opt.Applier,
 		GarbageCollect:  opt.GarbageCollect,
@@ -130,7 +130,7 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 	if err := git.Supported(); err == nil {
 		gs, err := git.NewSource(git.Opt{
 			CacheAccessor: cm,
-			MetadataStore: opt.MdStore,
+			MetadataStore: opt.MetadataStore,
 		})
 		if err != nil {
 			return nil, err
@@ -142,7 +142,7 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 
 	hs, err := http.NewSource(http.Opt{
 		CacheAccessor: cm,
-		MetadataStore: opt.MdStore,
+		MetadataStore: opt.MetadataStore,
 	})
 	if err != nil {
 		return nil, err
@@ -152,7 +152,7 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 
 	ss, err := local.NewSource(local.Opt{
 		CacheAccessor: cm,
-		MetadataStore: opt.MdStore,
+		MetadataStore: opt.MetadataStore,
 	})
 	if err != nil {
 		return nil, err
@@ -254,7 +254,7 @@ func (w *Worker) CacheManager() cache.Manager {
 }
 
 func (w *Worker) MetadataStore() *metadata.Store {
-	return w.MdStore
+	return w.WorkerOpt.MetadataStore
 }
 
 func (w *Worker) ResolveOp(v solver.Vertex, s frontend.FrontendLLBBridge, sm *session.Manager) (solver.Op, error) {
@@ -263,9 +263,9 @@ func (w *Worker) ResolveOp(v solver.Vertex, s frontend.FrontendLLBBridge, sm *se
 		case *pb.Op_Source:
 			return ops.NewSourceOp(v, op, baseOp.Platform, w.SourceManager, sm, w)
 		case *pb.Op_Exec:
-			return ops.NewExecOp(v, op, baseOp.Platform, w.CacheMgr, sm, w.MdStore, w.WorkerOpt.Executor, w)
+			return ops.NewExecOp(v, op, baseOp.Platform, w.CacheMgr, sm, w.WorkerOpt.MetadataStore, w.WorkerOpt.Executor, w)
 		case *pb.Op_File:
-			return ops.NewFileOp(v, op, w.CacheMgr, w.MdStore, w)
+			return ops.NewFileOp(v, op, w.CacheMgr, w.WorkerOpt.MetadataStore, w)
 		case *pb.Op_Build:
 			return ops.NewBuildOp(v, op, s, w)
 		default:
@@ -282,7 +282,7 @@ func (w *Worker) PruneCacheMounts(ctx context.Context, ids []string) error {
 
 	for _, id := range ids {
 		id = "cache-dir:" + id
-		sis, err := w.MdStore.Search(id)
+		sis, err := w.WorkerOpt.MetadataStore.Search(id)
 		if err != nil {
 			return err
 		}
