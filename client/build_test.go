@@ -539,10 +539,10 @@ func testClientGatewayContainerPID1Exit(t *testing.T, sb integration.Sandbox) {
 	}
 
 	_, err = c.Build(ctx, SolveOpt{}, product, b, nil)
-	// pid2 should error with `exit code: 255 on runc or
+	// pid2 should error with `buildkit-runc did not terminate successfully` on runc or
 	// `exit code: 137` (ie sigkill) on containerd
 	require.Error(t, err)
-	require.Regexp(t, "exit code: (255|137)", err.Error())
+	require.Regexp(t, "exit code: 137|buildkit-runc did not terminate successfully", err.Error())
 
 	checkAllReleasable(t, c, sb, true)
 }
