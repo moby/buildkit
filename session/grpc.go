@@ -64,7 +64,7 @@ func grpcClientConn(ctx context.Context, conn net.Conn) (context.Context, *grpc.
 		dialOpts = append(dialOpts, grpc.WithStreamInterceptor(grpc_middleware.ChainStreamClient(stream...)))
 	}
 
-	cc, err := grpc.DialContext(ctx, "", dialOpts...)
+	cc, err := grpc.DialContext(ctx, "localhost", dialOpts...)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to create grpc client")
 	}
