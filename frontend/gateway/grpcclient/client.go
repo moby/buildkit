@@ -509,7 +509,7 @@ func grpcClientConn(ctx context.Context) (context.Context, *grpc.ClientConn, err
 		return stdioConn(), nil
 	})
 
-	cc, err := grpc.DialContext(ctx, "", dialOpt, grpc.WithInsecure(), grpc.WithUnaryInterceptor(grpcerrors.UnaryClientInterceptor), grpc.WithStreamInterceptor(grpcerrors.StreamClientInterceptor))
+	cc, err := grpc.DialContext(ctx, "localhost", dialOpt, grpc.WithInsecure(), grpc.WithUnaryInterceptor(grpcerrors.UnaryClientInterceptor), grpc.WithStreamInterceptor(grpcerrors.StreamClientInterceptor))
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to create grpc client")
 	}
