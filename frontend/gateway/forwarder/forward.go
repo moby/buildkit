@@ -9,8 +9,11 @@ import (
 	clienttypes "github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend"
+	"github.com/moby/buildkit/frontend/gateway"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	gwpb "github.com/moby/buildkit/frontend/gateway/pb"
+	"github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	opspb "github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
@@ -19,12 +22,13 @@ import (
 	fstypes "github.com/tonistiigi/fsutil/types"
 )
 
-func llbBridgeToGatewayClient(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string, inputs map[string]*opspb.Definition, workerInfos []clienttypes.WorkerInfo, sid string) (*bridgeClient, error) {
+func llbBridgeToGatewayClient(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string, inputs map[string]*opspb.Definition, workerInfos []clienttypes.WorkerInfo, sid string, sm *session.Manager) (*bridgeClient, error) {
 	return &bridgeClient{
 		opts:              opts,
 		inputs:            inputs,
 		FrontendLLBBridge: llbBridge,
 		sid:               sid,
+		sm:                sm,
 		workerInfos:       workerInfos,
 		final:             map[*ref]struct{}{},
 	}, nil
@@ -37,6 +41,7 @@ type bridgeClient struct {
 	inputs      map[string]*opspb.Definition
 	final       map[*ref]struct{}
 	sid         string
+	sm          *session.Manager
 	refs        []*ref
 	workerInfos []clienttypes.WorkerInfo
 }
@@ -147,6 +152,41 @@ func (c *bridgeClient) discard(err error) {
 			}
 		}
 	}
+}
+
+func (c *bridgeClient) NewContainer(ctx context.Context, req client.NewContainerRequest) (client.Container, error) {
+	ctrReq := gateway.NewContainerRequest{
+		ContainerID: identity.NewID(),
+		NetMode:     req.NetMode,
+	}
+
+	for _, m := range req.Mounts {
+		var refProxy solver.ResultProxy
+		if m.Ref != nil {
+			var ok bool
+			refProxy, ok = m.Ref.(*ref)
+			if !ok {
+				return nil, errors.Errorf("unexpected Ref type: %T", m.Ref)
+			}
+		}
+		ctrReq.Mounts = append(ctrReq.Mounts, gateway.Mount{
+			Dest:      m.Dest,
+			Selector:  m.Selector,
+			Readonly:  m.Readonly,
+			MountType: m.MountType,
+			RefProxy:  refProxy,
+			CacheOpt:  m.CacheOpt,
+			SecretOpt: m.SecretOpt,
+			SSHOpt:    m.SSHOpt,
+		})
+	}
+
+	group := session.NewGroup(c.sid)
+	ctr, err := gateway.NewContainer(ctx, c, c.sm, group, ctrReq)
+	if err != nil {
+		return nil, err
+	}
+	return ctr, nil
 }
 
 type ref struct {

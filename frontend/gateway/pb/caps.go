@@ -35,6 +35,10 @@ const (
 
 	// CapGatewaySolveMetadata can be used to check if solve calls from gateway reliably return metadata
 	CapGatewaySolveMetadata apicaps.CapID = "gateway.solve.metadata"
+
+	// CapGatewayExec is the capability to create and interact with new
+	// containers directly through the gateway
+	CapGatewayExec apicaps.CapID = "gateway.exec"
 )
 
 func init() {
@@ -133,6 +137,13 @@ func init() {
 	Caps.Init(apicaps.Cap{
 		ID:      CapGatewaySolveMetadata,
 		Name:    "gateway metadata",
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapGatewayExec,
+		Name:    "gateway exec",
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})
