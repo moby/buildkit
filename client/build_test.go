@@ -266,12 +266,6 @@ func testClientGatewayContainerCancelOnRelease(t *testing.T, sb integration.Sand
 // process together all started via `Exec` into the same container.
 // We are mimicing: `echo testing | cat | cat > /tmp/foo && cat /tmp/foo`
 func testClientGatewayContainerExecPipe(t *testing.T, sb integration.Sandbox) {
-	if sb.Rootless() {
-		// TODO fix this
-		// We get `panic: cannot statfs cgroup root` from runc when when running
-		// this test with runc-rootless, no idea why.
-		t.Skip("Skipping oci-rootless for cgroup error")
-	}
 	requiresLinux(t)
 
 	ctx := context.TODO()
@@ -462,12 +456,6 @@ func testClientGatewayContainerPID1Fail(t *testing.T, sb integration.Sandbox) {
 // testClientGatewayContainerPID1Exit is testing that all process started
 // via `Exec` are shutdown when the primary pid1 process exits
 func testClientGatewayContainerPID1Exit(t *testing.T, sb integration.Sandbox) {
-	if sb.Rootless() {
-		// TODO fix this
-		// We get `panic: cannot statfs cgroup root` when running this test
-		// with runc-rootless
-		t.Skip("Skipping runc-rootless for cgroup error")
-	}
 	requiresLinux(t)
 
 	ctx := context.TODO()
@@ -542,12 +530,6 @@ func testClientGatewayContainerPID1Exit(t *testing.T, sb integration.Sandbox) {
 // testClientGatewayContainerMounts is testing mounts derived from various
 // llb.States
 func testClientGatewayContainerMounts(t *testing.T, sb integration.Sandbox) {
-	if sb.Rootless() {
-		// TODO fix this
-		// We get `panic: cannot statfs cgroup root` when running this test
-		// with runc-rootless
-		t.Skip("Skipping runc-rootless for cgroup error")
-	}
 	requiresLinux(t)
 
 	ctx := context.TODO()
