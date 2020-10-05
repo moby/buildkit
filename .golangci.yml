@@ -6,8 +6,8 @@ run:
   modules-download-mode: vendor
 
   build-tags:
-    - dfrunmount
-    - dfssh
+    - dfrunsecurity
+    - dfrunnetwork
 
 linters:
   enable:

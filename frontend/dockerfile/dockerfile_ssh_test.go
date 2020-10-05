@@ -1,5 +1,3 @@
-// +build dfssh
-
 package dockerfile
 
 import (
