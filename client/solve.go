@@ -177,10 +177,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		defer cancelSolve()
 
 		defer func() { // make sure the Status ends cleanly on build errors
-			go func() {
-				<-time.After(3 * time.Second)
-				cancelStatus()
-			}()
+			cancelStatus()
 			logrus.Debugf("stopping session")
 			s.Close()
 		}()
