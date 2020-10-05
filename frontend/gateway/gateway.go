@@ -37,6 +37,7 @@ import (
 	"github.com/moby/buildkit/util/stack"
 	"github.com/moby/buildkit/util/tracing"
 	"github.com/moby/buildkit/worker"
+	"github.com/opencontainers/go-digest"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -83,6 +84,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 
 	_, isDevel := opts[keyDevel]
 	var img specs.Image
+	var mfstDigest digest.Digest
 	var rootFS cache.MutableRef
 	var readonly bool // TODO: try to switch to read-only by default.
 
@@ -134,6 +136,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 		if err != nil {
 			return nil, err
 		}
+		mfstDigest = dgst
 
 		if err := json.Unmarshal(config, &img); err != nil {
 			return nil, err
@@ -183,12 +186,6 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 		defer rootFS.Release(context.TODO())
 	}
 
-	lbf, ctx, err := serveLLBBridgeForwarder(ctx, llbBridge, gf.workers, inputs, sid, sm)
-	defer lbf.conn.Close() //nolint
-	if err != nil {
-		return nil, err
-	}
-
 	args := []string{"/run"}
 	env := []string{}
 	cwd := "/"
@@ -215,8 +212,6 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 	}
 	env = append(env, "BUILDKIT_WORKERS="+string(dt))
 
-	defer lbf.Discard()
-
 	env = append(env, "BUILDKIT_EXPORTEDPRODUCT="+apicaps.ExportedProduct)
 
 	meta := executor.Meta{
@@ -231,6 +226,26 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 			meta.NetMode = opspb.NetMode_NONE
 		}
 	}
+
+	curCaps := getCaps(img.Config.Labels["moby.buildkit.frontend.caps"])
+	addCapsForKnownFrontends(curCaps, mfstDigest)
+	reqCaps := getCaps(opts["frontend.caps"])
+	if len(inputs) > 0 {
+		reqCaps["moby.buildkit.frontend.inputs"] = struct{}{}
+	}
+
+	for c := range reqCaps {
+		if _, ok := curCaps[c]; !ok {
+			return nil, stack.Enable(grpcerrors.WrapCode(errdefs.NewUnsupportedFrontendCapError(c), codes.Unimplemented))
+		}
+	}
+
+	lbf, ctx, err := serveLLBBridgeForwarder(ctx, llbBridge, gf.workers, inputs, sid, sm)
+	defer lbf.conn.Close() //nolint
+	if err != nil {
+		return nil, err
+	}
+	defer lbf.Discard()
 
 	err = llbBridge.Run(ctx, "", rootFS, nil, executor.ProcessInfo{Meta: meta, Stdin: lbf.Stdin, Stdout: lbf.Stdout, Stderr: os.Stderr}, nil)
 
@@ -1205,4 +1220,32 @@ func convertToGogoAny(in []*any.Any) []*gogotypes.Any {
 		out[i] = &gogotypes.Any{TypeUrl: in[i].TypeUrl, Value: in[i].Value}
 	}
 	return out
+}
+
+func getCaps(label string) map[string]struct{} {
+	if label == "" {
+		return make(map[string]struct{})
+	}
+	caps := strings.Split(label, ",")
+	out := make(map[string]struct{}, len(caps))
+	for _, c := range caps {
+		name := strings.SplitN(c, "+", 2)
+		if name[0] != "" {
+			out[name[0]] = struct{}{}
+		}
+	}
+	return out
+}
+
+func addCapsForKnownFrontends(caps map[string]struct{}, dgst digest.Digest) {
+	// these frontends were built without caps detection but do support inputs
+	defaults := map[digest.Digest]struct{}{
+		"sha256:9ac1c43a60e31dca741a6fe8314130a9cd4c4db0311fbbc636ff992ef60ae76d": {}, // docker/dockerfile:1.1.6
+		"sha256:080bd74d8778f83e7b670de193362d8c593c8b14f5c8fb919d28ee8feda0d069": {}, // docker/dockerfile:1.1.7
+		"sha256:60543a9d92b92af5088fb2938fb09b2072684af8384399e153e137fe081f8ab4": {}, // docker/dockerfile:1.1.6-experimental
+		"sha256:de85b2f3a3e8a2f7fe48e8e84a65f6fdd5cd5183afa6412fff9caa6871649c44": {}, // docker/dockerfile:1.1.7-experimental
+	}
+	if _, ok := defaults[dgst]; ok {
+		caps["moby.buildkit.frontend.inputs"] = struct{}{}
+	}
 }
