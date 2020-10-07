@@ -107,9 +107,9 @@ case $TYP in
     --output type=image,\"name=$publishedNames\",$pushFlag
   ;;
 "daily")
-  if [ -z $DAILY_TARGETS ]; then
-    # DAILY_TARGETS=""
-  fi
+  # if [ -z $DAILY_TARGETS ]; then
+  #   DAILY_TARGETS=""
+  # fi
   
   for TAG in $DAILY_TARGETS; do
   
