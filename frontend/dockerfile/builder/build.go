@@ -343,6 +343,10 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 		return nil, capsError
 	}
 
+	if res, ok, err := checkSubRequest(ctx, opts); ok {
+		return res, err
+	}
+
 	exportMap := len(targetPlatforms) > 1
 
 	if v := opts[keyMultiPlatform]; v != "" {
