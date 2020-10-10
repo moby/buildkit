@@ -107,6 +107,7 @@ func TestIntegration(t *testing.T) {
 		testSSHMount,
 		testStdinClosed,
 		testHostnameLookup,
+		testHostnameSpecifying,
 		testPushByDigest,
 		testBasicInlineCacheImportExport,
 		testExportBusyboxLocal,
@@ -293,6 +294,30 @@ func testHostnameLookup(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	require.NoError(t, err)
+}
+
+// moby/buildkit#1301
+func testHostnameSpecifying(t *testing.T, sb integration.Sandbox) {
+	if sb.Rootless() {
+		t.SkipNow()
+	}
+
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	hostname := "testtest"
+	st := llb.Image("busybox:latest").With(llb.Hostname(hostname)).
+		Run(llb.Shlexf("sh -c 'echo $HOSTNAME | grep %s'", hostname)).
+		Run(llb.Shlexf("sh -c 'echo $(hostname) | grep %s'", hostname))
+
+	def, err := st.Marshal(context.TODO())
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		FrontendAttrs: map[string]string{"hostname": hostname},
+	}, nil)
 	require.NoError(t, err)
 }
 
