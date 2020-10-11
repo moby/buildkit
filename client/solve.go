@@ -26,7 +26,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-	"fmt"
 )
 
 type SolveOpt struct {
@@ -258,7 +257,6 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		}
 
 		var exportersResponse []*controlapi.ExporterResponse
-		fmt.Println(exportersResponse)
 		if (resp.ExporterResponse != nil){
            exportersResponse = append(exportersResponse, resp.ExporterResponse)
         }
