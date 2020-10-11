@@ -23,7 +23,6 @@
 package remote
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -33,8 +32,8 @@ import (
 	"time"
 
 	"github.com/containerd/containerd/reference"
-	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/stargz-snapshotter/cache"
+	"github.com/containerd/stargz-snapshotter/fs/source"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
@@ -47,7 +46,8 @@ type Blob interface {
 	FetchedSize() int64
 	ReadAt(p []byte, offset int64, opts ...Option) (int, error)
 	Cache(offset int64, size int64, opts ...Option) error
-	Refresh(ctx context.Context, host docker.RegistryHosts, refspec reference.Spec, desc ocispec.Descriptor) error
+	Refresh(ctx context.Context, host source.RegistryHosts, refspec reference.Spec, desc ocispec.Descriptor) error
+	Close() error
 }
 
 type blob struct {
@@ -66,9 +66,33 @@ type blob struct {
 	fetchedRegionSetMu sync.Mutex
 
 	resolver *Resolver
+
+	closed   bool
+	closedMu sync.Mutex
 }
 
-func (b *blob) Refresh(ctx context.Context, hosts docker.RegistryHosts, refspec reference.Spec, desc ocispec.Descriptor) error {
+func (b *blob) Close() error {
+	b.closedMu.Lock()
+	defer b.closedMu.Unlock()
+	if b.closed {
+		return nil
+	}
+	b.closed = true
+	return b.cache.Close()
+}
+
+func (b *blob) isClosed() bool {
+	b.closedMu.Lock()
+	closed := b.closed
+	b.closedMu.Unlock()
+	return closed
+}
+
+func (b *blob) Refresh(ctx context.Context, hosts source.RegistryHosts, refspec reference.Spec, desc ocispec.Descriptor) error {
+	if b.isClosed() {
+		return fmt.Errorf("blob is already closed")
+	}
+
 	// refresh the fetcher
 	new, newSize, err := newFetcher(ctx, hosts, refspec, desc)
 	if err != nil {
@@ -89,6 +113,10 @@ func (b *blob) Refresh(ctx context.Context, hosts docker.RegistryHosts, refspec 
 }
 
 func (b *blob) Check() error {
+	if b.isClosed() {
+		return fmt.Errorf("blob is already closed")
+	}
+
 	now := time.Now()
 	b.lastCheckMu.Lock()
 	lastCheck := b.lastCheck
@@ -124,6 +152,10 @@ func (b *blob) FetchedSize() int64 {
 }
 
 func (b *blob) Cache(offset int64, size int64, opts ...Option) error {
+	if b.isClosed() {
+		return fmt.Errorf("blob is already closed")
+	}
+
 	var cacheOpts options
 	for _, o := range opts {
 		o(&cacheOpts)
@@ -136,9 +168,10 @@ func (b *blob) Cache(offset int64, size int64, opts ...Option) error {
 	fetchReg := region{floor(offset, b.chunkSize), ceil(offset+size-1, b.chunkSize) - 1}
 	discard := make(map[region]io.Writer)
 	b.walkChunks(fetchReg, func(reg region) error {
-		if _, err := b.cache.FetchAt(fr.genID(reg), 0, nil, cacheOpts.cacheOpts...); err != nil {
-			discard[reg] = ioutil.Discard
+		if r, err := b.cache.Get(fr.genID(reg), cacheOpts.cacheOpts...); err == nil {
+			return r.Close() // nop if the cache hits
 		}
+		discard[reg] = ioutil.Discard
 		return nil
 	})
 	if err := b.fetchRange(discard, &cacheOpts); err != nil {
@@ -152,6 +185,10 @@ func (b *blob) Cache(offset int64, size int64, opts ...Option) error {
 // It tries to fetch as many chunks as possible from local cache.
 // We can configure this function with options.
 func (b *blob) ReadAt(p []byte, offset int64, opts ...Option) (int, error) {
+	if b.isClosed() {
+		return 0, fmt.Errorf("blob is already closed")
+	}
+
 	if len(p) == 0 || offset > b.size {
 		return 0, nil
 	}
@@ -159,12 +196,6 @@ func (b *blob) ReadAt(p []byte, offset int64, opts ...Option) (int, error) {
 	// Make the buffer chunk aligned
 	allRegion := region{floor(offset, b.chunkSize), ceil(offset+int64(len(p))-1, b.chunkSize) - 1}
 	allData := make(map[region]io.Writer)
-	var putBufs []*bytes.Buffer
-	defer func() {
-		for _, bf := range putBufs {
-			b.resolver.bufPool.Put(bf)
-		}
-	}()
 
 	var readAtOpts options
 	for _, o := range opts {
@@ -177,7 +208,6 @@ func (b *blob) ReadAt(p []byte, offset int64, opts ...Option) (int, error) {
 	fr := b.fetcher
 	b.fetcherMu.Unlock()
 
-	var commits []func() error
 	b.walkChunks(allRegion, func(chunk region) error {
 		var (
 			base         = positive(chunk.b - offset)
@@ -187,55 +217,25 @@ func (b *blob) ReadAt(p []byte, offset int64, opts ...Option) (int, error) {
 		)
 
 		// Check if the content exists in the cache
-		n, err := b.cache.FetchAt(fr.genID(chunk), lowerUnread, p[base:base+expectedSize], readAtOpts.cacheOpts...)
-		if err == nil && n == int(expectedSize) {
-			return nil
+		r, err := b.cache.Get(fr.genID(chunk), readAtOpts.cacheOpts...)
+		if err == nil {
+			defer r.Close()
+			n, err := r.ReadAt(p[base:base+expectedSize], lowerUnread)
+			if (err == nil || err == io.EOF) && int64(n) == expectedSize {
+				return nil
+			}
 		}
 
 		// We missed cache. Take it from remote registry.
 		// We get the whole chunk here and add it to the cache so that following
 		// reads against neighboring chunks can take the data without making HTTP requests.
-		if lowerUnread == 0 && upperUnread == 0 {
-			// We can directly store the result in the given buffer
-			allData[chunk] = &byteWriter{
-				p: p[base : base+chunk.size()],
-			}
-		} else {
-			// Use temporally buffer for aligning this chunk
-			bf := b.resolver.bufPool.Get().(*bytes.Buffer)
-			putBufs = append(putBufs, bf)
-			bf.Reset()
-			bf.Grow(int(chunk.size()))
-			allData[chunk] = bf
-
-			// Function for committing the buffered chunk into the result slice.
-			commits = append(commits, func() error {
-				if int64(bf.Len()) != chunk.size() {
-					return fmt.Errorf("unexpected data size %d; want %d",
-						bf.Len(), chunk.size())
-				}
-				bb := bf.Bytes()[:chunk.size()]
-				n := copy(p[base:], bb[lowerUnread:chunk.size()-upperUnread])
-				if int64(n) != expectedSize {
-					return fmt.Errorf("invalid copied data size %d; want %d",
-						n, expectedSize)
-				}
-				return nil
-			})
-		}
+		allData[chunk] = newBytesWriter(p[base:base+expectedSize], lowerUnread)
 		return nil
 	})
 
 	// Read required data
 	if err := b.fetchRange(allData, &readAtOpts); err != nil {
 		return 0, err
-	}
-
-	// Write all data to the result buffer
-	for _, c := range commits {
-		if err := c(); err != nil {
-			return 0, err
-		}
 	}
 
 	// Adjust the buffer size according to the blob size
@@ -290,31 +290,32 @@ func (b *blob) fetchRange(allData map[region]io.Writer, opts *options) error {
 		} else if err != nil {
 			return errors.Wrapf(err, "failed to read multipart resp")
 		}
-		if err := b.walkChunks(reg, func(chunk region) error {
-
-			// Prepare the temporary buffer
-			bf := b.resolver.bufPool.Get().(*bytes.Buffer)
-			defer b.resolver.bufPool.Put(bf)
-			bf.Reset()
-			bf.Grow(int(chunk.size()))
-			w := io.Writer(bf)
+		if err := b.walkChunks(reg, func(chunk region) (retErr error) {
+			id := fr.genID(chunk)
+			cw, err := b.cache.Add(id, opts.cacheOpts...)
+			if err != nil {
+				return err
+			}
+			defer cw.Close()
+			w := io.Writer(cw)
 
 			// If this chunk is one of the targets, write the content to the
 			// passed reader too.
 			if _, ok := fetched[chunk]; ok {
-				w = io.MultiWriter(bf, allData[chunk])
+				w = io.MultiWriter(w, allData[chunk])
 			}
 
 			// Copy the target chunk
 			if _, err := io.CopyN(w, p, chunk.size()); err != nil {
+				cw.Abort()
 				return err
-			} else if int64(bf.Len()) != chunk.size() {
-				return fmt.Errorf("unexpected fetched data size %d; want %d",
-					bf.Len(), chunk.size())
 			}
 
 			// Add the target chunk to the cache
-			b.cache.Add(fr.genID(chunk), bf.Bytes()[:chunk.size()], opts.cacheOpts...)
+			if err := cw.Commit(); err != nil {
+				return err
+			}
+
 			b.fetchedRegionSetMu.Lock()
 			b.fetchedRegionSet.add(chunk)
 			b.fetchedRegionSetMu.Unlock()
@@ -360,15 +361,42 @@ func (b *blob) walkChunks(allRegion region, walkFn walkFunc) error {
 	return nil
 }
 
-type byteWriter struct {
-	p []byte
-	n int
+func newBytesWriter(dest []byte, destOff int64) io.Writer {
+	return &bytesWriter{
+		dest:    dest,
+		destOff: destOff,
+		current: 0,
+	}
 }
 
-func (w *byteWriter) Write(p []byte) (int, error) {
-	n := copy(w.p[w.n:], p)
-	w.n += n
-	return n, nil
+type bytesWriter struct {
+	dest    []byte
+	destOff int64
+	current int64
+}
+
+func (bw *bytesWriter) Write(p []byte) (int, error) {
+	defer func() { bw.current = bw.current + int64(len(p)) }()
+
+	var (
+		destBase = positive(bw.current - bw.destOff)
+		pBegin   = positive(bw.destOff - bw.current)
+		pEnd     = positive(bw.destOff + int64(len(bw.dest)) - bw.current)
+	)
+
+	if destBase > int64(len(bw.dest)) {
+		return len(p), nil
+	}
+	if pBegin >= int64(len(p)) {
+		return len(p), nil
+	}
+	if pEnd > int64(len(p)) {
+		pEnd = int64(len(p))
+	}
+
+	copy(bw.dest[destBase:], p[pBegin:pEnd])
+
+	return len(p), nil
 }
 
 func floor(n int64, unit int64) int64 {

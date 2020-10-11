@@ -27,6 +27,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sync"
@@ -34,19 +35,20 @@ import (
 
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/reference"
-	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/stargz-snapshotter/cache"
 	"github.com/containerd/stargz-snapshotter/estargz"
 	"github.com/containerd/stargz-snapshotter/fs/config"
 	"github.com/containerd/stargz-snapshotter/fs/reader"
 	"github.com/containerd/stargz-snapshotter/fs/remote"
+	"github.com/containerd/stargz-snapshotter/fs/source"
 	"github.com/containerd/stargz-snapshotter/task"
 	"github.com/containerd/stargz-snapshotter/util/lrucache"
-	"github.com/golang/groupcache/lru"
+	"github.com/containerd/stargz-snapshotter/util/namedmutex"
+	fusefs "github.com/hanwen/go-fuse/v2/fs"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
-	"golang.org/x/sync/singleflight"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -59,18 +61,17 @@ const (
 
 // Layer represents a layer.
 type Layer interface {
-
 	// Info returns the information of this layer.
 	Info() Info
 
-	// Root returns the root node of this layer.
-	Root() *estargz.TOCEntry
+	// RootNode returns the root node of this layer.
+	RootNode() (fusefs.InodeEmbedder, error)
 
 	// Check checks if the layer is still connectable.
 	Check() error
 
 	// Refresh refreshes the layer connection.
-	Refresh(ctx context.Context, hosts docker.RegistryHosts, refspec reference.Spec, desc ocispec.Descriptor) error
+	Refresh(ctx context.Context, hosts source.RegistryHosts, refspec reference.Spec, desc ocispec.Descriptor) error
 
 	// Verify verifies this layer using the passed TOC Digest.
 	Verify(tocDigest digest.Digest) (err error)
@@ -78,14 +79,13 @@ type Layer interface {
 	// SkipVerify skips verification for this layer.
 	SkipVerify()
 
-	// OpenFile opens a file.
-	// Calling this function before calling Verify or SkipVerify will fail.
-	OpenFile(name string) (io.ReaderAt, error)
-
 	// Prefetch prefetches the specified size. If the layer is eStargz and contains landmark files,
 	// the range indicated by these files is respected.
 	// Calling this function before calling Verify or SkipVerify will fail.
 	Prefetch(prefetchSize int64) error
+
+	// ReadAt reads this layer.
+	ReadAt([]byte, int64, ...remote.Option) (int, error)
 
 	// WaitForPrefetchCompletion waits untils Prefetch completes.
 	WaitForPrefetchCompletion() error
@@ -94,6 +94,10 @@ type Layer interface {
 	// Fetching contents is done as a background task.
 	// Calling this function before calling Verify or SkipVerify will fail.
 	BackgroundFetch() error
+
+	// Done releases the reference to this layer. The resources related to this layer will be
+	// discarded sooner or later. Queries after calling this function won't be serviced.
+	Done()
 }
 
 // Info is the current status of a layer.
@@ -105,15 +109,16 @@ type Info struct {
 
 // Resolver resolves the layer location and provieds the handler of that layer.
 type Resolver struct {
+	rootDir               string
 	resolver              *remote.Resolver
 	prefetchTimeout       time.Duration
-	layerCache            *lru.Cache
+	layerCache            *lrucache.Cache
 	layerCacheMu          sync.Mutex
-	blobCache             *lru.Cache
+	blobCache             *lrucache.Cache
 	blobCacheMu           sync.Mutex
 	backgroundTaskManager *task.BackgroundTaskManager
-	fsCache               cache.BlobCache
-	resolveG              singleflight.Group
+	resolveLock           *namedmutex.NamedMutex
+	config                config.Config
 }
 
 // NewResolver returns a new layer resolver.
@@ -127,27 +132,42 @@ func NewResolver(root string, backgroundTaskManager *task.BackgroundTaskManager,
 		prefetchTimeout = defaultPrefetchTimeoutSec * time.Second
 	}
 
-	// Prepare contents cache
-	fsCache, err := newCache(filepath.Join(root, "fscache"), cfg.FSCacheType, cfg)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to create fs cache")
+	// layerCache caches resolved layers for future use. This is useful in a use-case where
+	// the filesystem resolves and caches all layers in an image (not only queried one) in parallel,
+	// before they are actually queried.
+	layerCache := lrucache.New(resolveResultEntry)
+	layerCache.OnEvicted = func(key string, value interface{}) {
+		if err := value.(*layer).close(); err != nil {
+			logrus.WithField("key", key).WithError(err).Warnf("failed to clean up layer")
+			return
+		}
+		logrus.WithField("key", key).Debugf("cleaned up layer")
 	}
-	httpCache, err := newCache(filepath.Join(root, "httpcache"), cfg.HTTPCacheType, cfg)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to create http cache")
+
+	// blobCache caches resolved blobs for futural use. This is especially useful when a layer
+	// isn't eStargz/stargz (the *layer object won't be created/cached in this case).
+	blobCache := lrucache.New(resolveResultEntry)
+	blobCache.OnEvicted = func(key string, value interface{}) {
+		if err := value.(remote.Blob).Close(); err != nil {
+			logrus.WithField("key", key).WithError(err).Warnf("failed to clean up blob")
+			return
+		}
+		logrus.WithField("key", key).Debugf("cleaned up blob")
 	}
 
 	return &Resolver{
-		resolver:              remote.NewResolver(httpCache, cfg.BlobConfig),
-		fsCache:               fsCache,
-		layerCache:            lru.New(resolveResultEntry),
-		blobCache:             lru.New(resolveResultEntry),
+		rootDir:               root,
+		resolver:              remote.NewResolver(cfg.BlobConfig),
+		layerCache:            layerCache,
+		blobCache:             blobCache,
 		prefetchTimeout:       prefetchTimeout,
 		backgroundTaskManager: backgroundTaskManager,
+		config:                cfg,
+		resolveLock:           new(namedmutex.NamedMutex),
 	}, nil
 }
 
-func newCache(cachepath string, cacheType string, cfg config.Config) (cache.BlobCache, error) {
+func newCache(root string, cacheType string, cfg config.Config) (cache.BlobCache, error) {
 	if cacheType == memoryCacheType {
 		return cache.NewMemoryCache(), nil
 	}
@@ -174,8 +194,16 @@ func newCache(cachepath string, cacheType string, cfg config.Config) (cache.Blob
 	fCache.OnEvicted = func(key string, value interface{}) {
 		value.(*os.File).Close()
 	}
+	// create a cache on an unique directory
+	if err := os.MkdirAll(root, 0700); err != nil {
+		return nil, err
+	}
+	cachePath, err := ioutil.TempDir(root, "")
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to initialize directory cache")
+	}
 	return cache.NewDirectoryCache(
-		cachepath,
+		cachePath,
 		cache.DirectoryCacheConfig{
 			SyncAdd:   dcc.SyncAdd,
 			DataCache: dCache,
@@ -186,107 +214,148 @@ func newCache(cachepath string, cacheType string, cfg config.Config) (cache.Blob
 }
 
 // Resolve resolves a layer based on the passed layer blob information.
-func (r *Resolver) Resolve(ctx context.Context, hosts docker.RegistryHosts, refspec reference.Spec, desc ocispec.Descriptor) (_ Layer, retErr error) {
+func (r *Resolver) Resolve(ctx context.Context, hosts source.RegistryHosts, refspec reference.Spec, desc ocispec.Descriptor) (_ Layer, retErr error) {
 	name := refspec.String() + "/" + desc.Digest.String()
+
+	// Wait if resolving this layer is already running. The result
+	// can hopefully get from the LRU cache.
+	r.resolveLock.Lock(name)
+	defer r.resolveLock.Unlock(name)
+
 	ctx = log.WithLogger(ctx, log.G(ctx).WithField("src", name))
 
 	// First, try to retrieve this layer from the underlying LRU cache.
 	r.layerCacheMu.Lock()
-	c, ok := r.layerCache.Get(name)
+	c, done, ok := r.layerCache.Get(name)
 	r.layerCacheMu.Unlock()
-	if ok && c.(*layer).Check() == nil {
-		return c.(*layer), nil
-	}
-
-	resultChan := r.resolveG.DoChan(name, func() (interface{}, error) {
-		log.G(ctx).Debugf("resolving")
-
-		// Resolve the blob.
-		blobR, err := r.resolveBlob(ctx, hosts, refspec, desc)
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to resolve the blob")
+	if ok {
+		if l := c.(*layer); l.Check() == nil {
+			log.G(ctx).Debugf("hit layer cache %q", name)
+			return &layerRef{l, done}, nil
 		}
-
-		// Get a reader for stargz archive.
-		// Each file's read operation is a prioritized task and all background tasks
-		// will be stopped during the execution so this can avoid being disturbed for
-		// NW traffic by background tasks.
-		sr := io.NewSectionReader(readerAtFunc(func(p []byte, offset int64) (n int, err error) {
-			r.backgroundTaskManager.DoPrioritizedTask()
-			defer r.backgroundTaskManager.DonePrioritizedTask()
-			return blobR.ReadAt(p, offset)
-		}), 0, blobR.Size())
-		vr, root, err := reader.NewReader(sr, r.fsCache)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to read layer")
-		}
-
-		// Combine layer information together
-		l := newLayer(r, desc, blobR, vr, root)
+		// Cached layer is invalid
+		done()
 		r.layerCacheMu.Lock()
-		r.layerCache.Add(name, l)
+		r.layerCache.Remove(name)
 		r.layerCacheMu.Unlock()
-
-		log.G(ctx).Debugf("resolved")
-		return l, nil
-	})
-
-	var res singleflight.Result
-	select {
-	case res = <-resultChan:
-	case <-time.After(30 * time.Second):
-		r.resolveG.Forget(name)
-		return nil, fmt.Errorf("failed to resolve layer (timeout)")
-	}
-	if res.Err != nil || res.Val == nil {
-		return nil, fmt.Errorf("failed to resolve layer: %v", res.Err)
 	}
 
-	return res.Val.(*layer), nil
+	log.G(ctx).Debugf("resolving")
+
+	// Resolve the blob.
+	blobR, err := r.resolveBlob(ctx, hosts, refspec, desc)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to resolve the blob")
+	}
+	defer func() {
+		if retErr != nil {
+			blobR.done()
+		}
+	}()
+
+	fsCache, err := newCache(filepath.Join(r.rootDir, "fscache"), r.config.FSCacheType, r.config)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to create fs cache")
+	}
+	defer func() {
+		if retErr != nil {
+			fsCache.Close()
+		}
+	}()
+
+	// Get a reader for stargz archive.
+	// Each file's read operation is a prioritized task and all background tasks
+	// will be stopped during the execution so this can avoid being disturbed for
+	// NW traffic by background tasks.
+	sr := io.NewSectionReader(readerAtFunc(func(p []byte, offset int64) (n int, err error) {
+		r.backgroundTaskManager.DoPrioritizedTask()
+		defer r.backgroundTaskManager.DonePrioritizedTask()
+		return blobR.ReadAt(p, offset)
+	}), 0, blobR.Size())
+	vr, err := reader.NewReader(sr, fsCache)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to read layer")
+	}
+
+	// Combine layer information together and cache it.
+	l := newLayer(r, desc, blobR, vr)
+	r.layerCacheMu.Lock()
+	cachedL, done2, added := r.layerCache.Add(name, l)
+	r.layerCacheMu.Unlock()
+	if !added {
+		l.close() // layer already exists in the cache. discrad this.
+	}
+
+	log.G(ctx).Debugf("resolved")
+	return &layerRef{cachedL.(*layer), done2}, nil
 }
 
 // resolveBlob resolves a blob based on the passed layer blob information.
-func (r *Resolver) resolveBlob(ctx context.Context, hosts docker.RegistryHosts, refspec reference.Spec, desc ocispec.Descriptor) (remote.Blob, error) {
+func (r *Resolver) resolveBlob(ctx context.Context, hosts source.RegistryHosts, refspec reference.Spec, desc ocispec.Descriptor) (_ *blobRef, retErr error) {
 	name := refspec.String() + "/" + desc.Digest.String()
 
-	// Resolve the blob. The result will be cached for future use. This is effective
-	// in some failure cases including resolving is succeeded but the blob is non-stargz.
-	var blob remote.Blob
+	// Try to retrieve the blob from the underlying LRU cache.
 	r.blobCacheMu.Lock()
-	c, ok := r.blobCache.Get(name)
+	c, done, ok := r.blobCache.Get(name)
 	r.blobCacheMu.Unlock()
 	if ok {
 		if blob := c.(remote.Blob); blob.Check() == nil {
-			return blob, nil
+			return &blobRef{blob, done}, nil
 		}
+		// invalid blob. discard this.
+		done()
+		r.blobCacheMu.Lock()
+		r.blobCache.Remove(name)
+		r.blobCacheMu.Unlock()
 	}
 
-	var err error
-	blob, err = r.resolver.Resolve(ctx, hosts, refspec, desc)
+	httpCache, err := newCache(filepath.Join(r.rootDir, "httpcache"), r.config.HTTPCacheType, r.config)
 	if err != nil {
-		log.G(ctx).WithError(err).Debugf("failed to resolve source")
+		return nil, errors.Wrapf(err, "failed to create http cache")
+	}
+	defer func() {
+		if retErr != nil {
+			httpCache.Close()
+		}
+	}()
+
+	// Resolve the blob and cache the result.
+	b, err := r.resolver.Resolve(ctx, hosts, refspec, desc, httpCache)
+	if err != nil {
 		return nil, errors.Wrap(err, "failed to resolve the source")
 	}
 	r.blobCacheMu.Lock()
-	r.blobCache.Add(name, blob)
+	cachedB, done, added := r.blobCache.Add(name, b)
 	r.blobCacheMu.Unlock()
+	if !added {
+		b.Close() // blob already exists in the cache. discard this.
+	}
+	return &blobRef{cachedB.(remote.Blob), done}, nil
+}
 
-	return blob, nil
+// Cache is similar to Resolve but the result isn't returned. Instead, it'll be stored in the cache.
+func (r *Resolver) Cache(ctx context.Context, hosts source.RegistryHosts, refspec reference.Spec, desc ocispec.Descriptor) error {
+	l, err := r.Resolve(ctx, hosts, refspec, desc)
+	if err != nil {
+		return err
+	}
+	// Release this layer. However, this will remain on the cache until eviction.
+	// Until then, the client can reuse this (already pre-resolved) layer.
+	l.Done()
+	return nil
 }
 
 func newLayer(
 	resolver *Resolver,
 	desc ocispec.Descriptor,
-	blob remote.Blob,
+	blob *blobRef,
 	vr *reader.VerifiableReader,
-	root *estargz.TOCEntry,
 ) *layer {
 	return &layer{
 		resolver:         resolver,
 		desc:             desc,
 		blob:             blob,
 		verifiableReader: vr,
-		root:             root,
 		prefetchWaiter:   newWaiter(),
 	}
 }
@@ -294,12 +363,14 @@ func newLayer(
 type layer struct {
 	resolver         *Resolver
 	desc             ocispec.Descriptor
-	blob             remote.Blob
+	blob             *blobRef
 	verifiableReader *reader.VerifiableReader
-	root             *estargz.TOCEntry
 	prefetchWaiter   *waiter
 
 	r reader.Reader
+
+	closed   bool
+	closedMu sync.Mutex
 }
 
 func (l *layer) Info() Info {
@@ -310,19 +381,24 @@ func (l *layer) Info() Info {
 	}
 }
 
-func (l *layer) Root() *estargz.TOCEntry {
-	return l.root
-}
-
 func (l *layer) Check() error {
+	if l.isClosed() {
+		return fmt.Errorf("layer is already closed")
+	}
 	return l.blob.Check()
 }
 
-func (l *layer) Refresh(ctx context.Context, hosts docker.RegistryHosts, refspec reference.Spec, desc ocispec.Descriptor) error {
+func (l *layer) Refresh(ctx context.Context, hosts source.RegistryHosts, refspec reference.Spec, desc ocispec.Descriptor) error {
+	if l.isClosed() {
+		return fmt.Errorf("layer is already closed")
+	}
 	return l.blob.Refresh(ctx, hosts, refspec, desc)
 }
 
 func (l *layer) Verify(tocDigest digest.Digest) (err error) {
+	if l.isClosed() {
+		return fmt.Errorf("layer is already closed")
+	}
 	l.r, err = l.verifiableReader.VerifyTOC(tocDigest)
 	return
 }
@@ -331,16 +407,12 @@ func (l *layer) SkipVerify() {
 	l.r = l.verifiableReader.SkipVerify()
 }
 
-func (l *layer) OpenFile(name string) (io.ReaderAt, error) {
-	if l.r == nil {
-		return nil, fmt.Errorf("layer hasn't been verified yet")
-	}
-	return l.r.OpenFile(name)
-}
-
 func (l *layer) Prefetch(prefetchSize int64) error {
 	defer l.prefetchWaiter.done() // Notify the completion
 
+	if l.isClosed() {
+		return fmt.Errorf("layer is already closed")
+	}
 	if l.r == nil {
 		return fmt.Errorf("layer hasn't been verified yet")
 	}
@@ -372,10 +444,16 @@ func (l *layer) Prefetch(prefetchSize int64) error {
 }
 
 func (l *layer) WaitForPrefetchCompletion() error {
+	if l.isClosed() {
+		return fmt.Errorf("layer is already closed")
+	}
 	return l.prefetchWaiter.wait(l.resolver.prefetchTimeout)
 }
 
 func (l *layer) BackgroundFetch() error {
+	if l.isClosed() {
+		return fmt.Errorf("layer is already closed")
+	}
 	if l.r == nil {
 		return fmt.Errorf("layer hasn't been verified yet")
 	}
@@ -395,6 +473,62 @@ func (l *layer) BackgroundFetch() error {
 		reader.WithReader(br),                // Read contents in background
 		reader.WithCacheOpts(cache.Direct()), // Do not pollute mem cache
 	)
+}
+
+func (l *layerRef) Done() {
+	l.done()
+}
+
+func (l *layer) RootNode() (fusefs.InodeEmbedder, error) {
+	if l.isClosed() {
+		return nil, fmt.Errorf("layer is already closed")
+	}
+	if l.r == nil {
+		return nil, fmt.Errorf("layer hasn't been verified yet")
+	}
+	return newNode(l.desc.Digest, l.r, l.blob)
+}
+
+func (l *layer) ReadAt(p []byte, offset int64, opts ...remote.Option) (int, error) {
+	return l.blob.ReadAt(p, offset, opts...)
+}
+
+func (l *layer) close() error {
+	l.closedMu.Lock()
+	defer l.closedMu.Unlock()
+	if l.closed {
+		return nil
+	}
+	l.closed = true
+	defer l.blob.done() // Close reader first, then close the blob
+	l.verifiableReader.Close()
+	if l.r != nil {
+		return l.r.Close()
+	}
+	return nil
+}
+
+func (l *layer) isClosed() bool {
+	l.closedMu.Lock()
+	closed := l.closed
+	l.closedMu.Unlock()
+	return closed
+}
+
+// blobRef is a reference to the blob in the cache. Calling `done` decreases the reference counter
+// of this blob in the underlying cache. When nobody refers to the blob in the cache, resources bound
+// to this blob will be discarded.
+type blobRef struct {
+	remote.Blob
+	done func()
+}
+
+// layerRef is a reference to the layer in the cache. Calling `Done` or `done` decreases the
+// reference counter of this blob in the underlying cache. When nobody refers to the layer in the
+// cache, resources bound to this layer will be discarded.
+type layerRef struct {
+	*layer
+	done func()
 }
 
 func newWaiter() *waiter {
