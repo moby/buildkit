@@ -7,6 +7,8 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -37,6 +39,8 @@ func TestClientGatewayIntegration(t *testing.T) {
 		testClientGatewayContainerPID1Fail,
 		testClientGatewayContainerPID1Exit,
 		testClientGatewayContainerMounts,
+		testClientGatewayContainerPID1Tty,
+		testClientGatewayContainerExecTty,
 	}, integration.WithMirroredImages(integration.OfficialImages("busybox:latest")))
 }
 
@@ -714,6 +718,212 @@ func testClientGatewayContainerMounts(t *testing.T, sb integration.Sandbox) {
 	}, product, b, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), context.Canceled.Error())
+
+	checkAllReleasable(t, c, sb, true)
+}
+
+// testClientGatewayContainerPID1Tty is testing that we can get a tty via
+// a container pid1, executor.Run
+func testClientGatewayContainerPID1Tty(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	ctx := context.TODO()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	product := "buildkit_test"
+
+	inputR, inputW := io.Pipe()
+	output := bytes.NewBuffer(nil)
+
+	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
+		st := llb.Image("busybox:latest")
+
+		def, err := st.Marshal(ctx)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to marshal state")
+		}
+
+		r, err := c.Solve(ctx, client.SolveRequest{
+			Definition: def.ToPB(),
+		})
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to solve")
+		}
+
+		ctr, err := c.NewContainer(ctx, client.NewContainerRequest{
+			Mounts: []client.Mount{{
+				Dest:      "/",
+				MountType: pb.MountType_BIND,
+				Ref:       r.Ref,
+			}},
+		})
+		require.NoError(t, err)
+		defer ctr.Release(ctx)
+
+		pid1, err := ctr.Start(ctx, client.StartRequest{
+			Args:   []string{"sh"},
+			Tty:    true,
+			Stdin:  inputR,
+			Stdout: &nopCloser{output},
+			Stderr: &nopCloser{output},
+			Env:    []string{"PS1=% "},
+		})
+		require.NoError(t, err)
+		sendProcessInput(ctx, t, inputW, pid1)
+
+		err = pid1.Wait()
+		var exitError *errdefs.ExitError
+		require.True(t, errors.As(err, &exitError))
+		require.Equal(t, uint32(99), exitError.ExitCode)
+
+		return &client.Result{}, err
+	}
+
+	_, err = c.Build(ctx, SolveOpt{}, product, b, nil)
+	require.Error(t, err)
+	expectProcessOutput(t, output.String())
+
+	inputW.Close()
+	inputR.Close()
+
+	checkAllReleasable(t, c, sb, true)
+}
+
+func sendProcessInput(ctx context.Context, t *testing.T, input io.Writer, ctrProc client.ContainerProcess) {
+	err := ctrProc.Resize(ctx, client.WinSize{
+		Rows: 40,
+		Cols: 80,
+	})
+	require.NoError(t, err)
+	time.Sleep(500 * time.Millisecond)
+
+	input.Write([]byte("ttysize\n"))
+	time.Sleep(100 * time.Millisecond)
+	input.Write([]byte("cd /tmp\n"))
+	time.Sleep(100 * time.Millisecond)
+	input.Write([]byte("pwd\n"))
+	time.Sleep(100 * time.Millisecond)
+	input.Write([]byte("echo foobar > newfile\n"))
+	time.Sleep(100 * time.Millisecond)
+	input.Write([]byte("cat /tmp/newfile\n"))
+	time.Sleep(500 * time.Millisecond)
+
+	err = ctrProc.Resize(ctx, client.WinSize{
+		Rows: 60,
+		Cols: 100,
+	})
+	require.NoError(t, err)
+	time.Sleep(500 * time.Millisecond)
+
+	input.Write([]byte("ttysize\n"))
+	time.Sleep(100 * time.Millisecond)
+	input.Write([]byte("exit 99\n"))
+}
+
+// badControlRx will allow us to strip out the \r to the CSI "Erase In Display"
+// escape sequence
+var badControlRx = regexp.MustCompile(`\r.*\x1b\[J`)
+
+func expectProcessOutput(t *testing.T, output string) {
+	// filter out stray terminal CSR codes
+	output = badControlRx.ReplaceAllString(output, "")
+	// trim out \r so we can cleanly split on newline
+	output = strings.ReplaceAll(output, "\r", "")
+	// trim trailing \n
+	output = strings.TrimSpace(output)
+
+	t.Logf("OUTPUT: %s", output)
+	outputLines := strings.Split(output, "\n")
+
+	require.Equal(t, []string{
+		"% ttysize",
+		"80 40",
+		"% cd /tmp",
+		"% pwd",
+		"/tmp",
+		"% echo foobar > newfile",
+		"% cat /tmp/newfile",
+		"foobar",
+		"% ttysize",
+		"100 60",
+		"% exit 99",
+	}, outputLines)
+}
+
+// testClientGatewayContainerExecTty is testing that we can get a tty via
+// executor.Exec (secondary process)
+func testClientGatewayContainerExecTty(t *testing.T, sb integration.Sandbox) {
+	if sb.Rootless() {
+		// TODO fix this
+		// We get `panic: cannot statfs cgroup root` when running this test
+		// with runc-rootless
+		t.Skip("Skipping runc-rootless for cgroup error")
+	}
+	requiresLinux(t)
+	ctx := context.TODO()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	product := "buildkit_test"
+
+	inputR, inputW := io.Pipe()
+	output := bytes.NewBuffer(nil)
+	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
+		st := llb.Image("busybox:latest")
+
+		def, err := st.Marshal(ctx)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to marshal state")
+		}
+
+		r, err := c.Solve(ctx, client.SolveRequest{
+			Definition: def.ToPB(),
+		})
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to solve")
+		}
+
+		ctr, err := c.NewContainer(ctx, client.NewContainerRequest{
+			Mounts: []client.Mount{{
+				Dest:      "/",
+				MountType: pb.MountType_BIND,
+				Ref:       r.Ref,
+			}},
+		})
+		require.NoError(t, err)
+
+		pid1, err := ctr.Start(ctx, client.StartRequest{
+			Args: []string{"sleep", "10"},
+		})
+		require.NoError(t, err)
+
+		defer pid1.Wait()
+		defer ctr.Release(ctx)
+
+		pid2, err := ctr.Start(ctx, client.StartRequest{
+			Args:   []string{"sh"},
+			Tty:    true,
+			Stdin:  inputR,
+			Stdout: &nopCloser{output},
+			Stderr: &nopCloser{output},
+			Env:    []string{"PS1=% "},
+		})
+		require.NoError(t, err)
+		sendProcessInput(ctx, t, inputW, pid2)
+		return &client.Result{}, pid2.Wait()
+	}
+
+	_, err = c.Build(ctx, SolveOpt{}, product, b, nil)
+	require.Error(t, err)
+	require.Regexp(t, "exit code: 99|runc did not terminate successfully", err.Error())
+	expectProcessOutput(t, output.String())
+
+	inputW.Close()
+	inputR.Close()
 
 	checkAllReleasable(t, c, sb, true)
 }
