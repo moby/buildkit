@@ -242,6 +242,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
             if err != nil {
                 return nil, err
 		    }
+		    expis = append(expis, expi)
 	}
 	if req.Exporters != nil  {
 		for _, exporter := range req.Exporters {
@@ -294,7 +295,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		CacheImports:   cacheImports,
 	}, llbsolver.ExporterRequest{
 		Exporters:        expis,
-		Exporter:         expi,
+		Exporter:         expis[0],
 		CacheExporter:   cacheExporter,
 		CacheExportMode: cacheExportMode,
 	}, req.Entitlements)
