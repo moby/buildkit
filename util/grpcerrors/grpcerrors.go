@@ -100,9 +100,10 @@ func Code(err error) codes.Code {
 		Unwrap() error
 	})
 	if ok {
-		return Code(wrapped.Unwrap())
+		if err := wrapped.Unwrap(); err != nil {
+			return Code(err)
+		}
 	}
-
 	return status.FromContextError(err).Code()
 }
 
@@ -124,7 +125,9 @@ func AsGRPCStatus(err error) (*status.Status, bool) {
 		Unwrap() error
 	})
 	if ok {
-		return AsGRPCStatus(wrapped.Unwrap())
+		if err := wrapped.Unwrap(); err != nil {
+			return AsGRPCStatus(err)
+		}
 	}
 
 	return nil, false

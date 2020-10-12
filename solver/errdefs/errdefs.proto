@@ -16,3 +16,7 @@ message Source {
 message FrontendCap {
 	string name = 1;
 }
+
+message Subrequest {
+	string name = 1;
+}
