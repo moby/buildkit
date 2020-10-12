@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/containerd/containerd/content"
@@ -235,6 +236,18 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache
 	}
 
 	for i, desc := range remote.Descriptors {
+		// oci supports annotations but don't export internal annotations
+		if oci {
+			delete(desc.Annotations, "containerd.io/uncompressed")
+			delete(desc.Annotations, "buildkit/createdat")
+			for k := range desc.Annotations {
+				if strings.HasPrefix(k, "containerd.io/distribution.source.") {
+					delete(desc.Annotations, k)
+				}
+			}
+		} else {
+			desc.Annotations = nil
+		}
 		mfst.Layers = append(mfst.Layers, desc)
 		labels[fmt.Sprintf("containerd.io/gc.ref.content.%d", i+1)] = desc.Digest.String()
 	}
