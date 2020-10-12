@@ -239,6 +239,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 				}
 			}
 			if e.push {
+				annotations := map[digest.Digest]map[string]string{}
 				mprovider := contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
 				if src.Ref != nil {
 					remote, err := src.Ref.GetRemote(ctx, false, e.layerCompression)
@@ -247,6 +248,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 					}
 					for _, desc := range remote.Descriptors {
 						mprovider.Add(desc.Digest, remote.Provider)
+						addAnnotations(annotations, desc)
 					}
 				}
 				if len(src.Refs) > 0 {
@@ -257,11 +259,12 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 						}
 						for _, desc := range remote.Descriptors {
 							mprovider.Add(desc.Digest, remote.Provider)
+							addAnnotations(annotations, desc)
 						}
 					}
 				}
 
-				if err := push.Push(ctx, e.opt.SessionManager, sessionID, mprovider, e.opt.ImageWriter.ContentStore(), desc.Digest, targetName, e.insecure, e.opt.RegistryHosts, e.pushByDigest); err != nil {
+				if err := push.Push(ctx, e.opt.SessionManager, sessionID, mprovider, e.opt.ImageWriter.ContentStore(), desc.Digest, targetName, e.insecure, e.opt.RegistryHosts, e.pushByDigest, annotations); err != nil {
 					return nil, err
 				}
 			}
@@ -356,4 +359,18 @@ func getLayers(ctx context.Context, descs []ocispec.Descriptor, manifest ocispec
 		layers[i].Blob = manifest.Layers[i]
 	}
 	return layers, nil
+}
+
+func addAnnotations(m map[digest.Digest]map[string]string, desc ocispec.Descriptor) {
+	if desc.Annotations == nil {
+		return
+	}
+	a, ok := m[desc.Digest]
+	if !ok {
+		m[desc.Digest] = desc.Annotations
+		return
+	}
+	for k, v := range desc.Annotations {
+		a[k] = v
+	}
 }
