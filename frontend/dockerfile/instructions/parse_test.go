@@ -1,6 +1,7 @@
 package instructions
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
@@ -138,6 +139,39 @@ func TestParseOptInterval(t *testing.T) {
 	flInterval.Value = "1ms"
 	_, err = parseOptInterval(flInterval)
 	require.NoError(t, err)
+}
+
+func TestCommentsDetection(t *testing.T) {
+	dt := `# foo sets foo
+ARG foo=bar
+
+# base defines first stage
+FROM busybox AS base
+# this is irrelevant
+ARG foo
+# bar defines bar
+# baz is something else
+ARG bar baz=123
+`
+
+	ast, err := parser.Parse(bytes.NewBuffer([]byte(dt)))
+	require.NoError(t, err)
+
+	stages, meta, err := Parse(ast.AST)
+	require.NoError(t, err)
+
+	require.Equal(t, "defines first stage", stages[0].Comment)
+	require.Equal(t, "foo", meta[0].Args[0].Key)
+	require.Equal(t, "sets foo", meta[0].Args[0].Comment)
+
+	st := stages[0]
+
+	require.Equal(t, "foo", st.Commands[0].(*ArgCommand).Args[0].Key)
+	require.Equal(t, "", st.Commands[0].(*ArgCommand).Args[0].Comment)
+	require.Equal(t, "bar", st.Commands[1].(*ArgCommand).Args[0].Key)
+	require.Equal(t, "defines bar", st.Commands[1].(*ArgCommand).Args[0].Comment)
+	require.Equal(t, "baz", st.Commands[1].(*ArgCommand).Args[1].Key)
+	require.Equal(t, "is something else", st.Commands[1].(*ArgCommand).Args[1].Comment)
 }
 
 func TestErrorCases(t *testing.T) {
