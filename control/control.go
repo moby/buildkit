@@ -225,6 +225,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 	}()
 
 	var expi exporter.ExporterInstance
+	var sexpi exporter.ExporterInstance
 	var expis []exporter.ExporterInstance
 	// TODO: multiworker
 	// This is actually tricky, as the exporter should come from the worker that has the returned reference. We may need to delay this so that the solver loads this.
@@ -242,7 +243,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
             if err != nil {
                 return nil, err
 		    }
-		    expis = append(expis, expi)
+		    sexpi = expi
 	}
 	if req.Exporters != nil  {
 		for _, exporter := range req.Exporters {
@@ -295,7 +296,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		CacheImports:   cacheImports,
 	}, llbsolver.ExporterRequest{
 		Exporters:        expis,
-		Exporter:         expis[0],
+		Exporter:         sexpi,
 		CacheExporter:   cacheExporter,
 		CacheExportMode: cacheExportMode,
 	}, req.Entitlements)
