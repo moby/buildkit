@@ -24,6 +24,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
+	"fmt"
 )
 
 type Opt struct {
@@ -225,7 +226,6 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 	}()
 
 	var expi exporter.ExporterInstance
-	var sexpi exporter.ExporterInstance
 	var expis []exporter.ExporterInstance
 	// TODO: multiworker
 	// This is actually tricky, as the exporter should come from the worker that has the returned reference. We may need to delay this so that the solver loads this.
@@ -235,6 +235,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 	}
 
 	if req.Exporter != ""  {
+	fmt.Println("one")
             exp, err := w.Exporter(req.Exporter, c.opt.SessionManager)
             if err != nil {
                 return nil, err
@@ -243,9 +244,9 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
             if err != nil {
                 return nil, err
 		    }
-		    sexpi = expi
 	}
 	if req.Exporters != nil  {
+	fmt.Println("two")
 		for _, exporter := range req.Exporters {
             exp, err := w.Exporter(exporter, c.opt.SessionManager)
             if err != nil {
@@ -256,6 +257,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
                 return nil, err
 		    }
 		    expis = append(expis, expi)
+		    expi = nil
 		}
 	}
 
@@ -296,7 +298,7 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		CacheImports:   cacheImports,
 	}, llbsolver.ExporterRequest{
 		Exporters:        expis,
-		Exporter:         sexpi,
+		Exporter:         expi,
 		CacheExporter:   cacheExporter,
 		CacheExportMode: cacheExportMode,
 	}, req.Entitlements)

@@ -157,6 +157,9 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 
 	var exporterResponse  *controlapi.ExporterResponse
 	var exportersResponse []*controlapi.ExporterResponse
+	      if a := exp.Exporter; a != nil {
+	      exp.Exporters = append (exp.Exporters,a)
+	      }
      	  for _, e := range exp.Exporters {
             if e != nil {
                 inp := exporter.Source{
