@@ -293,13 +293,31 @@ func (ah *authHandler) doBearerAuth(ctx context.Context, sm *session.Manager, g 
 	scoped := strings.Join(to.Scopes, " ")
 
 	ah.Lock()
-	if r, exist := ah.scopedTokens[scoped]; exist {
+	for {
+		r, exist := ah.scopedTokens[scoped]
+		if !exist {
+			// no entry cached
+			break
+		}
 		ah.Unlock()
 		r.Wait()
-		if r.expires.IsZero() || r.expires.After(time.Now()) {
+		if r.err != nil {
+			select {
+			case <-ctx.Done():
+				return "", r.err
+			default:
+			}
+		}
+		if !errors.Is(r.err, context.Canceled) &&
+			(r.expires.IsZero() || r.expires.After(time.Now())) {
 			return r.token, r.err
 		}
+		// r.err is canceled or token expired. Get rid of it and try again
 		ah.Lock()
+		r2, exist := ah.scopedTokens[scoped]
+		if exist && r == r2 {
+			delete(ah.scopedTokens, scoped)
+		}
 	}
 
 	// only one fetch token job
