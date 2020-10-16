@@ -174,11 +174,17 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 		return "", nil, nil, nil, err
 	}
 
+	hostname, err := getHostname(e.base)(ctx)
+	if err != nil {
+		return "", nil, nil, nil, err
+	}
+
 	meta := &pb.Meta{
-		Args: args,
-		Env:  env.ToArray(),
-		Cwd:  cwd,
-		User: user,
+		Args:     args,
+		Env:      env.ToArray(),
+		Cwd:      cwd,
+		User:     user,
+		Hostname: hostname,
 	}
 	extraHosts, err := getExtraHosts(e.base)(ctx)
 	if err != nil {

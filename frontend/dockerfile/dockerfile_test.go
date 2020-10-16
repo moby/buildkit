@@ -105,6 +105,7 @@ var allTests = []integration.Test{
 	testErrorsSourceMap,
 	testMultiArgs,
 	testFrontendSubrequests,
+	testDockefileCheckHostname,
 }
 
 var fileOpTests = []integration.Test{
@@ -4765,6 +4766,38 @@ COPY Dockerfile Dockerfile
 	require.NoError(t, err)
 
 	require.True(t, called)
+}
+
+// moby/buildkit#1301
+func testDockefileCheckHostname(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+	dockerfile := []byte(`
+FROM busybox
+RUN cat /etc/hosts | grep testtest
+RUN echo $HOSTNAME | grep testtest
+RUN echo $(hostname) | grep testtest
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"hostname": "testtest",
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
 }
 
 func tmpdir(appliers ...fstest.Applier) (string, error) {

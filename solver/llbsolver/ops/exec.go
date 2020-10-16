@@ -370,6 +370,7 @@ func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 		Env:            e.op.Meta.Env,
 		Cwd:            e.op.Meta.Cwd,
 		User:           e.op.Meta.User,
+		Hostname:       e.op.Meta.Hostname,
 		ReadonlyRootFS: readonlyRootFS,
 		ExtraHosts:     extraHosts,
 		NetMode:        e.op.Network,

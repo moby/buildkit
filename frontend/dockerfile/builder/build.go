@@ -54,6 +54,7 @@ const (
 	keyContextSubDir           = "contextsubdir"
 	keyContextKeepGitDir       = "build-arg:BUILDKIT_CONTEXT_KEEP_GIT_DIR"
 	keySyntax                  = "build-arg:BUILDKIT_SYNTAX"
+	keyHostname                = "hostname"
 )
 
 var httpPrefix = regexp.MustCompile(`^https?://`)
@@ -395,6 +396,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 					OverrideCopyImage: opts[keyOverrideCopyImage],
 					LLBCaps:           &caps,
 					SourceMap:         sourceMap,
+					Hostname:          opts[keyHostname],
 				})
 
 				if err != nil {
