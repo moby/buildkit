@@ -31,7 +31,7 @@ jobs:
         name: Checkout
         uses: actions/checkout@v2
       -
-        name: Install
+        name: Install buildctl
         run: |
           mkdir -p /tmp/buildctl
           docker run --rm --privileged linuxkit/binfmt:$LINUXKIT_BINFMT
@@ -65,7 +65,7 @@ jobs:
         name: Checkout
         uses: actions/checkout@v2
       -
-        name: Install
+        name: Install buildctl
         run: |
           mkdir -p /tmp/buildctl
           docker run --rm --privileged linuxkit/binfmt:$LINUXKIT_BINFMT
@@ -105,34 +105,34 @@ jobs:
         include:
           -
             pkg: ./client
-            flags: --timeout=20m
+            flags: -v --timeout=20m
             skip-it: 0
           -
             pkg: ./cmd/buildctl
-            flags: ""
+            flags: -v
             skip-it: 0
           -
             pkg: ./worker/containerd
-            flags: ""
+            flags: -v
             skip-it: 0
           -
             pkg: ./...
-            flags: ""
+            flags: -v
             skip-it: 1
           -
             pkg: ./frontend
-            flags: ""
+            flags: -v
             skip-it: 0
           -
             pkg: ./frontend/dockerfile
-            flags: --parallel=6 --timeout=20m
+            flags: -v --parallel=6 --timeout=20m
             skip-it: 0
     steps:
       -
         name: Checkout
         uses: actions/checkout@v2
       -
-        name: Install
+        name: Install buildctl
         run: |
           mkdir -p /tmp/buildctl
           docker run --rm --privileged linuxkit/binfmt:$LINUXKIT_BINFMT
@@ -159,7 +159,7 @@ jobs:
         run: |
           docker load -i $IID_FILE
           cacheVolume=$(docker create -v $VOL -v $VOL/registry -v /go/pkg/mod alpine)
-          cid=$(docker create --rm -v /tmp --volumes-from=$cacheVolume -e TEST_DOCKERD -e SKIP_INTEGRATION_TESTS=${{ matrix.skip-it }} -e BUILDKIT_REGISTRY_MIRROR_DIR=$VOL/registry --privileged $IID go test -v ${{ matrix.flags }} ${{ matrix.pkg }})
+          cid=$(docker create --rm -v /tmp --volumes-from=$cacheVolume -e TEST_DOCKERD -e SKIP_INTEGRATION_TESTS=${{ matrix.skip-it }} -e BUILDKIT_REGISTRY_MIRROR_DIR=$VOL/registry --privileged $IID go test ${{ matrix.flags }} ${{ matrix.pkg }})
           docker start -a $cid
           docker rm -v $cacheVolume
       -
