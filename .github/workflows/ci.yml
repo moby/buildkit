@@ -167,6 +167,74 @@ jobs:
         if: always()
         uses: crazy-max/ghaction-dump-context@v1
 
+  dockerfile-tests:
+    runs-on: ubuntu-latest
+    needs: [ integration-tests-base ]
+    env:
+      IID: buildkit-tests
+      IID_FILE: /tmp/docker-iidfile
+      OCI_FILE: /tmp/docker-ocifile
+      VOL: /tmp/.buildkit-cache-test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - release: mainline
+            pkg: ./frontend/dockerfile
+            flags: --count=1 -v
+          - release: experimental
+            pkg: ./frontend/dockerfile
+            flags: --count=1 -v
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v2
+      -
+        name: Install buildctl
+        run: |
+          mkdir -p /tmp/buildctl
+          docker run --rm --privileged linuxkit/binfmt:$LINUXKIT_BINFMT
+          docker run --name buildkit -d --privileged -p $BUILDKIT_PORT:$BUILDKIT_PORT $REPO_SLUG_ORIGIN --debug --addr $BUILDKIT_HOST --oci-worker-gc=false
+          sudo docker cp buildkit:/usr/bin/buildctl /usr/local/bin/
+      -
+        name: Cache
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildkit-cache/integration-tests
+          key: ${{ runner.os }}-buildkit-integration-tests-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildkit-integration-tests-
+      -
+        name: Build
+        run: |
+          buildctl build --progress $PROGRESS --frontend=dockerfile.v0 \
+            --local context=. --local dockerfile=. \
+            --opt target=integration-tests \
+            --import-cache type=local,src=/tmp/.buildkit-cache/integration-tests \
+            --output type=docker,name=$IID,dest=$IID_FILE
+      -
+        name: Build frontend
+        run: |
+          buildtags=$(cat ./frontend/dockerfile/release/${{ matrix.release }}/tags)
+          buildctl build --progress $PROGRESS --frontend=dockerfile.v0 \
+            --local context=. --local dockerfile=. \
+            --opt filename=./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile \
+            --opt build-arg:BUILDTAGS="$buildtags" \
+            --output type=oci,dest=$OCI_FILE
+      -
+        name: Test
+        run: |
+          docker load -i $IID_FILE
+          cacheVolume=$(docker create -v $VOL -v $VOL/registry -v /go/pkg/mod alpine)
+          cid=$(docker create --rm -v /tmp --volumes-from=$cacheVolume -e TEST_DOCKERD -e BUILDKIT_REGISTRY_MIRROR_DIR=$VOL/registry -e BUILDKIT_WORKER_RANDOM=1 -e FRONTEND_GATEWAY_ONLY=local:/${{ matrix.release }}.tar -e EXTERNAL_DF_FRONTEND=/dockerfile-frontend --privileged $IID go test -tags '$buildtags' ${{ matrix.flags }} ${{ matrix.pkg }})
+          docker cp $OCI_FILE $cid:/${{ matrix.release }}.tar
+          docker start -a $cid
+          docker rm -v $cacheVolume
+      -
+        name: Dump context
+        if: always()
+        uses: crazy-max/ghaction-dump-context@v1
+
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -267,3 +335,5 @@ jobs:
         name: Dump context
         if: always()
         uses: crazy-max/ghaction-dump-context@v1
+
+
