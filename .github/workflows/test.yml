@@ -35,7 +35,7 @@ jobs:
           docker run --name buildkit -d --privileged -p $BUILDKIT_PORT:$BUILDKIT_PORT $REPO_SLUG_ORIGIN --debug --addr $BUILDKIT_HOST --oci-worker-gc=false
           sudo docker cp buildkit:/usr/bin/buildctl /usr/local/bin/
       -
-        name: Cache
+        name: Cache binaries
         uses: actions/cache@v2
         with:
           path: /tmp/.buildkit-cache/binaries
@@ -43,7 +43,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildkit-binaries-
       -
-        name: Build
+        name: Build binaries
         run: |
           buildctl build --frontend=dockerfile.v0 \
             --local context=. --local dockerfile=. \
@@ -69,7 +69,7 @@ jobs:
           docker run --name buildkit -d --privileged -p $BUILDKIT_PORT:$BUILDKIT_PORT $REPO_SLUG_ORIGIN --debug --addr $BUILDKIT_HOST --oci-worker-gc=false
           sudo docker cp buildkit:/usr/bin/buildctl /usr/local/bin/
       -
-        name: Cache
+        name: Cache integration-tests
         uses: actions/cache@v2
         with:
           path: /tmp/.buildkit-cache/integration-tests
@@ -77,7 +77,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildkit-integration-tests-
       -
-        name: Build
+        name: Build integration-tests
         run: |
           buildctl build --frontend=dockerfile.v0 \
             --local context=. --local dockerfile=. \
@@ -136,7 +136,7 @@ jobs:
           docker run --name buildkit -d --privileged -p $BUILDKIT_PORT:$BUILDKIT_PORT $REPO_SLUG_ORIGIN --debug --addr $BUILDKIT_HOST --oci-worker-gc=false
           sudo docker cp buildkit:/usr/bin/buildctl /usr/local/bin/
       -
-        name: Cache
+        name: Cache integration-tests
         uses: actions/cache@v2
         with:
           path: /tmp/.buildkit-cache/integration-tests
@@ -144,7 +144,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildkit-integration-tests-
       -
-        name: Build
+        name: Build integration-tests
         run: |
           buildctl build --frontend=dockerfile.v0 \
             --local context=. --local dockerfile=. \
@@ -196,7 +196,7 @@ jobs:
           docker run --name buildkit -d --privileged -p $BUILDKIT_PORT:$BUILDKIT_PORT $REPO_SLUG_ORIGIN --debug --addr $BUILDKIT_HOST --oci-worker-gc=false
           sudo docker cp buildkit:/usr/bin/buildctl /usr/local/bin/
       -
-        name: Cache
+        name: Cache integration-tests
         uses: actions/cache@v2
         with:
           path: /tmp/.buildkit-cache/integration-tests
@@ -204,7 +204,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildkit-integration-tests-
       -
-        name: Build
+        name: Build integration-tests
         run: |
           buildctl build --frontend=dockerfile.v0 \
             --local context=. --local dockerfile=. \
@@ -212,13 +212,23 @@ jobs:
             --import-cache type=local,src=/tmp/.buildkit-cache/integration-tests \
             --output type=docker,name=$IID,dest=$IID_FILE
       -
-        name: Build frontend
+        name: Cache dockerfile-frontend
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildkit-cache/dockerfile-frontend
+          key: ${{ runner.os }}-buildkit-dockerfile-frontend-${{ matrix.release }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildkit-dockerfile-frontend-${{ matrix.release }}-
+      -
+        name: Build dockerfile-frontend
         run: |
           buildtags=$(cat ./frontend/dockerfile/release/${{ matrix.release }}/tags)
           buildctl build --frontend=dockerfile.v0 \
             --local context=. --local dockerfile=. \
             --opt filename=./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile \
             --opt build-arg:BUILDTAGS="$buildtags" \
+            --import-cache type=local,src=/tmp/.buildkit-cache/dockerfile-frontend \
+            --export-cache type=local,dest=/tmp/.buildkit-cache/dockerfile-frontend \
             --output type=oci,dest=$OCI_FILE
       -
         name: Test
