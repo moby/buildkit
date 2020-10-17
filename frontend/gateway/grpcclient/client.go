@@ -475,14 +475,15 @@ func (b *procMessageForwarder) Send(ctx context.Context, m *pb.ExecMessage) {
 	}
 }
 
-func (b *procMessageForwarder) Recv(ctx context.Context) *pb.ExecMessage {
+func (b *procMessageForwarder) Recv(ctx context.Context) (m *pb.ExecMessage, ok bool) {
 	select {
 	case <-ctx.Done():
+		return nil, true
 	case <-b.done:
-	case m := <-b.msgs:
-		return m
+		return nil, false
+	case m = <-b.msgs:
+		return m, true
 	}
-	return nil
 }
 
 func (b *procMessageForwarder) Close() {
@@ -734,7 +735,7 @@ func (ctr *container) Start(ctx context.Context, req client.StartRequest) (clien
 		return nil, err
 	}
 
-	msg := msgs.Recv(ctx)
+	msg, _ := msgs.Recv(ctx)
 	if msg == nil {
 		return nil, errors.Errorf("failed to receive started message")
 	}
@@ -798,11 +799,22 @@ func (ctr *container) Start(ctx context.Context, req client.StartRequest) (clien
 	}
 
 	ctrProc.eg.Go(func() error {
+		var closeDoneOnce sync.Once
 		var exitError error
 		for {
-			msg := msgs.Recv(ctx)
-			if msg == nil {
+			msg, ok := msgs.Recv(ctx)
+			if !ok {
+				// no more messages, return
 				return exitError
+			}
+
+			if msg == nil {
+				// empty message from ctx cancel, so just start shutting down
+				// input, but continue processing more exit/done messages
+				closeDoneOnce.Do(func() {
+					close(done)
+				})
+				continue
 			}
 
 			if file := msg.GetFile(); file != nil {
@@ -826,7 +838,9 @@ func (ctr *container) Start(ctx context.Context, req client.StartRequest) (clien
 			} else if exit := msg.GetExit(); exit != nil {
 				// capture exit message to exitError so we can return it after
 				// the server sends the Done message
-				close(done)
+				closeDoneOnce.Do(func() {
+					close(done)
+				})
 				if exit.Code == 0 {
 					continue
 				}
