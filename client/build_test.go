@@ -3,11 +3,11 @@ package client
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -738,6 +738,9 @@ func testClientGatewayContainerPID1Tty(t *testing.T, sb integration.Sandbox) {
 	output := bytes.NewBuffer(nil)
 
 	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
+		ctx, timeout := context.WithTimeout(ctx, 10*time.Second)
+		defer timeout()
+
 		st := llb.Image("busybox:latest")
 
 		def, err := st.Marshal(ctx)
@@ -762,16 +765,27 @@ func testClientGatewayContainerPID1Tty(t *testing.T, sb integration.Sandbox) {
 		require.NoError(t, err)
 		defer ctr.Release(ctx)
 
+		prompt := newTestPrompt(ctx, t, inputW, output)
 		pid1, err := ctr.Start(ctx, client.StartRequest{
 			Args:   []string{"sh"},
 			Tty:    true,
 			Stdin:  inputR,
 			Stdout: &nopCloser{output},
 			Stderr: &nopCloser{output},
-			Env:    []string{"PS1=% "},
+			Env:    []string{fmt.Sprintf("PS1=%s", prompt.String())},
 		})
 		require.NoError(t, err)
-		sendProcessInput(ctx, t, inputW, pid1)
+		err = pid1.Resize(ctx, client.WinSize{Rows: 40, Cols: 80})
+		require.NoError(t, err)
+		prompt.SendExpect("ttysize", "80 40")
+		prompt.Send("cd /tmp")
+		prompt.SendExpect("pwd", "/tmp")
+		prompt.Send("echo foobar > newfile")
+		prompt.SendExpect("cat /tmp/newfile", "foobar")
+		err = pid1.Resize(ctx, client.WinSize{Rows: 60, Cols: 100})
+		require.NoError(t, err)
+		prompt.SendExpect("ttysize", "100 60")
+		prompt.SendExit(99)
 
 		err = pid1.Wait()
 		var exitError *errdefs.ExitError
@@ -783,7 +797,6 @@ func testClientGatewayContainerPID1Tty(t *testing.T, sb integration.Sandbox) {
 
 	_, err = c.Build(ctx, SolveOpt{}, product, b, nil)
 	require.Error(t, err)
-	expectProcessOutput(t, output.String())
 
 	inputW.Close()
 	inputR.Close()
@@ -791,65 +804,60 @@ func testClientGatewayContainerPID1Tty(t *testing.T, sb integration.Sandbox) {
 	checkAllReleasable(t, c, sb, true)
 }
 
-func sendProcessInput(ctx context.Context, t *testing.T, input io.Writer, ctrProc client.ContainerProcess) {
-	err := ctrProc.Resize(ctx, client.WinSize{
-		Rows: 40,
-		Cols: 80,
-	})
-	require.NoError(t, err)
-	time.Sleep(500 * time.Millisecond)
-
-	input.Write([]byte("ttysize\n"))
-	time.Sleep(100 * time.Millisecond)
-	input.Write([]byte("cd /tmp\n"))
-	time.Sleep(100 * time.Millisecond)
-	input.Write([]byte("pwd\n"))
-	time.Sleep(100 * time.Millisecond)
-	input.Write([]byte("echo foobar > newfile\n"))
-	time.Sleep(100 * time.Millisecond)
-	input.Write([]byte("cat /tmp/newfile\n"))
-	time.Sleep(500 * time.Millisecond)
-
-	err = ctrProc.Resize(ctx, client.WinSize{
-		Rows: 60,
-		Cols: 100,
-	})
-	require.NoError(t, err)
-	time.Sleep(500 * time.Millisecond)
-
-	input.Write([]byte("ttysize\n"))
-	time.Sleep(100 * time.Millisecond)
-	input.Write([]byte("exit 99\n"))
+type testPrompt struct {
+	ctx    context.Context
+	t      *testing.T
+	output *bytes.Buffer
+	input  io.Writer
+	prompt string
+	pos    int
 }
 
-// badControlRx will allow us to strip out the \r to the CSI "Erase In Display"
-// escape sequence
-var badControlRx = regexp.MustCompile(`\r.*\x1b\[J`)
+func newTestPrompt(ctx context.Context, t *testing.T, input io.Writer, output *bytes.Buffer) *testPrompt {
+	return &testPrompt{
+		ctx:    ctx,
+		t:      t,
+		input:  input,
+		output: output,
+		prompt: "% ",
+	}
+}
 
-func expectProcessOutput(t *testing.T, output string) {
-	// filter out stray terminal CSR codes
-	output = badControlRx.ReplaceAllString(output, "")
-	// trim out \r so we can cleanly split on newline
-	output = strings.ReplaceAll(output, "\r", "")
-	// trim trailing \n
-	output = strings.TrimSpace(output)
+func (p *testPrompt) String() string { return p.prompt }
 
-	t.Logf("OUTPUT: %s", output)
-	outputLines := strings.Split(output, "\n")
+func (p *testPrompt) SendExit(status int) {
+	p.input.Write([]byte(fmt.Sprintf("exit %d\n", status)))
+}
 
-	require.Equal(t, []string{
-		"% ttysize",
-		"80 40",
-		"% cd /tmp",
-		"% pwd",
-		"/tmp",
-		"% echo foobar > newfile",
-		"% cat /tmp/newfile",
-		"foobar",
-		"% ttysize",
-		"100 60",
-		"% exit 99",
-	}, outputLines)
+func (p *testPrompt) Send(cmd string) {
+	p.input.Write([]byte(cmd + "\n"))
+	p.wait(p.prompt)
+}
+
+func (p *testPrompt) SendExpect(cmd, expected string) {
+	for {
+		p.input.Write([]byte(cmd + "\n"))
+		response := p.wait(p.prompt)
+		if strings.Contains(response, expected) {
+			return
+		}
+	}
+}
+
+func (p *testPrompt) wait(msg string) string {
+	for {
+		newOutput := p.output.String()[p.pos:]
+		if strings.Contains(newOutput, msg) {
+			p.pos += len(newOutput)
+			return newOutput
+		}
+		select {
+		case <-p.ctx.Done():
+			p.t.Logf("Output at timeout: %s", p.output.String())
+			p.t.Fatalf("Timeout waiting for %q", msg)
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
 }
 
 // testClientGatewayContainerExecTty is testing that we can get a tty via
@@ -873,6 +881,8 @@ func testClientGatewayContainerExecTty(t *testing.T, sb integration.Sandbox) {
 	inputR, inputW := io.Pipe()
 	output := bytes.NewBuffer(nil)
 	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
+		ctx, timeout := context.WithTimeout(ctx, 10*time.Second)
+		defer timeout()
 		st := llb.Image("busybox:latest")
 
 		def, err := st.Marshal(ctx)
@@ -904,23 +914,35 @@ func testClientGatewayContainerExecTty(t *testing.T, sb integration.Sandbox) {
 		defer pid1.Wait()
 		defer ctr.Release(ctx)
 
+		prompt := newTestPrompt(ctx, t, inputW, output)
 		pid2, err := ctr.Start(ctx, client.StartRequest{
 			Args:   []string{"sh"},
 			Tty:    true,
 			Stdin:  inputR,
 			Stdout: &nopCloser{output},
 			Stderr: &nopCloser{output},
-			Env:    []string{"PS1=% "},
+			Env:    []string{fmt.Sprintf("PS1=%s", prompt.String())},
 		})
 		require.NoError(t, err)
-		sendProcessInput(ctx, t, inputW, pid2)
+
+		err = pid2.Resize(ctx, client.WinSize{Rows: 40, Cols: 80})
+		require.NoError(t, err)
+		prompt.SendExpect("ttysize", "80 40")
+		prompt.Send("cd /tmp")
+		prompt.SendExpect("pwd", "/tmp")
+		prompt.Send("echo foobar > newfile")
+		prompt.SendExpect("cat /tmp/newfile", "foobar")
+		err = pid2.Resize(ctx, client.WinSize{Rows: 60, Cols: 100})
+		require.NoError(t, err)
+		prompt.SendExpect("ttysize", "100 60")
+		prompt.SendExit(99)
+
 		return &client.Result{}, pid2.Wait()
 	}
 
 	_, err = c.Build(ctx, SolveOpt{}, product, b, nil)
 	require.Error(t, err)
 	require.Regexp(t, "exit code: 99|runc did not terminate successfully", err.Error())
-	expectProcessOutput(t, output.String())
 
 	inputW.Close()
 	inputR.Close()
