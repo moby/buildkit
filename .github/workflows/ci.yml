@@ -105,12 +105,19 @@ jobs:
           -
             pkg: ./client
             flags: --timeout=20m
+            skip-it: 0
           -
             pkg: ./cmd/buildctl
             flags: ""
+            skip-it: 0
           -
             pkg: ./worker/containerd
             flags: ""
+            skip-it: 0
+          -
+            pkg: ./...
+            flags: ""
+            skip-it: 1
     steps:
       -
         name: Checkout
@@ -137,14 +144,13 @@ jobs:
             --local context=. --local dockerfile=. \
             --opt target=integration-tests \
             --import-cache type=local,src=/tmp/.buildkit-cache/integration-tests \
-            --export-cache type=local,dest=/tmp/.buildkit-cache/integration-tests \
             --output type=docker,name=$IID,dest=$IID_FILE
       -
         name: Test ${{ matrix.pkg }}
         run: |
           docker load -i $IID_FILE
           cacheVolume=$(docker create -v $VOL -v $VOL/registry -v /go/pkg/mod alpine)
-          cid=$(docker create --rm -v /tmp --volumes-from=$cacheVolume -e TEST_DOCKERD -e SKIP_INTEGRATION_TESTS -e BUILDKIT_REGISTRY_MIRROR_DIR=$VOL/registry --privileged $IID go test -v ${{ matrix.flags }} ${{ matrix.pkg }})
+          cid=$(docker create --rm -v /tmp --volumes-from=$cacheVolume -e TEST_DOCKERD -e SKIP_INTEGRATION_TESTS=${{ matrix.skip-it }} -e BUILDKIT_REGISTRY_MIRROR_DIR=$VOL/registry --privileged $IID go test -v ${{ matrix.flags }} ${{ matrix.pkg }})
           docker start -a $cid
           docker rm -v $cacheVolume
       -
