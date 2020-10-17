@@ -21,6 +21,7 @@ env:
   BUILDKIT_PORT: "1234"
   PLATFORMS: "linux/amd64,linux/arm/v7,linux/arm64,linux/s390x,linux/ppc64le"
   PREFER_BUILDCTL: "1"
+  PROGRESS: "plain"
 
 jobs:
   binaries:
@@ -47,7 +48,7 @@ jobs:
       -
         name: Build
         run: |
-          buildctl build --progress plain --frontend=dockerfile.v0 \
+          buildctl build --progress $PROGRESS --frontend=dockerfile.v0 \
             --local context=. --local dockerfile=. \
             --opt target=binaries \
             --import-cache type=local,src=/tmp/.buildkit-cache/binaries \
@@ -81,7 +82,7 @@ jobs:
       -
         name: Build
         run: |
-          buildctl build --progress plain --frontend=dockerfile.v0 \
+          buildctl build --progress $PROGRESS --frontend=dockerfile.v0 \
             --local context=. --local dockerfile=. \
             --opt target=integration-tests-base \
             --import-cache type=local,src=/tmp/.buildkit-cache/integration-tests \
@@ -118,6 +119,14 @@ jobs:
             pkg: ./...
             flags: ""
             skip-it: 1
+          -
+            pkg: ./frontend
+            flags: ""
+            skip-it: 0
+          -
+            pkg: ./frontend/dockerfile
+            flags: --parallel=6 --timeout=20m
+            skip-it: 0
     steps:
       -
         name: Checkout
@@ -140,7 +149,7 @@ jobs:
       -
         name: Build
         run: |
-          buildctl build --progress plain --frontend=dockerfile.v0 \
+          buildctl build --progress $PROGRESS --frontend=dockerfile.v0 \
             --local context=. --local dockerfile=. \
             --opt target=integration-tests \
             --import-cache type=local,src=/tmp/.buildkit-cache/integration-tests \
@@ -153,6 +162,107 @@ jobs:
           cid=$(docker create --rm -v /tmp --volumes-from=$cacheVolume -e TEST_DOCKERD -e SKIP_INTEGRATION_TESTS=${{ matrix.skip-it }} -e BUILDKIT_REGISTRY_MIRROR_DIR=$VOL/registry --privileged $IID go test -v ${{ matrix.flags }} ${{ matrix.pkg }})
           docker start -a $cid
           docker rm -v $cacheVolume
+      -
+        name: Dump context
+        if: always()
+        uses: crazy-max/ghaction-dump-context@v1
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v2
+      -
+        name: Install buildctl
+        run: |
+          mkdir -p /tmp/buildctl
+          docker run --rm --privileged linuxkit/binfmt:$LINUXKIT_BINFMT
+          docker run --name buildkit -d --privileged -p $BUILDKIT_PORT:$BUILDKIT_PORT $REPO_SLUG_ORIGIN --debug --addr $BUILDKIT_HOST --oci-worker-gc=false
+          sudo docker cp buildkit:/usr/bin/buildctl /usr/local/bin/
+      -
+        name: Build
+        run: |
+          buildctl build --progress $PROGRESS --frontend=dockerfile.v0 \
+            --local context=. --local dockerfile=. \
+            --opt filename=./hack/dockerfiles/lint.Dockerfile
+      -
+        name: Dump context
+        if: always()
+        uses: crazy-max/ghaction-dump-context@v1
+
+  validate-vendor:
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v2
+      -
+        name: Install buildctl
+        run: |
+          mkdir -p /tmp/buildctl
+          docker run --rm --privileged linuxkit/binfmt:$LINUXKIT_BINFMT
+          docker run --name buildkit -d --privileged -p $BUILDKIT_PORT:$BUILDKIT_PORT $REPO_SLUG_ORIGIN --debug --addr $BUILDKIT_HOST --oci-worker-gc=false
+          sudo docker cp buildkit:/usr/bin/buildctl /usr/local/bin/
+      -
+        name: Build
+        run: |
+          buildctl build --progress $PROGRESS --frontend=dockerfile.v0 \
+            --local context=. --local dockerfile=. \
+            --opt filename=./hack/dockerfiles/vendor.Dockerfile \
+            --opt target=validate
+      -
+        name: Dump context
+        if: always()
+        uses: crazy-max/ghaction-dump-context@v1
+
+  validate-generated-files:
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v2
+      -
+        name: Install buildctl
+        run: |
+          mkdir -p /tmp/buildctl
+          docker run --rm --privileged linuxkit/binfmt:$LINUXKIT_BINFMT
+          docker run --name buildkit -d --privileged -p $BUILDKIT_PORT:$BUILDKIT_PORT $REPO_SLUG_ORIGIN --debug --addr $BUILDKIT_HOST --oci-worker-gc=false
+          sudo docker cp buildkit:/usr/bin/buildctl /usr/local/bin/
+      -
+        name: Build
+        run: |
+          gogo_version=$(awk '$1 == "github.com/gogo/protobuf" { print $2 }' go.mod)
+          buildctl build --progress $PROGRESS --frontend=dockerfile.v0 \
+            --local context=. --local dockerfile=. \
+            --opt build-arg:GOGO_VERSION=$gogo_version \
+            --opt filename=./hack/dockerfiles/generated-files.Dockerfile \
+            --opt target=validate
+      -
+        name: Dump context
+        if: always()
+        uses: crazy-max/ghaction-dump-context@v1
+
+  validate-shfmt:
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v2
+      -
+        name: Install buildctl
+        run: |
+          mkdir -p /tmp/buildctl
+          docker run --rm --privileged linuxkit/binfmt:$LINUXKIT_BINFMT
+          docker run --name buildkit -d --privileged -p $BUILDKIT_PORT:$BUILDKIT_PORT $REPO_SLUG_ORIGIN --debug --addr $BUILDKIT_HOST --oci-worker-gc=false
+          sudo docker cp buildkit:/usr/bin/buildctl /usr/local/bin/
+      -
+        name: Build
+        run: |
+          buildctl build --progress $PROGRESS --frontend=dockerfile.v0 \
+            --local context=. --local dockerfile=. \
+            --opt filename=./hack/dockerfiles/shfmt.Dockerfile \
+            --opt target=validate
       -
         name: Dump context
         if: always()
