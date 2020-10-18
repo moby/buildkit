@@ -24,7 +24,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
-	"fmt"
 )
 
 type Opt struct {
@@ -235,24 +234,22 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 	}
 
 	if req.Exporter != ""  {
-	fmt.Println("one")
             exp, err := w.Exporter(req.Exporter, c.opt.SessionManager)
             if err != nil {
                 return nil, err
             }
-            expi, err = exp.Resolve(ctx, nil)
+            expi, err = exp.Resolve(ctx, req.ExporterAttrs.ExporterAttrs)
             if err != nil {
                 return nil, err
 		    }
 	}
 	if req.Exporters != nil  {
-	fmt.Println("two")
-		for _, exporter := range req.Exporters {
-            exp, err := w.Exporter(exporter, c.opt.SessionManager)
+		for i := 0; i <= len(req.Exporters)-1; i++ {
+            exp, err := w.Exporter(req.Exporters[i], c.opt.SessionManager)
             if err != nil {
                 return nil, err
             }
-            expi, err = exp.Resolve(ctx, nil)
+            expi, err = exp.Resolve(ctx, req.ExportersAttrs[i].ExporterAttrs)
             if err != nil {
                 return nil, err
 		    }
