@@ -1,0 +1,202 @@
+name: build
+
+on:
+  push:
+    branches:
+      - 'github-actions' # remove when merged to master
+      - 'master'
+      - 'v*'
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - 'github-actions' # remove when merged to master
+      - 'master'
+      - 'v*'
+
+env:
+  REPO_SLUG_ORIGIN: "moby/buildkit:v0.7.0-rc1"
+  LINUXKIT_BINFMT: "v0.8"
+  BUILDKIT_HOST: "tcp://0.0.0.0:1234"
+  BUILDKIT_PORT: "1234"
+  PLATFORMS: "linux/amd64,linux/arm/v7,linux/arm64,linux/s390x,linux/ppc64le"
+
+jobs:
+  binaries:
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v2
+      -
+        name: Install buildctl
+        run: |
+          mkdir -p /tmp/buildctl
+          docker run --rm --privileged linuxkit/binfmt:$LINUXKIT_BINFMT
+          docker run --name buildkit -d --privileged -p $BUILDKIT_PORT:$BUILDKIT_PORT $REPO_SLUG_ORIGIN --debug --addr $BUILDKIT_HOST --oci-worker-gc=false
+          sudo docker cp buildkit:/usr/bin/buildctl /usr/local/bin/
+      -
+        name: Cache binaries
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildkit-cache/binaries
+          key: ${{ runner.os }}-buildkit-binaries-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildkit-binaries-
+      -
+        name: Build binaries
+        run: |
+          buildctl build --frontend=dockerfile.v0 \
+            --local context=. --local dockerfile=. \
+            --opt target=binaries \
+            --import-cache type=local,src=/tmp/.buildkit-cache/binaries \
+            --export-cache type=local,dest=/tmp/.buildkit-cache/binaries
+      -
+        name: Dump context
+        if: always()
+        uses: crazy-max/ghaction-dump-context@v1
+
+  binaries-cross-helper:
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v2
+      -
+        name: Install buildctl
+        run: |
+          mkdir -p /tmp/buildctl
+          docker run --rm --privileged linuxkit/binfmt:$LINUXKIT_BINFMT
+          docker run --name buildkit -d --privileged -p $BUILDKIT_PORT:$BUILDKIT_PORT $REPO_SLUG_ORIGIN --debug --addr $BUILDKIT_HOST --oci-worker-gc=false
+          sudo docker cp buildkit:/usr/bin/buildctl /usr/local/bin/
+      -
+        name: Cache binaries-cross-helper
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildkit-cache/binaries-cross-helper
+          key: ${{ runner.os }}-buildkit-binaries-cross-helper-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildkit-binaries-cross-helper-
+      -
+        name: Build binaries-cross-helper
+        run: |
+          buildctl build $progressFlag --frontend=dockerfile.v0 \
+            --local context=. --local dockerfile=. \
+            --opt target=binaries-linux-helper \
+            --opt platform=$PLATFORMS \
+            --import-cache type=local,src=/tmp/.buildkit-cache/binaries-cross-helper \
+            --export-cache type=local,dest=/tmp/.buildkit-cache/binaries-cross-helper
+      -
+        name: Dump context
+        if: always()
+        uses: crazy-max/ghaction-dump-context@v1
+
+  cross:
+    runs-on: ubuntu-latest
+    needs: [ binaries-cross-helper ]
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v2
+      -
+        name: Install buildctl
+        run: |
+          mkdir -p /tmp/buildctl
+          docker run --rm --privileged linuxkit/binfmt:$LINUXKIT_BINFMT
+          docker run --name buildkit -d --privileged -p $BUILDKIT_PORT:$BUILDKIT_PORT $REPO_SLUG_ORIGIN --debug --addr $BUILDKIT_HOST --oci-worker-gc=false
+          sudo docker cp buildkit:/usr/bin/buildctl /usr/local/bin/
+      -
+        name: Cache binaries-cross-helper
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildkit-cache/binaries-cross-helper
+          key: ${{ runner.os }}-buildkit-binaries-cross-helper-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildkit-binaries-cross-helper-
+      -
+        name: Build
+        run: |
+          buildctl build --frontend=dockerfile.v0 \
+            --local context=. --local dockerfile=. \
+            --opt platform=$PLATFORMS,darwin/amd64,windows/amd64 \
+            --import-cache type=local,src=/tmp/.buildkit-cache/binaries-cross-helper
+      -
+        name: Dump context
+        if: always()
+        uses: crazy-max/ghaction-dump-context@v1
+
+  buildkit-buildkitd:
+    runs-on: ubuntu-latest
+    needs: [ binaries ]
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v2
+      -
+        name: Install buildctl
+        run: |
+          mkdir -p /tmp/buildctl
+          docker run --rm --privileged linuxkit/binfmt:$LINUXKIT_BINFMT
+          docker run --name buildkit -d --privileged -p $BUILDKIT_PORT:$BUILDKIT_PORT $REPO_SLUG_ORIGIN --debug --addr $BUILDKIT_HOST --oci-worker-gc=false
+          sudo docker cp buildkit:/usr/bin/buildctl /usr/local/bin/
+      -
+        name: Cache binaries
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildkit-cache/binaries
+          key: ${{ runner.os }}-buildkit-binaries-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildkit-binaries-
+      -
+        name: Build
+        run: |
+          buildctl build --frontend=dockerfile.v0 \
+            --local context=. --local dockerfile=. \
+            --opt target=buildkit-buildkitd \
+            --opt platform=windows/amd64 \
+            --import-cache type=local,src=/tmp/.buildkit-cache/binaries
+      -
+        name: Dump context
+        if: always()
+        uses: crazy-max/ghaction-dump-context@v1
+
+  install:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          #- macOS-latest
+          - windows-latest
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v2
+        with:
+          path: src/github.com/moby/buildkit
+      -
+        name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.13
+      -
+        name: Cache Go modules
+        uses: actions/cache@v2
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      -
+        name: Install
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          go install -mod=vendor ./cmd/...
+        working-directory: src/github.com/moby/buildkit
+        shell: bash
+      -
+        name: Dump context
+        if: always()
+        uses: crazy-max/ghaction-dump-context@v1

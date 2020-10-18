@@ -15,46 +15,12 @@ on:
       - 'v*'
 
 env:
-  REPO_SLUG_ORIGIN: "moby/buildkit"
+  REPO_SLUG_ORIGIN: "moby/buildkit:v0.7.0-rc1"
   LINUXKIT_BINFMT: "v0.8"
   BUILDKIT_HOST: "tcp://0.0.0.0:1234"
   BUILDKIT_PORT: "1234"
 
 jobs:
-  binaries:
-    runs-on: ubuntu-latest
-    steps:
-      -
-        name: Checkout
-        uses: actions/checkout@v2
-      -
-        name: Install buildctl
-        run: |
-          mkdir -p /tmp/buildctl
-          docker run --rm --privileged linuxkit/binfmt:$LINUXKIT_BINFMT
-          docker run --name buildkit -d --privileged -p $BUILDKIT_PORT:$BUILDKIT_PORT $REPO_SLUG_ORIGIN --debug --addr $BUILDKIT_HOST --oci-worker-gc=false
-          sudo docker cp buildkit:/usr/bin/buildctl /usr/local/bin/
-      -
-        name: Cache binaries
-        uses: actions/cache@v2
-        with:
-          path: /tmp/.buildkit-cache/binaries
-          key: ${{ runner.os }}-buildkit-binaries-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-buildkit-binaries-
-      -
-        name: Build binaries
-        run: |
-          buildctl build --frontend=dockerfile.v0 \
-            --local context=. --local dockerfile=. \
-            --opt target=binaries \
-            --import-cache type=local,src=/tmp/.buildkit-cache/binaries \
-            --export-cache type=local,dest=/tmp/.buildkit-cache/binaries
-      -
-        name: Dump context
-        if: always()
-        uses: crazy-max/ghaction-dump-context@v1
-
   integration-tests-base:
     runs-on: ubuntu-latest
     steps:
@@ -239,6 +205,55 @@ jobs:
           docker cp $OCI_FILE $cid:/${{ matrix.release }}.tar
           docker start -a $cid
           docker rm -v $cacheVolume
+      -
+        name: Dump context
+        if: always()
+        uses: crazy-max/ghaction-dump-context@v1
+
+  unit-tests:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          #- ubuntu-latest
+          #- macOS-latest
+          - windows-latest
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v2
+        with:
+          path: src/github.com/moby/buildkit
+      -
+        name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.13
+      -
+        name: Cache Go modules
+        uses: actions/cache@v2
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      -
+        name: Test
+        env:
+          TMPDIR: ${{ runner.temp }}
+          SKIP_INTEGRATION_TESTS: 1
+        run: |
+          go test -coverprofile=coverage.txt -covermode=atomic ./...
+        working-directory: src/github.com/moby/buildkit
+        shell: bash
+#      -
+#        name: Upload coverage
+#        uses: codecov/codecov-action@v1
+#        if: success()
+#        with:
+#          token: ${{ secrets.CODECOV_TOKEN }}
+#          file: ./coverage.txt
       -
         name: Dump context
         if: always()
