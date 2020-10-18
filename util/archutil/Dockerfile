@@ -12,31 +12,31 @@ WORKDIR /src
 
 FROM base AS exit-amd64
 COPY fixtures/exit.amd64.s .
-RUN x86_64-linux-gnu-as -o exit.o exit.amd64.s && x86_64-linux-gnu-ld -o exit -s exit.o
+RUN x86_64-linux-gnu-as --noexecstack -o exit.o exit.amd64.s && x86_64-linux-gnu-ld -o exit -s exit.o
 
 FROM base AS exit-386
 COPY fixtures/exit.386.s .
-RUN i686-linux-gnu-as -o exit.o exit.386.s && i686-linux-gnu-ld -o exit -s exit.o
+RUN i686-linux-gnu-as --noexecstack -o exit.o exit.386.s && i686-linux-gnu-ld -o exit -s exit.o
 
 FROM base AS exit-arm64
 COPY fixtures/exit.arm64.s .
-RUN aarch64-linux-gnu-as -o exit.o exit.arm64.s && aarch64-linux-gnu-ld -o exit -s exit.o
+RUN aarch64-linux-gnu-as --noexecstack -o exit.o exit.arm64.s && aarch64-linux-gnu-ld -o exit -s exit.o
 
 FROM base AS exit-arm
 COPY fixtures/exit.arm.s .
-RUN arm-linux-gnueabihf-as -o exit.o exit.arm.s && arm-linux-gnueabihf-ld -o exit -s exit.o
+RUN arm-linux-gnueabihf-as --noexecstack -o exit.o exit.arm.s && arm-linux-gnueabihf-ld -o exit -s exit.o
 
 FROM base AS exit-riscv64
 COPY fixtures/exit.riscv64.s .
-RUN riscv64-linux-gnu-as -o exit.o exit.riscv64.s && riscv64-linux-gnu-ld -o exit -s exit.o
+RUN riscv64-linux-gnu-as --noexecstack -o exit.o exit.riscv64.s && riscv64-linux-gnu-ld -o exit -s exit.o
 
 FROM base AS exit-s390x
 COPY fixtures/exit.s390x.s .
-RUN s390x-linux-gnu-as -o exit.o exit.s390x.s && s390x-linux-gnu-ld -o exit -s exit.o
+RUN s390x-linux-gnu-as --noexecstack -o exit.o exit.s390x.s && s390x-linux-gnu-ld -o exit -s exit.o
 
 FROM base AS exit-ppc64le
 COPY fixtures/exit.ppc64le.s .
-RUN powerpc64le-linux-gnu-as -o exit.o exit.ppc64le.s && powerpc64le-linux-gnu-ld -o exit -s exit.o
+RUN powerpc64le-linux-gnu-as --noexecstack -o exit.o exit.ppc64le.s && powerpc64le-linux-gnu-ld -o exit -s exit.o
 
 FROM golang:1.13-alpine AS generate
 WORKDIR /src
