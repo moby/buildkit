@@ -213,6 +213,8 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable,
 	}
 	defer mount.Unmount(rootFSPath, 0)
 
+	defer executor.MountStubsCleaner(rootFSPath, mounts)()
+
 	uid, gid, sgids, err := oci.GetUser(rootFSPath, meta.User)
 	if err != nil {
 		return err
