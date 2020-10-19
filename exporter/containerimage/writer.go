@@ -27,10 +27,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const (
-	emptyGZLayer = digest.Digest("sha256:4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1")
-)
-
 type WriterOpt struct {
 	Snapshotter  snapshot.Snapshotter
 	ContentStore content.Store
@@ -413,7 +409,7 @@ func normalizeLayersAndHistory(remote *solver.Remote, history []ocispec.History,
 	var layerIndex int
 	for i, h := range history {
 		if !h.EmptyLayer {
-			if remote.Descriptors[layerIndex].Digest == emptyGZLayer {
+			if remote.Descriptors[layerIndex].Digest == exptypes.EmptyGZLayer {
 				h.EmptyLayer = true
 				remote.Descriptors = append(remote.Descriptors[:layerIndex], remote.Descriptors[layerIndex+1:]...)
 			} else {
