@@ -4,15 +4,22 @@ import (
 	"fmt"
 	io "io"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/containerd/typeurl"
 	"github.com/pkg/errors"
 )
 
+var helpers map[string]struct{}
+var helpersMu sync.RWMutex
+
 func init() {
 	typeurl.Register((*Stack)(nil), "github.com/moby/buildkit", "stack.Stack+json")
+
+	helpers = map[string]struct{}{}
 }
 
 var version string
@@ -21,6 +28,19 @@ var revision string
 func SetVersionInfo(v, r string) {
 	version = v
 	revision = r
+}
+
+func Helper() {
+	var pc [1]uintptr
+	n := runtime.Callers(2, pc[:])
+	if n == 0 {
+		return
+	}
+	frames := runtime.CallersFrames(pc[:n])
+	frame, _ := frames.Next()
+	helpersMu.Lock()
+	helpers[frame.Function] = struct{}{}
+	helpersMu.Unlock()
 }
 
 func Traces(err error) []*Stack {
@@ -52,6 +72,7 @@ func Enable(err error) error {
 	if err == nil {
 		return nil
 	}
+	Helper()
 	if !hasLocalStackTrace(err) {
 		return errors.WithStack(err)
 	}
@@ -112,6 +133,8 @@ func (w *formatter) Format(s fmt.State, verb rune) {
 
 func convertStack(s errors.StackTrace) *Stack {
 	var out Stack
+	helpersMu.RLock()
+	defer helpersMu.RUnlock()
 	for _, f := range s {
 		dt, err := f.MarshalText()
 		if err != nil {
@@ -119,6 +142,9 @@ func convertStack(s errors.StackTrace) *Stack {
 		}
 		p := strings.SplitN(string(dt), " ", 2)
 		if len(p) != 2 {
+			continue
+		}
+		if _, ok := helpers[p[0]]; ok {
 			continue
 		}
 		idx := strings.LastIndexByte(p[1], ':')
