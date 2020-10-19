@@ -271,9 +271,8 @@ func testClientGatewayContainerCancelOnRelease(t *testing.T, sb integration.Sand
 // We are mimicing: `echo testing | cat | cat > /tmp/foo && cat /tmp/foo`
 func testClientGatewayContainerExecPipe(t *testing.T, sb integration.Sandbox) {
 	if sb.Rootless() {
-		// TODO fix this
-		// We get `panic: cannot statfs cgroup root` from runc when when running
-		// this test with runc-rootless, no idea why.
+		// TODO remove when https://github.com/opencontainers/runc/pull/2634
+		// is merged and released
 		t.Skip("Skipping oci-rootless for cgroup error")
 	}
 	requiresLinux(t)
@@ -467,9 +466,8 @@ func testClientGatewayContainerPID1Fail(t *testing.T, sb integration.Sandbox) {
 // via `Exec` are shutdown when the primary pid1 process exits
 func testClientGatewayContainerPID1Exit(t *testing.T, sb integration.Sandbox) {
 	if sb.Rootless() {
-		// TODO fix this
-		// We get `panic: cannot statfs cgroup root` when running this test
-		// with runc-rootless
+		// TODO remove when https://github.com/opencontainers/runc/pull/2634
+		// is merged and released
 		t.Skip("Skipping runc-rootless for cgroup error")
 	}
 	requiresLinux(t)
@@ -535,10 +533,9 @@ func testClientGatewayContainerPID1Exit(t *testing.T, sb integration.Sandbox) {
 	}
 
 	_, err = c.Build(ctx, SolveOpt{}, product, b, nil)
-	// pid2 should error with `buildkit-runc did not terminate successfully` on runc or
-	// `exit code: 137` (ie sigkill) on containerd
 	require.Error(t, err)
-	require.Regexp(t, "exit code: 137|buildkit-runc did not terminate successfully", err.Error())
+	// `exit code: 137` (ie sigkill)
+	require.Regexp(t, "exit code: 137", err.Error())
 
 	checkAllReleasable(t, c, sb, true)
 }
@@ -547,9 +544,8 @@ func testClientGatewayContainerPID1Exit(t *testing.T, sb integration.Sandbox) {
 // llb.States
 func testClientGatewayContainerMounts(t *testing.T, sb integration.Sandbox) {
 	if sb.Rootless() {
-		// TODO fix this
-		// We get `panic: cannot statfs cgroup root` when running this test
-		// with runc-rootless
+		// TODO remove when https://github.com/opencontainers/runc/pull/2634
+		// is merged and released
 		t.Skip("Skipping runc-rootless for cgroup error")
 	}
 	requiresLinux(t)
@@ -864,9 +860,8 @@ func (p *testPrompt) wait(msg string) string {
 // executor.Exec (secondary process)
 func testClientGatewayContainerExecTty(t *testing.T, sb integration.Sandbox) {
 	if sb.Rootless() {
-		// TODO fix this
-		// We get `panic: cannot statfs cgroup root` when running this test
-		// with runc-rootless
+		// TODO remove when https://github.com/opencontainers/runc/pull/2634
+		// is merged and released
 		t.Skip("Skipping runc-rootless for cgroup error")
 	}
 	requiresLinux(t)
@@ -937,12 +932,17 @@ func testClientGatewayContainerExecTty(t *testing.T, sb integration.Sandbox) {
 		prompt.SendExpect("ttysize", "100 60")
 		prompt.SendExit(99)
 
-		return &client.Result{}, pid2.Wait()
+		err = pid2.Wait()
+		var exitError *errdefs.ExitError
+		require.True(t, errors.As(err, &exitError))
+		require.Equal(t, uint32(99), exitError.ExitCode)
+
+		return &client.Result{}, err
 	}
 
 	_, err = c.Build(ctx, SolveOpt{}, product, b, nil)
 	require.Error(t, err)
-	require.Regexp(t, "exit code: 99|runc did not terminate successfully", err.Error())
+	require.Regexp(t, "exit code: 99", err.Error())
 
 	inputW.Close()
 	inputR.Close()
