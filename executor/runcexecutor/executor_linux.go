@@ -7,14 +7,12 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/containerd/console"
-	"github.com/containerd/containerd"
 	runc "github.com/containerd/go-runc"
 	"github.com/docker/docker/pkg/signal"
 	"github.com/moby/buildkit/executor"
@@ -24,42 +22,40 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func (w *runcExecutor) run(ctx context.Context, id, bundle string, process executor.ProcessInfo) (int, error) {
-	return w.callWithIO(ctx, id, bundle, process, func(ctx context.Context, pidfile string, io runc.IO) (int, error) {
-		return w.runc.Run(ctx, id, bundle, &runc.CreateOpts{
+func updateRuncFieldsForHostOS(runtime *runc.Runc) {
+	// PdeathSignal only supported on unix platforms
+	runtime.PdeathSignal = syscall.SIGKILL // this can still leak the process
+}
+
+func (w *runcExecutor) run(ctx context.Context, id, bundle string, process executor.ProcessInfo) error {
+	return w.callWithIO(ctx, id, bundle, process, func(ctx context.Context, pidfile string, io runc.IO) error {
+		_, err := w.runc.Run(ctx, id, bundle, &runc.CreateOpts{
 			NoPivot: w.noPivot,
 			PidFile: pidfile,
 			IO:      io,
 		})
+		return err
 	})
 }
 
-func (w *runcExecutor) exec(ctx context.Context, id, bundle string, specsProcess *specs.Process, process executor.ProcessInfo) (int, error) {
-	return w.callWithIO(ctx, id, bundle, process, func(ctx context.Context, pidfile string, io runc.IO) (int, error) {
-		err := w.runc.Exec(ctx, id, *specsProcess, &runc.ExecOpts{
+func (w *runcExecutor) exec(ctx context.Context, id, bundle string, specsProcess *specs.Process, process executor.ProcessInfo) error {
+	return w.callWithIO(ctx, id, bundle, process, func(ctx context.Context, pidfile string, io runc.IO) error {
+		return w.runc.Exec(ctx, id, *specsProcess, &runc.ExecOpts{
 			PidFile: pidfile,
 			IO:      io,
 		})
-		var exitError *exec.ExitError
-		if errors.As(err, &exitError) {
-			return exitError.ExitCode(), err
-		}
-		if err != nil {
-			return containerd.UnknownExitStatus, err
-		}
-		return 0, nil
 	})
 }
 
-type runcCall func(ctx context.Context, pidfile string, io runc.IO) (int, error)
+type runcCall func(ctx context.Context, pidfile string, io runc.IO) error
 
-func (w *runcExecutor) callWithIO(ctx context.Context, id, bundle string, process executor.ProcessInfo, call runcCall) (int, error) {
+func (w *runcExecutor) callWithIO(ctx context.Context, id, bundle string, process executor.ProcessInfo, call runcCall) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	pidfile, err := ioutil.TempFile(bundle, "*.pid")
 	if err != nil {
-		return containerd.UnknownExitStatus, errors.Wrap(err, "failed to create pidfile")
+		return errors.Wrap(err, "failed to create pidfile")
 	}
 	defer os.Remove(pidfile.Name())
 	pidfile.Close()
@@ -70,13 +66,13 @@ func (w *runcExecutor) callWithIO(ctx context.Context, id, bundle string, proces
 
 	ptm, ptsName, err := console.NewPty()
 	if err != nil {
-		return containerd.UnknownExitStatus, err
+		return err
 	}
 
 	pts, err := os.OpenFile(ptsName, os.O_RDWR|syscall.O_NOCTTY, 0)
 	if err != nil {
 		ptm.Close()
-		return containerd.UnknownExitStatus, err
+		return err
 	}
 
 	eg, ctx := errgroup.WithContext(ctx)
