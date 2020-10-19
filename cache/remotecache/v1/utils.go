@@ -4,13 +4,10 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/solver"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
-)
-
-const (
-	emptyGZLayer = digest.Digest("sha256:4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1")
 )
 
 // sortConfig sorts the config structure to make sure it is deterministic
@@ -242,7 +239,7 @@ func marshalRemote(r *solver.Remote, state *marshalState) string {
 	}
 	desc := r.Descriptors[len(r.Descriptors)-1]
 
-	if desc.Digest == emptyGZLayer {
+	if desc.Digest == exptypes.EmptyGZLayer {
 		return parentID
 	}
 

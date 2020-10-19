@@ -9,13 +9,10 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/images"
 	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	digest "github.com/opencontainers/go-digest"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
-)
-
-const (
-	emptyGZLayer = digest.Digest("sha256:4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1")
 )
 
 type Opt struct {
@@ -93,7 +90,7 @@ func toDigests(layers []specs.Descriptor) []digest.Digest {
 func layerKey(layers []digest.Digest) string {
 	b := &strings.Builder{}
 	for _, l := range layers {
-		if l != emptyGZLayer {
+		if l != exptypes.EmptyGZLayer {
 			b.Write([]byte(l))
 		}
 	}
