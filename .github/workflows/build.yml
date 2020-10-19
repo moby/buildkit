@@ -186,10 +186,10 @@ jobs:
             VERSION=$(echo ${GITHUB_REF#refs/heads/} | sed -r 's#/+#-#g')
           fi
           if [ "${{ matrix.target-stage }}" != "" ]; then
-            CACHE_TAG=${{ matrix.target-stage }}
+            MAIN_TAG=${{ matrix.target-stage }}
             TAGS="${REPO_SLUG_TARGET}:${VERSION}-${{ matrix.target-stage }}"
           else
-            CACHE_TAG=latest
+            MAIN_TAG=latest
             TAGS="${REPO_SLUG_TARGET}:${VERSION}"
           fi
           if [[ $VERSION =~ ^v[0-9]{1,3}\.[0-9]{1,3} ]]; then
@@ -203,7 +203,7 @@ jobs:
           echo ::set-output name=tags::${TAGS}
           echo ::set-output name=created::$(date -u +'%Y-%m-%dT%H:%M:%SZ')
           echo ::set-output name=platforms::${PLATFORMS}
-          echo ::set-output name=cache_tag::${CACHE_TAG}
+          echo ::set-output name=main_tag::${MAIN_TAG}
       -
         name: Repo metadata
         id: repo
@@ -232,8 +232,8 @@ jobs:
           file: ./Dockerfile
           target: ${{ matrix.target-stage }}
           platforms: ${{ env.PLATFORMS }}
-          push: ${{ github.event_name != 'pull_request' && (endsWith(github.ref, github.event.repository.default_branch) || startsWith(github.ref, 'refs/tags/')) }}
-          cache-from: type=registry,ref=${{ env.REPO_SLUG_TARGET }}:${{ steps.prep.outputs.cache_tag }}
+          push: ${{ github.event_name != 'pull_request' && startsWith(github.ref, 'refs/tags/') }}
+          cache-from: type=registry,ref=${{ env.REPO_SLUG_TARGET }}:${{ steps.prep.outputs.main_tag }}
           #cache-to: type=inline
           tags: ${{ steps.prep.outputs.tags }}
           labels: |
@@ -246,13 +246,23 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.licenses=${{ fromJson(steps.repo.outputs.result).license.spdx_id }}
       -
+        name: Check manifest
+        if: github.event_name != 'pull_request' && startsWith(github.ref, 'refs/tags/')
+        run: |
+          docker buildx imagetools inspect ${{ env.REPO_SLUG_TARGET }}:${{ steps.prep.outputs.main_tag }}
+      -
+        name: Inspect image
+        if: github.event_name != 'pull_request' && startsWith(github.ref, 'refs/tags/')
+        run: |
+          docker pull ${{ env.REPO_SLUG_TARGET }}:${{ steps.prep.outputs.main_tag }}
+          docker image inspect ${{ env.REPO_SLUG_TARGET }}:${{ steps.prep.outputs.main_tag }}
+      -
         name: Dump context
         if: always()
         uses: crazy-max/ghaction-dump-context@v1
 
   release:
     runs-on: ubuntu-latest
-    needs: [ binaries ]
     steps:
       -
         name: Checkout
@@ -272,12 +282,14 @@ jobs:
             --output type=local,dest=./release-out \
             --opt target=release \
             --opt platform=$PLATFORMS,darwin/amd64,windows/amd64
+          mv release-out/**/* release-out/
       -
         name: Upload artifacts
         uses: actions/upload-artifact@v2
         with:
           name: buildkit
-          path: release-out/**/*
+          path: release-out/*
+          if-no-files-found: error
       -
         name: GitHub Release
         uses: softprops/action-gh-release@v1
@@ -286,7 +298,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           draft: true
-          files: release-out/**/*
+          files: release-out/*
           name: ${{ steps.prep.outputs.tag_name }}
       -
         name: Dump context
