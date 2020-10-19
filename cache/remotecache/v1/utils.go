@@ -9,6 +9,10 @@ import (
 	"github.com/pkg/errors"
 )
 
+const (
+	emptyGZLayer = digest.Digest("sha256:4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1")
+)
+
 // sortConfig sorts the config structure to make sure it is deterministic
 func sortConfig(cc *CacheConfig) {
 	type indexedLayer struct {
@@ -237,6 +241,10 @@ func marshalRemote(r *solver.Remote, state *marshalState) string {
 		parentID = marshalRemote(r2, state)
 	}
 	desc := r.Descriptors[len(r.Descriptors)-1]
+
+	if desc.Digest == emptyGZLayer {
+		return parentID
+	}
 
 	state.descriptors[desc.Digest] = DescriptorProviderPair{
 		Descriptor: desc,
