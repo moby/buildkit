@@ -13,6 +13,7 @@ import (
 
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/cio"
+	"github.com/containerd/containerd/mount"
 	containerdoci "github.com/containerd/containerd/oci"
 	"github.com/containerd/continuity/fs"
 	"github.com/docker/docker/pkg/idtools"
@@ -106,17 +107,19 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root cache.Moun
 		defer release()
 	}
 
+	lm := snapshot.LocalMounterWithMounts(rootMounts)
+	rootfsPath, err := lm.Mount()
+	if err != nil {
+		return err
+	}
+	defer lm.Unmount()
+	defer executor.MountStubsCleaner(rootfsPath, mounts)()
+
 	var sgids []uint32
 	uid, gid, err := oci.ParseUIDGID(meta.User)
 	if err != nil {
-		lm := snapshot.LocalMounterWithMounts(rootMounts)
-		rootfsPath, err := lm.Mount()
-		if err != nil {
-			return err
-		}
 		uid, gid, sgids, err = oci.GetUser(rootfsPath, meta.User)
 		if err != nil {
-			lm.Unmount()
 			return err
 		}
 
@@ -127,17 +130,13 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root cache.Moun
 
 		newp, err := fs.RootPath(rootfsPath, meta.Cwd)
 		if err != nil {
-			lm.Unmount()
 			return errors.Wrapf(err, "working dir %s points to invalid target", newp)
 		}
 		if _, err := os.Stat(newp); err != nil {
 			if err := idtools.MkdirAllAndChown(newp, 0755, identity); err != nil {
-				lm.Unmount()
 				return errors.Wrapf(err, "failed to create working directory %s", newp)
 			}
 		}
-
-		lm.Unmount()
 	}
 
 	provider, ok := w.networkProviders[meta.NetMode]
@@ -196,7 +195,11 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root cache.Moun
 		cioOpts = append(cioOpts, cio.WithTerminal)
 	}
 
-	task, err := container.NewTask(ctx, cio.NewCreator(cioOpts...), containerd.WithRootFS(rootMounts))
+	task, err := container.NewTask(ctx, cio.NewCreator(cioOpts...), containerd.WithRootFS([]mount.Mount{{
+		Source:  rootfsPath,
+		Type:    "bind",
+		Options: []string{"rbind"},
+	}}))
 	if err != nil {
 		return err
 	}
