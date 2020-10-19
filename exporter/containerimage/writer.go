@@ -413,13 +413,13 @@ func normalizeLayersAndHistory(remote *solver.Remote, history []ocispec.History,
 	var layerIndex int
 	for i, h := range history {
 		if !h.EmptyLayer {
-			if h.Created == nil {
-				h.Created = refMeta[layerIndex].createdAt
-			}
 			if remote.Descriptors[layerIndex].Digest == emptyGZLayer {
 				h.EmptyLayer = true
 				remote.Descriptors = append(remote.Descriptors[:layerIndex], remote.Descriptors[layerIndex+1:]...)
 			} else {
+				if h.Created == nil {
+					h.Created = refMeta[layerIndex].createdAt
+				}
 				layerIndex++
 			}
 		}
