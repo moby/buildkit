@@ -113,7 +113,7 @@ func (w *runcExecutor) callWithIO(ctx context.Context, id, bundle string, proces
 			if errors.As(err, &ptmClosedError) {
 				if ptmClosedError.Op == "read" &&
 					ptmClosedError.Path == "/dev/ptmx" &&
-					ptmClosedError.Err == syscall.Errno(0x5) {
+					ptmClosedError.Err == syscall.EIO {
 					return nil
 				}
 			}
