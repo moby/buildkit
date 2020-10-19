@@ -181,6 +181,10 @@ func FromGRPC(err error) error {
 		err = d.WrapError(err)
 	}
 
+	if err != nil {
+		stack.Helper()
+	}
+
 	return stack.Enable(err)
 }
 
