@@ -3,10 +3,12 @@ package client
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -37,6 +39,8 @@ func TestClientGatewayIntegration(t *testing.T) {
 		testClientGatewayContainerPID1Fail,
 		testClientGatewayContainerPID1Exit,
 		testClientGatewayContainerMounts,
+		testClientGatewayContainerPID1Tty,
+		testClientGatewayContainerExecTty,
 	}, integration.WithMirroredImages(integration.OfficialImages("busybox:latest")))
 }
 
@@ -714,6 +718,234 @@ func testClientGatewayContainerMounts(t *testing.T, sb integration.Sandbox) {
 	}, product, b, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), context.Canceled.Error())
+
+	checkAllReleasable(t, c, sb, true)
+}
+
+// testClientGatewayContainerPID1Tty is testing that we can get a tty via
+// a container pid1, executor.Run
+func testClientGatewayContainerPID1Tty(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	ctx := context.TODO()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	product := "buildkit_test"
+
+	inputR, inputW := io.Pipe()
+	output := bytes.NewBuffer(nil)
+
+	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
+		ctx, timeout := context.WithTimeout(ctx, 10*time.Second)
+		defer timeout()
+
+		st := llb.Image("busybox:latest")
+
+		def, err := st.Marshal(ctx)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to marshal state")
+		}
+
+		r, err := c.Solve(ctx, client.SolveRequest{
+			Definition: def.ToPB(),
+		})
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to solve")
+		}
+
+		ctr, err := c.NewContainer(ctx, client.NewContainerRequest{
+			Mounts: []client.Mount{{
+				Dest:      "/",
+				MountType: pb.MountType_BIND,
+				Ref:       r.Ref,
+			}},
+		})
+		require.NoError(t, err)
+		defer ctr.Release(ctx)
+
+		prompt := newTestPrompt(ctx, t, inputW, output)
+		pid1, err := ctr.Start(ctx, client.StartRequest{
+			Args:   []string{"sh"},
+			Tty:    true,
+			Stdin:  inputR,
+			Stdout: &nopCloser{output},
+			Stderr: &nopCloser{output},
+			Env:    []string{fmt.Sprintf("PS1=%s", prompt.String())},
+		})
+		require.NoError(t, err)
+		err = pid1.Resize(ctx, client.WinSize{Rows: 40, Cols: 80})
+		require.NoError(t, err)
+		prompt.SendExpect("ttysize", "80 40")
+		prompt.Send("cd /tmp")
+		prompt.SendExpect("pwd", "/tmp")
+		prompt.Send("echo foobar > newfile")
+		prompt.SendExpect("cat /tmp/newfile", "foobar")
+		err = pid1.Resize(ctx, client.WinSize{Rows: 60, Cols: 100})
+		require.NoError(t, err)
+		prompt.SendExpect("ttysize", "100 60")
+		prompt.SendExit(99)
+
+		err = pid1.Wait()
+		var exitError *errdefs.ExitError
+		require.True(t, errors.As(err, &exitError))
+		require.Equal(t, uint32(99), exitError.ExitCode)
+
+		return &client.Result{}, err
+	}
+
+	_, err = c.Build(ctx, SolveOpt{}, product, b, nil)
+	require.Error(t, err)
+
+	inputW.Close()
+	inputR.Close()
+
+	checkAllReleasable(t, c, sb, true)
+}
+
+type testPrompt struct {
+	ctx    context.Context
+	t      *testing.T
+	output *bytes.Buffer
+	input  io.Writer
+	prompt string
+	pos    int
+}
+
+func newTestPrompt(ctx context.Context, t *testing.T, input io.Writer, output *bytes.Buffer) *testPrompt {
+	return &testPrompt{
+		ctx:    ctx,
+		t:      t,
+		input:  input,
+		output: output,
+		prompt: "% ",
+	}
+}
+
+func (p *testPrompt) String() string { return p.prompt }
+
+func (p *testPrompt) SendExit(status int) {
+	p.input.Write([]byte(fmt.Sprintf("exit %d\n", status)))
+}
+
+func (p *testPrompt) Send(cmd string) {
+	p.input.Write([]byte(cmd + "\n"))
+	p.wait(p.prompt)
+}
+
+func (p *testPrompt) SendExpect(cmd, expected string) {
+	for {
+		p.input.Write([]byte(cmd + "\n"))
+		response := p.wait(p.prompt)
+		if strings.Contains(response, expected) {
+			return
+		}
+	}
+}
+
+func (p *testPrompt) wait(msg string) string {
+	for {
+		newOutput := p.output.String()[p.pos:]
+		if strings.Contains(newOutput, msg) {
+			p.pos += len(newOutput)
+			return newOutput
+		}
+		select {
+		case <-p.ctx.Done():
+			p.t.Logf("Output at timeout: %s", p.output.String())
+			p.t.Fatalf("Timeout waiting for %q", msg)
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+}
+
+// testClientGatewayContainerExecTty is testing that we can get a tty via
+// executor.Exec (secondary process)
+func testClientGatewayContainerExecTty(t *testing.T, sb integration.Sandbox) {
+	if sb.Rootless() {
+		// TODO fix this
+		// We get `panic: cannot statfs cgroup root` when running this test
+		// with runc-rootless
+		t.Skip("Skipping runc-rootless for cgroup error")
+	}
+	requiresLinux(t)
+	ctx := context.TODO()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	product := "buildkit_test"
+
+	inputR, inputW := io.Pipe()
+	output := bytes.NewBuffer(nil)
+	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
+		ctx, timeout := context.WithTimeout(ctx, 10*time.Second)
+		defer timeout()
+		st := llb.Image("busybox:latest")
+
+		def, err := st.Marshal(ctx)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to marshal state")
+		}
+
+		r, err := c.Solve(ctx, client.SolveRequest{
+			Definition: def.ToPB(),
+		})
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to solve")
+		}
+
+		ctr, err := c.NewContainer(ctx, client.NewContainerRequest{
+			Mounts: []client.Mount{{
+				Dest:      "/",
+				MountType: pb.MountType_BIND,
+				Ref:       r.Ref,
+			}},
+		})
+		require.NoError(t, err)
+
+		pid1, err := ctr.Start(ctx, client.StartRequest{
+			Args: []string{"sleep", "10"},
+		})
+		require.NoError(t, err)
+
+		defer pid1.Wait()
+		defer ctr.Release(ctx)
+
+		prompt := newTestPrompt(ctx, t, inputW, output)
+		pid2, err := ctr.Start(ctx, client.StartRequest{
+			Args:   []string{"sh"},
+			Tty:    true,
+			Stdin:  inputR,
+			Stdout: &nopCloser{output},
+			Stderr: &nopCloser{output},
+			Env:    []string{fmt.Sprintf("PS1=%s", prompt.String())},
+		})
+		require.NoError(t, err)
+
+		err = pid2.Resize(ctx, client.WinSize{Rows: 40, Cols: 80})
+		require.NoError(t, err)
+		prompt.SendExpect("ttysize", "80 40")
+		prompt.Send("cd /tmp")
+		prompt.SendExpect("pwd", "/tmp")
+		prompt.Send("echo foobar > newfile")
+		prompt.SendExpect("cat /tmp/newfile", "foobar")
+		err = pid2.Resize(ctx, client.WinSize{Rows: 60, Cols: 100})
+		require.NoError(t, err)
+		prompt.SendExpect("ttysize", "100 60")
+		prompt.SendExit(99)
+
+		return &client.Result{}, pid2.Wait()
+	}
+
+	_, err = c.Build(ctx, SolveOpt{}, product, b, nil)
+	require.Error(t, err)
+	require.Regexp(t, "exit code: 99|runc did not terminate successfully", err.Error())
+
+	inputW.Close()
+	inputR.Close()
 
 	checkAllReleasable(t, c, sb, true)
 }

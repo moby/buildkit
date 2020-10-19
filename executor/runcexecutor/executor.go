@@ -272,10 +272,7 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable,
 		}
 	}
 
-	if meta.Tty {
-		return errors.New("tty with runc not implemented")
-	}
-
+	spec.Process.Terminal = meta.Tty
 	spec.Process.OOMScoreAdj = w.oomScoreAdj
 	if w.rootless {
 		if err := rootlessspecconv.ToRootless(spec); err != nil {
@@ -326,10 +323,8 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable,
 			close(started)
 		})
 	}
-	status, err := w.runc.Run(runCtx, id, bundle, &runc.CreateOpts{
-		IO:      &forwardIO{stdin: process.Stdin, stdout: process.Stdout, stderr: process.Stderr},
-		NoPivot: w.noPivot,
-	})
+
+	status, err := w.run(runCtx, id, bundle, process)
 	close(ended)
 
 	if status != 0 || err != nil {
@@ -413,21 +408,14 @@ func (w *runcExecutor) Exec(ctx context.Context, id string, process executor.Pro
 		spec.Process.Env = process.Meta.Env
 	}
 
-	err = w.runc.Exec(ctx, id, *spec.Process, &runc.ExecOpts{
-		IO: &forwardIO{stdin: process.Stdin, stdout: process.Stdout, stderr: process.Stderr},
-	})
-
-	var exitError *exec.ExitError
-	if errors.As(err, &exitError) {
-		err = &errdefs.ExitError{
-			ExitCode: uint32(exitError.ExitCode()),
-			Err:      err,
-		}
-		return err
-	} else if err != nil {
-		return err
+	status, err := w.exec(ctx, id, state.Bundle, spec.Process, process)
+	if status == 0 && err == nil {
+		return nil
 	}
-	return nil
+	return &errdefs.ExitError{
+		ExitCode: uint32(status),
+		Err:      err,
+	}
 }
 
 type forwardIO struct {
