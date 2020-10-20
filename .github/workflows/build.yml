@@ -8,6 +8,7 @@ on:
       - 'v*'
     tags:
       - 'v*'
+      - 'dockerfile/*'
   pull_request:
     branches:
       - 'github-actions' # remove when merged to master

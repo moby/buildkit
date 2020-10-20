@@ -1,4 +1,4 @@
-name: release
+name: dockerfile-frontend
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
       - 'master'
       - 'v*'
     tags:
-      - 'v*'
+      - 'dockerfile/*'
   pull_request:
     branches:
       - 'github-actions' # remove when merged to master
@@ -16,7 +16,7 @@ on:
 
 env:
   BUILDKIT_VERSION: "v0.7.0-rc1"
-  REPO_SLUG_TARGET: "moby/buildkit"
+  DF_REPO_SLUG_TARGET: "docker/dockerfile-upstream"
   PLATFORMS: "linux/amd64,linux/arm/v7,linux/arm64,linux/s390x,linux/ppc64le"
 
 jobs:
@@ -25,9 +25,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target-stage:
-          - ""
-          - rootless
+        include:
+          -
+            channel: "mainline"
+            buildtags: ""
+          -
+            channel: "experimental"
+            buildtags: "dfrunsecurity dfrunnetwork"
     steps:
       -
         name: Checkout
@@ -39,23 +43,25 @@ jobs:
           VERSION=local
           if [ "${{ github.event_name }}" = "schedule" ]; then
             VERSION=nightly
-          elif [[ $GITHUB_REF == refs/tags/* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/}
+          elif [[ $GITHUB_REF == refs/tags/dockerfile/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/dockerfile/}
           elif [[ $GITHUB_REF == refs/heads/* ]]; then
             VERSION=$(echo ${GITHUB_REF#refs/heads/} | sed -r 's#/+#-#g')
           fi
-          if [ "${{ matrix.target-stage }}" != "" ]; then
-            MAIN_TAG=${{ matrix.target-stage }}
-            TAGS="${REPO_SLUG_TARGET}:${VERSION}-${{ matrix.target-stage }}"
+          if [ "${{ matrix.channel }}" != "mainline" ]; then
+            MAIN_TAG=${{ matrix.channel }}
+            TAGS="${DF_REPO_SLUG_TARGET}:${VERSION}-${{ matrix.channel }}"
           else
             MAIN_TAG=latest
-            TAGS="${REPO_SLUG_TARGET}:${VERSION}"
+            TAGS="${DF_REPO_SLUG_TARGET}:${VERSION}"
           fi
-          if [[ $VERSION =~ ^v[0-9]{1,3}\.[0-9]{1,3} ]]; then
-            if [ "${{ matrix.target-stage }}" != "" ]; then
-              TAGS="$TAGS,${REPO_SLUG_TARGET}:${{ matrix.target-stage }}"
+          if [[ $VERSION =~ ^[0-9]{1,3}\.[0-9]{1,3} ]]; then
+            if [ "${{ matrix.channel }}" != "mainline" ]; then
+              TAGS="$TAGS,${DF_REPO_SLUG_TARGET}:${{ matrix.channel }}"
             else
-              TAGS="$TAGS,${REPO_SLUG_TARGET}:latest"
+              MINOR=${VERSION%.*}
+              MAJOR=${MINOR%.*}
+              TAGS="$TAGS,${DF_REPO_SLUG_TARGET}:${MINOR},${DF_REPO_SLUG_TARGET}:${MAJOR},${DF_REPO_SLUG_TARGET}:latest"
             fi
           fi
           echo ::set-output name=version::${VERSION}
@@ -79,8 +85,8 @@ jobs:
         uses: docker/setup-buildx-action@v1
       -
         name: Login to DockerHub
-        uses: docker/login-action@v1
         if: github.event_name != 'pull_request'
+        uses: docker/login-action@v1
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -89,13 +95,15 @@ jobs:
         uses: docker/build-push-action@v2
         with:
           context: .
-          file: ./Dockerfile
-          target: ${{ matrix.target-stage }}
+          file: ./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile
           platforms: ${{ env.PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
-          cache-from: type=registry,ref=${{ env.REPO_SLUG_TARGET }}:${{ steps.prep.outputs.main_tag }}
+          cache-from: type=registry,ref=${{ env.DF_REPO_SLUG_TARGET }}:${{ steps.prep.outputs.main_tag }}
           #cache-to: type=inline
           tags: ${{ steps.prep.outputs.tags }}
+          build-args: |
+            CHANNEL=${{ matrix.channel }}
+            BUILDTAGS=${{ matrix.buildtags }}
           labels: |
             org.opencontainers.image.title=${{ fromJson(steps.repo.outputs.result).name }}
             org.opencontainers.image.url=${{ fromJson(steps.repo.outputs.result).html_url }}
@@ -106,64 +114,15 @@ jobs:
             org.opencontainers.image.licenses=${{ fromJson(steps.repo.outputs.result).license.spdx_id }}
       -
         name: Check manifest
-        if: github.event_name != 'pull_request' && startsWith(github.ref, 'refs/tags/v')
+        if: github.event_name != 'pull_request' && startsWith(github.ref, 'refs/tags/')
         run: |
-          docker buildx imagetools inspect ${{ env.REPO_SLUG_TARGET }}:${{ steps.prep.outputs.main_tag }}
+          docker buildx imagetools inspect ${{ env.DF_REPO_SLUG_TARGET }}:${{ steps.prep.outputs.main_tag }}
       -
         name: Inspect image
-        if: github.event_name != 'pull_request' && startsWith(github.ref, 'refs/tags/v')
+        if: github.event_name != 'pull_request' && startsWith(github.ref, 'refs/tags/')
         run: |
-          docker pull ${{ env.REPO_SLUG_TARGET }}:${{ steps.prep.outputs.main_tag }}
-          docker image inspect ${{ env.REPO_SLUG_TARGET }}:${{ steps.prep.outputs.main_tag }}
-      -
-        name: Dump context
-        if: always()
-        uses: crazy-max/ghaction-dump-context@v1
-
-  binaries:
-    runs-on: ubuntu-latest
-    steps:
-      -
-        name: Checkout
-        uses: actions/checkout@v2
-      -
-        name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
-      -
-        name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
-        with:
-          driver-opts: image=moby/buildkit:${{ env.BUILDKIT_VERSION }}
-      -
-        name: Build
-        uses: docker/build-push-action@v2
-        with:
-          context: .
-          file: ./Dockerfile
-          target: buildkit-buildkitd
-          platforms: ${{ env.PLATFORMS }},darwin/amd64,windows/amd64
-          outputs: type=local,dest=${{ runner.workspace }}/release-out
-      -
-        name: Move artifacts
-        run: |
-          mv ${{ runner.workspace }}/release-out/**/* ${{ runner.workspace }}/release-out/
-      -
-        name: Upload artifacts
-        uses: actions/upload-artifact@v2
-        with:
-          name: buildkit
-          path: release-out/*
-          if-no-files-found: error
-      -
-        name: GitHub Release
-        uses: softprops/action-gh-release@v1
-        if: success() && startsWith(github.ref, 'refs/tags/v')
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          draft: true
-          files: release-out/*
-          name: ${{ steps.prep.outputs.tag_name }}
+          docker pull ${{ env.DF_REPO_SLUG_TARGET }}:${{ steps.prep.outputs.main_tag }}
+          docker image inspect ${{ env.DF_REPO_SLUG_TARGET }}:${{ steps.prep.outputs.main_tag }}
       -
         name: Dump context
         if: always()
