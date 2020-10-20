@@ -16,10 +16,7 @@ on:
       - 'v*'
 
 env:
-  REPO_SLUG_ORIGIN: "moby/buildkit:v0.7.0-rc1"
-  LINUXKIT_BINFMT: "v0.8"
-  BUILDKIT_HOST: "tcp://0.0.0.0:1234"
-  BUILDKIT_PORT: "1234"
+  BUILDKIT_VERSION: "v0.7.0-rc1"
 
 jobs:
   lint:
@@ -29,18 +26,16 @@ jobs:
         name: Checkout
         uses: actions/checkout@v2
       -
-        name: Install buildctl
-        run: |
-          mkdir -p /tmp/buildctl
-          docker run --rm --privileged linuxkit/binfmt:$LINUXKIT_BINFMT
-          docker run --name buildkit -d --privileged -p $BUILDKIT_PORT:$BUILDKIT_PORT $REPO_SLUG_ORIGIN --debug --addr $BUILDKIT_HOST --oci-worker-gc=false
-          sudo docker cp buildkit:/usr/bin/buildctl /usr/local/bin/
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+        with:
+          driver-opts: image=moby/buildkit:${{ env.BUILDKIT_VERSION }}
       -
         name: Build
-        run: |
-          buildctl build --frontend=dockerfile.v0 \
-            --local context=. --local dockerfile=. \
-            --opt filename=./hack/dockerfiles/lint.Dockerfile
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: ./hack/dockerfiles/lint.Dockerfile
       -
         name: Dump context
         if: always()
@@ -53,19 +48,17 @@ jobs:
         name: Checkout
         uses: actions/checkout@v2
       -
-        name: Install buildctl
-        run: |
-          mkdir -p /tmp/buildctl
-          docker run --rm --privileged linuxkit/binfmt:$LINUXKIT_BINFMT
-          docker run --name buildkit -d --privileged -p $BUILDKIT_PORT:$BUILDKIT_PORT $REPO_SLUG_ORIGIN --debug --addr $BUILDKIT_HOST --oci-worker-gc=false
-          sudo docker cp buildkit:/usr/bin/buildctl /usr/local/bin/
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+        with:
+          driver-opts: image=moby/buildkit:${{ env.BUILDKIT_VERSION }}
       -
         name: Build
-        run: |
-          buildctl build --frontend=dockerfile.v0 \
-            --local context=. --local dockerfile=. \
-            --opt filename=./hack/dockerfiles/vendor.Dockerfile \
-            --opt target=validate
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: ./hack/dockerfiles/vendor.Dockerfile
+          target: validate
       -
         name: Dump context
         if: always()
@@ -78,21 +71,24 @@ jobs:
         name: Checkout
         uses: actions/checkout@v2
       -
-        name: Install buildctl
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+        with:
+          driver-opts: image=moby/buildkit:${{ env.BUILDKIT_VERSION }}
+      -
+        name: Extract protobuf version
+        id: protobuf
         run: |
-          mkdir -p /tmp/buildctl
-          docker run --rm --privileged linuxkit/binfmt:$LINUXKIT_BINFMT
-          docker run --name buildkit -d --privileged -p $BUILDKIT_PORT:$BUILDKIT_PORT $REPO_SLUG_ORIGIN --debug --addr $BUILDKIT_HOST --oci-worker-gc=false
-          sudo docker cp buildkit:/usr/bin/buildctl /usr/local/bin/
+          echo ::set-output name=version::$(awk '$1 == "github.com/gogo/protobuf" { print $2 }' go.mod)
       -
         name: Build
-        run: |
-          gogo_version=$(awk '$1 == "github.com/gogo/protobuf" { print $2 }' go.mod)
-          buildctl build --frontend=dockerfile.v0 \
-            --local context=. --local dockerfile=. \
-            --opt build-arg:GOGO_VERSION=$gogo_version \
-            --opt filename=./hack/dockerfiles/generated-files.Dockerfile \
-            --opt target=validate
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: ./hack/dockerfiles/generated-files.Dockerfile
+          target: validate
+          build-args: |
+            GOGO_VERSION=${{ steps.protobuf.outputs.version }}
       -
         name: Dump context
         if: always()
@@ -105,19 +101,17 @@ jobs:
         name: Checkout
         uses: actions/checkout@v2
       -
-        name: Install buildctl
-        run: |
-          mkdir -p /tmp/buildctl
-          docker run --rm --privileged linuxkit/binfmt:$LINUXKIT_BINFMT
-          docker run --name buildkit -d --privileged -p $BUILDKIT_PORT:$BUILDKIT_PORT $REPO_SLUG_ORIGIN --debug --addr $BUILDKIT_HOST --oci-worker-gc=false
-          sudo docker cp buildkit:/usr/bin/buildctl /usr/local/bin/
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+        with:
+          driver-opts: image=moby/buildkit:${{ env.BUILDKIT_VERSION }}
       -
         name: Build
-        run: |
-          buildctl build --frontend=dockerfile.v0 \
-            --local context=. --local dockerfile=. \
-            --opt filename=./hack/dockerfiles/shfmt.Dockerfile \
-            --opt target=validate
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: ./hack/dockerfiles/shfmt.Dockerfile
+          target: validate
       -
         name: Dump context
         if: always()

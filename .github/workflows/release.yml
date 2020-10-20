@@ -77,6 +77,8 @@ jobs:
       -
         name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
+        with:
+          driver-opts: image=moby/buildkit:${{ env.BUILDKIT_VERSION }}
       -
         name: Login to DockerHub
         uses: docker/login-action@v1
@@ -140,19 +142,19 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
-          target: buildkit-buildkitd
+          target: release
           platforms: ${{ env.PLATFORMS }},darwin/amd64,windows/amd64
-          outputs: type=local,dest=${{ runner.workspace }}/release-out
+          outputs: type=local,dest=./release-out
       -
         name: Move artifacts
         run: |
-          mv ${{ runner.workspace }}/release-out/**/* ${{ runner.workspace }}/release-out/
+          mv ./release-out/**/* ./release-out/
       -
         name: Upload artifacts
         uses: actions/upload-artifact@v2
         with:
           name: buildkit
-          path: release-out/*
+          path: ./release-out/*
           if-no-files-found: error
       -
         name: GitHub Release
@@ -162,7 +164,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           draft: true
-          files: release-out/*
+          files: ./release-out/*
           name: ${{ steps.prep.outputs.tag_name }}
       -
         name: Dump context

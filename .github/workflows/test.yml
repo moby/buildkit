@@ -16,10 +16,7 @@ on:
       - 'v*'
 
 env:
-  REPO_SLUG_ORIGIN: "moby/buildkit:v0.7.0-rc1"
-  LINUXKIT_BINFMT: "v0.8"
-  BUILDKIT_HOST: "tcp://0.0.0.0:1234"
-  BUILDKIT_PORT: "1234"
+  BUILDKIT_VERSION: "v0.7.0-rc1"
 
 jobs:
   integration-tests-base:
@@ -29,13 +26,6 @@ jobs:
         name: Checkout
         uses: actions/checkout@v2
       -
-        name: Install buildctl
-        run: |
-          mkdir -p /tmp/buildctl
-          docker run --rm --privileged linuxkit/binfmt:$LINUXKIT_BINFMT
-          docker run --name buildkit -d --privileged -p $BUILDKIT_PORT:$BUILDKIT_PORT $REPO_SLUG_ORIGIN --debug --addr $BUILDKIT_HOST --oci-worker-gc=false
-          sudo docker cp buildkit:/usr/bin/buildctl /usr/local/bin/
-      -
         name: Cache integration-tests
         uses: actions/cache@v2
         with:
@@ -44,13 +34,19 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildkit-integration-tests-
       -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+        with:
+          driver-opts: image=moby/buildkit:${{ env.BUILDKIT_VERSION }}
+      -
         name: Build integration-tests
-        run: |
-          buildctl build --frontend=dockerfile.v0 \
-            --local context=. --local dockerfile=. \
-            --opt target=integration-tests-base \
-            --import-cache type=local,src=/tmp/.buildkit-cache/integration-tests \
-            --export-cache type=local,dest=/tmp/.buildkit-cache/integration-tests
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: ./Dockerfile
+          target: integration-tests-base
+          cache-from: type=local,src=/tmp/.buildkit-cache/integration-tests
+          cache-to: type=local,dest=/tmp/.buildkit-cache/integration-tests
       -
         name: Dump context
         if: always()
@@ -61,7 +57,6 @@ jobs:
     needs: [ integration-tests-base ]
     env:
       IID: buildkit-tests
-      IID_FILE: /tmp/docker-iidfile
       VOL: /tmp/.buildkit-cache-test
     strategy:
       fail-fast: false
@@ -96,13 +91,6 @@ jobs:
         name: Checkout
         uses: actions/checkout@v2
       -
-        name: Install buildctl
-        run: |
-          mkdir -p /tmp/buildctl
-          docker run --rm --privileged linuxkit/binfmt:$LINUXKIT_BINFMT
-          docker run --name buildkit -d --privileged -p $BUILDKIT_PORT:$BUILDKIT_PORT $REPO_SLUG_ORIGIN --debug --addr $BUILDKIT_HOST --oci-worker-gc=false
-          sudo docker cp buildkit:/usr/bin/buildctl /usr/local/bin/
-      -
         name: Cache integration-tests
         uses: actions/cache@v2
         with:
@@ -111,17 +99,23 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildkit-integration-tests-
       -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+        with:
+          driver-opts: image=moby/buildkit:${{ env.BUILDKIT_VERSION }}
+      -
         name: Build integration-tests
-        run: |
-          buildctl build --frontend=dockerfile.v0 \
-            --local context=. --local dockerfile=. \
-            --opt target=integration-tests \
-            --import-cache type=local,src=/tmp/.buildkit-cache/integration-tests \
-            --output type=docker,name=$IID,dest=$IID_FILE
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: ./Dockerfile
+          target: integration-tests
+          load: true
+          cache-from: type=local,src=/tmp/.buildkit-cache/integration-tests
+          tags: ${{ env.IID }}
       -
         name: Test ${{ matrix.pkg }}
         run: |
-          docker load -i $IID_FILE
           cacheVolume=$(docker create -v $VOL -v $VOL/registry -v /go/pkg/mod alpine)
           cid=$(docker create --rm -v /tmp --volumes-from=$cacheVolume -e TEST_DOCKERD -e SKIP_INTEGRATION_TESTS=${{ matrix.skip-it }} -e BUILDKIT_REGISTRY_MIRROR_DIR=$VOL/registry --privileged $IID go test ${{ matrix.flags }} ${{ matrix.pkg }})
           docker start -a $cid
@@ -136,7 +130,6 @@ jobs:
     needs: [ integration-tests-base ]
     env:
       IID: buildkit-tests
-      IID_FILE: /tmp/docker-iidfile
       OCI_FILE: /tmp/docker-ocifile
       VOL: /tmp/.buildkit-cache-test
     strategy:
@@ -147,21 +140,16 @@ jobs:
             release: mainline
             pkg: ./frontend/dockerfile
             flags: --count=1 -v
+            buildtags: ""
           -
             release: experimental
             pkg: ./frontend/dockerfile
             flags: --count=1 -v
+            buildtags: dfrunsecurity dfrunnetwork
     steps:
       -
         name: Checkout
         uses: actions/checkout@v2
-      -
-        name: Install buildctl
-        run: |
-          mkdir -p /tmp/buildctl
-          docker run --rm --privileged linuxkit/binfmt:$LINUXKIT_BINFMT
-          docker run --name buildkit -d --privileged -p $BUILDKIT_PORT:$BUILDKIT_PORT $REPO_SLUG_ORIGIN --debug --addr $BUILDKIT_HOST --oci-worker-gc=false
-          sudo docker cp buildkit:/usr/bin/buildctl /usr/local/bin/
       -
         name: Cache integration-tests
         uses: actions/cache@v2
@@ -171,13 +159,20 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildkit-integration-tests-
       -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+        with:
+          driver-opts: image=moby/buildkit:${{ env.BUILDKIT_VERSION }}
+      -
         name: Build integration-tests
-        run: |
-          buildctl build --frontend=dockerfile.v0 \
-            --local context=. --local dockerfile=. \
-            --opt target=integration-tests \
-            --import-cache type=local,src=/tmp/.buildkit-cache/integration-tests \
-            --output type=docker,name=$IID,dest=$IID_FILE
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: ./Dockerfile
+          target: integration-tests
+          load: true
+          cache-from: type=local,src=/tmp/.buildkit-cache/integration-tests
+          tags: ${{ env.IID }}
       -
         name: Cache dockerfile-frontend
         uses: actions/cache@v2
@@ -188,19 +183,18 @@ jobs:
             ${{ runner.os }}-buildkit-dockerfile-frontend-${{ matrix.release }}-
       -
         name: Build dockerfile-frontend
-        run: |
-          buildtags=$(cat ./frontend/dockerfile/release/${{ matrix.release }}/tags)
-          buildctl build --frontend=dockerfile.v0 \
-            --local context=. --local dockerfile=. \
-            --opt filename=./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile \
-            --opt build-arg:BUILDTAGS="$buildtags" \
-            --import-cache type=local,src=/tmp/.buildkit-cache/dockerfile-frontend \
-            --export-cache type=local,dest=/tmp/.buildkit-cache/dockerfile-frontend \
-            --output type=oci,dest=$OCI_FILE
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: ./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile
+          build-args: |
+            BUILDTAGS=${{ matrix.buildtags }}
+          cache-from: type=local,src=/tmp/.buildkit-cache/dockerfile-frontend-${{ matrix.release }}
+          cache-to: type=local,dest=/tmp/.buildkit-cache/dockerfile-frontend-${{ matrix.release }}
+          outputs: type=oci,dest=${{ env.OCI_FILE }}
       -
         name: Test
         run: |
-          docker load -i $IID_FILE
           cacheVolume=$(docker create -v $VOL -v $VOL/registry -v /go/pkg/mod alpine)
           cid=$(docker create --rm -v /tmp --volumes-from=$cacheVolume -e TEST_DOCKERD -e BUILDKIT_REGISTRY_MIRROR_DIR=$VOL/registry -e BUILDKIT_WORKER_RANDOM=1 -e FRONTEND_GATEWAY_ONLY=local:/${{ matrix.release }}.tar -e EXTERNAL_DF_FRONTEND=/dockerfile-frontend --privileged $IID go test -tags '$buildtags' ${{ matrix.flags }} ${{ matrix.pkg }})
           docker cp $OCI_FILE $cid:/${{ matrix.release }}.tar
