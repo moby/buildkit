@@ -26,7 +26,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func Push(ctx context.Context, sm *session.Manager, sid string, provider content.Provider, manager content.Manager, dgst digest.Digest, ref string, insecure bool, hosts docker.RegistryHosts, byDigest bool) error {
+func Push(ctx context.Context, sm *session.Manager, sid string, provider content.Provider, manager content.Manager, dgst digest.Digest, ref string, insecure bool, hosts docker.RegistryHosts, byDigest bool, annotations map[digest.Digest]map[string]string) error {
 	desc := ocispec.Descriptor{
 		Digest: dgst,
 	}
@@ -87,7 +87,7 @@ func Push(ctx context.Context, sm *session.Manager, sid string, provider content
 	}
 
 	handlers := append([]images.Handler{},
-		images.HandlerFunc(annotateDistributionSourceHandler(manager, childrenHandler(provider))),
+		images.HandlerFunc(annotateDistributionSourceHandler(manager, annotations, childrenHandler(provider))),
 		filterHandler,
 		dedupeHandler(pushUpdateSourceHandler),
 	)
@@ -121,7 +121,7 @@ func Push(ctx context.Context, sm *session.Manager, sid string, provider content
 	return mfstDone(nil)
 }
 
-func annotateDistributionSourceHandler(manager content.Manager, f images.HandlerFunc) func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
+func annotateDistributionSourceHandler(manager content.Manager, annotations map[digest.Digest]map[string]string, f images.HandlerFunc) func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
 	return func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
 		children, err := f(ctx, desc)
 		if err != nil {
@@ -138,6 +138,20 @@ func annotateDistributionSourceHandler(manager content.Manager, f images.Handler
 
 		for i := range children {
 			child := children[i]
+
+			if m, ok := annotations[child.Digest]; ok {
+				for k, v := range m {
+					if !strings.HasPrefix(k, "containerd.io/distribution.source.") {
+						continue
+					}
+					if child.Annotations == nil {
+						child.Annotations = map[string]string{}
+					}
+					child.Annotations[k] = v
+				}
+			}
+			children[i] = child
+
 			info, err := manager.Info(ctx, child.Digest)
 			if errors.Is(err, errdefs.ErrNotFound) {
 				continue
