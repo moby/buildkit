@@ -36,25 +36,23 @@ func NewContentHashFunc(selectors []Selector) solver.ResultBasedCacheFunc {
 		eg, ctx := errgroup.WithContext(ctx)
 
 		for i, sel := range selectors {
-			// FIXME(tonistiigi): enabling this parallelization seems to create wrong results for some big inputs(like gobuild)
-			// func(i int) {
-			// 	eg.Go(func() error {
-			if !sel.Wildcard {
-				dgst, err := contenthash.Checksum(ctx, ref.ImmutableRef, path.Join("/", sel.Path), sel.FollowLinks)
-				if err != nil {
-					return "", err
+			i, sel := i, sel
+			eg.Go(func() error {
+				if !sel.Wildcard {
+					dgst, err := contenthash.Checksum(ctx, ref.ImmutableRef, path.Join("/", sel.Path), sel.FollowLinks)
+					if err != nil {
+						return err
+					}
+					dgsts[i] = []byte(dgst)
+				} else {
+					dgst, err := contenthash.ChecksumWildcard(ctx, ref.ImmutableRef, path.Join("/", sel.Path), sel.FollowLinks)
+					if err != nil {
+						return err
+					}
+					dgsts[i] = []byte(dgst)
 				}
-				dgsts[i] = []byte(dgst)
-			} else {
-				dgst, err := contenthash.ChecksumWildcard(ctx, ref.ImmutableRef, path.Join("/", sel.Path), sel.FollowLinks)
-				if err != nil {
-					return "", err
-				}
-				dgsts[i] = []byte(dgst)
-			}
-			// return nil
-			// })
-			// }(i)
+				return nil
+			})
 		}
 
 		if err := eg.Wait(); err != nil {
