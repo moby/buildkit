@@ -12,7 +12,7 @@ require (
 	github.com/containerd/containerd v1.4.1-0.20200903181227-d4e78200d6da
 	github.com/containerd/continuity v0.0.0-20200710164510-efbc4488d8fe
 	github.com/containerd/go-cni v1.0.1
-	github.com/containerd/go-runc v0.0.0-20201017060547-8c4be61c2e34
+	github.com/containerd/go-runc v0.0.0-20201020171139-16b287bc67d0
 	github.com/containerd/stargz-snapshotter v0.0.0-20200903042824-2ee75e91f8f9
 	github.com/containerd/typeurl v1.0.1
 	github.com/coreos/go-systemd/v22 v22.1.0
