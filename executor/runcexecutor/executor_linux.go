@@ -1,14 +1,9 @@
 package runcexecutor
 
 import (
-	"bufio"
 	"context"
-	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
-	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -28,10 +23,10 @@ func updateRuncFieldsForHostOS(runtime *runc.Runc) {
 }
 
 func (w *runcExecutor) run(ctx context.Context, id, bundle string, process executor.ProcessInfo) error {
-	return w.callWithIO(ctx, id, bundle, process, func(ctx context.Context, pidfile string, io runc.IO) error {
+	return w.callWithIO(ctx, id, bundle, process, func(ctx context.Context, started chan<- int, io runc.IO) error {
 		_, err := w.runc.Run(ctx, id, bundle, &runc.CreateOpts{
 			NoPivot: w.noPivot,
-			PidFile: pidfile,
+			Started: started,
 			IO:      io,
 		})
 		return err
@@ -39,29 +34,22 @@ func (w *runcExecutor) run(ctx context.Context, id, bundle string, process execu
 }
 
 func (w *runcExecutor) exec(ctx context.Context, id, bundle string, specsProcess *specs.Process, process executor.ProcessInfo) error {
-	return w.callWithIO(ctx, id, bundle, process, func(ctx context.Context, pidfile string, io runc.IO) error {
+	return w.callWithIO(ctx, id, bundle, process, func(ctx context.Context, started chan<- int, io runc.IO) error {
 		return w.runc.Exec(ctx, id, *specsProcess, &runc.ExecOpts{
-			PidFile: pidfile,
+			Started: started,
 			IO:      io,
 		})
 	})
 }
 
-type runcCall func(ctx context.Context, pidfile string, io runc.IO) error
+type runcCall func(ctx context.Context, started chan<- int, io runc.IO) error
 
 func (w *runcExecutor) callWithIO(ctx context.Context, id, bundle string, process executor.ProcessInfo, call runcCall) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	pidfile, err := ioutil.TempFile(bundle, "*.pid")
-	if err != nil {
-		return errors.Wrap(err, "failed to create pidfile")
-	}
-	defer os.Remove(pidfile.Name())
-	pidfile.Close()
-
 	if !process.Meta.Tty {
-		return call(ctx, pidfile.Name(), &forwardIO{stdin: process.Stdin, stdout: process.Stdout, stderr: process.Stderr})
+		return call(ctx, nil, &forwardIO{stdin: process.Stdin, stdout: process.Stdout, stderr: process.Stderr})
 	}
 
 	ptm, ptsName, err := console.NewPty()
@@ -117,37 +105,26 @@ func (w *runcExecutor) callWithIO(ctx context.Context, id, bundle string, proces
 		})
 	}
 
-	eg.Go(func() error {
-		// need to poll until the pidfile has the pid written to it
-		pidfileCtx, timeout := context.WithTimeout(ctx, 10*time.Second)
-		defer timeout()
+	started := make(chan int, 1)
 
+	eg.Go(func() error {
+		startedCtx, timeout := context.WithTimeout(ctx, 10*time.Second)
+		defer timeout()
 		var runcProcess *os.Process
-		for {
-			st, err := os.Stat(pidfile.Name())
-			if err == nil && st.Size() > 0 {
-				pid, err := runc.ReadPidFile(pidfile.Name())
-				if err != nil {
-					return errors.Wrapf(err, "unable to read pid file: %s", pidfile.Name())
-				}
-				// pid will be for the process in process.Meta, not the parent runc process.
-				// We need to send SIGWINCH to the runc process, not the process.Meta process.
-				ppid, err := getppid(pid)
-				if err != nil {
-					return errors.Wrapf(err, "unable to find runc process (parent of %d)", pid)
-				}
-				runcProcess, err = os.FindProcess(ppid)
-				if err != nil {
-					return errors.Wrapf(err, "unable to find process for pid %d", ppid)
-				}
-				break
+		select {
+		case <-startedCtx.Done():
+			return errors.New("runc started message never received")
+		case pid, ok := <-started:
+			if !ok {
+				return errors.New("runc process failed to send pid")
 			}
-			select {
-			case <-pidfileCtx.Done():
-				return errors.New("pidfile never updated")
-			case <-time.After(100 * time.Microsecond):
+			runcProcess, err = os.FindProcess(pid)
+			if err != nil {
+				return errors.Wrapf(err, "unable to find runc process for pid %d", pid)
 			}
+			defer runcProcess.Release()
 		}
+
 		for {
 			select {
 			case <-ctx.Done():
@@ -179,24 +156,5 @@ func (w *runcExecutor) callWithIO(ctx context.Context, id, bundle string, proces
 		runcIO.stderr = pts
 	}
 
-	return call(ctx, pidfile.Name(), runcIO)
-}
-
-const PPidStatusPrefix = "PPid:\t"
-
-func getppid(pid int) (int, error) {
-	fh, err := os.Open(fmt.Sprintf("/proc/%d/status", pid))
-	if err != nil {
-		return -1, err
-	}
-
-	defer fh.Close()
-	scanner := bufio.NewScanner(fh)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.HasPrefix(line, PPidStatusPrefix) {
-			return strconv.Atoi(strings.TrimPrefix(line, PPidStatusPrefix))
-		}
-	}
-	return -1, errors.Errorf("PPid line not found in /proc/%d/status", pid)
+	return call(ctx, started, runcIO)
 }
