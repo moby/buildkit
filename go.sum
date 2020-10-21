@@ -127,8 +127,8 @@ github.com/containerd/go-cni v1.0.1/go.mod h1:+vUpYxKvAF72G9i1WoDOiPGRtQpqsNW/ZH
 github.com/containerd/go-runc v0.0.0-20180907222934-5a6d9f37cfa3/go.mod h1:IV7qH3hrUgRmyYrtgEeGWJfWbgcHL9CSRruz2Vqcph0=
 github.com/containerd/go-runc v0.0.0-20200220073739-7016d3ce2328 h1:PRTagVMbJcCezLcHXe8UJvR1oBzp2lG3CEumeFOLOds=
 github.com/containerd/go-runc v0.0.0-20200220073739-7016d3ce2328/go.mod h1:PpyHrqVs8FTi9vpyHwPwiNEGaACDxT/N/pLcvMSRA9g=
-github.com/containerd/go-runc v0.0.0-20201017060547-8c4be61c2e34 h1:jFRg/hwx0DPpcg23MNusAppCDJa5nndN3/RAxSblN58=
-github.com/containerd/go-runc v0.0.0-20201017060547-8c4be61c2e34/go.mod h1:1CDPys/h0SMZoki7dv3bPQ1wJWnmaeZIO026WPts2xM=
+github.com/containerd/go-runc v0.0.0-20201020171139-16b287bc67d0 h1:e+50zk22gvHLJKe8+d+xSMyA88PPQk/XfWuUw1BdnPA=
+github.com/containerd/go-runc v0.0.0-20201020171139-16b287bc67d0/go.mod h1:cNU0ZbCgCQVZK4lgG3P+9tn9/PaJNmoDXPpoJhDR+Ok=
 github.com/containerd/stargz-snapshotter v0.0.0-20200903042824-2ee75e91f8f9 h1:JEcj3rNCg0Ho5t9kiOa4LV/vaNXbRQ9l2PIRzz2LWCQ=
 github.com/containerd/stargz-snapshotter v0.0.0-20200903042824-2ee75e91f8f9/go.mod h1:f+gZLtYcuNQWxucWyfVEQXSBoGbXNpQ76+XWVMgp+34=
 github.com/containerd/ttrpc v0.0.0-20190828154514-0e0f228740de/go.mod h1:PvCDdDGpgqzQIzDW1TphrGLssLDZp2GuS+X5DkEJB8o=
