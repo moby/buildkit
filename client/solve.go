@@ -314,6 +314,10 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 }
 
 func prepareSyncedDirs(def *llb.Definition, localDirs map[string]string) ([]filesync.SyncedDir, error) {
+	if localDirs == nil {
+		// Earthly specific - skip resolving local dirs found in the definition.
+		return nil, nil
+	}
 	for _, d := range localDirs {
 		fi, err := os.Stat(d)
 		if err != nil {
