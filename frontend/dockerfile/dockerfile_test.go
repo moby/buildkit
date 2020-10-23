@@ -106,6 +106,7 @@ var allTests = []integration.Test{
 	testMultiArgs,
 	testFrontendSubrequests,
 	testDockefileCheckHostname,
+	testDefaultShellAndPath,
 }
 
 var fileOpTests = []integration.Test{
@@ -1207,6 +1208,96 @@ COPY --from=build /out .
 	dt, err := ioutil.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
 	require.Equal(t, "foo bar:box-foo:123 456", string(dt))
+}
+
+func testDefaultShellAndPath(t *testing.T, sb integration.Sandbox) {
+	skipDockerd(t, sb)
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM scratch
+ENTRYPOINT foo bar
+COPY Dockerfile .
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	out := filepath.Join(destDir, "out.tar")
+	outW, err := os.Create(out)
+	require.NoError(t, err)
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+		FrontendAttrs: map[string]string{
+			"platform": "windows/amd64,linux/amd64",
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:   client.ExporterOCI,
+				Output: fixedWriteCloser(outW),
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "out.tar"))
+	require.NoError(t, err)
+
+	m, err := testutil.ReadTarToMap(dt, false)
+	require.NoError(t, err)
+
+	var idx ocispec.Index
+	err = json.Unmarshal(m["index.json"].Data, &idx)
+	require.NoError(t, err)
+
+	mlistHex := idx.Manifests[0].Digest.Hex()
+
+	idx = ocispec.Index{}
+	err = json.Unmarshal(m["blobs/sha256/"+mlistHex].Data, &idx)
+	require.NoError(t, err)
+
+	require.Equal(t, 2, len(idx.Manifests))
+
+	for i, exp := range []struct {
+		p          string
+		entrypoint []string
+		env        []string
+	}{
+		{p: "windows/amd64", entrypoint: []string{"cmd", "/S", "/C", "foo bar"}, env: []string{"PATH=c:\\Windows\\System32;c:\\Windows"}},
+		{p: "linux/amd64", entrypoint: []string{"/bin/sh", "-c", "foo bar"}, env: []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}},
+	} {
+		t.Run(exp.p, func(t *testing.T) {
+			require.Equal(t, exp.p, platforms.Format(*idx.Manifests[i].Platform))
+
+			var mfst ocispec.Manifest
+			err = json.Unmarshal(m["blobs/sha256/"+idx.Manifests[i].Digest.Hex()].Data, &mfst)
+			require.NoError(t, err)
+
+			require.Equal(t, 1, len(mfst.Layers))
+
+			var img ocispec.Image
+			err = json.Unmarshal(m["blobs/sha256/"+mfst.Config.Digest.Hex()].Data, &img)
+			require.NoError(t, err)
+
+			require.Equal(t, exp.entrypoint, img.Config.Entrypoint)
+			require.Equal(t, exp.env, img.Config.Env)
+		})
+	}
 }
 
 func testExportMultiPlatform(t *testing.T, sb integration.Sandbox) {
