@@ -1353,7 +1353,7 @@ func withShell(img Image, args []string) []string {
 	if len(img.Config.Shell) > 0 {
 		shell = append([]string{}, img.Config.Shell...)
 	} else {
-		shell = defaultShell()
+		shell = defaultShell(img.OS)
 	}
 	return append(shell, strings.Join(args, " "))
 }
