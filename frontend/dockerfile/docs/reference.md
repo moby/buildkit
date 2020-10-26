@@ -2216,8 +2216,6 @@ are stored currently).
 When the health status of a container changes, a `health_status` event is
 generated with the new status.
 
-The `HEALTHCHECK` feature was added in Docker 1.12.
-
 
 ## SHELL
 
@@ -2341,8 +2339,6 @@ environment variable expansion semantics could be modified.
 
 The `SHELL` instruction can also be used on Linux should an alternate shell be
 required such as `zsh`, `csh`, `tcsh` and others.
-
-The `SHELL` feature was added in Docker 1.12.
 
 ## External implementation features
 
