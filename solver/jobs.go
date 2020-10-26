@@ -230,6 +230,7 @@ type Job struct {
 	pw     progress.Writer
 	span   opentracing.Span
 	values sync.Map
+	id     string
 
 	progressCloser func()
 	SessionID      string
@@ -429,6 +430,7 @@ func (jl *Solver) NewJob(id string) (*Job, error) {
 		pw:             pw,
 		progressCloser: progressCloser,
 		span:           (&opentracing.NoopTracer{}).StartSpan(""),
+		id:             id,
 	}
 	jl.jobs[id] = j
 
@@ -513,6 +515,8 @@ func (j *Job) Discard() error {
 		}
 		st.mu.Unlock()
 	}
+
+	delete(j.list.jobs, j.id)
 	return nil
 }
 
