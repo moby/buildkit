@@ -352,6 +352,7 @@ The directory layout conforms to OCI Image Spec v1.0.
 -   `mode=max`: export all the layers of all intermediate steps. Not supported for `inline` cache exporter.
 -   `ref=docker.io/user/image:tag`: reference for `registry` cache exporter
 -   `dest=path/to/output-dir`: directory for `local` cache exporter
+-   `oci-mediatypes=true|false`: whether to use OCI mediatypes in exported manifests for `local` and `registry` exporter. Since BuildKit `v0.8` defaults to true.
 
 #### `--import-cache` options
 -   `type`: `registry` or `local`. Use `registry` to import `inline` cache.
