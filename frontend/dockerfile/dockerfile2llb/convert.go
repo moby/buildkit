@@ -317,7 +317,11 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 
 		// make sure that PATH is always set
 		if _, ok := shell.BuildEnvs(d.image.Config.Env)["PATH"]; !ok {
-			d.image.Config.Env = append(d.image.Config.Env, "PATH="+system.DefaultPathEnv)
+			var os string
+			if d.platform != nil {
+				os = d.platform.OS
+			}
+			d.image.Config.Env = append(d.image.Config.Env, "PATH="+system.DefaultPathEnv(os))
 		}
 
 		// initialize base metadata from image conf
@@ -1349,7 +1353,7 @@ func withShell(img Image, args []string) []string {
 	if len(img.Config.Shell) > 0 {
 		shell = append([]string{}, img.Config.Shell...)
 	} else {
-		shell = defaultShell()
+		shell = defaultShell(img.OS)
 	}
 	return append(shell, strings.Join(args, " "))
 }

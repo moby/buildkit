@@ -143,7 +143,7 @@ func TestFallbackPath(t *testing.T) {
 	require.False(t, def.Metadata[e.Vertex.Digest()].Caps[pb.CapExecMetaSetsDefaultPath])
 	v, ok := getenv(e, "PATH")
 	require.True(t, ok)
-	require.Equal(t, system.DefaultPathEnv, v)
+	require.Equal(t, system.DefaultPathEnvUnix, v)
 
 	// All capabilities, including pb.CapExecMetaSetsDefaultPath,
 	// so should get no PATH (not present at all, rather than
