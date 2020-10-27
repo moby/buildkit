@@ -21,6 +21,7 @@ import (
 	"github.com/moby/buildkit/session/sshforward/sshprovider"
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
+	utilsystem "github.com/moby/buildkit/util/system"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -42,6 +43,7 @@ func TestClientGatewayIntegration(t *testing.T) {
 		testClientGatewayContainerPID1Tty,
 		testClientGatewayContainerExecTty,
 		testClientSlowCacheRootfsRef,
+		testClientGatewayContainerPlatformPATH,
 	}, integration.WithMirroredImages(integration.OfficialImages("busybox:latest")))
 }
 
@@ -1013,7 +1015,77 @@ func testClientSlowCacheRootfsRef(t *testing.T, sb integration.Sandbox) {
 
 	_, err = c.Build(ctx, SolveOpt{}, "buildkit_test", b, nil)
 	require.NoError(t, err)
+	checkAllReleasable(t, c, sb, true)
+}
 
+// testClientGatewayContainerPlatformPATH is testing the correct default PATH
+// gets set for the requested platform
+func testClientGatewayContainerPlatformPATH(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	ctx := context.TODO()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	product := "buildkit_test"
+	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
+		st := llb.Image("busybox:latest")
+		def, err := st.Marshal(ctx)
+		require.NoError(t, err)
+		r, err := c.Solve(ctx, client.SolveRequest{
+			Definition: def.ToPB(),
+		})
+		require.NoError(t, err)
+
+		tests := []struct {
+			Name     string
+			Platform *pb.Platform
+			Expected string
+		}{{
+			"default path",
+			nil,
+			utilsystem.DefaultPathEnvUnix,
+		}, {
+			"linux path",
+			&pb.Platform{OS: "linux"},
+			utilsystem.DefaultPathEnvUnix,
+		}, {
+			"windows path",
+			&pb.Platform{OS: "windows"},
+			utilsystem.DefaultPathEnvWindows,
+		}}
+
+		for _, tt := range tests {
+			t.Run(tt.Name, func(t *testing.T) {
+				ctr, err := c.NewContainer(ctx, client.NewContainerRequest{
+					Mounts: []client.Mount{{
+						Dest:      "/",
+						MountType: pb.MountType_BIND,
+						Ref:       r.Ref,
+					}},
+					Platform: tt.Platform,
+				})
+				require.NoError(t, err)
+				output := bytes.NewBuffer(nil)
+				pid1, err := ctr.Start(ctx, client.StartRequest{
+					Args:   []string{"/bin/sh", "-c", "echo -n $PATH"},
+					Stdout: &nopCloser{output},
+				})
+				require.NoError(t, err)
+
+				err = pid1.Wait()
+				require.NoError(t, err)
+				require.Equal(t, tt.Expected, output.String())
+				err = ctr.Release(ctx)
+				require.NoError(t, err)
+			})
+		}
+		return &client.Result{}, err
+	}
+
+	_, err = c.Build(ctx, SolveOpt{}, product, b, nil)
+	require.NoError(t, err)
 	checkAllReleasable(t, c, sb, true)
 }
 

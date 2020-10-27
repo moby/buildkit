@@ -676,6 +676,8 @@ func (c *grpcClient) NewContainer(ctx context.Context, req client.NewContainerRe
 	_, err = c.client.NewContainer(ctx, &pb.NewContainerRequest{
 		ContainerID: id,
 		Mounts:      mounts,
+		Platform:    req.Platform,
+		Constraints: req.Constraints,
 	})
 	if err != nil {
 		return nil, err
