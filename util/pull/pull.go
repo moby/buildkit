@@ -13,6 +13,7 @@ import (
 	"github.com/containerd/containerd/remotes/docker/schema1"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/contentutil"
+	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/imageutil"
 	"github.com/moby/buildkit/util/pull/pullprogress"
 	digest "github.com/opencontainers/go-digest"
@@ -26,8 +27,9 @@ type Puller struct {
 	Src          reference.Spec
 	Platform     ocispec.Platform
 
-	resolveOnce sync.Once
+	g           flightcontrol.Group
 	resolveErr  error
+	resolveDone bool
 	desc        ocispec.Descriptor
 	configDesc  ocispec.Descriptor
 	ref         string
@@ -46,20 +48,28 @@ type PulledManifests struct {
 }
 
 func (p *Puller) resolve(ctx context.Context) error {
-	p.resolveOnce.Do(func() {
+	_, err := p.g.Do(ctx, "", func(ctx context.Context) (_ interface{}, err error) {
+		if p.resolveErr != nil || p.resolveDone {
+			return nil, p.resolveErr
+		}
+		defer func() {
+			if !errors.Is(err, context.Canceled) {
+				p.resolveErr = err
+			}
+		}()
 		if p.tryLocalResolve(ctx) == nil {
 			return
 		}
 		ref, desc, err := p.Resolver.Resolve(ctx, p.Src.String())
 		if err != nil {
-			p.resolveErr = err
-			return
+			return nil, err
 		}
 		p.desc = desc
 		p.ref = ref
+		p.resolveDone = true
+		return nil, nil
 	})
-
-	return p.resolveErr
+	return err
 }
 
 func (p *Puller) tryLocalResolve(ctx context.Context) error {

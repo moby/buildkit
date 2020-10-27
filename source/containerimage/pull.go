@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/containerd/containerd/content"
@@ -141,8 +140,9 @@ type puller struct {
 	id             *source.ImageIdentifier
 	vtx            solver.Vertex
 
-	cacheKeyOnce     sync.Once
+	g                flightcontrol.Group
 	cacheKeyErr      error
+	cacheKeyDone     bool
 	releaseTmpLeases func(context.Context) error
 	descHandlers     cache.DescHandlers
 	manifest         *pull.PulledManifests
@@ -172,16 +172,23 @@ func mainManifestKey(ctx context.Context, desc specs.Descriptor, platform specs.
 func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cacheKey string, cacheOpts solver.CacheOpts, cacheDone bool, err error) {
 	p.Puller.Resolver = resolver.DefaultPool.GetResolver(p.RegistryHosts, p.Ref, "pull", p.SessionManager, g).WithImageStore(p.ImageStore, p.id.ResolveMode)
 
-	p.cacheKeyOnce.Do(func() {
+	_, err = p.g.Do(ctx, "", func(ctx context.Context) (_ interface{}, err error) {
+		if p.cacheKeyErr != nil || p.cacheKeyDone == true {
+			return nil, p.cacheKeyErr
+		}
+		defer func() {
+			if !errors.Is(err, context.Canceled) {
+				p.cacheKeyErr = err
+			}
+		}()
 		ctx, done, err := leaseutil.WithLease(ctx, p.LeaseManager, leases.WithExpiration(5*time.Minute), leaseutil.MakeTemporary)
 		if err != nil {
-			p.cacheKeyErr = err
-			return
+			return nil, err
 		}
 		p.releaseTmpLeases = done
 		imageutil.AddLease(p.releaseTmpLeases)
 		defer func() {
-			if p.cacheKeyErr != nil {
+			if err != nil {
 				p.releaseTmpLeases(ctx)
 			}
 		}()
@@ -193,8 +200,7 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 
 		p.manifest, err = p.PullManifests(ctx)
 		if err != nil {
-			p.cacheKeyErr = err
-			return
+			return nil, err
 		}
 
 		if len(p.manifest.Remote.Descriptors) > 0 {
@@ -243,20 +249,20 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 		desc := p.manifest.MainManifestDesc
 		k, err := mainManifestKey(ctx, desc, p.Platform)
 		if err != nil {
-			p.cacheKeyErr = err
-			return
+			return nil, err
 		}
 		p.manifestKey = k.String()
 
 		dt, err := content.ReadBlob(ctx, p.ContentStore, p.manifest.ConfigDesc)
 		if err != nil {
-			p.cacheKeyErr = err
-			return
+			return nil, err
 		}
 		p.configKey = cacheKeyFromConfig(dt).String()
+		p.cacheKeyDone = true
+		return nil, nil
 	})
-	if p.cacheKeyErr != nil {
-		return "", nil, false, p.cacheKeyErr
+	if err != nil {
+		return "", nil, false, err
 	}
 
 	cacheOpts = solver.CacheOpts(make(map[interface{}]interface{}))
