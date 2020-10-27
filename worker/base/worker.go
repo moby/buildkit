@@ -367,7 +367,7 @@ func (w *Worker) Exporter(name string, sm *session.Manager) (exporter.Exporter, 
 func (w *Worker) FromRemote(ctx context.Context, remote *solver.Remote) (ref cache.ImmutableRef, err error) {
 	pw, _, _ := progress.FromContext(ctx)
 	descHandler := &cache.DescHandler{
-		Provider: remote.Provider,
+		Provider: func(session.Group) content.Provider { return remote.Provider },
 		Progress: &controller.Controller{Writer: pw},
 	}
 	descHandlers := cache.DescHandlers(make(map[digest.Digest]*cache.DescHandler))

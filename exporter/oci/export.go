@@ -125,7 +125,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 	}
 	defer done(context.TODO())
 
-	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes, e.layerCompression)
+	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes, e.layerCompression, sessionID)
 	if err != nil {
 		return nil, err
 	}

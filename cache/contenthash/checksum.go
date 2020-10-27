@@ -15,6 +15,7 @@ import (
 	"github.com/hashicorp/golang-lru/simplelru"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/metadata"
+	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/locker"
 	digest "github.com/opencontainers/go-digest"
@@ -44,12 +45,12 @@ func getDefaultManager() *cacheManager {
 // header, "/dir" is for contents. For the root node "" (empty string) is the
 // key for root, "/" for the root header
 
-func Checksum(ctx context.Context, ref cache.ImmutableRef, path string, followLinks bool) (digest.Digest, error) {
-	return getDefaultManager().Checksum(ctx, ref, path, followLinks)
+func Checksum(ctx context.Context, ref cache.ImmutableRef, path string, followLinks bool, s session.Group) (digest.Digest, error) {
+	return getDefaultManager().Checksum(ctx, ref, path, followLinks, s)
 }
 
-func ChecksumWildcard(ctx context.Context, ref cache.ImmutableRef, path string, followLinks bool) (digest.Digest, error) {
-	return getDefaultManager().ChecksumWildcard(ctx, ref, path, followLinks)
+func ChecksumWildcard(ctx context.Context, ref cache.ImmutableRef, path string, followLinks bool, s session.Group) (digest.Digest, error) {
+	return getDefaultManager().ChecksumWildcard(ctx, ref, path, followLinks, s)
 }
 
 func GetCacheContext(ctx context.Context, md *metadata.StorageItem, idmap *idtools.IdentityMapping) (CacheContext, error) {
@@ -65,8 +66,8 @@ func ClearCacheContext(md *metadata.StorageItem) {
 }
 
 type CacheContext interface {
-	Checksum(ctx context.Context, ref cache.Mountable, p string, followLinks bool) (digest.Digest, error)
-	ChecksumWildcard(ctx context.Context, ref cache.Mountable, p string, followLinks bool) (digest.Digest, error)
+	Checksum(ctx context.Context, ref cache.Mountable, p string, followLinks bool, s session.Group) (digest.Digest, error)
+	ChecksumWildcard(ctx context.Context, ref cache.Mountable, p string, followLinks bool, s session.Group) (digest.Digest, error)
 	HandleChange(kind fsutil.ChangeKind, p string, fi os.FileInfo, err error) error
 }
 
@@ -85,20 +86,20 @@ type cacheManager struct {
 	lruMu  sync.Mutex
 }
 
-func (cm *cacheManager) Checksum(ctx context.Context, ref cache.ImmutableRef, p string, followLinks bool) (digest.Digest, error) {
+func (cm *cacheManager) Checksum(ctx context.Context, ref cache.ImmutableRef, p string, followLinks bool, s session.Group) (digest.Digest, error) {
 	cc, err := cm.GetCacheContext(ctx, ensureOriginMetadata(ref.Metadata()), ref.IdentityMapping())
 	if err != nil {
 		return "", nil
 	}
-	return cc.Checksum(ctx, ref, p, followLinks)
+	return cc.Checksum(ctx, ref, p, followLinks, s)
 }
 
-func (cm *cacheManager) ChecksumWildcard(ctx context.Context, ref cache.ImmutableRef, p string, followLinks bool) (digest.Digest, error) {
+func (cm *cacheManager) ChecksumWildcard(ctx context.Context, ref cache.ImmutableRef, p string, followLinks bool, s session.Group) (digest.Digest, error) {
 	cc, err := cm.GetCacheContext(ctx, ensureOriginMetadata(ref.Metadata()), ref.IdentityMapping())
 	if err != nil {
 		return "", nil
 	}
-	return cc.ChecksumWildcard(ctx, ref, p, followLinks)
+	return cc.ChecksumWildcard(ctx, ref, p, followLinks, s)
 }
 
 func (cm *cacheManager) GetCacheContext(ctx context.Context, md *metadata.StorageItem, idmap *idtools.IdentityMapping) (CacheContext, error) {
@@ -170,13 +171,14 @@ type mount struct {
 	mountable cache.Mountable
 	mountPath string
 	unmount   func() error
+	session   session.Group
 }
 
 func (m *mount) mount(ctx context.Context) (string, error) {
 	if m.mountPath != "" {
 		return m.mountPath, nil
 	}
-	mounts, err := m.mountable.Mount(ctx, true)
+	mounts, err := m.mountable.Mount(ctx, true, m.session)
 	if err != nil {
 		return "", err
 	}
@@ -380,8 +382,8 @@ func (cc *cacheContext) HandleChange(kind fsutil.ChangeKind, p string, fi os.Fil
 	return nil
 }
 
-func (cc *cacheContext) ChecksumWildcard(ctx context.Context, mountable cache.Mountable, p string, followLinks bool) (digest.Digest, error) {
-	m := &mount{mountable: mountable}
+func (cc *cacheContext) ChecksumWildcard(ctx context.Context, mountable cache.Mountable, p string, followLinks bool, s session.Group) (digest.Digest, error) {
+	m := &mount{mountable: mountable, session: s}
 	defer m.clean()
 
 	wildcards, err := cc.wildcards(ctx, m, p)
@@ -417,8 +419,8 @@ func (cc *cacheContext) ChecksumWildcard(ctx context.Context, mountable cache.Mo
 	return wildcards[0].Record.Digest, nil
 }
 
-func (cc *cacheContext) Checksum(ctx context.Context, mountable cache.Mountable, p string, followLinks bool) (digest.Digest, error) {
-	m := &mount{mountable: mountable}
+func (cc *cacheContext) Checksum(ctx context.Context, mountable cache.Mountable, p string, followLinks bool, s session.Group) (digest.Digest, error) {
+	m := &mount{mountable: mountable, session: s}
 	defer m.clean()
 
 	return cc.checksumFollow(ctx, m, p, followLinks)

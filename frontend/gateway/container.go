@@ -12,6 +12,7 @@ import (
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/llbsolver/mounts"
 	opspb "github.com/moby/buildkit/solver/pb"
@@ -78,7 +79,7 @@ func NewContainer(ctx context.Context, e executor.Executor, sm *session.Manager,
 	}
 
 	makeMutable := func(worker worker.Worker, ref cache.ImmutableRef) (cache.MutableRef, error) {
-		mRef, err := worker.CacheManager().New(ctx, ref)
+		mRef, err := worker.CacheManager().New(ctx, ref, g)
 		if err != nil {
 			return nil, stack.Enable(err)
 		}
@@ -105,12 +106,13 @@ func NewContainer(ctx context.Context, e executor.Executor, sm *session.Manager,
 			name := fmt.Sprintf("container %s", req.ContainerID)
 			mm = mounts.NewMountManager(name, workerRef.Worker.CacheManager(), sm, workerRef.Worker.MetadataStore())
 
-			ctr.rootFS = workerRef.ImmutableRef
+			ctr.rootFS = mountWithSession(workerRef.ImmutableRef, g)
 			if !m.Readonly {
-				ctr.rootFS, err = makeMutable(workerRef.Worker, workerRef.ImmutableRef)
+				ref, err := makeMutable(workerRef.Worker, workerRef.ImmutableRef)
 				if err != nil {
 					return nil, stack.Enable(err)
 				}
+				ctr.rootFS = mountWithSession(ref, g)
 			}
 
 			// delete root mount from list, handled here
@@ -149,7 +151,7 @@ func NewContainer(ctx context.Context, e executor.Executor, sm *session.Manager,
 		case opspb.MountType_BIND:
 			// nothing to do here
 		case opspb.MountType_CACHE:
-			mRef, err := mm.MountableCache(ctx, toProtoMount(m), ref)
+			mRef, err := mm.MountableCache(ctx, toProtoMount(m), ref, g)
 			if err != nil {
 				return nil, err
 			}
@@ -187,7 +189,7 @@ func NewContainer(ctx context.Context, e executor.Executor, sm *session.Manager,
 		}
 
 		execMount := executor.Mount{
-			Src:      mountable,
+			Src:      mountWithSession(mountable, g),
 			Selector: m.Selector,
 			Dest:     m.Dest,
 			Readonly: m.Readonly,
@@ -208,7 +210,7 @@ type gatewayContainer struct {
 	id       string
 	netMode  opspb.NetMode
 	platform opspb.Platform
-	rootFS   cache.Mountable
+	rootFS   executor.Mountable
 	mounts   []executor.Mount
 	executor executor.Executor
 	started  bool
@@ -347,4 +349,17 @@ func addDefaultEnvvar(env []string, k, v string) []string {
 		}
 	}
 	return append(env, k+"="+v)
+}
+
+func mountWithSession(m cache.Mountable, g session.Group) executor.Mountable {
+	return &mountable{m: m, g: g}
+}
+
+type mountable struct {
+	m cache.Mountable
+	g session.Group
+}
+
+func (m *mountable) Mount(ctx context.Context, readonly bool) (snapshot.Mountable, error) {
+	return m.m.Mount(ctx, readonly, m.g)
 }

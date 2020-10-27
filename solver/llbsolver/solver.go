@@ -273,7 +273,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	}, nil
 }
 
-func inlineCache(ctx context.Context, e remotecache.Exporter, res solver.CachedResult) ([]byte, error) {
+func inlineCache(ctx context.Context, e remotecache.Exporter, res solver.CachedResult, g session.Group) ([]byte, error) {
 	if efl, ok := e.(interface {
 		ExportForLayers([]digest.Digest) ([]byte, error)
 	}); ok {
@@ -282,7 +282,7 @@ func inlineCache(ctx context.Context, e remotecache.Exporter, res solver.CachedR
 			return nil, errors.Errorf("invalid reference: %T", res.Sys())
 		}
 
-		remote, err := workerRef.ImmutableRef.GetRemote(ctx, true, compression.Default)
+		remote, err := workerRef.ImmutableRef.GetRemote(ctx, true, compression.Default, g)
 		if err != nil || remote == nil {
 			return nil, nil
 		}
@@ -293,8 +293,9 @@ func inlineCache(ctx context.Context, e remotecache.Exporter, res solver.CachedR
 		}
 
 		if _, err := res.CacheKeys()[0].Exporter.ExportTo(ctx, e, solver.CacheExportOpt{
-			Convert: workerRefConverter,
+			Convert: workerRefConverter(g),
 			Mode:    solver.CacheExportModeMin,
+			Session: g,
 		}); err != nil {
 			return nil, err
 		}
