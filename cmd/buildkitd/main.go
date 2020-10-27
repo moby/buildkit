@@ -208,7 +208,11 @@ func main() {
 		unary := grpc_middleware.ChainUnaryServer(unaryInterceptor(ctx), grpcerrors.UnaryServerInterceptor)
 		stream := grpc_middleware.ChainStreamServer(otgrpc.OpenTracingStreamServerInterceptor(tracer), grpcerrors.StreamServerInterceptor)
 
-		opts := []grpc.ServerOption{grpc.UnaryInterceptor(unary), grpc.StreamInterceptor(stream)}
+		maxMsgSize := 67108864 // 64MB
+		opts := []grpc.ServerOption{
+			grpc.UnaryInterceptor(unary), grpc.StreamInterceptor(stream),
+			grpc.MaxRecvMsgSize(maxMsgSize), grpc.MaxSendMsgSize(maxMsgSize),
+		}
 		server := grpc.NewServer(opts...)
 
 		// relative path does not work with nightlyone/lockfile

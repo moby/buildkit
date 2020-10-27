@@ -45,10 +45,11 @@ type SolveOpt struct {
 }
 
 type ExportEntry struct {
-	Type      string
-	Attrs     map[string]string
-	Output    func(map[string]string) (io.WriteCloser, error) // for ExporterOCI and ExporterDocker
-	OutputDir string                                          // for ExporterLocal
+	Type          string
+	Attrs         map[string]string
+	Output        func(map[string]string) (io.WriteCloser, error) // for ExporterOCI, ExporterDocker and ExporterEarthly
+	OutputDirFunc func(map[string]string) (string, error)         // for ExporterEarthly
+	OutputDir     string                                          // for ExporterLocal
 }
 
 type CacheOptionsEntry struct {
@@ -148,6 +149,14 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 				return nil, errors.Errorf("output file writer is required for %s exporter", ex.Type)
 			}
 			s.Allow(filesync.NewFSSyncTarget(ex.Output))
+		case ExporterEarthly:
+			if ex.OutputDir != "" {
+				return nil, errors.Errorf("output directory %s is not supported by %s exporter", ex.OutputDir, ex.Type)
+			}
+			if ex.Output == nil {
+				return nil, errors.Errorf("output file writer is required for %s exporter", ex.Type)
+			}
+			s.Allow(filesync.NewFSSyncMultiTarget(ex.Output, ex.OutputDirFunc))
 		default:
 			if ex.Output != nil {
 				return nil, errors.Errorf("output file writer is not supported by %s exporter", ex.Type)

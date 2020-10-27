@@ -50,7 +50,10 @@ func NewSession(ctx context.Context, name, sharedKey string) (*Session, error) {
 	var unary []grpc.UnaryServerInterceptor
 	var stream []grpc.StreamServerInterceptor
 
-	serverOpts := []grpc.ServerOption{}
+	maxMsgSize := 67108864 // 64MB
+	serverOpts := []grpc.ServerOption{
+		grpc.MaxRecvMsgSize(maxMsgSize), grpc.MaxSendMsgSize(maxMsgSize),
+	}
 	if span := opentracing.SpanFromContext(ctx); span != nil {
 		tracer := span.Tracer()
 		unary = append(unary, otgrpc.OpenTracingServerInterceptor(tracer, traceFilter()))
