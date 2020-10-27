@@ -95,6 +95,8 @@ type CacheExportOpt struct {
 	Convert func(context.Context, Result) (*Remote, error)
 	// Mode defines a cache export algorithm
 	Mode CacheExportMode
+	// Session is the session group to client (for auth credentials etc)
+	Session session.Group
 }
 
 // CacheExporter can export the artifacts of the build chain
@@ -145,7 +147,7 @@ type Op interface {
 	Exec(ctx context.Context, g session.Group, inputs []Result) (outputs []Result, err error)
 }
 
-type ResultBasedCacheFunc func(context.Context, Result) (digest.Digest, error)
+type ResultBasedCacheFunc func(context.Context, Result, session.Group) (digest.Digest, error)
 
 // CacheMap is a description for calculating the cache key of an operation.
 type CacheMap struct {

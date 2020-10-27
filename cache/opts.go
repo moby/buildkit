@@ -4,12 +4,13 @@ import (
 	"fmt"
 
 	"github.com/containerd/containerd/content"
+	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/util/progress"
 	digest "github.com/opencontainers/go-digest"
 )
 
 type DescHandler struct {
-	Provider       content.Provider
+	Provider       func(session.Group) content.Provider
 	Progress       progress.Controller
 	SnapshotLabels map[string]string
 }

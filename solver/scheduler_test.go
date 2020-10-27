@@ -3697,7 +3697,7 @@ func (cm *trackingCacheManager) Load(ctx context.Context, rec *CacheRecord) (Res
 	return cm.CacheManager.Load(ctx, rec)
 }
 
-func digestFromResult(ctx context.Context, res Result) (digest.Digest, error) {
+func digestFromResult(ctx context.Context, res Result, _ session.Group) (digest.Digest, error) {
 	return digest.FromBytes([]byte(unwrap(res))), nil
 }
 

@@ -9,6 +9,7 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/reference"
+	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/contentutil"
@@ -23,14 +24,14 @@ type Unlazier interface {
 	Unlazy(ctx context.Context) error
 }
 
-func (sr *immutableRef) GetRemote(ctx context.Context, createIfNeeded bool, compressionType compression.Type) (*solver.Remote, error) {
+func (sr *immutableRef) GetRemote(ctx context.Context, createIfNeeded bool, compressionType compression.Type, s session.Group) (*solver.Remote, error) {
 	ctx, done, err := leaseutil.WithLease(ctx, sr.cm.LeaseManager, leaseutil.MakeTemporary)
 	if err != nil {
 		return nil, err
 	}
 	defer done(ctx)
 
-	err = sr.computeBlobChain(ctx, createIfNeeded, compressionType)
+	err = sr.computeBlobChain(ctx, createIfNeeded, compressionType, s)
 	if err != nil {
 		return nil, err
 	}
@@ -102,9 +103,10 @@ func (sr *immutableRef) GetRemote(ctx context.Context, createIfNeeded bool, comp
 
 		remote.Descriptors = append(remote.Descriptors, desc)
 		mprovider.Add(lazyRefProvider{
-			ref:  ref,
-			desc: desc,
-			dh:   sr.descHandlers[desc.Digest],
+			ref:     ref,
+			desc:    desc,
+			dh:      sr.descHandlers[desc.Digest],
+			session: s,
 		})
 	}
 	return remote, nil
@@ -136,9 +138,10 @@ func (mp *lazyMultiProvider) Unlazy(ctx context.Context) error {
 }
 
 type lazyRefProvider struct {
-	ref  *immutableRef
-	desc ocispec.Descriptor
-	dh   *DescHandler
+	ref     *immutableRef
+	desc    ocispec.Descriptor
+	dh      *DescHandler
+	session session.Group
 }
 
 func (p lazyRefProvider) ReaderAt(ctx context.Context, desc ocispec.Descriptor) (content.ReaderAt, error) {
@@ -175,7 +178,7 @@ func (p lazyRefProvider) Unlazy(ctx context.Context) error {
 		// store. If efficient partial reads are desired in the future, something more like a "tee"
 		// that caches remote partial reads to a local store may need to replace this.
 		err := contentutil.Copy(ctx, p.ref.cm.ContentStore, &pullprogress.ProviderWithProgress{
-			Provider: p.dh.Provider,
+			Provider: p.dh.Provider(p.session),
 			Manager:  p.ref.cm.ContentStore,
 		}, p.desc)
 		if err != nil {

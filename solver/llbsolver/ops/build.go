@@ -80,7 +80,7 @@ func (b *buildOp) Exec(ctx context.Context, g session.Group, inputs []solver.Res
 		return nil, errors.Errorf("invalid reference for build %T", inp.Sys())
 	}
 
-	mount, err := ref.ImmutableRef.Mount(ctx, true)
+	mount, err := ref.ImmutableRef.Mount(ctx, true, g)
 	if err != nil {
 		return nil, err
 	}
