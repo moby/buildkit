@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -26,6 +27,8 @@ type NewContainerRequest struct {
 	ContainerID string
 	NetMode     opspb.NetMode
 	Mounts      []Mount
+	Platform    *opspb.Platform
+	Constraints *opspb.WorkerConstraints
 }
 
 // Mount used for the gateway.Container is nearly identical to the client.Mount
@@ -57,9 +60,17 @@ func toProtoMount(m Mount) *opspb.Mount {
 func NewContainer(ctx context.Context, e executor.Executor, sm *session.Manager, g session.Group, req NewContainerRequest) (client.Container, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	eg, ctx := errgroup.WithContext(ctx)
+	platform := opspb.Platform{
+		OS:           runtime.GOOS,
+		Architecture: runtime.GOARCH,
+	}
+	if req.Platform != nil {
+		platform = *req.Platform
+	}
 	ctr := &gatewayContainer{
 		id:       req.ContainerID,
 		netMode:  req.NetMode,
+		platform: platform,
 		executor: e,
 		errGroup: eg,
 		ctx:      ctx,
@@ -196,6 +207,7 @@ func NewContainer(ctx context.Context, e executor.Executor, sm *session.Manager,
 type gatewayContainer struct {
 	id       string
 	netMode  opspb.NetMode
+	platform opspb.Platform
 	rootFS   cache.Mountable
 	mounts   []executor.Mount
 	executor executor.Executor
@@ -227,7 +239,7 @@ func (gwCtr *gatewayContainer) Start(ctx context.Context, req client.StartReques
 	if procInfo.Meta.Cwd == "" {
 		procInfo.Meta.Cwd = "/"
 	}
-	procInfo.Meta.Env = addDefaultEnvvar(procInfo.Meta.Env, "PATH", utilsystem.DefaultPathEnvUnix) // support windows?
+	procInfo.Meta.Env = addDefaultEnvvar(procInfo.Meta.Env, "PATH", utilsystem.DefaultPathEnv(gwCtr.platform.OS))
 	if req.Tty {
 		procInfo.Meta.Env = addDefaultEnvvar(procInfo.Meta.Env, "TERM", "xterm")
 	}
