@@ -263,10 +263,22 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 			if grpcerrors.Code(err) == codes.AlreadyExists {
 				continue
 			}
+			if errors.Is(err, io.EOF) {
+				// TODO(vladaionescu): This sometimes happens when server responds with
+				//                     GRPC code codes.AlreadyExists and
+				//                     we continue to try to send data.
+				continue
+			}
 			return nil, report(err)
 		}
 		err = w.Close()
 		if grpcerrors.Code(err) == codes.AlreadyExists {
+			continue
+		}
+		if errors.Is(err, io.EOF) {
+			// TODO(vladaionescu): This sometimes happens when server responds with
+			//                     GRPC code codes.AlreadyExists and
+			//                     we continue to try to send data.
 			continue
 		}
 		if err != nil {
@@ -386,6 +398,12 @@ func exportDirFunc(ctx context.Context, md map[string]string, caller session.Cal
 		progress := newProgressHandler(ctx, "copying files")
 		if err := filesync.CopyToCallerWithMeta(ctx, md, fs, caller, progress); err != nil {
 			if grpcerrors.Code(err) == codes.AlreadyExists {
+				return nil
+			}
+			if errors.Is(err, io.EOF) {
+				// TODO(vladaionescu): This sometimes happens when server responds with
+				//                     GRPC code codes.AlreadyExists and
+				//                     fsutil continues to try to send data.
 				return nil
 			}
 			return err
