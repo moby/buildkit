@@ -172,6 +172,8 @@ message NewContainerRequest {
 	// For mount input values we can use random identifiers passed with ref
 	repeated pb.Mount Mounts = 2;
 	pb.NetMode Network = 3;
+	pb.Platform platform = 4;
+	pb.WorkerConstraints constraints = 5;
 }
 
 message NewContainerResponse{}

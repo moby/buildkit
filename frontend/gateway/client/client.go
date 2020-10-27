@@ -23,8 +23,10 @@ type Client interface {
 // NewContainerRequest encapsulates the requirements for a client to define a
 // new container, without defining the initial process.
 type NewContainerRequest struct {
-	Mounts  []Mount
-	NetMode pb.NetMode
+	Mounts      []Mount
+	NetMode     pb.NetMode
+	Platform    *pb.Platform
+	Constraints *pb.WorkerConstraints
 }
 
 // Mount allows clients to specify a filesystem mount. A Reference to a
