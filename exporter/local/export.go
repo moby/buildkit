@@ -70,7 +70,7 @@ func (e *localExporterInstance) Export(ctx context.Context, inp exporter.Source,
 				}
 				defer os.RemoveAll(src)
 			} else {
-				mount, err := ref.Mount(ctx, true)
+				mount, err := ref.Mount(ctx, true, session.NewGroup(sessionID))
 				if err != nil {
 					return err
 				}

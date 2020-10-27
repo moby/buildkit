@@ -125,7 +125,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	}
 	defer done(context.TODO())
 
-	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes, e.layerCompression)
+	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes, e.layerCompression, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +177,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 
 	mprovider := contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
 	if src.Ref != nil {
-		remote, err := src.Ref.GetRemote(ctx, false, e.layerCompression)
+		remote, err := src.Ref.GetRemote(ctx, false, e.layerCompression, session.NewGroup(sessionID))
 		if err != nil {
 			return nil, err
 		}
@@ -194,7 +194,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	}
 	if len(src.Refs) > 0 {
 		for _, r := range src.Refs {
-			remote, err := r.GetRemote(ctx, false, e.layerCompression)
+			remote, err := r.GetRemote(ctx, false, e.layerCompression, session.NewGroup(sessionID))
 			if err != nil {
 				return nil, err
 			}

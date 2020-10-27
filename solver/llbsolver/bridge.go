@@ -9,7 +9,6 @@ import (
 
 	"github.com/containerd/containerd/platforms"
 	"github.com/mitchellh/hashstructure"
-	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/executor"
@@ -245,7 +244,7 @@ func (rp *resultProxy) Result(ctx context.Context) (res solver.CachedResult, err
 	return nil, err
 }
 
-func (b *llbBridge) Run(ctx context.Context, id string, root cache.Mountable, mounts []executor.Mount, process executor.ProcessInfo, started chan<- struct{}) (err error) {
+func (b *llbBridge) Run(ctx context.Context, id string, root executor.Mountable, mounts []executor.Mount, process executor.ProcessInfo, started chan<- struct{}) (err error) {
 	w, err := b.resolveWorker()
 	if err != nil {
 		return err

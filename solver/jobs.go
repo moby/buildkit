@@ -623,7 +623,7 @@ func (s *sharedOp) CalcSlowCache(ctx context.Context, index Index, f ResultBased
 		}
 		s.slowMu.Unlock()
 		ctx = opentracing.ContextWithSpan(progress.WithProgress(ctx, s.st.mpw), s.st.mspan)
-		key, err := f(withAncestorCacheOpts(ctx, s.st), res)
+		key, err := f(withAncestorCacheOpts(ctx, s.st), res, s.st)
 		complete := true
 		if err != nil {
 			select {

@@ -48,7 +48,7 @@ type MountManager struct {
 	managerName   string
 }
 
-func (mm *MountManager) getRefCacheDir(ctx context.Context, ref cache.ImmutableRef, id string, m *pb.Mount, sharing pb.CacheSharingOpt) (mref cache.MutableRef, err error) {
+func (mm *MountManager) getRefCacheDir(ctx context.Context, ref cache.ImmutableRef, id string, m *pb.Mount, sharing pb.CacheSharingOpt, s session.Group) (mref cache.MutableRef, err error) {
 	g := &cacheRefGetter{
 		locker:          &mm.cacheMountsMu,
 		cacheMounts:     mm.cacheMounts,
@@ -56,6 +56,7 @@ func (mm *MountManager) getRefCacheDir(ctx context.Context, ref cache.ImmutableR
 		md:              mm.md,
 		globalCacheRefs: sharedCacheRefs,
 		name:            fmt.Sprintf("cached mount %s from %s", m.Dest, mm.managerName),
+		session:         s,
 	}
 	return g.getRefCacheDir(ctx, ref, id, sharing)
 }
@@ -67,6 +68,7 @@ type cacheRefGetter struct {
 	md              *metadata.Store
 	globalCacheRefs *cacheRefs
 	name            string
+	session         session.Group
 }
 
 func (g *cacheRefGetter) getRefCacheDir(ctx context.Context, ref cache.ImmutableRef, id string, sharing pb.CacheSharingOpt) (mref cache.MutableRef, err error) {
@@ -105,7 +107,7 @@ func (g *cacheRefGetter) getRefCacheDir(ctx context.Context, ref cache.Immutable
 
 func (g *cacheRefGetter) getRefCacheDirNoCache(ctx context.Context, key string, ref cache.ImmutableRef, id string, block bool) (cache.MutableRef, error) {
 	makeMutable := func(ref cache.ImmutableRef) (cache.MutableRef, error) {
-		return g.cm.New(ctx, ref, cache.WithRecordType(client.UsageRecordTypeCacheMount), cache.WithDescription(g.name), cache.CachePolicyRetain)
+		return g.cm.New(ctx, ref, g.session, cache.WithRecordType(client.UsageRecordTypeCacheMount), cache.WithDescription(g.name), cache.CachePolicyRetain)
 	}
 
 	cacheRefsLocker.Lock(key)
@@ -187,7 +189,7 @@ type sshMount struct {
 	idmap  *idtools.IdentityMapping
 }
 
-func (sm *sshMount) Mount(ctx context.Context, readonly bool) (snapshot.Mountable, error) {
+func (sm *sshMount) Mount(ctx context.Context, readonly bool, g session.Group) (snapshot.Mountable, error) {
 	return &sshMountInstance{sm: sm, idmap: sm.idmap}, nil
 }
 
@@ -279,7 +281,7 @@ type secretMount struct {
 	idmap *idtools.IdentityMapping
 }
 
-func (sm *secretMount) Mount(ctx context.Context, readonly bool) (snapshot.Mountable, error) {
+func (sm *secretMount) Mount(ctx context.Context, readonly bool, g session.Group) (snapshot.Mountable, error) {
 	return &secretMountInstance{sm: sm, idmap: sm.idmap}, nil
 }
 
@@ -370,11 +372,11 @@ func (sm *secretMountInstance) IdentityMapping() *idtools.IdentityMapping {
 	return sm.idmap
 }
 
-func (mm *MountManager) MountableCache(ctx context.Context, m *pb.Mount, ref cache.ImmutableRef) (cache.MutableRef, error) {
+func (mm *MountManager) MountableCache(ctx context.Context, m *pb.Mount, ref cache.ImmutableRef, g session.Group) (cache.MutableRef, error) {
 	if m.CacheOpt == nil {
 		return nil, errors.Errorf("missing cache mount options")
 	}
-	return mm.getRefCacheDir(ctx, ref, m.CacheOpt.ID, m, m.CacheOpt.Sharing)
+	return mm.getRefCacheDir(ctx, ref, m.CacheOpt.ID, m, m.CacheOpt.Sharing, g)
 }
 
 func (mm *MountManager) MountableTmpFS() cache.Mountable {
@@ -397,7 +399,7 @@ type tmpfs struct {
 	idmap *idtools.IdentityMapping
 }
 
-func (f *tmpfs) Mount(ctx context.Context, readonly bool) (snapshot.Mountable, error) {
+func (f *tmpfs) Mount(ctx context.Context, readonly bool, g session.Group) (snapshot.Mountable, error) {
 	return &tmpfsMount{readonly: readonly, idmap: f.idmap}, nil
 }
 

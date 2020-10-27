@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver/llbsolver/ops/fileoptypes"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/pkg/errors"
@@ -44,7 +45,7 @@ func TestMkdirMkfile(t *testing.T) {
 
 	s, rb := newTestFileSolver()
 	inp := rb.NewRef("ref1")
-	outs, err := s.Solve(context.TODO(), []fileoptypes.Ref{inp}, fo.Actions)
+	outs, err := s.Solve(context.TODO(), []fileoptypes.Ref{inp}, fo.Actions, nil)
 	require.NoError(t, err)
 	require.Equal(t, len(outs), 1)
 	rb.checkReleased(t, append(outs, inp))
@@ -114,7 +115,7 @@ func TestChownOpt(t *testing.T) {
 	s, rb := newTestFileSolver()
 	inp := rb.NewRef("ref1")
 	inp2 := rb.NewRef("usermount")
-	outs, err := s.Solve(context.TODO(), []fileoptypes.Ref{inp, inp2}, fo.Actions)
+	outs, err := s.Solve(context.TODO(), []fileoptypes.Ref{inp, inp2}, fo.Actions, nil)
 	require.NoError(t, err)
 	require.Equal(t, len(outs), 1)
 	rb.checkReleased(t, append(outs, inp, inp2))
@@ -176,7 +177,7 @@ func TestChownCopy(t *testing.T) {
 	s, rb := newTestFileSolver()
 	inpSrc := rb.NewRef("src")
 	inpDest := rb.NewRef("dest")
-	outs, err := s.Solve(context.TODO(), []fileoptypes.Ref{inpSrc, inpDest}, fo.Actions)
+	outs, err := s.Solve(context.TODO(), []fileoptypes.Ref{inpSrc, inpDest}, fo.Actions, nil)
 	require.NoError(t, err)
 	require.Equal(t, len(outs), 1)
 	rb.checkReleased(t, append(outs, inpSrc, inpDest))
@@ -207,7 +208,7 @@ func TestInvalidNoOutput(t *testing.T) {
 	}
 
 	s, rb := newTestFileSolver()
-	outs, err := s.Solve(context.TODO(), []fileoptypes.Ref{}, fo.Actions)
+	outs, err := s.Solve(context.TODO(), []fileoptypes.Ref{}, fo.Actions, nil)
 	rb.checkReleased(t, outs)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "no outputs specified")
@@ -244,7 +245,7 @@ func TestInvalidDuplicateOutput(t *testing.T) {
 	}
 
 	s, rb := newTestFileSolver()
-	_, err := s.Solve(context.TODO(), []fileoptypes.Ref{}, fo.Actions)
+	_, err := s.Solve(context.TODO(), []fileoptypes.Ref{}, fo.Actions, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "duplicate output")
 	rb.checkReleased(t, nil)
@@ -270,7 +271,7 @@ func TestActionInvalidIndex(t *testing.T) {
 	}
 
 	s, rb := newTestFileSolver()
-	_, err := s.Solve(context.TODO(), []fileoptypes.Ref{}, fo.Actions)
+	_, err := s.Solve(context.TODO(), []fileoptypes.Ref{}, fo.Actions, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "loop from index")
 	rb.checkReleased(t, nil)
@@ -307,7 +308,7 @@ func TestActionLoop(t *testing.T) {
 	}
 
 	s, rb := newTestFileSolver()
-	_, err := s.Solve(context.TODO(), []fileoptypes.Ref{}, fo.Actions)
+	_, err := s.Solve(context.TODO(), []fileoptypes.Ref{}, fo.Actions, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "loop from index")
 	rb.checkReleased(t, nil)
@@ -345,7 +346,7 @@ func TestMultiOutput(t *testing.T) {
 
 	s, rb := newTestFileSolver()
 	inp := rb.NewRef("ref1")
-	outs, err := s.Solve(context.TODO(), []fileoptypes.Ref{inp}, fo.Actions)
+	outs, err := s.Solve(context.TODO(), []fileoptypes.Ref{inp}, fo.Actions, nil)
 	require.NoError(t, err)
 	require.Equal(t, len(outs), 2)
 	rb.checkReleased(t, append(outs, inp))
@@ -393,7 +394,7 @@ func TestFileFromScratch(t *testing.T) {
 	}
 
 	s, rb := newTestFileSolver()
-	outs, err := s.Solve(context.TODO(), []fileoptypes.Ref{}, fo.Actions)
+	outs, err := s.Solve(context.TODO(), []fileoptypes.Ref{}, fo.Actions, nil)
 	require.NoError(t, err)
 	require.Equal(t, len(outs), 1)
 	rb.checkReleased(t, outs)
@@ -427,7 +428,7 @@ func TestFileCopyInputSrc(t *testing.T) {
 	s, rb := newTestFileSolver()
 	inp0 := rb.NewRef("srcref")
 	inp1 := rb.NewRef("destref")
-	outs, err := s.Solve(context.TODO(), []fileoptypes.Ref{inp0, inp1}, fo.Actions)
+	outs, err := s.Solve(context.TODO(), []fileoptypes.Ref{inp0, inp1}, fo.Actions, nil)
 	require.NoError(t, err)
 	require.Equal(t, len(outs), 1)
 	rb.checkReleased(t, append(outs, inp0, inp1))
@@ -481,7 +482,7 @@ func TestFileCopyInputRm(t *testing.T) {
 	s, rb := newTestFileSolver()
 	inp0 := rb.NewRef("srcref")
 	inp1 := rb.NewRef("destref")
-	outs, err := s.Solve(context.TODO(), []fileoptypes.Ref{inp0, inp1}, fo.Actions)
+	outs, err := s.Solve(context.TODO(), []fileoptypes.Ref{inp0, inp1}, fo.Actions, nil)
 	require.NoError(t, err)
 	require.Equal(t, len(outs), 1)
 	rb.checkReleased(t, append(outs, inp0, inp1))
@@ -545,7 +546,7 @@ func TestFileParallelActions(t *testing.T) {
 		<-ch
 	}
 
-	outs, err := s.Solve(context.TODO(), []fileoptypes.Ref{inp}, fo.Actions)
+	outs, err := s.Solve(context.TODO(), []fileoptypes.Ref{inp}, fo.Actions, nil)
 	require.NoError(t, err)
 	require.Equal(t, len(outs), 1)
 
@@ -664,7 +665,7 @@ func (b *testFileRefBackend) NewRef(id string) *testFileRef {
 	return r
 }
 
-func (b *testFileRefBackend) Prepare(ctx context.Context, ref fileoptypes.Ref, readonly bool) (fileoptypes.Mount, error) {
+func (b *testFileRefBackend) Prepare(ctx context.Context, ref fileoptypes.Ref, readonly bool, _ session.Group) (fileoptypes.Mount, error) {
 	var active *testFileRef
 	if ref == nil {
 		active = b.NewRef("scratch")

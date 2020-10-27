@@ -96,7 +96,7 @@ func (ls *localSourceHandler) CacheKey(ctx context.Context, g session.Group, ind
 func (ls *localSourceHandler) Snapshot(ctx context.Context, g session.Group) (cache.ImmutableRef, error) {
 	var ref cache.ImmutableRef
 	err := ls.sm.Any(ctx, g, func(ctx context.Context, _ string, c session.Caller) error {
-		r, err := ls.snapshot(ctx, c)
+		r, err := ls.snapshot(ctx, g, c)
 		if err != nil {
 			return err
 		}
@@ -109,7 +109,7 @@ func (ls *localSourceHandler) Snapshot(ctx context.Context, g session.Group) (ca
 	return ref, nil
 }
 
-func (ls *localSourceHandler) snapshot(ctx context.Context, caller session.Caller) (out cache.ImmutableRef, retErr error) {
+func (ls *localSourceHandler) snapshot(ctx context.Context, s session.Group, caller session.Caller) (out cache.ImmutableRef, retErr error) {
 	sharedKey := keySharedKey + ":" + ls.src.Name + ":" + ls.src.SharedKeyHint + ":" + caller.SharedKey() // TODO: replace caller.SharedKey() with source based hint from client(absolute-path+nodeid)
 
 	var mutable cache.MutableRef
@@ -126,7 +126,7 @@ func (ls *localSourceHandler) snapshot(ctx context.Context, caller session.Calle
 	}
 
 	if mutable == nil {
-		m, err := ls.cm.New(ctx, nil, cache.CachePolicyRetain, cache.WithRecordType(client.UsageRecordTypeLocalSource), cache.WithDescription(fmt.Sprintf("local source for %s", ls.src.Name)))
+		m, err := ls.cm.New(ctx, nil, s, cache.CachePolicyRetain, cache.WithRecordType(client.UsageRecordTypeLocalSource), cache.WithDescription(fmt.Sprintf("local source for %s", ls.src.Name)))
 		if err != nil {
 			return nil, err
 		}
@@ -146,7 +146,7 @@ func (ls *localSourceHandler) snapshot(ctx context.Context, caller session.Calle
 		}
 	}()
 
-	mount, err := mutable.Mount(ctx, false)
+	mount, err := mutable.Mount(ctx, false, s)
 	if err != nil {
 		return nil, err
 	}
