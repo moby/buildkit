@@ -41,6 +41,7 @@ func TestClientGatewayIntegration(t *testing.T) {
 		testClientGatewayContainerMounts,
 		testClientGatewayContainerPID1Tty,
 		testClientGatewayContainerExecTty,
+		testClientSlowCacheRootfsRef,
 	}, integration.WithMirroredImages(integration.OfficialImages("busybox:latest")))
 }
 
@@ -946,6 +947,72 @@ func testClientGatewayContainerExecTty(t *testing.T, sb integration.Sandbox) {
 
 	inputW.Close()
 	inputR.Close()
+
+	checkAllReleasable(t, c, sb, true)
+}
+
+func testClientSlowCacheRootfsRef(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	ctx := context.TODO()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
+		id := identity.NewID()
+		input := llb.Scratch().File(
+			llb.Mkdir("/found", 0700).
+				Mkfile("/found/data", 0600, []byte(id)),
+		)
+
+		st := llb.Image("busybox:latest").Run(
+			llb.Shlexf("echo hello"),
+			// Only readonly mounts trigger slow cache errors.
+			llb.AddMount("/src", input, llb.SourcePath("/notfound"), llb.Readonly),
+		).Root()
+
+		def1, err := st.Marshal(ctx)
+		require.NoError(t, err)
+
+		res1, err := c.Solve(ctx, client.SolveRequest{
+			Definition: def1.ToPB(),
+		})
+		require.NoError(t, err)
+
+		ref1, err := res1.SingleRef()
+		require.NoError(t, err)
+
+		// First stat should error because unlazy-ing the reference causes an error
+		// in CalcSlowCache.
+		_, err = ref1.StatFile(ctx, client.StatRequest{
+			Path: ".",
+		})
+		require.Error(t, err)
+
+		def2, err := llb.Image("busybox:latest").Marshal(ctx)
+		require.NoError(t, err)
+
+		res2, err := c.Solve(ctx, client.SolveRequest{
+			Definition: def2.ToPB(),
+		})
+		require.NoError(t, err)
+
+		ref2, err := res2.SingleRef()
+		require.NoError(t, err)
+
+		// Second stat should not error because the rootfs for `busybox` should not
+		// have been released.
+		_, err = ref2.StatFile(ctx, client.StatRequest{
+			Path: ".",
+		})
+		require.NoError(t, err)
+
+		return res2, nil
+	}
+
+	_, err = c.Build(ctx, SolveOpt{}, "buildkit_test", b, nil)
+	require.NoError(t, err)
 
 	checkAllReleasable(t, c, sb, true)
 }
