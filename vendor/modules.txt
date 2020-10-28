@@ -119,14 +119,14 @@ github.com/containerd/fifo
 github.com/containerd/go-cni
 # github.com/containerd/go-runc v0.0.0-20201020171139-16b287bc67d0
 github.com/containerd/go-runc
-# github.com/containerd/stargz-snapshotter v0.0.0-20200903042824-2ee75e91f8f9
+# github.com/containerd/stargz-snapshotter v0.0.0-20201027054423-3a04e4c2c116
 github.com/containerd/stargz-snapshotter/cache
 github.com/containerd/stargz-snapshotter/snapshot
 github.com/containerd/stargz-snapshotter/stargz
 github.com/containerd/stargz-snapshotter/stargz/config
-github.com/containerd/stargz-snapshotter/stargz/handler
 github.com/containerd/stargz-snapshotter/stargz/reader
 github.com/containerd/stargz-snapshotter/stargz/remote
+github.com/containerd/stargz-snapshotter/stargz/source
 github.com/containerd/stargz-snapshotter/stargz/verify
 github.com/containerd/stargz-snapshotter/task
 # github.com/containerd/ttrpc v1.0.1
@@ -235,7 +235,7 @@ github.com/gogo/protobuf/proto
 github.com/gogo/protobuf/protoc-gen-gogo/descriptor
 github.com/gogo/protobuf/sortkeys
 github.com/gogo/protobuf/types
-# github.com/golang/groupcache v0.0.0-20191227052852-215e87163ea7
+# github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e
 github.com/golang/groupcache/lru
 # github.com/golang/protobuf v1.4.2 => github.com/golang/protobuf v1.3.5
 github.com/golang/protobuf/proto
@@ -245,19 +245,12 @@ github.com/golang/protobuf/ptypes/duration
 github.com/golang/protobuf/ptypes/timestamp
 # github.com/google/crfs v0.0.0-20191108021818-71d77da419c9
 github.com/google/crfs/stargz
-# github.com/google/go-cmp v0.4.0
+# github.com/google/go-cmp v0.4.1
 github.com/google/go-cmp/cmp
 github.com/google/go-cmp/cmp/internal/diff
 github.com/google/go-cmp/cmp/internal/flags
 github.com/google/go-cmp/cmp/internal/function
 github.com/google/go-cmp/cmp/internal/value
-# github.com/google/go-containerregistry v0.0.0-20200425101607-48f605c3b60a
-github.com/google/go-containerregistry/pkg/authn
-github.com/google/go-containerregistry/pkg/internal/retry
-github.com/google/go-containerregistry/pkg/internal/retry/wait
-github.com/google/go-containerregistry/pkg/logs
-github.com/google/go-containerregistry/pkg/name
-github.com/google/go-containerregistry/pkg/v1/remote/transport
 # github.com/google/shlex v0.0.0-20150127133951-6f45313302b9
 github.com/google/shlex
 # github.com/google/uuid v1.1.1
@@ -353,7 +346,7 @@ github.com/urfave/cli
 github.com/willf/bitset
 # go.etcd.io/bbolt v1.3.5
 go.etcd.io/bbolt
-# go.opencensus.io v0.22.2
+# go.opencensus.io v0.22.3
 go.opencensus.io
 go.opencensus.io/internal
 go.opencensus.io/trace
@@ -384,9 +377,10 @@ golang.org/x/net/internal/socks
 golang.org/x/net/internal/timeseries
 golang.org/x/net/proxy
 golang.org/x/net/trace
-# golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
+# golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208
 golang.org/x/sync/errgroup
 golang.org/x/sync/semaphore
+golang.org/x/sync/singleflight
 # golang.org/x/sys v0.0.0-20200916030750-2334cc1a136f
 golang.org/x/sys/cpu
 golang.org/x/sys/internal/unsafeheader
@@ -398,11 +392,11 @@ golang.org/x/text/secure/bidirule
 golang.org/x/text/transform
 golang.org/x/text/unicode/bidi
 golang.org/x/text/unicode/norm
-# golang.org/x/time v0.0.0-20191024005414-555d28b269f0
+# golang.org/x/time v0.0.0-20200416051211-89c76fbcd5d1
 golang.org/x/time/rate
-# google.golang.org/genproto v0.0.0-20200526211855-cb27e3aa2013 => google.golang.org/genproto v0.0.0-20200224152610-e50cd9704f63
+# google.golang.org/genproto v0.0.0-20200527145253-8367513e4ece => google.golang.org/genproto v0.0.0-20200224152610-e50cd9704f63
 google.golang.org/genproto/googleapis/rpc/status
-# google.golang.org/grpc v1.28.1
+# google.golang.org/grpc v1.29.1
 google.golang.org/grpc
 google.golang.org/grpc/attributes
 google.golang.org/grpc/backoff
@@ -432,6 +426,7 @@ google.golang.org/grpc/internal/grpcsync
 google.golang.org/grpc/internal/grpcutil
 google.golang.org/grpc/internal/resolver/dns
 google.golang.org/grpc/internal/resolver/passthrough
+google.golang.org/grpc/internal/status
 google.golang.org/grpc/internal/syscall
 google.golang.org/grpc/internal/transport
 google.golang.org/grpc/keepalive
@@ -443,7 +438,7 @@ google.golang.org/grpc/serviceconfig
 google.golang.org/grpc/stats
 google.golang.org/grpc/status
 google.golang.org/grpc/tap
-# gopkg.in/yaml.v2 v2.2.8
+# gopkg.in/yaml.v2 v2.3.0
 gopkg.in/yaml.v2
 # gotest.tools/v3 v3.0.2
 gotest.tools/v3/assert
