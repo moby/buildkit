@@ -362,8 +362,8 @@ func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (res *
 				)
 				ref, err = res.SingleRef()
 				if err != nil {
-					for refId := range res.Refs {
-						id = refId
+					for refID := range res.Refs {
+						id = refID
 						break
 					}
 				} else {

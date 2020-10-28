@@ -139,11 +139,7 @@ func (c *bridgeClient) wrapSolveError(solveErr error) error {
 		}
 	}
 	if errors.As(solveErr, &fae) {
-		subject = &errdefs.Solve_File{
-			File: &errdefs.FileAction{
-				Index: int64(fae.Index),
-			},
-		}
+		subject = fae.ToSubject()
 	}
 	if errors.As(solveErr, &sce) {
 		var err error
@@ -151,11 +147,7 @@ func (c *bridgeClient) wrapSolveError(solveErr error) error {
 		if err != nil {
 			return err
 		}
-		subject = &errdefs.Solve_Cache{
-			Cache: &errdefs.ContentCache{
-				Index: int64(sce.Index),
-			},
-		}
+		subject = sce.ToSubject()
 	}
 	return errdefs.WithSolveError(solveErr, subject, inputIDs, outputIDs)
 }

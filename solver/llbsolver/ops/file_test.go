@@ -555,7 +555,7 @@ func TestFileParallelActions(t *testing.T) {
 
 func newTestFileSolver() (*FileOpSolver, *testFileRefBackend) {
 	trb := &testFileRefBackend{refs: map[*testFileRef]struct{}{}, mounts: map[string]*testMount{}}
-	return NewFileOpSolver(&testFileBackend{}, trb), trb
+	return NewFileOpSolver(nil, &testFileBackend{}, trb), trb
 }
 
 type testFileRef struct {
