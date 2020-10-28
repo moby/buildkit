@@ -31,6 +31,7 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/errdefs"
+	llberrdefs "github.com/moby/buildkit/solver/llbsolver/errdefs"
 	opspb "github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/grpcerrors"
@@ -270,6 +271,10 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 func (lbf *llbBridgeForwarder) Discard() {
 	lbf.mu.Lock()
 	defer lbf.mu.Unlock()
+	for id, workerRef := range lbf.workerRefByID {
+		workerRef.ImmutableRef.Release(context.TODO())
+		delete(lbf.workerRefByID, id)
+	}
 	for id, r := range lbf.refs {
 		if lbf.err == nil && lbf.result != nil {
 			keep := false
@@ -331,16 +336,17 @@ func NewBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridg
 
 func newBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, workers frontend.WorkerInfos, inputs map[string]*opspb.Definition, sid string, sm *session.Manager) *llbBridgeForwarder {
 	lbf := &llbBridgeForwarder{
-		callCtx:   ctx,
-		llbBridge: llbBridge,
-		refs:      map[string]solver.ResultProxy{},
-		doneCh:    make(chan struct{}),
-		pipe:      newPipe(),
-		workers:   workers,
-		inputs:    inputs,
-		sid:       sid,
-		sm:        sm,
-		ctrs:      map[string]gwclient.Container{},
+		callCtx:       ctx,
+		llbBridge:     llbBridge,
+		refs:          map[string]solver.ResultProxy{},
+		workerRefByID: map[string]*worker.WorkerRef{},
+		doneCh:        make(chan struct{}),
+		pipe:          newPipe(),
+		workers:       workers,
+		inputs:        inputs,
+		sid:           sid,
+		sm:            sm,
+		ctrs:          map[string]gwclient.Container{},
 	}
 	return lbf
 }
@@ -426,10 +432,11 @@ type LLBBridgeForwarder interface {
 }
 
 type llbBridgeForwarder struct {
-	mu        sync.Mutex
-	callCtx   context.Context
-	llbBridge frontend.FrontendLLBBridge
-	refs      map[string]solver.ResultProxy
+	mu            sync.Mutex
+	callCtx       context.Context
+	llbBridge     frontend.FrontendLLBBridge
+	refs          map[string]solver.ResultProxy
+	workerRefByID map[string]*worker.WorkerRef
 	// lastRef      solver.CachedResult
 	// lastRefs     map[string]solver.CachedResult
 	// err          error
@@ -486,6 +493,56 @@ func translateLegacySolveRequest(req *pb.SolveRequest) error {
 	return nil
 }
 
+func (lbf *llbBridgeForwarder) wrapSolveError(solveErr error) error {
+	var (
+		ee        *llberrdefs.ExecError
+		fae       *llberrdefs.FileActionError
+		sce       *solver.SlowCacheError
+		inputIDs  []string
+		outputIDs []string
+		subject   errdefs.IsSolve_Subject
+	)
+	if errors.As(solveErr, &ee) {
+		var err error
+		inputIDs, err = lbf.registerResultIDs(ee.Inputs...)
+		if err != nil {
+			return err
+		}
+		outputIDs, err = lbf.registerResultIDs(ee.Outputs...)
+		if err != nil {
+			return err
+		}
+	}
+	if errors.As(solveErr, &fae) {
+		subject = fae.ToSubject()
+	}
+	if errors.As(solveErr, &sce) {
+		var err error
+		inputIDs, err = lbf.registerResultIDs(sce.Result)
+		if err != nil {
+			return err
+		}
+		subject = sce.ToSubject()
+	}
+	return errdefs.WithSolveError(solveErr, subject, inputIDs, outputIDs)
+}
+
+func (lbf *llbBridgeForwarder) registerResultIDs(results ...solver.Result) (ids []string, err error) {
+	lbf.mu.Lock()
+	defer lbf.mu.Unlock()
+
+	ids = make([]string, len(results))
+	for i, res := range results {
+		workerRef, ok := res.Sys().(*worker.WorkerRef)
+		if !ok {
+			return ids, errors.Errorf("unexpected type for result, got %T", res.Sys())
+		}
+		ids[i] = workerRef.ID()
+		lbf.workerRefByID[workerRef.ID()] = workerRef
+	}
+	return ids, nil
+}
+
 func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) (*pb.SolveResponse, error) {
 	if err := translateLegacySolveRequest(req); err != nil {
 		return nil, err
@@ -500,6 +557,7 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 
 	ctx = tracing.ContextWithSpanFromContext(ctx, lbf.callCtx)
 	res, err := lbf.llbBridge.Solve(ctx, frontend.SolveRequest{
+		Evaluate:       req.Evaluate,
 		Definition:     req.Definition,
 		Frontend:       req.Frontend,
 		FrontendOpt:    req.FrontendOpt,
@@ -507,7 +565,7 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 		CacheImports:   cacheImports,
 	}, lbf.sid)
 	if err != nil {
-		return nil, err
+		return nil, lbf.wrapSolveError(err)
 	}
 
 	if len(res.Refs) > 0 && !req.AllowResultReturn {
@@ -594,24 +652,37 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 
 	return resp, nil
 }
-func (lbf *llbBridgeForwarder) ReadFile(ctx context.Context, req *pb.ReadFileRequest) (*pb.ReadFileResponse, error) {
-	ctx = tracing.ContextWithSpanFromContext(ctx, lbf.callCtx)
+
+func (lbf *llbBridgeForwarder) getImmutableRef(ctx context.Context, id, path string) (cache.ImmutableRef, error) {
 	lbf.mu.Lock()
-	ref, ok := lbf.refs[req.Ref]
+	ref, ok := lbf.refs[id]
 	lbf.mu.Unlock()
 	if !ok {
-		return nil, errors.Errorf("no such ref: %v", req.Ref)
+		return nil, errors.Errorf("no such ref: %v", id)
 	}
 	if ref == nil {
-		return nil, errors.Wrapf(os.ErrNotExist, "%s not found", req.FilePath)
+		return nil, errors.Wrapf(os.ErrNotExist, "%s not found", path)
 	}
+
 	r, err := ref.Result(ctx)
 	if err != nil {
-		return nil, err
+		return nil, lbf.wrapSolveError(err)
 	}
+
 	workerRef, ok := r.Sys().(*worker.WorkerRef)
 	if !ok {
 		return nil, errors.Errorf("invalid ref: %T", r.Sys())
+	}
+
+	return workerRef.ImmutableRef, nil
+}
+
+func (lbf *llbBridgeForwarder) ReadFile(ctx context.Context, req *pb.ReadFileRequest) (*pb.ReadFileResponse, error) {
+	ctx = tracing.ContextWithSpanFromContext(ctx, lbf.callCtx)
+
+	ref, err := lbf.getImmutableRef(ctx, req.Ref, req.FilePath)
+	if err != nil {
+		return nil, err
 	}
 
 	newReq := cacheutil.ReadRequest{
@@ -624,14 +695,14 @@ func (lbf *llbBridgeForwarder) ReadFile(ctx context.Context, req *pb.ReadFileReq
 		}
 	}
 
-	m, err := workerRef.ImmutableRef.Mount(ctx, true, session.NewGroup(lbf.sid))
+	m, err := ref.Mount(ctx, true, session.NewGroup(lbf.sid))
 	if err != nil {
 		return nil, err
 	}
 
 	dt, err := cacheutil.ReadFile(ctx, m, newReq)
 	if err != nil {
-		return nil, err
+		return nil, lbf.wrapSolveError(err)
 	}
 
 	return &pb.ReadFileResponse{Data: dt}, nil
@@ -639,35 +710,23 @@ func (lbf *llbBridgeForwarder) ReadFile(ctx context.Context, req *pb.ReadFileReq
 
 func (lbf *llbBridgeForwarder) ReadDir(ctx context.Context, req *pb.ReadDirRequest) (*pb.ReadDirResponse, error) {
 	ctx = tracing.ContextWithSpanFromContext(ctx, lbf.callCtx)
-	lbf.mu.Lock()
-	ref, ok := lbf.refs[req.Ref]
-	lbf.mu.Unlock()
-	if !ok {
-		return nil, errors.Errorf("no such ref: %v", req.Ref)
-	}
-	if ref == nil {
-		return nil, errors.Wrapf(os.ErrNotExist, "%s not found", req.DirPath)
-	}
-	r, err := ref.Result(ctx)
+
+	ref, err := lbf.getImmutableRef(ctx, req.Ref, req.DirPath)
 	if err != nil {
 		return nil, err
-	}
-	workerRef, ok := r.Sys().(*worker.WorkerRef)
-	if !ok {
-		return nil, errors.Errorf("invalid ref: %T", r.Sys())
 	}
 
 	newReq := cacheutil.ReadDirRequest{
 		Path:           req.DirPath,
 		IncludePattern: req.IncludePattern,
 	}
-	m, err := workerRef.ImmutableRef.Mount(ctx, true, session.NewGroup(lbf.sid))
+	m, err := ref.Mount(ctx, true, session.NewGroup(lbf.sid))
 	if err != nil {
 		return nil, err
 	}
 	entries, err := cacheutil.ReadDir(ctx, m, newReq)
 	if err != nil {
-		return nil, err
+		return nil, lbf.wrapSolveError(err)
 	}
 
 	return &pb.ReadDirResponse{Entries: entries}, nil
@@ -675,24 +734,12 @@ func (lbf *llbBridgeForwarder) ReadDir(ctx context.Context, req *pb.ReadDirReque
 
 func (lbf *llbBridgeForwarder) StatFile(ctx context.Context, req *pb.StatFileRequest) (*pb.StatFileResponse, error) {
 	ctx = tracing.ContextWithSpanFromContext(ctx, lbf.callCtx)
-	lbf.mu.Lock()
-	ref, ok := lbf.refs[req.Ref]
-	lbf.mu.Unlock()
-	if !ok {
-		return nil, errors.Errorf("no such ref: %v", req.Ref)
-	}
-	if ref == nil {
-		return nil, errors.Wrapf(os.ErrNotExist, "%s not found", req.Path)
-	}
-	r, err := ref.Result(ctx)
+
+	ref, err := lbf.getImmutableRef(ctx, req.Ref, req.Path)
 	if err != nil {
 		return nil, err
 	}
-	workerRef, ok := r.Sys().(*worker.WorkerRef)
-	if !ok {
-		return nil, errors.Errorf("invalid ref: %T", r.Sys())
-	}
-	m, err := workerRef.ImmutableRef.Mount(ctx, true, session.NewGroup(lbf.sid))
+	m, err := ref.Mount(ctx, true, session.NewGroup(lbf.sid))
 	if err != nil {
 		return nil, err
 	}
@@ -788,19 +835,34 @@ func (lbf *llbBridgeForwarder) NewContainer(ctx context.Context, in *pb.NewConta
 	}
 
 	for _, m := range in.Mounts {
-		var refProxy solver.ResultProxy
+		var workerRef *worker.WorkerRef
 		if m.ResultID != "" {
-			refProxy, err = lbf.convertRef(m.ResultID)
-			if err != nil {
-				return nil, errors.Wrapf(err, "failed to find ref %s for %q mount", m.ResultID, m.Dest)
+			var ok bool
+			workerRef, ok = lbf.workerRefByID[m.ResultID]
+			if !ok {
+				refProxy, err := lbf.convertRef(m.ResultID)
+				if err != nil {
+					return nil, errors.Wrapf(err, "failed to find ref %s for %q mount", m.ResultID, m.Dest)
+				}
+
+				res, err := refProxy.Result(ctx)
+				if err != nil {
+					return nil, stack.Enable(err)
+				}
+
+				workerRef, ok = res.Sys().(*worker.WorkerRef)
+				if !ok {
+					return nil, errors.Errorf("invalid reference %T", res.Sys())
+				}
 			}
+
 		}
 		ctrReq.Mounts = append(ctrReq.Mounts, Mount{
 			Dest:      m.Dest,
 			Selector:  m.Selector,
 			Readonly:  m.Readonly,
 			MountType: m.MountType,
-			RefProxy:  refProxy,
+			WorkerRef: workerRef,
 			CacheOpt:  m.CacheOpt,
 			SecretOpt: m.SecretOpt,
 			SSHOpt:    m.SSHOpt,

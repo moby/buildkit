@@ -13,7 +13,6 @@ import (
 	"github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
-	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/llbsolver/mounts"
 	opspb "github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/stack"
@@ -40,7 +39,7 @@ type Mount struct {
 	Selector  string
 	Readonly  bool
 	MountType opspb.MountType
-	RefProxy  solver.ResultProxy
+	WorkerRef *worker.WorkerRef
 	CacheOpt  *opspb.CacheOpt
 	SecretOpt *opspb.SecretOpt
 	SSHOpt    *opspb.SSHOpt
@@ -93,22 +92,13 @@ func NewContainer(ctx context.Context, e executor.Executor, sm *session.Manager,
 	mnts := req.Mounts
 
 	for i, m := range mnts {
-		if m.Dest == opspb.RootMount && m.RefProxy != nil {
-			res, err := m.RefProxy.Result(ctx)
-			if err != nil {
-				return nil, stack.Enable(err)
-			}
-			workerRef, ok := res.Sys().(*worker.WorkerRef)
-			if !ok {
-				return nil, errors.Errorf("invalid reference for exec %T", res.Sys())
-			}
-
+		if m.Dest == opspb.RootMount && m.WorkerRef != nil {
 			name := fmt.Sprintf("container %s", req.ContainerID)
-			mm = mounts.NewMountManager(name, workerRef.Worker.CacheManager(), sm, workerRef.Worker.MetadataStore())
+			mm = mounts.NewMountManager(name, m.WorkerRef.Worker.CacheManager(), sm, m.WorkerRef.Worker.MetadataStore())
 
-			ctr.rootFS = mountWithSession(workerRef.ImmutableRef, g)
+			ctr.rootFS = mountWithSession(m.WorkerRef.ImmutableRef, g)
 			if !m.Readonly {
-				ref, err := makeMutable(workerRef.Worker, workerRef.ImmutableRef)
+				ref, err := makeMutable(m.WorkerRef.Worker, m.WorkerRef.ImmutableRef)
 				if err != nil {
 					return nil, stack.Enable(err)
 				}
@@ -128,20 +118,13 @@ func NewContainer(ctx context.Context, e executor.Executor, sm *session.Manager,
 	for _, m := range mnts {
 		var ref cache.ImmutableRef
 		var mountable cache.Mountable
-		if m.RefProxy != nil {
-			res, err := m.RefProxy.Result(ctx)
-			if err != nil {
-				return nil, stack.Enable(err)
-			}
-			workerRef, ok := res.Sys().(*worker.WorkerRef)
-			if !ok {
-				return nil, errors.Errorf("invalid reference for exec %T", res.Sys())
-			}
-			ref = workerRef.ImmutableRef
+		if m.WorkerRef != nil {
+			ref = m.WorkerRef.ImmutableRef
 			mountable = ref
 
 			if !m.Readonly {
-				mountable, err = makeMutable(workerRef.Worker, ref)
+				var err error
+				mountable, err = makeMutable(m.WorkerRef.Worker, ref)
 				if err != nil {
 					return nil, stack.Enable(err)
 				}

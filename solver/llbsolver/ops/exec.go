@@ -19,6 +19,7 @@ import (
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/llbsolver"
+	"github.com/moby/buildkit/solver/llbsolver/errdefs"
 	"github.com/moby/buildkit/solver/llbsolver/mounts"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/progress/logs"
@@ -397,9 +398,12 @@ func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 	defer stdout.Close()
 	defer stderr.Close()
 
-	if err := e.exec.Run(ctx, "", mountWithSession(root, g), mounts, executor.ProcessInfo{Meta: meta, Stdin: nil, Stdout: stdout, Stderr: stderr}, nil); err != nil {
-		return nil, errors.Wrapf(err, "executor failed running %v", meta.Args)
-	}
+	execErr := e.exec.Run(ctx, "", mountWithSession(root, g), mounts, executor.ProcessInfo{
+		Meta:   meta,
+		Stdin:  nil,
+		Stdout: stdout,
+		Stderr: stderr,
+	}, nil)
 
 	refs := []solver.Result{}
 	for i, out := range outputs {
@@ -413,6 +417,10 @@ func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 			refs = append(refs, worker.NewWorkerRefResult(out.(cache.ImmutableRef), e.w))
 		}
 		outputs[i] = nil
+	}
+
+	if execErr != nil {
+		return nil, errdefs.WithExecError(errors.Wrapf(execErr, "executor failed running %v", meta.Args), inputs, refs)
 	}
 	return refs, nil
 }

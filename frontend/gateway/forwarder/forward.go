@@ -15,6 +15,8 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/solver/errdefs"
+	llberrdefs "github.com/moby/buildkit/solver/llbsolver/errdefs"
 	opspb "github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/worker"
@@ -31,23 +33,26 @@ func llbBridgeToGatewayClient(ctx context.Context, llbBridge frontend.FrontendLL
 		sm:                sm,
 		workerInfos:       workerInfos,
 		final:             map[*ref]struct{}{},
+		workerRefByID:     make(map[string]*worker.WorkerRef),
 	}, nil
 }
 
 type bridgeClient struct {
 	frontend.FrontendLLBBridge
-	mu          sync.Mutex
-	opts        map[string]string
-	inputs      map[string]*opspb.Definition
-	final       map[*ref]struct{}
-	sid         string
-	sm          *session.Manager
-	refs        []*ref
-	workerInfos []clienttypes.WorkerInfo
+	mu            sync.Mutex
+	opts          map[string]string
+	inputs        map[string]*opspb.Definition
+	final         map[*ref]struct{}
+	sid           string
+	sm            *session.Manager
+	refs          []*ref
+	workerRefByID map[string]*worker.WorkerRef
+	workerInfos   []clienttypes.WorkerInfo
 }
 
 func (c *bridgeClient) Solve(ctx context.Context, req client.SolveRequest) (*client.Result, error) {
 	res, err := c.FrontendLLBBridge.Solve(ctx, frontend.SolveRequest{
+		Evaluate:       req.Evaluate,
 		Definition:     req.Definition,
 		Frontend:       req.Frontend,
 		FrontendOpt:    req.FrontendOpt,
@@ -55,13 +60,13 @@ func (c *bridgeClient) Solve(ctx context.Context, req client.SolveRequest) (*cli
 		CacheImports:   req.CacheImports,
 	}, c.sid)
 	if err != nil {
-		return nil, err
+		return nil, c.wrapSolveError(err)
 	}
 
 	cRes := &client.Result{}
 	c.mu.Lock()
 	for k, r := range res.Refs {
-		rr, err := newRef(r, session.NewGroup(c.sid))
+		rr, err := c.newRef(r, session.NewGroup(c.sid))
 		if err != nil {
 			return nil, err
 		}
@@ -69,7 +74,7 @@ func (c *bridgeClient) Solve(ctx context.Context, req client.SolveRequest) (*cli
 		cRes.AddRef(k, rr)
 	}
 	if r := res.Ref; r != nil {
-		rr, err := newRef(r, session.NewGroup(c.sid))
+		rr, err := c.newRef(r, session.NewGroup(c.sid))
 		if err != nil {
 			return nil, err
 		}
@@ -113,6 +118,64 @@ func (c *bridgeClient) Inputs(ctx context.Context) (map[string]llb.State, error)
 	return inputs, nil
 }
 
+func (c *bridgeClient) wrapSolveError(solveErr error) error {
+	var (
+		ee        *llberrdefs.ExecError
+		fae       *llberrdefs.FileActionError
+		sce       *solver.SlowCacheError
+		inputIDs  []string
+		outputIDs []string
+		subject   errdefs.IsSolve_Subject
+	)
+	if errors.As(solveErr, &ee) {
+		var err error
+		inputIDs, err = c.registerResultIDs(ee.Inputs...)
+		if err != nil {
+			return err
+		}
+		outputIDs, err = c.registerResultIDs(ee.Outputs...)
+		if err != nil {
+			return err
+		}
+	}
+	if errors.As(solveErr, &fae) {
+		subject = &errdefs.Solve_File{
+			File: &errdefs.FileAction{
+				Index: int64(fae.Index),
+			},
+		}
+	}
+	if errors.As(solveErr, &sce) {
+		var err error
+		inputIDs, err = c.registerResultIDs(sce.Result)
+		if err != nil {
+			return err
+		}
+		subject = &errdefs.Solve_Cache{
+			Cache: &errdefs.ContentCache{
+				Index: int64(sce.Index),
+			},
+		}
+	}
+	return errdefs.WithSolveError(solveErr, subject, inputIDs, outputIDs)
+}
+
+func (c *bridgeClient) registerResultIDs(results ...solver.Result) (ids []string, err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	ids = make([]string, len(results))
+	for i, res := range results {
+		workerRef, ok := res.Sys().(*worker.WorkerRef)
+		if !ok {
+			return ids, errors.Errorf("unexpected type for result, got %T", res.Sys())
+		}
+		ids[i] = workerRef.ID()
+		c.workerRefByID[workerRef.ID()] = workerRef
+	}
+	return ids, nil
+}
+
 func (c *bridgeClient) toFrontendResult(r *client.Result) (*frontend.Result, error) {
 	if r == nil {
 		return nil, nil
@@ -145,6 +208,10 @@ func (c *bridgeClient) toFrontendResult(r *client.Result) (*frontend.Result, err
 }
 
 func (c *bridgeClient) discard(err error) {
+	for id, workerRef := range c.workerRefByID {
+		workerRef.ImmutableRef.Release(context.TODO())
+		delete(c.workerRefByID, id)
+	}
 	for _, r := range c.refs {
 		if r != nil {
 			if _, ok := c.final[r]; !ok || err != nil {
@@ -161,12 +228,27 @@ func (c *bridgeClient) NewContainer(ctx context.Context, req client.NewContainer
 	}
 
 	for _, m := range req.Mounts {
-		var refProxy solver.ResultProxy
+		var workerRef *worker.WorkerRef
 		if m.Ref != nil {
-			var ok bool
-			refProxy, ok = m.Ref.(*ref)
+			refProxy, ok := m.Ref.(*ref)
 			if !ok {
 				return nil, errors.Errorf("unexpected Ref type: %T", m.Ref)
+			}
+
+			res, err := refProxy.Result(ctx)
+			if err != nil {
+				return nil, err
+			}
+
+			workerRef, ok = res.Sys().(*worker.WorkerRef)
+			if !ok {
+				return nil, errors.Errorf("invalid ref: %T", res.Sys())
+			}
+		} else if m.ResultID != "" {
+			var ok bool
+			workerRef, ok = c.workerRefByID[m.ResultID]
+			if !ok {
+				return nil, errors.Errorf("failed to find ref %s for %q mount", m.ResultID, m.Dest)
 			}
 		}
 		ctrReq.Mounts = append(ctrReq.Mounts, gateway.Mount{
@@ -174,7 +256,7 @@ func (c *bridgeClient) NewContainer(ctx context.Context, req client.NewContainer
 			Selector:  m.Selector,
 			Readonly:  m.Readonly,
 			MountType: m.MountType,
-			RefProxy:  refProxy,
+			WorkerRef: workerRef,
 			CacheOpt:  m.CacheOpt,
 			SecretOpt: m.SecretOpt,
 			SSHOpt:    m.SSHOpt,
@@ -192,10 +274,11 @@ func (c *bridgeClient) NewContainer(ctx context.Context, req client.NewContainer
 type ref struct {
 	solver.ResultProxy
 	session session.Group
+	c       *bridgeClient
 }
 
-func newRef(r solver.ResultProxy, s session.Group) (*ref, error) {
-	return &ref{ResultProxy: r, session: s}, nil
+func (c *bridgeClient) newRef(r solver.ResultProxy, s session.Group) (*ref, error) {
+	return &ref{ResultProxy: r, session: s, c: c}, nil
 }
 
 func (r *ref) ToState() (st llb.State, err error) {
@@ -246,7 +329,7 @@ func (r *ref) StatFile(ctx context.Context, req client.StatRequest) (*fstypes.St
 func (r *ref) getMountable(ctx context.Context) (snapshot.Mountable, error) {
 	rr, err := r.ResultProxy.Result(ctx)
 	if err != nil {
-		return nil, err
+		return nil, r.c.wrapSolveError(err)
 	}
 	ref, ok := rr.Sys().(*worker.WorkerRef)
 	if !ok {

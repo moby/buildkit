@@ -125,6 +125,10 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest, sid st
 
 	if req.Definition != nil && req.Definition.Def != nil {
 		res = &frontend.Result{Ref: newResultProxy(b, req)}
+		if req.Evaluate {
+			_, err := res.Ref.Result(ctx)
+			return res, err
+		}
 	} else if req.Frontend != "" {
 		f, ok := b.frontends[req.Frontend]
 		if !ok {
@@ -195,6 +199,21 @@ func (rp *resultProxy) wrapError(err error) error {
 					})
 				}
 			}
+		}
+
+		var op *pb.Op
+		for _, dt := range rp.def.Def {
+			var curr pb.Op
+			if err := (&curr).Unmarshal(dt); err != nil {
+				return errors.Wrap(err, "failed to parse llb proto op")
+			}
+			if ve.Digest == digest.FromBytes(dt).String() {
+				op = &curr
+				break
+			}
+		}
+		if op != nil {
+			err = errdefs.WithOp(err, op)
 		}
 	}
 	return err

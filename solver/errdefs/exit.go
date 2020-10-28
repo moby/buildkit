@@ -1,6 +1,6 @@
 package errdefs
 
-import fmt "fmt"
+import "fmt"
 
 // ExitError will be returned when the container process exits with a non-zero
 // exit code.

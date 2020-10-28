@@ -15,6 +15,7 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/llbsolver"
+	"github.com/moby/buildkit/solver/llbsolver/errdefs"
 	"github.com/moby/buildkit/solver/llbsolver/file"
 	"github.com/moby/buildkit/solver/llbsolver/ops/fileoptypes"
 	"github.com/moby/buildkit/solver/pb"
@@ -44,7 +45,7 @@ func NewFileOp(v solver.Vertex, op *pb.Op_File, cm cache.Manager, md *metadata.S
 		md:        md,
 		numInputs: len(v.Inputs()),
 		w:         w,
-		solver:    NewFileOpSolver(&file.Backend{}, file.NewRefManager(cm)),
+		solver:    NewFileOpSolver(w, &file.Backend{}, file.NewRefManager(cm)),
 	}, nil
 }
 
@@ -159,6 +160,7 @@ func (f *fileOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 	outs, err := f.solver.Solve(ctx, inpRefs, f.op.Actions, g)
 	if err != nil {
 		return nil, err
+		// return nil, errdefs.WithExecError(err, inputs, nil)
 	}
 
 	outResults := make([]solver.Result, 0, len(outs))
@@ -258,8 +260,9 @@ func processOwner(chopt *pb.ChownOpt, selectors map[int]map[llbsolver.Selector]s
 	return nil
 }
 
-func NewFileOpSolver(b fileoptypes.Backend, r fileoptypes.RefManager) *FileOpSolver {
+func NewFileOpSolver(w worker.Worker, b fileoptypes.Backend, r fileoptypes.RefManager) *FileOpSolver {
 	return &FileOpSolver{
+		w:    w,
 		b:    b,
 		r:    r,
 		outs: map[int]int{},
@@ -268,6 +271,7 @@ func NewFileOpSolver(b fileoptypes.Backend, r fileoptypes.RefManager) *FileOpSol
 }
 
 type FileOpSolver struct {
+	w worker.Worker
 	b fileoptypes.Backend
 	r fileoptypes.RefManager
 
@@ -343,7 +347,7 @@ func (s *FileOpSolver) Solve(ctx context.Context, inputs []fileoptypes.Ref, acti
 				}
 				inp, err := s.getInput(ctx, idx, inputs, actions, g)
 				if err != nil {
-					return err
+					return errdefs.WithFileActionError(err, idx)
 				}
 				outs[i] = inp.ref
 				return nil
@@ -406,8 +410,22 @@ func (s *FileOpSolver) getInput(ctx context.Context, idx int, inputs []fileoptyp
 			for _, m := range toRelease {
 				m.Release(context.TODO())
 			}
-			if err != nil && inpMount != nil && inpMountPrepared {
-				inpMount.Release(context.TODO())
+			if err != nil && inpMount != nil {
+				if inpMountPrepared {
+					inpMount.Release(context.TODO())
+				}
+				var (
+					inputRes  []solver.Result
+					outputRes []solver.Result
+				)
+				for _, input := range inputs {
+					inputRes = append(inputRes, worker.NewWorkerRefResult(input.(cache.ImmutableRef), s.w))
+				}
+				ref, cerr := s.r.Commit(ctx, inpMount)
+				if cerr == nil {
+					outputRes = append(outputRes, worker.NewWorkerRefResult(ref.(cache.ImmutableRef), s.w))
+				}
+				err = errdefs.WithExecError(err, inputRes, outputRes)
 			}
 		}()
 
