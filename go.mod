@@ -13,7 +13,7 @@ require (
 	github.com/containerd/continuity v0.0.0-20200710164510-efbc4488d8fe
 	github.com/containerd/go-cni v1.0.1
 	github.com/containerd/go-runc v0.0.0-20201020171139-16b287bc67d0
-	github.com/containerd/stargz-snapshotter v0.0.0-20200903042824-2ee75e91f8f9
+	github.com/containerd/stargz-snapshotter v0.0.0-20201027054423-3a04e4c2c116
 	github.com/containerd/typeurl v1.0.1
 	github.com/coreos/go-systemd/v22 v22.1.0
 	github.com/docker/cli v0.0.0-20200227165822-2298e6a3fe24
@@ -26,7 +26,7 @@ require (
 	github.com/gogo/protobuf v1.3.1
 	// protobuf: the actual version is replaced in replace()
 	github.com/golang/protobuf v1.4.2
-	github.com/google/go-cmp v0.4.0
+	github.com/google/go-cmp v0.4.1
 	github.com/google/shlex v0.0.0-20150127133951-6f45313302b9
 	github.com/gorilla/mux v1.7.4 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.2.0
@@ -57,12 +57,12 @@ require (
 	go.etcd.io/bbolt v1.3.5
 	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
 	golang.org/x/net v0.0.0-20200707034311-ab3426394381
-	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
+	golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208
 	golang.org/x/sys v0.0.0-20200916030750-2334cc1a136f
-	golang.org/x/time v0.0.0-20191024005414-555d28b269f0
+	golang.org/x/time v0.0.0-20200416051211-89c76fbcd5d1
 	// genproto: the actual version is replaced in replace()
-	google.golang.org/genproto v0.0.0-20200526211855-cb27e3aa2013
-	google.golang.org/grpc v1.28.1
+	google.golang.org/genproto v0.0.0-20200527145253-8367513e4ece
+	google.golang.org/grpc v1.29.1
 )
 
 replace (

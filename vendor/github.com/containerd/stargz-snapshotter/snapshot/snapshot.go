@@ -63,7 +63,7 @@ const (
 // directory.
 type FileSystem interface {
 	Mount(ctx context.Context, mountpoint string, labels map[string]string) error
-	Check(ctx context.Context, mountpoint string) error
+	Check(ctx context.Context, mountpoint string, labels map[string]string) error
 	Unmount(ctx context.Context, mountpoint string) error
 }
 
@@ -97,7 +97,7 @@ type snapshotter struct {
 // as snapshots. This is implemented based on the overlayfs snapshotter, so
 // diffs are stored under the provided root and a metadata file is stored under
 // the root as same as overlayfs snapshotter.
-func NewSnapshotter(root string, targetFs FileSystem, opts ...Opt) (snapshots.Snapshotter, error) {
+func NewSnapshotter(ctx context.Context, root string, targetFs FileSystem, opts ...Opt) (snapshots.Snapshotter, error) {
 	if targetFs == nil {
 		return nil, fmt.Errorf("Specify filesystem to use")
 	}
@@ -128,12 +128,18 @@ func NewSnapshotter(root string, targetFs FileSystem, opts ...Opt) (snapshots.Sn
 		return nil, err
 	}
 
-	return &snapshotter{
+	o := &snapshotter{
 		root:        root,
 		ms:          ms,
 		asyncRemove: config.asyncRemove,
 		fs:          targetFs,
-	}, nil
+	}
+
+	if err := o.restoreRemoteSnapshot(ctx); err != nil {
+		return nil, errors.Wrap(err, "failed to restore remote snapshot")
+	}
+
+	return o, nil
 }
 
 // Stat returns the info for an active or committed snapshot by name or
@@ -661,7 +667,7 @@ func (o *snapshotter) checkAvailability(ctx context.Context, key string) bool {
 		if _, ok := info.Labels[remoteLabel]; ok {
 			eg.Go(func() error {
 				log.G(lCtx).Debug("checking mount point")
-				if err := o.fs.Check(egCtx, mp); err != nil {
+				if err := o.fs.Check(egCtx, mp, info.Labels); err != nil {
 					log.G(lCtx).WithError(err).Warn("layer is unavailable")
 					return err
 				}
@@ -676,4 +682,35 @@ func (o *snapshotter) checkAvailability(ctx context.Context, key string) bool {
 		return false
 	}
 	return true
+}
+
+func (o *snapshotter) restoreRemoteSnapshot(ctx context.Context) error {
+	mounts, err := mount.Self()
+	if err != nil {
+		return err
+	}
+	for _, m := range mounts {
+		if strings.HasPrefix(m.Mountpoint, filepath.Join(o.root, "snapshots")) {
+			if err := syscall.Unmount(m.Mountpoint, syscall.MNT_FORCE); err != nil {
+				return errors.Wrapf(err, "failed to unmount %s", m.Mountpoint)
+			}
+		}
+	}
+
+	var task []snapshots.Info
+	if err := o.Walk(ctx, func(ctx context.Context, info snapshots.Info) error {
+		if _, ok := info.Labels[remoteLabel]; ok {
+			task = append(task, info)
+		}
+		return nil
+	}); err != nil && !errdefs.IsNotFound(err) {
+		return err
+	}
+	for _, info := range task {
+		if err := o.prepareRemoteSnapshot(ctx, info.Name, info.Labels); err != nil {
+			return errors.Wrapf(err, "failed to prepare remote snapshot: %s", info.Name)
+		}
+	}
+
+	return nil
 }
