@@ -257,8 +257,8 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		}
 
 		var exportersResponse []*controlapi.ExporterResponse
-		if (resp.ExporterResponse != nil){
-           exportersResponse = append(exportersResponse, resp.ExporterResponse)
+		for _, v := range resp.ExportersResponse {
+           exportersResponse = append(exportersResponse, v)
         }
         res = &SolveResponse{
 			ExportersResponse: exportersResponse,
@@ -347,8 +347,8 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 	// Update index.json of exported cache content store
 	// FIXME(AkihiroSuda): dedupe const definition of cache/remotecache.ExporterResponseManifestDesc = "cache.manifest"
 	if len(res.ExportersResponse) > 0  {
-        for _, v := range res.ExportersResponse {
-            if manifestDescJSON := v.ExporterResponse["cache.manifest"]; manifestDescJSON != "" {
+        //for _, v := range res.ExportersResponse {
+            if manifestDescJSON := res.ExportersResponse[0].ExporterResponse["cache.manifest"]; manifestDescJSON != "" {
                 var manifestDesc ocispec.Descriptor
                 if err = json.Unmarshal([]byte(manifestDescJSON), &manifestDesc); err != nil {
                     return nil, err
@@ -359,7 +359,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
                     }
                 }
             }
-        }
+        //}
 	}
 	return res, nil
 }
