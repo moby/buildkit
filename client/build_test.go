@@ -1279,8 +1279,8 @@ func testClientGatewayFileActionError(t *testing.T, sb integration.Sandbox) {
 		require.True(t, errors.As(solveErr, &se))
 		// There are no inputs because rootfs is scratch.
 		require.Len(t, se.Solve.InputIDs, 0)
-		// There is one output for the mutable mount used for the fileop actions.
-		require.Len(t, se.Solve.OutputIDs, 1)
+		// There is one output for every action (3).
+		require.Len(t, se.Solve.OutputIDs, 3)
 
 		op, ok := se.Solve.Op.Op.(*pb.Op_File)
 		require.True(t, ok)
@@ -1289,10 +1289,10 @@ func testClientGatewayFileActionError(t *testing.T, sb integration.Sandbox) {
 		require.True(t, ok)
 
 		idx := subject.File.Index
-		require.Greater(t, len(op.File.Actions), int(idx))
+		require.Less(t, int(idx), len(op.File.Actions))
 
 		// Verify the index is pointing to the action that failed.
-		action := op.File.Actions[subject.File.Index]
+		action := op.File.Actions[idx]
 		mkfile, ok := action.Action.(*pb.FileAction_Mkfile)
 		require.True(t, ok)
 		require.Equal(t, mkfile.Mkfile.Path, "/notfound/foo")
@@ -1317,7 +1317,7 @@ func testClientGatewayFileActionError(t *testing.T, sb integration.Sandbox) {
 			}, {
 				Dest:      "/problem",
 				MountType: pb.MountType_BIND,
-				ResultID:  se.Solve.OutputIDs[0],
+				ResultID:  se.Solve.OutputIDs[idx],
 			}},
 		})
 		require.NoError(t, err)

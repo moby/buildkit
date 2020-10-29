@@ -158,6 +158,9 @@ func (c *bridgeClient) registerResultIDs(results ...solver.Result) (ids []string
 
 	ids = make([]string, len(results))
 	for i, res := range results {
+		if res == nil {
+			continue
+		}
 		workerRef, ok := res.Sys().(*worker.WorkerRef)
 		if !ok {
 			return ids, errors.Errorf("unexpected type for result, got %T", res.Sys())

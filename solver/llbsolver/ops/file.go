@@ -160,7 +160,6 @@ func (f *fileOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 	outs, err := f.solver.Solve(ctx, inpRefs, f.op.Actions, g)
 	if err != nil {
 		return nil, err
-		// return nil, errdefs.WithExecError(err, inputs, nil)
 	}
 
 	outResults := make([]solver.Result, 0, len(outs))
@@ -347,7 +346,7 @@ func (s *FileOpSolver) Solve(ctx context.Context, inputs []fileoptypes.Ref, acti
 				}
 				inp, err := s.getInput(ctx, idx, inputs, actions, g)
 				if err != nil {
-					return errdefs.WithFileActionError(err, idx)
+					return errdefs.WithFileActionError(err, idx-len(inputs))
 				}
 				outs[i] = inp.ref
 				return nil
@@ -405,31 +404,41 @@ func (s *FileOpSolver) getInput(ctx context.Context, idx int, inputs []fileoptyp
 
 		var inpMount, inpMountSecondary fileoptypes.Mount
 		var toRelease []fileoptypes.Mount
-		var inpMountPrepared bool
+		action := actions[idx-len(inputs)]
+
 		defer func() {
+			if err != nil && inpMount != nil {
+				inputRes := make([]solver.Result, len(inputs))
+				for i, input := range inputs {
+					inputRes[i] = worker.NewWorkerRefResult(input.(cache.ImmutableRef), s.w)
+				}
+
+				outputRes := make([]solver.Result, len(actions))
+
+				// Commit the mutable for the primary input of the failed action.
+				if !inpMount.Readonly() {
+					ref, cerr := s.r.Commit(ctx, inpMount)
+					if cerr == nil {
+						outputRes[idx-len(inputs)] = worker.NewWorkerRefResult(ref.(cache.ImmutableRef), s.w)
+					}
+					inpMount.Release(context.TODO())
+				}
+
+				// If the action has a secondary input, commit it and set the ref on
+				// the output results.
+				if inpMountSecondary != nil && !inpMountSecondary.Readonly() {
+					ref2, cerr := s.r.Commit(ctx, inpMountSecondary)
+					if cerr == nil {
+						outputRes[int(action.SecondaryInput)-len(inputs)] = worker.NewWorkerRefResult(ref2.(cache.ImmutableRef), s.w)
+					}
+				}
+
+				err = errdefs.WithExecError(err, inputRes, outputRes)
+			}
 			for _, m := range toRelease {
 				m.Release(context.TODO())
 			}
-			if err != nil && inpMount != nil {
-				if inpMountPrepared {
-					inpMount.Release(context.TODO())
-				}
-				var (
-					inputRes  []solver.Result
-					outputRes []solver.Result
-				)
-				for _, input := range inputs {
-					inputRes = append(inputRes, worker.NewWorkerRefResult(input.(cache.ImmutableRef), s.w))
-				}
-				ref, cerr := s.r.Commit(ctx, inpMount)
-				if cerr == nil {
-					outputRes = append(outputRes, worker.NewWorkerRefResult(ref.(cache.ImmutableRef), s.w))
-				}
-				err = errdefs.WithExecError(err, inputRes, outputRes)
-			}
 		}()
-
-		action := actions[idx-len(inputs)]
 
 		loadInput := func(ctx context.Context) func() error {
 			return func() error {
@@ -443,7 +452,6 @@ func (s *FileOpSolver) getInput(ctx context.Context, idx int, inputs []fileoptyp
 						return err
 					}
 					inpMount = m
-					inpMountPrepared = true
 					return nil
 				}
 				inpMount = inp.mount
@@ -542,7 +550,6 @@ func (s *FileOpSolver) getInput(ctx context.Context, idx int, inputs []fileoptyp
 				return nil, err
 			}
 			inpMount = m
-			inpMountPrepared = true
 		}
 
 		switch a := action.Action.(type) {

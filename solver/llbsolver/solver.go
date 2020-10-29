@@ -144,6 +144,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		eg.Go(func() error {
 			_, err := ref.Result(ctx2)
 			if err != nil {
+				// Also release any results referenced by exec errors.
 				var ee *errdefs.ExecError
 				if errors.As(err, &ee) {
 					ee.EachRef(func(res solver.Result) error {
