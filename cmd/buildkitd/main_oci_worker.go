@@ -11,6 +11,7 @@ import (
 	"time"
 
 	fuseoverlayfs "github.com/AkihiroSuda/containerd-fuse-overlayfs"
+	"github.com/BurntSushi/toml"
 	snapshotsapi "github.com/containerd/containerd/api/services/snapshots/v1"
 	"github.com/containerd/containerd/defaults"
 	"github.com/containerd/containerd/pkg/dialer"
@@ -22,6 +23,7 @@ import (
 	"github.com/containerd/containerd/sys"
 	remotesn "github.com/containerd/stargz-snapshotter/snapshot"
 	"github.com/containerd/stargz-snapshotter/stargz"
+	sgzconf "github.com/containerd/stargz-snapshotter/stargz/config"
 	sgzsource "github.com/containerd/stargz-snapshotter/stargz/source"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/executor/oci"
@@ -234,7 +236,7 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 	}
 
 	hosts := resolverFunc(common.config)
-	snFactory, err := snapshotterFactory(common.config.Root, cfg, hosts)
+	snFactory, err := snapshotterFactory(common.config.Root, cfg, hosts, common.configMetaData)
 	if err != nil {
 		return nil, err
 	}
@@ -287,7 +289,7 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 	return []worker.Worker{w}, nil
 }
 
-func snapshotterFactory(commonRoot string, cfg config.OCIConfig, hosts docker.RegistryHosts) (runc.SnapshotterFactory, error) {
+func snapshotterFactory(commonRoot string, cfg config.OCIConfig, hosts docker.RegistryHosts, cfgMeta *toml.MetaData) (runc.SnapshotterFactory, error) {
 	var (
 		name    = cfg.Snapshotter
 		address = cfg.ProxySnapshotterPath
@@ -368,9 +370,15 @@ func snapshotterFactory(commonRoot string, cfg config.OCIConfig, hosts docker.Re
 			}
 			return base, nil
 		}
+		sgzCfg := sgzconf.Config{}
+		if cfgMeta != nil {
+			if err := cfgMeta.PrimitiveDecode(cfg.StargzSnapshotterConfig, &sgzCfg); err != nil {
+				return snFactory, errors.Wrapf(err, "failed to parse stargz config")
+			}
+		}
 		snFactory.New = func(root string) (ctdsnapshot.Snapshotter, error) {
 			fs, err := stargz.NewFilesystem(filepath.Join(root, "stargz"),
-				cfg.StargzSnapshotterConfig,
+				sgzCfg,
 				stargz.WithGetSources(
 					// provides source info based on the registry config and
 					// default labels.
