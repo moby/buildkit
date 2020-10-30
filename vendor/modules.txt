@@ -216,7 +216,7 @@ github.com/docker/go-connections/tlsconfig
 github.com/docker/go-events
 # github.com/docker/go-units v0.4.0
 github.com/docker/go-units
-# github.com/docker/libnetwork v0.8.0-dev.2.0.20200226230617-d8334ccdb9be
+# github.com/docker/libnetwork v0.8.0-dev.2.0.20200917202933-d0951081b35f
 github.com/docker/libnetwork/ipamutils
 github.com/docker/libnetwork/resolvconf
 github.com/docker/libnetwork/resolvconf/dns
