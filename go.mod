@@ -16,7 +16,7 @@ require (
 	github.com/containerd/stargz-snapshotter v0.0.0-20201027054423-3a04e4c2c116
 	github.com/containerd/typeurl v1.0.1
 	github.com/coreos/go-systemd/v22 v22.1.0
-	github.com/docker/cli v0.0.0-20200227165822-2298e6a3fe24
+	github.com/docker/cli v20.10.0-beta1.0.20201029214301-1d20b15adc38+incompatible
 	github.com/docker/distribution v2.7.1+incompatible
 	github.com/docker/docker v17.12.0-ce-rc1.0.20200730172259-9f28837c1d93+incompatible
 	github.com/docker/go-connections v0.4.0
