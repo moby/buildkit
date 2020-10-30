@@ -54,17 +54,16 @@ func parseOutputCSV(s string) (client.ExportEntry, error) {
 
 // ParseOutput parses --output
 func ParseOutput(exports []string) ([]client.ExportEntry, error) {
-    if (len(exports) == 0){
-     return nil, errors.New("output is required")
-    }
-	exportsField := strings.Fields(exports[0])
-	var entries []client.ExportEntry
-	for _, s := range exportsField {
-		e, err := parseOutputCSV(s)
-		if err != nil {
-			return nil, err
-		}
-		entries = append(entries, e)
+    var entries []client.ExportEntry
+     if (len(exports) > 0){
+        exportsField := strings.Fields(exports[0])
+        for _, s := range exportsField {
+            e, err := parseOutputCSV(s)
+            if err != nil {
+                return nil, err
+            }
+            entries = append(entries, e)
+        }
 	}
 	return entries, nil
 }
