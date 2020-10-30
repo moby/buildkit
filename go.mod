@@ -27,7 +27,7 @@ require (
 	// protobuf: the actual version is replaced in replace()
 	github.com/golang/protobuf v1.4.2
 	github.com/google/go-cmp v0.4.1
-	github.com/google/shlex v0.0.0-20150127133951-6f45313302b9
+	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/gorilla/mux v1.7.4 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.2.0
 	github.com/grpc-ecosystem/grpc-opentracing v0.0.0-20180507213350-8e809c8a8645
