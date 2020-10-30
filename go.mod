@@ -37,6 +37,7 @@ require (
 	github.com/ishidawataru/sctp v0.0.0-20191218070446-00ab2ac2db07 // indirect
 	github.com/jaguilar/vt100 v0.0.0-20150826170717-2703a27b14ea
 	github.com/mitchellh/hashstructure v1.0.0
+	github.com/moby/locker v1.0.1
 	github.com/morikuni/aec v1.0.0
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.0.1

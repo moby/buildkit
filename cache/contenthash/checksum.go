@@ -11,12 +11,12 @@ import (
 	"sync"
 
 	"github.com/docker/docker/pkg/idtools"
-	"github.com/docker/docker/pkg/locker"
 	iradix "github.com/hashicorp/go-immutable-radix"
 	"github.com/hashicorp/golang-lru/simplelru"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/snapshot"
+	"github.com/moby/locker"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
