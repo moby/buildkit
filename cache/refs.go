@@ -370,10 +370,8 @@ func (sr *immutableRef) parentRefChain() []*immutableRef {
 }
 
 func (sr *immutableRef) Mount(ctx context.Context, readonly bool, s session.Group) (snapshot.Mountable, error) {
-	if getBlobOnly(sr.md) {
-		if err := sr.Extract(ctx, s); err != nil {
-			return nil, err
-		}
+	if err := sr.Extract(ctx, s); err != nil {
+		return nil, err
 	}
 
 	sr.mu.Lock()
@@ -382,6 +380,10 @@ func (sr *immutableRef) Mount(ctx context.Context, readonly bool, s session.Grou
 }
 
 func (sr *immutableRef) Extract(ctx context.Context, s session.Group) (rerr error) {
+	if !getBlobOnly(sr.md) {
+		return
+	}
+
 	ctx, done, err := leaseutil.WithLease(ctx, sr.cm.LeaseManager, leaseutil.MakeTemporary)
 	if err != nil {
 		return err

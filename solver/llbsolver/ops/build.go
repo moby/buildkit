@@ -54,6 +54,7 @@ func (b *buildOp) CacheMap(ctx context.Context, g session.Group, index int) (*so
 		Deps: make([]struct {
 			Selector          digest.Digest
 			ComputeDigestFunc solver.ResultBasedCacheFunc
+			PreprocessFunc    solver.PreprocessFunc
 		}, len(b.v.Inputs())),
 	}, true, nil
 }
