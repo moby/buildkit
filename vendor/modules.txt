@@ -1,7 +1,3 @@
-# github.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1
-## explicit; go 1.16
-github.com/Azure/go-ansiterm
-github.com/Azure/go-ansiterm/winterm
 # github.com/Microsoft/go-winio v0.5.1
 ## explicit; go 1.12
 github.com/Microsoft/go-winio
@@ -249,17 +245,12 @@ github.com/docker/docker/pkg/fileutils
 github.com/docker/docker/pkg/homedir
 github.com/docker/docker/pkg/idtools
 github.com/docker/docker/pkg/ioutils
-github.com/docker/docker/pkg/jsonmessage
 github.com/docker/docker/pkg/longpath
 github.com/docker/docker/pkg/pools
 github.com/docker/docker/pkg/reexec
 github.com/docker/docker/pkg/stringid
 github.com/docker/docker/pkg/system
 github.com/docker/docker/profiles/seccomp
-github.com/docker/docker/testutil/daemon
-github.com/docker/docker/testutil/environment
-github.com/docker/docker/testutil/fixtures/load
-github.com/docker/docker/testutil/request
 # github.com/docker/docker-credential-helpers v0.6.4
 ## explicit; go 1.13
 github.com/docker/docker-credential-helpers/client
@@ -395,8 +386,6 @@ github.com/moby/sys/mountinfo
 github.com/moby/sys/signal
 # github.com/moby/term v0.0.0-20210619224110-3f7ff695adc6
 ## explicit; go 1.13
-github.com/moby/term
-github.com/moby/term/windows
 # github.com/morikuni/aec v1.0.0
 ## explicit
 github.com/morikuni/aec
@@ -711,13 +700,4 @@ google.golang.org/protobuf/types/known/wrapperspb
 # gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
 ## explicit
 gopkg.in/yaml.v3
-# gotest.tools/v3 v3.0.3
-## explicit; go 1.11
-gotest.tools/v3/assert
-gotest.tools/v3/assert/cmp
-gotest.tools/v3/internal/assert
-gotest.tools/v3/internal/difflib
-gotest.tools/v3/internal/format
-gotest.tools/v3/internal/source
-gotest.tools/v3/poll
 # github.com/docker/docker => github.com/docker/docker v20.10.3-0.20220224222438-c78f6963a1c0+incompatible
