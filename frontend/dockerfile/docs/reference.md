@@ -2043,7 +2043,7 @@ RUN echo hello
 If you specify `--build-arg CONT_IMG_VER=<value>` on the command line, in both
 cases, the specification on line 2 does not cause a cache miss; line 3 does
 cause a cache miss.`ARG CONT_IMG_VER` causes the RUN line to be identified
-as the same as running `CONT_IMG_VER=<value>` echo hello, so if the `<value>`
+as the same as running `CONT_IMG_VER=<value> echo hello`, so if the `<value>`
 changes, we get a cache miss.
 
 Consider another example under the same command line:
