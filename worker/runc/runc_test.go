@@ -224,8 +224,8 @@ func (n *nopCloser) Close() error {
 	return nil
 }
 
-func execMount(m cache.Mountable) executor.Mountable {
-	return &mountable{m: m}
+func execMount(m cache.Mountable) executor.Mount {
+	return executor.Mount{Src: &mountable{m: m}}
 }
 
 type mountable struct {
