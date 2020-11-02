@@ -338,7 +338,11 @@ func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 				root = active
 			}
 		} else {
-			mounts = append(mounts, executor.Mount{Src: mountWithSession(mountable, g), Dest: m.Dest, Readonly: m.Readonly, Selector: m.Selector})
+			mws := mountWithSession(mountable, g)
+			mws.Dest = m.Dest
+			mws.Readonly = m.Readonly
+			mws.Selector = m.Selector
+			mounts = append(mounts, mws)
 		}
 	}
 
@@ -443,8 +447,12 @@ func parseExtraHosts(ips []*pb.HostIP) ([]executor.HostIP, error) {
 	return out, nil
 }
 
-func mountWithSession(m cache.Mountable, g session.Group) executor.Mountable {
-	return &mountable{m: m, g: g}
+func mountWithSession(m cache.Mountable, g session.Group) executor.Mount {
+	_, readonly := m.(cache.ImmutableRef)
+	return executor.Mount{
+		Src:      &mountable{m: m, g: g},
+		Readonly: readonly,
+	}
 }
 
 type mountable struct {

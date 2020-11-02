@@ -55,7 +55,7 @@ func New(client *containerd.Client, root, cgroup string, networkProviders map[pb
 	}
 }
 
-func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.Mountable, mounts []executor.Mount, process executor.ProcessInfo, started chan<- struct{}) (err error) {
+func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.Mount, mounts []executor.Mount, process executor.ProcessInfo, started chan<- struct{}) (err error) {
 	if id == "" {
 		id = identity.NewID()
 	}
@@ -93,7 +93,7 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.M
 		defer clean()
 	}
 
-	mountable, err := root.Mount(ctx, false)
+	mountable, err := root.Src.Mount(ctx, false)
 	if err != nil {
 		return err
 	}

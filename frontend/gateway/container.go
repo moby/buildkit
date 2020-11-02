@@ -121,7 +121,7 @@ func NewContainer(ctx context.Context, e executor.Executor, sm *session.Manager,
 		}
 	}
 
-	if ctr.rootFS == nil {
+	if ctr.rootFS.Src == nil {
 		return nil, errors.Errorf("root mount required")
 	}
 
@@ -189,7 +189,7 @@ func NewContainer(ctx context.Context, e executor.Executor, sm *session.Manager,
 		}
 
 		execMount := executor.Mount{
-			Src:      mountWithSession(mountable, g),
+			Src:      mountableWithSession(mountable, g),
 			Selector: m.Selector,
 			Dest:     m.Dest,
 			Readonly: m.Readonly,
@@ -210,7 +210,7 @@ type gatewayContainer struct {
 	id       string
 	netMode  opspb.NetMode
 	platform opspb.Platform
-	rootFS   executor.Mountable
+	rootFS   executor.Mount
 	mounts   []executor.Mount
 	executor executor.Executor
 	started  bool
@@ -351,7 +351,15 @@ func addDefaultEnvvar(env []string, k, v string) []string {
 	return append(env, k+"="+v)
 }
 
-func mountWithSession(m cache.Mountable, g session.Group) executor.Mountable {
+func mountWithSession(m cache.Mountable, g session.Group) executor.Mount {
+	_, readonly := m.(cache.ImmutableRef)
+	return executor.Mount{
+		Src:      mountableWithSession(m, g),
+		Readonly: readonly,
+	}
+}
+
+func mountableWithSession(m cache.Mountable, g session.Group) executor.Mountable {
 	return &mountable{m: m, g: g}
 }
 
