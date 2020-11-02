@@ -64,7 +64,7 @@ func createNetNS(c *cniProvider, id string) (string, error) {
 		errno = syscall.Errno(ws.ExitStatus())
 		if errno != 0 {
 			deleteNetNS(p)
-			return "", errors.Wrap(errno, "failed to mount")
+			return "", errors.Wrapf(errno, "failed to mount %s (pid=%d)", p, pid)
 		}
 		return p, nil
 	}
@@ -91,8 +91,8 @@ func unmountNetNS(nativeID string) error {
 }
 
 func deleteNetNS(nativeID string) error {
-	if err := os.RemoveAll(filepath.Dir(nativeID)); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return errors.Wrap(err, "error removing network namespace")
+	if err := os.RemoveAll(nativeID); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return errors.Wrapf(err, "error removing network namespace %s", nativeID)
 	}
 	return nil
 }
