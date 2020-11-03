@@ -13,6 +13,7 @@ import (
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/worker/base"
 	"github.com/pkg/errors"
@@ -43,7 +44,7 @@ func TestWorkerExec(t *testing.T, w *base.Worker) {
 	require.NoError(t, err)
 
 	snap := NewBusyboxSourceSnapshot(ctx, t, w, sm)
-	root, err := w.CacheMgr.New(ctx, snap)
+	root, err := w.CacheMgr.New(ctx, snap, nil)
 	require.NoError(t, err)
 
 	id := identity.NewID()
@@ -63,7 +64,7 @@ func TestWorkerExec(t *testing.T, w *base.Worker) {
 	}()
 	stdout := bytes.NewBuffer(nil)
 	stderr := bytes.NewBuffer(nil)
-	err = w.WorkerOpt.Executor.Run(ctxTimeout, id, root, nil, executor.ProcessInfo{
+	err = w.WorkerOpt.Executor.Run(ctxTimeout, id, execMount(root), nil, executor.ProcessInfo{
 		Meta: executor.Meta{
 			Args: []string{"cat"},
 			Cwd:  "/",
@@ -84,7 +85,7 @@ func TestWorkerExec(t *testing.T, w *base.Worker) {
 	eg := errgroup.Group{}
 	started = make(chan struct{})
 	eg.Go(func() error {
-		return w.WorkerOpt.Executor.Run(ctx, id, root, nil, executor.ProcessInfo{
+		return w.WorkerOpt.Executor.Run(ctx, id, execMount(root), nil, executor.ProcessInfo{
 			Meta: executor.Meta{
 				Args: []string{"sleep", "10"},
 				Cwd:  "/",
@@ -166,7 +167,7 @@ func TestWorkerExecFailures(t *testing.T, w *base.Worker) {
 	require.NoError(t, err)
 
 	snap := NewBusyboxSourceSnapshot(ctx, t, w, sm)
-	root, err := w.CacheMgr.New(ctx, snap)
+	root, err := w.CacheMgr.New(ctx, snap, nil)
 	require.NoError(t, err)
 
 	id := identity.NewID()
@@ -175,7 +176,7 @@ func TestWorkerExecFailures(t *testing.T, w *base.Worker) {
 	eg := errgroup.Group{}
 	started := make(chan struct{})
 	eg.Go(func() error {
-		return w.WorkerOpt.Executor.Run(ctx, id, root, nil, executor.ProcessInfo{
+		return w.WorkerOpt.Executor.Run(ctx, id, execMount(root), nil, executor.ProcessInfo{
 			Meta: executor.Meta{
 				Args: []string{"/bin/false"},
 				Cwd:  "/",
@@ -204,7 +205,7 @@ func TestWorkerExecFailures(t *testing.T, w *base.Worker) {
 	eg = errgroup.Group{}
 	started = make(chan struct{})
 	eg.Go(func() error {
-		return w.WorkerOpt.Executor.Run(ctx, id, root, nil, executor.ProcessInfo{
+		return w.WorkerOpt.Executor.Run(ctx, id, execMount(root), nil, executor.ProcessInfo{
 			Meta: executor.Meta{
 				Args: []string{"bogus"},
 			},
@@ -238,4 +239,16 @@ type nopCloser struct {
 
 func (n *nopCloser) Close() error {
 	return nil
+}
+
+func execMount(m cache.Mountable) executor.Mount {
+	return executor.Mount{Src: &mountable{m: m}}
+}
+
+type mountable struct {
+	m cache.Mountable
+}
+
+func (m *mountable) Mount(ctx context.Context, readonly bool) (snapshot.Mountable, error) {
+	return m.m.Mount(ctx, readonly, nil)
 }

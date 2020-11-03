@@ -4,7 +4,6 @@ import (
 	"context"
 	"sync"
 
-	"github.com/moby/buildkit/cache"
 	cacheutil "github.com/moby/buildkit/cache/util"
 	clienttypes "github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
@@ -14,6 +13,7 @@ import (
 	gwpb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver"
 	opspb "github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
@@ -61,7 +61,7 @@ func (c *bridgeClient) Solve(ctx context.Context, req client.SolveRequest) (*cli
 	cRes := &client.Result{}
 	c.mu.Lock()
 	for k, r := range res.Refs {
-		rr, err := newRef(r)
+		rr, err := newRef(r, session.NewGroup(c.sid))
 		if err != nil {
 			return nil, err
 		}
@@ -69,7 +69,7 @@ func (c *bridgeClient) Solve(ctx context.Context, req client.SolveRequest) (*cli
 		cRes.AddRef(k, rr)
 	}
 	if r := res.Ref; r != nil {
-		rr, err := newRef(r)
+		rr, err := newRef(r, session.NewGroup(c.sid))
 		if err != nil {
 			return nil, err
 		}
@@ -191,10 +191,11 @@ func (c *bridgeClient) NewContainer(ctx context.Context, req client.NewContainer
 
 type ref struct {
 	solver.ResultProxy
+	session session.Group
 }
 
-func newRef(r solver.ResultProxy) (*ref, error) {
-	return &ref{ResultProxy: r}, nil
+func newRef(r solver.ResultProxy, s session.Group) (*ref, error) {
+	return &ref{ResultProxy: r, session: s}, nil
 }
 
 func (r *ref) ToState() (st llb.State, err error) {
@@ -206,7 +207,7 @@ func (r *ref) ToState() (st llb.State, err error) {
 }
 
 func (r *ref) ReadFile(ctx context.Context, req client.ReadRequest) ([]byte, error) {
-	ref, err := r.getImmutableRef(ctx)
+	m, err := r.getMountable(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -219,11 +220,11 @@ func (r *ref) ReadFile(ctx context.Context, req client.ReadRequest) ([]byte, err
 			Length: r.Length,
 		}
 	}
-	return cacheutil.ReadFile(ctx, ref, newReq)
+	return cacheutil.ReadFile(ctx, m, newReq)
 }
 
 func (r *ref) ReadDir(ctx context.Context, req client.ReadDirRequest) ([]*fstypes.Stat, error) {
-	ref, err := r.getImmutableRef(ctx)
+	m, err := r.getMountable(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -231,18 +232,18 @@ func (r *ref) ReadDir(ctx context.Context, req client.ReadDirRequest) ([]*fstype
 		Path:           req.Path,
 		IncludePattern: req.IncludePattern,
 	}
-	return cacheutil.ReadDir(ctx, ref, newReq)
+	return cacheutil.ReadDir(ctx, m, newReq)
 }
 
 func (r *ref) StatFile(ctx context.Context, req client.StatRequest) (*fstypes.Stat, error) {
-	ref, err := r.getImmutableRef(ctx)
+	m, err := r.getMountable(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return cacheutil.StatFile(ctx, ref, req.Path)
+	return cacheutil.StatFile(ctx, m, req.Path)
 }
 
-func (r *ref) getImmutableRef(ctx context.Context) (cache.ImmutableRef, error) {
+func (r *ref) getMountable(ctx context.Context) (snapshot.Mountable, error) {
 	rr, err := r.ResultProxy.Result(ctx)
 	if err != nil {
 		return nil, err
@@ -251,5 +252,5 @@ func (r *ref) getImmutableRef(ctx context.Context) (cache.ImmutableRef, error) {
 	if !ok {
 		return nil, errors.Errorf("invalid ref: %T", rr.Sys())
 	}
-	return ref.ImmutableRef, nil
+	return ref.ImmutableRef.Mount(ctx, true, r.session)
 }

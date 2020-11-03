@@ -17,7 +17,6 @@ import (
 	containerdoci "github.com/containerd/containerd/oci"
 	"github.com/containerd/continuity/fs"
 	"github.com/docker/docker/pkg/idtools"
-	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/executor/oci"
 	"github.com/moby/buildkit/identity"
@@ -56,7 +55,7 @@ func New(client *containerd.Client, root, cgroup string, networkProviders map[pb
 	}
 }
 
-func (w *containerdExecutor) Run(ctx context.Context, id string, root cache.Mountable, mounts []executor.Mount, process executor.ProcessInfo, started chan<- struct{}) (err error) {
+func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.Mount, mounts []executor.Mount, process executor.ProcessInfo, started chan<- struct{}) (err error) {
 	if id == "" {
 		id = identity.NewID()
 	}
@@ -94,7 +93,7 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root cache.Moun
 		defer clean()
 	}
 
-	mountable, err := root.Mount(ctx, false)
+	mountable, err := root.Src.Mount(ctx, false)
 	if err != nil {
 		return err
 	}

@@ -203,7 +203,7 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 			return nil, err
 		}
 
-		if len(p.manifest.Remote.Descriptors) > 0 {
+		if len(p.manifest.Descriptors) > 0 {
 			pw, _, _ := progress.FromContext(ctx)
 			progressController := &controller.Controller{
 				Writer: pw,
@@ -214,7 +214,7 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 			}
 
 			p.descHandlers = cache.DescHandlers(make(map[digest.Digest]*cache.DescHandler))
-			for i, desc := range p.manifest.Remote.Descriptors {
+			for i, desc := range p.manifest.Descriptors {
 
 				// Hints for remote/stargz snapshotter for searching for remote snapshots
 				labels := snapshots.FilterInheritedLabels(desc.Annotations)
@@ -227,7 +227,7 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 					layersKey = "containerd.io/snapshot/remote/stargz.layers"
 					layers    string
 				)
-				for _, l := range p.manifest.Remote.Descriptors[i:] {
+				for _, l := range p.manifest.Descriptors[i:] {
 					ls := fmt.Sprintf("%s,", l.Digest.String())
 					// This avoids the label hits the size limitation.
 					// Skipping layers is allowed here and only affects performance.
@@ -239,7 +239,7 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 				labels[layersKey] = strings.TrimSuffix(layers, ",")
 
 				p.descHandlers[desc.Digest] = &cache.DescHandler{
-					Provider:       p.manifest.Remote.Provider,
+					Provider:       p.manifest.Provider,
 					Progress:       progressController,
 					SnapshotLabels: labels,
 				}
@@ -280,7 +280,7 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 func (p *puller) Snapshot(ctx context.Context, g session.Group) (ir cache.ImmutableRef, err error) {
 	p.Puller.Resolver = resolver.DefaultPool.GetResolver(p.RegistryHosts, p.Ref, "pull", p.SessionManager, g).WithImageStore(p.ImageStore, p.id.ResolveMode)
 
-	if len(p.manifest.Remote.Descriptors) == 0 {
+	if len(p.manifest.Descriptors) == 0 {
 		return nil, nil
 	}
 	defer p.releaseTmpLeases(ctx)
@@ -293,7 +293,7 @@ func (p *puller) Snapshot(ctx context.Context, g session.Group) (ir cache.Immuta
 	}()
 
 	var parent cache.ImmutableRef
-	for _, layerDesc := range p.manifest.Remote.Descriptors {
+	for _, layerDesc := range p.manifest.Descriptors {
 		parent = current
 		current, err = p.CacheAccessor.GetByBlob(ctx, layerDesc, parent,
 			p.descHandlers, cache.WithImageRef(p.manifest.Ref))

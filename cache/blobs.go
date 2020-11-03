@@ -6,6 +6,7 @@ import (
 	"github.com/containerd/containerd/diff"
 	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/mount"
+	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/winlayers"
@@ -29,7 +30,7 @@ var ErrNoBlobs = errors.Errorf("no blobs for snapshot")
 // computeBlobChain ensures every ref in a parent chain has an associated blob in the content store. If
 // a blob is missing and createIfNeeded is true, then the blob will be created, otherwise ErrNoBlobs will
 // be returned. Caller must hold a lease when calling this function.
-func (sr *immutableRef) computeBlobChain(ctx context.Context, createIfNeeded bool, compressionType compression.Type) error {
+func (sr *immutableRef) computeBlobChain(ctx context.Context, createIfNeeded bool, compressionType compression.Type, s session.Group) error {
 	if _, ok := leases.FromContext(ctx); !ok {
 		return errors.Errorf("missing lease requirement for computeBlobChain")
 	}
@@ -42,16 +43,16 @@ func (sr *immutableRef) computeBlobChain(ctx context.Context, createIfNeeded boo
 		ctx = winlayers.UseWindowsLayerMode(ctx)
 	}
 
-	return computeBlobChain(ctx, sr, createIfNeeded, compressionType)
+	return computeBlobChain(ctx, sr, createIfNeeded, compressionType, s)
 }
 
-func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool, compressionType compression.Type) error {
+func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool, compressionType compression.Type, s session.Group) error {
 	baseCtx := ctx
 	eg, ctx := errgroup.WithContext(ctx)
 	var currentDescr ocispec.Descriptor
 	if sr.parent != nil {
 		eg.Go(func() error {
-			return computeBlobChain(ctx, sr.parent, createIfNeeded, compressionType)
+			return computeBlobChain(ctx, sr.parent, createIfNeeded, compressionType, s)
 		})
 	}
 	eg.Go(func() error {
@@ -86,7 +87,7 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 				// reference needs to be committed
 				var lower []mount.Mount
 				if sr.parent != nil {
-					m, err := sr.parent.Mount(ctx, true)
+					m, err := sr.parent.Mount(ctx, true, s)
 					if err != nil {
 						return nil, err
 					}
@@ -99,7 +100,7 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 						defer release()
 					}
 				}
-				m, err := sr.Mount(ctx, true)
+				m, err := sr.Mount(ctx, true, s)
 				if err != nil {
 					return nil, err
 				}

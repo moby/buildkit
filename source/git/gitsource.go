@@ -64,7 +64,7 @@ func (gs *gitSource) ID() string {
 }
 
 // needs to be called with repo lock
-func (gs *gitSource) mountRemote(ctx context.Context, remote string, auth []string) (target string, release func(), retErr error) {
+func (gs *gitSource) mountRemote(ctx context.Context, remote string, auth []string, g session.Group) (target string, release func(), retErr error) {
 	remoteKey := "git-remote::" + remote
 
 	sis, err := gs.md.Search(remoteKey)
@@ -88,7 +88,7 @@ func (gs *gitSource) mountRemote(ctx context.Context, remote string, auth []stri
 
 	initializeRepo := false
 	if remoteRef == nil {
-		remoteRef, err = gs.cache.New(ctx, nil, cache.CachePolicyRetain, cache.WithDescription(fmt.Sprintf("shared git repo for %s", remote)))
+		remoteRef, err = gs.cache.New(ctx, nil, g, cache.CachePolicyRetain, cache.WithDescription(fmt.Sprintf("shared git repo for %s", remote)))
 		if err != nil {
 			return "", nil, errors.Wrapf(err, "failed to create new mutable for %s", remote)
 		}
@@ -105,7 +105,7 @@ func (gs *gitSource) mountRemote(ctx context.Context, remote string, auth []stri
 		}
 	}()
 
-	mount, err := remoteRef.Mount(ctx, false)
+	mount, err := remoteRef.Mount(ctx, false, g)
 	if err != nil {
 		return "", nil, err
 	}
@@ -249,7 +249,7 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index
 
 	gs.getAuthToken(ctx, g)
 
-	gitDir, unmountGitDir, err := gs.mountRemote(ctx, remote, gs.auth)
+	gitDir, unmountGitDir, err := gs.mountRemote(ctx, remote, gs.auth, g)
 	if err != nil {
 		return "", nil, false, err
 	}
@@ -307,7 +307,7 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 
 	gs.locker.Lock(gs.src.Remote)
 	defer gs.locker.Unlock(gs.src.Remote)
-	gitDir, unmountGitDir, err := gs.mountRemote(ctx, gs.src.Remote, gs.auth)
+	gitDir, unmountGitDir, err := gs.mountRemote(ctx, gs.src.Remote, gs.auth, g)
 	if err != nil {
 		return nil, err
 	}
@@ -345,7 +345,7 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 		}
 	}
 
-	checkoutRef, err := gs.cache.New(ctx, nil, cache.WithRecordType(client.UsageRecordTypeGitCheckout), cache.WithDescription(fmt.Sprintf("git snapshot for %s#%s", gs.src.Remote, ref)))
+	checkoutRef, err := gs.cache.New(ctx, nil, g, cache.WithRecordType(client.UsageRecordTypeGitCheckout), cache.WithDescription(fmt.Sprintf("git snapshot for %s#%s", gs.src.Remote, ref)))
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to create new mutable for %s", gs.src.Remote)
 	}
@@ -356,7 +356,7 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 		}
 	}()
 
-	mount, err := checkoutRef.Mount(ctx, false)
+	mount, err := checkoutRef.Mount(ctx, false, g)
 	if err != nil {
 		return nil, err
 	}

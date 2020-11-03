@@ -16,6 +16,7 @@ import (
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/llbsolver"
 	"github.com/moby/buildkit/solver/llbsolver/mounts"
@@ -250,7 +251,7 @@ func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 
 		makeMutable := func(ref cache.ImmutableRef) (cache.MutableRef, error) {
 			desc := fmt.Sprintf("mount %s from exec %s", m.Dest, strings.Join(e.op.Meta.Args, " "))
-			return e.cm.New(ctx, ref, cache.WithDescription(desc))
+			return e.cm.New(ctx, ref, g, cache.WithDescription(desc))
 		}
 
 		switch m.MountType {
@@ -280,7 +281,7 @@ func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 			}
 
 		case pb.MountType_CACHE:
-			mRef, err := e.mm.MountableCache(ctx, m, ref)
+			mRef, err := e.mm.MountableCache(ctx, m, ref, g)
 			if err != nil {
 				return nil, err
 			}
@@ -337,7 +338,11 @@ func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 				root = active
 			}
 		} else {
-			mounts = append(mounts, executor.Mount{Src: mountable, Dest: m.Dest, Readonly: m.Readonly, Selector: m.Selector})
+			mws := mountWithSession(mountable, g)
+			mws.Dest = m.Dest
+			mws.Readonly = m.Readonly
+			mws.Selector = m.Selector
+			mounts = append(mounts, mws)
 		}
 	}
 
@@ -390,7 +395,7 @@ func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 	defer stdout.Close()
 	defer stderr.Close()
 
-	if err := e.exec.Run(ctx, "", root, mounts, executor.ProcessInfo{Meta: meta, Stdin: nil, Stdout: stdout, Stderr: stderr}, nil); err != nil {
+	if err := e.exec.Run(ctx, "", mountWithSession(root, g), mounts, executor.ProcessInfo{Meta: meta, Stdin: nil, Stdout: stdout, Stderr: stderr}, nil); err != nil {
 		return nil, errors.Wrapf(err, "executor failed running %v", meta.Args)
 	}
 
@@ -440,4 +445,21 @@ func parseExtraHosts(ips []*pb.HostIP) ([]executor.HostIP, error) {
 		}
 	}
 	return out, nil
+}
+
+func mountWithSession(m cache.Mountable, g session.Group) executor.Mount {
+	_, readonly := m.(cache.ImmutableRef)
+	return executor.Mount{
+		Src:      &mountable{m: m, g: g},
+		Readonly: readonly,
+	}
+}
+
+type mountable struct {
+	m cache.Mountable
+	g session.Group
+}
+
+func (m *mountable) Mount(ctx context.Context, readonly bool) (snapshot.Mountable, error) {
+	return m.m.Mount(ctx, readonly, m.g)
 }

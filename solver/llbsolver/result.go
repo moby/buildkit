@@ -6,6 +6,7 @@ import (
 	"path"
 
 	"github.com/moby/buildkit/cache/contenthash"
+	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/worker"
@@ -21,7 +22,7 @@ type Selector struct {
 }
 
 func NewContentHashFunc(selectors []Selector) solver.ResultBasedCacheFunc {
-	return func(ctx context.Context, res solver.Result) (digest.Digest, error) {
+	return func(ctx context.Context, res solver.Result, s session.Group) (digest.Digest, error) {
 		ref, ok := res.Sys().(*worker.WorkerRef)
 		if !ok {
 			return "", errors.Errorf("invalid reference: %T", res)
@@ -39,13 +40,13 @@ func NewContentHashFunc(selectors []Selector) solver.ResultBasedCacheFunc {
 			i, sel := i, sel
 			eg.Go(func() error {
 				if !sel.Wildcard {
-					dgst, err := contenthash.Checksum(ctx, ref.ImmutableRef, path.Join("/", sel.Path), sel.FollowLinks)
+					dgst, err := contenthash.Checksum(ctx, ref.ImmutableRef, path.Join("/", sel.Path), sel.FollowLinks, s)
 					if err != nil {
 						return err
 					}
 					dgsts[i] = []byte(dgst)
 				} else {
-					dgst, err := contenthash.ChecksumWildcard(ctx, ref.ImmutableRef, path.Join("/", sel.Path), sel.FollowLinks)
+					dgst, err := contenthash.ChecksumWildcard(ctx, ref.ImmutableRef, path.Join("/", sel.Path), sel.FollowLinks, s)
 					if err != nil {
 						return err
 					}
@@ -63,11 +64,13 @@ func NewContentHashFunc(selectors []Selector) solver.ResultBasedCacheFunc {
 	}
 }
 
-func workerRefConverter(ctx context.Context, res solver.Result) (*solver.Remote, error) {
-	ref, ok := res.Sys().(*worker.WorkerRef)
-	if !ok {
-		return nil, errors.Errorf("invalid result: %T", res.Sys())
-	}
+func workerRefConverter(g session.Group) func(ctx context.Context, res solver.Result) (*solver.Remote, error) {
+	return func(ctx context.Context, res solver.Result) (*solver.Remote, error) {
+		ref, ok := res.Sys().(*worker.WorkerRef)
+		if !ok {
+			return nil, errors.Errorf("invalid result: %T", res.Sys())
+		}
 
-	return ref.ImmutableRef.GetRemote(ctx, true, compression.Default)
+		return ref.ImmutableRef.GetRemote(ctx, true, compression.Default, g)
+	}
 }

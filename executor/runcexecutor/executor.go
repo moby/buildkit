@@ -18,7 +18,6 @@ import (
 	"github.com/containerd/continuity/fs"
 	runc "github.com/containerd/go-runc"
 	"github.com/docker/docker/pkg/idtools"
-	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/executor/oci"
 	"github.com/moby/buildkit/identity"
@@ -130,7 +129,7 @@ func New(opt Opt, networkProviders map[pb.NetMode]network.Provider) (executor.Ex
 	return w, nil
 }
 
-func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable, mounts []executor.Mount, process executor.ProcessInfo, started chan<- struct{}) (err error) {
+func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, mounts []executor.Mount, process executor.ProcessInfo, started chan<- struct{}) (err error) {
 	meta := process.Meta
 
 	startedOnce := sync.Once{}
@@ -178,7 +177,7 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable,
 		defer clean()
 	}
 
-	mountable, err := root.Mount(ctx, false)
+	mountable, err := root.Src.Mount(ctx, false)
 	if err != nil {
 		return err
 	}
@@ -262,7 +261,7 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root cache.Mountable,
 	defer cleanup()
 
 	spec.Root.Path = rootFSPath
-	if _, ok := root.(cache.ImmutableRef); ok { // TODO: pass in with mount, not ref type
+	if root.Readonly {
 		spec.Root.Readonly = true
 	}
 

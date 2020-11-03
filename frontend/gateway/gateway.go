@@ -115,7 +115,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 			return nil, errors.Errorf("invalid ref: %T", res.Sys())
 		}
 
-		rootFS, err = workerRef.Worker.CacheManager().New(ctx, workerRef.ImmutableRef)
+		rootFS, err = workerRef.Worker.CacheManager().New(ctx, workerRef.ImmutableRef, session.NewGroup(sid))
 		if err != nil {
 			return nil, err
 		}
@@ -179,7 +179,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 		if !ok {
 			return nil, errors.Errorf("invalid ref: %T", r.Sys())
 		}
-		rootFS, err = workerRef.Worker.CacheManager().New(ctx, workerRef.ImmutableRef)
+		rootFS, err = workerRef.Worker.CacheManager().New(ctx, workerRef.ImmutableRef, session.NewGroup(sid))
 		if err != nil {
 			return nil, err
 		}
@@ -247,7 +247,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 	}
 	defer lbf.Discard()
 
-	err = llbBridge.Run(ctx, "", rootFS, nil, executor.ProcessInfo{Meta: meta, Stdin: lbf.Stdin, Stdout: lbf.Stdout, Stderr: os.Stderr}, nil)
+	err = llbBridge.Run(ctx, "", mountWithSession(rootFS, session.NewGroup(sid)), nil, executor.ProcessInfo{Meta: meta, Stdin: lbf.Stdin, Stdout: lbf.Stdout, Stderr: os.Stderr}, nil)
 
 	if err != nil {
 		if errors.Is(err, context.Canceled) && lbf.isErrServerClosed {
@@ -624,7 +624,12 @@ func (lbf *llbBridgeForwarder) ReadFile(ctx context.Context, req *pb.ReadFileReq
 		}
 	}
 
-	dt, err := cacheutil.ReadFile(ctx, workerRef.ImmutableRef, newReq)
+	m, err := workerRef.ImmutableRef.Mount(ctx, true, session.NewGroup(lbf.sid))
+	if err != nil {
+		return nil, err
+	}
+
+	dt, err := cacheutil.ReadFile(ctx, m, newReq)
 	if err != nil {
 		return nil, err
 	}
@@ -656,7 +661,11 @@ func (lbf *llbBridgeForwarder) ReadDir(ctx context.Context, req *pb.ReadDirReque
 		Path:           req.DirPath,
 		IncludePattern: req.IncludePattern,
 	}
-	entries, err := cacheutil.ReadDir(ctx, workerRef.ImmutableRef, newReq)
+	m, err := workerRef.ImmutableRef.Mount(ctx, true, session.NewGroup(lbf.sid))
+	if err != nil {
+		return nil, err
+	}
+	entries, err := cacheutil.ReadDir(ctx, m, newReq)
 	if err != nil {
 		return nil, err
 	}
@@ -683,8 +692,11 @@ func (lbf *llbBridgeForwarder) StatFile(ctx context.Context, req *pb.StatFileReq
 	if !ok {
 		return nil, errors.Errorf("invalid ref: %T", r.Sys())
 	}
-
-	st, err := cacheutil.StatFile(ctx, workerRef.ImmutableRef, req.Path)
+	m, err := workerRef.ImmutableRef.Mount(ctx, true, session.NewGroup(lbf.sid))
+	if err != nil {
+		return nil, err
+	}
+	st, err := cacheutil.StatFile(ctx, m, req.Path)
 	if err != nil {
 		return nil, err
 	}

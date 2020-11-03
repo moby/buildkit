@@ -162,10 +162,10 @@ func TestManager(t *testing.T) {
 
 	checkDiskUsage(ctx, t, cm, 0, 0)
 
-	active, err := cm.New(ctx, nil, CachePolicyRetain)
+	active, err := cm.New(ctx, nil, nil, CachePolicyRetain)
 	require.NoError(t, err)
 
-	m, err := active.Mount(ctx, false)
+	m, err := active.Mount(ctx, false, nil)
 	require.NoError(t, err)
 
 	lm := snapshot.LocalMounter(m)
@@ -234,7 +234,7 @@ func TestManager(t *testing.T) {
 	err = snap.Release(ctx)
 	require.NoError(t, err)
 
-	active2, err := cm.New(ctx, snap2, CachePolicyRetain)
+	active2, err := cm.New(ctx, snap2, nil, CachePolicyRetain)
 	require.NoError(t, err)
 
 	checkDiskUsage(ctx, t, cm, 2, 0)
@@ -326,7 +326,7 @@ func TestSnapshotExtract(t *testing.T) {
 
 	checkNumBlobs(ctx, t, co.cs, 2)
 
-	err = snap2.Extract(ctx)
+	err = snap2.Extract(ctx, nil)
 	require.NoError(t, err)
 
 	require.Equal(t, true, snap.Info().Extracted)
@@ -434,7 +434,7 @@ func TestExtractOnMutable(t *testing.T) {
 
 	cm := co.manager
 
-	active, err := cm.New(ctx, nil)
+	active, err := cm.New(ctx, nil, nil)
 	require.NoError(t, err)
 
 	snap, err := active.Commit(ctx)
@@ -480,7 +480,7 @@ func TestExtractOnMutable(t *testing.T) {
 
 	checkNumBlobs(ctx, t, co.cs, 2)
 
-	err = snap2.Extract(ctx)
+	err = snap2.Extract(ctx, nil)
 	require.NoError(t, err)
 
 	require.Equal(t, true, snap.Info().Extracted)
@@ -545,7 +545,7 @@ func TestSetBlob(t *testing.T) {
 
 	cm := co.manager
 
-	active, err := cm.New(ctx, nil)
+	active, err := cm.New(ctx, nil, nil)
 	require.NoError(t, err)
 
 	snap, err := active.Commit(ctx)
@@ -588,7 +588,7 @@ func TestSetBlob(t *testing.T) {
 	require.Equal(t, snap.ID(), info.SnapshotID)
 	require.Equal(t, info.Extracted, true)
 
-	active, err = cm.New(ctx, snap)
+	active, err = cm.New(ctx, snap, nil)
 	require.NoError(t, err)
 
 	snap2, err := active.Commit(ctx)
@@ -708,13 +708,13 @@ func TestPrune(t *testing.T) {
 	defer cleanup()
 	cm := co.manager
 
-	active, err := cm.New(ctx, nil)
+	active, err := cm.New(ctx, nil, nil)
 	require.NoError(t, err)
 
 	snap, err := active.Commit(ctx)
 	require.NoError(t, err)
 
-	active, err = cm.New(ctx, snap, CachePolicyRetain)
+	active, err = cm.New(ctx, snap, nil, CachePolicyRetain)
 	require.NoError(t, err)
 
 	snap2, err := active.Commit(ctx)
@@ -760,7 +760,7 @@ func TestPrune(t *testing.T) {
 	err = snap.Release(ctx)
 	require.NoError(t, err)
 
-	active, err = cm.New(ctx, snap, CachePolicyRetain)
+	active, err = cm.New(ctx, snap, nil, CachePolicyRetain)
 	require.NoError(t, err)
 
 	snap2, err = active.Commit(ctx)
@@ -818,7 +818,7 @@ func TestLazyCommit(t *testing.T) {
 	require.NoError(t, err)
 	cm := co.manager
 
-	active, err := cm.New(ctx, nil, CachePolicyRetain)
+	active, err := cm.New(ctx, nil, nil, CachePolicyRetain)
 	require.NoError(t, err)
 
 	// after commit mutable is locked
@@ -887,7 +887,7 @@ func TestLazyCommit(t *testing.T) {
 	require.NoError(t, err)
 
 	// test restarting after commit
-	active, err = cm.New(ctx, nil, CachePolicyRetain)
+	active, err = cm.New(ctx, nil, nil, CachePolicyRetain)
 	require.NoError(t, err)
 
 	// after commit mutable is locked
