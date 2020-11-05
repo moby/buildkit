@@ -3,7 +3,7 @@ module github.com/moby/buildkit
 go 1.13
 
 require (
-	github.com/AkihiroSuda/containerd-fuse-overlayfs v0.10.0
+	github.com/AkihiroSuda/containerd-fuse-overlayfs v1.0.0
 	github.com/BurntSushi/toml v0.3.1
 	github.com/Microsoft/go-winio v0.4.15-0.20200908182639-5b44b70ab3ab
 	github.com/Microsoft/hcsshim v0.8.9

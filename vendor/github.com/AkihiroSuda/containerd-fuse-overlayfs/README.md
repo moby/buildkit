@@ -36,7 +36,8 @@ with the following content, and recompile the containerd binary:
 
 package main
 
-import _ "github.com/AkihiroSuda/containerd-fuse-overlayfs"
+// NOTE: the package name was "github.com/AkihiroSuda/containerd-fuse-overlayfs" before v1.0.0
+import _ "github.com/AkihiroSuda/containerd-fuse-overlayfs/plugin"
 ```
 
 No extra configuration is needed.
