@@ -214,7 +214,7 @@ func addDefaultEnvvar(env []string, k, v string) []string {
 	return append(env, k+"="+v)
 }
 
-func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Result) ([]solver.Result, error) {
+func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Result) (refs []solver.Result, err error) {
 	var mounts []executor.Mount
 	var root cache.Mountable
 	var readonlyRootFS bool
@@ -226,6 +226,9 @@ func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 			if o != nil {
 				go o.Release(context.TODO())
 			}
+		}
+		if err != nil {
+			err = errdefs.WithExecError(errors.Wrapf(err, "executor failed running %v", e.op.Meta.Args), inputs, refs)
 		}
 	}()
 
@@ -405,7 +408,6 @@ func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 		Stderr: stderr,
 	}, nil)
 
-	refs := []solver.Result{}
 	for i, out := range outputs {
 		if mutable, ok := out.(cache.MutableRef); ok {
 			ref, err := mutable.Commit(ctx)
@@ -419,10 +421,7 @@ func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 		outputs[i] = nil
 	}
 
-	if execErr != nil {
-		return nil, errdefs.WithExecError(errors.Wrapf(execErr, "executor failed running %v", meta.Args), inputs, refs)
-	}
-	return refs, nil
+	return refs, execErr
 }
 
 func proxyEnvList(p *pb.ProxyEnv) []string {
