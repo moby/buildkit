@@ -2,6 +2,7 @@ package logs
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"math"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/pkg/errors"
+	"github.com/tonistiigi/units"
 )
 
 var defaultMaxLogSize = 1024 * 1024
@@ -35,12 +37,13 @@ func newStreamWriter(ctx context.Context, stream int, printOutput bool) io.Write
 }
 
 type streamWriter struct {
-	pw          progress.Writer
-	stream      int
-	printOutput bool
-	created     time.Time
-	size        int
-	clipping    bool
+	pw              progress.Writer
+	stream          int
+	printOutput     bool
+	created         time.Time
+	size            int
+	clipping        bool
+	clipReasonSpeed bool
 }
 
 func (sw *streamWriter) checkLimit(n int) int {
@@ -61,9 +64,11 @@ func (sw *streamWriter) checkLimit(n int) int {
 	maxSize := -1
 	if defaultMaxLogSpeed != -1 {
 		maxSize = int(math.Ceil(time.Since(sw.created).Seconds())) * defaultMaxLogSpeed
+		sw.clipReasonSpeed = true
 	}
 	if maxSize > defaultMaxLogSize {
 		maxSize = defaultMaxLogSize
+		sw.clipReasonSpeed = false
 	}
 	if maxSize < oldSize {
 		return 0
@@ -77,6 +82,13 @@ func (sw *streamWriter) checkLimit(n int) int {
 	return n
 }
 
+func (sw *streamWriter) clipLimitMessage() string {
+	if sw.clipReasonSpeed {
+		return fmt.Sprintf("%#g/s", units.Bytes(defaultMaxLogSpeed))
+	}
+	return fmt.Sprintf("%#g", units.Bytes(defaultMaxLogSize))
+}
+
 func (sw *streamWriter) Write(dt []byte) (int, error) {
 	oldSize := len(dt)
 	dt = append([]byte{}, dt[:sw.checkLimit(len(dt))]...)
@@ -85,7 +97,7 @@ func (sw *streamWriter) Write(dt []byte) (int, error) {
 		sw.clipping = false
 	}
 	if !sw.clipping && oldSize != len(dt) {
-		dt = append(dt, []byte("\n[output clipped, log limit reached]\n")...)
+		dt = append(dt, []byte(fmt.Sprintf("\n[output clipped, log limit %s reached]\n", sw.clipLimitMessage()))...)
 		sw.clipping = true
 	}
 
