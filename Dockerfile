@@ -8,10 +8,10 @@ ARG CONTAINERD_ALT_VERSION=v1.3.7
 # available targets: buildkitd, buildkitd.oci_only, buildkitd.containerd_only
 ARG BUILDKIT_TARGET=buildkitd
 ARG REGISTRY_VERSION=2.7.1
-ARG ROOTLESSKIT_VERSION=v0.9.5
+ARG ROOTLESSKIT_VERSION=v0.11.0
 ARG CNI_VERSION=v0.8.6
 ARG SHADOW_VERSION=4.8.1
-ARG FUSEOVERLAYFS_VERSION=v1.1.2
+ARG FUSEOVERLAYFS_VERSION=v1.2.0
 ARG STARGZ_SNAPSHOTTER_VERSION=3a04e4c2c116c85b4b66d01945cf7ebcb7a2eb5a
 
 # git stage is used for checking out remote repository sources
