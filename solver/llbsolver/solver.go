@@ -179,7 +179,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
                     }
                     inp.Ref = workerRef.ImmutableRef
 
-                    dt, err := inlineCache(ctx, exp.CacheExporter, r)
+                    dt, err := inlineCache(ctx, exp.CacheExporter, r, session.NewGroup(sessionID))
                     if err != nil {
                         return nil, err
                     }
@@ -203,7 +203,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
                             }
                             m[k] = workerRef.ImmutableRef
 
-                            dt, err := inlineCache(ctx, exp.CacheExporter, r)
+                            dt, err := inlineCache(ctx, exp.CacheExporter, r, session.NewGroup(sessionID))
                             if err != nil {
                                 return nil, err
                             }
@@ -223,6 +223,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
                 }
             }
 
+            g := session.NewGroup(j.SessionID)
             var cacheExporterResponse map[string]string
             if e := exp.CacheExporter; e != nil {
                 if err := inVertexContext(j.Context(ctx), "exporting cache", "", func(ctx context.Context) error {
@@ -234,8 +235,9 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
                         }
                         // all keys have same export chain so exporting others is not needed
                         _, err = r.CacheKeys()[0].Exporter.ExportTo(ctx, e, solver.CacheExportOpt{
-                            Convert: workerRefConverter,
+                            Convert: workerRefConverter(g),
                             Mode:    exp.CacheExportMode,
+                            Session: g,
                         })
                         return err
                     }); err != nil {
