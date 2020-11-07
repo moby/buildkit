@@ -655,7 +655,7 @@ The `FROM` instruction initializes a new build stage and sets the
 [*Base Image*](https://docs.docker.com/glossary/#base_image) for subsequent instructions. As such, a
 valid `Dockerfile` must start with a `FROM` instruction. The image can be
 any valid image – it is especially easy to start by **pulling an image** from
-the [*Public Repositories*](https://docs.docker.com/engine/tutorials/dockerrepos/).
+the [*Public Repositories*](https://docs.docker.com/docker-hub/repos/).
 
 - `ARG` is the only instruction that may precede `FROM` in the `Dockerfile`.
   See [Understand how ARG and FROM interact](#understand-how-arg-and-from-interact).
