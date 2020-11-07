@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	controlapi "github.com/moby/buildkit/api/services/control"
+
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
@@ -14,6 +14,7 @@ import (
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/rootfs"
+	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/session"
@@ -274,7 +275,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 
 	resp["containerimage.digest"] = desc.Digest.String()
 	response := &controlapi.ExporterResponse{
-	  ExporterResponse : resp,
+		ExporterResponse: resp,
 	}
 	return response, nil
 }

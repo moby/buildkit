@@ -5,6 +5,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
 	controlapi "github.com/moby/buildkit/api/services/control"
 	apitypes "github.com/moby/buildkit/api/types"
 	"github.com/moby/buildkit/cache/remotecache"
@@ -233,28 +234,28 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		return nil, err
 	}
 
-	if req.Exporter != ""  {
-            exp, err := w.Exporter(req.Exporter, c.opt.SessionManager)
-            if err != nil {
-                return nil, err
-            }
-            expi, err = exp.Resolve(ctx, req.ExporterAttrs.ExporterAttrs)
-            if err != nil {
-                return nil, err
-		    }
+	if req.Exporter != "" {
+		exp, err := w.Exporter(req.Exporter, c.opt.SessionManager)
+		if err != nil {
+			return nil, err
+		}
+		expi, err = exp.Resolve(ctx, req.ExporterAttrs.ExporterAttrs)
+		if err != nil {
+			return nil, err
+		}
 	}
-	if req.Exporters != nil  {
+	if req.Exporters != nil {
 		for i := 0; i <= len(req.Exporters)-1; i++ {
-            exp, err := w.Exporter(req.Exporters[i], c.opt.SessionManager)
-            if err != nil {
-                return nil, err
-            }
-            expi, err = exp.Resolve(ctx, req.ExportersAttrs[i].ExporterAttrs)
-            if err != nil {
-                return nil, err
-		    }
-		    expis = append(expis, expi)
-		    expi = nil
+			exp, err := w.Exporter(req.Exporters[i], c.opt.SessionManager)
+			if err != nil {
+				return nil, err
+			}
+			expi, err = exp.Resolve(ctx, req.ExportersAttrs[i].ExporterAttrs)
+			if err != nil {
+				return nil, err
+			}
+			expis = append(expis, expi)
+			expi = nil
 		}
 	}
 
@@ -294,8 +295,8 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		FrontendInputs: req.FrontendInputs,
 		CacheImports:   cacheImports,
 	}, llbsolver.ExporterRequest{
-		Exporters:        expis,
-		Exporter:         expi,
+		Exporters:       expis,
+		Exporter:        expi,
 		CacheExporter:   cacheExporter,
 		CacheExportMode: cacheExportMode,
 	}, req.Entitlements)

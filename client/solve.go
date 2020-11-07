@@ -3,6 +3,12 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
 	"github.com/containerd/containerd/content"
 	contentlocal "github.com/containerd/containerd/content/local"
 	controlapi "github.com/moby/buildkit/api/services/control"
@@ -21,11 +27,6 @@ import (
 	"github.com/sirupsen/logrus"
 	fstypes "github.com/tonistiigi/fsutil/types"
 	"golang.org/x/sync/errgroup"
-	"io"
-	"os"
-	"path/filepath"
-	"strings"
-	"time"
 )
 
 type SolveOpt struct {
@@ -54,7 +55,6 @@ type CacheOptionsEntry struct {
 	Type  string
 	Attrs map[string]string
 }
-
 
 // Solve calls Solve on the controller.
 // def must be nil if (and only if) opt.Frontend is set.
@@ -123,17 +123,17 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			s.Allow(a)
 		}
 
-        duplicate_Local_exporter := 0
-        duplicate_oci_exporter := 0
-        duplicate_docker_exporter := 0
-        duplicate_tar_exporter := 0
+		duplicateLocalExporter := 0
+		duplicateOciExporter := 0
+		duplicateDockerExporter := 0
+		duplicateTarExporter := 0
 		for _, ex := range opt.Exports {
 			switch ex.Type {
 			case ExporterLocal:
-			    duplicate_Local_exporter++
-			    if duplicate_Local_exporter > 1 {
-			        return nil, errors.New("using multiple ExporterLocal is not supported")
-			    }
+				duplicateLocalExporter++
+				if duplicateLocalExporter > 1 {
+					return nil, errors.New("using multiple ExporterLocal is not supported")
+				}
 				if ex.Output != nil {
 					return nil, errors.New("output file writer is not supported by local exporter")
 				}
@@ -142,17 +142,17 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 				}
 				s.Allow(filesync.NewFSSyncTargetDir(ex.OutputDir))
 			case ExporterOCI, ExporterDocker, ExporterTar:
-			    switch ex.Type {
-			    case ExporterOCI:
-			    duplicate_oci_exporter++
-			    case ExporterDocker:
-			    duplicate_docker_exporter++
-			    case ExporterTar:
-			    duplicate_tar_exporter++
-			    }
-				if duplicate_oci_exporter > 1 || duplicate_docker_exporter > 1 || duplicate_tar_exporter > 1  {
-            	    return nil, errors.New("using multiple ExporterOCI is not supported")
-            	}
+				switch ex.Type {
+				case ExporterOCI:
+					duplicateOciExporter++
+				case ExporterDocker:
+					duplicateDockerExporter++
+				case ExporterTar:
+					duplicateTarExporter++
+				}
+				if duplicateOciExporter > 1 || duplicateDockerExporter > 1 || duplicateTarExporter > 1 {
+					return nil, errors.New("using multiple ExporterOCI is not supported")
+				}
 				if ex.OutputDir != "" {
 					return nil, errors.Errorf("output directory %s is not supported by %s exporter", ex.OutputDir, ex.Type)
 				}
@@ -214,28 +214,28 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		var exportersTypes []string
 		var exporterType string
 		m := &controlapi.SolveRequest{
-			 ExportersAttrs: []*controlapi.ExporterAttrs{},
-			 ExporterAttrs: &controlapi.ExporterAttrs{},
-		     }
+			ExportersAttrs: []*controlapi.ExporterAttrs{},
+			ExporterAttrs:  &controlapi.ExporterAttrs{},
+		}
 		expo := &controlapi.ExporterAttrs{
-        	     ExporterAttrs: make(map[string]string),
-                }
+			ExporterAttrs: make(map[string]string),
+		}
 
-        if len(opt.Exports) > 1{
-            exporterType = ""
-            m.ExporterAttrs = nil
-            for _, ex := range opt.Exports {
-                exportersTypes = append(exportersTypes, ex.Type)
-                expo.ExporterAttrs = ex.Attrs
-                m.ExportersAttrs = append(m.ExportersAttrs, expo)
-            }
+		if len(opt.Exports) > 1 {
+			exporterType = ""
+			m.ExporterAttrs = nil
+			for _, ex := range opt.Exports {
+				exportersTypes = append(exportersTypes, ex.Type)
+				expo.ExporterAttrs = ex.Attrs
+				m.ExportersAttrs = append(m.ExportersAttrs, expo)
+			}
 		}
 		if len(opt.Exports) == 1 {
-		    exportersTypes= nil
-		    m.ExportersAttrs= nil
-            exporterType = opt.Exports[0].Type
-            expo.ExporterAttrs = opt.Exports[0].Attrs
-            m.ExporterAttrs = expo
+			exportersTypes = nil
+			m.ExportersAttrs = nil
+			exporterType = opt.Exports[0].Type
+			expo.ExporterAttrs = opt.Exports[0].Attrs
+			m.ExporterAttrs = expo
 		}
 
 		resp, err := c.controlClient().Solve(ctx, &controlapi.SolveRequest{
@@ -258,9 +258,9 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 
 		var exportersResponse []*controlapi.ExporterResponse
 		for _, v := range resp.ExportersResponse {
-           exportersResponse = append(exportersResponse, v)
-        }
-        res = &SolveResponse{
+			exportersResponse = append(exportersResponse, v)
+		}
+		res = &SolveResponse{
 			ExportersResponse: exportersResponse,
 		}
 		return nil
@@ -346,20 +346,20 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 	}
 	// Update index.json of exported cache content store
 	// FIXME(AkihiroSuda): dedupe const definition of cache/remotecache.ExporterResponseManifestDesc = "cache.manifest"
-	if len(res.ExportersResponse) > 0  {
-        for _, v := range res.ExportersResponse {
-            if manifestDescJSON := v.ExporterResponse["cache.manifest"]; manifestDescJSON != "" {
-                var manifestDesc ocispec.Descriptor
-                if err = json.Unmarshal([]byte(manifestDescJSON), &manifestDesc); err != nil {
-                    return nil, err
-                }
-                for indexJSONPath, tag := range cacheOpt.indicesToUpdate {
-                    if err = ociindex.PutDescToIndexJSONFileLocked(indexJSONPath, manifestDesc, tag); err != nil {
-                        return nil, err
-                    }
-                }
-            }
-        }
+	if len(res.ExportersResponse) > 0 {
+		for _, v := range res.ExportersResponse {
+			if manifestDescJSON := v.ExporterResponse["cache.manifest"]; manifestDescJSON != "" {
+				var manifestDesc ocispec.Descriptor
+				if err = json.Unmarshal([]byte(manifestDescJSON), &manifestDesc); err != nil {
+					return nil, err
+				}
+				for indexJSONPath, tag := range cacheOpt.indicesToUpdate {
+					if err = ociindex.PutDescToIndexJSONFileLocked(indexJSONPath, manifestDesc, tag); err != nil {
+						return nil, err
+					}
+				}
+			}
+		}
 	}
 	return res, nil
 }

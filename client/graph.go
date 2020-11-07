@@ -3,8 +3,8 @@ package client
 import (
 	"time"
 
-	digest "github.com/opencontainers/go-digest"
 	controlapi "github.com/moby/buildkit/api/services/control"
+	digest "github.com/opencontainers/go-digest"
 )
 
 type Vertex struct {

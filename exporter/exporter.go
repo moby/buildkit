@@ -3,8 +3,8 @@ package exporter
 import (
 	"context"
 
-	"github.com/moby/buildkit/cache"
 	controlapi "github.com/moby/buildkit/api/services/control"
+	"github.com/moby/buildkit/cache"
 )
 
 type Exporter interface {

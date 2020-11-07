@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/remotecache"
@@ -28,7 +29,7 @@ import (
 const keyEntitlements = "llb.entitlements"
 
 type ExporterRequest struct {
-    Exporter        exporter.ExporterInstance
+	Exporter        exporter.ExporterInstance
 	Exporters       []exporter.ExporterInstance
 	CacheExporter   remotecache.Exporter
 	CacheExportMode solver.CacheExportMode
@@ -47,10 +48,6 @@ type Solver struct {
 	gatewayForwarder          *controlgateway.GatewayForwarder
 	sm                        *session.Manager
 	entitlements              []string
-}
-
-type ExporterResponse struct {
-    exporterResponse  *controlapi.ExporterResponse
 }
 
 func New(wc *worker.Controller, f map[string]frontend.Frontend, cache solver.CacheManager, resolveCI map[string]remotecache.ResolveCacheImporterFunc, gatewayForwarder *controlgateway.GatewayForwarder, sm *session.Manager, ents []string) (*Solver, error) {
@@ -155,7 +152,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		return nil, err
 	}
 
-	var exporterResponse  *controlapi.ExporterResponse
+	var exporterResponse *controlapi.ExporterResponse
 	var exportersResponse []*controlapi.ExporterResponse
 	      if a := exp.Exporter; a != nil {
 	      exp.Exporters = append (exp.Exporters,a)
