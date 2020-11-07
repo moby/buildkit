@@ -362,7 +362,7 @@ func (w *Worker) Exporter(name string, sm *session.Manager) (exporter.Exporter, 
 	default:
 		return nil, errors.Errorf("exporter %q could not be found", name)
 	}
- }
+}
 
 func (w *Worker) FromRemote(ctx context.Context, remote *solver.Remote) (ref cache.ImmutableRef, err error) {
 	pw, _, _ := progress.FromContext(ctx)

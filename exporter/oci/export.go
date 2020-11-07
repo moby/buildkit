@@ -5,10 +5,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	controlapi "github.com/moby/buildkit/api/services/control"
+
 	archiveexporter "github.com/containerd/containerd/images/archive"
 	"github.com/containerd/containerd/leases"
 	"github.com/docker/distribution/reference"
+	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage"
@@ -209,21 +210,25 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 		}
 	}
 
+	response := &controlapi.ExporterResponse{
+		ExporterResponse: nil,
+	}
+
 	report := oneOffProgress(ctx, "sending tarball")
 	if err := archiveexporter.Export(ctx, mprovider, w, expOpts...); err != nil {
 		w.Close()
 		if grpcerrors.Code(err) == codes.AlreadyExists {
-            response.ExporterResponse = resp
+			response.ExporterResponse = resp
 			return response, report(nil)
 		}
 		return nil, report(err)
 	}
 	err = w.Close()
 	if grpcerrors.Code(err) == codes.AlreadyExists {
-            response.ExporterResponse = resp
-			return response, report(nil)
+		response.ExporterResponse = resp
+		return response, report(nil)
 	}
-    response.ExporterResponse = resp
+	response.ExporterResponse = resp
 	return response, report(err)
 }
 

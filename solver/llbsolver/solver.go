@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/remotecache"
@@ -28,7 +29,7 @@ import (
 const keyEntitlements = "llb.entitlements"
 
 type ExporterRequest struct {
-    Exporter        exporter.ExporterInstance
+	Exporter        exporter.ExporterInstance
 	Exporters       []exporter.ExporterInstance
 	CacheExporter   remotecache.Exporter
 	CacheExportMode solver.CacheExportMode
@@ -47,10 +48,6 @@ type Solver struct {
 	gatewayForwarder          *controlgateway.GatewayForwarder
 	sm                        *session.Manager
 	entitlements              []string
-}
-
-type ExporterResponse struct {
-    exporterResponse  *controlapi.ExporterResponse
 }
 
 func New(wc *worker.Controller, f map[string]frontend.Frontend, cache solver.CacheManager, resolveCI map[string]remotecache.ResolveCacheImporterFunc, gatewayForwarder *controlgateway.GatewayForwarder, sm *session.Manager, ents []string) (*Solver, error) {
@@ -155,120 +152,120 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		return nil, err
 	}
 
-	var exporterResponse  *controlapi.ExporterResponse
+	var exporterResponse *controlapi.ExporterResponse
 	var exportersResponse []*controlapi.ExporterResponse
-	      if a := exp.Exporter; a != nil {
-	      exp.Exporters = append (exp.Exporters,a)
-	      }
-     	  for _, e := range exp.Exporters {
-            if e != nil {
-                inp := exporter.Source{
-                    Metadata: res.Metadata,
-                }
-                if inp.Metadata == nil {
-                    inp.Metadata = make(map[string][]byte)
-                }
-                if res := res.Ref; res != nil {
-                    r, err := res.Result(ctx)
-                    if err != nil {
-                        return nil, err
-                    }
-                    workerRef, ok := r.Sys().(*worker.WorkerRef)
-                    if !ok {
-                        return nil, errors.Errorf("invalid reference: %T", r.Sys())
-                    }
-                    inp.Ref = workerRef.ImmutableRef
+	if a := exp.Exporter; a != nil {
+		exp.Exporters = append(exp.Exporters, a)
+	}
+	for _, e := range exp.Exporters {
+		if e != nil {
+			inp := exporter.Source{
+				Metadata: res.Metadata,
+			}
+			if inp.Metadata == nil {
+				inp.Metadata = make(map[string][]byte)
+			}
+			if res := res.Ref; res != nil {
+				r, err := res.Result(ctx)
+				if err != nil {
+					return nil, err
+				}
+				workerRef, ok := r.Sys().(*worker.WorkerRef)
+				if !ok {
+					return nil, errors.Errorf("invalid reference: %T", r.Sys())
+				}
+				inp.Ref = workerRef.ImmutableRef
 
-                    dt, err := inlineCache(ctx, exp.CacheExporter, r, session.NewGroup(sessionID))
-                    if err != nil {
-                        return nil, err
-                    }
-                    if dt != nil {
-                        inp.Metadata[exptypes.ExporterInlineCache] = dt
-                    }
-                }
-                if res.Refs != nil {
-                    m := make(map[string]cache.ImmutableRef, len(res.Refs))
-                    for k, res := range res.Refs {
-                        if res == nil {
-                            m[k] = nil
-                        } else {
-                            r, err := res.Result(ctx)
-                            if err != nil {
-                                return nil, err
-                            }
-                            workerRef, ok := r.Sys().(*worker.WorkerRef)
-                            if !ok {
-                                return nil, errors.Errorf("invalid reference: %T", r.Sys())
-                            }
-                            m[k] = workerRef.ImmutableRef
+				dt, err := inlineCache(ctx, exp.CacheExporter, r, session.NewGroup(sessionID))
+				if err != nil {
+					return nil, err
+				}
+				if dt != nil {
+					inp.Metadata[exptypes.ExporterInlineCache] = dt
+				}
+			}
+			if res.Refs != nil {
+				m := make(map[string]cache.ImmutableRef, len(res.Refs))
+				for k, res := range res.Refs {
+					if res == nil {
+						m[k] = nil
+					} else {
+						r, err := res.Result(ctx)
+						if err != nil {
+							return nil, err
+						}
+						workerRef, ok := r.Sys().(*worker.WorkerRef)
+						if !ok {
+							return nil, errors.Errorf("invalid reference: %T", r.Sys())
+						}
+						m[k] = workerRef.ImmutableRef
 
-                            dt, err := inlineCache(ctx, exp.CacheExporter, r, session.NewGroup(sessionID))
-                            if err != nil {
-                                return nil, err
-                            }
-                            if dt != nil {
-                                inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterInlineCache, k)] = dt
-                            }
-                        }
-                    }
-                    inp.Refs = m
-                }
+						dt, err := inlineCache(ctx, exp.CacheExporter, r, session.NewGroup(sessionID))
+						if err != nil {
+							return nil, err
+						}
+						if dt != nil {
+							inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterInlineCache, k)] = dt
+						}
+					}
+				}
+				inp.Refs = m
+			}
 
-                if err := inBuilderContext(ctx, j, e.Name(), "", func(ctx context.Context, _ session.Group) error {
-                    exporterResponse, err = e.Export(ctx, inp, j.SessionID)
-                    return err
-                }); err != nil {
-                    return nil, err
-                }
-            }
+			if err := inBuilderContext(ctx, j, e.Name(), "", func(ctx context.Context, _ session.Group) error {
+				exporterResponse, err = e.Export(ctx, inp, j.SessionID)
+				return err
+			}); err != nil {
+				return nil, err
+			}
+		}
 
-            g := session.NewGroup(j.SessionID)
-            var cacheExporterResponse map[string]string
-            if e := exp.CacheExporter; e != nil {
-		            if err := inBuilderContext(ctx, j, "exporting cache", "", func(ctx context.Context, _ session.Group) error {
-                    prepareDone := oneOffProgress(ctx, "preparing build cache for export")
-                    if err := res.EachRef(func(res solver.ResultProxy) error {
-                        r, err := res.Result(ctx)
-                        if err != nil {
-                            return err
-                        }
-                        // all keys have same export chain so exporting others is not needed
-                        _, err = r.CacheKeys()[0].Exporter.ExportTo(ctx, e, solver.CacheExportOpt{
-                            Convert: workerRefConverter(g),
-                            Mode:    exp.CacheExportMode,
-                            Session: g,
-                        })
-                        return err
-                    }); err != nil {
-                        return prepareDone(err)
-                    }
-                    prepareDone(nil)
-                    cacheExporterResponse, err = e.Finalize(ctx)
-                    return err
-                }); err != nil {
-                    return nil, err
-                }
-            }
+		g := session.NewGroup(j.SessionID)
+		var cacheExporterResponse map[string]string
+		if e := exp.CacheExporter; e != nil {
+			if err := inBuilderContext(ctx, j, "exporting cache", "", func(ctx context.Context, _ session.Group) error {
+				prepareDone := oneOffProgress(ctx, "preparing build cache for export")
+				if err := res.EachRef(func(res solver.ResultProxy) error {
+					r, err := res.Result(ctx)
+					if err != nil {
+						return err
+					}
+					// all keys have same export chain so exporting others is not needed
+					_, err = r.CacheKeys()[0].Exporter.ExportTo(ctx, e, solver.CacheExportOpt{
+						Convert: workerRefConverter(g),
+						Mode:    exp.CacheExportMode,
+						Session: g,
+					})
+					return err
+				}); err != nil {
+					return prepareDone(err)
+				}
+				prepareDone(nil)
+				cacheExporterResponse, err = e.Finalize(ctx)
+				return err
+			}); err != nil {
+				return nil, err
+			}
+		}
 
-            if exporterResponse == nil {
-                exporterResponse = &controlapi.ExporterResponse{
-                   ExporterResponse : map[string]string{},
-                }
-            }
+		if exporterResponse == nil {
+			exporterResponse = &controlapi.ExporterResponse{
+				ExporterResponse: map[string]string{},
+			}
+		}
 
-            for k, v := range res.Metadata {
-                if strings.HasPrefix(k, "frontend.") {
-                    exporterResponse.ExporterResponse[k] = string(v)
-               }
-            }
-            for k, v := range cacheExporterResponse {
-                if strings.HasPrefix(k, "cache.") {
-                    exporterResponse.ExporterResponse[k] = v
-                }
-            }
-         exportersResponse = append(exportersResponse, exporterResponse)
-     }
+		for k, v := range res.Metadata {
+			if strings.HasPrefix(k, "frontend.") {
+				exporterResponse.ExporterResponse[k] = string(v)
+			}
+		}
+		for k, v := range cacheExporterResponse {
+			if strings.HasPrefix(k, "cache.") {
+				exporterResponse.ExporterResponse[k] = v
+			}
+		}
+		exportersResponse = append(exportersResponse, exporterResponse)
+	}
 
 	return &client.SolveResponse{
 		ExportersResponse: exportersResponse,

@@ -584,11 +584,11 @@ func testPushByDigest(t *testing.T, sb integration.Sandbox) {
 
 	if len(resp.ExportersResponse) > 0 {
 		for _, e := range resp.ExportersResponse {
-	        desc, _, err := contentutil.ProviderFromRef(name + "@" + e.ExporterResponse["containerimage.digest"])
-	        require.NoError(t, err)
-	        require.Equal(t, e.ExporterResponse["containerimage.digest"], desc.Digest.String())
-	        require.Equal(t, images.MediaTypeDockerSchema2Manifest, desc.MediaType)
-            require.True(t, desc.Size > 0)
+			desc, _, err := contentutil.ProviderFromRef(name + "@" + e.ExporterResponse["containerimage.digest"])
+			require.NoError(t, err)
+			require.Equal(t, e.ExporterResponse["containerimage.digest"], desc.Digest.String())
+			require.Equal(t, images.MediaTypeDockerSchema2Manifest, desc.MediaType)
+			require.True(t, desc.Size > 0)
 		}
 	}
 }
@@ -853,11 +853,11 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 
 					resp, err := c.Build(context.TODO(), so, "", frontend, nil)
 					require.NoError(t, err)
-	                if len(resp.ExportersResponse) > 0 {
-		                for _, e := range resp.ExportersResponse {
-					        checkImageName[exp](out, imageName, e.ExporterResponse)
-					    }
-					 }
+					if len(resp.ExportersResponse) > 0 {
+						for _, e := range resp.ExportersResponse {
+							checkImageName[exp](out, imageName, e.ExporterResponse)
+						}
+					}
 				})
 			}
 		})
@@ -1545,14 +1545,14 @@ func testFrontendMetadataReturn(t *testing.T, sb integration.Sandbox) {
 		},
 	}, "", frontend, nil)
 	require.NoError(t, err)
-		if len(res.ExportersResponse) > 0 {
-    		for _, e := range res.ExportersResponse {
-               	require.Contains(t, e.ExporterResponse, "frontend.returned")
-               	require.Equal(t, e.ExporterResponse["frontend.returned"], "true")
-               	require.NotContains(t, e.ExporterResponse, "not-frontend.not-returned")
-               	require.NotContains(t, e.ExporterResponse, "frontendnot.returned.either")
-    		}
-    	}
+	if len(res.ExportersResponse) > 0 {
+		for _, e := range res.ExportersResponse {
+			require.Contains(t, e.ExporterResponse, "frontend.returned")
+			require.Equal(t, e.ExporterResponse["frontend.returned"], "true")
+			require.NotContains(t, e.ExporterResponse, "not-frontend.not-returned")
+			require.NotContains(t, e.ExporterResponse, "frontendnot.returned.either")
+		}
+	}
 	checkAllReleasable(t, c, sb, true)
 }
 
@@ -1656,13 +1656,13 @@ func testExporterTargetExists(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 	if len(res.ExportersResponse) > 0 {
-        for _, e := range res.ExportersResponse {
-             dgst := e.ExporterResponse["containerimage.digest"]
+		for _, e := range res.ExportersResponse {
+			dgst := e.ExporterResponse["containerimage.digest"]
 
-             require.True(t, strings.HasPrefix(dgst, "sha256:"))
-              require.Equal(t, dgst, mdDgst)
-        }
-    }
+			require.True(t, strings.HasPrefix(dgst, "sha256:"))
+			require.Equal(t, dgst, mdDgst)
+		}
+	}
 }
 
 func testTarExporterWithSocket(t *testing.T, sb integration.Sandbox) {
@@ -2539,18 +2539,18 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	if len(resp.ExportersResponse) > 0 && len(res.ExportersResponse) > 0 {
-        for _, e := range res.ExportersResponse {
-          for _, v := range resp.ExportersResponse {
-            dgst, ok := v.ExporterResponse["containerimage.digest"]
-            require.Equal(t, ok, true)
+		for _, e := range res.ExportersResponse {
+			for _, v := range resp.ExportersResponse {
+				dgst, ok := v.ExporterResponse["containerimage.digest"]
+				require.Equal(t, ok, true)
 
-        	dgst2, ok := e.ExporterResponse["containerimage.digest"]
-        	require.Equal(t, ok, true)
+				dgst2, ok := e.ExporterResponse["containerimage.digest"]
+				require.Equal(t, ok, true)
 
-        	require.Equal(t, dgst, dgst2)
-          }
-        }
-    }
+				require.Equal(t, dgst, dgst2)
+			}
+		}
+	}
 
 	err = c.Prune(context.TODO(), nil, PruneAll)
 	require.NoError(t, err)
@@ -2580,22 +2580,22 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 
 	if len(resp.ExportersResponse) > 0 && len(res.ExportersResponse) > 0 {
 		for _, e := range resp.ExportersResponse {
-			 for _, v := range res.ExportersResponse {
-                dgst3, ok := v.ExporterResponse["containerimage.digest"]
-                require.Equal(t, ok, true)
+			for _, v := range res.ExportersResponse {
+				dgst3, ok := v.ExporterResponse["containerimage.digest"]
+				require.Equal(t, ok, true)
 
-                dgst, ok := e.ExporterResponse["containerimage.digest"]
-                require.Equal(t, ok, true)
+				dgst, ok := e.ExporterResponse["containerimage.digest"]
+				require.Equal(t, ok, true)
 
-                unique, err := readFileInImage(c, target+"@"+dgst, "/unique")
-                require.NoError(t, err)
+				unique, err := readFileInImage(c, target+"@"+dgst, "/unique")
+				require.NoError(t, err)
 
-                // dgst3 != dgst, because inline cache is not exported for dgst3
-                unique3, err := readFileInImage(c, target+"@"+dgst3, "/unique")
-                require.NoError(t, err)
+				// dgst3 != dgst, because inline cache is not exported for dgst3
+				unique3, err := readFileInImage(c, target+"@"+dgst3, "/unique")
+				require.NoError(t, err)
 
-                require.EqualValues(t, unique, unique3)
-             }
+				require.EqualValues(t, unique, unique3)
+			}
 		}
 	}
 

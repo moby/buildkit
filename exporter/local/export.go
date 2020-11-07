@@ -6,8 +6,9 @@ import (
 	"os"
 	"strings"
 	"time"
-	controlapi "github.com/moby/buildkit/api/services/control"
+
 	"github.com/docker/docker/pkg/idtools"
+	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/session"
