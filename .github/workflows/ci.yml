@@ -2,16 +2,13 @@ name: CI
 
 on:
   push:
-    branches: [ earthly-master ]
+    branches: [ earthly-main ]
   pull_request:
-    branches: [ earthly-master ]
+    branches: [ earthly-main ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-      DOCKER_BUILDKIT: 1
     steps:
     - uses: actions/checkout@v2
     - name: Put back the git branch into git (Earthly uses it for tagging)
@@ -23,9 +20,9 @@ jobs:
           branch="${GITHUB_REF##*/}"
         fi
         git checkout -b "$branch" || true
+    - name: Download released earth
+      run: "sudo /bin/sh -c 'wget https://github.com/earthly/earthly/releases/latest/download/earth-linux-amd64 -O /usr/local/bin/earth && chmod +x /usr/local/bin/earth'"
     - name: Docker Login
-      run: docker login --username vladaionescu --password "$DOCKERHUB_TOKEN"
-    - name: Build buildkit
-      run: docker build -t earthly/buildkit:`git branch --show-current` --target buildkit-buildkitd-linux .
-    - name: push buildkit docker image
-      run: docker push earthly/buildkit:`git branch --show-current`
+      run: docker login --username "${{ secrets.DOCKERHUB_USERNAME }}" --password "${{ secrets.DOCKERHUB_TOKEN }}"
+    - name: Build
+      run: earth +build
