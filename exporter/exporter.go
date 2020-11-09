@@ -13,7 +13,7 @@ type Exporter interface {
 
 type ExporterInstance interface {
 	Name() string
-	Export(context.Context, Source) (*controlapi.ExporterResponse, error)
+	Export(ctx context.Context, src Source, sessionID string) (*controlapi.ExporterResponse, error)
 }
 
 type Source struct {

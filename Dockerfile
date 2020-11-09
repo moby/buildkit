@@ -128,7 +128,7 @@ RUN --mount=from=binaries \
 FROM scratch AS release
 COPY --from=releaser /out/ /
 
-FROM tonistiigi/git@sha256:393483e1cef35f09e1a8fe0a0bd93a78b1b6ecec5b5afa5fa5d600fa3ab1fdd8 AS buildkit-export
+FROM git AS buildkit-export
 RUN apk add --no-cache fuse3 && ln -s fusermount3 /usr/bin/fusermount
 COPY examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
 VOLUME /var/lib/buildkit

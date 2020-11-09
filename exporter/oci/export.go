@@ -108,7 +108,7 @@ func (e *imageExporterInstance) Name() string {
 	return "exporting to oci image format"
 }
 
-func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source) (*controlapi.ExporterResponse, error) {
+func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source, sessionID string) (*controlapi.ExporterResponse, error) {
 	if e.opt.Variant == VariantDocker && len(src.Refs) > 0 {
 		return nil, errors.Errorf("docker exporter does not currently support exporting manifest lists")
 	}
@@ -179,6 +179,41 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source)
 	response := &controlapi.ExporterResponse{
          ExporterResponse : nil,
     }
+  
+	mprovider := contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
+	if src.Ref != nil {
+		remote, err := src.Ref.GetRemote(ctx, false, e.layerCompression, session.NewGroup(sessionID))
+		if err != nil {
+			return nil, err
+		}
+		// unlazy before tar export as the tar writer does not handle
+		// layer blobs in parallel (whereas unlazy does)
+		if unlazier, ok := remote.Provider.(cache.Unlazier); ok {
+			if err := unlazier.Unlazy(ctx); err != nil {
+				return nil, err
+			}
+		}
+		for _, desc := range remote.Descriptors {
+			mprovider.Add(desc.Digest, remote.Provider)
+		}
+	}
+	if len(src.Refs) > 0 {
+		for _, r := range src.Refs {
+			remote, err := r.GetRemote(ctx, false, e.layerCompression, session.NewGroup(sessionID))
+			if err != nil {
+				return nil, err
+			}
+			if unlazier, ok := remote.Provider.(cache.Unlazier); ok {
+				if err := unlazier.Unlazy(ctx); err != nil {
+					return nil, err
+				}
+			}
+			for _, desc := range remote.Descriptors {
+				mprovider.Add(desc.Digest, remote.Provider)
+			}
+		}
+	}
+
 	report := oneOffProgress(ctx, "sending tarball")
 	if err := archiveexporter.Export(ctx, mprovider, w, expOpts...); err != nil {
 		w.Close()

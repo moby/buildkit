@@ -47,7 +47,16 @@ func (e *localExporterInstance) Name() string {
 	return "exporting to client"
 }
 
-func (e *localExporterInstance) Export(ctx context.Context, inp exporter.Source) (*controlapi.ExporterResponse, error) {
+func (e *localExporterInstance) Export(ctx context.Context, inp exporter.Source, sessionID string) (*controlapi.ExporterResponse, error) {
+
+	timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	caller, err := e.opt.SessionManager.Get(timeoutCtx, sessionID, false)
+	if err != nil {
+		return nil, err
+	}
+
 	isMap := len(inp.Refs) > 0
 
 	export := func(ctx context.Context, k string, ref cache.ImmutableRef) func() error {

@@ -46,7 +46,7 @@ func (e *localExporterInstance) Name() string {
 	return "exporting to client"
 }
 
-func (e *localExporterInstance) Export(ctx context.Context, inp exporter.Source) (*controlapi.ExporterResponse, error) {
+func (e *localExporterInstance) Export(ctx context.Context, inp exporter.Source, sessionID string) (*controlapi.ExporterResponse, error) {
 	var defers []func()
 
 	defer func() {
