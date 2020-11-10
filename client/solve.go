@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -55,8 +56,8 @@ type SolveOpt struct {
 type ExportEntry struct {
 	Type      string
 	Attrs     map[string]string
-	Output    func(map[string]string) (io.WriteCloser, error) // for ExporterOCI and ExporterDocker
-	OutputDir string                                          // for ExporterLocal
+	Output    filesync.FileOutputFunc // for ExporterOCI and ExporterDocker
+	OutputDir string                  // for ExporterLocal
 }
 
 type CacheOptionsEntry struct {
@@ -125,12 +126,23 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		return nil, err
 	}
 
-	var ex ExportEntry
-	if len(opt.Exports) > 1 {
-		return nil, errors.New("currently only single Exports can be specified")
+	type exporter struct {
+		ExportEntry
+		id string
 	}
-	if len(opt.Exports) == 1 {
-		ex = opt.Exports[0]
+
+	var exporters []exporter
+	ids := make(map[string]int)
+	for _, exp := range opt.Exports {
+		if id, ok := ids[exp.Type]; !ok {
+			ids[exp.Type] = 1
+		} else {
+			ids[exp.Type] = id + 1
+		}
+		exporters = append(exporters, exporter{
+			ExportEntry: exp,
+			id:          fmt.Sprint(exp.Type, ids[exp.Type]),
+		})
 	}
 
 	storesToUpdate := []string{}
@@ -156,56 +168,71 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			contentStores[key2] = store
 		}
 
-		var supportFile bool
-		var supportDir bool
-		switch ex.Type {
-		case ExporterLocal:
-			supportDir = true
-		case ExporterTar:
-			supportFile = true
-		case ExporterOCI, ExporterDocker:
-			supportDir = ex.OutputDir != ""
-			supportFile = ex.Output != nil
+		var exporterConfig struct {
+			outputDirs []string
+			outputs    map[string]filesync.FileOutputFunc
 		}
 
-		if supportFile && supportDir {
-			return nil, errors.Errorf("both file and directory output is not supported by %s exporter", ex.Type)
-		}
-		if !supportFile && ex.Output != nil {
-			return nil, errors.Errorf("output file writer is not supported by %s exporter", ex.Type)
-		}
-		if !supportDir && ex.OutputDir != "" {
-			return nil, errors.Errorf("output directory is not supported by %s exporter", ex.Type)
-		}
-
-		if supportFile {
-			if ex.Output == nil {
-				return nil, errors.Errorf("output file writer is required for %s exporter", ex.Type)
-			}
-			s.Allow(filesync.NewFSSyncTarget(ex.Output))
-		}
-		if supportDir {
-			if ex.OutputDir == "" {
-				return nil, errors.Errorf("output directory is required for %s exporter", ex.Type)
-			}
+		for _, ex := range exporters {
+			var supportFile bool
+			var supportDir bool
 			switch ex.Type {
+			case ExporterLocal:
+				supportDir = true
+			case ExporterTar:
+				supportFile = true
 			case ExporterOCI, ExporterDocker:
-				if err := os.MkdirAll(ex.OutputDir, 0755); err != nil {
-					return nil, err
+				supportDir = ex.OutputDir != ""
+				supportFile = ex.Output != nil
+			}
+			if supportFile && supportDir {
+				return nil, errors.Errorf("both file and directory output is not support by %s exporter", ex.Type)
+			}
+			if !supportFile && ex.Output != nil {
+				return nil, errors.Errorf("output file writer is not supported by %s exporter", ex.Type)
+			}
+			if !supportDir && ex.OutputDir != "" {
+				return nil, errors.Errorf("output directory is not supported by %s exporter", ex.Type)
+			}
+			if supportFile {
+				if ex.Output == nil {
+					return nil, errors.Errorf("output file writer is required for %s exporter", ex.Type)
 				}
-				cs, err := contentlocal.NewStore(ex.OutputDir)
-				if err != nil {
-					return nil, err
+				if exporterConfig.outputs == nil {
+					exporterConfig.outputs = make(map[string]filesync.FileOutputFunc)
 				}
-				contentStores["export"] = cs
-				storesToUpdate = append(storesToUpdate, ex.OutputDir)
-			default:
-				s.Allow(filesync.NewFSSyncTargetDir(ex.OutputDir))
+				exporterConfig.outputs[ex.id] = ex.Output
+			}
+			if supportDir {
+				if ex.OutputDir == "" {
+					return nil, errors.Errorf("output directory is required for %s exporter", ex.Type)
+				}
+				switch ex.Type {
+				case ExporterOCI, ExporterDocker:
+					if err := os.MkdirAll(ex.OutputDir, 0755); err != nil {
+						return nil, err
+					}
+					cs, err := contentlocal.NewStore(ex.OutputDir)
+					if err != nil {
+						return nil, err
+					}
+					contentStores["export"] = cs
+					storesToUpdate = append(storesToUpdate, ex.OutputDir)
+				default:
+					exporterConfig.outputDirs = append(exporterConfig.outputDirs, ex.OutputDir)
+				}
 			}
 		}
 
 		if len(contentStores) > 0 {
 			s.Allow(sessioncontent.NewAttachable(contentStores))
+		}
+
+		if len(exporterConfig.outputDirs) > 0 {
+			s.Allow(filesync.NewFSSyncTargetDir(exporterConfig.outputDirs))
+		}
+		if len(exporterConfig.outputs) > 0 {
+			s.Allow(filesync.NewFSSyncTarget(exporterConfig.outputs))
 		}
 
 		eg.Go(func() error {
@@ -255,11 +282,31 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			frontendInputs[key] = def.ToPB()
 		}
 
+		exports := make([]*controlapi.Exporter, 0, len(opt.Exports))
+		var localExporter bool
+		for _, exp := range exporters {
+			if exp.Type != ExporterLocal {
+				exports = append(exports, &controlapi.Exporter{
+					ID:    exp.id,
+					Type:  exp.Type,
+					Attrs: exp.Attrs,
+				})
+			} else {
+				localExporter = true
+			}
+		}
+		if localExporter {
+			// Add a single instance of the local exporter
+			// since it's replicated entirely on the client
+			exports = append(exports, &controlapi.Exporter{
+				Type: ExporterLocal,
+			})
+		}
+
 		resp, err := c.ControlClient().Solve(ctx, &controlapi.SolveRequest{
 			Ref:            ref,
 			Definition:     pbd,
-			Exporter:       ex.Type,
-			ExporterAttrs:  ex.Attrs,
+			Exporters:      exports,
 			Session:        s.ID(),
 			Frontend:       opt.Frontend,
 			FrontendAttrs:  frontendAttrs,

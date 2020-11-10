@@ -32,7 +32,7 @@ type Worker interface {
 	ResolveOp(v solver.Vertex, s frontend.FrontendLLBBridge, sm *session.Manager) (solver.Op, error)
 	ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt, sm *session.Manager, g session.Group) (string, digest.Digest, []byte, error)
 	DiskUsage(ctx context.Context, opt client.DiskUsageInfo) ([]*client.UsageInfo, error)
-	Exporter(name string, sm *session.Manager) (exporter.Exporter, error)
+	Exporter(name, id string, sm *session.Manager) (exporter.Exporter, error)
 	Prune(ctx context.Context, ch chan client.UsageInfo, opt ...client.PruneInfo) error
 	FromRemote(ctx context.Context, remote *solver.Remote) (cache.ImmutableRef, error)
 	PruneCacheMounts(ctx context.Context, ids []string) error

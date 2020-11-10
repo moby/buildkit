@@ -19,6 +19,7 @@ type ImageCommitOpts struct {
 	OCITypes    bool
 	Annotations AnnotationsGroup
 	Epoch       *time.Time
+	InlineCache exptypes.InlineCache
 
 	ForceInlineAttestations bool // force inline attestations to be attached
 }

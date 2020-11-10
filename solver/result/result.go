@@ -7,7 +7,6 @@ import (
 )
 
 type Result[T comparable] struct {
-	mu           sync.Mutex
 	Ref          T
 	Refs         map[string]T
 	Metadata     map[string][]byte
@@ -15,30 +14,24 @@ type Result[T comparable] struct {
 }
 
 func (r *Result[T]) AddMeta(k string, v []byte) {
-	r.mu.Lock()
 	if r.Metadata == nil {
 		r.Metadata = map[string][]byte{}
 	}
 	r.Metadata[k] = v
-	r.mu.Unlock()
 }
 
 func (r *Result[T]) AddRef(k string, ref T) {
-	r.mu.Lock()
 	if r.Refs == nil {
 		r.Refs = map[string]T{}
 	}
 	r.Refs[k] = ref
-	r.mu.Unlock()
 }
 
 func (r *Result[T]) AddAttestation(k string, v Attestation[T]) {
-	r.mu.Lock()
 	if r.Attestations == nil {
 		r.Attestations = map[string][]Attestation[T]{}
 	}
 	r.Attestations[k] = append(r.Attestations[k], v)
-	r.mu.Unlock()
 }
 
 func (r *Result[T]) SetRef(ref T) {
@@ -46,9 +39,6 @@ func (r *Result[T]) SetRef(ref T) {
 }
 
 func (r *Result[T]) SingleRef() (T, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
 	var zero T
 	if r.Refs != nil && r.Ref == zero {
 		var t T
@@ -58,9 +48,6 @@ func (r *Result[T]) SingleRef() (T, error) {
 }
 
 func (r *Result[T]) FindRef(key string) (T, bool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
 	if r.Refs != nil {
 		if ref, ok := r.Refs[key]; ok {
 			return ref, true

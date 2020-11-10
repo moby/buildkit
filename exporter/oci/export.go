@@ -47,6 +47,7 @@ type Opt struct {
 	ImageWriter    *containerimage.ImageWriter
 	Variant        ExporterVariant
 	LeaseManager   leases.Manager
+	ID             string // to support concurrent instances
 }
 
 type imageExporter struct {
@@ -112,24 +113,37 @@ func (e *imageExporterInstance) Config() *exporter.Config {
 	return exporter.NewConfigWithCompression(e.opts.RefCfg.Compression)
 }
 
-func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source, sessionID string) (_ map[string]string, descref exporter.DescriptorReference, err error) {
-	if e.opt.Variant == VariantDocker && len(src.Refs) > 0 {
+func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source, sessionID string) (map[string]string, exporter.DescriptorReference, error) {
+	return e.ExportImage(ctx, src, exptypes.InlineCache{}, sessionID)
+}
+
+func (e *imageExporterInstance) ExportImage(ctx context.Context, inp *exporter.Source, inlineCache exptypes.InlineCache, sessionID string) (_ map[string]string, descref exporter.DescriptorReference, err error) {
+	if e.opt.Variant == VariantDocker && len(inp.Refs) > 0 {
 		return nil, nil, errors.Errorf("docker exporter does not currently support exporting manifest lists")
 	}
 
-	if src.Metadata == nil {
-		src.Metadata = make(map[string][]byte)
+	meta := make(map[string][]byte)
+	for k, v := range inp.Metadata {
+		meta[k] = v
 	}
 	for k, v := range e.meta {
-		src.Metadata[k] = v
+		meta[k] = v
 	}
+	src := *inp
+	src.Metadata = meta
 
 	opts := e.opts
-	as, _, err := containerimage.ParseAnnotations(src.Metadata)
+	as, _, err := containerimage.ParseAnnotations(meta)
 	if err != nil {
 		return nil, nil, err
 	}
 	opts.Annotations = opts.Annotations.Merge(as)
+
+	if err != nil {
+		return nil, nil, err
+	}
+	opts.Annotations = as.Merge(opts.Annotations)
+	opts.InlineCache = inlineCache
 
 	ctx, done, err := leaseutil.WithLease(ctx, e.opt.LeaseManager, leaseutil.MakeTemporary)
 	if err != nil {
@@ -141,7 +155,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 		}
 	}()
 
-	desc, err := e.opt.ImageWriter.Commit(ctx, src, sessionID, &opts)
+	desc, err := e.opt.ImageWriter.Commit(ctx, &src, sessionID, &opts)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -176,7 +190,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 	}
 	resp[exptypes.ExporterImageDescriptorKey] = base64.StdEncoding.EncodeToString(dtdesc)
 
-	if n, ok := src.Metadata["image.name"]; e.opts.ImageName == "*" && ok {
+	if n, ok := meta["image.name"]; e.opts.ImageName == "*" && ok {
 		e.opts.ImageName = string(n)
 	}
 
@@ -239,7 +253,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 	}
 
 	if e.tar {
-		w, err := filesync.CopyFileWriter(ctx, resp, caller)
+		w, err := filesync.CopyFileWriter(ctx, resp, e.opt.ID, caller)
 		if err != nil {
 			return nil, nil, err
 		}

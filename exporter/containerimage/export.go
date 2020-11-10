@@ -187,20 +187,28 @@ func (e *imageExporterInstance) Config() *exporter.Config {
 	return exporter.NewConfigWithCompression(e.opts.RefCfg.Compression)
 }
 
-func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source, sessionID string) (_ map[string]string, descref exporter.DescriptorReference, err error) {
-	if src.Metadata == nil {
-		src.Metadata = make(map[string][]byte)
+func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source, sessionID string) (map[string]string, exporter.DescriptorReference, error) {
+	return e.ExportImage(ctx, src, exptypes.InlineCache{}, sessionID)
+}
+
+func (e *imageExporterInstance) ExportImage(ctx context.Context, inp *exporter.Source, inlineCache exptypes.InlineCache, sessionID string) (_ map[string]string, descref exporter.DescriptorReference, err error) {
+	meta := make(map[string][]byte)
+	for k, v := range inp.Metadata {
+		meta[k] = v
 	}
 	for k, v := range e.meta {
-		src.Metadata[k] = v
+		meta[k] = v
 	}
+	src := *inp
+	src.Metadata = meta
 
 	opts := e.opts
-	as, _, err := ParseAnnotations(src.Metadata)
+	as, _, err := ParseAnnotations(meta)
 	if err != nil {
 		return nil, nil, err
 	}
 	opts.Annotations = opts.Annotations.Merge(as)
+	opts.InlineCache = inlineCache
 
 	ctx, done, err := leaseutil.WithLease(ctx, e.opt.LeaseManager, leaseutil.MakeTemporary)
 	if err != nil {
@@ -212,7 +220,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 		}
 	}()
 
-	desc, err := e.opt.ImageWriter.Commit(ctx, src, sessionID, &opts)
+	desc, err := e.opt.ImageWriter.Commit(ctx, &src, sessionID, &opts)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -224,7 +232,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 
 	resp := make(map[string]string)
 
-	if n, ok := src.Metadata["image.name"]; e.opts.ImageName == "*" && ok {
+	if n, ok := meta["image.name"]; e.opts.ImageName == "*" && ok {
 		e.opts.ImageName = string(n)
 	}
 
@@ -274,7 +282,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 				tagDone(nil)
 
 				if e.unpack {
-					if err := e.unpackImage(ctx, img, src, session.NewGroup(sessionID)); err != nil {
+					if err := e.unpackImage(ctx, img, &src, session.NewGroup(sessionID)); err != nil {
 						return nil, nil, err
 					}
 				}
@@ -310,7 +318,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src *exporter.Source
 				}
 			}
 			if e.push {
-				err := e.pushImage(ctx, src, sessionID, targetName, desc.Digest)
+				err := e.pushImage(ctx, &src, sessionID, targetName, desc.Digest)
 				if err != nil {
 					return nil, nil, errors.Wrapf(err, "failed to push %v", targetName)
 				}

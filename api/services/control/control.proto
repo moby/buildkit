@@ -35,7 +35,7 @@ message PruneRequest {
 }
 
 message DiskUsageRequest {
-	repeated string filter = 1; 
+	repeated string filter = 1;
 }
 
 message DiskUsageResponse {
@@ -60,8 +60,8 @@ message UsageRecord {
 message SolveRequest {
 	string Ref = 1;
 	pb.Definition Definition = 2;
-	string Exporter = 3;
-	map<string, string> ExporterAttrs = 4;
+	string ExporterDeprecated = 3;
+	map<string, string> ExporterAttrsDeprecated = 4;
 	string Session = 5;
 	string Frontend = 6;
 	map<string, string> FrontendAttrs = 7;
@@ -70,6 +70,7 @@ message SolveRequest {
 	map<string, pb.Definition> FrontendInputs = 10;
 	bool Internal = 11; // Internal builds are not recorded in build history
 	moby.buildkit.v1.sourcepolicy.Policy SourcePolicy = 12;
+	repeated Exporter Exporters = 13;
 }
 
 message CacheOptions {
@@ -231,7 +232,12 @@ message BuildResultInfo {
 	repeated Descriptor Attestations = 2;
 }
 
+// Exporter describes the output exporter
 message Exporter {
+	// Type identifies the exporter
 	string Type = 1;
+	// Attrs specifies exporter configuration
 	map<string, string> Attrs = 2;
+	// ID identifies the exporter in the wire protocol
+	string id = 3 [(gogoproto.customname) = "ID"];
 }

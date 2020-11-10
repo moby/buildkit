@@ -34,6 +34,8 @@ type fsSyncProvider struct {
 	doneCh chan error
 }
 
+type FileOutputFunc func(map[string]string) (io.WriteCloser, error)
+
 type SyncedDir struct {
 	Dir string
 	Map func(string, *fstypes.Stat) fsutil.MapResult
@@ -229,24 +231,36 @@ func FSSync(ctx context.Context, c session.Caller, opt FSSendRequestOpt) error {
 }
 
 // NewFSSyncTargetDir allows writing into a directory
-func NewFSSyncTargetDir(outdir string) session.Attachable {
-	p := &fsSyncTarget{
-		outdir: outdir,
+func NewFSSyncTargetDir(outdirs []string) session.Attachable {
+	p := &fsSyncTargetDir{
+		outdirs: outdirs,
 	}
 	return p
 }
 
+type fsSyncTargetDir struct {
+	outdirs []string
+}
+
+func (sp *fsSyncTargetDir) Register(server *grpc.Server) {
+	RegisterFSSendServer(server, sp)
+}
+
+func (sp *fsSyncTargetDir) DiffCopy(stream FSSend_DiffCopyServer) (err error) {
+	return syncTargetDiffCopy(stream, sp.outdirs)
+}
+
 // NewFSSyncTarget allows writing into an io.WriteCloser
-func NewFSSyncTarget(f func(map[string]string) (io.WriteCloser, error)) session.Attachable {
+func NewFSSyncTarget(fs map[string]FileOutputFunc) session.Attachable {
 	p := &fsSyncTarget{
-		f: f,
+		fs: fs,
 	}
 	return p
 }
 
 type fsSyncTarget struct {
-	outdir string
-	f      func(map[string]string) (io.WriteCloser, error)
+	// fs maps exporter ID -> output func
+	fs map[string]FileOutputFunc
 }
 
 func (sp *fsSyncTarget) Register(server *grpc.Server) {
@@ -254,37 +268,31 @@ func (sp *fsSyncTarget) Register(server *grpc.Server) {
 }
 
 func (sp *fsSyncTarget) DiffCopy(stream FileSend_DiffCopyServer) (err error) {
-	if sp.outdir != "" {
-		return syncTargetDiffCopy(stream, sp.outdir)
-	}
-
-	if sp.f == nil {
+	if len(sp.fs) == 0 {
 		return errors.New("empty outfile and outdir")
 	}
 	opts, _ := metadata.FromIncomingContext(stream.Context()) // if no metadata continue with empty object
-	md := map[string]string{}
-	for k, v := range opts {
-		if strings.HasPrefix(k, keyExporterMetaPrefix) {
-			md[strings.TrimPrefix(k, keyExporterMetaPrefix)] = strings.Join(v, ",")
-		}
-	}
-	wc, err := sp.f(md)
-	if err != nil {
-		return err
-	}
-	if wc == nil {
-		return status.Errorf(codes.AlreadyExists, "target already exists")
-	}
-	defer func() {
-		err1 := wc.Close()
-		if err != nil {
-			err = err1
-		}
-	}()
-	return writeTargetFile(stream, wc)
+
+	return writeTargetFile(stream, sp.fs, opts)
 }
 
 func CopyToCaller(ctx context.Context, fs fsutil.FS, c session.Caller, progress func(int, bool)) error {
+	method := session.MethodURL(_FSSend_serviceDesc.ServiceName, "diffcopy")
+	if !c.Supports(method) {
+		return copyToCallerLegacy(ctx, fs, c, progress)
+	}
+
+	client := NewFSSendClient(c.Conn())
+
+	cc, err := client.DiffCopy(ctx)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return sendDiffCopy(cc, fs, progress)
+}
+
+func copyToCallerLegacy(ctx context.Context, fs fsutil.FS, c session.Caller, progress func(int, bool)) error {
 	method := session.MethodURL(_FileSend_serviceDesc.ServiceName, "diffcopy")
 	if !c.Supports(method) {
 		return errors.Errorf("method %s not supported by the client", method)
@@ -300,7 +308,7 @@ func CopyToCaller(ctx context.Context, fs fsutil.FS, c session.Caller, progress 
 	return sendDiffCopy(cc, fs, progress)
 }
 
-func CopyFileWriter(ctx context.Context, md map[string]string, c session.Caller) (io.WriteCloser, error) {
+func CopyFileWriter(ctx context.Context, md map[string]string, id string, c session.Caller) (io.WriteCloser, error) {
 	method := session.MethodURL(_FileSend_serviceDesc.ServiceName, "diffcopy")
 	if !c.Supports(method) {
 		return nil, errors.Errorf("method %s not supported by the client", method)
@@ -320,7 +328,7 @@ func CopyFileWriter(ctx context.Context, md map[string]string, c session.Caller)
 		return nil, errors.WithStack(err)
 	}
 
-	return newStreamWriter(cc), nil
+	return newStreamWriter(cc, id), nil
 }
 
 type InvalidSessionError struct {

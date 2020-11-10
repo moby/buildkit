@@ -29,3 +29,9 @@ type Platform struct {
 	ID       string
 	Platform ocispecs.Platform
 }
+
+type InlineCache struct {
+	Cache []byte
+	// Platforms maps platform -> inline cache
+	Platforms map[string][]byte
+}

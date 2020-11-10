@@ -4,6 +4,7 @@ package moby.filesync.v1;
 
 option go_package = "filesync";
 
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 import "github.com/tonistiigi/fsutil/types/wire.proto";
 
 service FileSync{
@@ -11,12 +12,17 @@ service FileSync{
   rpc TarStream(stream fsutil.types.Packet) returns (stream fsutil.types.Packet);
 }
 
+service FSSend{
+  rpc DiffCopy(stream fsutil.types.Packet) returns (stream fsutil.types.Packet);
+}
+
 service FileSend{
   rpc DiffCopy(stream BytesMessage) returns (stream BytesMessage);
 }
 
-
 // BytesMessage contains a chunk of byte data
 message BytesMessage{
 	bytes data = 1;
+	// ID identifies the exporter generating the data
+	string id = 2 [(gogoproto.customname) = "ID"];
 }

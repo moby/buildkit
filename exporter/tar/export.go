@@ -21,6 +21,7 @@ import (
 
 type Opt struct {
 	SessionManager *session.Manager
+	ID             string // to support concurrent instances
 }
 
 type localExporter struct {
@@ -151,10 +152,11 @@ func (e *localExporterInstance) Export(ctx context.Context, inp *exporter.Source
 		return nil, nil, err
 	}
 
-	w, err := filesync.CopyFileWriter(ctx, nil, caller)
+	w, err := filesync.CopyFileWriter(ctx, nil, e.opt.ID, caller)
 	if err != nil {
 		return nil, nil, err
 	}
+
 	report := progress.OneOff(ctx, "sending tarball")
 	if err := fsutil.WriteTar(ctx, fs, w); err != nil {
 		w.Close()
