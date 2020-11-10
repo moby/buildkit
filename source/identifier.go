@@ -107,6 +107,12 @@ func FromLLB(op *pb.Op_Source, platform *pb.Platform) (Identifier, error) {
 				id.AuthHeaderSecret = v
 			case pb.AttrAuthTokenSecret:
 				id.AuthTokenSecret = v
+			case pb.AttrKnownSSHHosts:
+				id.KnownSSHHosts = v
+			case pb.AttrMountSSHSock:
+				if v == "true" {
+					id.MountSSHSock = true
+				}
 			}
 		}
 	}

@@ -2,10 +2,15 @@ package source
 
 import (
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/pkg/errors"
 )
+
+// sshGitRegexp is used to detect if the git repo uses ssh
+// e.g. git@... or otheruser@nonstandardgithost.com:my/really/strange/repo.git
+var sshGitRegexp, _ = regexp.Compile("[a-z0-9_]+@[^/]+:.+")
 
 type GitIdentifier struct {
 	Remote           string
@@ -14,17 +19,15 @@ type GitIdentifier struct {
 	KeepGitDir       bool
 	AuthTokenSecret  string
 	AuthHeaderSecret string
+	MountSSHSock     bool
+	KnownSSHHosts    string
 }
 
 func NewGitIdentifier(remoteURL string) (*GitIdentifier, error) {
 	repo := GitIdentifier{}
 
-	if !isGitTransport(remoteURL) {
-		remoteURL = "https://" + remoteURL
-	}
-
 	var fragment string
-	if strings.HasPrefix(remoteURL, "git@") {
+	if sshGitRegexp.MatchString(remoteURL) {
 		// git@.. is not an URL, so cannot be parsed as URL
 		parts := strings.SplitN(remoteURL, "#", 2)
 
@@ -34,6 +37,10 @@ func NewGitIdentifier(remoteURL string) (*GitIdentifier, error) {
 		}
 		repo.Ref, repo.Subdir = getRefAndSubdir(fragment)
 	} else {
+		if !strings.HasPrefix(remoteURL, "http://") && !strings.HasPrefix(remoteURL, "https://") {
+			remoteURL = "https://" + remoteURL
+		}
+
 		u, err := url.Parse(remoteURL)
 		if err != nil {
 			return nil, err
@@ -51,12 +58,6 @@ func NewGitIdentifier(remoteURL string) (*GitIdentifier, error) {
 
 func (i *GitIdentifier) ID() string {
 	return "git"
-}
-
-// isGitTransport returns true if the provided str is a git transport by inspecting
-// the prefix of the string for known protocols used in git.
-func isGitTransport(str string) bool {
-	return strings.HasPrefix(str, "http://") || strings.HasPrefix(str, "https://") || strings.HasPrefix(str, "git://") || strings.HasPrefix(str, "git@")
 }
 
 func getRefAndSubdir(fragment string) (ref string, subdir string) {
