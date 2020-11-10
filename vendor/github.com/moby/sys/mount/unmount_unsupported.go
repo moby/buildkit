@@ -2,6 +2,10 @@
 
 package mount
 
-func unmount(target string, flag int) error {
+func unmountBare(_ string, _ int) error {
+	panic("Not implemented")
+}
+
+func unmount(_ string, _ int) error {
 	panic("Not implemented")
 }

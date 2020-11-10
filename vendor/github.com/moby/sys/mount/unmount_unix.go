@@ -4,8 +4,12 @@ package mount
 
 import "golang.org/x/sys/unix"
 
+func unmountBare(target string, flags int) error {
+	return unix.Unmount(target, flags)
+}
+
 func unmount(target string, flags int) error {
-	err := unix.Unmount(target, flags)
+	err := unmountBare(target, flags)
 	if err == nil || err == unix.EINVAL {
 		// Ignore "not mounted" error here. Note the same error
 		// can be returned if flags are invalid, so this code

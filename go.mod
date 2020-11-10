@@ -38,6 +38,7 @@ require (
 	github.com/jaguilar/vt100 v0.0.0-20150826170717-2703a27b14ea
 	github.com/mitchellh/hashstructure v1.0.0
 	github.com/moby/locker v1.0.1
+	github.com/moby/sys/mount v0.1.1 // indirect; force more current version of sys/mount than go mod selects automatically
 	github.com/moby/term v0.0.0-20200915141129-7f0af18e79f2 // indirect
 	github.com/morikuni/aec v1.0.0
 	github.com/opencontainers/go-digest v1.0.0
