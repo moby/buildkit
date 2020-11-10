@@ -157,7 +157,7 @@ github.com/docker/cli/cli/connhelper/commandconn
 github.com/docker/distribution/digestset
 github.com/docker/distribution/reference
 github.com/docker/distribution/registry/api/errcode
-# github.com/docker/docker v20.10.0-beta1.0.20201030232932-c2cc352355d4+incompatible
+# github.com/docker/docker v20.10.0-beta1.0.20201110211921-af34b94a78a1+incompatible
 github.com/docker/docker/api
 github.com/docker/docker/api/types
 github.com/docker/docker/api/types/blkiodev

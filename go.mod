@@ -18,7 +18,7 @@ require (
 	github.com/coreos/go-systemd/v22 v22.1.0
 	github.com/docker/cli v20.10.0-beta1.0.20201029214301-1d20b15adc38+incompatible
 	github.com/docker/distribution v2.7.1+incompatible
-	github.com/docker/docker v20.10.0-beta1.0.20201030232932-c2cc352355d4+incompatible
+	github.com/docker/docker v20.10.0-beta1.0.20201110211921-af34b94a78a1+incompatible
 	github.com/docker/go-connections v0.4.0
 	github.com/docker/libnetwork v0.8.0-dev.2.0.20200917202933-d0951081b35f
 	github.com/gofrs/flock v0.7.3
