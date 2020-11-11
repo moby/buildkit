@@ -269,7 +269,7 @@ func (gs *gitSourceHandler) mountSSHAuthSock(ctx context.Context, g session.Grou
 		ID:   sshID,
 		UID:  uid,
 		GID:  gid,
-		Mode: 0775,
+		Mode: 0700,
 	})
 	if err != nil {
 		return "", nil, err
