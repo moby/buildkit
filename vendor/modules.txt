@@ -157,7 +157,7 @@ github.com/docker/cli/cli/connhelper/commandconn
 github.com/docker/distribution/digestset
 github.com/docker/distribution/reference
 github.com/docker/distribution/registry/api/errcode
-# github.com/docker/docker v20.10.0-beta1.0.20201030232932-c2cc352355d4+incompatible
+# github.com/docker/docker v20.10.0-beta1.0.20201110211921-af34b94a78a1+incompatible
 github.com/docker/docker/api
 github.com/docker/docker/api/types
 github.com/docker/docker/api/types/blkiodev
@@ -262,9 +262,9 @@ github.com/jaguilar/vt100
 github.com/mitchellh/hashstructure
 # github.com/moby/locker v1.0.1
 github.com/moby/locker
-# github.com/moby/sys/mount v0.1.0
+# github.com/moby/sys/mount v0.1.1
 github.com/moby/sys/mount
-# github.com/moby/sys/mountinfo v0.1.3
+# github.com/moby/sys/mountinfo v0.4.0
 github.com/moby/sys/mountinfo
 # github.com/moby/term v0.0.0-20200915141129-7f0af18e79f2
 github.com/moby/term

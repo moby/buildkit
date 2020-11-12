@@ -5,51 +5,9 @@ package mount
 import (
 	"fmt"
 	"sort"
-	"strconv"
 
 	"github.com/moby/sys/mountinfo"
 )
-
-// mountError records an error from mount or unmount operation
-type mountError struct {
-	op             string
-	source, target string
-	flags          uintptr
-	data           string
-	err            error
-}
-
-func (e *mountError) Error() string {
-	out := e.op + " "
-
-	if e.source != "" {
-		out += e.source + ":" + e.target
-	} else {
-		out += e.target
-	}
-
-	if e.flags != uintptr(0) {
-		out += ", flags: 0x" + strconv.FormatUint(uint64(e.flags), 16)
-	}
-	if e.data != "" {
-		out += ", data: " + e.data
-	}
-
-	out += ": " + e.err.Error()
-	return out
-}
-
-// Cause returns the underlying cause of the error.
-// This is a convention used in github.com/pkg/errors
-func (e *mountError) Cause() error {
-	return e.err
-}
-
-// Unwrap returns the underlying error.
-// This is a convention used in golang 1.13+
-func (e *mountError) Unwrap() error {
-	return e.err
-}
 
 // Mount will mount filesystem according to the specified configuration.
 // Options must be specified like the mount or fstab unix commands:
@@ -59,15 +17,26 @@ func Mount(device, target, mType, options string) error {
 	return mount(device, target, mType, uintptr(flag), data)
 }
 
-// Unmount lazily unmounts a filesystem on supported platforms, otherwise
-// does a normal unmount.
+// Unmount lazily unmounts a filesystem on supported platforms, otherwise does
+// a normal unmount.  If target is not a mount point, no error is returned.
 func Unmount(target string) error {
 	return unmount(target, mntDetach)
 }
 
-// RecursiveUnmount unmounts the target and all mounts underneath, starting with
-// the deepsest mount first.
+// RecursiveUnmount unmounts the target and all mounts underneath, starting
+// with the deepest mount first. The argument does not have to be a mount
+// point itself.
 func RecursiveUnmount(target string) error {
+	// Fast path, works if target is a mount point that can be unmounted.
+	// On Linux, mntDetach flag ensures a recursive unmount.  For other
+	// platforms, if there are submounts, we'll get EBUSY (and fall back
+	// to the slow path). NOTE we do not ignore EINVAL here as target might
+	// not be a mount point itself (but there can be mounts underneath).
+	if err := unmountBare(target, mntDetach); err == nil {
+		return nil
+	}
+
+	// Slow path: get all submounts, sort, unmount one by one.
 	mounts, err := mountinfo.GetMounts(mountinfo.PrefixFilter(target))
 	if err != nil {
 		return err
