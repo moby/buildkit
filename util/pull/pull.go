@@ -11,10 +11,13 @@ import (
 	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/remotes/docker/schema1"
+	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/imageutil"
+	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/pull/pullprogress"
 	"github.com/moby/buildkit/util/resolver"
 	"github.com/moby/buildkit/util/resolver/retryhandler"
@@ -147,7 +150,7 @@ func (p *Puller) PullManifests(ctx context.Context) (*PulledManifests, error) {
 		}
 		handlers = append(handlers,
 			filterLayerBlobs(metadata, &mu),
-			retryhandler.New(remotes.FetchHandler(p.ContentStore, fetcher)),
+			retryhandler.New(remotes.FetchHandler(p.ContentStore, fetcher), loggerFromContext(ctx)),
 			childrenHandler,
 			dslHandler,
 		)
@@ -259,4 +262,14 @@ func getLayers(ctx context.Context, provider content.Provider, desc ocispec.Desc
 		layers[i] = desc
 	}
 	return layers, nil
+}
+
+func loggerFromContext(ctx context.Context) func([]byte) {
+	return func(dt []byte) {
+		pw, _, _ := progress.FromContext(ctx)
+		pw.Write(identity.NewID(), client.VertexLog{
+			Stream: 2,
+			Data:   []byte(dt),
+		})
+	}
 }

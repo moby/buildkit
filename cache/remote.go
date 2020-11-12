@@ -9,11 +9,14 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/reference"
+	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/leaseutil"
+	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/pull/pullprogress"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -180,7 +183,7 @@ func (p lazyRefProvider) Unlazy(ctx context.Context) error {
 		err := contentutil.Copy(ctx, p.ref.cm.ContentStore, &pullprogress.ProviderWithProgress{
 			Provider: p.dh.Provider(p.session),
 			Manager:  p.ref.cm.ContentStore,
-		}, p.desc)
+		}, p.desc, loggerFromContext(ctx))
 		if err != nil {
 			return nil, err
 		}
@@ -199,4 +202,14 @@ func (p lazyRefProvider) Unlazy(ctx context.Context) error {
 		return nil, err
 	})
 	return err
+}
+
+func loggerFromContext(ctx context.Context) func([]byte) {
+	return func(dt []byte) {
+		pw, _, _ := progress.FromContext(ctx)
+		pw.Write(identity.NewID(), client.VertexLog{
+			Stream: 2,
+			Data:   []byte(dt),
+		})
+	}
 }

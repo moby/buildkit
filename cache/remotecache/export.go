@@ -10,6 +10,8 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/images"
 	v1 "github.com/moby/buildkit/cache/remotecache/v1"
+	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/compression"
@@ -94,7 +96,7 @@ func (ce *contentCacheExporter) Finalize(ctx context.Context) (map[string]string
 			return nil, errors.Errorf("missing blob %s", l.Blob)
 		}
 		layerDone := oneOffProgress(ctx, fmt.Sprintf("writing layer %s", l.Blob))
-		if err := contentutil.Copy(ctx, ce.ingester, dgstPair.Provider, dgstPair.Descriptor); err != nil {
+		if err := contentutil.Copy(ctx, ce.ingester, dgstPair.Provider, dgstPair.Descriptor, loggerFromContext(ctx)); err != nil {
 			return nil, layerDone(errors.Wrap(err, "error writing layer blob"))
 		}
 		layerDone(nil)
@@ -143,4 +145,14 @@ func (ce *contentCacheExporter) Finalize(ctx context.Context) (map[string]string
 	res[ExporterResponseManifestDesc] = string(descJSON)
 	mfstDone(nil)
 	return res, nil
+}
+
+func loggerFromContext(ctx context.Context) func([]byte) {
+	return func(dt []byte) {
+		pw, _, _ := progress.FromContext(ctx)
+		pw.Write(identity.NewID(), client.VertexLog{
+			Stream: 2,
+			Data:   []byte(dt),
+		})
+	}
 }

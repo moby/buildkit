@@ -9,17 +9,13 @@ import (
 	"time"
 
 	"github.com/containerd/containerd/images"
-	"github.com/moby/buildkit/client"
-	"github.com/moby/buildkit/identity"
-	"github.com/moby/buildkit/util/progress"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
 
-func New(f images.HandlerFunc) images.HandlerFunc {
+func New(f images.HandlerFunc, logger func([]byte)) images.HandlerFunc {
 	return func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
 		backoff := time.Second
-		var pw progress.Writer
 		for {
 			descs, err := f(ctx, desc)
 			if err != nil {
@@ -31,13 +27,9 @@ func New(f images.HandlerFunc) images.HandlerFunc {
 						return nil, err
 					}
 				}
-				if pw == nil {
-					pw, _, _ = progress.FromContext(ctx)
+				if logger != nil {
+					logger([]byte(fmt.Sprintf("error: %v\n", err.Error())))
 				}
-				pw.Write(identity.NewID(), client.VertexLog{
-					Stream: 2,
-					Data:   []byte(fmt.Sprintf("error: %v\n", err.Error())),
-				})
 			} else {
 				return descs, nil
 			}
@@ -45,10 +37,9 @@ func New(f images.HandlerFunc) images.HandlerFunc {
 			if backoff >= 8*time.Second {
 				return nil, err
 			}
-			pw.Write(identity.NewID(), client.VertexLog{
-				Stream: 2,
-				Data:   []byte(fmt.Sprintf("retrying in %v\n", backoff)),
-			})
+			if logger != nil {
+				logger([]byte(fmt.Sprintf("retrying in %v\n", backoff)))
+			}
 			time.Sleep(backoff)
 			backoff *= 2
 		}
