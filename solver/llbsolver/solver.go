@@ -270,7 +270,7 @@ func inlineCache(ctx context.Context, e remotecache.Exporter, res solver.CachedR
 			return nil, errors.Errorf("invalid reference: %T", res.Sys())
 		}
 
-		remote, err := workerRef.ImmutableRef.GetRemote(ctx, true, compression.Default, g)
+		remote, err := workerRef.GetRemote(ctx, true, compression.Default, g)
 		if err != nil || remote == nil {
 			return nil, nil
 		}
