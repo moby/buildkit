@@ -147,7 +147,12 @@ func (cr *cacheRecord) isLazy(ctx context.Context) (bool, error) {
 	if !getBlobOnly(cr.md) {
 		return false, nil
 	}
-	_, err := cr.cm.ContentStore.Info(ctx, digest.Digest(getBlob(cr.md)))
+	dgst := getBlob(cr.md)
+	// special case for moby where there is no compressed blob (empty digest)
+	if dgst == "" {
+		return false, nil
+	}
+	_, err := cr.cm.ContentStore.Info(ctx, digest.Digest(dgst))
 	if errors.Is(err, errdefs.ErrNotFound) {
 		return true, nil
 	}
@@ -455,6 +460,10 @@ func (sr *immutableRef) extract(ctx context.Context, dhs DescHandlers, s session
 		snapshotID := getSnapshotID(sr.md)
 		if _, err := sr.cm.Snapshotter.Stat(ctx, snapshotID); err == nil {
 			return nil, nil
+		}
+
+		if sr.cm.Applier == nil {
+			return nil, errors.New("extract requires an applier")
 		}
 
 		eg, egctx := errgroup.WithContext(ctx)
