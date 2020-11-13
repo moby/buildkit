@@ -576,6 +576,16 @@ func gitWithinDir(ctx context.Context, gitDir, workDir, sshAuthSock, knownHosts 
 	return git(ctx, workDir, sshAuthSock, knownHosts, append(a, args...)...)
 }
 
+func getGitSSHCommand(knownHosts string) string {
+	gitSSHCommand := "ssh -F /dev/null"
+	if knownHosts != "" {
+		gitSSHCommand += " -o UserKnownHostsFile=" + knownHosts
+	} else {
+		gitSSHCommand += " -o StrictHostKeyChecking=no"
+	}
+	return gitSSHCommand
+}
+
 func git(ctx context.Context, dir, sshAuthSock, knownHosts string, args ...string) (*bytes.Buffer, error) {
 	for {
 		stdout, stderr := logs.NewLogStreams(ctx, false)
@@ -591,15 +601,12 @@ func git(ctx context.Context, dir, sshAuthSock, knownHosts string, args ...strin
 		cmd.Env = []string{
 			"PATH=" + os.Getenv("PATH"),
 			"GIT_TERMINAL_PROMPT=0",
+			"GIT_SSH_COMMAND=" + getGitSSHCommand(knownHosts),
 			//	"GIT_TRACE=1",
 		}
 		if sshAuthSock != "" {
 			cmd.Env = append(cmd.Env, "SSH_AUTH_SOCK="+sshAuthSock)
 		}
-		if knownHosts != "" {
-			cmd.Env = append(cmd.Env, "GIT_SSH_COMMAND=ssh -F /dev/null -o UserKnownHostsFile="+knownHosts)
-		}
-
 		// remote git commands spawn helper processes that inherit FDs and don't
 		// handle parent death signal so exec.CommandContext can't be used
 		err := runProcessGroup(ctx, cmd)
