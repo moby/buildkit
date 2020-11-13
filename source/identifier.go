@@ -110,9 +110,7 @@ func FromLLB(op *pb.Op_Source, platform *pb.Platform) (Identifier, error) {
 			case pb.AttrKnownSSHHosts:
 				id.KnownSSHHosts = v
 			case pb.AttrMountSSHSock:
-				if v == "true" {
-					id.MountSSHSock = true
-				}
+				id.MountSSHSock = v
 			}
 		}
 	}

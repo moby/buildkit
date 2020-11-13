@@ -201,7 +201,7 @@ func Git(remote, ref string, opts ...GitOption) State {
 	url := ""
 
 	for _, prefix := range []string{
-		"http://", "https://", "git://",
+		"http://", "https://", "git://", "git@",
 	} {
 		if strings.HasPrefix(remote, prefix) {
 			url = strings.Split(remote, "#")[0]
@@ -247,8 +247,8 @@ func Git(remote, ref string, opts ...GitOption) State {
 		attrs[pb.AttrKnownSSHHosts] = gi.KnownSSHHosts
 		addCap(&gi.Constraints, pb.CapSourceGitKnownSSHHosts)
 	}
-	if gi.MountSSHSock {
-		attrs[pb.AttrMountSSHSock] = "true"
+	if gi.MountSSHSock != "" {
+		attrs[pb.AttrMountSSHSock] = gi.MountSSHSock
 		addCap(&gi.Constraints, pb.CapSourceGitMountSSHSock)
 	}
 
@@ -274,7 +274,7 @@ type GitInfo struct {
 	AuthHeaderSecret string
 	addAuthCap       bool
 	KnownSSHHosts    string
-	MountSSHSock     bool
+	MountSSHSock     string
 }
 
 func KeepGitDir() GitOption {
@@ -304,9 +304,9 @@ func KnownSSHHosts(key string) GitOption {
 	})
 }
 
-func MountSSHSock() GitOption {
+func MountSSHSock(sshID string) GitOption {
 	return gitOptionFunc(func(gi *GitInfo) {
-		gi.MountSSHSock = true
+		gi.MountSSHSock = sshID
 	})
 }
 

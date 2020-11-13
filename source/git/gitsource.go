@@ -238,8 +238,7 @@ func (gs *gitSourceHandler) getAuthToken(ctx context.Context, g session.Group) e
 	})
 }
 
-func (gs *gitSourceHandler) mountSSHAuthSock(ctx context.Context, g session.Group) (string, func() error, error) {
-	sshID := "default"
+func (gs *gitSourceHandler) mountSSHAuthSock(ctx context.Context, sshID string, g session.Group) (string, func() error, error) {
 	var caller session.Caller
 	err := gs.sm.Any(ctx, g, func(ctx context.Context, _ string, c session.Caller) error {
 		if err := sshforward.CheckSSHID(ctx, c, sshID); err != nil {
@@ -261,9 +260,9 @@ func (gs *gitSourceHandler) mountSSHAuthSock(ctx context.Context, g session.Grou
 		return "", nil, err
 	}
 
-	// best effor, default to root
+	// best effort, default to root
 	uid, _ := strconv.Atoi(usr.Uid)
-	gid, _ := strconv.Atoi(usr.Uid)
+	gid, _ := strconv.Atoi(usr.Gid)
 
 	sock, cleanup, err := sshforward.MountSSHSocket(ctx, caller, sshforward.SocketOpt{
 		ID:   sshID,
@@ -326,9 +325,9 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index
 	defer unmountGitDir()
 
 	var sock string
-	if gs.src.MountSSHSock {
+	if gs.src.MountSSHSock != "" {
 		var unmountSock func() error
-		sock, unmountSock, err = gs.mountSSHAuthSock(ctx, g)
+		sock, unmountSock, err = gs.mountSSHAuthSock(ctx, gs.src.MountSSHSock, g)
 		if err != nil {
 			return "", nil, false, err
 		}
@@ -404,9 +403,9 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 	defer unmountGitDir()
 
 	var sock string
-	if gs.src.MountSSHSock {
+	if gs.src.MountSSHSock != "" {
 		var unmountSock func() error
-		sock, unmountSock, err = gs.mountSSHAuthSock(ctx, g)
+		sock, unmountSock, err = gs.mountSSHAuthSock(ctx, gs.src.MountSSHSock, g)
 		if err != nil {
 			return nil, err
 		}
@@ -598,7 +597,7 @@ func git(ctx context.Context, dir, sshAuthSock, knownHosts string, args ...strin
 			cmd.Env = append(cmd.Env, "SSH_AUTH_SOCK="+sshAuthSock)
 		}
 		if knownHosts != "" {
-			cmd.Env = append(cmd.Env, "GIT_SSH_COMMAND=ssh -o UserKnownHostsFile="+knownHosts)
+			cmd.Env = append(cmd.Env, "GIT_SSH_COMMAND=ssh -F /dev/null -o UserKnownHostsFile="+knownHosts)
 		}
 
 		// remote git commands spawn helper processes that inherit FDs and don't
