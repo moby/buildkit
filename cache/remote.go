@@ -24,6 +24,8 @@ type Unlazier interface {
 	Unlazy(ctx context.Context) error
 }
 
+// GetRemote gets a *solver.Remote from content store for this ref (potentially pulling lazily).
+// Note: Use WorkerRef.GetRemote instead as moby integration requires custom GetRemote implementation.
 func (sr *immutableRef) GetRemote(ctx context.Context, createIfNeeded bool, compressionType compression.Type, s session.Group) (*solver.Remote, error) {
 	ctx, done, err := leaseutil.WithLease(ctx, sr.cm.LeaseManager, leaseutil.MakeTemporary)
 	if err != nil {
