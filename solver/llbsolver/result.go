@@ -21,6 +21,17 @@ type Selector struct {
 	FollowLinks bool
 }
 
+func UnlazyResultFunc(ctx context.Context, res solver.Result, g session.Group) error {
+	ref, ok := res.Sys().(*worker.WorkerRef)
+	if !ok {
+		return errors.Errorf("invalid reference: %T", res)
+	}
+	if ref.ImmutableRef == nil {
+		return nil
+	}
+	return ref.ImmutableRef.Extract(ctx, g)
+}
+
 func NewContentHashFunc(selectors []Selector) solver.ResultBasedCacheFunc {
 	return func(ctx context.Context, res solver.Result, s session.Group) (digest.Digest, error) {
 		ref, ok := res.Sys().(*worker.WorkerRef)

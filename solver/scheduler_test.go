@@ -3517,6 +3517,7 @@ func (v *vertex) makeCacheMap() *CacheMap {
 		Deps: make([]struct {
 			Selector          digest.Digest
 			ComputeDigestFunc ResultBasedCacheFunc
+			PreprocessFunc    PreprocessFunc
 		}, len(v.Inputs())),
 	}
 	for i, f := range v.opt.slowCacheCompute {

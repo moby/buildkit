@@ -120,6 +120,7 @@ func (f *fileOp) CacheMap(ctx context.Context, g session.Group, index int) (*sol
 		Deps: make([]struct {
 			Selector          digest.Digest
 			ComputeDigestFunc solver.ResultBasedCacheFunc
+			PreprocessFunc    solver.PreprocessFunc
 		}, f.numInputs),
 	}
 
@@ -137,6 +138,9 @@ func (f *fileOp) CacheMap(ctx context.Context, g session.Group, index int) (*sol
 		cm.Deps[idx].Selector = digest.FromBytes(bytes.Join(dgsts, []byte{0}))
 
 		cm.Deps[idx].ComputeDigestFunc = llbsolver.NewContentHashFunc(dedupeSelectors(m))
+	}
+	for idx := range cm.Deps {
+		cm.Deps[idx].PreprocessFunc = llbsolver.UnlazyResultFunc
 	}
 
 	return cm, true, nil

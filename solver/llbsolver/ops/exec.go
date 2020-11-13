@@ -118,6 +118,7 @@ func (e *execOp) CacheMap(ctx context.Context, g session.Group, index int) (*sol
 		Deps: make([]struct {
 			Selector          digest.Digest
 			ComputeDigestFunc solver.ResultBasedCacheFunc
+			PreprocessFunc    solver.PreprocessFunc
 		}, e.numInputs),
 	}
 
@@ -137,6 +138,7 @@ func (e *execOp) CacheMap(ctx context.Context, g session.Group, index int) (*sol
 		if !dep.NoContentBasedHash {
 			cm.Deps[i].ComputeDigestFunc = llbsolver.NewContentHashFunc(toSelectors(dedupePaths(dep.Selectors)))
 		}
+		cm.Deps[i].PreprocessFunc = llbsolver.UnlazyResultFunc
 	}
 
 	return cm, true, nil

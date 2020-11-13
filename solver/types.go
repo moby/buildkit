@@ -148,6 +148,7 @@ type Op interface {
 }
 
 type ResultBasedCacheFunc func(context.Context, Result, session.Group) (digest.Digest, error)
+type PreprocessFunc func(context.Context, Result, session.Group) error
 
 // CacheMap is a description for calculating the cache key of an operation.
 type CacheMap struct {
@@ -173,6 +174,9 @@ type CacheMap struct {
 		// For example, in LLB this is invoked to calculate the cache key based on
 		// the checksum of file contents from input snapshots.
 		ComputeDigestFunc ResultBasedCacheFunc
+
+		// PreprocessFunc is a function that runs on an input before it is passed to op
+		PreprocessFunc PreprocessFunc
 	}
 
 	// Opts specifies generic options that will be passed to cache load calls if/when

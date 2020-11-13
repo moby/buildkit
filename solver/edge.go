@@ -223,6 +223,14 @@ func (e *edge) slowCacheFunc(dep *dep) ResultBasedCacheFunc {
 	return e.cacheMap.Deps[int(dep.index)].ComputeDigestFunc
 }
 
+// preprocessFunc returns result based cache func
+func (e *edge) preprocessFunc(dep *dep) PreprocessFunc {
+	if e.cacheMap == nil {
+		return nil
+	}
+	return e.cacheMap.Deps[int(dep.index)].PreprocessFunc
+}
+
 // allDepsHaveKeys checks if all dependencies have at least one key. used for
 // determining if there is enough data for combining cache key for edge
 func (e *edge) allDepsHaveKeys(matching bool) bool {
@@ -487,17 +495,20 @@ func (e *edge) processUpdate(upt pipe.Receiver) (depChanged bool) {
 					e.err = upt.Status().Err
 				}
 			} else if !dep.slowCacheComplete {
-				k := NewCacheKey(upt.Status().Value.(digest.Digest), -1)
-				dep.slowCacheKey = &ExportableCacheKey{CacheKey: k, Exporter: &exporter{k: k}}
-				slowKeyExp := CacheKeyWithSelector{CacheKey: *dep.slowCacheKey}
-				defKeys := make([]CacheKeyWithSelector, 0, len(dep.result.CacheKeys()))
-				for _, dk := range dep.result.CacheKeys() {
-					defKeys = append(defKeys, CacheKeyWithSelector{CacheKey: dk, Selector: e.cacheMap.Deps[i].Selector})
-				}
-				dep.slowCacheFoundKey = e.probeCache(dep, []CacheKeyWithSelector{slowKeyExp})
+				dgst := upt.Status().Value.(digest.Digest)
+				if e.cacheMap.Deps[int(dep.index)].ComputeDigestFunc != nil && dgst != "" {
+					k := NewCacheKey(dgst, -1)
+					dep.slowCacheKey = &ExportableCacheKey{CacheKey: k, Exporter: &exporter{k: k}}
+					slowKeyExp := CacheKeyWithSelector{CacheKey: *dep.slowCacheKey}
+					defKeys := make([]CacheKeyWithSelector, 0, len(dep.result.CacheKeys()))
+					for _, dk := range dep.result.CacheKeys() {
+						defKeys = append(defKeys, CacheKeyWithSelector{CacheKey: dk, Selector: e.cacheMap.Deps[i].Selector})
+					}
+					dep.slowCacheFoundKey = e.probeCache(dep, []CacheKeyWithSelector{slowKeyExp})
 
-				// connect def key to slow key
-				e.op.Cache().Query(append(defKeys, slowKeyExp), dep.index, e.cacheMap.Digest, e.edge.Index)
+					// connect def key to slow key
+					e.op.Cache().Query(append(defKeys, slowKeyExp), dep.index, e.cacheMap.Digest, e.edge.Index)
+				}
 
 				dep.slowCacheComplete = true
 				e.keysDidChange = true
@@ -583,7 +594,7 @@ func (e *edge) recalcCurrentState() {
 	stHigh := edgeStatusCacheSlow // maximum possible state
 	if e.cacheMap != nil {
 		for _, dep := range e.deps {
-			isSlowIncomplete := e.slowCacheFunc(dep) != nil && (dep.state == edgeStatusCacheSlow || (dep.state == edgeStatusComplete && !dep.slowCacheComplete))
+			isSlowIncomplete := (e.slowCacheFunc(dep) != nil || e.preprocessFunc(dep) != nil) && (dep.state == edgeStatusCacheSlow || (dep.state == edgeStatusComplete && !dep.slowCacheComplete))
 
 			if dep.state > stLow && len(dep.keyMap) == 0 && !isSlowIncomplete {
 				stLow = dep.state
@@ -804,15 +815,16 @@ func (e *edge) createInputRequests(desiredState edgeStatusType, f *pipeFactory, 
 			}
 		}
 		// initialize function to compute cache key based on dependency result
-		if dep.state == edgeStatusComplete && dep.slowCacheReq == nil && e.slowCacheFunc(dep) != nil && e.cacheMap != nil {
+		if dep.state == edgeStatusComplete && dep.slowCacheReq == nil && (e.slowCacheFunc(dep) != nil || e.preprocessFunc(dep) != nil) && e.cacheMap != nil {
+			pfn := e.preprocessFunc(dep)
 			fn := e.slowCacheFunc(dep)
 			res := dep.result
-			func(fn ResultBasedCacheFunc, res Result, index Index) {
+			func(pfn PreprocessFunc, fn ResultBasedCacheFunc, res Result, index Index) {
 				dep.slowCacheReq = f.NewFuncRequest(func(ctx context.Context) (interface{}, error) {
-					v, err := e.op.CalcSlowCache(ctx, index, fn, res)
+					v, err := e.op.CalcSlowCache(ctx, index, pfn, fn, res)
 					return v, errors.Wrap(err, "failed to compute cache key")
 				})
-			}(fn, res, dep.index)
+			}(pfn, fn, res, dep.index)
 			addedNew = true
 		}
 	}

@@ -268,6 +268,17 @@ func (jl *Solver) setEdge(e Edge, newEdge *edge) {
 	st.setEdge(e.Index, newEdge)
 }
 
+func (jl *Solver) getState(e Edge) *state {
+	jl.mu.RLock()
+	defer jl.mu.RUnlock()
+
+	st, ok := jl.actives[e.Vertex.Digest()]
+	if !ok {
+		return nil
+	}
+	return st
+}
+
 func (jl *Solver) getEdge(e Edge) *edge {
 	jl.mu.RLock()
 	defer jl.mu.RUnlock()
@@ -547,7 +558,7 @@ type activeOp interface {
 	Exec(ctx context.Context, inputs []Result) (outputs []Result, exporters []ExportableCacheKey, err error)
 	IgnoreCache() bool
 	Cache() CacheManager
-	CalcSlowCache(context.Context, Index, ResultBasedCacheFunc, Result) (digest.Digest, error)
+	CalcSlowCache(context.Context, Index, PreprocessFunc, ResultBasedCacheFunc, Result) (digest.Digest, error)
 }
 
 func newSharedOp(resolver ResolveOpFunc, cacheManager CacheManager, st *state) *sharedOp {
@@ -606,14 +617,14 @@ func (s *sharedOp) LoadCache(ctx context.Context, rec *CacheRecord) (Result, err
 	return res, err
 }
 
-func (s *sharedOp) CalcSlowCache(ctx context.Context, index Index, f ResultBasedCacheFunc, res Result) (dgst digest.Digest, err error) {
+func (s *sharedOp) CalcSlowCache(ctx context.Context, index Index, p PreprocessFunc, f ResultBasedCacheFunc, res Result) (dgst digest.Digest, err error) {
 	defer func() {
 		err = errdefs.WrapVertex(err, s.st.origDigest)
 	}()
 	key, err := s.g.Do(ctx, fmt.Sprintf("slow-compute-%d", index), func(ctx context.Context) (interface{}, error) {
 		s.slowMu.Lock()
 		// TODO: add helpers for these stored values
-		if res := s.slowCacheRes[index]; res != "" {
+		if res, ok := s.slowCacheRes[index]; ok {
 			s.slowMu.Unlock()
 			return res, nil
 		}
@@ -622,9 +633,23 @@ func (s *sharedOp) CalcSlowCache(ctx context.Context, index Index, f ResultBased
 			return err, nil
 		}
 		s.slowMu.Unlock()
-		ctx = opentracing.ContextWithSpan(progress.WithProgress(ctx, s.st.mpw), s.st.mspan)
-		key, err := f(withAncestorCacheOpts(ctx, s.st), res, s.st)
+
 		complete := true
+		if p != nil {
+			st := s.st.solver.getState(s.st.vtx.Inputs()[index])
+			ctx2 := opentracing.ContextWithSpan(progress.WithProgress(ctx, st.mpw), st.mspan)
+			err = p(ctx2, res, st)
+			if err != nil {
+				f = nil
+				ctx = ctx2
+			}
+		}
+
+		var key digest.Digest
+		if f != nil {
+			ctx = opentracing.ContextWithSpan(progress.WithProgress(ctx, s.st.mpw), s.st.mspan)
+			key, err = f(withAncestorCacheOpts(ctx, s.st), res, s.st)
+		}
 		if err != nil {
 			select {
 			case <-ctx.Done():
