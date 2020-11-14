@@ -500,12 +500,12 @@ func translateLegacySolveRequest(req *pb.SolveRequest) error {
 
 func (lbf *llbBridgeForwarder) wrapSolveError(solveErr error) error {
 	var (
-		ee        *llberrdefs.ExecError
-		fae       *llberrdefs.FileActionError
-		sce       *solver.SlowCacheError
-		inputIDs  []string
-		outputIDs []string
-		subject   errdefs.IsSolve_Subject
+		ee       *llberrdefs.ExecError
+		fae      *llberrdefs.FileActionError
+		sce      *solver.SlowCacheError
+		inputIDs []string
+		mountIDs []string
+		subject  errdefs.IsSolve_Subject
 	)
 	if errors.As(solveErr, &ee) {
 		var err error
@@ -513,7 +513,7 @@ func (lbf *llbBridgeForwarder) wrapSolveError(solveErr error) error {
 		if err != nil {
 			return err
 		}
-		outputIDs, err = lbf.registerResultIDs(ee.Outputs...)
+		mountIDs, err = lbf.registerResultIDs(ee.Outputs...)
 		if err != nil {
 			return err
 		}
@@ -529,7 +529,7 @@ func (lbf *llbBridgeForwarder) wrapSolveError(solveErr error) error {
 		}
 		subject = sce.ToSubject()
 	}
-	return errdefs.WithSolveError(solveErr, subject, inputIDs, outputIDs)
+	return errdefs.WithSolveError(solveErr, subject, inputIDs, mountIDs)
 }
 
 func (lbf *llbBridgeForwarder) registerResultIDs(results ...solver.Result) (ids []string, err error) {

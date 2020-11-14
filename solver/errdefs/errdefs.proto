@@ -23,7 +23,7 @@ message Subrequest {
 
 message Solve {
 	repeated string inputIDs = 1;
-	repeated string outputIDs = 2;
+	repeated string mountIDs = 2;
 	pb.Op op = 3;
 
 	oneof subject {

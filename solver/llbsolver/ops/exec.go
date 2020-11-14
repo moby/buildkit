@@ -245,11 +245,11 @@ func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 				}
 				execInputs[i] = inputs[m.Input]
 			}
-			execOutputs := make([]solver.Result, len(e.op.Mounts))
+			execMounts := make([]solver.Result, len(e.op.Mounts))
 			for i, res := range results {
-				execOutputs[p.OutputRefs[i].MountIndex] = res
+				execMounts[p.OutputRefs[i].MountIndex] = res
 			}
-			err = errdefs.WithExecError(err, execInputs, execOutputs)
+			err = errdefs.WithExecError(err, execInputs, execMounts)
 		}
 	}()
 	if err != nil {

@@ -36,7 +36,7 @@ func (e *SolveError) ToProto() grpcerrors.TypedErrorProto {
 	return &e.Solve
 }
 
-func WithSolveError(err error, subject IsSolve_Subject, inputIDs, outputIDs []string) error {
+func WithSolveError(err error, subject IsSolve_Subject, inputIDs, mountIDs []string) error {
 	if err == nil {
 		return nil
 	}
@@ -50,10 +50,10 @@ func WithSolveError(err error, subject IsSolve_Subject, inputIDs, outputIDs []st
 	return &SolveError{
 		Err: err,
 		Solve: Solve{
-			InputIDs:  inputIDs,
-			OutputIDs: outputIDs,
-			Op:        op,
-			Subject:   subject,
+			InputIDs: inputIDs,
+			MountIDs: mountIDs,
+			Op:       op,
+			Subject:  subject,
 		},
 	}
 }

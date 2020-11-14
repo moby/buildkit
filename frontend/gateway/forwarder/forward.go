@@ -119,12 +119,12 @@ func (c *bridgeClient) Inputs(ctx context.Context) (map[string]llb.State, error)
 
 func (c *bridgeClient) wrapSolveError(solveErr error) error {
 	var (
-		ee        *llberrdefs.ExecError
-		fae       *llberrdefs.FileActionError
-		sce       *solver.SlowCacheError
-		inputIDs  []string
-		outputIDs []string
-		subject   errdefs.IsSolve_Subject
+		ee       *llberrdefs.ExecError
+		fae      *llberrdefs.FileActionError
+		sce      *solver.SlowCacheError
+		inputIDs []string
+		mountIDs []string
+		subject  errdefs.IsSolve_Subject
 	)
 	if errors.As(solveErr, &ee) {
 		var err error
@@ -132,7 +132,7 @@ func (c *bridgeClient) wrapSolveError(solveErr error) error {
 		if err != nil {
 			return err
 		}
-		outputIDs, err = c.registerResultIDs(ee.Outputs...)
+		mountIDs, err = c.registerResultIDs(ee.Outputs...)
 		if err != nil {
 			return err
 		}
@@ -148,7 +148,7 @@ func (c *bridgeClient) wrapSolveError(solveErr error) error {
 		}
 		subject = sce.ToSubject()
 	}
-	return errdefs.WithSolveError(solveErr, subject, inputIDs, outputIDs)
+	return errdefs.WithSolveError(solveErr, subject, inputIDs, mountIDs)
 }
 
 func (c *bridgeClient) registerResultIDs(results ...solver.Result) (ids []string, err error) {

@@ -1135,7 +1135,7 @@ func testClientGatewayExecError(t *testing.T, sb integration.Sandbox) {
 				var se *errdefs.SolveError
 				require.True(t, errors.As(solveErr, &se))
 				require.Len(t, se.InputIDs, tt.NumMounts)
-				require.Len(t, se.OutputIDs, tt.NumMounts)
+				require.Len(t, se.MountIDs, tt.NumMounts)
 
 				op := se.Solve.Op
 				require.NotNil(t, op)
@@ -1151,7 +1151,7 @@ func testClientGatewayExecError(t *testing.T, sb integration.Sandbox) {
 					mounts = append(mounts, client.Mount{
 						Selector:  mnt.Selector,
 						Dest:      mnt.Dest,
-						ResultID:  se.Solve.OutputIDs[i],
+						ResultID:  se.Solve.MountIDs[i],
 						Readonly:  mnt.Readonly,
 						MountType: mnt.MountType,
 						CacheOpt:  mnt.CacheOpt,
@@ -1262,7 +1262,7 @@ func testClientGatewaySlowCacheExecError(t *testing.T, sb integration.Sandbox) {
 		require.True(t, ok)
 		// Slow cache errors should only have exactly one input and no outputs.
 		require.Len(t, se.Solve.InputIDs, 1)
-		require.Len(t, se.Solve.OutputIDs, 0)
+		require.Len(t, se.Solve.MountIDs, 0)
 
 		st := llb.Image("busybox:latest")
 		def, err := st.Marshal(ctx)
@@ -1390,7 +1390,7 @@ func testClientGatewayExecFileActionError(t *testing.T, sb integration.Sandbox) 
 				require.Len(t, se.Solve.InputIDs, tt.NumInputs)
 
 				// There is one output for every action in the fileop that failed.
-				require.Len(t, se.Solve.OutputIDs, tt.NumOutputs)
+				require.Len(t, se.Solve.MountIDs, tt.NumOutputs)
 
 				op, ok := se.Solve.Op.Op.(*pb.Op_File)
 				require.True(t, ok)
@@ -1404,7 +1404,7 @@ func testClientGatewayExecFileActionError(t *testing.T, sb integration.Sandbox) 
 				action := op.File.Actions[idx]
 
 				// The output for a file action is mapped by its index.
-				inputID := se.OutputIDs[idx]
+				inputID := se.MountIDs[idx]
 
 				var secondaryID string
 				if action.SecondaryInput != -1 {
@@ -1414,7 +1414,7 @@ func testClientGatewayExecFileActionError(t *testing.T, sb integration.Sandbox) 
 					if int(action.SecondaryInput) < len(se.InputIDs) {
 						secondaryID = se.InputIDs[action.SecondaryInput]
 					} else {
-						secondaryID = se.OutputIDs[int(action.SecondaryInput)-len(se.InputIDs)]
+						secondaryID = se.MountIDs[int(action.SecondaryInput)-len(se.InputIDs)]
 					}
 				}
 
