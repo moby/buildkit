@@ -5,7 +5,6 @@ import (
 	"sync"
 
 	cacheutil "github.com/moby/buildkit/cache/util"
-	clienttypes "github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/frontend/gateway"
@@ -24,14 +23,14 @@ import (
 	fstypes "github.com/tonistiigi/fsutil/types"
 )
 
-func llbBridgeToGatewayClient(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string, inputs map[string]*opspb.Definition, workerInfos []clienttypes.WorkerInfo, sid string, sm *session.Manager) (*bridgeClient, error) {
+func llbBridgeToGatewayClient(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string, inputs map[string]*opspb.Definition, w worker.Infos, sid string, sm *session.Manager) (*bridgeClient, error) {
 	return &bridgeClient{
 		opts:              opts,
 		inputs:            inputs,
 		FrontendLLBBridge: llbBridge,
 		sid:               sid,
 		sm:                sm,
-		workerInfos:       workerInfos,
+		workers:           w,
 		final:             map[*ref]struct{}{},
 		workerRefByID:     make(map[string]*worker.WorkerRef),
 	}, nil
@@ -46,8 +45,8 @@ type bridgeClient struct {
 	sid           string
 	sm            *session.Manager
 	refs          []*ref
+	workers       worker.Infos
 	workerRefByID map[string]*worker.WorkerRef
-	workerInfos   []clienttypes.WorkerInfo
 }
 
 func (c *bridgeClient) Solve(ctx context.Context, req client.SolveRequest) (*client.Result, error) {
@@ -87,8 +86,8 @@ func (c *bridgeClient) Solve(ctx context.Context, req client.SolveRequest) (*cli
 	return cRes, nil
 }
 func (c *bridgeClient) BuildOpts() client.BuildOpts {
-	workers := make([]client.WorkerInfo, 0, len(c.workerInfos))
-	for _, w := range c.workerInfos {
+	workers := make([]client.WorkerInfo, 0, len(c.workers.WorkerInfos()))
+	for _, w := range c.workers.WorkerInfos() {
 		workers = append(workers, client.WorkerInfo{
 			ID:        w.ID,
 			Labels:    w.Labels,
@@ -247,19 +246,26 @@ func (c *bridgeClient) NewContainer(ctx context.Context, req client.NewContainer
 			}
 		}
 		ctrReq.Mounts = append(ctrReq.Mounts, gateway.Mount{
-			Dest:      m.Dest,
-			Selector:  m.Selector,
-			Readonly:  m.Readonly,
-			MountType: m.MountType,
 			WorkerRef: workerRef,
-			CacheOpt:  m.CacheOpt,
-			SecretOpt: m.SecretOpt,
-			SSHOpt:    m.SSHOpt,
+			Mount: &opspb.Mount{
+				Dest:      m.Dest,
+				Selector:  m.Selector,
+				Readonly:  m.Readonly,
+				MountType: m.MountType,
+				CacheOpt:  m.CacheOpt,
+				SecretOpt: m.SecretOpt,
+				SSHOpt:    m.SSHOpt,
+			},
 		})
 	}
 
+	w, err := c.workers.GetDefault()
+	if err != nil {
+		return nil, err
+	}
+
 	group := session.NewGroup(c.sid)
-	ctr, err := gateway.NewContainer(ctx, c, c.sm, group, ctrReq)
+	ctr, err := gateway.NewContainer(ctx, w, c.sm, group, ctrReq)
 	if err != nil {
 		return nil, err
 	}

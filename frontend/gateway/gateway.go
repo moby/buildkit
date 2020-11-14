@@ -57,14 +57,14 @@ const (
 	keyDevel  = "gateway-devel"
 )
 
-func NewGatewayFrontend(w frontend.WorkerInfos) frontend.Frontend {
+func NewGatewayFrontend(w worker.Infos) frontend.Frontend {
 	return &gatewayFrontend{
 		workers: w,
 	}
 }
 
 type gatewayFrontend struct {
-	workers frontend.WorkerInfos
+	workers worker.Infos
 }
 
 func filterPrefix(opts map[string]string, pfx string) map[string]string {
@@ -248,7 +248,12 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 	}
 	defer lbf.Discard()
 
-	err = llbBridge.Run(ctx, "", mountWithSession(rootFS, session.NewGroup(sid)), nil, executor.ProcessInfo{Meta: meta, Stdin: lbf.Stdin, Stdout: lbf.Stdout, Stderr: os.Stderr}, nil)
+	w, err := gf.workers.GetDefault()
+	if err != nil {
+		return nil, err
+	}
+
+	err = w.Executor().Run(ctx, "", mountWithSession(rootFS, session.NewGroup(sid)), nil, executor.ProcessInfo{Meta: meta, Stdin: lbf.Stdin, Stdout: lbf.Stdout, Stderr: os.Stderr}, nil)
 
 	if err != nil {
 		if errors.Is(err, context.Canceled) && lbf.isErrServerClosed {
@@ -330,11 +335,11 @@ func (lbf *llbBridgeForwarder) Result() (*frontend.Result, error) {
 	return lbf.result, nil
 }
 
-func NewBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, workers frontend.WorkerInfos, inputs map[string]*opspb.Definition, sid string, sm *session.Manager) LLBBridgeForwarder {
+func NewBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, workers worker.Infos, inputs map[string]*opspb.Definition, sid string, sm *session.Manager) LLBBridgeForwarder {
 	return newBridgeForwarder(ctx, llbBridge, workers, inputs, sid, sm)
 }
 
-func newBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, workers frontend.WorkerInfos, inputs map[string]*opspb.Definition, sid string, sm *session.Manager) *llbBridgeForwarder {
+func newBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, workers worker.Infos, inputs map[string]*opspb.Definition, sid string, sm *session.Manager) *llbBridgeForwarder {
 	lbf := &llbBridgeForwarder{
 		callCtx:       ctx,
 		llbBridge:     llbBridge,
@@ -351,7 +356,7 @@ func newBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridg
 	return lbf
 }
 
-func serveLLBBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, workers frontend.WorkerInfos, inputs map[string]*opspb.Definition, sid string, sm *session.Manager) (*llbBridgeForwarder, context.Context, error) {
+func serveLLBBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLBBridge, workers worker.Infos, inputs map[string]*opspb.Definition, sid string, sm *session.Manager) (*llbBridgeForwarder, context.Context, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	lbf := newBridgeForwarder(ctx, llbBridge, workers, inputs, sid, sm)
 	server := grpc.NewServer(grpc.UnaryInterceptor(grpcerrors.UnaryServerInterceptor), grpc.StreamInterceptor(grpcerrors.StreamServerInterceptor))
@@ -443,7 +448,7 @@ type llbBridgeForwarder struct {
 	doneCh            chan struct{} // closed when result or err become valid through a call to a Return
 	result            *frontend.Result
 	err               error
-	workers           frontend.WorkerInfos
+	workers           worker.Infos
 	inputs            map[string]*opspb.Definition
 	isErrServerClosed bool
 	sid               string
@@ -861,21 +866,29 @@ func (lbf *llbBridgeForwarder) NewContainer(ctx context.Context, in *pb.NewConta
 
 		}
 		ctrReq.Mounts = append(ctrReq.Mounts, Mount{
-			Dest:      m.Dest,
-			Selector:  m.Selector,
-			Readonly:  m.Readonly,
-			MountType: m.MountType,
 			WorkerRef: workerRef,
-			CacheOpt:  m.CacheOpt,
-			SecretOpt: m.SecretOpt,
-			SSHOpt:    m.SSHOpt,
+			Mount: &opspb.Mount{
+				Dest:      m.Dest,
+				Selector:  m.Selector,
+				Readonly:  m.Readonly,
+				MountType: m.MountType,
+				CacheOpt:  m.CacheOpt,
+				SecretOpt: m.SecretOpt,
+				SSHOpt:    m.SSHOpt,
+			},
 		})
 	}
 
 	// Not using `ctx` here because it will get cancelled as soon as NewContainer returns
 	// and we want the context to live for the duration of the container.
 	group := session.NewGroup(lbf.sid)
-	ctr, err := NewContainer(context.Background(), lbf.llbBridge, lbf.sm, group, ctrReq)
+
+	w, err := lbf.workers.GetDefault()
+	if err != nil {
+		return nil, stack.Enable(err)
+	}
+
+	ctr, err := NewContainer(context.Background(), w, lbf.sm, group, ctrReq)
 	if err != nil {
 		return nil, stack.Enable(err)
 	}
