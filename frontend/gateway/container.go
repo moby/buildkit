@@ -96,11 +96,13 @@ func NewContainer(ctx context.Context, w worker.Worker, sm *session.Manager, g s
 	ctr.mounts = p.Mounts
 
 	for _, o := range p.OutputRefs {
+		o := o
 		ctr.cleanup = append(ctr.cleanup, func() error {
 			return o.Ref.Release(context.TODO())
 		})
 	}
 	for _, active := range p.Actives {
+		active := active
 		ctr.cleanup = append(ctr.cleanup, func() error {
 			return active.Release(context.TODO())
 		})
