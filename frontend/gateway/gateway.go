@@ -513,7 +513,7 @@ func (lbf *llbBridgeForwarder) wrapSolveError(solveErr error) error {
 		if err != nil {
 			return err
 		}
-		mountIDs, err = lbf.registerResultIDs(ee.Outputs...)
+		mountIDs, err = lbf.registerResultIDs(ee.Mounts...)
 		if err != nil {
 			return err
 		}

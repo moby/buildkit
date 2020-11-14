@@ -133,7 +133,7 @@ func (c *bridgeClient) wrapSolveError(solveErr error) error {
 		if err != nil {
 			return err
 		}
-		mountIDs, err = c.registerResultIDs(ee.Outputs...)
+		mountIDs, err = c.registerResultIDs(ee.Mounts...)
 		if err != nil {
 			return err
 		}
