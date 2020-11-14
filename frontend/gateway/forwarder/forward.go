@@ -21,6 +21,7 @@ import (
 	"github.com/moby/buildkit/worker"
 	"github.com/pkg/errors"
 	fstypes "github.com/tonistiigi/fsutil/types"
+	"golang.org/x/sync/errgroup"
 )
 
 func llbBridgeToGatewayClient(ctx context.Context, llbBridge frontend.FrontendLLBBridge, opts map[string]string, inputs map[string]*opspb.Definition, w worker.Infos, sid string, sm *session.Manager) (*bridgeClient, error) {
@@ -219,44 +220,56 @@ func (c *bridgeClient) NewContainer(ctx context.Context, req client.NewContainer
 	ctrReq := gateway.NewContainerRequest{
 		ContainerID: identity.NewID(),
 		NetMode:     req.NetMode,
+		Mounts:      make([]gateway.Mount, len(req.Mounts)),
 	}
 
-	for _, m := range req.Mounts {
-		var workerRef *worker.WorkerRef
-		if m.Ref != nil {
-			refProxy, ok := m.Ref.(*ref)
-			if !ok {
-				return nil, errors.Errorf("unexpected Ref type: %T", m.Ref)
-			}
+	eg, ctx := errgroup.WithContext(ctx)
 
-			res, err := refProxy.Result(ctx)
-			if err != nil {
-				return nil, err
-			}
+	for i, m := range req.Mounts {
+		i, m := i, m
+		eg.Go(func() error {
+			var workerRef *worker.WorkerRef
+			if m.Ref != nil {
+				refProxy, ok := m.Ref.(*ref)
+				if !ok {
+					return errors.Errorf("unexpected Ref type: %T", m.Ref)
+				}
 
-			workerRef, ok = res.Sys().(*worker.WorkerRef)
-			if !ok {
-				return nil, errors.Errorf("invalid ref: %T", res.Sys())
+				res, err := refProxy.Result(ctx)
+				if err != nil {
+					return err
+				}
+
+				workerRef, ok = res.Sys().(*worker.WorkerRef)
+				if !ok {
+					return errors.Errorf("invalid ref: %T", res.Sys())
+				}
+			} else if m.ResultID != "" {
+				var ok bool
+				workerRef, ok = c.workerRefByID[m.ResultID]
+				if !ok {
+					return errors.Errorf("failed to find ref %s for %q mount", m.ResultID, m.Dest)
+				}
 			}
-		} else if m.ResultID != "" {
-			var ok bool
-			workerRef, ok = c.workerRefByID[m.ResultID]
-			if !ok {
-				return nil, errors.Errorf("failed to find ref %s for %q mount", m.ResultID, m.Dest)
+			ctrReq.Mounts[i] = gateway.Mount{
+				WorkerRef: workerRef,
+				Mount: &opspb.Mount{
+					Dest:      m.Dest,
+					Selector:  m.Selector,
+					Readonly:  m.Readonly,
+					MountType: m.MountType,
+					CacheOpt:  m.CacheOpt,
+					SecretOpt: m.SecretOpt,
+					SSHOpt:    m.SSHOpt,
+				},
 			}
-		}
-		ctrReq.Mounts = append(ctrReq.Mounts, gateway.Mount{
-			WorkerRef: workerRef,
-			Mount: &opspb.Mount{
-				Dest:      m.Dest,
-				Selector:  m.Selector,
-				Readonly:  m.Readonly,
-				MountType: m.MountType,
-				CacheOpt:  m.CacheOpt,
-				SecretOpt: m.SecretOpt,
-				SSHOpt:    m.SSHOpt,
-			},
+			return nil
 		})
+	}
+
+	err := eg.Wait()
+	if err != nil {
+		return nil, err
 	}
 
 	w, err := c.workers.GetDefault()
