@@ -14,13 +14,12 @@ import (
 	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/docker/distribution/reference"
-	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
-	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/imageutil"
 	"github.com/moby/buildkit/util/progress"
+	"github.com/moby/buildkit/util/progress/logs"
 	"github.com/moby/buildkit/util/resolver"
 	"github.com/moby/buildkit/util/resolver/retryhandler"
 	digest "github.com/opencontainers/go-digest"
@@ -83,7 +82,7 @@ func Push(ctx context.Context, sm *session.Manager, sid string, provider content
 		}
 	})
 
-	pushHandler := retryhandler.New(remotes.PushHandler(pusher, provider), loggerFromContext(ctx))
+	pushHandler := retryhandler.New(remotes.PushHandler(pusher, provider), logs.LoggerFromContext(ctx))
 	pushUpdateSourceHandler, err := updateDistributionSourceHandler(manager, pushHandler, ref)
 	if err != nil {
 		return err
@@ -311,14 +310,4 @@ func dedupeHandler(h images.HandlerFunc) images.HandlerFunc {
 		}
 		return res.([]ocispec.Descriptor), nil
 	})
-}
-
-func loggerFromContext(ctx context.Context) func([]byte) {
-	return func(dt []byte) {
-		pw, _, _ := progress.FromContext(ctx)
-		pw.Write(identity.NewID(), client.VertexLog{
-			Stream: 2,
-			Data:   []byte(dt),
-		})
-	}
 }
