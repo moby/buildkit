@@ -5,7 +5,7 @@ go 1.13
 require (
 	github.com/AkihiroSuda/containerd-fuse-overlayfs v1.0.0
 	github.com/BurntSushi/toml v0.3.1
-	github.com/Microsoft/go-winio v0.4.15-0.20200908182639-5b44b70ab3ab
+	github.com/Microsoft/go-winio v0.4.15
 	github.com/Microsoft/hcsshim v0.8.9
 	github.com/codahale/hdrhistogram v0.0.0-20160425231609-f8ad88b59a58 // indirect
 	github.com/containerd/console v1.0.1
