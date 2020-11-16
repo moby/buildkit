@@ -133,7 +133,7 @@ FROM scratch AS release
 COPY --from=releaser /out/ /
 
 FROM git AS buildkit-export
-RUN apk add --no-cache fuse3 && ln -s fusermount3 /usr/bin/fusermount
+RUN apk add --no-cache fuse3 pigz && ln -s fusermount3 /usr/bin/fusermount
 COPY examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
 VOLUME /var/lib/buildkit
 
@@ -283,7 +283,7 @@ RUN ./autogen.sh --disable-nls --disable-man --without-audit --without-selinux -
 
 # Rootless mode.
 FROM alpine AS rootless
-RUN apk add --no-cache fuse3 git xz
+RUN apk add --no-cache fuse3 git xz pigz
 COPY --from=idmap /usr/bin/newuidmap /usr/bin/newuidmap
 COPY --from=idmap /usr/bin/newgidmap /usr/bin/newgidmap
 COPY --from=fuse-overlayfs /out/fuse-overlayfs /usr/bin/
