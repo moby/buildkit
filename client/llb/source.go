@@ -11,6 +11,7 @@ import (
 	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
+	"github.com/moby/buildkit/util/sshutil"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
@@ -200,6 +201,7 @@ type ImageInfo struct {
 func Git(remote, ref string, opts ...GitOption) State {
 	url := ""
 	isSSH := true
+	var sshHost string
 
 	for _, prefix := range []string{
 		"http://", "https://",
@@ -219,8 +221,12 @@ func Git(remote, ref string, opts ...GitOption) State {
 			//sshUser = parts[0]
 			remote = parts[1]
 		}
-		// keep remote consistent with http(s) version
-		remote = strings.Replace(remote, ":", "/", 1)
+		parts = strings.SplitN(remote, ":", 2)
+		if len(parts) == 2 {
+			sshHost = parts[0]
+			// keep remote consistent with http(s) version
+			remote = parts[0] + "/" + parts[1]
+		}
 	}
 
 	id := remote
@@ -257,12 +263,23 @@ func Git(remote, ref string, opts ...GitOption) State {
 			addCap(&gi.Constraints, pb.CapSourceGitHTTPAuth)
 		}
 	}
-	if gi.KnownSSHHosts != "" {
-		attrs[pb.AttrKnownSSHHosts] = gi.KnownSSHHosts
+	if isSSH {
+		if gi.KnownSSHHosts != "" {
+			attrs[pb.AttrKnownSSHHosts] = gi.KnownSSHHosts
+		} else if sshHost != "" {
+			keyscan, err := sshutil.SSHKeyScan(sshHost)
+			if err == nil {
+				// best effort
+				attrs[pb.AttrKnownSSHHosts] = keyscan
+			}
+		}
 		addCap(&gi.Constraints, pb.CapSourceGitKnownSSHHosts)
-	}
-	if gi.MountSSHSock != "" {
-		attrs[pb.AttrMountSSHSock] = gi.MountSSHSock
+
+		if gi.MountSSHSock == "" {
+			attrs[pb.AttrMountSSHSock] = "default"
+		} else {
+			attrs[pb.AttrMountSSHSock] = gi.MountSSHSock
+		}
 		addCap(&gi.Constraints, pb.CapSourceGitMountSSHSock)
 	}
 
