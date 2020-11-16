@@ -199,14 +199,28 @@ type ImageInfo struct {
 
 func Git(remote, ref string, opts ...GitOption) State {
 	url := ""
+	isSSH := true
 
 	for _, prefix := range []string{
-		"http://", "https://", "git://", "git@",
+		"http://", "https://",
 	} {
 		if strings.HasPrefix(remote, prefix) {
 			url = strings.Split(remote, "#")[0]
 			remote = strings.TrimPrefix(remote, prefix)
+			isSSH = false
+			break
 		}
+	}
+	if isSSH {
+		remote = strings.TrimPrefix(remote, "git://")
+		url = remote
+		parts := strings.SplitN(remote, "@", 2)
+		if len(parts) == 2 {
+			//sshUser = parts[0]
+			remote = parts[1]
+		}
+		// keep remote consistent with http(s) version
+		remote = strings.Replace(remote, ":", "/", 1)
 	}
 
 	id := remote
