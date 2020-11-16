@@ -10,6 +10,7 @@ import (
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver/errdefs"
+	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/tracing"
@@ -621,7 +622,9 @@ func (s *sharedOp) LoadCache(ctx context.Context, rec *CacheRecord) (Result, err
 // evaluated, hence "slow" cache.
 func (s *sharedOp) CalcSlowCache(ctx context.Context, index Index, p PreprocessFunc, f ResultBasedCacheFunc, res Result) (dgst digest.Digest, err error) {
 	defer func() {
-		err = errdefs.WrapVertex(WrapSlowCache(err, index, NewSharedResult(res).Clone()), s.st.origDigest)
+		err = WrapSlowCache(err, index, NewSharedResult(res).Clone())
+		err = errdefs.WithOp(err, s.st.vtx.Sys().(*pb.Op))
+		err = errdefs.WrapVertex(err, s.st.origDigest)
 	}()
 	key, err := s.g.Do(ctx, fmt.Sprintf("slow-compute-%d", index), func(ctx context.Context) (interface{}, error) {
 		s.slowMu.Lock()
@@ -683,6 +686,7 @@ func (s *sharedOp) CalcSlowCache(ctx context.Context, index Index, p PreprocessF
 
 func (s *sharedOp) CacheMap(ctx context.Context, index int) (resp *cacheMapResp, err error) {
 	defer func() {
+		err = errdefs.WithOp(err, s.st.vtx.Sys().(*pb.Op))
 		err = errdefs.WrapVertex(err, s.st.origDigest)
 	}()
 	op, err := s.getOp()
@@ -741,6 +745,7 @@ func (s *sharedOp) CacheMap(ctx context.Context, index int) (resp *cacheMapResp,
 
 func (s *sharedOp) Exec(ctx context.Context, inputs []Result) (outputs []Result, exporters []ExportableCacheKey, err error) {
 	defer func() {
+		err = errdefs.WithOp(err, s.st.vtx.Sys().(*pb.Op))
 		err = errdefs.WrapVertex(err, s.st.origDigest)
 	}()
 	op, err := s.getOp()

@@ -1118,6 +1118,17 @@ func testClientGatewayExecError(t *testing.T, sb integration.Sandbox) {
 				llb.AddMount("/readonly", llb.Scratch(), llb.Readonly),
 			).Root(),
 			2, []string{"/data"},
+		}, {
+			"rootfs and readwrite force no output mount",
+			llb.Image("busybox:latest").Run(
+				llb.Shlexf(`sh -c "echo %s > /data && echo %s > /rw/data && fail"`, id, id),
+				llb.AddMount(
+					"/rw",
+					llb.Scratch().File(llb.Mkfile("foo", 0700, []byte(id))),
+					llb.ForceNoOutput,
+				),
+			).Root(),
+			2, []string{"/data", "/rw/data", "/rw/foo"},
 		}}
 
 		for _, tt := range tests {
@@ -1216,7 +1227,7 @@ func testClientGatewayExecError(t *testing.T, sb integration.Sandbox) {
 	_, err = c.Build(ctx, SolveOpt{}, "buildkit_test", b, nil)
 	require.NoError(t, err)
 
-	// checkAllReleasable(t, c, sb, true)
+	checkAllReleasable(t, c, sb, true)
 }
 
 // testClientGatewaySlowCacheExecError is testing gateway exec into the ref

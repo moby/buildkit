@@ -229,14 +229,6 @@ func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 		return e.cm.New(ctx, ref, g, cache.WithDescription(desc))
 	})
 	defer func() {
-		for i := len(p.Actives) - 1; i >= 0; i-- { // call in LIFO order
-			p.Actives[i].Release(context.TODO())
-		}
-		for _, o := range p.OutputRefs {
-			if o.Ref != nil {
-				o.Ref.Release(context.TODO())
-			}
-		}
 		if err != nil {
 			execInputs := make([]solver.Result, len(e.op.Mounts))
 			for i, m := range e.op.Mounts {
@@ -246,10 +238,29 @@ func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 				execInputs[i] = inputs[m.Input]
 			}
 			execMounts := make([]solver.Result, len(e.op.Mounts))
+			copy(execMounts, execInputs)
 			for i, res := range results {
 				execMounts[p.OutputRefs[i].MountIndex] = res
 			}
+			for _, active := range p.Actives {
+				ref, cerr := active.Ref.Commit(ctx)
+				if cerr != nil {
+					err = errors.Wrapf(err, "error committing %s: %s", active.Ref.ID(), cerr)
+					continue
+				}
+				execMounts[active.MountIndex] = worker.NewWorkerRefResult(ref, e.w)
+			}
 			err = errdefs.WithExecError(err, execInputs, execMounts)
+		} else {
+			// Only release actives if err is nil.
+			for i := len(p.Actives) - 1; i >= 0; i-- { // call in LIFO order
+				p.Actives[i].Ref.Release(context.TODO())
+			}
+		}
+		for _, o := range p.OutputRefs {
+			if o.Ref != nil {
+				o.Ref.Release(context.TODO())
+			}
 		}
 	}()
 	if err != nil {

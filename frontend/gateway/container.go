@@ -85,7 +85,7 @@ func NewContainer(ctx context.Context, w worker.Worker, sm *session.Manager, g s
 	})
 	if err != nil {
 		for i := len(p.Actives) - 1; i >= 0; i-- { // call in LIFO order
-			p.Actives[i].Release(context.TODO())
+			p.Actives[i].Ref.Release(context.TODO())
 		}
 		for _, o := range p.OutputRefs {
 			o.Ref.Release(context.TODO())
@@ -104,7 +104,7 @@ func NewContainer(ctx context.Context, w worker.Worker, sm *session.Manager, g s
 	for _, active := range p.Actives {
 		active := active
 		ctr.cleanup = append(ctr.cleanup, func() error {
-			return active.Release(context.TODO())
+			return active.Ref.Release(context.TODO())
 		})
 	}
 
@@ -115,12 +115,17 @@ type PreparedMounts struct {
 	Root           executor.Mount
 	ReadonlyRootFS bool
 	Mounts         []executor.Mount
-	OutputRefs     []OutputRef
-	Actives        []cache.MutableRef
+	OutputRefs     []MountRef
+	Actives        []MountMutableRef
 }
 
-type OutputRef struct {
+type MountRef struct {
 	Ref        cache.Ref
+	MountIndex int
+}
+
+type MountMutableRef struct {
+	Ref        cache.MutableRef
 	MountIndex int
 }
 
@@ -140,7 +145,7 @@ func PrepareMounts(ctx context.Context, mm *mounts.MountManager, cm cache.Manage
 
 		// if mount is based on input validate and load it
 		if m.Input != opspb.Empty {
-			if int(m.Input) > len(refs) {
+			if int(m.Input) >= len(refs) {
 				return p, errors.Errorf("missing input %d", m.Input)
 			}
 			ref = refs[int(m.Input)].ImmutableRef
@@ -153,7 +158,7 @@ func PrepareMounts(ctx context.Context, mm *mounts.MountManager, cm cache.Manage
 			if m.Output != opspb.SkipOutput {
 				// if it is readonly and not root then output is the input
 				if m.Readonly && ref != nil && m.Dest != opspb.RootMount {
-					p.OutputRefs = append(p.OutputRefs, OutputRef{
+					p.OutputRefs = append(p.OutputRefs, MountRef{
 						MountIndex: i,
 						Ref:        ref.Clone(),
 					})
@@ -164,7 +169,7 @@ func PrepareMounts(ctx context.Context, mm *mounts.MountManager, cm cache.Manage
 						return p, err
 					}
 					mountable = active
-					p.OutputRefs = append(p.OutputRefs, OutputRef{
+					p.OutputRefs = append(p.OutputRefs, MountRef{
 						MountIndex: i,
 						Ref:        active,
 					})
@@ -175,7 +180,10 @@ func PrepareMounts(ctx context.Context, mm *mounts.MountManager, cm cache.Manage
 				if err != nil {
 					return p, err
 				}
-				p.Actives = append(p.Actives, active)
+				p.Actives = append(p.Actives, MountMutableRef{
+					MountIndex: i,
+					Ref:        active,
+				})
 				mountable = active
 			}
 
@@ -185,9 +193,12 @@ func PrepareMounts(ctx context.Context, mm *mounts.MountManager, cm cache.Manage
 				return p, err
 			}
 			mountable = active
-			p.Actives = append(p.Actives, active)
+			p.Actives = append(p.Actives, MountMutableRef{
+				MountIndex: i,
+				Ref:        active,
+			})
 			if m.Output != opspb.SkipOutput && ref != nil {
-				p.OutputRefs = append(p.OutputRefs, OutputRef{
+				p.OutputRefs = append(p.OutputRefs, MountRef{
 					MountIndex: i,
 					Ref:        ref.Clone(),
 				})
@@ -232,7 +243,10 @@ func PrepareMounts(ctx context.Context, mm *mounts.MountManager, cm cache.Manage
 				if err != nil {
 					return p, err
 				}
-				p.Actives = append(p.Actives, active)
+				p.Actives = append(p.Actives, MountMutableRef{
+					MountIndex: i,
+					Ref:        active,
+				})
 				root = active
 			}
 			p.Root = mountWithSession(root, g)

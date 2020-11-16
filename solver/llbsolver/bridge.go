@@ -198,21 +198,6 @@ func (rp *resultProxy) wrapError(err error) error {
 				}
 			}
 		}
-
-		var op *pb.Op
-		for _, dt := range rp.def.Def {
-			var curr pb.Op
-			if err := (&curr).Unmarshal(dt); err != nil {
-				return errors.Wrap(err, "failed to parse llb proto op")
-			}
-			if ve.Digest == digest.FromBytes(dt).String() {
-				op = &curr
-				break
-			}
-		}
-		if op != nil {
-			err = errdefs.WithOp(err, op)
-		}
 	}
 	return err
 }
