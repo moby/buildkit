@@ -5,6 +5,7 @@ import (
 	_ "crypto/sha256" // for opencontainers/go-digest
 	"encoding/json"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -198,30 +199,55 @@ type ImageInfo struct {
 	RecordType    string
 }
 
-func Git(remote, ref string, opts ...GitOption) State {
-	url := ""
-	isSSH := true
-	var sshHost string
+const (
+	gitProtocolHTTP = iota + 1
+	gitProtocolHTTPS
+	gitProtocolSSH
+	gitProtocolGit
+	gitProtocolUnknown
+)
 
-	for _, prefix := range []string{
-		"http://", "https://",
-	} {
+var gitSSHRegex = regexp.MustCompile("^([a-z0-9]+@)?[^:]+:.*$")
+
+func getGitProtocol(remote string) (string, int) {
+	prefixes := map[string]int{
+		"http://":  gitProtocolHTTP,
+		"https://": gitProtocolHTTPS,
+		"git://":   gitProtocolGit,
+		"ssh://":   gitProtocolSSH,
+	}
+	protocolType := gitProtocolUnknown
+	for prefix, potentialType := range prefixes {
 		if strings.HasPrefix(remote, prefix) {
-			url = strings.Split(remote, "#")[0]
 			remote = strings.TrimPrefix(remote, prefix)
-			isSSH = false
-			break
+			protocolType = potentialType
 		}
 	}
-	if isSSH {
-		remote = strings.TrimPrefix(remote, "git://")
-		url = remote
+
+	if protocolType == gitProtocolUnknown && gitSSHRegex.MatchString(remote) {
+		protocolType = gitProtocolSSH
+	}
+
+	// remove name from ssh
+	if protocolType == gitProtocolSSH {
 		parts := strings.SplitN(remote, "@", 2)
 		if len(parts) == 2 {
-			//sshUser = parts[0]
 			remote = parts[1]
 		}
-		parts = strings.SplitN(remote, ":", 2)
+	}
+
+	return remote, protocolType
+}
+
+func Git(remote, ref string, opts ...GitOption) State {
+	url := strings.Split(remote, "#")[0]
+
+	var protocolType int
+	remote, protocolType = getGitProtocol(remote)
+
+	var sshHost string
+	if protocolType == gitProtocolSSH {
+		parts := strings.SplitN(remote, ":", 2)
 		if len(parts) == 2 {
 			sshHost = parts[0]
 			// keep remote consistent with http(s) version
@@ -263,7 +289,7 @@ func Git(remote, ref string, opts ...GitOption) State {
 			addCap(&gi.Constraints, pb.CapSourceGitHTTPAuth)
 		}
 	}
-	if isSSH {
+	if protocolType == gitProtocolSSH {
 		if gi.KnownSSHHosts != "" {
 			attrs[pb.AttrKnownSSHHosts] = gi.KnownSSHHosts
 		} else if sshHost != "" {
