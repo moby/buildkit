@@ -15,8 +15,10 @@ import (
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/imageutil"
+	"github.com/moby/buildkit/util/progress/logs"
 	"github.com/moby/buildkit/util/pull/pullprogress"
 	"github.com/moby/buildkit/util/resolver"
+	"github.com/moby/buildkit/util/resolver/retryhandler"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -146,7 +148,7 @@ func (p *Puller) PullManifests(ctx context.Context) (*PulledManifests, error) {
 		}
 		handlers = append(handlers,
 			filterLayerBlobs(metadata, &mu),
-			remotes.FetchHandler(p.ContentStore, fetcher),
+			retryhandler.New(remotes.FetchHandler(p.ContentStore, fetcher), logs.LoggerFromContext(ctx)),
 			childrenHandler,
 			dslHandler,
 		)
