@@ -5,12 +5,14 @@ import (
 	_ "crypto/sha256" // for opencontainers/go-digest
 	"encoding/json"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
+	"github.com/moby/buildkit/util/sshutil"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
@@ -197,15 +199,59 @@ type ImageInfo struct {
 	RecordType    string
 }
 
-func Git(remote, ref string, opts ...GitOption) State {
-	url := ""
+const (
+	gitProtocolHTTP = iota + 1
+	gitProtocolHTTPS
+	gitProtocolSSH
+	gitProtocolGit
+	gitProtocolUnknown
+)
 
-	for _, prefix := range []string{
-		"http://", "https://", "git://", "git@",
-	} {
+var gitSSHRegex = regexp.MustCompile("^([a-z0-9]+@)?[^:]+:.*$")
+
+func getGitProtocol(remote string) (string, int) {
+	prefixes := map[string]int{
+		"http://":  gitProtocolHTTP,
+		"https://": gitProtocolHTTPS,
+		"git://":   gitProtocolGit,
+		"ssh://":   gitProtocolSSH,
+	}
+	protocolType := gitProtocolUnknown
+	for prefix, potentialType := range prefixes {
 		if strings.HasPrefix(remote, prefix) {
-			url = strings.Split(remote, "#")[0]
 			remote = strings.TrimPrefix(remote, prefix)
+			protocolType = potentialType
+		}
+	}
+
+	if protocolType == gitProtocolUnknown && gitSSHRegex.MatchString(remote) {
+		protocolType = gitProtocolSSH
+	}
+
+	// remove name from ssh
+	if protocolType == gitProtocolSSH {
+		parts := strings.SplitN(remote, "@", 2)
+		if len(parts) == 2 {
+			remote = parts[1]
+		}
+	}
+
+	return remote, protocolType
+}
+
+func Git(remote, ref string, opts ...GitOption) State {
+	url := strings.Split(remote, "#")[0]
+
+	var protocolType int
+	remote, protocolType = getGitProtocol(remote)
+
+	var sshHost string
+	if protocolType == gitProtocolSSH {
+		parts := strings.SplitN(remote, ":", 2)
+		if len(parts) == 2 {
+			sshHost = parts[0]
+			// keep remote consistent with http(s) version
+			remote = parts[0] + "/" + parts[1]
 		}
 	}
 
@@ -243,12 +289,23 @@ func Git(remote, ref string, opts ...GitOption) State {
 			addCap(&gi.Constraints, pb.CapSourceGitHTTPAuth)
 		}
 	}
-	if gi.KnownSSHHosts != "" {
-		attrs[pb.AttrKnownSSHHosts] = gi.KnownSSHHosts
+	if protocolType == gitProtocolSSH {
+		if gi.KnownSSHHosts != "" {
+			attrs[pb.AttrKnownSSHHosts] = gi.KnownSSHHosts
+		} else if sshHost != "" {
+			keyscan, err := sshutil.SSHKeyScan(sshHost)
+			if err == nil {
+				// best effort
+				attrs[pb.AttrKnownSSHHosts] = keyscan
+			}
+		}
 		addCap(&gi.Constraints, pb.CapSourceGitKnownSSHHosts)
-	}
-	if gi.MountSSHSock != "" {
-		attrs[pb.AttrMountSSHSock] = gi.MountSSHSock
+
+		if gi.MountSSHSock == "" {
+			attrs[pb.AttrMountSSHSock] = "default"
+		} else {
+			attrs[pb.AttrMountSSHSock] = gi.MountSSHSock
+		}
 		addCap(&gi.Constraints, pb.CapSourceGitMountSSHSock)
 	}
 
