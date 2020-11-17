@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/containerd/containerd"
 	"github.com/docker/distribution/reference"
 	"github.com/gogo/googleapis/google/rpc"
 	gogotypes "github.com/gogo/protobuf/types"
@@ -1170,7 +1169,7 @@ func (lbf *llbBridgeForwarder) ExecProcess(srv pb.LLBBridge_ExecProcessServer) e
 					var exitError *errdefs.ExitError
 					var statusError *rpc.Status
 					if err != nil {
-						statusCode = containerd.UnknownExitStatus
+						statusCode = errdefs.ContainerdUnknownExitStatus
 						st, _ := status.FromError(grpcerrors.ToGRPC(err))
 						stp := st.Proto()
 						statusError = &rpc.Status{
