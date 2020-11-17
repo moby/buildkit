@@ -555,7 +555,7 @@ func TestFileParallelActions(t *testing.T) {
 
 func newTestFileSolver() (*FileOpSolver, *testFileRefBackend) {
 	trb := &testFileRefBackend{refs: map[*testFileRef]struct{}{}, mounts: map[string]*testMount{}}
-	return NewFileOpSolver(&testFileBackend{}, trb), trb
+	return NewFileOpSolver(nil, &testFileBackend{}, trb), trb
 }
 
 type testFileRef struct {
@@ -581,6 +581,7 @@ type testMount struct {
 	callback  func()
 	unmounted bool
 	active    *testFileRef
+	readonly  bool
 }
 
 func (tm *testMount) addUser(user, group fileoptypes.Mount) {
@@ -615,6 +616,10 @@ func (tm *testMount) Release(ctx context.Context) error {
 		return tm.active.Release(ctx)
 	}
 	return nil
+}
+
+func (tm *testMount) Readonly() bool {
+	return tm.readonly
 }
 
 type testFileBackend struct {
@@ -674,7 +679,7 @@ func (b *testFileRefBackend) Prepare(ctx context.Context, ref fileoptypes.Ref, r
 	rr := ref.(*testFileRef)
 	m := rr.mount
 	if m == nil {
-		m = &testMount{b: b, id: "mount-" + rr.id, callback: rr.callback}
+		m = &testMount{b: b, id: "mount-" + rr.id, callback: rr.callback, readonly: readonly}
 	}
 	m.initID = m.id
 	m.active = active

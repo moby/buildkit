@@ -44,6 +44,9 @@ func TestClientGatewayIntegration(t *testing.T) {
 		testClientGatewayContainerExecTty,
 		testClientSlowCacheRootfsRef,
 		testClientGatewayContainerPlatformPATH,
+		testClientGatewayExecError,
+		testClientGatewaySlowCacheExecError,
+		testClientGatewayExecFileActionError,
 	}, integration.WithMirroredImages(integration.OfficialImages("busybox:latest")))
 }
 
@@ -935,6 +938,7 @@ func testClientGatewayContainerExecTty(t *testing.T, sb integration.Sandbox) {
 
 func testClientSlowCacheRootfsRef(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
+
 	ctx := context.TODO()
 
 	c, err := New(ctx, sb.Address())
@@ -1066,6 +1070,410 @@ func testClientGatewayContainerPlatformPATH(t *testing.T, sb integration.Sandbox
 
 	_, err = c.Build(ctx, SolveOpt{}, product, b, nil)
 	require.NoError(t, err)
+	checkAllReleasable(t, c, sb, true)
+}
+
+// testClientGatewayExecError is testing gateway exec to recreate the container
+// process for a failed execop.
+func testClientGatewayExecError(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+
+	ctx := context.TODO()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
+		id := identity.NewID()
+		tests := []struct {
+			Name      string
+			State     llb.State
+			NumMounts int
+			Paths     []string
+		}{{
+			"only rootfs",
+			llb.Image("busybox:latest").Run(
+				llb.Shlexf(`sh -c "echo %s > /data && fail"`, id),
+			).Root(),
+			1, []string{"/data"},
+		}, {
+			"rootfs and readwrite scratch mount",
+			llb.Image("busybox:latest").Run(
+				llb.Shlexf(`sh -c "echo %s > /data && echo %s > /rw/data && fail"`, id, id),
+				llb.AddMount("/rw", llb.Scratch()),
+			).Root(),
+			2, []string{"/data", "/rw/data"},
+		}, {
+			"rootfs and readwrite mount",
+			llb.Image("busybox:latest").Run(
+				llb.Shlexf(`sh -c "echo %s > /data && echo %s > /rw/data && fail"`, id, id),
+				llb.AddMount("/rw", llb.Scratch().File(llb.Mkfile("foo", 0700, []byte(id)))),
+			).Root(),
+			2, []string{"/data", "/rw/data", "/rw/foo"},
+		}, {
+			"rootfs and readonly scratch mount",
+			llb.Image("busybox:latest").Run(
+				llb.Shlexf(`sh -c "echo %s > /data && echo %s > /readonly/foo"`, id, id),
+				llb.AddMount("/readonly", llb.Scratch(), llb.Readonly),
+			).Root(),
+			2, []string{"/data"},
+		}, {
+			"rootfs and readwrite force no output mount",
+			llb.Image("busybox:latest").Run(
+				llb.Shlexf(`sh -c "echo %s > /data && echo %s > /rw/data && fail"`, id, id),
+				llb.AddMount(
+					"/rw",
+					llb.Scratch().File(llb.Mkfile("foo", 0700, []byte(id))),
+					llb.ForceNoOutput,
+				),
+			).Root(),
+			2, []string{"/data", "/rw/data", "/rw/foo"},
+		}}
+
+		for _, tt := range tests {
+			tt := tt
+			t.Run(tt.Name, func(t *testing.T) {
+				def, err := tt.State.Marshal(ctx)
+				require.NoError(t, err)
+
+				_, solveErr := c.Solve(ctx, client.SolveRequest{
+					Evaluate:   true,
+					Definition: def.ToPB(),
+				})
+				require.Error(t, solveErr)
+
+				var se *errdefs.SolveError
+				require.True(t, errors.As(solveErr, &se))
+				require.Len(t, se.InputIDs, tt.NumMounts)
+				require.Len(t, se.MountIDs, tt.NumMounts)
+
+				op := se.Solve.Op
+				require.NotNil(t, op)
+				require.NotNil(t, op.Op)
+
+				opExec, ok := se.Solve.Op.Op.(*pb.Op_Exec)
+				require.True(t, ok)
+
+				exec := opExec.Exec
+
+				var mounts []client.Mount
+				for i, mnt := range exec.Mounts {
+					mounts = append(mounts, client.Mount{
+						Selector:  mnt.Selector,
+						Dest:      mnt.Dest,
+						ResultID:  se.Solve.MountIDs[i],
+						Readonly:  mnt.Readonly,
+						MountType: mnt.MountType,
+						CacheOpt:  mnt.CacheOpt,
+						SecretOpt: mnt.SecretOpt,
+						SSHOpt:    mnt.SSHOpt,
+					})
+				}
+
+				ctr, err := c.NewContainer(ctx, client.NewContainerRequest{
+					Mounts:      mounts,
+					NetMode:     exec.Network,
+					Platform:    op.Platform,
+					Constraints: op.Constraints,
+				})
+				require.NoError(t, err)
+				defer ctr.Release(ctx)
+
+				inputR, inputW := io.Pipe()
+				defer inputW.Close()
+				defer inputR.Close()
+
+				pid1Output := bytes.NewBuffer(nil)
+
+				prompt := newTestPrompt(ctx, t, inputW, pid1Output)
+				pid1, err := ctr.Start(ctx, client.StartRequest{
+					Args:   []string{"sh"},
+					Tty:    true,
+					Stdin:  inputR,
+					Stdout: &nopCloser{pid1Output},
+					Stderr: &nopCloser{pid1Output},
+					Env:    []string{fmt.Sprintf("PS1=%s", prompt.String())},
+				})
+				require.NoError(t, err)
+
+				meta := exec.Meta
+				for _, p := range tt.Paths {
+					output := bytes.NewBuffer(nil)
+					proc, err := ctr.Start(ctx, client.StartRequest{
+						Args:         []string{"cat", p},
+						Env:          meta.Env,
+						User:         meta.User,
+						Cwd:          meta.Cwd,
+						Stdout:       &nopCloser{output},
+						SecurityMode: exec.Security,
+					})
+					require.NoError(t, err)
+
+					err = proc.Wait()
+					require.NoError(t, err)
+					require.Equal(t, id, strings.TrimSpace(output.String()))
+				}
+
+				prompt.SendExit(0)
+				err = pid1.Wait()
+				require.NoError(t, err)
+			})
+		}
+
+		return client.NewResult(), nil
+	}
+
+	_, err = c.Build(ctx, SolveOpt{}, "buildkit_test", b, nil)
+	require.NoError(t, err)
+
+	checkAllReleasable(t, c, sb, true)
+}
+
+// testClientGatewaySlowCacheExecError is testing gateway exec into the ref
+// that failed to mount during an execop.
+func testClientGatewaySlowCacheExecError(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+
+	ctx := context.TODO()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	id := identity.NewID()
+	input := llb.Scratch().File(
+		llb.Mkdir("/found", 0700).
+			Mkfile("/found/data", 0600, []byte(id)),
+	)
+
+	st := llb.Image("busybox:latest").Run(
+		llb.Shlexf("echo hello"),
+		// Only readonly mounts trigger slow cache errors.
+		llb.AddMount("/src", input, llb.SourcePath("/notfound"), llb.Readonly),
+	).Root()
+
+	def, err := st.Marshal(ctx)
+	require.NoError(t, err)
+
+	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
+		_, solveErr := c.Solve(ctx, client.SolveRequest{
+			Evaluate:   true,
+			Definition: def.ToPB(),
+		})
+		require.Error(t, solveErr)
+
+		var se *errdefs.SolveError
+		require.True(t, errors.As(solveErr, &se))
+
+		_, ok := se.Solve.Op.Op.(*pb.Op_Exec)
+		require.True(t, ok)
+
+		_, ok = se.Solve.Subject.(*errdefs.Solve_Cache)
+		require.True(t, ok)
+		// Slow cache errors should only have exactly one input and no outputs.
+		require.Len(t, se.Solve.InputIDs, 1)
+		require.Len(t, se.Solve.MountIDs, 0)
+
+		st := llb.Image("busybox:latest")
+		def, err := st.Marshal(ctx)
+		require.NoError(t, err)
+
+		res, err := c.Solve(ctx, client.SolveRequest{
+			Definition: def.ToPB(),
+		})
+		require.NoError(t, err)
+
+		ref, err := res.SingleRef()
+		require.NoError(t, err)
+
+		ctr, err := c.NewContainer(ctx, client.NewContainerRequest{
+			Mounts: []client.Mount{{
+				Dest:      "/",
+				MountType: pb.MountType_BIND,
+				Ref:       ref,
+			}, {
+				Dest:      "/problem",
+				MountType: pb.MountType_BIND,
+				ResultID:  se.Solve.InputIDs[0],
+			}},
+		})
+		require.NoError(t, err)
+		defer ctr.Release(ctx)
+
+		output := bytes.NewBuffer(nil)
+		proc, err := ctr.Start(ctx, client.StartRequest{
+			Args:   []string{"cat", "/problem/found/data"},
+			Stdout: &nopCloser{output},
+		})
+		require.NoError(t, err)
+
+		err = proc.Wait()
+		require.NoError(t, err)
+		require.Equal(t, id, strings.TrimSpace(output.String()))
+
+		return client.NewResult(), nil
+	}
+
+	_, err = c.Build(ctx, SolveOpt{}, "buildkit_test", b, nil)
+	require.NoError(t, err)
+
+	checkAllReleasable(t, c, sb, true)
+}
+
+// testClientGatewayExecFileActionError is testing gateway exec into the modified
+// mount of a failed fileop during a solve.
+func testClientGatewayExecFileActionError(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+
+	ctx := context.TODO()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
+		st := llb.Image("busybox:latest")
+		def, err := st.Marshal(ctx)
+		require.NoError(t, err)
+
+		res, err := c.Solve(ctx, client.SolveRequest{
+			Definition: def.ToPB(),
+		})
+		require.NoError(t, err)
+
+		debugfs, err := res.SingleRef()
+		require.NoError(t, err)
+
+		id := identity.NewID()
+		tests := []struct {
+			Name       string
+			State      llb.State
+			NumInputs  int
+			NumOutputs int
+			Path       string
+		}{{
+			"mkfile",
+			llb.Scratch().File(
+				llb.Mkdir("/found", 0700).
+					Mkfile("/found/foo", 0600, []byte(id)).
+					Mkfile("/notfound/foo", 0600, []byte(id)),
+			),
+			0, 3, "/input/found/foo",
+		}, {
+			"copy from input",
+			llb.Image("busybox").File(
+				llb.Copy(
+					llb.Scratch().File(
+						llb.Mkdir("/foo", 0600).Mkfile("/foo/bar", 0700, []byte(id)),
+					),
+					"/foo/bar",
+					"/notfound/baz",
+				),
+			),
+			2, 1, "/secondary/foo/bar",
+		}, {
+			"copy from action",
+			llb.Image("busybox").File(
+				llb.Copy(
+					llb.Mkdir("/foo", 0600).Mkfile("/foo/bar", 0700, []byte(id)).WithState(llb.Scratch()),
+					"/foo/bar",
+					"/notfound/baz",
+				),
+			),
+			1, 3, "/secondary/foo/bar",
+		}}
+
+		for _, tt := range tests {
+			tt := tt
+			t.Run(tt.Name, func(t *testing.T) {
+				def, err := tt.State.Marshal(ctx)
+				require.NoError(t, err)
+
+				_, err = c.Solve(ctx, client.SolveRequest{
+					Evaluate:   true,
+					Definition: def.ToPB(),
+				})
+				require.Error(t, err)
+
+				var se *errdefs.SolveError
+				require.True(t, errors.As(err, &se))
+				require.Len(t, se.Solve.InputIDs, tt.NumInputs)
+
+				// There is one output for every action in the fileop that failed.
+				require.Len(t, se.Solve.MountIDs, tt.NumOutputs)
+
+				op, ok := se.Solve.Op.Op.(*pb.Op_File)
+				require.True(t, ok)
+
+				subject, ok := se.Solve.Subject.(*errdefs.Solve_File)
+				require.True(t, ok)
+
+				// Retrieve the action that failed from the sbuject.
+				idx := subject.File.Index
+				require.Less(t, int(idx), len(op.File.Actions))
+				action := op.File.Actions[idx]
+
+				// The output for a file action is mapped by its index.
+				inputID := se.MountIDs[idx]
+
+				var secondaryID string
+				if action.SecondaryInput != -1 {
+					// If the secondary input is a result from another exec, it will be one
+					// of the input IDs, otherwise it's a intermediary mutable from another
+					// action in the same fileop.
+					if int(action.SecondaryInput) < len(se.InputIDs) {
+						secondaryID = se.InputIDs[action.SecondaryInput]
+					} else {
+						secondaryID = se.MountIDs[int(action.SecondaryInput)-len(se.InputIDs)]
+					}
+				}
+
+				mounts := []client.Mount{{
+					Dest:      "/",
+					MountType: pb.MountType_BIND,
+					Ref:       debugfs,
+				}, {
+					Dest:      "/input",
+					MountType: pb.MountType_BIND,
+					ResultID:  inputID,
+				}}
+
+				if secondaryID != "" {
+					mounts = append(mounts, client.Mount{
+						Dest:      "/secondary",
+						MountType: pb.MountType_BIND,
+						ResultID:  secondaryID,
+					})
+				}
+
+				ctr, err := c.NewContainer(ctx, client.NewContainerRequest{Mounts: mounts})
+				require.NoError(t, err)
+
+				// Verify that the randomly generated data can be found in a mutable ref
+				// created by the actions that have succeeded.
+				output := bytes.NewBuffer(nil)
+				proc, err := ctr.Start(ctx, client.StartRequest{
+					Args:   []string{"cat", tt.Path},
+					Stdout: &nopCloser{output},
+				})
+				require.NoError(t, err)
+
+				err = proc.Wait()
+				require.NoError(t, err)
+				require.Equal(t, id, strings.TrimSpace(output.String()))
+
+				err = ctr.Release(ctx)
+				require.NoError(t, err)
+			})
+		}
+
+		return client.NewResult(), nil
+	}
+
+	_, err = c.Build(ctx, SolveOpt{}, "buildkit_test", b, nil)
+	require.NoError(t, err)
+
 	checkAllReleasable(t, c, sb, true)
 }
 
