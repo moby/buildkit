@@ -70,12 +70,17 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 		return nil, nil, err
 	}
 
+	hostname := defaultHostname
+	if meta.Hostname != "" {
+		hostname = meta.Hostname
+	}
+
 	opts = append(opts,
 		oci.WithProcessArgs(meta.Args...),
 		oci.WithEnv(meta.Env),
 		oci.WithProcessCwd(meta.Cwd),
 		oci.WithNewPrivileges,
-		oci.WithHostname("buildkitsandbox"),
+		oci.WithHostname(hostname),
 	)
 
 	s, err := oci.GenerateSpec(ctx, nil, c, opts...)

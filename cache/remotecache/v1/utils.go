@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/solver"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
@@ -237,6 +238,10 @@ func marshalRemote(r *solver.Remote, state *marshalState) string {
 		parentID = marshalRemote(r2, state)
 	}
 	desc := r.Descriptors[len(r.Descriptors)-1]
+
+	if desc.Digest == exptypes.EmptyGZLayer {
+		return parentID
+	}
 
 	state.descriptors[desc.Digest] = DescriptorProviderPair{
 		Descriptor: desc,

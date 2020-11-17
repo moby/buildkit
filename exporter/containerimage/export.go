@@ -184,7 +184,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	}
 	defer done(context.TODO())
 
-	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes, e.layerCompression)
+	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes, e.layerCompression, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -233,35 +233,38 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 				tagDone(nil)
 
 				if e.unpack {
-					if err := e.unpackImage(ctx, img, src); err != nil {
+					if err := e.unpackImage(ctx, img, src, session.NewGroup(sessionID)); err != nil {
 						return nil, err
 					}
 				}
 			}
 			if e.push {
+				annotations := map[digest.Digest]map[string]string{}
 				mprovider := contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
 				if src.Ref != nil {
-					remote, err := src.Ref.GetRemote(ctx, false, e.layerCompression)
+					remote, err := src.Ref.GetRemote(ctx, false, e.layerCompression, session.NewGroup(sessionID))
 					if err != nil {
 						return nil, err
 					}
 					for _, desc := range remote.Descriptors {
 						mprovider.Add(desc.Digest, remote.Provider)
+						addAnnotations(annotations, desc)
 					}
 				}
 				if len(src.Refs) > 0 {
 					for _, r := range src.Refs {
-						remote, err := r.GetRemote(ctx, false, e.layerCompression)
+						remote, err := r.GetRemote(ctx, false, e.layerCompression, session.NewGroup(sessionID))
 						if err != nil {
 							return nil, err
 						}
 						for _, desc := range remote.Descriptors {
 							mprovider.Add(desc.Digest, remote.Provider)
+							addAnnotations(annotations, desc)
 						}
 					}
 				}
 
-				if err := push.Push(ctx, e.opt.SessionManager, sessionID, mprovider, e.opt.ImageWriter.ContentStore(), desc.Digest, targetName, e.insecure, e.opt.RegistryHosts, e.pushByDigest); err != nil {
+				if err := push.Push(ctx, e.opt.SessionManager, sessionID, mprovider, e.opt.ImageWriter.ContentStore(), desc.Digest, targetName, e.insecure, e.opt.RegistryHosts, e.pushByDigest, annotations); err != nil {
 					return nil, err
 				}
 			}
@@ -273,7 +276,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	return resp, nil
 }
 
-func (e *imageExporterInstance) unpackImage(ctx context.Context, img images.Image, src exporter.Source) (err0 error) {
+func (e *imageExporterInstance) unpackImage(ctx context.Context, img images.Image, src exporter.Source, s session.Group) (err0 error) {
 	unpackDone := oneOffProgress(ctx, "unpacking to "+img.Name)
 	defer func() {
 		unpackDone(err0)
@@ -300,7 +303,7 @@ func (e *imageExporterInstance) unpackImage(ctx context.Context, img images.Imag
 		}
 	}
 
-	remote, err := topLayerRef.GetRemote(ctx, true, e.layerCompression)
+	remote, err := topLayerRef.GetRemote(ctx, true, e.layerCompression, s)
 	if err != nil {
 		return err
 	}
@@ -356,4 +359,18 @@ func getLayers(ctx context.Context, descs []ocispec.Descriptor, manifest ocispec
 		layers[i].Blob = manifest.Layers[i]
 	}
 	return layers, nil
+}
+
+func addAnnotations(m map[digest.Digest]map[string]string, desc ocispec.Descriptor) {
+	if desc.Annotations == nil {
+		return
+	}
+	a, ok := m[desc.Digest]
+	if !ok {
+		m[desc.Digest] = desc.Annotations
+		return
+	}
+	for k, v := range desc.Annotations {
+		a[k] = v
+	}
 }

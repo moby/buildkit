@@ -67,7 +67,8 @@ func init() {
 }
 
 type workerInitializerOpt struct {
-	config *config.Config
+	config         *config.Config
+	configMetaData *toml.MetaData
 }
 
 type workerInitializer struct {
@@ -240,7 +241,7 @@ func main() {
 			os.RemoveAll(lockPath)
 		}()
 
-		controller, err := newController(c, &cfg)
+		controller, err := newController(c, &cfg, md)
 		if err != nil {
 			return err
 		}
@@ -585,13 +586,14 @@ func serverCredentials(cfg config.TLSConfig) (*tls.Config, error) {
 	return tlsConf, nil
 }
 
-func newController(c *cli.Context, cfg *config.Config) (*control.Controller, error) {
+func newController(c *cli.Context, cfg *config.Config, md *toml.MetaData) (*control.Controller, error) {
 	sessionManager, err := session.NewManager()
 	if err != nil {
 		return nil, err
 	}
 	wc, err := newWorkerController(c, workerInitializerOpt{
-		config: cfg,
+		config:         cfg,
+		configMetaData: md,
 	})
 	if err != nil {
 		return nil, err

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -19,7 +20,6 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/opts"
 	"github.com/docker/docker/pkg/ioutils"
-	"github.com/docker/docker/pkg/mount"
 	"github.com/docker/docker/pkg/stringid"
 	"github.com/docker/docker/testutil/request"
 	"github.com/docker/go-connections/sockets"
@@ -40,8 +40,9 @@ type nopLog struct{}
 func (nopLog) Logf(string, ...interface{}) {}
 
 const (
-	defaultDockerdBinary    = "dockerd"
-	defaultContainerdSocket = "/var/run/docker/containerd/containerd.sock"
+	defaultDockerdBinary         = "dockerd"
+	defaultContainerdSocket      = "/var/run/docker/containerd/containerd.sock"
+	defaultDockerdRootlessBinary = "dockerd-rootless.sh"
 )
 
 var errDaemonNotStarted = errors.New("daemon not started")
@@ -77,6 +78,8 @@ type Daemon struct {
 	pidFile                    string
 	args                       []string
 	containerdSocket           string
+	rootlessUser               *user.User
+	rootlessXDGRuntimeDir      string
 
 	// swarm related field
 	swarmListenAddr string
@@ -84,6 +87,7 @@ type Daemon struct {
 	DefaultAddrPool []string
 	SubnetSize      uint32
 	DataPathPort    uint32
+	OOMScoreAdjust  int
 	// cached information
 	CachedInfo types.Info
 }
@@ -134,6 +138,46 @@ func NewDaemon(workingDir string, ops ...Option) (*Daemon, error) {
 		op(d)
 	}
 
+	if d.rootlessUser != nil {
+		if err := os.Chmod(SockRoot, 0777); err != nil {
+			return nil, err
+		}
+		uid, err := strconv.Atoi(d.rootlessUser.Uid)
+		if err != nil {
+			return nil, err
+		}
+		gid, err := strconv.Atoi(d.rootlessUser.Gid)
+		if err != nil {
+			return nil, err
+		}
+		if err := os.Chown(d.Folder, uid, gid); err != nil {
+			return nil, err
+		}
+		if err := os.Chown(d.Root, uid, gid); err != nil {
+			return nil, err
+		}
+		if err := os.MkdirAll(filepath.Dir(d.execRoot), 0700); err != nil {
+			return nil, err
+		}
+		if err := os.Chown(filepath.Dir(d.execRoot), uid, gid); err != nil {
+			return nil, err
+		}
+		if err := os.MkdirAll(d.execRoot, 0700); err != nil {
+			return nil, err
+		}
+		if err := os.Chown(d.execRoot, uid, gid); err != nil {
+			return nil, err
+		}
+		d.rootlessXDGRuntimeDir = filepath.Join(d.Folder, "xdgrun")
+		if err := os.MkdirAll(d.rootlessXDGRuntimeDir, 0700); err != nil {
+			return nil, err
+		}
+		if err := os.Chown(d.rootlessXDGRuntimeDir, uid, gid); err != nil {
+			return nil, err
+		}
+		d.containerdSocket = ""
+	}
+
 	return d, nil
 }
 
@@ -152,11 +196,23 @@ func New(t testing.TB, ops ...Option) *Daemon {
 	assert.Check(t, dest != "", "Please set the DOCKER_INTEGRATION_DAEMON_DEST or the DEST environment variable")
 
 	if os.Getenv("DOCKER_ROOTLESS") != "" {
-		t.Skip("github.com/docker/docker/testutil/daemon.Daemon doesn't support DOCKER_ROOTLESS")
+		if os.Getenv("DOCKER_REMAP_ROOT") != "" {
+			t.Skip("DOCKER_ROOTLESS doesn't support DOCKER_REMAP_ROOT currently")
+		}
+		if env := os.Getenv("DOCKER_USERLANDPROXY"); env != "" {
+			if val, err := strconv.ParseBool(env); err == nil && !val {
+				t.Skip("DOCKER_ROOTLESS doesn't support DOCKER_USERLANDPROXY=false")
+			}
+		}
+		ops = append(ops, WithRootlessUser("unprivilegeduser"))
 	}
+	ops = append(ops, WithOOMScoreAdjust(-500))
 
 	d, err := NewDaemon(dest, ops...)
 	assert.NilError(t, err, "could not create daemon at %q", dest)
+	if d.rootlessUser != nil && d.dockerdBinary != defaultDockerdBinary {
+		t.Skipf("DOCKER_ROOTLESS doesn't support specifying non-default dockerd binary path %q", d.dockerdBinary)
+	}
 
 	return d
 }
@@ -231,9 +287,6 @@ func (d *Daemon) Cleanup(t testing.TB) {
 // Start starts the daemon and return once it is ready to receive requests.
 func (d *Daemon) Start(t testing.TB, args ...string) {
 	t.Helper()
-	if os.Getenv("DOCKER_ROOTLESS") != "" {
-		t.Skip("github.com/docker/docker/testutil/daemon.Daemon doesn't support DOCKER_ROOTLESS")
-	}
 	if err := d.StartWithError(args...); err != nil {
 		t.Fatalf("[%s] failed to start daemon with arguments %v : %v", d.id, d.args, err)
 	}
@@ -262,14 +315,30 @@ func (d *Daemon) StartWithLogFile(out *os.File, providedArgs ...string) error {
 		d.pidFile = filepath.Join(d.Folder, "docker.pid")
 	}
 
-	d.args = []string{
+	d.args = []string{}
+	if d.rootlessUser != nil {
+		if d.dockerdBinary != defaultDockerdBinary {
+			return errors.Errorf("[%s] DOCKER_ROOTLESS doesn't support non-default dockerd binary path %q", d.id, d.dockerdBinary)
+		}
+		dockerdBinary = "sudo"
+		d.args = append(d.args,
+			"-u", d.rootlessUser.Username,
+			"-E", "XDG_RUNTIME_DIR="+d.rootlessXDGRuntimeDir,
+			"-E", "HOME="+d.rootlessUser.HomeDir,
+			"-E", "PATH="+os.Getenv("PATH"),
+			"--",
+			defaultDockerdRootlessBinary,
+		)
+	}
+
+	d.args = append(d.args,
 		"--data-root", d.Root,
 		"--exec-root", d.execRoot,
 		"--pidfile", d.pidFile,
 		fmt.Sprintf("--userland-proxy=%t", d.userlandProxy),
 		"--containerd-namespace", d.id,
-		"--containerd-plugins-namespace", d.id + "p",
-	}
+		"--containerd-plugins-namespace", d.id+"p",
+	)
 	if d.containerdSocket != "" {
 		d.args = append(d.args, "--containerd", d.containerdSocket)
 	}
@@ -315,6 +384,10 @@ func (d *Daemon) StartWithLogFile(out *os.File, providedArgs ...string) error {
 	d.cmd.Stdout = out
 	d.cmd.Stderr = out
 	d.logFile = out
+	if d.rootlessUser != nil {
+		// sudo requires this for propagating signals
+		setsid(d.cmd)
+	}
 
 	if err := d.cmd.Start(); err != nil {
 		return errors.Wrapf(err, "[%s] could not start daemon container", d.id)
@@ -573,13 +646,14 @@ func (d *Daemon) ReloadConfig() error {
 		return errors.New("daemon is not running")
 	}
 
-	errCh := make(chan error)
+	errCh := make(chan error, 1)
 	started := make(chan struct{})
 	go func() {
 		_, body, err := request.Get("/events", request.Host(d.Sock()))
 		close(started)
 		if err != nil {
 			errCh <- err
+			return
 		}
 		defer body.Close()
 		dec := json.NewDecoder(body)
@@ -735,15 +809,6 @@ func (d *Daemon) Info(t testing.TB) types.Info {
 	assert.NilError(t, err)
 	assert.NilError(t, c.Close())
 	return info
-}
-
-// cleanupMount unmounts the daemon root directory, or logs a message if
-// unmounting failed.
-func cleanupMount(t testing.TB, d *Daemon) {
-	t.Helper()
-	if err := mount.Unmount(d.Root); err != nil {
-		d.log.Logf("[%s] unable to unmount daemon root (%s): %v", d.id, d.Root, err)
-	}
 }
 
 // cleanupRaftDir removes swarmkit wal files if present

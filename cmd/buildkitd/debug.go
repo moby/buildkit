@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/pprof"
+	"runtime"
 
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/trace"
@@ -18,9 +19,13 @@ func setupDebugHandlers(addr string) error {
 	m.Handle("/debug/pprof/profile", http.HandlerFunc(pprof.Profile))
 	m.Handle("/debug/pprof/symbol", http.HandlerFunc(pprof.Symbol))
 	m.Handle("/debug/pprof/trace", http.HandlerFunc(pprof.Trace))
-	// TODO: reenable after golang.org/x/net update
-	// m.Handle("/debug/requests", http.HandlerFunc(trace.Traces))
-	// m.Handle("/debug/events", http.HandlerFunc(trace.Events))
+	m.Handle("/debug/requests", http.HandlerFunc(trace.Traces))
+	m.Handle("/debug/events", http.HandlerFunc(trace.Events))
+
+	m.Handle("/debug/gc", http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		runtime.GC()
+		logrus.Debugf("triggered GC from debug endpoint")
+	}))
 
 	// setting debugaddr is opt-in. permission is defined by listener address
 	trace.AuthRequest = func(_ *http.Request) (bool, bool) {

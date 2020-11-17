@@ -2,6 +2,8 @@ package containerdexecutor
 
 import (
 	"context"
+	"io"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,14 +13,15 @@ import (
 
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/cio"
+	"github.com/containerd/containerd/mount"
 	containerdoci "github.com/containerd/containerd/oci"
 	"github.com/containerd/continuity/fs"
 	"github.com/docker/docker/pkg/idtools"
-	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/executor/oci"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/snapshot"
+	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/network"
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -52,7 +55,7 @@ func New(client *containerd.Client, root, cgroup string, networkProviders map[pb
 	}
 }
 
-func (w *containerdExecutor) Run(ctx context.Context, id string, root cache.Mountable, mounts []executor.Mount, process executor.ProcessInfo, started chan<- struct{}) (err error) {
+func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.Mount, mounts []executor.Mount, process executor.ProcessInfo, started chan<- struct{}) (err error) {
 	if id == "" {
 		id = identity.NewID()
 	}
@@ -82,7 +85,7 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root cache.Moun
 		return err
 	}
 
-	hostsFile, clean, err := oci.GetHostsFile(ctx, w.root, meta.ExtraHosts, nil)
+	hostsFile, clean, err := oci.GetHostsFile(ctx, w.root, meta.ExtraHosts, nil, meta.Hostname)
 	if err != nil {
 		return err
 	}
@@ -90,7 +93,7 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root cache.Moun
 		defer clean()
 	}
 
-	mountable, err := root.Mount(ctx, false)
+	mountable, err := root.Src.Mount(ctx, false)
 	if err != nil {
 		return err
 	}
@@ -103,17 +106,19 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root cache.Moun
 		defer release()
 	}
 
+	lm := snapshot.LocalMounterWithMounts(rootMounts)
+	rootfsPath, err := lm.Mount()
+	if err != nil {
+		return err
+	}
+	defer lm.Unmount()
+	defer executor.MountStubsCleaner(rootfsPath, mounts)()
+
 	var sgids []uint32
 	uid, gid, err := oci.ParseUIDGID(meta.User)
 	if err != nil {
-		lm := snapshot.LocalMounterWithMounts(rootMounts)
-		rootfsPath, err := lm.Mount()
-		if err != nil {
-			return err
-		}
 		uid, gid, sgids, err = oci.GetUser(rootfsPath, meta.User)
 		if err != nil {
-			lm.Unmount()
 			return err
 		}
 
@@ -124,17 +129,13 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root cache.Moun
 
 		newp, err := fs.RootPath(rootfsPath, meta.Cwd)
 		if err != nil {
-			lm.Unmount()
 			return errors.Wrapf(err, "working dir %s points to invalid target", newp)
 		}
 		if _, err := os.Stat(newp); err != nil {
 			if err := idtools.MkdirAllAndChown(newp, 0755, identity); err != nil {
-				lm.Unmount()
 				return errors.Wrapf(err, "failed to create working directory %s", newp)
 			}
 		}
-
-		lm.Unmount()
 	}
 
 	provider, ok := w.networkProviders[meta.NetMode]
@@ -187,12 +188,17 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root cache.Moun
 		}
 	}()
 
+	fixProcessOutput(&process)
 	cioOpts := []cio.Opt{cio.WithStreams(process.Stdin, process.Stdout, process.Stderr)}
 	if meta.Tty {
 		cioOpts = append(cioOpts, cio.WithTerminal)
 	}
 
-	task, err := container.NewTask(ctx, cio.NewCreator(cioOpts...), containerd.WithRootFS(rootMounts))
+	task, err := container.NewTask(ctx, cio.NewCreator(cioOpts...), containerd.WithRootFS([]mount.Mount{{
+		Source:  rootfsPath,
+		Type:    "bind",
+		Options: []string{"rbind"},
+	}}))
 	if err != nil {
 		return err
 	}
@@ -286,6 +292,7 @@ func (w *containerdExecutor) Exec(ctx context.Context, id string, process execut
 		spec.Process.Env = process.Meta.Env
 	}
 
+	fixProcessOutput(&process)
 	cioOpts := []cio.Opt{cio.WithStreams(process.Stdin, process.Stdout, process.Stderr)}
 	if meta.Tty {
 		cioOpts = append(cioOpts, cio.WithTerminal)
@@ -298,6 +305,19 @@ func (w *containerdExecutor) Exec(ctx context.Context, id string, process execut
 
 	err = w.runProcess(ctx, taskProcess, process.Resize, nil)
 	return err
+}
+
+func fixProcessOutput(process *executor.ProcessInfo) {
+	// It seems like if containerd has one of stdin, stdout or stderr then the
+	// others need to be present as well otherwise we get this error:
+	// failed to start io pipe copy: unable to copy pipes: containerd-shim: opening file "" failed: open : no such file or directory: unknown
+	// So just stub out any missing output
+	if process.Stdout == nil {
+		process.Stdout = &nopCloser{ioutil.Discard}
+	}
+	if process.Stderr == nil {
+		process.Stderr = &nopCloser{ioutil.Discard}
+	}
 }
 
 func (w *containerdExecutor) runProcess(ctx context.Context, p containerd.Process, resize <-chan executor.WinSize, started func()) error {
@@ -356,7 +376,7 @@ func (w *containerdExecutor) runProcess(ctx context.Context, p containerd.Proces
 				cancel()
 			}
 			if status.ExitCode() != 0 {
-				exitErr := &executor.ExitError{
+				exitErr := &errdefs.ExitError{
 					ExitCode: status.ExitCode(),
 					Err:      status.Error(),
 				}
@@ -378,4 +398,12 @@ func (w *containerdExecutor) runProcess(ctx context.Context, p containerd.Proces
 			return errors.Errorf("failed to kill process on cancel")
 		}
 	}
+}
+
+type nopCloser struct {
+	io.Writer
+}
+
+func (c *nopCloser) Close() error {
+	return nil
 }

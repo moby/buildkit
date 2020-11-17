@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"runtime"
 	"sync"
 
 	"github.com/containerd/stargz-snapshotter/cache"
@@ -36,6 +37,7 @@ import (
 	"github.com/google/crfs/stargz"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/semaphore"
 )
 
 type Reader interface {
@@ -133,22 +135,35 @@ func (gr *reader) Cache(opts ...CacheOption) (err error) {
 		filter = cacheOpts.filter
 	}
 
-	return gr.cacheWithReader(root, r, filter, cacheOpts.cacheOpts...)
+	eg, egCtx := errgroup.WithContext(context.Background())
+	eg.Go(func() error {
+		return gr.cacheWithReader(egCtx, eg, semaphore.NewWeighted(int64(runtime.GOMAXPROCS(0))),
+			root, r, filter, cacheOpts.cacheOpts...)
+	})
+	return eg.Wait()
 }
 
-func (gr *reader) cacheWithReader(dir *stargz.TOCEntry, r *stargz.Reader, filter func(*stargz.TOCEntry) bool, opts ...cache.Option) (rErr error) {
-	eg, _ := errgroup.WithContext(context.Background())
+func (gr *reader) cacheWithReader(ctx context.Context, eg *errgroup.Group, sem *semaphore.Weighted, dir *stargz.TOCEntry, r *stargz.Reader, filter func(*stargz.TOCEntry) bool, opts ...cache.Option) (rErr error) {
 	dir.ForeachChild(func(_ string, e *stargz.TOCEntry) bool {
 		if e.Type == "dir" {
 			// Walk through all files on this stargz file.
-			eg.Go(func() error {
-				// Make sure the entry is the immediate child for avoiding loop.
-				if filepath.Dir(filepath.Clean(e.Name)) != filepath.Clean(dir.Name) {
-					return fmt.Errorf("invalid child path %q; must be child of %q",
-						e.Name, dir.Name)
-				}
-				return gr.cacheWithReader(e, r, filter, opts...)
-			})
+
+			// Ignore a TOCEntry of "./" (formated as "" by stargz lib) on root directory
+			// because this points to the root directory itself.
+			if e.Name == "" && dir.Name == "" {
+				return true
+			}
+
+			// Make sure the entry is the immediate child for avoiding loop.
+			if filepath.Dir(filepath.Clean(e.Name)) != filepath.Clean(dir.Name) {
+				rErr = fmt.Errorf("invalid child path %q; must be child of %q",
+					e.Name, dir.Name)
+				return false
+			}
+			if err := gr.cacheWithReader(ctx, eg, sem, e, r, filter, opts...); err != nil {
+				rErr = err
+				return false
+			}
 			return true
 		} else if e.Type != "reg" {
 			// Only cache regular files
@@ -175,7 +190,14 @@ func (gr *reader) cacheWithReader(dir *stargz.TOCEntry, r *stargz.Reader, filter
 			}
 			nr += ce.ChunkSize
 
+			if err := sem.Acquire(ctx, 1); err != nil {
+				rErr = err
+				return false
+			}
+
 			eg.Go(func() error {
+				defer sem.Release(1)
+
 				// Check if the target chunks exists in the cache
 				id := genID(e.Digest, ce.ChunkOffset, ce.ChunkSize)
 				if _, err := gr.cache.FetchAt(id, 0, nil, opts...); err == nil {
@@ -214,13 +236,6 @@ func (gr *reader) cacheWithReader(dir *stargz.TOCEntry, r *stargz.Reader, filter
 
 		return true
 	})
-
-	if err := eg.Wait(); err != nil {
-		if rErr != nil {
-			return errors.Wrapf(rErr, "failed to pre-cache some files: %v", err)
-		}
-		return err
-	}
 
 	return
 }

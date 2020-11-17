@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -63,12 +64,21 @@ func (a *authHandlerNS) get(host string, sm *session.Manager, g session.Group) *
 			continue
 		}
 		if parts[0] == host {
-			session, username, password, err := sessionauth.CredentialsFunc(sm, g)(host)
-			if err == nil {
-				if username == h.common.Username && password == h.common.Secret {
+			if h.authority != nil {
+				session, ok, err := sessionauth.VerifyTokenAuthority(host, h.authority, sm, g)
+				if err == nil && ok {
 					a.handlers[host+"/"+session] = h
 					h.lastUsed = time.Now()
 					return h
+				}
+			} else {
+				session, username, password, err := sessionauth.CredentialsFunc(sm, g)(host)
+				if err == nil {
+					if username == h.common.Username && password == h.common.Secret {
+						a.handlers[host+"/"+session] = h
+						h.lastUsed = time.Now()
+						return h
+					}
 				}
 			}
 		}
@@ -117,7 +127,7 @@ func (a *dockerAuthorizer) Authorize(ctx context.Context, req *http.Request) err
 		return nil
 	}
 
-	auth, err := ah.authorize(ctx, a.session)
+	auth, err := ah.authorize(ctx, a.sm, a.session)
 	if err != nil {
 		return err
 	}
@@ -141,17 +151,17 @@ func (a *dockerAuthorizer) AddResponses(ctx context.Context, responses []*http.R
 
 	for _, c := range auth.ParseAuthHeader(last.Header) {
 		if c.Scheme == auth.BearerAuth {
+			var oldScopes []string
 			if err := invalidAuthorization(c, responses); err != nil {
 				a.handlers.delete(handler)
 
-				oldScope := ""
 				if handler != nil {
-					oldScope = strings.Join(handler.common.Scopes, " ")
+					oldScopes = handler.common.Scopes
 				}
 				handler = nil
 
 				// this hacky way seems to be best method to detect that error is fatal and should not be retried with a new token
-				if c.Parameters["error"] == "insufficient_scope" && c.Parameters["scope"] == oldScope {
+				if c.Parameters["error"] == "insufficient_scope" && parseScopes(oldScopes).contains(parseScopes(strings.Split(c.Parameters["scope"], " "))) {
 					return err
 				}
 			}
@@ -166,17 +176,25 @@ func (a *dockerAuthorizer) AddResponses(ctx context.Context, responses []*http.R
 				return nil
 			}
 
-			session, username, secret, err := a.getCredentials(host)
+			var username, secret string
+			session, pubKey, err := sessionauth.GetTokenAuthority(host, a.sm, a.session)
 			if err != nil {
 				return err
+			}
+			if pubKey == nil {
+				session, username, secret, err = a.getCredentials(host)
+				if err != nil {
+					return err
+				}
 			}
 
 			common, err := auth.GenerateTokenOptions(ctx, host, username, secret, c)
 			if err != nil {
 				return err
 			}
+			common.Scopes = parseScopes(append(common.Scopes, oldScopes...)).normalize()
 
-			a.handlers.set(host, session, newAuthHandler(a.client, c.Scheme, common))
+			a.handlers.set(host, session, newAuthHandler(host, a.client, c.Scheme, pubKey, common))
 
 			return nil
 		} else if c.Scheme == auth.BasicAuth {
@@ -191,7 +209,7 @@ func (a *dockerAuthorizer) AddResponses(ctx context.Context, responses []*http.R
 					Secret:   secret,
 				}
 
-				a.handlers.set(host, session, newAuthHandler(a.client, c.Scheme, common))
+				a.handlers.set(host, session, newAuthHandler(host, a.client, c.Scheme, nil, common))
 
 				return nil
 			}
@@ -225,24 +243,30 @@ type authHandler struct {
 	scopedTokens map[string]*authResult
 
 	lastUsed time.Time
+
+	host string
+
+	authority *[32]byte
 }
 
-func newAuthHandler(client *http.Client, scheme auth.AuthenticationScheme, opts auth.TokenOptions) *authHandler {
+func newAuthHandler(host string, client *http.Client, scheme auth.AuthenticationScheme, authority *[32]byte, opts auth.TokenOptions) *authHandler {
 	return &authHandler{
+		host:         host,
 		client:       client,
 		scheme:       scheme,
 		common:       opts,
 		scopedTokens: map[string]*authResult{},
 		lastUsed:     time.Now(),
+		authority:    authority,
 	}
 }
 
-func (ah *authHandler) authorize(ctx context.Context, g session.Group) (string, error) {
+func (ah *authHandler) authorize(ctx context.Context, sm *session.Manager, g session.Group) (string, error) {
 	switch ah.scheme {
 	case auth.BasicAuth:
 		return ah.doBasicAuth(ctx)
 	case auth.BearerAuth:
-		return ah.doBearerAuth(ctx)
+		return ah.doBearerAuth(ctx, sm, g)
 	default:
 		return "", errors.Wrapf(errdefs.ErrNotImplemented, "failed to find supported auth scheme: %s", string(ah.scheme))
 	}
@@ -259,23 +283,41 @@ func (ah *authHandler) doBasicAuth(ctx context.Context) (string, error) {
 	return fmt.Sprintf("Basic %s", auth), nil
 }
 
-func (ah *authHandler) doBearerAuth(ctx context.Context) (token string, err error) {
+func (ah *authHandler) doBearerAuth(ctx context.Context, sm *session.Manager, g session.Group) (token string, err error) {
 	// copy common tokenOptions
 	to := ah.common
 
-	to.Scopes = docker.GetTokenScopes(ctx, to.Scopes)
+	to.Scopes = parseScopes(docker.GetTokenScopes(ctx, to.Scopes)).normalize()
 
 	// Docs: https://docs.docker.com/registry/spec/auth/scope
 	scoped := strings.Join(to.Scopes, " ")
 
 	ah.Lock()
-	if r, exist := ah.scopedTokens[scoped]; exist {
+	for {
+		r, exist := ah.scopedTokens[scoped]
+		if !exist {
+			// no entry cached
+			break
+		}
 		ah.Unlock()
 		r.Wait()
-		if r.expires.IsZero() || r.expires.After(time.Now()) {
+		if r.err != nil {
+			select {
+			case <-ctx.Done():
+				return "", r.err
+			default:
+			}
+		}
+		if !errors.Is(r.err, context.Canceled) &&
+			(r.expires.IsZero() || r.expires.After(time.Now())) {
 			return r.token, r.err
 		}
+		// r.err is canceled or token expired. Get rid of it and try again
 		ah.Lock()
+		r2, exist := ah.scopedTokens[scoped]
+		if exist && r == r2 {
+			delete(ah.scopedTokens, scoped)
+		}
 	}
 
 	// only one fetch token job
@@ -303,6 +345,21 @@ func (ah *authHandler) doBearerAuth(ctx context.Context) (token string, err erro
 		r.Done()
 	}()
 
+	if ah.authority != nil {
+		resp, err := sessionauth.FetchToken(&sessionauth.FetchTokenRequest{
+			ClientID: "buildkit-client",
+			Host:     ah.host,
+			Realm:    to.Realm,
+			Service:  to.Service,
+			Scopes:   to.Scopes,
+		}, sm, g)
+		if err != nil {
+			return "", err
+		}
+		issuedAt, expires = time.Unix(resp.IssuedAt, 0), int(resp.ExpiresIn)
+		return resp.Token, nil
+	}
+
 	// fetch token for the resource scope
 	if to.Secret != "" {
 		defer func() {
@@ -318,7 +375,7 @@ func (ah *authHandler) doBearerAuth(ctx context.Context) (token string, err erro
 				// As of September 2017, GCR is known to return 404.
 				// As of February 2018, JFrog Artifactory is known to return 401.
 				if (errStatus.StatusCode == 405 && to.Username != "") || errStatus.StatusCode == 404 || errStatus.StatusCode == 401 {
-					resp, err := auth.FetchTokenWithOAuth(ctx, ah.client, nil, "containerd-client", to)
+					resp, err := auth.FetchTokenWithOAuth(ctx, ah.client, nil, "buildkit-client", to)
 					if err != nil {
 						return "", err
 					}
@@ -365,6 +422,71 @@ func sameRequest(r1, r2 *http.Request) bool {
 	}
 	if *r1.URL != *r2.URL {
 		return false
+	}
+	return true
+}
+
+type scopes map[string]map[string]struct{}
+
+func parseScopes(s []string) scopes {
+	// https://docs.docker.com/registry/spec/auth/scope/
+	m := map[string]map[string]struct{}{}
+	for _, scope := range s {
+		parts := strings.SplitN(scope, ":", 3)
+		names := []string{parts[0]}
+		if len(parts) > 1 {
+			names = append(names, parts[1])
+		}
+		var actions []string
+		if len(parts) == 3 {
+			actions = append(actions, strings.Split(parts[2], ",")...)
+		}
+		name := strings.Join(names, ":")
+		ma, ok := m[name]
+		if !ok {
+			ma = map[string]struct{}{}
+			m[name] = ma
+		}
+
+		for _, a := range actions {
+			ma[a] = struct{}{}
+		}
+	}
+	return m
+}
+
+func (s scopes) normalize() []string {
+	names := make([]string, 0, len(s))
+	for n := range s {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+
+	out := make([]string, 0, len(s))
+
+	for _, n := range names {
+		actions := make([]string, 0, len(s[n]))
+		for a := range s[n] {
+			actions = append(actions, a)
+		}
+		sort.Strings(actions)
+
+		out = append(out, n+":"+strings.Join(actions, ","))
+	}
+	return out
+}
+
+func (s scopes) contains(s2 scopes) bool {
+	for n := range s2 {
+		v, ok := s[n]
+		if !ok {
+			return false
+		}
+		for a := range s2[n] {
+			if _, ok := v[a]; !ok {
+				return false
+			}
+		}
 	}
 	return true
 }

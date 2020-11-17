@@ -21,8 +21,9 @@ func (kvp *KeyValuePair) String() string {
 
 // KeyValuePairOptional is the same as KeyValuePair but Value is optional
 type KeyValuePairOptional struct {
-	Key   string
-	Value *string
+	Key     string
+	Value   *string
+	Comment string
 }
 
 func (kvpo *KeyValuePairOptional) ValueString() string {
@@ -419,6 +420,7 @@ type Stage struct {
 	SourceCode string
 	Platform   string
 	Location   []parser.Range
+	Comment    string
 }
 
 // AddCommand to the stage

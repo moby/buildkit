@@ -14,6 +14,7 @@ import (
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/compression"
@@ -44,8 +45,8 @@ type ImmutableRef interface {
 	Clone() ImmutableRef
 
 	Info() RefInfo
-	Extract(ctx context.Context) error // +progress
-	GetRemote(ctx context.Context, createIfNeeded bool, compressionType compression.Type) (*solver.Remote, error)
+	Extract(ctx context.Context, s session.Group) error // +progress
+	GetRemote(ctx context.Context, createIfNeeded bool, compressionType compression.Type, s session.Group) (*solver.Remote, error)
 }
 
 type RefInfo struct {
@@ -64,7 +65,7 @@ type MutableRef interface {
 }
 
 type Mountable interface {
-	Mount(ctx context.Context, readonly bool) (snapshot.Mountable, error)
+	Mount(ctx context.Context, readonly bool, s session.Group) (snapshot.Mountable, error)
 }
 
 type ref interface {
@@ -146,7 +147,12 @@ func (cr *cacheRecord) isLazy(ctx context.Context) (bool, error) {
 	if !getBlobOnly(cr.md) {
 		return false, nil
 	}
-	_, err := cr.cm.ContentStore.Info(ctx, digest.Digest(getBlob(cr.md)))
+	dgst := getBlob(cr.md)
+	// special case for moby where there is no compressed blob (empty digest)
+	if dgst == "" {
+		return false, nil
+	}
+	_, err := cr.cm.ContentStore.Info(ctx, digest.Digest(dgst))
 	if errors.Is(err, errdefs.ErrNotFound) {
 		return true, nil
 	}
@@ -368,11 +374,9 @@ func (sr *immutableRef) parentRefChain() []*immutableRef {
 	return refs
 }
 
-func (sr *immutableRef) Mount(ctx context.Context, readonly bool) (snapshot.Mountable, error) {
-	if getBlobOnly(sr.md) {
-		if err := sr.Extract(ctx); err != nil {
-			return nil, err
-		}
+func (sr *immutableRef) Mount(ctx context.Context, readonly bool, s session.Group) (snapshot.Mountable, error) {
+	if err := sr.Extract(ctx, s); err != nil {
+		return nil, err
 	}
 
 	sr.mu.Lock()
@@ -380,7 +384,11 @@ func (sr *immutableRef) Mount(ctx context.Context, readonly bool) (snapshot.Moun
 	return sr.mount(ctx, readonly)
 }
 
-func (sr *immutableRef) Extract(ctx context.Context) (rerr error) {
+func (sr *immutableRef) Extract(ctx context.Context, s session.Group) (rerr error) {
+	if !getBlobOnly(sr.md) {
+		return
+	}
+
 	ctx, done, err := leaseutil.WithLease(ctx, sr.cm.LeaseManager, leaseutil.MakeTemporary)
 	if err != nil {
 		return err
@@ -395,7 +403,7 @@ func (sr *immutableRef) Extract(ctx context.Context) (rerr error) {
 		return err
 	}
 
-	return sr.extract(ctx, sr.descHandlers)
+	return sr.extract(ctx, sr.descHandlers, s)
 }
 
 func (sr *immutableRef) prepareRemoteSnapshots(ctx context.Context, dhs DescHandlers) (bool, error) {
@@ -449,11 +457,15 @@ func (sr *immutableRef) prepareRemoteSnapshots(ctx context.Context, dhs DescHand
 	return ok.(bool), err
 }
 
-func (sr *immutableRef) extract(ctx context.Context, dhs DescHandlers) error {
+func (sr *immutableRef) extract(ctx context.Context, dhs DescHandlers, s session.Group) error {
 	_, err := sr.sizeG.Do(ctx, sr.ID()+"-extract", func(ctx context.Context) (_ interface{}, rerr error) {
 		snapshotID := getSnapshotID(sr.md)
 		if _, err := sr.cm.Snapshotter.Stat(ctx, snapshotID); err == nil {
 			return nil, nil
+		}
+
+		if sr.cm.Applier == nil {
+			return nil, errors.New("extract requires an applier")
 		}
 
 		eg, egctx := errgroup.WithContext(ctx)
@@ -461,7 +473,7 @@ func (sr *immutableRef) extract(ctx context.Context, dhs DescHandlers) error {
 		parentID := ""
 		if sr.parent != nil {
 			eg.Go(func() error {
-				if err := sr.parent.extract(egctx, dhs); err != nil {
+				if err := sr.parent.extract(egctx, dhs, s); err != nil {
 					return err
 				}
 				parentID = getSnapshotID(sr.parent.md)
@@ -478,9 +490,10 @@ func (sr *immutableRef) extract(ctx context.Context, dhs DescHandlers) error {
 		eg.Go(func() error {
 			// unlazies if needed, otherwise a no-op
 			return lazyRefProvider{
-				ref:  sr,
-				desc: desc,
-				dh:   dh,
+				ref:     sr,
+				desc:    desc,
+				dh:      dh,
+				session: s,
 			}.Unlazy(egctx)
 		})
 
@@ -703,7 +716,7 @@ func (sr *mutableRef) commit(ctx context.Context) (*immutableRef, error) {
 	return ref, nil
 }
 
-func (sr *mutableRef) Mount(ctx context.Context, readonly bool) (snapshot.Mountable, error) {
+func (sr *mutableRef) Mount(ctx context.Context, readonly bool, s session.Group) (snapshot.Mountable, error) {
 	sr.mu.Lock()
 	defer sr.mu.Unlock()
 

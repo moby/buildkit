@@ -5,6 +5,7 @@ import (
 
 	"github.com/containerd/containerd/content"
 	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/executor"
@@ -35,6 +36,12 @@ type Worker interface {
 	ContentStore() content.Store
 	Executor() executor.Executor
 	CacheManager() cache.Manager
+	MetadataStore() *metadata.Store
+}
+
+type Infos interface {
+	GetDefault() (Worker, error)
+	WorkerInfos() []client.WorkerInfo
 }
 
 // Pre-defined label keys

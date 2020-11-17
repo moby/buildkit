@@ -32,221 +32,189 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"net/url"
+	"path"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/containerd/containerd/reference/docker"
+	"github.com/containerd/containerd/errdefs"
+	"github.com/containerd/containerd/reference"
+	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/stargz-snapshotter/cache"
 	"github.com/containerd/stargz-snapshotter/stargz/config"
-	"github.com/golang/groupcache/lru"
-	"github.com/google/go-containerregistry/pkg/authn"
-	"github.com/google/go-containerregistry/pkg/name"
-	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
 
 const (
-	defaultChunkSize     = 50000
-	defaultValidInterval = 60 * time.Second
-	defaultPoolEntry     = 3000
+	defaultChunkSize        = 50000
+	defaultValidIntervalSec = 60
 )
 
-func NewResolver(keychain authn.Keychain, cfg config.ResolverConfig) *Resolver {
-	if cfg.Host == nil {
-		cfg.Host = make(map[string]config.HostConfig)
+func NewResolver(cache cache.BlobCache, cfg config.BlobConfig) *Resolver {
+	if cfg.ChunkSize == 0 { // zero means "use default chunk size"
+		cfg.ChunkSize = defaultChunkSize
 	}
-	poolEntry := cfg.ConnectionPoolEntry
-	if poolEntry == 0 {
-		poolEntry = defaultPoolEntry
+	if cfg.ValidInterval == 0 { // zero means "use default interval"
+		cfg.ValidInterval = defaultValidIntervalSec
 	}
+	if cfg.CheckAlways {
+		cfg.ValidInterval = 0
+	}
+
 	return &Resolver{
-		transport: http.DefaultTransport,
-		trPool:    lru.New(poolEntry),
-		keychain:  keychain,
-		config:    cfg,
 		bufPool: sync.Pool{
 			New: func() interface{} {
 				return new(bytes.Buffer)
 			},
 		},
+		blobCache:  cache,
+		blobConfig: cfg,
 	}
 }
 
 type Resolver struct {
-	transport http.RoundTripper
-	trPool    *lru.Cache
-	trPoolMu  sync.Mutex
-	keychain  authn.Keychain
-	config    config.ResolverConfig
-	bufPool   sync.Pool
+	blobCache  cache.BlobCache
+	blobConfig config.BlobConfig
+	bufPool    sync.Pool
 }
 
-func (r *Resolver) Resolve(ref, digest string, cache cache.BlobCache, cfg config.BlobConfig) (Blob, error) {
-	fetcher, size, err := r.resolve(ref, digest)
+func (r *Resolver) Resolve(ctx context.Context, hosts docker.RegistryHosts, refspec reference.Spec, desc ocispec.Descriptor) (Blob, error) {
+	fetcher, size, err := newFetcher(ctx, hosts, refspec, desc)
 	if err != nil {
 		return nil, err
-	}
-	var (
-		chunkSize     int64
-		checkInterval time.Duration
-	)
-	chunkSize = cfg.ChunkSize
-	if chunkSize == 0 { // zero means "use default chunk size"
-		chunkSize = defaultChunkSize
-	}
-	if cfg.ValidInterval == 0 { // zero means "use default interval"
-		checkInterval = defaultValidInterval
-	} else {
-		checkInterval = time.Duration(cfg.ValidInterval) * time.Second
-	}
-	if cfg.CheckAlways {
-		checkInterval = 0
 	}
 	return &blob{
 		fetcher:       fetcher,
 		size:          size,
-		keychain:      r.keychain,
-		chunkSize:     chunkSize,
-		cache:         cache,
+		chunkSize:     r.blobConfig.ChunkSize,
+		cache:         r.blobCache,
 		lastCheck:     time.Now(),
-		checkInterval: checkInterval,
+		checkInterval: time.Duration(r.blobConfig.ValidInterval) * time.Second,
 		resolver:      r,
 	}, nil
 }
 
-func (r *Resolver) Refresh(target Blob) error {
-	b, ok := target.(*blob)
-	if !ok {
-		return fmt.Errorf("invalid type of blob. must be *blob")
-	}
-
-	// refresh the fetcher
-	b.fetcherMu.Lock()
-	defer b.fetcherMu.Unlock()
-	new, newSize, err := b.fetcher.refresh()
-	if err != nil {
-		return err
-	} else if newSize != b.size {
-		return fmt.Errorf("Invalid size of new blob %d; want %d", newSize, b.size)
-	}
-
-	// update the blob's fetcher with new one
-	b.fetcher = new
-	b.lastCheck = time.Now()
-
-	return nil
-}
-
-func (r *Resolver) resolve(ref, digest string) (*fetcher, int64, error) {
-	var (
-		nref name.Reference
-		url  string
-		tr   http.RoundTripper
-		size int64
-	)
-	named, err := docker.ParseDockerRef(ref)
+func newFetcher(ctx context.Context, hosts docker.RegistryHosts, refspec reference.Spec, desc ocispec.Descriptor) (*fetcher, int64, error) {
+	reghosts, err := hosts(refspec.Hostname())
 	if err != nil {
 		return nil, 0, err
 	}
-	hosts := append(r.config.Host[docker.Domain(named)].Mirrors, config.MirrorConfig{
-		Host: docker.Domain(named),
-	})
+	if desc.Digest.String() == "" {
+		return nil, 0, fmt.Errorf("Digest is mandatory in layer descriptor")
+	}
+	digest := desc.Digest
+	u, err := url.Parse("dummy://" + refspec.Locator)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Try to create fetcher until succeeded
 	rErr := fmt.Errorf("failed to resolve")
-	for _, h := range hosts {
-		// Parse reference
-		if h.Host == "" || strings.Contains(h.Host, "/") {
-			rErr = errors.Wrapf(rErr, "host %q: mirror must be a domain name", h.Host)
-			continue // try another host
+	for _, host := range reghosts {
+		if host.Host == "" || strings.Contains(host.Host, "/") {
+			rErr = errors.Wrapf(rErr, "invalid destination (host %q, ref:%q, digest:%q)",
+				host.Host, refspec, digest)
+			continue // Try another
+
 		}
-		var opts []name.Option
-		if h.Insecure {
-			opts = append(opts, name.Insecure)
-		}
-		sref := fmt.Sprintf("%s/%s", h.Host, docker.Path(named))
-		nref, err = name.ParseReference(sref, opts...)
-		if err != nil {
-			rErr = errors.Wrapf(rErr, "host %q: failed to parse ref %q (%q): %v",
-				h.Host, sref, digest, err)
-			continue // try another host
+
+		// Prepare transport with authorization functionality
+		tr := host.Client.Transport
+		if host.Authorizer != nil {
+			tr = &transport{
+				inner: tr,
+				auth:  host.Authorizer,
+				// Specify pull scope
+				// TODO: The scope generator function in containerd (github.com/containerd/containerd/remotes/docker/scope.go) should be exported and used here.
+				scope: "repository:" + strings.TrimPrefix(u.Path, "/") + ":pull",
+			}
 		}
 
 		// Resolve redirection and get blob URL
-		url, tr, err = r.resolveReference(nref, digest)
+		blobURL := fmt.Sprintf("%s://%s/%s/blobs/%s",
+			host.Scheme,
+			path.Join(host.Host, host.Path),
+			strings.TrimPrefix(refspec.Locator, refspec.Hostname()+"/"),
+			digest)
+		url, err := redirect(ctx, blobURL, tr)
 		if err != nil {
-			rErr = errors.Wrapf(rErr, "host %q: failed to resolve ref %q (%q): %v",
-				h.Host, nref.String(), digest, err)
-			continue // try another host
+			rErr = errors.Wrapf(rErr, "failed to redirect (host %q, ref:%q, digest:%q): %v",
+				host.Host, refspec, digest, err)
+			continue // Try another
 		}
 
 		// Get size information
-		size, err = getSize(url, tr)
+		// TODO: we should try to use the Size field in the descriptor here.
+		size, err := getSize(ctx, url, tr)
 		if err != nil {
-			rErr = errors.Wrapf(rErr, "host %q: failed to get size: %v", h.Host, err)
-			continue // try another host
+			rErr = errors.Wrapf(rErr, "failed to get size (host %q, ref:%q, digest:%q): %v",
+				host.Host, refspec, digest, err)
+			continue // Try another
 		}
 
-		rErr = nil // Hit one accessible mirror
-		break
-	}
-	if rErr != nil {
-		return nil, 0, errors.Wrapf(rErr, "cannot resolve ref %q (%q)", ref, digest)
+		// Hit one destination
+		return &fetcher{
+			url:     url,
+			tr:      tr,
+			blobURL: blobURL,
+		}, size, nil
 	}
 
-	return &fetcher{
-		resolver: r,
-		ref:      ref,
-		digest:   digest,
-		nref:     nref,
-		url:      url,
-		tr:       tr,
-	}, size, nil
+	return nil, 0, errors.Wrapf(rErr, "cannot resolve layer")
 }
 
-func (r *Resolver) resolveReference(ref name.Reference, digest string) (string, http.RoundTripper, error) {
-	r.trPoolMu.Lock()
-	defer r.trPoolMu.Unlock()
+type transport struct {
+	inner http.RoundTripper
+	auth  docker.Authorizer
+	scope string
+}
 
-	// Construct endpoint URL from given ref
-	endpointURL := fmt.Sprintf("%s://%s/v2/%s/blobs/%s",
-		ref.Context().Registry.Scheme(),
-		ref.Context().RegistryStr(),
-		ref.Context().RepositoryStr(),
-		digest)
-
-	// Try to use cached transport (cahced per reference name)
-	if tr, ok := r.trPool.Get(ref.Name()); ok {
-		if url, err := redirect(endpointURL, tr.(http.RoundTripper)); err == nil {
-			return url, tr.(http.RoundTripper), nil
+func (tr *transport) RoundTrip(req *http.Request) (*http.Response, error) {
+	ctx := docker.WithScope(req.Context(), tr.scope)
+	roundTrip := func(req *http.Request) (*http.Response, error) {
+		// authorize the request using docker.Authorizer
+		if err := tr.auth.Authorize(ctx, req); err != nil {
+			return nil, err
 		}
+
+		// send the request
+		return tr.inner.RoundTrip(req)
 	}
 
-	// Remove the stale transport from cache
-	r.trPool.Remove(ref.Name())
-
-	// transport is unavailable/expired so refresh the transport and try again
-	tr, err := authnTransport(ref, r.transport, r.keychain)
+	resp, err := roundTrip(req)
 	if err != nil {
-		return "", nil, err
-	}
-	url, err := redirect(endpointURL, tr)
-	if err != nil {
-		return "", nil, err
+		return nil, err
 	}
 
-	// Update transports cache
-	r.trPool.Add(ref.Name(), tr)
+	// TODO: support more status codes and retries
+	if resp.StatusCode == http.StatusUnauthorized {
 
-	return url, tr, nil
+		// prepare authorization for the target host using docker.Authorizer
+		if err := tr.auth.AddResponses(ctx, []*http.Response{resp}); err != nil {
+			if errdefs.IsNotImplemented(err) {
+				return resp, nil
+			}
+			return nil, err
+		}
+
+		// re-authorize and send the request
+		return roundTrip(req.Clone(ctx))
+	}
+
+	return resp, nil
 }
 
-func redirect(endpointURL string, tr http.RoundTripper) (url string, err error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+func redirect(ctx context.Context, blobURL string, tr http.RoundTripper) (url string, err error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	// We use GET request for GCR.
-	req, err := http.NewRequestWithContext(ctx, "GET", endpointURL, nil)
+	// We use GET request for redirect.
+	// gcr.io returns 200 on HEAD without Location header (2020).
+	// ghcr.io returns 200 on HEAD without Location header (2020).
+	req, err := http.NewRequestWithContext(ctx, "GET", blobURL, nil)
 	if err != nil {
 		return "", errors.Wrapf(err, "failed to make request to the registry")
 	}
@@ -262,7 +230,7 @@ func redirect(endpointURL string, tr http.RoundTripper) (url string, err error) 
 	}()
 
 	if res.StatusCode/100 == 2 {
-		url = endpointURL
+		url = blobURL
 	} else if redir := res.Header.Get("Location"); redir != "" && res.StatusCode/100 == 3 {
 		// TODO: Support nested redirection
 		url = redir
@@ -273,8 +241,8 @@ func redirect(endpointURL string, tr http.RoundTripper) (url string, err error) 
 	return
 }
 
-func getSize(url string, tr http.RoundTripper) (int64, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+func getSize(ctx context.Context, url string, tr http.RoundTripper) (int64, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, "HEAD", url, nil)
 	if err != nil {
@@ -286,52 +254,47 @@ func getSize(url string, tr http.RoundTripper) (int64, error) {
 		return 0, err
 	}
 	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("failed HEAD request with code %v", res.StatusCode)
+	if res.StatusCode == http.StatusOK {
+		return strconv.ParseInt(res.Header.Get("Content-Length"), 10, 64)
 	}
-	return strconv.ParseInt(res.Header.Get("Content-Length"), 10, 64)
-}
+	headStatusCode := res.StatusCode
 
-func authnTransport(ref name.Reference, tr http.RoundTripper, keychain authn.Keychain) (http.RoundTripper, error) {
-	if keychain == nil {
-		keychain = authn.DefaultKeychain
-	}
-	authn, err := keychain.Resolve(ref.Context())
+	// Failed to do HEAD request. Fall back to GET.
+	// ghcr.io (https://github-production-container-registry.s3.amazonaws.com) doesn't allow
+	// HEAD request (2020).
+	req, err = http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to resolve the reference %q", ref)
+		return 0, errors.Wrapf(err, "failed to make request to the registry")
 	}
-	errCh := make(chan error)
-	var rTr http.RoundTripper
-	go func() {
-		rTr, err = transport.New(
-			ref.Context().Registry,
-			authn,
-			tr,
-			[]string{ref.Scope(transport.PullScope)},
-		)
-		errCh <- err
+	req.Close = false
+	req.Header.Set("Range", "bytes=0-1")
+	res, err = tr.RoundTrip(req)
+	if err != nil {
+		return 0, errors.Wrapf(err, "failed to request")
+	}
+	defer func() {
+		io.Copy(ioutil.Discard, res.Body)
+		res.Body.Close()
 	}()
-	select {
-	case err = <-errCh:
-	case <-time.After(10 * time.Second):
-		return nil, fmt.Errorf("authentication timeout")
+
+	if res.StatusCode == http.StatusOK {
+		return strconv.ParseInt(res.Header.Get("Content-Length"), 10, 64)
+	} else if res.StatusCode == http.StatusPartialContent {
+		_, size, err := parseRange(res.Header.Get("Content-Range"))
+		return size, err
 	}
-	return rTr, err
+
+	return 0, fmt.Errorf("failed to get size with code (HEAD=%v, GET=%v)",
+		headStatusCode, res.StatusCode)
 }
 
 type fetcher struct {
-	resolver      *Resolver
-	ref           string
-	digest        string
-	nref          name.Reference
 	url           string
+	urlMu         sync.Mutex
 	tr            http.RoundTripper
+	blobURL       string
 	singleRange   bool
 	singleRangeMu sync.Mutex
-}
-
-func (f *fetcher) refresh() (*fetcher, int64, error) {
-	return f.resolver.resolve(f.ref, f.digest)
 }
 
 type multipartReadCloser interface {
@@ -339,7 +302,7 @@ type multipartReadCloser interface {
 	Close() error
 }
 
-func (f *fetcher) fetch(ctx context.Context, rs []region, opts *options) (multipartReadCloser, error) {
+func (f *fetcher) fetch(ctx context.Context, rs []region, retry bool, opts *options) (multipartReadCloser, error) {
 	if len(rs) == 0 {
 		return nil, fmt.Errorf("no request queried")
 	}
@@ -371,7 +334,10 @@ func (f *fetcher) fetch(ctx context.Context, rs []region, opts *options) (multip
 	}
 
 	// Request to the registry
-	req, err := http.NewRequestWithContext(ctx, "GET", f.url, nil)
+	f.urlMu.Lock()
+	url := f.url
+	f.urlMu.Unlock()
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -404,14 +370,21 @@ func (f *fetcher) fetch(ctx context.Context, rs []region, opts *options) (multip
 		}
 
 		// We are getting single range
-		reg, err := parseRange(res.Header.Get("Content-Range"))
+		reg, _, err := parseRange(res.Header.Get("Content-Range"))
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to parse Content-Range")
 		}
 		return singlePartReader(reg, res.Body), nil
-	} else if !singleRangeMode {
-		f.singleRangeMode()           // fallbacks to singe range request mode
-		return f.fetch(ctx, rs, opts) // retries with the single range mode
+	} else if retry && res.StatusCode == http.StatusForbidden {
+		// re-redirect and retry this once.
+		if err := f.refreshURL(ctx); err != nil {
+			return nil, errors.Wrapf(err, "failed to refresh URL on %v", res.Status)
+		}
+		return f.fetch(ctx, rs, false, opts)
+	} else if retry && res.StatusCode == http.StatusBadRequest && !singleRangeMode {
+		// gcr.io (https://storage.googleapis.com) returns 400 on multi-range request (2020 #81)
+		f.singleRangeMode()                  // fallbacks to singe range request mode
+		return f.fetch(ctx, rs, false, opts) // retries with the single range mode
 	}
 
 	return nil, fmt.Errorf("unexpected status code: %v", res.Status)
@@ -420,7 +393,10 @@ func (f *fetcher) fetch(ctx context.Context, rs []region, opts *options) (multip
 func (f *fetcher) check() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, "GET", f.url, nil)
+	f.urlMu.Lock()
+	url := f.url
+	f.urlMu.Unlock()
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return errors.Wrapf(err, "check failed: failed to make request")
 	}
@@ -434,19 +410,34 @@ func (f *fetcher) check() error {
 		io.Copy(ioutil.Discard, res.Body)
 		res.Body.Close()
 	}()
-	if res.StatusCode != http.StatusOK && res.StatusCode != http.StatusPartialContent {
-		return fmt.Errorf("unexpected status code %v", res.StatusCode)
+	if res.StatusCode == http.StatusOK || res.StatusCode == http.StatusPartialContent {
+		return nil
+	} else if res.StatusCode == http.StatusForbidden {
+		// Try to re-redirect this blob
+		rCtx, rCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer rCancel()
+		if err := f.refreshURL(rCtx); err == nil {
+			return nil
+		}
+		return fmt.Errorf("failed to refresh URL on status %v", res.Status)
 	}
 
+	return fmt.Errorf("unexpected status code %v", res.StatusCode)
+}
+
+func (f *fetcher) refreshURL(ctx context.Context) error {
+	newURL, err := redirect(ctx, f.blobURL, f.tr)
+	if err != nil {
+		return err
+	}
+	f.urlMu.Lock()
+	f.url = newURL
+	f.urlMu.Unlock()
 	return nil
 }
 
-func (f *fetcher) authn(tr http.RoundTripper, keychain authn.Keychain) (http.RoundTripper, error) {
-	return authnTransport(f.nref, tr, keychain)
-}
-
 func (f *fetcher) genID(reg region) string {
-	sum := sha256.Sum256([]byte(fmt.Sprintf("%s-%d-%d", f.url, reg.b, reg.e)))
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%s-%d-%d", f.blobURL, reg.b, reg.e)))
 	return fmt.Sprintf("%x", sum)
 }
 
@@ -503,28 +494,32 @@ func (sr *multipartReader) Next() (region, io.Reader, error) {
 	if err != nil {
 		return region{}, nil, err
 	}
-	reg, err := parseRange(p.Header.Get("Content-Range"))
+	reg, _, err := parseRange(p.Header.Get("Content-Range"))
 	if err != nil {
 		return region{}, nil, errors.Wrapf(err, "failed to parse Content-Range")
 	}
 	return reg, p, nil
 }
 
-func parseRange(header string) (region, error) {
+func parseRange(header string) (region, int64, error) {
 	submatches := contentRangeRegexp.FindStringSubmatch(header)
 	if len(submatches) < 4 {
-		return region{}, fmt.Errorf("Content-Range %q doesn't have enough information", header)
+		return region{}, 0, fmt.Errorf("Content-Range %q doesn't have enough information", header)
 	}
 	begin, err := strconv.ParseInt(submatches[1], 10, 64)
 	if err != nil {
-		return region{}, errors.Wrapf(err, "failed to parse beginning offset %q", submatches[1])
+		return region{}, 0, errors.Wrapf(err, "failed to parse beginning offset %q", submatches[1])
 	}
 	end, err := strconv.ParseInt(submatches[2], 10, 64)
 	if err != nil {
-		return region{}, errors.Wrapf(err, "failed to parse end offset %q", submatches[2])
+		return region{}, 0, errors.Wrapf(err, "failed to parse end offset %q", submatches[2])
+	}
+	blobSize, err := strconv.ParseInt(submatches[3], 10, 64)
+	if err != nil {
+		return region{}, 0, errors.Wrapf(err, "failed to parse blob size %q", submatches[3])
 	}
 
-	return region{begin, end}, nil
+	return region{begin, end}, blobSize, nil
 }
 
 type Option func(*options)

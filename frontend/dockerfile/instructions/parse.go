@@ -22,6 +22,7 @@ type parseRequest struct {
 	flags      *BFlags
 	original   string
 	location   []parser.Range
+	comments   []string
 }
 
 var parseRunPreHooks []func(*RunCommand, parseRequest) error
@@ -50,6 +51,7 @@ func newParseRequestFromNode(node *parser.Node) parseRequest {
 		original:   node.Original,
 		flags:      NewBFlagsWithArgs(node.Flags),
 		location:   node.Location(),
+		comments:   node.PrevComment,
 	}
 }
 
@@ -289,6 +291,7 @@ func parseFrom(req parseRequest) (*Stage, error) {
 		Commands:   []Command{},
 		Platform:   flPlatform.Value,
 		Location:   req.location,
+		Comment:    getComment(req.comments, stageName),
 	}, nil
 
 }
@@ -604,6 +607,7 @@ func parseArg(req parseRequest) (*ArgCommand, error) {
 		} else {
 			kvpo.Key = arg
 		}
+		kvpo.Comment = getComment(req.comments, kvpo.Key)
 		pairs[i] = kvpo
 	}
 
@@ -653,4 +657,16 @@ func errBlankCommandNames(command string) error {
 
 func errTooManyArguments(command string) error {
 	return errors.Errorf("Bad input to %s, too many arguments", command)
+}
+
+func getComment(comments []string, name string) string {
+	if name == "" {
+		return ""
+	}
+	for _, line := range comments {
+		if strings.HasPrefix(line, name+" ") {
+			return strings.TrimPrefix(line, name+" ")
+		}
+	}
+	return ""
 }

@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"fmt"
+	"os/exec"
 	"strconv"
 	"testing"
 
@@ -23,10 +24,15 @@ func signalDaemonReload(pid int) error {
 	return fmt.Errorf("daemon reload not supported")
 }
 
+func cleanupMount(_ testing.TB, _ *Daemon) {}
+
 func cleanupNetworkNamespace(_ testing.TB, _ *Daemon) {}
 
 // CgroupNamespace returns the cgroup namespace the daemon is running in
 func (d *Daemon) CgroupNamespace(t testing.TB) string {
 	assert.Assert(t, false)
 	return "cgroup namespaces are not supported on Windows"
+}
+
+func setsid(cmd *exec.Cmd) {
 }

@@ -90,7 +90,7 @@ fi
 DOCKERFILE_RELEASES_CUSTOM=""
 if [ "$TEST_DOCKERFILE" == 1 ]; then
   if [ -z $DOCKERFILE_RELEASES ]; then
-    DOCKERFILE_RELEASES="mainline experimental mounts secrets ssh"
+    DOCKERFILE_RELEASES="mainline experimental"
   else
     DOCKERFILE_RELEASES_CUSTOM=1
   fi

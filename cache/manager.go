@@ -16,6 +16,7 @@ import (
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/util/flightcontrol"
 	digest "github.com/opencontainers/go-digest"
@@ -47,7 +48,7 @@ type Accessor interface {
 	GetByBlob(ctx context.Context, desc ocispec.Descriptor, parent ImmutableRef, opts ...RefOption) (ImmutableRef, error)
 	Get(ctx context.Context, id string, opts ...RefOption) (ImmutableRef, error)
 
-	New(ctx context.Context, parent ImmutableRef, opts ...RefOption) (MutableRef, error)
+	New(ctx context.Context, parent ImmutableRef, s session.Group, opts ...RefOption) (MutableRef, error)
 	GetMutable(ctx context.Context, id string, opts ...RefOption) (MutableRef, error) // Rebase?
 	IdentityMapping() *idtools.IdentityMapping
 	Metadata(string) *metadata.StorageItem
@@ -105,7 +106,7 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispec.Descriptor, 
 	blobChainID := imagespecidentity.ChainID([]digest.Digest{desc.Digest, diffID})
 
 	descHandlers := descHandlersOf(opts...)
-	if descHandlers == nil || descHandlers[desc.Digest] == nil {
+	if desc.Digest != "" && (descHandlers == nil || descHandlers[desc.Digest] == nil) {
 		if _, err := cm.ContentStore.Info(ctx, desc.Digest); errors.Is(err, errdefs.ErrNotFound) {
 			return nil, NeedsRemoteProvidersError([]digest.Digest{desc.Digest})
 		} else if err != nil {
@@ -452,7 +453,7 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOpt
 	return rec, nil
 }
 
-func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, opts ...RefOption) (mr MutableRef, err error) {
+func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, sess session.Group, opts ...RefOption) (mr MutableRef, err error) {
 	id := identity.NewID()
 
 	var parent *immutableRef
@@ -471,7 +472,7 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, opts ...RefOpti
 		if err := parent.Finalize(ctx, true); err != nil {
 			return nil, err
 		}
-		if err := parent.Extract(ctx); err != nil {
+		if err := parent.Extract(ctx, sess); err != nil {
 			return nil, err
 		}
 		parentSnapshotID = getSnapshotID(parent.md)
