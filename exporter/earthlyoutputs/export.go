@@ -162,7 +162,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	names := make(map[string][]string)
 	for k := range images {
 		expSrc := expSrcs[k]
-		desc, err := e.opt.ImageWriter.Commit(ctx, expSrc, e.ociTypes, e.layerCompression)
+		desc, err := e.opt.ImageWriter.Commit(ctx, expSrc, e.ociTypes, e.layerCompression, sessionID)
 		if err != nil {
 			return nil, err
 		}
@@ -220,7 +220,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 		for mdK, mdV := range expSrcs[k].Metadata {
 			md[mdK] = string(mdV)
 		}
-		eg.Go(exportDirFunc(egCtx, md, caller, expSrcs[k].Ref))
+		eg.Go(exportDirFunc(egCtx, md, caller, expSrcs[k].Ref, sessionID))
 	}
 
 	mproviders := make(map[string]*contentutil.MultiProvider)
@@ -228,7 +228,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 		expSrc := expSrcs[k]
 		mprovider := contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
 		if expSrc.Ref != nil {
-			remote, err := expSrc.Ref.GetRemote(ctx, false, e.layerCompression)
+			remote, err := expSrc.Ref.GetRemote(ctx, false, e.layerCompression, session.NewGroup(sessionID))
 			if err != nil {
 				return nil, err
 			}
@@ -348,7 +348,7 @@ func newProgressHandler(ctx context.Context, id string) func(int, bool) {
 	}
 }
 
-func exportDirFunc(ctx context.Context, md map[string]string, caller session.Caller, ref cache.ImmutableRef) func() error {
+func exportDirFunc(ctx context.Context, md map[string]string, caller session.Caller, ref cache.ImmutableRef, sessionID string) func() error {
 	return func() error {
 		var src string
 		var err error
@@ -360,7 +360,7 @@ func exportDirFunc(ctx context.Context, md map[string]string, caller session.Cal
 			}
 			defer os.RemoveAll(src)
 		} else {
-			mount, err := ref.Mount(ctx, true)
+			mount, err := ref.Mount(ctx, true, session.NewGroup(sessionID))
 			if err != nil {
 				return err
 			}

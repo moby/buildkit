@@ -14,6 +14,7 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver/llbsolver/mounts"
+	"github.com/moby/buildkit/solver/pb"
 	opspb "github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/stack"
 	utilsystem "github.com/moby/buildkit/util/system"
@@ -154,7 +155,7 @@ func PrepareMounts(ctx context.Context, mm *mounts.MountManager, cm cache.Manage
 
 		switch m.MountType {
 		case pb.MountType_HOST_BIND:
-			mountable = newHostBind(e.cm.IdentityMapping())
+			mountable = mm.MountableHostBind()
 
 		case opspb.MountType_BIND:
 			// if mount creates an output

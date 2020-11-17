@@ -383,6 +383,10 @@ func (mm *MountManager) MountableTmpFS() cache.Mountable {
 	return newTmpfs(mm.cm.IdentityMapping())
 }
 
+func (mm *MountManager) MountableHostBind() cache.Mountable {
+	return newHostBind(mm.cm.IdentityMapping())
+}
+
 func (mm *MountManager) MountableSecret(ctx context.Context, m *pb.Mount, g session.Group) (cache.Mountable, error) {
 	return mm.getSecretMountable(ctx, m, g)
 }
@@ -432,7 +436,7 @@ type hostBind struct {
 	idmap *idtools.IdentityMapping
 }
 
-func (f *hostBind) Mount(ctx context.Context, readonly bool) (snapshot.Mountable, error) {
+func (f *hostBind) Mount(ctx context.Context, readonly bool, g session.Group) (snapshot.Mountable, error) {
 	return &hostBindMount{readonly: readonly, idmap: f.idmap}, nil
 }
 
