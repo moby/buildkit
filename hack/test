@@ -90,7 +90,7 @@ fi
 DOCKERFILE_RELEASES_CUSTOM=""
 if [ "$TEST_DOCKERFILE" == 1 ]; then
   if [ -z $DOCKERFILE_RELEASES ]; then
-    DOCKERFILE_RELEASES="mainline experimental"
+    DOCKERFILE_RELEASES="mainline labs"
   else
     DOCKERFILE_RELEASES_CUSTOM=1
   fi
