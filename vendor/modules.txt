@@ -59,7 +59,6 @@ github.com/containerd/containerd/containers
 github.com/containerd/containerd/content
 github.com/containerd/containerd/content/local
 github.com/containerd/containerd/content/proxy
-github.com/containerd/containerd/contrib/seccomp
 github.com/containerd/containerd/defaults
 github.com/containerd/containerd/diff
 github.com/containerd/containerd/diff/apply
@@ -191,6 +190,7 @@ github.com/docker/docker/pkg/reexec
 github.com/docker/docker/pkg/signal
 github.com/docker/docker/pkg/stringid
 github.com/docker/docker/pkg/system
+github.com/docker/docker/profiles/seccomp
 github.com/docker/docker/testutil/daemon
 github.com/docker/docker/testutil/environment
 github.com/docker/docker/testutil/fixtures/load
