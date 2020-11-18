@@ -18,7 +18,7 @@ ARG ALPINE_VERSION=3.12
 
 # git stage is used for checking out remote repository sources
 FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS git
-RUN apk add --no-cache git xz
+RUN apk add --no-cache git
 
 # xgo is a helper for golang cross-compilation
 FROM --platform=$BUILDPLATFORM tonistiigi/xx:golang@sha256:6f7d999551dd471b58f70716754290495690efa8421e0a1fcf18eb11d0c0a537 AS xgo
@@ -130,8 +130,8 @@ RUN --mount=from=binaries \
 FROM scratch AS release
 COPY --from=releaser /out/ /
 
-FROM git AS buildkit-export
-RUN apk add --no-cache fuse3 pigz && ln -s fusermount3 /usr/bin/fusermount
+FROM alpine:${ALPINE_VERSION} AS buildkit-export
+RUN apk add --no-cache fuse3 git pigz xz && ln -s fusermount3 /usr/bin/fusermount
 COPY examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
 VOLUME /var/lib/buildkit
 
