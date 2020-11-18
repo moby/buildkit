@@ -6,10 +6,10 @@ require (
 	github.com/AkihiroSuda/containerd-fuse-overlayfs v1.0.0
 	github.com/BurntSushi/toml v0.3.1
 	github.com/Microsoft/go-winio v0.4.15
-	github.com/Microsoft/hcsshim v0.8.9
+	github.com/Microsoft/hcsshim v0.8.10
 	github.com/codahale/hdrhistogram v0.0.0-20160425231609-f8ad88b59a58 // indirect
 	github.com/containerd/console v1.0.1
-	github.com/containerd/containerd v1.4.1-0.20200903181227-d4e78200d6da
+	github.com/containerd/containerd v1.4.1-0.20201117152358-0edc412565dc
 	github.com/containerd/continuity v0.0.0-20200710164510-efbc4488d8fe
 	github.com/containerd/go-cni v1.0.1
 	github.com/containerd/go-runc v0.0.0-20201020171139-16b287bc67d0
@@ -62,7 +62,7 @@ require (
 	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
 	golang.org/x/net v0.0.0-20200707034311-ab3426394381
 	golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208
-	golang.org/x/sys v0.0.0-20200922070232-aee5d888a860
+	golang.org/x/sys v0.0.0-20201013081832-0aaa2718063a
 	golang.org/x/time v0.0.0-20200416051211-89c76fbcd5d1
 	// genproto: the actual version is replaced in replace()
 	google.golang.org/genproto v0.0.0-20200527145253-8367513e4ece
