@@ -380,7 +380,7 @@ func (w *containerdExecutor) runProcess(ctx context.Context, p containerd.Proces
 					ExitCode: status.ExitCode(),
 					Err:      status.Error(),
 				}
-				if status.ExitCode() == containerd.UnknownExitStatus && status.Error() != nil {
+				if status.ExitCode() == errdefs.ContainerdUnknownExitStatus && status.Error() != nil {
 					exitErr.Err = errors.Wrap(status.Error(), "failure waiting for process")
 				}
 				select {
