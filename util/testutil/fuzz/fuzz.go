@@ -2,6 +2,7 @@ package fuzz
 
 import (
 	"bytes"
+
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
 )
 
