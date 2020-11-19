@@ -1,21 +1,24 @@
 # syntax = docker/dockerfile:1.1-experimental
 
-ARG RUNC_VERSION=v1.0.0-rc92
+# TODO update RUNC_VERSION with next release after 1.0-rc92
+ARG RUNC_VERSION=939ad4e3fcfa1ab531458355a73688c6f4ee5003
 ARG CONTAINERD_VERSION=v1.4.0
 # containerd v1.3 for integration tests
 ARG CONTAINERD_ALT_VERSION=v1.3.7
 # available targets: buildkitd, buildkitd.oci_only, buildkitd.containerd_only
 ARG BUILDKIT_TARGET=buildkitd
 ARG REGISTRY_VERSION=2.7.1
-ARG ROOTLESSKIT_VERSION=v0.9.5
+ARG ROOTLESSKIT_VERSION=v0.11.0
 ARG CNI_VERSION=v0.8.6
 ARG SHADOW_VERSION=4.8.1
-ARG FUSEOVERLAYFS_VERSION=v1.1.2
-ARG STARGZ_SNAPSHOTTER_VERSION=2ee75e91f8f98f3d324290a2503269812e019fc3
+ARG FUSEOVERLAYFS_VERSION=v1.2.0
+ARG STARGZ_SNAPSHOTTER_VERSION=3a04e4c2c116c85b4b66d01945cf7ebcb7a2eb5a
+
+ARG ALPINE_VERSION=3.12
 
 # git stage is used for checking out remote repository sources
-FROM --platform=$BUILDPLATFORM alpine AS git
-RUN apk add --no-cache git xz
+FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS git
+RUN apk add --no-cache git
 
 # xgo is a helper for golang cross-compilation
 FROM --platform=$BUILDPLATFORM tonistiigi/xx:golang@sha256:6f7d999551dd471b58f70716754290495690efa8421e0a1fcf18eb11d0c0a537 AS xgo
@@ -65,7 +68,7 @@ FROM gobuild-base AS runc
 WORKDIR $GOPATH/src/github.com/opencontainers/runc
 ARG TARGETPLATFORM
 RUN --mount=from=runc-src,src=/usr/src/runc,target=. --mount=target=/root/.cache,type=cache \
-  CGO_ENABLED=1 go build -ldflags '-w -extldflags -static' -tags 'seccomp netgo cgo static_build osusergo' -o /usr/bin/runc ./ && \
+  CGO_ENABLED=1 go build -ldflags '-extldflags -static' -tags 'seccomp netgo cgo static_build osusergo' -o /usr/bin/runc ./ && \
   file /usr/bin/runc | grep "statically linked"
 
 FROM gobuild-base AS buildkit-base
@@ -97,7 +100,7 @@ ARG BUILDKITD_TAGS
 RUN --mount=target=. --mount=target=/root/.cache,type=cache \
   --mount=target=/go/pkg/mod,type=cache \
   --mount=source=/tmp/.ldflags,target=/tmp/.ldflags,from=buildkit-version \
-  go build -ldflags "$(cat /tmp/.ldflags) -w -extldflags -static" -tags "osusergo netgo static_build seccomp ${BUILDKITD_TAGS}" -o /usr/bin/buildkitd ./cmd/buildkitd && \
+  go build -ldflags "$(cat /tmp/.ldflags) -extldflags '-static'" -tags "osusergo netgo static_build seccomp ${BUILDKITD_TAGS}" -o /usr/bin/buildkitd ./cmd/buildkitd && \
   file /usr/bin/buildkitd | egrep "statically linked|Windows"
 
 FROM scratch AS binaries-linux-helper
@@ -116,7 +119,7 @@ COPY --from=buildctl /usr/bin/buildctl /buildctl.exe
 
 FROM binaries-$TARGETOS AS binaries
 
-FROM --platform=$BUILDPLATFORM alpine AS releaser
+FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS releaser
 RUN apk add --no-cache tar gzip
 WORKDIR /work
 ARG TARGETPLATFORM
@@ -127,7 +130,8 @@ RUN --mount=from=binaries \
 FROM scratch AS release
 COPY --from=releaser /out/ /
 
-FROM tonistiigi/git@sha256:393483e1cef35f09e1a8fe0a0bd93a78b1b6ecec5b5afa5fa5d600fa3ab1fdd8 AS buildkit-export
+FROM alpine:${ALPINE_VERSION} AS buildkit-export
+RUN apk add --no-cache fuse3 git pigz xz && ln -s fusermount3 /usr/bin/fusermount
 COPY examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
 VOLUME /var/lib/buildkit
 
@@ -184,7 +188,7 @@ RUN --mount=target=/root/.cache,type=cache \
   file /out/containerd-stargz-grpc | grep "statically linked" && \
   file /out/ctr-remote | grep "statically linked"
 
-FROM --platform=$BUILDPLATFORM alpine AS fuse-overlayfs
+FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS fuse-overlayfs
 RUN apk add --no-cache curl
 ARG FUSEOVERLAYFS_VERSION
 ARG TARGETARCH
@@ -218,7 +222,7 @@ COPY --from=buildkitd /usr/bin/buildkitd /buildkitd.exe
 
 FROM buildkit-buildkitd-$TARGETOS AS buildkit-buildkitd
 
-FROM alpine AS containerd-runtime
+FROM alpine:${ALPINE_VERSION} AS containerd-runtime
 COPY --from=runc /usr/bin/runc /usr/bin/
 COPY --from=containerd /out/containerd* /usr/bin/
 COPY --from=containerd /out/ctr /usr/bin/
@@ -226,7 +230,7 @@ VOLUME /var/lib/containerd
 VOLUME /run/containerd
 ENTRYPOINT ["containerd"]
 
-FROM --platform=$BUILDPLATFORM alpine AS cni-plugins
+FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS cni-plugins
 RUN apk add --no-cache curl
 ARG CNI_VERSION
 ARG TARGETOS
@@ -265,7 +269,7 @@ VOLUME /var/lib/buildkit
 # newuidmap & newgidmap binaries (shadow-uidmap 4.7-r1) shipped with alpine cannot be executed without CAP_SYS_ADMIN,
 # because the binaries are built without libcap-dev.
 # So we need to build the binaries with libcap enabled.
-FROM alpine:3.12 AS idmap
+FROM alpine:${ALPINE_VERSION} AS idmap
 RUN apk add --no-cache autoconf automake build-base byacc gettext gettext-dev gcc git libcap-dev libtool libxslt
 RUN git clone https://github.com/shadow-maint/shadow.git /shadow
 WORKDIR /shadow
@@ -276,8 +280,8 @@ RUN ./autogen.sh --disable-nls --disable-man --without-audit --without-selinux -
   && cp src/newuidmap src/newgidmap /usr/bin
 
 # Rootless mode.
-FROM alpine:3.12 AS rootless
-RUN apk add --no-cache fuse3 git xz
+FROM alpine:${ALPINE_VERSION} AS rootless
+RUN apk add --no-cache fuse3 git xz pigz
 COPY --from=idmap /usr/bin/newuidmap /usr/bin/newuidmap
 COPY --from=idmap /usr/bin/newgidmap /usr/bin/newgidmap
 COPY --from=fuse-overlayfs /out/fuse-overlayfs /usr/bin/

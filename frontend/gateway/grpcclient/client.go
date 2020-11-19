@@ -11,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/containerd/containerd"
 	"github.com/gogo/googleapis/google/rpc"
 	gogotypes "github.com/gogo/protobuf/types"
 	"github.com/golang/protobuf/ptypes/any"
@@ -299,7 +298,7 @@ func (c *grpcClient) requestForRef(ref client.Reference) (*pb.SolveRequest, erro
 	return req, nil
 }
 
-func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (*client.Result, error) {
+func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (res *client.Result, err error) {
 	if creq.Definition != nil {
 		for _, md := range creq.Definition.Metadata {
 			for cap := range md.Caps {
@@ -345,13 +344,45 @@ func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (*clie
 		req.ExporterAttr = []byte("{}")
 	}
 
+	if creq.Evaluate {
+		if c.caps.Supports(pb.CapGatewayEvaluateSolve) == nil {
+			req.Evaluate = creq.Evaluate
+		} else {
+			// If evaluate is not supported, fallback to running Stat(".") in order to
+			// trigger an evaluation of the result.
+			defer func() {
+				if res == nil {
+					return
+				}
+
+				var (
+					id  string
+					ref client.Reference
+				)
+				ref, err = res.SingleRef()
+				if err != nil {
+					for refID := range res.Refs {
+						id = refID
+						break
+					}
+				} else {
+					id = ref.(*reference).id
+				}
+
+				_, err = c.client.StatFile(ctx, &pb.StatFileRequest{
+					Ref:  id,
+					Path: ".",
+				})
+			}()
+		}
+	}
+
 	resp, err := c.client.Solve(ctx, req)
 	if err != nil {
 		return nil, err
 	}
 
-	res := &client.Result{}
-
+	res = &client.Result{}
 	if resp.Result == nil {
 		if id := resp.Ref; id != "" {
 			c.requests[id] = req
@@ -475,14 +506,15 @@ func (b *procMessageForwarder) Send(ctx context.Context, m *pb.ExecMessage) {
 	}
 }
 
-func (b *procMessageForwarder) Recv(ctx context.Context) *pb.ExecMessage {
+func (b *procMessageForwarder) Recv(ctx context.Context) (m *pb.ExecMessage, ok bool) {
 	select {
 	case <-ctx.Done():
+		return nil, true
 	case <-b.done:
-	case m := <-b.msgs:
-		return m
+		return nil, false
+	case m = <-b.msgs:
+		return m, true
 	}
-	return nil
 }
 
 func (b *procMessageForwarder) Close() {
@@ -651,7 +683,7 @@ func (c *grpcClient) NewContainer(ctx context.Context, req client.NewContainerRe
 	id := identity.NewID()
 	var mounts []*opspb.Mount
 	for _, m := range req.Mounts {
-		var resultID string
+		resultID := m.ResultID
 		if m.Ref != nil {
 			ref, ok := m.Ref.(*reference)
 			if !ok {
@@ -675,6 +707,8 @@ func (c *grpcClient) NewContainer(ctx context.Context, req client.NewContainerRe
 	_, err = c.client.NewContainer(ctx, &pb.NewContainerRequest{
 		ContainerID: id,
 		Mounts:      mounts,
+		Platform:    req.Platform,
+		Constraints: req.Constraints,
 	})
 	if err != nil {
 		return nil, err
@@ -734,7 +768,7 @@ func (ctr *container) Start(ctx context.Context, req client.StartRequest) (clien
 		return nil, err
 	}
 
-	msg := msgs.Recv(ctx)
+	msg, _ := msgs.Recv(ctx)
 	if msg == nil {
 		return nil, errors.Errorf("failed to receive started message")
 	}
@@ -798,11 +832,22 @@ func (ctr *container) Start(ctx context.Context, req client.StartRequest) (clien
 	}
 
 	ctrProc.eg.Go(func() error {
+		var closeDoneOnce sync.Once
 		var exitError error
 		for {
-			msg := msgs.Recv(ctx)
-			if msg == nil {
+			msg, ok := msgs.Recv(ctx)
+			if !ok {
+				// no more messages, return
 				return exitError
+			}
+
+			if msg == nil {
+				// empty message from ctx cancel, so just start shutting down
+				// input, but continue processing more exit/done messages
+				closeDoneOnce.Do(func() {
+					close(done)
+				})
+				continue
 			}
 
 			if file := msg.GetFile(); file != nil {
@@ -826,7 +871,9 @@ func (ctr *container) Start(ctx context.Context, req client.StartRequest) (clien
 			} else if exit := msg.GetExit(); exit != nil {
 				// capture exit message to exitError so we can return it after
 				// the server sends the Done message
-				close(done)
+				closeDoneOnce.Do(func() {
+					close(done)
+				})
 				if exit.Code == 0 {
 					continue
 				}
@@ -835,7 +882,7 @@ func (ctr *container) Start(ctx context.Context, req client.StartRequest) (clien
 					Message: exit.Error.Message,
 					Details: convertGogoAny(exit.Error.Details),
 				}))
-				if exit.Code != containerd.UnknownExitStatus {
+				if exit.Code != errdefs.ContainerdUnknownExitStatus {
 					exitError = &errdefs.ExitError{ExitCode: exit.Code, Err: exitError}
 				}
 			} else if serverDone := msg.GetDone(); serverDone != nil {

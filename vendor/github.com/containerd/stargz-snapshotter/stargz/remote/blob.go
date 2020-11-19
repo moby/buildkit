@@ -28,25 +28,26 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net/http"
 	"regexp"
 	"sync"
 	"time"
 
+	"github.com/containerd/containerd/reference"
+	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/stargz-snapshotter/cache"
-	"github.com/google/go-containerregistry/pkg/authn"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
 
 var contentRangeRegexp = regexp.MustCompile(`bytes ([0-9]+)-([0-9]+)/([0-9]+|\\*)`)
 
 type Blob interface {
-	Authn(tr http.RoundTripper) (http.RoundTripper, error)
 	Check() error
 	Size() int64
 	FetchedSize() int64
 	ReadAt(p []byte, offset int64, opts ...Option) (int, error)
 	Cache(offset int64, size int64, opts ...Option) error
+	Refresh(ctx context.Context, host docker.RegistryHosts, refspec reference.Spec, desc ocispec.Descriptor) error
 }
 
 type blob struct {
@@ -54,10 +55,10 @@ type blob struct {
 	fetcherMu sync.Mutex
 
 	size          int64
-	keychain      authn.Keychain
 	chunkSize     int64
 	cache         cache.BlobCache
 	lastCheck     time.Time
+	lastCheckMu   sync.Mutex
 	checkInterval time.Duration
 
 	fetchedRegionSet   regionSet
@@ -66,24 +67,48 @@ type blob struct {
 	resolver *Resolver
 }
 
-func (b *blob) Authn(tr http.RoundTripper) (http.RoundTripper, error) {
+func (b *blob) Refresh(ctx context.Context, hosts docker.RegistryHosts, refspec reference.Spec, desc ocispec.Descriptor) error {
+	// refresh the fetcher
+	new, newSize, err := newFetcher(ctx, hosts, refspec, desc)
+	if err != nil {
+		return err
+	} else if newSize != b.size {
+		return fmt.Errorf("Invalid size of new blob %d; want %d", newSize, b.size)
+	}
+
+	// update the blob's fetcher with new one
 	b.fetcherMu.Lock()
-	fr := b.fetcher
+	b.fetcher = new
 	b.fetcherMu.Unlock()
-	return fr.authn(tr, b.keychain)
+	b.lastCheckMu.Lock()
+	b.lastCheck = time.Now()
+	b.lastCheckMu.Unlock()
+
+	return nil
 }
 
 func (b *blob) Check() error {
 	now := time.Now()
-	if now.Sub(b.lastCheck) < b.checkInterval {
+	b.lastCheckMu.Lock()
+	lastCheck := b.lastCheck
+	b.lastCheckMu.Unlock()
+	if now.Sub(lastCheck) < b.checkInterval {
 		// do nothing if not expired
 		return nil
 	}
-	b.lastCheck = now
 	b.fetcherMu.Lock()
 	fr := b.fetcher
 	b.fetcherMu.Unlock()
-	return fr.check()
+	err := fr.check()
+	if err == nil {
+		// update lastCheck only if check succeeded.
+		// on failure, we should check this layer next time again.
+		b.lastCheckMu.Lock()
+		b.lastCheck = now
+		b.lastCheckMu.Unlock()
+	}
+
+	return err
 }
 
 func (b *blob) Size() int64 {
@@ -244,14 +269,16 @@ func (b *blob) fetchRange(allData map[region]io.Writer, opts *options) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	mr, err := fr.fetch(ctx, req, opts)
+	mr, err := fr.fetch(ctx, req, true, opts)
 	if err != nil {
 		return err
 	}
 	defer mr.Close()
 
 	// Update the check timer because we succeeded to access the blob
+	b.lastCheckMu.Lock()
 	b.lastCheck = time.Now()
+	b.lastCheckMu.Unlock()
 
 	// chunk and cache responsed data. Regions must be aligned by chunk size.
 	// TODO: Reorganize remoteData to make it be aligned by chunk size

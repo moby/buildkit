@@ -78,7 +78,7 @@ jobs:
             branch: master
             condition: $TRAVIS_EVENT_TYPE != "cron"
         - provider: script
-          script: ./frontend/dockerfile/cmd/dockerfile-frontend/hack/release master experimental $DF_REPO_SLUG_TARGET push
+          script: ./frontend/dockerfile/cmd/dockerfile-frontend/hack/release master labs $DF_REPO_SLUG_TARGET push
           on:
             repo: moby/buildkit
             branch: master

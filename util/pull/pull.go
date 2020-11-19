@@ -11,10 +11,14 @@ import (
 	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/remotes/docker/schema1"
-	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/util/contentutil"
+	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/imageutil"
+	"github.com/moby/buildkit/util/progress/logs"
 	"github.com/moby/buildkit/util/pull/pullprogress"
+	"github.com/moby/buildkit/util/resolver"
+	"github.com/moby/buildkit/util/resolver/retryhandler"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -22,12 +26,13 @@ import (
 
 type Puller struct {
 	ContentStore content.Store
-	Resolver     remotes.Resolver
+	Resolver     *resolver.Resolver
 	Src          reference.Spec
 	Platform     ocispec.Platform
 
-	resolveOnce sync.Once
+	g           flightcontrol.Group
 	resolveErr  error
+	resolveDone bool
 	desc        ocispec.Descriptor
 	configDesc  ocispec.Descriptor
 	ref         string
@@ -35,31 +40,40 @@ type Puller struct {
 	nonlayers   []ocispec.Descriptor
 }
 
-var _ content.Provider = &Puller{}
+var _ content.Provider = &provider{}
 
 type PulledManifests struct {
 	Ref              string
 	MainManifestDesc ocispec.Descriptor
 	ConfigDesc       ocispec.Descriptor
 	Nonlayers        []ocispec.Descriptor
-	Remote           *solver.Remote
+	Descriptors      []ocispec.Descriptor
+	Provider         func(session.Group) content.Provider
 }
 
-func (p *Puller) resolve(ctx context.Context) error {
-	p.resolveOnce.Do(func() {
+func (p *Puller) resolve(ctx context.Context, resolver remotes.Resolver) error {
+	_, err := p.g.Do(ctx, "", func(ctx context.Context) (_ interface{}, err error) {
+		if p.resolveErr != nil || p.resolveDone {
+			return nil, p.resolveErr
+		}
+		defer func() {
+			if !errors.Is(err, context.Canceled) {
+				p.resolveErr = err
+			}
+		}()
 		if p.tryLocalResolve(ctx) == nil {
 			return
 		}
-		ref, desc, err := p.Resolver.Resolve(ctx, p.Src.String())
+		ref, desc, err := resolver.Resolve(ctx, p.Src.String())
 		if err != nil {
-			p.resolveErr = err
-			return
+			return nil, err
 		}
 		p.desc = desc
 		p.ref = ref
+		p.resolveDone = true
+		return nil, nil
 	})
-
-	return p.resolveErr
+	return err
 }
 
 func (p *Puller) tryLocalResolve(ctx context.Context) error {
@@ -91,7 +105,7 @@ func (p *Puller) tryLocalResolve(ctx context.Context) error {
 }
 
 func (p *Puller) PullManifests(ctx context.Context) (*PulledManifests, error) {
-	err := p.resolve(ctx)
+	err := p.resolve(ctx, p.Resolver)
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +148,7 @@ func (p *Puller) PullManifests(ctx context.Context) (*PulledManifests, error) {
 		}
 		handlers = append(handlers,
 			filterLayerBlobs(metadata, &mu),
-			remotes.FetchHandler(p.ContentStore, fetcher),
+			retryhandler.New(remotes.FetchHandler(p.ContentStore, fetcher), logs.LoggerFromContext(ctx)),
 			childrenHandler,
 			dslHandler,
 		)
@@ -179,20 +193,25 @@ func (p *Puller) PullManifests(ctx context.Context) (*PulledManifests, error) {
 		MainManifestDesc: p.desc,
 		ConfigDesc:       p.configDesc,
 		Nonlayers:        p.nonlayers,
-		Remote: &solver.Remote{
-			Descriptors: p.layers,
-			Provider:    p,
+		Descriptors:      p.layers,
+		Provider: func(g session.Group) content.Provider {
+			return &provider{puller: p, resolver: p.Resolver.WithSession(g)}
 		},
 	}, nil
 }
 
-func (p *Puller) ReaderAt(ctx context.Context, desc ocispec.Descriptor) (content.ReaderAt, error) {
-	err := p.resolve(ctx)
+type provider struct {
+	puller   *Puller
+	resolver remotes.Resolver
+}
+
+func (p *provider) ReaderAt(ctx context.Context, desc ocispec.Descriptor) (content.ReaderAt, error) {
+	err := p.puller.resolve(ctx, p.resolver)
 	if err != nil {
 		return nil, err
 	}
 
-	fetcher, err := p.Resolver.Fetcher(ctx, p.ref)
+	fetcher, err := p.resolver.Fetcher(ctx, p.puller.ref)
 	if err != nil {
 		return nil, err
 	}

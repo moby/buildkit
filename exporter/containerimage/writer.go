@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/containerd/containerd/content"
@@ -14,6 +15,7 @@ import (
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
+	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/compression"
@@ -25,10 +27,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
-)
-
-const (
-	emptyGZLayer = digest.Digest("sha256:4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1")
 )
 
 type WriterOpt struct {
@@ -46,7 +44,7 @@ type ImageWriter struct {
 	opt WriterOpt
 }
 
-func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool, compressionType compression.Type) (*ocispec.Descriptor, error) {
+func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool, compressionType compression.Type, sessionID string) (*ocispec.Descriptor, error) {
 	platformsBytes, ok := inp.Metadata[exptypes.ExporterPlatformsKey]
 
 	if len(inp.Refs) > 0 && !ok {
@@ -54,7 +52,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 	}
 
 	if len(inp.Refs) == 0 {
-		remotes, err := ic.exportLayers(ctx, compressionType, inp.Ref)
+		remotes, err := ic.exportLayers(ctx, compressionType, session.NewGroup(sessionID), inp.Ref)
 		if err != nil {
 			return nil, err
 		}
@@ -77,7 +75,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 		refs = append(refs, r)
 	}
 
-	remotes, err := ic.exportLayers(ctx, compressionType, refs...)
+	remotes, err := ic.exportLayers(ctx, compressionType, session.NewGroup(sessionID), refs...)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +140,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 	return &idxDesc, nil
 }
 
-func (ic *ImageWriter) exportLayers(ctx context.Context, compressionType compression.Type, refs ...cache.ImmutableRef) ([]solver.Remote, error) {
+func (ic *ImageWriter) exportLayers(ctx context.Context, compressionType compression.Type, s session.Group, refs ...cache.ImmutableRef) ([]solver.Remote, error) {
 	eg, ctx := errgroup.WithContext(ctx)
 	layersDone := oneOffProgress(ctx, "exporting layers")
 
@@ -154,7 +152,7 @@ func (ic *ImageWriter) exportLayers(ctx context.Context, compressionType compres
 				return
 			}
 			eg.Go(func() error {
-				remote, err := ref.GetRemote(ctx, true, compressionType)
+				remote, err := ref.GetRemote(ctx, true, compressionType, s)
 				if err != nil {
 					return err
 				}
@@ -235,6 +233,18 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache
 	}
 
 	for i, desc := range remote.Descriptors {
+		// oci supports annotations but don't export internal annotations
+		if oci {
+			delete(desc.Annotations, "containerd.io/uncompressed")
+			delete(desc.Annotations, "buildkit/createdat")
+			for k := range desc.Annotations {
+				if strings.HasPrefix(k, "containerd.io/distribution.source.") {
+					delete(desc.Annotations, k)
+				}
+			}
+		} else {
+			desc.Annotations = nil
+		}
 		mfst.Layers = append(mfst.Layers, desc)
 		labels[fmt.Sprintf("containerd.io/gc.ref.content.%d", i+1)] = desc.Digest.String()
 	}
@@ -306,7 +316,7 @@ func emptyImageConfig() ([]byte, error) {
 	}
 	img.RootFS.Type = "layers"
 	img.Config.WorkingDir = "/"
-	img.Config.Env = []string{"PATH=" + system.DefaultPathEnv}
+	img.Config.Env = []string{"PATH=" + system.DefaultPathEnv(pl.OS)}
 	dt, err := json.Marshal(img)
 	return dt, errors.Wrap(err, "failed to create empty image config")
 }
@@ -413,13 +423,13 @@ func normalizeLayersAndHistory(remote *solver.Remote, history []ocispec.History,
 	var layerIndex int
 	for i, h := range history {
 		if !h.EmptyLayer {
-			if h.Created == nil {
-				h.Created = refMeta[layerIndex].createdAt
-			}
-			if remote.Descriptors[layerIndex].Digest == emptyGZLayer {
+			if remote.Descriptors[layerIndex].Digest == exptypes.EmptyGZLayer {
 				h.EmptyLayer = true
 				remote.Descriptors = append(remote.Descriptors[:layerIndex], remote.Descriptors[layerIndex+1:]...)
 			} else {
+				if h.Created == nil {
+					h.Created = refMeta[layerIndex].createdAt
+				}
 				layerIndex++
 			}
 		}

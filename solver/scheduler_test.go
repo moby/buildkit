@@ -3517,6 +3517,7 @@ func (v *vertex) makeCacheMap() *CacheMap {
 		Deps: make([]struct {
 			Selector          digest.Digest
 			ComputeDigestFunc ResultBasedCacheFunc
+			PreprocessFunc    PreprocessFunc
 		}, len(v.Inputs())),
 	}
 	for i, f := range v.opt.slowCacheCompute {
@@ -3697,7 +3698,7 @@ func (cm *trackingCacheManager) Load(ctx context.Context, rec *CacheRecord) (Res
 	return cm.CacheManager.Load(ctx, rec)
 }
 
-func digestFromResult(ctx context.Context, res Result) (digest.Digest, error) {
+func digestFromResult(ctx context.Context, res Result, _ session.Group) (digest.Digest, error) {
 	return digest.FromBytes([]byte(unwrap(res))), nil
 }
 

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"syscall"
 
 	"github.com/gofrs/flock"
 	"github.com/pkg/errors"
@@ -15,6 +16,7 @@ import (
 type tokenSeeds struct {
 	mu  sync.Mutex
 	dir string
+	m   map[string]seed
 }
 
 type seed struct {
@@ -29,39 +31,48 @@ func (ts *tokenSeeds) getSeed(host string) ([]byte, error) {
 		return nil, err
 	}
 
+	if ts.m == nil {
+		ts.m = map[string]seed{}
+	}
+
 	l := flock.New(filepath.Join(ts.dir, ".token_seed.lock"))
 	if err := l.Lock(); err != nil {
-		return nil, err
-	}
-	defer l.Unlock()
-
-	// we include client side randomness to avoid chosen plaintext attack from the daemon side
-	fp := filepath.Join(ts.dir, ".token_seed")
-	dt, err := ioutil.ReadFile(fp)
-	m := map[string]seed{}
-	if err != nil {
-		if !errors.Is(err, os.ErrNotExist) {
+		if !errors.Is(err, syscall.EROFS) && errors.Is(err, syscall.EPERM) {
 			return nil, err
 		}
 	} else {
-		if err := json.Unmarshal(dt, &m); err != nil {
+		defer l.Unlock()
+	}
+
+	fp := filepath.Join(ts.dir, ".token_seed")
+
+	// we include client side randomness to avoid chosen plaintext attack from the daemon side
+	dt, err := ioutil.ReadFile(fp)
+	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) && !errors.Is(err, syscall.ENOTDIR) {
+			return nil, err
+		}
+	} else {
+		if err := json.Unmarshal(dt, &ts.m); err != nil {
 			return nil, errors.Wrapf(err, "failed to parse %s", fp)
 		}
 	}
-	v, ok := m[host]
+	v, ok := ts.m[host]
 	if !ok {
 		v = seed{Seed: newSeed()}
 	}
 
-	m[host] = v
+	ts.m[host] = v
 
-	dt, err = json.MarshalIndent(m, "", "  ")
+	dt, err = json.MarshalIndent(ts.m, "", "  ")
 	if err != nil {
 		return nil, err
 	}
 
 	if err := ioutil.WriteFile(fp, dt, 0600); err != nil {
-		return nil, err
+		if !errors.Is(err, syscall.EROFS) && !errors.Is(err, syscall.EPERM) {
+			return nil, err
+		}
 	}
 	return v.Seed, nil
 }

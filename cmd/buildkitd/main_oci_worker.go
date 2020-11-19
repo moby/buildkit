@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,9 +11,11 @@ import (
 	"time"
 
 	fuseoverlayfs "github.com/AkihiroSuda/containerd-fuse-overlayfs"
+	"github.com/BurntSushi/toml"
 	snapshotsapi "github.com/containerd/containerd/api/services/snapshots/v1"
 	"github.com/containerd/containerd/defaults"
 	"github.com/containerd/containerd/pkg/dialer"
+	"github.com/containerd/containerd/remotes/docker"
 	ctdsnapshot "github.com/containerd/containerd/snapshots"
 	"github.com/containerd/containerd/snapshots/native"
 	"github.com/containerd/containerd/snapshots/overlay"
@@ -20,6 +23,8 @@ import (
 	"github.com/containerd/containerd/sys"
 	remotesn "github.com/containerd/stargz-snapshotter/snapshot"
 	"github.com/containerd/stargz-snapshotter/stargz"
+	sgzconf "github.com/containerd/stargz-snapshotter/stargz/config"
+	sgzsource "github.com/containerd/stargz-snapshotter/stargz/source"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/executor/oci"
 	"github.com/moby/buildkit/util/network/cniprovider"
@@ -230,7 +235,8 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 		return nil, err
 	}
 
-	snFactory, err := snapshotterFactory(common.config.Root, cfg)
+	hosts := resolverFunc(common.config)
+	snFactory, err := snapshotterFactory(common.config.Root, cfg, hosts, common.configMetaData)
 	if err != nil {
 		return nil, err
 	}
@@ -267,7 +273,7 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 		return nil, err
 	}
 	opt.GCPolicy = getGCPolicy(cfg.GCConfig, common.config.Root)
-	opt.RegistryHosts = resolverFunc(common.config)
+	opt.RegistryHosts = hosts
 
 	if platformsStr := cfg.Platforms; len(platformsStr) != 0 {
 		platforms, err := parsePlatforms(platformsStr)
@@ -283,7 +289,7 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 	return []worker.Worker{w}, nil
 }
 
-func snapshotterFactory(commonRoot string, cfg config.OCIConfig) (runc.SnapshotterFactory, error) {
+func snapshotterFactory(commonRoot string, cfg config.OCIConfig, hosts docker.RegistryHosts, cfgMeta *toml.MetaData) (runc.SnapshotterFactory, error) {
 	var (
 		name    = cfg.Snapshotter
 		address = cfg.ProxySnapshotterPath
@@ -348,13 +354,42 @@ func snapshotterFactory(commonRoot string, cfg config.OCIConfig) (runc.Snapshott
 			return fuseoverlayfs.NewSnapshotter(root)
 		}
 	case "stargz":
-		snFactory.New = func(root string) (ctdsnapshot.Snapshotter, error) {
-			fs, err := stargz.NewFilesystem(filepath.Join(root, "stargz"),
-				cfg.StargzSnapshotterConfig)
+		// Pass the registry configuration to stargz snapshotter
+		sgzhosts := func(host string) ([]docker.RegistryHost, error) {
+			base, err := hosts(host)
 			if err != nil {
 				return nil, err
 			}
-			return remotesn.NewSnapshotter(filepath.Join(root, "snapshotter"),
+			for i := range base {
+				if base[i].Authorizer == nil {
+					// Default authorizer that don't fetch creds via session
+					// TODO(ktock): use session-based authorizer
+					base[i].Authorizer = docker.NewDockerAuthorizer(
+						docker.WithAuthClient(base[i].Client))
+				}
+			}
+			return base, nil
+		}
+		sgzCfg := sgzconf.Config{}
+		if cfgMeta != nil {
+			if err := cfgMeta.PrimitiveDecode(cfg.StargzSnapshotterConfig, &sgzCfg); err != nil {
+				return snFactory, errors.Wrapf(err, "failed to parse stargz config")
+			}
+		}
+		snFactory.New = func(root string) (ctdsnapshot.Snapshotter, error) {
+			fs, err := stargz.NewFilesystem(filepath.Join(root, "stargz"),
+				sgzCfg,
+				stargz.WithGetSources(
+					// provides source info based on the registry config and
+					// default labels.
+					sgzsource.FromDefaultLabels(sgzhosts),
+				),
+			)
+			if err != nil {
+				return nil, err
+			}
+			return remotesn.NewSnapshotter(context.Background(),
+				filepath.Join(root, "snapshotter"),
 				fs, remotesn.AsynchronousRemove)
 		}
 	default:

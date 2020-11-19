@@ -1,6 +1,6 @@
 package config
 
-import sgzconf "github.com/containerd/stargz-snapshotter/stargz/config"
+import "github.com/BurntSushi/toml"
 
 // Config provides containerd configuration data for the server
 type Config struct {
@@ -80,9 +80,13 @@ type OCIConfig struct {
 	// incomplete and the intention is to make it default without config.
 	UserRemapUnsupported string `toml:"userRemapUnsupported"`
 	// For use in storing the OCI worker binary name that will replace buildkit-runc
-	Binary                  string         `toml:"binary"`
-	ProxySnapshotterPath    string         `toml:"proxySnapshotterPath"`
-	StargzSnapshotterConfig sgzconf.Config `toml:"stargzSnapshotter"`
+	Binary               string `toml:"binary"`
+	ProxySnapshotterPath string `toml:"proxySnapshotterPath"`
+
+	// StargzSnapshotterConfig is configuration for stargz snapshotter.
+	// Decoding this is delayed in order to remove the dependency from this
+	// config pkg to stargz snapshotter's config pkg.
+	StargzSnapshotterConfig toml.Primitive `toml:"stargzSnapshotter"`
 }
 
 type ContainerdConfig struct {

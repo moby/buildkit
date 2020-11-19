@@ -63,7 +63,7 @@ func TestParseCases(t *testing.T) {
 				// CRLF --> CR to match Unix behavior
 				content = bytes.Replace(content, []byte{'\x0d', '\x0a'}, []byte{'\x0a'}, -1)
 			}
-			require.Equal(t, result.AST.Dump()+"\n", string(content), dockerfile)
+			require.Equal(t, string(content), result.AST.Dump()+"\n", dockerfile)
 		})
 	}
 }

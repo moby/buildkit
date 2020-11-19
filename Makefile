@@ -1,4 +1,5 @@
-DESTDIR=/usr/local
+prefix=/usr/local
+bindir=$(prefix)/bin
 
 binaries: FORCE
 	hack/binaries
@@ -8,8 +9,8 @@ images: FORCE
 	hack/images local moby/buildkit
 
 install: FORCE
-	mkdir -p $(DESTDIR)/bin
-	install bin/* $(DESTDIR)/bin
+	mkdir -p $(DESTDIR)$(bindir)
+	install bin/* $(DESTDIR)$(bindir)
 
 clean: FORCE
 	rm -rf ./bin

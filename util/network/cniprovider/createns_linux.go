@@ -15,29 +15,28 @@ import (
 )
 
 func createNetNS(c *cniProvider, id string) (string, error) {
-	p := filepath.Join(c.root, "net/cni", id)
-	if err := os.MkdirAll(filepath.Dir(p), 0700); err != nil {
-		deleteNetNS(p)
+	nsPath := filepath.Join(c.root, "net/cni", id)
+	if err := os.MkdirAll(filepath.Dir(nsPath), 0700); err != nil {
 		return "", err
 	}
 
-	f, err := os.Create(p)
+	f, err := os.Create(nsPath)
 	if err != nil {
-		deleteNetNS(p)
+		deleteNetNS(nsPath)
 		return "", err
 	}
 	if err := f.Close(); err != nil {
-		deleteNetNS(p)
+		deleteNetNS(nsPath)
 		return "", err
 	}
 	procNetNSBytes, err := syscall.BytePtrFromString("/proc/self/ns/net")
 	if err != nil {
-		deleteNetNS(p)
+		deleteNetNS(nsPath)
 		return "", err
 	}
-	pBytes, err := syscall.BytePtrFromString(p)
+	nsPathBytes, err := syscall.BytePtrFromString(nsPath)
 	if err != nil {
-		deleteNetNS(p)
+		deleteNetNS(nsPath)
 		return "", err
 	}
 	beforeFork()
@@ -45,7 +44,7 @@ func createNetNS(c *cniProvider, id string) (string, error) {
 	pid, _, errno := syscall.RawSyscall6(syscall.SYS_CLONE, uintptr(syscall.SIGCHLD)|unix.CLONE_NEWNET, 0, 0, 0, 0, 0)
 	if errno != 0 {
 		afterFork()
-		deleteNetNS(p)
+		deleteNetNS(nsPath)
 		return "", errno
 	}
 
@@ -58,31 +57,31 @@ func createNetNS(c *cniProvider, id string) (string, error) {
 		}
 
 		if err != nil {
-			deleteNetNS(p)
+			deleteNetNS(nsPath)
 			return "", errors.Wrapf(err, "failed to find pid=%d process", pid)
 		}
 		errno = syscall.Errno(ws.ExitStatus())
 		if errno != 0 {
-			deleteNetNS(p)
-			return "", errors.Wrap(errno, "failed to mount")
+			deleteNetNS(nsPath)
+			return "", errors.Wrapf(errno, "failed to mount %s (pid=%d)", nsPath, pid)
 		}
-		return p, nil
+		return nsPath, nil
 	}
 	afterForkInChild()
-	_, _, errno = syscall.RawSyscall6(syscall.SYS_MOUNT, uintptr(unsafe.Pointer(procNetNSBytes)), uintptr(unsafe.Pointer(pBytes)), 0, uintptr(unix.MS_BIND), 0, 0)
+	_, _, errno = syscall.RawSyscall6(syscall.SYS_MOUNT, uintptr(unsafe.Pointer(procNetNSBytes)), uintptr(unsafe.Pointer(nsPathBytes)), 0, uintptr(unix.MS_BIND), 0, 0)
 	syscall.RawSyscall(syscall.SYS_EXIT, uintptr(errno), 0, 0)
 	panic("unreachable")
 }
 
-func setNetNS(s *specs.Spec, nativeID string) error {
+func setNetNS(s *specs.Spec, nsPath string) error {
 	return oci.WithLinuxNamespace(specs.LinuxNamespace{
 		Type: specs.NetworkNamespace,
-		Path: nativeID,
+		Path: nsPath,
 	})(nil, nil, nil, s)
 }
 
-func unmountNetNS(nativeID string) error {
-	if err := unix.Unmount(nativeID, unix.MNT_DETACH); err != nil {
+func unmountNetNS(nsPath string) error {
+	if err := unix.Unmount(nsPath, unix.MNT_DETACH); err != nil {
 		if err != syscall.EINVAL && err != syscall.ENOENT {
 			return errors.Wrap(err, "error unmounting network namespace")
 		}
@@ -90,9 +89,9 @@ func unmountNetNS(nativeID string) error {
 	return nil
 }
 
-func deleteNetNS(nativeID string) error {
-	if err := os.RemoveAll(filepath.Dir(nativeID)); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return errors.Wrap(err, "error removing network namespace")
+func deleteNetNS(nsPath string) error {
+	if err := os.Remove(nsPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return errors.Wrapf(err, "error removing network namespace %s", nsPath)
 	}
 	return nil
 }

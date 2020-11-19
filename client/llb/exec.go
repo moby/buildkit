@@ -153,7 +153,13 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 	}
 	if c.Caps != nil {
 		if err := c.Caps.Supports(pb.CapExecMetaSetsDefaultPath); err != nil {
-			env = env.SetDefault("PATH", system.DefaultPathEnv)
+			os := "linux"
+			if c.Platform != nil {
+				os = c.Platform.OS
+			} else if e.constraints.Platform != nil {
+				os = e.constraints.Platform.OS
+			}
+			env = env.SetDefault("PATH", system.DefaultPathEnv(os))
 		} else {
 			addCap(&e.constraints, pb.CapExecMetaSetsDefaultPath)
 		}

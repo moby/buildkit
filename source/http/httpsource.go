@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/docker/docker/pkg/idtools"
-	"github.com/docker/docker/pkg/locker"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/session"
@@ -24,6 +23,7 @@ import (
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/util/tracing"
+	"github.com/moby/locker"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
@@ -238,7 +238,7 @@ func (hs *httpSourceHandler) CacheKey(ctx context.Context, g session.Group, inde
 		return hs.formatCacheKey(getFileName(hs.src.URL, hs.src.Filename, resp), dgst, modTime).String(), nil, true, nil
 	}
 
-	ref, dgst, err := hs.save(ctx, resp)
+	ref, dgst, err := hs.save(ctx, resp, g)
 	if err != nil {
 		return "", nil, false, err
 	}
@@ -249,8 +249,8 @@ func (hs *httpSourceHandler) CacheKey(ctx context.Context, g session.Group, inde
 	return hs.formatCacheKey(getFileName(hs.src.URL, hs.src.Filename, resp), dgst, resp.Header.Get("Last-Modified")).String(), nil, true, nil
 }
 
-func (hs *httpSourceHandler) save(ctx context.Context, resp *http.Response) (ref cache.ImmutableRef, dgst digest.Digest, retErr error) {
-	newRef, err := hs.cache.New(ctx, nil, cache.CachePolicyRetain, cache.WithDescription(fmt.Sprintf("http url %s", hs.src.URL)))
+func (hs *httpSourceHandler) save(ctx context.Context, resp *http.Response, s session.Group) (ref cache.ImmutableRef, dgst digest.Digest, retErr error) {
+	newRef, err := hs.cache.New(ctx, nil, s, cache.CachePolicyRetain, cache.WithDescription(fmt.Sprintf("http url %s", hs.src.URL)))
 	if err != nil {
 		return nil, "", err
 	}
@@ -265,7 +265,7 @@ func (hs *httpSourceHandler) save(ctx context.Context, resp *http.Response) (ref
 		}
 	}()
 
-	mount, err := newRef.Mount(ctx, false)
+	mount, err := newRef.Mount(ctx, false, s)
 	if err != nil {
 		return nil, "", err
 	}
@@ -392,7 +392,7 @@ func (hs *httpSourceHandler) Snapshot(ctx context.Context, g session.Group) (cac
 		return nil, err
 	}
 
-	ref, dgst, err := hs.save(ctx, resp)
+	ref, dgst, err := hs.save(ctx, resp, g)
 	if err != nil {
 		return nil, err
 	}

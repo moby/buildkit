@@ -108,13 +108,25 @@ type directives struct {
 	seen                  map[string]struct{} // Whether the escape directive has been seen
 }
 
-// setEscapeToken sets the default token for escaping characters in a Dockerfile.
+// setEscapeToken sets the default token for escaping characters and as line-
+// continuation token in a Dockerfile. Only ` (backtick) and \ (backslash) are
+// allowed as token.
 func (d *directives) setEscapeToken(s string) error {
-	if s != "`" && s != "\\" {
+	if s != "`" && s != `\` {
 		return errors.Errorf("invalid escape token '%s' does not match ` or \\", s)
 	}
 	d.escapeToken = rune(s[0])
-	d.lineContinuationRegex = regexp.MustCompile(`\` + s + `[ \t]*$`)
+	// The escape token is used both to escape characters in a line and as line
+	// continuation token. If it's the last non-whitespace token, it is used as
+	// line-continuation token, *unless* preceded by an escape-token.
+	//
+	// The second branch in the regular expression handles line-continuation
+	// tokens on their own line, which don't have any character preceding them.
+	//
+	// Due to Go lacking negative look-ahead matching, this regular expression
+	// does not currently handle a line-continuation token preceded by an *escaped*
+	// escape-token ("foo \\\").
+	d.lineContinuationRegex = regexp.MustCompile(`([^\` + s + `])\` + s + `[ \t]*$|^\` + s + `[ \t]*$`)
 	return nil
 }
 
@@ -339,7 +351,7 @@ var utf8bom = []byte{0xEF, 0xBB, 0xBF}
 
 func trimContinuationCharacter(line string, d *directives) (string, bool) {
 	if d.lineContinuationRegex.MatchString(line) {
-		line = d.lineContinuationRegex.ReplaceAllString(line, "")
+		line = d.lineContinuationRegex.ReplaceAllString(line, "$1")
 		return line, false
 	}
 	return line, true

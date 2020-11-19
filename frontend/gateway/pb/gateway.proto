@@ -107,6 +107,8 @@ message SolveRequest {
 
 	// apicaps:CapFrontendInputs
 	map<string, pb.Definition> FrontendInputs = 13;
+
+	bool Evaluate = 14;
 }
 
 // CacheOptionsEntry corresponds to the control.CacheOptionsEntry
@@ -172,6 +174,8 @@ message NewContainerRequest {
 	// For mount input values we can use random identifiers passed with ref
 	repeated pb.Mount Mounts = 2;
 	pb.NetMode Network = 3;
+	pb.Platform platform = 4;
+	pb.WorkerConstraints constraints = 5;
 }
 
 message NewContainerResponse{}

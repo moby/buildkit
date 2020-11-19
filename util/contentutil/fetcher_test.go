@@ -26,7 +26,7 @@ func TestFetcher(t *testing.T) {
 	p := FromFetcher(f)
 
 	b1 := NewBuffer()
-	err = Copy(ctx, b1, p, ocispec.Descriptor{Digest: digest.FromBytes([]byte("foobar")), Size: -1})
+	err = Copy(ctx, b1, p, ocispec.Descriptor{Digest: digest.FromBytes([]byte("foobar")), Size: -1}, nil)
 	require.NoError(t, err)
 
 	dt, err := content.ReadBlob(ctx, b1, ocispec.Descriptor{Digest: digest.FromBytes([]byte("foobar"))})
