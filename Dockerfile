@@ -131,7 +131,12 @@ FROM scratch AS release
 COPY --from=releaser /out/ /
 
 FROM alpine:${ALPINE_VERSION} AS buildkit-export
-RUN apk add --no-cache fuse3 git pigz xz && ln -s fusermount3 /usr/bin/fusermount
+# nsswitch.conf needs to be present to work around
+#   https://github.com/golang/go/issues/35305
+# drop this once we start building with Go 1.16
+RUN apk add --no-cache fuse3 git pigz xz \
+  && ln -s fusermount3 /usr/bin/fusermount \
+  && echo "hosts: files dns" >/etc/nsswitch.conf
 COPY examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
 VOLUME /var/lib/buildkit
 
@@ -286,11 +291,15 @@ COPY --from=idmap /usr/bin/newuidmap /usr/bin/newuidmap
 COPY --from=idmap /usr/bin/newgidmap /usr/bin/newgidmap
 COPY --from=fuse-overlayfs /out/fuse-overlayfs /usr/bin/
 # we could just set CAP_SETUID filecap rather than `chmod u+s`, but requires kernel >= 4.14
+# nsswitch.conf needs to be present to work around
+#   https://github.com/golang/go/issues/35305
+# drop this once we start building with Go 1.16
 RUN chmod u+s /usr/bin/newuidmap /usr/bin/newgidmap \
   && adduser -D -u 1000 user \
   && mkdir -p /run/user/1000 /home/user/.local/tmp /home/user/.local/share/buildkit \
   && chown -R user /run/user/1000 /home/user \
-  && echo user:100000:65536 | tee /etc/subuid | tee /etc/subgid
+  && echo user:100000:65536 | tee /etc/subuid | tee /etc/subgid \
+  && echo "hosts: files dns" >/etc/nsswitch.conf
 COPY --from=rootlesskit /rootlesskit /usr/bin/
 COPY --from=binaries / /usr/bin/
 COPY examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
