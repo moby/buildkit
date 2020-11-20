@@ -600,6 +600,7 @@ func git(ctx context.Context, dir, sshAuthSock, knownHosts string, args ...strin
 		cmd.Stderr = io.MultiWriter(stderr, errbuf)
 		cmd.Env = []string{
 			"PATH=" + os.Getenv("PATH"),
+			"HOME=" + os.Getenv("HOME"), // needed for git to read /root/.gitconfig
 			"GIT_TERMINAL_PROMPT=0",
 			"GIT_SSH_COMMAND=" + getGitSSHCommand(knownHosts),
 			//	"GIT_TRACE=1",
