@@ -1,0 +1,44 @@
+name: validate
+
+on:
+  push:
+    branches:
+      - 'master'
+    tags:
+      - 'v*'
+      - 'dockerfile/*'
+  pull_request:
+    branches:
+      - 'master'
+
+env:
+  REPO_SLUG_ORIGIN: "moby/buildkit:latest"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - script: ./hack/lint
+          - script: ./hack/validate-vendor
+          - script: ./hack/validate-generated-files
+          - script: ./hack/validate-shfmt
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v2
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+        with:
+          driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
+      -
+        name: Run
+        run: |
+          ${{ matrix.script }}
+      -
+        name: Dump context
+        if: always()
+        uses: crazy-max/ghaction-dump-context@v1
