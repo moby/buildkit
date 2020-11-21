@@ -1,60 +1,20 @@
 #!/usr/bin/env bash
 
 . $(dirname $0)/util
+set -eu
 
 : ${TARGETPLATFORM=}
 : ${CONTINUOUS_INTEGRATION=}
 
-set -ex
-
-progressFlag=""
-if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"; fi
-
-buildkitdTagsFlags=""
-if [ -n "$BUILDKITD_TAGS" ]; then
-  buildkitdTagsFlags="--opt build-arg:BUILDKITD_TAGS=\"$BUILDKITD_TAGS\""
+platformFlag=""
+if [ -n "$TARGETPLATFORM" ]; then
+  platformFlag="--platform $TARGETPLATFORM"
 fi
 
-binariesDocker() {
-  mkdir -p bin/tmp
-  export DOCKER_BUILDKIT=1
-  iidfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
-  target=$(echo "$TARGETPLATFORM" | cut -d"/" -f1)
-  if [ -z "$target" ]; then
-    target="linux"
-  fi
+set -x
 
-  docker build $platformFlag --build-arg BUILDKITD_TAGS="${BUILDKITD_TAGS}" --target binaries-$target --iidfile $iidfile --force-rm .
-  iid=$(cat $iidfile)
-  containerID=$(docker create $iid copy)
-  docker cp $containerID:/ bin/tmp
-  mv bin/tmp/build* bin/
-  rm -rf bin/tmp
-  docker rm $containerID
-  docker rmi -f $iid
-  rm -f $iidfile
-}
-
-binaries() {
-  platformFlag=""
-  if [ ! -z "$TARGETPLATFORM" ]; then
-    platformFlag="--opt platform=$TARGETPLATFORM"
-  fi
-  buildctl build $progressFlag --frontend=dockerfile.v0 \
-    --local context=. --local dockerfile=. \
-    $buildkitdTagsFlags --opt target=binaries $platformFlag \
-    --output type=local,dest=./bin/
-}
-
-case $buildmode in
-  "buildkit")
-    binaries
-    ;;
-  "docker-buildkit")
-    binariesDocker
-    ;;
-  *)
-    echo "Unsupported build mode: $buildmode" >&2
-    exit 1
-    ;;
-esac
+docker buildx build $progressFlag $platformFlag \
+  --target binaries \
+  --output "type=local,dest=./bin/" \
+  --file ./hack/dockerfiles/shfmt.Dockerfile \
+  .

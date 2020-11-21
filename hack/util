@@ -1,44 +1,34 @@
 #!/usr/bin/env sh
 
-: ${PREFER_BUILDCTL=}
-: ${PREFER_LEGACY=}
+: ${CONTINUOUS_INTEGRATION=}
+: ${CI=}
+: ${TRAVIS_BRANCH=}
+: ${GITHUB_ACTIONS=}
 : ${TRAVIS_EVENT_TYPE=}
 : ${TRAVIS_BRANCH=}
+: ${CACHE_REF=}
 
-newerEqualThan() { # $1=minimum wanted version $2=actual-version
-  [ "$1" = "$(printf "$1\n$2" | sort -V | head -n 1)" ]
-}
-
-buildmode="legacy"
-if [ "$PREFER_BUILDCTL" = "1" ]; then
-  buildmode="buildkit"
-else
-  serverVersion=$(docker info --format '{{.ServerVersion}}')
-  experimental=$(docker info --format '{{.ExperimentalBuild}}')
-  if [ "$PREFER_LEGACY" != "1" ] && (newerEqualThan "18.09" $serverVersion ||
-    (newerEqualThan "18.06" $serverVersion && [ "true" = "$experimental" ]) ||
-    [ "$DOCKER_BUILDKIT" = "1" ]); then
-    buildmode="docker-buildkit"
-  fi
-fi
-if [ "$buildmode" = "legacy" ]; then
-  echo "\"legacy\" buildmode is no longer supported. Please enable DOCKER_BUILDKIT or install standalone BuildKit." >&2
-  exit 1
+progressFlag=""
+if [ "$CONTINUOUS_INTEGRATION" = "true" ] || [ "$CI" = "true" ]; then
+  progressFlag="--progress=plain"
 fi
 
+cachetype=""
 cacheref=""
 currentref=""
-if [ "$TRAVIS_EVENT_TYPE" = "pull_request" ]; then
+if [ "$GITHUB_ACTIONS" = "true" ]; then
+  currentref="git://github.com/moby/buildkit#$GITHUB_REF"
+  cachetype="local"
+  cacheref="$CACHE_REF"
+elif [ "$TRAVIS_EVENT_TYPE" = "pull_request" ]; then
   currentref="git://github.com/moby/buildkit#refs/pull/$TRAVIS_PULL_REQUEST/merge"
+  cachetype="registry"
   cacheref="cicache.buildk.it/moby/buildkit/pr$TRAVIS_BUILD_ID"
 elif [ -n "$TRAVIS_BRANCH" ]; then
   currentref="git://github.com/$TRAVIS_REPO_SLUG#$TRAVIS_BRANCH"
 fi
 
 currentcontext="."
-currentcontextBuildctl="--local context=. --local dockerfile=."
-
 if [ -n "$currentref" ]; then
-  currentcontext="--build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 $currentref"
-  currentcontextBuildctl="--opt context=$currentref --opt build-arg:BUILDKIT_CONTEXT_KEEP_GIT_DIR=1"
+  currentcontext="$currentref"
 fi

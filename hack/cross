@@ -6,7 +6,11 @@
 
 importCacheFlags=""
 if [ -n "$cacheref" ]; then
-  importCacheFlags="--import-cache=type=registry,ref=$cacheref:binaries"
+  if [ "$cachetype" = "local" ]; then
+    importCacheFlags="--cache-from=type=local,src=$cacheref"
+  else
+    importCacheFlags="--cache-from=type=registry,ref=$cacheref:binaries"
+  fi
 fi
 
 set -ex
@@ -14,20 +18,22 @@ set -ex
 if [ -n "$MASTERCACHE_PASSWORD" ] && [ -n "$RUNC_PLATFORMS" ]; then
   repo="cicache.buildk.it/moby/buildkit/master"
   $(dirname $0)/login_ci_cache
-  buildctl build $progressFlag --frontend=dockerfile.v0 \
-    $currentcontextBuildctl \
-    --opt target=binaries-linux-helper \
-    --opt platform=$RUNC_PLATFORMS \
-    --import-cache type=registry,ref=cicache.buildk.it/moby/buildkit/master:binaries-cross-helper \
-    --export-cache type=inline --output type=image,push=true,name=$repo:binaries-cross-helper
+  docker buildx build $progressFlag \
+    --target "binaries-linux-helper" \
+    --platform "$RUNC_PLATFORMS" \
+    --output "type=image,push=true,name=$repo:binaries-cross-helper" \
+    --cache-from "type=registry,ref=cicache.buildk.it/moby/buildkit/master:binaries-cross-helper" \
+    --cache-to "type=inline" \
+    $currentcontext
 fi
 
-buildctl build --progress=plain --frontend=dockerfile.v0 \
-  $currentcontextBuildctl \
-  --opt platform=$PLATFORMS \
-  --import-cache type=registry,ref=cicache.buildk.it/moby/buildkit/master:binaries-cross-helper
+docker buildx build $progressFlag \
+  --platform "$PLATFORMS" \
+  --cache-from "type=registry,ref=cicache.buildk.it/moby/buildkit/master:binaries-cross-helper" \
+  $currentcontext
 
-buildctl build --progress=plain --frontend=dockerfile.v0 \
-  $currentcontextBuildctl \
-  --opt platform=windows/amd64 --opt target=buildkit-buildkitd \
-  --import-cache type=registry,ref=cicache.buildk.it/moby/buildkit/master:binaries
+docker buildx build $progressFlag \
+  --target "buildkit-buildkitd" \
+  --platform "windows/amd64" \
+  --cache-from "type=registry,ref=cicache.buildk.it/moby/buildkit/master:binaries" \
+  $currentcontext

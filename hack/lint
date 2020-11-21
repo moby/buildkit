@@ -1,37 +1,8 @@
 #!/usr/bin/env bash
 
 . $(dirname $0)/util
-set -eu -o pipefail -x
+set -ex
 
-: ${CONTINUOUS_INTEGRATION=}
-
-progressFlag=""
-if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"; fi
-
-lintDocker() {
-  export DOCKER_BUILDKIT=1
-  iidfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
-  docker build --iidfile $iidfile -f ./hack/dockerfiles/lint.Dockerfile --force-rm .
-  iid=$(cat $iidfile)
-  docker rmi $iid
-  rm -f $iidfile
-}
-
-lint() {
-  buildctl build $progressFlag --frontend=dockerfile.v0 \
-    --local context=. --local dockerfile=. \
-    --opt filename=./hack/dockerfiles/lint.Dockerfile
-}
-
-case $buildmode in
-  "buildkit")
-    lint
-    ;;
-  "docker-buildkit")
-    lintDocker
-    ;;
-  *)
-    echo "Unsupported build mode: $buildmode" >&2
-    exit 1
-    ;;
-esac
+docker buildx build $progressFlag \
+  --file ./hack/dockerfiles/lint.Dockerfile \
+  .

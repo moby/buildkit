@@ -9,7 +9,6 @@ set -eu -o pipefail
 : ${TEST_DOCKERD=}
 : ${TEST_DOCKERD_BINARY=$(which dockerd)}
 : ${DOCKERFILE_RELEASES=}
-: ${CONTINUOUS_INTEGRATION=}
 : ${BUILDKIT_REGISTRY_MIRROR_DIR=}
 
 if [ "$TEST_DOCKERD" == "1" ] && ! file $TEST_DOCKERD_BINARY | grep "statically linked" >/dev/null; then
@@ -19,11 +18,12 @@ fi
 
 importCacheFlags=""
 if [ -n "$cacheref" ]; then
-  importCacheFlags="--import-cache=type=registry,ref=$cacheref:integration-tests"
+  if [ "$cachetype" = "local" ]; then
+    importCacheFlags="--cache-from=type=local,src=$cacheref"
+  else
+    importCacheFlags="--import-cache=type=registry,ref=cicache.buildk.it/moby/buildkit/master:integration-tests --import-cache=type=registry,ref=$cacheref:integration-tests"
+  fi
 fi
-
-progressFlag=""
-if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"; fi
 
 if [ "$#" == 0 ]; then TEST_INTEGRATION=1; fi
 
@@ -49,26 +49,10 @@ iid="buildkit-tests"
 iidfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
 set -x
 
-case $buildmode in
-  "buildkit")
-    tmpfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
-    buildctl build $progressFlag --frontend=dockerfile.v0 $currentcontextBuildctl \
-      --opt target=integration-tests \
-      --output type=docker,name=$iid,dest=$tmpfile \
-      --import-cache type=registry,ref=cicache.buildk.it/moby/buildkit/master:integration-tests $importCacheFlags
-    docker load -i $tmpfile
-    rm $tmpfile
-    ;;
-  "docker-buildkit")
-    export DOCKER_BUILDKIT=1
-    docker build --iidfile $iidfile --target integration-tests --force-rm .
-    iid=$(cat $iidfile)
-    ;;
-  *)
-    echo "Unsupported build mode: $buildmode" >&2
-    exit 1
-    ;;
-esac
+docker buildx build $progressFlag $importCacheFlags \
+  --target "integration-tests" \
+  --output "type=docker,name=$iid" \
+  $currentcontext
 
 cacheVolume=$(docker create -v /root/.cache -v /root/.cache/registry -v /go/pkg/mod alpine)
 
@@ -98,22 +82,11 @@ if [ "$TEST_DOCKERFILE" == 1 ]; then
   for release in $DOCKERFILE_RELEASES; do
     buildtags=$(cat ./frontend/dockerfile/release/$release/tags)
     tarout=$(mktemp -t dockerfile-frontend.XXXXXXXXXX)
-    case $buildmode in
-      "buildkit")
-        buildctl build $progressFlag --frontend=dockerfile.v0 --local context=. --local dockerfile=. \
-          --opt filename=./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile \
-          --opt build-arg:BUILDTAGS="$buildtags" \
-          --output type=oci,dest=$tarout
-        ;;
-      "docker-buildkit")
-        dfiidfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
-        docker build --iidfile=$dfiidfile -f ./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile --build-arg BUILDTAGS="$buildtags" .
-        dfiid=$(cat $dfiidfile)
-        docker save -o $tarout $dfiid
-        docker rmi $dfiid
-        rm $dfiidfile
-        ;;
-    esac
+
+    docker buildx build $progressFlag $importCacheFlags \
+      --build-arg "BUILDTAGS=$buildtags" \
+      --file "./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile" \
+      .
 
     if [ -s $tarout ]; then
       if [ "$release" = "mainline" ] || [ "$release" = "experimental" ] || [ -n "$DOCKERFILE_RELEASES_CUSTOM" ] || [ "$TRAVIS_EVENT_TYPE" = "cron" ]; then
@@ -130,10 +103,3 @@ if [ "$TEST_DOCKERFILE" == 1 ]; then
 fi
 
 docker rm -v $cacheVolume
-
-case $buildmode in
-  "docker-buildkit")
-    rm "$iidfile"
-    docker rmi $iid
-    ;;
-esac

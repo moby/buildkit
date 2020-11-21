@@ -1,33 +1,15 @@
 #!/usr/bin/env sh
-
 set -eu
-
-: ${CONTINUOUS_INTEGRATION=}
-: ${DOCKER_BUILDKIT=}
-
-progressFlag=""
-if [ "$CONTINUOUS_INTEGRATION" = "true" ]; then progressFlag="--progress=plain"; fi
 
 case ${1:-} in
   '')
     . $(dirname $0)/util
-    case $buildmode in
-      "buildkit")
-        buildctl build $progressFlag --frontend=dockerfile.v0 --local context=. --local dockerfile=. --opt filename=./hack/dockerfiles/vendor.Dockerfile --opt target=validate
-        ;;
-      "docker-buildkit")
-        export DOCKER_BUILDKIT=1
-        iidfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
-        docker build --iidfile $iidfile -f ./hack/dockerfiles/vendor.Dockerfile --target validate --force-rm . || exit 1
-        iid=$(cat $iidfile)
-        docker rmi $iid
-        rm -f $iidfile
-        ;;
-      *)
-        echo "Unsupported build mode: $buildmode" >&2
-        exit 1
-        ;;
-    esac
+    set -ex
+
+    docker buildx build $progressFlag \
+      --target validate \
+      --file ./hack/dockerfiles/vendor.Dockerfile \
+      .
     ;;
   check)
     status="$(git status --porcelain -- go.mod go.sum vendor 2>/dev/null)"

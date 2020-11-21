@@ -1,29 +1,10 @@
 #!/usr/bin/env sh
 
 . $(dirname $0)/util
-set -eu
+set -ex
 
-: ${CONTINUOUS_INTEGRATION=}
-: ${DOCKER_BUILDKIT=}
-
-progressFlag=""
-if [ "$CONTINUOUS_INTEGRATION" = "true" ]; then progressFlag="--progress=plain"; fi
-
-cacheOnlyFlag=""
-if ! docker build --help 2>&1 | grep buildx >/dev/null; then cacheOnlyFlag="-o type=cacheonly"; fi
-
-case $buildmode in
-  "buildkit")
-    buildctl build $progressFlag --frontend=dockerfile.v0 --local context=. --local dockerfile=. \
-      --opt target=validate \
-      --opt filename=./hack/dockerfiles/shfmt.Dockerfile
-    ;;
-  "docker-buildkit")
-    export DOCKER_BUILDKIT=1
-    docker build $progressFlag $cacheOnlyFlag -f ./hack/dockerfiles/shfmt.Dockerfile --target validate .
-    ;;
-  *)
-    echo "Unsupported build mode: $buildmode" >&2
-    exit 1
-    ;;
-esac
+docker buildx build $progressFlag \
+  --target validate \
+  --output "type=cacheonly" \
+  --file ./hack/dockerfiles/shfmt.Dockerfile \
+  .

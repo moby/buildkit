@@ -1,35 +1,31 @@
 #!/usr/bin/env bash
 
 . $(dirname $0)/util
-
 set -e
 
 if [ -z "$TRAVIS_COMMIT" ]; then
-  echo "TRAVIS_COMMIT_REQURED"
+  echo "Travis commit required"
   exit 0
 fi
 
-progressFlag=""
-if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"; fi
-
 exportCacheFlags=""
 exportFlags=""
-
 if [ -f /tmp/buildkit-ci-cache-repo ]; then
-  exportCacheFlags="--export-cache=type=inline"
+  exportCacheFlags="--cache-to=type=inline"
   exportFlags="--output=type=image,push=true,name=$(cat /tmp/buildkit-ci-cache-repo)"
 fi
 
 set -x
-buildctl build $progressFlag --frontend=dockerfile.v0 \
-  $currentcontextBuildctl \
-  --opt target=binaries \
-  --import-cache type=registry,ref=cicache.buildk.it/moby/buildkit/master:binaries \
-  --import-cache type=registry,ref=cicache.buildk.it/moby/buildkit/master:integration-tests \
-  $exportCacheFlags $exportFlags:binaries
 
-buildctl build $progressFlag --frontend=dockerfile.v0 \
-  $currentcontextBuildctl \
-  --opt target=integration-tests-base \
-  --import-cache type=registry,ref=cicache.buildk.it/moby/buildkit/master:integration-tests \
-  $exportCacheFlags $exportFlags:integration-tests
+docker buildx build $progressFlag \
+  --target "binaries" \
+  --cache-from "type=registry,ref=cicache.buildk.it/moby/buildkit/master:binaries" \
+  --cache-from "type=registry,ref=cicache.buildk.it/moby/buildkit/master:integration-tests" \
+  $exportCacheFlags $exportFlags:binaries \
+  $currentcontext
+
+docker buildx build $progressFlag \
+  --target "integration-tests-base" \
+  --cache-from "type=registry,ref=cicache.buildk.it/moby/buildkit/master:integration-tests" \
+  $exportCacheFlags $exportFlags:integration-tests \
+  $currentcontext

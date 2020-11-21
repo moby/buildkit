@@ -1,0 +1,145 @@
+name: release
+
+on:
+  push:
+    branches:
+      - 'master'
+      - 'v*'
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - 'master'
+      - 'v*'
+
+env:
+  BUILDKIT_VERSION: "v0.7.0-rc1"
+  REPO_SLUG_TARGET: "moby/buildkit"
+  PLATFORMS: "linux/amd64,linux/arm/v7,linux/arm64,linux/s390x,linux/ppc64le"
+
+jobs:
+  init:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.prep.outputs.tag }}
+      push: ${{ steps.prep.outputs.push }}
+    steps:
+      -
+        name: Prepare
+        id: prep
+        run: |
+          TAG=local
+          PUSH=false
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            TAG=nightly
+            PUSH=push
+          elif [[ $GITHUB_REF == refs/tags/* ]]; then
+            TAG=${GITHUB_REF#refs/tags/}
+            PUSH=push
+          elif [[ $GITHUB_REF == refs/heads/* ]]; then
+            TAG=$(echo ${GITHUB_REF#refs/heads/} | sed -r 's#/+#-#g')
+            PUSH=push
+          fi
+          echo ::set-output name=tag::${TAG}
+          echo ::set-output name=push::${PUSH}
+      -
+        name: Dump context
+        if: always()
+        uses: crazy-max/ghaction-dump-context@v1
+
+  image:
+    runs-on: ubuntu-latest
+    needs: [ init ]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target-stage: ''
+            cache-key: image-root
+          - target-stage: rootless
+            cache-key: image-rootless
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v2
+      -
+        name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+        with:
+          driver-opts: image=moby/buildkit:${{ env.BUILDKIT_VERSION }}
+      -
+        name: Cache layers
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildkit-cache/${{ matrix.cache-key }}
+          key: ${{ runner.os }}-buildkit-${{ matrix.cache-key }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildkit-${{ matrix.cache-key }}-
+      -
+        name: Login to DockerHub
+        uses: docker/login-action@v1
+        if: github.event_name != 'pull_request'
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      -
+        name: Build
+        run: |
+          ./hack/images "${{ needs.init.outputs.tag }}" "$REPO_SLUG_TARGET" "${{ needs.init.outputs.push }}"
+        env:
+          CACHE_REF: /tmp/.buildkit-cache/${{ matrix.cache-key }}
+          TARGET: ${{ matrix.target-stage }}
+      -
+        name: Dump context
+        if: always()
+        uses: crazy-max/ghaction-dump-context@v1
+
+  binaries:
+    runs-on: ubuntu-latest
+    needs: [ init ]
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v2
+      -
+        name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+        with:
+          driver-opts: image=moby/buildkit:${{ env.BUILDKIT_VERSION }}
+      -
+        name: Build
+        run: |
+          ./hack/release-tar "${{ needs.init.outputs.tag }}" release-out
+        env:
+          PLATFORMS: ${{ env.PLATFORMS }},darwin/amd64,windows/amd64
+      -
+        name: Move artifacts
+        run: |
+          mv ./release-out/**/* ./release-out/
+      -
+        name: Upload artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: buildkit
+          path: ./release-out/*
+          if-no-files-found: error
+      -
+        name: GitHub Release
+        uses: softprops/action-gh-release@v1
+        if: success() && startsWith(github.ref, 'refs/tags/v')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          draft: true
+          files: ./release-out/*
+          name: ${{ needs.init.outputs.tag }}
+      -
+        name: Dump context
+        if: always()
+        uses: crazy-max/ghaction-dump-context@v1
