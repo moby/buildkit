@@ -454,6 +454,9 @@ func (sr *immutableRef) prepareRemoteSnapshots(ctx context.Context, dhs DescHand
 		// This layer cannot be prepared without unlazying.
 		return false, nil
 	})
+	if err != nil {
+		return false, err
+	}
 	return ok.(bool), err
 }
 
