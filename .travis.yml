@@ -1,5 +1,21 @@
-dist: bionic
 sudo: required
+language: minimal
+
+env:
+  global:
+    - DOCKER_CHANNEL="stable"
+    - PLATFORMS="linux/amd64,linux/arm/v7,linux/arm64,linux/s390x,linux/ppc64le"
+    - PREFER_BUILDCTL="1"
+
+before_install:
+  # update docker
+  - curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+  - sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) $DOCKER_CHANNEL"
+  - sudo apt-get update
+  - sudo apt-get -y -o Dpkg::Options::="--force-confnew" install docker-ce docker-ce-cli
+  # check
+  - sudo systemctl restart docker
+  - docker info
 
 install:
   - docker run --rm --privileged linuxkit/binfmt:v0.8
@@ -9,11 +25,6 @@ install:
 
 after_script:
   - if [[ "$TRAVIS_TEST_RESULT" == 1 ]]; then docker ps -a && docker logs buildkit && sudo dmesg; fi
-
-env:
-  global:
-    - PLATFORMS="linux/amd64,linux/arm/v7,linux/arm64,linux/s390x,linux/ppc64le"
-    - PREFER_BUILDCTL="1"
 
 jobs:
   include:
