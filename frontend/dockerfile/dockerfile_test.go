@@ -107,6 +107,7 @@ var allTests = []integration.Test{
 	testFrontendSubrequests,
 	testDockefileCheckHostname,
 	testDefaultShellAndPath,
+	testDockerfileLowercase,
 }
 
 var fileOpTests = []integration.Test{
@@ -2730,6 +2731,34 @@ COPY . .
 		t.Fatal("timed out")
 	default:
 	}
+}
+
+// moby/moby#10858
+func testDockerfileLowercase(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`FROM scratch
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	ctx := context.TODO()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	_, err = f.Solve(ctx, c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
 }
 
 func testExportedHistory(t *testing.T, sb integration.Sandbox) {
