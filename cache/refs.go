@@ -399,8 +399,10 @@ func (sr *immutableRef) Extract(ctx context.Context, s session.Group) (rerr erro
 		ctx = winlayers.UseWindowsLayerMode(ctx)
 	}
 
-	if _, err := sr.prepareRemoteSnapshots(ctx, sr.descHandlers); err != nil {
-		return err
+	if sr.cm.Snapshotter.Name() == "stargz" {
+		if _, err := sr.prepareRemoteSnapshots(ctx, sr.descHandlers); err != nil {
+			return err
+		}
 	}
 
 	return sr.extract(ctx, sr.descHandlers, s)
