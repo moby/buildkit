@@ -12,7 +12,7 @@ on:
       - 'master'
 
 env:
-  REPO_SLUG_ORIGIN: "moby/buildkit:latest"
+  REPO_SLUG_ORIGIN: "tonistiigi/buildkit:v0.8.0-rc2-hotfix.1"
 
 jobs:
   validate:
