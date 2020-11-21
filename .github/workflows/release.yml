@@ -4,16 +4,14 @@ on:
   push:
     branches:
       - 'master'
-      - 'v*'
     tags:
       - 'v*'
   pull_request:
     branches:
       - 'master'
-      - 'v*'
 
 env:
-  BUILDKIT_VERSION: "v0.7.0-rc1"
+  REPO_SLUG_ORIGIN: "moby/buildkit:latest"
   REPO_SLUG_TARGET: "moby/buildkit"
   PLATFORMS: "linux/amd64,linux/arm/v7,linux/arm64,linux/s390x,linux/ppc64le"
 
@@ -69,7 +67,7 @@ jobs:
         name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
         with:
-          driver-opts: image=moby/buildkit:${{ env.BUILDKIT_VERSION }}
+          driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
       -
         name: Cache layers
         uses: actions/cache@v2
@@ -86,7 +84,7 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       -
-        name: Build
+        name: Build ${{ needs.init.outputs.tag }}
         run: |
           ./hack/images "${{ needs.init.outputs.tag }}" "$REPO_SLUG_TARGET" "${{ needs.init.outputs.push }}"
         env:
@@ -111,9 +109,9 @@ jobs:
         name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
         with:
-          driver-opts: image=moby/buildkit:${{ env.BUILDKIT_VERSION }}
+          driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
       -
-        name: Build
+        name: Build ${{ needs.init.outputs.tag }}
         run: |
           ./hack/release-tar "${{ needs.init.outputs.tag }}" release-out
         env:

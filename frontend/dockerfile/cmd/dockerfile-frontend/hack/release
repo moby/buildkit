@@ -1,11 +1,7 @@
 #!/usr/bin/env bash
 
 : ${PLATFORMS=linux/amd64}
-: ${CONTINUOUS_INTEGRATION=}
 : ${DAILY_TARGETS=}
-
-progressFlag=""
-if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"; fi
 
 usage() {
   echo "$0 (master|tag|daily) (tag|channel) <repo> [push]"
@@ -61,7 +57,7 @@ TAG=$2
 REPO=$3
 PUSH=$4
 
-pushFlag=""
+pushFlag="push=false"
 if [ "$PUSH" = "push" ]; then
   pushFlag="push=true"
 fi
@@ -73,19 +69,21 @@ case $TYP in
     echo "invalid release $TAG"
     exit 1
   fi
+
   buildTags=$(cat $tagf)
   pushTag="master"
   if [ "$TAG" != "mainline" ]; then
     pushTag=${pushTag}-$TAG
   fi
+
   set -x
-  buildctl build $progressFlag --frontend=dockerfile.v0 \
-    --local context=. --local dockerfile=. \
-    --opt filename=./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile \
-    --opt platform=$PLATFORMS \
-    --opt "build-arg:CHANNEL=$TAG" \
-    --opt "build-arg:BUILDTAGS=$buildTags" \
-    --output type=image,name=$REPO:$pushTag,$pushFlag
+  docker buildx build $progressFlag \
+    --platform "$PLATFORMS" \
+    --build-arg "CHANNEL=$TAG" \
+    --build-arg "BUILDTAGS=$buildTags" \
+    --output "type=image,name=$REPO:$pushTag,$pushFlag" \
+    --file ./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile \
+    .
   ;;
 "tag")
   publishedNames=""
@@ -98,13 +96,13 @@ case $TYP in
   buildTags=$(cat $tagf)
 
   set -x
-  buildctl build $progressFlag --frontend=dockerfile.v0 \
-    --local context=. --local dockerfile=. \
-    --opt filename=./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile \
-    --opt platform=$PLATFORMS \
-    --opt "build-arg:CHANNEL=$TAG" \
-    --opt "build-arg:BUILDTAGS=$buildTags" \
-    --output type=image,\"name=$publishedNames\",$pushFlag
+  docker buildx build $progressFlag \
+    --platform "$PLATFORMS" \
+    --build-arg "CHANNEL=$TAG" \
+    --build-arg "BUILDTAGS=$buildTags" \
+    --output "type=image,name=\"$publishedNames\",$pushFlag" \
+    --file ./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile \
+    .
   ;;
 "daily")
   # if [ -z $DAILY_TARGETS ]; then
@@ -126,27 +124,28 @@ case $TYP in
     tmp=$(mktemp -d -t buildid.XXXXXXXXXX)
     set -x
     dt=$(date +%Y%m%d)
-    buildctl build $progressFlag --progress=plain --frontend=dockerfile.v0 \
-      --local context=. --local dockerfile=. \
-      --opt filename=./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile \
-      --opt "build-arg:CHANNEL=$TAG" \
-      --opt "build-arg:REPO=$REPO" \
-      --opt "build-arg:DATE=$dt" \
-      --opt "build-arg:BUILDTAGS=$buildTags" \
-      --opt target=buildid\
-      --output type=local,dest=$tmp
+    docker buildx build $progressFlag \
+      --platform "$PLATFORMS" \
+      --target "buildid" \
+      --build-arg "CHANNEL=$TAG" \
+      --build-arg "BUILDTAGS=$buildTags" \
+      --build-arg "REPO=$REPO" \
+      --build-arg "DATE=$dt" \
+      --output "type=local,dest=$tmp" \
+      --file ./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile \
+      .
     
     if [ -f $tmp/buildid ]; then
       buildid=$(cat $tmp/buildid)
       echo "buildid: $buildid"
-      
-      buildctl build $progressFlag --frontend=dockerfile.v0 \
-        --local context=. --local dockerfile=. \
-        --opt filename=./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile \
-        --opt platform=$PLATFORMS \
-        --opt "build-arg:CHANNEL=$TAG" \
-        --opt "build-arg:BUILDTAGS=$buildTags" \
-        --output type=image,name=$REPO:$dt-$TAG,$pushFlag
+
+      docker buildx build $progressFlag \
+        --platform "$PLATFORMS" \
+        --build-arg "CHANNEL=$TAG" \
+        --build-arg "BUILDTAGS=$buildTags" \
+        --output "type=image,name=$REPO:$dt-$TAG,$pushFlag" \
+        --file ./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile \
+        .
       rm $tmp/buildid
     fi
     rm -r $tmp

@@ -1,0 +1,100 @@
+name: frontend
+
+on:
+  schedule:
+    - cron: '0 10 * * *' # everyday at 10am
+  push:
+    branches:
+      - 'master'
+    tags:
+      - 'dockerfile/*'
+  pull_request:
+    branches:
+      - 'master'
+
+env:
+  REPO_SLUG_ORIGIN: "moby/buildkit:latest"
+  DF_REPO_SLUG_TARGET: "docker/dockerfile-upstream"
+  PLATFORMS: "linux/amd64,linux/arm/v7,linux/arm64,linux/s390x,linux/ppc64le"
+
+jobs:
+  init:
+    runs-on: ubuntu-latest
+    outputs:
+      typ: ${{ steps.prep.outputs.typ }}
+      tag: ${{ steps.prep.outputs.tag }}
+      push: ${{ steps.prep.outputs.push }}
+    steps:
+      -
+        name: Prepare
+        id: prep
+        run: |
+          TYP=master
+          TAG=mainline
+          PUSH=false
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            TYP=daily
+            TAG=_
+            PUSH=push
+          elif [[ $GITHUB_REF == refs/tags/* ]]; then
+            TYP=tag
+            TAG=${GITHUB_REF#refs/tags/}
+            PUSH=push
+          elif [[ $GITHUB_REF == refs/heads/* ]]; then
+            PUSH=push
+          fi
+          echo ::set-output name=typ::${TYP}
+          echo ::set-output name=tag::${TAG}
+          echo ::set-output name=push::${PUSH}
+      -
+        name: Dump context
+        if: always()
+        uses: crazy-max/ghaction-dump-context@v1
+
+  image:
+    runs-on: ubuntu-latest
+    needs: [ init ]
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v2
+      -
+        name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+        with:
+          driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
+      -
+        name: Cache layers
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildkit-cache/frontend-${{ needs.init.outputs.typ }}
+          key: ${{ runner.os }}-buildkit-frontend-${{ needs.init.outputs.typ }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildkit-frontend-${{ needs.init.outputs.typ }}-
+      -
+        name: Login to DockerHub
+        uses: docker/login-action@v1
+        if: github.event_name != 'pull_request'
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      -
+        name: Build ${{ needs.init.outputs.typ }}/${{ needs.init.outputs.tag }}
+        run: |
+          ./frontend/dockerfile/cmd/dockerfile-frontend/hack/release "${{ needs.init.outputs.typ }}" "${{ needs.init.outputs.tag }}" "$DF_REPO_SLUG_TARGET" "${{ needs.init.outputs.push }}"
+        env:
+          CACHE_REF: /tmp/.buildkit-cache/frontend-${{ needs.init.outputs.typ }}
+      -
+        name: Build ${{ needs.init.outputs.typ }}/labs
+        if: needs.init.outputs.typ == 'master'
+        run: |
+          ./frontend/dockerfile/cmd/dockerfile-frontend/hack/release "${{ needs.init.outputs.typ }}" labs "$DF_REPO_SLUG_TARGET" "${{ needs.init.outputs.push }}"
+        env:
+          CACHE_REF: /tmp/.buildkit-cache/frontend-${{ needs.init.outputs.typ }}
+      -
+        name: Dump context
+        if: always()
+        uses: crazy-max/ghaction-dump-context@v1

@@ -1,20 +1,29 @@
-dist: bionic
 sudo: required
+language: minimal
+
+env:
+  global:
+    - DOCKER_CHANNEL="stable"
+    - BUILDX_VERSION="v0.4.2"
+    - PLATFORMS="linux/amd64,linux/arm/v7,linux/arm64,linux/s390x,linux/ppc64le"
+
+before_install:
+  # update docker
+  - curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+  - sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) $DOCKER_CHANNEL"
+  - sudo apt-get update
+  - sudo apt-get -y -o Dpkg::Options::="--force-confnew" install docker-ce
+  # update buildx
+  - mkdir -vp ~/.docker/cli-plugins/
+  - curl --silent -L "https://github.com/docker/buildx/releases/download/${BUILDX_VERSION}/buildx-${BUILDX_VERSION}.linux-amd64" > ~/.docker/cli-plugins/docker-buildx
+  - chmod a+x ~/.docker/cli-plugins/docker-buildx
+  # check
+  - sudo systemctl restart docker
+  - docker info
 
 install:
   - docker buildx create --name builder --driver docker-container --driver-opt image=$REPO_SLUG_ORIGIN --use
   - docker run --rm --privileged tonistiigi/binfmt:latest --install all
-  - docker run --name buildkit -d --privileged -p 1234:1234 $REPO_SLUG_ORIGIN --debug --addr tcp://0.0.0.0:1234 --oci-worker-gc=false
-  - sudo docker cp buildkit:/usr/bin/buildctl /usr/bin/
-  - export BUILDKIT_HOST=tcp://0.0.0.0:1234
-
-after_script:
-  - if [[ "$TRAVIS_TEST_RESULT" == 1 ]]; then docker ps -a && docker logs buildkit && sudo dmesg; fi
-
-env:
-  global:
-    - PLATFORMS="linux/amd64,linux/arm/v7,linux/arm64,linux/s390x,linux/ppc64le"
-    - PREFER_BUILDCTL="1"
 
 jobs:
   include:
@@ -23,7 +32,7 @@ jobs:
       script: ./hack/login_ci_cache && ./hack/build_ci_first_pass
     - stage: testing
       name: "Client integration tests"
-      script: 
+      script:
         - TESTPKGS=./client TESTFLAGS='-v --timeout=20m' ./hack/test integration
         - TESTPKGS=./cmd/buildctl ./hack/test integration
         - TESTPKGS=./worker/containerd ./hack/test integration
@@ -98,8 +107,6 @@ jobs:
             repo: moby/buildkit
             branch: master
             condition: $TRAVIS_EVENT_TYPE == "cron"
-      
 
 before_deploy:
   - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
-
