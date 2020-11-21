@@ -29,7 +29,10 @@ jobs:
   include:
     - stage: building
       name: "Build"
-      script: ./hack/login_ci_cache && ./hack/build_ci_first_pass
+      script:
+        - ./hack/login_ci_cache
+        - ./hack/build_ci_first_pass binaries
+        - ./hack/build_ci_first_pass integration-tests
     - stage: testing
       name: "Client integration tests"
       script:

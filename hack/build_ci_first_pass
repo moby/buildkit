@@ -1,31 +1,52 @@
 #!/usr/bin/env bash
 
+TYP=$1
+
 . $(dirname $0)/util
 set -e
 
-if [ -z "$TRAVIS_COMMIT" ]; then
-  echo "Travis commit required"
+context="$currentcontext"
+importCacheFlags=""
+exportCacheFlags=""
+exportFlags=""
+
+if [ "$TRAVIS" = "true" ]; then
+  if [ -z "$TRAVIS_COMMIT" ]; then
+    echo "Travis commit required"
+    exit 0
+  fi
+  if [ -f /tmp/buildkit-ci-cache-repo ]; then
+    exportCacheFlags="--cache-to=type=inline"
+    exportFlags="--output=type=image,push=true,name=$(cat /tmp/buildkit-ci-cache-repo)"
+  fi
+  if [ "$TYP" = "binaries" ]; then
+    importCacheFlags="--cache-from=type=registry,ref=cicache.buildk.it/moby/buildkit/master:binaries --cache-from=type=registry,ref=cicache.buildk.it/moby/buildkit/master:integration-tests"
+    exportFlags="$exportFlags:binaries"
+  elif [ "$TYP" = "integration-tests" ]; then
+    importCacheFlags="--cache-from=type=registry,ref=cicache.buildk.it/moby/buildkit/master:integration-tests"
+    exportFlags="$exportFlags:integration-tests"
+  fi
+elif [ "$GITHUB_ACTIONS" = "true" ]; then
+  context="."
+  importCacheFlags="--cache-from=type=local,src=$cacheref"
+  exportCacheFlags="--cache-to=type=local,dest=$cacheref"
+fi
+
+if [ "$TYP" = "binaries" ]; then
+  set -x
+  docker buildx build $progressFlag $importCacheFlags $exportCacheFlags $exportFlags \
+    --target "binaries" \
+    $context
   exit 0
 fi
 
-exportCacheFlags=""
-exportFlags=""
-if [ -f /tmp/buildkit-ci-cache-repo ]; then
-  exportCacheFlags="--cache-to=type=inline"
-  exportFlags="--output=type=image,push=true,name=$(cat /tmp/buildkit-ci-cache-repo)"
+if [ "$TYP" = "integration-tests" ]; then
+  set -x
+  docker buildx build $progressFlag $importCacheFlags $exportCacheFlags $exportFlags \
+    --target "integration-tests-base" \
+    $context
+  exit 0
 fi
 
-set -x
-
-docker buildx build $progressFlag \
-  --target "binaries" \
-  --cache-from "type=registry,ref=cicache.buildk.it/moby/buildkit/master:binaries" \
-  --cache-from "type=registry,ref=cicache.buildk.it/moby/buildkit/master:integration-tests" \
-  $exportCacheFlags $exportFlags:binaries \
-  $currentcontext
-
-docker buildx build $progressFlag \
-  --target "integration-tests-base" \
-  --cache-from "type=registry,ref=cicache.buildk.it/moby/buildkit/master:integration-tests" \
-  $exportCacheFlags $exportFlags:integration-tests \
-  $currentcontext
+echo "Unknown type $TYP"
+exit 0
