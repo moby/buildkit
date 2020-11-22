@@ -34,20 +34,20 @@ jobs:
       script: ./hack/login_ci_cache && ./hack/build_ci_first_pass
     - stage: testing
       name: "Client integration tests"
-      script: 
+      script:
         - TESTPKGS=./client TESTFLAGS='-v --timeout=20m' ./hack/test integration
         - TESTPKGS=./cmd/buildctl ./hack/test integration
         - TESTPKGS=./worker/containerd ./hack/test integration
     - script:
-       - ./hack/lint
-       - SKIP_INTEGRATION_TESTS=1 ./hack/test integration gateway
-       - ./hack/validate-vendor
-       - ./hack/validate-generated-files
-       - ./hack/validate-shfmt
-       - TESTPKGS=./frontend ./hack/test
+        - ./hack/lint
+        - SKIP_INTEGRATION_TESTS=1 ./hack/test integration gateway
+        - ./hack/validate-vendor
+        - ./hack/validate-generated-files
+        - ./hack/validate-shfmt
+        - TESTPKGS=./frontend ./hack/test
       name: "Unit Tests & Lint & Vendor & Proto"
     - script:
-       - TESTPKGS=./frontend/dockerfile TESTFLAGS='-v --parallel=5 --timeout=30m' ./hack/test
+        - TESTPKGS=./frontend/dockerfile TESTFLAGS='-v --parallel=5 --timeout=30m' ./hack/test
       name: "Dockerfile integration tests"
     - script: TESTPKGS=./frontend/dockerfile ./hack/test dockerfile
       name: "External Dockerfile tests"
@@ -80,9 +80,9 @@ jobs:
           skip_cleanup: true
           file_glob: true
           on:
-           repo: moby/buildkit
-           tags: true
-           condition: $TRAVIS_TAG =~ ^v[0-9]
+            repo: moby/buildkit
+            tags: true
+            condition: $TRAVIS_TAG =~ ^v[0-9]
         - provider: script
           script: ./frontend/dockerfile/cmd/dockerfile-frontend/hack/release master mainline $DF_REPO_SLUG_TARGET push
           on:
@@ -107,8 +107,6 @@ jobs:
             repo: moby/buildkit
             branch: master
             condition: $TRAVIS_EVENT_TYPE == "cron"
-      
 
 before_deploy:
   - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
-

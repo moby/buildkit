@@ -4,23 +4,23 @@ metadata:
   name: buildkitd
 spec:
   containers:
-  - name: buildkitd
-    image: moby/buildkit:master
-    readinessProbe:
-      exec:
-        command:
-        - buildctl 
-        - debug 
-        - workers
-      initialDelaySeconds: 5
-      periodSeconds: 30
-    livenessProbe:
-      exec:
-        command:
-        - buildctl 
-        - debug 
-        - workers
-      initialDelaySeconds: 5
-      periodSeconds: 30
-    securityContext:
-      privileged: true
+    - name: buildkitd
+      image: moby/buildkit:master
+      readinessProbe:
+        exec:
+          command:
+            - buildctl
+            - debug
+            - workers
+        initialDelaySeconds: 5
+        periodSeconds: 30
+      livenessProbe:
+        exec:
+          command:
+            - buildctl
+            - debug
+            - workers
+        initialDelaySeconds: 5
+        periodSeconds: 30
+      securityContext:
+        privileged: true
