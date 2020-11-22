@@ -95,6 +95,7 @@ if [ "$TEST_DOCKERFILE" == 1 ]; then
     buildxCmd build $importCacheFlags \
       --build-arg "BUILDTAGS=$buildtags" \
       --file "./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile" \
+      --output "type=oci,dest=$tarout" \
       .
 
     if [ -s $tarout ]; then
