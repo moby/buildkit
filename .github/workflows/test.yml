@@ -1,0 +1,164 @@
+name: test
+
+on:
+  push:
+    branches:
+      - "ghactions-test"  # remove when merged
+      - 'master'
+    tags:
+      - 'v*'
+      - 'dockerfile/*'
+  pull_request:
+    branches:
+      - 'master'
+
+env:
+  REPO_SLUG_ORIGIN: "moby/buildkit:latest"
+
+jobs:
+  test-base:
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v2
+      -
+        name: Cache integration-tests
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildkit-cache/integration-tests
+          key: ${{ runner.os }}-buildkit-integration-tests-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildkit-integration-tests-
+      -
+        name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+        with:
+          driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
+      -
+        name: Build integration-tests
+        run: |
+          ./hack/build_ci_first_pass integration-tests
+        env:
+          CACHE_DIR: /tmp/.buildkit-cache/integration-tests
+      -
+        name: Dump context
+        if: always()
+        uses: crazy-max/ghaction-dump-context@v1
+
+  test:
+    runs-on: ubuntu-latest
+    needs: [test-base]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          -
+            pkg: ./client
+            typ: integration
+          -
+            pkg: ./cmd/buildctl ./worker/containerd
+            typ: integration
+          -
+            pkg: ''
+            skip-integration-tests: 1
+            typ: integration gateway
+          -
+            pkg: ./frontend
+            typ: ''
+          -
+            pkg: ./frontend/dockerfile
+            typ: ''
+          -
+            pkg: ./frontend/dockerfile
+            typ: dockerfile
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v2
+      -
+        name: Cache integration-tests
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildkit-cache/integration-tests
+          key: ${{ runner.os }}-buildkit-integration-tests-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildkit-integration-tests-
+      -
+        name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+        with:
+          driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
+      -
+        name: Test ${{ matrix.pkg }} ${{ matrix.typ }}
+        run: |
+          ./hack/test ${{ matrix.typ }}
+        env:
+          TEST_COVERAGE: 1
+          TESTPKGS: ${{ matrix.pkg }}
+          TESTFLAGS: -v --parallel=6 --timeout=20m
+          SKIP_INTEGRATION_TESTS: ${{ matrix.skip-integration-tests }}
+          CACHE_DIR: /tmp/.buildkit-cache/integration-tests
+      -
+        name: Upload coverage
+        uses: codecov/codecov-action@v1
+        with:
+          file: ./coverage/coverage.txt
+      -
+        name: Dump context
+        if: always()
+        uses: crazy-max/ghaction-dump-context@v1
+
+  os:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          # - ubuntu-latest
+          # - macOS-latest
+          - windows-latest
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v2
+      -
+        name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.13
+      -
+        name: Cache Go modules
+        uses: actions/cache@v2
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      -
+        name: Go mod
+        run: |
+          go mod download
+      -
+        name: Test
+        env:
+          TMPDIR: ${{ runner.temp }}
+          SKIP_INTEGRATION_TESTS: 1
+        run: |
+          go test -coverprofile=coverage.txt -covermode=atomic ./...
+        shell: bash
+      -
+        name: Upload coverage
+        uses: codecov/codecov-action@v1
+        with:
+          file: coverage.txt
+      -
+        name: Dump context
+        if: always()
+        uses: crazy-max/ghaction-dump-context@v1
