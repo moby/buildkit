@@ -28,5 +28,5 @@ linters:
 issues:
   exclude-rules:
     - linters:
-      - golint
+        - golint
       text: "stutters"
