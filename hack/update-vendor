@@ -1,41 +1,16 @@
 #!/usr/bin/env bash
 
 . $(dirname $0)/util
-set -eu -o pipefail -x
+set -eu
 
-: ${CONTINUOUS_INTEGRATION=}
+output=$(mktemp -d -t buildx-output.XXXXXXXXXX)
 
-progressFlag=""
-if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"; fi
+buildxCmd build \
+  --target "update" \
+  --output "type=local,dest=$output" \
+  --file "./hack/dockerfiles/vendor.Dockerfile" \
+  .
 
-case $buildmode in
-  "buildkit")
-    output=$(mktemp -d -t buildctl-output.XXXXXXXXXX)
-    buildctl build $progressFlag --frontend=dockerfile.v0 --local context=. --local dockerfile=. \
-      --opt target=update \
-      --opt filename=./hack/dockerfiles/vendor.Dockerfile \
-      --output type=local,dest=$output
-    rm -rf ./vendor
-    cp -R "$output"/out/* .
-    rm -rf $output
-    ;;
-  "docker-buildkit")
-    iidfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
-    export DOCKER_BUILDKIT=1
-    docker build --iidfile $iidfile -f ./hack/dockerfiles/vendor.Dockerfile --target update --force-rm .
-    iid=$(cat $iidfile)
-    cid=$(docker create $iid noop)
-    rm -rf ./vendor
-
-    docker cp $cid:/out/go.mod .
-    docker cp $cid:/out/go.sum .
-    docker cp $cid:/out/vendor .
-
-    docker rm $cid
-    rm -f $iidfile
-    ;;
-  *)
-    echo "Unsupported build mode: $buildmode" >&2
-    exit 1
-    ;;
-esac
+rm -rf ./vendor
+cp -R "$output"/out/* .
+rm -rf $output

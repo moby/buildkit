@@ -4,6 +4,7 @@ language: minimal
 env:
   global:
     - DOCKER_CHANNEL="stable"
+    - DOCKER_CLI_EXPERIMENTAL="enabled"
     - PLATFORMS="linux/amd64,linux/arm/v7,linux/arm64,linux/s390x,linux/ppc64le"
     - PREFER_BUILDCTL="1"
 
@@ -46,7 +47,7 @@ jobs:
        - TESTPKGS=./frontend ./hack/test
       name: "Unit Tests & Lint & Vendor & Proto"
     - script:
-       - TESTPKGS=./frontend/dockerfile TESTFLAGS='-v --parallel=6 --timeout=20m' ./hack/test
+       - TESTPKGS=./frontend/dockerfile TESTFLAGS='-v --parallel=5 --timeout=30m' ./hack/test
       name: "Dockerfile integration tests"
     - script: TESTPKGS=./frontend/dockerfile ./hack/test dockerfile
       name: "External Dockerfile tests"
