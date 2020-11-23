@@ -3,7 +3,6 @@ export BUILDX_NO_DEFAULT_LOAD=true
 
 : ${PREFER_BUILDCTL=}
 : ${PREFER_LEGACY=}
-: ${CONTINUOUS_INTEGRATION=}
 : ${CI=}
 : ${GITHUB_ACTIONS=}
 : ${DOCKER_BUILDKIT=}
@@ -12,7 +11,7 @@ export BUILDX_NO_DEFAULT_LOAD=true
 : ${CACHE_DIR=}
 
 progressFlag=""
-if [ "$CONTINUOUS_INTEGRATION" = "true" ] || [ "$CI" = "true" ]; then
+if [ "$CI" = "true" ]; then
   progressFlag="--progress=plain"
 fi
 

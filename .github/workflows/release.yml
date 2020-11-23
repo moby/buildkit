@@ -1,0 +1,27 @@
+name: release
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows:
+      - 'build'
+    branches:
+      - 'master'
+    types:
+      - 'completed'
+
+env:
+  REPO_SLUG_ORIGIN: "moby/buildkit:latest"
+  PLATFORMS: "linux/amd64,linux/arm/v7,linux/arm64,linux/s390x,linux/ppc64le"
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v2
+      -
+        name: Dump context
+        if: always()
+        uses: crazy-max/ghaction-dump-context@v1
