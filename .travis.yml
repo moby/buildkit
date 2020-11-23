@@ -55,7 +55,9 @@ jobs:
       name: "Dockerfile integration tests"
     - script: TESTPKGS=./frontend/dockerfile ./hack/test dockerfile
       name: "External Dockerfile tests"
-    - script: RUNC_PLATFORMS=$PLATFORMS PLATFORMS="${PLATFORMS},darwin/amd64,windows/amd64" ./hack/cross
+    - script:
+        - RUNC_PLATFORMS=$PLATFORMS PLATFORMS="${PLATFORMS},darwin/amd64,windows/amd64" ./hack/cross
+        - PLATFORMS="windows/amd64" ./hack/buildkit-buildkitd
       name: "Cross"
     - script: ./hack/images local $REPO_SLUG_TARGET
       name: "Build image"

@@ -1,6 +1,7 @@
 name: validate
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - 'master'
