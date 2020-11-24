@@ -3,13 +3,10 @@
 TAG=$1
 OUT=$2
 
+. $(dirname $0)/util
 set -eu -o pipefail
 
 : ${PLATFORMS=linux/amd64}
-: ${CONTINUOUS_INTEGRATION=}
-
-progressFlag=""
-if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"; fi
 
 usage() {
   echo "usage: ./hack/release-tar <tag> <out>"
@@ -20,11 +17,15 @@ if [ -z "$TAG" ] || [ -z "$OUT" ]; then
   usage
 fi
 
-set -x
+importCacheFlags=""
+if [[ -n "$cacheref" ]] && [[ "$cachetype" = "local" ]]; then
+  for ref in $cacheref; do
+    importCacheFlags="$importCacheFlags--cache-from=type=local,src=$ref "
+  done
+fi
 
-buildctl build $progressFlag --frontend=dockerfile.v0 \
-  --local context=. --local dockerfile=. \
-  --opt target=release \
-  --opt platform=$PLATFORMS \
-  --exporter local \
-  --exporter-opt output=$OUT
+buildxCmd build $importCacheFlags \
+  --target release \
+  --platform "$PLATFORMS" \
+  --output "type=local,dest=$OUT" \
+  $currentcontext

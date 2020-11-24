@@ -1,6 +1,8 @@
 name: build
 
 on:
+  schedule:
+    - cron: '0 10 * * *'  # everyday at 10am
   workflow_dispatch:
   push:
     branches:
@@ -14,13 +16,37 @@ on:
 
 env:
   REPO_SLUG_ORIGIN: "moby/buildkit:latest"
+  REPO_SLUG_TARGET: "moby/buildkit"
   PLATFORMS: "linux/amd64,linux/arm/v7,linux/arm64,linux/s390x,linux/ppc64le"
   CACHEKEY_INTEGRATION_TESTS: "integration-tests"
   CACHEKEY_BINARIES: "binaries"
+  CACHEKEY_CROSS: "cross"
 
 jobs:
+  cache:
+    runs-on: ubuntu-latest
+    outputs:
+      ref: ${{ steps.gen.outputs.ref }}
+    steps:
+      -
+        name: Generate cache ref
+        id: gen
+        run: |
+          REF=na
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            REF=nightly
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            REF=pr-${{ github.event.number }}
+          elif [[ $GITHUB_REF == refs/tags/* ]]; then
+            REF=${GITHUB_REF#refs/tags/}
+          elif [[ $GITHUB_REF == refs/heads/* ]]; then
+            REF=$(echo ${GITHUB_REF#refs/heads/} | sed -r 's#/+#-#g')
+          fi
+          echo ::set-output name=ref::${REF}
+
   base:
     runs-on: ubuntu-latest
+    needs: [cache]
     steps:
       -
         name: Checkout
@@ -30,17 +56,17 @@ jobs:
         uses: actions/cache@v2
         with:
           path: /tmp/.buildkit-cache/${{ env.CACHEKEY_INTEGRATION_TESTS }}
-          key: ${{ runner.os }}-buildkit-${{ env.CACHEKEY_INTEGRATION_TESTS }}-${{ github.sha }}
+          key: ${{ runner.os }}-buildkit-${{ env.CACHEKEY_INTEGRATION_TESTS }}-${{ needs.cache.outputs.ref }}-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-buildkit-${{ env.CACHEKEY_INTEGRATION_TESTS }}-
+            ${{ runner.os }}-buildkit-${{ env.CACHEKEY_INTEGRATION_TESTS }}-${{ needs.cache.outputs.ref }}-
       -
         name: Cache ${{ env.CACHEKEY_BINARIES }}
         uses: actions/cache@v2
         with:
           path: /tmp/.buildkit-cache/${{ env.CACHEKEY_BINARIES }}
-          key: ${{ runner.os }}-buildkit-${{ env.CACHEKEY_BINARIES }}-${{ github.sha }}
+          key: ${{ runner.os }}-buildkit-${{ env.CACHEKEY_BINARIES }}-${{ needs.cache.outputs.ref }}-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-buildkit-${{ env.CACHEKEY_BINARIES }}-
+            ${{ runner.os }}-buildkit-${{ env.CACHEKEY_BINARIES }}-${{ needs.cache.outputs.ref }}-
       -
         name: Set up QEMU
         uses: docker/setup-qemu-action@v1
@@ -68,7 +94,7 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-    needs: [base]
+    needs: [cache, base]
     strategy:
       fail-fast: false
       matrix:
@@ -76,22 +102,28 @@ jobs:
           -
             pkg: ./client
             typ: integration
+            coverage-filename: client-integration
           -
             pkg: ./cmd/buildctl ./worker/containerd
             typ: integration
+            coverage-filename: buildctl-containerd-integration
           -
             pkg: ''
             skip-integration-tests: 1
             typ: integration gateway
+            coverage-filename: integration-gateway-skipit
           -
             pkg: ./frontend
             typ: ''
+            coverage-filename: frontend
           -
             pkg: ./frontend/dockerfile
             typ: ''
+            coverage-filename: frontend-dockerfile
           -
             pkg: ./frontend/dockerfile
             typ: dockerfile
+            coverage-filename: frontend-dockerfile-dockerfile
     steps:
       -
         name: Checkout
@@ -101,9 +133,17 @@ jobs:
         uses: actions/cache@v2
         with:
           path: /tmp/.buildkit-cache/${{ env.CACHEKEY_INTEGRATION_TESTS }}
-          key: ${{ runner.os }}-buildkit-${{ env.CACHEKEY_INTEGRATION_TESTS }}-${{ github.sha }}
+          key: ${{ runner.os }}-buildkit-${{ env.CACHEKEY_INTEGRATION_TESTS }}-${{ needs.cache.outputs.ref }}-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-buildkit-${{ env.CACHEKEY_INTEGRATION_TESTS }}-
+            ${{ runner.os }}-buildkit-${{ env.CACHEKEY_INTEGRATION_TESTS }}-${{ needs.cache.outputs.ref }}-
+      -
+        name: Cache ${{ env.CACHEKEY_BINARIES }}
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildkit-cache/${{ env.CACHEKEY_BINARIES }}
+          key: ${{ runner.os }}-buildkit-${{ env.CACHEKEY_BINARIES }}-${{ needs.cache.outputs.ref }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildkit-${{ env.CACHEKEY_BINARIES }}-${{ needs.cache.outputs.ref }}-
       -
         name: Set up QEMU
         uses: docker/setup-qemu-action@v1
@@ -116,21 +156,19 @@ jobs:
         name: Test ${{ matrix.pkg }} ${{ matrix.typ }}
         run: |
           ./hack/test ${{ matrix.typ }}
+          mv ./coverage/coverage.txt ./coverage/coverage-${{ github.job }}-${{ matrix.coverage-filename }}.txt
         env:
           TEST_COVERAGE: 1
           TESTPKGS: ${{ matrix.pkg }}
           TESTFLAGS: -v --parallel=6 --timeout=20m
           SKIP_INTEGRATION_TESTS: ${{ matrix.skip-integration-tests }}
-          CACHE_DIR: /tmp/.buildkit-cache/${{ env.CACHEKEY_INTEGRATION_TESTS }}
+          CACHE_DIR: /tmp/.buildkit-cache/${{ env.CACHEKEY_INTEGRATION_TESTS }} /tmp/.buildkit-cache/${{ env.CACHEKEY_BINARIES }}
       -
-        name: Upload coverage
-        uses: codecov/codecov-action@v1
+        name: Upload coverage file
+        uses: actions/upload-artifact@v2
         with:
-          file: ./coverage/coverage.txt
-      -
-        name: Dump context
-        if: always()
-        uses: crazy-max/ghaction-dump-context@v1
+          name: coverage
+          path: ./coverage
 
   test-os:
     runs-on: ${{ matrix.os }}
@@ -168,32 +206,61 @@ jobs:
           TMPDIR: ${{ runner.temp }}
           SKIP_INTEGRATION_TESTS: 1
         run: |
-          go test -coverprofile=coverage.txt -covermode=atomic ./...
+          mkdir -p ./coverage
+          go test -coverprofile=./coverage/coverage-${{ github.job }}-${{ matrix.os }}.txt -covermode=atomic ./...
         shell: bash
       -
-        name: Upload coverage
-        uses: codecov/codecov-action@v1
+        name: Upload coverage file
+        uses: actions/upload-artifact@v2
         with:
-          file: coverage.txt
-      -
-        name: Dump context
-        if: always()
-        uses: crazy-max/ghaction-dump-context@v1
+          name: coverage
+          path: ./coverage
 
-  cross:
+  upload-coverage:
     runs-on: ubuntu-latest
+    needs: [test, test-os]
     steps:
       -
         name: Checkout
         uses: actions/checkout@v2
       -
-        name: Cache cross
+        name: Download coverage files
+        uses: actions/download-artifact@v2
+        with:
+          name: coverage
+          path: ./coverage
+      -
+        name: List coverage files
+        uses: actions/github-script@v3
+        id: files
+        with:
+          result-encoding: string
+          script: |
+            return require('fs').readdirSync('./coverage', {withFileTypes: true})
+              .filter(item => !item.isDirectory())
+              .map(item => `./coverage/${item.name}`)
+              .join(',');
+      -
+        name: Send to Codecov
+        uses: codecov/codecov-action@v1
+        with:
+          files: ${{ steps.files.outputs.result }}
+
+  cross:
+    runs-on: ubuntu-latest
+    needs: [cache]
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v2
+      -
+        name: Cache ${{ env.CACHEKEY_CROSS }}
         uses: actions/cache@v2
         with:
-          path: /tmp/.buildkit-cache/cross
-          key: ${{ runner.os }}-buildkit-cross-${{ github.sha }}
+          path: /tmp/.buildkit-cache/${{ env.CACHEKEY_CROSS }}
+          key: ${{ runner.os }}-buildkit-${{ env.CACHEKEY_CROSS }}-${{ needs.cache.outputs.ref }}-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-buildkit-cross-
+            ${{ runner.os }}-buildkit-${{ env.CACHEKEY_CROSS }}-${{ needs.cache.outputs.ref }}-
       -
         name: Set up QEMU
         uses: docker/setup-qemu-action@v1
@@ -209,27 +276,62 @@ jobs:
         env:
           PLATFORMS: ${{ env.PLATFORMS }},darwin/amd64,windows/amd64
           RUNC_PLATFORMS: ${{ env.PLATFORMS }}
-          CACHE_DIR: /tmp/.buildkit-cache/cross
-      -
-        name: Dump context
-        if: always()
-        uses: crazy-max/ghaction-dump-context@v1
+          CACHE_DIR: /tmp/.buildkit-cache/${{ env.CACHEKEY_CROSS }}
 
-  buildkit-buildkitd:
+  release-base:
     runs-on: ubuntu-latest
-    needs: [base]
+    outputs:
+      tag: ${{ steps.prep.outputs.tag }}
+      push: ${{ steps.prep.outputs.push }}
+    steps:
+      - name: Prepare
+        id: prep
+        run: |
+          TAG=local
+          PUSH=false
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            TAG=nightly
+            PUSH=push
+          elif [[ $GITHUB_REF == refs/tags/* ]]; then
+            TAG=${GITHUB_REF#refs/tags/}
+            PUSH=push
+          elif [[ $GITHUB_REF == refs/heads/* ]]; then
+            TAG=$(echo ${GITHUB_REF#refs/heads/} | sed -r 's#/+#-#g')
+            PUSH=push
+          fi
+          PUSH=false # FIXME: Remove when migration to GitHub Actions completed
+          echo ::set-output name=tag::${TAG}
+          echo ::set-output name=push::${PUSH}
+
+  image:
+    runs-on: ubuntu-latest
+    needs: [cache, release-base, test, cross]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target-stage: ''
+          - target-stage: rootless
     steps:
       -
-        name: Checkout
+        name: Checkout${{ env.CACHEKEY_BINARIES }}
         uses: actions/checkout@v2
       -
-        name: Cache ${{ env.CACHEKEY_BINARIES }}
+        name: Cache image${{ matrix.target-stage }}
         uses: actions/cache@v2
         with:
-          path: /tmp/.buildkit-cache/${{ env.CACHEKEY_BINARIES }}
-          key: ${{ runner.os }}-buildkit-${{ env.CACHEKEY_BINARIES }}-${{ github.sha }}
+          path: /tmp/.buildkit-cache/image${{ matrix.target-stage }}
+          key: ${{ runner.os }}-buildkit-image${{ matrix.target-stage }}-${{ needs.cache.outputs.ref }}-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-buildkit-${{ env.CACHEKEY_BINARIES }}-
+            ${{ runner.os }}-buildkit-image${{ matrix.target-stage }}-${{ needs.cache.outputs.ref }}-
+      -
+        name: Cache ${{ env.CACHEKEY_CROSS }}
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildkit-cache/${{ env.CACHEKEY_CROSS }}
+          key: ${{ runner.os }}-buildkit-${{ env.CACHEKEY_CROSS }}-${{ needs.cache.outputs.ref }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildkit-${{ env.CACHEKEY_CROSS }}-${{ needs.cache.outputs.ref }}-
       -
         name: Set up QEMU
         uses: docker/setup-qemu-action@v1
@@ -239,13 +341,76 @@ jobs:
         with:
           driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
       -
-        name: Build
-        run: |
-          ./hack/buildkit-buildkitd
-        env:
-          PLATFORMS: windows/amd64
-          CACHE_DIR: /tmp/.buildkit-cache/${{ env.CACHEKEY_BINARIES }}
+        name: Login to DockerHub
+        if: needs.release-base.outputs.push == 'push'
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       -
-        name: Dump context
-        if: always()
-        uses: crazy-max/ghaction-dump-context@v1
+        name: Build ${{ needs.release-base.outputs.tag }}
+        run: |
+          ./hack/images "${{ needs.release-base.outputs.tag }}" "$REPO_SLUG_TARGET" "${{ needs.release-base.outputs.push }}"
+        env:
+          TARGET: ${{ matrix.target-stage }}
+          CACHE_DIR: /tmp/.buildkit-cache/${{ env.CACHEKEY_CROSS }} /tmp/.buildkit-cache/image${{ matrix.target-stage }}
+
+  binaries:
+    runs-on: ubuntu-latest
+    needs: [cache, release-base, test, cross]
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v2
+      -
+        name: Cache ${{ env.CACHEKEY_BINARIES }}
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildkit-cache/${{ env.CACHEKEY_BINARIES }}
+          key: ${{ runner.os }}-buildkit-${{ env.CACHEKEY_BINARIES }}-${{ needs.cache.outputs.ref }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildkit-${{ env.CACHEKEY_BINARIES }}-${{ needs.cache.outputs.ref }}-
+      -
+        name: Cache ${{ env.CACHEKEY_CROSS }}
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildkit-cache/${{ env.CACHEKEY_CROSS }}
+          key: ${{ runner.os }}-buildkit-${{ env.CACHEKEY_CROSS }}-${{ needs.cache.outputs.ref }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildkit-${{ env.CACHEKEY_CROSS }}-${{ needs.cache.outputs.ref }}-
+      -
+        name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+        with:
+          driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
+      -
+        name: Build ${{ needs.release-base.outputs.tag }}
+        run: |
+          ./hack/release-tar "${{ needs.release-base.outputs.tag }}" release-out
+        env:
+          PLATFORMS: ${{ env.PLATFORMS }},darwin/amd64,windows/amd64
+          CACHE_DIR: /tmp/.buildkit-cache/${{ env.CACHEKEY_BINARIES }} /tmp/.buildkit-cache/${{ env.CACHEKEY_CROSS }}
+      -
+        name: Move artifacts
+        run: |
+          mv ./release-out/**/* ./release-out/
+      -
+        name: Upload artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: buildkit
+          path: ./release-out/*
+          if-no-files-found: error
+      -
+        name: GitHub Release
+        if: needs.release-base.outputs.push == 'push'
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          draft: true
+          files: ./release-out/*
+          name: ${{ needs.release-base.outputs.tag }}
