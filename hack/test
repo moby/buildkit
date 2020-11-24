@@ -3,6 +3,7 @@
 . $(dirname $0)/util
 set -eu -o pipefail
 
+: ${TRAVIS=}
 : ${TEST_INTEGRATION=}
 : ${TEST_GATEWAY=}
 : ${TEST_DOCKERFILE=}
@@ -17,12 +18,17 @@ if [ "$TEST_DOCKERD" == "1" ] && ! file $TEST_DOCKERD_BINARY | grep "statically 
   exit 1
 fi
 
+importMasterCacheFlags=""
+if [ "$TRAVIS" = "true" ]; then
+  importMasterCacheFlags="--cache-from=type=registry,ref=cicache.buildk.it/moby/buildkit/master:integration-tests"
+fi
+
 importCacheFlags=""
 if [ -n "$cacheref" ]; then
   if [ "$cachetype" = "local" ]; then
-    importCacheFlags="--cache-from=type=local,src=$cacheref"
+    importCacheFlags="--cache-from=type=local,src=$cacheref "
   else
-    importCacheFlags="--cache-from=type=registry,ref=cicache.buildk.it/moby/buildkit/master:integration-tests --cache-from=type=registry,ref=$cacheref:integration-tests"
+    importCacheFlags="--cache-from=type=registry,ref=$cacheref:integration-tests "
   fi
 fi
 
@@ -58,7 +64,7 @@ if [ "$TEST_COVERAGE" = "1" ]; then
   coverageFlags="-coverprofile=/coverage/coverage.txt -covermode=atomic"
 fi
 
-buildxCmd build $importCacheFlags \
+buildxCmd build $importMasterCacheFlags $importCacheFlags \
   --target "integration-tests" \
   --output "type=docker,name=$iid" \
   $currentcontext
