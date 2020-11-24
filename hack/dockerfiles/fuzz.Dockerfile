@@ -11,6 +11,5 @@ RUN apk add --no-cache git mercurial \
     github.com/dvyukov/go-fuzz/go-fuzz-build \
     github.com/moby/buildkit \
     && apk del git mercurial
-COPY fuzz.go /go/src/github.com/moby/buildkit/frontend/dockerfiles/parser/
 RUN cd /go/src/github.com/moby/buildkit/frontend/dockerfiles/parser \
     && $GOPATH/bin/go-fuzz-build && $GOPATH/bin/go-fuzz

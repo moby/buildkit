@@ -1,5 +1,3 @@
 #!/usr/bin/env bash
 
-cp util/testutil/fuzz/fuzz.go hack/dockerfiles/
-
 cd hack/dockerfiles && sudo docker build -f fuzz.Dockerfile .
