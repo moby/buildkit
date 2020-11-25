@@ -55,11 +55,11 @@ jobs:
       name: "Dockerfile integration tests"
     - script: TESTPKGS=./frontend/dockerfile ./hack/test dockerfile
       name: "External Dockerfile tests"
-    - script:
-        - RUNC_PLATFORMS=$PLATFORMS PLATFORMS="${PLATFORMS},darwin/amd64,windows/amd64" ./hack/cross
-        - PLATFORMS="windows/amd64" ./hack/buildkit-buildkitd
+    - script: RUNC_PLATFORMS=$PLATFORMS PLATFORMS="${PLATFORMS},darwin/amd64,windows/amd64" ./hack/cross
       name: "Cross"
-    - script: ./hack/images local $REPO_SLUG_TARGET
+    - script:
+        - ./hack/images local $REPO_SLUG_TARGET
+        - TARGET=rootless ./hack/images local $REPO_SLUG_TARGET
       name: "Build image"
       if: type == cron
     - stage: deploy
@@ -68,13 +68,13 @@ jobs:
       if: type != pull_request
       deploy:
         - provider: script
-          script: ./hack/images master $REPO_SLUG_TARGET push
+          script: ./hack/images master $REPO_SLUG_TARGET push && TARGET=rootless ./hack/images master $REPO_SLUG_TARGET push
           on:
             repo: moby/buildkit
             branch: master
             condition: $TRAVIS_EVENT_TYPE != "cron"
         - provider: script
-          script: ./hack/images $TRAVIS_TAG $REPO_SLUG_TARGET push && PLATFORMS="${PLATFORMS},darwin/amd64,windows/amd64" ./hack/release-tar $TRAVIS_TAG release-out
+          script: ./hack/images $TRAVIS_TAG $REPO_SLUG_TARGET push && TARGET=rootless ./hack/images $TRAVIS_TAG $REPO_SLUG_TARGET push && PLATFORMS="${PLATFORMS},darwin/amd64,windows/amd64" ./hack/release-tar $TRAVIS_TAG release-out
           on:
             repo: moby/buildkit
             tags: true

@@ -26,7 +26,9 @@ fi
 importCacheFlags=""
 if [ -n "$cacheref" ]; then
   if [ "$cachetype" = "local" ]; then
-    importCacheFlags="--cache-from=type=local,src=$cacheref "
+    for ref in $cacheref; do
+      importCacheFlags="$importCacheFlags--cache-from=type=local,src=$ref "
+    done
   else
     importCacheFlags="--cache-from=type=registry,ref=$cacheref:integration-tests "
   fi
@@ -102,7 +104,7 @@ if [ "$TEST_DOCKERFILE" == 1 ]; then
       --build-arg "BUILDTAGS=$buildtags" \
       --file "./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile" \
       --output "type=oci,dest=$tarout" \
-      .
+      $currentcontext
 
     if [ -s $tarout ]; then
       if [ "$release" = "mainline" ] || [ "$release" = "labs" ] || [ -n "$DOCKERFILE_RELEASES_CUSTOM" ] || [ "$TRAVIS_EVENT_TYPE" = "cron" ] || [ "$GITHUB_ACTIONS" = "true" ]; then
