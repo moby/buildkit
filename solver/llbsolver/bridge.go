@@ -167,6 +167,8 @@ func newResultProxy(b *llbBridge, req frontend.SolveRequest) *resultProxy {
 				rp.errResults = append(rp.errResults, res)
 				return nil
 			})
+			// acquire ownership so ExecError finalizer doesn't attempt to release as well
+			ee.OwnerBorrowed = true
 		}
 		return res, err
 	}
