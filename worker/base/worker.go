@@ -289,8 +289,14 @@ func (w *Worker) PruneCacheMounts(ctx context.Context, ids []string) error {
 		for _, si := range sis {
 			for _, k := range si.Indexes() {
 				if k == id || strings.HasPrefix(k, id+":") {
+					siOrig := si
 					if siCached := w.CacheMgr.Metadata(si.ID()); siCached != nil {
 						si = siCached
+					}
+					if si.Get(k) == nil {
+						si.Update(func(b *bolt.Bucket) error {
+							return si.SetValue(b, k, siOrig.Get(k))
+						})
 					}
 					if err := cache.CachePolicyDefault(si); err != nil {
 						return err
