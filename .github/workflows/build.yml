@@ -23,30 +23,8 @@ env:
   CACHEKEY_CROSS: "cross"
 
 jobs:
-  cache:
-    runs-on: ubuntu-latest
-    outputs:
-      ref: ${{ steps.gen.outputs.ref }}
-    steps:
-      -
-        name: Generate cache ref
-        id: gen
-        run: |
-          REF=na
-          if [ "${{ github.event_name }}" = "schedule" ]; then
-            REF=nightly
-          elif [ "${{ github.event_name }}" = "pull_request" ]; then
-            REF=pr-${{ github.event.number }}
-          elif [[ $GITHUB_REF == refs/tags/* ]]; then
-            REF=${GITHUB_REF#refs/tags/}
-          elif [[ $GITHUB_REF == refs/heads/* ]]; then
-            REF=$(echo ${GITHUB_REF#refs/heads/} | sed -r 's#/+#-#g')
-          fi
-          echo ::set-output name=ref::${REF}
-
   base:
     runs-on: ubuntu-latest
-    needs: [cache]
     steps:
       -
         name: Checkout
@@ -56,17 +34,17 @@ jobs:
         uses: actions/cache@v2
         with:
           path: /tmp/.buildkit-cache/${{ env.CACHEKEY_INTEGRATION_TESTS }}
-          key: ${{ runner.os }}-buildkit-${{ env.CACHEKEY_INTEGRATION_TESTS }}-${{ needs.cache.outputs.ref }}-${{ github.sha }}
+          key: ${{ runner.os }}-buildkit-${{ env.CACHEKEY_INTEGRATION_TESTS }}-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-buildkit-${{ env.CACHEKEY_INTEGRATION_TESTS }}-${{ needs.cache.outputs.ref }}-
+            ${{ runner.os }}-buildkit-${{ env.CACHEKEY_INTEGRATION_TESTS }}-
       -
         name: Cache ${{ env.CACHEKEY_BINARIES }}
         uses: actions/cache@v2
         with:
           path: /tmp/.buildkit-cache/${{ env.CACHEKEY_BINARIES }}
-          key: ${{ runner.os }}-buildkit-${{ env.CACHEKEY_BINARIES }}-${{ needs.cache.outputs.ref }}-${{ github.sha }}
+          key: ${{ runner.os }}-buildkit-${{ env.CACHEKEY_BINARIES }}-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-buildkit-${{ env.CACHEKEY_BINARIES }}-${{ needs.cache.outputs.ref }}-
+            ${{ runner.os }}-buildkit-${{ env.CACHEKEY_BINARIES }}-
       -
         name: Set up QEMU
         uses: docker/setup-qemu-action@v1
@@ -94,7 +72,7 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-    needs: [cache, base]
+    needs: [base]
     strategy:
       fail-fast: false
       matrix:
@@ -102,28 +80,22 @@ jobs:
           -
             pkg: ./client
             typ: integration
-            coverage-filename: client-integration
           -
             pkg: ./cmd/buildctl ./worker/containerd
             typ: integration
-            coverage-filename: buildctl-containerd-integration
           -
             pkg: ''
             skip-integration-tests: 1
             typ: integration gateway
-            coverage-filename: integration-gateway-skipit
           -
             pkg: ./frontend
             typ: ''
-            coverage-filename: frontend
           -
             pkg: ./frontend/dockerfile
             typ: ''
-            coverage-filename: frontend-dockerfile
           -
             pkg: ./frontend/dockerfile
             typ: dockerfile
-            coverage-filename: frontend-dockerfile-dockerfile
     steps:
       -
         name: Checkout
@@ -133,17 +105,17 @@ jobs:
         uses: actions/cache@v2
         with:
           path: /tmp/.buildkit-cache/${{ env.CACHEKEY_INTEGRATION_TESTS }}
-          key: ${{ runner.os }}-buildkit-${{ env.CACHEKEY_INTEGRATION_TESTS }}-${{ needs.cache.outputs.ref }}-${{ github.sha }}
+          key: ${{ runner.os }}-buildkit-${{ env.CACHEKEY_INTEGRATION_TESTS }}-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-buildkit-${{ env.CACHEKEY_INTEGRATION_TESTS }}-${{ needs.cache.outputs.ref }}-
+            ${{ runner.os }}-buildkit-${{ env.CACHEKEY_INTEGRATION_TESTS }}-
       -
         name: Cache ${{ env.CACHEKEY_BINARIES }}
         uses: actions/cache@v2
         with:
           path: /tmp/.buildkit-cache/${{ env.CACHEKEY_BINARIES }}
-          key: ${{ runner.os }}-buildkit-${{ env.CACHEKEY_BINARIES }}-${{ needs.cache.outputs.ref }}-${{ github.sha }}
+          key: ${{ runner.os }}-buildkit-${{ env.CACHEKEY_BINARIES }}-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-buildkit-${{ env.CACHEKEY_BINARIES }}-${{ needs.cache.outputs.ref }}-
+            ${{ runner.os }}-buildkit-${{ env.CACHEKEY_BINARIES }}-
       -
         name: Set up QEMU
         uses: docker/setup-qemu-action@v1
@@ -156,7 +128,7 @@ jobs:
         name: Test ${{ matrix.pkg }} ${{ matrix.typ }}
         run: |
           ./hack/test ${{ matrix.typ }}
-          mv ./coverage/coverage.txt ./coverage/coverage-${{ github.job }}-${{ matrix.coverage-filename }}.txt
+          mv ./coverage/coverage.txt ./coverage/coverage-${{ github.job }}-$(echo "${{ matrix.coverage-pkg }}-${{ matrix.skip-integration-tests }}-${{ matrix.typ }}" | tr -dc '[:alnum:]-\n\r' | tr '[:upper:]' '[:lower:]').txt
         env:
           TEST_COVERAGE: 1
           TESTPKGS: ${{ matrix.pkg }}
@@ -248,7 +220,6 @@ jobs:
 
   cross:
     runs-on: ubuntu-latest
-    needs: [cache]
     steps:
       -
         name: Checkout
@@ -258,9 +229,9 @@ jobs:
         uses: actions/cache@v2
         with:
           path: /tmp/.buildkit-cache/${{ env.CACHEKEY_CROSS }}
-          key: ${{ runner.os }}-buildkit-${{ env.CACHEKEY_CROSS }}-${{ needs.cache.outputs.ref }}-${{ github.sha }}
+          key: ${{ runner.os }}-buildkit-${{ env.CACHEKEY_CROSS }}-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-buildkit-${{ env.CACHEKEY_CROSS }}-${{ needs.cache.outputs.ref }}-
+            ${{ runner.os }}-buildkit-${{ env.CACHEKEY_CROSS }}-
       -
         name: Set up QEMU
         uses: docker/setup-qemu-action@v1
@@ -305,7 +276,7 @@ jobs:
 
   image:
     runs-on: ubuntu-latest
-    needs: [cache, release-base, test, cross]
+    needs: [release-base, test, cross]
     strategy:
       fail-fast: false
       matrix:
@@ -321,17 +292,17 @@ jobs:
         uses: actions/cache@v2
         with:
           path: /tmp/.buildkit-cache/image${{ matrix.target-stage }}
-          key: ${{ runner.os }}-buildkit-image${{ matrix.target-stage }}-${{ needs.cache.outputs.ref }}-${{ github.sha }}
+          key: ${{ runner.os }}-buildkit-image${{ matrix.target-stage }}-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-buildkit-image${{ matrix.target-stage }}-${{ needs.cache.outputs.ref }}-
+            ${{ runner.os }}-buildkit-image${{ matrix.target-stage }}-
       -
         name: Cache ${{ env.CACHEKEY_CROSS }}
         uses: actions/cache@v2
         with:
           path: /tmp/.buildkit-cache/${{ env.CACHEKEY_CROSS }}
-          key: ${{ runner.os }}-buildkit-${{ env.CACHEKEY_CROSS }}-${{ needs.cache.outputs.ref }}-${{ github.sha }}
+          key: ${{ runner.os }}-buildkit-${{ env.CACHEKEY_CROSS }}-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-buildkit-${{ env.CACHEKEY_CROSS }}-${{ needs.cache.outputs.ref }}-
+            ${{ runner.os }}-buildkit-${{ env.CACHEKEY_CROSS }}-
       -
         name: Set up QEMU
         uses: docker/setup-qemu-action@v1
@@ -357,7 +328,7 @@ jobs:
 
   binaries:
     runs-on: ubuntu-latest
-    needs: [cache, release-base, test, cross]
+    needs: [release-base, test, cross]
     steps:
       -
         name: Checkout
@@ -367,17 +338,17 @@ jobs:
         uses: actions/cache@v2
         with:
           path: /tmp/.buildkit-cache/${{ env.CACHEKEY_BINARIES }}
-          key: ${{ runner.os }}-buildkit-${{ env.CACHEKEY_BINARIES }}-${{ needs.cache.outputs.ref }}-${{ github.sha }}
+          key: ${{ runner.os }}-buildkit-${{ env.CACHEKEY_BINARIES }}-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-buildkit-${{ env.CACHEKEY_BINARIES }}-${{ needs.cache.outputs.ref }}-
+            ${{ runner.os }}-buildkit-${{ env.CACHEKEY_BINARIES }}-
       -
         name: Cache ${{ env.CACHEKEY_CROSS }}
         uses: actions/cache@v2
         with:
           path: /tmp/.buildkit-cache/${{ env.CACHEKEY_CROSS }}
-          key: ${{ runner.os }}-buildkit-${{ env.CACHEKEY_CROSS }}-${{ needs.cache.outputs.ref }}-${{ github.sha }}
+          key: ${{ runner.os }}-buildkit-${{ env.CACHEKEY_CROSS }}-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-buildkit-${{ env.CACHEKEY_CROSS }}-${{ needs.cache.outputs.ref }}-
+            ${{ runner.os }}-buildkit-${{ env.CACHEKEY_CROSS }}-
       -
         name: Set up QEMU
         uses: docker/setup-qemu-action@v1
