@@ -373,7 +373,7 @@ jobs:
           if-no-files-found: error
       -
         name: GitHub Release
-        if: needs.release-base.outputs.push == 'push'
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
