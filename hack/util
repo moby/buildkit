@@ -28,11 +28,8 @@ buildxCmd() {
   elif buildx version >/dev/null 2>&1; then
     set -x
     buildx "$@" $progressFlag
-  elif docker version >/dev/null 2>&1; then
-    set -x
-    DOCKER_BUILDKIT=1 docker "$@" $progressFlag
   else
-    echo >&2 "ERROR: Please enable DOCKER_BUILDKIT or install standalone buildx"
+    echo >&2 "ERROR: Please install buildx"
     exit 1
   fi
 }
