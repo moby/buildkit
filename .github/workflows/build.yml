@@ -276,9 +276,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - target-stage: ''
-          - target-stage: rootless
+        target-stage:
+          - ''
+          - rootless
     steps:
       -
         name: Checkout${{ env.CACHEKEY_BINARIES }}
@@ -384,6 +384,7 @@ jobs:
 
   frontend-base:
     runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
     outputs:
       typ: ${{ steps.prep.outputs.typ }}
       tag: ${{ steps.prep.outputs.tag }}
@@ -396,11 +397,7 @@ jobs:
           TYP=master
           TAG=mainline
           PUSH=false
-          if [ "${{ github.event_name }}" = "schedule" ]; then
-            TYP=daily
-            TAG=_
-            PUSH=push
-          elif [[ $GITHUB_REF == refs/tags/dockerfile/* ]]; then
+          if [[ $GITHUB_REF == refs/tags/dockerfile/* ]]; then
             TYP=tag
             TAG=${GITHUB_REF#refs/tags/}
             PUSH=push
@@ -413,6 +410,7 @@ jobs:
 
   frontend-image:
     runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
     needs: [frontend-base, test]
     steps:
       -
