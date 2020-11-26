@@ -25,6 +25,23 @@ if [ -z "$TAG" ] || [ -z "$REPO" ]; then
   usage
 fi
 
+localmode=""
+if [[ "$TAG" == "local" ]]; then
+  localmode="1"
+  if [ "$PUSH" = "push" ]; then
+    echo >&2 "local images cannot be pushed"
+    exit 1
+  fi
+fi
+
+outputFlag="--output=type=image,push=false"
+if [ "$PUSH" = "push" ]; then
+  outputFlag="--output=type=image,push=true"
+fi
+if [ -n "$localmode" ]; then
+  outputFlag="--output=type=docker"
+fi
+
 pushFlag="push=false"
 if [ "$PUSH" = "push" ]; then
   pushFlag="push=true"
@@ -55,13 +72,16 @@ if [[ -n "$cacheref" ]] && [[ "$cachetype" = "local" ]]; then
     importCacheFlags="$importCacheFlags--cache-from=type=local,src=$ref "
   done
 fi
+if [ -n "$localmode" ]; then
+  importCacheFlags=""
+fi
 
 exportCacheFlags=""
 if [ "$PUSH" = "push" ]; then
   exportCacheFlags="--cache-to=type=inline "
 fi
 
-buildxCmd build $targetFlag $importCacheFlags $exportCacheFlags \
+buildxCmd build $targetFlag $importCacheFlags $exportCacheFlags $outputFlag \
   --platform "$PLATFORMS" \
-  --output "type=image,name=$tagMain$tagLatest,$pushFlag" \
-  $currentref
+  --tag "$tagMain$tagLatest" \
+  $currentcontext
