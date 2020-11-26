@@ -66,10 +66,6 @@ jobs:
           ./hack/build_ci_first_pass integration-tests
         env:
           CACHE_DIR: /tmp/.buildkit-cache/${{ env.CACHEKEY_INTEGRATION_TESTS }}
-      -
-        name: Dump context
-        if: always()
-        uses: crazy-max/ghaction-dump-context@v1
 
   test:
     runs-on: ubuntu-latest
@@ -271,7 +267,6 @@ jobs:
             TAG=$(echo ${GITHUB_REF#refs/heads/} | sed -r 's#/+#-#g')
             PUSH=push
           fi
-          PUSH=false # FIXME: Remove when migration to GitHub Actions completed
           echo ::set-output name=tag::${TAG}
           echo ::set-output name=push::${PUSH}
 
@@ -412,7 +407,6 @@ jobs:
           elif [[ $GITHUB_REF == refs/heads/* ]]; then
             PUSH=push
           fi
-          PUSH=false # FIXME: Remove when migration to GitHub Actions completed
           echo ::set-output name=typ::${TYP}
           echo ::set-output name=tag::${TAG}
           echo ::set-output name=push::${PUSH}
