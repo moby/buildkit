@@ -17,6 +17,7 @@ on:
 env:
   REPO_SLUG_ORIGIN: "moby/buildkit:latest"
   REPO_SLUG_TARGET: "moby/buildkit"
+  DF_REPO_SLUG_TARGET: "docker/dockerfile-upstream"
   PLATFORMS: "linux/amd64,linux/arm/v7,linux/arm64,linux/s390x,linux/ppc64le"
   CACHEKEY_INTEGRATION_TESTS: "integration-tests"
   CACHEKEY_BINARIES: "binaries"
@@ -263,7 +264,7 @@ jobs:
           if [ "${{ github.event_name }}" = "schedule" ]; then
             TAG=nightly
             PUSH=push
-          elif [[ $GITHUB_REF == refs/tags/* ]]; then
+          elif [[ $GITHUB_REF == refs/tags/v* ]]; then
             TAG=${GITHUB_REF#refs/tags/}
             PUSH=push
           elif [[ $GITHUB_REF == refs/heads/* ]]; then
@@ -385,3 +386,77 @@ jobs:
           draft: true
           files: ./release-out/*
           name: ${{ needs.release-base.outputs.tag }}
+
+  frontend-base:
+    runs-on: ubuntu-latest
+    outputs:
+      typ: ${{ steps.prep.outputs.typ }}
+      tag: ${{ steps.prep.outputs.tag }}
+      push: ${{ steps.prep.outputs.push }}
+    steps:
+      -
+        name: Prepare
+        id: prep
+        run: |
+          TYP=master
+          TAG=mainline
+          PUSH=false
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            TYP=daily
+            TAG=_
+            PUSH=push
+          elif [[ $GITHUB_REF == refs/tags/dockerfile/* ]]; then
+            TYP=tag
+            TAG=${GITHUB_REF#refs/tags/}
+            PUSH=push
+          elif [[ $GITHUB_REF == refs/heads/* ]]; then
+            PUSH=push
+          fi
+          PUSH=false # FIXME: Remove when migration to GitHub Actions completed
+          echo ::set-output name=typ::${TYP}
+          echo ::set-output name=tag::${TAG}
+          echo ::set-output name=push::${PUSH}
+
+  frontend-image:
+    runs-on: ubuntu-latest
+    needs: [frontend-base, test]
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v2
+      -
+        name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+        with:
+          driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
+      -
+        name: Cache layers
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildkit-cache/frontend-${{ needs.frontend-base.outputs.typ }}
+          key: ${{ runner.os }}-buildkit-frontend-${{ needs.frontend-base.outputs.typ }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildkit-frontend-${{ needs.frontend-base.outputs.typ }}-
+      -
+        name: Login to DockerHub
+        uses: docker/login-action@v1
+        if: needs.frontend-base.outputs.push == 'push'
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      -
+        name: Build ${{ needs.frontend-base.outputs.typ }}/${{ needs.frontend-base.outputs.tag }}
+        run: |
+          ./frontend/dockerfile/cmd/dockerfile-frontend/hack/release "${{ needs.frontend-base.outputs.typ }}" "${{ needs.frontend-base.outputs.tag }}" "$DF_REPO_SLUG_TARGET" "${{ needs.frontend-base.outputs.push }}"
+        env:
+          CACHE_DIR: /tmp/.buildkit-cache/frontend-${{ needs.frontend-base.outputs.typ }}
+      -
+        name: Build ${{ needs.frontend-base.outputs.typ }}/labs
+        if: needs.frontend-base.outputs.typ == 'master'
+        run: |
+          ./frontend/dockerfile/cmd/dockerfile-frontend/hack/release "${{ needs.frontend-base.outputs.typ }}" labs "$DF_REPO_SLUG_TARGET" "${{ needs.frontend-base.outputs.push }}"
+        env:
+          CACHE_DIR: /tmp/.buildkit-cache/frontend-${{ needs.frontend-base.outputs.typ }}
