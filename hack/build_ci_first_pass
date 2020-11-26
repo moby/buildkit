@@ -16,25 +16,7 @@ fi
 
 importCacheFlags=""
 exportCacheFlags=""
-exportFlags=""
-
-if [ "$TRAVIS" = "true" ]; then
-  if [ -z "$TRAVIS_COMMIT" ]; then
-    echo "Travis commit required"
-    exit 0
-  fi
-  if [ -f /tmp/buildkit-ci-cache-repo ]; then
-    exportCacheFlags="--cache-to=type=inline"
-    exportFlags="--output=type=image,push=true,name=$(cat /tmp/buildkit-ci-cache-repo)"
-  fi
-  if [ "$TYP" = "binaries" ]; then
-    importCacheFlags="--cache-from=type=registry,ref=cicache.buildk.it/moby/buildkit/master:binaries --cache-from=type=registry,ref=cicache.buildk.it/moby/buildkit/master:integration-tests"
-    exportFlags="$exportFlags:binaries"
-  elif [ "$TYP" = "integration-tests" ]; then
-    importCacheFlags="--cache-from=type=registry,ref=cicache.buildk.it/moby/buildkit/master:integration-tests"
-    exportFlags="$exportFlags:integration-tests"
-  fi
-elif [ "$GITHUB_ACTIONS" = "true" ]; then
+if [ "$GITHUB_ACTIONS" = "true" ]; then
   if [ -n "$cacheref" ]; then
     importCacheFlags="--cache-from=type=local,src=$cacheref"
     exportCacheFlags="--cache-to=type=local,dest=$cacheref"
@@ -43,12 +25,12 @@ fi
 
 case $TYP in
   "binaries")
-    buildxCmd build $importCacheFlags $exportCacheFlags $exportFlags \
+    buildxCmd build $importCacheFlags $exportCacheFlags \
       --target "binaries" \
       $currentcontext
     ;;
   "integration-tests")
-    buildxCmd build $importCacheFlags $exportCacheFlags $exportFlags \
+    buildxCmd build $importCacheFlags $exportCacheFlags \
       --target "integration-tests-base" \
       $currentcontext
     ;;
