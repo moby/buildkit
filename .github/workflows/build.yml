@@ -73,6 +73,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     needs: [base]
+    outputs:
+      failure: ${{ steps.failure.outputs.result }}
     strategy:
       fail-fast: false
       matrix:
@@ -126,7 +128,10 @@ jobs:
           driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
       -
         name: Test ${{ matrix.pkg }} ${{ matrix.typ }}
+        id: test
+        continue-on-error: ${{ github.event_name == 'pull_request' }}
         run: |
+          mkdir -p ./coverage
           ./hack/test ${{ matrix.typ }}
           mv ./coverage/coverage.txt ./coverage/coverage-${{ github.job }}-$(echo "${{ matrix.coverage-pkg }}-${{ matrix.skip-integration-tests }}-${{ matrix.typ }}" | tr -dc '[:alnum:]-\n\r' | tr '[:upper:]' '[:lower:]').txt
         env:
@@ -135,6 +140,12 @@ jobs:
           TESTFLAGS: -v --parallel=6 --timeout=20m
           SKIP_INTEGRATION_TESTS: ${{ matrix.skip-integration-tests }}
           CACHE_DIR: /tmp/.buildkit-cache/${{ env.CACHEKEY_INTEGRATION_TESTS }} /tmp/.buildkit-cache/${{ env.CACHEKEY_BINARIES }}
+      -
+        name: Check outcome
+        id: failure
+        if: steps.test.outcome == 'failure'
+        run: |
+          echo ::set-output name=result::Test "${{ matrix.pkg }} ${{ matrix.typ }} ${{ matrix.skip-integration-tests }}" failed
       -
         name: Upload coverage file
         uses: actions/upload-artifact@v2
@@ -385,3 +396,14 @@ jobs:
           draft: true
           files: ./release-out/*
           name: ${{ needs.release-base.outputs.tag }}
+
+  test-status:
+    runs-on: ubuntu-latest
+    needs: [test, image, binaries]
+    if: always() && needs.test.outputs.failure != ''
+    steps:
+      -
+        name: Test failed
+        run: |
+          echo "::error::${{ needs.test.outputs.failure }}"
+          exit 1
