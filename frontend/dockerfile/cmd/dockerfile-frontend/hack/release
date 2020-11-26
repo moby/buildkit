@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 
-: ${PLATFORMS=linux/amd64}
-: ${CONTINUOUS_INTEGRATION=}
-: ${DAILY_TARGETS=}
+. $(dirname $0)/../../../../../hack/util
+set -e
 
-progressFlag=""
-if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"; fi
+: ${PLATFORMS=linux/amd64}
+: ${DAILY_TARGETS=}
 
 usage() {
   echo "$0 (master|tag|daily) (tag|channel) <repo> [push]"
@@ -61,9 +60,18 @@ TAG=$2
 REPO=$3
 PUSH=$4
 
-pushFlag=""
+pushFlag="push=false"
 if [ "$PUSH" = "push" ]; then
   pushFlag="push=true"
+fi
+
+importCacheFlags=""
+exportCacheFlags=""
+if [ "$GITHUB_ACTIONS" = "true" ]; then
+  if [ -n "$cacheref" ]; then
+    importCacheFlags="--cache-from=type=local,src=$cacheref"
+    exportCacheFlags="--cache-to=type=local,dest=$cacheref"
+  fi
 fi
 
 case $TYP in
@@ -73,19 +81,20 @@ case $TYP in
     echo "invalid release $TAG"
     exit 1
   fi
+
   buildTags=$(cat $tagf)
   pushTag="master"
   if [ "$TAG" != "mainline" ]; then
     pushTag=${pushTag}-$TAG
   fi
-  set -x
-  buildctl build $progressFlag --frontend=dockerfile.v0 \
-    --local context=. --local dockerfile=. \
-    --opt filename=./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile \
-    --opt platform=$PLATFORMS \
-    --opt "build-arg:CHANNEL=$TAG" \
-    --opt "build-arg:BUILDTAGS=$buildTags" \
-    --output type=image,name=$REPO:$pushTag,$pushFlag
+
+  buildxCmd build $importCacheFlags $exportCacheFlags \
+    --platform "$PLATFORMS" \
+    --build-arg "CHANNEL=$TAG" \
+    --build-arg "BUILDTAGS=$buildTags" \
+    --output "type=image,name=$REPO:$pushTag,$pushFlag" \
+    --file "./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile" \
+    $currentcontext
   ;;
 "tag")
   publishedNames=""
@@ -97,56 +106,55 @@ case $TYP in
   fi
   buildTags=$(cat $tagf)
 
-  set -x
-  buildctl build $progressFlag --frontend=dockerfile.v0 \
-    --local context=. --local dockerfile=. \
-    --opt filename=./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile \
-    --opt platform=$PLATFORMS \
-    --opt "build-arg:CHANNEL=$TAG" \
-    --opt "build-arg:BUILDTAGS=$buildTags" \
-    --output type=image,\"name=$publishedNames\",$pushFlag
+  buildxCmd build $importCacheFlags $exportCacheFlags \
+    --platform "$PLATFORMS" \
+    --build-arg "CHANNEL=$TAG" \
+    --build-arg "BUILDTAGS=$buildTags" \
+    --output "type=image,name=\"$publishedNames\",$pushFlag" \
+    --file "./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile" \
+    $currentcontext
   ;;
 "daily")
   # if [ -z $DAILY_TARGETS ]; then
   #   DAILY_TARGETS=""
   # fi
-  
+
   for TAG in $DAILY_TARGETS; do
-  
+
     tagf=./frontend/dockerfile/release/$TAG/tags
     if [ ! -f $tagf ]; then
       echo "invalid release $TAG"
       exit 1
     fi
     buildTags=$(cat $tagf)
-  
+
     # find the buildID of the last pushed image
     # returns a BuildID if rebuild needed
-  
+
     tmp=$(mktemp -d -t buildid.XXXXXXXXXX)
-    set -x
     dt=$(date +%Y%m%d)
-    buildctl build $progressFlag --progress=plain --frontend=dockerfile.v0 \
-      --local context=. --local dockerfile=. \
-      --opt filename=./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile \
-      --opt "build-arg:CHANNEL=$TAG" \
-      --opt "build-arg:REPO=$REPO" \
-      --opt "build-arg:DATE=$dt" \
-      --opt "build-arg:BUILDTAGS=$buildTags" \
-      --opt target=buildid\
-      --output type=local,dest=$tmp
-    
+    buildxCmd build $importCacheFlags $exportCacheFlags \
+      --platform "$PLATFORMS" \
+      --target "buildid" \
+      --build-arg "CHANNEL=$TAG" \
+      --build-arg "BUILDTAGS=$buildTags" \
+      --build-arg "REPO=$REPO" \
+      --build-arg "DATE=$dt" \
+      --output "type=local,dest=$tmp" \
+      --file "./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile" \
+      $currentcontext
+
     if [ -f $tmp/buildid ]; then
       buildid=$(cat $tmp/buildid)
       echo "buildid: $buildid"
-      
-      buildctl build $progressFlag --frontend=dockerfile.v0 \
-        --local context=. --local dockerfile=. \
-        --opt filename=./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile \
-        --opt platform=$PLATFORMS \
-        --opt "build-arg:CHANNEL=$TAG" \
-        --opt "build-arg:BUILDTAGS=$buildTags" \
-        --output type=image,name=$REPO:$dt-$TAG,$pushFlag
+
+      buildxCmd build $importCacheFlags $exportCacheFlags \
+        --platform "$PLATFORMS" \
+        --build-arg "CHANNEL=$TAG" \
+        --build-arg "BUILDTAGS=$buildTags" \
+        --output "type=image,name=$REPO:$dt-$TAG,$pushFlag" \
+        --file "./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile" \
+        $currentcontext
       rm $tmp/buildid
     fi
     rm -r $tmp
