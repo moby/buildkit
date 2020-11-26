@@ -6,7 +6,6 @@ env:
     - DOCKER_CHANNEL="stable"
     - DOCKER_CLI_EXPERIMENTAL="enabled"
     - PLATFORMS="linux/amd64,linux/arm/v7,linux/arm64,linux/s390x,linux/ppc64le"
-    - PREFER_BUILDCTL="1"
 
 before_install:
   # update docker
