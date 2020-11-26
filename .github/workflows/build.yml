@@ -317,7 +317,9 @@ jobs:
       -
         name: Build ${{ needs.release-base.outputs.tag }}
         run: |
-          ./hack/images "${{ needs.release-base.outputs.tag }}" "$REPO_SLUG_TARGET" "${{ needs.release-base.outputs.push }}"
+          tag="${{ needs.release-base.outputs.tag }}"
+          if [ -n "${{ matrix.target-stage }}" ]; then tag="$tag-${{ matrix.target-stage }}"; fi
+          ./hack/images "$tag" "$REPO_SLUG_TARGET" "${{ needs.release-base.outputs.push }}"
         env:
           TARGET: ${{ matrix.target-stage }}
           CACHE_DIR: /tmp/.buildkit-cache/${{ env.CACHEKEY_CROSS }} /tmp/.buildkit-cache/image${{ matrix.target-stage }}
