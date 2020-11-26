@@ -29,8 +29,15 @@ buildxCmd() {
     set -x
     buildx "$@" $progressFlag
   else
-    echo >&2 "ERROR: Please install buildx"
-    exit 1
+    topdir="$(realpath $(dirname "$0")/..)"
+    if [ ! -x "${topdir}/bin/buildx" ]; then
+      set -x
+      "${topdir}/hack/install-buildx"
+    fi
+    set -x
+    bootstrapName="moby-buildkit"
+    "${topdir}/hack/bootstrap-buildx" "${bootstrapName}"
+    BUILDX_BUILDER="${bootstrapName}" "${topdir}/bin/buildx" "$@" $progressFlag
   fi
 }
 

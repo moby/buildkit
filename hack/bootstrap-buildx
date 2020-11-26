@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -eu -o pipefail
+if [ "$#" -ne 1 ]; then
+  echo >&2 "usage: $0 <name>"
+  exit 1
+fi
+NAME="$1"
+echo "Bootstrapping buildx builder \"${NAME}\""
+
+topdir="$(realpath "$(dirname "$0")/..")"
+cd "${topdir}"
+buildx="./bin/buildx"
+if ! "${buildx}" inspect "${NAME}" >/dev/null 2>&1; then
+  set -x
+  "${buildx}" create --driver docker-container --name "${NAME}"
+fi
+
+set -x
+"${buildx}" inspect --bootstrap "${NAME}"
