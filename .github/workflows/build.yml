@@ -259,7 +259,7 @@ jobs:
       - name: Prepare
         id: prep
         run: |
-          TAG=local
+          TAG=pr
           PUSH=false
           if [ "${{ github.event_name }}" = "schedule" ]; then
             TAG=nightly
