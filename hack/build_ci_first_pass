@@ -35,9 +35,11 @@ if [ "$TRAVIS" = "true" ]; then
     exportFlags="$exportFlags:integration-tests"
   fi
 elif [ "$GITHUB_ACTIONS" = "true" ]; then
-  if [ -n "$cacheref" ]; then
-    importCacheFlags="--cache-from=type=local,src=$cacheref"
-    exportCacheFlags="--cache-to=type=local,dest=$cacheref"
+  if [ -n "$cacheRefFrom" ]; then
+    importCacheFlags="--cache-from=type=local,src=$cacheRefFrom"
+  fi
+  if [ -n "$cacheRefTo" ]; then
+    exportCacheFlags="--cache-to=type=local,dest=$cacheRefTo"
   fi
 fi
 

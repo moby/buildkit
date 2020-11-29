@@ -18,8 +18,8 @@ if [ -z "$TAG" ] || [ -z "$OUT" ]; then
 fi
 
 importCacheFlags=""
-if [[ -n "$cacheref" ]] && [[ "$cachetype" = "local" ]]; then
-  for ref in $cacheref; do
+if [[ -n "$cacheRefFrom" ]] && [[ "$cacheType" = "local" ]]; then
+  for ref in $cacheRefFrom; do
     importCacheFlags="$importCacheFlags--cache-from=type=local,src=$ref "
   done
 fi
