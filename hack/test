@@ -18,13 +18,13 @@ if [ "$TEST_DOCKERD" == "1" ] && ! file $TEST_DOCKERD_BINARY | grep "statically 
 fi
 
 importCacheFlags=""
-if [ -n "$cacheref" ]; then
-  if [ "$cachetype" = "local" ]; then
-    for ref in $cacheref; do
+if [ -n "$cacheRefFrom" ]; then
+  if [ "$cacheType" = "local" ]; then
+    for ref in $cacheRefFrom; do
       importCacheFlags="$importCacheFlags--cache-from=type=local,src=$ref "
     done
   else
-    importCacheFlags="--cache-from=type=registry,ref=$cacheref:integration-tests "
+    importCacheFlags="--cache-from=type=registry,ref=$cacheRefFrom:integration-tests "
   fi
 fi
 

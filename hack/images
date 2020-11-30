@@ -67,8 +67,8 @@ if [[ "$versionTag" == "$TAG" ]]; then
 fi
 
 importCacheFlags="--cache-from=type=registry,ref=$tagMain$tagLatest "
-if [[ -n "$cacheref" ]] && [[ "$cachetype" = "local" ]]; then
-  for ref in $cacheref; do
+if [[ -n "$cacheRefFrom" ]] && [[ "$cacheType" = "local" ]]; then
+  for ref in $cacheRefFrom; do
     importCacheFlags="$importCacheFlags--cache-from=type=local,src=$ref "
   done
 fi
@@ -77,8 +77,10 @@ if [ -n "$localmode" ]; then
 fi
 
 exportCacheFlags=""
-if [ "$PUSH" = "push" ]; then
-  exportCacheFlags="--cache-to=type=inline "
+if [[ -n "$cacheRefTo" ]] && [[ "$cacheType" = "local" ]]; then
+  exportCacheFlags="--cache-to=type=local,dest=$cacheRefTo "
+elif [ "$PUSH" = "push" ]; then
+  exportCacheFlags="$exportCacheFlags--cache-to=type=inline "
 fi
 
 buildxCmd build $targetFlag $importCacheFlags $exportCacheFlags $outputFlag \
