@@ -79,8 +79,7 @@ fi
 exportCacheFlags=""
 if [[ -n "$cacheRefTo" ]] && [[ "$cacheType" = "local" ]]; then
   exportCacheFlags="--cache-to=type=local,dest=$cacheRefTo "
-fi
-if [ "$PUSH" = "push" ]; then
+elif [ "$PUSH" = "push" ]; then
   exportCacheFlags="$exportCacheFlags--cache-to=type=inline "
 fi
 
