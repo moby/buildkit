@@ -7,7 +7,8 @@ export BUILDX_NO_DEFAULT_LOAD=true
 : ${GITHUB_ACTIONS=}
 : ${TRAVIS_EVENT_TYPE=}
 : ${TRAVIS_BRANCH=}
-: ${CACHE_DIR=}
+: ${CACHEDIR_FROM=}
+: ${CACHEDIR_TO=}
 
 if [ "$PREFER_BUILDCTL" = "1" ]; then
   echo >&2 "WARNING: PREFER_BUILDCTL is no longer supported. Ignoring."
@@ -38,17 +39,20 @@ buildxCmd() {
   fi
 }
 
-cachetype=""
-cacheref=""
+cacheType=""
+cacheRefFrom=""
+cacheRefTo=""
 currentref=""
 if [ "$GITHUB_ACTIONS" = "true" ]; then
   currentref="git://github.com/$GITHUB_REPOSITORY#$GITHUB_REF"
-  cachetype="local"
-  cacheref="$CACHE_DIR"
+  cacheType="local"
+  cacheRefFrom="$CACHEDIR_FROM"
+  cacheRefTo="$CACHEDIR_TO"
 elif [ "$TRAVIS_EVENT_TYPE" = "pull_request" ]; then
   currentref="git://github.com/moby/buildkit#refs/pull/$TRAVIS_PULL_REQUEST/merge"
-  cachetype="registry"
-  cacheref="cicache.buildk.it/moby/buildkit/pr$TRAVIS_BUILD_ID"
+  cacheType="registry"
+  cacheRefFrom="cicache.buildk.it/moby/buildkit/pr$TRAVIS_BUILD_ID"
+  cacheRefTo="$cacheRefFrom"
 elif [ -n "$TRAVIS_BRANCH" ]; then
   currentref="git://github.com/$TRAVIS_REPO_SLUG#$TRAVIS_BRANCH"
 fi

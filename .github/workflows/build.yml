@@ -59,13 +59,23 @@ jobs:
         run: |
           ./hack/build_ci_first_pass binaries
         env:
-          CACHE_DIR: /tmp/.buildkit-cache/${{ env.CACHEKEY_BINARIES }}
+          CACHEDIR_FROM: /tmp/.buildkit-cache/${{ env.CACHEKEY_BINARIES }}
+          CACHEDIR_TO: /tmp/.buildkit-cache/${{ env.CACHEKEY_BINARIES }}-new
       -
         name: Build ${{ env.CACHEKEY_INTEGRATION_TESTS }}
         run: |
           ./hack/build_ci_first_pass integration-tests
         env:
-          CACHE_DIR: /tmp/.buildkit-cache/${{ env.CACHEKEY_INTEGRATION_TESTS }}
+          CACHEDIR_FROM: /tmp/.buildkit-cache/${{ env.CACHEKEY_INTEGRATION_TESTS }}
+          CACHEDIR_TO: /tmp/.buildkit-cache/${{ env.CACHEKEY_INTEGRATION_TESTS }}-new
+      -
+        # FIXME: Temp fix for https://github.com/moby/buildkit/issues/1850
+        name: Move cache
+        run: |
+          rm -rf /tmp/.buildkit-cache/${{ env.CACHEKEY_BINARIES }}
+          mv /tmp/.buildkit-cache/${{ env.CACHEKEY_BINARIES }}-new /tmp/.buildkit-cache/${{ env.CACHEKEY_BINARIES }}
+          rm -rf /tmp/.buildkit-cache/${{ env.CACHEKEY_INTEGRATION_TESTS }}
+          mv /tmp/.buildkit-cache/${{ env.CACHEKEY_INTEGRATION_TESTS }}-new /tmp/.buildkit-cache/${{ env.CACHEKEY_INTEGRATION_TESTS }}
 
   test:
     runs-on: ubuntu-latest
@@ -131,7 +141,7 @@ jobs:
           TESTPKGS: ${{ matrix.pkg }}
           TESTFLAGS: -v --parallel=6 --timeout=20m
           SKIP_INTEGRATION_TESTS: ${{ matrix.skip-integration-tests }}
-          CACHE_DIR: /tmp/.buildkit-cache/${{ env.CACHEKEY_INTEGRATION_TESTS }} /tmp/.buildkit-cache/${{ env.CACHEKEY_BINARIES }}
+          CACHEDIR_FROM: /tmp/.buildkit-cache/${{ env.CACHEKEY_INTEGRATION_TESTS }} /tmp/.buildkit-cache/${{ env.CACHEKEY_BINARIES }}
       -
         name: Upload coverage file
         uses: actions/upload-artifact@v2
@@ -244,7 +254,14 @@ jobs:
         env:
           PLATFORMS: ${{ env.PLATFORMS }},darwin/amd64,windows/amd64
           RUNC_PLATFORMS: ${{ env.PLATFORMS }}
-          CACHE_DIR: /tmp/.buildkit-cache/${{ env.CACHEKEY_CROSS }}
+          CACHEDIR_FROM: /tmp/.buildkit-cache/${{ env.CACHEKEY_CROSS }}
+          CACHEDIR_TO: /tmp/.buildkit-cache/${{ env.CACHEKEY_CROSS }}-new
+      -
+        # FIXME: Temp fix for https://github.com/moby/buildkit/issues/1850
+        name: Move cache
+        run: |
+          rm -rf /tmp/.buildkit-cache/${{ env.CACHEKEY_CROSS }}
+          mv /tmp/.buildkit-cache/${{ env.CACHEKEY_CROSS }}-new /tmp/.buildkit-cache/${{ env.CACHEKEY_CROSS }}
 
   release-base:
     runs-on: ubuntu-latest
@@ -276,12 +293,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - target-stage: ''
-          - target-stage: rootless
+        target-stage:
+          - ''
+          - rootless
     steps:
       -
-        name: Checkout${{ env.CACHEKEY_BINARIES }}
+        name: Checkout
         uses: actions/checkout@v2
       -
         name: Cache image${{ matrix.target-stage }}
@@ -320,7 +337,14 @@ jobs:
           ./hack/images "${{ needs.release-base.outputs.tag }}" "$REPO_SLUG_TARGET" "${{ needs.release-base.outputs.push }}"
         env:
           TARGET: ${{ matrix.target-stage }}
-          CACHE_DIR: /tmp/.buildkit-cache/${{ env.CACHEKEY_CROSS }} /tmp/.buildkit-cache/image${{ matrix.target-stage }}
+          CACHEDIR_FROM: /tmp/.buildkit-cache/${{ env.CACHEKEY_CROSS }} /tmp/.buildkit-cache/image${{ matrix.target-stage }}
+          CACHEDIR_TO: /tmp/.buildkit-cache/image${{ matrix.target-stage }}-new
+      -
+        # FIXME: Temp fix for https://github.com/moby/buildkit/issues/1850
+        name: Move cache
+        run: |
+          rm -rf /tmp/.buildkit-cache/image${{ matrix.target-stage }}
+          mv /tmp/.buildkit-cache/image${{ matrix.target-stage }}-new /tmp/.buildkit-cache/image${{ matrix.target-stage }}
 
   binaries:
     runs-on: ubuntu-latest
@@ -359,7 +383,7 @@ jobs:
           ./hack/release-tar "${{ needs.release-base.outputs.tag }}" release-out
         env:
           PLATFORMS: ${{ env.PLATFORMS }},darwin/amd64,windows/amd64
-          CACHE_DIR: /tmp/.buildkit-cache/${{ env.CACHEKEY_BINARIES }} /tmp/.buildkit-cache/${{ env.CACHEKEY_CROSS }}
+          CACHEDIR_FROM: /tmp/.buildkit-cache/${{ env.CACHEKEY_BINARIES }} /tmp/.buildkit-cache/${{ env.CACHEKEY_CROSS }}
       -
         name: Move artifacts
         run: |
@@ -446,11 +470,18 @@ jobs:
         run: |
           ./frontend/dockerfile/cmd/dockerfile-frontend/hack/release "${{ needs.frontend-base.outputs.typ }}" "${{ needs.frontend-base.outputs.tag }}" "$DF_REPO_SLUG_TARGET" "${{ needs.frontend-base.outputs.push }}"
         env:
-          CACHE_DIR: /tmp/.buildkit-cache/frontend-${{ needs.frontend-base.outputs.typ }}
+          CACHEDIR_FROM: /tmp/.buildkit-cache/frontend-${{ needs.frontend-base.outputs.typ }}
+          CACHEDIR_TO: /tmp/.buildkit-cache/frontend-${{ needs.frontend-base.outputs.typ }}-new
       -
         name: Build ${{ needs.frontend-base.outputs.typ }}/labs
         if: needs.frontend-base.outputs.typ == 'master'
         run: |
           ./frontend/dockerfile/cmd/dockerfile-frontend/hack/release "${{ needs.frontend-base.outputs.typ }}" labs "$DF_REPO_SLUG_TARGET" "${{ needs.frontend-base.outputs.push }}"
         env:
-          CACHE_DIR: /tmp/.buildkit-cache/frontend-${{ needs.frontend-base.outputs.typ }}
+          CACHEDIR_FROM: /tmp/.buildkit-cache/frontend-${{ needs.frontend-base.outputs.typ }}
+      -
+        # FIXME: Temp fix for https://github.com/moby/buildkit/issues/1850
+        name: Move cache
+        run: |
+          rm -rf /tmp/.buildkit-cache/frontend-${{ needs.frontend-base.outputs.typ }}
+          mv /tmp/.buildkit-cache/frontend-${{ needs.frontend-base.outputs.typ }}-new /tmp/.buildkit-cache/frontend-${{ needs.frontend-base.outputs.typ }}
