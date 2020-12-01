@@ -34,6 +34,7 @@ func TestCommandsAtLeastOneArgument(t *testing.T) {
 		"HEALTHCHECK",
 		"EXPOSE",
 		"VOLUME",
+		"ENTRYPOINT",
 	}
 
 	for _, cmd := range commands {

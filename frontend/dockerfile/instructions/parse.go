@@ -400,6 +400,10 @@ func parseCmd(req parseRequest) (*CmdCommand, error) {
 }
 
 func parseEntrypoint(req parseRequest) (*EntrypointCommand, error) {
+	if len(req.args) == 0 {
+		return nil, errAtLeastOneArgument("ENTRYPOINT")
+	}
+
 	if err := req.flags.Parse(); err != nil {
 		return nil, err
 	}
