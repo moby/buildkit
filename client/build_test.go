@@ -941,11 +941,6 @@ func testClientSlowCacheRootfsRef(t *testing.T, sb integration.Sandbox) {
 
 	ctx := context.TODO()
 
-	// https://github.com/moby/buildkit/issues/1820
-	if sb.ContainerdAddress() != "" {
-		t.Skip()
-	}
-
 	c, err := New(ctx, sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
