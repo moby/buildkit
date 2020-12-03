@@ -60,13 +60,13 @@ fi
 tagLatest=""
 if [[ "$versionTag" == "$TAG" ]]; then
   if [ -n "$TARGET" ]; then
-    tagLatest=",$REPO:$TARGET"
+    tagLatest="--tag $REPO:$TARGET"
   else
-    tagLatest=",$REPO:latest"
+    tagLatest="--tag $REPO:latest"
   fi
 fi
 
-importCacheFlags="--cache-from=type=registry,ref=$tagMain$tagLatest "
+importCacheFlags="--cache-from=type=registry,ref=$tagMain "
 if [[ -n "$cacheRefFrom" ]] && [[ "$cacheType" = "local" ]]; then
   for ref in $cacheRefFrom; do
     importCacheFlags="$importCacheFlags--cache-from=type=local,src=$ref "
@@ -85,5 +85,5 @@ fi
 
 buildxCmd build $targetFlag $importCacheFlags $exportCacheFlags $outputFlag \
   --platform "$PLATFORMS" \
-  --tag "$tagMain$tagLatest" \
+  --tag "$tagMain" $tagLatest \
   $currentcontext
