@@ -595,7 +595,6 @@ func (e *edge) recalcCurrentState() {
 	stHigh := edgeStatusCacheSlow // maximum possible state
 	if e.cacheMap != nil {
 		for _, dep := range e.deps {
-			isSlowKeysIncomplete := e.slowCacheFunc(dep) != nil && (dep.state == edgeStatusCacheSlow || (dep.state == edgeStatusComplete && !dep.slowCacheComplete))
 			isSlowIncomplete := (e.slowCacheFunc(dep) != nil || e.preprocessFunc(dep) != nil) && (dep.state == edgeStatusCacheSlow || (dep.state == edgeStatusComplete && !dep.slowCacheComplete))
 
 			if dep.state > stLow && len(dep.keyMap) == 0 && !isSlowIncomplete {
@@ -620,7 +619,7 @@ func (e *edge) recalcCurrentState() {
 			if dep.state < edgeStatusCacheFast {
 				allDepsCompletedCacheFast = false
 			}
-			if isSlowKeysIncomplete || dep.state < edgeStatusCacheSlow {
+			if isSlowIncomplete || dep.state < edgeStatusCacheSlow {
 				allDepsCompletedCacheSlow = false
 			}
 			if dep.state < edgeStatusCacheSlow && len(dep.keyMap) == 0 {
