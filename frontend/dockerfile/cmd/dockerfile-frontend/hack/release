@@ -112,7 +112,7 @@ case $TYP in
     --platform "$PLATFORMS" \
     --build-arg "CHANNEL=$TAG" \
     --build-arg "BUILDTAGS=$buildTags" \
-    --output "type=image,name=\"$publishedNames\",$pushFlag" \
+    --output "type=image,\"name=$publishedNames\",$pushFlag" \
     --file "./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile" \
     $currentcontext
   ;;
