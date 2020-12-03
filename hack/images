@@ -42,31 +42,28 @@ if [ -n "$localmode" ]; then
   outputFlag="--output=type=docker"
 fi
 
-pushFlag="push=false"
-if [ "$PUSH" = "push" ]; then
-  pushFlag="push=true"
-fi
-
 targetFlag=""
 if [ -n "$TARGET" ]; then
   targetFlag="--target=$TARGET"
 fi
 
-tagMain="$REPO:$TAG"
+tagNames="$REPO:$TAG"
 if [ -n "$TARGET" ]; then
-  tagMain="$tagMain-$TARGET"
+  tagNames="$tagNames-$TARGET"
 fi
 
-tagLatest=""
 if [[ "$versionTag" == "$TAG" ]]; then
   if [ -n "$TARGET" ]; then
-    tagLatest="--tag $REPO:$TARGET"
+    tagNames="$tagNames $REPO:$TARGET"
   else
-    tagLatest="--tag $REPO:latest"
+    tagNames="$tagNames $REPO:latest"
   fi
 fi
 
-importCacheFlags="--cache-from=type=registry,ref=$tagMain "
+importCacheFlags=""
+for tagName in $tagNames; do
+  importCacheFlags="$importCacheFlags--cache-from=type=registry,ref=$tagName "
+done
 if [[ -n "$cacheRefFrom" ]] && [[ "$cacheType" = "local" ]]; then
   for ref in $cacheRefFrom; do
     importCacheFlags="$importCacheFlags--cache-from=type=local,src=$ref "
@@ -83,7 +80,11 @@ elif [ "$PUSH" = "push" ]; then
   exportCacheFlags="$exportCacheFlags--cache-to=type=inline "
 fi
 
-buildxCmd build $targetFlag $importCacheFlags $exportCacheFlags $outputFlag \
+tagFlags=""
+for tagName in $tagNames; do
+  tagFlags="$tagFlags--tag=$tagName "
+done
+
+buildxCmd build $targetFlag $importCacheFlags $exportCacheFlags $tagFlags $outputFlag \
   --platform "$PLATFORMS" \
-  --tag "$tagMain" $tagLatest \
   $currentcontext
