@@ -1,55 +1,48 @@
-// +build linux
+// +build seccomp
 
-/*
-   Copyright The containerd Authors.
-
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
-
-       http://www.apache.org/licenses/LICENSE-2.0
-
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
-*/
-
-package seccomp
+package seccomp // import "github.com/docker/docker/profiles/seccomp"
 
 import (
-	"runtime"
-
-	"golang.org/x/sys/unix"
-
 	"github.com/opencontainers/runtime-spec/specs-go"
+	"golang.org/x/sys/unix"
 )
 
-func arches() []specs.Arch {
-	switch runtime.GOARCH {
-	case "amd64":
-		return []specs.Arch{specs.ArchX86_64, specs.ArchX86, specs.ArchX32}
-	case "arm64":
-		return []specs.Arch{specs.ArchARM, specs.ArchAARCH64}
-	case "mips64":
-		return []specs.Arch{specs.ArchMIPS, specs.ArchMIPS64, specs.ArchMIPS64N32}
-	case "mips64n32":
-		return []specs.Arch{specs.ArchMIPS, specs.ArchMIPS64, specs.ArchMIPS64N32}
-	case "mipsel64":
-		return []specs.Arch{specs.ArchMIPSEL, specs.ArchMIPSEL64, specs.ArchMIPSEL64N32}
-	case "mipsel64n32":
-		return []specs.Arch{specs.ArchMIPSEL, specs.ArchMIPSEL64, specs.ArchMIPSEL64N32}
-	case "s390x":
-		return []specs.Arch{specs.ArchS390, specs.ArchS390X}
-	default:
-		return []specs.Arch{}
+func arches() []Architecture {
+	return []Architecture{
+		{
+			Arch:      specs.ArchX86_64,
+			SubArches: []specs.Arch{specs.ArchX86, specs.ArchX32},
+		},
+		{
+			Arch:      specs.ArchAARCH64,
+			SubArches: []specs.Arch{specs.ArchARM},
+		},
+		{
+			Arch:      specs.ArchMIPS64,
+			SubArches: []specs.Arch{specs.ArchMIPS, specs.ArchMIPS64N32},
+		},
+		{
+			Arch:      specs.ArchMIPS64N32,
+			SubArches: []specs.Arch{specs.ArchMIPS, specs.ArchMIPS64},
+		},
+		{
+			Arch:      specs.ArchMIPSEL64,
+			SubArches: []specs.Arch{specs.ArchMIPSEL, specs.ArchMIPSEL64N32},
+		},
+		{
+			Arch:      specs.ArchMIPSEL64N32,
+			SubArches: []specs.Arch{specs.ArchMIPSEL, specs.ArchMIPSEL64},
+		},
+		{
+			Arch:      specs.ArchS390X,
+			SubArches: []specs.Arch{specs.ArchS390},
+		},
 	}
 }
 
 // DefaultProfile defines the allowed syscalls for the default seccomp profile.
-func DefaultProfile(sp *specs.Spec) *specs.LinuxSeccomp {
-	syscalls := []specs.LinuxSyscall{
+func DefaultProfile() *Seccomp {
+	syscalls := []*Syscall{
 		{
 			Names: []string{
 				"accept",
@@ -390,12 +383,19 @@ func DefaultProfile(sp *specs.Spec) *specs.LinuxSeccomp {
 				"writev",
 			},
 			Action: specs.ActAllow,
-			Args:   []specs.LinuxSeccompArg{},
+			Args:   []*specs.LinuxSeccompArg{},
+		},
+		{
+			Names:  []string{"ptrace"},
+			Action: specs.ActAllow,
+			Includes: Filter{
+				MinKernel: &KernelVersion{4, 8},
+			},
 		},
 		{
 			Names:  []string{"personality"},
 			Action: specs.ActAllow,
-			Args: []specs.LinuxSeccompArg{
+			Args: []*specs.LinuxSeccompArg{
 				{
 					Index: 0,
 					Value: 0x0,
@@ -406,7 +406,7 @@ func DefaultProfile(sp *specs.Spec) *specs.LinuxSeccomp {
 		{
 			Names:  []string{"personality"},
 			Action: specs.ActAllow,
-			Args: []specs.LinuxSeccompArg{
+			Args: []*specs.LinuxSeccompArg{
 				{
 					Index: 0,
 					Value: 0x0008,
@@ -417,7 +417,7 @@ func DefaultProfile(sp *specs.Spec) *specs.LinuxSeccomp {
 		{
 			Names:  []string{"personality"},
 			Action: specs.ActAllow,
-			Args: []specs.LinuxSeccompArg{
+			Args: []*specs.LinuxSeccompArg{
 				{
 					Index: 0,
 					Value: 0x20000,
@@ -428,7 +428,7 @@ func DefaultProfile(sp *specs.Spec) *specs.LinuxSeccomp {
 		{
 			Names:  []string{"personality"},
 			Action: specs.ActAllow,
-			Args: []specs.LinuxSeccompArg{
+			Args: []*specs.LinuxSeccompArg{
 				{
 					Index: 0,
 					Value: 0x20008,
@@ -439,7 +439,7 @@ func DefaultProfile(sp *specs.Spec) *specs.LinuxSeccomp {
 		{
 			Names:  []string{"personality"},
 			Action: specs.ActAllow,
-			Args: []specs.LinuxSeccompArg{
+			Args: []*specs.LinuxSeccompArg{
 				{
 					Index: 0,
 					Value: 0xffffffff,
@@ -447,26 +447,17 @@ func DefaultProfile(sp *specs.Spec) *specs.LinuxSeccomp {
 				},
 			},
 		},
-	}
-
-	s := &specs.LinuxSeccomp{
-		DefaultAction: specs.ActErrno,
-		Architectures: arches(),
-		Syscalls:      syscalls,
-	}
-
-	// include by arch
-	switch runtime.GOARCH {
-	case "ppc64le":
-		s.Syscalls = append(s.Syscalls, specs.LinuxSyscall{
+		{
 			Names: []string{
 				"sync_file_range2",
 			},
 			Action: specs.ActAllow,
-			Args:   []specs.LinuxSeccompArg{},
-		})
-	case "arm", "arm64":
-		s.Syscalls = append(s.Syscalls, specs.LinuxSyscall{
+			Args:   []*specs.LinuxSeccompArg{},
+			Includes: Filter{
+				Arches: []string{"ppc64le"},
+			},
+		},
+		{
 			Names: []string{
 				"arm_fadvise64_64",
 				"arm_sync_file_range",
@@ -476,176 +467,231 @@ func DefaultProfile(sp *specs.Spec) *specs.LinuxSeccomp {
 				"set_tls",
 			},
 			Action: specs.ActAllow,
-			Args:   []specs.LinuxSeccompArg{},
-		})
-	case "amd64":
-		s.Syscalls = append(s.Syscalls, specs.LinuxSyscall{
+			Args:   []*specs.LinuxSeccompArg{},
+			Includes: Filter{
+				Arches: []string{"arm", "arm64"},
+			},
+		},
+		{
 			Names: []string{
 				"arch_prctl",
-				"modify_ldt",
 			},
 			Action: specs.ActAllow,
-			Args:   []specs.LinuxSeccompArg{},
-		})
-	case "386":
-		s.Syscalls = append(s.Syscalls, specs.LinuxSyscall{
+			Args:   []*specs.LinuxSeccompArg{},
+			Includes: Filter{
+				Arches: []string{"amd64", "x32"},
+			},
+		},
+		{
 			Names: []string{
 				"modify_ldt",
 			},
 			Action: specs.ActAllow,
-			Args:   []specs.LinuxSeccompArg{},
-		})
-	case "s390", "s390x":
-		s.Syscalls = append(s.Syscalls, specs.LinuxSyscall{
+			Args:   []*specs.LinuxSeccompArg{},
+			Includes: Filter{
+				Arches: []string{"amd64", "x32", "x86"},
+			},
+		},
+		{
 			Names: []string{
 				"s390_pci_mmio_read",
 				"s390_pci_mmio_write",
 				"s390_runtime_instr",
 			},
 			Action: specs.ActAllow,
-			Args:   []specs.LinuxSeccompArg{},
-		})
+			Args:   []*specs.LinuxSeccompArg{},
+			Includes: Filter{
+				Arches: []string{"s390", "s390x"},
+			},
+		},
+		{
+			Names: []string{
+				"open_by_handle_at",
+			},
+			Action: specs.ActAllow,
+			Args:   []*specs.LinuxSeccompArg{},
+			Includes: Filter{
+				Caps: []string{"CAP_DAC_READ_SEARCH"},
+			},
+		},
+		{
+			Names: []string{
+				"bpf",
+				"clone",
+				"fanotify_init",
+				"lookup_dcookie",
+				"mount",
+				"name_to_handle_at",
+				"perf_event_open",
+				"quotactl",
+				"setdomainname",
+				"sethostname",
+				"setns",
+				"syslog",
+				"umount",
+				"umount2",
+				"unshare",
+			},
+			Action: specs.ActAllow,
+			Args:   []*specs.LinuxSeccompArg{},
+			Includes: Filter{
+				Caps: []string{"CAP_SYS_ADMIN"},
+			},
+		},
+		{
+			Names: []string{
+				"clone",
+			},
+			Action: specs.ActAllow,
+			Args: []*specs.LinuxSeccompArg{
+				{
+					Index:    0,
+					Value:    unix.CLONE_NEWNS | unix.CLONE_NEWUTS | unix.CLONE_NEWIPC | unix.CLONE_NEWUSER | unix.CLONE_NEWPID | unix.CLONE_NEWNET | unix.CLONE_NEWCGROUP,
+					ValueTwo: 0,
+					Op:       specs.OpMaskedEqual,
+				},
+			},
+			Excludes: Filter{
+				Caps:   []string{"CAP_SYS_ADMIN"},
+				Arches: []string{"s390", "s390x"},
+			},
+		},
+		{
+			Names: []string{
+				"clone",
+			},
+			Action: specs.ActAllow,
+			Args: []*specs.LinuxSeccompArg{
+				{
+					Index:    1,
+					Value:    unix.CLONE_NEWNS | unix.CLONE_NEWUTS | unix.CLONE_NEWIPC | unix.CLONE_NEWUSER | unix.CLONE_NEWPID | unix.CLONE_NEWNET | unix.CLONE_NEWCGROUP,
+					ValueTwo: 0,
+					Op:       specs.OpMaskedEqual,
+				},
+			},
+			Comment: "s390 parameter ordering for clone is different",
+			Includes: Filter{
+				Arches: []string{"s390", "s390x"},
+			},
+			Excludes: Filter{
+				Caps: []string{"CAP_SYS_ADMIN"},
+			},
+		},
+		{
+			Names: []string{
+				"reboot",
+			},
+			Action: specs.ActAllow,
+			Args:   []*specs.LinuxSeccompArg{},
+			Includes: Filter{
+				Caps: []string{"CAP_SYS_BOOT"},
+			},
+		},
+		{
+			Names: []string{
+				"chroot",
+			},
+			Action: specs.ActAllow,
+			Args:   []*specs.LinuxSeccompArg{},
+			Includes: Filter{
+				Caps: []string{"CAP_SYS_CHROOT"},
+			},
+		},
+		{
+			Names: []string{
+				"delete_module",
+				"init_module",
+				"finit_module",
+			},
+			Action: specs.ActAllow,
+			Args:   []*specs.LinuxSeccompArg{},
+			Includes: Filter{
+				Caps: []string{"CAP_SYS_MODULE"},
+			},
+		},
+		{
+			Names: []string{
+				"acct",
+			},
+			Action: specs.ActAllow,
+			Args:   []*specs.LinuxSeccompArg{},
+			Includes: Filter{
+				Caps: []string{"CAP_SYS_PACCT"},
+			},
+		},
+		{
+			Names: []string{
+				"kcmp",
+				"process_vm_readv",
+				"process_vm_writev",
+				"ptrace",
+			},
+			Action: specs.ActAllow,
+			Args:   []*specs.LinuxSeccompArg{},
+			Includes: Filter{
+				Caps: []string{"CAP_SYS_PTRACE"},
+			},
+		},
+		{
+			Names: []string{
+				"iopl",
+				"ioperm",
+			},
+			Action: specs.ActAllow,
+			Args:   []*specs.LinuxSeccompArg{},
+			Includes: Filter{
+				Caps: []string{"CAP_SYS_RAWIO"},
+			},
+		},
+		{
+			Names: []string{
+				"settimeofday",
+				"stime",
+				"clock_settime",
+			},
+			Action: specs.ActAllow,
+			Args:   []*specs.LinuxSeccompArg{},
+			Includes: Filter{
+				Caps: []string{"CAP_SYS_TIME"},
+			},
+		},
+		{
+			Names: []string{
+				"vhangup",
+			},
+			Action: specs.ActAllow,
+			Args:   []*specs.LinuxSeccompArg{},
+			Includes: Filter{
+				Caps: []string{"CAP_SYS_TTY_CONFIG"},
+			},
+		},
+		{
+			Names: []string{
+				"get_mempolicy",
+				"mbind",
+				"set_mempolicy",
+			},
+			Action: specs.ActAllow,
+			Args:   []*specs.LinuxSeccompArg{},
+			Includes: Filter{
+				Caps: []string{"CAP_SYS_NICE"},
+			},
+		},
+		{
+			Names: []string{
+				"syslog",
+			},
+			Action: specs.ActAllow,
+			Args:   []*specs.LinuxSeccompArg{},
+			Includes: Filter{
+				Caps: []string{"CAP_SYSLOG"},
+			},
+		},
 	}
 
-	admin := false
-	for _, c := range sp.Process.Capabilities.Bounding {
-		switch c {
-		case "CAP_DAC_READ_SEARCH":
-			s.Syscalls = append(s.Syscalls, specs.LinuxSyscall{
-				Names:  []string{"open_by_handle_at"},
-				Action: specs.ActAllow,
-				Args:   []specs.LinuxSeccompArg{},
-			})
-		case "CAP_SYS_ADMIN":
-			admin = true
-			s.Syscalls = append(s.Syscalls, specs.LinuxSyscall{
-				Names: []string{
-					"bpf",
-					"clone",
-					"fanotify_init",
-					"lookup_dcookie",
-					"mount",
-					"name_to_handle_at",
-					"perf_event_open",
-					"quotactl",
-					"setdomainname",
-					"sethostname",
-					"setns",
-					"syslog",
-					"umount",
-					"umount2",
-					"unshare",
-				},
-				Action: specs.ActAllow,
-				Args:   []specs.LinuxSeccompArg{},
-			})
-		case "CAP_SYS_BOOT":
-			s.Syscalls = append(s.Syscalls, specs.LinuxSyscall{
-				Names:  []string{"reboot"},
-				Action: specs.ActAllow,
-				Args:   []specs.LinuxSeccompArg{},
-			})
-		case "CAP_SYS_CHROOT":
-			s.Syscalls = append(s.Syscalls, specs.LinuxSyscall{
-				Names:  []string{"chroot"},
-				Action: specs.ActAllow,
-				Args:   []specs.LinuxSeccompArg{},
-			})
-		case "CAP_SYS_MODULE":
-			s.Syscalls = append(s.Syscalls, specs.LinuxSyscall{
-				Names: []string{
-					"delete_module",
-					"init_module",
-					"finit_module",
-				},
-				Action: specs.ActAllow,
-				Args:   []specs.LinuxSeccompArg{},
-			})
-		case "CAP_SYS_PACCT":
-			s.Syscalls = append(s.Syscalls, specs.LinuxSyscall{
-				Names:  []string{"acct"},
-				Action: specs.ActAllow,
-				Args:   []specs.LinuxSeccompArg{},
-			})
-		case "CAP_SYS_PTRACE":
-			s.Syscalls = append(s.Syscalls, specs.LinuxSyscall{
-				Names: []string{
-					"kcmp",
-					"process_vm_readv",
-					"process_vm_writev",
-					"ptrace",
-				},
-				Action: specs.ActAllow,
-				Args:   []specs.LinuxSeccompArg{},
-			})
-		case "CAP_SYS_RAWIO":
-			s.Syscalls = append(s.Syscalls, specs.LinuxSyscall{
-				Names: []string{
-					"iopl",
-					"ioperm",
-				},
-				Action: specs.ActAllow,
-				Args:   []specs.LinuxSeccompArg{},
-			})
-		case "CAP_SYS_TIME":
-			s.Syscalls = append(s.Syscalls, specs.LinuxSyscall{
-				Names: []string{
-					"settimeofday",
-					"stime",
-					"clock_settime",
-				},
-				Action: specs.ActAllow,
-				Args:   []specs.LinuxSeccompArg{},
-			})
-		case "CAP_SYS_TTY_CONFIG":
-			s.Syscalls = append(s.Syscalls, specs.LinuxSyscall{
-				Names:  []string{"vhangup"},
-				Action: specs.ActAllow,
-				Args:   []specs.LinuxSeccompArg{},
-			})
-		case "CAP_SYSLOG":
-			s.Syscalls = append(s.Syscalls, specs.LinuxSyscall{
-				Names:  []string{"syslog"},
-				Action: specs.ActAllow,
-				Args:   []specs.LinuxSeccompArg{},
-			})
-		}
+	return &Seccomp{
+		DefaultAction: specs.ActErrno,
+		ArchMap:       arches(),
+		Syscalls:      syscalls,
 	}
-
-	if !admin {
-		switch runtime.GOARCH {
-		case "s390", "s390x":
-			s.Syscalls = append(s.Syscalls, specs.LinuxSyscall{
-				Names: []string{
-					"clone",
-				},
-				Action: specs.ActAllow,
-				Args: []specs.LinuxSeccompArg{
-					{
-						Index:    1,
-						Value:    unix.CLONE_NEWNS | unix.CLONE_NEWUTS | unix.CLONE_NEWIPC | unix.CLONE_NEWUSER | unix.CLONE_NEWPID | unix.CLONE_NEWNET | unix.CLONE_NEWCGROUP,
-						ValueTwo: 0,
-						Op:       specs.OpMaskedEqual,
-					},
-				},
-			})
-		default:
-			s.Syscalls = append(s.Syscalls, specs.LinuxSyscall{
-				Names: []string{
-					"clone",
-				},
-				Action: specs.ActAllow,
-				Args: []specs.LinuxSeccompArg{
-					{
-						Index:    0,
-						Value:    unix.CLONE_NEWNS | unix.CLONE_NEWUTS | unix.CLONE_NEWIPC | unix.CLONE_NEWUSER | unix.CLONE_NEWPID | unix.CLONE_NEWNET | unix.CLONE_NEWCGROUP,
-						ValueTwo: 0,
-						Op:       specs.OpMaskedEqual,
-					},
-				},
-			})
-		}
-	}
-
-	return s
 }

@@ -1,33 +1,34 @@
 #!/usr/bin/env bash
 
 . $(dirname $0)/util
+set -e
 
 : ${PLATFORMS=linux/arm}
 
 importCacheFlags=""
-if [ -n "$cacheref" ]; then
-  importCacheFlags="--import-cache=type=registry,ref=$cacheref:binaries"
-fi
-
-set -ex
-
-if [ -n "$MASTERCACHE_PASSWORD" ] && [ -n "$RUNC_PLATFORMS" ]; then
-  repo="cicache.buildk.it/moby/buildkit/master"
+exportCacheFlags=""
+outputFlags=""
+if [ -n "$MASTERCACHE_PASSWORD" ]; then
   $(dirname $0)/login_ci_cache
-  buildctl build $progressFlag --frontend=dockerfile.v0 \
-    $currentcontextBuildctl \
-    --opt target=binaries-linux-helper \
-    --opt platform=$RUNC_PLATFORMS \
-    --import-cache type=registry,ref=cicache.buildk.it/moby/buildkit/master:binaries-cross-helper \
-    --export-cache type=inline --output type=image,push=true,name=$repo:binaries-cross-helper
+  importCacheFlags="--cache-from=type=registry,ref=cicache.buildk.it/moby/buildkit/master:binaries-cross-helper"
+  exportCacheFlags="--cache-to=type=inline"
+  outputFlags="--output=type=image,push=true,name=cicache.buildk.it/moby/buildkit/master:binaries-cross-helper"
+elif [ "$GITHUB_ACTIONS" = "true" ]; then
+  if [ -n "$cacheRefFrom" ]; then
+    importCacheFlags="--cache-from=type=local,src=$cacheRefFrom"
+  fi
+  if [ -n "$cacheRefTo" ]; then
+    exportCacheFlags="--cache-to=type=local,dest=$cacheRefTo"
+  fi
 fi
 
-buildctl build --progress=plain --frontend=dockerfile.v0 \
-  $currentcontextBuildctl \
-  --opt platform=$PLATFORMS \
-  --import-cache type=registry,ref=cicache.buildk.it/moby/buildkit/master:binaries-cross-helper
+if [ -n "$RUNC_PLATFORMS" ]; then
+  buildxCmd build $importCacheFlags $exportCacheFlags $outputFlags \
+    --target "binaries-linux-helper" \
+    --platform "$RUNC_PLATFORMS" \
+    $currentcontext
+fi
 
-buildctl build --progress=plain --frontend=dockerfile.v0 \
-  $currentcontextBuildctl \
-  --opt platform=windows/amd64 --opt target=buildkit-buildkitd \
-  --import-cache type=registry,ref=cicache.buildk.it/moby/buildkit/master:binaries
+buildxCmd build $importCacheFlags \
+  --platform "$PLATFORMS" \
+  $currentcontext

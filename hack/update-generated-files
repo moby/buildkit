@@ -1,40 +1,17 @@
 #!/usr/bin/env bash
 
 . $(dirname $0)/util
-set -eu -o pipefail -x
-
-: ${CONTINUOUS_INTEGRATION=}
-
-progressFlag=""
-if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"; fi
+set -eu
 
 gogo_version=$(awk '$1 == "github.com/gogo/protobuf" { print $2 }' go.mod)
-case $buildmode in
-  "buildkit")
-    output=$(mktemp -d -t buildctl-output.XXXXXXXXXX)
-    buildctl build $progressFlag --frontend=dockerfile.v0 --local context=. --local dockerfile=. \
-      --opt build-arg:GOGO_VERSION=$gogo_version \
-      --opt target=update \
-      --opt filename=./hack/dockerfiles/generated-files.Dockerfile \
-      --output type=local,dest=$output
-    cp -R "$output/generated-files/" .
-    rm -rf $output
-    ;;
-  "docker-buildkit")
-    iidfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
-    export DOCKER_BUILDKIT=1
-    docker build --build-arg GOGO_VERSION=$gogo_version --iidfile $iidfile -f ./hack/dockerfiles/generated-files.Dockerfile --target update --force-rm .
-    iid=$(cat $iidfile)
-    cid=$(docker create $iid noop)
+output=$(mktemp -d -t buildctl-output.XXXXXXXXXX)
 
-    docker export $cid | tar -xf - --strip-components=1 generated-files
+buildxCmd build \
+  --target "update" \
+  --build-arg "GOGO_VERSION=$gogo_version" \
+  --output "type=local,dest=$output" \
+  --file "./hack/dockerfiles/generated-files.Dockerfile" \
+  .
 
-    docker rm $cid
-
-    rm -f $iidfile
-    ;;
-  *)
-    echo "Unsupported build mode: $buildmode" >&2
-    exit 1
-    ;;
-esac
+cp -R "$output/generated-files/" .
+rm -rf $output

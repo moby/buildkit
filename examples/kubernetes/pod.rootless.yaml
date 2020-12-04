@@ -8,27 +8,27 @@ metadata:
 # see buildkit/docs/rootless.md for caveats of rootless mode
 spec:
   containers:
-  - name: buildkitd
-    image: moby/buildkit:master-rootless
-    args:
-    - --oci-worker-no-process-sandbox
-    readinessProbe:
-      exec:
-        command:
-        - buildctl 
-        - debug 
-        - workers
-      initialDelaySeconds: 5
-      periodSeconds: 30
-    livenessProbe:
-      exec:
-        command:
-        - buildctl 
-        - debug 
-        - workers
-      initialDelaySeconds: 5
-      periodSeconds: 30
-    securityContext:
-# To change UID/GID, you need to rebuild the image
-      runAsUser: 1000
-      runAsGroup: 1000
+    - name: buildkitd
+      image: moby/buildkit:master-rootless
+      args:
+        - --oci-worker-no-process-sandbox
+      readinessProbe:
+        exec:
+          command:
+            - buildctl
+            - debug
+            - workers
+        initialDelaySeconds: 5
+        periodSeconds: 30
+      livenessProbe:
+        exec:
+          command:
+            - buildctl
+            - debug
+            - workers
+        initialDelaySeconds: 5
+        periodSeconds: 30
+      securityContext:
+        # To change UID/GID, you need to rebuild the image
+        runAsUser: 1000
+        runAsGroup: 1000

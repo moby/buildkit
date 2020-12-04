@@ -1,35 +1,61 @@
 #!/usr/bin/env bash
 
-. $(dirname $0)/util
+TYP=$1
 
+. $(dirname $0)/util
 set -e
 
-if [ -z "$TRAVIS_COMMIT" ]; then
-  echo "TRAVIS_COMMIT_REQURED"
-  exit 0
+usage() {
+  echo "usage: ./hack/build_ci_first_pass <binaries|integration-tests>"
+  exit 1
+}
+
+if [ -z "$TYP" ]; then
+  usage
 fi
 
-progressFlag=""
-if [ "$CONTINUOUS_INTEGRATION" == "true" ]; then progressFlag="--progress=plain"; fi
-
+importCacheFlags=""
 exportCacheFlags=""
 exportFlags=""
 
-if [ -f /tmp/buildkit-ci-cache-repo ]; then
-  exportCacheFlags="--export-cache=type=inline"
-  exportFlags="--output=type=image,push=true,name=$(cat /tmp/buildkit-ci-cache-repo)"
+if [ "$TRAVIS" = "true" ]; then
+  if [ -z "$TRAVIS_COMMIT" ]; then
+    echo "Travis commit required"
+    exit 0
+  fi
+  if [ -f /tmp/buildkit-ci-cache-repo ]; then
+    exportCacheFlags="--cache-to=type=inline"
+    exportFlags="--output=type=image,push=true,name=$(cat /tmp/buildkit-ci-cache-repo)"
+  fi
+  if [ "$TYP" = "binaries" ]; then
+    importCacheFlags="--cache-from=type=registry,ref=cicache.buildk.it/moby/buildkit/master:binaries --cache-from=type=registry,ref=cicache.buildk.it/moby/buildkit/master:integration-tests"
+    exportFlags="$exportFlags:binaries"
+  elif [ "$TYP" = "integration-tests" ]; then
+    importCacheFlags="--cache-from=type=registry,ref=cicache.buildk.it/moby/buildkit/master:integration-tests"
+    exportFlags="$exportFlags:integration-tests"
+  fi
+elif [ "$GITHUB_ACTIONS" = "true" ]; then
+  if [ -n "$cacheRefFrom" ]; then
+    importCacheFlags="--cache-from=type=local,src=$cacheRefFrom"
+  fi
+  if [ -n "$cacheRefTo" ]; then
+    exportCacheFlags="--cache-to=type=local,dest=$cacheRefTo"
+  fi
 fi
 
-set -x
-buildctl build $progressFlag --frontend=dockerfile.v0 \
-  $currentcontextBuildctl \
-  --opt target=binaries \
-  --import-cache type=registry,ref=cicache.buildk.it/moby/buildkit/master:binaries \
-  --import-cache type=registry,ref=cicache.buildk.it/moby/buildkit/master:integration-tests \
-  $exportCacheFlags $exportFlags:binaries
-
-buildctl build $progressFlag --frontend=dockerfile.v0 \
-  $currentcontextBuildctl \
-  --opt target=integration-tests-base \
-  --import-cache type=registry,ref=cicache.buildk.it/moby/buildkit/master:integration-tests \
-  $exportCacheFlags $exportFlags:integration-tests
+case $TYP in
+  "binaries")
+    buildxCmd build $importCacheFlags $exportCacheFlags $exportFlags \
+      --target "binaries" \
+      $currentcontext
+    ;;
+  "integration-tests")
+    buildxCmd build $importCacheFlags $exportCacheFlags $exportFlags \
+      --target "integration-tests-base" \
+      $currentcontext
+    ;;
+  *)
+    echo >&2 "Unknown type $TYP"
+    exit 1
+    ;;
+esac

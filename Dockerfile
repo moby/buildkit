@@ -2,25 +2,23 @@
 
 # TODO update RUNC_VERSION with next release after 1.0-rc92
 ARG RUNC_VERSION=939ad4e3fcfa1ab531458355a73688c6f4ee5003
-ARG CONTAINERD_VERSION=v1.4.0
+ARG CONTAINERD_VERSION=v1.4.2
 # containerd v1.3 for integration tests
 ARG CONTAINERD_ALT_VERSION=v1.3.7
 # available targets: buildkitd, buildkitd.oci_only, buildkitd.containerd_only
 ARG BUILDKIT_TARGET=buildkitd
 ARG REGISTRY_VERSION=2.7.1
-ARG ROOTLESSKIT_VERSION=v0.11.0
-ARG CNI_VERSION=v0.8.6
+ARG ROOTLESSKIT_VERSION=v0.11.1
+ARG CNI_VERSION=v0.8.7
 ARG SHADOW_VERSION=4.8.1
-ARG FUSEOVERLAYFS_VERSION=v1.2.0
+ARG FUSEOVERLAYFS_VERSION=v1.3.0
 ARG STARGZ_SNAPSHOTTER_VERSION=3a04e4c2c116c85b4b66d01945cf7ebcb7a2eb5a
 
 ARG ALPINE_VERSION=3.12
 
-FROM alpine:${ALPINE_VERSION} AS alpine
-
 # git stage is used for checking out remote repository sources
-FROM --platform=$BUILDPLATFORM alpine AS git
-RUN apk add --no-cache git xz
+FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS git
+RUN apk add --no-cache git
 
 # xgo is a helper for golang cross-compilation
 FROM --platform=$BUILDPLATFORM tonistiigi/xx:golang@sha256:6f7d999551dd471b58f70716754290495690efa8421e0a1fcf18eb11d0c0a537 AS xgo
@@ -107,8 +105,8 @@ RUN --mount=target=. --mount=target=/root/.cache,type=cache \
 
 FROM scratch AS binaries-linux-helper
 COPY --from=runc /usr/bin/runc /buildkit-runc
-# built from https://github.com/tonistiigi/binfmt/tree/85394e2a1bf0ac9e6c291945e869322bea969445/binfmt
-COPY --from=tonistiigi/binfmt:buildkit / /
+# built from https://github.com/tonistiigi/binfmt/runs/1488746859
+COPY --from=tonistiigi/binfmt:buildkit@sha256:4f7bf8fdf34ca4df118e099666b664c4cc8f054446dc71ff54117150ef1a2800 / /
 FROM binaries-linux-helper AS binaries-linux
 COPY --from=buildctl /usr/bin/buildctl /
 COPY --from=buildkitd /usr/bin/buildkitd /
@@ -121,7 +119,7 @@ COPY --from=buildctl /usr/bin/buildctl /buildctl.exe
 
 FROM binaries-$TARGETOS AS binaries
 
-FROM --platform=$BUILDPLATFORM alpine AS releaser
+FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS releaser
 RUN apk add --no-cache tar gzip
 WORKDIR /work
 ARG TARGETPLATFORM
@@ -132,8 +130,13 @@ RUN --mount=from=binaries \
 FROM scratch AS release
 COPY --from=releaser /out/ /
 
-FROM git AS buildkit-export
-RUN apk add --no-cache fuse3 pigz && ln -s fusermount3 /usr/bin/fusermount
+FROM alpine:${ALPINE_VERSION} AS buildkit-export
+# nsswitch.conf needs to be present to work around
+#   https://github.com/golang/go/issues/35305
+# drop this once we start building with Go 1.16
+RUN apk add --no-cache fuse3 git pigz xz \
+  && ln -s fusermount3 /usr/bin/fusermount \
+  && echo "hosts: files dns" >/etc/nsswitch.conf
 COPY examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
 VOLUME /var/lib/buildkit
 
@@ -190,7 +193,7 @@ RUN --mount=target=/root/.cache,type=cache \
   file /out/containerd-stargz-grpc | grep "statically linked" && \
   file /out/ctr-remote | grep "statically linked"
 
-FROM --platform=$BUILDPLATFORM alpine AS fuse-overlayfs
+FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS fuse-overlayfs
 RUN apk add --no-cache curl
 ARG FUSEOVERLAYFS_VERSION
 ARG TARGETARCH
@@ -224,7 +227,7 @@ COPY --from=buildkitd /usr/bin/buildkitd /buildkitd.exe
 
 FROM buildkit-buildkitd-$TARGETOS AS buildkit-buildkitd
 
-FROM alpine AS containerd-runtime
+FROM alpine:${ALPINE_VERSION} AS containerd-runtime
 COPY --from=runc /usr/bin/runc /usr/bin/
 COPY --from=containerd /out/containerd* /usr/bin/
 COPY --from=containerd /out/ctr /usr/bin/
@@ -232,7 +235,7 @@ VOLUME /var/lib/containerd
 VOLUME /run/containerd
 ENTRYPOINT ["containerd"]
 
-FROM --platform=$BUILDPLATFORM alpine AS cni-plugins
+FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS cni-plugins
 RUN apk add --no-cache curl
 ARG CNI_VERSION
 ARG TARGETOS
@@ -271,7 +274,7 @@ VOLUME /var/lib/buildkit
 # newuidmap & newgidmap binaries (shadow-uidmap 4.7-r1) shipped with alpine cannot be executed without CAP_SYS_ADMIN,
 # because the binaries are built without libcap-dev.
 # So we need to build the binaries with libcap enabled.
-FROM alpine AS idmap
+FROM alpine:${ALPINE_VERSION} AS idmap
 RUN apk add --no-cache autoconf automake build-base byacc gettext gettext-dev gcc git libcap-dev libtool libxslt
 RUN git clone https://github.com/shadow-maint/shadow.git /shadow
 WORKDIR /shadow
@@ -282,17 +285,21 @@ RUN ./autogen.sh --disable-nls --disable-man --without-audit --without-selinux -
   && cp src/newuidmap src/newgidmap /usr/bin
 
 # Rootless mode.
-FROM alpine AS rootless
+FROM alpine:${ALPINE_VERSION} AS rootless
 RUN apk add --no-cache fuse3 git xz pigz
 COPY --from=idmap /usr/bin/newuidmap /usr/bin/newuidmap
 COPY --from=idmap /usr/bin/newgidmap /usr/bin/newgidmap
 COPY --from=fuse-overlayfs /out/fuse-overlayfs /usr/bin/
 # we could just set CAP_SETUID filecap rather than `chmod u+s`, but requires kernel >= 4.14
+# nsswitch.conf needs to be present to work around
+#   https://github.com/golang/go/issues/35305
+# drop this once we start building with Go 1.16
 RUN chmod u+s /usr/bin/newuidmap /usr/bin/newgidmap \
   && adduser -D -u 1000 user \
   && mkdir -p /run/user/1000 /home/user/.local/tmp /home/user/.local/share/buildkit \
   && chown -R user /run/user/1000 /home/user \
-  && echo user:100000:65536 | tee /etc/subuid | tee /etc/subgid
+  && echo user:100000:65536 | tee /etc/subuid | tee /etc/subgid \
+  && echo "hosts: files dns" >/etc/nsswitch.conf
 COPY --from=rootlesskit /rootlesskit /usr/bin/
 COPY --from=binaries / /usr/bin/
 COPY examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/

@@ -52,6 +52,11 @@ $ rootlesskit buildkitd
 $ buildctl --addr unix:///run/user/$UID/buildkit/buildkitd.sock build ...
 ```
 
+To isolate BuildKit daemon's network namespace from the host (recommended):
+```console
+$ rootlesskit --net=slirp4netns --copy-up=/etc --disable-host-loopback buildkitd
+```
+
 ## Troubleshooting
 If facing an error related to `fuse-overlayfs`, try running `buildkitd` with `--oci-worker-snapshotter=native`:
 

@@ -1,0 +1,485 @@
+name: build
+
+on:
+  schedule:
+    - cron: '0 10 * * *'  # everyday at 10am
+  workflow_dispatch:
+  push:
+    branches:
+      - 'master'
+    tags:
+      - 'v*'
+      - 'dockerfile/*'
+  pull_request:
+    branches:
+      - 'master'
+
+env:
+  REPO_SLUG_ORIGIN: "moby/buildkit:latest"
+  REPO_SLUG_TARGET: "moby/buildkit"
+  DF_REPO_SLUG_TARGET: "docker/dockerfile-upstream"
+  PLATFORMS: "linux/amd64,linux/arm/v7,linux/arm64,linux/s390x,linux/ppc64le"
+  CACHEKEY_INTEGRATION_TESTS: "integration-tests"
+  CACHEKEY_BINARIES: "binaries"
+  CACHEKEY_CROSS: "cross"
+
+jobs:
+  base:
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v2
+      -
+        name: Cache ${{ env.CACHEKEY_INTEGRATION_TESTS }}
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildkit-cache/${{ env.CACHEKEY_INTEGRATION_TESTS }}
+          key: ${{ runner.os }}-buildkit-${{ env.CACHEKEY_INTEGRATION_TESTS }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildkit-${{ env.CACHEKEY_INTEGRATION_TESTS }}-
+      -
+        name: Cache ${{ env.CACHEKEY_BINARIES }}
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildkit-cache/${{ env.CACHEKEY_BINARIES }}
+          key: ${{ runner.os }}-buildkit-${{ env.CACHEKEY_BINARIES }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildkit-${{ env.CACHEKEY_BINARIES }}-
+      -
+        name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+        with:
+          driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
+      -
+        name: Build ${{ env.CACHEKEY_BINARIES }}
+        run: |
+          ./hack/build_ci_first_pass binaries
+        env:
+          CACHEDIR_FROM: /tmp/.buildkit-cache/${{ env.CACHEKEY_BINARIES }}
+          CACHEDIR_TO: /tmp/.buildkit-cache/${{ env.CACHEKEY_BINARIES }}-new
+      -
+        name: Build ${{ env.CACHEKEY_INTEGRATION_TESTS }}
+        run: |
+          ./hack/build_ci_first_pass integration-tests
+        env:
+          CACHEDIR_FROM: /tmp/.buildkit-cache/${{ env.CACHEKEY_INTEGRATION_TESTS }}
+          CACHEDIR_TO: /tmp/.buildkit-cache/${{ env.CACHEKEY_INTEGRATION_TESTS }}-new
+      -
+        # FIXME: Temp fix for https://github.com/moby/buildkit/issues/1850
+        name: Move cache
+        run: |
+          rm -rf /tmp/.buildkit-cache/${{ env.CACHEKEY_BINARIES }}
+          mv /tmp/.buildkit-cache/${{ env.CACHEKEY_BINARIES }}-new /tmp/.buildkit-cache/${{ env.CACHEKEY_BINARIES }}
+          rm -rf /tmp/.buildkit-cache/${{ env.CACHEKEY_INTEGRATION_TESTS }}
+          mv /tmp/.buildkit-cache/${{ env.CACHEKEY_INTEGRATION_TESTS }}-new /tmp/.buildkit-cache/${{ env.CACHEKEY_INTEGRATION_TESTS }}
+
+  test:
+    runs-on: ubuntu-latest
+    needs: [base]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          -
+            pkg: ./client
+            typ: integration
+          -
+            pkg: ./cmd/buildctl ./worker/containerd
+            typ: integration
+          -
+            pkg: ''
+            skip-integration-tests: 1
+            typ: integration gateway
+          -
+            pkg: ./frontend
+            typ: ''
+          -
+            pkg: ./frontend/dockerfile
+            typ: ''
+          -
+            pkg: ./frontend/dockerfile
+            typ: dockerfile
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v2
+      -
+        name: Cache ${{ env.CACHEKEY_INTEGRATION_TESTS }}
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildkit-cache/${{ env.CACHEKEY_INTEGRATION_TESTS }}
+          key: ${{ runner.os }}-buildkit-${{ env.CACHEKEY_INTEGRATION_TESTS }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildkit-${{ env.CACHEKEY_INTEGRATION_TESTS }}-
+      -
+        name: Cache ${{ env.CACHEKEY_BINARIES }}
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildkit-cache/${{ env.CACHEKEY_BINARIES }}
+          key: ${{ runner.os }}-buildkit-${{ env.CACHEKEY_BINARIES }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildkit-${{ env.CACHEKEY_BINARIES }}-
+      -
+        name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+        with:
+          driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
+      -
+        name: Test ${{ matrix.pkg }} ${{ matrix.typ }}
+        run: |
+          ./hack/test ${{ matrix.typ }}
+          mv ./coverage/coverage.txt ./coverage/coverage-${{ github.job }}-$(echo "${{ matrix.coverage-pkg }}-${{ matrix.skip-integration-tests }}-${{ matrix.typ }}" | tr -dc '[:alnum:]-\n\r' | tr '[:upper:]' '[:lower:]').txt
+        env:
+          TEST_COVERAGE: 1
+          TESTPKGS: ${{ matrix.pkg }}
+          TESTFLAGS: -v --parallel=6 --timeout=20m
+          SKIP_INTEGRATION_TESTS: ${{ matrix.skip-integration-tests }}
+          CACHEDIR_FROM: /tmp/.buildkit-cache/${{ env.CACHEKEY_INTEGRATION_TESTS }} /tmp/.buildkit-cache/${{ env.CACHEKEY_BINARIES }}
+      -
+        name: Upload coverage file
+        uses: actions/upload-artifact@v2
+        with:
+          name: coverage
+          path: ./coverage
+
+  test-os:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          # - ubuntu-latest
+          # - macOS-latest
+          - windows-latest
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v2
+      -
+        name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.13
+      -
+        name: Cache Go modules
+        uses: actions/cache@v2
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      -
+        name: Go mod
+        run: |
+          go mod download
+      -
+        name: Test
+        env:
+          TMPDIR: ${{ runner.temp }}
+          SKIP_INTEGRATION_TESTS: 1
+        run: |
+          mkdir -p ./coverage
+          go test -coverprofile=./coverage/coverage-${{ github.job }}-${{ matrix.os }}.txt -covermode=atomic ./...
+        shell: bash
+      -
+        name: Upload coverage file
+        uses: actions/upload-artifact@v2
+        with:
+          name: coverage
+          path: ./coverage
+
+  upload-coverage:
+    runs-on: ubuntu-latest
+    needs: [test, test-os]
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v2
+      -
+        name: Download coverage files
+        uses: actions/download-artifact@v2
+        with:
+          name: coverage
+          path: ./coverage
+      -
+        name: List coverage files
+        uses: actions/github-script@v3
+        id: files
+        with:
+          result-encoding: string
+          script: |
+            return require('fs').readdirSync('./coverage', {withFileTypes: true})
+              .filter(item => !item.isDirectory())
+              .map(item => `./coverage/${item.name}`)
+              .join(',');
+      -
+        name: Send to Codecov
+        uses: codecov/codecov-action@v1
+        with:
+          files: ${{ steps.files.outputs.result }}
+
+  cross:
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v2
+      -
+        name: Cache ${{ env.CACHEKEY_CROSS }}
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildkit-cache/${{ env.CACHEKEY_CROSS }}
+          key: ${{ runner.os }}-buildkit-${{ env.CACHEKEY_CROSS }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildkit-${{ env.CACHEKEY_CROSS }}-
+      -
+        name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+        with:
+          driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
+      -
+        name: Cross
+        run: |
+          ./hack/cross
+        env:
+          PLATFORMS: ${{ env.PLATFORMS }},darwin/amd64,windows/amd64
+          RUNC_PLATFORMS: ${{ env.PLATFORMS }}
+          CACHEDIR_FROM: /tmp/.buildkit-cache/${{ env.CACHEKEY_CROSS }}
+          CACHEDIR_TO: /tmp/.buildkit-cache/${{ env.CACHEKEY_CROSS }}-new
+      -
+        # FIXME: Temp fix for https://github.com/moby/buildkit/issues/1850
+        name: Move cache
+        run: |
+          rm -rf /tmp/.buildkit-cache/${{ env.CACHEKEY_CROSS }}
+          mv /tmp/.buildkit-cache/${{ env.CACHEKEY_CROSS }}-new /tmp/.buildkit-cache/${{ env.CACHEKEY_CROSS }}
+
+  release-base:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.prep.outputs.tag }}
+      push: ${{ steps.prep.outputs.push }}
+    steps:
+      - name: Prepare
+        id: prep
+        run: |
+          TAG=pr
+          PUSH=false
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            TAG=nightly
+            PUSH=push
+          elif [[ $GITHUB_REF == refs/tags/v* ]]; then
+            TAG=${GITHUB_REF#refs/tags/}
+            PUSH=push
+          elif [[ $GITHUB_REF == refs/heads/* ]]; then
+            TAG=$(echo ${GITHUB_REF#refs/heads/} | sed -r 's#/+#-#g')
+            PUSH=push
+          fi
+          echo ::set-output name=tag::${TAG}
+          echo ::set-output name=push::${PUSH}
+
+  image:
+    runs-on: ubuntu-latest
+    needs: [release-base, test, cross]
+    strategy:
+      fail-fast: false
+      matrix:
+        target-stage:
+          - ''
+          - rootless
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v2
+      -
+        name: Cache image${{ matrix.target-stage }}
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildkit-cache/image${{ matrix.target-stage }}
+          key: ${{ runner.os }}-buildkit-image${{ matrix.target-stage }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildkit-image${{ matrix.target-stage }}-
+      -
+        name: Cache ${{ env.CACHEKEY_CROSS }}
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildkit-cache/${{ env.CACHEKEY_CROSS }}
+          key: ${{ runner.os }}-buildkit-${{ env.CACHEKEY_CROSS }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildkit-${{ env.CACHEKEY_CROSS }}-
+      -
+        name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+        with:
+          driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
+      -
+        name: Login to DockerHub
+        if: needs.release-base.outputs.push == 'push'
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      -
+        name: Build ${{ needs.release-base.outputs.tag }}
+        run: |
+          ./hack/images "${{ needs.release-base.outputs.tag }}" "$REPO_SLUG_TARGET" "${{ needs.release-base.outputs.push }}"
+        env:
+          TARGET: ${{ matrix.target-stage }}
+          CACHEDIR_FROM: /tmp/.buildkit-cache/${{ env.CACHEKEY_CROSS }} /tmp/.buildkit-cache/image${{ matrix.target-stage }}
+          CACHEDIR_TO: /tmp/.buildkit-cache/image${{ matrix.target-stage }}-new
+      -
+        # FIXME: Temp fix for https://github.com/moby/buildkit/issues/1850
+        name: Move cache
+        run: |
+          rm -rf /tmp/.buildkit-cache/image${{ matrix.target-stage }}
+          mv /tmp/.buildkit-cache/image${{ matrix.target-stage }}-new /tmp/.buildkit-cache/image${{ matrix.target-stage }}
+
+  binaries:
+    runs-on: ubuntu-latest
+    needs: [release-base, test, cross]
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v2
+      -
+        name: Cache ${{ env.CACHEKEY_BINARIES }}
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildkit-cache/${{ env.CACHEKEY_BINARIES }}
+          key: ${{ runner.os }}-buildkit-${{ env.CACHEKEY_BINARIES }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildkit-${{ env.CACHEKEY_BINARIES }}-
+      -
+        name: Cache ${{ env.CACHEKEY_CROSS }}
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildkit-cache/${{ env.CACHEKEY_CROSS }}
+          key: ${{ runner.os }}-buildkit-${{ env.CACHEKEY_CROSS }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildkit-${{ env.CACHEKEY_CROSS }}-
+      -
+        name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+        with:
+          driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
+      -
+        name: Build ${{ needs.release-base.outputs.tag }}
+        run: |
+          ./hack/release-tar "${{ needs.release-base.outputs.tag }}" release-out
+        env:
+          PLATFORMS: ${{ env.PLATFORMS }},darwin/amd64,windows/amd64
+          CACHEDIR_FROM: /tmp/.buildkit-cache/${{ env.CACHEKEY_BINARIES }} /tmp/.buildkit-cache/${{ env.CACHEKEY_CROSS }}
+      -
+        name: Move artifacts
+        run: |
+          mv ./release-out/**/* ./release-out/
+      -
+        name: Upload artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: buildkit
+          path: ./release-out/*
+          if-no-files-found: error
+      -
+        name: GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          draft: true
+          files: ./release-out/*
+          name: ${{ needs.release-base.outputs.tag }}
+
+  frontend-base:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
+    outputs:
+      typ: ${{ steps.prep.outputs.typ }}
+      tag: ${{ steps.prep.outputs.tag }}
+      push: ${{ steps.prep.outputs.push }}
+    steps:
+      -
+        name: Prepare
+        id: prep
+        run: |
+          TYP=master
+          TAG=mainline
+          PUSH=false
+          if [[ $GITHUB_REF == refs/tags/dockerfile/* ]]; then
+            TYP=tag
+            TAG=${GITHUB_REF#refs/tags/}
+            PUSH=push
+          elif [[ $GITHUB_REF == refs/heads/* ]]; then
+            PUSH=push
+          fi
+          echo ::set-output name=typ::${TYP}
+          echo ::set-output name=tag::${TAG}
+          echo ::set-output name=push::${PUSH}
+
+  frontend-image:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
+    needs: [frontend-base, test]
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v2
+      -
+        name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+        with:
+          driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
+      -
+        name: Cache layers
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildkit-cache/frontend-${{ needs.frontend-base.outputs.typ }}
+          key: ${{ runner.os }}-buildkit-frontend-${{ needs.frontend-base.outputs.typ }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildkit-frontend-${{ needs.frontend-base.outputs.typ }}-
+      -
+        name: Login to DockerHub
+        uses: docker/login-action@v1
+        if: needs.frontend-base.outputs.push == 'push'
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      -
+        name: Build ${{ needs.frontend-base.outputs.typ }}/${{ needs.frontend-base.outputs.tag }}
+        run: |
+          ./frontend/dockerfile/cmd/dockerfile-frontend/hack/release "${{ needs.frontend-base.outputs.typ }}" "${{ needs.frontend-base.outputs.tag }}" "$DF_REPO_SLUG_TARGET" "${{ needs.frontend-base.outputs.push }}"
+        env:
+          CACHEDIR_FROM: /tmp/.buildkit-cache/frontend-${{ needs.frontend-base.outputs.typ }}
+          CACHEDIR_TO: /tmp/.buildkit-cache/frontend-${{ needs.frontend-base.outputs.typ }}-new
+      -
+        name: Build ${{ needs.frontend-base.outputs.typ }}/labs
+        if: needs.frontend-base.outputs.typ == 'master'
+        run: |
+          ./frontend/dockerfile/cmd/dockerfile-frontend/hack/release "${{ needs.frontend-base.outputs.typ }}" labs "$DF_REPO_SLUG_TARGET" "${{ needs.frontend-base.outputs.push }}"
+        env:
+          CACHEDIR_FROM: /tmp/.buildkit-cache/frontend-${{ needs.frontend-base.outputs.typ }}
+      -
+        # FIXME: Temp fix for https://github.com/moby/buildkit/issues/1850
+        name: Move cache
+        run: |
+          rm -rf /tmp/.buildkit-cache/frontend-${{ needs.frontend-base.outputs.typ }}
+          mv /tmp/.buildkit-cache/frontend-${{ needs.frontend-base.outputs.typ }}-new /tmp/.buildkit-cache/frontend-${{ needs.frontend-base.outputs.typ }}

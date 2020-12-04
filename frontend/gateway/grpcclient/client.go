@@ -11,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/containerd/containerd"
 	"github.com/gogo/googleapis/google/rpc"
 	gogotypes "github.com/gogo/protobuf/types"
 	"github.com/golang/protobuf/ptypes/any"
@@ -883,7 +882,7 @@ func (ctr *container) Start(ctx context.Context, req client.StartRequest) (clien
 					Message: exit.Error.Message,
 					Details: convertGogoAny(exit.Error.Details),
 				}))
-				if exit.Code != containerd.UnknownExitStatus {
+				if exit.Code != errdefs.ContainerdUnknownExitStatus {
 					exitError = &errdefs.ExitError{ExitCode: exit.Code, Err: exitError}
 				}
 			} else if serverDone := msg.GetDone(); serverDone != nil {
