@@ -3,7 +3,6 @@
 . $(dirname $0)/util
 set -eu -o pipefail
 
-: ${TRAVIS=}
 : ${TEST_INTEGRATION=}
 : ${TEST_GATEWAY=}
 : ${TEST_DOCKERFILE=}
@@ -16,11 +15,6 @@ set -eu -o pipefail
 if [ "$TEST_DOCKERD" == "1" ] && ! file $TEST_DOCKERD_BINARY | grep "statically linked" >/dev/null; then
   echo "dockerd binary needs to be statically linked"
   exit 1
-fi
-
-importMasterCacheFlags=""
-if [ "$TRAVIS" = "true" ]; then
-  importMasterCacheFlags="--cache-from=type=registry,ref=cicache.buildk.it/moby/buildkit/master:integration-tests"
 fi
 
 importCacheFlags=""
@@ -66,7 +60,7 @@ if [ "$TEST_COVERAGE" = "1" ]; then
   coverageFlags="-coverprofile=/coverage/coverage.txt -covermode=atomic"
 fi
 
-buildxCmd build $importMasterCacheFlags $importCacheFlags \
+buildxCmd build $importCacheFlags \
   --target "integration-tests" \
   --output "type=docker,name=$iid" \
   $currentcontext
@@ -107,7 +101,7 @@ if [ "$TEST_DOCKERFILE" == 1 ]; then
       $currentcontext
 
     if [ -s $tarout ]; then
-      if [ "$release" = "mainline" ] || [ "$release" = "labs" ] || [ -n "$DOCKERFILE_RELEASES_CUSTOM" ] || [ "$TRAVIS_EVENT_TYPE" = "cron" ] || [ "$GITHUB_ACTIONS" = "true" ]; then
+      if [ "$release" = "mainline" ] || [ "$release" = "labs" ] || [ -n "$DOCKERFILE_RELEASES_CUSTOM" ] || [ "$GITHUB_ACTIONS" = "true" ]; then
         cid=$(docker create -v /tmp $coverageVol --rm --privileged --volumes-from=$cacheVolume -e TEST_DOCKERD -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry -e BUILDKIT_WORKER_RANDOM=1 -e FRONTEND_GATEWAY_ONLY=local:/$release.tar -e EXTERNAL_DF_FRONTEND=/dockerfile-frontend $iid go test $coverageFlags --count=1 -tags "$buildtags" ${TESTFLAGS:--v} ./frontend/dockerfile)
         docker cp $tarout $cid:/$release.tar
         if [ "$TEST_DOCKERD" = "1" ]; then
