@@ -5,8 +5,6 @@ export BUILDX_NO_DEFAULT_LOAD=true
 : ${PREFER_LEGACY=}
 : ${CI=}
 : ${GITHUB_ACTIONS=}
-: ${TRAVIS_EVENT_TYPE=}
-: ${TRAVIS_BRANCH=}
 : ${CACHEDIR_FROM=}
 : ${CACHEDIR_TO=}
 
@@ -48,13 +46,6 @@ if [ "$GITHUB_ACTIONS" = "true" ]; then
   cacheType="local"
   cacheRefFrom="$CACHEDIR_FROM"
   cacheRefTo="$CACHEDIR_TO"
-elif [ "$TRAVIS_EVENT_TYPE" = "pull_request" ]; then
-  currentref="git://github.com/moby/buildkit#refs/pull/$TRAVIS_PULL_REQUEST/merge"
-  cacheType="registry"
-  cacheRefFrom="cicache.buildk.it/moby/buildkit/pr$TRAVIS_BUILD_ID"
-  cacheRefTo="$cacheRefFrom"
-elif [ -n "$TRAVIS_BRANCH" ]; then
-  currentref="git://github.com/$TRAVIS_REPO_SLUG#$TRAVIS_BRANCH"
 fi
 
 currentcontext="."

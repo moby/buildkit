@@ -7,13 +7,7 @@ set -e
 
 importCacheFlags=""
 exportCacheFlags=""
-outputFlags=""
-if [ -n "$MASTERCACHE_PASSWORD" ]; then
-  $(dirname $0)/login_ci_cache
-  importCacheFlags="--cache-from=type=registry,ref=cicache.buildk.it/moby/buildkit/master:binaries-cross-helper"
-  exportCacheFlags="--cache-to=type=inline"
-  outputFlags="--output=type=image,push=true,name=cicache.buildk.it/moby/buildkit/master:binaries-cross-helper"
-elif [ "$GITHUB_ACTIONS" = "true" ]; then
+if [ "$GITHUB_ACTIONS" = "true" ]; then
   if [ -n "$cacheRefFrom" ]; then
     importCacheFlags="--cache-from=type=local,src=$cacheRefFrom"
   fi
@@ -23,7 +17,7 @@ elif [ "$GITHUB_ACTIONS" = "true" ]; then
 fi
 
 if [ -n "$RUNC_PLATFORMS" ]; then
-  buildxCmd build $importCacheFlags $exportCacheFlags $outputFlags \
+  buildxCmd build $importCacheFlags $exportCacheFlags \
     --target "binaries-linux-helper" \
     --platform "$RUNC_PLATFORMS" \
     $currentcontext
