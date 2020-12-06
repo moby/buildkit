@@ -14,6 +14,7 @@ import (
 
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend/gateway/client"
+	gwerrdefs "github.com/moby/buildkit/frontend/gateway/errdefs"
 	gatewayapi "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
@@ -450,7 +451,7 @@ func testClientGatewayContainerPID1Fail(t *testing.T, sb integration.Sandbox) {
 		defer ctr.Release(ctx)
 		err = pid1.Wait()
 
-		var exitError *errdefs.ExitError
+		var exitError *gwerrdefs.ExitError
 		require.True(t, errors.As(err, &exitError))
 		require.Equal(t, uint32(99), exitError.ExitCode)
 
@@ -775,7 +776,7 @@ func testClientGatewayContainerPID1Tty(t *testing.T, sb integration.Sandbox) {
 		prompt.SendExit(99)
 
 		err = pid1.Wait()
-		var exitError *errdefs.ExitError
+		var exitError *gwerrdefs.ExitError
 		require.True(t, errors.As(err, &exitError))
 		require.Equal(t, uint32(99), exitError.ExitCode)
 
@@ -919,7 +920,7 @@ func testClientGatewayContainerExecTty(t *testing.T, sb integration.Sandbox) {
 		prompt.SendExit(99)
 
 		err = pid2.Wait()
-		var exitError *errdefs.ExitError
+		var exitError *gwerrdefs.ExitError
 		require.True(t, errors.As(err, &exitError))
 		require.Equal(t, uint32(99), exitError.ExitCode)
 
