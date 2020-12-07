@@ -110,6 +110,8 @@ github.com/opencontainers/runc v1.0.0-rc8 h1:dDCFes8Hj1r/i5qnypONo5jdOme/8HWZC/a
 github.com/opencontainers/runc v1.0.0-rc8/go.mod h1:qT5XzbpPznkRYVz/mWwUaVBUv2rmF59PVA73FjuZG0U=
 github.com/opencontainers/runtime-spec v0.0.0-20180909173843-eba862dc2470 h1:dQgS6CgSB2mBQur4Cz7kaEtXNSw56ZlRb7ZsBT70hTA=
 github.com/opencontainers/runtime-spec v0.0.0-20180909173843-eba862dc2470/go.mod h1:jwyrGlmzljRJv/Fgzds9SsS/C5hL+LL3ko9hs6T5lQ0=
+github.com/opencontainers/selinux v1.0.0-rc1.0.20180628160156-b6fa367ed7f5 h1:0k9ne2IjYSFmwpXP5/+vEvtTaJg3CoVS4nF613ZfSb8=
+github.com/opencontainers/selinux v1.0.0-rc1.0.20180628160156-b6fa367ed7f5/go.mod h1:+BLncwf63G4dgOzykXAxcmnFlUaOlkDdmw/CqsW6pjs=
 github.com/opentracing-contrib/go-stdlib v0.0.0-20171029140428-b1a47cfbdd75 h1:EIdPB7oNWEV0cOQ7eIrdyKQfEV5XxO/fB/GrEQIk7J0=
 github.com/opentracing-contrib/go-stdlib v0.0.0-20171029140428-b1a47cfbdd75/go.mod h1:PLldrQSroqzH70Xl+1DQcGnefIbqsKR7UDaiux3zV+w=
 github.com/opentracing/opentracing-go v0.0.0-20171003133519-1361b9cd60be h1:vn0ruyYif1hUWDS2aEUdh6JGUfgK8gOOLpz/iTjb6pQ=

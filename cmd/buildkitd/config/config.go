@@ -76,6 +76,10 @@ type OCIConfig struct {
 	// UserRemapUnsupported is unsupported key for testing. The feature is
 	// incomplete and the intention is to make it default without config.
 	UserRemapUnsupported string `toml:"userRemapUnsupported"`
+
+	// ApparmorProfile is the name of the apparmor profile that should be used to constrain build containers.
+	// The profile should already be loaded (by a higher level system) before creating a worker.
+	ApparmorProfile string `toml:"apparmor-profile"`
 }
 
 type ContainerdConfig struct {
@@ -86,6 +90,10 @@ type ContainerdConfig struct {
 	Namespace string            `toml:"namespace"`
 	GCConfig
 	NetworkConfig
+
+	// ApparmorProfile is the name of the apparmor profile that should be used to constrain build containers.
+	// The profile should already be loaded (by a higher level system) before creating a worker.
+	ApparmorProfile string `toml:"apparmor-profile"`
 }
 
 type GCPolicy struct {

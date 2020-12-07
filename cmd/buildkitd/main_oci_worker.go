@@ -70,6 +70,10 @@ func init() {
 			Usage: "path of cni binary files",
 			Value: defaultConf.Workers.OCI.NetworkConfig.CNIBinaryPath,
 		},
+		cli.StringFlag{
+			Name:  "oci-worker-apparmor-profile",
+			Usage: "set the name of the apparmor profile applied to containers",
+		},
 	}
 	n := "oci-worker-rootless"
 	u := "enable rootless mode"
@@ -180,6 +184,9 @@ func applyOCIFlags(c *cli.Context, cfg *config.Config) error {
 	if c.GlobalIsSet("oci-cni-binary-dir") {
 		cfg.Workers.OCI.NetworkConfig.CNIBinaryPath = c.GlobalString("oci-cni-binary-dir")
 	}
+	if c.GlobalIsSet("oci-worker-apparmor-profile") {
+		cfg.Workers.OCI.ApparmorProfile = c.GlobalString("oci-worker-apparmor-profile")
+	}
 	return nil
 }
 
@@ -232,7 +239,7 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 		},
 	}
 
-	opt, err := runc.NewWorkerOpt(common.config.Root, snFactory, cfg.Rootless, processMode, cfg.Labels, idmapping, nc, dns)
+	opt, err := runc.NewWorkerOpt(common.config.Root, snFactory, cfg.Rootless, processMode, cfg.Labels, idmapping, nc, dns, cfg.ApparmorProfile)
 	if err != nil {
 		return nil, err
 	}
