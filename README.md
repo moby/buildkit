@@ -178,7 +178,7 @@ buildctl build \
 
 #### Building a Dockerfile using external frontend:
 
-External versions of the Dockerfile frontend are pushed to https://hub.docker.com/r/docker/dockerfile-upstream and https://hub.docker.com/r/docker/dockerfile and can be used with the gateway frontend. The source for the external frontend is currently located in `./frontend/dockerfile/cmd/dockerfile-frontend` but will move out of this repository in the future ([#163](https://github.com/moby/buildkit/issues/163)). For automatic build from master branch of this repository `docker/dockerfile-upsteam:master` or `docker/dockerfile-upstream:master-experimental` image can be used.
+External versions of the Dockerfile frontend are pushed to https://hub.docker.com/r/docker/dockerfile-upstream and https://hub.docker.com/r/docker/dockerfile and can be used with the gateway frontend. The source for the external frontend is currently located in `./frontend/dockerfile/cmd/dockerfile-frontend` but will move out of this repository in the future ([#163](https://github.com/moby/buildkit/issues/163)). For automatic build from master branch of this repository `docker/dockerfile-upstream:master` or `docker/dockerfile-upstream:master-labs` image can be used.
 
 ```bash
 buildctl build \
@@ -435,7 +435,7 @@ For Kubernetes deployments, see [`examples/kubernetes`](./examples/kubernetes).
 
 ### Daemonless
 
-To run client and an ephemeral daemon in a single container ("daemonless mode"):
+To run the client and an ephemeral daemon in a single container ("daemonless mode"):
 
 ```bash
 docker run \
