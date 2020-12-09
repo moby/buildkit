@@ -1,4 +1,4 @@
-# Dockerfile frontend experimental syntaxes
+# Dockerfile frontend syntaxes
 
-Documentation for experimental Dockerfile syntaxes can be found in the
-[Dockerfile frontend documentation](/frontend/dockerfile/docs/experimental.md)
+Documentation for Dockerfile syntaxes can be found in the
+[Dockerfile frontend documentation](/frontend/dockerfile/docs/syntax.md)
