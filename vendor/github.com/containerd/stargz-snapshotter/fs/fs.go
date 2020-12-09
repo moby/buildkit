@@ -34,7 +34,7 @@
 // But in the near future, we intend to integrate it with CRFS.
 //
 
-package stargz
+package fs
 
 import (
 	"archive/tar"
@@ -56,15 +56,15 @@ import (
 	"github.com/containerd/containerd/reference"
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/stargz-snapshotter/cache"
+	"github.com/containerd/stargz-snapshotter/estargz"
+	"github.com/containerd/stargz-snapshotter/estargz/stargz"
+	"github.com/containerd/stargz-snapshotter/fs/config"
+	"github.com/containerd/stargz-snapshotter/fs/reader"
+	"github.com/containerd/stargz-snapshotter/fs/remote"
+	"github.com/containerd/stargz-snapshotter/fs/source"
 	snbase "github.com/containerd/stargz-snapshotter/snapshot"
-	"github.com/containerd/stargz-snapshotter/stargz/config"
-	"github.com/containerd/stargz-snapshotter/stargz/reader"
-	"github.com/containerd/stargz-snapshotter/stargz/remote"
-	"github.com/containerd/stargz-snapshotter/stargz/source"
-	"github.com/containerd/stargz-snapshotter/stargz/verify"
 	"github.com/containerd/stargz-snapshotter/task"
 	"github.com/golang/groupcache/lru"
-	"github.com/google/crfs/stargz"
 	fusefs "github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 	digest "github.com/opencontainers/go-digest"
@@ -86,14 +86,6 @@ const (
 	defaultPrefetchTimeoutSec = 10
 	statFileMode              = syscall.S_IFREG | 0400 // -r--------
 	stateDirMode              = syscall.S_IFDIR | 0500 // dr-x------
-
-	// PrefetchLandmark is a file entry which indicates the end position of
-	// prefetch in the stargz file.
-	PrefetchLandmark = ".prefetch.landmark"
-
-	// NoPrefetchLandmark is a file entry which indicates that no prefetch should
-	// occur in the stargz file.
-	NoPrefetchLandmark = ".no.prefetch.landmark"
 )
 
 type Option func(*options)
@@ -257,7 +249,7 @@ func (fs *filesystem) Mount(ctx context.Context, mountpoint string, labels map[s
 		// Skip if verification is disabled completely
 		l.skipVerify()
 		log.G(ctx).Debugf("Verification forcefully skipped")
-	} else if tocDigest, ok := labels[verify.TOCJSONDigestAnnotation]; ok {
+	} else if tocDigest, ok := labels[estargz.TOCJSONDigestAnnotation]; ok {
 		// Verify this layer using the TOC JSON digest passed through label.
 		dgst, err := digest.Parse(tocDigest)
 		if err != nil {
@@ -541,7 +533,7 @@ type layer struct {
 	root             *stargz.TOCEntry
 	prefetchWaiter   *waiter
 	prefetchTimeout  time.Duration
-	verifier         verify.TOCEntryVerifier
+	verifier         estargz.TOCEntryVerifier
 }
 
 func (l *layer) reader() (reader.Reader, error) {
@@ -556,7 +548,7 @@ func (l *layer) skipVerify() {
 }
 
 func (l *layer) verify(tocDigest digest.Digest) error {
-	v, err := verify.StargzTOC(io.NewSectionReader(
+	v, err := estargz.VerifyStargzTOC(io.NewSectionReader(
 		readerAtFunc(func(p []byte, offset int64) (n int, err error) {
 			return l.blob.ReadAt(p, offset)
 		}), 0, l.blob.Size()), tocDigest)
@@ -575,10 +567,10 @@ func (l *layer) prefetch(prefetchSize int64) error {
 	if err != nil {
 		return err
 	}
-	if _, ok := lr.Lookup(NoPrefetchLandmark); ok {
+	if _, ok := lr.Lookup(estargz.NoPrefetchLandmark); ok {
 		// do not prefetch this layer
 		return nil
-	} else if e, ok := lr.Lookup(PrefetchLandmark); ok {
+	} else if e, ok := lr.Lookup(estargz.PrefetchLandmark); ok {
 		// override the prefetch size with optimized value
 		prefetchSize = e.Offset
 	} else if prefetchSize > l.blob.Size() {
@@ -699,7 +691,7 @@ func (n *node) Readdir(ctx context.Context) (fusefs.DirStream, syscall.Errno) {
 	n.e.ForeachChild(func(baseName string, ent *stargz.TOCEntry) bool {
 
 		// We don't want to show prefetch landmarks in "/".
-		if n.e.Name == "" && (baseName == PrefetchLandmark || baseName == NoPrefetchLandmark) {
+		if n.e.Name == "" && (baseName == estargz.PrefetchLandmark || baseName == estargz.NoPrefetchLandmark) {
 			return true
 		}
 
@@ -742,7 +734,7 @@ var _ = (fusefs.NodeLookuper)((*node)(nil))
 
 func (n *node) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fusefs.Inode, syscall.Errno) {
 	// We don't want to show prefetch landmarks in "/".
-	if n.e.Name == "" && (name == PrefetchLandmark || name == NoPrefetchLandmark) {
+	if n.e.Name == "" && (name == estargz.PrefetchLandmark || name == estargz.NoPrefetchLandmark) {
 		return nil, syscall.ENOENT
 	}
 
@@ -1070,7 +1062,7 @@ func entryToAttr(e *stargz.TOCEntry, out *fuse.Attr) fusefs.StableAttr {
 	mtime := e.ModTime()
 	out.SetTimes(nil, &mtime, nil)
 	out.Mode = modeOfEntry(e)
-	out.Owner = fuse.Owner{Uid: uint32(e.Uid), Gid: uint32(e.Gid)}
+	out.Owner = fuse.Owner{Uid: uint32(e.UID), Gid: uint32(e.GID)}
 	out.Rdev = uint32(unix.Mkdev(uint32(e.DevMajor), uint32(e.DevMinor)))
 	out.Nlink = uint32(e.NumLink)
 	if out.Nlink == 0 {

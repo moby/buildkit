@@ -56,7 +56,7 @@ const (
 //
 // Mount() tries to mount a remote snapshot to the specified mount point
 // directory. If succeed, the mountpoint directory will be treated as a layer
-// snapshot.
+// snapshot. If Mount() fails, the mountpoint directory MUST be cleaned up.
 // Check() is called to check the connectibity of the existing layer snapshot
 // every time the layer is used by containerd.
 // Unmount() is called to unmount a remote snapshot from the specified mount point
@@ -238,16 +238,19 @@ func (o *snapshotter) Prepare(ctx context.Context, key, parent string, opts ...s
 		if err := o.prepareRemoteSnapshot(ctx, key, base.Labels); err == nil {
 			base.Labels[remoteLabel] = fmt.Sprintf("remote snapshot") // Mark this snapshot as remote
 			err := o.Commit(ctx, target, key, append(opts, snapshots.WithLabels(base.Labels))...)
-			if err == nil {
+			if err == nil || errdefs.IsAlreadyExists(err) {
+				// count also AlreadyExists as "success"
 				log.G(lCtx).WithField(remoteSnapshotLogKey, prepareSucceeded).Debug("prepared remote snapshot")
 				return nil, errors.Wrapf(errdefs.ErrAlreadyExists, "target snapshot %q", target)
 			}
 			log.G(lCtx).WithField(remoteSnapshotLogKey, prepareFailed).
 				WithError(err).Debug("failed to internally commit remote snapshot")
-		} else {
-			log.G(lCtx).WithField(remoteSnapshotLogKey, prepareFailed).
-				WithError(err).Debug("failed to prepare remote snapshot")
+			// Don't fallback here (= prohibit to use this key again) because the FileSystem
+			// possible has done some work on this "upper" directory.
+			return nil, err
 		}
+		log.G(lCtx).WithField(remoteSnapshotLogKey, prepareFailed).
+			WithError(err).Debug("failed to prepare remote snapshot")
 	}
 
 	return o.mounts(ctx, s, parent)

@@ -13,7 +13,7 @@ require (
 	github.com/containerd/continuity v0.0.0-20200710164510-efbc4488d8fe
 	github.com/containerd/go-cni v1.0.1
 	github.com/containerd/go-runc v0.0.0-20201020171139-16b287bc67d0
-	github.com/containerd/stargz-snapshotter v0.0.0-20201027054423-3a04e4c2c116
+	github.com/containerd/stargz-snapshotter v0.2.0
 	github.com/containerd/typeurl v1.0.1
 	github.com/coreos/go-systemd/v22 v22.1.0
 	github.com/docker/cli v20.10.0-beta1.0.20201029214301-1d20b15adc38+incompatible
