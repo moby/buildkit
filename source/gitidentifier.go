@@ -2,6 +2,7 @@ package source
 
 import (
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -17,6 +18,8 @@ type GitIdentifier struct {
 	MountSSHSock     string
 	KnownSSHHosts    string
 }
+
+var gitSSHRegex = regexp.MustCompile("^([a-z0-9]+@)?[^:]+:.*$")
 
 func NewGitIdentifier(remoteURL string) (*GitIdentifier, error) {
 	repo := GitIdentifier{}
@@ -58,7 +61,7 @@ func (i *GitIdentifier) ID() string {
 // isGitTransport returns true if the provided str is a git transport by inspecting
 // the prefix of the string for known protocols used in git.
 func isGitTransport(str string) bool {
-	return strings.HasPrefix(str, "http://") || strings.HasPrefix(str, "https://") || strings.HasPrefix(str, "git://") || strings.HasPrefix(str, "git@")
+	return strings.HasPrefix(str, "http://") || strings.HasPrefix(str, "https://") || strings.HasPrefix(str, "git://") || gitSSHRegex.MatchString(str)
 }
 
 func getRefAndSubdir(fragment string) (ref string, subdir string) {
