@@ -19,7 +19,7 @@ type GitIdentifier struct {
 	KnownSSHHosts    string
 }
 
-var gitSSHRegex = regexp.MustCompile("^([a-z0-9]+@)?[^:]+:.*$")
+var gitSSHRegex = regexp.MustCompile("^[a-z0-9]+@[^:]+:.*$")
 
 func NewGitIdentifier(remoteURL string) (*GitIdentifier, error) {
 	repo := GitIdentifier{}

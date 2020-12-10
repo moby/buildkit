@@ -207,7 +207,7 @@ const (
 	gitProtocolUnknown
 )
 
-var gitSSHRegex = regexp.MustCompile("^([a-z0-9]+@)?[^:]+:.*$")
+var gitSSHRegex = regexp.MustCompile("^[a-z0-9]+@[^:]+:.*$")
 
 func getGitProtocol(remote string) (string, int) {
 	prefixes := map[string]int{
