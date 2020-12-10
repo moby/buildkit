@@ -5,7 +5,6 @@ import (
 	_ "crypto/sha256" // for opencontainers/go-digest
 	"encoding/json"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -207,8 +206,6 @@ const (
 	gitProtocolUnknown
 )
 
-var gitSSHRegex = regexp.MustCompile("^[a-z0-9]+@[^:]+:.*$")
-
 func getGitProtocol(remote string) (string, int) {
 	prefixes := map[string]int{
 		"http://":  gitProtocolHTTP,
@@ -224,7 +221,7 @@ func getGitProtocol(remote string) (string, int) {
 		}
 	}
 
-	if protocolType == gitProtocolUnknown && gitSSHRegex.MatchString(remote) {
+	if protocolType == gitProtocolUnknown && sshutil.IsSSHTransport(remote) {
 		protocolType = gitProtocolSSH
 	}
 
