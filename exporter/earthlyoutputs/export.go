@@ -12,11 +12,13 @@ import (
 
 	archiveexporter "github.com/containerd/containerd/images/archive"
 	"github.com/containerd/containerd/leases"
+	"github.com/containerd/containerd/remotes/docker"
 	"github.com/docker/distribution/reference"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage"
+	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/snapshot"
@@ -25,6 +27,8 @@ import (
 	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/progress"
+	"github.com/moby/buildkit/util/push"
+	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
@@ -48,6 +52,7 @@ type Opt struct {
 	SessionManager *session.Manager
 	ImageWriter    *containerimage.ImageWriter
 	Variant        ExporterVariant
+	RegistryHosts  docker.RegistryHosts
 	LeaseManager   leases.Manager
 }
 
@@ -129,6 +134,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	}
 	dirs := make(map[string]bool)
 	images := make(map[string]bool)
+	shouldPush := make(map[string]bool)
 	expSrcs := make(map[string]exporter.Source)
 	for k, ref := range src.Refs {
 		expMd := make(map[string][]byte)
@@ -143,6 +149,13 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 		}
 		if string(expMd["export-dir"]) == "true" {
 			dirs[k] = true
+		}
+		if string(expMd["push"]) == "true" {
+			shouldPush[k] = true
+		}
+		inlineCache, ok := src.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterInlineCache, k)]
+		if ok {
+			expMd[exptypes.ExporterInlineCache] = inlineCache
 		}
 		expSrc := exporter.Source{
 			Ref:      ref,
@@ -224,6 +237,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	}
 
 	mproviders := make(map[string]*contentutil.MultiProvider)
+	annotations := map[digest.Digest]map[string]string{}
 	for k := range images {
 		expSrc := expSrcs[k]
 		mprovider := contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
@@ -241,6 +255,19 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 			}
 			for _, desc := range remote.Descriptors {
 				mprovider.Add(desc.Digest, remote.Provider)
+				addAnnotations(annotations, desc)
+			}
+
+			if shouldPush[k] {
+				for _, name := range names[k] {
+					err := push.Push(
+						ctx, e.opt.SessionManager, sessionID, mprovider,
+						e.opt.ImageWriter.ContentStore(), descs[k].Digest,
+						name, false, e.opt.RegistryHosts, false, annotations)
+					if err != nil {
+						return nil, err
+					}
+				}
 			}
 		}
 		mproviders[k] = mprovider
@@ -409,5 +436,19 @@ func exportDirFunc(ctx context.Context, md map[string]string, caller session.Cal
 			return err
 		}
 		return nil
+	}
+}
+
+func addAnnotations(m map[digest.Digest]map[string]string, desc ocispec.Descriptor) {
+	if desc.Annotations == nil {
+		return
+	}
+	a, ok := m[desc.Digest]
+	if !ok {
+		m[desc.Digest] = desc.Annotations
+		return
+	}
+	for k, v := range desc.Annotations {
+		a[k] = v
 	}
 }

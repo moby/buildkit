@@ -371,6 +371,7 @@ func (w *Worker) Exporter(name string, sm *session.Manager) (exporter.Exporter, 
 			SessionManager: sm,
 			ImageWriter:    w.imageWriter,
 			Variant:        ociexporter.VariantDocker,
+			RegistryHosts:  w.RegistryHosts,
 			LeaseManager:   w.LeaseManager,
 		})
 	default:
