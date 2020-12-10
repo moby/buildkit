@@ -254,6 +254,9 @@ func Git(remote, ref string, opts ...GitOption) State {
 			remote = parts[0] + "/" + parts[1]
 		}
 	}
+	if protocolType == gitProtocolUnknown {
+		url = "https://" + url
+	}
 
 	id := remote
 
