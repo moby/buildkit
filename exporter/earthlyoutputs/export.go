@@ -119,7 +119,7 @@ type imageExporterInstance struct {
 }
 
 func (e *imageExporterInstance) Name() string {
-	return "earthly exporting to oci image format"
+	return "[output] exporting outputs"
 }
 
 func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source, sessionID string) (map[string]string, error) {
