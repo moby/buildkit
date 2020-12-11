@@ -129,12 +129,12 @@ func (gs *gitSource) mountRemote(ctx context.Context, remote string, auth []stri
 	}()
 
 	if initializeRepo {
-		if _, err := gitWithinDir(ctx, dir, "", "", "", auth, "init", "--bare"); err != nil {
-			return "", nil, errors.Wrapf(err, "failed to init repo at %s", dir)
+		if buf, err := gitWithinDir(ctx, dir, "", "", "", auth, "init", "--bare"); err != nil {
+			return "", nil, errors.Wrapf(err, "failed to init repo at %s: %s", dir, buf.String())
 		}
 
-		if _, err := gitWithinDir(ctx, dir, "", "", "", auth, "remote", "add", "origin", remote); err != nil {
-			return "", nil, errors.Wrapf(err, "failed add origin repo at %s", dir)
+		if buf, err := gitWithinDir(ctx, dir, "", "", "", auth, "remote", "add", "origin", remote); err != nil {
+			return "", nil, errors.Wrapf(err, "failed add origin repo at %s: %s", dir, buf.String())
 		}
 
 		// same new remote metadata
@@ -348,7 +348,7 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index
 
 	buf, err := gitWithinDir(ctx, gitDir, "", sock, knownHosts, gs.auth, "ls-remote", "origin", ref)
 	if err != nil {
-		return "", nil, false, errors.Wrapf(err, "failed to fetch remote %s", remote)
+		return "", nil, false, errors.Wrapf(err, "failed to fetch remote %s: %s", remote, buf.String())
 	}
 	out := buf.String()
 	idx := strings.Index(out, "\t")
@@ -449,8 +449,8 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 			// in case the ref is a branch and it now points to a different commit sha
 			// TODO: is there a better way to do this?
 		}
-		if _, err := gitWithinDir(ctx, gitDir, "", sock, knownHosts, gs.auth, args...); err != nil {
-			return nil, errors.Wrapf(err, "failed to fetch remote %s", gs.src.Remote)
+		if buf, err := gitWithinDir(ctx, gitDir, "", sock, knownHosts, gs.auth, args...); err != nil {
+			return nil, errors.Wrapf(err, "failed to fetch remote %s: %s", gs.src.Remote, buf.String())
 		}
 	}
 
@@ -485,43 +485,43 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 		if err := os.MkdirAll(checkoutDir, 0711); err != nil {
 			return nil, err
 		}
-		_, err = gitWithinDir(ctx, checkoutDirGit, "", sock, knownHosts, nil, "init")
+		buf, err := gitWithinDir(ctx, checkoutDirGit, "", sock, knownHosts, nil, "init")
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "failed to init repo at %s: %s", checkoutDirGit, buf.String())
 		}
-		_, err = gitWithinDir(ctx, checkoutDirGit, "", sock, knownHosts, nil, "remote", "add", "origin", gitDir)
+		buf, err = gitWithinDir(ctx, checkoutDirGit, "", sock, knownHosts, nil, "remote", "add", "origin", gitDir)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "failed to add origin %s: %s", gitDir, buf.String())
 		}
 		pullref := ref
 		if isCommitSHA(ref) {
 			pullref = "refs/buildkit/" + identity.NewID()
 			_, err = gitWithinDir(ctx, gitDir, "", sock, knownHosts, gs.auth, "update-ref", pullref, ref)
 			if err != nil {
-				return nil, err
+				return nil, errors.Wrapf(err, "failed to update ref %s: %s", ref, buf.String())
 			}
 		} else {
 			pullref += ":" + pullref
 		}
-		_, err = gitWithinDir(ctx, checkoutDirGit, "", sock, knownHosts, gs.auth, "fetch", "-u", "--depth=1", "origin", pullref)
+		buf, err = gitWithinDir(ctx, checkoutDirGit, "", sock, knownHosts, gs.auth, "fetch", "-u", "--depth=1", "origin", pullref)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "failed to fetch %s: %s", pullref, buf.String())
 		}
-		_, err = gitWithinDir(ctx, checkoutDirGit, checkoutDir, sock, knownHosts, nil, "checkout", "FETCH_HEAD")
+		buf, err = gitWithinDir(ctx, checkoutDirGit, checkoutDir, sock, knownHosts, nil, "checkout", "FETCH_HEAD")
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to checkout remote %s", gs.src.Remote)
+			return nil, errors.Wrapf(err, "failed to checkout remote %s: %s", gs.src.Remote, buf.String())
 		}
 		gitDir = checkoutDirGit
 	} else {
-		_, err = gitWithinDir(ctx, gitDir, checkoutDir, sock, knownHosts, nil, "checkout", ref, "--", ".")
+		buf, err := gitWithinDir(ctx, gitDir, checkoutDir, sock, knownHosts, nil, "checkout", ref, "--", ".")
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to checkout remote %s", gs.src.Remote)
+			return nil, errors.Wrapf(err, "failed to checkout remote %s: %s", gs.src.Remote, buf.String())
 		}
 	}
 
-	_, err = gitWithinDir(ctx, gitDir, checkoutDir, sock, knownHosts, gs.auth, "submodule", "update", "--init", "--recursive", "--depth=1")
+	buf, err := gitWithinDir(ctx, gitDir, checkoutDir, sock, knownHosts, gs.auth, "submodule", "update", "--init", "--recursive", "--depth=1")
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to update submodules for %s", gs.src.Remote)
+		return nil, errors.Wrapf(err, "failed to update submodules for %s: %s", gs.src.Remote, buf.String())
 	}
 
 	if idmap := mount.IdentityMapping(); idmap != nil {
