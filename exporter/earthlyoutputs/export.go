@@ -135,6 +135,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	dirs := make(map[string]bool)
 	images := make(map[string]bool)
 	shouldPush := make(map[string]bool)
+	allImages := make(map[string]bool) // images + shouldPush union
 	expSrcs := make(map[string]exporter.Source)
 	for k, ref := range src.Refs {
 		expMd := make(map[string][]byte)
@@ -145,12 +146,14 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 			}
 		}
 		if string(expMd["export-image"]) == "true" {
+			allImages[k] = true
 			images[k] = true
 		}
 		if string(expMd["export-dir"]) == "true" {
 			dirs[k] = true
 		}
-		if string(expMd["push"]) == "true" {
+		if string(expMd["export-image-push"]) == "true" {
+			allImages[k] = true
 			shouldPush[k] = true
 		}
 		inlineCache, ok := src.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterInlineCache, k)]
@@ -173,7 +176,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 
 	descs := make(map[string]*ocispec.Descriptor)
 	names := make(map[string][]string)
-	for k := range images {
+	for k := range allImages {
 		expSrc := expSrcs[k]
 		desc, err := e.opt.ImageWriter.Commit(ctx, expSrc, e.ociTypes, e.layerCompression, sessionID)
 		if err != nil {
@@ -211,7 +214,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	// TODO(vladaionescu): Fill resp
 
 	writers := make(map[string]io.WriteCloser)
-	for k := range images {
+	for k := range allImages {
 		md := make(map[string]string)
 		for mdK, mdV := range expSrcs[k].Metadata {
 			md[mdK] = string(mdV)
@@ -238,7 +241,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 
 	mproviders := make(map[string]*contentutil.MultiProvider)
 	annotations := map[digest.Digest]map[string]string{}
-	for k := range images {
+	for k := range allImages {
 		expSrc := expSrcs[k]
 		mprovider := contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
 		if expSrc.Ref != nil {
