@@ -83,6 +83,61 @@ func TestCancelOne(t *testing.T) {
 	assert.Equal(t, counter, int64(1))
 }
 
+func TestCancelRace(t *testing.T) {
+	// t.Parallel() // disabled for better timing consistency. works with parallel as well
+
+	g := &Group{}
+	ctx, cancel := context.WithCancel(context.Background())
+
+	kick := make(chan struct{})
+	wait := make(chan struct{})
+
+	count := 0
+
+	// first run cancels context, second returns cleanly
+	f := func(ctx context.Context) (interface{}, error) {
+		done := ctx.Done()
+		if count > 0 {
+			time.Sleep(100 * time.Millisecond)
+			return nil, nil
+		}
+		go func() {
+			for {
+				select {
+				case <-wait:
+					return
+				default:
+					ctx.Done()
+				}
+			}
+		}()
+		count++
+		time.Sleep(50 * time.Millisecond)
+		close(kick)
+		time.Sleep(50 * time.Millisecond)
+		select {
+		case <-done:
+			return nil, ctx.Err()
+		case <-time.After(200 * time.Millisecond):
+		}
+		return nil, nil
+	}
+
+	go func() {
+		defer close(wait)
+		<-kick
+		cancel()
+		time.Sleep(5 * time.Millisecond)
+		_, err := g.Do(context.Background(), "foo", f)
+		require.NoError(t, err)
+	}()
+
+	_, err := g.Do(ctx, "foo", f)
+	require.Error(t, err)
+	require.Equal(t, true, errors.Is(err, context.Canceled))
+	<-wait
+}
+
 func TestCancelBoth(t *testing.T) {
 	t.Parallel()
 	g := &Group{}
@@ -133,7 +188,6 @@ func TestCancelBoth(t *testing.T) {
 	assert.Equal(t, "", r1)
 	assert.Equal(t, "", r2)
 	assert.Equal(t, counter, int64(1))
-
 	ret1, err := g.Do(context.TODO(), "foo", f)
 	assert.NoError(t, err)
 	assert.Equal(t, ret1, "bar")
