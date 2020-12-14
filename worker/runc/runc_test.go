@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	ctdsnapshot "github.com/containerd/containerd/snapshots"
 	"github.com/containerd/containerd/snapshots/overlay"
@@ -155,10 +156,28 @@ func TestRuncWorker(t *testing.T) {
 	err = snap.Release(ctx)
 	require.NoError(t, err)
 
-	du2, err := w.CacheMgr.DiskUsage(ctx, client.DiskUsageInfo{})
-	require.NoError(t, err)
-	require.Equal(t, 1, len(du2)-len(du))
+	retry := 0
+	var du2 []*client.UsageInfo
+	for {
+		du2, err = w.CacheMgr.DiskUsage(ctx, client.DiskUsageInfo{})
+		require.NoError(t, err)
+		if len(du2)-len(du) != 1 && retry == 0 {
+			t.Logf("invalid expected size: du1: %+v du2: %+v", formatDiskUsage(du), formatDiskUsage(du2))
+			time.Sleep(300 * time.Millisecond) // make race non-fatal if it fixes itself
+			retry++
+			continue
+		}
+		break
+	}
+	require.Equal(t, 1, len(du2)-len(du), "du1: %+v du2: %+v", formatDiskUsage(du), formatDiskUsage(du2))
+}
 
+func formatDiskUsage(du []*client.UsageInfo) string {
+	buf := new(bytes.Buffer)
+	for _, d := range du {
+		fmt.Fprintf(buf, "%+v ", d)
+	}
+	return buf.String()
 }
 
 func TestRuncWorkerNoProcessSandbox(t *testing.T) {
