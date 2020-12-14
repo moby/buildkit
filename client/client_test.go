@@ -1649,6 +1649,8 @@ func testExporterTargetExists(t *testing.T, sb integration.Sandbox) {
 
 	require.True(t, strings.HasPrefix(dgst, "sha256:"))
 	require.Equal(t, dgst, mdDgst)
+
+	require.True(t, strings.HasPrefix(res.ExporterResponse["containerimage.config.digest"], "sha256:"))
 }
 
 func testTarExporterWithSocket(t *testing.T, sb integration.Sandbox) {
