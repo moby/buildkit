@@ -20,4 +20,5 @@ func TestIsSSHTransport(t *testing.T) {
 	require.True(t, IsSSHTransport("other_Funky-username52@example.com:path/to/repo.git/"))
 	require.True(t, IsSSHTransport("other_Funky-username52@example.com:/to/really:odd:repo.git/"))
 	require.True(t, IsSSHTransport("teddy@4houses-down.com:/~/catnip.git/"))
+	require.True(t, IsSSHTransport("ssh://root@subdomain.example.hostname:2222/root/my/really/weird/path/foo.git"))
 }
