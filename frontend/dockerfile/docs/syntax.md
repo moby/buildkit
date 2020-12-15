@@ -27,7 +27,7 @@ change in between releases on labs channel, the old versions are guaranteed to b
 
 ## Build Mounts `RUN --mount=...`
 
-To use this flag set Dockerfile version to at least `1.2.0`
+To use this flag set Dockerfile version to at least `1.2`
 
 ```
 #syntax=docker/dockerfile:1.2

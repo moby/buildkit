@@ -10,9 +10,9 @@ Join `#buildkit` channel on [Docker Community Slack](http://dockr.ly/slack)
 
 ### Latest stable release
 
-- [`v0.8.0`, `latest`](https://github.com/moby/buildkit/blob/v0.8.0/Dockerfile)
+- [`v0.8.1`, `latest`](https://github.com/moby/buildkit/blob/v0.8.1/Dockerfile)
 
-- [`v0.8.0-rootless`, `rootless`](https://github.com/moby/buildkit/blob/v0.8.0/Dockerfile) (see [`docs/rootless.md`](https://github.com/moby/buildkit/blob/master/docs/rootless.md) for usage)
+- [`v0.8.1-rootless`, `rootless`](https://github.com/moby/buildkit/blob/v0.8.1/Dockerfile) (see [`docs/rootless.md`](https://github.com/moby/buildkit/blob/master/docs/rootless.md) for usage)
 
 ### Development build from master branch
 
