@@ -32,7 +32,34 @@ func TestFrontendIntegration(t *testing.T) {
 		testRefReadFile,
 		testRefReadDir,
 		testRefStatFile,
+		testReturnNil,
 	})
+}
+
+func testReturnNil(t *testing.T, sb integration.Sandbox) {
+	ctx := context.TODO()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		return nil, nil
+	}
+
+	_, err = c.Build(ctx, client.SolveOpt{}, "", frontend, nil)
+	require.NoError(t, err)
+
+	frontend = func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		return gateway.NewResult(), nil
+	}
+
+	_, err = c.Build(ctx, client.SolveOpt{}, "", frontend, nil)
+	require.NoError(t, err)
 }
 
 func testRefReadFile(t *testing.T, sb integration.Sandbox) {
