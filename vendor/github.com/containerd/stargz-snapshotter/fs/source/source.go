@@ -25,7 +25,7 @@ import (
 	"github.com/containerd/containerd/labels"
 	"github.com/containerd/containerd/reference"
 	"github.com/containerd/containerd/remotes/docker"
-	"github.com/containerd/stargz-snapshotter/stargz/config"
+	"github.com/containerd/stargz-snapshotter/fs/config"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )

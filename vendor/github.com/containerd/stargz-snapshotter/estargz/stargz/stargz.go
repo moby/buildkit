@@ -1,3 +1,19 @@
+/*
+   Copyright The containerd Authors.
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+*/
+
 // Copyright 2019 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
@@ -7,7 +23,12 @@
 // valid tarball, but it's slightly bigger with new gzip streams for
 // each new file & throughout large files, and has an index in a magic
 // file at the end.
+
 package stargz
+
+// Low-level components for building/parsing eStargz.
+// This is the modified version of stargz library (https://github.com/google/crfs)
+// following eStargz specification.
 
 import (
 	"archive/tar"
@@ -15,8 +36,8 @@ import (
 	"bytes"
 	"compress/gzip"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"hash"
 	"io"
@@ -27,17 +48,36 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/hashicorp/go-multierror"
+	"github.com/pkg/errors"
 )
 
 // TOCTarName is the name of the JSON file in the tar archive in the
 // table of contents gzip stream.
 const TOCTarName = "stargz.index.json"
 
-// FooterSize is the number of bytes in the stargz footer.
+// FooterSize is the number of bytes in the footer
 //
 // The footer is an empty gzip stream with no compression and an Extra
 // header of the form "%016xSTARGZ", where the 64 bit hex-encoded
 // number is the offset to the gzip stream of JSON TOC.
+//
+// 51 comes from:
+//
+// 10 bytes  gzip header
+// 2  bytes  XLEN (length of Extra field) = 26 (4 bytes header + 16 hex digits + len("STARGZ"))
+// 2  bytes  Extra: SI1 = 'S', SI2 = 'G'
+// 2  bytes  Extra: LEN = 22 (16 hex digits + len("STARGZ"))
+// 22 bytes  Extra: subfield = fmt.Sprintf("%016xSTARGZ", offsetOfTOC)
+// 5  bytes  flate header
+// 8  bytes  gzip footer
+// (End of the eStargz blob)
+//
+// NOTE: For Extra fields, subfield IDs SI1='S' SI2='G' is used for eStargz.
+const FooterSize = 51
+
+// legacyFooterSize is the number of bytes in the legacy stargz footer.
 //
 // 47 comes from:
 //
@@ -46,7 +86,7 @@ const TOCTarName = "stargz.index.json"
 //   22 bytes of extra (fmt.Sprintf("%016xSTARGZ", tocGzipOffset))
 //   5 byte flate header
 //   8 byte gzip footer (two little endian uint32s: digest, size)
-const FooterSize = 47
+const legacyFooterSize = 47
 
 // A Reader permits random access reads from a stargz file.
 type Reader struct {
@@ -64,20 +104,11 @@ type Reader struct {
 
 // Open opens a stargz file for reading.
 func Open(sr *io.SectionReader) (*Reader, error) {
-	if sr.Size() < FooterSize {
-		return nil, fmt.Errorf("stargz size %d is smaller than the stargz footer size", sr.Size())
+	tocOff, footerSize, err := OpenFooter(sr)
+	if err != nil {
+		return nil, errors.Wrapf(err, "error parsing footer")
 	}
-	// TODO: read a bigger chunk (1MB?) at once here to hopefully
-	// get the TOC + footer in one go.
-	var footer [FooterSize]byte
-	if _, err := sr.ReadAt(footer[:], sr.Size()-FooterSize); err != nil {
-		return nil, fmt.Errorf("error reading footer: %v", err)
-	}
-	tocOff, ok := parseFooter(footer[:])
-	if !ok {
-		return nil, fmt.Errorf("error parsing footer")
-	}
-	tocTargz := make([]byte, sr.Size()-tocOff-FooterSize)
+	tocTargz := make([]byte, sr.Size()-tocOff-footerSize)
 	if _, err := sr.ReadAt(tocTargz, tocOff); err != nil {
 		return nil, fmt.Errorf("error reading %d byte TOC targz: %v", len(tocTargz), err)
 	}
@@ -103,6 +134,20 @@ func Open(sr *io.SectionReader) (*Reader, error) {
 		return nil, fmt.Errorf("failed to initialize fields of entries: %v", err)
 	}
 	return r, nil
+}
+
+// OpenFooter extracts and parses footer from the given blob.
+func OpenFooter(sr *io.SectionReader) (tocOffset int64, footerSize int64, rErr error) {
+	if sr.Size() < FooterSize && sr.Size() < legacyFooterSize {
+		return 0, 0, fmt.Errorf("blob size %d is smaller than the footer size", sr.Size())
+	}
+	// TODO: read a bigger chunk (1MB?) at once here to hopefully
+	// get the TOC + footer in one go.
+	var footer [FooterSize]byte
+	if _, err := sr.ReadAt(footer[:], sr.Size()-FooterSize); err != nil {
+		return 0, 0, fmt.Errorf("error reading footer: %v", err)
+	}
+	return parseFooter(footer[:])
 }
 
 // TOCEntry is an entry in the stargz file's TOC (Table of Contents).
@@ -133,22 +178,22 @@ type TOCEntry struct {
 	// Mode is the permission and mode bits.
 	Mode int64 `json:"mode,omitempty"`
 
-	// Uid is the user ID of the owner.
-	Uid int `json:"uid,omitempty"`
+	// UID is the user ID of the owner.
+	UID int `json:"uid,omitempty"`
 
-	// Gid is the group ID of the owner.
-	Gid int `json:"gid,omitempty"`
+	// GID is the group ID of the owner.
+	GID int `json:"gid,omitempty"`
 
 	// Uname is the username of the owner.
 	//
 	// In the serialized JSON, this field may only be present for
-	// the first entry with the same Uid.
+	// the first entry with the same UID.
 	Uname string `json:"userName,omitempty"`
 
 	// Gname is the group name of the owner.
 	//
 	// In the serialized JSON, this field may only be present for
-	// the first entry with the same Gid.
+	// the first entry with the same GID.
 	Gname string `json:"groupName,omitempty"`
 
 	// Offset, for regular files, provides the offset in the
@@ -291,14 +336,14 @@ func (r *Reader) initFields() error {
 			lastPath = ent.Name
 
 			if ent.Uname != "" {
-				uname[ent.Uid] = ent.Uname
+				uname[ent.UID] = ent.Uname
 			} else {
-				ent.Uname = uname[ent.Uid]
+				ent.Uname = uname[ent.UID]
 			}
 			if ent.Gname != "" {
-				gname[ent.Gid] = ent.Gname
+				gname[ent.GID] = ent.Gname
 			} else {
-				ent.Gname = uname[ent.Gid]
+				ent.Gname = uname[ent.GID]
 			}
 
 			ent.modTime, _ = time.Parse(time.RFC3339, ent.ModTime3339)
@@ -504,7 +549,7 @@ func (fr *fileReader) ReadAt(p []byte, off int64) (n int, err error) {
 	sr := io.NewSectionReader(fr.r.sr, gzOff, gzBytesRemain)
 
 	const maxGZread = 2 << 20
-	var bufSize int = maxGZread
+	var bufSize = maxGZread
 	if gzBytesRemain < maxGZread {
 		bufSize = int(gzBytesRemain)
 	}
@@ -593,7 +638,6 @@ func (w *Writer) Close() error {
 	// Write the TOC index.
 	tocOff := w.cw.n
 	w.gz, _ = gzip.NewWriterLevel(w.cw, gzip.BestCompression)
-	w.gz.Extra = []byte("stargz.toc")
 	tw := tar.NewWriter(currentGzipWriter{w})
 	tocJSON, err := json.MarshalIndent(w.toc, "", "\t")
 	if err != nil {
@@ -618,7 +662,7 @@ func (w *Writer) Close() error {
 	}
 
 	// And a little footer with pointer to the TOC gzip stream.
-	if _, err := w.bw.Write(footerBytes(tocOff)); err != nil {
+	if _, err := w.bw.Write(FooterBytes(tocOff)); err != nil {
 		return err
 	}
 
@@ -694,18 +738,20 @@ func (w *Writer) AppendTar(r io.Reader) error {
 			continue
 		}
 
-		var xattrs map[string][]byte
-		if h.Xattrs != nil {
-			xattrs = make(map[string][]byte)
-			for k, v := range h.Xattrs {
-				xattrs[k] = []byte(v)
+		xattrs := make(map[string][]byte)
+		const xattrPAXRecordsPrefix = "SCHILY.xattr."
+		if h.PAXRecords != nil {
+			for k, v := range h.PAXRecords {
+				if strings.HasPrefix(k, xattrPAXRecordsPrefix) {
+					xattrs[k[len(xattrPAXRecordsPrefix):]] = []byte(v)
+				}
 			}
 		}
 		ent := &TOCEntry{
 			Name:        h.Name,
 			Mode:        h.Mode,
-			Uid:         h.Uid,
-			Gid:         h.Gid,
+			UID:         h.Uid,
+			GID:         h.Gid,
 			Uname:       w.nameIfChanged(&w.lastUsername, h.Uid, h.Uname),
 			Gname:       w.nameIfChanged(&w.lastGroupname, h.Gid, h.Gname),
 			ModTime3339: formatModtime(h.ModTime),
@@ -801,11 +847,18 @@ func (w *Writer) DiffID() string {
 	return fmt.Sprintf("sha256:%x", w.diffHash.Sum(nil))
 }
 
-// footerBytes the 47 byte footer.
-func footerBytes(tocOff int64) []byte {
+// FooterBytes returns the 51 bytes footer.
+func FooterBytes(tocOff int64) []byte {
 	buf := bytes.NewBuffer(make([]byte, 0, FooterSize))
 	gz, _ := gzip.NewWriterLevel(buf, gzip.NoCompression)
-	gz.Header.Extra = []byte(fmt.Sprintf("%016xSTARGZ", tocOff))
+
+	// Extra header indicating the offset of TOCJSON
+	// https://tools.ietf.org/html/rfc1952#section-2.3.1.1
+	header := make([]byte, 4)
+	header[0], header[1] = 'S', 'G'
+	subfield := fmt.Sprintf("%016xSTARGZ", tocOff)
+	binary.LittleEndian.PutUint16(header[2:4], uint16(len(subfield))) // little-endian per RFC1952
+	gz.Header.Extra = append(header, []byte(subfield)...)
 	gz.Close()
 	if buf.Len() != FooterSize {
 		panic(fmt.Sprintf("footer buffer = %d, not %d", buf.Len(), FooterSize))
@@ -813,23 +866,63 @@ func footerBytes(tocOff int64) []byte {
 	return buf.Bytes()
 }
 
-func parseFooter(p []byte) (tocOffset int64, ok bool) {
+func parseFooter(p []byte) (tocOffset int64, footerSize int64, rErr error) {
+	tocOffset, err := parseEStargzFooter(p)
+	if err == nil {
+		return tocOffset, FooterSize, nil
+	}
+	rErr = multierror.Append(rErr, err)
+
+	pad := len(p) - legacyFooterSize
+	if pad < 0 {
+		pad = 0
+	}
+	tocOffset, err = parseLegacyFooter(p[pad:])
+	if err == nil {
+		return tocOffset, legacyFooterSize, nil
+	}
+	rErr = multierror.Append(rErr, err)
+	return
+}
+
+func parseEStargzFooter(p []byte) (tocOffset int64, err error) {
 	if len(p) != FooterSize {
-		return 0, false
+		return 0, fmt.Errorf("invalid length %d cannot be parsed", len(p))
 	}
 	zr, err := gzip.NewReader(bytes.NewReader(p))
 	if err != nil {
-		return 0, false
+		return 0, err
+	}
+	extra := zr.Header.Extra
+	si1, si2, subfieldlen, subfield := extra[0], extra[1], extra[2:4], extra[4:]
+	if si1 != 'S' || si2 != 'G' {
+		return 0, fmt.Errorf("invalid subfield IDs: %q, %q; want E, S", si1, si2)
+	}
+	if slen := binary.LittleEndian.Uint16(subfieldlen); slen != uint16(16+len("STARGZ")) {
+		return 0, fmt.Errorf("invalid length of subfield %d; want %d", slen, 16+len("STARGZ"))
+	}
+	if string(subfield[16:]) != "STARGZ" {
+		return 0, fmt.Errorf("STARGZ magic string must be included in the footer subfield")
+	}
+	return strconv.ParseInt(string(subfield[:16]), 16, 64)
+}
+
+func parseLegacyFooter(p []byte) (tocOffset int64, err error) {
+	if len(p) != legacyFooterSize {
+		return 0, fmt.Errorf("legacy: invalid length %d cannot be parsed", len(p))
+	}
+	zr, err := gzip.NewReader(bytes.NewReader(p))
+	if err != nil {
+		return 0, errors.Wrapf(err, "legacy: failed to get footer gzip reader")
 	}
 	extra := zr.Header.Extra
 	if len(extra) != 16+len("STARGZ") {
-		return 0, false
+		return 0, fmt.Errorf("legacy: invalid stargz's extra field size")
 	}
 	if string(extra[16:]) != "STARGZ" {
-		return 0, false
+		return 0, fmt.Errorf("legacy: magic string STARGZ not found")
 	}
-	tocOffset, err = strconv.ParseInt(string(extra[:16]), 16, 64)
-	return tocOffset, err == nil
+	return strconv.ParseInt(string(extra[:16]), 16, 64)
 }
 
 func formatModtime(t time.Time) string {
