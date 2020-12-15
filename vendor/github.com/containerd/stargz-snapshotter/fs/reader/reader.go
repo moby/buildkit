@@ -33,8 +33,8 @@ import (
 	"sync"
 
 	"github.com/containerd/stargz-snapshotter/cache"
-	"github.com/containerd/stargz-snapshotter/stargz/verify"
-	"github.com/google/crfs/stargz"
+	"github.com/containerd/stargz-snapshotter/estargz"
+	"github.com/containerd/stargz-snapshotter/estargz/stargz"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
@@ -47,10 +47,10 @@ type Reader interface {
 }
 
 // VerifiableReader is a function that produces a Reader with a given verifier.
-type VerifiableReader func(verify.TOCEntryVerifier) Reader
+type VerifiableReader func(estargz.TOCEntryVerifier) Reader
 
 // NewReader creates a Reader based on the given stargz blob and cache implementation.
-// It returns VerifiableReader so the caller must provide a verify.TOCEntryVerifier
+// It returns VerifiableReader so the caller must provide a estargz.TOCEntryVerifier
 // to use for verifying file or chunk contained in this stargz blob.
 func NewReader(sr *io.SectionReader, cache cache.BlobCache) (VerifiableReader, *stargz.TOCEntry, error) {
 	r, err := stargz.Open(sr)
@@ -74,7 +74,7 @@ func NewReader(sr *io.SectionReader, cache cache.BlobCache) (VerifiableReader, *
 		},
 	}
 
-	return func(verifier verify.TOCEntryVerifier) Reader {
+	return func(verifier estargz.TOCEntryVerifier) Reader {
 		vr.verifier = verifier
 		return vr
 	}, root, nil
@@ -85,7 +85,7 @@ type reader struct {
 	sr       *io.SectionReader
 	cache    cache.BlobCache
 	bufPool  sync.Pool
-	verifier verify.TOCEntryVerifier
+	verifier estargz.TOCEntryVerifier
 }
 
 func (gr *reader) OpenFile(name string) (io.ReaderAt, error) {

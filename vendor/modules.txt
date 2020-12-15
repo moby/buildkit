@@ -113,22 +113,25 @@ github.com/containerd/continuity/fs/fstest
 github.com/containerd/continuity/pathdriver
 github.com/containerd/continuity/proto
 github.com/containerd/continuity/sysx
-# github.com/containerd/fifo v0.0.0-20200410184934-f15a3290365b
+# github.com/containerd/fifo v0.0.0-20201026212402-0724c46b320c
 github.com/containerd/fifo
 # github.com/containerd/go-cni v1.0.1
 github.com/containerd/go-cni
 # github.com/containerd/go-runc v0.0.0-20201020171139-16b287bc67d0
 github.com/containerd/go-runc
-# github.com/containerd/stargz-snapshotter v0.0.0-20201027054423-3a04e4c2c116
+# github.com/containerd/stargz-snapshotter v0.2.0
 github.com/containerd/stargz-snapshotter/cache
+github.com/containerd/stargz-snapshotter/estargz
+github.com/containerd/stargz-snapshotter/estargz/stargz
+github.com/containerd/stargz-snapshotter/fs
+github.com/containerd/stargz-snapshotter/fs/config
+github.com/containerd/stargz-snapshotter/fs/reader
+github.com/containerd/stargz-snapshotter/fs/remote
+github.com/containerd/stargz-snapshotter/fs/source
 github.com/containerd/stargz-snapshotter/snapshot
-github.com/containerd/stargz-snapshotter/stargz
-github.com/containerd/stargz-snapshotter/stargz/config
-github.com/containerd/stargz-snapshotter/stargz/reader
-github.com/containerd/stargz-snapshotter/stargz/remote
-github.com/containerd/stargz-snapshotter/stargz/source
-github.com/containerd/stargz-snapshotter/stargz/verify
 github.com/containerd/stargz-snapshotter/task
+github.com/containerd/stargz-snapshotter/util/positionwatcher
+github.com/containerd/stargz-snapshotter/util/tempfiles
 # github.com/containerd/ttrpc v1.0.1
 github.com/containerd/ttrpc
 # github.com/containerd/typeurl v1.0.1
@@ -231,8 +234,6 @@ github.com/golang/protobuf/ptypes/any
 github.com/golang/protobuf/ptypes/duration
 github.com/golang/protobuf/ptypes/struct
 github.com/golang/protobuf/ptypes/timestamp
-# github.com/google/crfs v0.0.0-20191108021818-71d77da419c9
-github.com/google/crfs/stargz
 # github.com/google/go-cmp v0.4.1
 github.com/google/go-cmp/cmp
 github.com/google/go-cmp/cmp/internal/diff
@@ -253,8 +254,12 @@ github.com/hanwen/go-fuse/v2/fuse
 github.com/hanwen/go-fuse/v2/internal
 github.com/hanwen/go-fuse/v2/internal/utimens
 github.com/hanwen/go-fuse/v2/splice
+# github.com/hashicorp/errwrap v1.0.0
+github.com/hashicorp/errwrap
 # github.com/hashicorp/go-immutable-radix v1.0.0 => github.com/tonistiigi/go-immutable-radix v0.0.0-20170803185627-826af9ccf0fe
 github.com/hashicorp/go-immutable-radix
+# github.com/hashicorp/go-multierror v1.0.0
+github.com/hashicorp/go-multierror
 # github.com/hashicorp/golang-lru v0.5.3
 github.com/hashicorp/golang-lru/simplelru
 # github.com/ishidawataru/sctp v0.0.0-20191218070446-00ab2ac2db07

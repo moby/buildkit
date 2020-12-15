@@ -139,6 +139,10 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 
 	resp := make(map[string]string)
 	resp["containerimage.digest"] = desc.Digest.String()
+	if v, ok := desc.Annotations["config.digest"]; ok {
+		resp["containerimage.config.digest"] = v
+		delete(desc.Annotations, "config.digeest")
+	}
 
 	if n, ok := src.Metadata["image.name"]; e.name == "*" && ok {
 		e.name = string(n)

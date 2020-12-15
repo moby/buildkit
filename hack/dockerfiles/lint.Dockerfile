@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.1-experimental
+# syntax=docker/dockerfile:1.2
 
 FROM golang:1.13-alpine
 RUN apk add --no-cache gcc musl-dev yamllint

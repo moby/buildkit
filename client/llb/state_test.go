@@ -101,6 +101,66 @@ func TestStateSourceMapMarshal(t *testing.T) {
 	require.Equal(t, int32(9), def.Source.Locations[dgst.String()].Locations[2].Ranges[0].Start.Line)
 }
 
+func TestPlatformFromImage(t *testing.T) {
+	t.Parallel()
+
+	s := Image("srcimage", LinuxS390x).
+		Run(Args([]string{"foo"})).
+		File(Mkdir("/foo", 0700).Mkfile("/bar", 0600, []byte("bar")))
+
+	dest := Image("destimage").File(Copy(s, "/", "/"))
+
+	def, err := dest.Marshal(context.TODO(), LinuxPpc64le)
+	require.NoError(t, err)
+
+	m, arr := parseDef(t, def.Def)
+	_ = m
+	require.Equal(t, 6, len(arr))
+
+	dgst, idx := last(t, arr)
+	require.Equal(t, 0, idx)
+
+	vtx, ok := m[dgst]
+	require.Equal(t, true, ok)
+
+	f, ok := vtx.Op.(*pb.Op_File)
+	require.Equal(t, true, ok)
+	require.Equal(t, 1, len(f.File.Actions))
+	require.Equal(t, "ppc64le", vtx.Platform.Architecture)
+
+	mainVtx := vtx
+	vtx, ok = m[vtx.Inputs[0].Digest]
+	require.Equal(t, true, ok)
+
+	src, ok := vtx.Op.(*pb.Op_Source)
+	require.Equal(t, true, ok)
+	require.Equal(t, "docker-image://docker.io/library/destimage:latest", src.Source.Identifier)
+	require.Equal(t, "ppc64le", vtx.Platform.Architecture)
+
+	vtx, ok = m[mainVtx.Inputs[1].Digest]
+	require.Equal(t, true, ok)
+
+	f, ok = vtx.Op.(*pb.Op_File)
+	require.Equal(t, true, ok)
+	require.Equal(t, 2, len(f.File.Actions))
+	require.Equal(t, "s390x", vtx.Platform.Architecture)
+
+	vtx, ok = m[vtx.Inputs[0].Digest]
+	require.Equal(t, true, ok)
+
+	_, ok = vtx.Op.(*pb.Op_Exec)
+	require.Equal(t, true, ok)
+	require.Equal(t, "s390x", vtx.Platform.Architecture)
+
+	vtx, ok = m[vtx.Inputs[0].Digest]
+	require.Equal(t, true, ok)
+
+	src, ok = vtx.Op.(*pb.Op_Source)
+	require.Equal(t, true, ok)
+	require.Equal(t, "docker-image://docker.io/library/srcimage:latest", src.Source.Identifier)
+	require.Equal(t, "s390x", vtx.Platform.Architecture)
+}
+
 func getEnvHelper(t *testing.T, s State, k string) (string, bool) {
 	t.Helper()
 	v, ok, err := s.GetEnv(context.TODO(), k)

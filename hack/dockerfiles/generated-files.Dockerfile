@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.1-experimental
+# syntax=docker/dockerfile:1.2
 
 # protoc is dynamically linked to glibc to can't use golang:1.10-alpine
 FROM golang:1.13-buster AS gobuild-base

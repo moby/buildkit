@@ -21,10 +21,10 @@ import (
 	"github.com/containerd/containerd/snapshots/overlay"
 	snproxy "github.com/containerd/containerd/snapshots/proxy"
 	"github.com/containerd/containerd/sys"
+	sgzfs "github.com/containerd/stargz-snapshotter/fs"
+	sgzconf "github.com/containerd/stargz-snapshotter/fs/config"
+	sgzsource "github.com/containerd/stargz-snapshotter/fs/source"
 	remotesn "github.com/containerd/stargz-snapshotter/snapshot"
-	"github.com/containerd/stargz-snapshotter/stargz"
-	sgzconf "github.com/containerd/stargz-snapshotter/stargz/config"
-	sgzsource "github.com/containerd/stargz-snapshotter/stargz/source"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/executor/oci"
 	"github.com/moby/buildkit/util/network/cniprovider"
@@ -377,9 +377,9 @@ func snapshotterFactory(commonRoot string, cfg config.OCIConfig, hosts docker.Re
 			}
 		}
 		snFactory.New = func(root string) (ctdsnapshot.Snapshotter, error) {
-			fs, err := stargz.NewFilesystem(filepath.Join(root, "stargz"),
+			fs, err := sgzfs.NewFilesystem(filepath.Join(root, "stargz"),
 				sgzCfg,
-				stargz.WithGetSources(
+				sgzfs.WithGetSources(
 					// provides source info based on the registry config and
 					// default labels.
 					sgzsource.FromDefaultLabels(sgzhosts),
