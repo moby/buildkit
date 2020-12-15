@@ -273,6 +273,9 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	}
 
 	resp["containerimage.digest"] = desc.Digest.String()
+	if v, ok := desc.Annotations["config.digest"]; ok {
+		resp["containerimage.config.digest"] = v
+	}
 	return resp, nil
 }
 

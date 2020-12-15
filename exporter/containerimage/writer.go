@@ -56,7 +56,15 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 		if err != nil {
 			return nil, err
 		}
-		return ic.commitDistributionManifest(ctx, inp.Ref, inp.Metadata[exptypes.ExporterImageConfigKey], &remotes[0], oci, inp.Metadata[exptypes.ExporterInlineCache])
+		mfstDesc, configDesc, err := ic.commitDistributionManifest(ctx, inp.Ref, inp.Metadata[exptypes.ExporterImageConfigKey], &remotes[0], oci, inp.Metadata[exptypes.ExporterInlineCache])
+		if err != nil {
+			return nil, err
+		}
+		if mfstDesc.Annotations == nil {
+			mfstDesc.Annotations = make(map[string]string)
+		}
+		mfstDesc.Annotations["config.digest"] = configDesc.Digest.String()
+		return mfstDesc, nil
 	}
 
 	var p exptypes.Platforms
@@ -108,7 +116,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 		}
 		config := inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterImageConfigKey, p.ID)]
 
-		desc, err := ic.commitDistributionManifest(ctx, r, config, &remotes[remotesMap[p.ID]], oci, inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterInlineCache, p.ID)])
+		desc, _, err := ic.commitDistributionManifest(ctx, r, config, &remotes[remotesMap[p.ID]], oci, inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterInlineCache, p.ID)])
 		if err != nil {
 			return nil, err
 		}
@@ -169,12 +177,12 @@ func (ic *ImageWriter) exportLayers(ctx context.Context, compressionType compres
 	return out, nil
 }
 
-func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache.ImmutableRef, config []byte, remote *solver.Remote, oci bool, inlineCache []byte) (*ocispec.Descriptor, error) {
+func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache.ImmutableRef, config []byte, remote *solver.Remote, oci bool, inlineCache []byte) (*ocispec.Descriptor, *ocispec.Descriptor, error) {
 	if len(config) == 0 {
 		var err error
 		config, err = emptyImageConfig()
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
@@ -186,14 +194,14 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache
 
 	history, err := parseHistoryFromConfig(config)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	remote, history = normalizeLayersAndHistory(remote, history, ref, oci)
 
 	config, err = patchImageConfig(config, remote.Descriptors, history, inlineCache)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var (
@@ -251,7 +259,7 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache
 
 	mfstJSON, err := json.MarshalIndent(mfst, "", "   ")
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to marshal manifest")
+		return nil, nil, errors.Wrap(err, "failed to marshal manifest")
 	}
 
 	mfstDigest := digest.FromBytes(mfstJSON)
@@ -262,7 +270,7 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache
 	mfstDone := oneOffProgress(ctx, "exporting manifest "+mfstDigest.String())
 
 	if err := content.WriteBlob(ctx, ic.opt.ContentStore, mfstDigest.String(), bytes.NewReader(mfstJSON), mfstDesc, content.WithLabels((labels))); err != nil {
-		return nil, mfstDone(errors.Wrapf(err, "error writing manifest blob %s", mfstDigest))
+		return nil, nil, mfstDone(errors.Wrapf(err, "error writing manifest blob %s", mfstDigest))
 	}
 	mfstDone(nil)
 
@@ -274,7 +282,7 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache
 	configDone := oneOffProgress(ctx, "exporting config "+configDigest.String())
 
 	if err := content.WriteBlob(ctx, ic.opt.ContentStore, configDigest.String(), bytes.NewReader(config), configDesc); err != nil {
-		return nil, configDone(errors.Wrap(err, "error writing config blob"))
+		return nil, nil, configDone(errors.Wrap(err, "error writing config blob"))
 	}
 	configDone(nil)
 
@@ -282,7 +290,7 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache
 		Digest:    mfstDigest,
 		Size:      int64(len(mfstJSON)),
 		MediaType: manifestType,
-	}, nil
+	}, &configDesc, nil
 }
 
 func (ic *ImageWriter) ContentStore() content.Store {
