@@ -28,12 +28,16 @@ buildxCmd() {
   elif buildx version >/dev/null 2>&1; then
     set -x
     buildx "$@" $progressFlag
-  elif docker version >/dev/null 2>&1; then
-    set -x
-    DOCKER_BUILDKIT=1 docker "$@" $progressFlag
   else
-    echo >&2 "ERROR: Please enable DOCKER_BUILDKIT or install standalone buildx"
-    exit 1
+    topdir="$(realpath $(dirname "$0")/..)"
+    if [ ! -x "${topdir}/bin/buildx" ]; then
+      set -x
+      "${topdir}/hack/install-buildx"
+    fi
+    set -x
+    bootstrapName="moby-buildkit"
+    "${topdir}/hack/bootstrap-buildx" "${bootstrapName}"
+    BUILDX_BUILDER="${bootstrapName}" "${topdir}/bin/buildx" "$@" $progressFlag
   fi
 }
 
