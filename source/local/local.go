@@ -180,8 +180,8 @@ func (ls *localSourceHandler) snapshot(ctx context.Context, s session.Group, cal
 		ProgressCb:       newProgressHandler(ctx, "transferring "+ls.src.Name+":"),
 	}
 
-	if idmap := mount.IdentityMapping(); idmap != nil {
-		opt.Filter = func(p string, stat *fstypes.Stat) bool {
+	opt.Filter = func(p string, stat *fstypes.Stat) bool {
+		if idmap := mount.IdentityMapping(); idmap != nil {
 			identity, err := idmap.ToHost(idtools.Identity{
 				UID: int(stat.Uid),
 				GID: int(stat.Gid),
@@ -191,8 +191,14 @@ func (ls *localSourceHandler) snapshot(ctx context.Context, s session.Group, cal
 			}
 			stat.Uid = uint32(identity.UID)
 			stat.Gid = uint32(identity.GID)
-			return true
 		}
+		// whatever permissions the user has, give them to group and others as well
+		// this matches behavior of gitsource, given that umask is 0
+		// ...??XXX?????? -> ...0000000XXX
+		umode := (stat.Mode & 0700) >> 6
+		// ...???XXX?????? -> ...???000000000 -> ...???000000XXX -> ...???000XXXXXX -> ...???XXXXXXXXX
+		stat.Mode = (stat.Mode ^ (stat.Mode & 0777)) | umode | (umode << 3) | (umode << 6)
+		return true
 	}
 
 	if err := filesync.FSSync(ctx, caller, opt); err != nil {
