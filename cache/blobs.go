@@ -219,6 +219,7 @@ func (sr *immutableRef) setBlob(ctx context.Context, desc ocispec.Descriptor) er
 	queueBlobChainID(sr.md, blobChainID.String())
 	queueMediaType(sr.md, desc.MediaType)
 	queueBlobSize(sr.md, desc.Size)
+	queueAnnotations(sr.md, desc.Annotations)
 	if err := sr.md.Commit(); err != nil {
 		return err
 	}

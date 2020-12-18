@@ -250,6 +250,7 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispec.Descriptor, 
 	queueBlobOnly(rec.md, blobOnly)
 	queueMediaType(rec.md, desc.MediaType)
 	queueBlobSize(rec.md, desc.Size)
+	queueAnnotations(rec.md, desc.Annotations)
 	queueCommitted(rec.md)
 
 	if err := rec.md.Commit(); err != nil {

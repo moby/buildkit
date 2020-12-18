@@ -57,6 +57,7 @@ type RefInfo struct {
 	Blob        digest.Digest
 	MediaType   string
 	Extracted   bool
+	Annotations map[string]string
 }
 
 type MutableRef interface {
@@ -333,6 +334,7 @@ func (sr *immutableRef) Info() RefInfo {
 		BlobChainID: digest.Digest(getBlobChainID(sr.md)),
 		SnapshotID:  getSnapshotID(sr.md),
 		Extracted:   !getBlobOnly(sr.md),
+		Annotations: getAnnotations(sr.md),
 	}
 }
 
@@ -341,7 +343,7 @@ func (sr *immutableRef) ociDesc() (ocispec.Descriptor, error) {
 		Digest:      digest.Digest(getBlob(sr.md)),
 		Size:        getBlobSize(sr.md),
 		MediaType:   getMediaType(sr.md),
-		Annotations: make(map[string]string),
+		Annotations: getAnnotations(sr.md),
 	}
 
 	diffID := getDiffID(sr.md)

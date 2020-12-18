@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/moby/buildkit/cache/metadata"
@@ -34,6 +35,9 @@ const keyImageRefs = "cache.imageRefs"
 const keyBlobSize = "cache.blobsize"
 
 const keyDeleted = "cache.deleted"
+
+// keyAnnotations is used for persistcence of layer annotations returned from differ
+const keyAnnotations = "cache.annotations"
 
 func queueDiffID(si *metadata.StorageItem, str string) error {
 	if str == "" {
@@ -557,6 +561,41 @@ func queueRecordType(si *metadata.StorageItem, value client.UsageRecordType) err
 	}
 	si.Queue(func(b *bolt.Bucket) error {
 		return si.SetValue(b, keyRecordType, v)
+	})
+	return nil
+}
+
+func getAnnotations(si *metadata.StorageItem) map[string]string {
+	mEmpty := make(map[string]string, 0)
+	v := si.Get(keyAnnotations)
+	if v == nil {
+		return mEmpty
+	}
+	var str string
+	if err := v.Unmarshal(&str); err != nil {
+		return mEmpty
+	}
+	m := make(map[string]string)
+	if err := json.Unmarshal([]byte(str), &m); err != nil {
+		return mEmpty
+	}
+	return m
+}
+
+func queueAnnotations(si *metadata.StorageItem, m map[string]string) error {
+	if len(m) == 0 {
+		return nil
+	}
+	b, err := json.Marshal(m)
+	if err != nil {
+		return err
+	}
+	v, err := metadata.NewValue(string(b))
+	if err != nil {
+		return errors.Wrap(err, "failed to create annotations value")
+	}
+	si.Queue(func(b *bolt.Bucket) error {
+		return si.SetValue(b, keyAnnotations, v)
 	})
 	return nil
 }
