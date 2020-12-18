@@ -214,13 +214,13 @@ func ft(tsec uint64, tnsec uint32) float64 {
 
 // Returned by LOOKUP
 func (o *EntryOut) string() string {
-	return fmt.Sprintf("{i%d g%d tE=%gs tA=%gs %v}",
+	return fmt.Sprintf("{n%d g%d tE=%gs tA=%gs %v}",
 		o.NodeId, o.Generation, ft(o.EntryValid, o.EntryValidNsec),
 		ft(o.AttrValid, o.AttrValidNsec), &o.Attr)
 }
 
 func (o *CreateOut) string() string {
-	return fmt.Sprintf("{i%d g%d %v %v}", o.NodeId, o.Generation, &o.EntryOut, &o.OpenOut)
+	return fmt.Sprintf("{n%d g%d %v %v}", o.NodeId, o.Generation, &o.EntryOut, &o.OpenOut)
 }
 
 func (o *StatfsOut) string() string {
@@ -243,11 +243,11 @@ func (o *NotifyInvalDeleteOut) string() string {
 }
 
 func (o *NotifyStoreOut) string() string {
-	return fmt.Sprintf("{i%d [%d +%d)}", o.Nodeid, o.Offset, o.Size)
+	return fmt.Sprintf("{n%d [%d +%d)}", o.Nodeid, o.Offset, o.Size)
 }
 
 func (o *NotifyRetrieveOut) string() string {
-	return fmt.Sprintf("{> %d: i%d [%d +%d)}", o.NotifyUnique, o.Nodeid, o.Offset, o.Size)
+	return fmt.Sprintf("{> %d: n%d [%d +%d)}", o.NotifyUnique, o.Nodeid, o.Offset, o.Size)
 }
 
 func (i *NotifyRetrieveIn) string() string {
@@ -260,7 +260,7 @@ func (f *FallocateIn) string() string {
 }
 
 func (f *LinkIn) string() string {
-	return fmt.Sprintf("{Oldnodeid: %d}", f.Oldnodeid)
+	return fmt.Sprintf("{Oldnodeid: n%d}", f.Oldnodeid)
 }
 
 func (o *WriteOut) string() string {
@@ -268,7 +268,7 @@ func (o *WriteOut) string() string {
 
 }
 func (i *CopyFileRangeIn) string() string {
-	return fmt.Sprintf("{Fh %d [%d +%d) => i%d Fh %d [%d, %d)}",
+	return fmt.Sprintf("{Fh %d [%d +%d) => n%d Fh %d [%d, %d)}",
 		i.FhIn, i.OffIn, i.Len, i.NodeIdOut, i.FhOut, i.OffOut, i.Len)
 }
 

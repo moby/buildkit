@@ -9,11 +9,11 @@ require (
 	github.com/Microsoft/hcsshim v0.8.10
 	github.com/codahale/hdrhistogram v0.0.0-20160425231609-f8ad88b59a58 // indirect
 	github.com/containerd/console v1.0.1
-	github.com/containerd/containerd v1.4.1-0.20201117152358-0edc412565dc
-	github.com/containerd/continuity v0.0.0-20200710164510-efbc4488d8fe
+	github.com/containerd/containerd v1.4.1-0.20201215193253-e922d5553d12
+	github.com/containerd/continuity v0.0.0-20201208142359-180525291bb7
 	github.com/containerd/go-cni v1.0.1
 	github.com/containerd/go-runc v0.0.0-20201020171139-16b287bc67d0
-	github.com/containerd/stargz-snapshotter v0.2.0
+	github.com/containerd/stargz-snapshotter v0.2.1-0.20201217071531-2b97b583765b
 	github.com/containerd/typeurl v1.0.1
 	github.com/coreos/go-systemd/v22 v22.1.0
 	github.com/docker/cli v20.10.0-beta1.0.20201029214301-1d20b15adc38+incompatible
@@ -22,11 +22,11 @@ require (
 	github.com/docker/go-connections v0.4.0
 	github.com/docker/libnetwork v0.8.0-dev.2.0.20200917202933-d0951081b35f
 	github.com/gofrs/flock v0.7.3
-	github.com/gogo/googleapis v1.3.2
+	github.com/gogo/googleapis v1.4.0
 	github.com/gogo/protobuf v1.3.1
 	// protobuf: the actual version is replaced in replace()
-	github.com/golang/protobuf v1.4.2
-	github.com/google/go-cmp v0.4.1
+	github.com/golang/protobuf v1.4.3
+	github.com/google/go-cmp v0.5.1
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/gorilla/mux v1.8.0 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.2.0
@@ -61,15 +61,17 @@ require (
 	go.etcd.io/bbolt v1.3.5
 	golang.org/x/crypto v0.0.0-20201117144127-c1f2f97bffc9
 	golang.org/x/net v0.0.0-20200707034311-ab3426394381
-	golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208
-	golang.org/x/sys v0.0.0-20201013081832-0aaa2718063a
+	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a
+	golang.org/x/sys v0.0.0-20201202213521-69691e467435
 	golang.org/x/time v0.0.0-20200416051211-89c76fbcd5d1
 	// genproto: the actual version is replaced in replace()
 	google.golang.org/genproto v0.0.0-20200527145253-8367513e4ece
-	google.golang.org/grpc v1.29.1
+	google.golang.org/grpc v1.30.0
 )
 
 replace (
+	// estargz: needs this replace because stargz-snapshotter git repo has two go.mod modules.
+	github.com/containerd/stargz-snapshotter/estargz => github.com/containerd/stargz-snapshotter/estargz v0.0.0-20201217071531-2b97b583765b
 	// protobuf: corresponds to containerd
 	github.com/golang/protobuf => github.com/golang/protobuf v1.3.5
 	github.com/hashicorp/go-immutable-radix => github.com/tonistiigi/go-immutable-radix v0.0.0-20170803185627-826af9ccf0fe

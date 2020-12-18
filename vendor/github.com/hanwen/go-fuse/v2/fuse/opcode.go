@@ -314,7 +314,7 @@ func doBatchForget(server *Server, req *request) {
 	forgets := *(*[]_ForgetOne)(unsafe.Pointer(h))
 	for i, f := range forgets {
 		if server.opts.Debug {
-			log.Printf("doBatchForget: rx %d %d/%d: FORGET i%d {Nlookup=%d}",
+			log.Printf("doBatchForget: rx %d %d/%d: FORGET n%d {Nlookup=%d}",
 				req.inHeader.Unique, i+1, len(forgets), f.NodeId, f.Nlookup)
 		}
 		if f.NodeId == pollHackInode {

@@ -36,10 +36,17 @@ func (d DirEntry) String() string {
 // DirEntryList holds the return value for READDIR and READDIRPLUS
 // opcodes.
 type DirEntryList struct {
-	buf        []byte
-	size       int      // capacity of the underlying buffer
-	offset     uint64   // entry count (NOT a byte offset)
-	lastDirent *_Dirent // pointer to the last serialized _Dirent. Used by FixMode().
+	buf []byte
+	// capacity of the underlying buffer
+	size int
+	// offset is the requested location in the directory. go-fuse
+	// currently counts in number of directory entries, but this is an
+	// implementation detail and may change in the future.
+	// If `offset` and `fs.fileEntry.dirOffset` disagree, then a
+	// directory seek has taken place.
+	offset uint64
+	// pointer to the last serialized _Dirent. Used by FixMode().
+	lastDirent *_Dirent
 }
 
 // NewDirEntryList creates a DirEntryList with the given data buffer
