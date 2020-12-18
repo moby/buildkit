@@ -135,6 +135,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	dirs := make(map[string]bool)
 	images := make(map[string]bool)
 	shouldPush := make(map[string]bool)
+	insecurePush := make(map[string]bool)
 	allImages := make(map[string]bool) // images + shouldPush union
 	expSrcs := make(map[string]exporter.Source)
 	for k, ref := range src.Refs {
@@ -155,6 +156,9 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 		if string(expMd["export-image-push"]) == "true" {
 			allImages[k] = true
 			shouldPush[k] = true
+		}
+		if string(expMd["insecure-push"]) == "true" {
+			insecurePush[k] = true
 		}
 		inlineCache, ok := src.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterInlineCache, k)]
 		if ok {
@@ -266,7 +270,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 					err := push.Push(
 						ctx, e.opt.SessionManager, sessionID, mprovider,
 						e.opt.ImageWriter.ContentStore(), descs[k].Digest,
-						name, false, e.opt.RegistryHosts, false, annotations)
+						name, insecurePush[k], e.opt.RegistryHosts, false, annotations)
 					if err != nil {
 						return nil, err
 					}
