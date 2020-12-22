@@ -212,7 +212,7 @@ func diffDirChanges(ctx context.Context, changeFn ChangeFunc, base string, o *di
 		// This block is here to ensure the change is recorded even if the
 		// modify time, mode and size of the parent directory in the rw and ro layers are all equal.
 		// Check https://github.com/docker/docker/pull/13590 for details.
-		if f.IsDir() {
+		if f != nil && f.IsDir() {
 			changedDirs[path] = struct{}{}
 		}
 		if kind == ChangeKindAdd || kind == ChangeKindDelete {
