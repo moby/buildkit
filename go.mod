@@ -10,7 +10,7 @@ require (
 	github.com/codahale/hdrhistogram v0.0.0-20160425231609-f8ad88b59a58 // indirect
 	github.com/containerd/console v1.0.1
 	github.com/containerd/containerd v1.4.1-0.20201117152358-0edc412565dc
-	github.com/containerd/continuity v0.0.0-20200710164510-efbc4488d8fe
+	github.com/containerd/continuity v0.0.0-20201208142359-180525291bb7
 	github.com/containerd/go-cni v1.0.1
 	github.com/containerd/go-runc v0.0.0-20201020171139-16b287bc67d0
 	github.com/containerd/stargz-snapshotter v0.2.0
