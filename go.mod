@@ -9,7 +9,7 @@ require (
 	github.com/Microsoft/hcsshim v0.8.10
 	github.com/codahale/hdrhistogram v0.0.0-20160425231609-f8ad88b59a58 // indirect
 	github.com/containerd/console v1.0.1
-	github.com/containerd/containerd v1.4.1-0.20201117152358-0edc412565dc
+	github.com/containerd/containerd v1.4.1-0.20201221152511-dc207b654da0
 	github.com/containerd/continuity v0.0.0-20201208142359-180525291bb7
 	github.com/containerd/go-cni v1.0.1
 	github.com/containerd/go-runc v0.0.0-20201020171139-16b287bc67d0
@@ -22,11 +22,12 @@ require (
 	github.com/docker/go-connections v0.4.0
 	github.com/docker/libnetwork v0.8.0-dev.2.0.20200917202933-d0951081b35f
 	github.com/gofrs/flock v0.7.3
-	github.com/gogo/googleapis v1.3.2
+	// googleapis: the actual version is replaced in replace()
+	github.com/gogo/googleapis v1.4.0
 	github.com/gogo/protobuf v1.3.1
 	// protobuf: the actual version is replaced in replace()
-	github.com/golang/protobuf v1.4.2
-	github.com/google/go-cmp v0.4.1
+	github.com/golang/protobuf v1.4.3
+	github.com/google/go-cmp v0.5.1
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/gorilla/mux v1.8.0 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.2.0
@@ -66,14 +67,19 @@ require (
 	golang.org/x/time v0.0.0-20200416051211-89c76fbcd5d1
 	// genproto: the actual version is replaced in replace()
 	google.golang.org/genproto v0.0.0-20200527145253-8367513e4ece
-	google.golang.org/grpc v1.29.1
+	// grpc: the actual version is replaced in replace()
+	google.golang.org/grpc v1.30.0
 )
 
 replace (
-	// protobuf: corresponds to containerd
+	// Replace rules copied from github.com/containerd/containerd
+	github.com/gogo/googleapis => github.com/gogo/googleapis v1.3.2
 	github.com/golang/protobuf => github.com/golang/protobuf v1.3.5
+
 	github.com/hashicorp/go-immutable-radix => github.com/tonistiigi/go-immutable-radix v0.0.0-20170803185627-826af9ccf0fe
 	github.com/jaguilar/vt100 => github.com/tonistiigi/vt100 v0.0.0-20190402012908-ad4c4a574305
 	// genproto: corresponds to containerd
 	google.golang.org/genproto => google.golang.org/genproto v0.0.0-20200224152610-e50cd9704f63
+	// grpc: note: containerd uses v1.27.1 replace rule
+	google.golang.org/grpc => google.golang.org/grpc v1.29.1
 )

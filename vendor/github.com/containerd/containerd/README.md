@@ -44,7 +44,7 @@ If you are interested in trying out containerd see our example at [Getting Start
 There are nightly builds available for download [here](https://github.com/containerd/containerd/actions?query=workflow%3ANightly).
 Binaries are generated from `master` branch every night for `Linux` and `Windows`.
 
-Please be aware: nightly builds might have critical bugs, it's not recommended for use in prodution and no support provided.
+Please be aware: nightly builds might have critical bugs, it's not recommended for use in production and no support provided.
 
 ## Runtime Requirements
 
@@ -140,7 +140,7 @@ redis, err := client.NewContainer(context, "redis-master", containerd.WithNewSpe
 
 ### Root Filesystems
 
-containerd allows you to use overlay or snapshot filesystems with your containers.  It comes with builtin support for overlayfs and btrfs.
+containerd allows you to use overlay or snapshot filesystems with your containers.  It comes with built in support for overlayfs and btrfs.
 
 ```go
 // pull an image and unpack it into the configured snapshotter
@@ -171,7 +171,7 @@ Taking a container object and turning it into a runnable process on a system is 
 task, err := redis.NewTask(context, cio.NewCreator(cio.WithStdio))
 defer task.Delete(context)
 
-// the task is now running and has a pid that can be use to setup networking
+// the task is now running and has a pid that can be used to setup networking
 // or other runtime settings outside of containerd
 pid := task.Pid()
 
@@ -184,7 +184,7 @@ status, err := task.Wait(context)
 
 ### Checkpoint and Restore
 
-If you have [criu](https://criu.org/Main_Page) installed on your machine you can checkpoint and restore containers and their tasks.  This allow you to clone and/or live migrate containers to other machines.
+If you have [criu](https://criu.org/Main_Page) installed on your machine you can checkpoint and restore containers and their tasks.  This allows you to clone and/or live migrate containers to other machines.
 
 ```go
 // checkpoint the task then push it to a registry
@@ -248,6 +248,40 @@ the autocomplete/ctr file in your `.bashrc`, or manually like:
 ```
 $ source ./contrib/autocomplete/ctr
 ```
+
+### CRI
+
+`cri` is a [containerd](https://containerd.io/) plugin implementation of the Kubernetes [container runtime interface (CRI)](https://github.com/kubernetes/cri-api/blob/master/pkg/apis/runtime/v1alpha2/api.proto). With it, you are able to use containerd as the container runtime for a Kubernetes cluster.
+
+![cri](./docs/cri.png)
+
+#### CRI Status
+
+`cri` is a native plugin of containerd. Since containerd 1.1, the cri plugin is built into the release binaries and enabled by default.
+
+> **Note:** As of containerd 1.5, the `cri` plugin is merged into the containerd/containerd repo. For example, the source code previously stored under [`containerd/cri/pkg`](https://github.com/containerd/cri/tree/release/1.4/pkg)
+was moved to [`containerd/containerd/pkg/cri` package](https://github.com/containerd/containerd/tree/master/pkg/cri).
+
+The `cri` plugin has reached GA status, representing that it is:
+* Feature complete
+* Works with Kubernetes 1.10 and above
+* Passes all [CRI validation tests](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-node/cri-validation.md).
+* Passes all [node e2e tests](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-node/e2e-node-tests.md).
+* Passes all [e2e tests](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-testing/e2e-tests.md).
+
+See results on the containerd k8s [test dashboard](https://k8s-testgrid.appspot.com/sig-node-containerd)
+
+#### Validating Your `cri` Setup
+A Kubernetes incubator project, [cri-tools](https://github.com/kubernetes-sigs/cri-tools), includes programs for exercising CRI implementations. More importantly, cri-tools includes the program `critest` which is used for running [CRI Validation Testing](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-node/cri-validation.md).
+
+#### CRI Guides
+* [Bringing up a Production Quality Cluster on GCE](docs/cri/kube-up.md)
+* [Installing with Ansible and Kubeadm](contrib/ansible/README.md)
+* [For Non-Ansible Users, Preforming a Custom Installation Using the Release Tarball and Kubeadm](docs/installation.md)
+* [CRI Plugin Testing Guide](./docs/cri/testing.md)
+* [Debugging Pods, Containers, and Images with `crictl`](./docs/cri/crictl.md)
+* [Configuring `cri` Plugins](./docs/cri/config.md)
+* [Configuring containerd](https://github.com/containerd/containerd/blob/master/docs/man/containerd-config.8.md)
 
 #### Distribution of `ctr` autocomplete for bash and zsh
 

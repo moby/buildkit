@@ -7,6 +7,7 @@ github.com/Azure/go-ansiterm/winterm
 github.com/BurntSushi/toml
 # github.com/Microsoft/go-winio v0.4.15
 github.com/Microsoft/go-winio
+github.com/Microsoft/go-winio/backuptar
 github.com/Microsoft/go-winio/pkg/guid
 github.com/Microsoft/go-winio/vhd
 # github.com/Microsoft/hcsshim v0.8.10
@@ -33,11 +34,11 @@ github.com/Microsoft/hcsshim/internal/vmcompute
 github.com/Microsoft/hcsshim/internal/wclayer
 github.com/Microsoft/hcsshim/internal/winapi
 github.com/Microsoft/hcsshim/osversion
-# github.com/containerd/cgroups v0.0.0-20200710171044-318312a37340
+# github.com/containerd/cgroups v0.0.0-20200824123100-0b889c03f102
 github.com/containerd/cgroups/stats/v1
 # github.com/containerd/console v1.0.1
 github.com/containerd/console
-# github.com/containerd/containerd v1.4.1-0.20201117152358-0edc412565dc
+# github.com/containerd/containerd v1.4.1-0.20201221152511-dc207b654da0
 github.com/containerd/containerd
 github.com/containerd/containerd/api/services/containers/v1
 github.com/containerd/containerd/api/services/content/v1
@@ -132,7 +133,7 @@ github.com/containerd/stargz-snapshotter/snapshot
 github.com/containerd/stargz-snapshotter/task
 github.com/containerd/stargz-snapshotter/util/positionwatcher
 github.com/containerd/stargz-snapshotter/util/tempfiles
-# github.com/containerd/ttrpc v1.0.1
+# github.com/containerd/ttrpc v1.0.2
 github.com/containerd/ttrpc
 # github.com/containerd/typeurl v1.0.1
 github.com/containerd/typeurl
@@ -216,7 +217,7 @@ github.com/docker/libnetwork/resolvconf/dns
 github.com/docker/libnetwork/types
 # github.com/gofrs/flock v0.7.3
 github.com/gofrs/flock
-# github.com/gogo/googleapis v1.3.2
+# github.com/gogo/googleapis v1.4.0 => github.com/gogo/googleapis v1.3.2
 github.com/gogo/googleapis/google/rpc
 # github.com/gogo/protobuf v1.3.1
 github.com/gogo/protobuf/gogoproto
@@ -226,7 +227,7 @@ github.com/gogo/protobuf/sortkeys
 github.com/gogo/protobuf/types
 # github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e
 github.com/golang/groupcache/lru
-# github.com/golang/protobuf v1.4.2 => github.com/golang/protobuf v1.3.5
+# github.com/golang/protobuf v1.4.3 => github.com/golang/protobuf v1.3.5
 github.com/golang/protobuf/jsonpb
 github.com/golang/protobuf/proto
 github.com/golang/protobuf/ptypes
@@ -234,7 +235,7 @@ github.com/golang/protobuf/ptypes/any
 github.com/golang/protobuf/ptypes/duration
 github.com/golang/protobuf/ptypes/struct
 github.com/golang/protobuf/ptypes/timestamp
-# github.com/google/go-cmp v0.4.1
+# github.com/google/go-cmp v0.5.1
 github.com/google/go-cmp/cmp
 github.com/google/go-cmp/cmp/internal/diff
 github.com/google/go-cmp/cmp/internal/flags
@@ -266,6 +267,12 @@ github.com/hashicorp/golang-lru/simplelru
 github.com/ishidawataru/sctp
 # github.com/jaguilar/vt100 v0.0.0-20150826170717-2703a27b14ea => github.com/tonistiigi/vt100 v0.0.0-20190402012908-ad4c4a574305
 github.com/jaguilar/vt100
+# github.com/klauspost/compress v1.11.3
+github.com/klauspost/compress/fse
+github.com/klauspost/compress/huff0
+github.com/klauspost/compress/snappy
+github.com/klauspost/compress/zstd
+github.com/klauspost/compress/zstd/internal/xxhash
 # github.com/mitchellh/hashstructure v1.0.0
 github.com/mitchellh/hashstructure
 # github.com/moby/locker v1.0.1
@@ -289,7 +296,7 @@ github.com/opencontainers/image-spec/specs-go/v1
 github.com/opencontainers/runc/libcontainer/user
 # github.com/opencontainers/runtime-spec v1.0.3-0.20200728170252-4d89ac9fbff6
 github.com/opencontainers/runtime-spec/specs-go
-# github.com/opencontainers/selinux v1.6.0
+# github.com/opencontainers/selinux v1.8.0
 github.com/opencontainers/selinux/go-selinux
 github.com/opencontainers/selinux/go-selinux/label
 github.com/opencontainers/selinux/pkg/pwalk
@@ -341,7 +348,7 @@ github.com/uber/jaeger-client-go/utils
 github.com/uber/jaeger-lib/metrics
 # github.com/urfave/cli v1.22.2
 github.com/urfave/cli
-# github.com/willf/bitset v1.1.11-0.20200630133818-d5bec3311243
+# github.com/willf/bitset v1.1.11
 github.com/willf/bitset
 # go.etcd.io/bbolt v1.3.5
 go.etcd.io/bbolt
@@ -395,7 +402,7 @@ golang.org/x/text/unicode/norm
 golang.org/x/time/rate
 # google.golang.org/genproto v0.0.0-20200527145253-8367513e4ece => google.golang.org/genproto v0.0.0-20200224152610-e50cd9704f63
 google.golang.org/genproto/googleapis/rpc/status
-# google.golang.org/grpc v1.29.1
+# google.golang.org/grpc v1.30.0 => google.golang.org/grpc v1.29.1
 google.golang.org/grpc
 google.golang.org/grpc/attributes
 google.golang.org/grpc/backoff
