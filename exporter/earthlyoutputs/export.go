@@ -2,6 +2,7 @@ package earthlyoutputs
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -12,6 +13,7 @@ import (
 
 	archiveexporter "github.com/containerd/containerd/images/archive"
 	"github.com/containerd/containerd/leases"
+	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/docker/distribution/reference"
 	"github.com/docker/docker/pkg/idtools"
@@ -132,44 +134,152 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	for k, v := range e.meta {
 		src.Metadata[k] = v
 	}
-	dirs := make(map[string]bool)
-	images := make(map[string]bool)
-	shouldPush := make(map[string]bool)
-	insecurePush := make(map[string]bool)
-	allImages := make(map[string]bool) // images + shouldPush union
-	expSrcs := make(map[string]exporter.Source)
+	localExport := make(map[string]bool)              // imgName -> true/false
+	shouldPush := make(map[string]bool)               // imgName -> true/false
+	insecurePush := make(map[string]bool)             // imgName -> true/false
+	plats := make(map[string][]exptypes.Platform)     // imgName -> []platform
+	imageExpSrcs := make(map[string]*exporter.Source) // imgName -> expSrc
+	var dirExpSrcs []*exporter.Source
 	for k, ref := range src.Refs {
-		expMd := make(map[string][]byte)
+		simpleMd := make(map[string][]byte)
 		mdPrefix := fmt.Sprintf("ref/%s/", k)
 		for mdK, mdV := range src.Metadata {
 			if strings.HasPrefix(mdK, mdPrefix) {
-				expMd[strings.TrimPrefix(mdK, mdPrefix)] = mdV
+				simpleMd[strings.TrimPrefix(mdK, mdPrefix)] = mdV
 			}
 		}
-		if string(expMd["export-image"]) == "true" {
-			allImages[k] = true
-			images[k] = true
-		}
-		if string(expMd["export-dir"]) == "true" {
-			dirs[k] = true
-		}
-		if string(expMd["export-image-push"]) == "true" {
-			allImages[k] = true
-			shouldPush[k] = true
-		}
-		if string(expMd["insecure-push"]) == "true" {
-			insecurePush[k] = true
-		}
-		inlineCache, ok := src.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterInlineCache, k)]
+		inlineCacheK := fmt.Sprintf("%s/%s", exptypes.ExporterInlineCache, k)
+		inlineCache, ok := src.Metadata[inlineCacheK]
 		if ok {
-			expMd[exptypes.ExporterInlineCache] = inlineCache
+			simpleMd[exptypes.ExporterInlineCache] = inlineCache
 		}
-		expSrc := exporter.Source{
-			Ref:      ref,
-			Refs:     map[string]cache.ImmutableRef{},
-			Metadata: expMd,
+
+		le := false
+		isImage := false
+		if string(simpleMd["export-image"]) == "true" {
+			isImage = true
+			le = true
 		}
-		expSrcs[k] = expSrc
+		sp := false
+		if string(simpleMd["export-image-push"]) == "true" {
+			isImage = true
+			sp = true
+		}
+		ip := false
+		if string(simpleMd["insecure-push"]) == "true" {
+			ip = true
+		}
+		if string(simpleMd["export-dir"]) == "true" {
+			expSrc := &exporter.Source{
+				Ref:      ref,
+				Refs:     map[string]cache.ImmutableRef{},
+				Metadata: simpleMd,
+			}
+			dirExpSrcs = append(dirExpSrcs, expSrc)
+		}
+		if isImage {
+			name := ""
+			if n, ok := simpleMd["image.name"]; ok {
+				name = string(n)
+			}
+			if name == "" {
+				return nil, errors.Errorf("exporting image with no name")
+			}
+			imgNames, err := normalizedNames(name)
+			if err != nil {
+				return nil, err
+			}
+			if len(imgNames) == 0 {
+				return nil, errors.Errorf("exporting image with no name")
+			}
+			delete(simpleMd, "image.name")
+
+			platStr := string(simpleMd["platform"])
+			if platStr != "" {
+				p, err := platforms.Parse(platStr)
+				if err != nil {
+					return nil, errors.Wrap(err, "parse platform")
+				}
+				plat := exptypes.Platform{
+					ID:       platStr,
+					Platform: p,
+				}
+				for _, imgName := range imgNames {
+					plats[imgName] = append(plats[imgName], plat)
+				}
+			}
+
+			for _, imgName := range imgNames {
+				le2, ok := localExport[imgName]
+				if !ok {
+					localExport[imgName] = le
+					le2 = le
+				}
+				if le != le2 {
+					return nil, errors.Errorf("inconsistent local-export/no-local-export setting for image %s", imgName)
+				}
+
+				sp2, ok := shouldPush[imgName]
+				if !ok {
+					shouldPush[imgName] = sp
+					sp2 = sp
+				}
+				if sp != sp2 {
+					return nil, errors.Errorf("inconsistent push/no-push setting for image %s", imgName)
+				}
+
+				ip2, ok := insecurePush[imgName]
+				if !ok {
+					insecurePush[imgName] = ip
+					ip2 = ip
+				}
+				if ip != ip2 {
+					return nil, errors.Errorf("inconsistent secure/insecure setting for image %s", imgName)
+				}
+
+				expSrc, ok := imageExpSrcs[imgName]
+				if !ok {
+					expSrc = &exporter.Source{
+						Refs:     map[string]cache.ImmutableRef{},
+						Metadata: make(map[string][]byte),
+					}
+					expSrc.Metadata["image.name"] = []byte(imgName)
+					if le {
+						expSrc.Metadata["export-image"] = []byte("true")
+					}
+					if sp {
+						expSrc.Metadata["export-image-push"] = []byte("true")
+					}
+					if ip {
+						expSrc.Metadata["insecure-push"] = []byte("true")
+					}
+					imageExpSrcs[imgName] = expSrc
+				}
+				if platStr != "" {
+					expSrc.Refs[platStr] = ref
+				} else {
+					expSrc.Ref = ref
+				}
+
+				for mdK, mdV := range simpleMd {
+					if platStr != "" {
+						expSrc.Metadata[fmt.Sprintf("%s/%s", mdK, platStr)] = mdV
+					} else {
+						expSrc.Metadata[mdK] = mdV
+					}
+				}
+			}
+		}
+	}
+	for imgName, ps := range plats {
+		if len(ps) > 0 {
+			expPlats := &exptypes.Platforms{Platforms: ps}
+			dt, err := json.Marshal(expPlats)
+			if err != nil {
+				return nil, err
+			}
+			imageExpSrcs[imgName].Metadata[exptypes.ExporterPlatformsKey] = dt
+		}
 	}
 
 	ctx, done, err := leaseutil.WithLease(ctx, e.opt.LeaseManager, leaseutil.MakeTemporary)
@@ -178,11 +288,9 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	}
 	defer done(context.TODO())
 
-	descs := make(map[string]*ocispec.Descriptor)
-	names := make(map[string][]string)
-	for k := range allImages {
-		expSrc := expSrcs[k]
-		desc, err := e.opt.ImageWriter.Commit(ctx, expSrc, e.ociTypes, e.layerCompression, sessionID)
+	descs := make(map[string]*ocispec.Descriptor) // imgName -> ImageWriter.Commit desc
+	for imgName, expSrc := range imageExpSrcs {
+		desc, err := e.opt.ImageWriter.Commit(ctx, *expSrc, e.ociTypes, e.layerCompression, sessionID)
 		if err != nil {
 			return nil, err
 		}
@@ -193,17 +301,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 			desc.Annotations = map[string]string{}
 		}
 		desc.Annotations[ocispec.AnnotationCreated] = time.Now().UTC().Format(time.RFC3339)
-		descs[k] = desc
-
-		imgName := e.name
-		if n, ok := expSrc.Metadata["image.name"]; ok {
-			imgName = string(n)
-		}
-		imgNames, err := normalizedNames(imgName)
-		if err != nil {
-			return nil, err
-		}
-		names[k] = imgNames
+		descs[imgName] = desc
 	}
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -217,74 +315,71 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	resp := make(map[string]string)
 	// TODO(vladaionescu): Fill resp
 
-	writers := make(map[string]io.WriteCloser)
-	for k := range allImages {
+	writers := make(map[string]io.WriteCloser) // imgName -> writer
+	for imgName, expSrc := range imageExpSrcs {
 		md := make(map[string]string)
-		for mdK, mdV := range expSrcs[k].Metadata {
-			md[mdK] = string(mdV)
+		for mdK, mdV := range expSrc.Metadata {
+			md[safeGrpcMetaKey(mdK)] = string(mdV)
 		}
-		md["containerimage.digest"] = descs[k].Digest.String()
-		if len(names[k]) != 0 {
-			md["image.name"] = strings.Join(names[k], ",")
-		}
-
 		w, err := filesync.CopyFileWriter(ctx, md, caller)
 		if err != nil {
 			return nil, err
 		}
-		writers[k] = w
+		writers[imgName] = w
 	}
 	eg, egCtx := errgroup.WithContext(ctx)
-	for k := range dirs {
+	for _, expSrc := range dirExpSrcs {
 		md := make(map[string]string)
-		for mdK, mdV := range expSrcs[k].Metadata {
-			md[mdK] = string(mdV)
+		for mdK, mdV := range expSrc.Metadata {
+			md[safeGrpcMetaKey(mdK)] = string(mdV)
 		}
-		eg.Go(exportDirFunc(egCtx, md, caller, expSrcs[k].Ref, sessionID))
+		eg.Go(exportDirFunc(egCtx, md, caller, expSrc.Ref, sessionID))
 	}
 
-	mproviders := make(map[string]*contentutil.MultiProvider)
+	mproviders := make(map[string]*contentutil.MultiProvider) // imgName -> mprovider
 	annotations := map[digest.Digest]map[string]string{}
-	for k := range allImages {
-		expSrc := expSrcs[k]
+	for imgName, expSrc := range imageExpSrcs {
 		mprovider := contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
-		if expSrc.Ref != nil {
-			remote, err := expSrc.Ref.GetRemote(ctx, false, e.layerCompression, session.NewGroup(sessionID))
-			if err != nil {
-				return nil, err
-			}
-			// unlazy before tar export as the tar writer does not handle
-			// layer blobs in parallel (whereas unlazy does)
-			if unlazier, ok := remote.Provider.(cache.Unlazier); ok {
-				if err := unlazier.Unlazy(ctx); err != nil {
+		mproviders[imgName] = mprovider
+		if len(src.Refs) > 0 {
+			for _, r := range expSrc.Refs {
+				remote, err := r.GetRemote(ctx, false, e.layerCompression, session.NewGroup(sessionID))
+				if err != nil {
 					return nil, err
 				}
-			}
-			for _, desc := range remote.Descriptors {
-				mprovider.Add(desc.Digest, remote.Provider)
-				addAnnotations(annotations, desc)
-			}
-
-			if shouldPush[k] {
-				for _, name := range names[k] {
-					err := push.Push(
-						ctx, e.opt.SessionManager, sessionID, mprovider,
-						e.opt.ImageWriter.ContentStore(), descs[k].Digest,
-						name, insecurePush[k], e.opt.RegistryHosts, false, annotations)
-					if err != nil {
+				// unlazy before tar export as the tar writer does not handle
+				// layer blobs in parallel (whereas unlazy does)
+				if unlazier, ok := remote.Provider.(cache.Unlazier); ok {
+					if err := unlazier.Unlazy(ctx); err != nil {
 						return nil, err
 					}
 				}
+				for _, desc := range remote.Descriptors {
+					mprovider.Add(desc.Digest, remote.Provider)
+					addAnnotations(annotations, desc)
+				}
 			}
 		}
-		mproviders[k] = mprovider
+
+		if shouldPush[imgName] {
+			err := push.Push(
+				ctx, e.opt.SessionManager, sessionID, mprovider,
+				e.opt.ImageWriter.ContentStore(), descs[imgName].Digest,
+				imgName, insecurePush[imgName], e.opt.RegistryHosts, false, annotations)
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	report := oneOffProgress(ctx, "sending tarballs")
-	for k := range images {
-		w := writers[k]
-		desc := descs[k]
-		expOpts := []archiveexporter.ExportOpt{archiveexporter.WithManifest(*desc, names[k]...)}
+	for imgName, le := range localExport {
+		if !le {
+			continue
+		}
+		w := writers[imgName]
+		desc := descs[imgName]
+		expOpts := []archiveexporter.ExportOpt{archiveexporter.WithManifest(*desc, imgName)}
 		switch e.opt.Variant {
 		case VariantOCI:
 			expOpts = append(expOpts, archiveexporter.WithAllPlatforms(), archiveexporter.WithSkipDockerManifest())
@@ -292,7 +387,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 		default:
 			return nil, report(errors.Errorf("invalid variant %q", e.opt.Variant))
 		}
-		if err := archiveexporter.Export(ctx, mproviders[k], w, expOpts...); err != nil {
+		if err := archiveexporter.Export(ctx, mproviders[imgName], w, expOpts...); err != nil {
 			w.Close()
 			if grpcerrors.Code(err) == codes.AlreadyExists {
 				continue
@@ -458,4 +553,8 @@ func addAnnotations(m map[digest.Digest]map[string]string, desc ocispec.Descript
 	for k, v := range desc.Annotations {
 		a[k] = v
 	}
+}
+
+func safeGrpcMetaKey(k string) string {
+	return strings.ReplaceAll(k, "/", "-")
 }
