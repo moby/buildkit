@@ -12,7 +12,7 @@ If you are using Docker v18.09 or later, BuildKit mode can be enabled by setting
 
 BuildKit supports loading frontends dynamically from container images. Images for Dockerfile frontends are available at [`docker/dockerfile`](https://hub.docker.com/r/docker/dockerfile/tags/) repository.
 
-To use the external frontend, the first line of your Dockerfile needs to be `# syntax=docker/dockerfile:v1.2` pointing to the
+To use the external frontend, the first line of your Dockerfile needs to be `# syntax=docker/dockerfile:1.2` pointing to the
 specific image you want to use.
 
 BuildKit also ships with Dockerfile frontend builtin but it is recommended to use an external image to make sure that all
@@ -73,7 +73,7 @@ it if more storage space is needed.
 #### Example: cache Go packages
 
 ```dockerfile
-# syntax = docker/dockerfile:experimental
+# syntax = docker/dockerfile:1.2
 FROM golang
 ...
 RUN --mount=type=cache,target=/root/.cache/go-build go build ...
@@ -82,7 +82,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build go build ...
 #### Example: cache apt packages
 
 ```dockerfile
-# syntax = docker/dockerfile:experimental
+# syntax = docker/dockerfile:1.2
 FROM ubuntu
 RUN rm -f /etc/apt/apt.conf.d/docker-clean; echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
 RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/apt \
@@ -115,7 +115,7 @@ This mount type allows the build container to access secure files such as privat
 #### Example: access to S3
 
 ```dockerfile
-# syntax = docker/dockerfile:experimental
+# syntax = docker/dockerfile:1.2
 FROM python:3
 RUN pip install awscli
 RUN --mount=type=secret,id=aws,target=/root/.aws/credentials aws s3 cp s3://... ...
@@ -147,7 +147,7 @@ This mount type allows the build container to access SSH keys via SSH agents, wi
 #### Example: access to Gitlab
 
 ```dockerfile
-# syntax = docker/dockerfile:experimental
+# syntax = docker/dockerfile:1.2
 FROM alpine
 RUN apk add --no-cache openssh-client
 RUN mkdir -p -m 0700 ~/.ssh && ssh-keyscan gitlab.com >> ~/.ssh/known_hosts
@@ -193,7 +193,7 @@ Default sandbox mode can be activated via `--security=sandbox`, but that is no-o
 #### Example: check entitlements
 
 ```dockerfile
-# syntax = docker/dockerfile:experimental
+# syntax = docker/dockerfile:1.2-labs
 FROM ubuntu
 RUN --security=insecure cat /proc/self/status | grep CapEff
 ```
@@ -229,7 +229,7 @@ which needs to be enabled when starting the buildkitd daemon
 #### Example: isolating external effects
 
 ```dockerfile
-# syntax = docker/dockerfile:experimental
+# syntax = docker/dockerfile:1.2-labs
 FROM python:3.6
 ADD mypackage.tgz wheels/
 RUN --network=none pip install --find-links wheels mypackage
