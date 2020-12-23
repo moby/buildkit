@@ -62,7 +62,7 @@ require (
 	golang.org/x/crypto v0.0.0-20201117144127-c1f2f97bffc9
 	golang.org/x/net v0.0.0-20200707034311-ab3426394381
 	golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208
-	golang.org/x/sys v0.0.0-20201013081832-0aaa2718063a
+	golang.org/x/sys v0.0.0-20201202213521-69691e467435
 	golang.org/x/time v0.0.0-20200416051211-89c76fbcd5d1
 	// genproto: the actual version is replaced in replace()
 	google.golang.org/genproto v0.0.0-20200527145253-8367513e4ece
