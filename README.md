@@ -60,6 +60,7 @@ You don't need to read this document unless you want to use the full-featured st
     - [`--export-cache` options](#--export-cache-options)
     - [`--import-cache` options](#--import-cache-options)
   - [Consistent hashing](#consistent-hashing)
+- [Systemd socket activation](#systemd-socket-activation)
 - [Expose BuildKit as a TCP service](#expose-buildkit-as-a-tcp-service)
   - [Load balancing](#load-balancing)
 - [Containerizing BuildKit](#containerizing-buildkit)
@@ -125,6 +126,9 @@ The buildkitd daemon supports two worker backends: OCI (runc) and containerd.
 By default, the OCI (runc) worker is used. You can set `--oci-worker=false --containerd-worker=true` to use the containerd worker.
 
 We are open to adding more backends.
+
+To start the buildkitd daemon using systemd socket activiation, you can install the buildkit systemd unit files.
+See [Systemd socket activation](#systemd-socket-activation)
 
 The buildkitd daemon listens gRPC API on `/run/buildkit/buildkitd.sock` by default, but you can also use TCP sockets.
 See [Expose BuildKit as a TCP service](#expose-buildkit-as-a-tcp-service).
@@ -370,6 +374,10 @@ consider client-side load balancing using consistent hashing.
 
 See [`./examples/kubernetes/consistenthash`](./examples/kubernetes/consistenthash).
 
+## Systemd socket activation
+
+On Systemd based systems, you can communicate with the daemon via [Systemd socket activation](http://0pointer.de/blog/projects/socket-activation.html), use `buildkitd --addr fd://`.
+You can find examples of using Systemd socket activation with BuildKit and Systemd in [`./examples/systemd`](./examples/systemd).
 ## Expose BuildKit as a TCP service
 
 The `buildkitd` daemon can listen the gRPC API on a TCP socket.
