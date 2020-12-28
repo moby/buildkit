@@ -57,7 +57,6 @@ import (
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/stargz-snapshotter/cache"
 	"github.com/containerd/stargz-snapshotter/estargz"
-	"github.com/containerd/stargz-snapshotter/estargz/stargz"
 	"github.com/containerd/stargz-snapshotter/fs/config"
 	"github.com/containerd/stargz-snapshotter/fs/reader"
 	"github.com/containerd/stargz-snapshotter/fs/remote"
@@ -515,7 +514,7 @@ func (fs *filesystem) Unmount(ctx context.Context, mountpoint string) error {
 	return syscall.Unmount(mountpoint, syscall.MNT_FORCE)
 }
 
-func newLayer(desc ocispec.Descriptor, blob remote.Blob, vr reader.VerifiableReader, root *stargz.TOCEntry, prefetchTimeout time.Duration) *layer {
+func newLayer(desc ocispec.Descriptor, blob remote.Blob, vr *reader.VerifiableReader, root *estargz.TOCEntry, prefetchTimeout time.Duration) *layer {
 	return &layer{
 		desc:             desc,
 		blob:             blob,
@@ -529,35 +528,27 @@ func newLayer(desc ocispec.Descriptor, blob remote.Blob, vr reader.VerifiableRea
 type layer struct {
 	desc             ocispec.Descriptor
 	blob             remote.Blob
-	verifiableReader reader.VerifiableReader
-	root             *stargz.TOCEntry
+	verifiableReader *reader.VerifiableReader
+	root             *estargz.TOCEntry
 	prefetchWaiter   *waiter
 	prefetchTimeout  time.Duration
-	verifier         estargz.TOCEntryVerifier
+	r                reader.Reader
 }
 
 func (l *layer) reader() (reader.Reader, error) {
-	if l.verifier == nil {
+	if l.r == nil {
 		return nil, fmt.Errorf("layer hasn't been verified yet")
 	}
-	return l.verifiableReader(l.verifier), nil
+	return l.r, nil
 }
 
 func (l *layer) skipVerify() {
-	l.verifier = nopTOCEntryVerifier{}
+	l.r = l.verifiableReader.SkipVerify()
 }
 
-func (l *layer) verify(tocDigest digest.Digest) error {
-	v, err := estargz.VerifyStargzTOC(io.NewSectionReader(
-		readerAtFunc(func(p []byte, offset int64) (n int, err error) {
-			return l.blob.ReadAt(p, offset)
-		}), 0, l.blob.Size()), tocDigest)
-	if err != nil {
-		return err
-	}
-
-	l.verifier = v
-	return nil
+func (l *layer) verify(tocDigest digest.Digest) (err error) {
+	l.r, err = l.verifiableReader.VerifyTOC(tocDigest)
+	return
 }
 
 func (l *layer) prefetch(prefetchSize int64) error {
@@ -584,7 +575,7 @@ func (l *layer) prefetch(prefetchSize int64) error {
 	}
 
 	// Cache uncompressed contents of the prefetched range
-	if err := lr.Cache(reader.WithFilter(func(e *stargz.TOCEntry) bool {
+	if err := lr.Cache(reader.WithFilter(func(e *estargz.TOCEntry) bool {
 		return e.Offset < prefetchSize // Cache only prefetch target
 	})); err != nil {
 		return errors.Wrap(err, "failed to cache prefetched layer")
@@ -595,22 +586,6 @@ func (l *layer) prefetch(prefetchSize int64) error {
 
 func (l *layer) waitForPrefetchCompletion() error {
 	return l.prefetchWaiter.wait(l.prefetchTimeout)
-}
-
-type nopTOCEntryVerifier struct{}
-
-func (nev nopTOCEntryVerifier) Verifier(ce *stargz.TOCEntry) (digest.Verifier, error) {
-	return nopVerifier{}, nil
-}
-
-type nopVerifier struct{}
-
-func (nv nopVerifier) Write(p []byte) (n int, err error) {
-	return len(p), nil
-}
-
-func (nv nopVerifier) Verified() bool {
-	return true
 }
 
 func newWaiter() *waiter {
@@ -674,7 +649,7 @@ type node struct {
 	fusefs.Inode
 	fs     *filesystem
 	layer  fileReader
-	e      *stargz.TOCEntry
+	e      *estargz.TOCEntry
 	s      *state
 	root   string
 	opaque bool // true if this node is an overlayfs opaque directory
@@ -686,9 +661,9 @@ var _ = (fusefs.NodeReaddirer)((*node)(nil))
 
 func (n *node) Readdir(ctx context.Context) (fusefs.DirStream, syscall.Errno) {
 	var ents []fuse.DirEntry
-	whiteouts := map[string]*stargz.TOCEntry{}
+	whiteouts := map[string]*estargz.TOCEntry{}
 	normalEnts := map[string]bool{}
-	n.e.ForeachChild(func(baseName string, ent *stargz.TOCEntry) bool {
+	n.e.ForeachChild(func(baseName string, ent *estargz.TOCEntry) bool {
 
 		// We don't want to show prefetch landmarks in "/".
 		if n.e.Name == "" && (baseName == estargz.PrefetchLandmark || baseName == estargz.NoPrefetchLandmark) {
@@ -849,7 +824,7 @@ func (n *node) Statfs(ctx context.Context, out *fuse.StatfsOut) syscall.Errno {
 // file is a file abstraction which implements file handle in go-fuse.
 type file struct {
 	n  *node
-	e  *stargz.TOCEntry
+	e  *estargz.TOCEntry
 	ra io.ReaderAt
 }
 
@@ -874,7 +849,7 @@ func (f *file) Getattr(ctx context.Context, out *fuse.AttrOut) syscall.Errno {
 // whiteout is a whiteout abstraction compliant to overlayfs.
 type whiteout struct {
 	fusefs.Inode
-	e *stargz.TOCEntry
+	e *estargz.TOCEntry
 }
 
 var _ = (fusefs.NodeGetattrer)((*whiteout)(nil))
@@ -1046,12 +1021,12 @@ func (sf *statFile) updateStatUnlocked() ([]byte, error) {
 
 // inodeOfEnt calculates the inode number which is one-to-one conresspondence
 // with the TOCEntry insntance.
-func inodeOfEnt(e *stargz.TOCEntry) uint64 {
+func inodeOfEnt(e *estargz.TOCEntry) uint64 {
 	return uint64(uintptr(unsafe.Pointer(e)))
 }
 
 // entryToAttr converts stargz's TOCEntry to go-fuse's Attr.
-func entryToAttr(e *stargz.TOCEntry, out *fuse.Attr) fusefs.StableAttr {
+func entryToAttr(e *estargz.TOCEntry, out *fuse.Attr) fusefs.StableAttr {
 	out.Ino = inodeOfEnt(e)
 	out.Size = uint64(e.Size)
 	out.Blksize = blockSize
@@ -1080,7 +1055,7 @@ func entryToAttr(e *stargz.TOCEntry, out *fuse.Attr) fusefs.StableAttr {
 }
 
 // entryToWhAttr converts stargz's TOCEntry to go-fuse's Attr of whiteouts.
-func entryToWhAttr(e *stargz.TOCEntry, out *fuse.Attr) fusefs.StableAttr {
+func entryToWhAttr(e *estargz.TOCEntry, out *fuse.Attr) fusefs.StableAttr {
 	fi := e.Stat()
 	out.Ino = inodeOfEnt(e)
 	out.Size = 0
@@ -1170,7 +1145,7 @@ func statFileToAttr(sf *statFile, size uint64, out *fuse.Attr) fusefs.StableAttr
 }
 
 // modeOfEntry gets system's mode bits from TOCEntry
-func modeOfEntry(e *stargz.TOCEntry) uint32 {
+func modeOfEntry(e *estargz.TOCEntry) uint32 {
 	// Permission bits
 	res := uint32(e.Stat().Mode() & os.ModePerm)
 

@@ -34,7 +34,7 @@ import (
 
 	"github.com/containerd/stargz-snapshotter/cache"
 	"github.com/containerd/stargz-snapshotter/estargz"
-	"github.com/containerd/stargz-snapshotter/estargz/stargz"
+	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
@@ -42,18 +42,50 @@ import (
 
 type Reader interface {
 	OpenFile(name string) (io.ReaderAt, error)
-	Lookup(name string) (*stargz.TOCEntry, bool)
+	Lookup(name string) (*estargz.TOCEntry, bool)
 	Cache(opts ...CacheOption) error
 }
 
-// VerifiableReader is a function that produces a Reader with a given verifier.
-type VerifiableReader func(estargz.TOCEntryVerifier) Reader
+// VerifiableReader produces a Reader with a given verifier.
+type VerifiableReader struct {
+	r *reader
+}
+
+func (vr *VerifiableReader) SkipVerify() Reader {
+	vr.r.verifier = nopTOCEntryVerifier{}
+	return vr.r
+}
+
+func (vr *VerifiableReader) VerifyTOC(tocDigest digest.Digest) (Reader, error) {
+	v, err := vr.r.r.VerifyTOC(tocDigest)
+	if err != nil {
+		return nil, err
+	}
+	vr.r.verifier = v
+	return vr.r, nil
+}
+
+type nopTOCEntryVerifier struct{}
+
+func (nev nopTOCEntryVerifier) Verifier(ce *estargz.TOCEntry) (digest.Verifier, error) {
+	return nopVerifier{}, nil
+}
+
+type nopVerifier struct{}
+
+func (nv nopVerifier) Write(p []byte) (n int, err error) {
+	return len(p), nil
+}
+
+func (nv nopVerifier) Verified() bool {
+	return true
+}
 
 // NewReader creates a Reader based on the given stargz blob and cache implementation.
 // It returns VerifiableReader so the caller must provide a estargz.TOCEntryVerifier
 // to use for verifying file or chunk contained in this stargz blob.
-func NewReader(sr *io.SectionReader, cache cache.BlobCache) (VerifiableReader, *stargz.TOCEntry, error) {
-	r, err := stargz.Open(sr)
+func NewReader(sr *io.SectionReader, cache cache.BlobCache) (*VerifiableReader, *estargz.TOCEntry, error) {
+	r, err := estargz.Open(sr)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to parse stargz")
 	}
@@ -74,14 +106,11 @@ func NewReader(sr *io.SectionReader, cache cache.BlobCache) (VerifiableReader, *
 		},
 	}
 
-	return func(verifier estargz.TOCEntryVerifier) Reader {
-		vr.verifier = verifier
-		return vr
-	}, root, nil
+	return &VerifiableReader{vr}, root, nil
 }
 
 type reader struct {
-	r        *stargz.Reader
+	r        *estargz.Reader
 	sr       *io.SectionReader
 	cache    cache.BlobCache
 	bufPool  sync.Pool
@@ -107,7 +136,7 @@ func (gr *reader) OpenFile(name string) (io.ReaderAt, error) {
 	}, nil
 }
 
-func (gr *reader) Lookup(name string) (*stargz.TOCEntry, bool) {
+func (gr *reader) Lookup(name string) (*estargz.TOCEntry, bool) {
 	return gr.r.Lookup(name)
 }
 
@@ -119,7 +148,7 @@ func (gr *reader) Cache(opts ...CacheOption) (err error) {
 
 	r := gr.r
 	if cacheOpts.reader != nil {
-		if r, err = stargz.Open(cacheOpts.reader); err != nil {
+		if r, err = estargz.Open(cacheOpts.reader); err != nil {
 			return errors.Wrap(err, "failed to parse stargz")
 		}
 	}
@@ -128,7 +157,7 @@ func (gr *reader) Cache(opts ...CacheOption) (err error) {
 		return fmt.Errorf("failed to get a TOCEntry of the root")
 	}
 
-	filter := func(*stargz.TOCEntry) bool {
+	filter := func(*estargz.TOCEntry) bool {
 		return true
 	}
 	if cacheOpts.filter != nil {
@@ -143,8 +172,8 @@ func (gr *reader) Cache(opts ...CacheOption) (err error) {
 	return eg.Wait()
 }
 
-func (gr *reader) cacheWithReader(ctx context.Context, eg *errgroup.Group, sem *semaphore.Weighted, dir *stargz.TOCEntry, r *stargz.Reader, filter func(*stargz.TOCEntry) bool, opts ...cache.Option) (rErr error) {
-	dir.ForeachChild(func(_ string, e *stargz.TOCEntry) bool {
+func (gr *reader) cacheWithReader(ctx context.Context, eg *errgroup.Group, sem *semaphore.Weighted, dir *estargz.TOCEntry, r *estargz.Reader, filter func(*estargz.TOCEntry) bool, opts ...cache.Option) (rErr error) {
+	dir.ForeachChild(func(_ string, e *estargz.TOCEntry) bool {
 		if e.Type == "dir" {
 			// Walk through all files on this stargz file.
 
@@ -171,7 +200,7 @@ func (gr *reader) cacheWithReader(ctx context.Context, eg *errgroup.Group, sem *
 		} else if !filter(e) {
 			// This entry need to be filtered out
 			return true
-		} else if e.Name == stargz.TOCTarName {
+		} else if e.Name == estargz.TOCTarName {
 			// We don't need to cache TOC json file
 			return true
 		}
@@ -244,7 +273,7 @@ type file struct {
 	name   string
 	digest string
 	ra     io.ReaderAt
-	r      *stargz.Reader
+	r      *estargz.Reader
 	cache  cache.BlobCache
 	gr     *reader
 }
@@ -323,7 +352,7 @@ func (sf *file) ReadAt(p []byte, offset int64) (int, error) {
 	return nr, nil
 }
 
-func (sf *file) verify(p []byte, ce *stargz.TOCEntry) error {
+func (sf *file) verify(p []byte, ce *estargz.TOCEntry) error {
 	v, err := sf.gr.verifier.Verifier(ce)
 	if err != nil {
 		return errors.Wrapf(err, "verifier not found %q (offset:%d,size:%d)",
@@ -357,7 +386,7 @@ type CacheOption func(*cacheOptions)
 
 type cacheOptions struct {
 	cacheOpts []cache.Option
-	filter    func(*stargz.TOCEntry) bool
+	filter    func(*estargz.TOCEntry) bool
 	reader    *io.SectionReader
 }
 
@@ -367,7 +396,7 @@ func WithCacheOpts(cacheOpts ...cache.Option) CacheOption {
 	}
 }
 
-func WithFilter(filter func(*stargz.TOCEntry) bool) CacheOption {
+func WithFilter(filter func(*estargz.TOCEntry) bool) CacheOption {
 	return func(opts *cacheOptions) {
 		opts.filter = filter
 	}

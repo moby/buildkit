@@ -63,6 +63,11 @@ type Inode struct {
 	ops    InodeEmbedder
 	bridge *rawBridge
 
+	// The *Node ID* is an arbitrary uint64 identifier chosen by the FUSE library.
+	// It is used the identify *nodes* (files/directories/symlinks/...) in the
+	// communication between the FUSE library and the Linux kernel.
+	nodeId uint64
+
 	// Following data is mutable.
 
 	// file handles.
@@ -115,11 +120,12 @@ func (n *Inode) EmbeddedInode() *Inode {
 	return n
 }
 
-func initInode(n *Inode, ops InodeEmbedder, attr StableAttr, bridge *rawBridge, persistent bool) {
+func initInode(n *Inode, ops InodeEmbedder, attr StableAttr, bridge *rawBridge, persistent bool, nodeId uint64) {
 	n.ops = ops
 	n.stableAttr = attr
 	n.bridge = bridge
 	n.persistent = persistent
+	n.nodeId = nodeId
 	n.parents = make(map[parentData]struct{})
 	if attr.Mode == fuse.S_IFDIR {
 		n.children = make(map[string]*Inode)
@@ -128,7 +134,7 @@ func initInode(n *Inode, ops InodeEmbedder, attr StableAttr, bridge *rawBridge, 
 
 // Set node ID and mode in EntryOut
 func (n *Inode) setEntryOut(out *fuse.EntryOut) {
-	out.NodeId = n.stableAttr.Ino
+	out.NodeId = n.nodeId
 	out.Ino = n.stableAttr.Ino
 	out.Mode = (out.Attr.Mode & 07777) | n.stableAttr.Mode
 }
@@ -303,8 +309,8 @@ func (n *Inode) Path(root *Inode) string {
 
 	if root != nil && root != p {
 		deletedPlaceholder := fmt.Sprintf(".go-fuse.%d/deleted", rand.Uint64())
-		n.bridge.logf("warning: Inode.Path: inode i%d is orphaned, replacing segment with %q",
-			n.stableAttr.Ino, deletedPlaceholder)
+		n.bridge.logf("warning: Inode.Path: n%d is orphaned, replacing segment with %q",
+			n.nodeId, deletedPlaceholder)
 		// NOSUBMIT - should replace rather than append?
 		segments = append(segments, deletedPlaceholder)
 	}
@@ -329,7 +335,16 @@ func (n *Inode) Path(root *Inode) string {
 // but it could be also valid if only iparent is locked and ichild was just
 // created and only one goroutine keeps referencing it.
 func (iparent *Inode) setEntry(name string, ichild *Inode) {
-	ichild.parents[parentData{name, iparent}] = struct{}{}
+	newParent := parentData{name, iparent}
+	if ichild.stableAttr.Mode == syscall.S_IFDIR {
+		// Directories cannot have more than one parent. Clear the map.
+		// This special-case is neccessary because ichild may still have a
+		// parent that was forgotten (i.e. removed from bridge.inoMap).
+		for i := range ichild.parents {
+			delete(ichild.parents, i)
+		}
+	}
+	ichild.parents[newParent] = struct{}{}
 	iparent.children[name] = ichild
 	ichild.changeCounter++
 	iparent.changeCounter++
@@ -360,8 +375,8 @@ func (n *Inode) ForgetPersistent() {
 // NewInode returns an inode for the given InodeEmbedder. The mode
 // should be standard mode argument (eg. S_IFDIR). The inode number in
 // id.Ino argument is used to implement hard-links.  If it is given,
-// and another node with the same ID is known, that will node will be
-// returned, and the passed-in `node` is ignored.
+// and another node with the same ID is known, the new inode may be
+// ignored, and the old one used instead.
 func (n *Inode) NewInode(ctx context.Context, node InodeEmbedder, id StableAttr) *Inode {
 	return n.newInode(ctx, node, id, false)
 }
@@ -380,8 +395,9 @@ func (n *Inode) removeRef(nlookup uint64, dropPersistence bool) (forgotten bool,
 	n.mu.Lock()
 	if nlookup > 0 && dropPersistence {
 		log.Panic("only one allowed")
+	} else if nlookup > n.lookupCount {
+		log.Panicf("n%d lookupCount underflow: lookupCount=%d, decrement=%d", n.nodeId, n.lookupCount, nlookup)
 	} else if nlookup > 0 {
-
 		n.lookupCount -= nlookup
 		n.changeCounter++
 	} else if dropPersistence && n.persistent {
@@ -389,13 +405,22 @@ func (n *Inode) removeRef(nlookup uint64, dropPersistence bool) (forgotten bool,
 		n.changeCounter++
 	}
 
+	n.bridge.mu.Lock()
+	if n.lookupCount == 0 {
+		forgotten = true
+		// Dropping the node from inoMap guarantees that no new references to this node are
+		// handed out to the kernel, hence we can also safely delete it from nodeidMap.
+		delete(n.bridge.stableAttrs, n.stableAttr)
+		delete(n.bridge.kernelNodeIds, n.nodeId)
+	}
+	n.bridge.mu.Unlock()
+
 retry:
 	for {
 		lockme = append(lockme[:0], n)
 		parents = parents[:0]
 		nChange := n.changeCounter
 		live = n.lookupCount > 0 || len(n.children) > 0 || n.persistent
-		forgotten = n.lookupCount == 0
 		for p := range n.parents {
 			parents = append(parents, p)
 			lockme = append(lockme, p.parent)
@@ -415,6 +440,10 @@ retry:
 		}
 
 		for _, p := range parents {
+			if p.parent.children[p.name] != n {
+				// another node has replaced us already
+				continue
+			}
 			delete(p.parent.children, p.name)
 			p.parent.changeCounter++
 		}
@@ -422,12 +451,8 @@ retry:
 		n.changeCounter++
 
 		if n.lookupCount != 0 {
-			panic("lookupCount changed")
+			log.Panicf("n%d %p lookupCount changed: %d", n.nodeId, n, n.lookupCount)
 		}
-
-		n.bridge.mu.Lock()
-		delete(n.bridge.nodes, n.stableAttr.Ino)
-		n.bridge.mu.Unlock()
 
 		unlockNodes(lockme...)
 		break
@@ -712,7 +737,7 @@ retry:
 // tuple should be invalidated. On next access, a LOOKUP operation
 // will be started.
 func (n *Inode) NotifyEntry(name string) syscall.Errno {
-	status := n.bridge.server.EntryNotify(n.stableAttr.Ino, name)
+	status := n.bridge.server.EntryNotify(n.nodeId, name)
 	return syscall.Errno(status)
 }
 
@@ -721,7 +746,7 @@ func (n *Inode) NotifyEntry(name string) syscall.Errno {
 // to NotifyEntry, but also sends an event to inotify watchers.
 func (n *Inode) NotifyDelete(name string, child *Inode) syscall.Errno {
 	// XXX arg ordering?
-	return syscall.Errno(n.bridge.server.DeleteNotify(n.stableAttr.Ino, child.stableAttr.Ino, name))
+	return syscall.Errno(n.bridge.server.DeleteNotify(n.nodeId, child.nodeId, name))
 
 }
 
@@ -729,16 +754,16 @@ func (n *Inode) NotifyDelete(name string, child *Inode) syscall.Errno {
 // inode should be flushed from buffers.
 func (n *Inode) NotifyContent(off, sz int64) syscall.Errno {
 	// XXX how does this work for directories?
-	return syscall.Errno(n.bridge.server.InodeNotify(n.stableAttr.Ino, off, sz))
+	return syscall.Errno(n.bridge.server.InodeNotify(n.nodeId, off, sz))
 }
 
 // WriteCache stores data in the kernel cache.
 func (n *Inode) WriteCache(offset int64, data []byte) syscall.Errno {
-	return syscall.Errno(n.bridge.server.InodeNotifyStoreCache(n.stableAttr.Ino, offset, data))
+	return syscall.Errno(n.bridge.server.InodeNotifyStoreCache(n.nodeId, offset, data))
 }
 
 // ReadCache reads data from the kernel cache.
 func (n *Inode) ReadCache(offset int64, dest []byte) (count int, errno syscall.Errno) {
-	c, s := n.bridge.server.InodeRetrieveCache(n.stableAttr.Ino, offset, dest)
+	c, s := n.bridge.server.InodeRetrieveCache(n.nodeId, offset, dest)
 	return c, syscall.Errno(s)
 }
