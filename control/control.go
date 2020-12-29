@@ -2,6 +2,7 @@ package control
 
 import (
 	"context"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -244,9 +245,10 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 	}
 
 	var (
-		cacheExporter   remotecache.Exporter
-		cacheExportMode solver.CacheExportMode
-		cacheImports    []frontend.CacheOptionsEntry
+		cacheExporter        remotecache.Exporter
+		cacheExportMode      solver.CacheExportMode
+		cacheExportOnFailure bool
+		cacheImports         []frontend.CacheOptionsEntry
 	)
 	if len(req.Cache.Exports) > 1 {
 		// TODO(AkihiroSuda): this should be fairly easy
@@ -264,6 +266,10 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 			return nil, err
 		}
 		cacheExportMode = parseCacheExportMode(e.Attrs["mode"])
+		cacheExportOnFailure, err = strconv.ParseBool(e.Attrs["onfailure"])
+		if err != nil {
+			return nil, err
+		}
 	}
 	for _, im := range req.Cache.Imports {
 		cacheImports = append(cacheImports, frontend.CacheOptionsEntry{
@@ -279,9 +285,10 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		FrontendInputs: req.FrontendInputs,
 		CacheImports:   cacheImports,
 	}, llbsolver.ExporterRequest{
-		Exporter:        expi,
-		CacheExporter:   cacheExporter,
-		CacheExportMode: cacheExportMode,
+		Exporter:             expi,
+		CacheExporter:        cacheExporter,
+		CacheExportMode:      cacheExportMode,
+		CacheExportOnFailure: cacheExportOnFailure,
 	}, req.Entitlements)
 	if err != nil {
 		return nil, err

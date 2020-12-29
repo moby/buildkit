@@ -241,10 +241,11 @@ func (s *scheduler) build(ctx context.Context, edge Edge) (CachedResult, error) 
 
 	<-wait
 
-	if err := p.Receiver.Status().Err; err != nil {
-		return nil, err
+	st := p.Receiver.Status()
+	if es, ok := st.Value.(*edgeState); ok && es.result != nil {
+		return es.result.Clone(), st.Err
 	}
-	return p.Receiver.Status().Value.(*edgeState).result.Clone(), nil
+	return nil, st.Err
 }
 
 // newPipe creates a new request pipe between two edges

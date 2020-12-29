@@ -28,9 +28,10 @@ import (
 const keyEntitlements = "llb.entitlements"
 
 type ExporterRequest struct {
-	Exporter        exporter.ExporterInstance
-	CacheExporter   remotecache.Exporter
-	CacheExportMode solver.CacheExportMode
+	Exporter             exporter.ExporterInstance
+	CacheExporter        remotecache.Exporter
+	CacheExportMode      solver.CacheExportMode
+	CacheExportOnFailure bool
 }
 
 // ResolveWorkerFunc returns default worker for the temporary default non-distributed use cases
@@ -150,12 +151,10 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		})
 		return nil
 	})
-	if err := eg.Wait(); err != nil {
-		return nil, err
-	}
+	resolveErr := eg.Wait()
 
 	var exporterResponse map[string]string
-	if e := exp.Exporter; e != nil {
+	if e := exp.Exporter; resolveErr == nil && e != nil {
 		inp := exporter.Source{
 			Metadata: res.Metadata,
 		}
@@ -219,12 +218,12 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 
 	g := session.NewGroup(j.SessionID)
 	var cacheExporterResponse map[string]string
-	if e := exp.CacheExporter; e != nil {
+	if e := exp.CacheExporter; (resolveErr == nil || exp.CacheExportOnFailure) && e != nil {
 		if err := inBuilderContext(ctx, j, "exporting cache", "", func(ctx context.Context, _ session.Group) error {
 			prepareDone := oneOffProgress(ctx, "preparing build cache for export")
 			if err := res.EachRef(func(res solver.ResultProxy) error {
 				r, err := res.Result(ctx)
-				if err != nil {
+				if r == nil {
 					return err
 				}
 				// all keys have same export chain so exporting others is not needed
@@ -243,6 +242,10 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		}); err != nil {
 			return nil, err
 		}
+	}
+
+	if resolveErr != nil {
+		return nil, resolveErr
 	}
 
 	if exporterResponse == nil {

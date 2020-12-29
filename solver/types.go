@@ -97,6 +97,8 @@ type CacheExportOpt struct {
 	Mode CacheExportMode
 	// Session is the session group to client (for auth credentials etc)
 	Session session.Group
+	// OnFailure specifies whether caching should still occur post build failure
+	OnFailure bool
 }
 
 // CacheExporter can export the artifacts of the build chain

@@ -443,9 +443,13 @@ func (e *edge) processUpdate(upt pipe.Receiver) (depChanged bool) {
 				e.err = err
 			}
 		} else {
-			e.result = NewSharedCachedResult(upt.Status().Value.(CachedResult))
 			e.state = edgeStatusComplete
 		}
+
+		if cr, ok := upt.Status().Value.(CachedResult); ok {
+			e.result = NewSharedCachedResult(cr)
+		}
+
 		return true
 	}
 
@@ -891,6 +895,9 @@ func (e *edge) execOp(ctx context.Context) (interface{}, error) {
 	cacheKeys, inputs := e.commitOptions()
 	results, subExporters, err := e.op.Exec(ctx, toResultSlice(inputs))
 	if err != nil {
+		if len(e.deps) > 0 {
+			return e.deps[0].result.CachedResult, errors.WithStack(err)
+		}
 		return nil, errors.WithStack(err)
 	}
 

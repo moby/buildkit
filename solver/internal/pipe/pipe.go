@@ -80,11 +80,7 @@ func NewWithFunction(f func(context.Context) (interface{}, error)) (*Pipe, func(
 
 	return p, func() {
 		res, err := f(ctx)
-		if err != nil {
-			p.Sender.Finalize(nil, err)
-			return
-		}
-		p.Sender.Finalize(res, nil)
+		p.Sender.Finalize(res, err)
 	}
 }
 

@@ -103,7 +103,7 @@ func (b *llbBridge) loadResult(ctx context.Context, def *pb.Definition, cacheImp
 
 	res, err := b.builder.Build(ctx, edge)
 	if err != nil {
-		return nil, err
+		return res, err
 	}
 	wr, ok := res.Sys().(*worker.WorkerRef)
 	if !ok {
@@ -261,7 +261,7 @@ func (rp *resultProxy) Result(ctx context.Context) (res solver.CachedResult, err
 		return v, err
 	})
 	if r != nil {
-		return r.(solver.CachedResult), nil
+		return r.(solver.CachedResult), err
 	}
 	return nil, err
 }

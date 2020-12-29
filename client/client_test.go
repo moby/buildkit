@@ -91,6 +91,7 @@ func TestIntegration(t *testing.T) {
 		testReadonlyRootFS,
 		testBasicRegistryCacheImportExport,
 		testBasicLocalCacheImportExport,
+		testBasicLocalCacheImportExportOnFailure,
 		testCachedMounts,
 		testProxyEnv,
 		testLocalSymlinkEscape,
@@ -2445,6 +2446,56 @@ func testBasicLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
 		},
 	}
 	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{im}, []CacheOptionsEntry{ex})
+}
+
+func testBasicLocalCacheImportExportOnFailure(t *testing.T, sb integration.Sandbox) {
+	skipDockerd(t, sb)
+	requiresLinux(t)
+
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("busybox:latest")
+	st := llb.Scratch()
+
+	run := func(cmd string) {
+		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+	}
+
+	run(`sh -c "echo -n foobar > const"`)
+	run(`sh -c "cat /dev/urandom | head -c 100 | sha256sum > unique"`)
+	run(`sh -c "exit 1"`)
+
+	def, err := st.Marshal(context.TODO())
+	require.NoError(t, err)
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	cacheDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(cacheDir)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		CacheExports: []CacheOptionsEntry{{
+			Type: "local",
+			Attrs: map[string]string{
+				"dest":      cacheDir,
+				"onfailure": "true",
+			},
+		}},
+	}, nil)
+	require.Error(t, err)
+
+	_, err = os.Stat(filepath.Join(cacheDir, "blobs"))
+	require.NoError(t, err)
+
+	err = c.Prune(context.TODO(), nil, PruneAll)
+	require.NoError(t, err)
+
+	checkAllRemoved(t, c, sb)
 }
 
 func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
