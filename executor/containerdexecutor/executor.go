@@ -19,9 +19,9 @@ import (
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/executor/oci"
+	"github.com/moby/buildkit/frontend/gateway/errdefs"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/snapshot"
-	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/network"
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -380,7 +380,7 @@ func (w *containerdExecutor) runProcess(ctx context.Context, p containerd.Proces
 					ExitCode: status.ExitCode(),
 					Err:      status.Error(),
 				}
-				if status.ExitCode() == errdefs.ContainerdUnknownExitStatus && status.Error() != nil {
+				if status.ExitCode() == errdefs.UnknownExitStatus && status.Error() != nil {
 					exitErr.Err = errors.Wrap(status.Error(), "failure waiting for process")
 				}
 				select {
