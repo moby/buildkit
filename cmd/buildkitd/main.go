@@ -512,6 +512,8 @@ func getListener(addr string, uid, gid int, tlsConfig *tls.Config) (net.Listener
 			logrus.Warnf("TLS is disabled for %s", addr)
 		}
 		return sys.GetLocalListener(listenAddr, uid, gid)
+	case "fd":
+		return listenFD(listenAddr, tlsConfig)
 	case "tcp":
 		if tlsConfig == nil {
 			logrus.Warnf("TLS is not enabled for %s. enabling mutual TLS authentication is highly recommended", addr)
