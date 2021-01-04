@@ -221,7 +221,7 @@ func getGitProtocol(remote string) (string, int) {
 		}
 	}
 
-	if protocolType == gitProtocolUnknown && sshutil.IsSSHTransport(remote) {
+	if protocolType == gitProtocolUnknown && sshutil.IsImplicitSSHTransport(remote) {
 		protocolType = gitProtocolSSH
 	}
 
