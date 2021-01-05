@@ -338,6 +338,9 @@ func (ah *authHandler) doBearerAuth(ctx context.Context, sm *session.Manager, g 
 			if exp := issuedAt.Add(time.Duration(float64(expires)*0.9) * time.Second); time.Now().Before(exp) {
 				r.expires = exp
 			}
+		} else if r.expires.IsZero() {
+			// if an error occurs cache it for 1 second rather than forever
+			r.expires = time.Now().Add(time.Second)
 		}
 		r.Done()
 	}()
