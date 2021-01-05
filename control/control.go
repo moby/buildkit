@@ -266,9 +266,11 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 			return nil, err
 		}
 		cacheExportMode = parseCacheExportMode(e.Attrs["mode"])
-		cacheExportOnFailure, err = strconv.ParseBool(e.Attrs["onfailure"])
-		if err != nil {
-			return nil, err
+		if onfailure, ok := e.Attrs["onfailure"]; ok {
+			cacheExportOnFailure, err = strconv.ParseBool(onfailure)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	for _, im := range req.Cache.Imports {
