@@ -17,7 +17,7 @@
 
 # Vagrantfile for cgroup2 and SELinux
 Vagrant.configure("2") do |config|
-  config.vm.box = "fedora/32-cloud-base"
+  config.vm.box = "fedora/33-cloud-base"
   memory = 4096
   cpus = 2
   config.vm.provider :virtualbox do |v|
@@ -85,7 +85,6 @@ Vagrant.configure("2") do |config|
         curl -fsSL "https://dl.google.com/go/go${GO_VERSION}.linux-amd64.tar.gz" | tar Cxz /usr/local
         cat >> /etc/environment <<EOF
 PATH=/usr/local/go/bin:$PATH
-GO111MODULE=off
 EOF
         source /etc/environment
         cat >> /etc/profile.d/sh.local <<EOF

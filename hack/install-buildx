@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -eu -o pipefail
+topdir="$(realpath $(dirname "$0")/..)"
+cd "${topdir}"
+
+VERSION="v0.5.1"
+BINDIR="$(pwd)/bin"
+DEST="${BINDIR}/buildx"
+
+os=""
+case "$(uname)" in
+  Linux)
+    os="linux"
+    ;;
+  Darwin)
+    os="darwin"
+    ;;
+  *)
+    echo >&2 "unknown OS"
+    exit 1
+    ;;
+esac
+
+arch="$(uname -m)"
+case "${arch}" in
+  x86_64)
+    arch="amd64"
+    ;;
+  aarch64)
+    arch="arm64"
+    ;;
+  armv7l)
+    arch="arm-v7"
+    ;;
+  armv6l)
+    arch="arm-v6"
+    ;;
+esac
+
+url="https://github.com/docker/buildx/releases/download/${VERSION}/buildx-${VERSION}.${os}-${arch}"
+
+echo "Installing buildx ${VERSION} as ${DEST}"
+set -x
+mkdir -p "${BINDIR}"
+rm -f "${DEST}.download"
+curl -f -L -o "${DEST}.download" "${url}"
+chmod +x "${DEST}.download"
+mv "${DEST}.download" "${DEST}"

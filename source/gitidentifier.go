@@ -27,8 +27,8 @@ func NewGitIdentifier(remoteURL string) (*GitIdentifier, error) {
 	}
 
 	var fragment string
-	if strings.HasPrefix(remoteURL, "git@") {
-		// git@.. is not an URL, so cannot be parsed as URL
+	if sshutil.IsImplicitSSHTransport(remoteURL) {
+		// implicit ssh urls such as "git@.." are not actually a URL, so cannot be parsed as URL
 		parts := strings.SplitN(remoteURL, "#", 2)
 
 		repo.Remote = parts[0]
@@ -59,7 +59,7 @@ func (i *GitIdentifier) ID() string {
 // isGitTransport returns true if the provided str is a git transport by inspecting
 // the prefix of the string for known protocols used in git.
 func isGitTransport(str string) bool {
-	return strings.HasPrefix(str, "http://") || strings.HasPrefix(str, "https://") || strings.HasPrefix(str, "git://") || sshutil.IsSSHTransport(str)
+	return strings.HasPrefix(str, "http://") || strings.HasPrefix(str, "https://") || strings.HasPrefix(str, "git://") || strings.HasPrefix(str, "ssh://") || sshutil.IsImplicitSSHTransport(str)
 }
 
 func getRefAndSubdir(fragment string) (ref string, subdir string) {
