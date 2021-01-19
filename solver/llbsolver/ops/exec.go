@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/moby/buildkit/util/proxy"
 	"net"
 	"os"
 	"path"
@@ -300,7 +301,10 @@ func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 
 	if e.op.Meta.ProxyEnv != nil {
 		meta.Env = append(meta.Env, proxyEnvList(e.op.Meta.ProxyEnv)...)
+	} else {
+		meta.Env = append(meta.Env, proxy.System...)
 	}
+
 	var currentOS string
 	if e.platform != nil {
 		currentOS = e.platform.OS
