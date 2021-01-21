@@ -120,7 +120,7 @@ github.com/containerd/fifo
 github.com/containerd/go-cni
 # github.com/containerd/go-runc v0.0.0-20201020171139-16b287bc67d0
 github.com/containerd/go-runc
-# github.com/containerd/stargz-snapshotter v0.2.1-0.20201217071531-2b97b583765b
+# github.com/containerd/stargz-snapshotter v0.3.0
 github.com/containerd/stargz-snapshotter/cache
 github.com/containerd/stargz-snapshotter/fs
 github.com/containerd/stargz-snapshotter/fs/config

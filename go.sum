@@ -222,8 +222,8 @@ github.com/containerd/go-runc v0.0.0-20201020171139-16b287bc67d0 h1:e+50zk22gvHL
 github.com/containerd/go-runc v0.0.0-20201020171139-16b287bc67d0/go.mod h1:cNU0ZbCgCQVZK4lgG3P+9tn9/PaJNmoDXPpoJhDR+Ok=
 github.com/containerd/imgcrypt v1.0.1/go.mod h1:mdd8cEPW7TPgNG4FpuP3sGBiQ7Yi/zak9TYCG3juvb0=
 github.com/containerd/nri v0.0.0-20201007170849-eb1350a75164/go.mod h1:+2wGSDGFYfE5+So4M5syatU0N0f0LbWpuqyMi4/BE8c=
-github.com/containerd/stargz-snapshotter v0.2.1-0.20201217071531-2b97b583765b h1:mcOHCuHEZLGFTCdS6LYjsbm4iePr2j7towTjtb8as0I=
-github.com/containerd/stargz-snapshotter v0.2.1-0.20201217071531-2b97b583765b/go.mod h1:sOeBRUp2i02FfLARbAMF7AUS8FrzLHL8txn4R94JeEI=
+github.com/containerd/stargz-snapshotter v0.3.0 h1:80K+e6RHxCZhUGUMWGeMPb9wxLHrbwYN8nOTrDfrEHA=
+github.com/containerd/stargz-snapshotter v0.3.0/go.mod h1:sOeBRUp2i02FfLARbAMF7AUS8FrzLHL8txn4R94JeEI=
 github.com/containerd/stargz-snapshotter/estargz v0.0.0-20201217071531-2b97b583765b h1:tnP4txDzNKsBOISNYG/f48Mt477CBeh9sS5rlu8MvSY=
 github.com/containerd/stargz-snapshotter/estargz v0.0.0-20201217071531-2b97b583765b/go.mod h1:E9uVkkBKf0EaC39j2JVW9EzdNhYvpz6eQIjILHebruk=
 github.com/containerd/ttrpc v0.0.0-20190828154514-0e0f228740de/go.mod h1:PvCDdDGpgqzQIzDW1TphrGLssLDZp2GuS+X5DkEJB8o=
