@@ -40,6 +40,8 @@ import (
 	"golang.org/x/sync/semaphore"
 )
 
+const maxWalkDepth = 10000
+
 type Reader interface {
 	OpenFile(name string) (io.ReaderAt, error)
 	Lookup(name string) (*estargz.TOCEntry, bool)
@@ -166,13 +168,17 @@ func (gr *reader) Cache(opts ...CacheOption) (err error) {
 
 	eg, egCtx := errgroup.WithContext(context.Background())
 	eg.Go(func() error {
-		return gr.cacheWithReader(egCtx, eg, semaphore.NewWeighted(int64(runtime.GOMAXPROCS(0))),
+		return gr.cacheWithReader(egCtx,
+			0, eg, semaphore.NewWeighted(int64(runtime.GOMAXPROCS(0))),
 			root, r, filter, cacheOpts.cacheOpts...)
 	})
 	return eg.Wait()
 }
 
-func (gr *reader) cacheWithReader(ctx context.Context, eg *errgroup.Group, sem *semaphore.Weighted, dir *estargz.TOCEntry, r *estargz.Reader, filter func(*estargz.TOCEntry) bool, opts ...cache.Option) (rErr error) {
+func (gr *reader) cacheWithReader(ctx context.Context, currentDepth int, eg *errgroup.Group, sem *semaphore.Weighted, dir *estargz.TOCEntry, r *estargz.Reader, filter func(*estargz.TOCEntry) bool, opts ...cache.Option) (rErr error) {
+	if currentDepth > maxWalkDepth {
+		return fmt.Errorf("TOCEntry tree is too deep (depth:%d)", currentDepth)
+	}
 	dir.ForeachChild(func(_ string, e *estargz.TOCEntry) bool {
 		if e.Type == "dir" {
 			// Walk through all files on this stargz file.
@@ -189,7 +195,7 @@ func (gr *reader) cacheWithReader(ctx context.Context, eg *errgroup.Group, sem *
 					e.Name, dir.Name)
 				return false
 			}
-			if err := gr.cacheWithReader(ctx, eg, sem, e, r, filter, opts...); err != nil {
+			if err := gr.cacheWithReader(ctx, currentDepth+1, eg, sem, e, r, filter, opts...); err != nil {
 				rErr = err
 				return false
 			}
