@@ -32,17 +32,24 @@ RUN apt-get update && apt-get install --no-install-recommends -y libseccomp-dev 
 FROM gobuild-minimal AS gobuild-cross-amd64
 RUN dpkg --add-architecture s390x && \
   dpkg --add-architecture ppc64el && \
-  dpkg --add-architecture armel && \
+  apt-get update && \
+  apt-get --no-install-recommends install -y \
+    gcc-s390x-linux-gnu libc6-dev-s390x-cross libseccomp-dev:s390x \
+    crossbuild-essential-ppc64el libseccomp-dev:ppc64el \
+    --no-install-recommends
+  
+FROM gobuild-minimal AS gobuild-cross-amd64-arm
+RUN echo "deb http://deb.debian.org/debian buster-backports main" >> /etc/apt/sources.list
+RUN apt-get update && apt-get install --no-install-recommends -y libseccomp2=2.4.4-1~bpo10+1 libseccomp-dev=2.4.4-1~bpo10+1 
+RUN dpkg --add-architecture armel && \
   dpkg --add-architecture armhf && \
   dpkg --add-architecture arm64 && \
   apt-get update && \
   apt-get --no-install-recommends install -y \
-  gcc-s390x-linux-gnu libc6-dev-s390x-cross libseccomp-dev:s390x \
-  crossbuild-essential-ppc64el libseccomp-dev:ppc64el \
-  crossbuild-essential-armel libseccomp-dev:armel \
-  crossbuild-essential-armhf libseccomp-dev:armhf \
-  crossbuild-essential-arm64 libseccomp-dev:arm64 \
-  --no-install-recommends
+    crossbuild-essential-armel libseccomp2:armel=2.4.4-1~bpo10+1 libseccomp-dev:armel=2.4.4-1~bpo10+1 \
+    crossbuild-essential-armhf libseccomp2:armhf=2.4.4-1~bpo10+1 libseccomp-dev:armhf=2.4.4-1~bpo10+1 \
+    crossbuild-essential-arm64 libseccomp2:arm64=2.4.4-1~bpo10+1 libseccomp-dev:arm64=2.4.4-1~bpo10+1 \
+    --no-install-recommends
 
 # define all valid target configurations for compilation
 FROM gobuild-minimal AS gobuild-amd64-amd64
@@ -50,10 +57,10 @@ FROM gobuild-minimal AS gobuild-arm-arm
 FROM gobuild-minimal AS gobuild-s390x-s390x
 FROM gobuild-minimal AS gobuild-ppc64le-ppc64le
 FROM gobuild-minimal AS gobuild-arm64-arm64
-FROM gobuild-cross-amd64 AS gobuild-amd64-arm
+FROM gobuild-cross-amd64-arm AS gobuild-amd64-arm
 FROM gobuild-cross-amd64 AS gobuild-amd64-s390x
 FROM gobuild-cross-amd64 AS gobuild-amd64-ppc64le
-FROM gobuild-cross-amd64 AS gobuild-amd64-arm64
+FROM gobuild-cross-amd64-arm AS gobuild-amd64-arm64
 FROM gobuild-$BUILDARCH-$TARGETARCH AS gobuild-base
 
 # runc source
@@ -68,7 +75,7 @@ FROM gobuild-base AS runc
 WORKDIR $GOPATH/src/github.com/opencontainers/runc
 ARG TARGETPLATFORM
 RUN --mount=from=runc-src,src=/usr/src/runc,target=. --mount=target=/root/.cache,type=cache \
-  CGO_ENABLED=1 go build -ldflags '-extldflags -static' -tags 'seccomp netgo cgo static_build osusergo' -o /usr/bin/runc ./ && \
+  CGO_ENABLED=1 go build -mod=vendor -ldflags '-extldflags -static' -tags 'apparmor seccomp netgo cgo static_build osusergo' -o /usr/bin/runc ./ && \
   file /usr/bin/runc | grep "statically linked"
 
 FROM gobuild-base AS buildkit-base
