@@ -226,3 +226,16 @@ func TestErrorCases(t *testing.T) {
 		require.Contains(t, err.Error(), c.expectedError)
 	}
 }
+
+func TestRunCmdFlagsUsed(t *testing.T) {
+	dockerfile := "RUN --mount=type=tmpfs,target=/foo/ echo hello"
+	r := strings.NewReader(dockerfile)
+	ast, err := parser.Parse(r)
+	require.NoError(t, err)
+
+	n := ast.AST.Children[0]
+	c, err := ParseInstruction(n)
+	require.NoError(t, err)
+	require.IsType(t, c, &RunCommand{})
+	require.Equal(t, []string{"mount"}, c.(*RunCommand).FlagsUsed)
+}
