@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/session"
 )
 
@@ -14,7 +13,7 @@ import (
 const RunOnLocalHostMagicStr = "/run_on_localhost_271c67a1-94d9-4241-8bca-cbae334622ae"
 
 // LocalhostExec is called by buildkitd; it connects to the user's client to request the client execute a command localy.
-func LocalhostExec(ctx context.Context, c session.Caller, process executor.ProcessInfo) error {
+func LocalhostExec(ctx context.Context, c session.Caller, args []string, stdout, stderr io.Writer) error {
 	// stdout and stderr get closed in execOp.Exec()
 
 	client := NewLocalhostClient(c.Conn())
@@ -24,7 +23,7 @@ func LocalhostExec(ctx context.Context, c session.Caller, process executor.Proce
 	}
 
 	req := InputMessage{
-		Command: process.Meta.Args,
+		Command: args,
 	}
 	if err := stream.SendMsg(&req); err != nil {
 		return err
@@ -41,8 +40,8 @@ func LocalhostExec(ctx context.Context, c session.Caller, process executor.Proce
 			}
 			return err
 		}
-		process.Stdout.Write(msg.Stdout)
-		process.Stderr.Write(msg.Stderr)
+		stdout.Write(msg.Stdout)
+		stderr.Write(msg.Stderr)
 		switch msg.Status {
 		case RUNNING:
 			//ignore

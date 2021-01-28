@@ -359,12 +359,7 @@ func (e *execOp) doFromLocalHack(ctx context.Context, g session.Group, meta exec
 	}
 
 	err := e.sm.Any(ctx, g, func(ctx context.Context, _ string, caller session.Caller) error {
-		err := localhost.LocalhostExec(ctx, caller, executor.ProcessInfo{
-			Meta:   meta,
-			Stdin:  nil,
-			Stdout: stdout,
-			Stderr: stderr,
-		})
+		err := localhost.LocalhostExec(ctx, caller, meta.Args, stdout, stderr)
 		if err != nil {
 			return err
 		}
