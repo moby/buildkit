@@ -60,6 +60,7 @@ type blob struct {
 	lastCheck     time.Time
 	lastCheckMu   sync.Mutex
 	checkInterval time.Duration
+	fetchTimeout  time.Duration
 
 	fetchedRegionSet   regionSet
 	fetchedRegionSetMu sync.Mutex
@@ -267,7 +268,7 @@ func (b *blob) fetchRange(allData map[region]io.Writer, opts *options) error {
 		req = append(req, reg)
 		fetched[reg] = false
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), b.fetchTimeout)
 	defer cancel()
 	mr, err := fr.fetch(ctx, req, true, opts)
 	if err != nil {

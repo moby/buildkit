@@ -45,6 +45,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -83,6 +84,7 @@ const (
 	stateDirName              = ".stargz-snapshotter"
 	defaultResolveResultEntry = 100
 	defaultPrefetchTimeoutSec = 10
+	defaultMaxConcurrency     = 2
 	statFileMode              = syscall.S_IFREG | 0400 // -r--------
 	stateDirMode              = syscall.S_IFDIR | 0500 // dr-x------
 )
@@ -144,6 +146,10 @@ func NewFilesystem(root string, cfg config.Config, opts ...Option) (_ snbase.Fil
 	if prefetchTimeout == 0 {
 		prefetchTimeout = defaultPrefetchTimeoutSec * time.Second
 	}
+	maxConcurrency := cfg.MaxConcurrency
+	if maxConcurrency == 0 {
+		maxConcurrency = defaultMaxConcurrency
+	}
 	getSources := fsOpts.getSources
 	if getSources == nil {
 		getSources = source.FromDefaultLabels(
@@ -161,7 +167,7 @@ func NewFilesystem(root string, cfg config.Config, opts ...Option) (_ snbase.Fil
 		layer:                 make(map[string]*layer),
 		resolveResult:         lru.New(resolveResultEntry),
 		blobResult:            lru.New(resolveResultEntry),
-		backgroundTaskManager: task.NewBackgroundTaskManager(2, 5*time.Second),
+		backgroundTaskManager: task.NewBackgroundTaskManager(maxConcurrency, 5*time.Second),
 		allowNoVerification:   cfg.AllowNoVerification,
 		disableVerification:   cfg.DisableVerification,
 	}, nil
@@ -701,6 +707,11 @@ func (n *node) Readdir(ctx context.Context) (fusefs.DirStream, syscall.Errno) {
 
 		}
 	}
+
+	// Avoid undeterministic order of entries on each call
+	sort.Slice(ents, func(i, j int) bool {
+		return ents[i].Name < ents[j].Name
+	})
 
 	return fusefs.NewListDirStream(ents), 0
 }

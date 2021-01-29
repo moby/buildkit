@@ -13,7 +13,7 @@ ARG CNI_VERSION=v0.8.7
 ARG SHADOW_VERSION=4.8.1
 ARG FUSEOVERLAYFS_VERSION=v1.3.0
 # master (Dec 17, 2020)
-ARG STARGZ_SNAPSHOTTER_VERSION=2b97b583765b26f7284fe13f39f4ef925ecf87c3
+ARG STARGZ_SNAPSHOTTER_VERSION=v0.3.0
 
 ARG ALPINE_VERSION=3.12
 
@@ -33,17 +33,24 @@ RUN apt-get update && apt-get install --no-install-recommends -y libseccomp-dev 
 FROM gobuild-minimal AS gobuild-cross-amd64
 RUN dpkg --add-architecture s390x && \
   dpkg --add-architecture ppc64el && \
-  dpkg --add-architecture armel && \
+  apt-get update && \
+  apt-get --no-install-recommends install -y \
+    gcc-s390x-linux-gnu libc6-dev-s390x-cross libseccomp-dev:s390x \
+    crossbuild-essential-ppc64el libseccomp-dev:ppc64el \
+    --no-install-recommends
+  
+FROM gobuild-minimal AS gobuild-cross-amd64-arm
+RUN echo "deb http://deb.debian.org/debian buster-backports main" >> /etc/apt/sources.list
+RUN apt-get update && apt-get install --no-install-recommends -y libseccomp2=2.4.4-1~bpo10+1 libseccomp-dev=2.4.4-1~bpo10+1 
+RUN dpkg --add-architecture armel && \
   dpkg --add-architecture armhf && \
   dpkg --add-architecture arm64 && \
   apt-get update && \
   apt-get --no-install-recommends install -y \
-  gcc-s390x-linux-gnu libc6-dev-s390x-cross libseccomp-dev:s390x \
-  crossbuild-essential-ppc64el libseccomp-dev:ppc64el \
-  crossbuild-essential-armel libseccomp-dev:armel \
-  crossbuild-essential-armhf libseccomp-dev:armhf \
-  crossbuild-essential-arm64 libseccomp-dev:arm64 \
-  --no-install-recommends
+    crossbuild-essential-armel libseccomp2:armel=2.4.4-1~bpo10+1 libseccomp-dev:armel=2.4.4-1~bpo10+1 \
+    crossbuild-essential-armhf libseccomp2:armhf=2.4.4-1~bpo10+1 libseccomp-dev:armhf=2.4.4-1~bpo10+1 \
+    crossbuild-essential-arm64 libseccomp2:arm64=2.4.4-1~bpo10+1 libseccomp-dev:arm64=2.4.4-1~bpo10+1 \
+    --no-install-recommends
 
 # define all valid target configurations for compilation
 FROM gobuild-minimal AS gobuild-amd64-amd64
@@ -51,10 +58,10 @@ FROM gobuild-minimal AS gobuild-arm-arm
 FROM gobuild-minimal AS gobuild-s390x-s390x
 FROM gobuild-minimal AS gobuild-ppc64le-ppc64le
 FROM gobuild-minimal AS gobuild-arm64-arm64
-FROM gobuild-cross-amd64 AS gobuild-amd64-arm
+FROM gobuild-cross-amd64-arm AS gobuild-amd64-arm
 FROM gobuild-cross-amd64 AS gobuild-amd64-s390x
 FROM gobuild-cross-amd64 AS gobuild-amd64-ppc64le
-FROM gobuild-cross-amd64 AS gobuild-amd64-arm64
+FROM gobuild-cross-amd64-arm AS gobuild-amd64-arm64
 FROM gobuild-$BUILDARCH-$TARGETARCH AS gobuild-base
 
 # runc source
@@ -69,7 +76,7 @@ FROM gobuild-base AS runc
 WORKDIR $GOPATH/src/github.com/opencontainers/runc
 ARG TARGETPLATFORM
 RUN --mount=from=runc-src,src=/usr/src/runc,target=. --mount=target=/root/.cache,type=cache \
-  CGO_ENABLED=1 go build -ldflags '-extldflags -static' -tags 'seccomp netgo cgo static_build osusergo' -o /usr/bin/runc ./ && \
+  CGO_ENABLED=1 go build -mod=vendor -ldflags '-extldflags -static' -tags 'apparmor seccomp netgo cgo static_build osusergo' -o /usr/bin/runc ./ && \
   file /usr/bin/runc | grep "statically linked"
 
 FROM gobuild-base AS buildkit-base
@@ -106,8 +113,8 @@ RUN --mount=target=. --mount=target=/root/.cache,type=cache \
 
 FROM scratch AS binaries-linux-helper
 COPY --from=runc /usr/bin/runc /buildkit-runc
-# built from https://github.com/tonistiigi/binfmt/runs/1488746859
-COPY --from=tonistiigi/binfmt:buildkit@sha256:4f7bf8fdf34ca4df118e099666b664c4cc8f054446dc71ff54117150ef1a2800 / /
+# built from https://github.com/tonistiigi/binfmt/runs/1743699129
+COPY --from=tonistiigi/binfmt:buildkit@sha256:75583ce1cf4a7166fd2592f45e4ff3f53727eee6edcd3a3e804f749b1f214a39 / /
 FROM binaries-linux-helper AS binaries-linux
 COPY --from=buildctl /usr/bin/buildctl /
 COPY --from=buildkitd /usr/bin/buildkitd /
