@@ -63,11 +63,18 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 		}
 	}
 	if needDialer {
-		dialFn, err := resolveDialer(address)
+		ch, err := resolveConnhelper(address)
 		if err != nil {
 			return nil, err
 		}
-		gopts = append(gopts, grpc.WithContextDialer(dialFn))
+
+		dopts, err := ch.DialOptions(address)
+		if err != nil {
+			return nil, err
+		}
+
+		dopts = append(dopts, grpc.WithContextDialer(ch.ContextDialer))
+		gopts = append(gopts, dopts...)
 	}
 	if needWithInsecure {
 		gopts = append(gopts, grpc.WithInsecure())
@@ -190,14 +197,13 @@ type withTracer struct {
 	tracer opentracing.Tracer
 }
 
-func resolveDialer(address string) (func(context.Context, string) (net.Conn, error), error) {
+func resolveConnhelper(address string) (connhelper.ConnectionHelper, error) {
 	ch, err := connhelper.GetConnectionHelper(address)
 	if err != nil {
 		return nil, err
 	}
 	if ch != nil {
-		return ch.ContextDialer, nil
+		return ch, nil
 	}
-	// basic dialer
-	return dialer, nil
+	return defaultConnhelper(), nil
 }
