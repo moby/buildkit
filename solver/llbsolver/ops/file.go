@@ -421,7 +421,6 @@ func (s *FileOpSolver) getInput(ctx context.Context, idx int, inputs []fileoptyp
 					if cerr == nil {
 						outputRes[idx-len(inputs)] = worker.NewWorkerRefResult(ref.(cache.ImmutableRef), s.w)
 					}
-					inpMount.Release(context.TODO())
 				}
 
 				// If the action has a secondary input, commit it and set the ref on
