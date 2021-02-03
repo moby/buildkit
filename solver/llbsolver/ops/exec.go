@@ -235,7 +235,7 @@ func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 				if m.Input == -1 {
 					continue
 				}
-				execInputs[i] = inputs[m.Input]
+				execInputs[i] = inputs[m.Input].Clone()
 			}
 			execMounts := make([]solver.Result, len(e.op.Mounts))
 			copy(execMounts, execInputs)
