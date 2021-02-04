@@ -1,6 +1,8 @@
 package instructions
 
 import (
+	"sort"
+	"strings"
 	"testing"
 )
 
@@ -183,5 +185,31 @@ func TestBuilderFlags(t *testing.T) {
 	}
 	if !flBool1.IsTrue() {
 		t.Fatalf("Test %s, bool1 should be true", bf.Args)
+	}
+
+	// ---
+
+	bf = NewBFlags()
+	_ = bf.AddBool("bool1", false)
+	_ = bf.AddBool("bool2", false)
+	_ = bf.AddBool("bool3", false)
+	_ = bf.AddBool("bool4", true)
+	_ = bf.AddBool("bool5", true)
+	_ = bf.AddString("str1", "")
+	_ = bf.AddString("str2", "")
+	_ = bf.AddString("str3", "def3")
+	_ = bf.AddString("str4", "def4")
+
+	bf.Args = []string{`--bool2=false`, `--bool3`, `--bool4=true`, `--bool5`, `--str2= `, `--str3=def3`, `--str4=my-val`}
+
+	if err = bf.Parse(); err != nil {
+		t.Fatalf("Test %q was supposed to work: %s", bf.Args, err)
+	}
+	used := bf.Used()
+	sort.Strings(used)
+	expected = "bool2, bool3, bool4, bool5, str2, str3, str4"
+	actual := strings.Join(used, ", ")
+	if actual != expected {
+		t.Fatalf("Test %s, expected '%s', got '%s'", bf.Args, expected, actual)
 	}
 }
