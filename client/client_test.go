@@ -122,6 +122,7 @@ func TestIntegration(t *testing.T) {
 		testSourceMapFromRef,
 		testLazyImagePush,
 		testStargzLazyPull,
+		testFileOpInputSwap,
 	}, mirrors)
 
 	integration.Run(t, []integration.Test{
@@ -1128,7 +1129,36 @@ func testFileOpCopyRm(t *testing.T, sb integration.Sandbox) {
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "file2"))
 	require.NoError(t, err)
 	require.Equal(t, []byte("file2"), dt)
+}
 
+// testFileOpInputSwap is a regression test that cache is invalidated when subset of fileop is built
+func testFileOpInputSwap(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	base := llb.Scratch().File(llb.Mkfile("/foo", 0600, []byte("foo")))
+
+	src := llb.Scratch().File(llb.Mkfile("/bar", 0600, []byte("bar")))
+
+	st := base.File(llb.Copy(src, "/bar", "/baz"))
+
+	def, err := st.Marshal(context.TODO())
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	require.NoError(t, err)
+
+	// bar does not exist in base but index of all inputs remains the same
+	st = base.File(llb.Copy(base, "/bar", "/baz"))
+
+	def, err = st.Marshal(context.TODO())
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "bar: no such file")
 }
 
 func testFileOpRmWildcard(t *testing.T, sb integration.Sandbox) {
