@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/moby/buildkit/frontend/gateway"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/localhost"
+	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/llbsolver"
 	"github.com/moby/buildkit/solver/llbsolver/errdefs"
@@ -316,20 +318,20 @@ func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 	defer stdout.Close()
 	defer stderr.Close()
 
-	newMeta, isLocal, err := e.doFromLocalHack(ctx, g, meta, stdout, stderr)
+	isLocal, err := e.doFromLocalHack(ctx, p.Root, g, meta, stdout, stderr)
 	if err != nil {
 		return nil, err
 	}
-	if isLocal {
-		meta = newMeta
-	}
 
-	execErr := e.exec.Run(ctx, "", p.Root, p.Mounts, executor.ProcessInfo{
-		Meta:   meta,
-		Stdin:  nil,
-		Stdout: stdout,
-		Stderr: stderr,
-	}, nil)
+	var execErr error
+	if !isLocal {
+		execErr = e.exec.Run(ctx, "", p.Root, p.Mounts, executor.ProcessInfo{
+			Meta:   meta,
+			Stdin:  nil,
+			Stdout: stdout,
+			Stderr: stderr,
+		}, nil)
+	}
 
 	for i, out := range p.OutputRefs {
 		if mutable, ok := out.Ref.(cache.MutableRef); ok {
@@ -347,32 +349,82 @@ func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 	return results, errors.Wrapf(execErr, "executor failed running %v", e.op.Meta.Args)
 }
 
-func (e *execOp) doFromLocalHack(ctx context.Context, g session.Group, meta executor.Meta, stdout, stderr io.WriteCloser) (executor.Meta, bool, error) {
-	isLocal := false
-	for _, mnt := range e.op.Mounts {
-		if mnt.Dest == localhost.RunOnLocalHostMagicStr {
-			isLocal = true
-		}
+func (e *execOp) doFromLocalHack(ctx context.Context, root executor.Mount, g session.Group, meta executor.Meta, stdout, stderr io.WriteCloser) (bool, error) {
+	var cmd string
+	if len(meta.Args) > 0 {
+		cmd = meta.Args[0]
 	}
-	if !isLocal {
-		return executor.Meta{}, false, nil
+	switch cmd {
+	case localhost.CopyFileMagicStr:
+		return true, e.copyLocally(ctx, root, g, meta, stdout, stderr)
+	case localhost.RunOnLocalHostMagicStr:
+		return true, e.execLocally(ctx, root, g, meta, stdout, stderr)
+	default:
+		return false, nil
+	}
+}
+
+func (e *execOp) copyLocally(ctx context.Context, root executor.Mount, g session.Group, meta executor.Meta, stdout, stderr io.WriteCloser) error {
+	if len(meta.Args) != 3 {
+		return fmt.Errorf("CopyFileMagicStr takes exactly 2 args")
+	}
+	if meta.Args[0] != localhost.CopyFileMagicStr {
+		panic("arg[0] must be CopyFileMagicStr; this should not have happened")
+	}
+	src := filepath.Clean(meta.Args[1])
+	dst := meta.Args[2]
+
+	if src == "/" {
+		return fmt.Errorf("copyLocally does not support copying the entire root filesystem")
 	}
 
-	err := e.sm.Any(ctx, g, func(ctx context.Context, _ string, caller session.Caller) error {
-		err := localhost.LocalhostExec(ctx, caller, meta.Args, stdout, stderr)
+	if strings.HasSuffix(dst, ".") || strings.HasSuffix(dst, "/") {
+		dst = filepath.Join(dst, filepath.Base(src))
+	}
+
+	return e.sm.Any(ctx, g, func(ctx context.Context, _ string, caller session.Caller) error {
+		mountable, err := root.Src.Mount(ctx, false)
+		if err != nil {
+			return err
+		}
+
+		rootMounts, release, err := mountable.Mount()
+		if err != nil {
+			return err
+		}
+		if release != nil {
+			defer release()
+		}
+
+		lm := snapshot.LocalMounterWithMounts(rootMounts)
+		rootfsPath, err := lm.Mount()
+		if err != nil {
+			return err
+		}
+		defer lm.Unmount()
+
+		finalDest := rootfsPath + "/" + dst
+		err = localhost.LocalhostGet(ctx, caller, src, finalDest, mountable)
 		if err != nil {
 			return err
 		}
 		return nil
 	})
-	if err != nil {
-		return executor.Meta{}, false, err
-	}
-	fakeMeta := meta
-	fakeMeta.Args = []string{"/bin/true"}
-	fakeMeta.Cwd = "/"
+}
 
-	return fakeMeta, true, nil
+func (e *execOp) execLocally(ctx context.Context, root executor.Mount, g session.Group, meta executor.Meta, stdout, stderr io.WriteCloser) error {
+	if len(meta.Args) == 0 || meta.Args[0] != localhost.RunOnLocalHostMagicStr {
+		panic("first arg should be RunOnLocalHostMagicStr; this should not happen")
+	}
+	args := meta.Args[1:] // remove magic uuid from command prefix; the rest that follows is the actual command to run
+
+	return e.sm.Any(ctx, g, func(ctx context.Context, _ string, caller session.Caller) error {
+		err := localhost.LocalhostExec(ctx, caller, args, stdout, stderr)
+		if err != nil {
+			return errors.Wrap(err, "error calling LocalhostExec")
+		}
+		return nil
+	})
 }
 
 func proxyEnvList(p *pb.ProxyEnv) []string {

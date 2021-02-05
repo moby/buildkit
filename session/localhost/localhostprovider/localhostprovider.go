@@ -8,6 +8,9 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/pkg/errors"
+	"github.com/tonistiigi/fsutil"
+
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/localhost"
 	"google.golang.org/grpc"
@@ -34,8 +37,7 @@ func (lp *localhostProvider) Exec(stream localhost.Localhost_ExecServer) error {
 	_ = opts // opts aren't used for anything at the moment
 
 	// first message must contain the command (and no stdin)
-	var msg localhost.InputMessage
-	err := stream.RecvMsg(&msg)
+	msg, err := stream.Recv()
 	if err != nil {
 		return err
 	}
@@ -79,7 +81,7 @@ func (lp *localhostProvider) Exec(stream localhost.Localhost_ExecServer) error {
 				resp := localhost.OutputMessage{
 					Stdout: buf[:n],
 				}
-				err := stream.SendMsg(&resp)
+				err := stream.Send(&resp)
 				if err != nil {
 					readErr = append(readErr, err)
 					m.Unlock()
@@ -106,7 +108,7 @@ func (lp *localhostProvider) Exec(stream localhost.Localhost_ExecServer) error {
 				resp := localhost.OutputMessage{
 					Stderr: buf[:n],
 				}
-				err := stream.SendMsg(&resp)
+				err := stream.Send(&resp)
 				if err != nil {
 					readErr = append(readErr, err)
 					m.Unlock()
@@ -153,9 +155,96 @@ func (lp *localhostProvider) Exec(stream localhost.Localhost_ExecServer) error {
 		ExitCode: int32(exitCode),
 		Status:   status,
 	}
-	if err := stream.SendMsg(&resp); err != nil {
+	if err := stream.Send(&resp); err != nil {
 		return err
 	}
 
+	return nil
+}
+
+func (lp *localhostProvider) Get(stream localhost.Localhost_GetServer) error {
+	// first message must contain the path to fetch
+	msg, err := stream.Recv()
+	if err != nil {
+		return err
+	}
+	path := string(msg.Data)
+
+	fi, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	switch mode := fi.Mode(); {
+	case mode.IsDir():
+		return sendDir(stream, path)
+	case mode.IsRegular():
+		return sendFile(stream, path)
+	default:
+		panic(fmt.Sprintf("unhandled mode file %v in localhostProvider.Get", mode))
+	}
+}
+
+func sendFile(stream localhost.Localhost_GetServer, path string) error {
+	err := stream.Send(&localhost.BytesMessage{
+		Data: []byte{'f', 0x00}, // 'f' denotes a file; 0 denotes version 0 of the send file protocol
+	})
+	if err != nil {
+		return err
+	}
+
+	stat, err := fsutil.Stat(path)
+	if err != nil {
+		return errors.Wrapf(err, "failed to stat %s", path)
+	}
+	payload, err := stat.Marshal()
+	if err != nil {
+		return err
+	}
+	err = stream.Send(&localhost.BytesMessage{
+		Data: payload,
+	})
+	if err != nil {
+		return err
+	}
+
+	f, err := os.Open(path)
+	if err != nil {
+		return errors.Wrapf(err, "failed to open %s", path)
+	}
+	defer f.Close()
+
+	buf := make([]byte, 1024*1024)
+	for {
+		n, err := f.Read(buf)
+		if n > 0 {
+			err = stream.Send(&localhost.BytesMessage{
+				Data: buf[:n],
+			})
+		}
+		switch err {
+		case nil:
+		case io.EOF:
+			return nil
+		default:
+			return err
+		}
+	}
+}
+
+func sendDir(stream localhost.Localhost_GetServer, path string) error {
+	err := stream.Send(&localhost.BytesMessage{
+		Data: []byte{'d', 0x00}, // 'd' denotes a file; 0 denotes version 0 of the send file protocol
+	})
+	if err != nil {
+		return err
+	}
+
+	fs := fsutil.NewFS(path, &fsutil.WalkOpt{
+		IncludePatterns: []string{"*"},
+	})
+	err = fsutil.Send(stream.Context(), stream, fs, nil)
+	if err != nil {
+		return errors.Wrap(err, "fsutil.Send failed")
+	}
 	return nil
 }

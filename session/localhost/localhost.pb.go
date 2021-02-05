@@ -54,7 +54,7 @@ func (OutputMessage_Status) EnumDescriptor() ([]byte, []int) {
 	return fileDescriptor_a5c3d86c7f529fcc, []int{1, 0}
 }
 
-// inputMessage contains stdin data
+// InputMessage contains stdin data
 type InputMessage struct {
 	Command []string `protobuf:"bytes,1,rep,name=command,proto3" json:"command,omitempty"`
 	Stdin   []byte   `protobuf:"bytes,2,opt,name=stdin,proto3" json:"stdin,omitempty"`
@@ -174,37 +174,85 @@ func (m *OutputMessage) GetExitCode() int32 {
 	return 0
 }
 
+// BytesMessage contains a chunk of byte data
+type BytesMessage struct {
+	Data []byte `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+}
+
+func (m *BytesMessage) Reset()      { *m = BytesMessage{} }
+func (*BytesMessage) ProtoMessage() {}
+func (*BytesMessage) Descriptor() ([]byte, []int) {
+	return fileDescriptor_a5c3d86c7f529fcc, []int{2}
+}
+func (m *BytesMessage) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *BytesMessage) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_BytesMessage.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *BytesMessage) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_BytesMessage.Merge(m, src)
+}
+func (m *BytesMessage) XXX_Size() int {
+	return m.Size()
+}
+func (m *BytesMessage) XXX_DiscardUnknown() {
+	xxx_messageInfo_BytesMessage.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_BytesMessage proto.InternalMessageInfo
+
+func (m *BytesMessage) GetData() []byte {
+	if m != nil {
+		return m.Data
+	}
+	return nil
+}
+
 func init() {
 	proto.RegisterEnum("moby.localhost.v1.OutputMessage_Status", OutputMessage_Status_name, OutputMessage_Status_value)
 	proto.RegisterType((*InputMessage)(nil), "moby.localhost.v1.InputMessage")
 	proto.RegisterType((*OutputMessage)(nil), "moby.localhost.v1.OutputMessage")
+	proto.RegisterType((*BytesMessage)(nil), "moby.localhost.v1.BytesMessage")
 }
 
 func init() { proto.RegisterFile("localhost.proto", fileDescriptor_a5c3d86c7f529fcc) }
 
 var fileDescriptor_a5c3d86c7f529fcc = []byte{
-	// 334 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0xe2, 0xcf, 0xc9, 0x4f, 0x4e,
-	0xcc, 0xc9, 0xc8, 0x2f, 0x2e, 0xd1, 0x2b, 0x28, 0xca, 0x2f, 0xc9, 0x17, 0x12, 0xcc, 0xcd, 0x4f,
-	0xaa, 0xd4, 0x43, 0x88, 0x96, 0x19, 0x2a, 0xd9, 0x71, 0xf1, 0x78, 0xe6, 0x15, 0x94, 0x96, 0xf8,
-	0xa6, 0x16, 0x17, 0x27, 0xa6, 0xa7, 0x0a, 0x49, 0x70, 0xb1, 0x27, 0xe7, 0xe7, 0xe6, 0x26, 0xe6,
-	0xa5, 0x48, 0x30, 0x2a, 0x30, 0x6b, 0x70, 0x06, 0xc1, 0xb8, 0x42, 0x22, 0x5c, 0xac, 0xc5, 0x25,
-	0x29, 0x99, 0x79, 0x12, 0x4c, 0x0a, 0x8c, 0x1a, 0x3c, 0x41, 0x10, 0x8e, 0xd2, 0x29, 0x46, 0x2e,
-	0x5e, 0xff, 0xd2, 0x12, 0x24, 0x13, 0xc4, 0xb8, 0xd8, 0x8a, 0x4b, 0x52, 0xf2, 0x4b, 0x4b, 0x24,
-	0x18, 0xc1, 0x0a, 0xa1, 0x3c, 0xa8, 0x78, 0x6a, 0x51, 0x11, 0xd4, 0x00, 0x28, 0x4f, 0xc8, 0x1e,
-	0x24, 0x9e, 0x58, 0x52, 0x5a, 0x2c, 0xc1, 0xac, 0xc0, 0xa8, 0xc1, 0x67, 0xa4, 0xae, 0x87, 0xe1,
-	0x4a, 0x3d, 0x14, 0x1b, 0xf4, 0x82, 0xc1, 0xca, 0x83, 0xa0, 0xda, 0x84, 0xa4, 0xb9, 0x38, 0x53,
-	0x2b, 0x32, 0x4b, 0xe2, 0x93, 0xf3, 0x53, 0x52, 0x25, 0x58, 0x14, 0x18, 0x35, 0x58, 0x83, 0x38,
-	0x40, 0x02, 0xce, 0xf9, 0x29, 0xa9, 0x4a, 0xda, 0x5c, 0x6c, 0x10, 0xe5, 0x42, 0xdc, 0x5c, 0xec,
-	0x41, 0xa1, 0x7e, 0x7e, 0x9e, 0x7e, 0xee, 0x02, 0x0c, 0x42, 0x1c, 0x5c, 0x2c, 0x2e, 0xfe, 0x7e,
-	0xae, 0x02, 0x8c, 0x42, 0x5c, 0x5c, 0x6c, 0xde, 0x9e, 0x3e, 0x3e, 0xae, 0x2e, 0x02, 0x4c, 0x46,
-	0x51, 0x5c, 0x9c, 0x3e, 0x30, 0x6b, 0x85, 0x7c, 0xb9, 0x58, 0x5c, 0x2b, 0x52, 0x93, 0x85, 0xe4,
-	0xb1, 0xb8, 0x07, 0x39, 0xc8, 0xa4, 0x14, 0x08, 0x39, 0x58, 0x83, 0xd1, 0x80, 0xd1, 0xc9, 0xfe,
-	0xc2, 0x43, 0x39, 0x86, 0x1b, 0x0f, 0xe5, 0x18, 0x3e, 0x3c, 0x94, 0x63, 0x6c, 0x78, 0x24, 0xc7,
-	0xb8, 0xe2, 0x91, 0x1c, 0xe3, 0x89, 0x47, 0x72, 0x8c, 0x17, 0x1e, 0xc9, 0x31, 0x3e, 0x78, 0x24,
-	0xc7, 0xf8, 0xe2, 0x91, 0x1c, 0xc3, 0x87, 0x47, 0x72, 0x8c, 0x13, 0x1e, 0xcb, 0x31, 0x5c, 0x78,
-	0x2c, 0xc7, 0x70, 0xe3, 0xb1, 0x1c, 0x43, 0x14, 0x27, 0xdc, 0xd4, 0x24, 0x36, 0x70, 0x1c, 0x1a,
-	0x03, 0x02, 0x00, 0x00, 0xff, 0xff, 0x6c, 0x6b, 0xd1, 0x6c, 0xd6, 0x01, 0x00, 0x00,
+	// 371 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x84, 0x92, 0x41, 0x6b, 0xe2, 0x40,
+	0x1c, 0xc5, 0xf3, 0xd7, 0x18, 0xcd, 0x7f, 0xdd, 0x5d, 0x77, 0x58, 0x96, 0xe0, 0xc2, 0x6c, 0xc8,
+	0x65, 0x03, 0x0b, 0x61, 0x6b, 0xef, 0x15, 0xac, 0x22, 0xa2, 0x46, 0x48, 0xe9, 0xa5, 0x97, 0x12,
+	0x93, 0xa1, 0x15, 0xd4, 0x11, 0x33, 0x29, 0x7a, 0xeb, 0x47, 0xe8, 0xb7, 0x68, 0x3f, 0x4a, 0xe9,
+	0xc9, 0xa3, 0xc7, 0x1a, 0x2f, 0x3d, 0xfa, 0x11, 0x8a, 0x31, 0xb6, 0x96, 0x0a, 0xde, 0xf2, 0x1e,
+	0x2f, 0xbf, 0x79, 0x6f, 0x18, 0xfc, 0xde, 0xe7, 0x9e, 0xdb, 0xbf, 0xe6, 0x81, 0xb0, 0x46, 0x63,
+	0x2e, 0x38, 0xf9, 0x31, 0xe0, 0xdd, 0xa9, 0xf5, 0xee, 0xde, 0x1c, 0x19, 0x27, 0x98, 0x6f, 0x0c,
+	0x47, 0xa1, 0x68, 0xb3, 0x20, 0x70, 0xaf, 0x18, 0xd1, 0x30, 0xeb, 0xf1, 0xc1, 0xc0, 0x1d, 0xfa,
+	0x1a, 0xe8, 0x69, 0x53, 0x75, 0xb6, 0x92, 0xfc, 0xc4, 0x4c, 0x20, 0xfc, 0xde, 0x50, 0x4b, 0xe9,
+	0x60, 0xe6, 0x9d, 0x8d, 0x30, 0x9e, 0x00, 0xbf, 0x76, 0x42, 0xb1, 0x43, 0xf8, 0x85, 0x4a, 0x20,
+	0x7c, 0x1e, 0x0a, 0x0d, 0xe2, 0x60, 0xa2, 0x12, 0x9f, 0x8d, 0xc7, 0x09, 0x20, 0x51, 0xa4, 0xbc,
+	0xf6, 0x5d, 0x11, 0x06, 0x5a, 0x5a, 0x07, 0xf3, 0x5b, 0xe9, 0xaf, 0xf5, 0xa9, 0xa5, 0xf5, 0xe1,
+	0x04, 0xeb, 0x2c, 0x8e, 0x3b, 0xc9, 0x6f, 0xe4, 0x37, 0xaa, 0x6c, 0xd2, 0x13, 0x97, 0x1e, 0xf7,
+	0x99, 0x26, 0xeb, 0x60, 0x66, 0x9c, 0xdc, 0xda, 0x38, 0xe5, 0x3e, 0x33, 0xfe, 0xa1, 0xb2, 0x89,
+	0x93, 0x2f, 0x98, 0x75, 0xce, 0x6d, 0xbb, 0x61, 0xd7, 0x0b, 0x12, 0xc9, 0xa1, 0x5c, 0xed, 0xd8,
+	0xb5, 0x02, 0x10, 0x44, 0xa5, 0xd9, 0x68, 0xb5, 0x6a, 0xd5, 0x42, 0xca, 0x30, 0x30, 0x5f, 0x99,
+	0x0a, 0x16, 0x6c, 0xa7, 0x10, 0x94, 0x7d, 0x57, 0xb8, 0xc9, 0x90, 0xf8, 0xbb, 0x74, 0x0f, 0xa8,
+	0xb6, 0xb6, 0xdd, 0x48, 0x1b, 0xe5, 0xda, 0x84, 0x79, 0xe4, 0xcf, 0x9e, 0xd2, 0xbb, 0xf7, 0x5a,
+	0xd4, 0x0f, 0xad, 0x32, 0xe1, 0x3f, 0x90, 0x26, 0xa6, 0xeb, 0x4c, 0xec, 0xa5, 0xed, 0x16, 0x2b,
+	0x1e, 0x0a, 0xac, 0x61, 0x95, 0xf2, 0x6c, 0x41, 0xa5, 0xf9, 0x82, 0x4a, 0xab, 0x05, 0x85, 0xdb,
+	0x88, 0xc2, 0x43, 0x44, 0xe1, 0x31, 0xa2, 0x30, 0x8b, 0x28, 0x3c, 0x47, 0x14, 0x5e, 0x22, 0x2a,
+	0xad, 0x22, 0x0a, 0x77, 0x4b, 0x2a, 0xcd, 0x96, 0x54, 0x9a, 0x2f, 0xa9, 0x74, 0xa1, 0xbe, 0x41,
+	0xbb, 0x4a, 0xfc, 0x6a, 0x8e, 0x5f, 0x03, 0x00, 0x00, 0xff, 0xff, 0x25, 0xfa, 0xbc, 0x57, 0x48,
+	0x02, 0x00, 0x00,
 }
 
 func (x OutputMessage_Status) String() string {
@@ -279,6 +327,30 @@ func (this *OutputMessage) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *BytesMessage) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*BytesMessage)
+	if !ok {
+		that2, ok := that.(BytesMessage)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if !bytes.Equal(this.Data, that1.Data) {
+		return false
+	}
+	return true
+}
 func (this *InputMessage) GoString() string {
 	if this == nil {
 		return "nil"
@@ -300,6 +372,16 @@ func (this *OutputMessage) GoString() string {
 	s = append(s, "Stderr: "+fmt.Sprintf("%#v", this.Stderr)+",\n")
 	s = append(s, "Status: "+fmt.Sprintf("%#v", this.Status)+",\n")
 	s = append(s, "ExitCode: "+fmt.Sprintf("%#v", this.ExitCode)+",\n")
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func (this *BytesMessage) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 5)
+	s = append(s, "&localhost.BytesMessage{")
+	s = append(s, "Data: "+fmt.Sprintf("%#v", this.Data)+",\n")
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
@@ -325,6 +407,7 @@ const _ = grpc.SupportPackageIsVersion4
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type LocalhostClient interface {
 	Exec(ctx context.Context, opts ...grpc.CallOption) (Localhost_ExecClient, error)
+	Get(ctx context.Context, opts ...grpc.CallOption) (Localhost_GetClient, error)
 }
 
 type localhostClient struct {
@@ -366,9 +449,41 @@ func (x *localhostExecClient) Recv() (*OutputMessage, error) {
 	return m, nil
 }
 
+func (c *localhostClient) Get(ctx context.Context, opts ...grpc.CallOption) (Localhost_GetClient, error) {
+	stream, err := c.cc.NewStream(ctx, &_Localhost_serviceDesc.Streams[1], "/moby.localhost.v1.Localhost/Get", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &localhostGetClient{stream}
+	return x, nil
+}
+
+type Localhost_GetClient interface {
+	Send(*BytesMessage) error
+	Recv() (*BytesMessage, error)
+	grpc.ClientStream
+}
+
+type localhostGetClient struct {
+	grpc.ClientStream
+}
+
+func (x *localhostGetClient) Send(m *BytesMessage) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *localhostGetClient) Recv() (*BytesMessage, error) {
+	m := new(BytesMessage)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // LocalhostServer is the server API for Localhost service.
 type LocalhostServer interface {
 	Exec(Localhost_ExecServer) error
+	Get(Localhost_GetServer) error
 }
 
 // UnimplementedLocalhostServer can be embedded to have forward compatible implementations.
@@ -377,6 +492,9 @@ type UnimplementedLocalhostServer struct {
 
 func (*UnimplementedLocalhostServer) Exec(srv Localhost_ExecServer) error {
 	return status.Errorf(codes.Unimplemented, "method Exec not implemented")
+}
+func (*UnimplementedLocalhostServer) Get(srv Localhost_GetServer) error {
+	return status.Errorf(codes.Unimplemented, "method Get not implemented")
 }
 
 func RegisterLocalhostServer(s *grpc.Server, srv LocalhostServer) {
@@ -409,6 +527,32 @@ func (x *localhostExecServer) Recv() (*InputMessage, error) {
 	return m, nil
 }
 
+func _Localhost_Get_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(LocalhostServer).Get(&localhostGetServer{stream})
+}
+
+type Localhost_GetServer interface {
+	Send(*BytesMessage) error
+	Recv() (*BytesMessage, error)
+	grpc.ServerStream
+}
+
+type localhostGetServer struct {
+	grpc.ServerStream
+}
+
+func (x *localhostGetServer) Send(m *BytesMessage) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *localhostGetServer) Recv() (*BytesMessage, error) {
+	m := new(BytesMessage)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 var _Localhost_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "moby.localhost.v1.Localhost",
 	HandlerType: (*LocalhostServer)(nil),
@@ -417,6 +561,12 @@ var _Localhost_serviceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "Exec",
 			Handler:       _Localhost_Exec_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "Get",
+			Handler:       _Localhost_Get_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
 		},
@@ -510,6 +660,36 @@ func (m *OutputMessage) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *BytesMessage) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *BytesMessage) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *BytesMessage) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Data) > 0 {
+		i -= len(m.Data)
+		copy(dAtA[i:], m.Data)
+		i = encodeVarintLocalhost(dAtA, i, uint64(len(m.Data)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
 func encodeVarintLocalhost(dAtA []byte, offset int, v uint64) int {
 	offset -= sovLocalhost(v)
 	base := offset
@@ -563,6 +743,19 @@ func (m *OutputMessage) Size() (n int) {
 	return n
 }
 
+func (m *BytesMessage) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Data)
+	if l > 0 {
+		n += 1 + l + sovLocalhost(uint64(l))
+	}
+	return n
+}
+
 func sovLocalhost(x uint64) (n int) {
 	return (math_bits.Len64(x|1) + 6) / 7
 }
@@ -589,6 +782,16 @@ func (this *OutputMessage) String() string {
 		`Stderr:` + fmt.Sprintf("%v", this.Stderr) + `,`,
 		`Status:` + fmt.Sprintf("%v", this.Status) + `,`,
 		`ExitCode:` + fmt.Sprintf("%v", this.ExitCode) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *BytesMessage) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&BytesMessage{`,
+		`Data:` + fmt.Sprintf("%v", this.Data) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -855,6 +1058,93 @@ func (m *OutputMessage) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipLocalhost(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthLocalhost
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthLocalhost
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *BytesMessage) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowLocalhost
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: BytesMessage: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: BytesMessage: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Data", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLocalhost
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthLocalhost
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthLocalhost
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Data = append(m.Data[:0], dAtA[iNdEx:postIndex]...)
+			if m.Data == nil {
+				m.Data = []byte{}
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipLocalhost(dAtA[iNdEx:])

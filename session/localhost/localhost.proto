@@ -7,6 +7,7 @@ option go_package = "localhost";
 // Localhost is a service that allows for local execution on the client
 service Localhost {
 	rpc Exec(stream InputMessage) returns (stream OutputMessage);
+	rpc Get(stream BytesMessage) returns (stream BytesMessage);
 }
 
 // InputMessage contains stdin data
@@ -26,4 +27,9 @@ message OutputMessage {
 	}
 	Status status = 3;
 	int32 exit_code = 4; // only valid if status is done
+}
+
+// BytesMessage contains a chunk of byte data
+message BytesMessage{
+	bytes data = 1;
 }
