@@ -9,7 +9,6 @@ import (
 
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/session"
-	"github.com/moby/buildkit/snapshot"
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
 	"github.com/tonistiigi/fsutil/types"
@@ -22,6 +21,12 @@ const RunOnLocalHostMagicStr = "271c67a1-94d9-4241-8bca-cbae334622ae"
 // CopyFileMagicStr is a magic command that copies a file from the local system into a snapshot
 // it's used as "CopyFileMagicStr src dest"
 const CopyFileMagicStr = "39a51ba7-d8c6-43ac-b3aa-f987b2db1ced"
+
+// Mountable is from buildkit/snapshot; however the snapshot package wont build on darwin
+// so we must pull this in here to avoid pulling in linux-specific packages.
+type Mountable interface {
+	IdentityMapping() *idtools.IdentityMapping
+}
 
 // LocalhostExec is called by buildkitd; it connects to the user's client to request the client execute a command localy.
 func LocalhostExec(ctx context.Context, c session.Caller, args []string, stdout, stderr io.Writer) error {
@@ -74,7 +79,7 @@ func LocalhostExec(ctx context.Context, c session.Caller, args []string, stdout,
 }
 
 // LocalhostGet fetches a file or directory located at src on the localhost; and copies it into the mounted snapshot under dest
-func LocalhostGet(ctx context.Context, c session.Caller, src, dest string, mount snapshot.Mountable) error {
+func LocalhostGet(ctx context.Context, c session.Caller, src, dest string, mount Mountable) error {
 	client := NewLocalhostClient(c.Conn())
 
 	stream, err := client.Get(ctx)
@@ -163,7 +168,7 @@ outer:
 	return nil
 }
 
-func receiveDir(stream Localhost_GetClient, dest string, mount snapshot.Mountable) error {
+func receiveDir(stream Localhost_GetClient, dest string, mount Mountable) error {
 	err := os.MkdirAll(dest, 0775)
 	if err != nil {
 		return errors.WithStack(err)
