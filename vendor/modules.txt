@@ -316,7 +316,7 @@ github.com/serialx/hashring
 github.com/shurcooL/sanitized_anchor_name
 # github.com/sirupsen/logrus v1.7.0
 github.com/sirupsen/logrus
-# github.com/stretchr/testify v1.5.1
+# github.com/stretchr/testify v1.7.0
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/require
 # github.com/syndtr/gocapability v0.0.0-20180916011248-d98352740cb2
@@ -441,8 +441,8 @@ google.golang.org/grpc/serviceconfig
 google.golang.org/grpc/stats
 google.golang.org/grpc/status
 google.golang.org/grpc/tap
-# gopkg.in/yaml.v2 v2.3.0
-gopkg.in/yaml.v2
+# gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c
+gopkg.in/yaml.v3
 # gotest.tools/v3 v3.0.2
 gotest.tools/v3/assert
 gotest.tools/v3/assert/cmp
