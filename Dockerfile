@@ -112,8 +112,8 @@ RUN --mount=target=. --mount=target=/root/.cache,type=cache \
 
 FROM scratch AS binaries-linux-helper
 COPY --from=runc /usr/bin/runc /buildkit-runc
-# built from https://github.com/tonistiigi/binfmt/runs/1488746859
-COPY --from=tonistiigi/binfmt:buildkit@sha256:4f7bf8fdf34ca4df118e099666b664c4cc8f054446dc71ff54117150ef1a2800 / /
+# built from https://github.com/tonistiigi/binfmt/runs/1743699129
+COPY --from=tonistiigi/binfmt:buildkit@sha256:75583ce1cf4a7166fd2592f45e4ff3f53727eee6edcd3a3e804f749b1f214a39 / /
 FROM binaries-linux-helper AS binaries-linux
 COPY --from=buildctl /usr/bin/buildctl /
 COPY --from=buildkitd /usr/bin/buildkitd /
