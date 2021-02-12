@@ -31,6 +31,7 @@ import (
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/containerd/snapshots/storage"
 	"github.com/containerd/continuity/fs"
+	"github.com/moby/sys/mountinfo"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -235,7 +236,10 @@ func (o *snapshotter) Prepare(ctx context.Context, key, parent string, opts ...s
 		//       or not, using the key `remoteSnapshotLogKey` defined in the above. This
 		//       log is used by tests in this project.
 		lCtx := log.WithLogger(ctx, log.G(ctx).WithField("key", key).WithField("parent", parent))
-		if err := o.prepareRemoteSnapshot(ctx, key, base.Labels); err == nil {
+		if err := o.prepareRemoteSnapshot(ctx, key, base.Labels); err != nil {
+			log.G(lCtx).WithField(remoteSnapshotLogKey, prepareFailed).
+				WithError(err).Debug("failed to prepare remote snapshot")
+		} else {
 			base.Labels[remoteLabel] = fmt.Sprintf("remote snapshot") // Mark this snapshot as remote
 			err := o.Commit(ctx, target, key, append(opts, snapshots.WithLabels(base.Labels))...)
 			if err == nil || errdefs.IsAlreadyExists(err) {
@@ -249,8 +253,6 @@ func (o *snapshotter) Prepare(ctx context.Context, key, parent string, opts ...s
 			// possible has done some work on this "upper" directory.
 			return nil, err
 		}
-		log.G(lCtx).WithField(remoteSnapshotLogKey, prepareFailed).
-			WithError(err).Debug("failed to prepare remote snapshot")
 	}
 
 	return o.mounts(ctx, s, parent)
@@ -688,7 +690,7 @@ func (o *snapshotter) checkAvailability(ctx context.Context, key string) bool {
 }
 
 func (o *snapshotter) restoreRemoteSnapshot(ctx context.Context) error {
-	mounts, err := mount.Self()
+	mounts, err := mountinfo.GetMounts(nil)
 	if err != nil {
 		return err
 	}
