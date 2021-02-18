@@ -341,24 +341,40 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	for imgName, expSrc := range imageExpSrcs {
 		mprovider := contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
 		mproviders[imgName] = mprovider
-		if len(src.Refs) > 0 {
-			for _, r := range expSrc.Refs {
-				remote, err := r.GetRemote(ctx, false, e.layerCompression, session.NewGroup(sessionID))
-				if err != nil {
+		for _, r := range expSrc.Refs {
+			remote, err := r.GetRemote(ctx, false, e.layerCompression, session.NewGroup(sessionID))
+			if err != nil {
+				return nil, err
+			}
+			// unlazy before tar export as the tar writer does not handle
+			// layer blobs in parallel (whereas unlazy does)
+			if unlazier, ok := remote.Provider.(cache.Unlazier); ok {
+				if err := unlazier.Unlazy(ctx); err != nil {
 					return nil, err
 				}
-				// unlazy before tar export as the tar writer does not handle
-				// layer blobs in parallel (whereas unlazy does)
-				if unlazier, ok := remote.Provider.(cache.Unlazier); ok {
-					if err := unlazier.Unlazy(ctx); err != nil {
-						return nil, err
-					}
-				}
-				for _, desc := range remote.Descriptors {
-					mprovider.Add(desc.Digest, remote.Provider)
-					addAnnotations(annotations, desc)
+			}
+			for _, desc := range remote.Descriptors {
+				mprovider.Add(desc.Digest, remote.Provider)
+				addAnnotations(annotations, desc)
+			}
+		}
+		if expSrc.Ref != nil { // This is a copy and paste of the above code
+			remote, err := expSrc.Ref.GetRemote(ctx, false, e.layerCompression, session.NewGroup(sessionID))
+			if err != nil {
+				return nil, err
+			}
+			// unlazy before tar export as the tar writer does not handle
+			// layer blobs in parallel (whereas unlazy does)
+			if unlazier, ok := remote.Provider.(cache.Unlazier); ok {
+				if err := unlazier.Unlazy(ctx); err != nil {
+					return nil, err
 				}
 			}
+			for _, desc := range remote.Descriptors {
+				mprovider.Add(desc.Digest, remote.Provider)
+				addAnnotations(annotations, desc)
+			}
+
 		}
 
 		if shouldPush[imgName] {
