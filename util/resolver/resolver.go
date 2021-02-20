@@ -43,7 +43,7 @@ func fillInsecureOpts(host string, c config.RegistryConfig, h docker.RegistryHos
 	}
 	if c.Insecure != nil && *c.Insecure {
 		h2 := h
-		transport := newTransport()
+		transport := newDefaultTransport()
 		transport.TLSClientConfig = tc
 		h2.Client = &http.Client{
 			Transport: tracing.NewTransport(transport),
@@ -53,7 +53,7 @@ func fillInsecureOpts(host string, c config.RegistryConfig, h docker.RegistryHos
 	}
 
 	if len(hosts) == 0 {
-		transport := newTransport()
+		transport := newDefaultTransport()
 		transport.TLSClientConfig = tc
 
 		h.Client = &http.Client{
@@ -172,20 +172,18 @@ func NewRegistryConfig(m map[string]config.RegistryConfig) docker.RegistryHosts 
 
 func newDefaultClient() *http.Client {
 	return &http.Client{
-		Transport: tracing.NewTransport(defaultTransport),
+		Transport: tracing.NewTransport(newDefaultTransport()),
 	}
 }
 
-var defaultTransport = newTransport()
-
-// newTransport is for pull or push client
+// newDefaultTransport is for pull or push client
 //
 // NOTE: For push, there must disable http2 for https because the flow control
 // will limit data transfer. The net/http package doesn't provide http2 tunable
 // settings which limits push performance.
 //
 // REF: https://github.com/golang/go/issues/14077
-func newTransport() *http.Transport {
+func newDefaultTransport() *http.Transport {
 	return &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
 		DialContext: (&net.Dialer{
@@ -196,7 +194,6 @@ func newTransport() *http.Transport {
 		IdleConnTimeout:       30 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 5 * time.Second,
-		MaxConnsPerHost:       6,
 		TLSNextProto:          make(map[string]func(authority string, c *tls.Conn) http.RoundTripper),
 	}
 }
