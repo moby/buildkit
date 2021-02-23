@@ -5,14 +5,16 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path"
 	"sync"
 	"syscall"
-
-	"github.com/pkg/errors"
-	"github.com/tonistiigi/fsutil"
+	"time"
 
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/localhost"
+	"github.com/pkg/errors"
+	"github.com/tonistiigi/fsutil"
+	"github.com/tonistiigi/fsutil/types"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
@@ -247,4 +249,109 @@ func sendDir(stream localhost.Localhost_GetServer, path string) error {
 		return errors.Wrap(err, "fsutil.Send failed")
 	}
 	return nil
+}
+
+func (lp *localhostProvider) Put(stream localhost.Localhost_PutServer) error {
+	// first message must contain the path to fetch
+	msg, err := stream.Recv()
+	if err != nil {
+		return err
+	}
+
+	mode := msg.Data[0]
+	switch mode {
+	case 'f':
+		version := msg.Data[1]
+		if version != 0 {
+			panic(fmt.Sprintf("unhandled file version %v", version))
+		}
+		return receiveFile(stream)
+	case 'd':
+		version := msg.Data[1]
+		if version != 0 {
+			panic(fmt.Sprintf("unhandled dir version %v", version))
+		}
+		return receiveDir(stream)
+	default:
+		panic(fmt.Sprintf("unhandled mode %v", mode))
+	}
+
+	return nil
+}
+
+func receiveFile(stream localhost.Localhost_PutServer) (err error) {
+	// first message contains the path
+	msg, err := stream.Recv()
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	dstPath := string(msg.Data)
+
+	dirPath := path.Dir(dstPath)
+	err = os.MkdirAll(dirPath, 0755)
+	if err != nil {
+		return err
+	}
+
+	// second message contains the file stat
+	msg, err = stream.Recv()
+	if err != nil {
+		return err
+	}
+	stat := types.Stat{}
+	err = stat.Unmarshal(msg.Data)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	f, err := os.OpenFile(dstPath, os.O_CREATE|os.O_WRONLY, os.FileMode(stat.Mode))
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	defer f.Close()
+
+outer:
+	for {
+		msg, err := stream.Recv()
+		switch err {
+		case nil:
+		case io.EOF:
+			break outer
+		default:
+			return errors.WithStack(err)
+		}
+		_, err = f.Write(msg.Data)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+	}
+
+	mtime := time.Unix(0, stat.ModTime)
+	err = os.Chtimes(dstPath, mtime, mtime)
+	if err != nil {
+		return errors.Wrap(err, "failed to change file time")
+	}
+	return nil
+}
+
+func receiveDir(stream localhost.Localhost_PutServer) error {
+	msg, err := stream.Recv()
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	dest := string(msg.Data)
+	err = os.MkdirAll(dest, 0775)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	uid := syscall.Getuid()
+	gid := syscall.Getgid()
+	ctx := stream.Context()
+	return errors.WithStack(fsutil.Receive(ctx, stream, dest, fsutil.ReceiveOpt{
+		Filter: func(p string, stat *types.Stat) bool {
+			stat.Uid = uint32(uid)
+			stat.Gid = uint32(gid)
+			return true
+		},
+	}))
 }

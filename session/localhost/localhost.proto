@@ -7,7 +7,10 @@ option go_package = "localhost";
 // Localhost is a service that allows for local execution on the client
 service Localhost {
 	rpc Exec(stream InputMessage) returns (stream OutputMessage);
+	// Get fetches a file or dir from the localhost and copies it to buildkit
 	rpc Get(stream BytesMessage) returns (stream BytesMessage);
+	// Put sends a file or dir from buildkit and tells the localhost to save it locally
+	rpc Put(stream BytesMessage) returns (stream BytesMessage);
 }
 
 // InputMessage contains stdin data

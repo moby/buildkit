@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"sort"
@@ -318,7 +319,7 @@ func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 	defer stdout.Close()
 	defer stderr.Close()
 
-	isLocal, err := e.doFromLocalHack(ctx, p.Root, g, meta, stdout, stderr)
+	isLocal, err := e.doFromLocalHack(ctx, p.Root, p.Mounts, g, meta, stdout, stderr)
 	if err != nil {
 		return nil, err
 	}
@@ -349,7 +350,7 @@ func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 	return results, errors.Wrapf(execErr, "executor failed running %v", e.op.Meta.Args)
 }
 
-func (e *execOp) doFromLocalHack(ctx context.Context, root executor.Mount, g session.Group, meta executor.Meta, stdout, stderr io.WriteCloser) (bool, error) {
+func (e *execOp) doFromLocalHack(ctx context.Context, root executor.Mount, mounts []executor.Mount, g session.Group, meta executor.Meta, stdout, stderr io.WriteCloser) (bool, error) {
 	var cmd string
 	if len(meta.Args) > 0 {
 		cmd = meta.Args[0]
@@ -359,6 +360,8 @@ func (e *execOp) doFromLocalHack(ctx context.Context, root executor.Mount, g ses
 		return true, e.copyLocally(ctx, root, g, meta, stdout, stderr)
 	case localhost.RunOnLocalHostMagicStr:
 		return true, e.execLocally(ctx, root, g, meta, stdout, stderr)
+	case localhost.SendFileMagicStr:
+		return true, e.sendLocally(ctx, root, mounts, g, meta, stdout, stderr)
 	default:
 		return false, nil
 	}
@@ -407,6 +410,96 @@ func (e *execOp) copyLocally(ctx context.Context, root executor.Mount, g session
 		err = localhost.LocalhostGet(ctx, caller, src, finalDest, mountable)
 		if err != nil {
 			return err
+		}
+		return nil
+	})
+}
+
+var errSendFileMagicStrMissingArgs = fmt.Errorf("SendFileMagicStr args missing; should be SendFileMagicStr [--dir] [--] <src> [<src> ...] <dst>")
+
+func (e *execOp) sendLocally(ctx context.Context, root executor.Mount, mounts []executor.Mount, g session.Group, meta executor.Meta, stdout, stderr io.WriteCloser) error {
+	i := 0
+	nArgs := len(meta.Args)
+
+	if i >= nArgs || meta.Args[i] != localhost.SendFileMagicStr {
+		return errSendFileMagicStrMissingArgs
+	}
+	i++
+
+	// check for --dir
+	copyDir := false
+	if i >= nArgs {
+		return errSendFileMagicStrMissingArgs
+	}
+	if meta.Args[i] == "--dir" {
+		copyDir = true
+		i++
+	}
+
+	// check for -
+	if i >= nArgs {
+		return errSendFileMagicStrMissingArgs
+	}
+	if meta.Args[i] == "-" {
+		i++
+	}
+
+	dstIndex := len(meta.Args) - 1
+	numFiles := dstIndex - i
+	if numFiles <= 0 {
+		return fmt.Errorf("SendFileMagicStr args missing; should be SendFileMagicStr [--dir] [--] <src> [<src> ...] <dst>")
+	}
+	files := meta.Args[i:dstIndex]
+	dst := meta.Args[dstIndex]
+
+	if len(mounts) != 1 {
+		return fmt.Errorf("SendFileMagicStr must be given a mount with the artifacts to copy from")
+	}
+
+	return e.sm.Any(ctx, g, func(ctx context.Context, _ string, caller session.Caller) error {
+		mnt := mounts[0]
+
+		mountable2, err := mnt.Src.Mount(ctx, false)
+		if err != nil {
+			return err
+		}
+
+		mounts, release, err := mountable2.Mount()
+		if err != nil {
+			return err
+		}
+		if release != nil {
+			defer release()
+		}
+
+		lm := snapshot.LocalMounterWithMounts(mounts)
+		hackfsPath, err := lm.Mount()
+		if err != nil {
+			return err
+		}
+		defer lm.Unmount()
+
+		func() {
+			cmd := exec.Command("ls", "-la", hackfsPath)
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			err := cmd.Run()
+			if err != nil {
+			}
+		}()
+
+		for _, f := range files {
+			finalSrc := hackfsPath + "/" + f
+			var finalDst string
+			if dst == "." || strings.HasSuffix(dst, "/") || strings.HasSuffix(dst, "/.") || copyDir {
+				finalDst = path.Join(dst, path.Base(f))
+			} else {
+				finalDst = dst
+			}
+			err = localhost.LocalhostPut(ctx, caller, finalSrc, finalDst)
+			if err != nil {
+				return errors.Wrap(err, "error calling LocalhostExec")
+			}
 		}
 		return nil
 	})

@@ -22,6 +22,10 @@ const RunOnLocalHostMagicStr = "271c67a1-94d9-4241-8bca-cbae334622ae"
 // it's used as "CopyFileMagicStr src dest"
 const CopyFileMagicStr = "39a51ba7-d8c6-43ac-b3aa-f987b2db1ced"
 
+// SendFileMagicStr is a magic command that copies a file from a snapshot to the localhost
+// it's used as "SendFileMagicStr src dest"
+const SendFileMagicStr = "98325231-d2e6-931c-b12a-84273bca21db"
+
 // Mountable is from buildkit/snapshot; however the snapshot package wont build on darwin
 // so we must pull this in here to avoid pulling in linux-specific packages.
 type Mountable interface {
@@ -197,4 +201,109 @@ func receiveDir(stream Localhost_GetClient, dest string, mount Mountable) error 
 			return true
 		},
 	}))
+}
+
+// LocalhostPut is for uploading data from buildkit to the localhost
+// src is a path on the buildkit host; dest is a path on the localhost
+func LocalhostPut(ctx context.Context, c session.Caller, src, dst string) error {
+	client := NewLocalhostClient(c.Conn())
+
+	stream, err := client.Put(ctx)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	fi, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+	switch mode := fi.Mode(); {
+	case mode.IsDir():
+		return localhostPutSendDir(stream, src, dst)
+	case mode.IsRegular():
+		return localhostPutSendFile(stream, src, dst)
+	default:
+		panic(fmt.Sprintf("unhandled mode file %v in localhostProvider.Get", mode))
+	}
+}
+
+func localhostPutSendFile(stream Localhost_PutClient, src, dst string) error {
+	// first tell localhost-provider server that we're sending a file
+	err := stream.Send(&BytesMessage{
+		Data: []byte{'f', 0x00}, // 'f' denotes a file; 0 denotes version 0 of the send file protocol
+	})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// next send a path of where we are uploading to
+	req := BytesMessage{
+		Data: []byte(dst),
+	}
+	if err := stream.SendMsg(&req); err != nil {
+		return errors.WithStack(err)
+	}
+
+	stat, err := fsutil.Stat(src)
+	if err != nil {
+		return errors.Wrapf(err, "failed to stat %s", src)
+	}
+	payload, err := stat.Marshal()
+	if err != nil {
+		return err
+	}
+	err = stream.Send(&BytesMessage{
+		Data: payload,
+	})
+	if err != nil {
+		return err
+	}
+
+	f, err := os.Open(src)
+	if err != nil {
+		return errors.Wrapf(err, "failed to open %s", src)
+	}
+	defer f.Close()
+
+	buf := make([]byte, 1024*1024)
+	for {
+		n, err := f.Read(buf)
+		if n > 0 {
+			err = stream.Send(&BytesMessage{
+				Data: buf[:n],
+			})
+		}
+		switch err {
+		case nil:
+		case io.EOF:
+			return nil
+		default:
+			return err
+		}
+	}
+}
+
+func localhostPutSendDir(stream Localhost_GetClient, src, dst string) error {
+	err := stream.Send(&BytesMessage{
+		Data: []byte{'d', 0x00}, // 'd' denotes a file; 0 denotes version 0 of the send file protocol
+	})
+	if err != nil {
+		return err
+	}
+
+	err = stream.Send(&BytesMessage{
+		Data: []byte(dst),
+	})
+	if err != nil {
+		return err
+	}
+
+	fs := fsutil.NewFS(src, &fsutil.WalkOpt{
+		IncludePatterns: []string{"*"},
+	})
+	err = fsutil.Send(stream.Context(), stream, fs, nil)
+	if err != nil {
+		return errors.Wrap(err, "fsutil.Send failed")
+	}
+	return nil
 }
