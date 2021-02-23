@@ -22,7 +22,7 @@ FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS git
 RUN apk add --no-cache git
 
 # xgo is a helper for golang cross-compilation
-FROM --platform=$BUILDPLATFORM tonistiigi/xx:golang@sha256:6f7d999551dd471b58f70716754290495690efa8421e0a1fcf18eb11d0c0a537 AS xgo
+FROM --platform=$BUILDPLATFORM tonistiigi/xx:golang-master@sha256:91a49f50f049316e330aefcc438342db38ab871cb9d6579a9a20b3b759d1b430 AS xgo
 
 # gobuild is base stage for compiling go/cgo
 FROM --platform=$BUILDPLATFORM golang:1.13-buster AS gobuild-minimal
@@ -33,10 +33,12 @@ RUN apt-get update && apt-get install --no-install-recommends -y libseccomp-dev 
 FROM gobuild-minimal AS gobuild-cross-amd64
 RUN dpkg --add-architecture s390x && \
   dpkg --add-architecture ppc64el && \
+  dpkg --add-architecture mips64el && \
   apt-get update && \
   apt-get --no-install-recommends install -y \
     gcc-s390x-linux-gnu libc6-dev-s390x-cross libseccomp-dev:s390x \
     crossbuild-essential-ppc64el libseccomp-dev:ppc64el \
+    crossbuild-essential-mips64el libseccomp-dev:mips64el \
     --no-install-recommends
   
 FROM gobuild-minimal AS gobuild-cross-amd64-arm
@@ -61,6 +63,7 @@ FROM gobuild-minimal AS gobuild-arm64-arm64
 FROM gobuild-cross-amd64-arm AS gobuild-amd64-arm
 FROM gobuild-cross-amd64 AS gobuild-amd64-s390x
 FROM gobuild-cross-amd64 AS gobuild-amd64-ppc64le
+FROM gobuild-cross-amd64 AS gobuild-amd64-mips64le
 FROM gobuild-cross-amd64-arm AS gobuild-amd64-arm64
 FROM gobuild-$BUILDARCH-$TARGETARCH AS gobuild-base
 
@@ -113,8 +116,8 @@ RUN --mount=target=. --mount=target=/root/.cache,type=cache \
 
 FROM scratch AS binaries-linux-helper
 COPY --from=runc /usr/bin/runc /buildkit-runc
-# built from https://github.com/tonistiigi/binfmt/runs/1743699129
-COPY --from=tonistiigi/binfmt:buildkit@sha256:75583ce1cf4a7166fd2592f45e4ff3f53727eee6edcd3a3e804f749b1f214a39 / /
+COPY --from=tonistiigi/binfmt:buildkit@sha256:ac2bd9906d7804eb688f88709e95bb00902ea420464b93bb59698956a137e298 / /
+
 FROM binaries-linux-helper AS binaries-linux
 COPY --from=buildctl /usr/bin/buildctl /
 COPY --from=buildkitd /usr/bin/buildkitd /

@@ -18,7 +18,7 @@ env:
   REPO_SLUG_ORIGIN: "moby/buildkit:latest"
   REPO_SLUG_TARGET: "moby/buildkit"
   DF_REPO_SLUG_TARGET: "docker/dockerfile-upstream"
-  PLATFORMS: "linux/amd64,linux/arm/v7,linux/arm64,linux/s390x,linux/ppc64le"
+  PLATFORMS: "linux/amd64,linux/arm/v7,linux/arm64,linux/s390x,linux/ppc64le,linux/mips64le"
   CACHEKEY_INTEGRATION_TESTS: "integration-tests"
   CACHEKEY_BINARIES: "binaries"
   CACHEKEY_CROSS: "cross"
