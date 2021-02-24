@@ -11,6 +11,7 @@ on:
   pull_request:
     branches:
       - 'master'
+      - 'v0.8'
 
 env:
   REPO_SLUG_ORIGIN: "moby/buildkit:latest"
