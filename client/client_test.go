@@ -2126,15 +2126,33 @@ func testStargzLazyPull(t *testing.T, sb integration.Sandbox) {
 	}
 	require.NoError(t, err)
 
-	// Prepare stargz image
-	sgzImage := registry + "/stargz/alpine:latest"
-	err = exec.Command("ctr-remote", "image", "optimize",
-		"--period=1", "alpine:latest", sgzImage).Run()
-	require.NoError(t, err)
+	var (
+		imageService = client.ImageService()
+		contentStore = client.ContentStore()
+		ctx          = namespaces.WithNamespace(context.Background(), "buildkit")
+	)
 
 	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
+
+	// Prepare stargz image
+	orgImage := "docker.io/library/alpine:latest"
+	sgzImage := registry + "/stargz/alpine:latest"
+	ctrRemoteCommonArg := []string{"--namespace", "buildkit", "--address", cdAddress}
+	err = exec.Command("ctr-remote", append(ctrRemoteCommonArg, "i", "pull", orgImage)...).Run()
+	require.NoError(t, err)
+	err = exec.Command("ctr-remote", append(ctrRemoteCommonArg, "i", "optimize", "--oci", "--period=1", orgImage, sgzImage)...).Run()
+	require.NoError(t, err)
+	err = exec.Command("ctr-remote", append(ctrRemoteCommonArg, "i", "push", "--plain-http", sgzImage)...).Run()
+	require.NoError(t, err)
+
+	// clear all local state out
+	err = imageService.Delete(ctx, orgImage, images.SynchronousDelete())
+	require.NoError(t, err)
+	err = imageService.Delete(ctx, sgzImage, images.SynchronousDelete())
+	require.NoError(t, err)
+	checkAllReleasable(t, c, sb, true)
 
 	// stargz layers should be lazy even for executing something on them
 	def, err := llb.Image(sgzImage).
@@ -2154,12 +2172,6 @@ func testStargzLazyPull(t *testing.T, sb integration.Sandbox) {
 		},
 	}, nil)
 	require.NoError(t, err)
-
-	var (
-		imageService = client.ImageService()
-		contentStore = client.ContentStore()
-		ctx          = namespaces.WithNamespace(context.Background(), "buildkit")
-	)
 
 	img, err := imageService.Get(ctx, target)
 	require.NoError(t, err)

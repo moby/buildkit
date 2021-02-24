@@ -1,4 +1,4 @@
-// +build !linux,!freebsd,!solaris,!openbsd freebsd,!cgo solaris,!cgo openbsd,!cgo
+// +build freebsd
 
 /*
    Copyright The containerd Authors.
@@ -16,19 +16,8 @@
    limitations under the License.
 */
 
-package mount
+package native
 
-import (
-	"fmt"
-	"runtime"
-)
+const mountType = "nullfs"
 
-// Self retrieves a list of mounts for the current running process.
-func Self() ([]Info, error) {
-	return nil, fmt.Errorf("mountinfo.Self is not implemented on %s/%s", runtime.GOOS, runtime.GOARCH)
-}
-
-// PID collects the mounts for a specific process ID.
-func PID(pid int) ([]Info, error) {
-	return nil, fmt.Errorf("mountinfo.PID is not implemented on %s/%s", runtime.GOOS, runtime.GOARCH)
-}
+var defaultMountOptions = []string{}
