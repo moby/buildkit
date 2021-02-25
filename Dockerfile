@@ -1,7 +1,6 @@
 # syntax = docker/dockerfile:1.2
 
-# TODO update RUNC_VERSION with next release after 1.0-rc92
-ARG RUNC_VERSION=939ad4e3fcfa1ab531458355a73688c6f4ee5003
+ARG RUNC_VERSION=v1.0.0-rc93
 ARG CONTAINERD_VERSION=v1.4.2
 # containerd v1.3 for integration tests
 ARG CONTAINERD_ALT_VERSION=v1.3.7
