@@ -122,6 +122,7 @@ func TestIntegration(t *testing.T) {
 		testSourceMapFromRef,
 		testLazyImagePush,
 		testStargzLazyPull,
+		testFileOpInputSwap,
 	}, mirrors)
 
 	integration.Run(t, []integration.Test{
@@ -1128,7 +1129,36 @@ func testFileOpCopyRm(t *testing.T, sb integration.Sandbox) {
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "file2"))
 	require.NoError(t, err)
 	require.Equal(t, []byte("file2"), dt)
+}
 
+// testFileOpInputSwap is a regression test that cache is invalidated when subset of fileop is built
+func testFileOpInputSwap(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	base := llb.Scratch().File(llb.Mkfile("/foo", 0600, []byte("foo")))
+
+	src := llb.Scratch().File(llb.Mkfile("/bar", 0600, []byte("bar")))
+
+	st := base.File(llb.Copy(src, "/bar", "/baz"))
+
+	def, err := st.Marshal(context.TODO())
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	require.NoError(t, err)
+
+	// bar does not exist in base but index of all inputs remains the same
+	st = base.File(llb.Copy(base, "/bar", "/baz"))
+
+	def, err = st.Marshal(context.TODO())
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "bar: no such file")
 }
 
 func testFileOpRmWildcard(t *testing.T, sb integration.Sandbox) {
@@ -2096,15 +2126,33 @@ func testStargzLazyPull(t *testing.T, sb integration.Sandbox) {
 	}
 	require.NoError(t, err)
 
-	// Prepare stargz image
-	sgzImage := registry + "/stargz/alpine:latest"
-	err = exec.Command("ctr-remote", "image", "optimize",
-		"--period=1", "alpine:latest", sgzImage).Run()
-	require.NoError(t, err)
+	var (
+		imageService = client.ImageService()
+		contentStore = client.ContentStore()
+		ctx          = namespaces.WithNamespace(context.Background(), "buildkit")
+	)
 
 	c, err := New(context.TODO(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
+
+	// Prepare stargz image
+	orgImage := "docker.io/library/alpine:latest"
+	sgzImage := registry + "/stargz/alpine:latest"
+	ctrRemoteCommonArg := []string{"--namespace", "buildkit", "--address", cdAddress}
+	err = exec.Command("ctr-remote", append(ctrRemoteCommonArg, "i", "pull", orgImage)...).Run()
+	require.NoError(t, err)
+	err = exec.Command("ctr-remote", append(ctrRemoteCommonArg, "i", "optimize", "--oci", "--period=1", orgImage, sgzImage)...).Run()
+	require.NoError(t, err)
+	err = exec.Command("ctr-remote", append(ctrRemoteCommonArg, "i", "push", "--plain-http", sgzImage)...).Run()
+	require.NoError(t, err)
+
+	// clear all local state out
+	err = imageService.Delete(ctx, orgImage, images.SynchronousDelete())
+	require.NoError(t, err)
+	err = imageService.Delete(ctx, sgzImage, images.SynchronousDelete())
+	require.NoError(t, err)
+	checkAllReleasable(t, c, sb, true)
 
 	// stargz layers should be lazy even for executing something on them
 	def, err := llb.Image(sgzImage).
@@ -2124,12 +2172,6 @@ func testStargzLazyPull(t *testing.T, sb integration.Sandbox) {
 		},
 	}, nil)
 	require.NoError(t, err)
-
-	var (
-		imageService = client.ImageService()
-		contentStore = client.ContentStore()
-		ctx          = namespaces.WithNamespace(context.Background(), "buildkit")
-	)
 
 	img, err := imageService.Get(ctx, target)
 	require.NoError(t, err)

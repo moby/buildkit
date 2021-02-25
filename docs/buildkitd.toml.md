@@ -66,7 +66,7 @@ insecure-entitlements = [ "network.host", "security.insecure" ]
   platforms = [ "linux/amd64", "linux/arm64" ]
   namespace = "buildkit"
   gc = true
-  # gckeepstorage sets storage limit for default gc profile, in bytes.
+  # gckeepstorage sets storage limit for default gc profile, in MB.
   gckeepstorage = 9000
   [worker.containerd.labels]
     "foo" = "bar"

@@ -1,6 +1,6 @@
 module github.com/containerd/stargz-snapshotter/estargz
 
-go 1.13
+go 1.15
 
 require (
 	github.com/opencontainers/go-digest v1.0.0

@@ -91,6 +91,10 @@ func init() {
 			Usage: "snapshotter name to use",
 			Value: ctd.DefaultSnapshotter,
 		},
+		cli.StringFlag{
+			Name:  "containerd-worker-apparmor-profile",
+			Usage: "set the name of the apparmor profile applied to containers",
+		},
 	}
 
 	if defaultConf.Workers.Containerd.GC == nil || *defaultConf.Workers.Containerd.GC {
@@ -192,6 +196,9 @@ func applyContainerdFlags(c *cli.Context, cfg *config.Config) error {
 	if c.GlobalIsSet("containerd-worker-snapshotter") {
 		cfg.Workers.Containerd.Snapshotter = c.GlobalString("containerd-worker-snapshotter")
 	}
+	if c.GlobalIsSet("containerd-worker-apparmor-profile") {
+		cfg.Workers.Containerd.ApparmorProfile = c.GlobalString("containerd-worker-apparmor-profile")
+	}
 
 	return nil
 }
@@ -222,7 +229,7 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 	if cfg.Snapshotter != "" {
 		snapshotter = cfg.Snapshotter
 	}
-	opt, err := containerd.NewWorkerOpt(common.config.Root, cfg.Address, snapshotter, cfg.Namespace, cfg.Labels, dns, nc, ctd.WithTimeout(60*time.Second))
+	opt, err := containerd.NewWorkerOpt(common.config.Root, cfg.Address, snapshotter, cfg.Namespace, cfg.Labels, dns, nc, common.config.Workers.Containerd.ApparmorProfile, ctd.WithTimeout(60*time.Second))
 	if err != nil {
 		return nil, err
 	}
