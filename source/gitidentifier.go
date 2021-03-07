@@ -2,6 +2,8 @@ package source
 
 import (
 	"net/url"
+	"os/exec"
+	"regexp"
 	"strings"
 
 	"github.com/moby/buildkit/util/sshutil"
@@ -19,6 +21,8 @@ type GitIdentifier struct {
 	KnownSSHHosts    string
 }
 
+var defaultBranch = regexp.MustCompile(`refs/heads/(\S+)`)
+
 func NewGitIdentifier(remoteURL string) (*GitIdentifier, error) {
 	repo := GitIdentifier{}
 
@@ -35,6 +39,7 @@ func NewGitIdentifier(remoteURL string) (*GitIdentifier, error) {
 		if len(parts) == 2 {
 			fragment = parts[1]
 		}
+
 		repo.Ref, repo.Subdir = getRefAndSubdir(fragment)
 	} else {
 		u, err := url.Parse(remoteURL)
@@ -49,6 +54,15 @@ func NewGitIdentifier(remoteURL string) (*GitIdentifier, error) {
 	if repo.Subdir != "" {
 		return nil, errors.Errorf("subdir not supported yet")
 	}
+
+	if repo.Ref == "" {
+		var err error
+		repo.Ref, err = getDefaultBranch(repo.Remote)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return &repo, nil
 }
 
@@ -64,7 +78,7 @@ func isGitTransport(str string) bool {
 
 func getRefAndSubdir(fragment string) (ref string, subdir string) {
 	refAndDir := strings.SplitN(fragment, ":", 2)
-	ref = "master"
+	ref = ""
 	if len(refAndDir[0]) != 0 {
 		ref = refAndDir[0]
 	}
@@ -72,4 +86,18 @@ func getRefAndSubdir(fragment string) (ref string, subdir string) {
 		subdir = refAndDir[1]
 	}
 	return
+}
+
+// getDefaultBranch gets the default branch of a repository using ls-remote
+func getDefaultBranch(remoteURL string) (string, error) {
+	out, err := exec.Command("git", "ls-remote", "--symref", remoteURL, "HEAD").CombinedOutput()
+	if err != nil {
+		return "", errors.Errorf("error fetching default branch for repository %s: %v", remoteURL, err)
+	}
+
+	ss := defaultBranch.FindAllStringSubmatch(string(out), -1)
+	if len(ss) == 0 || len(ss[0]) != 2 {
+		return "", errors.Errorf("could not find default branch for repository: %s", remoteURL)
+	}
+	return ss[0][1], nil
 }
