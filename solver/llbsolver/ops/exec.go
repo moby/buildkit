@@ -514,9 +514,10 @@ func (e *execOp) execLocally(ctx context.Context, root executor.Mount, g session
 		panic("first arg should be RunOnLocalHostMagicStr; this should not happen")
 	}
 	args := meta.Args[1:] // remove magic uuid from command prefix; the rest that follows is the actual command to run
+	cwd := meta.Cwd
 
 	return e.sm.Any(ctx, g, func(ctx context.Context, _ string, caller session.Caller) error {
-		err := localhost.LocalhostExec(ctx, caller, args, stdout, stderr)
+		err := localhost.LocalhostExec(ctx, caller, args, cwd, stdout, stderr)
 		if err != nil {
 			return errors.Wrap(err, "error calling LocalhostExec")
 		}

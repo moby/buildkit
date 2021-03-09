@@ -33,7 +33,7 @@ type Mountable interface {
 }
 
 // LocalhostExec is called by buildkitd; it connects to the user's client to request the client execute a command localy.
-func LocalhostExec(ctx context.Context, c session.Caller, args []string, stdout, stderr io.Writer) error {
+func LocalhostExec(ctx context.Context, c session.Caller, args []string, dir string, stdout, stderr io.Writer) error {
 	// stdout and stderr get closed in execOp.Exec()
 
 	client := NewLocalhostClient(c.Conn())
@@ -44,6 +44,7 @@ func LocalhostExec(ctx context.Context, c session.Caller, args []string, stdout,
 
 	req := InputMessage{
 		Command: args,
+		Dir:     dir,
 	}
 	if err := stream.SendMsg(&req); err != nil {
 		return errors.WithStack(err)

@@ -17,6 +17,7 @@ service Localhost {
 message InputMessage {
 	repeated string command = 1;
 	bytes stdin = 2;
+	string dir = 3;
 }
 
 // OutputMessage contains stdout and stderr data

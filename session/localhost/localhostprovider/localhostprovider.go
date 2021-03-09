@@ -44,17 +44,24 @@ func (lp *localhostProvider) Exec(stream localhost.Localhost_ExecServer) error {
 		return err
 	}
 
-	// it might be possible to run in parallel; but it hasn't been tested.
-	lp.m.Lock()
-	defer lp.m.Unlock()
-
 	if len(msg.Command) == 0 {
 		return fmt.Errorf("command is empty")
 	}
 	cmdStr := msg.Command[0]
 	args := msg.Command[1:]
+	workingDir := msg.Dir
+
+	// it might be possible to run in parallel; but it hasn't been tested.
+	lp.m.Lock()
+	defer lp.m.Unlock()
+
+	err = os.MkdirAll(workingDir, 0755)
+	if err != nil {
+		return errors.WithStack(err)
+	}
 
 	cmd := exec.CommandContext(ctx, cmdStr, args...)
+	cmd.Dir = workingDir
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
