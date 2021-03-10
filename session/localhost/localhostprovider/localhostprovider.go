@@ -55,9 +55,11 @@ func (lp *localhostProvider) Exec(stream localhost.Localhost_ExecServer) error {
 	lp.m.Lock()
 	defer lp.m.Unlock()
 
-	err = os.MkdirAll(workingDir, 0755)
-	if err != nil {
-		return errors.WithStack(err)
+	if workingDir != "" {
+		err = os.MkdirAll(workingDir, 0755)
+		if err != nil {
+			return errors.WithStack(err)
+		}
 	}
 
 	cmd := exec.CommandContext(ctx, cmdStr, args...)

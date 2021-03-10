@@ -8,7 +8,6 @@ import (
 	"io"
 	"net"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"sort"
@@ -411,6 +410,7 @@ func (e *execOp) copyLocally(ctx context.Context, root executor.Mount, g session
 		defer lm.Unmount()
 
 		finalDest := rootfsPath + "/" + dst
+		logrus.Debugf("calling LocalhostGet src=%s dst=%s", src, finalDest)
 		err = localhost.LocalhostGet(ctx, caller, src, finalDest, mountable)
 		if err != nil {
 			return err
@@ -483,15 +483,6 @@ func (e *execOp) sendLocally(ctx context.Context, root executor.Mount, mounts []
 		}
 		defer lm.Unmount()
 
-		func() {
-			cmd := exec.Command("ls", "-la", hackfsPath)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			err := cmd.Run()
-			if err != nil {
-			}
-		}()
-
 		for _, f := range files {
 			finalSrc := hackfsPath + "/" + f
 			var finalDst string
@@ -500,6 +491,7 @@ func (e *execOp) sendLocally(ctx context.Context, root executor.Mount, mounts []
 			} else {
 				finalDst = dst
 			}
+			logrus.Debugf("calling LocalhostPut src=%s dst=%s", finalSrc, finalDst)
 			err = localhost.LocalhostPut(ctx, caller, finalSrc, finalDst)
 			if err != nil {
 				return errors.Wrap(err, "error calling LocalhostExec")
@@ -517,6 +509,7 @@ func (e *execOp) execLocally(ctx context.Context, root executor.Mount, g session
 	cwd := meta.Cwd
 
 	return e.sm.Any(ctx, g, func(ctx context.Context, _ string, caller session.Caller) error {
+		logrus.Debugf("localexec dir=%s; args=%v", cwd, args)
 		err := localhost.LocalhostExec(ctx, caller, args, cwd, stdout, stderr)
 		if err != nil {
 			return errors.Wrap(err, "error calling LocalhostExec")
