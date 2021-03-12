@@ -1,9 +1,9 @@
 # syntax = docker/dockerfile:1.2
 
 ARG RUNC_VERSION=v1.0.0-rc93
-ARG CONTAINERD_VERSION=v1.4.3
-# containerd v1.3 for integration tests
-ARG CONTAINERD_ALT_VERSION=v1.3.7
+ARG CONTAINERD_VERSION=v1.5.0-rc.2
+# containerd v1.4 for integration tests
+ARG CONTAINERD_ALT_VERSION=v1.4.4
 # available targets: buildkitd, buildkitd.oci_only, buildkitd.containerd_only
 ARG BUILDKIT_TARGET=buildkitd
 ARG REGISTRY_VERSION=2.7.1
@@ -148,7 +148,7 @@ RUN --mount=from=containerd-src,src=/usr/src/containerd,readwrite --mount=target
   && make bin/ctr \
   && mv bin /out
 
-# containerd v1.3 for integration tests
+# containerd v1.4 for integration tests
 FROM containerd-base as containerd-alt
 ARG CONTAINERD_ALT_VERSION
 RUN --mount=from=containerd-src,src=/usr/src/containerd,readwrite --mount=target=/root/.cache,type=cache \
@@ -244,7 +244,7 @@ RUN apk add --no-cache shadow shadow-uidmap sudo vim iptables fuse \
   && ln -s /sbin/iptables-legacy /usr/bin/iptables \
   && xx-go --wrap
 # musl is needed to directly use the registry binary that is built on alpine
-ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.3=/opt/containerd-alt/bin"
+ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.4=/opt/containerd-alt/bin"
 ENV BUILDKIT_INTEGRATION_SNAPSHOTTER=stargz
 ENV CGO_ENABLED=0
 COPY --from=stargz-snapshotter /out/* /usr/bin/
