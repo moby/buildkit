@@ -179,9 +179,9 @@ func TestChecksumWildcard(t *testing.T) {
 
 	dgst, err := cc.ChecksumWildcard(context.TODO(), ref, "f*o", false, nil)
 	require.NoError(t, err)
-	require.Equal(t, dgstFileData0, dgst)
+	require.Equal(t, digest.FromBytes(append([]byte("foo"), []byte(dgstFileData0)...)), dgst)
 
-	expFoos := digest.Digest("sha256:c9f914ad7ad8fe6092ce67484b43ca39c2087aabf9e4a1b223249b0f8b09b9f2")
+	expFoos := digest.Digest("sha256:7f51c821895cfc116d3f64231dfb438e87a237ecbbe027cd96b7ee5e763cc569")
 
 	dgst, err = cc.ChecksumWildcard(context.TODO(), ref, "f*", false, nil)
 	require.NoError(t, err)
@@ -189,15 +189,17 @@ func TestChecksumWildcard(t *testing.T) {
 
 	dgst, err = cc.ChecksumWildcard(context.TODO(), ref, "x/d?", false, nil)
 	require.NoError(t, err)
-	require.Equal(t, dgstDirD0, dgst)
+	require.Equal(t, digest.FromBytes(append([]byte("d0"), []byte(dgstDirD0)...)), dgst)
 
 	dgst, err = cc.ChecksumWildcard(context.TODO(), ref, "x/d?/def", true, nil)
 	require.NoError(t, err)
 	require.Equal(t, dgstFileData0, dgst)
 
+	expFoos2 := digest.Digest("sha256:8afc09c7018d65d5eb318a9ef55cb704dec1f06d288181d913fc27a571aa042d")
+
 	dgst, err = cc.ChecksumWildcard(context.TODO(), ref, "y*", true, nil)
 	require.NoError(t, err)
-	require.Equal(t, expFoos, dgst)
+	require.Equal(t, expFoos2, dgst)
 
 	err = ref.Release(context.TODO())
 	require.NoError(t, err)
