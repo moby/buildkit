@@ -25,6 +25,7 @@ import (
 	"github.com/moby/buildkit/exporter"
 	imageexporter "github.com/moby/buildkit/exporter/containerimage"
 	localexporter "github.com/moby/buildkit/exporter/local"
+	nydusexporter "github.com/moby/buildkit/exporter/nydus"
 	ociexporter "github.com/moby/buildkit/exporter/oci"
 	tarexporter "github.com/moby/buildkit/exporter/tar"
 	"github.com/moby/buildkit/frontend"
@@ -364,6 +365,17 @@ func (w *Worker) Exporter(name string, sm *session.Manager) (exporter.Exporter, 
 			ImageWriter:    w.imageWriter,
 			Variant:        ociexporter.VariantDocker,
 			LeaseManager:   w.LeaseManager,
+		})
+	case client.ExporterNydusImage:
+		return nydusexporter.New(nydusexporter.Opt{
+			ImageOpt: imageexporter.Opt{
+				Images:         w.ImageStore,
+				SessionManager: sm,
+				ImageWriter:    w.imageWriter,
+				RegistryHosts:  w.RegistryHosts,
+				LeaseManager:   w.LeaseManager,
+			},
+			CacheManager: w.CacheManager(),
 		})
 	default:
 		return nil, errors.Errorf("exporter %q could not be found", name)

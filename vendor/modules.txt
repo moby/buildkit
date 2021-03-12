@@ -34,6 +34,8 @@ github.com/Microsoft/hcsshim/internal/vmcompute
 github.com/Microsoft/hcsshim/internal/wclayer
 github.com/Microsoft/hcsshim/internal/winapi
 github.com/Microsoft/hcsshim/osversion
+# github.com/aliyun/aliyun-oss-go-sdk v2.1.6+incompatible
+github.com/aliyun/aliyun-oss-go-sdk/oss
 # github.com/containerd/cgroups v0.0.0-20210114181951-8a68de567b68
 github.com/containerd/cgroups/stats/v1
 # github.com/containerd/console v1.0.1
@@ -219,6 +221,17 @@ github.com/docker/libnetwork/ipamutils
 github.com/docker/libnetwork/resolvconf
 github.com/docker/libnetwork/resolvconf/dns
 github.com/docker/libnetwork/types
+# github.com/dragonflyoss/image-service/contrib/nydusify v0.0.0-20210322095924-5caf58755f51
+github.com/dragonflyoss/image-service/contrib/nydusify/pkg/backend
+github.com/dragonflyoss/image-service/contrib/nydusify/pkg/build
+github.com/dragonflyoss/image-service/contrib/nydusify/pkg/cache
+github.com/dragonflyoss/image-service/contrib/nydusify/pkg/converter
+github.com/dragonflyoss/image-service/contrib/nydusify/pkg/converter/provider
+github.com/dragonflyoss/image-service/contrib/nydusify/pkg/parser
+github.com/dragonflyoss/image-service/contrib/nydusify/pkg/remote
+github.com/dragonflyoss/image-service/contrib/nydusify/pkg/utils
+# github.com/dustin/go-humanize v1.0.0
+github.com/dustin/go-humanize
 # github.com/gofrs/flock v0.7.3
 github.com/gofrs/flock
 # github.com/gogo/googleapis v1.4.0
