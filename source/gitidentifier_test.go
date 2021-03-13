@@ -13,16 +13,16 @@ func TestNewGitIdentifier(t *testing.T) {
 	require.Equal(t, "main", gi.Ref)
 	require.Equal(t, "", gi.Subdir)
 
-	gi, err = NewGitIdentifier("git@github.com:moby/buildkit.git#master")
+	gi, err = NewGitIdentifier("git@github.com:moby/buildkit.git#main")
 	require.Nil(t, err)
 	require.Equal(t, "git@github.com:moby/buildkit.git", gi.Remote)
-	require.Equal(t, "master", gi.Ref)
+	require.Equal(t, "main", gi.Ref)
 	require.Equal(t, "", gi.Subdir)
 
-	gi, err = NewGitIdentifier("github.com/moby/buildkit.git")
+	gi, err = NewGitIdentifier("github.com/moby/buildkit.git#main")
 	require.Nil(t, err)
 	require.Equal(t, "https://github.com/moby/buildkit.git", gi.Remote)
-	require.Equal(t, "master", gi.Ref)
+	require.Equal(t, "main", gi.Ref)
 	require.Equal(t, "", gi.Subdir)
 
 }
