@@ -276,9 +276,9 @@ github.com/klauspost/compress/zstd/internal/xxhash
 github.com/mitchellh/hashstructure
 # github.com/moby/locker v1.0.1
 github.com/moby/locker
-# github.com/moby/sys/mount v0.1.1
+# github.com/moby/sys/mount v0.2.0
 github.com/moby/sys/mount
-# github.com/moby/sys/mountinfo v0.4.0
+# github.com/moby/sys/mountinfo v0.4.1
 github.com/moby/sys/mountinfo
 # github.com/moby/term v0.0.0-20200915141129-7f0af18e79f2
 github.com/moby/term
