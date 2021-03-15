@@ -54,7 +54,7 @@ This mount type allows the build container to cache directories for compilers an
 
 |Option               |Description|
 |---------------------|-----------|
-|`id`                 | Optional ID to identify separate/different caches|
+|`id`                 | Optional ID to identify separate/different caches. Defaults to value of `target`. |
 |`target` (required)  | Mount path.|
 |`ro`,`readonly`      | Read-only if set.|
 |`sharing`            | One of `shared`, `private`, or `locked`. Defaults to `shared`. A `shared` cache mount can be used concurrently by multiple writers. `private` creates a new mount if there are multiple writers. `locked` pauses the second writer until the first one releases the mount.|
