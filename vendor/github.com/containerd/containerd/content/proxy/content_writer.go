@@ -125,7 +125,8 @@ func (rw *remoteWriter) Commit(ctx context.Context, size int64, expected digest.
 
 	rw.digest = resp.Digest
 	rw.offset = resp.Offset
-	return nil
+
+	return rw.Close()
 }
 
 func (rw *remoteWriter) Truncate(size int64) error {
