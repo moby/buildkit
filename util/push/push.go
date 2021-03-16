@@ -43,7 +43,12 @@ func Push(ctx context.Context, sm *session.Manager, sid string, provider content
 	if byDigest {
 		ref = parsed.Name()
 	} else {
-		ref = reference.TagNameOnly(parsed).String()
+		// add digest to ref, this is what containderd uses to choose root manifest from all manifests
+		r, err := reference.WithDigest(reference.TagNameOnly(parsed), dgst)
+		if err != nil {
+			return errors.Wrapf(err, "failed to combine ref %s with digest %s", ref, dgst)
+		}
+		ref = r.String()
 	}
 
 	scope := "push"
