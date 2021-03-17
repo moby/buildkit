@@ -62,6 +62,8 @@ func (c *CacheChains) normalize() error {
 		}
 	}
 
+	st.removeLoops()
+
 	items := make([]*item, 0, len(st.byKey))
 	for _, it := range st.byKey {
 		items = append(items, it)
@@ -118,6 +120,25 @@ type item struct {
 type link struct {
 	src      *item
 	selector string
+}
+
+func (c *item) removeLink(src *item) bool {
+	found := false
+	for idx := range c.links {
+		for l := range c.links[idx] {
+			if l.src == src {
+				delete(c.links[idx], l)
+				found = true
+			}
+		}
+	}
+	for idx := range c.links {
+		if len(c.links[idx]) == 0 {
+			c.links = nil
+			break
+		}
+	}
+	return found
 }
 
 func (c *item) AddResult(createdAt time.Time, result *solver.Remote) {
