@@ -27,8 +27,10 @@ import (
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/continuity/fs/fstest"
+	nydusifyutils "github.com/dragonflyoss/image-service/contrib/nydusify/pkg/utils"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/exporter/nydus"
 	"github.com/moby/buildkit/frontend/dockerfile/builder"
 	"github.com/moby/buildkit/frontend/dockerfile/dockerfile2llb"
 	gateway "github.com/moby/buildkit/frontend/gateway/client"
@@ -96,6 +98,7 @@ var allTests = []integration.Test{
 	testCopyWildcardCache,
 	testDockerignoreOverride,
 	testTarExporter,
+	testNydusExporter,
 	testDefaultEnvWithArgs,
 	testEnvEmptyFormatting,
 	testCacheMultiPlatformImportExport,
@@ -544,6 +547,76 @@ FROM stage-$TARGETOS
 	mi, ok = m["darwin_amd64/fordarwin"]
 	require.Equal(t, true, ok)
 	require.Equal(t, "data2", string(mi.Data))
+}
+
+func testNydusExporter(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrorRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	dockerfile := []byte(`
+FROM busybox
+RUN echo nydus > /data
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	target := registry + "/buildkit/build/exporter:nydus"
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterNydusImage,
+				Attrs: map[string]string{
+					"name": target,
+				},
+			},
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	remote, err := nydus.NewRemote(nil, "", nil, target, true)
+	require.NoError(t, err)
+
+	desc, err := remote.Resolve(context.Background())
+	require.NoError(t, err)
+
+	reader, err := remote.Pull(context.Background(), *desc, false)
+	require.NoError(t, err)
+	defer reader.Close()
+
+	mstBytes, err := ioutil.ReadAll(reader)
+	require.NoError(t, err)
+
+	var mst ocispec.Manifest
+	err = json.Unmarshal(mstBytes, &mst)
+	require.NoError(t, err)
+
+	require.Equal(t, 3, len(mst.Layers))
+	for idx, layer := range mst.Layers {
+		if idx == len(mst.Layers)-1 {
+			require.Equal(t, "true", layer.Annotations[nydusifyutils.LayerAnnotationNydusBootstrap])
+		} else {
+			require.Equal(t, nydusifyutils.MediaTypeNydusBlob, layer.MediaType)
+			require.Equal(t, "true", layer.Annotations[nydusifyutils.LayerAnnotationNydusBlob])
+		}
+	}
 }
 
 func testWorkdirCreatesDir(t *testing.T, sb integration.Sandbox) {

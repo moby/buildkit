@@ -183,6 +183,11 @@ RUN --mount=target=/root/.cache,type=cache \
   xx-verify --static /out/containerd-stargz-grpc && \
   xx-verify --static /out/ctr-remote
 
+FROM gobuild-base AS nydus-binaries
+WORKDIR /usr/bin
+RUN wget https://github.com/dragonflyoss/image-service/releases/download/v1.0.0/nydus-static-v1.0.0-x86_64.tgz
+RUN tar xzvf nydus-static-v1.0.0-x86_64.tgz
+
 FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS fuse-overlayfs
 RUN apk add --no-cache curl
 COPY --from=xx / /
@@ -248,6 +253,7 @@ ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.3=/opt/containerd-alt/bi
 ENV BUILDKIT_INTEGRATION_SNAPSHOTTER=stargz
 ENV CGO_ENABLED=0
 COPY --from=stargz-snapshotter /out/* /usr/bin/
+COPY --from=nydus-binaries /usr/bin/nydus-static/* /usr/bin/
 COPY --from=rootlesskit /rootlesskit /usr/bin/
 COPY --from=containerd-alt /out/containerd* /opt/containerd-alt/bin/
 COPY --from=registry /bin/registry /usr/bin
