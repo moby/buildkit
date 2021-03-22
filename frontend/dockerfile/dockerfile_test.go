@@ -108,6 +108,7 @@ var allTests = []integration.Test{
 	testDockefileCheckHostname,
 	testDefaultShellAndPath,
 	testDockerfileLowercase,
+	testExportCacheLoop,
 }
 
 var fileOpTests = []integration.Test{
@@ -384,6 +385,85 @@ RUN [ "$(cat testfile)" == "contents0" ]
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
 		},
+	}, nil)
+	require.NoError(t, err)
+}
+
+func testExportCacheLoop(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM alpine as base
+RUN echo aa > /foo
+WORKDIR /bar
+
+FROM base as base1
+COPY hello.txt .
+
+FROM base as base2
+COPY --from=base1 /bar/hello.txt .
+RUN true
+
+FROM scratch
+COPY --from=base2 /foo /f
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+		fstest.CreateFile("hello.txt", []byte("hello"), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	cacheDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(cacheDir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+		CacheExports: []client.CacheOptionsEntry{
+			{
+				Type: "local",
+				Attrs: map[string]string{
+					"dest": filepath.Join(cacheDir, "cache"),
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	err = c.Prune(context.TODO(), nil)
+	require.NoError(t, err)
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+		CacheExports: []client.CacheOptionsEntry{
+			{
+				Type: "local",
+				Attrs: map[string]string{
+					"dest": filepath.Join(cacheDir, "cache"),
+				},
+			},
+		},
+		CacheImports: []client.CacheOptionsEntry{
+			{
+				Type: "local",
+				Attrs: map[string]string{
+					"src": filepath.Join(cacheDir, "cache"),
+				},
+			},
+		},
+		FrontendAttrs: map[string]string{},
 	}, nil)
 	require.NoError(t, err)
 }
