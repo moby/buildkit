@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"time"
 
-	fuseoverlayfs "github.com/AkihiroSuda/containerd-fuse-overlayfs"
 	"github.com/BurntSushi/toml"
 	snapshotsapi "github.com/containerd/containerd/api/services/snapshots/v1"
 	"github.com/containerd/containerd/defaults"
@@ -19,8 +18,10 @@ import (
 	ctdsnapshot "github.com/containerd/containerd/snapshots"
 	"github.com/containerd/containerd/snapshots/native"
 	"github.com/containerd/containerd/snapshots/overlay"
+	"github.com/containerd/containerd/snapshots/overlay/overlayutils"
 	snproxy "github.com/containerd/containerd/snapshots/proxy"
 	"github.com/containerd/containerd/sys"
+	fuseoverlayfs "github.com/containerd/fuse-overlayfs-snapshotter"
 	sgzfs "github.com/containerd/stargz-snapshotter/fs"
 	sgzconf "github.com/containerd/stargz-snapshotter/fs/config"
 	sgzsource "github.com/containerd/stargz-snapshotter/fs/source"
@@ -331,7 +332,7 @@ func snapshotterFactory(commonRoot string, cfg config.OCIConfig, hosts docker.Re
 	}
 
 	if name == "auto" {
-		if err := overlay.Supported(commonRoot); err == nil {
+		if err := overlayutils.Supported(commonRoot); err == nil {
 			name = "overlayfs"
 		} else {
 			logrus.Debugf("auto snapshotter: overlayfs is not available for %s, trying fuse-overlayfs: %v", commonRoot, err)
