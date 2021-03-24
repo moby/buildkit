@@ -252,7 +252,7 @@ jobs:
         run: |
           ./hack/cross
         env:
-          PLATFORMS: ${{ env.PLATFORMS }},darwin/amd64,windows/amd64
+          PLATFORMS: ${{ env.PLATFORMS }},darwin/amd64,darwin/arm64,windows/amd64,windows/arm64
           RUNC_PLATFORMS: ${{ env.PLATFORMS }}
           CACHEDIR_FROM: /tmp/.buildkit-cache/${{ env.CACHEKEY_CROSS }}
           CACHEDIR_TO: /tmp/.buildkit-cache/${{ env.CACHEKEY_CROSS }}-new
@@ -382,7 +382,7 @@ jobs:
         run: |
           ./hack/release-tar "${{ needs.release-base.outputs.tag }}" release-out
         env:
-          PLATFORMS: ${{ env.PLATFORMS }},darwin/amd64,windows/amd64
+          PLATFORMS: ${{ env.PLATFORMS }},darwin/amd64,darwin/arm64,windows/amd64,windows/arm64
           CACHEDIR_FROM: /tmp/.buildkit-cache/${{ env.CACHEKEY_BINARIES }} /tmp/.buildkit-cache/${{ env.CACHEKEY_CROSS }}
       -
         name: Move artifacts

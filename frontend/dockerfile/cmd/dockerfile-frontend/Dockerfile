@@ -1,9 +1,10 @@
 # syntax = docker/dockerfile:1.1-experimental
 
-FROM --platform=$BUILDPLATFORM tonistiigi/xx:golang@sha256:6f7d999551dd471b58f70716754290495690efa8421e0a1fcf18eb11d0c0a537 AS xgo
+# xx is a helper for cross-compilation
+FROM --platform=$BUILDPLATFORM tonistiigi/xx:golang@sha256:810dc54d5144f133a218e88e319184bf8b9ce01d37d46ddb37573e90decd9eef AS xx
 
-FROM --platform=$BUILDPLATFORM golang:1.13-buster AS base
-COPY --from=xgo / /
+FROM --platform=$BUILDPLATFORM golang:1.13-alpine AS base
+COPY --from=xx / /
 WORKDIR /src
 ENV GOFLAGS=-mod=vendor
 
@@ -16,15 +17,14 @@ RUN --mount=target=. \
   echo -n "${VERSION}" | tee /tmp/.version;
 
 FROM base AS build
-RUN apt-get update && apt-get --no-install-recommends install -y file
+RUN apk add --no-cache file
 ARG BUILDTAGS=""
 ARG TARGETPLATFORM
-ENV TARGETPLATFORM=$TARGETPLATFORM
 RUN --mount=target=. --mount=type=cache,target=/root/.cache \
   --mount=target=/go/pkg/mod,type=cache \
   --mount=source=/tmp/.ldflags,target=/tmp/.ldflags,from=version \
-  CGO_ENABLED=0 go build -o /dockerfile-frontend -ldflags "-d $(cat /tmp/.ldflags)" -tags "$BUILDTAGS netgo static_build osusergo" ./frontend/dockerfile/cmd/dockerfile-frontend && \
-  file /dockerfile-frontend | grep "statically linked"
+  CGO_ENABLED=0 xx-go build -o /dockerfile-frontend -ldflags "-d $(cat /tmp/.ldflags)" -tags "$BUILDTAGS netgo static_build osusergo" ./frontend/dockerfile/cmd/dockerfile-frontend && \
+  xx-verify --static /dockerfile-frontend
 
 FROM scratch AS release
 LABEL moby.buildkit.frontend.network.none="true"
