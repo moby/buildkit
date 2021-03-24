@@ -1,5 +1,19 @@
+#   Copyright The containerd Authors.
+
+#   Licensed under the Apache License, Version 2.0 (the "License");
+#   you may not use this file except in compliance with the License.
+#   You may obtain a copy of the License at
+
+#       http://www.apache.org/licenses/LICENSE-2.0
+
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+
 ARG FUSEOVERLAYFS_COMMIT=master
-ARG ROOTLESSKIT_COMMIT=v0.14.0-beta.0
+ARG ROOTLESSKIT_COMMIT=v0.14.0
 ARG SHADOW_COMMIT=4.8.1
 
 ARG GO_VERSION=1.16
@@ -7,8 +21,8 @@ ARG DEBIAN_VERSION=10
 ARG ALPINE_VERSION=3.13
 
 FROM golang:${GO_VERSION}-alpine AS containerd-fuse-overlayfs-test
-COPY . /go/src/github.com/AkihiroSuda/containerd-fuse-overlayfs
-WORKDIR  /go/src/github.com/AkihiroSuda/containerd-fuse-overlayfs
+COPY . /go/src/github.com/containerd/fuse-overlayfs-snapshotter
+WORKDIR  /go/src/github.com/containerd/fuse-overlayfs-snapshotter
 ENV CGO_ENABLED=0
 ENV GO111MODULE=on
 RUN mkdir /out && go test -c -o /out/containerd-fuse-overlayfs.test

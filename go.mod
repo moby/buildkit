@@ -3,14 +3,14 @@ module github.com/moby/buildkit
 go 1.13
 
 require (
-	github.com/AkihiroSuda/containerd-fuse-overlayfs v1.0.1
 	github.com/BurntSushi/toml v0.3.1
 	github.com/Microsoft/go-winio v0.4.17-0.20210211115548-6eac466e5fa3
 	github.com/Microsoft/hcsshim v0.8.15
 	github.com/codahale/hdrhistogram v0.0.0-20160425231609-f8ad88b59a58 // indirect
 	github.com/containerd/console v1.0.1
-	github.com/containerd/containerd v1.5.0-beta.3.0.20210309150730-ddf6594fbeed
+	github.com/containerd/containerd v1.5.0-beta.4
 	github.com/containerd/continuity v0.0.0-20210208174643-50096c924a4e
+	github.com/containerd/fuse-overlayfs-snapshotter v1.0.2
 	github.com/containerd/go-cni v1.0.1
 	github.com/containerd/go-runc v0.0.0-20201020171139-16b287bc67d0
 	github.com/containerd/stargz-snapshotter v0.4.1
@@ -39,7 +39,6 @@ require (
 	github.com/mitchellh/hashstructure v1.0.0
 	github.com/moby/locker v1.0.1
 	github.com/moby/sys/mount v0.2.0 // indirect; force more current version of sys/mount than go mod selects automatically
-	github.com/moby/sys/mountinfo v0.4.1 // indirect; force more current version of sys/mountinfo than go mod selects automatically
 	github.com/moby/term v0.0.0-20200915141129-7f0af18e79f2 // indirect
 	github.com/morikuni/aec v1.0.0
 	github.com/opencontainers/go-digest v1.0.0
