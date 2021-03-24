@@ -221,6 +221,12 @@ func addDefaultEnvvar(env []string, k, v string) []string {
 }
 
 func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Result) (results []solver.Result, err error) {
+	err = e.w.ParallelismSem().Acquire(ctx, 1)
+	if err != nil {
+		return nil, err
+	}
+	defer e.w.ParallelismSem().Release(1)
+
 	refs := make([]*worker.WorkerRef, len(inputs))
 	for i, inp := range inputs {
 		var ok bool

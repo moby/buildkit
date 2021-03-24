@@ -15,6 +15,7 @@ import (
 	"github.com/moby/buildkit/solver"
 	digest "github.com/opencontainers/go-digest"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
+	"golang.org/x/sync/semaphore"
 )
 
 type Worker interface {
@@ -25,6 +26,7 @@ type Worker interface {
 
 	GCPolicy() []client.PruneInfo
 	LoadRef(ctx context.Context, id string, hidden bool) (cache.ImmutableRef, error)
+	ParallelismSem() *semaphore.Weighted
 	// ResolveOp resolves Vertex.Sys() to Op implementation.
 	ResolveOp(v solver.Vertex, s frontend.FrontendLLBBridge, sm *session.Manager) (solver.Op, error)
 	ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt, sm *session.Manager, g session.Group) (digest.Digest, []byte, error)

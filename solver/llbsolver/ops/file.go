@@ -157,6 +157,12 @@ func (f *fileOp) CacheMap(ctx context.Context, g session.Group, index int) (*sol
 }
 
 func (f *fileOp) Exec(ctx context.Context, g session.Group, inputs []solver.Result) ([]solver.Result, error) {
+	err := f.w.ParallelismSem().Acquire(ctx, 1)
+	if err != nil {
+		return nil, err
+	}
+	defer f.w.ParallelismSem().Release(1)
+
 	inpRefs := make([]fileoptypes.Ref, 0, len(inputs))
 	for _, inp := range inputs {
 		workerRef, ok := inp.Sys().(*worker.WorkerRef)
