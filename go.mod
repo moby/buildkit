@@ -16,11 +16,11 @@ require (
 	github.com/containerd/stargz-snapshotter v0.4.1
 	github.com/containerd/typeurl v1.0.1
 	github.com/coreos/go-systemd/v22 v22.1.0
-	github.com/docker/cli v20.10.0-beta1.0.20201029214301-1d20b15adc38+incompatible
+	github.com/docker/cli v20.10.5+incompatible
 	github.com/docker/distribution v2.7.1+incompatible
-	github.com/docker/docker v20.10.0-beta1.0.20201110211921-af34b94a78a1+incompatible
+	github.com/docker/docker v20.10.5+incompatible
 	github.com/docker/go-connections v0.4.0
-	github.com/docker/libnetwork v0.8.0-dev.2.0.20200917202933-d0951081b35f
+	github.com/docker/libnetwork v0.8.0-dev.2.0.20201215162534-fa125a3512ee
 	github.com/gofrs/flock v0.7.3
 	github.com/gogo/googleapis v1.4.0
 	github.com/gogo/protobuf v1.3.2
@@ -39,7 +39,7 @@ require (
 	github.com/mitchellh/hashstructure v1.0.0
 	github.com/moby/locker v1.0.1
 	github.com/moby/sys/mount v0.2.0 // indirect; force more current version of sys/mount than go mod selects automatically
-	github.com/moby/term v0.0.0-20200915141129-7f0af18e79f2 // indirect
+	github.com/moby/term v0.0.0-20201110203204-bea5bbe245bf // indirect
 	github.com/morikuni/aec v1.0.0
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.0.1
