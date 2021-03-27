@@ -133,6 +133,7 @@ func (sw *streamWriter) Close() error {
 func LoggerFromContext(ctx context.Context) func([]byte) {
 	return func(dt []byte) {
 		pw, _, _ := progress.FromContext(ctx)
+		defer pw.Close()
 		pw.Write(identity.NewID(), client.VertexLog{
 			Stream: stderr,
 			Data:   []byte(dt),
