@@ -23,6 +23,7 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/semaphore"
 )
 
 const keyEntitlements = "llb.entitlements"
@@ -48,7 +49,7 @@ type Solver struct {
 	entitlements              []string
 }
 
-func New(wc *worker.Controller, f map[string]frontend.Frontend, cache solver.CacheManager, resolveCI map[string]remotecache.ResolveCacheImporterFunc, gatewayForwarder *controlgateway.GatewayForwarder, sm *session.Manager, ents []string) (*Solver, error) {
+func New(wc *worker.Controller, f map[string]frontend.Frontend, cache solver.CacheManager, resolveCI map[string]remotecache.ResolveCacheImporterFunc, gatewayForwarder *controlgateway.GatewayForwarder, sm *session.Manager, ents []string, parallelismSem *semaphore.Weighted) (*Solver, error) {
 	s := &Solver{
 		workerController:          wc,
 		resolveWorker:             defaultResolver(wc),
@@ -61,8 +62,9 @@ func New(wc *worker.Controller, f map[string]frontend.Frontend, cache solver.Cac
 	}
 
 	s.solver = solver.NewSolver(solver.SolverOpt{
-		ResolveOpFunc: s.resolver(),
-		DefaultCache:  cache,
+		ResolveOpFunc:  s.resolver(),
+		DefaultCache:   cache,
+		ParallelismSem: parallelismSem,
 	})
 	return s, nil
 }

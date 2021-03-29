@@ -388,3 +388,7 @@ func parseExtraHosts(ips []*pb.HostIP) ([]executor.HostIP, error) {
 	}
 	return out, nil
 }
+
+func (e *execOp) CountsAsParallelism() bool {
+	return true
+}

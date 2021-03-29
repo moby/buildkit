@@ -146,6 +146,10 @@ type Op interface {
 
 	// Exec runs an operation given results from previous operations.
 	Exec(ctx context.Context, g session.Group, inputs []Result) (outputs []Result, err error)
+
+	// CountsAsParallelism specifies whether the `Op` should be subject to the parallelism
+	// semaphore.
+	CountsAsParallelism() bool
 }
 
 type ResultBasedCacheFunc func(context.Context, Result, session.Group) (digest.Digest, error)

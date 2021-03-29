@@ -93,3 +93,7 @@ func (s *sourceOp) Exec(ctx context.Context, g session.Group, _ []solver.Result)
 	}
 	return []solver.Result{worker.NewWorkerRefResult(ref, s.w)}, nil
 }
+
+func (s *sourceOp) CountsAsParallelism() bool {
+	return true
+}

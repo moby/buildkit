@@ -22,6 +22,8 @@ type Config struct {
 	Registries map[string]RegistryConfig `toml:"registry"`
 
 	DNS *DNSConfig `toml:"dns"`
+
+	MaxParallelism int `toml:"max-parallelism"`
 }
 
 type GRPCConfig struct {

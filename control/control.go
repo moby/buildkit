@@ -24,6 +24,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/semaphore"
 	"google.golang.org/grpc"
 )
 
@@ -35,6 +36,7 @@ type Opt struct {
 	ResolveCacheExporterFuncs map[string]remotecache.ResolveCacheExporterFunc
 	ResolveCacheImporterFuncs map[string]remotecache.ResolveCacheImporterFunc
 	Entitlements              []string
+	ParallelismSem            *semaphore.Weighted
 }
 
 type Controller struct { // TODO: ControlService
@@ -52,7 +54,7 @@ func NewController(opt Opt) (*Controller, error) {
 
 	gatewayForwarder := controlgateway.NewGatewayForwarder()
 
-	solver, err := llbsolver.New(opt.WorkerController, opt.Frontends, cache, opt.ResolveCacheImporterFuncs, gatewayForwarder, opt.SessionManager, opt.Entitlements)
+	solver, err := llbsolver.New(opt.WorkerController, opt.Frontends, cache, opt.ResolveCacheImporterFuncs, gatewayForwarder, opt.SessionManager, opt.Entitlements, opt.ParallelismSem)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create solver")
 	}

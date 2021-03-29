@@ -55,6 +55,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/semaphore"
 	"google.golang.org/grpc"
 )
 
@@ -621,6 +622,10 @@ func newController(c *cli.Context, cfg *config.Config, md *toml.MetaData) (*cont
 		"registry": registryremotecache.ResolveCacheImporterFunc(sessionManager, w.ContentStore(), resolverFn),
 		"local":    localremotecache.ResolveCacheImporterFunc(sessionManager),
 	}
+	var parallelismSem *semaphore.Weighted
+	if cfg.MaxParallelism > 0 {
+		parallelismSem = semaphore.NewWeighted(int64(cfg.MaxParallelism))
+	}
 	return control.NewController(control.Opt{
 		SessionManager:            sessionManager,
 		WorkerController:          wc,
@@ -629,6 +634,7 @@ func newController(c *cli.Context, cfg *config.Config, md *toml.MetaData) (*cont
 		ResolveCacheImporterFuncs: remoteCacheImporterFuncs,
 		CacheKeyStorage:           cacheStorage,
 		Entitlements:              cfg.Entitlements,
+		ParallelismSem:            parallelismSem,
 	})
 }
 

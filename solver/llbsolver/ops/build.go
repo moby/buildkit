@@ -141,3 +141,7 @@ func (b *buildOp) Exec(ctx context.Context, g session.Group, inputs []solver.Res
 
 	return []solver.Result{r}, err
 }
+
+func (b *buildOp) CountsAsParallelism() bool {
+	return false
+}

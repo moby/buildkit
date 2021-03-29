@@ -179,6 +179,10 @@ func (f *fileOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 	return outResults, nil
 }
 
+func (f *fileOp) CountsAsParallelism() bool {
+	return true
+}
+
 func addSelector(m map[int]map[llbsolver.Selector]struct{}, idx int, sel string, wildcard, followLinks bool) {
 	mm, ok := m[idx]
 	if !ok {
