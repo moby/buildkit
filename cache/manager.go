@@ -375,7 +375,7 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOpt
 
 	md, ok := cm.md.Get(id)
 	if !ok {
-		return nil, errors.Wrapf(errNotFound, "%s not found", id)
+		return nil, errors.Wrap(errNotFound, id)
 	}
 	if mutableID := getEqualMutable(md); mutableID != "" {
 		mutable, err := cm.getRecord(ctx, mutableID)
