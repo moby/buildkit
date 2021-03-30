@@ -2,6 +2,7 @@ package cacheimport
 
 import (
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/containerd/containerd/content"
@@ -46,7 +47,9 @@ func (c *CacheChains) normalize() error {
 
 	validated := make([]*item, 0, len(c.items))
 	for _, it := range c.items {
+		it.backlinksMu.Lock()
 		it.validate()
+		it.backlinksMu.Unlock()
 	}
 	for _, it := range c.items {
 		if !it.invalid {
@@ -112,9 +115,10 @@ type item struct {
 	result     *solver.Remote
 	resultTime time.Time
 
-	links     []map[link]struct{}
-	backlinks map[*item]struct{}
-	invalid   bool
+	links       []map[link]struct{}
+	backlinksMu sync.Mutex
+	backlinks   map[*item]struct{}
+	invalid     bool
 }
 
 type link struct {
@@ -160,7 +164,9 @@ func (c *item) LinkFrom(rec solver.CacheExporterRecord, index int, selector stri
 	}
 
 	c.links[index][link{src: src, selector: selector}] = struct{}{}
+	src.backlinksMu.Lock()
 	src.backlinks[c] = struct{}{}
+	src.backlinksMu.Unlock()
 }
 
 func (c *item) validate() {
