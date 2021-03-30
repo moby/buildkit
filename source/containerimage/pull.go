@@ -182,7 +182,7 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 				p.cacheKeyErr = err
 			}
 		}()
-		ctx, done, err := leaseutil.WithLease(ctx, p.LeaseManager, leases.WithExpiration(5*time.Minute), leaseutil.MakeTemporary)
+		ctx, done, err := leaseutil.WithLease(ctx, p.LeaseManager, leases.WithExpiration(15*time.Minute), leaseutil.MakeTemporary)
 		if err != nil {
 			return nil, err
 		}
