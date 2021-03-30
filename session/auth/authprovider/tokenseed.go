@@ -53,9 +53,8 @@ func (ts *tokenSeeds) getSeed(host string) ([]byte, error) {
 			return nil, err
 		}
 	} else {
-		if err := json.Unmarshal(dt, &ts.m); err != nil {
-			return nil, errors.Wrapf(err, "failed to parse %s", fp)
-		}
+		// ignore error in case of crash during previous marshal
+		_ = json.Unmarshal(dt, &ts.m)
 	}
 	v, ok := ts.m[host]
 	if !ok {
