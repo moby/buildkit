@@ -57,13 +57,13 @@ func Config(ctx context.Context, str string, resolver remotes.Resolver, cache Co
 	}
 
 	if leaseManager != nil {
-		ctx2, done, err := leaseutil.WithLease(ctx, leaseManager, leases.WithExpiration(30*time.Minute), leaseutil.MakeTemporary)
+		ctx2, done, err := leaseutil.WithLease(ctx, leaseManager, leases.WithExpiration(5*time.Minute), leaseutil.MakeTemporary)
 		if err != nil {
 			return "", nil, errors.WithStack(err)
 		}
 		ctx = ctx2
 		defer func() {
-			// this lease is not deleted to allow other components to access manifest/config from cache. It will be deleted after 30 min deadline or on pruning inactive builder
+			// this lease is not deleted to allow other components to access manifest/config from cache. It will be deleted after 5 min deadline or on pruning inactive builder
 			AddLease(done)
 		}()
 	}
