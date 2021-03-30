@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/mount"
@@ -46,7 +47,7 @@ type ImmutableRef interface {
 
 	Info() RefInfo
 	Extract(ctx context.Context, s session.Group) error // +progress
-	GetRemote(ctx context.Context, createIfNeeded bool, compressionType compression.Type, s session.Group) (*solver.Remote, error)
+	GetRemote(ctx context.Context, createIfNeeded bool, compressionType compression.Type, forceCompression bool, s session.Group) (*solver.Remote, error)
 }
 
 type RefInfo struct {
@@ -197,6 +198,20 @@ func (cr *cacheRecord) Size(ctx context.Context) (int64, error) {
 			info, err := cr.cm.ContentStore.Info(ctx, digest.Digest(dgst))
 			if err == nil {
 				usage.Size += info.Size
+			}
+			for k, v := range info.Labels {
+				// accumulate size of compression variant blobs
+				if strings.HasPrefix(k, compressionVariantDigestLabelPrefix) {
+					if cdgst, err := digest.Parse(v); err == nil {
+						if digest.Digest(dgst) == cdgst {
+							// do not double count if the label points to this content itself.
+							continue
+						}
+						if info, err := cr.cm.ContentStore.Info(ctx, cdgst); err == nil {
+							usage.Size += info.Size
+						}
+					}
+				}
 			}
 		}
 		cr.mu.Lock()
@@ -359,6 +374,52 @@ func (sr *immutableRef) ociDesc() (ocispec.Descriptor, error) {
 	}
 
 	return desc, nil
+}
+
+const compressionVariantDigestLabelPrefix = "buildkit.io/compression/digest."
+
+func compressionVariantDigestLabel(compressionType compression.Type) string {
+	return compressionVariantDigestLabelPrefix + compressionType.String()
+}
+
+func (sr *immutableRef) getCompressionBlob(ctx context.Context, compressionType compression.Type) (content.Info, error) {
+	cs := sr.cm.ContentStore
+	info, err := cs.Info(ctx, digest.Digest(getBlob(sr.md)))
+	if err != nil {
+		return content.Info{}, err
+	}
+	dgstS, ok := info.Labels[compressionVariantDigestLabel(compressionType)]
+	if ok {
+		dgst, err := digest.Parse(dgstS)
+		if err != nil {
+			return content.Info{}, err
+		}
+		return cs.Info(ctx, dgst)
+	}
+	return content.Info{}, errdefs.ErrNotFound
+}
+
+func (sr *immutableRef) addCompressionBlob(ctx context.Context, dgst digest.Digest, compressionType compression.Type) error {
+	cs := sr.cm.ContentStore
+	if err := sr.cm.ManagerOpt.LeaseManager.AddResource(ctx, leases.Lease{ID: sr.ID()}, leases.Resource{
+		ID:   dgst.String(),
+		Type: "content",
+	}); err != nil {
+		return err
+	}
+	info, err := cs.Info(ctx, digest.Digest(getBlob(sr.md)))
+	if err != nil {
+		return err
+	}
+	if info.Labels == nil {
+		info.Labels = make(map[string]string)
+	}
+	cachedVariantLabel := compressionVariantDigestLabel(compressionType)
+	info.Labels[cachedVariantLabel] = dgst.String()
+	if _, err := cs.Update(ctx, info, "labels."+cachedVariantLabel); err != nil {
+		return err
+	}
+	return nil
 }
 
 // order is from parent->child, sr will be at end of slice
