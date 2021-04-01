@@ -41,6 +41,7 @@ func LocalhostExec(ctx context.Context, c session.Caller, args []string, dir str
 	if err != nil {
 		return errors.WithStack(err)
 	}
+	defer stream.CloseSend()
 
 	req := InputMessage{
 		Command: args,
@@ -91,6 +92,7 @@ func LocalhostGet(ctx context.Context, c session.Caller, src, dest string, mount
 	if err != nil {
 		return errors.WithStack(err)
 	}
+	defer stream.CloseSend()
 
 	req := BytesMessage{
 		Data: []byte(src),
@@ -213,6 +215,7 @@ func LocalhostPut(ctx context.Context, c session.Caller, src, dst string) error 
 	if err != nil {
 		return errors.WithStack(err)
 	}
+	defer stream.CloseSend()
 
 	fi, err := os.Stat(src)
 	if err != nil {
