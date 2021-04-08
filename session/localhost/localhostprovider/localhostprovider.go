@@ -284,8 +284,6 @@ func (lp *localhostProvider) Put(stream localhost.Localhost_PutServer) error {
 	default:
 		panic(fmt.Sprintf("unhandled mode %v", mode))
 	}
-
-	return nil
 }
 
 func receiveFile(stream localhost.Localhost_PutServer) (err error) {
@@ -324,6 +322,7 @@ outer:
 		msg, err := stream.Recv()
 		switch err {
 		case nil:
+			// ignore
 		case io.EOF:
 			break outer
 		default:
@@ -340,7 +339,9 @@ outer:
 	if err != nil {
 		return errors.Wrap(err, "failed to change file time")
 	}
-	return nil
+
+	// send an empty message to confirm we're done processing
+	return stream.Send(&localhost.BytesMessage{})
 }
 
 func receiveDir(stream localhost.Localhost_PutServer) error {

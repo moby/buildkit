@@ -272,19 +272,30 @@ func localhostPutSendFile(stream Localhost_PutClient, src, dst string) error {
 	buf := make([]byte, 1024*1024)
 	for {
 		n, err := f.Read(buf)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return errors.Wrapf(err, "failed to read from %s", src)
+		}
 		if n > 0 {
 			err = stream.Send(&BytesMessage{
 				Data: buf[:n],
 			})
-		}
-		switch err {
-		case nil:
-		case io.EOF:
-			return nil
-		default:
-			return err
+			if err != nil {
+				return err
+			}
 		}
 	}
+
+	err = stream.CloseSend()
+	if err != nil {
+		return errors.Wrap(err, "stream.CloseSend failed")
+	}
+
+	// wait for final message to confirm the client has finished receiving and writing the file
+	_, err = stream.Recv()
+	return err
 }
 
 func localhostPutSendDir(stream Localhost_GetClient, src, dst string) error {
