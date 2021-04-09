@@ -16,9 +16,8 @@ import (
 
 func InitContainerdWorker() {
 	Register(&containerd{
-		name:           "containerd",
-		containerd:     "containerd",
-		containerdShim: "containerd-shim-runc-v2",
+		name:       "containerd",
+		containerd: "containerd",
 	})
 	// defined in Dockerfile
 	// e.g. `containerd-1.1=/opt/containerd-1.1/bin,containerd-42.0=/opt/containerd-42.0/bin`
@@ -31,28 +30,28 @@ func InitContainerdWorker() {
 			}
 			name, bin := pair[0], pair[1]
 			Register(&containerd{
-				name:           name,
-				containerd:     filepath.Join(bin, "containerd"),
-				containerdShim: filepath.Join(bin, "containerd-shim-runc-v2"),
+				name:       name,
+				containerd: filepath.Join(bin, "containerd"),
+				// override PATH to make sure that the expected version of the shim binary is used
+				extraEnv: []string{fmt.Sprintf("PATH=%s:%s", bin, os.Getenv("PATH"))},
 			})
 		}
 	}
 
 	if s := os.Getenv("BUILDKIT_INTEGRATION_SNAPSHOTTER"); s != "" {
 		Register(&containerd{
-			name:           fmt.Sprintf("containerd-snapshotter-%s", s),
-			containerd:     "containerd",
-			containerdShim: "containerd-shim-runc-v2",
-			snapshotter:    s,
+			name:        fmt.Sprintf("containerd-snapshotter-%s", s),
+			containerd:  "containerd",
+			snapshotter: s,
 		})
 	}
 }
 
 type containerd struct {
-	name           string
-	containerd     string
-	containerdShim string
-	snapshotter    string
+	name        string
+	containerd  string
+	snapshotter string
+	extraEnv    []string // e.g. "PATH=/opt/containerd-1.4/bin:/usr/bin:..."
 }
 
 func (c *containerd) Name() string {
@@ -61,9 +60,6 @@ func (c *containerd) Name() string {
 
 func (c *containerd) New(cfg *BackendConfig) (b Backend, cl func() error, err error) {
 	if err := lookupBinary(c.containerd); err != nil {
-		return nil, nil, err
-	}
-	if err := lookupBinary(c.containerdShim); err != nil {
 		return nil, nil, err
 	}
 	if err := lookupBinary("buildkitd"); err != nil {
@@ -103,11 +99,7 @@ disabled_plugins = ["cri"]
 [debug]
   level = "debug"
   address = %q
-
-[plugins]
-  [plugins.linux]
-    shim = %q
-`, filepath.Join(tmpdir, "root"), filepath.Join(tmpdir, "state"), address, filepath.Join(tmpdir, "debug.sock"), c.containerdShim)
+`, filepath.Join(tmpdir, "root"), filepath.Join(tmpdir, "state"), address, filepath.Join(tmpdir, "debug.sock"))
 
 	var snBuildkitdArgs []string
 	if c.snapshotter != "" {
@@ -135,6 +127,7 @@ disabled_plugins = ["cri"]
 	}
 
 	cmd := exec.Command(c.containerd, "--config", configFile)
+	cmd.Env = append(os.Environ(), c.extraEnv...)
 
 	ctdStop, err := startCmd(cmd, cfg.Logs)
 	if err != nil {
@@ -154,7 +147,7 @@ disabled_plugins = ["cri"]
 		"--containerd-worker-labels=org.mobyproject.buildkit.worker.sandbox=true", // Include use of --containerd-worker-labels to trigger https://github.com/moby/buildkit/pull/603
 	}, snBuildkitdArgs...)
 
-	buildkitdSock, stop, err := runBuildkitd(cfg, buildkitdArgs, cfg.Logs, 0, 0)
+	buildkitdSock, stop, err := runBuildkitd(cfg, buildkitdArgs, cfg.Logs, 0, 0, c.extraEnv)
 	if err != nil {
 		printLogs(cfg.Logs, log.Println)
 		return nil, nil, err
