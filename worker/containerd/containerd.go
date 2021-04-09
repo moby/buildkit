@@ -9,6 +9,7 @@ import (
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/gc"
 	"github.com/containerd/containerd/leases"
+	gogoptypes "github.com/gogo/protobuf/types"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/executor/containerdexecutor"
@@ -17,6 +18,7 @@ import (
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/network/netproviders"
 	"github.com/moby/buildkit/util/winlayers"
+	"github.com/moby/buildkit/worker"
 	"github.com/moby/buildkit/worker/base"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -48,7 +50,15 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 	if err != nil {
 		return base.WorkerOpt{}, err
 	}
+
+	serverInfo, err := client.IntrospectionService().Server(context.TODO(), &gogoptypes.Empty{})
+	if err != nil {
+		return base.WorkerOpt{}, err
+	}
+
 	xlabels := base.Labels("containerd", snapshotterName)
+	xlabels[worker.LabelContainerdNamespace] = ns
+	xlabels[worker.LabelContainerdUUID] = serverInfo.UUID
 	for k, v := range labels {
 		xlabels[k] = v
 	}
