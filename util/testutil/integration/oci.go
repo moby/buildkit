@@ -67,7 +67,7 @@ func (s *oci) New(cfg *BackendConfig) (Backend, func() error, error) {
 		buildkitdArgs = append([]string{"sudo", "-u", fmt.Sprintf("#%d", s.uid), "-i", "--", "exec", "rootlesskit"}, buildkitdArgs...)
 	}
 
-	buildkitdSock, stop, err := runBuildkitd(cfg, buildkitdArgs, cfg.Logs, s.uid, s.gid)
+	buildkitdSock, stop, err := runBuildkitd(cfg, buildkitdArgs, cfg.Logs, s.uid, s.gid, nil)
 	if err != nil {
 		printLogs(cfg.Logs, log.Println)
 		return nil, nil, err
