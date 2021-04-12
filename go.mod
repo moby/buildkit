@@ -3,30 +3,30 @@ module github.com/moby/buildkit
 go 1.13
 
 require (
-	github.com/AkihiroSuda/containerd-fuse-overlayfs v1.0.0
 	github.com/BurntSushi/toml v0.3.1
-	github.com/Microsoft/go-winio v0.4.16
-	github.com/Microsoft/hcsshim v0.8.14
+	github.com/Microsoft/go-winio v0.4.17-0.20210211115548-6eac466e5fa3
+	github.com/Microsoft/hcsshim v0.8.15
 	github.com/codahale/hdrhistogram v0.0.0-20160425231609-f8ad88b59a58 // indirect
 	github.com/containerd/console v1.0.1
-	github.com/containerd/containerd v1.5.0-beta.0.0.20210122062454-5a66c2ae5cec
-	github.com/containerd/continuity v0.0.0-20201208142359-180525291bb7
+	github.com/containerd/containerd v1.5.0-beta.4
+	github.com/containerd/continuity v0.0.0-20210208174643-50096c924a4e
+	github.com/containerd/fuse-overlayfs-snapshotter v1.0.2
 	github.com/containerd/go-cni v1.0.1
 	github.com/containerd/go-runc v0.0.0-20201020171139-16b287bc67d0
 	github.com/containerd/stargz-snapshotter v0.4.1
 	github.com/containerd/typeurl v1.0.1
 	github.com/coreos/go-systemd/v22 v22.1.0
-	github.com/docker/cli v20.10.0-beta1.0.20201029214301-1d20b15adc38+incompatible
+	github.com/docker/cli v20.10.5+incompatible
 	github.com/docker/distribution v2.7.1+incompatible
-	github.com/docker/docker v20.10.0-beta1.0.20201110211921-af34b94a78a1+incompatible
+	github.com/docker/docker v20.10.5+incompatible
 	github.com/docker/go-connections v0.4.0
-	github.com/docker/libnetwork v0.8.0-dev.2.0.20200917202933-d0951081b35f
+	github.com/docker/libnetwork v0.8.0-dev.2.0.20201215162534-fa125a3512ee
 	github.com/gofrs/flock v0.7.3
 	github.com/gogo/googleapis v1.4.0
-	github.com/gogo/protobuf v1.3.1
+	github.com/gogo/protobuf v1.3.2
 	// protobuf: the actual version is replaced in replace()
 	github.com/golang/protobuf v1.4.3
-	github.com/google/go-cmp v0.5.2
+	github.com/google/go-cmp v0.5.4
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/gorilla/mux v1.8.0 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.2.0
@@ -38,13 +38,13 @@ require (
 	github.com/jaguilar/vt100 v0.0.0-20150826170717-2703a27b14ea
 	github.com/mitchellh/hashstructure v1.0.0
 	github.com/moby/locker v1.0.1
-	github.com/moby/sys/mount v0.1.1 // indirect; force more current version of sys/mount than go mod selects automatically
-	github.com/moby/term v0.0.0-20200915141129-7f0af18e79f2 // indirect
+	github.com/moby/sys/mount v0.2.0 // indirect; force more current version of sys/mount than go mod selects automatically
+	github.com/moby/term v0.0.0-20201110203204-bea5bbe245bf // indirect
 	github.com/morikuni/aec v1.0.0
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.0.1
-	github.com/opencontainers/runc v1.0.0-rc92
-	github.com/opencontainers/runtime-spec v1.0.3-0.20200728170252-4d89ac9fbff6
+	github.com/opencontainers/runc v1.0.0-rc93
+	github.com/opencontainers/runtime-spec v1.0.3-0.20200929063507-e6143ca7d51d
 	github.com/opencontainers/selinux v1.8.0
 	github.com/opentracing-contrib/go-stdlib v1.0.0
 	github.com/opentracing/opentracing-go v1.2.0
@@ -60,9 +60,9 @@ require (
 	github.com/urfave/cli v1.22.2
 	go.etcd.io/bbolt v1.3.5
 	golang.org/x/crypto v0.0.0-20201117144127-c1f2f97bffc9
-	golang.org/x/net v0.0.0-20201110031124-69a78807bb2b
+	golang.org/x/net v0.0.0-20201224014010-6772e930b67b
 	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a
-	golang.org/x/sys v0.0.0-20210119212857-b64e53b001e4
+	golang.org/x/sys v0.0.0-20210320140829-1e4c9ba3b0c4
 	golang.org/x/time v0.0.0-20200630173020-3af7569d3a1e
 	// genproto: the actual version is replaced in replace()
 	google.golang.org/genproto v0.0.0-20201110150050-8816d57aaa9a

@@ -640,13 +640,16 @@ func (s *sharedOp) CalcSlowCache(ctx context.Context, index Index, p PreprocessF
 		}
 		if err := s.slowCacheErr[index]; err != nil {
 			s.slowMu.Unlock()
-			return err, nil
+			return nil, err
 		}
 		s.slowMu.Unlock()
 
 		complete := true
 		if p != nil {
 			st := s.st.solver.getState(s.st.vtx.Inputs()[index])
+			if st == nil {
+				return nil, errors.Errorf("failed to get state for index %d on %v", index, s.st.vtx.Name())
+			}
 			ctx2 := opentracing.ContextWithSpan(progress.WithProgress(ctx, st.mpw), st.mspan)
 			err = p(ctx2, res, st)
 			if err != nil {

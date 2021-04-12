@@ -280,10 +280,13 @@ func (s *StorageItem) GetExternal(k string) ([]byte, error) {
 		if b == nil {
 			return errors.WithStack(errNotFound)
 		}
-		dt = b.Get([]byte(k))
-		if dt == nil {
+		dt2 := b.Get([]byte(k))
+		if dt2 == nil {
 			return errors.WithStack(errNotFound)
 		}
+		// data needs to be copied as boltdb can reuse the buffer after View returns
+		dt = make([]byte, len(dt2))
+		copy(dt, dt2)
 		return nil
 	})
 	if err != nil {

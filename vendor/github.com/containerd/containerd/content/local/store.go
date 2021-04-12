@@ -131,25 +131,13 @@ func (s *store) ReaderAt(ctx context.Context, desc ocispec.Descriptor) (content.
 	if err != nil {
 		return nil, errors.Wrapf(err, "calculating blob path for ReaderAt")
 	}
-	fi, err := os.Stat(p)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return nil, err
-		}
 
-		return nil, errors.Wrapf(errdefs.ErrNotFound, "blob %s expected at %s", desc.Digest, p)
+	reader, err := OpenReader(p)
+	if err != nil {
+		return nil, errors.Wrapf(err, "blob %s expected at %s", desc.Digest, p)
 	}
 
-	fp, err := os.Open(p)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return nil, err
-		}
-
-		return nil, errors.Wrapf(errdefs.ErrNotFound, "blob %s expected at %s", desc.Digest, p)
-	}
-
-	return sizeReaderAt{size: fi.Size(), fp: fp}, nil
+	return reader, nil
 }
 
 // Delete removes a blob by its digest.
@@ -240,9 +228,14 @@ func (s *store) Update(ctx context.Context, info content.Info, fieldpaths ...str
 	return info, nil
 }
 
-func (s *store) Walk(ctx context.Context, fn content.WalkFunc, filters ...string) error {
-	// TODO: Support filters
+func (s *store) Walk(ctx context.Context, fn content.WalkFunc, fs ...string) error {
 	root := filepath.Join(s.root, "blobs")
+
+	filter, err := filters.ParseAll(fs...)
+	if err != nil {
+		return err
+	}
+
 	var alg digest.Algorithm
 	return filepath.Walk(root, func(path string, fi os.FileInfo, err error) error {
 		if err != nil {
@@ -286,7 +279,12 @@ func (s *store) Walk(ctx context.Context, fn content.WalkFunc, filters ...string
 				return err
 			}
 		}
-		return fn(s.info(dgst, fi, labels))
+
+		info := s.info(dgst, fi, labels)
+		if !filter.Match(content.AdaptInfo(info)) {
+			return nil
+		}
+		return fn(info)
 	})
 }
 

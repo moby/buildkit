@@ -1,17 +1,15 @@
-# github.com/AkihiroSuda/containerd-fuse-overlayfs v1.0.0
-github.com/AkihiroSuda/containerd-fuse-overlayfs
 # github.com/Azure/go-ansiterm v0.0.0-20170929234023-d6e3b3328b78
 github.com/Azure/go-ansiterm
 github.com/Azure/go-ansiterm/winterm
 # github.com/BurntSushi/toml v0.3.1
 github.com/BurntSushi/toml
-# github.com/Microsoft/go-winio v0.4.16
+# github.com/Microsoft/go-winio v0.4.17-0.20210211115548-6eac466e5fa3
 github.com/Microsoft/go-winio
 github.com/Microsoft/go-winio/backuptar
 github.com/Microsoft/go-winio/pkg/guid
 github.com/Microsoft/go-winio/pkg/security
 github.com/Microsoft/go-winio/vhd
-# github.com/Microsoft/hcsshim v0.8.14
+# github.com/Microsoft/hcsshim v0.8.15
 github.com/Microsoft/hcsshim
 github.com/Microsoft/hcsshim/computestorage
 github.com/Microsoft/hcsshim/hcn
@@ -36,11 +34,11 @@ github.com/Microsoft/hcsshim/internal/vmcompute
 github.com/Microsoft/hcsshim/internal/wclayer
 github.com/Microsoft/hcsshim/internal/winapi
 github.com/Microsoft/hcsshim/osversion
-# github.com/containerd/cgroups v0.0.0-20200824123100-0b889c03f102
+# github.com/containerd/cgroups v0.0.0-20210114181951-8a68de567b68
 github.com/containerd/cgroups/stats/v1
 # github.com/containerd/console v1.0.1
 github.com/containerd/console
-# github.com/containerd/containerd v1.5.0-beta.0.0.20210122062454-5a66c2ae5cec
+# github.com/containerd/containerd v1.5.0-beta.4
 github.com/containerd/containerd
 github.com/containerd/containerd/api/services/containers/v1
 github.com/containerd/containerd/api/services/content/v1
@@ -83,6 +81,7 @@ github.com/containerd/containerd/metadata/boltutil
 github.com/containerd/containerd/mount
 github.com/containerd/containerd/namespaces
 github.com/containerd/containerd/oci
+github.com/containerd/containerd/pkg/cap
 github.com/containerd/containerd/pkg/dialer
 github.com/containerd/containerd/pkg/seed
 github.com/containerd/containerd/platforms
@@ -103,11 +102,12 @@ github.com/containerd/containerd/services/introspection
 github.com/containerd/containerd/snapshots
 github.com/containerd/containerd/snapshots/native
 github.com/containerd/containerd/snapshots/overlay
+github.com/containerd/containerd/snapshots/overlay/overlayutils
 github.com/containerd/containerd/snapshots/proxy
 github.com/containerd/containerd/snapshots/storage
 github.com/containerd/containerd/sys
 github.com/containerd/containerd/version
-# github.com/containerd/continuity v0.0.0-20201208142359-180525291bb7
+# github.com/containerd/continuity v0.0.0-20210208174643-50096c924a4e
 github.com/containerd/continuity
 github.com/containerd/continuity/devices
 github.com/containerd/continuity/driver
@@ -116,8 +116,10 @@ github.com/containerd/continuity/fs/fstest
 github.com/containerd/continuity/pathdriver
 github.com/containerd/continuity/proto
 github.com/containerd/continuity/sysx
-# github.com/containerd/fifo v0.0.0-20201026212402-0724c46b320c
+# github.com/containerd/fifo v0.0.0-20210316144830-115abcc95a1d
 github.com/containerd/fifo
+# github.com/containerd/fuse-overlayfs-snapshotter v1.0.2
+github.com/containerd/fuse-overlayfs-snapshotter
 # github.com/containerd/go-cni v1.0.1
 github.com/containerd/go-cni
 # github.com/containerd/go-runc v0.0.0-20201020171139-16b287bc67d0
@@ -153,7 +155,7 @@ github.com/coreos/go-systemd/v22/daemon
 github.com/cpuguy83/go-md2man/v2/md2man
 # github.com/davecgh/go-spew v1.1.1
 github.com/davecgh/go-spew/spew
-# github.com/docker/cli v20.10.0-beta1.0.20201029214301-1d20b15adc38+incompatible
+# github.com/docker/cli v20.10.5+incompatible
 github.com/docker/cli/cli/config
 github.com/docker/cli/cli/config/configfile
 github.com/docker/cli/cli/config/credentials
@@ -163,7 +165,7 @@ github.com/docker/cli/cli/connhelper/commandconn
 github.com/docker/distribution/digestset
 github.com/docker/distribution/reference
 github.com/docker/distribution/registry/api/errcode
-# github.com/docker/docker v20.10.0-beta1.0.20201110211921-af34b94a78a1+incompatible
+# github.com/docker/docker v20.10.5+incompatible
 github.com/docker/docker/api
 github.com/docker/docker/api/types
 github.com/docker/docker/api/types/blkiodev
@@ -212,7 +214,7 @@ github.com/docker/go-connections/tlsconfig
 github.com/docker/go-events
 # github.com/docker/go-units v0.4.0
 github.com/docker/go-units
-# github.com/docker/libnetwork v0.8.0-dev.2.0.20200917202933-d0951081b35f
+# github.com/docker/libnetwork v0.8.0-dev.2.0.20201215162534-fa125a3512ee
 github.com/docker/libnetwork/ipamutils
 github.com/docker/libnetwork/resolvconf
 github.com/docker/libnetwork/resolvconf/dns
@@ -221,7 +223,7 @@ github.com/docker/libnetwork/types
 github.com/gofrs/flock
 # github.com/gogo/googleapis v1.4.0
 github.com/gogo/googleapis/google/rpc
-# github.com/gogo/protobuf v1.3.1
+# github.com/gogo/protobuf v1.3.2
 github.com/gogo/protobuf/gogoproto
 github.com/gogo/protobuf/proto
 github.com/gogo/protobuf/protoc-gen-gogo/descriptor
@@ -237,7 +239,7 @@ github.com/golang/protobuf/ptypes/any
 github.com/golang/protobuf/ptypes/duration
 github.com/golang/protobuf/ptypes/struct
 github.com/golang/protobuf/ptypes/timestamp
-# github.com/google/go-cmp v0.5.2
+# github.com/google/go-cmp v0.5.4
 github.com/google/go-cmp/cmp
 github.com/google/go-cmp/cmp/internal/diff
 github.com/google/go-cmp/cmp/internal/flags
@@ -275,11 +277,11 @@ github.com/klauspost/compress/zstd/internal/xxhash
 github.com/mitchellh/hashstructure
 # github.com/moby/locker v1.0.1
 github.com/moby/locker
-# github.com/moby/sys/mount v0.1.1
+# github.com/moby/sys/mount v0.2.0
 github.com/moby/sys/mount
-# github.com/moby/sys/mountinfo v0.4.0
+# github.com/moby/sys/mountinfo v0.4.1
 github.com/moby/sys/mountinfo
-# github.com/moby/term v0.0.0-20200915141129-7f0af18e79f2
+# github.com/moby/term v0.0.0-20201110203204-bea5bbe245bf
 github.com/moby/term
 github.com/moby/term/windows
 # github.com/morikuni/aec v1.0.0
@@ -290,9 +292,9 @@ github.com/opencontainers/go-digest
 github.com/opencontainers/image-spec/identity
 github.com/opencontainers/image-spec/specs-go
 github.com/opencontainers/image-spec/specs-go/v1
-# github.com/opencontainers/runc v1.0.0-rc92
+# github.com/opencontainers/runc v1.0.0-rc93
 github.com/opencontainers/runc/libcontainer/user
-# github.com/opencontainers/runtime-spec v1.0.3-0.20200728170252-4d89ac9fbff6
+# github.com/opencontainers/runtime-spec v1.0.3-0.20200929063507-e6143ca7d51d
 github.com/opencontainers/runtime-spec/specs-go
 # github.com/opencontainers/selinux v1.8.0
 github.com/opencontainers/selinux/go-selinux
@@ -321,8 +323,6 @@ github.com/sirupsen/logrus
 # github.com/stretchr/testify v1.7.0
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/require
-# github.com/syndtr/gocapability v0.0.0-20180916011248-d98352740cb2
-github.com/syndtr/gocapability/capability
 # github.com/tonistiigi/fsutil v0.0.0-20201103201449-0834f99b7b85
 github.com/tonistiigi/fsutil
 github.com/tonistiigi/fsutil/copy
@@ -370,7 +370,7 @@ golang.org/x/crypto/poly1305
 golang.org/x/crypto/ssh
 golang.org/x/crypto/ssh/agent
 golang.org/x/crypto/ssh/internal/bcrypt_pbkdf
-# golang.org/x/net v0.0.0-20201110031124-69a78807bb2b
+# golang.org/x/net v0.0.0-20201224014010-6772e930b67b
 golang.org/x/net/context
 golang.org/x/net/context/ctxhttp
 golang.org/x/net/http/httpguts
@@ -385,8 +385,9 @@ golang.org/x/net/trace
 golang.org/x/sync/errgroup
 golang.org/x/sync/semaphore
 golang.org/x/sync/singleflight
-# golang.org/x/sys v0.0.0-20210119212857-b64e53b001e4
+# golang.org/x/sys v0.0.0-20210320140829-1e4c9ba3b0c4
 golang.org/x/sys/cpu
+golang.org/x/sys/execabs
 golang.org/x/sys/internal/unsafeheader
 golang.org/x/sys/unix
 golang.org/x/sys/windows
@@ -445,9 +446,10 @@ google.golang.org/grpc/status
 google.golang.org/grpc/tap
 # gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c
 gopkg.in/yaml.v3
-# gotest.tools/v3 v3.0.2
+# gotest.tools/v3 v3.0.3
 gotest.tools/v3/assert
 gotest.tools/v3/assert/cmp
+gotest.tools/v3/internal/assert
 gotest.tools/v3/internal/difflib
 gotest.tools/v3/internal/format
 gotest.tools/v3/internal/source

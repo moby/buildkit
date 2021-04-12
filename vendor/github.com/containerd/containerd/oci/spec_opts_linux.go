@@ -25,7 +25,9 @@ import (
 	"path/filepath"
 
 	"github.com/containerd/containerd/containers"
+	"github.com/containerd/containerd/pkg/cap"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
 )
 
@@ -40,6 +42,8 @@ func WithHostDevices(_ context.Context, _ Client, _ *containers.Container, s *Sp
 	s.Linux.Devices = append(s.Linux.Devices, devs...)
 	return nil
 }
+
+var errNotADevice = errors.New("not a device node")
 
 func getDevices(path string) ([]specs.LinuxDevice, error) {
 	files, err := ioutil.ReadDir(path)
@@ -69,7 +73,7 @@ func getDevices(path string) ([]specs.LinuxDevice, error) {
 		}
 		device, err := deviceFromPath(filepath.Join(path, f.Name()), "rwm")
 		if err != nil {
-			if err == ErrNotADevice {
+			if err == errNotADevice {
 				continue
 			}
 			if os.IsNotExist(err) {
@@ -95,7 +99,7 @@ func deviceFromPath(path, permissions string) (*specs.LinuxDevice, error) {
 		minor     = unix.Minor(devNumber)
 	)
 	if major == 0 {
-		return nil, ErrNotADevice
+		return nil, errNotADevice
 	}
 
 	var (
@@ -108,7 +112,7 @@ func deviceFromPath(path, permissions string) (*specs.LinuxDevice, error) {
 	case mode&unix.S_IFCHR == unix.S_IFCHR:
 		devType = "c"
 	}
-	fm := os.FileMode(mode)
+	fm := os.FileMode(mode &^ unix.S_IFMT)
 	return &specs.LinuxDevice{
 		Type:     devType,
 		Path:     path,
@@ -179,4 +183,20 @@ func WithCPUCFS(quota int64, period uint64) SpecOpts {
 		s.Linux.Resources.CPU.Period = &period
 		return nil
 	}
+}
+
+// WithAllCurrentCapabilities propagates the effective capabilities of the caller process to the container process.
+// The capability set may differ from WithAllKnownCapabilities when running in a container.
+var WithAllCurrentCapabilities = func(ctx context.Context, client Client, c *containers.Container, s *Spec) error {
+	caps, err := cap.Current()
+	if err != nil {
+		return err
+	}
+	return WithCapabilities(caps)(ctx, client, c, s)
+}
+
+// WithAllKnownCapabilities sets all the the known linux capabilities for the container process
+var WithAllKnownCapabilities = func(ctx context.Context, client Client, c *containers.Container, s *Spec) error {
+	caps := cap.Known()
+	return WithCapabilities(caps)(ctx, client, c, s)
 }
