@@ -69,8 +69,8 @@ func cloneExecOp(old *pb.ExecOp) pb.ExecOp {
 	}
 	n.Meta = &meta
 	n.Mounts = nil
-	for i := range n.Mounts {
-		m := *n.Mounts[i]
+	for i := range old.Mounts {
+		m := *old.Mounts[i]
 		n.Mounts = append(n.Mounts, &m)
 	}
 	return n
