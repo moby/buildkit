@@ -98,6 +98,7 @@ func TestIntegration(t *testing.T) {
 		testSharedCacheMounts,
 		testLockedCacheMounts,
 		testDuplicateCacheMount,
+		testRunCacheWithMounts,
 		testParallelLocalBuilds,
 		testSecretMounts,
 		testExtraHosts,
@@ -2769,6 +2770,33 @@ func testDuplicateCacheMount(t *testing.T, sb integration.Sandbox) {
 
 	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
 	require.NoError(t, err)
+}
+
+func testRunCacheWithMounts(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("busybox:latest")
+
+	out := busybox.Run(llb.Shlex(`sh -e -c "[[ -f /m1/sbin/apk ]]"`))
+	out.AddMount("/m1", llb.Image("alpine:latest"), llb.Readonly)
+
+	def, err := out.Marshal(context.TODO())
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	require.NoError(t, err)
+
+	out = busybox.Run(llb.Shlex(`sh -e -c "[[ -f /m1/sbin/apk ]]"`))
+	out.AddMount("/m1", llb.Image("busybox:latest"), llb.Readonly)
+
+	def, err = out.Marshal(context.TODO())
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	require.Error(t, err)
 }
 
 func testCacheMountNoCache(t *testing.T, sb integration.Sandbox) {
