@@ -140,10 +140,10 @@ func (gs *gitSource) mountRemote(ctx context.Context, remote string, auth []stri
 		// same new remote metadata
 		si, _ := gs.md.Get(remoteRef.ID())
 		v, err := metadata.NewValue(remoteKey)
-		v.Index = remoteKey
 		if err != nil {
 			return "", nil, err
 		}
+		v.Index = remoteKey
 
 		if err := si.Update(func(b *bolt.Bucket) error {
 			return si.SetValue(b, "git-remote", v)
@@ -551,10 +551,11 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 
 	si, _ := gs.md.Get(snap.ID())
 	v, err := metadata.NewValue(snapshotKey)
-	v.Index = snapshotKey
 	if err != nil {
 		return nil, err
 	}
+	v.Index = snapshotKey
+
 	if err := si.Update(func(b *bolt.Bucket) error {
 		return si.SetValue(b, "git-snapshot", v)
 	}); err != nil {
