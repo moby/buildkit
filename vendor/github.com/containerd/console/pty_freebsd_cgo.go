@@ -1,3 +1,5 @@
+// +build freebsd,cgo
+
 /*
    Copyright The containerd Authors.
 
@@ -14,22 +16,30 @@
    limitations under the License.
 */
 
-package sys
+package console
 
-import "os"
+import (
+	"fmt"
+	"os"
+)
 
-// IsFifo checks if a file is a (named pipe) fifo
-// if the file does not exist then it returns false
-func IsFifo(path string) (bool, error) {
-	stat, err := os.Stat(path)
+/*
+#include <fcntl.h>
+#include <stdlib.h>
+#include <unistd.h>
+*/
+import "C"
+
+// openpt allocates a new pseudo-terminal and establishes a connection with its
+// control device.
+func openpt() (*os.File, error) {
+	fd, err := C.posix_openpt(C.O_RDWR)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return false, nil
-		}
-		return false, err
+		return nil, fmt.Errorf("posix_openpt: %w", err)
 	}
-	if stat.Mode()&os.ModeNamedPipe == os.ModeNamedPipe {
-		return true, nil
+	if _, err := C.grantpt(fd); err != nil {
+		C.close(fd)
+		return nil, fmt.Errorf("grantpt: %w", err)
 	}
-	return false, nil
+	return os.NewFile(uintptr(fd), ""), nil
 }

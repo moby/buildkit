@@ -1,5 +1,3 @@
-// +build solaris
-
 /*
    Copyright The containerd Authors.
 
@@ -16,12 +14,10 @@
    limitations under the License.
 */
 
-package fifo
+package sys
 
-import (
-	"golang.org/x/sys/unix"
-)
+import "github.com/containerd/containerd/pkg/userns"
 
-func mkfifo(path string, mode uint32) (err error) {
-	return unix.Mkfifo(path, mode)
-}
+// RunningInUserNS detects whether we are currently running in a user namespace.
+// Deprecated: use github.com/containerd/containerd/pkg/userns.RunningInUserNS instead.
+var RunningInUserNS = userns.RunningInUserNS

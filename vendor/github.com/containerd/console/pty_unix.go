@@ -1,4 +1,4 @@
-// +build !windows
+// +build darwin linux netbsd openbsd solaris
 
 /*
    Copyright The containerd Authors.
@@ -16,18 +16,15 @@
    limitations under the License.
 */
 
-package sys
+package console
 
-import "golang.org/x/sys/unix"
+import (
+	"os"
 
-// RunningPrivileged returns true if the effective user ID of the
-// calling process is 0
-func RunningPrivileged() bool {
-	return unix.Geteuid() == 0
-}
+	"golang.org/x/sys/unix"
+)
 
-// RunningUnprivileged returns true if the effective user ID of the
-// calling process is not 0
-func RunningUnprivileged() bool {
-	return !RunningPrivileged()
+// openpt allocates a new pseudo-terminal by opening the /dev/ptmx device
+func openpt() (*os.File, error) {
+	return os.OpenFile("/dev/ptmx", unix.O_RDWR|unix.O_NOCTTY|unix.O_CLOEXEC, 0)
 }
