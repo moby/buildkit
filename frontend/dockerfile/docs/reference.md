@@ -33,11 +33,11 @@ a `Dockerfile` and a *context*. The build's context is the set of files at a
 specified location `PATH` or `URL`. The `PATH` is a directory on your local
 filesystem. The `URL` is a Git repository location.
 
-A context is processed recursively. So, a `PATH` includes any subdirectories and
-the `URL` includes the repository and its submodules. This example shows a
-build command that uses the current directory as context:
+The build context is processed recursively. So, a `PATH` includes any subdirectories
+and the `URL` includes the repository and its submodules. This example shows a
+build command that uses the current directory (`.`) as build context:
 
-```bash
+```console
 $ docker build .
 
 Sending build context to Docker daemon  6.51 MB
@@ -52,8 +52,9 @@ Dockerfile.
 
 > **Warning**
 >
-> Do not use your root directory, `/`, as the `PATH` as it causes the build to
-> transfer the entire contents of your hard drive to the Docker daemon.
+> Do not use your root directory, `/`, as the `PATH` for  your build context, as
+> it causes the build to transfer the entire contents of your hard drive to the
+> Docker daemon.
 {:.warning}
 
 To use a file in the build context, the `Dockerfile` refers to the file specified
@@ -66,28 +67,28 @@ Traditionally, the `Dockerfile` is called `Dockerfile` and located in the root
 of the context. You use the `-f` flag with `docker build` to point to a Dockerfile
 anywhere in your file system.
 
-```bash
+```console
 $ docker build -f /path/to/a/Dockerfile .
 ```
 
 You can specify a repository and tag at which to save the new image if
 the build succeeds:
 
-```bash
+```console
 $ docker build -t shykes/myapp .
 ```
 
 To tag the image into multiple repositories after the build,
 add multiple `-t` parameters when you run the `build` command:
 
-```bash
+```console
 $ docker build -t shykes/myapp:1.0.2 -t shykes/myapp:latest .
 ```
 
 Before the Docker daemon runs the instructions in the `Dockerfile`, it performs
 a preliminary validation of the `Dockerfile` and returns an error if the syntax is incorrect:
 
-```bash
+```console
 $ docker build -t test/myapp .
 
 Sending build context to Docker daemon 2.048 kB
@@ -109,7 +110,7 @@ to accelerate the `docker build` process significantly. This is indicated by
 the `Using cache` message in the console output.
 (For more information, see the [`Dockerfile` best practices guide](https://docs.docker.com/engine/userguide/eng-image/dockerfile_best-practices/):
 
-```bash
+```console
 $ docker build -t svendowideit/ambassador .
 
 Sending build context to Docker daemon 15.36 kB
@@ -413,14 +414,15 @@ RUN dir c:\
 
 Results in:
 
-```powershell
-PS C:\John> docker build -t cmd .
+```console
+PS E:\myproject> docker build -t cmd .
+
 Sending build context to Docker daemon 3.072 kB
 Step 1/2 : FROM microsoft/nanoserver
  ---> 22738ff49c6d
 Step 2/2 : COPY testfile.txt c:\RUN dir c:
 GetFileAttributesEx c:RUN: The system cannot find the file specified.
-PS C:\John>
+PS E:\myproject>
 ```
 
 One solution to the above would be to use `/` as the target of both the `COPY`
@@ -441,8 +443,9 @@ RUN dir c:\
 
 Results in:
 
-```powershell
-PS C:\John> docker build -t succeeds --no-cache=true .
+```console
+PS E:\myproject> docker build -t succeeds --no-cache=true .
+
 Sending build context to Docker daemon 3.072 kB
 Step 1/3 : FROM microsoft/nanoserver
  ---> 22738ff49c6d
@@ -467,7 +470,7 @@ Step 3/3 : RUN dir c:\
  ---> 01c7f3bef04f
 Removing intermediate container a2c157f842f5
 Successfully built 01c7f3bef04f
-PS C:\John>
+PS E:\myproject>
 ```
 
 ## Environment replacement
@@ -910,8 +913,8 @@ the most-recently-applied value overrides any previously-set value.
 To view an image's labels, use the `docker image inspect` command. You can use
 the `--format` option to show just the labels;
  
-```bash
-docker image inspect --format='{{json .Config.Labels}}' myimage
+```console
+$ docker image inspect --format='{{json .Config.Labels}}' myimage
 ```
 ```json
 {
@@ -980,8 +983,8 @@ port on the host, so the port will not be the same for TCP and UDP.
 Regardless of the `EXPOSE` settings, you can override them at runtime by using
 the `-p` flag. For example
 
-```bash
-docker run -p 80:80/tcp -p 80:80/udp ...
+```console
+$ docker run -p 80:80/tcp -p 80:80/udp ...
 ```
 
 To set up port redirection on the host system, see [using the -P flag](run.md#expose-incoming-ports).
@@ -1397,7 +1400,7 @@ An `ENTRYPOINT` allows you to configure a container that will run as an executab
 For example, the following starts nginx with its default content, listening
 on port 80:
 
-```bash
+```console
 $ docker run -i -t --rm -p 80:80 nginx
 ```
 
@@ -1432,7 +1435,7 @@ CMD ["-c"]
 
 When you run the container, you can see that `top` is the only process:
 
-```bash
+```console
 $ docker run -it --rm --name test  top -H
 
 top - 08:25:00 up  7:27,  0 users,  load average: 0.00, 0.01, 0.05
@@ -1447,7 +1450,7 @@ KiB Swap:  1441840 total,        0 used,  1441840 free.  1324440 cached Mem
 
 To examine the result further, you can use `docker exec`:
 
-```bash
+```console
 $ docker exec -it test ps aux
 
 USER       PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
@@ -1519,7 +1522,7 @@ If you run this image with `docker run -it --rm -p 80:80 --name test apache`,
 you can then examine the container's processes with `docker exec`, or `docker top`,
 and then ask the script to stop Apache:
 
-```bash
+```console
 $ docker exec -it test ps aux
 
 USER       PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
@@ -1579,7 +1582,7 @@ ENTRYPOINT exec top -b
 
 When you run this image, you'll see the single `PID 1` process:
 
-```bash
+```console
 $ docker run -it --rm --name test top
 
 Mem: 1704520K used, 352148K free, 0K shrd, 0K buff, 140368121167873K cached
@@ -1591,7 +1594,7 @@ Load average: 0.08 0.03 0.05 2/98 6
 
 Which exits cleanly on `docker stop`:
 
-```bash
+```console
 $ /usr/bin/time docker stop test
 
 test
@@ -1610,7 +1613,7 @@ CMD --ignored-param1
 
 You can then run it (giving it a name for the next step):
 
-```bash
+```console
 $ docker run -it --name test top --ignored-param2
 
 Mem: 1704184K used, 352484K free, 0K shrd, 0K buff, 140621524238337K cached
@@ -1626,7 +1629,7 @@ You can see from the output of `top` that the specified `ENTRYPOINT` is not `PID
 If you then run `docker stop test`, the container will not exit cleanly - the
 `stop` command will be forced to send a `SIGKILL` after the timeout:
 
-```bash
+```console
 $ docker exec -it test ps aux
 
 PID   USER     COMMAND
@@ -1859,9 +1862,10 @@ ARG user
 USER $user
 # ...
 ```
+
 A user builds this file by calling:
 
-```bash
+```console
 $ docker build --build-arg user=what_user .
 ```
 
@@ -1900,7 +1904,7 @@ RUN echo $CONT_IMG_VER
 
 Then, assume this image is built with this command:
 
-```bash
+```console
 $ docker build --build-arg CONT_IMG_VER=v2.0.1 .
 ```
 
@@ -1922,7 +1926,7 @@ RUN echo $CONT_IMG_VER
 Unlike an `ARG` instruction, `ENV` values are always persisted in the built
 image. Consider a docker build without the `--build-arg` flag:
 
-```bash
+```console
 $ docker build .
 ```
 
@@ -2298,8 +2302,9 @@ RUN c:\example\Execute-MyCmdlet -sample 'hello world'
 
 Resulting in:
 
-```powershell
-PS E:\docker\build\shell> docker build -t shell .
+```console
+PS E:\myproject> docker build -t shell .
+
 Sending build context to Docker daemon 4.096 kB
 Step 1/5 : FROM microsoft/nanoserver
  ---> 22738ff49c6d
@@ -2330,7 +2335,7 @@ hello world
  ---> 8e559e9bf424
 Removing intermediate container be6d8e63fe75
 Successfully built 8e559e9bf424
-PS E:\docker\build\shell>
+PS E:\myproject>
 ```
 
 The `SHELL` instruction could also be used to modify the way in which
