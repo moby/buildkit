@@ -91,8 +91,13 @@ a preliminary validation of the `Dockerfile` and returns an error if the syntax 
 ```console
 $ docker build -t test/myapp .
 
-Sending build context to Docker daemon 2.048 kB
-Error response from daemon: Unknown instruction: RUNCMD
+[+] Building 0.3s (2/2) FINISHED
+ => [internal] load build definition from Dockerfile                       0.1s
+ => => transferring dockerfile: 60B                                        0.0s
+ => [internal] load .dockerignore                                          0.1s
+ => => transferring context: 2B                                            0.0s
+error: failed to solve: rpc error: code = Unknown desc = failed to solve with frontend dockerfile.v0: failed to create LLB definition:
+dockerfile parse error line 2: unknown instruction: RUNCMD
 ```
 
 The Docker daemon runs the instructions in the `Dockerfile` one-by-one,
@@ -105,38 +110,35 @@ Note that each instruction is run independently, and causes a new image
 to be created - so `RUN cd /tmp` will not have any effect on the next
 instructions.
 
-Whenever possible, Docker will re-use the intermediate images (cache),
-to accelerate the `docker build` process significantly. This is indicated by
-the `Using cache` message in the console output.
-(For more information, see the [`Dockerfile` best practices guide](https://docs.docker.com/engine/userguide/eng-image/dockerfile_best-practices/):
+Whenever possible, Docker uses a build-cache to accelerate the `docker build`
+process significantly. This is indicated by the `CACHED` message in the console
+output. (For more information, see the [`Dockerfile` best practices guide](https://docs.docker.com/engine/userguide/eng-image/dockerfile_best-practices/):
 
 ```console
 $ docker build -t svendowideit/ambassador .
 
-Sending build context to Docker daemon 15.36 kB
-Step 1/4 : FROM alpine:3.2
- ---> 31f630c65071
-Step 2/4 : MAINTAINER SvenDowideit@home.org.au
- ---> Using cache
- ---> 2a1c91448f5f
-Step 3/4 : RUN apk update &&      apk add socat &&        rm -r /var/cache/
- ---> Using cache
- ---> 21ed6e7fbb73
-Step 4/4 : CMD env | grep _TCP= | (sed 's/.*_PORT_\([0-9]*\)_TCP=tcp:\/\/\(.*\):\(.*\)/socat -t 100000000 TCP4-LISTEN:\1,fork,reuseaddr TCP4:\2:\3 \&/' && echo wait) | sh
- ---> Using cache
- ---> 7ea8aef582cc
-Successfully built 7ea8aef582cc
+[+] Building 0.7s (6/6) FINISHED
+ => [internal] load build definition from Dockerfile                       0.1s
+ => => transferring dockerfile: 286B                                       0.0s
+ => [internal] load .dockerignore                                          0.1s
+ => => transferring context: 2B                                            0.0s
+ => [internal] load metadata for docker.io/library/alpine:3.2              0.4s
+ => CACHED [1/2] FROM docker.io/library/alpine:3.2@sha256:e9a2035f9d0d7ce  0.0s
+ => CACHED [2/2] RUN apk add --no-cache socat                              0.0s
+ => exporting to image                                                     0.0s
+ => => exporting layers                                                    0.0s
+ => => writing image sha256:1affb80ca37018ac12067fa2af38cc5bcc2a8f09963de  0.0s
+ => => naming to docker.io/library/mysocatimage                            0.0s
 ```
 
-Build cache is only used from images that have a local parent chain. This means
-that these images were created by previous builds or the whole chain of images
-was loaded with `docker load`. If you wish to use build cache of a specific
-image you can specify it with `--cache-from` option. Images specified with
-`--cache-from` do not need to have a parent chain and may be pulled from other
-registries.
+By default, the build cache is based results from previous builds on the machine
+on which you are building. The `--cache-from` option also allows you to use a
+build-cache that's distributed through an image registry refer to the
+[specifying external cache sources](commandline/build.md#specifying-external-cache-sources)
+section in the `docker build` command reference.
 
-When you're done with your build, you're ready to look into [*Pushing a
-repository to its registry*](https://docs.docker.com/engine/tutorials/dockerrepos/#/contributing-to-docker-hub).
+When you're done with your build, you're ready to look into [scanning your image with `docker scan`](https://docs.docker.com/engine/scan/),
+and [pushing your image to Docker Hub](https://docs.docker.com/docker-hub/repos/).
 
 
 ## BuildKit
@@ -2319,9 +2321,9 @@ Step 3/5 : RUN New-Item -ItemType Directory C:\Example
     Directory: C:\
 
 
-Mode                LastWriteTime         Length Name
-----                -------------         ------ ----
-d-----       10/28/2016  11:26 AM                Example
+Mode         LastWriteTime              Length Name
+----         -------------              ------ ----
+d-----       10/28/2016  11:26 AM              Example
 
 
  ---> 3f2fbf1395d9
