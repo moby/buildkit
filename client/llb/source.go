@@ -440,8 +440,15 @@ func Differ(t DiffType, required bool) LocalOption {
 
 type DiffType string
 
-const DiffNone DiffType = pb.AttrLocalDifferNone
-const DiffMetadata DiffType = pb.AttrLocalDifferMetadata
+const (
+	// DiffNone will do no file comparisons, all files in the Local source will
+	// be retransmitted.
+	DiffNone DiffType = pb.AttrLocalDifferNone
+	// DiffMetadata will compare file metadata (size, modified time, mode, owner,
+	// group, device and link name) to determine if the files in the Local source need
+	// to be retransmitted.  This is the default behavior.
+	DiffMetadata DiffType = pb.AttrLocalDifferMetadata
+)
 
 type DifferInfo struct {
 	Type     DiffType

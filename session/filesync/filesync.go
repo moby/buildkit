@@ -24,7 +24,6 @@ const (
 	keyFollowPaths        = "followpaths"
 	keyDirName            = "dir-name"
 	keyExporterMetaPrefix = "exporter-md-"
-	keyDiffer             = "differ"
 )
 
 type fsSyncProvider struct {
