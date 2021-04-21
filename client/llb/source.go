@@ -361,6 +361,12 @@ func Local(name string, opts ...LocalOption) State {
 		attrs[pb.AttrSharedKeyHint] = gi.SharedKeyHint
 		addCap(&gi.Constraints, pb.CapSourceLocalSharedKeyHint)
 	}
+	if gi.Differ.Type != "" {
+		attrs[pb.AttrLocalDiffer] = string(gi.Differ.Type)
+		if gi.Differ.Required {
+			addCap(&gi.Constraints, pb.CapSourceLocalDiffer)
+		}
+	}
 
 	addCap(&gi.Constraints, pb.CapSourceLocal)
 
@@ -423,6 +429,26 @@ func SharedKeyHint(h string) LocalOption {
 	})
 }
 
+func Differ(t DiffType, required bool) LocalOption {
+	return localOptionFunc(func(li *LocalInfo) {
+		li.Differ = DifferInfo{
+			Type:     t,
+			Required: required,
+		}
+	})
+}
+
+type DiffType string
+
+const DiffNone DiffType = pb.AttrLocalDifferNone
+const DiffMetadata DiffType = pb.AttrLocalDifferMetadata
+const DiffContent DiffType = pb.AttrLocalDifferContent
+
+type DifferInfo struct {
+	Type     DiffType
+	Required bool
+}
+
 type LocalInfo struct {
 	constraintsWrapper
 	SessionID       string
@@ -430,6 +456,7 @@ type LocalInfo struct {
 	ExcludePatterns string
 	FollowPaths     string
 	SharedKeyHint   string
+	Differ          DifferInfo
 }
 
 func HTTP(url string, opts ...HTTPOption) State {

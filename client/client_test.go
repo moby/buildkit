@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -126,6 +127,7 @@ func TestIntegration(t *testing.T) {
 		testStargzLazyPull,
 		testFileOpInputSwap,
 		testRelativeMountpoint,
+		testLocalSourceDiffer,
 	}, mirrors)
 
 	integration.Run(t, []integration.Test{
@@ -1267,6 +1269,86 @@ func testFileOpInputSwap(t *testing.T, sb integration.Sandbox) {
 	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "bar: no such file")
+}
+
+func testLocalSourceDiffer(t *testing.T, sb integration.Sandbox) {
+	for _, d := range []llb.DiffType{llb.DiffNone, llb.DiffMetadata} {
+		t.Run(fmt.Sprintf("differ=%s", d), func(t *testing.T) {
+			testLocalSourceWithDiffer(t, sb, d)
+		})
+	}
+}
+
+func testLocalSourceWithDiffer(t *testing.T, sb integration.Sandbox, d llb.DiffType) {
+	requiresLinux(t)
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	dir, err := tmpdir(
+		fstest.CreateFile("foo", []byte("foo"), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	tv := syscall.NsecToTimespec(time.Now().UnixNano())
+
+	err = syscall.UtimesNano(filepath.Join(dir, "foo"), []syscall.Timespec{tv, tv})
+	require.NoError(t, err)
+
+	st := llb.Local("mylocal"+string(d), llb.Differ(d, false))
+
+	def, err := st.Marshal(context.TODO())
+	require.NoError(t, err)
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalDirs: map[string]string{
+			"mylocal" + string(d): dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "foo"))
+	require.NoError(t, err)
+	require.Equal(t, []byte("foo"), dt)
+
+	err = ioutil.WriteFile(filepath.Join(dir, "foo"), []byte("bar"), 0600)
+	require.NoError(t, err)
+
+	err = syscall.UtimesNano(filepath.Join(dir, "foo"), []syscall.Timespec{tv, tv})
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalDirs: map[string]string{
+			"mylocal" + string(d): dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "foo"))
+	require.NoError(t, err)
+	if d == llb.DiffMetadata {
+		require.Equal(t, []byte("foo"), dt)
+	}
+	if d == llb.DiffNone {
+		require.Equal(t, []byte("bar"), dt)
+	}
 }
 
 func testFileOpRmWildcard(t *testing.T, sb integration.Sandbox) {
