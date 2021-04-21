@@ -153,8 +153,6 @@ func FromLLB(op *pb.Op_Source, platform *pb.Platform) (Identifier, error) {
 					id.Differ = fsutil.DiffMetadata
 				case pb.AttrLocalDifferNone:
 					id.Differ = fsutil.DiffNone
-				case pb.AttrLocalDifferContent:
-					id.Differ = fsutil.DiffContent
 				}
 			}
 		}

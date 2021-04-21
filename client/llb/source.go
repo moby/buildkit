@@ -442,7 +442,6 @@ type DiffType string
 
 const DiffNone DiffType = pb.AttrLocalDifferNone
 const DiffMetadata DiffType = pb.AttrLocalDifferMetadata
-const DiffContent DiffType = pb.AttrLocalDifferContent
 
 type DifferInfo struct {
 	Type     DiffType

@@ -30,6 +30,5 @@ const AttrImageRecordType = "image.recordtype"
 const AttrLocalDiffer = "local.differ"
 const AttrLocalDifferNone = "none"
 const AttrLocalDifferMetadata = "metadata"
-const AttrLocalDifferContent = "content"
 
 type IsFileAction = isFileAction_Action
