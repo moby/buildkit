@@ -128,10 +128,10 @@ $ docker build -t svendowideit/ambassador .
  => exporting to image                                                     0.0s
  => => exporting layers                                                    0.0s
  => => writing image sha256:1affb80ca37018ac12067fa2af38cc5bcc2a8f09963de  0.0s
- => => naming to docker.io/library/mysocatimage                            0.0s
+ => => naming to docker.io/svendowideit/ambassador                         0.0s
 ```
 
-By default, the build cache is based results from previous builds on the machine
+By default, the build cache is based on results from previous builds on the machine
 on which you are building. The `--cache-from` option also allows you to use a
 build-cache that's distributed through an image registry refer to the
 [specifying external cache sources](commandline/build.md#specifying-external-cache-sources)
@@ -318,6 +318,8 @@ The following parser directives are supported:
 
 ## syntax
 
+<a name="external-implementation-features"><!-- included for deep-links to old section --></a>
+
 ```dockerfile
 # syntax=[remote image reference]
 ```
@@ -325,55 +327,73 @@ The following parser directives are supported:
 For example:
 
 ```dockerfile
-# syntax=docker/dockerfile
-# syntax=docker/dockerfile:1.0
+# syntax=docker/dockerfile:1
 # syntax=docker.io/docker/dockerfile:1
-# syntax=docker/dockerfile:1.0.0-experimental
 # syntax=example.com/user/repo:tag@sha256:abcdef...
 ```
 
-This feature is only enabled if the [BuildKit](#buildkit) backend is used.
+This feature is only available when using the [BuildKit](#buildkit) backend, and
+is ignored when using the classic builder backend.
 
-The syntax directive defines the location of the Dockerfile builder that is used for
-building the current Dockerfile. The BuildKit backend allows to seamlessly use
-external implementations of builders that are distributed as Docker images and
-execute inside a container sandbox environment.
+The syntax directive defines the location of the Dockerfile syntax that is used
+to build the Dockerfile. The BuildKit backend allows to seamlessly use external
+implementations that are distributed as Docker images and execute inside a
+container sandbox environment.
 
-Custom Dockerfile implementation allows you to:
+Custom Dockerfile implementations allows you to:
 
-  - Automatically get bugfixes without updating the daemon
+  - Automatically get bugfixes without updating the Docker daemon
   - Make sure all users are using the same implementation to build your Dockerfile
-  - Use the latest features without updating the daemon
-  - Try out new experimental or third-party features
+  - Use the latest features without updating the Docker daemon
+  - Try out new features or third-party features before they are integrated in the Docker daemon
+  - Use [alternative build definitions, or create your own](https://github.com/moby/buildkit#exploring-llb)
 
 ### Official releases
 
 Docker distributes official versions of the images that can be used for building
 Dockerfiles under `docker/dockerfile` repository on Docker Hub. There are two
-channels where new images are released: stable and experimental.
+channels where new images are released: `stable` and `labs`.
 
-Stable channel follows semantic versioning. For example:
+Stable channel follows [semantic versioning](https://semver.org). For example:
 
-  - `docker/dockerfile:1.0.0` - only allow immutable version `1.0.0`
-  - `docker/dockerfile:1.0` - allow versions `1.0.*`
-  - `docker/dockerfile:1` - allow versions `1.*.*`
-  - `docker/dockerfile:latest` - latest release on stable channel
+  - `docker/dockerfile:1` - kept updated with the latest `1.x.x` minor _and_ patch release
+  - `docker/dockerfile:1.2` -  kept updated with the latest `1.2.x` patch release,
+    and stops receiving updates once version `1.3.0` is released.
+  - `docker/dockerfile:1.2.1` - immutable: never updated
 
-The experimental channel uses incremental versioning with the major and minor
-component from the stable channel on the time of the release. For example:
+We recommend using `docker/dockerfile:1`, which always points to the latest stable
+release of the version 1 syntax, and receives both "minor" and "patch" updates
+for the version 1 release cycle. BuildKit automatically checks for updates of the
+syntax when performing a build, making sure you are using the most current version.
 
-  - `docker/dockerfile:1.0.1-experimental` - only allow immutable version `1.0.1-experimental`
-  - `docker/dockerfile:1.0-experimental` - latest experimental releases after `1.0`
-  - `docker/dockerfile:experimental` - latest release on experimental channel
+If a specific version is used, such as `1.2` or `1.2.1`, the Dockerfile needs to
+be updated manually to continue receiving bugfixes and new features. Old versions
+of the Dockerfile remain compatible with the new versions of the builder.
 
-You should choose a channel that best fits your needs. If you only want
-bugfixes, you should use `docker/dockerfile:1.0`. If you want to benefit from
-experimental features, you should use the experimental channel. If you are using
-the experimental channel, newer releases may not be backwards compatible, so it
+**labs channel**
+
+The "labs" channel provides early access to Dockerfile features that are not yet
+available in the stable channel. Labs channel images are released in conjunction
+with the stable releases, and follow the same versioning with the `-labs` suffix,
+for example:
+
+  - `docker/dockerfile:labs` - latest release on labs channel
+  - `docker/dockerfile:1-labs` - same as `dockerfile:1` in the stable channel, with labs features enabled
+  - `docker/dockerfile:1.2-labs` -  same as `dockerfile:1.2` in the stable channel, with labs features enabled
+  - `docker/dockerfile:1.2.1-labs` - immutable: never updated. Same as `dockerfile:1.2.1` in the stable channel, with labs features enabled
+
+Choose a channel that best fits your needs; if you want to benefit from
+new features, use the labs channel. Images in the labs channel provide a superset
+of the features in the stable channel; note that `stable` features in the labs
+channel images follow [semantic versioning](https://semver.org), but "labs"
+features do not, and newer releases may not be backwards compatible, so it
 is recommended to use an immutable full version variant.
 
-For master builds and nightly feature releases refer to the description in
-[the source repository](https://github.com/moby/buildkit/blob/master/README.md).
+For documentation on "labs" features, master builds, and nightly feature releases,
+refer to the description in [the BuildKit source repository on GitHub](https://github.com/moby/buildkit/blob/master/README.md).
+For a full list of available images, visit the [image repository on Docker Hub](https://hub.docker.com/r/docker/dockerfile),
+and the [docker/dockerfile-upstream image repository](https://hub.docker.com/r/docker/dockerfile-upstream)
+for development builds.
 
 ## escape
 
@@ -2346,15 +2366,6 @@ environment variable expansion semantics could be modified.
 
 The `SHELL` instruction can also be used on Linux should an alternate shell be
 required such as `zsh`, `csh`, `tcsh` and others.
-
-## External implementation features
-
-This feature is only available when using the  [BuildKit](#buildkit) backend.
-
-Docker build supports experimental features like cache mounts, build secrets and
-ssh forwarding that are enabled by using an external implementation of the
-builder with a syntax directive. To learn about these features,
-[refer to the documentation in BuildKit repository](https://github.com/moby/buildkit/blob/master/frontend/dockerfile/docs/experimental.md).
 
 ## Dockerfile examples
 
