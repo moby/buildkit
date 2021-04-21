@@ -427,6 +427,8 @@ type CopyInfo struct {
 	Mode                *os.FileMode
 	FollowSymlinks      bool
 	CopyDirContentsOnly bool
+	IncludePatterns     []string
+	ExcludePatterns     []string
 	AttemptUnpack       bool
 	CreateDestPath      bool
 	AllowWildcard       bool
@@ -458,6 +460,8 @@ func (a *fileActionCopy) toProtoAction(ctx context.Context, parent string, base 
 		Src:                              src,
 		Dest:                             normalizePath(parent, a.dest, true),
 		Owner:                            a.info.ChownOpt.marshal(base),
+		IncludePatterns:                  a.info.IncludePatterns,
+		ExcludePatterns:                  a.info.ExcludePatterns,
 		AllowWildcard:                    a.info.AllowWildcard,
 		AllowEmptyWildcard:               a.info.AllowEmptyWildcard,
 		FollowSymlink:                    a.info.FollowSymlinks,

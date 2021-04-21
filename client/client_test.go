@@ -73,6 +73,7 @@ func TestIntegration(t *testing.T) {
 		testRelativeWorkDir,
 		testFileOpMkdirMkfile,
 		testFileOpCopyRm,
+		testFileOpCopyIncludeExclude,
 		testFileOpRmWildcard,
 		testCallDiskUsage,
 		testBuildMultiMount,
@@ -1130,6 +1131,60 @@ func testFileOpCopyRm(t *testing.T, sb integration.Sandbox) {
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "file2"))
 	require.NoError(t, err)
 	require.Equal(t, []byte("file2"), dt)
+}
+
+func testFileOpCopyIncludeExclude(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	dir, err := tmpdir(
+		fstest.CreateFile("myfile", []byte("data0"), 0600),
+		fstest.CreateDir("sub", 0700),
+		fstest.CreateFile("sub/foo", []byte("foo0"), 0600),
+		fstest.CreateFile("sub/bar", []byte("bar0"), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	st := llb.Scratch().File(
+		llb.Copy(
+			llb.Local("mylocal"), "/", "/", &llb.CopyInfo{
+				IncludePatterns: []string{"sub/*"},
+				ExcludePatterns: []string{"sub/bar"},
+			},
+		),
+	)
+
+	def, err := st.Marshal(context.TODO())
+	require.NoError(t, err)
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalDirs: map[string]string{
+			"mylocal": dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "sub", "foo"))
+	require.NoError(t, err)
+	require.Equal(t, []byte("foo0"), dt)
+
+	for _, name := range []string{"myfile", "sub/bar"} {
+		_, err = os.Stat(filepath.Join(destDir, name))
+		require.Equal(t, true, errors.Is(err, os.ErrNotExist))
+	}
 }
 
 // testFileOpInputSwap is a regression test that cache is invalidated when subset of fileop is built

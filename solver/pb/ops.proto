@@ -291,6 +291,10 @@ message FileActionCopy {
 	bool allowEmptyWildcard = 10;
 	// optional created time override
 	int64 timestamp = 11;
+	// include only files/dirs matching at least one of these patterns
+	repeated string include_patterns = 12;
+	// exclude files/dir matching any of these patterns (even if they match an include pattern)
+	repeated string exclude_patterns = 13;
 }
 
 message FileActionMkFile {
