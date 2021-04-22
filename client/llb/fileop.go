@@ -56,6 +56,10 @@ type subAction interface {
 	toProtoAction(context.Context, string, pb.InputIndex) (pb.IsFileAction, error)
 }
 
+type capAdder interface {
+	addCaps(*FileOp)
+}
+
 type FileAction struct {
 	state  *State
 	prev   *FileAction
@@ -500,6 +504,15 @@ func (a *fileActionCopy) sourcePath(ctx context.Context) (string, error) {
 	return p, nil
 }
 
+func (a *fileActionCopy) addCaps(f *FileOp) {
+	if len(a.info.IncludePatterns) != 0 {
+		addCap(&f.constraints, pb.CapFileCopyIncludePatterns)
+	}
+	if len(a.info.ExcludePatterns) != 0 {
+		addCap(&f.constraints, pb.CapFileCopyExcludePatterns)
+	}
+}
+
 type CreatedTime time.Time
 
 func WithCreatedTime(t time.Time) CreatedTime {
@@ -686,6 +699,10 @@ func (f *FileOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 	pop.Inputs = state.inputs
 
 	for i, st := range state.actions {
+		if adder, isCapAdder := st.action.(capAdder); isCapAdder {
+			adder.addCaps(f)
+		}
+
 		output := pb.OutputIndex(-1)
 		if i+1 == len(state.actions) {
 			output = 0
