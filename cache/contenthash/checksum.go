@@ -8,8 +8,10 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"sync"
 
+	"github.com/docker/docker/pkg/fileutils"
 	"github.com/docker/docker/pkg/idtools"
 	iradix "github.com/hashicorp/go-immutable-radix"
 	"github.com/hashicorp/golang-lru/simplelru"
@@ -21,6 +23,7 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
+	"github.com/tonistiigi/fsutil/prefix"
 	fstypes "github.com/tonistiigi/fsutil/types"
 )
 
@@ -45,12 +48,15 @@ func getDefaultManager() *cacheManager {
 // header, "/dir" is for contents. For the root node "" (empty string) is the
 // key for root, "/" for the root header
 
-func Checksum(ctx context.Context, ref cache.ImmutableRef, path string, followLinks bool, s session.Group) (digest.Digest, error) {
-	return getDefaultManager().Checksum(ctx, ref, path, followLinks, s)
+type ChecksumOpts struct {
+	FollowLinks     bool
+	Wildcard        bool
+	IncludePatterns []string
+	ExcludePatterns []string
 }
 
-func ChecksumWildcard(ctx context.Context, ref cache.ImmutableRef, path string, followLinks bool, s session.Group) (digest.Digest, error) {
-	return getDefaultManager().ChecksumWildcard(ctx, ref, path, followLinks, s)
+func Checksum(ctx context.Context, ref cache.ImmutableRef, path string, opts ChecksumOpts, s session.Group) (digest.Digest, error) {
+	return getDefaultManager().Checksum(ctx, ref, path, opts, s)
 }
 
 func GetCacheContext(ctx context.Context, md *metadata.StorageItem, idmap *idtools.IdentityMapping) (CacheContext, error) {
@@ -66,8 +72,7 @@ func ClearCacheContext(md *metadata.StorageItem) {
 }
 
 type CacheContext interface {
-	Checksum(ctx context.Context, ref cache.Mountable, p string, followLinks bool, s session.Group) (digest.Digest, error)
-	ChecksumWildcard(ctx context.Context, ref cache.Mountable, p string, followLinks bool, s session.Group) (digest.Digest, error)
+	Checksum(ctx context.Context, ref cache.Mountable, p string, opts ChecksumOpts, s session.Group) (digest.Digest, error)
 	HandleChange(kind fsutil.ChangeKind, p string, fi os.FileInfo, err error) error
 }
 
@@ -75,7 +80,7 @@ type Hashed interface {
 	Digest() digest.Digest
 }
 
-type Wildcard struct {
+type IncludedPath struct {
 	Path   string
 	Record *CacheRecord
 }
@@ -86,20 +91,12 @@ type cacheManager struct {
 	lruMu  sync.Mutex
 }
 
-func (cm *cacheManager) Checksum(ctx context.Context, ref cache.ImmutableRef, p string, followLinks bool, s session.Group) (digest.Digest, error) {
+func (cm *cacheManager) Checksum(ctx context.Context, ref cache.ImmutableRef, p string, opts ChecksumOpts, s session.Group) (digest.Digest, error) {
 	cc, err := cm.GetCacheContext(ctx, ensureOriginMetadata(ref.Metadata()), ref.IdentityMapping())
 	if err != nil {
 		return "", nil
 	}
-	return cc.Checksum(ctx, ref, p, followLinks, s)
-}
-
-func (cm *cacheManager) ChecksumWildcard(ctx context.Context, ref cache.ImmutableRef, p string, followLinks bool, s session.Group) (digest.Digest, error) {
-	cc, err := cm.GetCacheContext(ctx, ensureOriginMetadata(ref.Metadata()), ref.IdentityMapping())
-	if err != nil {
-		return "", nil
-	}
-	return cc.ChecksumWildcard(ctx, ref, p, followLinks, s)
+	return cc.Checksum(ctx, ref, p, opts, s)
 }
 
 func (cm *cacheManager) GetCacheContext(ctx context.Context, md *metadata.StorageItem, idmap *idtools.IdentityMapping) (CacheContext, error) {
@@ -264,12 +261,17 @@ func (cc *cacheContext) save() error {
 	return cc.md.SetExternal(keyContentHash, dt)
 }
 
-// HandleChange notifies the source about a modification operation
-func (cc *cacheContext) HandleChange(kind fsutil.ChangeKind, p string, fi os.FileInfo, err error) (retErr error) {
+func keyPath(p string) string {
 	p = path.Join("/", filepath.ToSlash(p))
 	if p == "/" {
 		p = ""
 	}
+	return p
+}
+
+// HandleChange notifies the source about a modification operation
+func (cc *cacheContext) HandleChange(kind fsutil.ChangeKind, p string, fi os.FileInfo, err error) (retErr error) {
+	p = keyPath(p)
 	k := convertPathToKey([]byte(p))
 
 	deleteDir := func(cr *CacheRecord) {
@@ -382,36 +384,40 @@ func (cc *cacheContext) HandleChange(kind fsutil.ChangeKind, p string, fi os.Fil
 	return nil
 }
 
-func (cc *cacheContext) ChecksumWildcard(ctx context.Context, mountable cache.Mountable, p string, followLinks bool, s session.Group) (digest.Digest, error) {
+func (cc *cacheContext) Checksum(ctx context.Context, mountable cache.Mountable, p string, opts ChecksumOpts, s session.Group) (digest.Digest, error) {
 	m := &mount{mountable: mountable, session: s}
 	defer m.clean()
 
-	wildcards, err := cc.wildcards(ctx, m, p)
+	if !opts.Wildcard && len(opts.IncludePatterns) == 0 && len(opts.ExcludePatterns) == 0 {
+		return cc.checksumFollow(ctx, m, p, opts.FollowLinks)
+	}
+
+	includedPaths, err := cc.includedPaths(ctx, m, p, opts)
 	if err != nil {
 		return "", err
 	}
 
-	if followLinks {
-		for i, w := range wildcards {
+	if opts.FollowLinks {
+		for i, w := range includedPaths {
 			if w.Record.Type == CacheRecordTypeSymlink {
-				dgst, err := cc.checksumFollow(ctx, m, w.Path, followLinks)
+				dgst, err := cc.checksumFollow(ctx, m, w.Path, opts.FollowLinks)
 				if err != nil {
 					return "", err
 				}
-				wildcards[i].Record = &CacheRecord{Digest: dgst}
+				includedPaths[i].Record = &CacheRecord{Digest: dgst}
 			}
 		}
 	}
-	if len(wildcards) == 0 {
+	if len(includedPaths) == 0 {
 		return digest.FromBytes([]byte{}), nil
 	}
 
-	if len(wildcards) == 1 && path.Base(p) == path.Base(wildcards[0].Path) {
-		return wildcards[0].Record.Digest, nil
+	if len(includedPaths) == 1 && path.Base(p) == path.Base(includedPaths[0].Path) {
+		return includedPaths[0].Record.Digest, nil
 	}
 
 	digester := digest.Canonical.Digester()
-	for i, w := range wildcards {
+	for i, w := range includedPaths {
 		if i != 0 {
 			digester.Hash().Write([]byte{0})
 		}
@@ -419,13 +425,6 @@ func (cc *cacheContext) ChecksumWildcard(ctx context.Context, mountable cache.Mo
 		digester.Hash().Write([]byte(w.Record.Digest))
 	}
 	return digester.Digest(), nil
-}
-
-func (cc *cacheContext) Checksum(ctx context.Context, mountable cache.Mountable, p string, followLinks bool, s session.Group) (digest.Digest, error) {
-	m := &mount{mountable: mountable, session: s}
-	defer m.clean()
-
-	return cc.checksumFollow(ctx, m, p, followLinks)
 }
 
 func (cc *cacheContext) checksumFollow(ctx context.Context, m *mount, p string, follow bool) (digest.Digest, error) {
@@ -452,7 +451,7 @@ func (cc *cacheContext) checksumFollow(ctx context.Context, m *mount, p string, 
 	}
 }
 
-func (cc *cacheContext) wildcards(ctx context.Context, m *mount, p string) ([]*Wildcard, error) {
+func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, opts ChecksumOpts) ([]*IncludedPath, error) {
 	cc.mu.Lock()
 	defer cc.mu.Unlock()
 
@@ -478,18 +477,34 @@ func (cc *cacheContext) wildcards(ctx context.Context, m *mount, p string) ([]*W
 		}
 	}()
 
-	p = path.Join("/", filepath.ToSlash(p))
-	if p == "/" {
-		p = ""
+	p = keyPath(p)
+
+	rootedIncludePatterns := make([]string, len(opts.IncludePatterns))
+	for i, includePattern := range opts.IncludePatterns {
+		rootedIncludePatterns[i] = keyPath(includePattern)
 	}
 
-	wildcards := make([]*Wildcard, 0, 2)
+	var excludePatternMatcher *fileutils.PatternMatcher
+	if len(opts.ExcludePatterns) != 0 {
+		rootedExcludePatterns := make([]string, len(opts.ExcludePatterns))
+		for i, excludePattern := range opts.ExcludePatterns {
+			rootedExcludePatterns[i] = keyPath(excludePattern)
+		}
+		excludePatternMatcher, err = fileutils.NewPatternMatcher(rootedExcludePatterns)
+		if err != nil {
+			return nil, errors.Wrapf(err, "invalid excludepatterns: %s", opts.ExcludePatterns)
+		}
+	}
+
+	includedPaths := make([]*IncludedPath, 0, 2)
 
 	txn := cc.tree.Txn()
 	root = txn.Root()
 	var updated bool
 
+	lastIncludedDir := ""
 	iter := root.Seek([]byte{})
+treeWalk:
 	for {
 		k, _, ok := iter.Next()
 		if !ok {
@@ -498,8 +513,8 @@ func (cc *cacheContext) wildcards(ctx context.Context, m *mount, p string) ([]*W
 		if len(k) > 0 && k[len(k)-1] == byte(0) {
 			continue
 		}
-		fn := convertKeyToPath(k)
-		b, err := path.Match(p, string(fn))
+		fn := string(convertKeyToPath(k))
+		b, err := shouldIncludePath(p, fn, opts.Wildcard, rootedIncludePatterns, excludePatternMatcher, lastIncludedDir)
 		if err != nil {
 			return nil, err
 		}
@@ -515,8 +530,25 @@ func (cc *cacheContext) wildcards(ctx context.Context, m *mount, p string) ([]*W
 			updated = true
 		}
 
-		wildcards = append(wildcards, &Wildcard{Path: string(fn), Record: cr})
+		if cr.Type == CacheRecordTypeDir {
+			lastIncludedDir = fn
 
+			if excludePatternMatcher != nil {
+				dirSlash := fn + "/"
+				for _, pat := range excludePatternMatcher.Patterns() {
+					patStr := pat.String() + "/"
+					if strings.HasPrefix(patStr, dirSlash) {
+						// This dir has exclusions underneath it. Do not
+						// include the dir as a whole. Instead, continue
+						// walking and only include paths that match the
+						// filters.
+						continue treeWalk
+					}
+				}
+			}
+		}
+
+		includedPaths = append(includedPaths, &IncludedPath{Path: fn, Record: cr})
 		if cr.Type == CacheRecordTypeDir {
 			iter = root.Seek(append(k, 0, 0xff))
 		}
@@ -525,14 +557,56 @@ func (cc *cacheContext) wildcards(ctx context.Context, m *mount, p string) ([]*W
 	cc.tree = txn.Commit()
 	cc.dirty = updated
 
-	return wildcards, nil
+	return includedPaths, nil
+}
+
+func shouldIncludePath(
+	p string,
+	candidate string,
+	wildcard bool,
+	rootedIncludePatterns []string,
+	excludePatternMatcher *fileutils.PatternMatcher,
+	lastIncludedDir string,
+) (bool, error) {
+	if wildcard {
+		include, err := path.Match(p, candidate)
+		if err != nil {
+			return include, err
+		}
+		if !include {
+			return false, nil
+		}
+	} else if !strings.HasPrefix(candidate+"/", p+"/") {
+		return false, nil
+	}
+
+	if len(rootedIncludePatterns) != 0 &&
+		(lastIncludedDir == "" ||
+			!strings.HasPrefix(candidate, lastIncludedDir+"/")) {
+		matched := false
+		for _, pattern := range rootedIncludePatterns {
+			if ok, partial := prefix.Match(pattern, candidate); ok && !partial {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false, nil
+		}
+	}
+
+	if excludePatternMatcher == nil {
+		return true, nil
+	}
+	m, err := excludePatternMatcher.Matches(candidate)
+	if err != nil {
+		return false, errors.Wrap(err, "failed to match excludepatterns")
+	}
+	return !m, nil
 }
 
 func (cc *cacheContext) checksumNoFollow(ctx context.Context, m *mount, p string) (*CacheRecord, error) {
-	p = path.Join("/", filepath.ToSlash(p))
-	if p == "/" {
-		p = ""
-	}
+	p = keyPath(p)
 
 	cc.mu.RLock()
 	if cc.txn == nil {
