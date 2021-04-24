@@ -1338,6 +1338,10 @@ func proxyEnvFromBuildArgs(args map[string]string) *llb.ProxyEnv {
 			pe.NoProxy = v
 			isNil = false
 		}
+		if strings.EqualFold(k, "all_proxy") {
+			pe.AllProxy = v
+			isNil = false
+		}
 	}
 	if isNil {
 		return nil
