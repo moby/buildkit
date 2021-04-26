@@ -1,4 +1,4 @@
-// +build !solaris
+// +build freebsd,!cgo
 
 /*
    Copyright The containerd Authors.
@@ -16,10 +16,21 @@
    limitations under the License.
 */
 
-package fifo
+package console
 
-import "syscall"
+import (
+	"os"
+)
 
-func mkfifo(path string, mode uint32) (err error) {
-	return syscall.Mkfifo(path, mode)
+//
+// Implementing the functions below requires cgo support.  Non-cgo stubs
+// versions are defined below to enable cross-compilation of source code
+// that depends on these functions, but the resultant cross-compiled
+// binaries cannot actually be used.  If the stub function(s) below are
+// actually invoked they will display an error message and cause the
+// calling process to exit.
+//
+
+func openpt() (*os.File, error) {
+	panic("openpt() support requires cgo.")
 }
