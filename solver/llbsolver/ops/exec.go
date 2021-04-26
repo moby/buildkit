@@ -368,6 +368,9 @@ func proxyEnvList(p *pb.ProxyEnv) []string {
 	if v := p.NoProxy; v != "" {
 		out = append(out, "NO_PROXY="+v, "no_proxy="+v)
 	}
+	if v := p.AllProxy; v != "" {
+		out = append(out, "ALL_PROXY="+v, "all_proxy="+v)
+	}
 	return out
 }
 
