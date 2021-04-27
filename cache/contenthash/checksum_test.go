@@ -471,9 +471,18 @@ func TestChecksumIncludeExclude(t *testing.T) {
 
 	require.NotEqual(t, dgstFoo, dgstFooBar)
 
-	dgstD0, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"d0/*"}}, nil)
+	dgstD0, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"d0"}}, nil)
 	require.NoError(t, err)
-	dgstD1, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"d1/*"}}, nil)
+	dgstD1, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"d1"}}, nil)
+	require.NoError(t, err)
+
+	dgstD0Star, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"d0/*"}}, nil)
+	require.NoError(t, err)
+	dgstD1Star, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"d1/*"}}, nil)
+	require.NoError(t, err)
+
+	// Nothing matches pattern, but d2's metadata should be captured in the checksum
+	dgstD2Foo, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"d2/foo"}}, nil)
 	require.NoError(t, err)
 
 	err = ref.Release(context.TODO())
@@ -489,6 +498,7 @@ func TestChecksumIncludeExclude(t *testing.T) {
 		"ADD d0/xyz file xyz",
 		"ADD d1 dir",
 		"ADD d1/def file def",
+		"ADD d2 dir",
 	}
 
 	ref = createRef(t, cm, ch)
@@ -504,17 +514,29 @@ func TestChecksumIncludeExclude(t *testing.T) {
 	require.Equal(t, dgstFoo, dgstFoo2)
 	require.Equal(t, dgstFooBar, dgstFooBar2)
 
-	dgstD02, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"d0/*"}}, nil)
+	dgstD02, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"d0"}}, nil)
 	require.NoError(t, err)
 	require.NotEqual(t, dgstD0, dgstD02)
 
-	dgstD12, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"d1/*"}}, nil)
+	dgstD12, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"d1"}}, nil)
 	require.NoError(t, err)
 	require.Equal(t, dgstD1, dgstD12)
 
-	dgstD0Exclude, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"d0/*"}, ExcludePatterns: []string{"d0/xyz"}}, nil)
+	dgstD0Star2, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"d0/*"}}, nil)
 	require.NoError(t, err)
-	require.Equal(t, dgstD0, dgstD0Exclude)
+	require.NotEqual(t, dgstD0Star, dgstD0Star2)
+
+	dgstD1Star2, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"d1/*"}}, nil)
+	require.NoError(t, err)
+	require.Equal(t, dgstD1Star, dgstD1Star2)
+
+	dgstD0StarExclude, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"d0/*"}, ExcludePatterns: []string{"d0/xyz"}}, nil)
+	require.NoError(t, err)
+	require.Equal(t, dgstD0Star, dgstD0StarExclude)
+
+	dgstD2Foo2, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"d2/foo"}}, nil)
+	require.NoError(t, err)
+	require.NotEqual(t, dgstD2Foo, dgstD2Foo2)
 
 	err = ref.Release(context.TODO())
 	require.NoError(t, err)

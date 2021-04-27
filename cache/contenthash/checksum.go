@@ -510,15 +510,20 @@ treeWalk:
 		if !ok {
 			break
 		}
-		if len(k) > 0 && k[len(k)-1] == byte(0) {
-			continue
-		}
 		fn := string(convertKeyToPath(k))
-		b, err := shouldIncludePath(p, fn, opts.Wildcard, rootedIncludePatterns, excludePatternMatcher, lastIncludedDir)
+		dirHeader := false
+		if len(k) > 0 && k[len(k)-1] == byte(0) {
+			dirHeader = true
+			fn = fn[:len(fn)-1]
+		}
+		b, partialMatch, err := shouldIncludePath(p, fn, opts.Wildcard, rootedIncludePatterns, excludePatternMatcher, lastIncludedDir)
 		if err != nil {
 			return nil, err
 		}
-		if !b {
+		// Dir headers for parent dirs of an include pattern should be included
+		// in the digest because their metadata may be copied by a copy that
+		// includes files or subdirs underneath them.
+		if !b || dirHeader != partialMatch {
 			continue
 		}
 
@@ -567,42 +572,47 @@ func shouldIncludePath(
 	rootedIncludePatterns []string,
 	excludePatternMatcher *fileutils.PatternMatcher,
 	lastIncludedDir string,
-) (bool, error) {
+) (bool, bool, error) {
 	if wildcard {
 		include, err := path.Match(p, candidate)
 		if err != nil {
-			return include, err
+			return include, false, err
 		}
 		if !include {
-			return false, nil
+			return false, false, nil
 		}
 	} else if !strings.HasPrefix(candidate+"/", p+"/") {
-		return false, nil
+		return false, false, nil
 	}
 
+	partial := false
 	if len(rootedIncludePatterns) != 0 &&
 		(lastIncludedDir == "" ||
 			!strings.HasPrefix(candidate, lastIncludedDir+"/")) {
+		partial = true
 		matched := false
 		for _, pattern := range rootedIncludePatterns {
-			if ok, partial := prefix.Match(pattern, candidate); ok && !partial {
+			if ok, partialMatch := prefix.Match(pattern, candidate); ok {
 				matched = true
-				break
+				if !partialMatch {
+					partial = false
+					break
+				}
 			}
 		}
 		if !matched {
-			return false, nil
+			return false, partial, nil
 		}
 	}
 
 	if excludePatternMatcher == nil {
-		return true, nil
+		return true, partial, nil
 	}
 	m, err := excludePatternMatcher.Matches(candidate)
 	if err != nil {
-		return false, errors.Wrap(err, "failed to match excludepatterns")
+		return false, partial, errors.Wrap(err, "failed to match excludepatterns")
 	}
-	return !m, nil
+	return !m, partial, nil
 }
 
 func (cc *cacheContext) checksumNoFollow(ctx context.Context, m *mount, p string) (*CacheRecord, error) {
