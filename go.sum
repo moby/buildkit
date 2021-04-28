@@ -61,8 +61,8 @@ github.com/OneOfOne/xxhash v1.2.2/go.mod h1:HSdplMjZKSmBqAxg5vPj2TmRDmfkzw+cTzAE
 github.com/PuerkitoBio/purell v1.1.1/go.mod h1:c11w/QuzBsJSee3cPx9rAFu61PvFxuPbtSwDGJws/X0=
 github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578/go.mod h1:uGdkoq3SwY9Y+13GIhn11/XLaGBb4BfwItxLd5jeuXE=
 github.com/Shopify/logrus-bugsnag v0.0.0-20171204204709-577dee27f20d/go.mod h1:HI8ITrYtUY+O+ZhtlqUnD8+KwNPOyugEhfP9fdUIaEQ=
-github.com/aaronlehmann/fsutil v0.0.0-20210421230417-620ac87d5620 h1:QvaYmkJ1bcslW9/y3HXoe96Pz51pr3Hg55DhskwauZE=
-github.com/aaronlehmann/fsutil v0.0.0-20210421230417-620ac87d5620/go.mod h1:4Bcxev2PKmz1bFF6Mg3opy8w4kYQVvEXQGKVkQkP2Ac=
+github.com/aaronlehmann/fsutil v0.0.0-20210428220603-accc0fae8749 h1:Pe6Ex38zK9fsv73pYe5c3/pf2ZNKIHxlw4VMt2hbpl8=
+github.com/aaronlehmann/fsutil v0.0.0-20210428220603-accc0fae8749/go.mod h1:4Bcxev2PKmz1bFF6Mg3opy8w4kYQVvEXQGKVkQkP2Ac=
 github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=
 github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=
 github.com/alecthomas/units v0.0.0-20151022065526-2efee857e7cf/go.mod h1:ybxpYRFXyAe+OPACYpWeL0wqObRcbAqCMya13uyzqw0=

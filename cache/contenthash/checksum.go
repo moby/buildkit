@@ -592,7 +592,7 @@ func shouldIncludePath(
 		partial = true
 		matched := false
 		for _, pattern := range rootedIncludePatterns {
-			if ok, partialMatch := prefix.Match(pattern, candidate); ok {
+			if ok, partialMatch := prefix.Match(pattern, candidate, true); ok {
 				matched = true
 				if !partialMatch {
 					partial = false

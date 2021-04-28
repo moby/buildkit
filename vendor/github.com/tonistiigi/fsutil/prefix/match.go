@@ -1,18 +1,28 @@
 package prefix
 
 import (
+	"path"
 	"path/filepath"
 	"strings"
 )
 
-func Match(pattern, name string) (bool, bool) {
-	count := strings.Count(name, string(filepath.Separator))
+func Match(pattern, name string, slashSeparator bool) (bool, bool) {
+	separator := filepath.Separator
+	if slashSeparator {
+		separator = '/'
+	}
+	count := strings.Count(name, string(separator))
 	partial := false
-	if strings.Count(pattern, string(filepath.Separator)) > count {
-		pattern = trimUntilIndex(pattern, string(filepath.Separator), count)
+	if strings.Count(pattern, string(separator)) > count {
+		pattern = trimUntilIndex(pattern, string(separator), count)
 		partial = true
 	}
-	m, _ := filepath.Match(pattern, name)
+	var m bool
+	if slashSeparator {
+		m, _ = path.Match(pattern, name)
+	} else {
+		m, _ = filepath.Match(pattern, name)
+	}
 	return m, partial
 }
 

@@ -75,7 +75,7 @@ replace (
 	github.com/hashicorp/go-immutable-radix => github.com/tonistiigi/go-immutable-radix v0.0.0-20170803185627-826af9ccf0fe
 	github.com/jaguilar/vt100 => github.com/tonistiigi/vt100 v0.0.0-20190402012908-ad4c4a574305
 	// temporary until https://github.com/tonistiigi/fsutil/pull/101 is merged
-	github.com/tonistiigi/fsutil => github.com/aaronlehmann/fsutil v0.0.0-20210421230417-620ac87d5620
+	github.com/tonistiigi/fsutil => github.com/aaronlehmann/fsutil v0.0.0-20210428220603-accc0fae8749
 	// genproto: corresponds to containerd
 	google.golang.org/genproto => google.golang.org/genproto v0.0.0-20200224152610-e50cd9704f63
 	// grpc: corresponds to protobuf

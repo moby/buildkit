@@ -98,7 +98,7 @@ func Walk(ctx context.Context, p string, opt *WalkOpt, fn filepath.WalkFunc) err
 					matched := false
 					partial := true
 					for _, pattern := range includePatterns {
-						if ok, p := prefix.Match(pattern, path); ok {
+						if ok, p := prefix.Match(pattern, path, false); ok {
 							matched = true
 							if !p {
 								partial = false
