@@ -323,6 +323,31 @@ func testMultipleRepos(t *testing.T, keepGitDir bool) {
 	require.Equal(t, "xyz\n", string(dt))
 }
 
+func TestCredentialRedaction(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+
+	t.Parallel()
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+
+	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	gs := setupGitSource(t, tmpdir)
+
+	url := "https://user:keepthissecret@non-existant-host/user/private-repo.git"
+	id := &source.GitIdentifier{Remote: url}
+
+	g, err := gs.Resolve(ctx, id, nil, nil)
+	require.NoError(t, err)
+
+	_, _, _, err = g.CacheKey(ctx, nil, 0)
+	require.Error(t, err)
+	require.False(t, strings.Contains(err.Error(), "keepthissecret"))
+}
+
 func setupGitSource(t *testing.T, tmpdir string) source.Source {
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	assert.NoError(t, err)
