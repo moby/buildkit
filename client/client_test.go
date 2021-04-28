@@ -98,6 +98,7 @@ func TestIntegration(t *testing.T) {
 		testSharedCacheMounts,
 		testLockedCacheMounts,
 		testDuplicateCacheMount,
+		testRunCacheWithMounts,
 		testParallelLocalBuilds,
 		testSecretMounts,
 		testExtraHosts,
@@ -2771,6 +2772,33 @@ func testDuplicateCacheMount(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 }
 
+func testRunCacheWithMounts(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("busybox:latest")
+
+	out := busybox.Run(llb.Shlex(`sh -e -c "[[ -f /m1/sbin/apk ]]"`))
+	out.AddMount("/m1", llb.Image("alpine:latest"), llb.Readonly)
+
+	def, err := out.Marshal(context.TODO())
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	require.NoError(t, err)
+
+	out = busybox.Run(llb.Shlex(`sh -e -c "[[ -f /m1/sbin/apk ]]"`))
+	out.AddMount("/m1", llb.Image("busybox:latest"), llb.Readonly)
+
+	def, err = out.Marshal(context.TODO())
+	require.NoError(t, err)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{}, nil)
+	require.Error(t, err)
+}
+
 func testCacheMountNoCache(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 	c, err := New(context.TODO(), sb.Address())
@@ -3148,12 +3176,13 @@ func testProxyEnv(t *testing.T, sb integration.Sandbox) {
 	defer c.Close()
 
 	base := llb.Image("docker.io/library/busybox:latest").Dir("/out")
-	cmd := `sh -c "echo -n $HTTP_PROXY-$HTTPS_PROXY-$NO_PROXY-$no_proxy > env"`
+	cmd := `sh -c "echo -n $HTTP_PROXY-$HTTPS_PROXY-$NO_PROXY-$no_proxy-$ALL_PROXY-$all_proxy > env"`
 
 	st := base.Run(llb.Shlex(cmd), llb.WithProxy(llb.ProxyEnv{
 		HTTPProxy:  "httpvalue",
 		HTTPSProxy: "httpsvalue",
 		NoProxy:    "noproxyvalue",
+		AllProxy:   "allproxyvalue",
 	}))
 	out := st.AddMount("/out", llb.Scratch())
 
@@ -3176,7 +3205,7 @@ func testProxyEnv(t *testing.T, sb integration.Sandbox) {
 
 	dt, err := ioutil.ReadFile(filepath.Join(destDir, "env"))
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "httpvalue-httpsvalue-noproxyvalue-noproxyvalue")
+	require.Equal(t, string(dt), "httpvalue-httpsvalue-noproxyvalue-noproxyvalue-allproxyvalue-allproxyvalue")
 
 	// repeat to make sure proxy doesn't change cache
 	st = base.Run(llb.Shlex(cmd), llb.WithProxy(llb.ProxyEnv{
@@ -3204,7 +3233,7 @@ func testProxyEnv(t *testing.T, sb integration.Sandbox) {
 
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "env"))
 	require.NoError(t, err)
-	require.Equal(t, string(dt), "httpvalue-httpsvalue-noproxyvalue-noproxyvalue")
+	require.Equal(t, string(dt), "httpvalue-httpsvalue-noproxyvalue-noproxyvalue-allproxyvalue-allproxyvalue")
 }
 
 func requiresLinux(t *testing.T) {

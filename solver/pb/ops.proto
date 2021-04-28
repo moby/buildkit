@@ -225,6 +225,7 @@ message ProxyEnv {
 	string https_proxy = 2;
 	string ftp_proxy = 3;
 	string no_proxy = 4;
+	string all_proxy = 5;
 }
 
 // WorkerConstraints defines conditions for the worker

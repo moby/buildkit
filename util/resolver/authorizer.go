@@ -403,6 +403,11 @@ func (ah *authHandler) fetchToken(ctx context.Context, sm *session.Manager, g se
 }
 
 func invalidAuthorization(c auth.Challenge, responses []*http.Response) error {
+	lastResponse := responses[len(responses)-1]
+	if lastResponse.StatusCode == http.StatusUnauthorized {
+		return errors.Wrapf(docker.ErrInvalidAuthorization, "authorization status: %v", lastResponse.StatusCode)
+	}
+
 	errStr := c.Parameters["error"]
 	if errStr == "" {
 		return nil

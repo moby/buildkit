@@ -234,6 +234,7 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 			HttpsProxy: p.HTTPSProxy,
 			FtpProxy:   p.FTPProxy,
 			NoProxy:    p.NoProxy,
+			AllProxy:   p.AllProxy,
 		}
 		addCap(&e.constraints, pb.CapExecMetaProxy)
 	}
@@ -655,6 +656,7 @@ type ProxyEnv struct {
 	HTTPSProxy string
 	FTPProxy   string
 	NoProxy    string
+	AllProxy   string
 }
 
 type CacheMountSharingMode int

@@ -120,10 +120,13 @@ BINARIES=$(addprefix bin/,$(COMMANDS))
 TESTFLAGS ?= $(TESTFLAGS_RACE) $(EXTRA_TESTFLAGS)
 TESTFLAGS_PARALLEL ?= 8
 
+# Use this to replace `go test` with, for instance, `gotestsum`
+GOTEST ?= go test
+
 OUTPUTDIR = $(join $(ROOTDIR), _output)
 CRIDIR=$(OUTPUTDIR)/cri
 
-.PHONY: clean all AUTHORS build binaries test integration generate protos checkprotos coverage ci check help install uninstall vendor release mandir install-man genman install-cri-deps cri-release cri-cni-release cri-integration bin/cri-integration.test
+.PHONY: clean all AUTHORS build binaries test integration generate protos checkprotos coverage ci check help install uninstall vendor release mandir install-man genman install-cri-deps cri-release cri-cni-release cri-integration install-deps bin/cri-integration.test
 .DEFAULT: default
 
 all: binaries
@@ -170,15 +173,15 @@ build: ## build the go packages
 
 test: ## run tests, except integration tests and tests that require root
 	@echo "$(WHALE) $@"
-	@go test ${TESTFLAGS} ${PACKAGES}
+	@$(GOTEST) ${TESTFLAGS} ${PACKAGES}
 
 root-test: ## run tests, except integration tests
 	@echo "$(WHALE) $@"
-	@go test ${TESTFLAGS} ${TEST_REQUIRES_ROOT_PACKAGES} -test.root
+	@$(GOTEST) ${TESTFLAGS} ${TEST_REQUIRES_ROOT_PACKAGES} -test.root
 
 integration: ## run integration tests
 	@echo "$(WHALE) $@"
-	@cd "${ROOTDIR}/integration/client" && go mod download && go test -v ${TESTFLAGS} -test.root -parallel ${TESTFLAGS_PARALLEL} .
+	@cd "${ROOTDIR}/integration/client" && go mod download && $(GOTEST) -v ${TESTFLAGS} -test.root -parallel ${TESTFLAGS_PARALLEL} .
 
 # TODO integrate cri integration bucket with coverage
 bin/cri-integration.test:
@@ -196,14 +199,14 @@ benchmark: ## run benchmarks tests
 
 FORCE:
 
-define BUILD_BINARY =
+define BUILD_BINARY
 @echo "$(WHALE) $@"
 @go build ${DEBUG_GO_GCFLAGS} ${GO_GCFLAGS} ${GO_BUILD_FLAGS} -o $@ ${GO_LDFLAGS} ${GO_TAGS}  ./$<
 endef
 
 # Build a binary from a cmd.
 bin/%: cmd/% FORCE
-	$(BUILD_BINARY)
+	$(call BUILD_BINARY)
 
 bin/containerd-shim: cmd/containerd-shim FORCE # set !cgo and omit pie for a static shim build: https://github.com/golang/go/issues/17789#issuecomment-258542220
 	@echo "$(WHALE) bin/containerd-shim"
@@ -262,6 +265,7 @@ release: releases/$(RELEASE).tar.gz
 	@echo "$(WHALE) $@"
 	@cd releases && sha256sum $(RELEASE).tar.gz >$(RELEASE).tar.gz.sha256sum
 
+# install of cri deps into release output directory
 ifeq ($(GOOS),windows)
 install-cri-deps: $(BINARIES)
 	mkdir -p $(CRIDIR)
@@ -281,6 +285,7 @@ install-cri-deps: $(BINARIES)
 	DESTDIR=$(CRIDIR) script/setup/install-runc
 	DESTDIR=$(CRIDIR) script/setup/install-cni
 	DESTDIR=$(CRIDIR) script/setup/install-critools
+	DESTDIR=$(CRIDIR) script/setup/install-imgcrypt
 
 	@install -d $(CRIDIR)/bin
 	@install $(BINARIES) $(CRIDIR)/bin
@@ -343,6 +348,18 @@ uninstall:
 	@echo "$(WHALE) $@"
 	@rm -f $(addprefix $(DESTDIR)/bin/,$(notdir $(BINARIES)))
 
+ifeq ($(GOOS),windows)
+install-deps:
+	# TODO: need a script for hcshim something like containerd/cri/hack/install/windows/install-hcsshim.sh
+	script/setup/install-critools
+	script/setup/install-cni-windows
+else
+install-deps: ## install cri dependencies
+	script/setup/install-seccomp
+	script/setup/install-runc
+	script/setup/install-critools
+	script/setup/install-cni
+endif
 
 coverage: ## generate coverprofiles from the unit tests, except tests that require root
 	@echo "$(WHALE) $@"
@@ -373,7 +390,7 @@ root-coverage: ## generate coverage profiles for unit tests that require root
 		fi; \
 	done )
 
-vendor:
+vendor: ## vendor
 	@echo "$(WHALE) $@"
 	@go mod tidy
 	@go mod vendor

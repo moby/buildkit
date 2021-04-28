@@ -27,11 +27,11 @@ func New(opt Opt) (network.Provider, error) {
 		return nil, errors.Wrapf(err, "failed to read cni binary dir %q", opt.BinaryDir)
 	}
 
-	cniOptions := []cni.CNIOpt{cni.WithPluginDir([]string{opt.BinaryDir}), cni.WithInterfacePrefix("eth")}
+	cniOptions := []cni.Opt{cni.WithPluginDir([]string{opt.BinaryDir}), cni.WithInterfacePrefix("eth")}
 
 	// Windows doesn't use CNI for loopback.
 	if runtime.GOOS != "windows" {
-		cniOptions = append([]cni.CNIOpt{cni.WithMinNetworkCount(2)}, cniOptions...)
+		cniOptions = append([]cni.Opt{cni.WithMinNetworkCount(2)}, cniOptions...)
 		cniOptions = append(cniOptions, cni.WithLoNetwork)
 	}
 
