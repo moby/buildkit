@@ -1126,7 +1126,7 @@ func testFileOpCopyRm(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, []byte("bar0"), dt)
 
 	_, err = os.Stat(filepath.Join(destDir, "out/foo"))
-	require.Equal(t, true, errors.Is(err, os.ErrNotExist))
+	require.ErrorIs(t, err, os.ErrNotExist)
 
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "file2"))
 	require.NoError(t, err)
@@ -1183,7 +1183,7 @@ func testFileOpCopyIncludeExclude(t *testing.T, sb integration.Sandbox) {
 
 	for _, name := range []string{"myfile", "sub/bar"} {
 		_, err = os.Stat(filepath.Join(destDir, name))
-		require.Equal(t, true, errors.Is(err, os.ErrNotExist))
+		require.ErrorIs(t, err, os.ErrNotExist)
 	}
 }
 
@@ -1268,10 +1268,10 @@ func testFileOpRmWildcard(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, true, fi.IsDir())
 
 	_, err = os.Stat(filepath.Join(destDir, "foo/target"))
-	require.Equal(t, true, errors.Is(err, os.ErrNotExist))
+	require.ErrorIs(t, err, os.ErrNotExist)
 
 	_, err = os.Stat(filepath.Join(destDir, "bar/target"))
-	require.Equal(t, true, errors.Is(err, os.ErrNotExist))
+	require.ErrorIs(t, err, os.ErrNotExist)
 }
 
 func testCallDiskUsage(t *testing.T, sb integration.Sandbox) {
@@ -2240,7 +2240,7 @@ func testStargzLazyPull(t *testing.T, sb integration.Sandbox) {
 	var sgzLayers []ocispec.Descriptor
 	for _, layer := range manifest.Layers[:len(manifest.Layers)-1] {
 		_, err = contentStore.Info(ctx, layer.Digest)
-		require.True(t, errors.Is(err, ctderrdefs.ErrNotFound), "unexpected error %v", err)
+		require.ErrorIs(t, err, ctderrdefs.ErrNotFound, "unexpected error %v", err)
 		sgzLayers = append(sgzLayers, layer)
 	}
 	require.NotEqual(t, 0, len(sgzLayers), "no layer can be used for checking lazypull")
@@ -2373,7 +2373,7 @@ func testLazyImagePush(t *testing.T, sb integration.Sandbox) {
 
 	for _, layer := range manifest.Layers {
 		_, err = contentStore.Info(ctx, layer.Digest)
-		require.True(t, errors.Is(err, ctderrdefs.ErrNotFound), "unexpected error %v", err)
+		require.ErrorIs(t, err, ctderrdefs.ErrNotFound, "unexpected error %v", err)
 	}
 
 	// clear all local state out again
@@ -2405,7 +2405,7 @@ func testLazyImagePush(t *testing.T, sb integration.Sandbox) {
 
 	for _, layer := range manifest.Layers {
 		_, err = contentStore.Info(ctx, layer.Digest)
-		require.True(t, errors.Is(err, ctderrdefs.ErrNotFound), "unexpected error %v", err)
+		require.ErrorIs(t, err, ctderrdefs.ErrNotFound, "unexpected error %v", err)
 	}
 
 	// check that a subsequent build can use the previously lazy image in an exec
