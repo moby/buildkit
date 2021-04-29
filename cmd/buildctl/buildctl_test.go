@@ -18,6 +18,7 @@ func TestCLIIntegration(t *testing.T) {
 		testBuildWithLocalFiles,
 		testBuildLocalExporter,
 		testBuildContainerdExporter,
+		testBuildMetadataFile,
 		testPrune,
 		testUsage,
 	},
