@@ -1973,6 +1973,8 @@ corresponding `ARG` instruction in the Dockerfile.
 - `ftp_proxy`
 - `NO_PROXY`
 - `no_proxy`
+- `ALL_PROXY`
+- `all_proxy`
 
 To use these, pass them on the command line using the `--build-arg` flag, for
 example:
