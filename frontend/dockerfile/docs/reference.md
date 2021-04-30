@@ -1974,10 +1974,11 @@ corresponding `ARG` instruction in the Dockerfile.
 - `NO_PROXY`
 - `no_proxy`
 
-To use these, simply pass them on the command line using the flag:
+To use these, pass them on the command line using the `--build-arg` flag, for
+example:
 
-```bash
---build-arg <varname>=<value>
+```console
+$ docker build --build-arg HTTPS_PROXY=https://my-proxy.example.com .
 ```
 
 By default, these pre-defined variables are excluded from the output of
