@@ -67,6 +67,25 @@ func testBuildLocalExporter(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, string(dt), "bar")
 }
 
+// issue 1305
+func testBuildLocalExporterCleanup(t *testing.T, sb integration.Sandbox) {
+	st := llb.Image("busybox").
+		Run(llb.Shlex("sh -c 'exit 1'"))
+	rdr, err := marshal(st.Root())
+	require.NoError(t, err)
+
+	tmpdir, err := ioutil.TempDir("", "buildkit-buildctl")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	fileoci := tmpdir + "/oci.tar"
+	cmd := sb.Cmd(fmt.Sprintf("build --progress=plain --output type=oci,dest=%s", fileoci))
+	cmd.Stdin = rdr
+	err = cmd.Run()
+	_, err = os.Stat(fileoci)
+	require.Contains(t, err.Error(), "no such file or directory")
+}
+
 func testBuildContainerdExporter(t *testing.T, sb integration.Sandbox) {
 	cdAddress := sb.ContainerdAddress()
 	if cdAddress == "" {

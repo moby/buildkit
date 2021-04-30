@@ -20,6 +20,7 @@ func TestCLIIntegration(t *testing.T) {
 		testBuildContainerdExporter,
 		testPrune,
 		testUsage,
+		testBuildLocalExporterCleanup,
 	},
 		integration.WithMirroredImages(integration.OfficialImages("busybox:latest")),
 	)

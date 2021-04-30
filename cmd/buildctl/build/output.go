@@ -47,6 +47,7 @@ func parseOutputCSV(s string) (client.ExportEntry, error) {
 		return ex, errors.Wrap(err, "invalid output option: output")
 	}
 	if ex.Output != nil || ex.OutputDir != "" {
+		ex.Dest = ex.Attrs["dest"]
 		delete(ex.Attrs, "dest")
 	}
 	return ex, nil
@@ -82,6 +83,7 @@ func ParseLegacyExporter(legacyExporter string, legacyExporterOpts []string) ([]
 		return nil, errors.Wrap(err, "invalid exporter option: output")
 	}
 	if ex.Output != nil || ex.OutputDir != "" {
+		ex.Dest = ex.Attrs["output"]
 		delete(ex.Attrs, "output")
 	}
 	return []client.ExportEntry{ex}, nil

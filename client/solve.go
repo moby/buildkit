@@ -49,6 +49,7 @@ type ExportEntry struct {
 	Attrs     map[string]string
 	Output    func(map[string]string) (io.WriteCloser, error) // for ExporterOCI and ExporterDocker
 	OutputDir string                                          // for ExporterLocal
+	Dest      string
 }
 
 type CacheOptionsEntry struct {

@@ -135,7 +135,7 @@ func openTraceFile(clicontext *cli.Context) (*os.File, error) {
 	return nil, nil
 }
 
-func buildAction(clicontext *cli.Context) error {
+func buildAction(clicontext *cli.Context) (retErr error) {
 	c, err := bccommon.ResolveClient(clicontext)
 	if err != nil {
 		return err
@@ -190,6 +190,11 @@ func buildAction(clicontext *cli.Context) error {
 	} else {
 		exports, err = build.ParseOutput(clicontext.StringSlice("output"))
 	}
+	defer func() {
+		if retErr != nil {
+			deleteExportedFiles(exports)
+		}
+	}()
 	if err != nil {
 		return err
 	}
@@ -299,4 +304,22 @@ func buildAction(clicontext *cli.Context) error {
 	})
 
 	return eg.Wait()
+}
+
+func deleteExportedFiles(exports []client.ExportEntry) {
+	for _, ex := range exports {
+		switch ex.Type {
+		case client.ExporterOCI, client.ExporterDocker, client.ExporterTar:
+			fi, err := os.Stat(ex.Dest)
+			if err == nil && !fi.IsDir() {
+				rerr := os.Remove(ex.Dest)
+				if rerr != nil {
+					logrus.Debugf("building failed, deleting temp file %s receives error: %v", ex.Dest, rerr)
+					continue
+				}
+				logrus.Debugf("building failed, deleted temp file: %s", ex.Dest)
+			}
+		}
+	}
+	return
 }
