@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/containerd/continuity"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/cmd/buildctl/build"
@@ -100,6 +101,10 @@ var buildCommand = cli.Command{
 		cli.StringSliceFlag{
 			Name:  "ssh",
 			Usage: "Allow forwarding SSH agent to the builder. Format default|<id>[=<socket>|<key>[,<key>]]",
+		},
+		cli.StringFlag{
+			Name:  "metadata-file",
+			Usage: "Output build metadata (e.g., image digest) to a file as JSON",
 		},
 	},
 }
@@ -290,7 +295,15 @@ func buildAction(clicontext *cli.Context) error {
 		for k, v := range resp.ExporterResponse {
 			logrus.Debugf("exporter response: %s=%s", k, v)
 		}
-		return err
+
+		metadataFile := clicontext.String("metadata-file")
+		if metadataFile != "" && resp.ExporterResponse != nil {
+			if err := writeMetadataFile(metadataFile, resp.ExporterResponse); err != nil {
+				return err
+			}
+		}
+
+		return nil
 	})
 
 	eg.Go(func() error {
@@ -299,4 +312,12 @@ func buildAction(clicontext *cli.Context) error {
 	})
 
 	return eg.Wait()
+}
+
+func writeMetadataFile(filename string, exporterResponse map[string]string) error {
+	b, err := json.Marshal(exporterResponse)
+	if err != nil {
+		return err
+	}
+	return continuity.AtomicWriteFile(filename, b, 0666)
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -109,6 +110,61 @@ func testBuildContainerdExporter(t *testing.T, sb integration.Sandbox) {
 	ok, err := img.IsUnpacked(ctx, snapshotter)
 	require.NoError(t, err)
 	require.Equal(t, ok, true)
+}
+
+func testBuildMetadataFile(t *testing.T, sb integration.Sandbox) {
+	st := llb.Image("busybox").
+		Run(llb.Shlex("sh -c 'echo -n bar > /foo'"))
+
+	rdr, err := marshal(st.Root())
+	require.NoError(t, err)
+
+	tmpDir, err := ioutil.TempDir("", "buildkit-buildctl")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	imageName := "example.com/moby/metadata:test"
+	metadataFile := filepath.Join(tmpDir, "metadata.json")
+
+	buildCmd := []string{
+		"build", "--progress=plain",
+		"--output type=image,name=" + imageName + ",push=false",
+		"--metadata-file", metadataFile,
+	}
+
+	cmd := sb.Cmd(strings.Join(buildCmd, " "))
+	cmd.Stdin = rdr
+	err = cmd.Run()
+	require.NoError(t, err)
+
+	require.FileExists(t, metadataFile)
+	metadataBytes, err := ioutil.ReadFile(metadataFile)
+	require.NoError(t, err)
+
+	var metadata map[string]string
+	err = json.Unmarshal(metadataBytes, &metadata)
+	require.NoError(t, err)
+
+	require.Equal(t, imageName, metadata["image.name"])
+
+	digest := metadata["containerimage.digest"]
+	require.NotEmpty(t, digest)
+
+	cdAddress := sb.ContainerdAddress()
+	if cdAddress == "" {
+		t.Log("no containerd worker, skipping digest verification")
+	} else {
+		client, err := containerd.New(cdAddress, containerd.WithTimeout(60*time.Second))
+		require.NoError(t, err)
+		defer client.Close()
+
+		ctx := namespaces.WithNamespace(context.Background(), "buildkit")
+
+		img, err := client.GetImage(ctx, imageName)
+		require.NoError(t, err)
+
+		require.Equal(t, img.Metadata().Target.Digest.String(), digest)
+	}
 }
 
 func marshal(st llb.State) (io.Reader, error) {
