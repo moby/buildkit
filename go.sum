@@ -61,8 +61,6 @@ github.com/OneOfOne/xxhash v1.2.2/go.mod h1:HSdplMjZKSmBqAxg5vPj2TmRDmfkzw+cTzAE
 github.com/PuerkitoBio/purell v1.1.1/go.mod h1:c11w/QuzBsJSee3cPx9rAFu61PvFxuPbtSwDGJws/X0=
 github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578/go.mod h1:uGdkoq3SwY9Y+13GIhn11/XLaGBb4BfwItxLd5jeuXE=
 github.com/Shopify/logrus-bugsnag v0.0.0-20171204204709-577dee27f20d/go.mod h1:HI8ITrYtUY+O+ZhtlqUnD8+KwNPOyugEhfP9fdUIaEQ=
-github.com/aaronlehmann/fsutil v0.0.0-20210428220603-accc0fae8749 h1:Pe6Ex38zK9fsv73pYe5c3/pf2ZNKIHxlw4VMt2hbpl8=
-github.com/aaronlehmann/fsutil v0.0.0-20210428220603-accc0fae8749/go.mod h1:4Bcxev2PKmz1bFF6Mg3opy8w4kYQVvEXQGKVkQkP2Ac=
 github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=
 github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=
 github.com/alecthomas/units v0.0.0-20151022065526-2efee857e7cf/go.mod h1:ybxpYRFXyAe+OPACYpWeL0wqObRcbAqCMya13uyzqw0=
@@ -631,6 +629,8 @@ github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635/go.mod h1:hkRG
 github.com/tchap/go-patricia v2.2.6+incompatible/go.mod h1:bmLyhP68RS6kStMGxByiQ23RP/odRBOTVjwp2cDyi6I=
 github.com/tmc/grpc-websocket-proxy v0.0.0-20170815181823-89b8d40f7ca8/go.mod h1:ncp9v5uamzpCO7NfCPTXjqaC+bZgJeR0sMTm6dMHP7U=
 github.com/tmc/grpc-websocket-proxy v0.0.0-20190109142713-0ad062ec5ee5/go.mod h1:ncp9v5uamzpCO7NfCPTXjqaC+bZgJeR0sMTm6dMHP7U=
+github.com/tonistiigi/fsutil v0.0.0-20210503153615-5c8be85fc731 h1:mQRv1skMLUpSW6elAWmJHWXTz42PQ3cB4R8Z4iA29yk=
+github.com/tonistiigi/fsutil v0.0.0-20210503153615-5c8be85fc731/go.mod h1:4Bcxev2PKmz1bFF6Mg3opy8w4kYQVvEXQGKVkQkP2Ac=
 github.com/tonistiigi/go-immutable-radix v0.0.0-20170803185627-826af9ccf0fe h1:pd7hrFSqUPxYS9IB+UMG1AB/8EXGXo17ssx0bSQ5L6Y=
 github.com/tonistiigi/go-immutable-radix v0.0.0-20170803185627-826af9ccf0fe/go.mod h1:/+MCh11CJf2oz0BXmlmqyopK/ad1rKkcOXPoYuPCJYU=
 github.com/tonistiigi/units v0.0.0-20180711220420-6950e57a87ea h1:SXhTLE6pb6eld/v/cCndK0AMpt1wiVFb/YYmqB3/QG0=

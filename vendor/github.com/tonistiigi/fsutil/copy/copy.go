@@ -396,23 +396,23 @@ func (c *copier) exclude(path string, fi os.FileInfo) (bool, error) {
 	if err != nil {
 		return false, errors.Wrap(err, "failed to match excludepatterns")
 	}
-	if m {
-		if fi.IsDir() && c.excludePatternMatcher.Exclusions() {
-			dirSlash := path + string(filepath.Separator)
-			for _, pat := range c.excludePatternMatcher.Patterns() {
-				if !pat.Exclusion() {
-					continue
-				}
-				patStr := pat.String() + string(filepath.Separator)
-				if strings.HasPrefix(patStr, dirSlash) {
-					return false, nil
-				}
-			}
-		}
-		return true, nil
+	if !m {
+		return false, nil
 	}
 
-	return false, nil
+	if fi.IsDir() && c.excludePatternMatcher.Exclusions() {
+		dirSlash := path + string(filepath.Separator)
+		for _, pat := range c.excludePatternMatcher.Patterns() {
+			if !pat.Exclusion() {
+				continue
+			}
+			patStr := pat.String() + string(filepath.Separator)
+			if strings.HasPrefix(patStr, dirSlash) {
+				return false, nil
+			}
+		}
+	}
+	return true, nil
 }
 
 // Delayed creation of parent directories when a file or dir matches an include

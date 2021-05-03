@@ -6,18 +6,21 @@ import (
 	"strings"
 )
 
-func Match(pattern, name string, slashSeparator bool) (bool, bool) {
+// Match matches a path against a pattern. It returns m = true if the path
+// matches the pattern, and partial = true if the pattern has more separators
+// than the path and the common components match (for example, name = foo and
+// pattern = foo/bar/*). slashSeparator determines whether the path and pattern
+// are '/' delimited (true) or use the native path separator (false).
+func Match(pattern, name string, slashSeparator bool) (m bool, partial bool) {
 	separator := filepath.Separator
 	if slashSeparator {
 		separator = '/'
 	}
 	count := strings.Count(name, string(separator))
-	partial := false
 	if strings.Count(pattern, string(separator)) > count {
 		pattern = trimUntilIndex(pattern, string(separator), count)
 		partial = true
 	}
-	var m bool
 	if slashSeparator {
 		m, _ = path.Match(pattern, name)
 	} else {

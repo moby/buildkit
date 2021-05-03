@@ -52,7 +52,7 @@ require (
 	github.com/serialx/hashring v0.0.0-20190422032157-8b2912629002
 	github.com/sirupsen/logrus v1.7.0
 	github.com/stretchr/testify v1.7.0
-	github.com/tonistiigi/fsutil v0.0.0-20201103201449-0834f99b7b85
+	github.com/tonistiigi/fsutil v0.0.0-20210503153615-5c8be85fc731
 	github.com/tonistiigi/units v0.0.0-20180711220420-6950e57a87ea
 	github.com/uber/jaeger-client-go v2.25.0+incompatible
 	github.com/uber/jaeger-lib v2.2.0+incompatible // indirect
@@ -74,8 +74,6 @@ replace (
 	github.com/golang/protobuf => github.com/golang/protobuf v1.3.5
 	github.com/hashicorp/go-immutable-radix => github.com/tonistiigi/go-immutable-radix v0.0.0-20170803185627-826af9ccf0fe
 	github.com/jaguilar/vt100 => github.com/tonistiigi/vt100 v0.0.0-20190402012908-ad4c4a574305
-	// temporary until https://github.com/tonistiigi/fsutil/pull/101 is merged
-	github.com/tonistiigi/fsutil => github.com/aaronlehmann/fsutil v0.0.0-20210428220603-accc0fae8749
 	// genproto: corresponds to containerd
 	google.golang.org/genproto => google.golang.org/genproto v0.0.0-20200224152610-e50cd9704f63
 	// grpc: corresponds to protobuf
