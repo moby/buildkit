@@ -29,10 +29,12 @@ import (
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/snapshots"
+	"github.com/containerd/containerd/snapshots/overlay/overlayutils"
 	"github.com/containerd/containerd/snapshots/storage"
 	"github.com/containerd/continuity/fs"
 	"github.com/moby/sys/mountinfo"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -91,7 +93,8 @@ type snapshotter struct {
 	asyncRemove bool
 
 	// fs is a filesystem that this snapshotter recognizes.
-	fs FileSystem
+	fs        FileSystem
+	userxattr bool // whether to enable "userxattr" mount option
 }
 
 // NewSnapshotter returns a Snapshotter which can use unpacked remote layers
@@ -129,11 +132,17 @@ func NewSnapshotter(ctx context.Context, root string, targetFs FileSystem, opts 
 		return nil, err
 	}
 
+	userxattr, err := overlayutils.NeedsUserXAttr(root)
+	if err != nil {
+		logrus.WithError(err).Warnf("cannot detect whether \"userxattr\" option needs to be used, assuming to be %v", userxattr)
+	}
+
 	o := &snapshotter{
 		root:        root,
 		ms:          ms,
 		asyncRemove: config.asyncRemove,
 		fs:          targetFs,
+		userxattr:   userxattr,
 	}
 
 	if err := o.restoreRemoteSnapshot(ctx); err != nil {
@@ -598,6 +607,9 @@ func (o *snapshotter) mounts(ctx context.Context, s storage.Snapshot, checkKey s
 	}
 
 	options = append(options, fmt.Sprintf("lowerdir=%s", strings.Join(parentPaths, ":")))
+	if o.userxattr {
+		options = append(options, "userxattr")
+	}
 	return []mount.Mount{
 		{
 			Type:    "overlay",
