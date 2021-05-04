@@ -8,12 +8,12 @@ require (
 	github.com/Microsoft/hcsshim v0.8.16
 	github.com/codahale/hdrhistogram v0.0.0-20160425231609-f8ad88b59a58 // indirect
 	github.com/containerd/console v1.0.2
-	github.com/containerd/containerd v1.5.0-rc.2
+	github.com/containerd/containerd v1.5.0
 	github.com/containerd/continuity v0.1.0
 	github.com/containerd/fuse-overlayfs-snapshotter v1.0.2
 	github.com/containerd/go-cni v1.0.2
 	github.com/containerd/go-runc v1.0.0
-	github.com/containerd/stargz-snapshotter v0.4.1
+	github.com/containerd/stargz-snapshotter v0.5.0
 	github.com/containerd/typeurl v1.0.2
 	github.com/coreos/go-systemd/v22 v22.1.0
 	github.com/docker/cli v20.10.5+incompatible
