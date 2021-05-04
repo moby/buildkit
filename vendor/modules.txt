@@ -35,11 +35,11 @@ github.com/Microsoft/hcsshim/internal/wclayer
 github.com/Microsoft/hcsshim/internal/winapi
 github.com/Microsoft/hcsshim/osversion
 github.com/Microsoft/hcsshim/pkg/ociwclayer
-# github.com/containerd/cgroups v1.0.0
+# github.com/containerd/cgroups v1.0.1
 github.com/containerd/cgroups/stats/v1
 # github.com/containerd/console v1.0.2
 github.com/containerd/console
-# github.com/containerd/containerd v1.5.0-rc.2
+# github.com/containerd/containerd v1.5.0
 github.com/containerd/containerd
 github.com/containerd/containerd/api/services/containers/v1
 github.com/containerd/containerd/api/services/content/v1
