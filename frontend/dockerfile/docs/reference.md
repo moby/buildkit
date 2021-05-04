@@ -963,7 +963,7 @@ easily, for example with `docker inspect`. To set a label corresponding to the
 `MAINTAINER` field you could use:
 
 ```dockerfile
-LABEL maintainer="SvenDowideit@home.org.au"
+LABEL org.opencontainers.image.authors="SvenDowideit@home.org.au"
 ```
 
 This will then be visible from `docker inspect` with the other labels.
