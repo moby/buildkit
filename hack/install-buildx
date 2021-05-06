@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 set -eu -o pipefail
-topdir="$(realpath $(dirname "$0")/..)"
-cd "${topdir}"
 
-VERSION="v0.5.1"
-BINDIR="$(pwd)/bin"
-DEST="${BINDIR}/buildx"
+if [ -z "${BINDIR}" ] && [ -z "${PREFIX}" ]; then
+  PREFIX="$(realpath "$(dirname "$0")"/..)"
+fi
+
+: "${VERSION:=v0.5.1}"
+: "${BINDIR:="${PREFIX}/bin"}"
+: "${DEST:="${BINDIR}/buildx"}"
 
 os=""
 case "$(uname)" in
