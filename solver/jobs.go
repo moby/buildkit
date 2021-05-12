@@ -16,7 +16,6 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
-	"golang.org/x/sync/semaphore"
 )
 
 // ResolveOpFunc finds an Op implementation for a Vertex
@@ -238,9 +237,8 @@ type Job struct {
 }
 
 type SolverOpt struct {
-	ResolveOpFunc  ResolveOpFunc
-	DefaultCache   CacheManager
-	ParallelismSem *semaphore.Weighted
+	ResolveOpFunc ResolveOpFunc
+	DefaultCache  CacheManager
 }
 
 func NewSolver(opts SolverOpt) *Solver {
@@ -768,13 +766,11 @@ func (s *sharedOp) Exec(ctx context.Context, inputs []Result) (outputs []Result,
 		if s.execRes != nil || s.execErr != nil {
 			return s.execRes, s.execErr
 		}
-		if s.st.opts.ParallelismSem != nil && op.CountsAsParallelism() {
-			err := s.st.opts.ParallelismSem.Acquire(ctx, 1)
-			if err != nil {
-				return nil, errors.Wrap(err, "acquire parallelism sem")
-			}
-			defer s.st.opts.ParallelismSem.Release(1)
+		release, err := op.Acquire(ctx)
+		if err != nil {
+			return nil, errors.Wrap(err, "acquire op resources")
 		}
+		defer release()
 
 		ctx = opentracing.ContextWithSpan(progress.WithProgress(ctx, s.st.mpw), s.st.mspan)
 		ctx = withAncestorCacheOpts(ctx, s.st)

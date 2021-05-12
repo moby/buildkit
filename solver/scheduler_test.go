@@ -3511,8 +3511,8 @@ func (v *vertex) Exec(ctx context.Context, g session.Group, inputs []Result) (ou
 	return []Result{&dummyResult{id: identity.NewID(), value: v.opt.value}}, nil
 }
 
-func (v *vertex) CountsAsParallelism() bool {
-	return false
+func (v *vertex) Acquire(ctx context.Context) (ReleaseFunc, error) {
+	return func() {}, nil
 }
 
 func (v *vertex) makeCacheMap() *CacheMap {
@@ -3560,8 +3560,8 @@ func (v *vertexConst) Exec(ctx context.Context, g session.Group, inputs []Result
 	return []Result{&dummyResult{id: identity.NewID(), intValue: v.value}}, nil
 }
 
-func (v *vertexConst) CountsAsParallelism() bool {
-	return false
+func (v *vertexConst) Acquire(ctx context.Context) (ReleaseFunc, error) {
+	return func() {}, nil
 }
 
 // vtxSum returns a vertex that ourputs sum of its inputs plus a constant
@@ -3599,8 +3599,8 @@ func (v *vertexSum) Exec(ctx context.Context, g session.Group, inputs []Result) 
 	return []Result{&dummyResult{id: identity.NewID(), intValue: s}}, nil
 }
 
-func (v *vertexSum) CountsAsParallelism() bool {
-	return false
+func (v *vertexSum) Acquire(ctx context.Context) (ReleaseFunc, error) {
+	return func() {}, nil
 }
 
 func vtxSubBuild(g Edge, opt vtxOpt) *vertexSubBuild {
@@ -3634,8 +3634,8 @@ func (v *vertexSubBuild) Exec(ctx context.Context, g session.Group, inputs []Res
 	return []Result{res}, nil
 }
 
-func (v *vertexSubBuild) CountsAsParallelism() bool {
-	return false
+func (v *vertexSubBuild) Acquire(ctx context.Context) (ReleaseFunc, error) {
+	return func() {}, nil
 }
 
 //nolint:unused

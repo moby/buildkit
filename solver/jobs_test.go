@@ -16,6 +16,7 @@ import (
 
 func init() {
 	integration.InitOCIWorker()
+	integration.InitContainerdWorker()
 }
 
 func TestJobsIntegration(t *testing.T) {
