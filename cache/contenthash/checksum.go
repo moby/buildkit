@@ -500,16 +500,27 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 
 	txn := cc.tree.Txn()
 	root = txn.Root()
-	var updated bool
+	var (
+		updated bool
+		iter    *iradix.Seeker
+		k       []byte
+		kOk     bool
+	)
+
+	if opts.Wildcard {
+		iter = root.Seek([]byte{})
+		k, _, kOk = iter.Next()
+
+	} else {
+		k = convertPathToKey([]byte(p))
+		if _, kOk = root.Get(k); kOk {
+			iter = root.Seek(k)
+		}
+	}
 
 	lastIncludedDir := ""
-	iter := root.Seek([]byte{})
 treeWalk:
-	for {
-		k, _, ok := iter.Next()
-		if !ok {
-			break
-		}
+	for kOk {
 		fn := string(convertKeyToPath(k))
 		dirHeader := false
 		if len(k) > 0 && k[len(k)-1] == byte(0) {
@@ -524,6 +535,7 @@ treeWalk:
 		// in the digest because their metadata may be copied by a copy that
 		// includes files or subdirs underneath them.
 		if !b || dirHeader != partialMatch {
+			k, _, kOk = iter.Next()
 			continue
 		}
 
@@ -547,6 +559,7 @@ treeWalk:
 						// include the dir as a whole. Instead, continue
 						// walking and only include paths that match the
 						// filters.
+						k, _, kOk = iter.Next()
 						continue treeWalk
 					}
 				}
@@ -557,6 +570,7 @@ treeWalk:
 		if cr.Type == CacheRecordTypeDir {
 			iter = root.Seek(append(k, 0, 0xff))
 		}
+		k, _, kOk = iter.Next()
 	}
 
 	cc.tree = txn.Commit()
