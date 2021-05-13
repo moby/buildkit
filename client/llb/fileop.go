@@ -505,11 +505,8 @@ func (a *fileActionCopy) sourcePath(ctx context.Context) (string, error) {
 }
 
 func (a *fileActionCopy) addCaps(f *FileOp) {
-	if len(a.info.IncludePatterns) != 0 {
-		addCap(&f.constraints, pb.CapFileCopyIncludePatterns)
-	}
-	if len(a.info.ExcludePatterns) != 0 {
-		addCap(&f.constraints, pb.CapFileCopyExcludePatterns)
+	if len(a.info.IncludePatterns) != 0 || len(a.info.ExcludePatterns) != 0 {
+		addCap(&f.constraints, pb.CapFileCopyIncludeExcludePatterns)
 	}
 }
 
