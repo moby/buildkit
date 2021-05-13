@@ -615,7 +615,7 @@ func shouldIncludePath(
 			}
 		}
 		if !matched {
-			return false, partial, nil
+			return false, false, nil
 		}
 	}
 
