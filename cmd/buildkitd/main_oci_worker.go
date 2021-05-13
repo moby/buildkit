@@ -278,8 +278,8 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 	}
 
 	var parallelismSem *semaphore.Weighted
-	if common.config.MaxParallelism > 0 {
-		parallelismSem = semaphore.NewWeighted(int64(common.config.MaxParallelism))
+	if cfg.MaxParallelism > 0 {
+		parallelismSem = semaphore.NewWeighted(int64(cfg.MaxParallelism))
 	}
 
 	opt, err := runc.NewWorkerOpt(common.config.Root, snFactory, cfg.Rootless, processMode, cfg.Labels, idmapping, nc, dns, cfg.Binary, cfg.ApparmorProfile, parallelismSem)

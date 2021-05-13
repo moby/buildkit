@@ -227,8 +227,8 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 	}
 
 	var parallelismSem *semaphore.Weighted
-	if common.config.MaxParallelism > 0 {
-		parallelismSem = semaphore.NewWeighted(int64(common.config.MaxParallelism))
+	if cfg.MaxParallelism > 0 {
+		parallelismSem = semaphore.NewWeighted(int64(cfg.MaxParallelism))
 	}
 
 	snapshotter := ctd.DefaultSnapshotter

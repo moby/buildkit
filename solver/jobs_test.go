@@ -93,7 +93,7 @@ func testParallelism(t *testing.T, sb integration.Sandbox) {
 type parallelismSetterSingle struct{}
 
 func (*parallelismSetterSingle) UpdateConfigFile(in string) string {
-	return in + "\n\nmax-parallelism = 1\n"
+	return in + "\n\n[worker.oci]\n  max-parallelism = 1\n\n[worker.containerd]\n  max-parallelism = 1\n"
 }
 
 var maxParallelismSingle integration.ConfigUpdater = &parallelismSetterSingle{}
