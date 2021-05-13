@@ -466,6 +466,8 @@ func TestChecksumIncludeExclude(t *testing.T) {
 
 	dgstFoo, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"foo"}}, nil)
 	require.NoError(t, err)
+	require.Equal(t, dgstFileData0, dgst)
+
 	dgstFooBar, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"foo", "bar"}}, nil)
 	require.NoError(t, err)
 

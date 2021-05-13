@@ -477,6 +477,7 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 		}
 	}()
 
+	endsInSep := len(p) != 0 && p[len(p)-1] == filepath.Separator
 	p = keyPath(p)
 
 	rootedIncludePatterns := make([]string, len(opts.IncludePatterns))
@@ -526,6 +527,11 @@ treeWalk:
 		if len(k) > 0 && k[len(k)-1] == byte(0) {
 			dirHeader = true
 			fn = fn[:len(fn)-1]
+			if fn == p && endsInSep {
+				// We don't include the metadata header for a source dir which ends with a separator
+				k, _, kOk = iter.Next()
+				continue
+			}
 		}
 		b, partialMatch, err := shouldIncludePath(p, fn, opts.Wildcard, rootedIncludePatterns, excludePatternMatcher, lastIncludedDir)
 		if err != nil {
