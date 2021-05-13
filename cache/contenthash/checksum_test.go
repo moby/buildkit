@@ -480,6 +480,9 @@ func TestChecksumIncludeExclude(t *testing.T) {
 
 	dgstD0Star, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"d0/*"}}, nil)
 	require.NoError(t, err)
+	dgstD0AStar, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"d0/a*"}}, nil)
+	require.NoError(t, err)
+	require.Equal(t, dgstD0Star, dgstD0AStar)
 	dgstD1Star, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"d1/*"}}, nil)
 	require.NoError(t, err)
 
@@ -527,6 +530,11 @@ func TestChecksumIncludeExclude(t *testing.T) {
 	dgstD0Star2, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"d0/*"}}, nil)
 	require.NoError(t, err)
 	require.NotEqual(t, dgstD0Star, dgstD0Star2)
+
+	dgstD0AStar2, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"d0/a*"}}, nil)
+	require.NoError(t, err)
+	// new file does not match the include pattern, so the digest should stay the same
+	require.Equal(t, dgstD0AStar, dgstD0AStar2)
 
 	dgstD1Star2, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"d1/*"}}, nil)
 	require.NoError(t, err)
