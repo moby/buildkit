@@ -1157,6 +1157,12 @@ func testFileOpCopyIncludeExclude(t *testing.T, sb integration.Sandbox) {
 		),
 	)
 
+	busybox := llb.Image("busybox:latest")
+	run := func(cmd string) {
+		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+	}
+	run(`sh -c "cat /dev/urandom | head -c 100 | sha256sum > unique"`)
+
 	def, err := st.Marshal(context.TODO())
 	require.NoError(t, err)
 
@@ -1185,6 +1191,51 @@ func testFileOpCopyIncludeExclude(t *testing.T, sb integration.Sandbox) {
 		_, err = os.Stat(filepath.Join(destDir, name))
 		require.ErrorIs(t, err, os.ErrNotExist)
 	}
+
+	randBytes, err := ioutil.ReadFile(filepath.Join(destDir, "unique"))
+	require.NoError(t, err)
+
+	// Create additional file which doesn't match the include pattern, and make
+	// sure this doesn't invalidate the cache.
+
+	err = fstest.Apply(fstest.CreateFile("unmatchedfile", []byte("data1"), 0600)).Apply(dir)
+	require.NoError(t, err)
+
+	st = llb.Scratch().File(
+		llb.Copy(
+			llb.Local("mylocal"), "/", "/", &llb.CopyInfo{
+				IncludePatterns: []string{"sub/*"},
+				ExcludePatterns: []string{"sub/bar"},
+			},
+		),
+	)
+
+	run(`sh -c "cat /dev/urandom | head -c 100 | sha256sum > unique"`)
+
+	def, err = st.Marshal(context.TODO())
+	require.NoError(t, err)
+
+	destDir, err = ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalDirs: map[string]string{
+			"mylocal": dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	randBytes2, err := ioutil.ReadFile(filepath.Join(destDir, "unique"))
+	require.NoError(t, err)
+
+	require.Equal(t, randBytes, randBytes2)
 }
 
 // testFileOpInputSwap is a regression test that cache is invalidated when subset of fileop is built
