@@ -2,10 +2,10 @@ package source
 
 import (
 	"net/url"
+	"path"
 	"strings"
 
 	"github.com/moby/buildkit/util/sshutil"
-	"github.com/pkg/errors"
 )
 
 type GitIdentifier struct {
@@ -46,8 +46,8 @@ func NewGitIdentifier(remoteURL string) (*GitIdentifier, error) {
 		u.Fragment = ""
 		repo.Remote = u.String()
 	}
-	if repo.Subdir != "" {
-		return nil, errors.Errorf("subdir not supported yet")
+	if sd := path.Clean(repo.Subdir); sd == "/" || sd == "." {
+		repo.Subdir = ""
 	}
 	return &repo, nil
 }
