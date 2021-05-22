@@ -91,6 +91,9 @@ jobs:
             pkg: ./cmd/buildctl ./worker/containerd
             typ: integration
           -
+            pkg: ./solver
+            typ: integration
+          -
             pkg: ''
             skip-integration-tests: 1
             typ: integration gateway

@@ -766,6 +766,11 @@ func (s *sharedOp) Exec(ctx context.Context, inputs []Result) (outputs []Result,
 		if s.execRes != nil || s.execErr != nil {
 			return s.execRes, s.execErr
 		}
+		release, err := op.Acquire(ctx)
+		if err != nil {
+			return nil, errors.Wrap(err, "acquire op resources")
+		}
+		defer release()
 
 		ctx = opentracing.ContextWithSpan(progress.WithProgress(ctx, s.st.mpw), s.st.mspan)
 		ctx = withAncestorCacheOpts(ctx, s.st)

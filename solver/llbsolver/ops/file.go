@@ -24,28 +24,31 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/semaphore"
 )
 
 const fileCacheType = "buildkit.file.v0"
 
 type fileOp struct {
-	op        *pb.FileOp
-	md        *metadata.Store
-	w         worker.Worker
-	solver    *FileOpSolver
-	numInputs int
+	op          *pb.FileOp
+	md          *metadata.Store
+	w           worker.Worker
+	solver      *FileOpSolver
+	numInputs   int
+	parallelism *semaphore.Weighted
 }
 
-func NewFileOp(v solver.Vertex, op *pb.Op_File, cm cache.Manager, md *metadata.Store, w worker.Worker) (solver.Op, error) {
+func NewFileOp(v solver.Vertex, op *pb.Op_File, cm cache.Manager, parallelism *semaphore.Weighted, md *metadata.Store, w worker.Worker) (solver.Op, error) {
 	if err := llbsolver.ValidateOp(&pb.Op{Op: op}); err != nil {
 		return nil, err
 	}
 	return &fileOp{
-		op:        op.File,
-		md:        md,
-		numInputs: len(v.Inputs()),
-		w:         w,
-		solver:    NewFileOpSolver(w, &file.Backend{}, file.NewRefManager(cm)),
+		op:          op.File,
+		md:          md,
+		numInputs:   len(v.Inputs()),
+		w:           w,
+		solver:      NewFileOpSolver(w, &file.Backend{}, file.NewRefManager(cm)),
+		parallelism: parallelism,
 	}, nil
 }
 
@@ -177,6 +180,19 @@ func (f *fileOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 	}
 
 	return outResults, nil
+}
+
+func (f *fileOp) Acquire(ctx context.Context) (solver.ReleaseFunc, error) {
+	if f.parallelism == nil {
+		return func() {}, nil
+	}
+	err := f.parallelism.Acquire(ctx, 1)
+	if err != nil {
+		return nil, err
+	}
+	return func() {
+		f.parallelism.Release(1)
+	}, nil
 }
 
 func addSelector(m map[int]map[llbsolver.Selector]struct{}, idx int, sel string, wildcard, followLinks bool) {
