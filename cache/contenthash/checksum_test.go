@@ -31,9 +31,10 @@ import (
 )
 
 const (
-	dgstFileData0     = digest.Digest("sha256:cd8e75bca50f2d695f220d0cb0997d8ead387e4f926e8669a92d7f104cc9885b")
-	dgstDirD0         = digest.Digest("sha256:d47454417d2c554067fbefe5f5719edc49f3cfe969c36b62e34a187a4da0cc9a")
-	dgstDirD0Modified = digest.Digest("sha256:555ffa3028630d97ba37832b749eda85ab676fd64ffb629fbf0f4ec8c1e3bff1")
+	dgstFileData0       = digest.Digest("sha256:cd8e75bca50f2d695f220d0cb0997d8ead387e4f926e8669a92d7f104cc9885b")
+	dgstDirD0           = digest.Digest("sha256:d47454417d2c554067fbefe5f5719edc49f3cfe969c36b62e34a187a4da0cc9a")
+	dgstDirD0FileByFile = digest.Digest("sha256:231c3293e329de47fec9e79056686477891fd1f244ed7b1c1fa668489a1f0d50")
+	dgstDirD0Modified   = digest.Digest("sha256:555ffa3028630d97ba37832b749eda85ab676fd64ffb629fbf0f4ec8c1e3bff1")
 )
 
 func TestChecksumSymlinkNoParentScan(t *testing.T) {
@@ -189,7 +190,7 @@ func TestChecksumWildcardOrFilter(t *testing.T) {
 
 	dgst, err = cc.Checksum(context.TODO(), ref, "x/d?", ChecksumOpts{Wildcard: true}, nil)
 	require.NoError(t, err)
-	require.Equal(t, digest.FromBytes(append([]byte("d0"), []byte(dgstDirD0)...)), dgst)
+	require.Equal(t, dgstDirD0FileByFile, dgst)
 
 	dgst, err = cc.Checksum(context.TODO(), ref, "x/d?/def", ChecksumOpts{FollowLinks: true, Wildcard: true}, nil)
 	require.NoError(t, err)
@@ -486,7 +487,8 @@ func TestChecksumIncludeExclude(t *testing.T) {
 	dgstD1Star, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"d1/*"}}, nil)
 	require.NoError(t, err)
 
-	// Nothing matches pattern, but d2's metadata should be captured in the checksum
+	// Nothing matches pattern, but d2's metadata should be captured in the
+	// checksum if d2 exists
 	dgstD2Foo, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"d2/foo"}}, nil)
 	require.NoError(t, err)
 
@@ -546,7 +548,7 @@ func TestChecksumIncludeExclude(t *testing.T) {
 
 	dgstD2Foo2, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"d2/foo"}}, nil)
 	require.NoError(t, err)
-	require.NotEqual(t, dgstD2Foo, dgstD2Foo2)
+	require.Equal(t, dgstD2Foo, dgstD2Foo2)
 
 	err = ref.Release(context.TODO())
 	require.NoError(t, err)

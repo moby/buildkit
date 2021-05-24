@@ -23,7 +23,6 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
-	"github.com/tonistiigi/fsutil/prefix"
 	fstypes "github.com/tonistiigi/fsutil/types"
 )
 
@@ -480,9 +479,16 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 	endsInSep := len(p) != 0 && p[len(p)-1] == filepath.Separator
 	p = keyPath(p)
 
-	rootedIncludePatterns := make([]string, len(opts.IncludePatterns))
-	for i, includePattern := range opts.IncludePatterns {
-		rootedIncludePatterns[i] = keyPath(includePattern)
+	var includePatternMatcher *fileutils.PatternMatcher
+	if len(opts.IncludePatterns) != 0 {
+		rootedIncludePatterns := make([]string, len(opts.IncludePatterns))
+		for i, includePattern := range opts.IncludePatterns {
+			rootedIncludePatterns[i] = keyPath(includePattern)
+		}
+		includePatternMatcher, err = fileutils.NewPatternMatcher(rootedIncludePatterns)
+		if err != nil {
+			return nil, errors.Wrapf(err, "invalid includepatterns: %s", opts.IncludePatterns)
+		}
 	}
 
 	var excludePatternMatcher *fileutils.PatternMatcher
@@ -511,7 +517,6 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 	if opts.Wildcard {
 		iter = root.Seek([]byte{})
 		k, _, kOk = iter.Next()
-
 	} else {
 		k = convertPathToKey([]byte(p))
 		if _, kOk = root.Get(k); kOk {
@@ -519,10 +524,22 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 		}
 	}
 
-	lastIncludedDir := ""
-treeWalk:
+	var (
+		parentDirHeaders []*IncludedPath
+		lastMatchedDir   string
+	)
+
 	for kOk {
 		fn := string(convertKeyToPath(k))
+
+		for len(parentDirHeaders) != 0 {
+			lastParentDir := parentDirHeaders[len(parentDirHeaders)-1]
+			if strings.HasPrefix(fn, lastParentDir.Path+"/") {
+				break
+			}
+			parentDirHeaders = parentDirHeaders[:len(parentDirHeaders)-1]
+		}
+
 		dirHeader := false
 		if len(k) > 0 && k[len(k)-1] == byte(0) {
 			dirHeader = true
@@ -533,14 +550,28 @@ treeWalk:
 				continue
 			}
 		}
-		b, partialMatch, err := shouldIncludePath(p, fn, opts.Wildcard, rootedIncludePatterns, excludePatternMatcher, lastIncludedDir)
+		if opts.Wildcard {
+			if lastMatchedDir == "" || !strings.HasPrefix(fn, lastMatchedDir+"/") {
+				include, err := path.Match(p, fn)
+				if err != nil {
+					return nil, err
+				}
+				if !include {
+					k, _, kOk = iter.Next()
+					continue
+				}
+				lastMatchedDir = fn
+			}
+		} else if !strings.HasPrefix(fn+"/", p+"/") {
+			k, _, kOk = iter.Next()
+			continue
+		}
+
+		shouldInclude, err := shouldIncludePath(p, fn, includePatternMatcher, excludePatternMatcher)
 		if err != nil {
 			return nil, err
 		}
-		// Dir headers for parent dirs of an include pattern should be included
-		// in the digest because their metadata may be copied by a copy that
-		// includes files or subdirs underneath them.
-		if !b || dirHeader != partialMatch {
+		if !shouldInclude && !dirHeader {
 			k, _, kOk = iter.Next()
 			continue
 		}
@@ -554,27 +585,22 @@ treeWalk:
 		}
 
 		if cr.Type == CacheRecordTypeDir {
-			lastIncludedDir = fn
-
-			if excludePatternMatcher != nil {
-				dirSlash := fn + "/"
-				for _, pat := range excludePatternMatcher.Patterns() {
-					patStr := pat.String() + "/"
-					if strings.HasPrefix(patStr, dirSlash) {
-						// This dir has exclusions underneath it. Do not
-						// include the dir as a whole. Instead, continue
-						// walking and only include paths that match the
-						// filters.
-						k, _, kOk = iter.Next()
-						continue treeWalk
-					}
-				}
-			}
+			// We only hash dir headers and files, not dir contents. Hashing
+			// dir contents could be wrong if there are exclusions within the
+			// dir.
+			shouldInclude = false
 		}
 
-		includedPaths = append(includedPaths, &IncludedPath{Path: fn, Record: cr})
-		if cr.Type == CacheRecordTypeDir {
-			iter = root.Seek(append(k, 0, 0xff))
+		if !shouldInclude {
+			if cr.Type == CacheRecordTypeDirHeader {
+				// We keep track of non-included parent dir headers in case an
+				// include pattern matches a file inside one of these dirs.
+				parentDirHeaders = append(parentDirHeaders, &IncludedPath{Path: fn, Record: cr})
+			}
+		} else {
+			includedPaths = append(includedPaths, parentDirHeaders...)
+			parentDirHeaders = nil
+			includedPaths = append(includedPaths, &IncludedPath{Path: fn, Record: cr})
 		}
 		k, _, kOk = iter.Next()
 	}
@@ -588,51 +614,30 @@ treeWalk:
 func shouldIncludePath(
 	p string,
 	candidate string,
-	wildcard bool,
-	rootedIncludePatterns []string,
+	includePatternMatcher *fileutils.PatternMatcher,
 	excludePatternMatcher *fileutils.PatternMatcher,
-	lastIncludedDir string,
-) (bool, bool, error) {
-	if wildcard {
-		include, err := path.Match(p, candidate)
+) (bool, error) {
+	if includePatternMatcher != nil {
+		m, err := includePatternMatcher.Matches(filepath.FromSlash(candidate))
 		if err != nil {
-			return include, false, err
+			return false, errors.Wrap(err, "failed to match includepatterns")
 		}
-		if !include {
-			return false, false, nil
-		}
-	} else if !strings.HasPrefix(candidate+"/", p+"/") {
-		return false, false, nil
-	}
-
-	partial := false
-	if len(rootedIncludePatterns) != 0 &&
-		(lastIncludedDir == "" ||
-			!strings.HasPrefix(candidate, lastIncludedDir+"/")) {
-		partial = true
-		matched := false
-		for _, pattern := range rootedIncludePatterns {
-			if ok, partialMatch := prefix.Match(pattern, candidate, true); ok {
-				matched = true
-				if !partialMatch {
-					partial = false
-					break
-				}
-			}
-		}
-		if !matched {
-			return false, false, nil
+		if !m {
+			return false, nil
 		}
 	}
 
-	if excludePatternMatcher == nil {
-		return true, partial, nil
+	if excludePatternMatcher != nil {
+		m, err := excludePatternMatcher.Matches(filepath.FromSlash(candidate))
+		if err != nil {
+			return false, errors.Wrap(err, "failed to match excludepatterns")
+		}
+		if m {
+			return false, nil
+		}
 	}
-	m, err := excludePatternMatcher.Matches(candidate)
-	if err != nil {
-		return false, partial, errors.Wrap(err, "failed to match excludepatterns")
-	}
-	return !m, partial, nil
+
+	return true, nil
 }
 
 func (cc *cacheContext) checksumNoFollow(ctx context.Context, m *mount, p string) (*CacheRecord, error) {
