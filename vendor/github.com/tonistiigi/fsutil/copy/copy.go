@@ -321,7 +321,7 @@ func (c *copier) copy(ctx context.Context, src, srcComponents, target string, ov
 
 	switch {
 	case fi.IsDir():
-		if created, err := c.copyDirectory(ctx, src, srcComponents, target, fi, overwriteTargetMetadata, skipIncludePatterns); err != nil {
+		if created, err := c.copyDirectory(ctx, src, srcComponents, target, fi, overwriteTargetMetadata, skipIncludePatterns, include); err != nil {
 			return err
 		} else if !overwriteTargetMetadata || !skipIncludePatterns {
 			copyFileInfo = created
@@ -426,7 +426,7 @@ func (c *copier) createParentDirs(src, srcComponents, target string, overwriteTa
 	return nil
 }
 
-func (c *copier) copyDirectory(ctx context.Context, src, srcComponents, dst string, stat os.FileInfo, overwriteTargetMetadata, skipIncludePatterns bool) (bool, error) {
+func (c *copier) copyDirectory(ctx context.Context, src, srcComponents, dst string, stat os.FileInfo, overwriteTargetMetadata, skipIncludePatterns, matchedExactly bool) (bool, error) {
 	if !stat.IsDir() {
 		return false, errors.Errorf("source is not directory")
 	}
@@ -437,7 +437,7 @@ func (c *copier) copyDirectory(ctx context.Context, src, srcComponents, dst stri
 	// pattern exactly, go ahead and create the directory. Otherwise, delay to
 	// handle include patterns like a/*/c where we do not want to create a/b
 	// until we encounter a/b/c.
-	if skipIncludePatterns {
+	if matchedExactly || skipIncludePatterns {
 		var err error
 		created, err = copyDirectoryOnly(src, dst, stat, overwriteTargetMetadata)
 		if err != nil {
