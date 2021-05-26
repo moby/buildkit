@@ -120,7 +120,7 @@ FROM alpine:${ALPINE_VERSION} AS buildkit-export
 # nsswitch.conf needs to be present to work around
 #   https://github.com/golang/go/issues/35305
 # drop this once we start building with Go 1.16
-RUN apk add --no-cache fuse3 git pigz xz \
+RUN apk add --no-cache fuse3 git openssh pigz xz \
   && ln -s fusermount3 /usr/bin/fusermount \
   && echo "hosts: files dns" >/etc/nsswitch.conf
 COPY examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
@@ -282,7 +282,7 @@ RUN CC=$(xx-clang --print-target-triple)-clang ./autogen.sh --disable-nls --disa
 
 # Rootless mode.
 FROM alpine:${ALPINE_VERSION} AS rootless
-RUN apk add --no-cache fuse3 git xz pigz
+RUN apk add --no-cache fuse3 git openssh pigz xz
 COPY --from=idmap /usr/bin/newuidmap /usr/bin/newuidmap
 COPY --from=idmap /usr/bin/newgidmap /usr/bin/newgidmap
 COPY --from=fuse-overlayfs /out/fuse-overlayfs /usr/bin/
