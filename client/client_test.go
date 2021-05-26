@@ -124,6 +124,7 @@ func TestIntegration(t *testing.T) {
 		testLazyImagePush,
 		testStargzLazyPull,
 		testFileOpInputSwap,
+		testRelativeMountpoint,
 	}, mirrors)
 
 	integration.Run(t, []integration.Test{
@@ -3443,6 +3444,44 @@ func testParallelLocalBuilds(t *testing.T, sb integration.Sandbox) {
 
 	err = eg.Wait()
 	require.NoError(t, err)
+}
+
+// testRelativeMountpoint is a test that relative paths for mountpoints don't
+// fail when runc is upgraded to at least rc95, which introduces an error when
+// mountpoints are not absolute. Relative paths should be transformed to
+// absolute points based on the llb.State's current working directory.
+func testRelativeMountpoint(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	id := identity.NewID()
+
+	st := llb.Image("busybox:latest").Dir("/root").Run(
+		llb.Shlexf("sh -c 'echo -n %s > /root/relpath/data'", id),
+	).AddMount("relpath", llb.Scratch())
+
+	def, err := st.Marshal(context.TODO())
+	require.NoError(t, err)
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "data"))
+	require.NoError(t, err)
+	require.Equal(t, dt, []byte(id))
 }
 
 func tmpdir(appliers ...fstest.Applier) (string, error) {
