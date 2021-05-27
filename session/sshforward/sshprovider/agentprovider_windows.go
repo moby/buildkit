@@ -6,10 +6,10 @@ import (
 	"net"
 	"regexp"
 	"strings"
-	"syscall"
 
 	"github.com/Microsoft/go-winio"
 	"github.com/pkg/errors"
+	"golang.org/x/sys/windows"
 )
 
 // Returns the Windows OpenSSH agent named pipe path, but
@@ -19,11 +19,11 @@ func getFallbackAgentPath() (string, error) {
 	// than a UNIX socket. These pipes do not play nice
 	// with os.Stat (which tries to open its target), so
 	// use a FindFirstFile syscall to check for existence.
-	var fd syscall.Win32finddata
+	var fd windows.Win32finddata
 
 	path := `\\.\pipe\openssh-ssh-agent`
-	pathPtr, _ := syscall.UTF16PtrFromString(path)
-	handle, err := syscall.FindFirstFile(pathPtr, &fd)
+	pathPtr, _ := windows.UTF16PtrFromString(path)
+	handle, err := windows.FindFirstFile(pathPtr, &fd)
 
 	if err != nil {
 		msg := "Windows OpenSSH agent not available at %s." +
@@ -31,7 +31,7 @@ func getFallbackAgentPath() (string, error) {
 		return "", errors.Errorf(msg, path)
 	}
 
-	_ = syscall.CloseHandle(handle)
+	_ = windows.CloseHandle(handle)
 
 	return path, nil
 }
