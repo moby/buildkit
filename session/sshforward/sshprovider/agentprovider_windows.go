@@ -42,7 +42,7 @@ func isWindowsPipePath(path string) bool {
 	// and requires winio.DialPipe() rather than DialTimeout("unix").
 	// Slashes and backslashes may be used interchangeably in the path.
 	// Path separators may consist of multiple consecutive (back)slashes.
-	pipePattern := strings.ReplaceAll("^[/]{2}[^/]+[/]+pipe[/]+", "[/]", `[\\/]`)
+	pipePattern := strings.ReplaceAll("^[/]{2}[^/]+[/]+pipe[/]+", "/", `\\/`)
 	ok, _ := regexp.MatchString(pipePattern, path)
 	return ok
 }
