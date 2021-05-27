@@ -47,7 +47,7 @@ func isWindowsPipePath(path string) bool {
 	return ok
 }
 
-func parsePlatformSocketPath(path string) *socketDialer {
+func getWindowsPipeDialer(path string) *socketDialer {
 	if isWindowsPipePath(path) {
 		return &socketDialer{path: path, dialer: windowsPipeDialer}
 	}

@@ -148,7 +148,7 @@ func toAgentSource(paths []string) (source, error) {
 			return source{}, errors.New("only single socket allowed")
 		}
 
-		if parsed := parsePlatformSocketPath(p); parsed != nil {
+		if parsed := getWindowsPipeDialer(p); parsed != nil {
 			socket = parsed
 			continue
 		}

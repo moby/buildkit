@@ -10,6 +10,6 @@ func getFallbackAgentPath() (string, error) {
 	return "", errors.Errorf("make sure SSH_AUTH_SOCK is set")
 }
 
-func parsePlatformSocketPath(path string) (*socketDialer) {
+func getWindowsPipeDialer(path string) *socketDialer {
 	return nil
 }
