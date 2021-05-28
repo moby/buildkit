@@ -27,6 +27,7 @@ import (
 	"github.com/moby/buildkit/session/pullping"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/util/compression"
+	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/progress"
@@ -136,6 +137,10 @@ type imgData struct {
 	shouldPush bool
 	// insecurePush is set when the push should take place over an unencrypted connection.
 	insecurePush bool
+
+	// mp is the MultiProvider for this image. Note that for local reg exports, the
+	// mmp is used instead.
+	mp *contentutil.MultiProvider
 
 	// platforms is a list of platforms to build for.
 	platforms []exptypes.Platform
@@ -358,15 +363,16 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 		}
 		if img.localRegExport != "" {
 			img.localRegExportReport = oneOffProgress(ctx, fmt.Sprintf("transferring %s", imgName))
+
+			err := mmp.AddImg(ctx, img.localRegExport, e.opt.ImageWriter.ContentStore(), img.mfstDesc.Digest)
+			if err != nil {
+				return nil, err
+			}
 		}
-		mmpID := img.localRegExport
-		if mmpID == "" {
-			mmpID = imgName
+		if img.localExport || img.shouldPush {
+			img.mp = contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
 		}
-		err := mmp.AddImg(ctx, mmpID, e.opt.ImageWriter.ContentStore(), img.mfstDesc.Digest)
-		if err != nil {
-			return nil, err
-		}
+
 		for _, r := range img.expSrc.Refs {
 			remote, err := r.GetRemote(ctx, false, e.layerCompression, session.NewGroup(sessionID))
 			if err != nil {
@@ -380,9 +386,14 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 				}
 			}
 			for _, desc := range remote.Descriptors {
-				err := mmp.AddImgSub(mmpID, desc.Digest, remote.Provider)
-				if err != nil {
-					return nil, err
+				if img.localRegExport != "" {
+					err := mmp.AddImgSub(img.localRegExport, desc.Digest, remote.Provider)
+					if err != nil {
+						return nil, err
+					}
+				}
+				if img.localExport || img.shouldPush {
+					img.mp.Add(desc.Digest, remote.Provider)
 				}
 				addAnnotations(annotations, desc)
 			}
@@ -400,9 +411,14 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 				}
 			}
 			for _, desc := range remote.Descriptors {
-				err := mmp.AddImgSub(mmpID, desc.Digest, remote.Provider)
-				if err != nil {
-					return nil, err
+				if img.localRegExport != "" {
+					err := mmp.AddImgSub(img.localRegExport, desc.Digest, remote.Provider)
+					if err != nil {
+						return nil, err
+					}
+				}
+				if img.localExport || img.shouldPush {
+					img.mp.Add(desc.Digest, remote.Provider)
 				}
 				addAnnotations(annotations, desc)
 			}
@@ -410,7 +426,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 
 		if img.shouldPush {
 			err := push.Push(
-				ctx, e.opt.SessionManager, sessionID, mmp,
+				ctx, e.opt.SessionManager, sessionID, img.mp,
 				e.opt.ImageWriter.ContentStore(), img.mfstDesc.Digest,
 				imgName, img.insecurePush, e.opt.RegistryHosts, false, annotations)
 			if err != nil {
@@ -462,15 +478,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 			default:
 				return nil, errors.Errorf("invalid variant %q", e.opt.Variant)
 			}
-			mmpID := img.localRegExport
-			if mmpID == "" {
-				mmpID = imgName
-			}
-			mp, _, err := mmp.Get(ctx, mmpID)
-			if err != nil {
-				return nil, err
-			}
-			if err := archiveexporter.Export(ctx, mp, img.tarWriter, expOpts...); err != nil {
+			if err := archiveexporter.Export(ctx, img.mp, img.tarWriter, expOpts...); err != nil {
 				img.tarWriter.Close()
 				if grpcerrors.Code(err) == codes.AlreadyExists {
 					continue
