@@ -21,11 +21,12 @@ import (
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
+	"github.com/moby/buildkit/exporter/earthlyoutputs/registry/eodriver"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/filesync"
+	"github.com/moby/buildkit/session/pullping"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/util/compression"
-	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/progress"
@@ -124,6 +125,37 @@ func (e *imageExporterInstance) Name() string {
 	return "[output] exporting outputs"
 }
 
+type imgData struct {
+	// localExport represents whether the image should be exported locally as a tar.
+	localExport bool
+	// localRegExport is set when the image should be exported via local registry. The value
+	// represents the image name that can be used to pull the image from the local registry.
+	localRegExport string
+
+	// shouldPush is set when the image should be pushed.
+	shouldPush bool
+	// insecurePush is set when the push should take place over an unencrypted connection.
+	insecurePush bool
+
+	// platforms is a list of platforms to build for.
+	platforms []exptypes.Platform
+
+	// expSrc is the exporter source constructed in a way that makes it look like this
+	// image is the only one being exported.
+	expSrc *exporter.Source
+
+	// mfstDesc is the image manifest descriptor.
+	mfstDesc *ocispec.Descriptor
+
+	// tarWriter is the image tar writer (set only if localExport is true).
+	tarWriter io.WriteCloser
+
+	// localRegExportReport is the one-off progress reporter for the local reg export.
+	localRegExportReport func()
+	// localExportReport is the one-off progress reporter for the tar export.
+	localExportReport func()
+}
+
 func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source, sessionID string) (map[string]string, error) {
 	if src.Ref != nil {
 		return nil, errors.Errorf("export with src.Ref not supported")
@@ -134,11 +166,9 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	for k, v := range e.meta {
 		src.Metadata[k] = v
 	}
-	localExport := make(map[string]bool)              // imgName -> true/false
-	shouldPush := make(map[string]bool)               // imgName -> true/false
-	insecurePush := make(map[string]bool)             // imgName -> true/false
-	plats := make(map[string][]exptypes.Platform)     // imgName -> []platform
-	imageExpSrcs := make(map[string]*exporter.Source) // imgName -> expSrc
+	images := make(map[string]*imgData)
+	hasAnyTarExport := false
+	hasAnyLocalRegExport := false
 	var dirExpSrcs []*exporter.Source
 	for k, ref := range src.Refs {
 		simpleMd := make(map[string][]byte)
@@ -159,6 +189,13 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 		if string(simpleMd["export-image"]) == "true" {
 			isImage = true
 			le = true
+			hasAnyTarExport = true
+		}
+		eilr := ""
+		if string(simpleMd["export-image-local-registry"]) != "" {
+			isImage = true
+			eilr = string(simpleMd["export-image-local-registry"])
+			hasAnyLocalRegExport = true
 		}
 		sp := false
 		if string(simpleMd["export-image-push"]) == "true" {
@@ -193,92 +230,70 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 				return nil, errors.Errorf("exporting image with no name")
 			}
 			delete(simpleMd, "image.name")
-
 			platStr := string(simpleMd["platform"])
-			if platStr != "" {
-				p, err := platforms.Parse(platStr)
-				if err != nil {
-					return nil, errors.Wrap(err, "parse platform")
-				}
-				plat := exptypes.Platform{
-					ID:       platStr,
-					Platform: p,
-				}
-				for _, imgName := range imgNames {
-					plats[imgName] = append(plats[imgName], plat)
-				}
-			}
-
 			for _, imgName := range imgNames {
-				le2, ok := localExport[imgName]
+				img, ok := images[imgName]
 				if !ok {
-					localExport[imgName] = le
-					le2 = le
+					img = &imgData{
+						expSrc: &exporter.Source{
+							Refs:     map[string]cache.ImmutableRef{},
+							Metadata: make(map[string][]byte),
+						},
+					}
+					images[imgName] = img
 				}
-				if le != le2 {
-					return nil, errors.Errorf("inconsistent local-export/no-local-export setting for image %s", imgName)
-				}
+				img.localExport = img.localExport || le
+				img.localRegExport = eilr
+				img.shouldPush = img.shouldPush || sp
+				img.insecurePush = img.insecurePush || ip
 
-				sp2, ok := shouldPush[imgName]
-				if !ok {
-					shouldPush[imgName] = sp
-					sp2 = sp
+				img.expSrc.Metadata["image.name"] = []byte(imgName)
+				if eilr != "" {
+					img.expSrc.Metadata["export-image-local-registry"] = []byte(eilr)
 				}
-				if sp != sp2 {
-					return nil, errors.Errorf("inconsistent push/no-push setting for image %s", imgName)
+				if le {
+					img.expSrc.Metadata["export-image"] = []byte("true")
 				}
-
-				ip2, ok := insecurePush[imgName]
-				if !ok {
-					insecurePush[imgName] = ip
-					ip2 = ip
+				if sp {
+					img.expSrc.Metadata["export-image-push"] = []byte("true")
 				}
-				if ip != ip2 {
-					return nil, errors.Errorf("inconsistent secure/insecure setting for image %s", imgName)
-				}
-
-				expSrc, ok := imageExpSrcs[imgName]
-				if !ok {
-					expSrc = &exporter.Source{
-						Refs:     map[string]cache.ImmutableRef{},
-						Metadata: make(map[string][]byte),
-					}
-					expSrc.Metadata["image.name"] = []byte(imgName)
-					if le {
-						expSrc.Metadata["export-image"] = []byte("true")
-					}
-					if sp {
-						expSrc.Metadata["export-image-push"] = []byte("true")
-					}
-					if ip {
-						expSrc.Metadata["insecure-push"] = []byte("true")
-					}
-					imageExpSrcs[imgName] = expSrc
+				if ip {
+					img.expSrc.Metadata["insecure-push"] = []byte("true")
 				}
 				if platStr != "" {
-					expSrc.Refs[platStr] = ref
+					img.expSrc.Refs[platStr] = ref
+
+					p, err := platforms.Parse(platStr)
+					if err != nil {
+						return nil, errors.Wrap(err, "parse platform")
+					}
+					plat := exptypes.Platform{
+						ID:       platStr,
+						Platform: p,
+					}
+					img.platforms = append(img.platforms, plat)
 				} else {
-					expSrc.Ref = ref
+					img.expSrc.Ref = ref
 				}
 
 				for mdK, mdV := range simpleMd {
 					if platStr != "" {
-						expSrc.Metadata[fmt.Sprintf("%s/%s", mdK, platStr)] = mdV
+						img.expSrc.Metadata[fmt.Sprintf("%s/%s", mdK, platStr)] = mdV
 					} else {
-						expSrc.Metadata[mdK] = mdV
+						img.expSrc.Metadata[mdK] = mdV
 					}
 				}
 			}
 		}
 	}
-	for imgName, ps := range plats {
-		if len(ps) > 0 {
-			expPlats := &exptypes.Platforms{Platforms: ps}
+	for _, img := range images {
+		if len(img.platforms) > 0 {
+			expPlats := &exptypes.Platforms{Platforms: img.platforms}
 			dt, err := json.Marshal(expPlats)
 			if err != nil {
 				return nil, err
 			}
-			imageExpSrcs[imgName].Metadata[exptypes.ExporterPlatformsKey] = dt
+			img.expSrc.Metadata[exptypes.ExporterPlatformsKey] = dt
 		}
 	}
 
@@ -288,12 +303,12 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	}
 	defer done(context.TODO())
 
-	descs := make(map[string]*ocispec.Descriptor) // imgName -> ImageWriter.Commit desc
-	for imgName, expSrc := range imageExpSrcs {
-		desc, err := e.opt.ImageWriter.Commit(ctx, *expSrc, e.ociTypes, e.layerCompression, sessionID)
+	for _, img := range images {
+		desc, err := e.opt.ImageWriter.Commit(ctx, *img.expSrc, e.ociTypes, e.layerCompression, sessionID)
 		if err != nil {
 			return nil, err
 		}
+		img.mfstDesc = desc
 		defer func() {
 			e.opt.ImageWriter.ContentStore().Delete(context.TODO(), desc.Digest)
 		}()
@@ -301,12 +316,10 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 			desc.Annotations = map[string]string{}
 		}
 		desc.Annotations[ocispec.AnnotationCreated] = time.Now().UTC().Format(time.RFC3339)
-		descs[imgName] = desc
 	}
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-
 	caller, err := e.opt.SessionManager.Get(timeoutCtx, sessionID, false)
 	if err != nil {
 		return nil, err
@@ -315,96 +328,166 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	resp := make(map[string]string)
 	// TODO(vladaionescu): Fill resp
 
-	writers := make(map[string]io.WriteCloser) // imgName -> writer
-	for imgName, expSrc := range imageExpSrcs {
+	for _, img := range images {
+		if !img.localExport {
+			continue
+		}
 		md := make(map[string]string)
-		for mdK, mdV := range expSrc.Metadata {
+		for mdK, mdV := range img.expSrc.Metadata {
 			md[safeGrpcMetaKey(mdK)] = string(mdV)
 		}
-		w, err := filesync.CopyFileWriter(ctx, md, caller)
+		img.tarWriter, err = filesync.CopyFileWriter(ctx, md, caller)
 		if err != nil {
 			return nil, err
 		}
-		writers[imgName] = w
 	}
-	eg, egCtx := errgroup.WithContext(ctx)
+	dirEG, egCtx := errgroup.WithContext(ctx)
 	for _, expSrc := range dirExpSrcs {
 		md := make(map[string]string)
 		for mdK, mdV := range expSrc.Metadata {
 			md[safeGrpcMetaKey(mdK)] = string(mdV)
 		}
-		eg.Go(exportDirFunc(egCtx, md, caller, expSrc.Ref, sessionID))
+		dirEG.Go(exportDirFunc(egCtx, md, caller, expSrc.Ref, sessionID))
 	}
 
-	mproviders := make(map[string]*contentutil.MultiProvider) // imgName -> mprovider
+	mmp := eodriver.MultiMultiProviderSingleton
 	annotations := map[digest.Digest]map[string]string{}
-	for imgName, expSrc := range imageExpSrcs {
-		mprovider := contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
-		mproviders[imgName] = mprovider
-		for _, r := range expSrc.Refs {
+	for imgName, img := range images {
+		if img.localExport {
+			img.localExportReport = oneOffProgress(ctx, fmt.Sprintf("transferring (via tar) %s", imgName))
+		}
+		if img.localRegExport != "" {
+			img.localRegExportReport = oneOffProgress(ctx, fmt.Sprintf("transferring %s", imgName))
+		}
+		mmpID := img.localRegExport
+		if mmpID == "" {
+			mmpID = imgName
+		}
+		err := mmp.AddImg(ctx, mmpID, e.opt.ImageWriter.ContentStore(), img.mfstDesc.Digest)
+		if err != nil {
+			return nil, err
+		}
+		for _, r := range img.expSrc.Refs {
 			remote, err := r.GetRemote(ctx, false, e.layerCompression, session.NewGroup(sessionID))
 			if err != nil {
 				return nil, err
 			}
-			// unlazy before tar export as the tar writer does not handle
-			// layer blobs in parallel (whereas unlazy does)
-			if unlazier, ok := remote.Provider.(cache.Unlazier); ok {
-				if err := unlazier.Unlazy(ctx); err != nil {
-					return nil, err
+			if img.localExport {
+				// unlazy before tar export as the tar writer does not handle
+				// layer blobs in parallel (whereas unlazy does)
+				if unlazier, ok := remote.Provider.(cache.Unlazier); ok {
+					if err := unlazier.Unlazy(ctx); err != nil {
+						return nil, err
+					}
 				}
 			}
 			for _, desc := range remote.Descriptors {
-				mprovider.Add(desc.Digest, remote.Provider)
+				err := mmp.AddImgSub(mmpID, desc.Digest, remote.Provider)
+				if err != nil {
+					return nil, err
+				}
 				addAnnotations(annotations, desc)
 			}
 		}
-		if expSrc.Ref != nil { // This is a copy and paste of the above code
-			remote, err := expSrc.Ref.GetRemote(ctx, false, e.layerCompression, session.NewGroup(sessionID))
+		if img.expSrc.Ref != nil { // This is a copy and paste of the above code
+			remote, err := img.expSrc.Ref.GetRemote(ctx, false, e.layerCompression, session.NewGroup(sessionID))
 			if err != nil {
 				return nil, err
 			}
-			// unlazy before tar export as the tar writer does not handle
-			// layer blobs in parallel (whereas unlazy does)
-			if unlazier, ok := remote.Provider.(cache.Unlazier); ok {
-				if err := unlazier.Unlazy(ctx); err != nil {
-					return nil, err
+			if img.localExport {
+				// unlazy before tar export as the tar writer does not handle
+				// layer blobs in parallel (whereas unlazy does)
+				if unlazier, ok := remote.Provider.(cache.Unlazier); ok {
+					if err := unlazier.Unlazy(ctx); err != nil {
+						return nil, err
+					}
 				}
 			}
 			for _, desc := range remote.Descriptors {
-				mprovider.Add(desc.Digest, remote.Provider)
+				err := mmp.AddImgSub(mmpID, desc.Digest, remote.Provider)
+				if err != nil {
+					return nil, err
+				}
 				addAnnotations(annotations, desc)
 			}
-
 		}
 
-		if shouldPush[imgName] {
+		if img.shouldPush {
 			err := push.Push(
-				ctx, e.opt.SessionManager, sessionID, mprovider,
-				e.opt.ImageWriter.ContentStore(), descs[imgName].Digest,
-				imgName, insecurePush[imgName], e.opt.RegistryHosts, false, annotations)
+				ctx, e.opt.SessionManager, sessionID, mmp,
+				e.opt.ImageWriter.ContentStore(), img.mfstDesc.Digest,
+				imgName, img.insecurePush, e.opt.RegistryHosts, false, annotations)
 			if err != nil {
 				return nil, err
 			}
 		}
 	}
 
-	report := oneOffProgress(ctx, "sending tarballs")
-	for imgName, le := range localExport {
-		if !le {
-			continue
+	var pullPingChan chan error
+	if hasAnyLocalRegExport {
+		// inform the client that it's safe to perform pulls now
+		pullImgs := make([]string, 0, len(images))
+		for _, img := range images {
+			if img.localRegExport != "" {
+				pullImgs = append(pullImgs, img.localRegExport)
+			}
 		}
-		w := writers[imgName]
-		desc := descs[imgName]
-		expOpts := []archiveexporter.ExportOpt{archiveexporter.WithManifest(*desc, imgName)}
-		switch e.opt.Variant {
-		case VariantOCI:
-			expOpts = append(expOpts, archiveexporter.WithAllPlatforms(), archiveexporter.WithSkipDockerManifest())
-		case VariantDocker:
-		default:
-			return nil, report(errors.Errorf("invalid variant %q", e.opt.Variant))
+		pullPingChan = pullping.PullPingChannel(ctx, pullImgs, caller)
+		ctxTimeout, cancel := context.WithTimeout(ctx, 1*time.Hour)
+		defer cancel()
+		// wait for the client to finish pulling
+		select {
+		case err := <-pullPingChan:
+			if err != nil {
+				return nil, errors.Wrap(err, "pull ping error")
+			}
+		case <-ctxTimeout.Done():
+			return nil, errors.Wrap(ctxTimeout.Err(), "pull ping ctx done")
+		case <-caller.Context().Done():
+			return nil, errors.Wrap(caller.Context().Err(), "caller context done")
 		}
-		if err := archiveexporter.Export(ctx, mproviders[imgName], w, expOpts...); err != nil {
-			w.Close()
+		for _, img := range images {
+			if img.localRegExport != "" {
+				img.localRegExportReport()
+			}
+		}
+	}
+
+	if hasAnyTarExport {
+		for imgName, img := range images {
+			if !img.localExport {
+				continue
+			}
+			expOpts := []archiveexporter.ExportOpt{archiveexporter.WithManifest(*img.mfstDesc, imgName)}
+			switch e.opt.Variant {
+			case VariantOCI:
+				expOpts = append(expOpts, archiveexporter.WithAllPlatforms(), archiveexporter.WithSkipDockerManifest())
+			case VariantDocker:
+			default:
+				return nil, errors.Errorf("invalid variant %q", e.opt.Variant)
+			}
+			mmpID := img.localRegExport
+			if mmpID == "" {
+				mmpID = imgName
+			}
+			mp, _, err := mmp.Get(ctx, mmpID)
+			if err != nil {
+				return nil, err
+			}
+			if err := archiveexporter.Export(ctx, mp, img.tarWriter, expOpts...); err != nil {
+				img.tarWriter.Close()
+				if grpcerrors.Code(err) == codes.AlreadyExists {
+					continue
+				}
+				if errors.Is(err, io.EOF) {
+					// TODO(vladaionescu): This sometimes happens when server responds with
+					//                     GRPC code codes.AlreadyExists and
+					//                     we continue to try to send data.
+					continue
+				}
+				return nil, err
+			}
+			err = img.tarWriter.Close()
 			if grpcerrors.Code(err) == codes.AlreadyExists {
 				continue
 			}
@@ -414,42 +497,42 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 				//                     we continue to try to send data.
 				continue
 			}
-			return nil, report(err)
+			if err != nil {
+				return nil, err
+			}
+			img.localExportReport()
 		}
-		err = w.Close()
-		if grpcerrors.Code(err) == codes.AlreadyExists {
-			continue
-		}
-		if errors.Is(err, io.EOF) {
-			// TODO(vladaionescu): This sometimes happens when server responds with
-			//                     GRPC code codes.AlreadyExists and
-			//                     we continue to try to send data.
-			continue
-		}
-		if err != nil {
-			return nil, report(err)
+		// just in case any report was skipped due to a continue
+		for _, img := range images {
+			if img.localExportReport != nil {
+				img.localExportReport()
+			}
 		}
 	}
-	if err := eg.Wait(); err != nil {
-		return nil, report(err)
+
+	if err := dirEG.Wait(); err != nil {
+		return nil, err
 	}
-	return resp, report(nil)
+
+	return resp, nil
 }
 
-func oneOffProgress(ctx context.Context, id string) func(err error) error {
+func oneOffProgress(ctx context.Context, id string) func() {
 	pw, _, _ := progress.FromContext(ctx)
 	now := time.Now()
 	st := progress.Status{
 		Started: &now,
 	}
 	pw.Write(id, st)
-	return func(err error) error {
-		// TODO: set error on status
+	return func() {
+		if st.Completed != nil {
+			// Don't close twice.
+			return
+		}
 		now := time.Now()
 		st.Completed = &now
 		pw.Write(id, st)
 		pw.Close()
-		return err
 	}
 }
 

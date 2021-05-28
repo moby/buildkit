@@ -35,6 +35,10 @@ github.com/Microsoft/hcsshim/internal/wclayer
 github.com/Microsoft/hcsshim/internal/winapi
 github.com/Microsoft/hcsshim/osversion
 github.com/Microsoft/hcsshim/pkg/ociwclayer
+# github.com/beorn7/perks v1.0.1
+github.com/beorn7/perks/quantile
+# github.com/cespare/xxhash/v2 v2.1.1
+github.com/cespare/xxhash/v2
 # github.com/containerd/cgroups v1.0.0
 github.com/containerd/cgroups/stats/v1
 # github.com/containerd/console v1.0.2
@@ -164,9 +168,43 @@ github.com/docker/cli/cli/config/credentials
 github.com/docker/cli/cli/config/types
 github.com/docker/cli/cli/connhelper/commandconn
 # github.com/docker/distribution v2.7.1+incompatible
+github.com/docker/distribution
+github.com/docker/distribution/configuration
+github.com/docker/distribution/context
 github.com/docker/distribution/digestset
+github.com/docker/distribution/health
+github.com/docker/distribution/health/checks
+github.com/docker/distribution/manifest
+github.com/docker/distribution/manifest/manifestlist
+github.com/docker/distribution/manifest/ocischema
+github.com/docker/distribution/manifest/schema1
+github.com/docker/distribution/manifest/schema2
+github.com/docker/distribution/metrics
+github.com/docker/distribution/notifications
 github.com/docker/distribution/reference
 github.com/docker/distribution/registry/api/errcode
+github.com/docker/distribution/registry/api/v2
+github.com/docker/distribution/registry/auth
+github.com/docker/distribution/registry/client
+github.com/docker/distribution/registry/client/auth
+github.com/docker/distribution/registry/client/auth/challenge
+github.com/docker/distribution/registry/client/transport
+github.com/docker/distribution/registry/handlers
+github.com/docker/distribution/registry/listener
+github.com/docker/distribution/registry/middleware/registry
+github.com/docker/distribution/registry/middleware/repository
+github.com/docker/distribution/registry/proxy
+github.com/docker/distribution/registry/proxy/scheduler
+github.com/docker/distribution/registry/storage
+github.com/docker/distribution/registry/storage/cache
+github.com/docker/distribution/registry/storage/cache/memory
+github.com/docker/distribution/registry/storage/cache/redis
+github.com/docker/distribution/registry/storage/driver
+github.com/docker/distribution/registry/storage/driver/base
+github.com/docker/distribution/registry/storage/driver/factory
+github.com/docker/distribution/registry/storage/driver/middleware
+github.com/docker/distribution/uuid
+github.com/docker/distribution/version
 # github.com/docker/docker v20.10.5+incompatible
 github.com/docker/docker/api
 github.com/docker/docker/api/types
@@ -214,6 +252,8 @@ github.com/docker/go-connections/sockets
 github.com/docker/go-connections/tlsconfig
 # github.com/docker/go-events v0.0.0-20190806004212-e31b211e4f1c
 github.com/docker/go-events
+# github.com/docker/go-metrics v0.0.1
+github.com/docker/go-metrics
 # github.com/docker/go-units v0.4.0
 github.com/docker/go-units
 # github.com/docker/libnetwork v0.8.0-dev.2.0.20201215162534-fa125a3512ee
@@ -221,6 +261,11 @@ github.com/docker/libnetwork/ipamutils
 github.com/docker/libnetwork/resolvconf
 github.com/docker/libnetwork/resolvconf/dns
 github.com/docker/libnetwork/types
+# github.com/docker/libtrust v0.0.0-20150114040149-fa567046d9b1
+github.com/docker/libtrust
+# github.com/garyburd/redigo v0.0.0-20150301180006-535138d7bcd7
+github.com/garyburd/redigo/internal
+github.com/garyburd/redigo/redis
 # github.com/gofrs/flock v0.7.3
 github.com/gofrs/flock
 # github.com/gogo/googleapis v1.4.0
@@ -251,6 +296,10 @@ github.com/google/go-cmp/cmp/internal/value
 github.com/google/shlex
 # github.com/google/uuid v1.2.0
 github.com/google/uuid
+# github.com/gorilla/handlers v0.0.0-20150720190736-60c7bfde3e33
+github.com/gorilla/handlers
+# github.com/gorilla/mux v1.8.0
+github.com/gorilla/mux
 # github.com/grpc-ecosystem/go-grpc-middleware v1.2.0
 github.com/grpc-ecosystem/go-grpc-middleware
 # github.com/grpc-ecosystem/grpc-opentracing v0.0.0-20180507213350-8e809c8a8645
@@ -275,6 +324,8 @@ github.com/klauspost/compress/huff0
 github.com/klauspost/compress/snappy
 github.com/klauspost/compress/zstd
 github.com/klauspost/compress/zstd/internal/xxhash
+# github.com/matttproud/golang_protobuf_extensions v1.0.2-0.20181231171920-c182affec369
+github.com/matttproud/golang_protobuf_extensions/pbutil
 # github.com/mitchellh/hashstructure v1.0.0
 github.com/mitchellh/hashstructure
 # github.com/moby/locker v1.0.1
@@ -314,13 +365,27 @@ github.com/pkg/errors
 github.com/pkg/profile
 # github.com/pmezard/go-difflib v1.0.0
 github.com/pmezard/go-difflib/difflib
+# github.com/prometheus/client_golang v1.7.1
+github.com/prometheus/client_golang/prometheus
+github.com/prometheus/client_golang/prometheus/internal
+github.com/prometheus/client_golang/prometheus/promhttp
+# github.com/prometheus/client_model v0.2.0
+github.com/prometheus/client_model/go
+# github.com/prometheus/common v0.10.0
+github.com/prometheus/common/expfmt
+github.com/prometheus/common/internal/bitbucket.org/ww/goautoneg
+github.com/prometheus/common/model
+# github.com/prometheus/procfs v0.6.0
+github.com/prometheus/procfs
+github.com/prometheus/procfs/internal/fs
+github.com/prometheus/procfs/internal/util
 # github.com/russross/blackfriday/v2 v2.0.1
 github.com/russross/blackfriday/v2
 # github.com/serialx/hashring v0.0.0-20190422032157-8b2912629002
 github.com/serialx/hashring
 # github.com/shurcooL/sanitized_anchor_name v1.0.0
 github.com/shurcooL/sanitized_anchor_name
-# github.com/sirupsen/logrus v1.7.0
+# github.com/sirupsen/logrus v1.8.1
 github.com/sirupsen/logrus
 # github.com/stretchr/testify v1.7.0
 github.com/stretchr/testify/assert
@@ -446,6 +511,8 @@ google.golang.org/grpc/serviceconfig
 google.golang.org/grpc/stats
 google.golang.org/grpc/status
 google.golang.org/grpc/tap
+# gopkg.in/yaml.v2 v2.4.0
+gopkg.in/yaml.v2
 # gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c
 gopkg.in/yaml.v3
 # gotest.tools/v3 v3.0.3

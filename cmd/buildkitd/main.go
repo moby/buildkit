@@ -34,6 +34,7 @@ import (
 	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/control"
 	"github.com/moby/buildkit/executor/oci"
+	"github.com/moby/buildkit/exporter/earthlyoutputs/registry"
 	"github.com/moby/buildkit/frontend"
 	dockerfile "github.com/moby/buildkit/frontend/dockerfile/builder"
 	"github.com/moby/buildkit/frontend/gateway"
@@ -247,6 +248,18 @@ func main() {
 		}
 
 		controller.Register(server)
+
+		lrPort, ok := os.LookupEnv("BUILDKIT_LOCAL_REGISTRY_LISTEN_PORT")
+		if ok {
+			logrus.Infof("Starting local registry for outputs on port %s", lrPort)
+			serveErr := registry.Serve(ctx, fmt.Sprintf("0.0.0.0:%s", lrPort))
+			go func() {
+				err := <-serveErr
+				if err != nil {
+					logrus.Errorf("Registry serve error: %s\n", err.Error())
+				}
+			}()
+		}
 
 		ents := c.GlobalStringSlice("allow-insecure-entitlement")
 		if len(ents) > 0 {

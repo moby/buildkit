@@ -19,6 +19,7 @@ import (
 	sessioncontent "github.com/moby/buildkit/session/content"
 	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/session/grpchijack"
+	"github.com/moby/buildkit/session/pullping"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/entitlements"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -45,11 +46,12 @@ type SolveOpt struct {
 }
 
 type ExportEntry struct {
-	Type          string
-	Attrs         map[string]string
-	Output        func(map[string]string) (io.WriteCloser, error) // for ExporterOCI, ExporterDocker and ExporterEarthly
-	OutputDirFunc func(map[string]string) (string, error)         // for ExporterEarthly
-	OutputDir     string                                          // for ExporterLocal
+	Type               string
+	Attrs              map[string]string
+	Output             func(map[string]string) (io.WriteCloser, error) // for ExporterOCI, ExporterDocker and ExporterEarthly
+	OutputDir          string                                          // for ExporterLocal
+	OutputDirFunc      func(map[string]string) (string, error)         // for ExporterEarthly
+	OutputPullCallback pullping.PullCallback                           // for ExporterEarthly
 }
 
 type CacheOptionsEntry struct {
@@ -155,6 +157,9 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			}
 			if ex.Output == nil {
 				return nil, errors.Errorf("output file writer is required for %s exporter", ex.Type)
+			}
+			if ex.OutputPullCallback != nil {
+				s.Allow(pullping.NewPullPing(ex.OutputPullCallback))
 			}
 			s.Allow(filesync.NewFSSyncMultiTarget(ex.Output, ex.OutputDirFunc))
 		default:
