@@ -372,13 +372,11 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 			if err != nil {
 				return nil, err
 			}
-			if img.localExport {
-				// unlazy before tar export as the tar writer does not handle
-				// layer blobs in parallel (whereas unlazy does)
-				if unlazier, ok := remote.Provider.(cache.Unlazier); ok {
-					if err := unlazier.Unlazy(ctx); err != nil {
-						return nil, err
-					}
+			// unlazy before export as some consumers do not handle
+			// layer blobs in parallel (whereas unlazy does)
+			if unlazier, ok := remote.Provider.(cache.Unlazier); ok {
+				if err := unlazier.Unlazy(ctx); err != nil {
+					return nil, err
 				}
 			}
 			for _, desc := range remote.Descriptors {
@@ -394,13 +392,11 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 			if err != nil {
 				return nil, err
 			}
-			if img.localExport {
-				// unlazy before tar export as the tar writer does not handle
-				// layer blobs in parallel (whereas unlazy does)
-				if unlazier, ok := remote.Provider.(cache.Unlazier); ok {
-					if err := unlazier.Unlazy(ctx); err != nil {
-						return nil, err
-					}
+			// unlazy before export as some consumers do not handle
+			// layer blobs in parallel (whereas unlazy does)
+			if unlazier, ok := remote.Provider.(cache.Unlazier); ok {
+				if err := unlazier.Unlazy(ctx); err != nil {
+					return nil, err
 				}
 			}
 			for _, desc := range remote.Descriptors {
