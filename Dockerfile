@@ -22,10 +22,9 @@ RUN apk add --no-cache git
 # xx is a helper for cross-compilation
 FROM --platform=$BUILDPLATFORM tonistiigi/xx@sha256:810dc54d5144f133a218e88e319184bf8b9ce01d37d46ddb37573e90decd9eef AS xx
 
-FROM --platform=$BUILDPLATFORM golang:1.13-alpine AS gostable
 FROM --platform=$BUILDPLATFORM golang:1.16-alpine AS golatest
 
-FROM gostable AS go-linux
+FROM golatest AS go-linux
 FROM golatest AS go-darwin
 FROM golatest AS go-windows-amd64
 FROM golatest AS go-windows-386
@@ -51,7 +50,7 @@ WORKDIR $GOPATH/src/github.com/opencontainers/runc
 ARG TARGETPLATFORM
 # gcc is only installed for libgcc
 # lld has issues building static binaries for ppc so prefer ld for it
-RUN set -e; xx-apk add musl-dev gcc libseccomp-dev; \
+RUN set -e; xx-apk add musl-dev gcc libseccomp-dev libseccomp-static; \
   [ "$(xx-info arch)" != "ppc64le" ] || XX_CC_PREFER_LINKER=ld xx-clang --setup-target-triple
 RUN --mount=from=runc-src,src=/usr/src/runc,target=. --mount=target=/root/.cache,type=cache \
   CGO_ENABLED=1 xx-go build -mod=vendor -ldflags '-extldflags -static' -tags 'apparmor seccomp netgo cgo static_build osusergo' -o /usr/bin/runc ./ && \
@@ -151,6 +150,7 @@ RUN --mount=from=containerd-src,src=/usr/src/containerd,readwrite --mount=target
 # containerd v1.4 for integration tests
 FROM containerd-base as containerd-alt
 ARG CONTAINERD_ALT_VERSION
+ARG GO111MODULE=off
 RUN --mount=from=containerd-src,src=/usr/src/containerd,readwrite --mount=target=/root/.cache,type=cache \
   git fetch origin \
   && git checkout -q "$CONTAINERD_ALT_VERSION" \
