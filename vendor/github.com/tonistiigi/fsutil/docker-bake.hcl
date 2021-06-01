@@ -54,5 +54,5 @@ target "shfmt" {
 
 target "cross" {
   inherits = ["build"]
-  platforms = ["linux/amd64", "linux/arm64", "linux/arm", "linux/ppc64le", "linux/s390x"]
+  platforms = ["linux/amd64", "linux/386", "linux/arm64", "linux/arm", "linux/ppc64le", "linux/s390x"]
 }

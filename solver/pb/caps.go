@@ -50,8 +50,9 @@ const (
 
 	CapExecMetaSecurityDeviceWhitelistV1 apicaps.CapID = "exec.meta.security.devices.v1"
 
-	CapFileBase       apicaps.CapID = "file.base"
-	CapFileRmWildcard apicaps.CapID = "file.rm.wildcard"
+	CapFileBase                       apicaps.CapID = "file.base"
+	CapFileRmWildcard                 apicaps.CapID = "file.rm.wildcard"
+	CapFileCopyIncludeExcludePatterns apicaps.CapID = "file.copy.includeexcludepatterns"
 
 	CapConstraints apicaps.CapID = "constraints"
 	CapPlatform    apicaps.CapID = "platform"
@@ -284,6 +285,12 @@ func init() {
 
 	Caps.Init(apicaps.Cap{
 		ID:      CapFileRmWildcard,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapFileCopyIncludeExcludePatterns,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})

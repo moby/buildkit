@@ -73,6 +73,7 @@ func TestIntegration(t *testing.T) {
 		testRelativeWorkDir,
 		testFileOpMkdirMkfile,
 		testFileOpCopyRm,
+		testFileOpCopyIncludeExclude,
 		testFileOpRmWildcard,
 		testCallDiskUsage,
 		testBuildMultiMount,
@@ -1126,11 +1127,116 @@ func testFileOpCopyRm(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, []byte("bar0"), dt)
 
 	_, err = os.Stat(filepath.Join(destDir, "out/foo"))
-	require.Equal(t, true, errors.Is(err, os.ErrNotExist))
+	require.ErrorIs(t, err, os.ErrNotExist)
 
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "file2"))
 	require.NoError(t, err)
 	require.Equal(t, []byte("file2"), dt)
+}
+
+func testFileOpCopyIncludeExclude(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	dir, err := tmpdir(
+		fstest.CreateFile("myfile", []byte("data0"), 0600),
+		fstest.CreateDir("sub", 0700),
+		fstest.CreateFile("sub/foo", []byte("foo0"), 0600),
+		fstest.CreateFile("sub/bar", []byte("bar0"), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	st := llb.Scratch().File(
+		llb.Copy(
+			llb.Local("mylocal"), "/", "/", &llb.CopyInfo{
+				IncludePatterns: []string{"sub/*"},
+				ExcludePatterns: []string{"sub/bar"},
+			},
+		),
+	)
+
+	busybox := llb.Image("busybox:latest")
+	run := func(cmd string) {
+		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+	}
+	run(`sh -c "cat /dev/urandom | head -c 100 | sha256sum > unique"`)
+
+	def, err := st.Marshal(context.TODO())
+	require.NoError(t, err)
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalDirs: map[string]string{
+			"mylocal": dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "sub", "foo"))
+	require.NoError(t, err)
+	require.Equal(t, []byte("foo0"), dt)
+
+	for _, name := range []string{"myfile", "sub/bar"} {
+		_, err = os.Stat(filepath.Join(destDir, name))
+		require.ErrorIs(t, err, os.ErrNotExist)
+	}
+
+	randBytes, err := ioutil.ReadFile(filepath.Join(destDir, "unique"))
+	require.NoError(t, err)
+
+	// Create additional file which doesn't match the include pattern, and make
+	// sure this doesn't invalidate the cache.
+
+	err = fstest.Apply(fstest.CreateFile("unmatchedfile", []byte("data1"), 0600)).Apply(dir)
+	require.NoError(t, err)
+
+	st = llb.Scratch().File(
+		llb.Copy(
+			llb.Local("mylocal"), "/", "/", &llb.CopyInfo{
+				IncludePatterns: []string{"sub/*"},
+				ExcludePatterns: []string{"sub/bar"},
+			},
+		),
+	)
+
+	run(`sh -c "cat /dev/urandom | head -c 100 | sha256sum > unique"`)
+
+	def, err = st.Marshal(context.TODO())
+	require.NoError(t, err)
+
+	destDir, err = ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalDirs: map[string]string{
+			"mylocal": dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	randBytes2, err := ioutil.ReadFile(filepath.Join(destDir, "unique"))
+	require.NoError(t, err)
+
+	require.Equal(t, randBytes, randBytes2)
 }
 
 // testFileOpInputSwap is a regression test that cache is invalidated when subset of fileop is built
@@ -1214,10 +1320,10 @@ func testFileOpRmWildcard(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, true, fi.IsDir())
 
 	_, err = os.Stat(filepath.Join(destDir, "foo/target"))
-	require.Equal(t, true, errors.Is(err, os.ErrNotExist))
+	require.ErrorIs(t, err, os.ErrNotExist)
 
 	_, err = os.Stat(filepath.Join(destDir, "bar/target"))
-	require.Equal(t, true, errors.Is(err, os.ErrNotExist))
+	require.ErrorIs(t, err, os.ErrNotExist)
 }
 
 func testCallDiskUsage(t *testing.T, sb integration.Sandbox) {
@@ -2186,7 +2292,7 @@ func testStargzLazyPull(t *testing.T, sb integration.Sandbox) {
 	var sgzLayers []ocispec.Descriptor
 	for _, layer := range manifest.Layers[:len(manifest.Layers)-1] {
 		_, err = contentStore.Info(ctx, layer.Digest)
-		require.True(t, errors.Is(err, ctderrdefs.ErrNotFound), "unexpected error %v", err)
+		require.ErrorIs(t, err, ctderrdefs.ErrNotFound, "unexpected error %v", err)
 		sgzLayers = append(sgzLayers, layer)
 	}
 	require.NotEqual(t, 0, len(sgzLayers), "no layer can be used for checking lazypull")
@@ -2319,7 +2425,7 @@ func testLazyImagePush(t *testing.T, sb integration.Sandbox) {
 
 	for _, layer := range manifest.Layers {
 		_, err = contentStore.Info(ctx, layer.Digest)
-		require.True(t, errors.Is(err, ctderrdefs.ErrNotFound), "unexpected error %v", err)
+		require.ErrorIs(t, err, ctderrdefs.ErrNotFound, "unexpected error %v", err)
 	}
 
 	// clear all local state out again
@@ -2351,7 +2457,7 @@ func testLazyImagePush(t *testing.T, sb integration.Sandbox) {
 
 	for _, layer := range manifest.Layers {
 		_, err = contentStore.Info(ctx, layer.Digest)
-		require.True(t, errors.Is(err, ctderrdefs.ErrNotFound), "unexpected error %v", err)
+		require.ErrorIs(t, err, ctderrdefs.ErrNotFound, "unexpected error %v", err)
 	}
 
 	// check that a subsequent build can use the previously lazy image in an exec
