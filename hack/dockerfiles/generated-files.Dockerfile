@@ -2,7 +2,8 @@
 
 # protoc is dynamically linked to glibc to can't use golang:1.10-alpine
 FROM golang:1.13-buster AS gobuild-base
-ARG PROTOC_VERSION=3.1.0
+# https://github.com/golang/protobuf/blob/v1.3.5/.travis.yml#L15
+ARG PROTOC_VERSION=3.11.4
 ARG GOGO_VERSION=v1.3.2
 RUN apt-get update && apt-get --no-install-recommends install -y \
 	unzip \
