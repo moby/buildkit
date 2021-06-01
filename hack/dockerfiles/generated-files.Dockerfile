@@ -3,20 +3,19 @@
 # protoc is dynamically linked to glibc to can't use golang:1.10-alpine
 FROM golang:1.13-buster AS gobuild-base
 ARG PROTOC_VERSION=3.1.0
-ARG GOGO_VERSION=master
+ARG GOGO_VERSION=v1.3.2
 RUN apt-get update && apt-get --no-install-recommends install -y \
-	git \
 	unzip \
 	&& true
 RUN wget -q https://github.com/google/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip && unzip protoc-${PROTOC_VERSION}-linux-x86_64.zip -d /usr/local
 
-RUN go get -d github.com/gogo/protobuf/protoc-gen-gogofaster \
+RUN git clone https://github.com/gogo/protobuf.git /go/src/github.com/gogo/protobuf \
 	&& cd /go/src/github.com/gogo/protobuf \
 	&& git checkout -q $GOGO_VERSION \
 	&& go install ./protoc-gen-gogo ./protoc-gen-gogofaster ./protoc-gen-gogoslick
 
-ARG PROTOBUF_VERSION=v1.3.3
-RUN go get -d github.com/golang/protobuf/protoc-gen-go \
+ARG PROTOBUF_VERSION=v1.3.5
+RUN git clone https://github.com/golang/protobuf.git /go/src/github.com/golang/protobuf \
 	&& cd /go/src/github.com/golang/protobuf \
 	&& git checkout -q $PROTOBUF_VERSION \
 	&& go install ./protoc-gen-go
