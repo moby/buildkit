@@ -48,9 +48,12 @@ import (
 	"github.com/moby/buildkit/util/profiler"
 	"github.com/moby/buildkit/util/resolver"
 	"github.com/moby/buildkit/util/stack"
+	"github.com/moby/buildkit/util/tracing/detect"
+	_ "github.com/moby/buildkit/util/tracing/detect/jaeger"
 	"github.com/moby/buildkit/version"
 	"github.com/moby/buildkit/worker"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -207,7 +210,13 @@ func main() {
 				return err
 			}
 		}
-		unary := grpc_middleware.ChainUnaryServer(unaryInterceptor(ctx), grpcerrors.UnaryServerInterceptor)
+
+		tracer, err := detect.OTTracer()
+		if err != nil {
+			return err
+		}
+
+		unary := grpc_middleware.ChainUnaryServer(unaryInterceptor(ctx, tracer), grpcerrors.UnaryServerInterceptor)
 		stream := grpc_middleware.ChainStreamServer(otgrpc.OpenTracingStreamServerInterceptor(tracer), grpcerrors.StreamServerInterceptor)
 
 		opts := []grpc.ServerOption{grpc.UnaryInterceptor(unary), grpc.StreamInterceptor(stream)}
@@ -282,11 +291,8 @@ func main() {
 		return err
 	}
 
-	app.After = func(context *cli.Context) error {
-		if closeTracer != nil {
-			return closeTracer.Close()
-		}
-		return nil
+	app.After = func(_ *cli.Context) error {
+		return detect.Shutdown(context.TODO())
 	}
 
 	profiler.Attach(app)
@@ -525,7 +531,7 @@ func getListener(addr string, uid, gid int, tlsConfig *tls.Config) (net.Listener
 	}
 }
 
-func unaryInterceptor(globalCtx context.Context) grpc.UnaryServerInterceptor {
+func unaryInterceptor(globalCtx context.Context, tracer opentracing.Tracer) grpc.UnaryServerInterceptor {
 	withTrace := otgrpc.OpenTracingServerInterceptor(tracer, otgrpc.LogPayloads())
 
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {

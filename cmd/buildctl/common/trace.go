@@ -2,40 +2,25 @@ package common
 
 import (
 	"context"
-	"io"
 	"os"
 	"strings"
 
 	"github.com/moby/buildkit/util/appcontext"
+	"github.com/moby/buildkit/util/tracing/detect"
+	_ "github.com/moby/buildkit/util/tracing/detect/jaeger"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
-	"github.com/opentracing/opentracing-go/log"
-	jaeger "github.com/uber/jaeger-client-go"
+	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/urfave/cli"
 )
 
-func getTracer() (opentracing.Tracer, io.Closer) {
-	if traceAddr := os.Getenv("JAEGER_TRACE"); traceAddr != "" {
-		tr, err := jaeger.NewUDPTransport(traceAddr, 0)
-		if err != nil {
-			panic(err)
-		}
-
-		// metricsFactory := prometheus.New()
-		return jaeger.NewTracer(
-			"buildctl",
-			jaeger.NewConstSampler(true),
-			jaeger.NewRemoteReporter(tr),
-		)
-	}
-
-	return opentracing.NoopTracer{}, &nopCloser{}
-}
-
-func AttachAppContext(app *cli.App) {
+func AttachAppContext(app *cli.App) error {
 	ctx := appcontext.Context()
 
-	tracer, closer := getTracer()
+	tracer, err := detect.OTTracer()
+	if err != nil {
+		return err
+	}
 
 	var span opentracing.Span
 
@@ -50,7 +35,7 @@ func AttachAppContext(app *cli.App) {
 				}
 
 				span = tracer.StartSpan(name)
-				span.LogFields(log.String("command", strings.Join(os.Args, " ")))
+				span.LogFields(otlog.String("command", strings.Join(os.Args, " ")))
 
 				ctx = opentracing.ContextWithSpan(ctx, span)
 
@@ -77,9 +62,9 @@ func AttachAppContext(app *cli.App) {
 		if span != nil {
 			span.Finish()
 		}
-		return closer.Close()
+		return detect.Shutdown(context.TODO())
 	}
-
+	return nil
 }
 
 func CommandContext(c *cli.Context) context.Context {
