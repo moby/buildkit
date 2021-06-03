@@ -86,12 +86,6 @@ func (s *sourceOp) CacheMap(ctx context.Context, g session.Group, index int) (*s
 }
 
 func (s *sourceOp) Exec(ctx context.Context, g session.Group, _ []solver.Result) (outputs []solver.Result, err error) {
-	err = s.w.ParallelismSem().Acquire(ctx, 1)
-	if err != nil {
-		return nil, err
-	}
-	defer s.w.ParallelismSem().Release(1)
-
 	src, err := s.instance(ctx)
 	if err != nil {
 		return nil, err

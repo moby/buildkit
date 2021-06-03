@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -88,8 +87,6 @@ type Worker struct {
 	SourceManager *source.Manager
 	imageWriter   *imageexporter.ImageWriter
 	ImageSource   *containerimage.Source
-
-	parallelismSem *semaphore.Weighted
 }
 
 // NewWorker instantiates a local worker
@@ -183,21 +180,12 @@ func NewWorker(opt WorkerOpt) (*Worker, error) {
 		opt.LeaseManager.Delete(context.TODO(), l)
 	}
 
-	maxParallelism := 20
-	maxParallelismStr := os.Getenv("EARTHLY_BUILDKIT_MAX_PARALLELISM")
-	if maxParallelismStr != "" {
-		maxParallelism, err = strconv.Atoi(maxParallelismStr)
-		if err != nil {
-			return nil, errors.Wrap(err, "parse EARTHLY_BUILDKIT_MAX_PARALLELISM")
-		}
-	}
 	return &Worker{
-		WorkerOpt:      opt,
-		CacheMgr:       cm,
-		SourceManager:  sm,
-		imageWriter:    iw,
-		ImageSource:    is,
-		parallelismSem: semaphore.NewWeighted(int64(maxParallelism)),
+		WorkerOpt:     opt,
+		CacheMgr:      cm,
+		SourceManager: sm,
+		imageWriter:   iw,
+		ImageSource:   is,
 	}, nil
 }
 
@@ -276,11 +264,11 @@ func (w *Worker) ResolveOp(v solver.Vertex, s frontend.FrontendLLBBridge, sm *se
 	if baseOp, ok := v.Sys().(*pb.Op); ok {
 		switch op := baseOp.Op.(type) {
 		case *pb.Op_Source:
-			return ops.NewSourceOp(v, op, baseOp.Platform, w.SourceManager, w.ParallelismSem(), sm, w)
+			return ops.NewSourceOp(v, op, baseOp.Platform, w.SourceManager, w.ParallelismSem, sm, w)
 		case *pb.Op_Exec:
-			return ops.NewExecOp(v, op, baseOp.Platform, w.CacheMgr, w.ParallelismSem(), sm, w.WorkerOpt.MetadataStore, w.WorkerOpt.Executor, w)
+			return ops.NewExecOp(v, op, baseOp.Platform, w.CacheMgr, w.ParallelismSem, sm, w.WorkerOpt.MetadataStore, w.WorkerOpt.Executor, w)
 		case *pb.Op_File:
-			return ops.NewFileOp(v, op, w.CacheMgr, w.ParallelismSem(), w.WorkerOpt.MetadataStore, w)
+			return ops.NewFileOp(v, op, w.CacheMgr, w.ParallelismSem, w.WorkerOpt.MetadataStore, w)
 		case *pb.Op_Build:
 			return ops.NewBuildOp(v, op, s, w)
 		default:
@@ -336,17 +324,7 @@ func (w *Worker) PruneCacheMounts(ctx context.Context, ids []string) error {
 	return nil
 }
 
-func (w *Worker) ParallelismSem() *semaphore.Weighted {
-	return w.parallelismSem
-}
-
 func (w *Worker) ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt, sm *session.Manager, g session.Group) (digest.Digest, []byte, error) {
-	err := w.parallelismSem.Acquire(ctx, 1)
-	if err != nil {
-		return "", nil, err
-	}
-	defer w.parallelismSem.Release(1)
-
 	return w.ImageSource.ResolveImageConfig(ctx, ref, opt, sm, g)
 }
 

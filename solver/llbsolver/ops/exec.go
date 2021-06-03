@@ -47,7 +47,7 @@ type execOp struct {
 	platform    *pb.Platform
 	numInputs   int
 	parallelism *semaphore.Weighted
-	sm        *session.Manager
+	sm          *session.Manager
 }
 
 func NewExecOp(v solver.Vertex, op *pb.Op_Exec, platform *pb.Platform, cm cache.Manager, parallelism *semaphore.Weighted, sm *session.Manager, md *metadata.Store, exec executor.Executor, w worker.Worker) (solver.Op, error) {
@@ -64,7 +64,7 @@ func NewExecOp(v solver.Vertex, op *pb.Op_Exec, platform *pb.Platform, cm cache.
 		w:           w,
 		platform:    platform,
 		parallelism: parallelism,
-		sm:        sm,
+		sm:          sm,
 	}, nil
 }
 
@@ -240,12 +240,6 @@ func addDefaultEnvvar(env []string, k, v string) []string {
 }
 
 func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Result) (results []solver.Result, err error) {
-	err = e.w.ParallelismSem().Acquire(ctx, 1)
-	if err != nil {
-		return nil, err
-	}
-	defer e.w.ParallelismSem().Release(1)
-
 	refs := make([]*worker.WorkerRef, len(inputs))
 	for i, inp := range inputs {
 		var ok bool
