@@ -319,6 +319,8 @@ func snapshotterFactory(commonRoot string, cfg config.OCIConfig, hosts docker.Re
 				grpc.WithInsecure(),
 				grpc.WithConnectParams(connParams),
 				grpc.WithContextDialer(dialer.ContextDialer),
+				grpc.WithInitialWindowSize(65535 * 32),
+				grpc.WithInitialConnWindowSize(65535 * 16),
 				grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(defaults.DefaultMaxRecvMsgSize)),
 				grpc.WithDefaultCallOptions(grpc.MaxCallSendMsgSize(defaults.DefaultMaxSendMsgSize)),
 			}

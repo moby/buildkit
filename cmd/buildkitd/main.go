@@ -214,6 +214,8 @@ func main() {
 		opts := []grpc.ServerOption{
 			grpc.UnaryInterceptor(unary), grpc.StreamInterceptor(stream),
 			grpc.MaxRecvMsgSize(maxMsgSize), grpc.MaxSendMsgSize(maxMsgSize),
+			grpc.InitialWindowSize(65535 * 32),
+			grpc.InitialConnWindowSize(65535 * 16),
 		}
 		server := grpc.NewServer(opts...)
 
