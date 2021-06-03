@@ -33,34 +33,37 @@ import (
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/sync/semaphore"
 )
 
 const execCacheType = "buildkit.exec.v0"
 
 type execOp struct {
-	op        *pb.ExecOp
-	cm        cache.Manager
-	mm        *mounts.MountManager
-	exec      executor.Executor
-	w         worker.Worker
-	platform  *pb.Platform
-	numInputs int
+	op          *pb.ExecOp
+	cm          cache.Manager
+	mm          *mounts.MountManager
+	exec        executor.Executor
+	w           worker.Worker
+	platform    *pb.Platform
+	numInputs   int
+	parallelism *semaphore.Weighted
 	sm        *session.Manager
 }
 
-func NewExecOp(v solver.Vertex, op *pb.Op_Exec, platform *pb.Platform, cm cache.Manager, sm *session.Manager, md *metadata.Store, exec executor.Executor, w worker.Worker) (solver.Op, error) {
+func NewExecOp(v solver.Vertex, op *pb.Op_Exec, platform *pb.Platform, cm cache.Manager, parallelism *semaphore.Weighted, sm *session.Manager, md *metadata.Store, exec executor.Executor, w worker.Worker) (solver.Op, error) {
 	if err := llbsolver.ValidateOp(&pb.Op{Op: op}); err != nil {
 		return nil, err
 	}
 	name := fmt.Sprintf("exec %s", strings.Join(op.Exec.Meta.Args, " "))
 	return &execOp{
-		op:        op.Exec,
-		mm:        mounts.NewMountManager(name, cm, sm, md),
-		cm:        cm,
-		exec:      exec,
-		numInputs: len(v.Inputs()),
-		w:         w,
-		platform:  platform,
+		op:          op.Exec,
+		mm:          mounts.NewMountManager(name, cm, sm, md),
+		cm:          cm,
+		exec:        exec,
+		numInputs:   len(v.Inputs()),
+		w:           w,
+		platform:    platform,
+		parallelism: parallelism,
 		sm:        sm,
 	}, nil
 }
@@ -252,7 +255,7 @@ func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 		}
 	}
 
-	p, err := gateway.PrepareMounts(ctx, e.mm, e.cm, g, e.op.Mounts, refs, func(m *pb.Mount, ref cache.ImmutableRef) (cache.MutableRef, error) {
+	p, err := gateway.PrepareMounts(ctx, e.mm, e.cm, g, e.op.Meta.Cwd, e.op.Mounts, refs, func(m *pb.Mount, ref cache.ImmutableRef) (cache.MutableRef, error) {
 		desc := fmt.Sprintf("mount %s from exec %s", m.Dest, strings.Join(e.op.Meta.Args, " "))
 		return e.cm.New(ctx, ref, g, cache.WithDescription(desc))
 	})
@@ -573,4 +576,17 @@ func parseExtraHosts(ips []*pb.HostIP) ([]executor.HostIP, error) {
 		}
 	}
 	return out, nil
+}
+
+func (e *execOp) Acquire(ctx context.Context) (solver.ReleaseFunc, error) {
+	if e.parallelism == nil {
+		return func() {}, nil
+	}
+	err := e.parallelism.Acquire(ctx, 1)
+	if err != nil {
+		return nil, err
+	}
+	return func() {
+		e.parallelism.Release(1)
+	}, nil
 }

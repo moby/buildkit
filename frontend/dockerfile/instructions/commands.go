@@ -272,6 +272,13 @@ type RunCommand struct {
 	FlagsUsed []string
 }
 
+func (c *RunCommand) Expand(expander SingleWordExpander) error {
+	if err := setMountState(c, expander); err != nil {
+		return err
+	}
+	return nil
+}
+
 // CmdCommand : CMD foo
 //
 // Set the default command to run in the container (which may be empty).

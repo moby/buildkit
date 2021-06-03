@@ -36,6 +36,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
+	"golang.org/x/sync/semaphore"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 )
@@ -276,7 +277,12 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 		},
 	}
 
-	opt, err := runc.NewWorkerOpt(common.config.Root, snFactory, cfg.Rootless, processMode, cfg.Labels, idmapping, nc, dns, cfg.Binary, cfg.ApparmorProfile)
+	var parallelismSem *semaphore.Weighted
+	if cfg.MaxParallelism > 0 {
+		parallelismSem = semaphore.NewWeighted(int64(cfg.MaxParallelism))
+	}
+
+	opt, err := runc.NewWorkerOpt(common.config.Root, snFactory, cfg.Rootless, processMode, cfg.Labels, idmapping, nc, dns, cfg.Binary, cfg.ApparmorProfile, parallelismSem)
 	if err != nil {
 		return nil, err
 	}

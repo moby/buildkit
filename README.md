@@ -86,6 +86,7 @@ BuildKit is used by the following projects:
 -   [the Sanic build tool](https://github.com/distributed-containers-inc/sanic)
 -   [vab](https://github.com/stellarproject/vab)
 -   [Rio](https://github.com/rancher/rio)
+-   [kim](https://github.com/rancher/kim)
 -   [PouchContainer](https://github.com/alibaba/pouch)
 -   [Docker buildx](https://github.com/docker/buildx)
 -   [Okteto Cloud](https://okteto.com/)
@@ -373,6 +374,20 @@ If you have multiple BuildKit daemon instances but you don't want to use registr
 consider client-side load balancing using consistent hashing.
 
 See [`./examples/kubernetes/consistenthash`](./examples/kubernetes/consistenthash).
+
+## Metadata
+
+To output build metadata such as the image digest, pass the `--metadata-file` flag.
+The metadata will be written as a JSON object to the specified file.
+The directory of the specified file must already exist and be writable.
+
+```
+buildctl build ... --metadata-file metadata.json
+```
+
+```
+{"containerimage.digest": "sha256:ea0cfb27fd41ea0405d3095880c1efa45710f5bcdddb7d7d5a7317ad4825ae14",...}
+```
 
 ## Systemd socket activation
 

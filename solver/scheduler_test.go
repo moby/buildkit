@@ -3511,6 +3511,10 @@ func (v *vertex) Exec(ctx context.Context, g session.Group, inputs []Result) (ou
 	return []Result{&dummyResult{id: identity.NewID(), value: v.opt.value}}, nil
 }
 
+func (v *vertex) Acquire(ctx context.Context) (ReleaseFunc, error) {
+	return func() {}, nil
+}
+
 func (v *vertex) makeCacheMap() *CacheMap {
 	m := &CacheMap{
 		Digest: digest.FromBytes([]byte(fmt.Sprintf("seed:%s", v.opt.cacheKeySeed))),
@@ -3556,6 +3560,10 @@ func (v *vertexConst) Exec(ctx context.Context, g session.Group, inputs []Result
 	return []Result{&dummyResult{id: identity.NewID(), intValue: v.value}}, nil
 }
 
+func (v *vertexConst) Acquire(ctx context.Context) (ReleaseFunc, error) {
+	return func() {}, nil
+}
+
 // vtxSum returns a vertex that ourputs sum of its inputs plus a constant
 func vtxSum(v int, opt vtxOpt) *vertexSum {
 	if opt.cacheKeySeed == "" {
@@ -3591,6 +3599,10 @@ func (v *vertexSum) Exec(ctx context.Context, g session.Group, inputs []Result) 
 	return []Result{&dummyResult{id: identity.NewID(), intValue: s}}, nil
 }
 
+func (v *vertexSum) Acquire(ctx context.Context) (ReleaseFunc, error) {
+	return func() {}, nil
+}
+
 func vtxSubBuild(g Edge, opt vtxOpt) *vertexSubBuild {
 	if opt.cacheKeySeed == "" {
 		opt.cacheKeySeed = fmt.Sprintf("sum-%s", identity.NewID())
@@ -3620,6 +3632,10 @@ func (v *vertexSubBuild) Exec(ctx context.Context, g session.Group, inputs []Res
 		return nil, err
 	}
 	return []Result{res}, nil
+}
+
+func (v *vertexSubBuild) Acquire(ctx context.Context) (ReleaseFunc, error) {
+	return func() {}, nil
 }
 
 //nolint:unused

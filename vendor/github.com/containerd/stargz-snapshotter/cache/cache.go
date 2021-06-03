@@ -24,7 +24,8 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/golang/groupcache/lru"
+	"github.com/containerd/stargz-snapshotter/util/lrucache"
+	"github.com/containerd/stargz-snapshotter/util/namedmutex"
 	"github.com/pkg/errors"
 )
 
@@ -34,15 +35,37 @@ const (
 )
 
 type DirectoryCacheConfig struct {
+
+	// Number of entries of LRU cache (default: 10).
+	// This won't be used when DataCache is specified.
 	MaxLRUCacheEntry int
-	MaxCacheFds      int
-	SyncAdd          bool
+
+	// Number of file descriptors to cache (default: 10).
+	// This won't be used when FdCache is specified.
+	MaxCacheFds int
+
+	// On Add, wait until the data is fully written to the cache directory.
+	SyncAdd bool
+
+	// DataCache is an on-memory cache of the data.
+	// OnEvicted will be overridden and replaced for internal use.
+	DataCache *lrucache.Cache
+
+	// FdCache is a cache for opened file descriptors.
+	// OnEvicted will be overridden and replaced for internal use.
+	FdCache *lrucache.Cache
+
+	// BufPool will be used for pooling bytes.Buffer.
+	BufPool *sync.Pool
 }
 
 // TODO: contents validation.
 
 type BlobCache interface {
+	// Add adds the passed data to the cache
 	Add(key string, p []byte, opts ...Option)
+
+	// FetchAt fetches the specified range of data from the cache
 	FetchAt(key string, offset int64, p []byte, opts ...Option) (n int, err error)
 }
 
@@ -64,33 +87,48 @@ func Direct() Option {
 }
 
 func NewDirectoryCache(directory string, config DirectoryCacheConfig) (BlobCache, error) {
-	maxEntry := config.MaxLRUCacheEntry
-	if maxEntry == 0 {
-		maxEntry = defaultMaxLRUCacheEntry
+	if !filepath.IsAbs(directory) {
+		return nil, fmt.Errorf("dir cache path must be an absolute path; got %q", directory)
 	}
-	maxFds := config.MaxCacheFds
-	if maxFds == 0 {
-		maxFds = defaultMaxCacheFds
-	}
-	if err := os.MkdirAll(directory, os.ModePerm); err != nil {
-		return nil, err
-	}
-	dc := &directoryCache{
-		cache:     newObjectCache(maxEntry),
-		fileCache: newObjectCache(maxFds),
-		wipLock:   &namedLock{},
-		directory: directory,
-		bufPool: sync.Pool{
+	bufPool := config.BufPool
+	if bufPool == nil {
+		bufPool = &sync.Pool{
 			New: func() interface{} {
 				return new(bytes.Buffer)
 			},
-		},
+		}
 	}
-	dc.cache.finalize = func(value interface{}) {
-		dc.bufPool.Put(value)
+	dataCache := config.DataCache
+	if dataCache == nil {
+		maxEntry := config.MaxLRUCacheEntry
+		if maxEntry == 0 {
+			maxEntry = defaultMaxLRUCacheEntry
+		}
+		dataCache = lrucache.New(maxEntry)
+		dataCache.OnEvicted = func(key string, value interface{}) {
+			bufPool.Put(value)
+		}
 	}
-	dc.fileCache.finalize = func(value interface{}) {
-		value.(*os.File).Close()
+	fdCache := config.FdCache
+	if fdCache == nil {
+		maxEntry := config.MaxCacheFds
+		if maxEntry == 0 {
+			maxEntry = defaultMaxCacheFds
+		}
+		fdCache = lrucache.New(maxEntry)
+		fdCache.OnEvicted = func(key string, value interface{}) {
+			value.(*os.File).Close()
+		}
+	}
+	if err := os.MkdirAll(directory, 0700); err != nil {
+		return nil, err
+	}
+	dc := &directoryCache{
+		cache:     dataCache,
+		fileCache: fdCache,
+		wipLock:   new(namedmutex.NamedMutex),
+		directory: directory,
+		bufPool:   bufPool,
 	}
 	dc.syncAdd = config.SyncAdd
 	return dc, nil
@@ -98,12 +136,12 @@ func NewDirectoryCache(directory string, config DirectoryCacheConfig) (BlobCache
 
 // directoryCache is a cache implementation which backend is a directory.
 type directoryCache struct {
-	cache     *objectCache
-	fileCache *objectCache
+	cache     *lrucache.Cache
+	fileCache *lrucache.Cache
 	directory string
-	wipLock   *namedLock
+	wipLock   *namedmutex.NamedMutex
 
-	bufPool sync.Pool
+	bufPool *sync.Pool
 
 	syncAdd bool
 }
@@ -116,7 +154,7 @@ func (dc *directoryCache) FetchAt(key string, offset int64, p []byte, opts ...Op
 
 	if !opt.direct {
 		// Get data from memory
-		if b, done, ok := dc.cache.get(key); ok {
+		if b, done, ok := dc.cache.Get(key); ok {
 			defer done()
 			data := b.(*bytes.Buffer).Bytes()
 			if int64(len(data)) < offset {
@@ -127,7 +165,7 @@ func (dc *directoryCache) FetchAt(key string, offset int64, p []byte, opts ...Op
 		}
 
 		// Get data from disk. If the file is already opened, use it.
-		if f, done, ok := dc.fileCache.get(key); ok {
+		if f, done, ok := dc.fileCache.Get(key); ok {
 			defer done()
 			return f.(*os.File).ReadAt(p, offset)
 		}
@@ -147,8 +185,14 @@ func (dc *directoryCache) FetchAt(key string, offset int64, p []byte, opts ...Op
 	// Cache the opened file for future use. If "direct" option is specified, this
 	// won't be done. This option is useful for preventing file cache from being
 	// polluted by data that won't be accessed immediately.
-	if opt.direct || !dc.fileCache.add(key, file) {
+	if opt.direct {
 		file.Close()
+	} else {
+		_, done, added := dc.fileCache.Add(key, file)
+		if !added {
+			file.Close() // file already exists in the cache. discard it.
+		}
+		done() // Release this immediately. This will be removed on eviction in lru cache.
 	}
 
 	// TODO: should we cache the entire file data on memory?
@@ -172,9 +216,11 @@ func (dc *directoryCache) Add(key string, p []byte, opts ...Option) {
 		b := dc.bufPool.Get().(*bytes.Buffer)
 		b.Reset()
 		b.Write(p)
-		if !dc.cache.add(key, b) {
-			dc.bufPool.Put(b) // Already exists. No need to cache.
+		_, done, added := dc.cache.Add(key, b)
+		if !added {
+			dc.bufPool.Put(b) // already exists in the cache. discard it.
 		}
+		done() // This will remain until it's evicted in lru cache.
 	}
 
 	// Cache the passed data to disk.
@@ -189,29 +235,29 @@ func (dc *directoryCache) Add(key string, p []byte, opts ...Option) {
 			wip = dc.wipPath(key)
 		)
 
-		dc.wipLock.lock(key)
+		dc.wipLock.Lock(key)
 		if _, err := os.Stat(wip); err == nil {
-			dc.wipLock.unlock(key)
+			dc.wipLock.Unlock(key)
 			return // Write in progress
 		}
 		if _, err := os.Stat(c); err == nil {
-			dc.wipLock.unlock(key)
+			dc.wipLock.Unlock(key)
 			return // Already exists.
 		}
 
 		// Write the contents to a temporary file
 		if err := os.MkdirAll(filepath.Dir(wip), os.ModePerm); err != nil {
 			fmt.Printf("Warning: Failed to Create blob cache directory %q: %v\n", c, err)
-			dc.wipLock.unlock(key)
+			dc.wipLock.Unlock(key)
 			return
 		}
 		wipfile, err := os.Create(wip)
 		if err != nil {
 			fmt.Printf("Warning: failed to prepare temp file for storing cache %q", key)
-			dc.wipLock.unlock(key)
+			dc.wipLock.Unlock(key)
 			return
 		}
-		dc.wipLock.unlock(key)
+		dc.wipLock.Unlock(key)
 
 		defer func() {
 			wipfile.Close()
@@ -241,8 +287,14 @@ func (dc *directoryCache) Add(key string, p []byte, opts ...Option) {
 		// Cache the opened file for future use. If "direct" option is specified, this
 		// won't be done. This option is useful for preventing file cache from being
 		// polluted by data that won't be accessed immediately.
-		if opt.direct || !dc.fileCache.add(key, file) {
+		if opt.direct {
 			file.Close()
+		} else {
+			_, done, added := dc.fileCache.Add(key, file)
+			if !added {
+				file.Close() // already exists in the cache. discard it.
+			}
+			done() // This will remain until it's evicted in lru cache.
 		}
 	}
 
@@ -259,109 +311,6 @@ func (dc *directoryCache) cachePath(key string) string {
 
 func (dc *directoryCache) wipPath(key string) string {
 	return filepath.Join(dc.directory, key[:2], "w", key)
-}
-
-type namedLock struct {
-	muMap  map[string]*sync.Mutex
-	refMap map[string]int
-
-	mu sync.Mutex
-}
-
-func (nl *namedLock) lock(name string) {
-	nl.mu.Lock()
-	if nl.muMap == nil {
-		nl.muMap = make(map[string]*sync.Mutex)
-	}
-	if nl.refMap == nil {
-		nl.refMap = make(map[string]int)
-	}
-	if _, ok := nl.muMap[name]; !ok {
-		nl.muMap[name] = &sync.Mutex{}
-	}
-	mu := nl.muMap[name]
-	nl.refMap[name]++
-	nl.mu.Unlock()
-	mu.Lock()
-}
-
-func (nl *namedLock) unlock(name string) {
-	nl.mu.Lock()
-	mu := nl.muMap[name]
-	nl.refMap[name]--
-	if nl.refMap[name] <= 0 {
-		delete(nl.muMap, name)
-		delete(nl.refMap, name)
-	}
-	nl.mu.Unlock()
-	mu.Unlock()
-}
-
-func newObjectCache(maxEntries int) *objectCache {
-	oc := &objectCache{
-		cache: lru.New(maxEntries),
-	}
-	oc.cache.OnEvicted = func(key lru.Key, value interface{}) {
-		value.(*object).release() // Decrease ref count incremented in add operation.
-	}
-	return oc
-}
-
-type objectCache struct {
-	cache    *lru.Cache
-	cacheMu  sync.Mutex
-	finalize func(interface{})
-}
-
-func (oc *objectCache) get(key string) (value interface{}, done func(), ok bool) {
-	oc.cacheMu.Lock()
-	defer oc.cacheMu.Unlock()
-	o, ok := oc.cache.Get(key)
-	if !ok {
-		return nil, nil, false
-	}
-	o.(*object).use()
-	return o.(*object).v, func() { o.(*object).release() }, true
-}
-
-func (oc *objectCache) add(key string, value interface{}) bool {
-	oc.cacheMu.Lock()
-	defer oc.cacheMu.Unlock()
-	if _, ok := oc.cache.Get(key); ok {
-		return false // TODO: should we swap the object?
-	}
-	o := &object{
-		v:        value,
-		finalize: oc.finalize,
-	}
-	o.use() // Keep this object having at least 1 ref count (will be decreased on eviction)
-	oc.cache.Add(key, o)
-	return true
-}
-
-type object struct {
-	v interface{}
-
-	refCounts int64
-	finalize  func(interface{})
-
-	mu sync.Mutex
-}
-
-func (o *object) use() {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	o.refCounts++
-}
-
-func (o *object) release() {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	o.refCounts--
-	if o.refCounts <= 0 && o.finalize != nil {
-		// nobody will refer this object
-		o.finalize(o.v)
-	}
 }
 
 func NewMemoryCache() BlobCache {

@@ -187,6 +187,8 @@ func docopy(ctx context.Context, src, dest string, action pb.FileActionCopy, u *
 
 	opt := []copy.Opt{
 		func(ci *copy.CopyInfo) {
+			ci.IncludePatterns = action.IncludePatterns
+			ci.ExcludePatterns = action.ExcludePatterns
 			ci.Chown = ch
 			ci.Utime = timestampToTime(action.Timestamp)
 			if m := int(action.Mode); m != -1 {

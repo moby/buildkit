@@ -77,6 +77,7 @@ type WorkerOpt struct {
 	IdentityMapping *idtools.IdentityMapping
 	LeaseManager    leases.Manager
 	GarbageCollect  func(context.Context) (gc.Stats, error)
+	ParallelismSem  *semaphore.Weighted
 }
 
 // Worker is a local worker instance with dedicated snapshotter, cache, and so on.
@@ -275,11 +276,11 @@ func (w *Worker) ResolveOp(v solver.Vertex, s frontend.FrontendLLBBridge, sm *se
 	if baseOp, ok := v.Sys().(*pb.Op); ok {
 		switch op := baseOp.Op.(type) {
 		case *pb.Op_Source:
-			return ops.NewSourceOp(v, op, baseOp.Platform, w.SourceManager, sm, w)
+			return ops.NewSourceOp(v, op, baseOp.Platform, w.SourceManager, w.ParallelismSem, sm, w)
 		case *pb.Op_Exec:
-			return ops.NewExecOp(v, op, baseOp.Platform, w.CacheMgr, sm, w.WorkerOpt.MetadataStore, w.WorkerOpt.Executor, w)
+			return ops.NewExecOp(v, op, baseOp.Platform, w.CacheMgr, w.ParallelismSem, sm, w.WorkerOpt.MetadataStore, w.WorkerOpt.Executor, w)
 		case *pb.Op_File:
-			return ops.NewFileOp(v, op, w.CacheMgr, w.WorkerOpt.MetadataStore, w)
+			return ops.NewFileOp(v, op, w.CacheMgr, w.ParallelismSem, w.WorkerOpt.MetadataStore, w)
 		case *pb.Op_Build:
 			return ops.NewBuildOp(v, op, s, w)
 		default:
