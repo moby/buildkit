@@ -14,7 +14,6 @@ import (
 	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/docker/distribution/reference"
-	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/imageutil"
@@ -55,7 +54,7 @@ func Push(ctx context.Context, sm *session.Manager, sid string, provider content
 	if insecure {
 		insecureTrue := true
 		httpTrue := true
-		hosts = resolver.NewRegistryConfig(map[string]config.RegistryConfig{
+		hosts = resolver.NewRegistryConfig(map[string]resolver.RegistryConfig{
 			reference.Domain(parsed): {
 				Insecure:  &insecureTrue,
 				PlainHTTP: &httpTrue,
