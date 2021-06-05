@@ -35,7 +35,11 @@ func NewSSHAgentProvider(confs []AgentConfig) (session.Attachable, error) {
 		}
 
 		if conf.Paths[0] == "" {
-			return nil, errors.Errorf("invalid empty ssh agent socket, make sure SSH_AUTH_SOCK is set")
+			p, err := getFallbackAgentPath()
+			if err != nil {
+				return nil, errors.Wrap(err, "invalid empty ssh agent socket")
+			}
+			conf.Paths[0] = p
 		}
 
 		src, err := toAgentSource(conf.Paths)
@@ -56,7 +60,20 @@ func NewSSHAgentProvider(confs []AgentConfig) (session.Attachable, error) {
 
 type source struct {
 	agent  agent.Agent
-	socket string
+	socket *socketDialer
+}
+
+type socketDialer struct {
+	path   string
+	dialer func(string) (net.Conn, error)
+}
+
+func (s socketDialer) Dial() (net.Conn, error) {
+	return s.dialer(s.path)
+}
+
+func (s socketDialer) String() string {
+	return s.path
 }
 
 type socketProvider struct {
@@ -94,8 +111,8 @@ func (sp *socketProvider) ForwardAgent(stream sshforward.SSH_ForwardAgentServer)
 
 	var a agent.Agent
 
-	if src.socket != "" {
-		conn, err := net.DialTimeout("unix", src.socket, time.Second)
+	if src.socket != nil {
+		conn, err := src.socket.Dial()
 		if err != nil {
 			return errors.Wrapf(err, "failed to connect to %s", src.socket)
 		}
@@ -124,21 +141,24 @@ func (sp *socketProvider) ForwardAgent(stream sshforward.SSH_ForwardAgentServer)
 
 func toAgentSource(paths []string) (source, error) {
 	var keys bool
-	var socket string
+	var socket *socketDialer
 	a := agent.NewKeyring()
 	for _, p := range paths {
-		if socket != "" {
+		if socket != nil {
 			return source{}, errors.New("only single socket allowed")
 		}
+
+		if parsed := getWindowsPipeDialer(p); parsed != nil {
+			socket = parsed
+			continue
+		}
+
 		fi, err := os.Stat(p)
 		if err != nil {
 			return source{}, errors.WithStack(err)
 		}
 		if fi.Mode()&os.ModeSocket > 0 {
-			if keys {
-				return source{}, errors.Errorf("invalid combination of keys and sockets")
-			}
-			socket = p
+			socket = &socketDialer{path: p, dialer: unixSocketDialer}
 			continue
 		}
 
@@ -160,7 +180,7 @@ func toAgentSource(paths []string) (source, error) {
 				if keys {
 					return source{}, errors.Errorf("invalid combination of keys and sockets")
 				}
-				socket = p
+				socket = &socketDialer{path: p, dialer: unixSocketDialer}
 				continue
 			}
 
@@ -173,11 +193,18 @@ func toAgentSource(paths []string) (source, error) {
 		keys = true
 	}
 
-	if socket != "" {
+	if socket != nil {
+		if keys {
+			return source{}, errors.Errorf("invalid combination of keys and sockets")
+		}
 		return source{socket: socket}, nil
 	}
 
 	return source{agent: a}, nil
+}
+
+func unixSocketDialer(path string) (net.Conn, error) {
+	return net.DialTimeout("unix", path, 2*time.Second)
 }
 
 func sockPair() (io.ReadWriteCloser, io.ReadWriteCloser) {
