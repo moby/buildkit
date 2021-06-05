@@ -165,7 +165,7 @@ github.com/coreos/go-systemd/v22/daemon
 github.com/cpuguy83/go-md2man/v2/md2man
 # github.com/davecgh/go-spew v1.1.1
 github.com/davecgh/go-spew/spew
-# github.com/docker/cli v20.10.5+incompatible
+# github.com/docker/cli v20.10.7+incompatible
 github.com/docker/cli/cli/config
 github.com/docker/cli/cli/config/configfile
 github.com/docker/cli/cli/config/credentials
@@ -175,7 +175,7 @@ github.com/docker/cli/cli/connhelper/commandconn
 github.com/docker/distribution/digestset
 github.com/docker/distribution/reference
 github.com/docker/distribution/registry/api/errcode
-# github.com/docker/docker v20.10.5+incompatible
+# github.com/docker/docker v20.10.7+incompatible
 github.com/docker/docker/api
 github.com/docker/docker/api/types
 github.com/docker/docker/api/types/blkiodev
@@ -226,7 +226,7 @@ github.com/docker/go-events
 github.com/docker/go-metrics
 # github.com/docker/go-units v0.4.0
 github.com/docker/go-units
-# github.com/docker/libnetwork v0.8.0-dev.2.0.20201215162534-fa125a3512ee
+# github.com/docker/libnetwork v0.8.0-dev.2.0.20210525090646-64b7a4574d14
 github.com/docker/libnetwork/ipamutils
 github.com/docker/libnetwork/resolvconf
 github.com/docker/libnetwork/resolvconf/dns
@@ -275,7 +275,7 @@ github.com/hanwen/go-fuse/v2/splice
 github.com/hashicorp/go-immutable-radix
 # github.com/hashicorp/golang-lru v0.5.3
 github.com/hashicorp/golang-lru/simplelru
-# github.com/ishidawataru/sctp v0.0.0-20191218070446-00ab2ac2db07
+# github.com/ishidawataru/sctp v0.0.0-20210226210310-f2269e66cdee
 github.com/ishidawataru/sctp
 # github.com/jaguilar/vt100 v0.0.0-20150826170717-2703a27b14ea => github.com/tonistiigi/vt100 v0.0.0-20190402012908-ad4c4a574305
 github.com/jaguilar/vt100
