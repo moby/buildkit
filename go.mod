@@ -16,11 +16,11 @@ require (
 	github.com/containerd/stargz-snapshotter v0.5.0
 	github.com/containerd/typeurl v1.0.2
 	github.com/coreos/go-systemd/v22 v22.1.0
-	github.com/docker/cli v20.10.5+incompatible
+	github.com/docker/cli v20.10.7+incompatible
 	github.com/docker/distribution v2.7.1+incompatible
-	github.com/docker/docker v20.10.5+incompatible
+	github.com/docker/docker v20.10.7+incompatible
 	github.com/docker/go-connections v0.4.0
-	github.com/docker/libnetwork v0.8.0-dev.2.0.20201215162534-fa125a3512ee
+	github.com/docker/libnetwork v0.8.0-dev.2.0.20210525090646-64b7a4574d14
 	github.com/gofrs/flock v0.7.3
 	github.com/gogo/googleapis v1.4.0
 	github.com/gogo/protobuf v1.3.2
@@ -34,7 +34,7 @@ require (
 	github.com/hashicorp/go-immutable-radix v1.0.0
 	github.com/hashicorp/golang-lru v0.5.3
 	github.com/hashicorp/uuid v0.0.0-20160311170451-ebb0a03e909c // indirect
-	github.com/ishidawataru/sctp v0.0.0-20191218070446-00ab2ac2db07 // indirect
+	github.com/ishidawataru/sctp v0.0.0-20210226210310-f2269e66cdee // indirect
 	github.com/jaguilar/vt100 v0.0.0-20150826170717-2703a27b14ea
 	github.com/mitchellh/hashstructure v1.0.0
 	github.com/moby/locker v1.0.1
