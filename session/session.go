@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"net"
+	"strings"
 
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/moby/buildkit/identity"
@@ -56,7 +57,7 @@ func NewSession(ctx context.Context, name, sharedKey string) (*Session, error) {
 
 	if span := trace.SpanFromContext(ctx); span != nil {
 		tracer := span.Tracer()
-		unary = append(unary, otelgrpc.UnaryServerInterceptor(otelgrpc.WithTracerProvider(constTracerProvider{tracer: tracer}), otelgrpc.WithPropagators(propagators)))
+		unary = append(unary, filterServer(otelgrpc.UnaryServerInterceptor(otelgrpc.WithTracerProvider(constTracerProvider{tracer: tracer}), otelgrpc.WithPropagators(propagators))))
 		stream = append(stream, otelgrpc.StreamServerInterceptor(otelgrpc.WithTracerProvider(constTracerProvider{tracer: tracer}), otelgrpc.WithPropagators(propagators)))
 	}
 
@@ -155,10 +156,21 @@ func MethodURL(s, m string) string {
 	return "/" + s + "/" + m
 }
 
-// func traceFilter() otgrpc.Option {
-// 	return otgrpc.IncludingSpans(func(parentSpanCtx opentracing.SpanContext,
-// 		method string,
-// 		req, resp interface{}) bool {
-// 		return !strings.HasSuffix(method, "Health/Check")
-// 	})
-// }
+// updates needed in opentelemetry-contrib to avoid this
+func filterServer(intercept grpc.UnaryServerInterceptor) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+		if strings.HasSuffix(info.FullMethod, "Health/Check") {
+			return handler(ctx, req)
+		}
+		return intercept(ctx, req, info, handler)
+	}
+}
+
+func filterClient(intercept grpc.UnaryClientInterceptor) grpc.UnaryClientInterceptor {
+	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		if strings.HasSuffix(method, "Health/Check") {
+			return invoker(ctx, method, req, reply, cc, opts...)
+		}
+		return intercept(ctx, method, req, reply, cc, invoker, opts...)
+	}
+}
