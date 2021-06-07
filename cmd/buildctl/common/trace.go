@@ -3,26 +3,24 @@ package common
 import (
 	"context"
 	"os"
-	"strings"
 
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/moby/buildkit/util/tracing/detect"
-	_ "github.com/moby/buildkit/util/tracing/detect/jaeger"
-	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/opentracing/opentracing-go/ext"
-	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/urfave/cli"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func AttachAppContext(app *cli.App) error {
 	ctx := appcontext.Context()
 
-	tracer, err := detect.OTTracer()
+	tracer, err := detect.Tracer()
 	if err != nil {
 		return err
 	}
 
-	var span opentracing.Span
+	var span trace.Span
 
 	for i, cmd := range app.Commands {
 		func(before cli.BeforeFunc) {
@@ -34,10 +32,8 @@ func AttachAppContext(app *cli.App) error {
 					}
 				}
 
-				span = tracer.StartSpan(name)
-				span.LogFields(otlog.String("command", strings.Join(os.Args, " ")))
-
-				ctx = opentracing.ContextWithSpan(ctx, span)
+				ctx, span = tracer.Start(ctx, name)
+				span.SetAttributes(attribute.KeyValue{Key: "command", Value: attribute.ArrayValue(os.Args)})
 
 				clicontext.App.Metadata["context"] = ctx
 				return nil
@@ -47,7 +43,7 @@ func AttachAppContext(app *cli.App) error {
 
 	app.ExitErrHandler = func(clicontext *cli.Context, err error) {
 		if span != nil {
-			ext.Error.Set(span, true)
+			span.SetStatus(codes.Error, err.Error())
 		}
 		cli.HandleExitCoder(err)
 	}
@@ -60,7 +56,7 @@ func AttachAppContext(app *cli.App) error {
 			}
 		}
 		if span != nil {
-			span.Finish()
+			span.End()
 		}
 		return detect.Shutdown(context.TODO())
 	}
@@ -69,11 +65,4 @@ func AttachAppContext(app *cli.App) error {
 
 func CommandContext(c *cli.Context) context.Context {
 	return c.App.Metadata["context"].(context.Context)
-}
-
-type nopCloser struct {
-}
-
-func (*nopCloser) Close() error {
-	return nil
 }

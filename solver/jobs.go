@@ -14,8 +14,8 @@ import (
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/tracing"
 	digest "github.com/opencontainers/go-digest"
-	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // ResolveOpFunc finds an Op implementation for a Vertex
@@ -50,7 +50,7 @@ type state struct {
 	mpw     *progress.MultiWriter
 	allPw   map[progress.Writer]struct{}
 	mspan   *tracing.MultiSpan
-	allSpan map[opentracing.Span]struct{}
+	allSpan map[trace.Span]struct{}
 
 	vtx          Vertex
 	clientVertex client.Vertex
@@ -210,7 +210,7 @@ func (sb *subBuilder) Build(ctx context.Context, e Edge) (CachedResult, error) {
 }
 
 func (sb *subBuilder) InContext(ctx context.Context, f func(context.Context, session.Group) error) error {
-	return f(opentracing.ContextWithSpan(progress.WithProgress(ctx, sb.mpw), sb.mspan), sb.state)
+	return f(trace.ContextWithSpan(progress.WithProgress(ctx, sb.mpw), sb.mspan), sb.state)
 }
 
 func (sb *subBuilder) EachValue(ctx context.Context, key string, fn func(interface{}) error) error {
@@ -228,7 +228,7 @@ type Job struct {
 	list   *Solver
 	pr     *progress.MultiReader
 	pw     progress.Writer
-	span   opentracing.Span
+	span   trace.Span
 	values sync.Map
 	id     string
 
@@ -358,7 +358,7 @@ func (jl *Solver) loadUnlocked(v, parent Vertex, j *Job, cache map[Vertex]Vertex
 			parents:      map[digest.Digest]struct{}{},
 			childVtx:     map[digest.Digest]struct{}{},
 			allPw:        map[progress.Writer]struct{}{},
-			allSpan:      map[opentracing.Span]struct{}{},
+			allSpan:      map[trace.Span]struct{}{},
 			mpw:          progress.NewMultiWriter(progress.WithMetadata("vertex", dgst)),
 			mspan:        tracing.NewMultiSpan(),
 			vtx:          v,
@@ -435,12 +435,13 @@ func (jl *Solver) NewJob(id string) (*Job, error) {
 	pr, ctx, progressCloser := progress.NewContext(context.Background())
 	pw, _, _ := progress.FromContext(ctx) // TODO: expose progress.Pipe()
 
+	_, span := trace.NewNoopTracerProvider().Tracer("").Start(ctx, "")
 	j := &Job{
 		list:           jl,
 		pr:             progress.NewMultiReader(pr),
 		pw:             pw,
 		progressCloser: progressCloser,
-		span:           (&opentracing.NoopTracer{}).StartSpan(""),
+		span:           span,
 		id:             id,
 	}
 	jl.jobs[id] = j
@@ -492,7 +493,7 @@ func (jl *Solver) deleteIfUnreferenced(k digest.Digest, st *state) {
 }
 
 func (j *Job) Build(ctx context.Context, e Edge) (CachedResult, error) {
-	if span := opentracing.SpanFromContext(ctx); span != nil {
+	if span := trace.SpanFromContext(ctx); span != nil {
 		j.span = span
 	}
 
@@ -613,7 +614,7 @@ func (s *sharedOp) Cache() CacheManager {
 }
 
 func (s *sharedOp) LoadCache(ctx context.Context, rec *CacheRecord) (Result, error) {
-	ctx = opentracing.ContextWithSpan(progress.WithProgress(ctx, s.st.mpw), s.st.mspan)
+	ctx = trace.ContextWithSpan(progress.WithProgress(ctx, s.st.mpw), s.st.mspan)
 	// no cache hit. start evaluating the node
 	span, ctx := tracing.StartSpan(ctx, "load cache: "+s.st.vtx.Name())
 	notifyStarted(ctx, &s.st.clientVertex, true)
@@ -650,7 +651,7 @@ func (s *sharedOp) CalcSlowCache(ctx context.Context, index Index, p PreprocessF
 			if st == nil {
 				return nil, errors.Errorf("failed to get state for index %d on %v", index, s.st.vtx.Name())
 			}
-			ctx2 := opentracing.ContextWithSpan(progress.WithProgress(ctx, st.mpw), st.mspan)
+			ctx2 := trace.ContextWithSpan(progress.WithProgress(ctx, st.mpw), st.mspan)
 			err = p(ctx2, res, st)
 			if err != nil {
 				f = nil
@@ -660,7 +661,7 @@ func (s *sharedOp) CalcSlowCache(ctx context.Context, index Index, p PreprocessF
 
 		var key digest.Digest
 		if f != nil {
-			ctx = opentracing.ContextWithSpan(progress.WithProgress(ctx, s.st.mpw), s.st.mspan)
+			ctx = trace.ContextWithSpan(progress.WithProgress(ctx, s.st.mpw), s.st.mspan)
 			key, err = f(withAncestorCacheOpts(ctx, s.st), res, s.st)
 		}
 		if err != nil {
@@ -685,7 +686,7 @@ func (s *sharedOp) CalcSlowCache(ctx context.Context, index Index, p PreprocessF
 		return key, err
 	})
 	if err != nil {
-		ctx = opentracing.ContextWithSpan(progress.WithProgress(ctx, s.st.mpw), s.st.mspan)
+		ctx = trace.ContextWithSpan(progress.WithProgress(ctx, s.st.mpw), s.st.mspan)
 		notifyStarted(ctx, &s.st.clientVertex, false)
 		notifyCompleted(ctx, &s.st.clientVertex, err, false)
 		return "", err
@@ -709,7 +710,7 @@ func (s *sharedOp) CacheMap(ctx context.Context, index int) (resp *cacheMapResp,
 		if s.cacheErr != nil {
 			return nil, s.cacheErr
 		}
-		ctx = opentracing.ContextWithSpan(progress.WithProgress(ctx, s.st.mpw), s.st.mspan)
+		ctx = trace.ContextWithSpan(progress.WithProgress(ctx, s.st.mpw), s.st.mspan)
 		ctx = withAncestorCacheOpts(ctx, s.st)
 		if len(s.st.vtx.Inputs()) == 0 {
 			// no cache hit. start evaluating the node
@@ -772,7 +773,7 @@ func (s *sharedOp) Exec(ctx context.Context, inputs []Result) (outputs []Result,
 		}
 		defer release()
 
-		ctx = opentracing.ContextWithSpan(progress.WithProgress(ctx, s.st.mpw), s.st.mspan)
+		ctx = trace.ContextWithSpan(progress.WithProgress(ctx, s.st.mpw), s.st.mspan)
 		ctx = withAncestorCacheOpts(ctx, s.st)
 
 		// no cache hit. start evaluating the node

@@ -22,7 +22,7 @@ func jaegerExporter() (sdktrace.SpanExporter, error) {
 
 	endpoint := envOr("OTEL_EXPORTER_JAEGER_ENDPOINT", "http://localhost:14250")
 	host := envOr("OTEL_EXPORTER_JAEGER_HOST", "localhost")
-	port := envOr("OTEL_EXPORTER_JAEGER_PORT", "6832")
+	port := envOr("OTEL_EXPORTER_JAEGER_PORT", "6831")
 	var isEndpoint bool
 
 	// JAEGER_TRACE is not env defined by opentelemetry spec but buildkit backward compatibility

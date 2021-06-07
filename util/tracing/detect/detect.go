@@ -6,9 +6,7 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
-	otbridge "go.opentelemetry.io/otel/bridge/opentracing"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/semconv"
@@ -20,8 +18,6 @@ type ExporterDetector func() (sdktrace.SpanExporter, error)
 var detectors map[string]ExporterDetector
 var once sync.Once
 var tracer trace.Tracer
-var otTracer opentracing.Tracer
-var exporter sdktrace.SpanExporter
 var closers []func(context.Context) error
 var err error
 
@@ -58,7 +54,6 @@ func detectExporter() (sdktrace.SpanExporter, error) {
 func detect() error {
 	tp := trace.NewNoopTracerProvider()
 	tracer = tp.Tracer("")
-	otTracer = opentracing.NoopTracer{}
 
 	exp, err := detectExporter()
 	if err != nil {
@@ -73,23 +68,18 @@ func detect() error {
 	if err != nil {
 		return err
 	}
-	exporter = exp
 
 	sp := sdktrace.NewBatchSpanProcessor(exp)
 
-	closers = append(closers, sp.Shutdown)
-
-	tp = sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sp), sdktrace.WithResource(res))
+	sdktp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sp), sdktrace.WithResource(res))
+	closers = append(closers, sdktp.Shutdown)
+	tp = sdktp
 	tracer = tp.Tracer("")
-
-	bt, wt := otbridge.NewTracerPair(tracer)
-	otTracer = bt
-	tracer = wt.Tracer("")
 
 	return nil
 }
 
-func tracers() (trace.Tracer, opentracing.Tracer, error) {
+func Tracer() (trace.Tracer, error) {
 	once.Do(func() {
 		if err1 := detect(); err1 != nil {
 			err = err1
@@ -97,19 +87,9 @@ func tracers() (trace.Tracer, opentracing.Tracer, error) {
 	})
 	b, _ := strconv.ParseBool(os.Getenv("OTEL_INGORE_ERROR"))
 	if err != nil && !b {
-		return nil, nil, err
+		return nil, err
 	}
-	return tracer, otTracer, nil
-}
-
-func Tracer() (trace.Tracer, error) {
-	t, _, err := tracers()
-	return t, err
-}
-
-func OTTracer() (opentracing.Tracer, error) {
-	_, t, err := tracers()
-	return t, err
+	return tracer, nil
 }
 
 func Shutdown(ctx context.Context) error {
