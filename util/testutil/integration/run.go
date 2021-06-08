@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/containerd/containerd/content"
+	"github.com/containerd/containerd/remotes/docker"
 	"github.com/gofrs/flock"
 	"github.com/moby/buildkit/util/contentutil"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -216,6 +217,13 @@ func copyImagesLocal(t *testing.T, host string, images map[string]string) error 
 				return err
 			}
 		}
+
+		// already exists check
+		_, _, err = docker.NewResolver(docker.ResolverOptions{}).Resolve(context.TODO(), host+"/"+to)
+		if err == nil {
+			continue
+		}
+
 		ingester, err := contentutil.IngesterFromRef(host + "/" + to)
 		if err != nil {
 			return err
