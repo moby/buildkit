@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -169,6 +170,9 @@ func (gs *gitSourceHandler) shaToCacheKey(sha string) string {
 	key := sha
 	if gs.src.KeepGitDir {
 		key += ".git"
+	}
+	if gs.src.Subdir != "" {
+		key += ":" + gs.src.Subdir
 	}
 	return key
 }
@@ -480,7 +484,12 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 		}
 	}()
 
-	if gs.src.KeepGitDir {
+	subdir := path.Clean(gs.src.Subdir)
+	if subdir == "/" {
+		subdir = "."
+	}
+
+	if gs.src.KeepGitDir && subdir == "." {
 		checkoutDirGit := filepath.Join(checkoutDir, ".git")
 		if err := os.MkdirAll(checkoutDir, 0711); err != nil {
 			return nil, err
@@ -513,9 +522,43 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 		}
 		gitDir = checkoutDirGit
 	} else {
-		_, err = gitWithinDir(ctx, gitDir, checkoutDir, sock, knownHosts, nil, "checkout", ref, "--", ".")
+		cd := checkoutDir
+		if subdir != "." {
+			cd, err = ioutil.TempDir(cd, "checkout")
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to create temporary checkout dir")
+			}
+		}
+		_, err = gitWithinDir(ctx, gitDir, cd, sock, knownHosts, nil, "checkout", ref, "--", ".")
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to checkout remote %s", redactCredentials(gs.src.Remote))
+		}
+		if subdir != "." {
+			d, err := os.Open(filepath.Join(cd, subdir))
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to open subdir %v", subdir)
+			}
+			defer func() {
+				if d != nil {
+					d.Close()
+				}
+			}()
+			names, err := d.Readdirnames(0)
+			if err != nil {
+				return nil, err
+			}
+			for _, n := range names {
+				if err := os.Rename(filepath.Join(cd, subdir, n), filepath.Join(checkoutDir, n)); err != nil {
+					return nil, err
+				}
+			}
+			if err := d.Close(); err != nil {
+				return nil, err
+			}
+			d = nil // reset defer
+			if err := os.RemoveAll(cd); err != nil {
+				return nil, err
+			}
 		}
 	}
 

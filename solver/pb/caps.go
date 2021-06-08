@@ -25,6 +25,7 @@ const (
 	CapSourceGitHTTPAuth      apicaps.CapID = "source.git.httpauth"
 	CapSourceGitKnownSSHHosts apicaps.CapID = "source.git.knownsshhosts"
 	CapSourceGitMountSSHSock  apicaps.CapID = "source.git.mountsshsock"
+	CapSourceGitSubdir        apicaps.CapID = "source.git.subdir"
 
 	CapSourceHTTP         apicaps.CapID = "source.http"
 	CapSourceHTTPChecksum apicaps.CapID = "source.http.checksum"
@@ -149,6 +150,12 @@ func init() {
 
 	Caps.Init(apicaps.Cap{
 		ID:      CapSourceGitMountSSHSock,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapSourceGitSubdir,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})
