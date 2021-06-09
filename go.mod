@@ -8,14 +8,14 @@ require (
 	github.com/Microsoft/hcsshim v0.8.16
 	github.com/codahale/hdrhistogram v0.0.0-20160425231609-f8ad88b59a58 // indirect
 	github.com/containerd/console v1.0.2
-	github.com/containerd/containerd v1.5.0
+	github.com/containerd/containerd v1.5.2
 	github.com/containerd/continuity v0.1.0
 	github.com/containerd/fuse-overlayfs-snapshotter v1.0.2
 	github.com/containerd/go-cni v1.0.2
 	github.com/containerd/go-runc v1.0.0
-	github.com/containerd/stargz-snapshotter v0.5.0
+	github.com/containerd/stargz-snapshotter v0.6.4
 	github.com/containerd/typeurl v1.0.2
-	github.com/coreos/go-systemd/v22 v22.1.0
+	github.com/coreos/go-systemd/v22 v22.3.2
 	github.com/docker/cli v20.10.7+incompatible
 	github.com/docker/distribution v2.7.1+incompatible
 	github.com/docker/docker v20.10.7+incompatible
@@ -50,7 +50,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/pkg/profile v1.5.0
 	github.com/serialx/hashring v0.0.0-20190422032157-8b2912629002
-	github.com/sirupsen/logrus v1.7.0
+	github.com/sirupsen/logrus v1.8.1
 	github.com/stretchr/testify v1.7.0
 	github.com/tonistiigi/fsutil v0.0.0-20210525040343-5dfbf5db66b9
 	github.com/tonistiigi/units v0.0.0-20180711220420-6950e57a87ea

@@ -20,12 +20,14 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sync"
 
 	"github.com/containerd/stargz-snapshotter/util/lrucache"
 	"github.com/containerd/stargz-snapshotter/util/namedmutex"
+	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 )
 
@@ -61,12 +63,32 @@ type DirectoryCacheConfig struct {
 
 // TODO: contents validation.
 
+// BlobCache represents a cache for bytes data
 type BlobCache interface {
-	// Add adds the passed data to the cache
-	Add(key string, p []byte, opts ...Option)
+	// Add returns a writer to add contents to cache
+	Add(key string, opts ...Option) (Writer, error)
 
-	// FetchAt fetches the specified range of data from the cache
-	FetchAt(key string, offset int64, p []byte, opts ...Option) (n int, err error)
+	// Get returns a reader to read the specified contents
+	// from cache
+	Get(key string, opts ...Option) (Reader, error)
+
+	// Close closes the cache
+	Close() error
+}
+
+// Reader provides the data cached.
+type Reader interface {
+	io.ReaderAt
+	Close() error
+}
+
+// Writer enables the client to cache byte data. Commit() must be
+// called after data is fully written to Write(). To abort the written
+// data, Abort() must be called.
+type Writer interface {
+	io.WriteCloser
+	Commit() error
+	Abort() error
 }
 
 type cacheOpt struct {
@@ -123,12 +145,17 @@ func NewDirectoryCache(directory string, config DirectoryCacheConfig) (BlobCache
 	if err := os.MkdirAll(directory, 0700); err != nil {
 		return nil, err
 	}
+	wipdir := filepath.Join(directory, "wip")
+	if err := os.MkdirAll(wipdir, 0700); err != nil {
+		return nil, err
+	}
 	dc := &directoryCache{
-		cache:     dataCache,
-		fileCache: fdCache,
-		wipLock:   new(namedmutex.NamedMutex),
-		directory: directory,
-		bufPool:   bufPool,
+		cache:        dataCache,
+		fileCache:    fdCache,
+		wipLock:      new(namedmutex.NamedMutex),
+		directory:    directory,
+		wipDirectory: wipdir,
+		bufPool:      bufPool,
 	}
 	dc.syncAdd = config.SyncAdd
 	return dc, nil
@@ -136,17 +163,25 @@ func NewDirectoryCache(directory string, config DirectoryCacheConfig) (BlobCache
 
 // directoryCache is a cache implementation which backend is a directory.
 type directoryCache struct {
-	cache     *lrucache.Cache
-	fileCache *lrucache.Cache
-	directory string
-	wipLock   *namedmutex.NamedMutex
+	cache        *lrucache.Cache
+	fileCache    *lrucache.Cache
+	wipDirectory string
+	directory    string
+	wipLock      *namedmutex.NamedMutex
 
 	bufPool *sync.Pool
 
 	syncAdd bool
+
+	closed   bool
+	closedMu sync.Mutex
 }
 
-func (dc *directoryCache) FetchAt(key string, offset int64, p []byte, opts ...Option) (n int, err error) {
+func (dc *directoryCache) Get(key string, opts ...Option) (Reader, error) {
+	if dc.isClosed() {
+		return nil, fmt.Errorf("cache is already closed")
+	}
+
 	opt := &cacheOpt{}
 	for _, o := range opts {
 		opt = o(opt)
@@ -155,19 +190,24 @@ func (dc *directoryCache) FetchAt(key string, offset int64, p []byte, opts ...Op
 	if !opt.direct {
 		// Get data from memory
 		if b, done, ok := dc.cache.Get(key); ok {
-			defer done()
-			data := b.(*bytes.Buffer).Bytes()
-			if int64(len(data)) < offset {
-				return 0, fmt.Errorf("invalid offset %d exceeds chunk size %d",
-					offset, len(data))
-			}
-			return copy(p, data[offset:]), nil
+			return &reader{
+				ReaderAt: bytes.NewReader(b.(*bytes.Buffer).Bytes()),
+				closeFunc: func() error {
+					done()
+					return nil
+				},
+			}, nil
 		}
 
 		// Get data from disk. If the file is already opened, use it.
 		if f, done, ok := dc.fileCache.Get(key); ok {
-			defer done()
-			return f.(*os.File).ReadAt(p, offset)
+			return &reader{
+				ReaderAt: f.(*os.File),
+				closeFunc: func() error {
+					done() // file will be closed when it's evicted from the cache
+					return nil
+				},
+			}, nil
 		}
 	}
 
@@ -176,168 +216,219 @@ func (dc *directoryCache) FetchAt(key string, offset int64, p []byte, opts ...Op
 	//       or simply report the cache miss?
 	file, err := os.Open(dc.cachePath(key))
 	if err != nil {
-		return 0, errors.Wrapf(err, "failed to open blob file for %q", key)
-	}
-	if n, err = file.ReadAt(p, offset); err == io.EOF {
-		err = nil
+		return nil, errors.Wrapf(err, "failed to open blob file for %q", key)
 	}
 
-	// Cache the opened file for future use. If "direct" option is specified, this
-	// won't be done. This option is useful for preventing file cache from being
-	// polluted by data that won't be accessed immediately.
+	// If "direct" option is specified, do not cache the file on memory.
+	// This option is useful for preventing memory cache from being polluted by data
+	// that won't be accessed immediately.
 	if opt.direct {
-		file.Close()
-	} else {
-		_, done, added := dc.fileCache.Add(key, file)
-		if !added {
-			file.Close() // file already exists in the cache. discard it.
-		}
-		done() // Release this immediately. This will be removed on eviction in lru cache.
+		return &reader{
+			ReaderAt:  file,
+			closeFunc: func() error { return file.Close() },
+		}, nil
 	}
 
 	// TODO: should we cache the entire file data on memory?
 	//       but making I/O (possibly huge) on every fetching
 	//       might be costly.
-
-	return n, err
+	return &reader{
+		ReaderAt: file,
+		closeFunc: func() error {
+			_, done, added := dc.fileCache.Add(key, file)
+			defer done() // Release it immediately. Cleaned up on eviction.
+			if !added {
+				return file.Close() // file already exists in the cache. close it.
+			}
+			return nil
+		},
+	}, nil
 }
 
-func (dc *directoryCache) Add(key string, p []byte, opts ...Option) {
+func (dc *directoryCache) Add(key string, opts ...Option) (Writer, error) {
+	if dc.isClosed() {
+		return nil, fmt.Errorf("cache is already closed")
+	}
+
 	opt := &cacheOpt{}
 	for _, o := range opts {
 		opt = o(opt)
 	}
 
-	if !opt.direct {
-		// Cache the passed data on memory. This enables to serve this data even
-		// during writing it to the disk. If "direct" option is specified, this
-		// won't be done. This option is useful for preventing memory cache from being
-		// polluted by data that won't be accessed immediately.
-		b := dc.bufPool.Get().(*bytes.Buffer)
-		b.Reset()
-		b.Write(p)
-		_, done, added := dc.cache.Add(key, b)
-		if !added {
-			dc.bufPool.Put(b) // already exists in the cache. discard it.
-		}
-		done() // This will remain until it's evicted in lru cache.
+	wip, err := dc.wipFile(key)
+	if err != nil {
+		return nil, err
 	}
-
-	// Cache the passed data to disk.
-	b2 := dc.bufPool.Get().(*bytes.Buffer)
-	b2.Reset()
-	b2.Write(p)
-	addFunc := func() {
-		defer dc.bufPool.Put(b2)
-
-		var (
-			c   = dc.cachePath(key)
-			wip = dc.wipPath(key)
-		)
-
-		dc.wipLock.Lock(key)
-		if _, err := os.Stat(wip); err == nil {
-			dc.wipLock.Unlock(key)
-			return // Write in progress
-		}
-		if _, err := os.Stat(c); err == nil {
-			dc.wipLock.Unlock(key)
-			return // Already exists.
-		}
-
-		// Write the contents to a temporary file
-		if err := os.MkdirAll(filepath.Dir(wip), os.ModePerm); err != nil {
-			fmt.Printf("Warning: Failed to Create blob cache directory %q: %v\n", c, err)
-			dc.wipLock.Unlock(key)
-			return
-		}
-		wipfile, err := os.Create(wip)
-		if err != nil {
-			fmt.Printf("Warning: failed to prepare temp file for storing cache %q", key)
-			dc.wipLock.Unlock(key)
-			return
-		}
-		dc.wipLock.Unlock(key)
-
-		defer func() {
-			wipfile.Close()
-			os.Remove(wipfile.Name())
-		}()
-		want := b2.Len()
-		if _, err := io.CopyN(wipfile, b2, int64(want)); err != nil {
-			fmt.Printf("Warning: failed to write cache: %v\n", err)
-			return
-		}
-
-		// Commit the cache contents
-		if err := os.MkdirAll(filepath.Dir(c), os.ModePerm); err != nil {
-			fmt.Printf("Warning: Failed to Create blob cache directory %q: %v\n", c, err)
-			return
-		}
-		if err := os.Rename(wipfile.Name(), c); err != nil {
-			fmt.Printf("Warning: failed to commit cache to %q: %v\n", c, err)
-			return
-		}
-		file, err := os.Open(c)
-		if err != nil {
-			fmt.Printf("Warning: failed to open cache on %q: %v\n", c, err)
-			return
-		}
-
-		// Cache the opened file for future use. If "direct" option is specified, this
-		// won't be done. This option is useful for preventing file cache from being
-		// polluted by data that won't be accessed immediately.
-		if opt.direct {
-			file.Close()
-		} else {
-			_, done, added := dc.fileCache.Add(key, file)
-			if !added {
-				file.Close() // already exists in the cache. discard it.
+	w := &writer{
+		WriteCloser: wip,
+		commitFunc: func() error {
+			if dc.isClosed() {
+				return fmt.Errorf("cache is already closed")
 			}
-			done() // This will remain until it's evicted in lru cache.
-		}
+			// Commit the cache contents
+			c := dc.cachePath(key)
+			if err := os.MkdirAll(filepath.Dir(c), os.ModePerm); err != nil {
+				var allErr error
+				if err := os.Remove(wip.Name()); err != nil {
+					allErr = multierror.Append(allErr, err)
+				}
+				return multierror.Append(allErr,
+					errors.Wrapf(err, "failed to create cache directory %q", c))
+			}
+			return os.Rename(wip.Name(), c)
+		},
+		abortFunc: func() error {
+			return os.Remove(wip.Name())
+		},
 	}
 
-	if dc.syncAdd {
-		addFunc()
-	} else {
-		go addFunc()
+	// If "direct" option is specified, do not cache the passed data on memory.
+	// This option is useful for preventing memory cache from being polluted by data
+	// that won't be accessed immediately.
+	if opt.direct {
+		return w, nil
 	}
+
+	b := dc.bufPool.Get().(*bytes.Buffer)
+	b.Reset()
+	memW := &writer{
+		WriteCloser: nopWriteCloser(io.Writer(b)),
+		commitFunc: func() error {
+			if dc.isClosed() {
+				w.Close()
+				return fmt.Errorf("cache is already closed")
+			}
+			cached, done, added := dc.cache.Add(key, b)
+			if !added {
+				dc.bufPool.Put(b) // already exists in the cache. abort it.
+			}
+			commit := func() error {
+				defer done()
+				defer w.Close()
+				n, err := w.Write(cached.(*bytes.Buffer).Bytes())
+				if err != nil || n != cached.(*bytes.Buffer).Len() {
+					w.Abort()
+					return err
+				}
+				return w.Commit()
+			}
+			if dc.syncAdd {
+				return commit()
+			}
+			go func() {
+				if err := commit(); err != nil {
+					fmt.Println("failed to commit to file:", err)
+				}
+			}()
+			return nil
+		},
+		abortFunc: func() error {
+			defer w.Close()
+			defer w.Abort()
+			dc.bufPool.Put(b) // abort it.
+			return nil
+		},
+	}
+
+	return memW, nil
+}
+
+func (dc *directoryCache) Close() error {
+	dc.closedMu.Lock()
+	defer dc.closedMu.Unlock()
+	if dc.closed {
+		return nil
+	}
+	dc.closed = true
+	if err := os.RemoveAll(dc.directory); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (dc *directoryCache) isClosed() bool {
+	dc.closedMu.Lock()
+	closed := dc.closed
+	dc.closedMu.Unlock()
+	return closed
 }
 
 func (dc *directoryCache) cachePath(key string) string {
 	return filepath.Join(dc.directory, key[:2], key)
 }
 
-func (dc *directoryCache) wipPath(key string) string {
-	return filepath.Join(dc.directory, key[:2], "w", key)
+func (dc *directoryCache) wipFile(key string) (*os.File, error) {
+	return ioutil.TempFile(dc.wipDirectory, key+"-*")
 }
 
 func NewMemoryCache() BlobCache {
-	return &memoryCache{
-		membuf: map[string]string{},
+	return &MemoryCache{
+		Membuf: map[string]*bytes.Buffer{},
 	}
 }
 
-// memoryCache is a cache implementation which backend is a memory.
-type memoryCache struct {
-	membuf map[string]string // read-only []byte map is more ideal but we don't have it in golang...
+// MemoryCache is a cache implementation which backend is a memory.
+type MemoryCache struct {
+	Membuf map[string]*bytes.Buffer
 	mu     sync.Mutex
 }
 
-func (mc *memoryCache) FetchAt(key string, offset int64, p []byte, opts ...Option) (n int, err error) {
+func (mc *MemoryCache) Get(key string, opts ...Option) (Reader, error) {
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
-
-	cache, ok := mc.membuf[key]
+	b, ok := mc.Membuf[key]
 	if !ok {
-		return 0, fmt.Errorf("Missed cache: %q", key)
+		return nil, fmt.Errorf("Missed cache: %q", key)
 	}
-	return copy(p, cache[offset:]), nil
+	return &reader{bytes.NewReader(b.Bytes()), func() error { return nil }}, nil
 }
 
-func (mc *memoryCache) Add(key string, p []byte, opts ...Option) {
-	mc.mu.Lock()
-	defer mc.mu.Unlock()
-	mc.membuf[key] = string(p)
+func (mc *MemoryCache) Add(key string, opts ...Option) (Writer, error) {
+	b := new(bytes.Buffer)
+	return &writer{
+		WriteCloser: nopWriteCloser(io.Writer(b)),
+		commitFunc: func() error {
+			mc.mu.Lock()
+			defer mc.mu.Unlock()
+			mc.Membuf[key] = b
+			return nil
+		},
+		abortFunc: func() error { return nil },
+	}, nil
+}
+
+func (mc *MemoryCache) Close() error {
+	return nil
+}
+
+type reader struct {
+	io.ReaderAt
+	closeFunc func() error
+}
+
+func (r *reader) Close() error { return r.closeFunc() }
+
+type writer struct {
+	io.WriteCloser
+	commitFunc func() error
+	abortFunc  func() error
+}
+
+func (w *writer) Commit() error {
+	return w.commitFunc()
+}
+
+func (w *writer) Abort() error {
+	return w.abortFunc()
+}
+
+type writeCloser struct {
+	io.Writer
+	closeFunc func() error
+}
+
+func (w *writeCloser) Close() error { return w.closeFunc() }
+
+func nopWriteCloser(w io.Writer) io.WriteCloser {
+	return &writeCloser{w, func() error { return nil }}
 }

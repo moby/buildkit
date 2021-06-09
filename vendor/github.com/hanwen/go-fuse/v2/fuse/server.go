@@ -21,6 +21,9 @@ import (
 const (
 	// The kernel caps writes at 128k.
 	MAX_KERNEL_WRITE = 128 * 1024
+
+	minMaxReaders = 2
+	maxMaxReaders = 16
 )
 
 // Server contains the logic for reading from the FUSE device and
@@ -39,6 +42,9 @@ type Server struct {
 	latencies LatencyMap
 
 	opts *MountOptions
+
+	// maxReaders is the maximum number of goroutines reading requests
+	maxReaders int
 
 	// Pools for []byte
 	buffers bufferPool
@@ -161,9 +167,17 @@ func NewServer(fs RawFileSystem, mountPoint string, opts *MountOptions) (*Server
 		}
 	}
 
+	maxReaders := runtime.GOMAXPROCS(0)
+	if maxReaders < minMaxReaders {
+		maxReaders = minMaxReaders
+	} else if maxReaders > maxMaxReaders {
+		maxReaders = maxMaxReaders
+	}
+
 	ms := &Server{
 		fileSystem:  fs,
 		opts:        &o,
+		maxReaders:  maxReaders,
 		retrieveTab: make(map[uint64]*retrieveCacheRequest),
 		// OSX has races when multiple routines read from the
 		// FUSE device: on unmount, sometime some reads do not
@@ -238,9 +252,6 @@ func (ms *Server) DebugData() string {
 	return fmt.Sprintf("readers: %d", r)
 }
 
-// What is a good number?  Maybe the number of CPUs?
-const _MAX_READERS = 2
-
 // handleEINTR retries the given function until it doesn't return syscall.EINTR.
 // This is similar to the HANDLE_EINTR() macro from Chromium ( see
 // https://code.google.com/p/chromium/codesearch#chromium/src/base/posix/eintr_wrapper.h
@@ -267,7 +278,7 @@ func (ms *Server) readRequest(exitIdle bool) (req *request, code Status) {
 	dest := ms.readPool.Get().([]byte)
 
 	ms.reqMu.Lock()
-	if ms.reqReaders > _MAX_READERS {
+	if ms.reqReaders > ms.maxReaders {
 		ms.reqMu.Unlock()
 		return nil, OK
 	}

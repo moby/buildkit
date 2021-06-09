@@ -583,8 +583,6 @@ retry:
 		lockNodes(lockme...)
 		if n.changeCounter != nChange {
 			unlockNodes(lockme...)
-			// could avoid unlocking and relocking n here.
-			n.mu.Lock()
 			continue retry
 		}
 

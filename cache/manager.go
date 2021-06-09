@@ -519,7 +519,16 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, sess session.Gr
 		return nil, errors.Wrapf(err, "failed to add snapshot %s to lease", id)
 	}
 
-	if err := cm.Snapshotter.Prepare(ctx, id, parentSnapshotID); err != nil {
+	if cm.Snapshotter.Name() == "stargz" && parent != nil {
+		if rerr := parent.withRemoteSnapshotLabelsStargzMode(ctx, sess, func() {
+			err = cm.Snapshotter.Prepare(ctx, id, parentSnapshotID)
+		}); rerr != nil {
+			return nil, rerr
+		}
+	} else {
+		err = cm.Snapshotter.Prepare(ctx, id, parentSnapshotID)
+	}
+	if err != nil {
 		return nil, errors.Wrapf(err, "failed to prepare %s", id)
 	}
 

@@ -73,6 +73,12 @@ const (
 	// of an image manifest.
 	TOCJSONDigestAnnotation = "containerd.io/snapshot/stargz/toc.digest"
 
+	// StoreUncompressedSizeAnnotation is an additional annotation key for eStargz to enable lazy
+	// pulling on containers/storage. Stargz Store is required to expose the layer's uncompressed size
+	// to the runtime but current OCI image doesn't ship this information by default. So we store this
+	// to the special annotation.
+	StoreUncompressedSizeAnnotation = "io.containers.estargz.uncompressed-size"
+
 	// PrefetchLandmark is a file entry which indicates the end position of
 	// prefetch in the stargz file.
 	PrefetchLandmark = ".prefetch.landmark"
