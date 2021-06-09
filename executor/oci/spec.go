@@ -15,6 +15,7 @@ import (
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/util/network"
+	traceexec "github.com/moby/buildkit/util/tracing/exec"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/opencontainers/selinux/go-selinux"
 	"github.com/pkg/errors"
@@ -75,6 +76,8 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 	if meta.Hostname != "" {
 		hostname = meta.Hostname
 	}
+
+	meta.Env = append(meta.Env, traceexec.Environ(ctx)...)
 
 	opts = append(opts,
 		oci.WithProcessArgs(meta.Args...),
