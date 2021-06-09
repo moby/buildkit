@@ -177,7 +177,10 @@ func (ls *localSourceHandler) snapshot(ctx context.Context, s session.Group, cal
 		OverrideExcludes: false,
 		DestDir:          dest,
 		CacheUpdater:     &cacheUpdater{cc, mount.IdentityMapping()},
-		ProgressCb:       newProgressHandler(ctx, "transferring "+ls.src.Name+":"),
+
+		// earthly needs to set this to nil so it does not conflict with verbose output of file copies
+		// (warning: it's not even feasible to reassign ProgressCb to nil as the call to newProgressHandler causes it to print out immediately)
+		//ProgressCb:       newProgressHandler(ctx, "transferring "+ls.src.Name+":"),
 	}
 
 	opt.Filter = func(p string, stat *fstypes.Stat) bool {

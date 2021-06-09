@@ -79,3 +79,5 @@ replace (
 	// grpc: corresponds to protobuf
 	google.golang.org/grpc => google.golang.org/grpc v1.30.0
 )
+
+replace github.com/tonistiigi/fsutil => github.com/earthly/fsutil v0.0.0-20210609160335-a94814c540b2

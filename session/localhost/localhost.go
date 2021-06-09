@@ -316,7 +316,7 @@ func localhostPutSendDir(stream Localhost_GetClient, src, dst string) error {
 	fs := fsutil.NewFS(src, &fsutil.WalkOpt{
 		IncludePatterns: []string{"*"},
 	})
-	err = fsutil.Send(stream.Context(), stream, fs, nil)
+	err = fsutil.Send(stream.Context(), stream, fs, nil, nil)
 	if err != nil {
 		return errors.Wrap(err, "fsutil.Send failed")
 	}

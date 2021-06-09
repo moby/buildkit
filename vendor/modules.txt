@@ -394,7 +394,7 @@ github.com/sirupsen/logrus
 # github.com/stretchr/testify v1.7.0
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/require
-# github.com/tonistiigi/fsutil v0.0.0-20210525040343-5dfbf5db66b9
+# github.com/tonistiigi/fsutil v0.0.0-20210525040343-5dfbf5db66b9 => github.com/earthly/fsutil v0.0.0-20210609160335-a94814c540b2
 github.com/tonistiigi/fsutil
 github.com/tonistiigi/fsutil/copy
 github.com/tonistiigi/fsutil/prefix

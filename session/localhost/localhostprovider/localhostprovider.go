@@ -253,7 +253,7 @@ func sendDir(stream localhost.Localhost_GetServer, path string) error {
 	fs := fsutil.NewFS(path, &fsutil.WalkOpt{
 		IncludePatterns: []string{"*"},
 	})
-	err = fsutil.Send(stream.Context(), stream, fs, nil)
+	err = fsutil.Send(stream.Context(), stream, fs, nil, nil)
 	if err != nil {
 		return errors.Wrap(err, "fsutil.Send failed")
 	}
