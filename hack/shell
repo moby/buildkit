@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
+
 set -e
+
 function clean() {
   docker rmi $(cat $iidfile)
 }
+
 iidfile=$(mktemp -t docker-iidfile.XXXXXXXXXX)
 DOCKER_BUILDKIT=1 docker build --iidfile $iidfile --target dev-env .
-#DOCKER_BUILDKIT=1 docker build --iidfile $iidfile -f ./hack/dockerfiles/test.buildkit.Dockerfile --target dev-env .
+
 trap clean EXIT
 SSH=
 if [ -n "$MOUNT_SSH_AUTH_SOCK" ]; then
   SSH="-v $SSH_AUTH_SOCK:$SSH_AUTH_SOCK -e SSH_AUTH_SOCK"
 fi
-docker run $SSH -it --privileged -v /tmp --net=host --rm -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry $(cat $iidfile)
+docker run $SSH -it --privileged -v /tmp --net=host -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry --rm $(cat $iidfile)
