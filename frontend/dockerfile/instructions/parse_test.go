@@ -193,11 +193,6 @@ func TestErrorCases(t *testing.T) {
 			expectedError: "FROM isn't allowed as an ONBUILD trigger",
 		},
 		{
-			name:          "ONBUILD forbidden MAINTAINER",
-			dockerfile:    "ONBUILD MAINTAINER docker.io",
-			expectedError: "MAINTAINER isn't allowed as an ONBUILD trigger",
-		},
-		{
 			name:          "MAINTAINER unknown flag",
 			dockerfile:    "MAINTAINER --boo joe@example.com",
 			expectedError: "Unknown flag: boo",
@@ -206,6 +201,11 @@ func TestErrorCases(t *testing.T) {
 			name:          "Chaining ONBUILD",
 			dockerfile:    `ONBUILD ONBUILD RUN touch foobar`,
 			expectedError: "Chaining ONBUILD via `ONBUILD ONBUILD` isn't allowed",
+		},
+		{
+			name:          "Invalid instruction",
+			dockerfile:    `foo bar`,
+			expectedError: "unknown instruction: FOO",
 		},
 		{
 			name:          "Invalid instruction",
