@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/url"
+	"strings"
 
 	"github.com/containerd/containerd/defaults"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
@@ -16,9 +17,12 @@ import (
 	"github.com/moby/buildkit/session/grpchijack"
 	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/moby/buildkit/util/grpcerrors"
+	"github.com/moby/buildkit/util/tracing/otlptracegrpc"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/propagation"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -60,7 +64,6 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 		if wt, ok := o.(*withTracer); ok {
 			customTracer = true
 			tracerProvider = wt.tp
-
 		}
 		if wd, ok := o.(*withDialer); ok {
 			gopts = append(gopts, grpc.WithContextDialer(wd.dialer))
@@ -76,7 +79,7 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 
 	if tracerProvider != nil {
 		var propagators = propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{})
-		unary = append(unary, otelgrpc.UnaryClientInterceptor(otelgrpc.WithTracerProvider(tracerProvider), otelgrpc.WithPropagators(propagators)))
+		unary = append(unary, filterInterceptor(otelgrpc.UnaryClientInterceptor(otelgrpc.WithTracerProvider(tracerProvider), otelgrpc.WithPropagators(propagators))))
 		stream = append(stream, otelgrpc.StreamClientInterceptor(otelgrpc.WithTracerProvider(tracerProvider), otelgrpc.WithPropagators(propagators)))
 	}
 
@@ -122,10 +125,41 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to dial %q . make sure buildkitd is running", address)
 	}
+
 	c := &Client{
 		conn: conn,
 	}
+
+	_ = c.setupDelegatedTracing(ctx) // ignore error
+
 	return c, nil
+}
+
+func (c *Client) setupDelegatedTracing(ctx context.Context) error {
+	span := trace.SpanFromContext(ctx)
+	if !span.SpanContext().IsValid() {
+		return nil
+	}
+
+	exp, ok := span.TracerProvider().(interface {
+		SpanExporter() sdktrace.SpanExporter
+	})
+	if !ok || exp == nil {
+		return nil
+	}
+	del, ok := exp.(interface {
+		SetDelegate(context.Context, sdktrace.SpanExporter) error
+	})
+	if !ok {
+		return nil
+	}
+
+	pd := otlptracegrpc.NewClient(c.conn)
+	e, err := otlptrace.New(ctx, pd)
+	if err != nil {
+		return nil
+	}
+	return del.SetDelegate(ctx, e)
 }
 
 func (c *Client) controlClient() controlapi.ControlClient {
@@ -218,4 +252,13 @@ func resolveDialer(address string) (func(context.Context, string) (net.Conn, err
 	}
 	// basic dialer
 	return dialer, nil
+}
+
+func filterInterceptor(intercept grpc.UnaryClientInterceptor) grpc.UnaryClientInterceptor {
+	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		if strings.HasSuffix(method, "opentelemetry.proto.collector.trace.v1.TraceService/Export") {
+			return invoker(ctx, method, req, reply, cc, opts...)
+		}
+		return intercept(ctx, method, req, reply, cc, invoker, opts...)
+	}
 }

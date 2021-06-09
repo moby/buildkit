@@ -58,6 +58,7 @@ import (
 	"github.com/urfave/cli"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel/propagation"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -635,6 +636,17 @@ func newController(c *cli.Context, cfg *config.Config, md *toml.MetaData) (*cont
 		"registry": registryremotecache.ResolveCacheImporterFunc(sessionManager, w.ContentStore(), resolverFn),
 		"local":    localremotecache.ResolveCacheImporterFunc(sessionManager),
 	}
+
+	tp, err := detect.TracerProvider()
+	if err != nil {
+		return nil, err
+	}
+
+	var tc sdktrace.SpanExporter
+	if tp, ok := tp.(detect.TraceCollector); ok {
+		tc = tp.SpanExporter()
+	}
+
 	return control.NewController(control.Opt{
 		SessionManager:            sessionManager,
 		WorkerController:          wc,
@@ -643,6 +655,7 @@ func newController(c *cli.Context, cfg *config.Config, md *toml.MetaData) (*cont
 		ResolveCacheImporterFuncs: remoteCacheImporterFuncs,
 		CacheKeyStorage:           cacheStorage,
 		Entitlements:              cfg.Entitlements,
+		TraceCollector:            tc,
 	})
 }
 

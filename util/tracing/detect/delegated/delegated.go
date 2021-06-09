@@ -15,7 +15,7 @@ var exp = &Exporter{}
 func init() {
 	detect.Register("delegated", func() (sdktrace.SpanExporter, error) {
 		return exp, nil
-	})
+	}, 100)
 }
 
 type Exporter struct {
@@ -60,7 +60,9 @@ func (e *Exporter) SetDelegate(ctx context.Context, del sdktrace.SpanExporter) e
 	e.delegate = del
 
 	if len(e.buffer) > 0 {
-		return e.delegate.ExportSpans(ctx, e.buffer)
+		err := e.delegate.ExportSpans(ctx, e.buffer)
+		e.buffer = nil
+		return err
 	}
 	return nil
 }

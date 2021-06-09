@@ -13,6 +13,7 @@ import (
 	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/moby/buildkit/util/profiler"
 	"github.com/moby/buildkit/util/stack"
+	_ "github.com/moby/buildkit/util/tracing/detect/delegated"
 	_ "github.com/moby/buildkit/util/tracing/detect/jaeger"
 	"github.com/moby/buildkit/version"
 	"github.com/sirupsen/logrus"
