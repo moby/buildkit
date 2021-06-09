@@ -8,6 +8,7 @@ run:
   build-tags:
     - dfrunsecurity
     - dfrunnetwork
+    - dfheredoc
 
 linters:
   enable:
