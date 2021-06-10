@@ -176,7 +176,7 @@ github.com/docker/cli/cli/connhelper/commandconn
 github.com/docker/distribution/digestset
 github.com/docker/distribution/reference
 github.com/docker/distribution/registry/api/errcode
-# github.com/docker/docker v20.10.7+incompatible
+# github.com/docker/docker v20.10.7+incompatible => github.com/docker/docker v20.10.3-0.20210609100121-ef4d47340142+incompatible
 github.com/docker/docker/api
 github.com/docker/docker/api/types
 github.com/docker/docker/api/types/blkiodev
@@ -195,6 +195,10 @@ github.com/docker/docker/api/types/versions
 github.com/docker/docker/api/types/volume
 github.com/docker/docker/client
 github.com/docker/docker/errdefs
+github.com/docker/docker/libnetwork/ipamutils
+github.com/docker/docker/libnetwork/resolvconf
+github.com/docker/docker/libnetwork/resolvconf/dns
+github.com/docker/docker/libnetwork/types
 github.com/docker/docker/opts
 github.com/docker/docker/pkg/archive
 github.com/docker/docker/pkg/chrootarchive
@@ -227,11 +231,6 @@ github.com/docker/go-events
 github.com/docker/go-metrics
 # github.com/docker/go-units v0.4.0
 github.com/docker/go-units
-# github.com/docker/libnetwork v0.8.0-dev.2.0.20210525090646-64b7a4574d14
-github.com/docker/libnetwork/ipamutils
-github.com/docker/libnetwork/resolvconf
-github.com/docker/libnetwork/resolvconf/dns
-github.com/docker/libnetwork/types
 # github.com/gofrs/flock v0.7.3
 github.com/gofrs/flock
 # github.com/gogo/googleapis v1.4.0
@@ -357,7 +356,7 @@ github.com/sirupsen/logrus
 # github.com/stretchr/testify v1.7.0
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/require
-# github.com/tonistiigi/fsutil v0.0.0-20210525040343-5dfbf5db66b9
+# github.com/tonistiigi/fsutil v0.0.0-20210609172227-d72af97c0eaf
 github.com/tonistiigi/fsutil
 github.com/tonistiigi/fsutil/copy
 github.com/tonistiigi/fsutil/prefix
@@ -419,7 +418,7 @@ golang.org/x/net/trace
 # golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 golang.org/x/sync/errgroup
 golang.org/x/sync/semaphore
-# golang.org/x/sys v0.0.0-20210324051608-47abb6519492
+# golang.org/x/sys v0.0.0-20210403161142-5e06dd20ab57
 golang.org/x/sys/cpu
 golang.org/x/sys/execabs
 golang.org/x/sys/internal/unsafeheader
