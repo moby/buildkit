@@ -142,6 +142,9 @@ var securityTests = []integration.Test{}
 // Tests that depend on the `network.*` entitlements
 var networkTests = []integration.Test{}
 
+// Tests that depend on heredoc support
+var heredocTests = []integration.Test{}
+
 var opts []integration.TestOpt
 var securityOpts []integration.TestOpt
 
@@ -194,6 +197,7 @@ func TestIntegration(t *testing.T) {
 			"granted": networkHostGranted,
 			"denied":  networkHostDenied,
 		}))...)
+	integration.Run(t, heredocTests, opts...)
 }
 
 func testDefaultEnvWithArgs(t *testing.T, sb integration.Sandbox) {

@@ -30,7 +30,7 @@ change in between releases on labs channel, the old versions are guaranteed to b
 To use this flag set Dockerfile version to at least `1.2`
 
 ```
-#syntax=docker/dockerfile:1.2
+# syntax=docker/dockerfile:1.2
 ```
 
 `RUN --mount` allows you to create mounts that process running as part of the build can access. This can be used to bind
@@ -175,10 +175,10 @@ However, pem files with passphrases are not supported.
 
 ## Security context `RUN --security=insecure|sandbox`
 
-To use this flag set Dockerfile version to `labs` channel.
+To use this flag, set Dockerfile version to `labs` channel.
 
 ```
-#syntax=docker/dockerfile:1.2-labs
+# syntax=docker/dockerfile:1.2-labs
 ```
 
 With `--security=insecure`, builder runs the command without sandbox in insecure mode,
@@ -204,10 +204,10 @@ RUN --security=insecure cat /proc/self/status | grep CapEff
 
 ## Network modes `RUN --network=none|host|default`
 
-To use this flag set Dockerfile version to `labs` channel.
+To use this flag, set Dockerfile version to `labs` channel.
 
 ```
-#syntax=docker/dockerfile:1.2-labs
+# syntax=docker/dockerfile:1.2-labs
 ```
 
 `RUN --network` allows control over which networking environment the command is run in.
@@ -237,3 +237,91 @@ RUN --network=none pip install --find-links wheels mypackage
 
 `pip` will only be able to install the packages provided in the tarfile, which
 can be controlled by an earlier build stage.
+
+
+## Here-Documents
+
+To use this flag, set Dockerfile version to `labs` channel. Currently this feature is only available
+in `docker/dockerfile-upstream:master-labs` image.
+
+```
+# syntax=docker/dockerfile-upstream:master-labs
+```
+
+Here-documents allow redirection of subsequent Dockerfile lines to the input of `RUN` or `COPY` commands.
+If such command contains a [here-document](https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_07_04)
+Dockerfile will consider the next lines until the line only containing a here-doc delimiter as part of the same command.
+
+#### Example: running a multi-line script
+
+```dockerfile
+# syntax = docker/dockerfile-upstream:master-labs
+FROM debian
+RUN <<eot bash
+  apt-get update
+  apt-get install -y vim
+eot
+```
+
+If the command only contains a here-document, its contents is evaluated with the default shell.
+
+```dockerfile
+# syntax = docker/dockerfile-upstream:master-labs
+FROM debian
+RUN <<eot
+  mkdir -p foo/bar
+eot
+```
+
+Alternatively, shebang header can be used to define an interpreter.
+
+```dockerfile
+# syntax = docker/dockerfile-upstream:master-labs
+FROM python:3.6
+RUN <<eot
+#!/usr/bin/env python
+print("hello world")
+eot
+```
+
+More complex examples may use multiple here-documents.
+
+```dockerfile
+# syntax = docker/dockerfile-upstream:master-labs
+FROM alpine
+RUN <<FILE1 cat > file1 && <<FILE2 cat > file2
+I am
+first
+FILE1
+I am
+second
+FILE2
+```
+
+#### Example: creating inline files
+
+In `COPY` commands source parameters can be replaced with here-doc indicators.
+Regular here-doc [variable expansion and tab stripping rules](https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_07_04) apply.
+
+```dockerfile
+# syntax = docker/dockerfile-upstream:master-labs
+FROM alpine
+ARG FOO=bar
+COPY <<-eot /app/foo
+	hello ${FOO}
+eot
+```
+
+```dockerfile
+# syntax = docker/dockerfile-upstream:master-labs
+FROM alpine
+COPY <<-"eot" /app/script.sh
+	echo hello ${FOO}
+eot
+RUN FOO=abc ash /app/script.sh
+```
+
+
+
+
+
