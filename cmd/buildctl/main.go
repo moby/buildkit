@@ -17,12 +17,16 @@ import (
 	"github.com/moby/buildkit/version"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
+	"go.opentelemetry.io/otel"
 )
 
 func init() {
 	apicaps.ExportedProduct = "buildkit"
 
 	stack.SetVersionInfo(version.Version, version.Revision)
+
+	// do not log tracing errors to stdio
+	otel.SetErrorHandler(skipErrors{})
 }
 
 func main() {
@@ -122,3 +126,7 @@ func handleErr(debug bool, err error) {
 	}
 	os.Exit(1)
 }
+
+type skipErrors struct{}
+
+func (skipErrors) Handle(err error) {}

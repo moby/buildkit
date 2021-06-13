@@ -56,6 +56,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
@@ -65,6 +66,10 @@ import (
 func init() {
 	apicaps.ExportedProduct = "buildkit"
 	stack.SetVersionInfo(version.Version, version.Revision)
+
+	// OTEL error handling is broken https://github.com/open-telemetry/opentelemetry-go/pull/1851
+	// remove this with otel update
+	otel.SetErrorHandler(skipErrors{})
 
 	seed.WithTimeAndRand()
 	reexec.Init()
@@ -749,3 +754,7 @@ type constTracerProvider struct {
 func (tp constTracerProvider) Tracer(instrumentationName string, opts ...trace.TracerOption) trace.Tracer {
 	return tp.tracer
 }
+
+type skipErrors struct{}
+
+func (skipErrors) Handle(err error) {}
