@@ -127,6 +127,7 @@ var fileOpTests = []integration.Test{
 	testCopyVarSubstitution,
 	testCopyWildcards,
 	testCopyRelative,
+	testAddURLChmod,
 	testTarContext,
 	testTarContextExternalDockerfile,
 	testWorkdirUser,
@@ -3470,6 +3471,66 @@ RUN sh -c "[ $(cat /test5/foo) = 'hello' ]"
 		},
 	}, nil)
 	require.NoError(t, err)
+}
+
+func testAddURLChmod(t *testing.T, sb integration.Sandbox) {
+	skipDockerd(t, sb)
+	f := getFrontend(t, sb)
+	f.RequiresBuildctl(t)
+
+	resp := httpserver.Response{
+		Etag:    identity.NewID(),
+		Content: []byte("content1"),
+	}
+	server := httpserver.NewTestServer(map[string]httpserver.Response{
+		"/foo": resp,
+	})
+	defer server.Close()
+
+	dockerfile := []byte(fmt.Sprintf(`
+FROM busybox AS build
+ADD --chmod=644 %[1]s /tmp/foo1
+ADD --chmod=755 %[1]s /tmp/foo2
+ADD --chmod=0413 %[1]s /tmp/foo3
+RUN stat -c "%%04a" /tmp/foo1 >> /dest && \
+	stat -c "%%04a" /tmp/foo2 >> /dest && \
+	stat -c "%%04a" /tmp/foo3 >> /dest
+
+FROM scratch
+COPY --from=build /dest /dest
+`, server.URL+"/foo"))
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(context.TODO(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := tmpdir()
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "dest"))
+	require.NoError(t, err)
+	require.Equal(t, []byte("0644\n0755\n0413\n"), dt)
 }
 
 func testDockerfileFromGit(t *testing.T, sb integration.Sandbox) {
