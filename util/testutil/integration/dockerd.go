@@ -97,6 +97,11 @@ func (c dockerdWorker) New(ctx context.Context, cfg *BackendConfig) (b Backend, 
 	}
 	deferF.append(dockerAPI.Close)
 
+	err = waitForAPI(ctx, dockerAPI, 5*time.Second)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	// Create a file descriptor to be used as a Unix domain socket.
 	// Remove it immediately (the name will still be valid for the socket) so that
 	// we don't leave files all over the users tmp tree.
@@ -148,6 +153,22 @@ func (c dockerdWorker) New(ctx context.Context, cfg *BackendConfig) (b Backend, 
 		rootless:  false,
 		isDockerd: true,
 	}, cl, nil
+}
+
+func waitForAPI(ctx context.Context, apiClient *client.Client, d time.Duration) error {
+	step := 50 * time.Millisecond
+	i := 0
+	for {
+		if _, err := apiClient.Ping(ctx); err == nil {
+			break
+		}
+		i++
+		if time.Duration(i)*step > d {
+			return fmt.Errorf("failed to connect to /_ping endpoint")
+		}
+		time.Sleep(step)
+	}
+	return nil
 }
 
 func SkipIfDockerd(t *testing.T, sb Sandbox, reason ...string) {
