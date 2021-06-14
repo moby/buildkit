@@ -839,6 +839,7 @@ func dispatchCopyFileOp(d *dispatchState, c instructions.SourcesAndDest, sourceS
 			st := llb.HTTP(src, llb.Filename(f), dfCmd(c))
 
 			opts := append([]llb.CopyOption{&llb.CopyInfo{
+				Mode:           mode,
 				CreateDestPath: true,
 			}}, copyOpt...)
 
