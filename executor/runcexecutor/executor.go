@@ -46,6 +46,7 @@ type Opt struct {
 	DNS             *oci.DNSConfig
 	OOMScoreAdj     *int
 	ApparmorProfile string
+	TracingSocket   string
 }
 
 var defaultCommandCandidates = []string{"buildkit-runc", "runc"}
@@ -64,6 +65,7 @@ type runcExecutor struct {
 	running          map[string]chan error
 	mu               sync.Mutex
 	apparmorProfile  string
+	tracingSocket    string
 }
 
 func New(opt Opt, networkProviders map[pb.NetMode]network.Provider) (executor.Executor, error) {
@@ -127,6 +129,7 @@ func New(opt Opt, networkProviders map[pb.NetMode]network.Provider) (executor.Ex
 		oomScoreAdj:      opt.OOMScoreAdj,
 		running:          make(map[string]chan error),
 		apparmorProfile:  opt.ApparmorProfile,
+		tracingSocket:    opt.TracingSocket,
 	}
 	return w, nil
 }
@@ -256,7 +259,7 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 		}
 		opts = append(opts, containerdoci.WithCgroup(cgroupsPath))
 	}
-	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, namespace, w.processMode, w.idmap, w.apparmorProfile, opts...)
+	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, namespace, w.processMode, w.idmap, w.apparmorProfile, w.tracingSocket, opts...)
 	if err != nil {
 		return err
 	}

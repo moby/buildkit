@@ -15,6 +15,7 @@ import (
 	"github.com/moby/buildkit/util/stack"
 	_ "github.com/moby/buildkit/util/tracing/detect/delegated"
 	_ "github.com/moby/buildkit/util/tracing/detect/jaeger"
+	_ "github.com/moby/buildkit/util/tracing/env"
 	"github.com/moby/buildkit/version"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"

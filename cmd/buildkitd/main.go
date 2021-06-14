@@ -50,6 +50,8 @@ import (
 	"github.com/moby/buildkit/util/stack"
 	"github.com/moby/buildkit/util/tracing/detect"
 	_ "github.com/moby/buildkit/util/tracing/detect/jaeger"
+	_ "github.com/moby/buildkit/util/tracing/env"
+	"github.com/moby/buildkit/util/tracing/transform"
 	"github.com/moby/buildkit/version"
 	"github.com/moby/buildkit/worker"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -60,6 +62,8 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
+	tracev1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
+	v1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 )
@@ -78,6 +82,7 @@ type workerInitializerOpt struct {
 	config         *config.Config
 	configMetaData *toml.MetaData
 	sessionManager *session.Manager
+	traceSocket    string
 }
 
 type workerInitializer struct {
@@ -305,7 +310,7 @@ func main() {
 	profiler.Attach(app)
 
 	if err := app.Run(os.Args); err != nil {
-		fmt.Fprintf(os.Stderr, "buildkitd: %s\n", err)
+		fmt.Fprintf(os.Stderr, "buildkitd: %+v\n", err)
 		os.Exit(1)
 	}
 }
@@ -553,6 +558,10 @@ func unaryInterceptor(globalCtx context.Context, tp trace.TracerProvider) grpc.U
 			}
 		}()
 
+		if strings.HasSuffix(info.FullMethod, "opentelemetry.proto.collector.trace.v1.TraceService/Export") {
+			return handler(ctx, req)
+		}
+
 		resp, err = withTrace(ctx, req, info, handler)
 		if err != nil {
 			logrus.Errorf("%s returned error: %+v", info.FullMethod, stack.Formatter(err))
@@ -603,10 +612,25 @@ func newController(c *cli.Context, cfg *config.Config, md *toml.MetaData) (*cont
 	if err != nil {
 		return nil, err
 	}
+
+	tc, err := detect.Exporter()
+	if err != nil {
+		return nil, err
+	}
+
+	var traceSocket string
+	if tc != nil {
+		traceSocket = filepath.Join(cfg.Root, "otel-grpc.sock")
+		if err := runTraceController(traceSocket, tc); err != nil {
+			return nil, err
+		}
+	}
+
 	wc, err := newWorkerController(c, workerInitializerOpt{
 		config:         cfg,
 		configMetaData: md,
 		sessionManager: sessionManager,
+		traceSocket:    traceSocket,
 	})
 	if err != nil {
 		return nil, err
@@ -635,16 +659,6 @@ func newController(c *cli.Context, cfg *config.Config, md *toml.MetaData) (*cont
 	remoteCacheImporterFuncs := map[string]remotecache.ResolveCacheImporterFunc{
 		"registry": registryremotecache.ResolveCacheImporterFunc(sessionManager, w.ContentStore(), resolverFn),
 		"local":    localremotecache.ResolveCacheImporterFunc(sessionManager),
-	}
-
-	tp, err := detect.TracerProvider()
-	if err != nil {
-		return nil, err
-	}
-
-	var tc sdktrace.SpanExporter
-	if tp, ok := tp.(detect.TraceCollector); ok {
-		tc = tp.SpanExporter()
 	}
 
 	return control.NewController(control.Opt{
@@ -754,4 +768,33 @@ func getDNSConfig(cfg *config.DNSConfig) *oci.DNSConfig {
 		}
 	}
 	return dns
+}
+
+func runTraceController(p string, exp sdktrace.SpanExporter) error {
+	server := grpc.NewServer()
+	tracev1.RegisterTraceServiceServer(server, &traceCollector{exporter: exp})
+	uid := os.Getuid()
+	l, err := sys.GetLocalListener(p, uid, uid)
+	if err != nil {
+		return err
+	}
+	if err := os.Chmod(p, 0666); err != nil {
+		l.Close()
+		return err
+	}
+	go server.Serve(l)
+	return nil
+}
+
+type traceCollector struct {
+	*tracev1.UnimplementedTraceServiceServer
+	exporter sdktrace.SpanExporter
+}
+
+func (t *traceCollector) Export(ctx context.Context, req *tracev1.ExportTraceServiceRequest) (*tracev1.ExportTraceServiceResponse, error) {
+	err := t.exporter.ExportSpans(ctx, transform.Spans(req.GetResourceSpans()))
+	if err != nil {
+		return nil, err
+	}
+	return &v1.ExportTraceServiceResponse{}, nil
 }

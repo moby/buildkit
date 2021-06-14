@@ -37,7 +37,7 @@ const (
 
 // GenerateSpec generates spec using containerd functionality.
 // opts are ignored for s.Process, s.Hostname, and s.Mounts .
-func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mount, id, resolvConf, hostsFile string, namespace network.Namespace, processMode ProcessMode, idmap *idtools.IdentityMapping, apparmorProfile string, opts ...oci.SpecOpts) (*specs.Spec, func(), error) {
+func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mount, id, resolvConf, hostsFile string, namespace network.Namespace, processMode ProcessMode, idmap *idtools.IdentityMapping, apparmorProfile string, tracingSocket string, opts ...oci.SpecOpts) (*specs.Spec, func(), error) {
 	c := &containers.Container{
 		ID: id,
 	}
@@ -77,7 +77,11 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 		hostname = meta.Hostname
 	}
 
-	meta.Env = append(meta.Env, traceexec.Environ(ctx)...)
+	if tracingSocket != "" {
+		// https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/protocol/exporter.md
+		meta.Env = append(meta.Env, "OTEL_TRACES_EXPORTER=otlp", "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=unix:///dev/otel-grpc.sock", "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=grpc")
+		meta.Env = append(meta.Env, traceexec.Environ(ctx)...)
+	}
 
 	opts = append(opts,
 		oci.WithProcessArgs(meta.Args...),
@@ -140,6 +144,15 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 				Options:     mount.Options,
 			})
 		}
+	}
+
+	if tracingSocket != "" {
+		s.Mounts = append(s.Mounts, specs.Mount{
+			Destination: "/dev/otel-grpc.sock",
+			Type:        "bind",
+			Source:      tracingSocket,
+			Options:     []string{"ro", "rbind"},
+		})
 	}
 
 	return s, releaseAll, nil

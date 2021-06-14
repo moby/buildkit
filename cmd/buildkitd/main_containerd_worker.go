@@ -235,7 +235,7 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 	if cfg.Snapshotter != "" {
 		snapshotter = cfg.Snapshotter
 	}
-	opt, err := containerd.NewWorkerOpt(common.config.Root, cfg.Address, snapshotter, cfg.Namespace, cfg.Labels, dns, nc, common.config.Workers.Containerd.ApparmorProfile, parallelismSem, ctd.WithTimeout(60*time.Second))
+	opt, err := containerd.NewWorkerOpt(common.config.Root, cfg.Address, snapshotter, cfg.Namespace, cfg.Labels, dns, nc, common.config.Workers.Containerd.ApparmorProfile, parallelismSem, common.traceSocket, ctd.WithTimeout(60*time.Second))
 	if err != nil {
 		return nil, err
 	}

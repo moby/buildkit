@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"io/ioutil"
+	"log"
 	"net"
 	"net/url"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	"github.com/moby/buildkit/session/grpchijack"
 	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/moby/buildkit/util/grpcerrors"
+	"github.com/moby/buildkit/util/tracing/detect"
 	"github.com/moby/buildkit/util/tracing/otlptracegrpc"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
@@ -136,17 +138,12 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 }
 
 func (c *Client) setupDelegatedTracing(ctx context.Context) error {
-	span := trace.SpanFromContext(ctx)
-	if !span.SpanContext().IsValid() {
-		return nil
+	exp, err := detect.Exporter()
+	if err != nil {
+		return err
 	}
 
-	exp, ok := span.TracerProvider().(interface {
-		SpanExporter() sdktrace.SpanExporter
-	})
-	if !ok || exp == nil {
-		return nil
-	}
+	log.Printf("exporter %v %T", exp, exp)
 	del, ok := exp.(interface {
 		SetDelegate(context.Context, sdktrace.SpanExporter) error
 	})

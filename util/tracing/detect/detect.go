@@ -27,6 +27,7 @@ var ServiceName string
 var detectors map[string]detector
 var once sync.Once
 var tp trace.TracerProvider
+var exporter sdktrace.SpanExporter
 var closers []func(context.Context) error
 var err error
 
@@ -95,10 +96,8 @@ func detect() error {
 	sdktp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sp), sdktrace.WithResource(res))
 	closers = append(closers, sdktp.Shutdown)
 
-	tp = &tracerProviderWithExporter{
-		TracerProvider: sdktp,
-		exp:            exp,
-	}
+	exporter = exp
+	tp = sdktp
 	return nil
 }
 
@@ -113,6 +112,14 @@ func TracerProvider() (trace.TracerProvider, error) {
 		return nil, err
 	}
 	return tp, nil
+}
+
+func Exporter() (sdktrace.SpanExporter, error) {
+	_, err := TracerProvider()
+	if err != nil {
+		return nil, err
+	}
+	return exporter, nil
 }
 
 func Shutdown(ctx context.Context) error {
@@ -141,18 +148,3 @@ func (serviceNameDetector) Detect(ctx context.Context) (*resource.Resource, erro
 		},
 	).Detect(ctx)
 }
-
-type TraceCollector interface {
-	SpanExporter() sdktrace.SpanExporter
-}
-
-type tracerProviderWithExporter struct {
-	trace.TracerProvider
-	exp sdktrace.SpanExporter
-}
-
-func (t *tracerProviderWithExporter) SpanExporter() sdktrace.SpanExporter {
-	return t.exp
-}
-
-var _ TraceCollector = &tracerProviderWithExporter{}
