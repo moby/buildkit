@@ -489,7 +489,7 @@ func (cc *cacheContext) wildcards(ctx context.Context, m *mount, p string) ([]*W
 	root = txn.Root()
 	var updated bool
 
-	iter := root.Seek([]byte{})
+	iter := root.Iterator()
 	for {
 		k, _, ok := iter.Next()
 		if !ok {
@@ -518,7 +518,9 @@ func (cc *cacheContext) wildcards(ctx context.Context, m *mount, p string) ([]*W
 		wildcards = append(wildcards, &Wildcard{Path: string(fn), Record: cr})
 
 		if cr.Type == CacheRecordTypeDir {
-			iter = root.Seek(append(k, 0, 0xff))
+			next := append(k, 0, 0xff)
+			iter = root.Iterator()
+			iter.SeekLowerBound(next)
 		}
 	}
 
@@ -623,7 +625,8 @@ func (cc *cacheContext) checksum(ctx context.Context, root *iradix.Node, txn *ir
 	case CacheRecordTypeDir:
 		h := sha256.New()
 		next := append(k, 0)
-		iter := root.Seek(next)
+		iter := root.Iterator()
+		iter.SeekLowerBound(append(append([]byte{}, next...), 0))
 		subk := next
 		ok := true
 		for {
@@ -641,7 +644,8 @@ func (cc *cacheContext) checksum(ctx context.Context, root *iradix.Node, txn *ir
 
 			if subcr.Type == CacheRecordTypeDir { // skip subfiles
 				next := append(subk, 0, 0xff)
-				iter = root.Seek(next)
+				iter = root.Iterator()
+				iter.SeekLowerBound(next)
 			}
 			subk, _, ok = iter.Next()
 		}
