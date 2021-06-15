@@ -1,4 +1,4 @@
-module github.com/jaguilar/vt100
+module github.com/tonistiigi/vt100
 
 go 1.12
 
