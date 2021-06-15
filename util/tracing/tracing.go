@@ -44,7 +44,7 @@ func FinishWithError(span trace.Span, err error) {
 // context.WithoutCancel() that would copy the context but reset ctx.Done
 func ContextWithSpanFromContext(ctx, ctx2 context.Context) context.Context {
 	// if already is a span then noop
-	if span := trace.SpanFromContext(ctx); span != nil {
+	if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {
 		return ctx
 	}
 	if span := trace.SpanFromContext(ctx2); span != nil {
