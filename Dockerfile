@@ -10,10 +10,9 @@ ARG REGISTRY_VERSION=2.7.1
 ARG ROOTLESSKIT_VERSION=v0.14.2
 ARG CNI_VERSION=v0.9.1
 ARG SHADOW_VERSION=4.8.1
-ARG FUSEOVERLAYFS_VERSION=v1.5.0
 ARG STARGZ_SNAPSHOTTER_VERSION=v0.5.0
 
-ARG ALPINE_VERSION=3.12
+ARG ALPINE_VERSION=3.14
 
 # git stage is used for checking out remote repository sources
 FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS git
@@ -183,16 +182,6 @@ RUN --mount=target=/root/.cache,type=cache \
   xx-verify --static /out/containerd-stargz-grpc && \
   xx-verify --static /out/ctr-remote
 
-FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS fuse-overlayfs
-RUN apk add --no-cache curl
-COPY --from=xx / /
-ARG FUSEOVERLAYFS_VERSION
-ARG TARGETPLATFORM
-RUN mkdir /out && \
-  curl -sSL -o /out/fuse-overlayfs https://github.com/containers/fuse-overlayfs/releases/download/${FUSEOVERLAYFS_VERSION}/fuse-overlayfs-$(xx-info march) && \
-  chmod +x /out/fuse-overlayfs && \
-  xx-verify --static /out/fuse-overlayfs
-
 # Copy together all binaries needed for oci worker mode
 FROM buildkit-export AS buildkit-buildkitd.oci_only
 COPY --from=buildkitd.oci_only /usr/bin/buildkitd.oci_only /usr/bin/
@@ -264,9 +253,10 @@ ENV BUILDKIT_RUN_NETWORK_INTEGRATION_TESTS=1 BUILDKIT_CNI_INIT_LOCK_PATH=/run/bu
 FROM integration-tests AS dev-env
 VOLUME /var/lib/buildkit
 
-# newuidmap & newgidmap binaries (shadow-uidmap 4.7-r1) shipped with alpine cannot be executed without CAP_SYS_ADMIN,
+# newuidmap & newgidmap binaries (shadow-uidmap 4.8.1-r0) shipped with alpine cannot be executed without CAP_SYS_ADMIN,
 # because the binaries are built without libcap-dev.
 # So we need to build the binaries with libcap enabled.
+# TODO: ask the Alpine upstream to enable libcap: https://github.com/moby/buildkit/issues/2038
 FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS idmap
 RUN apk add --no-cache git autoconf automake clang lld gettext-dev libtool make byacc binutils
 COPY --from=xx / /
@@ -282,10 +272,9 @@ RUN CC=$(xx-clang --print-target-triple)-clang ./autogen.sh --disable-nls --disa
 
 # Rootless mode.
 FROM alpine:${ALPINE_VERSION} AS rootless
-RUN apk add --no-cache fuse3 git openssh pigz xz
+RUN apk add --no-cache fuse3 fuse-overlayfs git openssh pigz xz
 COPY --from=idmap /usr/bin/newuidmap /usr/bin/newuidmap
 COPY --from=idmap /usr/bin/newgidmap /usr/bin/newgidmap
-COPY --from=fuse-overlayfs /out/fuse-overlayfs /usr/bin/
 # we could just set CAP_SETUID filecap rather than `chmod u+s`, but requires kernel >= 4.14
 # nsswitch.conf needs to be present to work around
 #   https://github.com/golang/go/issues/35305
