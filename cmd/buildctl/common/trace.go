@@ -2,42 +2,25 @@ package common
 
 import (
 	"context"
-	"io"
 	"os"
-	"strings"
 
 	"github.com/moby/buildkit/util/appcontext"
-	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/opentracing/opentracing-go/ext"
-	"github.com/opentracing/opentracing-go/log"
-	jaeger "github.com/uber/jaeger-client-go"
+	"github.com/moby/buildkit/util/tracing/detect"
 	"github.com/urfave/cli"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
-func getTracer() (opentracing.Tracer, io.Closer) {
-	if traceAddr := os.Getenv("JAEGER_TRACE"); traceAddr != "" {
-		tr, err := jaeger.NewUDPTransport(traceAddr, 0)
-		if err != nil {
-			panic(err)
-		}
-
-		// metricsFactory := prometheus.New()
-		return jaeger.NewTracer(
-			"buildctl",
-			jaeger.NewConstSampler(true),
-			jaeger.NewRemoteReporter(tr),
-		)
-	}
-
-	return opentracing.NoopTracer{}, &nopCloser{}
-}
-
-func AttachAppContext(app *cli.App) {
+func AttachAppContext(app *cli.App) error {
 	ctx := appcontext.Context()
 
-	tracer, closer := getTracer()
+	tracer, err := detect.Tracer()
+	if err != nil {
+		return err
+	}
 
-	var span opentracing.Span
+	var span trace.Span
 
 	for i, cmd := range app.Commands {
 		func(before cli.BeforeFunc) {
@@ -49,10 +32,9 @@ func AttachAppContext(app *cli.App) {
 					}
 				}
 
-				span = tracer.StartSpan(name)
-				span.LogFields(log.String("command", strings.Join(os.Args, " ")))
-
-				ctx = opentracing.ContextWithSpan(ctx, span)
+				ctx, span = tracer.Start(ctx, name, trace.WithAttributes(
+					attribute.Array("command", attribute.ArrayValue(os.Args)),
+				))
 
 				clicontext.App.Metadata["context"] = ctx
 				return nil
@@ -62,7 +44,7 @@ func AttachAppContext(app *cli.App) {
 
 	app.ExitErrHandler = func(clicontext *cli.Context, err error) {
 		if span != nil {
-			ext.Error.Set(span, true)
+			span.SetStatus(codes.Error, err.Error())
 		}
 		cli.HandleExitCoder(err)
 	}
@@ -75,20 +57,13 @@ func AttachAppContext(app *cli.App) {
 			}
 		}
 		if span != nil {
-			span.Finish()
+			span.End()
 		}
-		return closer.Close()
+		return detect.Shutdown(context.TODO())
 	}
-
+	return nil
 }
 
 func CommandContext(c *cli.Context) context.Context {
 	return c.App.Metadata["context"].(context.Context)
-}
-
-type nopCloser struct {
-}
-
-func (*nopCloser) Close() error {
-	return nil
 }

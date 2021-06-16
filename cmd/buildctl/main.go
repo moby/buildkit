@@ -13,15 +13,20 @@ import (
 	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/moby/buildkit/util/profiler"
 	"github.com/moby/buildkit/util/stack"
+	_ "github.com/moby/buildkit/util/tracing/detect/jaeger"
 	"github.com/moby/buildkit/version"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
+	"go.opentelemetry.io/otel"
 )
 
 func init() {
 	apicaps.ExportedProduct = "buildkit"
 
 	stack.SetVersionInfo(version.Version, version.Revision)
+
+	// do not log tracing errors to stdio
+	otel.SetErrorHandler(skipErrors{})
 }
 
 func main() {
@@ -98,19 +103,30 @@ func main() {
 		return nil
 	}
 
-	bccommon.AttachAppContext(app)
+	if err := bccommon.AttachAppContext(app); err != nil {
+		handleErr(debugEnabled, err)
+	}
 
 	profiler.Attach(app)
 
-	if err := app.Run(os.Args); err != nil {
-		for _, s := range errdefs.Sources(err) {
-			s.Print(os.Stderr)
-		}
-		if debugEnabled {
-			fmt.Fprintf(os.Stderr, "error: %+v", stack.Formatter(err))
-		} else {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		}
-		os.Exit(1)
-	}
+	handleErr(debugEnabled, app.Run(os.Args))
 }
+
+func handleErr(debug bool, err error) {
+	if err == nil {
+		return
+	}
+	for _, s := range errdefs.Sources(err) {
+		s.Print(os.Stderr)
+	}
+	if debug {
+		fmt.Fprintf(os.Stderr, "error: %+v", stack.Formatter(err))
+	} else {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+	}
+	os.Exit(1)
+}
+
+type skipErrors struct{}
+
+func (skipErrors) Handle(err error) {}

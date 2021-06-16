@@ -10,15 +10,16 @@ import (
 
 	"github.com/containerd/containerd/defaults"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client/connhelper"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/grpchijack"
 	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/moby/buildkit/util/grpcerrors"
-	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -54,8 +55,9 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 			needWithInsecure = false
 		}
 		if wt, ok := o.(*withTracer); ok {
-			unary = append(unary, otgrpc.OpenTracingClientInterceptor(wt.tracer, otgrpc.LogPayloads()))
-			stream = append(stream, otgrpc.OpenTracingStreamClientInterceptor(wt.tracer))
+			var propagators = propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{})
+			unary = append(unary, otelgrpc.UnaryClientInterceptor(otelgrpc.WithTracerProvider(wt), otelgrpc.WithPropagators(propagators)))
+			stream = append(stream, otelgrpc.StreamClientInterceptor(otelgrpc.WithTracerProvider(wt), otelgrpc.WithPropagators(propagators)))
 		}
 		if wd, ok := o.(*withDialer); ok {
 			gopts = append(gopts, grpc.WithContextDialer(wd.dialer))
@@ -182,12 +184,16 @@ func loadCredentials(opts *withCredentials) (grpc.DialOption, error) {
 	return grpc.WithTransportCredentials(credentials.NewTLS(cfg)), nil
 }
 
-func WithTracer(t opentracing.Tracer) ClientOpt {
+func WithTracer(t trace.Tracer) ClientOpt {
 	return &withTracer{t}
 }
 
 type withTracer struct {
-	tracer opentracing.Tracer
+	tracer trace.Tracer
+}
+
+func (wt *withTracer) Tracer(instrumentationName string, opts ...trace.TracerOption) trace.Tracer {
+	return wt.tracer
 }
 
 func resolveDialer(address string) (func(context.Context, string) (net.Conn, error), error) {
