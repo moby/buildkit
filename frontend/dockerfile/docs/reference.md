@@ -1822,6 +1822,11 @@ RUN pwd
 The output of the final `pwd` command in this `Dockerfile` would be
 `/path/$DIRNAME`
 
+If not specified, the default working directory is `/`. In practice, if you aren't building a Dockerfile from scratch (`FROM scratch`), 
+the `WORKDIR` may likely be set by the base image you're using.
+
+Therefore, to avoid unintended operations in unknown directories, it is best practice to set your `WORKDIR` explicitly.
+
 ## ARG
 
 ```dockerfile
