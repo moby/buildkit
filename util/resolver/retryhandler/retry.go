@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"strings"
 	"syscall"
 	"time"
 
@@ -57,7 +56,7 @@ func retryError(err error) bool {
 		return true
 	}
 
-	if errors.Is(err, io.EOF) || errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.EPIPE) {
+	if errors.Is(err, io.EOF) || errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.EPIPE) || errors.Is(err, net.ErrClosed) {
 		return true
 	}
 	// catches TLS timeout or other network-related temporary errors
@@ -66,11 +65,6 @@ func retryError(err error) bool {
 	}
 	// https://github.com/containerd/containerd/pull/4724
 	if errors.Cause(err).Error() == "no response" {
-		return true
-	}
-
-	// net.ErrClosed exposed in go1.16
-	if strings.Contains(err.Error(), "use of closed network connection") {
 		return true
 	}
 
