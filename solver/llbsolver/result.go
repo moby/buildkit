@@ -44,6 +44,9 @@ func NewContentHashFunc(selectors []Selector) solver.ResultBasedCacheFunc {
 		if !ok {
 			return "", errors.Errorf("invalid reference: %T", res)
 		}
+		if ref.ImmutableRef == nil {
+			return "", errors.Errorf("cannot checksum empty reference")
+		}
 
 		if len(selectors) == 0 {
 			selectors = []Selector{{}}
