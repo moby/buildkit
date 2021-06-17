@@ -29,7 +29,7 @@ FROM golatest AS go-darwin
 FROM golatest AS go-windows-amd64
 FROM golatest AS go-windows-386
 FROM golatest AS go-windows-arm
-FROM --platform=$BUILDPLATFORM tonistiigi/golang:497feff1-alpine AS go-windows-arm64
+FROM --platform=$BUILDPLATFORM golang:1.17beta1-alpine AS go-windows-arm64
 FROM go-windows-${TARGETARCH} AS go-windows
 
 # gobuild is base stage for compiling go/cgo
