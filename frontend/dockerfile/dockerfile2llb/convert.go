@@ -227,10 +227,15 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 				continue
 			}
 			func(i int, d *dispatchState) {
-				eg.Go(func() error {
+				eg.Go(func() (err error) {
+					defer func() {
+						if err != nil {
+							err = parser.WithLocation(err, d.stage.Location)
+						}
+					}()
 					ref, err := reference.ParseNormalizedNamed(d.stage.BaseName)
 					if err != nil {
-						return parser.WithLocation(errors.Wrapf(err, "failed to parse stage name %q", d.stage.BaseName), d.stage.Location)
+						return errors.Wrapf(err, "failed to parse stage name %q", d.stage.BaseName)
 					}
 					platform := d.platform
 					if platform == nil {
@@ -250,11 +255,11 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 							LogName:     fmt.Sprintf("%s load metadata for %s", prefix, d.stage.BaseName),
 						})
 						if err != nil {
-							return err
+							return errors.Wrap(err, d.stage.BaseName)
 						}
 						var img Image
 						if err := json.Unmarshal(dt, &img); err != nil {
-							return err
+							return errors.Wrap(err, "failed to parse image config")
 						}
 						img.Created = nil
 						// if there is no explicit target platform, try to match based on image config
