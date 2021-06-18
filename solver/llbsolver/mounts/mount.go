@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/containerd/containerd/mount"
-	"github.com/containerd/containerd/sys"
+	"github.com/containerd/containerd/pkg/userns"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/metadata"
@@ -314,7 +314,7 @@ func (sm *secretMountInstance) Mount() ([]mount.Mount, func() error, error) {
 		Options: []string{"nodev", "nosuid", "noexec", fmt.Sprintf("uid=%d,gid=%d", os.Geteuid(), os.Getegid())},
 	}
 
-	if sys.RunningInUserNS() {
+	if userns.RunningInUserNS() {
 		tmpMount.Options = nil
 	}
 
