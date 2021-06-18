@@ -17,6 +17,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/containerd/containerd/pkg/seed"
+	"github.com/containerd/containerd/pkg/userns"
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/sys"
@@ -119,7 +120,7 @@ func main() {
 	}
 
 	rootlessUsage := "set all the default options to be compatible with rootless containers"
-	if sys.RunningInUserNS() {
+	if userns.RunningInUserNS() {
 		app.Flags = append(app.Flags, cli.BoolTFlag{
 			Name:  "rootless",
 			Usage: rootlessUsage + " (default: true)",
@@ -355,7 +356,7 @@ func serveGRPC(cfg config.GRPCConfig, server *grpc.Server, errCh chan error) err
 }
 
 func defaultConfigPath() string {
-	if sys.RunningInUserNS() {
+	if userns.RunningInUserNS() {
 		return filepath.Join(appdefaults.UserConfigDir(), "buildkitd.toml")
 	}
 	return filepath.Join(appdefaults.ConfigDir, "buildkitd.toml")
@@ -409,7 +410,7 @@ func setDefaultConfig(cfg *config.Config) {
 	cfg.Workers.OCI.NetworkConfig = setDefaultNetworkConfig(cfg.Workers.OCI.NetworkConfig)
 	cfg.Workers.Containerd.NetworkConfig = setDefaultNetworkConfig(cfg.Workers.Containerd.NetworkConfig)
 
-	if sys.RunningInUserNS() {
+	if userns.RunningInUserNS() {
 		// if buildkitd is being executed as the mapped-root (not only EUID==0 but also $USER==root)
 		// in a user namespace, we need to enable the rootless mode but
 		// we don't want to honor $HOME for setting up default paths.

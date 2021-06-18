@@ -16,6 +16,7 @@ import (
 	snapshotsapi "github.com/containerd/containerd/api/services/snapshots/v1"
 	"github.com/containerd/containerd/defaults"
 	"github.com/containerd/containerd/pkg/dialer"
+	"github.com/containerd/containerd/pkg/userns"
 	"github.com/containerd/containerd/reference"
 	"github.com/containerd/containerd/remotes/docker"
 	ctdsnapshot "github.com/containerd/containerd/snapshots"
@@ -23,7 +24,6 @@ import (
 	"github.com/containerd/containerd/snapshots/overlay"
 	"github.com/containerd/containerd/snapshots/overlay/overlayutils"
 	snproxy "github.com/containerd/containerd/snapshots/proxy"
-	"github.com/containerd/containerd/sys"
 	fuseoverlayfs "github.com/containerd/fuse-overlayfs-snapshotter"
 	sgzfs "github.com/containerd/stargz-snapshotter/fs"
 	sgzconf "github.com/containerd/stargz-snapshotter/fs/config"
@@ -110,7 +110,7 @@ func init() {
 	}
 	n := "oci-worker-rootless"
 	u := "enable rootless mode"
-	if sys.RunningInUserNS() {
+	if userns.RunningInUserNS() {
 		flags = append(flags, cli.BoolTFlag{
 			Name:  n,
 			Usage: u,
@@ -189,7 +189,7 @@ func applyOCIFlags(c *cli.Context, cfg *config.Config) error {
 		cfg.Workers.OCI.Rootless = c.GlobalBool("rootless")
 	}
 	if c.GlobalIsSet("oci-worker-rootless") {
-		if !sys.RunningInUserNS() || os.Geteuid() > 0 {
+		if !userns.RunningInUserNS() || os.Geteuid() > 0 {
 			return errors.New("rootless mode requires to be executed as the mapped root in a user namespace; you may use RootlessKit for setting up the namespace")
 		}
 		cfg.Workers.OCI.Rootless = c.GlobalBool("oci-worker-rootless")
