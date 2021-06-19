@@ -2,6 +2,7 @@ package integration
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -58,7 +59,7 @@ func (c *containerd) Name() string {
 	return c.name
 }
 
-func (c *containerd) New(cfg *BackendConfig) (b Backend, cl func() error, err error) {
+func (c *containerd) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl func() error, err error) {
 	if err := lookupBinary(c.containerd); err != nil {
 		return nil, nil, err
 	}
@@ -147,7 +148,7 @@ disabled_plugins = ["cri"]
 		"--containerd-worker-labels=org.mobyproject.buildkit.worker.sandbox=true", // Include use of --containerd-worker-labels to trigger https://github.com/moby/buildkit/pull/603
 	}, snBuildkitdArgs...)
 
-	buildkitdSock, stop, err := runBuildkitd(cfg, buildkitdArgs, cfg.Logs, 0, 0, c.extraEnv)
+	buildkitdSock, stop, err := runBuildkitd(ctx, cfg, buildkitdArgs, cfg.Logs, 0, 0, c.extraEnv)
 	if err != nil {
 		printLogs(cfg.Logs, log.Println)
 		return nil, nil, err

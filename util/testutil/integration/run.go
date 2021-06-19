@@ -20,6 +20,7 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/gofrs/flock"
+	"github.com/moby/buildkit/util/appcontext"
 	"github.com/moby/buildkit/util/contentutil"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -45,6 +46,7 @@ type Backend interface {
 type Sandbox interface {
 	Backend
 
+	Context() context.Context
 	Cmd(...string) *exec.Cmd
 	PrintLogs(*testing.T)
 	NewRegistry() (string, error)
@@ -58,7 +60,7 @@ type BackendConfig struct {
 }
 
 type Worker interface {
-	New(*BackendConfig) (Backend, func() error, error)
+	New(context.Context, *BackendConfig) (Backend, func() error, error)
 	Name() string
 }
 
@@ -154,6 +156,8 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 				name := fn + "/worker=" + br.Name() + mv.functionSuffix()
 				func(fn, testName string, br Worker, tc Test, mv matrixValue) {
 					ok := t.Run(testName, func(t *testing.T) {
+						ctx := appcontext.Context()
+
 						defer cleanOnComplete()()
 						if !strings.HasSuffix(fn, "NoParallel") {
 							t.Parallel()
@@ -161,7 +165,7 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 						require.NoError(t, sandboxLimiter.Acquire(context.TODO(), 1))
 						defer sandboxLimiter.Release(1)
 
-						sb, closer, err := newSandbox(br, mirror, mv)
+						sb, closer, err := newSandbox(ctx, br, mirror, mv)
 						require.NoError(t, err)
 						defer func() {
 							assert.NoError(t, closer())

@@ -1,7 +1,6 @@
 package solver
 
 import (
-	"context"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -33,7 +32,7 @@ func TestJobsIntegration(t *testing.T) {
 }
 
 func testParallelism(t *testing.T, sb integration.Sandbox) {
-	ctx := context.TODO()
+	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
 	require.NoError(t, err)

@@ -3,6 +3,7 @@ package integration
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -49,6 +50,11 @@ type sandbox struct {
 	logs    map[string]*bytes.Buffer
 	cleanup *multiCloser
 	mv      matrixValue
+	ctx     context.Context
+}
+
+func (sb *sandbox) Context() context.Context {
+	return sb.ctx
 }
 
 func (sb *sandbox) PrintLogs(t *testing.T) {
@@ -80,7 +86,7 @@ func (sb *sandbox) Value(k string) interface{} {
 	return sb.mv.values[k].value
 }
 
-func newSandbox(w Worker, mirror string, mv matrixValue) (s Sandbox, cl func() error, err error) {
+func newSandbox(ctx context.Context, w Worker, mirror string, mv matrixValue) (s Sandbox, cl func() error, err error) {
 	cfg := &BackendConfig{
 		Logs: make(map[string]*bytes.Buffer),
 	}
@@ -117,7 +123,7 @@ func newSandbox(w Worker, mirror string, mv matrixValue) (s Sandbox, cl func() e
 		cfg.ConfigFile = filepath.Join(dir, buildkitdConfigFile)
 	}
 
-	b, closer, err := w.New(cfg)
+	b, closer, err := w.New(ctx, cfg)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -128,6 +134,7 @@ func newSandbox(w Worker, mirror string, mv matrixValue) (s Sandbox, cl func() e
 		logs:    cfg.Logs,
 		cleanup: deferF,
 		mv:      mv,
+		ctx:     ctx,
 	}, cl, nil
 }
 
@@ -139,7 +146,7 @@ func getBuildkitdAddr(tmpdir string) string {
 	return address
 }
 
-func runBuildkitd(conf *BackendConfig, args []string, logs map[string]*bytes.Buffer, uid, gid int, extraEnv []string) (address string, cl func() error, err error) {
+func runBuildkitd(ctx context.Context, conf *BackendConfig, args []string, logs map[string]*bytes.Buffer, uid, gid int, extraEnv []string) (address string, cl func() error, err error) {
 	deferF := &multiCloser{}
 	cl = deferF.F()
 

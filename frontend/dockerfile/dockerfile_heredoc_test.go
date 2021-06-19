@@ -3,7 +3,6 @@
 package dockerfile
 
 import (
-	"context"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -73,7 +72,7 @@ COPY --from=build /dest /
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	c, err := client.New(context.TODO(), sb.Address())
+	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -81,7 +80,7 @@ COPY --from=build /dest /
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		Exports: []client.ExportEntry{
 			{
 				Type:      client.ExporterLocal,
@@ -130,7 +129,7 @@ COPY --from=build /dest /dest
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	c, err := client.New(context.TODO(), sb.Address())
+	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -138,7 +137,7 @@ COPY --from=build /dest /dest
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		Exports: []client.ExportEntry{
 			{
 				Type:      client.ExporterLocal,
@@ -180,7 +179,7 @@ COPY --from=build /dest /dest
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	c, err := client.New(context.TODO(), sb.Address())
+	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -188,7 +187,7 @@ COPY --from=build /dest /dest
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		Exports: []client.ExportEntry{
 			{
 				Type:      client.ExporterLocal,
@@ -231,7 +230,7 @@ COPY --from=build /dest /dest
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	c, err := client.New(context.TODO(), sb.Address())
+	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -239,7 +238,7 @@ COPY --from=build /dest /dest
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		Exports: []client.ExportEntry{
 			{
 				Type:      client.ExporterLocal,
@@ -296,7 +295,7 @@ COPY --from=build /dest /
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	c, err := client.New(context.TODO(), sb.Address())
+	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -304,7 +303,7 @@ COPY --from=build /dest /
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		Exports: []client.ExportEntry{
 			{
 				Type:      client.ExporterLocal,
@@ -388,7 +387,7 @@ COPY --from=build /dest /
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	c, err := client.New(context.TODO(), sb.Address())
+	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -396,7 +395,7 @@ COPY --from=build /dest /
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		Exports: []client.ExportEntry{
 			{
 				Type:      client.ExporterLocal,
@@ -465,7 +464,7 @@ COPY --from=build /dest /
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	c, err := client.New(context.TODO(), sb.Address())
+	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -473,7 +472,7 @@ COPY --from=build /dest /
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		Exports: []client.ExportEntry{
 			{
 				Type:      client.ExporterLocal,

@@ -34,7 +34,7 @@ func testBuildWithLocalFiles(t *testing.T, sb integration.Sandbox) {
 
 	st.AddMount("/mnt", llb.Local("src"), llb.Readonly)
 
-	rdr, err := marshal(st.Root())
+	rdr, err := marshal(sb.Context(), st.Root())
 	require.NoError(t, err)
 
 	cmd := sb.Cmd(fmt.Sprintf("build --progress=plain --local src=%s", dir))
@@ -50,7 +50,7 @@ func testBuildLocalExporter(t *testing.T, sb integration.Sandbox) {
 
 	out := st.AddMount("/out", llb.Scratch())
 
-	rdr, err := marshal(out)
+	rdr, err := marshal(sb.Context(), out)
 	require.NoError(t, err)
 
 	tmpdir, err := ioutil.TempDir("", "buildkit-buildctl")
@@ -77,7 +77,7 @@ func testBuildContainerdExporter(t *testing.T, sb integration.Sandbox) {
 	st := llb.Image("busybox").
 		Run(llb.Shlex("sh -c 'echo -n bar > /foo'"))
 
-	rdr, err := marshal(st.Root())
+	rdr, err := marshal(sb.Context(), st.Root())
 	require.NoError(t, err)
 
 	imageName := "example.com/moby/imageexporter:test"
@@ -116,7 +116,7 @@ func testBuildMetadataFile(t *testing.T, sb integration.Sandbox) {
 	st := llb.Image("busybox").
 		Run(llb.Shlex("sh -c 'echo -n bar > /foo'"))
 
-	rdr, err := marshal(st.Root())
+	rdr, err := marshal(sb.Context(), st.Root())
 	require.NoError(t, err)
 
 	tmpDir, err := ioutil.TempDir("", "buildkit-buildctl")
@@ -167,8 +167,8 @@ func testBuildMetadataFile(t *testing.T, sb integration.Sandbox) {
 	}
 }
 
-func marshal(st llb.State) (io.Reader, error) {
-	def, err := st.Marshal(context.TODO())
+func marshal(ctx context.Context, st llb.State) (io.Reader, error) {
+	def, err := st.Marshal(ctx)
 	if err != nil {
 		return nil, err
 	}

@@ -54,7 +54,7 @@ func TestClientGatewayIntegration(t *testing.T) {
 func testClientGatewaySolve(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 
-	ctx := context.TODO()
+	ctx := sb.Context()
 
 	c, err := New(ctx, sb.Address())
 	require.NoError(t, err)
@@ -132,7 +132,7 @@ func testClientGatewaySolve(t *testing.T, sb integration.Sandbox) {
 func testClientGatewayFailedSolve(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 
-	ctx := context.TODO()
+	ctx := sb.Context()
 
 	c, err := New(ctx, sb.Address())
 	require.NoError(t, err)
@@ -150,7 +150,7 @@ func testClientGatewayFailedSolve(t *testing.T, sb integration.Sandbox) {
 func testClientGatewayEmptySolve(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 
-	ctx := context.TODO()
+	ctx := sb.Context()
 
 	c, err := New(ctx, sb.Address())
 	require.NoError(t, err)
@@ -174,7 +174,7 @@ func testClientGatewayEmptySolve(t *testing.T, sb integration.Sandbox) {
 func testNoBuildID(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 
-	ctx := context.TODO()
+	ctx := sb.Context()
 
 	c, err := New(ctx, sb.Address())
 	require.NoError(t, err)
@@ -189,7 +189,7 @@ func testNoBuildID(t *testing.T, sb integration.Sandbox) {
 func testUnknownBuildID(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 
-	ctx := context.TODO()
+	ctx := sb.Context()
 
 	c, err := New(ctx, sb.Address())
 	require.NoError(t, err)
@@ -206,7 +206,7 @@ func testUnknownBuildID(t *testing.T, sb integration.Sandbox) {
 func testClientGatewayContainerCancelOnRelease(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 
-	ctx := context.TODO()
+	ctx := sb.Context()
 
 	c, err := New(ctx, sb.Address())
 	require.NoError(t, err)
@@ -279,7 +279,7 @@ func testClientGatewayContainerCancelOnRelease(t *testing.T, sb integration.Sand
 func testClientGatewayContainerExecPipe(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 
-	ctx := context.TODO()
+	ctx := sb.Context()
 
 	c, err := New(ctx, sb.Address())
 	require.NoError(t, err)
@@ -405,7 +405,7 @@ func testClientGatewayContainerExecPipe(t *testing.T, sb integration.Sandbox) {
 func testClientGatewayContainerPID1Fail(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 
-	ctx := context.TODO()
+	ctx := sb.Context()
 
 	c, err := New(ctx, sb.Address())
 	require.NoError(t, err)
@@ -469,7 +469,7 @@ func testClientGatewayContainerPID1Fail(t *testing.T, sb integration.Sandbox) {
 func testClientGatewayContainerPID1Exit(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 
-	ctx := context.TODO()
+	ctx := sb.Context()
 
 	c, err := New(ctx, sb.Address())
 	require.NoError(t, err)
@@ -542,7 +542,7 @@ func testClientGatewayContainerPID1Exit(t *testing.T, sb integration.Sandbox) {
 func testClientGatewayContainerMounts(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 
-	ctx := context.TODO()
+	ctx := sb.Context()
 
 	c, err := New(ctx, sb.Address())
 	require.NoError(t, err)
@@ -714,7 +714,7 @@ func testClientGatewayContainerMounts(t *testing.T, sb integration.Sandbox) {
 // a container pid1, executor.Run
 func testClientGatewayContainerPID1Tty(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
-	ctx := context.TODO()
+	ctx := sb.Context()
 
 	c, err := New(ctx, sb.Address())
 	require.NoError(t, err)
@@ -852,7 +852,7 @@ func (p *testPrompt) wait(msg string) string {
 // executor.Exec (secondary process)
 func testClientGatewayContainerExecTty(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
-	ctx := context.TODO()
+	ctx := sb.Context()
 
 	c, err := New(ctx, sb.Address())
 	require.NoError(t, err)
@@ -940,7 +940,7 @@ func testClientGatewayContainerExecTty(t *testing.T, sb integration.Sandbox) {
 func testClientSlowCacheRootfsRef(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 
-	ctx := context.TODO()
+	ctx := sb.Context()
 
 	c, err := New(ctx, sb.Address())
 	require.NoError(t, err)
@@ -1007,7 +1007,7 @@ func testClientSlowCacheRootfsRef(t *testing.T, sb integration.Sandbox) {
 // gets set for the requested platform
 func testClientGatewayContainerPlatformPATH(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
-	ctx := context.TODO()
+	ctx := sb.Context()
 
 	c, err := New(ctx, sb.Address())
 	require.NoError(t, err)
@@ -1079,7 +1079,7 @@ func testClientGatewayContainerPlatformPATH(t *testing.T, sb integration.Sandbox
 func testClientGatewayExecError(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 
-	ctx := context.TODO()
+	ctx := sb.Context()
 
 	c, err := New(ctx, sb.Address())
 	require.NoError(t, err)
@@ -1236,7 +1236,7 @@ func testClientGatewayExecError(t *testing.T, sb integration.Sandbox) {
 func testClientGatewaySlowCacheExecError(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 
-	ctx := context.TODO()
+	ctx := sb.Context()
 
 	c, err := New(ctx, sb.Address())
 	require.NoError(t, err)
@@ -1327,7 +1327,7 @@ func testClientGatewaySlowCacheExecError(t *testing.T, sb integration.Sandbox) {
 func testClientGatewayExecFileActionError(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 
-	ctx := context.TODO()
+	ctx := sb.Context()
 
 	c, err := New(ctx, sb.Address())
 	require.NoError(t, err)
