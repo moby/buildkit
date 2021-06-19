@@ -37,7 +37,7 @@ func TestFrontendIntegration(t *testing.T) {
 }
 
 func testReturnNil(t *testing.T, sb integration.Sandbox) {
-	ctx := context.TODO()
+	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
 	require.NoError(t, err)
@@ -63,7 +63,7 @@ func testReturnNil(t *testing.T, sb integration.Sandbox) {
 }
 
 func testRefReadFile(t *testing.T, sb integration.Sandbox) {
-	ctx := context.TODO()
+	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
 	require.NoError(t, err)
@@ -128,7 +128,7 @@ func testRefReadFile(t *testing.T, sb integration.Sandbox) {
 }
 
 func testRefReadDir(t *testing.T, sb integration.Sandbox) {
-	ctx := context.TODO()
+	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
 	require.NoError(t, err)
@@ -244,7 +244,7 @@ func testRefReadDir(t *testing.T, sb integration.Sandbox) {
 }
 
 func testRefStatFile(t *testing.T, sb integration.Sandbox) {
-	ctx := context.TODO()
+	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())
 	require.NoError(t, err)

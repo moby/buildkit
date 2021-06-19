@@ -3,7 +3,6 @@
 package dockerfile
 
 import (
-	"context"
 	"os"
 	"testing"
 
@@ -65,11 +64,11 @@ RUN --security=insecure ls -l /dev && dd if=/dev/zero of=disk.img bs=20M count=1
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	c, err := client.New(context.TODO(), sb.Address())
+	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -104,11 +103,11 @@ RUN [ "$(cat /proc/self/status | grep CapBnd)" == "CapBnd:	00000000a80425fb" ]
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	c, err := client.New(context.TODO(), sb.Address())
+	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -142,11 +141,11 @@ RUN --security=sandbox [ "$(cat /proc/self/status | grep CapBnd)" == "CapBnd:	00
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	c, err := client.New(context.TODO(), sb.Address())
+	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -170,11 +169,11 @@ RUN [ "$(cat /proc/self/status | grep CapBnd)" == "CapBnd:	00000000a80425fb" ]
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	c, err := client.New(context.TODO(), sb.Address())
+	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	_, err = f.Solve(context.TODO(), c, client.SolveOpt{
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
