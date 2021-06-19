@@ -18,7 +18,7 @@ package contrib // import "go.opentelemetry.io/contrib"
 
 // Version is the current release version of OpenTelemetry Contrib in use.
 func Version() string {
-	return "0.20.0"
+	return "0.21.0"
 	// This string is updated by the pre_release.sh script during release
 }
 

@@ -33,6 +33,12 @@ var _ SpanProcessor = (*simpleSpanProcessor)(nil)
 
 // NewSimpleSpanProcessor returns a new SpanProcessor that will synchronously
 // send completed spans to the exporter immediately.
+//
+// This SpanProcessor is not recommended for production use. The synchronous
+// nature of this SpanProcessor make it good for testing, debugging, or
+// showing examples of other feature, but it will be slow and have a high
+// computation resource usage overhead. The BatchSpanProcessor is recommended
+// for production use instead.
 func NewSimpleSpanProcessor(exporter SpanExporter) SpanProcessor {
 	ssp := &simpleSpanProcessor{
 		exporter: exporter,
@@ -49,8 +55,7 @@ func (ssp *simpleSpanProcessor) OnEnd(s ReadOnlySpan) {
 	defer ssp.exporterMu.RUnlock()
 
 	if ssp.exporter != nil && s.SpanContext().TraceFlags().IsSampled() {
-		ss := s.Snapshot()
-		if err := ssp.exporter.ExportSpans(context.Background(), []*SpanSnapshot{ss}); err != nil {
+		if err := ssp.exporter.ExportSpans(context.Background(), []ReadOnlySpan{s}); err != nil {
 			otel.Handle(err)
 		}
 	}
@@ -60,16 +65,34 @@ func (ssp *simpleSpanProcessor) OnEnd(s ReadOnlySpan) {
 func (ssp *simpleSpanProcessor) Shutdown(ctx context.Context) error {
 	var err error
 	ssp.stopOnce.Do(func() {
+		stopFunc := func(exp SpanExporter) (<-chan error, func()) {
+			done := make(chan error)
+			return done, func() { done <- exp.Shutdown(ctx) }
+		}
+
+		// The exporter field of the simpleSpanProcessor needs to be zeroed to
+		// signal it is shut down, meaning all subsequent calls to OnEnd will
+		// be gracefully ignored. This needs to be done synchronously to avoid
+		// any race condition.
+		//
+		// A closure is used to keep reference to the exporter and then the
+		// field is zeroed. This ensures the simpleSpanProcessor is shut down
+		// before the exporter. This order is important as it avoids a
+		// potential deadlock. If the exporter shut down operation generates a
+		// span, that span would need to be exported. Meaning, OnEnd would be
+		// called and try acquiring the lock that is held here.
 		ssp.exporterMu.Lock()
-		exporter := ssp.exporter
-		// Set exporter to nil so subsequent calls to OnEnd are ignored
-		// gracefully.
+		done, shutdown := stopFunc(ssp.exporter)
 		ssp.exporter = nil
 		ssp.exporterMu.Unlock()
 
-		// Clear the ssp.exporter prior to shutting it down so if that creates
-		// a span that needs to be exported there is no deadlock.
-		err = exporter.Shutdown(ctx)
+		go shutdown()
+
+		select {
+		case err = <-done:
+		case <-ctx.Done():
+			err = ctx.Err()
+		}
 	})
 	return err
 }

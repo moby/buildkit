@@ -9,17 +9,17 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/propagation"
-	"go.opentelemetry.io/otel/semconv"
+	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
 	"go.opentelemetry.io/otel/trace"
 )
 
 // StartSpan starts a new span as a child of the span in context.
 // If there is no span in context then this is a no-op.
-func StartSpan(ctx context.Context, operationName string, opts ...trace.SpanOption) (trace.Span, context.Context) {
+func StartSpan(ctx context.Context, operationName string, opts ...trace.SpanStartOption) (trace.Span, context.Context) {
 	parent := trace.SpanFromContext(ctx)
 	tracer := trace.NewNoopTracerProvider().Tracer("")
-	if parent != nil {
-		tracer = parent.Tracer()
+	if parent.SpanContext().IsValid() {
+		tracer = parent.TracerProvider().Tracer("")
 	}
 	ctx, span := tracer.Start(ctx, operationName, opts...)
 	return span, ctx
@@ -76,11 +76,11 @@ func NewTransport(rt http.RoundTripper) http.RoundTripper {
 
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	span := trace.SpanFromContext(req.Context())
-	if span == nil { // no tracer connected with either request or transport
+	if !span.SpanContext().IsValid() { // no tracer connected with either request or transport
 		return t.RoundTripper.RoundTrip(req)
 	}
 
-	ctx, span := span.Tracer().Start(req.Context(), req.Method)
+	ctx, span := span.TracerProvider().Tracer("").Start(req.Context(), req.Method)
 
 	req = req.WithContext(ctx)
 	span.SetAttributes(semconv.HTTPClientAttributesFromHTTPRequest(req)...)

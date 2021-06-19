@@ -13,6 +13,7 @@ gen/
 /example/jaeger/jaeger
 /example/namedtracer/namedtracer
 /example/opencensus/opencensus
+/example/passthrough/passthrough
 /example/prometheus/prometheus
 /example/prom-collector/prom-collector
 /example/zipkin/zipkin

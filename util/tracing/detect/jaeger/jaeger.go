@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/moby/buildkit/util/tracing/detect"
-	"go.opentelemetry.io/otel/exporters/trace/jaeger"
+	"go.opentelemetry.io/otel/exporters/jaeger"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
@@ -48,7 +48,7 @@ func jaegerExporter() (sdktrace.SpanExporter, error) {
 		epo = jaeger.WithAgentEndpoint(jaeger.WithAgentHost(host), jaeger.WithAgentPort(port))
 	}
 
-	return jaeger.NewRawExporter(epo)
+	return jaeger.New(epo)
 }
 
 func envOr(key, defaultValue string) string {

@@ -57,7 +57,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
@@ -67,10 +66,6 @@ import (
 func init() {
 	apicaps.ExportedProduct = "buildkit"
 	stack.SetVersionInfo(version.Version, version.Revision)
-
-	// OTEL error handling is broken https://github.com/open-telemetry/opentelemetry-go/pull/1851
-	// remove this with otel update
-	otel.SetErrorHandler(skipErrors{})
 
 	seed.WithTimeAndRand()
 	reexec.Init()
@@ -220,14 +215,14 @@ func main() {
 			}
 		}
 
-		tracer, err := detect.Tracer()
+		tp, err := detect.TracerProvider()
 		if err != nil {
 			return err
 		}
 
-		streamTracer := otelgrpc.StreamServerInterceptor(otelgrpc.WithTracerProvider(constTracerProvider{tracer: tracer}), otelgrpc.WithPropagators(propagators))
+		streamTracer := otelgrpc.StreamServerInterceptor(otelgrpc.WithTracerProvider(tp), otelgrpc.WithPropagators(propagators))
 
-		unary := grpc_middleware.ChainUnaryServer(unaryInterceptor(ctx, tracer), grpcerrors.UnaryServerInterceptor)
+		unary := grpc_middleware.ChainUnaryServer(unaryInterceptor(ctx, tp), grpcerrors.UnaryServerInterceptor)
 		stream := grpc_middleware.ChainStreamServer(streamTracer, grpcerrors.StreamServerInterceptor)
 
 		opts := []grpc.ServerOption{grpc.UnaryInterceptor(unary), grpc.StreamInterceptor(stream)}
@@ -542,8 +537,8 @@ func getListener(addr string, uid, gid int, tlsConfig *tls.Config) (net.Listener
 	}
 }
 
-func unaryInterceptor(globalCtx context.Context, tracer trace.Tracer) grpc.UnaryServerInterceptor {
-	withTrace := otelgrpc.UnaryServerInterceptor(otelgrpc.WithTracerProvider(constTracerProvider{tracer: tracer}), otelgrpc.WithPropagators(propagators))
+func unaryInterceptor(globalCtx context.Context, tp trace.TracerProvider) grpc.UnaryServerInterceptor {
+	withTrace := otelgrpc.UnaryServerInterceptor(otelgrpc.WithTracerProvider(tp), otelgrpc.WithPropagators(propagators))
 
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
 		ctx, cancel := context.WithCancel(ctx)
@@ -747,15 +742,3 @@ func getDNSConfig(cfg *config.DNSConfig) *oci.DNSConfig {
 	}
 	return dns
 }
-
-type constTracerProvider struct {
-	tracer trace.Tracer
-}
-
-func (tp constTracerProvider) Tracer(instrumentationName string, opts ...trace.TracerOption) trace.Tracer {
-	return tp.tracer
-}
-
-type skipErrors struct{}
-
-func (skipErrors) Handle(err error) {}

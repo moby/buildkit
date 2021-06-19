@@ -42,6 +42,9 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 	var unary []grpc.UnaryClientInterceptor
 	var stream []grpc.StreamClientInterceptor
 
+	var customTracer bool // allows manually setting disabling tracing even if tracer in context
+	var tracerProvider trace.TracerProvider
+
 	for _, o := range opts {
 		if _, ok := o.(*withFailFast); ok {
 			gopts = append(gopts, grpc.FailOnNonTempDialError(true))
@@ -55,15 +58,28 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 			needWithInsecure = false
 		}
 		if wt, ok := o.(*withTracer); ok {
-			var propagators = propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{})
-			unary = append(unary, otelgrpc.UnaryClientInterceptor(otelgrpc.WithTracerProvider(wt), otelgrpc.WithPropagators(propagators)))
-			stream = append(stream, otelgrpc.StreamClientInterceptor(otelgrpc.WithTracerProvider(wt), otelgrpc.WithPropagators(propagators)))
+			customTracer = true
+			tracerProvider = wt.tp
+
 		}
 		if wd, ok := o.(*withDialer); ok {
 			gopts = append(gopts, grpc.WithContextDialer(wd.dialer))
 			needDialer = false
 		}
 	}
+
+	if !customTracer {
+		if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {
+			tracerProvider = span.TracerProvider()
+		}
+	}
+
+	if tracerProvider != nil {
+		var propagators = propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{})
+		unary = append(unary, otelgrpc.UnaryClientInterceptor(otelgrpc.WithTracerProvider(tracerProvider), otelgrpc.WithPropagators(propagators)))
+		stream = append(stream, otelgrpc.StreamClientInterceptor(otelgrpc.WithTracerProvider(tracerProvider), otelgrpc.WithPropagators(propagators)))
+	}
+
 	if needDialer {
 		dialFn, err := resolveDialer(address)
 		if err != nil {
@@ -184,16 +200,12 @@ func loadCredentials(opts *withCredentials) (grpc.DialOption, error) {
 	return grpc.WithTransportCredentials(credentials.NewTLS(cfg)), nil
 }
 
-func WithTracer(t trace.Tracer) ClientOpt {
+func WithTracerProvider(t trace.TracerProvider) ClientOpt {
 	return &withTracer{t}
 }
 
 type withTracer struct {
-	tracer trace.Tracer
-}
-
-func (wt *withTracer) Tracer(instrumentationName string, opts ...trace.TracerOption) trace.Tracer {
-	return wt.tracer
+	tp trace.TracerProvider
 }
 
 func resolveDialer(address string) (func(context.Context, string) (net.Conn, error), error) {

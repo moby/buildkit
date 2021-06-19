@@ -1,5 +1,38 @@
 # Release Process
 
+## Semantic Convention Generation
+
+If a new version of the OpenTelemetry Specification has been released it will be necessary to generate a new
+semantic convention package from the YAML definitions in the specification repository. There is a utility in
+`internal/tools/semconv-gen` that can be used to generate the a package with the name matching the specification
+version number under the `semconv` package. This will ideally be done soon after the specification release is
+tagged. Make sure that the specification repo contains a checkout of the the latest tagged release so that the
+generated files match the released semantic conventions.
+
+There are currently two categories of semantic conventions that must be generated, `resource` and `trace`.
+
+```
+cd internal/tools/semconv-gen
+go run generator.go -i /path/to/specification/repo/semantic_conventions/resource
+go run generator.go -i /path/to/specification/repo/semantic_conventions/trace
+```
+
+Using default values for all options other than `input` will result in using the `template.j2` template to
+generate `resource.go` and `trace.go` in `/path/to/otelgo/repo/semconv/<version>`.
+
+There are several ancillary files that are not generated and should be copied into the new package from the
+prior package, with updates made as appropriate to canonical import path statements and constant values.
+These files include:
+
+* doc.go
+* exception.go
+* http(_test)?.go
+* schema.go
+
+Uses of the previous schema version in this repository should be updated to use the newly generated version.
+No tooling for this exists at present, so use find/replace in your editor of choice or craft a `grep | sed`
+pipeline if you like living on the edge.
+
 ## Pre-Release
 
 Update go.mod for submodules to depend on the new release which will happen in the next step.
@@ -31,7 +64,6 @@ Update go.mod for submodules to depend on the new release which will happen in t
 
 4. Push the changes to upstream and create a Pull Request on GitHub.
     Be sure to include the curated changes from the [Changelog](./CHANGELOG.md) in the description.
-
 
 ## Tag
 
@@ -76,6 +108,13 @@ After releasing verify that examples build outside of the repository.
 The script copies examples into a different directory removes any `replace` declarations in `go.mod` and builds them.
 This ensures they build with the published release, not the local copy.
 
-## Contrib Repository
+## Post-Release
+
+### Contrib Repository
 
 Once verified be sure to [make a release for the `contrib` repository](https://github.com/open-telemetry/opentelemetry-go-contrib/blob/main/RELEASING.md) that uses this release.
+
+### Website Documentation
+
+Update [the documentation](./website_docs) for [the OpenTelemetry website](https://opentelemetry.io/docs/go/).
+Importantly, bump any package versions referenced to be the latest one you just released and ensure all code examples still compile and are accurate.

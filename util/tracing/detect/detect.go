@@ -3,21 +3,24 @@ package detect
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	"go.opentelemetry.io/otel/semconv"
+	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
 	"go.opentelemetry.io/otel/trace"
 )
 
 type ExporterDetector func() (sdktrace.SpanExporter, error)
 
+var ServiceName string
+
 var detectors map[string]ExporterDetector
 var once sync.Once
-var tracer trace.Tracer
+var tp trace.TracerProvider
 var closers []func(context.Context) error
 var err error
 
@@ -52,8 +55,7 @@ func detectExporter() (sdktrace.SpanExporter, error) {
 }
 
 func detect() error {
-	tp := trace.NewNoopTracerProvider()
-	tracer = tp.Tracer("")
+	tp = trace.NewNoopTracerProvider()
 
 	exp, err := detectExporter()
 	if err != nil {
@@ -63,8 +65,11 @@ func detect() error {
 	if exp == nil {
 		return nil
 	}
-
-	res, err := resource.Detect(context.Background(), serviceNameDetector{}, resource.FromEnv{}, resource.Host{}, resource.TelemetrySDK{})
+	res, err := resource.Detect(context.Background(), serviceNameDetector{})
+	if err != nil {
+		return err
+	}
+	res, err = resource.Merge(resource.Default(), res)
 	if err != nil {
 		return err
 	}
@@ -74,12 +79,11 @@ func detect() error {
 	sdktp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sp), sdktrace.WithResource(res))
 	closers = append(closers, sdktp.Shutdown)
 	tp = sdktp
-	tracer = tp.Tracer("")
 
 	return nil
 }
 
-func Tracer() (trace.Tracer, error) {
+func TracerProvider() (trace.TracerProvider, error) {
 	once.Do(func() {
 		if err1 := detect(); err1 != nil {
 			err = err1
@@ -89,7 +93,7 @@ func Tracer() (trace.Tracer, error) {
 	if err != nil && !b {
 		return nil, err
 	}
-	return tracer, nil
+	return tp, nil
 }
 
 func Shutdown(ctx context.Context) error {
@@ -105,12 +109,16 @@ type serviceNameDetector struct{}
 
 func (serviceNameDetector) Detect(ctx context.Context) (*resource.Resource, error) {
 	return resource.StringDetector(
+		semconv.SchemaURL,
 		semconv.ServiceNameKey,
 		func() (string, error) {
 			if n := os.Getenv("OTEL_SERVICE_NAME"); n != "" {
 				return n, nil
 			}
-			return os.Args[0], nil
+			if ServiceName != "" {
+				return ServiceName, nil
+			}
+			return filepath.Base(os.Args[0]), nil
 		},
 	).Detect(ctx)
 }

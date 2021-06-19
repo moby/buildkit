@@ -40,6 +40,9 @@ $(TOOLS)/%: | $(TOOLS)
 	cd $(TOOLS_MOD_DIR) && \
 	$(GO) build -o $@ $(PACKAGE)
 
+SEMCONVGEN = $(TOOLS)/semconv-gen
+$(TOOLS)/semconv-gen: PACKAGE=go.opentelemetry.io/otel/$(TOOLS_MOD_DIR)/semconv-gen
+
 CROSSLINK = $(TOOLS)/crosslink
 $(TOOLS)/crosslink: PACKAGE=go.opentelemetry.io/otel/$(TOOLS_MOD_DIR)/crosslink
 
@@ -55,7 +58,7 @@ $(TOOLS)/stringer: PACKAGE=golang.org/x/tools/cmd/stringer
 $(TOOLS)/gojq: PACKAGE=github.com/itchyny/gojq/cmd/gojq
 
 .PHONY: tools
-tools: $(CROSSLINK) $(GOLANGCI_LINT) $(MISSPELL) $(STRINGER) $(TOOLS)/gojq
+tools: $(CROSSLINK) $(GOLANGCI_LINT) $(MISSPELL) $(STRINGER) $(TOOLS)/gojq $(SEMCONVGEN)
 
 
 # Build
@@ -147,7 +150,7 @@ lint-modules: | $(CROSSLINK)
 
 .PHONY: license-check
 license-check:
-	@licRes=$$(for f in $$(find . -type f \( -iname '*.go' -o -iname '*.sh' \) ! -path '**/third_party/*' ! -path './exporters/otlp/internal/opentelemetry-proto/*') ; do \
+	@licRes=$$(for f in $$(find . -type f \( -iname '*.go' -o -iname '*.sh' \) ! -path '**/third_party/*') ; do \
 	           awk '/Copyright The OpenTelemetry Authors|generated|GENERATED/ && NR<=3 { found=1; next } END { if (!found) print FILENAME }' $$f; \
 	   done); \
 	   if [ -n "$${licRes}" ]; then \
@@ -158,13 +161,14 @@ license-check:
 .PHONY: dependabot-check
 dependabot-check:
 	@result=$$( \
-		for f in $$( find . -type f -name go.mod -exec dirname {} \; | sed 's/^.\/\?/\//' ); \
-			do grep -q "$$f" .github/dependabot.yml \
+		for f in $$( find . -type f -name go.mod -exec dirname {} \; | sed 's/^.//' ); \
+			do grep -q "directory: \+$$f" .github/dependabot.yml \
 			|| echo "$$f"; \
 		done; \
 	); \
 	if [ -n "$$result" ]; then \
 		echo "missing go.mod dependabot check:"; echo "$$result"; \
+		echo "new modules need to be added to the .github/dependabot.yml file"; \
 		exit 1; \
 	fi
 

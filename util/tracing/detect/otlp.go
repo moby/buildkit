@@ -5,9 +5,9 @@ import (
 	"os"
 
 	"github.com/pkg/errors"
-	"go.opentelemetry.io/otel/exporters/otlp"
-	"go.opentelemetry.io/otel/exporters/otlp/otlpgrpc"
-	"go.opentelemetry.io/otel/exporters/otlp/otlphttp"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
@@ -29,18 +29,17 @@ func otlpExporter() (sdktrace.SpanExporter, error) {
 		proto = "grpc"
 	}
 
-	var pd otlp.ProtocolDriver
+	var c otlptrace.Client
 
 	switch proto {
 	case "grpc":
-		pd = otlpgrpc.NewDriver()
+		c = otlptracegrpc.NewClient()
 	case "http/protobuf":
-		pd = otlphttp.NewDriver(otlphttp.WithMarshal(otlp.MarshalProto))
-	case "http/json":
-		pd = otlphttp.NewDriver(otlphttp.WithMarshal(otlp.MarshalJSON))
+		c = otlptracehttp.NewClient()
+	// case "http/json": // unsupported by library
 	default:
 		return nil, errors.Errorf("unsupported otlp protocol %v", proto)
 	}
 
-	return otlp.NewExporter(context.Background(), pd)
+	return otlptrace.New(context.Background(), c)
 }

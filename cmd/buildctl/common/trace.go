@@ -15,10 +15,11 @@ import (
 func AttachAppContext(app *cli.App) error {
 	ctx := appcontext.Context()
 
-	tracer, err := detect.Tracer()
+	tp, err := detect.TracerProvider()
 	if err != nil {
 		return err
 	}
+	tracer := tp.Tracer("")
 
 	var span trace.Span
 
