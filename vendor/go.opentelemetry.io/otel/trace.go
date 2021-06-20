@@ -22,9 +22,9 @@ import (
 // Tracer creates a named tracer that implements Tracer interface.
 // If the name is an empty string then provider uses default name.
 //
-// This is short for GetTracerProvider().Tracer(name)
-func Tracer(name string) trace.Tracer {
-	return GetTracerProvider().Tracer(name)
+// This is short for GetTracerProvider().Tracer(name, opts...)
+func Tracer(name string, opts ...trace.TracerOption) trace.Tracer {
+	return GetTracerProvider().Tracer(name, opts...)
 }
 
 // GetTracerProvider returns the registered global trace provider.

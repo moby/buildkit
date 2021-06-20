@@ -44,9 +44,8 @@ func grpcClientConn(ctx context.Context, conn net.Conn) (context.Context, *grpc.
 	}
 
 	if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {
-		tracer := span.Tracer()
-		unary = append(unary, filterClient(otelgrpc.UnaryClientInterceptor(otelgrpc.WithTracerProvider(constTracerProvider{tracer: tracer}), otelgrpc.WithPropagators(propagators))))
-		stream = append(stream, otelgrpc.StreamClientInterceptor(otelgrpc.WithTracerProvider(constTracerProvider{tracer: tracer}), otelgrpc.WithPropagators(propagators)))
+		unary = append(unary, filterClient(otelgrpc.UnaryClientInterceptor(otelgrpc.WithTracerProvider(span.TracerProvider()), otelgrpc.WithPropagators(propagators))))
+		stream = append(stream, otelgrpc.StreamClientInterceptor(otelgrpc.WithTracerProvider(span.TracerProvider()), otelgrpc.WithPropagators(propagators)))
 	}
 
 	unary = append(unary, grpcerrors.UnaryClientInterceptor)
@@ -96,12 +95,4 @@ func monitorHealth(ctx context.Context, cc *grpc.ClientConn, cancelConn func()) 
 			}
 		}
 	}
-}
-
-type constTracerProvider struct {
-	tracer trace.Tracer
-}
-
-func (tp constTracerProvider) Tracer(instrumentationName string, opts ...trace.TracerOption) trace.Tracer {
-	return tp.tracer
 }

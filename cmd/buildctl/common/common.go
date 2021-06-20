@@ -65,7 +65,7 @@ func ResolveClient(c *cli.Context) (*client.Client, error) {
 	ctx := CommandContext(c)
 
 	if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {
-		opts = append(opts, client.WithTracer(span.Tracer()))
+		opts = append(opts, client.WithTracerProvider(span.TracerProvider()))
 	}
 
 	if caCert != "" || cert != "" || key != "" {

@@ -18,7 +18,7 @@ import (
 	"context"
 	"strings"
 
-	"go.opentelemetry.io/otel/semconv"
+	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
 )
 
 type osTypeDetector struct{}
@@ -29,6 +29,7 @@ func (osTypeDetector) Detect(ctx context.Context) (*Resource, error) {
 	osType := runtimeOS()
 
 	return NewWithAttributes(
+		semconv.SchemaURL,
 		semconv.OSTypeKey.String(strings.ToLower(osType)),
 	), nil
 }

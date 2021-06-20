@@ -21,12 +21,23 @@ import (
 
 // TextMapCarrier is the storage medium used by a TextMapPropagator.
 type TextMapCarrier interface {
+	// DO NOT CHANGE: any modification will not be backwards compatible and
+	// must never be done outside of a new major release.
+
 	// Get returns the value associated with the passed key.
 	Get(key string) string
+	// DO NOT CHANGE: any modification will not be backwards compatible and
+	// must never be done outside of a new major release.
+
 	// Set stores the key-value pair.
 	Set(key string, value string)
+	// DO NOT CHANGE: any modification will not be backwards compatible and
+	// must never be done outside of a new major release.
+
 	// Keys lists the keys stored in this carrier.
 	Keys() []string
+	// DO NOT CHANGE: any modification will not be backwards compatible and
+	// must never be done outside of a new major release.
 }
 
 // HeaderCarrier adapts http.Header to satisfy the TextMapCarrier interface.
@@ -54,12 +65,23 @@ func (hc HeaderCarrier) Keys() []string {
 // TextMapPropagator propagates cross-cutting concerns as key-value text
 // pairs within a carrier that travels in-band across process boundaries.
 type TextMapPropagator interface {
+	// DO NOT CHANGE: any modification will not be backwards compatible and
+	// must never be done outside of a new major release.
+
 	// Inject set cross-cutting concerns from the Context into the carrier.
 	Inject(ctx context.Context, carrier TextMapCarrier)
+	// DO NOT CHANGE: any modification will not be backwards compatible and
+	// must never be done outside of a new major release.
+
 	// Extract reads cross-cutting concerns from the carrier into a Context.
 	Extract(ctx context.Context, carrier TextMapCarrier) context.Context
+	// DO NOT CHANGE: any modification will not be backwards compatible and
+	// must never be done outside of a new major release.
+
 	// Fields returns the keys who's values are set with Inject.
 	Fields() []string
+	// DO NOT CHANGE: any modification will not be backwards compatible and
+	// must never be done outside of a new major release.
 }
 
 type compositeTextMapPropagator []TextMapPropagator

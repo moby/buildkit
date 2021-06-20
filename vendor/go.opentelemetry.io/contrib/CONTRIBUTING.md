@@ -123,6 +123,7 @@ Approvers:
 - [Sam Xie](https://github.com/XSAM)
 - [David Ashpole](https://github.com/dashpole), Google
 - [Gustavo Silva Paiva](https://github.com/paivagustavo), LightStep
+- [Aaron Clawson](https://github.com/MadVikingGod)
 
 Maintainers:
 

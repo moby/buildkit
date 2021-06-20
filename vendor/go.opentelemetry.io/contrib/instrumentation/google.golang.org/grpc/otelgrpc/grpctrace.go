@@ -120,13 +120,11 @@ func Inject(ctx context.Context, metadata *metadata.MD, opts ...Option) {
 // Extract returns the correlation context and span context that
 // another service encoded in the gRPC metadata object with Inject.
 // This function is meant to be used on incoming requests.
-func Extract(ctx context.Context, metadata *metadata.MD, opts ...Option) ([]attribute.KeyValue, trace.SpanContext) {
+func Extract(ctx context.Context, metadata *metadata.MD, opts ...Option) (baggage.Baggage, trace.SpanContext) {
 	c := newConfig(opts)
 	ctx = c.Propagators.Extract(ctx, &metadataSupplier{
 		metadata: metadata,
 	})
 
-	attributeSet := baggage.Set(ctx)
-
-	return (&attributeSet).ToSlice(), trace.SpanContextFromContext(ctx)
+	return baggage.FromContext(ctx), trace.SpanContextFromContext(ctx)
 }

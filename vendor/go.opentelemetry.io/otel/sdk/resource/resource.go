@@ -16,6 +16,8 @@ package resource // import "go.opentelemetry.io/otel/sdk/resource"
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -29,24 +31,60 @@ import (
 // (`*resource.Resource`).  The `nil` value is equivalent to an empty
 // Resource.
 type Resource struct {
-	attrs attribute.Set
+	attrs     attribute.Set
+	schemaURL string
 }
 
 var (
 	emptyResource Resource
 
-	defaultResource *Resource = func(r *Resource, err error) *Resource {
+	defaultResource = func(r *Resource, err error) *Resource {
 		if err != nil {
 			otel.Handle(err)
 		}
 		return r
-	}(Detect(context.Background(), defaultServiceNameDetector{}, FromEnv{}, TelemetrySDK{}))
+	}(Detect(context.Background(), defaultServiceNameDetector{}, fromEnv{}, telemetrySDK{}))
 )
 
-// NewWithAttributes creates a resource from attrs. If attrs contains
-// duplicate keys, the last value will be used. If attrs contains any invalid
-// items those items will be dropped.
-func NewWithAttributes(attrs ...attribute.KeyValue) *Resource {
+var (
+	errMergeConflictSchemaURL = errors.New("cannot merge resource due to conflicting Schema URL")
+)
+
+// New returns a Resource combined from the user-provided detectors.
+func New(ctx context.Context, opts ...Option) (*Resource, error) {
+	cfg := config{}
+	for _, opt := range opts {
+		opt.apply(&cfg)
+	}
+
+	resource, err := Detect(ctx, cfg.detectors...)
+
+	var err2 error
+	resource, err2 = Merge(resource, &Resource{schemaURL: cfg.schemaURL})
+	if err == nil {
+		err = err2
+	} else if err2 != nil {
+		err = fmt.Errorf("detecting resources: %s", []string{err.Error(), err2.Error()})
+	}
+
+	return resource, err
+}
+
+// NewWithAttributes creates a resource from attrs and associates the resource with a
+// schema URL. If attrs contains duplicate keys, the last value will be used. If attrs
+// contains any invalid items those items will be dropped. The attrs are assumed to be
+// in a schema identified by schemaURL.
+func NewWithAttributes(schemaURL string, attrs ...attribute.KeyValue) *Resource {
+	resource := NewSchemaless(attrs...)
+	resource.schemaURL = schemaURL
+	return resource
+}
+
+// NewSchemaless creates a resource from attrs. If attrs contains duplicate keys,
+// the last value will be used. If attrs contains any invalid items those items will
+// be dropped. The resource will not be associated with a schema URL. If the schema
+// of the attrs is known use NewWithAttributes instead.
+func NewSchemaless(attrs ...attribute.KeyValue) *Resource {
 	if len(attrs) == 0 {
 		return &emptyResource
 	}
@@ -62,7 +100,7 @@ func NewWithAttributes(attrs ...attribute.KeyValue) *Resource {
 		return &emptyResource
 	}
 
-	return &Resource{s} //nolint
+	return &Resource{attrs: s} //nolint
 }
 
 // String implements the Stringer interface and provides a
@@ -84,6 +122,10 @@ func (r *Resource) Attributes() []attribute.KeyValue {
 		r = Empty()
 	}
 	return r.attrs.ToSlice()
+}
+
+func (r *Resource) SchemaURL() string {
+	return r.schemaURL
 }
 
 // Iter returns an interator of the Resource attributes.
@@ -111,15 +153,32 @@ func (r *Resource) Equal(eq *Resource) bool {
 // If there are common keys between resource a and b, then the value
 // from resource b will overwrite the value from resource a, even
 // if resource b's value is empty.
-func Merge(a, b *Resource) *Resource {
+//
+// The SchemaURL of the resources will be merged according to the spec rules:
+// https://github.com/open-telemetry/opentelemetry-specification/blob/bad49c714a62da5493f2d1d9bafd7ebe8c8ce7eb/specification/resource/sdk.md#merge
+// If the resources have different non-empty schemaURL an empty resource and an error
+// will be returned.
+func Merge(a, b *Resource) (*Resource, error) {
 	if a == nil && b == nil {
-		return Empty()
+		return Empty(), nil
 	}
 	if a == nil {
-		return b
+		return b, nil
 	}
 	if b == nil {
-		return a
+		return a, nil
+	}
+
+	// Merge the schema URL.
+	var schemaURL string
+	if a.schemaURL == "" {
+		schemaURL = b.schemaURL
+	} else if b.schemaURL == "" {
+		schemaURL = a.schemaURL
+	} else if a.schemaURL == b.schemaURL {
+		schemaURL = a.schemaURL
+	} else {
+		return Empty(), errMergeConflictSchemaURL
 	}
 
 	// Note: 'b' attributes will overwrite 'a' with last-value-wins in attribute.Key()
@@ -129,7 +188,8 @@ func Merge(a, b *Resource) *Resource {
 	for mi.Next() {
 		combine = append(combine, mi.Label())
 	}
-	return NewWithAttributes(combine...)
+	merged := NewWithAttributes(schemaURL, combine...)
+	return merged, nil
 }
 
 // Empty returns an instance of Resource with no attributes.  It is
@@ -147,9 +207,9 @@ func Default() *Resource {
 // Environment returns an instance of Resource with attributes
 // extracted from the OTEL_RESOURCE_ATTRIBUTES environment variable.
 func Environment() *Resource {
-	detector := &FromEnv{}
+	detector := &fromEnv{}
 	resource, err := detector.Detect(context.Background())
-	if err == nil {
+	if err != nil {
 		otel.Handle(err)
 	}
 	return resource

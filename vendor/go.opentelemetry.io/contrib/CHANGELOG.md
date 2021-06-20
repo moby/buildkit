@@ -8,6 +8,21 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.21.0] - 2021-06-18
+
+### Fixed
+
+- Dockerfile based examples for `otelgin` and `otelmacaron`. (#767)
+
+### Changed
+
+- Supported minimum version of Go bumped from 1.14 to 1.15. (#787)
+- EKS Resource Detector now use the Kubernetes Go client to obtain the ConfigMap. (#813)
+
+### Removed
+
+- Remove service name from `otelmongodb` configuration and span attributes. (#763)
+
 ## [0.20.0] - 2021-04-23
 
 ### Changed
@@ -22,6 +37,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### Changed
 
 - Upgrade to v0.19.0 of `go.opentelemetry.io/otel`.
+- Fix Span names created in HTTP Instrumentation package to conform with guidelines. (#757)
 
 ## [0.18.0] - 2021-03-04
 
@@ -299,7 +315,8 @@ First official tagged release of `contrib` repository.
 - Prefix support for dogstatsd (#34)
 - Update Go Runtime package to use batch observer (#44)
 
-[Unreleased]: https://github.com/open-telemetry/opentelemetry-go-contrib/compare/v0.20.0...HEAD
+[Unreleased]: https://github.com/open-telemetry/opentelemetry-go-contrib/compare/v0.21.0...HEAD
+[0.21.0]: https://github.com/open-telemetry/opentelemetry-go-contrib/releases/tag/v0.21.0
 [0.20.0]: https://github.com/open-telemetry/opentelemetry-go-contrib/releases/tag/v0.20.0
 [0.19.0]: https://github.com/open-telemetry/opentelemetry-go-contrib/releases/tag/v0.19.0
 [0.18.0]: https://github.com/open-telemetry/opentelemetry-go-contrib/releases/tag/v0.18.0

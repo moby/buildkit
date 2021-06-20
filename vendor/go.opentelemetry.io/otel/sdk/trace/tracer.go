@@ -36,8 +36,8 @@ var _ trace.Tracer = &tracer{}
 // span context found in the passed context. The created Span will be
 // configured appropriately by any SpanOption passed. Any Timestamp option
 // passed will be used as the start time of the Span's life-cycle.
-func (tr *tracer) Start(ctx context.Context, name string, options ...trace.SpanOption) (context.Context, trace.Span) {
-	config := trace.NewSpanConfig(options...)
+func (tr *tracer) Start(ctx context.Context, name string, options ...trace.SpanStartOption) (context.Context, trace.Span) {
+	config := trace.NewSpanStartConfig(options...)
 
 	// For local spans created by this SDK, track child span count.
 	if p := trace.SpanFromContext(ctx); p != nil {
@@ -47,10 +47,10 @@ func (tr *tracer) Start(ctx context.Context, name string, options ...trace.SpanO
 	}
 
 	span := startSpanInternal(ctx, tr, name, config)
-	for _, l := range config.Links {
+	for _, l := range config.Links() {
 		span.addLink(l)
 	}
-	span.SetAttributes(config.Attributes...)
+	span.SetAttributes(config.Attributes()...)
 
 	span.tracer = tr
 
