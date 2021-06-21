@@ -8,7 +8,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
-const maxBuffer = 128
+const maxBuffer = 256
 
 var exp = &Exporter{}
 
@@ -19,9 +19,9 @@ func init() {
 }
 
 type Exporter struct {
-	mu       sync.Mutex
-	delegate sdktrace.SpanExporter
-	buffer   []sdktrace.ReadOnlySpan
+	mu        sync.Mutex
+	exporters []sdktrace.SpanExporter
+	buffer    []sdktrace.ReadOnlySpan
 }
 
 var _ sdktrace.SpanExporter = &Exporter{}
@@ -30,8 +30,14 @@ func (e *Exporter) ExportSpans(ctx context.Context, ss []sdktrace.ReadOnlySpan) 
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	if e.delegate != nil {
-		return e.delegate.ExportSpans(ctx, ss)
+	var err error
+	for _, e := range e.exporters {
+		if err1 := e.ExportSpans(ctx, ss); err1 != nil {
+			err = err1
+		}
+	}
+	if err != nil {
+		return err
 	}
 
 	if len(e.buffer) > maxBuffer {
@@ -46,23 +52,24 @@ func (e *Exporter) Shutdown(ctx context.Context) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	if e.delegate != nil {
-		return e.delegate.Shutdown(ctx)
+	var err error
+	for _, e := range e.exporters {
+		if err1 := e.Shutdown(ctx); err1 != nil {
+			err = err1
+		}
 	}
 
-	return nil
+	return err
 }
 
-func (e *Exporter) SetDelegate(ctx context.Context, del sdktrace.SpanExporter) error {
+func (e *Exporter) SetSpanExporter(ctx context.Context, exp sdktrace.SpanExporter) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	e.delegate = del
+	e.exporters = append(e.exporters, exp)
 
 	if len(e.buffer) > 0 {
-		err := e.delegate.ExportSpans(ctx, e.buffer)
-		e.buffer = nil
-		return err
+		return exp.ExportSpans(ctx, e.buffer)
 	}
 	return nil
 }

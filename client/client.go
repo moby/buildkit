@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"io/ioutil"
-	"log"
 	"net"
 	"net/url"
 	"strings"
@@ -18,7 +17,6 @@ import (
 	"github.com/moby/buildkit/session/grpchijack"
 	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/moby/buildkit/util/grpcerrors"
-	"github.com/moby/buildkit/util/tracing/detect"
 	"github.com/moby/buildkit/util/tracing/otlptracegrpc"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
@@ -50,6 +48,7 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 
 	var customTracer bool // allows manually setting disabling tracing even if tracer in context
 	var tracerProvider trace.TracerProvider
+	var tracerDelegate TracerDelegate
 
 	for _, o := range opts {
 		if _, ok := o.(*withFailFast); ok {
@@ -70,6 +69,9 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 		if wd, ok := o.(*withDialer); ok {
 			gopts = append(gopts, grpc.WithContextDialer(wd.dialer))
 			needDialer = false
+		}
+		if wt, ok := o.(*withTracerDelegate); ok {
+			tracerDelegate = wt
 		}
 	}
 
@@ -132,31 +134,20 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 		conn: conn,
 	}
 
-	_ = c.setupDelegatedTracing(ctx) // ignore error
+	if tracerDelegate != nil {
+		_ = c.setupDelegatedTracing(ctx, tracerDelegate) // ignore error
+	}
 
 	return c, nil
 }
 
-func (c *Client) setupDelegatedTracing(ctx context.Context) error {
-	exp, err := detect.Exporter()
-	if err != nil {
-		return err
-	}
-
-	log.Printf("exporter %v %T", exp, exp)
-	del, ok := exp.(interface {
-		SetDelegate(context.Context, sdktrace.SpanExporter) error
-	})
-	if !ok {
-		return nil
-	}
-
+func (c *Client) setupDelegatedTracing(ctx context.Context, td TracerDelegate) error {
 	pd := otlptracegrpc.NewClient(c.conn)
 	e, err := otlptrace.New(ctx, pd)
 	if err != nil {
 		return nil
 	}
-	return del.SetDelegate(ctx, e)
+	return td.SetSpanExporter(ctx, e)
 }
 
 func (c *Client) controlClient() controlapi.ControlClient {
@@ -237,6 +228,20 @@ func WithTracerProvider(t trace.TracerProvider) ClientOpt {
 
 type withTracer struct {
 	tp trace.TracerProvider
+}
+
+type TracerDelegate interface {
+	SetSpanExporter(context.Context, sdktrace.SpanExporter) error
+}
+
+func WithTracerDelegate(td TracerDelegate) ClientOpt {
+	return &withTracerDelegate{
+		TracerDelegate: td,
+	}
+}
+
+type withTracerDelegate struct {
+	TracerDelegate
 }
 
 func resolveDialer(address string) (func(context.Context, string) (net.Conn, error), error) {
