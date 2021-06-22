@@ -29,6 +29,8 @@ import (
 	v1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type Opt struct {
@@ -193,6 +195,9 @@ func (c *Controller) Prune(req *controlapi.PruneRequest, stream controlapi.Contr
 }
 
 func (c *Controller) Export(ctx context.Context, req *tracev1.ExportTraceServiceRequest) (*tracev1.ExportTraceServiceResponse, error) {
+	if c.opt.TraceCollector == nil {
+		return nil, status.Errorf(codes.Unavailable, "trace collector not configured")
+	}
 	err := c.opt.TraceCollector.ExportSpans(ctx, transform.Spans(req.GetResourceSpans()))
 	if err != nil {
 		return nil, err
