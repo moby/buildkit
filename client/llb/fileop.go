@@ -544,7 +544,7 @@ type FileOp struct {
 	isValidated bool
 }
 
-func (f *FileOp) Validate(context.Context) error {
+func (f *FileOp) Validate(context.Context, *Constraints) error {
 	if f.isValidated {
 		return nil
 	}
@@ -667,7 +667,7 @@ func (f *FileOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 	if f.Cached(c) {
 		return f.Load()
 	}
-	if err := f.Validate(ctx); err != nil {
+	if err := f.Validate(ctx, c); err != nil {
 		return "", nil, nil, nil, err
 	}
 

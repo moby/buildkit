@@ -36,7 +36,7 @@ func NewSource(id string, attrs map[string]string, c Constraints) *SourceOp {
 	return s
 }
 
-func (s *SourceOp) Validate(ctx context.Context) error {
+func (s *SourceOp) Validate(ctx context.Context, c *Constraints) error {
 	if s.err != nil {
 		return s.err
 	}
@@ -50,7 +50,7 @@ func (s *SourceOp) Marshal(ctx context.Context, constraints *Constraints) (diges
 	if s.Cached(constraints) {
 		return s.Load()
 	}
-	if err := s.Validate(ctx); err != nil {
+	if err := s.Validate(ctx, constraints); err != nil {
 		return "", nil, nil, nil, err
 	}
 

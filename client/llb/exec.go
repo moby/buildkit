@@ -95,7 +95,7 @@ func (e *ExecOp) GetMount(target string) Output {
 	return nil
 }
 
-func (e *ExecOp) Validate(ctx context.Context) error {
+func (e *ExecOp) Validate(ctx context.Context, c *Constraints) error {
 	if e.isValidated {
 		return nil
 	}
@@ -115,7 +115,7 @@ func (e *ExecOp) Validate(ctx context.Context) error {
 	}
 	for _, m := range e.mounts {
 		if m.source != nil {
-			if err := m.source.Vertex(ctx).Validate(ctx); err != nil {
+			if err := m.source.Vertex(ctx, c).Validate(ctx, c); err != nil {
 				return err
 			}
 		}
@@ -128,7 +128,7 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 	if e.Cached(c) {
 		return e.Load()
 	}
-	if err := e.Validate(ctx); err != nil {
+	if err := e.Validate(ctx, c); err != nil {
 		return "", nil, nil, nil, err
 	}
 	// make sure mounts are sorted

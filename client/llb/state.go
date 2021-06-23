@@ -19,11 +19,11 @@ type StateOption func(State) State
 
 type Output interface {
 	ToInput(context.Context, *Constraints) (*pb.Input, error)
-	Vertex(context.Context) Vertex
+	Vertex(context.Context, *Constraints) Vertex
 }
 
 type Vertex interface {
-	Validate(context.Context) error
+	Validate(context.Context, *Constraints) error
 	Marshal(context.Context, *Constraints) (digest.Digest, []byte, *pb.OpMetadata, []*SourceLocation, error)
 	Output() Output
 	Inputs() []Output
@@ -111,9 +111,6 @@ func (s State) Marshal(ctx context.Context, co ...ConstraintsOpt) (*Definition, 
 	def := &Definition{
 		Metadata: make(map[digest.Digest]pb.OpMetadata, 0),
 	}
-	if s.Output() == nil || s.Output().Vertex(ctx) == nil {
-		return def, nil
-	}
 
 	defaultPlatform := platforms.Normalize(platforms.DefaultSpec())
 	c := &Constraints{
@@ -123,10 +120,12 @@ func (s State) Marshal(ctx context.Context, co ...ConstraintsOpt) (*Definition, 
 	for _, o := range append(s.opts, co...) {
 		o.SetConstraintsOption(c)
 	}
-
+	if s.Output() == nil || s.Output().Vertex(ctx, c) == nil {
+		return def, nil
+	}
 	smc := newSourceMapCollector()
 
-	def, err := marshal(ctx, s.Output().Vertex(ctx), def, smc, map[digest.Digest]struct{}{}, map[Vertex]struct{}{}, c)
+	def, err := marshal(ctx, s.Output().Vertex(ctx, c), def, smc, map[digest.Digest]struct{}{}, map[Vertex]struct{}{}, c)
 	if err != nil {
 		return def, err
 	}
@@ -176,7 +175,7 @@ func marshal(ctx context.Context, v Vertex, def *Definition, s *sourceMapCollect
 	}
 	for _, inp := range v.Inputs() {
 		var err error
-		def, err = marshal(ctx, inp.Vertex(ctx), def, s, cache, vertexCache, c)
+		def, err = marshal(ctx, inp.Vertex(ctx, c), def, s, cache, vertexCache, c)
 		if err != nil {
 			return def, err
 		}
@@ -199,8 +198,8 @@ func marshal(ctx context.Context, v Vertex, def *Definition, s *sourceMapCollect
 	return def, nil
 }
 
-func (s State) Validate(ctx context.Context) error {
-	return s.Output().Vertex(ctx).Validate(ctx)
+func (s State) Validate(ctx context.Context, c *Constraints) error {
+	return s.Output().Vertex(ctx, c).Validate(ctx, c)
 }
 
 func (s State) Output() Output {
@@ -390,7 +389,7 @@ func (o *output) ToInput(ctx context.Context, c *Constraints) (*pb.Input, error)
 	return &pb.Input{Digest: dgst, Index: index}, nil
 }
 
-func (o *output) Vertex(context.Context) Vertex {
+func (o *output) Vertex(context.Context, *Constraints) Vertex {
 	return o.vertex
 }
 

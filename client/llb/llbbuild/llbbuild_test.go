@@ -49,6 +49,6 @@ func (d *dummyOutput) ToInput(context.Context, *llb.Constraints) (*pb.Input, err
 		Index:  pb.OutputIndex(7), // random constant
 	}, nil
 }
-func (d *dummyOutput) Vertex(context.Context) llb.Vertex {
+func (d *dummyOutput) Vertex(context.Context, *llb.Constraints) llb.Vertex {
 	return nil
 }

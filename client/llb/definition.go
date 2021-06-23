@@ -105,11 +105,11 @@ func (d *DefinitionOp) ToInput(ctx context.Context, c *Constraints) (*pb.Input, 
 	return d.Output().ToInput(ctx, c)
 }
 
-func (d *DefinitionOp) Vertex(context.Context) Vertex {
+func (d *DefinitionOp) Vertex(context.Context, *Constraints) Vertex {
 	return d
 }
 
-func (d *DefinitionOp) Validate(context.Context) error {
+func (d *DefinitionOp) Validate(context.Context, *Constraints) error {
 	// Scratch state has no digest, ops or metas.
 	if d.dgst == "" {
 		return nil
@@ -151,7 +151,7 @@ func (d *DefinitionOp) Marshal(ctx context.Context, c *Constraints) (digest.Dige
 		return "", nil, nil, nil, errors.Errorf("cannot marshal empty definition op")
 	}
 
-	if err := d.Validate(ctx); err != nil {
+	if err := d.Validate(ctx, c); err != nil {
 		return "", nil, nil, nil, err
 	}
 

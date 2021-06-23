@@ -22,7 +22,7 @@ func (as *asyncState) Output() Output {
 	return as
 }
 
-func (as *asyncState) Vertex(ctx context.Context) Vertex {
+func (as *asyncState) Vertex(ctx context.Context, c *Constraints) Vertex {
 	err := as.Do(ctx)
 	if err != nil {
 		return &errVertex{err}
@@ -32,7 +32,7 @@ func (as *asyncState) Vertex(ctx context.Context) Vertex {
 		if out == nil {
 			return nil
 		}
-		return out.Vertex(ctx)
+		return out.Vertex(ctx, c)
 	}
 	return nil
 }
@@ -82,7 +82,7 @@ type errVertex struct {
 	err error
 }
 
-func (v *errVertex) Validate(context.Context) error {
+func (v *errVertex) Validate(context.Context, *Constraints) error {
 	return v.err
 }
 func (v *errVertex) Marshal(context.Context, *Constraints) (digest.Digest, []byte, *pb.OpMetadata, []*SourceLocation, error) {
