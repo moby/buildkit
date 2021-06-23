@@ -93,6 +93,7 @@ func TestIntegration(t *testing.T) {
 		testBasicRegistryCacheImportExport,
 		testBasicLocalCacheImportExport,
 		testCachedMounts,
+		testCopyFromScratch,
 		testProxyEnv,
 		testLocalSymlinkEscape,
 		testTmpfsMounts,
@@ -2942,6 +2943,28 @@ func testCacheMountNoCache(t *testing.T, sb integration.Sandbox) {
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
 	require.NoError(t, err)
+}
+
+func testCopyFromScratch(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Scratch().File(llb.Copy(llb.Scratch(), "/", "/"))
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
+	require.NoError(t, err)
+
+	st = llb.Scratch().File(llb.Copy(llb.Scratch(), "/foo", "/"))
+	def, err = st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "/foo: no such file or directory")
 }
 
 // containerd/containerd#2119
