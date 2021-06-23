@@ -121,7 +121,7 @@ func Image(ref string, opts ...ImageOption) State {
 		src.err = err
 	} else if info.metaResolver != nil {
 		if _, ok := r.(reference.Digested); ok || !info.resolveDigest {
-			return NewState(src.Output()).Async(func(ctx context.Context, st State) (State, error) {
+			return NewState(src.Output()).Async(func(ctx context.Context, st State, c *Constraints) (State, error) {
 				_, dt, err := info.metaResolver.ResolveImageConfig(ctx, ref, ResolveImageConfigOpt{
 					Platform:    info.Constraints.Platform,
 					ResolveMode: info.resolveMode.String(),
@@ -132,7 +132,7 @@ func Image(ref string, opts ...ImageOption) State {
 				return st.WithImageConfig(dt)
 			})
 		}
-		return Scratch().Async(func(ctx context.Context, _ State) (State, error) {
+		return Scratch().Async(func(ctx context.Context, _ State, c *Constraints) (State, error) {
 			dgst, dt, err := info.metaResolver.ResolveImageConfig(context.TODO(), ref, ResolveImageConfigOpt{
 				Platform:    info.Constraints.Platform,
 				ResolveMode: info.resolveMode.String(),
