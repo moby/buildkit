@@ -2965,6 +2965,17 @@ func testCopyFromScratch(t *testing.T, sb integration.Sandbox) {
 	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "/foo: no such file or directory")
+
+	busybox := llb.Image("busybox:latest")
+
+	out := busybox.Run(llb.Shlex(`sh -e -c '[ $(ls /scratch | wc -l) = '0' ]'`))
+	out.AddMount("/scratch", llb.Scratch(), llb.Readonly)
+
+	def, err = out.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
+	require.NoError(t, err)
 }
 
 // containerd/containerd#2119
