@@ -36,7 +36,7 @@ func NewSource(id string, attrs map[string]string, c Constraints) *SourceOp {
 	return s
 }
 
-func (s *SourceOp) Validate(ctx context.Context) error {
+func (s *SourceOp) Validate(ctx context.Context, c *Constraints) error {
 	if s.err != nil {
 		return s.err
 	}
@@ -50,7 +50,7 @@ func (s *SourceOp) Marshal(ctx context.Context, constraints *Constraints) (diges
 	if s.Cached(constraints) {
 		return s.Load()
 	}
-	if err := s.Validate(ctx); err != nil {
+	if err := s.Validate(ctx, constraints); err != nil {
 		return "", nil, nil, nil, err
 	}
 
@@ -121,9 +121,13 @@ func Image(ref string, opts ...ImageOption) State {
 		src.err = err
 	} else if info.metaResolver != nil {
 		if _, ok := r.(reference.Digested); ok || !info.resolveDigest {
-			return NewState(src.Output()).Async(func(ctx context.Context, st State) (State, error) {
+			return NewState(src.Output()).Async(func(ctx context.Context, st State, c *Constraints) (State, error) {
+				p := info.Constraints.Platform
+				if p == nil {
+					p = c.Platform
+				}
 				_, dt, err := info.metaResolver.ResolveImageConfig(ctx, ref, ResolveImageConfigOpt{
-					Platform:    info.Constraints.Platform,
+					Platform:    p,
 					ResolveMode: info.resolveMode.String(),
 				})
 				if err != nil {
@@ -132,9 +136,13 @@ func Image(ref string, opts ...ImageOption) State {
 				return st.WithImageConfig(dt)
 			})
 		}
-		return Scratch().Async(func(ctx context.Context, _ State) (State, error) {
+		return Scratch().Async(func(ctx context.Context, _ State, c *Constraints) (State, error) {
+			p := info.Constraints.Platform
+			if p == nil {
+				p = c.Platform
+			}
 			dgst, dt, err := info.metaResolver.ResolveImageConfig(context.TODO(), ref, ResolveImageConfigOpt{
-				Platform:    info.Constraints.Platform,
+				Platform:    p,
 				ResolveMode: info.resolveMode.String(),
 			})
 			if err != nil {

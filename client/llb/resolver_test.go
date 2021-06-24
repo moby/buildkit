@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/containerd/containerd/platforms"
 	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
@@ -21,10 +22,11 @@ func TestImageMetaResolver(t *testing.T) {
 
 	require.Equal(t, false, tr.called)
 
-	def, err := st.Marshal(context.TODO())
+	def, err := st.Marshal(context.TODO(), LinuxPpc64le)
 	require.NoError(t, err)
 
 	require.Equal(t, true, tr.called)
+	require.Equal(t, "linux/ppc64le", tr.platform)
 
 	m, arr := parseDef(t, def.Def)
 	require.Equal(t, 2, len(arr))
@@ -66,9 +68,10 @@ func TestImageResolveDigest(t *testing.T) {
 }
 
 type testResolver struct {
-	digest digest.Digest
-	dir    string
-	called bool
+	digest   digest.Digest
+	dir      string
+	called   bool
+	platform string
 }
 
 func (r *testResolver) ResolveImageConfig(ctx context.Context, ref string, opt ResolveImageConfigOpt) (digest.Digest, []byte, error) {
@@ -82,6 +85,10 @@ func (r *testResolver) ResolveImageConfig(ctx context.Context, ref string, opt R
 	r.called = true
 
 	img.Config.WorkingDir = r.dir
+
+	if opt.Platform != nil {
+		r.platform = platforms.Format(*opt.Platform)
+	}
 
 	dt, err := json.Marshal(img)
 	if err != nil {

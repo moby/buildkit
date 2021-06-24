@@ -38,7 +38,7 @@ func TestDefinitionEquivalence(t *testing.T) {
 			op, err := NewDefinitionOp(def.ToPB())
 			require.NoError(t, err)
 
-			err = op.Validate(ctx)
+			err = op.Validate(ctx, nil)
 			require.NoError(t, err)
 
 			st2 := NewState(op.Output())
@@ -101,7 +101,7 @@ func TestDefinitionInputCache(t *testing.T) {
 	op, err := NewDefinitionOp(def.ToPB())
 	require.NoError(t, err)
 
-	err = op.Validate(ctx)
+	err = op.Validate(ctx, nil)
 	require.NoError(t, err)
 
 	st2 := NewState(op.Output())
@@ -113,7 +113,7 @@ func TestDefinitionInputCache(t *testing.T) {
 
 	// verify the expected number of vertexes gets marshalled
 	vertexCache := make(map[Vertex]struct{})
-	_, err = marshal(ctx, st2.Output().Vertex(ctx), marshalDef, smc, map[digest.Digest]struct{}{}, vertexCache, constraints)
+	_, err = marshal(ctx, st2.Output().Vertex(ctx, constraints), marshalDef, smc, map[digest.Digest]struct{}{}, vertexCache, constraints)
 	require.NoError(t, err)
 	// 1 exec + 2x2 mounts from stA and stB + 1 src = 6 vertexes
 	require.Equal(t, 6, len(vertexCache))

@@ -19,11 +19,11 @@ type StateOption func(State) State
 
 type Output interface {
 	ToInput(context.Context, *Constraints) (*pb.Input, error)
-	Vertex(context.Context) Vertex
+	Vertex(context.Context, *Constraints) Vertex
 }
 
 type Vertex interface {
-	Validate(context.Context) error
+	Validate(context.Context, *Constraints) error
 	Marshal(context.Context, *Constraints) (digest.Digest, []byte, *pb.OpMetadata, []*SourceLocation, error)
 	Output() Output
 	Inputs() []Output
@@ -41,7 +41,7 @@ type State struct {
 	out   Output
 	prev  *State
 	key   interface{}
-	value func(context.Context) (interface{}, error)
+	value func(context.Context, *Constraints) (interface{}, error)
 	opts  []ConstraintsOpt
 	async *asyncState
 }
@@ -58,12 +58,12 @@ func (s State) ensurePlatform() State {
 }
 
 func (s State) WithValue(k, v interface{}) State {
-	return s.withValue(k, func(context.Context) (interface{}, error) {
+	return s.withValue(k, func(context.Context, *Constraints) (interface{}, error) {
 		return v, nil
 	})
 }
 
-func (s State) withValue(k interface{}, v func(context.Context) (interface{}, error)) State {
+func (s State) withValue(k interface{}, v func(context.Context, *Constraints) (interface{}, error)) State {
 	return State{
 		out:   s.Output(),
 		prev:  &s, // doesn't need to be original pointer
@@ -72,21 +72,25 @@ func (s State) withValue(k interface{}, v func(context.Context) (interface{}, er
 	}
 }
 
-func (s State) Value(ctx context.Context, k interface{}) (interface{}, error) {
-	return s.getValue(k)(ctx)
+func (s State) Value(ctx context.Context, k interface{}, co ...ConstraintsOpt) (interface{}, error) {
+	c := &Constraints{}
+	for _, f := range co {
+		f.SetConstraintsOption(c)
+	}
+	return s.getValue(k)(ctx, c)
 }
 
-func (s State) getValue(k interface{}) func(context.Context) (interface{}, error) {
+func (s State) getValue(k interface{}) func(context.Context, *Constraints) (interface{}, error) {
 	if s.key == k {
 		return s.value
 	}
 	if s.async != nil {
-		return func(ctx context.Context) (interface{}, error) {
-			err := s.async.Do(ctx)
+		return func(ctx context.Context, c *Constraints) (interface{}, error) {
+			err := s.async.Do(ctx, c)
 			if err != nil {
 				return nil, err
 			}
-			return s.async.target.getValue(k)(ctx)
+			return s.async.target.getValue(k)(ctx, c)
 		}
 	}
 	if s.prev == nil {
@@ -95,7 +99,7 @@ func (s State) getValue(k interface{}) func(context.Context) (interface{}, error
 	return s.prev.getValue(k)
 }
 
-func (s State) Async(f func(context.Context, State) (State, error)) State {
+func (s State) Async(f func(context.Context, State, *Constraints) (State, error)) State {
 	s2 := State{
 		async: &asyncState{f: f, prev: s},
 	}
@@ -111,9 +115,6 @@ func (s State) Marshal(ctx context.Context, co ...ConstraintsOpt) (*Definition, 
 	def := &Definition{
 		Metadata: make(map[digest.Digest]pb.OpMetadata, 0),
 	}
-	if s.Output() == nil || s.Output().Vertex(ctx) == nil {
-		return def, nil
-	}
 
 	defaultPlatform := platforms.Normalize(platforms.DefaultSpec())
 	c := &Constraints{
@@ -123,10 +124,12 @@ func (s State) Marshal(ctx context.Context, co ...ConstraintsOpt) (*Definition, 
 	for _, o := range append(s.opts, co...) {
 		o.SetConstraintsOption(c)
 	}
-
+	if s.Output() == nil || s.Output().Vertex(ctx, c) == nil {
+		return def, nil
+	}
 	smc := newSourceMapCollector()
 
-	def, err := marshal(ctx, s.Output().Vertex(ctx), def, smc, map[digest.Digest]struct{}{}, map[Vertex]struct{}{}, c)
+	def, err := marshal(ctx, s.Output().Vertex(ctx, c), def, smc, map[digest.Digest]struct{}{}, map[Vertex]struct{}{}, c)
 	if err != nil {
 		return def, err
 	}
@@ -176,7 +179,7 @@ func marshal(ctx context.Context, v Vertex, def *Definition, s *sourceMapCollect
 	}
 	for _, inp := range v.Inputs() {
 		var err error
-		def, err = marshal(ctx, inp.Vertex(ctx), def, s, cache, vertexCache, c)
+		def, err = marshal(ctx, inp.Vertex(ctx, c), def, s, cache, vertexCache, c)
 		if err != nil {
 			return def, err
 		}
@@ -199,8 +202,8 @@ func marshal(ctx context.Context, v Vertex, def *Definition, s *sourceMapCollect
 	return def, nil
 }
 
-func (s State) Validate(ctx context.Context) error {
-	return s.Output().Vertex(ctx).Validate(ctx)
+func (s State) Validate(ctx context.Context, c *Constraints) error {
+	return s.Output().Vertex(ctx, c).Validate(ctx, c)
 }
 
 func (s State) Output() Output {
@@ -287,8 +290,12 @@ func (s State) Dirf(str string, v ...interface{}) State {
 	return Dirf(str, v...)(s)
 }
 
-func (s State) GetEnv(ctx context.Context, key string) (string, bool, error) {
-	env, err := getEnv(s)(ctx)
+func (s State) GetEnv(ctx context.Context, key string, co ...ConstraintsOpt) (string, bool, error) {
+	c := &Constraints{}
+	for _, f := range co {
+		f.SetConstraintsOption(c)
+	}
+	env, err := getEnv(s)(ctx, c)
 	if err != nil {
 		return "", false, err
 	}
@@ -296,20 +303,32 @@ func (s State) GetEnv(ctx context.Context, key string) (string, bool, error) {
 	return v, ok, nil
 }
 
-func (s State) Env(ctx context.Context) ([]string, error) {
-	env, err := getEnv(s)(ctx)
+func (s State) Env(ctx context.Context, co ...ConstraintsOpt) ([]string, error) {
+	c := &Constraints{}
+	for _, f := range co {
+		f.SetConstraintsOption(c)
+	}
+	env, err := getEnv(s)(ctx, c)
 	if err != nil {
 		return nil, err
 	}
 	return env.ToArray(), nil
 }
 
-func (s State) GetDir(ctx context.Context) (string, error) {
-	return getDir(s)(ctx)
+func (s State) GetDir(ctx context.Context, co ...ConstraintsOpt) (string, error) {
+	c := &Constraints{}
+	for _, f := range co {
+		f.SetConstraintsOption(c)
+	}
+	return getDir(s)(ctx, c)
 }
 
-func (s State) GetArgs(ctx context.Context) ([]string, error) {
-	return getArgs(s)(ctx)
+func (s State) GetArgs(ctx context.Context, co ...ConstraintsOpt) ([]string, error) {
+	c := &Constraints{}
+	for _, f := range co {
+		f.SetConstraintsOption(c)
+	}
+	return getArgs(s)(ctx, c)
 }
 
 func (s State) Reset(s2 State) State {
@@ -324,31 +343,47 @@ func (s State) Hostname(v string) State {
 	return Hostname(v)(s)
 }
 
-func (s State) GetHostname(ctx context.Context) (string, error) {
-	return getHostname(s)(ctx)
+func (s State) GetHostname(ctx context.Context, co ...ConstraintsOpt) (string, error) {
+	c := &Constraints{}
+	for _, f := range co {
+		f.SetConstraintsOption(c)
+	}
+	return getHostname(s)(ctx, c)
 }
 
 func (s State) Platform(p specs.Platform) State {
 	return platform(p)(s)
 }
 
-func (s State) GetPlatform(ctx context.Context) (*specs.Platform, error) {
-	return getPlatform(s)(ctx)
+func (s State) GetPlatform(ctx context.Context, co ...ConstraintsOpt) (*specs.Platform, error) {
+	c := &Constraints{}
+	for _, f := range co {
+		f.SetConstraintsOption(c)
+	}
+	return getPlatform(s)(ctx, c)
 }
 
 func (s State) Network(n pb.NetMode) State {
 	return Network(n)(s)
 }
 
-func (s State) GetNetwork(ctx context.Context) (pb.NetMode, error) {
-	return getNetwork(s)(ctx)
+func (s State) GetNetwork(ctx context.Context, co ...ConstraintsOpt) (pb.NetMode, error) {
+	c := &Constraints{}
+	for _, f := range co {
+		f.SetConstraintsOption(c)
+	}
+	return getNetwork(s)(ctx, c)
 }
 func (s State) Security(n pb.SecurityMode) State {
 	return Security(n)(s)
 }
 
-func (s State) GetSecurity(ctx context.Context) (pb.SecurityMode, error) {
-	return getSecurity(s)(ctx)
+func (s State) GetSecurity(ctx context.Context, co ...ConstraintsOpt) (pb.SecurityMode, error) {
+	c := &Constraints{}
+	for _, f := range co {
+		f.SetConstraintsOption(c)
+	}
+	return getSecurity(s)(ctx, c)
 }
 
 func (s State) With(so ...StateOption) State {
@@ -390,7 +425,7 @@ func (o *output) ToInput(ctx context.Context, c *Constraints) (*pb.Input, error)
 	return &pb.Input{Digest: dgst, Index: index}, nil
 }
 
-func (o *output) Vertex(context.Context) Vertex {
+func (o *output) Vertex(context.Context, *Constraints) Vertex {
 	return o.vertex
 }
 
@@ -565,6 +600,6 @@ func Require(filters ...string) ConstraintsOpt {
 	})
 }
 
-func nilValue(context.Context) (interface{}, error) {
+func nilValue(context.Context, *Constraints) (interface{}, error) {
 	return nil, nil
 }
