@@ -200,10 +200,7 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 		}
 
 		if len(p.manifest.Descriptors) > 0 {
-			pw, _, _ := progress.FromContext(ctx)
-			progressController := &controller.Controller{
-				Writer: pw,
-			}
+			progressController := &controller.Controller{}
 			if p.vtx != nil {
 				progressController.Digest = p.vtx.Digest()
 				progressController.Name = p.vtx.Name()
