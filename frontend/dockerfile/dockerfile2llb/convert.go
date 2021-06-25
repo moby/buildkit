@@ -654,9 +654,11 @@ func dispatchEnv(d *dispatchState, c *instructions.EnvCommand) error {
 func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyEnv, sources []*dispatchState, dopt dispatchOpt) error {
 	var opt []llb.RunOption
 
+	customname := c.String()
+
 	var args []string = c.CmdLine
 	if len(c.Files) > 0 {
-		if len(args) != 1 {
+		if len(args) != 1 || !c.PrependShell {
 			return fmt.Errorf("parsing produced an invalid run command: %v", args)
 		}
 
@@ -674,12 +676,15 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 				if c.Files[0].Chomp {
 					data = parser.ChompHeredocContent(data)
 				}
-				st := llb.Scratch().Dir(sourcePath).File(llb.Mkfile(f, 0755, []byte(data)))
+				st := llb.Scratch().Dir(sourcePath).File(
+					llb.Mkfile(f, 0755, []byte(data)),
+					WithInternalName("preparing inline document"),
+				)
 
 				mount := llb.AddMount(destPath, st, llb.SourcePath(sourcePath), llb.Readonly)
 				opt = append(opt, mount)
 
-				args[0] = path.Join(destPath, f)
+				args = []string{path.Join(destPath, f)}
 			} else {
 				// Just a simple heredoc, so just run the contents in the
 				// shell: this creates the effect of a "fake"-heredoc, so that
@@ -690,14 +695,17 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 				if c.Files[0].Chomp {
 					data = parser.ChompHeredocContent(data)
 				}
-				args[0] = data
+				args = []string{data}
 			}
+			customname += fmt.Sprintf(" (%s)", summarizeHeredoc(c.Files[0].Data))
 		} else {
 			// More complex heredoc, so reconstitute it, and pass it to the
 			// shell to handle.
+			full := args[0]
 			for _, file := range c.Files {
-				args[0] += "\n" + file.Data + file.Name
+				full += "\n" + file.Data + file.Name
 			}
+			args = []string{full}
 		}
 	}
 	if c.PrependShell {
@@ -746,7 +754,7 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 	if err != nil {
 		return err
 	}
-	opt = append(opt, llb.WithCustomName(prefixCommand(d, uppercaseCmd(processCmdEnv(&shlex, c.String(), env)), d.prefixPlatform, pl)))
+	opt = append(opt, llb.WithCustomName(prefixCommand(d, uppercaseCmd(processCmdEnv(&shlex, customname, env)), d.prefixPlatform, pl)))
 	for _, h := range dopt.extraHosts {
 		opt = append(opt, llb.AddExtraHost(h.Host, h.IP))
 	}
@@ -873,9 +881,14 @@ func dispatchCopyFileOp(d *dispatchState, c instructions.SourcesAndDest, sourceS
 	}
 
 	for _, src := range c.SourceContents {
+		commitMessage.WriteString(" <<" + src.Path)
+
 		data := src.Data
 		f := src.Path
-		st := llb.Scratch().Dir("/").File(llb.Mkfile(f, 0664, []byte(data)))
+		st := llb.Scratch().File(
+			llb.Mkfile(f, 0664, []byte(data)),
+			WithInternalName("preparing inline document"),
+		)
 
 		opts := append([]llb.CopyOption{&llb.CopyInfo{
 			Mode:           mode,
@@ -1511,4 +1524,14 @@ func location(sm *llb.SourceMap, locations []parser.Range) llb.ConstraintsOpt {
 		})
 	}
 	return sm.Location(loc)
+}
+
+func summarizeHeredoc(doc string) string {
+	doc = strings.TrimSpace(doc)
+	lines := strings.Split(strings.ReplaceAll(doc, "\r\n", "\n"), "\n")
+	summary := lines[0]
+	if len(lines) > 1 {
+		summary += "..."
+	}
+	return summary
 }
