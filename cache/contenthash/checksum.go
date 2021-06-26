@@ -95,7 +95,7 @@ func (cm *cacheManager) Checksum(ctx context.Context, ref cache.ImmutableRef, p 
 		if p == "/" {
 			return digest.FromBytes(nil), nil
 		}
-		return "", errors.Errorf("cannot checksum empty reference")
+		return "", errors.Errorf("%s: no such file or directory", p)
 	}
 	cc, err := cm.GetCacheContext(ctx, ensureOriginMetadata(ref.Metadata()), ref.IdentityMapping())
 	if err != nil {
