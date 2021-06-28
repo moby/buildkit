@@ -136,7 +136,7 @@ func (c *call) wait(ctx context.Context) (v interface{}, err error) {
 			<-c.cleaned
 			return nil, errRetry
 		}
-		pw, ok, _ := progress.FromContext(ctx)
+		pw, ok, _ := progress.NewFromContext(ctx)
 		if ok {
 			c.progressState.add(pw)
 		}
@@ -149,7 +149,7 @@ func (c *call) wait(ctx context.Context) (v interface{}, err error) {
 	default:
 	}
 
-	pw, ok, ctx := progress.FromContext(ctx)
+	pw, ok, ctx := progress.NewFromContext(ctx)
 	if ok {
 		c.progressState.add(pw)
 	}

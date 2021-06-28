@@ -15,8 +15,9 @@ type Controller struct {
 	started *time.Time
 	writer  progress.Writer
 
-	Digest digest.Digest
-	Name   string
+	Digest        digest.Digest
+	Name          string
+	WriterFactory progress.WriterFactory
 }
 
 var _ progress.Controller = &Controller{}
@@ -26,7 +27,7 @@ func (c *Controller) Start(ctx context.Context) (context.Context, func(error)) {
 		if c.started == nil {
 			now := time.Now()
 			c.started = &now
-			c.writer, _, ctx = progress.FromContext(ctx)
+			c.writer, _, _ = c.WriterFactory(ctx)
 		}
 
 		if c.Digest != "" {

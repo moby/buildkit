@@ -433,7 +433,7 @@ func (jl *Solver) NewJob(id string) (*Job, error) {
 	}
 
 	pr, ctx, progressCloser := progress.NewContext(context.Background())
-	pw, _, _ := progress.FromContext(ctx) // TODO: expose progress.Pipe()
+	pw, _, _ := progress.NewFromContext(ctx) // TODO: expose progress.Pipe()
 
 	_, span := trace.NewNoopTracerProvider().Tracer("").Start(ctx, "")
 	j := &Job{
@@ -881,7 +881,7 @@ func (v *vertexWithCacheOptions) Inputs() []Edge {
 }
 
 func notifyStarted(ctx context.Context, v *client.Vertex, cached bool) {
-	pw, _, _ := progress.FromContext(ctx)
+	pw, _, _ := progress.NewFromContext(ctx)
 	defer pw.Close()
 	now := time.Now()
 	v.Started = &now
@@ -891,7 +891,7 @@ func notifyStarted(ctx context.Context, v *client.Vertex, cached bool) {
 }
 
 func notifyCompleted(ctx context.Context, v *client.Vertex, err error, cached bool) {
-	pw, _, _ := progress.FromContext(ctx)
+	pw, _, _ := progress.NewFromContext(ctx)
 	defer pw.Close()
 	now := time.Now()
 	if v.Started == nil {

@@ -96,7 +96,7 @@ func trackProgress(ctx context.Context, desc ocispec.Descriptor, manager PullMan
 		ticker.Stop()
 	}()
 
-	pw, _, _ := progress.FromContext(ctx)
+	pw, _, _ := progress.NewFromContext(ctx)
 	defer pw.Close()
 
 	ingestRef := remotes.MakeRefKey(ctx, desc)

@@ -42,6 +42,7 @@ import (
 	"github.com/moby/buildkit/source/http"
 	"github.com/moby/buildkit/source/local"
 	"github.com/moby/buildkit/util/archutil"
+	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/progress/controller"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
@@ -374,7 +375,9 @@ func (w *Worker) Exporter(name string, sm *session.Manager) (exporter.Exporter, 
 func (w *Worker) FromRemote(ctx context.Context, remote *solver.Remote) (ref cache.ImmutableRef, err error) {
 	descHandler := &cache.DescHandler{
 		Provider: func(session.Group) content.Provider { return remote.Provider },
-		Progress: &controller.Controller{},
+		Progress: &controller.Controller{
+			WriterFactory: progress.FromContext(ctx),
+		},
 	}
 	descHandlers := cache.DescHandlers(make(map[digest.Digest]*cache.DescHandler))
 	for _, desc := range remote.Descriptors {
