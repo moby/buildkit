@@ -330,6 +330,12 @@ func (w *containerdExecutor) runProcess(ctx context.Context, p containerd.Proces
 		return err
 	}
 
+	io := p.IO()
+	defer func() {
+		io.Wait()
+		io.Close()
+	}()
+
 	err = p.Start(ctx)
 	if err != nil {
 		return err
@@ -373,6 +379,7 @@ func (w *containerdExecutor) runProcess(ctx context.Context, p containerd.Proces
 			killCtx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
 			killCtxDone = killCtx.Done()
 			p.Kill(killCtx, syscall.SIGKILL)
+			io.Cancel()
 		case status := <-statusCh:
 			if cancel != nil {
 				cancel()
@@ -397,6 +404,7 @@ func (w *containerdExecutor) runProcess(ctx context.Context, p containerd.Proces
 			if cancel != nil {
 				cancel()
 			}
+			io.Cancel()
 			return errors.Errorf("failed to kill process on cancel")
 		}
 	}
