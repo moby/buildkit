@@ -66,7 +66,9 @@ type nopWriteCloser struct {
 func (nopWriteCloser) Close() error { return nil }
 
 func TestIntegration(t *testing.T) {
-	mirrors := integration.WithMirroredImages(integration.OfficialImages("busybox:latest", "alpine:latest"))
+	mirroredImages := integration.OfficialImages("busybox:latest", "alpine:latest")
+	mirroredImages["tonistiigi/test:nolayers"] = "docker.io/tonistiigi/test:nolayers"
+	mirrors := integration.WithMirroredImages(mirroredImages)
 
 	integration.Run(t, []integration.Test{
 		testCacheExportCacheKeyLoop,
@@ -93,6 +95,7 @@ func TestIntegration(t *testing.T) {
 		testBasicRegistryCacheImportExport,
 		testBasicLocalCacheImportExport,
 		testCachedMounts,
+		testCopyFromEmptyImage,
 		testProxyEnv,
 		testLocalSymlinkEscape,
 		testTmpfsMounts,
@@ -2942,6 +2945,41 @@ func testCacheMountNoCache(t *testing.T, sb integration.Sandbox) {
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
 	require.NoError(t, err)
+}
+
+func testCopyFromEmptyImage(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	for _, image := range []llb.State{llb.Scratch(), llb.Image("tonistiigi/test:nolayers")} {
+		st := llb.Scratch().File(llb.Copy(image, "/", "/"))
+		def, err := st.Marshal(sb.Context())
+		require.NoError(t, err)
+
+		_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
+		require.NoError(t, err)
+
+		st = llb.Scratch().File(llb.Copy(image, "/foo", "/"))
+		def, err = st.Marshal(sb.Context())
+		require.NoError(t, err)
+
+		_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "/foo: no such file or directory")
+
+		busybox := llb.Image("busybox:latest")
+
+		out := busybox.Run(llb.Shlex(`sh -e -c '[ $(ls /scratch | wc -l) = '0' ]'`))
+		out.AddMount("/scratch", image, llb.Readonly)
+
+		def, err = out.Marshal(sb.Context())
+		require.NoError(t, err)
+
+		_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
+		require.NoError(t, err)
+	}
 }
 
 // containerd/containerd#2119

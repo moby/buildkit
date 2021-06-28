@@ -91,6 +91,12 @@ type cacheManager struct {
 }
 
 func (cm *cacheManager) Checksum(ctx context.Context, ref cache.ImmutableRef, p string, opts ChecksumOpts, s session.Group) (digest.Digest, error) {
+	if ref == nil {
+		if p == "/" {
+			return digest.FromBytes(nil), nil
+		}
+		return "", errors.Errorf("%s: no such file or directory", p)
+	}
 	cc, err := cm.GetCacheContext(ctx, ensureOriginMetadata(ref.Metadata()), ref.IdentityMapping())
 	if err != nil {
 		return "", nil
