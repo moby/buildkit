@@ -200,9 +200,8 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 		}
 
 		if len(p.manifest.Descriptors) > 0 {
-			pw, _, _ := progress.FromContext(ctx)
 			progressController := &controller.Controller{
-				Writer: pw,
+				WriterFactory: progress.FromContext(ctx),
 			}
 			if p.vtx != nil {
 				progressController.Digest = p.vtx.Digest()
@@ -369,7 +368,7 @@ func cacheKeyFromConfig(dt []byte) digest.Digest {
 }
 
 func oneOffProgress(ctx context.Context, id string) func(err error) error {
-	pw, _, _ := progress.FromContext(ctx)
+	pw, _, _ := progress.NewFromContext(ctx)
 	now := time.Now()
 	st := progress.Status{
 		Started: &now,
