@@ -77,10 +77,17 @@ func (node *Node) lines(start, end int) {
 }
 
 func (node *Node) canContainHeredoc() bool {
-	if _, allowedDirective := heredocDirectives[node.Value]; !allowedDirective {
+	// check for compound commands, like ONBUILD
+	if ok := heredocCompoundDirectives[node.Value]; ok {
+		if node.Next != nil && len(node.Next.Children) > 0 {
+			node = node.Next.Children[0]
+		}
+	}
+
+	if ok := heredocDirectives[node.Value]; !ok {
 		return false
 	}
-	if _, isJSON := node.Attributes["json"]; isJSON {
+	if isJSON := node.Attributes["json"]; isJSON {
 		return false
 	}
 
@@ -106,13 +113,12 @@ type Heredoc struct {
 }
 
 var (
-	dispatch          map[string]func(string, *directives) (*Node, map[string]bool, error)
-	heredocDirectives map[string]bool
-	reWhitespace      = regexp.MustCompile(`[\t\v\f\r ]+`)
-	reDirectives      = regexp.MustCompile(`^#\s*([a-zA-Z][a-zA-Z0-9]*)\s*=\s*(.+?)\s*$`)
-	reComment         = regexp.MustCompile(`^#.*$`)
-	reHeredoc         = regexp.MustCompile(`^(\d*)<<(-?)(['"]?)([a-zA-Z][a-zA-Z0-9]*)(['"]?)$`)
-	reLeadingTabs     = regexp.MustCompile(`(?m)^\t+`)
+	dispatch      map[string]func(string, *directives) (*Node, map[string]bool, error)
+	reWhitespace  = regexp.MustCompile(`[\t\v\f\r ]+`)
+	reDirectives  = regexp.MustCompile(`^#\s*([a-zA-Z][a-zA-Z0-9]*)\s*=\s*(.+?)\s*$`)
+	reComment     = regexp.MustCompile(`^#.*$`)
+	reHeredoc     = regexp.MustCompile(`^(\d*)<<(-?)(['"]?)([a-zA-Z][a-zA-Z0-9]*)(['"]?)$`)
+	reLeadingTabs = regexp.MustCompile(`(?m)^\t+`)
 )
 
 // DefaultEscapeToken is the default escape token
@@ -122,6 +128,11 @@ var validDirectives = map[string]struct{}{
 	"escape": {},
 	"syntax": {},
 }
+
+var (
+	heredocDirectives         map[string]bool // directives allowed to contain heredocs
+	heredocCompoundDirectives map[string]bool // directives allowed to contain directives containing heredocs
+)
 
 // directive is the structure used during a build run to hold the state of
 // parsing directives.

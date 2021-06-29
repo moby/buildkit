@@ -381,11 +381,14 @@ func parseOnBuild(req parseRequest) (*OnbuildCommand, error) {
 	}
 
 	original := regexp.MustCompile(`(?i)^\s*ONBUILD\s*`).ReplaceAllString(req.original, "")
+	for _, heredoc := range req.heredocs {
+		original += "\n" + heredoc.Content + heredoc.Name
+	}
+
 	return &OnbuildCommand{
 		Expression:      original,
 		withNameAndCode: newWithNameAndCode(req),
 	}, nil
-
 }
 
 func parseWorkdir(req parseRequest) (*WorkdirCommand, error) {
