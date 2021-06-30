@@ -3,6 +3,7 @@
 package dockerfile
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/frontend/dockerfile/builder"
 	"github.com/moby/buildkit/util/testutil/integration"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,6 +25,7 @@ var hdTests = []integration.Test{
 	testRunComplexHeredoc,
 	testHeredocIndent,
 	testHeredocVarSubstitution,
+	testOnBuildHeredoc,
 }
 
 func init() {
@@ -499,4 +502,93 @@ COPY --from=build /dest /
 		require.NoError(t, err)
 		require.Equal(t, content, string(dt))
 	}
+}
+
+func testOnBuildHeredoc(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrorRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	dockerfile := []byte(`
+FROM busybox
+ONBUILD RUN <<EOF
+echo "hello world" >> /dest
+EOF
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	target := registry + "/buildkit/testonbuildheredoc:base"
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"push": "true",
+					"name": target,
+				},
+			},
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dockerfile = []byte(fmt.Sprintf(`
+	FROM %s 
+	`, target))
+
+	dir, err = tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	dockerfile = []byte(fmt.Sprintf(`
+	FROM %s AS base
+	FROM scratch
+	COPY --from=base /dest /dest
+	`, target))
+
+	dir, err = tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "dest"))
+	require.NoError(t, err)
+	require.Equal(t, "hello world\n", string(dt))
 }
