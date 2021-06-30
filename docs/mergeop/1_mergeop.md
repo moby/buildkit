@@ -23,8 +23,7 @@ For now, Merge will only merge together the root (i.e. "/") of the provided stat
 The opts will be used to configure the behavior when there are conflicts during the merge, which is detailed more in the next conflict detection doc.
 
 Some notes on forwards compatibility:
-2. If we ever want to add the ability to use selectors on the input states of Merge, we can use the existing .Dir() method on States to implement choosing a subdir to merge.
-    1. This means that for now we should return an error if users try to call Merge with a Dir value set to something besides "/"
+* If we ever want to add the ability to use selectors on the input states of Merge, we can use the existing .Dir() method on States to implement choosing a subdir to merge. This means that for now we should return an error if users try to call Merge with a Dir value set to something besides "/"
 
 ### Basic Example
 
