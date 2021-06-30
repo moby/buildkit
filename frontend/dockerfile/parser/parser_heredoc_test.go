@@ -77,6 +77,33 @@ Y
 X
 X
 Y
+
+RUN <<COMPLEX python3
+print('hello world')
+COMPLEX
+
+COPY <<file.txt /dest
+hello world
+file.txt
+
+RUN <<eo'f'
+echo foo
+eof
+
+RUN <<eo\'f
+echo foo
+eo'f
+
+RUN <<'e'o\'f
+echo foo
+eo'f
+
+RUN <<'one two'
+echo bar
+one two
+
+RUN <<$EOF
+$EOF
 	`)
 
 	tests := [][]Heredoc{
@@ -196,6 +223,62 @@ Y
 				Expand:  true,
 			},
 		},
+		{
+			// RUN <<COMPLEX python3
+			{
+				Name:    "COMPLEX",
+				Content: "print('hello world')\n",
+				Expand:  true,
+			},
+		},
+		{
+			// COPY <<file.txt /dest
+			{
+				Name:    "file.txt",
+				Content: "hello world\n",
+				Expand:  true,
+			},
+		},
+		{
+			// RUN <<eo'f'
+			{
+				Name:    "eof",
+				Content: "echo foo\n",
+				Expand:  false,
+			},
+		},
+		{
+			// RUN <<eo\'f
+			{
+				Name:    "eo'f",
+				Content: "echo foo\n",
+				Expand:  true,
+			},
+		},
+		{
+			// RUN <<'e'o\'f
+			{
+				Name:    "eo'f",
+				Content: "echo foo\n",
+				Expand:  false,
+			},
+		},
+		{
+			// RUN <<'one two'
+			{
+				Name:    "one two",
+				Content: "echo bar\n",
+				Expand:  false,
+			},
+		},
+		{
+			// RUN <<$EOF
+			{
+				Name:    "$EOF",
+				Content: "",
+				Expand:  true,
+			},
+		},
 	}
 
 	result, err := Parse(dockerfile)
@@ -238,6 +321,7 @@ func TestParseHeredocHelpers(t *testing.T) {
 		"<<-EOF",
 		"<<-'EOF'",
 		`<<-"EOF"`,
+		`<<EO"F"`,
 	}
 	invalidHeredocs := []string{
 		"<<'EOF",
@@ -252,6 +336,7 @@ func TestParseHeredocHelpers(t *testing.T) {
 		"<<-",
 		"<EOF",
 		"<<<EOF",
+		"<<EOF sh",
 	}
 	for _, src := range notHeredocs {
 		heredoc, err := ParseHeredoc(src)
