@@ -677,7 +677,7 @@ func testSecurityModeSysfs(t *testing.T, sb integration.Sandbox) {
 
 	if secMode == securitySandbox {
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "executor failed running")
+		require.Contains(t, err.Error(), "did not complete successfully")
 		require.Contains(t, err.Error(), "mkdir /sys/fs/cgroup/cpuset/securitytest")
 	} else {
 		require.NoError(t, err)
@@ -3190,7 +3190,7 @@ func testReadonlyRootFS(t *testing.T, sb integration.Sandbox) {
 	// Would prefer to detect more specifically "Read-only file
 	// system" but that isn't exposed here (it is on the stdio
 	// which we don't see).
-	require.Contains(t, err.Error(), "executor failed running [/bin/touch /foo]:")
+	require.Contains(t, err.Error(), "process \"/bin/touch /foo\" did not complete successfully")
 
 	checkAllReleasable(t, c, sb, true)
 }

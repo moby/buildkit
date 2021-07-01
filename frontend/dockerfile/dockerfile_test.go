@@ -2149,7 +2149,7 @@ func testDockerfileInvalidCommand(t *testing.T, sb integration.Sandbox) {
 	err = cmd.Run()
 	require.Error(t, err)
 	require.Contains(t, stdout.String(), "/bin/sh -c invalidcmd")
-	require.Contains(t, stdout.String(), "executor failed running")
+	require.Contains(t, stdout.String(), "did not complete successfully")
 }
 
 func testDockerfileADDFromURL(t *testing.T, sb integration.Sandbox) {
