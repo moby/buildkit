@@ -117,7 +117,7 @@ var (
 	reWhitespace  = regexp.MustCompile(`[\t\v\f\r ]+`)
 	reDirectives  = regexp.MustCompile(`^#\s*([a-zA-Z][a-zA-Z0-9]*)\s*=\s*(.+?)\s*$`)
 	reComment     = regexp.MustCompile(`^#.*$`)
-	reHeredoc     = regexp.MustCompile(`^(\d*)<<(-?)(['"]?)([a-zA-Z][a-zA-Z0-9]*)(['"]?)$`)
+	reHeredoc     = regexp.MustCompile(`^(\d*)<<(-?)([^<]*)$`)
 	reLeadingTabs = regexp.MustCompile(`(?m)^\t+`)
 )
 
@@ -399,30 +399,57 @@ func Parse(rwc io.Reader) (*Result, error) {
 	}, withLocation(handleScannerError(scanner.Err()), currentLine, 0)
 }
 
+// Extracts a heredoc from a possible heredoc regex match
 func heredocFromMatch(match []string) (*Heredoc, error) {
 	if len(match) == 0 {
 		return nil, nil
 	}
 
-	fileDescriptor, _ := strconv.ParseUint(match[1], 10, 0)
+	fd, _ := strconv.ParseUint(match[1], 10, 0)
 	chomp := match[2] == "-"
-	quoteOpen := match[3]
-	name := match[4]
-	quoteClose := match[5]
+	rest := match[3]
 
-	expand := true
-	if quoteOpen != "" || quoteClose != "" {
-		if quoteOpen != quoteClose {
-			return nil, errors.New("quoted heredoc quotes do not match")
-		}
-		expand = false
+	if len(rest) == 0 {
+		return nil, nil
 	}
 
+	shlex := shell.NewLex('\\')
+	shlex.SkipUnsetEnv = true
+
+	// Attempt to parse both the heredoc both with *and* without quotes.
+	// If there are quotes in one but not the other, then we know that some
+	// part of the heredoc word is quoted, so we shouldn't expand the content.
+	shlex.RawQuotes = false
+	words, err := shlex.ProcessWords(rest, []string{})
+	if err != nil {
+		return nil, err
+	}
+	// quick sanity check that rest is a single word
+	if len(words) != 1 {
+		return nil, nil
+	}
+
+	shlex.RawQuotes = true
+	wordsRaw, err := shlex.ProcessWords(rest, []string{})
+	if err != nil {
+		return nil, err
+	}
+	if len(wordsRaw) != len(words) {
+		return nil, fmt.Errorf("internal lexing of heredoc produced inconsistent results: %s", rest)
+	}
+
+	word := words[0]
+	wordQuoteCount := strings.Count(word, `'`) + strings.Count(word, `"`)
+	wordRaw := wordsRaw[0]
+	wordRawQuoteCount := strings.Count(wordRaw, `'`) + strings.Count(wordRaw, `"`)
+
+	expand := wordQuoteCount == wordRawQuoteCount
+
 	return &Heredoc{
-		Name:           name,
+		Name:           word,
 		Expand:         expand,
 		Chomp:          chomp,
-		FileDescriptor: uint(fileDescriptor),
+		FileDescriptor: uint(fd),
 	}, nil
 }
 
@@ -437,6 +464,8 @@ func MustParseHeredoc(src string) *Heredoc {
 func heredocsFromLine(line string) ([]Heredoc, error) {
 	shlex := shell.NewLex('\\')
 	shlex.RawQuotes = true
+	shlex.RawEscapes = true
+	shlex.SkipUnsetEnv = true
 	words, _ := shlex.ProcessWords(line, []string{})
 
 	var docs []Heredoc
