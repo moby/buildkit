@@ -41,7 +41,6 @@ type Ref interface {
 type ImmutableRef interface {
 	Ref
 	Parent() ImmutableRef
-	Finalize(ctx context.Context, commit bool) error // Make sure reference is flushed to driver
 	Clone() ImmutableRef
 
 	Info() RefInfo
@@ -255,7 +254,7 @@ func (cr *cacheRecord) mount(ctx context.Context, readonly bool) (snapshot.Mount
 		return setReadonly(m), nil
 	}
 
-	if err := cr.finalize(ctx, true); err != nil {
+	if err := cr.finalize(ctx); err != nil {
 		return nil, err
 	}
 	if cr.viewMount == nil { // TODO: handle this better
@@ -717,27 +716,20 @@ func (sr *immutableRef) release(ctx context.Context) error {
 	return nil
 }
 
-func (sr *immutableRef) Finalize(ctx context.Context, b bool) error {
+func (sr *immutableRef) finalizeLocked(ctx context.Context) error {
 	sr.mu.Lock()
 	defer sr.mu.Unlock()
-
-	return sr.finalize(ctx, b)
+	return sr.finalize(ctx)
 }
 
 func (cr *cacheRecord) Metadata() *metadata.StorageItem {
 	return cr.md
 }
 
-func (cr *cacheRecord) finalize(ctx context.Context, commit bool) error {
+// caller must hold cacheRecord.mu
+func (cr *cacheRecord) finalize(ctx context.Context) error {
 	mutable := cr.equalMutable
 	if mutable == nil {
-		return nil
-	}
-	if !commit {
-		if HasCachePolicyRetain(mutable) {
-			CachePolicyRetain(mutable)
-			return mutable.Metadata().Commit()
-		}
 		return nil
 	}
 

@@ -128,11 +128,11 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispec.Descriptor, 
 		if err != nil {
 			return nil, err
 		}
-		if err := p2.Finalize(ctx, true); err != nil {
+		p = p2.(*immutableRef)
+		if err := p.finalizeLocked(ctx); err != nil {
 			return nil, err
 		}
-		parentID = p2.ID()
-		p = p2.(*immutableRef)
+		parentID = p.ID()
 	}
 
 	releaseParent := false
@@ -475,7 +475,7 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, sess session.Gr
 			}
 			parent = p.(*immutableRef)
 		}
-		if err := parent.Finalize(ctx, true); err != nil {
+		if err := parent.finalizeLocked(ctx); err != nil {
 			return nil, err
 		}
 		if err := parent.Extract(ctx, sess); err != nil {
