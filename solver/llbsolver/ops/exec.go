@@ -354,7 +354,7 @@ func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 		// Prevent the result from being released.
 		p.OutputRefs[i].Ref = nil
 	}
-	return results, errors.Wrapf(execErr, "executor failed running %v", e.op.Meta.Args)
+	return results, errors.Wrapf(execErr, "process %q did not complete successfully", strings.Join(e.op.Meta.Args, " "))
 }
 
 func proxyEnvList(p *pb.ProxyEnv) []string {
