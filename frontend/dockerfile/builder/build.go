@@ -143,6 +143,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 		llb.SessionID(c.BuildOpts().SessionID),
 		llb.SharedKeyHint(localNameDockerfile),
 		dockerfile2llb.WithInternalName(name),
+		llb.Differ(llb.DiffNone, false),
 	)
 
 	fileop := useFileOp(opts, &caps)
@@ -302,6 +303,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 					llb.FollowPaths([]string{dockerignoreFilename}),
 					llb.SharedKeyHint(localNameContext+"-"+dockerignoreFilename),
 					dockerfile2llb.WithInternalName("load "+dockerignoreFilename),
+					llb.Differ(llb.DiffNone, false),
 				)
 				dockerignoreState = &st
 			}

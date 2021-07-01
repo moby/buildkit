@@ -18,6 +18,7 @@ const (
 	CapSourceLocalFollowPaths     apicaps.CapID = "source.local.followpaths"
 	CapSourceLocalExcludePatterns apicaps.CapID = "source.local.excludepatterns"
 	CapSourceLocalSharedKeyHint   apicaps.CapID = "source.local.sharedkeyhint"
+	CapSourceLocalDiffer          apicaps.CapID = "source.local.differ"
 
 	CapSourceGit              apicaps.CapID = "source.git"
 	CapSourceGitKeepDir       apicaps.CapID = "source.git.keepgitdir"
@@ -118,6 +119,13 @@ func init() {
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapSourceLocalDiffer,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
 	Caps.Init(apicaps.Cap{
 		ID:      CapSourceGit,
 		Enabled: true,

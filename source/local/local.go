@@ -178,6 +178,7 @@ func (ls *localSourceHandler) snapshot(ctx context.Context, s session.Group, cal
 		DestDir:          dest,
 		CacheUpdater:     &cacheUpdater{cc, mount.IdentityMapping()},
 		ProgressCb:       newProgressHandler(ctx, "transferring "+ls.src.Name+":"),
+		Differ:           ls.src.Differ,
 	}
 
 	if idmap := mount.IdentityMapping(); idmap != nil {
