@@ -727,7 +727,7 @@ func (cc *cacheContext) checksum(ctx context.Context, root *iradix.Node, txn *ir
 		return nil, false, err
 	}
 	if cr == nil {
-		return nil, false, errors.Wrapf(errNotFound, "%q not found", convertKeyToPath(origk))
+		return nil, false, errors.Wrapf(errNotFound, "%q", convertKeyToPath(origk))
 	}
 	if cr.Digest != "" {
 		return cr, false, nil

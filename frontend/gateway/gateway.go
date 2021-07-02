@@ -669,7 +669,7 @@ func (lbf *llbBridgeForwarder) getImmutableRef(ctx context.Context, id, path str
 		return nil, errors.Errorf("no such ref: %v", id)
 	}
 	if ref == nil {
-		return nil, errors.Wrapf(os.ErrNotExist, "%s not found", path)
+		return nil, errors.Wrap(os.ErrNotExist, path)
 	}
 
 	r, err := ref.Result(ctx)
