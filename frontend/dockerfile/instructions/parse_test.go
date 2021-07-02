@@ -204,13 +204,13 @@ func TestErrorCases(t *testing.T) {
 		},
 		{
 			name:          "Invalid instruction",
-			dockerfile:    `foo bar`,
+			dockerfile:    `FOO bar`,
 			expectedError: "unknown instruction: FOO",
 		},
 		{
 			name:          "Invalid instruction",
 			dockerfile:    `foo bar`,
-			expectedError: "unknown instruction: FOO",
+			expectedError: "unknown instruction: foo",
 		},
 	}
 	for _, c := range cases {
