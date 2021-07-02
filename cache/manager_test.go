@@ -228,7 +228,7 @@ func TestManager(t *testing.T) {
 
 	_, err = cm.GetMutable(ctx, active.ID())
 	require.Error(t, err)
-	require.Equal(t, true, errors.Is(err, errNotFound))
+	require.Equal(t, true, errors.Is(err, errInvalid))
 
 	_, err = cm.GetMutable(ctx, snap.ID())
 	require.Error(t, err)
@@ -244,6 +244,8 @@ func TestManager(t *testing.T) {
 
 	err = snap.Release(ctx)
 	require.NoError(t, err)
+
+	checkDiskUsage(ctx, t, cm, 1, 0)
 
 	active2, err := cm.New(ctx, snap2, nil, CachePolicyRetain)
 	require.NoError(t, err)
@@ -822,11 +824,17 @@ func TestPrune(t *testing.T) {
 	err = snap.Release(ctx)
 	require.NoError(t, err)
 
+	checkDiskUsage(ctx, t, cm, 0, 1)
+
 	active, err = cm.New(ctx, snap, nil, CachePolicyRetain)
 	require.NoError(t, err)
 
+	checkDiskUsage(ctx, t, cm, 2, 0)
+
 	snap2, err = active.Commit(ctx)
 	require.NoError(t, err)
+
+	checkDiskUsage(ctx, t, cm, 2, 0)
 
 	err = snap.Release(ctx)
 	require.NoError(t, err)
@@ -882,6 +890,14 @@ func TestLazyCommit(t *testing.T) {
 
 	active, err := cm.New(ctx, nil, nil, CachePolicyRetain)
 	require.NoError(t, err)
+	activeID := active.ID()
+
+	err = active.Release(ctx)
+	require.NoError(t, err)
+
+	active, err = cm.GetMutable(ctx, activeID)
+	require.NoError(t, err)
+	require.Equal(t, active.ID(), activeID)
 
 	// after commit mutable is locked
 	snap, err := active.Commit(ctx)
@@ -918,9 +934,9 @@ func TestLazyCommit(t *testing.T) {
 	// after release mutable becomes available again
 	active2, err := cm.GetMutable(ctx, active.ID())
 	require.NoError(t, err)
-	require.Equal(t, active2.ID(), active.ID())
+	// ID is different now because the previous active was committed
+	require.NotEqual(t, active2.ID(), active.ID())
 
-	// because ref was took mutable old immutable are cleared
 	_, err = cm.Get(ctx, snap.ID())
 	require.Error(t, err)
 	require.Equal(t, true, errors.Is(err, errNotFound))
@@ -935,10 +951,10 @@ func TestLazyCommit(t *testing.T) {
 	err = snap.Release(ctx)
 	require.NoError(t, err)
 
-	// mutable is gone after finalize
+	// mutable is not accessible after finalize
 	_, err = cm.GetMutable(ctx, active2.ID())
 	require.Error(t, err)
-	require.Equal(t, true, errors.Is(err, errNotFound))
+	require.Equal(t, true, errors.Is(err, errInvalid))
 
 	// immutable still works
 	snap2, err = cm.Get(ctx, snap.ID())
@@ -997,21 +1013,64 @@ func TestLazyCommit(t *testing.T) {
 		snapshotterName: "native",
 	})
 	require.NoError(t, err)
-	defer cleanup()
 	cm = co.manager
 
 	snap2, err = cm.Get(ctx, snap.ID())
 	require.NoError(t, err)
+	snap2ID := snap2.ID()
 
 	err = snap2.(*immutableRef).finalizeLocked(ctx)
 	require.NoError(t, err)
+	queueDescription(snap2.Metadata(), "foo")
+	require.NoError(t, snap2.Metadata().Commit())
 
 	err = snap2.Release(ctx)
 	require.NoError(t, err)
 
 	_, err = cm.GetMutable(ctx, active.ID())
 	require.Error(t, err)
-	require.Equal(t, true, errors.Is(err, errNotFound))
+	require.Equal(t, true, errors.Is(err, errInvalid))
+
+	active, err = cm.New(ctx, nil, nil, CachePolicyRetain)
+	require.NoError(t, err)
+	snap3, err := active.Commit(ctx)
+	require.NoError(t, err)
+	snap3ID := snap3.ID()
+
+	// simulate the old equalMutable format to test that the migration logic in cacheManager.init works as expected
+	setEqualMutable(snap3.Metadata(), snap2ID)
+	require.NoError(t, snap3.Metadata().Commit())
+
+	require.NoError(t, snap3.Release(ctx))
+	checkDiskUsage(ctx, t, cm, 0, 3)
+
+	err = cm.Close()
+	require.NoError(t, err)
+	cleanup()
+
+	co, cleanup, err = newCacheManager(ctx, cmOpt{
+		tmpdir:          tmpdir,
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	defer cleanup()
+	cm = co.manager
+
+	// there's 1 less ref now because cacheManager.init should have gotten rid of the one marked as an equalMutable
+	checkDiskUsage(ctx, t, cm, 0, 2)
+
+	snap3, err = cm.Get(ctx, snap3ID)
+	require.NoError(t, err)
+
+	_, err = cm.Get(ctx, snap2ID)
+	require.True(t, errors.Is(err, errNotFound))
+
+	checkDiskUsage(ctx, t, cm, 1, 1)
+
+	require.Equal(t, "", getEqualMutable(snap3.Metadata()))
+	require.Equal(t, "foo", GetDescription(snap3.Metadata()))
+	require.Equal(t, snap2ID, getSnapshotID(snap3.Metadata()))
 }
 
 func TestGetRemote(t *testing.T) {
@@ -1326,4 +1385,15 @@ func fileToBlob(file *os.File, compress bool) ([]byte, ocispecs.Descriptor, erro
 			"containerd.io/uncompressed": sha.Digest().String(),
 		},
 	}, nil
+}
+
+func setEqualMutable(si *metadata.StorageItem, s string) error {
+	v, err := metadata.NewValue(s)
+	if err != nil {
+		return errors.Wrapf(err, "failed to create %s meta value", deprecatedKeyEqualMutable)
+	}
+	si.Queue(func(b *bolt.Bucket) error {
+		return si.SetValue(b, deprecatedKeyEqualMutable, v)
+	})
+	return nil
 }

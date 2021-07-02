@@ -215,7 +215,7 @@ func (ls *localSourceHandler) snapshot(ctx context.Context, s session.Group, cal
 
 	// skip storing snapshot by the shared key if it already exists
 	skipStoreSharedKey := false
-	si, _ := ls.md.Get(mutable.ID())
+	si := mutable.Metadata()
 	if v := si.Get(keySharedKey); v != nil {
 		var str string
 		if err := v.Unmarshal(&str); err != nil {

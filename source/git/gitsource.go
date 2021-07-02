@@ -141,7 +141,7 @@ func (gs *gitSource) mountRemote(ctx context.Context, remote string, auth []stri
 		}
 
 		// same new remote metadata
-		si, _ := gs.md.Get(remoteRef.ID())
+		si := remoteRef.Metadata()
 		v, err := metadata.NewValue(remoteKey)
 		if err != nil {
 			return "", nil, err

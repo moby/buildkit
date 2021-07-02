@@ -398,6 +398,21 @@ func (s *StorageItem) GetAndSetValue(key string, fn func(*Value) (*Value, error)
 	})
 }
 
+func (s *StorageItem) CopyValuesTo(other *StorageItem) error {
+	s.vmu.RLock()
+	defer s.vmu.RUnlock()
+	other.vmu.Lock()
+	defer other.vmu.Unlock()
+	return errors.WithStack(other.Update(func(b *bolt.Bucket) error {
+		for k, v := range s.values {
+			if err := other.setValue(b, k, v); err != nil {
+				return err
+			}
+		}
+		return nil
+	}))
+}
+
 type Value struct {
 	Value json.RawMessage `json:"value,omitempty"`
 	Index string          `json:"index,omitempty"`

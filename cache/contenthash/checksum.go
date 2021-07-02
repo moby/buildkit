@@ -17,6 +17,7 @@ import (
 	"github.com/hashicorp/golang-lru/simplelru"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/metadata"
+	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/locker"
@@ -24,6 +25,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
 	fstypes "github.com/tonistiigi/fsutil/types"
+	bolt "go.etcd.io/bbolt"
 )
 
 var errNotFound = errors.Errorf("not found")
@@ -32,6 +34,7 @@ var defaultManager *cacheManager
 var defaultManagerOnce sync.Once
 
 const keyContentHash = "buildkit.contenthash.v0"
+const keyCacheContextID = "buildkit.cacheContextID.v0"
 
 func getDefaultManager() *cacheManager {
 	defaultManagerOnce.Do(func() {
@@ -67,7 +70,7 @@ func SetCacheContext(ctx context.Context, md *metadata.StorageItem, cc CacheCont
 }
 
 func ClearCacheContext(md *metadata.StorageItem) {
-	getDefaultManager().clearCacheContext(md.ID())
+	getDefaultManager().clearCacheContext(getCacheContextID(md))
 }
 
 type CacheContext interface {
@@ -105,24 +108,31 @@ func (cm *cacheManager) Checksum(ctx context.Context, ref cache.ImmutableRef, p 
 }
 
 func (cm *cacheManager) GetCacheContext(ctx context.Context, md *metadata.StorageItem, idmap *idtools.IdentityMapping) (CacheContext, error) {
-	cm.locker.Lock(md.ID())
+	id := getCacheContextID(md)
+	if id == "" {
+		id = identity.NewID()
+		if err := setCacheContextID(md, id); err != nil {
+			return nil, err
+		}
+	}
+	cm.locker.Lock(id)
 	cm.lruMu.Lock()
-	v, ok := cm.lru.Get(md.ID())
+	v, ok := cm.lru.Get(id)
 	cm.lruMu.Unlock()
 	if ok {
-		cm.locker.Unlock(md.ID())
+		cm.locker.Unlock(id)
 		v.(*cacheContext).linkMap = map[string][][]byte{}
 		return v.(*cacheContext), nil
 	}
 	cc, err := newCacheContext(md, idmap)
 	if err != nil {
-		cm.locker.Unlock(md.ID())
+		cm.locker.Unlock(id)
 		return nil, err
 	}
 	cm.lruMu.Lock()
-	cm.lru.Add(md.ID(), cc)
+	cm.lru.Add(id, cc)
 	cm.lruMu.Unlock()
-	cm.locker.Unlock(md.ID())
+	cm.locker.Unlock(id)
 	return cc, nil
 }
 
@@ -131,7 +141,8 @@ func (cm *cacheManager) SetCacheContext(ctx context.Context, md *metadata.Storag
 	if !ok {
 		return errors.Errorf("invalid cachecontext: %T", cc)
 	}
-	if md.ID() != cc.md.ID() {
+	id := getCacheContextID(md)
+	if id != getCacheContextID(cc.md) {
 		cc = &cacheContext{
 			md:       md,
 			tree:     cci.(*cacheContext).tree,
@@ -144,7 +155,7 @@ func (cm *cacheManager) SetCacheContext(ctx context.Context, md *metadata.Storag
 		}
 	}
 	cm.lruMu.Lock()
-	cm.lru.Add(md.ID(), cc)
+	cm.lru.Add(id, cc)
 	cm.lruMu.Unlock()
 	return nil
 }
@@ -207,6 +218,31 @@ func (m *mount) clean() error {
 	return nil
 }
 
+func getCacheContextID(md *metadata.StorageItem) string {
+	v := md.Get(keyCacheContextID)
+	if v == nil {
+		return ""
+	}
+	var str string
+	if err := v.Unmarshal(&str); err != nil {
+		return ""
+	}
+	return str
+}
+
+func setCacheContextID(md *metadata.StorageItem, id string) error {
+	if id == "" {
+		return nil
+	}
+	v, err := metadata.NewValue(id)
+	if err != nil {
+		return errors.Wrap(err, "failed to set cache context ID value")
+	}
+	return md.Update(func(b *bolt.Bucket) error {
+		return md.SetValue(b, keyCacheContextID, v)
+	})
+}
+
 func newCacheContext(md *metadata.StorageItem, idmap *idtools.IdentityMapping) (*cacheContext, error) {
 	cc := &cacheContext{
 		md:       md,
@@ -237,6 +273,12 @@ func (cc *cacheContext) load() error {
 		txn.Insert([]byte(p.Path), p.Record)
 	}
 	cc.tree = txn.Commit()
+
+	if id := getCacheContextID(cc.md); id == "" {
+		if err := setCacheContextID(cc.md, identity.NewID()); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
