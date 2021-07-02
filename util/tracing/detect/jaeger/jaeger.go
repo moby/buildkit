@@ -11,7 +11,7 @@ import (
 )
 
 func init() {
-	detect.Register("jaeger", jaegerExporter)
+	detect.Register("jaeger", jaegerExporter, 11)
 }
 
 func jaegerExporter() (sdktrace.SpanExporter, error) {

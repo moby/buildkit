@@ -12,7 +12,7 @@ import (
 )
 
 func init() {
-	Register("otlp", otlpExporter)
+	Register("otlp", otlpExporter, 10)
 }
 
 func otlpExporter() (sdktrace.SpanExporter, error) {

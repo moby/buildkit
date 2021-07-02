@@ -47,10 +47,9 @@ type state struct {
 	parents  map[digest.Digest]struct{}
 	childVtx map[digest.Digest]struct{}
 
-	mpw     *progress.MultiWriter
-	allPw   map[progress.Writer]struct{}
-	mspan   *tracing.MultiSpan
-	allSpan map[trace.Span]struct{}
+	mpw   *progress.MultiWriter
+	allPw map[progress.Writer]struct{}
+	mspan *tracing.MultiSpan
 
 	vtx          Vertex
 	clientVertex client.Vertex
@@ -210,7 +209,11 @@ func (sb *subBuilder) Build(ctx context.Context, e Edge) (CachedResult, error) {
 }
 
 func (sb *subBuilder) InContext(ctx context.Context, f func(context.Context, session.Group) error) error {
-	return f(trace.ContextWithSpan(progress.WithProgress(ctx, sb.mpw), sb.mspan), sb.state)
+	ctx = progress.WithProgress(ctx, sb.mpw)
+	if sb.mspan.Span != nil {
+		ctx = trace.ContextWithSpan(ctx, sb.mspan)
+	}
+	return f(ctx, sb.state)
 }
 
 func (sb *subBuilder) EachValue(ctx context.Context, key string, fn func(interface{}) error) error {
@@ -358,7 +361,6 @@ func (jl *Solver) loadUnlocked(v, parent Vertex, j *Job, cache map[Vertex]Vertex
 			parents:      map[digest.Digest]struct{}{},
 			childVtx:     map[digest.Digest]struct{}{},
 			allPw:        map[progress.Writer]struct{}{},
-			allSpan:      map[trace.Span]struct{}{},
 			mpw:          progress.NewMultiWriter(progress.WithMetadata("vertex", dgst)),
 			mspan:        tracing.NewMultiSpan(),
 			vtx:          v,
@@ -415,8 +417,9 @@ func (jl *Solver) connectProgressFromState(target, src *state) {
 			target.mpw.Add(j.pw)
 			target.allPw[j.pw] = struct{}{}
 			j.pw.Write(target.clientVertex.Digest.String(), target.clientVertex)
-			target.mspan.Add(j.span)
-			target.allSpan[j.span] = struct{}{}
+			if j.span != nil && j.span.SpanContext().IsValid() {
+				target.mspan.Add(j.span)
+			}
 		}
 	}
 	for p := range src.parents {
@@ -522,9 +525,6 @@ func (j *Job) Discard() error {
 		if _, ok := st.allPw[j.pw]; ok {
 			delete(st.allPw, j.pw)
 		}
-		if _, ok := st.allSpan[j.span]; ok {
-			delete(st.allSpan, j.span)
-		}
 		st.mu.Unlock()
 	}
 
@@ -614,7 +614,10 @@ func (s *sharedOp) Cache() CacheManager {
 }
 
 func (s *sharedOp) LoadCache(ctx context.Context, rec *CacheRecord) (Result, error) {
-	ctx = trace.ContextWithSpan(progress.WithProgress(ctx, s.st.mpw), s.st.mspan)
+	ctx = progress.WithProgress(ctx, s.st.mpw)
+	if s.st.mspan.Span != nil {
+		ctx = trace.ContextWithSpan(ctx, s.st.mspan)
+	}
 	// no cache hit. start evaluating the node
 	span, ctx := tracing.StartSpan(ctx, "load cache: "+s.st.vtx.Name())
 	notifyStarted(ctx, &s.st.clientVertex, true)
@@ -651,7 +654,10 @@ func (s *sharedOp) CalcSlowCache(ctx context.Context, index Index, p PreprocessF
 			if st == nil {
 				return nil, errors.Errorf("failed to get state for index %d on %v", index, s.st.vtx.Name())
 			}
-			ctx2 := trace.ContextWithSpan(progress.WithProgress(ctx, st.mpw), st.mspan)
+			ctx2 := progress.WithProgress(ctx, st.mpw)
+			if st.mspan.Span != nil {
+				ctx2 = trace.ContextWithSpan(ctx2, st.mspan)
+			}
 			err = p(ctx2, res, st)
 			if err != nil {
 				f = nil
@@ -661,7 +667,10 @@ func (s *sharedOp) CalcSlowCache(ctx context.Context, index Index, p PreprocessF
 
 		var key digest.Digest
 		if f != nil {
-			ctx = trace.ContextWithSpan(progress.WithProgress(ctx, s.st.mpw), s.st.mspan)
+			ctx = progress.WithProgress(ctx, s.st.mpw)
+			if s.st.mspan.Span != nil {
+				ctx = trace.ContextWithSpan(ctx, s.st.mspan)
+			}
 			key, err = f(withAncestorCacheOpts(ctx, s.st), res, s.st)
 		}
 		if err != nil {
@@ -686,7 +695,10 @@ func (s *sharedOp) CalcSlowCache(ctx context.Context, index Index, p PreprocessF
 		return key, err
 	})
 	if err != nil {
-		ctx = trace.ContextWithSpan(progress.WithProgress(ctx, s.st.mpw), s.st.mspan)
+		ctx = progress.WithProgress(ctx, s.st.mpw)
+		if s.st.mspan.Span != nil {
+			ctx = trace.ContextWithSpan(ctx, s.st.mspan)
+		}
 		notifyStarted(ctx, &s.st.clientVertex, false)
 		notifyCompleted(ctx, &s.st.clientVertex, err, false)
 		return "", err
@@ -710,7 +722,10 @@ func (s *sharedOp) CacheMap(ctx context.Context, index int) (resp *cacheMapResp,
 		if s.cacheErr != nil {
 			return nil, s.cacheErr
 		}
-		ctx = trace.ContextWithSpan(progress.WithProgress(ctx, s.st.mpw), s.st.mspan)
+		ctx = progress.WithProgress(ctx, s.st.mpw)
+		if s.st.mspan.Span != nil {
+			ctx = trace.ContextWithSpan(ctx, s.st.mspan)
+		}
 		ctx = withAncestorCacheOpts(ctx, s.st)
 		if len(s.st.vtx.Inputs()) == 0 {
 			// no cache hit. start evaluating the node
@@ -773,7 +788,10 @@ func (s *sharedOp) Exec(ctx context.Context, inputs []Result) (outputs []Result,
 		}
 		defer release()
 
-		ctx = trace.ContextWithSpan(progress.WithProgress(ctx, s.st.mpw), s.st.mspan)
+		ctx = progress.WithProgress(ctx, s.st.mpw)
+		if s.st.mspan.Span != nil {
+			ctx = trace.ContextWithSpan(ctx, s.st.mspan)
+		}
 		ctx = withAncestorCacheOpts(ctx, s.st)
 
 		// no cache hit. start evaluating the node

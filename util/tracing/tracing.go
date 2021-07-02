@@ -18,7 +18,7 @@ import (
 func StartSpan(ctx context.Context, operationName string, opts ...trace.SpanStartOption) (trace.Span, context.Context) {
 	parent := trace.SpanFromContext(ctx)
 	tracer := trace.NewNoopTracerProvider().Tracer("")
-	if parent.SpanContext().IsValid() {
+	if parent != nil && parent.SpanContext().IsValid() {
 		tracer = parent.TracerProvider().Tracer("")
 	}
 	ctx, span := tracer.Start(ctx, operationName, opts...)
@@ -47,7 +47,7 @@ func ContextWithSpanFromContext(ctx, ctx2 context.Context) context.Context {
 	if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {
 		return ctx
 	}
-	if span := trace.SpanFromContext(ctx2); span != nil {
+	if span := trace.SpanFromContext(ctx2); span != nil && span.SpanContext().IsValid() {
 		return trace.ContextWithSpan(ctx, span)
 	}
 	return ctx

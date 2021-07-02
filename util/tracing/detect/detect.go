@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"sync"
 
@@ -16,19 +17,28 @@ import (
 
 type ExporterDetector func() (sdktrace.SpanExporter, error)
 
+type detector struct {
+	f        ExporterDetector
+	priority int
+}
+
 var ServiceName string
 
-var detectors map[string]ExporterDetector
+var detectors map[string]detector
 var once sync.Once
 var tp trace.TracerProvider
+var exporter sdktrace.SpanExporter
 var closers []func(context.Context) error
 var err error
 
-func Register(name string, exp ExporterDetector) {
+func Register(name string, exp ExporterDetector, priority int) {
 	if detectors == nil {
-		detectors = map[string]ExporterDetector{}
+		detectors = map[string]detector{}
 	}
-	detectors[name] = exp
+	detectors[name] = detector{
+		f:        exp,
+		priority: priority,
+	}
 }
 
 func detectExporter() (sdktrace.SpanExporter, error) {
@@ -40,10 +50,17 @@ func detectExporter() (sdktrace.SpanExporter, error) {
 			}
 			return nil, errors.Errorf("unsupported opentelemetry tracer %v", n)
 		}
-		return d()
+		return d.f()
 	}
+	arr := make([]detector, 0, len(detectors))
 	for _, d := range detectors {
-		exp, err := d()
+		arr = append(arr, d)
+	}
+	sort.Slice(arr, func(i, j int) bool {
+		return arr[i].priority < arr[j].priority
+	})
+	for _, d := range arr {
+		exp, err := d.f()
 		if err != nil {
 			return nil, err
 		}
@@ -78,8 +95,9 @@ func detect() error {
 
 	sdktp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sp), sdktrace.WithResource(res))
 	closers = append(closers, sdktp.Shutdown)
-	tp = sdktp
 
+	exporter = exp
+	tp = sdktp
 	return nil
 }
 
@@ -94,6 +112,14 @@ func TracerProvider() (trace.TracerProvider, error) {
 		return nil, err
 	}
 	return tp, nil
+}
+
+func Exporter() (sdktrace.SpanExporter, error) {
+	_, err := TracerProvider()
+	if err != nil {
+		return nil, err
+	}
+	return exporter, nil
 }
 
 func Shutdown(ctx context.Context) error {
