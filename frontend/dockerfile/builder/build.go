@@ -425,7 +425,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 				})
 
 				if err != nil {
-					return errors.Wrapf(err, "failed to create LLB definition")
+					return err
 				}
 
 				def, err := st.Marshal(ctx)
