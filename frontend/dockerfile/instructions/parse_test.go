@@ -195,7 +195,7 @@ func TestErrorCases(t *testing.T) {
 		{
 			name:          "MAINTAINER unknown flag",
 			dockerfile:    "MAINTAINER --boo joe@example.com",
-			expectedError: "Unknown flag: boo",
+			expectedError: "unknown flag: boo",
 		},
 		{
 			name:          "Chaining ONBUILD",

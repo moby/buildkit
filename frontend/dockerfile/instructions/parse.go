@@ -64,7 +64,7 @@ func ParseInstruction(node *parser.Node) (v interface{}, err error) {
 		err = parser.WithLocation(err, node.Location())
 	}()
 	req := newParseRequestFromNode(node)
-	switch node.Value {
+	switch strings.ToLower(node.Value) {
 	case command.Env:
 		return parseEnv(req)
 	case command.Maintainer:
@@ -102,7 +102,6 @@ func ParseInstruction(node *parser.Node) (v interface{}, err error) {
 	case command.Shell:
 		return parseShell(req)
 	}
-
 	return nil, suggest.WrapError(&UnknownInstruction{Instruction: node.Value, Line: node.StartLine}, node.Value, allInstructionNames(), false)
 }
 
