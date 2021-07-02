@@ -30,9 +30,8 @@ require (
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/gorilla/mux v1.8.0 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.2.0
-	github.com/hashicorp/go-immutable-radix v1.0.0
+	github.com/hashicorp/go-immutable-radix v1.3.1
 	github.com/hashicorp/golang-lru v0.5.3
-	github.com/hashicorp/uuid v0.0.0-20160311170451-ebb0a03e909c // indirect
 	github.com/ishidawataru/sctp v0.0.0-20210226210310-f2269e66cdee // indirect
 	github.com/mitchellh/hashstructure v1.0.0
 	github.com/moby/locker v1.0.1
@@ -71,7 +70,4 @@ require (
 	google.golang.org/grpc v1.38.0
 )
 
-replace (
-	github.com/docker/docker => github.com/docker/docker v20.10.3-0.20210609100121-ef4d47340142+incompatible
-	github.com/hashicorp/go-immutable-radix => github.com/tonistiigi/go-immutable-radix v0.0.0-20170803185627-826af9ccf0fe
-)
+replace github.com/docker/docker => github.com/docker/docker v20.10.3-0.20210609100121-ef4d47340142+incompatible
