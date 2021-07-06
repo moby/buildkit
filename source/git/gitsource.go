@@ -311,6 +311,12 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index
 	gs.locker.Lock(remote)
 	defer gs.locker.Unlock(remote)
 
+	if ref := gs.src.Ref; ref != "" && isCommitSHA(ref) {
+		ref = gs.shaToCacheKey(ref)
+		gs.cacheKey = ref
+		return ref, nil, true, nil
+	}
+
 	gs.getAuthToken(ctx, g)
 
 	gitDir, unmountGitDir, err := gs.mountRemote(ctx, remote, gs.auth, g)
@@ -345,12 +351,6 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index
 		if err != nil {
 			return "", nil, false, err
 		}
-	}
-
-	if isCommitSHA(ref) {
-		ref = gs.shaToCacheKey(ref)
-		gs.cacheKey = ref
-		return ref, nil, true, nil
 	}
 
 	// TODO: should we assume that remote tag is immutable? add a timer?
@@ -699,12 +699,12 @@ func tokenScope(remote string) string {
 func getDefaultBranch(ctx context.Context, gitDir, workDir, sshAuthSock, knownHosts string, auth []string, remoteURL string) (string, error) {
 	buf, err := gitWithinDir(ctx, gitDir, workDir, sshAuthSock, knownHosts, auth, "ls-remote", "--symref", remoteURL, "HEAD")
 	if err != nil {
-		return "", errors.Errorf("error fetching default branch for repository %s: %v", remoteURL, err)
+		return "", errors.Wrapf(err, "error fetching default branch for repository %s", redactCredentials(remoteURL))
 	}
 
 	ss := defaultBranch.FindAllStringSubmatch(buf.String(), -1)
 	if len(ss) == 0 || len(ss[0]) != 2 {
-		return "", errors.Errorf("could not find default branch for repository: %s", remoteURL)
+		return "", errors.Errorf("could not find default branch for repository: %s", redactCredentials(remoteURL))
 	}
 	return ss[0][1], nil
 }

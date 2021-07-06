@@ -498,6 +498,7 @@ func setupGitRepo(dir string) (string, error) {
 		"git submodule add "+subPath+" sub",
 		"git add -A",
 		"git commit -m withsub",
+		"git checkout master",
 	); err != nil {
 		return "", err
 	}

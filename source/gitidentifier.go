@@ -35,7 +35,6 @@ func NewGitIdentifier(remoteURL string) (*GitIdentifier, error) {
 		if len(parts) == 2 {
 			fragment = parts[1]
 		}
-
 		repo.Ref, repo.Subdir = getRefAndSubdir(fragment)
 	} else {
 		u, err := url.Parse(remoteURL)
@@ -50,7 +49,6 @@ func NewGitIdentifier(remoteURL string) (*GitIdentifier, error) {
 	if sd := path.Clean(repo.Subdir); sd == "/" || sd == "." {
 		repo.Subdir = ""
 	}
-
 	return &repo, nil
 }
 
