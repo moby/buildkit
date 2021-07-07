@@ -211,6 +211,7 @@ func main() {
 			return err
 		}
 
+		logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
 		if cfg.Debug {
 			logrus.SetLevel(logrus.DebugLevel)
 		}
