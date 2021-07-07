@@ -5,7 +5,6 @@ import (
 	"crypto/ed25519"
 	"crypto/hmac"
 	"crypto/sha256"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -191,8 +190,6 @@ func (ap *authProvider) getAuthorityKey(host string, salt []byte) (ed25519.Priva
 	mac := hmac.New(sha256.New, salt)
 	if creds.Secret != "" {
 		mac.Write(seed)
-		enc := json.NewEncoder(mac)
-		enc.Encode(creds)
 	}
 
 	sum := mac.Sum(nil)
