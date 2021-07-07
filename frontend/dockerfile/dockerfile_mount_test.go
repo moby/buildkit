@@ -24,6 +24,7 @@ var mountTests = []integration.Test{
 	testMountEnvAcrossStages,
 	testMountMetaArg,
 	testMountFromError,
+	testMountInvalid,
 }
 
 func init() {
@@ -86,6 +87,77 @@ RUN [ ! -f /mytmp/foo ]
 		},
 	}, nil)
 	require.NoError(t, err)
+}
+
+func testMountInvalid(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM scratch
+RUN --mont=target=/mytmp,type=tmpfs /bin/true
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unknown flag: mont")
+	require.Contains(t, err.Error(), "did you mean mount?")
+
+	dockerfile = []byte(`
+	FROM scratch
+	RUN --mount=typ=tmpfs /bin/true
+	`)
+
+	dir, err = tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unexpected key 'typ'")
+	require.Contains(t, err.Error(), "did you mean type?")
+
+	dockerfile = []byte(`
+	FROM scratch
+	RUN --mount=type=tmp /bin/true
+	`)
+
+	dir, err = tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unsupported mount type \"tmp\"")
+	require.Contains(t, err.Error(), "did you mean tmpfs?")
 }
 
 func testMountRWCache(t *testing.T, sb integration.Sandbox) {

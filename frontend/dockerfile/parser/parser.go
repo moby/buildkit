@@ -50,7 +50,7 @@ func (node *Node) Location() []Range {
 // Returns a string suitable for printing.
 func (node *Node) Dump() string {
 	str := ""
-	str += node.Value
+	str += strings.ToLower(node.Value)
 
 	if len(node.Flags) > 0 {
 		str += fmt.Sprintf(" %q", node.Flags)
@@ -78,13 +78,13 @@ func (node *Node) lines(start, end int) {
 
 func (node *Node) canContainHeredoc() bool {
 	// check for compound commands, like ONBUILD
-	if ok := heredocCompoundDirectives[node.Value]; ok {
+	if ok := heredocCompoundDirectives[strings.ToLower(node.Value)]; ok {
 		if node.Next != nil && len(node.Next.Children) > 0 {
 			node = node.Next.Children[0]
 		}
 	}
 
-	if ok := heredocDirectives[node.Value]; !ok {
+	if ok := heredocDirectives[strings.ToLower(node.Value)]; !ok {
 		return false
 	}
 	if isJSON := node.Attributes["json"]; isJSON {
@@ -245,7 +245,7 @@ func newNodeFromLine(line string, d *directives, comments []string) (*Node, erro
 		return nil, err
 	}
 
-	fn := dispatch[cmd]
+	fn := dispatch[strings.ToLower(cmd)]
 	// Ignore invalid Dockerfile instructions
 	if fn == nil {
 		fn = parseIgnore

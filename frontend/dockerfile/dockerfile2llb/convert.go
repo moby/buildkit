@@ -25,6 +25,7 @@ import (
 	"github.com/moby/buildkit/frontend/dockerfile/shell"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
+	"github.com/moby/buildkit/util/suggest"
 	"github.com/moby/buildkit/util/system"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -216,6 +217,13 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		allDispatchStates.states[0].stageName = ""
 	}
 
+	allStageNames := make([]string, 0, len(allDispatchStates.states))
+	for _, s := range allDispatchStates.states {
+		if s.stageName != "" {
+			allStageNames = append(allStageNames, s.stageName)
+		}
+	}
+
 	eg, ctx := errgroup.WithContext(ctx)
 	for i, d := range allDispatchStates.states {
 		reachable := isReachable(target, d)
@@ -233,6 +241,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 							err = parser.WithLocation(err, d.stage.Location)
 						}
 					}()
+					origName := d.stage.BaseName
 					ref, err := reference.ParseNormalizedNamed(d.stage.BaseName)
 					if err != nil {
 						return errors.Wrapf(err, "failed to parse stage name %q", d.stage.BaseName)
@@ -243,7 +252,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 					}
 					d.stage.BaseName = reference.TagNameOnly(ref).String()
 					var isScratch bool
-					if metaResolver != nil && reachable && !d.unregistered {
+					if metaResolver != nil && reachable {
 						prefix := "["
 						if opt.PrefixPlatform && platform != nil {
 							prefix += platforms.Format(*platform) + " "
@@ -255,7 +264,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 							LogName:     fmt.Sprintf("%s load metadata for %s", prefix, d.stage.BaseName),
 						})
 						if err != nil {
-							return errors.Wrap(err, d.stage.BaseName)
+							return suggest.WrapError(errors.Wrap(err, origName), origName, append(allStageNames, commonImageNames()...), true)
 						}
 						var img Image
 						if err := json.Unmarshal(dt, &img); err != nil {
@@ -1534,4 +1543,15 @@ func summarizeHeredoc(doc string) string {
 		summary += "..."
 	}
 	return summary
+}
+
+func commonImageNames() []string {
+	repos := []string{
+		"alpine", "busybox", "centos", "debian", "golang", "ubuntu", "fedora",
+	}
+	out := make([]string, 0, len(repos)*4)
+	for _, name := range repos {
+		out = append(out, name, "docker.io/library"+name, name+":latest", "docker.io/library"+name+":latest")
+	}
+	return out
 }
