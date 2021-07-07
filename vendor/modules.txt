@@ -79,6 +79,8 @@ github.com/containerd/containerd/gc
 github.com/containerd/containerd/identifiers
 github.com/containerd/containerd/images
 github.com/containerd/containerd/images/archive
+github.com/containerd/containerd/images/converter
+github.com/containerd/containerd/images/converter/uncompress
 github.com/containerd/containerd/labels
 github.com/containerd/containerd/leases
 github.com/containerd/containerd/leases/proxy

@@ -2050,6 +2050,22 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
+	allCompressedTarget := registry + "/buildkit/build/exporter:withallcompressed"
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name":              allCompressedTarget,
+					"push":              "true",
+					"compression":       "gzip",
+					"force-compression": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
 	if cdAddress == "" {
 		t.Skip("rest of test requires containerd worker")
 	}
@@ -2058,9 +2074,12 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	err = client.ImageService().Delete(ctx, compressedTarget, images.SynchronousDelete())
 	require.NoError(t, err)
+	err = client.ImageService().Delete(ctx, allCompressedTarget, images.SynchronousDelete())
+	require.NoError(t, err)
 
 	checkAllReleasable(t, c, sb, true)
 
+	// check if the new layer is compressed with compression option
 	img, err := client.Pull(ctx, compressedTarget)
 	require.NoError(t, err)
 
@@ -2085,6 +2104,51 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	item, ok := m["data"]
+	require.True(t, ok)
+	require.Equal(t, int32(item.Header.Typeflag), tar.TypeReg)
+	require.Equal(t, []byte("uncompressed"), item.Data)
+
+	dt, err = content.ReadBlob(ctx, img.ContentStore(), ocispec.Descriptor{Digest: mfst.Layers[1].Digest})
+	require.NoError(t, err)
+
+	m, err = testutil.ReadTarToMap(dt, true)
+	require.NoError(t, err)
+
+	item, ok = m["data"]
+	require.True(t, ok)
+	require.Equal(t, int32(item.Header.Typeflag), tar.TypeReg)
+	require.Equal(t, []byte("gzip"), item.Data)
+
+	err = client.ImageService().Delete(ctx, compressedTarget, images.SynchronousDelete())
+	require.NoError(t, err)
+
+	checkAllReleasable(t, c, sb, true)
+
+	// check if all layers are compressed with force-compressoin option
+	img, err = client.Pull(ctx, allCompressedTarget)
+	require.NoError(t, err)
+
+	dt, err = content.ReadBlob(ctx, img.ContentStore(), img.Target())
+	require.NoError(t, err)
+
+	mfst = struct {
+		MediaType string `json:"mediaType,omitempty"`
+		ocispec.Manifest
+	}{}
+
+	err = json.Unmarshal(dt, &mfst)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(mfst.Layers))
+	require.Equal(t, images.MediaTypeDockerSchema2LayerGzip, mfst.Layers[0].MediaType)
+	require.Equal(t, images.MediaTypeDockerSchema2LayerGzip, mfst.Layers[1].MediaType)
+
+	dt, err = content.ReadBlob(ctx, img.ContentStore(), ocispec.Descriptor{Digest: mfst.Layers[0].Digest})
+	require.NoError(t, err)
+
+	m, err = testutil.ReadTarToMap(dt, true)
+	require.NoError(t, err)
+
+	item, ok = m["data"]
 	require.True(t, ok)
 	require.Equal(t, int32(item.Header.Typeflag), tar.TypeReg)
 	require.Equal(t, []byte("uncompressed"), item.Data)
