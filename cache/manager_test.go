@@ -269,6 +269,51 @@ func TestManager(t *testing.T) {
 	require.Equal(t, 0, len(dirs))
 }
 
+func TestLazyGetByBlob(t *testing.T) {
+	t.Parallel()
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+
+	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+
+	co, cleanup, err := newCacheManager(ctx, cmOpt{
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	defer cleanup()
+	cm := co.manager
+
+	// Test for #2226 https://github.com/moby/buildkit/issues/2226, create lazy blobs with the same diff ID but
+	// different digests (due to different compression) and make sure GetByBlob still works
+	_, desc, err := mapToBlob(map[string]string{"foo": "bar"}, true)
+	require.NoError(t, err)
+	descHandlers := DescHandlers(make(map[digest.Digest]*DescHandler))
+	descHandlers[desc.Digest] = &DescHandler{}
+	diffID, err := diffIDFromDescriptor(desc)
+	require.NoError(t, err)
+
+	_, err = cm.GetByBlob(ctx, desc, nil, descHandlers)
+	require.NoError(t, err)
+
+	_, desc2, err := mapToBlob(map[string]string{"foo": "bar"}, false)
+	require.NoError(t, err)
+	descHandlers2 := DescHandlers(make(map[digest.Digest]*DescHandler))
+	descHandlers2[desc2.Digest] = &DescHandler{}
+	diffID2, err := diffIDFromDescriptor(desc2)
+	require.NoError(t, err)
+
+	require.NotEqual(t, desc.Digest, desc2.Digest)
+	require.Equal(t, diffID, diffID2)
+
+	_, err = cm.GetByBlob(ctx, desc2, nil, descHandlers2)
+	require.NoError(t, err)
+}
+
 func TestSnapshotExtract(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
@@ -294,7 +339,7 @@ func TestSnapshotExtract(t *testing.T) {
 
 	cm := co.manager
 
-	b, desc, err := mapToBlob(map[string]string{"foo": "bar"})
+	b, desc, err := mapToBlob(map[string]string{"foo": "bar"}, true)
 	require.NoError(t, err)
 
 	err = content.WriteBlob(ctx, co.cs, "ref1", bytes.NewBuffer(b), desc)
@@ -305,7 +350,7 @@ func TestSnapshotExtract(t *testing.T) {
 
 	require.Equal(t, false, snap.Info().Extracted)
 
-	b2, desc2, err := mapToBlob(map[string]string{"foo": "bar123"})
+	b2, desc2, err := mapToBlob(map[string]string{"foo": "bar123"}, true)
 	require.NoError(t, err)
 
 	err = content.WriteBlob(ctx, co.cs, "ref1", bytes.NewBuffer(b2), desc2)
@@ -440,13 +485,13 @@ func TestExtractOnMutable(t *testing.T) {
 	snap, err := active.Commit(ctx)
 	require.NoError(t, err)
 
-	b, desc, err := mapToBlob(map[string]string{"foo": "bar"})
+	b, desc, err := mapToBlob(map[string]string{"foo": "bar"}, true)
 	require.NoError(t, err)
 
 	err = content.WriteBlob(ctx, co.cs, "ref1", bytes.NewBuffer(b), desc)
 	require.NoError(t, err)
 
-	b2, desc2, err := mapToBlob(map[string]string{"foo2": "1"})
+	b2, desc2, err := mapToBlob(map[string]string{"foo2": "1"}, true)
 	require.NoError(t, err)
 
 	err = content.WriteBlob(ctx, co.cs, "ref2", bytes.NewBuffer(b2), desc2)
@@ -562,7 +607,7 @@ func TestSetBlob(t *testing.T) {
 	require.NoError(t, err)
 	defer clean(context.TODO())
 
-	b, desc, err := mapToBlob(map[string]string{"foo": "bar"})
+	b, desc, err := mapToBlob(map[string]string{"foo": "bar"}, true)
 	require.NoError(t, err)
 
 	err = content.WriteBlob(ctx, co.cs, "ref1", bytes.NewBuffer(b), desc)
@@ -594,7 +639,7 @@ func TestSetBlob(t *testing.T) {
 	snap2, err := active.Commit(ctx)
 	require.NoError(t, err)
 
-	b2, desc2, err := mapToBlob(map[string]string{"foo2": "bar2"})
+	b2, desc2, err := mapToBlob(map[string]string{"foo2": "bar2"}, true)
 	require.NoError(t, err)
 
 	err = content.WriteBlob(ctx, co.cs, "ref2", bytes.NewBuffer(b2), desc2)
@@ -612,7 +657,7 @@ func TestSetBlob(t *testing.T) {
 	require.Equal(t, snap2.ID(), info2.SnapshotID)
 	require.Equal(t, info2.Extracted, true)
 
-	b3, desc3, err := mapToBlob(map[string]string{"foo3": "bar3"})
+	b3, desc3, err := mapToBlob(map[string]string{"foo3": "bar3"}, true)
 	require.NoError(t, err)
 
 	err = content.WriteBlob(ctx, co.cs, "ref3", bytes.NewBuffer(b3), desc3)
@@ -637,7 +682,7 @@ func TestSetBlob(t *testing.T) {
 	require.Equal(t, snap2.ID(), snap4.ID())
 
 	// snap5 is same different blob but same diffID as snap2
-	b5, desc5, err := mapToBlob(map[string]string{"foo5": "bar5"})
+	b5, desc5, err := mapToBlob(map[string]string{"foo5": "bar5"}, true)
 	require.NoError(t, err)
 
 	desc5.Annotations["containerd.io/uncompressed"] = info2.DiffID.String()
@@ -658,7 +703,7 @@ func TestSetBlob(t *testing.T) {
 	require.Equal(t, digest.FromBytes([]byte(info.BlobChainID+" "+digest.FromBytes([]byte(desc5.Digest+" "+info2.DiffID)))), snap5.Info().BlobChainID)
 
 	// snap6 is a child of snap3
-	b6, desc6, err := mapToBlob(map[string]string{"foo6": "bar6"})
+	b6, desc6, err := mapToBlob(map[string]string{"foo6": "bar6"}, true)
 	require.NoError(t, err)
 
 	err = content.WriteBlob(ctx, co.cs, "ref6", bytes.NewBuffer(b6), desc6)
@@ -999,11 +1044,23 @@ func (b *buf) close() {
 	<-b.closed
 }
 
-func mapToBlob(m map[string]string) ([]byte, ocispec.Descriptor, error) {
+type bufferCloser struct {
+	*bytes.Buffer
+}
+
+func (b bufferCloser) Close() error {
+	return nil
+}
+
+func mapToBlob(m map[string]string, compress bool) ([]byte, ocispec.Descriptor, error) {
 	buf := bytes.NewBuffer(nil)
-	gz := gzip.NewWriter(buf)
 	sha := digest.SHA256.Digester()
-	tw := tar.NewWriter(io.MultiWriter(sha.Hash(), gz))
+
+	var dest io.WriteCloser = bufferCloser{buf}
+	if compress {
+		dest = gzip.NewWriter(buf)
+	}
+	tw := tar.NewWriter(io.MultiWriter(sha.Hash(), dest))
 
 	for k, v := range m {
 		if err := tw.WriteHeader(&tar.Header{
@@ -1019,12 +1076,17 @@ func mapToBlob(m map[string]string) ([]byte, ocispec.Descriptor, error) {
 	if err := tw.Close(); err != nil {
 		return nil, ocispec.Descriptor{}, err
 	}
-	if err := gz.Close(); err != nil {
+	if err := dest.Close(); err != nil {
 		return nil, ocispec.Descriptor{}, err
+	}
+
+	mediaType := ocispec.MediaTypeImageLayer
+	if compress {
+		mediaType = ocispec.MediaTypeImageLayerGzip
 	}
 	return buf.Bytes(), ocispec.Descriptor{
 		Digest:    digest.FromBytes(buf.Bytes()),
-		MediaType: ocispec.MediaTypeImageLayerGzip,
+		MediaType: mediaType,
 		Size:      int64(buf.Len()),
 		Annotations: map[string]string{
 			"containerd.io/uncompressed": sha.Digest().String(),
