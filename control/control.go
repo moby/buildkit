@@ -20,11 +20,17 @@ import (
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/imageutil"
 	"github.com/moby/buildkit/util/throttle"
+	"github.com/moby/buildkit/util/tracing/transform"
 	"github.com/moby/buildkit/worker"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	tracev1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
+	v1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type Opt struct {
@@ -35,9 +41,12 @@ type Opt struct {
 	ResolveCacheExporterFuncs map[string]remotecache.ResolveCacheExporterFunc
 	ResolveCacheImporterFuncs map[string]remotecache.ResolveCacheImporterFunc
 	Entitlements              []string
+	TraceCollector            sdktrace.SpanExporter
 }
 
 type Controller struct { // TODO: ControlService
+	*tracev1.UnimplementedTraceServiceServer
+
 	buildCount       int64
 	opt              Opt
 	solver           *llbsolver.Solver
@@ -75,6 +84,7 @@ func NewController(opt Opt) (*Controller, error) {
 func (c *Controller) Register(server *grpc.Server) error {
 	controlapi.RegisterControlServer(server, c)
 	c.gatewayForwarder.Register(server)
+	tracev1.RegisterTraceServiceServer(server, c)
 	return nil
 }
 
@@ -182,6 +192,17 @@ func (c *Controller) Prune(req *controlapi.PruneRequest, stream controlapi.Contr
 	})
 
 	return eg2.Wait()
+}
+
+func (c *Controller) Export(ctx context.Context, req *tracev1.ExportTraceServiceRequest) (*tracev1.ExportTraceServiceResponse, error) {
+	if c.opt.TraceCollector == nil {
+		return nil, status.Errorf(codes.Unavailable, "trace collector not configured")
+	}
+	err := c.opt.TraceCollector.ExportSpans(ctx, transform.Spans(req.GetResourceSpans()))
+	if err != nil {
+		return nil, err
+	}
+	return &v1.ExportTraceServiceResponse{}, nil
 }
 
 func translateLegacySolveRequest(req *controlapi.SolveRequest) error {

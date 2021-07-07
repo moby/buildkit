@@ -14,7 +14,6 @@ For more details about stargz/eStargz image format, please see also [Stargz and 
 
 ## Known limitations
 
-- For OCI woker, `~/.docker/config.json`-based authentication can't be used for stargz/eStargz-based lazy pulling.
 - For containerd worker, stargz snapshotter (`containerd-stargz-grpc`) needs to be run and configured separately.
 - Rootless execution is currently unsupported.
 
@@ -81,9 +80,6 @@ Hello, world!
 
 Note that when a stage is exported (e.g. to the registry), the base image (even stargz/eStargz) of that stage needs to be pulled to copy it to the destination.
 However if the destination is a registry and the target repository already contains some blobs of that image or [cross repository blob mount](https://docs.docker.com/registry/spec/api/#cross-repository-blob-mount) can be used, buildkit keeps these blobs lazy.
-
-Also note that though registry configuration in `/etc/buildkit/buildkitd.toml` is applied to lazy pulling as well, `~/.docker/config.json`-based authorization is currently not supported.
-We are working on this integration.
 
 ### Using proxy (standalone) snapshotter
 

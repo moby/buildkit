@@ -181,6 +181,8 @@ func (ls *localSourceHandler) snapshot(ctx context.Context, s session.Group, cal
 		// earthly needs to set this to nil so it does not conflict with verbose output of file copies
 		// (warning: it's not even feasible to reassign ProgressCb to nil as the call to newProgressHandler causes it to print out immediately)
 		//ProgressCb:       newProgressHandler(ctx, "transferring "+ls.src.Name+":"),
+
+		Differ: ls.src.Differ,
 	}
 
 	opt.Filter = func(p string, stat *fstypes.Stat) bool {
@@ -254,7 +256,7 @@ func (ls *localSourceHandler) snapshot(ctx context.Context, s session.Group, cal
 
 func newProgressHandler(ctx context.Context, id string) func(int, bool) {
 	limiter := rate.NewLimiter(rate.Every(100*time.Millisecond), 1)
-	pw, _, _ := progress.FromContext(ctx)
+	pw, _, _ := progress.NewFromContext(ctx)
 	now := time.Now()
 	st := progress.Status{
 		Started: &now,

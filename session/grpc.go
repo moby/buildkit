@@ -8,11 +8,11 @@ import (
 
 	"github.com/containerd/containerd/defaults"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
 	"github.com/moby/buildkit/util/grpcerrors"
-	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/net/http2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
@@ -48,10 +48,9 @@ func grpcClientConn(ctx context.Context, conn net.Conn) (context.Context, *grpc.
 		grpc.WithDefaultCallOptions(grpc.MaxCallSendMsgSize(defaults.DefaultMaxSendMsgSize)),
 	}
 
-	if span := opentracing.SpanFromContext(ctx); span != nil {
-		tracer := span.Tracer()
-		unary = append(unary, otgrpc.OpenTracingClientInterceptor(tracer, traceFilter()))
-		stream = append(stream, otgrpc.OpenTracingStreamClientInterceptor(tracer, traceFilter()))
+	if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {
+		unary = append(unary, filterClient(otelgrpc.UnaryClientInterceptor(otelgrpc.WithTracerProvider(span.TracerProvider()), otelgrpc.WithPropagators(propagators))))
+		stream = append(stream, otelgrpc.StreamClientInterceptor(otelgrpc.WithTracerProvider(span.TracerProvider()), otelgrpc.WithPropagators(propagators)))
 	}
 
 	unary = append(unary, grpcerrors.UnaryClientInterceptor)

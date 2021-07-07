@@ -91,6 +91,12 @@ type cacheManager struct {
 }
 
 func (cm *cacheManager) Checksum(ctx context.Context, ref cache.ImmutableRef, p string, opts ChecksumOpts, s session.Group) (digest.Digest, error) {
+	if ref == nil {
+		if p == "/" {
+			return digest.FromBytes(nil), nil
+		}
+		return "", errors.Errorf("%s: no such file or directory", p)
+	}
 	cc, err := cm.GetCacheContext(ctx, ensureOriginMetadata(ref.Metadata()), ref.IdentityMapping())
 	if err != nil {
 		return "", nil
@@ -509,18 +515,19 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 	root = txn.Root()
 	var (
 		updated bool
-		iter    *iradix.Seeker
+		iter    *iradix.Iterator
 		k       []byte
 		kOk     bool
 	)
 
+	iter = root.Iterator()
+
 	if opts.Wildcard {
-		iter = root.Seek([]byte{})
 		k, _, kOk = iter.Next()
 	} else {
 		k = convertPathToKey([]byte(p))
 		if _, kOk = root.Get(k); kOk {
-			iter = root.Seek(k)
+			iter.SeekLowerBound(append(append([]byte{}, k...), 0))
 		}
 	}
 
@@ -721,7 +728,7 @@ func (cc *cacheContext) checksum(ctx context.Context, root *iradix.Node, txn *ir
 		return nil, false, err
 	}
 	if cr == nil {
-		return nil, false, errors.Wrapf(errNotFound, "%q not found", convertKeyToPath(origk))
+		return nil, false, errors.Wrapf(errNotFound, "%q", convertKeyToPath(origk))
 	}
 	if cr.Digest != "" {
 		return cr, false, nil
@@ -732,7 +739,8 @@ func (cc *cacheContext) checksum(ctx context.Context, root *iradix.Node, txn *ir
 	case CacheRecordTypeDir:
 		h := sha256.New()
 		next := append(k, 0)
-		iter := root.Seek(next)
+		iter := root.Iterator()
+		iter.SeekLowerBound(append(append([]byte{}, next...), 0))
 		subk := next
 		ok := true
 		for {
@@ -750,7 +758,8 @@ func (cc *cacheContext) checksum(ctx context.Context, root *iradix.Node, txn *ir
 
 			if subcr.Type == CacheRecordTypeDir { // skip subfiles
 				next := append(subk, 0, 0xff)
-				iter = root.Seek(next)
+				iter = root.Iterator()
+				iter.SeekLowerBound(next)
 			}
 			subk, _, ok = iter.Next()
 		}

@@ -8,9 +8,10 @@ import (
 	"time"
 
 	"github.com/moby/buildkit/client"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/moby/buildkit/util/tracing/detect"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // ResolveClient resolves a client from CLI args
@@ -64,8 +65,17 @@ func ResolveClient(c *cli.Context) (*client.Client, error) {
 
 	ctx := CommandContext(c)
 
-	if span := opentracing.SpanFromContext(ctx); span != nil {
-		opts = append(opts, client.WithTracer(span.Tracer()))
+	if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {
+		opts = append(opts, client.WithTracerProvider(span.TracerProvider()))
+
+		exp, err := detect.Exporter()
+		if err != nil {
+			return nil, err
+		}
+
+		if td, ok := exp.(client.TracerDelegate); ok {
+			opts = append(opts, client.WithTracerDelegate(td))
+		}
 	}
 
 	if caCert != "" || cert != "" || key != "" {

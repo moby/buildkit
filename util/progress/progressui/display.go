@@ -2,6 +2,7 @@ package progressui
 
 import (
 	"bytes"
+	"container/ring"
 	"context"
 	"fmt"
 	"io"
@@ -12,11 +13,11 @@ import (
 	"time"
 
 	"github.com/containerd/console"
-	"github.com/jaguilar/vt100"
 	"github.com/moby/buildkit/client"
 	"github.com/morikuni/aec"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/tonistiigi/units"
+	"github.com/tonistiigi/vt100"
 	"golang.org/x/time/rate"
 )
 
@@ -130,6 +131,7 @@ type vertex struct {
 	logs          [][]byte
 	logsPartial   bool
 	logsOffset    int
+	logsBuffer    *ring.Ring // stores last logs to print them on error
 	prev          *client.Vertex
 	events        []string
 	lastBlockTime *time.Time
@@ -295,9 +297,19 @@ func (t *trace) printErrorLogs(f io.Writer) {
 		if v.Error != "" && !strings.HasSuffix(v.Error, context.Canceled.Error()) {
 			fmt.Fprintln(f, "------")
 			fmt.Fprintf(f, " > %s:\n", v.Name)
+			// tty keeps original logs
 			for _, l := range v.logs {
 				f.Write(l)
 				fmt.Fprintln(f)
+			}
+			// printer keeps last logs buffer
+			if v.logsBuffer != nil {
+				for i := 0; i < v.logsBuffer.Len(); i++ {
+					if v.logsBuffer.Value != nil {
+						fmt.Fprintln(f, string(v.logsBuffer.Value.([]byte)))
+					}
+					v.logsBuffer = v.logsBuffer.Next()
+				}
 			}
 			fmt.Fprintln(f, "------")
 		}

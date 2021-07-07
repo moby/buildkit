@@ -96,18 +96,18 @@ func (e *ExecOp) GetMount(target string) Output {
 	return nil
 }
 
-func (e *ExecOp) Validate(ctx context.Context) error {
+func (e *ExecOp) Validate(ctx context.Context, c *Constraints) error {
 	if e.isValidated {
 		return nil
 	}
-	args, err := getArgs(e.base)(ctx)
+	args, err := getArgs(e.base)(ctx, c)
 	if err != nil {
 		return err
 	}
 	if len(args) == 0 {
 		return errors.Errorf("arguments are required")
 	}
-	cwd, err := getDir(e.base)(ctx)
+	cwd, err := getDir(e.base)(ctx, c)
 	if err != nil {
 		return err
 	}
@@ -116,7 +116,7 @@ func (e *ExecOp) Validate(ctx context.Context) error {
 	}
 	for _, m := range e.mounts {
 		if m.source != nil {
-			if err := m.source.Vertex(ctx).Validate(ctx); err != nil {
+			if err := m.source.Vertex(ctx, c).Validate(ctx, c); err != nil {
 				return err
 			}
 		}
@@ -129,7 +129,7 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 	if e.Cached(c) {
 		return e.Load()
 	}
-	if err := e.Validate(ctx); err != nil {
+	if err := e.Validate(ctx, c); err != nil {
 		return "", nil, nil, nil, err
 	}
 	// make sure mounts are sorted
@@ -137,7 +137,7 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 		return e.mounts[i].target < e.mounts[j].target
 	})
 
-	env, err := getEnv(e.base)(ctx)
+	env, err := getEnv(e.base)(ctx, c)
 	if err != nil {
 		return "", nil, nil, nil, err
 	}
@@ -166,22 +166,22 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 		}
 	}
 
-	args, err := getArgs(e.base)(ctx)
+	args, err := getArgs(e.base)(ctx, c)
 	if err != nil {
 		return "", nil, nil, nil, err
 	}
 
-	cwd, err := getDir(e.base)(ctx)
+	cwd, err := getDir(e.base)(ctx, c)
 	if err != nil {
 		return "", nil, nil, nil, err
 	}
 
-	user, err := getUser(e.base)(ctx)
+	user, err := getUser(e.base)(ctx, c)
 	if err != nil {
 		return "", nil, nil, nil, err
 	}
 
-	hostname, err := getHostname(e.base)(ctx)
+	hostname, err := getHostname(e.base)(ctx, c)
 	if err != nil {
 		return "", nil, nil, nil, err
 	}
@@ -193,7 +193,7 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 		User:     user,
 		Hostname: hostname,
 	}
-	extraHosts, err := getExtraHosts(e.base)(ctx)
+	extraHosts, err := getExtraHosts(e.base)(ctx, c)
 	if err != nil {
 		return "", nil, nil, nil, err
 	}
@@ -205,12 +205,12 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 		meta.ExtraHosts = hosts
 	}
 
-	network, err := getNetwork(e.base)(ctx)
+	network, err := getNetwork(e.base)(ctx, c)
 	if err != nil {
 		return "", nil, nil, nil, err
 	}
 
-	security, err := getSecurity(e.base)(ctx)
+	security, err := getSecurity(e.base)(ctx, c)
 	if err != nil {
 		return "", nil, nil, nil, err
 	}
@@ -264,7 +264,7 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 	}
 
 	if e.constraints.Platform == nil {
-		p, err := getPlatform(e.base)(ctx)
+		p, err := getPlatform(e.base)(ctx, c)
 		if err != nil {
 			return "", nil, nil, nil, err
 		}

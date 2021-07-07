@@ -132,8 +132,16 @@ func (c *call) wait(ctx context.Context) (v interface{}, err error) {
 	select {
 	case <-c.ready:
 		c.mu.Unlock()
-		<-c.cleaned
-		return nil, errRetry
+		if c.err != nil { // on error retry
+			<-c.cleaned
+			return nil, errRetry
+		}
+		pw, ok, _ := progress.NewFromContext(ctx)
+		if ok {
+			c.progressState.add(pw)
+		}
+		return c.result, nil
+
 	case <-c.ctx.done: // could return if no error
 		c.mu.Unlock()
 		<-c.cleaned
@@ -141,7 +149,7 @@ func (c *call) wait(ctx context.Context) (v interface{}, err error) {
 	default:
 	}
 
-	pw, ok, ctx := progress.FromContext(ctx)
+	pw, ok, ctx := progress.NewFromContext(ctx)
 	if ok {
 		c.progressState.add(pw)
 	}

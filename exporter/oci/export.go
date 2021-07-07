@@ -229,7 +229,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 }
 
 func oneOffProgress(ctx context.Context, id string) func(err error) error {
-	pw, _, _ := progress.FromContext(ctx)
+	pw, _, _ := progress.NewFromContext(ctx)
 	now := time.Now()
 	st := progress.Status{
 		Started: &now,

@@ -25,7 +25,7 @@ func TestProgress(t *testing.T) {
 		return saveProgress(ctx, pr, &trace)
 	})
 
-	pw, _, ctx := FromContext(ctx, WithMetadata("tag", "foo"))
+	pw, _, ctx := NewFromContext(ctx, WithMetadata("tag", "foo"))
 	s, err = calc(ctx, 5, "calc")
 	pw.Close()
 	assert.NoError(t, err)
@@ -66,7 +66,7 @@ func TestProgressNested(t *testing.T) {
 }
 
 func calc(ctx context.Context, total int, name string) (int, error) {
-	pw, _, ctx := FromContext(ctx)
+	pw, _, ctx := NewFromContext(ctx)
 	defer pw.Close()
 
 	sum := 0
@@ -91,7 +91,7 @@ func calc(ctx context.Context, total int, name string) (int, error) {
 func reduceCalc(ctx context.Context, total int) (int, error) {
 	eg, ctx := errgroup.WithContext(ctx)
 
-	pw, _, ctx := FromContext(ctx)
+	pw, _, ctx := NewFromContext(ctx)
 	defer pw.Close()
 
 	pw.Write("reduce", Status{Action: "starting"})

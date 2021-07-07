@@ -2,6 +2,7 @@ package flightcontrol
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -201,6 +202,29 @@ func TestCancelBoth(t *testing.T) {
 	assert.Equal(t, ret1, "bar")
 
 	assert.Equal(t, counter, int64(4))
+}
+
+func TestContention(t *testing.T) {
+	perthread := 1000
+	threads := 100
+
+	wg := sync.WaitGroup{}
+	wg.Add(threads)
+
+	g := &Group{}
+
+	for i := 0; i < threads; i++ {
+		for j := 0; j < perthread; j++ {
+			_, err := g.Do(context.TODO(), "foo", func(ctx context.Context) (interface{}, error) {
+				time.Sleep(time.Microsecond)
+				return nil, nil
+			})
+			require.NoError(t, err)
+		}
+		wg.Done()
+	}
+
+	wg.Wait()
 }
 
 func testFunc(wait time.Duration, ret string, counter *int64) func(ctx context.Context) (interface{}, error) {

@@ -105,16 +105,7 @@ func (b *llbBridge) loadResult(ctx context.Context, def *pb.Definition, cacheImp
 	if err != nil {
 		return nil, err
 	}
-	wr, ok := res.Sys().(*worker.WorkerRef)
-	if !ok {
-		return nil, errors.Errorf("invalid reference for exporting: %T", res.Sys())
-	}
-	if wr.ImmutableRef != nil {
-		if err := wr.ImmutableRef.Finalize(ctx, false); err != nil {
-			return nil, err
-		}
-	}
-	return res, err
+	return res, nil
 }
 
 func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest, sid string) (res *frontend.Result, err error) {

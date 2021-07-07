@@ -33,7 +33,7 @@ func main() {
 }
 
 func goBuildBase() llb.State {
-	goAlpine := llb.Image("docker.io/library/golang:1.13-alpine")
+	goAlpine := llb.Image("docker.io/library/golang:1.16-alpine")
 	return goAlpine.
 		AddEnv("PATH", "/usr/local/go/bin:"+system.DefaultPathEnvUnix).
 		AddEnv("GOPATH", "/go").
@@ -89,7 +89,7 @@ func goFromGit(repo, tag string) llb.StateOption {
 		Dirf("/go/src/%s", repo).
 		Run(llb.Shlexf("git checkout -q %s", tag)).Root()
 	return func(s llb.State) llb.State {
-		return s.With(copyFrom(src, "/go", "/")).Reset(s).Async(func(ctx context.Context, s llb.State) (llb.State, error) {
+		return s.With(copyFrom(src, "/go", "/")).Reset(s).Async(func(ctx context.Context, s llb.State, c *llb.Constraints) (llb.State, error) {
 			// TODO: add s.With(s2.DirValue) or s.With(llb.Dir(s2)) or s.Reset(s2, llb.DirMask)?
 			dir, err := src.GetDir(ctx)
 			if err != nil {

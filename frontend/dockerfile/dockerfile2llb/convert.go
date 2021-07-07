@@ -227,10 +227,15 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 				continue
 			}
 			func(i int, d *dispatchState) {
-				eg.Go(func() error {
+				eg.Go(func() (err error) {
+					defer func() {
+						if err != nil {
+							err = parser.WithLocation(err, d.stage.Location)
+						}
+					}()
 					ref, err := reference.ParseNormalizedNamed(d.stage.BaseName)
 					if err != nil {
-						return parser.WithLocation(errors.Wrapf(err, "failed to parse stage name %q", d.stage.BaseName), d.stage.Location)
+						return errors.Wrapf(err, "failed to parse stage name %q", d.stage.BaseName)
 					}
 					platform := d.platform
 					if platform == nil {
@@ -250,11 +255,11 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 							LogName:     fmt.Sprintf("%s load metadata for %s", prefix, d.stage.BaseName),
 						})
 						if err != nil {
-							return err
+							return errors.Wrap(err, d.stage.BaseName)
 						}
 						var img Image
 						if err := json.Unmarshal(dt, &img); err != nil {
-							return err
+							return errors.Wrap(err, "failed to parse image config")
 						}
 						img.Created = nil
 						// if there is no explicit target platform, try to match based on image config
@@ -507,7 +512,7 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 	case *instructions.AddCommand:
 		err = dispatchCopy(d, c.SourcesAndDest, opt.buildContext, true, c, c.Chown, c.Chmod, c.Location(), opt)
 		if err == nil {
-			for _, src := range c.Sources() {
+			for _, src := range c.SourcePaths {
 				if !strings.HasPrefix(src, "http://") && !strings.HasPrefix(src, "https://") {
 					d.ctxPaths[path.Join("/", filepath.ToSlash(src))] = struct{}{}
 				}
@@ -542,7 +547,7 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 		}
 		err = dispatchCopy(d, c.SourcesAndDest, l, false, c, c.Chown, c.Chmod, c.Location(), opt)
 		if err == nil && len(cmd.sources) == 0 {
-			for _, src := range c.Sources() {
+			for _, src := range c.SourcePaths {
 				d.ctxPaths[path.Join("/", filepath.ToSlash(src))] = struct{}{}
 			}
 		}
@@ -647,15 +652,71 @@ func dispatchEnv(d *dispatchState, c *instructions.EnvCommand) error {
 }
 
 func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyEnv, sources []*dispatchState, dopt dispatchOpt) error {
+	var opt []llb.RunOption
+
+	customname := c.String()
+
 	var args []string = c.CmdLine
+	if len(c.Files) > 0 {
+		if len(args) != 1 || !c.PrependShell {
+			return fmt.Errorf("parsing produced an invalid run command: %v", args)
+		}
+
+		if heredoc := parser.MustParseHeredoc(args[0]); heredoc != nil {
+			if d.image.OS != "windows" && strings.HasPrefix(c.Files[0].Data, "#!") {
+				// This is a single heredoc with a shebang, so create a file
+				// and run it.
+				// NOTE: choosing to expand doesn't really make sense here, so
+				// we silently ignore that option if it was provided.
+				sourcePath := "/"
+				destPath := "/dev/pipes/"
+
+				f := c.Files[0].Name
+				data := c.Files[0].Data
+				if c.Files[0].Chomp {
+					data = parser.ChompHeredocContent(data)
+				}
+				st := llb.Scratch().Dir(sourcePath).File(
+					llb.Mkfile(f, 0755, []byte(data)),
+					WithInternalName("preparing inline document"),
+				)
+
+				mount := llb.AddMount(destPath, st, llb.SourcePath(sourcePath), llb.Readonly)
+				opt = append(opt, mount)
+
+				args = []string{path.Join(destPath, f)}
+			} else {
+				// Just a simple heredoc, so just run the contents in the
+				// shell: this creates the effect of a "fake"-heredoc, so that
+				// the syntax can still be used for shells that don't support
+				// heredocs directly.
+				// NOTE: like above, we ignore the expand option.
+				data := c.Files[0].Data
+				if c.Files[0].Chomp {
+					data = parser.ChompHeredocContent(data)
+				}
+				args = []string{data}
+			}
+			customname += fmt.Sprintf(" (%s)", summarizeHeredoc(c.Files[0].Data))
+		} else {
+			// More complex heredoc, so reconstitute it, and pass it to the
+			// shell to handle.
+			full := args[0]
+			for _, file := range c.Files {
+				full += "\n" + file.Data + file.Name
+			}
+			args = []string{full}
+		}
+	}
 	if c.PrependShell {
 		args = withShell(d.image, args)
 	}
+
 	env, err := d.state.Env(context.TODO())
 	if err != nil {
 		return err
 	}
-	opt := []llb.RunOption{llb.Args(args), dfCmd(c), location(dopt.sourceMap, c.Location())}
+	opt = append(opt, llb.Args(args), dfCmd(c), location(dopt.sourceMap, c.Location()))
 	if d.ignoreCache {
 		opt = append(opt, llb.IgnoreCache)
 	}
@@ -693,7 +754,7 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 	if err != nil {
 		return err
 	}
-	opt = append(opt, llb.WithCustomName(prefixCommand(d, uppercaseCmd(processCmdEnv(&shlex, c.String(), env)), d.prefixPlatform, pl)))
+	opt = append(opt, llb.WithCustomName(prefixCommand(d, uppercaseCmd(processCmdEnv(&shlex, customname, env)), d.prefixPlatform, pl)))
 	for _, h := range dopt.extraHosts {
 		opt = append(opt, llb.AddExtraHost(h.Host, h.IP))
 	}
@@ -735,12 +796,12 @@ func dispatchWorkdir(d *dispatchState, c *instructions.WorkdirCommand, commit bo
 }
 
 func dispatchCopyFileOp(d *dispatchState, c instructions.SourcesAndDest, sourceState llb.State, isAddCommand bool, cmdToPrint fmt.Stringer, chown string, chmod string, loc []parser.Range, opt dispatchOpt) error {
-	pp, err := pathRelativeToWorkingDir(d.state, c.Dest())
+	pp, err := pathRelativeToWorkingDir(d.state, c.DestPath)
 	if err != nil {
 		return err
 	}
 	dest := path.Join("/", pp)
-	if c.Dest() == "." || c.Dest() == "" || c.Dest()[len(c.Dest())-1] == filepath.Separator {
+	if c.DestPath == "." || c.DestPath == "" || c.DestPath[len(c.DestPath)-1] == filepath.Separator {
 		dest += string(filepath.Separator)
 	}
 
@@ -768,7 +829,7 @@ func dispatchCopyFileOp(d *dispatchState, c instructions.SourcesAndDest, sourceS
 
 	var a *llb.FileAction
 
-	for _, src := range c.Sources() {
+	for _, src := range c.SourcePaths {
 		commitMessage.WriteString(" " + src)
 		if strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://") {
 			if !isAddCommand {
@@ -791,6 +852,7 @@ func dispatchCopyFileOp(d *dispatchState, c instructions.SourcesAndDest, sourceS
 			st := llb.HTTP(src, llb.Filename(f), dfCmd(c))
 
 			opts := append([]llb.CopyOption{&llb.CopyInfo{
+				Mode:           mode,
 				CreateDestPath: true,
 			}}, copyOpt...)
 
@@ -818,7 +880,29 @@ func dispatchCopyFileOp(d *dispatchState, c instructions.SourcesAndDest, sourceS
 		}
 	}
 
-	commitMessage.WriteString(" " + c.Dest())
+	for _, src := range c.SourceContents {
+		commitMessage.WriteString(" <<" + src.Path)
+
+		data := src.Data
+		f := src.Path
+		st := llb.Scratch().File(
+			llb.Mkfile(f, 0664, []byte(data)),
+			WithInternalName("preparing inline document"),
+		)
+
+		opts := append([]llb.CopyOption{&llb.CopyInfo{
+			Mode:           mode,
+			CreateDestPath: true,
+		}}, copyOpt...)
+
+		if a == nil {
+			a = llb.Copy(st, f, dest, opts...)
+		} else {
+			a = a.Copy(st, f, dest, opts...)
+		}
+	}
+
+	commitMessage.WriteString(" " + c.DestPath)
 
 	platform := opt.targetPlatform
 	if d.platform != nil {
@@ -847,6 +931,10 @@ func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState l
 		return dispatchCopyFileOp(d, c, sourceState, isAddCommand, cmdToPrint, chown, chmod, loc, opt)
 	}
 
+	if len(c.SourceContents) > 0 {
+		return errors.New("inline content copy is not supported")
+	}
+
 	if chmod != "" {
 		if opt.llbCaps != nil && opt.llbCaps.Supports(pb.CapFileBase) != nil {
 			return errors.Wrap(opt.llbCaps.Supports(pb.CapFileBase), "chmod is not supported")
@@ -855,18 +943,18 @@ func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState l
 	}
 
 	img := llb.Image(opt.copyImage, llb.MarkImageInternal, llb.Platform(opt.buildPlatforms[0]), WithInternalName("helper image for file operations"))
-	pp, err := pathRelativeToWorkingDir(d.state, c.Dest())
+	pp, err := pathRelativeToWorkingDir(d.state, c.DestPath)
 	if err != nil {
 		return err
 	}
 	dest := path.Join(".", pp)
-	if c.Dest() == "." || c.Dest() == "" || c.Dest()[len(c.Dest())-1] == filepath.Separator {
+	if c.DestPath == "." || c.DestPath == "" || c.DestPath[len(c.DestPath)-1] == filepath.Separator {
 		dest += string(filepath.Separator)
 	}
 	args := []string{"copy"}
 	unpack := isAddCommand
 
-	mounts := make([]llb.RunOption, 0, len(c.Sources()))
+	mounts := make([]llb.RunOption, 0, len(c.SourcePaths))
 	if chown != "" {
 		args = append(args, fmt.Sprintf("--chown=%s", chown))
 		_, _, err := parseUser(chown)
@@ -883,7 +971,7 @@ func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState l
 		commitMessage.WriteString("COPY")
 	}
 
-	for i, src := range c.Sources() {
+	for i, src := range c.SourcePaths {
 		commitMessage.WriteString(" " + src)
 		if strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://") {
 			if !isAddCommand {
@@ -920,7 +1008,7 @@ func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState l
 		}
 	}
 
-	commitMessage.WriteString(" " + c.Dest())
+	commitMessage.WriteString(" " + c.DestPath)
 
 	args = append(args, dest)
 	if unpack {
@@ -1436,4 +1524,14 @@ func location(sm *llb.SourceMap, locations []parser.Range) llb.ConstraintsOpt {
 		})
 	}
 	return sm.Location(loc)
+}
+
+func summarizeHeredoc(doc string) string {
+	doc = strings.TrimSpace(doc)
+	lines := strings.Split(strings.ReplaceAll(doc, "\r\n", "\n"), "\n")
+	summary := lines[0]
+	if len(lines) > 1 {
+		summary += "..."
+	}
+	return summary
 }

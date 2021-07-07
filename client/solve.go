@@ -23,10 +23,10 @@ import (
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/entitlements"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
-	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	fstypes "github.com/tonistiigi/fsutil/types"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -96,8 +96,8 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 	statusContext, cancelStatus := context.WithCancel(context.Background())
 	defer cancelStatus()
 
-	if span := opentracing.SpanFromContext(ctx); span != nil {
-		statusContext = opentracing.ContextWithSpan(statusContext, span)
+	if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {
+		statusContext = trace.ContextWithSpan(statusContext, span)
 	}
 
 	s := opt.SharedSession

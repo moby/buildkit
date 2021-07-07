@@ -128,11 +128,11 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispec.Descriptor, 
 		if err != nil {
 			return nil, err
 		}
-		if err := p2.Finalize(ctx, true); err != nil {
+		p = p2.(*immutableRef)
+		if err := p.finalizeLocked(ctx); err != nil {
 			return nil, err
 		}
-		parentID = p2.ID()
-		p = p2.(*immutableRef)
+		parentID = p.ID()
 	}
 
 	releaseParent := false
@@ -150,10 +150,13 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispec.Descriptor, 
 		return nil, err
 	}
 
-	if len(sis) > 0 {
-		ref, err := cm.get(ctx, sis[0].ID(), opts...)
+	for _, si := range sis {
+		ref, err := cm.get(ctx, si.ID(), opts...)
 		if err != nil && !IsNotFound(err) {
 			return nil, errors.Wrapf(err, "failed to get record %s by blobchainid", sis[0].ID())
+		}
+		if ref == nil {
+			continue
 		}
 		if p != nil {
 			releaseParent = true
@@ -170,12 +173,15 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispec.Descriptor, 
 	}
 
 	var link ImmutableRef
-	if len(sis) > 0 {
-		ref, err := cm.get(ctx, sis[0].ID(), opts...)
+	for _, si := range sis {
+		ref, err := cm.get(ctx, si.ID(), opts...)
 		if err != nil && !IsNotFound(err) {
 			return nil, errors.Wrapf(err, "failed to get record %s by chainid", sis[0].ID())
 		}
-		link = ref
+		if ref != nil {
+			link = ref
+			break
+		}
 	}
 
 	id := identity.NewID()
@@ -375,7 +381,7 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOpt
 
 	md, ok := cm.md.Get(id)
 	if !ok {
-		return nil, errors.Wrapf(errNotFound, "%s not found", id)
+		return nil, errors.Wrap(errNotFound, id)
 	}
 	if mutableID := getEqualMutable(md); mutableID != "" {
 		mutable, err := cm.getRecord(ctx, mutableID)
@@ -469,7 +475,7 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, sess session.Gr
 			}
 			parent = p.(*immutableRef)
 		}
-		if err := parent.Finalize(ctx, true); err != nil {
+		if err := parent.finalizeLocked(ctx); err != nil {
 			return nil, err
 		}
 		if err := parent.Extract(ctx, sess); err != nil {
@@ -513,7 +519,16 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, sess session.Gr
 		return nil, errors.Wrapf(err, "failed to add snapshot %s to lease", id)
 	}
 
-	if err := cm.Snapshotter.Prepare(ctx, id, parentSnapshotID); err != nil {
+	if cm.Snapshotter.Name() == "stargz" && parent != nil {
+		if rerr := parent.withRemoteSnapshotLabelsStargzMode(ctx, sess, func() {
+			err = cm.Snapshotter.Prepare(ctx, id, parentSnapshotID)
+		}); rerr != nil {
+			return nil, rerr
+		}
+	} else {
+		err = cm.Snapshotter.Prepare(ctx, id, parentSnapshotID)
+	}
+	if err != nil {
 		return nil, errors.Wrapf(err, "failed to prepare %s", id)
 	}
 
@@ -756,6 +771,22 @@ func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, opt
 		return nil
 	}
 
+	// calculate sizes here so that lock does not need to be held for slow process
+	for _, cr := range toDelete {
+		size := getSize(cr.md)
+
+		if size == sizeUnknown && cr.equalImmutable != nil {
+			size = getSize(cr.equalImmutable.md) // benefit from DiskUsage calc
+		}
+		if size == sizeUnknown {
+			// calling size will warm cache for next call
+			if _, err := cr.Size(ctx); err != nil {
+				return err
+			}
+		}
+	}
+
+	cm.mu.Lock()
 	var err error
 	for _, cr := range toDelete {
 		cr.mu.Lock()
@@ -779,15 +810,6 @@ func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, opt
 		if c.Size == sizeUnknown && cr.equalImmutable != nil {
 			c.Size = getSize(cr.equalImmutable.md) // benefit from DiskUsage calc
 		}
-		if c.Size == sizeUnknown {
-			cr.mu.Unlock() // all the non-prune modifications already protected by cr.dead
-			s, err := cr.Size(ctx)
-			if err != nil {
-				return err
-			}
-			c.Size = s
-			cr.mu.Lock()
-		}
 
 		opt.totalSize -= c.Size
 
@@ -805,6 +827,7 @@ func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, opt
 		}
 		cr.mu.Unlock()
 	}
+	cm.mu.Unlock()
 	if err != nil {
 		return err
 	}

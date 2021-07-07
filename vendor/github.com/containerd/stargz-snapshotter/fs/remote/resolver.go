@@ -23,7 +23,6 @@
 package remote
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"fmt"
@@ -32,6 +31,7 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"path"
 	"strconv"
 	"strings"
@@ -43,6 +43,7 @@ import (
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/stargz-snapshotter/cache"
 	"github.com/containerd/stargz-snapshotter/fs/config"
+	"github.com/containerd/stargz-snapshotter/fs/source"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
@@ -53,7 +54,7 @@ const (
 	defaultFetchTimeoutSec  = 300
 )
 
-func NewResolver(blobCache cache.BlobCache, cfg config.BlobConfig) *Resolver {
+func NewResolver(cfg config.BlobConfig) *Resolver {
 	if cfg.ChunkSize == 0 { // zero means "use default chunk size"
 		cfg.ChunkSize = defaultChunkSize
 	}
@@ -68,23 +69,15 @@ func NewResolver(blobCache cache.BlobCache, cfg config.BlobConfig) *Resolver {
 	}
 
 	return &Resolver{
-		bufPool: sync.Pool{
-			New: func() interface{} {
-				return new(bytes.Buffer)
-			},
-		},
-		blobCache:  blobCache,
 		blobConfig: cfg,
 	}
 }
 
 type Resolver struct {
-	blobCache  cache.BlobCache
 	blobConfig config.BlobConfig
-	bufPool    sync.Pool
 }
 
-func (r *Resolver) Resolve(ctx context.Context, hosts docker.RegistryHosts, refspec reference.Spec, desc ocispec.Descriptor) (Blob, error) {
+func (r *Resolver) Resolve(ctx context.Context, hosts source.RegistryHosts, refspec reference.Spec, desc ocispec.Descriptor, blobCache cache.BlobCache) (Blob, error) {
 	fetcher, size, err := newFetcher(ctx, hosts, refspec, desc)
 	if err != nil {
 		return nil, err
@@ -93,7 +86,7 @@ func (r *Resolver) Resolve(ctx context.Context, hosts docker.RegistryHosts, refs
 		fetcher:       fetcher,
 		size:          size,
 		chunkSize:     r.blobConfig.ChunkSize,
-		cache:         r.blobCache,
+		cache:         blobCache,
 		lastCheck:     time.Now(),
 		checkInterval: time.Duration(r.blobConfig.ValidInterval) * time.Second,
 		resolver:      r,
@@ -101,8 +94,8 @@ func (r *Resolver) Resolve(ctx context.Context, hosts docker.RegistryHosts, refs
 	}, nil
 }
 
-func newFetcher(ctx context.Context, hosts docker.RegistryHosts, refspec reference.Spec, desc ocispec.Descriptor) (*fetcher, int64, error) {
-	reghosts, err := hosts(refspec.Hostname())
+func newFetcher(ctx context.Context, hosts source.RegistryHosts, refspec reference.Spec, desc ocispec.Descriptor) (*fetcher, int64, error) {
+	reghosts, err := hosts(refspec)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -110,7 +103,7 @@ func newFetcher(ctx context.Context, hosts docker.RegistryHosts, refspec referen
 		return nil, 0, fmt.Errorf("Digest is mandatory in layer descriptor")
 	}
 	digest := desc.Digest
-	pullScope, err := docker.RepositoryScope(refspec, false)
+	pullScope, err := repositoryScope(refspec, false)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -127,6 +120,7 @@ func newFetcher(ctx context.Context, hosts docker.RegistryHosts, refspec referen
 
 		// Prepare transport with authorization functionality
 		tr := host.Client.Transport
+		timeout := host.Client.Timeout
 		if host.Authorizer != nil {
 			tr = &transport{
 				inner: tr,
@@ -141,7 +135,7 @@ func newFetcher(ctx context.Context, hosts docker.RegistryHosts, refspec referen
 			path.Join(host.Host, host.Path),
 			strings.TrimPrefix(refspec.Locator, refspec.Hostname()+"/"),
 			digest)
-		url, err := redirect(ctx, blobURL, tr)
+		url, err := redirect(ctx, blobURL, tr, timeout)
 		if err != nil {
 			rErr = errors.Wrapf(rErr, "failed to redirect (host %q, ref:%q, digest:%q): %v",
 				host.Host, refspec, digest, err)
@@ -150,7 +144,7 @@ func newFetcher(ctx context.Context, hosts docker.RegistryHosts, refspec referen
 
 		// Get size information
 		// TODO: we should try to use the Size field in the descriptor here.
-		size, err := getSize(ctx, url, tr)
+		size, err := getSize(ctx, url, tr, timeout)
 		if err != nil {
 			rErr = errors.Wrapf(rErr, "failed to get size (host %q, ref:%q, digest:%q): %v",
 				host.Host, refspec, digest, err)
@@ -162,6 +156,7 @@ func newFetcher(ctx context.Context, hosts docker.RegistryHosts, refspec referen
 			url:     url,
 			tr:      tr,
 			blobURL: blobURL,
+			timeout: timeout,
 		}, size, nil
 	}
 
@@ -209,10 +204,12 @@ func (tr *transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return resp, nil
 }
 
-func redirect(ctx context.Context, blobURL string, tr http.RoundTripper) (url string, err error) {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-
+func redirect(ctx context.Context, blobURL string, tr http.RoundTripper, timeout time.Duration) (url string, err error) {
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
 	// We use GET request for redirect.
 	// gcr.io returns 200 on HEAD without Location header (2020).
 	// ghcr.io returns 200 on HEAD without Location header (2020).
@@ -243,9 +240,12 @@ func redirect(ctx context.Context, blobURL string, tr http.RoundTripper) (url st
 	return
 }
 
-func getSize(ctx context.Context, url string, tr http.RoundTripper) (int64, error) {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
+func getSize(ctx context.Context, url string, tr http.RoundTripper, timeout time.Duration) (int64, error) {
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
 	req, err := http.NewRequestWithContext(ctx, "HEAD", url, nil)
 	if err != nil {
 		return 0, err
@@ -297,6 +297,7 @@ type fetcher struct {
 	blobURL       string
 	singleRange   bool
 	singleRangeMu sync.Mutex
+	timeout       time.Duration
 }
 
 type multipartReadCloser interface {
@@ -393,8 +394,12 @@ func (f *fetcher) fetch(ctx context.Context, rs []region, retry bool, opts *opti
 }
 
 func (f *fetcher) check() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	ctx := context.Background()
+	if f.timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, f.timeout)
+		defer cancel()
+	}
 	f.urlMu.Lock()
 	url := f.url
 	f.urlMu.Unlock()
@@ -416,8 +421,12 @@ func (f *fetcher) check() error {
 		return nil
 	} else if res.StatusCode == http.StatusForbidden {
 		// Try to re-redirect this blob
-		rCtx, rCancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer rCancel()
+		rCtx := context.Background()
+		if f.timeout > 0 {
+			var rCancel context.CancelFunc
+			rCtx, rCancel = context.WithTimeout(rCtx, f.timeout)
+			defer rCancel()
+		}
 		if err := f.refreshURL(rCtx); err == nil {
 			return nil
 		}
@@ -428,7 +437,7 @@ func (f *fetcher) check() error {
 }
 
 func (f *fetcher) refreshURL(ctx context.Context) error {
-	newURL, err := redirect(ctx, f.blobURL, f.tr)
+	newURL, err := redirect(ctx, f.blobURL, f.tr, f.timeout)
 	if err != nil {
 		return err
 	}
@@ -548,4 +557,22 @@ func WithCacheOpts(cacheOpts ...cache.Option) Option {
 	return func(opts *options) {
 		opts.cacheOpts = cacheOpts
 	}
+}
+
+// NOTE: ported from https://github.com/containerd/containerd/blob/v1.5.2/remotes/docker/scope.go#L29-L42
+// TODO: import this from containerd package once we drop support to continerd v1.4.x
+//
+// repositoryScope returns a repository scope string such as "repository:foo/bar:pull"
+// for "host/foo/bar:baz".
+// When push is true, both pull and push are added to the scope.
+func repositoryScope(refspec reference.Spec, push bool) (string, error) {
+	u, err := url.Parse("dummy://" + refspec.Locator)
+	if err != nil {
+		return "", err
+	}
+	s := "repository:" + strings.TrimPrefix(u.Path, "/") + ":pull"
+	if push {
+		s += ",push"
+	}
+	return s, nil
 }

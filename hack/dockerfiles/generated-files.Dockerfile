@@ -1,14 +1,18 @@
 # syntax=docker/dockerfile:1.2
 
 # protoc is dynamically linked to glibc to can't use golang:1.10-alpine
-FROM golang:1.13-buster AS gobuild-base
+FROM golang:1.16-buster AS gobuild-base
 # https://github.com/golang/protobuf/blob/v1.3.5/.travis.yml#L15
 ARG PROTOC_VERSION=3.11.4
 ARG GOGO_VERSION=v1.3.2
 RUN apt-get update && apt-get --no-install-recommends install -y \
 	unzip \
 	&& true
-RUN wget -q https://github.com/google/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip && unzip protoc-${PROTOC_VERSION}-linux-x86_64.zip -d /usr/local
+
+ARG TARGETOS TARGETARCH
+RUN set -e; \
+	arch=$(echo $TARGETARCH | sed -e s/amd64/x86_64/ -e s/arm64/aarch_64/); \
+	wget -q https://github.com/google/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-${TARGETOS}-${arch}.zip && unzip protoc-${PROTOC_VERSION}-${TARGETOS}-${arch}.zip -d /usr/local
 
 RUN git clone https://github.com/gogo/protobuf.git /go/src/github.com/gogo/protobuf \
 	&& cd /go/src/github.com/gogo/protobuf \
@@ -33,7 +37,7 @@ RUN mkdir /generated-files
 RUN --mount=target=/tmp/src \
 	cp -r /tmp/src/. . && \
 	git add -A && \
-	go generate ./... && \
+	go generate -mod=vendor -v ./... && \
 	git ls-files -m --others -- **/*.pb.go | tar -cf - --files-from - | tar -C /generated-files -xf -
 
 FROM scratch AS update
@@ -42,4 +46,4 @@ COPY --from=generated /generated-files /generated-files
 FROM gobuild-base AS validate
 RUN --mount=target=/tmp/src \
 	cp -r /tmp/src/. . && \
-	go generate ./... && git diff && ./hack/validate-generated-files check
+	go generate -mod=vendor -v ./... && git diff && ./hack/validate-generated-files check

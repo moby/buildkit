@@ -67,6 +67,12 @@
 // Typically, each call of the API happens in its own
 // goroutine, so take care to make the file system thread-safe.
 //
+// Be careful when you access the FUSE mount from the same process. An access can
+// tie up two OS threads (one on the request side and one on the FUSE server side).
+// This can deadlock if there is no free thread to handle the FUSE server side.
+// Run your program with GOMAXPROCS=1 to make the problem easier to reproduce,
+// see https://github.com/hanwen/go-fuse/issues/261 for an example of that
+// problem.
 //
 // Higher level interfaces
 //

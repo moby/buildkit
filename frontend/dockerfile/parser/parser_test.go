@@ -137,6 +137,9 @@ func TestParseWarnsOnEmptyContinutationLine(t *testing.T) {
 	dockerfile := bytes.NewBufferString(`
 FROM alpine:3.6
 
+RUN valid \
+    continuation
+
 RUN something \
 
     following \
@@ -146,6 +149,7 @@ RUN something \
 RUN another \
 
     thing
+
 RUN non-indented \
 # this is a comment
    after-comment

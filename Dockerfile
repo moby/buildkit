@@ -1,6 +1,6 @@
 # syntax = docker/dockerfile:1.2
 
-ARG RUNC_VERSION=v1.0.0-rc95
+ARG RUNC_VERSION=v1.0.0
 ARG CONTAINERD_VERSION=v1.5.2
 # containerd v1.4 for integration tests
 ARG CONTAINERD_ALT_VERSION=v1.4.6
@@ -10,27 +10,25 @@ ARG REGISTRY_VERSION=2.7.1
 ARG ROOTLESSKIT_VERSION=v0.14.2
 ARG CNI_VERSION=v0.9.1
 ARG SHADOW_VERSION=4.8.1
-ARG FUSEOVERLAYFS_VERSION=v1.5.0
 ARG STARGZ_SNAPSHOTTER_VERSION=v0.5.0
 
-ARG ALPINE_VERSION=3.12
+ARG ALPINE_VERSION=3.14
 
 # git stage is used for checking out remote repository sources
 FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS git
 RUN apk add --no-cache git
 
 # xx is a helper for cross-compilation
-FROM --platform=$BUILDPLATFORM tonistiigi/xx@sha256:810dc54d5144f133a218e88e319184bf8b9ce01d37d46ddb37573e90decd9eef AS xx
+FROM --platform=$BUILDPLATFORM tonistiigi/xx@sha256:1e96844fadaa2f9aea021b2b05299bc02fe4c39a92d8e735b93e8e2b15610128 AS xx
 
-FROM --platform=$BUILDPLATFORM golang:1.13-alpine AS gostable
 FROM --platform=$BUILDPLATFORM golang:1.16-alpine AS golatest
 
-FROM gostable AS go-linux
+FROM golatest AS go-linux
 FROM golatest AS go-darwin
 FROM golatest AS go-windows-amd64
 FROM golatest AS go-windows-386
 FROM golatest AS go-windows-arm
-FROM --platform=$BUILDPLATFORM tonistiigi/golang:497feff1-alpine AS go-windows-arm64
+FROM --platform=$BUILDPLATFORM golang:1.17beta1-alpine AS go-windows-arm64
 FROM go-windows-${TARGETARCH} AS go-windows
 
 # gobuild is base stage for compiling go/cgo
@@ -51,7 +49,7 @@ WORKDIR $GOPATH/src/github.com/opencontainers/runc
 ARG TARGETPLATFORM
 # gcc is only installed for libgcc
 # lld has issues building static binaries for ppc so prefer ld for it
-RUN set -e; xx-apk add musl-dev gcc libseccomp-dev; \
+RUN set -e; xx-apk add musl-dev gcc libseccomp-dev libseccomp-static; \
   [ "$(xx-info arch)" != "ppc64le" ] || XX_CC_PREFER_LINKER=ld xx-clang --setup-target-triple
 RUN --mount=from=runc-src,src=/usr/src/runc,target=. --mount=target=/root/.cache,type=cache \
   CGO_ENABLED=1 xx-go build -mod=vendor -ldflags '-extldflags -static' -tags 'apparmor seccomp netgo cgo static_build osusergo' -o /usr/bin/runc ./ && \
@@ -91,8 +89,8 @@ RUN --mount=target=. --mount=target=/root/.cache,type=cache \
 
 FROM scratch AS binaries-linux-helper
 COPY --from=runc /usr/bin/runc /buildkit-runc
-# built from https://github.com/tonistiigi/binfmt/runs/1743699129
-COPY --from=tonistiigi/binfmt:buildkit@sha256:75583ce1cf4a7166fd2592f45e4ff3f53727eee6edcd3a3e804f749b1f214a39 / /
+# built from https://github.com/tonistiigi/binfmt/releases/tag/buildkit%2Fv6.0.0-15
+COPY --from=tonistiigi/binfmt:buildkit@sha256:81a03e6630e9c39df109bf24ae8c807881c4fd1703084827d855f8093cc7ab7a / /
 FROM binaries-linux-helper AS binaries-linux
 COPY --from=buildctl /usr/bin/buildctl /
 COPY --from=buildkitd /usr/bin/buildkitd /
@@ -116,13 +114,10 @@ RUN --mount=from=binaries \
 FROM scratch AS release
 COPY --from=releaser /out/ /
 
-FROM alpine:${ALPINE_VERSION} AS buildkit-export
-# nsswitch.conf needs to be present to work around
-#   https://github.com/golang/go/issues/35305
-# drop this once we start building with Go 1.16
+# tonistiigi/alpine supports riscv64
+FROM tonistiigi/alpine:${ALPINE_VERSION} AS buildkit-export
 RUN apk add --no-cache fuse3 git openssh pigz xz \
-  && ln -s fusermount3 /usr/bin/fusermount \
-  && echo "hosts: files dns" >/etc/nsswitch.conf
+  && ln -s fusermount3 /usr/bin/fusermount
 COPY examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
 VOLUME /var/lib/buildkit
 
@@ -151,6 +146,7 @@ RUN --mount=from=containerd-src,src=/usr/src/containerd,readwrite --mount=target
 # containerd v1.4 for integration tests
 FROM containerd-base as containerd-alt
 ARG CONTAINERD_ALT_VERSION
+ARG GO111MODULE=off
 RUN --mount=from=containerd-src,src=/usr/src/containerd,readwrite --mount=target=/root/.cache,type=cache \
   git fetch origin \
   && git checkout -q "$CONTAINERD_ALT_VERSION" \
@@ -182,16 +178,6 @@ RUN --mount=target=/root/.cache,type=cache \
   mkdir /out && CGO_ENABLED=0 PREFIX=/out/ make && \
   xx-verify --static /out/containerd-stargz-grpc && \
   xx-verify --static /out/ctr-remote
-
-FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS fuse-overlayfs
-RUN apk add --no-cache curl
-COPY --from=xx / /
-ARG FUSEOVERLAYFS_VERSION
-ARG TARGETPLATFORM
-RUN mkdir /out && \
-  curl -sSL -o /out/fuse-overlayfs https://github.com/containers/fuse-overlayfs/releases/download/${FUSEOVERLAYFS_VERSION}/fuse-overlayfs-$(xx-info march) && \
-  chmod +x /out/fuse-overlayfs && \
-  xx-verify --static /out/fuse-overlayfs
 
 # Copy together all binaries needed for oci worker mode
 FROM buildkit-export AS buildkit-buildkitd.oci_only
@@ -264,9 +250,10 @@ ENV BUILDKIT_RUN_NETWORK_INTEGRATION_TESTS=1 BUILDKIT_CNI_INIT_LOCK_PATH=/run/bu
 FROM integration-tests AS dev-env
 VOLUME /var/lib/buildkit
 
-# newuidmap & newgidmap binaries (shadow-uidmap 4.7-r1) shipped with alpine cannot be executed without CAP_SYS_ADMIN,
+# newuidmap & newgidmap binaries (shadow-uidmap 4.8.1-r0) shipped with alpine cannot be executed without CAP_SYS_ADMIN,
 # because the binaries are built without libcap-dev.
 # So we need to build the binaries with libcap enabled.
+# TODO: ask the Alpine upstream to enable libcap: https://github.com/moby/buildkit/issues/2038
 FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS idmap
 RUN apk add --no-cache git autoconf automake clang lld gettext-dev libtool make byacc binutils
 COPY --from=xx / /
@@ -281,21 +268,16 @@ RUN CC=$(xx-clang --print-target-triple)-clang ./autogen.sh --disable-nls --disa
   && cp src/newuidmap src/newgidmap /usr/bin
 
 # Rootless mode.
-FROM alpine:${ALPINE_VERSION} AS rootless
-RUN apk add --no-cache fuse3 git openssh pigz xz
+FROM tonistiigi/alpine:${ALPINE_VERSION} AS rootless
+RUN apk add --no-cache fuse3 fuse-overlayfs git openssh pigz xz
 COPY --from=idmap /usr/bin/newuidmap /usr/bin/newuidmap
 COPY --from=idmap /usr/bin/newgidmap /usr/bin/newgidmap
-COPY --from=fuse-overlayfs /out/fuse-overlayfs /usr/bin/
 # we could just set CAP_SETUID filecap rather than `chmod u+s`, but requires kernel >= 4.14
-# nsswitch.conf needs to be present to work around
-#   https://github.com/golang/go/issues/35305
-# drop this once we start building with Go 1.16
 RUN chmod u+s /usr/bin/newuidmap /usr/bin/newgidmap \
   && adduser -D -u 1000 user \
   && mkdir -p /run/user/1000 /home/user/.local/tmp /home/user/.local/share/buildkit \
   && chown -R user /run/user/1000 /home/user \
-  && echo user:100000:65536 | tee /etc/subuid | tee /etc/subgid \
-  && echo "hosts: files dns" >/etc/nsswitch.conf
+  && echo user:100000:65536 | tee /etc/subuid | tee /etc/subgid
 COPY --from=rootlesskit /rootlesskit /usr/bin/
 COPY --from=binaries / /usr/bin/
 COPY examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/

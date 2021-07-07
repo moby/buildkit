@@ -402,10 +402,24 @@ func fillGo18FileTypeBits(mode int64, fi os.FileInfo) int64 {
 // ReadSecurityXattrToTarHeader reads security.capability xattr from filesystem
 // to a tar header
 func ReadSecurityXattrToTarHeader(path string, hdr *tar.Header) error {
+	const (
+		// Values based on linux/include/uapi/linux/capability.h
+		xattrCapsSz2    = 20
+		versionOffset   = 3
+		vfsCapRevision2 = 2
+		vfsCapRevision3 = 3
+	)
 	capability, _ := system.Lgetxattr(path, "security.capability")
 	if capability != nil {
+		length := len(capability)
+		if capability[versionOffset] == vfsCapRevision3 {
+			// Convert VFS_CAP_REVISION_3 to VFS_CAP_REVISION_2 as root UID makes no
+			// sense outside the user namespace the archive is built in.
+			capability[versionOffset] = vfsCapRevision2
+			length = xattrCapsSz2
+		}
 		hdr.Xattrs = make(map[string]string)
-		hdr.Xattrs["security.capability"] = string(capability)
+		hdr.Xattrs["security.capability"] = string(capability[:length])
 	}
 	return nil
 }
@@ -739,13 +753,18 @@ func TarWithOptions(srcPath string, options *TarOptions) (io.ReadCloser, error) 
 		return nil, err
 	}
 
+	whiteoutConverter, err := getWhiteoutConverter(options.WhiteoutFormat, options.InUserNS)
+	if err != nil {
+		return nil, err
+	}
+
 	go func() {
 		ta := newTarAppender(
 			idtools.NewIDMappingsFromMaps(options.UIDMaps, options.GIDMaps),
 			compressWriter,
 			options.ChownOpts,
 		)
-		ta.WhiteoutConverter = getWhiteoutConverter(options.WhiteoutFormat, options.InUserNS)
+		ta.WhiteoutConverter = whiteoutConverter
 
 		defer func() {
 			// Make sure to check the error on Close.
@@ -903,7 +922,10 @@ func Unpack(decompressedArchive io.Reader, dest string, options *TarOptions) err
 	var dirs []*tar.Header
 	idMapping := idtools.NewIDMappingsFromMaps(options.UIDMaps, options.GIDMaps)
 	rootIDs := idMapping.RootPair()
-	whiteoutConverter := getWhiteoutConverter(options.WhiteoutFormat, options.InUserNS)
+	whiteoutConverter, err := getWhiteoutConverter(options.WhiteoutFormat, options.InUserNS)
+	if err != nil {
+		return err
+	}
 
 	// Iterate through the files in the archive.
 loop:

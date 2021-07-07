@@ -23,6 +23,7 @@
 package reader
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -46,6 +47,7 @@ type Reader interface {
 	OpenFile(name string) (io.ReaderAt, error)
 	Lookup(name string) (*estargz.TOCEntry, bool)
 	Cache(opts ...CacheOption) error
+	Close() error
 }
 
 // VerifiableReader produces a Reader with a given verifier.
@@ -67,6 +69,10 @@ func (vr *VerifiableReader) VerifyTOC(tocDigest digest.Digest) (Reader, error) {
 	return vr.r, nil
 }
 
+func (vr *VerifiableReader) Close() error {
+	return vr.r.Close()
+}
+
 type nopTOCEntryVerifier struct{}
 
 func (nev nopTOCEntryVerifier) Verifier(ce *estargz.TOCEntry) (digest.Verifier, error) {
@@ -86,15 +92,10 @@ func (nv nopVerifier) Verified() bool {
 // NewReader creates a Reader based on the given stargz blob and cache implementation.
 // It returns VerifiableReader so the caller must provide a estargz.TOCEntryVerifier
 // to use for verifying file or chunk contained in this stargz blob.
-func NewReader(sr *io.SectionReader, cache cache.BlobCache) (*VerifiableReader, *estargz.TOCEntry, error) {
+func NewReader(sr *io.SectionReader, cache cache.BlobCache) (*VerifiableReader, error) {
 	r, err := estargz.Open(sr)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to parse stargz")
-	}
-
-	root, ok := r.Lookup("")
-	if !ok {
-		return nil, nil, fmt.Errorf("failed to get a TOCEntry of the root")
+		return nil, errors.Wrap(err, "failed to parse stargz")
 	}
 
 	vr := &reader{
@@ -108,7 +109,7 @@ func NewReader(sr *io.SectionReader, cache cache.BlobCache) (*VerifiableReader, 
 		},
 	}
 
-	return &VerifiableReader{vr}, root, nil
+	return &VerifiableReader{vr}, nil
 }
 
 type reader struct {
@@ -117,9 +118,16 @@ type reader struct {
 	cache    cache.BlobCache
 	bufPool  sync.Pool
 	verifier estargz.TOCEntryVerifier
+
+	closed   bool
+	closedMu sync.Mutex
 }
 
 func (gr *reader) OpenFile(name string) (io.ReaderAt, error) {
+	if gr.isClosed() {
+		return nil, fmt.Errorf("reader is already closed")
+	}
+
 	sr, err := gr.r.OpenFile(name)
 	if err != nil {
 		return nil, err
@@ -143,6 +151,10 @@ func (gr *reader) Lookup(name string) (*estargz.TOCEntry, bool) {
 }
 
 func (gr *reader) Cache(opts ...CacheOption) (err error) {
+	if gr.isClosed() {
+		return fmt.Errorf("reader is already closed")
+	}
+
 	var cacheOpts cacheOptions
 	for _, o := range opts {
 		o(&cacheOpts)
@@ -173,6 +185,23 @@ func (gr *reader) Cache(opts ...CacheOption) (err error) {
 			root, r, filter, cacheOpts.cacheOpts...)
 	})
 	return eg.Wait()
+}
+
+func (gr *reader) Close() error {
+	gr.closedMu.Lock()
+	defer gr.closedMu.Unlock()
+	if gr.closed {
+		return nil
+	}
+	gr.closed = true
+	return gr.cache.Close()
+}
+
+func (gr *reader) isClosed() bool {
+	gr.closedMu.Lock()
+	closed := gr.closed
+	gr.closedMu.Unlock()
+	return closed
 }
 
 func (gr *reader) cacheWithReader(ctx context.Context, currentDepth int, eg *errgroup.Group, sem *semaphore.Weighted, dir *estargz.TOCEntry, r *estargz.Reader, filter func(*estargz.TOCEntry) bool, opts ...cache.Option) (rErr error) {
@@ -230,42 +259,44 @@ func (gr *reader) cacheWithReader(ctx context.Context, currentDepth int, eg *err
 				return false
 			}
 
-			eg.Go(func() error {
+			eg.Go(func() (retErr error) {
 				defer sem.Release(1)
 
 				// Check if the target chunks exists in the cache
 				id := genID(e.Digest, ce.ChunkOffset, ce.ChunkSize)
-				if _, err := gr.cache.FetchAt(id, 0, nil, opts...); err == nil {
-					return nil
+				if r, err := gr.cache.Get(id, opts...); err == nil {
+					return r.Close()
 				}
 
 				// missed cache, needs to fetch and add it to the cache
 				cr := io.NewSectionReader(sr, ce.ChunkOffset, ce.ChunkSize)
-				b := gr.bufPool.Get().(*bytes.Buffer)
-				defer gr.bufPool.Put(b)
-				b.Reset()
-				b.Grow(int(ce.ChunkSize))
 				v, err := gr.verifier.Verifier(ce)
 				if err != nil {
 					return errors.Wrapf(err, "verifier not found %q(off:%d,size:%d)",
 						e.Name, ce.ChunkOffset, ce.ChunkSize)
 				}
-				if _, err := io.CopyN(b, io.TeeReader(cr, v), ce.ChunkSize); err != nil {
+				br := bufio.NewReaderSize(io.TeeReader(cr, v), int(ce.ChunkSize))
+				if _, err := br.Peek(int(ce.ChunkSize)); err != nil {
+					return fmt.Errorf("cacheWithReader.peek: %v", err)
+				}
+				w, err := gr.cache.Add(id, opts...)
+				if err != nil {
+					return err
+				}
+				defer w.Close()
+				if _, err := io.CopyN(w, br, ce.ChunkSize); err != nil {
+					w.Abort()
 					return errors.Wrapf(err,
-						"failed to read file payload of %q (offset:%d,size:%d)",
+						"failed to cache file payload of %q (offset:%d,size:%d)",
 						e.Name, ce.ChunkOffset, ce.ChunkSize)
 				}
-				if int64(b.Len()) != ce.ChunkSize {
-					return fmt.Errorf("unexpected copied data size %d; want %d",
-						b.Len(), ce.ChunkSize)
-				}
 				if !v.Verified() {
+					w.Abort()
 					return fmt.Errorf("invalid chunk %q (offset:%d,size:%d)",
 						e.Name, ce.ChunkOffset, ce.ChunkSize)
 				}
-				gr.cache.Add(id, b.Bytes()[:ce.ChunkSize], opts...)
 
-				return nil
+				return w.Commit()
 			})
 		}
 
@@ -301,10 +332,14 @@ func (sf *file) ReadAt(p []byte, offset int64) (int, error) {
 		)
 
 		// Check if the content exists in the cache
-		n, err := sf.cache.FetchAt(id, lowerDiscard, p[nr:int64(nr)+expectedSize])
-		if err == nil && int64(n) == expectedSize {
-			nr += n
-			continue
+		if r, err := sf.cache.Get(id); err == nil {
+			n, err := r.ReadAt(p[nr:int64(nr)+expectedSize], lowerDiscard)
+			if (err == nil || err == io.EOF) && int64(n) == expectedSize {
+				nr += n
+				r.Close()
+				continue
+			}
+			r.Close()
 		}
 
 		// We missed cache. Take it from underlying reader.
@@ -324,7 +359,14 @@ func (sf *file) ReadAt(p []byte, offset int64) (int, error) {
 			}
 
 			// Cache this chunk
-			sf.cache.Add(id, ip)
+			if w, err := sf.cache.Add(id); err == nil {
+				if cn, err := w.Write(ip); err != nil || cn != len(ip) {
+					w.Abort()
+				} else {
+					w.Commit()
+				}
+				w.Close()
+			}
 			nr += n
 			continue
 		}
@@ -346,8 +388,15 @@ func (sf *file) ReadAt(p []byte, offset int64) (int, error) {
 		}
 
 		// Cache this chunk
-		sf.cache.Add(id, ip)
-		n = copy(p[nr:], ip[lowerDiscard:ce.ChunkSize-upperDiscard])
+		if w, err := sf.cache.Add(id); err == nil {
+			if cn, err := w.Write(ip); err != nil || cn != len(ip) {
+				w.Abort()
+			} else {
+				w.Commit()
+			}
+			w.Close()
+		}
+		n := copy(p[nr:], ip[lowerDiscard:ce.ChunkSize-upperDiscard])
 		sf.gr.bufPool.Put(b)
 		if int64(n) != expectedSize {
 			return 0, fmt.Errorf("unexpected final data size %d; want %d", n, expectedSize)
@@ -364,7 +413,7 @@ func (sf *file) verify(p []byte, ce *estargz.TOCEntry) error {
 		return errors.Wrapf(err, "verifier not found %q (offset:%d,size:%d)",
 			ce.Name, ce.ChunkOffset, ce.ChunkSize)
 	}
-	if _, err := io.Copy(v, bytes.NewReader(p)); err != nil {
+	if _, err := v.Write(p); err != nil {
 		return errors.Wrapf(err, "failed to verify %q (offset:%d,size:%d)",
 			ce.Name, ce.ChunkOffset, ce.ChunkSize)
 	}

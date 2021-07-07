@@ -382,10 +382,11 @@ func (w *Worker) Exporter(name string, sm *session.Manager) (exporter.Exporter, 
 }
 
 func (w *Worker) FromRemote(ctx context.Context, remote *solver.Remote) (ref cache.ImmutableRef, err error) {
-	pw, _, _ := progress.FromContext(ctx)
 	descHandler := &cache.DescHandler{
 		Provider: func(session.Group) content.Provider { return remote.Provider },
-		Progress: &controller.Controller{Writer: pw},
+		Progress: &controller.Controller{
+			WriterFactory: progress.FromContext(ctx),
+		},
 	}
 	descHandlers := cache.DescHandlers(make(map[digest.Digest]*cache.DescHandler))
 	for _, desc := range remote.Descriptors {

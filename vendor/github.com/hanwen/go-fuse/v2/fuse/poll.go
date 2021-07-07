@@ -28,7 +28,7 @@ func doPollHackLookup(ms *Server, req *request) {
 			Fh: pollHackInode,
 		}
 		req.status = OK
-	case _OP_GETATTR:
+	case _OP_GETATTR, _OP_SETATTR:
 		out := (*AttrOut)(req.outData())
 		out.Attr = attr
 		req.status = OK

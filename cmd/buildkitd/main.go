@@ -17,6 +17,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/containerd/containerd/pkg/seed"
+	"github.com/containerd/containerd/pkg/userns"
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/sys"
@@ -25,7 +26,6 @@ import (
 	"github.com/docker/go-connections/sockets"
 	"github.com/gofrs/flock"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
 	"github.com/moby/buildkit/cache/remotecache"
 	inlineremotecache "github.com/moby/buildkit/cache/remotecache/inline"
 	localremotecache "github.com/moby/buildkit/cache/remotecache/local"
@@ -49,12 +49,22 @@ import (
 	"github.com/moby/buildkit/util/profiler"
 	"github.com/moby/buildkit/util/resolver"
 	"github.com/moby/buildkit/util/stack"
+	"github.com/moby/buildkit/util/tracing/detect"
+	_ "github.com/moby/buildkit/util/tracing/detect/jaeger"
+	_ "github.com/moby/buildkit/util/tracing/env"
+	"github.com/moby/buildkit/util/tracing/transform"
 	"github.com/moby/buildkit/version"
 	"github.com/moby/buildkit/worker"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/otel/propagation"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/trace"
+	tracev1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
+	v1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 )
@@ -67,9 +77,13 @@ func init() {
 	reexec.Init()
 }
 
+var propagators = propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{})
+
 type workerInitializerOpt struct {
 	config         *config.Config
 	configMetaData *toml.MetaData
+	sessionManager *session.Manager
+	traceSocket    string
 }
 
 type workerInitializer struct {
@@ -108,7 +122,7 @@ func main() {
 	}
 
 	rootlessUsage := "set all the default options to be compatible with rootless containers"
-	if sys.RunningInUserNS() {
+	if userns.RunningInUserNS() {
 		app.Flags = append(app.Flags, cli.BoolTFlag{
 			Name:  "rootless",
 			Usage: rootlessUsage + " (default: true)",
@@ -207,8 +221,16 @@ func main() {
 				return err
 			}
 		}
-		unary := grpc_middleware.ChainUnaryServer(unaryInterceptor(ctx), grpcerrors.UnaryServerInterceptor)
-		stream := grpc_middleware.ChainStreamServer(otgrpc.OpenTracingStreamServerInterceptor(tracer), grpcerrors.StreamServerInterceptor)
+
+		tp, err := detect.TracerProvider()
+		if err != nil {
+			return err
+		}
+
+		streamTracer := otelgrpc.StreamServerInterceptor(otelgrpc.WithTracerProvider(tp), otelgrpc.WithPropagators(propagators))
+
+		unary := grpc_middleware.ChainUnaryServer(unaryInterceptor(ctx, tp), grpcerrors.UnaryServerInterceptor)
+		stream := grpc_middleware.ChainStreamServer(streamTracer, grpcerrors.StreamServerInterceptor)
 
 		maxMsgSize := 67108864 // 64MB
 		opts := []grpc.ServerOption{
@@ -300,17 +322,14 @@ func main() {
 		return err
 	}
 
-	app.After = func(context *cli.Context) error {
-		if closeTracer != nil {
-			return closeTracer.Close()
-		}
-		return nil
+	app.After = func(_ *cli.Context) error {
+		return detect.Shutdown(context.TODO())
 	}
 
 	profiler.Attach(app)
 
 	if err := app.Run(os.Args); err != nil {
-		fmt.Fprintf(os.Stderr, "buildkitd: %s\n", err)
+		fmt.Fprintf(os.Stderr, "buildkitd: %+v\n", err)
 		os.Exit(1)
 	}
 }
@@ -357,7 +376,7 @@ func serveGRPC(cfg config.GRPCConfig, server *grpc.Server, errCh chan error) err
 }
 
 func defaultConfigPath() string {
-	if sys.RunningInUserNS() {
+	if userns.RunningInUserNS() {
 		return filepath.Join(appdefaults.UserConfigDir(), "buildkitd.toml")
 	}
 	return filepath.Join(appdefaults.ConfigDir, "buildkitd.toml")
@@ -411,7 +430,7 @@ func setDefaultConfig(cfg *config.Config) {
 	cfg.Workers.OCI.NetworkConfig = setDefaultNetworkConfig(cfg.Workers.OCI.NetworkConfig)
 	cfg.Workers.Containerd.NetworkConfig = setDefaultNetworkConfig(cfg.Workers.Containerd.NetworkConfig)
 
-	if sys.RunningInUserNS() {
+	if userns.RunningInUserNS() {
 		// if buildkitd is being executed as the mapped-root (not only EUID==0 but also $USER==root)
 		// in a user namespace, we need to enable the rootless mode but
 		// we don't want to honor $HOME for setting up default paths.
@@ -543,8 +562,8 @@ func getListener(addr string, uid, gid int, tlsConfig *tls.Config) (net.Listener
 	}
 }
 
-func unaryInterceptor(globalCtx context.Context) grpc.UnaryServerInterceptor {
-	withTrace := otgrpc.OpenTracingServerInterceptor(tracer, otgrpc.LogPayloads())
+func unaryInterceptor(globalCtx context.Context, tp trace.TracerProvider) grpc.UnaryServerInterceptor {
+	withTrace := otelgrpc.UnaryServerInterceptor(otelgrpc.WithTracerProvider(tp), otelgrpc.WithPropagators(propagators))
 
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
 		ctx, cancel := context.WithCancel(ctx)
@@ -557,6 +576,10 @@ func unaryInterceptor(globalCtx context.Context) grpc.UnaryServerInterceptor {
 				cancel()
 			}
 		}()
+
+		if strings.HasSuffix(info.FullMethod, "opentelemetry.proto.collector.trace.v1.TraceService/Export") {
+			return handler(ctx, req)
+		}
 
 		resp, err = withTrace(ctx, req, info, handler)
 		if err != nil {
@@ -608,9 +631,25 @@ func newController(c *cli.Context, cfg *config.Config, md *toml.MetaData) (*cont
 	if err != nil {
 		return nil, err
 	}
+
+	tc, err := detect.Exporter()
+	if err != nil {
+		return nil, err
+	}
+
+	var traceSocket string
+	if tc != nil {
+		traceSocket = filepath.Join(cfg.Root, "otel-grpc.sock")
+		if err := runTraceController(traceSocket, tc); err != nil {
+			return nil, err
+		}
+	}
+
 	wc, err := newWorkerController(c, workerInitializerOpt{
 		config:         cfg,
 		configMetaData: md,
+		sessionManager: sessionManager,
+		traceSocket:    traceSocket,
 	})
 	if err != nil {
 		return nil, err
@@ -640,6 +679,7 @@ func newController(c *cli.Context, cfg *config.Config, md *toml.MetaData) (*cont
 		"registry": registryremotecache.ResolveCacheImporterFunc(sessionManager, w.ContentStore(), resolverFn),
 		"local":    localremotecache.ResolveCacheImporterFunc(sessionManager),
 	}
+
 	return control.NewController(control.Opt{
 		SessionManager:            sessionManager,
 		WorkerController:          wc,
@@ -648,6 +688,7 @@ func newController(c *cli.Context, cfg *config.Config, md *toml.MetaData) (*cont
 		ResolveCacheImporterFuncs: remoteCacheImporterFuncs,
 		CacheKeyStorage:           cacheStorage,
 		Entitlements:              cfg.Entitlements,
+		TraceCollector:            tc,
 	})
 }
 
@@ -746,4 +787,33 @@ func getDNSConfig(cfg *config.DNSConfig) *oci.DNSConfig {
 		}
 	}
 	return dns
+}
+
+func runTraceController(p string, exp sdktrace.SpanExporter) error {
+	server := grpc.NewServer()
+	tracev1.RegisterTraceServiceServer(server, &traceCollector{exporter: exp})
+	uid := os.Getuid()
+	l, err := sys.GetLocalListener(p, uid, uid)
+	if err != nil {
+		return err
+	}
+	if err := os.Chmod(p, 0666); err != nil {
+		l.Close()
+		return err
+	}
+	go server.Serve(l)
+	return nil
+}
+
+type traceCollector struct {
+	*tracev1.UnimplementedTraceServiceServer
+	exporter sdktrace.SpanExporter
+}
+
+func (t *traceCollector) Export(ctx context.Context, req *tracev1.ExportTraceServiceRequest) (*tracev1.ExportTraceServiceResponse, error) {
+	err := t.exporter.ExportSpans(ctx, transform.Spans(req.GetResourceSpans()))
+	if err != nil {
+		return nil, err
+	}
+	return &v1.ExportTraceServiceResponse{}, nil
 }

@@ -29,9 +29,9 @@ import (
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/snapshots"
-	"github.com/containerd/containerd/snapshots/overlay/overlayutils"
 	"github.com/containerd/containerd/snapshots/storage"
 	"github.com/containerd/continuity/fs"
+	"github.com/containerd/stargz-snapshotter/snapshot/overlayutils"
 	"github.com/moby/sys/mountinfo"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -41,6 +41,7 @@ import (
 const (
 	targetSnapshotLabel = "containerd.io/snapshot.ref"
 	remoteLabel         = "containerd.io/snapshot/remote"
+	remoteLabelVal      = "remote snapshot"
 
 	// remoteSnapshotLogKey is a key for log line, which indicates whether
 	// `Prepare` method successfully prepared targeting remote snapshot or not, as
@@ -249,7 +250,7 @@ func (o *snapshotter) Prepare(ctx context.Context, key, parent string, opts ...s
 			log.G(lCtx).WithField(remoteSnapshotLogKey, prepareFailed).
 				WithError(err).Debug("failed to prepare remote snapshot")
 		} else {
-			base.Labels[remoteLabel] = fmt.Sprintf("remote snapshot") // Mark this snapshot as remote
+			base.Labels[remoteLabel] = remoteLabelVal // Mark this snapshot as remote
 			err := o.Commit(ctx, target, key, append(opts, snapshots.WithLabels(base.Labels))...)
 			if err == nil || errdefs.IsAlreadyExists(err) {
 				// count also AlreadyExists as "success"

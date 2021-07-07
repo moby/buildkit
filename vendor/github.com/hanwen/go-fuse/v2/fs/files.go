@@ -17,7 +17,9 @@ import (
 )
 
 // NewLoopbackFile creates a FileHandle out of a file descriptor. All
-// operations are implemented.
+// operations are implemented. When using the Fd from a *os.File, call
+// syscall.Dup() on the fd, to avoid os.File's finalizer from closing
+// the file descriptor.
 func NewLoopbackFile(fd int) FileHandle {
 	return &loopbackFile{fd: fd}
 }

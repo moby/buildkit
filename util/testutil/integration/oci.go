@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -44,7 +45,7 @@ func (s *oci) Name() string {
 	return "oci"
 }
 
-func (s *oci) New(cfg *BackendConfig) (Backend, func() error, error) {
+func (s *oci) New(ctx context.Context, cfg *BackendConfig) (Backend, func() error, error) {
 	if err := lookupBinary("buildkitd"); err != nil {
 		return nil, nil, err
 	}
@@ -67,7 +68,7 @@ func (s *oci) New(cfg *BackendConfig) (Backend, func() error, error) {
 		buildkitdArgs = append([]string{"sudo", "-u", fmt.Sprintf("#%d", s.uid), "-i", "--", "exec", "rootlesskit"}, buildkitdArgs...)
 	}
 
-	buildkitdSock, stop, err := runBuildkitd(cfg, buildkitdArgs, cfg.Logs, s.uid, s.gid, nil)
+	buildkitdSock, stop, err := runBuildkitd(ctx, cfg, buildkitdArgs, cfg.Logs, s.uid, s.gid, nil)
 	if err != nil {
 		printLogs(cfg.Logs, log.Println)
 		return nil, nil, err

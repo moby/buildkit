@@ -16,23 +16,23 @@ import (
 	"github.com/hanwen/go-fuse/v2/internal/utimens"
 )
 
-func (n *loopbackNode) Getxattr(ctx context.Context, attr string, dest []byte) (uint32, syscall.Errno) {
+func (n *LoopbackNode) Getxattr(ctx context.Context, attr string, dest []byte) (uint32, syscall.Errno) {
 	return 0, syscall.ENOSYS
 }
 
-func (n *loopbackNode) Setxattr(ctx context.Context, attr string, data []byte, flags uint32) syscall.Errno {
+func (n *LoopbackNode) Setxattr(ctx context.Context, attr string, data []byte, flags uint32) syscall.Errno {
 	return syscall.ENOSYS
 }
 
-func (n *loopbackNode) Removexattr(ctx context.Context, attr string) syscall.Errno {
+func (n *LoopbackNode) Removexattr(ctx context.Context, attr string) syscall.Errno {
 	return syscall.ENOSYS
 }
 
-func (n *loopbackNode) Listxattr(ctx context.Context, dest []byte) (uint32, syscall.Errno) {
+func (n *LoopbackNode) Listxattr(ctx context.Context, dest []byte) (uint32, syscall.Errno) {
 	return 0, syscall.ENOSYS
 }
 
-func (n *loopbackNode) renameExchange(name string, newparent *loopbackNode, newName string) syscall.Errno {
+func (n *LoopbackNode) renameExchange(name string, newparent InodeEmbedder, newName string) syscall.Errno {
 	return syscall.ENOSYS
 }
 
@@ -111,7 +111,7 @@ func (f *loopbackFile) utimens(a *time.Time, m *time.Time) syscall.Errno {
 	return ToErrno(err)
 }
 
-func (n *loopbackNode) CopyFileRange(ctx context.Context, fhIn FileHandle,
+func (n *LoopbackNode) CopyFileRange(ctx context.Context, fhIn FileHandle,
 	offIn uint64, out *Inode, fhOut FileHandle, offOut uint64,
 	len uint64, flags uint64) (uint32, syscall.Errno) {
 	return 0, syscall.ENOSYS

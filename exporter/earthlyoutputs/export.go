@@ -522,7 +522,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 }
 
 func oneOffProgress(ctx context.Context, id string) func() {
-	pw, _, _ := progress.FromContext(ctx)
+	pw, _, _ := progress.FromContext(ctx)(ctx)
 	now := time.Now()
 	st := progress.Status{
 		Started: &now,
@@ -558,7 +558,7 @@ func normalizedNames(name string) ([]string, error) {
 
 func newProgressHandler(ctx context.Context, id string) func(int, bool) {
 	limiter := rate.NewLimiter(rate.Every(100*time.Millisecond), 1)
-	pw, _, _ := progress.FromContext(ctx)
+	pw, _, _ := progress.FromContext(ctx)(ctx)
 	now := time.Now()
 	st := progress.Status{
 		Started: &now,

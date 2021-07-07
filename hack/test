@@ -9,8 +9,9 @@ set -eu -o pipefail
 : ${TEST_DOCKERD=}
 : ${TEST_DOCKERD_BINARY=$(which dockerd)}
 : ${TEST_COVERAGE=}
+: ${TEST_KEEP_CACHE=}
 : ${DOCKERFILE_RELEASES=}
-: ${BUILDKIT_REGISTRY_MIRROR_DIR=}
+: ${BUILDKIT_WORKER_RANDOM=}
 
 if [ "$TEST_DOCKERD" == "1" ] && ! file $TEST_DOCKERD_BINARY | grep "statically linked" >/dev/null; then
   echo "dockerd binary needs to be statically linked"
@@ -65,7 +66,10 @@ buildxCmd build $importCacheFlags \
   --output "type=docker,name=$iid" \
   $currentcontext
 
-cacheVolume=$(docker create -v /root/.cache -v /root/.cache/registry -v /go/pkg/mod alpine)
+cacheVolume="buildkit-test-cache"
+if ! docker container inspect "$cacheVolume" >/dev/null 2>/dev/null; then
+  docker create -v /root/.cache -v /root/.cache/registry -v /go/pkg/mod --name "$cacheVolume" alpine
+fi
 
 if [ "$TEST_INTEGRATION" == 1 ]; then
   cid=$(docker create --rm -v /tmp $coverageVol --volumes-from=$cacheVolume -e TEST_DOCKERD -e SKIP_INTEGRATION_TESTS -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry --privileged $iid go test $coverageFlags ${TESTFLAGS:--v} ${TESTPKGS:-./...})
@@ -90,6 +94,12 @@ if [ "$TEST_DOCKERFILE" == 1 ]; then
     DOCKERFILE_RELEASES_CUSTOM=1
   fi
 
+  # These tests run only on single random worker by default because the test matrix is big.
+  # If flags are set then this is disabled and you need to use the flags to set specific worker.
+  if [ -z "$BUILDKIT_WORKER_RANDOM" ] && [ -z "$TESTFLAGS" ]; then
+    export BUILDKIT_WORKER_RANDOM=1
+  fi
+
   for release in $DOCKERFILE_RELEASES; do
     buildtags=$(cat ./frontend/dockerfile/release/$release/tags)
     tarout=$(mktemp -t dockerfile-frontend.XXXXXXXXXX)
@@ -102,7 +112,7 @@ if [ "$TEST_DOCKERFILE" == 1 ]; then
 
     if [ -s $tarout ]; then
       if [ "$release" = "mainline" ] || [ "$release" = "labs" ] || [ -n "$DOCKERFILE_RELEASES_CUSTOM" ] || [ "$GITHUB_ACTIONS" = "true" ]; then
-        cid=$(docker create -v /tmp $coverageVol --rm --privileged --volumes-from=$cacheVolume -e TEST_DOCKERD -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry -e BUILDKIT_WORKER_RANDOM=1 -e FRONTEND_GATEWAY_ONLY=local:/$release.tar -e EXTERNAL_DF_FRONTEND=/dockerfile-frontend $iid go test $coverageFlags --count=1 -tags "$buildtags" ${TESTFLAGS:--v} ./frontend/dockerfile)
+        cid=$(docker create -v /tmp $coverageVol --rm --privileged --volumes-from=$cacheVolume -e TEST_DOCKERD -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry -e BUILDKIT_WORKER_RANDOM -e FRONTEND_GATEWAY_ONLY=local:/$release.tar -e EXTERNAL_DF_FRONTEND=/dockerfile-frontend $iid go test $coverageFlags --count=1 -tags "$buildtags" ${TESTFLAGS:--v} ./frontend/dockerfile)
         docker cp $tarout $cid:/$release.tar
         if [ "$TEST_DOCKERD" = "1" ]; then
           docker cp "$TEST_DOCKERD_BINARY" $cid:/usr/bin/
@@ -114,4 +124,6 @@ if [ "$TEST_DOCKERFILE" == 1 ]; then
   done
 fi
 
-docker rm -v $cacheVolume
+if [ "$TEST_KEEP_CACHE" != "1" ]; then
+  docker rm -v $cacheVolume
+fi

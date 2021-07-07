@@ -1,3 +1,5 @@
+// +build go1.15
+
 package git
 
 import "net/url"
@@ -11,18 +13,5 @@ func redactCredentials(s string) string {
 		return s // string is not a URL, just return it
 	}
 
-	return urlRedacted(u)
-}
-
-// urlRedacted comes from go but isn't available under 1.13
-func urlRedacted(u *url.URL) string {
-	if u == nil {
-		return ""
-	}
-
-	ru := *u
-	if _, has := ru.User.Password(); has {
-		ru.User = url.UserPassword(ru.User.Username(), "xxxxx")
-	}
-	return ru.String()
+	return u.Redacted()
 }
