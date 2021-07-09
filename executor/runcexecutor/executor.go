@@ -183,7 +183,7 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 		defer clean()
 	}
 
-	mountable, err := root.Src.Mount(ctx, false)
+	mountable, err := root.Src.Mount(ctx, root.Readonly)
 	if err != nil {
 		return err
 	}

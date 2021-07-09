@@ -18,7 +18,6 @@ import (
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/session"
-	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/util/buildinfo"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/contentutil"
@@ -369,13 +368,9 @@ func (e *imageExporterInstance) unpackImage(ctx context.Context, img images.Imag
 		return err
 	}
 
-	// get containerd snapshotter
-	ctrdSnapshotter, release := snapshot.NewContainerdSnapshotter(snapshotter)
-	defer release()
-
 	var chain []digest.Digest
 	for _, layer := range layers {
-		if _, err := rootfs.ApplyLayer(ctx, layer, chain, ctrdSnapshotter, applier); err != nil {
+		if _, err := rootfs.ApplyLayer(ctx, layer, chain, snapshotter.Containerd(), applier); err != nil {
 			return err
 		}
 		chain = append(chain, layer.Diff.Digest)

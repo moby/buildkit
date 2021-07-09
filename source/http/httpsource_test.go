@@ -313,7 +313,7 @@ func TestHTTPChecksum(t *testing.T) {
 }
 
 func readFile(ctx context.Context, ref cache.ImmutableRef, fp string) ([]byte, error) {
-	mount, err := ref.Mount(ctx, false, nil)
+	mount, err := ref.Mount(ctx, true, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -358,11 +358,12 @@ func newHTTPSource(tmpdir string) (source.Source, error) {
 	if err != nil {
 		return nil, err
 	}
+	lm := leaseutil.WithNamespace(ctdmetadata.NewLeaseManager(mdb), "buildkit")
 
 	cm, err := cache.NewManager(cache.ManagerOpt{
 		Snapshotter:    snapshot.FromContainerdSnapshotter("native", containerdsnapshot.NSSnapshotter("buildkit", mdb.Snapshotter("native")), nil),
 		MetadataStore:  md,
-		LeaseManager:   leaseutil.WithNamespace(ctdmetadata.NewLeaseManager(mdb), "buildkit"),
+		LeaseManager:   lm,
 		ContentStore:   mdb.ContentStore(),
 		GarbageCollect: mdb.GarbageCollect,
 	})

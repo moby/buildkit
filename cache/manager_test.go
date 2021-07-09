@@ -1260,8 +1260,9 @@ func TestGetRemote(t *testing.T) {
 			eg.Go(func() error {
 				remote, err := ir.GetRemote(egctx, true, compressionType, true, nil)
 				require.NoError(t, err)
-				refChain := ir.parentRefChain()
-				for i, desc := range remote.Descriptors {
+				curRef := ir
+				for i := range remote.Descriptors {
+					desc := remote.Descriptors[len(remote.Descriptors)-1-i]
 					switch compressionType {
 					case compression.Uncompressed:
 						require.Equal(t, ocispecs.MediaTypeImageLayer, desc.MediaType)
@@ -1278,15 +1279,14 @@ func TestGetRemote(t *testing.T) {
 					require.Contains(t, expectedContent, dgst, "for %v", compressionType)
 					checkDescriptor(ctx, t, co.cs, desc, compressionType)
 
-					r := refChain[i]
-					isLazy, err := r.isLazy(egctx)
+					isLazy, err := curRef.isLazy(egctx)
 					require.NoError(t, err)
 					needs, err := needsConversion(ctx, co.cs, desc, compressionType)
 					require.NoError(t, err)
 					if needs {
 						require.False(t, isLazy, "layer %q requires conversion so it must be unlazied", desc.Digest)
 					}
-					bDesc, err := r.getCompressionBlob(egctx, compressionType)
+					bDesc, err := curRef.getCompressionBlob(egctx, compressionType)
 					if isLazy {
 						require.Error(t, err)
 					} else {
@@ -1294,6 +1294,7 @@ func TestGetRemote(t *testing.T) {
 						checkDescriptor(ctx, t, co.cs, bDesc, compressionType)
 						require.Equal(t, desc.Digest, bDesc.Digest)
 					}
+					curRef = curRef.parent
 				}
 				return nil
 			})

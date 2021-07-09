@@ -39,14 +39,14 @@ func (sr *immutableRef) GetRemote(ctx context.Context, createIfNeeded bool, comp
 		return nil, err
 	}
 
-	chain := sr.parentRefChain()
+	chain := sr.layerChain()
 	mproviderBase := contentutil.NewMultiProvider(nil)
 	mprovider := &lazyMultiProvider{mprovider: mproviderBase}
 	remote := &solver.Remote{
 		Provider: mprovider,
 	}
-	for _, ref := range chain {
-		desc, err := ref.ociDesc(ctx, sr.descHandlers)
+	for _, rec := range chain {
+		desc, err := rec.ociDesc(ctx, sr.descHandlers)
 		if err != nil {
 			return nil, err
 		}
@@ -67,11 +67,11 @@ func (sr *immutableRef) GetRemote(ctx context.Context, createIfNeeded bool, comp
 		// will already have their dsl stored in the content store, which is
 		// used by the push handlers)
 		var addAnnotations []string
-		isLazy, err := ref.isLazy(ctx)
+		isLazy, err := rec.isLazy(ctx)
 		if err != nil {
 			return nil, err
 		} else if isLazy {
-			imageRefs := ref.getImageRefs()
+			imageRefs := rec.getImageRefs()
 			for _, imageRef := range imageRefs {
 				refspec, err := reference.Parse(imageRef)
 				if err != nil {
@@ -114,7 +114,7 @@ func (sr *immutableRef) GetRemote(ctx context.Context, createIfNeeded bool, comp
 			} else if needs {
 				// ensure the compression type.
 				// compressed blob must be created and stored in the content store.
-				blobDesc, err := ref.getCompressionBlob(ctx, compressionType)
+				blobDesc, err := rec.getCompressionBlob(ctx, compressionType)
 				if err != nil {
 					return nil, errors.Wrapf(err, "compression blob for %q not found", compressionType)
 				}
@@ -138,7 +138,7 @@ func (sr *immutableRef) GetRemote(ctx context.Context, createIfNeeded bool, comp
 
 		remote.Descriptors = append(remote.Descriptors, desc)
 		mprovider.Add(lazyRefProvider{
-			ref:     ref,
+			rec:     rec,
 			desc:    desc,
 			dh:      sr.descHandlers[desc.Digest],
 			session: s,
@@ -173,7 +173,7 @@ func (mp *lazyMultiProvider) Unlazy(ctx context.Context) error {
 }
 
 type lazyRefProvider struct {
-	ref     *immutableRef
+	rec     *cacheRecord
 	desc    ocispecs.Descriptor
 	dh      *DescHandler
 	session session.Group
@@ -186,12 +186,12 @@ func (p lazyRefProvider) ReaderAt(ctx context.Context, desc ocispecs.Descriptor)
 	if err := p.Unlazy(ctx); err != nil {
 		return nil, err
 	}
-	return p.ref.cm.ContentStore.ReaderAt(ctx, desc)
+	return p.rec.cm.ContentStore.ReaderAt(ctx, desc)
 }
 
 func (p lazyRefProvider) Unlazy(ctx context.Context) error {
-	_, err := p.ref.cm.unlazyG.Do(ctx, string(p.desc.Digest), func(ctx context.Context) (_ interface{}, rerr error) {
-		if isLazy, err := p.ref.isLazy(ctx); err != nil {
+	_, err := p.rec.cm.unlazyG.Do(ctx, string(p.desc.Digest), func(ctx context.Context) (_ interface{}, rerr error) {
+		if isLazy, err := p.rec.isLazy(ctx); err != nil {
 			return nil, err
 		} else if !isLazy {
 			return nil, nil
@@ -212,19 +212,19 @@ func (p lazyRefProvider) Unlazy(ctx context.Context) error {
 		// For now, just pull down the whole content and then return a ReaderAt from the local content
 		// store. If efficient partial reads are desired in the future, something more like a "tee"
 		// that caches remote partial reads to a local store may need to replace this.
-		err := contentutil.Copy(ctx, p.ref.cm.ContentStore, &pullprogress.ProviderWithProgress{
+		err := contentutil.Copy(ctx, p.rec.cm.ContentStore, &pullprogress.ProviderWithProgress{
 			Provider: p.dh.Provider(p.session),
-			Manager:  p.ref.cm.ContentStore,
+			Manager:  p.rec.cm.ContentStore,
 		}, p.desc, p.dh.Ref, logs.LoggerFromContext(ctx))
 		if err != nil {
 			return nil, err
 		}
 
-		if imageRefs := p.ref.getImageRefs(); len(imageRefs) > 0 {
+		if imageRefs := p.rec.getImageRefs(); len(imageRefs) > 0 {
 			// just use the first image ref, it's arbitrary
 			imageRef := imageRefs[0]
-			if p.ref.GetDescription() == "" {
-				if err := p.ref.SetDescription("pulled from " + imageRef); err != nil {
+			if p.rec.GetDescription() == "" {
+				if err := p.rec.SetDescription("pulled from " + imageRef); err != nil {
 					return nil, err
 				}
 			}
@@ -235,7 +235,7 @@ func (p lazyRefProvider) Unlazy(ctx context.Context) error {
 			return nil, errors.Errorf("unhandled layer media type: %q", p.desc.MediaType)
 		}
 
-		if err := p.ref.addCompressionBlob(ctx, p.desc, compressionType); err != nil {
+		if err := p.rec.addCompressionBlob(ctx, p.desc, compressionType); err != nil {
 			return nil, err
 		}
 		return nil, nil

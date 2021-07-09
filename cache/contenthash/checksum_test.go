@@ -1208,11 +1208,12 @@ func setupCacheManager(t *testing.T, tmpdir string, snapshotterName string, snap
 
 	md, err := metadata.NewStore(filepath.Join(tmpdir, "metadata.db"))
 	require.NoError(t, err)
+	lm := leaseutil.WithNamespace(ctdmetadata.NewLeaseManager(mdb), "buildkit")
 
 	cm, err := cache.NewManager(cache.ManagerOpt{
 		Snapshotter:    snapshot.FromContainerdSnapshotter(snapshotterName, containerdsnapshot.NSSnapshotter("buildkit", mdb.Snapshotter(snapshotterName)), nil),
 		MetadataStore:  md,
-		LeaseManager:   leaseutil.WithNamespace(ctdmetadata.NewLeaseManager(mdb), "buildkit"),
+		LeaseManager:   lm,
 		ContentStore:   mdb.ContentStore(),
 		GarbageCollect: mdb.GarbageCollect,
 	})

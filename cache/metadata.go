@@ -378,7 +378,7 @@ func (md *cacheMetadata) updateLastUsed() error {
 	}
 	v2, err := metadata.NewValue(time.Now().UnixNano())
 	if err != nil {
-		return errors.Wrap(err, "failed to create lastUsedAt value")
+		return errors.Wrap(err, "failed to create value")
 	}
 	return md.si.Update(func(b *bolt.Bucket) error {
 		if err := md.si.SetValue(b, keyUsageCount, v); err != nil {

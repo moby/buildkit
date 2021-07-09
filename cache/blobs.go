@@ -339,7 +339,7 @@ func ensureCompression(ctx context.Context, ref *immutableRef, compressionType c
 
 		// Convert layer compression type
 		if err := (lazyRefProvider{
-			ref:     ref,
+			rec:     ref.cacheRecord,
 			desc:    desc,
 			dh:      ref.descHandlers[desc.Digest],
 			session: s,
