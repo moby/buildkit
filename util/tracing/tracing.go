@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/moby/buildkit/util/bklog"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/propagation"
@@ -22,6 +23,7 @@ func StartSpan(ctx context.Context, operationName string, opts ...trace.SpanStar
 		tracer = parent.TracerProvider().Tracer("")
 	}
 	ctx, span := tracer.Start(ctx, operationName, opts...)
+	ctx = bklog.WithLogger(ctx, bklog.GetLogger(ctx).WithField("span", operationName))
 	return span, ctx
 }
 

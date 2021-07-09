@@ -239,7 +239,7 @@ func TestInMemoryCacheSelectorNested(t *testing.T) {
 func TestInMemoryCacheReleaseParent(t *testing.T) {
 	storage := NewInMemoryCacheStorage()
 	results := NewInMemoryResultStorage()
-	m := NewCacheManager(identity.NewID(), storage, results)
+	m := NewCacheManager(context.TODO(), identity.NewID(), storage, results)
 
 	res0 := testResult("result0")
 	cacheFoo, err := m.Save(NewCacheKey(dgst("foo"), 0), res0, time.Now())
@@ -291,7 +291,7 @@ func TestInMemoryCacheReleaseParent(t *testing.T) {
 func TestInMemoryCacheRestoreOfflineDeletion(t *testing.T) {
 	storage := NewInMemoryCacheStorage()
 	results := NewInMemoryResultStorage()
-	m := NewCacheManager(identity.NewID(), storage, results)
+	m := NewCacheManager(context.TODO(), identity.NewID(), storage, results)
 
 	res0 := testResult("result0")
 	cacheFoo, err := m.Save(NewCacheKey(dgst("foo"), 0), res0, time.Now())
@@ -305,7 +305,7 @@ func TestInMemoryCacheRestoreOfflineDeletion(t *testing.T) {
 	_, err = results2.Save(res1, time.Now()) // only add bar
 	require.NoError(t, err)
 
-	m = NewCacheManager(identity.NewID(), storage, results2)
+	m = NewCacheManager(context.TODO(), identity.NewID(), storage, results2)
 
 	keys, err := m.Query(nil, 0, dgst("foo"), 0)
 	require.NoError(t, err)
@@ -327,7 +327,7 @@ func TestInMemoryCacheRestoreOfflineDeletion(t *testing.T) {
 func TestCarryOverFromSublink(t *testing.T) {
 	storage := NewInMemoryCacheStorage()
 	results := NewInMemoryResultStorage()
-	m := NewCacheManager(identity.NewID(), storage, results)
+	m := NewCacheManager(context.TODO(), identity.NewID(), storage, results)
 
 	cacheFoo, err := m.Save(NewCacheKey(dgst("foo"), 0), testResult("resultFoo"), time.Now())
 	require.NoError(t, err)

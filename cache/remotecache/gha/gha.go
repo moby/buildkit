@@ -297,7 +297,7 @@ func (ci *importer) Resolve(ctx context.Context, _ specs.Descriptor, id string, 
 		if err != nil {
 			return nil, err
 		}
-		cms = append(cms, solver.NewCacheManager(id, keysStorage, resultStorage))
+		cms = append(cms, solver.NewCacheManager(ctx, id, keysStorage, resultStorage))
 	}
 
 	return solver.NewCombinedCacheManager(cms, nil), nil

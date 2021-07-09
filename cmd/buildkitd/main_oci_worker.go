@@ -301,7 +301,7 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 		}
 		opt.Platforms = platforms
 	}
-	w, err := base.NewWorker(opt)
+	w, err := base.NewWorker(context.TODO(), opt)
 	if err != nil {
 		return nil, err
 	}
