@@ -70,7 +70,7 @@ func (sr *immutableRef) GetRemote(ctx context.Context, createIfNeeded bool, comp
 		if err != nil {
 			return nil, err
 		} else if isLazy {
-			imageRefs := getImageRefs(ref.md)
+			imageRefs := ref.getImageRefs()
 			for _, imageRef := range imageRefs {
 				refspec, err := reference.Parse(imageRef)
 				if err != nil {
@@ -214,13 +214,11 @@ func (p lazyRefProvider) Unlazy(ctx context.Context) error {
 			return nil, err
 		}
 
-		if imageRefs := getImageRefs(p.ref.md); len(imageRefs) > 0 {
+		if imageRefs := p.ref.getImageRefs(); len(imageRefs) > 0 {
 			// just use the first image ref, it's arbitrary
 			imageRef := imageRefs[0]
-			if GetDescription(p.ref.md) == "" {
-				queueDescription(p.ref.md, "pulled from "+imageRef)
-				err := p.ref.md.Commit()
-				if err != nil {
+			if p.ref.GetDescription() == "" {
+				if err := p.ref.SetDescription("pulled from " + imageRef); err != nil {
 					return nil, err
 				}
 			}

@@ -504,10 +504,10 @@ func getRefMetadata(ref cache.ImmutableRef, limit int) []refMetadata {
 	if ref == nil {
 		return append(getRefMetadata(nil, limit-1), meta)
 	}
-	if descr := cache.GetDescription(ref.Metadata()); descr != "" {
+	if descr := ref.GetDescription(); descr != "" {
 		meta.description = descr
 	}
-	createdAt := cache.GetCreatedAt(ref.Metadata())
+	createdAt := ref.GetCreatedAt()
 	meta.createdAt = &createdAt
 	p := ref.Parent()
 	if p != nil {

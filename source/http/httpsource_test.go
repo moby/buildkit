@@ -328,11 +328,6 @@ func newHTTPSource(tmpdir string) (source.Source, error) {
 		return nil, err
 	}
 
-	md, err := metadata.NewStore(filepath.Join(tmpdir, "metadata.db"))
-	if err != nil {
-		return nil, err
-	}
-
 	store, err := local.NewStore(tmpdir)
 	if err != nil {
 		return nil, err
@@ -347,6 +342,11 @@ func newHTTPSource(tmpdir string) (source.Source, error) {
 		"native": snapshotter,
 	})
 
+	md, err := metadata.NewStore(filepath.Join(tmpdir, "metadata.db"))
+	if err != nil {
+		return nil, err
+	}
+
 	cm, err := cache.NewManager(cache.ManagerOpt{
 		Snapshotter:    snapshot.FromContainerdSnapshotter("native", containerdsnapshot.NSSnapshotter("buildkit", mdb.Snapshotter("native")), nil),
 		MetadataStore:  md,
@@ -360,6 +360,5 @@ func newHTTPSource(tmpdir string) (source.Source, error) {
 
 	return NewSource(Opt{
 		CacheAccessor: cm,
-		MetadataStore: md,
 	})
 }

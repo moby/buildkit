@@ -59,7 +59,7 @@ func TestChecksumSymlinkNoParentScan(t *testing.T) {
 
 	ref := createRef(t, cm, ch)
 
-	cc, err := newCacheContext(ref.Metadata(), nil)
+	cc, err := newCacheContext(ref)
 	require.NoError(t, err)
 
 	dgst, err := cc.Checksum(context.TODO(), ref, "aa/ln/bb/cc/dd", ChecksumOpts{FollowLinks: true}, nil)
@@ -87,7 +87,7 @@ func TestChecksumHardlinks(t *testing.T) {
 
 	ref := createRef(t, cm, ch)
 
-	cc, err := newCacheContext(ref.Metadata(), nil)
+	cc, err := newCacheContext(ref)
 	require.NoError(t, err)
 
 	dgst, err := cc.Checksum(context.TODO(), ref, "abc/foo", ChecksumOpts{}, nil)
@@ -105,7 +105,7 @@ func TestChecksumHardlinks(t *testing.T) {
 	// validate same results with handleChange
 	ref2 := createRef(t, cm, nil)
 
-	cc2, err := newCacheContext(ref2.Metadata(), nil)
+	cc2, err := newCacheContext(ref2)
 	require.NoError(t, err)
 
 	err = emit(cc2.HandleChange, changeStream(ch))
@@ -176,7 +176,7 @@ func TestChecksumWildcardOrFilter(t *testing.T) {
 
 	ref := createRef(t, cm, ch)
 
-	cc, err := newCacheContext(ref.Metadata(), nil)
+	cc, err := newCacheContext(ref)
 	require.NoError(t, err)
 
 	dgst, err := cc.Checksum(context.TODO(), ref, "f*o", ChecksumOpts{Wildcard: true}, nil)
@@ -220,7 +220,7 @@ func TestChecksumWildcardWithBadMountable(t *testing.T) {
 
 	ref := createRef(t, cm, nil)
 
-	cc, err := newCacheContext(ref.Metadata(), nil)
+	cc, err := newCacheContext(ref)
 	require.NoError(t, err)
 
 	_, err = cc.Checksum(context.TODO(), newBadMountable(), "*", ChecksumOpts{Wildcard: true}, nil)
@@ -249,7 +249,7 @@ func TestSymlinksNoFollow(t *testing.T) {
 
 	ref := createRef(t, cm, ch)
 
-	cc, err := newCacheContext(ref.Metadata(), nil)
+	cc, err := newCacheContext(ref)
 	require.NoError(t, err)
 
 	expectedSym := digest.Digest("sha256:a2ba571981f48ec34eb79c9a3ab091b6491e825c2f7e9914ea86e8e958be7fae")
@@ -311,7 +311,7 @@ func TestChecksumBasicFile(t *testing.T) {
 	// for the digest values, the actual values are not important in development
 	// phase but consistency is
 
-	cc, err := newCacheContext(ref.Metadata(), nil)
+	cc, err := newCacheContext(ref)
 	require.NoError(t, err)
 
 	_, err = cc.Checksum(context.TODO(), ref, "nosuch", ChecksumOpts{FollowLinks: true}, nil)
@@ -372,7 +372,7 @@ func TestChecksumBasicFile(t *testing.T) {
 
 	ref = createRef(t, cm, ch)
 
-	cc, err = newCacheContext(ref.Metadata(), nil)
+	cc, err = newCacheContext(ref)
 	require.NoError(t, err)
 
 	dgst, err = cc.Checksum(context.TODO(), ref, "/", ChecksumOpts{FollowLinks: true}, nil)
@@ -391,7 +391,7 @@ func TestChecksumBasicFile(t *testing.T) {
 
 	ref = createRef(t, cm, ch)
 
-	cc, err = newCacheContext(ref.Metadata(), nil)
+	cc, err = newCacheContext(ref)
 	require.NoError(t, err)
 
 	dgst, err = cc.Checksum(context.TODO(), ref, "/", ChecksumOpts{FollowLinks: true}, nil)
@@ -417,7 +417,7 @@ func TestChecksumBasicFile(t *testing.T) {
 
 	ref = createRef(t, cm, ch)
 
-	cc, err = newCacheContext(ref.Metadata(), nil)
+	cc, err = newCacheContext(ref)
 	require.NoError(t, err)
 
 	dgst, err = cc.Checksum(context.TODO(), ref, "abc/aa/foo", ChecksumOpts{FollowLinks: true}, nil)
@@ -466,7 +466,7 @@ func testChecksumIncludeExclude(t *testing.T, wildcard bool) {
 
 	ref := createRef(t, cm, ch)
 
-	cc, err := newCacheContext(ref.Metadata(), nil)
+	cc, err := newCacheContext(ref)
 	require.NoError(t, err)
 
 	opts := func(opts ChecksumOpts) ChecksumOpts {
@@ -525,7 +525,7 @@ func testChecksumIncludeExclude(t *testing.T, wildcard bool) {
 
 	ref = createRef(t, cm, ch)
 
-	cc, err = newCacheContext(ref.Metadata(), nil)
+	cc, err = newCacheContext(ref)
 	require.NoError(t, err)
 
 	dgstFoo2, err := cc.Checksum(context.TODO(), ref, "", opts(ChecksumOpts{IncludePatterns: []string{"foo"}}), nil)
@@ -599,7 +599,7 @@ func TestChecksumIncludeDoubleStar(t *testing.T) {
 
 	ref := createRef(t, cm, ch)
 
-	cc, err := newCacheContext(ref.Metadata(), nil)
+	cc, err := newCacheContext(ref)
 	require.NoError(t, err)
 
 	dgst, err := cc.Checksum(context.TODO(), ref, "prefix/a", ChecksumOpts{IncludePatterns: []string{"**/foo/**"}}, nil)
@@ -623,7 +623,7 @@ func TestChecksumIncludeDoubleStar(t *testing.T) {
 
 	ref = createRef(t, cm, ch)
 
-	cc, err = newCacheContext(ref.Metadata(), nil)
+	cc, err = newCacheContext(ref)
 	require.NoError(t, err)
 
 	dgst, err = cc.Checksum(context.TODO(), ref, "prefix/a", ChecksumOpts{IncludePatterns: []string{"**/foo/**", "**/report"}}, nil)
@@ -671,7 +671,7 @@ func TestChecksumIncludeSymlink(t *testing.T) {
 
 	ref := createRef(t, cm, ch)
 
-	cc, err := newCacheContext(ref.Metadata(), nil)
+	cc, err := newCacheContext(ref)
 	require.NoError(t, err)
 
 	dgst, err := cc.Checksum(context.TODO(), ref, "data/d1", ChecksumOpts{IncludePatterns: []string{"**/foo"}}, nil)
@@ -715,7 +715,7 @@ func TestHandleChange(t *testing.T) {
 	// for the digest values, the actual values are not important in development
 	// phase but consistency is
 
-	cc, err := newCacheContext(ref.Metadata(), nil)
+	cc, err := newCacheContext(ref)
 	require.NoError(t, err)
 
 	err = emit(cc.HandleChange, changeStream(ch))
@@ -791,7 +791,7 @@ func TestHandleRecursiveDir(t *testing.T) {
 
 	ref := createRef(t, cm, nil)
 
-	cc, err := newCacheContext(ref.Metadata(), nil)
+	cc, err := newCacheContext(ref)
 	require.NoError(t, err)
 
 	err = emit(cc.HandleChange, changeStream(ch))
@@ -838,7 +838,7 @@ func TestChecksumUnorderedFiles(t *testing.T) {
 
 	ref := createRef(t, cm, nil)
 
-	cc, err := newCacheContext(ref.Metadata(), nil)
+	cc, err := newCacheContext(ref)
 	require.NoError(t, err)
 
 	err = emit(cc.HandleChange, changeStream(ch))
@@ -858,7 +858,7 @@ func TestChecksumUnorderedFiles(t *testing.T) {
 
 	ref = createRef(t, cm, nil)
 
-	cc, err = newCacheContext(ref.Metadata(), nil)
+	cc, err = newCacheContext(ref)
 	require.NoError(t, err)
 
 	err = emit(cc.HandleChange, changeStream(ch))
@@ -1045,7 +1045,7 @@ func TestSymlinkInPathHandleChange(t *testing.T) {
 
 	ref := createRef(t, cm, nil)
 
-	cc, err := newCacheContext(ref.Metadata(), nil)
+	cc, err := newCacheContext(ref)
 	require.NoError(t, err)
 
 	err = emit(cc.HandleChange, changeStream(ch))
@@ -1165,9 +1165,6 @@ func createRef(t *testing.T, cm cache.Manager, files []string) cache.ImmutableRe
 }
 
 func setupCacheManager(t *testing.T, tmpdir string, snapshotterName string, snapshotter snapshots.Snapshotter) (cache.Manager, func()) {
-	md, err := metadata.NewStore(filepath.Join(tmpdir, "metadata.db"))
-	require.NoError(t, err)
-
 	store, err := local.NewStore(tmpdir)
 	require.NoError(t, err)
 
@@ -1177,6 +1174,9 @@ func setupCacheManager(t *testing.T, tmpdir string, snapshotterName string, snap
 	mdb := ctdmetadata.NewDB(db, store, map[string]snapshots.Snapshotter{
 		snapshotterName: snapshotter,
 	})
+
+	md, err := metadata.NewStore(filepath.Join(tmpdir, "metadata.db"))
+	require.NoError(t, err)
 
 	cm, err := cache.NewManager(cache.ManagerOpt{
 		Snapshotter:    snapshot.FromContainerdSnapshotter(snapshotterName, containerdsnapshot.NSSnapshotter("buildkit", mdb.Snapshotter(snapshotterName)), nil),

@@ -11,7 +11,6 @@ import (
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/contenthash"
-	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/filesync"
@@ -23,30 +22,24 @@ import (
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
 	fstypes "github.com/tonistiigi/fsutil/types"
-	bolt "go.etcd.io/bbolt"
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-const keySharedKey = "local.sharedKey"
-
 type Opt struct {
 	CacheAccessor cache.Accessor
-	MetadataStore *metadata.Store
 }
 
 func NewSource(opt Opt) (source.Source, error) {
 	ls := &localSource{
 		cm: opt.CacheAccessor,
-		md: opt.MetadataStore,
 	}
 	return ls, nil
 }
 
 type localSource struct {
 	cm cache.Accessor
-	md *metadata.Store
 }
 
 func (ls *localSource) ID() string {
@@ -111,10 +104,10 @@ func (ls *localSourceHandler) Snapshot(ctx context.Context, g session.Group) (ca
 }
 
 func (ls *localSourceHandler) snapshot(ctx context.Context, s session.Group, caller session.Caller) (out cache.ImmutableRef, retErr error) {
-	sharedKey := keySharedKey + ":" + ls.src.Name + ":" + ls.src.SharedKeyHint + ":" + caller.SharedKey() // TODO: replace caller.SharedKey() with source based hint from client(absolute-path+nodeid)
+	sharedKey := ls.src.Name + ":" + ls.src.SharedKeyHint + ":" + caller.SharedKey() // TODO: replace caller.SharedKey() with source based hint from client(absolute-path+nodeid)
 
 	var mutable cache.MutableRef
-	sis, err := ls.md.Search(sharedKey)
+	sis, err := searchSharedKey(ctx, ls.cm, sharedKey)
 	if err != nil {
 		return nil, err
 	}
@@ -138,11 +131,10 @@ func (ls *localSourceHandler) snapshot(ctx context.Context, s session.Group, cal
 	defer func() {
 		if retErr != nil && mutable != nil {
 			// on error remove the record as checksum update is in undefined state
-			cache.CachePolicyDefault(mutable)
-			if err := mutable.Metadata().Commit(); err != nil {
+			if err := mutable.SetCachePolicyDefault(); err != nil {
 				bklog.G(ctx).Errorf("failed to reset mutable cachepolicy: %v", err)
 			}
-			contenthash.ClearCacheContext(mutable.Metadata())
+			contenthash.ClearCacheContext(mutable)
 			go mutable.Release(context.TODO())
 		}
 	}()
@@ -165,7 +157,7 @@ func (ls *localSourceHandler) snapshot(ctx context.Context, s session.Group, cal
 		}
 	}()
 
-	cc, err := contenthash.GetCacheContext(ctx, mutable.Metadata(), mount.IdentityMapping())
+	cc, err := contenthash.GetCacheContext(ctx, mutable)
 	if err != nil {
 		return nil, err
 	}
@@ -209,29 +201,14 @@ func (ls *localSourceHandler) snapshot(ctx context.Context, s session.Group, cal
 	}
 	lm = nil
 
-	if err := contenthash.SetCacheContext(ctx, mutable.Metadata(), cc); err != nil {
+	if err := contenthash.SetCacheContext(ctx, mutable, cc); err != nil {
 		return nil, err
 	}
 
 	// skip storing snapshot by the shared key if it already exists
-	skipStoreSharedKey := false
-	si, _ := ls.md.Get(mutable.ID())
-	if v := si.Get(keySharedKey); v != nil {
-		var str string
-		if err := v.Unmarshal(&str); err != nil {
-			return nil, err
-		}
-		skipStoreSharedKey = str == sharedKey
-	}
-	if !skipStoreSharedKey {
-		v, err := metadata.NewValue(sharedKey)
-		if err != nil {
-			return nil, err
-		}
-		v.Index = sharedKey
-		if err := si.Update(func(b *bolt.Bucket) error {
-			return si.SetValue(b, sharedKey, v)
-		}); err != nil {
+	md := cacheRefMetadata{mutable}
+	if md.getSharedKey() != sharedKey {
+		if err := md.setSharedKey(sharedKey); err != nil {
 			return nil, err
 		}
 		bklog.G(ctx).Debugf("saved %s as %s", mutable.ID(), sharedKey)
@@ -281,4 +258,31 @@ func (cu *cacheUpdater) MarkSupported(bool) {
 
 func (cu *cacheUpdater) ContentHasher() fsutil.ContentHasher {
 	return contenthash.NewFromStat
+}
+
+const keySharedKey = "local.sharedKey"
+const sharedKeyIndex = keySharedKey + ":"
+
+func searchSharedKey(ctx context.Context, store cache.MetadataStore, k string) ([]cacheRefMetadata, error) {
+	var results []cacheRefMetadata
+	mds, err := store.Search(ctx, sharedKeyIndex+k)
+	if err != nil {
+		return nil, err
+	}
+	for _, md := range mds {
+		results = append(results, cacheRefMetadata{md})
+	}
+	return results, nil
+}
+
+type cacheRefMetadata struct {
+	cache.RefMetadata
+}
+
+func (md cacheRefMetadata) getSharedKey() string {
+	return md.GetString(keySharedKey)
+}
+
+func (md cacheRefMetadata) setSharedKey(key string) error {
+	return md.SetString(keySharedKey, key, sharedKeyIndex+key)
 }

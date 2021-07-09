@@ -78,7 +78,7 @@ func NewContainer(ctx context.Context, w worker.Worker, sm *session.Manager, g s
 	}
 
 	name := fmt.Sprintf("container %s", req.ContainerID)
-	mm := mounts.NewMountManager(name, w.CacheManager(), sm, w.MetadataStore())
+	mm := mounts.NewMountManager(name, w.CacheManager(), sm)
 	p, err := PrepareMounts(ctx, mm, w.CacheManager(), g, "", mnts, refs, func(m *opspb.Mount, ref cache.ImmutableRef) (cache.MutableRef, error) {
 		cm := w.CacheManager()
 		if m.Input != opspb.Empty {
