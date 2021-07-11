@@ -149,7 +149,8 @@ func Unmarshal(marshalled []byte) (FSMetadata, error) {
 
 ## Conflict Detection Alternatives
 
-There are a few existing userspace emulations of overlayfs that were considered for implementing our layer conflict detection features:
+While the doc proposes we write our own code implementing conflict detection for now, there are a few existing userspace 
+emulations of overlayfs that were considered for implementing our layer conflict detection features:
 
 * GVisor
     * Pros

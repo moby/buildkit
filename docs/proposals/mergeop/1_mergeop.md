@@ -1,13 +1,36 @@
 # **MergeOp**
 
+## **Use Case**
+MergeOp enables users to combine independent snapshots without necessarily having to copy data on disk or introduce
+unneeded cache dependencies.
+
+For example, right now if you have separate LLB states (for example, separate stages in a multi-stage Dockerfile build) 
+whose artifacts need to be combined together into a single state, your only option is to copy them together, which 
+results in wasted disk space and increased execution time. It also means that the order you combine them in is important
+and if any of the "lower layer" states being combined changes, the copying of all the states being combined above it 
+will be invalidated and thus need to be repeated, worsening the disk space + execution time waste even further.
+
+With MergeOp, you will instead be able to combine states together without any actual copy of data on disk (provided the 
+underlying snapshotter satisfies some requirements, as described later). All of the merged states remain independent,
+so if one of them changes, that doesn't invalidate the cache chain of other states in the merge and require extra work
+to recombine them together.
+  * This becomes especially powerful in combination with DiffOp (described in a subsequent doc), which allows you to
+    select which layers of an LLB state you want to merge and thus making it trivial to only merge together exactly what
+    you want. For example, you can easily only merge together runtime artifacts, leaving buildtime dependencies out of a 
+    final merged state.
+
+For now, this design only proposes changes to Buildkit's backend and LLB. Adding support for MergeOp to higher-level
+users of MergeOp is out of scope but the potential use cases (such as using this to optimize Dockerfile COPY operations)
+are mentioned and considered throughout the docs.
+
 ## **Requirements**
 
 1. Support for an LLB Op that merges the results of other LLB ops. The result of merging input ops should look the same as if you had taken the layers of the snapshots backing each input op result and applied them all on top of one another in the order provided. This has similarities with the existing llb.Copy operation but there are several key differences:
-    1. The deletions of files and dirs included with layer definitions must be retained and have an effect when merging. So rather than just copying files and directories on top of each other, it’s more like you are merging filesystem change sets on top of each other.
-    2. It must opportunistically optimize out the copying of data on disk when the underlying host+snapshotter has support for doing so (such as via overlayfs). If such optimizations aren’t available, the implementation must have a fallback mode with behavior that is functionally identical even if much less efficient.
-    3. All file metadata, including times, must be retained rather than updated at the time the merge takes place to ensure complete reproducibility.
+   1. It must opportunistically optimize out the copying of data on disk when the underlying host+snapshotter has support for doing so (such as via overlayfs). If such optimizations aren’t available, the implementation must have a fallback mode with behavior that is functionally identical even if much less efficient.
+   2. All file metadata, including times, must be retained rather than updated at the time the merge takes place to ensure complete reproducibility.
+   3. There must be optional support for retaining the deletions of files and dirs included with layer definitions and thus allowing them to have an effect when merging. So rather than just copying files and directories on top of each other, it’s more like you are merging filesystem change sets on top of each other.
 2. The output of MergeOp must be usable as an LLB result in the same way that outputs of SourceOp, FileOp and ExecOp are today. This allows MergeOp to work seamlessly with the rest of LLB.
-    1. For example, you must be able to use a MergeOp result as a mount in an ExecOp or as the base for a FileOp without needing to add special handling to those other Op types.
+   1. For example, you must be able to use a MergeOp result as a mount in an ExecOp or as the base for a FileOp without needing to add special handling to those other Op types.
 
 ## LLB
 
@@ -72,14 +95,14 @@ mergedState := Merge(stateB, stateC) /*
    	 /a   - contains A
    	 /b   - contains B
    	 /c   - contains C
-	  /foo - contains C
+	 /foo - contains C
 */
 
 mergedState = Merge(stateC, stateB) /*
    	 /a   - contains A
    	 /b   - contains B
    	 /c   - contains C
-	   /foo - [doesn't exist!]
+	 /foo - [doesn't exist!]
 */
 ```
 
@@ -88,6 +111,10 @@ Here you can see that deletion of a file is considered part of a layer merge in 
 This example also illustrates that because stateB was created on top of stateA, stateA’s layers will be included when doing the merge. To be more concrete:
 * `Merge(stateB, stateC)` results in layers being ordered stateC->stateB->stateA
 * `Merge(stateC, stateB)` results in layers being ordered stateB->stateA->stateC
+
+It's also worth noting that if you try to delete a file which doesn't exist and that doesn't result in an error, that
+will not result in a deletion actually being included as part of the layer. Only deletion of existing files can be
+included with the layer definition.
 
 ### Run Example
 
