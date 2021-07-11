@@ -195,6 +195,14 @@ There were several choices for which format to use when (de)serializing layer fi
     * Cons
         * The format is not perfectly optimized for our use case of conflict detection (same as Tar)
         * Not clear if the continuity package is maintained much these days besides the util functions under fs used by containerd’s differ (which the proto is separate from). We may become partially or fully responsible for maintenance of the proto and thus have to deal with any other consumers of it that exist out in the world.
+* [Stargz's TOC format](https://github.com/containerd/stargz-snapshotter/blob/v0.6.4/docs/stargz-estargz.md#toc-tocentries-and-footer)
+    * Pros
+      * An existing format being used today that has already underwent careful thought+design in terms of creating platform-agnostic representations of filesystems
+    * Cons
+      * Focused on a somewhat different use case and thus has more than we really need, such as support for specifying
+        individual chunks of layers.
+      * Ties us into any changes needed by stargz, which are likely not often going to be directly relevent to the use 
+        case of this doc.
 * Custom Proto or JSON
     * Pros
         * Can customize to our exact requirements, including optimizing the format to minimize overhead when converting between it and our in-memory data structures used for conflict detection
