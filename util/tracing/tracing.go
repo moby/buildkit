@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/coryb/otelbundle/instrumentation/httptrace"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/propagation"
@@ -70,7 +71,7 @@ type Transport struct {
 func NewTransport(rt http.RoundTripper) http.RoundTripper {
 	// TODO: switch to otelhttp. needs upstream updates to avoid transport-global tracer
 	return &Transport{
-		RoundTripper: rt,
+		RoundTripper: httptrace.Transport(rt),
 	}
 }
 

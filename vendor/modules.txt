@@ -168,6 +168,8 @@ github.com/containernetworking/cni/pkg/version
 # github.com/coreos/go-systemd/v22 v22.3.2
 github.com/coreos/go-systemd/v22/activation
 github.com/coreos/go-systemd/v22/daemon
+# github.com/coryb/otelbundle/instrumentation/httptrace v0.0.0-20210711065347-dfc379f8e35c
+github.com/coryb/otelbundle/instrumentation/httptrace
 # github.com/cpuguy83/go-md2man/v2 v2.0.0
 github.com/cpuguy83/go-md2man/v2/md2man
 # github.com/davecgh/go-spew v1.1.1

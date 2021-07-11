@@ -16,6 +16,7 @@ require (
 	github.com/containerd/stargz-snapshotter v0.6.4
 	github.com/containerd/typeurl v1.0.2
 	github.com/coreos/go-systemd/v22 v22.3.2
+	github.com/coryb/otelbundle/instrumentation/httptrace v0.0.0-20210711065347-dfc379f8e35c
 	github.com/docker/cli v20.10.7+incompatible
 	github.com/docker/distribution v2.7.1+incompatible
 	// docker: the actual version is replaced in replace()
