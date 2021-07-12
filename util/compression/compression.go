@@ -7,6 +7,7 @@ import (
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/images"
+	"github.com/containerd/stargz-snapshotter/estargz"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -23,6 +24,9 @@ const (
 	// Gzip is used for blob data.
 	Gzip
 
+	// EStargz is used for estargz data.
+	EStargz
+
 	// UnknownCompression means not supported yet.
 	UnknownCompression Type = -1
 )
@@ -35,6 +39,8 @@ func (ct Type) String() string {
 		return "uncompressed"
 	case Gzip:
 		return "gzip"
+	case EStargz:
+		return "estargz"
 	default:
 		return "unknown"
 	}
@@ -48,7 +54,7 @@ func DetectLayerMediaType(ctx context.Context, cs content.Store, id digest.Diges
 	}
 	defer ra.Close()
 
-	ct, err := detectCompressionType(content.NewReader(ra))
+	ct, err := detectCompressionType(io.NewSectionReader(ra, 0, ra.Size()))
 	if err != nil {
 		return "", err
 	}
@@ -64,13 +70,18 @@ func DetectLayerMediaType(ctx context.Context, cs content.Store, id digest.Diges
 			return ocispec.MediaTypeImageLayerGzip, nil
 		}
 		return images.MediaTypeDockerSchema2LayerGzip, nil
+	case EStargz:
+		if oci {
+			return ocispec.MediaTypeImageLayerGzip, nil
+		}
+		return images.MediaTypeDockerSchema2LayerGzip, nil
 	default:
 		return "", errors.Errorf("failed to detect layer %v compression type", id)
 	}
 }
 
 // detectCompressionType detects compression type from real blob data.
-func detectCompressionType(cr io.Reader) (Type, error) {
+func detectCompressionType(cr *io.SectionReader) (Type, error) {
 	var buf [10]byte
 	var n int
 	var err error
@@ -95,6 +106,11 @@ func detectCompressionType(cr io.Reader) (Type, error) {
 			return c, nil
 		}
 	}
+
+	if _, _, err := estargz.OpenFooter(cr); err == nil {
+		return EStargz, nil
+	}
+
 	return Uncompressed, nil
 }
 

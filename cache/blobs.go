@@ -76,6 +76,8 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 				mediaType = ocispec.MediaTypeImageLayer
 			case compression.Gzip:
 				mediaType = ocispec.MediaTypeImageLayerGzip
+			case compression.EStargz:
+				mediaType = ocispec.MediaTypeImageLayerGzip
 			default:
 				return nil, errors.Errorf("unknown layer compression type: %q", compressionType)
 			}
@@ -137,12 +139,6 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 				return nil, errors.Errorf("unknown layer compression type")
 			}
 
-			if forceCompression {
-				if err := ensureCompression(ctx, sr, descr, compressionType, s); err != nil {
-					return nil, err
-				}
-			}
-
 			return descr, nil
 
 		})
@@ -162,6 +158,13 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 	if currentDescr.Digest != "" {
 		if err := sr.setBlob(baseCtx, currentDescr); err != nil {
 			return err
+		}
+		if forceCompression || compressionType == compression.EStargz {
+			// Ensure the layer is compresed as expected. If needed, forcefully convert it here.
+			// Comparer doesn't support creating estargz. So we always do conversion for estargz.
+			if err := ensureCompression(ctx, sr, currentDescr, compressionType, s); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
