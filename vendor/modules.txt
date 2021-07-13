@@ -145,6 +145,7 @@ github.com/containerd/stargz-snapshotter/fs/metrics
 github.com/containerd/stargz-snapshotter/fs/reader
 github.com/containerd/stargz-snapshotter/fs/remote
 github.com/containerd/stargz-snapshotter/fs/source
+github.com/containerd/stargz-snapshotter/nativeconverter/estargz
 github.com/containerd/stargz-snapshotter/snapshot
 github.com/containerd/stargz-snapshotter/snapshot/overlayutils
 github.com/containerd/stargz-snapshotter/task

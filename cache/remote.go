@@ -108,24 +108,21 @@ func (sr *immutableRef) GetRemote(ctx context.Context, createIfNeeded bool, comp
 		if forceCompression {
 			// ensure the compression type.
 			// compressed blob must be created and stored in the content store.
-			_, convertMediaTypeFunc, err := getConverters(desc, compressionType)
+			_, convertDescFunc, err := getConverters(desc, compressionType)
 			if err != nil {
 				return nil, err
 			}
-			if convertMediaTypeFunc != nil {
+			if convertDescFunc != nil {
 				// needs conversion
 				info, err := ref.getCompressionBlob(ctx, compressionType)
 				if err != nil {
 					return nil, err
 				}
-				newDesc := desc
-				newDesc.MediaType = convertMediaTypeFunc(newDesc.MediaType)
-				newDesc.Digest = info.Digest
-				newDesc.Size = info.Size
+				newDesc := convertDescFunc(desc, info)
 				if desc.Digest != newDesc.Digest {
 					mproviderBase.Add(newDesc.Digest, ref.cm.ContentStore)
 				}
-				desc = newDesc
+				desc = *newDesc
 			}
 		}
 

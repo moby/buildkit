@@ -14,6 +14,7 @@ require (
 	github.com/containerd/go-cni v1.0.2
 	github.com/containerd/go-runc v1.0.0
 	github.com/containerd/stargz-snapshotter v0.6.4
+	github.com/containerd/stargz-snapshotter/estargz v0.6.4
 	github.com/containerd/typeurl v1.0.2
 	github.com/coreos/go-systemd/v22 v22.3.2
 	github.com/docker/cli v20.10.7+incompatible
