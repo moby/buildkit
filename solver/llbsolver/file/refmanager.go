@@ -7,8 +7,8 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver/llbsolver/ops/fileoptypes"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 func NewRefManager(cm cache.Manager) *RefManager {
@@ -41,7 +41,7 @@ func (rm *RefManager) Prepare(ctx context.Context, ref fileoptypes.Ref, readonly
 		if rerr != nil {
 			cache.CachePolicyDefault(mr)
 			if err := mr.Metadata().Commit(); err != nil {
-				logrus.Errorf("failed to reset FileOp mutable ref cachepolicy: %v", err)
+				bklog.G(ctx).Errorf("failed to reset FileOp mutable ref cachepolicy: %v", err)
 			}
 			mr.Release(context.TODO())
 		}

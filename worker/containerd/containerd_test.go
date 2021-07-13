@@ -3,6 +3,7 @@
 package containerd
 
 import (
+	"context"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -44,7 +45,7 @@ func checkRequirement(t *testing.T) {
 func testContainerdWorkerExec(t *testing.T, sb integration.Sandbox) {
 	workerOpt, cleanupWorkerOpt := newWorkerOpt(t, sb.ContainerdAddress())
 	defer cleanupWorkerOpt()
-	w, err := base.NewWorker(workerOpt)
+	w, err := base.NewWorker(context.TODO(), workerOpt)
 	require.NoError(t, err)
 
 	tests.TestWorkerExec(t, w)
@@ -53,7 +54,7 @@ func testContainerdWorkerExec(t *testing.T, sb integration.Sandbox) {
 func testContainerdWorkerExecFailures(t *testing.T, sb integration.Sandbox) {
 	workerOpt, cleanupWorkerOpt := newWorkerOpt(t, sb.ContainerdAddress())
 	defer cleanupWorkerOpt()
-	w, err := base.NewWorker(workerOpt)
+	w, err := base.NewWorker(context.TODO(), workerOpt)
 	require.NoError(t, err)
 
 	tests.TestWorkerExecFailures(t, w)

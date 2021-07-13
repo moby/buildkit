@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/pkg/seed"
 	"github.com/containerd/containerd/pkg/userns"
 	"github.com/containerd/containerd/platforms"
@@ -45,8 +46,8 @@ import (
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/moby/buildkit/util/appdefaults"
 	"github.com/moby/buildkit/util/archutil"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/grpcerrors"
-	_ "github.com/moby/buildkit/util/log"
 	"github.com/moby/buildkit/util/profiler"
 	"github.com/moby/buildkit/util/resolver"
 	"github.com/moby/buildkit/util/stack"
@@ -76,6 +77,9 @@ func init() {
 
 	seed.WithTimeAndRand()
 	reexec.Init()
+
+	// overwrites containerd/log.G
+	log.G = bklog.GetLogger
 }
 
 var propagators = propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{})
@@ -296,10 +300,10 @@ func main() {
 			err = ctx.Err()
 		}
 
-		logrus.Infof("stopping server")
+		bklog.G(ctx).Infof("stopping server")
 		if os.Getenv("NOTIFY_SOCKET") != "" {
 			notified, notifyErr := sddaemon.SdNotify(false, sddaemon.SdNotifyStopping)
-			logrus.Debugf("SdNotifyStopping notified=%v, err=%v", notified, notifyErr)
+			bklog.G(ctx).Debugf("SdNotifyStopping notified=%v, err=%v", notified, notifyErr)
 		}
 		server.GracefulStop()
 
