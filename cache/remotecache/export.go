@@ -58,11 +58,12 @@ type contentCacheExporter struct {
 	chains   *v1.CacheChains
 	ingester content.Ingester
 	oci      bool
+	ref      string
 }
 
-func NewExporter(ingester content.Ingester, oci bool) Exporter {
+func NewExporter(ingester content.Ingester, ref string, oci bool) Exporter {
 	cc := v1.NewCacheChains()
-	return &contentCacheExporter{CacheExporterTarget: cc, chains: cc, ingester: ingester, oci: oci}
+	return &contentCacheExporter{CacheExporterTarget: cc, chains: cc, ingester: ingester, oci: oci, ref: ref}
 }
 
 func (ce *contentCacheExporter) Finalize(ctx context.Context) (map[string]string, error) {
@@ -95,7 +96,7 @@ func (ce *contentCacheExporter) Finalize(ctx context.Context) (map[string]string
 			return nil, errors.Errorf("missing blob %s", l.Blob)
 		}
 		layerDone := oneOffProgress(ctx, fmt.Sprintf("writing layer %s", l.Blob))
-		if err := contentutil.Copy(ctx, ce.ingester, dgstPair.Provider, dgstPair.Descriptor, logs.LoggerFromContext(ctx)); err != nil {
+		if err := contentutil.Copy(ctx, ce.ingester, dgstPair.Provider, dgstPair.Descriptor, ce.ref, logs.LoggerFromContext(ctx)); err != nil {
 			return nil, layerDone(errors.Wrap(err, "error writing layer blob"))
 		}
 		layerDone(nil)

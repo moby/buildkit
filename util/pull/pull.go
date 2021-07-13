@@ -148,7 +148,7 @@ func (p *Puller) PullManifests(ctx context.Context) (*PulledManifests, error) {
 		}
 		handlers = append(handlers,
 			filterLayerBlobs(metadata, &mu),
-			retryhandler.New(remotes.FetchHandler(p.ContentStore, fetcher), logs.LoggerFromContext(ctx)),
+			retryhandler.New(remotes.FetchHandler(p.ContentStore, fetcher), p.ref, logs.LoggerFromContext(ctx)),
 			childrenHandler,
 			dslHandler,
 		)
