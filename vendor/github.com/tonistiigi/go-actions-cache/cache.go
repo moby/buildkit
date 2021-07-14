@@ -54,14 +54,14 @@ func NewBlob(dt []byte) Blob {
 	}
 }
 
-func TryEnv() (*Cache, error) {
+func TryEnv(opt Opt) (*Cache, error) {
 	tokenEnc, ok := os.LookupEnv("GHCACHE_TOKEN_ENC")
 	if ok {
 		url, token, err := decryptToken(tokenEnc, os.Getenv("GHCACHE_TOKEN_PW"))
 		if err != nil {
 			return nil, err
 		}
-		return New(token, url)
+		return New(token, url, opt)
 	}
 
 	token, ok := os.LookupEnv("ACTIONS_RUNTIME_TOKEN")
@@ -75,10 +75,14 @@ func TryEnv() (*Cache, error) {
 		return nil, nil
 	}
 
-	return New(token, cacheURL)
+	return New(token, cacheURL, opt)
 }
 
-func New(token, url string) (*Cache, error) {
+type Opt struct {
+	Client *http.Client
+}
+
+func New(token, url string, opt Opt) (*Cache, error) {
 	tk, _, err := new(jwt.Parser).ParseUnverified(token, jwt.MapClaims{})
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -130,7 +134,12 @@ func New(token, url string) (*Cache, error) {
 	}
 	Log("parsed token: scopes: %+v, issued: %v, expires: %v", scopes, nbft, expt)
 
+	if opt.Client == nil {
+		opt.Client = http.DefaultClient
+	}
+
 	return &Cache{
+		opt:       opt,
 		scopes:    scopes,
 		URL:       url,
 		Token:     tk,
@@ -166,6 +175,7 @@ func (p Permission) String() string {
 }
 
 type Cache struct {
+	opt       Opt
 	scopes    []Scope
 	URL       string
 	Token     *jwt.Token
@@ -190,7 +200,7 @@ func (c *Cache) Load(ctx context.Context, keys ...string) (*Entry, error) {
 	req.URL.RawQuery = q.Encode()
 	req = req.WithContext(ctx)
 	Log("load cache %s", req.URL.String())
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := c.opt.Client.Do(req)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -208,6 +218,7 @@ func (c *Cache) Load(ctx context.Context, keys ...string) (*Entry, error) {
 	if err := json.Unmarshal(dt, &ce); err != nil {
 		return nil, errors.WithStack(err)
 	}
+	ce.client = c.opt.Client
 	if ce.Key == "" {
 		return nil, nil
 	}
@@ -228,7 +239,7 @@ func (c *Cache) reserve(ctx context.Context, key string) (int, error) {
 	req.Header.Set("Content-Type", "application/json")
 	req = req.WithContext(ctx)
 	Log("save cache req %s body=%s", req.URL.String(), dt)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := c.opt.Client.Do(req)
 	if err != nil {
 		return 0, errors.WithStack(err)
 	}
@@ -264,7 +275,7 @@ func (c *Cache) commit(ctx context.Context, id int, size int64) error {
 	c.accept(req)
 	req.Header.Set("Content-Type", "application/json")
 	Log("commit cache %s, size %d", req.URL.String(), size)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := c.opt.Client.Do(req)
 	if err != nil {
 		return errors.Wrapf(err, "error committing cache %d", id)
 	}
@@ -401,7 +412,7 @@ func (c *Cache) uploadChunk(ctx context.Context, id int, ra io.ReaderAt, off, n 
 	req.Header.Set("Content-Range", fmt.Sprintf("bytes %d-%d/*", off, off+n-1))
 
 	Log("upload cache chunk %s, range %d-%d", req.URL.String(), off, off+n-1)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := c.opt.Client.Do(req)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -447,6 +458,8 @@ type Entry struct {
 	Key   string `json:"cacheKey"`
 	Scope string `json:"scope"`
 	URL   string `json:"archiveLocation"`
+
+	client *http.Client
 }
 
 func (ce *Entry) WriteTo(ctx context.Context, w io.Writer) error {
@@ -468,7 +481,11 @@ func (ce *Entry) Download(ctx context.Context) ReaderAtCloser {
 		if offset != 0 {
 			req.Header.Set("Range", fmt.Sprintf("bytes=%d-", offset))
 		}
-		resp, err := http.DefaultClient.Do(req)
+		client := ce.client
+		if client == nil {
+			client = http.DefaultClient
+		}
+		resp, err := client.Do(req)
 		if err != nil {
 			return nil, errors.WithStack(err)
 		}
