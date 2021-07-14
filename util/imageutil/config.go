@@ -101,7 +101,7 @@ func Config(ctx context.Context, str string, resolver remotes.Resolver, cache Co
 	children := childrenConfigHandler(cache, platform)
 
 	handlers := []images.Handler{
-		retryhandler.New(remotes.FetchHandler(cache, fetcher), func(_ []byte) {}),
+		retryhandler.New(remotes.FetchHandler(cache, fetcher), str, func(_ []byte) {}),
 		children,
 	}
 	if err := images.Dispatch(ctx, images.Handlers(handlers...), nil, desc); err != nil {

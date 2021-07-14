@@ -208,7 +208,7 @@ func (p lazyRefProvider) Unlazy(ctx context.Context) error {
 		err := contentutil.Copy(ctx, p.ref.cm.ContentStore, &pullprogress.ProviderWithProgress{
 			Provider: p.dh.Provider(p.session),
 			Manager:  p.ref.cm.ContentStore,
-		}, p.desc, logs.LoggerFromContext(ctx))
+		}, p.desc, p.dh.Ref, logs.LoggerFromContext(ctx))
 		if err != nil {
 			return nil, err
 		}

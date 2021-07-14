@@ -52,7 +52,7 @@ func ResolveCacheExporterFunc(sm *session.Manager, hosts docker.RegistryHosts) r
 		if err != nil {
 			return nil, err
 		}
-		return remotecache.NewExporter(contentutil.FromPusher(pusher), ociMediatypes), nil
+		return remotecache.NewExporter(contentutil.FromPusher(pusher), ref, ociMediatypes), nil
 	}
 }
 

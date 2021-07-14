@@ -13,8 +13,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-func Copy(ctx context.Context, ingester content.Ingester, provider content.Provider, desc ocispec.Descriptor, logger func([]byte)) error {
-	if _, err := retryhandler.New(remotes.FetchHandler(ingester, &localFetcher{provider}), logger)(ctx, desc); err != nil {
+func Copy(ctx context.Context, ingester content.Ingester, provider content.Provider, desc ocispec.Descriptor, ref string, logger func([]byte)) error {
+	if _, err := retryhandler.New(remotes.FetchHandler(ingester, &localFetcher{provider}), ref, logger)(ctx, desc); err != nil {
 		return err
 	}
 	return nil
@@ -65,7 +65,7 @@ func CopyChain(ctx context.Context, ingester content.Ingester, provider content.
 	handlers := []images.Handler{
 		images.ChildrenHandler(provider),
 		filterHandler,
-		retryhandler.New(remotes.FetchHandler(ingester, &localFetcher{provider}), func(_ []byte) {}),
+		retryhandler.New(remotes.FetchHandler(ingester, &localFetcher{provider}), "", func(_ []byte) {}),
 	}
 
 	if err := images.Dispatch(ctx, images.Handlers(handlers...), nil, desc); err != nil {
@@ -73,7 +73,7 @@ func CopyChain(ctx context.Context, ingester content.Ingester, provider content.
 	}
 
 	for i := len(manifestStack) - 1; i >= 0; i-- {
-		if err := Copy(ctx, ingester, provider, manifestStack[i], nil); err != nil {
+		if err := Copy(ctx, ingester, provider, manifestStack[i], "", nil); err != nil {
 			return errors.WithStack(err)
 		}
 	}

@@ -42,7 +42,7 @@ func ResolveCacheExporterFunc(sm *session.Manager) remotecache.ResolveCacheExpor
 		if err != nil {
 			return nil, err
 		}
-		return remotecache.NewExporter(cs, ociMediatypes), nil
+		return remotecache.NewExporter(cs, "", ociMediatypes), nil
 	}
 }
 

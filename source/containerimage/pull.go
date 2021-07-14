@@ -237,6 +237,7 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 					Provider:       p.manifest.Provider,
 					Progress:       progressController,
 					SnapshotLabels: labels,
+					Ref:            p.manifest.Ref,
 				}
 			}
 		}
