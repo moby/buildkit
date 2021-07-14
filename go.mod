@@ -5,10 +5,10 @@ go 1.13
 require (
 	github.com/BurntSushi/toml v0.3.1
 	github.com/Microsoft/go-winio v0.4.17
-	github.com/Microsoft/hcsshim v0.8.16
+	github.com/Microsoft/hcsshim v0.8.18
 	github.com/agext/levenshtein v1.2.3
 	github.com/containerd/console v1.0.2
-	github.com/containerd/containerd v1.5.2
+	github.com/containerd/containerd v1.5.3
 	github.com/containerd/continuity v0.1.0
 	github.com/containerd/fuse-overlayfs-snapshotter v1.0.2
 	github.com/containerd/go-cni v1.0.2
