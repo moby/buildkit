@@ -13,6 +13,7 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/progress"
+	"github.com/moby/buildkit/util/tracing"
 	"github.com/moby/buildkit/worker"
 	"github.com/opencontainers/go-digest"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -79,7 +80,7 @@ type exporter struct {
 
 func NewExporter(c *Config) (remotecache.Exporter, error) {
 	cc := v1.NewCacheChains()
-	cache, err := actionscache.New(c.Token, c.URL)
+	cache, err := actionscache.New(c.Token, c.URL, actionscache.Opt{Client: tracing.DefaultClient})
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +195,7 @@ type importer struct {
 }
 
 func NewImporter(c *Config) (remotecache.Importer, error) {
-	cache, err := actionscache.New(c.Token, c.URL)
+	cache, err := actionscache.New(c.Token, c.URL, actionscache.Opt{Client: tracing.DefaultClient})
 	if err != nil {
 		return nil, err
 	}

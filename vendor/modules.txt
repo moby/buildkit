@@ -365,7 +365,7 @@ github.com/tonistiigi/fsutil
 github.com/tonistiigi/fsutil/copy
 github.com/tonistiigi/fsutil/prefix
 github.com/tonistiigi/fsutil/types
-# github.com/tonistiigi/go-actions-cache v0.0.0-20210206051143-d2e2f65e1fd4
+# github.com/tonistiigi/go-actions-cache v0.0.0-20210714033416-b93d7f1b2e70
 github.com/tonistiigi/go-actions-cache
 # github.com/tonistiigi/units v0.0.0-20180711220420-6950e57a87ea
 github.com/tonistiigi/units

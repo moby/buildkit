@@ -1069,8 +1069,8 @@ github.com/tommy-muehle/go-mnd v1.3.1-0.20200224220436-e6f9a994e8fa/go.mod h1:dS
 github.com/tonistiigi/fsutil v0.0.0-20201103201449-0834f99b7b85/go.mod h1:a7cilN64dG941IOXfhJhlH0qB92hxJ9A1ewrdUmJ6xo=
 github.com/tonistiigi/fsutil v0.0.0-20210609172227-d72af97c0eaf h1:L0ixhsTk9j+dVnIvF6aiVCxPiaFvwTOyJxqimPq44p8=
 github.com/tonistiigi/fsutil v0.0.0-20210609172227-d72af97c0eaf/go.mod h1:lJAxK//iyZ3yGbQswdrPTxugZIDM7sd4bEsD0x3XMHk=
-github.com/tonistiigi/go-actions-cache v0.0.0-20210206051143-d2e2f65e1fd4 h1:aYoTVJ6p9+bYgia+1zRtxV4Ghc3SUjnn32FpKC+TQRA=
-github.com/tonistiigi/go-actions-cache v0.0.0-20210206051143-d2e2f65e1fd4/go.mod h1:dNS+PPTqGnSl80x3wEyWWCHeON5xiBGtcM0uD6CgHNU=
+github.com/tonistiigi/go-actions-cache v0.0.0-20210714033416-b93d7f1b2e70 h1:+ZlFs3Tl5qYZJvX2PxfZxGlVXz847LsOJGyNVU5pCHo=
+github.com/tonistiigi/go-actions-cache v0.0.0-20210714033416-b93d7f1b2e70/go.mod h1:dNS+PPTqGnSl80x3wEyWWCHeON5xiBGtcM0uD6CgHNU=
 github.com/tonistiigi/units v0.0.0-20180711220420-6950e57a87ea h1:SXhTLE6pb6eld/v/cCndK0AMpt1wiVFb/YYmqB3/QG0=
 github.com/tonistiigi/units v0.0.0-20180711220420-6950e57a87ea/go.mod h1:WPnis/6cRcDZSUvVmezrxJPkiO87ThFYsoUiMwWNDJk=
 github.com/tonistiigi/vt100 v0.0.0-20210615222946-8066bb97264f h1:DLpt6B5oaaS8jyXHa9VA4rrZloBVPVXeCtrOsrFauxc=
