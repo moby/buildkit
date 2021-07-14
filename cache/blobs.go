@@ -14,6 +14,7 @@ import (
 	imagespecidentity "github.com/opencontainers/image-spec/identity"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -111,12 +112,21 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 				if release != nil {
 					defer release()
 				}
-				descr, err = sr.cm.Differ.Compare(ctx, lower, upper,
-					diff.WithMediaType(mediaType),
-					diff.WithReference(sr.ID()),
-				)
-				if err != nil {
-					return nil, err
+				if !isTypeWindows(sr) {
+					// Try optimized diff for overlayfs
+					descr, err = sr.computeOverlayBlob(ctx, lower, upper, mediaType, sr.ID())
+					if err != nil {
+						logrus.Errorf("failed to compute blob (%s) from diff of overlay snapshotter: %+v", sr.ID(), err)
+					}
+				}
+				if descr.Digest == "" {
+					descr, err = sr.cm.Differ.Compare(ctx, lower, upper,
+						diff.WithMediaType(mediaType),
+						diff.WithReference(sr.ID()),
+					)
+					if err != nil {
+						return nil, err
+					}
 				}
 			}
 

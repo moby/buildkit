@@ -1,5 +1,3 @@
-// +build darwin freebsd netbsd
-
 /*
    Copyright The containerd Authors.
 
@@ -16,18 +14,25 @@
    limitations under the License.
 */
 
-package local
+package oci
 
 import (
-	"os"
-	"syscall"
-	"time"
+	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 
-func getATime(fi os.FileInfo) time.Time {
-	if st, ok := fi.Sys().(*syscall.Stat_t); ok {
-		return time.Unix(int64(st.Atimespec.Sec), int64(st.Atimespec.Nsec)) //nolint: unconvert // int64 conversions ensure the line compiles for 32-bit systems as well.
+func defaultMounts() []specs.Mount {
+	return []specs.Mount{
+		{
+			Destination: "/dev",
+			Type:        "devfs",
+			Source:      "devfs",
+			Options:     []string{"ruleset=4"},
+		},
+		{
+			Destination: "/dev/fd",
+			Type:        "fdescfs",
+			Source:      "fdescfs",
+			Options:     []string{},
+		},
 	}
-
-	return fi.ModTime()
 }
