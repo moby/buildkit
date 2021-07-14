@@ -6,6 +6,7 @@ set -eu -o pipefail
 : ${TEST_INTEGRATION=}
 : ${TEST_GATEWAY=}
 : ${TEST_DOCKERFILE=}
+: ${TEST_WORKER=}
 : ${TEST_DOCKERD=}
 : ${TEST_DOCKERD_BINARY=$(which dockerd)}
 : ${TEST_COVERAGE=}
@@ -59,6 +60,14 @@ if [ "$TEST_COVERAGE" = "1" ]; then
   mkdir -p "$covdir"
   coverageVol="-v $covdir:/coverage"
   coverageFlags="-coverprofile=/coverage/coverage.txt -covermode=atomic"
+fi
+
+if [ -n "$TEST_WORKER" ]; then
+  if [[ $TESTFLAGS == *"--run"* ]]; then
+    echo >&2 "ERROR: TESTFLAGS cannot contain --run flag if TEST_WORKER is set."
+    exit 1
+  fi
+  TESTFLAGS="${TESTFLAGS} --run=//worker=${TEST_WORKER}$"
 fi
 
 buildxCmd build $importCacheFlags \
