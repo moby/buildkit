@@ -9,6 +9,9 @@ import (
 	"time"
 
 	"github.com/moby/buildkit/util/bklog"
+	"github.com/moby/buildkit/util/tracing"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/diff"
@@ -150,6 +153,11 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 }
 
 func (ic *ImageWriter) exportLayers(ctx context.Context, compressionType compression.Type, forceCompression bool, s session.Group, refs ...cache.ImmutableRef) ([]solver.Remote, error) {
+	span, ctx := tracing.StartSpan(ctx, "export layers", trace.WithAttributes(
+		attribute.String("exportLayers.compressionType", compressionType.String()),
+		attribute.Bool("exportLayers.forceCompression", forceCompression),
+	))
+
 	eg, ctx := errgroup.WithContext(ctx)
 	layersDone := oneOffProgress(ctx, "exporting layers")
 
@@ -171,11 +179,9 @@ func (ic *ImageWriter) exportLayers(ctx context.Context, compressionType compres
 		}(i, ref)
 	}
 
-	if err := layersDone(eg.Wait()); err != nil {
-		return nil, err
-	}
-
-	return out, nil
+	err := layersDone(eg.Wait())
+	tracing.FinishWithError(span, err)
+	return out, err
 }
 
 func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache.ImmutableRef, config []byte, remote *solver.Remote, oci bool, inlineCache []byte) (*ocispec.Descriptor, *ocispec.Descriptor, error) {
