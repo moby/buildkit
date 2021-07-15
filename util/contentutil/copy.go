@@ -7,14 +7,14 @@ import (
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/images"
-	"github.com/containerd/containerd/remotes"
+	"github.com/moby/buildkit/util/resolver/limited"
 	"github.com/moby/buildkit/util/resolver/retryhandler"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
 
 func Copy(ctx context.Context, ingester content.Ingester, provider content.Provider, desc ocispec.Descriptor, ref string, logger func([]byte)) error {
-	if _, err := retryhandler.New(remotes.FetchHandler(ingester, &localFetcher{provider}), ref, logger)(ctx, desc); err != nil {
+	if _, err := retryhandler.New(limited.FetchHandler(ingester, &localFetcher{provider}, ref), logger)(ctx, desc); err != nil {
 		return err
 	}
 	return nil
@@ -65,7 +65,7 @@ func CopyChain(ctx context.Context, ingester content.Ingester, provider content.
 	handlers := []images.Handler{
 		images.ChildrenHandler(provider),
 		filterHandler,
-		retryhandler.New(remotes.FetchHandler(ingester, &localFetcher{provider}), "", func(_ []byte) {}),
+		retryhandler.New(limited.FetchHandler(ingester, &localFetcher{provider}, ""), func(_ []byte) {}),
 	}
 
 	if err := images.Dispatch(ctx, images.Handlers(handlers...), nil, desc); err != nil {

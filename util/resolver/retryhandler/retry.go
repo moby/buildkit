@@ -5,43 +5,17 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"sync"
 	"syscall"
 	"time"
 
 	"github.com/containerd/containerd/images"
 	remoteserrors "github.com/containerd/containerd/remotes/errors"
-	"github.com/docker/distribution/reference"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
-	"golang.org/x/sync/semaphore"
 )
 
-var mu sync.Mutex
-var sem = map[string]*semaphore.Weighted{}
-
-const connsPerHost = 4
-
-func New(f images.HandlerFunc, ref string, logger func([]byte)) images.HandlerFunc {
-	if ref != "" {
-		if named, err := reference.ParseNormalizedNamed(ref); err == nil {
-			ref = reference.Domain(named)
-		}
-	}
-
+func New(f images.HandlerFunc, logger func([]byte)) images.HandlerFunc {
 	return func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
-		mu.Lock()
-		s, ok := sem[ref]
-		if !ok {
-			s = semaphore.NewWeighted(connsPerHost)
-			sem[ref] = s
-		}
-		mu.Unlock()
-		if err := s.Acquire(ctx, 1); err != nil {
-			return nil, err
-		}
-		defer s.Release(1)
-
 		backoff := time.Second
 		for {
 			descs, err := f(ctx, desc)
