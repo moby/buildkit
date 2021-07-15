@@ -149,6 +149,7 @@ func (f *fetcher) Fetch(ctx context.Context, desc ocispec.Descriptor) (io.ReadCl
 		release()
 		return nil, err
 	}
+
 	rcw := &readCloser{ReadCloser: rc}
 	closer := func() {
 		if !rcw.closed {
@@ -161,7 +162,16 @@ func (f *fetcher) Fetch(ctx context.Context, desc ocispec.Descriptor) (io.ReadCl
 		rc.close()
 	})
 
+	if s, ok := rc.(io.Seeker); ok {
+		return &readCloserSeeker{rcw, s}, nil
+	}
+
 	return rcw, nil
+}
+
+type readCloserSeeker struct {
+	*readCloser
+	io.Seeker
 }
 
 type readCloser struct {

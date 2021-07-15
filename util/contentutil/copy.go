@@ -46,6 +46,18 @@ func (r *rc) Read(b []byte) (int, error) {
 	return n, err
 }
 
+func (r *rc) Seek(offset int64, whence int) (int64, error) {
+	switch whence {
+	case io.SeekStart:
+		r.offset = int(offset)
+	case io.SeekCurrent:
+		r.offset += int(offset)
+	case io.SeekEnd:
+		r.offset = int(r.Size()) - int(offset)
+	}
+	return int64(r.offset), nil
+}
+
 func CopyChain(ctx context.Context, ingester content.Ingester, provider content.Provider, desc ocispec.Descriptor) error {
 	var m sync.Mutex
 	manifestStack := []ocispec.Descriptor{}
