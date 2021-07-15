@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"runtime"
+	"strings"
 	"sync"
 
 	"github.com/containerd/containerd/content"
@@ -21,7 +22,7 @@ var Default = New(4)
 type Group struct {
 	mu   sync.Mutex
 	size int
-	sem  map[string]*semaphore.Weighted
+	sem  map[string][2]*semaphore.Weighted
 }
 
 type req struct {
@@ -29,26 +30,43 @@ type req struct {
 	ref string
 }
 
-func (r *req) acquire(ctx context.Context) (func(), error) {
+func (r *req) acquire(ctx context.Context, desc ocispec.Descriptor) (func(), error) {
+	// json request get one additional connection
+	highPriority := strings.HasSuffix(desc.MediaType, "+json")
+
 	r.g.mu.Lock()
 	s, ok := r.g.sem[r.ref]
 	if !ok {
-		s = semaphore.NewWeighted(int64(r.g.size))
+		s = [2]*semaphore.Weighted{
+			semaphore.NewWeighted(int64(r.g.size)),
+			semaphore.NewWeighted(int64(r.g.size + 1)),
+		}
 		r.g.sem[r.ref] = s
 	}
 	r.g.mu.Unlock()
-	if err := s.Acquire(ctx, 1); err != nil {
+	if !highPriority {
+		if err := s[0].Acquire(ctx, 1); err != nil {
+			return nil, err
+		}
+	}
+	if err := s[1].Acquire(ctx, 1); err != nil {
+		if !highPriority {
+			s[0].Release(1)
+		}
 		return nil, err
 	}
 	return func() {
-		s.Release(1)
+		s[1].Release(1)
+		if !highPriority {
+			s[0].Release(1)
+		}
 	}, nil
 }
 
 func New(size int) *Group {
 	return &Group{
 		size: size,
-		sem:  make(map[string]*semaphore.Weighted),
+		sem:  make(map[string][2]*semaphore.Weighted),
 	}
 }
 
@@ -70,7 +88,7 @@ type pusher struct {
 }
 
 func (p *pusher) Push(ctx context.Context, desc ocispec.Descriptor) (content.Writer, error) {
-	release, err := p.req.acquire(ctx)
+	release, err := p.req.acquire(ctx, desc)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +140,7 @@ type fetcher struct {
 }
 
 func (f *fetcher) Fetch(ctx context.Context, desc ocispec.Descriptor) (io.ReadCloser, error) {
-	release, err := f.req.acquire(ctx)
+	release, err := f.req.acquire(ctx, desc)
 	if err != nil {
 		return nil, err
 	}
