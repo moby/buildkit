@@ -12,6 +12,7 @@ import (
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage"
+	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/util/compression"
@@ -150,10 +151,10 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	desc.Annotations[ocispec.AnnotationCreated] = time.Now().UTC().Format(time.RFC3339)
 
 	resp := make(map[string]string)
-	resp["containerimage.digest"] = desc.Digest.String()
-	if v, ok := desc.Annotations["config.digest"]; ok {
-		resp["containerimage.config.digest"] = v
-		delete(desc.Annotations, "config.digeest")
+	resp[exptypes.ExporterImageDigestKey] = desc.Digest.String()
+	if v, ok := desc.Annotations[exptypes.ExporterConfigDigestKey]; ok {
+		resp[exptypes.ExporterImageConfigDigestKey] = v
+		delete(desc.Annotations, exptypes.ExporterConfigDigestKey)
 	}
 
 	if n, ok := src.Metadata["image.name"]; e.name == "*" && ok {

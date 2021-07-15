@@ -67,7 +67,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 		if mfstDesc.Annotations == nil {
 			mfstDesc.Annotations = make(map[string]string)
 		}
-		mfstDesc.Annotations["config.digest"] = configDesc.Digest.String()
+		mfstDesc.Annotations[exptypes.ExporterConfigDigestKey] = configDesc.Digest.String()
 		return mfstDesc, nil
 	}
 
