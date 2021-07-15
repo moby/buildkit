@@ -34,12 +34,12 @@ func (f *localFetcher) Fetch(ctx context.Context, desc ocispec.Descriptor) (io.R
 
 type rc struct {
 	content.ReaderAt
-	offset int
+	offset int64
 }
 
 func (r *rc) Read(b []byte) (int, error) {
-	n, err := r.ReadAt(b, int64(r.offset))
-	r.offset += n
+	n, err := r.ReadAt(b, r.offset)
+	r.offset += int64(n)
 	if n > 0 && err == io.EOF {
 		err = nil
 	}
@@ -49,13 +49,13 @@ func (r *rc) Read(b []byte) (int, error) {
 func (r *rc) Seek(offset int64, whence int) (int64, error) {
 	switch whence {
 	case io.SeekStart:
-		r.offset = int(offset)
+		r.offset = offset
 	case io.SeekCurrent:
-		r.offset += int(offset)
+		r.offset += offset
 	case io.SeekEnd:
-		r.offset = int(r.Size()) - int(offset)
+		r.offset = r.Size() - offset
 	}
-	return int64(r.offset), nil
+	return r.offset, nil
 }
 
 func CopyChain(ctx context.Context, ingester content.Ingester, provider content.Provider, desc ocispec.Descriptor) error {
