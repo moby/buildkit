@@ -122,8 +122,7 @@ type streamEvent struct {
 }
 
 const (
-	closeEvent streamEventType = iota
-	receiveEndEvent
+	receiveEndEvent streamEventType = iota
 	errorEvent
 )
 
@@ -188,19 +187,12 @@ func (w *clientStream) CloseSend() error {
 
 	if err != nil {
 		w.sendStreamEvent(errorEvent, err)
-	} else {
-		w.sendStreamEvent(closeEvent, nil)
 	}
 
 	return err
 }
 
-const (
-	clientClosedState byte = 1 << iota
-	receiveEndedState
-)
-
-func wrapClientStream(s grpc.ClientStream, desc *grpc.StreamDesc) *clientStream {
+func wrapClientStream(ctx context.Context, s grpc.ClientStream, desc *grpc.StreamDesc) *clientStream {
 	events := make(chan streamEvent)
 	eventsDone := make(chan struct{})
 	finished := make(chan error)
@@ -208,23 +200,20 @@ func wrapClientStream(s grpc.ClientStream, desc *grpc.StreamDesc) *clientStream 
 	go func() {
 		defer close(eventsDone)
 
-		// Both streams have to be closed
-		state := byte(0)
-
-		for event := range events {
-			switch event.Type {
-			case closeEvent:
-				state |= clientClosedState
-			case receiveEndEvent:
-				state |= receiveEndedState
-			case errorEvent:
-				finished <- event.Err
+		for {
+			select {
+			case <-ctx.Done():
+				finished <- ctx.Err()
 				return
-			}
-
-			if state == clientClosedState|receiveEndedState {
-				finished <- nil
-				return
+			case event := <-events:
+				switch event.Type {
+				case receiveEndEvent:
+					finished <- nil
+					return
+				case errorEvent:
+					finished <- event.Err
+					return
+				}
 			}
 		}
 	}()
@@ -284,7 +273,7 @@ func StreamClientInterceptor(opts ...Option) grpc.StreamClientInterceptor {
 			span.End()
 			return s, err
 		}
-		stream := wrapClientStream(s, desc)
+		stream := wrapClientStream(ctx, s, desc)
 
 		go func() {
 			err := <-stream.finished
