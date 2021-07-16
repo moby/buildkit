@@ -19,7 +19,7 @@ set -eu
 # * addr
 # * log
 tmp=$(mktemp -d /tmp/buildctl-daemonless.XXXXXX)
-trap "kill \$(cat $tmp/pid); rm -rf $tmp" EXIT
+trap "kill \$(cat $tmp/pid); wait \$(cat $tmp/pid) || true; rm -rf $tmp" EXIT
 
 startBuildkitd() {
     addr=
@@ -57,3 +57,4 @@ waitForBuildkitd() {
 startBuildkitd
 waitForBuildkitd
 $BUILDCTL --addr=$(cat $tmp/addr) "$@"
+
