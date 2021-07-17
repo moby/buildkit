@@ -81,6 +81,7 @@ type OCIConfig struct {
 	// The profile should already be loaded (by a higher level system) before creating a worker.
 	ApparmorProfile string `toml:"apparmor-profile"`
 
+	// MaxParallelism is the maximum number of parallel build steps that can be run at the same time.
 	MaxParallelism int `toml:"max-parallelism"`
 }
 
