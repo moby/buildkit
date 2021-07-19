@@ -1,4 +1,4 @@
-# syntax = docker/dockerfile:1.2
+# syntax = docker/dockerfile:1.3
 
 ARG RUNC_VERSION=v1.0.0
 ARG CONTAINERD_VERSION=v1.5.3

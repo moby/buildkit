@@ -12,7 +12,7 @@ If you are using Docker v18.09 or later, BuildKit mode can be enabled by setting
 
 BuildKit supports loading frontends dynamically from container images. Images for Dockerfile frontends are available at [`docker/dockerfile`](https://hub.docker.com/r/docker/dockerfile/tags/) repository.
 
-To use the external frontend, the first line of your Dockerfile needs to be `# syntax=docker/dockerfile:1.2` pointing to the
+To use the external frontend, the first line of your Dockerfile needs to be `# syntax=docker/dockerfile:1.3` pointing to the
 specific image you want to use.
 
 BuildKit also ships with Dockerfile frontend builtin but it is recommended to use an external image to make sure that all
@@ -30,7 +30,7 @@ change in between releases on labs channel, the old versions are guaranteed to b
 To use this flag set Dockerfile version to at least `1.2`
 
 ```
-# syntax=docker/dockerfile:1.2
+# syntax=docker/dockerfile:1.3
 ```
 
 `RUN --mount` allows you to create mounts that process running as part of the build can access. This can be used to bind
@@ -73,7 +73,7 @@ it if more storage space is needed.
 #### Example: cache Go packages
 
 ```dockerfile
-# syntax = docker/dockerfile:1.2
+# syntax = docker/dockerfile:1.3
 FROM golang
 ...
 RUN --mount=type=cache,target=/root/.cache/go-build go build ...
@@ -82,7 +82,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build go build ...
 #### Example: cache apt packages
 
 ```dockerfile
-# syntax = docker/dockerfile:1.2
+# syntax = docker/dockerfile:1.3
 FROM ubuntu
 RUN rm -f /etc/apt/apt.conf.d/docker-clean; echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
 RUN --mount=type=cache,target=/var/cache/apt --mount=type=cache,target=/var/lib/apt \
@@ -115,7 +115,7 @@ This mount type allows the build container to access secure files such as privat
 #### Example: access to S3
 
 ```dockerfile
-# syntax = docker/dockerfile:1.2
+# syntax = docker/dockerfile:1.3
 FROM python:3
 RUN pip install awscli
 RUN --mount=type=secret,id=aws,target=/root/.aws/credentials aws s3 cp s3://... ...
@@ -147,7 +147,7 @@ This mount type allows the build container to access SSH keys via SSH agents, wi
 #### Example: access to Gitlab
 
 ```dockerfile
-# syntax = docker/dockerfile:1.2
+# syntax = docker/dockerfile:1.3
 FROM alpine
 RUN apk add --no-cache openssh-client
 RUN mkdir -p -m 0700 ~/.ssh && ssh-keyscan gitlab.com >> ~/.ssh/known_hosts
@@ -172,42 +172,10 @@ You can also specify a path to `*.pem` file on the host directly instead of `$SS
 However, pem files with passphrases are not supported.
 
 
-
-## Security context `RUN --security=insecure|sandbox`
-
-To use this flag, set Dockerfile version to `labs` channel.
-
-```
-# syntax=docker/dockerfile:1.2-labs
-```
-
-With `--security=insecure`, builder runs the command without sandbox in insecure mode,
-which allows to run flows requiring elevated privileges (e.g. containerd). This is equivalent
-to running `docker run --privileged`. In order to access this feature, entitlement
-`security.insecure` should be enabled when starting the buildkitd daemon
-(`--allow-insecure-entitlement security.insecure`) and for a build request
-(`--allow security.insecure`).
-
-Default sandbox mode can be activated via `--security=sandbox`, but that is no-op.
-
-#### Example: check entitlements
-
-```dockerfile
-# syntax = docker/dockerfile:1.2-labs
-FROM ubuntu
-RUN --security=insecure cat /proc/self/status | grep CapEff
-```
-
-```
-#84 0.093 CapEff:	0000003fffffffff
-```
-
 ## Network modes `RUN --network=none|host|default`
 
-To use this flag, set Dockerfile version to `labs` channel.
-
 ```
-# syntax=docker/dockerfile:1.2-labs
+# syntax=docker/dockerfile:1.3
 ```
 
 `RUN --network` allows control over which networking environment the command is run in.
@@ -229,7 +197,7 @@ which needs to be enabled when starting the buildkitd daemon
 #### Example: isolating external effects
 
 ```dockerfile
-# syntax = docker/dockerfile:1.2-labs
+# syntax = docker/dockerfile:1.3
 FROM python:3.6
 ADD mypackage.tgz wheels/
 RUN --network=none pip install --find-links wheels mypackage
@@ -239,13 +207,42 @@ RUN --network=none pip install --find-links wheels mypackage
 can be controlled by an earlier build stage.
 
 
-## Here-Documents
+## Security context `RUN --security=insecure|sandbox`
 
-To use this flag, set Dockerfile version to `labs` channel. Currently this feature is only available
-in `docker/dockerfile-upstream:master-labs` image.
+To use this flag, set Dockerfile version to `labs` channel.
 
 ```
-# syntax=docker/dockerfile-upstream:master-labs
+# syntax=docker/dockerfile:1.3-labs
+```
+
+With `--security=insecure`, builder runs the command without sandbox in insecure mode,
+which allows to run flows requiring elevated privileges (e.g. containerd). This is equivalent
+to running `docker run --privileged`. In order to access this feature, entitlement
+`security.insecure` should be enabled when starting the buildkitd daemon
+(`--allow-insecure-entitlement security.insecure`) and for a build request
+(`--allow security.insecure`).
+
+Default sandbox mode can be activated via `--security=sandbox`, but that is no-op.
+
+#### Example: check entitlements
+
+```dockerfile
+# syntax = docker/dockerfile:1.3-labs
+FROM ubuntu
+RUN --security=insecure cat /proc/self/status | grep CapEff
+```
+
+```
+#84 0.093 CapEff:	0000003fffffffff
+```
+
+## Here-Documents
+
+To use this flag, set Dockerfile version to `labs` channel. This feature is available
+since `docker/dockerfile:1.3.0-labs` release.
+
+```
+# syntax=docker/dockerfile:1.3-labs
 ```
 
 Here-documents allow redirection of subsequent Dockerfile lines to the input of `RUN` or `COPY` commands.
@@ -255,7 +252,7 @@ Dockerfile will consider the next lines until the line only containing a here-do
 #### Example: running a multi-line script
 
 ```dockerfile
-# syntax = docker/dockerfile-upstream:master-labs
+# syntax = docker/dockerfile:1.3-labs
 FROM debian
 RUN <<eot bash
   apt-get update
@@ -266,7 +263,7 @@ eot
 If the command only contains a here-document, its contents is evaluated with the default shell.
 
 ```dockerfile
-# syntax = docker/dockerfile-upstream:master-labs
+# syntax = docker/dockerfile:1.3-labs
 FROM debian
 RUN <<eot
   mkdir -p foo/bar
@@ -276,7 +273,7 @@ eot
 Alternatively, shebang header can be used to define an interpreter.
 
 ```dockerfile
-# syntax = docker/dockerfile-upstream:master-labs
+# syntax = docker/dockerfile:1.3-labs
 FROM python:3.6
 RUN <<eot
 #!/usr/bin/env python
@@ -287,7 +284,7 @@ eot
 More complex examples may use multiple here-documents.
 
 ```dockerfile
-# syntax = docker/dockerfile-upstream:master-labs
+# syntax = docker/dockerfile:1.3-labs
 FROM alpine
 RUN <<FILE1 cat > file1 && <<FILE2 cat > file2
 I am
@@ -304,7 +301,7 @@ In `COPY` commands source parameters can be replaced with here-doc indicators.
 Regular here-doc [variable expansion and tab stripping rules](https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_07_04) apply.
 
 ```dockerfile
-# syntax = docker/dockerfile-upstream:master-labs
+# syntax = docker/dockerfile:1.3-labs
 FROM alpine
 ARG FOO=bar
 COPY <<-eot /app/foo
@@ -313,7 +310,7 @@ eot
 ```
 
 ```dockerfile
-# syntax = docker/dockerfile-upstream:master-labs
+# syntax = docker/dockerfile:1.3-labs
 FROM alpine
 COPY <<-"eot" /app/script.sh
 	echo hello ${FOO}

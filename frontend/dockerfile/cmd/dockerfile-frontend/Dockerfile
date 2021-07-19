@@ -1,4 +1,4 @@
-# syntax = docker/dockerfile:1.1-experimental
+# syntax = docker/dockerfile:1.3
 
 # xx is a helper for cross-compilation
 FROM --platform=$BUILDPLATFORM tonistiigi/xx:golang@sha256:810dc54d5144f133a218e88e319184bf8b9ce01d37d46ddb37573e90decd9eef AS xx
