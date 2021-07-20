@@ -35,6 +35,23 @@ const (
 	HTTPSScheme       = "https"
 )
 
+// FIXME: Not sure about if it's the right package
+type BuildInfo struct {
+	Type  BuildInfoType `json:",omitempty"`
+	Ref   string        `json:",omitempty"`
+	Alias string        `json:",omitempty"`
+	Pin   string        `json:",omitempty"`
+}
+
+type BuildInfoType string
+
+const (
+	BuildInfoTypeImage BuildInfoType = DockerImageScheme
+	BuildInfoTypeGit                 = GitScheme
+	BuildInfoTypeHttp                = HTTPScheme
+	BuildInfoTypeHttps               = HTTPSScheme
+)
+
 type Identifier interface {
 	ID() string // until sources are in process this string comparison could be avoided
 }

@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types/strslice"
+	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/util/system"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 )
@@ -53,6 +54,9 @@ type Image struct {
 
 	// Variant defines platform variant. To be added to OCI.
 	Variant string `json:"variant,omitempty"`
+
+	// BuildInfo defines build dependencies
+	BuildInfo source.BuildInfo `json:"moby.buildkit.buildinfo.v0,omitempty"`
 }
 
 func clone(src Image) Image {
@@ -61,6 +65,7 @@ func clone(src Image) Image {
 	img.Config.Env = append([]string{}, src.Config.Env...)
 	img.Config.Cmd = append([]string{}, src.Config.Cmd...)
 	img.Config.Entrypoint = append([]string{}, src.Config.Entrypoint...)
+	img.BuildInfo = src.BuildInfo
 	return img
 }
 

@@ -24,6 +24,7 @@ import (
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"github.com/moby/buildkit/frontend/dockerfile/shell"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/suggest"
 	"github.com/moby/buildkit/util/system"
@@ -276,7 +277,6 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 							p := autoDetectPlatform(img, *platform, platformOpt.buildPlatforms)
 							platform = &p
 						}
-						d.image = img
 						if dgst != "" {
 							ref, err = reference.WithDigest(ref, dgst)
 							if err != nil {
@@ -294,6 +294,15 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 								}
 							}
 						}
+						if !isScratch {
+							img.BuildInfo = source.BuildInfo{
+								Type:  source.BuildInfoTypeImage,
+								Ref:   origName,
+								Alias: ref.String(),
+								Pin:   dgst.String(),
+							}
+						}
+						d.image = img
 					}
 					if isScratch {
 						d.state = llb.Scratch()
