@@ -403,7 +403,11 @@ func (sr *immutableRef) getCompressionBlob(ctx context.Context, compressionType 
 		if err != nil {
 			return content.Info{}, err
 		}
-		return cs.Info(ctx, dgst)
+		info, err := cs.Info(ctx, dgst)
+		if err != nil {
+			return content.Info{}, err
+		}
+		return info, nil
 	}
 	return content.Info{}, errdefs.ErrNotFound
 }

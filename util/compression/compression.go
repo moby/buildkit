@@ -40,6 +40,17 @@ func (ct Type) String() string {
 	}
 }
 
+func FromMediaType(mediaType string) Type {
+	switch toOCILayerType[mediaType] {
+	case ocispecs.MediaTypeImageLayer:
+		return Uncompressed
+	case ocispecs.MediaTypeImageLayerGzip:
+		return Gzip
+	default:
+		return UnknownCompression
+	}
+}
+
 // DetectLayerMediaType returns media type from existing blob data.
 func DetectLayerMediaType(ctx context.Context, cs content.Store, id digest.Digest, oci bool) (string, error) {
 	ra, err := cs.ReaderAt(ctx, ocispecs.Descriptor{Digest: id})
