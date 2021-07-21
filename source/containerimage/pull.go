@@ -83,6 +83,7 @@ func (is *Source) ResolveImageConfig(ctx context.Context, ref string, opt llb.Re
 	if err != nil {
 		return "", nil, err
 	}
+	key += rm.String()
 
 	res, err := is.g.Do(ctx, key, func(ctx context.Context) (interface{}, error) {
 		res := resolver.DefaultPool.GetResolver(is.RegistryHosts, ref, "pull", sm, g).WithImageStore(is.ImageStore, rm)
