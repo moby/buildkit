@@ -715,7 +715,7 @@ func (s *sharedOp) CacheMap(ctx context.Context, index int) (resp *cacheMapResp,
 	if err != nil {
 		return nil, err
 	}
-	res, err := s.g.Do(ctx, "cachemap", func(ctx context.Context) (ret interface{}, retErr error) {
+	res, err := s.g.Do(ctx, fmt.Sprintf("cachemap-%d", index), func(ctx context.Context) (ret interface{}, retErr error) {
 		if s.cacheRes != nil && s.cacheDone || index < len(s.cacheRes) {
 			return s.cacheRes, nil
 		}
