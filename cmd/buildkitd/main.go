@@ -66,7 +66,6 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 	tracev1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
-	v1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 )
@@ -805,5 +804,5 @@ func (t *traceCollector) Export(ctx context.Context, req *tracev1.ExportTraceSer
 	if err != nil {
 		return nil, err
 	}
-	return &v1.ExportTraceServiceResponse{}, nil
+	return &tracev1.ExportTraceServiceResponse{}, nil
 }
