@@ -55,14 +55,16 @@ type Config struct {
 }
 
 type BlobConfig struct {
-	ValidInterval   int64 `toml:"valid_interval"`
-	CheckAlways     bool  `toml:"check_always"`
-	ChunkSize       int64 `toml:"chunk_size"`
-	FetchTimeoutSec int64 `toml:"fetching_timeout_sec"`
+	ValidInterval        int64 `toml:"valid_interval"`
+	CheckAlways          bool  `toml:"check_always"`
+	ChunkSize            int64 `toml:"chunk_size"`
+	FetchTimeoutSec      int64 `toml:"fetching_timeout_sec"`
+	ForceSingleRangeMode bool  `toml:"force_single_range_mode"`
 }
 
 type DirectoryCacheConfig struct {
 	MaxLRUCacheEntry int  `toml:"max_lru_cache_entry"`
 	MaxCacheFds      int  `toml:"max_cache_fds"`
 	SyncAdd          bool `toml:"sync_add"`
+	Direct           bool `toml:"direct"`
 }

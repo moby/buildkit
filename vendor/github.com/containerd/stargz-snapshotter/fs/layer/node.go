@@ -33,9 +33,11 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"github.com/containerd/stargz-snapshotter/estargz"
+	commonmetrics "github.com/containerd/stargz-snapshotter/fs/metrics/common"
 	"github.com/containerd/stargz-snapshotter/fs/reader"
 	"github.com/containerd/stargz-snapshotter/fs/remote"
 	fusefs "github.com/hanwen/go-fuse/v2/fs"
@@ -62,19 +64,21 @@ func newNode(layerDgst digest.Digest, r reader.Reader, blob remote.Blob) (fusefs
 		return nil, fmt.Errorf("failed to get a TOCEntry of the root")
 	}
 	return &node{
-		r: r,
-		e: root,
-		s: newState(layerDgst, blob),
+		r:        r,
+		e:        root,
+		s:        newState(layerDgst, blob),
+		layerSha: layerDgst,
 	}, nil
 }
 
 // node is a filesystem inode abstraction.
 type node struct {
 	fusefs.Inode
-	r      reader.Reader
-	e      *estargz.TOCEntry
-	s      *state
-	opaque bool // true if this node is an overlayfs opaque directory
+	r        reader.Reader
+	e        *estargz.TOCEntry
+	s        *state
+	layerSha digest.Digest
+	opaque   bool // true if this node is an overlayfs opaque directory
 }
 
 var _ = (fusefs.InodeEmbedder)((*node)(nil))
@@ -82,6 +86,10 @@ var _ = (fusefs.InodeEmbedder)((*node)(nil))
 var _ = (fusefs.NodeReaddirer)((*node)(nil))
 
 func (n *node) Readdir(ctx context.Context) (fusefs.DirStream, syscall.Errno) {
+	// Measure how long node_readdir operation takes.
+	start := time.Now() // set start time
+	defer commonmetrics.MeasureLatency(commonmetrics.NodeReaddir, n.layerSha, start)
+
 	var ents []fuse.DirEntry
 	whiteouts := map[string]*estargz.TOCEntry{}
 	normalEnts := map[string]bool{}
@@ -168,10 +176,11 @@ func (n *node) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fu
 	}
 
 	return n.NewInode(ctx, &node{
-		r:      n.r,
-		e:      ce,
-		s:      n.s,
-		opaque: opaque,
+		r:        n.r,
+		e:        ce,
+		s:        n.s,
+		layerSha: n.layerSha,
+		opaque:   opaque,
 	}, entryToAttr(ce, &out.Attr)), 0
 }
 

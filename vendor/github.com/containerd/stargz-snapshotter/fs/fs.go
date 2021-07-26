@@ -51,7 +51,8 @@ import (
 	"github.com/containerd/stargz-snapshotter/estargz"
 	"github.com/containerd/stargz-snapshotter/fs/config"
 	"github.com/containerd/stargz-snapshotter/fs/layer"
-	fsmetrics "github.com/containerd/stargz-snapshotter/fs/metrics"
+	commonmetrics "github.com/containerd/stargz-snapshotter/fs/metrics/common"
+	layermetrics "github.com/containerd/stargz-snapshotter/fs/metrics/layer"
 	"github.com/containerd/stargz-snapshotter/fs/source"
 	"github.com/containerd/stargz-snapshotter/snapshot"
 	"github.com/containerd/stargz-snapshotter/task"
@@ -104,10 +105,11 @@ func NewFilesystem(root string, cfg config.Config, opts ...Option) (_ snapshot.F
 	var ns *metrics.Namespace
 	if !cfg.NoPrometheus {
 		ns = metrics.NewNamespace("stargz", "fs", nil)
+		commonmetrics.Register() // Register common metrics. This will happen only once.
 	}
-	c := fsmetrics.NewLayerMetrics(ns)
+	c := layermetrics.NewLayerMetrics(ns)
 	if ns != nil {
-		metrics.Register(ns)
+		metrics.Register(ns) // Register layer metrics.
 	}
 
 	return &filesystem{
@@ -137,10 +139,13 @@ type filesystem struct {
 	allowNoVerification   bool
 	disableVerification   bool
 	getSources            source.GetSources
-	metricsController     *fsmetrics.Controller
+	metricsController     *layermetrics.Controller
 }
 
 func (fs *filesystem) Mount(ctx context.Context, mountpoint string, labels map[string]string) (retErr error) {
+	// Setting the start time to measure the Mount operation duration.
+	start := time.Now()
+
 	// This is a prioritized task and all background tasks will be stopped
 	// execution so this can avoid being disturbed for NW traffic by background
 	// tasks.
@@ -239,6 +244,10 @@ func (fs *filesystem) Mount(ctx context.Context, mountpoint string, labels map[s
 		log.G(ctx).WithError(err).Warnf("Failed to get root node")
 		return errors.Wrapf(err, "failed to get root node")
 	}
+
+	// Measuring duration of Mount operation for resolved layer.
+	digest := l.Info().Digest // get layer sha
+	defer commonmetrics.MeasureLatency(commonmetrics.Mount, digest, start)
 
 	// Register the mountpoint layer
 	fs.layerMu.Lock()

@@ -43,7 +43,9 @@ import (
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/stargz-snapshotter/cache"
 	"github.com/containerd/stargz-snapshotter/fs/config"
+	commonmetrics "github.com/containerd/stargz-snapshotter/fs/metrics/common"
 	"github.com/containerd/stargz-snapshotter/fs/source"
+	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
@@ -81,6 +83,10 @@ func (r *Resolver) Resolve(ctx context.Context, hosts source.RegistryHosts, refs
 	fetcher, size, err := newFetcher(ctx, hosts, refspec, desc)
 	if err != nil {
 		return nil, err
+	}
+
+	if r.blobConfig.ForceSingleRangeMode {
+		fetcher.singleRangeMode()
 	}
 	return &blob{
 		fetcher:       fetcher,
@@ -156,6 +162,7 @@ func newFetcher(ctx context.Context, hosts source.RegistryHosts, refspec referen
 			url:     url,
 			tr:      tr,
 			blobURL: blobURL,
+			digest:  digest,
 			timeout: timeout,
 		}, size, nil
 	}
@@ -295,6 +302,7 @@ type fetcher struct {
 	urlMu         sync.Mutex
 	tr            http.RoundTripper
 	blobURL       string
+	digest        digest.Digest
 	singleRange   bool
 	singleRangeMu sync.Mutex
 	timeout       time.Duration
@@ -351,7 +359,11 @@ func (f *fetcher) fetch(ctx context.Context, rs []region, retry bool, opts *opti
 	req.Header.Add("Range", fmt.Sprintf("bytes=%s", ranges[:len(ranges)-1]))
 	req.Header.Add("Accept-Encoding", "identity")
 	req.Close = false
+
+	// Recording the roundtrip latency for remote registry GET operation.
+	start := time.Now()
 	res, err := tr.RoundTrip(req) // NOT DefaultClient; don't want redirects
+	commonmetrics.MeasureLatency(commonmetrics.RemoteRegistryGet, f.digest, start)
 	if err != nil {
 		return nil, err
 	}

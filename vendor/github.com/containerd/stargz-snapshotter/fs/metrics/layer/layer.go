@@ -14,7 +14,7 @@
    limitations under the License.
 */
 
-package metrics
+package layermetrics
 
 import (
 	"github.com/containerd/stargz-snapshotter/fs/layer"

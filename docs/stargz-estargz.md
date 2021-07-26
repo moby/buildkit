@@ -1,6 +1,6 @@
 # Lazy pulling stargz/eStargz base images (Experimental)
 
-This document describes the configuration that allows buildkit to lazily pull [stargz](https://github.com/google/crfs/blob/master/README.md#introducing-stargz)/[eStargz](https://github.com/containerd/stargz-snapshotter/blob/master/docs/stargz-estargz.md)-formatted images from registries.
+This document describes the configuration that allows buildkit to lazily pull [stargz](https://github.com/google/crfs/blob/master/README.md#introducing-stargz)/[eStargz](https://github.com/containerd/stargz-snapshotter/blob/master/docs/stargz-estargz.md)-formatted images from registries and how to obtain stargz/eStargz images.
 
 By default, buildkit doesn't pull images until they are strictly needed.
 For example, during a build, buildkit doesn't pull the base image until it runs commands on it (e.g. `RUN` Dockerfile instruction) or until it exports stages as tarballs, etc.
@@ -14,7 +14,7 @@ For more details about stargz/eStargz image format, please see also [Stargz and 
 
 ## Known limitations
 
-- For containerd worker, stargz snapshotter (`containerd-stargz-grpc`) needs to be run and configured separately.
+- If you are using containerd worker, stargz snapshotter (`containerd-stargz-grpc`) needs to be run and configured separately.
 - Rootless execution is currently unsupported.
 
 ## Enabling lazy pulling of stargz/eStargz images
@@ -146,13 +146,34 @@ eStargz is an extended format of stargz by [Stargz Snapshotter](https://github.c
 It comes with [additional features](https://github.com/containerd/stargz-snapshotter/blob/master/docs/stargz-estargz.md#estargz-archive-format) including chunk verification and prefetch for avoiding the overhead of on-demand fetching.
 For more details about lazy pull with stargz/eStargz images, please refer to the docs on these repositories.
 
-### Getting stargz/eStargz formatted images
+## Creating stargz/eStargz images
+
+### Building eStargz image with BuildKit
+
+BuildKit supports creating eStargz as one of the compression types.
+As shown in the following, `compression=estargz` creates an eStargz-formatted image.
+Specifying `oci-mediatypes=true` option is highly recommended for enabling [layer verification](https://github.com/containerd/stargz-snapshotter/blob/v0.6.4/docs/verification.md) of eStargz.
+
+```
+buildctl build ... \
+  --output type=image,name=docker.io/username/image,push=true,compression=estargz,oci-mediatypes=true
+```
+
+:information_source: Building eStargz is only supported by OCI worker.
+
+:information_source: `compression` option isn't applied to layers that already exist in the cache (including the base images). Thus if you create eStargz image using non-eStargz base images, you need to specify `force-compression=true` option as well for applying the `compression` config to all existing layers.
+
+:information_source: BuildKit doesn't support [prefetch-based optimization of eStargz](https://github.com/containerd/stargz-snapshotter/blob/v0.6.4/docs/stargz-estargz.md#example-use-case-of-prioritized-files-workload-based-image-optimization-in-stargz-snapshotter). To enable full feature of eStargz, you can also use other tools as described in the next section.
+
+### Other methods to obtain stargz/eStargz images
 
 Pre-converted stargz/eStargz images are available at [`ghcr.io/stargz-containers` repository](https://github.com/containerd/stargz-snapshotter/blob/master/docs/pre-converted-images.md) (mainly for testing purpose).
 
-You can also create any stargz/eStargz image by converting an OCI/Docker image into stargz/eStargz-formatted one using one of the following tools.
+You can also create any stargz/eStargz image using the variety of tools including the following.
 
-- [`ctr-remote`](https://github.com/containerd/stargz-snapshotter#creating-stargz-images-and-further-optimization) developed in stargz snapshotter project.
-- [`stargzify`](https://github.com/google/crfs/tree/master/stargz/stargzify) developed in CRFS project (creating eStargz image is unsupported).
+- [`nerdctl`](https://github.com/containerd/nerdctl/blob/v0.10.0/docs/stargz.md#building-stargz-images-using-nerdctl-build): Docker-compatible CLI for containerd and BuildKit. This supports `convert` subcommand to convert an OCI/Docker image into eStargz.
+- [`ctr-remote`](https://github.com/containerd/stargz-snapshotter/blob/v0.6.4/docs/ctr-remote.md): containerd CLI developed in stargz snapshotter project. This supports converting an OCI/Docker image into eStargz and [optimizing](https://github.com/containerd/stargz-snapshotter/blob/v0.6.4/docs/stargz-estargz.md#example-use-case-of-prioritized-files-workload-based-image-optimization-in-stargz-snapshotter) it.
+- [`stargzify`](https://github.com/google/crfs/tree/master/stargz/stargzify): CLI tool to convert an OCI/Docker image to stargz. This is developed in CRFS project. Creating eStargz is unsupported.
 
-For more details about these tools, please refer to the docs in these repositories.
+There also other tools including Kaniko, ko, builpacks.io that support eStargz creation.
+For more details, please refer to [`Creating eStargz images with tools in the community` section in the introductory post](https://medium.com/nttlabs/lazy-pulling-estargz-ef35812d73de).

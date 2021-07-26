@@ -17,6 +17,7 @@ import (
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/snapshots"
+	"github.com/containerd/stargz-snapshotter/estargz"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/session"
@@ -221,6 +222,9 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 				if labels == nil {
 					labels = make(map[string]string)
 				}
+				for _, k := range []string{estargz.TOCJSONDigestAnnotation, estargz.StoreUncompressedSizeAnnotation} {
+					labels[k] = desc.Annotations[k]
+				}
 				labels["containerd.io/snapshot/remote/stargz.reference"] = p.manifest.Ref
 				labels["containerd.io/snapshot/remote/stargz.digest"] = desc.Digest.String()
 				var (
@@ -242,6 +246,7 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 					Provider:       p.manifest.Provider,
 					Progress:       progressController,
 					SnapshotLabels: labels,
+					Annotations:    desc.Annotations,
 					Ref:            p.manifest.Ref,
 				}
 			}

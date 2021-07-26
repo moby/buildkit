@@ -27,6 +27,7 @@ import (
 	"github.com/opencontainers/image-spec/identity"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -69,6 +70,7 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 		layerCompression: compression.Default,
 	}
 
+	var esgz bool
 	for k, v := range opt {
 		switch k {
 		case keyImageName:
@@ -139,6 +141,9 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 			switch v {
 			case "gzip":
 				i.layerCompression = compression.Gzip
+			case "estargz":
+				i.layerCompression = compression.EStargz
+				esgz = true
 			case "uncompressed":
 				i.layerCompression = compression.Uncompressed
 			default:
@@ -160,6 +165,10 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 			}
 			i.meta[k] = []byte(v)
 		}
+	}
+	if esgz && !i.ociTypes {
+		logrus.Warn("forcibly turning on oci-mediatype mode for estargz")
+		i.ociTypes = true
 	}
 	return i, nil
 }
