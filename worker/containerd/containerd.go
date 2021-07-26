@@ -20,7 +20,7 @@ import (
 	"github.com/moby/buildkit/util/winlayers"
 	"github.com/moby/buildkit/worker"
 	"github.com/moby/buildkit/worker/base"
-	specs "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/semaphore"
 )
@@ -84,10 +84,10 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 		return base.WorkerOpt{}, errors.New("failed to find any runtime plugins")
 	}
 
-	var platforms []specs.Platform
+	var platforms []ocispecs.Platform
 	for _, plugin := range resp.Plugins {
 		for _, p := range plugin.Platforms {
-			platforms = append(platforms, specs.Platform{
+			platforms = append(platforms, ocispecs.Platform{
 				OS:           p.OS,
 				Architecture: p.Architecture,
 				Variant:      p.Variant,

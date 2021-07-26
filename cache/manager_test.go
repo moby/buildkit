@@ -26,7 +26,7 @@ import (
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/util/leaseutil"
 	digest "github.com/opencontainers/go-digest"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	bolt "go.etcd.io/bbolt"
@@ -613,7 +613,7 @@ func TestSetBlob(t *testing.T) {
 	err = content.WriteBlob(ctx, co.cs, "ref1", bytes.NewBuffer(b), desc)
 	require.NoError(t, err)
 
-	err = snap.(*immutableRef).setBlob(ctx, ocispec.Descriptor{
+	err = snap.(*immutableRef).setBlob(ctx, ocispecs.Descriptor{
 		Digest: digest.FromBytes([]byte("foobar")),
 		Annotations: map[string]string{
 			"containerd.io/uncompressed": digest.FromBytes([]byte("foobar2")).String(),
@@ -720,7 +720,7 @@ func TestSetBlob(t *testing.T) {
 	require.Equal(t, string(info6.ChainID), info6.SnapshotID)
 	require.Equal(t, info6.Extracted, false)
 
-	_, err = cm.GetByBlob(ctx, ocispec.Descriptor{
+	_, err = cm.GetByBlob(ctx, ocispecs.Descriptor{
 		Digest: digest.FromBytes([]byte("notexist")),
 		Annotations: map[string]string{
 			"containerd.io/uncompressed": digest.FromBytes([]byte("notexist")).String(),
@@ -1052,7 +1052,7 @@ func (b bufferCloser) Close() error {
 	return nil
 }
 
-func mapToBlob(m map[string]string, compress bool) ([]byte, ocispec.Descriptor, error) {
+func mapToBlob(m map[string]string, compress bool) ([]byte, ocispecs.Descriptor, error) {
 	buf := bytes.NewBuffer(nil)
 	sha := digest.SHA256.Digester()
 
@@ -1067,24 +1067,24 @@ func mapToBlob(m map[string]string, compress bool) ([]byte, ocispec.Descriptor, 
 			Name: k,
 			Size: int64(len(v)),
 		}); err != nil {
-			return nil, ocispec.Descriptor{}, err
+			return nil, ocispecs.Descriptor{}, err
 		}
 		if _, err := tw.Write([]byte(v)); err != nil {
-			return nil, ocispec.Descriptor{}, err
+			return nil, ocispecs.Descriptor{}, err
 		}
 	}
 	if err := tw.Close(); err != nil {
-		return nil, ocispec.Descriptor{}, err
+		return nil, ocispecs.Descriptor{}, err
 	}
 	if err := dest.Close(); err != nil {
-		return nil, ocispec.Descriptor{}, err
+		return nil, ocispecs.Descriptor{}, err
 	}
 
-	mediaType := ocispec.MediaTypeImageLayer
+	mediaType := ocispecs.MediaTypeImageLayer
 	if compress {
-		mediaType = ocispec.MediaTypeImageLayerGzip
+		mediaType = ocispecs.MediaTypeImageLayerGzip
 	}
-	return buf.Bytes(), ocispec.Descriptor{
+	return buf.Bytes(), ocispecs.Descriptor{
 		Digest:    digest.FromBytes(buf.Bytes()),
 		MediaType: mediaType,
 		Size:      int64(buf.Len()),

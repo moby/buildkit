@@ -12,7 +12,7 @@ import (
 	"github.com/moby/buildkit/util/winlayers"
 	digest "github.com/opencontainers/go-digest"
 	imagespecidentity "github.com/opencontainers/image-spec/identity"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -46,7 +46,7 @@ func (sr *immutableRef) computeBlobChain(ctx context.Context, createIfNeeded boo
 func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool, compressionType compression.Type, forceCompression bool, s session.Group) error {
 	baseCtx := ctx
 	eg, ctx := errgroup.WithContext(ctx)
-	var currentDescr ocispec.Descriptor
+	var currentDescr ocispecs.Descriptor
 	if sr.parent != nil {
 		eg.Go(func() error {
 			return computeBlobChain(ctx, sr.parent, createIfNeeded, compressionType, forceCompression, s)
@@ -73,14 +73,14 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 			var mediaType string
 			switch compressionType {
 			case compression.Uncompressed:
-				mediaType = ocispec.MediaTypeImageLayer
+				mediaType = ocispecs.MediaTypeImageLayer
 			case compression.Gzip:
-				mediaType = ocispec.MediaTypeImageLayerGzip
+				mediaType = ocispecs.MediaTypeImageLayerGzip
 			default:
 				return nil, errors.Errorf("unknown layer compression type: %q", compressionType)
 			}
 
-			var descr ocispec.Descriptor
+			var descr ocispecs.Descriptor
 			var err error
 
 			if descr.Digest == "" {
@@ -151,7 +151,7 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 		}
 
 		if dp != nil {
-			currentDescr = dp.(ocispec.Descriptor)
+			currentDescr = dp.(ocispecs.Descriptor)
 		}
 		return nil
 	})
@@ -170,7 +170,7 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 // setBlob associates a blob with the cache record.
 // A lease must be held for the blob when calling this function
 // Caller should call Info() for knowing what current values are actually set
-func (sr *immutableRef) setBlob(ctx context.Context, desc ocispec.Descriptor) error {
+func (sr *immutableRef) setBlob(ctx context.Context, desc ocispecs.Descriptor) error {
 	if _, ok := leases.FromContext(ctx); !ok {
 		return errors.Errorf("missing lease requirement for setBlob")
 	}
@@ -242,7 +242,7 @@ func isTypeWindows(sr *immutableRef) bool {
 }
 
 // ensureCompression ensures the specified ref has the blob of the specified compression Type.
-func ensureCompression(ctx context.Context, ref *immutableRef, desc ocispec.Descriptor, compressionType compression.Type, s session.Group) error {
+func ensureCompression(ctx context.Context, ref *immutableRef, desc ocispecs.Descriptor, compressionType compression.Type, s session.Group) error {
 	// Resolve converters
 	layerConvertFunc, _, err := getConverters(desc, compressionType)
 	if err != nil {

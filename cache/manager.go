@@ -21,7 +21,7 @@ import (
 	"github.com/moby/buildkit/util/flightcontrol"
 	digest "github.com/opencontainers/go-digest"
 	imagespecidentity "github.com/opencontainers/image-spec/identity"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
@@ -45,7 +45,7 @@ type ManagerOpt struct {
 }
 
 type Accessor interface {
-	GetByBlob(ctx context.Context, desc ocispec.Descriptor, parent ImmutableRef, opts ...RefOption) (ImmutableRef, error)
+	GetByBlob(ctx context.Context, desc ocispecs.Descriptor, parent ImmutableRef, opts ...RefOption) (ImmutableRef, error)
 	Get(ctx context.Context, id string, opts ...RefOption) (ImmutableRef, error)
 
 	New(ctx context.Context, parent ImmutableRef, s session.Group, opts ...RefOption) (MutableRef, error)
@@ -97,7 +97,7 @@ func NewManager(opt ManagerOpt) (Manager, error) {
 	return cm, nil
 }
 
-func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispec.Descriptor, parent ImmutableRef, opts ...RefOption) (ir ImmutableRef, rerr error) {
+func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor, parent ImmutableRef, opts ...RefOption) (ir ImmutableRef, rerr error) {
 	diffID, err := diffIDFromDescriptor(desc)
 	if err != nil {
 		return nil, err
@@ -1197,7 +1197,7 @@ func sortDeleteRecords(toDelete []*deleteRecord) {
 	})
 }
 
-func diffIDFromDescriptor(desc ocispec.Descriptor) (digest.Digest, error) {
+func diffIDFromDescriptor(desc ocispecs.Descriptor) (digest.Digest, error) {
 	diffIDStr, ok := desc.Annotations["containerd.io/uncompressed"]
 	if !ok {
 		return "", errors.Errorf("missing uncompressed annotation for %s", desc.Digest)

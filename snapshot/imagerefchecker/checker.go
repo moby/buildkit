@@ -11,7 +11,7 @@ import (
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	digest "github.com/opencontainers/go-digest"
-	specs "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
 
@@ -63,7 +63,7 @@ func (c *Checker) init() {
 	var mu sync.Mutex
 
 	for _, img := range imgs {
-		if err := images.Dispatch(context.TODO(), images.Handlers(layersHandler(c.opt.ContentStore, func(layers []specs.Descriptor) {
+		if err := images.Dispatch(context.TODO(), images.Handlers(layersHandler(c.opt.ContentStore, func(layers []ocispecs.Descriptor) {
 			mu.Lock()
 			c.registerLayers(layers)
 			mu.Unlock()
@@ -73,13 +73,13 @@ func (c *Checker) init() {
 	}
 }
 
-func (c *Checker) registerLayers(l []specs.Descriptor) {
+func (c *Checker) registerLayers(l []ocispecs.Descriptor) {
 	if k := layerKey(toDigests(l)); k != "" {
 		c.images[k] = struct{}{}
 	}
 }
 
-func toDigests(layers []specs.Descriptor) []digest.Digest {
+func toDigests(layers []ocispecs.Descriptor) []digest.Digest {
 	digests := make([]digest.Digest, len(layers))
 	for i, l := range layers {
 		digests[i] = l.Digest
@@ -97,29 +97,29 @@ func layerKey(layers []digest.Digest) string {
 	return b.String()
 }
 
-func layersHandler(provider content.Provider, f func([]specs.Descriptor)) images.HandlerFunc {
-	return func(ctx context.Context, desc specs.Descriptor) ([]specs.Descriptor, error) {
+func layersHandler(provider content.Provider, f func([]ocispecs.Descriptor)) images.HandlerFunc {
+	return func(ctx context.Context, desc ocispecs.Descriptor) ([]ocispecs.Descriptor, error) {
 		switch desc.MediaType {
-		case images.MediaTypeDockerSchema2Manifest, specs.MediaTypeImageManifest:
+		case images.MediaTypeDockerSchema2Manifest, ocispecs.MediaTypeImageManifest:
 			p, err := content.ReadBlob(ctx, provider, desc)
 			if err != nil {
 				return nil, nil
 			}
 
-			var manifest specs.Manifest
+			var manifest ocispecs.Manifest
 			if err := json.Unmarshal(p, &manifest); err != nil {
 				return nil, err
 			}
 
 			f(manifest.Layers)
 			return nil, nil
-		case images.MediaTypeDockerSchema2ManifestList, specs.MediaTypeImageIndex:
+		case images.MediaTypeDockerSchema2ManifestList, ocispecs.MediaTypeImageIndex:
 			p, err := content.ReadBlob(ctx, provider, desc)
 			if err != nil {
 				return nil, nil
 			}
 
-			var index specs.Index
+			var index ocispecs.Index
 			if err := json.Unmarshal(p, &index); err != nil {
 				return nil, err
 			}

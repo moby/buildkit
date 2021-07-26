@@ -28,7 +28,7 @@ import (
 	"github.com/moby/buildkit/util/system"
 	digest "github.com/opencontainers/go-digest"
 	specs "github.com/opencontainers/image-spec/specs-go"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -48,7 +48,7 @@ type ImageWriter struct {
 	opt WriterOpt
 }
 
-func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool, compressionType compression.Type, forceCompression bool, sessionID string) (*ocispec.Descriptor, error) {
+func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool, compressionType compression.Type, forceCompression bool, sessionID string) (*ocispecs.Descriptor, error) {
 	platformsBytes, ok := inp.Metadata[exptypes.ExporterPlatformsKey]
 
 	if len(inp.Refs) > 0 && !ok {
@@ -97,10 +97,10 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 		// excluded from go types.
 		MediaType string `json:"mediaType,omitempty"`
 
-		ocispec.Index
+		ocispecs.Index
 	}{
-		MediaType: ocispec.MediaTypeImageIndex,
-		Index: ocispec.Index{
+		MediaType: ocispecs.MediaTypeImageIndex,
+		Index: ocispecs.Index{
 			Versioned: specs.Versioned{
 				SchemaVersion: 2,
 			},
@@ -137,7 +137,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 	}
 
 	idxDigest := digest.FromBytes(idxBytes)
-	idxDesc := ocispec.Descriptor{
+	idxDesc := ocispecs.Descriptor{
 		Digest:    idxDigest,
 		Size:      int64(len(idxBytes)),
 		MediaType: idx.MediaType,
@@ -184,7 +184,7 @@ func (ic *ImageWriter) exportLayers(ctx context.Context, compressionType compres
 	return out, err
 }
 
-func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache.ImmutableRef, config []byte, remote *solver.Remote, oci bool, inlineCache []byte) (*ocispec.Descriptor, *ocispec.Descriptor, error) {
+func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache.ImmutableRef, config []byte, remote *solver.Remote, oci bool, inlineCache []byte) (*ocispecs.Descriptor, *ocispecs.Descriptor, error) {
 	if len(config) == 0 {
 		var err error
 		config, err = emptyImageConfig()
@@ -213,8 +213,8 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache
 
 	var (
 		configDigest = digest.FromBytes(config)
-		manifestType = ocispec.MediaTypeImageManifest
-		configType   = ocispec.MediaTypeImageConfig
+		manifestType = ocispecs.MediaTypeImageManifest
+		configType   = ocispecs.MediaTypeImageConfig
 	)
 
 	// Use docker media types for older Docker versions and registries
@@ -228,14 +228,14 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache
 		// excluded from go types.
 		MediaType string `json:"mediaType,omitempty"`
 
-		ocispec.Manifest
+		ocispecs.Manifest
 	}{
 		MediaType: manifestType,
-		Manifest: ocispec.Manifest{
+		Manifest: ocispecs.Manifest{
 			Versioned: specs.Versioned{
 				SchemaVersion: 2,
 			},
-			Config: ocispec.Descriptor{
+			Config: ocispecs.Descriptor{
 				Digest:    configDigest,
 				Size:      int64(len(config)),
 				MediaType: configType,
@@ -270,7 +270,7 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache
 	}
 
 	mfstDigest := digest.FromBytes(mfstJSON)
-	mfstDesc := ocispec.Descriptor{
+	mfstDesc := ocispecs.Descriptor{
 		Digest: mfstDigest,
 		Size:   int64(len(mfstJSON)),
 	}
@@ -281,7 +281,7 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache
 	}
 	mfstDone(nil)
 
-	configDesc := ocispec.Descriptor{
+	configDesc := ocispecs.Descriptor{
 		Digest:    configDigest,
 		Size:      int64(len(config)),
 		MediaType: configType,
@@ -293,7 +293,7 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache
 	}
 	configDone(nil)
 
-	return &ocispec.Descriptor{
+	return &ocispecs.Descriptor{
 		Digest:    mfstDigest,
 		Size:      int64(len(mfstJSON)),
 		MediaType: manifestType,
@@ -316,14 +316,14 @@ func emptyImageConfig() ([]byte, error) {
 	pl := platforms.Normalize(platforms.DefaultSpec())
 
 	type image struct {
-		ocispec.Image
+		ocispecs.Image
 
 		// Variant defines platform variant. To be added to OCI.
 		Variant string `json:"variant,omitempty"`
 	}
 
 	img := image{
-		Image: ocispec.Image{
+		Image: ocispecs.Image{
 			Architecture: pl.Architecture,
 			OS:           pl.OS,
 		},
@@ -336,9 +336,9 @@ func emptyImageConfig() ([]byte, error) {
 	return dt, errors.Wrap(err, "failed to create empty image config")
 }
 
-func parseHistoryFromConfig(dt []byte) ([]ocispec.History, error) {
+func parseHistoryFromConfig(dt []byte) ([]ocispecs.History, error) {
 	var config struct {
-		History []ocispec.History
+		History []ocispecs.History
 	}
 	if err := json.Unmarshal(dt, &config); err != nil {
 		return nil, errors.Wrap(err, "failed to unmarshal history from config")
@@ -346,13 +346,13 @@ func parseHistoryFromConfig(dt []byte) ([]ocispec.History, error) {
 	return config.History, nil
 }
 
-func patchImageConfig(dt []byte, descs []ocispec.Descriptor, history []ocispec.History, cache []byte) ([]byte, error) {
+func patchImageConfig(dt []byte, descs []ocispecs.Descriptor, history []ocispecs.History, cache []byte) ([]byte, error) {
 	m := map[string]json.RawMessage{}
 	if err := json.Unmarshal(dt, &m); err != nil {
 		return nil, errors.Wrap(err, "failed to parse image config for patch")
 	}
 
-	var rootFS ocispec.RootFS
+	var rootFS ocispecs.RootFS
 	rootFS.Type = "layers"
 	for _, desc := range descs {
 		rootFS.DiffIDs = append(rootFS.DiffIDs, digest.Digest(desc.Annotations["containerd.io/uncompressed"]))
@@ -395,7 +395,7 @@ func patchImageConfig(dt []byte, descs []ocispec.Descriptor, history []ocispec.H
 	return dt, errors.Wrap(err, "failed to marshal config after patch")
 }
 
-func normalizeLayersAndHistory(ctx context.Context, remote *solver.Remote, history []ocispec.History, ref cache.ImmutableRef, oci bool) (*solver.Remote, []ocispec.History) {
+func normalizeLayersAndHistory(ctx context.Context, remote *solver.Remote, history []ocispecs.History, ref cache.ImmutableRef, oci bool) (*solver.Remote, []ocispecs.History) {
 	refMeta := getRefMetadata(ref, len(remote.Descriptors))
 
 	var historyLayers int
@@ -409,7 +409,7 @@ func normalizeLayersAndHistory(ctx context.Context, remote *solver.Remote, histo
 		// this case shouldn't happen but if it does force set history layers empty
 		// from the bottom
 		bklog.G(ctx).Warn("invalid image config with unaccounted layers")
-		historyCopy := make([]ocispec.History, 0, len(history))
+		historyCopy := make([]ocispecs.History, 0, len(history))
 		var l int
 		for _, h := range history {
 			if l >= len(remote.Descriptors) {
@@ -426,7 +426,7 @@ func normalizeLayersAndHistory(ctx context.Context, remote *solver.Remote, histo
 	if len(remote.Descriptors) > historyLayers {
 		// some history items are missing. add them based on the ref metadata
 		for _, md := range refMeta[historyLayers:] {
-			history = append(history, ocispec.History{
+			history = append(history, ocispecs.History{
 				Created:   md.createdAt,
 				CreatedBy: md.description,
 				Comment:   "buildkit.exporter.image.v0",

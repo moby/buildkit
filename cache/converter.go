@@ -14,12 +14,12 @@ import (
 	"github.com/containerd/containerd/labels"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/opencontainers/go-digest"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 // getConverters returns converter functions according to the specified compression type.
 // If no conversion is needed, this returns nil without error.
-func getConverters(desc ocispec.Descriptor, compressionType compression.Type) (converter.ConvertFunc, func(string) string, error) {
+func getConverters(desc ocispecs.Descriptor, compressionType compression.Type) (converter.ConvertFunc, func(string) string, error) {
 	switch compressionType {
 	case compression.Uncompressed:
 		if !images.IsLayerType(desc.MediaType) || uncompress.IsUncompressedType(desc.MediaType) {
@@ -38,7 +38,7 @@ func getConverters(desc ocispec.Descriptor, compressionType compression.Type) (c
 	}
 }
 
-func gzipLayerConvertFunc(ctx context.Context, cs content.Store, desc ocispec.Descriptor) (*ocispec.Descriptor, error) {
+func gzipLayerConvertFunc(ctx context.Context, cs content.Store, desc ocispecs.Descriptor) (*ocispecs.Descriptor, error) {
 	if !images.IsLayerType(desc.MediaType) || isGzipCompressedType(desc.MediaType) {
 		// No conversion. No need to return an error here.
 		return nil, nil
@@ -102,8 +102,8 @@ func isGzipCompressedType(mt string) bool {
 	case
 		images.MediaTypeDockerSchema2LayerGzip,
 		images.MediaTypeDockerSchema2LayerForeignGzip,
-		ocispec.MediaTypeImageLayerGzip,
-		ocispec.MediaTypeImageLayerNonDistributableGzip:
+		ocispecs.MediaTypeImageLayerGzip,
+		ocispecs.MediaTypeImageLayerNonDistributableGzip:
 		return true
 	default:
 		return false
@@ -116,10 +116,10 @@ func convertMediaTypeToUncompress(mt string) string {
 		return images.MediaTypeDockerSchema2Layer
 	case images.MediaTypeDockerSchema2LayerForeignGzip:
 		return images.MediaTypeDockerSchema2LayerForeign
-	case ocispec.MediaTypeImageLayerGzip:
-		return ocispec.MediaTypeImageLayer
-	case ocispec.MediaTypeImageLayerNonDistributableGzip:
-		return ocispec.MediaTypeImageLayerNonDistributable
+	case ocispecs.MediaTypeImageLayerGzip:
+		return ocispecs.MediaTypeImageLayer
+	case ocispecs.MediaTypeImageLayerNonDistributableGzip:
+		return ocispecs.MediaTypeImageLayerNonDistributable
 	default:
 		return mt
 	}

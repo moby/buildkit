@@ -25,7 +25,7 @@ import (
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
-	specs "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -90,8 +90,8 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 		defaultBuildPlatform = workers[0].Platforms[0]
 	}
 
-	buildPlatforms := []specs.Platform{defaultBuildPlatform}
-	targetPlatforms := []*specs.Platform{nil}
+	buildPlatforms := []ocispecs.Platform{defaultBuildPlatform}
+	targetPlatforms := []*ocispecs.Platform{nil}
 	if v := opts[keyTargetPlatform]; v != "" {
 		var err error
 		targetPlatforms, err = parsePlatforms(v)
@@ -394,7 +394,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 	eg, ctx = errgroup.WithContext(ctx)
 
 	for i, tp := range targetPlatforms {
-		func(i int, tp *specs.Platform) {
+		func(i int, tp *ocispecs.Platform) {
 			eg.Go(func() (err error) {
 				defer func() {
 					var el *parser.ErrorLocation
@@ -613,8 +613,8 @@ func isArchive(header []byte) bool {
 	return err == nil
 }
 
-func parsePlatforms(v string) ([]*specs.Platform, error) {
-	var pp []*specs.Platform
+func parsePlatforms(v string) ([]*ocispecs.Platform, error) {
+	var pp []*ocispecs.Platform
 	for _, v := range strings.Split(v, ",") {
 		p, err := platforms.Parse(v)
 		if err != nil {

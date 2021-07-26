@@ -21,7 +21,7 @@ import (
 	"github.com/moby/buildkit/util/network/netproviders"
 	"github.com/moby/buildkit/util/winlayers"
 	"github.com/moby/buildkit/worker/base"
-	specs "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	bolt "go.etcd.io/bbolt"
 	"golang.org/x/sync/semaphore"
 )
@@ -122,7 +122,7 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		Applier:         winlayers.NewFileSystemApplierWithWindows(c, apply.NewFileSystemApplier(c)),
 		Differ:          winlayers.NewWalkingDiffWithWindows(c, walking.NewWalkingDiff(c)),
 		ImageStore:      nil, // explicitly
-		Platforms:       []specs.Platform{platforms.Normalize(platforms.DefaultSpec())},
+		Platforms:       []ocispecs.Platform{platforms.Normalize(platforms.DefaultSpec())},
 		IdentityMapping: idmap,
 		LeaseManager:    lm,
 		GarbageCollect:  mdb.GarbageCollect,

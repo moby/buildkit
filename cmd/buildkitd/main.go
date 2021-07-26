@@ -57,7 +57,7 @@ import (
 	"github.com/moby/buildkit/util/tracing/transform"
 	"github.com/moby/buildkit/version"
 	"github.com/moby/buildkit/worker"
-	specs "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -727,7 +727,7 @@ func attrMap(sl []string) (map[string]string, error) {
 	return m, nil
 }
 
-func formatPlatforms(p []specs.Platform) []string {
+func formatPlatforms(p []ocispecs.Platform) []string {
 	str := make([]string, 0, len(p))
 	for _, pp := range p {
 		str = append(str, platforms.Format(platforms.Normalize(pp)))
@@ -735,8 +735,8 @@ func formatPlatforms(p []specs.Platform) []string {
 	return str
 }
 
-func parsePlatforms(platformsStr []string) ([]specs.Platform, error) {
-	out := make([]specs.Platform, 0, len(platformsStr))
+func parsePlatforms(platformsStr []string) ([]ocispecs.Platform, error) {
+	out := make([]ocispecs.Platform, 0, len(platformsStr))
 	for _, s := range platformsStr {
 		p, err := platforms.Parse(s)
 		if err != nil {
