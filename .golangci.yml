@@ -31,6 +31,8 @@ linters-settings:
     alias:
       - pkg: "github.com/opencontainers/image-spec/specs-go/v1"
         alias: "ocispecs"
+      - pkg: "github.com/opencontainers/go-digest"
+        alias: "digest"
     no-unaliased: true
 
 issues:
