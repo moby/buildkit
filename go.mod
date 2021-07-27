@@ -36,6 +36,7 @@ require (
 	github.com/mitchellh/hashstructure v1.0.0
 	github.com/moby/locker v1.0.1
 	github.com/moby/sys/mount v0.2.0 // indirect
+	github.com/moby/sys/signal v0.5.0
 	github.com/moby/term v0.0.0-20201110203204-bea5bbe245bf // indirect
 	github.com/morikuni/aec v1.0.0
 	github.com/opencontainers/go-digest v1.0.0
