@@ -14,7 +14,6 @@ import (
 
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend/gateway/client"
-	gwerrdefs "github.com/moby/buildkit/frontend/gateway/errdefs"
 	gatewayapi "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
@@ -451,8 +450,8 @@ func testClientGatewayContainerPID1Fail(t *testing.T, sb integration.Sandbox) {
 		defer ctr.Release(ctx)
 		err = pid1.Wait()
 
-		var exitError *gwerrdefs.ExitError
-		require.True(t, errors.As(err, &exitError))
+		var exitError *gatewayapi.ExitError
+		require.ErrorAs(t, err, &exitError)
 		require.Equal(t, uint32(99), exitError.ExitCode)
 
 		return nil, err
@@ -531,6 +530,9 @@ func testClientGatewayContainerPID1Exit(t *testing.T, sb integration.Sandbox) {
 
 	_, err = c.Build(ctx, SolveOpt{}, product, b, nil)
 	require.Error(t, err)
+	var exitError *gatewayapi.ExitError
+	require.ErrorAs(t, err, &exitError)
+	require.Equal(t, uint32(137), exitError.ExitCode)
 	// `exit code: 137` (ie sigkill)
 	require.Regexp(t, "exit code: 137", err.Error())
 
@@ -776,8 +778,8 @@ func testClientGatewayContainerPID1Tty(t *testing.T, sb integration.Sandbox) {
 		prompt.SendExit(99)
 
 		err = pid1.Wait()
-		var exitError *gwerrdefs.ExitError
-		require.True(t, errors.As(err, &exitError))
+		var exitError *gatewayapi.ExitError
+		require.ErrorAs(t, err, &exitError)
 		require.Equal(t, uint32(99), exitError.ExitCode)
 
 		return &client.Result{}, err
@@ -920,8 +922,8 @@ func testClientGatewayContainerExecTty(t *testing.T, sb integration.Sandbox) {
 		prompt.SendExit(99)
 
 		err = pid2.Wait()
-		var exitError *gwerrdefs.ExitError
-		require.True(t, errors.As(err, &exitError))
+		var exitError *gatewayapi.ExitError
+		require.ErrorAs(t, err, &exitError)
 		require.Equal(t, uint32(99), exitError.ExitCode)
 
 		return &client.Result{}, err
@@ -929,6 +931,9 @@ func testClientGatewayContainerExecTty(t *testing.T, sb integration.Sandbox) {
 
 	_, err = c.Build(ctx, SolveOpt{}, product, b, nil)
 	require.Error(t, err)
+	var exitError *gatewayapi.ExitError
+	require.ErrorAs(t, err, &exitError)
+	require.Equal(t, uint32(99), exitError.ExitCode)
 	require.Regexp(t, "exit code: 99", err.Error())
 
 	inputW.Close()
@@ -1145,7 +1150,7 @@ func testClientGatewayExecError(t *testing.T, sb integration.Sandbox) {
 				require.Error(t, solveErr)
 
 				var se *errdefs.SolveError
-				require.True(t, errors.As(solveErr, &se))
+				require.ErrorAs(t, solveErr, &se)
 				require.Len(t, se.InputIDs, tt.NumMounts)
 				require.Len(t, se.MountIDs, tt.NumMounts)
 
@@ -1265,7 +1270,7 @@ func testClientGatewaySlowCacheExecError(t *testing.T, sb integration.Sandbox) {
 		require.Error(t, solveErr)
 
 		var se *errdefs.SolveError
-		require.True(t, errors.As(solveErr, &se))
+		require.ErrorAs(t, solveErr, &se)
 
 		_, ok := se.Solve.Op.Op.(*pb.Op_Exec)
 		require.True(t, ok)
@@ -1398,7 +1403,7 @@ func testClientGatewayExecFileActionError(t *testing.T, sb integration.Sandbox) 
 				require.Error(t, err)
 
 				var se *errdefs.SolveError
-				require.True(t, errors.As(err, &se))
+				require.ErrorAs(t, err, &se)
 				require.Len(t, se.Solve.InputIDs, tt.NumInputs)
 
 				// There is one output for every action in the fileop that failed.

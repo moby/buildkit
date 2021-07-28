@@ -21,7 +21,7 @@ import (
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/executor/oci"
-	"github.com/moby/buildkit/frontend/gateway/errdefs"
+	gatewayapi "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver/pb"
@@ -388,11 +388,11 @@ func (w *containerdExecutor) runProcess(ctx context.Context, p containerd.Proces
 				cancel()
 			}
 			if status.ExitCode() != 0 {
-				exitErr := &errdefs.ExitError{
+				exitErr := &gatewayapi.ExitError{
 					ExitCode: status.ExitCode(),
 					Err:      status.Error(),
 				}
-				if status.ExitCode() == errdefs.UnknownExitStatus && status.Error() != nil {
+				if status.ExitCode() == gatewayapi.UnknownExitStatus && status.Error() != nil {
 					exitErr.Err = errors.Wrap(status.Error(), "failure waiting for process")
 				}
 				select {
