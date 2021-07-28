@@ -26,7 +26,8 @@ var ErrNoBlobs = errors.Errorf("no blobs for snapshot")
 // computeBlobChain ensures every ref in a parent chain has an associated blob in the content store. If
 // a blob is missing and createIfNeeded is true, then the blob will be created, otherwise ErrNoBlobs will
 // be returned. Caller must hold a lease when calling this function.
-func (sr *immutableRef) computeBlobChain(ctx context.Context, createIfNeeded bool, compressionType compression.Type, s session.Group) error {
+// If forceCompression is specified but the blob of compressionType doesn't exist, this function creates it.
+func (sr *immutableRef) computeBlobChain(ctx context.Context, createIfNeeded bool, compressionType compression.Type, forceCompression bool, s session.Group) error {
 	if _, ok := leases.FromContext(ctx); !ok {
 		return errors.Errorf("missing lease requirement for computeBlobChain")
 	}
@@ -39,22 +40,31 @@ func (sr *immutableRef) computeBlobChain(ctx context.Context, createIfNeeded boo
 		ctx = winlayers.UseWindowsLayerMode(ctx)
 	}
 
-	return computeBlobChain(ctx, sr, createIfNeeded, compressionType, s)
+	return computeBlobChain(ctx, sr, createIfNeeded, compressionType, forceCompression, s)
 }
 
-func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool, compressionType compression.Type, s session.Group) error {
+func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool, compressionType compression.Type, forceCompression bool, s session.Group) error {
 	baseCtx := ctx
 	eg, ctx := errgroup.WithContext(ctx)
 	var currentDescr ocispec.Descriptor
 	if sr.parent != nil {
 		eg.Go(func() error {
-			return computeBlobChain(ctx, sr.parent, createIfNeeded, compressionType, s)
+			return computeBlobChain(ctx, sr.parent, createIfNeeded, compressionType, forceCompression, s)
 		})
 	}
 	eg.Go(func() error {
 		dp, err := g.Do(ctx, sr.ID(), func(ctx context.Context) (interface{}, error) {
 			refInfo := sr.Info()
 			if refInfo.Blob != "" {
+				if forceCompression {
+					desc, err := sr.ociDesc()
+					if err != nil {
+						return nil, err
+					}
+					if err := ensureCompression(ctx, sr, desc, compressionType, s); err != nil {
+						return nil, err
+					}
+				}
 				return nil, nil
 			} else if !createIfNeeded {
 				return nil, errors.WithStack(ErrNoBlobs)
@@ -125,6 +135,12 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 				descr.Annotations[containerdUncompressed] = descr.Digest.String()
 			} else {
 				return nil, errors.Errorf("unknown layer compression type")
+			}
+
+			if forceCompression {
+				if err := ensureCompression(ctx, sr, descr, compressionType, s); err != nil {
+					return nil, err
+				}
 			}
 
 			return descr, nil
@@ -223,4 +239,40 @@ func isTypeWindows(sr *immutableRef) bool {
 		return isTypeWindows(parent)
 	}
 	return false
+}
+
+// ensureCompression ensures the specified ref has the blob of the specified compression Type.
+func ensureCompression(ctx context.Context, ref *immutableRef, desc ocispec.Descriptor, compressionType compression.Type, s session.Group) error {
+	// Resolve converters
+	layerConvertFunc, _, err := getConverters(desc, compressionType)
+	if err != nil {
+		return err
+	} else if layerConvertFunc == nil {
+		return nil // no need to convert
+	}
+
+	// First, lookup local content store
+	if _, err := ref.getCompressionBlob(ctx, compressionType); err == nil {
+		return nil // found the compression variant. no need to convert.
+	}
+
+	// Convert layer compression type
+	if err := (lazyRefProvider{
+		ref:     ref,
+		desc:    desc,
+		dh:      ref.descHandlers[desc.Digest],
+		session: s,
+	}).Unlazy(ctx); err != nil {
+		return err
+	}
+	newDesc, err := layerConvertFunc(ctx, ref.cm.ContentStore, desc)
+	if err != nil {
+		return err
+	}
+
+	// Start to track converted layer
+	if err := ref.addCompressionBlob(ctx, newDesc.Digest, compressionType); err != nil {
+		return err
+	}
+	return nil
 }

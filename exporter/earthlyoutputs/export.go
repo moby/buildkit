@@ -309,7 +309,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	defer done(context.TODO())
 
 	for _, img := range images {
-		desc, err := e.opt.ImageWriter.Commit(ctx, *img.expSrc, e.ociTypes, e.layerCompression, sessionID)
+		desc, err := e.opt.ImageWriter.Commit(ctx, *img.expSrc, e.ociTypes, e.layerCompression, false, sessionID)
 		if err != nil {
 			return nil, err
 		}
@@ -374,7 +374,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 		}
 
 		for _, r := range img.expSrc.Refs {
-			remote, err := r.GetRemote(ctx, false, e.layerCompression, session.NewGroup(sessionID))
+			remote, err := r.GetRemote(ctx, false, e.layerCompression, false, session.NewGroup(sessionID))
 			if err != nil {
 				return nil, err
 			}
@@ -399,7 +399,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 			}
 		}
 		if img.expSrc.Ref != nil { // This is a copy and paste of the above code
-			remote, err := img.expSrc.Ref.GetRemote(ctx, false, e.layerCompression, session.NewGroup(sessionID))
+			remote, err := img.expSrc.Ref.GetRemote(ctx, false, e.layerCompression, false, session.NewGroup(sessionID))
 			if err != nil {
 				return nil, err
 			}

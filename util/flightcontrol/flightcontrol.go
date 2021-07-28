@@ -39,7 +39,7 @@ func (g *Group) Do(ctx context.Context, key string, fn func(ctx context.Context)
 			return v, err
 		}
 		// backoff logic
-		if backoff >= 60*time.Second {
+		if backoff >= 15*time.Second {
 			err = errors.Wrapf(errRetryTimeout, "flightcontrol")
 			return v, err
 		}

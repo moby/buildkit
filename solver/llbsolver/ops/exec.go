@@ -26,13 +26,13 @@ import (
 	"github.com/moby/buildkit/solver/llbsolver/errdefs"
 	"github.com/moby/buildkit/solver/llbsolver/mounts"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/progress/logs"
 	utilsystem "github.com/moby/buildkit/util/system"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/semaphore"
 )
 
@@ -312,7 +312,7 @@ func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 		})
 	}
 	if err != nil {
-		logrus.Warn(err.Error()) // TODO: remove this with pull support
+		bklog.G(ctx).Warn(err.Error()) // TODO: remove this with pull support
 	}
 
 	meta := executor.Meta{
@@ -428,7 +428,7 @@ func (e *execOp) copyLocally(ctx context.Context, root executor.Mount, g session
 		defer lm.Unmount()
 
 		finalDest := rootfsPath + "/" + dst
-		logrus.Debugf("calling LocalhostGet src=%s dst=%s", src, finalDest)
+		bklog.G(ctx).Debugf("calling LocalhostGet src=%s dst=%s", src, finalDest)
 		err = localhost.LocalhostGet(ctx, caller, src, finalDest, mountable)
 		if err != nil {
 			return err
@@ -509,7 +509,7 @@ func (e *execOp) sendLocally(ctx context.Context, root executor.Mount, mounts []
 			} else {
 				finalDst = dst
 			}
-			logrus.Debugf("calling LocalhostPut src=%s dst=%s", finalSrc, finalDst)
+			bklog.G(ctx).Debugf("calling LocalhostPut src=%s dst=%s", finalSrc, finalDst)
 			err = localhost.LocalhostPut(ctx, caller, finalSrc, finalDst)
 			if err != nil {
 				return errors.Wrap(err, "error calling LocalhostExec")
@@ -527,7 +527,7 @@ func (e *execOp) execLocally(ctx context.Context, root executor.Mount, g session
 	cwd := meta.Cwd
 
 	return e.sm.Any(ctx, g, func(ctx context.Context, _ string, caller session.Caller) error {
-		logrus.Debugf("localexec dir=%s; args=%v", cwd, args)
+		bklog.G(ctx).Debugf("localexec dir=%s; args=%v", cwd, args)
 		err := localhost.LocalhostExec(ctx, caller, args, cwd, stdout, stderr)
 		if err != nil {
 			return errors.Wrap(err, "error calling LocalhostExec")

@@ -6,6 +6,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/moby/buildkit/util/bklog"
+
 	controlapi "github.com/moby/buildkit/api/services/control"
 	apitypes "github.com/moby/buildkit/api/types"
 	"github.com/moby/buildkit/cache/remotecache"
@@ -23,7 +25,6 @@ import (
 	"github.com/moby/buildkit/util/tracing/transform"
 	"github.com/moby/buildkit/worker"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	tracev1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	v1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
@@ -57,7 +58,7 @@ type Controller struct { // TODO: ControlService
 }
 
 func NewController(opt Opt) (*Controller, error) {
-	cache := solver.NewCacheManager("local", opt.CacheKeyStorage, worker.NewCacheResultStorage(opt.WorkerController))
+	cache := solver.NewCacheManager(context.TODO(), "local", opt.CacheKeyStorage, worker.NewCacheResultStorage(opt.WorkerController))
 
 	gatewayForwarder := controlgateway.NewGatewayForwarder()
 
@@ -142,7 +143,7 @@ func (c *Controller) Prune(req *controlapi.PruneRequest, stream controlapi.Contr
 				ReleaseUnreferenced() error
 			}); ok {
 				if err := c.ReleaseUnreferenced(); err != nil {
-					logrus.Errorf("failed to release cache metadata: %+v", err)
+					bklog.G(ctx).Errorf("failed to release cache metadata: %+v", err)
 				}
 			}
 		}
@@ -284,7 +285,11 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		if err != nil {
 			return nil, err
 		}
-		cacheExportMode = parseCacheExportMode(e.Attrs["mode"])
+		if exportMode, supported := parseCacheExportMode(e.Attrs["mode"]); !supported {
+			bklog.G(ctx).Debugf("skipping invalid cache export mode: %s", e.Attrs["mode"])
+		} else {
+			cacheExportMode = exportMode
+		}
 	}
 	for _, im := range req.Cache.Imports {
 		cacheImports = append(cacheImports, frontend.CacheOptionsEntry{
@@ -384,7 +389,8 @@ func (c *Controller) Status(req *controlapi.StatusRequest, stream controlapi.Con
 }
 
 func (c *Controller) Session(stream controlapi.Control_SessionServer) error {
-	logrus.Debugf("session started")
+	bklog.G(stream.Context()).Debugf("session started")
+
 	conn, closeCh, opts := grpchijack.Hijack(stream)
 	defer conn.Close()
 
@@ -395,7 +401,7 @@ func (c *Controller) Session(stream controlapi.Control_SessionServer) error {
 	}()
 
 	err := c.opt.SessionManager.HandleConn(ctx, conn, opts)
-	logrus.Debugf("session finished: %v", err)
+	bklog.G(ctx).Debugf("session finished: %v", err)
 	return err
 }
 
@@ -451,25 +457,22 @@ func (c *Controller) gc() {
 	err = eg.Wait()
 	close(ch)
 	if err != nil {
-		logrus.Errorf("gc error: %+v", err)
+		bklog.G(ctx).Errorf("gc error: %+v", err)
 	}
 	<-done
 	if size > 0 {
-		logrus.Debugf("gc cleaned up %d bytes", size)
+		bklog.G(ctx).Debugf("gc cleaned up %d bytes", size)
 	}
 }
 
-func parseCacheExportMode(mode string) solver.CacheExportMode {
+func parseCacheExportMode(mode string) (solver.CacheExportMode, bool) {
 	switch mode {
 	case "min":
-		return solver.CacheExportModeMin
+		return solver.CacheExportModeMin, true
 	case "max":
-		return solver.CacheExportModeMax
-	case "":
-	default:
-		logrus.Debugf("skipping invalid cache export mode: %s", mode)
+		return solver.CacheExportModeMax, true
 	}
-	return solver.CacheExportModeMin
+	return solver.CacheExportModeMin, false
 }
 
 func toPBGCPolicy(in []client.PruneInfo) []*apitypes.GCPolicy {

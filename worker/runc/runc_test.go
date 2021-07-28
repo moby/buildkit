@@ -64,7 +64,7 @@ func TestRuncWorker(t *testing.T) {
 
 	workerOpt, cleanupWorkerOpt := newWorkerOpt(t, oci.ProcessSandbox)
 	defer cleanupWorkerOpt()
-	w, err := base.NewWorker(workerOpt)
+	w, err := base.NewWorker(context.TODO(), workerOpt)
 	require.NoError(t, err)
 
 	ctx := tests.NewCtx("buildkit-test")
@@ -186,7 +186,7 @@ func TestRuncWorkerNoProcessSandbox(t *testing.T) {
 
 	workerOpt, cleanupWorkerOpt := newWorkerOpt(t, oci.NoProcessSandbox)
 	defer cleanupWorkerOpt()
-	w, err := base.NewWorker(workerOpt)
+	w, err := base.NewWorker(context.TODO(), workerOpt)
 	require.NoError(t, err)
 
 	ctx := tests.NewCtx("buildkit-test")
@@ -217,7 +217,7 @@ func TestRuncWorkerExec(t *testing.T) {
 
 	workerOpt, cleanupWorkerOpt := newWorkerOpt(t, oci.ProcessSandbox)
 	defer cleanupWorkerOpt()
-	w, err := base.NewWorker(workerOpt)
+	w, err := base.NewWorker(context.TODO(), workerOpt)
 	require.NoError(t, err)
 
 	tests.TestWorkerExec(t, w)
@@ -229,7 +229,7 @@ func TestRuncWorkerExecFailures(t *testing.T) {
 
 	workerOpt, cleanupWorkerOpt := newWorkerOpt(t, oci.ProcessSandbox)
 	defer cleanupWorkerOpt()
-	w, err := base.NewWorker(workerOpt)
+	w, err := base.NewWorker(context.TODO(), workerOpt)
 	require.NoError(t, err)
 
 	tests.TestWorkerExecFailures(t, w)

@@ -31,6 +31,7 @@ import (
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/continuity/fs/fstest"
 	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	gateway "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
@@ -591,10 +592,10 @@ func testPushByDigest(t *testing.T, sb integration.Sandbox) {
 	_, _, err = contentutil.ProviderFromRef(name + ":latest")
 	require.Error(t, err)
 
-	desc, _, err := contentutil.ProviderFromRef(name + "@" + resp.ExporterResponse["containerimage.digest"])
+	desc, _, err := contentutil.ProviderFromRef(name + "@" + resp.ExporterResponse[exptypes.ExporterImageDigestKey])
 	require.NoError(t, err)
 
-	require.Equal(t, resp.ExporterResponse["containerimage.digest"], desc.Digest.String())
+	require.Equal(t, resp.ExporterResponse[exptypes.ExporterImageDigestKey], desc.Digest.String())
 	require.Equal(t, images.MediaTypeDockerSchema2Manifest, desc.MediaType)
 	require.True(t, desc.Size > 0)
 }
@@ -1861,19 +1862,19 @@ func testExporterTargetExists(t *testing.T, sb integration.Sandbox) {
 				Type:  ExporterOCI,
 				Attrs: map[string]string{},
 				Output: func(m map[string]string) (io.WriteCloser, error) {
-					mdDgst = m["containerimage.digest"]
+					mdDgst = m[exptypes.ExporterImageDigestKey]
 					return nil, nil
 				},
 			},
 		},
 	}, nil)
 	require.NoError(t, err)
-	dgst := res.ExporterResponse["containerimage.digest"]
+	dgst := res.ExporterResponse[exptypes.ExporterImageDigestKey]
 
 	require.True(t, strings.HasPrefix(dgst, "sha256:"))
 	require.Equal(t, dgst, mdDgst)
 
-	require.True(t, strings.HasPrefix(res.ExporterResponse["containerimage.config.digest"], "sha256:"))
+	require.True(t, strings.HasPrefix(res.ExporterResponse[exptypes.ExporterImageConfigDigestKey], "sha256:"))
 }
 
 func testTarExporterWithSocket(t *testing.T, sb integration.Sandbox) {
@@ -2050,6 +2051,22 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
+	allCompressedTarget := registry + "/buildkit/build/exporter:withallcompressed"
+	_, err = c.Solve(context.TODO(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name":              allCompressedTarget,
+					"push":              "true",
+					"compression":       "gzip",
+					"force-compression": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
 	if cdAddress == "" {
 		t.Skip("rest of test requires containerd worker")
 	}
@@ -2058,9 +2075,12 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	err = client.ImageService().Delete(ctx, compressedTarget, images.SynchronousDelete())
 	require.NoError(t, err)
+	err = client.ImageService().Delete(ctx, allCompressedTarget, images.SynchronousDelete())
+	require.NoError(t, err)
 
 	checkAllReleasable(t, c, sb, true)
 
+	// check if the new layer is compressed with compression option
 	img, err := client.Pull(ctx, compressedTarget)
 	require.NoError(t, err)
 
@@ -2085,6 +2105,51 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	item, ok := m["data"]
+	require.True(t, ok)
+	require.Equal(t, int32(item.Header.Typeflag), tar.TypeReg)
+	require.Equal(t, []byte("uncompressed"), item.Data)
+
+	dt, err = content.ReadBlob(ctx, img.ContentStore(), ocispec.Descriptor{Digest: mfst.Layers[1].Digest})
+	require.NoError(t, err)
+
+	m, err = testutil.ReadTarToMap(dt, true)
+	require.NoError(t, err)
+
+	item, ok = m["data"]
+	require.True(t, ok)
+	require.Equal(t, int32(item.Header.Typeflag), tar.TypeReg)
+	require.Equal(t, []byte("gzip"), item.Data)
+
+	err = client.ImageService().Delete(ctx, compressedTarget, images.SynchronousDelete())
+	require.NoError(t, err)
+
+	checkAllReleasable(t, c, sb, true)
+
+	// check if all layers are compressed with force-compressoin option
+	img, err = client.Pull(ctx, allCompressedTarget)
+	require.NoError(t, err)
+
+	dt, err = content.ReadBlob(ctx, img.ContentStore(), img.Target())
+	require.NoError(t, err)
+
+	mfst = struct {
+		MediaType string `json:"mediaType,omitempty"`
+		ocispec.Manifest
+	}{}
+
+	err = json.Unmarshal(dt, &mfst)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(mfst.Layers))
+	require.Equal(t, images.MediaTypeDockerSchema2LayerGzip, mfst.Layers[0].MediaType)
+	require.Equal(t, images.MediaTypeDockerSchema2LayerGzip, mfst.Layers[1].MediaType)
+
+	dt, err = content.ReadBlob(ctx, img.ContentStore(), ocispec.Descriptor{Digest: mfst.Layers[0].Digest})
+	require.NoError(t, err)
+
+	m, err = testutil.ReadTarToMap(dt, true)
+	require.NoError(t, err)
+
+	item, ok = m["data"]
 	require.True(t, ok)
 	require.Equal(t, int32(item.Header.Typeflag), tar.TypeReg)
 	require.Equal(t, []byte("uncompressed"), item.Data)
@@ -2728,7 +2793,7 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	dgst, ok := resp.ExporterResponse["containerimage.digest"]
+	dgst, ok := resp.ExporterResponse[exptypes.ExporterImageDigestKey]
 	require.Equal(t, ok, true)
 
 	unique, err := readFileInImage(sb.Context(), c, target+"@"+dgst, "/unique")
@@ -2767,7 +2832,7 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	dgst2, ok := resp.ExporterResponse["containerimage.digest"]
+	dgst2, ok := resp.ExporterResponse[exptypes.ExporterImageDigestKey]
 	require.Equal(t, ok, true)
 
 	require.Equal(t, dgst, dgst2)
@@ -2798,7 +2863,7 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	dgst3, ok := resp.ExporterResponse["containerimage.digest"]
+	dgst3, ok := resp.ExporterResponse[exptypes.ExporterImageDigestKey]
 	require.Equal(t, ok, true)
 
 	// dgst3 != dgst, because inline cache is not exported for dgst3

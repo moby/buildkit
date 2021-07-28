@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/moby/buildkit/util/suggest"
 	"github.com/pkg/errors"
 )
 
@@ -55,6 +56,20 @@ func isValidMountType(s string) bool {
 	}
 	_, ok := allowedMountTypes[s]
 	return ok
+}
+
+func allMountTypes() []string {
+	types := make([]string, 0, len(allowedMountTypes)+2)
+	for k := range allowedMountTypes {
+		types = append(types, k)
+	}
+	if isSecretMountsSupported() {
+		types = append(types, "secret")
+	}
+	if isSSHMountsSupported() {
+		types = append(types, "ssh")
+	}
+	return types
 }
 
 func runMountPreHook(cmd *RunCommand, req parseRequest) error {
@@ -173,10 +188,11 @@ func parseMount(value string, expander SingleWordExpander) (*Mount, error) {
 			// if we don't have an expander, defer evaluation to later
 			continue
 		}
+
 		switch key {
 		case "type":
 			if !isValidMountType(strings.ToLower(value)) {
-				return nil, errors.Errorf("unsupported mount type %q", value)
+				return nil, suggest.WrapError(errors.Errorf("unsupported mount type %q", value), value, allMountTypes(), true)
 			}
 			m.Type = strings.ToLower(value)
 		case "from":
@@ -234,7 +250,10 @@ func parseMount(value string, expander SingleWordExpander) (*Mount, error) {
 			}
 			m.GID = &gid
 		default:
-			return nil, errors.Errorf("unexpected key '%s' in '%s'", key, field)
+			allKeys := []string{
+				"type", "from", "source", "target", "readonly", "id", "sharing", "required", "mode", "uid", "gid", "src", "dst", "ro", "rw", "readwrite",
+			}
+			return nil, suggest.WrapError(errors.Errorf("unexpected key '%s' in '%s'", key, field), key, allKeys, true)
 		}
 	}
 

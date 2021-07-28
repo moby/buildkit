@@ -152,8 +152,10 @@ made through a pull request.
 		people = [
 			"akihirosuda",
 			"coryb",
+			"crazy-max",
 			"hinshun",
 			"ijc",
+			"ktock",
 			"sipsma",
 			"tiborvass",
 			"tonistiigi",
@@ -191,15 +193,25 @@ made through a pull request.
 	Email = "github@corybennett.org"
 	GitHub = "coryb"
 
+	[people.crazy-max]
+	Name = "Kevin Alvarez"
+	Email = "contact@crazymax.dev"
+	GitHub = "crazy-max"
+
 	[people.hinshun]
 	Name = "Edgar Lee"
 	Email = "edgarhinshunlee@gmail.com"
 	GitHub = "hinshun"
 
-	[People.ijc]
+	[people.ijc]
 	Name = "Ian Campbell"
 	Email = "ian.campbell@docker.com"
 	GitHub = "ijc"
+
+	[people.ktock]
+	Name = "Kohei Tokunaga"
+	Email = "ktokunaga.mail@gmail.com"
+	GitHub = "ktock"
 
 	[people.sipsma]
 	Name = "Erik Sipsma"

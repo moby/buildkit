@@ -27,24 +27,25 @@ type Unlazier interface {
 
 // GetRemote gets a *solver.Remote from content store for this ref (potentially pulling lazily).
 // Note: Use WorkerRef.GetRemote instead as moby integration requires custom GetRemote implementation.
-func (sr *immutableRef) GetRemote(ctx context.Context, createIfNeeded bool, compressionType compression.Type, s session.Group) (*solver.Remote, error) {
+func (sr *immutableRef) GetRemote(ctx context.Context, createIfNeeded bool, compressionType compression.Type, forceCompression bool, s session.Group) (*solver.Remote, error) {
 	ctx, done, err := leaseutil.WithLease(ctx, sr.cm.LeaseManager, leaseutil.MakeTemporary)
 	if err != nil {
 		return nil, err
 	}
 	defer done(ctx)
 
-	err = sr.computeBlobChain(ctx, createIfNeeded, compressionType, s)
+	err = sr.computeBlobChain(ctx, createIfNeeded, compressionType, forceCompression, s)
 	if err != nil {
 		return nil, err
 	}
 
-	mprovider := &lazyMultiProvider{mprovider: contentutil.NewMultiProvider(nil)}
+	chain := sr.parentRefChain()
+	mproviderBase := contentutil.NewMultiProvider(nil)
+	mprovider := &lazyMultiProvider{mprovider: mproviderBase}
 	remote := &solver.Remote{
 		Provider: mprovider,
 	}
-
-	for _, ref := range sr.parentRefChain() {
+	for _, ref := range chain {
 		desc, err := ref.ociDesc()
 		if err != nil {
 			return nil, err
@@ -101,6 +102,30 @@ func (sr *immutableRef) GetRemote(ctx context.Context, createIfNeeded bool, comp
 					existingRepos = append(existingRepos, repo)
 				}
 				desc.Annotations[dslKey] = strings.Join(existingRepos, ",")
+			}
+		}
+
+		if forceCompression {
+			// ensure the compression type.
+			// compressed blob must be created and stored in the content store.
+			_, convertMediaTypeFunc, err := getConverters(desc, compressionType)
+			if err != nil {
+				return nil, err
+			}
+			if convertMediaTypeFunc != nil {
+				// needs conversion
+				info, err := ref.getCompressionBlob(ctx, compressionType)
+				if err != nil {
+					return nil, err
+				}
+				newDesc := desc
+				newDesc.MediaType = convertMediaTypeFunc(newDesc.MediaType)
+				newDesc.Digest = info.Digest
+				newDesc.Size = info.Size
+				if desc.Digest != newDesc.Digest {
+					mproviderBase.Add(newDesc.Digest, ref.cm.ContentStore)
+				}
+				desc = newDesc
 			}
 		}
 
@@ -183,7 +208,7 @@ func (p lazyRefProvider) Unlazy(ctx context.Context) error {
 		err := contentutil.Copy(ctx, p.ref.cm.ContentStore, &pullprogress.ProviderWithProgress{
 			Provider: p.dh.Provider(p.session),
 			Manager:  p.ref.cm.ContentStore,
-		}, p.desc, logs.LoggerFromContext(ctx))
+		}, p.desc, p.dh.Ref, logs.LoggerFromContext(ctx))
 		if err != nil {
 			return nil, err
 		}

@@ -21,10 +21,10 @@ import (
 	"github.com/moby/buildkit/session/grpchijack"
 	"github.com/moby/buildkit/session/pullping"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/entitlements"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	fstypes "github.com/tonistiigi/fsutil/types"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
@@ -112,7 +112,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		}
 	}
 
-	cacheOpt, err := parseCacheOptions(opt)
+	cacheOpt, err := parseCacheOptions(ctx, opt)
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +195,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 				<-time.After(3 * time.Second)
 				cancelStatus()
 			}()
-			logrus.Debugf("stopping session")
+			bklog.G(ctx).Debugf("stopping session")
 			s.Close()
 		}()
 		var pbd *pb.Definition
@@ -388,7 +388,7 @@ type cacheOptions struct {
 	frontendAttrs   map[string]string
 }
 
-func parseCacheOptions(opt SolveOpt) (*cacheOptions, error) {
+func parseCacheOptions(ctx context.Context, opt SolveOpt) (*cacheOptions, error) {
 	var (
 		cacheExports []*controlapi.CacheOptionsEntry
 		cacheImports []*controlapi.CacheOptionsEntry
@@ -441,14 +441,14 @@ func parseCacheOptions(opt SolveOpt) (*cacheOptions, error) {
 			}
 			cs, err := contentlocal.NewStore(csDir)
 			if err != nil {
-				logrus.Warning("local cache import at " + csDir + " not found due to err: " + err.Error())
+				bklog.G(ctx).Warning("local cache import at " + csDir + " not found due to err: " + err.Error())
 				continue
 			}
 			// if digest is not specified, load from "latest" tag
 			if attrs["digest"] == "" {
 				idx, err := ociindex.ReadIndexJSONFileLocked(filepath.Join(csDir, "index.json"))
 				if err != nil {
-					logrus.Warning("local cache import at " + csDir + " not found due to err: " + err.Error())
+					bklog.G(ctx).Warning("local cache import at " + csDir + " not found due to err: " + err.Error())
 					continue
 				}
 				for _, m := range idx.Manifests {

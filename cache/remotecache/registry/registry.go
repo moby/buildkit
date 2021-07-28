@@ -11,6 +11,7 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/resolver"
+	"github.com/moby/buildkit/util/resolver/limited"
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -52,7 +53,7 @@ func ResolveCacheExporterFunc(sm *session.Manager, hosts docker.RegistryHosts) r
 		if err != nil {
 			return nil, err
 		}
-		return remotecache.NewExporter(contentutil.FromPusher(pusher), ociMediatypes), nil
+		return remotecache.NewExporter(contentutil.FromPusher(pusher), ref, ociMediatypes), nil
 	}
 }
 
@@ -72,7 +73,7 @@ func ResolveCacheImporterFunc(sm *session.Manager, cs content.Store, hosts docke
 			return nil, specs.Descriptor{}, err
 		}
 		src := &withDistributionSourceLabel{
-			Provider: contentutil.FromFetcher(fetcher),
+			Provider: contentutil.FromFetcher(limited.Default.WrapFetcher(fetcher, ref)),
 			ref:      ref,
 			source:   cs,
 		}

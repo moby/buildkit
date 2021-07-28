@@ -57,6 +57,7 @@ You don't need to read this document unless you want to use the full-featured st
     - [Inline (push image and cache together)](#inline-push-image-and-cache-together)
     - [Registry (push image and cache separately)](#registry-push-image-and-cache-separately)
     - [Local directory](#local-directory-1)
+    - [GitHub Actions cache (experimental)](#github-actions-cache-experimental)
     - [`--export-cache` options](#--export-cache-options)
     - [`--import-cache` options](#--import-cache-options)
   - [Consistent hashing](#consistent-hashing)
@@ -231,8 +232,8 @@ Keys supported by image output:
 * `unpack=true`: unpack image after creation (for use with containerd)
 * `dangling-name-prefix=[value]`: name image with `prefix@<digest>` , used for anonymous images
 * `name-canonical=true`: add additional canonical name `name@<digest>`
-* `compression=[uncompressed,gzip]`: choose compression type for layer, gzip is default value
-
+* `compression=[uncompressed,gzip]`: choose compression type for layers newly created and cached, gzip is default value
+* `force-compression=true`: forcefully apply `compression` option to all layers (including already existing layers).
 
 If credentials are required, `buildctl` will attempt to read Docker configuration file `$DOCKER_CONFIG/config.json`.
 `$DOCKER_CONFIG` defaults to `~/.docker`.
@@ -314,6 +315,7 @@ BuildKit supports the following cache exporters:
 * `inline`: embed the cache into the image, and push them to the registry together
 * `registry`: push the image and the cache separately
 * `local`: export to a local directory
+* `gha`: export to GitHub Actions cache
 
 In most case you want to use the `inline` cache exporter.
 However, note that the `inline` cache exporter only supports `min` cache mode. 
@@ -340,7 +342,7 @@ However, the standalone `buildctl` does NOT require `--opt build-arg:BUILDKIT_IN
 buildctl build ... \
   --output type=image,name=localhost:5000/myrepo:image,push=true \
   --export-cache type=registry,ref=localhost:5000/myrepo:buildcache \
-  --import-cache type=registry,ref=localhost:5000/myrepo:buildcache \
+  --import-cache type=registry,ref=localhost:5000/myrepo:buildcache
 ```
 
 #### Local directory
@@ -352,18 +354,37 @@ buildctl build ... --import-cache type=local,src=path/to/input-dir
 
 The directory layout conforms to OCI Image Spec v1.0.
 
+#### GitHub Actions cache (experimental)
+
+```bash
+buildctl build ... \
+  --output type=image,name=docker.io/username/image,push=true \
+  --export-cache type=gha \
+  --import-cache type=gha
+```
+
+Following attributes are required to authenticate against the [Github Actions Cache service API](https://github.com/tonistiigi/go-actions-cache/blob/master/api.md#authentication):
+* `url`: Cache server URL (default `$ACTIONS_CACHE_URL`)
+* `token`: Access token (default `$ACTIONS_RUNTIME_TOKEN`)
+
+:information_source: This type of cache can be used with [Docker Build Push Action](https://github.com/docker/build-push-action)
+where `url` and `token` will be automatically set. To use this backend in a inline `run` step, you have to include [crazy-max/ghaction-github-runtime](https://github.com/crazy-max/ghaction-github-runtime)
+in your workflow to expose the runtime.
+
 #### `--export-cache` options
--   `type`: `inline`, `registry`, or `local`
+-   `type`: `inline`, `registry`, `local` or `gha`
 -   `mode=min` (default): only export layers for the resulting image
--   `mode=max`: export all the layers of all intermediate steps. Not supported for `inline` cache exporter.
+-   `mode=max`: export all the layers of all intermediate steps. Not supported for `inline` and `gha` cache exporter.
 -   `ref=docker.io/user/image:tag`: reference for `registry` cache exporter
 -   `dest=path/to/output-dir`: directory for `local` cache exporter
+-   `scope=buildkit`: scope for `gha` cache exporter (default `buildkit`)
 -   `oci-mediatypes=true|false`: whether to use OCI mediatypes in exported manifests for `local` and `registry` exporter. Since BuildKit `v0.8` defaults to true.
 
 #### `--import-cache` options
--   `type`: `registry` or `local`. Use `registry` to import `inline` cache.
+-   `type`: `registry`, `local` or `gha`. Use `registry` to import `inline` cache.
 -   `ref=docker.io/user/image:tag`: reference for `registry` cache importer
 -   `src=path/to/input-dir`: directory for `local` cache importer
+-   `scope=buildkit`: scope for `gha` cache importer (default `buildkit`)
 -   `digest=sha256:deadbeef`: digest of the manifest list to import for `local` cache importer.
 -   `tag=customtag`: custom tag of image for `local` cache importer.
     Defaults to the digest of "latest" tag in `index.json` is for digest, not for tag

@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"strconv"
 	"strings"
@@ -249,7 +250,7 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 		}
 		opt.Platforms = platforms
 	}
-	w, err := base.NewWorker(opt)
+	w, err := base.NewWorker(context.TODO(), opt)
 	if err != nil {
 		return nil, err
 	}

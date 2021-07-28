@@ -14,6 +14,7 @@ import (
 	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/moby/buildkit/util/leaseutil"
+	"github.com/moby/buildkit/util/resolver/limited"
 	"github.com/moby/buildkit/util/resolver/retryhandler"
 	digest "github.com/opencontainers/go-digest"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -101,7 +102,7 @@ func Config(ctx context.Context, str string, resolver remotes.Resolver, cache Co
 	children := childrenConfigHandler(cache, platform)
 
 	handlers := []images.Handler{
-		retryhandler.New(remotes.FetchHandler(cache, fetcher), func(_ []byte) {}),
+		retryhandler.New(limited.FetchHandler(cache, fetcher, str), func(_ []byte) {}),
 		children,
 	}
 	if err := images.Dispatch(ctx, images.Handlers(handlers...), nil, desc); err != nil {

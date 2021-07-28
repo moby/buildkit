@@ -99,6 +99,8 @@ func main() {
 
 	app.Before = func(context *cli.Context) error {
 		debugEnabled = context.GlobalBool("debug")
+
+		logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
 		if debugEnabled {
 			logrus.SetLevel(logrus.DebugLevel)
 		}

@@ -8,6 +8,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/moby/buildkit/util/bklog"
+	"github.com/moby/buildkit/util/tracing"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/diff"
 	"github.com/containerd/containerd/images"
@@ -25,7 +30,6 @@ import (
 	specs "github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -44,7 +48,7 @@ type ImageWriter struct {
 	opt WriterOpt
 }
 
-func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool, compressionType compression.Type, sessionID string) (*ocispec.Descriptor, error) {
+func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool, compressionType compression.Type, forceCompression bool, sessionID string) (*ocispec.Descriptor, error) {
 	platformsBytes, ok := inp.Metadata[exptypes.ExporterPlatformsKey]
 
 	if len(inp.Refs) > 0 && !ok {
@@ -52,7 +56,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 	}
 
 	if len(inp.Refs) == 0 {
-		remotes, err := ic.exportLayers(ctx, compressionType, session.NewGroup(sessionID), inp.Ref)
+		remotes, err := ic.exportLayers(ctx, compressionType, forceCompression, session.NewGroup(sessionID), inp.Ref)
 		if err != nil {
 			return nil, err
 		}
@@ -63,7 +67,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 		if mfstDesc.Annotations == nil {
 			mfstDesc.Annotations = make(map[string]string)
 		}
-		mfstDesc.Annotations["config.digest"] = configDesc.Digest.String()
+		mfstDesc.Annotations[exptypes.ExporterConfigDigestKey] = configDesc.Digest.String()
 		return mfstDesc, nil
 	}
 
@@ -83,7 +87,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 		refs = append(refs, r)
 	}
 
-	remotes, err := ic.exportLayers(ctx, compressionType, session.NewGroup(sessionID), refs...)
+	remotes, err := ic.exportLayers(ctx, compressionType, forceCompression, session.NewGroup(sessionID), refs...)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +152,12 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 	return &idxDesc, nil
 }
 
-func (ic *ImageWriter) exportLayers(ctx context.Context, compressionType compression.Type, s session.Group, refs ...cache.ImmutableRef) ([]solver.Remote, error) {
+func (ic *ImageWriter) exportLayers(ctx context.Context, compressionType compression.Type, forceCompression bool, s session.Group, refs ...cache.ImmutableRef) ([]solver.Remote, error) {
+	span, ctx := tracing.StartSpan(ctx, "export layers", trace.WithAttributes(
+		attribute.String("exportLayers.compressionType", compressionType.String()),
+		attribute.Bool("exportLayers.forceCompression", forceCompression),
+	))
+
 	eg, ctx := errgroup.WithContext(ctx)
 	layersDone := oneOffProgress(ctx, "exporting layers")
 
@@ -160,7 +169,7 @@ func (ic *ImageWriter) exportLayers(ctx context.Context, compressionType compres
 				return
 			}
 			eg.Go(func() error {
-				remote, err := ref.GetRemote(ctx, true, compressionType, s)
+				remote, err := ref.GetRemote(ctx, true, compressionType, forceCompression, s)
 				if err != nil {
 					return err
 				}
@@ -170,11 +179,9 @@ func (ic *ImageWriter) exportLayers(ctx context.Context, compressionType compres
 		}(i, ref)
 	}
 
-	if err := layersDone(eg.Wait()); err != nil {
-		return nil, err
-	}
-
-	return out, nil
+	err := layersDone(eg.Wait())
+	tracing.FinishWithError(span, err)
+	return out, err
 }
 
 func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache.ImmutableRef, config []byte, remote *solver.Remote, oci bool, inlineCache []byte) (*ocispec.Descriptor, *ocispec.Descriptor, error) {
@@ -197,7 +204,7 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache
 		return nil, nil, err
 	}
 
-	remote, history = normalizeLayersAndHistory(remote, history, ref, oci)
+	remote, history = normalizeLayersAndHistory(ctx, remote, history, ref, oci)
 
 	config, err = patchImageConfig(config, remote.Descriptors, history, inlineCache)
 	if err != nil {
@@ -388,8 +395,7 @@ func patchImageConfig(dt []byte, descs []ocispec.Descriptor, history []ocispec.H
 	return dt, errors.Wrap(err, "failed to marshal config after patch")
 }
 
-func normalizeLayersAndHistory(remote *solver.Remote, history []ocispec.History, ref cache.ImmutableRef, oci bool) (*solver.Remote, []ocispec.History) {
-
+func normalizeLayersAndHistory(ctx context.Context, remote *solver.Remote, history []ocispec.History, ref cache.ImmutableRef, oci bool) (*solver.Remote, []ocispec.History) {
 	refMeta := getRefMetadata(ref, len(remote.Descriptors))
 
 	var historyLayers int
@@ -402,7 +408,7 @@ func normalizeLayersAndHistory(remote *solver.Remote, history []ocispec.History,
 	if historyLayers > len(remote.Descriptors) {
 		// this case shouldn't happen but if it does force set history layers empty
 		// from the bottom
-		logrus.Warn("invalid image config with unaccounted layers")
+		bklog.G(ctx).Warn("invalid image config with unaccounted layers")
 		historyCopy := make([]ocispec.History, 0, len(history))
 		var l int
 		for _, h := range history {

@@ -17,6 +17,7 @@ import (
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/continuity/fs/fstest"
 	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/stretchr/testify/require"
 )
@@ -147,7 +148,7 @@ func testBuildMetadataFile(t *testing.T, sb integration.Sandbox) {
 
 	require.Equal(t, imageName, metadata["image.name"])
 
-	digest := metadata["containerimage.digest"]
+	digest := metadata[exptypes.ExporterImageDigestKey]
 	require.NotEmpty(t, digest)
 
 	cdAddress := sb.ContainerdAddress()

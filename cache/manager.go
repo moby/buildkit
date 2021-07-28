@@ -175,7 +175,8 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispec.Descriptor, 
 	var link ImmutableRef
 	for _, si := range sis {
 		ref, err := cm.get(ctx, si.ID(), opts...)
-		if err != nil && !IsNotFound(err) {
+		// if the error was NotFound or NeedsRemoteProvider, we can't re-use the snapshot from the blob so just skip it
+		if err != nil && !IsNotFound(err) && !errors.As(err, &NeedsRemoteProvidersError{}) {
 			return nil, errors.Wrapf(err, "failed to get record %s by chainid", sis[0].ID())
 		}
 		if ref != nil {
