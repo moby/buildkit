@@ -12,7 +12,7 @@ RUN apt-get update && apt-get --no-install-recommends install -y \
 ARG TARGETOS TARGETARCH
 RUN set -e; \
 	arch=$(echo $TARGETARCH | sed -e s/amd64/x86_64/ -e s/arm64/aarch_64/); \
-	wget -q https://github.com/google/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-${TARGETOS}-${arch}.zip && unzip protoc-${PROTOC_VERSION}-${TARGETOS}-${arch}.zip -d /usr/local
+	wget -q https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-${TARGETOS}-${arch}.zip && unzip protoc-${PROTOC_VERSION}-${TARGETOS}-${arch}.zip -d /usr/local
 
 RUN git clone https://github.com/gogo/protobuf.git /go/src/github.com/gogo/protobuf \
 	&& cd /go/src/github.com/gogo/protobuf \
