@@ -58,8 +58,6 @@ You don't need to read this document unless you want to use the full-featured st
     - [Registry (push image and cache separately)](#registry-push-image-and-cache-separately)
     - [Local directory](#local-directory-1)
     - [GitHub Actions cache (experimental)](#github-actions-cache-experimental)
-    - [`--export-cache` options](#--export-cache-options)
-    - [`--import-cache` options](#--import-cache-options)
   - [Consistent hashing](#consistent-hashing)
 - [Systemd socket activation](#systemd-socket-activation)
 - [Expose BuildKit as a TCP service](#expose-buildkit-as-a-tcp-service)
@@ -330,7 +328,7 @@ buildctl build ... \
   --import-cache type=registry,ref=docker.io/username/image
 ```
 
-Note that the inline cache is not imported unless `--import-cache type=registry,ref=...` is provided.
+Note that the inline cache is not imported unless [`--import-cache type=registry,ref=...`](#registry-push-image-and-cache-separately) is provided.
 
 :information_source: Docker-integrated BuildKit (`DOCKER_BUILDKIT=1 docker build`) and `docker buildx`requires 
 `--build-arg BUILDKIT_INLINE_CACHE=1` to be specified to enable the `inline` cache exporter.
@@ -345,6 +343,17 @@ buildctl build ... \
   --import-cache type=registry,ref=localhost:5000/myrepo:buildcache
 ```
 
+`--export-cache` options:
+* `type=registry`
+* `mode=min` (default): only export layers for the resulting image
+* `mode=max`: export all the layers of all intermediate steps.
+* `ref=docker.io/user/image:tag`: reference
+* `oci-mediatypes=true|false`: whether to use OCI mediatypes in exported manifests. Since BuildKit `v0.8` defaults to true.
+
+`--import-cache` options:
+* `type=registry`
+* `ref=docker.io/user/image:tag`: reference
+
 #### Local directory
 
 ```bash
@@ -353,6 +362,19 @@ buildctl build ... --import-cache type=local,src=path/to/input-dir
 ```
 
 The directory layout conforms to OCI Image Spec v1.0.
+
+`--export-cache` options:
+* `type=local`
+* `mode=min` (default): only export layers for the resulting image
+* `mode=max`: export all the layers of all intermediate steps.
+* `dest=path/to/output-dir`: destination directory for cache exporter
+* `oci-mediatypes=true|false`: whether to use OCI mediatypes in exported manifests. Since BuildKit `v0.8` defaults to true.
+
+`--import-cache` options:
+* `type=local`
+* `src=path/to/input-dir`: source directory for cache importer
+* `digest=sha256:deadbeef`: digest of the manifest list to import.
+* `tag=customtag`: custom tag of image. Defaults "latest" tag digest in `index.json` is for digest, not for tag
 
 #### GitHub Actions cache (experimental)
 
@@ -371,23 +393,15 @@ Following attributes are required to authenticate against the [Github Actions Ca
 where `url` and `token` will be automatically set. To use this backend in a inline `run` step, you have to include [crazy-max/ghaction-github-runtime](https://github.com/crazy-max/ghaction-github-runtime)
 in your workflow to expose the runtime.
 
-#### `--export-cache` options
--   `type`: `inline`, `registry`, `local` or `gha`
--   `mode=min` (default): only export layers for the resulting image
--   `mode=max`: export all the layers of all intermediate steps. Not supported for `inline` and `gha` cache exporter.
--   `ref=docker.io/user/image:tag`: reference for `registry` cache exporter
--   `dest=path/to/output-dir`: directory for `local` cache exporter
--   `scope=buildkit`: scope for `gha` cache exporter (default `buildkit`)
--   `oci-mediatypes=true|false`: whether to use OCI mediatypes in exported manifests for `local` and `registry` exporter. Since BuildKit `v0.8` defaults to true.
+`--export-cache` options:
+* `type=gha`
+* `mode=min` (default): only export layers for the resulting image
+* `mode=max`: export all the layers of all intermediate steps.
+* `scope=buildkit`: which scope cache object belongs to (default `buildkit`)
 
-#### `--import-cache` options
--   `type`: `registry`, `local` or `gha`. Use `registry` to import `inline` cache.
--   `ref=docker.io/user/image:tag`: reference for `registry` cache importer
--   `src=path/to/input-dir`: directory for `local` cache importer
--   `scope=buildkit`: scope for `gha` cache importer (default `buildkit`)
--   `digest=sha256:deadbeef`: digest of the manifest list to import for `local` cache importer.
--   `tag=customtag`: custom tag of image for `local` cache importer.
-    Defaults to the digest of "latest" tag in `index.json` is for digest, not for tag
+`--import-cache` options:
+* `type=gha`
+* `scope=buildkit`: which scope cache object belongs to (default `buildkit`)
 
 ### Consistent hashing
 
