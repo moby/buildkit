@@ -1135,14 +1135,15 @@ func (lbf *llbBridgeForwarder) ExecProcess(srv pb.LLBBridge_ExecProcessServer) e
 				pios[pid] = pio
 
 				proc, err := ctr.Start(initCtx, gwclient.StartRequest{
-					Args:   init.Meta.Args,
-					Env:    init.Meta.Env,
-					User:   init.Meta.User,
-					Cwd:    init.Meta.Cwd,
-					Tty:    init.Tty,
-					Stdin:  pio.processReaders[0],
-					Stdout: pio.processWriters[1],
-					Stderr: pio.processWriters[2],
+					Args:         init.Meta.Args,
+					Env:          init.Meta.Env,
+					User:         init.Meta.User,
+					Cwd:          init.Meta.Cwd,
+					Tty:          init.Tty,
+					Stdin:        pio.processReaders[0],
+					Stdout:       pio.processWriters[1],
+					Stderr:       pio.processWriters[2],
+					SecurityMode: init.Security,
 				})
 				if err != nil {
 					return stack.Enable(err)
