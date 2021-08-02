@@ -38,7 +38,6 @@ type Ref interface {
 
 type ImmutableRef interface {
 	Ref
-	Parent() ImmutableRef
 	Clone() ImmutableRef
 
 	Extract(ctx context.Context, s session.Group) error // +progress
@@ -293,13 +292,6 @@ func (sr *immutableRef) Clone() ImmutableRef {
 	return ref
 }
 
-func (sr *immutableRef) Parent() ImmutableRef {
-	if p := sr.parentRef(true, sr.descHandlers); p != nil { // avoid returning typed nil pointer
-		return p
-	}
-	return nil
-}
-
 func (cr *cacheRecord) ociDesc(ctx context.Context, dhs DescHandlers) (ocispecs.Descriptor, error) {
 	dgst := cr.getBlob()
 	if dgst == "" {
@@ -336,6 +328,10 @@ func (cr *cacheRecord) ociDesc(ctx context.Context, dhs DescHandlers) (ocispecs.
 			return ocispecs.Descriptor{}, err
 		}
 		desc.Annotations["buildkit/createdat"] = string(createdAt)
+	}
+
+	if description := cr.GetDescription(); description != "" {
+		desc.Annotations["buildkit/description"] = description
 	}
 
 	return desc, nil

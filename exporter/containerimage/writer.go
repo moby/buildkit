@@ -419,7 +419,7 @@ func patchImageConfig(dt []byte, descs []ocispecs.Descriptor, history []ocispecs
 }
 
 func normalizeLayersAndHistory(ctx context.Context, remote *solver.Remote, history []ocispecs.History, ref cache.ImmutableRef, oci bool) (*solver.Remote, []ocispecs.History) {
-	refMeta := getRefMetadata(ref, len(remote.Descriptors))
+	refMeta := getRefMetadata(remote.Descriptors)
 
 	var historyLayers int
 	for _, h := range history {
@@ -515,28 +515,26 @@ type refMetadata struct {
 	createdAt   *time.Time
 }
 
-func getRefMetadata(ref cache.ImmutableRef, limit int) []refMetadata {
-	if limit <= 0 {
-		return nil
+func getRefMetadata(descs []ocispecs.Descriptor) []refMetadata {
+	var metas []refMetadata
+	for _, desc := range descs {
+		meta := refMetadata{}
+
+		if description := desc.Annotations["buildkit/description"]; description != "" {
+			meta.description = description
+		} else {
+			meta.description = "created by buildkit" // shouldn't be shown but don't fail build
+		}
+
+		var createdAt time.Time
+		if err := createdAt.UnmarshalText([]byte(desc.Annotations["buildkit/createdat"])); err != nil {
+			createdAt = time.Now()
+		}
+		meta.createdAt = &createdAt
+
+		metas = append(metas, meta)
 	}
-	now := time.Now()
-	meta := refMetadata{
-		description: "created by buildkit", // shouldn't be shown but don't fail build
-		createdAt:   &now,
-	}
-	if ref == nil {
-		return append(getRefMetadata(nil, limit-1), meta)
-	}
-	if descr := ref.GetDescription(); descr != "" {
-		meta.description = descr
-	}
-	createdAt := ref.GetCreatedAt()
-	meta.createdAt = &createdAt
-	p := ref.Parent()
-	if p != nil {
-		defer p.Release(context.TODO())
-	}
-	return append(getRefMetadata(p, limit-1), meta)
+	return metas
 }
 
 func oneOffProgress(ctx context.Context, id string) func(err error) error {
