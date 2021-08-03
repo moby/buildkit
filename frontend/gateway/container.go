@@ -28,6 +28,7 @@ import (
 type NewContainerRequest struct {
 	ContainerID string
 	NetMode     opspb.NetMode
+	ExtraHosts  []executor.HostIP
 	Mounts      []Mount
 	Platform    *opspb.Platform
 	Constraints *opspb.WorkerConstraints
@@ -52,13 +53,14 @@ func NewContainer(ctx context.Context, w worker.Worker, sm *session.Manager, g s
 		platform = *req.Platform
 	}
 	ctr := &gatewayContainer{
-		id:       req.ContainerID,
-		netMode:  req.NetMode,
-		platform: platform,
-		executor: w.Executor(),
-		errGroup: eg,
-		ctx:      ctx,
-		cancel:   cancel,
+		id:         req.ContainerID,
+		netMode:    req.NetMode,
+		extraHosts: req.ExtraHosts,
+		platform:   platform,
+		executor:   w.Executor(),
+		errGroup:   eg,
+		ctx:        ctx,
+		cancel:     cancel,
 	}
 
 	var (
@@ -276,18 +278,19 @@ func PrepareMounts(ctx context.Context, mm *mounts.MountManager, cm cache.Manage
 }
 
 type gatewayContainer struct {
-	id       string
-	netMode  opspb.NetMode
-	platform opspb.Platform
-	rootFS   executor.Mount
-	mounts   []executor.Mount
-	executor executor.Executor
-	started  bool
-	errGroup *errgroup.Group
-	mu       sync.Mutex
-	cleanup  []func() error
-	ctx      context.Context
-	cancel   func()
+	id         string
+	netMode    opspb.NetMode
+	extraHosts []executor.HostIP
+	platform   opspb.Platform
+	rootFS     executor.Mount
+	mounts     []executor.Mount
+	executor   executor.Executor
+	started    bool
+	errGroup   *errgroup.Group
+	mu         sync.Mutex
+	cleanup    []func() error
+	ctx        context.Context
+	cancel     func()
 }
 
 func (gwCtr *gatewayContainer) Start(ctx context.Context, req client.StartRequest) (client.ContainerProcess, error) {
@@ -300,6 +303,7 @@ func (gwCtr *gatewayContainer) Start(ctx context.Context, req client.StartReques
 			Cwd:          req.Cwd,
 			Tty:          req.Tty,
 			NetMode:      gwCtr.netMode,
+			ExtraHosts:   gwCtr.extraHosts,
 			SecurityMode: req.SecurityMode,
 		},
 		Stdin:  req.Stdin,

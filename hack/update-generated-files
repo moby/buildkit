@@ -16,5 +16,5 @@ buildxCmd build \
 
 # --build-arg "PROTOBUF_VERSION=$protobuf_version" \
 
-cp -R "$output/generated-files/" .
+cp -R "$output/generated-files/." .
 rm -rf $output
