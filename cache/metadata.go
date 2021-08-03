@@ -24,6 +24,7 @@ const keyLayerType = "cache.layerType"
 const keyRecordType = "cache.recordType"
 const keyCommitted = "snapshot.committed"
 const keyParent = "cache.parent"
+const keyMergeParents = "cache.mergeParents"
 const keyDiffID = "cache.diffID"
 const keyChainID = "cache.chainID"
 const keyBlobChainID = "cache.blobChainID"
@@ -306,6 +307,14 @@ func (md *cacheMetadata) getParent() string {
 	return md.GetString(keyParent)
 }
 
+func (md *cacheMetadata) queueMergeParents(parents []string) error {
+	return md.queueValue(keyMergeParents, parents, "")
+}
+
+func (md *cacheMetadata) getMergeParents() []string {
+	return md.getStringSlice(keyMergeParents)
+}
+
 func (md *cacheMetadata) queueSize(s int64) error {
 	return md.queueValue(keySize, s, "")
 }
@@ -378,7 +387,7 @@ func (md *cacheMetadata) updateLastUsed() error {
 	}
 	v2, err := metadata.NewValue(time.Now().UnixNano())
 	if err != nil {
-		return errors.Wrap(err, "failed to create value")
+		return errors.Wrap(err, "failed to create lastUsedAt value")
 	}
 	return md.si.Update(func(b *bolt.Bucket) error {
 		if err := md.si.SetValue(b, keyUsageCount, v); err != nil {

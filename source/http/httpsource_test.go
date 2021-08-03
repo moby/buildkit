@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/containerd/containerd/content/local"
+	"github.com/containerd/containerd/diff/apply"
+	"github.com/containerd/containerd/diff/walking"
 	ctdmetadata "github.com/containerd/containerd/metadata"
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/containerd/snapshots/native"
@@ -20,6 +22,7 @@ import (
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/testutil/httpserver"
+	"github.com/moby/buildkit/util/winlayers"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 	bolt "go.etcd.io/bbolt"
@@ -359,12 +362,17 @@ func newHTTPSource(tmpdir string) (source.Source, error) {
 		return nil, err
 	}
 	lm := leaseutil.WithNamespace(ctdmetadata.NewLeaseManager(mdb), "buildkit")
+	c := mdb.ContentStore()
+	applier := winlayers.NewFileSystemApplierWithWindows(c, apply.NewFileSystemApplier(c))
+	differ := winlayers.NewWalkingDiffWithWindows(c, walking.NewWalkingDiff(c))
 
 	cm, err := cache.NewManager(cache.ManagerOpt{
 		Snapshotter:    snapshot.FromContainerdSnapshotter("native", containerdsnapshot.NSSnapshotter("buildkit", mdb.Snapshotter("native")), nil),
 		MetadataStore:  md,
 		LeaseManager:   lm,
-		ContentStore:   mdb.ContentStore(),
+		ContentStore:   c,
+		Applier:        applier,
+		Differ:         differ,
 		GarbageCollect: mdb.GarbageCollect,
 	})
 	if err != nil {

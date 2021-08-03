@@ -50,7 +50,6 @@ func (sr *immutableRef) GetRemote(ctx context.Context, createIfNeeded bool, comp
 		if err != nil {
 			return nil, err
 		}
-
 		// NOTE: The media type might be missing for some migrated ones
 		// from before lease based storage. If so, we should detect
 		// the media type from blob data.

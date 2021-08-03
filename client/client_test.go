@@ -136,6 +136,7 @@ func TestIntegration(t *testing.T) {
 		testLocalSourceDiffer,
 		testBuildExportZstd,
 		testPullZstdImage,
+		testMergeOpInlineCache,
 	}, mirrors)
 
 	integration.Run(t, []integration.Test{
@@ -3792,6 +3793,184 @@ func testProxyEnv(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, string(dt), "httpvalue-httpsvalue-noproxyvalue-noproxyvalue-allproxyvalue-allproxyvalue")
 }
 
+func testMergeOpInlineCache(t *testing.T, sb integration.Sandbox) {
+	skipDockerd(t, sb)
+	requiresLinux(t)
+
+	cdAddress := sb.ContainerdAddress()
+	if cdAddress == "" {
+		t.Skip("test requires containerd worker")
+	}
+
+	client, err := newContainerd(cdAddress)
+	require.NoError(t, err)
+	defer client.Close()
+
+	ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrorRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	// push the busybox image to the mutable registry
+	sourceImage := "busybox:latest"
+	def, err := llb.Image(sourceImage).Marshal(sb.Context())
+	require.NoError(t, err)
+
+	busyboxTargetNoTag := registry + "/buildkit/testlazyimage:"
+	busyboxTarget := busyboxTargetNoTag + "latest"
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": busyboxTarget,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	imageService := client.ImageService()
+	contentStore := client.ContentStore()
+
+	busyboxImg, err := imageService.Get(ctx, busyboxTarget)
+	require.NoError(t, err)
+
+	busyboxManifest, err := images.Manifest(ctx, contentStore, busyboxImg.Target, nil)
+	require.NoError(t, err)
+
+	for _, layer := range busyboxManifest.Layers {
+		_, err = contentStore.Info(ctx, layer.Digest)
+		require.NoError(t, err)
+	}
+
+	// clear all local state out
+	err = imageService.Delete(ctx, busyboxImg.Name, images.SynchronousDelete())
+	require.NoError(t, err)
+	checkAllReleasable(t, c, sb, true)
+
+	for _, layer := range busyboxManifest.Layers {
+		_, err = contentStore.Info(ctx, layer.Digest)
+		require.ErrorIs(t, err, ctderrdefs.ErrNotFound, "unexpected error %v", err)
+	}
+
+	// make a new merge that includes the lazy busybox as a base and exports inline cache
+	input1 := llb.Scratch().
+		File(llb.Mkdir("/dir", 0777)).
+		File(llb.Mkfile("/dir/1", 0777, nil))
+	input1Copy := llb.Scratch().File(llb.Copy(input1, "/dir/1", "/foo/1", &llb.CopyInfo{CreateDestPath: true}))
+
+	input2 := llb.Scratch().
+		File(llb.Mkdir("/dir", 0755)).
+		File(llb.Mkfile("/dir/2", 0777, nil))
+	input2Copy := llb.Scratch().File(llb.Copy(input2, "/dir/2", "/bar/2", &llb.CopyInfo{CreateDestPath: true}))
+
+	merge := llb.Merge([]llb.State{llb.Image(busyboxTarget), input1Copy, input2Copy})
+
+	def, err = merge.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	target := registry + "/buildkit/testmergecache:latest"
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+		CacheExports: []CacheOptionsEntry{{
+			Type: "inline",
+		}},
+	}, nil)
+	require.NoError(t, err)
+
+	// verify that the busybox image stayed lazy
+	for _, layer := range busyboxManifest.Layers {
+		_, err = contentStore.Info(ctx, layer.Digest)
+		require.ErrorIs(t, err, ctderrdefs.ErrNotFound, "unexpected error %v", err)
+	}
+
+	// clear all local state out
+	img, err := imageService.Get(ctx, target)
+	require.NoError(t, err)
+
+	manifest, err := images.Manifest(ctx, contentStore, img.Target, nil)
+	require.NoError(t, err)
+
+	err = imageService.Delete(ctx, img.Name, images.SynchronousDelete())
+	require.NoError(t, err)
+	checkAllReleasable(t, c, sb, true)
+
+	for _, layer := range manifest.Layers {
+		_, err = contentStore.Info(ctx, layer.Digest)
+		require.ErrorIs(t, err, ctderrdefs.ErrNotFound, "unexpected error %v", err)
+	}
+
+	// re-run the build with a change only to input1 using the remote cache
+	input1 = llb.Scratch().
+		File(llb.Mkdir("/dir", 0777)).
+		File(llb.Mkfile("/dir/1", 0444, nil))
+	input1Copy = llb.Scratch().File(llb.Copy(input1, "/dir/1", "/foo/1", &llb.CopyInfo{CreateDestPath: true}))
+
+	merge = llb.Merge([]llb.State{llb.Image(busyboxTarget), input1Copy, input2Copy})
+
+	def, err = merge.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{{
+			Type: ExporterImage,
+			Attrs: map[string]string{
+				"name": target,
+				"push": "true",
+			},
+		}},
+		CacheImports: []CacheOptionsEntry{{
+			Type: "registry",
+			Attrs: map[string]string{
+				"ref": target,
+			},
+		}},
+		CacheExports: []CacheOptionsEntry{{
+			Type: "inline",
+		}},
+	}, nil)
+	require.NoError(t, err)
+
+	// verify everything from before stayed lazy except the middle layer for input1Copy
+	img, err = imageService.Get(ctx, target)
+	require.NoError(t, err)
+
+	manifest, err = images.Manifest(ctx, contentStore, img.Target, nil)
+	require.NoError(t, err)
+
+	for i, layer := range manifest.Layers {
+		switch i {
+		case 0, 2:
+			// bottom and top layer should stay lazy as they didn't change
+			_, err = contentStore.Info(ctx, layer.Digest)
+			require.ErrorIs(t, err, ctderrdefs.ErrNotFound, "unexpected error %v for index %d", err, i)
+		case 1:
+			// middle layer had to be rebuilt, should exist locally
+			_, err = contentStore.Info(ctx, layer.Digest)
+			require.NoError(t, err)
+		default:
+			require.Fail(t, "unexpected layer index %d", i)
+		}
+	}
+}
+
 func requiresLinux(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skipf("unsupported GOOS: %s", runtime.GOOS)
@@ -3876,15 +4055,19 @@ loop0:
 	retries = 0
 	for {
 		count := 0
-		err = client.ContentStore().Walk(ctx, func(content.Info) error {
+		var infos []content.Info
+		err = client.ContentStore().Walk(ctx, func(info content.Info) error {
 			count++
+			infos = append(infos, info)
 			return nil
 		})
 		require.NoError(t, err)
 		if count == 0 {
 			break
 		}
-		require.True(t, 20 > retries)
+		if retries >= 20 {
+			require.FailNowf(t, "content still exists", "%+v", infos)
+		}
 		retries++
 		time.Sleep(500 * time.Millisecond)
 	}

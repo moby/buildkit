@@ -40,7 +40,7 @@ func newWorkerOpt(t *testing.T, processMode oci.ProcessMode) (base.WorkerOpt, fu
 		},
 	}
 	rootless := false
-	workerOpt, err := NewWorkerOpt(tmpdir, snFactory, rootless, processMode, nil, nil, netproviders.Opt{Mode: "host"}, nil, "", "", nil, "")
+	workerOpt, err := NewWorkerOpt(context.TODO(), tmpdir, snFactory, rootless, processMode, nil, nil, netproviders.Opt{Mode: "host"}, nil, "", "", nil, "")
 	require.NoError(t, err)
 
 	return workerOpt, cleanup
@@ -112,6 +112,7 @@ func TestRuncWorker(t *testing.T) {
 	stderr := bytes.NewBuffer(nil)
 	err = w.WorkerOpt.Executor.Run(ctx, "", execMount(snap, true), nil, executor.ProcessInfo{Meta: meta, Stderr: &nopCloser{stderr}}, nil)
 	require.Error(t, err) // Read-only root
+
 	// typical error is like `mkdir /.../rootfs/proc: read-only file system`.
 	// make sure the error is caused before running `echo foo > /bar`.
 	require.Contains(t, stderr.String(), "read-only file system")

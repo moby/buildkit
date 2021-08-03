@@ -17,6 +17,7 @@ message Op {
 		SourceOp source = 3;
 		FileOp file = 4;
 		BuildOp build = 5;
+		MergeOp merge = 6;
 	}
 	Platform platform = 10;
 	WorkerConstraints constraints = 11;
@@ -117,7 +118,7 @@ message TmpfsOpt {
 message CacheOpt {
 	// ID is an optional namespace for the mount
 	string ID = 1;
-	// Sharing is the sharing mode for the mount 
+	// Sharing is the sharing mode for the mount
 	CacheSharingOpt sharing = 2;
 }
 
@@ -190,11 +191,11 @@ message OpMetadata {
 	// ignore_cache specifies to ignore the cache for this Op.
 	bool ignore_cache = 1;
 	// Description can be used for keeping any text fields that builder doesn't parse
-	map<string, string> description = 2; 
+	map<string, string> description = 2;
 	// index 3 reserved for WorkerConstraint in previous versions
 	// WorkerConstraint worker_constraint = 3;
 	ExportCache export_cache = 4;
-	
+
 	map<string, bool> caps = 5 [(gogoproto.castkey) = "github.com/moby/buildkit/util/apicaps.CapID", (gogoproto.nullable) = false];
 }
 
@@ -211,7 +212,7 @@ message Locations {
 
 // Source info contains the shared metadata of a source mapping
 message SourceInfo {
- 	string filename = 1;
+	string filename = 1;
 	bytes data = 2;
 	Definition definition = 3;
 }
@@ -361,4 +362,12 @@ message UserOpt {
 message NamedUserOpt {
 	string name = 1;
 	int64 input = 2 [(gogoproto.customtype) = "InputIndex", (gogoproto.nullable) = false];
+}
+
+message MergeInput {
+	int64 input = 1 [(gogoproto.customtype) = "InputIndex", (gogoproto.nullable) = false];
+}
+
+message MergeOp {
+	repeated MergeInput inputs = 1;
 }

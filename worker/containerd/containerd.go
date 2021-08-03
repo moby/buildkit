@@ -26,16 +26,16 @@ import (
 )
 
 // NewWorkerOpt creates a WorkerOpt.
-func NewWorkerOpt(root string, address, snapshotterName, ns string, labels map[string]string, dns *oci.DNSConfig, nopt netproviders.Opt, apparmorProfile string, parallelismSem *semaphore.Weighted, traceSocket string, opts ...containerd.ClientOpt) (base.WorkerOpt, error) {
+func NewWorkerOpt(ctx context.Context, root string, address, snapshotterName, ns string, labels map[string]string, dns *oci.DNSConfig, nopt netproviders.Opt, apparmorProfile string, parallelismSem *semaphore.Weighted, traceSocket string, opts ...containerd.ClientOpt) (base.WorkerOpt, error) {
 	opts = append(opts, containerd.WithDefaultNamespace(ns))
 	client, err := containerd.New(address, opts...)
 	if err != nil {
 		return base.WorkerOpt{}, errors.Wrapf(err, "failed to connect client to %q . make sure containerd is running", address)
 	}
-	return newContainerd(root, client, snapshotterName, ns, labels, dns, nopt, apparmorProfile, parallelismSem, traceSocket)
+	return newContainerd(ctx, root, client, snapshotterName, ns, labels, dns, nopt, apparmorProfile, parallelismSem, traceSocket)
 }
 
-func newContainerd(root string, client *containerd.Client, snapshotterName, ns string, labels map[string]string, dns *oci.DNSConfig, nopt netproviders.Opt, apparmorProfile string, parallelismSem *semaphore.Weighted, traceSocket string) (base.WorkerOpt, error) {
+func newContainerd(ctx context.Context, root string, client *containerd.Client, snapshotterName, ns string, labels map[string]string, dns *oci.DNSConfig, nopt netproviders.Opt, apparmorProfile string, parallelismSem *semaphore.Weighted, traceSocket string) (base.WorkerOpt, error) {
 	if strings.Contains(snapshotterName, "/") {
 		return base.WorkerOpt{}, errors.Errorf("bad snapshotter name: %q", snapshotterName)
 	}
@@ -100,6 +100,8 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 		return base.WorkerOpt{}, err
 	}
 
+	applier := winlayers.NewFileSystemApplierWithWindows(cs, df)
+	differ := winlayers.NewWalkingDiffWithWindows(cs, df)
 	snap := containerdsnapshot.NewSnapshotter(snapshotterName, client.SnapshotService(snapshotterName), ns, nil)
 
 	if err := cache.MigrateV2(
@@ -125,8 +127,8 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 		Executor:       containerdexecutor.New(client, root, "", np, dns, apparmorProfile, traceSocket),
 		Snapshotter:    snap,
 		ContentStore:   cs,
-		Applier:        winlayers.NewFileSystemApplierWithWindows(cs, df),
-		Differ:         winlayers.NewWalkingDiffWithWindows(cs, df),
+		Applier:        applier,
+		Differ:         differ,
 		ImageStore:     client.ImageService(),
 		Platforms:      platforms,
 		LeaseManager:   lm,

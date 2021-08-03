@@ -174,7 +174,8 @@ func Changes(ctx context.Context, changeFn fs.ChangeFunc, upperdir, upperdirView
 		if isDelete {
 			// This is a deleted entry.
 			kind = fs.ChangeKindDelete
-			f = nil
+			// Leave f set to the FileInfo for the whiteout device in case the caller wants it, e.g.
+			// the merge code uses it to hardlink in the whiteout device to merged snapshots
 		} else if baseF, err := os.Lstat(filepath.Join(base, path)); err == nil {
 			// File exists in the base layer. Thus this is modified.
 			kind = fs.ChangeKindModify
@@ -185,11 +186,11 @@ func Changes(ctx context.Context, changeFn fs.ChangeFunc, upperdir, upperdirView
 			} else if err != nil {
 				return err
 			}
-		} else if os.IsNotExist(err) {
+		} else if os.IsNotExist(err) || errors.Is(err, unix.ENOTDIR) {
 			// File doesn't exist in the base layer. Thus this is added.
 			kind = fs.ChangeKindAdd
 		} else if err != nil {
-			return err
+			return errors.Wrap(err, "failed to stat base file during overlay diff")
 		}
 
 		if !skipRecord {

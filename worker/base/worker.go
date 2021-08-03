@@ -267,6 +267,8 @@ func (w *Worker) ResolveOp(v solver.Vertex, s frontend.FrontendLLBBridge, sm *se
 			return ops.NewFileOp(v, op, w.CacheMgr, w.ParallelismSem, w)
 		case *pb.Op_Build:
 			return ops.NewBuildOp(v, op, s, w)
+		case *pb.Op_Merge:
+			return ops.NewMergeOp(v, op, w)
 		default:
 			return nil, errors.Errorf("no support for %T", op)
 		}

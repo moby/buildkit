@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/flightcontrol"
 	digest "github.com/opencontainers/go-digest"
 	imagespecidentity "github.com/opencontainers/image-spec/identity"
@@ -53,6 +55,7 @@ type Accessor interface {
 	New(ctx context.Context, parent ImmutableRef, s session.Group, opts ...RefOption) (MutableRef, error)
 	GetMutable(ctx context.Context, id string, opts ...RefOption) (MutableRef, error) // Rebase?
 	IdentityMapping() *idtools.IdentityMapping
+	Merge(ctx context.Context, parents []ImmutableRef, opts ...RefOption) (ImmutableRef, error)
 }
 
 type Controller interface {
@@ -73,9 +76,16 @@ type ExternalRefChecker interface {
 }
 
 type cacheManager struct {
-	records map[string]*cacheRecord
-	mu      sync.Mutex
-	ManagerOpt
+	records         map[string]*cacheRecord
+	mu              sync.Mutex
+	Snapshotter     snapshot.MergeSnapshotter
+	ContentStore    content.Store
+	LeaseManager    leases.Manager
+	PruneRefChecker ExternalRefCheckerFunc
+	GarbageCollect  func(ctx context.Context) (gc.Stats, error)
+	Applier         diff.Applier
+	Differ          diff.Comparer
+	MetadataStore   *metadata.Store
 
 	muPrune sync.Mutex // make sure parallel prune is not allowed so there will not be inconsistent results
 	unlazyG flightcontrol.Group
@@ -83,8 +93,15 @@ type cacheManager struct {
 
 func NewManager(opt ManagerOpt) (Manager, error) {
 	cm := &cacheManager{
-		ManagerOpt: opt,
-		records:    make(map[string]*cacheRecord),
+		Snapshotter:     snapshot.NewMergeSnapshotter(context.TODO(), opt.Snapshotter, opt.LeaseManager),
+		ContentStore:    opt.ContentStore,
+		LeaseManager:    opt.LeaseManager,
+		PruneRefChecker: opt.PruneRefChecker,
+		GarbageCollect:  opt.GarbageCollect,
+		Applier:         opt.Applier,
+		Differ:          opt.Differ,
+		MetadataStore:   opt.MetadataStore,
+		records:         make(map[string]*cacheRecord),
 	}
 
 	if err := cm.init(context.TODO()); err != nil {
@@ -114,7 +131,6 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor,
 	}
 
 	var p *immutableRef
-	var parentID string
 	if parent != nil {
 		p2, err := cm.Get(ctx, parent.ID(), NoUpdateLastUsed, descHandlers)
 		if err != nil {
@@ -122,18 +138,17 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor,
 		}
 		p = p2.(*immutableRef)
 
+		if err := p.finalizeLocked(ctx); err != nil {
+			p.Release(context.TODO())
+			return nil, err
+		}
+
 		if p.getChainID() == "" || p.getBlobChainID() == "" {
 			p.Release(context.TODO())
 			return nil, errors.Errorf("failed to get ref by blob on non-addressable parent")
 		}
 		chainID = imagespecidentity.ChainID([]digest.Digest{p.getChainID(), chainID})
 		blobChainID = imagespecidentity.ChainID([]digest.Digest{p.getBlobChainID(), blobChainID})
-
-		if err := p.finalizeLocked(ctx); err != nil {
-			p.Release(context.TODO())
-			return nil, err
-		}
-		parentID = p.ID()
 	}
 
 	releaseParent := false
@@ -195,7 +210,7 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor,
 		go link.Release(context.TODO())
 	}
 
-	l, err := cm.ManagerOpt.LeaseManager.Create(ctx, func(l *leases.Lease) error {
+	l, err := cm.LeaseManager.Create(ctx, func(l *leases.Lease) error {
 		l.ID = id
 		l.Labels = map[string]string{
 			"containerd.io/gc.flat": time.Now().UTC().Format(time.RFC3339Nano),
@@ -208,7 +223,7 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor,
 
 	defer func() {
 		if rerr != nil {
-			if err := cm.ManagerOpt.LeaseManager.Delete(context.TODO(), leases.Lease{
+			if err := cm.LeaseManager.Delete(context.TODO(), leases.Lease{
 				ID: l.ID,
 			}); err != nil {
 				logrus.Errorf("failed to remove lease: %+v", err)
@@ -216,7 +231,7 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor,
 		}
 	}()
 
-	if err := cm.LeaseManager.AddResource(ctx, leases.Lease{ID: id}, leases.Resource{
+	if err := cm.LeaseManager.AddResource(ctx, l, leases.Resource{
 		ID:   snapshotID,
 		Type: "snapshots/" + cm.Snapshotter.Name(),
 	}); err != nil && !errdefs.IsAlreadyExists(err) {
@@ -224,7 +239,7 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor,
 	}
 
 	if desc.Digest != "" {
-		if err := cm.ManagerOpt.LeaseManager.AddResource(ctx, leases.Lease{ID: id}, leases.Resource{
+		if err := cm.LeaseManager.AddResource(ctx, leases.Lease{ID: id}, leases.Resource{
 			ID:   desc.Digest.String(),
 			Type: "content",
 		}); err != nil {
@@ -238,11 +253,11 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor,
 		mu:            &sync.Mutex{},
 		cm:            cm,
 		refs:          make(map[ref]struct{}),
-		parent:        p,
+		parentRefs:    parentRefs{layerParent: p},
 		cacheMetadata: md,
 	}
 
-	if err := initializeMetadata(rec.cacheMetadata, parentID, opts...); err != nil {
+	if err := initializeMetadata(rec.cacheMetadata, rec.parentRefs, opts...); err != nil {
 		return nil, err
 	}
 
@@ -342,18 +357,16 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOpt
 	checkLazyProviders := func(rec *cacheRecord) error {
 		missing := NeedsRemoteProvidersError(nil)
 		dhs := descHandlersOf(opts...)
-		for {
-			blob := rec.getBlob()
-			if isLazy, err := rec.isLazy(ctx); err != nil {
+		if err := rec.walkUniqueRecords(func(cr *cacheRecord) error {
+			blob := cr.getBlob()
+			if isLazy, err := cr.isLazy(ctx); err != nil {
 				return err
 			} else if isLazy && dhs[blob] == nil {
 				missing = append(missing, blob)
 			}
-
-			if rec.parent == nil {
-				break
-			}
-			rec = rec.parent.cacheRecord
+			return nil
+		}); err != nil {
+			return err
 		}
 		if len(missing) > 0 {
 			return missing
@@ -375,6 +388,17 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOpt
 	if !ok {
 		return nil, errors.Wrap(errNotFound, id)
 	}
+
+	parents, err := cm.parentsOf(ctx, md, opts...)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to get parents")
+	}
+	defer func() {
+		if retErr != nil {
+			parents.release(context.TODO())
+		}
+	}()
+
 	if mutableID := md.getEqualMutable(); mutableID != "" {
 		mutable, err := cm.getRecord(ctx, mutableID)
 		if err != nil {
@@ -385,16 +409,11 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOpt
 			return nil, err
 		}
 
-		// parent refs are possibly lazy so keep it hold the description handlers.
-		var dhs DescHandlers
-		if mutable.parent != nil {
-			dhs = mutable.parent.descHandlers
-		}
 		rec := &cacheRecord{
 			mu:            &sync.Mutex{},
 			cm:            cm,
 			refs:          make(map[ref]struct{}),
-			parent:        mutable.parentRef(false, dhs),
+			parentRefs:    parents,
 			cacheMetadata: md,
 			equalMutable:  &mutableRef{cacheRecord: mutable},
 		}
@@ -403,28 +422,12 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOpt
 		return rec, nil
 	}
 
-	var parent *immutableRef
-	if parentID := md.getParent(); parentID != "" {
-		var err error
-		parent, err = cm.get(ctx, parentID, append(opts, NoUpdateLastUsed)...)
-		if err != nil {
-			return nil, err
-		}
-		defer func() {
-			if retErr != nil {
-				parent.mu.Lock()
-				parent.release(context.TODO())
-				parent.mu.Unlock()
-			}
-		}()
-	}
-
 	rec := &cacheRecord{
 		mu:            &sync.Mutex{},
 		mutable:       !md.getCommitted(),
 		cm:            cm,
 		refs:          make(map[ref]struct{}),
-		parent:        parent,
+		parentRefs:    parents,
 		cacheMetadata: md,
 	}
 
@@ -436,7 +439,7 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOpt
 		return nil, errors.Wrapf(errNotFound, "failed to get deleted record %s", id)
 	}
 
-	if err := initializeMetadata(rec.cacheMetadata, md.getParent(), opts...); err != nil {
+	if err := initializeMetadata(rec.cacheMetadata, rec.parentRefs, opts...); err != nil {
 		return nil, err
 	}
 
@@ -451,11 +454,29 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOpt
 	return rec, nil
 }
 
+func (cm *cacheManager) parentsOf(ctx context.Context, md *cacheMetadata, opts ...RefOption) (ps parentRefs, rerr error) {
+	if parentID := md.getParent(); parentID != "" {
+		p, err := cm.get(ctx, parentID, append(opts, NoUpdateLastUsed))
+		if err != nil {
+			return ps, err
+		}
+		ps.layerParent = p
+		return ps, nil
+	}
+	for _, parentID := range md.getMergeParents() {
+		p, err := cm.get(ctx, parentID, append(opts, NoUpdateLastUsed))
+		if err != nil {
+			return ps, err
+		}
+		ps.mergeParents = append(ps.mergeParents, p)
+	}
+	return ps, nil
+}
+
 func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, sess session.Group, opts ...RefOption) (mr MutableRef, err error) {
 	id := identity.NewID()
 
 	var parent *immutableRef
-	var parentID string
 	var parentSnapshotID string
 	if s != nil {
 		if _, ok := s.(*immutableRef); ok {
@@ -470,11 +491,10 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, sess session.Gr
 		if err := parent.finalizeLocked(ctx); err != nil {
 			return nil, err
 		}
-		if err := parent.Extract(ctx, sess); err != nil {
+		if err := parent.PrepareMount(ctx, parent.descHandlers, sess); err != nil {
 			return nil, err
 		}
 		parentSnapshotID = parent.getSnapshotID()
-		parentID = parent.ID()
 	}
 
 	defer func() {
@@ -483,7 +503,7 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, sess session.Gr
 		}
 	}()
 
-	l, err := cm.ManagerOpt.LeaseManager.Create(ctx, func(l *leases.Lease) error {
+	l, err := cm.LeaseManager.Create(ctx, func(l *leases.Lease) error {
 		l.ID = id
 		l.Labels = map[string]string{
 			"containerd.io/gc.flat": time.Now().UTC().Format(time.RFC3339Nano),
@@ -496,7 +516,7 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, sess session.Gr
 
 	defer func() {
 		if err != nil {
-			if err := cm.ManagerOpt.LeaseManager.Delete(context.TODO(), leases.Lease{
+			if err := cm.LeaseManager.Delete(context.TODO(), leases.Lease{
 				ID: l.ID,
 			}); err != nil {
 				logrus.Errorf("failed to remove lease: %+v", err)
@@ -505,7 +525,7 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, sess session.Gr
 	}()
 
 	snapshotID := id
-	if err := cm.LeaseManager.AddResource(ctx, leases.Lease{ID: id}, leases.Resource{
+	if err := cm.LeaseManager.AddResource(ctx, l, leases.Resource{
 		ID:   snapshotID,
 		Type: "snapshots/" + cm.Snapshotter.Name(),
 	}); err != nil && !errdefs.IsAlreadyExists(err) {
@@ -522,7 +542,7 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, sess session.Gr
 		err = cm.Snapshotter.Prepare(ctx, snapshotID, parentSnapshotID)
 	}
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to prepare %s", parentSnapshotID)
+		return nil, errors.Wrapf(err, "failed to prepare %v as %s", parentSnapshotID, snapshotID)
 	}
 
 	cm.mu.Lock()
@@ -535,12 +555,12 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, sess session.Gr
 		mutable:       true,
 		cm:            cm,
 		refs:          make(map[ref]struct{}),
-		parent:        parent,
+		parentRefs:    parentRefs{layerParent: parent},
 		cacheMetadata: md,
 	}
 
 	opts = append(opts, withSnapshotID(snapshotID))
-	if err := initializeMetadata(rec.cacheMetadata, parentID, opts...); err != nil {
+	if err := initializeMetadata(rec.cacheMetadata, rec.parentRefs, opts...); err != nil {
 		return nil, err
 	}
 
@@ -589,6 +609,108 @@ func (cm *cacheManager) GetMutable(ctx context.Context, id string, opts ...RefOp
 	}
 
 	return rec.mref(true, descHandlersOf(opts...)), nil
+}
+
+func (cm *cacheManager) Merge(ctx context.Context, inputParents []ImmutableRef, opts ...RefOption) (ir ImmutableRef, rerr error) {
+	id := identity.NewID()
+
+	var parents parentRefs
+	dhs := make(map[digest.Digest]*DescHandler)
+	defer func() {
+		if rerr != nil {
+			parents.release(context.TODO())
+		}
+	}()
+	for _, inputParent := range inputParents {
+		var parent *immutableRef
+		if p, ok := inputParent.(*immutableRef); ok {
+			parent = p
+		} else {
+			// inputParent implements ImmutableRef but isn't our internal struct, get an instance of the internal struct
+			// by calling Get on its ID.
+			p, err := cm.Get(ctx, inputParent.ID(), append(opts, NoUpdateLastUsed)...)
+			if err != nil {
+				return nil, err
+			}
+			parent = p.(*immutableRef)
+			defer parent.Release(context.TODO())
+		}
+		switch parent.parentKind() {
+		case Merge:
+			// if parent is itself a merge, flatten it out by just setting our parents directly to its parents
+			for _, grandparent := range parent.mergeParents {
+				parents.mergeParents = append(parents.mergeParents, grandparent.clone())
+			}
+		case Layer, None:
+			parents.mergeParents = append(parents.mergeParents, parent.clone())
+		}
+		for dgst, handler := range parent.descHandlers {
+			dhs[dgst] = handler
+		}
+	}
+
+	for _, parent := range parents.mergeParents {
+		if err := parent.finalizeLocked(ctx); err != nil {
+			return nil, errors.Wrapf(err, "failed to finalize parent during merge")
+		}
+	}
+
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	// Build the new ref
+	md, _ := cm.getMetadata(id)
+
+	rec := &cacheRecord{
+		mu:            &sync.Mutex{},
+		mutable:       false,
+		cm:            cm,
+		cacheMetadata: md,
+		parentRefs:    parents,
+		refs:          make(map[ref]struct{}),
+	}
+
+	if err := initializeMetadata(rec.cacheMetadata, rec.parentRefs, opts...); err != nil {
+		return nil, err
+	}
+
+	snapshotID := id
+
+	l, err := cm.LeaseManager.Create(ctx, func(l *leases.Lease) error {
+		l.ID = id
+		l.Labels = map[string]string{
+			"containerd.io/gc.flat": time.Now().UTC().Format(time.RFC3339Nano),
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create lease")
+	}
+	defer func() {
+		if rerr != nil {
+			if err := cm.LeaseManager.Delete(context.TODO(), leases.Lease{
+				ID: l.ID,
+			}); err != nil {
+				bklog.G(ctx).Errorf("failed to remove lease: %+v", err)
+			}
+		}
+	}()
+
+	if err := cm.LeaseManager.AddResource(ctx, leases.Lease{ID: id}, leases.Resource{
+		ID:   snapshotID,
+		Type: "snapshots/" + cm.Snapshotter.Name(),
+	}); err != nil {
+		return nil, err
+	}
+
+	rec.queueSnapshotID(snapshotID)
+	if err := rec.commitMetadata(); err != nil {
+		return nil, err
+	}
+
+	cm.records[id] = rec
+
+	return rec.ref(true, dhs), nil
 }
 
 func (cm *cacheManager) Prune(ctx context.Context, ch chan client.UsageInfo, opts ...client.PruneInfo) error {
@@ -690,7 +812,7 @@ func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, opt
 
 			shared := false
 			if opt.checkShared != nil {
-				shared = opt.checkShared.Exists(cr.ID(), cr.parentChain())
+				shared = opt.checkShared.Exists(cr.ID(), cr.layerDigestChain())
 			}
 
 			if !opt.all {
@@ -806,8 +928,14 @@ func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, opt
 			UsageCount:  usageCount,
 		}
 
-		if cr.parent != nil {
-			c.Parent = cr.parent.ID()
+		switch cr.parentKind() {
+		case Layer:
+			c.Parents = []string{cr.layerParent.ID()}
+		case Merge:
+			c.Parents = make([]string, len(cr.mergeParents))
+			for i, p := range cr.mergeParents {
+				c.Parents[i] = p.ID()
+			}
 		}
 		if c.Size == sizeUnknown && cr.equalImmutable != nil {
 			c.Size = cr.equalImmutable.getSize() // benefit from DiskUsage calc
@@ -851,12 +979,15 @@ func (cm *cacheManager) markShared(m map[string]*cacheUsageInfo) error {
 		return errors.WithStack(err)
 	}
 
-	var markAllParentsShared func(string)
-	markAllParentsShared = func(id string) {
-		if v, ok := m[id]; ok {
-			v.shared = true
-			if v.parent != "" {
-				markAllParentsShared(v.parent)
+	var markAllParentsShared func(...string)
+	markAllParentsShared = func(ids ...string) {
+		for _, id := range ids {
+			if id == "" {
+				continue
+			}
+			if v, ok := m[id]; ok {
+				v.shared = true
+				markAllParentsShared(v.parents...)
 			}
 		}
 	}
@@ -874,7 +1005,7 @@ func (cm *cacheManager) markShared(m map[string]*cacheUsageInfo) error {
 
 type cacheUsageInfo struct {
 	refs        int
-	parent      string
+	parents     []string
 	size        int64
 	mutable     bool
 	createdAt   time.Time
@@ -917,13 +1048,20 @@ func (cm *cacheManager) DiskUsage(ctx context.Context, opt client.DiskUsageInfo)
 			description: cr.GetDescription(),
 			doubleRef:   cr.equalImmutable != nil,
 			recordType:  cr.GetRecordType(),
-			parentChain: cr.parentChain(),
+			parentChain: cr.layerDigestChain(),
 		}
 		if c.recordType == "" {
 			c.recordType = client.UsageRecordTypeRegular
 		}
-		if cr.parent != nil {
-			c.parent = cr.parent.ID()
+
+		switch cr.parentKind() {
+		case Layer:
+			c.parents = []string{cr.layerParent.ID()}
+		case Merge:
+			c.parents = make([]string, len(cr.mergeParents))
+			for i, p := range cr.mergeParents {
+				c.parents[i] = p.ID()
+			}
 		}
 		if cr.mutable && c.refs > 0 {
 			c.size = 0 // size can not be determined because it is changing
@@ -940,12 +1078,14 @@ func (cm *cacheManager) DiskUsage(ctx context.Context, opt client.DiskUsageInfo)
 		}
 		for id := range rescan {
 			v := m[id]
-			if v.refs == 0 && v.parent != "" {
-				m[v.parent].refs--
-				if v.doubleRef {
-					m[v.parent].refs--
+			if v.refs == 0 {
+				for _, p := range v.parents {
+					m[p].refs--
+					if v.doubleRef {
+						m[p].refs--
+					}
+					rescan[p] = struct{}{}
 				}
-				rescan[v.parent] = struct{}{}
 			}
 			delete(rescan, id)
 		}
@@ -962,7 +1102,7 @@ func (cm *cacheManager) DiskUsage(ctx context.Context, opt client.DiskUsageInfo)
 			Mutable:     cr.mutable,
 			InUse:       cr.refs > 0,
 			Size:        cr.size,
-			Parent:      cr.parent,
+			Parents:     cr.parents,
 			CreatedAt:   cr.createdAt,
 			Description: cr.description,
 			LastUsedAt:  cr.lastUsedAt,
@@ -1079,13 +1219,26 @@ func withSnapshotID(id string) RefOption {
 	})
 }
 
-func initializeMetadata(m *cacheMetadata, parent string, opts ...RefOption) error {
+func initializeMetadata(m *cacheMetadata, parents parentRefs, opts ...RefOption) error {
 	if tm := m.GetCreatedAt(); !tm.IsZero() {
 		return nil
 	}
 
-	if err := m.queueParent(parent); err != nil {
-		return err
+	switch parents.parentKind() {
+	case Merge:
+		var ids []string
+		for _, p := range parents.mergeParents {
+			ids = append(ids, p.ID())
+		}
+		if err := m.queueMergeParents(ids); err != nil {
+			return err
+		}
+	case Layer:
+		if parents.layerParent != nil {
+			if err := m.queueParent(parents.layerParent.ID()); err != nil {
+				return err
+			}
+		}
 	}
 
 	if err := m.queueCreatedAt(time.Now()); err != nil {
@@ -1112,8 +1265,8 @@ func adaptUsageInfo(info *client.UsageInfo) filters.Adaptor {
 		switch fieldpath[0] {
 		case "id":
 			return info.ID, info.ID != ""
-		case "parent":
-			return info.Parent, info.Parent != ""
+		case "parents":
+			return strings.Join(info.Parents, ";"), len(info.Parents) > 0
 		case "description":
 			return info.Description, info.Description != ""
 		case "inuse":

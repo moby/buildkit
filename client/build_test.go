@@ -51,6 +51,7 @@ func TestClientGatewayIntegration(t *testing.T) {
 		testClientGatewaySlowCacheExecError,
 		testClientGatewayExecFileActionError,
 		testClientGatewayContainerExtraHosts,
+		testMergeOpSnapshots,
 	}, integration.WithMirroredImages(integration.OfficialImages("busybox:latest")))
 
 	integration.Run(t, []integration.Test{
@@ -1792,4 +1793,337 @@ type nopCloser struct {
 
 func (n *nopCloser) Close() error {
 	return nil
+}
+
+func testMergeOpSnapshots(t *testing.T, sb integration.Sandbox) {
+	skipDockerd(t, sb)
+	requiresLinux(t)
+
+	ctx := sb.Context()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	product := "buildkit_test"
+
+	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
+		stateA := llb.Scratch().
+			File(llb.Mkfile("/foo", 0777, []byte("A"))).
+			File(llb.Mkfile("/a", 0777, []byte("A"))).
+			File(llb.Mkdir("/bar", 0700)).
+			File(llb.Mkfile("/bar/A", 0777, []byte("A")))
+		stateB := stateA.
+			File(llb.Rm("/foo")).
+			File(llb.Mkfile("/b", 0777, []byte("B"))).
+			File(llb.Mkfile("/bar/B", 0774, []byte("B")))
+		stateC := llb.Scratch().
+			File(llb.Mkfile("/foo", 0775, []byte("C"))).
+			File(llb.Mkfile("/c", 0777, []byte("C"))).
+			File(llb.Mkdir("/bar", 0777)).
+			File(llb.Mkfile("/bar/A", 0400, []byte("C"))) // overwrite /bar/A from stateA
+
+		mergeA := llb.Merge([]llb.State{llb.Image("busybox:latest"), stateA, stateC})
+		def, err := mergeA.Marshal(sb.Context())
+		require.NoError(t, err)
+
+		res, err := c.Solve(sb.Context(), client.SolveRequest{
+			Definition: def.ToPB(),
+		})
+		require.NoError(t, err)
+
+		stat, err := res.Ref.StatFile(ctx, client.StatRequest{
+			Path: "/a",
+		})
+		require.NoError(t, err)
+		require.False(t, stat.IsDir())
+		require.EqualValues(t, 0777, stat.Mode&0777)
+
+		stat, err = res.Ref.StatFile(ctx, client.StatRequest{
+			Path: "/c",
+		})
+		require.NoError(t, err)
+		require.False(t, stat.IsDir())
+		require.EqualValues(t, 0777, stat.Mode&0777)
+
+		stat, err = res.Ref.StatFile(ctx, client.StatRequest{
+			Path: "/foo",
+		})
+		require.NoError(t, err)
+		require.False(t, stat.IsDir())
+		require.EqualValues(t, 0775, stat.Mode&0777)
+		contents, err := res.Ref.ReadFile(ctx, client.ReadRequest{
+			Filename: "/foo",
+		})
+		require.NoError(t, err)
+		require.Equal(t, "C", string(contents))
+
+		stat, err = res.Ref.StatFile(ctx, client.StatRequest{
+			Path: "/bar",
+		})
+		require.NoError(t, err)
+		require.True(t, stat.IsDir())
+		require.EqualValues(t, 0777, stat.Mode&0777)
+
+		stat, err = res.Ref.StatFile(ctx, client.StatRequest{
+			Path: "/bar/A",
+		})
+		require.NoError(t, err)
+		require.False(t, stat.IsDir())
+		require.EqualValues(t, 0400, stat.Mode&0777)
+		contents, err = res.Ref.ReadFile(ctx, client.ReadRequest{
+			Filename: "/bar/A",
+		})
+		require.NoError(t, err)
+		require.Equal(t, "C", string(contents))
+
+		mergeB := llb.Merge([]llb.State{stateC, stateB, llb.Image("busybox:latest")})
+		def, err = mergeB.Marshal(sb.Context())
+		require.NoError(t, err)
+
+		res, err = c.Solve(sb.Context(), client.SolveRequest{
+			Definition: def.ToPB(),
+		})
+		require.NoError(t, err)
+
+		stat, err = res.Ref.StatFile(ctx, client.StatRequest{
+			Path: "/a",
+		})
+		require.NoError(t, err)
+		require.False(t, stat.IsDir())
+		require.EqualValues(t, 0777, stat.Mode&0777)
+
+		stat, err = res.Ref.StatFile(ctx, client.StatRequest{
+			Path: "/b",
+		})
+		require.NoError(t, err)
+		require.False(t, stat.IsDir())
+		require.EqualValues(t, 0777, stat.Mode&0777)
+
+		stat, err = res.Ref.StatFile(ctx, client.StatRequest{
+			Path: "/c",
+		})
+		require.NoError(t, err)
+		require.False(t, stat.IsDir())
+		require.EqualValues(t, 0777, stat.Mode&0777)
+
+		_, err = res.Ref.StatFile(ctx, client.StatRequest{
+			Path: "/foo",
+		})
+		require.Error(t, err)
+
+		stat, err = res.Ref.StatFile(ctx, client.StatRequest{
+			Path: "/bar",
+		})
+		require.NoError(t, err)
+		require.True(t, stat.IsDir())
+		require.EqualValues(t, 0700, stat.Mode&0777)
+
+		stat, err = res.Ref.StatFile(ctx, client.StatRequest{
+			Path: "/bar/A",
+		})
+		require.NoError(t, err)
+		require.False(t, stat.IsDir())
+		require.EqualValues(t, 0777, stat.Mode&0777)
+		contents, err = res.Ref.ReadFile(ctx, client.ReadRequest{
+			Filename: "/bar/A",
+		})
+		require.NoError(t, err)
+		require.Equal(t, "A", string(contents))
+
+		stat, err = res.Ref.StatFile(ctx, client.StatRequest{
+			Path: "/bar/B",
+		})
+		require.NoError(t, err)
+		require.False(t, stat.IsDir())
+		require.EqualValues(t, 0774, stat.Mode&0777)
+		contents, err = res.Ref.ReadFile(ctx, client.ReadRequest{
+			Filename: "/bar/B",
+		})
+		require.NoError(t, err)
+		require.Equal(t, "B", string(contents))
+
+		stateD := llb.Scratch().File(llb.Mkdir("/qaz", 0755))
+		mergeC := llb.Merge([]llb.State{mergeA, mergeB, stateD})
+		def, err = mergeC.Marshal(sb.Context())
+		require.NoError(t, err)
+
+		res, err = c.Solve(sb.Context(), client.SolveRequest{
+			Definition: def.ToPB(),
+		})
+		require.NoError(t, err)
+
+		stat, err = res.Ref.StatFile(ctx, client.StatRequest{
+			Path: "/a",
+		})
+		require.NoError(t, err)
+		require.False(t, stat.IsDir())
+		require.EqualValues(t, 0777, stat.Mode&0777)
+
+		stat, err = res.Ref.StatFile(ctx, client.StatRequest{
+			Path: "/b",
+		})
+		require.NoError(t, err)
+		require.False(t, stat.IsDir())
+		require.EqualValues(t, 0777, stat.Mode&0777)
+
+		stat, err = res.Ref.StatFile(ctx, client.StatRequest{
+			Path: "/c",
+		})
+		require.NoError(t, err)
+		require.False(t, stat.IsDir())
+		require.EqualValues(t, 0777, stat.Mode&0777)
+
+		_, err = res.Ref.StatFile(ctx, client.StatRequest{
+			Path: "/foo",
+		})
+		require.Error(t, err)
+
+		stat, err = res.Ref.StatFile(ctx, client.StatRequest{
+			Path: "/bar",
+		})
+		require.NoError(t, err)
+		require.True(t, stat.IsDir())
+		require.EqualValues(t, 0700, stat.Mode&0777)
+
+		stat, err = res.Ref.StatFile(ctx, client.StatRequest{
+			Path: "/bar/A",
+		})
+		require.NoError(t, err)
+		require.False(t, stat.IsDir())
+		require.EqualValues(t, 0777, stat.Mode&0777)
+		contents, err = res.Ref.ReadFile(ctx, client.ReadRequest{
+			Filename: "/bar/A",
+		})
+		require.NoError(t, err)
+		require.Equal(t, "A", string(contents))
+
+		stat, err = res.Ref.StatFile(ctx, client.StatRequest{
+			Path: "/bar/B",
+		})
+		require.NoError(t, err)
+		require.False(t, stat.IsDir())
+		require.EqualValues(t, 0774, stat.Mode&0777)
+		contents, err = res.Ref.ReadFile(ctx, client.ReadRequest{
+			Filename: "/bar/B",
+		})
+		require.NoError(t, err)
+		require.Equal(t, "B", string(contents))
+
+		stat, err = res.Ref.StatFile(ctx, client.StatRequest{
+			Path: "/qaz",
+		})
+		require.NoError(t, err)
+		require.True(t, stat.IsDir())
+		require.EqualValues(t, 0755, stat.Mode&0777)
+
+		runA := mergeC.Run(llb.Shlex("sh -c -e -x '" + strings.Join([]string{
+			// turn /a file into a dir, mv b and c into it
+			"rm /a",
+			"mkdir /a",
+			"mv /b /c /a/",
+
+			// remove+recreate /bar to make it opaque on overlay snapshotters
+			"rm -rf /bar",
+			"mkdir -m 0777 /bar",
+			"echo D > /bar/D",
+
+			// turn /qaz dir into a file
+			"rm -rf /qaz",
+			"touch /qaz",
+		}, " && ") + "'")).Root()
+
+		stateE := llb.Scratch().
+			File(llb.Mkdir("/bar", 0777)).
+			File(llb.Mkfile("/bar/E", 0777, nil))
+
+		mergeD := llb.Merge([]llb.State{stateE, runA})
+
+		def, err = mergeD.Marshal(sb.Context())
+		require.NoError(t, err)
+
+		res, err = c.Solve(sb.Context(), client.SolveRequest{
+			Definition: def.ToPB(),
+		})
+		require.NoError(t, err)
+
+		stat, err = res.Ref.StatFile(ctx, client.StatRequest{
+			Path: "/a",
+		})
+		require.NoError(t, err)
+		require.True(t, stat.IsDir())
+
+		_, err = res.Ref.StatFile(ctx, client.StatRequest{
+			Path: "/b",
+		})
+		require.Error(t, err)
+		stat, err = res.Ref.StatFile(ctx, client.StatRequest{
+			Path: "/a/b",
+		})
+		require.NoError(t, err)
+		require.False(t, stat.IsDir())
+		require.EqualValues(t, 0777, stat.Mode&0777)
+		contents, err = res.Ref.ReadFile(ctx, client.ReadRequest{
+			Filename: "/a/b",
+		})
+		require.NoError(t, err)
+		require.Equal(t, "B", string(contents))
+
+		_, err = res.Ref.StatFile(ctx, client.StatRequest{
+			Path: "/c",
+		})
+		require.Error(t, err)
+		stat, err = res.Ref.StatFile(ctx, client.StatRequest{
+			Path: "/a/c",
+		})
+		require.NoError(t, err)
+		require.False(t, stat.IsDir())
+		require.EqualValues(t, 0777, stat.Mode&0777)
+		contents, err = res.Ref.ReadFile(ctx, client.ReadRequest{
+			Filename: "/a/c",
+		})
+		require.NoError(t, err)
+		require.Equal(t, "C", string(contents))
+
+		_, err = res.Ref.StatFile(ctx, client.StatRequest{
+			Path: "/foo",
+		})
+		require.Error(t, err)
+
+		stat, err = res.Ref.StatFile(ctx, client.StatRequest{
+			Path: "/bar",
+		})
+		require.NoError(t, err)
+		require.True(t, stat.IsDir())
+		require.EqualValues(t, 0777, stat.Mode&0777)
+
+		_, err = res.Ref.StatFile(ctx, client.StatRequest{
+			Path: "/bar/A",
+		})
+		require.Error(t, err)
+
+		_, err = res.Ref.StatFile(ctx, client.StatRequest{
+			Path: "/bar/B",
+		})
+		require.Error(t, err)
+
+		stat, err = res.Ref.StatFile(ctx, client.StatRequest{
+			Path: "/bar/E",
+		})
+		require.NoError(t, err)
+		require.False(t, stat.IsDir())
+		require.EqualValues(t, 0777, stat.Mode&0777)
+
+		stat, err = res.Ref.StatFile(ctx, client.StatRequest{
+			Path: "/qaz",
+		})
+		require.NoError(t, err)
+		require.False(t, stat.IsDir())
+
+		return &client.Result{}, nil
+	}
+
+	_, err = c.Build(ctx, SolveOpt{}, product, b, nil)
+	require.NoError(t, err)
+	checkAllReleasable(t, c, sb, true)
 }

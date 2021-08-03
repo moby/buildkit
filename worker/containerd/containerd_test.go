@@ -31,7 +31,7 @@ func newWorkerOpt(t *testing.T, addr string) (base.WorkerOpt, func()) {
 	tmpdir, err := ioutil.TempDir("", "workertest")
 	require.NoError(t, err)
 	cleanup := func() { os.RemoveAll(tmpdir) }
-	workerOpt, err := NewWorkerOpt(tmpdir, addr, "overlayfs", "buildkit-test", nil, nil, netproviders.Opt{Mode: "host"}, "", nil, "")
+	workerOpt, err := NewWorkerOpt(context.TODO(), tmpdir, addr, "overlayfs", "buildkit-test", nil, nil, netproviders.Opt{Mode: "host"}, "", nil, "")
 	require.NoError(t, err)
 	return workerOpt, cleanup
 }

@@ -41,13 +41,14 @@ message UsageRecord {
 	bool Mutable = 2;
 	bool InUse = 3;
 	int64 Size = 4;
-	string Parent = 5;
+	string Parent = 5 [deprecated=true];
 	google.protobuf.Timestamp CreatedAt = 6 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
 	google.protobuf.Timestamp LastUsedAt = 7 [(gogoproto.stdtime) = true];
 	int64 UsageCount = 8;
 	string Description = 9;
 	string RecordType = 10;
 	bool Shared = 11;
+	repeated string Parents = 12;
 }
 
 message SolveRequest {
