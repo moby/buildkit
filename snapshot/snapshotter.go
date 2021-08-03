@@ -7,6 +7,7 @@ import (
 	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/snapshots"
 	"github.com/docker/docker/pkg/idtools"
+	"github.com/pkg/errors"
 )
 
 type Mountable interface {
@@ -53,6 +54,7 @@ func (s *fromContainerd) Mounts(ctx context.Context, key string) (Mountable, err
 	}
 	return &staticMountable{mounts: mounts, idmap: s.idmap, id: key}, nil
 }
+
 func (s *fromContainerd) Prepare(ctx context.Context, key, parent string, opts ...snapshots.Opt) error {
 	_, err := s.Snapshotter.Prepare(ctx, key, parent, opts...)
 	return err
@@ -66,6 +68,15 @@ func (s *fromContainerd) View(ctx context.Context, key, parent string, opts ...s
 }
 func (s *fromContainerd) IdentityMapping() *idtools.IdentityMapping {
 	return s.idmap
+}
+
+func (s *fromContainerd) Commit(ctx context.Context, name, key string, opts ...snapshots.Opt) error {
+	info, err := s.Stat(ctx, key)
+	if err != nil {
+		return errors.Wrap(err, "failed to stat active key during commit")
+	}
+	opts = append(opts, snapshots.WithLabels(snapshots.FilterInheritedLabels(info.Labels)))
+	return s.Snapshotter.Commit(ctx, name, key, opts...)
 }
 
 // NewContainerdSnapshotter converts snapshotter to containerd snapshotter
