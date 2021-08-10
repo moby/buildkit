@@ -220,7 +220,6 @@ github.com/docker/docker/pkg/jsonmessage
 github.com/docker/docker/pkg/longpath
 github.com/docker/docker/pkg/pools
 github.com/docker/docker/pkg/reexec
-github.com/docker/docker/pkg/signal
 github.com/docker/docker/pkg/stringid
 github.com/docker/docker/pkg/system
 github.com/docker/docker/profiles/seccomp
@@ -314,6 +313,8 @@ github.com/moby/locker
 github.com/moby/sys/mount
 # github.com/moby/sys/mountinfo v0.4.1
 github.com/moby/sys/mountinfo
+# github.com/moby/sys/signal v0.5.0
+github.com/moby/sys/signal
 # github.com/moby/term v0.0.0-20201110203204-bea5bbe245bf
 github.com/moby/term
 github.com/moby/term/windows
@@ -464,7 +465,7 @@ golang.org/x/net/trace
 # golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 golang.org/x/sync/errgroup
 golang.org/x/sync/semaphore
-# golang.org/x/sys v0.0.0-20210426230700-d19ff857e887
+# golang.org/x/sys v0.0.0-20210630005230-0f9fa26af87c
 golang.org/x/sys/cpu
 golang.org/x/sys/execabs
 golang.org/x/sys/internal/unsafeheader
