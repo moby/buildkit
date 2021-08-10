@@ -574,7 +574,7 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 			continue
 		}
 
-		shouldInclude, err := shouldIncludePath(p, fn, includePatternMatcher, excludePatternMatcher)
+		shouldInclude, err := shouldIncludePath(fn, includePatternMatcher, excludePatternMatcher)
 		if err != nil {
 			return nil, err
 		}
@@ -619,13 +619,12 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 }
 
 func shouldIncludePath(
-	p string,
 	candidate string,
 	includePatternMatcher *fileutils.PatternMatcher,
 	excludePatternMatcher *fileutils.PatternMatcher,
 ) (bool, error) {
 	if includePatternMatcher != nil {
-		m, err := includePatternMatcher.Matches(filepath.FromSlash(candidate))
+		m, err := includePatternMatcher.Matches(candidate)
 		if err != nil {
 			return false, errors.Wrap(err, "failed to match includepatterns")
 		}
@@ -635,7 +634,7 @@ func shouldIncludePath(
 	}
 
 	if excludePatternMatcher != nil {
-		m, err := excludePatternMatcher.Matches(filepath.FromSlash(candidate))
+		m, err := excludePatternMatcher.Matches(candidate)
 		if err != nil {
 			return false, errors.Wrap(err, "failed to match excludepatterns")
 		}
