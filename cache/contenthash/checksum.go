@@ -487,11 +487,7 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 
 	var includePatternMatcher *fileutils.PatternMatcher
 	if len(opts.IncludePatterns) != 0 {
-		rootedIncludePatterns := make([]string, len(opts.IncludePatterns))
-		for i, includePattern := range opts.IncludePatterns {
-			rootedIncludePatterns[i] = keyPath(includePattern)
-		}
-		includePatternMatcher, err = fileutils.NewPatternMatcher(rootedIncludePatterns)
+		includePatternMatcher, err = fileutils.NewPatternMatcher(opts.IncludePatterns)
 		if err != nil {
 			return nil, errors.Wrapf(err, "invalid includepatterns: %s", opts.IncludePatterns)
 		}
@@ -499,11 +495,7 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 
 	var excludePatternMatcher *fileutils.PatternMatcher
 	if len(opts.ExcludePatterns) != 0 {
-		rootedExcludePatterns := make([]string, len(opts.ExcludePatterns))
-		for i, excludePattern := range opts.ExcludePatterns {
-			rootedExcludePatterns[i] = keyPath(excludePattern)
-		}
-		excludePatternMatcher, err = fileutils.NewPatternMatcher(rootedExcludePatterns)
+		excludePatternMatcher, err = fileutils.NewPatternMatcher(opts.ExcludePatterns)
 		if err != nil {
 			return nil, errors.Wrapf(err, "invalid excludepatterns: %s", opts.ExcludePatterns)
 		}
@@ -557,8 +549,10 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 				continue
 			}
 		}
+
+		var shouldInclude bool
 		if opts.Wildcard {
-			if lastMatchedDir == "" || !strings.HasPrefix(fn, lastMatchedDir+"/") {
+			if p != "" && (lastMatchedDir == "" || !strings.HasPrefix(fn, lastMatchedDir+"/")) {
 				include, err := path.Match(p, fn)
 				if err != nil {
 					return nil, err
@@ -569,15 +563,23 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 				}
 				lastMatchedDir = fn
 			}
-		} else if !strings.HasPrefix(fn+"/", p+"/") {
-			k, _, kOk = iter.Next()
-			continue
+
+			shouldInclude, err = shouldIncludePath(strings.TrimSuffix(strings.TrimPrefix(fn+"/", lastMatchedDir+"/"), "/"), includePatternMatcher, excludePatternMatcher)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			if !strings.HasPrefix(fn+"/", p+"/") {
+				k, _, kOk = iter.Next()
+				continue
+			}
+
+			shouldInclude, err = shouldIncludePath(strings.TrimSuffix(strings.TrimPrefix(fn+"/", p+"/"), "/"), includePatternMatcher, excludePatternMatcher)
+			if err != nil {
+				return nil, err
+			}
 		}
 
-		shouldInclude, err := shouldIncludePath(p, fn, includePatternMatcher, excludePatternMatcher)
-		if err != nil {
-			return nil, err
-		}
 		if !shouldInclude && !dirHeader {
 			k, _, kOk = iter.Next()
 			continue
@@ -619,13 +621,12 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 }
 
 func shouldIncludePath(
-	p string,
 	candidate string,
 	includePatternMatcher *fileutils.PatternMatcher,
 	excludePatternMatcher *fileutils.PatternMatcher,
 ) (bool, error) {
 	if includePatternMatcher != nil {
-		m, err := includePatternMatcher.Matches(filepath.FromSlash(candidate))
+		m, err := includePatternMatcher.Matches(candidate)
 		if err != nil {
 			return false, errors.Wrap(err, "failed to match includepatterns")
 		}
@@ -635,7 +636,7 @@ func shouldIncludePath(
 	}
 
 	if excludePatternMatcher != nil {
-		m, err := excludePatternMatcher.Matches(filepath.FromSlash(candidate))
+		m, err := excludePatternMatcher.Matches(candidate)
 		if err != nil {
 			return false, errors.Wrap(err, "failed to match excludepatterns")
 		}
