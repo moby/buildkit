@@ -27,7 +27,6 @@ import (
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/frontend"
 	gwclient "github.com/moby/buildkit/frontend/gateway/client"
-	gwerrdefs "github.com/moby/buildkit/frontend/gateway/errdefs"
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
@@ -1169,10 +1168,10 @@ func (lbf *llbBridgeForwarder) ExecProcess(srv pb.LLBBridge_ExecProcessServer) e
 					err := proc.Wait()
 
 					var statusCode uint32
-					var exitError *gwerrdefs.ExitError
+					var exitError *pb.ExitError
 					var statusError *rpc.Status
 					if err != nil {
-						statusCode = gwerrdefs.UnknownExitStatus
+						statusCode = pb.UnknownExitStatus
 						st, _ := status.FromError(grpcerrors.ToGRPC(err))
 						stp := st.Proto()
 						statusError = &rpc.Status{
