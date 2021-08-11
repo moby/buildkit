@@ -438,6 +438,14 @@ func TestChecksumBasicFile(t *testing.T) {
 
 func TestChecksumIncludeExclude(t *testing.T) {
 	t.Parallel()
+
+	t.Run("wildcard_false", func(t *testing.T) { testChecksumIncludeExclude(t, false) })
+	t.Run("wildcard_true", func(t *testing.T) { testChecksumIncludeExclude(t, true) })
+}
+
+func testChecksumIncludeExclude(t *testing.T, wildcard bool) {
+	t.Parallel()
+
 	tmpdir, err := ioutil.TempDir("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
@@ -461,37 +469,43 @@ func TestChecksumIncludeExclude(t *testing.T) {
 	cc, err := newCacheContext(ref.Metadata(), nil)
 	require.NoError(t, err)
 
-	dgst, err := cc.Checksum(context.TODO(), ref, "foo", ChecksumOpts{IncludePatterns: []string{"foo"}}, nil)
-	require.NoError(t, err)
+	opts := func(opts ChecksumOpts) ChecksumOpts {
+		opts.Wildcard = wildcard
+		return opts
+	}
 
-	require.Equal(t, dgstFileData0, dgst)
-
-	dgstFoo, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"foo"}}, nil)
+	dgstFoo, err := cc.Checksum(context.TODO(), ref, "", opts(ChecksumOpts{IncludePatterns: []string{"foo"}}), nil)
 	require.NoError(t, err)
-	require.Equal(t, dgstFileData0, dgst)
+	require.NotEqual(t, digest.FromBytes([]byte{}), dgstFoo)
 
-	dgstFooBar, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"foo", "bar"}}, nil)
+	dgstFooBar, err := cc.Checksum(context.TODO(), ref, "", opts(ChecksumOpts{IncludePatterns: []string{"foo", "bar"}}), nil)
 	require.NoError(t, err)
+	require.NotEqual(t, digest.FromBytes([]byte{}), dgstFooBar)
 
 	require.NotEqual(t, dgstFoo, dgstFooBar)
 
-	dgstD0, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"d0"}}, nil)
+	dgstD0, err := cc.Checksum(context.TODO(), ref, "", opts(ChecksumOpts{IncludePatterns: []string{"d0"}}), nil)
 	require.NoError(t, err)
-	dgstD1, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"d1"}}, nil)
+	require.NotEqual(t, digest.FromBytes([]byte{}), dgstD0)
+	dgstD1, err := cc.Checksum(context.TODO(), ref, "", opts(ChecksumOpts{IncludePatterns: []string{"d1"}}), nil)
 	require.NoError(t, err)
+	require.NotEqual(t, digest.FromBytes([]byte{}), dgstD1)
 
-	dgstD0Star, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"d0/*"}}, nil)
+	dgstD0Star, err := cc.Checksum(context.TODO(), ref, "", opts(ChecksumOpts{IncludePatterns: []string{"d0/*"}}), nil)
 	require.NoError(t, err)
-	dgstD0AStar, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"d0/a*"}}, nil)
+	require.NotEqual(t, digest.FromBytes([]byte{}), dgstD0Star)
+	dgstD0AStar, err := cc.Checksum(context.TODO(), ref, "", opts(ChecksumOpts{IncludePatterns: []string{"d0/a*"}}), nil)
 	require.NoError(t, err)
 	require.Equal(t, dgstD0Star, dgstD0AStar)
-	dgstD1Star, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"d1/*"}}, nil)
+	dgstD1Star, err := cc.Checksum(context.TODO(), ref, "", opts(ChecksumOpts{IncludePatterns: []string{"d1/*"}}), nil)
 	require.NoError(t, err)
+	require.NotEqual(t, digest.FromBytes([]byte{}), dgstD1Star)
 
 	// Nothing matches pattern, but d2's metadata should be captured in the
 	// checksum if d2 exists
-	dgstD2Foo, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"d2/foo"}}, nil)
+	dgstD2Foo, err := cc.Checksum(context.TODO(), ref, "", opts(ChecksumOpts{IncludePatterns: []string{"d2/foo"}}), nil)
 	require.NoError(t, err)
+	require.Equal(t, digest.FromBytes([]byte{}), dgstD2Foo)
 
 	err = ref.Release(context.TODO())
 	require.NoError(t, err)
@@ -514,46 +528,52 @@ func TestChecksumIncludeExclude(t *testing.T) {
 	cc, err = newCacheContext(ref.Metadata(), nil)
 	require.NoError(t, err)
 
-	dgstFoo2, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"foo"}}, nil)
+	dgstFoo2, err := cc.Checksum(context.TODO(), ref, "", opts(ChecksumOpts{IncludePatterns: []string{"foo"}}), nil)
 	require.NoError(t, err)
-	dgstFooBar2, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"foo", "bar"}}, nil)
+	dgstFooBar2, err := cc.Checksum(context.TODO(), ref, "", opts(ChecksumOpts{IncludePatterns: []string{"foo", "bar"}}), nil)
 	require.NoError(t, err)
 
 	require.Equal(t, dgstFoo, dgstFoo2)
 	require.Equal(t, dgstFooBar, dgstFooBar2)
 
-	dgstD02, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"d0"}}, nil)
+	dgstD02, err := cc.Checksum(context.TODO(), ref, "", opts(ChecksumOpts{IncludePatterns: []string{"d0"}}), nil)
 	require.NoError(t, err)
 	require.NotEqual(t, dgstD0, dgstD02)
+	require.NotEqual(t, digest.FromBytes([]byte{}), dgstD02)
 
-	dgstD12, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"d1"}}, nil)
+	dgstD12, err := cc.Checksum(context.TODO(), ref, "", opts(ChecksumOpts{IncludePatterns: []string{"d1"}}), nil)
 	require.NoError(t, err)
 	require.Equal(t, dgstD1, dgstD12)
 
-	dgstD0Star2, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"d0/*"}}, nil)
+	dgstD0Star2, err := cc.Checksum(context.TODO(), ref, "", opts(ChecksumOpts{IncludePatterns: []string{"d0/*"}}), nil)
 	require.NoError(t, err)
 	require.NotEqual(t, dgstD0Star, dgstD0Star2)
 
-	dgstD0AStar2, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"d0/a*"}}, nil)
+	dgstD0AStar2, err := cc.Checksum(context.TODO(), ref, "", opts(ChecksumOpts{IncludePatterns: []string{"d0/a*"}}), nil)
 	require.NoError(t, err)
 	// new file does not match the include pattern, so the digest should stay the same
 	require.Equal(t, dgstD0AStar, dgstD0AStar2)
+	require.NotEqual(t, digest.FromBytes([]byte{}), dgstD0AStar2)
 
-	dgstStarStarABC, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"**/abc"}}, nil)
+	dgstStarStarABC, err := cc.Checksum(context.TODO(), ref, "", opts(ChecksumOpts{IncludePatterns: []string{"**/abc"}}), nil)
 	require.NoError(t, err)
 	require.Equal(t, dgstD0AStar, dgstStarStarABC)
 
-	dgstD1Star2, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"d1/*"}}, nil)
+	dgstD1Star2, err := cc.Checksum(context.TODO(), ref, "", opts(ChecksumOpts{IncludePatterns: []string{"d1/*"}}), nil)
 	require.NoError(t, err)
 	require.Equal(t, dgstD1Star, dgstD1Star2)
 
-	dgstD0StarExclude, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"d0/*"}, ExcludePatterns: []string{"d0/xyz"}}, nil)
+	dgstD0StarExclude, err := cc.Checksum(context.TODO(), ref, "", opts(ChecksumOpts{IncludePatterns: []string{"d0/*"}, ExcludePatterns: []string{"d0/xyz"}}), nil)
 	require.NoError(t, err)
 	require.Equal(t, dgstD0Star, dgstD0StarExclude)
 
-	dgstD2Foo2, err := cc.Checksum(context.TODO(), ref, "", ChecksumOpts{IncludePatterns: []string{"d2/foo"}}, nil)
+	dgstD2Foo2, err := cc.Checksum(context.TODO(), ref, "", opts(ChecksumOpts{IncludePatterns: []string{"d2/foo"}}), nil)
 	require.NoError(t, err)
 	require.Equal(t, dgstD2Foo, dgstD2Foo2)
+
+	dgstD2Foo3, err := cc.Checksum(context.TODO(), ref, "d2", opts(ChecksumOpts{IncludePatterns: []string{"foo"}}), nil)
+	require.NoError(t, err)
+	require.Equal(t, dgstD2Foo, dgstD2Foo3)
 
 	err = ref.Release(context.TODO())
 	require.NoError(t, err)
