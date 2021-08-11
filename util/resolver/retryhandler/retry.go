@@ -10,12 +10,12 @@ import (
 
 	"github.com/containerd/containerd/images"
 	remoteserrors "github.com/containerd/containerd/remotes/errors"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
 
 func New(f images.HandlerFunc, logger func([]byte)) images.HandlerFunc {
-	return func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
+	return func(ctx context.Context, desc ocispecs.Descriptor) ([]ocispecs.Descriptor, error) {
 		backoff := time.Second
 		for {
 			descs, err := f(ctx, desc)

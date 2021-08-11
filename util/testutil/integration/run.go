@@ -22,7 +22,7 @@ import (
 	"github.com/gofrs/flock"
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/moby/buildkit/util/contentutil"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -203,7 +203,7 @@ func copyImagesLocal(t *testing.T, host string, images map[string]string) error 
 		}
 		localImageCache[host][to] = struct{}{}
 
-		var desc ocispec.Descriptor
+		var desc ocispecs.Descriptor
 		var provider content.Provider
 		var err error
 		if strings.HasPrefix(from, "local:") {

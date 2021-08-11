@@ -11,7 +11,7 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/testutil"
 	digest "github.com/opencontainers/go-digest"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -70,7 +70,7 @@ func TestContentAttachable(t *testing.T) {
 		for storeID, blobMap := range testBlobs {
 			callerStore := NewCallerStore(c, storeID)
 			for dgst, blob := range blobMap {
-				blob2, err := content.ReadBlob(ctx, callerStore, ocispec.Descriptor{Digest: dgst})
+				blob2, err := content.ReadBlob(ctx, callerStore, ocispecs.Descriptor{Digest: dgst})
 				if err != nil {
 					return err
 				}

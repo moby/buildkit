@@ -11,19 +11,29 @@ run:
 
 linters:
   enable:
-    - gofmt
-    - govet
     - deadcode
+    - gofmt
     - goimports
+    - golint
+    - govet
+    - importas
     - ineffassign
     - misspell
+    - staticcheck
+    - structcheck
+    - typecheck
     - unused
     - varcheck
-    - golint
-    - staticcheck
-    - typecheck
-    - structcheck
   disable-all: true
+
+linters-settings:
+  importas:
+    alias:
+      - pkg: "github.com/opencontainers/image-spec/specs-go/v1"
+        alias: "ocispecs"
+      - pkg: "github.com/opencontainers/go-digest"
+        alias: "digest"
+    no-unaliased: true
 
 issues:
   exclude-rules:

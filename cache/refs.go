@@ -23,7 +23,7 @@ import (
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/winlayers"
 	digest "github.com/opencontainers/go-digest"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
@@ -360,8 +360,8 @@ func (sr *immutableRef) Info() RefInfo {
 	}
 }
 
-func (sr *immutableRef) ociDesc() (ocispec.Descriptor, error) {
-	desc := ocispec.Descriptor{
+func (sr *immutableRef) ociDesc() (ocispecs.Descriptor, error) {
+	desc := ocispecs.Descriptor{
 		Digest:      digest.Digest(getBlob(sr.md)),
 		Size:        getBlobSize(sr.md),
 		MediaType:   getMediaType(sr.md),
@@ -377,7 +377,7 @@ func (sr *immutableRef) ociDesc() (ocispec.Descriptor, error) {
 	if !createdAt.IsZero() {
 		createdAt, err := createdAt.MarshalText()
 		if err != nil {
-			return ocispec.Descriptor{}, err
+			return ocispecs.Descriptor{}, err
 		}
 		desc.Annotations["buildkit/createdat"] = string(createdAt)
 	}

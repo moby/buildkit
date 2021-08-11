@@ -27,7 +27,7 @@ import (
 	utilsystem "github.com/moby/buildkit/util/system"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
-	specs "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/semaphore"
 )
@@ -93,7 +93,7 @@ func (e *execOp) CacheMap(ctx context.Context, g session.Group, index int) (*sol
 
 	p := platforms.DefaultSpec()
 	if e.platform != nil {
-		p = specs.Platform{
+		p = ocispecs.Platform{
 			OS:           e.platform.OS,
 			Architecture: e.platform.Architecture,
 			Variant:      e.platform.Variant,

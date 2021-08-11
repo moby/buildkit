@@ -27,7 +27,7 @@ import (
 	"github.com/moby/buildkit/util/suggest"
 	"github.com/moby/buildkit/util/system"
 	"github.com/moby/sys/signal"
-	specs "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -54,8 +54,8 @@ type ConvertOpt struct {
 	// CacheIDNamespace scopes the IDs for different cache mounts
 	CacheIDNamespace  string
 	ImageResolveMode  llb.ResolveMode
-	TargetPlatform    *specs.Platform
-	BuildPlatforms    []specs.Platform
+	TargetPlatform    *ocispecs.Platform
+	BuildPlatforms    []ocispecs.Platform
 	PrefixPlatform    bool
 	ExtraHosts        []llb.HostIP
 	ForceNetMode      pb.NetMode
@@ -486,8 +486,8 @@ type dispatchOpt struct {
 	buildContext      llb.State
 	proxyEnv          *llb.ProxyEnv
 	cacheIDNamespace  string
-	targetPlatform    specs.Platform
-	buildPlatforms    []specs.Platform
+	targetPlatform    ocispecs.Platform
+	buildPlatforms    []ocispecs.Platform
 	extraHosts        []llb.HostIP
 	copyImage         string
 	llbCaps           *apicaps.CapSet
@@ -568,7 +568,7 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 type dispatchState struct {
 	state          llb.State
 	image          Image
-	platform       *specs.Platform
+	platform       *ocispecs.Platform
 	stage          instructions.Stage
 	base           *dispatchState
 	deps           map[*dispatchState]struct{}
@@ -1306,7 +1306,7 @@ func commitToHistory(img *Image, msg string, withLayer bool, st *llb.State) erro
 		msg += " # buildkit"
 	}
 
-	img.History = append(img.History, specs.History{
+	img.History = append(img.History, ocispecs.History{
 		CreatedBy:  msg,
 		Comment:    historyComment,
 		EmptyLayer: !withLayer,
@@ -1460,7 +1460,7 @@ func withShell(img Image, args []string) []string {
 	return append(shell, strings.Join(args, " "))
 }
 
-func autoDetectPlatform(img Image, target specs.Platform, supported []specs.Platform) specs.Platform {
+func autoDetectPlatform(img Image, target ocispecs.Platform, supported []ocispecs.Platform) ocispecs.Platform {
 	os := img.OS
 	arch := img.Architecture
 	if target.OS == os && target.Architecture == arch {
@@ -1492,7 +1492,7 @@ func processCmdEnv(shlex *shell.Lex, cmd string, env []string) string {
 	return w
 }
 
-func prefixCommand(ds *dispatchState, str string, prefixPlatform bool, platform *specs.Platform) string {
+func prefixCommand(ds *dispatchState, str string, prefixPlatform bool, platform *ocispecs.Platform) string {
 	if ds.cmdTotal == 0 {
 		return str
 	}

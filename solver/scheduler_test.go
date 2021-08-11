@@ -14,7 +14,7 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	digest "github.com/opencontainers/go-digest"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
@@ -3727,7 +3727,7 @@ func testExporterOpts(all bool) CacheExportOpt {
 	return CacheExportOpt{
 		Convert: func(ctx context.Context, res Result) (*Remote, error) {
 			if dr, ok := res.Sys().(*dummyResult); ok {
-				return &Remote{Descriptors: []ocispec.Descriptor{{
+				return &Remote{Descriptors: []ocispecs.Descriptor{{
 					Annotations: map[string]string{"value": fmt.Sprintf("%d", dr.intValue)},
 				}}}, nil
 			}

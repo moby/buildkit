@@ -33,7 +33,7 @@ import (
 	"github.com/moby/buildkit/util/resolver"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/identity"
-	specs "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
 
@@ -152,7 +152,7 @@ type puller struct {
 	*pull.Puller
 }
 
-func mainManifestKey(ctx context.Context, desc specs.Descriptor, platform specs.Platform) (digest.Digest, error) {
+func mainManifestKey(ctx context.Context, desc ocispecs.Descriptor, platform ocispecs.Platform) (digest.Digest, error) {
 	dt, err := json.Marshal(struct {
 		Digest  digest.Digest
 		OS      string
@@ -361,7 +361,7 @@ func markRefLayerTypeWindows(ref cache.ImmutableRef) error {
 // cacheKeyFromConfig returns a stable digest from image config. If image config
 // is a known oci image we will use chainID of layers.
 func cacheKeyFromConfig(dt []byte) digest.Digest {
-	var img specs.Image
+	var img ocispecs.Image
 	err := json.Unmarshal(dt, &img)
 	if err != nil {
 		return digest.FromBytes(dt)

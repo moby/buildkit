@@ -47,7 +47,7 @@ import (
 	"github.com/moby/buildkit/util/progress/controller"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
-	specs "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 	"golang.org/x/sync/semaphore"
@@ -62,7 +62,7 @@ const labelCreatedAt = "buildkit/createdat"
 type WorkerOpt struct {
 	ID              string
 	Labels          map[string]string
-	Platforms       []specs.Platform
+	Platforms       []ocispecs.Platform
 	GCPolicy        []client.PruneInfo
 	MetadataStore   *metadata.Store
 	Executor        executor.Executor
@@ -200,7 +200,7 @@ func (w *Worker) Labels() map[string]string {
 	return w.WorkerOpt.Labels
 }
 
-func (w *Worker) Platforms(noCache bool) []specs.Platform {
+func (w *Worker) Platforms(noCache bool) []ocispecs.Platform {
 	if noCache {
 		pm := make(map[string]struct{}, len(w.WorkerOpt.Platforms))
 		for _, p := range w.WorkerOpt.Platforms {

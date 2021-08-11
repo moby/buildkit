@@ -18,7 +18,7 @@ import (
 	"github.com/moby/buildkit/util/progress/logs"
 	digest "github.com/opencontainers/go-digest"
 	specs "github.com/opencontainers/image-spec/specs-go"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
 
@@ -80,14 +80,14 @@ func (ce *contentCacheExporter) Finalize(ctx context.Context) (map[string]string
 		MediaType string `json:"mediaType,omitempty"`
 
 		// Manifests references platform specific manifests.
-		Manifests []ocispec.Descriptor `json:"manifests"`
+		Manifests []ocispecs.Descriptor `json:"manifests"`
 	}
 
 	var mfst manifestList
 	mfst.SchemaVersion = 2
 	mfst.MediaType = images.MediaTypeDockerSchema2ManifestList
 	if ce.oci {
-		mfst.MediaType = ocispec.MediaTypeImageIndex
+		mfst.MediaType = ocispecs.MediaTypeImageIndex
 	}
 
 	for _, l := range config.Layers {
@@ -110,7 +110,7 @@ func (ce *contentCacheExporter) Finalize(ctx context.Context) (map[string]string
 		return nil, err
 	}
 	dgst := digest.FromBytes(dt)
-	desc := ocispec.Descriptor{
+	desc := ocispecs.Descriptor{
 		Digest:    dgst,
 		Size:      int64(len(dt)),
 		MediaType: v1.CacheConfigMediaTypeV0,
@@ -129,7 +129,7 @@ func (ce *contentCacheExporter) Finalize(ctx context.Context) (map[string]string
 	}
 	dgst = digest.FromBytes(dt)
 
-	desc = ocispec.Descriptor{
+	desc = ocispecs.Descriptor{
 		Digest:    dgst,
 		Size:      int64(len(dt)),
 		MediaType: mfst.MediaType,

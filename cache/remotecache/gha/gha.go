@@ -15,8 +15,8 @@ import (
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/tracing"
 	"github.com/moby/buildkit/worker"
-	"github.com/opencontainers/go-digest"
-	specs "github.com/opencontainers/image-spec/specs-go/v1"
+	digest "github.com/opencontainers/go-digest"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	actionscache "github.com/tonistiigi/go-actions-cache"
@@ -176,16 +176,16 @@ func (ce *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 
 // ResolveCacheImporterFunc for Github actions cache importer.
 func ResolveCacheImporterFunc() remotecache.ResolveCacheImporterFunc {
-	return func(ctx context.Context, g session.Group, attrs map[string]string) (remotecache.Importer, specs.Descriptor, error) {
+	return func(ctx context.Context, g session.Group, attrs map[string]string) (remotecache.Importer, ocispecs.Descriptor, error) {
 		cfg, err := getConfig(attrs)
 		if err != nil {
-			return nil, specs.Descriptor{}, err
+			return nil, ocispecs.Descriptor{}, err
 		}
 		i, err := NewImporter(cfg)
 		if err != nil {
-			return nil, specs.Descriptor{}, err
+			return nil, ocispecs.Descriptor{}, err
 		}
-		return i, specs.Descriptor{}, nil
+		return i, ocispecs.Descriptor{}, nil
 	}
 }
 
@@ -218,7 +218,7 @@ func (ci *importer) makeDescriptorProviderPair(l v1.CacheLayer) (*v1.DescriptorP
 		}
 		annotations["buildkit/createdat"] = string(txt)
 	}
-	desc := specs.Descriptor{
+	desc := ocispecs.Descriptor{
 		MediaType:   l.Annotations.MediaType,
 		Digest:      l.Blob,
 		Size:        l.Annotations.Size,
@@ -270,7 +270,7 @@ func (ci *importer) loadScope(ctx context.Context, scope string) (*v1.CacheChain
 	return cc, nil
 }
 
-func (ci *importer) Resolve(ctx context.Context, _ specs.Descriptor, id string, w worker.Worker) (solver.CacheManager, error) {
+func (ci *importer) Resolve(ctx context.Context, _ ocispecs.Descriptor, id string, w worker.Worker) (solver.CacheManager, error) {
 	eg, ctx := errgroup.WithContext(ctx)
 	ccs := make([]*v1.CacheChains, len(ci.cache.Scopes()))
 
@@ -305,11 +305,11 @@ func (ci *importer) Resolve(ctx context.Context, _ specs.Descriptor, id string, 
 }
 
 type ciProvider struct {
-	desc specs.Descriptor
+	desc ocispecs.Descriptor
 	ci   *importer
 }
 
-func (p *ciProvider) ReaderAt(ctx context.Context, desc specs.Descriptor) (content.ReaderAt, error) {
+func (p *ciProvider) ReaderAt(ctx context.Context, desc ocispecs.Descriptor) (content.ReaderAt, error) {
 	key := "buildkit-blob-" + version + "-" + desc.Digest.String()
 	ce, err := p.ci.cache.Load(ctx, key)
 	if err != nil {
@@ -324,7 +324,7 @@ func (p *ciProvider) ReaderAt(ctx context.Context, desc specs.Descriptor) (conte
 
 type readerAt struct {
 	actionscache.ReaderAtCloser
-	desc specs.Descriptor
+	desc ocispecs.Descriptor
 }
 
 func (r *readerAt) Size() int64 {

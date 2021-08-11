@@ -27,7 +27,6 @@ import (
 	"github.com/pkg/errors"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	tracev1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
-	v1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -203,7 +202,7 @@ func (c *Controller) Export(ctx context.Context, req *tracev1.ExportTraceService
 	if err != nil {
 		return nil, err
 	}
-	return &v1.ExportTraceServiceResponse{}, nil
+	return &tracev1.ExportTraceServiceResponse{}, nil
 }
 
 func translateLegacySolveRequest(req *controlapi.SolveRequest) error {

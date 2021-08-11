@@ -9,7 +9,7 @@ import (
 	"github.com/containerd/containerd/platforms"
 	"github.com/google/shlex"
 	"github.com/moby/buildkit/solver/pb"
-	specs "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 type contextKeyT string
@@ -182,20 +182,20 @@ func shlexf(str string, replace bool, v ...interface{}) StateOption {
 	}
 }
 
-func platform(p specs.Platform) StateOption {
+func platform(p ocispecs.Platform) StateOption {
 	return func(s State) State {
 		return s.WithValue(keyPlatform, platforms.Normalize(p))
 	}
 }
 
-func getPlatform(s State) func(context.Context, *Constraints) (*specs.Platform, error) {
-	return func(ctx context.Context, c *Constraints) (*specs.Platform, error) {
+func getPlatform(s State) func(context.Context, *Constraints) (*ocispecs.Platform, error) {
+	return func(ctx context.Context, c *Constraints) (*ocispecs.Platform, error) {
 		v, err := s.getValue(keyPlatform)(ctx, c)
 		if err != nil {
 			return nil, err
 		}
 		if v != nil {
-			p := v.(specs.Platform)
+			p := v.(ocispecs.Platform)
 			return &p, nil
 		}
 		return nil, nil

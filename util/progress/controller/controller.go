@@ -7,7 +7,7 @@ import (
 
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/util/progress"
-	"github.com/opencontainers/go-digest"
+	digest "github.com/opencontainers/go-digest"
 )
 
 type Controller struct {

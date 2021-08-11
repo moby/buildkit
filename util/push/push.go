@@ -22,13 +22,13 @@ import (
 	"github.com/moby/buildkit/util/resolver/limited"
 	"github.com/moby/buildkit/util/resolver/retryhandler"
 	digest "github.com/opencontainers/go-digest"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
 func Push(ctx context.Context, sm *session.Manager, sid string, provider content.Provider, manager content.Manager, dgst digest.Digest, ref string, insecure bool, hosts docker.RegistryHosts, byDigest bool, annotations map[digest.Digest]map[string]string) error {
-	desc := ocispec.Descriptor{
+	desc := ocispecs.Descriptor{
 		Digest: dgst,
 	}
 	parsed, err := reference.ParseNormalizedNamed(ref)
@@ -71,12 +71,12 @@ func Push(ctx context.Context, sm *session.Manager, sid string, provider content
 	}
 
 	var m sync.Mutex
-	manifestStack := []ocispec.Descriptor{}
+	manifestStack := []ocispecs.Descriptor{}
 
-	filterHandler := images.HandlerFunc(func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
+	filterHandler := images.HandlerFunc(func(ctx context.Context, desc ocispecs.Descriptor) ([]ocispecs.Descriptor, error) {
 		switch desc.MediaType {
-		case images.MediaTypeDockerSchema2Manifest, ocispec.MediaTypeImageManifest,
-			images.MediaTypeDockerSchema2ManifestList, ocispec.MediaTypeImageIndex:
+		case images.MediaTypeDockerSchema2Manifest, ocispecs.MediaTypeImageManifest,
+			images.MediaTypeDockerSchema2ManifestList, ocispecs.MediaTypeImageIndex:
 			m.Lock()
 			manifestStack = append(manifestStack, desc)
 			m.Unlock()
@@ -109,7 +109,7 @@ func Push(ctx context.Context, sm *session.Manager, sid string, provider content
 	}
 
 	layersDone := oneOffProgress(ctx, "pushing layers")
-	err = images.Dispatch(ctx, images.Handlers(handlers...), nil, ocispec.Descriptor{
+	err = images.Dispatch(ctx, images.Handlers(handlers...), nil, ocispecs.Descriptor{
 		Digest:    dgst,
 		Size:      ra.Size(),
 		MediaType: mtype,
@@ -127,8 +127,8 @@ func Push(ctx context.Context, sm *session.Manager, sid string, provider content
 	return mfstDone(nil)
 }
 
-func annotateDistributionSourceHandler(manager content.Manager, annotations map[digest.Digest]map[string]string, f images.HandlerFunc) func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
-	return func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
+func annotateDistributionSourceHandler(manager content.Manager, annotations map[digest.Digest]map[string]string, f images.HandlerFunc) func(ctx context.Context, desc ocispecs.Descriptor) ([]ocispecs.Descriptor, error) {
+	return func(ctx context.Context, desc ocispecs.Descriptor) ([]ocispecs.Descriptor, error) {
 		children, err := f(ctx, desc)
 		if err != nil {
 			return nil, err
@@ -136,8 +136,8 @@ func annotateDistributionSourceHandler(manager content.Manager, annotations map[
 
 		// only add distribution source for the config or blob data descriptor
 		switch desc.MediaType {
-		case images.MediaTypeDockerSchema2Manifest, ocispec.MediaTypeImageManifest,
-			images.MediaTypeDockerSchema2ManifestList, ocispec.MediaTypeImageIndex:
+		case images.MediaTypeDockerSchema2Manifest, ocispecs.MediaTypeImageManifest,
+			images.MediaTypeDockerSchema2ManifestList, ocispecs.MediaTypeImageIndex:
 		default:
 			return children, nil
 		}
@@ -200,10 +200,10 @@ func oneOffProgress(ctx context.Context, id string) func(err error) error {
 }
 
 func childrenHandler(provider content.Provider) images.HandlerFunc {
-	return func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
-		var descs []ocispec.Descriptor
+	return func(ctx context.Context, desc ocispecs.Descriptor) ([]ocispecs.Descriptor, error) {
+		var descs []ocispecs.Descriptor
 		switch desc.MediaType {
-		case images.MediaTypeDockerSchema2Manifest, ocispec.MediaTypeImageManifest:
+		case images.MediaTypeDockerSchema2Manifest, ocispecs.MediaTypeImageManifest:
 			p, err := content.ReadBlob(ctx, provider, desc)
 			if err != nil {
 				return nil, err
@@ -211,20 +211,20 @@ func childrenHandler(provider content.Provider) images.HandlerFunc {
 
 			// TODO(stevvooe): We just assume oci manifest, for now. There may be
 			// subtle differences from the docker version.
-			var manifest ocispec.Manifest
+			var manifest ocispecs.Manifest
 			if err := json.Unmarshal(p, &manifest); err != nil {
 				return nil, err
 			}
 
 			descs = append(descs, manifest.Config)
 			descs = append(descs, manifest.Layers...)
-		case images.MediaTypeDockerSchema2ManifestList, ocispec.MediaTypeImageIndex:
+		case images.MediaTypeDockerSchema2ManifestList, ocispecs.MediaTypeImageIndex:
 			p, err := content.ReadBlob(ctx, provider, desc)
 			if err != nil {
 				return nil, err
 			}
 
-			var index ocispec.Index
+			var index ocispecs.Index
 			if err := json.Unmarshal(p, &index); err != nil {
 				return nil, err
 			}
@@ -235,8 +235,8 @@ func childrenHandler(provider content.Provider) images.HandlerFunc {
 				}
 			}
 		case images.MediaTypeDockerSchema2Layer, images.MediaTypeDockerSchema2LayerGzip,
-			images.MediaTypeDockerSchema2Config, ocispec.MediaTypeImageConfig,
-			ocispec.MediaTypeImageLayer, ocispec.MediaTypeImageLayerGzip:
+			images.MediaTypeDockerSchema2Config, ocispecs.MediaTypeImageConfig,
+			ocispecs.MediaTypeImageLayer, ocispecs.MediaTypeImageLayerGzip:
 			// childless data types.
 			return nil, nil
 		default:
@@ -258,12 +258,12 @@ func updateDistributionSourceHandler(manager content.Manager, pushF images.Handl
 		return nil, err
 	}
 
-	return images.HandlerFunc(func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
+	return images.HandlerFunc(func(ctx context.Context, desc ocispecs.Descriptor) ([]ocispecs.Descriptor, error) {
 		var islayer bool
 
 		switch desc.MediaType {
 		case images.MediaTypeDockerSchema2Layer, images.MediaTypeDockerSchema2LayerGzip,
-			ocispec.MediaTypeImageLayer, ocispec.MediaTypeImageLayerGzip:
+			ocispecs.MediaTypeImageLayer, ocispecs.MediaTypeImageLayerGzip:
 			islayer = true
 		}
 
@@ -284,10 +284,10 @@ func updateDistributionSourceHandler(manager content.Manager, pushF images.Handl
 
 func dedupeHandler(h images.HandlerFunc) images.HandlerFunc {
 	var g flightcontrol.Group
-	res := map[digest.Digest][]ocispec.Descriptor{}
+	res := map[digest.Digest][]ocispecs.Descriptor{}
 	var mu sync.Mutex
 
-	return images.HandlerFunc(func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
+	return images.HandlerFunc(func(ctx context.Context, desc ocispecs.Descriptor) ([]ocispecs.Descriptor, error) {
 		res, err := g.Do(ctx, desc.Digest.String(), func(ctx context.Context) (interface{}, error) {
 			mu.Lock()
 			if r, ok := res[desc.Digest]; ok {
@@ -312,6 +312,6 @@ func dedupeHandler(h images.HandlerFunc) images.HandlerFunc {
 		if res == nil {
 			return nil, nil
 		}
-		return res.([]ocispec.Descriptor), nil
+		return res.([]ocispecs.Descriptor), nil
 	})
 }

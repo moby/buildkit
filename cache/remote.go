@@ -16,7 +16,7 @@ import (
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/progress/logs"
 	"github.com/moby/buildkit/util/pull/pullprogress"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -150,7 +150,7 @@ func (mp *lazyMultiProvider) Add(p lazyRefProvider) {
 	mp.plist = append(mp.plist, p)
 }
 
-func (mp *lazyMultiProvider) ReaderAt(ctx context.Context, desc ocispec.Descriptor) (content.ReaderAt, error) {
+func (mp *lazyMultiProvider) ReaderAt(ctx context.Context, desc ocispecs.Descriptor) (content.ReaderAt, error) {
 	return mp.mprovider.ReaderAt(ctx, desc)
 }
 
@@ -167,12 +167,12 @@ func (mp *lazyMultiProvider) Unlazy(ctx context.Context) error {
 
 type lazyRefProvider struct {
 	ref     *immutableRef
-	desc    ocispec.Descriptor
+	desc    ocispecs.Descriptor
 	dh      *DescHandler
 	session session.Group
 }
 
-func (p lazyRefProvider) ReaderAt(ctx context.Context, desc ocispec.Descriptor) (content.ReaderAt, error) {
+func (p lazyRefProvider) ReaderAt(ctx context.Context, desc ocispecs.Descriptor) (content.ReaderAt, error) {
 	if desc.Digest != p.desc.Digest {
 		return nil, errdefs.ErrNotFound
 	}
