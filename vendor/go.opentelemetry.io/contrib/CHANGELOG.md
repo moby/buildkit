@@ -8,6 +8,23 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.22.0] - 2021-07-26
+
+### Added
+
+- Add the `zpages` span processor. (#894)
+
+### Changed
+
+- The `b3.B3` type has been removed.
+  `b3.New()` and `b3.WithInjectEncoding(encoding)` are added to replace it. (#868)
+
+### Fixed
+
+- Fix deadlocks and race conditions in `otelsarama.WrapAsyncProducer`.
+  The `messaging.message_id` and `messaging.kafka.partition` attributes are now not set if a message was not processed. (#754) (#755) (#881)
+- Fix `otelsarama.WrapAsyncProducer` so that the messages from the `Errors` channel contain the original `Metadata`. (#754)
+
 ## [0.21.0] - 2021-06-18
 
 ### Fixed
@@ -315,7 +332,8 @@ First official tagged release of `contrib` repository.
 - Prefix support for dogstatsd (#34)
 - Update Go Runtime package to use batch observer (#44)
 
-[Unreleased]: https://github.com/open-telemetry/opentelemetry-go-contrib/compare/v0.21.0...HEAD
+[Unreleased]: https://github.com/open-telemetry/opentelemetry-go-contrib/compare/v0.22.0...HEAD
+[0.22.0]: https://github.com/open-telemetry/opentelemetry-go-contrib/releases/tag/v0.22.0
 [0.21.0]: https://github.com/open-telemetry/opentelemetry-go-contrib/releases/tag/v0.21.0
 [0.20.0]: https://github.com/open-telemetry/opentelemetry-go-contrib/releases/tag/v0.20.0
 [0.19.0]: https://github.com/open-telemetry/opentelemetry-go-contrib/releases/tag/v0.19.0

@@ -43,7 +43,14 @@ var (
 			otel.Handle(err)
 		}
 		return r
-	}(Detect(context.Background(), defaultServiceNameDetector{}, fromEnv{}, telemetrySDK{}))
+	}(
+		Detect(
+			context.Background(),
+			defaultServiceNameDetector{},
+			fromEnv{},
+			telemetrySDK{},
+		),
+	)
 )
 
 var (

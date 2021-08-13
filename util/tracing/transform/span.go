@@ -107,7 +107,7 @@ func (s *readOnlySpan) Attributes() []attribute.KeyValue {
 	return Attributes(s.pb.Attributes)
 }
 
-func (s *readOnlySpan) Links() []trace.Link {
+func (s *readOnlySpan) Links() []tracesdk.Link {
 	return links(s.pb.Links)
 }
 
@@ -174,12 +174,12 @@ func statusCode(st *tracepb.Status) codes.Code {
 }
 
 // links transforms OTLP span links to span Links.
-func links(links []*tracepb.Span_Link) []trace.Link {
+func links(links []*tracepb.Span_Link) []tracesdk.Link {
 	if len(links) == 0 {
 		return nil
 	}
 
-	sl := make([]trace.Link, 0, len(links))
+	sl := make([]tracesdk.Link, 0, len(links))
 	for _, otLink := range links {
 		// This redefinition is necessary to prevent otLink.*ID[:] copies
 		// being reused -- in short we need a new otLink per iteration.
@@ -195,7 +195,7 @@ func links(links []*tracepb.Span_Link) []trace.Link {
 			SpanID:  sid,
 		})
 
-		sl = append(sl, trace.Link{
+		sl = append(sl, tracesdk.Link{
 			SpanContext: sctx,
 			Attributes:  Attributes(otLink.Attributes),
 		})

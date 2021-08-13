@@ -55,7 +55,7 @@ type ReadOnlySpan interface {
 	// Attributes returns the defining attributes of the span.
 	Attributes() []attribute.KeyValue
 	// Links returns all the links the span has to other spans.
-	Links() []trace.Link
+	Links() []Link
 	// Events returns all the events that occurred within in the spans
 	// lifetime.
 	Events() []Event
@@ -262,11 +262,13 @@ func (s *span) End(options ...trace.SpanEndOption) {
 	}
 	s.mu.Unlock()
 
-	sps, ok := s.tracer.provider.spanProcessors.Load().(spanProcessorStates)
-	mustExportOrProcess := ok && len(sps) > 0
-	if mustExportOrProcess {
+	if sps, ok := s.tracer.provider.spanProcessors.Load().(spanProcessorStates); ok {
+		if len(sps) == 0 {
+			return
+		}
+		snap := s.snapshot()
 		for _, sp := range sps {
-			sp.sp.OnEnd(s.snapshot())
+			sp.sp.OnEnd(snap)
 		}
 	}
 }
@@ -384,11 +386,11 @@ func (s *span) Attributes() []attribute.KeyValue {
 }
 
 // Links returns the links of this span.
-func (s *span) Links() []trace.Link {
+func (s *span) Links() []Link {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if len(s.links.queue) == 0 {
-		return []trace.Link{}
+		return []Link{}
 	}
 	return s.interfaceArrayToLinksArray()
 }
@@ -433,13 +435,15 @@ func (s *span) addLink(link trace.Link) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	var droppedAttributeCount int
+
 	// Discard over limited attributes
 	if len(link.Attributes) > s.spanLimits.AttributePerLinkCountLimit {
-		link.DroppedAttributeCount = len(link.Attributes) - s.spanLimits.AttributePerLinkCountLimit
+		droppedAttributeCount = len(link.Attributes) - s.spanLimits.AttributePerLinkCountLimit
 		link.Attributes = link.Attributes[:s.spanLimits.AttributePerLinkCountLimit]
 	}
 
-	s.links.add(link)
+	s.links.add(Link{link.SpanContext, link.Attributes, droppedAttributeCount})
 }
 
 // DroppedAttributes returns the number of attributes dropped by the span
@@ -512,10 +516,10 @@ func (s *span) snapshot() ReadOnlySpan {
 	return &sd
 }
 
-func (s *span) interfaceArrayToLinksArray() []trace.Link {
-	linkArr := make([]trace.Link, 0)
+func (s *span) interfaceArrayToLinksArray() []Link {
+	linkArr := make([]Link, 0)
 	for _, value := range s.links.queue {
-		linkArr = append(linkArr, value.(trace.Link))
+		linkArr = append(linkArr, value.(Link))
 	}
 	return linkArr
 }
@@ -559,7 +563,9 @@ func startSpanInternal(ctx context.Context, tr *tracer, name string, o *trace.Sp
 	// If told explicitly to make this a new root use a zero value SpanContext
 	// as a parent which contains an invalid trace ID and is not remote.
 	var psc trace.SpanContext
-	if !o.NewRoot() {
+	if o.NewRoot() {
+		ctx = trace.ContextWithSpanContext(ctx, psc)
+	} else {
 		psc = trace.SpanContextFromContext(ctx)
 	}
 
@@ -635,7 +641,7 @@ func isSampled(s SamplingResult) bool {
 type Status struct {
 	// Code is an identifier of a Spans state classification.
 	Code codes.Code
-	// Message is a user hint about why that status was set. It is only
+	// Description is a user hint about why that status was set. It is only
 	// applicable when Code is Error.
 	Description string
 }

@@ -12,17 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package contrib contains common values used across all
-// instrumentation, exporter, and detector contributions.
-package contrib // import "go.opentelemetry.io/contrib"
+// +build !aix
+// +build !darwin
+// +build !dragonfly
+// +build !freebsd
+// +build !linux
+// +build !netbsd
+// +build !openbsd
+// +build !solaris
+// +build !windows
+// +build !zos
 
-// Version is the current release version of OpenTelemetry Contrib in use.
-func Version() string {
-	return "0.22.0"
-	// This string is updated by the pre_release.sh script during release
-}
+package resource // import "go.opentelemetry.io/otel/sdk/resource"
 
-// SemVersion is the semantic version to be supplied to tracer/meter creation.
-func SemVersion() string {
-	return "semver:" + Version()
+// platformOSDescription is a placeholder implementation for OSes
+// for which this project currently doesn't support os.description
+// attribute detection. See build tags declaration early on this file
+// for a list of unsupported OSes.
+func platformOSDescription() (string, error) {
+	return "<unknown>", nil
 }

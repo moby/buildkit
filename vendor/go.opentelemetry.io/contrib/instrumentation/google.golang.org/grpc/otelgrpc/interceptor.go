@@ -202,9 +202,6 @@ func wrapClientStream(ctx context.Context, s grpc.ClientStream, desc *grpc.Strea
 
 		for {
 			select {
-			case <-ctx.Done():
-				finished <- ctx.Err()
-				return
 			case event := <-events:
 				switch event.Type {
 				case receiveEndEvent:
@@ -214,6 +211,9 @@ func wrapClientStream(ctx context.Context, s grpc.ClientStream, desc *grpc.Strea
 					finished <- event.Err
 					return
 				}
+			case <-ctx.Done():
+				finished <- ctx.Err()
+				return
 			}
 		}
 	}()

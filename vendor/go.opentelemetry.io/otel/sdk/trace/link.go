@@ -12,17 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package contrib contains common values used across all
-// instrumentation, exporter, and detector contributions.
-package contrib // import "go.opentelemetry.io/contrib"
+package trace // import "go.opentelemetry.io/otel/sdk/trace"
 
-// Version is the current release version of OpenTelemetry Contrib in use.
-func Version() string {
-	return "0.22.0"
-	// This string is updated by the pre_release.sh script during release
-}
+import (
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
+)
 
-// SemVersion is the semantic version to be supplied to tracer/meter creation.
-func SemVersion() string {
-	return "semver:" + Version()
+// Link is the relationship between two Spans. The relationship can be within
+// the same Trace or across different Traces.
+type Link struct {
+	// SpanContext of the linked Span.
+	SpanContext trace.SpanContext
+
+	// Attributes describe the aspects of the link.
+	Attributes []attribute.KeyValue
+
+	// DroppedAttributeCount is the number of attributes that were not
+	// recorded due to configured limits being reached.
+	DroppedAttributeCount int
 }

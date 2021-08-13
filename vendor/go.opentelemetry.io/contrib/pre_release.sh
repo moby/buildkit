@@ -25,20 +25,23 @@ set -e
 
 declare CONTRIB_TAG
 declare OTEL_TAG
+declare PREV_OTEL_TAG
 
 help() {
    printf "\n"
    printf "Usage: %s [-o otel_tag] [-t tag]\n" "$0"
    printf "\t-o Otel release tag. Update all go.mod to reference go.opentelemetry.io/otel <otel_tag>.\n"
+   printf "\t-p Previous Otel release tag. Update all go.mod that reference go.opentelemetry.io/otel <prev_otel_tag>.\n"
    printf "\t-t New Contrib unreleased tag. Update all go.mod files with this tag.\n"
    exit 1 # Exit script after printing help
 }
 
-while getopts "t:o:" opt
+while getopts "t:o:p:" opt
 do
    case "$opt" in
       t ) CONTRIB_TAG="$OPTARG" ;;
       o ) OTEL_TAG="$OPTARG" ;;
+      p ) PREV_OTEL_TAG="$OPTARG" ;;
       ? ) help ;; # Print help
    esac
 done
@@ -46,11 +49,11 @@ done
 declare -r SEMVER_REGEX="^v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(\\-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$"
 
 validate_tag() {
-    local tag_=$1
-    if [[ "${tag_}" =~ ${SEMVER_REGEX} ]]; then
-	    printf "%s is valid semver tag.\n" "${tag_}"
+    local newTag=$1
+    if [[ "${newTag}" =~ ${SEMVER_REGEX} ]]; then
+	    printf "%s is valid semver tag.\n" "${newTag}"
     else
-	    printf "%s is not a valid semver tag.\n" "${tag_}"
+	    printf "%s is not a valid semver tag.\n" "${newTag}"
 	    return 1
     fi
 }
@@ -109,16 +112,19 @@ rm -f ./contrib.go.bak
 
 declare -r BRANCH_NAME=pre_release_${CONTRIB_TAG}
 
+defaultFromTag="v[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*[^0-9]*.*"
+
 patch_gomods() {
     local pkg_=$1
-    local tag_=$2
+    local oldTag=${2:-$defaultFromTag}
+    local newTag=$3
     # now do the same for all the directories underneath
     PACKAGE_DIRS=$(find . -mindepth 2 -type f -name 'go.mod' -exec dirname {} \; | egrep -v 'tools' | sed 's|^\.\/||' | sort)
     # quote any '.' characters in the pkg name
     local quoted_pkg_=${pkg_//./\\.}
     for dir in $PACKAGE_DIRS; do
 	    cp "${dir}/go.mod" "${dir}/go.mod.bak"
-	    sed "s|${quoted_pkg_}\([^ ]*\) v[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*[^0-9]*.*$|${pkg_}\1 ${tag_}|" "${dir}/go.mod.bak" >"${dir}/go.mod"
+	    sed "s|${quoted_pkg_}\([^ ]*\) ${oldTag}$|${pkg_}\1 ${newTag}|" "${dir}/go.mod.bak" >"${dir}/go.mod"
 	    rm -f "${dir}/go.mod.bak"
     done
 }
@@ -130,11 +136,11 @@ git checkout -b "${BRANCH_NAME}" main
 if [ -n "${OTEL_TAG}" ]; then
     # first update the top most module
     go get "go.opentelemetry.io/otel@${OTEL_TAG}"
-    patch_gomods go.opentelemetry.io/otel "${OTEL_TAG}"
+    patch_gomods go.opentelemetry.io/otel "${PREV_OTEL_TAG}" "${OTEL_TAG}"
 fi
 
 if [ -n "${CONTRIB_TAG}" ]; then
-    patch_gomods go.opentelemetry.io/contrib "${CONTRIB_TAG}"
+    patch_gomods go.opentelemetry.io/contrib "" "${CONTRIB_TAG}"
 fi
 
 git diff
