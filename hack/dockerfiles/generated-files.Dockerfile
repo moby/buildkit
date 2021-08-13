@@ -20,7 +20,7 @@ RUN --mount=target=/root/.cache,type=cache GO111MODULE=on go install \
 	github.com/gogo/protobuf/protoc-gen-gogofaster@${GOGO_VERSION} \
 	github.com/gogo/protobuf/protoc-gen-gogoslick@${GOGO_VERSION}
 
-ARG PROTOBUF_VERSION=v1.3.5
+ARG PROTOBUF_VERSION=v1.5.2
 RUN --mount=target=/root/.cache,type=cache GO111MODULE=on go install \
 	github.com/golang/protobuf/protoc-gen-go@${PROTOBUF_VERSION}
 
