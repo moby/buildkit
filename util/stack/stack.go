@@ -79,8 +79,8 @@ func Enable(err error) error {
 	return err
 }
 
-func Wrap(err error, s Stack) error {
-	return &withStack{stack: s, error: err}
+func Wrap(err error, s *Stack) error {
+	return &withStack{stack: *s, error: err}
 }
 
 func hasLocalStackTrace(err error) bool {
