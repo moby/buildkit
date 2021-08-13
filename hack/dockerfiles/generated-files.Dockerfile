@@ -8,7 +8,7 @@ RUN apt-get update && apt-get --no-install-recommends install -y \
 	&& true
 
 # https://github.com/golang/protobuf/blob/v1.3.5/.travis.yml#L15
-ARG PROTOC_VERSION=3.11.4
+ARG PROTOC_VERSION=3.17.3
 ARG TARGETOS TARGETARCH
 RUN set -e; \
 	arch=$(echo $TARGETARCH | sed -e s/amd64/x86_64/ -e s/arm64/aarch_64/); \
