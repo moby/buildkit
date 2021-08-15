@@ -3,7 +3,8 @@ FROM alpine:3.13
 WORKDIR /buildkit
 
 build:
-    FROM DOCKERFILE --target buildkit-buildkitd-linux .
+    ARG DOCKER_TARGET=buildkit-buildkitd-linux
+    FROM DOCKERFILE --target $DOCKER_TARGET .
 
 code:
     COPY . .
