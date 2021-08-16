@@ -193,15 +193,11 @@ func TestCancelBoth(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, ret1, "bar")
 
-	f2 := testFunc(100*time.Millisecond, "baz", &counter)
-	ret1, err = g.Do(context.TODO(), "foo", f2)
-	assert.NoError(t, err)
-	assert.Equal(t, ret1, "baz")
 	ret1, err = g.Do(context.TODO(), "abc", f)
 	assert.NoError(t, err)
 	assert.Equal(t, ret1, "bar")
 
-	assert.Equal(t, counter, int64(4))
+	assert.Equal(t, counter, int64(3))
 }
 
 func TestContention(t *testing.T) {

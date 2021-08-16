@@ -224,7 +224,16 @@ func (p lazyRefProvider) Unlazy(ctx context.Context) error {
 				}
 			}
 		}
-		return nil, err
+
+		compressionType := compression.FromMediaType(p.desc.MediaType)
+		if compressionType == compression.UnknownCompression {
+			return nil, errors.Errorf("unhandled layer media type: %q", p.desc.MediaType)
+		}
+
+		if err := p.ref.addCompressionBlob(ctx, p.desc.Digest, compressionType); err != nil {
+			return nil, err
+		}
+		return nil, nil
 	})
 	return err
 }

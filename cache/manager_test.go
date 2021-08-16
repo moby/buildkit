@@ -5,16 +5,20 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/content/local"
 	"github.com/containerd/containerd/diff/apply"
+	"github.com/containerd/containerd/diff/walking"
 	"github.com/containerd/containerd/leases"
 	ctdmetadata "github.com/containerd/containerd/metadata"
 	"github.com/containerd/containerd/namespaces"
@@ -22,14 +26,19 @@ import (
 	"github.com/containerd/containerd/snapshots/native"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
+	"github.com/moby/buildkit/util/compression"
+	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/leaseutil"
+	"github.com/moby/buildkit/util/winlayers"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	bolt "go.etcd.io/bbolt"
+	"golang.org/x/sync/errgroup"
 )
 
 type cmOpt struct {
@@ -116,15 +125,17 @@ func newCacheManager(ctx context.Context, opt cmOpt) (co *cmOut, cleanup func() 
 		return nil, nil, err
 	}
 
-	lm := ctdmetadata.NewLeaseManager(mdb)
+	store = containerdsnapshot.NewContentStore(mdb.ContentStore(), ns)
+	lm := leaseutil.WithNamespace(ctdmetadata.NewLeaseManager(mdb), ns)
 
 	cm, err := NewManager(ManagerOpt{
 		Snapshotter:    snapshot.FromContainerdSnapshotter(opt.snapshotterName, containerdsnapshot.NSSnapshotter(ns, mdb.Snapshotter(opt.snapshotterName)), nil),
 		MetadataStore:  md,
-		ContentStore:   mdb.ContentStore(),
-		LeaseManager:   leaseutil.WithNamespace(lm, ns),
+		ContentStore:   store,
+		LeaseManager:   lm,
 		GarbageCollect: mdb.GarbageCollect,
-		Applier:        apply.NewFileSystemApplier(mdb.ContentStore()),
+		Applier:        winlayers.NewFileSystemApplierWithWindows(store, apply.NewFileSystemApplier(store)),
+		Differ:         winlayers.NewWalkingDiffWithWindows(store, walking.NewWalkingDiff(store)),
 	})
 	if err != nil {
 		return nil, nil, err
@@ -132,7 +143,7 @@ func newCacheManager(ctx context.Context, opt cmOpt) (co *cmOut, cleanup func() 
 	return &cmOut{
 		manager: cm,
 		lm:      lm,
-		cs:      mdb.ContentStore(),
+		cs:      store,
 	}, cleanup, nil
 }
 
@@ -506,6 +517,8 @@ func TestExtractOnMutable(t *testing.T) {
 	err = snap.(*immutableRef).setBlob(leaseCtx, desc)
 	done(context.TODO())
 	require.NoError(t, err)
+	err = snap.(*immutableRef).setChains(leaseCtx)
+	require.NoError(t, err)
 
 	snap2, err := cm.GetByBlob(ctx, desc2, snap)
 	require.NoError(t, err)
@@ -623,6 +636,8 @@ func TestSetBlob(t *testing.T) {
 
 	err = snap.(*immutableRef).setBlob(ctx, desc)
 	require.NoError(t, err)
+	err = snap.(*immutableRef).setChains(ctx)
+	require.NoError(t, err)
 
 	info = snap.Info()
 	require.Equal(t, desc.Annotations["containerd.io/uncompressed"], string(info.DiffID))
@@ -646,6 +661,8 @@ func TestSetBlob(t *testing.T) {
 	require.NoError(t, err)
 
 	err = snap2.(*immutableRef).setBlob(ctx, desc2)
+	require.NoError(t, err)
+	err = snap2.(*immutableRef).setChains(ctx)
 	require.NoError(t, err)
 
 	info2 := snap2.Info()
@@ -997,6 +1014,171 @@ func TestLazyCommit(t *testing.T) {
 	require.Equal(t, true, errors.Is(err, errNotFound))
 }
 
+func TestGetRemote(t *testing.T) {
+	t.Parallel()
+	// windows fails when lazy blob is being extracted with "invalid windows mount type: 'bind'"
+	if runtime.GOOS != "linux" {
+		t.Skipf("unsupported GOOS: %s", runtime.GOOS)
+	}
+
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+
+	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+
+	co, cleanup, err := newCacheManager(ctx, cmOpt{
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	defer cleanup()
+	cm := co.manager
+
+	ctx, done, err := leaseutil.WithLease(ctx, co.lm, leaseutil.MakeTemporary)
+	require.NoError(t, err)
+	defer done(context.TODO())
+
+	contentBuffer := contentutil.NewBuffer()
+
+	descHandlers := DescHandlers(map[digest.Digest]*DescHandler{})
+
+	// make some lazy refs from blobs
+	expectedContent := map[digest.Digest]struct{}{}
+	var descs []ocispecs.Descriptor
+	for i := 0; i < 2; i++ {
+		blobmap := map[string]string{"foo": strconv.Itoa(i)}
+		blobBytes, desc, err := mapToBlob(blobmap, true)
+		require.NoError(t, err)
+
+		expectedContent[desc.Digest] = struct{}{}
+		descs = append(descs, desc)
+
+		cw, err := contentBuffer.Writer(ctx)
+		require.NoError(t, err)
+		_, err = cw.Write(blobBytes)
+		require.NoError(t, err)
+		err = cw.Commit(ctx, 0, cw.Digest())
+		require.NoError(t, err)
+
+		descHandlers[desc.Digest] = &DescHandler{
+			Provider: func(_ session.Group) content.Provider { return contentBuffer },
+		}
+
+		_, uncompressedDesc, err := mapToBlob(blobmap, false)
+		require.NoError(t, err)
+		expectedContent[uncompressedDesc.Digest] = struct{}{}
+	}
+
+	// Create 3 levels of mutable refs, where each parent ref has 2 children (this tests parallel creation of
+	// overlapping blob chains).
+	lazyRef, err := cm.GetByBlob(ctx, descs[0], nil, descHandlers)
+	require.NoError(t, err)
+
+	refs := []ImmutableRef{lazyRef}
+	for i := 0; i < 3; i++ {
+		var newRefs []ImmutableRef
+		for j, ir := range refs {
+			for k := 0; k < 2; k++ {
+				mutRef, err := cm.New(ctx, ir, nil, descHandlers)
+				require.NoError(t, err)
+
+				m, err := mutRef.Mount(ctx, false, nil)
+				require.NoError(t, err)
+
+				lm := snapshot.LocalMounter(m)
+				target, err := lm.Mount()
+				require.NoError(t, err)
+
+				f, err := os.Create(filepath.Join(target, fmt.Sprintf("%d-%d-%d", i, j, k)))
+				require.NoError(t, err)
+				err = os.Chtimes(f.Name(), time.Unix(0, 0), time.Unix(0, 0))
+				require.NoError(t, err)
+
+				_, desc, err := fileToBlob(f, true)
+				require.NoError(t, err)
+				expectedContent[desc.Digest] = struct{}{}
+				_, desc, err = fileToBlob(f, false)
+				require.NoError(t, err)
+				expectedContent[desc.Digest] = struct{}{}
+
+				f.Close()
+				err = lm.Unmount()
+				require.NoError(t, err)
+
+				immutRef, err := mutRef.Commit(ctx)
+				require.NoError(t, err)
+				newRefs = append(newRefs, immutRef)
+			}
+		}
+		refs = newRefs
+	}
+
+	// also test the original lazyRef to get coverage for refs that don't have to be extracted from the snapshotter
+	lazyRef2, err := cm.GetByBlob(ctx, descs[1], nil, descHandlers)
+	require.NoError(t, err)
+	refs = append(refs, lazyRef2)
+
+	checkNumBlobs(ctx, t, co.cs, 1)
+
+	// Call GetRemote on all the refs
+	eg, egctx := errgroup.WithContext(ctx)
+	for _, ir := range refs {
+		ir := ir.(*immutableRef)
+		for _, compressionType := range []compression.Type{compression.Uncompressed, compression.Gzip} {
+			compressionType := compressionType
+			eg.Go(func() error {
+				remote, err := ir.GetRemote(egctx, true, compressionType, true, nil)
+				require.NoError(t, err)
+				refChain := ir.parentRefChain()
+				for i, desc := range remote.Descriptors {
+					switch compressionType {
+					case compression.Uncompressed:
+						require.Equal(t, ocispecs.MediaTypeImageLayer, desc.MediaType)
+					case compression.Gzip:
+						require.Equal(t, ocispecs.MediaTypeImageLayerGzip, desc.MediaType)
+					default:
+						require.Fail(t, "unhandled media type", compressionType)
+					}
+					require.Contains(t, expectedContent, desc.Digest)
+
+					r := refChain[i]
+					isLazy, err := r.isLazy(egctx)
+					require.NoError(t, err)
+					info, err := r.getCompressionBlob(egctx, compressionType)
+					if isLazy {
+						require.Error(t, err)
+					} else {
+						require.NoError(t, err)
+						require.Equal(t, info.Digest, desc.Digest)
+					}
+				}
+				return nil
+			})
+		}
+	}
+	require.NoError(t, eg.Wait())
+
+	// verify there's a 1-to-1 mapping between the content store and what we expected to be there
+	err = co.cs.Walk(ctx, func(info content.Info) error {
+		var matched bool
+		for expected := range expectedContent {
+			if info.Digest == expected {
+				delete(expectedContent, expected)
+				matched = true
+				break
+			}
+		}
+		require.True(t, matched, "match for blob: %s", info.Digest)
+		return nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, map[digest.Digest]struct{}{}, expectedContent)
+}
+
 func checkDiskUsage(ctx context.Context, t *testing.T, cm Manager, inuse, unused int) {
 	du, err := cm.DiskUsage(ctx, client.DiskUsageInfo{})
 	require.NoError(t, err)
@@ -1073,6 +1255,58 @@ func mapToBlob(m map[string]string, compress bool) ([]byte, ocispecs.Descriptor,
 			return nil, ocispecs.Descriptor{}, err
 		}
 	}
+	if err := tw.Close(); err != nil {
+		return nil, ocispecs.Descriptor{}, err
+	}
+	if err := dest.Close(); err != nil {
+		return nil, ocispecs.Descriptor{}, err
+	}
+
+	mediaType := ocispecs.MediaTypeImageLayer
+	if compress {
+		mediaType = ocispecs.MediaTypeImageLayerGzip
+	}
+	return buf.Bytes(), ocispecs.Descriptor{
+		Digest:    digest.FromBytes(buf.Bytes()),
+		MediaType: mediaType,
+		Size:      int64(buf.Len()),
+		Annotations: map[string]string{
+			"containerd.io/uncompressed": sha.Digest().String(),
+		},
+	}, nil
+}
+
+func fileToBlob(file *os.File, compress bool) ([]byte, ocispecs.Descriptor, error) {
+	buf := bytes.NewBuffer(nil)
+	sha := digest.SHA256.Digester()
+
+	var dest io.WriteCloser = bufferCloser{buf}
+	if compress {
+		dest = gzip.NewWriter(buf)
+	}
+	tw := tar.NewWriter(io.MultiWriter(sha.Hash(), dest))
+
+	info, err := file.Stat()
+	if err != nil {
+		return nil, ocispecs.Descriptor{}, err
+	}
+
+	fi, err := tar.FileInfoHeader(info, "")
+	if err != nil {
+		return nil, ocispecs.Descriptor{}, err
+	}
+	fi.Format = tar.FormatPAX
+	fi.ModTime = fi.ModTime.Truncate(time.Second)
+	fi.AccessTime = time.Time{}
+	fi.ChangeTime = time.Time{}
+
+	if err := tw.WriteHeader(fi); err != nil {
+		return nil, ocispecs.Descriptor{}, err
+	}
+	if _, err := io.Copy(tw, file); err != nil {
+		return nil, ocispecs.Descriptor{}, err
+	}
+
 	if err := tw.Close(); err != nil {
 		return nil, ocispecs.Descriptor{}, err
 	}
