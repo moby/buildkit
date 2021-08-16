@@ -888,6 +888,11 @@ func (lbf *llbBridgeForwarder) NewContainer(ctx context.Context, in *pb.NewConta
 		return nil, stack.Enable(err)
 	}
 
+	ctrReq.ExtraHosts, err = ParseExtraHosts(in.ExtraHosts)
+	if err != nil {
+		return nil, stack.Enable(err)
+	}
+
 	ctr, err := NewContainer(context.Background(), w, lbf.sm, group, ctrReq)
 	if err != nil {
 		return nil, stack.Enable(err)

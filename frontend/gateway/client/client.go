@@ -25,6 +25,7 @@ type Client interface {
 type NewContainerRequest struct {
 	Mounts      []Mount
 	NetMode     pb.NetMode
+	ExtraHosts  []*pb.HostIP
 	Platform    *pb.Platform
 	Constraints *pb.WorkerConstraints
 }
