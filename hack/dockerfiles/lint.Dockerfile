@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.3
 
-FROM golang:1.16-alpine
+FROM golang:1.17-alpine
 RUN apk add --no-cache gcc musl-dev yamllint
 RUN wget -O- -nv https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.41.1
 WORKDIR /go/src/github.com/moby/buildkit
