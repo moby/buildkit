@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.3
 
 # protoc is dynamically linked to glibc to can't use golang:1.10-alpine
-FROM golang:1.16-buster AS gobuild-base
+FROM golang:1.17-buster AS gobuild-base
 
 RUN apt-get update && apt-get --no-install-recommends install -y \
 	unzip \
