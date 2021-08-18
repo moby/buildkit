@@ -639,8 +639,6 @@ func TestChecksumIncludeDoubleStar(t *testing.T) {
 }
 
 func TestChecksumIncludeSymlink(t *testing.T) {
-	t.Skip("Test will fail until https://github.com/moby/buildkit/issues/2300 is fixed")
-
 	t.Parallel()
 	tmpdir, err := ioutil.TempDir("", "buildkit-state")
 	require.NoError(t, err)
@@ -654,9 +652,10 @@ func TestChecksumIncludeSymlink(t *testing.T) {
 	ch := []string{
 		"ADD data dir",
 		"ADD data/d1 dir",
+		"ADD data/d1/d2 dir",
 		"ADD mnt dir",
 		"ADD mnt/data symlink ../data",
-		"ADD data/d1/foo file abc",
+		"ADD data/d1/d2/foo file abc",
 	}
 
 	ref := createRef(t, cm, ch)
@@ -664,20 +663,42 @@ func TestChecksumIncludeSymlink(t *testing.T) {
 	cc, err := newCacheContext(ref.Metadata(), nil)
 	require.NoError(t, err)
 
-	dgst, err := cc.Checksum(context.TODO(), ref, "data/d1", ChecksumOpts{IncludePatterns: []string{"**/foo"}}, nil)
+	dgstD1, err := cc.Checksum(context.TODO(), ref, "data/d1", ChecksumOpts{IncludePatterns: []string{"**/foo"}}, nil)
 	require.NoError(t, err)
 	// File should be included
-	require.NotEqual(t, digest.FromBytes([]byte{}), dgst)
+	require.NotEqual(t, digest.FromBytes([]byte{}), dgstD1)
 
-	dgst, err = cc.Checksum(context.TODO(), ref, "mnt/data/d1", ChecksumOpts{IncludePatterns: []string{"**/foo"}}, nil)
+	dgstMntD1, err := cc.Checksum(context.TODO(), ref, "mnt/data/d1", ChecksumOpts{IncludePatterns: []string{"**/foo"}}, nil)
 	require.NoError(t, err)
 	// File should be included despite symlink
-	require.NotEqual(t, digest.FromBytes([]byte{}), dgst)
+	require.Equal(t, dgstD1, dgstMntD1)
+
+	dgstD2, err := cc.Checksum(context.TODO(), ref, "data/d1/d2", ChecksumOpts{IncludePatterns: []string{"**/foo"}}, nil)
+	require.NoError(t, err)
+	// File should be included
+	require.NotEqual(t, digest.FromBytes([]byte{}), dgstD2)
+
+	dgstMntD2, err := cc.Checksum(context.TODO(), ref, "mnt/data/d1/d2", ChecksumOpts{IncludePatterns: []string{"**/foo"}}, nil)
+	require.NoError(t, err)
+	// File should be included despite symlink
+	require.Equal(t, dgstD2, dgstMntD2)
 
 	// Same, with Wildcard = true
-	dgst, err = cc.Checksum(context.TODO(), ref, "mnt/data/d1", ChecksumOpts{IncludePatterns: []string{"**/foo"}, Wildcard: true}, nil)
+	dgstMntD1Wildcard, err := cc.Checksum(context.TODO(), ref, "mnt/data/d1", ChecksumOpts{IncludePatterns: []string{"**/foo"}, Wildcard: true}, nil)
 	require.NoError(t, err)
-	require.NotEqual(t, digest.FromBytes([]byte{}), dgst)
+	require.Equal(t, dgstD1, dgstMntD1Wildcard)
+
+	dgstMntD1Wildcard2, err := cc.Checksum(context.TODO(), ref, "mnt/data/d*", ChecksumOpts{IncludePatterns: []string{"**/foo"}, Wildcard: true}, nil)
+	require.NoError(t, err)
+	require.Equal(t, dgstD1, dgstMntD1Wildcard2)
+
+	dgstMntD2Wildcard, err := cc.Checksum(context.TODO(), ref, "mnt/data/d1/d2", ChecksumOpts{IncludePatterns: []string{"**/foo"}, Wildcard: true}, nil)
+	require.NoError(t, err)
+	require.Equal(t, dgstD2, dgstMntD2Wildcard)
+
+	dgstMntD2Wildcard2, err := cc.Checksum(context.TODO(), ref, "mnt/data/d1/d*", ChecksumOpts{IncludePatterns: []string{"**/foo"}, Wildcard: true}, nil)
+	require.NoError(t, err)
+	require.Equal(t, dgstD2, dgstMntD2Wildcard2)
 }
 
 func TestHandleChange(t *testing.T) {
