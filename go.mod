@@ -7,6 +7,7 @@ require (
 	github.com/Microsoft/go-winio v0.5.0
 	github.com/Microsoft/hcsshim v0.8.18
 	github.com/agext/levenshtein v1.2.3
+	github.com/aws/aws-sdk-go v1.31.6
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bits-and-blooms/bitset v1.2.0 // indirect
 	github.com/cenkalti/backoff/v4 v4.1.1 // indirect
@@ -56,6 +57,7 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/golang-lru v0.5.3
 	github.com/ishidawataru/sctp v0.0.0-20210226210310-f2269e66cdee // indirect
+	github.com/jmespath/go-jmespath v0.3.0 // indirect
 	github.com/klauspost/compress v1.12.3 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.2-0.20181231171920-c182affec369 // indirect
 	github.com/mitchellh/hashstructure v1.0.0

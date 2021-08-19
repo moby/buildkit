@@ -36,7 +36,6 @@ You don't need to read this document unless you want to use the full-featured st
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 
-
 - [Used by](#used-by)
 - [Quick start](#quick-start)
   - [Starting the `buildkitd` daemon:](#starting-the-buildkitd-daemon)
@@ -58,7 +57,9 @@ You don't need to read this document unless you want to use the full-featured st
     - [Registry (push image and cache separately)](#registry-push-image-and-cache-separately)
     - [Local directory](#local-directory-1)
     - [GitHub Actions cache (experimental)](#github-actions-cache-experimental)
+    - [S3 cache (experimental)](#s3-cache-experimental)
   - [Consistent hashing](#consistent-hashing)
+- [Metadata](#metadata)
 - [Systemd socket activation](#systemd-socket-activation)
 - [Expose BuildKit as a TCP service](#expose-buildkit-as-a-tcp-service)
   - [Load balancing](#load-balancing)
@@ -401,6 +402,34 @@ in your workflow to expose the runtime.
 
 `--import-cache` options:
 * `type=gha`
+* `scope=buildkit`: which scope cache object belongs to (default `buildkit`)
+
+#### S3 cache (experimental)
+
+```bash
+buildctl build ... \
+  --output type=image,name=docker.io/username/image,push=true \
+  --export-cache type=s3 \
+  --import-cache type=s3
+```
+
+The following attributes are required:
+* `bucket`: AWS S3 bucket (default `$AWS_BUCKET`)
+* `region`: AWS region (default `$AWS_REGION`)
+
+The following attributes are required and will be automatically set when using [iam-roles-for-service-accounts](https://github.com/awsdocs/amazon-eks-user-guide/blob/master/doc_source/iam-roles-for-service-accounts-technical-overview.md).
+* `role`: AWS role (default `$AWS_ROLE_ARN`)
+* `session`: AWS assume role session name (default `$AWS_ROLE_SESSION_NAME`)
+* `token`: AWS web identity token file (default `$AWS_WEB_IDENTITY_TOKEN_FILE`)
+
+`--export-cache` options:
+* `type=s3`
+* `mode=min` (default): only export layers for the resulting image
+* `mode=max`: export all the layers of all intermediate steps.
+* `scope=buildkit`: which scope cache object belongs to (default `buildkit`)
+
+`--import-cache` options:
+* `type=s3`
 * `scope=buildkit`: which scope cache object belongs to (default `buildkit`)
 
 ### Consistent hashing
