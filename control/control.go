@@ -45,8 +45,7 @@ type Opt struct {
 }
 
 type Controller struct { // TODO: ControlService
-	*tracev1.UnimplementedTraceServiceServer
-
+	// buildCount needs to be 64bit aligned
 	buildCount       int64
 	opt              Opt
 	solver           *llbsolver.Solver
@@ -54,6 +53,7 @@ type Controller struct { // TODO: ControlService
 	gatewayForwarder *controlgateway.GatewayForwarder
 	throttledGC      func()
 	gcmu             sync.Mutex
+	*tracev1.UnimplementedTraceServiceServer
 }
 
 func NewController(opt Opt) (*Controller, error) {
