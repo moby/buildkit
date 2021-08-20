@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	snapshotsapi "github.com/containerd/containerd/api/services/snapshots/v1"
 	"github.com/containerd/containerd/defaults"
 	"github.com/containerd/containerd/pkg/dialer"
@@ -38,6 +37,7 @@ import (
 	"github.com/moby/buildkit/worker"
 	"github.com/moby/buildkit/worker/base"
 	"github.com/moby/buildkit/worker/runc"
+	"github.com/pelletier/go-toml"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -47,7 +47,7 @@ import (
 )
 
 func init() {
-	defaultConf, _, _ := defaultConf()
+	defaultConf, _ := defaultConf()
 
 	enabledValue := func(b *bool) string {
 		if b == nil {
@@ -250,7 +250,7 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 	}
 
 	hosts := resolverFunc(common.config)
-	snFactory, err := snapshotterFactory(common.config.Root, cfg, common.sessionManager, hosts, common.configMetaData)
+	snFactory, err := snapshotterFactory(common.config.Root, cfg, common.sessionManager, hosts)
 	if err != nil {
 		return nil, err
 	}
@@ -308,7 +308,7 @@ func ociWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([]worker
 	return []worker.Worker{w}, nil
 }
 
-func snapshotterFactory(commonRoot string, cfg config.OCIConfig, sm *session.Manager, hosts docker.RegistryHosts, cfgMeta *toml.MetaData) (runc.SnapshotterFactory, error) {
+func snapshotterFactory(commonRoot string, cfg config.OCIConfig, sm *session.Manager, hosts docker.RegistryHosts) (runc.SnapshotterFactory, error) {
 	var (
 		name    = cfg.Snapshotter
 		address = cfg.ProxySnapshotterPath
@@ -374,8 +374,17 @@ func snapshotterFactory(commonRoot string, cfg config.OCIConfig, sm *session.Man
 		}
 	case "stargz":
 		sgzCfg := sgzconf.Config{}
-		if cfgMeta != nil {
-			if err := cfgMeta.PrimitiveDecode(cfg.StargzSnapshotterConfig, &sgzCfg); err != nil {
+		if cfg.StargzSnapshotterConfig != nil {
+			// In order to keep the stargz Config type (and dependency) out of
+			// the main BuildKit config, the main config Unmarshalls it into a
+			// generic map[string]interface{}. Here we convert it back into TOML
+			// tree, and unmarshal it to the actual type.
+			t, err := toml.TreeFromMap(cfg.StargzSnapshotterConfig)
+			if err != nil {
+				return snFactory, errors.Wrapf(err, "failed to parse stargz config")
+			}
+			err = t.Unmarshal(&sgzCfg)
+			if err != nil {
 				return snFactory, errors.Wrapf(err, "failed to parse stargz config")
 			}
 		}

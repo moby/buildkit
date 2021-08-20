@@ -64,7 +64,7 @@ options=["edns0"]
 searchDomains=["example.com"]
 `
 
-	cfg, md, err := Load(bytes.NewBuffer([]byte(testConfig)))
+	cfg, err := Load(bytes.NewBuffer([]byte(testConfig)))
 	require.NoError(t, err)
 
 	require.Equal(t, "/foo/bar", cfg.Root)
@@ -73,11 +73,10 @@ searchDomains=["example.com"]
 
 	require.Equal(t, "buildkit.sock", cfg.GRPC.Address[0])
 	require.Equal(t, "debug.sock", cfg.GRPC.DebugAddress)
-	require.Equal(t, 1234, cfg.GRPC.GID)
+	require.Nil(t, cfg.GRPC.UID)
+	require.NotNil(t, cfg.GRPC.GID)
+	require.Equal(t, 1234, *cfg.GRPC.GID)
 	require.Equal(t, "mycert.pem", cfg.GRPC.TLS.Cert)
-
-	require.True(t, md.IsDefined("grpc", "gid"))
-	require.False(t, md.IsDefined("grpc", "uid"))
 
 	require.NotNil(t, cfg.Workers.OCI.Enabled)
 	require.Equal(t, int64(123456789), cfg.Workers.OCI.GCKeepStorage)
