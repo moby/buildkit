@@ -759,6 +759,7 @@ RUN instruction onto the next line. For example, consider these two lines:
 RUN /bin/bash -c 'source $HOME/.bashrc; \
 echo $HOME'
 ```
+
 Together they are equivalent to this single line:
 
 ```dockerfile
@@ -938,6 +939,7 @@ the `--format` option to show just the labels;
 ```console
 $ docker image inspect --format='{{json .Config.Labels}}' myimage
 ```
+
 ```json
 {
   "com.example.vendor": "ACME Incorporated",
