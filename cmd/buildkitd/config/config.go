@@ -1,7 +1,6 @@
 package config
 
 import (
-	"github.com/BurntSushi/toml"
 	"github.com/moby/buildkit/util/resolver"
 )
 
@@ -30,8 +29,8 @@ type Config struct {
 type GRPCConfig struct {
 	Address      []string `toml:"address"`
 	DebugAddress string   `toml:"debugAddress"`
-	UID          int      `toml:"uid"`
-	GID          int      `toml:"gid"`
+	UID          *int     `toml:"uid"`
+	GID          *int     `toml:"gid"`
 
 	TLS TLSConfig `toml:"tls"`
 	// MaxRecvMsgSize int    `toml:"max_recv_message_size"`
@@ -73,9 +72,9 @@ type OCIConfig struct {
 	ProxySnapshotterPath string `toml:"proxySnapshotterPath"`
 
 	// StargzSnapshotterConfig is configuration for stargz snapshotter.
-	// Decoding this is delayed in order to remove the dependency from this
-	// config pkg to stargz snapshotter's config pkg.
-	StargzSnapshotterConfig toml.Primitive `toml:"stargzSnapshotter"`
+	// We use a generic map[string]interface{} in order to remove the dependency
+	// on stargz snapshotter's config pkg from our config.
+	StargzSnapshotterConfig map[string]interface{} `toml:"stargzSnapshotter"`
 
 	// ApparmorProfile is the name of the apparmor profile that should be used to constrain build containers.
 	// The profile should already be loaded (by a higher level system) before creating a worker.
