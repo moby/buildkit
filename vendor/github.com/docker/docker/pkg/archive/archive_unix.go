@@ -10,7 +10,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/containerd/containerd/sys"
+	"github.com/containerd/containerd/pkg/userns"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/docker/docker/pkg/system"
 	"golang.org/x/sys/unix"
@@ -51,8 +51,8 @@ func setHeaderForSpecialDevice(hdr *tar.Header, name string, stat interface{}) (
 		// Currently go does not fill in the major/minors
 		if s.Mode&unix.S_IFBLK != 0 ||
 			s.Mode&unix.S_IFCHR != 0 {
-			hdr.Devmajor = int64(unix.Major(uint64(s.Rdev))) // nolint: unconvert
-			hdr.Devminor = int64(unix.Minor(uint64(s.Rdev))) // nolint: unconvert
+			hdr.Devmajor = int64(unix.Major(uint64(s.Rdev))) //nolint: unconvert
+			hdr.Devminor = int64(unix.Minor(uint64(s.Rdev))) //nolint: unconvert
 		}
 	}
 
@@ -92,7 +92,7 @@ func handleTarTypeBlockCharFifo(hdr *tar.Header, path string) error {
 	}
 
 	err := system.Mknod(path, mode, int(system.Mkdev(hdr.Devmajor, hdr.Devminor)))
-	if errors.Is(err, syscall.EPERM) && sys.RunningInUserNS() {
+	if errors.Is(err, syscall.EPERM) && userns.RunningInUserNS() {
 		// In most cases, cannot create a device if running in user namespace
 		err = nil
 	}

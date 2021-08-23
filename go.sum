@@ -384,8 +384,8 @@ github.com/docker/distribution v2.6.0-rc.1.0.20180327202408-83389a148052+incompa
 github.com/docker/distribution v2.7.1-0.20190205005809-0d3efadf0154+incompatible/go.mod h1:J2gT2udsDAN96Uj4KfcMRqY0/ypR+oyYUYmja8H+y+w=
 github.com/docker/distribution v2.7.1+incompatible h1:a5mlkVzth6W5A4fOsS3D2EO5BUmsJpcB+cRlLU7cSug=
 github.com/docker/distribution v2.7.1+incompatible/go.mod h1:J2gT2udsDAN96Uj4KfcMRqY0/ypR+oyYUYmja8H+y+w=
-github.com/docker/docker v20.10.3-0.20210609100121-ef4d47340142+incompatible h1:CKSQs5KedtaAdusBPAJQS7cN1PibFX4RuThbwHgJrJE=
-github.com/docker/docker v20.10.3-0.20210609100121-ef4d47340142+incompatible/go.mod h1:eEKB0N0r5NX/I1kEveEz05bcu8tLC/8azJZsviup8Sk=
+github.com/docker/docker v20.10.3-0.20210817025855-ba2adeebdb8d+incompatible h1:tSd7TeZCH0j9m4P14bfe/eO1KYawrt3DztHI8gZAmLM=
+github.com/docker/docker v20.10.3-0.20210817025855-ba2adeebdb8d+incompatible/go.mod h1:eEKB0N0r5NX/I1kEveEz05bcu8tLC/8azJZsviup8Sk=
 github.com/docker/docker-credential-helpers v0.6.3 h1:zI2p9+1NQYdnG6sMU26EX4aVGlqbInSQxQXLvzJ4RPQ=
 github.com/docker/docker-credential-helpers v0.6.3/go.mod h1:WRaJzqw3CTB9bk10avuGsjVBZsD05qeibJ1/TYlvc0Y=
 github.com/docker/go-connections v0.4.0 h1:El9xVISelRB7BuFusrZozjnkIM5YnzCViNKohAFqRJQ=
@@ -1079,8 +1079,8 @@ github.com/tmc/grpc-websocket-proxy v0.0.0-20190109142713-0ad062ec5ee5/go.mod h1
 github.com/tommy-muehle/go-mnd v1.1.1/go.mod h1:dSUh0FtTP8VhvkL1S+gUR1OKd9ZnSaozuI6r3m6wOig=
 github.com/tommy-muehle/go-mnd v1.3.1-0.20200224220436-e6f9a994e8fa/go.mod h1:dSUh0FtTP8VhvkL1S+gUR1OKd9ZnSaozuI6r3m6wOig=
 github.com/tonistiigi/fsutil v0.0.0-20201103201449-0834f99b7b85/go.mod h1:a7cilN64dG941IOXfhJhlH0qB92hxJ9A1ewrdUmJ6xo=
-github.com/tonistiigi/fsutil v0.0.0-20210609172227-d72af97c0eaf h1:L0ixhsTk9j+dVnIvF6aiVCxPiaFvwTOyJxqimPq44p8=
-github.com/tonistiigi/fsutil v0.0.0-20210609172227-d72af97c0eaf/go.mod h1:lJAxK//iyZ3yGbQswdrPTxugZIDM7sd4bEsD0x3XMHk=
+github.com/tonistiigi/fsutil v0.0.0-20210818161904-4442383b5028 h1:uEkkUFMCPtzz1HVOa42u15OHems1ugiRt172tSRTWSk=
+github.com/tonistiigi/fsutil v0.0.0-20210818161904-4442383b5028/go.mod h1:E6osHKls9ix67jofYQ61RQKwlJhqJOZM2hintp+49iI=
 github.com/tonistiigi/go-actions-cache v0.0.0-20210714033416-b93d7f1b2e70 h1:+ZlFs3Tl5qYZJvX2PxfZxGlVXz847LsOJGyNVU5pCHo=
 github.com/tonistiigi/go-actions-cache v0.0.0-20210714033416-b93d7f1b2e70/go.mod h1:dNS+PPTqGnSl80x3wEyWWCHeON5xiBGtcM0uD6CgHNU=
 github.com/tonistiigi/opentelemetry-go-contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.0.0-20210714055410-d010b05b4939 h1:s6wDMZYNyWt8KvkjhrMpOthFPgI3JB8ipJS+eCV/psg=
