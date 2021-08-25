@@ -3,7 +3,9 @@ package cache
 import (
 	"context"
 	"fmt"
+	"io"
 
+	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/diff"
 	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/mount"
@@ -44,6 +46,8 @@ func (sr *immutableRef) computeBlobChain(ctx context.Context, createIfNeeded boo
 	return computeBlobChain(ctx, sr, createIfNeeded, compressionType, forceCompression, s)
 }
 
+type compressor func(dest io.Writer, requiredMediaType string) (io.WriteCloser, error)
+
 func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool, compressionType compression.Type, forceCompression bool, s session.Group) error {
 	eg, ctx := errgroup.WithContext(ctx)
 	if sr.parent != nil {
@@ -53,19 +57,24 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 	}
 
 	eg.Go(func() error {
-		v, err := g.Do(ctx, fmt.Sprintf("%s-%t", sr.ID(), createIfNeeded), func(ctx context.Context) (interface{}, error) {
+		_, err := g.Do(ctx, fmt.Sprintf("%s-%t", sr.ID(), createIfNeeded), func(ctx context.Context) (interface{}, error) {
 			if getBlob(sr.md) != "" {
-				return sr.ociDesc()
+				return nil, nil
 			}
 			if !createIfNeeded {
 				return nil, errors.WithStack(ErrNoBlobs)
 			}
 
 			var mediaType string
+			var compressorFunc compressor
+			var finalize func(context.Context, content.Store) (map[string]string, error)
 			switch compressionType {
 			case compression.Uncompressed:
 				mediaType = ocispecs.MediaTypeImageLayer
 			case compression.Gzip:
+				mediaType = ocispecs.MediaTypeImageLayerGzip
+			case compression.EStargz:
+				compressorFunc, finalize = writeEStargz()
 				mediaType = ocispecs.MediaTypeImageLayerGzip
 			default:
 				return nil, errors.Errorf("unknown layer compression type: %q", compressionType)
@@ -100,6 +109,7 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 			desc, err := sr.cm.Differ.Compare(ctx, lower, upper,
 				diff.WithMediaType(mediaType),
 				diff.WithReference(sr.ID()),
+				diff.WithCompressor(compressorFunc),
 			)
 			if err != nil {
 				return nil, err
@@ -107,6 +117,15 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 
 			if desc.Annotations == nil {
 				desc.Annotations = map[string]string{}
+			}
+			if finalize != nil {
+				a, err := finalize(ctx, sr.cm.ContentStore)
+				if err != nil {
+					return nil, errors.Wrapf(err, "failed to finalize compression")
+				}
+				for k, v := range a {
+					desc.Annotations[k] = v
+				}
 			}
 
 			info, err := sr.cm.ContentStore.Info(ctx, desc.Digest)
@@ -122,23 +141,18 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 				return nil, errors.Errorf("unknown layer compression type")
 			}
 
-			if err := sr.setBlob(ctx, desc); err != nil {
+			if err := sr.setBlob(ctx, compressionType, desc); err != nil {
 				return nil, err
 			}
 
-			return desc, nil
+			return nil, nil
 		})
 		if err != nil {
 			return err
 		}
-		descr, ok := v.(ocispecs.Descriptor)
-		if !ok {
-			return fmt.Errorf("invalid descriptor returned by differ while computing blob for %s", sr.ID())
-		}
-
 		if forceCompression {
-			if err := ensureCompression(ctx, sr, descr, compressionType, s); err != nil {
-				return err
+			if err := ensureCompression(ctx, sr, compressionType, s); err != nil {
+				return errors.Wrapf(err, "failed to ensure compression type of %q", compressionType)
 			}
 		}
 		return nil
@@ -153,7 +167,7 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 // setBlob associates a blob with the cache record.
 // A lease must be held for the blob when calling this function
 // Caller should call Info() for knowing what current values are actually set
-func (sr *immutableRef) setBlob(ctx context.Context, desc ocispecs.Descriptor) error {
+func (sr *immutableRef) setBlob(ctx context.Context, compressionType compression.Type, desc ocispecs.Descriptor) error {
 	if _, ok := leases.FromContext(ctx); !ok {
 		return errors.Errorf("missing lease requirement for setBlob")
 	}
@@ -166,7 +180,6 @@ func (sr *immutableRef) setBlob(ctx context.Context, desc ocispecs.Descriptor) e
 		return err
 	}
 
-	compressionType := compression.FromMediaType(desc.MediaType)
 	if compressionType == compression.UnknownCompression {
 		return errors.Errorf("unhandled layer media type: %q", desc.MediaType)
 	}
@@ -197,7 +210,7 @@ func (sr *immutableRef) setBlob(ctx context.Context, desc ocispecs.Descriptor) e
 		return err
 	}
 
-	if err := sr.addCompressionBlob(ctx, desc.Digest, compressionType); err != nil {
+	if err := sr.addCompressionBlob(ctx, desc, compressionType); err != nil {
 		return err
 	}
 	return nil
@@ -247,14 +260,25 @@ func isTypeWindows(sr *immutableRef) bool {
 }
 
 // ensureCompression ensures the specified ref has the blob of the specified compression Type.
-func ensureCompression(ctx context.Context, ref *immutableRef, desc ocispecs.Descriptor, compressionType compression.Type, s session.Group) error {
-	_, err := g.Do(ctx, fmt.Sprintf("%s-%d", desc.Digest, compressionType), func(ctx context.Context) (interface{}, error) {
+func ensureCompression(ctx context.Context, ref *immutableRef, compressionType compression.Type, s session.Group) error {
+	_, err := g.Do(ctx, fmt.Sprintf("%s-%d", ref.ID(), compressionType), func(ctx context.Context) (interface{}, error) {
+		desc, err := ref.ociDesc(ctx, ref.descHandlers)
+		if err != nil {
+			return nil, err
+		}
+
 		// Resolve converters
-		layerConvertFunc, _, err := getConverters(desc, compressionType)
+		layerConvertFunc, err := getConverter(desc, compressionType)
 		if err != nil {
 			return nil, err
 		} else if layerConvertFunc == nil {
-			return nil, nil // no need to convert
+			if isLazy, err := ref.isLazy(ctx); err != nil {
+				return nil, err
+			} else if isLazy {
+				// This ref can be used as the specified compressionType. Keep it lazy.
+				return nil, nil
+			}
+			return nil, ref.addCompressionBlob(ctx, desc, compressionType)
 		}
 
 		// First, lookup local content store
@@ -277,7 +301,7 @@ func ensureCompression(ctx context.Context, ref *immutableRef, desc ocispecs.Des
 		}
 
 		// Start to track converted layer
-		if err := ref.addCompressionBlob(ctx, newDesc.Digest, compressionType); err != nil {
+		if err := ref.addCompressionBlob(ctx, *newDesc, compressionType); err != nil {
 			return nil, err
 		}
 		return nil, nil

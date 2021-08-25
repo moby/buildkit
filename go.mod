@@ -4,7 +4,7 @@ go 1.17
 
 require (
 	github.com/Azure/go-ansiterm v0.0.0-20170929234023-d6e3b3328b78 // indirect
-	github.com/Microsoft/go-winio v0.4.17
+	github.com/Microsoft/go-winio v0.5.0
 	github.com/Microsoft/hcsshim v0.8.18
 	github.com/agext/levenshtein v1.2.3
 	github.com/beorn7/perks v1.0.1 // indirect
@@ -19,8 +19,8 @@ require (
 	github.com/containerd/fuse-overlayfs-snapshotter v1.0.2
 	github.com/containerd/go-cni v1.0.2
 	github.com/containerd/go-runc v1.0.0
-	github.com/containerd/stargz-snapshotter v0.6.4
-	github.com/containerd/stargz-snapshotter/estargz v0.6.4 // indirect
+	github.com/containerd/stargz-snapshotter v0.7.0
+	github.com/containerd/stargz-snapshotter/estargz v0.7.0
 	github.com/containerd/ttrpc v1.0.2 // indirect
 	github.com/containerd/typeurl v1.0.2
 	github.com/containernetworking/cni v0.8.1 // indirect
@@ -32,7 +32,7 @@ require (
 	github.com/docker/distribution v2.7.1+incompatible
 	// docker: the actual version is replaced in replace()
 	github.com/docker/docker v20.10.7+incompatible // master (v21.xx-dev)
-	github.com/docker/docker-credential-helpers v0.6.3 // indirect
+	github.com/docker/docker-credential-helpers v0.6.4 // indirect
 	github.com/docker/go-connections v0.4.0
 	github.com/docker/go-events v0.0.0-20190806004212-e31b211e4f1c // indirect
 	github.com/docker/go-metrics v0.0.1 // indirect
@@ -74,9 +74,9 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/pkg/profile v1.5.0
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/prometheus/client_golang v1.7.1 // indirect
+	github.com/prometheus/client_golang v1.11.0 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect
-	github.com/prometheus/common v0.10.0 // indirect
+	github.com/prometheus/common v0.26.0 // indirect
 	github.com/prometheus/procfs v0.6.0 // indirect
 	github.com/russross/blackfriday/v2 v2.0.1 // indirect
 	github.com/serialx/hashring v0.0.0-20190422032157-8b2912629002
@@ -109,15 +109,16 @@ require (
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	golang.org/x/sys v0.0.0-20210630005230-0f9fa26af87c
 	golang.org/x/text v0.3.4 // indirect
-	golang.org/x/time v0.0.0-20200630173020-3af7569d3a1e
+	golang.org/x/time v0.0.0-20210220033141-f8bda1e9f3ba
 	google.golang.org/genproto v0.0.0-20201110150050-8816d57aaa9a
-	google.golang.org/grpc v1.38.0
+	google.golang.org/grpc v1.39.0
 	google.golang.org/protobuf v1.26.0 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c // indirect
 	gotest.tools/v3 v3.0.3 // indirect
 )
 
 replace (
+	github.com/containerd/containerd => github.com/containerd/containerd v1.5.1-0.20210721160646-ee27cde735e2
 	github.com/docker/docker => github.com/docker/docker v20.10.3-0.20210817025855-ba2adeebdb8d+incompatible
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc => github.com/tonistiigi/opentelemetry-go-contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.0.0-20210714055410-d010b05b4939
 	go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace => github.com/tonistiigi/opentelemetry-go-contrib/instrumentation/net/http/httptrace/otelhttptrace v0.0.0-20210714055410-d010b05b4939

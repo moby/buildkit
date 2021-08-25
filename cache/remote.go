@@ -46,7 +46,7 @@ func (sr *immutableRef) GetRemote(ctx context.Context, createIfNeeded bool, comp
 		Provider: mprovider,
 	}
 	for _, ref := range chain {
-		desc, err := ref.ociDesc()
+		desc, err := ref.ociDesc(ctx, sr.descHandlers)
 		if err != nil {
 			return nil, err
 		}
@@ -66,7 +66,8 @@ func (sr *immutableRef) GetRemote(ctx context.Context, createIfNeeded bool, comp
 		// update distribution source annotation for lazy-refs (non-lazy refs
 		// will already have their dsl stored in the content store, which is
 		// used by the push handlers)
-		if isLazy, err := ref.isLazy(ctx); err != nil {
+		isLazy, err := ref.isLazy(ctx)
+		if err != nil {
 			return nil, err
 		} else if isLazy {
 			imageRefs := getImageRefs(ref.md)
@@ -106,24 +107,24 @@ func (sr *immutableRef) GetRemote(ctx context.Context, createIfNeeded bool, comp
 		}
 
 		if forceCompression {
-			// ensure the compression type.
-			// compressed blob must be created and stored in the content store.
-			_, convertMediaTypeFunc, err := getConverters(desc, compressionType)
-			if err != nil {
+			if needs, err := needsConversion(desc.MediaType, compressionType); err != nil {
 				return nil, err
-			}
-			if convertMediaTypeFunc != nil {
-				// needs conversion
-				info, err := ref.getCompressionBlob(ctx, compressionType)
+			} else if needs {
+				// ensure the compression type.
+				// compressed blob must be created and stored in the content store.
+				blobDesc, err := ref.getCompressionBlob(ctx, compressionType)
 				if err != nil {
-					return nil, err
+					return nil, errors.Wrapf(err, "compression blob for %q not found", compressionType)
 				}
 				newDesc := desc
-				newDesc.MediaType = convertMediaTypeFunc(newDesc.MediaType)
-				newDesc.Digest = info.Digest
-				newDesc.Size = info.Size
-				if desc.Digest != newDesc.Digest {
-					mproviderBase.Add(newDesc.Digest, ref.cm.ContentStore)
+				newDesc.MediaType = blobDesc.MediaType
+				newDesc.Digest = blobDesc.Digest
+				newDesc.Size = blobDesc.Size
+				for k, v := range blobDesc.Annotations {
+					if newDesc.Annotations == nil {
+						newDesc.Annotations = make(map[string]string)
+					}
+					newDesc.Annotations[k] = v
 				}
 				desc = newDesc
 			}
@@ -230,7 +231,7 @@ func (p lazyRefProvider) Unlazy(ctx context.Context) error {
 			return nil, errors.Errorf("unhandled layer media type: %q", p.desc.MediaType)
 		}
 
-		if err := p.ref.addCompressionBlob(ctx, p.desc.Digest, compressionType); err != nil {
+		if err := p.ref.addCompressionBlob(ctx, p.desc, compressionType); err != nil {
 			return nil, err
 		}
 		return nil, nil
