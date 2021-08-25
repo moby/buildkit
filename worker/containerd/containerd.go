@@ -102,7 +102,14 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 
 	snap := containerdsnapshot.NewSnapshotter(snapshotterName, client.SnapshotService(snapshotterName), ns, nil)
 
-	if err := cache.MigrateV2(context.TODO(), filepath.Join(root, "metadata.db"), filepath.Join(root, "metadata_v2.db"), cs, snap, lm); err != nil {
+	if err := cache.MigrateV2(
+		context.TODO(),
+		filepath.Join(root, "metadata.db"),
+		filepath.Join(root, "metadata_v2.db"),
+		cs,
+		snap,
+		lm,
+	); err != nil {
 		return base.WorkerOpt{}, err
 	}
 

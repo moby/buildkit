@@ -58,7 +58,7 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 
 	eg.Go(func() error {
 		_, err := g.Do(ctx, fmt.Sprintf("%s-%t", sr.ID(), createIfNeeded), func(ctx context.Context) (interface{}, error) {
-			if getBlob(sr.md) != "" {
+			if sr.getBlob() != "" {
 				return nil, nil
 			}
 			if !createIfNeeded {
@@ -187,7 +187,7 @@ func (sr *immutableRef) setBlob(ctx context.Context, compressionType compression
 	sr.mu.Lock()
 	defer sr.mu.Unlock()
 
-	if getBlob(sr.md) != "" {
+	if sr.getBlob() != "" {
 		return nil
 	}
 
@@ -202,11 +202,11 @@ func (sr *immutableRef) setBlob(ctx context.Context, compressionType compression
 		return err
 	}
 
-	queueDiffID(sr.md, diffID.String())
-	queueBlob(sr.md, desc.Digest.String())
-	queueMediaType(sr.md, desc.MediaType)
-	queueBlobSize(sr.md, desc.Size)
-	if err := sr.md.Commit(); err != nil {
+	sr.queueDiffID(diffID)
+	sr.queueBlob(desc.Digest)
+	sr.queueMediaType(desc.MediaType)
+	sr.queueBlobSize(desc.Size)
+	if err := sr.commitMetadata(); err != nil {
 		return err
 	}
 
@@ -224,33 +224,33 @@ func (sr *immutableRef) setChains(ctx context.Context) error {
 	sr.mu.Lock()
 	defer sr.mu.Unlock()
 
-	if getChainID(sr.md) != "" {
+	if sr.getChainID() != "" {
 		return nil
 	}
 
 	var chainIDs []digest.Digest
 	var blobChainIDs []digest.Digest
 	if sr.parent != nil {
-		chainIDs = append(chainIDs, digest.Digest(getChainID(sr.parent.md)))
-		blobChainIDs = append(blobChainIDs, digest.Digest(getBlobChainID(sr.parent.md)))
+		chainIDs = append(chainIDs, digest.Digest(sr.parent.getChainID()))
+		blobChainIDs = append(blobChainIDs, digest.Digest(sr.parent.getBlobChainID()))
 	}
-	diffID := digest.Digest(getDiffID(sr.md))
+	diffID := digest.Digest(sr.getDiffID())
 	chainIDs = append(chainIDs, diffID)
-	blobChainIDs = append(blobChainIDs, imagespecidentity.ChainID([]digest.Digest{digest.Digest(getBlob(sr.md)), diffID}))
+	blobChainIDs = append(blobChainIDs, imagespecidentity.ChainID([]digest.Digest{digest.Digest(sr.getBlob()), diffID}))
 
 	chainID := imagespecidentity.ChainID(chainIDs)
 	blobChainID := imagespecidentity.ChainID(blobChainIDs)
 
-	queueChainID(sr.md, chainID.String())
-	queueBlobChainID(sr.md, blobChainID.String())
-	if err := sr.md.Commit(); err != nil {
+	sr.queueChainID(chainID)
+	sr.queueBlobChainID(blobChainID)
+	if err := sr.commitMetadata(); err != nil {
 		return err
 	}
 	return nil
 }
 
 func isTypeWindows(sr *immutableRef) bool {
-	if GetLayerType(sr) == "windows" {
+	if sr.GetLayerType() == "windows" {
 		return true
 	}
 	if parent := sr.parent; parent != nil {

@@ -103,7 +103,15 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 	}
 	snap := containerdsnapshot.NewSnapshotter(snFactory.Name, mdb.Snapshotter(snFactory.Name), "buildkit", idmap)
 	lm := leaseutil.WithNamespace(ctdmetadata.NewLeaseManager(mdb), "buildkit")
-	if err := cache.MigrateV2(context.TODO(), filepath.Join(root, "metadata.db"), filepath.Join(root, "metadata_v2.db"), c, snap, lm); err != nil {
+
+	if err := cache.MigrateV2(
+		context.TODO(),
+		filepath.Join(root, "metadata.db"),
+		filepath.Join(root, "metadata_v2.db"),
+		c,
+		snap,
+		lm,
+	); err != nil {
 		return opt, err
 	}
 

@@ -428,9 +428,6 @@ func setupGitSource(t *testing.T, tmpdir string) source.Source {
 	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
 	assert.NoError(t, err)
 
-	md, err := metadata.NewStore(filepath.Join(tmpdir, "metadata.db"))
-	assert.NoError(t, err)
-
 	store, err := local.NewStore(tmpdir)
 	require.NoError(t, err)
 
@@ -440,6 +437,9 @@ func setupGitSource(t *testing.T, tmpdir string) source.Source {
 	mdb := ctdmetadata.NewDB(db, store, map[string]snapshots.Snapshotter{
 		"native": snapshotter,
 	})
+
+	md, err := metadata.NewStore(filepath.Join(tmpdir, "metadata.db"))
+	require.NoError(t, err)
 
 	cm, err := cache.NewManager(cache.ManagerOpt{
 		Snapshotter:    snapshot.FromContainerdSnapshotter("native", containerdsnapshot.NSSnapshotter("buildkit", mdb.Snapshotter("native")), nil),
@@ -452,7 +452,6 @@ func setupGitSource(t *testing.T, tmpdir string) source.Source {
 
 	gs, err := NewSource(Opt{
 		CacheAccessor: cm,
-		MetadataStore: md,
 	})
 	require.NoError(t, err)
 

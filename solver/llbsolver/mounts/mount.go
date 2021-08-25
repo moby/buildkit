@@ -15,7 +15,6 @@ import (
 	"github.com/containerd/containerd/pkg/userns"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/cache"
-	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
@@ -26,16 +25,14 @@ import (
 	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/moby/locker"
 	"github.com/pkg/errors"
-	bolt "go.etcd.io/bbolt"
 	"google.golang.org/grpc/codes"
 )
 
-func NewMountManager(name string, cm cache.Manager, sm *session.Manager, md *metadata.Store) *MountManager {
+func NewMountManager(name string, cm cache.Manager, sm *session.Manager) *MountManager {
 	return &MountManager{
 		cm:          cm,
 		sm:          sm,
 		cacheMounts: map[string]*cacheRefShare{},
-		md:          md,
 		managerName: name,
 	}
 }
@@ -45,7 +42,6 @@ type MountManager struct {
 	sm            *session.Manager
 	cacheMountsMu sync.Mutex
 	cacheMounts   map[string]*cacheRefShare
-	md            *metadata.Store
 	managerName   string
 }
 
@@ -54,7 +50,6 @@ func (mm *MountManager) getRefCacheDir(ctx context.Context, ref cache.ImmutableR
 		locker:          &mm.cacheMountsMu,
 		cacheMounts:     mm.cacheMounts,
 		cm:              mm.cm,
-		md:              mm.md,
 		globalCacheRefs: sharedCacheRefs,
 		name:            fmt.Sprintf("cached mount %s from %s", m.Dest, mm.managerName),
 		session:         s,
@@ -66,14 +61,13 @@ type cacheRefGetter struct {
 	locker          sync.Locker
 	cacheMounts     map[string]*cacheRefShare
 	cm              cache.Manager
-	md              *metadata.Store
 	globalCacheRefs *cacheRefs
 	name            string
 	session         session.Group
 }
 
 func (g *cacheRefGetter) getRefCacheDir(ctx context.Context, ref cache.ImmutableRef, id string, sharing pb.CacheSharingOpt) (mref cache.MutableRef, err error) {
-	key := "cache-dir:" + id
+	key := id
 	if ref != nil {
 		key += ":" + ref.ID()
 	}
@@ -114,7 +108,7 @@ func (g *cacheRefGetter) getRefCacheDirNoCache(ctx context.Context, key string, 
 	cacheRefsLocker.Lock(key)
 	defer cacheRefsLocker.Unlock(key)
 	for {
-		sis, err := g.md.Search(key)
+		sis, err := SearchCacheDir(ctx, g.cm, key)
 		if err != nil {
 			return nil, err
 		}
@@ -145,16 +139,8 @@ func (g *cacheRefGetter) getRefCacheDirNoCache(ctx context.Context, key string, 
 		return nil, err
 	}
 
-	si, _ := g.md.Get(mRef.ID())
-	v, err := metadata.NewValue(key)
-	if err != nil {
-		mRef.Release(context.TODO())
-		return nil, err
-	}
-	v.Index = key
-	if err := si.Update(func(b *bolt.Bucket) error {
-		return si.SetValue(b, key, v)
-	}); err != nil {
+	md := CacheRefMetadata{mRef}
+	if err := md.setCacheDirIndex(key); err != nil {
 		mRef.Release(context.TODO())
 		return nil, err
 	}
@@ -517,4 +503,31 @@ func (r *cacheRef) Release(ctx context.Context) error {
 		return r.release(ctx)
 	}
 	return nil
+}
+
+const keyCacheDir = "cache-dir"
+const cacheDirIndex = keyCacheDir + ":"
+
+func SearchCacheDir(ctx context.Context, store cache.MetadataStore, id string) ([]CacheRefMetadata, error) {
+	var results []CacheRefMetadata
+	mds, err := store.Search(ctx, cacheDirIndex+id)
+	if err != nil {
+		return nil, err
+	}
+	for _, md := range mds {
+		results = append(results, CacheRefMetadata{md})
+	}
+	return results, nil
+}
+
+type CacheRefMetadata struct {
+	cache.RefMetadata
+}
+
+func (md CacheRefMetadata) setCacheDirIndex(id string) error {
+	return md.SetString(keyCacheDir, id, cacheDirIndex+id)
+}
+
+func (md CacheRefMetadata) ClearCacheDirIndex() error {
+	return md.ClearValueAndIndex(keyCacheDir, cacheDirIndex)
 }
