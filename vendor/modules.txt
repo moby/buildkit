@@ -105,6 +105,7 @@ github.com/containerd/containerd/namespaces
 github.com/containerd/containerd/oci
 github.com/containerd/containerd/pkg/cap
 github.com/containerd/containerd/pkg/dialer
+github.com/containerd/containerd/pkg/seccomp
 github.com/containerd/containerd/pkg/seed
 github.com/containerd/containerd/pkg/userns
 github.com/containerd/containerd/platforms
