@@ -261,7 +261,7 @@ RUN CC=$(xx-clang --print-target-triple)-clang ./autogen.sh --disable-nls --disa
 
 # Rootless mode.
 FROM tonistiigi/alpine:${ALPINE_VERSION} AS rootless
-RUN apk add --no-cache fuse3 fuse-overlayfs git openssh pigz xz
+RUN apk add --no-cache fuse3 fuse-overlayfs git openssh pigz xz wget
 COPY --from=idmap /usr/bin/newuidmap /usr/bin/newuidmap
 COPY --from=idmap /usr/bin/newgidmap /usr/bin/newgidmap
 # we could just set CAP_SETUID filecap rather than `chmod u+s`, but requires kernel >= 4.14
