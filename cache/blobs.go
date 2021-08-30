@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"strconv"
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/diff"
@@ -17,6 +19,7 @@ import (
 	imagespecidentity "github.com/opencontainers/image-spec/identity"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -106,13 +109,52 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 			if release != nil {
 				defer release()
 			}
-			desc, err := sr.cm.Differ.Compare(ctx, lower, upper,
-				diff.WithMediaType(mediaType),
-				diff.WithReference(sr.ID()),
-				diff.WithCompressor(compressorFunc),
-			)
-			if err != nil {
-				return nil, err
+			var desc ocispecs.Descriptor
+
+			// Determine differ and error/log handling according to the platform, envvar and the snapshotter.
+			var enableOverlay, fallback, logWarnOnErr bool
+			if forceOvlStr := os.Getenv("BUILDKIT_DEBUG_FORCE_OVERLAY_DIFF"); forceOvlStr != "" {
+				enableOverlay, err = strconv.ParseBool(forceOvlStr)
+				if err != nil {
+					return nil, errors.Wrapf(err, "invalid boolean in BUILDKIT_DEBUG_FORCE_OVERLAY_DIFF")
+				}
+				fallback = false // prohibit fallback on debug
+			} else if !isTypeWindows(sr) {
+				enableOverlay, fallback = true, true
+				switch sr.cm.ManagerOpt.Snapshotter.Name() {
+				case "overlayfs", "fuse-overlayfs", "stargz":
+					logWarnOnErr = true // snapshotter should support overlay diff. so print warn log on failure
+				}
+			}
+			if enableOverlay {
+				computed, ok, err := sr.tryComputeOverlayBlob(ctx, lower, upper, mediaType, sr.ID(), compressorFunc)
+				if !ok || err != nil {
+					if !fallback {
+						if !ok {
+							return nil, errors.Errorf("overlay mounts not detected (lower=%+v,upper=%+v)", lower, upper)
+						}
+						if err != nil {
+							return nil, errors.Wrapf(err, "failed to compute overlay diff")
+						}
+					}
+					if logWarnOnErr {
+						logrus.Warnf("failed to compute blob by overlay differ (ok=%v): %v", ok, err)
+					}
+				}
+				if ok {
+					desc = computed
+				}
+			}
+
+			if desc.Digest == "" {
+				desc, err = sr.cm.Differ.Compare(ctx, lower, upper,
+					diff.WithMediaType(mediaType),
+					diff.WithReference(sr.ID()),
+					diff.WithCompressor(compressorFunc),
+				)
+				if err != nil {
+					return nil, err
+				}
 			}
 
 			if desc.Annotations == nil {
