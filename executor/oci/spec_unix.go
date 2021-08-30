@@ -7,11 +7,11 @@ import (
 
 	"github.com/containerd/containerd/containers"
 	"github.com/containerd/containerd/oci"
+	cdseccomp "github.com/containerd/containerd/pkg/seccomp"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/docker/docker/profiles/seccomp"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/entitlements/security"
-	"github.com/moby/buildkit/util/system"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/opencontainers/selinux/go-selinux/label"
 )
@@ -41,7 +41,7 @@ func generateSecurityOpts(mode pb.SecurityMode, apparmorProfile string) (opts []
 			},
 		}, nil
 	case pb.SecurityMode_SANDBOX:
-		if system.SeccompSupported() {
+		if cdseccomp.IsEnabled() {
 			opts = append(opts, withDefaultProfile())
 		}
 		if apparmorProfile != "" {
