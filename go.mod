@@ -3,7 +3,7 @@ module github.com/moby/buildkit
 go 1.17
 
 require (
-	github.com/Azure/go-ansiterm v0.0.0-20170929234023-d6e3b3328b78 // indirect
+	github.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1 // indirect
 	github.com/Microsoft/go-winio v0.5.0
 	github.com/Microsoft/hcsshim v0.8.18
 	github.com/agext/levenshtein v1.2.3
@@ -63,7 +63,7 @@ require (
 	github.com/moby/sys/mount v0.2.0 // indirect
 	github.com/moby/sys/mountinfo v0.4.1 // indirect
 	github.com/moby/sys/signal v0.5.0
-	github.com/moby/term v0.0.0-20201110203204-bea5bbe245bf // indirect
+	github.com/moby/term v0.0.0-20210619224110-3f7ff695adc6 // indirect
 	github.com/morikuni/aec v1.0.0
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.0.1
