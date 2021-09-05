@@ -131,6 +131,8 @@ func TestIntegration(t *testing.T) {
 		testFileOpInputSwap,
 		testRelativeMountpoint,
 		testLocalSourceDiffer,
+		testBuildExportZstd,
+		testPullZstdImage,
 	}, mirrors)
 
 	integration.Run(t, []integration.Test{
@@ -2165,6 +2167,156 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, []byte("gzip"), item.Data)
 }
 
+func testBuildExportZstd(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("busybox:latest")
+	cmd := `sh -e -c "echo -n zstd > data"`
+
+	st := llb.Scratch()
+	st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	out := filepath.Join(destDir, "out.tar")
+	outW, err := os.Create(out)
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:   ExporterOCI,
+				Output: fixedWriteCloser(outW),
+				Attrs: map[string]string{
+					"compression": "zstd",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(out)
+	require.NoError(t, err)
+
+	m, err := testutil.ReadTarToMap(dt, false)
+	require.NoError(t, err)
+
+	var index ocispecs.Index
+	err = json.Unmarshal(m["index.json"].Data, &index)
+	require.NoError(t, err)
+
+	var mfst ocispecs.Manifest
+	err = json.Unmarshal(m["blobs/sha256/"+index.Manifests[0].Digest.Hex()].Data, &mfst)
+	require.NoError(t, err)
+
+	lastLayer := mfst.Layers[len(mfst.Layers)-1]
+	require.Equal(t, ocispecs.MediaTypeImageLayer+"+zstd", lastLayer.MediaType)
+
+	zstdLayerDigest := lastLayer.Digest.Hex()
+	require.Equal(t, m["blobs/sha256/"+zstdLayerDigest].Data[:4], []byte{0x28, 0xb5, 0x2f, 0xfd})
+
+	// repeat without oci mediatype
+	outW, err = os.Create(out)
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:   ExporterOCI,
+				Output: fixedWriteCloser(outW),
+				Attrs: map[string]string{
+					"compression":    "zstd",
+					"oci-mediatypes": "false",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err = ioutil.ReadFile(out)
+	require.NoError(t, err)
+
+	m, err = testutil.ReadTarToMap(dt, false)
+	require.NoError(t, err)
+
+	err = json.Unmarshal(m["index.json"].Data, &index)
+	require.NoError(t, err)
+
+	err = json.Unmarshal(m["blobs/sha256/"+index.Manifests[0].Digest.Hex()].Data, &mfst)
+	require.NoError(t, err)
+
+	lastLayer = mfst.Layers[len(mfst.Layers)-1]
+	require.Equal(t, images.MediaTypeDockerSchema2Layer+".zstd", lastLayer.MediaType)
+
+	require.Equal(t, lastLayer.Digest.Hex(), zstdLayerDigest)
+}
+
+func testPullZstdImage(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("busybox:latest")
+	cmd := `sh -e -c "echo -n zstd > data"`
+
+	st := llb.Scratch()
+	st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrorRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	target := registry + "/buildkit/build/exporter:zstd"
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name":        target,
+					"push":        "true",
+					"compression": "zstd",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	st = llb.Scratch().File(llb.Copy(llb.Image(target), "/data", "/zdata"))
+
+	def, err = st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "zdata"))
+	require.NoError(t, err)
+	require.Equal(t, dt, []byte("zstd"))
+}
 func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	skipDockerd(t, sb)
 	requiresLinux(t)

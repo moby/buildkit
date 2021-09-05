@@ -11,6 +11,7 @@ import (
 	"github.com/containerd/containerd/diff"
 	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/mount"
+	"github.com/klauspost/compress/zstd"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/flightcontrol"
@@ -79,6 +80,9 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 			case compression.EStargz:
 				compressorFunc, finalize = writeEStargz()
 				mediaType = ocispecs.MediaTypeImageLayerGzip
+			case compression.Zstd:
+				compressorFunc = zstdWriter
+				mediaType = ocispecs.MediaTypeImageLayer + "+zstd"
 			default:
 				return nil, errors.Errorf("unknown layer compression type: %q", compressionType)
 			}
@@ -349,4 +353,8 @@ func ensureCompression(ctx context.Context, ref *immutableRef, compressionType c
 		return nil, nil
 	})
 	return err
+}
+
+func zstdWriter(dest io.Writer, requiredMediaType string) (io.WriteCloser, error) {
+	return zstd.NewWriter(dest)
 }
