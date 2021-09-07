@@ -657,6 +657,7 @@ func TestChecksumIncludeSymlink(t *testing.T) {
 		"ADD mnt dir",
 		"ADD mnt/data symlink ../data",
 		"ADD data/d0/d1/d2/foo file abc",
+		"ADD data/symlink-to-d0 symlink d0",
 	}
 
 	ref := createRef(t, cm, ch)
@@ -704,6 +705,10 @@ func TestChecksumIncludeSymlink(t *testing.T) {
 	dgstMntInnerWildcard, err := cc.Checksum(context.TODO(), ref, "mnt/data/d0/d*/d2", ChecksumOpts{IncludePatterns: []string{"**/foo"}, Wildcard: true}, nil)
 	require.NoError(t, err)
 	require.Equal(t, dgstD2, dgstMntInnerWildcard)
+
+	dgstMntInnerWildcard2, err := cc.Checksum(context.TODO(), ref, "mnt/data/symlink-to-d0/d*/d2", ChecksumOpts{IncludePatterns: []string{"**/foo"}, Wildcard: true}, nil)
+	require.NoError(t, err)
+	require.Equal(t, dgstD2, dgstMntInnerWildcard2)
 }
 
 func TestHandleChange(t *testing.T) {

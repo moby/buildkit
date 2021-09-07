@@ -517,50 +517,14 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 	iter = root.Iterator()
 
 	if opts.Wildcard {
-		// For consistency with what the copy implementation in fsutil
-		// does: split pattern into non-wildcard prefix and rest of
-		// pattern, then follow symlinks when resolving the non-wildcard
-		// prefix.
-
-		d1, d2 := splitWildcards(p)
-		if d1 != "/" {
-			origPrefix = d1
-			k = convertPathToKey([]byte(d1))
-			linksWalked := 0
-			if d2 != "" {
-				// getFollowLinks only handles symlinks in path
-				// components before the last component, so
-				// handle last component in d1 specially.
-				for {
-					v, ok := root.Get(k)
-
-					if !ok || v.(*CacheRecord).Type != CacheRecordTypeSymlink {
-						break
-					}
-
-					linksWalked++
-					if linksWalked > 255 {
-						return nil, errors.Errorf("too many links")
-					}
-
-					dirPath := path.Clean(d1)
-					if dirPath == "." || dirPath == "/" {
-						dirPath = ""
-					}
-					d1 = path.Clean(v.(*CacheRecord).Linkname)
-					if !path.IsAbs(d1) {
-						d1 = path.Clean(path.Join("/", path.Join(path.Dir(dirPath), d1)))
-					}
-					k = convertPathToKey([]byte(d1))
-				}
-			}
+		origPrefix, k, kOk, err = wildcardPrefix(root, p)
+		if err != nil {
+			return nil, err
 		}
 	} else {
 		origPrefix = p
 		k = convertPathToKey([]byte(origPrefix))
-	}
 
-	if origPrefix != "" {
 		// We need to resolve symlinks here, in case the base path
 		// involves a symlink. That will match fsutil behavior of
 		// calling functions such as stat and walk.
@@ -569,8 +533,11 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 		if err != nil {
 			return nil, err
 		}
+		kOk = (cr != nil)
+	}
 
-		if kOk = (cr != nil); kOk {
+	if origPrefix != "" {
+		if kOk {
 			iter.SeekLowerBound(append(append([]byte{}, k...), 0))
 		}
 
@@ -715,6 +682,50 @@ func shouldIncludePath(
 	}
 
 	return true, nil
+}
+
+func wildcardPrefix(root *iradix.Node, p string) (string, []byte, bool, error) {
+	// For consistency with what the copy implementation in fsutil
+	// does: split pattern into non-wildcard prefix and rest of
+	// pattern, then follow symlinks when resolving the non-wildcard
+	// prefix.
+
+	d1, d2 := splitWildcards(p)
+	if d1 == "/" {
+		return "", nil, false, nil
+	}
+
+	k, cr, err := getFollowLinks(root, convertPathToKey([]byte(d1)), true)
+	if err != nil {
+		return "", k, false, err
+	}
+
+	if d2 != "" && cr != nil && cr.Type == CacheRecordTypeSymlink {
+		// getFollowLinks only handles symlinks in path
+		// components before the last component, so
+		// handle last component in d1 specially.
+		linksWalked := 0
+		resolved := string(convertKeyToPath(k))
+		for {
+			v, ok := root.Get(k)
+
+			if !ok {
+				return d1, k, false, nil
+			}
+			if v.(*CacheRecord).Type != CacheRecordTypeSymlink {
+				break
+			}
+
+			linksWalked++
+			if linksWalked > 255 {
+				return "", k, false, errors.Errorf("too many links")
+			}
+
+			resolved := cleanLink(resolved, v.(*CacheRecord).Linkname)
+			k = convertPathToKey([]byte(resolved))
+		}
+	}
+	return d1, k, cr != nil, nil
 }
 
 func splitWildcards(p string) (d1, d2 string) {
@@ -1030,14 +1041,8 @@ func getFollowLinksWalk(root *iradix.Node, k []byte, follow bool, linksWalked *i
 			if *linksWalked > 255 {
 				return nil, nil, errors.Errorf("too many links")
 			}
-			dirPath := path.Clean(string(convertKeyToPath(dir)))
-			if dirPath == "." || dirPath == "/" {
-				dirPath = ""
-			}
-			link := path.Clean(parent.Linkname)
-			if !path.IsAbs(link) {
-				link = path.Join("/", path.Join(path.Dir(dirPath), link))
-			}
+
+			link := cleanLink(string(convertKeyToPath(dir)), parent.Linkname)
 			return getFollowLinksWalk(root, append(convertPathToKey([]byte(link)), file...), follow, linksWalked)
 		}
 	}
@@ -1047,6 +1052,18 @@ func getFollowLinksWalk(root *iradix.Node, k []byte, follow bool, linksWalked *i
 		return k, v.(*CacheRecord), nil
 	}
 	return k, nil, nil
+}
+
+func cleanLink(dir, linkname string) string {
+	dirPath := path.Clean(dir)
+	if dirPath == "." || dirPath == "/" {
+		dirPath = ""
+	}
+	link := path.Clean(linkname)
+	if !path.IsAbs(link) {
+		return path.Join("/", path.Join(path.Dir(dirPath), link))
+	}
+	return link
 }
 
 func prepareDigest(fp, p string, fi os.FileInfo) (digest.Digest, error) {
