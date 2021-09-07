@@ -26,6 +26,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -36,6 +37,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/containerd/containerd/log"
 	"github.com/containerd/stargz-snapshotter/estargz"
 	commonmetrics "github.com/containerd/stargz-snapshotter/fs/metrics/common"
 	"github.com/containerd/stargz-snapshotter/fs/reader"
@@ -43,6 +45,7 @@ import (
 	fusefs "github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 	digest "github.com/opencontainers/go-digest"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 )
 
@@ -269,6 +272,8 @@ type file struct {
 var _ = (fusefs.FileReader)((*file)(nil))
 
 func (f *file) Read(ctx context.Context, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
+	defer commonmetrics.MeasureLatency(commonmetrics.ReadOnDemand, f.n.layerSha, time.Now())   // measure time for on-demand file reads (in milliseconds)
+	defer commonmetrics.IncOperationCount(commonmetrics.OnDemandReadAccessCount, f.n.layerSha) // increment the counter for on-demand file accesses
 	n, err := f.ra.ReadAt(dest, off)
 	if err != nil && err != io.EOF {
 		f.n.s.report(fmt.Errorf("failed to read node: %v", err))
@@ -428,10 +433,22 @@ func (sf *statFile) Statfs(ctx context.Context, out *fuse.StatfsOut) syscall.Err
 	return 0
 }
 
+// logContents puts the contents of statFile in the log
+// to keep that information accessible for troubleshooting.
+// The entries naming is kept to be consistend with the field naming in statJSON.
+func (sf *statFile) logContents() {
+	ctx := context.Background()
+	log.G(ctx).WithFields(logrus.Fields{
+		"digest": sf.statJSON.Digest, "size": sf.statJSON.Size,
+		"fetchedSize": sf.statJSON.FetchedSize, "fetchedPercent": sf.statJSON.FetchedPercent,
+	}).WithError(errors.New(sf.statJSON.Error)).Error("statFile error")
+}
+
 func (sf *statFile) report(err error) {
 	sf.mu.Lock()
 	defer sf.mu.Unlock()
 	sf.statJSON.Error = err.Error()
+	sf.logContents()
 }
 
 func (sf *statFile) attr(out *fuse.Attr) (fusefs.StableAttr, syscall.Errno) {
