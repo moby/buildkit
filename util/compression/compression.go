@@ -27,8 +27,16 @@ const (
 	// EStargz is used for estargz data.
 	EStargz
 
+	// Zstd is used for Zstandard data.
+	Zstd
+
 	// UnknownCompression means not supported yet.
 	UnknownCompression Type = -1
+)
+
+const (
+	mediaTypeDockerSchema2LayerZstd = images.MediaTypeDockerSchema2Layer + ".zstd"
+	mediaTypeImageLayerZstd         = ocispecs.MediaTypeImageLayer + "+zstd" // unreleased image-spec#790
 )
 
 var Default = Gzip
@@ -41,8 +49,23 @@ func (ct Type) String() string {
 		return "gzip"
 	case EStargz:
 		return "estargz"
+	case Zstd:
+		return "zstd"
 	default:
 		return "unknown"
+	}
+}
+
+func (ct Type) DefaultMediaType() string {
+	switch ct {
+	case Uncompressed:
+		return ocispecs.MediaTypeImageLayer
+	case Gzip, EStargz:
+		return ocispecs.MediaTypeImageLayerGzip
+	case Zstd:
+		return mediaTypeImageLayerZstd
+	default:
+		return ocispecs.MediaTypeImageLayer + "+unknown"
 	}
 }
 
@@ -52,6 +75,8 @@ func FromMediaType(mediaType string) Type {
 		return Uncompressed
 	case ocispecs.MediaTypeImageLayerGzip:
 		return Gzip
+	case mediaTypeImageLayerZstd:
+		return Zstd
 	default:
 		return UnknownCompression
 	}
@@ -81,6 +106,7 @@ func DetectLayerMediaType(ctx context.Context, cs content.Store, id digest.Diges
 			return ocispecs.MediaTypeImageLayerGzip, nil
 		}
 		return images.MediaTypeDockerSchema2LayerGzip, nil
+
 	default:
 		return "", errors.Errorf("failed to detect layer %v compression type", id)
 	}
@@ -108,6 +134,7 @@ func detectCompressionType(cr *io.SectionReader) (Type, error) {
 
 	for c, m := range map[Type][]byte{
 		Gzip: {0x1F, 0x8B, 0x08},
+		Zstd: {0x28, 0xB5, 0x2F, 0xFD},
 	} {
 		if n < len(m) {
 			continue
@@ -127,6 +154,8 @@ var toDockerLayerType = map[string]string{
 	images.MediaTypeDockerSchema2LayerGzip:        images.MediaTypeDockerSchema2LayerGzip,
 	images.MediaTypeDockerSchema2LayerForeign:     images.MediaTypeDockerSchema2Layer,
 	images.MediaTypeDockerSchema2LayerForeignGzip: images.MediaTypeDockerSchema2LayerGzip,
+	mediaTypeImageLayerZstd:                       mediaTypeDockerSchema2LayerZstd,
+	mediaTypeDockerSchema2LayerZstd:               mediaTypeDockerSchema2LayerZstd,
 }
 
 var toOCILayerType = map[string]string{
@@ -136,6 +165,8 @@ var toOCILayerType = map[string]string{
 	images.MediaTypeDockerSchema2LayerGzip:        ocispecs.MediaTypeImageLayerGzip,
 	images.MediaTypeDockerSchema2LayerForeign:     ocispecs.MediaTypeImageLayer,
 	images.MediaTypeDockerSchema2LayerForeignGzip: ocispecs.MediaTypeImageLayerGzip,
+	mediaTypeImageLayerZstd:                       mediaTypeImageLayerZstd,
+	mediaTypeDockerSchema2LayerZstd:               mediaTypeImageLayerZstd,
 }
 
 func convertLayerMediaType(mediaType string, oci bool) string {

@@ -28,6 +28,7 @@ import (
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/containerd/snapshots/native"
 	"github.com/containerd/stargz-snapshotter/estargz"
+	"github.com/klauspost/compress/zstd"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/session"
@@ -1065,7 +1066,6 @@ func TestGetRemote(t *testing.T) {
 
 	// make some lazy refs from blobs
 	expectedContent := map[digest.Digest]struct{}{}
-	variant := map[digest.Digest]digest.Digest{}
 	esgz2gzip := map[digest.Digest]digest.Digest{}
 	var descs []ocispecs.Descriptor
 	for i := 0; i < 2; i++ {
@@ -1091,11 +1091,14 @@ func TestGetRemote(t *testing.T) {
 		require.NoError(t, err)
 		expectedContent[uncompressedDesc.Digest] = struct{}{}
 
-		esgzDgst, uncompressedEsgzDgst, err := esgzBlobDigest(uncompressedBlobBytes)
+		esgzDgst, err := esgzBlobDigest(uncompressedBlobBytes)
 		require.NoError(t, err)
-		expectedContent[esgzDgst] = struct{}{}
-		variant[uncompressedEsgzDgst] = uncompressedDesc.Digest
+		// expectedContent[esgzDgst] = struct{}{} // disabled
 		esgz2gzip[esgzDgst] = desc.Digest
+
+		zstdDigest, err := zstdBlobDigest(uncompressedBlobBytes)
+		require.NoError(t, err)
+		expectedContent[zstdDigest] = struct{}{}
 	}
 
 	// Create 3 levels of mutable refs, where each parent ref has 2 children (this tests parallel creation of
@@ -1129,11 +1132,14 @@ func TestGetRemote(t *testing.T) {
 				uncompressedBlobBytes, uncompressedDesc, err := fileToBlob(f, false)
 				require.NoError(t, err)
 				expectedContent[uncompressedDesc.Digest] = struct{}{}
-				esgzDgst, uncompressedEsgzDgst, err := esgzBlobDigest(uncompressedBlobBytes)
+				esgzDgst, err := esgzBlobDigest(uncompressedBlobBytes)
 				require.NoError(t, err)
-				expectedContent[esgzDgst] = struct{}{}
-				variant[uncompressedEsgzDgst] = uncompressedDesc.Digest
+				// expectedContent[esgzDgst] = struct{}{}
 				esgz2gzip[esgzDgst] = desc.Digest
+
+				zstdDigest, err := zstdBlobDigest(uncompressedBlobBytes)
+				require.NoError(t, err)
+				expectedContent[zstdDigest] = struct{}{}
 
 				f.Close()
 				err = lm.Unmount()
@@ -1160,7 +1166,7 @@ func TestGetRemote(t *testing.T) {
 	eg, egctx := errgroup.WithContext(ctx)
 	for _, ir := range refs {
 		ir := ir.(*immutableRef)
-		for _, compressionType := range []compression.Type{compression.Uncompressed, compression.Gzip, compression.EStargz} {
+		for _, compressionType := range []compression.Type{compression.Uncompressed, compression.Gzip /*compression.EStargz,*/, compression.Zstd} {
 			compressionType := compressionType
 			eg.Go(func() error {
 				remote, err := ir.GetRemote(egctx, true, compressionType, true, nil)
@@ -1174,14 +1180,13 @@ func TestGetRemote(t *testing.T) {
 						require.Equal(t, ocispecs.MediaTypeImageLayerGzip, desc.MediaType)
 					case compression.EStargz:
 						require.Equal(t, ocispecs.MediaTypeImageLayerGzip, desc.MediaType)
+					case compression.Zstd:
+						require.Equal(t, ocispecs.MediaTypeImageLayer+"+zstd", desc.MediaType)
 					default:
 						require.Fail(t, "unhandled media type", compressionType)
 					}
 					dgst := desc.Digest
-					if v, ok := variant[dgst]; ok {
-						dgst = v
-					}
-					require.Contains(t, expectedContent, dgst)
+					require.Contains(t, expectedContent, dgst, "for %v", compressionType)
 					checkDescriptor(ctx, t, co.cs, desc, compressionType)
 
 					r := refChain[i]
@@ -1223,9 +1228,6 @@ func TestGetRemote(t *testing.T) {
 	// verify there's a 1-to-1 mapping between the content store and what we expected to be there
 	err = co.cs.Walk(ctx, func(info content.Info) error {
 		dgst := info.Digest
-		if v, ok := variant[dgst]; ok {
-			dgst = v
-		}
 		var matched bool
 		for expected := range expectedContent {
 			if dgst == expected {
@@ -1234,7 +1236,7 @@ func TestGetRemote(t *testing.T) {
 				break
 			}
 		}
-		require.True(t, matched, "match for blob: %s", info.Digest)
+		require.True(t, matched, "unexpected blob: %s", info.Digest)
 		checkInfo(ctx, t, co.cs, info)
 		return nil
 	})
@@ -1316,31 +1318,36 @@ func checkDiskUsage(ctx context.Context, t *testing.T, cm Manager, inuse, unused
 	require.Equal(t, unused, unusedActual)
 }
 
-func esgzBlobDigest(uncompressedBlobBytes []byte) (digest.Digest, digest.Digest, error) {
+func esgzBlobDigest(uncompressedBlobBytes []byte) (digest.Digest, error) {
 	buf := new(bytes.Buffer)
 	compressorFunc, _ := writeEStargz()
 	w, err := compressorFunc(buf, ocispecs.MediaTypeImageLayerGzip)
 	if err != nil {
-		return "", "", err
+		return "", err
 	}
 	if _, err := io.Copy(w, bytes.NewReader(uncompressedBlobBytes)); err != nil {
-		return "", "", err
+		return "", err
 	}
 	if err := w.Close(); err != nil {
-		return "", "", err
+		return "", err
 	}
 	b := buf.Bytes()
-	esgzDgst := digest.FromBytes(b)
-	ur, err := gzip.NewReader(bytes.NewReader(b))
+	return digest.FromBytes(b), nil
+}
+
+func zstdBlobDigest(uncompressedBlobBytes []byte) (digest.Digest, error) {
+	b := bytes.NewBuffer(nil)
+	w, err := zstd.NewWriter(b)
 	if err != nil {
-		return "", "", err
+		return "", err
 	}
-	defer ur.Close()
-	uncompressedDgst, err := digest.FromReader(ur)
-	if err != nil {
-		return "", "", err
+	if _, err := w.Write(uncompressedBlobBytes); err != nil {
+		return "", err
 	}
-	return esgzDgst, uncompressedDgst, nil
+	if err := w.Close(); err != nil {
+		return "", err
+	}
+	return digest.FromBytes(b.Bytes()), nil
 }
 
 func checkNumBlobs(ctx context.Context, t *testing.T, cs content.Store, expected int) {

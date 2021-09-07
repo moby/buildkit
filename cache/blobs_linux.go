@@ -1,3 +1,4 @@
+//go:build linux
 // +build linux
 
 package cache
@@ -34,7 +35,6 @@ var emptyDesc = ocispecs.Descriptor{}
 // be computed (e.g. because the mounts aren't overlayfs), it returns
 // an error.
 func (sr *immutableRef) tryComputeOverlayBlob(ctx context.Context, lower, upper []mount.Mount, mediaType string, ref string, compressorFunc compressor) (_ ocispecs.Descriptor, ok bool, err error) {
-
 	// Get upperdir location if mounts are overlayfs that can be processed by this differ.
 	upperdir, err := getOverlayUpperdir(lower, upper)
 	if err != nil {
@@ -50,6 +50,8 @@ func (sr *immutableRef) tryComputeOverlayBlob(ctx context.Context, lower, upper 
 			compressorFunc = func(dest io.Writer, requiredMediaType string) (io.WriteCloser, error) {
 				return ctdcompression.CompressStream(dest, ctdcompression.Gzip)
 			}
+		case ocispecs.MediaTypeImageLayer + "+zstd":
+			compressorFunc = zstdWriter
 		default:
 			return emptyDesc, false, errors.Errorf("unsupported diff media type: %v", mediaType)
 		}

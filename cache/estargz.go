@@ -6,9 +6,10 @@ import (
 	"io"
 	"sync"
 
-	"github.com/containerd/containerd/archive/compression"
+	cdcompression "github.com/containerd/containerd/archive/compression"
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/stargz-snapshotter/estargz"
+	"github.com/moby/buildkit/util/compression"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 )
@@ -22,8 +23,8 @@ func writeEStargz() (compressorFunc compressor, finalize func(context.Context, c
 	var bInfo blobInfo
 	var mu sync.Mutex
 	return func(dest io.Writer, requiredMediaType string) (io.WriteCloser, error) {
-			if !isGzipCompressedType(requiredMediaType) {
-				return nil, fmt.Errorf("unsupported media type for estargz compressor %q", requiredMediaType)
+			if compression.FromMediaType(requiredMediaType) != compression.Gzip {
+				return nil, errors.Errorf("unsupported media type for estargz compressor %q", requiredMediaType)
 			}
 			done := make(chan struct{})
 			pr, pw := io.Pipe()
@@ -127,7 +128,7 @@ func calculateBlob() (io.WriteCloser, chan blobInfo) {
 		c := new(counter)
 		dgstr := digest.Canonical.Digester()
 		diffID := digest.Canonical.Digester()
-		decompressR, err := compression.DecompressStream(io.TeeReader(pr, dgstr.Hash()))
+		decompressR, err := cdcompression.DecompressStream(io.TeeReader(pr, dgstr.Hash()))
 		if err != nil {
 			pr.CloseWithError(err)
 			return

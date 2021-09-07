@@ -144,6 +144,8 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 			case "estargz":
 				i.layerCompression = compression.EStargz
 				esgz = true
+			case "zstd":
+				i.layerCompression = compression.Zstd
 			case "uncompressed":
 				i.layerCompression = compression.Uncompressed
 			default:
