@@ -38,6 +38,10 @@ func (e *localExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 	return &localExporterInstance{localExporter: e}, nil
 }
 
+func (e *localExporter) Config() exporter.Config {
+	return exporter.Config{}
+}
+
 type localExporterInstance struct {
 	*localExporter
 }

@@ -203,6 +203,16 @@ func (e *imageExporterInstance) Name() string {
 	return "exporting to image"
 }
 
+func (e *imageExporterInstance) Config() exporter.Config {
+	return exporter.Config{
+		Compression: cache.CompressionOpt{
+			Type:  e.layerCompression,
+			Force: e.forceCompression,
+			Level: e.compressionLevel,
+		},
+	}
+}
+
 func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source, sessionID string) (map[string]string, error) {
 	if src.Metadata == nil {
 		src.Metadata = make(map[string][]byte)

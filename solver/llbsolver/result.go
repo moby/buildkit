@@ -9,7 +9,6 @@ import (
 	"github.com/moby/buildkit/cache/contenthash"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
-	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
@@ -83,16 +82,13 @@ func NewContentHashFunc(selectors []Selector) solver.ResultBasedCacheFunc {
 	}
 }
 
-func workerRefConverter(g session.Group) func(ctx context.Context, res solver.Result) (*solver.Remote, error) {
+func workerRefConverter(g session.Group, compressionopt cache.CompressionOpt) func(ctx context.Context, res solver.Result) (*solver.Remote, error) {
 	return func(ctx context.Context, res solver.Result) (*solver.Remote, error) {
 		ref, ok := res.Sys().(*worker.WorkerRef)
 		if !ok {
 			return nil, errors.Errorf("invalid result: %T", res.Sys())
 		}
 
-		return ref.GetRemote(ctx, true, cache.CompressionOpt{
-			Type:  compression.Default,
-			Level: -1,
-		}, g)
+		return ref.GetRemote(ctx, true, compressionopt, g)
 	}
 }

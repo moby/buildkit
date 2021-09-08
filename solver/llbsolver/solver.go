@@ -16,6 +16,7 @@ import (
 	"github.com/moby/buildkit/frontend/gateway"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/entitlements"
 	"github.com/moby/buildkit/util/progress"
@@ -173,7 +174,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 			}
 			inp.Ref = workerRef.ImmutableRef
 
-			dt, err := inlineCache(ctx, exp.CacheExporter, r, session.NewGroup(sessionID))
+			dt, err := inlineCache(ctx, exp.CacheExporter, r, e.Config().Compression, session.NewGroup(sessionID))
 			if err != nil {
 				return nil, err
 			}
@@ -197,7 +198,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 					}
 					m[k] = workerRef.ImmutableRef
 
-					dt, err := inlineCache(ctx, exp.CacheExporter, r, session.NewGroup(sessionID))
+					dt, err := inlineCache(ctx, exp.CacheExporter, r, e.Config().Compression, session.NewGroup(sessionID))
 					if err != nil {
 						return nil, err
 					}
@@ -229,7 +230,10 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 				}
 				// all keys have same export chain so exporting others is not needed
 				_, err = r.CacheKeys()[0].Exporter.ExportTo(ctx, e, solver.CacheExportOpt{
-					Convert: workerRefConverter(g),
+					Convert: workerRefConverter(g, cache.CompressionOpt{
+						Type:  compression.Default, // TODO: make configurable
+						Level: -1,
+					}),
 					Mode:    exp.CacheExportMode,
 					Session: g,
 				})
@@ -265,7 +269,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	}, nil
 }
 
-func inlineCache(ctx context.Context, e remotecache.Exporter, res solver.CachedResult, g session.Group) ([]byte, error) {
+func inlineCache(ctx context.Context, e remotecache.Exporter, res solver.CachedResult, compressionopt cache.CompressionOpt, g session.Group) ([]byte, error) {
 	if efl, ok := e.(interface {
 		ExportForLayers([]digest.Digest) ([]byte, error)
 	}); ok {
@@ -274,12 +278,11 @@ func inlineCache(ctx context.Context, e remotecache.Exporter, res solver.CachedR
 			return nil, errors.Errorf("invalid reference: %T", res.Sys())
 		}
 
-		remote, err := workerRef.GetRemote(ctx, true, cache.CompressionOpt{ // todo: compression settings wrong
-			Type:  compression.Default,
-			Force: false,
-			Level: -1,
-		}, g)
+		remote, err := workerRef.GetRemote(ctx, true, compressionopt, g)
 		if err != nil || remote == nil {
+			if err != nil {
+				bklog.G(ctx).WithError(err).Error("failed to export inline cache")
+			}
 			return nil, nil
 		}
 
@@ -289,13 +292,12 @@ func inlineCache(ctx context.Context, e remotecache.Exporter, res solver.CachedR
 		}
 
 		if _, err := res.CacheKeys()[0].Exporter.ExportTo(ctx, e, solver.CacheExportOpt{
-			Convert: workerRefConverter(g),
+			Convert: workerRefConverter(g, compressionopt),
 			Mode:    solver.CacheExportModeMin,
 			Session: g,
 		}); err != nil {
 			return nil, err
 		}
-
 		return efl.ExportForLayers(digests)
 	}
 	return nil, nil

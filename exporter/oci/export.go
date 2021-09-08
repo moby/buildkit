@@ -140,6 +140,16 @@ func (e *imageExporterInstance) Name() string {
 	return "exporting to oci image format"
 }
 
+func (e *imageExporterInstance) Config() exporter.Config {
+	return exporter.Config{
+		Compression: cache.CompressionOpt{
+			Type:  e.layerCompression,
+			Force: e.forceCompression,
+			Level: e.compressionLevel,
+		},
+	}
+}
+
 func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source, sessionID string) (map[string]string, error) {
 	if e.opt.Variant == VariantDocker && len(src.Refs) > 0 {
 		return nil, errors.Errorf("docker exporter does not currently support exporting manifest lists")
