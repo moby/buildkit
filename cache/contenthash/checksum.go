@@ -516,21 +516,44 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 	txn := cc.tree.Txn()
 	root = txn.Root()
 	var (
-		updated bool
-		iter    *iradix.Iterator
-		k       []byte
-		kOk     bool
+		updated        bool
+		iter           *iradix.Iterator
+		k              []byte
+		kOk            bool
+		origPrefix     string
+		resolvedPrefix string
 	)
 
 	iter = root.Iterator()
 
 	if opts.Wildcard {
-		k, _, kOk = iter.Next()
+		origPrefix, k, kOk, err = wildcardPrefix(root, p)
+		if err != nil {
+			return nil, err
+		}
 	} else {
-		k = convertPathToKey([]byte(p))
-		if _, kOk = root.Get(k); kOk {
+		origPrefix = p
+		k = convertPathToKey([]byte(origPrefix))
+
+		// We need to resolve symlinks here, in case the base path
+		// involves a symlink. That will match fsutil behavior of
+		// calling functions such as stat and walk.
+		var cr *CacheRecord
+		k, cr, err = getFollowLinks(root, k, true)
+		if err != nil {
+			return nil, err
+		}
+		kOk = (cr != nil)
+	}
+
+	if origPrefix != "" {
+		if kOk {
 			iter.SeekLowerBound(append(append([]byte{}, k...), 0))
 		}
+
+		resolvedPrefix = string(convertKeyToPath(k))
+	} else {
+		k, _, kOk = iter.Next()
 	}
 
 	var (
@@ -540,6 +563,20 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 
 	for kOk {
 		fn := string(convertKeyToPath(k))
+
+		// Convert the path prefix from what we found in the prefix
+		// tree to what the argument specified.
+		//
+		// For example, if the original 'p' argument was /a/b and there
+		// is a symlink a->c, we want fn to be /a/b/foo rather than
+		// /c/b/foo. This is necessary to ensure correct pattern
+		// matching.
+		//
+		// When wildcards are enabled, this translation applies to the
+		// portion of 'p' before any wildcards.
+		if strings.HasPrefix(fn, resolvedPrefix) {
+			fn = origPrefix + strings.TrimPrefix(fn, resolvedPrefix)
+		}
 
 		for len(parentDirHeaders) != 0 {
 			lastParentDir := parentDirHeaders[len(parentDirHeaders)-1]
@@ -591,8 +628,7 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 			}
 		} else {
 			if !strings.HasPrefix(fn+"/", p+"/") {
-				k, _, kOk = iter.Next()
-				continue
+				break
 			}
 
 			shouldInclude, err = shouldIncludePath(
@@ -690,6 +726,82 @@ func shouldIncludePath(
 	}
 
 	return true, nil
+}
+
+func wildcardPrefix(root *iradix.Node, p string) (string, []byte, bool, error) {
+	// For consistency with what the copy implementation in fsutil
+	// does: split pattern into non-wildcard prefix and rest of
+	// pattern, then follow symlinks when resolving the non-wildcard
+	// prefix.
+
+	d1, d2 := splitWildcards(p)
+	if d1 == "/" {
+		return "", nil, false, nil
+	}
+
+	linksWalked := 0
+	k, cr, err := getFollowLinksWalk(root, convertPathToKey([]byte(d1)), true, &linksWalked)
+	if err != nil {
+		return "", k, false, err
+	}
+
+	if d2 != "" && cr != nil && cr.Type == CacheRecordTypeSymlink {
+		// getFollowLinks only handles symlinks in path
+		// components before the last component, so
+		// handle last component in d1 specially.
+		resolved := string(convertKeyToPath(k))
+		for {
+			v, ok := root.Get(k)
+
+			if !ok {
+				return d1, k, false, nil
+			}
+			if v.(*CacheRecord).Type != CacheRecordTypeSymlink {
+				break
+			}
+
+			linksWalked++
+			if linksWalked > 255 {
+				return "", k, false, errors.Errorf("too many links")
+			}
+
+			resolved := cleanLink(resolved, v.(*CacheRecord).Linkname)
+			k = convertPathToKey([]byte(resolved))
+		}
+	}
+	return d1, k, cr != nil, nil
+}
+
+func splitWildcards(p string) (d1, d2 string) {
+	parts := strings.Split(path.Join(p), "/")
+	var p1, p2 []string
+	var found bool
+	for _, p := range parts {
+		if !found && containsWildcards(p) {
+			found = true
+		}
+		if p == "" {
+			p = "/"
+		}
+		if !found {
+			p1 = append(p1, p)
+		} else {
+			p2 = append(p2, p)
+		}
+	}
+	return filepath.Join(p1...), filepath.Join(p2...)
+}
+
+func containsWildcards(name string) bool {
+	for i := 0; i < len(name); i++ {
+		ch := name[i]
+		if ch == '\\' {
+			i++
+		} else if ch == '*' || ch == '?' || ch == '[' {
+			return true
+		}
+	}
+	return false
 }
 
 func (cc *cacheContext) checksumNoFollow(ctx context.Context, m *mount, p string) (*CacheRecord, error) {
@@ -973,14 +1085,8 @@ func getFollowLinksWalk(root *iradix.Node, k []byte, follow bool, linksWalked *i
 			if *linksWalked > 255 {
 				return nil, nil, errors.Errorf("too many links")
 			}
-			dirPath := path.Clean(string(convertKeyToPath(dir)))
-			if dirPath == "." || dirPath == "/" {
-				dirPath = ""
-			}
-			link := path.Clean(parent.Linkname)
-			if !path.IsAbs(link) {
-				link = path.Join("/", path.Join(path.Dir(dirPath), link))
-			}
+
+			link := cleanLink(string(convertKeyToPath(dir)), parent.Linkname)
 			return getFollowLinksWalk(root, append(convertPathToKey([]byte(link)), file...), follow, linksWalked)
 		}
 	}
@@ -990,6 +1096,18 @@ func getFollowLinksWalk(root *iradix.Node, k []byte, follow bool, linksWalked *i
 		return k, v.(*CacheRecord), nil
 	}
 	return k, nil, nil
+}
+
+func cleanLink(dir, linkname string) string {
+	dirPath := path.Clean(dir)
+	if dirPath == "." || dirPath == "/" {
+		dirPath = ""
+	}
+	link := path.Clean(linkname)
+	if !path.IsAbs(link) {
+		return path.Join("/", path.Join(path.Dir(dirPath), link))
+	}
+	return link
 }
 
 func prepareDigest(fp, p string, fi os.FileInfo) (digest.Digest, error) {
