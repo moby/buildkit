@@ -695,7 +695,8 @@ func wildcardPrefix(root *iradix.Node, p string) (string, []byte, bool, error) {
 		return "", nil, false, nil
 	}
 
-	k, cr, err := getFollowLinks(root, convertPathToKey([]byte(d1)), true)
+	linksWalked := 0
+	k, cr, err := getFollowLinksWalk(root, convertPathToKey([]byte(d1)), true, &linksWalked)
 	if err != nil {
 		return "", k, false, err
 	}
@@ -704,7 +705,6 @@ func wildcardPrefix(root *iradix.Node, p string) (string, []byte, bool, error) {
 		// getFollowLinks only handles symlinks in path
 		// components before the last component, so
 		// handle last component in d1 specially.
-		linksWalked := 0
 		resolved := string(convertKeyToPath(k))
 		for {
 			v, ok := root.Get(k)
