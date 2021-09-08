@@ -14,4 +14,11 @@ SSH=
 if [ -n "$MOUNT_SSH_AUTH_SOCK" ]; then
   SSH="-v $SSH_AUTH_SOCK:$SSH_AUTH_SOCK -e SSH_AUTH_SOCK"
 fi
-docker run $SSH -it --privileged -v /tmp --net=host -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry --rm $(cat $iidfile)
+
+volumes=
+if [ -n "$MOUNT_BUILDKIT_SOURCE" ]; then
+  volumes="-v $(pwd):/src"
+fi
+
+set -x
+docker run $SSH $volumes -it --privileged -v /tmp --net=host -e BUILDKIT_REGISTRY_MIRROR_DIR=/root/.cache/registry --rm $(cat $iidfile)
