@@ -48,7 +48,7 @@ type ImageWriter struct {
 	opt WriterOpt
 }
 
-func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool, compressionType compression.Type, forceCompression bool, sessionID string) (*ocispecs.Descriptor, error) {
+func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool, compressionopt cache.CompressionOpt, sessionID string) (*ocispecs.Descriptor, error) {
 	platformsBytes, ok := inp.Metadata[exptypes.ExporterPlatformsKey]
 
 	if len(inp.Refs) > 0 && !ok {
@@ -56,7 +56,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 	}
 
 	if len(inp.Refs) == 0 {
-		remotes, err := ic.exportLayers(ctx, compressionType, forceCompression, session.NewGroup(sessionID), inp.Ref)
+		remotes, err := ic.exportLayers(ctx, compressionopt, session.NewGroup(sessionID), inp.Ref)
 		if err != nil {
 			return nil, err
 		}
@@ -87,7 +87,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 		refs = append(refs, r)
 	}
 
-	remotes, err := ic.exportLayers(ctx, compressionType, forceCompression, session.NewGroup(sessionID), refs...)
+	remotes, err := ic.exportLayers(ctx, compressionopt, session.NewGroup(sessionID), refs...)
 	if err != nil {
 		return nil, err
 	}
@@ -152,10 +152,11 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 	return &idxDesc, nil
 }
 
-func (ic *ImageWriter) exportLayers(ctx context.Context, compressionType compression.Type, forceCompression bool, s session.Group, refs ...cache.ImmutableRef) ([]solver.Remote, error) {
+func (ic *ImageWriter) exportLayers(ctx context.Context, compressionopt cache.CompressionOpt, s session.Group, refs ...cache.ImmutableRef) ([]solver.Remote, error) {
 	span, ctx := tracing.StartSpan(ctx, "export layers", trace.WithAttributes(
-		attribute.String("exportLayers.compressionType", compressionType.String()),
-		attribute.Bool("exportLayers.forceCompression", forceCompression),
+		attribute.String("exportLayers.compressionType", compressionopt.Type.String()),
+		attribute.Bool("exportLayers.forceCompression", compressionopt.Force),
+		attribute.Int("exportLayers.compressionLevel", int(compressionopt.Level)),
 	))
 
 	eg, ctx := errgroup.WithContext(ctx)
@@ -169,7 +170,7 @@ func (ic *ImageWriter) exportLayers(ctx context.Context, compressionType compres
 				return
 			}
 			eg.Go(func() error {
-				remote, err := ref.GetRemote(ctx, true, compressionType, forceCompression, s)
+				remote, err := ref.GetRemote(ctx, true, compressionopt, s)
 				if err != nil {
 					return err
 				}

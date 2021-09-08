@@ -18,7 +18,7 @@ var eStargzAnnotations = []string{estargz.TOCJSONDigestAnnotation, estargz.Store
 
 // writeEStargz writes the passed blobs stream as an eStargz-compressed blob.
 // getAnnotations function returns all eStargz annotations.
-func writeEStargz() (compressorFunc compressor, finalize func(context.Context, content.Store) (map[string]string, error)) {
+func writeEStargz(level int) (compressorFunc compressor, finalize func(context.Context, content.Store) (map[string]string, error)) {
 	annotations := make(map[string]string)
 	var bInfo blobInfo
 	var mu sync.Mutex
@@ -33,7 +33,7 @@ func writeEStargz() (compressorFunc compressor, finalize func(context.Context, c
 				defer pr.Close()
 				cw, bInfoCh := calculateBlob()
 				defer cw.Close()
-				w := estargz.NewWriter(io.MultiWriter(dest, cw))
+				w := estargz.NewWriterLevel(io.MultiWriter(dest, cw), level)
 				if err := w.AppendTar(pr); err != nil {
 					pr.CloseWithError(err)
 					return

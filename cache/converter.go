@@ -47,15 +47,15 @@ func needsConversion(mediaType string, compressionType compression.Type) (bool, 
 
 // getConverter returns converter function according to the specified compression type.
 // If no conversion is needed, this returns nil without error.
-func getConverter(desc ocispecs.Descriptor, compressionType compression.Type) (converter.ConvertFunc, error) {
-	if needs, err := needsConversion(desc.MediaType, compressionType); err != nil {
+func getConverter(desc ocispecs.Descriptor, compressionopt CompressionOpt) (converter.ConvertFunc, error) {
+	if needs, err := needsConversion(desc.MediaType, compressionopt.Type); err != nil {
 		return nil, err
 	} else if !needs {
 		// No conversion. No need to return an error here.
 		return nil, nil
 	}
 
-	c := conversion{target: compressionType}
+	c := conversion{target: compressionopt.Type}
 
 	from := compression.FromMediaType(desc.MediaType)
 	switch from {
@@ -66,24 +66,24 @@ func getConverter(desc ocispecs.Descriptor, compressionType compression.Type) (c
 		return nil, errors.Errorf("unsupported source compression type %q from mediatype %q", from, desc.MediaType)
 	}
 
-	switch compressionType {
+	switch compressionopt.Type {
 	case compression.Uncompressed:
 	case compression.Gzip:
 		c.compress = func(w io.Writer) (io.WriteCloser, error) {
-			return gzip.NewWriter(w), nil
+			return gzip.NewWriterLevel(w, compressionopt.Level)
 		}
 	case compression.Zstd:
 		c.compress = func(w io.Writer) (io.WriteCloser, error) {
-			return zstd.NewWriter(w)
+			return zstd.NewWriter(w, zstd.WithEncoderLevel(toZstdEncoderLevel(compressionopt.Level)))
 		}
 	case compression.EStargz:
-		compressorFunc, finalize := writeEStargz()
+		compressorFunc, finalize := writeEStargz(compressionopt.Level)
 		c.compress = func(w io.Writer) (io.WriteCloser, error) {
 			return compressorFunc(w, ocispecs.MediaTypeImageLayerGzip)
 		}
 		c.finalize = finalize
 	default:
-		return nil, errors.Errorf("unknown target compression type during conversion: %q", compressionType)
+		return nil, errors.Errorf("unknown target compression type during conversion: %q", compressionopt.Type)
 	}
 
 	return (&c).convert, nil

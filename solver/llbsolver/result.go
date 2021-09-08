@@ -5,6 +5,7 @@ import (
 	"context"
 	"path"
 
+	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/contenthash"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
@@ -89,6 +90,9 @@ func workerRefConverter(g session.Group) func(ctx context.Context, res solver.Re
 			return nil, errors.Errorf("invalid result: %T", res.Sys())
 		}
 
-		return ref.GetRemote(ctx, true, compression.Default, false, g)
+		return ref.GetRemote(ctx, true, cache.CompressionOpt{
+			Type:  compression.Default,
+			Level: -1,
+		}, g)
 	}
 }

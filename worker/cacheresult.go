@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
-	"github.com/moby/buildkit/util/compression"
 	"github.com/pkg/errors"
 )
 
@@ -77,7 +77,7 @@ func (s *cacheResultStorage) LoadRemote(ctx context.Context, res solver.CacheRes
 	}
 	defer ref.Release(context.TODO())
 	wref := WorkerRef{ref, w}
-	remote, err := wref.GetRemote(ctx, false, compression.Default, false, g)
+	remote, err := wref.GetRemote(ctx, false, cache.CompressionOpt{}, g)
 	if err != nil {
 		return nil, nil // ignore error. loadRemote is best effort
 	}

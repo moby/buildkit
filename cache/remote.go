@@ -27,14 +27,14 @@ type Unlazier interface {
 
 // GetRemote gets a *solver.Remote from content store for this ref (potentially pulling lazily).
 // Note: Use WorkerRef.GetRemote instead as moby integration requires custom GetRemote implementation.
-func (sr *immutableRef) GetRemote(ctx context.Context, createIfNeeded bool, compressionType compression.Type, forceCompression bool, s session.Group) (*solver.Remote, error) {
+func (sr *immutableRef) GetRemote(ctx context.Context, createIfNeeded bool, compressionopt CompressionOpt, s session.Group) (*solver.Remote, error) {
 	ctx, done, err := leaseutil.WithLease(ctx, sr.cm.LeaseManager, leaseutil.MakeTemporary)
 	if err != nil {
 		return nil, err
 	}
 	defer done(ctx)
 
-	err = sr.computeBlobChain(ctx, createIfNeeded, compressionType, forceCompression, s)
+	err = sr.computeBlobChain(ctx, createIfNeeded, compressionopt, s)
 	if err != nil {
 		return nil, err
 	}
@@ -106,15 +106,15 @@ func (sr *immutableRef) GetRemote(ctx context.Context, createIfNeeded bool, comp
 			}
 		}
 
-		if forceCompression {
-			if needs, err := needsConversion(desc.MediaType, compressionType); err != nil {
+		if compressionopt.Force {
+			if needs, err := needsConversion(desc.MediaType, compressionopt.Type); err != nil {
 				return nil, err
 			} else if needs {
 				// ensure the compression type.
 				// compressed blob must be created and stored in the content store.
-				blobDesc, err := ref.getCompressionBlob(ctx, compressionType)
+				blobDesc, err := ref.getCompressionBlob(ctx, compressionopt.Type)
 				if err != nil {
-					return nil, errors.Wrapf(err, "compression blob for %q not found", compressionType)
+					return nil, errors.Wrapf(err, "compression blob for %q not found", compressionopt.Type)
 				}
 				newDesc := desc
 				newDesc.MediaType = blobDesc.MediaType

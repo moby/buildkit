@@ -1169,7 +1169,11 @@ func TestGetRemote(t *testing.T) {
 		for _, compressionType := range []compression.Type{compression.Uncompressed, compression.Gzip /*compression.EStargz,*/, compression.Zstd} {
 			compressionType := compressionType
 			eg.Go(func() error {
-				remote, err := ir.GetRemote(egctx, true, compressionType, true, nil)
+				remote, err := ir.GetRemote(egctx, true, CompressionOpt{
+					Type:  compressionType,
+					Force: true,
+					Level: -1,
+				}, nil)
 				require.NoError(t, err)
 				refChain := ir.parentRefChain()
 				for i, desc := range remote.Descriptors {
@@ -1320,7 +1324,7 @@ func checkDiskUsage(ctx context.Context, t *testing.T, cm Manager, inuse, unused
 
 func esgzBlobDigest(uncompressedBlobBytes []byte) (digest.Digest, error) {
 	buf := new(bytes.Buffer)
-	compressorFunc, _ := writeEStargz()
+	compressorFunc, _ := writeEStargz(-1)
 	w, err := compressorFunc(buf, ocispecs.MediaTypeImageLayerGzip)
 	if err != nil {
 		return "", err

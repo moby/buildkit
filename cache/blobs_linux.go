@@ -15,7 +15,6 @@ import (
 	"syscall"
 
 	"github.com/containerd/containerd/archive"
-	ctdcompression "github.com/containerd/containerd/archive/compression"
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/mount"
@@ -41,20 +40,6 @@ func (sr *immutableRef) tryComputeOverlayBlob(ctx context.Context, lower, upper 
 		// This is not an overlayfs snapshot. This is not an error so don't return error here
 		// and let the caller fallback to another differ.
 		return emptyDesc, false, nil
-	}
-
-	if compressorFunc == nil {
-		switch mediaType {
-		case ocispecs.MediaTypeImageLayer:
-		case ocispecs.MediaTypeImageLayerGzip:
-			compressorFunc = func(dest io.Writer, requiredMediaType string) (io.WriteCloser, error) {
-				return ctdcompression.CompressStream(dest, ctdcompression.Gzip)
-			}
-		case ocispecs.MediaTypeImageLayer + "+zstd":
-			compressorFunc = zstdWriter
-		default:
-			return emptyDesc, false, errors.Errorf("unsupported diff media type: %v", mediaType)
-		}
 	}
 
 	cw, err := sr.cm.ContentStore.Writer(ctx,

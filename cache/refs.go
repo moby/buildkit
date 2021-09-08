@@ -42,7 +42,7 @@ type ImmutableRef interface {
 	Clone() ImmutableRef
 
 	Extract(ctx context.Context, s session.Group) error // +progress
-	GetRemote(ctx context.Context, createIfNeeded bool, compressionType compression.Type, forceCompression bool, s session.Group) (*solver.Remote, error)
+	GetRemote(ctx context.Context, createIfNeeded bool, compression CompressionOpt, s session.Group) (*solver.Remote, error)
 }
 
 type MutableRef interface {
@@ -52,6 +52,12 @@ type MutableRef interface {
 
 type Mountable interface {
 	Mount(ctx context.Context, readonly bool, s session.Group) (snapshot.Mountable, error)
+}
+
+type CompressionOpt struct {
+	Type  compression.Type
+	Force bool
+	Level int
 }
 
 type ref interface {

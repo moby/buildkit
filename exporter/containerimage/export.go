@@ -40,6 +40,7 @@ const (
 	keyNameCanonical    = "name-canonical"
 	keyLayerCompression = "compression"
 	keyForceCompression = "force-compression"
+	keyCompressionLevel = "compression-level"
 	ociTypes            = "oci-mediatypes"
 )
 
@@ -68,6 +69,7 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 	i := &imageExporterInstance{
 		imageExporter:    e,
 		layerCompression: compression.Default,
+		compressionLevel: -1,
 	}
 
 	var esgz bool
@@ -158,9 +160,15 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 			}
 			b, err := strconv.ParseBool(v)
 			if err != nil {
-				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
+				return nil, errors.Wrapf(err, "non-bool value %s specified for %s", v, k)
 			}
 			i.forceCompression = b
+		case keyCompressionLevel:
+			ii, err := strconv.ParseInt(v, 10, 64)
+			if err != nil {
+				return nil, errors.Wrapf(err, "non-integer value %s specified for %s", v, k)
+			}
+			i.compressionLevel = int(ii)
 		default:
 			if i.meta == nil {
 				i.meta = make(map[string][]byte)
@@ -187,6 +195,7 @@ type imageExporterInstance struct {
 	danglingPrefix   string
 	layerCompression compression.Type
 	forceCompression bool
+	compressionLevel int
 	meta             map[string][]byte
 }
 
@@ -208,7 +217,11 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	}
 	defer done(context.TODO())
 
-	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes, e.layerCompression, e.forceCompression, sessionID)
+	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes, cache.CompressionOpt{
+		Type:  e.layerCompression,
+		Force: e.forceCompression,
+		Level: e.compressionLevel,
+	}, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -266,7 +279,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 				annotations := map[digest.Digest]map[string]string{}
 				mprovider := contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
 				if src.Ref != nil {
-					remote, err := src.Ref.GetRemote(ctx, false, e.layerCompression, e.forceCompression, session.NewGroup(sessionID))
+					remote, err := src.Ref.GetRemote(ctx, false, cache.CompressionOpt{}, session.NewGroup(sessionID))
 					if err != nil {
 						return nil, err
 					}
@@ -277,7 +290,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 				}
 				if len(src.Refs) > 0 {
 					for _, r := range src.Refs {
-						remote, err := r.GetRemote(ctx, false, e.layerCompression, e.forceCompression, session.NewGroup(sessionID))
+						remote, err := r.GetRemote(ctx, false, cache.CompressionOpt{}, session.NewGroup(sessionID))
 						if err != nil {
 							return nil, err
 						}
@@ -330,7 +343,7 @@ func (e *imageExporterInstance) unpackImage(ctx context.Context, img images.Imag
 		}
 	}
 
-	remote, err := topLayerRef.GetRemote(ctx, true, e.layerCompression, e.forceCompression, s)
+	remote, err := topLayerRef.GetRemote(ctx, true, cache.CompressionOpt{}, s)
 	if err != nil {
 		return err
 	}
