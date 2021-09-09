@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -82,6 +83,10 @@ func detect() error {
 	if exp == nil {
 		return nil
 	}
+
+	// enable log with traceID when valid exporter
+	bklog.EnableLogWithTraceID(true)
+
 	res, err := resource.Detect(context.Background(), serviceNameDetector{})
 	if err != nil {
 		return err
