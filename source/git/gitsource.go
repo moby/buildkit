@@ -28,6 +28,7 @@ import (
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/progress/logs"
+	"github.com/moby/buildkit/util/urlutil"
 	"github.com/moby/locker"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
@@ -70,7 +71,7 @@ func (gs *gitSource) ID() string {
 func (gs *gitSource) mountRemote(ctx context.Context, remote string, auth []string, g session.Group) (target string, release func(), retErr error) {
 	sis, err := searchGitRemote(ctx, gs.cache, remote)
 	if err != nil {
-		return "", nil, errors.Wrapf(err, "failed to search metadata for %s", redactCredentials(remote))
+		return "", nil, errors.Wrapf(err, "failed to search metadata for %s", urlutil.RedactCredentials(remote))
 	}
 
 	var remoteRef cache.MutableRef
@@ -79,19 +80,19 @@ func (gs *gitSource) mountRemote(ctx context.Context, remote string, auth []stri
 		if err != nil {
 			if errors.Is(err, cache.ErrLocked) {
 				// should never really happen as no other function should access this metadata, but lets be graceful
-				bklog.G(ctx).Warnf("mutable ref for %s  %s was locked: %v", redactCredentials(remote), si.ID(), err)
+				bklog.G(ctx).Warnf("mutable ref for %s  %s was locked: %v", urlutil.RedactCredentials(remote), si.ID(), err)
 				continue
 			}
-			return "", nil, errors.Wrapf(err, "failed to get mutable ref for %s", redactCredentials(remote))
+			return "", nil, errors.Wrapf(err, "failed to get mutable ref for %s", urlutil.RedactCredentials(remote))
 		}
 		break
 	}
 
 	initializeRepo := false
 	if remoteRef == nil {
-		remoteRef, err = gs.cache.New(ctx, nil, g, cache.CachePolicyRetain, cache.WithDescription(fmt.Sprintf("shared git repo for %s", redactCredentials(remote))))
+		remoteRef, err = gs.cache.New(ctx, nil, g, cache.CachePolicyRetain, cache.WithDescription(fmt.Sprintf("shared git repo for %s", urlutil.RedactCredentials(remote))))
 		if err != nil {
-			return "", nil, errors.Wrapf(err, "failed to create new mutable for %s", redactCredentials(remote))
+			return "", nil, errors.Wrapf(err, "failed to create new mutable for %s", urlutil.RedactCredentials(remote))
 		}
 		initializeRepo = true
 	}
@@ -342,7 +343,7 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index
 
 	buf, err := gitWithinDir(ctx, gitDir, "", sock, knownHosts, gs.auth, "ls-remote", "origin", ref)
 	if err != nil {
-		return "", nil, false, errors.Wrapf(err, "failed to fetch remote %s", redactCredentials(remote))
+		return "", nil, false, errors.Wrapf(err, "failed to fetch remote %s", urlutil.RedactCredentials(remote))
 	}
 	out := buf.String()
 	idx := strings.Index(out, "\t")
@@ -447,13 +448,13 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 			// TODO: is there a better way to do this?
 		}
 		if _, err := gitWithinDir(ctx, gitDir, "", sock, knownHosts, gs.auth, args...); err != nil {
-			return nil, errors.Wrapf(err, "failed to fetch remote %s", redactCredentials(gs.src.Remote))
+			return nil, errors.Wrapf(err, "failed to fetch remote %s", urlutil.RedactCredentials(gs.src.Remote))
 		}
 	}
 
 	checkoutRef, err := gs.cache.New(ctx, nil, g, cache.WithRecordType(client.UsageRecordTypeGitCheckout), cache.WithDescription(fmt.Sprintf("git snapshot for %s#%s", gs.src.Remote, ref)))
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to create new mutable for %s", redactCredentials(gs.src.Remote))
+		return nil, errors.Wrapf(err, "failed to create new mutable for %s", urlutil.RedactCredentials(gs.src.Remote))
 	}
 
 	defer func() {
@@ -511,7 +512,7 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 		}
 		_, err = gitWithinDir(ctx, checkoutDirGit, checkoutDir, sock, knownHosts, nil, "checkout", "FETCH_HEAD")
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to checkout remote %s", redactCredentials(gs.src.Remote))
+			return nil, errors.Wrapf(err, "failed to checkout remote %s", urlutil.RedactCredentials(gs.src.Remote))
 		}
 		gitDir = checkoutDirGit
 	} else {
@@ -524,7 +525,7 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 		}
 		_, err = gitWithinDir(ctx, gitDir, cd, sock, knownHosts, nil, "checkout", ref, "--", ".")
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to checkout remote %s", redactCredentials(gs.src.Remote))
+			return nil, errors.Wrapf(err, "failed to checkout remote %s", urlutil.RedactCredentials(gs.src.Remote))
 		}
 		if subdir != "." {
 			d, err := os.Open(filepath.Join(cd, subdir))
@@ -557,7 +558,7 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 
 	_, err = gitWithinDir(ctx, gitDir, checkoutDir, sock, knownHosts, gs.auth, "submodule", "update", "--init", "--recursive", "--depth=1")
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to update submodules for %s", redactCredentials(gs.src.Remote))
+		return nil, errors.Wrapf(err, "failed to update submodules for %s", urlutil.RedactCredentials(gs.src.Remote))
 	}
 
 	if idmap := mount.IdentityMapping(); idmap != nil {
@@ -675,12 +676,12 @@ func tokenScope(remote string) string {
 func getDefaultBranch(ctx context.Context, gitDir, workDir, sshAuthSock, knownHosts string, auth []string, remoteURL string) (string, error) {
 	buf, err := gitWithinDir(ctx, gitDir, workDir, sshAuthSock, knownHosts, auth, "ls-remote", "--symref", remoteURL, "HEAD")
 	if err != nil {
-		return "", errors.Wrapf(err, "error fetching default branch for repository %s", redactCredentials(remoteURL))
+		return "", errors.Wrapf(err, "error fetching default branch for repository %s", urlutil.RedactCredentials(remoteURL))
 	}
 
 	ss := defaultBranch.FindAllStringSubmatch(buf.String(), -1)
 	if len(ss) == 0 || len(ss[0]) != 2 {
-		return "", errors.Errorf("could not find default branch for repository: %s", redactCredentials(remoteURL))
+		return "", errors.Errorf("could not find default branch for repository: %s", urlutil.RedactCredentials(remoteURL))
 	}
 	return ss[0][1], nil
 }
