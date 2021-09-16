@@ -1,40 +1,125 @@
 //go:build linux
 // +build linux
 
-package cache
+package overlaydiffer
 
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/containerd/containerd/archive"
 	ctdcompression "github.com/containerd/containerd/archive/compression"
 	"github.com/containerd/containerd/content"
+	"github.com/containerd/containerd/diff"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/mount"
 	"github.com/containerd/continuity/devices"
 	"github.com/containerd/continuity/fs"
 	"github.com/containerd/continuity/sysx"
+	"github.com/klauspost/compress/zstd"
+	"github.com/moby/buildkit/snapshot"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
+
+	log "github.com/moby/buildkit/util/bklog"
 )
+
+func NewOverlayDiffer(store content.Store, sn snapshot.Snapshotter, d diff.Comparer) diff.Comparer {
+	return &overlayDiffer{
+		store: store,
+		d:     d,
+		sn:    sn,
+	}
+}
+
+const containerdUncompressed = "containerd.io/uncompressed"
 
 var emptyDesc = ocispecs.Descriptor{}
 
-// computeOverlayBlob provides overlayfs-specialized method to compute
-// diff between lower and upper snapshot. If the passed mounts cannot
-// be computed (e.g. because the mounts aren't overlayfs), it returns
-// an error.
-func (sr *immutableRef) tryComputeOverlayBlob(ctx context.Context, lower, upper []mount.Mount, mediaType string, ref string, compressorFunc compressor) (_ ocispecs.Descriptor, ok bool, err error) {
+// overlayDiffer provides overlayfs-specialized method to compute
+// diff between lower and upper snapshot.
+type overlayDiffer struct {
+	store content.Store
+	d     diff.Comparer
+	sn    snapshot.Snapshotter
+}
+
+// Compare creates a diff between the given mounts and uploads the result
+// to the content store.
+func (d *overlayDiffer) Compare(ctx context.Context, lower, upper []mount.Mount, opts ...diff.Opt) (desc ocispecs.Descriptor, err error) {
+
+	// Determine differ and error/log handling based on envvar and snapshotter.
+	var enableOverlay, fallback, logWarnOnErr bool
+	if forceOvlStr := os.Getenv("BUILDKIT_DEBUG_FORCE_OVERLAY_DIFF"); forceOvlStr != "" {
+		enableOverlay, err = strconv.ParseBool(forceOvlStr)
+		if err != nil {
+			return emptyDesc, errors.Wrapf(err, "invalid boolean in BUILDKIT_DEBUG_FORCE_OVERLAY_DIFF")
+		}
+		fallback = false // prohibit fallback on debug
+	} else {
+		enableOverlay, fallback = true, true
+		switch d.sn.Name() {
+		case "overlayfs", "stargz":
+			// overlayfs-based snapshotters should support overlay diff. so print warn log on failure.
+			logWarnOnErr = true
+		case "fuse-overlayfs":
+			// not supported with fuse-overlayfs snapshotter which doesn't provide overlayfs mounts.
+			// TODO: add support for fuse-overlayfs
+			enableOverlay = false
+		}
+	}
+
+	var config diff.Config
+	for _, opt := range opts {
+		if err := opt(&config); err != nil {
+			return emptyDesc, err
+		}
+	}
+	if enableOverlay {
+		computed, ok, err := d.tryComputeOverlayBlob(ctx, lower, upper, config.MediaType, config.Reference, config.Compressor)
+		if !ok || err != nil {
+			if !fallback {
+				if !ok {
+					return emptyDesc, errors.Errorf("overlay mounts not detected (lower=%+v,upper=%+v)", lower, upper)
+				}
+				if err != nil {
+					return emptyDesc, errors.Wrapf(err, "failed to compute overlay diff")
+				}
+			}
+			if logWarnOnErr {
+				logrus.Warnf("failed to compute blob by overlay differ (ok=%v): %v", ok, err)
+			}
+		}
+		if ok {
+			desc = computed
+		}
+	}
+
+	if desc.Digest == "" {
+		desc, err = d.d.Compare(ctx, lower, upper, opts...)
+		if err != nil {
+			return emptyDesc, err
+		}
+	}
+
+	return desc, nil
+}
+
+func (d *overlayDiffer) tryComputeOverlayBlob(ctx context.Context, lower, upper []mount.Mount, mediaType string, ref string, compressorFunc func(dest io.Writer, mediaType string) (io.WriteCloser, error)) (_ ocispecs.Descriptor, ok bool, err error) {
 	// Get upperdir location if mounts are overlayfs that can be processed by this differ.
 	upperdir, err := getOverlayUpperdir(lower, upper)
 	if err != nil {
@@ -43,6 +128,9 @@ func (sr *immutableRef) tryComputeOverlayBlob(ctx context.Context, lower, upper 
 		return emptyDesc, false, nil
 	}
 
+	if mediaType == "" {
+		mediaType = ocispecs.MediaTypeImageLayerGzip
+	}
 	if compressorFunc == nil {
 		switch mediaType {
 		case ocispecs.MediaTypeImageLayer:
@@ -57,7 +145,13 @@ func (sr *immutableRef) tryComputeOverlayBlob(ctx context.Context, lower, upper 
 		}
 	}
 
-	cw, err := sr.cm.ContentStore.Writer(ctx,
+	var newReference bool
+	if ref == "" {
+		newReference = true
+		ref = uniqueRef()
+	}
+
+	cw, err := d.store.Writer(ctx,
 		content.WithRef(ref),
 		content.WithDescriptor(ocispecs.Descriptor{
 			MediaType: mediaType, // most contentstore implementations just ignore this
@@ -68,8 +162,18 @@ func (sr *immutableRef) tryComputeOverlayBlob(ctx context.Context, lower, upper 
 	defer func() {
 		if err != nil {
 			cw.Close()
+			if newReference {
+				if err := d.store.Abort(ctx, ref); err != nil {
+					log.G(ctx).WithField("ref", ref).Warnf("failed to delete diff upload")
+				}
+			}
 		}
 	}()
+	if !newReference {
+		if err := cw.Truncate(0); err != nil {
+			return emptyDesc, false, err
+		}
+	}
 
 	var labels map[string]string
 	if compressorFunc != nil {
@@ -103,7 +207,7 @@ func (sr *immutableRef) tryComputeOverlayBlob(ctx context.Context, lower, upper 
 			return emptyDesc, false, errors.Wrap(err, "failed to commit")
 		}
 	}
-	cinfo, err := sr.cm.ContentStore.Info(ctx, dgst)
+	cinfo, err := d.store.Info(ctx, dgst)
 	if err != nil {
 		return emptyDesc, false, errors.Wrap(err, "failed to get info from content store")
 	}
@@ -113,7 +217,7 @@ func (sr *immutableRef) tryComputeOverlayBlob(ctx context.Context, lower, upper 
 	// Set uncompressed label if digest already existed without label
 	if _, ok := cinfo.Labels[containerdUncompressed]; !ok {
 		cinfo.Labels[containerdUncompressed] = labels[containerdUncompressed]
-		if _, err := sr.cm.ContentStore.Update(ctx, cinfo, "labels."+containerdUncompressed); err != nil {
+		if _, err := d.store.Update(ctx, cinfo, "labels."+containerdUncompressed); err != nil {
 			return emptyDesc, false, errors.Wrap(err, "error setting uncompressed label")
 		}
 	}
@@ -422,4 +526,16 @@ func compareCapabilities(p1, p2 string) (bool, error) {
 		return false, errors.Wrapf(err, "failed to get xattr for %s", p2)
 	}
 	return bytes.Equal(c1, c2), nil
+}
+
+func uniqueRef() string {
+	t := time.Now()
+	var b [3]byte
+	// Ignore read failures, just decreases uniqueness
+	rand.Read(b[:])
+	return fmt.Sprintf("%d-%s", t.UnixNano(), base64.URLEncoding.EncodeToString(b[:]))
+}
+
+func zstdWriter(dest io.Writer, requiredMediaType string) (io.WriteCloser, error) {
+	return zstd.NewWriter(dest)
 }

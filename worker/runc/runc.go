@@ -19,6 +19,7 @@ import (
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/network/netproviders"
+	"github.com/moby/buildkit/util/overlaydiffer"
 	"github.com/moby/buildkit/util/winlayers"
 	"github.com/moby/buildkit/worker/base"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -128,7 +129,7 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		Snapshotter:     snap,
 		ContentStore:    c,
 		Applier:         winlayers.NewFileSystemApplierWithWindows(c, apply.NewFileSystemApplier(c)),
-		Differ:          winlayers.NewWalkingDiffWithWindows(c, walking.NewWalkingDiff(c)),
+		Differ:          winlayers.NewWalkingDiffWithWindows(c, overlaydiffer.NewOverlayDiffer(c, snap, walking.NewWalkingDiff(c))),
 		ImageStore:      nil, // explicitly
 		Platforms:       []ocispecs.Platform{platforms.Normalize(platforms.DefaultSpec())},
 		IdentityMapping: idmap,

@@ -1,6 +1,7 @@
+//go:build linux
 // +build linux
 
-package cache
+package overlaydiffer
 
 import (
 	"context"
