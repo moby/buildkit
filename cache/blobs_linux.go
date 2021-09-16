@@ -4,6 +4,7 @@
 package cache
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
@@ -71,10 +72,11 @@ func (sr *immutableRef) tryComputeOverlayBlob(ctx context.Context, lower, upper 
 		}
 	}()
 
+	bufW := bufio.NewWriterSize(cw, 128*1024)
 	var labels map[string]string
 	if compressorFunc != nil {
 		dgstr := digest.SHA256.Digester()
-		compressed, err := compressorFunc(cw, mediaType)
+		compressed, err := compressorFunc(bufW, mediaType)
 		if err != nil {
 			return emptyDesc, false, errors.Wrap(err, "failed to get compressed stream")
 		}
@@ -88,11 +90,14 @@ func (sr *immutableRef) tryComputeOverlayBlob(ctx context.Context, lower, upper 
 		}
 		labels[containerdUncompressed] = dgstr.Digest().String()
 	} else {
-		if err = writeOverlayUpperdir(ctx, cw, upperdir, lower); err != nil {
+		if err = writeOverlayUpperdir(ctx, bufW, upperdir, lower); err != nil {
 			return emptyDesc, false, errors.Wrap(err, "failed to write diff")
 		}
 	}
 
+	if err := bufW.Flush(); err != nil {
+		return emptyDesc, false, errors.Wrap(err, "failed to flush diff")
+	}
 	var commitopts []content.Opt
 	if labels != nil {
 		commitopts = append(commitopts, content.WithLabels(labels))
