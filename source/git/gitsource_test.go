@@ -60,7 +60,7 @@ func testRepeatedFetch(t *testing.T, keepGitDir bool) {
 	g, err := gs.Resolve(ctx, id, nil, nil)
 	require.NoError(t, err)
 
-	key1, _, done, err := g.CacheKey(ctx, nil, 0)
+	key1, pin1, _, done, err := g.CacheKey(ctx, nil, 0)
 	require.NoError(t, err)
 	require.True(t, done)
 
@@ -70,6 +70,7 @@ func testRepeatedFetch(t *testing.T, keepGitDir bool) {
 	}
 
 	require.Equal(t, expLen, len(key1))
+	require.Equal(t, 40, len(pin1))
 
 	ref1, err := g.Snapshot(ctx, nil)
 	require.NoError(t, err)
@@ -102,10 +103,11 @@ func testRepeatedFetch(t *testing.T, keepGitDir bool) {
 	g, err = gs.Resolve(ctx, id, nil, nil)
 	require.NoError(t, err)
 
-	key2, _, _, err := g.CacheKey(ctx, nil, 0)
+	key2, pin2, _, _, err := g.CacheKey(ctx, nil, 0)
 	require.NoError(t, err)
 
 	require.Equal(t, key1, key2)
+	require.Equal(t, pin1, pin2)
 
 	ref2, err := g.Snapshot(ctx, nil)
 	require.NoError(t, err)
@@ -118,9 +120,10 @@ func testRepeatedFetch(t *testing.T, keepGitDir bool) {
 	g, err = gs.Resolve(ctx, id, nil, nil)
 	require.NoError(t, err)
 
-	key3, _, _, err := g.CacheKey(ctx, nil, 0)
+	key3, pin3, _, _, err := g.CacheKey(ctx, nil, 0)
 	require.NoError(t, err)
 	require.NotEqual(t, key1, key3)
+	require.NotEqual(t, pin1, pin3)
 
 	ref3, err := g.Snapshot(ctx, nil)
 	require.NoError(t, err)
@@ -187,7 +190,7 @@ func testFetchBySHA(t *testing.T, keepGitDir bool) {
 	g, err := gs.Resolve(ctx, id, nil, nil)
 	require.NoError(t, err)
 
-	key1, _, done, err := g.CacheKey(ctx, nil, 0)
+	key1, pin1, _, done, err := g.CacheKey(ctx, nil, 0)
 	require.NoError(t, err)
 	require.True(t, done)
 
@@ -197,6 +200,7 @@ func testFetchBySHA(t *testing.T, keepGitDir bool) {
 	}
 
 	require.Equal(t, expLen, len(key1))
+	require.Equal(t, 40, len(pin1))
 
 	ref1, err := g.Snapshot(ctx, nil)
 	require.NoError(t, err)
@@ -278,15 +282,18 @@ func testMultipleRepos(t *testing.T, keepGitDir bool) {
 		expLen += 4
 	}
 
-	key1, _, _, err := g.CacheKey(ctx, nil, 0)
+	key1, pin1, _, _, err := g.CacheKey(ctx, nil, 0)
 	require.NoError(t, err)
 	require.Equal(t, expLen, len(key1))
+	require.Equal(t, 40, len(pin1))
 
-	key2, _, _, err := g2.CacheKey(ctx, nil, 0)
+	key2, pin2, _, _, err := g2.CacheKey(ctx, nil, 0)
 	require.NoError(t, err)
 	require.Equal(t, expLen, len(key2))
+	require.Equal(t, 40, len(pin2))
 
 	require.NotEqual(t, key1, key2)
+	require.NotEqual(t, pin1, pin2)
 
 	ref1, err := g.Snapshot(ctx, nil)
 	require.NoError(t, err)
@@ -343,7 +350,7 @@ func TestCredentialRedaction(t *testing.T) {
 	g, err := gs.Resolve(ctx, id, nil, nil)
 	require.NoError(t, err)
 
-	_, _, _, err = g.CacheKey(ctx, nil, 0)
+	_, _, _, _, err = g.CacheKey(ctx, nil, 0)
 	require.Error(t, err)
 	require.False(t, strings.Contains(err.Error(), "keepthissecret"))
 }
@@ -390,7 +397,7 @@ func testSubdir(t *testing.T, keepGitDir bool) {
 	g, err := gs.Resolve(ctx, id, nil, nil)
 	require.NoError(t, err)
 
-	key1, _, done, err := g.CacheKey(ctx, nil, 0)
+	key1, pin1, _, done, err := g.CacheKey(ctx, nil, 0)
 	require.NoError(t, err)
 	require.True(t, done)
 
@@ -400,6 +407,7 @@ func testSubdir(t *testing.T, keepGitDir bool) {
 	}
 
 	require.Equal(t, expLen, len(key1))
+	require.Equal(t, 40, len(pin1))
 
 	ref1, err := g.Snapshot(ctx, nil)
 	require.NoError(t, err)

@@ -19,6 +19,7 @@ import (
 	"github.com/docker/go-connections/nat"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/client/llb/imagemetaresolver"
+	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"github.com/moby/buildkit/frontend/dockerfile/shell"
@@ -276,7 +277,6 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 							p := autoDetectPlatform(img, *platform, platformOpt.buildPlatforms)
 							platform = &p
 						}
-						d.image = img
 						if dgst != "" {
 							ref, err = reference.WithDigest(ref, dgst)
 							if err != nil {
@@ -294,6 +294,17 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 								}
 							}
 						}
+						if !isScratch {
+							// image not scratch set original image name as ref
+							// and actual reference as alias in BuildInfo
+							d.buildInfo = &exptypes.BuildInfo{
+								Type:  exptypes.BuildInfoTypeDockerImage,
+								Ref:   origName,
+								Alias: ref.String(),
+								Pin:   dgst.String(),
+							}
+						}
+						d.image = img
 					}
 					if isScratch {
 						d.state = llb.Scratch()
@@ -319,11 +330,18 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 
 	buildContext := &mutableOutput{}
 	ctxPaths := map[string]struct{}{}
+	var buildInfos []exptypes.BuildInfo
 
 	for _, d := range allDispatchStates.states {
 		if !isReachable(target, d) {
 			continue
 		}
+
+		// collect build dependencies
+		if d.buildInfo != nil {
+			buildInfos = append(buildInfos, *d.buildInfo)
+		}
+
 		if d.base != nil {
 			d.state = d.base.state
 			d.platform = d.base.platform
@@ -392,6 +410,18 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 
 		for p := range d.ctxPaths {
 			ctxPaths[p] = struct{}{}
+		}
+	}
+
+	// set target with gathered build dependencies
+	target.image.BuildInfo = []byte{}
+	if len(buildInfos) > 0 {
+		sort.Slice(buildInfos, func(i, j int) bool {
+			return buildInfos[i].Ref < buildInfos[j].Ref
+		})
+		target.image.BuildInfo, err = json.Marshal(buildInfos)
+		if err != nil {
+			return nil, nil, err
 		}
 	}
 
@@ -582,6 +612,7 @@ type dispatchState struct {
 	cmdIndex       int
 	cmdTotal       int
 	prefixPlatform bool
+	buildInfo      *exptypes.BuildInfo
 }
 
 type dispatchStates struct {

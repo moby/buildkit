@@ -21,6 +21,7 @@ import (
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/source"
+	srctypes "github.com/moby/buildkit/source/types"
 	"github.com/moby/buildkit/util/tracing"
 	"github.com/moby/locker"
 	digest "github.com/opencontainers/go-digest"
@@ -52,7 +53,7 @@ func NewSource(opt Opt) (source.Source, error) {
 }
 
 func (hs *httpSource) ID() string {
-	return source.HTTPSScheme
+	return srctypes.HTTPSScheme
 }
 
 type httpSourceHandler struct {
@@ -118,26 +119,26 @@ func (hs *httpSourceHandler) formatCacheKey(filename string, dgst digest.Digest,
 	return digest.FromBytes(dt)
 }
 
-func (hs *httpSourceHandler) CacheKey(ctx context.Context, g session.Group, index int) (string, solver.CacheOpts, bool, error) {
+func (hs *httpSourceHandler) CacheKey(ctx context.Context, g session.Group, index int) (string, string, solver.CacheOpts, bool, error) {
 	if hs.src.Checksum != "" {
 		hs.cacheKey = hs.src.Checksum
-		return hs.formatCacheKey(getFileName(hs.src.URL, hs.src.Filename, nil), hs.src.Checksum, "").String(), nil, true, nil
+		return hs.formatCacheKey(getFileName(hs.src.URL, hs.src.Filename, nil), hs.src.Checksum, "").String(), hs.src.Checksum.String(), nil, true, nil
 	}
 
 	uh, err := hs.urlHash()
 	if err != nil {
-		return "", nil, false, nil
+		return "", "", nil, false, nil
 	}
 
 	// look up metadata(previously stored headers) for that URL
 	mds, err := searchHTTPURLDigest(ctx, hs.cache, uh)
 	if err != nil {
-		return "", nil, false, errors.Wrapf(err, "failed to search metadata for %s", uh)
+		return "", "", nil, false, errors.Wrapf(err, "failed to search metadata for %s", uh)
 	}
 
 	req, err := http.NewRequest("GET", hs.src.URL, nil)
 	if err != nil {
-		return "", nil, false, err
+		return "", "", nil, false, err
 	}
 	req = req.WithContext(ctx)
 	m := map[string]cacheRefMetadata{}
@@ -194,7 +195,7 @@ func (hs *httpSourceHandler) CacheKey(ctx context.Context, g session.Group, inde
 					if dgst != "" {
 						modTime := md.getHTTPModTime()
 						resp.Body.Close()
-						return hs.formatCacheKey(getFileName(hs.src.URL, hs.src.Filename, resp), dgst, modTime).String(), nil, true, nil
+						return hs.formatCacheKey(getFileName(hs.src.URL, hs.src.Filename, resp), dgst, modTime).String(), dgst.String(), nil, true, nil
 					}
 				}
 			}
@@ -205,10 +206,10 @@ func (hs *httpSourceHandler) CacheKey(ctx context.Context, g session.Group, inde
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", nil, false, err
+		return "", "", nil, false, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
-		return "", nil, false, errors.Errorf("invalid response status %d", resp.StatusCode)
+		return "", "", nil, false, errors.Errorf("invalid response status %d", resp.StatusCode)
 	}
 	if resp.StatusCode == http.StatusNotModified {
 		respETag := resp.Header.Get("ETag")
@@ -221,27 +222,27 @@ func (hs *httpSourceHandler) CacheKey(ctx context.Context, g session.Group, inde
 		}
 		md, ok := m[respETag]
 		if !ok {
-			return "", nil, false, errors.Errorf("invalid not-modified ETag: %v", respETag)
+			return "", "", nil, false, errors.Errorf("invalid not-modified ETag: %v", respETag)
 		}
 		hs.refID = md.ID()
 		dgst := md.getHTTPChecksum()
 		if dgst == "" {
-			return "", nil, false, errors.Errorf("invalid metadata change")
+			return "", "", nil, false, errors.Errorf("invalid metadata change")
 		}
 		modTime := md.getHTTPModTime()
 		resp.Body.Close()
-		return hs.formatCacheKey(getFileName(hs.src.URL, hs.src.Filename, resp), dgst, modTime).String(), nil, true, nil
+		return hs.formatCacheKey(getFileName(hs.src.URL, hs.src.Filename, resp), dgst, modTime).String(), dgst.String(), nil, true, nil
 	}
 
 	ref, dgst, err := hs.save(ctx, resp, g)
 	if err != nil {
-		return "", nil, false, err
+		return "", "", nil, false, err
 	}
 	ref.Release(context.TODO())
 
 	hs.cacheKey = dgst
 
-	return hs.formatCacheKey(getFileName(hs.src.URL, hs.src.Filename, resp), dgst, resp.Header.Get("Last-Modified")).String(), nil, true, nil
+	return hs.formatCacheKey(getFileName(hs.src.URL, hs.src.Filename, resp), dgst, resp.Header.Get("Last-Modified")).String(), dgst.String(), nil, true, nil
 }
 
 func (hs *httpSourceHandler) save(ctx context.Context, resp *http.Response, s session.Group) (ref cache.ImmutableRef, dgst digest.Digest, retErr error) {

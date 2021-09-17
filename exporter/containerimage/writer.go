@@ -8,11 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/moby/buildkit/util/bklog"
-	"github.com/moby/buildkit/util/tracing"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
-
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/diff"
 	"github.com/containerd/containerd/images"
@@ -23,13 +18,18 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/util/bklog"
+	"github.com/moby/buildkit/util/buildinfo"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/system"
+	"github.com/moby/buildkit/util/tracing"
 	digest "github.com/opencontainers/go-digest"
 	specs "github.com/opencontainers/image-spec/specs-go"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -48,7 +48,7 @@ type ImageWriter struct {
 	opt WriterOpt
 }
 
-func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool, compressionType compression.Type, forceCompression bool, sessionID string) (*ocispecs.Descriptor, error) {
+func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool, compressionType compression.Type, buildInfoMode buildinfo.ExportMode, forceCompression bool, sessionID string) (*ocispecs.Descriptor, error) {
 	platformsBytes, ok := inp.Metadata[exptypes.ExporterPlatformsKey]
 
 	if len(inp.Refs) > 0 && !ok {
@@ -60,7 +60,13 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 		if err != nil {
 			return nil, err
 		}
-		mfstDesc, configDesc, err := ic.commitDistributionManifest(ctx, inp.Ref, inp.Metadata[exptypes.ExporterImageConfigKey], &remotes[0], oci, inp.Metadata[exptypes.ExporterInlineCache])
+
+		var buildInfo []byte
+		if buildInfoMode&buildinfo.ExportImageConfig > 0 {
+			buildInfo = inp.Metadata[exptypes.ExporterBuildInfo]
+		}
+
+		mfstDesc, configDesc, err := ic.commitDistributionManifest(ctx, inp.Ref, inp.Metadata[exptypes.ExporterImageConfigKey], &remotes[0], oci, inp.Metadata[exptypes.ExporterInlineCache], buildInfo)
 		if err != nil {
 			return nil, err
 		}
@@ -68,6 +74,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 			mfstDesc.Annotations = make(map[string]string)
 		}
 		mfstDesc.Annotations[exptypes.ExporterConfigDigestKey] = configDesc.Digest.String()
+
 		return mfstDesc, nil
 	}
 
@@ -119,8 +126,14 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 			return nil, errors.Errorf("failed to find ref for ID %s", p.ID)
 		}
 		config := inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterImageConfigKey, p.ID)]
+		inlineCache := inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterInlineCache, p.ID)]
 
-		desc, _, err := ic.commitDistributionManifest(ctx, r, config, &remotes[remotesMap[p.ID]], oci, inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterInlineCache, p.ID)])
+		var buildInfo []byte
+		if buildInfoMode&buildinfo.ExportImageConfig > 0 {
+			buildInfo = inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, p.ID)]
+		}
+
+		desc, _, err := ic.commitDistributionManifest(ctx, r, config, &remotes[remotesMap[p.ID]], oci, inlineCache, buildInfo)
 		if err != nil {
 			return nil, err
 		}
@@ -184,7 +197,7 @@ func (ic *ImageWriter) exportLayers(ctx context.Context, compressionType compres
 	return out, err
 }
 
-func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache.ImmutableRef, config []byte, remote *solver.Remote, oci bool, inlineCache []byte) (*ocispecs.Descriptor, *ocispecs.Descriptor, error) {
+func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache.ImmutableRef, config []byte, remote *solver.Remote, oci bool, inlineCache []byte, buildInfo []byte) (*ocispecs.Descriptor, *ocispecs.Descriptor, error) {
 	if len(config) == 0 {
 		var err error
 		config, err = emptyImageConfig()
@@ -206,7 +219,7 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache
 
 	remote, history = normalizeLayersAndHistory(ctx, remote, history, ref, oci)
 
-	config, err = patchImageConfig(config, remote.Descriptors, history, inlineCache)
+	config, err = patchImageConfig(config, remote.Descriptors, history, inlineCache, buildInfo)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -346,7 +359,7 @@ func parseHistoryFromConfig(dt []byte) ([]ocispecs.History, error) {
 	return config.History, nil
 }
 
-func patchImageConfig(dt []byte, descs []ocispecs.Descriptor, history []ocispecs.History, cache []byte) ([]byte, error) {
+func patchImageConfig(dt []byte, descs []ocispecs.Descriptor, history []ocispecs.History, cache []byte, buildInfo []byte) ([]byte, error) {
 	m := map[string]json.RawMessage{}
 	if err := json.Unmarshal(dt, &m); err != nil {
 		return nil, errors.Wrap(err, "failed to parse image config for patch")
@@ -389,6 +402,16 @@ func patchImageConfig(dt []byte, descs []ocispecs.Descriptor, history []ocispecs
 			return nil, err
 		}
 		m["moby.buildkit.cache.v0"] = dt
+	}
+
+	if buildInfo != nil {
+		dt, err := json.Marshal(buildInfo)
+		if err != nil {
+			return nil, err
+		}
+		m[buildinfo.ImageConfigField] = dt
+	} else if _, ok := m[buildinfo.ImageConfigField]; ok {
+		delete(m, buildinfo.ImageConfigField)
 	}
 
 	dt, err = json.Marshal(m)

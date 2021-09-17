@@ -59,6 +59,7 @@ You don't need to read this document unless you want to use the full-featured st
     - [Local directory](#local-directory-1)
     - [GitHub Actions cache (experimental)](#github-actions-cache-experimental)
   - [Consistent hashing](#consistent-hashing)
+- [Metadata](#metadata)
 - [Systemd socket activation](#systemd-socket-activation)
 - [Expose BuildKit as a TCP service](#expose-buildkit-as-a-tcp-service)
   - [Load balancing](#load-balancing)
@@ -232,6 +233,7 @@ Keys supported by image output:
 * `name-canonical=true`: add additional canonical name `name@<digest>`
 * `compression=[uncompressed,gzip,estargz,zstd]`: choose compression type for layers newly created and cached, gzip is default value. estargz should be used with `oci-mediatypes=true`.
 * `force-compression=true`: forcefully apply `compression` option to all layers (including already existing layers).
+* `buildinfo=[all,imageconfig,metadata,none]`: choose [build dependency](docs/build-repro.md#build-dependencies) version to export (default `all`).
 
 If credentials are required, `buildctl` will attempt to read Docker configuration file `$DOCKER_CONFIG/config.json`.
 `$DOCKER_CONFIG` defaults to `~/.docker`.
@@ -416,7 +418,7 @@ To output build metadata such as the image digest, pass the `--metadata-file` fl
 The metadata will be written as a JSON object to the specified file.
 The directory of the specified file must already exist and be writable.
 
-```
+```bash
 buildctl build ... --metadata-file metadata.json
 ```
 
