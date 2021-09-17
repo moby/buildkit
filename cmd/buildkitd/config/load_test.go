@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"bytes"
@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestConfig(t *testing.T) {
+func TestLoad(t *testing.T) {
 
 	const testConfig = `
 root = "/foo/bar"
