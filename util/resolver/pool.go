@@ -40,7 +40,7 @@ func (p *Pool) gc() {
 	defer p.mu.Unlock()
 
 	for k, ns := range p.m {
-		ns.mu.Lock()
+		ns.muHandlers.Lock()
 		for key, h := range ns.handlers {
 			if time.Since(h.lastUsed) < 10*time.Minute {
 				continue
@@ -58,7 +58,7 @@ func (p *Pool) gc() {
 		if len(ns.handlers) == 0 {
 			delete(p.m, k)
 		}
-		ns.mu.Unlock()
+		ns.muHandlers.Unlock()
 	}
 
 	time.AfterFunc(5*time.Minute, p.gc)
@@ -128,9 +128,9 @@ func (r *Resolver) HostsFunc(host string) ([]docker.RegistryHost, error) {
 	return func(domain string) ([]docker.RegistryHost, error) {
 		v, err := r.handler.g.Do(context.TODO(), domain, func(ctx context.Context) (interface{}, error) {
 			// long lock not needed because flightcontrol.Do
-			r.handler.mu.Lock()
+			r.handler.muHosts.Lock()
 			v, ok := r.handler.hosts[domain]
-			r.handler.mu.Unlock()
+			r.handler.muHosts.Unlock()
 			if ok {
 				return v, nil
 			}
@@ -138,9 +138,9 @@ func (r *Resolver) HostsFunc(host string) ([]docker.RegistryHost, error) {
 			if err != nil {
 				return nil, err
 			}
-			r.handler.mu.Lock()
+			r.handler.muHosts.Lock()
 			r.handler.hosts[domain] = res
-			r.handler.mu.Unlock()
+			r.handler.muHosts.Unlock()
 			return res, nil
 		})
 		if err != nil || v == nil {
