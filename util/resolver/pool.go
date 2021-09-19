@@ -146,10 +146,13 @@ func (r *Resolver) HostsFunc(host string) ([]docker.RegistryHost, error) {
 		if err != nil || v == nil {
 			return nil, err
 		}
-		res := v.([]docker.RegistryHost)
-		if len(res) == 0 {
+		vv := v.([]docker.RegistryHost)
+		if len(vv) == 0 {
 			return nil, nil
 		}
+		// make a copy so authorizer is set on unique instance
+		res := make([]docker.RegistryHost, len(vv))
+		copy(res, vv)
 		auth := newDockerAuthorizer(res[0].Client, r.handler, r.sm, r.g)
 		for i := range res {
 			res[i].Authorizer = auth
