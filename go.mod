@@ -24,14 +24,20 @@ require (
 	github.com/gofrs/flock v0.7.3
 	github.com/gogo/googleapis v1.4.0
 	github.com/gogo/protobuf v1.3.2
+	github.com/golang/protobuf v1.5.2
+	github.com/golang/snappy v0.0.4-0.20210608040537-544b4180ac70 // indirect; snappy: updated for go1.17 support
 	github.com/google/go-cmp v0.5.6
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/grpc-ecosystem/go-grpc-middleware v1.2.0
 	github.com/hashicorp/go-immutable-radix v1.3.1
 	github.com/hashicorp/golang-lru v0.5.3
+	github.com/ishidawataru/sctp v0.0.0-20210226210310-f2269e66cdee // indirect
+	github.com/klauspost/compress v1.12.3
 	github.com/mitchellh/hashstructure v1.0.0
 	github.com/moby/locker v1.0.1
+	github.com/moby/sys/mount v0.2.0 // indirect
 	github.com/moby/sys/signal v0.5.0
+	github.com/moby/term v0.0.0-20210619224110-3f7ff695adc6 // indirect
 	github.com/morikuni/aec v1.0.0
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.0.1
@@ -89,20 +95,13 @@ require (
 	github.com/docker/go-units v0.4.0 // indirect
 	github.com/felixge/httpsnoop v1.0.2 // indirect
 	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e // indirect
-	github.com/golang/protobuf v1.5.2
-	// snappy: updated for go1.17 support
-	github.com/golang/snappy v0.0.4-0.20210608040537-544b4180ac70 // indirect
 	github.com/google/uuid v1.2.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0 // indirect
 	github.com/hanwen/go-fuse/v2 v2.1.0 // indirect
 	github.com/hashicorp/errwrap v1.0.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
-	github.com/ishidawataru/sctp v0.0.0-20210226210310-f2269e66cdee // indirect
-	github.com/klauspost/compress v1.12.3
 	github.com/matttproud/golang_protobuf_extensions v1.0.2-0.20181231171920-c182affec369 // indirect
-	github.com/moby/sys/mount v0.2.0 // indirect
 	github.com/moby/sys/mountinfo v0.4.1 // indirect
-	github.com/moby/term v0.0.0-20210619224110-3f7ff695adc6 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_golang v1.11.0 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect
