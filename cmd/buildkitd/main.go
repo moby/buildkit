@@ -204,7 +204,7 @@ func main() {
 		ctx, cancel := context.WithCancel(appcontext.Context())
 		defer cancel()
 
-		cfg, err := LoadFile(c.GlobalString("config"))
+		cfg, err := config.LoadFile(c.GlobalString("config"))
 		if err != nil {
 			return err
 		}
@@ -368,7 +368,7 @@ func defaultConfigPath() string {
 }
 
 func defaultConf() (config.Config, error) {
-	cfg, err := LoadFile(defaultConfigPath())
+	cfg, err := config.LoadFile(defaultConfigPath())
 	if err != nil {
 		var pe *os.PathError
 		if !errors.As(err, &pe) {
@@ -775,6 +775,15 @@ func getDNSConfig(cfg *config.DNSConfig) *oci.DNSConfig {
 		}
 	}
 	return dns
+}
+
+// parseBoolOrAuto returns (nil, nil) if s is "auto"
+func parseBoolOrAuto(s string) (*bool, error) {
+	if s == "" || strings.ToLower(s) == "auto" {
+		return nil, nil
+	}
+	b, err := strconv.ParseBool(s)
+	return &b, err
 }
 
 func runTraceController(p string, exp sdktrace.SpanExporter) error {
