@@ -26,7 +26,7 @@ func NewBusyboxSourceSnapshot(ctx context.Context, t *testing.T, w *base.Worker,
 	require.NoError(t, err)
 	src, err := w.SourceManager.Resolve(ctx, img, sm, nil)
 	require.NoError(t, err)
-	_, _, _, err = src.CacheKey(ctx, nil, 0)
+	_, _, _, _, err = src.CacheKey(ctx, nil, 0)
 	require.NoError(t, err)
 	snap, err := src.Snapshot(ctx, nil)
 	require.NoError(t, err)
