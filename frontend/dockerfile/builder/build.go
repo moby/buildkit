@@ -33,29 +33,35 @@ import (
 const (
 	DefaultLocalNameContext    = "context"
 	DefaultLocalNameDockerfile = "dockerfile"
-	keyTarget                  = "target"
-	keyFilename                = "filename"
-	keyCacheFrom               = "cache-from"    // for registry only. deprecated in favor of keyCacheImports
-	keyCacheImports            = "cache-imports" // JSON representation of []CacheOptionsEntry
-	keyCacheNS                 = "build-arg:BUILDKIT_CACHE_MOUNT_NS"
 	defaultDockerfileName      = "Dockerfile"
 	dockerignoreFilename       = ".dockerignore"
-	buildArgPrefix             = "build-arg:"
-	labelPrefix                = "label:"
-	keyNoCache                 = "no-cache"
-	keyTargetPlatform          = "platform"
-	keyMultiPlatform           = "multi-platform"
-	keyImageResolveMode        = "image-resolve-mode"
-	keyGlobalAddHosts          = "add-hosts"
-	keyForceNetwork            = "force-network-mode"
-	keyOverrideCopyImage       = "override-copy-image" // remove after CopyOp implemented
-	keyNameContext             = "contextkey"
-	keyNameDockerfile          = "dockerfilekey"
-	keyContextSubDir           = "contextsubdir"
-	keyContextKeepGitDir       = "build-arg:BUILDKIT_CONTEXT_KEEP_GIT_DIR"
-	keySyntax                  = "build-arg:BUILDKIT_SYNTAX"
-	keyMultiPlatformArg        = "build-arg:BUILDKIT_MULTI_PLATFORM"
-	keyHostname                = "hostname"
+
+	buildArgPrefix = "build-arg:"
+	labelPrefix    = "label:"
+
+	keyTarget            = "target"
+	keyFilename          = "filename"
+	keyCacheFrom         = "cache-from"    // for registry only. deprecated in favor of keyCacheImports
+	keyCacheImports      = "cache-imports" // JSON representation of []CacheOptionsEntry
+	keyContextSubDir     = "contextsubdir"
+	keyForceNetwork      = "force-network-mode"
+	keyGlobalAddHosts    = "add-hosts"
+	keyHostname          = "hostname"
+	keyImageResolveMode  = "image-resolve-mode"
+	keyMultiPlatform     = "multi-platform"
+	keyNameContext       = "contextkey"
+	keyNameDockerfile    = "dockerfilekey"
+	keyNoCache           = "no-cache"
+	keyOverrideCopyImage = "override-copy-image" // remove after CopyOp implemented
+	keyTargetPlatform    = "platform"
+
+	// Don't forget to update frontend documentation if you add
+	// a new build-arg: frontend/dockerfile/docs/syntax.md
+	keyCacheNSArg           = "build-arg:BUILDKIT_CACHE_MOUNT_NS"
+	keyContextKeepGitDirArg = "build-arg:BUILDKIT_CONTEXT_KEEP_GIT_DIR"
+	keyHostnameArg          = "build-arg:BUILDKIT_SANDBOX_HOSTNAME"
+	keyMultiPlatformArg     = "build-arg:BUILDKIT_MULTI_PLATFORM"
+	keySyntaxArg            = "build-arg:BUILDKIT_SYNTAX"
 )
 
 var httpPrefix = regexp.MustCompile(`^https?://`)
@@ -150,7 +156,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 
 	var buildContext *llb.State
 	isNotLocalContext := false
-	if st, ok := detectGitContext(opts[localNameContext], opts[keyContextKeepGitDir]); ok {
+	if st, ok := detectGitContext(opts[localNameContext], opts[keyContextKeepGitDirArg]); ok {
 		if !forceLocalDockerfile {
 			src = *st
 		}
@@ -346,11 +352,11 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 	}
 
 	if _, ok := opts["cmdline"]; !ok {
-		if cmdline, ok := opts[keySyntax]; ok {
+		if cmdline, ok := opts[keySyntaxArg]; ok {
 			p := strings.SplitN(strings.TrimSpace(cmdline), " ", 2)
 			res, err := forwardGateway(ctx, c, p[0], cmdline)
 			if err != nil && len(errdefs.Sources(err)) == 0 {
-				return nil, errors.Wrapf(err, "failed with %s = %s", keySyntax, cmdline)
+				return nil, errors.Wrapf(err, "failed with %s = %s", keySyntaxArg, cmdline)
 			}
 			return res, err
 		} else if ref, cmdline, loc, ok := dockerfile2llb.DetectSyntax(bytes.NewBuffer(dtDockerfile)); ok {
@@ -391,6 +397,10 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 	}
 	res := client.NewResult()
 
+	if v, ok := opts[keyHostnameArg]; ok && len(v) > 0 {
+		opts[keyHostname] = v
+	}
+
 	eg, ctx = errgroup.WithContext(ctx)
 
 	for i, tp := range targetPlatforms {
@@ -407,7 +417,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 					MetaResolver:      c,
 					BuildArgs:         filter(opts, buildArgPrefix),
 					Labels:            filter(opts, labelPrefix),
-					CacheIDNamespace:  opts[keyCacheNS],
+					CacheIDNamespace:  opts[keyCacheNSArg],
 					SessionID:         c.BuildOpts().SessionID,
 					BuildContext:      buildContext,
 					Excludes:          excludes,
