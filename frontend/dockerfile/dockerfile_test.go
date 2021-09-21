@@ -5121,9 +5121,9 @@ func testDockefileCheckHostname(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 	dockerfile := []byte(`
 FROM busybox
-RUN cat /etc/hosts | grep testtest
-RUN echo $HOSTNAME | grep testtest
-RUN echo $(hostname) | grep testtest
+RUN cat /etc/hosts | grep foo
+RUN echo $HOSTNAME | grep foo
+RUN echo $(hostname) | grep foo
 `)
 
 	dir, err := tmpdir(
@@ -5136,16 +5136,43 @@ RUN echo $(hostname) | grep testtest
 	require.NoError(t, err)
 	defer c.Close()
 
-	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		FrontendAttrs: map[string]string{
-			"hostname": "testtest",
+	cases := []struct {
+		name  string
+		attrs map[string]string
+	}{
+		{
+			name: "meta",
+			attrs: map[string]string{
+				"hostname": "foo",
+			},
 		},
-		LocalDirs: map[string]string{
-			builder.DefaultLocalNameDockerfile: dir,
-			builder.DefaultLocalNameContext:    dir,
+		{
+			name: "arg",
+			attrs: map[string]string{
+				"build-arg:BUILDKIT_SANDBOX_HOSTNAME": "foo",
+			},
 		},
-	}, nil)
-	require.NoError(t, err)
+		{
+			name: "meta and arg",
+			attrs: map[string]string{
+				"hostname":                            "bar",
+				"build-arg:BUILDKIT_SANDBOX_HOSTNAME": "foo",
+			},
+		},
+	}
+	for _, tt := range cases {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+				FrontendAttrs: tt.attrs,
+				LocalDirs: map[string]string{
+					builder.DefaultLocalNameDockerfile: dir,
+					builder.DefaultLocalNameContext:    dir,
+				},
+			}, nil)
+			require.NoError(t, err)
+		})
+	}
 }
 
 // moby/buildkit#2311
