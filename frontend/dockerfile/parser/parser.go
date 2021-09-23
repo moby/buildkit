@@ -300,11 +300,7 @@ func Parse(rwc io.Reader) (*Result, error) {
 		}
 		if isComment(bytesRead) {
 			comment := strings.TrimSpace(string(bytesRead[1:]))
-			if comment == "" {
-				comments = nil
-			} else {
-				comments = append(comments, comment)
-			}
+			comments = append(comments, comment)
 		}
 		bytesRead, err = processLine(d, bytesRead, true)
 		if err != nil {

@@ -133,6 +133,30 @@ func TestParseIncludesLineNumbers(t *testing.T) {
 	}
 }
 
+func TestParsePreservesEmptyCommentLines(t *testing.T) {
+	dockerfile := bytes.NewBufferString(`
+# This multi-line comment contains an intentionally empty line.
+#
+# This is the last line of the comment.
+FROM image
+RUN something
+ENTRYPOINT	["/bin/app"]`)
+
+	result, err := Parse(dockerfile)
+	require.NoError(t, err)
+	ast := result.AST
+
+	// Sanity check, we assume comments are attached to the `FROM` Node
+	require.Equal(t, "FROM image", ast.Children[0].Original)
+
+	fromNode := ast.Children[0]
+	commentLines := fromNode.PrevComment
+	require.Equal(t, 3, len(commentLines))
+	require.Equal(t, commentLines[0], "This multi-line comment contains an intentionally empty line.")
+	require.Equal(t, commentLines[1], "")
+	require.Equal(t, commentLines[2], "This is the last line of the comment.")
+}
+
 func TestParseWarnsOnEmptyContinutationLine(t *testing.T) {
 	dockerfile := bytes.NewBufferString(`
 FROM alpine:3.6
