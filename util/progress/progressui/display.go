@@ -519,11 +519,11 @@ func (disp *display) print(d displayInfo, width, height int, all bool) {
 
 		out = align(out, timer, width)
 		if j.completedTime != nil {
-			color := aec.BlueF
+			color := colorRun
 			if j.isCanceled {
-				color = aec.YellowF
+				color = colorCancel
 			} else if j.hasError {
-				color = aec.RedF
+				color = colorError
 			}
 			out = aec.Apply(out, color)
 		}
