@@ -13,22 +13,28 @@ import (
 	"github.com/containerd/containerd/images/converter"
 	"github.com/containerd/containerd/labels"
 	"github.com/klauspost/compress/zstd"
+	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/util/compression"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
 
-// needsConversion indicates whether a conversion is needed for the specified mediatype to
+// needsConversion indicates whether a conversion is needed for the specified descriptor to
 // be the compressionType.
-func needsConversion(mediaType string, compressionType compression.Type) (bool, error) {
+func needsConversion(ctx context.Context, cs content.Store, desc ocispecs.Descriptor, compressionType compression.Type) (bool, error) {
+	mediaType := desc.MediaType
 	switch compressionType {
 	case compression.Uncompressed:
 		if !images.IsLayerType(mediaType) || compression.FromMediaType(mediaType) == compression.Uncompressed {
 			return false, nil
 		}
 	case compression.Gzip:
-		if !images.IsLayerType(mediaType) || compression.FromMediaType(mediaType) == compression.Gzip {
+		esgz, err := isEStargz(ctx, cs, desc.Digest)
+		if err != nil {
+			return false, err
+		}
+		if (!images.IsLayerType(mediaType) || compression.FromMediaType(mediaType) == compression.Gzip) && !esgz {
 			return false, nil
 		}
 	case compression.Zstd:
@@ -36,7 +42,11 @@ func needsConversion(mediaType string, compressionType compression.Type) (bool, 
 			return false, nil
 		}
 	case compression.EStargz:
-		if !images.IsLayerType(mediaType) {
+		esgz, err := isEStargz(ctx, cs, desc.Digest)
+		if err != nil {
+			return false, err
+		}
+		if !images.IsLayerType(mediaType) || esgz {
 			return false, nil
 		}
 	default:
@@ -47,9 +57,9 @@ func needsConversion(mediaType string, compressionType compression.Type) (bool, 
 
 // getConverter returns converter function according to the specified compression type.
 // If no conversion is needed, this returns nil without error.
-func getConverter(desc ocispecs.Descriptor, compressionType compression.Type) (converter.ConvertFunc, error) {
-	if needs, err := needsConversion(desc.MediaType, compressionType); err != nil {
-		return nil, err
+func getConverter(ctx context.Context, cs content.Store, desc ocispecs.Descriptor, compressionType compression.Type) (converter.ConvertFunc, error) {
+	if needs, err := needsConversion(ctx, cs, desc, compressionType); err != nil {
+		return nil, errors.Wrapf(err, "failed to determine conversion needs")
 	} else if !needs {
 		// No conversion. No need to return an error here.
 		return nil, nil
@@ -61,7 +71,27 @@ func getConverter(desc ocispecs.Descriptor, compressionType compression.Type) (c
 	switch from {
 	case compression.Uncompressed:
 	case compression.Gzip, compression.Zstd:
-		c.decompress = cdcompression.DecompressStream
+		c.decompress = func(ctx context.Context, desc ocispecs.Descriptor) (r io.ReadCloser, err error) {
+			ra, err := cs.ReaderAt(ctx, desc)
+			if err != nil {
+				return nil, err
+			}
+			esgz, err := isEStargz(ctx, cs, desc.Digest)
+			if err != nil {
+				return nil, err
+			} else if esgz {
+				r, err = decompressEStargz(io.NewSectionReader(ra, 0, ra.Size()))
+				if err != nil {
+					return nil, err
+				}
+			} else {
+				r, err = cdcompression.DecompressStream(io.NewSectionReader(ra, 0, ra.Size()))
+				if err != nil {
+					return nil, err
+				}
+			}
+			return &readCloser{r, ra.Close}, nil
+		}
 	default:
 		return nil, errors.Errorf("unsupported source compression type %q from mediatype %q", from, desc.MediaType)
 	}
@@ -77,7 +107,7 @@ func getConverter(desc ocispecs.Descriptor, compressionType compression.Type) (c
 			return zstd.NewWriter(w)
 		}
 	case compression.EStargz:
-		compressorFunc, finalize := writeEStargz()
+		compressorFunc, finalize := compressEStargz()
 		c.compress = func(w io.Writer) (io.WriteCloser, error) {
 			return compressorFunc(w, ocispecs.MediaTypeImageLayerGzip)
 		}
@@ -91,27 +121,15 @@ func getConverter(desc ocispecs.Descriptor, compressionType compression.Type) (c
 
 type conversion struct {
 	target     compression.Type
-	decompress func(io.Reader) (cdcompression.DecompressReadCloser, error)
+	decompress func(context.Context, ocispecs.Descriptor) (io.ReadCloser, error)
 	compress   func(w io.Writer) (io.WriteCloser, error)
 	finalize   func(context.Context, content.Store) (map[string]string, error)
 }
 
 func (c *conversion) convert(ctx context.Context, cs content.Store, desc ocispecs.Descriptor) (*ocispecs.Descriptor, error) {
 	// prepare the source and destination
-	info, err := cs.Info(ctx, desc.Digest)
-	if err != nil {
-		return nil, err
-	}
-	labelz := info.Labels
-	if labelz == nil {
-		labelz = make(map[string]string)
-	}
-	ra, err := cs.ReaderAt(ctx, desc)
-	if err != nil {
-		return nil, err
-	}
-	defer ra.Close()
-	ref := fmt.Sprintf("convert-from-%s-to-%s", desc.Digest, c.target.String())
+	labelz := make(map[string]string)
+	ref := fmt.Sprintf("convert-from-%s-to-%s-%s", desc.Digest, c.target.String(), identity.NewID())
 	w, err := cs.Writer(ctx, content.WithRef(ref))
 	if err != nil {
 		return nil, err
@@ -133,9 +151,16 @@ func (c *conversion) convert(ctx context.Context, cs content.Store, desc ocispec
 
 	// convert this layer
 	diffID := digest.Canonical.Digester()
-	var rdr io.Reader = io.NewSectionReader(ra, 0, ra.Size())
-	if c.decompress != nil {
-		rc, err := c.decompress(rdr)
+	var rdr io.Reader
+	if c.decompress == nil {
+		ra, err := cs.ReaderAt(ctx, desc)
+		if err != nil {
+			return nil, err
+		}
+		defer ra.Close()
+		rdr = io.NewSectionReader(ra, 0, ra.Size())
+	} else {
+		rc, err := c.decompress(ctx, desc)
 		if err != nil {
 			return nil, err
 		}
@@ -157,7 +182,7 @@ func (c *conversion) convert(ctx context.Context, cs content.Store, desc ocispec
 	if err := w.Close(); err != nil {
 		return nil, err
 	}
-	info, err = cs.Info(ctx, w.Digest())
+	info, err := cs.Info(ctx, w.Digest())
 	if err != nil {
 		return nil, err
 	}
@@ -166,6 +191,7 @@ func (c *conversion) convert(ctx context.Context, cs content.Store, desc ocispec
 	newDesc.MediaType = c.target.DefaultMediaType()
 	newDesc.Digest = info.Digest
 	newDesc.Size = info.Size
+	newDesc.Annotations = nil
 	if c.finalize != nil {
 		a, err := c.finalize(ctx, cs)
 		if err != nil {
@@ -179,4 +205,18 @@ func (c *conversion) convert(ctx context.Context, cs content.Store, desc ocispec
 		}
 	}
 	return &newDesc, nil
+}
+
+type readCloser struct {
+	io.ReadCloser
+	closeFunc func() error
+}
+
+func (rc *readCloser) Close() error {
+	err1 := rc.ReadCloser.Close()
+	err2 := rc.closeFunc()
+	if err1 != nil {
+		return errors.Wrapf(err1, "failed to close: %v", err2)
+	}
+	return err2
 }

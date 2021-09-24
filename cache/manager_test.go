@@ -9,10 +9,11 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
-	"sync"
+	"strings"
 	"testing"
 	"time"
 
@@ -1032,6 +1033,96 @@ func TestLazyCommit(t *testing.T) {
 	require.Equal(t, true, errors.Is(err, errNotFound))
 }
 
+func TestConversion(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS != "linux" {
+		t.Skipf("unsupported GOOS: %s", runtime.GOOS)
+	}
+
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+
+	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+
+	co, cleanup, err := newCacheManager(ctx, cmOpt{
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	defer cleanup()
+	store := co.cs
+
+	// Preapre the original tar blob using archive/tar and tar command on the system
+	m := map[string]string{"foo1": "bar1", "foo2": "bar2"}
+
+	orgBlobBytesGo, orgDescGo, err := mapToBlob(m, false)
+	require.NoError(t, err)
+	cw, err := store.Writer(ctx, content.WithRef(fmt.Sprintf("write-test-blob-%s", orgDescGo.Digest)))
+	require.NoError(t, err)
+	_, err = cw.Write(orgBlobBytesGo)
+	require.NoError(t, err)
+	err = cw.Commit(ctx, 0, cw.Digest())
+	require.NoError(t, err)
+
+	orgBlobBytesSys, orgDescSys, err := mapToSystemTarBlob(m)
+	require.NoError(t, err)
+	cw, err = store.Writer(ctx, content.WithRef(fmt.Sprintf("write-test-blob-%s", orgDescSys.Digest)))
+	require.NoError(t, err)
+	_, err = cw.Write(orgBlobBytesSys)
+	require.NoError(t, err)
+	err = cw.Commit(ctx, 0, cw.Digest())
+	require.NoError(t, err)
+
+	// Tests all combination of the conversions from type i to type j preserve
+	// the uncompressed digest.
+	allCompression := []compression.Type{compression.Uncompressed, compression.Gzip, compression.EStargz, compression.Zstd}
+	eg, egctx := errgroup.WithContext(ctx)
+	for _, orgDesc := range []ocispecs.Descriptor{orgDescGo, orgDescSys} {
+		for _, i := range allCompression {
+			for _, j := range allCompression {
+				i, j, orgDesc := i, j, orgDesc
+				eg.Go(func() error {
+					testName := fmt.Sprintf("%s=>%s", i, j)
+
+					// Prepare the source compression type
+					convertFunc, err := getConverter(egctx, store, orgDesc, i)
+					require.NoError(t, err, testName)
+					srcDesc := &orgDesc
+					if convertFunc != nil {
+						srcDesc, err = convertFunc(egctx, store, orgDesc)
+						require.NoError(t, err, testName)
+					}
+
+					// Convert the blob
+					convertFunc, err = getConverter(egctx, store, *srcDesc, j)
+					require.NoError(t, err, testName)
+					resDesc := srcDesc
+					if convertFunc != nil {
+						resDesc, err = convertFunc(egctx, store, *srcDesc)
+						require.NoError(t, err, testName)
+					}
+
+					// Check the uncompressed digest is the same as the original
+					convertFunc, err = getConverter(egctx, store, *resDesc, compression.Uncompressed)
+					require.NoError(t, err, testName)
+					recreatedDesc := resDesc
+					if convertFunc != nil {
+						recreatedDesc, err = convertFunc(egctx, store, *resDesc)
+						require.NoError(t, err, testName)
+					}
+					require.Equal(t, recreatedDesc.Digest, orgDesc.Digest, testName)
+					return nil
+				})
+			}
+		}
+	}
+	require.NoError(t, eg.Wait())
+}
+
 func TestGetRemote(t *testing.T) {
 	t.Parallel()
 	// windows fails when lazy blob is being extracted with "invalid windows mount type: 'bind'"
@@ -1066,7 +1157,6 @@ func TestGetRemote(t *testing.T) {
 
 	// make some lazy refs from blobs
 	expectedContent := map[digest.Digest]struct{}{}
-	esgz2gzip := map[digest.Digest]digest.Digest{}
 	var descs []ocispecs.Descriptor
 	for i := 0; i < 2; i++ {
 		blobmap := map[string]string{"foo": strconv.Itoa(i)}
@@ -1093,8 +1183,7 @@ func TestGetRemote(t *testing.T) {
 
 		esgzDgst, err := esgzBlobDigest(uncompressedBlobBytes)
 		require.NoError(t, err)
-		// expectedContent[esgzDgst] = struct{}{} // disabled
-		esgz2gzip[esgzDgst] = desc.Digest
+		expectedContent[esgzDgst] = struct{}{}
 
 		zstdDigest, err := zstdBlobDigest(uncompressedBlobBytes)
 		require.NoError(t, err)
@@ -1132,10 +1221,10 @@ func TestGetRemote(t *testing.T) {
 				uncompressedBlobBytes, uncompressedDesc, err := fileToBlob(f, false)
 				require.NoError(t, err)
 				expectedContent[uncompressedDesc.Digest] = struct{}{}
+
 				esgzDgst, err := esgzBlobDigest(uncompressedBlobBytes)
 				require.NoError(t, err)
-				// expectedContent[esgzDgst] = struct{}{}
-				esgz2gzip[esgzDgst] = desc.Digest
+				expectedContent[esgzDgst] = struct{}{}
 
 				zstdDigest, err := zstdBlobDigest(uncompressedBlobBytes)
 				require.NoError(t, err)
@@ -1161,12 +1250,10 @@ func TestGetRemote(t *testing.T) {
 	checkNumBlobs(ctx, t, co.cs, 1)
 
 	// Call GetRemote on all the refs
-	esgzRefs := map[digest.Digest]struct{}{}
-	var esgzRefsMu sync.Mutex
 	eg, egctx := errgroup.WithContext(ctx)
 	for _, ir := range refs {
 		ir := ir.(*immutableRef)
-		for _, compressionType := range []compression.Type{compression.Uncompressed, compression.Gzip /*compression.EStargz,*/, compression.Zstd} {
+		for _, compressionType := range []compression.Type{compression.Uncompressed, compression.Gzip, compression.EStargz, compression.Zstd} {
 			compressionType := compressionType
 			eg.Go(func() error {
 				remote, err := ir.GetRemote(egctx, true, compressionType, true, nil)
@@ -1190,16 +1277,9 @@ func TestGetRemote(t *testing.T) {
 					checkDescriptor(ctx, t, co.cs, desc, compressionType)
 
 					r := refChain[i]
-					if compressionType == compression.EStargz {
-						if digest.Digest(r.getBlob()) == desc.Digest {
-							esgzRefsMu.Lock()
-							esgzRefs[desc.Digest] = struct{}{}
-							esgzRefsMu.Unlock()
-						}
-					}
 					isLazy, err := r.isLazy(egctx)
 					require.NoError(t, err)
-					needs, err := needsConversion(desc.MediaType, compressionType)
+					needs, err := needsConversion(ctx, co.cs, desc, compressionType)
 					require.NoError(t, err)
 					if needs {
 						require.False(t, isLazy, "layer %q requires conversion so it must be unlazied", desc.Digest)
@@ -1218,12 +1298,6 @@ func TestGetRemote(t *testing.T) {
 		}
 	}
 	require.NoError(t, eg.Wait())
-
-	for dgst := range esgzRefs {
-		gzipDgst, ok := esgz2gzip[dgst]
-		require.True(t, ok, "match for gzip blob: %s", dgst)
-		delete(expectedContent, gzipDgst) // esgz blob is reused also as gzip. duplicated gzip blob is unexpected.
-	}
 
 	// verify there's a 1-to-1 mapping between the content store and what we expected to be there
 	err = co.cs.Walk(ctx, func(info content.Info) error {
@@ -1318,21 +1392,16 @@ func checkDiskUsage(ctx context.Context, t *testing.T, cm Manager, inuse, unused
 	require.Equal(t, unused, unusedActual)
 }
 
-func esgzBlobDigest(uncompressedBlobBytes []byte) (digest.Digest, error) {
-	buf := new(bytes.Buffer)
-	compressorFunc, _ := writeEStargz()
-	w, err := compressorFunc(buf, ocispecs.MediaTypeImageLayerGzip)
-	if err != nil {
+func esgzBlobDigest(uncompressedBlobBytes []byte) (blobDigest digest.Digest, err error) {
+	esgzDigester := digest.Canonical.Digester()
+	w := estargz.NewWriter(esgzDigester.Hash())
+	if err := w.AppendTarLossLess(bytes.NewReader(uncompressedBlobBytes)); err != nil {
 		return "", err
 	}
-	if _, err := io.Copy(w, bytes.NewReader(uncompressedBlobBytes)); err != nil {
+	if _, err := w.Close(); err != nil {
 		return "", err
 	}
-	if err := w.Close(); err != nil {
-		return "", err
-	}
-	b := buf.Bytes()
-	return digest.FromBytes(b), nil
+	return esgzDigester.Digest(), nil
 }
 
 func zstdBlobDigest(uncompressedBlobBytes []byte) (digest.Digest, error) {
@@ -1480,6 +1549,67 @@ func fileToBlob(file *os.File, compress bool) ([]byte, ocispecs.Descriptor, erro
 		Size:      int64(buf.Len()),
 		Annotations: map[string]string{
 			"containerd.io/uncompressed": sha.Digest().String(),
+		},
+	}, nil
+}
+
+func mapToSystemTarBlob(m map[string]string) ([]byte, ocispecs.Descriptor, error) {
+	tmpdir, err := ioutil.TempDir("", "tarcreation")
+	if err != nil {
+		return nil, ocispecs.Descriptor{}, err
+	}
+	defer os.RemoveAll(tmpdir)
+
+	expected := map[string]string{}
+	for k, v := range m {
+		expected[k] = v
+		if err := ioutil.WriteFile(filepath.Join(tmpdir, k), []byte(v), 0600); err != nil {
+			return nil, ocispecs.Descriptor{}, err
+		}
+	}
+
+	cmd := exec.Command("tar", "-C", tmpdir, "-c", ".")
+	tarout, err := cmd.Output()
+	if err != nil {
+		return nil, ocispecs.Descriptor{}, err
+	}
+
+	tr := tar.NewReader(bytes.NewReader(tarout))
+	for {
+		h, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, ocispecs.Descriptor{}, err
+		}
+		k := strings.TrimPrefix(filepath.Clean("/"+h.Name), "/")
+		if k == "" {
+			continue // ignore the root entry
+		}
+		v, ok := expected[k]
+		if !ok {
+			return nil, ocispecs.Descriptor{}, errors.Errorf("unexpected file %s", h.Name)
+		}
+		delete(expected, k)
+		gotV, err := ioutil.ReadAll(tr)
+		if err != nil {
+			return nil, ocispecs.Descriptor{}, err
+		}
+		if string(gotV) != string(v) {
+			return nil, ocispecs.Descriptor{}, errors.Errorf("unexpected contents of %s", h.Name)
+		}
+	}
+	if len(expected) > 0 {
+		return nil, ocispecs.Descriptor{}, errors.Errorf("expected file doesn't archived: %+v", expected)
+	}
+
+	return tarout, ocispecs.Descriptor{
+		Digest:    digest.FromBytes(tarout),
+		MediaType: ocispecs.MediaTypeImageLayer,
+		Size:      int64(len(tarout)),
+		Annotations: map[string]string{
+			"containerd.io/uncompressed": digest.FromBytes(tarout).String(),
 		},
 	}, nil
 }

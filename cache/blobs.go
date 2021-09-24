@@ -78,7 +78,7 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 			case compression.Gzip:
 				mediaType = ocispecs.MediaTypeImageLayerGzip
 			case compression.EStargz:
-				compressorFunc, finalize = writeEStargz()
+				compressorFunc, finalize = compressEStargz()
 				mediaType = ocispecs.MediaTypeImageLayerGzip
 			case compression.Zstd:
 				compressorFunc = zstdWriter
@@ -314,7 +314,7 @@ func ensureCompression(ctx context.Context, ref *immutableRef, compressionType c
 		}
 
 		// Resolve converters
-		layerConvertFunc, err := getConverter(desc, compressionType)
+		layerConvertFunc, err := getConverter(ctx, ref.cm.ContentStore, desc, compressionType)
 		if err != nil {
 			return nil, err
 		} else if layerConvertFunc == nil {
@@ -343,12 +343,12 @@ func ensureCompression(ctx context.Context, ref *immutableRef, compressionType c
 		}
 		newDesc, err := layerConvertFunc(ctx, ref.cm.ContentStore, desc)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "failed to convert")
 		}
 
 		// Start to track converted layer
 		if err := ref.addCompressionBlob(ctx, *newDesc, compressionType); err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "failed to add compression blob")
 		}
 		return nil, nil
 	})
