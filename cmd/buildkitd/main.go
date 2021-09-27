@@ -74,7 +74,9 @@ func init() {
 	stack.SetVersionInfo(version.Version, version.Revision)
 
 	seed.WithTimeAndRand()
-	reexec.Init()
+	if reexec.Init() {
+		os.Exit(0)
+	}
 
 	// overwrites containerd/log.G
 	log.G = bklog.GetLogger
