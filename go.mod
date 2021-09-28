@@ -74,7 +74,7 @@ require (
 	google.golang.org/grpc v1.38.0
 )
 
-replace github.com/docker/docker => github.com/docker/docker v20.10.3-0.20210609100121-ef4d47340142+incompatible
+replace github.com/docker/docker => github.com/tonistiigi/docker v0.10.1-0.20210928031959-5fec36db36f9
 
 replace go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc => github.com/tonistiigi/opentelemetry-go-contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.0.0-20210714055410-d010b05b4939
 

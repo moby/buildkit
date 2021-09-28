@@ -184,7 +184,7 @@ github.com/docker/cli/cli/connhelper/commandconn
 github.com/docker/distribution/digestset
 github.com/docker/distribution/reference
 github.com/docker/distribution/registry/api/errcode
-# github.com/docker/docker v20.10.7+incompatible => github.com/docker/docker v20.10.3-0.20210609100121-ef4d47340142+incompatible
+# github.com/docker/docker v20.10.7+incompatible => github.com/tonistiigi/docker v0.10.1-0.20210928031959-5fec36db36f9
 github.com/docker/docker/api
 github.com/docker/docker/api/types
 github.com/docker/docker/api/types/blkiodev
