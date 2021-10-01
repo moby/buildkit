@@ -21,6 +21,7 @@ var (
 	keyUser      = contextKeyT("llb.exec.user")
 	keyHostname  = contextKeyT("llb.exec.hostname")
 	keyExtraHost = contextKeyT("llb.exec.extrahost")
+	keyShmSize   = contextKeyT("llb.exec.shmsize")
 	keyPlatform  = contextKeyT("llb.platform")
 	keyNetwork   = contextKeyT("llb.network")
 	keySecurity  = contextKeyT("llb.security")
@@ -230,6 +231,26 @@ func getExtraHosts(s State) func(context.Context, *Constraints) ([]HostIP, error
 type HostIP struct {
 	Host string
 	IP   net.IP
+}
+
+func shmSize(kb int64) StateOption {
+	return func(s State) State {
+		return s.WithValue(keyShmSize, kb)
+	}
+}
+
+func getShmSize(s State) func(context.Context, *Constraints) (*int64, error) {
+	return func(ctx context.Context, c *Constraints) (*int64, error) {
+		v, err := s.getValue(keyShmSize)(ctx, c)
+		if err != nil {
+			return nil, err
+		}
+		if v != nil {
+			kb := v.(int64)
+			return &kb, nil
+		}
+		return nil, nil
+	}
 }
 
 func Network(v pb.NetMode) StateOption {

@@ -107,6 +107,7 @@ func TestIntegration(t *testing.T) {
 		testParallelLocalBuilds,
 		testSecretMounts,
 		testExtraHosts,
+		testShmSize,
 		testNetworkMode,
 		testFrontendMetadataReturn,
 		testFrontendUseSolveResults,
@@ -526,6 +527,37 @@ func testExtraHosts(t *testing.T, sb integration.Sandbox) {
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
 	require.NoError(t, err)
+}
+
+func testShmSize(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Image("busybox:latest").
+		Run(llb.Shlex(`sh -c 'mount | grep /dev/shm > /out/out'`), llb.WithShmSize(128*1024))
+
+	out := st.AddMount("/out", llb.Scratch())
+	def, err := out.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "out"))
+	require.NoError(t, err)
+	require.Contains(t, string(dt), `size=131072k`)
 }
 
 func testNetworkMode(t *testing.T, sb integration.Sandbox) {
