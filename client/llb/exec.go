@@ -192,6 +192,7 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 		User:     user,
 		Hostname: hostname,
 	}
+
 	extraHosts, err := getExtraHosts(e.base)(ctx, c)
 	if err != nil {
 		return "", nil, nil, nil, err
@@ -202,6 +203,14 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 			hosts[i] = &pb.HostIP{Host: h.Host, IP: h.IP.String()}
 		}
 		meta.ExtraHosts = hosts
+	}
+
+	shmSize, err := getShmSize(e.base)(ctx, c)
+	if err != nil {
+		return "", nil, nil, nil, err
+	}
+	if shmSize != nil {
+		meta.ShmSize = *shmSize
 	}
 
 	network, err := getNetwork(e.base)(ctx, c)
@@ -495,6 +504,12 @@ func Args(a []string) RunOption {
 func AddExtraHost(host string, ip net.IP) RunOption {
 	return runOptionFunc(func(ei *ExecInfo) {
 		ei.State = ei.State.AddExtraHost(host, ip)
+	})
+}
+
+func WithShmSize(kb int64) RunOption {
+	return runOptionFunc(func(ei *ExecInfo) {
+		ei.State = ei.State.WithShmSize(kb)
 	})
 }
 

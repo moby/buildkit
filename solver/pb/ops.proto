@@ -58,6 +58,7 @@ message Meta {
 	ProxyEnv proxy_env = 5;
 	repeated HostIP extraHosts = 6;
 	string hostname = 7;
+	int64 shmSize = 8;
 }
 
 enum NetMode {

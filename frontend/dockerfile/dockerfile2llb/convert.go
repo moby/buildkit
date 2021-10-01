@@ -59,6 +59,7 @@ type ConvertOpt struct {
 	BuildPlatforms    []ocispecs.Platform
 	PrefixPlatform    bool
 	ExtraHosts        []llb.HostIP
+	ShmSize           int64
 	ForceNetMode      pb.NetMode
 	OverrideCopyImage string
 	LLBCaps           *apicaps.CapSet
@@ -389,6 +390,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 			buildPlatforms:    platformOpt.buildPlatforms,
 			targetPlatform:    platformOpt.targetPlatform,
 			extraHosts:        opt.ExtraHosts,
+			shmSize:           opt.ShmSize,
 			copyImage:         opt.OverrideCopyImage,
 			llbCaps:           opt.LLBCaps,
 			sourceMap:         opt.SourceMap,
@@ -519,6 +521,7 @@ type dispatchOpt struct {
 	targetPlatform    ocispecs.Platform
 	buildPlatforms    []ocispecs.Platform
 	extraHosts        []llb.HostIP
+	shmSize           int64
 	copyImage         string
 	llbCaps           *apicaps.CapSet
 	sourceMap         *llb.SourceMap
@@ -797,6 +800,9 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 	opt = append(opt, llb.WithCustomName(prefixCommand(d, uppercaseCmd(processCmdEnv(&shlex, customname, env)), d.prefixPlatform, pl)))
 	for _, h := range dopt.extraHosts {
 		opt = append(opt, llb.AddExtraHost(h.Host, h.IP))
+	}
+	if dopt.shmSize > 0 {
+		opt = append(opt, llb.WithShmSize(dopt.shmSize))
 	}
 	d.state = d.state.Run(opt...).Root()
 	return commitToHistory(&d.image, "RUN "+runCommandString(args, d.buildArgs, shell.BuildEnvs(env)), true, &d.state)

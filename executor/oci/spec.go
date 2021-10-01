@@ -91,6 +91,10 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 		oci.WithHostname(hostname),
 	)
 
+	if meta.ShmSize > 0 {
+		opts = append(opts, oci.WithDevShmSize(meta.ShmSize))
+	}
+
 	s, err := oci.GenerateSpec(ctx, nil, c, opts...)
 	if err != nil {
 		return nil, nil, err

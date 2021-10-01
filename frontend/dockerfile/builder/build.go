@@ -53,6 +53,7 @@ const (
 	keyNameDockerfile    = "dockerfilekey"
 	keyNoCache           = "no-cache"
 	keyOverrideCopyImage = "override-copy-image" // remove after CopyOp implemented
+	keyShmSize           = "shm-size"
 	keyTargetPlatform    = "platform"
 
 	// Don't forget to update frontend documentation if you add
@@ -114,6 +115,11 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 	extraHosts, err := parseExtraHosts(opts[keyGlobalAddHosts])
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to parse additional hosts")
+	}
+
+	shmSize, err := parseShmSize(opts[keyShmSize])
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to parse shm size")
 	}
 
 	defaultNetMode, err := parseNetMode(opts[keyForceNetwork])
@@ -427,6 +433,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 					ImageResolveMode:  resolveMode,
 					PrefixPlatform:    exportMap,
 					ExtraHosts:        extraHosts,
+					ShmSize:           shmSize,
 					ForceNetMode:      defaultNetMode,
 					OverrideCopyImage: opts[keyOverrideCopyImage],
 					LLBCaps:           &caps,
@@ -673,6 +680,17 @@ func parseExtraHosts(v string) ([]llb.HostIP, error) {
 		out = append(out, llb.HostIP{Host: key, IP: ip})
 	}
 	return out, nil
+}
+
+func parseShmSize(v string) (int64, error) {
+	if len(v) == 0 {
+		return 0, nil
+	}
+	kb, err := strconv.ParseInt(v, 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	return kb, nil
 }
 
 func parseNetMode(v string) (pb.NetMode, error) {
