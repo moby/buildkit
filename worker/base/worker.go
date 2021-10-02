@@ -48,6 +48,7 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
 )
 
@@ -346,6 +347,24 @@ func (w *Worker) Exporter(name string, sm *session.Manager) (exporter.Exporter, 
 }
 
 func (w *Worker) FromRemote(ctx context.Context, remote *solver.Remote) (ref cache.ImmutableRef, err error) {
+	if cd, ok := remote.Provider.(interface {
+		CheckDescriptor(context.Context, ocispecs.Descriptor) error
+	}); ok && len(remote.Descriptors) > 0 {
+		var eg errgroup.Group
+		for _, desc := range remote.Descriptors {
+			desc := desc
+			eg.Go(func() error {
+				if err := cd.CheckDescriptor(ctx, desc); err != nil {
+					return err
+				}
+				return nil
+			})
+		}
+		if err := eg.Wait(); err != nil {
+			return nil, err
+		}
+	}
+
 	descHandler := &cache.DescHandler{
 		Provider: func(session.Group) content.Provider { return remote.Provider },
 		Progress: &controller.Controller{
