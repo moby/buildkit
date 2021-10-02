@@ -147,6 +147,9 @@ func parseMount(value string, expander SingleWordExpander) (*Mount, error) {
 		key := strings.ToLower(parts[0])
 
 		if len(parts) == 1 {
+			if expander == nil {
+				continue // evaluate later
+			}
 			switch key {
 			case "readonly", "ro":
 				m.ReadOnly = true

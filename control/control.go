@@ -46,8 +46,7 @@ type Opt struct {
 }
 
 type Controller struct { // TODO: ControlService
-	*tracev1.UnimplementedTraceServiceServer
-
+	// buildCount needs to be 64bit aligned
 	buildCount       int64
 	opt              Opt
 	solver           *llbsolver.Solver
@@ -55,6 +54,7 @@ type Controller struct { // TODO: ControlService
 	gatewayForwarder *controlgateway.GatewayForwarder
 	throttledGC      func()
 	gcmu             sync.Mutex
+	*tracev1.UnimplementedTraceServiceServer
 }
 
 func NewController(opt Opt) (*Controller, error) {
@@ -238,6 +238,8 @@ func translateLegacySolveRequest(req *controlapi.SolveRequest) error {
 func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*controlapi.SolveResponse, error) {
 	atomic.AddInt64(&c.buildCount, 1)
 	defer atomic.AddInt64(&c.buildCount, -1)
+
+	// This method registers job ID in solver.Solve. Make sure there are no blocking calls before that might delay this.
 
 	if err := translateLegacySolveRequest(req); err != nil {
 		return nil, err
