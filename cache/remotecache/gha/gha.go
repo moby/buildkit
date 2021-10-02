@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/containerd/containerd/content"
@@ -141,7 +142,9 @@ func (ce *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 				return nil, layerDone(err)
 			}
 			if err := ce.cache.Save(ctx, key, ra); err != nil {
-				return nil, layerDone(errors.Wrap(err, "error writing layer blob"))
+				if !errors.Is(err, os.ErrExist) {
+					return nil, layerDone(errors.Wrap(err, "error writing layer blob"))
+				}
 			}
 			layerDone(nil)
 		}
