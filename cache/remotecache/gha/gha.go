@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/containerd/containerd/content"
@@ -308,18 +309,47 @@ func (ci *importer) Resolve(ctx context.Context, _ specs.Descriptor, id string, 
 }
 
 type ciProvider struct {
-	desc specs.Descriptor
-	ci   *importer
+	desc    specs.Descriptor
+	ci      *importer
+	mu      sync.Mutex
+	entries map[digest.Digest]*actionscache.Entry
 }
 
-func (p *ciProvider) ReaderAt(ctx context.Context, desc specs.Descriptor) (content.ReaderAt, error) {
+func (p *ciProvider) CheckDescriptor(ctx context.Context, desc specs.Descriptor) error {
+	if desc.Digest != p.desc.Digest {
+		return nil
+	}
+
+	_, err := p.loadEntry(ctx, desc)
+	return err
+}
+
+func (p *ciProvider) loadEntry(ctx context.Context, desc specs.Descriptor) (*actionscache.Entry, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if ce, ok := p.entries[desc.Digest]; ok {
+		return ce, nil
+	}
 	key := "buildkit-blob-" + version + "-" + desc.Digest.String()
 	ce, err := p.ci.cache.Load(ctx, key)
 	if err != nil {
 		return nil, err
 	}
 	if ce == nil {
-		return nil, errors.Errorf("blob not found")
+		return nil, errors.Errorf("blob %s not found", desc.Digest)
+	}
+	if p.entries == nil {
+		p.entries = make(map[digest.Digest]*actionscache.Entry)
+	}
+	p.entries[desc.Digest] = ce
+	return ce, nil
+}
+
+func (p *ciProvider) ReaderAt(ctx context.Context, desc specs.Descriptor) (content.ReaderAt, error) {
+	ce, err := p.loadEntry(ctx, desc)
+	if err != nil {
+		return nil, err
 	}
 	rac := ce.Download(context.TODO())
 	return &readerAt{ReaderAtCloser: rac, desc: desc}, nil
