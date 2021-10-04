@@ -458,7 +458,14 @@ func (e *edge) processUpdate(upt pipe.Receiver) (depChanged bool) {
 			dep.err = err
 		}
 
-		state := upt.Status().Value.(*edgeState)
+		if upt.Status().Value == nil {
+			return
+		}
+		state, isEdgeState := upt.Status().Value.(*edgeState)
+		if !isEdgeState {
+			bklog.G(context.TODO()).Warnf("invalid edgeState value for update: %T", state)
+			return
+		}
 
 		if len(dep.keys) < len(state.keys) {
 			newKeys := state.keys[len(dep.keys):]
