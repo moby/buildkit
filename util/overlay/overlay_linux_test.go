@@ -1,6 +1,7 @@
+//go:build linux
 // +build linux
 
-package cache
+package overlay
 
 import (
 	"context"
@@ -402,7 +403,7 @@ func collectAndCheckChanges(base, upperdir string, expected []TestChange) error 
 		},
 	}
 	return mount.WithTempMount(ctx, upperView, func(upperViewRoot string) error {
-		if err := overlayChanges(ctx, func(k fs.ChangeKind, p string, f os.FileInfo, err error) error {
+		if err := Changes(ctx, func(k fs.ChangeKind, p string, f os.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
