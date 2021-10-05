@@ -298,7 +298,7 @@ func (s *inMemoryResultStore) Load(ctx context.Context, res CacheResult) (Result
 	return v.(Result), nil
 }
 
-func (s *inMemoryResultStore) LoadRemote(_ context.Context, _ CacheResult, _ session.Group) (*Remote, error) {
+func (s *inMemoryResultStore) LoadRemotes(_ context.Context, _ CacheResult, _ *CompressionOpt, _ session.Group) ([]*Remote, error) {
 	return nil, nil
 }
 

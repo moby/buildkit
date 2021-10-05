@@ -15,6 +15,7 @@ import (
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/filesync"
+	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/buildinfo"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/contentutil"
@@ -144,6 +145,15 @@ func (e *imageExporterInstance) Name() string {
 	return "exporting to oci image format"
 }
 
+func (e *imageExporterInstance) Config() exporter.Config {
+	return exporter.Config{
+		Compression: solver.CompressionOpt{
+			Type:  e.layerCompression,
+			Force: e.forceCompression,
+		},
+	}
+}
+
 func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source, sessionID string) (map[string]string, error) {
 	if e.opt.Variant == VariantDocker && len(src.Refs) > 0 {
 		return nil, errors.Errorf("docker exporter does not currently support exporting manifest lists")
@@ -227,11 +237,16 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	}
 
 	mprovider := contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
+	compressionopt := solver.CompressionOpt{
+		Type:  e.layerCompression,
+		Force: e.forceCompression,
+	}
 	if src.Ref != nil {
-		remote, err := src.Ref.GetRemote(ctx, false, e.layerCompression, e.forceCompression, session.NewGroup(sessionID))
+		remotes, err := src.Ref.GetRemotes(ctx, false, compressionopt, false, session.NewGroup(sessionID))
 		if err != nil {
 			return nil, err
 		}
+		remote := remotes[0]
 		// unlazy before tar export as the tar writer does not handle
 		// layer blobs in parallel (whereas unlazy does)
 		if unlazier, ok := remote.Provider.(cache.Unlazier); ok {
@@ -245,10 +260,11 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	}
 	if len(src.Refs) > 0 {
 		for _, r := range src.Refs {
-			remote, err := r.GetRemote(ctx, false, e.layerCompression, e.forceCompression, session.NewGroup(sessionID))
+			remotes, err := r.GetRemotes(ctx, false, compressionopt, false, session.NewGroup(sessionID))
 			if err != nil {
 				return nil, err
 			}
+			remote := remotes[0]
 			if unlazier, ok := remote.Provider.(cache.Unlazier); ok {
 				if err := unlazier.Unlazy(ctx); err != nil {
 					return nil, err
