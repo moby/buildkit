@@ -1115,6 +1115,8 @@ func TestConversion(t *testing.T) {
 						require.NoError(t, err, testName)
 					}
 					require.Equal(t, recreatedDesc.Digest, orgDesc.Digest, testName)
+					require.NotNil(t, recreatedDesc.Annotations)
+					require.Equal(t, recreatedDesc.Annotations["containerd.io/uncompressed"], orgDesc.Digest.String(), testName)
 					return nil
 				})
 			}
