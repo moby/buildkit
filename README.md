@@ -547,7 +547,7 @@ Please refer to [`docs/rootless.md`](docs/rootless.md).
 
 ## Building multi-platform images
 
-See [`docker buildx` documentation](https://github.com/docker/buildx#building-multi-platform-images)
+Please refer to [`docs/multi-platform.md`](docs/multi-platform.md).
 
 ## Contributing
 
