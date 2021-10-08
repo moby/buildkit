@@ -213,6 +213,23 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 		meta.ShmSize = *shmSize
 	}
 
+	ulimits, err := getUlimit(e.base)(ctx, c)
+	if err != nil {
+		return "", nil, nil, nil, err
+	}
+	if len(ulimits) > 0 {
+		addCap(&e.constraints, pb.CapExecMetaUlimit)
+		ul := make([]*pb.Ulimit, len(ulimits))
+		for i, u := range ulimits {
+			ul[i] = &pb.Ulimit{
+				Name: u.Name,
+				Soft: u.Soft,
+				Hard: u.Hard,
+			}
+		}
+		meta.Ulimit = ul
+	}
+
 	network, err := getNetwork(e.base)(ctx, c)
 	if err != nil {
 		return "", nil, nil, nil, err
@@ -513,6 +530,12 @@ func WithShmSize(kb int64) RunOption {
 	})
 }
 
+func AddUlimit(name UlimitName, soft int64, hard int64) RunOption {
+	return runOptionFunc(func(ei *ExecInfo) {
+		ei.State = ei.State.AddUlimit(name, soft, hard)
+	})
+}
+
 func With(so ...StateOption) RunOption {
 	return runOptionFunc(func(ei *ExecInfo) {
 		ei.State = ei.State.With(so...)
@@ -681,4 +704,24 @@ const (
 const (
 	SecurityModeInsecure = pb.SecurityMode_INSECURE
 	SecurityModeSandbox  = pb.SecurityMode_SANDBOX
+)
+
+type UlimitName string
+
+const (
+	UlimitCore       UlimitName = "core"
+	UlimitCPU        UlimitName = "cpu"
+	UlimitData       UlimitName = "data"
+	UlimitFsize      UlimitName = "fsize"
+	UlimitLocks      UlimitName = "locks"
+	UlimitMemlock    UlimitName = "memlock"
+	UlimitMsgqueue   UlimitName = "msgqueue"
+	UlimitNice       UlimitName = "nice"
+	UlimitNofile     UlimitName = "nofile"
+	UlimitNproc      UlimitName = "nproc"
+	UlimitRss        UlimitName = "rss"
+	UlimitRtprio     UlimitName = "rtprio"
+	UlimitRttime     UlimitName = "rttime"
+	UlimitSigpending UlimitName = "sigpending"
+	UlimitStack      UlimitName = "stack"
 )

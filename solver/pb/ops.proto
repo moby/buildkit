@@ -59,6 +59,18 @@ message Meta {
 	repeated HostIP extraHosts = 6;
 	string hostname = 7;
 	int64 shmSize = 8;
+	repeated Ulimit ulimit = 9;
+}
+
+message HostIP {
+	string Host = 1;
+	string IP = 2;
+}
+
+message Ulimit {
+	string Name = 1;
+	int64 Soft = 2;
+	int64 Hard = 3;
 }
 
 enum NetMode {
@@ -242,11 +254,6 @@ message Definition {
 	map<string, OpMetadata> metadata = 2 [(gogoproto.castkey) = "github.com/opencontainers/go-digest.Digest", (gogoproto.nullable) = false];
 	// Source contains the source mapping information for the vertexes in the definition
 	Source Source = 3;
-}
-
-message HostIP {
-	string Host = 1;
-	string IP = 2;
 }
 
 message FileOp {
