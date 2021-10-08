@@ -34,6 +34,7 @@ type Ref interface {
 	RefMetadata
 	Release(context.Context) error
 	IdentityMapping() *idtools.IdentityMapping
+	DescHandler(digest.Digest) *DescHandler
 }
 
 type ImmutableRef interface {
@@ -313,10 +314,18 @@ type immutableRef struct {
 	descHandlers    DescHandlers
 }
 
+func (sr *immutableRef) DescHandler(dgst digest.Digest) *DescHandler {
+	return sr.descHandlers[dgst]
+}
+
 type mutableRef struct {
 	*cacheRecord
 	triggerLastUsed bool
 	descHandlers    DescHandlers
+}
+
+func (sr *mutableRef) DescHandler(dgst digest.Digest) *DescHandler {
+	return sr.descHandlers[dgst]
 }
 
 func (sr *immutableRef) Clone() ImmutableRef {
