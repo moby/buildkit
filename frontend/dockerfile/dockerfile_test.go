@@ -115,6 +115,8 @@ var allTests = []integration.Test{
 	testWildcardRenameCache,
 	testDockerfileInvalidInstruction,
 	testBuildInfo,
+	testShmSize,
+	testUlimit,
 }
 
 var fileOpTests = []integration.Test{
@@ -5262,6 +5264,96 @@ COPY --from=buildx /buildx /usr/libexec/docker/cli-plugins/docker-buildx
 	assert.Equal(t, exptypes.BuildInfoTypeHTTP, bi["sources"][3].Type)
 	assert.Equal(t, "https://raw.githubusercontent.com/moby/moby/master/README.md", bi["sources"][3].Ref)
 	assert.Equal(t, "sha256:419455202b0ef97e480d7f8199b26a721a417818bc0e2d106975f74323f25e6c", bi["sources"][3].Pin)
+}
+
+func testShmSize(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+	dockerfile := []byte(`
+FROM busybox AS base
+RUN mount | grep /dev/shm > /shmsize
+FROM scratch
+COPY --from=base /shmsize /
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"shm-size": "131072",
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "shmsize"))
+	require.NoError(t, err)
+	require.Contains(t, string(dt), `size=131072k`)
+}
+
+func testUlimit(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+	dockerfile := []byte(`
+FROM busybox AS base
+RUN ulimit -n > /ulimit
+FROM scratch
+COPY --from=base /ulimit /
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"ulimit": "nofile=1062:1062",
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "ulimit"))
+	require.NoError(t, err)
+	require.Equal(t, `1062`, strings.TrimSpace(string(dt)))
 }
 
 func tmpdir(appliers ...fstest.Applier) (string, error) {

@@ -108,6 +108,7 @@ func TestIntegration(t *testing.T) {
 		testSecretMounts,
 		testExtraHosts,
 		testShmSize,
+		testUlimit,
 		testNetworkMode,
 		testFrontendMetadataReturn,
 		testFrontendUseSolveResults,
@@ -558,6 +559,47 @@ func testShmSize(t *testing.T, sb integration.Sandbox) {
 	dt, err := ioutil.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
 	require.Contains(t, string(dt), `size=131072k`)
+}
+
+func testUlimit(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("busybox:latest")
+	st := llb.Scratch()
+
+	run := func(cmd string, ro ...llb.RunOption) {
+		st = busybox.Run(append(ro, llb.Shlex(cmd), llb.Dir("/wd"))...).AddMount("/wd", st)
+	}
+
+	run(`sh -c "ulimit -n > first"`, llb.AddUlimit(llb.UlimitNofile, 1062, 1062))
+	run(`sh -c "ulimit -n > second"`)
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "first"))
+	require.NoError(t, err)
+	require.Equal(t, `1062`, strings.TrimSpace(string(dt)))
+
+	dt2, err := ioutil.ReadFile(filepath.Join(destDir, "second"))
+	require.NoError(t, err)
+	require.NotEqual(t, `1062`, strings.TrimSpace(string(dt2)))
 }
 
 func testNetworkMode(t *testing.T, sb integration.Sandbox) {

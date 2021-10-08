@@ -401,6 +401,10 @@ func (s State) WithShmSize(kb int64) State {
 	return shmSize(kb)(s)
 }
 
+func (s State) AddUlimit(name UlimitName, soft int64, hard int64) State {
+	return ulimit(name, soft, hard)(s)
+}
+
 func (s State) isFileOpCopyInput() {}
 
 type output struct {
