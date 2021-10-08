@@ -232,15 +232,20 @@ func (w *Worker) LoadRef(ctx context.Context, id string, hidden bool) (cache.Imm
 			}
 			descHandlers := cache.DescHandlers(make(map[digest.Digest]*cache.DescHandler))
 			for k, v := range optGetter(keys...) {
-				if v, ok := v.(*cache.DescHandler); ok {
-					descHandlers[k.(digest.Digest)] = v
+				if key, ok := k.(cache.DescHandlerKey); ok {
+					if handler, ok := v.(*cache.DescHandler); ok {
+						descHandlers[digest.Digest(key)] = handler
+					}
 				}
 			}
 			opts = append(opts, descHandlers)
 			ref, err = w.CacheMgr.Get(ctx, id, opts...)
 		}
 	}
-	return ref, err
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to load ref")
+	}
+	return ref, nil
 }
 
 func (w *Worker) Executor() executor.Executor {

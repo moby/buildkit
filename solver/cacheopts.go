@@ -21,8 +21,12 @@ func CacheOptGetterOf(ctx context.Context) func(keys ...interface{}) map[interfa
 	return nil
 }
 
+func WithCacheOptGetter(ctx context.Context, getter func(keys ...interface{}) map[interface{}]interface{}) context.Context {
+	return context.WithValue(ctx, cacheOptGetterKey{}, getter)
+}
+
 func withAncestorCacheOpts(ctx context.Context, start *state) context.Context {
-	return context.WithValue(ctx, cacheOptGetterKey{}, func(keys ...interface{}) map[interface{}]interface{} {
+	return WithCacheOptGetter(ctx, func(keys ...interface{}) map[interface{}]interface{} {
 		keySet := make(map[interface{}]struct{})
 		for _, k := range keys {
 			keySet[k] = struct{}{}
