@@ -599,10 +599,10 @@ This file causes the following build behavior:
 
 
 Matching is done using Go's
-[filepath.Match](http://golang.org/pkg/path/filepath#Match) rules.  A
+[filepath.Match](https://golang.org/pkg/path/filepath#Match) rules.  A
 preprocessing step removes leading and trailing whitespace and
 eliminates `.` and `..` elements using Go's
-[filepath.Clean](http://golang.org/pkg/path/filepath/#Clean).  Lines
+[filepath.Clean](https://golang.org/pkg/path/filepath/#Clean).  Lines
 that are blank after preprocessing are ignored.
 
 Beyond Go's filepath.Match rules, Docker also supports a special
@@ -1117,7 +1117,7 @@ directories, their paths are interpreted as relative to the source of
 the context of the build.
 
 Each `<src>` may contain wildcards and matching will be done using Go's
-[filepath.Match](http://golang.org/pkg/path/filepath#Match) rules. For example:
+[filepath.Match](https://golang.org/pkg/path/filepath#Match) rules. For example:
 
 To add all files starting with "hom":
 
@@ -1293,7 +1293,7 @@ directories will be interpreted as relative to the source of the context
 of the build.
 
 Each `<src>` may contain wildcards and matching will be done using Go's
-[filepath.Match](http://golang.org/pkg/path/filepath#Match) rules. For example:
+[filepath.Match](https://golang.org/pkg/path/filepath#Match) rules. For example:
 
 To add all files starting with "hom":
 
