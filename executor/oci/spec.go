@@ -164,6 +164,7 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 		})
 	}
 
+	s.Mounts = dedupMounts(s.Mounts)
 	return s, releaseAll, nil
 }
 
