@@ -58,7 +58,6 @@ message Meta {
 	ProxyEnv proxy_env = 5;
 	repeated HostIP extraHosts = 6;
 	string hostname = 7;
-	int64 shmSize = 8;
 	repeated Ulimit ulimit = 9;
 }
 
@@ -92,6 +91,7 @@ message Mount {
 	int64 output = 4 [(gogoproto.customtype) = "OutputIndex", (gogoproto.nullable) = false];
 	bool readonly = 5;
 	MountType mountType = 6;
+	TmpfsOpt TmpfsOpt = 19;
 	CacheOpt cacheOpt = 20;
 	SecretOpt secretOpt = 21;
 	SSHOpt SSHOpt = 22;
@@ -105,6 +105,12 @@ enum MountType {
 	SSH = 2;
 	CACHE = 3;
 	TMPFS = 4;
+}
+
+// TmpfsOpt defines options describing tpmfs mounts
+message TmpfsOpt {
+	// Specify an upper limit on the size of the filesystem.
+	int64 size = 1;
 }
 
 // CacheOpt defines options specific to cache mounts

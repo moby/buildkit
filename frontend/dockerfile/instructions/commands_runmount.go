@@ -123,6 +123,7 @@ type Mount struct {
 	Source       string
 	Target       string
 	ReadOnly     bool
+	SizeLimit    int64
 	CacheID      string
 	CacheSharing string
 	Required     bool
@@ -224,6 +225,16 @@ func parseMount(value string, expander SingleWordExpander) (*Mount, error) {
 					return nil, errors.Errorf("invalid value for %s: %s", key, value)
 				}
 				m.Required = v
+			} else {
+				return nil, errors.Errorf("unexpected key '%s' for mount type '%s'", key, m.Type)
+			}
+		case "size":
+			if m.Type == "tmpfs" {
+				v, err := strconv.ParseInt(value, 10, 64)
+				if err != nil {
+					return nil, errors.Errorf("invalid value for %s: %s", key, value)
+				}
+				m.SizeLimit = v
 			} else {
 				return nil, errors.Errorf("unexpected key '%s' for mount type '%s'", key, m.Type)
 			}
