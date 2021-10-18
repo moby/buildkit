@@ -29,7 +29,8 @@ import (
 )
 
 type Client struct {
-	conn *grpc.ClientConn
+	conn          *grpc.ClientConn
+	sessionDialer func(ctx context.Context, proto string, meta map[string][]string) (net.Conn, error)
 }
 
 type ClientOpt interface{}
@@ -49,6 +50,7 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 	var customTracer bool // allows manually setting disabling tracing even if tracer in context
 	var tracerProvider trace.TracerProvider
 	var tracerDelegate TracerDelegate
+	var sessionDialer func(context.Context, string, map[string][]string) (net.Conn, error)
 
 	for _, o := range opts {
 		if _, ok := o.(*withFailFast); ok {
@@ -72,6 +74,9 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 		}
 		if wt, ok := o.(*withTracerDelegate); ok {
 			tracerDelegate = wt
+		}
+		if sd, ok := o.(*withSessionDialer); ok {
+			sessionDialer = sd.dialer
 		}
 	}
 
@@ -131,7 +136,8 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 	}
 
 	c := &Client{
-		conn: conn,
+		conn:          conn,
+		sessionDialer: sessionDialer,
 	}
 
 	if tracerDelegate != nil {
@@ -242,6 +248,14 @@ func WithTracerDelegate(td TracerDelegate) ClientOpt {
 
 type withTracerDelegate struct {
 	TracerDelegate
+}
+
+func WithSessionDialer(dialer func(context.Context, string, map[string][]string) (net.Conn, error)) ClientOpt {
+	return &withSessionDialer{dialer}
+}
+
+type withSessionDialer struct {
+	dialer func(context.Context, string, map[string][]string) (net.Conn, error)
 }
 
 func resolveDialer(address string) (func(context.Context, string) (net.Conn, error), error) {
