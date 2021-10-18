@@ -397,10 +397,6 @@ func (s State) AddExtraHost(host string, ip net.IP) State {
 	return extraHost(host, ip)(s)
 }
 
-func (s State) WithShmSize(kb int64) State {
-	return shmSize(kb)(s)
-}
-
 func (s State) AddUlimit(name UlimitName, soft int64, hard int64) State {
 	return ulimit(name, soft, hard)(s)
 }

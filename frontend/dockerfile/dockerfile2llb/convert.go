@@ -810,8 +810,11 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 	for _, h := range dopt.extraHosts {
 		opt = append(opt, llb.AddExtraHost(h.Host, h.IP))
 	}
-	if dopt.shmSize > 0 {
-		opt = append(opt, llb.WithShmSize(dopt.shmSize))
+
+	if dopt.llbCaps != nil && dopt.llbCaps.Supports(pb.CapExecMountTmpfsSize) == nil {
+		if dopt.shmSize > 0 {
+			opt = append(opt, llb.AddMount("/dev/shm", llb.Scratch(), llb.Tmpfs(llb.TmpfsSize(dopt.shmSize))))
+		}
 	}
 
 	d.state = d.state.Run(opt...).Root()

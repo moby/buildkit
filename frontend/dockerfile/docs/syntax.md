@@ -96,6 +96,7 @@ This mount type allows mounting tmpfs in the build container.
 |Option               |Description|
 |---------------------|-----------|
 |`target` (required)  | Mount path.|
+|`size`               | Specify an upper limit on the size of the filesystem.|
 
 
 ### `RUN --mount=type=secret`

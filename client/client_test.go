@@ -536,8 +536,10 @@ func testShmSize(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	st := llb.Image("busybox:latest").
-		Run(llb.Shlex(`sh -c 'mount | grep /dev/shm > /out/out'`), llb.WithShmSize(128*1024))
+	st := llb.Image("busybox:latest").Run(
+		llb.AddMount("/dev/shm", llb.Scratch(), llb.Tmpfs(llb.TmpfsSize(128*1024))),
+		llb.Shlex(`sh -c 'mount | grep /dev/shm > /out/out'`),
+	)
 
 	out := st.AddMount("/out", llb.Scratch())
 	def, err := out.Marshal(sb.Context())
