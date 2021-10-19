@@ -5291,7 +5291,7 @@ COPY --from=base /shmsize /
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
-			"shm-size": "131072",
+			"shm-size": "134217728",
 		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
