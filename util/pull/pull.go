@@ -21,7 +21,7 @@ import (
 	"github.com/moby/buildkit/util/resolver/limited"
 	"github.com/moby/buildkit/util/resolver/retryhandler"
 	digest "github.com/opencontainers/go-digest"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
 
@@ -29,26 +29,26 @@ type Puller struct {
 	ContentStore content.Store
 	Resolver     *resolver.Resolver
 	Src          reference.Spec
-	Platform     ocispec.Platform
+	Platform     ocispecs.Platform
 
 	g           flightcontrol.Group
 	resolveErr  error
 	resolveDone bool
-	desc        ocispec.Descriptor
-	configDesc  ocispec.Descriptor
+	desc        ocispecs.Descriptor
+	configDesc  ocispecs.Descriptor
 	ref         string
-	layers      []ocispec.Descriptor
-	nonlayers   []ocispec.Descriptor
+	layers      []ocispecs.Descriptor
+	nonlayers   []ocispecs.Descriptor
 }
 
 var _ content.Provider = &provider{}
 
 type PulledManifests struct {
 	Ref              string
-	MainManifestDesc ocispec.Descriptor
-	ConfigDesc       ocispec.Descriptor
-	Nonlayers        []ocispec.Descriptor
-	Descriptors      []ocispec.Descriptor
+	MainManifestDesc ocispecs.Descriptor
+	ConfigDesc       ocispecs.Descriptor
+	Nonlayers        []ocispecs.Descriptor
+	Descriptors      []ocispecs.Descriptor
 	Provider         func(session.Group) content.Provider
 }
 
@@ -78,7 +78,7 @@ func (p *Puller) resolve(ctx context.Context, resolver remotes.Resolver) error {
 }
 
 func (p *Puller) tryLocalResolve(ctx context.Context) error {
-	desc := ocispec.Descriptor{
+	desc := ocispecs.Descriptor{
 		Digest: p.Src.Digest(),
 	}
 
@@ -114,7 +114,7 @@ func (p *Puller) PullManifests(ctx context.Context) (*PulledManifests, error) {
 	platform := platforms.Only(p.Platform)
 
 	var mu sync.Mutex // images.Dispatch calls handlers in parallel
-	metadata := make(map[digest.Digest]ocispec.Descriptor)
+	metadata := make(map[digest.Digest]ocispecs.Descriptor)
 
 	// TODO: need a wrapper snapshot interface that combines content
 	// and snapshots as 1) buildkit shouldn't have a dependency on contentstore
@@ -178,7 +178,7 @@ func (p *Puller) PullManifests(ctx context.Context) (*PulledManifests, error) {
 	for _, desc := range metadata {
 		p.nonlayers = append(p.nonlayers, desc)
 		switch desc.MediaType {
-		case images.MediaTypeDockerSchema2Config, ocispec.MediaTypeImageConfig:
+		case images.MediaTypeDockerSchema2Config, ocispecs.MediaTypeImageConfig:
 			p.configDesc = desc
 		}
 	}
@@ -206,7 +206,7 @@ type provider struct {
 	resolver remotes.Resolver
 }
 
-func (p *provider) ReaderAt(ctx context.Context, desc ocispec.Descriptor) (content.ReaderAt, error) {
+func (p *provider) ReaderAt(ctx context.Context, desc ocispecs.Descriptor) (content.ReaderAt, error) {
 	err := p.puller.resolve(ctx, p.resolver)
 	if err != nil {
 		return nil, err
@@ -222,10 +222,10 @@ func (p *provider) ReaderAt(ctx context.Context, desc ocispec.Descriptor) (conte
 
 // filterLayerBlobs causes layer blobs to be skipped for fetch, which is required to support lazy blobs.
 // It also stores the non-layer blobs (metadata) it encounters in the provided map.
-func filterLayerBlobs(metadata map[digest.Digest]ocispec.Descriptor, mu sync.Locker) images.HandlerFunc {
-	return func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
+func filterLayerBlobs(metadata map[digest.Digest]ocispecs.Descriptor, mu sync.Locker) images.HandlerFunc {
+	return func(ctx context.Context, desc ocispecs.Descriptor) ([]ocispecs.Descriptor, error) {
 		switch desc.MediaType {
-		case ocispec.MediaTypeImageLayer, images.MediaTypeDockerSchema2Layer, ocispec.MediaTypeImageLayerGzip, images.MediaTypeDockerSchema2LayerGzip, images.MediaTypeDockerSchema2LayerForeign, images.MediaTypeDockerSchema2LayerForeignGzip:
+		case ocispecs.MediaTypeImageLayer, images.MediaTypeDockerSchema2Layer, ocispecs.MediaTypeImageLayerGzip, images.MediaTypeDockerSchema2LayerGzip, images.MediaTypeDockerSchema2LayerForeign, images.MediaTypeDockerSchema2LayerForeignGzip:
 			return nil, images.ErrSkipDesc
 		default:
 			if metadata != nil {
@@ -238,7 +238,7 @@ func filterLayerBlobs(metadata map[digest.Digest]ocispec.Descriptor, mu sync.Loc
 	}
 }
 
-func getLayers(ctx context.Context, provider content.Provider, desc ocispec.Descriptor, platform platforms.MatchComparer) ([]ocispec.Descriptor, error) {
+func getLayers(ctx context.Context, provider content.Provider, desc ocispecs.Descriptor, platform platforms.MatchComparer) ([]ocispecs.Descriptor, error) {
 	manifest, err := images.Manifest(ctx, provider, desc, platform)
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -251,7 +251,7 @@ func getLayers(ctx context.Context, provider content.Provider, desc ocispec.Desc
 	if len(diffIDs) != len(manifest.Layers) {
 		return nil, errors.Errorf("mismatched image rootfs and manifest layers %+v %+v", diffIDs, manifest.Layers)
 	}
-	layers := make([]ocispec.Descriptor, len(diffIDs))
+	layers := make([]ocispecs.Descriptor, len(diffIDs))
 	for i := range diffIDs {
 		desc := manifest.Layers[i]
 		if desc.Annotations == nil {

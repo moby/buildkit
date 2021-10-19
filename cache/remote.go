@@ -16,7 +16,7 @@ import (
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/progress/logs"
 	"github.com/moby/buildkit/util/pull/pullprogress"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -46,7 +46,7 @@ func (sr *immutableRef) GetRemote(ctx context.Context, createIfNeeded bool, comp
 		Provider: mprovider,
 	}
 	for _, ref := range chain {
-		desc, err := ref.ociDesc()
+		desc, err := ref.ociDesc(ctx, sr.descHandlers)
 		if err != nil {
 			return nil, err
 		}
@@ -66,7 +66,8 @@ func (sr *immutableRef) GetRemote(ctx context.Context, createIfNeeded bool, comp
 		// update distribution source annotation for lazy-refs (non-lazy refs
 		// will already have their dsl stored in the content store, which is
 		// used by the push handlers)
-		if isLazy, err := ref.isLazy(ctx); err != nil {
+		isLazy, err := ref.isLazy(ctx)
+		if err != nil {
 			return nil, err
 		} else if isLazy {
 			imageRefs := getImageRefs(ref.md)
@@ -106,24 +107,24 @@ func (sr *immutableRef) GetRemote(ctx context.Context, createIfNeeded bool, comp
 		}
 
 		if forceCompression {
-			// ensure the compression type.
-			// compressed blob must be created and stored in the content store.
-			_, convertMediaTypeFunc, err := getConverters(desc, compressionType)
-			if err != nil {
+			if needs, err := needsConversion(desc.MediaType, compressionType); err != nil {
 				return nil, err
-			}
-			if convertMediaTypeFunc != nil {
-				// needs conversion
-				info, err := ref.getCompressionBlob(ctx, compressionType)
+			} else if needs {
+				// ensure the compression type.
+				// compressed blob must be created and stored in the content store.
+				blobDesc, err := ref.getCompressionBlob(ctx, compressionType)
 				if err != nil {
-					return nil, err
+					return nil, errors.Wrapf(err, "compression blob for %q not found", compressionType)
 				}
 				newDesc := desc
-				newDesc.MediaType = convertMediaTypeFunc(newDesc.MediaType)
-				newDesc.Digest = info.Digest
-				newDesc.Size = info.Size
-				if desc.Digest != newDesc.Digest {
-					mproviderBase.Add(newDesc.Digest, ref.cm.ContentStore)
+				newDesc.MediaType = blobDesc.MediaType
+				newDesc.Digest = blobDesc.Digest
+				newDesc.Size = blobDesc.Size
+				for k, v := range blobDesc.Annotations {
+					if newDesc.Annotations == nil {
+						newDesc.Annotations = make(map[string]string)
+					}
+					newDesc.Annotations[k] = v
 				}
 				desc = newDesc
 			}
@@ -150,7 +151,7 @@ func (mp *lazyMultiProvider) Add(p lazyRefProvider) {
 	mp.plist = append(mp.plist, p)
 }
 
-func (mp *lazyMultiProvider) ReaderAt(ctx context.Context, desc ocispec.Descriptor) (content.ReaderAt, error) {
+func (mp *lazyMultiProvider) ReaderAt(ctx context.Context, desc ocispecs.Descriptor) (content.ReaderAt, error) {
 	return mp.mprovider.ReaderAt(ctx, desc)
 }
 
@@ -167,12 +168,12 @@ func (mp *lazyMultiProvider) Unlazy(ctx context.Context) error {
 
 type lazyRefProvider struct {
 	ref     *immutableRef
-	desc    ocispec.Descriptor
+	desc    ocispecs.Descriptor
 	dh      *DescHandler
 	session session.Group
 }
 
-func (p lazyRefProvider) ReaderAt(ctx context.Context, desc ocispec.Descriptor) (content.ReaderAt, error) {
+func (p lazyRefProvider) ReaderAt(ctx context.Context, desc ocispecs.Descriptor) (content.ReaderAt, error) {
 	if desc.Digest != p.desc.Digest {
 		return nil, errdefs.ErrNotFound
 	}
@@ -224,7 +225,16 @@ func (p lazyRefProvider) Unlazy(ctx context.Context) error {
 				}
 			}
 		}
-		return nil, err
+
+		compressionType := compression.FromMediaType(p.desc.MediaType)
+		if compressionType == compression.UnknownCompression {
+			return nil, errors.Errorf("unhandled layer media type: %q", p.desc.MediaType)
+		}
+
+		if err := p.ref.addCompressionBlob(ctx, p.desc, compressionType); err != nil {
+			return nil, err
+		}
+		return nil, nil
 	})
 	return err
 }

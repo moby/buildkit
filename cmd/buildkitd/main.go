@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/pkg/seed"
 	"github.com/containerd/containerd/pkg/userns"
@@ -58,7 +57,7 @@ import (
 	"github.com/moby/buildkit/util/tracing/transform"
 	"github.com/moby/buildkit/version"
 	"github.com/moby/buildkit/worker"
-	specs "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
@@ -67,7 +66,6 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 	tracev1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
-	v1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 )
@@ -87,7 +85,6 @@ var propagators = propagation.NewCompositeTextMapPropagator(propagation.TraceCon
 
 type workerInitializerOpt struct {
 	config         *config.Config
-	configMetaData *toml.MetaData
 	sessionManager *session.Manager
 	traceSocket    string
 }
@@ -121,7 +118,7 @@ func main() {
 	app.Usage = "build daemon"
 	app.Version = version.Version
 
-	defaultConf, md, err := defaultConf()
+	defaultConf, err := defaultConf()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%+v\n", err)
 		os.Exit(1)
@@ -140,11 +137,11 @@ func main() {
 		})
 	}
 
-	groupValue := func(gid int) string {
-		if md == nil || !md.IsDefined("grpc", "gid") {
+	groupValue := func(gid *int) string {
+		if gid == nil {
 			return ""
 		}
-		return strconv.Itoa(gid)
+		return strconv.Itoa(*gid)
 	}
 
 	app.Flags = append(app.Flags,
@@ -208,13 +205,13 @@ func main() {
 		ctx, cancel := context.WithCancel(appcontext.Context())
 		defer cancel()
 
-		cfg, md, err := LoadFile(c.GlobalString("config"))
+		cfg, err := LoadFile(c.GlobalString("config"))
 		if err != nil {
 			return err
 		}
 
 		setDefaultConfig(&cfg)
-		if err := applyMainFlags(c, &cfg, md); err != nil {
+		if err := applyMainFlags(c, &cfg); err != nil {
 			return err
 		}
 
@@ -273,7 +270,7 @@ func main() {
 			os.RemoveAll(lockPath)
 		}()
 
-		controller, err := newController(c, &cfg, md)
+		controller, err := newController(c, &cfg)
 		if err != nil {
 			return err
 		}
@@ -353,7 +350,7 @@ func serveGRPC(cfg config.GRPCConfig, server *grpc.Server, errCh chan error) err
 	eg, _ := errgroup.WithContext(context.Background())
 	listeners := make([]net.Listener, 0, len(addrs))
 	for _, addr := range addrs {
-		l, err := getListener(addr, cfg.UID, cfg.GID, tlsConfig)
+		l, err := getListener(addr, *cfg.UID, *cfg.GID, tlsConfig)
 		if err != nil {
 			for _, l := range listeners {
 				l.Close()
@@ -389,18 +386,18 @@ func defaultConfigPath() string {
 	return filepath.Join(appdefaults.ConfigDir, "buildkitd.toml")
 }
 
-func defaultConf() (config.Config, *toml.MetaData, error) {
-	cfg, md, err := LoadFile(defaultConfigPath())
+func defaultConf() (config.Config, error) {
+	cfg, err := LoadFile(defaultConfigPath())
 	if err != nil {
 		var pe *os.PathError
 		if !errors.As(err, &pe) {
-			return config.Config{}, nil, err
+			return config.Config{}, err
 		}
-		return cfg, nil, nil
+		return cfg, nil
 	}
 	setDefaultConfig(&cfg)
 
-	return cfg, md, nil
+	return cfg, nil
 }
 
 func setDefaultNetworkConfig(nc config.NetworkConfig) config.NetworkConfig {
@@ -453,7 +450,7 @@ func setDefaultConfig(cfg *config.Config) {
 	}
 }
 
-func applyMainFlags(c *cli.Context, cfg *config.Config, md *toml.MetaData) error {
+func applyMainFlags(c *cli.Context, cfg *config.Config) error {
 	if c.IsSet("debug") {
 		cfg.Debug = c.Bool("debug")
 	}
@@ -474,7 +471,7 @@ func applyMainFlags(c *cli.Context, cfg *config.Config, md *toml.MetaData) error
 	}
 
 	if c.IsSet("allow-insecure-entitlement") {
-		//override values from config
+		// override values from config
 		cfg.Entitlements = c.StringSlice("allow-insecure-entitlement")
 	}
 
@@ -482,12 +479,14 @@ func applyMainFlags(c *cli.Context, cfg *config.Config, md *toml.MetaData) error
 		cfg.GRPC.DebugAddress = c.String("debugaddr")
 	}
 
-	if md == nil || !md.IsDefined("grpc", "uid") {
-		cfg.GRPC.UID = os.Getuid()
+	if cfg.GRPC.UID == nil {
+		uid := os.Getuid()
+		cfg.GRPC.UID = &uid
 	}
 
-	if md == nil || !md.IsDefined("grpc", "gid") {
-		cfg.GRPC.GID = os.Getgid()
+	if cfg.GRPC.GID == nil {
+		gid := os.Getgid()
+		cfg.GRPC.GID = &gid
 	}
 
 	if group := c.String("group"); group != "" {
@@ -495,7 +494,7 @@ func applyMainFlags(c *cli.Context, cfg *config.Config, md *toml.MetaData) error
 		if err != nil {
 			return err
 		}
-		cfg.GRPC.GID = gid
+		cfg.GRPC.GID = &gid
 	}
 
 	if tlscert := c.String("tlscert"); tlscert != "" {
@@ -633,7 +632,7 @@ func serverCredentials(cfg config.TLSConfig) (*tls.Config, error) {
 	return tlsConf, nil
 }
 
-func newController(c *cli.Context, cfg *config.Config, md *toml.MetaData) (*control.Controller, error) {
+func newController(c *cli.Context, cfg *config.Config) (*control.Controller, error) {
 	sessionManager, err := session.NewManager()
 	if err != nil {
 		return nil, err
@@ -654,7 +653,6 @@ func newController(c *cli.Context, cfg *config.Config, md *toml.MetaData) (*cont
 
 	wc, err := newWorkerController(c, workerInitializerOpt{
 		config:         cfg,
-		configMetaData: md,
 		sessionManager: sessionManager,
 		traceSocket:    traceSocket,
 	})
@@ -747,7 +745,7 @@ func attrMap(sl []string) (map[string]string, error) {
 	return m, nil
 }
 
-func formatPlatforms(p []specs.Platform) []string {
+func formatPlatforms(p []ocispecs.Platform) []string {
 	str := make([]string, 0, len(p))
 	for _, pp := range p {
 		str = append(str, platforms.Format(platforms.Normalize(pp)))
@@ -755,8 +753,8 @@ func formatPlatforms(p []specs.Platform) []string {
 	return str
 }
 
-func parsePlatforms(platformsStr []string) ([]specs.Platform, error) {
-	out := make([]specs.Platform, 0, len(platformsStr))
+func parsePlatforms(platformsStr []string) ([]ocispecs.Platform, error) {
+	out := make([]ocispecs.Platform, 0, len(platformsStr))
 	for _, s := range platformsStr {
 		p, err := platforms.Parse(s)
 		if err != nil {
@@ -824,5 +822,5 @@ func (t *traceCollector) Export(ctx context.Context, req *tracev1.ExportTraceSer
 	if err != nil {
 		return nil, err
 	}
-	return &v1.ExportTraceServiceResponse{}, nil
+	return &tracev1.ExportTraceServiceResponse{}, nil
 }

@@ -23,7 +23,7 @@ import (
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/winlayers"
 	digest "github.com/opencontainers/go-digest"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
@@ -360,12 +360,23 @@ func (sr *immutableRef) Info() RefInfo {
 	}
 }
 
-func (sr *immutableRef) ociDesc() (ocispec.Descriptor, error) {
-	desc := ocispec.Descriptor{
+func (sr *immutableRef) ociDesc(ctx context.Context, dhs DescHandlers) (ocispecs.Descriptor, error) {
+	desc := ocispecs.Descriptor{
 		Digest:      digest.Digest(getBlob(sr.md)),
 		Size:        getBlobSize(sr.md),
 		MediaType:   getMediaType(sr.md),
 		Annotations: make(map[string]string),
+	}
+
+	if blobDesc, err := getBlobDesc(ctx, sr.cm.ContentStore, desc.Digest); err == nil {
+		if blobDesc.Annotations != nil {
+			desc.Annotations = blobDesc.Annotations
+		}
+	} else if dh, ok := dhs[desc.Digest]; ok {
+		// No blob metadtata is stored in the content store. Try to get annotations from desc handlers.
+		for k, v := range filterAnnotationsForSave(dh.Annotations) {
+			desc.Annotations[k] = v
+		}
 	}
 
 	diffID := getDiffID(sr.md)
@@ -377,7 +388,7 @@ func (sr *immutableRef) ociDesc() (ocispec.Descriptor, error) {
 	if !createdAt.IsZero() {
 		createdAt, err := createdAt.MarshalText()
 		if err != nil {
-			return ocispec.Descriptor{}, err
+			return ocispecs.Descriptor{}, err
 		}
 		desc.Annotations["buildkit/createdat"] = string(createdAt)
 	}
@@ -385,33 +396,37 @@ func (sr *immutableRef) ociDesc() (ocispec.Descriptor, error) {
 	return desc, nil
 }
 
-const compressionVariantDigestLabelPrefix = "buildkit.io/compression/digest."
+const (
+	compressionVariantDigestLabelPrefix      = "buildkit.io/compression/digest."
+	compressionVariantAnnotationsLabelPrefix = "buildkit.io/compression/annotation."
+	compressionVariantMediaTypeLabel         = "buildkit.io/compression/mediatype"
+)
 
 func compressionVariantDigestLabel(compressionType compression.Type) string {
 	return compressionVariantDigestLabelPrefix + compressionType.String()
 }
 
-func (sr *immutableRef) getCompressionBlob(ctx context.Context, compressionType compression.Type) (content.Info, error) {
+func (sr *immutableRef) getCompressionBlob(ctx context.Context, compressionType compression.Type) (ocispecs.Descriptor, error) {
 	cs := sr.cm.ContentStore
 	info, err := cs.Info(ctx, digest.Digest(getBlob(sr.md)))
 	if err != nil {
-		return content.Info{}, err
+		return ocispecs.Descriptor{}, err
 	}
 	dgstS, ok := info.Labels[compressionVariantDigestLabel(compressionType)]
 	if ok {
 		dgst, err := digest.Parse(dgstS)
 		if err != nil {
-			return content.Info{}, err
+			return ocispecs.Descriptor{}, err
 		}
-		return cs.Info(ctx, dgst)
+		return getBlobDesc(ctx, cs, dgst)
 	}
-	return content.Info{}, errdefs.ErrNotFound
+	return ocispecs.Descriptor{}, errdefs.ErrNotFound
 }
 
-func (sr *immutableRef) addCompressionBlob(ctx context.Context, dgst digest.Digest, compressionType compression.Type) error {
+func (sr *immutableRef) addCompressionBlob(ctx context.Context, desc ocispecs.Descriptor, compressionType compression.Type) error {
 	cs := sr.cm.ContentStore
 	if err := sr.cm.ManagerOpt.LeaseManager.AddResource(ctx, leases.Lease{ID: sr.ID()}, leases.Resource{
-		ID:   dgst.String(),
+		ID:   desc.Digest.String(),
 		Type: "content",
 	}); err != nil {
 		return err
@@ -424,11 +439,75 @@ func (sr *immutableRef) addCompressionBlob(ctx context.Context, dgst digest.Dige
 		info.Labels = make(map[string]string)
 	}
 	cachedVariantLabel := compressionVariantDigestLabel(compressionType)
-	info.Labels[cachedVariantLabel] = dgst.String()
+	info.Labels[cachedVariantLabel] = desc.Digest.String()
 	if _, err := cs.Update(ctx, info, "labels."+cachedVariantLabel); err != nil {
 		return err
 	}
+
+	info, err = cs.Info(ctx, desc.Digest)
+	if err != nil {
+		return err
+	}
+	var fields []string
+	info.Labels = map[string]string{
+		compressionVariantMediaTypeLabel: desc.MediaType,
+	}
+	fields = append(fields, "labels."+compressionVariantMediaTypeLabel)
+	for k, v := range filterAnnotationsForSave(desc.Annotations) {
+		k2 := compressionVariantAnnotationsLabelPrefix + k
+		info.Labels[k2] = v
+		fields = append(fields, "labels."+k2)
+	}
+	if _, err := cs.Update(ctx, info, fields...); err != nil {
+		return err
+	}
+
 	return nil
+}
+
+func filterAnnotationsForSave(a map[string]string) (b map[string]string) {
+	if a == nil {
+		return nil
+	}
+	for _, k := range append(eStargzAnnotations, containerdUncompressed) {
+		v, ok := a[k]
+		if !ok {
+			continue
+		}
+		if b == nil {
+			b = make(map[string]string)
+		}
+		b[k] = v
+	}
+	return
+}
+
+func getBlobDesc(ctx context.Context, cs content.Store, dgst digest.Digest) (ocispecs.Descriptor, error) {
+	info, err := cs.Info(ctx, dgst)
+	if err != nil {
+		return ocispecs.Descriptor{}, err
+	}
+	if info.Labels == nil {
+		return ocispecs.Descriptor{}, fmt.Errorf("no blob metadata is stored for %q", info.Digest)
+	}
+	mt, ok := info.Labels[compressionVariantMediaTypeLabel]
+	if !ok {
+		return ocispecs.Descriptor{}, fmt.Errorf("no media type is stored for %q", info.Digest)
+	}
+	desc := ocispecs.Descriptor{
+		Digest:    info.Digest,
+		Size:      info.Size,
+		MediaType: mt,
+	}
+	for k, v := range info.Labels {
+		if strings.HasPrefix(k, compressionVariantAnnotationsLabelPrefix) {
+			if desc.Annotations == nil {
+				desc.Annotations = make(map[string]string)
+			}
+			desc.Annotations[strings.TrimPrefix(k, compressionVariantAnnotationsLabelPrefix)] = v
+		}
+	}
+	return desc, nil
 }
 
 // order is from parent->child, sr will be at end of slice
@@ -510,11 +589,7 @@ func (sr *immutableRef) withRemoteSnapshotLabelsStargzMode(ctx context.Context, 
 		} else if _, ok := info.Labels["containerd.io/snapshot/remote"]; !ok {
 			continue // This isn't a remote snapshot; skip
 		}
-		desc, err := r.ociDesc()
-		if err != nil {
-			return err
-		}
-		dh := dhs[desc.Digest]
+		dh := dhs[digest.Digest(getBlob(r.md))]
 		if dh == nil {
 			continue // no info passed; skip
 		}
@@ -553,11 +628,7 @@ func (sr *immutableRef) prepareRemoteSnapshotsStargzMode(ctx context.Context, s 
 				continue
 			}
 
-			desc, err := r.ociDesc()
-			if err != nil {
-				return nil, err
-			}
-			dh := dhs[desc.Digest]
+			dh := dhs[digest.Digest(getBlob(r.md))]
 			if dh == nil {
 				// We cannot prepare remote snapshots without descHandler.
 				return nil, nil
@@ -585,7 +656,7 @@ func (sr *immutableRef) prepareRemoteSnapshotsStargzMode(ctx context.Context, s 
 			if r.parent != nil {
 				parentID = getSnapshotID(r.parent.md)
 			}
-			if err = r.cm.Snapshotter.Prepare(ctx, key, parentID, opts...); err != nil {
+			if err := r.cm.Snapshotter.Prepare(ctx, key, parentID, opts...); err != nil {
 				if errdefs.IsAlreadyExists(err) {
 					// Check if the targeting snapshot ID has been prepared as
 					// a remote snapshot in the snapshotter.
@@ -658,7 +729,7 @@ func (sr *immutableRef) extract(ctx context.Context, dhs DescHandlers, s session
 			})
 		}
 
-		desc, err := sr.ociDesc()
+		desc, err := sr.ociDesc(ctx, dhs)
 		if err != nil {
 			return nil, err
 		}

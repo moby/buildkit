@@ -6,27 +6,31 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/BurntSushi/toml"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
+	"github.com/pelletier/go-toml"
 	"github.com/pkg/errors"
 )
 
-func Load(r io.Reader) (config.Config, *toml.MetaData, error) {
+func Load(r io.Reader) (config.Config, error) {
 	var c config.Config
-	md, err := toml.DecodeReader(r, &c)
+	t, err := toml.LoadReader(r)
 	if err != nil {
-		return c, nil, errors.Wrap(err, "failed to parse config")
+		return c, errors.Wrap(err, "failed to parse config")
 	}
-	return c, &md, nil
+	err = t.Unmarshal(&c)
+	if err != nil {
+		return c, errors.Wrap(err, "failed to parse config")
+	}
+	return c, nil
 }
 
-func LoadFile(fp string) (config.Config, *toml.MetaData, error) {
+func LoadFile(fp string) (config.Config, error) {
 	f, err := os.Open(fp)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return config.Config{}, nil, nil
+			return config.Config{}, nil
 		}
-		return config.Config{}, nil, errors.Wrapf(err, "failed to load config from %s", fp)
+		return config.Config{}, errors.Wrapf(err, "failed to load config from %s", fp)
 	}
 	defer f.Close()
 	return Load(f)

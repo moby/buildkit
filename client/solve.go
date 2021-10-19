@@ -23,7 +23,7 @@ import (
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/entitlements"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	fstypes "github.com/tonistiigi/fsutil/types"
 	"go.opentelemetry.io/otel/trace"
@@ -314,7 +314,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 	// Update index.json of exported cache content store
 	// FIXME(AkihiroSuda): dedupe const definition of cache/remotecache.ExporterResponseManifestDesc = "cache.manifest"
 	if manifestDescJSON := res.ExporterResponse["cache.manifest"]; manifestDescJSON != "" {
-		var manifestDesc ocispec.Descriptor
+		var manifestDesc ocispecs.Descriptor
 		if err = json.Unmarshal([]byte(manifestDescJSON), &manifestDesc); err != nil {
 			return nil, err
 		}
@@ -452,7 +452,7 @@ func parseCacheOptions(ctx context.Context, opt SolveOpt) (*cacheOptions, error)
 					continue
 				}
 				for _, m := range idx.Manifests {
-					if (m.Annotations[ocispec.AnnotationRefName] == "latest" && attrs["tag"] == "") || (attrs["tag"] != "" && m.Annotations[ocispec.AnnotationRefName] == attrs["tag"]) {
+					if (m.Annotations[ocispecs.AnnotationRefName] == "latest" && attrs["tag"] == "") || (attrs["tag"] != "" && m.Annotations[ocispecs.AnnotationRefName] == attrs["tag"]) {
 						attrs["digest"] = string(m.Digest)
 						break
 					}

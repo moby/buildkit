@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"path"
 	"path/filepath"
@@ -31,7 +30,7 @@ import (
 	utilsystem "github.com/moby/buildkit/util/system"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
-	specs "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/semaphore"
 )
@@ -99,7 +98,7 @@ func (e *execOp) CacheMap(ctx context.Context, g session.Group, index int) (*sol
 
 	p := platforms.DefaultSpec()
 	if e.platform != nil {
-		p = specs.Platform{
+		p = ocispecs.Platform{
 			OS:           e.platform.OS,
 			Architecture: e.platform.Architecture,
 			Variant:      e.platform.Variant,
@@ -296,7 +295,7 @@ func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 		return nil, err
 	}
 
-	extraHosts, err := parseExtraHosts(e.op.Meta.ExtraHosts)
+	extraHosts, err := gateway.ParseExtraHosts(e.op.Meta.ExtraHosts)
 	if err != nil {
 		return nil, err
 	}
@@ -554,21 +553,6 @@ func proxyEnvList(p *pb.ProxyEnv) []string {
 		out = append(out, "ALL_PROXY="+v, "all_proxy="+v)
 	}
 	return out
-}
-
-func parseExtraHosts(ips []*pb.HostIP) ([]executor.HostIP, error) {
-	out := make([]executor.HostIP, len(ips))
-	for i, hip := range ips {
-		ip := net.ParseIP(hip.IP)
-		if ip == nil {
-			return nil, errors.Errorf("failed to parse IP %s", hip.IP)
-		}
-		out[i] = executor.HostIP{
-			IP:   ip,
-			Host: hip.Host,
-		}
-	}
-	return out, nil
 }
 
 func (e *execOp) Acquire(ctx context.Context) (solver.ReleaseFunc, error) {

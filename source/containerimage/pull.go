@@ -17,6 +17,7 @@ import (
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/snapshots"
+	"github.com/containerd/stargz-snapshotter/estargz"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/session"
@@ -33,7 +34,7 @@ import (
 	"github.com/moby/buildkit/util/resolver"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/identity"
-	specs "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 )
 
@@ -83,6 +84,7 @@ func (is *Source) ResolveImageConfig(ctx context.Context, ref string, opt llb.Re
 	if err != nil {
 		return "", nil, err
 	}
+	key += rm.String()
 
 	res, err := is.g.Do(ctx, key, func(ctx context.Context) (interface{}, error) {
 		res := resolver.DefaultPool.GetResolver(is.RegistryHosts, ref, "pull", sm, g).WithImageStore(is.ImageStore, rm)
@@ -152,7 +154,7 @@ type puller struct {
 	*pull.Puller
 }
 
-func mainManifestKey(ctx context.Context, desc specs.Descriptor, platform specs.Platform) (digest.Digest, error) {
+func mainManifestKey(ctx context.Context, desc ocispecs.Descriptor, platform ocispecs.Platform) (digest.Digest, error) {
 	dt, err := json.Marshal(struct {
 		Digest  digest.Digest
 		OS      string
@@ -220,6 +222,9 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 				if labels == nil {
 					labels = make(map[string]string)
 				}
+				for _, k := range []string{estargz.TOCJSONDigestAnnotation, estargz.StoreUncompressedSizeAnnotation} {
+					labels[k] = desc.Annotations[k]
+				}
 				labels["containerd.io/snapshot/remote/stargz.reference"] = p.manifest.Ref
 				labels["containerd.io/snapshot/remote/stargz.digest"] = desc.Digest.String()
 				var (
@@ -241,6 +246,7 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 					Provider:       p.manifest.Provider,
 					Progress:       progressController,
 					SnapshotLabels: labels,
+					Annotations:    desc.Annotations,
 					Ref:            p.manifest.Ref,
 				}
 			}
@@ -361,7 +367,7 @@ func markRefLayerTypeWindows(ref cache.ImmutableRef) error {
 // cacheKeyFromConfig returns a stable digest from image config. If image config
 // is a known oci image we will use chainID of layers.
 func cacheKeyFromConfig(dt []byte) digest.Digest {
-	var img specs.Image
+	var img ocispecs.Image
 	err := json.Unmarshal(dt, &img)
 	if err != nil {
 		return digest.FromBytes(dt)

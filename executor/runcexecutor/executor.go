@@ -21,7 +21,7 @@ import (
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/executor/oci"
-	"github.com/moby/buildkit/frontend/gateway/errdefs"
+	gatewayapi "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/network"
@@ -340,13 +340,13 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 
 func exitError(ctx context.Context, err error) error {
 	if err != nil {
-		exitErr := &errdefs.ExitError{
-			ExitCode: errdefs.UnknownExitStatus,
+		exitErr := &gatewayapi.ExitError{
+			ExitCode: gatewayapi.UnknownExitStatus,
 			Err:      err,
 		}
 		var runcExitError *runc.ExitError
 		if errors.As(err, &runcExitError) {
-			exitErr = &errdefs.ExitError{
+			exitErr = &gatewayapi.ExitError{
 				ExitCode: uint32(runcExitError.Status),
 			}
 		}

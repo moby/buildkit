@@ -19,10 +19,10 @@ produces:
 consumes:
   - "application/json"
   - "text/plain"
-basePath: "/v1.41"
+basePath: "/v1.42"
 info:
   title: "Docker Engine API"
-  version: "1.41"
+  version: "1.42"
   x-logo:
     url: "https://docs.docker.com/images/logo-docker-main.png"
   description: |
@@ -55,8 +55,8 @@ info:
     the URL is not supported by the daemon, a HTTP `400 Bad Request` error message
     is returned.
 
-    If you omit the version-prefix, the current version of the API (v1.41) is used.
-    For example, calling `/info` is the same as calling `/v1.41/info`. Using the
+    If you omit the version-prefix, the current version of the API (v1.42) is used.
+    For example, calling `/info` is the same as calling `/v1.42/info`. Using the
     API without a version-prefix is deprecated and will be removed in a future release.
 
     Engine releases in the near future should support this version of the API,
@@ -5583,12 +5583,12 @@ paths:
           schema:
             $ref: "#/definitions/ErrorResponse"
         404:
-          description: "no such container"
+          description: "no such image"
           schema:
             $ref: "#/definitions/ErrorResponse"
           examples:
             application/json:
-              message: "No such container: c2ada9df5af8"
+              message: "No such image: c2ada9df5af8"
         409:
           description: "conflict"
           schema:
@@ -7202,6 +7202,11 @@ paths:
             - `reference`=(`<image-name>[:<tag>]`)
             - `since`=(`<image-name>[:<tag>]`,  `<image id>` or `<image@digest>`)
           type: "string"
+        - name: "shared-size"
+          in: "query"
+          description: "Compute and show shared size as a `SharedSize` field on each image."
+          type: "boolean"
+          default: false
         - name: "digests"
           in: "query"
           description: "Show digest information as a `RepoDigests` field on each image."
@@ -8339,10 +8344,43 @@ paths:
                   UsageData:
                     Size: 10920104
                     RefCount: 2
+              BuildCache:
+                -
+                  ID: "hw53o5aio51xtltp5xjp8v7fx"
+                  Parent: ""
+                  Type: "regular"
+                  Description: "pulled from docker.io/library/debian@sha256:234cb88d3020898631af0ccbbcca9a66ae7306ecd30c9720690858c1b007d2a0"
+                  InUse: false
+                  Shared: true
+                  Size: 0
+                  CreatedAt: "2021-06-28T13:31:01.474619385Z"
+                  LastUsedAt: "2021-07-07T22:02:32.738075951Z"
+                  UsageCount: 26
+                -
+                  ID: "ndlpt0hhvkqcdfkputsk4cq9c"
+                  Parent: "hw53o5aio51xtltp5xjp8v7fx"
+                  Type: "regular"
+                  Description: "mount / from exec /bin/sh -c echo 'Binary::apt::APT::Keep-Downloaded-Packages \"true\";' > /etc/apt/apt.conf.d/keep-cache"
+                  InUse: false
+                  Shared: true
+                  Size: 51
+                  CreatedAt: "2021-06-28T13:31:03.002625487Z"
+                  LastUsedAt: "2021-07-07T22:02:32.773909517Z"
+                  UsageCount: 26
         500:
           description: "server error"
           schema:
             $ref: "#/definitions/ErrorResponse"
+      parameters:
+        - name: "type"
+          in: "query"
+          description: |
+            Object types, for which to compute and return data.
+          type: "array"
+          collectionFormat: multi
+          items:
+            type: "string"
+            enum: ["container", "image", "volume", "build-cache"]
       tags: ["System"]
   /images/{name}/get:
     get:

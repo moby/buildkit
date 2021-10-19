@@ -5,31 +5,44 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"sync"
 	"testing"
+	"time"
 
+	ctdcompression "github.com/containerd/containerd/archive/compression"
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/content/local"
 	"github.com/containerd/containerd/diff/apply"
+	"github.com/containerd/containerd/diff/walking"
+	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/leases"
 	ctdmetadata "github.com/containerd/containerd/metadata"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/containerd/snapshots/native"
+	"github.com/containerd/stargz-snapshotter/estargz"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
+	"github.com/moby/buildkit/util/compression"
+	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/leaseutil"
+	"github.com/moby/buildkit/util/winlayers"
 	digest "github.com/opencontainers/go-digest"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	bolt "go.etcd.io/bbolt"
+	"golang.org/x/sync/errgroup"
 )
 
 type cmOpt struct {
@@ -116,15 +129,17 @@ func newCacheManager(ctx context.Context, opt cmOpt) (co *cmOut, cleanup func() 
 		return nil, nil, err
 	}
 
-	lm := ctdmetadata.NewLeaseManager(mdb)
+	store = containerdsnapshot.NewContentStore(mdb.ContentStore(), ns)
+	lm := leaseutil.WithNamespace(ctdmetadata.NewLeaseManager(mdb), ns)
 
 	cm, err := NewManager(ManagerOpt{
 		Snapshotter:    snapshot.FromContainerdSnapshotter(opt.snapshotterName, containerdsnapshot.NSSnapshotter(ns, mdb.Snapshotter(opt.snapshotterName)), nil),
 		MetadataStore:  md,
-		ContentStore:   mdb.ContentStore(),
-		LeaseManager:   leaseutil.WithNamespace(lm, ns),
+		ContentStore:   store,
+		LeaseManager:   lm,
 		GarbageCollect: mdb.GarbageCollect,
-		Applier:        apply.NewFileSystemApplier(mdb.ContentStore()),
+		Applier:        winlayers.NewFileSystemApplierWithWindows(store, apply.NewFileSystemApplier(store)),
+		Differ:         winlayers.NewWalkingDiffWithWindows(store, walking.NewWalkingDiff(store)),
 	})
 	if err != nil {
 		return nil, nil, err
@@ -132,7 +147,7 @@ func newCacheManager(ctx context.Context, opt cmOpt) (co *cmOut, cleanup func() 
 	return &cmOut{
 		manager: cm,
 		lm:      lm,
-		cs:      mdb.ContentStore(),
+		cs:      store,
 	}, cleanup, nil
 }
 
@@ -503,8 +518,14 @@ func TestExtractOnMutable(t *testing.T) {
 	leaseCtx, done, err := leaseutil.WithLease(ctx, co.lm, leases.WithExpiration(0))
 	require.NoError(t, err)
 
-	err = snap.(*immutableRef).setBlob(leaseCtx, desc)
+	compressionType := compression.FromMediaType(desc.MediaType)
+	if compressionType == compression.UnknownCompression {
+		t.Errorf("unhandled layer media type: %q", desc.MediaType)
+	}
+	err = snap.(*immutableRef).setBlob(leaseCtx, compressionType, desc)
 	done(context.TODO())
+	require.NoError(t, err)
+	err = snap.(*immutableRef).setChains(leaseCtx)
 	require.NoError(t, err)
 
 	snap2, err := cm.GetByBlob(ctx, desc2, snap)
@@ -613,7 +634,7 @@ func TestSetBlob(t *testing.T) {
 	err = content.WriteBlob(ctx, co.cs, "ref1", bytes.NewBuffer(b), desc)
 	require.NoError(t, err)
 
-	err = snap.(*immutableRef).setBlob(ctx, ocispec.Descriptor{
+	err = snap.(*immutableRef).setBlob(ctx, compression.UnknownCompression, ocispecs.Descriptor{
 		Digest: digest.FromBytes([]byte("foobar")),
 		Annotations: map[string]string{
 			"containerd.io/uncompressed": digest.FromBytes([]byte("foobar2")).String(),
@@ -621,7 +642,13 @@ func TestSetBlob(t *testing.T) {
 	})
 	require.Error(t, err)
 
-	err = snap.(*immutableRef).setBlob(ctx, desc)
+	compressionType := compression.FromMediaType(desc.MediaType)
+	if compressionType == compression.UnknownCompression {
+		t.Errorf("unhandled layer media type: %q", desc.MediaType)
+	}
+	err = snap.(*immutableRef).setBlob(ctx, compressionType, desc)
+	require.NoError(t, err)
+	err = snap.(*immutableRef).setChains(ctx)
 	require.NoError(t, err)
 
 	info = snap.Info()
@@ -645,7 +672,13 @@ func TestSetBlob(t *testing.T) {
 	err = content.WriteBlob(ctx, co.cs, "ref2", bytes.NewBuffer(b2), desc2)
 	require.NoError(t, err)
 
-	err = snap2.(*immutableRef).setBlob(ctx, desc2)
+	compressionType2 := compression.FromMediaType(desc2.MediaType)
+	if compressionType2 == compression.UnknownCompression {
+		t.Errorf("unhandled layer media type: %q", desc2.MediaType)
+	}
+	err = snap2.(*immutableRef).setBlob(ctx, compressionType2, desc2)
+	require.NoError(t, err)
+	err = snap2.(*immutableRef).setChains(ctx)
 	require.NoError(t, err)
 
 	info2 := snap2.Info()
@@ -720,7 +753,7 @@ func TestSetBlob(t *testing.T) {
 	require.Equal(t, string(info6.ChainID), info6.SnapshotID)
 	require.Equal(t, info6.Extracted, false)
 
-	_, err = cm.GetByBlob(ctx, ocispec.Descriptor{
+	_, err = cm.GetByBlob(ctx, ocispecs.Descriptor{
 		Digest: digest.FromBytes([]byte("notexist")),
 		Annotations: map[string]string{
 			"containerd.io/uncompressed": digest.FromBytes([]byte("notexist")).String(),
@@ -997,6 +1030,276 @@ func TestLazyCommit(t *testing.T) {
 	require.Equal(t, true, errors.Is(err, errNotFound))
 }
 
+func TestGetRemote(t *testing.T) {
+	t.Parallel()
+	// windows fails when lazy blob is being extracted with "invalid windows mount type: 'bind'"
+	if runtime.GOOS != "linux" {
+		t.Skipf("unsupported GOOS: %s", runtime.GOOS)
+	}
+
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+
+	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+
+	co, cleanup, err := newCacheManager(ctx, cmOpt{
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	defer cleanup()
+	cm := co.manager
+
+	ctx, done, err := leaseutil.WithLease(ctx, co.lm, leaseutil.MakeTemporary)
+	require.NoError(t, err)
+	defer done(context.TODO())
+
+	contentBuffer := contentutil.NewBuffer()
+
+	descHandlers := DescHandlers(map[digest.Digest]*DescHandler{})
+
+	// make some lazy refs from blobs
+	expectedContent := map[digest.Digest]struct{}{}
+	variant := map[digest.Digest]digest.Digest{}
+	esgz2gzip := map[digest.Digest]digest.Digest{}
+	var descs []ocispecs.Descriptor
+	for i := 0; i < 2; i++ {
+		blobmap := map[string]string{"foo": strconv.Itoa(i)}
+		blobBytes, desc, err := mapToBlob(blobmap, true)
+		require.NoError(t, err)
+
+		expectedContent[desc.Digest] = struct{}{}
+		descs = append(descs, desc)
+
+		cw, err := contentBuffer.Writer(ctx)
+		require.NoError(t, err)
+		_, err = cw.Write(blobBytes)
+		require.NoError(t, err)
+		err = cw.Commit(ctx, 0, cw.Digest())
+		require.NoError(t, err)
+
+		descHandlers[desc.Digest] = &DescHandler{
+			Provider: func(_ session.Group) content.Provider { return contentBuffer },
+		}
+
+		uncompressedBlobBytes, uncompressedDesc, err := mapToBlob(blobmap, false)
+		require.NoError(t, err)
+		expectedContent[uncompressedDesc.Digest] = struct{}{}
+
+		esgzDgst, uncompressedEsgzDgst, err := esgzBlobDigest(uncompressedBlobBytes)
+		require.NoError(t, err)
+		expectedContent[esgzDgst] = struct{}{}
+		variant[uncompressedEsgzDgst] = uncompressedDesc.Digest
+		esgz2gzip[esgzDgst] = desc.Digest
+	}
+
+	// Create 3 levels of mutable refs, where each parent ref has 2 children (this tests parallel creation of
+	// overlapping blob chains).
+	lazyRef, err := cm.GetByBlob(ctx, descs[0], nil, descHandlers)
+	require.NoError(t, err)
+
+	refs := []ImmutableRef{lazyRef}
+	for i := 0; i < 3; i++ {
+		var newRefs []ImmutableRef
+		for j, ir := range refs {
+			for k := 0; k < 2; k++ {
+				mutRef, err := cm.New(ctx, ir, nil, descHandlers)
+				require.NoError(t, err)
+
+				m, err := mutRef.Mount(ctx, false, nil)
+				require.NoError(t, err)
+
+				lm := snapshot.LocalMounter(m)
+				target, err := lm.Mount()
+				require.NoError(t, err)
+
+				f, err := os.Create(filepath.Join(target, fmt.Sprintf("%d-%d-%d", i, j, k)))
+				require.NoError(t, err)
+				err = os.Chtimes(f.Name(), time.Unix(0, 0), time.Unix(0, 0))
+				require.NoError(t, err)
+
+				_, desc, err := fileToBlob(f, true)
+				require.NoError(t, err)
+				expectedContent[desc.Digest] = struct{}{}
+				uncompressedBlobBytes, uncompressedDesc, err := fileToBlob(f, false)
+				require.NoError(t, err)
+				expectedContent[uncompressedDesc.Digest] = struct{}{}
+				esgzDgst, uncompressedEsgzDgst, err := esgzBlobDigest(uncompressedBlobBytes)
+				require.NoError(t, err)
+				expectedContent[esgzDgst] = struct{}{}
+				variant[uncompressedEsgzDgst] = uncompressedDesc.Digest
+				esgz2gzip[esgzDgst] = desc.Digest
+
+				f.Close()
+				err = lm.Unmount()
+				require.NoError(t, err)
+
+				immutRef, err := mutRef.Commit(ctx)
+				require.NoError(t, err)
+				newRefs = append(newRefs, immutRef)
+			}
+		}
+		refs = newRefs
+	}
+
+	// also test the original lazyRef to get coverage for refs that don't have to be extracted from the snapshotter
+	lazyRef2, err := cm.GetByBlob(ctx, descs[1], nil, descHandlers)
+	require.NoError(t, err)
+	refs = append(refs, lazyRef2)
+
+	checkNumBlobs(ctx, t, co.cs, 1)
+
+	// Call GetRemote on all the refs
+	esgzRefs := map[digest.Digest]struct{}{}
+	var esgzRefsMu sync.Mutex
+	eg, egctx := errgroup.WithContext(ctx)
+	for _, ir := range refs {
+		ir := ir.(*immutableRef)
+		for _, compressionType := range []compression.Type{compression.Uncompressed, compression.Gzip, compression.EStargz} {
+			compressionType := compressionType
+			eg.Go(func() error {
+				remote, err := ir.GetRemote(egctx, true, compressionType, true, nil)
+				require.NoError(t, err)
+				refChain := ir.parentRefChain()
+				for i, desc := range remote.Descriptors {
+					switch compressionType {
+					case compression.Uncompressed:
+						require.Equal(t, ocispecs.MediaTypeImageLayer, desc.MediaType)
+					case compression.Gzip:
+						require.Equal(t, ocispecs.MediaTypeImageLayerGzip, desc.MediaType)
+					case compression.EStargz:
+						require.Equal(t, ocispecs.MediaTypeImageLayerGzip, desc.MediaType)
+					default:
+						require.Fail(t, "unhandled media type", compressionType)
+					}
+					dgst := desc.Digest
+					if v, ok := variant[dgst]; ok {
+						dgst = v
+					}
+					require.Contains(t, expectedContent, dgst)
+					checkDescriptor(ctx, t, co.cs, desc, compressionType)
+
+					r := refChain[i]
+					if compressionType == compression.EStargz {
+						if digest.Digest(getBlob(r.md)) == desc.Digest {
+							esgzRefsMu.Lock()
+							esgzRefs[desc.Digest] = struct{}{}
+							esgzRefsMu.Unlock()
+						}
+					}
+					isLazy, err := r.isLazy(egctx)
+					require.NoError(t, err)
+					needs, err := needsConversion(desc.MediaType, compressionType)
+					require.NoError(t, err)
+					if needs {
+						require.False(t, isLazy, "layer %q requires conversion so it must be unlazied", desc.Digest)
+					}
+					bDesc, err := r.getCompressionBlob(egctx, compressionType)
+					if isLazy {
+						require.Error(t, err)
+					} else {
+						require.NoError(t, err)
+						checkDescriptor(ctx, t, co.cs, bDesc, compressionType)
+						require.Equal(t, desc.Digest, bDesc.Digest)
+					}
+				}
+				return nil
+			})
+		}
+	}
+	require.NoError(t, eg.Wait())
+
+	for dgst := range esgzRefs {
+		gzipDgst, ok := esgz2gzip[dgst]
+		require.True(t, ok, "match for gzip blob: %s", dgst)
+		delete(expectedContent, gzipDgst) // esgz blob is reused also as gzip. duplicated gzip blob is unexpected.
+	}
+
+	// verify there's a 1-to-1 mapping between the content store and what we expected to be there
+	err = co.cs.Walk(ctx, func(info content.Info) error {
+		dgst := info.Digest
+		if v, ok := variant[dgst]; ok {
+			dgst = v
+		}
+		var matched bool
+		for expected := range expectedContent {
+			if dgst == expected {
+				delete(expectedContent, expected)
+				matched = true
+				break
+			}
+		}
+		require.True(t, matched, "match for blob: %s", info.Digest)
+		checkInfo(ctx, t, co.cs, info)
+		return nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, map[digest.Digest]struct{}{}, expectedContent)
+}
+
+func checkInfo(ctx context.Context, t *testing.T, cs content.Store, info content.Info) {
+	if info.Labels == nil {
+		return
+	}
+	uncompressedDgst, ok := info.Labels[containerdUncompressed]
+	if !ok {
+		return
+	}
+	ra, err := cs.ReaderAt(ctx, ocispecs.Descriptor{Digest: info.Digest})
+	require.NoError(t, err)
+	defer ra.Close()
+	decompressR, err := ctdcompression.DecompressStream(io.NewSectionReader(ra, 0, ra.Size()))
+	require.NoError(t, err)
+
+	diffID := digest.Canonical.Digester()
+	_, err = io.Copy(diffID.Hash(), decompressR)
+	require.NoError(t, err)
+	require.Equal(t, diffID.Digest().String(), uncompressedDgst)
+}
+
+func checkDescriptor(ctx context.Context, t *testing.T, cs content.Store, desc ocispecs.Descriptor, compressionType compression.Type) {
+	if desc.Annotations == nil {
+		return
+	}
+
+	// Check annotations exist
+	uncompressedDgst, ok := desc.Annotations[containerdUncompressed]
+	require.True(t, ok, "uncompressed digest annotation not found: %q", desc.Digest)
+	var uncompressedSize int64
+	if compressionType == compression.EStargz {
+		_, ok := desc.Annotations[estargz.TOCJSONDigestAnnotation]
+		require.True(t, ok, "toc digest annotation not found: %q", desc.Digest)
+		uncompressedSizeS, ok := desc.Annotations[estargz.StoreUncompressedSizeAnnotation]
+		require.True(t, ok, "uncompressed size annotation not found: %q", desc.Digest)
+		var err error
+		uncompressedSize, err = strconv.ParseInt(uncompressedSizeS, 10, 64)
+		require.NoError(t, err)
+	}
+
+	// Check annotation values are valid
+	c := new(counter)
+	ra, err := cs.ReaderAt(ctx, desc)
+	if err != nil && errdefs.IsNotFound(err) {
+		return // lazy layer
+	}
+	require.NoError(t, err)
+	defer ra.Close()
+	decompressR, err := ctdcompression.DecompressStream(io.NewSectionReader(ra, 0, ra.Size()))
+	require.NoError(t, err)
+
+	diffID := digest.Canonical.Digester()
+	_, err = io.Copy(io.MultiWriter(diffID.Hash(), c), decompressR)
+	require.NoError(t, err)
+	require.Equal(t, diffID.Digest().String(), uncompressedDgst)
+	if compressionType == compression.EStargz {
+		require.Equal(t, c.size(), uncompressedSize)
+	}
+}
+
 func checkDiskUsage(ctx context.Context, t *testing.T, cm Manager, inuse, unused int) {
 	du, err := cm.DiskUsage(ctx, client.DiskUsageInfo{})
 	require.NoError(t, err)
@@ -1010,6 +1313,33 @@ func checkDiskUsage(ctx context.Context, t *testing.T, cm Manager, inuse, unused
 	}
 	require.Equal(t, inuse, inuseActual)
 	require.Equal(t, unused, unusedActual)
+}
+
+func esgzBlobDigest(uncompressedBlobBytes []byte) (digest.Digest, digest.Digest, error) {
+	buf := new(bytes.Buffer)
+	compressorFunc, _ := writeEStargz()
+	w, err := compressorFunc(buf, ocispecs.MediaTypeImageLayerGzip)
+	if err != nil {
+		return "", "", err
+	}
+	if _, err := io.Copy(w, bytes.NewReader(uncompressedBlobBytes)); err != nil {
+		return "", "", err
+	}
+	if err := w.Close(); err != nil {
+		return "", "", err
+	}
+	b := buf.Bytes()
+	esgzDgst := digest.FromBytes(b)
+	ur, err := gzip.NewReader(bytes.NewReader(b))
+	if err != nil {
+		return "", "", err
+	}
+	defer ur.Close()
+	uncompressedDgst, err := digest.FromReader(ur)
+	if err != nil {
+		return "", "", err
+	}
+	return esgzDgst, uncompressedDgst, nil
 }
 
 func checkNumBlobs(ctx context.Context, t *testing.T, cs content.Store, expected int) {
@@ -1052,7 +1382,7 @@ func (b bufferCloser) Close() error {
 	return nil
 }
 
-func mapToBlob(m map[string]string, compress bool) ([]byte, ocispec.Descriptor, error) {
+func mapToBlob(m map[string]string, compress bool) ([]byte, ocispecs.Descriptor, error) {
 	buf := bytes.NewBuffer(nil)
 	sha := digest.SHA256.Digester()
 
@@ -1067,24 +1397,76 @@ func mapToBlob(m map[string]string, compress bool) ([]byte, ocispec.Descriptor, 
 			Name: k,
 			Size: int64(len(v)),
 		}); err != nil {
-			return nil, ocispec.Descriptor{}, err
+			return nil, ocispecs.Descriptor{}, err
 		}
 		if _, err := tw.Write([]byte(v)); err != nil {
-			return nil, ocispec.Descriptor{}, err
+			return nil, ocispecs.Descriptor{}, err
 		}
 	}
 	if err := tw.Close(); err != nil {
-		return nil, ocispec.Descriptor{}, err
+		return nil, ocispecs.Descriptor{}, err
 	}
 	if err := dest.Close(); err != nil {
-		return nil, ocispec.Descriptor{}, err
+		return nil, ocispecs.Descriptor{}, err
 	}
 
-	mediaType := ocispec.MediaTypeImageLayer
+	mediaType := ocispecs.MediaTypeImageLayer
 	if compress {
-		mediaType = ocispec.MediaTypeImageLayerGzip
+		mediaType = ocispecs.MediaTypeImageLayerGzip
 	}
-	return buf.Bytes(), ocispec.Descriptor{
+	return buf.Bytes(), ocispecs.Descriptor{
+		Digest:    digest.FromBytes(buf.Bytes()),
+		MediaType: mediaType,
+		Size:      int64(buf.Len()),
+		Annotations: map[string]string{
+			"containerd.io/uncompressed": sha.Digest().String(),
+		},
+	}, nil
+}
+
+func fileToBlob(file *os.File, compress bool) ([]byte, ocispecs.Descriptor, error) {
+	buf := bytes.NewBuffer(nil)
+	sha := digest.SHA256.Digester()
+
+	var dest io.WriteCloser = bufferCloser{buf}
+	if compress {
+		dest = gzip.NewWriter(buf)
+	}
+	tw := tar.NewWriter(io.MultiWriter(sha.Hash(), dest))
+
+	info, err := file.Stat()
+	if err != nil {
+		return nil, ocispecs.Descriptor{}, err
+	}
+
+	fi, err := tar.FileInfoHeader(info, "")
+	if err != nil {
+		return nil, ocispecs.Descriptor{}, err
+	}
+	fi.Format = tar.FormatPAX
+	fi.ModTime = fi.ModTime.Truncate(time.Second)
+	fi.AccessTime = time.Time{}
+	fi.ChangeTime = time.Time{}
+
+	if err := tw.WriteHeader(fi); err != nil {
+		return nil, ocispecs.Descriptor{}, err
+	}
+	if _, err := io.Copy(tw, file); err != nil {
+		return nil, ocispecs.Descriptor{}, err
+	}
+
+	if err := tw.Close(); err != nil {
+		return nil, ocispecs.Descriptor{}, err
+	}
+	if err := dest.Close(); err != nil {
+		return nil, ocispecs.Descriptor{}, err
+	}
+
+	mediaType := ocispecs.MediaTypeImageLayer
+	if compress {
+		mediaType = ocispecs.MediaTypeImageLayerGzip
+	}
+	return buf.Bytes(), ocispecs.Descriptor{
 		Digest:    digest.FromBytes(buf.Bytes()),
 		MediaType: mediaType,
 		Size:      int64(buf.Len()),

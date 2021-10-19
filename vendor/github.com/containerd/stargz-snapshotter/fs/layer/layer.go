@@ -209,6 +209,7 @@ func newCache(root string, cacheType string, cfg config.Config) (cache.BlobCache
 			DataCache: dCache,
 			FdCache:   fCache,
 			BufPool:   bufPool,
+			Direct:    dcc.Direct,
 		},
 	)
 }

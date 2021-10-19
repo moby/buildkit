@@ -41,7 +41,7 @@ import (
 	"github.com/moby/buildkit/util/testutil"
 	"github.com/moby/buildkit/util/testutil/httpserver"
 	"github.com/moby/buildkit/util/testutil/integration"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -1349,13 +1349,13 @@ COPY Dockerfile .
 	m, err := testutil.ReadTarToMap(dt, false)
 	require.NoError(t, err)
 
-	var idx ocispec.Index
+	var idx ocispecs.Index
 	err = json.Unmarshal(m["index.json"].Data, &idx)
 	require.NoError(t, err)
 
 	mlistHex := idx.Manifests[0].Digest.Hex()
 
-	idx = ocispec.Index{}
+	idx = ocispecs.Index{}
 	err = json.Unmarshal(m["blobs/sha256/"+mlistHex].Data, &idx)
 	require.NoError(t, err)
 
@@ -1372,13 +1372,13 @@ COPY Dockerfile .
 		t.Run(exp.p, func(t *testing.T) {
 			require.Equal(t, exp.p, platforms.Format(*idx.Manifests[i].Platform))
 
-			var mfst ocispec.Manifest
+			var mfst ocispecs.Manifest
 			err = json.Unmarshal(m["blobs/sha256/"+idx.Manifests[i].Digest.Hex()].Data, &mfst)
 			require.NoError(t, err)
 
 			require.Equal(t, 1, len(mfst.Layers))
 
-			var img ocispec.Image
+			var img ocispecs.Image
 			err = json.Unmarshal(m["blobs/sha256/"+mfst.Config.Digest.Hex()].Data, &img)
 			require.NoError(t, err)
 
@@ -1480,13 +1480,13 @@ COPY arch-$TARGETARCH whoami
 	m, err := testutil.ReadTarToMap(dt, false)
 	require.NoError(t, err)
 
-	var idx ocispec.Index
+	var idx ocispecs.Index
 	err = json.Unmarshal(m["index.json"].Data, &idx)
 	require.NoError(t, err)
 
 	mlistHex := idx.Manifests[0].Digest.Hex()
 
-	idx = ocispec.Index{}
+	idx = ocispecs.Index{}
 	err = json.Unmarshal(m["blobs/sha256/"+mlistHex].Data, &idx)
 	require.NoError(t, err)
 
@@ -1505,7 +1505,7 @@ COPY arch-$TARGETARCH whoami
 		t.Run(exp.p, func(t *testing.T) {
 			require.Equal(t, exp.p, platforms.Format(*idx.Manifests[i].Platform))
 
-			var mfst ocispec.Manifest
+			var mfst ocispecs.Manifest
 			err = json.Unmarshal(m["blobs/sha256/"+idx.Manifests[i].Digest.Hex()].Data, &mfst)
 			require.NoError(t, err)
 
@@ -1515,7 +1515,7 @@ COPY arch-$TARGETARCH whoami
 			require.NoError(t, err)
 			require.Equal(t, exp.dt, string(m2["whoami"].Data))
 
-			var img ocispec.Image
+			var img ocispecs.Image
 			err = json.Unmarshal(m["blobs/sha256/"+mfst.Config.Digest.Hex()].Data, &img)
 			require.NoError(t, err)
 
@@ -1891,7 +1891,7 @@ ENTRYPOINT my entrypoint
 	dt, err := content.ReadBlob(ctx, ctr.ContentStore(), desc)
 	require.NoError(t, err)
 
-	var ociimg ocispec.Image
+	var ociimg ocispecs.Image
 	err = json.Unmarshal(dt, &ociimg)
 	require.NoError(t, err)
 
@@ -1984,7 +1984,7 @@ COPY foo .
 	dt, err := content.ReadBlob(ctx, ctr.ContentStore(), desc)
 	require.NoError(t, err)
 
-	var ociimg ocispec.Image
+	var ociimg ocispecs.Image
 	err = json.Unmarshal(dt, &ociimg)
 	require.NoError(t, err)
 
@@ -2639,7 +2639,7 @@ ENV foo=bar
 	dt, err := content.ReadBlob(ctx, client.ContentStore(), desc)
 	require.NoError(t, err)
 
-	var ociimg ocispec.Image
+	var ociimg ocispecs.Image
 	err = json.Unmarshal(dt, &ociimg)
 	require.NoError(t, err)
 
@@ -2723,7 +2723,7 @@ EXPOSE 5000
 	dt, err := content.ReadBlob(ctx, client.ContentStore(), desc)
 	require.NoError(t, err)
 
-	var ociimg ocispec.Image
+	var ociimg ocispecs.Image
 	err = json.Unmarshal(dt, &ociimg)
 	require.NoError(t, err)
 
@@ -2932,7 +2932,7 @@ RUN ["ls"]
 	dt, err := content.ReadBlob(ctx, client.ContentStore(), desc)
 	require.NoError(t, err)
 
-	var ociimg ocispec.Image
+	var ociimg ocispecs.Image
 	err = json.Unmarshal(dt, &ociimg)
 	require.NoError(t, err)
 
@@ -3105,7 +3105,7 @@ USER nobody
 	dt, err = content.ReadBlob(ctx, client.ContentStore(), desc)
 	require.NoError(t, err)
 
-	var ociimg ocispec.Image
+	var ociimg ocispecs.Image
 	err = json.Unmarshal(dt, &ociimg)
 	require.NoError(t, err)
 
@@ -3917,7 +3917,7 @@ LABEL foo=bar
 	dt, err := content.ReadBlob(ctx, client.ContentStore(), desc)
 	require.NoError(t, err)
 
-	var ociimg ocispec.Image
+	var ociimg ocispecs.Image
 	err = json.Unmarshal(dt, &ociimg)
 	require.NoError(t, err)
 
@@ -5381,16 +5381,16 @@ func fixedWriteCloser(wc io.WriteCloser) func(map[string]string) (io.WriteCloser
 }
 
 type imageInfo struct {
-	desc   ocispec.Descriptor
+	desc   ocispecs.Descriptor
 	layers []map[string]*testutil.TarItem
 }
 
-func readIndex(ctx context.Context, p content.Provider, desc ocispec.Descriptor) (map[string]*imageInfo, error) {
+func readIndex(ctx context.Context, p content.Provider, desc ocispecs.Descriptor) (map[string]*imageInfo, error) {
 	dt, err := content.ReadBlob(ctx, p, desc)
 	if err != nil {
 		return nil, err
 	}
-	var idx ocispec.Index
+	var idx ocispecs.Index
 	if err := json.Unmarshal(dt, &idx); err != nil {
 		return nil, err
 	}
@@ -5406,7 +5406,7 @@ func readIndex(ctx context.Context, p content.Provider, desc ocispec.Descriptor)
 	}
 	return mi, nil
 }
-func readImage(ctx context.Context, p content.Provider, desc ocispec.Descriptor) (*imageInfo, error) {
+func readImage(ctx context.Context, p content.Provider, desc ocispecs.Descriptor) (*imageInfo, error) {
 	ii := &imageInfo{desc: desc}
 
 	dt, err := content.ReadBlob(ctx, p, desc)
@@ -5414,7 +5414,7 @@ func readImage(ctx context.Context, p content.Provider, desc ocispec.Descriptor)
 		return nil, err
 	}
 
-	var mfst ocispec.Manifest
+	var mfst ocispecs.Manifest
 	if err := json.Unmarshal(dt, &mfst); err != nil {
 		return nil, err
 	}

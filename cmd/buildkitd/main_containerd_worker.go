@@ -28,7 +28,7 @@ const (
 )
 
 func init() {
-	defaultConf, _, _ := defaultConf()
+	defaultConf, _ := defaultConf()
 
 	enabledValue := func(b *bool) string {
 		if b == nil {

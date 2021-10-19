@@ -59,6 +59,10 @@ type DirectoryCacheConfig struct {
 
 	// BufPool will be used for pooling bytes.Buffer.
 	BufPool *sync.Pool
+
+	// Direct forcefully enables direct mode for all operation in cache.
+	// Thus operation won't use on-memory caches.
+	Direct bool
 }
 
 // TODO: contents validation.
@@ -156,6 +160,7 @@ func NewDirectoryCache(directory string, config DirectoryCacheConfig) (BlobCache
 		directory:    directory,
 		wipDirectory: wipdir,
 		bufPool:      bufPool,
+		direct:       config.Direct,
 	}
 	dc.syncAdd = config.SyncAdd
 	return dc, nil
@@ -172,6 +177,7 @@ type directoryCache struct {
 	bufPool *sync.Pool
 
 	syncAdd bool
+	direct  bool
 
 	closed   bool
 	closedMu sync.Mutex
@@ -187,7 +193,7 @@ func (dc *directoryCache) Get(key string, opts ...Option) (Reader, error) {
 		opt = o(opt)
 	}
 
-	if !opt.direct {
+	if !dc.direct && !opt.direct {
 		// Get data from memory
 		if b, done, ok := dc.cache.Get(key); ok {
 			return &reader{
@@ -222,7 +228,7 @@ func (dc *directoryCache) Get(key string, opts ...Option) (Reader, error) {
 	// If "direct" option is specified, do not cache the file on memory.
 	// This option is useful for preventing memory cache from being polluted by data
 	// that won't be accessed immediately.
-	if opt.direct {
+	if dc.direct || opt.direct {
 		return &reader{
 			ReaderAt:  file,
 			closeFunc: func() error { return file.Close() },
@@ -285,7 +291,7 @@ func (dc *directoryCache) Add(key string, opts ...Option) (Writer, error) {
 	// If "direct" option is specified, do not cache the passed data on memory.
 	// This option is useful for preventing memory cache from being polluted by data
 	// that won't be accessed immediately.
-	if opt.direct {
+	if dc.direct || opt.direct {
 		return w, nil
 	}
 

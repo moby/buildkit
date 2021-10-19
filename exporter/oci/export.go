@@ -20,8 +20,9 @@ import (
 	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/progress"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc/codes"
 )
 
@@ -58,6 +59,7 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 		imageExporter:    e,
 		layerCompression: compression.Default,
 	}
+	var esgz bool
 	for k, v := range opt {
 		switch k {
 		case keyImageName:
@@ -66,6 +68,9 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 			switch v {
 			case "gzip":
 				i.layerCompression = compression.Gzip
+			case "estargz":
+				i.layerCompression = compression.EStargz
+				esgz = true
 			case "uncompressed":
 				i.layerCompression = compression.Uncompressed
 			default:
@@ -103,6 +108,10 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 		i.ociTypes = e.opt.Variant == VariantOCI
 	} else {
 		i.ociTypes = *ot
+	}
+	if esgz && !i.ociTypes {
+		logrus.Warn("forcibly turning on oci-mediatype mode for estargz")
+		i.ociTypes = true
 	}
 	return i, nil
 }
@@ -148,7 +157,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	if desc.Annotations == nil {
 		desc.Annotations = map[string]string{}
 	}
-	desc.Annotations[ocispec.AnnotationCreated] = time.Now().UTC().Format(time.RFC3339)
+	desc.Annotations[ocispecs.AnnotationCreated] = time.Now().UTC().Format(time.RFC3339)
 
 	resp := make(map[string]string)
 	resp[exptypes.ExporterImageDigestKey] = desc.Digest.String()

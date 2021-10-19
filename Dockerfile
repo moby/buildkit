@@ -1,7 +1,7 @@
 # syntax = docker/dockerfile:1.3
 
-ARG RUNC_VERSION=v1.0.0
-ARG CONTAINERD_VERSION=v1.5.3
+ARG RUNC_VERSION=v1.0.1
+ARG CONTAINERD_VERSION=v1.5.5
 # containerd v1.4 for integration tests
 ARG CONTAINERD_ALT_VERSION=v1.4.6
 # available targets: buildkitd, buildkitd.oci_only, buildkitd.containerd_only
@@ -21,18 +21,10 @@ RUN apk add --no-cache git
 # xx is a helper for cross-compilation
 FROM --platform=$BUILDPLATFORM tonistiigi/xx@sha256:1e96844fadaa2f9aea021b2b05299bc02fe4c39a92d8e735b93e8e2b15610128 AS xx
 
-FROM --platform=$BUILDPLATFORM golang:1.16-alpine AS golatest
-
-FROM golatest AS go-linux
-FROM golatest AS go-darwin
-FROM golatest AS go-windows-amd64
-FROM golatest AS go-windows-386
-FROM golatest AS go-windows-arm
-FROM --platform=$BUILDPLATFORM golang:1.17beta1-alpine AS go-windows-arm64
-FROM go-windows-${TARGETARCH} AS go-windows
+FROM --platform=$BUILDPLATFORM golang:1.17-alpine AS golatest
 
 # gobuild is base stage for compiling go/cgo
-FROM go-${TARGETOS} AS gobuild-base
+FROM golatest AS gobuild-base
 RUN apk add --no-cache file bash clang lld pkgconfig git make
 COPY --from=xx / /
 

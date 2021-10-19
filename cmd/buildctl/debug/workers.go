@@ -11,7 +11,7 @@ import (
 	"github.com/containerd/containerd/platforms"
 	"github.com/moby/buildkit/client"
 	bccommon "github.com/moby/buildkit/cmd/buildctl/common"
-	specs "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/tonistiigi/units"
 	"github.com/urfave/cli"
 )
@@ -106,7 +106,7 @@ func commandContext(c *cli.Context) context.Context {
 	return c.App.Metadata["context"].(context.Context)
 }
 
-func joinPlatforms(p []specs.Platform) string {
+func joinPlatforms(p []ocispecs.Platform) string {
 	str := make([]string, 0, len(p))
 	for _, pp := range p {
 		str = append(str, platforms.Format(platforms.Normalize(pp)))

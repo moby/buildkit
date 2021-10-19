@@ -3,7 +3,7 @@
 # xx is a helper for cross-compilation
 FROM --platform=$BUILDPLATFORM tonistiigi/xx:golang@sha256:810dc54d5144f133a218e88e319184bf8b9ce01d37d46ddb37573e90decd9eef AS xx
 
-FROM --platform=$BUILDPLATFORM golang:1.16-alpine AS base
+FROM --platform=$BUILDPLATFORM golang:1.17-alpine AS base
 RUN apk add git bash
 COPY --from=xx / /
 WORKDIR /src

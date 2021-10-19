@@ -5,7 +5,7 @@ import (
 
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/identity"
-	"github.com/opencontainers/go-digest"
+	digest "github.com/opencontainers/go-digest"
 )
 
 type Logger func(*client.SolveStatus)

@@ -11,8 +11,8 @@ import (
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/remotes"
 	"github.com/docker/distribution/reference"
-	"github.com/opencontainers/go-digest"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	digest "github.com/opencontainers/go-digest"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/semaphore"
 )
@@ -30,7 +30,7 @@ type req struct {
 	ref string
 }
 
-func (r *req) acquire(ctx context.Context, desc ocispec.Descriptor) (func(), error) {
+func (r *req) acquire(ctx context.Context, desc ocispecs.Descriptor) (func(), error) {
 	// json request get one additional connection
 	highPriority := strings.HasSuffix(desc.MediaType, "+json")
 
@@ -87,7 +87,7 @@ type pusher struct {
 	req *req
 }
 
-func (p *pusher) Push(ctx context.Context, desc ocispec.Descriptor) (content.Writer, error) {
+func (p *pusher) Push(ctx context.Context, desc ocispecs.Descriptor) (content.Writer, error) {
 	release, err := p.req.acquire(ctx, desc)
 	if err != nil {
 		return nil, err
@@ -139,7 +139,7 @@ type fetcher struct {
 	req *req
 }
 
-func (f *fetcher) Fetch(ctx context.Context, desc ocispec.Descriptor) (io.ReadCloser, error) {
+func (f *fetcher) Fetch(ctx context.Context, desc ocispecs.Descriptor) (io.ReadCloser, error) {
 	release, err := f.req.acquire(ctx, desc)
 	if err != nil {
 		return nil, err

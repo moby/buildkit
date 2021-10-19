@@ -27,7 +27,6 @@ import (
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/frontend"
 	gwclient "github.com/moby/buildkit/frontend/gateway/client"
-	gwerrdefs "github.com/moby/buildkit/frontend/gateway/errdefs"
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
@@ -40,8 +39,8 @@ import (
 	"github.com/moby/buildkit/util/stack"
 	"github.com/moby/buildkit/util/tracing"
 	"github.com/moby/buildkit/worker"
-	"github.com/opencontainers/go-digest"
-	specs "github.com/opencontainers/image-spec/specs-go/v1"
+	digest "github.com/opencontainers/go-digest"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"golang.org/x/net/http2"
 	"golang.org/x/sync/errgroup"
@@ -85,7 +84,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 	}
 
 	_, isDevel := opts[keyDevel]
-	var img specs.Image
+	var img ocispecs.Image
 	var mfstDigest digest.Digest
 	var rootFS cache.MutableRef
 	var readonly bool // TODO: try to switch to read-only by default.
@@ -468,9 +467,9 @@ type llbBridgeForwarder struct {
 
 func (lbf *llbBridgeForwarder) ResolveImageConfig(ctx context.Context, req *pb.ResolveImageConfigRequest) (*pb.ResolveImageConfigResponse, error) {
 	ctx = tracing.ContextWithSpanFromContext(ctx, lbf.callCtx)
-	var platform *specs.Platform
+	var platform *ocispecs.Platform
 	if p := req.Platform; p != nil {
-		platform = &specs.Platform{
+		platform = &ocispecs.Platform{
 			OS:           p.OS,
 			Architecture: p.Architecture,
 			Variant:      p.Variant,
@@ -896,6 +895,11 @@ func (lbf *llbBridgeForwarder) NewContainer(ctx context.Context, in *pb.NewConta
 		return nil, stack.Enable(err)
 	}
 
+	ctrReq.ExtraHosts, err = ParseExtraHosts(in.ExtraHosts)
+	if err != nil {
+		return nil, stack.Enable(err)
+	}
+
 	ctr, err := NewContainer(context.Background(), w, lbf.sm, group, ctrReq)
 	if err != nil {
 		return nil, stack.Enable(err)
@@ -1142,14 +1146,15 @@ func (lbf *llbBridgeForwarder) ExecProcess(srv pb.LLBBridge_ExecProcessServer) e
 				pios[pid] = pio
 
 				proc, err := ctr.Start(initCtx, gwclient.StartRequest{
-					Args:   init.Meta.Args,
-					Env:    init.Meta.Env,
-					User:   init.Meta.User,
-					Cwd:    init.Meta.Cwd,
-					Tty:    init.Tty,
-					Stdin:  pio.processReaders[0],
-					Stdout: pio.processWriters[1],
-					Stderr: pio.processWriters[2],
+					Args:         init.Meta.Args,
+					Env:          init.Meta.Env,
+					User:         init.Meta.User,
+					Cwd:          init.Meta.Cwd,
+					Tty:          init.Tty,
+					Stdin:        pio.processReaders[0],
+					Stdout:       pio.processWriters[1],
+					Stderr:       pio.processWriters[2],
+					SecurityMode: init.Security,
 				})
 				if err != nil {
 					return stack.Enable(err)
@@ -1175,10 +1180,10 @@ func (lbf *llbBridgeForwarder) ExecProcess(srv pb.LLBBridge_ExecProcessServer) e
 					err := proc.Wait()
 
 					var statusCode uint32
-					var exitError *gwerrdefs.ExitError
+					var exitError *pb.ExitError
 					var statusError *rpc.Status
 					if err != nil {
-						statusCode = gwerrdefs.UnknownExitStatus
+						statusCode = pb.UnknownExitStatus
 						st, _ := status.FromError(grpcerrors.ToGRPC(err))
 						stp := st.Proto()
 						statusError = &rpc.Status{

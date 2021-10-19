@@ -15,7 +15,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -45,7 +44,7 @@ import (
 	"github.com/moby/buildkit/util/testutil/echoserver"
 	"github.com/moby/buildkit/util/testutil/httpserver"
 	"github.com/moby/buildkit/util/testutil/integration"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/ssh/agent"
@@ -751,7 +750,7 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 			_, ok := m["oci-layout"]
 			require.True(t, ok)
 
-			var index ocispec.Index
+			var index ocispecs.Index
 			err = json.Unmarshal(m["index.json"].Data, &index)
 			require.NoError(t, err)
 			require.Equal(t, 2, index.SchemaVersion)
@@ -1688,18 +1687,18 @@ func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 		_, ok := m["oci-layout"]
 		require.True(t, ok)
 
-		var index ocispec.Index
+		var index ocispecs.Index
 		err = json.Unmarshal(m["index.json"].Data, &index)
 		require.NoError(t, err)
 		require.Equal(t, 2, index.SchemaVersion)
 		require.Equal(t, 1, len(index.Manifests))
 
-		var mfst ocispec.Manifest
+		var mfst ocispecs.Manifest
 		err = json.Unmarshal(m["blobs/sha256/"+index.Manifests[0].Digest.Hex()].Data, &mfst)
 		require.NoError(t, err)
 		require.Equal(t, 2, len(mfst.Layers))
 
-		var ociimg ocispec.Image
+		var ociimg ocispecs.Image
 		err = json.Unmarshal(m["blobs/sha256/"+mfst.Config.Digest.Hex()].Data, &ociimg)
 		require.NoError(t, err)
 		require.Equal(t, "layers", ociimg.RootFS.Type)
@@ -2089,7 +2088,7 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 
 	var mfst = struct {
 		MediaType string `json:"mediaType,omitempty"`
-		ocispec.Manifest
+		ocispecs.Manifest
 	}{}
 
 	err = json.Unmarshal(dt, &mfst)
@@ -2098,7 +2097,7 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, images.MediaTypeDockerSchema2Layer, mfst.Layers[0].MediaType)
 	require.Equal(t, images.MediaTypeDockerSchema2LayerGzip, mfst.Layers[1].MediaType)
 
-	dt, err = content.ReadBlob(ctx, img.ContentStore(), ocispec.Descriptor{Digest: mfst.Layers[0].Digest})
+	dt, err = content.ReadBlob(ctx, img.ContentStore(), ocispecs.Descriptor{Digest: mfst.Layers[0].Digest})
 	require.NoError(t, err)
 
 	m, err := testutil.ReadTarToMap(dt, false)
@@ -2109,7 +2108,7 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, int32(item.Header.Typeflag), tar.TypeReg)
 	require.Equal(t, []byte("uncompressed"), item.Data)
 
-	dt, err = content.ReadBlob(ctx, img.ContentStore(), ocispec.Descriptor{Digest: mfst.Layers[1].Digest})
+	dt, err = content.ReadBlob(ctx, img.ContentStore(), ocispecs.Descriptor{Digest: mfst.Layers[1].Digest})
 	require.NoError(t, err)
 
 	m, err = testutil.ReadTarToMap(dt, true)
@@ -2134,7 +2133,7 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 
 	mfst = struct {
 		MediaType string `json:"mediaType,omitempty"`
-		ocispec.Manifest
+		ocispecs.Manifest
 	}{}
 
 	err = json.Unmarshal(dt, &mfst)
@@ -2143,7 +2142,7 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, images.MediaTypeDockerSchema2LayerGzip, mfst.Layers[0].MediaType)
 	require.Equal(t, images.MediaTypeDockerSchema2LayerGzip, mfst.Layers[1].MediaType)
 
-	dt, err = content.ReadBlob(ctx, img.ContentStore(), ocispec.Descriptor{Digest: mfst.Layers[0].Digest})
+	dt, err = content.ReadBlob(ctx, img.ContentStore(), ocispecs.Descriptor{Digest: mfst.Layers[0].Digest})
 	require.NoError(t, err)
 
 	m, err = testutil.ReadTarToMap(dt, true)
@@ -2154,7 +2153,7 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, int32(item.Header.Typeflag), tar.TypeReg)
 	require.Equal(t, []byte("uncompressed"), item.Data)
 
-	dt, err = content.ReadBlob(ctx, img.ContentStore(), ocispec.Descriptor{Digest: mfst.Layers[1].Digest})
+	dt, err = content.ReadBlob(ctx, img.ContentStore(), ocispecs.Descriptor{Digest: mfst.Layers[1].Digest})
 	require.NoError(t, err)
 
 	m, err = testutil.ReadTarToMap(dt, true)
@@ -2275,7 +2274,7 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	dt, err = content.ReadBlob(ctx, img.ContentStore(), desc)
 	require.NoError(t, err)
 
-	var ociimg ocispec.Image
+	var ociimg ocispecs.Image
 	err = json.Unmarshal(dt, &ociimg)
 	require.NoError(t, err)
 
@@ -2308,7 +2307,7 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 
 	var mfst = struct {
 		MediaType string `json:"mediaType,omitempty"`
-		ocispec.Manifest
+		ocispecs.Manifest
 	}{}
 
 	err = json.Unmarshal(dt, &mfst)
@@ -2319,7 +2318,7 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, images.MediaTypeDockerSchema2LayerGzip, mfst.Layers[0].MediaType)
 	require.Equal(t, images.MediaTypeDockerSchema2LayerGzip, mfst.Layers[1].MediaType)
 
-	dt, err = content.ReadBlob(ctx, img.ContentStore(), ocispec.Descriptor{Digest: mfst.Layers[0].Digest})
+	dt, err = content.ReadBlob(ctx, img.ContentStore(), ocispecs.Descriptor{Digest: mfst.Layers[0].Digest})
 	require.NoError(t, err)
 
 	m, err := testutil.ReadTarToMap(dt, true)
@@ -2342,7 +2341,7 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	_, ok = m["foo/sub/baz"]
 	require.False(t, ok)
 
-	dt, err = content.ReadBlob(ctx, img.ContentStore(), ocispec.Descriptor{Digest: mfst.Layers[1].Digest})
+	dt, err = content.ReadBlob(ctx, img.ContentStore(), ocispecs.Descriptor{Digest: mfst.Layers[1].Digest})
 	require.NoError(t, err)
 
 	m, err = testutil.ReadTarToMap(dt, true)
@@ -2396,35 +2395,44 @@ func testStargzLazyPull(t *testing.T, sb integration.Sandbox) {
 
 	// Prepare stargz image
 	orgImage := "docker.io/library/alpine:latest"
-	sgzImage := registry + "/stargz/alpine:latest"
-	ctrRemoteCommonArg := []string{"--namespace", "buildkit", "--address", cdAddress}
-	err = exec.Command("ctr-remote", append(ctrRemoteCommonArg, "i", "pull", orgImage)...).Run()
+	sgzImage := registry + "/stargz/alpine:" + identity.NewID()
+	def, err := llb.Image(orgImage).Marshal(sb.Context())
 	require.NoError(t, err)
-	err = exec.Command("ctr-remote", append(ctrRemoteCommonArg, "i", "optimize", "--oci", "--period=1", orgImage, sgzImage)...).Run()
-	require.NoError(t, err)
-	err = exec.Command("ctr-remote", append(ctrRemoteCommonArg, "i", "push", "--plain-http", sgzImage)...).Run()
-	require.NoError(t, err)
-
-	// clear all local state out
-	err = imageService.Delete(ctx, orgImage, images.SynchronousDelete())
-	require.NoError(t, err)
-	err = imageService.Delete(ctx, sgzImage, images.SynchronousDelete())
-	require.NoError(t, err)
-	checkAllReleasable(t, c, sb, true)
-
-	// stargz layers should be lazy even for executing something on them
-	def, err := llb.Image(sgzImage).
-		Run(llb.Args([]string{"/bin/touch", "/foo"})).
-		Marshal(sb.Context())
-	require.NoError(t, err)
-	target := registry + "/buildkit/testlazyimage:latest"
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
 			{
 				Type: ExporterImage,
 				Attrs: map[string]string{
-					"name": target,
-					"push": "true",
+					"name":              sgzImage,
+					"push":              "true",
+					"compression":       "estargz",
+					"oci-mediatypes":    "true",
+					"force-compression": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	// clear all local state out
+	err = imageService.Delete(ctx, sgzImage, images.SynchronousDelete())
+	require.NoError(t, err)
+	checkAllReleasable(t, c, sb, true)
+
+	// stargz layers should be lazy even for executing something on them
+	def, err = llb.Image(sgzImage).
+		Run(llb.Args([]string{"/bin/touch", "/foo"})).
+		Marshal(sb.Context())
+	require.NoError(t, err)
+	target := registry + "/buildkit/testlazyimage:" + identity.NewID()
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name":           target,
+					"push":           "true",
+					"oci-mediatypes": "true",
 				},
 			},
 		},
@@ -2439,7 +2447,7 @@ func testStargzLazyPull(t *testing.T, sb integration.Sandbox) {
 
 	// Check if image layers are lazy.
 	// The topmost(last) layer created by `Run` isn't lazy so we skip the check for the layer.
-	var sgzLayers []ocispec.Descriptor
+	var sgzLayers []ocispecs.Descriptor
 	for _, layer := range manifest.Layers[:len(manifest.Layers)-1] {
 		_, err = contentStore.Info(ctx, layer.Digest)
 		require.ErrorIs(t, err, ctderrdefs.ErrNotFound, "unexpected error %v", err)
@@ -3174,11 +3182,11 @@ func testDuplicateWhiteouts(t *testing.T, sb integration.Sandbox) {
 	m, err := testutil.ReadTarToMap(dt, false)
 	require.NoError(t, err)
 
-	var index ocispec.Index
+	var index ocispecs.Index
 	err = json.Unmarshal(m["index.json"].Data, &index)
 	require.NoError(t, err)
 
-	var mfst ocispec.Manifest
+	var mfst ocispecs.Manifest
 	err = json.Unmarshal(m["blobs/sha256/"+index.Manifests[0].Digest.Hex()].Data, &mfst)
 	require.NoError(t, err)
 
@@ -3245,11 +3253,11 @@ func testWhiteoutParentDir(t *testing.T, sb integration.Sandbox) {
 	m, err := testutil.ReadTarToMap(dt, false)
 	require.NoError(t, err)
 
-	var index ocispec.Index
+	var index ocispecs.Index
 	err = json.Unmarshal(m["index.json"].Data, &index)
 	require.NoError(t, err)
 
-	var mfst ocispec.Manifest
+	var mfst ocispecs.Manifest
 	err = json.Unmarshal(m["blobs/sha256/"+index.Manifests[0].Digest.Hex()].Data, &mfst)
 	require.NoError(t, err)
 

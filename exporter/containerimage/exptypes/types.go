@@ -1,8 +1,8 @@
 package exptypes
 
 import (
-	"github.com/opencontainers/go-digest"
-	specs "github.com/opencontainers/image-spec/specs-go/v1"
+	digest "github.com/opencontainers/go-digest"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 const (
@@ -22,5 +22,5 @@ type Platforms struct {
 
 type Platform struct {
 	ID       string
-	Platform specs.Platform
+	Platform ocispecs.Platform
 }

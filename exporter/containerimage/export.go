@@ -25,8 +25,9 @@ import (
 	"github.com/moby/buildkit/util/push"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/identity"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -69,6 +70,7 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 		layerCompression: compression.Default,
 	}
 
+	var esgz bool
 	for k, v := range opt {
 		switch k {
 		case keyImageName:
@@ -139,6 +141,9 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 			switch v {
 			case "gzip":
 				i.layerCompression = compression.Gzip
+			case "estargz":
+				i.layerCompression = compression.EStargz
+				esgz = true
 			case "uncompressed":
 				i.layerCompression = compression.Uncompressed
 			default:
@@ -160,6 +165,10 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 			}
 			i.meta[k] = []byte(v)
 		}
+	}
+	if esgz && !i.ociTypes {
+		logrus.Warn("forcibly turning on oci-mediatype mode for estargz")
+		i.ociTypes = true
 	}
 	return i, nil
 }
@@ -361,15 +370,15 @@ func (e *imageExporterInstance) unpackImage(ctx context.Context, img images.Imag
 	return err
 }
 
-func getLayers(ctx context.Context, descs []ocispec.Descriptor, manifest ocispec.Manifest) ([]rootfs.Layer, error) {
+func getLayers(ctx context.Context, descs []ocispecs.Descriptor, manifest ocispecs.Manifest) ([]rootfs.Layer, error) {
 	if len(descs) != len(manifest.Layers) {
 		return nil, errors.Errorf("mismatched image rootfs and manifest layers")
 	}
 
 	layers := make([]rootfs.Layer, len(descs))
 	for i, desc := range descs {
-		layers[i].Diff = ocispec.Descriptor{
-			MediaType: ocispec.MediaTypeImageLayer,
+		layers[i].Diff = ocispecs.Descriptor{
+			MediaType: ocispecs.MediaTypeImageLayer,
 			Digest:    digest.Digest(desc.Annotations["containerd.io/uncompressed"]),
 		}
 		layers[i].Blob = manifest.Layers[i]
@@ -377,7 +386,7 @@ func getLayers(ctx context.Context, descs []ocispec.Descriptor, manifest ocispec
 	return layers, nil
 }
 
-func addAnnotations(m map[digest.Digest]map[string]string, desc ocispec.Descriptor) {
+func addAnnotations(m map[digest.Digest]map[string]string, desc ocispecs.Descriptor) {
 	if desc.Annotations == nil {
 		return
 	}
