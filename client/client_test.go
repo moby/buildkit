@@ -537,7 +537,7 @@ func testShmSize(t *testing.T, sb integration.Sandbox) {
 	defer c.Close()
 
 	st := llb.Image("busybox:latest").Run(
-		llb.AddMount("/dev/shm", llb.Scratch(), llb.Tmpfs(llb.TmpfsSize(128*1024))),
+		llb.AddMount("/dev/shm", llb.Scratch(), llb.Tmpfs(llb.TmpfsSize(128*1024*1024))),
 		llb.Shlex(`sh -c 'mount | grep /dev/shm > /out/out'`),
 	)
 

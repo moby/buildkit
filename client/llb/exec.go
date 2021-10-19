@@ -499,9 +499,9 @@ func (fn tmpfsOptionFunc) SetTmpfsOption(ti *TmpfsInfo) {
 	fn(ti)
 }
 
-func TmpfsSize(kb int64) TmpfsOption {
+func TmpfsSize(b int64) TmpfsOption {
 	return tmpfsOptionFunc(func(ti *TmpfsInfo) {
-		ti.Size = kb
+		ti.Size = b
 	})
 }
 
