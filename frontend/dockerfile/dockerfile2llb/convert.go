@@ -981,7 +981,14 @@ func dispatchCopyFileOp(d *dispatchState, c instructions.SourcesAndDest, sourceS
 		fileOpt = append(fileOpt, llb.IgnoreCache)
 	}
 
-	d.state = d.state.File(a, fileOpt...)
+	// TODO: user/chmod broken
+	// MergeOp needs cap detection
+	// llb.File needs way to pass in custom user directory input
+	parent := d.state
+	d.state = llb.Scratch().File(a, fileOpt...)
+	if parent.Output() != nil { // this should be handled by llb.Client, currently panics
+		d.state = llb.Merge([]llb.State{parent, d.state}, fileOpt...)
+	}
 	return commitToHistory(&d.image, commitMessage.String(), true, &d.state)
 }
 
