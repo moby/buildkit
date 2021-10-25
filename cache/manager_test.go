@@ -226,7 +226,7 @@ func TestManager(t *testing.T) {
 
 	checkDiskUsage(ctx, t, cm, 1, 0)
 
-	err = snap.(*immutableRef).finalizeLocked(ctx)
+	err = snap.Finalize(ctx)
 	require.NoError(t, err)
 
 	err = snap.Release(ctx)
@@ -948,7 +948,7 @@ func TestLazyCommit(t *testing.T) {
 	require.NoError(t, err)
 
 	// this time finalize commit
-	err = snap.(*immutableRef).finalizeLocked(ctx)
+	err = snap.Finalize(ctx)
 	require.NoError(t, err)
 
 	err = snap.Release(ctx)
@@ -1022,7 +1022,7 @@ func TestLazyCommit(t *testing.T) {
 	snap2, err = cm.Get(ctx, snap.ID())
 	require.NoError(t, err)
 
-	err = snap2.(*immutableRef).finalizeLocked(ctx)
+	err = snap2.Finalize(ctx)
 	require.NoError(t, err)
 
 	err = snap2.Release(ctx)

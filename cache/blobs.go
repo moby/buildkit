@@ -39,7 +39,7 @@ func (sr *immutableRef) computeBlobChain(ctx context.Context, createIfNeeded boo
 		return errors.Errorf("missing lease requirement for computeBlobChain")
 	}
 
-	if err := sr.finalizeLocked(ctx); err != nil {
+	if err := sr.Finalize(ctx); err != nil {
 		return err
 	}
 
