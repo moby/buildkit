@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"time"
 
+	srctypes "github.com/moby/buildkit/source/types"
 	"github.com/moby/buildkit/util/bklog"
 
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/cache/contenthash"
-	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/filesync"
@@ -23,34 +23,28 @@ import (
 	"github.com/pkg/errors"
 	"github.com/tonistiigi/fsutil"
 	fstypes "github.com/tonistiigi/fsutil/types"
-	bolt "go.etcd.io/bbolt"
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-const keySharedKey = "local.sharedKey"
-
 type Opt struct {
 	CacheAccessor cache.Accessor
-	MetadataStore *metadata.Store
 }
 
 func NewSource(opt Opt) (source.Source, error) {
 	ls := &localSource{
 		cm: opt.CacheAccessor,
-		md: opt.MetadataStore,
 	}
 	return ls, nil
 }
 
 type localSource struct {
 	cm cache.Accessor
-	md *metadata.Store
 }
 
 func (ls *localSource) ID() string {
-	return source.LocalScheme
+	return srctypes.LocalScheme
 }
 
 func (ls *localSource) Resolve(ctx context.Context, id source.Identifier, sm *session.Manager, _ solver.Vertex) (source.SourceInstance, error) {
@@ -72,13 +66,13 @@ type localSourceHandler struct {
 	*localSource
 }
 
-func (ls *localSourceHandler) CacheKey(ctx context.Context, g session.Group, index int) (string, solver.CacheOpts, bool, error) {
+func (ls *localSourceHandler) CacheKey(ctx context.Context, g session.Group, index int) (string, string, solver.CacheOpts, bool, error) {
 	sessionID := ls.src.SessionID
 
 	if sessionID == "" {
 		id := g.SessionIterator().NextSession()
 		if id == "" {
-			return "", nil, false, errors.New("could not access local files without session")
+			return "", "", nil, false, errors.New("could not access local files without session")
 		}
 		sessionID = id
 	}
@@ -89,9 +83,9 @@ func (ls *localSourceHandler) CacheKey(ctx context.Context, g session.Group, ind
 		FollowPaths     []string
 	}{SessionID: sessionID, IncludePatterns: ls.src.IncludePatterns, ExcludePatterns: ls.src.ExcludePatterns, FollowPaths: ls.src.FollowPaths})
 	if err != nil {
-		return "", nil, false, err
+		return "", "", nil, false, err
 	}
-	return "session:" + ls.src.Name + ":" + digest.FromBytes(dt).String(), nil, true, nil
+	return "session:" + ls.src.Name + ":" + digest.FromBytes(dt).String(), digest.FromBytes(dt).String(), nil, true, nil
 }
 
 func (ls *localSourceHandler) Snapshot(ctx context.Context, g session.Group) (cache.ImmutableRef, error) {
@@ -111,10 +105,10 @@ func (ls *localSourceHandler) Snapshot(ctx context.Context, g session.Group) (ca
 }
 
 func (ls *localSourceHandler) snapshot(ctx context.Context, s session.Group, caller session.Caller) (out cache.ImmutableRef, retErr error) {
-	sharedKey := keySharedKey + ":" + ls.src.Name + ":" + ls.src.SharedKeyHint + ":" + caller.SharedKey() // TODO: replace caller.SharedKey() with source based hint from client(absolute-path+nodeid)
+	sharedKey := ls.src.Name + ":" + ls.src.SharedKeyHint + ":" + caller.SharedKey() // TODO: replace caller.SharedKey() with source based hint from client(absolute-path+nodeid)
 
 	var mutable cache.MutableRef
-	sis, err := ls.md.Search(sharedKey)
+	sis, err := searchSharedKey(ctx, ls.cm, sharedKey)
 	if err != nil {
 		return nil, err
 	}
@@ -138,11 +132,10 @@ func (ls *localSourceHandler) snapshot(ctx context.Context, s session.Group, cal
 	defer func() {
 		if retErr != nil && mutable != nil {
 			// on error remove the record as checksum update is in undefined state
-			cache.CachePolicyDefault(mutable)
-			if err := mutable.Metadata().Commit(); err != nil {
+			if err := mutable.SetCachePolicyDefault(); err != nil {
 				bklog.G(ctx).Errorf("failed to reset mutable cachepolicy: %v", err)
 			}
-			contenthash.ClearCacheContext(mutable.Metadata())
+			contenthash.ClearCacheContext(mutable)
 			go mutable.Release(context.TODO())
 		}
 	}()
@@ -165,7 +158,7 @@ func (ls *localSourceHandler) snapshot(ctx context.Context, s session.Group, cal
 		}
 	}()
 
-	cc, err := contenthash.GetCacheContext(ctx, mutable.Metadata(), mount.IdentityMapping())
+	cc, err := contenthash.GetCacheContext(ctx, mutable)
 	if err != nil {
 		return nil, err
 	}
@@ -186,8 +179,8 @@ func (ls *localSourceHandler) snapshot(ctx context.Context, s session.Group, cal
 		Differ: ls.src.Differ,
 	}
 
-	opt.Filter = func(p string, stat *fstypes.Stat) bool {
-		if idmap := mount.IdentityMapping(); idmap != nil {
+	if idmap := mount.IdentityMapping(); idmap != nil {
+		opt.Filter = func(p string, stat *fstypes.Stat) bool {
 			identity, err := idmap.ToHost(idtools.Identity{
 				UID: int(stat.Uid),
 				GID: int(stat.Gid),
@@ -197,13 +190,8 @@ func (ls *localSourceHandler) snapshot(ctx context.Context, s session.Group, cal
 			}
 			stat.Uid = uint32(identity.UID)
 			stat.Gid = uint32(identity.GID)
+			return true
 		}
-		// earthly specific: 280ec68aac5576994367d1f580d08adc2d7dd502
-		// whatever permissions the user has, give them to group and others as well
-		// this matches behavior of gitsource, given that umask is 0
-		umode := (stat.Mode & 0700) >> 6
-		stat.Mode = (stat.Mode ^ (stat.Mode & 0777)) | umode | (umode << 3) | (umode << 6)
-		return true
 	}
 
 	if err := filesync.FSSync(ctx, caller, opt); err != nil {
@@ -218,29 +206,14 @@ func (ls *localSourceHandler) snapshot(ctx context.Context, s session.Group, cal
 	}
 	lm = nil
 
-	if err := contenthash.SetCacheContext(ctx, mutable.Metadata(), cc); err != nil {
+	if err := contenthash.SetCacheContext(ctx, mutable, cc); err != nil {
 		return nil, err
 	}
 
 	// skip storing snapshot by the shared key if it already exists
-	skipStoreSharedKey := false
-	si, _ := ls.md.Get(mutable.ID())
-	if v := si.Get(keySharedKey); v != nil {
-		var str string
-		if err := v.Unmarshal(&str); err != nil {
-			return nil, err
-		}
-		skipStoreSharedKey = str == sharedKey
-	}
-	if !skipStoreSharedKey {
-		v, err := metadata.NewValue(sharedKey)
-		if err != nil {
-			return nil, err
-		}
-		v.Index = sharedKey
-		if err := si.Update(func(b *bolt.Bucket) error {
-			return si.SetValue(b, sharedKey, v)
-		}); err != nil {
+	md := cacheRefMetadata{mutable}
+	if md.getSharedKey() != sharedKey {
+		if err := md.setSharedKey(sharedKey); err != nil {
 			return nil, err
 		}
 		bklog.G(ctx).Debugf("saved %s as %s", mutable.ID(), sharedKey)
@@ -290,4 +263,31 @@ func (cu *cacheUpdater) MarkSupported(bool) {
 
 func (cu *cacheUpdater) ContentHasher() fsutil.ContentHasher {
 	return contenthash.NewFromStat
+}
+
+const keySharedKey = "local.sharedKey"
+const sharedKeyIndex = keySharedKey + ":"
+
+func searchSharedKey(ctx context.Context, store cache.MetadataStore, k string) ([]cacheRefMetadata, error) {
+	var results []cacheRefMetadata
+	mds, err := store.Search(ctx, sharedKeyIndex+k)
+	if err != nil {
+		return nil, err
+	}
+	for _, md := range mds {
+		results = append(results, cacheRefMetadata{md})
+	}
+	return results, nil
+}
+
+type cacheRefMetadata struct {
+	cache.RefMetadata
+}
+
+func (md cacheRefMetadata) getSharedKey() string {
+	return md.GetString(keySharedKey)
+}
+
+func (md cacheRefMetadata) setSharedKey(key string) error {
+	return md.SetString(keySharedKey, key, sharedKeyIndex+key)
 }

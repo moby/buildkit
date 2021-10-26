@@ -96,6 +96,7 @@ This mount type allows mounting tmpfs in the build container.
 |Option               |Description|
 |---------------------|-----------|
 |`target` (required)  | Mount path.|
+|`size`               | Specify an upper limit on the size of the filesystem.|
 
 
 ### `RUN --mount=type=secret`
@@ -318,7 +319,11 @@ eot
 RUN FOO=abc ash /app/script.sh
 ```
 
+## Built-in build args
 
-
-
-
+* `BUILDKIT_CACHE_MOUNT_NS=<string>` set optional cache ID namespace
+* `BUILDKIT_CONTEXT_KEEP_GIT_DIR=<bool>` trigger git context to keep the `.git` directory
+* `BUILDKIT_INLINE_CACHE=<bool>` inline cache metadata to image configuration or not (for Docker-integrated BuildKit (`DOCKER_BUILDKIT=1 docker build`) and `docker buildx`)
+* `BUILDKIT_MULTI_PLATFORM=<bool>` opt into determnistic output regardless of multi-platform output or not
+* `BUILDKIT_SANDBOX_HOSTNAME=<string>` set the hostname (default `buildkitsandbox`)
+* `BUILDKIT_SYNTAX=<image>` set frontend image

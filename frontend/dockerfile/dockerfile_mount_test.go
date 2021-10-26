@@ -25,6 +25,7 @@ var mountTests = []integration.Test{
 	testMountMetaArg,
 	testMountFromError,
 	testMountInvalid,
+	testMountTmpfsSize,
 }
 
 func init() {
@@ -451,4 +452,47 @@ RUN --mount=from=$ttt,type=cache,target=/tmp ls
 	}, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "'from' doesn't support variable expansion, define alias stage instead")
+}
+
+func testMountTmpfsSize(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM busybox AS base
+RUN --mount=type=tmpfs,target=/dev/shm,size=128m mount | grep /dev/shm > /tmpfssize
+FROM scratch
+COPY --from=base /tmpfssize /
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "tmpfssize"))
+	require.NoError(t, err)
+	require.Contains(t, string(dt), `size=131072k`)
 }

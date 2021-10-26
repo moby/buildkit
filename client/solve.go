@@ -176,7 +176,11 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		}
 
 		eg.Go(func() error {
-			return s.Run(statusContext, grpchijack.Dialer(c.controlClient()))
+			sd := c.sessionDialer
+			if sd == nil {
+				sd = grpchijack.Dialer(c.controlClient())
+			}
+			return s.Run(statusContext, sd)
 		})
 	}
 
@@ -359,13 +363,13 @@ func prepareSyncedDirs(def *llb.Definition, localDirs map[string]string) ([]file
 				return nil, errors.Wrap(err, "failed to parse llb proto op")
 			}
 			if src := op.GetSource(); src != nil {
-				if strings.HasPrefix(src.Identifier, "local://") { // TODO: just make a type property
+				if strings.HasPrefix(src.Identifier, "local://") {
 					name := strings.TrimPrefix(src.Identifier, "local://")
 					d, ok := localDirs[name]
 					if !ok {
 						return nil, errors.Errorf("local directory %s not enabled", name)
 					}
-					dirs = append(dirs, filesync.SyncedDir{Name: name, Dir: d, Map: resetUIDAndGID}) // TODO: excludes
+					dirs = append(dirs, filesync.SyncedDir{Name: name, Dir: d, Map: resetUIDAndGID})
 				}
 			}
 		}

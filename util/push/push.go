@@ -19,6 +19,7 @@ import (
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/progress/logs"
 	"github.com/moby/buildkit/util/resolver"
+	resolverconfig "github.com/moby/buildkit/util/resolver/config"
 	"github.com/moby/buildkit/util/resolver/limited"
 	"github.com/moby/buildkit/util/resolver/retryhandler"
 	digest "github.com/opencontainers/go-digest"
@@ -54,7 +55,7 @@ func Push(ctx context.Context, sm *session.Manager, sid string, provider content
 	if insecure {
 		insecureTrue := true
 		httpTrue := true
-		hosts = resolver.NewRegistryConfig(map[string]resolver.RegistryConfig{
+		hosts = resolver.NewRegistryConfig(map[string]resolverconfig.RegistryConfig{
 			reference.Domain(parsed): {
 				Insecure:  &insecureTrue,
 				PlainHTTP: &httpTrue,

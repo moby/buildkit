@@ -2,6 +2,7 @@ package llbsolver
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"strings"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/moby/buildkit/frontend/gateway"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/util/buildinfo"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/entitlements"
 	"github.com/moby/buildkit/util/progress"
@@ -173,12 +175,20 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 			}
 			inp.Ref = workerRef.ImmutableRef
 
-			dt, err := inlineCache(ctx, exp.CacheExporter, r, session.NewGroup(sessionID))
+			dtbi, err := buildinfo.Merge(ctx, res.BuildInfo(), inp.Metadata[exptypes.ExporterImageConfigKey])
 			if err != nil {
 				return nil, err
 			}
-			if dt != nil {
-				inp.Metadata[exptypes.ExporterInlineCache] = dt
+			if dtbi != nil && len(dtbi) > 0 {
+				inp.Metadata[exptypes.ExporterBuildInfo] = dtbi
+			}
+
+			dtic, err := inlineCache(ctx, exp.CacheExporter, r, session.NewGroup(sessionID))
+			if err != nil {
+				return nil, err
+			}
+			if dtic != nil {
+				inp.Metadata[exptypes.ExporterInlineCache] = dtic
 			}
 		}
 		if res.Refs != nil {
@@ -197,12 +207,20 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 					}
 					m[k] = workerRef.ImmutableRef
 
-					dt, err := inlineCache(ctx, exp.CacheExporter, r, session.NewGroup(sessionID))
+					dtbi, err := buildinfo.Merge(ctx, res.BuildInfo(), inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterImageConfigKey, k)])
 					if err != nil {
 						return nil, err
 					}
-					if dt != nil {
-						inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterInlineCache, k)] = dt
+					if dtbi != nil && len(dtbi) > 0 {
+						inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, k)] = dtbi
+					}
+
+					dtic, err := inlineCache(ctx, exp.CacheExporter, r, session.NewGroup(sessionID))
+					if err != nil {
+						return nil, err
+					}
+					if dtic != nil {
+						inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterInlineCache, k)] = dtic
 					}
 				}
 			}
@@ -252,6 +270,9 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	for k, v := range res.Metadata {
 		if strings.HasPrefix(k, "frontend.") {
 			exporterResponse[k] = string(v)
+		}
+		if strings.HasPrefix(k, exptypes.ExporterBuildInfo) {
+			exporterResponse[k] = base64.StdEncoding.EncodeToString(v)
 		}
 	}
 	for k, v := range cacheExporterResponse {

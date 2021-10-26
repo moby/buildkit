@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/containerd/containerd/platforms"
+	"github.com/docker/go-units"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
@@ -33,29 +34,37 @@ import (
 const (
 	DefaultLocalNameContext    = "context"
 	DefaultLocalNameDockerfile = "dockerfile"
-	keyTarget                  = "target"
-	keyFilename                = "filename"
-	keyCacheFrom               = "cache-from"    // for registry only. deprecated in favor of keyCacheImports
-	keyCacheImports            = "cache-imports" // JSON representation of []CacheOptionsEntry
-	keyCacheNS                 = "build-arg:BUILDKIT_CACHE_MOUNT_NS"
 	defaultDockerfileName      = "Dockerfile"
 	dockerignoreFilename       = ".dockerignore"
-	buildArgPrefix             = "build-arg:"
-	labelPrefix                = "label:"
-	keyNoCache                 = "no-cache"
-	keyTargetPlatform          = "platform"
-	keyMultiPlatform           = "multi-platform"
-	keyImageResolveMode        = "image-resolve-mode"
-	keyGlobalAddHosts          = "add-hosts"
-	keyForceNetwork            = "force-network-mode"
-	keyOverrideCopyImage       = "override-copy-image" // remove after CopyOp implemented
-	keyNameContext             = "contextkey"
-	keyNameDockerfile          = "dockerfilekey"
-	keyContextSubDir           = "contextsubdir"
-	keyContextKeepGitDir       = "build-arg:BUILDKIT_CONTEXT_KEEP_GIT_DIR"
-	keySyntax                  = "build-arg:BUILDKIT_SYNTAX"
-	keyMultiPlatformArg        = "build-arg:BUILDKIT_MULTI_PLATFORM"
-	keyHostname                = "hostname"
+
+	buildArgPrefix = "build-arg:"
+	labelPrefix    = "label:"
+
+	keyTarget            = "target"
+	keyFilename          = "filename"
+	keyCacheFrom         = "cache-from"    // for registry only. deprecated in favor of keyCacheImports
+	keyCacheImports      = "cache-imports" // JSON representation of []CacheOptionsEntry
+	keyContextSubDir     = "contextsubdir"
+	keyForceNetwork      = "force-network-mode"
+	keyGlobalAddHosts    = "add-hosts"
+	keyHostname          = "hostname"
+	keyImageResolveMode  = "image-resolve-mode"
+	keyMultiPlatform     = "multi-platform"
+	keyNameContext       = "contextkey"
+	keyNameDockerfile    = "dockerfilekey"
+	keyNoCache           = "no-cache"
+	keyOverrideCopyImage = "override-copy-image" // remove after CopyOp implemented
+	keyShmSize           = "shm-size"
+	keyTargetPlatform    = "platform"
+	keyUlimit            = "ulimit"
+
+	// Don't forget to update frontend documentation if you add
+	// a new build-arg: frontend/dockerfile/docs/syntax.md
+	keyCacheNSArg           = "build-arg:BUILDKIT_CACHE_MOUNT_NS"
+	keyContextKeepGitDirArg = "build-arg:BUILDKIT_CONTEXT_KEEP_GIT_DIR"
+	keyHostnameArg          = "build-arg:BUILDKIT_SANDBOX_HOSTNAME"
+	keyMultiPlatformArg     = "build-arg:BUILDKIT_MULTI_PLATFORM"
+	keySyntaxArg            = "build-arg:BUILDKIT_SYNTAX"
 )
 
 var httpPrefix = regexp.MustCompile(`^https?://`)
@@ -110,6 +119,16 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 		return nil, errors.Wrap(err, "failed to parse additional hosts")
 	}
 
+	shmSize, err := parseShmSize(opts[keyShmSize])
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to parse shm size")
+	}
+
+	ulimit, err := parseUlimits(opts[keyUlimit])
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to parse ulimit")
+	}
+
 	defaultNetMode, err := parseNetMode(opts[keyForceNetwork])
 	if err != nil {
 		return nil, err
@@ -150,7 +169,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 
 	var buildContext *llb.State
 	isNotLocalContext := false
-	if st, ok := detectGitContext(opts[localNameContext], opts[keyContextKeepGitDir]); ok {
+	if st, ok := detectGitContext(opts[localNameContext], opts[keyContextKeepGitDirArg]); ok {
 		if !forceLocalDockerfile {
 			src = *st
 		}
@@ -346,11 +365,11 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 	}
 
 	if _, ok := opts["cmdline"]; !ok {
-		if cmdline, ok := opts[keySyntax]; ok {
+		if cmdline, ok := opts[keySyntaxArg]; ok {
 			p := strings.SplitN(strings.TrimSpace(cmdline), " ", 2)
 			res, err := forwardGateway(ctx, c, p[0], cmdline)
 			if err != nil && len(errdefs.Sources(err)) == 0 {
-				return nil, errors.Wrapf(err, "failed with %s = %s", keySyntax, cmdline)
+				return nil, errors.Wrapf(err, "failed with %s = %s", keySyntaxArg, cmdline)
 			}
 			return res, err
 		} else if ref, cmdline, loc, ok := dockerfile2llb.DetectSyntax(bytes.NewBuffer(dtDockerfile)); ok {
@@ -391,6 +410,10 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 	}
 	res := client.NewResult()
 
+	if v, ok := opts[keyHostnameArg]; ok && len(v) > 0 {
+		opts[keyHostname] = v
+	}
+
 	eg, ctx = errgroup.WithContext(ctx)
 
 	for i, tp := range targetPlatforms {
@@ -407,7 +430,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 					MetaResolver:      c,
 					BuildArgs:         filter(opts, buildArgPrefix),
 					Labels:            filter(opts, labelPrefix),
-					CacheIDNamespace:  opts[keyCacheNS],
+					CacheIDNamespace:  opts[keyCacheNSArg],
 					SessionID:         c.BuildOpts().SessionID,
 					BuildContext:      buildContext,
 					Excludes:          excludes,
@@ -417,6 +440,8 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 					ImageResolveMode:  resolveMode,
 					PrefixPlatform:    exportMap,
 					ExtraHosts:        extraHosts,
+					ShmSize:           shmSize,
+					Ulimit:            ulimit,
 					ForceNetMode:      defaultNetMode,
 					OverrideCopyImage: opts[keyOverrideCopyImage],
 					LLBCaps:           &caps,
@@ -661,6 +686,41 @@ func parseExtraHosts(v string) ([]llb.HostIP, error) {
 			return nil, errors.Errorf("failed to parse IP %s", val)
 		}
 		out = append(out, llb.HostIP{Host: key, IP: ip})
+	}
+	return out, nil
+}
+
+func parseShmSize(v string) (int64, error) {
+	if len(v) == 0 {
+		return 0, nil
+	}
+	kb, err := strconv.ParseInt(v, 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	return kb, nil
+}
+
+func parseUlimits(v string) ([]pb.Ulimit, error) {
+	if v == "" {
+		return nil, nil
+	}
+	out := make([]pb.Ulimit, 0)
+	csvReader := csv.NewReader(strings.NewReader(v))
+	fields, err := csvReader.Read()
+	if err != nil {
+		return nil, err
+	}
+	for _, field := range fields {
+		ulimit, err := units.ParseUlimit(field)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, pb.Ulimit{
+			Name: ulimit.Name,
+			Soft: ulimit.Soft,
+			Hard: ulimit.Hard,
+		})
 	}
 	return out, nil
 }

@@ -238,6 +238,8 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 	atomic.AddInt64(&c.buildCount, 1)
 	defer atomic.AddInt64(&c.buildCount, -1)
 
+	// This method registers job ID in solver.Solve. Make sure there are no blocking calls before that might delay this.
+
 	if err := translateLegacySolveRequest(req); err != nil {
 		return nil, err
 	}

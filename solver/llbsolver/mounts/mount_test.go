@@ -39,7 +39,6 @@ type cmOut struct {
 	manager cache.Manager
 	lm      leases.Manager
 	cs      content.Store
-	md      *metadata.Store
 }
 
 func newCacheManager(ctx context.Context, opt cmOpt) (co *cmOut, cleanup func() error, err error) {
@@ -89,11 +88,6 @@ func newCacheManager(ctx context.Context, opt cmOpt) (co *cmOut, cleanup func() 
 		opt.snapshotter = snapshotter
 	}
 
-	md, err := metadata.NewStore(filepath.Join(tmpdir, "metadata.db"))
-	if err != nil {
-		return nil, nil, err
-	}
-
 	store, err := local.NewStore(tmpdir)
 	if err != nil {
 		return nil, nil, err
@@ -116,6 +110,11 @@ func newCacheManager(ctx context.Context, opt cmOpt) (co *cmOut, cleanup func() 
 
 	lm := ctdmetadata.NewLeaseManager(mdb)
 
+	md, err := metadata.NewStore(filepath.Join(tmpdir, "metadata.db"))
+	if err != nil {
+		return nil, nil, err
+	}
+
 	cm, err := cache.NewManager(cache.ManagerOpt{
 		Snapshotter:    snapshot.FromContainerdSnapshotter(opt.snapshotterName, containerdsnapshot.NSSnapshotter(ns, mdb.Snapshotter(opt.snapshotterName)), nil),
 		MetadataStore:  md,
@@ -131,16 +130,14 @@ func newCacheManager(ctx context.Context, opt cmOpt) (co *cmOut, cleanup func() 
 		manager: cm,
 		lm:      lm,
 		cs:      mdb.ContentStore(),
-		md:      md,
 	}, cleanup, nil
 }
 
-func newRefGetter(m cache.Manager, md *metadata.Store, shared *cacheRefs) *cacheRefGetter {
+func newRefGetter(m cache.Manager, shared *cacheRefs) *cacheRefGetter {
 	return &cacheRefGetter{
 		locker:          &sync.Mutex{},
 		cacheMounts:     map[string]*cacheRefShare{},
 		cm:              m,
-		md:              md,
 		globalCacheRefs: shared,
 	}
 }
@@ -164,10 +161,10 @@ func TestCacheMountPrivateRefs(t *testing.T) {
 
 	defer cleanup()
 
-	g1 := newRefGetter(co.manager, co.md, sharedCacheRefs)
-	g2 := newRefGetter(co.manager, co.md, sharedCacheRefs)
-	g3 := newRefGetter(co.manager, co.md, sharedCacheRefs)
-	g4 := newRefGetter(co.manager, co.md, sharedCacheRefs)
+	g1 := newRefGetter(co.manager, sharedCacheRefs)
+	g2 := newRefGetter(co.manager, sharedCacheRefs)
+	g3 := newRefGetter(co.manager, sharedCacheRefs)
+	g4 := newRefGetter(co.manager, sharedCacheRefs)
 
 	ref, err := g1.getRefCacheDir(ctx, nil, "foo", pb.CacheSharingOpt_PRIVATE)
 	require.NoError(t, err)
@@ -231,9 +228,9 @@ func TestCacheMountSharedRefs(t *testing.T) {
 
 	defer cleanup()
 
-	g1 := newRefGetter(co.manager, co.md, sharedCacheRefs)
-	g2 := newRefGetter(co.manager, co.md, sharedCacheRefs)
-	g3 := newRefGetter(co.manager, co.md, sharedCacheRefs)
+	g1 := newRefGetter(co.manager, sharedCacheRefs)
+	g2 := newRefGetter(co.manager, sharedCacheRefs)
+	g3 := newRefGetter(co.manager, sharedCacheRefs)
 
 	ref, err := g1.getRefCacheDir(ctx, nil, "foo", pb.CacheSharingOpt_SHARED)
 	require.NoError(t, err)
@@ -281,8 +278,8 @@ func TestCacheMountLockedRefs(t *testing.T) {
 
 	defer cleanup()
 
-	g1 := newRefGetter(co.manager, co.md, sharedCacheRefs)
-	g2 := newRefGetter(co.manager, co.md, sharedCacheRefs)
+	g1 := newRefGetter(co.manager, sharedCacheRefs)
+	g2 := newRefGetter(co.manager, sharedCacheRefs)
 
 	ref, err := g1.getRefCacheDir(ctx, nil, "foo", pb.CacheSharingOpt_LOCKED)
 	require.NoError(t, err)
@@ -346,8 +343,8 @@ func TestCacheMountSharedRefsDeadlock(t *testing.T) {
 
 	var sharedCacheRefs = &cacheRefs{}
 
-	g1 := newRefGetter(co.manager, co.md, sharedCacheRefs)
-	g2 := newRefGetter(co.manager, co.md, sharedCacheRefs)
+	g1 := newRefGetter(co.manager, sharedCacheRefs)
+	g2 := newRefGetter(co.manager, sharedCacheRefs)
 
 	ref, err := g1.getRefCacheDir(ctx, nil, "foo", pb.CacheSharingOpt_SHARED)
 	require.NoError(t, err)

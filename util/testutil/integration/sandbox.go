@@ -182,6 +182,9 @@ func runBuildkitd(ctx context.Context, conf *BackendConfig, args []string, logs 
 	args = append(args, "--root", tmpdir, "--addr", address, "--debug")
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Env = append(os.Environ(), "BUILDKIT_DEBUG_EXEC_OUTPUT=1", "BUILDKIT_DEBUG_PANIC_ON_ERROR=1", "TMPDIR="+filepath.Join(tmpdir, "tmp"))
+	if runtime.GOOS != "windows" {
+		cmd.Env = append(cmd.Env, "BUILDKIT_DEBUG_FORCE_OVERLAY_DIFF=true")
+	}
 	cmd.Env = append(cmd.Env, extraEnv...)
 	cmd.SysProcAttr = getSysProcAttr()
 

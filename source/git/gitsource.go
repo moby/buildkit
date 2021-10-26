@@ -17,10 +17,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/moby/buildkit/util/bklog"
-
 	"github.com/moby/buildkit/cache"
-	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
@@ -29,10 +26,12 @@ import (
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/source"
+	srctypes "github.com/moby/buildkit/source/types"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/progress/logs"
+	"github.com/moby/buildkit/util/urlutil"
 	"github.com/moby/locker"
 	"github.com/pkg/errors"
-	bolt "go.etcd.io/bbolt"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -42,11 +41,9 @@ var defaultBranch = regexp.MustCompile(`refs/heads/(\S+)`)
 
 type Opt struct {
 	CacheAccessor cache.Accessor
-	MetadataStore *metadata.Store
 }
 
 type gitSource struct {
-	md     *metadata.Store
 	cache  cache.Accessor
 	locker *locker.Locker
 }
@@ -61,7 +58,6 @@ func Supported() error {
 
 func NewSource(opt Opt) (source.Source, error) {
 	gs := &gitSource{
-		md:     opt.MetadataStore,
 		cache:  opt.CacheAccessor,
 		locker: locker.New(),
 	}
@@ -69,16 +65,14 @@ func NewSource(opt Opt) (source.Source, error) {
 }
 
 func (gs *gitSource) ID() string {
-	return source.GitScheme
+	return srctypes.GitScheme
 }
 
 // needs to be called with repo lock
 func (gs *gitSource) mountRemote(ctx context.Context, remote string, auth []string, g session.Group) (target string, release func(), retErr error) {
-	remoteKey := "git-remote::" + remote
-
-	sis, err := gs.md.Search(remoteKey)
+	sis, err := searchGitRemote(ctx, gs.cache, remote)
 	if err != nil {
-		return "", nil, errors.Wrapf(err, "failed to search metadata for %s", redactCredentials(remote))
+		return "", nil, errors.Wrapf(err, "failed to search metadata for %s", urlutil.RedactCredentials(remote))
 	}
 
 	var remoteRef cache.MutableRef
@@ -87,19 +81,19 @@ func (gs *gitSource) mountRemote(ctx context.Context, remote string, auth []stri
 		if err != nil {
 			if errors.Is(err, cache.ErrLocked) {
 				// should never really happen as no other function should access this metadata, but lets be graceful
-				bklog.G(ctx).Warnf("mutable ref for %s  %s was locked: %v", redactCredentials(remote), si.ID(), err)
+				bklog.G(ctx).Warnf("mutable ref for %s  %s was locked: %v", urlutil.RedactCredentials(remote), si.ID(), err)
 				continue
 			}
-			return "", nil, errors.Wrapf(err, "failed to get mutable ref for %s", redactCredentials(remote))
+			return "", nil, errors.Wrapf(err, "failed to get mutable ref for %s", urlutil.RedactCredentials(remote))
 		}
 		break
 	}
 
 	initializeRepo := false
 	if remoteRef == nil {
-		remoteRef, err = gs.cache.New(ctx, nil, g, cache.CachePolicyRetain, cache.WithDescription(fmt.Sprintf("shared git repo for %s", redactCredentials(remote))))
+		remoteRef, err = gs.cache.New(ctx, nil, g, cache.CachePolicyRetain, cache.WithDescription(fmt.Sprintf("shared git repo for %s", urlutil.RedactCredentials(remote))))
 		if err != nil {
-			return "", nil, errors.Wrapf(err, "failed to create new mutable for %s", redactCredentials(remote))
+			return "", nil, errors.Wrapf(err, "failed to create new mutable for %s", urlutil.RedactCredentials(remote))
 		}
 		initializeRepo = true
 	}
@@ -140,17 +134,9 @@ func (gs *gitSource) mountRemote(ctx context.Context, remote string, auth []stri
 			return "", nil, errors.Wrapf(err, "failed add origin repo at %s", dir)
 		}
 
-		// same new remote metadata
-		si, _ := gs.md.Get(remoteRef.ID())
-		v, err := metadata.NewValue(remoteKey)
-		if err != nil {
-			return "", nil, err
-		}
-		v.Index = remoteKey
-
-		if err := si.Update(func(b *bolt.Bucket) error {
-			return si.SetValue(b, "git-remote", v)
-		}); err != nil {
+		// save new remote metadata
+		md := cacheRefMetadata{remoteRef}
+		if err := md.setGitRemote(remote); err != nil {
 			return "", nil, err
 		}
 	}
@@ -307,22 +293,22 @@ func (gs *gitSourceHandler) mountKnownHosts(ctx context.Context) (string, func()
 	return knownHosts.Name(), cleanup, nil
 }
 
-func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index int) (string, solver.CacheOpts, bool, error) {
+func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index int) (string, string, solver.CacheOpts, bool, error) {
 	remote := gs.src.Remote
 	gs.locker.Lock(remote)
 	defer gs.locker.Unlock(remote)
 
 	if ref := gs.src.Ref; ref != "" && isCommitSHA(ref) {
-		ref = gs.shaToCacheKey(ref)
-		gs.cacheKey = ref
-		return ref, nil, true, nil
+		cacheKey := gs.shaToCacheKey(ref)
+		gs.cacheKey = cacheKey
+		return cacheKey, ref, nil, true, nil
 	}
 
 	gs.getAuthToken(ctx, g)
 
 	gitDir, unmountGitDir, err := gs.mountRemote(ctx, remote, gs.auth, g)
 	if err != nil {
-		return "", nil, false, err
+		return "", "", nil, false, err
 	}
 	defer unmountGitDir()
 
@@ -331,7 +317,7 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index
 		var unmountSock func() error
 		sock, unmountSock, err = gs.mountSSHAuthSock(ctx, gs.src.MountSSHSock, g)
 		if err != nil {
-			return "", nil, false, err
+			return "", "", nil, false, err
 		}
 		defer unmountSock()
 	}
@@ -341,7 +327,7 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index
 		var unmountKnownHosts func() error
 		knownHosts, unmountKnownHosts, err = gs.mountKnownHosts(ctx)
 		if err != nil {
-			return "", nil, false, err
+			return "", "", nil, false, err
 		}
 		defer unmountKnownHosts()
 	}
@@ -350,7 +336,7 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index
 	if ref == "" {
 		ref, err = getDefaultBranch(ctx, gitDir, "", sock, knownHosts, gs.auth, gs.src.Remote)
 		if err != nil {
-			return "", nil, false, err
+			return "", "", nil, false, err
 		}
 	}
 
@@ -358,28 +344,28 @@ func (gs *gitSourceHandler) CacheKey(ctx context.Context, g session.Group, index
 
 	buf, err := gitWithinDir(ctx, gitDir, "", sock, knownHosts, gs.auth, "ls-remote", "origin", ref)
 	if err != nil {
-		return "", nil, false, errors.Wrapf(err, "failed to fetch remote %s", redactCredentials(remote))
+		return "", "", nil, false, errors.Wrapf(err, "failed to fetch remote %s", urlutil.RedactCredentials(remote))
 	}
 	out := buf.String()
 	idx := strings.Index(out, "\t")
 	if idx == -1 {
-		return "", nil, false, errors.Errorf("repository does not contain ref %s, output: %q", ref, string(out))
+		return "", "", nil, false, errors.Errorf("repository does not contain ref %s, output: %q", ref, string(out))
 	}
 
 	sha := string(out[:idx])
 	if !isCommitSHA(sha) {
-		return "", nil, false, errors.Errorf("invalid commit sha %q", sha)
+		return "", "", nil, false, errors.Errorf("invalid commit sha %q", sha)
 	}
-	sha = gs.shaToCacheKey(sha)
-	gs.cacheKey = sha
-	return sha, nil, true, nil
+	cacheKey := gs.shaToCacheKey(sha)
+	gs.cacheKey = cacheKey
+	return cacheKey, sha, nil, true, nil
 }
 
 func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out cache.ImmutableRef, retErr error) {
 	cacheKey := gs.cacheKey
 	if cacheKey == "" {
 		var err error
-		cacheKey, _, _, err = gs.CacheKey(ctx, g, 0)
+		cacheKey, _, _, _, err = gs.CacheKey(ctx, g, 0)
 		if err != nil {
 			return nil, err
 		}
@@ -387,11 +373,11 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 
 	gs.getAuthToken(ctx, g)
 
-	snapshotKey := "git-snapshot::" + cacheKey + ":" + gs.src.Subdir
+	snapshotKey := cacheKey + ":" + gs.src.Subdir
 	gs.locker.Lock(snapshotKey)
 	defer gs.locker.Unlock(snapshotKey)
 
-	sis, err := gs.md.Search(snapshotKey)
+	sis, err := searchGitSnapshot(ctx, gs.cache, snapshotKey)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to search metadata for %s", snapshotKey)
 	}
@@ -463,13 +449,13 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 			// TODO: is there a better way to do this?
 		}
 		if _, err := gitWithinDir(ctx, gitDir, "", sock, knownHosts, gs.auth, args...); err != nil {
-			return nil, errors.Wrapf(err, "failed to fetch remote %s", redactCredentials(gs.src.Remote))
+			return nil, errors.Wrapf(err, "failed to fetch remote %s", urlutil.RedactCredentials(gs.src.Remote))
 		}
 	}
 
 	checkoutRef, err := gs.cache.New(ctx, nil, g, cache.WithRecordType(client.UsageRecordTypeGitCheckout), cache.WithDescription(fmt.Sprintf("git snapshot for %s#%s", gs.src.Remote, ref)))
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to create new mutable for %s", redactCredentials(gs.src.Remote))
+		return nil, errors.Wrapf(err, "failed to create new mutable for %s", urlutil.RedactCredentials(gs.src.Remote))
 	}
 
 	defer func() {
@@ -527,7 +513,7 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 		}
 		_, err = gitWithinDir(ctx, checkoutDirGit, checkoutDir, sock, knownHosts, nil, "checkout", "FETCH_HEAD")
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to checkout remote %s", redactCredentials(gs.src.Remote))
+			return nil, errors.Wrapf(err, "failed to checkout remote %s", urlutil.RedactCredentials(gs.src.Remote))
 		}
 		gitDir = checkoutDirGit
 	} else {
@@ -540,7 +526,7 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 		}
 		_, err = gitWithinDir(ctx, gitDir, cd, sock, knownHosts, nil, "checkout", ref, "--", ".")
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to checkout remote %s", redactCredentials(gs.src.Remote))
+			return nil, errors.Wrapf(err, "failed to checkout remote %s", urlutil.RedactCredentials(gs.src.Remote))
 		}
 		if subdir != "." {
 			d, err := os.Open(filepath.Join(cd, subdir))
@@ -573,7 +559,7 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 
 	_, err = gitWithinDir(ctx, gitDir, checkoutDir, sock, knownHosts, gs.auth, "submodule", "update", "--init", "--recursive", "--depth=1")
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to update submodules for %s", redactCredentials(gs.src.Remote))
+		return nil, errors.Wrapf(err, "failed to update submodules for %s", urlutil.RedactCredentials(gs.src.Remote))
 	}
 
 	if idmap := mount.IdentityMapping(); idmap != nil {
@@ -601,19 +587,10 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 		}
 	}()
 
-	si, _ := gs.md.Get(snap.ID())
-	v, err := metadata.NewValue(snapshotKey)
-	if err != nil {
+	md := cacheRefMetadata{snap}
+	if err := md.setGitSnapshot(snapshotKey); err != nil {
 		return nil, err
 	}
-	v.Index = snapshotKey
-
-	if err := si.Update(func(b *bolt.Bucket) error {
-		return si.SetValue(b, "git-snapshot", v)
-	}); err != nil {
-		return nil, err
-	}
-
 	return snap, nil
 }
 
@@ -653,7 +630,6 @@ func git(ctx context.Context, dir, sshAuthSock, knownHosts string, args ...strin
 		cmd.Stderr = io.MultiWriter(stderr, errbuf)
 		cmd.Env = []string{
 			"PATH=" + os.Getenv("PATH"),
-			"HOME=" + os.Getenv("HOME"), // needed for git to read /root/.gitconfig
 			"GIT_TERMINAL_PROMPT=0",
 			"GIT_SSH_COMMAND=" + getGitSSHCommand(knownHosts),
 			//	"GIT_TRACE=1",
@@ -701,12 +677,49 @@ func tokenScope(remote string) string {
 func getDefaultBranch(ctx context.Context, gitDir, workDir, sshAuthSock, knownHosts string, auth []string, remoteURL string) (string, error) {
 	buf, err := gitWithinDir(ctx, gitDir, workDir, sshAuthSock, knownHosts, auth, "ls-remote", "--symref", remoteURL, "HEAD")
 	if err != nil {
-		return "", errors.Wrapf(err, "error fetching default branch for repository %s", redactCredentials(remoteURL))
+		return "", errors.Wrapf(err, "error fetching default branch for repository %s", urlutil.RedactCredentials(remoteURL))
 	}
 
 	ss := defaultBranch.FindAllStringSubmatch(buf.String(), -1)
 	if len(ss) == 0 || len(ss[0]) != 2 {
-		return "", errors.Errorf("could not find default branch for repository: %s", redactCredentials(remoteURL))
+		return "", errors.Errorf("could not find default branch for repository: %s", urlutil.RedactCredentials(remoteURL))
 	}
 	return ss[0][1], nil
+}
+
+const keyGitRemote = "git-remote"
+const gitRemoteIndex = keyGitRemote + "::"
+const keyGitSnapshot = "git-snapshot"
+const gitSnapshotIndex = keyGitSnapshot + "::"
+
+func search(ctx context.Context, store cache.MetadataStore, key string, idx string) ([]cacheRefMetadata, error) {
+	var results []cacheRefMetadata
+	mds, err := store.Search(ctx, idx+key)
+	if err != nil {
+		return nil, err
+	}
+	for _, md := range mds {
+		results = append(results, cacheRefMetadata{md})
+	}
+	return results, nil
+}
+
+func searchGitRemote(ctx context.Context, store cache.MetadataStore, remote string) ([]cacheRefMetadata, error) {
+	return search(ctx, store, remote, gitRemoteIndex)
+}
+
+func searchGitSnapshot(ctx context.Context, store cache.MetadataStore, key string) ([]cacheRefMetadata, error) {
+	return search(ctx, store, key, gitSnapshotIndex)
+}
+
+type cacheRefMetadata struct {
+	cache.RefMetadata
+}
+
+func (md cacheRefMetadata) setGitSnapshot(key string) error {
+	return md.SetString(keyGitSnapshot, key, gitSnapshotIndex+key)
+}
+
+func (md cacheRefMetadata) setGitRemote(key string) error {
+	return md.SetString(keyGitRemote, key, gitRemoteIndex+key)
 }

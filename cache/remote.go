@@ -66,11 +66,12 @@ func (sr *immutableRef) GetRemote(ctx context.Context, createIfNeeded bool, comp
 		// update distribution source annotation for lazy-refs (non-lazy refs
 		// will already have their dsl stored in the content store, which is
 		// used by the push handlers)
+		var addAnnotations []string
 		isLazy, err := ref.isLazy(ctx)
 		if err != nil {
 			return nil, err
 		} else if isLazy {
-			imageRefs := getImageRefs(ref.md)
+			imageRefs := ref.getImageRefs()
 			for _, imageRef := range imageRefs {
 				refspec, err := reference.Parse(imageRef)
 				if err != nil {
@@ -103,11 +104,12 @@ func (sr *immutableRef) GetRemote(ctx context.Context, createIfNeeded bool, comp
 					existingRepos = append(existingRepos, repo)
 				}
 				desc.Annotations[dslKey] = strings.Join(existingRepos, ",")
+				addAnnotations = append(addAnnotations, dslKey)
 			}
 		}
 
 		if forceCompression {
-			if needs, err := needsConversion(desc.MediaType, compressionType); err != nil {
+			if needs, err := needsConversion(ctx, sr.cm.ContentStore, desc, compressionType); err != nil {
 				return nil, err
 			} else if needs {
 				// ensure the compression type.
@@ -120,6 +122,10 @@ func (sr *immutableRef) GetRemote(ctx context.Context, createIfNeeded bool, comp
 				newDesc.MediaType = blobDesc.MediaType
 				newDesc.Digest = blobDesc.Digest
 				newDesc.Size = blobDesc.Size
+				newDesc.Annotations = nil
+				for _, k := range addAnnotations {
+					newDesc.Annotations[k] = desc.Annotations[k]
+				}
 				for k, v := range blobDesc.Annotations {
 					if newDesc.Annotations == nil {
 						newDesc.Annotations = make(map[string]string)
@@ -214,13 +220,11 @@ func (p lazyRefProvider) Unlazy(ctx context.Context) error {
 			return nil, err
 		}
 
-		if imageRefs := getImageRefs(p.ref.md); len(imageRefs) > 0 {
+		if imageRefs := p.ref.getImageRefs(); len(imageRefs) > 0 {
 			// just use the first image ref, it's arbitrary
 			imageRef := imageRefs[0]
-			if GetDescription(p.ref.md) == "" {
-				queueDescription(p.ref.md, "pulled from "+imageRef)
-				err := p.ref.md.Commit()
-				if err != nil {
+			if p.ref.GetDescription() == "" {
+				if err := p.ref.SetDescription("pulled from " + imageRef); err != nil {
 					return nil, err
 				}
 			}

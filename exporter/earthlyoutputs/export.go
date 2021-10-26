@@ -26,6 +26,7 @@ import (
 	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/session/pullping"
 	"github.com/moby/buildkit/snapshot"
+	"github.com/moby/buildkit/util/buildinfo"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/grpcerrors"
@@ -50,6 +51,7 @@ const (
 	VariantOCI          = "oci"
 	VariantDocker       = "docker"
 	ociTypes            = "oci-mediatypes"
+	keyBuildInfo        = "buildinfo"
 )
 
 type Opt struct {
@@ -99,6 +101,15 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
 			}
 			*ot = b
+		case keyBuildInfo:
+			if v == "" {
+				continue
+			}
+			bimode, err := buildinfo.ParseExportMode(v)
+			if err != nil {
+				return nil, err
+			}
+			i.buildInfoMode = bimode
 		default:
 			if i.meta == nil {
 				i.meta = make(map[string][]byte)
@@ -120,6 +131,7 @@ type imageExporterInstance struct {
 	name             string
 	ociTypes         bool
 	layerCompression compression.Type
+	buildInfoMode    buildinfo.ExportMode
 }
 
 func (e *imageExporterInstance) Name() string {
@@ -309,7 +321,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	defer done(context.TODO())
 
 	for _, img := range images {
-		desc, err := e.opt.ImageWriter.Commit(ctx, *img.expSrc, e.ociTypes, e.layerCompression, false, sessionID)
+		desc, err := e.opt.ImageWriter.Commit(ctx, *img.expSrc, e.ociTypes, e.layerCompression, e.buildInfoMode, false, sessionID)
 		if err != nil {
 			return nil, err
 		}

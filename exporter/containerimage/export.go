@@ -19,6 +19,7 @@ import (
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
+	"github.com/moby/buildkit/util/buildinfo"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/leaseutil"
@@ -40,6 +41,7 @@ const (
 	keyNameCanonical    = "name-canonical"
 	keyLayerCompression = "compression"
 	keyForceCompression = "force-compression"
+	keyBuildInfo        = "buildinfo"
 	ociTypes            = "oci-mediatypes"
 )
 
@@ -68,6 +70,7 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 	i := &imageExporterInstance{
 		imageExporter:    e,
 		layerCompression: compression.Default,
+		buildInfoMode:    buildinfo.ExportDefault,
 	}
 
 	var esgz bool
@@ -144,6 +147,8 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 			case "estargz":
 				i.layerCompression = compression.EStargz
 				esgz = true
+			case "zstd":
+				i.layerCompression = compression.Zstd
 			case "uncompressed":
 				i.layerCompression = compression.Uncompressed
 			default:
@@ -159,6 +164,15 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
 			}
 			i.forceCompression = b
+		case keyBuildInfo:
+			if v == "" {
+				continue
+			}
+			bimode, err := buildinfo.ParseExportMode(v)
+			if err != nil {
+				return nil, err
+			}
+			i.buildInfoMode = bimode
 		default:
 			if i.meta == nil {
 				i.meta = make(map[string][]byte)
@@ -185,6 +199,7 @@ type imageExporterInstance struct {
 	danglingPrefix   string
 	layerCompression compression.Type
 	forceCompression bool
+	buildInfoMode    buildinfo.ExportMode
 	meta             map[string][]byte
 }
 
@@ -206,7 +221,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	}
 	defer done(context.TODO())
 
-	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes, e.layerCompression, e.forceCompression, sessionID)
+	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes, e.layerCompression, e.buildInfoMode, e.forceCompression, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -214,6 +229,15 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	defer func() {
 		e.opt.ImageWriter.ContentStore().Delete(context.TODO(), desc.Digest)
 	}()
+
+	if e.buildInfoMode&buildinfo.ExportMetadata == 0 {
+		for k := range src.Metadata {
+			if !strings.HasPrefix(k, exptypes.ExporterBuildInfo) {
+				continue
+			}
+			delete(src.Metadata, k)
+		}
+	}
 
 	resp := make(map[string]string)
 

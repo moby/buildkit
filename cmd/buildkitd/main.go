@@ -23,7 +23,6 @@ import (
 	"github.com/containerd/containerd/sys"
 	sddaemon "github.com/coreos/go-systemd/v22/daemon"
 	"github.com/docker/docker/pkg/reexec"
-	"github.com/docker/go-connections/sockets"
 	"github.com/gofrs/flock"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/moby/buildkit/cache/remotecache"
@@ -75,7 +74,9 @@ func init() {
 	stack.SetVersionInfo(version.Version, version.Revision)
 
 	seed.WithTimeAndRand()
-	reexec.Init()
+	if reexec.Init() {
+		os.Exit(0)
+	}
 
 	// overwrites containerd/log.G
 	log.G = bklog.GetLogger
@@ -205,7 +206,7 @@ func main() {
 		ctx, cancel := context.WithCancel(appcontext.Context())
 		defer cancel()
 
-		cfg, err := LoadFile(c.GlobalString("config"))
+		cfg, err := config.LoadFile(c.GlobalString("config"))
 		if err != nil {
 			return err
 		}
@@ -277,6 +278,7 @@ func main() {
 
 		controller.Register(server)
 
+		// start earthly-specific registry server
 		lrPort, ok := os.LookupEnv("BUILDKIT_LOCAL_REGISTRY_LISTEN_PORT")
 		if ok {
 			logrus.Infof("Starting local registry for outputs on port %s", lrPort)
@@ -387,7 +389,7 @@ func defaultConfigPath() string {
 }
 
 func defaultConf() (config.Config, error) {
-	cfg, err := LoadFile(defaultConfigPath())
+	cfg, err := config.LoadFile(defaultConfigPath())
 	if err != nil {
 		var pe *os.PathError
 		if !errors.As(err, &pe) {
@@ -559,10 +561,16 @@ func getListener(addr string, uid, gid int, tlsConfig *tls.Config) (net.Listener
 	case "fd":
 		return listenFD(listenAddr, tlsConfig)
 	case "tcp":
+		l, err := net.Listen("tcp", listenAddr)
+		if err != nil {
+			return nil, err
+		}
+
 		if tlsConfig == nil {
 			logrus.Warnf("TLS is not enabled for %s. enabling mutual TLS authentication is highly recommended", addr)
+			return l, nil
 		}
-		return sockets.NewTCPSocket(listenAddr, tlsConfig)
+		return tls.NewListener(l, tlsConfig), nil
 	default:
 		return nil, errors.Errorf("addr %s not supported", addr)
 	}
@@ -794,6 +802,15 @@ func getDNSConfig(cfg *config.DNSConfig) *oci.DNSConfig {
 		}
 	}
 	return dns
+}
+
+// parseBoolOrAuto returns (nil, nil) if s is "auto"
+func parseBoolOrAuto(s string) (*bool, error) {
+	if s == "" || strings.ToLower(s) == "auto" {
+		return nil, nil
+	}
+	b, err := strconv.ParseBool(s)
+	return &b, err
 }
 
 func runTraceController(p string, exp sdktrace.SpanExporter) error {

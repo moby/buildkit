@@ -9,10 +9,11 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
-	"sync"
+	"strings"
 	"testing"
 	"time"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/containerd/snapshots/native"
 	"github.com/containerd/stargz-snapshotter/estargz"
+	"github.com/klauspost/compress/zstd"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/session"
@@ -83,7 +85,7 @@ func newCacheManager(ctx context.Context, opt cmOpt) (co *cmOut, cleanup func() 
 		return err
 	}
 	defer func() {
-		if err != nil {
+		if err != nil && cleanup != nil {
 			cleanup()
 		}
 	}()
@@ -102,11 +104,6 @@ func newCacheManager(ctx context.Context, opt cmOpt) (co *cmOut, cleanup func() 
 			return nil, nil, err
 		}
 		opt.snapshotter = snapshotter
-	}
-
-	md, err := metadata.NewStore(filepath.Join(tmpdir, "metadata.db"))
-	if err != nil {
-		return nil, nil, err
 	}
 
 	store, err := local.NewStore(tmpdir)
@@ -131,6 +128,11 @@ func newCacheManager(ctx context.Context, opt cmOpt) (co *cmOut, cleanup func() 
 
 	store = containerdsnapshot.NewContentStore(mdb.ContentStore(), ns)
 	lm := leaseutil.WithNamespace(ctdmetadata.NewLeaseManager(mdb), ns)
+
+	md, err := metadata.NewStore(filepath.Join(tmpdir, "metadata.db"))
+	if err != nil {
+		return nil, nil, err
+	}
 
 	cm, err := NewManager(ManagerOpt{
 		Snapshotter:    snapshot.FromContainerdSnapshotter(opt.snapshotterName, containerdsnapshot.NSSnapshotter(ns, mdb.Snapshotter(opt.snapshotterName)), nil),
@@ -224,7 +226,7 @@ func TestManager(t *testing.T) {
 
 	checkDiskUsage(ctx, t, cm, 1, 0)
 
-	err = snap.(*immutableRef).finalizeLocked(ctx)
+	err = snap.Finalize(ctx)
 	require.NoError(t, err)
 
 	err = snap.Release(ctx)
@@ -363,7 +365,7 @@ func TestSnapshotExtract(t *testing.T) {
 	snap, err := cm.GetByBlob(ctx, desc, nil)
 	require.NoError(t, err)
 
-	require.Equal(t, false, snap.Info().Extracted)
+	require.Equal(t, false, !snap.(*immutableRef).getBlobOnly())
 
 	b2, desc2, err := mapToBlob(map[string]string{"foo": "bar123"}, true)
 	require.NoError(t, err)
@@ -374,11 +376,11 @@ func TestSnapshotExtract(t *testing.T) {
 	snap2, err := cm.GetByBlob(ctx, desc2, snap)
 	require.NoError(t, err)
 
-	size, err := snap2.Size(ctx)
+	size, err := snap2.(*immutableRef).size(ctx)
 	require.NoError(t, err)
 	require.Equal(t, int64(len(b2)), size)
 
-	require.Equal(t, false, snap2.Info().Extracted)
+	require.Equal(t, false, !snap2.(*immutableRef).getBlobOnly())
 
 	dirs, err := ioutil.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
 	require.NoError(t, err)
@@ -389,8 +391,8 @@ func TestSnapshotExtract(t *testing.T) {
 	err = snap2.Extract(ctx, nil)
 	require.NoError(t, err)
 
-	require.Equal(t, true, snap.Info().Extracted)
-	require.Equal(t, true, snap2.Info().Extracted)
+	require.Equal(t, true, !snap.(*immutableRef).getBlobOnly())
+	require.Equal(t, true, !snap2.(*immutableRef).getBlobOnly())
 
 	dirs, err = ioutil.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
 	require.NoError(t, err)
@@ -534,9 +536,9 @@ func TestExtractOnMutable(t *testing.T) {
 	err = snap.Release(context.TODO())
 	require.NoError(t, err)
 
-	require.Equal(t, false, snap2.Info().Extracted)
+	require.Equal(t, false, !snap2.(*immutableRef).getBlobOnly())
 
-	size, err := snap2.Size(ctx)
+	size, err := snap2.(*immutableRef).size(ctx)
 	require.NoError(t, err)
 	require.Equal(t, int64(len(b2)), size)
 
@@ -549,8 +551,8 @@ func TestExtractOnMutable(t *testing.T) {
 	err = snap2.Extract(ctx, nil)
 	require.NoError(t, err)
 
-	require.Equal(t, true, snap.Info().Extracted)
-	require.Equal(t, true, snap2.Info().Extracted)
+	require.Equal(t, true, !snap.(*immutableRef).getBlobOnly())
+	require.Equal(t, true, !snap2.(*immutableRef).getBlobOnly())
 
 	buf := pruneResultBuffer()
 	err = cm.Prune(ctx, buf.C, client.PruneInfo{})
@@ -617,12 +619,12 @@ func TestSetBlob(t *testing.T) {
 	snap, err := active.Commit(ctx)
 	require.NoError(t, err)
 
-	info := snap.Info()
-	require.Equal(t, "", string(info.DiffID))
-	require.Equal(t, "", string(info.Blob))
-	require.Equal(t, "", string(info.ChainID))
-	require.Equal(t, "", string(info.BlobChainID))
-	require.Equal(t, info.Extracted, true)
+	snapRef := snap.(*immutableRef)
+	require.Equal(t, "", string(snapRef.getDiffID()))
+	require.Equal(t, "", string(snapRef.getBlob()))
+	require.Equal(t, "", string(snapRef.getChainID()))
+	require.Equal(t, "", string(snapRef.getBlobChainID()))
+	require.Equal(t, !snapRef.getBlobOnly(), true)
 
 	ctx, clean, err := leaseutil.WithLease(ctx, co.lm)
 	require.NoError(t, err)
@@ -651,14 +653,14 @@ func TestSetBlob(t *testing.T) {
 	err = snap.(*immutableRef).setChains(ctx)
 	require.NoError(t, err)
 
-	info = snap.Info()
-	require.Equal(t, desc.Annotations["containerd.io/uncompressed"], string(info.DiffID))
-	require.Equal(t, desc.Digest, info.Blob)
-	require.Equal(t, desc.MediaType, info.MediaType)
-	require.Equal(t, info.DiffID, info.ChainID)
-	require.Equal(t, digest.FromBytes([]byte(desc.Digest+" "+info.DiffID)), info.BlobChainID)
-	require.Equal(t, snap.ID(), info.SnapshotID)
-	require.Equal(t, info.Extracted, true)
+	snapRef = snap.(*immutableRef)
+	require.Equal(t, desc.Annotations["containerd.io/uncompressed"], string(snapRef.getDiffID()))
+	require.Equal(t, desc.Digest, snapRef.getBlob())
+	require.Equal(t, desc.MediaType, snapRef.getMediaType())
+	require.Equal(t, snapRef.getDiffID(), snapRef.getChainID())
+	require.Equal(t, digest.FromBytes([]byte(desc.Digest+" "+snapRef.getDiffID())), snapRef.getBlobChainID())
+	require.Equal(t, snap.ID(), snapRef.getSnapshotID())
+	require.Equal(t, !snapRef.getBlobOnly(), true)
 
 	active, err = cm.New(ctx, snap, nil)
 	require.NoError(t, err)
@@ -681,14 +683,14 @@ func TestSetBlob(t *testing.T) {
 	err = snap2.(*immutableRef).setChains(ctx)
 	require.NoError(t, err)
 
-	info2 := snap2.Info()
-	require.Equal(t, desc2.Annotations["containerd.io/uncompressed"], string(info2.DiffID))
-	require.Equal(t, desc2.Digest, info2.Blob)
-	require.Equal(t, desc2.MediaType, info2.MediaType)
-	require.Equal(t, digest.FromBytes([]byte(info.ChainID+" "+info2.DiffID)), info2.ChainID)
-	require.Equal(t, digest.FromBytes([]byte(info.BlobChainID+" "+digest.FromBytes([]byte(desc2.Digest+" "+info2.DiffID)))), info2.BlobChainID)
-	require.Equal(t, snap2.ID(), info2.SnapshotID)
-	require.Equal(t, info2.Extracted, true)
+	snapRef2 := snap2.(*immutableRef)
+	require.Equal(t, desc2.Annotations["containerd.io/uncompressed"], string(snapRef2.getDiffID()))
+	require.Equal(t, desc2.Digest, snapRef2.getBlob())
+	require.Equal(t, desc2.MediaType, snapRef2.getMediaType())
+	require.Equal(t, digest.FromBytes([]byte(snapRef.getChainID()+" "+snapRef2.getDiffID())), snapRef2.getChainID())
+	require.Equal(t, digest.FromBytes([]byte(snapRef.getBlobChainID()+" "+digest.FromBytes([]byte(desc2.Digest+" "+snapRef2.getDiffID())))), snapRef2.getBlobChainID())
+	require.Equal(t, snap2.ID(), snapRef2.getSnapshotID())
+	require.Equal(t, !snapRef2.getBlobOnly(), true)
 
 	b3, desc3, err := mapToBlob(map[string]string{"foo3": "bar3"}, true)
 	require.NoError(t, err)
@@ -699,14 +701,14 @@ func TestSetBlob(t *testing.T) {
 	snap3, err := cm.GetByBlob(ctx, desc3, snap)
 	require.NoError(t, err)
 
-	info3 := snap3.Info()
-	require.Equal(t, desc3.Annotations["containerd.io/uncompressed"], string(info3.DiffID))
-	require.Equal(t, desc3.Digest, info3.Blob)
-	require.Equal(t, desc3.MediaType, info3.MediaType)
-	require.Equal(t, digest.FromBytes([]byte(info.ChainID+" "+info3.DiffID)), info3.ChainID)
-	require.Equal(t, digest.FromBytes([]byte(info.BlobChainID+" "+digest.FromBytes([]byte(desc3.Digest+" "+info3.DiffID)))), info3.BlobChainID)
-	require.Equal(t, string(info3.ChainID), info3.SnapshotID)
-	require.Equal(t, info3.Extracted, false)
+	snapRef3 := snap3.(*immutableRef)
+	require.Equal(t, desc3.Annotations["containerd.io/uncompressed"], string(snapRef3.getDiffID()))
+	require.Equal(t, desc3.Digest, snapRef3.getBlob())
+	require.Equal(t, desc3.MediaType, snapRef3.getMediaType())
+	require.Equal(t, digest.FromBytes([]byte(snapRef.getChainID()+" "+snapRef3.getDiffID())), snapRef3.getChainID())
+	require.Equal(t, digest.FromBytes([]byte(snapRef.getBlobChainID()+" "+digest.FromBytes([]byte(desc3.Digest+" "+snapRef3.getDiffID())))), snapRef3.getBlobChainID())
+	require.Equal(t, string(snapRef3.getChainID()), snapRef3.getSnapshotID())
+	require.Equal(t, !snapRef3.getBlobOnly(), false)
 
 	// snap4 is same as snap2
 	snap4, err := cm.GetByBlob(ctx, desc2, snap)
@@ -718,7 +720,7 @@ func TestSetBlob(t *testing.T) {
 	b5, desc5, err := mapToBlob(map[string]string{"foo5": "bar5"}, true)
 	require.NoError(t, err)
 
-	desc5.Annotations["containerd.io/uncompressed"] = info2.DiffID.String()
+	desc5.Annotations["containerd.io/uncompressed"] = snapRef2.getDiffID().String()
 
 	err = content.WriteBlob(ctx, co.cs, "ref5", bytes.NewBuffer(b5), desc5)
 	require.NoError(t, err)
@@ -726,14 +728,15 @@ func TestSetBlob(t *testing.T) {
 	snap5, err := cm.GetByBlob(ctx, desc5, snap)
 	require.NoError(t, err)
 
+	snapRef5 := snap5.(*immutableRef)
 	require.NotEqual(t, snap2.ID(), snap5.ID())
-	require.Equal(t, snap2.Info().SnapshotID, snap5.Info().SnapshotID)
-	require.Equal(t, info2.DiffID, snap5.Info().DiffID)
-	require.Equal(t, desc5.Digest, snap5.Info().Blob)
+	require.Equal(t, snapRef2.getSnapshotID(), snapRef5.getSnapshotID())
+	require.Equal(t, snapRef2.getDiffID(), snapRef5.getDiffID())
+	require.Equal(t, desc5.Digest, snapRef5.getBlob())
 
-	require.Equal(t, snap2.Info().ChainID, snap5.Info().ChainID)
-	require.NotEqual(t, snap2.Info().BlobChainID, snap5.Info().BlobChainID)
-	require.Equal(t, digest.FromBytes([]byte(info.BlobChainID+" "+digest.FromBytes([]byte(desc5.Digest+" "+info2.DiffID)))), snap5.Info().BlobChainID)
+	require.Equal(t, snapRef2.getChainID(), snapRef5.getChainID())
+	require.NotEqual(t, snapRef2.getBlobChainID(), snapRef5.getBlobChainID())
+	require.Equal(t, digest.FromBytes([]byte(snapRef.getBlobChainID()+" "+digest.FromBytes([]byte(desc5.Digest+" "+snapRef2.getDiffID())))), snapRef5.getBlobChainID())
 
 	// snap6 is a child of snap3
 	b6, desc6, err := mapToBlob(map[string]string{"foo6": "bar6"}, true)
@@ -745,13 +748,13 @@ func TestSetBlob(t *testing.T) {
 	snap6, err := cm.GetByBlob(ctx, desc6, snap3)
 	require.NoError(t, err)
 
-	info6 := snap6.Info()
-	require.Equal(t, desc6.Annotations["containerd.io/uncompressed"], string(info6.DiffID))
-	require.Equal(t, desc6.Digest, info6.Blob)
-	require.Equal(t, digest.FromBytes([]byte(snap3.Info().ChainID+" "+info6.DiffID)), info6.ChainID)
-	require.Equal(t, digest.FromBytes([]byte(info3.BlobChainID+" "+digest.FromBytes([]byte(info6.Blob+" "+info6.DiffID)))), info6.BlobChainID)
-	require.Equal(t, string(info6.ChainID), info6.SnapshotID)
-	require.Equal(t, info6.Extracted, false)
+	snapRef6 := snap6.(*immutableRef)
+	require.Equal(t, desc6.Annotations["containerd.io/uncompressed"], string(snapRef6.getDiffID()))
+	require.Equal(t, desc6.Digest, snapRef6.getBlob())
+	require.Equal(t, digest.FromBytes([]byte(snapRef3.getChainID()+" "+snapRef6.getDiffID())), snapRef6.getChainID())
+	require.Equal(t, digest.FromBytes([]byte(snapRef3.getBlobChainID()+" "+digest.FromBytes([]byte(snapRef6.getBlob()+" "+snapRef6.getDiffID())))), snapRef6.getBlobChainID())
+	require.Equal(t, string(snapRef6.getChainID()), snapRef6.getSnapshotID())
+	require.Equal(t, !snapRef6.getBlobOnly(), false)
 
 	_, err = cm.GetByBlob(ctx, ocispecs.Descriptor{
 		Digest: digest.FromBytes([]byte("notexist")),
@@ -945,7 +948,7 @@ func TestLazyCommit(t *testing.T) {
 	require.NoError(t, err)
 
 	// this time finalize commit
-	err = snap.(*immutableRef).finalizeLocked(ctx)
+	err = snap.Finalize(ctx)
 	require.NoError(t, err)
 
 	err = snap.Release(ctx)
@@ -1019,7 +1022,7 @@ func TestLazyCommit(t *testing.T) {
 	snap2, err = cm.Get(ctx, snap.ID())
 	require.NoError(t, err)
 
-	err = snap2.(*immutableRef).finalizeLocked(ctx)
+	err = snap2.Finalize(ctx)
 	require.NoError(t, err)
 
 	err = snap2.Release(ctx)
@@ -1028,6 +1031,98 @@ func TestLazyCommit(t *testing.T) {
 	_, err = cm.GetMutable(ctx, active.ID())
 	require.Error(t, err)
 	require.Equal(t, true, errors.Is(err, errNotFound))
+}
+
+func TestConversion(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS != "linux" {
+		t.Skipf("unsupported GOOS: %s", runtime.GOOS)
+	}
+
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+
+	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+
+	co, cleanup, err := newCacheManager(ctx, cmOpt{
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	defer cleanup()
+	store := co.cs
+
+	// Preapre the original tar blob using archive/tar and tar command on the system
+	m := map[string]string{"foo1": "bar1", "foo2": "bar2"}
+
+	orgBlobBytesGo, orgDescGo, err := mapToBlob(m, false)
+	require.NoError(t, err)
+	cw, err := store.Writer(ctx, content.WithRef(fmt.Sprintf("write-test-blob-%s", orgDescGo.Digest)))
+	require.NoError(t, err)
+	_, err = cw.Write(orgBlobBytesGo)
+	require.NoError(t, err)
+	err = cw.Commit(ctx, 0, cw.Digest())
+	require.NoError(t, err)
+
+	orgBlobBytesSys, orgDescSys, err := mapToSystemTarBlob(m)
+	require.NoError(t, err)
+	cw, err = store.Writer(ctx, content.WithRef(fmt.Sprintf("write-test-blob-%s", orgDescSys.Digest)))
+	require.NoError(t, err)
+	_, err = cw.Write(orgBlobBytesSys)
+	require.NoError(t, err)
+	err = cw.Commit(ctx, 0, cw.Digest())
+	require.NoError(t, err)
+
+	// Tests all combination of the conversions from type i to type j preserve
+	// the uncompressed digest.
+	allCompression := []compression.Type{compression.Uncompressed, compression.Gzip, compression.EStargz, compression.Zstd}
+	eg, egctx := errgroup.WithContext(ctx)
+	for _, orgDesc := range []ocispecs.Descriptor{orgDescGo, orgDescSys} {
+		for _, i := range allCompression {
+			for _, j := range allCompression {
+				i, j, orgDesc := i, j, orgDesc
+				eg.Go(func() error {
+					testName := fmt.Sprintf("%s=>%s", i, j)
+
+					// Prepare the source compression type
+					convertFunc, err := getConverter(egctx, store, orgDesc, i)
+					require.NoError(t, err, testName)
+					srcDesc := &orgDesc
+					if convertFunc != nil {
+						srcDesc, err = convertFunc(egctx, store, orgDesc)
+						require.NoError(t, err, testName)
+					}
+
+					// Convert the blob
+					convertFunc, err = getConverter(egctx, store, *srcDesc, j)
+					require.NoError(t, err, testName)
+					resDesc := srcDesc
+					if convertFunc != nil {
+						resDesc, err = convertFunc(egctx, store, *srcDesc)
+						require.NoError(t, err, testName)
+					}
+
+					// Check the uncompressed digest is the same as the original
+					convertFunc, err = getConverter(egctx, store, *resDesc, compression.Uncompressed)
+					require.NoError(t, err, testName)
+					recreatedDesc := resDesc
+					if convertFunc != nil {
+						recreatedDesc, err = convertFunc(egctx, store, *resDesc)
+						require.NoError(t, err, testName)
+					}
+					require.Equal(t, recreatedDesc.Digest, orgDesc.Digest, testName)
+					require.NotNil(t, recreatedDesc.Annotations)
+					require.Equal(t, recreatedDesc.Annotations["containerd.io/uncompressed"], orgDesc.Digest.String(), testName)
+					return nil
+				})
+			}
+		}
+	}
+	require.NoError(t, eg.Wait())
 }
 
 func TestGetRemote(t *testing.T) {
@@ -1064,8 +1159,6 @@ func TestGetRemote(t *testing.T) {
 
 	// make some lazy refs from blobs
 	expectedContent := map[digest.Digest]struct{}{}
-	variant := map[digest.Digest]digest.Digest{}
-	esgz2gzip := map[digest.Digest]digest.Digest{}
 	var descs []ocispecs.Descriptor
 	for i := 0; i < 2; i++ {
 		blobmap := map[string]string{"foo": strconv.Itoa(i)}
@@ -1090,11 +1183,13 @@ func TestGetRemote(t *testing.T) {
 		require.NoError(t, err)
 		expectedContent[uncompressedDesc.Digest] = struct{}{}
 
-		esgzDgst, uncompressedEsgzDgst, err := esgzBlobDigest(uncompressedBlobBytes)
+		esgzDgst, err := esgzBlobDigest(uncompressedBlobBytes)
 		require.NoError(t, err)
 		expectedContent[esgzDgst] = struct{}{}
-		variant[uncompressedEsgzDgst] = uncompressedDesc.Digest
-		esgz2gzip[esgzDgst] = desc.Digest
+
+		zstdDigest, err := zstdBlobDigest(uncompressedBlobBytes)
+		require.NoError(t, err)
+		expectedContent[zstdDigest] = struct{}{}
 	}
 
 	// Create 3 levels of mutable refs, where each parent ref has 2 children (this tests parallel creation of
@@ -1128,11 +1223,14 @@ func TestGetRemote(t *testing.T) {
 				uncompressedBlobBytes, uncompressedDesc, err := fileToBlob(f, false)
 				require.NoError(t, err)
 				expectedContent[uncompressedDesc.Digest] = struct{}{}
-				esgzDgst, uncompressedEsgzDgst, err := esgzBlobDigest(uncompressedBlobBytes)
+
+				esgzDgst, err := esgzBlobDigest(uncompressedBlobBytes)
 				require.NoError(t, err)
 				expectedContent[esgzDgst] = struct{}{}
-				variant[uncompressedEsgzDgst] = uncompressedDesc.Digest
-				esgz2gzip[esgzDgst] = desc.Digest
+
+				zstdDigest, err := zstdBlobDigest(uncompressedBlobBytes)
+				require.NoError(t, err)
+				expectedContent[zstdDigest] = struct{}{}
 
 				f.Close()
 				err = lm.Unmount()
@@ -1154,12 +1252,10 @@ func TestGetRemote(t *testing.T) {
 	checkNumBlobs(ctx, t, co.cs, 1)
 
 	// Call GetRemote on all the refs
-	esgzRefs := map[digest.Digest]struct{}{}
-	var esgzRefsMu sync.Mutex
 	eg, egctx := errgroup.WithContext(ctx)
 	for _, ir := range refs {
 		ir := ir.(*immutableRef)
-		for _, compressionType := range []compression.Type{compression.Uncompressed, compression.Gzip, compression.EStargz} {
+		for _, compressionType := range []compression.Type{compression.Uncompressed, compression.Gzip, compression.EStargz, compression.Zstd} {
 			compressionType := compressionType
 			eg.Go(func() error {
 				remote, err := ir.GetRemote(egctx, true, compressionType, true, nil)
@@ -1173,27 +1269,19 @@ func TestGetRemote(t *testing.T) {
 						require.Equal(t, ocispecs.MediaTypeImageLayerGzip, desc.MediaType)
 					case compression.EStargz:
 						require.Equal(t, ocispecs.MediaTypeImageLayerGzip, desc.MediaType)
+					case compression.Zstd:
+						require.Equal(t, ocispecs.MediaTypeImageLayer+"+zstd", desc.MediaType)
 					default:
 						require.Fail(t, "unhandled media type", compressionType)
 					}
 					dgst := desc.Digest
-					if v, ok := variant[dgst]; ok {
-						dgst = v
-					}
-					require.Contains(t, expectedContent, dgst)
+					require.Contains(t, expectedContent, dgst, "for %v", compressionType)
 					checkDescriptor(ctx, t, co.cs, desc, compressionType)
 
 					r := refChain[i]
-					if compressionType == compression.EStargz {
-						if digest.Digest(getBlob(r.md)) == desc.Digest {
-							esgzRefsMu.Lock()
-							esgzRefs[desc.Digest] = struct{}{}
-							esgzRefsMu.Unlock()
-						}
-					}
 					isLazy, err := r.isLazy(egctx)
 					require.NoError(t, err)
-					needs, err := needsConversion(desc.MediaType, compressionType)
+					needs, err := needsConversion(ctx, co.cs, desc, compressionType)
 					require.NoError(t, err)
 					if needs {
 						require.False(t, isLazy, "layer %q requires conversion so it must be unlazied", desc.Digest)
@@ -1213,18 +1301,9 @@ func TestGetRemote(t *testing.T) {
 	}
 	require.NoError(t, eg.Wait())
 
-	for dgst := range esgzRefs {
-		gzipDgst, ok := esgz2gzip[dgst]
-		require.True(t, ok, "match for gzip blob: %s", dgst)
-		delete(expectedContent, gzipDgst) // esgz blob is reused also as gzip. duplicated gzip blob is unexpected.
-	}
-
 	// verify there's a 1-to-1 mapping between the content store and what we expected to be there
 	err = co.cs.Walk(ctx, func(info content.Info) error {
 		dgst := info.Digest
-		if v, ok := variant[dgst]; ok {
-			dgst = v
-		}
 		var matched bool
 		for expected := range expectedContent {
 			if dgst == expected {
@@ -1233,7 +1312,7 @@ func TestGetRemote(t *testing.T) {
 				break
 			}
 		}
-		require.True(t, matched, "match for blob: %s", info.Digest)
+		require.True(t, matched, "unexpected blob: %s", info.Digest)
 		checkInfo(ctx, t, co.cs, info)
 		return nil
 	})
@@ -1315,31 +1394,31 @@ func checkDiskUsage(ctx context.Context, t *testing.T, cm Manager, inuse, unused
 	require.Equal(t, unused, unusedActual)
 }
 
-func esgzBlobDigest(uncompressedBlobBytes []byte) (digest.Digest, digest.Digest, error) {
-	buf := new(bytes.Buffer)
-	compressorFunc, _ := writeEStargz()
-	w, err := compressorFunc(buf, ocispecs.MediaTypeImageLayerGzip)
-	if err != nil {
-		return "", "", err
+func esgzBlobDigest(uncompressedBlobBytes []byte) (blobDigest digest.Digest, err error) {
+	esgzDigester := digest.Canonical.Digester()
+	w := estargz.NewWriter(esgzDigester.Hash())
+	if err := w.AppendTarLossLess(bytes.NewReader(uncompressedBlobBytes)); err != nil {
+		return "", err
 	}
-	if _, err := io.Copy(w, bytes.NewReader(uncompressedBlobBytes)); err != nil {
-		return "", "", err
+	if _, err := w.Close(); err != nil {
+		return "", err
+	}
+	return esgzDigester.Digest(), nil
+}
+
+func zstdBlobDigest(uncompressedBlobBytes []byte) (digest.Digest, error) {
+	b := bytes.NewBuffer(nil)
+	w, err := zstd.NewWriter(b)
+	if err != nil {
+		return "", err
+	}
+	if _, err := w.Write(uncompressedBlobBytes); err != nil {
+		return "", err
 	}
 	if err := w.Close(); err != nil {
-		return "", "", err
+		return "", err
 	}
-	b := buf.Bytes()
-	esgzDgst := digest.FromBytes(b)
-	ur, err := gzip.NewReader(bytes.NewReader(b))
-	if err != nil {
-		return "", "", err
-	}
-	defer ur.Close()
-	uncompressedDgst, err := digest.FromReader(ur)
-	if err != nil {
-		return "", "", err
-	}
-	return esgzDgst, uncompressedDgst, nil
+	return digest.FromBytes(b.Bytes()), nil
 }
 
 func checkNumBlobs(ctx context.Context, t *testing.T, cs content.Store, expected int) {
@@ -1472,6 +1551,67 @@ func fileToBlob(file *os.File, compress bool) ([]byte, ocispecs.Descriptor, erro
 		Size:      int64(buf.Len()),
 		Annotations: map[string]string{
 			"containerd.io/uncompressed": sha.Digest().String(),
+		},
+	}, nil
+}
+
+func mapToSystemTarBlob(m map[string]string) ([]byte, ocispecs.Descriptor, error) {
+	tmpdir, err := ioutil.TempDir("", "tarcreation")
+	if err != nil {
+		return nil, ocispecs.Descriptor{}, err
+	}
+	defer os.RemoveAll(tmpdir)
+
+	expected := map[string]string{}
+	for k, v := range m {
+		expected[k] = v
+		if err := ioutil.WriteFile(filepath.Join(tmpdir, k), []byte(v), 0600); err != nil {
+			return nil, ocispecs.Descriptor{}, err
+		}
+	}
+
+	cmd := exec.Command("tar", "-C", tmpdir, "-c", ".")
+	tarout, err := cmd.Output()
+	if err != nil {
+		return nil, ocispecs.Descriptor{}, err
+	}
+
+	tr := tar.NewReader(bytes.NewReader(tarout))
+	for {
+		h, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, ocispecs.Descriptor{}, err
+		}
+		k := strings.TrimPrefix(filepath.Clean("/"+h.Name), "/")
+		if k == "" {
+			continue // ignore the root entry
+		}
+		v, ok := expected[k]
+		if !ok {
+			return nil, ocispecs.Descriptor{}, errors.Errorf("unexpected file %s", h.Name)
+		}
+		delete(expected, k)
+		gotV, err := ioutil.ReadAll(tr)
+		if err != nil {
+			return nil, ocispecs.Descriptor{}, err
+		}
+		if string(gotV) != string(v) {
+			return nil, ocispecs.Descriptor{}, errors.Errorf("unexpected contents of %s", h.Name)
+		}
+	}
+	if len(expected) > 0 {
+		return nil, ocispecs.Descriptor{}, errors.Errorf("expected file doesn't archived: %+v", expected)
+	}
+
+	return tarout, ocispecs.Descriptor{
+		Digest:    digest.FromBytes(tarout),
+		MediaType: ocispecs.MediaTypeImageLayer,
+		Size:      int64(len(tarout)),
+		Annotations: map[string]string{
+			"containerd.io/uncompressed": digest.FromBytes(tarout).String(),
 		},
 	}, nil
 }

@@ -11,7 +11,6 @@ import (
 	"sync"
 
 	"github.com/moby/buildkit/cache"
-	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/llbsolver"
@@ -31,20 +30,20 @@ const fileCacheType = "buildkit.file.v0"
 
 type fileOp struct {
 	op          *pb.FileOp
-	md          *metadata.Store
+	md          cache.MetadataStore
 	w           worker.Worker
 	solver      *FileOpSolver
 	numInputs   int
 	parallelism *semaphore.Weighted
 }
 
-func NewFileOp(v solver.Vertex, op *pb.Op_File, cm cache.Manager, parallelism *semaphore.Weighted, md *metadata.Store, w worker.Worker) (solver.Op, error) {
+func NewFileOp(v solver.Vertex, op *pb.Op_File, cm cache.Manager, parallelism *semaphore.Weighted, w worker.Worker) (solver.Op, error) {
 	if err := llbsolver.ValidateOp(&pb.Op{Op: op}); err != nil {
 		return nil, err
 	}
 	return &fileOp{
 		op:          op.File,
-		md:          md,
+		md:          cm,
 		numInputs:   len(v.Inputs()),
 		w:           w,
 		solver:      NewFileOpSolver(w, &file.Backend{}, file.NewRefManager(cm)),

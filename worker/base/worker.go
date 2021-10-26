@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/containerd/containerd/content"
@@ -50,7 +49,7 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
-	bolt "go.etcd.io/bbolt"
+	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
 )
 
@@ -65,7 +64,6 @@ type WorkerOpt struct {
 	Labels          map[string]string
 	Platforms       []ocispecs.Platform
 	GCPolicy        []client.PruneInfo
-	MetadataStore   *metadata.Store
 	Executor        executor.Executor
 	Snapshotter     snapshot.Snapshotter
 	ContentStore    content.Store
@@ -77,6 +75,7 @@ type WorkerOpt struct {
 	LeaseManager    leases.Manager
 	GarbageCollect  func(context.Context) (gc.Stats, error)
 	ParallelismSem  *semaphore.Weighted
+	MetadataStore   *metadata.Store
 }
 
 // Worker is a local worker instance with dedicated snapshotter, cache, and so on.
@@ -98,13 +97,13 @@ func NewWorker(ctx context.Context, opt WorkerOpt) (*Worker, error) {
 
 	cm, err := cache.NewManager(cache.ManagerOpt{
 		Snapshotter:     opt.Snapshotter,
-		MetadataStore:   opt.MetadataStore,
 		PruneRefChecker: imageRefChecker,
 		Applier:         opt.Applier,
 		GarbageCollect:  opt.GarbageCollect,
 		LeaseManager:    opt.LeaseManager,
 		ContentStore:    opt.ContentStore,
 		Differ:          opt.Differ,
+		MetadataStore:   opt.MetadataStore,
 	})
 	if err != nil {
 		return nil, err
@@ -133,7 +132,6 @@ func NewWorker(ctx context.Context, opt WorkerOpt) (*Worker, error) {
 	if err := git.Supported(); err == nil {
 		gs, err := git.NewSource(git.Opt{
 			CacheAccessor: cm,
-			MetadataStore: opt.MetadataStore,
 		})
 		if err != nil {
 			return nil, err
@@ -145,7 +143,6 @@ func NewWorker(ctx context.Context, opt WorkerOpt) (*Worker, error) {
 
 	hs, err := http.NewSource(http.Opt{
 		CacheAccessor: cm,
-		MetadataStore: opt.MetadataStore,
 	})
 	if err != nil {
 		return nil, err
@@ -155,7 +152,6 @@ func NewWorker(ctx context.Context, opt WorkerOpt) (*Worker, error) {
 
 	ss, err := local.NewSource(local.Opt{
 		CacheAccessor: cm,
-		MetadataStore: opt.MetadataStore,
 	})
 	if err != nil {
 		return nil, err
@@ -256,19 +252,15 @@ func (w *Worker) CacheManager() cache.Manager {
 	return w.CacheMgr
 }
 
-func (w *Worker) MetadataStore() *metadata.Store {
-	return w.WorkerOpt.MetadataStore
-}
-
 func (w *Worker) ResolveOp(v solver.Vertex, s frontend.FrontendLLBBridge, sm *session.Manager) (solver.Op, error) {
 	if baseOp, ok := v.Sys().(*pb.Op); ok {
 		switch op := baseOp.Op.(type) {
 		case *pb.Op_Source:
 			return ops.NewSourceOp(v, op, baseOp.Platform, w.SourceManager, w.ParallelismSem, sm, w)
 		case *pb.Op_Exec:
-			return ops.NewExecOp(v, op, baseOp.Platform, w.CacheMgr, w.ParallelismSem, sm, w.WorkerOpt.MetadataStore, w.WorkerOpt.Executor, w)
+			return ops.NewExecOp(v, op, baseOp.Platform, w.CacheMgr, w.ParallelismSem, sm, w.WorkerOpt.Executor, w)
 		case *pb.Op_File:
-			return ops.NewFileOp(v, op, w.CacheMgr, w.ParallelismSem, w.WorkerOpt.MetadataStore, w)
+			return ops.NewFileOp(v, op, w.CacheMgr, w.ParallelismSem, w)
 		case *pb.Op_Build:
 			return ops.NewBuildOp(v, op, s, w)
 		default:
@@ -284,38 +276,20 @@ func (w *Worker) PruneCacheMounts(ctx context.Context, ids []string) error {
 	defer mu.Unlock()
 
 	for _, id := range ids {
-		id = "cache-dir:" + id
-		sis, err := w.WorkerOpt.MetadataStore.Search(id)
+		mds, err := mounts.SearchCacheDir(ctx, w.CacheMgr, id)
 		if err != nil {
 			return err
 		}
-		for _, si := range sis {
-			for _, k := range si.Indexes() {
-				if k == id || strings.HasPrefix(k, id+":") {
-					siOrig := si
-					if siCached := w.CacheMgr.Metadata(si.ID()); siCached != nil {
-						si = siCached
-					}
-					if si.Get(k) == nil {
-						si.Update(func(b *bolt.Bucket) error {
-							return si.SetValue(b, k, siOrig.Get(k))
-						})
-					}
-					if err := cache.CachePolicyDefault(si); err != nil {
-						return err
-					}
-					si.Queue(func(b *bolt.Bucket) error {
-						return si.SetValue(b, k, nil)
-					})
-					if err := si.Commit(); err != nil {
-						return err
-					}
-					// if ref is unused try to clean it up right away by releasing it
-					if mref, err := w.CacheMgr.GetMutable(ctx, si.ID()); err == nil {
-						go mref.Release(context.TODO())
-					}
-					break
-				}
+		for _, md := range mds {
+			if err := md.SetCachePolicyDefault(); err != nil {
+				return err
+			}
+			if err := md.ClearCacheDirIndex(); err != nil {
+				return err
+			}
+			// if ref is unused try to clean it up right away by releasing it
+			if mref, err := w.CacheMgr.GetMutable(ctx, md.ID()); err == nil {
+				go mref.Release(context.TODO())
 			}
 		}
 	}
@@ -382,6 +356,24 @@ func (w *Worker) Exporter(name string, sm *session.Manager) (exporter.Exporter, 
 }
 
 func (w *Worker) FromRemote(ctx context.Context, remote *solver.Remote) (ref cache.ImmutableRef, err error) {
+	if cd, ok := remote.Provider.(interface {
+		CheckDescriptor(context.Context, ocispecs.Descriptor) error
+	}); ok && len(remote.Descriptors) > 0 {
+		var eg errgroup.Group
+		for _, desc := range remote.Descriptors {
+			desc := desc
+			eg.Go(func() error {
+				if err := cd.CheckDescriptor(ctx, desc); err != nil {
+					return err
+				}
+				return nil
+			})
+		}
+		if err := eg.Wait(); err != nil {
+			return nil, err
+		}
+	}
+
 	descHandler := &cache.DescHandler{
 		Provider: func(session.Group) content.Provider { return remote.Provider },
 		Progress: &controller.Controller{

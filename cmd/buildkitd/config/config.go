@@ -1,7 +1,7 @@
 package config
 
 import (
-	"github.com/moby/buildkit/util/resolver"
+	resolverconfig "github.com/moby/buildkit/util/resolver/config"
 )
 
 // Config provides containerd configuration data for the server
@@ -21,7 +21,7 @@ type Config struct {
 		Containerd ContainerdConfig `toml:"containerd"`
 	} `toml:"worker"`
 
-	Registries map[string]resolver.RegistryConfig `toml:"registry"`
+	Registries map[string]resolverconfig.RegistryConfig `toml:"registry"`
 
 	DNS *DNSConfig `toml:"dns"`
 }

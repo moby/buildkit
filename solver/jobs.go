@@ -22,7 +22,7 @@ import (
 type ResolveOpFunc func(Vertex, Builder) (Op, error)
 
 type Builder interface {
-	Build(ctx context.Context, e Edge) (CachedResult, error)
+	Build(ctx context.Context, e Edge) (CachedResult, BuildInfo, error)
 	InContext(ctx context.Context, f func(ctx context.Context, g session.Group) error) error
 	EachValue(ctx context.Context, key string, fn func(interface{}) error) error
 }
@@ -197,15 +197,16 @@ type subBuilder struct {
 	exporters []ExportableCacheKey
 }
 
-func (sb *subBuilder) Build(ctx context.Context, e Edge) (CachedResult, error) {
+func (sb *subBuilder) Build(ctx context.Context, e Edge) (CachedResult, BuildInfo, error) {
+	// TODO(@crazy-max): Handle BuildInfo from subbuild
 	res, err := sb.solver.subBuild(ctx, e, sb.vtx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	sb.mu.Lock()
 	sb.exporters = append(sb.exporters, res.CacheKeys()[0]) // all keys already have full export chain
 	sb.mu.Unlock()
-	return res, nil
+	return res, nil, nil
 }
 
 func (sb *subBuilder) InContext(ctx context.Context, f func(context.Context, session.Group) error) error {
@@ -455,7 +456,7 @@ func (jl *Solver) NewJob(id string) (*Job, error) {
 }
 
 func (jl *Solver) Get(id string) (*Job, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
 	defer cancel()
 
 	go func() {
@@ -495,17 +496,43 @@ func (jl *Solver) deleteIfUnreferenced(k digest.Digest, st *state) {
 	}
 }
 
-func (j *Job) Build(ctx context.Context, e Edge) (CachedResult, error) {
+func (j *Job) Build(ctx context.Context, e Edge) (CachedResult, BuildInfo, error) {
 	if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {
 		j.span = span
 	}
 
 	v, err := j.list.load(e.Vertex, nil, j)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	e.Vertex = v
-	return j.list.s.build(ctx, e)
+
+	res, err := j.list.s.build(ctx, e)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	j.list.mu.Lock()
+	defer j.list.mu.Unlock()
+	return res, j.walkBuildInfo(ctx, e, make(BuildInfo)), nil
+}
+
+func (j *Job) walkBuildInfo(ctx context.Context, e Edge, bi BuildInfo) BuildInfo {
+	for _, inp := range e.Vertex.Inputs() {
+		if st, ok := j.list.actives[inp.Vertex.Digest()]; ok {
+			st.mu.Lock()
+			for _, cacheRes := range st.op.cacheRes {
+				for key, val := range cacheRes.BuildInfo {
+					if _, ok := bi[key]; !ok {
+						bi[key] = val
+					}
+				}
+			}
+			st.mu.Unlock()
+			bi = j.walkBuildInfo(ctx, inp, bi)
+		}
+	}
+	return bi
 }
 
 func (j *Job) Discard() error {
@@ -919,6 +946,8 @@ func notifyCompleted(ctx context.Context, v *client.Vertex, err error, cached bo
 	v.Cached = cached
 	if err != nil {
 		v.Error = err.Error()
+	} else {
+		v.Error = ""
 	}
 	pw.Write(v.Digest.String(), *v)
 }

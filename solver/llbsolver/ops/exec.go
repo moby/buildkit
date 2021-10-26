@@ -14,7 +14,6 @@ import (
 
 	"github.com/containerd/containerd/platforms"
 	"github.com/moby/buildkit/cache"
-	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/frontend/gateway"
 	"github.com/moby/buildkit/session"
@@ -49,14 +48,14 @@ type execOp struct {
 	sm          *session.Manager
 }
 
-func NewExecOp(v solver.Vertex, op *pb.Op_Exec, platform *pb.Platform, cm cache.Manager, parallelism *semaphore.Weighted, sm *session.Manager, md *metadata.Store, exec executor.Executor, w worker.Worker) (solver.Op, error) {
+func NewExecOp(v solver.Vertex, op *pb.Op_Exec, platform *pb.Platform, cm cache.Manager, parallelism *semaphore.Weighted, sm *session.Manager, exec executor.Executor, w worker.Worker) (solver.Op, error) {
 	if err := llbsolver.ValidateOp(&pb.Op{Op: op}); err != nil {
 		return nil, err
 	}
 	name := fmt.Sprintf("exec %s", strings.Join(op.Exec.Meta.Args, " "))
 	return &execOp{
 		op:          op.Exec,
-		mm:          mounts.NewMountManager(name, cm, sm, md),
+		mm:          mounts.NewMountManager(name, cm, sm),
 		cm:          cm,
 		exec:        exec,
 		numInputs:   len(v.Inputs()),
@@ -322,6 +321,7 @@ func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 		Hostname:       e.op.Meta.Hostname,
 		ReadonlyRootFS: p.ReadonlyRootFS,
 		ExtraHosts:     extraHosts,
+		Ulimit:         e.op.Meta.Ulimit,
 		NetMode:        e.op.Network,
 		SecurityMode:   e.op.Security,
 	}

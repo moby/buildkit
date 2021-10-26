@@ -74,6 +74,7 @@ type ResultProxy interface {
 	Result(context.Context) (CachedResult, error)
 	Release(context.Context) error
 	Definition() *pb.Definition
+	BuildInfo() BuildInfo
 }
 
 // CacheExportMode is the type for setting cache exporting modes
@@ -190,7 +191,14 @@ type CacheMap struct {
 	// such as oci descriptor content providers and progress writers to be passed to
 	// the cache. Opts should not have any impact on the computed cache key.
 	Opts CacheOpts
+
+	// BuildInfo contains build dependencies that will be set from source
+	// operation.
+	BuildInfo map[string]string
 }
+
+// BuildInfo contains solved build dependencies.
+type BuildInfo map[string]string
 
 // ExportableCacheKey is a cache key connected with an exporter that can export
 // a chain of cacherecords pointing to that key

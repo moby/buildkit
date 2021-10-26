@@ -25,6 +25,7 @@ import (
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/source"
+	srctypes "github.com/moby/buildkit/source/types"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/imageutil"
 	"github.com/moby/buildkit/util/leaseutil"
@@ -67,7 +68,7 @@ func NewSource(opt SourceOpt) (*Source, error) {
 }
 
 func (is *Source) ID() string {
-	return source.DockerImageScheme
+	return srctypes.DockerImageScheme
 }
 
 func (is *Source) ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt, sm *session.Manager, g session.Group) (digest.Digest, []byte, error) {
@@ -172,7 +173,7 @@ func mainManifestKey(ctx context.Context, desc ocispecs.Descriptor, platform oci
 	return digest.FromBytes(dt), nil
 }
 
-func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cacheKey string, cacheOpts solver.CacheOpts, cacheDone bool, err error) {
+func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cacheKey string, imgDigest string, cacheOpts solver.CacheOpts, cacheDone bool, err error) {
 	p.Puller.Resolver = resolver.DefaultPool.GetResolver(p.RegistryHosts, p.Ref, "pull", p.SessionManager, g).WithImageStore(p.ImageStore, p.id.ResolveMode)
 
 	// progressFactory needs the outer context, the context in `p.g.Do` will
@@ -268,7 +269,7 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 		return nil, nil
 	})
 	if err != nil {
-		return "", nil, false, err
+		return "", "", nil, false, err
 	}
 
 	cacheOpts = solver.CacheOpts(make(map[interface{}]interface{}))
@@ -278,9 +279,9 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 
 	cacheDone = index > 0
 	if index == 0 || p.configKey == "" {
-		return p.manifestKey, cacheOpts, cacheDone, nil
+		return p.manifestKey, p.manifest.MainManifestDesc.Digest.String(), cacheOpts, cacheDone, nil
 	}
-	return p.configKey, cacheOpts, cacheDone, nil
+	return p.configKey, p.manifest.MainManifestDesc.Digest.String(), cacheOpts, cacheDone, nil
 }
 
 func (p *puller) Snapshot(ctx context.Context, g session.Group) (ir cache.ImmutableRef, err error) {
@@ -345,8 +346,8 @@ func (p *puller) Snapshot(ctx context.Context, g session.Group) (ir cache.Immuta
 		}
 	}
 
-	if p.id.RecordType != "" && cache.GetRecordType(current) == "" {
-		if err := cache.SetRecordType(current, p.id.RecordType); err != nil {
+	if p.id.RecordType != "" && current.GetRecordType() == "" {
+		if err := current.SetRecordType(p.id.RecordType); err != nil {
 			return nil, err
 		}
 	}
@@ -361,7 +362,7 @@ func markRefLayerTypeWindows(ref cache.ImmutableRef) error {
 			return err
 		}
 	}
-	return cache.SetLayerType(ref, "windows")
+	return ref.SetLayerType("windows")
 }
 
 // cacheKeyFromConfig returns a stable digest from image config. If image config

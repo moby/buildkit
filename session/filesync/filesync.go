@@ -64,7 +64,7 @@ func (sp *fsSyncProvider) TarStream(stream FileSync_TarStreamServer) error {
 func (sp *fsSyncProvider) handle(method string, stream grpc.ServerStream) (retErr error) {
 	var pr *protocol
 	for _, p := range supportedProtocols {
-		if method == p.name && isProtoSupported(p.name) {
+		if method == p.name {
 			pr = &p
 			break
 		}
@@ -133,14 +133,6 @@ type protocol struct {
 	recvFn func(stream grpc.ClientStream, destDir string, cu CacheUpdater, progress progressCb, differ fsutil.DiffType, mapFunc func(string, *fstypes.Stat) bool) error
 }
 
-func isProtoSupported(p string) bool {
-	// TODO: this should be removed after testing if stability is confirmed
-	if override := os.Getenv("BUILD_STREAM_PROTOCOL"); override != "" {
-		return strings.EqualFold(p, override)
-	}
-	return true
-}
-
 var supportedProtocols = []protocol{
 	{
 		name:   "diffcopy",
@@ -174,7 +166,7 @@ type CacheUpdater interface {
 func FSSync(ctx context.Context, c session.Caller, opt FSSendRequestOpt) error {
 	var pr *protocol
 	for _, p := range supportedProtocols {
-		if isProtoSupported(p.name) && c.Supports(session.MethodURL(_FileSync_serviceDesc.ServiceName, p.name)) {
+		if c.Supports(session.MethodURL(_FileSync_serviceDesc.ServiceName, p.name)) {
 			pr = &p
 			break
 		}
@@ -247,7 +239,7 @@ func NewFSSyncTarget(f func(map[string]string) (io.WriteCloser, error)) session.
 	return p
 }
 
-// NewFSSyncTarget allows writing into an io.WriteCloser
+// NewFSSyncTarget allows writing into an io.WriteCloser - THIS IS EARTHLY SPECIFIC
 func NewFSSyncMultiTarget(f func(map[string]string) (io.WriteCloser, error), outdirFunc func(map[string]string) (string, error)) session.Attachable {
 	p := &fsSyncTarget{
 		f:          f,
@@ -258,7 +250,7 @@ func NewFSSyncMultiTarget(f func(map[string]string) (io.WriteCloser, error), out
 
 type fsSyncTarget struct {
 	outdir     string
-	outdirFunc func(map[string]string) (string, error)
+	outdirFunc func(map[string]string) (string, error) // earthly-specific
 	f          func(map[string]string) (io.WriteCloser, error)
 }
 
@@ -267,15 +259,19 @@ func (sp *fsSyncTarget) Register(server *grpc.Server) {
 }
 
 func (sp *fsSyncTarget) DiffCopy(stream FileSend_DiffCopyServer) (err error) {
+	if sp.outdir != "" {
+		return syncTargetDiffCopy(stream, sp.outdir)
+	}
+
+	if sp.f == nil {
+		return errors.New("empty outfile and outdir")
+	}
 	opts, _ := metadata.FromIncomingContext(stream.Context()) // if no metadata continue with empty object
 	md := map[string]string{}
 	for k, v := range opts {
 		if strings.HasPrefix(k, keyExporterMetaPrefix) {
 			md[strings.TrimPrefix(k, keyExporterMetaPrefix)] = strings.Join(v, ",")
 		}
-	}
-	if sp.outdir != "" {
-		return syncTargetDiffCopy(stream, sp.outdir)
 	}
 	if sp.outdirFunc != nil {
 		outdir, err := sp.outdirFunc(md)
@@ -285,9 +281,6 @@ func (sp *fsSyncTarget) DiffCopy(stream FileSend_DiffCopyServer) (err error) {
 		if outdir != "" {
 			return syncTargetDiffCopy(stream, outdir)
 		}
-	}
-	if sp.f == nil {
-		return errors.New("empty outfile and outdir")
 	}
 	wc, err := sp.f(md)
 	if err != nil {
@@ -321,6 +314,7 @@ func CopyToCaller(ctx context.Context, fs fsutil.FS, c session.Caller, progress 
 	return sendDiffCopy(cc, fs, progress)
 }
 
+// CopyToCallerWithMeta is earthly-specific
 func CopyToCallerWithMeta(ctx context.Context, md map[string]string, fs fsutil.FS, c session.Caller, progress func(int, bool)) error {
 	method := session.MethodURL(_FileSend_serviceDesc.ServiceName, "diffcopy")
 	if !c.Supports(method) {

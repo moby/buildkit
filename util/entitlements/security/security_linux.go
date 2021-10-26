@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync"
 
 	"github.com/containerd/containerd/containers"
 	"github.com/containerd/containerd/oci"
+	"github.com/containerd/containerd/pkg/cap"
 	"github.com/containerd/containerd/pkg/userns"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -17,46 +19,11 @@ import (
 // WithInsecureSpec sets spec with All capability.
 func WithInsecureSpec() oci.SpecOpts {
 	return func(_ context.Context, _ oci.Client, _ *containers.Container, s *specs.Spec) error {
-		addCaps := []string{
-			"CAP_FSETID",
-			"CAP_KILL",
-			"CAP_FOWNER",
-			"CAP_MKNOD",
-			"CAP_CHOWN",
-			"CAP_DAC_OVERRIDE",
-			"CAP_NET_RAW",
-			"CAP_SETGID",
-			"CAP_SETUID",
-			"CAP_SETPCAP",
-			"CAP_SETFCAP",
-			"CAP_NET_BIND_SERVICE",
-			"CAP_SYS_CHROOT",
-			"CAP_AUDIT_WRITE",
-			"CAP_MAC_ADMIN",
-			"CAP_MAC_OVERRIDE",
-			"CAP_DAC_READ_SEARCH",
-			"CAP_SYS_PTRACE",
-			"CAP_SYS_MODULE",
-			"CAP_SYSLOG",
-			"CAP_SYS_RAWIO",
-			"CAP_SYS_ADMIN",
-			"CAP_LINUX_IMMUTABLE",
-			"CAP_SYS_BOOT",
-			"CAP_SYS_NICE",
-			"CAP_SYS_PACCT",
-			"CAP_SYS_TTY_CONFIG",
-			"CAP_SYS_TIME",
-			"CAP_WAKE_ALARM",
-			"CAP_AUDIT_READ",
-			"CAP_AUDIT_CONTROL",
-			"CAP_SYS_RESOURCE",
-			"CAP_BLOCK_SUSPEND",
-			"CAP_IPC_LOCK",
-			"CAP_IPC_OWNER",
-			"CAP_LEASE",
-			"CAP_NET_ADMIN",
-			"CAP_NET_BROADCAST",
+		addCaps, err := getAllCaps()
+		if err != nil {
+			return err
 		}
+
 		s.Process.Capabilities.Bounding = append(s.Process.Capabilities.Bounding, addCaps...)
 		s.Process.Capabilities.Ambient = append(s.Process.Capabilities.Ambient, addCaps...)
 		s.Process.Capabilities.Effective = append(s.Process.Capabilities.Effective, addCaps...)
@@ -70,6 +37,12 @@ func WithInsecureSpec() oci.SpecOpts {
 		s.Linux.Resources.Devices = []specs.LinuxDeviceCgroup{
 			{
 				Allow:  true,
+				Type:   "c",
+				Access: "rwm",
+			},
+			{
+				Allow:  true,
+				Type:   "b",
 				Access: "rwm",
 			},
 		}
@@ -153,4 +126,77 @@ func getFreeLoopID() (int, error) {
 		return int(r1), nil
 	}
 	return 0, errors.Errorf("error getting free loop device: %v", uerr)
+}
+
+var (
+	currentCaps     []string
+	currentCapsErr  error
+	currentCapsOnce sync.Once
+)
+
+func getCurrentCaps() ([]string, error) {
+	currentCapsOnce.Do(func() {
+		currentCaps, currentCapsErr = cap.Current()
+	})
+
+	return currentCaps, currentCapsErr
+}
+
+func getAllCaps() ([]string, error) {
+	availableCaps, err := getCurrentCaps()
+	if err != nil {
+		return nil, fmt.Errorf("error getting current capabilities: %s", err)
+	}
+
+	// see if any of the base linux35Caps are not available to be granted
+	// they are either not supported by the kernel or dropped at the process level
+	for _, cap := range availableCaps {
+		if _, exists := linux35Caps[cap]; !exists {
+			logrus.Warnf("capability %s could not be granted for insecure mode", cap)
+		}
+	}
+
+	return availableCaps, nil
+}
+
+// linux35Caps provides a list of capabilities available on Linux 3.5 kernel
+var linux35Caps = map[string]struct{}{
+	"CAP_FSETID":           {},
+	"CAP_KILL":             {},
+	"CAP_FOWNER":           {},
+	"CAP_MKNOD":            {},
+	"CAP_CHOWN":            {},
+	"CAP_DAC_OVERRIDE":     {},
+	"CAP_NET_RAW":          {},
+	"CAP_SETGID":           {},
+	"CAP_SETUID":           {},
+	"CAP_SETPCAP":          {},
+	"CAP_SETFCAP":          {},
+	"CAP_NET_BIND_SERVICE": {},
+	"CAP_SYS_CHROOT":       {},
+	"CAP_AUDIT_WRITE":      {},
+	"CAP_MAC_ADMIN":        {},
+	"CAP_MAC_OVERRIDE":     {},
+	"CAP_DAC_READ_SEARCH":  {},
+	"CAP_SYS_PTRACE":       {},
+	"CAP_SYS_MODULE":       {},
+	"CAP_SYSLOG":           {},
+	"CAP_SYS_RAWIO":        {},
+	"CAP_SYS_ADMIN":        {},
+	"CAP_LINUX_IMMUTABLE":  {},
+	"CAP_SYS_BOOT":         {},
+	"CAP_SYS_NICE":         {},
+	"CAP_SYS_PACCT":        {},
+	"CAP_SYS_TTY_CONFIG":   {},
+	"CAP_SYS_TIME":         {},
+	"CAP_WAKE_ALARM":       {},
+	"CAP_AUDIT_READ":       {},
+	"CAP_AUDIT_CONTROL":    {},
+	"CAP_SYS_RESOURCE":     {},
+	"CAP_BLOCK_SUSPEND":    {},
+	"CAP_IPC_LOCK":         {},
+	"CAP_IPC_OWNER":        {},
+	"CAP_LEASE":            {},
+	"CAP_NET_ADMIN":        {},
+	"CAP_NET_BROADCAST":    {},
 }

@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -107,6 +108,8 @@ func TestIntegration(t *testing.T) {
 		testParallelLocalBuilds,
 		testSecretMounts,
 		testExtraHosts,
+		testShmSize,
+		testUlimit,
 		testNetworkMode,
 		testFrontendMetadataReturn,
 		testFrontendUseSolveResults,
@@ -131,6 +134,8 @@ func TestIntegration(t *testing.T) {
 		testFileOpInputSwap,
 		testRelativeMountpoint,
 		testLocalSourceDiffer,
+		testBuildExportZstd,
+		testPullZstdImage,
 	}, mirrors)
 
 	integration.Run(t, []integration.Test{
@@ -526,6 +531,80 @@ func testExtraHosts(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 }
 
+func testShmSize(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Image("busybox:latest").Run(
+		llb.AddMount("/dev/shm", llb.Scratch(), llb.Tmpfs(llb.TmpfsSize(128*1024*1024))),
+		llb.Shlex(`sh -c 'mount | grep /dev/shm > /out/out'`),
+	)
+
+	out := st.AddMount("/out", llb.Scratch())
+	def, err := out.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "out"))
+	require.NoError(t, err)
+	require.Contains(t, string(dt), `size=131072k`)
+}
+
+func testUlimit(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("busybox:latest")
+	st := llb.Scratch()
+
+	run := func(cmd string, ro ...llb.RunOption) {
+		st = busybox.Run(append(ro, llb.Shlex(cmd), llb.Dir("/wd"))...).AddMount("/wd", st)
+	}
+
+	run(`sh -c "ulimit -n > first"`, llb.AddUlimit(llb.UlimitNofile, 1062, 1062))
+	run(`sh -c "ulimit -n > second"`)
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "first"))
+	require.NoError(t, err)
+	require.Equal(t, `1062`, strings.TrimSpace(string(dt)))
+
+	dt2, err := ioutil.ReadFile(filepath.Join(destDir, "second"))
+	require.NoError(t, err)
+	require.NotEqual(t, `1062`, strings.TrimSpace(string(dt2)))
+}
+
 func testNetworkMode(t *testing.T, sb integration.Sandbox) {
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -600,29 +679,36 @@ func testPushByDigest(t *testing.T, sb integration.Sandbox) {
 }
 
 func testSecurityMode(t *testing.T, sb integration.Sandbox) {
-	var command string
+	command := `sh -c 'cat /proc/self/status | grep CapEff | cut -f 2 > /out'`
 	mode := llb.SecurityModeSandbox
 	var allowedEntitlements []entitlements.Entitlement
+	var assertCaps func(caps uint64)
 	secMode := sb.Value("secmode")
 	if secMode == securitySandbox {
-		/*
-			$ capsh --decode=00000000a80425fb
-			0x00000000a80425fb=cap_chown,cap_dac_override,cap_fowner,cap_fsetid,cap_kill,cap_setgid,cap_setuid,cap_setpcap,
-			cap_net_bind_service,cap_net_raw,cap_sys_chroot,cap_mknod,cap_audit_write,cap_setfcap
-		*/
-		command = `sh -c 'cat /proc/self/status | grep CapEff | grep "00000000a80425fb"'`
+		assertCaps = func(caps uint64) {
+			/*
+				$ capsh --decode=00000000a80425fb
+				0x00000000a80425fb=cap_chown,cap_dac_override,cap_fowner,cap_fsetid,cap_kill,cap_setgid,cap_setuid,cap_setpcap,
+				cap_net_bind_service,cap_net_raw,cap_sys_chroot,cap_mknod,cap_audit_write,cap_setfcap
+			*/
+			require.EqualValues(t, 0xa80425fb, caps)
+		}
 		allowedEntitlements = []entitlements.Entitlement{}
 	} else {
 		skipDockerd(t, sb)
-		/*
-			$ capsh --decode=0000003fffffffff
-			0x0000003fffffffff=cap_chown,cap_dac_override,cap_dac_read_search,cap_fowner,cap_fsetid,cap_kill,cap_setgid,
-			cap_setuid,cap_setpcap,cap_linux_immutable,cap_net_bind_service,cap_net_broadcast,cap_net_admin,cap_net_raw,
-			cap_ipc_lock,cap_ipc_owner,cap_sys_module,cap_sys_rawio,cap_sys_chroot,cap_sys_ptrace,cap_sys_pacct,cap_sys_admin,
-			cap_sys_boot,cap_sys_nice,cap_sys_resource,cap_sys_time,cap_sys_tty_config,cap_mknod,cap_lease,cap_audit_write,
-			cap_audit_control,cap_setfcap,cap_mac_override,cap_mac_admin,cap_syslog,cap_wake_alarm,cap_block_suspend,cap_audit_read
-		*/
-		command = `sh -c 'cat /proc/self/status | grep CapEff | grep "0000003fffffffff"'`
+		assertCaps = func(caps uint64) {
+			/*
+				$ capsh --decode=0000003fffffffff
+				0x0000003fffffffff=cap_chown,cap_dac_override,cap_dac_read_search,cap_fowner,cap_fsetid,cap_kill,cap_setgid,
+				cap_setuid,cap_setpcap,cap_linux_immutable,cap_net_bind_service,cap_net_broadcast,cap_net_admin,cap_net_raw,
+				cap_ipc_lock,cap_ipc_owner,cap_sys_module,cap_sys_rawio,cap_sys_chroot,cap_sys_ptrace,cap_sys_pacct,cap_sys_admin,
+				cap_sys_boot,cap_sys_nice,cap_sys_resource,cap_sys_time,cap_sys_tty_config,cap_mknod,cap_lease,cap_audit_write,
+				cap_audit_control,cap_setfcap,cap_mac_override,cap_mac_admin,cap_syslog,cap_wake_alarm,cap_block_suspend,cap_audit_read
+			*/
+
+			// require that _at least_ minimum capabilities are granted
+			require.EqualValues(t, 0x3fffffffff, caps&0x3fffffffff)
+		}
 		mode = llb.SecurityModeInsecure
 		allowedEntitlements = []entitlements.Entitlement{entitlements.EntitlementSecurityInsecure}
 	}
@@ -638,11 +724,31 @@ func testSecurityMode(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
 		AllowedEntitlements: allowedEntitlements,
 	}, nil)
 
 	require.NoError(t, err)
+
+	contents, err := ioutil.ReadFile(filepath.Join(destDir, "out"))
+	require.NoError(t, err)
+
+	caps, err := strconv.ParseUint(strings.TrimSpace(string(contents)), 16, 64)
+	require.NoError(t, err)
+
+	t.Logf("Caps: %x", caps)
+
+	assertCaps(caps)
 }
 
 func testSecurityModeSysfs(t *testing.T, sb integration.Sandbox) {
@@ -2165,6 +2271,156 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, []byte("gzip"), item.Data)
 }
 
+func testBuildExportZstd(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("busybox:latest")
+	cmd := `sh -e -c "echo -n zstd > data"`
+
+	st := llb.Scratch()
+	st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	out := filepath.Join(destDir, "out.tar")
+	outW, err := os.Create(out)
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:   ExporterOCI,
+				Output: fixedWriteCloser(outW),
+				Attrs: map[string]string{
+					"compression": "zstd",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(out)
+	require.NoError(t, err)
+
+	m, err := testutil.ReadTarToMap(dt, false)
+	require.NoError(t, err)
+
+	var index ocispecs.Index
+	err = json.Unmarshal(m["index.json"].Data, &index)
+	require.NoError(t, err)
+
+	var mfst ocispecs.Manifest
+	err = json.Unmarshal(m["blobs/sha256/"+index.Manifests[0].Digest.Hex()].Data, &mfst)
+	require.NoError(t, err)
+
+	lastLayer := mfst.Layers[len(mfst.Layers)-1]
+	require.Equal(t, ocispecs.MediaTypeImageLayer+"+zstd", lastLayer.MediaType)
+
+	zstdLayerDigest := lastLayer.Digest.Hex()
+	require.Equal(t, m["blobs/sha256/"+zstdLayerDigest].Data[:4], []byte{0x28, 0xb5, 0x2f, 0xfd})
+
+	// repeat without oci mediatype
+	outW, err = os.Create(out)
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:   ExporterOCI,
+				Output: fixedWriteCloser(outW),
+				Attrs: map[string]string{
+					"compression":    "zstd",
+					"oci-mediatypes": "false",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err = ioutil.ReadFile(out)
+	require.NoError(t, err)
+
+	m, err = testutil.ReadTarToMap(dt, false)
+	require.NoError(t, err)
+
+	err = json.Unmarshal(m["index.json"].Data, &index)
+	require.NoError(t, err)
+
+	err = json.Unmarshal(m["blobs/sha256/"+index.Manifests[0].Digest.Hex()].Data, &mfst)
+	require.NoError(t, err)
+
+	lastLayer = mfst.Layers[len(mfst.Layers)-1]
+	require.Equal(t, images.MediaTypeDockerSchema2Layer+".zstd", lastLayer.MediaType)
+
+	require.Equal(t, lastLayer.Digest.Hex(), zstdLayerDigest)
+}
+
+func testPullZstdImage(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("busybox:latest")
+	cmd := `sh -e -c "echo -n zstd > data"`
+
+	st := llb.Scratch()
+	st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrorRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	target := registry + "/buildkit/build/exporter:zstd"
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name":        target,
+					"push":        "true",
+					"compression": "zstd",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	st = llb.Scratch().File(llb.Copy(llb.Image(target), "/data", "/zdata"))
+
+	def, err = st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "zdata"))
+	require.NoError(t, err)
+	require.Equal(t, dt, []byte("zstd"))
+}
 func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	skipDockerd(t, sb)
 	requiresLinux(t)
