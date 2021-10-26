@@ -4,13 +4,14 @@ go 1.17
 
 require (
 	github.com/Microsoft/go-winio v0.5.0
-	github.com/Microsoft/hcsshim v0.8.18
+	github.com/Microsoft/hcsshim v0.9.0
 	github.com/agext/levenshtein v1.2.3
 	github.com/containerd/console v1.0.3
-	github.com/containerd/containerd v1.5.5
-	github.com/containerd/continuity v0.1.0
+	github.com/containerd/containerd v1.6.0-beta.1
+	github.com/containerd/containerd/api v1.6.0-beta.1
+	github.com/containerd/continuity v0.2.0
 	github.com/containerd/fuse-overlayfs-snapshotter v1.0.2
-	github.com/containerd/go-cni v1.0.2
+	github.com/containerd/go-cni v1.1.0
 	github.com/containerd/go-runc v1.0.0
 	github.com/containerd/stargz-snapshotter v0.8.1-0.20210910092506-a3ecdc9366fb
 	github.com/containerd/stargz-snapshotter/estargz v0.8.1-0.20210910092506-a3ecdc9366fb
@@ -28,7 +29,7 @@ require (
 	github.com/golang/protobuf v1.5.2
 	github.com/google/go-cmp v0.5.6
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
-	github.com/grpc-ecosystem/go-grpc-middleware v1.2.0
+	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0
 	github.com/hashicorp/go-immutable-radix v1.3.1
 	github.com/hashicorp/golang-lru v0.5.3
 	github.com/ishidawataru/sctp v0.0.0-20210226210310-f2269e66cdee // indirect
@@ -36,12 +37,12 @@ require (
 	github.com/mitchellh/hashstructure v1.0.0
 	github.com/moby/locker v1.0.1
 	github.com/moby/sys/mount v0.2.0 // indirect
-	github.com/moby/sys/signal v0.5.0
+	github.com/moby/sys/signal v0.5.1-0.20210723232958-8a51b5cc8879
 	github.com/moby/term v0.0.0-20210619224110-3f7ff695adc6 // indirect
 	github.com/morikuni/aec v1.0.0
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.0.2-0.20210819154149-5ad6f50d6283
-	github.com/opencontainers/runc v1.0.1
+	github.com/opencontainers/runc v1.0.2
 	github.com/opencontainers/runtime-spec v1.0.3-0.20210326190908-1c3f411f0417
 	github.com/opencontainers/selinux v1.8.2
 	github.com/pelletier/go-toml v1.9.4
@@ -55,25 +56,25 @@ require (
 	github.com/tonistiigi/units v0.0.0-20180711220420-6950e57a87ea
 	github.com/tonistiigi/vt100 v0.0.0-20210615222946-8066bb97264f
 	github.com/urfave/cli v1.22.4
-	go.etcd.io/bbolt v1.3.5
-	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.21.0
+	go.etcd.io/bbolt v1.3.6
+	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.24.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace v0.21.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.21.0
-	go.opentelemetry.io/otel v1.0.0-RC1
-	go.opentelemetry.io/otel/exporters/jaeger v1.0.0-RC1
-	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.0.0-RC1
-	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.0.0-RC1
-	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.0.0-RC1
-	go.opentelemetry.io/otel/sdk v1.0.0-RC1
-	go.opentelemetry.io/otel/trace v1.0.0-RC1
+	go.opentelemetry.io/otel v1.0.1
+	go.opentelemetry.io/otel/exporters/jaeger v1.0.1
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.0.1
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.0.1
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.0.1
+	go.opentelemetry.io/otel/sdk v1.0.1
+	go.opentelemetry.io/otel/trace v1.0.1
 	go.opentelemetry.io/proto/otlp v0.9.0
 	golang.org/x/crypto v0.0.0-20210322153248-0c34fe9e7dc2
-	golang.org/x/net v0.0.0-20210520170846-37e1c6afe023
+	golang.org/x/net v0.0.0-20210825183410-e898025ed96a
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/sys v0.0.0-20210630005230-0f9fa26af87c
+	golang.org/x/sys v0.0.0-20210915083310-ed5796bab164
 	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac
 	google.golang.org/genproto v0.0.0-20210602131652-f16073e35f0c
-	google.golang.org/grpc v1.40.0
+	google.golang.org/grpc v1.41.0
 )
 
 require (
@@ -82,10 +83,10 @@ require (
 	github.com/bits-and-blooms/bitset v1.2.0 // indirect
 	github.com/cenkalti/backoff/v4 v4.1.1 // indirect
 	github.com/cespare/xxhash/v2 v2.1.1 // indirect
-	github.com/containerd/cgroups v1.0.1 // indirect
+	github.com/containerd/cgroups v1.0.2 // indirect
 	github.com/containerd/fifo v1.0.0 // indirect
 	github.com/containerd/ttrpc v1.0.2 // indirect
-	github.com/containernetworking/cni v0.8.1 // indirect
+	github.com/containernetworking/cni v1.0.1 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible // indirect
@@ -111,19 +112,16 @@ require (
 	github.com/shurcooL/sanitized_anchor_name v1.0.0 // indirect
 	github.com/vbatts/tar-split v0.11.2 // indirect
 	go.opencensus.io v0.22.3 // indirect
-	go.opentelemetry.io/contrib v0.21.0 // indirect
-	go.opentelemetry.io/otel/internal/metric v0.21.0 // indirect
-	go.opentelemetry.io/otel/metric v0.21.0 // indirect
+	go.opentelemetry.io/otel/internal/metric v0.24.0 // indirect
+	go.opentelemetry.io/otel/metric v0.24.0 // indirect
 	golang.org/x/text v0.3.6 // indirect
-	google.golang.org/protobuf v1.26.0 // indirect
+	google.golang.org/protobuf v1.27.1 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 	gotest.tools/v3 v3.0.3 // indirect
 )
 
 replace (
-	github.com/containerd/containerd => github.com/containerd/containerd v1.5.1-0.20210721160646-ee27cde735e2
 	github.com/docker/docker => github.com/docker/docker v20.10.3-0.20210817025855-ba2adeebdb8d+incompatible
-	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc => github.com/tonistiigi/opentelemetry-go-contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.0.0-20210714055410-d010b05b4939
-	go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace => github.com/tonistiigi/opentelemetry-go-contrib/instrumentation/net/http/httptrace/otelhttptrace v0.0.0-20210714055410-d010b05b4939
-	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp => github.com/tonistiigi/opentelemetry-go-contrib/instrumentation/net/http/otelhttp v0.0.0-20210714055410-d010b05b4939
+	go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace => github.com/tonistiigi/opentelemetry-go-contrib/instrumentation/net/http/httptrace/otelhttptrace v0.0.0-20211026174723-2f82a1e0c997
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp => github.com/tonistiigi/opentelemetry-go-contrib/instrumentation/net/http/otelhttp v0.0.0-20211026174723-2f82a1e0c997
 )

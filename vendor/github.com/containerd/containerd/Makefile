@@ -89,12 +89,14 @@ ifdef BUILDTAGS
 endif
 GO_BUILDTAGS ?=
 GO_BUILDTAGS += ${DEBUG_TAGS}
-GO_TAGS=$(if $(GO_BUILDTAGS),-tags "$(GO_BUILDTAGS)",)
+GO_TAGS=$(if $(GO_BUILDTAGS),-tags "$(strip $(GO_BUILDTAGS))",)
 GO_LDFLAGS=-ldflags '-X $(PKG)/version.Version=$(VERSION) -X $(PKG)/version.Revision=$(REVISION) -X $(PKG)/version.Package=$(PACKAGE) $(EXTRA_LDFLAGS)'
 SHIM_GO_LDFLAGS=-ldflags '-X $(PKG)/version.Version=$(VERSION) -X $(PKG)/version.Revision=$(REVISION) -X $(PKG)/version.Package=$(PACKAGE) -extldflags "-static" $(EXTRA_LDFLAGS)'
 
 # Project packages.
 PACKAGES=$(shell $(GO) list ${GO_TAGS} ./... | grep -v /vendor/ | grep -v /integration)
+API_PACKAGES=$(shell (cd api && $(GO) list ${GO_TAGS} ./... | grep -v /vendor/ | grep -v /integration))
+NON_API_PACKAGES=$(shell $(GO) list ${GO_TAGS} ./... | grep -v /vendor/ | grep -v /integration | grep -v "containerd/api")
 TEST_REQUIRES_ROOT_PACKAGES=$(filter \
     ${PACKAGES}, \
     $(shell \
@@ -156,7 +158,13 @@ generate: protos
 
 protos: bin/protoc-gen-gogoctrd ## generate protobuf
 	@echo "$(WHALE) $@"
-	@PATH="${ROOTDIR}/bin:${PATH}" protobuild --quiet ${PACKAGES}
+	@find . -path ./vendor -prune -false -o -name '*.pb.go' | xargs rm
+	$(eval TMPDIR := $(shell mktemp -d))
+	@mv ${ROOTDIR}/vendor ${TMPDIR}
+	@(cd ${ROOTDIR}/api && PATH="${ROOTDIR}/bin:${PATH}" protobuild --quiet ${API_PACKAGES})
+	@(PATH="${ROOTDIR}/bin:${PATH}" protobuild --quiet ${NON_API_PACKAGES})
+	@mv ${TMPDIR}/vendor ${ROOTDIR}
+	@rm -rf ${TMPDIR}
 
 check-protos: protos ## check if protobufs needs to be generated again
 	@echo "$(WHALE) $@"
@@ -244,11 +252,11 @@ genman: man/containerd.8 man/ctr.8
 
 man/containerd.8: FORCE
 	@echo "$(WHALE) $@"
-	$(GO) run cmd/gen-manpages/main.go $(@F) $(@D)
+	$(GO) run -mod=readonly ${GO_TAGS} cmd/gen-manpages/main.go $(@F) $(@D)
 
 man/ctr.8: FORCE
 	@echo "$(WHALE) $@"
-	$(GO) run cmd/gen-manpages/main.go $(@F) $(@D)
+	$(GO) run -mod=readonly ${GO_TAGS} cmd/gen-manpages/main.go $(@F) $(@D)
 
 man/%: docs/man/%.md FORCE
 	@echo "$(WHALE) $@"
@@ -400,10 +408,26 @@ root-coverage: ## generate coverage profiles for unit tests that require root
 		fi; \
 	done )
 
-vendor: ## vendor
+vendor: ## ensure all the go.mod/go.sum files are up-to-date including vendor/ directory
 	@echo "$(WHALE) $@"
 	@$(GO) mod tidy
 	@$(GO) mod vendor
+	@$(GO) mod verify
+	@(cd ${ROOTDIR}/api && ${GO} mod tidy)
+	@(cd ${ROOTDIR}/integration/client && ${GO} mod tidy)
+
+verify-vendor: ## verify if all the go.mod/go.sum files are up-to-date
+	@echo "$(WHALE) $@"
+	$(eval TMPDIR := $(shell mktemp -d))
+	@cp -R ${ROOTDIR} ${TMPDIR}
+	@(cd ${TMPDIR}/containerd && ${GO} mod tidy)
+	@(cd ${TMPDIR}/containerd/api && ${GO} mod tidy)
+	@(cd ${TMPDIR}/containerd/integration/client && ${GO} mod tidy)
+	@diff -r -u -q ${ROOTDIR} ${TMPDIR}/containerd
+	@rm -rf ${TMPDIR}
+	@${ROOTDIR}/script/verify-go-modules.sh api
+	@${ROOTDIR}/script/verify-go-modules.sh integration/client
+
 
 help: ## this help
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST) | sort

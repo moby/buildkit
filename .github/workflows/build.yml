@@ -69,6 +69,7 @@ jobs:
           - ./frontend/dockerfile
         worker:
           - containerd
+          - containerd-1.5
           - containerd-1.4
           - containerd-snapshotter-stargz
           - oci

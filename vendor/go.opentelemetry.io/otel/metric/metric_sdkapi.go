@@ -54,7 +54,7 @@ type InstrumentImpl interface {
 }
 
 // SyncImpl is the implementation-level interface to a generic
-// synchronous instrument (e.g., ValueRecorder and Counter instruments).
+// synchronous instrument (e.g., Histogram and Counter instruments).
 type SyncImpl interface {
 	InstrumentImpl
 
@@ -86,10 +86,8 @@ type AsyncImpl interface {
 
 // WrapMeterImpl constructs a `Meter` implementation from a
 // `MeterImpl` implementation.
-func WrapMeterImpl(impl MeterImpl, instrumentationName string, opts ...MeterOption) Meter {
+func WrapMeterImpl(impl MeterImpl) Meter {
 	return Meter{
-		impl:    impl,
-		name:    instrumentationName,
-		version: NewMeterConfig(opts...).InstrumentationVersion(),
+		impl: impl,
 	}
 }

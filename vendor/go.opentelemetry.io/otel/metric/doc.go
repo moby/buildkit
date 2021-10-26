@@ -31,23 +31,23 @@ part of a system is being measured.
 Instruments are categorized as Synchronous or Asynchronous and independently
 as Adding or Grouping. Synchronous instruments are called by the user with a
 Context. Asynchronous instruments are called by the SDK during collection.
-Additive instruments are semantically intended for capturing a sum. Grouping
+Adding instruments are semantically intended for capturing a sum. Grouping
 instruments are intended for capturing a distribution.
 
-Additive instruments may be monotonic, in which case they are non-decreasing
+Adding instruments may be monotonic, in which case they are non-decreasing
 and naturally define a rate.
 
 The synchronous instrument names are:
 
-  Counter:           additive, monotonic
-  UpDownCounter:     additive
-  ValueRecorder:     grouping
+  Counter:           adding, monotonic
+  UpDownCounter:     adding
+  Histogram:         grouping
 
 and the asynchronous instruments are:
 
-  SumObserver:       additive, monotonic
-  UpDownSumObserver: additive
-  ValueObserver:     grouping
+  CounterObserver:       adding, monotonic
+  UpDownCounterObserver: adding
+  GaugeObserver:         grouping
 
 All instruments are provided with support for either float64 or int64 input
 values.
