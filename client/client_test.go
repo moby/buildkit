@@ -1730,19 +1730,19 @@ func testUser(t *testing.T, sb integration.Sandbox) {
 
 	dt, err := ioutil.ReadFile(filepath.Join(destDir, "user"))
 	require.NoError(t, err)
-	require.Contains(t, string(dt), "daemon")
+	require.Equal(t, "daemon", strings.TrimSpace(string(dt)))
 
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "group"))
 	require.NoError(t, err)
-	require.Contains(t, string(dt), "daemon")
+	require.Equal(t, "daemon", strings.TrimSpace(string(dt)))
 
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "nobody"))
 	require.NoError(t, err)
-	require.Contains(t, string(dt), "nobody")
+	require.Equal(t, "nobody", strings.TrimSpace(string(dt)))
 
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "userone"))
 	require.NoError(t, err)
-	require.Contains(t, string(dt), "1")
+	require.Equal(t, "1", strings.TrimSpace(string(dt)))
 
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "root_supplementary"))
 	require.NoError(t, err)
