@@ -373,6 +373,10 @@ func (mm *MountManager) MountableTmpFS() cache.Mountable {
 	return newTmpfs(mm.cm.IdentityMapping())
 }
 
+func (mm *MountManager) MountableHostBind() cache.Mountable { // earthly-specific
+	return newHostBind(mm.cm.IdentityMapping())
+}
+
 func (mm *MountManager) MountableSecret(ctx context.Context, m *pb.Mount, g session.Group) (cache.Mountable, error) {
 	return mm.getSecretMountable(ctx, m, g)
 }
@@ -411,6 +415,41 @@ func (m *tmpfsMount) Mount() ([]mount.Mount, func() error, error) {
 }
 
 func (m *tmpfsMount) IdentityMapping() *idtools.IdentityMapping {
+	return m.idmap
+}
+
+// earthly-specific hostbind functions
+func newHostBind(idmap *idtools.IdentityMapping) cache.Mountable {
+	return &hostBind{idmap: idmap}
+}
+
+type hostBind struct {
+	idmap *idtools.IdentityMapping
+}
+
+func (f *hostBind) Mount(ctx context.Context, readonly bool, g session.Group) (snapshot.Mountable, error) {
+	return &hostBindMount{readonly: readonly, idmap: f.idmap}, nil
+}
+
+type hostBindMount struct {
+	readonly bool
+	idmap    *idtools.IdentityMapping
+}
+
+func (m *hostBindMount) Mount() ([]mount.Mount, func() error, error) {
+	opt := []string{"rbind"}
+	if m.readonly {
+		opt = append(opt, "ro")
+	} else {
+		opt = append(opt, "rw")
+	}
+	return []mount.Mount{{
+		Type:    "bind",
+		Options: opt,
+	}}, func() error { return nil }, nil
+}
+
+func (m *hostBindMount) IdentityMapping() *idtools.IdentityMapping {
 	return m.idmap
 }
 

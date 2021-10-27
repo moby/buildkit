@@ -93,6 +93,7 @@ enum MountType {
 	SSH = 2;
 	CACHE = 3;
 	TMPFS = 4;
+	HOST_BIND = 100;  // Earthly specific.
 }
 
 // CacheOpt defines options specific to cache mounts
