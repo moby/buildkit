@@ -119,27 +119,23 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.M
 	defer lm.Unmount()
 	defer executor.MountStubsCleaner(rootfsPath, mounts)()
 
-	var sgids []uint32
-	uid, gid, err := oci.ParseUIDGID(meta.User)
+	uid, gid, sgids, err := oci.GetUser(rootfsPath, meta.User)
 	if err != nil {
-		uid, gid, sgids, err = oci.GetUser(rootfsPath, meta.User)
-		if err != nil {
-			return err
-		}
+		return err
+	}
 
-		identity := idtools.Identity{
-			UID: int(uid),
-			GID: int(gid),
-		}
+	identity := idtools.Identity{
+		UID: int(uid),
+		GID: int(gid),
+	}
 
-		newp, err := fs.RootPath(rootfsPath, meta.Cwd)
-		if err != nil {
-			return errors.Wrapf(err, "working dir %s points to invalid target", newp)
-		}
-		if _, err := os.Stat(newp); err != nil {
-			if err := idtools.MkdirAllAndChown(newp, 0755, identity); err != nil {
-				return errors.Wrapf(err, "failed to create working directory %s", newp)
-			}
+	newp, err := fs.RootPath(rootfsPath, meta.Cwd)
+	if err != nil {
+		return errors.Wrapf(err, "working dir %s points to invalid target", newp)
+	}
+	if _, err := os.Stat(newp); err != nil {
+		if err := idtools.MkdirAllAndChown(newp, 0755, identity); err != nil {
+			return errors.Wrapf(err, "failed to create working directory %s", newp)
 		}
 	}
 
