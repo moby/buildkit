@@ -434,25 +434,28 @@ type scopes map[string]map[string]struct{}
 func parseScopes(s []string) scopes {
 	// https://docs.docker.com/registry/spec/auth/scope/
 	m := map[string]map[string]struct{}{}
-	for _, scope := range s {
-		parts := strings.SplitN(scope, ":", 3)
-		names := []string{parts[0]}
-		if len(parts) > 1 {
-			names = append(names, parts[1])
-		}
-		var actions []string
-		if len(parts) == 3 {
-			actions = append(actions, strings.Split(parts[2], ",")...)
-		}
-		name := strings.Join(names, ":")
-		ma, ok := m[name]
-		if !ok {
-			ma = map[string]struct{}{}
-			m[name] = ma
-		}
+	for _, scopeStr := range s {
+		// The scopeStr may have strings that contain multiple scopes separated by a space.
+		for _, scope := range strings.Split(scopeStr, " ") {
+			parts := strings.SplitN(scope, ":", 3)
+			names := []string{parts[0]}
+			if len(parts) > 1 {
+				names = append(names, parts[1])
+			}
+			var actions []string
+			if len(parts) == 3 {
+				actions = append(actions, strings.Split(parts[2], ",")...)
+			}
+			name := strings.Join(names, ":")
+			ma, ok := m[name]
+			if !ok {
+				ma = map[string]struct{}{}
+				m[name] = ma
+			}
 
-		for _, a := range actions {
-			ma[a] = struct{}{}
+			for _, a := range actions {
+				ma[a] = struct{}{}
+			}
 		}
 	}
 	return m
