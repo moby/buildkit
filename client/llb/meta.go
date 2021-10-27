@@ -15,13 +15,14 @@ import (
 type contextKeyT string
 
 var (
-	keyArgs      = contextKeyT("llb.exec.args")
-	keyDir       = contextKeyT("llb.exec.dir")
-	keyEnv       = contextKeyT("llb.exec.env")
-	keyExtraHost = contextKeyT("llb.exec.extrahost")
-	keyHostname  = contextKeyT("llb.exec.hostname")
-	keyUlimit    = contextKeyT("llb.exec.ulimit")
-	keyUser      = contextKeyT("llb.exec.user")
+	keyArgs         = contextKeyT("llb.exec.args")
+	keyDir          = contextKeyT("llb.exec.dir")
+	keyEnv          = contextKeyT("llb.exec.env")
+	keyExtraHost    = contextKeyT("llb.exec.extrahost")
+	keyHostname     = contextKeyT("llb.exec.hostname")
+	keyUlimit       = contextKeyT("llb.exec.ulimit")
+	keyCgroupParent = contextKeyT("llb.exec.cgroup.parent")
+	keyUser         = contextKeyT("llb.exec.user")
 
 	keyPlatform = contextKeyT("llb.platform")
 	keyNetwork  = contextKeyT("llb.network")
@@ -260,6 +261,25 @@ func getUlimit(s State) func(context.Context, *Constraints) ([]pb.Ulimit, error)
 			return v.([]pb.Ulimit), nil
 		}
 		return nil, nil
+	}
+}
+
+func cgroupParent(cp string) StateOption {
+	return func(s State) State {
+		return s.WithValue(keyCgroupParent, cp)
+	}
+}
+
+func getCgroupParent(s State) func(context.Context, *Constraints) (string, error) {
+	return func(ctx context.Context, c *Constraints) (string, error) {
+		v, err := s.getValue(keyCgroupParent)(ctx, c)
+		if err != nil {
+			return "", err
+		}
+		if v != nil {
+			return v.(string), nil
+		}
+		return "", nil
 	}
 }
 

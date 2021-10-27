@@ -59,6 +59,7 @@ message Meta {
 	repeated HostIP extraHosts = 6;
 	string hostname = 7;
 	repeated Ulimit ulimit = 9;
+	string cgroupParent = 10;
 }
 
 message HostIP {

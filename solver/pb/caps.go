@@ -36,6 +36,7 @@ const (
 	CapBuildOpLLBFileName apicaps.CapID = "source.buildop.llbfilename"
 
 	CapExecMetaBase                      apicaps.CapID = "exec.meta.base"
+	CapExecMetaCgroupParent              apicaps.CapID = "exec.meta.cgroup.parent"
 	CapExecMetaNetwork                   apicaps.CapID = "exec.meta.network"
 	CapExecMetaProxy                     apicaps.CapID = "exec.meta.proxyenv"
 	CapExecMetaSecurity                  apicaps.CapID = "exec.meta.security"
@@ -203,6 +204,12 @@ func init() {
 
 	Caps.Init(apicaps.Cap{
 		ID:      CapExecMetaBase,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapExecMetaCgroupParent,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})

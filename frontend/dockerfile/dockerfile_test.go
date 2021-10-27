@@ -117,6 +117,7 @@ var allTests = []integration.Test{
 	testBuildInfo,
 	testShmSize,
 	testUlimit,
+	testCgroupParent,
 }
 
 var fileOpTests = []integration.Test{
@@ -5354,6 +5355,55 @@ COPY --from=base /ulimit /
 	dt, err := ioutil.ReadFile(filepath.Join(destDir, "ulimit"))
 	require.NoError(t, err)
 	require.Equal(t, `1062`, strings.TrimSpace(string(dt)))
+}
+
+func testCgroupParent(t *testing.T, sb integration.Sandbox) {
+	if sb.Rootless() {
+		t.SkipNow()
+	}
+
+	f := getFrontend(t, sb)
+	dockerfile := []byte(`
+FROM alpine AS base
+RUN cat /proc/self/cgroup > /out
+FROM scratch
+COPY --from=base /out /
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"cgroup-parent": "foocgroup",
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "out"))
+	require.NoError(t, err)
+	require.Contains(t, strings.TrimSpace(string(dt)), `/foocgroup/buildkit/`)
 }
 
 func tmpdir(appliers ...fstest.Applier) (string, error) {

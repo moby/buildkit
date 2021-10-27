@@ -110,6 +110,7 @@ func TestIntegration(t *testing.T) {
 		testExtraHosts,
 		testShmSize,
 		testUlimit,
+		testCgroupParent,
 		testNetworkMode,
 		testFrontendMetadataReturn,
 		testFrontendUseSolveResults,
@@ -603,6 +604,51 @@ func testUlimit(t *testing.T, sb integration.Sandbox) {
 	dt2, err := ioutil.ReadFile(filepath.Join(destDir, "second"))
 	require.NoError(t, err)
 	require.NotEqual(t, `1062`, strings.TrimSpace(string(dt2)))
+}
+
+func testCgroupParent(t *testing.T, sb integration.Sandbox) {
+	if sb.Rootless() {
+		t.SkipNow()
+	}
+
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	img := llb.Image("alpine:latest")
+	st := llb.Scratch()
+
+	run := func(cmd string, ro ...llb.RunOption) {
+		st = img.Run(append(ro, llb.Shlex(cmd), llb.Dir("/wd"))...).AddMount("/wd", st)
+	}
+
+	run(`sh -c "cat /proc/self/cgroup > first"`, llb.WithCgroupParent("foocgroup"))
+	run(`sh -c "cat /proc/self/cgroup > second"`)
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "first"))
+	require.NoError(t, err)
+	require.Contains(t, strings.TrimSpace(string(dt)), `/foocgroup/buildkit/`)
+
+	dt2, err := ioutil.ReadFile(filepath.Join(destDir, "second"))
+	require.NoError(t, err)
+	require.NotContains(t, strings.TrimSpace(string(dt2)), `/foocgroup/buildkit/`)
 }
 
 func testNetworkMode(t *testing.T, sb integration.Sandbox) {
