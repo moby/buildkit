@@ -40,9 +40,6 @@ type ImmutableRef interface {
 	Ref
 	Parent() ImmutableRef
 	Clone() ImmutableRef
-	// Finalize commits the snapshot to the driver if it's not already.
-	// This means the snapshot can no longer be mounted as mutable.
-	Finalize(context.Context) error
 
 	Extract(ctx context.Context, s session.Group) error // +progress
 	GetRemote(ctx context.Context, createIfNeeded bool, compressionType compression.Type, forceCompression bool, s session.Group) (*solver.Remote, error)
@@ -821,7 +818,7 @@ func (sr *immutableRef) release(ctx context.Context) error {
 	return nil
 }
 
-func (sr *immutableRef) Finalize(ctx context.Context) error {
+func (sr *immutableRef) finalizeLocked(ctx context.Context) error {
 	sr.mu.Lock()
 	defer sr.mu.Unlock()
 	return sr.finalize(ctx)

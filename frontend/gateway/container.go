@@ -158,7 +158,7 @@ func PrepareMounts(ctx context.Context, mm *mounts.MountManager, cm cache.Manage
 		}
 
 		switch m.MountType {
-		case opspb.MountType_HOST_BIND:
+		case opspb.MountType_HOST_BIND: //earthly
 			mountable = mm.MountableHostBind()
 
 		case opspb.MountType_BIND:
@@ -214,7 +214,7 @@ func PrepareMounts(ctx context.Context, mm *mounts.MountManager, cm cache.Manage
 			}
 
 		case opspb.MountType_TMPFS:
-			mountable = mm.MountableTmpFS(m)
+			mountable = mm.MountableTmpFS()
 		case opspb.MountType_SECRET:
 			var err error
 			mountable, err = mm.MountableSecret(ctx, m, g)

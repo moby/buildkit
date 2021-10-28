@@ -4,8 +4,6 @@ package oci
 
 import (
 	"context"
-	"fmt"
-	"strings"
 
 	"github.com/containerd/containerd/containers"
 	"github.com/containerd/containerd/oci"
@@ -77,29 +75,6 @@ func generateIDmapOpts(idmap *idtools.IdentityMapping) ([]oci.SpecOpts, error) {
 	}
 	return []oci.SpecOpts{
 		oci.WithUserNamespace(specMapping(idmap.UIDs()), specMapping(idmap.GIDs())),
-	}, nil
-}
-
-func generateRlimitOpts(ulimits []*pb.Ulimit) ([]oci.SpecOpts, error) {
-	if len(ulimits) == 0 {
-		return nil, nil
-	}
-	var rlimits []specs.POSIXRlimit
-	for _, u := range ulimits {
-		if u == nil {
-			continue
-		}
-		rlimits = append(rlimits, specs.POSIXRlimit{
-			Type: fmt.Sprintf("RLIMIT_%s", strings.ToUpper(u.Name)),
-			Hard: uint64(u.Hard),
-			Soft: uint64(u.Soft),
-		})
-	}
-	return []oci.SpecOpts{
-		func(_ context.Context, _ oci.Client, _ *containers.Container, s *specs.Spec) error {
-			s.Process.Rlimits = rlimits
-			return nil
-		},
 	}, nil
 }
 

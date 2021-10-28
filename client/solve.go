@@ -176,11 +176,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		}
 
 		eg.Go(func() error {
-			sd := c.sessionDialer
-			if sd == nil {
-				sd = grpchijack.Dialer(c.controlClient())
-			}
-			return s.Run(statusContext, sd)
+			return s.Run(statusContext, grpchijack.Dialer(c.controlClient()))
 		})
 	}
 

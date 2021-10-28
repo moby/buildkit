@@ -22,7 +22,7 @@ type Stream interface {
 }
 
 func sendDiffCopy(stream Stream, fs fsutil.FS, progress progressCb) error {
-	return errors.WithStack(fsutil.Send(stream.Context(), stream, fs, progress, nil))
+	return errors.WithStack(fsutil.Send(stream.Context(), stream, fs, progress, nil)) //earthly needs to pass nil
 }
 
 func newStreamWriter(stream grpc.ClientStream) io.WriteCloser {

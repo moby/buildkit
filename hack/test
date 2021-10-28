@@ -18,6 +18,17 @@ if [ "$TEST_DOCKERD" == "1" ] && ! file $TEST_DOCKERD_BINARY | grep "statically 
   exit 1
 fi
 
+importCacheFlags=""
+if [ -n "$cacheRefFrom" ]; then
+  if [ "$cacheType" = "local" ]; then
+    for ref in $cacheRefFrom; do
+      importCacheFlags="$importCacheFlags--cache-from=type=local,src=$ref "
+    done
+  else
+    importCacheFlags="--cache-from=type=registry,ref=$cacheRefFrom:integration-tests "
+  fi
+fi
+
 if [ "$#" == 0 ]; then TEST_INTEGRATION=1; fi
 
 while test $# -gt 0; do
@@ -50,7 +61,7 @@ if [ "$TEST_COVERAGE" = "1" ]; then
   coverageFlags="-coverprofile=/coverage/coverage.txt -covermode=atomic"
 fi
 
-buildxCmd build $cacheFromFlags \
+buildxCmd build $importCacheFlags \
   --target "integration-tests" \
   --output "type=docker,name=$iid" \
   $currentcontext
@@ -93,7 +104,7 @@ if [ "$TEST_DOCKERFILE" == 1 ]; then
     buildtags=$(cat ./frontend/dockerfile/release/$release/tags)
     tarout=$(mktemp -t dockerfile-frontend.XXXXXXXXXX)
 
-    buildxCmd build $cacheFromFlags \
+    buildxCmd build $importCacheFlags \
       --build-arg "BUILDTAGS=$buildtags" \
       --file "./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile" \
       --output "type=oci,dest=$tarout" \

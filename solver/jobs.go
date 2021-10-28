@@ -946,8 +946,6 @@ func notifyCompleted(ctx context.Context, v *client.Vertex, err error, cached bo
 	v.Cached = cached
 	if err != nil {
 		v.Error = err.Error()
-	} else {
-		v.Error = ""
 	}
 	pw.Write(v.Digest.String(), *v)
 }

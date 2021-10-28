@@ -171,12 +171,8 @@ func (ls *localSourceHandler) snapshot(ctx context.Context, s session.Group, cal
 		OverrideExcludes: false,
 		DestDir:          dest,
 		CacheUpdater:     &cacheUpdater{cc, mount.IdentityMapping()},
-
-		// earthly needs to set this to nil so it does not conflict with verbose output of file copies
-		// (warning: it's not even feasible to reassign ProgressCb to nil as the call to newProgressHandler causes it to print out immediately)
-		//ProgressCb:       newProgressHandler(ctx, "transferring "+ls.src.Name+":"),
-
-		Differ: ls.src.Differ,
+		ProgressCb:       newProgressHandler(ctx, "transferring "+ls.src.Name+":"),
+		Differ:           ls.src.Differ,
 	}
 
 	if idmap := mount.IdentityMapping(); idmap != nil {
@@ -190,6 +186,11 @@ func (ls *localSourceHandler) snapshot(ctx context.Context, s session.Group, cal
 			}
 			stat.Uid = uint32(identity.UID)
 			stat.Gid = uint32(identity.GID)
+			// earthly-specific
+			// whatever permissions the user has, give them to group and others as well
+			// this matches behavior of gitsource, given that umask is 0
+			umode := (stat.Mode & 0700) >> 6
+			stat.Mode = (stat.Mode ^ (stat.Mode & 0777)) | umode | (umode << 3) | (umode << 6)
 			return true
 		}
 	}

@@ -43,8 +43,7 @@ type mount struct {
 	selector     string
 	cacheID      string
 	tmpfs        bool
-	tmpfsOpt     TmpfsInfo
-	hostBind     bool
+	hostBind     bool //earthly
 	cacheSharing CacheMountSharingMode
 	noOutput     bool
 }
@@ -207,21 +206,12 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 		meta.ExtraHosts = hosts
 	}
 
-	ulimits, err := getUlimit(e.base)(ctx, c)
+	shmSize, err := getShmSize(e.base)(ctx, c)
 	if err != nil {
 		return "", nil, nil, nil, err
 	}
-	if len(ulimits) > 0 {
-		addCap(&e.constraints, pb.CapExecMetaUlimit)
-		ul := make([]*pb.Ulimit, len(ulimits))
-		for i, u := range ulimits {
-			ul[i] = &pb.Ulimit{
-				Name: u.Name,
-				Soft: u.Soft,
-				Hard: u.Hard,
-			}
-		}
-		meta.Ulimit = ul
+	if shmSize != nil {
+		meta.ShmSize = *shmSize
 	}
 
 	network, err := getNetwork(e.base)(ctx, c)
@@ -269,9 +259,6 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 			addCap(&e.constraints, pb.CapExecMountCacheSharing)
 		} else if m.tmpfs {
 			addCap(&e.constraints, pb.CapExecMountTmpfs)
-			if m.tmpfsOpt.Size > 0 {
-				addCap(&e.constraints, pb.CapExecMountTmpfsSize)
-			}
 		} else if m.source != nil {
 			addCap(&e.constraints, pb.CapExecMountBind)
 		}
@@ -356,11 +343,8 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 		}
 		if m.tmpfs {
 			pm.MountType = pb.MountType_TMPFS
-			pm.TmpfsOpt = &pb.TmpfsOpt{
-				Size_: m.tmpfsOpt.Size,
-			}
 		}
-		if m.hostBind {
+		if m.hostBind { //earthly
 			pm.MountType = pb.MountType_HOST_BIND
 		}
 		peo.Mounts = append(peo.Mounts, pm)
@@ -482,38 +466,13 @@ func AsPersistentCacheDir(id string, sharing CacheMountSharingMode) MountOption 
 	}
 }
 
-func Tmpfs(opts ...TmpfsOption) MountOption {
+func Tmpfs() MountOption {
 	return func(m *mount) {
-		t := &TmpfsInfo{}
-		for _, opt := range opts {
-			opt.SetTmpfsOption(t)
-		}
 		m.tmpfs = true
-		m.tmpfsOpt = *t
 	}
 }
 
-type TmpfsOption interface {
-	SetTmpfsOption(*TmpfsInfo)
-}
-
-type tmpfsOptionFunc func(*TmpfsInfo)
-
-func (fn tmpfsOptionFunc) SetTmpfsOption(ti *TmpfsInfo) {
-	fn(ti)
-}
-
-func TmpfsSize(b int64) TmpfsOption {
-	return tmpfsOptionFunc(func(ti *TmpfsInfo) {
-		ti.Size = b
-	})
-}
-
-type TmpfsInfo struct {
-	Size int64
-}
-
-func HostBind() MountOption {
+func HostBind() MountOption { //earthly
 	return func(m *mount) {
 		m.hostBind = true
 	}
@@ -558,9 +517,9 @@ func AddExtraHost(host string, ip net.IP) RunOption {
 	})
 }
 
-func AddUlimit(name UlimitName, soft int64, hard int64) RunOption {
+func WithShmSize(kb int64) RunOption {
 	return runOptionFunc(func(ei *ExecInfo) {
-		ei.State = ei.State.AddUlimit(name, soft, hard)
+		ei.State = ei.State.WithShmSize(kb)
 	})
 }
 
@@ -732,24 +691,4 @@ const (
 const (
 	SecurityModeInsecure = pb.SecurityMode_INSECURE
 	SecurityModeSandbox  = pb.SecurityMode_SANDBOX
-)
-
-type UlimitName string
-
-const (
-	UlimitCore       UlimitName = "core"
-	UlimitCPU        UlimitName = "cpu"
-	UlimitData       UlimitName = "data"
-	UlimitFsize      UlimitName = "fsize"
-	UlimitLocks      UlimitName = "locks"
-	UlimitMemlock    UlimitName = "memlock"
-	UlimitMsgqueue   UlimitName = "msgqueue"
-	UlimitNice       UlimitName = "nice"
-	UlimitNofile     UlimitName = "nofile"
-	UlimitNproc      UlimitName = "nproc"
-	UlimitRss        UlimitName = "rss"
-	UlimitRtprio     UlimitName = "rtprio"
-	UlimitRttime     UlimitName = "rttime"
-	UlimitSigpending UlimitName = "sigpending"
-	UlimitStack      UlimitName = "stack"
 )

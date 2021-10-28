@@ -45,7 +45,7 @@ type execOp struct {
 	platform    *pb.Platform
 	numInputs   int
 	parallelism *semaphore.Weighted
-	sm          *session.Manager
+	sm          *session.Manager //earthly
 }
 
 func NewExecOp(v solver.Vertex, op *pb.Op_Exec, platform *pb.Platform, cm cache.Manager, parallelism *semaphore.Weighted, sm *session.Manager, exec executor.Executor, w worker.Worker) (solver.Op, error) {
@@ -62,7 +62,7 @@ func NewExecOp(v solver.Vertex, op *pb.Op_Exec, platform *pb.Platform, cm cache.
 		w:           w,
 		platform:    platform,
 		parallelism: parallelism,
-		sm:          sm,
+		sm:          sm, //earthly
 	}, nil
 }
 
@@ -321,7 +321,7 @@ func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 		Hostname:       e.op.Meta.Hostname,
 		ReadonlyRootFS: p.ReadonlyRootFS,
 		ExtraHosts:     extraHosts,
-		Ulimit:         e.op.Meta.Ulimit,
+		ShmSize:        e.op.Meta.ShmSize,
 		NetMode:        e.op.Network,
 		SecurityMode:   e.op.Security,
 	}
@@ -370,6 +370,7 @@ func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 	return results, errors.Wrapf(execErr, "process %q did not complete successfully", strings.Join(e.op.Meta.Args, " "))
 }
 
+// earthly-specific
 func (e *execOp) doFromLocalHack(ctx context.Context, root executor.Mount, mounts []executor.Mount, g session.Group, meta executor.Meta, stdout, stderr io.WriteCloser) (bool, error) {
 	var cmd string
 	if len(meta.Args) > 0 {

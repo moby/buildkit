@@ -39,7 +39,7 @@ func (sr *immutableRef) computeBlobChain(ctx context.Context, createIfNeeded boo
 		return errors.Errorf("missing lease requirement for computeBlobChain")
 	}
 
-	if err := sr.Finalize(ctx); err != nil {
+	if err := sr.finalizeLocked(ctx); err != nil {
 		return err
 	}
 
@@ -126,13 +126,8 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 			} else if !isTypeWindows(sr) {
 				enableOverlay, fallback = true, true
 				switch sr.cm.ManagerOpt.Snapshotter.Name() {
-				case "overlayfs", "stargz":
-					// overlayfs-based snapshotters should support overlay diff. so print warn log on failure.
-					logWarnOnErr = true
-				case "fuse-overlayfs":
-					// not supported with fuse-overlayfs snapshotter which doesn't provide overlayfs mounts.
-					// TODO: add support for fuse-overlayfs
-					enableOverlay = false
+				case "overlayfs", "fuse-overlayfs", "stargz":
+					logWarnOnErr = true // snapshotter should support overlay diff. so print warn log on failure
 				}
 			}
 			if enableOverlay {

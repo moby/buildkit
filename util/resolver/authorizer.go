@@ -337,7 +337,7 @@ func (ah *authHandler) fetchToken(ctx context.Context, sm *session.Manager, g se
 				r.expires = exp
 			}
 		} else if errors.Is(err, context.Canceled) {
-			// prevent context canceled errors from being permanent
+			// earthly-specific prevent context canceled errors from being permanent
 			r.expires = time.Now()
 		}
 	}()

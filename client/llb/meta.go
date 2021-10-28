@@ -18,14 +18,13 @@ var (
 	keyArgs      = contextKeyT("llb.exec.args")
 	keyDir       = contextKeyT("llb.exec.dir")
 	keyEnv       = contextKeyT("llb.exec.env")
-	keyExtraHost = contextKeyT("llb.exec.extrahost")
-	keyHostname  = contextKeyT("llb.exec.hostname")
-	keyUlimit    = contextKeyT("llb.exec.ulimit")
 	keyUser      = contextKeyT("llb.exec.user")
-
-	keyPlatform = contextKeyT("llb.platform")
-	keyNetwork  = contextKeyT("llb.network")
-	keySecurity = contextKeyT("llb.security")
+	keyHostname  = contextKeyT("llb.exec.hostname")
+	keyExtraHost = contextKeyT("llb.exec.extrahost")
+	keyShmSize   = contextKeyT("llb.exec.shmsize")
+	keyPlatform  = contextKeyT("llb.platform")
+	keyNetwork   = contextKeyT("llb.network")
+	keySecurity  = contextKeyT("llb.security")
 )
 
 func AddEnvf(key, value string, v ...interface{}) StateOption {
@@ -234,30 +233,21 @@ type HostIP struct {
 	IP   net.IP
 }
 
-func ulimit(name UlimitName, soft int64, hard int64) StateOption {
+func shmSize(kb int64) StateOption {
 	return func(s State) State {
-		return s.withValue(keyUlimit, func(ctx context.Context, c *Constraints) (interface{}, error) {
-			v, err := getUlimit(s)(ctx, c)
-			if err != nil {
-				return nil, err
-			}
-			return append(v, pb.Ulimit{
-				Name: string(name),
-				Soft: soft,
-				Hard: hard,
-			}), nil
-		})
+		return s.WithValue(keyShmSize, kb)
 	}
 }
 
-func getUlimit(s State) func(context.Context, *Constraints) ([]pb.Ulimit, error) {
-	return func(ctx context.Context, c *Constraints) ([]pb.Ulimit, error) {
-		v, err := s.getValue(keyUlimit)(ctx, c)
+func getShmSize(s State) func(context.Context, *Constraints) (*int64, error) {
+	return func(ctx context.Context, c *Constraints) (*int64, error) {
+		v, err := s.getValue(keyShmSize)(ctx, c)
 		if err != nil {
 			return nil, err
 		}
 		if v != nil {
-			return v.([]pb.Ulimit), nil
+			kb := v.(int64)
+			return &kb, nil
 		}
 		return nil, nil
 	}

@@ -29,8 +29,7 @@ import (
 )
 
 type Client struct {
-	conn          *grpc.ClientConn
-	sessionDialer func(ctx context.Context, proto string, meta map[string][]string) (net.Conn, error)
+	conn *grpc.ClientConn
 }
 
 type ClientOpt interface{}
@@ -38,8 +37,8 @@ type ClientOpt interface{}
 // New returns a new buildkit client. Address can be empty for the system-default address.
 func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error) {
 	gopts := []grpc.DialOption{
-		grpc.WithInitialWindowSize(65535 * 32),
-		grpc.WithInitialConnWindowSize(65535 * 16),
+		grpc.WithInitialWindowSize(65535 * 32), //earthly
+		grpc.WithInitialConnWindowSize(65535 * 16), //earthly
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(defaults.DefaultMaxRecvMsgSize)),
 		grpc.WithDefaultCallOptions(grpc.MaxCallSendMsgSize(defaults.DefaultMaxSendMsgSize)),
 	}
@@ -52,7 +51,6 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 	var customTracer bool // allows manually setting disabling tracing even if tracer in context
 	var tracerProvider trace.TracerProvider
 	var tracerDelegate TracerDelegate
-	var sessionDialer func(context.Context, string, map[string][]string) (net.Conn, error)
 
 	for _, o := range opts {
 		if _, ok := o.(*withFailFast); ok {
@@ -76,9 +74,6 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 		}
 		if wt, ok := o.(*withTracerDelegate); ok {
 			tracerDelegate = wt
-		}
-		if sd, ok := o.(*withSessionDialer); ok {
-			sessionDialer = sd.dialer
 		}
 	}
 
@@ -138,8 +133,7 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 	}
 
 	c := &Client{
-		conn:          conn,
-		sessionDialer: sessionDialer,
+		conn: conn,
 	}
 
 	if tracerDelegate != nil {
@@ -250,14 +244,6 @@ func WithTracerDelegate(td TracerDelegate) ClientOpt {
 
 type withTracerDelegate struct {
 	TracerDelegate
-}
-
-func WithSessionDialer(dialer func(context.Context, string, map[string][]string) (net.Conn, error)) ClientOpt {
-	return &withSessionDialer{dialer}
-}
-
-type withSessionDialer struct {
-	dialer func(context.Context, string, map[string][]string) (net.Conn, error)
 }
 
 func resolveDialer(address string) (func(context.Context, string) (net.Conn, error), error) {

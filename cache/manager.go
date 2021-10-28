@@ -129,7 +129,7 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor,
 		chainID = imagespecidentity.ChainID([]digest.Digest{p.getChainID(), chainID})
 		blobChainID = imagespecidentity.ChainID([]digest.Digest{p.getBlobChainID(), blobChainID})
 
-		if err := p.Finalize(ctx); err != nil {
+		if err := p.finalizeLocked(ctx); err != nil {
 			p.Release(context.TODO())
 			return nil, err
 		}
@@ -467,7 +467,7 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, sess session.Gr
 			}
 			parent = p.(*immutableRef)
 		}
-		if err := parent.Finalize(ctx); err != nil {
+		if err := parent.finalizeLocked(ctx); err != nil {
 			return nil, err
 		}
 		if err := parent.Extract(ctx, sess); err != nil {

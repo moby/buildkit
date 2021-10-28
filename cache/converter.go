@@ -191,13 +191,16 @@ func (c *conversion) convert(ctx context.Context, cs content.Store, desc ocispec
 	newDesc.MediaType = c.target.DefaultMediaType()
 	newDesc.Digest = info.Digest
 	newDesc.Size = info.Size
-	newDesc.Annotations = map[string]string{labels.LabelUncompressed: diffID.Digest().String()}
+	newDesc.Annotations = nil
 	if c.finalize != nil {
 		a, err := c.finalize(ctx, cs)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed finalize compression")
 		}
 		for k, v := range a {
+			if newDesc.Annotations == nil {
+				newDesc.Annotations = make(map[string]string)
+			}
 			newDesc.Annotations[k] = v
 		}
 	}

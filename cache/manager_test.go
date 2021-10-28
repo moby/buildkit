@@ -226,7 +226,7 @@ func TestManager(t *testing.T) {
 
 	checkDiskUsage(ctx, t, cm, 1, 0)
 
-	err = snap.Finalize(ctx)
+	err = snap.(*immutableRef).finalizeLocked(ctx)
 	require.NoError(t, err)
 
 	err = snap.Release(ctx)
@@ -948,7 +948,7 @@ func TestLazyCommit(t *testing.T) {
 	require.NoError(t, err)
 
 	// this time finalize commit
-	err = snap.Finalize(ctx)
+	err = snap.(*immutableRef).finalizeLocked(ctx)
 	require.NoError(t, err)
 
 	err = snap.Release(ctx)
@@ -1022,7 +1022,7 @@ func TestLazyCommit(t *testing.T) {
 	snap2, err = cm.Get(ctx, snap.ID())
 	require.NoError(t, err)
 
-	err = snap2.Finalize(ctx)
+	err = snap2.(*immutableRef).finalizeLocked(ctx)
 	require.NoError(t, err)
 
 	err = snap2.Release(ctx)
@@ -1115,8 +1115,6 @@ func TestConversion(t *testing.T) {
 						require.NoError(t, err, testName)
 					}
 					require.Equal(t, recreatedDesc.Digest, orgDesc.Digest, testName)
-					require.NotNil(t, recreatedDesc.Annotations)
-					require.Equal(t, recreatedDesc.Annotations["containerd.io/uncompressed"], orgDesc.Digest.String(), testName)
 					return nil
 				})
 			}

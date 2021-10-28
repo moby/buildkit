@@ -239,7 +239,7 @@ func NewFSSyncTarget(f func(map[string]string) (io.WriteCloser, error)) session.
 	return p
 }
 
-// NewFSSyncTarget allows writing into an io.WriteCloser - THIS IS EARTHLY SPECIFIC
+// NewFSSyncTarget allows writing into an io.WriteCloser; it is earthly-specific
 func NewFSSyncMultiTarget(f func(map[string]string) (io.WriteCloser, error), outdirFunc func(map[string]string) (string, error)) session.Attachable {
 	p := &fsSyncTarget{
 		f:          f,
@@ -250,7 +250,7 @@ func NewFSSyncMultiTarget(f func(map[string]string) (io.WriteCloser, error), out
 
 type fsSyncTarget struct {
 	outdir     string
-	outdirFunc func(map[string]string) (string, error) // earthly-specific
+	outdirFunc func(map[string]string) (string, error) //earthly
 	f          func(map[string]string) (io.WriteCloser, error)
 }
 
@@ -314,7 +314,7 @@ func CopyToCaller(ctx context.Context, fs fsutil.FS, c session.Caller, progress 
 	return sendDiffCopy(cc, fs, progress)
 }
 
-// CopyToCallerWithMeta is earthly-specific
+// CopyToCallerWithMeta is earthly specific
 func CopyToCallerWithMeta(ctx context.Context, md map[string]string, fs fsutil.FS, c session.Caller, progress func(int, bool)) error {
 	method := session.MethodURL(_FileSend_serviceDesc.ServiceName, "diffcopy")
 	if !c.Supports(method) {
