@@ -6,7 +6,6 @@ import (
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
-	"github.com/moby/buildkit/util/compression"
 )
 
 func NewWorkerRefResult(ref cache.ImmutableRef, worker Worker) solver.Result {
@@ -26,16 +25,16 @@ func (wr *WorkerRef) ID() string {
 	return wr.Worker.ID() + "::" + refID
 }
 
-// GetRemote method abstracts ImmutableRef's GetRemote to allow a Worker to override.
+// GetRemotes method abstracts ImmutableRef's GetRemotes to allow a Worker to override.
 // This is needed for moby integration.
-// Use this method instead of calling ImmutableRef.GetRemote() directly.
-func (wr *WorkerRef) GetRemote(ctx context.Context, createIfNeeded bool, compressionType compression.Type, forceCompression bool, g session.Group) (*solver.Remote, error) {
+// Use this method instead of calling ImmutableRef.GetRemotes() directly.
+func (wr *WorkerRef) GetRemotes(ctx context.Context, createIfNeeded bool, compressionopt solver.CompressionOpt, all bool, g session.Group) ([]*solver.Remote, error) {
 	if w, ok := wr.Worker.(interface {
-		GetRemote(context.Context, cache.ImmutableRef, bool, compression.Type, bool, session.Group) (*solver.Remote, error)
+		GetRemotes(context.Context, cache.ImmutableRef, bool, solver.CompressionOpt, bool, session.Group) ([]*solver.Remote, error)
 	}); ok {
-		return w.GetRemote(ctx, wr.ImmutableRef, createIfNeeded, compressionType, forceCompression, g)
+		return w.GetRemotes(ctx, wr.ImmutableRef, createIfNeeded, compressionopt, all, g)
 	}
-	return wr.ImmutableRef.GetRemote(ctx, createIfNeeded, compressionType, forceCompression, g)
+	return wr.ImmutableRef.GetRemotes(ctx, createIfNeeded, compressionopt, all, g)
 }
 
 type workerRefResult struct {

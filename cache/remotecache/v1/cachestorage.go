@@ -267,9 +267,25 @@ func (cs *cacheResultStorage) Load(ctx context.Context, res solver.CacheResult) 
 	return worker.NewWorkerRefResult(ref, cs.w), nil
 }
 
-func (cs *cacheResultStorage) LoadRemote(ctx context.Context, res solver.CacheResult, _ session.Group) (*solver.Remote, error) {
+func (cs *cacheResultStorage) LoadRemotes(ctx context.Context, res solver.CacheResult, compressionopts *solver.CompressionOpt, _ session.Group) ([]*solver.Remote, error) {
 	if r := cs.byResultID(res.ID); r != nil && r.result != nil {
-		return r.result, nil
+		if compressionopts == nil {
+			return []*solver.Remote{r.result}, nil
+		}
+		// Any of blobs in the remote must meet the specified compression option.
+		match := false
+		for _, desc := range r.result.Descriptors {
+			m := compressionopts.Type.IsMediaType(desc.MediaType)
+			match = match || m
+			if compressionopts.Force && !m {
+				match = false
+				break
+			}
+		}
+		if match {
+			return []*solver.Remote{r.result}, nil
+		}
+		return nil, nil // return nil as it's best effort.
 	}
 	return nil, errors.WithStack(solver.ErrNotFound)
 }

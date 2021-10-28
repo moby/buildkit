@@ -2303,6 +2303,12 @@ func testBuildExportZstd(t *testing.T, sb integration.Sandbox) {
 				},
 			},
 		},
+		// compression option should work even with inline cache exports
+		CacheExports: []CacheOptionsEntry{
+			{
+				Type: "inline",
+			},
+		},
 	}, nil)
 	require.NoError(t, err)
 
@@ -3100,6 +3106,50 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, ok, true)
 
 	require.Equal(t, dgst, dgst2)
+
+	err = c.Prune(sb.Context(), nil, PruneAll)
+	require.NoError(t, err)
+
+	checkAllRemoved(t, c, sb)
+
+	// Export the cache again with compression
+	resp, err = c.Solve(sb.Context(), def, SolveOpt{
+		// specifying inline cache exporter is needed for reproducing containerimage.digest
+		// (not needed for reproducing rootfs/unique)
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name":              target,
+					"push":              "true",
+					"compression":       "uncompressed", // inline cache should work with compression
+					"force-compression": "true",
+				},
+			},
+		},
+		CacheExports: []CacheOptionsEntry{
+			{
+				Type: "inline",
+			},
+		},
+		CacheImports: []CacheOptionsEntry{
+			{
+				Type: "registry",
+				Attrs: map[string]string{
+					"ref": target,
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dgst2uncompress, ok := resp.ExporterResponse[exptypes.ExporterImageDigestKey]
+	require.Equal(t, ok, true)
+
+	// dgst2uncompress != dgst, because the compression type is different
+	unique2uncompress, err := readFileInImage(sb.Context(), c, target+"@"+dgst2uncompress, "/unique")
+	require.NoError(t, err)
+	require.EqualValues(t, unique, unique2uncompress)
 
 	err = c.Prune(sb.Context(), nil, PruneAll)
 	require.NoError(t, err)

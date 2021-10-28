@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -35,6 +36,7 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
+	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/leaseutil"
@@ -1125,7 +1127,9 @@ func TestConversion(t *testing.T) {
 	require.NoError(t, eg.Wait())
 }
 
-func TestGetRemote(t *testing.T) {
+type idxToVariants []map[compression.Type]ocispecs.Descriptor
+
+func TestGetRemotes(t *testing.T) {
 	t.Parallel()
 	// windows fails when lazy blob is being extracted with "invalid windows mount type: 'bind'"
 	if runtime.GOOS != "linux" {
@@ -1251,15 +1255,24 @@ func TestGetRemote(t *testing.T) {
 
 	checkNumBlobs(ctx, t, co.cs, 1)
 
-	// Call GetRemote on all the refs
+	variantsMap := make(map[string]idxToVariants)
+	var variantsMapMu sync.Mutex
+
+	// Call GetRemotes on all the refs
 	eg, egctx := errgroup.WithContext(ctx)
 	for _, ir := range refs {
 		ir := ir.(*immutableRef)
 		for _, compressionType := range []compression.Type{compression.Uncompressed, compression.Gzip, compression.EStargz, compression.Zstd} {
 			compressionType := compressionType
+			compressionopt := solver.CompressionOpt{
+				Type:  compressionType,
+				Force: true,
+			}
 			eg.Go(func() error {
-				remote, err := ir.GetRemote(egctx, true, compressionType, true, nil)
+				remotes, err := ir.GetRemotes(egctx, true, compressionopt, false, nil)
 				require.NoError(t, err)
+				require.Equal(t, 1, len(remotes))
+				remote := remotes[0]
 				refChain := ir.parentRefChain()
 				for i, desc := range remote.Descriptors {
 					switch compressionType {
@@ -1277,6 +1290,21 @@ func TestGetRemote(t *testing.T) {
 					dgst := desc.Digest
 					require.Contains(t, expectedContent, dgst, "for %v", compressionType)
 					checkDescriptor(ctx, t, co.cs, desc, compressionType)
+
+					variantsMapMu.Lock()
+					if len(variantsMap[ir.ID()]) == 0 {
+						variantsMap[ir.ID()] = make(idxToVariants, len(remote.Descriptors))
+					}
+					variantsMapMu.Unlock()
+
+					require.Equal(t, len(remote.Descriptors), len(variantsMap[ir.ID()]))
+
+					variantsMapMu.Lock()
+					if variantsMap[ir.ID()][i] == nil {
+						variantsMap[ir.ID()][i] = make(map[compression.Type]ocispecs.Descriptor)
+					}
+					variantsMap[ir.ID()][i][compressionType] = desc
+					variantsMapMu.Unlock()
 
 					r := refChain[i]
 					isLazy, err := r.isLazy(egctx)
@@ -1318,6 +1346,93 @@ func TestGetRemote(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, map[digest.Digest]struct{}{}, expectedContent)
+
+	// Check if "all" option returns all available blobs
+	for _, ir := range refs {
+		ir := ir.(*immutableRef)
+		variantsMapMu.Lock()
+		variants, ok := variantsMap[ir.ID()]
+		variantsMapMu.Unlock()
+		require.True(t, ok, ir.ID())
+		for _, compressionType := range []compression.Type{compression.Uncompressed, compression.Gzip, compression.EStargz, compression.Zstd} {
+			compressionType := compressionType
+			compressionopt := solver.CompressionOpt{Type: compressionType}
+			eg.Go(func() error {
+				remotes, err := ir.GetRemotes(egctx, false, compressionopt, true, nil)
+				require.NoError(t, err)
+				require.True(t, len(remotes) > 0, "for %s : %d", compressionType, len(remotes))
+				gotMain, gotVariants := remotes[0], remotes[1:]
+
+				// Check the main blob is compatible with all == false
+				mainOnly, err := ir.GetRemotes(egctx, false, compressionopt, false, nil)
+				require.NoError(t, err)
+				require.Equal(t, 1, len(mainOnly))
+				mainRemote := mainOnly[0]
+				require.Equal(t, len(mainRemote.Descriptors), len(gotMain.Descriptors))
+				for i := 0; i < len(mainRemote.Descriptors); i++ {
+					require.Equal(t, mainRemote.Descriptors[i].Digest, gotMain.Descriptors[i].Digest)
+				}
+
+				// Check all variants are covered
+				checkVariantsCoverage(egctx, t, variants, len(remotes[0].Descriptors)-1, gotVariants, &compressionType)
+				return nil
+			})
+		}
+	}
+	require.NoError(t, eg.Wait())
+}
+
+func checkVariantsCoverage(ctx context.Context, t *testing.T, variants idxToVariants, idx int, remotes []*solver.Remote, expectCompression *compression.Type) {
+	if idx < 0 {
+		for _, r := range remotes {
+			require.Equal(t, len(r.Descriptors), 0)
+		}
+		return
+	}
+
+	// check the contents of the topmost blob of each remote
+	got := make(map[digest.Digest][]*solver.Remote)
+	for _, r := range remotes {
+		require.Equal(t, len(r.Descriptors)-1, idx, "idx = %d", idx)
+
+		// record this variant
+		topmost, lower := r.Descriptors[idx], r.Descriptors[:idx]
+		got[topmost.Digest] = append(got[topmost.Digest], &solver.Remote{Descriptors: lower, Provider: r.Provider})
+
+		// check the contents
+		r, err := r.Provider.ReaderAt(ctx, topmost)
+		require.NoError(t, err)
+		dgstr := digest.Canonical.Digester()
+		_, err = io.Copy(dgstr.Hash(), io.NewSectionReader(r, 0, topmost.Size))
+		require.NoError(t, err)
+		require.NoError(t, r.Close())
+		require.Equal(t, dgstr.Digest(), topmost.Digest)
+	}
+
+	// check the lowers as well
+	eg, egctx := errgroup.WithContext(ctx)
+	for _, lowers := range got {
+		lowers := lowers
+		eg.Go(func() error {
+			checkVariantsCoverage(egctx, t, variants, idx-1, lowers, nil) // expect all compression variants
+			return nil
+		})
+	}
+	require.NoError(t, eg.Wait())
+
+	// check the coverage of the variants
+	targets := variants[idx]
+	if expectCompression != nil {
+		c, ok := variants[idx][*expectCompression]
+		require.True(t, ok, "idx = %d, compression = %q, variants = %+v, got = %+v", idx, *expectCompression, variants[idx], got)
+		targets = map[compression.Type]ocispecs.Descriptor{*expectCompression: c}
+	}
+	for c, d := range targets {
+		_, ok := got[d.Digest]
+		require.True(t, ok, "idx = %d, compression = %q, want = %+v, got = %+v", idx, c, d, got)
+		delete(got, d.Digest)
+	}
+	require.Equal(t, 0, len(got))
 }
 
 func checkInfo(ctx context.Context, t *testing.T, cs content.Store, info content.Info) {

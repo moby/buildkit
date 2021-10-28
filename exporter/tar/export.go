@@ -45,6 +45,10 @@ func (e *localExporterInstance) Name() string {
 	return "exporting to client"
 }
 
+func (e *localExporterInstance) Config() exporter.Config {
+	return exporter.Config{}
+}
+
 func (e *localExporterInstance) Export(ctx context.Context, inp exporter.Source, sessionID string) (map[string]string, error) {
 	var defers []func()
 

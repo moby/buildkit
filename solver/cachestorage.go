@@ -47,6 +47,6 @@ type CacheInfoLink struct {
 type CacheResultStorage interface {
 	Save(Result, time.Time) (CacheResult, error)
 	Load(ctx context.Context, res CacheResult) (Result, error)
-	LoadRemote(ctx context.Context, res CacheResult, s session.Group) (*Remote, error)
+	LoadRemotes(ctx context.Context, res CacheResult, compression *CompressionOpt, s session.Group) ([]*Remote, error)
 	Exists(id string) bool
 }

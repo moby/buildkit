@@ -7,6 +7,7 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/compression"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 )
@@ -93,12 +94,21 @@ const (
 
 // CacheExportOpt defines options for exporting build cache
 type CacheExportOpt struct {
-	// Convert can convert a build result to transferable object
-	Convert func(context.Context, Result) (*Remote, error)
+	// ResolveRemotes can convert a build result to transferable objects
+	ResolveRemotes func(context.Context, Result) ([]*Remote, error)
 	// Mode defines a cache export algorithm
 	Mode CacheExportMode
 	// Session is the session group to client (for auth credentials etc)
 	Session session.Group
+	// CompressionOpt is an option to specify the compression of the object to load.
+	// If specified, all objects that meet the option will be cached.
+	CompressionOpt *CompressionOpt
+}
+
+// CompressionOpt is compression information of a blob
+type CompressionOpt struct {
+	Type  compression.Type
+	Force bool
 }
 
 // CacheExporter can export the artifacts of the build chain

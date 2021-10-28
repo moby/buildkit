@@ -19,6 +19,7 @@ import (
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
+	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/buildinfo"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/contentutil"
@@ -207,6 +208,15 @@ func (e *imageExporterInstance) Name() string {
 	return "exporting to image"
 }
 
+func (e *imageExporterInstance) Config() exporter.Config {
+	return exporter.Config{
+		Compression: solver.CompressionOpt{
+			Type:  e.layerCompression,
+			Force: e.forceCompression,
+		},
+	}
+}
+
 func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source, sessionID string) (map[string]string, error) {
 	if src.Metadata == nil {
 		src.Metadata = make(map[string][]byte)
@@ -287,11 +297,16 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 			if e.push {
 				annotations := map[digest.Digest]map[string]string{}
 				mprovider := contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
+				compressionopt := solver.CompressionOpt{
+					Type:  e.layerCompression,
+					Force: e.forceCompression,
+				}
 				if src.Ref != nil {
-					remote, err := src.Ref.GetRemote(ctx, false, e.layerCompression, e.forceCompression, session.NewGroup(sessionID))
+					remotes, err := src.Ref.GetRemotes(ctx, false, compressionopt, false, session.NewGroup(sessionID))
 					if err != nil {
 						return nil, err
 					}
+					remote := remotes[0]
 					for _, desc := range remote.Descriptors {
 						mprovider.Add(desc.Digest, remote.Provider)
 						addAnnotations(annotations, desc)
@@ -299,10 +314,11 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 				}
 				if len(src.Refs) > 0 {
 					for _, r := range src.Refs {
-						remote, err := r.GetRemote(ctx, false, e.layerCompression, e.forceCompression, session.NewGroup(sessionID))
+						remotes, err := r.GetRemotes(ctx, false, compressionopt, false, session.NewGroup(sessionID))
 						if err != nil {
 							return nil, err
 						}
+						remote := remotes[0]
 						for _, desc := range remote.Descriptors {
 							mprovider.Add(desc.Digest, remote.Provider)
 							addAnnotations(annotations, desc)
@@ -352,10 +368,15 @@ func (e *imageExporterInstance) unpackImage(ctx context.Context, img images.Imag
 		}
 	}
 
-	remote, err := topLayerRef.GetRemote(ctx, true, e.layerCompression, e.forceCompression, s)
+	compressionopt := solver.CompressionOpt{
+		Type:  e.layerCompression,
+		Force: e.forceCompression,
+	}
+	remotes, err := topLayerRef.GetRemotes(ctx, true, compressionopt, false, s)
 	if err != nil {
 		return err
 	}
+	remote := remotes[0]
 
 	// ensure the content for each layer exists locally in case any are lazy
 	if unlazier, ok := remote.Provider.(cache.Unlazier); ok {

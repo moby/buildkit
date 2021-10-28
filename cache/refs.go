@@ -45,7 +45,7 @@ type ImmutableRef interface {
 	Finalize(context.Context) error
 
 	Extract(ctx context.Context, s session.Group) error // +progress
-	GetRemote(ctx context.Context, createIfNeeded bool, compressionType compression.Type, forceCompression bool, s session.Group) (*solver.Remote, error)
+	GetRemotes(ctx context.Context, createIfNeeded bool, compressionopt solver.CompressionOpt, all bool, s session.Group) ([]*solver.Remote, error)
 }
 
 type MutableRef interface {
@@ -379,9 +379,29 @@ func compressionVariantDigestLabel(compressionType compression.Type) string {
 	return compressionVariantDigestLabelPrefix + compressionType.String()
 }
 
+func getCompressionVariants(ctx context.Context, cs content.Store, dgst digest.Digest) (res []compression.Type, _ error) {
+	info, err := cs.Info(ctx, dgst)
+	if errors.Is(err, errdefs.ErrNotFound) {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
+	}
+	for k := range info.Labels {
+		if strings.HasPrefix(k, compressionVariantDigestLabelPrefix) {
+			if t := compression.Parse(strings.TrimPrefix(k, compressionVariantDigestLabelPrefix)); t != compression.UnknownCompression {
+				res = append(res, t)
+			}
+		}
+	}
+	return
+}
+
 func (sr *immutableRef) getCompressionBlob(ctx context.Context, compressionType compression.Type) (ocispecs.Descriptor, error) {
-	cs := sr.cm.ContentStore
-	info, err := cs.Info(ctx, sr.getBlob())
+	return getCompressionVariantBlob(ctx, sr.cm.ContentStore, sr.getBlob(), compressionType)
+}
+
+func getCompressionVariantBlob(ctx context.Context, cs content.Store, dgst digest.Digest, compressionType compression.Type) (ocispecs.Descriptor, error) {
+	info, err := cs.Info(ctx, dgst)
 	if err != nil {
 		return ocispecs.Descriptor{}, err
 	}
