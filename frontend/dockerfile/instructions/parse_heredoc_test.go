@@ -1,3 +1,4 @@
+//go:build dfheredoc
 // +build dfheredoc
 
 package instructions
