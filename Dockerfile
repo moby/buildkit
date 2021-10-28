@@ -1,9 +1,11 @@
 # syntax = docker/dockerfile:1.3
 
-ARG RUNC_VERSION=v1.0.1
-ARG CONTAINERD_VERSION=v1.5.5
+ARG RUNC_VERSION=v1.0.2
+ARG CONTAINERD_VERSION=v1.6.0-beta.1
+# containerd v1.5 for integration tests
+ARG CONTAINERD_ALT_VERSION_15=v1.5.5
 # containerd v1.4 for integration tests
-ARG CONTAINERD_ALT_VERSION=v1.4.6
+ARG CONTAINERD_ALT_VERSION_14=v1.4.6
 # available targets: buildkitd, buildkitd.oci_only, buildkitd.containerd_only
 ARG BUILDKIT_TARGET=buildkitd
 ARG REGISTRY_VERSION=2.7.1
@@ -135,13 +137,24 @@ RUN --mount=from=containerd-src,src=/usr/src/containerd,readwrite --mount=target
   && make bin/ctr \
   && mv bin /out
 
-# containerd v1.4 for integration tests
-FROM containerd-base as containerd-alt
-ARG CONTAINERD_ALT_VERSION
+# containerd v1.5 for integration tests
+FROM containerd-base as containerd-alt-15
+ARG CONTAINERD_ALT_VERSION_15
 ARG GO111MODULE=off
 RUN --mount=from=containerd-src,src=/usr/src/containerd,readwrite --mount=target=/root/.cache,type=cache \
   git fetch origin \
-  && git checkout -q "$CONTAINERD_ALT_VERSION" \
+  && git checkout -q "$CONTAINERD_ALT_VERSION_15" \
+  && make bin/containerd \
+  && make bin/containerd-shim-runc-v2 \
+  && mv bin /out
+
+# containerd v1.4 for integration tests
+FROM containerd-base as containerd-alt-14
+ARG CONTAINERD_ALT_VERSION_14
+ARG GO111MODULE=off
+RUN --mount=from=containerd-src,src=/usr/src/containerd,readwrite --mount=target=/root/.cache,type=cache \
+  git fetch origin \
+  && git checkout -q "$CONTAINERD_ALT_VERSION_14" \
   && make bin/containerd \
   && make bin/containerd-shim-runc-v2 \
   && mv bin /out
@@ -222,12 +235,13 @@ RUN apk add --no-cache shadow shadow-uidmap sudo vim iptables fuse \
   && ln -s /sbin/iptables-legacy /usr/bin/iptables \
   && xx-go --wrap
 # musl is needed to directly use the registry binary that is built on alpine
-ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.4=/opt/containerd-alt/bin"
+ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.4=/opt/containerd-alt-14/bin,containerd-1.5=/opt/containerd-alt-15/bin"
 ENV BUILDKIT_INTEGRATION_SNAPSHOTTER=stargz
 ENV CGO_ENABLED=0
 COPY --from=stargz-snapshotter /out/* /usr/bin/
 COPY --from=rootlesskit /rootlesskit /usr/bin/
-COPY --from=containerd-alt /out/containerd* /opt/containerd-alt/bin/
+COPY --from=containerd-alt-14 /out/containerd* /opt/containerd-alt-14/bin/
+COPY --from=containerd-alt-15 /out/containerd* /opt/containerd-alt-15/bin/
 COPY --from=registry /bin/registry /usr/bin
 COPY --from=runc /usr/bin/runc /usr/bin
 COPY --from=containerd /out/containerd* /usr/bin/

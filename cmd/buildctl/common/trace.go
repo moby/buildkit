@@ -34,7 +34,7 @@ func AttachAppContext(app *cli.App) error {
 				}
 
 				ctx, span = tracer.Start(ctx, name, trace.WithAttributes(
-					attribute.Array("command", attribute.ArrayValue(os.Args)),
+					attribute.StringSlice("command", os.Args),
 				))
 
 				clicontext.App.Metadata["context"] = ctx

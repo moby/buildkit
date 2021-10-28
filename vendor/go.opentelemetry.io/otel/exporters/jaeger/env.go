@@ -24,7 +24,7 @@ const (
 	// i.e.	"localhost"
 	envAgentHost = "OTEL_EXPORTER_JAEGER_AGENT_HOST"
 	// Port for the Jaeger agent, part of address where exporter sends spans
-	// i.e. 6832
+	// i.e. 6831
 	envAgentPort = "OTEL_EXPORTER_JAEGER_AGENT_PORT"
 	// The HTTP endpoint for sending spans directly to a collector,
 	// i.e. http://jaeger-collector:14268/api/traces.

@@ -12,26 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package otlptracehttp
+package otlptracehttp // import "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 
 import (
 	"crypto/tls"
 	"time"
 
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/internal/otlpconfig"
-)
-
-const (
-	// defaultMaxAttempts describes how many times the driver
-	// should retry the sending of the payload in case of a
-	// retryable error.
-	defaultMaxAttempts int = 5
-	// defaultTracesPath is a default URL path for endpoint that
-	// receives spans.
-	defaultTracesPath string = "/v1/traces"
-	// defaultBackoff is a default base backoff time used in the
-	// exponential backoff strategy.
-	defaultBackoff time.Duration = 300 * time.Millisecond
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/internal/retry"
 )
 
 // Compression describes the compression used for payloads sent to the
@@ -52,9 +40,9 @@ type Option interface {
 	applyHTTPOption(*otlpconfig.Config)
 }
 
-// RetrySettings defines configuration for retrying batches in case of export failure
-// using an exponential backoff.
-type RetrySettings otlpconfig.RetrySettings
+// RetryConfig defines configuration for retrying batches in case of export
+// failure using an exponential backoff.
+type RetryConfig retry.Config
 
 type wrappedOption struct {
 	otlpconfig.HTTPOption
@@ -84,21 +72,6 @@ func WithURLPath(urlPath string) Option {
 	return wrappedOption{otlpconfig.WithURLPath(urlPath)}
 }
 
-// WithMaxAttempts allows one to override how many times the driver
-// will try to send the payload in case of retryable errors.
-// The max attempts is limited to at most 5 retries. If unset,
-// default (5) will be used.
-func WithMaxAttempts(maxAttempts int) Option {
-	return wrappedOption{otlpconfig.WithMaxAttempts(maxAttempts)}
-}
-
-// WithBackoff tells the driver to use the duration as a base of the
-// exponential backoff strategy. If unset, default (300ms) will be
-// used.
-func WithBackoff(duration time.Duration) Option {
-	return wrappedOption{otlpconfig.WithBackoff(duration)}
-}
-
 // WithTLSClientConfig can be used to set up a custom TLS
 // configuration for the client used to send payloads to the
 // collector. Use it if you want to use a custom certificate.
@@ -123,4 +96,13 @@ func WithHeaders(headers map[string]string) Option {
 // each spans batch.  If unset, the default will be 10 seconds.
 func WithTimeout(duration time.Duration) Option {
 	return wrappedOption{otlpconfig.WithTimeout(duration)}
+}
+
+// WithRetry configures the retry policy for transient errors that may occurs
+// when exporting traces. An exponential back-off algorithm is used to ensure
+// endpoints are not overwhelmed with retries. If unset, the default retry
+// policy will retry after 5 seconds and increase exponentially after each
+// error for a total of 1 minute.
+func WithRetry(rc RetryConfig) Option {
+	return wrappedOption{otlpconfig.WithRetry(retry.Config(rc))}
 }

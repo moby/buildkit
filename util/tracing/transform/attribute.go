@@ -44,7 +44,7 @@ func boolArray(kv []*commonpb.AnyValue) attribute.Value {
 	for i, v := range kv {
 		arr[i] = v.GetBoolValue()
 	}
-	return attribute.ArrayValue(arr)
+	return attribute.BoolSliceValue(arr)
 }
 
 func intArray(kv []*commonpb.AnyValue) attribute.Value {
@@ -52,7 +52,7 @@ func intArray(kv []*commonpb.AnyValue) attribute.Value {
 	for i, v := range kv {
 		arr[i] = v.GetIntValue()
 	}
-	return attribute.ArrayValue(arr)
+	return attribute.Int64SliceValue(arr)
 }
 
 func doubleArray(kv []*commonpb.AnyValue) attribute.Value {
@@ -60,7 +60,7 @@ func doubleArray(kv []*commonpb.AnyValue) attribute.Value {
 	for i, v := range kv {
 		arr[i] = v.GetDoubleValue()
 	}
-	return attribute.ArrayValue(arr)
+	return attribute.Float64SliceValue(arr)
 }
 
 func stringArray(kv []*commonpb.AnyValue) attribute.Value {
@@ -68,12 +68,12 @@ func stringArray(kv []*commonpb.AnyValue) attribute.Value {
 	for i, v := range kv {
 		arr[i] = v.GetStringValue()
 	}
-	return attribute.ArrayValue(arr)
+	return attribute.StringSliceValue(arr)
 }
 
 func arrayValues(kv []*commonpb.AnyValue) attribute.Value {
 	if len(kv) == 0 {
-		return attribute.ArrayValue([]string{})
+		return attribute.StringSliceValue([]string{})
 	}
 
 	switch kv[0].Value.(type) {
@@ -86,6 +86,6 @@ func arrayValues(kv []*commonpb.AnyValue) attribute.Value {
 	case *commonpb.AnyValue_StringValue:
 		return stringArray(kv)
 	default:
-		return attribute.ArrayValue([]string{})
+		return attribute.StringSliceValue([]string{})
 	}
 }
