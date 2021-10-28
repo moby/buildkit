@@ -73,7 +73,7 @@ func TestRuncWorker(t *testing.T) {
 	require.NoError(t, err)
 	snap := tests.NewBusyboxSourceSnapshot(ctx, t, w, sm)
 
-	mounts, err := snap.Mount(ctx, false, nil)
+	mounts, err := snap.Mount(ctx, true, nil)
 	require.NoError(t, err)
 
 	lm := snapshot.LocalMounter(mounts)
@@ -98,7 +98,7 @@ func TestRuncWorker(t *testing.T) {
 	require.NoError(t, err)
 
 	// for _, d := range du {
-	// 	fmt.Printf("du: %+v\n", d)
+	// 	t.Logf("du: %+v\n", d)
 	// }
 
 	for _, d := range du {
@@ -111,16 +111,16 @@ func TestRuncWorker(t *testing.T) {
 	}
 
 	stderr := bytes.NewBuffer(nil)
-	err = w.WorkerOpt.Executor.Run(ctx, "", execMount(snap), nil, executor.ProcessInfo{Meta: meta, Stderr: &nopCloser{stderr}}, nil)
+	err = w.WorkerOpt.Executor.Run(ctx, "", execMount(snap, true), nil, executor.ProcessInfo{Meta: meta, Stderr: &nopCloser{stderr}}, nil)
 	require.Error(t, err) // Read-only root
 	// typical error is like `mkdir /.../rootfs/proc: read-only file system`.
 	// make sure the error is caused before running `echo foo > /bar`.
 	require.Contains(t, stderr.String(), "read-only file system")
 
-	root, err := w.CacheMgr.New(ctx, snap, nil)
+	root, err := w.CacheMgr.New(ctx, snap, nil, cache.CachePolicyRetain)
 	require.NoError(t, err)
 
-	err = w.WorkerOpt.Executor.Run(ctx, "", execMount(root), nil, executor.ProcessInfo{Meta: meta, Stderr: &nopCloser{stderr}}, nil)
+	err = w.WorkerOpt.Executor.Run(ctx, "", execMount(root, false), nil, executor.ProcessInfo{Meta: meta, Stderr: &nopCloser{stderr}}, nil)
 	require.NoError(t, err)
 
 	meta = executor.Meta{
@@ -128,13 +128,13 @@ func TestRuncWorker(t *testing.T) {
 		Cwd:  "/",
 	}
 
-	err = w.WorkerOpt.Executor.Run(ctx, "", execMount(root), nil, executor.ProcessInfo{Meta: meta, Stderr: &nopCloser{stderr}}, nil)
+	err = w.WorkerOpt.Executor.Run(ctx, "", execMount(root, false), nil, executor.ProcessInfo{Meta: meta, Stderr: &nopCloser{stderr}}, nil)
 	require.NoError(t, err)
 
 	rf, err := root.Commit(ctx)
 	require.NoError(t, err)
 
-	mounts, err = rf.Mount(ctx, false, nil)
+	mounts, err = rf.Mount(ctx, true, nil)
 	require.NoError(t, err)
 
 	lm = snapshot.LocalMounter(mounts)
@@ -207,7 +207,7 @@ func TestRuncWorkerNoProcessSandbox(t *testing.T) {
 	}
 	stdout := bytes.NewBuffer(nil)
 	stderr := bytes.NewBuffer(nil)
-	err = w.WorkerOpt.Executor.Run(ctx, "", execMount(root), nil, executor.ProcessInfo{Meta: meta, Stdout: &nopCloser{stdout}, Stderr: &nopCloser{stderr}}, nil)
+	err = w.WorkerOpt.Executor.Run(ctx, "", execMount(root, false), nil, executor.ProcessInfo{Meta: meta, Stdout: &nopCloser{stdout}, Stderr: &nopCloser{stderr}}, nil)
 	require.NoError(t, err, fmt.Sprintf("stdout=%q, stderr=%q", stdout.String(), stderr.String()))
 	require.Equal(t, string(selfCmdline), stdout.String())
 }
@@ -244,8 +244,8 @@ func (n *nopCloser) Close() error {
 	return nil
 }
 
-func execMount(m cache.Mountable) executor.Mount {
-	return executor.Mount{Src: &mountable{m: m}}
+func execMount(m cache.Mountable, readonly bool) executor.Mount {
+	return executor.Mount{Src: &mountable{m: m}, Readonly: readonly}
 }
 
 type mountable struct {

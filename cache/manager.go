@@ -216,10 +216,10 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor,
 		}
 	}()
 
-	if err := cm.ManagerOpt.LeaseManager.AddResource(ctx, l, leases.Resource{
+	if err := cm.LeaseManager.AddResource(ctx, l, leases.Resource{
 		ID:   snapshotID,
-		Type: "snapshots/" + cm.ManagerOpt.Snapshotter.Name(),
-	}); err != nil {
+		Type: "snapshots/" + cm.Snapshotter.Name(),
+	}); err != nil && !errdefs.IsAlreadyExists(err) {
 		return nil, errors.Wrapf(err, "failed to add snapshot %s to lease", id)
 	}
 
@@ -504,24 +504,25 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, sess session.Gr
 		}
 	}()
 
-	if err := cm.ManagerOpt.LeaseManager.AddResource(ctx, l, leases.Resource{
-		ID:   id,
-		Type: "snapshots/" + cm.ManagerOpt.Snapshotter.Name(),
-	}); err != nil {
-		return nil, errors.Wrapf(err, "failed to add snapshot %s to lease", id)
+	snapshotID := id
+	if err := cm.LeaseManager.AddResource(ctx, leases.Lease{ID: id}, leases.Resource{
+		ID:   snapshotID,
+		Type: "snapshots/" + cm.Snapshotter.Name(),
+	}); err != nil && !errdefs.IsAlreadyExists(err) {
+		return nil, errors.Wrapf(err, "failed to add snapshot %s to lease", snapshotID)
 	}
 
 	if cm.Snapshotter.Name() == "stargz" && parent != nil {
 		if rerr := parent.withRemoteSnapshotLabelsStargzMode(ctx, sess, func() {
-			err = cm.Snapshotter.Prepare(ctx, id, parentSnapshotID)
+			err = cm.Snapshotter.Prepare(ctx, snapshotID, parentSnapshotID)
 		}); rerr != nil {
 			return nil, rerr
 		}
 	} else {
-		err = cm.Snapshotter.Prepare(ctx, id, parentSnapshotID)
+		err = cm.Snapshotter.Prepare(ctx, snapshotID, parentSnapshotID)
 	}
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to prepare %s", id)
+		return nil, errors.Wrapf(err, "failed to prepare %s", parentSnapshotID)
 	}
 
 	cm.mu.Lock()
@@ -538,7 +539,7 @@ func (cm *cacheManager) New(ctx context.Context, s ImmutableRef, sess session.Gr
 		cacheMetadata: md,
 	}
 
-	opts = append(opts, withSnapshotID(id))
+	opts = append(opts, withSnapshotID(snapshotID))
 	if err := initializeMetadata(rec.cacheMetadata, parentID, opts...); err != nil {
 		return nil, err
 	}

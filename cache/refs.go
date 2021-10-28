@@ -75,8 +75,7 @@ type cacheRecord struct {
 	// dead means record is marked as deleted
 	dead bool
 
-	view      string
-	viewMount snapshot.Mountable
+	mountCache snapshot.Mountable
 
 	sizeG flightcontrol.Group
 
@@ -164,6 +163,14 @@ func (cr *cacheRecord) IdentityMapping() *idtools.IdentityMapping {
 	return cr.cm.IdentityMapping()
 }
 
+func (cr *cacheRecord) viewLeaseID() string {
+	return cr.ID() + "-view"
+}
+
+func (cr *cacheRecord) viewSnapshotID() string {
+	return cr.getSnapshotID() + "-view"
+}
+
 func (cr *cacheRecord) size(ctx context.Context) (int64, error) {
 	// this expects that usage() is implemented lazily
 	s, err := cr.sizeG.Do(ctx, cr.ID(), func(ctx context.Context) (interface{}, error) {
@@ -239,52 +246,59 @@ func (cr *cacheRecord) parentRef(hidden bool, descHandlers DescHandlers) *immuta
 	return p.ref(hidden, descHandlers)
 }
 
-// must be called holding cacheRecord mu
-func (cr *cacheRecord) mount(ctx context.Context, readonly bool) (snapshot.Mountable, error) {
+// caller must hold cr.mu
+func (cr *cacheRecord) mount(ctx context.Context, s session.Group) (_ snapshot.Mountable, rerr error) {
+	if cr.mountCache != nil {
+		return cr.mountCache, nil
+	}
+
+	var mountSnapshotID string
 	if cr.mutable {
-		m, err := cr.cm.Snapshotter.Mounts(ctx, cr.getSnapshotID())
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to mount %s", cr.ID())
-		}
-		if readonly {
-			m = setReadonly(m)
-		}
-		return m, nil
-	}
-
-	if cr.equalMutable != nil && readonly {
-		m, err := cr.cm.Snapshotter.Mounts(ctx, cr.equalMutable.getSnapshotID())
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to mount %s", cr.equalMutable.ID())
-		}
-		return setReadonly(m), nil
-	}
-
-	if err := cr.finalize(ctx); err != nil {
-		return nil, err
-	}
-	if cr.viewMount == nil { // TODO: handle this better
-		view := identity.NewID()
-		l, err := cr.cm.LeaseManager.Create(ctx, func(l *leases.Lease) error {
-			l.ID = view
+		mountSnapshotID = cr.getSnapshotID()
+	} else if cr.equalMutable != nil {
+		mountSnapshotID = cr.equalMutable.getSnapshotID()
+	} else {
+		mountSnapshotID = cr.viewSnapshotID()
+		if _, err := cr.cm.LeaseManager.Create(ctx, func(l *leases.Lease) error {
+			l.ID = cr.viewLeaseID()
 			l.Labels = map[string]string{
 				"containerd.io/gc.flat": time.Now().UTC().Format(time.RFC3339Nano),
 			}
 			return nil
-		}, leaseutil.MakeTemporary)
-		if err != nil {
+		}, leaseutil.MakeTemporary); err != nil && !errdefs.IsAlreadyExists(err) {
 			return nil, err
 		}
-		ctx = leases.WithLease(ctx, l.ID)
-		m, err := cr.cm.Snapshotter.View(ctx, view, cr.getSnapshotID())
-		if err != nil {
-			cr.cm.LeaseManager.Delete(context.TODO(), leases.Lease{ID: l.ID})
-			return nil, errors.Wrapf(err, "failed to mount %s", cr.ID())
+		defer func() {
+			if rerr != nil {
+				cr.cm.LeaseManager.Delete(context.TODO(), leases.Lease{ID: cr.viewLeaseID()})
+			}
+		}()
+		if err := cr.cm.LeaseManager.AddResource(ctx, leases.Lease{ID: cr.viewLeaseID()}, leases.Resource{
+			ID:   mountSnapshotID,
+			Type: "snapshots/" + cr.cm.Snapshotter.Name(),
+		}); err != nil && !errdefs.IsAlreadyExists(err) {
+			return nil, err
 		}
-		cr.view = view
-		cr.viewMount = m
+		// Return the mount direct from View rather than setting it using the Mounts call below.
+		// The two are equivalent for containerd snapshotters but the moby snapshotter requires
+		// the use of the mountable returned by View in this case.
+		mnts, err := cr.cm.Snapshotter.View(ctx, mountSnapshotID, cr.getSnapshotID())
+		if err != nil && !errdefs.IsAlreadyExists(err) {
+			return nil, err
+		}
+		cr.mountCache = mnts
 	}
-	return cr.viewMount, nil
+
+	if cr.mountCache != nil {
+		return cr.mountCache, nil
+	}
+
+	mnts, err := cr.cm.Snapshotter.Mounts(ctx, mountSnapshotID)
+	if err != nil {
+		return nil, err
+	}
+	cr.mountCache = mnts
+	return cr.mountCache, nil
 }
 
 // call when holding the manager lock
@@ -299,8 +313,10 @@ func (cr *cacheRecord) remove(ctx context.Context, removeSnapshot bool) error {
 		}
 	}
 	if removeSnapshot {
-		if err := cr.cm.LeaseManager.Delete(context.TODO(), leases.Lease{ID: cr.ID()}); err != nil {
-			return errors.Wrapf(err, "failed to remove %s", cr.ID())
+		if err := cr.cm.LeaseManager.Delete(ctx, leases.Lease{
+			ID: cr.ID(),
+		}); err != nil && !errdefs.IsNotFound(err) {
+			return errors.Wrapf(err, "failed to delete lease for %s", cr.ID())
 		}
 	}
 	if err := cr.cm.MetadataStore.Clear(cr.ID()); err != nil {
@@ -362,6 +378,11 @@ func (sr *immutableRef) Clone() ImmutableRef {
 }
 
 func (sr *immutableRef) ociDesc(ctx context.Context, dhs DescHandlers) (ocispecs.Descriptor, error) {
+	dgst := sr.getBlob()
+	if dgst == "" {
+		return ocispecs.Descriptor{}, errors.Errorf("no blob set for cache record %s", sr.ID())
+	}
+
 	desc := ocispecs.Descriptor{
 		Digest:      sr.getBlob(),
 		Size:        sr.getBlobSize(),
@@ -446,7 +467,7 @@ func getCompressionVariantBlob(ctx context.Context, cs content.Store, dgst diges
 
 func (sr *immutableRef) addCompressionBlob(ctx context.Context, desc ocispecs.Descriptor, compressionType compression.Type) error {
 	cs := sr.cm.ContentStore
-	if err := sr.cm.ManagerOpt.LeaseManager.AddResource(ctx, leases.Lease{ID: sr.ID()}, leases.Resource{
+	if err := sr.cm.LeaseManager.AddResource(ctx, leases.Lease{ID: sr.ID()}, leases.Resource{
 		ID:   desc.Digest.String(),
 		Type: "content",
 	}); err != nil {
@@ -544,7 +565,13 @@ func (sr *immutableRef) parentRefChain() []*immutableRef {
 	return refs
 }
 
-func (sr *immutableRef) Mount(ctx context.Context, readonly bool, s session.Group) (snapshot.Mountable, error) {
+func (sr *immutableRef) Mount(ctx context.Context, readonly bool, s session.Group) (_ snapshot.Mountable, rerr error) {
+	if sr.equalMutable != nil && !readonly {
+		if err := sr.Finalize(ctx); err != nil {
+			return nil, err
+		}
+	}
+
 	if err := sr.Extract(ctx, s); err != nil {
 		return nil, err
 	}
@@ -552,35 +579,33 @@ func (sr *immutableRef) Mount(ctx context.Context, readonly bool, s session.Grou
 	sr.mu.Lock()
 	defer sr.mu.Unlock()
 
+	if sr.mountCache != nil {
+		return sr.mountCache, nil
+	}
+
+	var mnt snapshot.Mountable
 	if sr.cm.Snapshotter.Name() == "stargz" {
-		var (
-			m    snapshot.Mountable
-			rerr error
-		)
 		if err := sr.withRemoteSnapshotLabelsStargzMode(ctx, s, func() {
-			m, rerr = sr.mount(ctx, readonly)
+			mnt, rerr = sr.mount(ctx, s)
 		}); err != nil {
 			return nil, err
 		}
-		return m, rerr
+	} else {
+		mnt, rerr = sr.mount(ctx, s)
+	}
+	if rerr != nil {
+		return nil, rerr
 	}
 
-	return sr.mount(ctx, readonly)
+	if readonly {
+		mnt = setReadonly(mnt)
+	}
+	return mnt, nil
 }
 
 func (sr *immutableRef) Extract(ctx context.Context, s session.Group) (rerr error) {
 	if !sr.getBlobOnly() {
-		return
-	}
-
-	ctx, done, err := leaseutil.WithLease(ctx, sr.cm.LeaseManager, leaseutil.MakeTemporary)
-	if err != nil {
-		return err
-	}
-	defer done(ctx)
-
-	if sr.GetLayerType() == "windows" {
-		ctx = winlayers.UseWindowsLayerMode(ctx)
+		return nil
 	}
 
 	if sr.cm.Snapshotter.Name() == "stargz" {
@@ -588,14 +613,14 @@ func (sr *immutableRef) Extract(ctx context.Context, s session.Group) (rerr erro
 			if rerr = sr.prepareRemoteSnapshotsStargzMode(ctx, s); rerr != nil {
 				return
 			}
-			rerr = sr.extract(ctx, sr.descHandlers, s)
+			rerr = sr.unlazy(ctx, sr.descHandlers, s)
 		}); err != nil {
 			return err
 		}
 		return rerr
 	}
 
-	return sr.extract(ctx, sr.descHandlers, s)
+	return sr.unlazy(ctx, sr.descHandlers, s)
 }
 
 func (sr *immutableRef) withRemoteSnapshotLabelsStargzMode(ctx context.Context, s session.Group, f func()) error {
@@ -726,94 +751,115 @@ func makeTmpLabelsStargzMode(labels map[string]string, s session.Group) (fields 
 	return
 }
 
-func (sr *immutableRef) extract(ctx context.Context, dhs DescHandlers, s session.Group) error {
-	_, err := sr.sizeG.Do(ctx, sr.ID()+"-extract", func(ctx context.Context) (_ interface{}, rerr error) {
-		snapshotID := sr.getSnapshotID()
-		if _, err := sr.cm.Snapshotter.Stat(ctx, snapshotID); err == nil {
+func (sr *immutableRef) unlazy(ctx context.Context, dhs DescHandlers, s session.Group) error {
+	_, err := sr.sizeG.Do(ctx, sr.ID()+"-unlazy", func(ctx context.Context) (_ interface{}, rerr error) {
+		if _, err := sr.cm.Snapshotter.Stat(ctx, sr.getSnapshotID()); err == nil {
 			return nil, nil
 		}
 
-		if sr.cm.Applier == nil {
-			return nil, errors.New("extract requires an applier")
-		}
-
-		eg, egctx := errgroup.WithContext(ctx)
-
-		parentID := ""
-		if sr.parent != nil {
-			eg.Go(func() error {
-				if err := sr.parent.extract(egctx, dhs, s); err != nil {
-					return err
-				}
-				parentID = sr.parent.getSnapshotID()
-				return nil
-			})
-		}
-
-		desc, err := sr.ociDesc(ctx, dhs)
-		if err != nil {
-			return nil, err
-		}
-		dh := dhs[desc.Digest]
-
-		eg.Go(func() error {
-			// unlazies if needed, otherwise a no-op
-			return lazyRefProvider{
-				ref:     sr,
-				desc:    desc,
-				dh:      dh,
-				session: s,
-			}.Unlazy(egctx)
-		})
-
-		if err := eg.Wait(); err != nil {
-			return nil, err
-		}
-
-		if dh != nil && dh.Progress != nil {
-			_, stopProgress := dh.Progress.Start(ctx)
-			defer stopProgress(rerr)
-			statusDone := dh.Progress.Status("extracting "+desc.Digest.String(), "extracting")
-			defer statusDone()
-		}
-
-		key := fmt.Sprintf("extract-%s %s", identity.NewID(), sr.getChainID())
-
-		err = sr.cm.Snapshotter.Prepare(ctx, key, parentID)
-		if err != nil {
-			return nil, err
-		}
-
-		mountable, err := sr.cm.Snapshotter.Mounts(ctx, key)
-		if err != nil {
-			return nil, err
-		}
-		mounts, unmount, err := mountable.Mount()
-		if err != nil {
-			return nil, err
-		}
-		_, err = sr.cm.Applier.Apply(ctx, desc, mounts)
-		if err != nil {
-			unmount()
-			return nil, err
-		}
-
-		if err := unmount(); err != nil {
-			return nil, err
-		}
-		if err := sr.cm.Snapshotter.Commit(ctx, sr.getSnapshotID(), key); err != nil {
-			if !errors.Is(err, errdefs.ErrAlreadyExists) {
-				return nil, err
-			}
-		}
-		sr.queueBlobOnly(false)
-		sr.queueSize(sizeUnknown)
-		if err := sr.commitMetadata(); err != nil {
-			return nil, err
-		}
-		return nil, nil
+		return nil, sr.unlazyLayer(ctx, dhs, s)
 	})
 	return err
+}
+
+// should be called within sizeG.Do call for this ref's ID
+func (sr *immutableRef) unlazyLayer(ctx context.Context, dhs DescHandlers, s session.Group) (rerr error) {
+	if !sr.getBlobOnly() {
+		return nil
+	}
+
+	if sr.cm.Applier == nil {
+		return errors.New("unlazy requires an applier")
+	}
+
+	if _, ok := leases.FromContext(ctx); !ok {
+		leaseCtx, done, err := leaseutil.WithLease(ctx, sr.cm.LeaseManager, leaseutil.MakeTemporary)
+		if err != nil {
+			return err
+		}
+		defer done(leaseCtx)
+		ctx = leaseCtx
+	}
+
+	if sr.GetLayerType() == "windows" {
+		ctx = winlayers.UseWindowsLayerMode(ctx)
+	}
+
+	eg, egctx := errgroup.WithContext(ctx)
+
+	parentID := ""
+	if sr.parent != nil {
+		eg.Go(func() error {
+			if err := sr.parent.unlazy(egctx, dhs, s); err != nil {
+				return err
+			}
+			parentID = sr.parent.getSnapshotID()
+			return nil
+		})
+	}
+
+	desc, err := sr.ociDesc(ctx, dhs)
+	if err != nil {
+		return err
+	}
+	dh := dhs[desc.Digest]
+
+	eg.Go(func() error {
+		// unlazies if needed, otherwise a no-op
+		return lazyRefProvider{
+			ref:     sr,
+			desc:    desc,
+			dh:      dh,
+			session: s,
+		}.Unlazy(egctx)
+	})
+
+	if err := eg.Wait(); err != nil {
+		return err
+	}
+
+	if dh != nil && dh.Progress != nil {
+		_, stopProgress := dh.Progress.Start(ctx)
+		defer stopProgress(rerr)
+		statusDone := dh.Progress.Status("extracting "+desc.Digest.String(), "extracting")
+		defer statusDone()
+	}
+
+	key := fmt.Sprintf("extract-%s %s", identity.NewID(), sr.getChainID())
+
+	err = sr.cm.Snapshotter.Prepare(ctx, key, parentID)
+	if err != nil {
+		return err
+	}
+
+	mountable, err := sr.cm.Snapshotter.Mounts(ctx, key)
+	if err != nil {
+		return err
+	}
+	mounts, unmount, err := mountable.Mount()
+	if err != nil {
+		return err
+	}
+	_, err = sr.cm.Applier.Apply(ctx, desc, mounts)
+	if err != nil {
+		unmount()
+		return err
+	}
+
+	if err := unmount(); err != nil {
+		return err
+	}
+	if err := sr.cm.Snapshotter.Commit(ctx, sr.getSnapshotID(), key); err != nil {
+		if !errors.Is(err, errdefs.ErrAlreadyExists) {
+			return err
+		}
+	}
+	sr.queueBlobOnly(false)
+	sr.queueSize(sizeUnknown)
+	if err := sr.commitMetadata(); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (sr *immutableRef) Release(ctx context.Context) error {
@@ -853,16 +899,13 @@ func (sr *immutableRef) release(ctx context.Context) error {
 	}
 
 	if len(sr.refs) == 0 {
-		if sr.viewMount != nil { // TODO: release viewMount earlier if possible
-			if err := sr.cm.LeaseManager.Delete(ctx, leases.Lease{ID: sr.view}); err != nil {
-				return errors.Wrapf(err, "failed to remove view lease %s", sr.view)
-			}
-			sr.view = ""
-			sr.viewMount = nil
-		}
-
 		if sr.equalMutable != nil {
 			sr.equalMutable.release(ctx)
+		} else {
+			if err := sr.cm.LeaseManager.Delete(ctx, leases.Lease{ID: sr.viewLeaseID()}); err != nil && !errdefs.IsNotFound(err) {
+				return err
+			}
+			sr.mountCache = nil
 		}
 	}
 
@@ -895,19 +938,20 @@ func (cr *cacheRecord) finalize(ctx context.Context) error {
 		}
 	}
 
-	if err := cr.cm.ManagerOpt.LeaseManager.AddResource(ctx, leases.Lease{ID: cr.ID()}, leases.Resource{
-		ID:   cr.ID(),
-		Type: "snapshots/" + cr.cm.ManagerOpt.Snapshotter.Name(),
+	if err := cr.cm.LeaseManager.AddResource(ctx, leases.Lease{ID: cr.ID()}, leases.Resource{
+		ID:   cr.getSnapshotID(),
+		Type: "snapshots/" + cr.cm.Snapshotter.Name(),
 	}); err != nil {
 		cr.cm.LeaseManager.Delete(context.TODO(), leases.Lease{ID: cr.ID()})
-		return errors.Wrapf(err, "failed to add snapshot %s to lease", cr.ID())
+		return errors.Wrapf(err, "failed to add snapshot %s to lease", cr.getSnapshotID())
 	}
 
-	err = cr.cm.Snapshotter.Commit(ctx, cr.ID(), mutable.ID())
-	if err != nil {
+	if err := cr.cm.Snapshotter.Commit(ctx, cr.getSnapshotID(), mutable.getSnapshotID()); err != nil {
 		cr.cm.LeaseManager.Delete(context.TODO(), leases.Lease{ID: cr.ID()})
-		return errors.Wrapf(err, "failed to commit %s", mutable.ID())
+		return errors.Wrapf(err, "failed to commit %s to %s", mutable.getSnapshotID(), cr.getSnapshotID())
 	}
+	cr.mountCache = nil
+
 	mutable.dead = true
 	go func() {
 		cr.cm.mu.Lock()
@@ -919,7 +963,6 @@ func (cr *cacheRecord) finalize(ctx context.Context) error {
 
 	cr.equalMutable = nil
 	cr.clearEqualMutable()
-	cr.queueSnapshotID(cr.ID())
 	return cr.commitMetadata()
 }
 
@@ -965,7 +1008,7 @@ func (sr *mutableRef) commit(ctx context.Context) (*immutableRef, error) {
 
 	md.queueCommitted(true)
 	md.queueSize(sizeUnknown)
-	md.queueSnapshotID(sr.getSnapshotID())
+	md.queueSnapshotID(id)
 	md.setEqualMutable(sr.ID())
 	if err := md.commitMetadata(); err != nil {
 		return nil, err
@@ -976,24 +1019,32 @@ func (sr *mutableRef) commit(ctx context.Context) (*immutableRef, error) {
 	return ref, nil
 }
 
-func (sr *mutableRef) Mount(ctx context.Context, readonly bool, s session.Group) (snapshot.Mountable, error) {
+func (sr *mutableRef) Mount(ctx context.Context, readonly bool, s session.Group) (_ snapshot.Mountable, rerr error) {
 	sr.mu.Lock()
 	defer sr.mu.Unlock()
 
+	if sr.mountCache != nil {
+		return sr.mountCache, nil
+	}
+
+	var mnt snapshot.Mountable
 	if sr.cm.Snapshotter.Name() == "stargz" && sr.parent != nil {
-		var (
-			m    snapshot.Mountable
-			rerr error
-		)
 		if err := sr.parent.withRemoteSnapshotLabelsStargzMode(ctx, s, func() {
-			m, rerr = sr.mount(ctx, readonly)
+			mnt, rerr = sr.mount(ctx, s)
 		}); err != nil {
 			return nil, err
 		}
-		return m, rerr
+	} else {
+		mnt, rerr = sr.mount(ctx, s)
+	}
+	if rerr != nil {
+		return nil, rerr
 	}
 
-	return sr.mount(ctx, readonly)
+	if readonly {
+		mnt = setReadonly(mnt)
+	}
+	return mnt, nil
 }
 
 func (sr *mutableRef) Commit(ctx context.Context) (ImmutableRef, error) {

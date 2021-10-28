@@ -83,7 +83,7 @@ func testRepeatedFetch(t *testing.T, keepGitDir bool) {
 	require.NoError(t, err)
 	defer ref1.Release(context.TODO())
 
-	mount, err := ref1.Mount(ctx, false, nil)
+	mount, err := ref1.Mount(ctx, true, nil)
 	require.NoError(t, err)
 
 	lm := snapshot.LocalMounter(mount)
@@ -136,7 +136,7 @@ func testRepeatedFetch(t *testing.T, keepGitDir bool) {
 	require.NoError(t, err)
 	defer ref3.Release(context.TODO())
 
-	mount, err = ref3.Mount(ctx, false, nil)
+	mount, err = ref3.Mount(ctx, true, nil)
 	require.NoError(t, err)
 
 	lm = snapshot.LocalMounter(mount)
@@ -213,7 +213,7 @@ func testFetchBySHA(t *testing.T, keepGitDir bool) {
 	require.NoError(t, err)
 	defer ref1.Release(context.TODO())
 
-	mount, err := ref1.Mount(ctx, false, nil)
+	mount, err := ref1.Mount(ctx, true, nil)
 	require.NoError(t, err)
 
 	lm := snapshot.LocalMounter(mount)
@@ -306,7 +306,7 @@ func testMultipleRepos(t *testing.T, keepGitDir bool) {
 	require.NoError(t, err)
 	defer ref1.Release(context.TODO())
 
-	mount, err := ref1.Mount(ctx, false, nil)
+	mount, err := ref1.Mount(ctx, true, nil)
 	require.NoError(t, err)
 
 	lm := snapshot.LocalMounter(mount)
@@ -318,7 +318,7 @@ func testMultipleRepos(t *testing.T, keepGitDir bool) {
 	require.NoError(t, err)
 	defer ref2.Release(context.TODO())
 
-	mount, err = ref2.Mount(ctx, false, nil)
+	mount, err = ref2.Mount(ctx, true, nil)
 	require.NoError(t, err)
 
 	lm = snapshot.LocalMounter(mount)
@@ -420,7 +420,7 @@ func testSubdir(t *testing.T, keepGitDir bool) {
 	require.NoError(t, err)
 	defer ref1.Release(context.TODO())
 
-	mount, err := ref1.Mount(ctx, false, nil)
+	mount, err := ref1.Mount(ctx, true, nil)
 	require.NoError(t, err)
 
 	lm := snapshot.LocalMounter(mount)
@@ -455,11 +455,12 @@ func setupGitSource(t *testing.T, tmpdir string) source.Source {
 
 	md, err := metadata.NewStore(filepath.Join(tmpdir, "metadata.db"))
 	require.NoError(t, err)
+	lm := leaseutil.WithNamespace(ctdmetadata.NewLeaseManager(mdb), "buildkit")
 
 	cm, err := cache.NewManager(cache.ManagerOpt{
 		Snapshotter:    snapshot.FromContainerdSnapshotter("native", containerdsnapshot.NSSnapshotter("buildkit", mdb.Snapshotter("native")), nil),
 		MetadataStore:  md,
-		LeaseManager:   leaseutil.WithNamespace(ctdmetadata.NewLeaseManager(mdb), "buildkit"),
+		LeaseManager:   lm,
 		ContentStore:   mdb.ContentStore(),
 		GarbageCollect: mdb.GarbageCollect,
 	})

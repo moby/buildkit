@@ -2,9 +2,7 @@ package snapshot
 
 import (
 	"context"
-	"os"
 	"sync"
-	"sync/atomic"
 
 	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/snapshots"
@@ -68,29 +66,6 @@ func (s *fromContainerd) View(ctx context.Context, key, parent string, opts ...s
 }
 func (s *fromContainerd) IdentityMapping() *idtools.IdentityMapping {
 	return s.idmap
-}
-
-type staticMountable struct {
-	count  int32
-	id     string
-	mounts []mount.Mount
-	idmap  *idtools.IdentityMapping
-}
-
-func (cm *staticMountable) Mount() ([]mount.Mount, func() error, error) {
-	atomic.AddInt32(&cm.count, 1)
-	return cm.mounts, func() error {
-		if atomic.AddInt32(&cm.count, -1) < 0 {
-			if v := os.Getenv("BUILDKIT_DEBUG_PANIC_ON_ERROR"); v == "1" {
-				panic("release of released mount " + cm.id)
-			}
-		}
-		return nil
-	}, nil
-}
-
-func (cm *staticMountable) IdentityMapping() *idtools.IdentityMapping {
-	return cm.idmap
 }
 
 // NewContainerdSnapshotter converts snapshotter to containerd snapshotter

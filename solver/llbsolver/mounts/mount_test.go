@@ -108,7 +108,7 @@ func newCacheManager(ctx context.Context, opt cmOpt) (co *cmOut, cleanup func() 
 		return nil, nil, err
 	}
 
-	lm := ctdmetadata.NewLeaseManager(mdb)
+	lm := leaseutil.WithNamespace(ctdmetadata.NewLeaseManager(mdb), ns)
 
 	md, err := metadata.NewStore(filepath.Join(tmpdir, "metadata.db"))
 	if err != nil {
@@ -119,7 +119,7 @@ func newCacheManager(ctx context.Context, opt cmOpt) (co *cmOut, cleanup func() 
 		Snapshotter:    snapshot.FromContainerdSnapshotter(opt.snapshotterName, containerdsnapshot.NSSnapshotter(ns, mdb.Snapshotter(opt.snapshotterName)), nil),
 		MetadataStore:  md,
 		ContentStore:   mdb.ContentStore(),
-		LeaseManager:   leaseutil.WithNamespace(lm, ns),
+		LeaseManager:   lm,
 		GarbageCollect: mdb.GarbageCollect,
 		Applier:        apply.NewFileSystemApplier(mdb.ContentStore()),
 	})
