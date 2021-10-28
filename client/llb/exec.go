@@ -186,12 +186,18 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 		return "", nil, nil, nil, err
 	}
 
+	cgrpParent, err := getCgroupParent(e.base)(ctx, c)
+	if err != nil {
+		return "", nil, nil, nil, err
+	}
+
 	meta := &pb.Meta{
-		Args:     args,
-		Env:      env.ToArray(),
-		Cwd:      cwd,
-		User:     user,
-		Hostname: hostname,
+		Args:         args,
+		Env:          env.ToArray(),
+		Cwd:          cwd,
+		User:         user,
+		Hostname:     hostname,
+		CgroupParent: cgrpParent,
 	}
 
 	extraHosts, err := getExtraHosts(e.base)(ctx, c)
@@ -551,6 +557,12 @@ func AddExtraHost(host string, ip net.IP) RunOption {
 func AddUlimit(name UlimitName, soft int64, hard int64) RunOption {
 	return runOptionFunc(func(ei *ExecInfo) {
 		ei.State = ei.State.AddUlimit(name, soft, hard)
+	})
+}
+
+func WithCgroupParent(cp string) RunOption {
+	return runOptionFunc(func(ei *ExecInfo) {
+		ei.State = ei.State.WithCgroupParent(cp)
 	})
 }
 

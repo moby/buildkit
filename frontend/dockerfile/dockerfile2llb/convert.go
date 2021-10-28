@@ -61,6 +61,7 @@ type ConvertOpt struct {
 	ExtraHosts        []llb.HostIP
 	ShmSize           int64
 	Ulimit            []pb.Ulimit
+	CgroupParent      string
 	ForceNetMode      pb.NetMode
 	OverrideCopyImage string
 	LLBCaps           *apicaps.CapSet
@@ -393,6 +394,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 			extraHosts:        opt.ExtraHosts,
 			shmSize:           opt.ShmSize,
 			ulimit:            opt.Ulimit,
+			cgroupParent:      opt.CgroupParent,
 			copyImage:         opt.OverrideCopyImage,
 			llbCaps:           opt.LLBCaps,
 			sourceMap:         opt.SourceMap,
@@ -525,6 +527,7 @@ type dispatchOpt struct {
 	extraHosts        []llb.HostIP
 	shmSize           int64
 	ulimit            []pb.Ulimit
+	cgroupParent      string
 	copyImage         string
 	llbCaps           *apicaps.CapSet
 	sourceMap         *llb.SourceMap
@@ -814,6 +817,12 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 	if dopt.llbCaps != nil && dopt.llbCaps.Supports(pb.CapExecMountTmpfsSize) == nil {
 		if dopt.shmSize > 0 {
 			opt = append(opt, llb.AddMount("/dev/shm", llb.Scratch(), llb.Tmpfs(llb.TmpfsSize(dopt.shmSize))))
+		}
+	}
+
+	if dopt.llbCaps != nil && dopt.llbCaps.Supports(pb.CapExecMetaCgroupParent) == nil {
+		if len(dopt.cgroupParent) > 0 {
+			opt = append(opt, llb.WithCgroupParent(dopt.cgroupParent))
 		}
 	}
 

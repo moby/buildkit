@@ -44,6 +44,7 @@ const (
 	keyFilename          = "filename"
 	keyCacheFrom         = "cache-from"    // for registry only. deprecated in favor of keyCacheImports
 	keyCacheImports      = "cache-imports" // JSON representation of []CacheOptionsEntry
+	keyCgroupParent      = "cgroup-parent"
 	keyContextSubDir     = "contextsubdir"
 	keyForceNetwork      = "force-network-mode"
 	keyGlobalAddHosts    = "add-hosts"
@@ -442,6 +443,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 					ExtraHosts:        extraHosts,
 					ShmSize:           shmSize,
 					Ulimit:            ulimit,
+					CgroupParent:      opts[keyCgroupParent],
 					ForceNetMode:      defaultNetMode,
 					OverrideCopyImage: opts[keyOverrideCopyImage],
 					LLBCaps:           &caps,

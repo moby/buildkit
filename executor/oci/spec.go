@@ -3,6 +3,8 @@ package oci
 import (
 	"context"
 	"path"
+	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/containerd/containerd/containers"
@@ -37,9 +39,23 @@ const (
 
 // GenerateSpec generates spec using containerd functionality.
 // opts are ignored for s.Process, s.Hostname, and s.Mounts .
-func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mount, id, resolvConf, hostsFile string, namespace network.Namespace, processMode ProcessMode, idmap *idtools.IdentityMapping, apparmorProfile string, tracingSocket string, opts ...oci.SpecOpts) (*specs.Spec, func(), error) {
+func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mount, id, resolvConf, hostsFile string, namespace network.Namespace, cgroupParent string, processMode ProcessMode, idmap *idtools.IdentityMapping, apparmorProfile string, tracingSocket string, opts ...oci.SpecOpts) (*specs.Spec, func(), error) {
 	c := &containers.Container{
 		ID: id,
+	}
+
+	if len(meta.CgroupParent) > 0 {
+		cgroupParent = meta.CgroupParent
+	}
+	if cgroupParent != "" {
+		var cgroupsPath string
+		lastSeparator := cgroupParent[len(cgroupParent)-1:]
+		if strings.Contains(cgroupParent, ".slice") && lastSeparator == ":" {
+			cgroupsPath = cgroupParent + id
+		} else {
+			cgroupsPath = filepath.Join("/", cgroupParent, "buildkit", id)
+		}
+		opts = append(opts, oci.WithCgroup(cgroupsPath))
 	}
 
 	// containerd/oci.GenerateSpec requires a namespace, which
