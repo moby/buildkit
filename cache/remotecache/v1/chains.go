@@ -1,6 +1,7 @@
 package cacheimport
 
 import (
+	"context"
 	"strings"
 	"sync"
 	"time"
@@ -75,7 +76,7 @@ func (c *CacheChains) normalize() error {
 	return nil
 }
 
-func (c *CacheChains) Marshal() (*CacheConfig, DescriptorProvider, error) {
+func (c *CacheChains) Marshal(ctx context.Context) (*CacheConfig, DescriptorProvider, error) {
 	if err := c.normalize(); err != nil {
 		return nil, nil, err
 	}
@@ -87,7 +88,7 @@ func (c *CacheChains) Marshal() (*CacheConfig, DescriptorProvider, error) {
 	}
 
 	for _, it := range c.items {
-		if err := marshalItem(it, st); err != nil {
+		if err := marshalItem(ctx, it, st); err != nil {
 			return nil, nil, err
 		}
 	}
