@@ -68,7 +68,7 @@ func NewExporter(ingester content.Ingester, ref string, oci bool) Exporter {
 
 func (ce *contentCacheExporter) Finalize(ctx context.Context) (map[string]string, error) {
 	res := make(map[string]string)
-	config, descs, err := ce.chains.Marshal()
+	config, descs, err := ce.chains.Marshal(ctx)
 	if err != nil {
 		return nil, err
 	}

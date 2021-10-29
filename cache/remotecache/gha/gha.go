@@ -106,7 +106,7 @@ func (ce *exporter) indexKey() string {
 
 func (ce *exporter) Finalize(ctx context.Context) (map[string]string, error) {
 	// res := make(map[string]string)
-	config, descs, err := ce.chains.Marshal()
+	config, descs, err := ce.chains.Marshal(ctx)
 	if err != nil {
 		return nil, err
 	}
