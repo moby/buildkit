@@ -35,22 +35,24 @@ const (
 
 	CapBuildOpLLBFileName apicaps.CapID = "source.buildop.llbfilename"
 
-	CapExecMetaBase                  apicaps.CapID = "exec.meta.base"
-	CapExecMetaProxy                 apicaps.CapID = "exec.meta.proxyenv"
-	CapExecMetaNetwork               apicaps.CapID = "exec.meta.network"
-	CapExecMetaSecurity              apicaps.CapID = "exec.meta.security"
-	CapExecMetaSetsDefaultPath       apicaps.CapID = "exec.meta.setsdefaultpath"
-	CapExecMountBind                 apicaps.CapID = "exec.mount.bind"
-	CapExecMountBindReadWriteNoOuput apicaps.CapID = "exec.mount.bind.readwrite-nooutput"
-	CapExecMountCache                apicaps.CapID = "exec.mount.cache"
-	CapExecMountCacheSharing         apicaps.CapID = "exec.mount.cache.sharing"
-	CapExecMountSelector             apicaps.CapID = "exec.mount.selector"
-	CapExecMountTmpfs                apicaps.CapID = "exec.mount.tmpfs"
-	CapExecMountSecret               apicaps.CapID = "exec.mount.secret"
-	CapExecMountSSH                  apicaps.CapID = "exec.mount.ssh"
-	CapExecCgroupsMounted            apicaps.CapID = "exec.cgroup"
-
+	CapExecMetaBase                      apicaps.CapID = "exec.meta.base"
+	CapExecMetaCgroupParent              apicaps.CapID = "exec.meta.cgroup.parent"
+	CapExecMetaNetwork                   apicaps.CapID = "exec.meta.network"
+	CapExecMetaProxy                     apicaps.CapID = "exec.meta.proxyenv"
+	CapExecMetaSecurity                  apicaps.CapID = "exec.meta.security"
 	CapExecMetaSecurityDeviceWhitelistV1 apicaps.CapID = "exec.meta.security.devices.v1"
+	CapExecMetaSetsDefaultPath           apicaps.CapID = "exec.meta.setsdefaultpath"
+	CapExecMetaUlimit                    apicaps.CapID = "exec.meta.ulimit"
+	CapExecMountBind                     apicaps.CapID = "exec.mount.bind"
+	CapExecMountBindReadWriteNoOuput     apicaps.CapID = "exec.mount.bind.readwrite-nooutput"
+	CapExecMountCache                    apicaps.CapID = "exec.mount.cache"
+	CapExecMountCacheSharing             apicaps.CapID = "exec.mount.cache.sharing"
+	CapExecMountSelector                 apicaps.CapID = "exec.mount.selector"
+	CapExecMountTmpfs                    apicaps.CapID = "exec.mount.tmpfs"
+	CapExecMountTmpfsSize                apicaps.CapID = "exec.mount.tmpfs.size"
+	CapExecMountSecret                   apicaps.CapID = "exec.mount.secret"
+	CapExecMountSSH                      apicaps.CapID = "exec.mount.ssh"
+	CapExecCgroupsMounted                apicaps.CapID = "exec.cgroup"
 
 	CapFileBase                       apicaps.CapID = "file.base"
 	CapFileRmWildcard                 apicaps.CapID = "file.rm.wildcard"
@@ -207,6 +209,12 @@ func init() {
 	})
 
 	Caps.Init(apicaps.Cap{
+		ID:      CapExecMetaCgroupParent,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
 		ID:      CapExecMetaProxy,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
@@ -232,6 +240,12 @@ func init() {
 
 	Caps.Init(apicaps.Cap{
 		ID:      CapExecMetaSecurityDeviceWhitelistV1,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapExecMetaUlimit,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})
@@ -268,6 +282,12 @@ func init() {
 
 	Caps.Init(apicaps.Cap{
 		ID:      CapExecMountTmpfs,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
+		ID:      CapExecMountTmpfsSize,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})

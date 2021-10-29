@@ -18,7 +18,8 @@ type Meta struct {
 	Tty            bool
 	ReadonlyRootFS bool
 	ExtraHosts     []HostIP
-	ShmSize        int64
+	Ulimit         []*pb.Ulimit
+	CgroupParent   string
 	NetMode        pb.NetMode
 	SecurityMode   pb.SecurityMode
 }

@@ -369,8 +369,8 @@ func (mm *MountManager) MountableCache(ctx context.Context, m *pb.Mount, ref cac
 	return mm.getRefCacheDir(ctx, ref, m.CacheOpt.ID, m, m.CacheOpt.Sharing, g)
 }
 
-func (mm *MountManager) MountableTmpFS() cache.Mountable {
-	return newTmpfs(mm.cm.IdentityMapping())
+func (mm *MountManager) MountableTmpFS(m *pb.Mount) cache.Mountable {
+	return newTmpfs(mm.cm.IdentityMapping(), m.TmpfsOpt)
 }
 
 func (mm *MountManager) MountableHostBind() cache.Mountable { // earthly-specific
@@ -385,27 +385,34 @@ func (mm *MountManager) MountableSSH(ctx context.Context, m *pb.Mount, g session
 	return mm.getSSHMountable(ctx, m, g)
 }
 
-func newTmpfs(idmap *idtools.IdentityMapping) cache.Mountable {
-	return &tmpfs{idmap: idmap}
+func newTmpfs(idmap *idtools.IdentityMapping, opt *pb.TmpfsOpt) cache.Mountable {
+	return &tmpfs{idmap: idmap, opt: opt}
 }
 
 type tmpfs struct {
 	idmap *idtools.IdentityMapping
+	opt   *pb.TmpfsOpt
 }
 
 func (f *tmpfs) Mount(ctx context.Context, readonly bool, g session.Group) (snapshot.Mountable, error) {
-	return &tmpfsMount{readonly: readonly, idmap: f.idmap}, nil
+	return &tmpfsMount{readonly: readonly, idmap: f.idmap, opt: f.opt}, nil
 }
 
 type tmpfsMount struct {
 	readonly bool
 	idmap    *idtools.IdentityMapping
+	opt      *pb.TmpfsOpt
 }
 
 func (m *tmpfsMount) Mount() ([]mount.Mount, func() error, error) {
 	opt := []string{"nosuid"}
 	if m.readonly {
 		opt = append(opt, "ro")
+	}
+	if m.opt != nil {
+		if m.opt.Size_ > 0 {
+			opt = append(opt, fmt.Sprintf("size=%d", m.opt.Size_))
+		}
 	}
 	return []mount.Mount{{
 		Type:    "tmpfs",

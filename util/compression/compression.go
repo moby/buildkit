@@ -41,6 +41,21 @@ const (
 
 var Default = Gzip
 
+func Parse(t string) Type {
+	switch t {
+	case "uncompressed":
+		return Uncompressed
+	case "gzip":
+		return Gzip
+	case "estargz":
+		return EStargz
+	case "zstd":
+		return Zstd
+	default:
+		return UnknownCompression
+	}
+}
+
 func (ct Type) String() string {
 	switch ct {
 	case Uncompressed:
@@ -67,6 +82,14 @@ func (ct Type) DefaultMediaType() string {
 	default:
 		return ocispecs.MediaTypeImageLayer + "+unknown"
 	}
+}
+
+func (ct Type) IsMediaType(mt string) bool {
+	mt, ok := toOCILayerType[mt]
+	if !ok {
+		return false
+	}
+	return mt == ct.DefaultMediaType()
 }
 
 func FromMediaType(mediaType string) Type {

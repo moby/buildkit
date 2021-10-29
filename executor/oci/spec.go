@@ -3,6 +3,8 @@ package oci
 import (
 	"context"
 	"path"
+	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/containerd/containerd/containers"
@@ -37,9 +39,23 @@ const (
 
 // GenerateSpec generates spec using containerd functionality.
 // opts are ignored for s.Process, s.Hostname, and s.Mounts .
-func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mount, id, resolvConf, hostsFile string, namespace network.Namespace, processMode ProcessMode, idmap *idtools.IdentityMapping, apparmorProfile string, tracingSocket string, opts ...oci.SpecOpts) (*specs.Spec, func(), error) {
+func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mount, id, resolvConf, hostsFile string, namespace network.Namespace, cgroupParent string, processMode ProcessMode, idmap *idtools.IdentityMapping, apparmorProfile string, tracingSocket string, opts ...oci.SpecOpts) (*specs.Spec, func(), error) {
 	c := &containers.Container{
 		ID: id,
+	}
+
+	if len(meta.CgroupParent) > 0 {
+		cgroupParent = meta.CgroupParent
+	}
+	if cgroupParent != "" {
+		var cgroupsPath string
+		lastSeparator := cgroupParent[len(cgroupParent)-1:]
+		if strings.Contains(cgroupParent, ".slice") && lastSeparator == ":" {
+			cgroupsPath = cgroupParent + id
+		} else {
+			cgroupsPath = filepath.Join("/", cgroupParent, "buildkit", id)
+		}
+		opts = append(opts, oci.WithCgroup(cgroupsPath))
 	}
 
 	// containerd/oci.GenerateSpec requires a namespace, which
@@ -72,6 +88,12 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 		return nil, nil, err
 	}
 
+	if rlimitsOpts, err := generateRlimitOpts(meta.Ulimit); err == nil {
+		opts = append(opts, rlimitsOpts...)
+	} else {
+		return nil, nil, err
+	}
+
 	hostname := defaultHostname
 	if meta.Hostname != "" {
 		hostname = meta.Hostname
@@ -91,21 +113,20 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 		oci.WithHostname(hostname),
 	)
 
-	if meta.ShmSize > 0 {
-		opts = append(opts, oci.WithDevShmSize(meta.ShmSize))
-	}
-
 	s, err := oci.GenerateSpec(ctx, nil, c, opts...)
 	if err != nil {
 		return nil, nil, err
+	}
+
+	if len(meta.Ulimit) == 0 {
+		// reset open files limit
+		s.Process.Rlimits = nil
 	}
 
 	// set the networking information on the spec
 	if err := namespace.Set(s); err != nil {
 		return nil, nil, err
 	}
-
-	s.Process.Rlimits = nil // reset open files limit
 
 	sm := &submounts{}
 
@@ -159,6 +180,7 @@ func GenerateSpec(ctx context.Context, meta executor.Meta, mounts []executor.Mou
 		})
 	}
 
+	s.Mounts = dedupMounts(s.Mounts)
 	return s, releaseAll, nil
 }
 

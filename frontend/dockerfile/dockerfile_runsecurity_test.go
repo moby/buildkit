@@ -1,3 +1,4 @@
+//go:build dfrunsecurity
 // +build dfrunsecurity
 
 package dockerfile
@@ -93,7 +94,7 @@ func testRunSecurityInsecure(t *testing.T, sb integration.Sandbox) {
 
 	dockerfile := []byte(`
 FROM busybox
-RUN --security=insecure [ "$(cat /proc/self/status | grep CapBnd)" == "CapBnd:	0000003fffffffff" ]
+RUN --security=insecure [ "$(printf '%x' $(( $(cat /proc/self/status | grep CapBnd | cut -f 2 | sed s#^#0x#) & 0x3fffffffff)))" == "3fffffffff" ]
 RUN [ "$(cat /proc/self/status | grep CapBnd)" == "CapBnd:	00000000a80425fb" ]
 `)
 

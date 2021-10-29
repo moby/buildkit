@@ -321,7 +321,8 @@ func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 		Hostname:       e.op.Meta.Hostname,
 		ReadonlyRootFS: p.ReadonlyRootFS,
 		ExtraHosts:     extraHosts,
-		ShmSize:        e.op.Meta.ShmSize,
+		Ulimit:         e.op.Meta.Ulimit,
+		CgroupParent:   e.op.Meta.CgroupParent,
 		NetMode:        e.op.Network,
 		SecurityMode:   e.op.Security,
 	}

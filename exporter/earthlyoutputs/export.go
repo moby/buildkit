@@ -26,6 +26,7 @@ import (
 	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/session/pullping"
 	"github.com/moby/buildkit/snapshot"
+	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/buildinfo"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/contentutil"
@@ -36,6 +37,7 @@ import (
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"github.com/tonistiigi/fsutil"
 	fstypes "github.com/tonistiigi/fsutil/types"
 	"golang.org/x/sync/errgroup"
@@ -48,6 +50,7 @@ type ExporterVariant string
 const (
 	keyImageName        = "name"
 	keyLayerCompression = "compression"
+	keyForceCompression = "force-compression"
 	VariantOCI          = "oci"
 	VariantDocker       = "docker"
 	ociTypes            = "oci-mediatypes"
@@ -77,6 +80,7 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 		imageExporter:    e,
 		layerCompression: compression.Default,
 	}
+	var esgz bool
 	for k, v := range opt {
 		switch k {
 		case keyImageName:
@@ -85,11 +89,27 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 			switch v {
 			case "gzip":
 				i.layerCompression = compression.Gzip
+			case "estargz":
+				i.layerCompression = compression.EStargz
+				esgz = true
+			case "zstd":
+				i.layerCompression = compression.Zstd
 			case "uncompressed":
 				i.layerCompression = compression.Uncompressed
 			default:
 				return nil, errors.Errorf("unsupported layer compression type: %v", v)
 			}
+		case keyForceCompression:
+			if v == "" {
+				i.forceCompression = true
+				continue
+			}
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
+			}
+			i.forceCompression = b
+
 		case ociTypes:
 			ot = new(bool)
 			if v == "" {
@@ -122,6 +142,10 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 	} else {
 		i.ociTypes = *ot
 	}
+	if esgz && !i.ociTypes {
+		logrus.Warn("forcibly turning on oci-mediatype mode for estargz")
+		i.ociTypes = true
+	}
 	return i, nil
 }
 
@@ -131,6 +155,7 @@ type imageExporterInstance struct {
 	name             string
 	ociTypes         bool
 	layerCompression compression.Type
+	forceCompression bool
 	buildInfoMode    buildinfo.ExportMode
 }
 
@@ -385,11 +410,17 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 			img.mp = contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
 		}
 
+		compressionopt := solver.CompressionOpt{
+			Type:  e.layerCompression,
+			Force: e.forceCompression,
+		}
+
 		for _, r := range img.expSrc.Refs {
-			remote, err := r.GetRemote(ctx, false, e.layerCompression, false, session.NewGroup(sessionID))
+			remotes, err := r.GetRemotes(ctx, false, compressionopt, false, session.NewGroup(sessionID))
 			if err != nil {
 				return nil, err
 			}
+			remote := remotes[0]
 			// unlazy before export as some consumers do not handle
 			// layer blobs in parallel (whereas unlazy does)
 			if unlazier, ok := remote.Provider.(cache.Unlazier); ok {
@@ -411,10 +442,11 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 			}
 		}
 		if img.expSrc.Ref != nil { // This is a copy and paste of the above code
-			remote, err := img.expSrc.Ref.GetRemote(ctx, false, e.layerCompression, false, session.NewGroup(sessionID))
+			remotes, err := img.expSrc.Ref.GetRemotes(ctx, false, compressionopt, false, session.NewGroup(sessionID))
 			if err != nil {
 				return nil, err
 			}
+			remote := remotes[0]
 			// unlazy before export as some consumers do not handle
 			// layer blobs in parallel (whereas unlazy does)
 			if unlazier, ok := remote.Provider.(cache.Unlazier); ok {
@@ -531,6 +563,15 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	}
 
 	return resp, nil
+}
+
+func (e *imageExporterInstance) Config() exporter.Config {
+	return exporter.Config{
+		Compression: solver.CompressionOpt{
+			Type:  e.layerCompression,
+			Force: e.forceCompression,
+		},
+	}
 }
 
 func oneOffProgress(ctx context.Context, id string) func() {

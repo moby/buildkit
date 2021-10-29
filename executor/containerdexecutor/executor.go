@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -162,18 +161,8 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.M
 		opts = append(opts, containerdoci.WithRootFSReadonly())
 	}
 
-	if w.cgroupParent != "" {
-		var cgroupsPath string
-		lastSeparator := w.cgroupParent[len(w.cgroupParent)-1:]
-		if strings.Contains(w.cgroupParent, ".slice") && lastSeparator == ":" {
-			cgroupsPath = w.cgroupParent + id
-		} else {
-			cgroupsPath = filepath.Join("/", w.cgroupParent, "buildkit", id)
-		}
-		opts = append(opts, containerdoci.WithCgroup(cgroupsPath))
-	}
 	processMode := oci.ProcessSandbox // FIXME(AkihiroSuda)
-	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, namespace, processMode, nil, w.apparmorProfile, w.traceSocket, opts...)
+	spec, cleanup, err := oci.GenerateSpec(ctx, meta, mounts, id, resolvConf, hostsFile, namespace, w.cgroupParent, processMode, nil, w.apparmorProfile, w.traceSocket, opts...)
 	if err != nil {
 		return err
 	}

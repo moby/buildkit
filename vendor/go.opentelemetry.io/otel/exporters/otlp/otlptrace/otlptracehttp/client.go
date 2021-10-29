@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package otlptracehttp
+package otlptracehttp // import "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 
 import (
 	"bytes"
@@ -21,25 +21,33 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"math/rand"
 	"net"
 	"net/http"
 	"path"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
 
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/internal/otlpconfig"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/internal/retry"
 
 	"google.golang.org/protobuf/proto"
 
-	"go.opentelemetry.io/otel"
 	coltracepb "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 )
 
 const contentTypeProto = "application/x-protobuf"
+
+var gzPool = sync.Pool{
+	New: func() interface{} {
+		w := gzip.NewWriter(ioutil.Discard)
+		return w
+	},
+}
 
 // Keep it in sync with golang's DefaultTransport from net/http! We
 // have our own copy to avoid handling a situation where the
@@ -59,11 +67,12 @@ var ourTransport = &http.Transport{
 }
 
 type client struct {
-	name       string
-	cfg        otlpconfig.SignalConfig
-	generalCfg otlpconfig.Config
-	client     *http.Client
-	stopCh     chan struct{}
+	name        string
+	cfg         otlpconfig.SignalConfig
+	generalCfg  otlpconfig.Config
+	requestFunc retry.RequestFunc
+	client      *http.Client
+	stopCh      chan struct{}
 }
 
 var _ otlptrace.Client = (*client)(nil)
@@ -77,7 +86,7 @@ func NewClient(opts ...Option) otlptrace.Client {
 	}
 
 	for pathPtr, defaultPath := range map[*string]string{
-		&cfg.Traces.URLPath: defaultTracesPath,
+		&cfg.Traces.URLPath: otlpconfig.DefaultTracesPath,
 	} {
 		tmp := strings.TrimSpace(*pathPtr)
 		if tmp == "" {
@@ -89,15 +98,6 @@ func NewClient(opts ...Option) otlptrace.Client {
 			}
 		}
 		*pathPtr = tmp
-	}
-	if cfg.MaxAttempts <= 0 {
-		cfg.MaxAttempts = defaultMaxAttempts
-	}
-	if cfg.MaxAttempts > defaultMaxAttempts {
-		cfg.MaxAttempts = defaultMaxAttempts
-	}
-	if cfg.Backoff <= 0 {
-		cfg.Backoff = defaultBackoff
 	}
 
 	httpClient := &http.Client{
@@ -112,11 +112,12 @@ func NewClient(opts ...Option) otlptrace.Client {
 
 	stopCh := make(chan struct{})
 	return &client{
-		name:       "traces",
-		cfg:        cfg.Traces,
-		generalCfg: cfg,
-		stopCh:     stopCh,
-		client:     httpClient,
+		name:        "traces",
+		cfg:         cfg.Traces,
+		generalCfg:  cfg,
+		requestFunc: cfg.RetryConfig.RequestFunc(evaluate),
+		stopCh:      stopCh,
+		client:      httpClient,
 	}
 }
 
@@ -151,41 +152,150 @@ func (d *client) UploadTraces(ctx context.Context, protoSpans []*tracepb.Resourc
 	if err != nil {
 		return err
 	}
-	return d.send(ctx, rawRequest)
-}
 
-func (d *client) send(ctx context.Context, rawRequest []byte) error {
-	address := fmt.Sprintf("%s://%s%s", d.getScheme(), d.cfg.Endpoint, d.cfg.URLPath)
-	var cancel context.CancelFunc
-	ctx, cancel = d.contextWithStop(ctx)
+	ctx, cancel := d.contextWithStop(ctx)
 	defer cancel()
-	for i := 0; i < d.generalCfg.MaxAttempts; i++ {
-		response, err := d.singleSend(ctx, rawRequest, address)
+
+	request, err := d.newRequest(rawRequest)
+	if err != nil {
+		return err
+	}
+
+	return d.requestFunc(ctx, func(ctx context.Context) error {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		request.reset(ctx)
+		resp, err := d.client.Do(request.Request)
 		if err != nil {
 			return err
 		}
-		// We don't care about the body, so try to read it
-		// into /dev/null and close it immediately. The
-		// reading part is to facilitate connection reuse.
-		_, _ = io.Copy(ioutil.Discard, response.Body)
-		_ = response.Body.Close()
-		switch response.StatusCode {
+
+		var rErr error
+		switch resp.StatusCode {
 		case http.StatusOK:
-			return nil
-		case http.StatusTooManyRequests:
-			fallthrough
-		case http.StatusServiceUnavailable:
-			select {
-			case <-time.After(getWaitDuration(d.generalCfg.Backoff, i)):
-				continue
-			case <-ctx.Done():
-				return ctx.Err()
+			// Success, do not retry.
+		case http.StatusTooManyRequests,
+			http.StatusServiceUnavailable:
+			// Retry-able failure.
+			rErr = newResponseError(resp.Header)
+
+			// Going to retry, drain the body to reuse the connection.
+			if _, err := io.Copy(ioutil.Discard, resp.Body); err != nil {
+				_ = resp.Body.Close()
+				return err
 			}
 		default:
-			return fmt.Errorf("failed to send %s to %s with HTTP status %s", d.name, address, response.Status)
+			rErr = fmt.Errorf("failed to send %s to %s: %s", d.name, request.URL, resp.Status)
+		}
+
+		if err := resp.Body.Close(); err != nil {
+			return err
+		}
+		return rErr
+	})
+}
+
+func (d *client) newRequest(body []byte) (request, error) {
+	address := fmt.Sprintf("%s://%s%s", d.getScheme(), d.cfg.Endpoint, d.cfg.URLPath)
+	r, err := http.NewRequest(http.MethodPost, address, nil)
+	if err != nil {
+		return request{Request: r}, err
+	}
+
+	for k, v := range d.cfg.Headers {
+		r.Header.Set(k, v)
+	}
+	r.Header.Set("Content-Type", contentTypeProto)
+
+	req := request{Request: r}
+	switch Compression(d.cfg.Compression) {
+	case NoCompression:
+		r.ContentLength = (int64)(len(body))
+		req.bodyReader = bodyReader(body)
+	case GzipCompression:
+		// Ensure the content length is not used.
+		r.ContentLength = -1
+		r.Header.Set("Content-Encoding", "gzip")
+
+		gz := gzPool.Get().(*gzip.Writer)
+		defer gzPool.Put(gz)
+
+		var b bytes.Buffer
+		gz.Reset(&b)
+
+		if _, err := gz.Write(body); err != nil {
+			return req, err
+		}
+		// Close needs to be called to ensure body if fully written.
+		if err := gz.Close(); err != nil {
+			return req, err
+		}
+
+		req.bodyReader = bodyReader(b.Bytes())
+	}
+
+	return req, nil
+}
+
+// bodyReader returns a closure returning a new reader for buf.
+func bodyReader(buf []byte) func() io.ReadCloser {
+	return func() io.ReadCloser {
+		return ioutil.NopCloser(bytes.NewReader(buf))
+	}
+}
+
+// request wraps an http.Request with a resettable body reader.
+type request struct {
+	*http.Request
+
+	// bodyReader allows the same body to be used for multiple requests.
+	bodyReader func() io.ReadCloser
+}
+
+// reset reinitializes the request Body and uses ctx for the request.
+func (r *request) reset(ctx context.Context) {
+	r.Body = r.bodyReader()
+	r.Request = r.Request.WithContext(ctx)
+}
+
+// retryableError represents a request failure that can be retried.
+type retryableError struct {
+	throttle int64
+}
+
+// newResponseError returns a retryableError and will extract any explicit
+// throttle delay contained in headers.
+func newResponseError(header http.Header) error {
+	var rErr retryableError
+	if s, ok := header["Retry-After"]; ok {
+		if t, err := strconv.ParseInt(s[0], 10, 64); err == nil {
+			rErr.throttle = t
 		}
 	}
-	return fmt.Errorf("failed to send data to %s after %d tries", address, d.generalCfg.MaxAttempts)
+	return rErr
+}
+
+func (e retryableError) Error() string {
+	return "retry-able request failure"
+}
+
+// evaluate returns if err is retry-able. If it is and it includes an explicit
+// throttling delay, that delay is also returned.
+func evaluate(err error) (bool, time.Duration) {
+	if err == nil {
+		return false, 0
+	}
+
+	rErr, ok := err.(retryableError)
+	if !ok {
+		return false, 0
+	}
+
+	return true, time.Duration(rErr.throttle)
 }
 
 func (d *client) getScheme() string {
@@ -193,26 +303,6 @@ func (d *client) getScheme() string {
 		return "http"
 	}
 	return "https"
-}
-
-func getWaitDuration(backoff time.Duration, i int) time.Duration {
-	// Strategy: after nth failed attempt, attempt resending after
-	// k * initialBackoff + jitter, where k is a random number in
-	// range [0, 2^n-1), and jitter is a random percentage of
-	// initialBackoff from [-5%, 5%).
-	//
-	// Based on
-	// https://en.wikipedia.org/wiki/Exponential_backoff#Example_exponential_backoff_algorithm
-	//
-	// Jitter is our addition.
-
-	// There won't be an overflow, since i is capped to
-	// defaultMaxAttempts (5).
-	upperK := (int64)(1) << (i + 1)
-	jitterPercent := (rand.Float64() - 0.5) / 10.
-	jitter := jitterPercent * (float64)(backoff)
-	k := rand.Int63n(upperK)
-	return (time.Duration)(k)*backoff + (time.Duration)(jitter)
 }
 
 func (d *client) contextWithStop(ctx context.Context) (context.Context, context.CancelFunc) {
@@ -229,52 +319,4 @@ func (d *client) contextWithStop(ctx context.Context) (context.Context, context.
 		}
 	}(ctx, cancel)
 	return ctx, cancel
-}
-
-func (d *client) singleSend(ctx context.Context, rawRequest []byte, address string) (*http.Response, error) {
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, address, nil)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader, contentLength, headers := d.prepareBody(rawRequest)
-	// Not closing bodyReader through defer, the HTTP Client's
-	// Transport will do it for us
-	request.Body = bodyReader
-	request.ContentLength = contentLength
-	for key, values := range headers {
-		for _, value := range values {
-			request.Header.Add(key, value)
-		}
-	}
-	return d.client.Do(request)
-}
-
-func (d *client) prepareBody(rawRequest []byte) (io.ReadCloser, int64, http.Header) {
-	var bodyReader io.ReadCloser
-	headers := http.Header{}
-	for k, v := range d.cfg.Headers {
-		headers.Set(k, v)
-	}
-	contentLength := (int64)(len(rawRequest))
-	headers.Set("Content-Type", contentTypeProto)
-	requestReader := bytes.NewBuffer(rawRequest)
-	switch Compression(d.cfg.Compression) {
-	case NoCompression:
-		bodyReader = ioutil.NopCloser(requestReader)
-	case GzipCompression:
-		preader, pwriter := io.Pipe()
-		go func() {
-			defer pwriter.Close()
-			gzipper := gzip.NewWriter(pwriter)
-			defer gzipper.Close()
-			_, err := io.Copy(gzipper, requestReader)
-			if err != nil {
-				otel.Handle(fmt.Errorf("otlphttp: failed to gzip request: %v", err))
-			}
-		}()
-		headers.Set("Content-Encoding", "gzip")
-		bodyReader = preader
-		contentLength = -1
-	}
-	return bodyReader, contentLength, headers
 }

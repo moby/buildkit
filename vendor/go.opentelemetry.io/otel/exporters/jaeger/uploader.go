@@ -45,8 +45,9 @@ func (fn endpointOptionFunc) newBatchUploader() (batchUploader, error) {
 	return fn()
 }
 
-// WithAgentEndpoint configures the Jaeger exporter to send spans to a jaeger-agent. This will
-// use the following environment variables for configuration if no explicit option is provided:
+// WithAgentEndpoint configures the Jaeger exporter to send spans to a Jaeger agent
+// over compact thrift protocol. This will use the following environment variables for
+// configuration if no explicit option is provided:
 //
 // - OTEL_EXPORTER_JAEGER_AGENT_HOST is used for the agent address host
 // - OTEL_EXPORTER_JAEGER_AGENT_PORT is used for the agent address port
@@ -59,7 +60,7 @@ func WithAgentEndpoint(options ...AgentEndpointOption) EndpointOption {
 			agentClientUDPParams{
 				AttemptReconnecting: true,
 				Host:                envOr(envAgentHost, "localhost"),
-				Port:                envOr(envAgentPort, "6832"),
+				Port:                envOr(envAgentPort, "6831"),
 			},
 		}
 		for _, opt := range options {
@@ -102,7 +103,7 @@ func WithAgentHost(host string) AgentEndpointOption {
 // WithAgentPort sets a port to be used in the agent client endpoint.
 // This option overrides any value set for the
 // OTEL_EXPORTER_JAEGER_AGENT_PORT environment variable.
-// If this option is not passed and the env var is not set, "6832" will be used by default.
+// If this option is not passed and the env var is not set, "6831" will be used by default.
 func WithAgentPort(port string) AgentEndpointOption {
 	return agentEndpointOptionFunc(func(o *agentEndpointConfig) {
 		o.Port = port
@@ -137,7 +138,7 @@ func WithMaxPacketSize(size int) AgentEndpointOption {
 	})
 }
 
-// WithCollectorEndpoint defines the full url to the Jaeger HTTP Thrift collector. This will
+// WithCollectorEndpoint defines the full URL to the Jaeger HTTP Thrift collector. This will
 // use the following environment variables for configuration if no explicit option is provided:
 //
 // - OTEL_EXPORTER_JAEGER_ENDPOINT is the HTTP endpoint for sending spans directly to a collector.

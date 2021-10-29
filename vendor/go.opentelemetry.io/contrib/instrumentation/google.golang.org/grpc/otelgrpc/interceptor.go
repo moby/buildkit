@@ -20,7 +20,6 @@ import (
 	"context"
 	"io"
 	"net"
-	"strings"
 
 	"github.com/golang/protobuf/proto" // nolint:staticcheck
 
@@ -30,13 +29,12 @@ import (
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc/internal"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/baggage"
 	"go.opentelemetry.io/otel/codes"
 	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
 	"go.opentelemetry.io/otel/trace"
-
-	otelcontrib "go.opentelemetry.io/contrib"
 )
 
 type messageType attribute.KeyValue
@@ -80,7 +78,7 @@ func UnaryClientInterceptor(opts ...Option) grpc.UnaryClientInterceptor {
 
 		tracer := newConfig(opts).TracerProvider.Tracer(
 			instrumentationName,
-			trace.WithInstrumentationVersion(otelcontrib.SemVersion()),
+			trace.WithInstrumentationVersion(SemVersion()),
 		)
 
 		name, attr := spanInfo(method, cc.Target())
@@ -202,9 +200,6 @@ func wrapClientStream(ctx context.Context, s grpc.ClientStream, desc *grpc.Strea
 
 		for {
 			select {
-			case <-ctx.Done():
-				finished <- ctx.Err()
-				return
 			case event := <-events:
 				switch event.Type {
 				case receiveEndEvent:
@@ -214,6 +209,9 @@ func wrapClientStream(ctx context.Context, s grpc.ClientStream, desc *grpc.Strea
 					finished <- event.Err
 					return
 				}
+			case <-ctx.Done():
+				finished <- ctx.Err()
+				return
 			}
 		}
 	}()
@@ -250,7 +248,7 @@ func StreamClientInterceptor(opts ...Option) grpc.StreamClientInterceptor {
 
 		tracer := newConfig(opts).TracerProvider.Tracer(
 			instrumentationName,
-			trace.WithInstrumentationVersion(otelcontrib.SemVersion()),
+			trace.WithInstrumentationVersion(SemVersion()),
 		)
 
 		name, attr := spanInfo(method, cc.Target())
@@ -310,7 +308,7 @@ func UnaryServerInterceptor(opts ...Option) grpc.UnaryServerInterceptor {
 
 		tracer := newConfig(opts).TracerProvider.Tracer(
 			instrumentationName,
-			trace.WithInstrumentationVersion(otelcontrib.SemVersion()),
+			trace.WithInstrumentationVersion(SemVersion()),
 		)
 
 		name, attr := spanInfo(info.FullMethod, peerFromCtx(ctx))
@@ -399,7 +397,7 @@ func StreamServerInterceptor(opts ...Option) grpc.StreamServerInterceptor {
 
 		tracer := newConfig(opts).TracerProvider.Tracer(
 			instrumentationName,
-			trace.WithInstrumentationVersion(otelcontrib.SemVersion()),
+			trace.WithInstrumentationVersion(SemVersion()),
 		)
 
 		name, attr := spanInfo(info.FullMethod, peerFromCtx(ctx))
@@ -429,7 +427,7 @@ func StreamServerInterceptor(opts ...Option) grpc.StreamServerInterceptor {
 // method and peer address.
 func spanInfo(fullMethod, peerAddress string) (string, []attribute.KeyValue) {
 	attrs := []attribute.KeyValue{RPCSystemGRPC}
-	name, mAttrs := parseFullMethod(fullMethod)
+	name, mAttrs := internal.ParseFullMethod(fullMethod)
 	attrs = append(attrs, mAttrs...)
 	attrs = append(attrs, peerAttr(peerAddress)...)
 	return name, attrs
@@ -459,27 +457,6 @@ func peerFromCtx(ctx context.Context) string {
 		return ""
 	}
 	return p.Addr.String()
-}
-
-// parseFullMethod returns a span name following the OpenTelemetry semantic
-// conventions as well as all applicable span attribute.KeyValue attributes based
-// on a gRPC's FullMethod.
-func parseFullMethod(fullMethod string) (string, []attribute.KeyValue) {
-	name := strings.TrimLeft(fullMethod, "/")
-	parts := strings.SplitN(name, "/", 2)
-	if len(parts) != 2 {
-		// Invalid format, does not follow `/package.service/method`.
-		return name, []attribute.KeyValue(nil)
-	}
-
-	var attrs []attribute.KeyValue
-	if service := parts[0]; service != "" {
-		attrs = append(attrs, semconv.RPCServiceKey.String(service))
-	}
-	if method := parts[1]; method != "" {
-		attrs = append(attrs, semconv.RPCMethodKey.String(method))
-	}
-	return name, attrs
 }
 
 // statusCodeAttr returns status code attribute based on given gRPC code

@@ -61,7 +61,10 @@ func TestDefaultPlatform(t *testing.T) {
 
 	require.Equal(t, depth(e), 2)
 
-	expected := platforms.DefaultSpec()
+	// needs extra normalize for default spec
+	// https://github.com/moby/buildkit/pull/2427#issuecomment-952301867
+	expected := platforms.Normalize(platforms.DefaultSpec())
+
 	require.Equal(t, expected, platform(e))
 	require.Equal(t, []string{"bar"}, args(e))
 	e = parent(e, 0)

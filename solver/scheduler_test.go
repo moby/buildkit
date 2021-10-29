@@ -3789,11 +3789,11 @@ func testExporterOpts(all bool) CacheExportOpt {
 		mode = CacheExportModeMax
 	}
 	return CacheExportOpt{
-		Convert: func(ctx context.Context, res Result) (*Remote, error) {
+		ResolveRemotes: func(ctx context.Context, res Result) ([]*Remote, error) {
 			if dr, ok := res.Sys().(*dummyResult); ok {
-				return &Remote{Descriptors: []ocispecs.Descriptor{{
+				return []*Remote{{Descriptors: []ocispecs.Descriptor{{
 					Annotations: map[string]string{"value": fmt.Sprintf("%d", dr.intValue)},
-				}}}, nil
+				}}}}, nil
 			}
 			return nil, nil
 		},

@@ -23,7 +23,6 @@ import (
 	"github.com/containerd/containerd/sys"
 	sddaemon "github.com/coreos/go-systemd/v22/daemon"
 	"github.com/docker/docker/pkg/reexec"
-	"github.com/docker/go-connections/sockets"
 	"github.com/gofrs/flock"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/moby/buildkit/cache/remotecache"
@@ -562,10 +561,16 @@ func getListener(addr string, uid, gid int, tlsConfig *tls.Config) (net.Listener
 	case "fd":
 		return listenFD(listenAddr, tlsConfig)
 	case "tcp":
+		l, err := net.Listen("tcp", listenAddr)
+		if err != nil {
+			return nil, err
+		}
+
 		if tlsConfig == nil {
 			logrus.Warnf("TLS is not enabled for %s. enabling mutual TLS authentication is highly recommended", addr)
+			return l, nil
 		}
-		return sockets.NewTCPSocket(listenAddr, tlsConfig)
+		return tls.NewListener(l, tlsConfig), nil
 	default:
 		return nil, errors.Errorf("addr %s not supported", addr)
 	}

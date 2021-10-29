@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/containerd/containerd/platforms"
+	"github.com/docker/go-units"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
@@ -43,6 +44,7 @@ const (
 	keyFilename          = "filename"
 	keyCacheFrom         = "cache-from"    // for registry only. deprecated in favor of keyCacheImports
 	keyCacheImports      = "cache-imports" // JSON representation of []CacheOptionsEntry
+	keyCgroupParent      = "cgroup-parent"
 	keyContextSubDir     = "contextsubdir"
 	keyForceNetwork      = "force-network-mode"
 	keyGlobalAddHosts    = "add-hosts"
@@ -55,6 +57,7 @@ const (
 	keyOverrideCopyImage = "override-copy-image" // remove after CopyOp implemented
 	keyShmSize           = "shm-size"
 	keyTargetPlatform    = "platform"
+	keyUlimit            = "ulimit"
 
 	// Don't forget to update frontend documentation if you add
 	// a new build-arg: frontend/dockerfile/docs/syntax.md
@@ -120,6 +123,11 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 	shmSize, err := parseShmSize(opts[keyShmSize])
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to parse shm size")
+	}
+
+	ulimit, err := parseUlimits(opts[keyUlimit])
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to parse ulimit")
 	}
 
 	defaultNetMode, err := parseNetMode(opts[keyForceNetwork])
@@ -434,6 +442,8 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 					PrefixPlatform:    exportMap,
 					ExtraHosts:        extraHosts,
 					ShmSize:           shmSize,
+					Ulimit:            ulimit,
+					CgroupParent:      opts[keyCgroupParent],
 					ForceNetMode:      defaultNetMode,
 					OverrideCopyImage: opts[keyOverrideCopyImage],
 					LLBCaps:           &caps,
@@ -691,6 +701,30 @@ func parseShmSize(v string) (int64, error) {
 		return 0, err
 	}
 	return kb, nil
+}
+
+func parseUlimits(v string) ([]pb.Ulimit, error) {
+	if v == "" {
+		return nil, nil
+	}
+	out := make([]pb.Ulimit, 0)
+	csvReader := csv.NewReader(strings.NewReader(v))
+	fields, err := csvReader.Read()
+	if err != nil {
+		return nil, err
+	}
+	for _, field := range fields {
+		ulimit, err := units.ParseUlimit(field)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, pb.Ulimit{
+			Name: ulimit.Name,
+			Soft: ulimit.Soft,
+			Hard: ulimit.Hard,
+		})
+	}
+	return out, nil
 }
 
 func parseNetMode(v string) (pb.NetMode, error) {

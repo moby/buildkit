@@ -1,3 +1,4 @@
+//go:build (linux && !no_containerd_worker) || (windows && !no_containerd_worker)
 // +build linux,!no_containerd_worker windows,!no_containerd_worker
 
 package main

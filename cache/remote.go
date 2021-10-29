@@ -25,16 +25,122 @@ type Unlazier interface {
 	Unlazy(ctx context.Context) error
 }
 
-// GetRemote gets a *solver.Remote from content store for this ref (potentially pulling lazily).
-// Note: Use WorkerRef.GetRemote instead as moby integration requires custom GetRemote implementation.
-func (sr *immutableRef) GetRemote(ctx context.Context, createIfNeeded bool, compressionType compression.Type, forceCompression bool, s session.Group) (*solver.Remote, error) {
+// GetRemotes gets []*solver.Remote from content store for this ref (potentially pulling lazily).
+// Compressionopt can be used to specify the compression type of blobs. If Force is true, the compression
+// type is applied to all blobs in the chain. If Force is false, it's applied only to the newly created
+// layers. If all is true, all available chains that has the specified compression type of topmost blob are
+// appended to the result.
+// Note: Use WorkerRef.GetRemotes instead as moby integration requires custom GetRemotes implementation.
+func (sr *immutableRef) GetRemotes(ctx context.Context, createIfNeeded bool, compressionopt solver.CompressionOpt, all bool, s session.Group) ([]*solver.Remote, error) {
 	ctx, done, err := leaseutil.WithLease(ctx, sr.cm.LeaseManager, leaseutil.MakeTemporary)
 	if err != nil {
 		return nil, err
 	}
 	defer done(ctx)
 
-	err = sr.computeBlobChain(ctx, createIfNeeded, compressionType, forceCompression, s)
+	// fast path if compression variants aren't required
+	// NOTE: compressionopt is applied only to *newly created layers* if Force != true.
+	remote, err := sr.getRemote(ctx, createIfNeeded, compressionopt, s)
+	if err != nil {
+		return nil, err
+	}
+	if !all || compressionopt.Force || len(remote.Descriptors) == 0 {
+		return []*solver.Remote{remote}, nil // early return if compression variants aren't required
+	}
+
+	// Search all available remotes that has the topmost blob with the specified
+	// compression with all combination of copmressions
+	res := []*solver.Remote{remote}
+	topmost, parentChain := remote.Descriptors[len(remote.Descriptors)-1], remote.Descriptors[:len(remote.Descriptors)-1]
+	vDesc, err := getCompressionVariantBlob(ctx, sr.cm.ContentStore, topmost.Digest, compressionopt.Type)
+	if err != nil {
+		return res, nil // compression variant doesn't exist. return the main blob only.
+	}
+
+	var variants []*solver.Remote
+	if len(parentChain) == 0 {
+		variants = append(variants, &solver.Remote{
+			Descriptors: []ocispecs.Descriptor{vDesc},
+			Provider:    sr.cm.ContentStore,
+		})
+	} else {
+		// get parents with all combination of all available compressions.
+		parents, err := getAvailableBlobs(ctx, sr.cm.ContentStore, &solver.Remote{
+			Descriptors: parentChain,
+			Provider:    remote.Provider,
+		})
+		if err != nil {
+			return nil, err
+		}
+		variants = appendRemote(parents, vDesc, sr.cm.ContentStore)
+	}
+
+	// Return the main remote and all its compression variants.
+	// NOTE: Because compressionopt is applied only to *newly created layers* in the main remote (i.e. res[0]),
+	//       it's possible that the main remote doesn't contain any blobs of the compressionopt.Type.
+	//       The topmost blob of the variants (res[1:]) is guaranteed to be the compressionopt.Type.
+	res = append(res, variants...)
+	return res, nil
+}
+
+func appendRemote(parents []*solver.Remote, desc ocispecs.Descriptor, p content.Provider) (res []*solver.Remote) {
+	for _, pRemote := range parents {
+		provider := contentutil.NewMultiProvider(pRemote.Provider)
+		provider.Add(desc.Digest, p)
+		res = append(res, &solver.Remote{
+			Descriptors: append(pRemote.Descriptors, desc),
+			Provider:    provider,
+		})
+	}
+	return
+}
+
+func getAvailableBlobs(ctx context.Context, cs content.Store, chain *solver.Remote) ([]*solver.Remote, error) {
+	if len(chain.Descriptors) == 0 {
+		return nil, nil
+	}
+	target, parentChain := chain.Descriptors[len(chain.Descriptors)-1], chain.Descriptors[:len(chain.Descriptors)-1]
+	parents, err := getAvailableBlobs(ctx, cs, &solver.Remote{
+		Descriptors: parentChain,
+		Provider:    chain.Provider,
+	})
+	if err != nil {
+		return nil, err
+	}
+	compressions, err := getCompressionVariants(ctx, cs, target.Digest)
+	if err != nil {
+		return nil, err
+	}
+	var res []*solver.Remote
+	for _, c := range compressions {
+		desc, err := getCompressionVariantBlob(ctx, cs, target.Digest, c)
+		if err != nil {
+			return nil, err
+		}
+		if len(parents) == 0 { // bottommost ref
+			res = append(res, &solver.Remote{
+				Descriptors: []ocispecs.Descriptor{desc},
+				Provider:    cs,
+			})
+			continue
+		}
+		res = append(res, appendRemote(parents, desc, cs)...)
+	}
+	if len(res) == 0 {
+		// no available compression blobs for this blob. return the original blob.
+		if len(parents) == 0 { // bottommost ref
+			return []*solver.Remote{chain}, nil
+		}
+		return appendRemote(parents, target, chain.Provider), nil
+	}
+	return res, nil
+}
+
+func (sr *immutableRef) getRemote(ctx context.Context, createIfNeeded bool, compressionopt solver.CompressionOpt, s session.Group) (*solver.Remote, error) {
+	compressionType := compressionopt.Type
+	forceCompression := compressionopt.Force
+
+	err := sr.computeBlobChain(ctx, createIfNeeded, compressionType, forceCompression, s)
 	if err != nil {
 		return nil, err
 	}

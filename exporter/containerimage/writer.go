@@ -175,6 +175,10 @@ func (ic *ImageWriter) exportLayers(ctx context.Context, compressionType compres
 	layersDone := oneOffProgress(ctx, "exporting layers")
 
 	out := make([]solver.Remote, len(refs))
+	compressionopt := solver.CompressionOpt{
+		Type:  compressionType,
+		Force: forceCompression,
+	}
 
 	for i, ref := range refs {
 		func(i int, ref cache.ImmutableRef) {
@@ -182,10 +186,11 @@ func (ic *ImageWriter) exportLayers(ctx context.Context, compressionType compres
 				return
 			}
 			eg.Go(func() error {
-				remote, err := ref.GetRemote(ctx, true, compressionType, forceCompression, s)
+				remotes, err := ref.GetRemotes(ctx, true, compressionopt, false, s)
 				if err != nil {
 					return err
 				}
+				remote := remotes[0]
 				out[i] = *remote
 				return nil
 			})

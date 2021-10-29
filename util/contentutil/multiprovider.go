@@ -26,6 +26,26 @@ type MultiProvider struct {
 	sub  map[digest.Digest]content.Provider
 }
 
+func (mp *MultiProvider) CheckDescriptor(ctx context.Context, desc ocispecs.Descriptor) error {
+	type checkDescriptor interface {
+		CheckDescriptor(context.Context, ocispecs.Descriptor) error
+	}
+
+	mp.mu.RLock()
+	if p, ok := mp.sub[desc.Digest]; ok {
+		mp.mu.RUnlock()
+		if cd, ok := p.(checkDescriptor); ok {
+			return cd.CheckDescriptor(ctx, desc)
+		}
+	} else {
+		mp.mu.RUnlock()
+	}
+	if cd, ok := mp.base.(checkDescriptor); ok {
+		return cd.CheckDescriptor(ctx, desc)
+	}
+	return nil
+}
+
 // ReaderAt returns a content.ReaderAt
 func (mp *MultiProvider) ReaderAt(ctx context.Context, desc ocispecs.Descriptor) (content.ReaderAt, error) {
 	mp.mu.RLock()
