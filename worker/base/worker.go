@@ -23,6 +23,7 @@ import (
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/exporter"
 	imageexporter "github.com/moby/buildkit/exporter/containerimage"
+	"github.com/moby/buildkit/exporter/earthlyoutputs"
 	localexporter "github.com/moby/buildkit/exporter/local"
 	ociexporter "github.com/moby/buildkit/exporter/oci"
 	tarexporter "github.com/moby/buildkit/exporter/tar"
@@ -339,6 +340,14 @@ func (w *Worker) Exporter(name string, sm *session.Manager) (exporter.Exporter, 
 			SessionManager: sm,
 			ImageWriter:    w.imageWriter,
 			Variant:        ociexporter.VariantDocker,
+			LeaseManager:   w.LeaseManager,
+		})
+	case client.ExporterEarthly:
+		return earthlyoutputs.New(earthlyoutputs.Opt{
+			SessionManager: sm,
+			ImageWriter:    w.imageWriter,
+			Variant:        ociexporter.VariantDocker,
+			RegistryHosts:  w.RegistryHosts,
 			LeaseManager:   w.LeaseManager,
 		})
 	default:
