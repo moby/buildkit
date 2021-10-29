@@ -239,9 +239,19 @@ func NewFSSyncTarget(f func(map[string]string) (io.WriteCloser, error)) session.
 	return p
 }
 
+// NewFSSyncTarget allows writing into an io.WriteCloser; it is earthly-specific
+func NewFSSyncMultiTarget(f func(map[string]string) (io.WriteCloser, error), outdirFunc func(map[string]string) (string, error)) session.Attachable {
+	p := &fsSyncTarget{
+		f:          f,
+		outdirFunc: outdirFunc,
+	}
+	return p
+}
+
 type fsSyncTarget struct {
-	outdir string
-	f      func(map[string]string) (io.WriteCloser, error)
+	outdir     string
+	outdirFunc func(map[string]string) (string, error) //earthly
+	f          func(map[string]string) (io.WriteCloser, error)
 }
 
 func (sp *fsSyncTarget) Register(server *grpc.Server) {
@@ -263,6 +273,15 @@ func (sp *fsSyncTarget) DiffCopy(stream FileSend_DiffCopyServer) (err error) {
 			md[strings.TrimPrefix(k, keyExporterMetaPrefix)] = strings.Join(v, ",")
 		}
 	}
+	if sp.outdirFunc != nil {
+		outdir, err := sp.outdirFunc(md)
+		if err != nil {
+			return err
+		}
+		if outdir != "" {
+			return syncTargetDiffCopy(stream, outdir)
+		}
+	}
 	wc, err := sp.f(md)
 	if err != nil {
 		return err
@@ -272,7 +291,7 @@ func (sp *fsSyncTarget) DiffCopy(stream FileSend_DiffCopyServer) (err error) {
 	}
 	defer func() {
 		err1 := wc.Close()
-		if err != nil {
+		if err1 != nil && err == nil {
 			err = err1
 		}
 	}()
@@ -286,6 +305,30 @@ func CopyToCaller(ctx context.Context, fs fsutil.FS, c session.Caller, progress 
 	}
 
 	client := NewFileSendClient(c.Conn())
+
+	cc, err := client.DiffCopy(ctx)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return sendDiffCopy(cc, fs, progress)
+}
+
+// CopyToCallerWithMeta is earthly specific
+func CopyToCallerWithMeta(ctx context.Context, md map[string]string, fs fsutil.FS, c session.Caller, progress func(int, bool)) error {
+	method := session.MethodURL(_FileSend_serviceDesc.ServiceName, "diffcopy")
+	if !c.Supports(method) {
+		return errors.Errorf("method %s not supported by the client", method)
+	}
+
+	client := NewFileSendClient(c.Conn())
+
+	opts := make(map[string][]string, len(md))
+	for k, v := range md {
+		opts[keyExporterMetaPrefix+k] = []string{v}
+	}
+
+	ctx = metadata.NewOutgoingContext(ctx, opts)
 
 	cc, err := client.DiffCopy(ctx)
 	if err != nil {

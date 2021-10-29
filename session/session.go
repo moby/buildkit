@@ -53,7 +53,12 @@ func NewSession(ctx context.Context, name, sharedKey string) (*Session, error) {
 	var unary []grpc.UnaryServerInterceptor
 	var stream []grpc.StreamServerInterceptor
 
-	serverOpts := []grpc.ServerOption{}
+	maxMsgSize := 67108864 // 64MB
+	serverOpts := []grpc.ServerOption{
+		grpc.MaxRecvMsgSize(maxMsgSize), grpc.MaxSendMsgSize(maxMsgSize),
+		grpc.InitialWindowSize(65535 * 32),
+		grpc.InitialConnWindowSize(65535 * 16),
+	}
 
 	if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {
 		unary = append(unary, filterServer(otelgrpc.UnaryServerInterceptor(otelgrpc.WithTracerProvider(span.TracerProvider()), otelgrpc.WithPropagators(propagators))))

@@ -4,6 +4,7 @@ import (
 	"context"
 	"io/ioutil"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/containerd/continuity/fs"
 	"github.com/docker/docker/pkg/fileutils"
 	"github.com/pkg/errors"
+	"github.com/tonistiigi/fsutil"
 )
 
 var bufferPool = &sync.Pool{
@@ -87,7 +89,7 @@ func Copy(ctx context.Context, srcRoot, src, dstRoot, dst string, opts ...Opt) e
 		return err
 	}
 
-	c, err := newCopier(ci.Chown, ci.Utime, ci.Mode, ci.XAttrErrorHandler, ci.IncludePatterns, ci.ExcludePatterns)
+	c, err := newCopier(dstRoot, ci.Chown, ci.Utime, ci.Mode, ci.XAttrErrorHandler, ci.IncludePatterns, ci.ExcludePatterns, ci.ChangeFunc)
 	if err != nil {
 		return err
 	}
@@ -170,6 +172,7 @@ type CopyInfo struct {
 	IncludePatterns []string
 	// Exclude files/dir matching any of these patterns (even if they match an include pattern)
 	ExcludePatterns []string
+	ChangeFunc      fsutil.ChangeFunc
 }
 
 type Opt func(*CopyInfo)
@@ -217,6 +220,12 @@ func WithExcludePattern(excludePattern string) Opt {
 	}
 }
 
+func WithChangeNotifier(fn fsutil.ChangeFunc) Opt {
+	return func(ci *CopyInfo) {
+		ci.ChangeFunc = fn
+	}
+}
+
 type copier struct {
 	chown                 Chowner
 	utime                 *time.Time
@@ -226,6 +235,8 @@ type copier struct {
 	includePatternMatcher *fileutils.PatternMatcher
 	excludePatternMatcher *fileutils.PatternMatcher
 	parentDirs            []parentDir
+	changefn              fsutil.ChangeFunc
+	root                  string
 }
 
 type parentDir struct {
@@ -234,7 +245,7 @@ type parentDir struct {
 	copied  bool
 }
 
-func newCopier(chown Chowner, tm *time.Time, mode *int, xeh XAttrErrorHandler, includePatterns, excludePatterns []string) (*copier, error) {
+func newCopier(root string, chown Chowner, tm *time.Time, mode *int, xeh XAttrErrorHandler, includePatterns, excludePatterns []string, changeFunc fsutil.ChangeFunc) (*copier, error) {
 	if xeh == nil {
 		xeh = func(dst, src, key string, err error) error {
 			return err
@@ -260,6 +271,7 @@ func newCopier(chown Chowner, tm *time.Time, mode *int, xeh XAttrErrorHandler, i
 	}
 
 	return &copier{
+		root:                  root,
 		inodes:                map[uint64]string{},
 		chown:                 chown,
 		utime:                 tm,
@@ -267,6 +279,7 @@ func newCopier(chown Chowner, tm *time.Time, mode *int, xeh XAttrErrorHandler, i
 		mode:                  mode,
 		includePatternMatcher: includePatternMatcher,
 		excludePatternMatcher: excludePatternMatcher,
+		changefn:              changeFunc,
 	}, nil
 }
 
@@ -319,6 +332,7 @@ func (c *copier) copy(ctx context.Context, src, srcComponents, target string, ov
 	}
 
 	copyFileInfo := true
+	notify := true
 
 	switch {
 	case fi.IsDir():
@@ -330,6 +344,7 @@ func (c *copier) copy(ctx context.Context, src, srcComponents, target string, ov
 		} else if !overwriteTargetMetadata || c.includePatternMatcher != nil {
 			copyFileInfo = created
 		}
+		notify = false
 	case (fi.Mode() & os.ModeType) == 0:
 		link, err := getLinkSource(target, fi, c.inodes)
 		if err != nil {
@@ -366,6 +381,20 @@ func (c *copier) copy(ctx context.Context, src, srcComponents, target string, ov
 
 		if err := copyXAttrs(target, src, c.xattrErrorHandler); err != nil {
 			return errors.Wrap(err, "failed to copy xattrs")
+		}
+	}
+	if notify {
+		if err := c.notifyChange(target, fi); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *copier) notifyChange(target string, fi os.FileInfo) error {
+	if c.changefn != nil {
+		if err := c.changefn(fsutil.ChangeKindAdd, path.Clean(strings.TrimPrefix(target, c.root)), fi, nil); err != nil {
+			return errors.Wrap(err, "failed to notify file change")
 		}
 	}
 	return nil
@@ -461,6 +490,11 @@ func (c *copier) copyDirectory(
 		created, err = copyDirectoryOnly(src, dst, stat, overwriteTargetMetadata)
 		if err != nil {
 			return created, err
+		}
+		if created || overwriteTargetMetadata {
+			if err := c.notifyChange(dst, stat); err != nil {
+				return created, err
+			}
 		}
 		parentDir.copied = true
 	}

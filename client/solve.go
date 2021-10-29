@@ -19,6 +19,7 @@ import (
 	sessioncontent "github.com/moby/buildkit/session/content"
 	"github.com/moby/buildkit/session/filesync"
 	"github.com/moby/buildkit/session/grpchijack"
+	"github.com/moby/buildkit/session/pullping"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/entitlements"
@@ -45,10 +46,12 @@ type SolveOpt struct {
 }
 
 type ExportEntry struct {
-	Type      string
-	Attrs     map[string]string
-	Output    func(map[string]string) (io.WriteCloser, error) // for ExporterOCI and ExporterDocker
-	OutputDir string                                          // for ExporterLocal
+	Type               string
+	Attrs              map[string]string
+	Output             func(map[string]string) (io.WriteCloser, error) // for ExporterOCI, ExporterDocker and ExporterEarthly
+	OutputDir          string                                          // for ExporterLocal
+	OutputDirFunc      func(map[string]string) (string, error)         // for ExporterEarthly
+	OutputPullCallback pullping.PullCallback                           // for ExporterEarthly
 }
 
 type CacheOptionsEntry struct {
@@ -148,6 +151,17 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 				return nil, errors.Errorf("output file writer is required for %s exporter", ex.Type)
 			}
 			s.Allow(filesync.NewFSSyncTarget(ex.Output))
+		case ExporterEarthly:
+			if ex.OutputDir != "" {
+				return nil, errors.Errorf("output directory %s is not supported by %s exporter", ex.OutputDir, ex.Type)
+			}
+			if ex.Output == nil {
+				return nil, errors.Errorf("output file writer is required for %s exporter", ex.Type)
+			}
+			if ex.OutputPullCallback != nil {
+				s.Allow(pullping.NewPullPing(ex.OutputPullCallback))
+			}
+			s.Allow(filesync.NewFSSyncMultiTarget(ex.Output, ex.OutputDirFunc))
 		default:
 			if ex.Output != nil {
 				return nil, errors.Errorf("output file writer is not supported by %s exporter", ex.Type)
@@ -318,6 +332,10 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 }
 
 func prepareSyncedDirs(def *llb.Definition, localDirs map[string]string) ([]filesync.SyncedDir, error) {
+	if localDirs == nil {
+		// Earthly specific - skip resolving local dirs found in the definition.
+		return nil, nil
+	}
 	for _, d := range localDirs {
 		fi, err := os.Stat(d)
 		if err != nil {

@@ -44,6 +44,7 @@ type mount struct {
 	cacheID      string
 	tmpfs        bool
 	tmpfsOpt     TmpfsInfo
+	hostBind     bool // earthly-specific
 	cacheSharing CacheMountSharingMode
 	noOutput     bool
 }
@@ -365,6 +366,9 @@ func (e *ExecOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 				Size_: m.tmpfsOpt.Size,
 			}
 		}
+		if m.hostBind { //earthly
+			pm.MountType = pb.MountType_HOST_BIND
+		}
 		peo.Mounts = append(peo.Mounts, pm)
 	}
 
@@ -513,6 +517,12 @@ func TmpfsSize(b int64) TmpfsOption {
 
 type TmpfsInfo struct {
 	Size int64
+}
+
+func HostBind() MountOption { // earthly-specific
+	return func(m *mount) {
+		m.hostBind = true
+	}
 }
 
 type RunOption interface {

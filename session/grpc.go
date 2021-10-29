@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/containerd/containerd/defaults"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/grpcerrors"
@@ -41,6 +42,10 @@ func grpcClientConn(ctx context.Context, conn net.Conn) (context.Context, *grpc.
 	dialOpts := []grpc.DialOption{
 		dialer,
 		grpc.WithInsecure(),
+		grpc.WithInitialWindowSize(65535 * 32),
+		grpc.WithInitialConnWindowSize(65535 * 16),
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(defaults.DefaultMaxRecvMsgSize)),
+		grpc.WithDefaultCallOptions(grpc.MaxCallSendMsgSize(defaults.DefaultMaxSendMsgSize)),
 	}
 
 	if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {

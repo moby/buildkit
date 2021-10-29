@@ -218,9 +218,43 @@ github.com/docker/cli/cli/config/types
 github.com/docker/cli/cli/connhelper/commandconn
 # github.com/docker/distribution v2.7.1+incompatible
 ## explicit
+github.com/docker/distribution
+github.com/docker/distribution/configuration
+github.com/docker/distribution/context
 github.com/docker/distribution/digestset
+github.com/docker/distribution/health
+github.com/docker/distribution/health/checks
+github.com/docker/distribution/manifest
+github.com/docker/distribution/manifest/manifestlist
+github.com/docker/distribution/manifest/ocischema
+github.com/docker/distribution/manifest/schema1
+github.com/docker/distribution/manifest/schema2
+github.com/docker/distribution/metrics
+github.com/docker/distribution/notifications
 github.com/docker/distribution/reference
 github.com/docker/distribution/registry/api/errcode
+github.com/docker/distribution/registry/api/v2
+github.com/docker/distribution/registry/auth
+github.com/docker/distribution/registry/client
+github.com/docker/distribution/registry/client/auth
+github.com/docker/distribution/registry/client/auth/challenge
+github.com/docker/distribution/registry/client/transport
+github.com/docker/distribution/registry/handlers
+github.com/docker/distribution/registry/listener
+github.com/docker/distribution/registry/middleware/registry
+github.com/docker/distribution/registry/middleware/repository
+github.com/docker/distribution/registry/proxy
+github.com/docker/distribution/registry/proxy/scheduler
+github.com/docker/distribution/registry/storage
+github.com/docker/distribution/registry/storage/cache
+github.com/docker/distribution/registry/storage/cache/memory
+github.com/docker/distribution/registry/storage/cache/redis
+github.com/docker/distribution/registry/storage/driver
+github.com/docker/distribution/registry/storage/driver/base
+github.com/docker/distribution/registry/storage/driver/factory
+github.com/docker/distribution/registry/storage/driver/middleware
+github.com/docker/distribution/uuid
+github.com/docker/distribution/version
 # github.com/docker/docker v20.10.7+incompatible => github.com/docker/docker v20.10.3-0.20210817025855-ba2adeebdb8d+incompatible
 ## explicit
 github.com/docker/docker/api
@@ -281,9 +315,16 @@ github.com/docker/go-metrics
 # github.com/docker/go-units v0.4.0
 ## explicit
 github.com/docker/go-units
+# github.com/docker/libtrust v0.0.0-20150114040149-fa567046d9b1
+## explicit
+github.com/docker/libtrust
 # github.com/felixge/httpsnoop v1.0.2
 ## explicit; go 1.13
 github.com/felixge/httpsnoop
+# github.com/garyburd/redigo v0.0.0-20150301180006-535138d7bcd7
+## explicit
+github.com/garyburd/redigo/internal
+github.com/garyburd/redigo/redis
 # github.com/gofrs/flock v0.7.3
 ## explicit
 github.com/gofrs/flock
@@ -324,6 +365,12 @@ github.com/google/shlex
 # github.com/google/uuid v1.2.0
 ## explicit
 github.com/google/uuid
+# github.com/gorilla/handlers v0.0.0-20150720190736-60c7bfde3e33
+## explicit
+github.com/gorilla/handlers
+# github.com/gorilla/mux v1.8.0
+## explicit; go 1.12
+github.com/gorilla/mux
 # github.com/grpc-ecosystem/go-grpc-middleware v1.3.0
 ## explicit; go 1.14
 github.com/grpc-ecosystem/go-grpc-middleware
@@ -452,11 +499,10 @@ github.com/sirupsen/logrus
 ## explicit; go 1.13
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/require
-# github.com/tonistiigi/fsutil v0.0.0-20210818161904-4442383b5028
+# github.com/tonistiigi/fsutil v0.0.0-20210818161904-4442383b5028 => github.com/earthly/fsutil v0.0.0-20211029185157-9f87c4e70cf0
 ## explicit; go 1.13
 github.com/tonistiigi/fsutil
 github.com/tonistiigi/fsutil/copy
-github.com/tonistiigi/fsutil/prefix
 github.com/tonistiigi/fsutil/types
 # github.com/tonistiigi/go-actions-cache v0.0.0-20211002214948-4d48f2ff622a
 ## explicit; go 1.16
@@ -688,6 +734,9 @@ google.golang.org/protobuf/types/known/durationpb
 google.golang.org/protobuf/types/known/fieldmaskpb
 google.golang.org/protobuf/types/known/timestamppb
 google.golang.org/protobuf/types/known/wrapperspb
+# gopkg.in/yaml.v2 v2.4.0
+## explicit; go 1.15
+gopkg.in/yaml.v2
 # gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
 ## explicit
 gopkg.in/yaml.v3
@@ -700,6 +749,7 @@ gotest.tools/v3/internal/difflib
 gotest.tools/v3/internal/format
 gotest.tools/v3/internal/source
 gotest.tools/v3/poll
+# github.com/tonistiigi/fsutil => github.com/earthly/fsutil v0.0.0-20211029185157-9f87c4e70cf0
 # github.com/docker/docker => github.com/docker/docker v20.10.3-0.20210817025855-ba2adeebdb8d+incompatible
 # go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace => github.com/tonistiigi/opentelemetry-go-contrib/instrumentation/net/http/httptrace/otelhttptrace v0.0.0-20211026174723-2f82a1e0c997
 # go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp => github.com/tonistiigi/opentelemetry-go-contrib/instrumentation/net/http/otelhttp v0.0.0-20211026174723-2f82a1e0c997
