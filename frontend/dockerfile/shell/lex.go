@@ -173,6 +173,7 @@ func (sw *shellWord) processStopOn(stopChar rune) (string, []string, error) {
 			if ch == sw.escapeToken {
 				if sw.rawEscapes {
 					words.addRawChar(ch)
+					result.WriteRune(ch)
 				}
 
 				// '\' (default escape token, but ` allowed) escapes, except end of line
