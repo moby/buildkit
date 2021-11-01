@@ -290,7 +290,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 
 func inlineCache(ctx context.Context, e remotecache.Exporter, res solver.CachedResult, compressionopt solver.CompressionOpt, g session.Group) ([]byte, error) {
 	if efl, ok := e.(interface {
-		ExportForLayers([]digest.Digest) ([]byte, error)
+		ExportForLayers(context.Context, []digest.Digest) ([]byte, error)
 	}); ok {
 		workerRef, ok := res.Sys().(*worker.WorkerRef)
 		if !ok {
@@ -317,7 +317,7 @@ func inlineCache(ctx context.Context, e remotecache.Exporter, res solver.CachedR
 			return nil, err
 		}
 
-		return efl.ExportForLayers(digests)
+		return efl.ExportForLayers(ctx, digests)
 	}
 	return nil, nil
 }

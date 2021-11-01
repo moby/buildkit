@@ -38,8 +38,8 @@ func (ce *exporter) reset() {
 	ce.chains = cc
 }
 
-func (ce *exporter) ExportForLayers(layers []digest.Digest) ([]byte, error) {
-	config, descs, err := ce.chains.Marshal()
+func (ce *exporter) ExportForLayers(ctx context.Context, layers []digest.Digest) ([]byte, error) {
+	config, descs, err := ce.chains.Marshal(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +63,7 @@ func (ce *exporter) ExportForLayers(layers []digest.Digest) ([]byte, error) {
 		return nil, err
 	}
 
-	cfg, _, err := cc.Marshal()
+	cfg, _, err := cc.Marshal(ctx)
 	if err != nil {
 		return nil, err
 	}
