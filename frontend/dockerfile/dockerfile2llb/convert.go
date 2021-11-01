@@ -594,6 +594,21 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 			return err
 		}
 	}
+	if ex, ok := cmd.Command.(instructions.SupportsSingleWordExpansionRaw); ok {
+		err := ex.ExpandRaw(func(word string) (string, error) {
+			env, err := d.state.Env(context.TODO())
+			if err != nil {
+				return "", err
+			}
+
+			lex := shell.NewLex('\\')
+			lex.RawQuotes = true
+			return lex.ProcessWord(word, env)
+		})
+		if err != nil {
+			return err
+		}
+	}
 
 	var err error
 	switch c := cmd.Command.(type) {
