@@ -46,7 +46,7 @@ currentcontext="."
 cacheFromFlags=""
 cacheToFlags=""
 if [ "$GITHUB_ACTIONS" = "true" ]; then
-  currentref="git://github.com/$GITHUB_REPOSITORY#$GITHUB_REF"
+  currentref="https://github.com/$GITHUB_REPOSITORY.git#$GITHUB_REF"
   if [ -n "$CACHE_FROM" ]; then
     for cfrom in $CACHE_FROM; do
       cacheFromFlags="${cacheFromFlags}--cache-from=$cfrom "
