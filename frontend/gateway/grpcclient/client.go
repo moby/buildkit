@@ -457,6 +457,27 @@ func (c *grpcClient) BuildOpts() client.BuildOpts {
 	}
 }
 
+func (c *grpcClient) CurrentFrontend() (*llb.State, error) {
+	fp := "/run/config/buildkit/metadata/frontend.bin"
+	if _, err := os.Stat(fp); err != nil {
+		return nil, nil
+	}
+	dt, err := os.ReadFile(fp)
+	if err != nil {
+		return nil, err
+	}
+	var def opspb.Definition
+	if err := def.Unmarshal(dt); err != nil {
+		return nil, err
+	}
+	op, err := llb.NewDefinitionOp(&def)
+	if err != nil {
+		return nil, err
+	}
+	st := llb.NewState(op)
+	return &st, nil
+}
+
 func (c *grpcClient) Inputs(ctx context.Context) (map[string]llb.State, error) {
 	err := c.caps.Supports(pb.CapFrontendInputs)
 	if err != nil {
