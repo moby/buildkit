@@ -36,8 +36,8 @@ require (
 	github.com/klauspost/compress v1.13.5
 	github.com/mitchellh/hashstructure v1.0.0
 	github.com/moby/locker v1.0.1
-	github.com/moby/sys/mount v0.2.0 // indirect
-	github.com/moby/sys/signal v0.5.1-0.20210723232958-8a51b5cc8879
+	github.com/moby/sys/mount v0.3.0 // indirect
+	github.com/moby/sys/signal v0.6.0
 	github.com/moby/term v0.0.0-20210619224110-3f7ff695adc6 // indirect
 	github.com/morikuni/aec v1.0.0
 	github.com/opencontainers/go-digest v1.0.0
@@ -71,7 +71,7 @@ require (
 	golang.org/x/crypto v0.0.0-20210322153248-0c34fe9e7dc2
 	golang.org/x/net v0.0.0-20210825183410-e898025ed96a
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/sys v0.0.0-20210915083310-ed5796bab164
+	golang.org/x/sys v0.0.0-20211025201205-69cdffdb9359
 	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac
 	google.golang.org/genproto v0.0.0-20210602131652-f16073e35f0c
 	google.golang.org/grpc v1.41.0
@@ -102,7 +102,7 @@ require (
 	github.com/hashicorp/errwrap v1.0.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.2-0.20181231171920-c182affec369 // indirect
-	github.com/moby/sys/mountinfo v0.4.1 // indirect
+	github.com/moby/sys/mountinfo v0.5.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_golang v1.11.0 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect
