@@ -1,0 +1,16 @@
+#!/usr/bin/env sh
+set -eu
+
+case ${1:-} in
+  '')
+    . "$(dirname $0)/util"
+    buildxCmd build \
+      --target validate \
+      --file ./hack/dockerfiles/gosec.Dockerfile \
+      .
+    ;;
+  check)
+    gosec -confidence medium -severity high ./...
+    echo 'Congratulations! All gosec checks passed.'
+    ;;
+esac

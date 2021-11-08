@@ -22,6 +22,9 @@ test:
 lint:
 	./hack/lint
 
+validate-gosec:
+	./hack/validate-gosec
+
 validate-vendor:
 	./hack/validate-vendor
 

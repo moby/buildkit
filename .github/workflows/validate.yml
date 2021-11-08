@@ -27,6 +27,7 @@ jobs:
           - script: ./hack/validate-vendor
           - script: ./hack/validate-generated-files
           - script: ./hack/validate-shfmt
+          - script: ./hack/validate-gosec
     steps:
       -
         name: Checkout
