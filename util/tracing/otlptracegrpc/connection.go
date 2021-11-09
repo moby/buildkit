@@ -121,6 +121,7 @@ func (c *Connection) indefiniteBackgroundConnection() {
 
 	// No strong seeding required, nano time can
 	// already help with pseudo uniqueness.
+	// #nosec G404
 	rng := rand.New(rand.NewSource(time.Now().UnixNano() + rand.Int63n(1024)))
 
 	// maxJitterNanos: 70% of the connectionReattemptPeriod
