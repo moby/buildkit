@@ -151,7 +151,7 @@ func convertStack(s errors.StackTrace) *Stack {
 		if idx == -1 {
 			continue
 		}
-		line, err := strconv.Atoi(p[1][idx+1:])
+		line, err := strconv.ParseInt(p[1][idx+1:], 10, 32)
 		if err != nil {
 			continue
 		}
