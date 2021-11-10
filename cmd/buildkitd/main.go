@@ -220,6 +220,7 @@ func main() {
 		if cfg.Debug {
 			logrus.SetLevel(logrus.DebugLevel)
 		}
+		logrus.SetOutput(os.Stderr) // earthly-specific: force logs to show up under earthly-buildkitd container logs
 
 		if cfg.GRPC.DebugAddress != "" {
 			if err := setupDebugHandlers(cfg.GRPC.DebugAddress); err != nil {
