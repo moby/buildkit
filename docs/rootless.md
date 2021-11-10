@@ -5,40 +5,27 @@ Rootless mode allows running BuildKit daemon as a non-root user.
 ## Distribution-specific hint
 Using Ubuntu kernel is recommended.
 
-### Ubuntu
-* No preparation is needed.
-* `overlayfs` snapshotter is used by default ([Ubuntu-specific kernel patch](https://kernel.ubuntu.com/git/ubuntu/ubuntu-bionic.git/commit/fs/overlayfs?id=3b7da90f28fe1ed4b79ef2d994c81efbc58f1144)).
-
-### Debian GNU/Linux
-* Add `kernel.unprivileged_userns_clone=1` to `/etc/sysctl.conf` (or `/etc/sysctl.d`) and run `sudo sysctl -p`
-* `fuse-overlayfs` snapshotter is used by default.
-* To use `overlayfs` snapshotter (recommended), run `sudo modprobe overlay permit_mounts_in_userns=1` ([Debian-specific kernel patch, introduced in Debian 10](https://salsa.debian.org/kernel-team/linux/blob/283390e7feb21b47779b48e0c8eb0cc409d2c815/debian/patches/debian/overlayfs-permit-mounts-in-userns.patch)). Put the configuration to `/etc/modprobe.d` for persistence.
-
-### Arch Linux
-* Add `kernel.unprivileged_userns_clone=1` to `/etc/sysctl.conf` (or `/etc/sysctl.d`) and run `sudo sysctl -p`
-* `fuse-overlayfs` snapshotter is used by default if running kernel >= 4.18.
-  Otherwise only `native` snapshotter can be used.
-
-### Fedora
-* If you don't have the latest `runc` (>= v1.0.0-rc91) installed and you have `crun` instead, you need to run `buildkitd` with `--oci-worker-binary=crun`.
-* `fuse-overlayfs` snapshotter is used by default.
-
-### RHEL/CentOS 8
-* No preparation is needed.
-* `fuse-overlayfs` snapshotter is used by default.
+### Debian GNU/Linux 10
+Add `kernel.unprivileged_userns_clone=1` to `/etc/sysctl.conf` (or `/etc/sysctl.d`) and run `sudo sysctl -p`.
+This step is not needed for Debian GNU/Linux 11 and later.
 
 ### RHEL/CentOS 7
-* Add `user.max_user_namespaces=28633` to `/etc/sysctl.conf` (or `/etc/sysctl.d`) and run `sudo sysctl -p`
-* Old releases (<= 7.6) require [extra configuration steps](https://github.com/moby/moby/pull/40076).
-* Only `native` snapshotter can be used.
+Add `user.max_user_namespaces=28633` to `/etc/sysctl.conf` (or `/etc/sysctl.d`) and run `sudo sysctl -p`.
+This step is not needed for RHEL/CentOS 8 and later.
+
+### Fedora, before kernel 5.13
+You may have to disable SELinux, or run BuildKit with `--oci-worker-snapshotter=fuse-overlayfs`.
 
 ### Container-Optimized OS from Google
-* :warning: Currently unsupported. See [#879](https://github.com/moby/buildkit/issues/879).
+:warning: Currently unsupported. See [#879](https://github.com/moby/buildkit/issues/879).
 
 ## Known limitations
-* `fuse-overlayfs` is used instead of `overlayfs` on most distros.
+* Using the `overlayfs` snapshotter requires kernel >= 5.11 or Ubuntu kernel.
+  On kernel >= 4.18, the `fuse-overlayfs` snapshotter is used instead of `overlayfs`.
+  On kernel < 4.18, the `native` snapshotter is used.
 * Network mode is always set to `network.host`.
-* No support for `containerd` worker
+* No support for `containerd` worker.
+  ("worker" here is a BuildKit term, not a Kubernetes term. Running rootless BuildKit in containerd is fully supported.)
 
 ## Running BuildKit in Rootless mode
 
@@ -58,11 +45,23 @@ $ rootlesskit --net=slirp4netns --copy-up=/etc --disable-host-loopback buildkitd
 ```
 
 ## Troubleshooting
-If facing an error related to `fuse-overlayfs`, try running `buildkitd` with `--oci-worker-snapshotter=native`:
+
+### Error related to `overlayfs`
+Try running `buildkitd` with `--oci-worker-snapshotter=fuse-overlayfs`:
+
+```console
+$ rootlesskit buildkitd --oci-worker-snapshotter=fuse-overlayfs
+```
+
+### Error related to `fuse-overlayfs`
+Try running `buildkitd` with `--oci-worker-snapshotter=native`:
 
 ```console
 $ rootlesskit buildkitd --oci-worker-snapshotter=native
 ```
+
+### Error related to `newuidmap` or `/etc/subuid`
+See https://rootlesscontaine.rs/getting-started/common/subuid/
 
 ## Containerized deployment
 
