@@ -333,8 +333,8 @@ func (c *Controller) Status(req *controlapi.StatusRequest, stream controlapi.Con
 				return nil
 			}
 			logSize := 0
-			retry := false
 			for {
+				retry := false
 				sr := controlapi.StatusResponse{}
 				for _, v := range ss.Vertexes {
 					sr.Vertexes = append(sr.Vertexes, &controlapi.Vertex{
@@ -366,7 +366,7 @@ func (c *Controller) Status(req *controlapi.StatusRequest, stream controlapi.Con
 						Msg:       v.Data,
 						Timestamp: v.Timestamp,
 					})
-					logSize += len(v.Data)
+					logSize += len(v.Data) + emptyLogVertexSize
 					// avoid logs growing big and split apart if they do
 					if logSize > 1024*1024 {
 						ss.Vertexes = nil
