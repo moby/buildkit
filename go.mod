@@ -34,7 +34,7 @@ require (
 	github.com/hashicorp/golang-lru v0.5.3
 	github.com/ishidawataru/sctp v0.0.0-20210226210310-f2269e66cdee // indirect
 	github.com/klauspost/compress v1.13.5
-	github.com/mitchellh/hashstructure v1.0.0
+	github.com/mitchellh/hashstructure/v2 v2.0.2
 	github.com/moby/locker v1.0.1
 	github.com/moby/sys/mount v0.3.0 // indirect
 	github.com/moby/sys/signal v0.6.0

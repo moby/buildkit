@@ -13,7 +13,7 @@ import (
 	"github.com/containerd/containerd/oci"
 	"github.com/containerd/continuity/fs"
 	"github.com/docker/docker/pkg/idtools"
-	"github.com/mitchellh/hashstructure"
+	"github.com/mitchellh/hashstructure/v2"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/util/network"
@@ -200,7 +200,7 @@ func (s *submounts) subMount(m mount.Mount, subPath string) (mount.Mount, error)
 	if s.m == nil {
 		s.m = map[uint64]mountRef{}
 	}
-	h, err := hashstructure.Hash(m, nil)
+	h, err := hashstructure.Hash(m, hashstructure.FormatV2, nil)
 	if err != nil {
 		return mount.Mount{}, nil
 	}
