@@ -37,12 +37,6 @@ func WithInsecureSpec() oci.SpecOpts {
 		s.Linux.Resources.Devices = []specs.LinuxDeviceCgroup{
 			{
 				Allow:  true,
-				Type:   "c",
-				Access: "rwm",
-			},
-			{
-				Allow:  true,
-				Type:   "b",
 				Access: "rwm",
 			},
 		}
