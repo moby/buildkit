@@ -37,15 +37,19 @@ func IngesterFromRef(ref string) (content.Ingester, error) {
 		Client: http.DefaultClient,
 	})
 
-	pusher, err := remote.Pusher(context.TODO(), ref)
+	p, err := remote.Pusher(context.TODO(), ref)
 	if err != nil {
 		return nil, err
 	}
 
 	return &ingester{
 		locker: locker.New(),
-		pusher: pusher,
+		pusher: &pusher{p},
 	}, nil
+}
+
+type pusher struct {
+	remotes.Pusher
 }
 
 type ingester struct {

@@ -11,6 +11,7 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
+	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/session"
@@ -27,6 +28,21 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
+
+type pusher struct {
+	remotes.Pusher
+}
+
+// Pusher creates and new pusher instance for resolver
+// containerd resolver.Pusher() method is broken and should not be called directly
+// we need to wrap to mask interface detection
+func Pusher(ctx context.Context, resolver remotes.Resolver, ref string) (remotes.Pusher, error) {
+	p, err := resolver.Pusher(ctx, ref)
+	if err != nil {
+		return nil, err
+	}
+	return &pusher{Pusher: p}, nil
+}
 
 func Push(ctx context.Context, sm *session.Manager, sid string, provider content.Provider, manager content.Manager, dgst digest.Digest, ref string, insecure bool, hosts docker.RegistryHosts, byDigest bool, annotations map[digest.Digest]map[string]string) error {
 	desc := ocispecs.Descriptor{
@@ -66,7 +82,7 @@ func Push(ctx context.Context, sm *session.Manager, sid string, provider content
 
 	resolver := resolver.DefaultPool.GetResolver(hosts, ref, scope, sm, session.NewGroup(sid))
 
-	pusher, err := resolver.Pusher(ctx, ref)
+	pusher, err := Pusher(ctx, resolver, ref)
 	if err != nil {
 		return err
 	}
