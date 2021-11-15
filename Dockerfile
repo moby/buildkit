@@ -1,7 +1,7 @@
 # syntax = docker/dockerfile:1.3
 
 ARG RUNC_VERSION=v1.0.2
-ARG CONTAINERD_VERSION=v1.6.0-beta.1
+ARG CONTAINERD_VERSION=v1.6.0-beta.2
 # containerd v1.5 for integration tests
 ARG CONTAINERD_ALT_VERSION_15=v1.5.5
 # containerd v1.4 for integration tests
