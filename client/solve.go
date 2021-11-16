@@ -27,6 +27,8 @@ import (
 	fstypes "github.com/tonistiigi/fsutil/types"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type SolveOpt struct {
@@ -181,10 +183,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		defer cancelSolve()
 
 		defer func() { // make sure the Status ends cleanly on build errors
-			go func() {
-				<-time.After(3 * time.Second)
-				cancelStatus()
-			}()
+			cancelStatus()
 			bklog.G(ctx).Debugf("stopping session")
 			s.Close()
 		}()
@@ -258,6 +257,11 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 				if err == io.EOF {
 					return nil
 				}
+
+				if status.Code(err) == codes.Canceled {
+					return nil
+				}
+
 				return errors.Wrap(err, "failed to receive status")
 			}
 			s := SolveStatus{}
