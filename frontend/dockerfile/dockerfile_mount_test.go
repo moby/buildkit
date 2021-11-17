@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var mountTests = []integration.Test{
+var mountTests = integration.TestFuncs(
 	testMountContext,
 	testMountTmpfs,
 	testMountRWCache,
@@ -26,12 +26,12 @@ var mountTests = []integration.Test{
 	testMountFromError,
 	testMountInvalid,
 	testMountTmpfsSize,
-}
+)
 
 func init() {
 	allTests = append(allTests, mountTests...)
 
-	fileOpTests = append(fileOpTests, testCacheMountUser)
+	fileOpTests = append(fileOpTests, integration.TestFuncs(testCacheMountUser)...)
 }
 
 func testMountContext(t *testing.T, sb integration.Sandbox) {

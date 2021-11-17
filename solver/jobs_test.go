@@ -20,9 +20,9 @@ func init() {
 
 func TestJobsIntegration(t *testing.T) {
 	mirrors := integration.WithMirroredImages(integration.OfficialImages("busybox:latest"))
-	integration.Run(t, []integration.Test{
+	integration.Run(t, integration.TestFuncs(
 		testParallelism,
-	},
+	),
 		mirrors,
 		integration.WithMatrix("max-parallelism", map[string]interface{}{
 			"single":    maxParallelismSingle,

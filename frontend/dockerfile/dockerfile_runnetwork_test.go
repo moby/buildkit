@@ -15,12 +15,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var runNetworkTests = []integration.Test{
+var runNetworkTests = integration.TestFuncs(
 	testRunDefaultNetwork,
 	testRunNoNetwork,
 	testRunHostNetwork,
 	testRunGlobalNetwork,
-}
+)
 
 func init() {
 	networkTests = append(networkTests, runNetworkTests...)

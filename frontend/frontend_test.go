@@ -28,12 +28,12 @@ func init() {
 }
 
 func TestFrontendIntegration(t *testing.T) {
-	integration.Run(t, []integration.Test{
+	integration.Run(t, integration.TestFuncs(
 		testRefReadFile,
 		testRefReadDir,
 		testRefStatFile,
 		testReturnNil,
-	})
+	))
 }
 
 func testReturnNil(t *testing.T, sb integration.Sandbox) {

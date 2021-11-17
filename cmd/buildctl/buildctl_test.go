@@ -13,7 +13,7 @@ func init() {
 }
 
 func TestCLIIntegration(t *testing.T) {
-	integration.Run(t, []integration.Test{
+	integration.Run(t, integration.TestFuncs(
 		testDiskUsage,
 		testBuildWithLocalFiles,
 		testBuildLocalExporter,
@@ -21,7 +21,7 @@ func TestCLIIntegration(t *testing.T) {
 		testBuildMetadataFile,
 		testPrune,
 		testUsage,
-	},
+	),
 		integration.WithMirroredImages(integration.OfficialImages("busybox:latest")),
 	)
 }
