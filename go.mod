@@ -4,14 +4,14 @@ go 1.17
 
 require (
 	github.com/Microsoft/go-winio v0.5.0
-	github.com/Microsoft/hcsshim v0.9.0
+	github.com/Microsoft/hcsshim v0.9.1
 	github.com/agext/levenshtein v1.2.3
 	github.com/containerd/console v1.0.3
-	github.com/containerd/containerd v1.6.0-beta.1
-	github.com/containerd/containerd/api v1.6.0-beta.1
+	github.com/containerd/containerd v1.6.0-beta.2.0.20211112054404-aa1b0736165c
+	github.com/containerd/containerd/api v1.6.0-beta.2.0.20211112054404-aa1b0736165c
 	github.com/containerd/continuity v0.2.0
 	github.com/containerd/fuse-overlayfs-snapshotter v1.0.2
-	github.com/containerd/go-cni v1.1.0
+	github.com/containerd/go-cni v1.1.1-0.20211026134925-aa8bf14323a5
 	github.com/containerd/go-runc v1.0.0
 	github.com/containerd/stargz-snapshotter v0.8.1-0.20210910092506-a3ecdc9366fb
 	github.com/containerd/stargz-snapshotter/estargz v0.8.1-0.20210910092506-a3ecdc9366fb
@@ -85,7 +85,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.1.1 // indirect
 	github.com/containerd/cgroups v1.0.2 // indirect
 	github.com/containerd/fifo v1.0.0 // indirect
-	github.com/containerd/ttrpc v1.0.2 // indirect
+	github.com/containerd/ttrpc v1.1.0 // indirect
 	github.com/containernetworking/cni v1.0.1 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
