@@ -1,11 +1,11 @@
 [Unit]
 Description=BuildKit
-Requires=buildkit.socket
-After=buildkit.socket
 Documentation=https://github.com/moby/buildkit
 
 [Service]
-ExecStart=/usr/local/bin/buildkitd --addr fd://
+Type=notify
+NotifyAccess=all
+ExecStart=rootlesskit /usr/local/bin/buildkitd --addr unix://%t/buildkit/rootless
 
 [Install]
 WantedBy=multi-user.target
