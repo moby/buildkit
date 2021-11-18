@@ -2,13 +2,12 @@ package snapshot
 
 import (
 	"context"
-	"os"
 	"sync"
-	"sync/atomic"
 
 	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/snapshots"
 	"github.com/docker/docker/pkg/idtools"
+	"github.com/pkg/errors"
 )
 
 type Mountable interface {
@@ -55,6 +54,7 @@ func (s *fromContainerd) Mounts(ctx context.Context, key string) (Mountable, err
 	}
 	return &staticMountable{mounts: mounts, idmap: s.idmap, id: key}, nil
 }
+
 func (s *fromContainerd) Prepare(ctx context.Context, key, parent string, opts ...snapshots.Opt) error {
 	_, err := s.Snapshotter.Prepare(ctx, key, parent, opts...)
 	return err
@@ -70,27 +70,13 @@ func (s *fromContainerd) IdentityMapping() *idtools.IdentityMapping {
 	return s.idmap
 }
 
-type staticMountable struct {
-	count  int32
-	id     string
-	mounts []mount.Mount
-	idmap  *idtools.IdentityMapping
-}
-
-func (cm *staticMountable) Mount() ([]mount.Mount, func() error, error) {
-	atomic.AddInt32(&cm.count, 1)
-	return cm.mounts, func() error {
-		if atomic.AddInt32(&cm.count, -1) < 0 {
-			if v := os.Getenv("BUILDKIT_DEBUG_PANIC_ON_ERROR"); v == "1" {
-				panic("release of released mount " + cm.id)
-			}
-		}
-		return nil
-	}, nil
-}
-
-func (cm *staticMountable) IdentityMapping() *idtools.IdentityMapping {
-	return cm.idmap
+func (s *fromContainerd) Commit(ctx context.Context, name, key string, opts ...snapshots.Opt) error {
+	info, err := s.Stat(ctx, key)
+	if err != nil {
+		return errors.Wrap(err, "failed to stat active key during commit")
+	}
+	opts = append(opts, snapshots.WithLabels(snapshots.FilterInheritedLabels(info.Labels)))
+	return s.Snapshotter.Commit(ctx, name, key, opts...)
 }
 
 // NewContainerdSnapshotter converts snapshotter to containerd snapshotter

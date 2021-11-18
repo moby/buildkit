@@ -232,15 +232,20 @@ func (w *Worker) LoadRef(ctx context.Context, id string, hidden bool) (cache.Imm
 			}
 			descHandlers := cache.DescHandlers(make(map[digest.Digest]*cache.DescHandler))
 			for k, v := range optGetter(keys...) {
-				if v, ok := v.(*cache.DescHandler); ok {
-					descHandlers[k.(digest.Digest)] = v
+				if key, ok := k.(cache.DescHandlerKey); ok {
+					if handler, ok := v.(*cache.DescHandler); ok {
+						descHandlers[digest.Digest(key)] = handler
+					}
 				}
 			}
 			opts = append(opts, descHandlers)
 			ref, err = w.CacheMgr.Get(ctx, id, opts...)
 		}
 	}
-	return ref, err
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to load ref")
+	}
+	return ref, nil
 }
 
 func (w *Worker) Executor() executor.Executor {
@@ -262,6 +267,8 @@ func (w *Worker) ResolveOp(v solver.Vertex, s frontend.FrontendLLBBridge, sm *se
 			return ops.NewFileOp(v, op, w.CacheMgr, w.ParallelismSem, w)
 		case *pb.Op_Build:
 			return ops.NewBuildOp(v, op, s, w)
+		case *pb.Op_Merge:
+			return ops.NewMergeOp(v, op, w)
 		default:
 			return nil, errors.Errorf("no support for %T", op)
 		}
