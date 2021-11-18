@@ -8,7 +8,7 @@ require (
 	github.com/Microsoft/hcsshim v0.8.23
 	github.com/agext/levenshtein v1.2.3
 	github.com/containerd/console v1.0.2
-	github.com/containerd/containerd v1.5.8-0.20211112185055-5fde9a5b31df
+	github.com/containerd/containerd v1.5.8
 	github.com/containerd/continuity v0.1.0
 	github.com/containerd/fuse-overlayfs-snapshotter v1.0.2
 	github.com/containerd/go-cni v1.0.2
