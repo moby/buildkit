@@ -139,6 +139,7 @@ func TestIntegration(t *testing.T) {
 		testPullZstdImage,
 		testMergeOp,
 		testMergeOpCache,
+		testRmSymlink,
 	}, mirrors)
 
 	integration.Run(t, []integration.Test{
@@ -3822,6 +3823,41 @@ func testSourceMapFromRef(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, 1, len(srcs[0].Ranges))
 	require.Equal(t, int32(3), srcs[0].Ranges[0].Start.Line)
 	require.Equal(t, int32(1), srcs[0].Ranges[0].Start.Character)
+}
+
+func testRmSymlink(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	// Test that if FileOp.Rm is called on a symlink, then
+	// the symlink is removed rather than the target
+	mnt := llb.Image("alpine").
+		Run(llb.Shlex("touch /mnt/target")).
+		AddMount("/mnt", llb.Scratch())
+
+	mnt = llb.Image("alpine").
+		Run(llb.Shlex("ln -s target /mnt/link")).
+		AddMount("/mnt", mnt)
+
+	def, err := mnt.File(llb.Rm("link")).Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	require.NoError(t, fstest.CheckDirectoryEqualWithApplier(destDir, fstest.CreateFile("target", nil, 0644)))
 }
 
 func testProxyEnv(t *testing.T, sb integration.Sandbox) {
