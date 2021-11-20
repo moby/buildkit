@@ -5,10 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
 	"github.com/moby/buildkit/frontend/dockerfile/shell"
 	"github.com/moby/buildkit/util/appcontext"
+	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -202,11 +202,13 @@ ADD https://raw.githubusercontent.com/moby/buildkit/master/README.md /
 `
 	_, image, err := Dockerfile2LLB(appcontext.Context(), []byte(df), ConvertOpt{
 		TargetPlatform: &ocispecs.Platform{
-			Architecture: "amd64", OS: "linux",
+			Architecture: "amd64",
+			OS:           "linux",
 		},
 		BuildPlatforms: []ocispecs.Platform{
 			{
-				Architecture: "amd64", OS: "linux",
+				Architecture: "amd64",
+				OS:           "linux",
 			},
 		},
 	})
@@ -214,13 +216,15 @@ ADD https://raw.githubusercontent.com/moby/buildkit/master/README.md /
 	require.NoError(t, err)
 	require.NotNil(t, image.BuildInfo)
 
-	var bi []exptypes.BuildInfo
+	var bi binfotypes.BuildInfo
 	err = json.Unmarshal(image.BuildInfo, &bi)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(bi))
 
-	assert.Equal(t, exptypes.BuildInfoTypeDockerImage, bi[0].Type)
-	assert.Equal(t, "busybox", bi[0].Ref)
-	assert.True(t, strings.HasPrefix(bi[0].Alias, "docker.io/library/busybox@"))
-	assert.NotEmpty(t, bi[0].Pin)
+	sources := bi.Sources
+	require.Equal(t, 1, len(sources))
+
+	assert.Equal(t, binfotypes.SourceTypeDockerImage, sources[0].Type)
+	assert.Equal(t, "busybox", sources[0].Ref)
+	assert.True(t, strings.HasPrefix(sources[0].Alias, "docker.io/library/busybox@"))
+	assert.NotEmpty(t, sources[0].Pin)
 }

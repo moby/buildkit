@@ -21,6 +21,7 @@ import (
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/buildinfo"
+	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/system"
@@ -416,9 +417,9 @@ func patchImageConfig(dt []byte, descs []ocispecs.Descriptor, history []ocispecs
 		if err != nil {
 			return nil, err
 		}
-		m[buildinfo.ImageConfigField] = dt
-	} else if _, ok := m[buildinfo.ImageConfigField]; ok {
-		delete(m, buildinfo.ImageConfigField)
+		m[binfotypes.ImageConfigField] = dt
+	} else if _, ok := m[binfotypes.ImageConfigField]; ok {
+		delete(m, binfotypes.ImageConfigField)
 	}
 
 	dt, err = json.Marshal(m)

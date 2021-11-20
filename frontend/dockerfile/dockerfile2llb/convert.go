@@ -19,12 +19,12 @@ import (
 	"github.com/docker/go-connections/nat"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/client/llb/imagemetaresolver"
-	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"github.com/moby/buildkit/frontend/dockerfile/shell"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
+	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
 	"github.com/moby/buildkit/util/suggest"
 	"github.com/moby/buildkit/util/system"
 	"github.com/moby/sys/signal"
@@ -346,10 +346,10 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 							}
 						}
 						if !isScratch {
-							// image not scratch set original image name as ref
-							// and actual reference as alias in BuildInfo
-							d.buildInfo = &exptypes.BuildInfo{
-								Type:  exptypes.BuildInfoTypeDockerImage,
+							// if image not scratch set original image name as ref
+							// and actual reference as alias in BuildSource
+							d.buildSource = &binfotypes.Source{
+								Type:  binfotypes.SourceTypeDockerImage,
 								Ref:   origName,
 								Alias: ref.String(),
 								Pin:   dgst.String(),
@@ -381,7 +381,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 
 	buildContext := &mutableOutput{}
 	ctxPaths := map[string]struct{}{}
-	var buildInfos []exptypes.BuildInfo
+	var buildSources []binfotypes.Source
 
 	for _, d := range allDispatchStates.states {
 		if !isReachable(target, d) {
@@ -389,8 +389,8 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		}
 
 		// collect build dependencies
-		if d.buildInfo != nil {
-			buildInfos = append(buildInfos, *d.buildInfo)
+		if d.buildSource != nil {
+			buildSources = append(buildSources, *d.buildSource)
 		}
 
 		if d.base != nil {
@@ -469,11 +469,13 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 
 	// set target with gathered build dependencies
 	target.image.BuildInfo = []byte{}
-	if len(buildInfos) > 0 {
-		sort.Slice(buildInfos, func(i, j int) bool {
-			return buildInfos[i].Ref < buildInfos[j].Ref
+	if len(buildSources) > 0 {
+		sort.Slice(buildSources, func(i, j int) bool {
+			return buildSources[i].Ref < buildSources[j].Ref
 		})
-		target.image.BuildInfo, err = json.Marshal(buildInfos)
+		target.image.BuildInfo, err = json.Marshal(&binfotypes.BuildInfo{
+			Sources: buildSources,
+		})
 		if err != nil {
 			return nil, nil, err
 		}
@@ -685,7 +687,7 @@ type dispatchState struct {
 	cmdIndex       int
 	cmdTotal       int
 	prefixPlatform bool
-	buildInfo      *exptypes.BuildInfo
+	buildSource    *binfotypes.Source
 }
 
 type dispatchStates struct {

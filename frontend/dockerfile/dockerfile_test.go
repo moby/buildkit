@@ -40,6 +40,7 @@ import (
 	"github.com/moby/buildkit/session/upload/uploadprovider"
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
+	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/testutil"
 	"github.com/moby/buildkit/util/testutil/httpserver"
@@ -115,7 +116,7 @@ var allTests = integration.TestFuncs(
 	testExportCacheLoop,
 	testWildcardRenameCache,
 	testDockerfileInvalidInstruction,
-	testBuildInfo,
+	testBuildSources,
 	testShmSize,
 	testUlimit,
 	testCgroupParent,
@@ -5184,7 +5185,7 @@ RUN echo $(hostname) | grep foo
 }
 
 // moby/buildkit#2311
-func testBuildInfo(t *testing.T, sb integration.Sandbox) {
+func testBuildSources(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 
 	gitDir, err := ioutil.TempDir("", "buildkit")
@@ -5247,29 +5248,28 @@ COPY --from=buildx /buildx /usr/libexec/docker/cli-plugins/docker-buildx
 	dtbi, err := base64.StdEncoding.DecodeString(res.ExporterResponse[exptypes.ExporterBuildInfo])
 	require.NoError(t, err)
 
-	var bi map[string][]exptypes.BuildInfo
+	var bi binfotypes.BuildInfo
 	err = json.Unmarshal(dtbi, &bi)
 	require.NoError(t, err)
 
-	_, ok := bi["sources"]
-	require.True(t, ok)
-	require.Equal(t, 4, len(bi["sources"]))
+	sources := bi.Sources
+	require.Equal(t, 4, len(sources))
 
-	assert.Equal(t, exptypes.BuildInfoTypeDockerImage, bi["sources"][0].Type)
-	assert.Equal(t, "docker.io/docker/buildx-bin:0.6.1@sha256:a652ced4a4141977c7daaed0a074dcd9844a78d7d2615465b12f433ae6dd29f0", bi["sources"][0].Ref)
-	assert.Equal(t, "sha256:a652ced4a4141977c7daaed0a074dcd9844a78d7d2615465b12f433ae6dd29f0", bi["sources"][0].Pin)
+	assert.Equal(t, binfotypes.SourceTypeDockerImage, sources[0].Type)
+	assert.Equal(t, "docker.io/docker/buildx-bin:0.6.1@sha256:a652ced4a4141977c7daaed0a074dcd9844a78d7d2615465b12f433ae6dd29f0", sources[0].Ref)
+	assert.Equal(t, "sha256:a652ced4a4141977c7daaed0a074dcd9844a78d7d2615465b12f433ae6dd29f0", sources[0].Pin)
 
-	assert.Equal(t, exptypes.BuildInfoTypeDockerImage, bi["sources"][1].Type)
-	assert.Equal(t, "docker.io/docker/dockerfile-upstream:1.3.0", bi["sources"][1].Ref)
-	assert.Equal(t, "sha256:9e2c9eca7367393aecc68795c671f93466818395a2693498debe831fd67f5e89", bi["sources"][1].Pin)
+	assert.Equal(t, binfotypes.SourceTypeDockerImage, sources[1].Type)
+	assert.Equal(t, "docker.io/docker/dockerfile-upstream:1.3.0", sources[1].Ref)
+	assert.Equal(t, "sha256:9e2c9eca7367393aecc68795c671f93466818395a2693498debe831fd67f5e89", sources[1].Pin)
 
-	assert.Equal(t, exptypes.BuildInfoTypeDockerImage, bi["sources"][2].Type)
-	assert.Equal(t, "docker.io/library/busybox:latest", bi["sources"][2].Ref)
-	assert.NotEmpty(t, bi["sources"][2].Pin)
+	assert.Equal(t, binfotypes.SourceTypeDockerImage, sources[2].Type)
+	assert.Equal(t, "docker.io/library/busybox:latest", sources[2].Ref)
+	assert.NotEmpty(t, sources[2].Pin)
 
-	assert.Equal(t, exptypes.BuildInfoTypeHTTP, bi["sources"][3].Type)
-	assert.Equal(t, "https://raw.githubusercontent.com/moby/moby/master/README.md", bi["sources"][3].Ref)
-	assert.Equal(t, "sha256:419455202b0ef97e480d7f8199b26a721a417818bc0e2d106975f74323f25e6c", bi["sources"][3].Pin)
+	assert.Equal(t, binfotypes.SourceTypeHTTP, sources[3].Type)
+	assert.Equal(t, "https://raw.githubusercontent.com/moby/moby/master/README.md", sources[3].Ref)
+	assert.Equal(t, "sha256:419455202b0ef97e480d7f8199b26a721a417818bc0e2d106975f74323f25e6c", sources[3].Pin)
 }
 
 func testShmSize(t *testing.T, sb integration.Sandbox) {

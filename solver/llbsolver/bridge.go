@@ -62,7 +62,7 @@ func (b *llbBridge) Warn(ctx context.Context, dgst digest.Digest, msg string, op
 	})
 }
 
-func (b *llbBridge) loadResult(ctx context.Context, def *pb.Definition, cacheImports []gw.CacheOptionsEntry) (solver.CachedResult, solver.BuildInfo, error) {
+func (b *llbBridge) loadResult(ctx context.Context, def *pb.Definition, cacheImports []gw.CacheOptionsEntry) (solver.CachedResult, solver.BuildSources, error) {
 	w, err := b.resolveWorker()
 	if err != nil {
 		return nil, nil, err
@@ -162,13 +162,13 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest, sid st
 }
 
 type resultProxy struct {
-	cb         func(context.Context) (solver.CachedResult, solver.BuildInfo, error)
+	cb         func(context.Context) (solver.CachedResult, solver.BuildSources, error)
 	def        *pb.Definition
 	g          flightcontrol.Group
 	mu         sync.Mutex
 	released   bool
 	v          solver.CachedResult
-	bi         solver.BuildInfo
+	bsrc       solver.BuildSources
 	err        error
 	errResults []solver.Result
 }
@@ -177,8 +177,8 @@ func newResultProxy(b *llbBridge, req frontend.SolveRequest) *resultProxy {
 	rp := &resultProxy{
 		def: req.Definition,
 	}
-	rp.cb = func(ctx context.Context) (solver.CachedResult, solver.BuildInfo, error) {
-		res, bi, err := b.loadResult(ctx, req.Definition, req.CacheImports)
+	rp.cb = func(ctx context.Context) (solver.CachedResult, solver.BuildSources, error) {
+		res, bsrc, err := b.loadResult(ctx, req.Definition, req.CacheImports)
 		var ee *llberrdefs.ExecError
 		if errors.As(err, &ee) {
 			ee.EachRef(func(res solver.Result) error {
@@ -188,7 +188,7 @@ func newResultProxy(b *llbBridge, req frontend.SolveRequest) *resultProxy {
 			// acquire ownership so ExecError finalizer doesn't attempt to release as well
 			ee.OwnerBorrowed = true
 		}
-		return res, bi, err
+		return res, bsrc, err
 	}
 	return rp
 }
@@ -197,8 +197,8 @@ func (rp *resultProxy) Definition() *pb.Definition {
 	return rp.def
 }
 
-func (rp *resultProxy) BuildInfo() solver.BuildInfo {
-	return rp.bi
+func (rp *resultProxy) BuildSources() solver.BuildSources {
+	return rp.bsrc
 }
 
 func (rp *resultProxy) Release(ctx context.Context) (err error) {
@@ -259,7 +259,7 @@ func (rp *resultProxy) Result(ctx context.Context) (res solver.CachedResult, err
 			return rp.v, rp.err
 		}
 		rp.mu.Unlock()
-		v, bi, err := rp.cb(ctx)
+		v, bsrc, err := rp.cb(ctx)
 		if err != nil {
 			select {
 			case <-ctx.Done():
@@ -278,7 +278,7 @@ func (rp *resultProxy) Result(ctx context.Context) (res solver.CachedResult, err
 			return nil, errors.Errorf("evaluating released result")
 		}
 		rp.v = v
-		rp.bi = bi
+		rp.bsrc = bsrc
 		rp.err = err
 		rp.mu.Unlock()
 		return v, err
