@@ -5,6 +5,7 @@ After=buildkit.socket
 Documentation=https://github.com/moby/buildkit
 
 [Service]
+Type=notify
 ExecStart=/usr/local/bin/buildkitd --addr fd://
 
 [Install]
