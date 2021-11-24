@@ -99,7 +99,7 @@ func newSnapshotter(ctx context.Context, snapshotterName string) (_ context.Cont
 	lm := leaseutil.WithNamespace(ctdmetadata.NewLeaseManager(mdb), ns)
 	snapshotter := NewMergeSnapshotter(ctx, FromContainerdSnapshotter(snapshotterName, mdb.Snapshotter(snapshotterName), nil), lm).(*mergeSnapshotter)
 	if noHardlink {
-		snapshotter.useHardlinks = false
+		snapshotter.tryCrossSnapshotLink = false
 	}
 
 	leaseID := identity.NewID()
@@ -198,6 +198,7 @@ func TestMerge(t *testing.T) {
 				requireMtime(t, filepath.Join(root, "c"), ts.Add(6*time.Second))
 				requireMtime(t, filepath.Join(root, "foo"), ts.Add(4*time.Second))
 				requireMtime(t, filepath.Join(root, "bar"), ts.Add(12*time.Second))
+				requireMtime(t, filepath.Join(root, "hardlink"), ts.Add(12*time.Second))
 				requireMtime(t, filepath.Join(root, "bar/A"), ts.Add(12*time.Second))
 				requireMtime(t, filepath.Join(root, "bar/B"), ts.Add(9*time.Second))
 				requireMtime(t, filepath.Join(root, "symlink"), ts.Add(3*time.Second))

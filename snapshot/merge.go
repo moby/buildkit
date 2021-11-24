@@ -56,40 +56,36 @@ type mergeSnapshotter struct {
 	lm leases.Manager
 
 	// Whether we should try to implement merges by hardlinking between underlying directories
-	useHardlinks bool
+	tryCrossSnapshotLink bool
 
-	// Whether the snapshotter is overlay-based, which enables some required behavior like
-	// creation of whiteout devices to represent deletes in addition to some optimizations
-	// like using the first merge input as the parent snapshot.
+	// Whether the snapshotter is overlay-based, which enables some some optimizations like
+	// using the first merge input as the parent snapshot.
 	overlayBased bool
 }
 
 func NewMergeSnapshotter(ctx context.Context, sn Snapshotter, lm leases.Manager) MergeSnapshotter {
 	name := sn.Name()
-	_, useHardlinks := hardlinkMergeSnapshotters[name]
+	_, tryCrossSnapshotLink := hardlinkMergeSnapshotters[name]
 	_, overlayBased := overlayBasedSnapshotters[name]
 
 	if overlayBased && userns.RunningInUserNS() {
 		// When using an overlay-based snapshotter, if we are running rootless on a pre-5.11
 		// kernel, we will not have userxattr. This results in opaque xattrs not being visible
-		// to us and thus breaking the overlay-optimized differ. This also means that there are
-		// cases where in order to apply a deletion, we'd need to create a whiteout device but
-		// may not have access to one to hardlink, so we just fall back to not using hardlinks
-		// at all in this case.
+		// to us and thus breaking the overlay-optimized differ.
 		userxattr, err := needsUserXAttr(ctx, sn, lm)
 		if err != nil {
 			bklog.G(ctx).Debugf("failed to check user xattr: %v", err)
-			useHardlinks = false
+			tryCrossSnapshotLink = false
 		} else {
-			useHardlinks = userxattr
+			tryCrossSnapshotLink = userxattr
 		}
 	}
 
 	return &mergeSnapshotter{
-		Snapshotter:  sn,
-		lm:           lm,
-		useHardlinks: useHardlinks,
-		overlayBased: overlayBased,
+		Snapshotter:          sn,
+		lm:                   lm,
+		tryCrossSnapshotLink: tryCrossSnapshotLink,
+		overlayBased:         overlayBased,
 	}
 }
 
@@ -99,7 +95,8 @@ func (sn *mergeSnapshotter) Merge(ctx context.Context, key string, diffs []Diff,
 		// Overlay-based snapshotters can skip the base snapshot of the merge (if one exists) and just use it as the
 		// parent of the merge snapshot. Other snapshotters will start empty (with baseKey set to "").
 		// Find the baseKey by following the chain of diffs for as long as it follows the pattern of the current lower
-		// being the parent of the current upper and equal to the previous upper.
+		// being the parent of the current upper and equal to the previous upper, i.e.:
+		// Diff("", A) -> Diff(A, B) -> Diff(B, C), etc.
 		var baseIndex int
 		for i, diff := range diffs {
 			info, err := sn.Stat(ctx, diff.Upper)
@@ -134,37 +131,9 @@ func (sn *mergeSnapshotter) Merge(ctx context.Context, key string, diffs []Diff,
 		return errors.Wrapf(err, "failed to get mounts of %q", key)
 	}
 
-	// externalHardlinks keeps track of which inodes have been hard-linked between snapshots (which is
-	// enabled when sn.useHardlinks is set to true)
-	externalHardlinks := make(map[uint64]struct{})
-
-	for _, diff := range diffs {
-		var lowerMounts Mountable
-		if diff.Lower != "" {
-			viewID := identity.NewID()
-			var err error
-			lowerMounts, err = sn.View(tempLeaseCtx, viewID, diff.Lower)
-			if err != nil {
-				return errors.Wrapf(err, "failed to get mounts of lower %q", diff.Lower)
-			}
-		}
-
-		viewID := identity.NewID()
-		upperMounts, err := sn.View(tempLeaseCtx, viewID, diff.Upper)
-		if err != nil {
-			return errors.Wrapf(err, "failed to get mounts of upper %q", diff.Upper)
-		}
-
-		err = diffApply(tempLeaseCtx, lowerMounts, upperMounts, applyMounts, sn.useHardlinks, externalHardlinks, sn.overlayBased)
-		if err != nil {
-			return err
-		}
-	}
-
-	// save the correctly calculated usage as a label on the committed key
-	usage, err := diskUsage(ctx, applyMounts, externalHardlinks)
+	usage, err := sn.diffApply(ctx, applyMounts, diffs...)
 	if err != nil {
-		return errors.Wrap(err, "failed to get disk usage of diff apply merge")
+		return errors.Wrap(err, "failed to apply diffs")
 	}
 	if err := sn.Commit(ctx, key, prepareKey, withMergeUsage(usage)); err != nil {
 		return errors.Wrapf(err, "failed to commit %q", key)

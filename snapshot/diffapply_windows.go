@@ -11,12 +11,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-func diffApply(ctx context.Context, lowerMountable, upperMountable, applyMountable Mountable, useHardlink bool, externalHardlinks map[uint64]struct{}, createWhiteoutDeletes bool) error {
-	return errors.New("diff apply not supported on windows")
-}
-
-func diskUsage(ctx context.Context, mountable Mountable, externalHardlinks map[uint64]struct{}) (snapshots.Usage, error) {
-	return snapshots.Usage{}, errors.New("disk usage not supported on windows")
+func (sn *mergeSnapshotter) diffApply(ctx context.Context, dest Mountable, diffs ...Diff) (_ snapshots.Usage, rerr error) {
+	return snapshots.Usage{}, errors.New("diffApply not yet supported on windows")
 }
 
 func needsUserXAttr(ctx context.Context, sn Snapshotter, lm leases.Manager) (bool, error) {
