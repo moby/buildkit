@@ -12,9 +12,10 @@ import (
 // Definition is the LLB definition structure with per-vertex metadata entries
 // Corresponds to the Definition structure defined in solver/pb.Definition.
 type Definition struct {
-	Def      [][]byte
-	Metadata map[digest.Digest]pb.OpMetadata
-	Source   *pb.Source
+	Def         [][]byte
+	Metadata    map[digest.Digest]pb.OpMetadata
+	Source      *pb.Source
+	Constraints *Constraints
 }
 
 func (def *Definition) ToPB() *pb.Definition {

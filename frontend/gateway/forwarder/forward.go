@@ -19,6 +19,7 @@ import (
 	opspb "github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/worker"
+	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	fstypes "github.com/tonistiigi/fsutil/types"
 	"golang.org/x/sync/errgroup"
@@ -214,6 +215,10 @@ func (c *bridgeClient) discard(err error) {
 			}
 		}
 	}
+}
+
+func (c *bridgeClient) Warn(ctx context.Context, dgst digest.Digest, msg string) error {
+	return c.FrontendLLBBridge.Warn(ctx, dgst, 1, msg)
 }
 
 func (c *bridgeClient) NewContainer(ctx context.Context, req client.NewContainerRequest) (client.Container, error) {

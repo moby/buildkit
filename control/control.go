@@ -376,6 +376,13 @@ func (c *Controller) Status(req *controlapi.StatusRequest, stream controlapi.Con
 						break
 					}
 				}
+				for _, v := range ss.Warnings {
+					sr.Warnings = append(sr.Warnings, &controlapi.VertexWarning{
+						Vertex: v.Vertex,
+						Level:  int64(v.Level),
+						Msg:    v.Message,
+					})
+				}
 				if err := stream.SendMsg(&sr); err != nil {
 					return err
 				}
