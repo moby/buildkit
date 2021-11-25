@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"runtime"
 
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -68,7 +69,11 @@ func (s *oci) New(ctx context.Context, cfg *BackendConfig) (Backend, func() erro
 		buildkitdArgs = append([]string{"sudo", "-u", fmt.Sprintf("#%d", s.uid), "-i", "--", "exec", "rootlesskit"}, buildkitdArgs...)
 	}
 
-	buildkitdSock, stop, err := runBuildkitd(ctx, cfg, buildkitdArgs, cfg.Logs, s.uid, s.gid, nil)
+	var extraEnv []string
+	if runtime.GOOS != "windows" && s.snapshotter != "native" {
+		extraEnv = append(extraEnv, "BUILDKIT_DEBUG_FORCE_OVERLAY_DIFF=true")
+	}
+	buildkitdSock, stop, err := runBuildkitd(ctx, cfg, buildkitdArgs, cfg.Logs, s.uid, s.gid, extraEnv)
 	if err != nil {
 		printLogs(cfg.Logs, log.Println)
 		return nil, nil, err

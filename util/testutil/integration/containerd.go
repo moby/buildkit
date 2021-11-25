@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -148,6 +149,9 @@ disabled_plugins = ["cri"]
 		"--containerd-worker-labels=org.mobyproject.buildkit.worker.sandbox=true", // Include use of --containerd-worker-labels to trigger https://github.com/moby/buildkit/pull/603
 	}, snBuildkitdArgs...)
 
+	if runtime.GOOS != "windows" && c.snapshotter != "native" {
+		c.extraEnv = append(c.extraEnv, "BUILDKIT_DEBUG_FORCE_OVERLAY_DIFF=true")
+	}
 	buildkitdSock, stop, err := runBuildkitd(ctx, cfg, buildkitdArgs, cfg.Logs, 0, 0, c.extraEnv)
 	if err != nil {
 		printLogs(cfg.Logs, log.Println)

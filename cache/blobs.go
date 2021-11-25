@@ -137,7 +137,7 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 					case "overlayfs", "stargz":
 						// overlayfs-based snapshotters should support overlay diff. so print warn log on failure.
 						logWarnOnErr = true
-					case "fuse-overlayfs":
+					case "fuse-overlayfs", "native":
 						// not supported with fuse-overlayfs snapshotter which doesn't provide overlayfs mounts.
 						// TODO: add support for fuse-overlayfs
 						enableOverlay = false
