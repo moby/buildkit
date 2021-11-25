@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"os/exec"
@@ -18,7 +17,6 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/events"
 	"github.com/docker/docker/client"
-	"github.com/docker/docker/opts"
 	"github.com/docker/docker/pkg/ioutils"
 	"github.com/docker/docker/pkg/stringid"
 	"github.com/docker/docker/testutil/request"
@@ -43,6 +41,8 @@ const (
 	defaultDockerdBinary         = "dockerd"
 	defaultContainerdSocket      = "/var/run/docker/containerd/containerd.sock"
 	defaultDockerdRootlessBinary = "dockerd-rootless.sh"
+	defaultUnixSocket            = "/var/run/docker.sock"
+	defaultTLSHost               = "localhost:2376"
 )
 
 var errDaemonNotStarted = errors.New("daemon not started")
@@ -262,7 +262,8 @@ func (d *Daemon) LogFileName() string {
 
 // ReadLogFile returns the content of the daemon log file
 func (d *Daemon) ReadLogFile() ([]byte, error) {
-	return ioutil.ReadFile(d.logFile.Name())
+	_ = d.logFile.Sync()
+	return os.ReadFile(d.logFile.Name())
 }
 
 // NewClientT creates new client based on daemon's socket path
@@ -290,6 +291,7 @@ func (d *Daemon) Cleanup(t testing.TB) {
 	t.Helper()
 	cleanupMount(t, d)
 	cleanupRaftDir(t, d)
+	cleanupDaemonStorage(t, d)
 	cleanupNetworkNamespace(t, d)
 }
 
@@ -739,11 +741,11 @@ func (d *Daemon) getClientConfig() (*clientConfig, error) {
 		transport = &http.Transport{
 			TLSClientConfig: tlsConfig,
 		}
-		addr = fmt.Sprintf("%s:%d", opts.DefaultHTTPHost, opts.DefaultTLSHTTPPort)
+		addr = defaultTLSHost
 		scheme = "https"
 		proto = "tcp"
 	} else if d.UseDefaultHost {
-		addr = opts.DefaultUnixSocket
+		addr = defaultUnixSocket
 		proto = "unix"
 		scheme = "http"
 		transport = &http.Transport{}
@@ -826,6 +828,39 @@ func cleanupRaftDir(t testing.TB, d *Daemon) {
 	t.Helper()
 	for _, p := range []string{"wal", "wal-v3-encrypted", "snap-v3-encrypted"} {
 		dir := filepath.Join(d.Root, "swarm/raft", p)
+		if err := os.RemoveAll(dir); err != nil {
+			t.Logf("[%s] error removing %v: %v", d.id, dir, err)
+		}
+	}
+}
+
+// cleanupDaemonStorage removes the daemon's storage directory.
+//
+// Note that we don't delete the whole directory, as some files (e.g. daemon
+// logs) are collected for inclusion in the "bundles" that are stored as Jenkins
+// artifacts.
+//
+// We currently do not include container logs in the bundles, so this also
+// removes the "containers" sub-directory.
+func cleanupDaemonStorage(t testing.TB, d *Daemon) {
+	t.Helper()
+	dirs := []string{
+		"builder",
+		"buildkit",
+		"containers",
+		"image",
+		"network",
+		"plugins",
+		"tmp",
+		"trust",
+		"volumes",
+		// note: this assumes storage-driver name matches the subdirectory,
+		// which is currently true, but not guaranteed.
+		d.storageDriver,
+	}
+
+	for _, p := range dirs {
+		dir := filepath.Join(d.Root, p)
 		if err := os.RemoveAll(dir); err != nil {
 			t.Logf("[%s] error removing %v: %v", d.id, dir, err)
 		}

@@ -218,7 +218,7 @@ github.com/docker/cli/cli/connhelper/commandconn
 github.com/docker/distribution/digestset
 github.com/docker/distribution/reference
 github.com/docker/distribution/registry/api/errcode
-# github.com/docker/docker v20.10.7+incompatible => github.com/docker/docker v20.10.3-0.20210817025855-ba2adeebdb8d+incompatible
+# github.com/docker/docker v20.10.7+incompatible => github.com/docker/docker v20.10.3-0.20211124173851-93d560d5b3b0+incompatible
 ## explicit
 github.com/docker/docker/api
 github.com/docker/docker/api/types
@@ -240,7 +240,6 @@ github.com/docker/docker/client
 github.com/docker/docker/errdefs
 github.com/docker/docker/libnetwork/ipamutils
 github.com/docker/docker/libnetwork/resolvconf
-github.com/docker/docker/libnetwork/resolvconf/dns
 github.com/docker/docker/libnetwork/types
 github.com/docker/docker/opts
 github.com/docker/docker/pkg/archive
@@ -459,11 +458,10 @@ github.com/sirupsen/logrus
 ## explicit; go 1.13
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/require
-# github.com/tonistiigi/fsutil v0.0.0-20210818161904-4442383b5028
+# github.com/tonistiigi/fsutil v0.0.0-20211125000220-d952e50eae30
 ## explicit; go 1.13
 github.com/tonistiigi/fsutil
 github.com/tonistiigi/fsutil/copy
-github.com/tonistiigi/fsutil/prefix
 github.com/tonistiigi/fsutil/types
 # github.com/tonistiigi/go-actions-cache v0.0.0-20211202175116-9642704158ff
 ## explicit; go 1.16
@@ -710,6 +708,6 @@ gotest.tools/v3/internal/difflib
 gotest.tools/v3/internal/format
 gotest.tools/v3/internal/source
 gotest.tools/v3/poll
-# github.com/docker/docker => github.com/docker/docker v20.10.3-0.20210817025855-ba2adeebdb8d+incompatible
+# github.com/docker/docker => github.com/docker/docker v20.10.3-0.20211124173851-93d560d5b3b0+incompatible
 # go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace => github.com/tonistiigi/opentelemetry-go-contrib/instrumentation/net/http/httptrace/otelhttptrace v0.0.0-20211026174723-2f82a1e0c997
 # go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp => github.com/tonistiigi/opentelemetry-go-contrib/instrumentation/net/http/otelhttp v0.0.0-20211026174723-2f82a1e0c997
