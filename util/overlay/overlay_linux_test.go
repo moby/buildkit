@@ -221,8 +221,6 @@ func TestParentDirectoryPermission(t *testing.T) {
 // TestUpdateWithSameTime is a test ported from
 // https://github.com/containerd/continuity/blob/v0.1.0/fs/diff_test.go#L221-L269
 // Copyright The containerd Authors.
-//
-// NOTE: This test is patched for our differ. See the following NOTE for details.
 func TestUpdateWithSameTime(t *testing.T) {
 	tt := time.Now().Truncate(time.Second)
 	t1 := tt.Add(5 * time.Nanosecond)
@@ -257,16 +255,6 @@ func TestUpdateWithSameTime(t *testing.T) {
 	)
 	diff := []TestChange{
 		Modify("/file-modified-time"),
-
-		// NOTE: Even if the file is identical, overlayfs copies it to
-		//       the upper layer when the modification occurred. continuity's differ avoids counting
-		//       this as "modify" by comparing the time and the file contents between upper and lower
-		//       but here we want to avoid comparing bits which makes the differ slower.
-		// TODO: we need a way to effectively determine two files are identical
-		//       without copmaring bits.
-		Modify("/file-no-change"),
-		Modify("/file-same-time"),
-
 		// Include changes with truncated timestamps. Comparing newly
 		// extracted tars which have truncated timestamps will be
 		// expected to produce changes. The expectation is that diff

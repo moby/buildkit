@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 
 	"github.com/containerd/containerd/archive"
@@ -181,7 +182,7 @@ func Changes(ctx context.Context, changeFn fs.ChangeFunc, upperdir, upperdirView
 			kind = fs.ChangeKindModify
 			// Avoid including directory that hasn't been modified. If /foo/bar/baz is modified,
 			// then /foo will apper here even if it's not been modified because it's the parent of bar.
-			if same, err := sameDir(baseF, f, filepath.Join(base, path), filepath.Join(upperdirView, path)); same {
+			if same, err := sameDirent(baseF, f, filepath.Join(base, path), filepath.Join(upperdirView, path)); same {
 				skipRecord = true // Both are the same, don't record the change
 			} else if err != nil {
 				return err
@@ -267,15 +268,18 @@ func checkOpaque(upperdir string, path string, base string, f os.FileInfo) (isOp
 	return false, nil
 }
 
-// sameDir performs continity-compatible comparison of directories.
+// sameDirent performs continity-compatible comparison of files and directories.
 // https://github.com/containerd/continuity/blob/v0.1.0/fs/path.go#L91-L133
-// This doesn't compare files because it requires to compare their contents.
-// This is what we want to avoid by this overlayfs-specialized differ.
-func sameDir(f1, f2 os.FileInfo, f1fullPath, f2fullPath string) (bool, error) {
-	if !f1.IsDir() || !f2.IsDir() {
-		return false, nil
-	}
-
+// This will only do a slow content comparison of two files if they have all the
+// same metadata and both have truncated nanosecond mtime timestamps. In practice,
+// this can only happen if both the base file in the lowerdirs has a truncated
+// timestamp (i.e. was unpacked from a tar) and the user did something like
+// "mv foo tmp && mv tmp foo" that results in the file being copied up to the
+// upperdir without making any changes to it. This is much rarer than similar
+// cases in the double-walking differ, where the slow content comparison will
+// be used whenever a file with a truncated timestamp is in the lowerdir at
+// all and left unmodified.
+func sameDirent(f1, f2 os.FileInfo, f1fullPath, f2fullPath string) (bool, error) {
 	if os.SameFile(f1, f2) {
 		return true, nil
 	}
@@ -287,6 +291,32 @@ func sameDir(f1, f2 os.FileInfo, f1fullPath, f2fullPath string) (bool, error) {
 
 	if eq, err := compareCapabilities(f1fullPath, f2fullPath); err != nil || !eq {
 		return eq, err
+	}
+
+	if !f1.IsDir() {
+		if f1.Size() != f2.Size() {
+			return false, nil
+		}
+		t1 := f1.ModTime()
+		t2 := f2.ModTime()
+
+		if t1.Unix() != t2.Unix() {
+			return false, nil
+		}
+
+		// If the timestamp may have been truncated in both of the
+		// files, check content of file to determine difference
+		if t1.Nanosecond() == 0 && t2.Nanosecond() == 0 {
+			if (f1.Mode() & os.ModeSymlink) == os.ModeSymlink {
+				return compareSymlinkTarget(f1fullPath, f2fullPath)
+			}
+			if f1.Size() == 0 {
+				return true, nil
+			}
+			return compareFileContent(f1fullPath, f2fullPath)
+		} else if t1.Nanosecond() != t2.Nanosecond() {
+			return false, nil
+		}
 	}
 
 	return true, nil
@@ -321,4 +351,81 @@ func compareCapabilities(p1, p2 string) (bool, error) {
 		return false, errors.Wrapf(err, "failed to get xattr for %s", p2)
 	}
 	return bytes.Equal(c1, c2), nil
+}
+
+// Ported from continuity project
+// https://github.com/containerd/continuity/blob/bce1c3f9669b6f3e7f6656ee715b0b4d75fa64a6/fs/path.go#L135
+// Copyright The containerd Authors.
+func compareSymlinkTarget(p1, p2 string) (bool, error) {
+	t1, err := os.Readlink(p1)
+	if err != nil {
+		return false, err
+	}
+	t2, err := os.Readlink(p2)
+	if err != nil {
+		return false, err
+	}
+	return t1 == t2, nil
+}
+
+var bufPool = sync.Pool{
+	New: func() interface{} {
+		b := make([]byte, 32*1024)
+		return &b
+	},
+}
+
+// Ported from continuity project
+// https://github.com/containerd/continuity/blob/bce1c3f9669b6f3e7f6656ee715b0b4d75fa64a6/fs/path.go#L151
+// Copyright The containerd Authors.
+func compareFileContent(p1, p2 string) (bool, error) {
+	f1, err := os.Open(p1)
+	if err != nil {
+		return false, err
+	}
+	defer f1.Close()
+	if stat, err := f1.Stat(); err != nil {
+		return false, err
+	} else if !stat.Mode().IsRegular() {
+		return false, errors.Errorf("%s is not a regular file", p1)
+	}
+
+	f2, err := os.Open(p2)
+	if err != nil {
+		return false, err
+	}
+	defer f2.Close()
+	if stat, err := f2.Stat(); err != nil {
+		return false, err
+	} else if !stat.Mode().IsRegular() {
+		return false, errors.Errorf("%s is not a regular file", p2)
+	}
+
+	b1 := bufPool.Get().(*[]byte)
+	defer bufPool.Put(b1)
+	b2 := bufPool.Get().(*[]byte)
+	defer bufPool.Put(b2)
+	for {
+		n1, err1 := io.ReadFull(f1, *b1)
+		if err1 == io.ErrUnexpectedEOF {
+			// it's expected to get EOF when file size isn't a multiple of chunk size, consolidate these error types
+			err1 = io.EOF
+		}
+		if err1 != nil && err1 != io.EOF {
+			return false, err1
+		}
+		n2, err2 := io.ReadFull(f2, *b2)
+		if err2 == io.ErrUnexpectedEOF {
+			err2 = io.EOF
+		}
+		if err2 != nil && err2 != io.EOF {
+			return false, err2
+		}
+		if n1 != n2 || !bytes.Equal((*b1)[:n1], (*b2)[:n2]) {
+			return false, nil
+		}
+		if err1 == io.EOF && err2 == io.EOF {
+			return true, nil
+		}
+	}
 }
