@@ -113,6 +113,8 @@ func attr(dgst digest.Digest, op pb.Op) (string, string) {
 		return "build", "box3d"
 	case *pb.Op_Merge:
 		return "merge", "invtriangle"
+	case *pb.Op_Diff:
+		return "diff", "doublecircle"
 	case *pb.Op_File:
 		names := []string{}
 
