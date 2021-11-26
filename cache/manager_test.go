@@ -602,7 +602,7 @@ func TestExtractOnMutable(t *testing.T) {
 	err = snap.(*immutableRef).setBlob(leaseCtx, compressionType, desc)
 	done(context.TODO())
 	require.NoError(t, err)
-	err = snap.(*immutableRef).computeChainMetadata(leaseCtx)
+	err = snap.(*immutableRef).computeChainMetadata(leaseCtx, map[string]struct{}{snap.ID(): {}})
 	require.NoError(t, err)
 
 	snap2, err := cm.GetByBlob(ctx, desc2, snap)
@@ -725,7 +725,7 @@ func TestSetBlob(t *testing.T) {
 	}
 	err = snap.(*immutableRef).setBlob(ctx, compressionType, desc)
 	require.NoError(t, err)
-	err = snap.(*immutableRef).computeChainMetadata(ctx)
+	err = snap.(*immutableRef).computeChainMetadata(ctx, map[string]struct{}{snap.ID(): {}})
 	require.NoError(t, err)
 
 	snapRef = snap.(*immutableRef)
@@ -755,7 +755,7 @@ func TestSetBlob(t *testing.T) {
 	}
 	err = snap2.(*immutableRef).setBlob(ctx, compressionType2, desc2)
 	require.NoError(t, err)
-	err = snap2.(*immutableRef).computeChainMetadata(ctx)
+	err = snap2.(*immutableRef).computeChainMetadata(ctx, map[string]struct{}{snap.ID(): {}, snap2.ID(): {}})
 	require.NoError(t, err)
 
 	snapRef2 := snap2.(*immutableRef)

@@ -114,15 +114,22 @@ func (cr *cacheRecord) mref(triggerLastUsed bool, descHandlers DescHandlers) *mu
 type parentRefs struct {
 	layerParent  *immutableRef
 	mergeParents []*immutableRef
+	diffParents  *diffParents
+}
+
+type diffParents struct {
+	lower *immutableRef
+	upper *immutableRef
 }
 
 // caller must hold cacheManager.mu
 func (p parentRefs) release(ctx context.Context) (rerr error) {
-	if p.layerParent != nil {
+	switch {
+	case p.layerParent != nil:
 		p.layerParent.mu.Lock()
 		defer p.layerParent.mu.Unlock()
 		rerr = p.layerParent.release(ctx)
-	} else if len(p.mergeParents) > 0 {
+	case len(p.mergeParents) > 0:
 		for i, parent := range p.mergeParents {
 			if parent == nil {
 				continue
@@ -135,19 +142,49 @@ func (p parentRefs) release(ctx context.Context) (rerr error) {
 			}
 			parent.mu.Unlock()
 		}
+	case p.diffParents != nil:
+		if p.diffParents.lower != nil {
+			p.diffParents.lower.mu.Lock()
+			defer p.diffParents.lower.mu.Unlock()
+			if err := p.diffParents.lower.release(ctx); err != nil {
+				rerr = multierror.Append(rerr, err).ErrorOrNil()
+			} else {
+				p.diffParents.lower = nil
+			}
+		}
+		if p.diffParents.upper != nil {
+			p.diffParents.upper.mu.Lock()
+			defer p.diffParents.upper.mu.Unlock()
+			if err := p.diffParents.upper.release(ctx); err != nil {
+				rerr = multierror.Append(rerr, err).ErrorOrNil()
+			} else {
+				p.diffParents.upper = nil
+			}
+		}
 	}
+
 	return rerr
 }
 
 func (p parentRefs) clone() parentRefs {
-	if p.layerParent != nil {
+	switch {
+	case p.layerParent != nil:
 		p.layerParent = p.layerParent.clone()
-	} else if len(p.mergeParents) > 0 {
+	case len(p.mergeParents) > 0:
 		newParents := make([]*immutableRef, len(p.mergeParents))
 		for i, p := range p.mergeParents {
 			newParents[i] = p.clone()
 		}
 		p.mergeParents = newParents
+	case p.diffParents != nil:
+		newDiffParents := &diffParents{}
+		if p.diffParents.lower != nil {
+			newDiffParents.lower = p.diffParents.lower.clone()
+		}
+		if p.diffParents.upper != nil {
+			newDiffParents.upper = p.diffParents.upper.clone()
+		}
+		p.diffParents = newDiffParents
 	}
 	return p
 }
@@ -158,11 +195,15 @@ const (
 	BaseLayer refKind = iota
 	Layer
 	Merge
+	Diff
 )
 
 func (cr *cacheRecord) kind() refKind {
 	if len(cr.mergeParents) > 0 {
 		return Merge
+	}
+	if cr.diffParents != nil {
+		return Diff
 	}
 	if cr.layerParent != nil {
 		return Layer
@@ -177,8 +218,8 @@ func (cr *cacheRecord) isDead() bool {
 
 var errSkipWalk = errors.New("skip")
 
-// walkAncestors calls the provided func on cr and each of its ancestors, counting both layer
-// and merge parents. It starts at cr and does a depth-first walk to parents. It will visit
+// walkAncestors calls the provided func on cr and each of its ancestors, counting layer,
+// diff, and merge parents. It starts at cr and does a depth-first walk to parents. It will visit
 // a record and its parents multiple times if encountered more than once. It will only skip
 // visiting parents of a record if errSkipWalk is returned. If any other error is returned,
 // the walk will stop and return the error to the caller.
@@ -199,6 +240,13 @@ func (cr *cacheRecord) walkAncestors(f func(*cacheRecord) error) error {
 		case Merge:
 			for _, p := range cur.mergeParents {
 				curs = append(curs, p.cacheRecord)
+			}
+		case Diff:
+			if cur.diffParents.lower != nil {
+				curs = append(curs, cur.diffParents.lower.cacheRecord)
+			}
+			if cur.diffParents.upper != nil {
+				curs = append(curs, cur.diffParents.upper.cacheRecord)
 			}
 		}
 	}
@@ -416,6 +464,19 @@ func (sr *immutableRef) layerChain() []*immutableRef {
 	return layers
 }
 
+// returns the set of cache record IDs for each layer in sr's layer chain
+func (sr *immutableRef) layerSet() map[string]struct{} {
+	var count int
+	sr.layerWalk(func(*immutableRef) {
+		count++
+	})
+	set := make(map[string]struct{}, count)
+	sr.layerWalk(func(sr *immutableRef) {
+		set[sr.ID()] = struct{}{}
+	})
+	return set
+}
+
 // layerWalk visits each ref representing an actual layer in the chain for
 // sr (including sr). The layers are visited from lowest->highest as ordered
 // in the remote for the ref.
@@ -424,6 +485,21 @@ func (sr *immutableRef) layerWalk(f func(*immutableRef)) {
 	case Merge:
 		for _, parent := range sr.mergeParents {
 			parent.layerWalk(f)
+		}
+	case Diff:
+		lower := sr.diffParents.lower
+		upper := sr.diffParents.upper
+		// If upper is only one blob different from lower, then re-use that blob
+		switch {
+		case upper != nil && lower == nil && upper.kind() == BaseLayer:
+			// upper is a single layer being diffed with scratch
+			f(upper)
+		case upper != nil && lower != nil && upper.kind() == Layer && upper.layerParent.ID() == lower.ID():
+			// upper is a single layer on top of lower
+			f(upper)
+		default:
+			// otherwise, the diff will be computed and turned into its own single blob
+			f(sr)
 		}
 	case Layer:
 		sr.layerParent.layerWalk(f)
@@ -439,6 +515,13 @@ func (cr *cacheRecord) layerDigestChain() []digest.Digest {
 		return cr.layerDigestChainCache
 	}
 	switch cr.kind() {
+	case Diff:
+		if cr.getBlob() == "" {
+			// this diff just reuses the upper blob
+			cr.layerDigestChainCache = cr.diffParents.upper.layerDigestChain()
+		} else {
+			cr.layerDigestChainCache = append(cr.layerDigestChainCache, cr.getBlob())
+		}
 	case Merge:
 		for _, parent := range cr.mergeParents {
 			cr.layerDigestChainCache = append(cr.layerDigestChainCache, parent.layerDigestChain()...)
@@ -870,8 +953,8 @@ func (sr *immutableRef) unlazy(ctx context.Context, dhs DescHandlers, s session.
 		}
 
 		switch sr.kind() {
-		case Merge:
-			return nil, sr.unlazyMerge(ctx, dhs, s)
+		case Merge, Diff:
+			return nil, sr.unlazyDiffMerge(ctx, dhs, s)
 		case Layer, BaseLayer:
 			return nil, sr.unlazyLayer(ctx, dhs, s)
 		}
@@ -881,25 +964,39 @@ func (sr *immutableRef) unlazy(ctx context.Context, dhs DescHandlers, s session.
 }
 
 // should be called within sizeG.Do call for this ref's ID
-func (sr *immutableRef) unlazyMerge(ctx context.Context, dhs DescHandlers, s session.Group) error {
+func (sr *immutableRef) unlazyDiffMerge(ctx context.Context, dhs DescHandlers, s session.Group) error {
 	eg, egctx := errgroup.WithContext(ctx)
-	for _, parent := range sr.mergeParents {
-		parent := parent
-		eg.Go(func() error {
-			return parent.unlazy(egctx, dhs, s)
-		})
-	}
-	if err := eg.Wait(); err != nil {
-		return err
-	}
 	var diffs []snapshot.Diff
 	sr.layerWalk(func(sr *immutableRef) {
-		diff := snapshot.Diff{Upper: sr.getSnapshotID()}
-		if sr.layerParent != nil {
+		var diff snapshot.Diff
+		switch sr.kind() {
+		case Diff:
+			if sr.diffParents.lower != nil {
+				diff.Lower = sr.diffParents.lower.getSnapshotID()
+				eg.Go(func() error {
+					return sr.diffParents.lower.unlazy(egctx, dhs, s)
+				})
+			}
+			if sr.diffParents.upper != nil {
+				diff.Upper = sr.diffParents.upper.getSnapshotID()
+				eg.Go(func() error {
+					return sr.diffParents.upper.unlazy(egctx, dhs, s)
+				})
+			}
+		case Layer:
 			diff.Lower = sr.layerParent.getSnapshotID()
+			fallthrough
+		case BaseLayer:
+			diff.Upper = sr.getSnapshotID()
+			eg.Go(func() error {
+				return sr.unlazy(egctx, dhs, s)
+			})
 		}
 		diffs = append(diffs, diff)
 	})
+	if err := eg.Wait(); err != nil {
+		return err
+	}
 	return sr.cm.Snapshotter.Merge(ctx, sr.getSnapshotID(), diffs)
 }
 
@@ -1089,7 +1186,7 @@ func (cr *cacheRecord) finalize(ctx context.Context) error {
 
 	if err := cr.cm.Snapshotter.Commit(ctx, cr.getSnapshotID(), mutable.getSnapshotID()); err != nil {
 		cr.cm.LeaseManager.Delete(context.TODO(), leases.Lease{ID: cr.ID()})
-		return errors.Wrapf(err, "failed to commit %s to %s", mutable.getSnapshotID(), cr.getSnapshotID())
+		return errors.Wrapf(err, "failed to commit %s to %s during finalize", mutable.getSnapshotID(), cr.getSnapshotID())
 	}
 	cr.mountCache = nil
 

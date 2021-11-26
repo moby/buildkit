@@ -25,6 +25,8 @@ const keyRecordType = "cache.recordType"
 const keyCommitted = "snapshot.committed"
 const keyParent = "cache.parent"
 const keyMergeParents = "cache.mergeParents"
+const keyLowerDiffParent = "cache.lowerDiffParent"
+const keyUpperDiffParent = "cache.upperDiffParent"
 const keyDiffID = "cache.diffID"
 const keyChainID = "cache.chainID"
 const keyBlobChainID = "cache.blobChainID"
@@ -313,6 +315,22 @@ func (md *cacheMetadata) queueMergeParents(parents []string) error {
 
 func (md *cacheMetadata) getMergeParents() []string {
 	return md.getStringSlice(keyMergeParents)
+}
+
+func (md *cacheMetadata) queueLowerDiffParent(parent string) error {
+	return md.queueValue(keyLowerDiffParent, parent, "")
+}
+
+func (md *cacheMetadata) getLowerDiffParent() string {
+	return md.GetString(keyLowerDiffParent)
+}
+
+func (md *cacheMetadata) queueUpperDiffParent(parent string) error {
+	return md.queueValue(keyUpperDiffParent, parent, "")
+}
+
+func (md *cacheMetadata) getUpperDiffParent() string {
+	return md.GetString(keyUpperDiffParent)
 }
 
 func (md *cacheMetadata) queueSize(s int64) error {
