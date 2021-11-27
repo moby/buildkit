@@ -34,6 +34,9 @@ func (wr *WorkerRef) GetRemotes(ctx context.Context, createIfNeeded bool, compre
 	}); ok {
 		return w.GetRemotes(ctx, wr.ImmutableRef, createIfNeeded, compressionopt, all, g)
 	}
+	if wr.ImmutableRef == nil {
+		return nil, nil
+	}
 	return wr.ImmutableRef.GetRemotes(ctx, createIfNeeded, compressionopt, all, g)
 }
 

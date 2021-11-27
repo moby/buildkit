@@ -77,7 +77,9 @@ func (d *diffOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 				return nil, errors.Errorf("invalid lower reference for diff op %T", lowerInp.Sys())
 			}
 			lowerRef = wref.ImmutableRef
-			lowerRefID = wref.ImmutableRef.ID()
+			if lowerRef != nil {
+				lowerRefID = wref.ImmutableRef.ID()
+			}
 		} else {
 			return nil, errors.New("invalid nil lower input for diff op")
 		}
@@ -93,7 +95,9 @@ func (d *diffOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 				return nil, errors.Errorf("invalid upper reference for diff op %T", upperInp.Sys())
 			}
 			upperRef = wref.ImmutableRef
-			upperRefID = wref.ImmutableRef.ID()
+			if upperRef != nil {
+				upperRefID = wref.ImmutableRef.ID()
+			}
 		} else {
 			return nil, errors.New("invalid nil upper input for diff op")
 		}

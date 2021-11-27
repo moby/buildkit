@@ -221,6 +221,11 @@ func (w *Worker) LoadRef(ctx context.Context, id string, hidden bool) (cache.Imm
 	if hidden {
 		opts = append(opts, cache.NoUpdateLastUsed)
 	}
+	if id == "" {
+		// results can have nil refs if they are optimized out to be equal to scratch,
+		// i.e. Diff(A,A) == scratch
+		return nil, nil
+	}
 
 	ref, err := w.CacheMgr.Get(ctx, id, opts...)
 	var needsRemoteProviders cache.NeedsRemoteProvidersError
