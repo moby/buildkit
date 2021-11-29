@@ -9,6 +9,7 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	digest "github.com/opencontainers/go-digest"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -73,14 +74,55 @@ func (ce *exporter) ExportForLayers(ctx context.Context, layers []digest.Digest)
 		return nil, nil
 	}
 
-	cache := map[int]int{}
-
 	// reorder layers based on the order in the image
+	blobIndexes := make(map[digest.Digest]int, len(layers))
+	for i, blob := range layers {
+		blobIndexes[blob] = i
+	}
+
 	for i, r := range cfg.Records {
 		for j, rr := range r.Results {
-			n := getSortedLayerIndex(rr.LayerIndex, cfg.Layers, cache)
-			rr.LayerIndex = n
-			r.Results[j] = rr
+			resultBlobs := layerToBlobs(rr.LayerIndex, cfg.Layers)
+			// match being true means the result is in the same order as the image
+			var match bool
+			if len(resultBlobs) <= len(layers) {
+				match = true
+				for k, resultBlob := range resultBlobs {
+					layerBlob := layers[k]
+					if resultBlob != layerBlob {
+						match = false
+						break
+					}
+				}
+			}
+			if match {
+				// The layers of the result are in the same order as the image, so we can
+				// specify it just using the CacheResult struct and specifying LayerIndex
+				// as the top-most layer of the result.
+				rr.LayerIndex = len(resultBlobs) - 1
+				r.Results[j] = rr
+			} else {
+				// The layers of the result are not in the same order as the image, so we
+				// have to use ChainedResult to specify each layer of the result individually.
+				chainedResult := v1.ChainedResult{}
+				for _, resultBlob := range resultBlobs {
+					idx, ok := blobIndexes[resultBlob]
+					if !ok {
+						return nil, errors.Errorf("failed to find blob %s in layers", resultBlob)
+					}
+					chainedResult.LayerIndexes = append(chainedResult.LayerIndexes, idx)
+				}
+				r.Results[j] = v1.CacheResult{}
+				r.ChainedResults = append(r.ChainedResults, chainedResult)
+			}
+			// remove any CacheResults that had to be converted to the ChainedResult format.
+			var filteredResults []v1.CacheResult
+			for _, rr := range r.Results {
+				if rr != (v1.CacheResult{}) {
+					filteredResults = append(filteredResults, rr)
+				}
+			}
+			r.Results = filteredResults
 			cfg.Records[i] = r
 		}
 	}
@@ -94,14 +136,16 @@ func (ce *exporter) ExportForLayers(ctx context.Context, layers []digest.Digest)
 	return dt, nil
 }
 
-func getSortedLayerIndex(idx int, layers []v1.CacheLayer, cache map[int]int) int {
-	if idx == -1 {
-		return -1
+func layerToBlobs(idx int, layers []v1.CacheLayer) []digest.Digest {
+	var ds []digest.Digest
+	for idx != -1 {
+		layer := layers[idx]
+		ds = append(ds, layer.Blob)
+		idx = layer.ParentIndex
 	}
-	l := layers[idx]
-	if i, ok := cache[idx]; ok {
-		return i
+	// reverse so they go lowest to highest
+	for i, j := 0, len(ds)-1; i < j; i, j = i+1, j-1 {
+		ds[i], ds[j] = ds[j], ds[i]
 	}
-	cache[idx] = getSortedLayerIndex(l.ParentIndex, layers, cache) + 1
-	return cache[idx]
+	return ds
 }

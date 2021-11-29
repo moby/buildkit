@@ -138,7 +138,9 @@ func TestIntegration(t *testing.T) {
 		testBuildExportZstd,
 		testPullZstdImage,
 		testMergeOp,
-		testMergeOpCache,
+		testMergeOpCacheInline,
+		testMergeOpCacheMin,
+		testMergeOpCacheMax,
 		testRmSymlink,
 		testMoveParentDir,
 	)
@@ -4117,7 +4119,20 @@ func testMergeOp(t *testing.T, sb integration.Sandbox) {
 	)
 }
 
-func testMergeOpCache(t *testing.T, sb integration.Sandbox) {
+func testMergeOpCacheInline(t *testing.T, sb integration.Sandbox) {
+	testMergeOpCache(t, sb, "inline")
+}
+
+func testMergeOpCacheMin(t *testing.T, sb integration.Sandbox) {
+	testMergeOpCache(t, sb, "min")
+}
+
+func testMergeOpCacheMax(t *testing.T, sb integration.Sandbox) {
+	testMergeOpCache(t, sb, "max")
+}
+
+func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
+	t.Helper()
 	skipDockerd(t, sb)
 	requiresLinux(t)
 
@@ -4205,6 +4220,51 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox) {
 
 	target := registry + "/buildkit/testmerge:latest"
 	cacheTarget := registry + "/buildkit/testmergecache:latest"
+
+	var cacheExports []CacheOptionsEntry
+	var cacheImports []CacheOptionsEntry
+	switch mode {
+	case "inline":
+		cacheExports = []CacheOptionsEntry{{
+			Type: "inline",
+		}}
+		cacheImports = []CacheOptionsEntry{{
+			Type: "registry",
+			Attrs: map[string]string{
+				"ref": target,
+			},
+		}}
+	case "min":
+		cacheExports = []CacheOptionsEntry{{
+			Type: "registry",
+			Attrs: map[string]string{
+				"ref": cacheTarget,
+			},
+		}}
+		cacheImports = []CacheOptionsEntry{{
+			Type: "registry",
+			Attrs: map[string]string{
+				"ref": cacheTarget,
+			},
+		}}
+	case "max":
+		cacheExports = []CacheOptionsEntry{{
+			Type: "registry",
+			Attrs: map[string]string{
+				"ref":  cacheTarget,
+				"mode": "max",
+			},
+		}}
+		cacheImports = []CacheOptionsEntry{{
+			Type: "registry",
+			Attrs: map[string]string{
+				"ref": cacheTarget,
+			},
+		}}
+	default:
+		require.Fail(t, "unknown cache mode: %s", mode)
+	}
+
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
 			{
@@ -4215,12 +4275,7 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox) {
 				},
 			},
 		},
-		CacheExports: []CacheOptionsEntry{{
-			Type: "registry",
-			Attrs: map[string]string{
-				"ref": cacheTarget,
-			},
-		}},
+		CacheExports: cacheExports,
 	}, nil)
 	require.NoError(t, err)
 
@@ -4273,22 +4328,12 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox) {
 				"push": "true",
 			},
 		}},
-		CacheImports: []CacheOptionsEntry{{
-			Type: "registry",
-			Attrs: map[string]string{
-				"ref": cacheTarget,
-			},
-		}},
-		CacheExports: []CacheOptionsEntry{{
-			Type: "registry",
-			Attrs: map[string]string{
-				"ref": cacheTarget,
-			},
-		}},
+		CacheImports: cacheImports,
+		CacheExports: cacheExports,
 	}, nil)
 	require.NoError(t, err)
 
-	// verify everything from before stayed lazy except the middle layer for input1Copy
+	// verify everything from before stayed lazy
 	img, err = imageService.Get(ctx, target)
 	require.NoError(t, err)
 
@@ -4319,18 +4364,8 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox) {
 				"push": "true",
 			},
 		}},
-		CacheImports: []CacheOptionsEntry{{
-			Type: "registry",
-			Attrs: map[string]string{
-				"ref": cacheTarget,
-			},
-		}},
-		CacheExports: []CacheOptionsEntry{{
-			Type: "registry",
-			Attrs: map[string]string{
-				"ref": cacheTarget,
-			},
-		}},
+		CacheExports: cacheExports,
+		CacheImports: cacheImports,
 	}, nil)
 	require.NoError(t, err)
 
@@ -4368,12 +4403,7 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox) {
 				OutputDir: destDir,
 			},
 		},
-		CacheImports: []CacheOptionsEntry{{
-			Type: "registry",
-			Attrs: map[string]string{
-				"ref": cacheTarget,
-			},
-		}},
+		CacheImports: cacheImports,
 	}, nil)
 	require.NoError(t, err)
 
@@ -4381,6 +4411,89 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	require.Equalf(t, bar2Contents, newBar2Contents, "bar/2 contents changed")
+
+	// Now test the case with a layer on top of a merge.
+	err = imageService.Delete(ctx, img.Name, images.SynchronousDelete())
+	require.NoError(t, err)
+	checkAllReleasable(t, c, sb, true)
+
+	for _, layer := range manifest.Layers {
+		_, err = contentStore.Info(ctx, layer.Digest)
+		require.ErrorIs(t, err, ctderrdefs.ErrNotFound, "unexpected error %v", err)
+	}
+
+	mergePlusLayer := merge.File(llb.Mkfile("/3", 0444, nil))
+
+	def, err = mergePlusLayer.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{{
+			Type: ExporterImage,
+			Attrs: map[string]string{
+				"name": target,
+				"push": "true",
+			},
+		}},
+		CacheExports: cacheExports,
+		CacheImports: cacheImports,
+	}, nil)
+	require.NoError(t, err)
+
+	// check the random value at /bar/2 didn't change
+	destDir, err = ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		CacheImports: cacheImports,
+	}, nil)
+	require.NoError(t, err)
+
+	newBar2Contents, err = ioutil.ReadFile(filepath.Join(destDir, "bar", "2"))
+	require.NoError(t, err)
+
+	require.Equalf(t, bar2Contents, newBar2Contents, "bar/2 contents changed")
+
+	// clear local state, repeat the build, verify everything stays lazy
+	err = imageService.Delete(ctx, img.Name, images.SynchronousDelete())
+	require.NoError(t, err)
+	checkAllReleasable(t, c, sb, true)
+
+	for _, layer := range manifest.Layers {
+		_, err = contentStore.Info(ctx, layer.Digest)
+		require.ErrorIs(t, err, ctderrdefs.ErrNotFound, "unexpected error %v", err)
+	}
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{{
+			Type: ExporterImage,
+			Attrs: map[string]string{
+				"name": target,
+				"push": "true",
+			},
+		}},
+		CacheImports: cacheImports,
+		CacheExports: cacheExports,
+	}, nil)
+	require.NoError(t, err)
+
+	img, err = imageService.Get(ctx, target)
+	require.NoError(t, err)
+
+	manifest, err = images.Manifest(ctx, contentStore, img.Target, nil)
+	require.NoError(t, err)
+
+	for i, layer := range manifest.Layers {
+		_, err = contentStore.Info(ctx, layer.Digest)
+		require.ErrorIs(t, err, ctderrdefs.ErrNotFound, "unexpected error %v for index %d", err, i)
+	}
 }
 
 func requireContents(ctx context.Context, t *testing.T, c *Client, sb integration.Sandbox, state llb.State, cacheImports, cacheExports []CacheOptionsEntry, imageTarget string, files ...fstest.Applier) {
