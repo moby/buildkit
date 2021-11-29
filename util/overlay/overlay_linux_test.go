@@ -55,6 +55,48 @@ func TestSimpleDiff(t *testing.T) {
 	}
 }
 
+func TestRenameDiff(t *testing.T) {
+	l1 := fstest.Apply(
+		fstest.CreateDir("/dir1", 0755),
+		fstest.CreateFile("/dir1/f1", []byte("#####"), 0644),
+	)
+	l2 := fstest.Apply(
+		renameDirWithFallback("/dir1", "/dir2",
+			fstest.Apply(
+				fstest.CreateDir("/dir2", 0755),
+				fstest.CreateFile("/dir2/f1", []byte("#####"), 0644),
+				fstest.RemoveAll("dir1"),
+			),
+		),
+	)
+	diff := []TestChange{
+		Delete("/dir1"),
+		Add("/dir2"),
+		Add("/dir2/f1"),
+	}
+
+	if err := testDiffWithBase(l1, l2, diff, "redirect_dir=off"); err != nil {
+		t.Fatalf("Failed diff with base: %+v", err)
+	}
+}
+
+type applyFn func(root string) error
+
+func (a applyFn) Apply(root string) error {
+	return a(root)
+}
+
+func renameDirWithFallback(from, to string, fallback fstest.Applier) fstest.Applier {
+	return applyFn(func(root string) error {
+		rename := fstest.Rename(from, to)
+		err := rename.Apply(root)
+		if err == nil {
+			return nil
+		}
+		return fallback.Apply(root)
+	})
+}
+
 // TestEmptyFileDiff is a test ported from
 // https://github.com/containerd/continuity/blob/v0.1.0/fs/diff_test.go#L75-L89
 // Copyright The containerd Authors.
@@ -294,7 +336,7 @@ func TestLchtimes(t *testing.T) {
 	}
 }
 
-func testDiffWithBase(base, diff fstest.Applier, expected []TestChange) error {
+func testDiffWithBase(base, diff fstest.Applier, expected []TestChange, opts ...string) error {
 	t1, err := ioutil.TempDir("", "diff-with-base-lower-")
 	if err != nil {
 		return errors.Wrap(err, "failed to create temp dir")
@@ -321,7 +363,7 @@ func testDiffWithBase(base, diff fstest.Applier, expected []TestChange) error {
 		{
 			Type:    "overlay",
 			Source:  "overlay",
-			Options: []string{fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s", t1, tupper, workdir)},
+			Options: []string{strings.Join(append([]string{fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s", t1, tupper, workdir)}, opts...), ",")},
 		},
 	}, func(overlayRoot string) error {
 		if err := diff.Apply(overlayRoot); err != nil {

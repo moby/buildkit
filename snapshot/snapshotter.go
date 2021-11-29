@@ -2,9 +2,12 @@ package snapshot
 
 import (
 	"context"
+	"os"
+	"strings"
 	"sync"
 
 	"github.com/containerd/containerd/mount"
+	"github.com/containerd/containerd/pkg/userns"
 	"github.com/containerd/containerd/snapshots"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/pkg/errors"
@@ -111,6 +114,10 @@ func (cs *containerdSnapshotter) returnMounts(mf Mountable) ([]mount.Mount, erro
 	cs.mu.Lock()
 	cs.releasers = append(cs.releasers, release)
 	cs.mu.Unlock()
+	redirectDirOption := getRedirectDirOption()
+	if redirectDirOption != "" {
+		mounts = setRedirectDir(mounts, redirectDirOption)
+	}
 	return mounts, nil
 }
 
@@ -134,4 +141,43 @@ func (cs *containerdSnapshotter) View(ctx context.Context, key, parent string, o
 		return nil, err
 	}
 	return cs.returnMounts(mf)
+}
+
+var redirectDirOption string
+var redirectDirOptionOnce sync.Once
+
+func getRedirectDirOption() string {
+	redirectDirOptionOnce.Do(func() {
+		if _, err := os.Stat("/sys/module/overlay/parameters/redirect_dir"); err != nil {
+			redirectDirOption = "" // redirect_dir unsupported
+			return
+		}
+		if userns.RunningInUserNS() {
+			// userxattr (kernel >= 5.11) disables redirect_dir and doesn't allow specifying "off".
+			redirectDirOption = ""
+			return
+		}
+		redirectDirOption = "off" // disable redirect_dir to avoid broken diff
+	})
+	return redirectDirOption
+}
+
+func setRedirectDir(mounts []mount.Mount, redirectDirOption string) (ret []mount.Mount) {
+	if redirectDirOption == "" {
+		return mounts
+	}
+	for _, m := range mounts {
+		if m.Type == "overlay" {
+			var opts []string
+			for _, o := range m.Options {
+				if strings.HasPrefix(o, "redirect_dir=") {
+					continue
+				}
+				opts = append(opts, o)
+			}
+			m.Options = append(opts, "redirect_dir="+redirectDirOption)
+		}
+		ret = append(ret, m)
+	}
+	return ret
 }
