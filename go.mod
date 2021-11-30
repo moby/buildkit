@@ -13,11 +13,11 @@ require (
 	github.com/containerd/fuse-overlayfs-snapshotter v1.0.2
 	github.com/containerd/go-cni v1.1.1-0.20211026134925-aa8bf14323a5
 	github.com/containerd/go-runc v1.0.0
-	github.com/containerd/stargz-snapshotter v0.8.1-0.20210910092506-a3ecdc9366fb
-	github.com/containerd/stargz-snapshotter/estargz v0.8.1-0.20210910092506-a3ecdc9366fb
+	github.com/containerd/stargz-snapshotter v0.10.2-0.20211202025742-84f1bebf056d
+	github.com/containerd/stargz-snapshotter/estargz v0.10.2-0.20211202025742-84f1bebf056d
 	github.com/containerd/typeurl v1.0.2
 	github.com/coreos/go-systemd/v22 v22.3.2
-	github.com/docker/cli v20.10.8+incompatible
+	github.com/docker/cli v20.10.11+incompatible
 	github.com/docker/distribution v2.7.1+incompatible
 	// docker: the actual version is replaced in replace()
 	github.com/docker/docker v20.10.7+incompatible // master (v21.xx-dev)
@@ -98,8 +98,10 @@ require (
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0 // indirect
-	github.com/hanwen/go-fuse/v2 v2.1.0 // indirect
+	github.com/hanwen/go-fuse/v2 v2.1.1-0.20210825171523-3ab5d95a30ae // indirect
 	github.com/hashicorp/errwrap v1.0.0 // indirect
+	github.com/hashicorp/go-cleanhttp v0.5.1 // indirect
+	github.com/hashicorp/go-retryablehttp v0.7.0 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.2-0.20181231171920-c182affec369 // indirect
 	github.com/moby/sys/mountinfo v0.5.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
