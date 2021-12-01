@@ -140,6 +140,9 @@ type vertex struct {
 	count         int
 	statusUpdates map[string]struct{}
 
+	warnings   []client.VertexWarning
+	warningIdx int
+
 	jobs      []*job
 	jobCached bool
 
@@ -255,6 +258,14 @@ func (t *trace) update(s *client.SolveStatus, termWidth int) {
 		t.updates[v.Digest] = struct{}{}
 		v.update(1)
 	}
+	for _, w := range s.Warnings {
+		v, ok := t.byDigest[w.Vertex]
+		if !ok {
+			continue // shouldn't happen
+		}
+		v.warnings = append(v.warnings, *w)
+		v.update(1)
+	}
 	for _, l := range s.Logs {
 		v, ok := t.byDigest[l.Vertex]
 		if !ok {
@@ -366,6 +377,16 @@ func (t *trace) displayInfo() (d displayInfo) {
 				j.status = fmt.Sprintf("%.2f / %.2f", units.Bytes(s.Current), units.Bytes(s.Total))
 			} else if s.Current != 0 {
 				j.status = fmt.Sprintf("%.2f", units.Bytes(s.Current))
+			}
+			jobs = append(jobs, j)
+		}
+		for _, w := range v.warnings {
+			msg := "WARN: " + string(w.Message)
+			j := &job{
+				startTime:     addTime(v.Started, t.localTimeDiff),
+				completedTime: addTime(v.Completed, t.localTimeDiff),
+				name:          msg,
+				isCanceled:    true,
 			}
 			jobs = append(jobs, j)
 		}

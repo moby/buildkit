@@ -125,6 +125,11 @@ func (p *textMux) printVtx(t *trace, dgst digest.Digest) {
 	}
 	v.statusUpdates = map[string]struct{}{}
 
+	for _, w := range v.warnings[v.warningIdx:] {
+		fmt.Fprintf(p.w, "#%d WARN: %s\n", v.index, w.Message)
+		v.warningIdx++
+	}
+
 	for i, l := range v.logs {
 		if i == 0 {
 			l = l[v.logsOffset:]
