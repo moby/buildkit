@@ -52,9 +52,10 @@ func (b *llbBridge) Warn(ctx context.Context, dgst digest.Digest, msg string, op
 		pw.Write(identity.NewID(), client.VertexWarning{
 			Vertex:     dgst,
 			Level:      level,
-			Message:    []byte(msg),
+			Short:      []byte(msg),
 			SourceInfo: opts.SourceInfo,
 			Range:      opts.Range,
+			Detail:     opts.Detail,
 		})
 		return pw.Close()
 	})

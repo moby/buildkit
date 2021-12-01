@@ -38,7 +38,8 @@ type VertexLog struct {
 type VertexWarning struct {
 	Vertex     digest.Digest
 	Level      int
-	Message    []byte
+	Short      []byte
+	Detail     []byte
 	SourceInfo *pb.SourceInfo
 	Range      []*pb.Range
 }

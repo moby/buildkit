@@ -176,9 +176,10 @@ message PongResponse{
 message WarnRequest {
 	string Digest = 1 [(gogoproto.customtype) = "github.com/opencontainers/go-digest.Digest", (gogoproto.nullable) = false];
 	int64 Level = 2;
-	bytes Message = 3;
-	pb.SourceInfo info = 4;
-	repeated pb.Range ranges = 5;
+	bytes Short = 3;
+	bytes Detail = 4;
+	pb.SourceInfo info = 5;
+	repeated pb.Range ranges = 6;
 }
 
 message WarnResponse{}

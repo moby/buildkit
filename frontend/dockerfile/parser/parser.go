@@ -273,7 +273,8 @@ type Result struct {
 }
 
 type Warning struct {
-	Message  string
+	Short    string
+	Detail   string
 	Location *Range
 }
 
@@ -283,7 +284,7 @@ func (r *Result) PrintWarnings(out io.Writer) {
 		return
 	}
 	for _, w := range r.Warnings {
-		fmt.Fprintf(out, "[WARNING]: %s\n", w.Message)
+		fmt.Fprintf(out, "[WARNING]: %s\n", w.Short)
 	}
 	if len(r.Warnings) > 0 {
 		fmt.Fprintf(out, "[WARNING]: Empty continuation lines will become errors in a future release.\n")
@@ -352,7 +353,8 @@ func Parse(rwc io.Reader) (*Result, error) {
 
 		if hasEmptyContinuationLine {
 			warnings = append(warnings, Warning{
-				Message:  "Empty continuation line found in: " + line,
+				Short:    "Empty continuation line found in: " + line,
+				Detail:   "Empty continuation lines will become errors in a future release. https://github.com/moby/moby/pull/33719",
 				Location: &Range{Start: Position{Line: currentLine}, End: Position{Line: currentLine}},
 			})
 		}

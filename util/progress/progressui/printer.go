@@ -126,7 +126,7 @@ func (p *textMux) printVtx(t *trace, dgst digest.Digest) {
 	v.statusUpdates = map[string]struct{}{}
 
 	for _, w := range v.warnings[v.warningIdx:] {
-		fmt.Fprintf(p.w, "#%d WARN: %s\n", v.index, w.Message)
+		fmt.Fprintf(p.w, "#%d WARN: %s\n", v.index, w.Short)
 		v.warningIdx++
 	}
 

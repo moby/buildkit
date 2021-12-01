@@ -296,7 +296,8 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 				s.Warnings = append(s.Warnings, &VertexWarning{
 					Vertex:     v.Vertex,
 					Level:      int(v.Level),
-					Message:    v.Msg,
+					Short:      v.Short,
+					Detail:     v.Detail,
 					SourceInfo: v.Info,
 					Range:      v.Ranges,
 				})

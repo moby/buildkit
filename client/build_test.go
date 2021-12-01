@@ -193,6 +193,7 @@ func testWarnings(t *testing.T, sb integration.Sandbox) {
 			Range: []*pb.Range{
 				{Start: pb.Position{Line: 2}, End: pb.Position{Line: 4}},
 			},
+			Detail: []byte("this is detail"),
 		}))
 
 		return r, nil
@@ -239,7 +240,8 @@ func testWarnings(t *testing.T, sb integration.Sandbox) {
 
 	w := warnings[0]
 
-	require.Equal(t, "this is warning", string(w.Message))
+	require.Equal(t, "this is warning", string(w.Short))
+	require.Equal(t, "this is detail", string(w.Detail))
 	require.Equal(t, 3, w.Level)
 	_, ok := vertexes[w.Vertex]
 	require.True(t, ok)

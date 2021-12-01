@@ -455,11 +455,11 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 					LLBCaps:           &caps,
 					SourceMap:         sourceMap,
 					Hostname:          opts[keyHostname],
-					Warn: func(msg string, location *parser.Range) {
+					Warn: func(msg, detail string, location *parser.Range) {
 						if i != 0 {
 							return
 						}
-						c.Warn(ctx, defVtx, msg, warnOpts(sourceMap, location))
+						c.Warn(ctx, defVtx, msg, warnOpts(sourceMap, location, detail))
 					},
 				})
 
@@ -779,8 +779,8 @@ func scopeToSubDir(c *llb.State, fileop bool, dir string) *llb.State {
 	return &bc
 }
 
-func warnOpts(sm *llb.SourceMap, r *parser.Range) client.WarnOpts {
-	opts := client.WarnOpts{Level: 1}
+func warnOpts(sm *llb.SourceMap, r *parser.Range, detail string) client.WarnOpts {
+	opts := client.WarnOpts{Level: 1, Detail: []byte(detail)}
 	if r == nil {
 		return opts
 	}

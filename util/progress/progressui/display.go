@@ -389,7 +389,7 @@ func (t *trace) displayInfo() (d displayInfo) {
 			jobs = append(jobs, j)
 		}
 		for _, w := range v.warnings {
-			msg := "WARN: " + string(w.Message)
+			msg := "WARN: " + string(w.Short)
 			j := &job{
 				startTime:     addTime(v.Started, t.localTimeDiff),
 				completedTime: addTime(v.Completed, t.localTimeDiff),
