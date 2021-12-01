@@ -21,7 +21,7 @@ import (
 	"golang.org/x/time/rate"
 )
 
-func DisplaySolveStatus(ctx context.Context, phase string, c console.Console, w io.Writer, ch chan *client.SolveStatus) error {
+func DisplaySolveStatus(ctx context.Context, phase string, c console.Console, w io.Writer, ch chan *client.SolveStatus) ([]client.VertexWarning, error) {
 	modeConsole := c != nil
 
 	disp := &display{c: c, phase: phase}
@@ -57,7 +57,7 @@ func DisplaySolveStatus(ctx context.Context, phase string, c console.Console, w 
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return nil, ctx.Err()
 		case <-ticker.C:
 		case ss, ok := <-ch:
 			if ok {
@@ -72,7 +72,7 @@ func DisplaySolveStatus(ctx context.Context, phase string, c console.Console, w 
 			if done {
 				disp.print(t.displayInfo(), width, height, true)
 				t.printErrorLogs(c)
-				return nil
+				return t.warnings(), nil
 			} else if displayLimiter.Allow() {
 				ticker.Stop()
 				ticker = time.NewTicker(tickerTimeout)
@@ -83,7 +83,7 @@ func DisplaySolveStatus(ctx context.Context, phase string, c console.Console, w 
 				printer.print(t)
 				if done {
 					t.printErrorLogs(w)
-					return nil
+					return t.warnings(), nil
 				}
 				ticker.Stop()
 				ticker = time.NewTicker(tickerTimeout)
@@ -170,6 +170,14 @@ func newTrace(w io.Writer, modeConsole bool) *trace {
 		w:           w,
 		modeConsole: modeConsole,
 	}
+}
+
+func (t *trace) warnings() []client.VertexWarning {
+	var out []client.VertexWarning
+	for _, v := range t.vertexes {
+		out = append(out, v.warnings...)
+	}
+	return out
 }
 
 func (t *trace) triggerVertexEvent(v *client.Vertex) {
