@@ -264,6 +264,11 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 		return nil, errors.Wrapf(err, "failed to marshal local source")
 	}
 
+	defVtx, err := def.Head()
+	if err != nil {
+		return nil, err
+	}
+
 	var sourceMap *llb.SourceMap
 
 	eg, ctx2 := errgroup.WithContext(ctx)
@@ -426,6 +431,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 						err = wrapSource(err, sourceMap, el.Location)
 					}
 				}()
+
 				st, img, err := dockerfile2llb.Dockerfile2LLB(ctx, dtDockerfile, dockerfile2llb.ConvertOpt{
 					Target:            opts[keyTarget],
 					MetaResolver:      c,
@@ -449,6 +455,12 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 					LLBCaps:           &caps,
 					SourceMap:         sourceMap,
 					Hostname:          opts[keyHostname],
+					Warn: func(msg string, location *parser.Range) {
+						if i != 0 {
+							return
+						}
+						c.Warn(ctx, defVtx, msg, warnOpts(sourceMap, location))
+					},
 				})
 
 				if err != nil {
@@ -765,6 +777,29 @@ func scopeToSubDir(c *llb.State, fileop bool, dir string) *llb.State {
 	unpack.AddMount("/src", *c, llb.Readonly)
 	bc := unpack.AddMount("/out", llb.Scratch())
 	return &bc
+}
+
+func warnOpts(sm *llb.SourceMap, r *parser.Range) client.WarnOpts {
+	opts := client.WarnOpts{Level: 1}
+	if r == nil {
+		return opts
+	}
+	opts.SourceInfo = &pb.SourceInfo{
+		Data:       sm.Data,
+		Filename:   sm.Filename,
+		Definition: sm.Definition.ToPB(),
+	}
+	opts.Range = []*pb.Range{{
+		Start: pb.Position{
+			Line:      int32(r.Start.Line),
+			Character: int32(r.Start.Character),
+		},
+		End: pb.Position{
+			Line:      int32(r.End.Line),
+			Character: int32(r.End.Character),
+		},
+	}}
+	return opts
 }
 
 func wrapSource(err error, sm *llb.SourceMap, ranges []parser.Range) error {

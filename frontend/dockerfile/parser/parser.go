@@ -269,7 +269,12 @@ func newNodeFromLine(line string, d *directives, comments []string) (*Node, erro
 type Result struct {
 	AST         *Node
 	EscapeToken rune
-	Warnings    []string
+	Warnings    []Warning
+}
+
+type Warning struct {
+	Message  string
+	Location *Range
 }
 
 // PrintWarnings to the writer
@@ -277,7 +282,12 @@ func (r *Result) PrintWarnings(out io.Writer) {
 	if len(r.Warnings) == 0 {
 		return
 	}
-	fmt.Fprintf(out, strings.Join(r.Warnings, "\n")+"\n")
+	for _, w := range r.Warnings {
+		fmt.Fprintf(out, "[WARNING]: %s\n", w.Message)
+	}
+	if len(r.Warnings) > 0 {
+		fmt.Fprintf(out, "[WARNING]: Empty continuation lines will become errors in a future release.\n")
+	}
 }
 
 // Parse reads lines from a Reader, parses the lines into an AST and returns
@@ -288,7 +298,7 @@ func Parse(rwc io.Reader) (*Result, error) {
 	root := &Node{StartLine: -1}
 	scanner := bufio.NewScanner(rwc)
 	scanner.Split(scanLines)
-	warnings := []string{}
+	warnings := []Warning{}
 	var comments []string
 
 	var err error
@@ -341,7 +351,10 @@ func Parse(rwc io.Reader) (*Result, error) {
 		}
 
 		if hasEmptyContinuationLine {
-			warnings = append(warnings, "[WARNING]: Empty continuation line found in:\n    "+line)
+			warnings = append(warnings, Warning{
+				Message:  "Empty continuation line found in: " + line,
+				Location: &Range{Start: Position{Line: currentLine}, End: Position{Line: currentLine}},
+			})
 		}
 
 		child, err := newNodeFromLine(line, d, comments)
@@ -382,10 +395,6 @@ func Parse(rwc io.Reader) (*Result, error) {
 
 		root.AddChild(child, startLine, currentLine)
 		comments = nil
-	}
-
-	if len(warnings) > 0 {
-		warnings = append(warnings, "[WARNING]: Empty continuation lines will become errors in a future release.")
 	}
 
 	if root.StartLine < 0 {
