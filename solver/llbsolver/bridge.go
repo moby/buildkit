@@ -10,9 +10,11 @@ import (
 	"github.com/containerd/containerd/platforms"
 	"github.com/mitchellh/hashstructure/v2"
 	"github.com/moby/buildkit/cache/remotecache"
+	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend"
 	gw "github.com/moby/buildkit/frontend/gateway/client"
+	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/errdefs"
@@ -20,6 +22,7 @@ import (
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/flightcontrol"
+	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
@@ -34,6 +37,21 @@ type llbBridge struct {
 	cms                       map[string]solver.CacheManager
 	cmsMu                     sync.Mutex
 	sm                        *session.Manager
+}
+
+func (b *llbBridge) Warn(ctx context.Context, dgst digest.Digest, level int, msg string) error {
+	return b.builder.InContext(ctx, func(ctx context.Context, g session.Group) error {
+		pw, ok, _ := progress.NewFromContext(ctx, progress.WithMetadata("vertex", dgst))
+		if !ok {
+			return nil
+		}
+		pw.Write(identity.NewID(), client.VertexWarning{
+			Vertex:  dgst,
+			Level:   level,
+			Message: []byte(msg),
+		})
+		return pw.Close()
+	})
 }
 
 func (b *llbBridge) loadResult(ctx context.Context, def *pb.Definition, cacheImports []gw.CacheOptionsEntry) (solver.CachedResult, solver.BuildInfo, error) {

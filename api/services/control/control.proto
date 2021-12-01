@@ -104,6 +104,7 @@ message StatusResponse {
 	repeated Vertex vertexes = 1;
 	repeated VertexStatus statuses = 2;
 	repeated VertexLog logs = 3;
+	repeated VertexWarning warnings = 4;
 }
 
 message Vertex {
@@ -132,6 +133,12 @@ message VertexLog {
 	google.protobuf.Timestamp timestamp = 2 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
 	int64 stream = 3;
 	bytes msg = 4;
+}
+
+message VertexWarning {
+	string vertex = 1 [(gogoproto.customtype) = "github.com/opencontainers/go-digest.Digest", (gogoproto.nullable) = false];
+	int64 level = 2;
+	bytes msg = 3;
 }
 
 message BytesMessage {

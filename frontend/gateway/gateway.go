@@ -993,6 +993,14 @@ func (lbf *llbBridgeForwarder) ReleaseContainer(ctx context.Context, in *pb.Rele
 	return &pb.ReleaseContainerResponse{}, stack.Enable(err)
 }
 
+func (lbf *llbBridgeForwarder) Warn(ctx context.Context, in *pb.WarnRequest) (*pb.WarnResponse, error) {
+	err := lbf.llbBridge.Warn(ctx, in.Digest, int(in.Level), string(in.Message))
+	if err != nil {
+		return nil, err
+	}
+	return &pb.WarnResponse{}, nil
+}
+
 type processIO struct {
 	id       string
 	mu       sync.Mutex

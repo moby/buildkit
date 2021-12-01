@@ -18,6 +18,7 @@ type Client interface {
 	BuildOpts() BuildOpts
 	Inputs(ctx context.Context) (map[string]llb.State, error)
 	NewContainer(ctx context.Context, req NewContainerRequest) (Container, error)
+	Warn(ctx context.Context, dgst digest.Digest, msg string) error
 }
 
 // NewContainerRequest encapsulates the requirements for a client to define a

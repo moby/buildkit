@@ -31,7 +31,10 @@ service LLBBridge {
 
 	rpc NewContainer(NewContainerRequest) returns (NewContainerResponse);
 	rpc ReleaseContainer(ReleaseContainerRequest) returns (ReleaseContainerResponse);
-	rpc ExecProcess(stream ExecMessage) returns (stream ExecMessage);  
+	rpc ExecProcess(stream ExecMessage) returns (stream ExecMessage);
+
+	// apicaps:CapGatewayWarnings
+	rpc Warn(WarnRequest) returns (WarnResponse); 
 }
 
 message Result {
@@ -168,6 +171,14 @@ message PongResponse{
 	repeated moby.buildkit.v1.apicaps.APICap LLBCaps = 2 [(gogoproto.nullable) = false];
 	repeated moby.buildkit.v1.types.WorkerRecord Workers = 3;
 }
+
+message WarnRequest {
+	string Digest = 1 [(gogoproto.customtype) = "github.com/opencontainers/go-digest.Digest", (gogoproto.nullable) = false];
+	int64 Level = 2;
+	bytes Message = 3;
+}
+
+message WarnResponse{}
 
 message NewContainerRequest {
 	string ContainerID = 1;
