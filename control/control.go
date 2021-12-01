@@ -381,6 +381,8 @@ func (c *Controller) Status(req *controlapi.StatusRequest, stream controlapi.Con
 						Vertex: v.Vertex,
 						Level:  int64(v.Level),
 						Msg:    v.Message,
+						Info:   v.SourceInfo,
+						Ranges: v.Range,
 					})
 				}
 				if err := stream.SendMsg(&sr); err != nil {

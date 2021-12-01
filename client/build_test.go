@@ -184,7 +184,17 @@ func testWarnings(t *testing.T, sb integration.Sandbox) {
 			return nil, errors.Wrap(err, "failed to solve")
 		}
 
-		require.NoError(t, c.Warn(ctx, dgst, "this is warning"))
+		require.NoError(t, c.Warn(ctx, dgst, "this is warning", client.WarnOpts{
+			Level: 3,
+			SourceInfo: &pb.SourceInfo{
+				Filename: "mydockerfile",
+				Data:     []byte("filedata"),
+			},
+			Range: []*pb.Range{
+				{Start: pb.Position{Line: 2}, End: pb.Position{Line: 4}},
+			},
+		}))
+
 		return r, nil
 	}
 
@@ -230,9 +240,15 @@ func testWarnings(t *testing.T, sb integration.Sandbox) {
 	w := warnings[0]
 
 	require.Equal(t, "this is warning", string(w.Message))
-	require.Equal(t, 1, w.Level)
+	require.Equal(t, 3, w.Level)
 	_, ok := vertexes[w.Vertex]
 	require.True(t, ok)
+
+	require.Equal(t, "mydockerfile", w.SourceInfo.Filename)
+	require.Equal(t, "filedata", string(w.SourceInfo.Data))
+	require.Equal(t, 1, len(w.Range))
+	require.Equal(t, int32(2), w.Range[0].Start.Line)
+	require.Equal(t, int32(4), w.Range[0].End.Line)
 
 	checkAllReleasable(t, c, sb, true)
 }

@@ -298,11 +298,13 @@ func (c *grpcClient) requestForRef(ref client.Reference) (*pb.SolveRequest, erro
 	return req, nil
 }
 
-func (c *grpcClient) Warn(ctx context.Context, dgst digest.Digest, msg string) error {
+func (c *grpcClient) Warn(ctx context.Context, dgst digest.Digest, msg string, opts client.WarnOpts) error {
 	_, err := c.client.Warn(ctx, &pb.WarnRequest{
 		Digest:  dgst,
-		Level:   1,
+		Level:   int64(opts.Level),
 		Message: []byte(msg),
+		Info:    opts.SourceInfo,
+		Ranges:  opts.Range,
 	})
 	return err
 }

@@ -3,6 +3,7 @@ package client
 import (
 	"time"
 
+	"github.com/moby/buildkit/solver/pb"
 	digest "github.com/opencontainers/go-digest"
 )
 
@@ -35,9 +36,11 @@ type VertexLog struct {
 }
 
 type VertexWarning struct {
-	Vertex  digest.Digest
-	Level   int
-	Message []byte
+	Vertex     digest.Digest
+	Level      int
+	Message    []byte
+	SourceInfo *pb.SourceInfo
+	Range      []*pb.Range
 }
 
 type SolveStatus struct {
