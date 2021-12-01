@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-set -eu -o pipefail
+set -euo pipefail
 
-if [ -z "${BINDIR}" ] && [ -z "${PREFIX}" ]; then
-  PREFIX="$(realpath "$(dirname "$0")"/..)"
+if [ -z "${BINDIR:-}" ] && [ -z "${PREFIX:-}" ]; then
+  PREFIX="$(realpath "$(dirname "$0")/..")"
 fi
 
 : "${VERSION:=v0.5.1}"
