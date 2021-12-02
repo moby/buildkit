@@ -286,42 +286,45 @@ func (sr *immutableRef) computeChainMetadata(ctx context.Context) error {
 		return nil
 	}
 
-	var chainIDs []digest.Digest
-	var blobChainIDs []digest.Digest
+	var chainID digest.Digest
+	var blobChainID digest.Digest
 
-	// Blobs should be set the actual layers in the ref's chain, no
-	// any merge refs.
-	layerChain := sr.layerChain()
-	var layerParent *cacheRecord
 	switch sr.kind() {
-	case Merge:
-		layerParent = layerChain[len(layerChain)-1].cacheRecord
+	case BaseLayer:
+		diffID := sr.getDiffID()
+		chainID = diffID
+		blobChainID = imagespecidentity.ChainID([]digest.Digest{digest.Digest(sr.getBlob()), diffID})
 	case Layer:
-		// skip the last layer in the chain, which is this ref itself
-		layerParent = layerChain[len(layerChain)-2].cacheRecord
-	}
-	if layerParent != nil {
-		if parentChainID := layerParent.getChainID(); parentChainID != "" {
-			chainIDs = append(chainIDs, parentChainID)
+		if parentChainID := sr.layerParent.getChainID(); parentChainID != "" {
+			chainID = parentChainID
 		} else {
-			return errors.Errorf("failed to set chain for reference with non-addressable parent")
+			return errors.Errorf("failed to set chain for reference with non-addressable parent %q", sr.layerParent.GetDescription())
 		}
-		if parentBlobChainID := layerParent.getBlobChainID(); parentBlobChainID != "" {
-			blobChainIDs = append(blobChainIDs, parentBlobChainID)
+		if parentBlobChainID := sr.layerParent.getBlobChainID(); parentBlobChainID != "" {
+			blobChainID = parentBlobChainID
 		} else {
-			return errors.Errorf("failed to set blobchain for reference with non-addressable parent")
+			return errors.Errorf("failed to set blobchain for reference with non-addressable parent %q", sr.layerParent.GetDescription())
 		}
-	}
-
-	switch sr.kind() {
-	case Layer, BaseLayer:
 		diffID := digest.Digest(sr.getDiffID())
-		chainIDs = append(chainIDs, diffID)
-		blobChainIDs = append(blobChainIDs, imagespecidentity.ChainID([]digest.Digest{digest.Digest(sr.getBlob()), diffID}))
+		chainID = imagespecidentity.ChainID([]digest.Digest{chainID, diffID})
+		blobID := imagespecidentity.ChainID([]digest.Digest{digest.Digest(sr.getBlob()), diffID})
+		blobChainID = imagespecidentity.ChainID([]digest.Digest{blobChainID, blobID})
+	case Merge:
+		// Merge chain IDs can re-use the first input chain ID as a base, but after that have to
+		// be computed one-by-one for each blob in the chain. It should have the same value as
+		// if you had created the merge by unpacking all the blobs on top of each other with GetByBlob.
+		baseInput := sr.mergeParents[0]
+		chainID = baseInput.getChainID()
+		blobChainID = baseInput.getBlobChainID()
+		for _, mergeParent := range sr.mergeParents[1:] {
+			for _, layer := range mergeParent.layerChain() {
+				diffID := digest.Digest(layer.getDiffID())
+				chainID = imagespecidentity.ChainID([]digest.Digest{chainID, diffID})
+				blobID := imagespecidentity.ChainID([]digest.Digest{digest.Digest(layer.getBlob()), diffID})
+				blobChainID = imagespecidentity.ChainID([]digest.Digest{blobChainID, blobID})
+			}
+		}
 	}
-
-	chainID := imagespecidentity.ChainID(chainIDs)
-	blobChainID := imagespecidentity.ChainID(blobChainIDs)
 
 	sr.queueChainID(chainID)
 	sr.queueBlobChainID(blobChainID)

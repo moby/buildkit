@@ -337,6 +337,75 @@ func TestLazyGetByBlob(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestMergeBlobchainID(t *testing.T) {
+	t.Parallel()
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+
+	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+
+	co, cleanup, err := newCacheManager(ctx, cmOpt{
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	defer cleanup()
+	cm := co.manager
+
+	// create a merge ref that has 3 inputs, with each input being a 3 layer blob chain
+	var mergeInputs []ImmutableRef
+	var descs []ocispecs.Descriptor
+	descHandlers := DescHandlers(map[digest.Digest]*DescHandler{})
+	for i := 0; i < 3; i++ {
+		contentBuffer := contentutil.NewBuffer()
+		var curBlob ImmutableRef
+		for j := 0; j < 3; j++ {
+			blobBytes, desc, err := mapToBlob(map[string]string{strconv.Itoa(i): strconv.Itoa(j)}, true)
+			require.NoError(t, err)
+			cw, err := contentBuffer.Writer(ctx)
+			require.NoError(t, err)
+			_, err = cw.Write(blobBytes)
+			require.NoError(t, err)
+			err = cw.Commit(ctx, 0, cw.Digest())
+			require.NoError(t, err)
+			descHandlers[desc.Digest] = &DescHandler{
+				Provider: func(_ session.Group) content.Provider { return contentBuffer },
+			}
+			curBlob, err = cm.GetByBlob(ctx, desc, curBlob, descHandlers)
+			require.NoError(t, err)
+			descs = append(descs, desc)
+		}
+		mergeInputs = append(mergeInputs, curBlob.Clone())
+	}
+
+	mergeRef, err := cm.Merge(ctx, mergeInputs)
+	require.NoError(t, err)
+
+	_, err = mergeRef.GetRemotes(ctx, true, solver.CompressionOpt{Type: compression.Default}, false, nil)
+	require.NoError(t, err)
+
+	// verify the merge blobchain ID isn't just set to one of the inputs (regression test)
+	mergeBlobchainID := mergeRef.(*immutableRef).getBlobChainID()
+	for _, mergeInput := range mergeInputs {
+		inputBlobchainID := mergeInput.(*immutableRef).getBlobChainID()
+		require.NotEqual(t, mergeBlobchainID, inputBlobchainID)
+	}
+
+	// verify you get the merge ref when asking for an equivalent blob chain
+	var curBlob ImmutableRef
+	for _, desc := range descs[:len(descs)-1] {
+		curBlob, err = cm.GetByBlob(ctx, desc, curBlob, descHandlers)
+		require.NoError(t, err)
+	}
+	blobRef, err := cm.GetByBlob(ctx, descs[len(descs)-1], curBlob, descHandlers)
+	require.NoError(t, err)
+	require.Equal(t, mergeRef.ID(), blobRef.ID())
+}
+
 func TestSnapshotExtract(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
