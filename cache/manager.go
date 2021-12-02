@@ -168,8 +168,15 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor,
 
 	for _, si := range sis {
 		ref, err := cm.get(ctx, si.ID(), opts...)
-		if err != nil && !IsNotFound(err) {
-			return nil, errors.Wrapf(err, "failed to get record %s by blobchainid", sis[0].ID())
+		if err != nil {
+			if errors.As(err, &NeedsRemoteProvidersError{}) {
+				// This shouldn't happen and indicates that blobchain IDs are being set incorrectly,
+				// but if it does happen it's not fatal as we can just not try to re-use by blobchainID.
+				// Log the error but continue.
+				bklog.G(ctx).Errorf("missing providers for ref with equivalent blobchain ID %s", blobChainID)
+			} else if !IsNotFound(err) {
+				return nil, errors.Wrapf(err, "failed to get record %s by blobchainid", sis[0].ID())
+			}
 		}
 		if ref == nil {
 			continue
