@@ -69,7 +69,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.0.1
 	go.opentelemetry.io/otel/trace v1.2.0
 	go.opentelemetry.io/proto/otlp v0.9.0
-	golang.org/x/crypto v0.0.0-20210322153248-0c34fe9e7dc2
+	golang.org/x/crypto v0.0.0-20211202192323-5770296d904e
 	golang.org/x/net v0.0.0-20211123203042-d83791d6bcd9
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	golang.org/x/sys v0.0.0-20211123173158-ef496fb156ab
