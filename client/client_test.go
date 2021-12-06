@@ -3952,51 +3952,119 @@ func testMergeOp(t *testing.T, sb integration.Sandbox) {
 		require.NoError(t, err)
 
 		require.NoError(t, fstest.CheckDirectoryEqualWithApplier(destDir, fstest.Apply(files...)))
+
+		// verify the image exports+imports the same
+		var target string
+		var exports []ExportEntry
+		if os.Getenv("TEST_DOCKERD") == "1" {
+			// use a fake url so we can guarantee when we do the build with the image
+			// we are using the local image in dockerd, not pulling from a registry
+			target = "fake.invalid:33333/testmergeop:latest"
+			exports = []ExportEntry{{
+				Type: "moby",
+				Attrs: map[string]string{
+					"name": target,
+				},
+			}}
+		} else {
+			registry, err := sb.NewRegistry()
+			if errors.Is(err, integration.ErrorRequirements) {
+				return
+			}
+			require.NoError(t, err)
+			target = registry + "/testmergeop:latest"
+			exports = []ExportEntry{{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			}}
+		}
+
+		_, err = c.Solve(sb.Context(), def, SolveOpt{Exports: exports}, nil)
+		require.NoError(t, err)
+		cdAddress := sb.ContainerdAddress()
+		if cdAddress != "" {
+			ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
+			client, err := newContainerd(cdAddress)
+			require.NoError(t, err)
+			defer client.Close()
+			imageService := client.ImageService()
+			imageList, err := imageService.List(ctx)
+			require.NoError(t, err)
+			for _, img := range imageList {
+				err = imageService.Delete(ctx, img.Name, images.SynchronousDelete())
+				require.NoError(t, err)
+			}
+		}
+		checkAllReleasable(t, c, sb, true)
+
+		img := llb.Image(target, llb.ResolveModePreferLocal)
+
+		def, err = img.Marshal(sb.Context())
+		require.NoError(t, err)
+
+		destDir, err = ioutil.TempDir("", "buildkit")
+		require.NoError(t, err)
+		defer os.RemoveAll(destDir)
+
+		_, err = c.Solve(sb.Context(), def, SolveOpt{
+			Exports: []ExportEntry{
+				{
+					Type:      ExporterLocal,
+					OutputDir: destDir,
+				},
+			},
+		}, nil)
+		require.NoError(t, err)
+
+		require.NoError(t, fstest.CheckDirectoryEqualWithApplier(destDir, fstest.Apply(files...)))
 	}
 
 	stateA := llb.Scratch().
-		File(llb.Mkfile("/foo", 0777, []byte("A"))).
-		File(llb.Mkfile("/a", 0777, []byte("A"))).
+		File(llb.Mkfile("/foo", 0755, []byte("A"))).
+		File(llb.Mkfile("/a", 0755, []byte("A"))).
 		File(llb.Mkdir("/bar", 0700)).
-		File(llb.Mkfile("/bar/A", 0777, []byte("A")))
+		File(llb.Mkfile("/bar/A", 0755, []byte("A")))
 	stateB := stateA.
 		File(llb.Rm("/foo")).
-		File(llb.Mkfile("/b", 0777, []byte("B"))).
-		File(llb.Mkfile("/bar/B", 0774, []byte("B")))
+		File(llb.Mkfile("/b", 0755, []byte("B"))).
+		File(llb.Mkfile("/bar/B", 0754, []byte("B")))
 	stateC := llb.Scratch().
-		File(llb.Mkfile("/foo", 0775, []byte("C"))).
-		File(llb.Mkfile("/c", 0777, []byte("C"))).
-		File(llb.Mkdir("/bar", 0777)).
+		File(llb.Mkfile("/foo", 0755, []byte("C"))).
+		File(llb.Mkfile("/c", 0755, []byte("C"))).
+		File(llb.Mkdir("/bar", 0755)).
 		File(llb.Mkfile("/bar/A", 0400, []byte("C")))
 
 	mergeA := llb.Merge([]llb.State{stateA, stateC})
 	requireContents(mergeA,
-		fstest.CreateFile("foo", []byte("C"), 0775),
-		fstest.CreateFile("c", []byte("C"), 0777),
-		fstest.CreateDir("bar", 0777),
+		fstest.CreateFile("foo", []byte("C"), 0755),
+		fstest.CreateFile("c", []byte("C"), 0755),
+		fstest.CreateDir("bar", 0755),
 		fstest.CreateFile("bar/A", []byte("C"), 0400),
-		fstest.CreateFile("a", []byte("A"), 0777),
+		fstest.CreateFile("a", []byte("A"), 0755),
 	)
 
 	mergeB := llb.Merge([]llb.State{stateC, stateB})
 	requireContents(mergeB,
-		fstest.CreateFile("a", []byte("A"), 0777),
-		fstest.CreateFile("b", []byte("B"), 0777),
-		fstest.CreateFile("c", []byte("C"), 0777),
+		fstest.CreateFile("a", []byte("A"), 0755),
+		fstest.CreateFile("b", []byte("B"), 0755),
+		fstest.CreateFile("c", []byte("C"), 0755),
 		fstest.CreateDir("bar", 0700),
-		fstest.CreateFile("bar/A", []byte("A"), 0777),
-		fstest.CreateFile("bar/B", []byte("B"), 0774),
+		fstest.CreateFile("bar/A", []byte("A"), 0755),
+		fstest.CreateFile("bar/B", []byte("B"), 0754),
 	)
 
 	stateD := llb.Scratch().File(llb.Mkdir("/qaz", 0755))
 	mergeC := llb.Merge([]llb.State{mergeA, mergeB, stateD})
 	requireContents(mergeC,
-		fstest.CreateFile("a", []byte("A"), 0777),
-		fstest.CreateFile("b", []byte("B"), 0777),
-		fstest.CreateFile("c", []byte("C"), 0777),
+		fstest.CreateFile("a", []byte("A"), 0755),
+		fstest.CreateFile("b", []byte("B"), 0755),
+		fstest.CreateFile("c", []byte("C"), 0755),
 		fstest.CreateDir("bar", 0700),
-		fstest.CreateFile("bar/A", []byte("A"), 0777),
-		fstest.CreateFile("bar/B", []byte("B"), 0774),
+		fstest.CreateFile("bar/A", []byte("A"), 0755),
+		fstest.CreateFile("bar/B", []byte("B"), 0754),
 		fstest.CreateDir("qaz", 0755),
 	)
 
@@ -4008,7 +4076,7 @@ func testMergeOp(t *testing.T, sb integration.Sandbox) {
 			"mv /b /c /a/",
 			// remove+recreate /bar to make it opaque on overlay snapshotters
 			"rm -rf /bar",
-			"mkdir -m 0777 /bar",
+			"mkdir -m 0755 /bar",
 			"echo -n D > /bar/D",
 			// turn /qaz dir into a file
 			"rm -rf /qaz",
@@ -4025,18 +4093,18 @@ func testMergeOp(t *testing.T, sb integration.Sandbox) {
 		File(llb.Rm("/proc")).
 		File(llb.Rm("/sys"))
 	stateE := llb.Scratch().
-		File(llb.Mkfile("/foo", 0777, []byte("E"))).
-		File(llb.Mkdir("/bar", 0777)).
-		File(llb.Mkfile("/bar/A", 0777, []byte("A"))).
-		File(llb.Mkfile("/bar/E", 0777, nil))
+		File(llb.Mkfile("/foo", 0755, []byte("E"))).
+		File(llb.Mkdir("/bar", 0755)).
+		File(llb.Mkfile("/bar/A", 0755, []byte("A"))).
+		File(llb.Mkfile("/bar/E", 0755, nil))
 	mergeD := llb.Merge([]llb.State{stateE, runA})
 	requireContents(mergeD,
 		fstest.CreateDir("a", 0755),
-		fstest.CreateFile("a/b", []byte("B"), 0777),
-		fstest.CreateFile("a/c", []byte("C"), 0777),
-		fstest.CreateDir("bar", 0777),
+		fstest.CreateFile("a/b", []byte("B"), 0755),
+		fstest.CreateFile("a/c", []byte("C"), 0755),
+		fstest.CreateDir("bar", 0755),
 		fstest.CreateFile("bar/D", []byte("D"), 0644),
-		fstest.CreateFile("bar/E", nil, 0777), // exists because opaques dirs are converted to explicit whiteouts
+		fstest.CreateFile("bar/E", nil, 0755), // exists because opaques dirs are converted to explicit whiteouts
 		fstest.CreateFile("qaz", nil, 0644),
 		// /foo from stateE is not here because it is deleted in stateB, which is part of a submerge of mergeD
 	)
