@@ -10,7 +10,6 @@ type ReaderAtCloser interface {
 }
 
 type readerAtCloser struct {
-	size   int64
 	offset int64
 	rc     io.ReadCloser
 	ra     io.ReaderAt
