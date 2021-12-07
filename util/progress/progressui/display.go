@@ -521,7 +521,7 @@ func (disp *display) print(d displayInfo, width, height int, all bool) {
 
 		out = align(out, timer, width)
 		if j.completedTime != nil {
-			color := colorRun
+			color := getTermColor()
 			if j.isCanceled {
 				color = colorCancel
 			} else if j.hasError {
