@@ -112,7 +112,7 @@ instructions.
 
 Whenever possible, Docker uses a build-cache to accelerate the `docker build`
 process significantly. This is indicated by the `CACHED` message in the console
-output. (For more information, see the [`Dockerfile` best practices guide](https://docs.docker.com/engine/userguide/eng-image/dockerfile_best-practices/):
+output. (For more information, see the [`Dockerfile` best practices guide](https://docs.docker.com/engine/userguide/eng-image/dockerfile_best-practices/)):
 
 ```console
 $ docker build -t svendowideit/ambassador .
