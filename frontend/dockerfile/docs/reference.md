@@ -159,8 +159,8 @@ implementation. For example, BuildKit can:
 To use the BuildKit backend, you need to set an environment variable
 `DOCKER_BUILDKIT=1` on the CLI before invoking `docker build`.
 
-To learn about the experimental Dockerfile syntax available to BuildKit-based
-builds [refer to the documentation in the BuildKit repository](https://github.com/moby/buildkit/blob/master/frontend/dockerfile/docs/experimental.md).
+To learn about the Dockerfile syntax available to BuildKit-based
+builds [refer to the documentation in the BuildKit repository](https://github.com/moby/buildkit/blob/master/frontend/dockerfile/docs/syntax.md).
 
 ## Format
 
