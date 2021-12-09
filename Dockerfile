@@ -103,7 +103,8 @@ WORKDIR /work
 ARG TARGETPLATFORM
 RUN --mount=from=binaries \
   --mount=source=/tmp/.version,target=/tmp/.version,from=buildkit-version \
-  mkdir -p /out && tar czvf "/out/buildkit-$(cat /tmp/.version).$(echo $TARGETPLATFORM | sed 's/\//-/g').tar.gz" --mtime='2015-10-21 00:00Z' --sort=name --transform 's/^./bin/' .
+  TIME=$(git show -s --format=%cd --date=format:'%Y-%m-%d %H:%M:%S') \
+  mkdir -p /out && tar czvf "/out/buildkit-$(cat /tmp/.version).$(echo $TARGETPLATFORM | sed 's/\//-/g').tar.gz" --mtime=${TIME} --sort=name --transform 's/^./bin/' .
 
 FROM scratch AS release
 COPY --from=releaser /out/ /
