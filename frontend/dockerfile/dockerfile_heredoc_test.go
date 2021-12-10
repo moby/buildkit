@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var hdTests = []integration.Test{
+var hdTests = integration.TestFuncs(
 	testCopyHeredoc,
 	testRunBasicHeredoc,
 	testRunFakeHeredoc,
@@ -27,7 +27,7 @@ var hdTests = []integration.Test{
 	testHeredocIndent,
 	testHeredocVarSubstitution,
 	testOnBuildHeredoc,
-}
+)
 
 func init() {
 	heredocTests = append(heredocTests, hdTests...)

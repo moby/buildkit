@@ -13,10 +13,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var secretsTests = []integration.Test{
+var secretsTests = integration.TestFuncs(
 	testSecretFileParams,
 	testSecretRequiredWithoutValue,
-}
+)
 
 func init() {
 	allTests = append(allTests, secretsTests...)

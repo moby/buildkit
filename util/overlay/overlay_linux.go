@@ -46,7 +46,7 @@ func GetUpperdir(lower, upper []mount.Mount) (string, error) {
 		case "overlay":
 			// lower snapshot is an overlay mount of multiple layers
 			var err error
-			lowerlayers, err = getOverlayLayers(lowerM)
+			lowerlayers, err = GetOverlayLayers(lowerM)
 			if err != nil {
 				return "", err
 			}
@@ -59,7 +59,7 @@ func GetUpperdir(lower, upper []mount.Mount) (string, error) {
 		if upperM.Type != "overlay" {
 			return "", errors.Errorf("upper snapshot isn't overlay mounted (type = %q)", upperM.Type)
 		}
-		upperlayers, err := getOverlayLayers(upperM)
+		upperlayers, err := GetOverlayLayers(upperM)
 		if err != nil {
 			return "", err
 		}
@@ -83,8 +83,8 @@ func GetUpperdir(lower, upper []mount.Mount) (string, error) {
 	return upperdir, nil
 }
 
-// getOverlayLayers returns all layer directories of an overlayfs mount.
-func getOverlayLayers(m mount.Mount) ([]string, error) {
+// GetOverlayLayers returns all layer directories of an overlayfs mount.
+func GetOverlayLayers(m mount.Mount) ([]string, error) {
 	var u string
 	var uFound bool
 	var l []string // l[0] = bottommost

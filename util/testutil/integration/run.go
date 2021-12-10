@@ -68,7 +68,32 @@ type ConfigUpdater interface {
 	UpdateConfigFile(string) string
 }
 
-type Test func(*testing.T, Sandbox)
+type Test interface {
+	Name() string
+	Run(t *testing.T, sb Sandbox)
+}
+
+type testFunc struct {
+	name string
+	run  func(t *testing.T, sb Sandbox)
+}
+
+func (f testFunc) Name() string {
+	return f.name
+}
+
+func (f testFunc) Run(t *testing.T, sb Sandbox) {
+	t.Helper()
+	f.run(t, sb)
+}
+
+func TestFuncs(funcs ...func(t *testing.T, sb Sandbox)) []Test {
+	var tests []Test
+	for _, f := range funcs {
+		tests = append(tests, testFunc{name: getFunctionName(f), run: f})
+	}
+	return tests
+}
 
 var defaultWorkers []Worker
 
@@ -152,7 +177,7 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 	for _, br := range list {
 		for _, tc := range testCases {
 			for _, mv := range matrix {
-				fn := getFunctionName(tc)
+				fn := tc.Name()
 				name := fn + "/worker=" + br.Name() + mv.functionSuffix()
 				func(fn, testName string, br Worker, tc Test, mv matrixValue) {
 					ok := t.Run(testName, func(t *testing.T) {
@@ -173,7 +198,7 @@ func Run(t *testing.T, testCases []Test, opt ...TestOpt) {
 								sb.PrintLogs(t)
 							}
 						}()
-						tc(t, sb)
+						tc.Run(t, sb)
 					})
 					require.True(t, ok)
 				}(fn, name, br, tc, mv)
