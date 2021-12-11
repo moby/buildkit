@@ -76,10 +76,11 @@ type Hashed interface {
 }
 
 type includedPath struct {
-	path                  string
-	record                *CacheRecord
-	matchedIncludePattern bool
-	matchedExcludePattern bool
+	path             string
+	record           *CacheRecord
+	included         bool
+	includeMatchInfo fileutils.MatchInfo
+	excludeMatchInfo fileutils.MatchInfo
 }
 
 type cacheManager struct {
@@ -664,17 +665,25 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 		}
 		maybeIncludedPath.record = cr
 
-		if !shouldInclude {
-			if cr.Type == CacheRecordTypeDirHeader {
-				// We keep track of non-included parent dir headers in case an
-				// include pattern matches a file inside one of these dirs.
-				parentDirHeaders = append(parentDirHeaders, maybeIncludedPath)
+		if shouldInclude {
+			for _, parentDir := range parentDirHeaders {
+				if !parentDir.included {
+					includedPaths = append(includedPaths, parentDir)
+					parentDir.included = true
+				}
 			}
-		} else {
-			includedPaths = append(includedPaths, parentDirHeaders...)
-			parentDirHeaders = nil
 			includedPaths = append(includedPaths, maybeIncludedPath)
+			maybeIncludedPath.included = true
 		}
+
+		if cr.Type == CacheRecordTypeDirHeader {
+			// We keep track of parent dir headers whether
+			// they are immediately included or not, in case
+			// an include pattern matches a file inside one
+			// of these dirs.
+			parentDirHeaders = append(parentDirHeaders, maybeIncludedPath)
+		}
+
 		k, _, kOk = iter.Next()
 	}
 
@@ -692,19 +701,20 @@ func shouldIncludePath(
 	parentDir *includedPath,
 ) (bool, error) {
 	var (
-		m   bool
-		err error
+		m         bool
+		matchInfo fileutils.MatchInfo
+		err       error
 	)
 	if includePatternMatcher != nil {
 		if parentDir != nil {
-			m, err = includePatternMatcher.MatchesUsingParentResult(candidate, parentDir.matchedIncludePattern)
+			m, matchInfo, err = includePatternMatcher.MatchesUsingParentResults(candidate, parentDir.includeMatchInfo)
 		} else {
-			m, err = includePatternMatcher.MatchesOrParentMatches(candidate)
+			m, matchInfo, err = includePatternMatcher.MatchesUsingParentResults(candidate, fileutils.MatchInfo{})
 		}
 		if err != nil {
 			return false, errors.Wrap(err, "failed to match includepatterns")
 		}
-		maybeIncludedPath.matchedIncludePattern = m
+		maybeIncludedPath.includeMatchInfo = matchInfo
 		if !m {
 			return false, nil
 		}
@@ -712,14 +722,14 @@ func shouldIncludePath(
 
 	if excludePatternMatcher != nil {
 		if parentDir != nil {
-			m, err = excludePatternMatcher.MatchesUsingParentResult(candidate, parentDir.matchedExcludePattern)
+			m, matchInfo, err = excludePatternMatcher.MatchesUsingParentResults(candidate, parentDir.excludeMatchInfo)
 		} else {
-			m, err = excludePatternMatcher.MatchesOrParentMatches(candidate)
+			m, matchInfo, err = excludePatternMatcher.MatchesUsingParentResults(candidate, fileutils.MatchInfo{})
 		}
 		if err != nil {
 			return false, errors.Wrap(err, "failed to match excludepatterns")
 		}
-		maybeIncludedPath.matchedExcludePattern = m
+		maybeIncludedPath.excludeMatchInfo = matchInfo
 		if m {
 			return false, nil
 		}
