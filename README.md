@@ -155,6 +155,7 @@ Currently, the following high-level languages has been implemented for LLB:
 -   [HLB](https://github.com/openllb/hlb)
 -   [Earthfile (Earthly)](https://github.com/earthly/earthly)
 -   [Cargo Wharf (Rust)](https://github.com/denzp/cargo-wharf)
+-   [Nix](https://github.com/AkihiroSuda/buildkit-nix)
 -   (open a PR to add your own language)
 
 ### Exploring Dockerfiles
