@@ -91,6 +91,7 @@ BuildKit is used by the following projects:
 -   [Docker buildx](https://github.com/docker/buildx)
 -   [Okteto Cloud](https://okteto.com/)
 -   [Earthly earthfiles](https://github.com/vladaionescu/earthly)
+-   [Gitpod](https://github.com/gitpod-io/gitpod)
 
 ## Quick start
 
