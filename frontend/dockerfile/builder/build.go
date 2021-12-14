@@ -814,7 +814,7 @@ func contextByNameFunc(c client.Client, p *ocispecs.Platform) func(context.Conte
 
 		if p != nil {
 			name := name + "::" + platforms.Format(platforms.Normalize(*p))
-			st, img, err := contextByName(ctx, c, name)
+			st, img, err := contextByName(ctx, c, name, p)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -822,11 +822,11 @@ func contextByNameFunc(c client.Client, p *ocispecs.Platform) func(context.Conte
 				return st, img, nil
 			}
 		}
-		return contextByName(ctx, c, name)
+		return contextByName(ctx, c, name, p)
 	}
 }
 
-func contextByName(ctx context.Context, c client.Client, name string) (*llb.State, *dockerfile2llb.Image, error) {
+func contextByName(ctx context.Context, c client.Client, name string, platform *ocispecs.Platform) (*llb.State, *dockerfile2llb.Image, error) {
 	opts := c.BuildOpts().Opts
 	v, ok := opts["context:"+name]
 	if !ok {
@@ -839,7 +839,14 @@ func contextByName(ctx context.Context, c client.Client, name string) (*llb.Stat
 	}
 	switch vv[0] {
 	case "docker-image":
-		st := llb.Image(strings.TrimPrefix(vv[1], "//"), llb.WithCustomName("[context "+name+"] "+vv[1]), llb.WithMetaResolver(c))
+		imgOpt := []llb.ImageOption{
+			llb.WithCustomName("[context " + name + "] " + vv[1]),
+			llb.WithMetaResolver(c),
+		}
+		if platform != nil {
+			imgOpt = append(imgOpt, llb.Platform(*platform))
+		}
+		st := llb.Image(strings.TrimPrefix(vv[1], "//"), imgOpt...)
 		return &st, nil, nil
 	case "git":
 		st, ok := detectGitContext(v, "1")
