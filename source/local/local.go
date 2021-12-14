@@ -117,6 +117,8 @@ func (ls *localSourceHandler) snapshot(ctx context.Context, s session.Group, cal
 			bklog.G(ctx).Debugf("reusing ref for local: %s", m.ID())
 			mutable = m
 			break
+		} else {
+			bklog.G(ctx).Debugf("not reusing ref %s for local: %v", si.ID(), err)
 		}
 	}
 

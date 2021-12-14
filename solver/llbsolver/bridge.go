@@ -8,11 +8,13 @@ import (
 	"time"
 
 	"github.com/containerd/containerd/platforms"
-	"github.com/mitchellh/hashstructure"
+	"github.com/mitchellh/hashstructure/v2"
 	"github.com/moby/buildkit/cache/remotecache"
+	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend"
 	gw "github.com/moby/buildkit/frontend/gateway/client"
+	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/errdefs"
@@ -20,6 +22,7 @@ import (
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/flightcontrol"
+	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
@@ -34,6 +37,21 @@ type llbBridge struct {
 	cms                       map[string]solver.CacheManager
 	cmsMu                     sync.Mutex
 	sm                        *session.Manager
+}
+
+func (b *llbBridge) Warn(ctx context.Context, dgst digest.Digest, level int, msg string) error {
+	return b.builder.InContext(ctx, func(ctx context.Context, g session.Group) error {
+		pw, ok, _ := progress.NewFromContext(ctx, progress.WithMetadata("vertex", dgst))
+		if !ok {
+			return nil
+		}
+		pw.Write(identity.NewID(), client.VertexWarning{
+			Vertex:  dgst,
+			Level:   level,
+			Message: []byte(msg),
+		})
+		return pw.Close()
+	})
 }
 
 func (b *llbBridge) loadResult(ctx context.Context, def *pb.Definition, cacheImports []gw.CacheOptionsEntry) (solver.CachedResult, solver.BuildInfo, error) {
@@ -79,6 +97,15 @@ func (b *llbBridge) loadResult(ctx context.Context, def *pb.Definition, cacheImp
 		} else {
 			cm = prevCm
 		}
+
+		// TODO FIXME earthly-specific this wait is required to ensure the remotecache/registry's ResolveCacheImporterFunc can run
+		// which requires the session to remain open in order to get dockerhub (or any other registry) credentials.
+		// It seems like the cleaner approach is to bake this in somewhere into the edge or Load
+		if lcm, ok := cm.(*lazyCacheManager); ok {
+			bklog.G(ctx).Debugf("forcing lazyCacheManager.wait()")
+			lcm.wait()
+		}
+
 		cms = append(cms, cm)
 		b.cmsMu.Unlock()
 	}
@@ -345,7 +372,7 @@ func cmKey(im gw.CacheOptionsEntry) (string, error) {
 	if im.Type == "registry" && im.Attrs["ref"] != "" {
 		return im.Attrs["ref"], nil
 	}
-	i, err := hashstructure.Hash(im, nil)
+	i, err := hashstructure.Hash(im, hashstructure.FormatV2, nil)
 	if err != nil {
 		return "", err
 	}

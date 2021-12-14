@@ -19,9 +19,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var sshTests = []integration.Test{
+var sshTests = integration.TestFuncs(
 	testSSHSocketParams,
-}
+)
 
 func init() {
 	allTests = append(allTests, sshTests...)

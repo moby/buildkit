@@ -115,7 +115,7 @@ func Copy(ctx context.Context, srcRoot, src, dstRoot, dst string, opts ...Opt) e
 		if err != nil {
 			return err
 		}
-		if err := c.copy(ctx, srcFollowed, "", dst, false, false, false); err != nil {
+		if err := c.copy(ctx, srcFollowed, "", dst, false, fileutils.MatchInfo{}, fileutils.MatchInfo{}); err != nil {
 			return err
 		}
 	}
@@ -284,7 +284,7 @@ func newCopier(root string, chown Chowner, tm *time.Time, mode *int, xeh XAttrEr
 }
 
 // dest is always clean
-func (c *copier) copy(ctx context.Context, src, srcComponents, target string, overwriteTargetMetadata, parentMatchedInclude, parentMatchedExclude bool) error {
+func (c *copier) copy(ctx context.Context, src, srcComponents, target string, overwriteTargetMetadata bool, parentIncludeMatchInfo, parentExcludeMatchInfo fileutils.MatchInfo) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -297,16 +297,20 @@ func (c *copier) copy(ctx context.Context, src, srcComponents, target string, ov
 	}
 
 	include := true
-	matchesIncludePattern := false
-	matchesExcludePattern := false
+	var (
+		includeMatchInfo fileutils.MatchInfo
+		excludeMatchInfo fileutils.MatchInfo
+	)
 	if srcComponents != "" {
-		matchesIncludePattern, err = c.include(srcComponents, fi, parentMatchedInclude)
+		matchesIncludePattern := false
+		matchesExcludePattern := false
+		matchesIncludePattern, includeMatchInfo, err = c.include(srcComponents, fi, parentIncludeMatchInfo)
 		if err != nil {
 			return err
 		}
 		include = matchesIncludePattern
 
-		matchesExcludePattern, err = c.exclude(srcComponents, fi, parentMatchedExclude)
+		matchesExcludePattern, excludeMatchInfo, err = c.exclude(srcComponents, fi, parentExcludeMatchInfo)
 		if err != nil {
 			return err
 		}
@@ -338,7 +342,7 @@ func (c *copier) copy(ctx context.Context, src, srcComponents, target string, ov
 	case fi.IsDir():
 		if created, err := c.copyDirectory(
 			ctx, src, srcComponents, target, fi, overwriteTargetMetadata,
-			include, matchesIncludePattern, matchesExcludePattern,
+			include, includeMatchInfo, excludeMatchInfo,
 		); err != nil {
 			return err
 		} else if !overwriteTargetMetadata || c.includePatternMatcher != nil {
@@ -400,28 +404,28 @@ func (c *copier) notifyChange(target string, fi os.FileInfo) error {
 	return nil
 }
 
-func (c *copier) include(path string, fi os.FileInfo, parentMatchedInclude bool) (bool, error) {
+func (c *copier) include(path string, fi os.FileInfo, parentIncludeMatchInfo fileutils.MatchInfo) (bool, fileutils.MatchInfo, error) {
 	if c.includePatternMatcher == nil {
-		return true, nil
+		return true, fileutils.MatchInfo{}, nil
 	}
 
-	m, err := c.includePatternMatcher.MatchesUsingParentResult(path, parentMatchedInclude)
+	m, matchInfo, err := c.includePatternMatcher.MatchesUsingParentResults(path, parentIncludeMatchInfo)
 	if err != nil {
-		return false, errors.Wrap(err, "failed to match includepatterns")
+		return false, matchInfo, errors.Wrap(err, "failed to match includepatterns")
 	}
-	return m, nil
+	return m, matchInfo, nil
 }
 
-func (c *copier) exclude(path string, fi os.FileInfo, parentMatchedExclude bool) (bool, error) {
+func (c *copier) exclude(path string, fi os.FileInfo, parentExcludeMatchInfo fileutils.MatchInfo) (bool, fileutils.MatchInfo, error) {
 	if c.excludePatternMatcher == nil {
-		return false, nil
+		return false, fileutils.MatchInfo{}, nil
 	}
 
-	m, err := c.excludePatternMatcher.MatchesUsingParentResult(path, parentMatchedExclude)
+	m, matchInfo, err := c.excludePatternMatcher.MatchesUsingParentResults(path, parentExcludeMatchInfo)
 	if err != nil {
-		return false, errors.Wrap(err, "failed to match excludepatterns")
+		return false, matchInfo, errors.Wrap(err, "failed to match excludepatterns")
 	}
-	return m, nil
+	return m, matchInfo, nil
 }
 
 // Delayed creation of parent directories when a file or dir matches an include
@@ -467,8 +471,8 @@ func (c *copier) copyDirectory(
 	stat os.FileInfo,
 	overwriteTargetMetadata bool,
 	include bool,
-	matchesIncludePattern bool,
-	matchesExcludePattern bool,
+	includeMatchInfo fileutils.MatchInfo,
+	excludeMatchInfo fileutils.MatchInfo,
 ) (bool, error) {
 	if !stat.IsDir() {
 		return false, errors.Errorf("source is not directory")
@@ -515,7 +519,7 @@ func (c *copier) copyDirectory(
 			ctx,
 			filepath.Join(src, fi.Name()), filepath.Join(srcComponents, fi.Name()),
 			filepath.Join(dst, fi.Name()),
-			true, matchesIncludePattern, matchesExcludePattern,
+			true, includeMatchInfo, excludeMatchInfo,
 		); err != nil {
 			return false, err
 		}

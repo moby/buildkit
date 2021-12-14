@@ -57,6 +57,7 @@ const (
 	CapFileBase                       apicaps.CapID = "file.base"
 	CapFileRmWildcard                 apicaps.CapID = "file.rm.wildcard"
 	CapFileCopyIncludeExcludePatterns apicaps.CapID = "file.copy.includeexcludepatterns"
+	CapFileRmNoFollowSymlink          apicaps.CapID = "file.rm.nofollowsymlink"
 
 	CapConstraints apicaps.CapID = "constraints"
 	CapPlatform    apicaps.CapID = "platform"
@@ -66,6 +67,8 @@ const (
 	CapMetaExportCache apicaps.CapID = "meta.exportcache"
 
 	CapRemoteCacheGHA apicaps.CapID = "cache.gha"
+
+	CapMergeOp apicaps.CapID = "mergeop"
 )
 
 func init() {
@@ -327,6 +330,12 @@ func init() {
 	})
 
 	Caps.Init(apicaps.Cap{
+		ID:      CapFileRmNoFollowSymlink,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+
+	Caps.Init(apicaps.Cap{
 		ID:      CapFileCopyIncludeExcludePatterns,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
@@ -364,6 +373,11 @@ func init() {
 
 	Caps.Init(apicaps.Cap{
 		ID:      CapRemoteCacheGHA,
+		Enabled: true,
+		Status:  apicaps.CapStatusExperimental,
+	})
+	Caps.Init(apicaps.Cap{
+		ID:      CapMergeOp,
 		Enabled: true,
 		Status:  apicaps.CapStatusExperimental,
 	})

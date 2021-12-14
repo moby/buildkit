@@ -299,6 +299,15 @@ func (c *grpcClient) requestForRef(ref client.Reference) (*pb.SolveRequest, erro
 	return req, nil
 }
 
+func (c *grpcClient) Warn(ctx context.Context, dgst digest.Digest, msg string) error {
+	_, err := c.client.Warn(ctx, &pb.WarnRequest{
+		Digest:  dgst,
+		Level:   1,
+		Message: []byte(msg),
+	})
+	return err
+}
+
 func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (res *client.Result, err error) {
 	if creq.Definition != nil {
 		for _, md := range creq.Definition.Metadata {
@@ -456,6 +465,27 @@ func (c *grpcClient) BuildOpts() client.BuildOpts {
 		LLBCaps:   c.llbCaps,
 		Caps:      c.caps,
 	}
+}
+
+func (c *grpcClient) CurrentFrontend() (*llb.State, error) {
+	fp := "/run/config/buildkit/metadata/frontend.bin"
+	if _, err := os.Stat(fp); err != nil {
+		return nil, nil
+	}
+	dt, err := os.ReadFile(fp)
+	if err != nil {
+		return nil, err
+	}
+	var def opspb.Definition
+	if err := def.Unmarshal(dt); err != nil {
+		return nil, err
+	}
+	op, err := llb.NewDefinitionOp(&def)
+	if err != nil {
+		return nil, err
+	}
+	st := llb.NewState(op)
+	return &st, nil
 }
 
 func (c *grpcClient) Inputs(ctx context.Context) (map[string]llb.State, error) {

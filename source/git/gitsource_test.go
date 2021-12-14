@@ -11,6 +11,8 @@ import (
 	"testing"
 
 	"github.com/containerd/containerd/content/local"
+	"github.com/containerd/containerd/diff/apply"
+	"github.com/containerd/containerd/diff/walking"
 	ctdmetadata "github.com/containerd/containerd/metadata"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/snapshots"
@@ -22,6 +24,7 @@ import (
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/util/leaseutil"
+	"github.com/moby/buildkit/util/winlayers"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -83,7 +86,7 @@ func testRepeatedFetch(t *testing.T, keepGitDir bool) {
 	require.NoError(t, err)
 	defer ref1.Release(context.TODO())
 
-	mount, err := ref1.Mount(ctx, false, nil)
+	mount, err := ref1.Mount(ctx, true, nil)
 	require.NoError(t, err)
 
 	lm := snapshot.LocalMounter(mount)
@@ -136,7 +139,7 @@ func testRepeatedFetch(t *testing.T, keepGitDir bool) {
 	require.NoError(t, err)
 	defer ref3.Release(context.TODO())
 
-	mount, err = ref3.Mount(ctx, false, nil)
+	mount, err = ref3.Mount(ctx, true, nil)
 	require.NoError(t, err)
 
 	lm = snapshot.LocalMounter(mount)
@@ -213,7 +216,7 @@ func testFetchBySHA(t *testing.T, keepGitDir bool) {
 	require.NoError(t, err)
 	defer ref1.Release(context.TODO())
 
-	mount, err := ref1.Mount(ctx, false, nil)
+	mount, err := ref1.Mount(ctx, true, nil)
 	require.NoError(t, err)
 
 	lm := snapshot.LocalMounter(mount)
@@ -306,7 +309,7 @@ func testMultipleRepos(t *testing.T, keepGitDir bool) {
 	require.NoError(t, err)
 	defer ref1.Release(context.TODO())
 
-	mount, err := ref1.Mount(ctx, false, nil)
+	mount, err := ref1.Mount(ctx, true, nil)
 	require.NoError(t, err)
 
 	lm := snapshot.LocalMounter(mount)
@@ -318,7 +321,7 @@ func testMultipleRepos(t *testing.T, keepGitDir bool) {
 	require.NoError(t, err)
 	defer ref2.Release(context.TODO())
 
-	mount, err = ref2.Mount(ctx, false, nil)
+	mount, err = ref2.Mount(ctx, true, nil)
 	require.NoError(t, err)
 
 	lm = snapshot.LocalMounter(mount)
@@ -420,7 +423,7 @@ func testSubdir(t *testing.T, keepGitDir bool) {
 	require.NoError(t, err)
 	defer ref1.Release(context.TODO())
 
-	mount, err := ref1.Mount(ctx, false, nil)
+	mount, err := ref1.Mount(ctx, true, nil)
 	require.NoError(t, err)
 
 	lm := snapshot.LocalMounter(mount)
@@ -455,12 +458,18 @@ func setupGitSource(t *testing.T, tmpdir string) source.Source {
 
 	md, err := metadata.NewStore(filepath.Join(tmpdir, "metadata.db"))
 	require.NoError(t, err)
+	lm := leaseutil.WithNamespace(ctdmetadata.NewLeaseManager(mdb), "buildkit")
+	c := mdb.ContentStore()
+	applier := winlayers.NewFileSystemApplierWithWindows(c, apply.NewFileSystemApplier(c))
+	differ := winlayers.NewWalkingDiffWithWindows(c, walking.NewWalkingDiff(c))
 
 	cm, err := cache.NewManager(cache.ManagerOpt{
 		Snapshotter:    snapshot.FromContainerdSnapshotter("native", containerdsnapshot.NSSnapshotter("buildkit", mdb.Snapshotter("native")), nil),
 		MetadataStore:  md,
-		LeaseManager:   leaseutil.WithNamespace(ctdmetadata.NewLeaseManager(mdb), "buildkit"),
-		ContentStore:   mdb.ContentStore(),
+		LeaseManager:   lm,
+		ContentStore:   c,
+		Applier:        applier,
+		Differ:         differ,
 		GarbageCollect: mdb.GarbageCollect,
 	})
 	require.NoError(t, err)

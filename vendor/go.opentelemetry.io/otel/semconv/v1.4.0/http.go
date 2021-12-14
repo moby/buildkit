@@ -51,36 +51,12 @@ func NetAttributesFromHTTPRequest(network string, request *http.Request) []attri
 		attrs = append(attrs, NetTransportOther)
 	}
 
-	peerName, peerIP, peerPort := "", "", 0
-	{
-		hostPart := request.RemoteAddr
-		portPart := ""
-		if idx := strings.LastIndex(hostPart, ":"); idx >= 0 {
-			hostPart = request.RemoteAddr[:idx]
-			portPart = request.RemoteAddr[idx+1:]
-		}
-		if hostPart != "" {
-			if ip := net.ParseIP(hostPart); ip != nil {
-				peerIP = ip.String()
-			} else {
-				peerName = hostPart
-			}
-
-			if portPart != "" {
-				numPort, err := strconv.ParseUint(portPart, 10, 16)
-				if err == nil {
-					peerPort = (int)(numPort)
-				} else {
-					peerName, peerIP = "", ""
-				}
-			}
-		}
+	peerIP, peerName, peerPort := hostIPNamePort(request.RemoteAddr)
+	if peerIP != "" {
+		attrs = append(attrs, NetPeerIPKey.String(peerIP))
 	}
 	if peerName != "" {
 		attrs = append(attrs, NetPeerNameKey.String(peerName))
-	}
-	if peerIP != "" {
-		attrs = append(attrs, NetPeerIPKey.String(peerIP))
 	}
 	if peerPort != 0 {
 		attrs = append(attrs, NetPeerPortKey.Int(peerPort))
@@ -88,27 +64,9 @@ func NetAttributesFromHTTPRequest(network string, request *http.Request) []attri
 
 	hostIP, hostName, hostPort := "", "", 0
 	for _, someHost := range []string{request.Host, request.Header.Get("Host"), request.URL.Host} {
-		hostPart := ""
-		if idx := strings.LastIndex(someHost, ":"); idx >= 0 {
-			strPort := someHost[idx+1:]
-			numPort, err := strconv.ParseUint(strPort, 10, 16)
-			if err == nil {
-				hostPort = (int)(numPort)
-			}
-			hostPart = someHost[:idx]
-		} else {
-			hostPart = someHost
-		}
-		if hostPart != "" {
-			ip := net.ParseIP(hostPart)
-			if ip != nil {
-				hostIP = ip.String()
-			} else {
-				hostName = hostPart
-			}
+		hostIP, hostName, hostPort = hostIPNamePort(someHost)
+		if hostIP != "" || hostName != "" || hostPort != 0 {
 			break
-		} else {
-			hostPort = 0
 		}
 	}
 	if hostIP != "" {
@@ -122,6 +80,30 @@ func NetAttributesFromHTTPRequest(network string, request *http.Request) []attri
 	}
 
 	return attrs
+}
+
+// hostIPNamePort extracts the IP address, name and (optional) port from hostWithPort.
+// It handles both IPv4 and IPv6 addresses. If the host portion is not recognized
+// as a valid IPv4 or IPv6 address, the `ip` result will be empty and the
+// host portion will instead be returned in `name`.
+func hostIPNamePort(hostWithPort string) (ip string, name string, port int) {
+	var (
+		hostPart, portPart string
+		parsedPort         uint64
+		err                error
+	)
+	if hostPart, portPart, err = net.SplitHostPort(hostWithPort); err != nil {
+		hostPart, portPart = hostWithPort, ""
+	}
+	if parsedIP := net.ParseIP(hostPart); parsedIP != nil {
+		ip = parsedIP.String()
+	} else {
+		name = hostPart
+	}
+	if parsedPort, err = strconv.ParseUint(portPart, 10, 16); err == nil {
+		port = int(parsedPort)
+	}
+	return
 }
 
 // EndUserAttributesFromHTTPRequest generates attributes of the
@@ -225,7 +207,9 @@ func HTTPServerAttributesFromHTTPRequest(serverName, route string, request *http
 		attrs = append(attrs, HTTPRouteKey.String(route))
 	}
 	if values, ok := request.Header["X-Forwarded-For"]; ok && len(values) > 0 {
-		attrs = append(attrs, HTTPClientIPKey.String(values[0]))
+		if addresses := strings.SplitN(values[0], ",", 2); len(addresses) > 0 {
+			attrs = append(attrs, HTTPClientIPKey.String(addresses[0]))
+		}
 	}
 
 	return append(attrs, httpCommonAttributesFromHTTPRequest(request)...)

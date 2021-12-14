@@ -34,10 +34,17 @@ type VertexLog struct {
 	Timestamp time.Time
 }
 
+type VertexWarning struct {
+	Vertex  digest.Digest
+	Level   int
+	Message []byte
+}
+
 type SolveStatus struct {
 	Vertexes []*Vertex
 	Statuses []*VertexStatus
 	Logs     []*VertexLog
+	Warnings []*VertexWarning
 }
 
 type SolveResponse struct {

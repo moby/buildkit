@@ -451,6 +451,10 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 		if _, err := gitWithinDir(ctx, gitDir, "", sock, knownHosts, gs.auth, args...); err != nil {
 			return nil, errors.Wrapf(err, "failed to fetch remote %s", urlutil.RedactCredentials(gs.src.Remote))
 		}
+		_, err = gitWithinDir(ctx, gitDir, "", sock, knownHosts, nil, "reflog", "expire", "--all", "--expire=now")
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to expire reflog for remote %s", urlutil.RedactCredentials(gs.src.Remote))
+		}
 	}
 
 	checkoutRef, err := gs.cache.New(ctx, nil, g, cache.WithRecordType(client.UsageRecordTypeGitCheckout), cache.WithDescription(fmt.Sprintf("git snapshot for %s#%s", gs.src.Remote, ref)))
@@ -514,6 +518,17 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 		_, err = gitWithinDir(ctx, checkoutDirGit, checkoutDir, sock, knownHosts, nil, "checkout", "FETCH_HEAD")
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to checkout remote %s", urlutil.RedactCredentials(gs.src.Remote))
+		}
+		_, err = gitWithinDir(ctx, checkoutDirGit, "", sock, knownHosts, nil, "remote", "set-url", "origin", urlutil.RedactCredentials(gs.src.Remote))
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to set remote origin to %s", urlutil.RedactCredentials(gs.src.Remote))
+		}
+		_, err = gitWithinDir(ctx, checkoutDirGit, "", sock, knownHosts, nil, "reflog", "expire", "--all", "--expire=now")
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to expire reflog for remote %s", urlutil.RedactCredentials(gs.src.Remote))
+		}
+		if err := os.Remove(filepath.Join(checkoutDirGit, "FETCH_HEAD")); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return nil, errors.Wrapf(err, "failed to remove FETCH_HEAD for remote %s", urlutil.RedactCredentials(gs.src.Remote))
 		}
 		gitDir = checkoutDirGit
 	} else {

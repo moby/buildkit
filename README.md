@@ -91,6 +91,7 @@ BuildKit is used by the following projects:
 -   [Docker buildx](https://github.com/docker/buildx)
 -   [Okteto Cloud](https://okteto.com/)
 -   [Earthly earthfiles](https://github.com/vladaionescu/earthly)
+-   [Gitpod](https://github.com/gitpod-io/gitpod)
 
 ## Quick start
 
@@ -155,6 +156,7 @@ Currently, the following high-level languages has been implemented for LLB:
 -   [HLB](https://github.com/openllb/hlb)
 -   [Earthfile (Earthly)](https://github.com/earthly/earthly)
 -   [Cargo Wharf (Rust)](https://github.com/denzp/cargo-wharf)
+-   [Nix](https://github.com/AkihiroSuda/buildkit-nix)
 -   (open a PR to add your own language)
 
 ### Exploring Dockerfiles
@@ -194,7 +196,7 @@ buildctl build \
 buildctl build \
     --frontend gateway.v0 \
     --opt source=docker/dockerfile \
-    --opt context=git://github.com/moby/moby \
+    --opt context=https://github.com/moby/moby.git \
     --opt build-arg:APT_MIRROR=cdn-fastly.deb.debian.org
 ```
 
@@ -321,6 +323,8 @@ In most case you want to use the `inline` cache exporter.
 However, note that the `inline` cache exporter only supports `min` cache mode. 
 To enable `max` cache mode, push the image and the cache separately by using `registry` cache exporter.
 
+`inline` and `registry` exporters both store the cache in the registry. For importing the cache, `type=registry` is sufficient for both, as specifying the cache format is not necessary.
+
 #### Inline (push image and cache together)
 
 ```bash
@@ -331,6 +335,8 @@ buildctl build ... \
 ```
 
 Note that the inline cache is not imported unless [`--import-cache type=registry,ref=...`](#registry-push-image-and-cache-separately) is provided.
+
+Inline cache embeds cache metadata into the image config. The layers in the image will be left untouched compared to the image with no cache information.
 
 :information_source: Docker-integrated BuildKit (`DOCKER_BUILDKIT=1 docker build`) and `docker buildx`requires 
 `--build-arg BUILDKIT_INLINE_CACHE=1` to be specified to enable the `inline` cache exporter.
@@ -386,6 +392,10 @@ buildctl build ... \
   --export-cache type=gha \
   --import-cache type=gha
 ```
+
+Github Actions cache saves both cache metadata and layers to GitHub's Cache service. This cache currently has a [size limit of 10GB](https://docs.github.com/en/actions/advanced-guides/caching-dependencies-to-speed-up-workflows#usage-limits-and-eviction-policy) that is shared accross different caches in the repo. If you exceed this limit, GitHub will save your cache but will begin evicting caches until the total size is less than 10 GB. Recycling caches too often can result in slower runtimes overall.
+
+Similarly to using [actions/cache](https://github.com/actions/cache), caches are [scoped by branch](https://docs.github.com/en/actions/advanced-guides/caching-dependencies-to-speed-up-workflows#restrictions-for-accessing-a-cache), with the default and target branches being available to every branch.
 
 Following attributes are required to authenticate against the [Github Actions Cache service API](https://github.com/tonistiigi/go-actions-cache/blob/master/api.md#authentication):
 * `url`: Cache server URL (default `$ACTIONS_CACHE_URL`)

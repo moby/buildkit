@@ -26,13 +26,14 @@ import (
 	utilsystem "github.com/moby/buildkit/util/system"
 	"github.com/moby/buildkit/util/testutil/echoserver"
 	"github.com/moby/buildkit/util/testutil/integration"
+	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/ssh/agent"
 )
 
 func TestClientGatewayIntegration(t *testing.T) {
-	integration.Run(t, []integration.Test{
+	integration.Run(t, integration.TestFuncs(
 		testClientGatewaySolve,
 		testClientGatewayFailedSolve,
 		testClientGatewayEmptySolve,
@@ -51,20 +52,21 @@ func TestClientGatewayIntegration(t *testing.T) {
 		testClientGatewaySlowCacheExecError,
 		testClientGatewayExecFileActionError,
 		testClientGatewayContainerExtraHosts,
-	}, integration.WithMirroredImages(integration.OfficialImages("busybox:latest")))
+		testWarnings,
+	), integration.WithMirroredImages(integration.OfficialImages("busybox:latest")))
 
-	integration.Run(t, []integration.Test{
+	integration.Run(t, integration.TestFuncs(
 		testClientGatewayContainerSecurityMode,
-	}, integration.WithMirroredImages(integration.OfficialImages("busybox:latest")),
+	), integration.WithMirroredImages(integration.OfficialImages("busybox:latest")),
 		integration.WithMatrix("secmode", map[string]interface{}{
 			"sandbox":  securitySandbox,
 			"insecure": securityInsecure,
 		}),
 	)
 
-	integration.Run(t, []integration.Test{
+	integration.Run(t, integration.TestFuncs(
 		testClientGatewayContainerHostNetworking,
-	},
+	),
 		integration.WithMirroredImages(integration.OfficialImages("busybox:latest")),
 		integration.WithMatrix("netmode", map[string]interface{}{
 			"default": defaultNetwork,
@@ -147,6 +149,90 @@ func testClientGatewaySolve(t *testing.T, sb integration.Sandbox) {
 	read, err := ioutil.ReadFile(filepath.Join(tmpdir, "foo"))
 	require.NoError(t, err)
 	require.Equal(t, testStr, string(read))
+
+	checkAllReleasable(t, c, sb, true)
+}
+
+func testWarnings(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+
+	ctx := sb.Context()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	product := "buildkit_test"
+
+	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
+		st := llb.Scratch().File(llb.Mkfile("/dummy", 0600, []byte("foo")))
+
+		def, err := st.Marshal(ctx)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to marshal state")
+		}
+
+		dgst, _, _, _, err := st.Output().Vertex(ctx, def.Constraints).Marshal(ctx, def.Constraints)
+		if err != nil {
+			return nil, err
+		}
+
+		r, err := c.Solve(ctx, client.SolveRequest{
+			Definition: def.ToPB(),
+		})
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to solve")
+		}
+
+		require.NoError(t, c.Warn(ctx, dgst, "this is warning"))
+		return r, nil
+	}
+
+	status := make(chan *SolveStatus)
+	statusDone := make(chan struct{})
+	done := make(chan struct{})
+
+	var warnings []*VertexWarning
+	vertexes := map[digest.Digest]struct{}{}
+
+	go func() {
+		defer close(statusDone)
+		for {
+			select {
+			case st, ok := <-status:
+				if !ok {
+					return
+				}
+				for _, s := range st.Vertexes {
+					vertexes[s.Digest] = struct{}{}
+				}
+				warnings = append(warnings, st.Warnings...)
+			case <-done:
+				return
+			}
+		}
+	}()
+
+	_, err = c.Build(ctx, SolveOpt{}, product, b, status)
+	require.NoError(t, err)
+
+	select {
+	case <-statusDone:
+	case <-time.After(10 * time.Second):
+		close(done)
+	}
+
+	<-statusDone
+
+	require.Equal(t, 1, len(vertexes))
+	require.Equal(t, 1, len(warnings))
+
+	w := warnings[0]
+
+	require.Equal(t, "this is warning", string(w.Message))
+	require.Equal(t, 1, w.Level)
+	_, ok := vertexes[w.Vertex]
+	require.True(t, ok)
 
 	checkAllReleasable(t, c, sb, true)
 }

@@ -62,6 +62,14 @@ func (j *Job) Status(ctx context.Context, ch chan *client.SolveStatus) error {
 				v.Vertex = vtx.(digest.Digest)
 				v.Timestamp = p.Timestamp
 				ss.Logs = append(ss.Logs, &v)
+			case client.VertexWarning:
+				vtx, ok := p.Meta("vertex")
+				if !ok {
+					bklog.G(ctx).Warnf("progress %s warning without vertex info", p.ID)
+					continue
+				}
+				v.Vertex = vtx.(digest.Digest)
+				ss.Warnings = append(ss.Warnings, &v)
 			}
 		}
 		select {

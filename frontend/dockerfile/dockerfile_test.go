@@ -58,7 +58,7 @@ func init() {
 	}
 }
 
-var allTests = []integration.Test{
+var allTests = integration.TestFuncs(
 	testCmdShell,
 	testGlobalArg,
 	testDockerfileDirs,
@@ -118,9 +118,9 @@ var allTests = []integration.Test{
 	testShmSize,
 	testUlimit,
 	testCgroupParent,
-}
+)
 
-var fileOpTests = []integration.Test{
+var fileOpTests = integration.TestFuncs(
 	testEmptyDestDir,
 	testCopyChownCreateDest,
 	testCopyThroughSymlinkContext,
@@ -143,7 +143,7 @@ var fileOpTests = []integration.Test{
 	testWorkdirCopyIgnoreRelative,
 	testCopyFollowAllSymlinks,
 	testDockerfileAddChownExpand,
-}
+)
 
 // Tests that depend on the `security.*` entitlements
 var securityTests = []integration.Test{}

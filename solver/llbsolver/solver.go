@@ -245,6 +245,13 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 				if err != nil {
 					return err
 				}
+
+				workerRef, ok := r.Sys().(*worker.WorkerRef)
+				if !ok {
+					return errors.Errorf("invalid reference: %T", r.Sys())
+				}
+				ctx = withDescHandlerCacheOpts(ctx, workerRef.ImmutableRef)
+
 				// all keys have same export chain so exporting others is not needed
 				_, err = r.CacheKeys()[0].Exporter.ExportTo(ctx, e, solver.CacheExportOpt{
 					ResolveRemotes: workerRefResolver(solver.CompressionOpt{
@@ -290,7 +297,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 
 func inlineCache(ctx context.Context, e remotecache.Exporter, res solver.CachedResult, compressionopt solver.CompressionOpt, g session.Group) ([]byte, error) {
 	if efl, ok := e.(interface {
-		ExportForLayers([]digest.Digest) ([]byte, error)
+		ExportForLayers(context.Context, []digest.Digest) ([]byte, error)
 	}); ok {
 		workerRef, ok := res.Sys().(*worker.WorkerRef)
 		if !ok {
@@ -308,6 +315,7 @@ func inlineCache(ctx context.Context, e remotecache.Exporter, res solver.CachedR
 			digests = append(digests, desc.Digest)
 		}
 
+		ctx = withDescHandlerCacheOpts(ctx, workerRef.ImmutableRef)
 		if _, err := res.CacheKeys()[0].Exporter.ExportTo(ctx, e, solver.CacheExportOpt{
 			ResolveRemotes: workerRefResolver(compressionopt, true, g), // load as many compression blobs as possible
 			Mode:           solver.CacheExportModeMin,
@@ -317,9 +325,23 @@ func inlineCache(ctx context.Context, e remotecache.Exporter, res solver.CachedR
 			return nil, err
 		}
 
-		return efl.ExportForLayers(digests)
+		return efl.ExportForLayers(ctx, digests)
 	}
 	return nil, nil
+}
+
+func withDescHandlerCacheOpts(ctx context.Context, ref cache.ImmutableRef) context.Context {
+	return solver.WithCacheOptGetter(ctx, func(keys ...interface{}) map[interface{}]interface{} {
+		vals := make(map[interface{}]interface{})
+		for _, k := range keys {
+			if key, ok := k.(cache.DescHandlerKey); ok {
+				if handler := ref.DescHandler(digest.Digest(key)); handler != nil {
+					vals[k] = handler
+				}
+			}
+		}
+		return vals
+	})
 }
 
 func (s *Solver) Status(ctx context.Context, id string, statusChan chan *client.SolveStatus) error {

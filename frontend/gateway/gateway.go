@@ -7,12 +7,15 @@ import (
 	"io"
 	"net"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/containerd/containerd/mount"
 	"github.com/docker/distribution/reference"
+	"github.com/docker/docker/pkg/idtools"
 	"github.com/gogo/googleapis/google/rpc"
 	gogotypes "github.com/gogo/protobuf/types"
 	"github.com/golang/protobuf/ptypes/any"
@@ -28,6 +31,7 @@ import (
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/errdefs"
 	llberrdefs "github.com/moby/buildkit/solver/llbsolver/errdefs"
@@ -88,6 +92,8 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 	var rootFS cache.MutableRef
 	var readonly bool // TODO: try to switch to read-only by default.
 
+	var frontendDef *opspb.Definition
+
 	if isDevel {
 		devRes, err := llbBridge.Solve(ctx,
 			frontend.SolveRequest{
@@ -106,10 +112,12 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 		if devRes.Ref == nil {
 			return nil, errors.Errorf("development gateway didn't return default result")
 		}
+		frontendDef = devRes.Ref.Definition()
 		res, err := devRes.Ref.Result(ctx)
 		if err != nil {
 			return nil, err
 		}
+
 		workerRef, ok := res.Sys().(*worker.WorkerRef)
 		if !ok {
 			return nil, errors.Errorf("invalid ref: %T", res.Sys())
@@ -171,6 +179,7 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 			return nil, errors.Errorf("gateway source didn't return default result")
 
 		}
+		frontendDef = res.Ref.Definition()
 		r, err := res.Ref.Result(ctx)
 		if err != nil {
 			return nil, err
@@ -252,7 +261,19 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 		return nil, err
 	}
 
-	err = w.Executor().Run(ctx, "", mountWithSession(rootFS, session.NewGroup(sid)), nil, executor.ProcessInfo{Meta: meta, Stdin: lbf.Stdin, Stdout: lbf.Stdout, Stderr: os.Stderr}, nil)
+	mdmnt, release, err := metadataMount(frontendDef)
+	if err != nil {
+		return nil, err
+	}
+	if release != nil {
+		defer release()
+	}
+	var mnts []executor.Mount
+	if mdmnt != nil {
+		mnts = append(mnts, *mdmnt)
+	}
+
+	err = w.Executor().Run(ctx, "", mountWithSession(rootFS, session.NewGroup(sid)), mnts, executor.ProcessInfo{Meta: meta, Stdin: lbf.Stdin, Stdout: lbf.Stdout, Stderr: os.Stderr}, nil)
 
 	if err != nil {
 		if errdefs.IsCanceled(err) && lbf.isErrServerClosed {
@@ -270,6 +291,53 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 	}
 
 	return lbf.Result()
+}
+
+func metadataMount(def *opspb.Definition) (*executor.Mount, func(), error) {
+	dt, err := def.Marshal()
+	if err != nil {
+		return nil, nil, err
+	}
+	dir, err := os.MkdirTemp("", "buildkit-metadata")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "frontend.bin"), dt, 0400); err != nil {
+		return nil, nil, err
+	}
+
+	return &executor.Mount{
+			Src:      &bind{dir},
+			Dest:     "/run/config/buildkit/metadata",
+			Readonly: true,
+		}, func() {
+			os.RemoveAll(dir)
+		}, nil
+}
+
+type bind struct {
+	dir string
+}
+
+func (b *bind) Mount(ctx context.Context, readonly bool) (snapshot.Mountable, error) {
+	return &bindMount{b.dir, readonly}, nil
+}
+
+type bindMount struct {
+	dir      string
+	readonly bool
+}
+
+func (b *bindMount) Mount() ([]mount.Mount, func() error, error) {
+	return []mount.Mount{{
+		Type:    "bind",
+		Source:  b.dir,
+		Options: []string{"bind", "ro"},
+	}}, func() error { return nil }, nil
+}
+func (b *bindMount) IdentityMapping() *idtools.IdentityMapping {
+	return nil
 }
 
 func (lbf *llbBridgeForwarder) Discard() {
@@ -930,6 +998,14 @@ func (lbf *llbBridgeForwarder) ReleaseContainer(ctx context.Context, in *pb.Rele
 	}
 	err := ctr.Release(ctx)
 	return &pb.ReleaseContainerResponse{}, stack.Enable(err)
+}
+
+func (lbf *llbBridgeForwarder) Warn(ctx context.Context, in *pb.WarnRequest) (*pb.WarnResponse, error) {
+	err := lbf.llbBridge.Warn(ctx, in.Digest, int(in.Level), string(in.Message))
+	if err != nil {
+		return nil, err
+	}
+	return &pb.WarnResponse{}, nil
 }
 
 type processIO struct {

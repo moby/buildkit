@@ -2,6 +2,7 @@ package llbsolver
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/containerd/containerd/platforms"
@@ -169,7 +170,11 @@ func newVertex(dgst digest.Digest, op *pb.Op, opMeta *pb.OpMetadata, load func(d
 		}
 	}
 
-	vtx := &vertex{sys: op, options: opt, digest: dgst, name: llbOpName(op)}
+	name, err := llbOpName(op, load)
+	if err != nil {
+		return nil, err
+	}
+	vtx := &vertex{sys: op, options: opt, digest: dgst, name: name}
 	for _, in := range op.Inputs {
 		sub, err := load(in.Digest)
 		if err != nil {
@@ -242,25 +247,35 @@ func loadLLB(def *pb.Definition, fn func(digest.Digest, *pb.Op, func(digest.Dige
 	return solver.Edge{Vertex: v, Index: solver.Index(lastOp.Inputs[0].Index)}, nil
 }
 
-func llbOpName(op *pb.Op) string {
-	switch op := op.Op.(type) {
+func llbOpName(pbOp *pb.Op, load func(digest.Digest) (solver.Vertex, error)) (string, error) {
+	switch op := pbOp.Op.(type) {
 	case *pb.Op_Source:
 		if id, err := source.FromLLB(op, nil); err == nil {
 			if id, ok := id.(*source.LocalIdentifier); ok {
 				if len(id.IncludePatterns) == 1 {
-					return op.Source.Identifier + " (" + id.IncludePatterns[0] + ")"
+					return op.Source.Identifier + " (" + id.IncludePatterns[0] + ")", nil
 				}
 			}
 		}
-		return op.Source.Identifier
+		return op.Source.Identifier, nil
 	case *pb.Op_Exec:
-		return strings.Join(op.Exec.Meta.Args, " ")
+		return strings.Join(op.Exec.Meta.Args, " "), nil
 	case *pb.Op_File:
-		return fileOpName(op.File.Actions)
+		return fileOpName(op.File.Actions), nil
 	case *pb.Op_Build:
-		return "build"
+		return "build", nil
+	case *pb.Op_Merge:
+		subnames := make([]string, len(pbOp.Inputs))
+		for i, inp := range pbOp.Inputs {
+			subvtx, err := load(inp.Digest)
+			if err != nil {
+				return "", err
+			}
+			subnames[i] = strconv.Quote(subvtx.Name())
+		}
+		return "merge " + strings.Join(subnames, " + "), nil
 	default:
-		return "unknown"
+		return "unknown", nil
 	}
 }
 
@@ -308,6 +323,10 @@ func ValidateOp(op *pb.Op) error {
 	case *pb.Op_Build:
 		if op.Build == nil {
 			return errors.Errorf("invalid nil build op")
+		}
+	case *pb.Op_Merge:
+		if op.Merge == nil {
+			return errors.Errorf("invalid nil merge op")
 		}
 	}
 	return nil

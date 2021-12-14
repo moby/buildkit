@@ -10,6 +10,7 @@ import (
 	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/util/contentutil"
+	"github.com/moby/buildkit/util/push"
 	"github.com/moby/buildkit/util/resolver"
 	"github.com/moby/buildkit/util/resolver/limited"
 	digest "github.com/opencontainers/go-digest"
@@ -48,7 +49,7 @@ func ResolveCacheExporterFunc(sm *session.Manager, hosts docker.RegistryHosts) r
 			ociMediatypes = b
 		}
 		remote := resolver.DefaultPool.GetResolver(hosts, ref, "push", sm, g)
-		pusher, err := remote.Pusher(ctx, ref)
+		pusher, err := push.Pusher(ctx, remote, ref)
 		if err != nil {
 			return nil, err
 		}

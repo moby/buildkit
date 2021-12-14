@@ -1,5 +1,4 @@
-FROM debian:buster-slim AS base
-RUN echo "deb http://os.loongnix.org/mirrors/debian/debian/ buster main" > /etc/apt/sources.list
+FROM debian:bullseye-slim AS base
 RUN apt-get update && apt-get --no-install-recommends install -y \
   binutils-arm-linux-gnueabihf \
   binutils-aarch64-linux-gnu \

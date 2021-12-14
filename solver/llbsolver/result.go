@@ -66,7 +66,7 @@ func NewContentHashFunc(selectors []Selector) solver.ResultBasedCacheFunc {
 					s,
 				)
 				if err != nil {
-					return err
+					return errors.Wrapf(err, "failed to calculate checksum of ref %s", ref.ID())
 				}
 				dgsts[i] = []byte(dgst)
 				return nil

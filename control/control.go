@@ -109,7 +109,7 @@ func (c *Controller) DiskUsage(ctx context.Context, r *controlapi.DiskUsageReque
 				Mutable:     r.Mutable,
 				InUse:       r.InUse,
 				Size_:       r.Size,
-				Parent:      r.Parent,
+				Parents:     r.Parents,
 				UsageCount:  int64(r.UsageCount),
 				Description: r.Description,
 				CreatedAt:   r.CreatedAt,
@@ -177,7 +177,7 @@ func (c *Controller) Prune(req *controlapi.PruneRequest, stream controlapi.Contr
 				Mutable:     r.Mutable,
 				InUse:       r.InUse,
 				Size_:       r.Size,
-				Parent:      r.Parent,
+				Parents:     r.Parents,
 				UsageCount:  int64(r.UsageCount),
 				Description: r.Description,
 				CreatedAt:   r.CreatedAt,
@@ -333,8 +333,8 @@ func (c *Controller) Status(req *controlapi.StatusRequest, stream controlapi.Con
 				return nil
 			}
 			logSize := 0
-			retry := false
 			for {
+				retry := false
 				sr := controlapi.StatusResponse{}
 				for _, v := range ss.Vertexes {
 					sr.Vertexes = append(sr.Vertexes, &controlapi.Vertex{
@@ -366,7 +366,7 @@ func (c *Controller) Status(req *controlapi.StatusRequest, stream controlapi.Con
 						Msg:       v.Data,
 						Timestamp: v.Timestamp,
 					})
-					logSize += len(v.Data)
+					logSize += len(v.Data) + emptyLogVertexSize
 					// avoid logs growing big and split apart if they do
 					if logSize > 1024*1024 {
 						ss.Vertexes = nil
@@ -375,6 +375,13 @@ func (c *Controller) Status(req *controlapi.StatusRequest, stream controlapi.Con
 						retry = true
 						break
 					}
+				}
+				for _, v := range ss.Warnings {
+					sr.Warnings = append(sr.Warnings, &controlapi.VertexWarning{
+						Vertex: v.Vertex,
+						Level:  int64(v.Level),
+						Msg:    v.Message,
+					})
 				}
 				if err := stream.SendMsg(&sr); err != nil {
 					return err

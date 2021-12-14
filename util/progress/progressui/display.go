@@ -22,7 +22,6 @@ import (
 )
 
 func DisplaySolveStatus(ctx context.Context, phase string, c console.Console, w io.Writer, ch chan *client.SolveStatus) error {
-
 	modeConsole := c != nil
 
 	disp := &display{c: c, phase: phase}
@@ -46,7 +45,10 @@ func DisplaySolveStatus(ctx context.Context, phase string, c console.Console, w 
 
 	var done bool
 	ticker := time.NewTicker(tickerTimeout)
-	defer ticker.Stop()
+	// implemented as closure because "ticker" can change
+	defer func() {
+		ticker.Stop()
+	}()
 
 	displayLimiter := rate.NewLimiter(rate.Every(displayTimeout), 1)
 

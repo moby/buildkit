@@ -1,4 +1,4 @@
-# /etc/buildkit/buildkitd.toml
+# buildkitd.toml
 
 ## NAME
 
@@ -10,6 +10,9 @@ buildkitd.toml - configuration file for buildkitd
 The TOML file used to configure the buildkitd daemon settings has a short
 list of global settings followed by a series of sections for specific areas
 of daemon configuration.
+
+The file path is `/etc/buildkit/buildkitd.toml` for rootful mode,
+`~/.config/buildkit/buildkitd.toml` for rootless mode.
 
 ## EXAMPLE
 
@@ -87,11 +90,15 @@ insecure-entitlements = [ "network.host", "security.insecure" ]
 
 # registry configures a new Docker register used for cache import or output.
 [registry."docker.io"]
-  mirrors = ["hub.docker.io"]
+  mirrors = ["yourmirror.local:5000"]
   http = true
   insecure = true
   ca=["/etc/config/myca.pem"]
   [[registry."docker.io".keypair]]
     key="/etc/config/key.pem"
     cert="/etc/config/cert.pem"
+    
+# optionally mirror configuration can be done by defining it as a registry.
+[registry."yourmirror.local:5000"]
+  http = true
 ```

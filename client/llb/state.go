@@ -29,6 +29,18 @@ type Vertex interface {
 	Inputs() []Output
 }
 
+func NewConstraints(co ...ConstraintsOpt) *Constraints {
+	defaultPlatform := platforms.Normalize(platforms.DefaultSpec())
+	c := &Constraints{
+		Platform:      &defaultPlatform,
+		LocalUniqueID: identity.NewID(),
+	}
+	for _, o := range co {
+		o.SetConstraintsOption(c)
+	}
+	return c
+}
+
 func NewState(o Output) State {
 	s := State{
 		out: o,
@@ -112,18 +124,12 @@ func (s State) SetMarshalDefaults(co ...ConstraintsOpt) State {
 }
 
 func (s State) Marshal(ctx context.Context, co ...ConstraintsOpt) (*Definition, error) {
+	c := NewConstraints(append(s.opts, co...)...)
 	def := &Definition{
-		Metadata: make(map[digest.Digest]pb.OpMetadata, 0),
+		Metadata:    make(map[digest.Digest]pb.OpMetadata, 0),
+		Constraints: c,
 	}
 
-	defaultPlatform := platforms.Normalize(platforms.DefaultSpec())
-	c := &Constraints{
-		Platform:      &defaultPlatform,
-		LocalUniqueID: identity.NewID(),
-	}
-	for _, o := range append(s.opts, co...) {
-		o.SetConstraintsOption(c)
-	}
 	if s.Output() == nil || s.Output().Vertex(ctx, c) == nil {
 		return def, nil
 	}
