@@ -139,5 +139,6 @@ type WarnOpts struct {
 	Level      int
 	SourceInfo *pb.SourceInfo
 	Range      []*pb.Range
-	Detail     []byte
+	Detail     [][]byte
+	URL        string
 }

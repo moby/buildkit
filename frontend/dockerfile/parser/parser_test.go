@@ -166,7 +166,7 @@ RUN indented \
 	require.Contains(t, warnings[0].Short, "Empty continuation line found in")
 	require.Contains(t, warnings[0].Short, "RUN something     following     more")
 	require.Contains(t, warnings[1].Short, "RUN another     thing")
-	require.Contains(t, warnings[0].Detail, "will become errors in a future release")
+	require.Contains(t, string(warnings[0].Detail[0]), "will become errors in a future release")
 }
 
 func TestParseReturnsScannerErrors(t *testing.T) {

@@ -139,9 +139,10 @@ message VertexWarning {
 	string vertex = 1 [(gogoproto.customtype) = "github.com/opencontainers/go-digest.Digest", (gogoproto.nullable) = false];
 	int64 level = 2;
 	bytes short = 3;
-	bytes detail = 4;
-	pb.SourceInfo info = 5;
-	repeated pb.Range ranges = 6;
+	repeated bytes detail = 4;
+	string url = 5;
+	pb.SourceInfo info = 6;
+	repeated pb.Range ranges = 7;
 }
 
 message BytesMessage {

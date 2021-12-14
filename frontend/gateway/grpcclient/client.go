@@ -306,6 +306,7 @@ func (c *grpcClient) Warn(ctx context.Context, dgst digest.Digest, msg string, o
 		Info:   opts.SourceInfo,
 		Ranges: opts.Range,
 		Detail: opts.Detail,
+		Url:    opts.URL,
 	})
 	return err
 }

@@ -999,6 +999,7 @@ func (lbf *llbBridgeForwarder) Warn(ctx context.Context, in *pb.WarnRequest) (*p
 		SourceInfo: in.Info,
 		Range:      in.Ranges,
 		Detail:     in.Detail,
+		URL:        in.Url,
 	})
 	if err != nil {
 		return nil, err

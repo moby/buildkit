@@ -298,6 +298,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 					Level:      int(v.Level),
 					Short:      v.Short,
 					Detail:     v.Detail,
+					URL:        v.Url,
 					SourceInfo: v.Info,
 					Range:      v.Ranges,
 				})

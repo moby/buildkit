@@ -56,6 +56,7 @@ func (b *llbBridge) Warn(ctx context.Context, dgst digest.Digest, msg string, op
 			SourceInfo: opts.SourceInfo,
 			Range:      opts.Range,
 			Detail:     opts.Detail,
+			URL:        opts.URL,
 		})
 		return pw.Close()
 	})

@@ -384,6 +384,7 @@ func (c *Controller) Status(req *controlapi.StatusRequest, stream controlapi.Con
 						Detail: v.Detail,
 						Info:   v.SourceInfo,
 						Ranges: v.Range,
+						Url:    v.URL,
 					})
 				}
 				if err := stream.SendMsg(&sr); err != nil {

@@ -39,7 +39,8 @@ type VertexWarning struct {
 	Vertex     digest.Digest
 	Level      int
 	Short      []byte
-	Detail     []byte
+	Detail     [][]byte
+	URL        string
 	SourceInfo *pb.SourceInfo
 	Range      []*pb.Range
 }

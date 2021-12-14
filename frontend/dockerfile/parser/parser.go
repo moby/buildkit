@@ -274,7 +274,8 @@ type Result struct {
 
 type Warning struct {
 	Short    string
-	Detail   string
+	Detail   [][]byte
+	URL      string
 	Location *Range
 }
 
@@ -354,7 +355,8 @@ func Parse(rwc io.Reader) (*Result, error) {
 		if hasEmptyContinuationLine {
 			warnings = append(warnings, Warning{
 				Short:    "Empty continuation line found in: " + line,
-				Detail:   "Empty continuation lines will become errors in a future release. https://github.com/moby/moby/pull/33719",
+				Detail:   [][]byte{[]byte("Empty continuation lines will become errors in a future release")},
+				URL:      "https://github.com/moby/moby/pull/33719",
 				Location: &Range{Start: Position{Line: currentLine}, End: Position{Line: currentLine}},
 			})
 		}

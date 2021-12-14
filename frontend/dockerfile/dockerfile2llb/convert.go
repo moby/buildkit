@@ -68,7 +68,7 @@ type ConvertOpt struct {
 	ContextLocalName  string
 	SourceMap         *llb.SourceMap
 	Hostname          string
-	Warn              func(short, detail string, location *parser.Range)
+	Warn              func(short, url string, detail [][]byte, location *parser.Range)
 }
 
 func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State, *Image, error) {
@@ -93,7 +93,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 	}
 
 	for _, w := range dockerfile.Warnings {
-		opt.Warn(w.Short, w.Detail, w.Location)
+		opt.Warn(w.Short, w.URL, w.Detail, w.Location)
 	}
 
 	proxyEnv := proxyEnvFromBuildArgs(opt.BuildArgs)
