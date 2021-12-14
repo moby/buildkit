@@ -122,6 +122,7 @@ var allTests = integration.TestFuncs(
 	testNamedImageContext,
 	testNamedLocalContext,
 	testNamedInputContext,
+	testNamedMultiplatformInputContext,
 )
 
 var fileOpTests = integration.TestFuncs(
@@ -5625,6 +5626,155 @@ COPY --from=build /foo /out /
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "foo"))
 	require.NoError(t, err)
 	require.Equal(t, "foo is bar\n", string(dt))
+}
+
+func testNamedMultiplatformInputContext(t *testing.T, sb integration.Sandbox) {
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	dockerfile := []byte(`
+FROM --platform=$BUILDPLATFORM alpine
+ARG TARGETARCH
+ENV FOO=bar-$TARGETARCH
+RUN echo "foo $TARGETARCH" > /out
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	dockerfile2 := []byte(`
+FROM base AS build
+RUN echo "foo is $FOO" > /foo
+FROM scratch
+COPY --from=build /foo /out /
+`)
+
+	dir2, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile2, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	f := getFrontend(t, sb)
+
+	b := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		res, err := f.SolveGateway(ctx, c, gateway.SolveRequest{
+			FrontendOpt: map[string]string{
+				"platform": "linux/amd64,linux/arm64",
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		if len(res.Refs) != 2 {
+			return nil, errors.Errorf("expected 2 refs, got %d", len(res.Refs))
+		}
+
+		inputs := map[string]*pb.Definition{}
+		st, err := res.Refs["linux/amd64"].ToState()
+		if err != nil {
+			return nil, err
+		}
+		def, err := st.Marshal(ctx)
+		if err != nil {
+			return nil, err
+		}
+		inputs["base::linux/amd64"] = def.ToPB()
+
+		st, err = res.Refs["linux/arm64"].ToState()
+		if err != nil {
+			return nil, err
+		}
+		def, err = st.Marshal(ctx)
+		if err != nil {
+			return nil, err
+		}
+		inputs["base::linux/arm64"] = def.ToPB()
+
+		frontendOpt := map[string]string{
+			"dockerfilekey":             builder.DefaultLocalNameDockerfile + "2",
+			"context:base::linux/amd64": "input:base::linux/amd64",
+			"context:base::linux/arm64": "input:base::linux/arm64",
+			"platform":                  "linux/amd64,linux/arm64",
+		}
+
+		dt, ok := res.Metadata["containerimage.config/linux/amd64"]
+		if !ok {
+			return nil, errors.Errorf("no containerimage.config in metadata")
+		}
+		dt, err = json.Marshal(map[string][]byte{
+			"containerimage.config": dt,
+		})
+		if err != nil {
+			return nil, err
+		}
+		frontendOpt["input-metadata:base::linux/amd64"] = string(dt)
+
+		dt, ok = res.Metadata["containerimage.config/linux/arm64"]
+		if !ok {
+			return nil, errors.Errorf("no containerimage.config in metadata")
+		}
+		dt, err = json.Marshal(map[string][]byte{
+			"containerimage.config": dt,
+		})
+		if err != nil {
+			return nil, err
+		}
+		frontendOpt["input-metadata:base::linux/arm64"] = string(dt)
+
+		res, err = f.SolveGateway(ctx, c, gateway.SolveRequest{
+			FrontendOpt:    frontendOpt,
+			FrontendInputs: inputs,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return res, nil
+	}
+
+	product := "buildkit_test"
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = c.Build(ctx, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile:       dir,
+			builder.DefaultLocalNameContext:          dir,
+			builder.DefaultLocalNameDockerfile + "2": dir2,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, product, b, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "linux_amd64/out"))
+	require.NoError(t, err)
+	require.Equal(t, "foo amd64\n", string(dt))
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "linux_amd64/foo"))
+	require.NoError(t, err)
+	require.Equal(t, "foo is bar-amd64\n", string(dt))
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "linux_arm64/out"))
+	require.NoError(t, err)
+	require.Equal(t, "foo arm64\n", string(dt))
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "linux_arm64/foo"))
+	require.NoError(t, err)
+	require.Equal(t, "foo is bar-arm64\n", string(dt))
 }
 
 func tmpdir(appliers ...fstest.Applier) (string, error) {
