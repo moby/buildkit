@@ -1,19 +1,12 @@
 name: build
 
 on:
-  schedule:
-    - cron: '0 10 * * *'  # everyday at 10am
-  workflow_dispatch:
   push:
     branches:
-      - 'master'
-    tags:
-      - 'v*'
-      - 'dockerfile/*'
+      - 'earthly-main'
   pull_request:
     branches:
-      - 'master'
-      - 'v*'
+      - 'earthly-main'
 
 env:
   REPO_SLUG_ORIGIN: "moby/buildkit:latest"

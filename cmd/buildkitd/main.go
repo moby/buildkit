@@ -34,6 +34,7 @@ import (
 	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/control"
 	"github.com/moby/buildkit/executor/oci"
+	"github.com/moby/buildkit/exporter/earthlyoutputs/registry"
 	"github.com/moby/buildkit/frontend"
 	dockerfile "github.com/moby/buildkit/frontend/dockerfile/builder"
 	"github.com/moby/buildkit/frontend/gateway"
@@ -219,6 +220,7 @@ func main() {
 		if cfg.Debug {
 			logrus.SetLevel(logrus.DebugLevel)
 		}
+		logrus.SetOutput(os.Stderr) // earthly-specific: force logs to show up under earthly-buildkitd container logs
 
 		if cfg.GRPC.DebugAddress != "" {
 			if err := setupDebugHandlers(cfg.GRPC.DebugAddress); err != nil {
@@ -236,7 +238,13 @@ func main() {
 		unary := grpc_middleware.ChainUnaryServer(unaryInterceptor(ctx, tp), grpcerrors.UnaryServerInterceptor)
 		stream := grpc_middleware.ChainStreamServer(streamTracer, grpcerrors.StreamServerInterceptor)
 
-		opts := []grpc.ServerOption{grpc.UnaryInterceptor(unary), grpc.StreamInterceptor(stream)}
+		maxMsgSize := 67108864 // 64MB
+		opts := []grpc.ServerOption{
+			grpc.UnaryInterceptor(unary), grpc.StreamInterceptor(stream),
+			grpc.MaxRecvMsgSize(maxMsgSize), grpc.MaxSendMsgSize(maxMsgSize),
+			grpc.InitialWindowSize(65535 * 32),
+			grpc.InitialConnWindowSize(65535 * 16),
+		}
 		server := grpc.NewServer(opts...)
 
 		// relative path does not work with nightlyone/lockfile
@@ -270,6 +278,19 @@ func main() {
 		}
 
 		controller.Register(server)
+
+		// earthly specific
+		lrPort, ok := os.LookupEnv("BUILDKIT_LOCAL_REGISTRY_LISTEN_PORT")
+		if ok {
+			logrus.Infof("Starting local registry for outputs on port %s", lrPort)
+			serveErr := registry.Serve(ctx, fmt.Sprintf("0.0.0.0:%s", lrPort))
+			go func() {
+				err := <-serveErr
+				if err != nil {
+					logrus.Errorf("Registry serve error: %s\n", err.Error())
+				}
+			}()
+		}
 
 		ents := c.GlobalStringSlice("allow-insecure-entitlement")
 		if len(ents) > 0 {

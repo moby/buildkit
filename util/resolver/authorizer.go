@@ -336,6 +336,9 @@ func (ah *authHandler) fetchToken(ctx context.Context, sm *session.Manager, g se
 			if exp := issuedAt.Add(time.Duration(float64(expires)*0.9) * time.Second); time.Now().Before(exp) {
 				r.expires = exp
 			}
+		} else if errors.Is(err, context.Canceled) {
+			// earthly-specific prevent context canceled errors from being permanent
+			r.expires = time.Now()
 		}
 	}()
 
