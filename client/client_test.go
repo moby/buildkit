@@ -1741,13 +1741,21 @@ func testUser(t *testing.T, sb integration.Sandbox) {
 	st := llb.Image("busybox:latest").Run(llb.Shlex(`sh -c "mkdir -m 0777 /wd"`))
 
 	run := func(user, cmd string) {
-		st = st.Run(llb.Shlex(cmd), llb.Dir("/wd"), llb.User(user))
+		if user != "" {
+			st = st.Run(llb.Shlex(cmd), llb.Dir("/wd"), llb.User(user))
+		} else {
+			st = st.Run(llb.Shlex(cmd), llb.Dir("/wd"))
+		}
 	}
 
 	run("daemon", `sh -c "id -nu > user"`)
 	run("daemon:daemon", `sh -c "id -ng > group"`)
 	run("daemon:nobody", `sh -c "id -ng > nobody"`)
 	run("1:1", `sh -c "id -g > userone"`)
+	run("root", `sh -c "id -Gn > root_supplementary"`)
+	run("", `sh -c "id -Gn > default_supplementary"`)
+	run("", `rm /etc/passwd /etc/group`) // test that default user still works
+	run("", `sh -c "id -u > default_uid"`)
 
 	st = st.Run(llb.Shlex("cp -a /wd/. /out/"))
 	out := st.AddMount("/out", llb.Scratch())
@@ -1771,19 +1779,32 @@ func testUser(t *testing.T, sb integration.Sandbox) {
 
 	dt, err := ioutil.ReadFile(filepath.Join(destDir, "user"))
 	require.NoError(t, err)
-	require.Contains(t, string(dt), "daemon")
+	require.Equal(t, "daemon", strings.TrimSpace(string(dt)))
 
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "group"))
 	require.NoError(t, err)
-	require.Contains(t, string(dt), "daemon")
+	require.Equal(t, "daemon", strings.TrimSpace(string(dt)))
 
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "nobody"))
 	require.NoError(t, err)
-	require.Contains(t, string(dt), "nobody")
+	require.Equal(t, "nobody", strings.TrimSpace(string(dt)))
 
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "userone"))
 	require.NoError(t, err)
-	require.Contains(t, string(dt), "1")
+	require.Equal(t, "1", strings.TrimSpace(string(dt)))
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "root_supplementary"))
+	require.NoError(t, err)
+	require.True(t, strings.HasPrefix(string(dt), "root "))
+	require.True(t, strings.Contains(string(dt), "wheel"))
+
+	dt2, err := ioutil.ReadFile(filepath.Join(destDir, "default_supplementary"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), string(dt2))
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "default_uid"))
+	require.NoError(t, err)
+	require.Equal(t, "0", strings.TrimSpace(string(dt)))
 
 	checkAllReleasable(t, c, sb, true)
 }
