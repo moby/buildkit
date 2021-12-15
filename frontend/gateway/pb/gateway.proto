@@ -9,6 +9,7 @@ import "github.com/moby/buildkit/api/types/worker.proto";
 import "github.com/moby/buildkit/util/apicaps/pb/caps.proto";
 import "github.com/tonistiigi/fsutil/types/stat.proto";
 
+
 option (gogoproto.sizer_all) = true;
 option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
@@ -173,9 +174,13 @@ message PongResponse{
 }
 
 message WarnRequest {
-	string Digest = 1 [(gogoproto.customtype) = "github.com/opencontainers/go-digest.Digest", (gogoproto.nullable) = false];
-	int64 Level = 2;
-	bytes Message = 3;
+	string digest = 1 [(gogoproto.customtype) = "github.com/opencontainers/go-digest.Digest", (gogoproto.nullable) = false];
+	int64 level = 2;
+	bytes short = 3;
+	repeated bytes detail = 4;
+	string url = 5;
+	pb.SourceInfo info = 6;
+	repeated pb.Range ranges = 7;
 }
 
 message WarnResponse{}

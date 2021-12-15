@@ -39,16 +39,24 @@ type llbBridge struct {
 	sm                        *session.Manager
 }
 
-func (b *llbBridge) Warn(ctx context.Context, dgst digest.Digest, level int, msg string) error {
+func (b *llbBridge) Warn(ctx context.Context, dgst digest.Digest, msg string, opts frontend.WarnOpts) error {
 	return b.builder.InContext(ctx, func(ctx context.Context, g session.Group) error {
 		pw, ok, _ := progress.NewFromContext(ctx, progress.WithMetadata("vertex", dgst))
 		if !ok {
 			return nil
 		}
+		level := opts.Level
+		if level == 0 {
+			level = 1
+		}
 		pw.Write(identity.NewID(), client.VertexWarning{
-			Vertex:  dgst,
-			Level:   level,
-			Message: []byte(msg),
+			Vertex:     dgst,
+			Level:      level,
+			Short:      []byte(msg),
+			SourceInfo: opts.SourceInfo,
+			Range:      opts.Range,
+			Detail:     opts.Detail,
+			URL:        opts.URL,
 		})
 		return pw.Close()
 	})
