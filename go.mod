@@ -49,7 +49,7 @@ require (
 	github.com/sirupsen/logrus v1.8.1
 	github.com/stretchr/testify v1.7.0
 	github.com/tonistiigi/fsutil v0.0.0-20210609172227-d72af97c0eaf
-	github.com/tonistiigi/go-actions-cache v0.0.0-20211002214948-4d48f2ff622a
+	github.com/tonistiigi/go-actions-cache v0.0.0-20211202175116-9642704158ff
 	github.com/tonistiigi/units v0.0.0-20180711220420-6950e57a87ea
 	github.com/tonistiigi/vt100 v0.0.0-20210615222946-8066bb97264f
 	github.com/urfave/cli v1.22.2

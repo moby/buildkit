@@ -10,6 +10,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"strconv"
@@ -17,8 +18,8 @@ import (
 	"sync"
 	"time"
 
-	jwt "github.com/dgrijalva/jwt-go"
 	"github.com/dimchansky/utfbom"
+	jwt "github.com/golang-jwt/jwt/v4"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -198,17 +199,17 @@ func (c *Cache) Scopes() []Scope {
 }
 
 func (c *Cache) Load(ctx context.Context, keys ...string) (*Entry, error) {
-	req, err := http.NewRequest("GET", c.url("cache"), nil)
+	u, err := url.Parse(c.url("cache"))
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return nil, err
 	}
-	c.auth(req)
-	c.accept(req)
-	q := req.URL.Query()
+	q := u.Query()
 	q.Set("keys", strings.Join(keys, ","))
 	q.Set("version", version(keys[0]))
-	req.URL.RawQuery = q.Encode()
-	Log("load cache %s", req.URL.String())
+	u.RawQuery = q.Encode()
+
+	req := c.newRequest("GET", u.String(), nil)
+	Log("load cache %s", u.String())
 	resp, err := c.doWithRetries(ctx, req)
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -236,14 +237,12 @@ func (c *Cache) reserve(ctx context.Context, key string) (int, error) {
 	if err != nil {
 		return 0, errors.WithStack(err)
 	}
-	req, err := http.NewRequest("POST", c.url("caches"), bytes.NewReader(dt))
-	if err != nil {
-		return 0, errors.WithStack(err)
-	}
-	c.auth(req)
-	c.accept(req)
-	req.Header.Set("Content-Type", "application/json")
-	Log("save cache req %s body=%s", req.URL.String(), dt)
+	req := c.newRequest("POST", c.url("caches"), func() io.Reader {
+		return bytes.NewReader(dt)
+	})
+
+	req.headers["Content-Type"] = "application/json"
+	Log("save cache req %s body=%s", req.url, dt)
 	resp, err := c.doWithRetries(ctx, req)
 	if err != nil {
 		return 0, errors.WithStack(err)
@@ -269,14 +268,11 @@ func (c *Cache) commit(ctx context.Context, id int, size int64) error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	req, err := http.NewRequest("POST", c.url(fmt.Sprintf("caches/%d", id)), bytes.NewReader(dt))
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	c.auth(req)
-	c.accept(req)
-	req.Header.Set("Content-Type", "application/json")
-	Log("commit cache %s, size %d", req.URL.String(), size)
+	req := c.newRequest("POST", c.url(fmt.Sprintf("caches/%d", id)), func() io.Reader {
+		return bytes.NewReader(dt)
+	})
+	req.headers["Content-Type"] = "application/json"
+	Log("commit cache %s, size %d", req.url, size)
 	resp, err := c.doWithRetries(ctx, req)
 	if err != nil {
 		return errors.Wrapf(err, "error committing cache %d", id)
@@ -400,17 +396,13 @@ loop0:
 }
 
 func (c *Cache) uploadChunk(ctx context.Context, id int, ra io.ReaderAt, off, n int64) error {
-	r := io.NewSectionReader(ra, off, n)
-	req, err := http.NewRequest("PATCH", c.url(fmt.Sprintf("caches/%d", id)), r)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	c.auth(req)
-	c.accept(req)
-	req.Header.Set("Content-Type", "application/octet-stream")
-	req.Header.Set("Content-Range", fmt.Sprintf("bytes %d-%d/*", off, off+n-1))
+	req := c.newRequest("PATCH", c.url(fmt.Sprintf("caches/%d", id)), func() io.Reader {
+		return io.NewSectionReader(ra, off, n)
+	})
+	req.headers["Content-Type"] = "application/octet-stream"
+	req.headers["Content-Range"] = fmt.Sprintf("bytes %d-%d/*", off, off+n-1)
 
-	Log("upload cache chunk %s, range %d-%d", req.URL.String(), off, off+n-1)
+	Log("upload cache chunk %s, range %d-%d", req.url, off, off+n-1)
 	resp, err := c.doWithRetries(ctx, req)
 	if err != nil {
 		return errors.WithStack(err)
@@ -425,8 +417,19 @@ func (c *Cache) uploadChunk(ctx context.Context, id int, ra io.ReaderAt, off, n 
 	return resp.Body.Close()
 }
 
-func (c *Cache) doWithRetries(ctx context.Context, req *http.Request) (*http.Response, error) {
-	req = req.WithContext(ctx)
+func (c *Cache) newRequest(method, url string, body func() io.Reader) *request {
+	return &request{
+		method: method,
+		url:    url,
+		body:   body,
+		headers: map[string]string{
+			"Authorization": "Bearer " + c.Token.Raw,
+			"Accept":        "application/json;api-version=6.0-preview.1",
+		},
+	}
+}
+
+func (c *Cache) doWithRetries(ctx context.Context, r *request) (*http.Response, error) {
 	var err error
 	max := time.Now().Add(c.opt.Timeout)
 	for {
@@ -436,6 +439,12 @@ func (c *Cache) doWithRetries(ctx context.Context, req *http.Request) (*http.Res
 			}
 			return nil, err1
 		}
+		req, err := r.httpReq()
+		if err != nil {
+			return nil, err
+		}
+		req = req.WithContext(ctx)
+
 		var resp *http.Response
 		resp, err = c.opt.Client.Do(req)
 		if err != nil {
@@ -455,14 +464,6 @@ func (c *Cache) doWithRetries(ctx context.Context, req *http.Request) (*http.Res
 		c.opt.BackoffPool.Reset()
 		return resp, nil
 	}
-}
-
-func (c *Cache) auth(r *http.Request) {
-	r.Header.Add("Authorization", "Bearer "+c.Token.Raw)
-}
-
-func (c *Cache) accept(r *http.Request) {
-	r.Header.Add("Accept", "application/json;api-version=6.0-preview.1")
 }
 
 func (c *Cache) url(p string) string {
@@ -529,6 +530,28 @@ func (ce *Entry) Download(ctx context.Context) ReaderAtCloser {
 		}
 		return resp.Body, nil
 	})
+}
+
+type request struct {
+	method  string
+	url     string
+	body    func() io.Reader
+	headers map[string]string
+}
+
+func (r *request) httpReq() (*http.Request, error) {
+	var body io.Reader
+	if r.body != nil {
+		body = r.body()
+	}
+	req, err := http.NewRequest(r.method, r.url, body)
+	if err != nil {
+		return nil, err
+	}
+	for k, v := range r.headers {
+		req.Header.Add(k, v)
+	}
+	return req, nil
 }
 
 func version(k string) string {
