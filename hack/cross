@@ -3,7 +3,12 @@
 . $(dirname $0)/util
 set -e
 
-: ${PLATFORMS=linux/arm}
+: ${PLATFORMS=}
+
+platformFlag=""
+if [ -n "$PLATFORMS" ]; then
+  platformFlag="--platform=$PLATFORMS"
+fi
 
 if [ -n "$RUNC_PLATFORMS" ]; then
   buildxCmd build $cacheFromFlags $cacheToFlags \
@@ -12,6 +17,5 @@ if [ -n "$RUNC_PLATFORMS" ]; then
     $currentcontext
 fi
 
-buildxCmd build $cacheFromFlags \
-  --platform "$PLATFORMS" \
+buildxCmd build $platformFlag $cacheFromFlags \
   $currentcontext
