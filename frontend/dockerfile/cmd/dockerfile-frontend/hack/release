@@ -3,7 +3,7 @@
 . $(dirname $0)/../../../../../hack/util
 set -e
 
-: ${PLATFORMS=linux/amd64}
+: ${PLATFORMS=}
 : ${DAILY_TARGETS=}
 
 usage() {
@@ -60,6 +60,11 @@ TAG=$2
 REPO=$3
 PUSH=$4
 
+platformFlag=""
+if [ -n "$PLATFORMS" ]; then
+  platformFlag="--platform=$PLATFORMS"
+fi
+
 pushFlag="push=false"
 if [ "$PUSH" = "push" ]; then
   pushFlag="push=true"
@@ -79,8 +84,7 @@ case $TYP in
     pushTag=${pushTag}-$TAG
   fi
 
-  buildxCmd build $cacheFromFlags $cacheToFlags \
-    --platform "$PLATFORMS" \
+  buildxCmd build $platformFlag $cacheFromFlags $cacheToFlags \
     --build-arg "CHANNEL=$TAG" \
     --build-arg "BUILDTAGS=$buildTags" \
     --output "type=image,name=$REPO:$pushTag,$pushFlag" \
@@ -97,8 +101,7 @@ case $TYP in
   fi
   buildTags=$(cat $tagf)
 
-  buildxCmd build $cacheFromFlags $cacheToFlags \
-    --platform "$PLATFORMS" \
+  buildxCmd build $platformFlag $cacheFromFlags $cacheToFlags \
     --build-arg "CHANNEL=$TAG" \
     --build-arg "BUILDTAGS=$buildTags" \
     --output "type=image,\"name=$publishedNames\",$pushFlag" \
@@ -124,8 +127,7 @@ case $TYP in
 
     tmp=$(mktemp -d -t buildid.XXXXXXXXXX)
     dt=$(date +%Y%m%d)
-    buildxCmd build $cacheFromFlags $cacheToFlags \
-      --platform "$PLATFORMS" \
+    buildxCmd build $platformFlag $cacheFromFlags $cacheToFlags \
       --target "buildid" \
       --build-arg "CHANNEL=$TAG" \
       --build-arg "BUILDTAGS=$buildTags" \
@@ -139,8 +141,7 @@ case $TYP in
       buildid=$(cat $tmp/buildid)
       echo "buildid: $buildid"
 
-      buildxCmd build $cacheFromFlags $cacheToFlags \
-        --platform "$PLATFORMS" \
+      buildxCmd build $platformFlag $cacheFromFlags $cacheToFlags \
         --build-arg "CHANNEL=$TAG" \
         --build-arg "BUILDTAGS=$buildTags" \
         --output "type=image,name=$REPO:$dt-$TAG,$pushFlag" \

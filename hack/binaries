@@ -3,17 +3,17 @@
 . $(dirname $0)/util
 set -eu
 
-: ${TARGETPLATFORM=}
+: ${PLATFORMS=}
 : ${BUILDKITD_TAGS=}
-
-platformFlag="--platform local"
-if [ -n "$TARGETPLATFORM" ]; then
-  platformFlag="--platform $TARGETPLATFORM"
-fi
 
 buildkitdTagsFlags=""
 if [ -n "$BUILDKITD_TAGS" ]; then
   buildkitdTagsFlags="--build-arg=BUILDKITD_TAGS=\"$BUILDKITD_TAGS\""
+fi
+
+platformFlag=""
+if [ -n "$PLATFORMS" ]; then
+  platformFlag="--platform=$PLATFORMS"
 fi
 
 buildxCmd build $platformFlag $buildkitdTagsFlags \
