@@ -140,6 +140,7 @@ func TestIntegration(t *testing.T) {
 		testMergeOp,
 		testMergeOpCache,
 		testRmSymlink,
+		testMoveParentDir,
 	), mirrors)
 
 	integration.Run(t, integration.TestFuncs(
@@ -3649,6 +3650,74 @@ func testWhiteoutParentDir(t *testing.T, sb integration.Sandbox) {
 	require.True(t, ok)
 
 	_, ok = m["foo/"]
+	require.True(t, ok)
+}
+
+// #2490
+func testMoveParentDir(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("busybox:latest")
+	st := llb.Scratch()
+
+	run := func(cmd string) {
+		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+	}
+
+	run(`sh -c "mkdir -p foo; echo -n first > foo/bar;"`)
+	run(`mv foo foo2`)
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	out := filepath.Join(destDir, "out.tar")
+	outW, err := os.Create(out)
+	require.NoError(t, err)
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:   ExporterOCI,
+				Output: fixedWriteCloser(outW),
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(out)
+	require.NoError(t, err)
+
+	m, err := testutil.ReadTarToMap(dt, false)
+	require.NoError(t, err)
+
+	var index ocispecs.Index
+	err = json.Unmarshal(m["index.json"].Data, &index)
+	require.NoError(t, err)
+
+	var mfst ocispecs.Manifest
+	err = json.Unmarshal(m["blobs/sha256/"+index.Manifests[0].Digest.Hex()].Data, &mfst)
+	require.NoError(t, err)
+
+	lastLayer := mfst.Layers[len(mfst.Layers)-1]
+
+	layer, ok := m["blobs/sha256/"+lastLayer.Digest.Hex()]
+	require.True(t, ok)
+
+	m, err = testutil.ReadTarToMap(layer.Data, true)
+	require.NoError(t, err)
+
+	_, ok = m[".wh.foo"]
+	require.True(t, ok)
+
+	_, ok = m["foo2/"]
+	require.True(t, ok)
+
+	_, ok = m["foo2/bar"]
 	require.True(t, ok)
 }
 
