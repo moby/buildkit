@@ -7,7 +7,7 @@ PUSH=$3
 . $(dirname $0)/util
 set -eu -o pipefail
 
-: ${PLATFORMS=linux/amd64}
+: ${PLATFORMS=}
 : ${TARGET=}
 
 versionTag=$(git describe --always --tags --match "v[0-9]*")
@@ -23,6 +23,11 @@ usage() {
 
 if [ -z "$TAG" ] || [ -z "$REPO" ]; then
   usage
+fi
+
+platformFlag=""
+if [ -n "$PLATFORMS" ]; then
+  platformFlag="--platform=$PLATFORMS"
 fi
 
 localmode=""
@@ -83,6 +88,5 @@ for tagName in $tagNames; do
   tagFlags="$tagFlags--tag=$tagName "
 done
 
-buildxCmd build $targetFlag $importCacheFlags $exportCacheFlags $tagFlags $outputFlag \
-  --platform "$PLATFORMS" \
+buildxCmd build $platformFlag $targetFlag $importCacheFlags $exportCacheFlags $tagFlags $outputFlag \
   $currentcontext

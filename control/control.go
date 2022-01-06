@@ -380,7 +380,11 @@ func (c *Controller) Status(req *controlapi.StatusRequest, stream controlapi.Con
 					sr.Warnings = append(sr.Warnings, &controlapi.VertexWarning{
 						Vertex: v.Vertex,
 						Level:  int64(v.Level),
-						Msg:    v.Message,
+						Short:  v.Short,
+						Detail: v.Detail,
+						Info:   v.SourceInfo,
+						Ranges: v.Range,
+						Url:    v.URL,
 					})
 				}
 				if err := stream.SendMsg(&sr); err != nil {

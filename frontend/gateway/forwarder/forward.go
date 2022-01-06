@@ -217,8 +217,8 @@ func (c *bridgeClient) discard(err error) {
 	}
 }
 
-func (c *bridgeClient) Warn(ctx context.Context, dgst digest.Digest, msg string) error {
-	return c.FrontendLLBBridge.Warn(ctx, dgst, 1, msg)
+func (c *bridgeClient) Warn(ctx context.Context, dgst digest.Digest, msg string, opts client.WarnOpts) error {
+	return c.FrontendLLBBridge.Warn(ctx, dgst, msg, opts)
 }
 
 func (c *bridgeClient) NewContainer(ctx context.Context, req client.NewContainerRequest) (client.Container, error) {

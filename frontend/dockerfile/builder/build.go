@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/containerd/containerd/platforms"
+	"github.com/docker/distribution/reference"
 	"github.com/docker/go-units"
 	controlapi "github.com/moby/buildkit/api/services/control"
 	"github.com/moby/buildkit/client/llb"
@@ -264,6 +265,11 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 		return nil, errors.Wrapf(err, "failed to marshal local source")
 	}
 
+	defVtx, err := def.Head()
+	if err != nil {
+		return nil, err
+	}
+
 	var sourceMap *llb.SourceMap
 
 	eg, ctx2 := errgroup.WithContext(ctx)
@@ -426,6 +432,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 						err = wrapSource(err, sourceMap, el.Location)
 					}
 				}()
+
 				st, img, err := dockerfile2llb.Dockerfile2LLB(ctx, dtDockerfile, dockerfile2llb.ConvertOpt{
 					Target:            opts[keyTarget],
 					MetaResolver:      c,
@@ -449,6 +456,13 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 					LLBCaps:           &caps,
 					SourceMap:         sourceMap,
 					Hostname:          opts[keyHostname],
+					Warn: func(msg, url string, detail [][]byte, location *parser.Range) {
+						if i != 0 {
+							return
+						}
+						c.Warn(ctx, defVtx, msg, warnOpts(sourceMap, location, detail, url))
+					},
+					ContextByName: contextByNameFunc(c, tp),
 				})
 
 				if err != nil {
@@ -765,6 +779,123 @@ func scopeToSubDir(c *llb.State, fileop bool, dir string) *llb.State {
 	unpack.AddMount("/src", *c, llb.Readonly)
 	bc := unpack.AddMount("/out", llb.Scratch())
 	return &bc
+}
+
+func warnOpts(sm *llb.SourceMap, r *parser.Range, detail [][]byte, url string) client.WarnOpts {
+	opts := client.WarnOpts{Level: 1, Detail: detail, URL: url}
+	if r == nil {
+		return opts
+	}
+	opts.SourceInfo = &pb.SourceInfo{
+		Data:       sm.Data,
+		Filename:   sm.Filename,
+		Definition: sm.Definition.ToPB(),
+	}
+	opts.Range = []*pb.Range{{
+		Start: pb.Position{
+			Line:      int32(r.Start.Line),
+			Character: int32(r.Start.Character),
+		},
+		End: pb.Position{
+			Line:      int32(r.End.Line),
+			Character: int32(r.End.Character),
+		},
+	}}
+	return opts
+}
+
+func contextByNameFunc(c client.Client, p *ocispecs.Platform) func(context.Context, string) (*llb.State, *dockerfile2llb.Image, error) {
+	return func(ctx context.Context, name string) (*llb.State, *dockerfile2llb.Image, error) {
+		named, err := reference.ParseNormalizedNamed(name)
+		if err != nil {
+			return nil, nil, errors.Wrapf(err, "invalid context name %s", name)
+		}
+		name = strings.TrimSuffix(reference.FamiliarString(named), ":latest")
+
+		if p != nil {
+			name := name + "::" + platforms.Format(platforms.Normalize(*p))
+			st, img, err := contextByName(ctx, c, name, p)
+			if err != nil {
+				return nil, nil, err
+			}
+			if st != nil {
+				return st, img, nil
+			}
+		}
+		return contextByName(ctx, c, name, p)
+	}
+}
+
+func contextByName(ctx context.Context, c client.Client, name string, platform *ocispecs.Platform) (*llb.State, *dockerfile2llb.Image, error) {
+	opts := c.BuildOpts().Opts
+	v, ok := opts["context:"+name]
+	if !ok {
+		return nil, nil, nil
+	}
+
+	vv := strings.SplitN(v, ":", 2)
+	if len(vv) != 2 {
+		return nil, nil, errors.Errorf("invalid context specifier %s for %s", v, name)
+	}
+	switch vv[0] {
+	case "docker-image":
+		imgOpt := []llb.ImageOption{
+			llb.WithCustomName("[context " + name + "] " + vv[1]),
+			llb.WithMetaResolver(c),
+		}
+		if platform != nil {
+			imgOpt = append(imgOpt, llb.Platform(*platform))
+		}
+		st := llb.Image(strings.TrimPrefix(vv[1], "//"), imgOpt...)
+		return &st, nil, nil
+	case "git":
+		st, ok := detectGitContext(v, "1")
+		if !ok {
+			return nil, nil, errors.Errorf("invalid git context %s", v)
+		}
+		return st, nil, nil
+	case "http", "https":
+		st, ok := detectGitContext(v, "1")
+		if !ok {
+			httpst := llb.HTTP(v, llb.WithCustomName("[context "+name+"] "+v))
+			st = &httpst
+		}
+		return st, nil, nil
+	case "local":
+		st := llb.Local(vv[1], llb.WithCustomName("[context "+name+"] load from client"), llb.SessionID(c.BuildOpts().SessionID), llb.SharedKeyHint("context:"+name))
+		return &st, nil, nil
+	case "input":
+		inputs, err := c.Inputs(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		st, ok := inputs[vv[1]]
+		if !ok {
+			return nil, nil, errors.Errorf("invalid input %s for %s", vv[1], name)
+		}
+		md, ok := opts["input-metadata:"+vv[1]]
+		if ok {
+			m := make(map[string][]byte)
+			if err := json.Unmarshal([]byte(md), &m); err != nil {
+				return nil, nil, errors.Wrapf(err, "failed to parse input metadata %s", md)
+			}
+			dt, ok := m["containerimage.config"]
+			if ok {
+				st, err = st.WithImageConfig([]byte(dt))
+				if err != nil {
+					return nil, nil, err
+				}
+				var img dockerfile2llb.Image
+				if err := json.Unmarshal(dt, &img); err != nil {
+					return nil, nil, errors.Wrapf(err, "failed to parse image config for %s", name)
+				}
+				return &st, &img, nil
+			}
+		}
+		return &st, nil, nil
+	default:
+		return nil, nil, errors.Errorf("unsupported context source %s for %s", vv[0], name)
+	}
 }
 
 func wrapSource(err error, sm *llb.SourceMap, ranges []parser.Range) error {

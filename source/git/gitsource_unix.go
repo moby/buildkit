@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/docker/docker/pkg/reexec"
@@ -63,8 +64,12 @@ func gitMain() {
 	close(done)
 	if err != nil {
 		if exiterr, ok := err.(*exec.ExitError); ok {
-			status := exiterr.Sys().(unix.WaitStatus)
-			os.Exit(status.ExitStatus())
+			switch status := exiterr.Sys().(type) {
+			case unix.WaitStatus:
+				os.Exit(status.ExitStatus())
+			case syscall.WaitStatus:
+				os.Exit(status.ExitStatus())
+			}
 		}
 		os.Exit(1)
 	}

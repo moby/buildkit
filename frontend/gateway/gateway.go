@@ -1001,7 +1001,13 @@ func (lbf *llbBridgeForwarder) ReleaseContainer(ctx context.Context, in *pb.Rele
 }
 
 func (lbf *llbBridgeForwarder) Warn(ctx context.Context, in *pb.WarnRequest) (*pb.WarnResponse, error) {
-	err := lbf.llbBridge.Warn(ctx, in.Digest, int(in.Level), string(in.Message))
+	err := lbf.llbBridge.Warn(ctx, in.Digest, string(in.Short), frontend.WarnOpts{
+		Level:      int(in.Level),
+		SourceInfo: in.Info,
+		Range:      in.Ranges,
+		Detail:     in.Detail,
+		URL:        in.Url,
+	})
 	if err != nil {
 		return nil, err
 	}
