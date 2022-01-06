@@ -75,7 +75,9 @@ func (s *cacheResultStorage) LoadRemotes(ctx context.Context, res solver.CacheRe
 	if err != nil {
 		return nil, err
 	}
-	defer ref.Release(context.TODO())
+	if ref != nil {
+		defer ref.Release(context.TODO())
+	}
 	wref := WorkerRef{ref, w}
 	all := true // load as many compression blobs as possible
 	if compressionopt == nil {

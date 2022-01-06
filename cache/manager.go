@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
@@ -56,6 +57,7 @@ type Accessor interface {
 	GetMutable(ctx context.Context, id string, opts ...RefOption) (MutableRef, error) // Rebase?
 	IdentityMapping() *idtools.IdentityMapping
 	Merge(ctx context.Context, parents []ImmutableRef, opts ...RefOption) (ImmutableRef, error)
+	Diff(ctx context.Context, lower, upper ImmutableRef, opts ...RefOption) (ImmutableRef, error)
 }
 
 type Controller interface {
@@ -477,6 +479,26 @@ func (cm *cacheManager) parentsOf(ctx context.Context, md *cacheMetadata, opts .
 		}
 		ps.mergeParents = append(ps.mergeParents, p)
 	}
+	if lowerParentID := md.getLowerDiffParent(); lowerParentID != "" {
+		p, err := cm.get(ctx, lowerParentID, append(opts, NoUpdateLastUsed))
+		if err != nil {
+			return ps, err
+		}
+		if ps.diffParents == nil {
+			ps.diffParents = &diffParents{}
+		}
+		ps.diffParents.lower = p
+	}
+	if upperParentID := md.getUpperDiffParent(); upperParentID != "" {
+		p, err := cm.get(ctx, upperParentID, append(opts, NoUpdateLastUsed))
+		if err != nil {
+			return ps, err
+		}
+		if ps.diffParents == nil {
+			ps.diffParents = &diffParents{}
+		}
+		ps.diffParents.upper = p
+	}
 	return ps, nil
 }
 
@@ -627,8 +649,6 @@ func (cm *cacheManager) Merge(ctx context.Context, inputParents []ImmutableRef, 
 	// These optimizations may make sense here in cache, in the snapshotter or both.
 	// Be sure that any optimizations handle existing pre-optimization refs correctly.
 
-	id := identity.NewID()
-
 	parents := parentRefs{mergeParents: make([]*immutableRef, 0, len(inputParents))}
 	dhs := make(map[digest.Digest]*DescHandler)
 	defer func() {
@@ -659,7 +679,7 @@ func (cm *cacheManager) Merge(ctx context.Context, inputParents []ImmutableRef, 
 			for _, grandparent := range parent.mergeParents {
 				parents.mergeParents = append(parents.mergeParents, grandparent.clone())
 			}
-		case Layer, BaseLayer:
+		default:
 			parents.mergeParents = append(parents.mergeParents, parent.clone())
 		}
 		for dgst, handler := range parent.descHandlers {
@@ -667,6 +687,15 @@ func (cm *cacheManager) Merge(ctx context.Context, inputParents []ImmutableRef, 
 		}
 	}
 
+	mergeRef, err := cm.createMergeRef(ctx, parents, dhs, opts...)
+	if err != nil {
+		parents.release(context.TODO())
+		return nil, err
+	}
+	return mergeRef, nil
+}
+
+func (cm *cacheManager) createMergeRef(ctx context.Context, parents parentRefs, dhs DescHandlers, opts ...RefOption) (ir *immutableRef, rerr error) {
 	if len(parents.mergeParents) == 0 {
 		// merge of nothing is nothing
 		return nil, nil
@@ -686,6 +715,7 @@ func (cm *cacheManager) Merge(ctx context.Context, inputParents []ImmutableRef, 
 	defer cm.mu.Unlock()
 
 	// Build the new ref
+	id := identity.NewID()
 	md, _ := cm.getMetadata(id)
 
 	rec := &cacheRecord{
@@ -731,6 +761,177 @@ func (cm *cacheManager) Merge(ctx context.Context, inputParents []ImmutableRef, 
 
 	rec.queueSnapshotID(snapshotID)
 
+	if err := rec.commitMetadata(); err != nil {
+		return nil, err
+	}
+
+	cm.records[id] = rec
+
+	return rec.ref(true, dhs), nil
+}
+
+func (cm *cacheManager) Diff(ctx context.Context, lower, upper ImmutableRef, opts ...RefOption) (ir ImmutableRef, rerr error) {
+	if lower == nil {
+		return nil, errors.New("lower ref for diff cannot be nil")
+	}
+
+	var dps diffParents
+	parents := parentRefs{diffParents: &dps}
+	dhs := make(map[digest.Digest]*DescHandler)
+	defer func() {
+		if rerr != nil {
+			parents.release(context.TODO())
+		}
+	}()
+	for i, inputParent := range []ImmutableRef{lower, upper} {
+		if inputParent == nil {
+			continue
+		}
+		var parent *immutableRef
+		if p, ok := inputParent.(*immutableRef); ok {
+			parent = p
+		} else {
+			// inputParent implements ImmutableRef but isn't our internal struct, get an instance of the internal struct
+			// by calling Get on its ID.
+			p, err := cm.Get(ctx, inputParent.ID(), append(opts, NoUpdateLastUsed)...)
+			if err != nil {
+				return nil, err
+			}
+			parent = p.(*immutableRef)
+			defer parent.Release(context.TODO())
+		}
+		if i == 0 {
+			dps.lower = parent
+		} else {
+			dps.upper = parent
+		}
+		for dgst, handler := range parent.descHandlers {
+			dhs[dgst] = handler
+		}
+	}
+
+	// Check to see if lower is an ancestor of upper. If so, define the diff as a merge
+	// of the layers separating the two. This can result in a different diff than just
+	// running the differ directly on lower and upper, but this is chosen as a default
+	// behavior in order to maximize layer re-use in the default case. We may add an
+	// option for controlling this behavior in the future if it's needed.
+	if dps.upper != nil {
+		lowerLayers := dps.lower.layerChain()
+		upperLayers := dps.upper.layerChain()
+		var lowerIsAncestor bool
+		// when upper is only 1 layer different than lower, we can skip this as we
+		// won't need a merge in order to get optimal behavior.
+		if len(upperLayers) > len(lowerLayers)+1 {
+			lowerIsAncestor = true
+			for i, lowerLayer := range lowerLayers {
+				if lowerLayer.ID() != upperLayers[i].ID() {
+					lowerIsAncestor = false
+					break
+				}
+			}
+		}
+		if lowerIsAncestor {
+			mergeParents := parentRefs{mergeParents: make([]*immutableRef, len(upperLayers)-len(lowerLayers))}
+			defer func() {
+				if rerr != nil {
+					mergeParents.release(context.TODO())
+				}
+			}()
+			for i := len(lowerLayers); i < len(upperLayers); i++ {
+				subUpper := upperLayers[i]
+				subLower := subUpper.layerParent
+				if subLower == nil {
+					mergeParents.mergeParents[i-len(lowerLayers)] = subUpper.clone()
+				} else {
+					subParents := parentRefs{diffParents: &diffParents{lower: subLower.clone(), upper: subUpper.clone()}}
+					diffRef, err := cm.createDiffRef(ctx, subParents, subUpper.descHandlers,
+						WithDescription(fmt.Sprintf("diff %q -> %q", subLower.ID(), subUpper.ID())))
+					if err != nil {
+						subParents.release(context.TODO())
+						return nil, err
+					}
+					mergeParents.mergeParents[i-len(lowerLayers)] = diffRef
+				}
+			}
+			mergeRef, err := cm.createMergeRef(ctx, mergeParents, dhs)
+			if err != nil {
+				return nil, err
+			}
+			parents.release(context.TODO())
+			return mergeRef, nil
+		}
+	}
+
+	diffRef, err := cm.createDiffRef(ctx, parents, dhs, opts...)
+	if err != nil {
+		parents.release(context.TODO())
+		return nil, err
+	}
+	return diffRef, nil
+}
+
+func (cm *cacheManager) createDiffRef(ctx context.Context, parents parentRefs, dhs DescHandlers, opts ...RefOption) (ir *immutableRef, rerr error) {
+	dps := parents.diffParents
+	if err := dps.lower.Finalize(ctx); err != nil {
+		return nil, errors.Wrapf(err, "failed to finalize lower parent during diff")
+	}
+	if dps.upper != nil {
+		if err := dps.upper.Finalize(ctx); err != nil {
+			return nil, errors.Wrapf(err, "failed to finalize upper parent during diff")
+		}
+	}
+
+	id := identity.NewID()
+
+	snapshotID := id
+
+	l, err := cm.LeaseManager.Create(ctx, func(l *leases.Lease) error {
+		l.ID = id
+		l.Labels = map[string]string{
+			"containerd.io/gc.flat": time.Now().UTC().Format(time.RFC3339Nano),
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create lease")
+	}
+	defer func() {
+		if rerr != nil {
+			if err := cm.LeaseManager.Delete(context.TODO(), leases.Lease{
+				ID: l.ID,
+			}); err != nil {
+				bklog.G(ctx).Errorf("failed to remove lease: %+v", err)
+			}
+		}
+	}()
+
+	if err := cm.LeaseManager.AddResource(ctx, leases.Lease{ID: id}, leases.Resource{
+		ID:   snapshotID,
+		Type: "snapshots/" + cm.Snapshotter.Name(),
+	}); err != nil {
+		return nil, err
+	}
+
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	// Build the new ref
+	md, _ := cm.getMetadata(id)
+
+	rec := &cacheRecord{
+		mu:            &sync.Mutex{},
+		mutable:       false,
+		cm:            cm,
+		cacheMetadata: md,
+		parentRefs:    parents,
+		refs:          make(map[ref]struct{}),
+	}
+
+	if err := initializeMetadata(rec.cacheMetadata, rec.parentRefs, opts...); err != nil {
+		return nil, err
+	}
+
+	rec.queueSnapshotID(snapshotID)
 	if err := rec.commitMetadata(); err != nil {
 		return nil, err
 	}
@@ -963,6 +1164,14 @@ func (cm *cacheManager) prune(ctx context.Context, ch chan client.UsageInfo, opt
 			for i, p := range cr.mergeParents {
 				c.Parents[i] = p.ID()
 			}
+		case Diff:
+			c.Parents = make([]string, 0, 2)
+			if cr.diffParents.lower != nil {
+				c.Parents = append(c.Parents, cr.diffParents.lower.ID())
+			}
+			if cr.diffParents.upper != nil {
+				c.Parents = append(c.Parents, cr.diffParents.upper.ID())
+			}
 		}
 		if c.Size == sizeUnknown && cr.equalImmutable != nil {
 			c.Size = cr.equalImmutable.getSize() // benefit from DiskUsage calc
@@ -1088,6 +1297,13 @@ func (cm *cacheManager) DiskUsage(ctx context.Context, opt client.DiskUsageInfo)
 			c.parents = make([]string, len(cr.mergeParents))
 			for i, p := range cr.mergeParents {
 				c.parents[i] = p.ID()
+			}
+		case Diff:
+			if cr.diffParents.lower != nil {
+				c.parents = append(c.parents, cr.diffParents.lower.ID())
+			}
+			if cr.diffParents.upper != nil {
+				c.parents = append(c.parents, cr.diffParents.upper.ID())
 			}
 		}
 		if cr.mutable && c.refs > 0 {
@@ -1251,17 +1467,29 @@ func initializeMetadata(m *cacheMetadata, parents parentRefs, opts ...RefOption)
 		return nil
 	}
 
-	if parents.layerParent != nil {
+	switch {
+	case parents.layerParent != nil:
 		if err := m.queueParent(parents.layerParent.ID()); err != nil {
 			return err
 		}
-	} else if len(parents.mergeParents) > 0 {
+	case len(parents.mergeParents) > 0:
 		var ids []string
 		for _, p := range parents.mergeParents {
 			ids = append(ids, p.ID())
 		}
 		if err := m.queueMergeParents(ids); err != nil {
 			return err
+		}
+	case parents.diffParents != nil:
+		if parents.diffParents.lower != nil {
+			if err := m.queueLowerDiffParent(parents.diffParents.lower.ID()); err != nil {
+				return err
+			}
+		}
+		if parents.diffParents.upper != nil {
+			if err := m.queueUpperDiffParent(parents.diffParents.upper.ID()); err != nil {
+				return err
+			}
 		}
 	}
 

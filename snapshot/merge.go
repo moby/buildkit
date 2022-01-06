@@ -99,11 +99,15 @@ func (sn *mergeSnapshotter) Merge(ctx context.Context, key string, diffs []Diff,
 		// Diff("", A) -> Diff(A, B) -> Diff(B, C), etc.
 		var baseIndex int
 		for i, diff := range diffs {
-			info, err := sn.Stat(ctx, diff.Upper)
-			if err != nil {
-				return err
+			var parentKey string
+			if diff.Upper != "" {
+				info, err := sn.Stat(ctx, diff.Upper)
+				if err != nil {
+					return err
+				}
+				parentKey = info.Parent
 			}
-			if info.Parent != diff.Lower {
+			if parentKey != diff.Lower {
 				break
 			}
 			if diff.Lower != baseKey {
