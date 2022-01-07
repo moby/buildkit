@@ -18,7 +18,7 @@ type Client interface {
 	BuildOpts() BuildOpts
 	Inputs(ctx context.Context) (map[string]llb.State, error)
 	NewContainer(ctx context.Context, req NewContainerRequest) (Container, error)
-	Warn(ctx context.Context, dgst digest.Digest, msg string) error
+	Warn(ctx context.Context, dgst digest.Digest, msg string, opts WarnOpts) error
 }
 
 // NewContainerRequest encapsulates the requirements for a client to define a
@@ -133,4 +133,12 @@ type BuildOpts struct {
 	Product   string
 	LLBCaps   apicaps.CapSet
 	Caps      apicaps.CapSet
+}
+
+type WarnOpts struct {
+	Level      int
+	SourceInfo *pb.SourceInfo
+	Range      []*pb.Range
+	Detail     [][]byte
+	URL        string
 }

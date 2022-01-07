@@ -96,7 +96,7 @@ func GetOverlayLayers(m mount.Mount) ([]string, error) {
 			for i, j := 0, len(l)-1; i < j; i, j = i+1, j-1 {
 				l[i], l[j] = l[j], l[i] // make l[0] = bottommost
 			}
-		} else if strings.HasPrefix(o, "workdir=") || o == "index=off" || o == "userxattr" {
+		} else if strings.HasPrefix(o, "workdir=") || o == "index=off" || o == "userxattr" || strings.HasPrefix(o, "redirect_dir=") {
 			// these options are possible to specfied by the snapshotter but not indicate dir locations.
 			continue
 		} else {
@@ -160,6 +160,15 @@ func Changes(ctx context.Context, changeFn fs.ChangeFunc, upperdir, upperdirView
 		// Skip root
 		if path == string(os.PathSeparator) {
 			return nil
+		}
+
+		// Check redirect
+		if redirect, err := checkRedirect(upperdir, path, f); err != nil {
+			return err
+		} else if redirect {
+			// Return error when redirect_dir is enabled which can result to a wrong diff.
+			// TODO: support redirect_dir
+			return fmt.Errorf("redirect_dir is used but it's not supported in overlayfs differ")
 		}
 
 		// Check if this is a deleted entry
@@ -264,6 +273,19 @@ func checkOpaque(upperdir string, path string, base string, f os.FileInfo) (isOp
 				return true, nil
 			}
 		}
+	}
+	return false, nil
+}
+
+// checkRedirect checks if the specified path enables redirect_dir.
+func checkRedirect(upperdir string, path string, f os.FileInfo) (bool, error) {
+	if f.IsDir() {
+		rKey := "trusted.overlay.redirect"
+		redirect, err := sysx.LGetxattr(filepath.Join(upperdir, path), rKey)
+		if err != nil && err != unix.ENODATA {
+			return false, errors.Wrapf(err, "failed to retrieve %s attr", rKey)
+		}
+		return len(redirect) > 0, nil
 	}
 	return false, nil
 }

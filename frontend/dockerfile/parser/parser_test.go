@@ -162,11 +162,11 @@ RUN indented \
 	result, err := Parse(dockerfile)
 	require.NoError(t, err)
 	warnings := result.Warnings
-	require.Equal(t, 3, len(warnings))
-	require.Contains(t, warnings[0], "Empty continuation line found in")
-	require.Contains(t, warnings[0], "RUN something     following     more")
-	require.Contains(t, warnings[1], "RUN another     thing")
-	require.Contains(t, warnings[2], "will become errors in a future release")
+	require.Equal(t, 2, len(warnings))
+	require.Contains(t, warnings[0].Short, "Empty continuation line found in")
+	require.Contains(t, warnings[0].Short, "RUN something     following     more")
+	require.Contains(t, warnings[1].Short, "RUN another     thing")
+	require.Contains(t, string(warnings[0].Detail[0]), "will become errors in a future release")
 }
 
 func TestParseReturnsScannerErrors(t *testing.T) {

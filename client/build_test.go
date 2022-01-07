@@ -184,7 +184,19 @@ func testWarnings(t *testing.T, sb integration.Sandbox) {
 			return nil, errors.Wrap(err, "failed to solve")
 		}
 
-		require.NoError(t, c.Warn(ctx, dgst, "this is warning"))
+		require.NoError(t, c.Warn(ctx, dgst, "this is warning", client.WarnOpts{
+			Level: 3,
+			SourceInfo: &pb.SourceInfo{
+				Filename: "mydockerfile",
+				Data:     []byte("filedata"),
+			},
+			Range: []*pb.Range{
+				{Start: pb.Position{Line: 2}, End: pb.Position{Line: 4}},
+			},
+			Detail: [][]byte{[]byte("this is detail"), []byte("and more detail")},
+			URL:    "https://example.com",
+		}))
+
 		return r, nil
 	}
 
@@ -229,10 +241,20 @@ func testWarnings(t *testing.T, sb integration.Sandbox) {
 
 	w := warnings[0]
 
-	require.Equal(t, "this is warning", string(w.Message))
-	require.Equal(t, 1, w.Level)
+	require.Equal(t, "this is warning", string(w.Short))
+	require.Equal(t, 2, len(w.Detail))
+	require.Equal(t, "this is detail", string(w.Detail[0]))
+	require.Equal(t, "and more detail", string(w.Detail[1]))
+	require.Equal(t, "https://example.com", w.URL)
+	require.Equal(t, 3, w.Level)
 	_, ok := vertexes[w.Vertex]
 	require.True(t, ok)
+
+	require.Equal(t, "mydockerfile", w.SourceInfo.Filename)
+	require.Equal(t, "filedata", string(w.SourceInfo.Data))
+	require.Equal(t, 1, len(w.Range))
+	require.Equal(t, int32(2), w.Range[0].Start.Line)
+	require.Equal(t, int32(4), w.Range[0].End.Line)
 
 	checkAllReleasable(t, c, sb, true)
 }

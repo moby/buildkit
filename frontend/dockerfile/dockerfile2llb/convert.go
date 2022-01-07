@@ -68,9 +68,21 @@ type ConvertOpt struct {
 	ContextLocalName  string
 	SourceMap         *llb.SourceMap
 	Hostname          string
+	Warn              func(short, url string, detail [][]byte, location *parser.Range)
+	ContextByName     func(context.Context, string) (*llb.State, *Image, error)
 }
 
 func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State, *Image, error) {
+	contextByName := opt.ContextByName
+	opt.ContextByName = func(ctx context.Context, name string) (*llb.State, *Image, error) {
+		if !strings.EqualFold(name, "scratch") && !strings.EqualFold(name, "context") {
+			if contextByName != nil {
+				return contextByName(ctx, name)
+			}
+		}
+		return nil, nil, nil
+	}
+
 	if len(dt) == 0 {
 		return nil, nil, errors.Errorf("the Dockerfile cannot be empty")
 	}
@@ -89,6 +101,10 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 	dockerfile, err := parser.Parse(bytes.NewReader(dt))
 	if err != nil {
 		return nil, nil, err
+	}
+
+	for _, w := range dockerfile.Warnings {
+		opt.Warn(w.Short, w.URL, w.Detail, w.Location)
 	}
 
 	proxyEnv := proxyEnvFromBuildArgs(opt.BuildArgs)
@@ -128,12 +144,29 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		st.BaseName = name
 
 		ds := &dispatchState{
-			stage:          st,
 			deps:           make(map[*dispatchState]struct{}),
 			ctxPaths:       make(map[string]struct{}),
 			stageName:      st.Name,
 			prefixPlatform: opt.PrefixPlatform,
 		}
+
+		if st.Name != "" {
+			s, img, err := opt.ContextByName(ctx, st.Name)
+			if err != nil {
+				return nil, nil, err
+			}
+			if s != nil {
+				ds.noinit = true
+				ds.state = *s
+				if img != nil {
+					ds.image = *img
+				}
+				allDispatchStates.addState(ds)
+				continue
+			}
+		}
+
+		ds.stage = st
 
 		if st.Name == "" {
 			ds.stageName = fmt.Sprintf("stage-%d", i)
@@ -232,7 +265,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 	for i, d := range allDispatchStates.states {
 		reachable := isReachable(target, d)
 		// resolve image config for every stage
-		if d.base == nil {
+		if d.base == nil && !d.noinit {
 			if d.stage.BaseName == emptyImageName {
 				d.state = llb.Scratch()
 				d.image = emptyImage(platformOpt.targetPlatform)
@@ -255,8 +288,23 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 						platform = &platformOpt.targetPlatform
 					}
 					d.stage.BaseName = reference.TagNameOnly(ref).String()
+
 					var isScratch bool
-					if metaResolver != nil && reachable {
+					st, img, err := opt.ContextByName(ctx, d.stage.BaseName)
+					if err != nil {
+						return err
+					}
+					if st != nil {
+						if img != nil {
+							d.image = *img
+						} else {
+							d.image = emptyImage(platformOpt.targetPlatform)
+						}
+						d.state = *st
+						d.platform = platform
+						return nil
+					}
+					if reachable {
 						prefix := "["
 						if opt.PrefixPlatform && platform != nil {
 							prefix += platforms.Format(*platform) + " "
@@ -610,6 +658,7 @@ type dispatchState struct {
 	platform       *ocispecs.Platform
 	stage          instructions.Stage
 	base           *dispatchState
+	noinit         bool
 	deps           map[*dispatchState]struct{}
 	buildArgs      []instructions.KeyValuePairOptional
 	commands       []command

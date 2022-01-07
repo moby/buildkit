@@ -39,6 +39,24 @@ func (def *Definition) FromPB(x *pb.Definition) {
 	}
 }
 
+func (def *Definition) Head() (digest.Digest, error) {
+	if len(def.Def) == 0 {
+		return "", nil
+	}
+
+	last := def.Def[len(def.Def)-1]
+
+	var pop pb.Op
+	if err := (&pop).Unmarshal(last); err != nil {
+		return "", err
+	}
+	if len(pop.Inputs) == 0 {
+		return "", nil
+	}
+
+	return pop.Inputs[0].Digest, nil
+}
+
 func WriteTo(def *Definition, w io.Writer) error {
 	b, err := def.ToPB().Marshal()
 	if err != nil {

@@ -140,6 +140,7 @@ func TestIntegration(t *testing.T) {
 		testMergeOp,
 		testMergeOpCache,
 		testRmSymlink,
+		testMoveParentDir,
 	), mirrors)
 
 	integration.Run(t, integration.TestFuncs(
@@ -1741,13 +1742,21 @@ func testUser(t *testing.T, sb integration.Sandbox) {
 	st := llb.Image("busybox:latest").Run(llb.Shlex(`sh -c "mkdir -m 0777 /wd"`))
 
 	run := func(user, cmd string) {
-		st = st.Run(llb.Shlex(cmd), llb.Dir("/wd"), llb.User(user))
+		if user != "" {
+			st = st.Run(llb.Shlex(cmd), llb.Dir("/wd"), llb.User(user))
+		} else {
+			st = st.Run(llb.Shlex(cmd), llb.Dir("/wd"))
+		}
 	}
 
 	run("daemon", `sh -c "id -nu > user"`)
 	run("daemon:daemon", `sh -c "id -ng > group"`)
 	run("daemon:nobody", `sh -c "id -ng > nobody"`)
 	run("1:1", `sh -c "id -g > userone"`)
+	run("root", `sh -c "id -Gn > root_supplementary"`)
+	run("", `sh -c "id -Gn > default_supplementary"`)
+	run("", `rm /etc/passwd /etc/group`) // test that default user still works
+	run("", `sh -c "id -u > default_uid"`)
 
 	st = st.Run(llb.Shlex("cp -a /wd/. /out/"))
 	out := st.AddMount("/out", llb.Scratch())
@@ -1771,19 +1780,32 @@ func testUser(t *testing.T, sb integration.Sandbox) {
 
 	dt, err := ioutil.ReadFile(filepath.Join(destDir, "user"))
 	require.NoError(t, err)
-	require.Contains(t, string(dt), "daemon")
+	require.Equal(t, "daemon", strings.TrimSpace(string(dt)))
 
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "group"))
 	require.NoError(t, err)
-	require.Contains(t, string(dt), "daemon")
+	require.Equal(t, "daemon", strings.TrimSpace(string(dt)))
 
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "nobody"))
 	require.NoError(t, err)
-	require.Contains(t, string(dt), "nobody")
+	require.Equal(t, "nobody", strings.TrimSpace(string(dt)))
 
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "userone"))
 	require.NoError(t, err)
-	require.Contains(t, string(dt), "1")
+	require.Equal(t, "1", strings.TrimSpace(string(dt)))
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "root_supplementary"))
+	require.NoError(t, err)
+	require.True(t, strings.HasPrefix(string(dt), "root "))
+	require.True(t, strings.Contains(string(dt), "wheel"))
+
+	dt2, err := ioutil.ReadFile(filepath.Join(destDir, "default_supplementary"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), string(dt2))
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "default_uid"))
+	require.NoError(t, err)
+	require.Equal(t, "0", strings.TrimSpace(string(dt)))
 
 	checkAllReleasable(t, c, sb, true)
 }
@@ -3628,6 +3650,74 @@ func testWhiteoutParentDir(t *testing.T, sb integration.Sandbox) {
 	require.True(t, ok)
 
 	_, ok = m["foo/"]
+	require.True(t, ok)
+}
+
+// #2490
+func testMoveParentDir(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("busybox:latest")
+	st := llb.Scratch()
+
+	run := func(cmd string) {
+		st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+	}
+
+	run(`sh -c "mkdir -p foo; echo -n first > foo/bar;"`)
+	run(`mv foo foo2`)
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	out := filepath.Join(destDir, "out.tar")
+	outW, err := os.Create(out)
+	require.NoError(t, err)
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:   ExporterOCI,
+				Output: fixedWriteCloser(outW),
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(out)
+	require.NoError(t, err)
+
+	m, err := testutil.ReadTarToMap(dt, false)
+	require.NoError(t, err)
+
+	var index ocispecs.Index
+	err = json.Unmarshal(m["index.json"].Data, &index)
+	require.NoError(t, err)
+
+	var mfst ocispecs.Manifest
+	err = json.Unmarshal(m["blobs/sha256/"+index.Manifests[0].Digest.Hex()].Data, &mfst)
+	require.NoError(t, err)
+
+	lastLayer := mfst.Layers[len(mfst.Layers)-1]
+
+	layer, ok := m["blobs/sha256/"+lastLayer.Digest.Hex()]
+	require.True(t, ok)
+
+	m, err = testutil.ReadTarToMap(layer.Data, true)
+	require.NoError(t, err)
+
+	_, ok = m[".wh.foo"]
+	require.True(t, ok)
+
+	_, ok = m["foo2/"]
+	require.True(t, ok)
+
+	_, ok = m["foo2/bar"]
 	require.True(t, ok)
 }
 

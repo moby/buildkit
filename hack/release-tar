@@ -6,7 +6,7 @@ OUT=$2
 . $(dirname $0)/util
 set -eu -o pipefail
 
-: ${PLATFORMS=linux/amd64}
+: ${PLATFORMS=}
 
 usage() {
   echo "usage: ./hack/release-tar <tag> <out>"
@@ -17,8 +17,12 @@ if [ -z "$TAG" ] || [ -z "$OUT" ]; then
   usage
 fi
 
-buildxCmd build $cacheFromFlags \
+platformFlag=""
+if [ -n "$PLATFORMS" ]; then
+  platformFlag="--platform=$PLATFORMS"
+fi
+
+buildxCmd build $platformFlag $cacheFromFlags \
   --target release \
-  --platform "$PLATFORMS" \
   --output "type=local,dest=$OUT" \
   $currentcontext
