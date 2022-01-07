@@ -839,14 +839,15 @@ func contextByName(ctx context.Context, c client.Client, name string, platform *
 	}
 	switch vv[0] {
 	case "docker-image":
+		ref := strings.TrimPrefix(vv[1], "//")
 		imgOpt := []llb.ImageOption{
-			llb.WithCustomName("[context " + name + "] " + vv[1]),
+			llb.WithCustomName("[context " + name + "] " + ref),
 			llb.WithMetaResolver(c),
 		}
 		if platform != nil {
 			imgOpt = append(imgOpt, llb.Platform(*platform))
 		}
-		st := llb.Image(strings.TrimPrefix(vv[1], "//"), imgOpt...)
+		st := llb.Image(ref, imgOpt...)
 		return &st, nil, nil
 	case "git":
 		st, ok := detectGitContext(v, "1")
