@@ -347,7 +347,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 						}
 						if !isScratch {
 							// if image not scratch set original image name as ref
-							// and actual reference as alias in BuildSource
+							// and actual reference as alias in binfotypes.Source
 							d.buildSource = &binfotypes.Source{
 								Type:  binfotypes.SourceTypeDockerImage,
 								Ref:   origName,

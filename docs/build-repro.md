@@ -4,7 +4,7 @@
 
 Build dependencies are generated when your image has been built. These
 dependencies include versions of used images, git repositories and HTTP URLs
-used by LLB `Source` operation.
+used by LLB `Source` operation as well as build request attributes.
 
 By default, the build dependencies are embedded in the image configuration and
 also available in the solver response. The export mode can be refined with
@@ -23,6 +23,15 @@ The structure is base64 encoded and has the following format when decoded:
 
 ```json
 {
+  "frontend": "dockerfile.v0",
+  "attrs": {
+    "build-arg:foo": "bar",
+    "cmdline": "crazymax/dockerfile:master",
+    "context": "https://github.com/crazy-max/buildkit-buildsources-test.git#master",
+    "filename": "Dockerfile",
+    "platform": "linux/amd64,linux/arm64",
+    "source": "crazymax/dockerfile:master"
+  },
   "sources": [
     {
       "type": "docker-image",
@@ -48,9 +57,12 @@ The structure is base64 encoded and has the following format when decoded:
 }
 ```
 
-* `type` defines the source type (`docker-image`, `git` or `http`).
-* `ref` is the reference of the source.
-* `pin` is the source digest.
+* `frontend` defines the frontend used to build.
+* `attrs` defines build request attributes.
+* `sources` defines build dependencies.
+  * `type` defines the source type (`docker-image`, `git` or `http`).
+  * `ref` is the reference of the source.
+  * `pin` is the source digest.
 
 ### Exporter response (metadata)
 

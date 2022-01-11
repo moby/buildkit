@@ -5,8 +5,10 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"sort"
+	"strings"
 
 	"github.com/docker/distribution/reference"
+	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/source"
 	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
 	"github.com/moby/buildkit/util/urlutil"
@@ -23,14 +25,26 @@ func Decode(enc string) (bi binfotypes.BuildInfo, _ error) {
 	return bi, err
 }
 
-// Merge combines and fixes build sources from image config
-// key binfotypes.ImageConfigField.
-func Merge(ctx context.Context, buildSources map[string]string, imageConfig []byte) ([]byte, error) {
+// Encode encodes build info.
+func Encode(ctx context.Context, solveReq frontend.SolveRequest, buildSources map[string]string, imageConfig []byte) ([]byte, error) {
 	icbi, err := FromImageConfig(imageConfig)
 	if err != nil {
 		return nil, err
 	}
+	srcs, err := mergeSources(ctx, buildSources, icbi)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(binfotypes.BuildInfo{
+		Frontend: solveReq.Frontend,
+		Attrs:    filterAttrs(solveReq.FrontendOpt),
+		Sources:  srcs,
+	})
+}
 
+// mergeSources combines and fixes build sources from image config
+// key binfotypes.ImageConfigField.
+func mergeSources(ctx context.Context, buildSources map[string]string, imageConfigBuildInfo binfotypes.BuildInfo) ([]binfotypes.Source, error) {
 	// Iterate and combine build sources
 	mbs := map[string]binfotypes.Source{}
 	for buildSource, pin := range buildSources {
@@ -40,7 +54,7 @@ func Merge(ctx context.Context, buildSources map[string]string, imageConfig []by
 		}
 		switch sourceID := src.(type) {
 		case *source.ImageIdentifier:
-			for i, ics := range icbi.Sources {
+			for i, ics := range imageConfigBuildInfo.Sources {
 				// Use original user input from image config
 				if ics.Type == binfotypes.SourceTypeDockerImage && ics.Alias == sourceID.Reference.String() {
 					if _, ok := mbs[ics.Alias]; !ok {
@@ -53,7 +67,7 @@ func Merge(ctx context.Context, buildSources map[string]string, imageConfig []by
 							Ref:  reference.TagNameOnly(parsed).String(),
 							Pin:  pin,
 						}
-						icbi.Sources = append(icbi.Sources[:i], icbi.Sources[i+1:]...)
+						imageConfigBuildInfo.Sources = append(imageConfigBuildInfo.Sources[:i], imageConfigBuildInfo.Sources[i+1:]...)
 					}
 					break
 				}
@@ -94,7 +108,7 @@ func Merge(ctx context.Context, buildSources map[string]string, imageConfig []by
 	// Leftovers build deps in image config. Mostly duplicated ones we
 	// don't need but there is an edge case if no instruction except sources
 	// one is defined (e.g. FROM ...) that can be valid so take it into account.
-	for _, ics := range icbi.Sources {
+	for _, ics := range imageConfigBuildInfo.Sources {
 		if ics.Type != binfotypes.SourceTypeDockerImage {
 			continue
 		}
@@ -119,9 +133,7 @@ func Merge(ctx context.Context, buildSources map[string]string, imageConfig []by
 		return srcs[i].Ref < srcs[j].Ref
 	})
 
-	return json.Marshal(binfotypes.BuildInfo{
-		Sources: srcs,
-	})
+	return srcs, nil
 }
 
 // FromImageConfig returns build dependencies from image config.
@@ -140,4 +152,40 @@ func FromImageConfig(imageConfig []byte) (bi binfotypes.BuildInfo, _ error) {
 		return bi, errors.Wrap(err, "failed to unmarshal buildinfo")
 	}
 	return bi, nil
+}
+
+var knownAttrs = []string{
+	"cmdline",
+	"context",
+	"filename",
+	"source",
+
+	//"add-hosts",
+	//"cgroup-parent",
+	//"force-network-mode",
+	//"hostname",
+	//"image-resolve-mode",
+	"platform",
+	"shm-size",
+	"target",
+	"ulimit",
+}
+
+// filterAttrs filters frontent opt by picking only those that
+// could effectively change the build result.
+func filterAttrs(attrs map[string]string) map[string]string {
+	filtered := make(map[string]string)
+	for k, v := range attrs {
+		if strings.HasPrefix(k, "build-arg:") || strings.HasPrefix(k, "label:") {
+			filtered[k] = v
+			continue
+		}
+		for _, knownAttr := range knownAttrs {
+			if knownAttr == k {
+				filtered[k] = v
+				break
+			}
+		}
+	}
+	return filtered
 }
