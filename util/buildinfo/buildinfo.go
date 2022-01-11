@@ -199,10 +199,16 @@ var knownAttrs = []string{
 func filterAttrs(attrs map[string]string) map[string]string {
 	filtered := make(map[string]string)
 	for k, v := range attrs {
+		// Control args are filtered out
+		if isControlArg(k) {
+			continue
+		}
+		// Always include args and labels
 		if strings.HasPrefix(k, "build-arg:") || strings.HasPrefix(k, "label:") {
 			filtered[k] = v
 			continue
 		}
+		// Filter only for known attributes
 		for _, knownAttr := range knownAttrs {
 			if knownAttr == k {
 				filtered[k] = v
@@ -211,4 +217,24 @@ func filterAttrs(attrs map[string]string) map[string]string {
 		}
 	}
 	return filtered
+}
+
+var knownControlArgs = []string{
+	"BUILDKIT_CACHE_MOUNT_NS",
+	"BUILDKIT_CONTEXT_KEEP_GIT_DIR",
+	"BUILDKIT_INLINE_BUILDINFO_ATTRS",
+	"BUILDKIT_INLINE_CACHE",
+	"BUILDKIT_MULTI_PLATFORM",
+	"BUILDKIT_SANDBOX_HOSTNAME",
+	"BUILDKIT_SYNTAX",
+}
+
+// isControlArg checks if a build attributes is a control arg
+func isControlArg(attrKey string) bool {
+	for _, k := range knownControlArgs {
+		if strings.HasPrefix(attrKey, "build-arg:"+k) {
+			return true
+		}
+	}
+	return false
 }
