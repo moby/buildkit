@@ -138,7 +138,6 @@ func (s *scheduler) dispatch(e *edge) {
 		debugSchedulerPostUnpark(e, inc)
 	}
 
-postUnpark:
 	// set up new requests that didn't complete/were added by this run
 	openIncoming := make([]*edgePipe, 0, len(inc))
 	for _, r := range s.incoming[e] {
@@ -189,11 +188,9 @@ postUnpark:
 	// unpark(), not for any external input.
 	if len(openIncoming) > 0 && len(openOutgoing) == 0 {
 		e.markFailed(pf, errors.New("buildkit scheduler error: return leaving incoming open. Please report this with BUILDKIT_SCHEDULER_DEBUG=1"))
-		goto postUnpark
 	}
 	if len(openIncoming) == 0 && len(openOutgoing) > 0 {
 		e.markFailed(pf, errors.New("buildkit scheduler error: return leaving outgoing open. Please report this with BUILDKIT_SCHEDULER_DEBUG=1"))
-		goto postUnpark
 	}
 }
 
