@@ -21,6 +21,7 @@ import (
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/buildinfo"
 	"github.com/moby/buildkit/util/compression"
+	"github.com/moby/buildkit/util/convert"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/system"
 	"github.com/moby/buildkit/util/tracing"
@@ -48,7 +49,7 @@ type ImageWriter struct {
 	opt WriterOpt
 }
 
-func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool, comp compression.Config, buildInfoMode buildinfo.ExportMode, sessionID string) (*ocispecs.Descriptor, error) {
+func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool, comp compression.Config, buildInfoMode buildinfo.ExportMode, propagateNonDist bool, sessionID string) (*ocispecs.Descriptor, error) {
 	platformsBytes, ok := inp.Metadata[exptypes.ExporterPlatformsKey]
 
 	if len(inp.Refs) > 0 && !ok {
@@ -56,6 +57,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 	}
 
 	if len(inp.Refs) == 0 {
+		// TODO: pass through non-dist layers?
 		remotes, err := ic.exportLayers(ctx, comp, session.NewGroup(sessionID), inp.Ref)
 		if err != nil {
 			return nil, err
@@ -66,7 +68,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 			buildInfo = inp.Metadata[exptypes.ExporterBuildInfo]
 		}
 
-		mfstDesc, configDesc, err := ic.commitDistributionManifest(ctx, inp.Ref, inp.Metadata[exptypes.ExporterImageConfigKey], &remotes[0], oci, inp.Metadata[exptypes.ExporterInlineCache], buildInfo)
+		mfstDesc, configDesc, err := ic.commitDistributionManifest(ctx, inp.Ref, inp.Metadata[exptypes.ExporterImageConfigKey], &remotes[0], oci, inp.Metadata[exptypes.ExporterInlineCache], buildInfo, propagateNonDist)
 		if err != nil {
 			return nil, err
 		}
@@ -94,6 +96,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 		refs = append(refs, r)
 	}
 
+	// TODO: Pass through non-distributable layers
 	remotes, err := ic.exportLayers(ctx, comp, session.NewGroup(sessionID), refs...)
 	if err != nil {
 		return nil, err
@@ -133,7 +136,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 			buildInfo = inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, p.ID)]
 		}
 
-		desc, _, err := ic.commitDistributionManifest(ctx, r, config, &remotes[remotesMap[p.ID]], oci, inlineCache, buildInfo)
+		desc, _, err := ic.commitDistributionManifest(ctx, r, config, &remotes[remotesMap[p.ID]], oci, inlineCache, buildInfo, propagateNonDist)
 		if err != nil {
 			return nil, err
 		}
@@ -202,7 +205,7 @@ func (ic *ImageWriter) exportLayers(ctx context.Context, comp compression.Config
 	return out, err
 }
 
-func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache.ImmutableRef, config []byte, remote *solver.Remote, oci bool, inlineCache []byte, buildInfo []byte) (*ocispecs.Descriptor, *ocispecs.Descriptor, error) {
+func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache.ImmutableRef, config []byte, remote *solver.Remote, oci bool, inlineCache []byte, buildInfo []byte, propagateNonDist bool) (*ocispecs.Descriptor, *ocispecs.Descriptor, error) {
 	if len(config) == 0 {
 		var err error
 		config, err = emptyImageConfig()
@@ -277,6 +280,10 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache
 			}
 		} else {
 			desc.Annotations = nil
+		}
+		if !propagateNonDist {
+			desc.MediaType = convert.LayerToDistributable(oci, desc.MediaType)
+			desc.URLs = nil
 		}
 		mfst.Layers = append(mfst.Layers, desc)
 		labels[fmt.Sprintf("containerd.io/gc.ref.content.%d", i+1)] = desc.Digest.String()

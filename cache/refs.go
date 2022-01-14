@@ -600,6 +600,7 @@ func (sr *immutableRef) ociDesc(ctx context.Context, dhs DescHandlers) (ocispecs
 		Size:        sr.getBlobSize(),
 		MediaType:   sr.getMediaType(),
 		Annotations: make(map[string]string),
+		URLs:        sr.getURLs(),
 	}
 
 	if blobDesc, err := getBlobDesc(ctx, sr.cm.ContentStore, desc.Digest); err == nil {
@@ -748,6 +749,7 @@ func getBlobDesc(ctx context.Context, cs content.Store, dgst digest.Digest) (oci
 	if !ok {
 		return ocispecs.Descriptor{}, fmt.Errorf("no media type is stored for %q", info.Digest)
 	}
+
 	desc := ocispecs.Descriptor{
 		Digest:    info.Digest,
 		Size:      info.Size,

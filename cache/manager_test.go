@@ -1508,6 +1508,65 @@ func checkVariantsCoverage(ctx context.Context, t *testing.T, variants idxToVari
 	require.Equal(t, 0, len(got))
 }
 
+// Make sure that media type and urls are persisted for non-distributable blobs.
+func TestNondistributableBlobs(t *testing.T) {
+	t.Parallel()
+
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+
+	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+
+	co, cleanup, err := newCacheManager(ctx, cmOpt{
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	defer cleanup()
+
+	cm := co.manager
+
+	ctx, done, err := leaseutil.WithLease(ctx, co.lm, leaseutil.MakeTemporary)
+	require.NoError(t, err)
+	defer done(context.TODO())
+
+	contentBuffer := contentutil.NewBuffer()
+	descHandlers := DescHandlers(map[digest.Digest]*DescHandler{})
+
+	data, desc, err := mapToBlob(map[string]string{"foo": "bar"}, false)
+	require.NoError(t, err)
+
+	// Pretend like this is non-distributable
+	desc.MediaType = ocispecs.MediaTypeImageLayerNonDistributable
+	desc.URLs = []string{"https://buildkit.moby.dev/foo"}
+
+	cw, err := contentBuffer.Writer(ctx)
+	require.NoError(t, err)
+	_, err = cw.Write(data)
+	require.NoError(t, err)
+	err = cw.Commit(ctx, 0, cw.Digest())
+	require.NoError(t, err)
+
+	descHandlers[desc.Digest] = &DescHandler{
+		Provider: func(_ session.Group) content.Provider { return contentBuffer },
+	}
+
+	ref, err := cm.GetByBlob(ctx, desc, nil, descHandlers)
+	require.NoError(t, err)
+
+	remotes, err := ref.GetRemotes(ctx, true, compression.Config{}, false, nil)
+	require.NoError(t, err)
+
+	desc2 := remotes[0].Descriptors[0]
+
+	require.Equal(t, desc.MediaType, desc2.MediaType)
+	require.Equal(t, desc.URLs, desc2.URLs)
+}
+
 func checkInfo(ctx context.Context, t *testing.T, cs content.Store, info content.Info) {
 	if info.Labels == nil {
 		return

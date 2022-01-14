@@ -224,6 +224,7 @@ func (sr *immutableRef) getRemote(ctx context.Context, createIfNeeded bool, comp
 				newDesc.MediaType = blobDesc.MediaType
 				newDesc.Digest = blobDesc.Digest
 				newDesc.Size = blobDesc.Size
+				newDesc.URLs = blobDesc.URLs
 				newDesc.Annotations = nil
 				for _, k := range addAnnotations {
 					newDesc.Annotations[k] = desc.Annotations[k]

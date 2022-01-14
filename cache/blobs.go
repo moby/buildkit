@@ -306,6 +306,7 @@ func (sr *immutableRef) setBlob(ctx context.Context, compressionType compression
 	sr.queueBlob(desc.Digest)
 	sr.queueMediaType(desc.MediaType)
 	sr.queueBlobSize(desc.Size)
+	sr.appendURLs(desc.URLs)
 	if err := sr.commitMetadata(); err != nil {
 		return err
 	}

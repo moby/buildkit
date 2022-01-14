@@ -44,6 +44,10 @@ const (
 	keyCompressionLevel = "compression-level"
 	keyBuildInfo        = "buildinfo"
 	ociTypes            = "oci-mediatypes"
+	// propagateNondistLayersKey is an exporter option which can be used to mark a layer as non-distributable if the layer reference was
+	// already found to use a non-distributable media type.
+	// When this option is not set, the exporter will change the media type of the layer to a distributable one.
+	propagateNondistLayersKey = "propagate-nondist-layers"
 )
 
 type Opt struct {
@@ -181,6 +185,12 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 				return nil, err
 			}
 			i.buildInfoMode = bimode
+		case propagateNondistLayersKey:
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return nil, errors.Wrapf(err, "non-bool value %s specified for %s", v, k)
+			}
+			i.propagateNondistLayers = b
 		default:
 			if i.meta == nil {
 				i.meta = make(map[string][]byte)
@@ -197,19 +207,20 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 
 type imageExporterInstance struct {
 	*imageExporter
-	targetName       string
-	push             bool
-	pushByDigest     bool
-	unpack           bool
-	insecure         bool
-	ociTypes         bool
-	nameCanonical    bool
-	danglingPrefix   string
-	layerCompression compression.Type
-	forceCompression bool
-	compressionLevel *int
-	buildInfoMode    buildinfo.ExportMode
-	meta             map[string][]byte
+	targetName             string
+	push                   bool
+	pushByDigest           bool
+	unpack                 bool
+	insecure               bool
+	ociTypes               bool
+	nameCanonical          bool
+	danglingPrefix         string
+	layerCompression       compression.Type
+	forceCompression       bool
+	compressionLevel       *int
+	buildInfoMode          buildinfo.ExportMode
+	meta                   map[string][]byte
+	propagateNondistLayers bool
 }
 
 func (e *imageExporterInstance) Name() string {
@@ -244,7 +255,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	}
 	defer done(context.TODO())
 
-	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes, e.compression(), e.buildInfoMode, sessionID)
+	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes, e.compression(), e.buildInfoMode, e.propagateNondistLayers, sessionID)
 	if err != nil {
 		return nil, err
 	}
