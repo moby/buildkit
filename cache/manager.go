@@ -410,25 +410,32 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOpt
 
 	if mutableID := md.getEqualMutable(); mutableID != "" {
 		mutable, err := cm.getRecord(ctx, mutableID)
-		if err != nil {
-			// check loading mutable deleted record from disk
-			if IsNotFound(err) {
-				cm.MetadataStore.Clear(id)
+		if err == nil {
+			rec := &cacheRecord{
+				mu:            &sync.Mutex{},
+				cm:            cm,
+				refs:          make(map[ref]struct{}),
+				parentRefs:    parents,
+				cacheMetadata: md,
+				equalMutable:  &mutableRef{cacheRecord: mutable},
 			}
+			mutable.equalImmutable = &immutableRef{cacheRecord: rec}
+			cm.records[id] = rec
+			return rec, nil
+		} else if IsNotFound(err) {
+			// The equal mutable for this ref is not found, check to see if our snapshot exists
+			if _, statErr := cm.Snapshotter.Stat(ctx, md.getSnapshotID()); statErr != nil {
+				// this ref's snapshot also doesn't exist, just remove this record
+				cm.MetadataStore.Clear(id)
+				return nil, errors.Wrap(errNotFound, id)
+			}
+			// Our snapshot exists, so there may have been a crash while finalizing this ref.
+			// Clear the equal mutable field and continue using this ref.
+			md.clearEqualMutable()
+			md.commitMetadata()
+		} else {
 			return nil, err
 		}
-
-		rec := &cacheRecord{
-			mu:            &sync.Mutex{},
-			cm:            cm,
-			refs:          make(map[ref]struct{}),
-			parentRefs:    parents,
-			cacheMetadata: md,
-			equalMutable:  &mutableRef{cacheRecord: mutable},
-		}
-		mutable.equalImmutable = &immutableRef{cacheRecord: rec}
-		cm.records[id] = rec
-		return rec, nil
 	}
 
 	rec := &cacheRecord{
@@ -446,6 +453,20 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOpt
 			return nil, err
 		}
 		return nil, errors.Wrapf(errNotFound, "failed to get deleted record %s", id)
+	}
+
+	if rec.mutable {
+		// If the record is mutable, then the snapshot must exist
+		if _, err := cm.Snapshotter.Stat(ctx, rec.ID()); err != nil {
+			if !errdefs.IsNotFound(err) {
+				return nil, errors.Wrap(err, "failed to check mutable ref snapshot")
+			}
+			// the snapshot doesn't exist, clear this record
+			if err := rec.remove(ctx, true); err != nil {
+				return nil, errors.Wrap(err, "failed to remove mutable rec with missing snapshot")
+			}
+			return nil, errors.Wrap(errNotFound, rec.ID())
+		}
 	}
 
 	if err := initializeMetadata(rec.cacheMetadata, rec.parentRefs, opts...); err != nil {
