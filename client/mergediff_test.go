@@ -1137,9 +1137,27 @@ func (tc verifyContents) Run(t *testing.T, sb integration.Sandbox) {
 	cacheName := fmt.Sprintf("buildkit/%s-cache", imageName)
 	cacheTarget := fmt.Sprintf("%s/%s:latest", registry, cacheName)
 
-	var cacheOpts []CacheOptionsEntry
+	var importInlineCacheOpts []CacheOptionsEntry
+	var exportInlineCacheOpts []CacheOptionsEntry
+	var importRegistryCacheOpts []CacheOptionsEntry
+	var exportRegistryCacheOpts []CacheOptionsEntry
 	if os.Getenv("TEST_DOCKERD") != "1" {
-		cacheOpts = []CacheOptionsEntry{{
+		importInlineCacheOpts = []CacheOptionsEntry{{
+			Type: "registry",
+			Attrs: map[string]string{
+				"ref": imageTarget,
+			},
+		}}
+		exportInlineCacheOpts = []CacheOptionsEntry{{
+			Type: "inline",
+		}}
+		importRegistryCacheOpts = []CacheOptionsEntry{{
+			Type: "registry",
+			Attrs: map[string]string{
+				"ref": cacheTarget,
+			},
+		}}
+		exportRegistryCacheOpts = []CacheOptionsEntry{{
 			Type: "registry",
 			Attrs: map[string]string{
 				"ref": cacheTarget,
@@ -1148,58 +1166,60 @@ func (tc verifyContents) Run(t *testing.T, sb integration.Sandbox) {
 	}
 
 	resetState(t, c, sb)
-	requireContents(ctx, t, c, sb, tc.state, nil, cacheOpts, imageTarget, tc.contents(sb))
+	requireContents(ctx, t, c, sb, tc.state, nil, exportInlineCacheOpts, imageTarget, tc.contents(sb))
 
 	if os.Getenv("TEST_DOCKERD") == "1" {
 		return
 	}
 
-	// Check that the cache is actually used. This can only be asserted on
-	// in containerd-based tests because it needs access to the image+content store
-	if cdAddress != "" {
-		client, err := newContainerd(cdAddress)
-		require.NoError(t, err)
-		defer client.Close()
+	for _, importCacheOpts := range [][]CacheOptionsEntry{importInlineCacheOpts, importRegistryCacheOpts} {
+		// Check that the cache is actually used. This can only be asserted on
+		// in containerd-based tests because it needs access to the image+content store
+		if cdAddress != "" {
+			client, err := newContainerd(cdAddress)
+			require.NoError(t, err)
+			defer client.Close()
 
-		def, err := tc.state.Marshal(sb.Context())
-		require.NoError(t, err)
+			def, err := tc.state.Marshal(sb.Context())
+			require.NoError(t, err)
 
-		resetState(t, c, sb)
-		_, err = c.Solve(ctx, def, SolveOpt{
-			Exports: []ExportEntry{
-				{
-					Type: ExporterImage,
-					Attrs: map[string]string{
-						"name": imageTarget,
-						"push": "true",
+			resetState(t, c, sb)
+			_, err = c.Solve(ctx, def, SolveOpt{
+				Exports: []ExportEntry{
+					{
+						Type: ExporterImage,
+						Attrs: map[string]string{
+							"name": imageTarget,
+							"push": "true",
+						},
 					},
 				},
-			},
-			CacheImports: cacheOpts,
-		}, nil)
-		require.NoError(t, err)
+				CacheImports: importCacheOpts,
+			}, nil)
+			require.NoError(t, err)
 
-		img, err := client.GetImage(ctdCtx, imageTarget)
-		require.NoError(t, err)
+			img, err := client.GetImage(ctdCtx, imageTarget)
+			require.NoError(t, err)
 
-		var unexpectedLayers []ocispecs.Descriptor
-		require.NoError(t, images.Walk(ctdCtx, images.HandlerFunc(func(ctx context.Context, desc ocispecs.Descriptor) ([]ocispecs.Descriptor, error) {
-			if images.IsLayerType(desc.MediaType) {
-				_, err := client.ContentStore().Info(ctdCtx, desc.Digest)
-				if err == nil {
-					unexpectedLayers = append(unexpectedLayers, desc)
-				} else {
-					require.True(t, errdefs.IsNotFound(err))
+			var unexpectedLayers []ocispecs.Descriptor
+			require.NoError(t, images.Walk(ctdCtx, images.HandlerFunc(func(ctx context.Context, desc ocispecs.Descriptor) ([]ocispecs.Descriptor, error) {
+				if images.IsLayerType(desc.MediaType) {
+					_, err := client.ContentStore().Info(ctdCtx, desc.Digest)
+					if err == nil {
+						unexpectedLayers = append(unexpectedLayers, desc)
+					} else {
+						require.True(t, errdefs.IsNotFound(err))
+					}
 				}
-			}
-			return images.Children(ctx, client.ContentStore(), desc)
-		}), img.Target()))
-		require.Empty(t, unexpectedLayers)
-	}
+				return images.Children(ctx, client.ContentStore(), desc)
+			}), img.Target()))
+			require.Empty(t, unexpectedLayers)
+		}
 
-	// verify that builds using cache reimport the same contents
-	resetState(t, c, sb)
-	requireContents(ctx, t, c, sb, tc.state, cacheOpts, cacheOpts, imageTarget, tc.contents(sb))
+		// verify that builds using cache reimport the same contents
+		resetState(t, c, sb)
+		requireContents(ctx, t, c, sb, tc.state, importCacheOpts, exportRegistryCacheOpts, imageTarget, tc.contents(sb))
+	}
 }
 
 type verifyBlobReuse struct {
