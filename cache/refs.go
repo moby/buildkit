@@ -775,6 +775,9 @@ func (sr *immutableRef) Mount(ctx context.Context, readonly bool, s session.Grou
 	defer sr.mu.Unlock()
 
 	if sr.mountCache != nil {
+		if readonly {
+			return setReadonly(sr.mountCache), nil
+		}
 		return sr.mountCache, nil
 	}
 
@@ -1258,6 +1261,9 @@ func (sr *mutableRef) Mount(ctx context.Context, readonly bool, s session.Group)
 	defer sr.mu.Unlock()
 
 	if sr.mountCache != nil {
+		if readonly {
+			return setReadonly(sr.mountCache), nil
+		}
 		return sr.mountCache, nil
 	}
 
