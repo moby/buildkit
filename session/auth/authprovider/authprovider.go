@@ -86,27 +86,25 @@ func (ap *authProvider) FetchToken(ctx context.Context, req *auth.FetchTokenRequ
 			progresswriter.Wrap(name, ap.logger, done)
 		}
 		ap.mu.Unlock()
-		// try GET first because Docker Hub does not support POST
-		// switch once support has landed
-		resp, err := authutil.FetchToken(ctx, http.DefaultClient, nil, to)
+		// credential information is provided, use oauth POST endpoint
+		resp, err := authutil.FetchTokenWithOAuth(ctx, http.DefaultClient, nil, "buildkit-client", to)
 		if err != nil {
 			var errStatus remoteserrors.ErrUnexpectedStatus
 			if errors.As(err, &errStatus) {
-				// retry with POST request
+				// Registries without support for POST may return 404 for POST /v2/token.
 				// As of September 2017, GCR is known to return 404.
 				// As of February 2018, JFrog Artifactory is known to return 401.
 				if (errStatus.StatusCode == 405 && to.Username != "") || errStatus.StatusCode == 404 || errStatus.StatusCode == 401 {
-					resp, err := authutil.FetchTokenWithOAuth(ctx, http.DefaultClient, nil, "buildkit-client", to)
+					resp, err := authutil.FetchToken(ctx, http.DefaultClient, nil, to)
 					if err != nil {
 						return nil, err
 					}
-
-					return toTokenResponse(resp.AccessToken, resp.IssuedAt, resp.ExpiresIn), nil
+					return toTokenResponse(resp.Token, resp.IssuedAt, resp.ExpiresIn), nil
 				}
 			}
 			return nil, err
 		}
-		return toTokenResponse(resp.Token, resp.IssuedAt, resp.ExpiresIn), nil
+		return toTokenResponse(resp.AccessToken, resp.IssuedAt, resp.ExpiresIn), nil
 	}
 	// do request anonymously
 	resp, err := authutil.FetchToken(ctx, http.DefaultClient, nil, to)

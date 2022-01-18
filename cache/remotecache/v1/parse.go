@@ -65,6 +65,31 @@ func parseRecord(cc CacheConfig, idx int, provider DescriptorProvider, t solver.
 		}
 	}
 
+	for _, res := range rec.ChainedResults {
+		remote := &solver.Remote{}
+		mp := contentutil.NewMultiProvider(nil)
+		for _, diff := range res.LayerIndexes {
+			if diff < 0 || diff >= len(cc.Layers) {
+				return nil, errors.Errorf("invalid layer index %d", diff)
+			}
+
+			l := cc.Layers[diff]
+
+			descPair, ok := provider[l.Blob]
+			if !ok {
+				remote = nil
+				break
+			}
+
+			remote.Descriptors = append(remote.Descriptors, descPair.Descriptor)
+			mp.Add(descPair.Descriptor.Digest, descPair.Provider)
+		}
+		if remote != nil {
+			remote.Provider = mp
+			r.AddResult(res.CreatedAt, remote)
+		}
+	}
+
 	cache[idx] = r
 	return r, nil
 }

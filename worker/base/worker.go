@@ -222,6 +222,11 @@ func (w *Worker) LoadRef(ctx context.Context, id string, hidden bool) (cache.Imm
 	if hidden {
 		opts = append(opts, cache.NoUpdateLastUsed)
 	}
+	if id == "" {
+		// results can have nil refs if they are optimized out to be equal to scratch,
+		// i.e. Diff(A,A) == scratch
+		return nil, nil
+	}
 
 	ref, err := w.CacheMgr.Get(ctx, id, opts...)
 	var needsRemoteProviders cache.NeedsRemoteProvidersError
@@ -270,6 +275,8 @@ func (w *Worker) ResolveOp(v solver.Vertex, s frontend.FrontendLLBBridge, sm *se
 			return ops.NewBuildOp(v, op, s, w)
 		case *pb.Op_Merge:
 			return ops.NewMergeOp(v, op, w)
+		case *pb.Op_Diff:
+			return ops.NewDiffOp(v, op, w)
 		default:
 			return nil, errors.Errorf("no support for %T", op)
 		}

@@ -274,6 +274,28 @@ func llbOpName(pbOp *pb.Op, load func(digest.Digest) (solver.Vertex, error)) (st
 			subnames[i] = strconv.Quote(subvtx.Name())
 		}
 		return "merge " + strings.Join(subnames, " + "), nil
+	case *pb.Op_Diff:
+		var lowerName string
+		if op.Diff.Lower.Input == -1 {
+			lowerName = "scratch"
+		} else {
+			lowerVtx, err := load(pbOp.Inputs[op.Diff.Lower.Input].Digest)
+			if err != nil {
+				return "", err
+			}
+			lowerName = strconv.Quote(lowerVtx.Name())
+		}
+		var upperName string
+		if op.Diff.Upper.Input == -1 {
+			upperName = "scratch"
+		} else {
+			upperVtx, err := load(pbOp.Inputs[op.Diff.Upper.Input].Digest)
+			if err != nil {
+				return "", err
+			}
+			upperName = strconv.Quote(upperVtx.Name())
+		}
+		return "diff " + lowerName + " -> " + upperName, nil
 	default:
 		return "unknown", nil
 	}
@@ -327,6 +349,10 @@ func ValidateOp(op *pb.Op) error {
 	case *pb.Op_Merge:
 		if op.Merge == nil {
 			return errors.Errorf("invalid nil merge op")
+		}
+	case *pb.Op_Diff:
+		if op.Diff == nil {
+			return errors.Errorf("invalid nil diff op")
 		}
 	}
 	return nil

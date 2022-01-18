@@ -136,7 +136,7 @@ func (e *exporter) ExportTo(ctx context.Context, t CacheExporterTarget, opt Cach
 				return nil, err
 			}
 			res.Release(context.TODO())
-			if remote == nil {
+			if remote == nil && len(remotes) > 0 {
 				remote, remotes = remotes[0], remotes[1:] // pop the first element
 			}
 			if opt.CompressionOpt != nil {

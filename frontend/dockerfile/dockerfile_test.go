@@ -5471,7 +5471,7 @@ func testNamedLocalContext(t *testing.T, sb integration.Sandbox) {
 FROM busybox AS base
 RUN cat /etc/alpine-release > /out
 FROM scratch
-COPY --from=base /out /
+COPY --from=base /o* /
 `)
 
 	dir, err := tmpdir(
@@ -5484,6 +5484,8 @@ COPY --from=base /out /
 
 	dir2, err := tmpdir(
 		fstest.CreateFile("out", outf, 0600),
+		fstest.CreateFile("out2", outf, 0600),
+		fstest.CreateFile(".dockerignore", []byte("out2\n"), 0600),
 	)
 	require.NoError(t, err)
 	defer os.RemoveAll(dir2)
@@ -5515,6 +5517,10 @@ COPY --from=base /out /
 	dt, err := ioutil.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
 	require.True(t, len(dt) > 0)
+
+	_, err = ioutil.ReadFile(filepath.Join(destDir, "out2"))
+	require.Error(t, err)
+	require.True(t, errors.Is(err, os.ErrNotExist))
 }
 
 func testNamedInputContext(t *testing.T, sb integration.Sandbox) {

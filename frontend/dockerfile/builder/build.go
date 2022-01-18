@@ -839,14 +839,15 @@ func contextByName(ctx context.Context, c client.Client, name string, platform *
 	}
 	switch vv[0] {
 	case "docker-image":
+		ref := strings.TrimPrefix(vv[1], "//")
 		imgOpt := []llb.ImageOption{
-			llb.WithCustomName("[context " + name + "] " + vv[1]),
+			llb.WithCustomName("[context " + name + "] " + ref),
 			llb.WithMetaResolver(c),
 		}
 		if platform != nil {
 			imgOpt = append(imgOpt, llb.Platform(*platform))
 		}
-		st := llb.Image(strings.TrimPrefix(vv[1], "//"), imgOpt...)
+		st := llb.Image(ref, imgOpt...)
 		return &st, nil, nil
 	case "git":
 		st, ok := detectGitContext(v, "1")
@@ -862,7 +863,44 @@ func contextByName(ctx context.Context, c client.Client, name string, platform *
 		}
 		return st, nil, nil
 	case "local":
-		st := llb.Local(vv[1], llb.WithCustomName("[context "+name+"] load from client"), llb.SessionID(c.BuildOpts().SessionID), llb.SharedKeyHint("context:"+name))
+		st := llb.Local(vv[1],
+			llb.SessionID(c.BuildOpts().SessionID),
+			llb.FollowPaths([]string{dockerignoreFilename}),
+			llb.SharedKeyHint("context:"+name+"-"+dockerignoreFilename),
+			llb.WithCustomName("[context "+name+"] load "+dockerignoreFilename),
+			llb.Differ(llb.DiffNone, false),
+		)
+		def, err := st.Marshal(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		res, err := c.Solve(ctx, client.SolveRequest{
+			Evaluate:   true,
+			Definition: def.ToPB(),
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		ref, err := res.SingleRef()
+		if err != nil {
+			return nil, nil, err
+		}
+		dt, _ := ref.ReadFile(ctx, client.ReadRequest{
+			Filename: dockerignoreFilename,
+		}) // error ignored
+		var excludes []string
+		if len(dt) != 0 {
+			excludes, err = dockerignore.ReadAll(bytes.NewBuffer(dt))
+			if err != nil {
+				return nil, nil, err
+			}
+		}
+		st = llb.Local(vv[1],
+			llb.WithCustomName("[context "+name+"] load from client"),
+			llb.SessionID(c.BuildOpts().SessionID),
+			llb.SharedKeyHint("context:"+name),
+			llb.ExcludePatterns(excludes),
+		)
 		return &st, nil, nil
 	case "input":
 		inputs, err := c.Inputs(ctx)
