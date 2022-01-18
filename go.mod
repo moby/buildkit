@@ -126,7 +126,7 @@ require (
 	gotest.tools/v3 v3.0.3 // indirect
 )
 
-replace github.com/tonistiigi/fsutil => github.com/earthly/fsutil v0.0.0-20211214000626-0053bea6feeb
+replace github.com/tonistiigi/fsutil => github.com/earthly/fsutil v0.0.0-20220118225905-42fa88fbe869
 
 replace (
 	github.com/docker/docker => github.com/docker/docker v20.10.3-0.20211208011758-87521affb077+incompatible
