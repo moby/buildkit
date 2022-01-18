@@ -70,6 +70,9 @@ func (m *mergeOp) Exec(ctx context.Context, g session.Group, inputs []solver.Res
 		if !ok {
 			return nil, errors.Errorf("invalid reference for merge %T", inp.Sys())
 		}
+		if wref.ImmutableRef == nil {
+			continue
+		}
 		refs[index] = wref.ImmutableRef
 		ids[index] = wref.ImmutableRef.ID()
 		index++

@@ -18,6 +18,7 @@ message Op {
 		FileOp file = 4;
 		BuildOp build = 5;
 		MergeOp merge = 6;
+		DiffOp diff = 7;
 	}
 	Platform platform = 10;
 	WorkerConstraints constraints = 11;
@@ -372,4 +373,17 @@ message MergeInput {
 
 message MergeOp {
 	repeated MergeInput inputs = 1;
+}
+
+message LowerDiffInput {
+  int64 input = 1 [(gogoproto.customtype) = "InputIndex", (gogoproto.nullable) = false];
+}
+
+message UpperDiffInput {
+  int64 input = 1 [(gogoproto.customtype) = "InputIndex", (gogoproto.nullable) = false];
+}
+
+message DiffOp {
+  LowerDiffInput lower = 1;
+  UpperDiffInput upper = 2;
 }

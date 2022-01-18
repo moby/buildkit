@@ -26,6 +26,7 @@ import (
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/leases"
 	ctdmetadata "github.com/containerd/containerd/metadata"
+	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/containerd/snapshots/native"
@@ -602,7 +603,7 @@ func TestExtractOnMutable(t *testing.T) {
 	err = snap.(*immutableRef).setBlob(leaseCtx, compressionType, desc)
 	done(context.TODO())
 	require.NoError(t, err)
-	err = snap.(*immutableRef).computeChainMetadata(leaseCtx)
+	err = snap.(*immutableRef).computeChainMetadata(leaseCtx, map[string]struct{}{snap.ID(): {}})
 	require.NoError(t, err)
 
 	snap2, err := cm.GetByBlob(ctx, desc2, snap)
@@ -725,7 +726,7 @@ func TestSetBlob(t *testing.T) {
 	}
 	err = snap.(*immutableRef).setBlob(ctx, compressionType, desc)
 	require.NoError(t, err)
-	err = snap.(*immutableRef).computeChainMetadata(ctx)
+	err = snap.(*immutableRef).computeChainMetadata(ctx, map[string]struct{}{snap.ID(): {}})
 	require.NoError(t, err)
 
 	snapRef = snap.(*immutableRef)
@@ -755,7 +756,7 @@ func TestSetBlob(t *testing.T) {
 	}
 	err = snap2.(*immutableRef).setBlob(ctx, compressionType2, desc2)
 	require.NoError(t, err)
-	err = snap2.(*immutableRef).computeChainMetadata(ctx)
+	err = snap2.(*immutableRef).computeChainMetadata(ctx, map[string]struct{}{snap.ID(): {}, snap2.ID(): {}})
 	require.NoError(t, err)
 
 	snapRef2 := snap2.(*immutableRef)
@@ -1683,6 +1684,75 @@ func TestMergeOp(t *testing.T) {
 	checkDiskUsage(ctx, t, cm, 0, 0)
 }
 
+func TestMountReadOnly(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS != "linux" {
+		t.Skipf("unsupported GOOS: %s", runtime.GOOS)
+	}
+
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+
+	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+
+	co, cleanup, err := newCacheManager(ctx, cmOpt{
+		snapshotter:     snapshotter,
+		snapshotterName: "overlay",
+	})
+	require.NoError(t, err)
+	defer cleanup()
+	cm := co.manager
+
+	mutRef, err := cm.New(ctx, nil, nil)
+	require.NoError(t, err)
+
+	for i := 0; i < 2; i++ {
+		rwMntable, err := mutRef.Mount(ctx, false, nil)
+		require.NoError(t, err)
+		rwMnts, release, err := rwMntable.Mount()
+		require.NoError(t, err)
+		defer release()
+		require.Len(t, rwMnts, 1)
+		require.False(t, isReadOnly(rwMnts[0]))
+
+		roMntable, err := mutRef.Mount(ctx, true, nil)
+		require.NoError(t, err)
+		roMnts, release, err := roMntable.Mount()
+		require.NoError(t, err)
+		defer release()
+		require.Len(t, roMnts, 1)
+		require.True(t, isReadOnly(roMnts[0]))
+
+		immutRef, err := mutRef.Commit(ctx)
+		require.NoError(t, err)
+
+		roMntable, err = immutRef.Mount(ctx, true, nil)
+		require.NoError(t, err)
+		roMnts, release, err = roMntable.Mount()
+		require.NoError(t, err)
+		defer release()
+		require.Len(t, roMnts, 1)
+		require.True(t, isReadOnly(roMnts[0]))
+
+		rwMntable, err = immutRef.Mount(ctx, false, nil)
+		require.NoError(t, err)
+		rwMnts, release, err = rwMntable.Mount()
+		require.NoError(t, err)
+		defer release()
+		require.Len(t, rwMnts, 1)
+		// once immutable, even when readonly=false, the mount is still readonly
+		require.True(t, isReadOnly(rwMnts[0]))
+
+		// repeat with a ref that has a parent
+		mutRef, err = cm.New(ctx, immutRef, nil)
+		require.NoError(t, err)
+	}
+}
+
 func checkDiskUsage(ctx context.Context, t *testing.T, cm Manager, inuse, unused int) {
 	du, err := cm.DiskUsage(ctx, client.DiskUsageInfo{})
 	require.NoError(t, err)
@@ -1918,4 +1988,19 @@ func mapToSystemTarBlob(m map[string]string) ([]byte, ocispecs.Descriptor, error
 			"containerd.io/uncompressed": digest.FromBytes(tarout).String(),
 		},
 	}, nil
+}
+
+func isReadOnly(mnt mount.Mount) bool {
+	var hasUpperdir bool
+	for _, o := range mnt.Options {
+		if o == "ro" {
+			return true
+		} else if strings.HasPrefix(o, "upperdir=") {
+			hasUpperdir = true
+		}
+	}
+	if mnt.Type == "overlay" {
+		return !hasUpperdir
+	}
+	return false
 }

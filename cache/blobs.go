@@ -47,27 +47,40 @@ func (sr *immutableRef) computeBlobChain(ctx context.Context, createIfNeeded boo
 		ctx = winlayers.UseWindowsLayerMode(ctx)
 	}
 
-	return computeBlobChain(ctx, sr, createIfNeeded, compressionType, forceCompression, s)
+	// filter keeps track of which layers should actually be included in the blob chain.
+	// This is required for diff refs, which can include only a single layer from their parent
+	// refs rather than every single layer present among their ancestors.
+	filter := sr.layerSet()
+
+	return computeBlobChain(ctx, sr, createIfNeeded, compressionType, forceCompression, s, filter)
 }
 
 type compressor func(dest io.Writer, requiredMediaType string) (io.WriteCloser, error)
 
-func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool, compressionType compression.Type, forceCompression bool, s session.Group) error {
+func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool, compressionType compression.Type, forceCompression bool, s session.Group, filter map[string]struct{}) error {
 	eg, ctx := errgroup.WithContext(ctx)
 	switch sr.kind() {
 	case Merge:
 		for _, parent := range sr.mergeParents {
 			parent := parent
 			eg.Go(func() error {
-				return computeBlobChain(ctx, parent, createIfNeeded, compressionType, forceCompression, s)
+				return computeBlobChain(ctx, parent, createIfNeeded, compressionType, forceCompression, s, filter)
+			})
+		}
+	case Diff:
+		if _, ok := filter[sr.ID()]; !ok && sr.diffParents.upper != nil {
+			// This diff is just re-using the upper blob, compute that
+			eg.Go(func() error {
+				return computeBlobChain(ctx, sr.diffParents.upper, createIfNeeded, compressionType, forceCompression, s, filter)
 			})
 		}
 	case Layer:
 		eg.Go(func() error {
-			return computeBlobChain(ctx, sr.layerParent, createIfNeeded, compressionType, forceCompression, s)
+			return computeBlobChain(ctx, sr.layerParent, createIfNeeded, compressionType, forceCompression, s, filter)
 		})
-		fallthrough
-	case BaseLayer:
+	}
+
+	if _, ok := filter[sr.ID()]; ok {
 		eg.Go(func() error {
 			_, err := g.Do(ctx, fmt.Sprintf("%s-%t", sr.ID(), createIfNeeded), func(ctx context.Context) (interface{}, error) {
 				if sr.getBlob() != "" {
@@ -95,9 +108,16 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 					return nil, errors.Errorf("unknown layer compression type: %q", compressionType)
 				}
 
+				var lowerRef *immutableRef
+				switch sr.kind() {
+				case Diff:
+					lowerRef = sr.diffParents.lower
+				case Layer:
+					lowerRef = sr.layerParent
+				}
 				var lower []mount.Mount
-				if sr.layerParent != nil {
-					m, err := sr.layerParent.Mount(ctx, true, s)
+				if lowerRef != nil {
+					m, err := lowerRef.Mount(ctx, true, s)
 					if err != nil {
 						return nil, err
 					}
@@ -110,22 +130,36 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 						defer release()
 					}
 				}
-				m, err := sr.Mount(ctx, true, s)
-				if err != nil {
-					return nil, err
+
+				var upperRef *immutableRef
+				switch sr.kind() {
+				case Diff:
+					upperRef = sr.diffParents.upper
+				default:
+					upperRef = sr
 				}
-				upper, release, err := m.Mount()
-				if err != nil {
-					return nil, err
+				var upper []mount.Mount
+				if upperRef != nil {
+					m, err := upperRef.Mount(ctx, true, s)
+					if err != nil {
+						return nil, err
+					}
+					var release func() error
+					upper, release, err = m.Mount()
+					if err != nil {
+						return nil, err
+					}
+					if release != nil {
+						defer release()
+					}
 				}
-				if release != nil {
-					defer release()
-				}
+
 				var desc ocispecs.Descriptor
+				var err error
 
 				// Determine differ and error/log handling according to the platform, envvar and the snapshotter.
 				var enableOverlay, fallback, logWarnOnErr bool
-				if forceOvlStr := os.Getenv("BUILDKIT_DEBUG_FORCE_OVERLAY_DIFF"); forceOvlStr != "" {
+				if forceOvlStr := os.Getenv("BUILDKIT_DEBUG_FORCE_OVERLAY_DIFF"); forceOvlStr != "" && sr.kind() != Diff {
 					enableOverlay, err = strconv.ParseBool(forceOvlStr)
 					if err != nil {
 						return nil, errors.Wrapf(err, "invalid boolean in BUILDKIT_DEBUG_FORCE_OVERLAY_DIFF")
@@ -135,8 +169,10 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 					enableOverlay, fallback = true, true
 					switch sr.cm.Snapshotter.Name() {
 					case "overlayfs", "stargz":
-						// overlayfs-based snapshotters should support overlay diff. so print warn log on failure.
-						logWarnOnErr = true
+						// overlayfs-based snapshotters should support overlay diff except when running an arbitrary diff
+						// (in which case lower and upper may differ by more than one layer), so print warn log on unexpected
+						// failure.
+						logWarnOnErr = sr.kind() != Diff
 					case "fuse-overlayfs", "native":
 						// not supported with fuse-overlayfs snapshotter which doesn't provide overlayfs mounts.
 						// TODO: add support for fuse-overlayfs
@@ -220,7 +256,7 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 	if err := eg.Wait(); err != nil {
 		return err
 	}
-	return sr.computeChainMetadata(ctx)
+	return sr.computeChainMetadata(ctx, filter)
 }
 
 // setBlob associates a blob with the cache record.
@@ -274,7 +310,7 @@ func (sr *immutableRef) setBlob(ctx context.Context, compressionType compression
 	return nil
 }
 
-func (sr *immutableRef) computeChainMetadata(ctx context.Context) error {
+func (sr *immutableRef) computeChainMetadata(ctx context.Context, filter map[string]struct{}) error {
 	if _, ok := leases.FromContext(ctx); !ok {
 		return errors.Errorf("missing lease requirement for computeChainMetadata")
 	}
@@ -291,38 +327,62 @@ func (sr *immutableRef) computeChainMetadata(ctx context.Context) error {
 
 	switch sr.kind() {
 	case BaseLayer:
+		if _, ok := filter[sr.ID()]; !ok {
+			return nil
+		}
 		diffID := sr.getDiffID()
 		chainID = diffID
 		blobChainID = imagespecidentity.ChainID([]digest.Digest{digest.Digest(sr.getBlob()), diffID})
 	case Layer:
-		if parentChainID := sr.layerParent.getChainID(); parentChainID != "" {
-			chainID = parentChainID
-		} else {
-			return errors.Errorf("failed to set chain for reference with non-addressable parent %q", sr.layerParent.GetDescription())
+		if _, ok := filter[sr.ID()]; !ok {
+			return nil
 		}
-		if parentBlobChainID := sr.layerParent.getBlobChainID(); parentBlobChainID != "" {
-			blobChainID = parentBlobChainID
-		} else {
-			return errors.Errorf("failed to set blobchain for reference with non-addressable parent %q", sr.layerParent.GetDescription())
+		if _, ok := filter[sr.layerParent.ID()]; ok {
+			if parentChainID := sr.layerParent.getChainID(); parentChainID != "" {
+				chainID = parentChainID
+			} else {
+				return errors.Errorf("failed to set chain for reference with non-addressable parent %q", sr.layerParent.GetDescription())
+			}
+			if parentBlobChainID := sr.layerParent.getBlobChainID(); parentBlobChainID != "" {
+				blobChainID = parentBlobChainID
+			} else {
+				return errors.Errorf("failed to set blobchain for reference with non-addressable parent %q", sr.layerParent.GetDescription())
+			}
 		}
 		diffID := digest.Digest(sr.getDiffID())
 		chainID = imagespecidentity.ChainID([]digest.Digest{chainID, diffID})
 		blobID := imagespecidentity.ChainID([]digest.Digest{digest.Digest(sr.getBlob()), diffID})
 		blobChainID = imagespecidentity.ChainID([]digest.Digest{blobChainID, blobID})
 	case Merge:
-		// Merge chain IDs can re-use the first input chain ID as a base, but after that have to
-		// be computed one-by-one for each blob in the chain. It should have the same value as
-		// if you had created the merge by unpacking all the blobs on top of each other with GetByBlob.
 		baseInput := sr.mergeParents[0]
+		if _, ok := filter[baseInput.ID()]; !ok {
+			// not enough information to compute chain at this time
+			return nil
+		}
 		chainID = baseInput.getChainID()
 		blobChainID = baseInput.getBlobChainID()
 		for _, mergeParent := range sr.mergeParents[1:] {
 			for _, layer := range mergeParent.layerChain() {
+				if _, ok := filter[layer.ID()]; !ok {
+					// not enough information to compute chain at this time
+					return nil
+				}
 				diffID := digest.Digest(layer.getDiffID())
 				chainID = imagespecidentity.ChainID([]digest.Digest{chainID, diffID})
 				blobID := imagespecidentity.ChainID([]digest.Digest{digest.Digest(layer.getBlob()), diffID})
 				blobChainID = imagespecidentity.ChainID([]digest.Digest{blobChainID, blobID})
 			}
+		}
+	case Diff:
+		if _, ok := filter[sr.ID()]; ok {
+			// this diff is its own blob
+			diffID := sr.getDiffID()
+			chainID = diffID
+			blobChainID = imagespecidentity.ChainID([]digest.Digest{digest.Digest(sr.getBlob()), diffID})
+		} else {
+			// re-using upper blob
+			chainID = sr.diffParents.upper.getChainID()
+			blobChainID = sr.diffParents.upper.getBlobChainID()
 		}
 	}
 

@@ -27,14 +27,20 @@ type LayerAnnotations struct {
 }
 
 type CacheRecord struct {
-	Results []CacheResult  `json:"layers,omitempty"`
-	Digest  digest.Digest  `json:"digest,omitempty"`
-	Inputs  [][]CacheInput `json:"inputs,omitempty"`
+	Results        []CacheResult   `json:"layers,omitempty"`
+	ChainedResults []ChainedResult `json:"chains,omitempty"`
+	Digest         digest.Digest   `json:"digest,omitempty"`
+	Inputs         [][]CacheInput  `json:"inputs,omitempty"`
 }
 
 type CacheResult struct {
 	LayerIndex int       `json:"layer"`
 	CreatedAt  time.Time `json:"createdAt,omitempty"`
+}
+
+type ChainedResult struct {
+	LayerIndexes []int     `json:"layers"`
+	CreatedAt    time.Time `json:"createdAt,omitempty"`
 }
 
 type CacheInput struct {

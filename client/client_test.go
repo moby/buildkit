@@ -72,7 +72,7 @@ func TestIntegration(t *testing.T) {
 	mirroredImages["tonistiigi/test:nolayers"] = "docker.io/tonistiigi/test:nolayers"
 	mirrors := integration.WithMirroredImages(mirroredImages)
 
-	integration.Run(t, integration.TestFuncs(
+	tests := integration.TestFuncs(
 		testCacheExportCacheKeyLoop,
 		testRelativeWorkDir,
 		testFileOpMkdirMkfile,
@@ -138,10 +138,14 @@ func TestIntegration(t *testing.T) {
 		testBuildExportZstd,
 		testPullZstdImage,
 		testMergeOp,
-		testMergeOpCache,
+		testMergeOpCacheInline,
+		testMergeOpCacheMin,
+		testMergeOpCacheMax,
 		testRmSymlink,
 		testMoveParentDir,
-	), mirrors)
+	)
+	tests = append(tests, diffOpTestCases()...)
+	integration.Run(t, tests, mirrors)
 
 	integration.Run(t, integration.TestFuncs(
 		testSecurityMode,
@@ -4023,93 +4027,19 @@ func testMergeOp(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	requireContents := func(state llb.State, files ...fstest.Applier) {
-		def, err := state.Marshal(sb.Context())
+	ctx := sb.Context()
+	registry, err := sb.NewRegistry()
+	if !errors.Is(err, integration.ErrorRequirements) {
 		require.NoError(t, err)
+	}
 
-		destDir, err := ioutil.TempDir("", "buildkit")
-		require.NoError(t, err)
-		defer os.RemoveAll(destDir)
-
-		_, err = c.Solve(sb.Context(), def, SolveOpt{
-			Exports: []ExportEntry{
-				{
-					Type:      ExporterLocal,
-					OutputDir: destDir,
-				},
-			},
-		}, nil)
-		require.NoError(t, err)
-
-		require.NoError(t, fstest.CheckDirectoryEqualWithApplier(destDir, fstest.Apply(files...)))
-
-		// verify the image exports+imports the same
-		var target string
-		var exports []ExportEntry
-		if os.Getenv("TEST_DOCKERD") == "1" {
-			// use a fake url so we can guarantee when we do the build with the image
-			// we are using the local image in dockerd, not pulling from a registry
-			target = "fake.invalid:33333/testmergeop:latest"
-			exports = []ExportEntry{{
-				Type: "moby",
-				Attrs: map[string]string{
-					"name": target,
-				},
-			}}
-		} else {
-			registry, err := sb.NewRegistry()
-			if errors.Is(err, integration.ErrorRequirements) {
-				return
-			}
-			require.NoError(t, err)
-			target = registry + "/testmergeop:latest"
-			exports = []ExportEntry{{
-				Type: ExporterImage,
-				Attrs: map[string]string{
-					"name": target,
-					"push": "true",
-				},
-			}}
-		}
-
-		_, err = c.Solve(sb.Context(), def, SolveOpt{Exports: exports}, nil)
-		require.NoError(t, err)
-		cdAddress := sb.ContainerdAddress()
-		if cdAddress != "" {
-			ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
-			client, err := newContainerd(cdAddress)
-			require.NoError(t, err)
-			defer client.Close()
-			imageService := client.ImageService()
-			imageList, err := imageService.List(ctx)
-			require.NoError(t, err)
-			for _, img := range imageList {
-				err = imageService.Delete(ctx, img.Name, images.SynchronousDelete())
-				require.NoError(t, err)
-			}
-		}
-		checkAllReleasable(t, c, sb, true)
-
-		img := llb.Image(target, llb.ResolveModePreferLocal)
-
-		def, err = img.Marshal(sb.Context())
-		require.NoError(t, err)
-
-		destDir, err = ioutil.TempDir("", "buildkit")
-		require.NoError(t, err)
-		defer os.RemoveAll(destDir)
-
-		_, err = c.Solve(sb.Context(), def, SolveOpt{
-			Exports: []ExportEntry{
-				{
-					Type:      ExporterLocal,
-					OutputDir: destDir,
-				},
-			},
-		}, nil)
-		require.NoError(t, err)
-
-		require.NoError(t, fstest.CheckDirectoryEqualWithApplier(destDir, fstest.Apply(files...)))
+	var imageTarget string
+	if os.Getenv("TEST_DOCKERD") == "1" {
+		// do image export but use a fake url as the image should just end up in moby's
+		// local store
+		imageTarget = "fake.invalid:33333/buildkit/testmergeop:latest"
+	} else if registry != "" {
+		imageTarget = registry + "/buildkit/testmergeop:latest"
 	}
 
 	stateA := llb.Scratch().
@@ -4128,7 +4058,7 @@ func testMergeOp(t *testing.T, sb integration.Sandbox) {
 		File(llb.Mkfile("/bar/A", 0400, []byte("C")))
 
 	mergeA := llb.Merge([]llb.State{stateA, stateC})
-	requireContents(mergeA,
+	requireContents(ctx, t, c, sb, mergeA, nil, nil, imageTarget,
 		fstest.CreateFile("foo", []byte("C"), 0755),
 		fstest.CreateFile("c", []byte("C"), 0755),
 		fstest.CreateDir("bar", 0755),
@@ -4137,7 +4067,7 @@ func testMergeOp(t *testing.T, sb integration.Sandbox) {
 	)
 
 	mergeB := llb.Merge([]llb.State{stateC, stateB})
-	requireContents(mergeB,
+	requireContents(ctx, t, c, sb, mergeB, nil, nil, imageTarget,
 		fstest.CreateFile("a", []byte("A"), 0755),
 		fstest.CreateFile("b", []byte("B"), 0755),
 		fstest.CreateFile("c", []byte("C"), 0755),
@@ -4148,7 +4078,7 @@ func testMergeOp(t *testing.T, sb integration.Sandbox) {
 
 	stateD := llb.Scratch().File(llb.Mkdir("/qaz", 0755))
 	mergeC := llb.Merge([]llb.State{mergeA, mergeB, stateD})
-	requireContents(mergeC,
+	requireContents(ctx, t, c, sb, mergeC, nil, nil, imageTarget,
 		fstest.CreateFile("a", []byte("A"), 0755),
 		fstest.CreateFile("b", []byte("B"), 0755),
 		fstest.CreateFile("c", []byte("C"), 0755),
@@ -4158,49 +4088,51 @@ func testMergeOp(t *testing.T, sb integration.Sandbox) {
 		fstest.CreateDir("qaz", 0755),
 	)
 
-	runA := llb.Merge([]llb.State{llb.Image("busybox"), mergeC}).
-		Run(llb.Shlex("sh -c -e -x '" + strings.Join([]string{
-			// turn /a file into a dir, mv b and c into it
-			"rm /a",
-			"mkdir /a",
-			"mv /b /c /a/",
-			// remove+recreate /bar to make it opaque on overlay snapshotters
-			"rm -rf /bar",
-			"mkdir -m 0755 /bar",
-			"echo -n D > /bar/D",
-			// turn /qaz dir into a file
-			"rm -rf /qaz",
-			"touch /qaz",
-		}, " && ") + "'")).Root().
-		File(llb.Rm("/bin")). // get rid of stuff from busybox image that is tedious to assert on
-		File(llb.Rm("/dev")).
-		File(llb.Rm("/etc")).
-		File(llb.Rm("/home")).
-		File(llb.Rm("/root")).
-		File(llb.Rm("/tmp")).
-		File(llb.Rm("/usr")).
-		File(llb.Rm("/var")).
-		File(llb.Rm("/proc")).
-		File(llb.Rm("/sys"))
+	runA := runShell(llb.Merge([]llb.State{llb.Image("alpine"), mergeC}),
+		// turn /a file into a dir, mv b and c into it
+		"rm /a",
+		"mkdir /a",
+		"mv /b /c /a/",
+		// remove+recreate /bar to make it opaque on overlay snapshotters
+		"rm -rf /bar",
+		"mkdir -m 0755 /bar",
+		"echo -n D > /bar/D",
+		// turn /qaz dir into a file
+		"rm -rf /qaz",
+		"touch /qaz",
+	)
 	stateE := llb.Scratch().
 		File(llb.Mkfile("/foo", 0755, []byte("E"))).
 		File(llb.Mkdir("/bar", 0755)).
 		File(llb.Mkfile("/bar/A", 0755, []byte("A"))).
 		File(llb.Mkfile("/bar/E", 0755, nil))
 	mergeD := llb.Merge([]llb.State{stateE, runA})
-	requireContents(mergeD,
-		fstest.CreateDir("a", 0755),
-		fstest.CreateFile("a/b", []byte("B"), 0755),
-		fstest.CreateFile("a/c", []byte("C"), 0755),
-		fstest.CreateDir("bar", 0755),
-		fstest.CreateFile("bar/D", []byte("D"), 0644),
-		fstest.CreateFile("bar/E", nil, 0755), // exists because opaques dirs are converted to explicit whiteouts
-		fstest.CreateFile("qaz", nil, 0644),
-		// /foo from stateE is not here because it is deleted in stateB, which is part of a submerge of mergeD
+	requireEqualContents(ctx, t, c, mergeD, llb.Image("alpine").
+		File(llb.Mkdir("a", 0755)).
+		File(llb.Mkfile("a/b", 0755, []byte("B"))).
+		File(llb.Mkfile("a/c", 0755, []byte("C"))).
+		File(llb.Mkdir("bar", 0755)).
+		File(llb.Mkfile("bar/D", 0644, []byte("D"))).
+		File(llb.Mkfile("bar/E", 0755, nil)).
+		File(llb.Mkfile("qaz", 0644, nil)),
+	// /foo from stateE is not here because it is deleted in stateB, which is part of a submerge of mergeD
 	)
 }
 
-func testMergeOpCache(t *testing.T, sb integration.Sandbox) {
+func testMergeOpCacheInline(t *testing.T, sb integration.Sandbox) {
+	testMergeOpCache(t, sb, "inline")
+}
+
+func testMergeOpCacheMin(t *testing.T, sb integration.Sandbox) {
+	testMergeOpCache(t, sb, "min")
+}
+
+func testMergeOpCacheMax(t *testing.T, sb integration.Sandbox) {
+	testMergeOpCache(t, sb, "max")
+}
+
+func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
+	t.Helper()
 	skipDockerd(t, sb)
 	requiresLinux(t)
 
@@ -4276,10 +4208,9 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox) {
 	input1Copy := llb.Scratch().File(llb.Copy(input1, "/dir/1", "/foo/1", &llb.CopyInfo{CreateDestPath: true}))
 
 	// put random contents in the file to ensure it's not re-run later
-	input2 := llb.Image("alpine:latest").Run(llb.Args([]string{"sh", "-c", strings.Join([]string{
+	input2 := runShell(llb.Image("alpine:latest"),
 		"mkdir /dir",
-		"cat /dev/urandom | head -c 100 | sha256sum > /dir/2",
-	}, " && ")})).Root()
+		"cat /dev/urandom | head -c 100 | sha256sum > /dir/2")
 	input2Copy := llb.Scratch().File(llb.Copy(input2, "/dir/2", "/bar/2", &llb.CopyInfo{CreateDestPath: true}))
 
 	merge := llb.Merge([]llb.State{llb.Image(busyboxTarget), input1Copy, input2Copy})
@@ -4289,6 +4220,51 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox) {
 
 	target := registry + "/buildkit/testmerge:latest"
 	cacheTarget := registry + "/buildkit/testmergecache:latest"
+
+	var cacheExports []CacheOptionsEntry
+	var cacheImports []CacheOptionsEntry
+	switch mode {
+	case "inline":
+		cacheExports = []CacheOptionsEntry{{
+			Type: "inline",
+		}}
+		cacheImports = []CacheOptionsEntry{{
+			Type: "registry",
+			Attrs: map[string]string{
+				"ref": target,
+			},
+		}}
+	case "min":
+		cacheExports = []CacheOptionsEntry{{
+			Type: "registry",
+			Attrs: map[string]string{
+				"ref": cacheTarget,
+			},
+		}}
+		cacheImports = []CacheOptionsEntry{{
+			Type: "registry",
+			Attrs: map[string]string{
+				"ref": cacheTarget,
+			},
+		}}
+	case "max":
+		cacheExports = []CacheOptionsEntry{{
+			Type: "registry",
+			Attrs: map[string]string{
+				"ref":  cacheTarget,
+				"mode": "max",
+			},
+		}}
+		cacheImports = []CacheOptionsEntry{{
+			Type: "registry",
+			Attrs: map[string]string{
+				"ref": cacheTarget,
+			},
+		}}
+	default:
+		require.Fail(t, "unknown cache mode: %s", mode)
+	}
+
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
 			{
@@ -4299,12 +4275,7 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox) {
 				},
 			},
 		},
-		CacheExports: []CacheOptionsEntry{{
-			Type: "registry",
-			Attrs: map[string]string{
-				"ref": cacheTarget,
-			},
-		}},
+		CacheExports: cacheExports,
 	}, nil)
 	require.NoError(t, err)
 
@@ -4357,22 +4328,12 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox) {
 				"push": "true",
 			},
 		}},
-		CacheImports: []CacheOptionsEntry{{
-			Type: "registry",
-			Attrs: map[string]string{
-				"ref": cacheTarget,
-			},
-		}},
-		CacheExports: []CacheOptionsEntry{{
-			Type: "registry",
-			Attrs: map[string]string{
-				"ref": cacheTarget,
-			},
-		}},
+		CacheImports: cacheImports,
+		CacheExports: cacheExports,
 	}, nil)
 	require.NoError(t, err)
 
-	// verify everything from before stayed lazy except the middle layer for input1Copy
+	// verify everything from before stayed lazy
 	img, err = imageService.Get(ctx, target)
 	require.NoError(t, err)
 
@@ -4403,18 +4364,8 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox) {
 				"push": "true",
 			},
 		}},
-		CacheImports: []CacheOptionsEntry{{
-			Type: "registry",
-			Attrs: map[string]string{
-				"ref": cacheTarget,
-			},
-		}},
-		CacheExports: []CacheOptionsEntry{{
-			Type: "registry",
-			Attrs: map[string]string{
-				"ref": cacheTarget,
-			},
-		}},
+		CacheExports: cacheExports,
+		CacheImports: cacheImports,
 	}, nil)
 	require.NoError(t, err)
 
@@ -4452,12 +4403,7 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox) {
 				OutputDir: destDir,
 			},
 		},
-		CacheImports: []CacheOptionsEntry{{
-			Type: "registry",
-			Attrs: map[string]string{
-				"ref": cacheTarget,
-			},
-		}},
+		CacheImports: cacheImports,
 	}, nil)
 	require.NoError(t, err)
 
@@ -4465,6 +4411,194 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	require.Equalf(t, bar2Contents, newBar2Contents, "bar/2 contents changed")
+
+	// Now test the case with a layer on top of a merge.
+	err = imageService.Delete(ctx, img.Name, images.SynchronousDelete())
+	require.NoError(t, err)
+	checkAllReleasable(t, c, sb, true)
+
+	for _, layer := range manifest.Layers {
+		_, err = contentStore.Info(ctx, layer.Digest)
+		require.ErrorIs(t, err, ctderrdefs.ErrNotFound, "unexpected error %v", err)
+	}
+
+	mergePlusLayer := merge.File(llb.Mkfile("/3", 0444, nil))
+
+	def, err = mergePlusLayer.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{{
+			Type: ExporterImage,
+			Attrs: map[string]string{
+				"name": target,
+				"push": "true",
+			},
+		}},
+		CacheExports: cacheExports,
+		CacheImports: cacheImports,
+	}, nil)
+	require.NoError(t, err)
+
+	// check the random value at /bar/2 didn't change
+	destDir, err = ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		CacheImports: cacheImports,
+	}, nil)
+	require.NoError(t, err)
+
+	newBar2Contents, err = ioutil.ReadFile(filepath.Join(destDir, "bar", "2"))
+	require.NoError(t, err)
+
+	require.Equalf(t, bar2Contents, newBar2Contents, "bar/2 contents changed")
+
+	// clear local state, repeat the build, verify everything stays lazy
+	err = imageService.Delete(ctx, img.Name, images.SynchronousDelete())
+	require.NoError(t, err)
+	checkAllReleasable(t, c, sb, true)
+
+	for _, layer := range manifest.Layers {
+		_, err = contentStore.Info(ctx, layer.Digest)
+		require.ErrorIs(t, err, ctderrdefs.ErrNotFound, "unexpected error %v", err)
+	}
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{{
+			Type: ExporterImage,
+			Attrs: map[string]string{
+				"name": target,
+				"push": "true",
+			},
+		}},
+		CacheImports: cacheImports,
+		CacheExports: cacheExports,
+	}, nil)
+	require.NoError(t, err)
+
+	img, err = imageService.Get(ctx, target)
+	require.NoError(t, err)
+
+	manifest, err = images.Manifest(ctx, contentStore, img.Target, nil)
+	require.NoError(t, err)
+
+	for i, layer := range manifest.Layers {
+		_, err = contentStore.Info(ctx, layer.Digest)
+		require.ErrorIs(t, err, ctderrdefs.ErrNotFound, "unexpected error %v for index %d", err, i)
+	}
+}
+
+func requireContents(ctx context.Context, t *testing.T, c *Client, sb integration.Sandbox, state llb.State, cacheImports, cacheExports []CacheOptionsEntry, imageTarget string, files ...fstest.Applier) {
+	t.Helper()
+
+	def, err := state.Marshal(ctx)
+	require.NoError(t, err)
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = c.Solve(ctx, def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		CacheImports: cacheImports,
+		CacheExports: cacheExports,
+	}, nil)
+	require.NoError(t, err)
+
+	require.NoError(t, fstest.CheckDirectoryEqualWithApplier(destDir, fstest.Apply(files...)))
+
+	if imageTarget != "" {
+		var exports []ExportEntry
+		if os.Getenv("TEST_DOCKERD") == "1" {
+			exports = []ExportEntry{{
+				Type: "moby",
+				Attrs: map[string]string{
+					"name": imageTarget,
+				},
+			}}
+		} else {
+			exports = []ExportEntry{{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": imageTarget,
+					"push": "true",
+				},
+			}}
+		}
+
+		_, err = c.Solve(ctx, def, SolveOpt{Exports: exports, CacheImports: cacheImports, CacheExports: cacheExports}, nil)
+		require.NoError(t, err)
+		resetState(t, c, sb)
+		requireContents(ctx, t, c, sb, llb.Image(imageTarget, llb.ResolveModePreferLocal), cacheImports, nil, "", files...)
+	}
+}
+
+func requireEqualContents(ctx context.Context, t *testing.T, c *Client, stateA, stateB llb.State) {
+	t.Helper()
+
+	defA, err := stateA.Marshal(ctx)
+	require.NoError(t, err)
+
+	destDirA, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDirA)
+
+	_, err = c.Solve(ctx, defA, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDirA,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	defB, err := stateB.Marshal(ctx)
+	require.NoError(t, err)
+
+	destDirB, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDirB)
+
+	_, err = c.Solve(ctx, defB, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destDirB,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	require.NoError(t, fstest.CheckDirectoryEqual(destDirA, destDirB))
+}
+
+func runShellExecState(base llb.State, cmds ...string) llb.ExecState {
+	return base.Run(llb.Args([]string{"sh", "-c", strings.Join(cmds, " && ")}))
+}
+
+func runShell(base llb.State, cmds ...string) llb.State {
+	return runShellExecState(base, cmds...).Root()
+}
+
+func chainRunShells(base llb.State, cmdss ...[]string) llb.State {
+	for _, cmds := range cmdss {
+		base = runShell(base, cmds...)
+	}
+	return base
 }
 
 func requiresLinux(t *testing.T) {
