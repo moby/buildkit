@@ -1684,6 +1684,87 @@ func TestMergeOp(t *testing.T) {
 	checkDiskUsage(ctx, t, cm, 0, 0)
 }
 
+func TestLoadHalfFinalizedRef(t *testing.T) {
+	// This test simulates the situation where a ref w/ an equalMutable has its
+	// snapshot committed but there is a crash before the metadata is updated to
+	// clear the equalMutable field. It's expected that the mutable will be
+	// removed and the immutable ref will continue to be usable.
+	t.Parallel()
+
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+
+	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+
+	co, cleanup, err := newCacheManager(ctx, cmOpt{
+		tmpdir:          tmpdir,
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	defer cleanup()
+	cm := co.manager.(*cacheManager)
+
+	mref, err := cm.New(ctx, nil, nil, CachePolicyRetain)
+	require.NoError(t, err)
+	mutRef := mref.(*mutableRef)
+
+	iref, err := mutRef.Commit(ctx)
+	require.NoError(t, err)
+	immutRef := iref.(*immutableRef)
+
+	require.NoError(t, mref.Release(ctx))
+
+	_, err = co.lm.Create(ctx, func(l *leases.Lease) error {
+		l.ID = immutRef.ID()
+		l.Labels = map[string]string{
+			"containerd.io/gc.flat": time.Now().UTC().Format(time.RFC3339Nano),
+		}
+		return nil
+	})
+	require.NoError(t, err)
+	err = co.lm.AddResource(ctx, leases.Lease{ID: immutRef.ID()}, leases.Resource{
+		ID:   immutRef.getSnapshotID(),
+		Type: "snapshots/" + cm.Snapshotter.Name(),
+	})
+	require.NoError(t, err)
+
+	err = cm.Snapshotter.Commit(ctx, immutRef.getSnapshotID(), mutRef.getSnapshotID())
+	require.NoError(t, err)
+
+	_, err = cm.Snapshotter.Stat(ctx, mutRef.getSnapshotID())
+	require.Error(t, err)
+
+	require.NoError(t, iref.Release(ctx))
+
+	require.NoError(t, cm.Close())
+	require.NoError(t, cleanup())
+
+	co, cleanup, err = newCacheManager(ctx, cmOpt{
+		tmpdir:          tmpdir,
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	defer cleanup()
+	cm = co.manager.(*cacheManager)
+
+	_, err = cm.GetMutable(ctx, mutRef.ID())
+	require.ErrorIs(t, err, errNotFound)
+
+	iref, err = cm.Get(ctx, immutRef.ID())
+	require.NoError(t, err)
+	require.NoError(t, iref.Finalize(ctx))
+	immutRef = iref.(*immutableRef)
+
+	_, err = cm.Snapshotter.Stat(ctx, immutRef.getSnapshotID())
+	require.NoError(t, err)
+}
+
 func TestMountReadOnly(t *testing.T) {
 	t.Parallel()
 	if runtime.GOOS != "linux" {
