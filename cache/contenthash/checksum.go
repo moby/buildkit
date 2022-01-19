@@ -520,7 +520,7 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 		updated        bool
 		iter           *iradix.Iterator
 		k              []byte
-		kOk            bool
+		keyOk          bool
 		origPrefix     string
 		resolvedPrefix string
 	)
@@ -528,7 +528,7 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 	iter = root.Iterator()
 
 	if opts.Wildcard {
-		origPrefix, k, kOk, err = wildcardPrefix(root, p)
+		origPrefix, k, keyOk, err = wildcardPrefix(root, p)
 		if err != nil {
 			return nil, err
 		}
@@ -544,17 +544,17 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 		if err != nil {
 			return nil, err
 		}
-		kOk = (cr != nil)
+		keyOk = (cr != nil)
 	}
 
 	if origPrefix != "" {
-		if kOk {
+		if keyOk {
 			iter.SeekLowerBound(append(append([]byte{}, k...), 0))
 		}
 
 		resolvedPrefix = string(convertKeyToPath(k))
 	} else {
-		k, _, kOk = iter.Next()
+		k, _, keyOk = iter.Next()
 	}
 
 	var (
@@ -562,7 +562,7 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 		lastMatchedDir   string
 	)
 
-	for kOk {
+	for keyOk {
 		fn := string(convertKeyToPath(k))
 
 		// Convert the path prefix from what we found in the prefix
@@ -597,7 +597,7 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 			fn = fn[:len(fn)-1]
 			if fn == p && endsInSep {
 				// We don't include the metadata header for a source dir which ends with a separator
-				k, _, kOk = iter.Next()
+				k, _, keyOk = iter.Next()
 				continue
 			}
 		}
@@ -611,7 +611,7 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 					return nil, err
 				}
 				if !include {
-					k, _, kOk = iter.Next()
+					k, _, keyOk = iter.Next()
 					continue
 				}
 				lastMatchedDir = fn
@@ -645,7 +645,7 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 		}
 
 		if !shouldInclude && !dirHeader {
-			k, _, kOk = iter.Next()
+			k, _, keyOk = iter.Next()
 			continue
 		}
 
@@ -684,7 +684,7 @@ func (cc *cacheContext) includedPaths(ctx context.Context, m *mount, p string, o
 			parentDirHeaders = append(parentDirHeaders, maybeIncludedPath)
 		}
 
-		k, _, kOk = iter.Next()
+		k, _, keyOk = iter.Next()
 	}
 
 	cc.tree = txn.Commit()
