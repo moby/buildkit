@@ -85,20 +85,18 @@ func (m *staticEmulatorMount) IdentityMapping() *idtools.IdentityMapping {
 
 func getEmulator(p *pb.Platform, idmap *idtools.IdentityMapping) (*emulator, error) {
 	all := archutil.SupportedPlatforms(false)
-	m := make(map[string]struct{}, len(all))
-
-	for _, p := range all {
-		m[p] = struct{}{}
-	}
-
 	pp := platforms.Normalize(ocispecs.Platform{
 		Architecture: p.Architecture,
 		OS:           p.OS,
 		Variant:      p.Variant,
 	})
 
-	if _, ok := m[platforms.Format(pp)]; ok {
-		return nil, nil
+	for _, ps := range all {
+		if p, err := platforms.Parse(ps); err == nil {
+			if platforms.Only(p).Match(pp) {
+				return nil, nil
+			}
+		}
 	}
 
 	a, ok := qemuArchMap[pp.Architecture]
