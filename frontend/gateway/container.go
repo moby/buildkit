@@ -85,7 +85,6 @@ func NewContainer(ctx context.Context, w worker.Worker, sm *session.Manager, g s
 			cm = refs[m.Input].Worker.CacheManager()
 		}
 		return cm.New(ctx, ref, g)
-
 	})
 	if err != nil {
 		for i := len(p.Actives) - 1; i >= 0; i-- { // call in LIFO order

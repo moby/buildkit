@@ -169,7 +169,7 @@ func FromGRPC(err error) error {
 		}
 	}
 
-	err = &grpcStatusErr{st: status.FromProto(n)}
+	err = &grpcStatusError{st: status.FromProto(n)}
 
 	for _, s := range stacks {
 		if s != nil {
@@ -188,18 +188,18 @@ func FromGRPC(err error) error {
 	return stack.Enable(err)
 }
 
-type grpcStatusErr struct {
+type grpcStatusError struct {
 	st *status.Status
 }
 
-func (e *grpcStatusErr) Error() string {
+func (e *grpcStatusError) Error() string {
 	if e.st.Code() == codes.OK || e.st.Code() == codes.Unknown {
 		return e.st.Message()
 	}
 	return e.st.Code().String() + ": " + e.st.Message()
 }
 
-func (e *grpcStatusErr) GRPCStatus() *status.Status {
+func (e *grpcStatusError) GRPCStatus() *status.Status {
 	return e.st
 }
 

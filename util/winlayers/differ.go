@@ -212,7 +212,6 @@ func makeWindowsLayer(w io.Writer) (io.Writer, func(error), chan error) {
 		tarWriter := tar.NewWriter(w)
 
 		err := func() error {
-
 			h := &tar.Header{
 				Name:     "Hives",
 				Typeflag: tar.TypeDir,

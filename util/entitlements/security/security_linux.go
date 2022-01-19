@@ -129,17 +129,17 @@ func getFreeLoopID() (int, error) {
 }
 
 var (
-	currentCaps     []string
-	currentCapsErr  error
-	currentCapsOnce sync.Once
+	currentCaps      []string
+	currentCapsError error //nolint:errname
+	currentCapsOnce  sync.Once
 )
 
 func getCurrentCaps() ([]string, error) {
 	currentCapsOnce.Do(func() {
-		currentCaps, currentCapsErr = cap.Current()
+		currentCaps, currentCapsError = cap.Current()
 	})
 
-	return currentCaps, currentCapsErr
+	return currentCaps, currentCapsError
 }
 
 func getAllCaps() ([]string, error) {

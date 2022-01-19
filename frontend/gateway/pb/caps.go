@@ -57,7 +57,6 @@ const (
 )
 
 func init() {
-
 	Caps.Init(apicaps.Cap{
 		ID:      CapSolveBase,
 		Enabled: true,

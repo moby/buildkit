@@ -77,8 +77,8 @@ func (m *staticEmulatorMount) Mount() ([]mount.Mount, func() error, error) {
 		}}, func() error {
 			return os.RemoveAll(tmpdir)
 		}, nil
-
 }
+
 func (m *staticEmulatorMount) IdentityMapping() *idtools.IdentityMapping {
 	return m.idmap
 }

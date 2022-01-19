@@ -65,7 +65,6 @@ func (p *textMux) printVtx(t *trace, dgst digest.Digest) {
 		} else {
 			fmt.Fprintf(p.w, "#%d %s\n", v.index, v.Name)
 		}
-
 	}
 
 	if len(v.events) != 0 {
@@ -180,7 +179,6 @@ func (p *textMux) printVtx(t *trace, dgst digest.Digest) {
 			}
 			fmt.Fprintf(p.w, "#%d DONE%s\n", v.index, tm)
 		}
-
 	}
 
 	delete(t.updates, dgst)

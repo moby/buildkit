@@ -126,7 +126,7 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor,
 	descHandlers := descHandlersOf(opts...)
 	if desc.Digest != "" && (descHandlers == nil || descHandlers[desc.Digest] == nil) {
 		if _, err := cm.ContentStore.Info(ctx, desc.Digest); errors.Is(err, errdefs.ErrNotFound) {
-			return nil, NeedsRemoteProvidersError([]digest.Digest{desc.Digest})
+			return nil, NeedsRemoteProviderError([]digest.Digest{desc.Digest})
 		} else if err != nil {
 			return nil, err
 		}
@@ -171,7 +171,7 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor,
 	for _, si := range sis {
 		ref, err := cm.get(ctx, si.ID(), opts...)
 		if err != nil {
-			if errors.As(err, &NeedsRemoteProvidersError{}) {
+			if errors.As(err, &NeedsRemoteProviderError{}) {
 				// This shouldn't happen and indicates that blobchain IDs are being set incorrectly,
 				// but if it does happen it's not fatal as we can just not try to re-use by blobchainID.
 				// Log the error but continue.
@@ -201,7 +201,7 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor,
 	for _, si := range sis {
 		ref, err := cm.get(ctx, si.ID(), opts...)
 		// if the error was NotFound or NeedsRemoteProvider, we can't re-use the snapshot from the blob so just skip it
-		if err != nil && !IsNotFound(err) && !errors.As(err, &NeedsRemoteProvidersError{}) {
+		if err != nil && !IsNotFound(err) && !errors.As(err, &NeedsRemoteProviderError{}) {
 			return nil, errors.Wrapf(err, "failed to get record %s by chainid", si.ID())
 		}
 		if ref != nil {
@@ -364,7 +364,7 @@ func (cm *cacheManager) get(ctx context.Context, id string, opts ...RefOption) (
 // getRecord returns record for id. Requires manager lock.
 func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOption) (cr *cacheRecord, retErr error) {
 	checkLazyProviders := func(rec *cacheRecord) error {
-		missing := NeedsRemoteProvidersError(nil)
+		missing := NeedsRemoteProviderError(nil)
 		dhs := descHandlersOf(opts...)
 		if err := rec.walkUniqueAncestors(func(cr *cacheRecord) error {
 			blob := cr.getBlob()

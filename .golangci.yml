@@ -24,6 +24,10 @@ linters:
     - typecheck
     - unused
     - varcheck
+    - bodyclose
+    - errname
+    - makezero
+    - whitespace
   disable-all: true
 
 linters-settings:

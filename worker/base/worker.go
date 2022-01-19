@@ -228,7 +228,7 @@ func (w *Worker) LoadRef(ctx context.Context, id string, hidden bool) (cache.Imm
 	}
 
 	ref, err := w.CacheMgr.Get(ctx, id, opts...)
-	var needsRemoteProviders cache.NeedsRemoteProvidersError
+	var needsRemoteProviders cache.NeedsRemoteProviderError
 	if errors.As(err, &needsRemoteProviders) {
 		if optGetter := solver.CacheOptGetterOf(ctx); optGetter != nil {
 			var keys []interface{}

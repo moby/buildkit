@@ -162,7 +162,6 @@ func MigrateV2(ctx context.Context, from, to string, cs content.Store, s snapsho
 		if err := md.commitMetadata(); err != nil {
 			return err
 		}
-
 	}
 
 	// calculate new chainid/blobsumid

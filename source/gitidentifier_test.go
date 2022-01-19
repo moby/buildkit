@@ -30,5 +30,4 @@ func TestNewGitIdentifier(t *testing.T) {
 	require.Equal(t, "https://github.com/moby/buildkit.git", gi.Remote)
 	require.Equal(t, "main", gi.Ref)
 	require.Equal(t, "", gi.Subdir)
-
 }

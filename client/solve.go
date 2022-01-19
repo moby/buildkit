@@ -459,7 +459,6 @@ func parseCacheOptions(ctx context.Context, opt SolveOpt) (*cacheOptions, error)
 				}
 			}
 			contentStores["local:"+csDir] = cs
-
 		}
 		if im.Type == "registry" {
 			legacyImportRef := attrs["ref"]
