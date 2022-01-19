@@ -694,6 +694,7 @@ func (cm *cacheManager) Merge(ctx context.Context, inputParents []ImmutableRef, 
 			parent = p.(*immutableRef)
 			defer parent.Release(context.TODO())
 		}
+		// On success, cloned parents will be not be released and will be owned by the returned ref
 		switch parent.kind() {
 		case Merge:
 			// if parent is itself a merge, flatten it out by just setting our parents directly to its parents
@@ -708,9 +709,9 @@ func (cm *cacheManager) Merge(ctx context.Context, inputParents []ImmutableRef, 
 		}
 	}
 
+	// On success, createMergeRef takes ownership of parents
 	mergeRef, err := cm.createMergeRef(ctx, parents, dhs, opts...)
 	if err != nil {
-		parents.release(context.TODO())
 		return nil, err
 	}
 	return mergeRef, nil
@@ -821,10 +822,11 @@ func (cm *cacheManager) Diff(ctx context.Context, lower, upper ImmutableRef, opt
 			parent = p.(*immutableRef)
 			defer parent.Release(context.TODO())
 		}
+		// On success, cloned parents will not be released and will be owned by the returned ref
 		if i == 0 {
-			dps.lower = parent
+			dps.lower = parent.clone()
 		} else {
-			dps.upper = parent
+			dps.upper = parent.clone()
 		}
 		for dgst, handler := range parent.descHandlers {
 			dhs[dgst] = handler
@@ -861,6 +863,7 @@ func (cm *cacheManager) Diff(ctx context.Context, lower, upper ImmutableRef, opt
 			for i := len(lowerLayers); i < len(upperLayers); i++ {
 				subUpper := upperLayers[i]
 				subLower := subUpper.layerParent
+				// On success, cloned refs will not be released and will be owned by the returned ref
 				if subLower == nil {
 					mergeParents.mergeParents[i-len(lowerLayers)] = subUpper.clone()
 				} else {
@@ -874,6 +877,7 @@ func (cm *cacheManager) Diff(ctx context.Context, lower, upper ImmutableRef, opt
 					mergeParents.mergeParents[i-len(lowerLayers)] = diffRef
 				}
 			}
+			// On success, createMergeRef takes ownership of mergeParents
 			mergeRef, err := cm.createMergeRef(ctx, mergeParents, dhs)
 			if err != nil {
 				return nil, err
@@ -883,9 +887,9 @@ func (cm *cacheManager) Diff(ctx context.Context, lower, upper ImmutableRef, opt
 		}
 	}
 
+	// On success, createDiffRef takes ownership of parents
 	diffRef, err := cm.createDiffRef(ctx, parents, dhs, opts...)
 	if err != nil {
-		parents.release(context.TODO())
 		return nil, err
 	}
 	return diffRef, nil
