@@ -19,7 +19,7 @@ linters:
     - misspell
     - unused
     - varcheck
-    - golint
+    - revive
     - staticcheck
     - typecheck
     - structcheck
@@ -28,5 +28,5 @@ linters:
 issues:
   exclude-rules:
     - linters:
-        - golint
+        - revive
       text: "stutters"
