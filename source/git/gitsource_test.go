@@ -100,12 +100,10 @@ func testRepeatedFetch(t *testing.T, keepGitDir bool) {
 	require.Equal(t, "bar\n", string(dt))
 
 	_, err = os.Lstat(filepath.Join(dir, "ghi"))
-	require.Error(t, err)
-	require.True(t, errors.Is(err, os.ErrNotExist))
+	require.ErrorAs(t, err, &os.ErrNotExist)
 
 	_, err = os.Lstat(filepath.Join(dir, "sub/subfile"))
-	require.Error(t, err)
-	require.True(t, errors.Is(err, os.ErrNotExist))
+	require.ErrorAs(t, err, &os.ErrNotExist)
 
 	// second fetch returns same dir
 	id = &source.GitIdentifier{Remote: repodir, Ref: "master", KeepGitDir: keepGitDir}
@@ -233,6 +231,108 @@ func testFetchBySHA(t *testing.T, keepGitDir bool) {
 	require.NoError(t, err)
 
 	require.Equal(t, "subcontents\n", string(dt))
+}
+
+func TestFetchByTag(t *testing.T) {
+	testFetchByTag(t, "lightweight-tag", "third", false, true, false)
+}
+
+func TestFetchByTagKeepGitDir(t *testing.T) {
+	testFetchByTag(t, "lightweight-tag", "third", false, true, true)
+}
+
+func TestFetchByAnnotatedTag(t *testing.T) {
+	testFetchByTag(t, "v1.2.3", "second", true, false, false)
+}
+
+func TestFetchByAnnotatedTagKeepGitDir(t *testing.T) {
+	testFetchByTag(t, "v1.2.3", "second", true, false, true)
+}
+
+func testFetchByTag(t *testing.T, tag, expectedCommitSubject string, isAnnotatedTag, hasFoo13File, keepGitDir bool) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented containerd bind-mount support on Windows")
+	}
+
+	t.Parallel()
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+
+	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	gs := setupGitSource(t, tmpdir)
+
+	repodir, err := ioutil.TempDir("", "buildkit-gitsource")
+	require.NoError(t, err)
+	defer os.RemoveAll(repodir)
+
+	repodir, err = setupGitRepo(repodir)
+	require.NoError(t, err)
+
+	id := &source.GitIdentifier{Remote: repodir, Ref: tag, KeepGitDir: keepGitDir}
+
+	g, err := gs.Resolve(ctx, id, nil, nil)
+	require.NoError(t, err)
+
+	key1, pin1, _, done, err := g.CacheKey(ctx, nil, 0)
+	require.NoError(t, err)
+	require.True(t, done)
+
+	expLen := 40
+	if keepGitDir {
+		expLen += 4
+	}
+
+	require.Equal(t, expLen, len(key1))
+	require.Equal(t, 40, len(pin1))
+
+	ref1, err := g.Snapshot(ctx, nil)
+	require.NoError(t, err)
+	defer ref1.Release(context.TODO())
+
+	mount, err := ref1.Mount(ctx, true, nil)
+	require.NoError(t, err)
+
+	lm := snapshot.LocalMounter(mount)
+	dir, err := lm.Mount()
+	require.NoError(t, err)
+	defer lm.Unmount()
+
+	dt, err := ioutil.ReadFile(filepath.Join(dir, "def"))
+	require.NoError(t, err)
+	require.Equal(t, "bar\n", string(dt))
+
+	dt, err = ioutil.ReadFile(filepath.Join(dir, "foo13"))
+	if hasFoo13File {
+		require.Nil(t, err)
+		require.Equal(t, "sbb\n", string(dt))
+	} else {
+		require.ErrorAs(t, err, &os.ErrNotExist)
+	}
+
+	if keepGitDir {
+		if isAnnotatedTag {
+			// get commit sha that the annotated tag points to
+			annotatedTagCommit, err := git(ctx, dir, "", "", "rev-list", "-n", "1", tag)
+			require.NoError(t, err)
+
+			// get current commit sha
+			headCommit, err := git(ctx, dir, "", "", "rev-parse", "HEAD")
+			require.NoError(t, err)
+
+			// HEAD should match the actual commit sha (and not the sha of the annotated tag,
+			// since it's not possible to checkout a non-commit object)
+			require.Equal(t, annotatedTagCommit.String(), headCommit.String())
+		}
+
+		// test that we checked out the correct commit
+		// (in the case of an annotated tag, this message is of the commit the annotated tag points to
+		// and not the message of the tag)
+		gitLogOutput, err := git(ctx, dir, "", "", "log", "-n", "1", "--format=%s")
+		require.NoError(t, err)
+		require.True(t, strings.Contains(strings.TrimSpace(gitLogOutput.String()), expectedCommitSubject))
+	}
 }
 
 func TestMultipleRepos(t *testing.T) {
@@ -514,6 +614,11 @@ func setupGitRepo(dir string) (string, error) {
 		"echo bar > def",
 		"git add def",
 		"git commit -m second",
+		"git tag -a -m \"this is an annotated tag\" v1.2.3",
+		"echo sbb > foo13",
+		"git add foo13",
+		"git commit -m third",
+		"git tag lightweight-tag",
 		"git checkout -B feature",
 		"echo baz > ghi",
 		"git add ghi",

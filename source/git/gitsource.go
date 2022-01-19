@@ -501,8 +501,17 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 		if err != nil {
 			return nil, err
 		}
+
+		gitCatFileBuf, err := gitWithinDir(ctx, gitDir, "", sock, knownHosts, gs.auth, "cat-file", "-t", ref)
+		if err != nil {
+			return nil, err
+		}
+		isAnnotatedTag := strings.TrimSpace(gitCatFileBuf.String()) == "tag"
+
 		pullref := ref
-		if isCommitSHA(ref) {
+		if isAnnotatedTag {
+			pullref += ":refs/tags/" + pullref
+		} else if isCommitSHA(ref) {
 			pullref = "refs/buildkit/" + identity.NewID()
 			_, err = gitWithinDir(ctx, gitDir, "", sock, knownHosts, gs.auth, "update-ref", pullref, ref)
 			if err != nil {
