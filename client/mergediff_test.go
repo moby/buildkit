@@ -1126,7 +1126,7 @@ func (tc verifyContents) Run(t *testing.T, sb integration.Sandbox) {
 	defer c.Close()
 
 	registry, err := sb.NewRegistry()
-	if errors.Is(err, integration.ErrorRequirements) {
+	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
 	}
 	require.NoError(t, err)
@@ -1248,7 +1248,7 @@ func (tc verifyBlobReuse) Run(t *testing.T, sb integration.Sandbox) {
 	ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
 
 	registry, err := sb.NewRegistry()
-	if errors.Is(err, integration.ErrorRequirements) {
+	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
 	}
 	require.NoError(t, err)

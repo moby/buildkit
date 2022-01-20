@@ -14,7 +14,7 @@ linters:
     - deadcode
     - gofmt
     - goimports
-    - golint
+    - revive
     - govet
     - importas
     - ineffassign
@@ -24,6 +24,10 @@ linters:
     - typecheck
     - unused
     - varcheck
+    - bodyclose
+    - errname
+    - makezero
+    - whitespace
   disable-all: true
 
 linters-settings:
@@ -38,5 +42,5 @@ linters-settings:
 issues:
   exclude-rules:
     - linters:
-        - golint
+        - revive
       text: "stutters"

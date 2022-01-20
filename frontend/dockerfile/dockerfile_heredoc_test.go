@@ -509,7 +509,7 @@ func testOnBuildHeredoc(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 
 	registry, err := sb.NewRegistry()
-	if errors.Is(err, integration.ErrorRequirements) {
+	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
 	}
 	require.NoError(t, err)

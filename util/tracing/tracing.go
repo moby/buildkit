@@ -57,7 +57,7 @@ func ContextWithSpanFromContext(ctx, ctx2 context.Context) context.Context {
 	return ctx
 }
 
-var DefaultTransport http.RoundTripper = NewTransport(http.DefaultTransport)
+var DefaultTransport = NewTransport(http.DefaultTransport)
 
 var DefaultClient = &http.Client{
 	Transport: DefaultTransport,

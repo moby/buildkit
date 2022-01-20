@@ -116,19 +116,19 @@ func (mc *multiCloser) append(f func() error) {
 	mc.fns = append(mc.fns, f)
 }
 
-var ErrorRequirements = errors.Errorf("missing requirements")
+var ErrRequirements = errors.Errorf("missing requirements")
 
 func lookupBinary(name string) error {
 	_, err := exec.LookPath(name)
 	if err != nil {
-		return errors.Wrapf(ErrorRequirements, "failed to lookup %s binary", name)
+		return errors.Wrapf(ErrRequirements, "failed to lookup %s binary", name)
 	}
 	return nil
 }
 
 func requireRoot() error {
 	if os.Getuid() != 0 {
-		return errors.Wrap(ErrorRequirements, "requires root")
+		return errors.Wrap(ErrRequirements, "requires root")
 	}
 	return nil
 }

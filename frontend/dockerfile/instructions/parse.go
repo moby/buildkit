@@ -102,7 +102,7 @@ func ParseInstruction(node *parser.Node) (v interface{}, err error) {
 	case command.Shell:
 		return parseShell(req)
 	}
-	return nil, suggest.WrapError(&UnknownInstruction{Instruction: node.Value, Line: node.StartLine}, node.Value, allInstructionNames(), false)
+	return nil, suggest.WrapError(&UnknownInstructionError{Instruction: node.Value, Line: node.StartLine}, node.Value, allInstructionNames(), false)
 }
 
 // ParseCommand converts an AST to a typed Command
@@ -117,13 +117,13 @@ func ParseCommand(node *parser.Node) (Command, error) {
 	return nil, parser.WithLocation(errors.Errorf("%T is not a command type", s), node.Location())
 }
 
-// UnknownInstruction represents an error occurring when a command is unresolvable
-type UnknownInstruction struct {
+// UnknownInstructionError represents an error occurring when a command is unresolvable
+type UnknownInstructionError struct {
 	Line        int
 	Instruction string
 }
 
-func (e *UnknownInstruction) Error() string {
+func (e *UnknownInstructionError) Error() string {
 	return fmt.Sprintf("unknown instruction: %s", e.Instruction)
 }
 
@@ -167,7 +167,6 @@ func Parse(ast *parser.Node) (stages []Stage, metaArgs []ArgCommand, err error) 
 		default:
 			return nil, nil, parser.WithLocation(errors.Errorf("%T is not a command type", cmd), n.Location())
 		}
-
 	}
 	return stages, metaArgs, nil
 }
@@ -193,7 +192,6 @@ func parseKvps(args []string, cmdName string) (KeyValuePairs, error) {
 }
 
 func parseEnv(req parseRequest) (*EnvCommand, error) {
-
 	if err := req.flags.Parse(); err != nil {
 		return nil, err
 	}
@@ -222,7 +220,6 @@ func parseMaintainer(req parseRequest) (*MaintainerCommand, error) {
 }
 
 func parseLabel(req parseRequest) (*LabelCommand, error) {
-
 	if err := req.flags.Parse(); err != nil {
 		return nil, err
 	}
@@ -346,7 +343,6 @@ func parseFrom(req parseRequest) (*Stage, error) {
 		Location:   req.location,
 		Comment:    getComment(req.comments, stageName),
 	}, nil
-
 }
 
 func parseBuildStageName(args []string) (string, error) {
@@ -404,7 +400,6 @@ func parseWorkdir(req parseRequest) (*WorkdirCommand, error) {
 		Path:            req.args[0],
 		withNameAndCode: newWithNameAndCode(req),
 	}, nil
-
 }
 
 func parseShellDependentCommand(req parseRequest, command string, emptyAsNil bool) (ShellDependantCmdLine, error) {
@@ -528,7 +523,6 @@ func parseHealthcheck(req parseRequest) (*HealthCheckCommand, error) {
 			Test: test,
 		}
 	} else {
-
 		healthcheck := container.HealthConfig{}
 
 		flInterval := req.flags.AddString("interval", "")
@@ -645,7 +639,6 @@ func parseVolume(req parseRequest) (*VolumeCommand, error) {
 		cmd.Volumes = append(cmd.Volumes, v)
 	}
 	return cmd, nil
-
 }
 
 func parseStopSignal(req parseRequest) (*StopSignalCommand, error) {
@@ -659,7 +652,6 @@ func parseStopSignal(req parseRequest) (*StopSignalCommand, error) {
 		withNameAndCode: newWithNameAndCode(req),
 	}
 	return cmd, nil
-
 }
 
 func parseArg(req parseRequest) (*ArgCommand, error) {

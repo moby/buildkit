@@ -27,5 +27,4 @@ func parseIdentityMapping(str string) (*idtools.IdentityMapping, error) {
 		return nil, errors.Wrap(err, "failed to create ID mappings")
 	}
 	return mappings, nil
-
 }

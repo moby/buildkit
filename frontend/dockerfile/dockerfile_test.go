@@ -1817,7 +1817,6 @@ COPY --from=0 /foo /foo
 	dt, err := ioutil.ReadFile(filepath.Join(destDir, "foo"))
 	require.NoError(t, err)
 	require.Equal(t, "foo-contents", string(dt))
-
 }
 
 func testCmdShell(t *testing.T, sb integration.Sandbox) {
@@ -3993,7 +3992,7 @@ func testOnBuildCleared(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 
 	registry, err := sb.NewRegistry()
-	if errors.Is(err, integration.ErrorRequirements) {
+	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
 	}
 	require.NoError(t, err)
@@ -4101,7 +4100,7 @@ func testCacheMultiPlatformImportExport(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 
 	registry, err := sb.NewRegistry()
-	if errors.Is(err, integration.ErrorRequirements) {
+	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
 	}
 	require.NoError(t, err)
@@ -4227,7 +4226,7 @@ func testCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 
 	registry, err := sb.NewRegistry()
-	if errors.Is(err, integration.ErrorRequirements) {
+	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
 	}
 	require.NoError(t, err)
@@ -4404,7 +4403,7 @@ func testImportExportReproducibleIDs(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 
 	registry, err := sb.NewRegistry()
-	if errors.Is(err, integration.ErrorRequirements) {
+	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
 	}
 	require.NoError(t, err)

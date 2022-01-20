@@ -120,7 +120,7 @@ func getFreeLoopID() (int, error) {
 	}
 	defer fd.Close()
 
-	const _LOOP_CTL_GET_FREE = 0x4C82 //nolint:golint
+	const _LOOP_CTL_GET_FREE = 0x4C82 //nolint:revive
 	r1, _, uerr := unix.Syscall(unix.SYS_IOCTL, fd.Fd(), _LOOP_CTL_GET_FREE, 0)
 	if uerr == 0 {
 		return int(r1), nil
@@ -129,17 +129,17 @@ func getFreeLoopID() (int, error) {
 }
 
 var (
-	currentCaps     []string
-	currentCapsErr  error
-	currentCapsOnce sync.Once
+	currentCaps      []string
+	currentCapsError error //nolint:errname
+	currentCapsOnce  sync.Once
 )
 
 func getCurrentCaps() ([]string, error) {
 	currentCapsOnce.Do(func() {
-		currentCaps, currentCapsErr = cap.Current()
+		currentCaps, currentCapsError = cap.Current()
 	})
 
-	return currentCaps, currentCapsErr
+	return currentCaps, currentCapsError
 }
 
 func getAllCaps() ([]string, error) {

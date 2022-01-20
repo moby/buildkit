@@ -312,7 +312,6 @@ func TestHTTPChecksum(t *testing.T) {
 
 	ref.Release(context.TODO())
 	ref = nil
-
 }
 
 func readFile(ctx context.Context, ref cache.ImmutableRef, fp string) ([]byte, error) {

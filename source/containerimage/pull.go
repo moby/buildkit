@@ -217,7 +217,6 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 
 			p.descHandlers = cache.DescHandlers(make(map[digest.Digest]*cache.DescHandler))
 			for i, desc := range p.manifest.Descriptors {
-
 				// Hints for remote/stargz snapshotter for searching for remote snapshots
 				labels := snapshots.FilterInheritedLabels(desc.Annotations)
 				if labels == nil {

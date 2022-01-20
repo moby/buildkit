@@ -177,7 +177,6 @@ func (gf *gatewayFrontend) Solve(ctx context.Context, llbBridge frontend.Fronten
 		}()
 		if res.Ref == nil {
 			return nil, errors.Errorf("gateway source didn't return default result")
-
 		}
 		frontendDef = res.Ref.Definition()
 		r, err := res.Ref.Result(ctx)
@@ -827,7 +826,6 @@ func (lbf *llbBridgeForwarder) StatFile(ctx context.Context, req *pb.StatFileReq
 }
 
 func (lbf *llbBridgeForwarder) Ping(context.Context, *pb.PingRequest) (*pb.PongResponse, error) {
-
 	workers := lbf.workers.WorkerInfos()
 	pbWorkers := make([]*apitypes.WorkerRecord, 0, len(workers))
 	for _, w := range workers {
@@ -930,7 +928,6 @@ func (lbf *llbBridgeForwarder) NewContainer(ctx context.Context, in *pb.NewConta
 					return nil, errors.Errorf("invalid reference %T", res.Sys())
 				}
 			}
-
 		}
 		ctrReq.Mounts = append(ctrReq.Mounts, Mount{
 			WorkerRef: workerRef,
