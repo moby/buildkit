@@ -364,7 +364,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 							dfCmd(d.stage.SourceCode),
 							llb.Platform(*platform),
 							opt.ImageResolveMode,
-							llb.WithCustomName(prefixCommand(d, "FROM "+d.stage.BaseName, opt.PrefixPlatform, platform)),
+							llb.WithCustomName(prefixCommand(d, "FROM "+d.stage.BaseName, opt.PrefixPlatform, platform, nil)),
 							location(opt.SourceMap, d.stage.Location),
 						)
 					}
@@ -858,7 +858,7 @@ func dispatchRun(d *dispatchState, c *instructions.RunCommand, proxy *llb.ProxyE
 	if err != nil {
 		return err
 	}
-	opt = append(opt, llb.WithCustomName(prefixCommand(d, uppercaseCmd(processCmdEnv(&shlex, customname, env)), d.prefixPlatform, pl)))
+	opt = append(opt, llb.WithCustomName(prefixCommand(d, uppercaseCmd(processCmdEnv(&shlex, customname, env)), d.prefixPlatform, pl, env)))
 	for _, h := range dopt.extraHosts {
 		opt = append(opt, llb.AddExtraHost(h.Host, h.IP))
 	}
@@ -902,7 +902,7 @@ func dispatchWorkdir(d *dispatchState, c *instructions.WorkdirCommand, commit bo
 				return err
 			}
 			d.state = d.state.File(llb.Mkdir(wd, 0755, mkdirOpt...),
-				llb.WithCustomName(prefixCommand(d, uppercaseCmd(processCmdEnv(opt.shlex, c.String(), env)), d.prefixPlatform, &platform)),
+				llb.WithCustomName(prefixCommand(d, uppercaseCmd(processCmdEnv(opt.shlex, c.String(), env)), d.prefixPlatform, &platform, env)),
 				location(opt.sourceMap, c.Location()),
 			)
 			withLayer = true
@@ -1032,7 +1032,7 @@ func dispatchCopyFileOp(d *dispatchState, c instructions.SourcesAndDest, sourceS
 	}
 
 	fileOpt := []llb.ConstraintsOpt{
-		llb.WithCustomName(prefixCommand(d, uppercaseCmd(processCmdEnv(opt.shlex, cmdToPrint.String(), env)), d.prefixPlatform, &platform)),
+		llb.WithCustomName(prefixCommand(d, uppercaseCmd(processCmdEnv(opt.shlex, cmdToPrint.String(), env)), d.prefixPlatform, &platform, env)),
 		location(opt.sourceMap, loc),
 	}
 	if d.ignoreCache {
@@ -1147,7 +1147,7 @@ func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState l
 		llb.Dir("/dest"),
 		llb.ReadonlyRootFS(),
 		dfCmd(cmdToPrint),
-		llb.WithCustomName(prefixCommand(d, uppercaseCmd(processCmdEnv(opt.shlex, cmdToPrint.String(), env)), d.prefixPlatform, &platform)),
+		llb.WithCustomName(prefixCommand(d, uppercaseCmd(processCmdEnv(opt.shlex, cmdToPrint.String(), env)), d.prefixPlatform, &platform, env)),
 		location(opt.sourceMap, loc),
 	}
 	if d.ignoreCache {
@@ -1600,13 +1600,13 @@ func processCmdEnv(shlex *shell.Lex, cmd string, env []string) string {
 	return w
 }
 
-func prefixCommand(ds *dispatchState, str string, prefixPlatform bool, platform *ocispecs.Platform) string {
+func prefixCommand(ds *dispatchState, str string, prefixPlatform bool, platform *ocispecs.Platform, env []string) string {
 	if ds.cmdTotal == 0 {
 		return str
 	}
 	out := "["
 	if prefixPlatform && platform != nil {
-		out += platforms.Format(*platform) + " "
+		out += platforms.Format(*platform) + formatTargetPlatform(*platform, platformFromEnv(env)) + " "
 	}
 	if ds.stageName != "" {
 		out += ds.stageName + " "
@@ -1614,6 +1614,62 @@ func prefixCommand(ds *dispatchState, str string, prefixPlatform bool, platform 
 	ds.cmdIndex++
 	out += fmt.Sprintf("%*d/%d] ", int(1+math.Log10(float64(ds.cmdTotal))), ds.cmdIndex, ds.cmdTotal)
 	return out + str
+}
+
+// formatTargetPlatform formats a secondary platform string for cross compilation cases
+func formatTargetPlatform(base ocispecs.Platform, target *ocispecs.Platform) string {
+	if target == nil {
+		return ""
+	}
+	if target.OS == "" {
+		target.OS = base.OS
+	}
+	if target.Architecture == "" {
+		target.Architecture = base.Architecture
+	}
+	p := platforms.Normalize(*target)
+
+	if p.OS == base.OS && p.Architecture != base.Architecture {
+		archVariant := p.Architecture
+		if p.Variant != "" {
+			archVariant += "/" + p.Variant
+		}
+		return "->" + archVariant
+	}
+	if p.OS != base.OS {
+		return "->" + platforms.Format(p)
+	}
+	return ""
+}
+
+// platformFromEnv returns defined platforms based on TARGET* environment variables
+func platformFromEnv(env []string) *ocispecs.Platform {
+	var p ocispecs.Platform
+	var set bool
+	for _, v := range env {
+		parts := strings.SplitN(v, "=", 2)
+		switch parts[0] {
+		case "TARGETPLATFORM":
+			p, err := platforms.Parse(parts[1])
+			if err != nil {
+				continue
+			}
+			return &p
+		case "TARGETOS":
+			p.OS = parts[1]
+			set = true
+		case "TARGETARCH":
+			p.Architecture = parts[1]
+			set = true
+		case "TARGETVARIANT":
+			p.Variant = parts[1]
+			set = true
+		}
+	}
+	if !set {
+		return nil
+	}
+	return &p
 }
 
 func useFileOp(args map[string]string, caps *apicaps.CapSet) bool {
