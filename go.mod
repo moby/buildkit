@@ -6,6 +6,7 @@ require (
 	github.com/Microsoft/go-winio v0.5.1
 	github.com/Microsoft/hcsshim v0.9.1
 	github.com/agext/levenshtein v1.2.3
+	github.com/armon/circbuf v0.0.0-20190214190532-5111143e8da2
 	github.com/containerd/console v1.0.3
 	github.com/containerd/containerd v1.6.0-beta.3
 	github.com/containerd/containerd/api v1.6.0-beta.3
