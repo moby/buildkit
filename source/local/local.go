@@ -24,8 +24,6 @@ import (
 	"github.com/tonistiigi/fsutil"
 	fstypes "github.com/tonistiigi/fsutil/types"
 	"golang.org/x/time/rate"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 type Opt struct {
@@ -89,22 +87,44 @@ func (ls *localSourceHandler) CacheKey(ctx context.Context, g session.Group, ind
 }
 
 func (ls *localSourceHandler) Snapshot(ctx context.Context, g session.Group) (cache.ImmutableRef, error) {
+	sessionID := ls.src.SessionID
+	if sessionID == "" {
+		return ls.snapshotWithAnySession(ctx, g)
+	}
+
+	timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	caller, err := ls.sm.Get(timeoutCtx, sessionID, false)
+	if err != nil {
+		return ls.snapshotWithAnySession(ctx, g)
+	}
+
+	ref, err := ls.snapshot(ctx, caller)
+	if err != nil {
+		var serr filesync.InvalidSessionError
+		if errors.As(err, &serr) {
+			return ls.snapshotWithAnySession(ctx, g)
+		}
+		return nil, err
+	}
+	return ref, nil
+}
+
+func (ls *localSourceHandler) snapshotWithAnySession(ctx context.Context, g session.Group) (cache.ImmutableRef, error) {
 	var ref cache.ImmutableRef
 	err := ls.sm.Any(ctx, g, func(ctx context.Context, _ string, c session.Caller) error {
-		r, err := ls.snapshot(ctx, g, c)
+		r, err := ls.snapshot(ctx, c)
 		if err != nil {
 			return err
 		}
 		ref = r
 		return nil
 	})
-	if err != nil {
-		return nil, err
-	}
-	return ref, nil
+	return ref, err
 }
 
-func (ls *localSourceHandler) snapshot(ctx context.Context, s session.Group, caller session.Caller) (out cache.ImmutableRef, retErr error) {
+func (ls *localSourceHandler) snapshot(ctx context.Context, caller session.Caller) (out cache.ImmutableRef, retErr error) {
 	sharedKey := ls.src.Name + ":" + ls.src.SharedKeyHint + ":" + caller.SharedKey() // TODO: replace caller.SharedKey() with source based hint from client(absolute-path+nodeid)
 
 	var mutable cache.MutableRef
@@ -123,7 +143,7 @@ func (ls *localSourceHandler) snapshot(ctx context.Context, s session.Group, cal
 	}
 
 	if mutable == nil {
-		m, err := ls.cm.New(ctx, nil, s, cache.CachePolicyRetain, cache.WithRecordType(client.UsageRecordTypeLocalSource), cache.WithDescription(fmt.Sprintf("local source for %s", ls.src.Name)))
+		m, err := ls.cm.New(ctx, nil, nil, cache.CachePolicyRetain, cache.WithRecordType(client.UsageRecordTypeLocalSource), cache.WithDescription(fmt.Sprintf("local source for %s", ls.src.Name)))
 		if err != nil {
 			return nil, err
 		}
@@ -142,7 +162,7 @@ func (ls *localSourceHandler) snapshot(ctx context.Context, s session.Group, cal
 		}
 	}()
 
-	mount, err := mutable.Mount(ctx, false, s)
+	mount, err := mutable.Mount(ctx, false, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -193,9 +213,6 @@ func (ls *localSourceHandler) snapshot(ctx context.Context, s session.Group, cal
 	}
 
 	if err := filesync.FSSync(ctx, caller, opt); err != nil {
-		if status.Code(err) == codes.NotFound {
-			return nil, errors.Errorf("local source %s not enabled from the client", ls.src.Name)
-		}
 		return nil, err
 	}
 
