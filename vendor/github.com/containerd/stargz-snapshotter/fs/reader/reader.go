@@ -33,7 +33,6 @@ import (
 	"os"
 	"runtime"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/containerd/stargz-snapshotter/cache"
@@ -60,7 +59,8 @@ type Reader interface {
 type VerifiableReader struct {
 	r *reader
 
-	lastVerifyErr           atomic.Value
+	lastVerifyErr           error
+	lastVerifyErrMu         sync.Mutex
 	prohibitVerifyFailure   bool
 	prohibitVerifyFailureMu sync.RWMutex
 
@@ -68,6 +68,19 @@ type VerifiableReader struct {
 	closedMu sync.Mutex
 
 	verifier func(uint32, string) (digest.Verifier, error)
+}
+
+func (vr *VerifiableReader) storeLastVerifyErr(err error) {
+	vr.lastVerifyErrMu.Lock()
+	vr.lastVerifyErr = err
+	vr.lastVerifyErrMu.Unlock()
+}
+
+func (vr *VerifiableReader) loadLastVerifyErr() error {
+	vr.lastVerifyErrMu.Lock()
+	err := vr.lastVerifyErr
+	vr.lastVerifyErrMu.Unlock()
+	return err
 }
 
 func (vr *VerifiableReader) SkipVerify() Reader {
@@ -80,10 +93,10 @@ func (vr *VerifiableReader) VerifyTOC(tocDigest digest.Digest) (Reader, error) {
 	}
 	vr.prohibitVerifyFailureMu.Lock()
 	vr.prohibitVerifyFailure = true
-	lastVerifyErr := vr.lastVerifyErr.Load()
+	lastVerifyErr := vr.loadLastVerifyErr()
 	vr.prohibitVerifyFailureMu.Unlock()
 	if err := lastVerifyErr; err != nil {
-		return nil, errors.Wrapf(err.(error), "content error occures during caching contents")
+		return nil, errors.Wrapf(err, "content error occurs during caching contents")
 	}
 	if actual := vr.r.r.TOCDigest(); actual != tocDigest {
 		return nil, fmt.Errorf("invalid TOC JSON %q; want %q", actual, tocDigest)
@@ -200,7 +213,7 @@ func (vr *VerifiableReader) cacheWithReader(ctx context.Context, currentDepth in
 				defer sem.Release(1)
 				defer func() {
 					if retErr != nil {
-						vr.lastVerifyErr.Store(retErr)
+						vr.storeLastVerifyErr(retErr)
 					}
 				}()
 
@@ -227,7 +240,7 @@ func (vr *VerifiableReader) cacheWithReader(ctx context.Context, currentDepth in
 						vr.prohibitVerifyFailureMu.RUnlock()
 						return errors.Wrapf(err, "verifier not found %q(off:%d,size:%d)", name, chunkOffset, chunkSize)
 					}
-					vr.lastVerifyErr.Store(err)
+					vr.storeLastVerifyErr(err)
 					vr.prohibitVerifyFailureMu.RUnlock()
 				}
 				tee := ioutil.Discard
@@ -248,7 +261,7 @@ func (vr *VerifiableReader) cacheWithReader(ctx context.Context, currentDepth in
 						w.Abort()
 						return err
 					}
-					vr.lastVerifyErr.Store(err)
+					vr.storeLastVerifyErr(err)
 					vr.prohibitVerifyFailureMu.RUnlock()
 				}
 
