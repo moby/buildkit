@@ -241,7 +241,7 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 					return nil, errors.Errorf("unknown layer compression type")
 				}
 
-				if err := sr.setBlob(ctx, comp.Type, desc); err != nil {
+				if err := sr.setBlob(ctx, desc); err != nil {
 					return nil, err
 				}
 				return nil, nil
@@ -267,10 +267,15 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 
 // setBlob associates a blob with the cache record.
 // A lease must be held for the blob when calling this function
-func (sr *immutableRef) setBlob(ctx context.Context, compressionType compression.Type, desc ocispecs.Descriptor) error {
+func (sr *immutableRef) setBlob(ctx context.Context, desc ocispecs.Descriptor) (rerr error) {
 	if _, ok := leases.FromContext(ctx); !ok {
 		return errors.Errorf("missing lease requirement for setBlob")
 	}
+	defer func() {
+		if rerr == nil {
+			rerr = sr.linkBlob(ctx, desc)
+		}
+	}()
 
 	diffID, err := diffIDFromDescriptor(desc)
 	if err != nil {
@@ -278,10 +283,6 @@ func (sr *immutableRef) setBlob(ctx context.Context, compressionType compression
 	}
 	if _, err := sr.cm.ContentStore.Info(ctx, desc.Digest); err != nil {
 		return err
-	}
-
-	if compressionType == compression.UnknownCompression {
-		return errors.Errorf("unhandled layer media type: %q", desc.MediaType)
 	}
 
 	sr.mu.Lock()
@@ -311,9 +312,6 @@ func (sr *immutableRef) setBlob(ctx context.Context, compressionType compression
 		return err
 	}
 
-	if err := sr.addCompressionBlob(ctx, desc, compressionType); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -437,11 +435,11 @@ func ensureCompression(ctx context.Context, ref *immutableRef, comp compression.
 				// This ref can be used as the specified compressionType. Keep it lazy.
 				return nil, nil
 			}
-			return nil, ref.addCompressionBlob(ctx, desc, comp.Type)
+			return nil, ref.linkBlob(ctx, desc)
 		}
 
 		// First, lookup local content store
-		if _, err := ref.getCompressionBlob(ctx, comp.Type); err == nil {
+		if _, err := ref.getBlobWithCompression(ctx, comp.Type); err == nil {
 			return nil, nil // found the compression variant. no need to convert.
 		}
 
@@ -460,7 +458,7 @@ func ensureCompression(ctx context.Context, ref *immutableRef, comp compression.
 		}
 
 		// Start to track converted layer
-		if err := ref.addCompressionBlob(ctx, *newDesc, comp.Type); err != nil {
+		if err := ref.linkBlob(ctx, *newDesc); err != nil {
 			return nil, errors.Wrapf(err, "failed to add compression blob")
 		}
 		return nil, nil

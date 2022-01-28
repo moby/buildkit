@@ -14,6 +14,7 @@ import (
 	"github.com/containerd/containerd/images/converter"
 	"github.com/containerd/containerd/labels"
 	"github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/compression"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -129,6 +130,7 @@ var bufioPool = sync.Pool{
 }
 
 func (c *conversion) convert(ctx context.Context, cs content.Store, desc ocispecs.Descriptor) (*ocispecs.Descriptor, error) {
+	bklog.G(ctx).WithField("blob", desc).WithField("target", c.target).Debugf("converting blob to the target compression")
 	// prepare the source and destination
 	labelz := make(map[string]string)
 	ref := fmt.Sprintf("convert-from-%s-to-%s-%s", desc.Digest, c.target.Type.String(), identity.NewID())

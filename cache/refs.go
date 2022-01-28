@@ -338,24 +338,21 @@ func (cr *cacheRecord) size(ctx context.Context) (int64, error) {
 			}
 		}
 		if dgst := cr.getBlob(); dgst != "" {
+			added := make(map[digest.Digest]struct{})
 			info, err := cr.cm.ContentStore.Info(ctx, digest.Digest(dgst))
 			if err == nil {
 				usage.Size += info.Size
+				added[digest.Digest(dgst)] = struct{}{}
 			}
-			for k, v := range info.Labels {
-				// accumulate size of compression variant blobs
-				if strings.HasPrefix(k, compressionVariantDigestLabelPrefix) {
-					if cdgst, err := digest.Parse(v); err == nil {
-						if digest.Digest(dgst) == cdgst {
-							// do not double count if the label points to this content itself.
-							continue
-						}
-						if info, err := cr.cm.ContentStore.Info(ctx, cdgst); err == nil {
-							usage.Size += info.Size
-						}
+			walkBlobVariantsOnly(ctx, cr.cm.ContentStore, digest.Digest(dgst), func(desc ocispecs.Descriptor) bool {
+				if _, ok := added[desc.Digest]; !ok {
+					if info, err := cr.cm.ContentStore.Info(ctx, desc.Digest); err == nil {
+						usage.Size += info.Size
+						added[desc.Digest] = struct{}{}
 					}
 				}
-			}
+				return true
+			}, nil)
 		}
 		cr.mu.Lock()
 		cr.queueSize(usage.Size)
@@ -687,92 +684,171 @@ func (sr *immutableRef) ociDesc(ctx context.Context, dhs DescHandlers, preferNon
 }
 
 const (
-	compressionVariantDigestLabelPrefix      = "buildkit.io/compression/digest."
-	compressionVariantAnnotationsLabelPrefix = "buildkit.io/compression/annotation."
-	compressionVariantMediaTypeLabel         = "buildkit.io/compression/mediatype"
+	blobVariantGCLabel         = "containerd.io/gc.ref.content.blob-"
+	blobAnnotationsLabelPrefix = "buildkit.io/blob/annotation."
+	blobMediaTypeLabel         = "buildkit.io/blob/mediatype"
 )
 
-func compressionVariantDigestLabel(compressionType compression.Type) string {
-	return compressionVariantDigestLabelPrefix + compressionType.String()
+// linkBlob makes a link between this ref and the passed blob. The linked blob can be
+// acquired during walkBlob. This is useful to associate a compression variant blob to
+// this ref. This doesn't record the blob to the cache record (i.e. the passed blob can't
+// be acquired through getBlob). Use setBlob for that purpose.
+func (sr *immutableRef) linkBlob(ctx context.Context, desc ocispecs.Descriptor) error {
+	cs := sr.cm.ContentStore
+	blobDigest := sr.getBlob()
+	info, err := cs.Info(ctx, blobDigest)
+	if err != nil {
+		return err
+	}
+	vInfo, err := cs.Info(ctx, desc.Digest)
+	if err != nil {
+		return err
+	}
+	vInfo.Labels = map[string]string{
+		blobVariantGCLabel + blobDigest.String(): blobDigest.String(),
+	}
+	vInfo = addBlobDescToInfo(desc, vInfo)
+	if _, err := cs.Update(ctx, vInfo, fieldsFromLabels(vInfo.Labels)...); err != nil {
+		return err
+	}
+	// let the future call to size() recalcultate the new size
+	sr.mu.Lock()
+	sr.queueSize(sizeUnknown)
+	if err := sr.commitMetadata(); err != nil {
+		sr.mu.Unlock()
+		return err
+	}
+	sr.mu.Unlock()
+	if desc.Digest == blobDigest {
+		return nil
+	}
+	info.Labels = map[string]string{
+		blobVariantGCLabel + desc.Digest.String(): desc.Digest.String(),
+	}
+	_, err = cs.Update(ctx, info, fieldsFromLabels(info.Labels)...)
+	return err
 }
 
-func getCompressionVariants(ctx context.Context, cs content.Store, dgst digest.Digest) (res []compression.Type, _ error) {
+func (sr *immutableRef) getBlobWithCompression(ctx context.Context, compressionType compression.Type) (ocispecs.Descriptor, error) {
+	if _, err := sr.cm.ContentStore.Info(ctx, sr.getBlob()); err != nil {
+		return ocispecs.Descriptor{}, err
+	}
+	desc, err := sr.ociDesc(ctx, nil, true)
+	if err != nil {
+		return ocispecs.Descriptor{}, err
+	}
+	return getBlobWithCompression(ctx, sr.cm.ContentStore, desc, compressionType)
+}
+
+func getBlobWithCompression(ctx context.Context, cs content.Store, desc ocispecs.Descriptor, compressionType compression.Type) (ocispecs.Descriptor, error) {
+	if compressionType == compression.UnknownCompression {
+		return ocispecs.Descriptor{}, fmt.Errorf("cannot get unknown compression type")
+	}
+	var target *ocispecs.Descriptor
+	if err := walkBlob(ctx, cs, desc, func(desc ocispecs.Descriptor) bool {
+		if needs, err := needsConversion(ctx, cs, desc, compressionType); err == nil && !needs {
+			target = &desc
+			return false
+		}
+		return true
+	}); err != nil || target == nil {
+		return ocispecs.Descriptor{}, errdefs.ErrNotFound
+	}
+	return *target, nil
+}
+
+func walkBlob(ctx context.Context, cs content.Store, desc ocispecs.Descriptor, f func(ocispecs.Descriptor) bool) error {
+	if !f(desc) {
+		return nil
+	}
+	if _, err := walkBlobVariantsOnly(ctx, cs, desc.Digest, func(desc ocispecs.Descriptor) bool { return f(desc) }, nil); err != nil {
+		return err
+	}
+	return nil
+}
+
+func walkBlobVariantsOnly(ctx context.Context, cs content.Store, dgst digest.Digest, f func(ocispecs.Descriptor) bool, visited map[digest.Digest]struct{}) (bool, error) {
+	if visited == nil {
+		visited = make(map[digest.Digest]struct{})
+	}
+	visited[dgst] = struct{}{}
 	info, err := cs.Info(ctx, dgst)
 	if errors.Is(err, errdefs.ErrNotFound) {
-		return nil, nil
+		return true, nil
 	} else if err != nil {
-		return nil, err
+		return false, err
 	}
-	for k := range info.Labels {
-		if strings.HasPrefix(k, compressionVariantDigestLabelPrefix) {
-			if t := compression.Parse(strings.TrimPrefix(k, compressionVariantDigestLabelPrefix)); t != compression.UnknownCompression {
-				res = append(res, t)
+	var children []digest.Digest
+	for k, dgstS := range info.Labels {
+		if !strings.HasPrefix(k, blobVariantGCLabel) {
+			continue
+		}
+		cDgst, err := digest.Parse(dgstS)
+		if err != nil || cDgst == dgst {
+			continue
+		}
+		if cDesc, err := getBlobDesc(ctx, cs, cDgst); err == nil {
+			if !f(cDesc) {
+				return false, nil
 			}
 		}
+		children = append(children, cDgst)
 	}
-	return
+	for _, c := range children {
+		if _, isVisited := visited[c]; isVisited {
+			continue
+		}
+		if isContinue, err := walkBlobVariantsOnly(ctx, cs, c, f, visited); !isContinue || err != nil {
+			return isContinue, err
+		}
+	}
+	return true, nil
 }
 
-func (sr *immutableRef) getCompressionBlob(ctx context.Context, compressionType compression.Type) (ocispecs.Descriptor, error) {
-	return getCompressionVariantBlob(ctx, sr.cm.ContentStore, sr.getBlob(), compressionType)
-}
-
-func getCompressionVariantBlob(ctx context.Context, cs content.Store, dgst digest.Digest, compressionType compression.Type) (ocispecs.Descriptor, error) {
+func getBlobDesc(ctx context.Context, cs content.Store, dgst digest.Digest) (ocispecs.Descriptor, error) {
 	info, err := cs.Info(ctx, dgst)
 	if err != nil {
 		return ocispecs.Descriptor{}, err
 	}
-	dgstS, ok := info.Labels[compressionVariantDigestLabel(compressionType)]
-	if ok {
-		dgst, err := digest.Parse(dgstS)
-		if err != nil {
-			return ocispecs.Descriptor{}, err
-		}
-		return getBlobDesc(ctx, cs, dgst)
+	if info.Labels == nil {
+		return ocispecs.Descriptor{}, fmt.Errorf("no blob metadata is stored for %q", info.Digest)
 	}
-	return ocispecs.Descriptor{}, errdefs.ErrNotFound
+	mt, ok := info.Labels[blobMediaTypeLabel]
+	if !ok {
+		return ocispecs.Descriptor{}, fmt.Errorf("no media type is stored for %q", info.Digest)
+	}
+	desc := ocispecs.Descriptor{
+		Digest:    info.Digest,
+		Size:      info.Size,
+		MediaType: mt,
+	}
+	for k, v := range info.Labels {
+		if strings.HasPrefix(k, blobAnnotationsLabelPrefix) {
+			if desc.Annotations == nil {
+				desc.Annotations = make(map[string]string)
+			}
+			desc.Annotations[strings.TrimPrefix(k, blobAnnotationsLabelPrefix)] = v
+		}
+	}
+	if len(desc.URLs) == 0 {
+		// If there are no URL's, there is no reason to have this be non-dsitributable
+		desc.MediaType = layerToDistributable(desc.MediaType)
+	}
+	return desc, nil
 }
 
-func (sr *immutableRef) addCompressionBlob(ctx context.Context, desc ocispecs.Descriptor, compressionType compression.Type) error {
-	cs := sr.cm.ContentStore
-	if err := sr.cm.LeaseManager.AddResource(ctx, leases.Lease{ID: sr.ID()}, leases.Resource{
-		ID:   desc.Digest.String(),
-		Type: "content",
-	}); err != nil {
-		return err
-	}
-	info, err := cs.Info(ctx, sr.getBlob())
-	if err != nil {
-		return err
+func addBlobDescToInfo(desc ocispecs.Descriptor, info content.Info) content.Info {
+	if _, ok := info.Labels[blobMediaTypeLabel]; ok {
+		return info // descriptor information already stored
 	}
 	if info.Labels == nil {
 		info.Labels = make(map[string]string)
 	}
-	cachedVariantLabel := compressionVariantDigestLabel(compressionType)
-	info.Labels[cachedVariantLabel] = desc.Digest.String()
-	if _, err := cs.Update(ctx, info, "labels."+cachedVariantLabel); err != nil {
-		return err
-	}
-
-	info, err = cs.Info(ctx, desc.Digest)
-	if err != nil {
-		return err
-	}
-	var fields []string
-	info.Labels = map[string]string{
-		compressionVariantMediaTypeLabel: desc.MediaType,
-	}
-	fields = append(fields, "labels."+compressionVariantMediaTypeLabel)
+	info.Labels[blobMediaTypeLabel] = desc.MediaType
 	for k, v := range filterAnnotationsForSave(desc.Annotations) {
-		k2 := compressionVariantAnnotationsLabelPrefix + k
-		info.Labels[k2] = v
-		fields = append(fields, "labels."+k2)
+		info.Labels[blobAnnotationsLabelPrefix+k] = v
 	}
-	if _, err := cs.Update(ctx, info, fields...); err != nil {
-		return err
-	}
-
-	return nil
+	return info
 }
 
 func filterAnnotationsForSave(a map[string]string) (b map[string]string) {
@@ -792,33 +868,11 @@ func filterAnnotationsForSave(a map[string]string) (b map[string]string) {
 	return
 }
 
-func getBlobDesc(ctx context.Context, cs content.Store, dgst digest.Digest) (ocispecs.Descriptor, error) {
-	info, err := cs.Info(ctx, dgst)
-	if err != nil {
-		return ocispecs.Descriptor{}, err
+func fieldsFromLabels(labels map[string]string) (fields []string) {
+	for k := range labels {
+		fields = append(fields, "labels."+k)
 	}
-	if info.Labels == nil {
-		return ocispecs.Descriptor{}, fmt.Errorf("no blob metadata is stored for %q", info.Digest)
-	}
-	mt, ok := info.Labels[compressionVariantMediaTypeLabel]
-	if !ok {
-		return ocispecs.Descriptor{}, fmt.Errorf("no media type is stored for %q", info.Digest)
-	}
-
-	desc := ocispecs.Descriptor{
-		Digest:    info.Digest,
-		Size:      info.Size,
-		MediaType: mt,
-	}
-	for k, v := range info.Labels {
-		if strings.HasPrefix(k, compressionVariantAnnotationsLabelPrefix) {
-			if desc.Annotations == nil {
-				desc.Annotations = make(map[string]string)
-			}
-			desc.Annotations[strings.TrimPrefix(k, compressionVariantAnnotationsLabelPrefix)] = v
-		}
-	}
-	return desc, nil
+	return
 }
 
 func (sr *immutableRef) Mount(ctx context.Context, readonly bool, s session.Group) (_ snapshot.Mountable, rerr error) {
