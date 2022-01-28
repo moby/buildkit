@@ -21,6 +21,7 @@ package oci
 
 import (
 	"context"
+	"errors"
 
 	"github.com/containerd/containerd/containers"
 )
@@ -43,5 +44,12 @@ var WithAllKnownCapabilities = func(ctx context.Context, client Client, c *conta
 func WithCPUShares(shares uint64) SpecOpts {
 	return func(ctx context.Context, _ Client, c *containers.Container, s *Spec) error {
 		return nil
+	}
+}
+
+// WithRdt sets the container's RDT parameters
+func WithRdt(closID, l3CacheSchema, memBwSchema string) SpecOpts {
+	return func(_ context.Context, _ Client, _ *containers.Container, _ *Spec) error {
+		return errors.New("RDT not supported")
 	}
 }

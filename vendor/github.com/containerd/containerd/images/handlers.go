@@ -18,6 +18,7 @@ package images
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 
@@ -25,7 +26,6 @@ import (
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/platforms"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
 )
@@ -33,17 +33,17 @@ import (
 var (
 	// ErrSkipDesc is used to skip processing of a descriptor and
 	// its descendants.
-	ErrSkipDesc = fmt.Errorf("skip descriptor")
+	ErrSkipDesc = errors.New("skip descriptor")
 
 	// ErrStopHandler is used to signify that the descriptor
 	// has been handled and should not be handled further.
 	// This applies only to a single descriptor in a handler
 	// chain and does not apply to descendant descriptors.
-	ErrStopHandler = fmt.Errorf("stop handler")
+	ErrStopHandler = errors.New("stop handler")
 
 	// ErrEmptyWalk is used when the WalkNotEmpty handlers return no
 	// children (e.g.: they were filtered out).
-	ErrEmptyWalk = fmt.Errorf("image might be filtered out")
+	ErrEmptyWalk = errors.New("image might be filtered out")
 )
 
 // Handler handles image manifests
@@ -308,7 +308,7 @@ func LimitManifests(f HandlerFunc, m platforms.MatchComparer, n int) HandlerFunc
 
 			if n > 0 {
 				if len(children) == 0 {
-					return children, errors.Wrap(errdefs.ErrNotFound, "no match for platform in manifest")
+					return children, fmt.Errorf("no match for platform in manifest: %w", errdefs.ErrNotFound)
 				}
 				if len(children) > n {
 					children = children[:n]

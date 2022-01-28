@@ -14,12 +14,7 @@
 
 package metric // import "go.opentelemetry.io/otel/metric"
 
-import (
-	"context"
-
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/metric/number"
-)
+type noopMeterProvider struct{}
 
 // NewNoopMeterProvider returns an implementation of MeterProvider that
 // performs no operations. The Meter and Instrument created from the returned
@@ -28,39 +23,8 @@ func NewNoopMeterProvider() MeterProvider {
 	return noopMeterProvider{}
 }
 
-type noopMeterProvider struct{}
-
-type noopInstrument struct{}
-type noopBoundInstrument struct{}
-type NoopSync struct{ noopInstrument }
-type NoopAsync struct{ noopInstrument }
-
 var _ MeterProvider = noopMeterProvider{}
-var _ SyncImpl = NoopSync{}
-var _ BoundSyncImpl = noopBoundInstrument{}
-var _ AsyncImpl = NoopAsync{}
 
 func (noopMeterProvider) Meter(instrumentationName string, opts ...MeterOption) Meter {
 	return Meter{}
-}
-
-func (noopInstrument) Implementation() interface{} {
-	return nil
-}
-
-func (noopInstrument) Descriptor() Descriptor {
-	return Descriptor{}
-}
-
-func (noopBoundInstrument) RecordOne(context.Context, number.Number) {
-}
-
-func (noopBoundInstrument) Unbind() {
-}
-
-func (NoopSync) Bind([]attribute.KeyValue) BoundSyncImpl {
-	return noopBoundInstrument{}
-}
-
-func (NoopSync) RecordOne(context.Context, number.Number, []attribute.KeyValue) {
 }
