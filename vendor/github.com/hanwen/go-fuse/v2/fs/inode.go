@@ -703,7 +703,7 @@ retry:
 		}
 
 		if destChild != nil {
-			oldParent.children[oldName] = oldChild
+			oldParent.children[oldName] = destChild
 			oldParent.changeCounter++
 
 			destChild.parents.add(parentData{oldName, oldParent})

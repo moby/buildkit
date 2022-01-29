@@ -26,6 +26,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 type Client struct {
@@ -102,7 +103,7 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 		gopts = append(gopts, grpc.WithContextDialer(dialFn))
 	}
 	if needWithInsecure {
-		gopts = append(gopts, grpc.WithInsecure())
+		gopts = append(gopts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
 	if address == "" {
 		address = appdefaults.Address

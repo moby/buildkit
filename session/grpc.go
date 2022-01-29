@@ -14,6 +14,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/net/http2"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/health/grpc_health_v1"
 )
 
@@ -40,7 +41,7 @@ func grpcClientConn(ctx context.Context, conn net.Conn) (context.Context, *grpc.
 
 	dialOpts := []grpc.DialOption{
 		dialer,
-		grpc.WithInsecure(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	}
 
 	if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {

@@ -45,6 +45,7 @@ import (
 	"golang.org/x/sync/semaphore"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func init() {
@@ -328,7 +329,7 @@ func snapshotterFactory(commonRoot string, cfg config.OCIConfig, sm *session.Man
 				Backoff: backoffConfig,
 			}
 			gopts := []grpc.DialOption{
-				grpc.WithInsecure(),
+				grpc.WithTransportCredentials(insecure.NewCredentials()),
 				grpc.WithConnectParams(connParams),
 				grpc.WithContextDialer(dialer.ContextDialer),
 				grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(defaults.DefaultMaxRecvMsgSize)),

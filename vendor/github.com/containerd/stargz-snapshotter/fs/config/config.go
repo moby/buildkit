@@ -34,18 +34,21 @@ const (
 )
 
 type Config struct {
-	HTTPCacheType       string `toml:"http_cache_type"`
-	FSCacheType         string `toml:"filesystem_cache_type"`
-	ResolveResultEntry  int    `toml:"resolve_result_entry"`
-	PrefetchSize        int64  `toml:"prefetch_size"`
-	PrefetchTimeoutSec  int64  `toml:"prefetch_timeout_sec"`
-	NoPrefetch          bool   `toml:"noprefetch"`
-	NoBackgroundFetch   bool   `toml:"no_background_fetch"`
-	Debug               bool   `toml:"debug"`
-	AllowNoVerification bool   `toml:"allow_no_verification"`
-	DisableVerification bool   `toml:"disable_verification"`
-	MaxConcurrency      int64  `toml:"max_concurrency"`
-	NoPrometheus        bool   `toml:"no_prometheus"`
+	HTTPCacheType string `toml:"http_cache_type"`
+	FSCacheType   string `toml:"filesystem_cache_type"`
+	// ResolveResultEntryTTLSec is TTL (in sec) to cache resolved layers for
+	// future use. (default 120s)
+	ResolveResultEntryTTLSec int   `toml:"resolve_result_entry_ttl_sec"`
+	ResolveResultEntry       int   `toml:"resolve_result_entry"` // deprecated
+	PrefetchSize             int64 `toml:"prefetch_size"`
+	PrefetchTimeoutSec       int64 `toml:"prefetch_timeout_sec"`
+	NoPrefetch               bool  `toml:"noprefetch"`
+	NoBackgroundFetch        bool  `toml:"no_background_fetch"`
+	Debug                    bool  `toml:"debug"`
+	AllowNoVerification      bool  `toml:"allow_no_verification"`
+	DisableVerification      bool  `toml:"disable_verification"`
+	MaxConcurrency           int64 `toml:"max_concurrency"`
+	NoPrometheus             bool  `toml:"no_prometheus"`
 
 	// BlobConfig is config for layer blob management.
 	BlobConfig `toml:"blob"`

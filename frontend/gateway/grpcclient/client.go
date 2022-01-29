@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/moby/buildkit/util/bklog"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/gogo/googleapis/google/rpc"
 	gogotypes "github.com/gogo/protobuf/types"
@@ -1042,7 +1043,7 @@ func grpcClientConn(ctx context.Context) (context.Context, *grpc.ClientConn, err
 		return stdioConn(), nil
 	})
 
-	cc, err := grpc.DialContext(ctx, "localhost", dialOpt, grpc.WithInsecure(), grpc.WithUnaryInterceptor(grpcerrors.UnaryClientInterceptor), grpc.WithStreamInterceptor(grpcerrors.StreamClientInterceptor))
+	cc, err := grpc.DialContext(ctx, "localhost", dialOpt, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithUnaryInterceptor(grpcerrors.UnaryClientInterceptor), grpc.WithStreamInterceptor(grpcerrors.StreamClientInterceptor))
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to create grpc client")
 	}
