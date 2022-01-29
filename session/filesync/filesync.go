@@ -70,7 +70,7 @@ func (sp *fsSyncProvider) handle(method string, stream grpc.ServerStream) (retEr
 		}
 	}
 	if pr == nil {
-		return errors.New("failed to negotiate protocol")
+		return InvalidSessionError{errors.New("failed to negotiate protocol")}
 	}
 
 	opts, _ := metadata.FromIncomingContext(stream.Context()) // if no metadata continue with empty object
@@ -83,7 +83,7 @@ func (sp *fsSyncProvider) handle(method string, stream grpc.ServerStream) (retEr
 
 	dir, ok := sp.dirs[dirName]
 	if !ok {
-		return status.Errorf(codes.NotFound, "no access allowed to dir %q", dirName)
+		return InvalidSessionError{status.Errorf(codes.NotFound, "no access allowed to dir %q", dirName)}
 	}
 
 	excludes := opts[keyExcludePatterns]
@@ -316,4 +316,16 @@ func CopyFileWriter(ctx context.Context, md map[string]string, c session.Caller)
 	}
 
 	return newStreamWriter(cc), nil
+}
+
+type InvalidSessionError struct {
+	err error
+}
+
+func (e InvalidSessionError) Error() string {
+	return e.err.Error()
+}
+
+func (e InvalidSessionError) Unwrap() error {
+	return e.err
 }
