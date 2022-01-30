@@ -3,6 +3,6 @@
 
 package archutil
 
-func s390xSupported() error {
-	return check(Binarys390x)
+func s390xSupported() (string, error) {
+	return check("390x", Binarys390x)
 }
