@@ -91,11 +91,9 @@ func getEmulator(p *pb.Platform, idmap *idtools.IdentityMapping) (*emulator, err
 		Variant:      p.Variant,
 	})
 
-	for _, ps := range all {
-		if p, err := platforms.Parse(ps); err == nil {
-			if platforms.Only(p).Match(pp) {
-				return nil, nil
-			}
+	for _, p := range all {
+		if platforms.Only(p).Match(pp) {
+			return nil, nil
 		}
 	}
 
