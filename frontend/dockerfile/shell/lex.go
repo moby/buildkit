@@ -18,10 +18,11 @@ import (
 // It doesn't support all flavors of ${xx:...} formats but new ones can
 // be added by adding code to the "special ${} format processing" section
 type Lex struct {
-	escapeToken  rune
-	RawQuotes    bool
-	RawEscapes   bool
-	SkipUnsetEnv bool
+	escapeToken       rune
+	RawQuotes         bool
+	RawEscapes        bool
+	SkipProcessQuotes bool
+	SkipUnsetEnv      bool
 }
 
 // NewLex creates a new Lex which uses escapeToken to escape quotes.
@@ -62,23 +63,25 @@ func (s *Lex) ProcessWordsWithMap(word string, env map[string]string) ([]string,
 
 func (s *Lex) process(word string, env map[string]string) (string, []string, error) {
 	sw := &shellWord{
-		envs:         env,
-		escapeToken:  s.escapeToken,
-		skipUnsetEnv: s.SkipUnsetEnv,
-		rawQuotes:    s.RawQuotes,
-		rawEscapes:   s.RawEscapes,
+		envs:              env,
+		escapeToken:       s.escapeToken,
+		skipUnsetEnv:      s.SkipUnsetEnv,
+		skipProcessQuotes: s.SkipProcessQuotes,
+		rawQuotes:         s.RawQuotes,
+		rawEscapes:        s.RawEscapes,
 	}
 	sw.scanner.Init(strings.NewReader(word))
 	return sw.process(word)
 }
 
 type shellWord struct {
-	scanner      scanner.Scanner
-	envs         map[string]string
-	escapeToken  rune
-	rawQuotes    bool
-	rawEscapes   bool
-	skipUnsetEnv bool
+	scanner           scanner.Scanner
+	envs              map[string]string
+	escapeToken       rune
+	rawQuotes         bool
+	rawEscapes        bool
+	skipUnsetEnv      bool
+	skipProcessQuotes bool
 }
 
 func (sw *shellWord) process(source string) (string, []string, error) {
@@ -141,9 +144,11 @@ func (sw *shellWord) processStopOn(stopChar rune) (string, []string, error) {
 	var words wordsStruct
 
 	var charFuncMapping = map[rune]func() (string, error){
-		'\'': sw.processSingleQuote,
-		'"':  sw.processDoubleQuote,
-		'$':  sw.processDollar,
+		'$': sw.processDollar,
+	}
+	if !sw.skipProcessQuotes {
+		charFuncMapping['\''] = sw.processSingleQuote
+		charFuncMapping['"'] = sw.processDoubleQuote
 	}
 
 	for sw.scanner.Peek() != scanner.EOF {
@@ -173,6 +178,7 @@ func (sw *shellWord) processStopOn(stopChar rune) (string, []string, error) {
 			if ch == sw.escapeToken {
 				if sw.rawEscapes {
 					words.addRawChar(ch)
+					result.WriteRune(ch)
 				}
 
 				// '\' (default escape token, but ` allowed) escapes, except end of line

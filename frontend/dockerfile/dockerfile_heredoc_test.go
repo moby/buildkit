@@ -20,6 +20,7 @@ import (
 
 var hdTests = integration.TestFuncs(
 	testCopyHeredoc,
+	testCopyHeredocSpecialSymbols,
 	testRunBasicHeredoc,
 	testRunFakeHeredoc,
 	testRunShebangHeredoc,
@@ -110,6 +111,94 @@ COPY --from=build /dest /
 		require.NoError(t, err)
 		require.Equal(t, content, string(dt))
 	}
+}
+
+func testCopyHeredocSpecialSymbols(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+
+	dockerfile := []byte(`
+FROM scratch
+
+COPY <<EOF quotefile
+"quotes in file"
+EOF
+
+COPY <<EOF slashfile1
+\
+EOF
+COPY <<EOF slashfile2
+\\
+EOF
+COPY <<EOF slashfile3
+\$
+EOF
+
+COPY <<"EOF" rawslashfile1
+\
+EOF
+COPY <<"EOF" rawslashfile2
+\\
+EOF
+COPY <<"EOF" rawslashfile3
+\$
+EOF
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", []byte(dockerfile), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "quotefile"))
+	require.NoError(t, err)
+	require.Equal(t, "\"quotes in file\"\n", string(dt))
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "slashfile1"))
+	require.NoError(t, err)
+	require.Equal(t, "\n", string(dt))
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "slashfile2"))
+	require.NoError(t, err)
+	require.Equal(t, "\\\n", string(dt))
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "slashfile3"))
+	require.NoError(t, err)
+	require.Equal(t, "$\n", string(dt))
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "rawslashfile1"))
+	require.NoError(t, err)
+	require.Equal(t, "\\\n", string(dt))
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "rawslashfile2"))
+	require.NoError(t, err)
+	require.Equal(t, "\\\\\n", string(dt))
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "rawslashfile3"))
+	require.NoError(t, err)
+	require.Equal(t, "\\$\n", string(dt))
 }
 
 func testRunBasicHeredoc(t *testing.T, sb integration.Sandbox) {
@@ -449,6 +538,25 @@ COPY <<"EOF" /dest/c3
 Hello ${name}!
 EOF
 
+COPY <<EOF /dest/q1
+Hello '${name}'!
+EOF
+COPY <<EOF /dest/q2
+Hello "${name}"!
+EOF
+COPY <<'EOF' /dest/qsingle1
+Hello '${name}'!
+EOF
+COPY <<'EOF' /dest/qsingle2
+Hello "${name}"!
+EOF
+COPY <<"EOF" /dest/qdouble1
+Hello '${name}'!
+EOF
+COPY <<"EOF" /dest/qdouble2
+Hello "${name}"!
+EOF
+
 RUN <<EOF
 greeting="Hello"
 echo "${greeting} ${name}!" > /dest/r1
@@ -491,11 +599,17 @@ COPY --from=build /dest /
 	require.NoError(t, err)
 
 	contents := map[string]string{
-		"c1": "Hello world!\n",
-		"c2": "Hello ${name}!\n",
-		"c3": "Hello ${name}!\n",
-		"r1": "Hello world!\n",
-		"r2": "Hello new world!\n",
+		"c1":       "Hello world!\n",
+		"c2":       "Hello ${name}!\n",
+		"c3":       "Hello ${name}!\n",
+		"q1":       "Hello 'world'!\n",
+		"q2":       "Hello \"world\"!\n",
+		"qsingle1": "Hello '${name}'!\n",
+		"qsingle2": "Hello \"${name}\"!\n",
+		"qdouble1": "Hello '${name}'!\n",
+		"qdouble2": "Hello \"${name}\"!\n",
+		"r1":       "Hello world!\n",
+		"r2":       "Hello new world!\n",
 	}
 
 	for name, content := range contents {
@@ -509,7 +623,7 @@ func testOnBuildHeredoc(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 
 	registry, err := sb.NewRegistry()
-	if errors.Is(err, integration.ErrorRequirements) {
+	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
 	}
 	require.NoError(t, err)

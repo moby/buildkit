@@ -648,7 +648,6 @@ func TestChecksumIncludeDoubleStar(t *testing.T) {
 	dgst, err = cc.Checksum(context.TODO(), ref, "prefix/a", ChecksumOpts{IncludePatterns: []string{"**/foo", "**/report"}, Wildcard: true}, nil)
 	require.NoError(t, err)
 	require.Equal(t, dgstDoubleStar, dgst)
-
 }
 
 func TestChecksumIncludeSymlink(t *testing.T) {

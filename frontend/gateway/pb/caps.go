@@ -1,4 +1,4 @@
-package moby_buildkit_v1_frontend //nolint:golint
+package moby_buildkit_v1_frontend //nolint:revive
 
 import "github.com/moby/buildkit/util/apicaps"
 
@@ -57,7 +57,6 @@ const (
 )
 
 func init() {
-
 	Caps.Init(apicaps.Cap{
 		ID:      CapSolveBase,
 		Enabled: true,

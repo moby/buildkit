@@ -26,7 +26,7 @@ import (
 	gen "go.opentelemetry.io/otel/exporters/jaeger/internal/gen-go/jaeger"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.7.0"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -147,13 +147,15 @@ func spanToThrift(ss sdktrace.ReadOnlySpan) *gen.Span {
 	}
 
 	if ss.Status().Code != codes.Unset {
-		tags = append(tags, getInt64Tag(keyStatusCode, int64(ss.Status().Code)))
+		switch ss.Status().Code {
+		case codes.Ok:
+			tags = append(tags, getStringTag(keyStatusCode, "OK"))
+		case codes.Error:
+			tags = append(tags, getBoolTag(keyError, true))
+			tags = append(tags, getStringTag(keyStatusCode, "ERROR"))
+		}
 		if ss.Status().Description != "" {
 			tags = append(tags, getStringTag(keyStatusMessage, ss.Status().Description))
-		}
-
-		if ss.Status().Code == codes.Error {
-			tags = append(tags, getBoolTag(keyError, true))
 		}
 	}
 

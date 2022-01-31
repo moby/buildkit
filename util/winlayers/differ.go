@@ -109,8 +109,7 @@ func (s *winDiffer) Compare(ctx context.Context, lower, upper []mount.Mount, opt
 				if err != nil {
 					return errors.Wrap(err, "failed to get compressed stream")
 				}
-				var w io.Writer = io.MultiWriter(compressed, dgstr.Hash())
-				w, discard, done := makeWindowsLayer(w)
+				w, discard, done := makeWindowsLayer(io.MultiWriter(compressed, dgstr.Hash()))
 				err = archive.WriteDiff(ctx, w, lowerRoot, upperRoot)
 				if err != nil {
 					discard(err)
@@ -213,7 +212,6 @@ func makeWindowsLayer(w io.Writer) (io.Writer, func(error), chan error) {
 		tarWriter := tar.NewWriter(w)
 
 		err := func() error {
-
 			h := &tar.Header{
 				Name:     "Hives",
 				Typeflag: tar.TypeDir,

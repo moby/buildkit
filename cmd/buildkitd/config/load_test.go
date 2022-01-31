@@ -8,7 +8,6 @@ import (
 )
 
 func TestLoad(t *testing.T) {
-
 	const testConfig = `
 root = "/foo/bar"
 debug=true

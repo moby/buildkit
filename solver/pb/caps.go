@@ -73,7 +73,6 @@ const (
 )
 
 func init() {
-
 	Caps.Init(apicaps.Cap{
 		ID:      CapSourceImage,
 		Enabled: true,

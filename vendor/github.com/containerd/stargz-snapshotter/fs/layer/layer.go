@@ -45,7 +45,7 @@ import (
 	"github.com/containerd/stargz-snapshotter/fs/source"
 	"github.com/containerd/stargz-snapshotter/metadata"
 	"github.com/containerd/stargz-snapshotter/task"
-	"github.com/containerd/stargz-snapshotter/util/lrucache"
+	"github.com/containerd/stargz-snapshotter/util/cacheutil"
 	"github.com/containerd/stargz-snapshotter/util/namedmutex"
 	fusefs "github.com/hanwen/go-fuse/v2/fs"
 	digest "github.com/opencontainers/go-digest"
@@ -55,11 +55,11 @@ import (
 )
 
 const (
-	defaultResolveResultEntry = 30
-	defaultMaxLRUCacheEntry   = 10
-	defaultMaxCacheFds        = 10
-	defaultPrefetchTimeoutSec = 10
-	memoryCacheType           = "memory"
+	defaultResolveResultEntryTTLSec = 120
+	defaultMaxLRUCacheEntry         = 10
+	defaultMaxCacheFds              = 10
+	defaultPrefetchTimeoutSec       = 10
+	memoryCacheType                 = "memory"
 )
 
 // Layer represents a layer.
@@ -117,9 +117,9 @@ type Resolver struct {
 	rootDir               string
 	resolver              *remote.Resolver
 	prefetchTimeout       time.Duration
-	layerCache            *lrucache.Cache
+	layerCache            *cacheutil.TTLCache
 	layerCacheMu          sync.Mutex
-	blobCache             *lrucache.Cache
+	blobCache             *cacheutil.TTLCache
 	blobCacheMu           sync.Mutex
 	backgroundTaskManager *task.BackgroundTaskManager
 	resolveLock           *namedmutex.NamedMutex
@@ -129,9 +129,9 @@ type Resolver struct {
 
 // NewResolver returns a new layer resolver.
 func NewResolver(root string, backgroundTaskManager *task.BackgroundTaskManager, cfg config.Config, resolveHandlers map[string]remote.Handler, metadataStore metadata.Store) (*Resolver, error) {
-	resolveResultEntry := cfg.ResolveResultEntry
-	if resolveResultEntry == 0 {
-		resolveResultEntry = defaultResolveResultEntry
+	resolveResultEntryTTL := time.Duration(cfg.ResolveResultEntryTTLSec) * time.Second
+	if resolveResultEntryTTL == 0 {
+		resolveResultEntryTTL = defaultResolveResultEntryTTLSec * time.Second
 	}
 	prefetchTimeout := time.Duration(cfg.PrefetchTimeoutSec) * time.Second
 	if prefetchTimeout == 0 {
@@ -141,7 +141,7 @@ func NewResolver(root string, backgroundTaskManager *task.BackgroundTaskManager,
 	// layerCache caches resolved layers for future use. This is useful in a use-case where
 	// the filesystem resolves and caches all layers in an image (not only queried one) in parallel,
 	// before they are actually queried.
-	layerCache := lrucache.New(resolveResultEntry)
+	layerCache := cacheutil.NewTTLCache(resolveResultEntryTTL)
 	layerCache.OnEvicted = func(key string, value interface{}) {
 		if err := value.(*layer).close(); err != nil {
 			logrus.WithField("key", key).WithError(err).Warnf("failed to clean up layer")
@@ -152,7 +152,7 @@ func NewResolver(root string, backgroundTaskManager *task.BackgroundTaskManager,
 
 	// blobCache caches resolved blobs for futural use. This is especially useful when a layer
 	// isn't eStargz/stargz (the *layer object won't be created/cached in this case).
-	blobCache := lrucache.New(resolveResultEntry)
+	blobCache := cacheutil.NewTTLCache(resolveResultEntryTTL)
 	blobCache.OnEvicted = func(key string, value interface{}) {
 		if err := value.(remote.Blob).Close(); err != nil {
 			logrus.WithField("key", key).WithError(err).Warnf("failed to clean up blob")
@@ -198,7 +198,7 @@ func newCache(root string, cacheType string, cfg config.Config) (cache.BlobCache
 			return new(bytes.Buffer)
 		},
 	}
-	dCache, fCache := lrucache.New(maxDataEntry), lrucache.New(maxFdEntry)
+	dCache, fCache := cacheutil.NewLRUCache(maxDataEntry), cacheutil.NewLRUCache(maxFdEntry)
 	dCache.OnEvicted = func(key string, value interface{}) {
 		value.(*bytes.Buffer).Reset()
 		bufPool.Put(value)
@@ -231,13 +231,13 @@ func (r *Resolver) Resolve(ctx context.Context, hosts source.RegistryHosts, refs
 	name := refspec.String() + "/" + desc.Digest.String()
 
 	// Wait if resolving this layer is already running. The result
-	// can hopefully get from the LRU cache.
+	// can hopefully get from the cache.
 	r.resolveLock.Lock(name)
 	defer r.resolveLock.Unlock(name)
 
 	ctx = log.WithLogger(ctx, log.G(ctx).WithField("src", name))
 
-	// First, try to retrieve this layer from the underlying LRU cache.
+	// First, try to retrieve this layer from the underlying cache.
 	r.layerCacheMu.Lock()
 	c, done, ok := r.layerCache.Get(name)
 	r.layerCacheMu.Unlock()
@@ -324,7 +324,7 @@ func (r *Resolver) Resolve(ctx context.Context, hosts source.RegistryHosts, refs
 func (r *Resolver) resolveBlob(ctx context.Context, hosts source.RegistryHosts, refspec reference.Spec, desc ocispec.Descriptor) (_ *blobRef, retErr error) {
 	name := refspec.String() + "/" + desc.Digest.String()
 
-	// Try to retrieve the blob from the underlying LRU cache.
+	// Try to retrieve the blob from the underlying cache.
 	r.blobCacheMu.Lock()
 	c, done, ok := r.blobCache.Get(name)
 	r.blobCacheMu.Unlock()

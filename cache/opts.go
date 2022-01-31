@@ -30,8 +30,8 @@ func descHandlersOf(opts ...RefOption) DescHandlers {
 
 type DescHandlerKey digest.Digest
 
-type NeedsRemoteProvidersError []digest.Digest
+type NeedsRemoteProviderError []digest.Digest //nolint:errname
 
-func (m NeedsRemoteProvidersError) Error() string {
+func (m NeedsRemoteProviderError) Error() string {
 	return fmt.Sprintf("missing descriptor handlers for lazy blobs %+v", []digest.Digest(m))
 }

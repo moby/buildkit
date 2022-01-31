@@ -197,7 +197,7 @@ func (r *Resolver) Resolve(ctx context.Context, ref string) (string, ocispecs.De
 	n, desc, err := r.Resolver.Resolve(ctx, ref)
 	if err == nil {
 		atomic.AddInt64(&r.handler.counter, 1)
-		return n, desc, err
+		return n, desc, nil
 	}
 
 	if r.mode == source.ResolveModeDefault && r.is != nil {

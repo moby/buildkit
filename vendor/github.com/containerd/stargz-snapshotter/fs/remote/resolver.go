@@ -52,7 +52,6 @@ import (
 	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -178,16 +177,13 @@ func backoffStrategy(min, max time.Duration, attemptNum int, resp *http.Response
 	return jitter(delayTime)
 }
 
-// retryStrategy extends retryablehttp's DefaultRetryPolicy to log the error and response when retrying
+// retryStrategy extends retryablehttp's DefaultRetryPolicy to debug log the error when retrying
 // DefaultRetryPolicy retries whenever err is non-nil (except for some url errors) or if returned
 // status code is 429 or 5xx (except 501)
 func retryStrategy(ctx context.Context, resp *http.Response, err error) (bool, error) {
 	retry, err2 := rhttp.DefaultRetryPolicy(ctx, resp, err)
 	if retry {
-		log.G(ctx).WithFields(logrus.Fields{
-			"error":    err,
-			"response": resp,
-		}).Infof("Retrying request")
+		log.G(ctx).WithError(err).Debugf("Retrying request")
 	}
 	return retry, err2
 }

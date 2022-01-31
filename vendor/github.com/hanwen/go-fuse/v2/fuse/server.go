@@ -24,6 +24,10 @@ const (
 	// The kernel caps writes at 128k.
 	MAX_KERNEL_WRITE = 128 * 1024
 
+	// Linux kernel constant from include/uapi/linux/fuse.h
+	// Reads from /dev/fuse that are smaller fail with EINVAL.
+	_FUSE_MIN_READ_BUFFER = 8192
+
 	minMaxReaders = 2
 	maxMaxReaders = 16
 )
@@ -207,8 +211,12 @@ func NewServer(fs RawFileSystem, mountPoint string, opts *MountOptions) (*Server
 		}
 	}
 	ms.readPool.New = func() interface{} {
-		buf := make([]byte, o.MaxWrite+int(maxInputSize)+logicalBlockSize)
-		buf = alignSlice(buf, unsafe.Sizeof(WriteIn{}), logicalBlockSize, uintptr(o.MaxWrite)+maxInputSize)
+		targetSize := o.MaxWrite + int(maxInputSize)
+		if targetSize < _FUSE_MIN_READ_BUFFER {
+			targetSize = _FUSE_MIN_READ_BUFFER
+		}
+		buf := make([]byte, targetSize+logicalBlockSize)
+		buf = alignSlice(buf, unsafe.Sizeof(WriteIn{}), logicalBlockSize, uintptr(targetSize))
 		return buf
 	}
 	mountPoint = filepath.Clean(mountPoint)

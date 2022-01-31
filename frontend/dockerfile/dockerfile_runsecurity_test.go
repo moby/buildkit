@@ -31,7 +31,6 @@ func init() {
 	}
 
 	securityTests = append(securityTests, runSecurityTests...)
-
 }
 
 func testInsecureDevicesWhitelist(t *testing.T, sb integration.Sandbox) {

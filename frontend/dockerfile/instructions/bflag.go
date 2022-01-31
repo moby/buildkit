@@ -204,7 +204,6 @@ func (bf *BFlags) Parse() error {
 		default:
 			panic("No idea what kind of flag we have! Should never get here!")
 		}
-
 	}
 
 	return nil

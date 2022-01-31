@@ -160,7 +160,6 @@ func (d *DefinitionOp) Marshal(ctx context.Context, c *Constraints) (digest.Dige
 
 	meta := d.metas[d.dgst]
 	return d.dgst, d.defs[d.dgst], &meta, d.sources[d.dgst], nil
-
 }
 
 func (d *DefinitionOp) Output() Output {

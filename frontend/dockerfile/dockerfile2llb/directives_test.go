@@ -68,5 +68,4 @@ RUN ls
 	require.False(t, ok)
 	require.Equal(t, ref, "")
 	require.Equal(t, cmdline, "")
-
 }
