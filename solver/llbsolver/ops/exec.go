@@ -20,7 +20,6 @@ import (
 	"github.com/moby/buildkit/solver/llbsolver/errdefs"
 	"github.com/moby/buildkit/solver/llbsolver/mounts"
 	"github.com/moby/buildkit/solver/pb"
-	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/progress/logs"
 	utilsystem "github.com/moby/buildkit/util/system"
 	"github.com/moby/buildkit/worker"
@@ -293,8 +292,11 @@ func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 		return nil, err
 	}
 
-	emu, err := getEmulator(e.platform, e.cm.IdentityMapping())
-	if err == nil && emu != nil {
+	emu, err := getEmulator(ctx, e.platform, e.cm.IdentityMapping())
+	if err != nil {
+		return nil, err
+	}
+	if emu != nil {
 		e.op.Meta.Args = append([]string{qemuMountName}, e.op.Meta.Args...)
 
 		p.Mounts = append(p.Mounts, executor.Mount{
@@ -302,9 +304,6 @@ func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 			Src:      emu,
 			Dest:     qemuMountName,
 		})
-	}
-	if err != nil {
-		bklog.G(ctx).Warn(err.Error()) // TODO: remove this with pull support
 	}
 
 	meta := executor.Meta{
