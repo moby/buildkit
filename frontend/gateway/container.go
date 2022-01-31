@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 
 	"github.com/moby/buildkit/util/bklog"
 
@@ -294,6 +295,7 @@ type gatewayContainer struct {
 
 func (gwCtr *gatewayContainer) Start(ctx context.Context, req client.StartRequest) (client.ContainerProcess, error) {
 	resize := make(chan executor.WinSize)
+	signal := make(chan syscall.Signal)
 	procInfo := executor.ProcessInfo{
 		Meta: executor.Meta{
 			Args:         req.Args,
@@ -309,6 +311,7 @@ func (gwCtr *gatewayContainer) Start(ctx context.Context, req client.StartReques
 		Stdout: req.Stdout,
 		Stderr: req.Stderr,
 		Resize: resize,
+		Signal: signal,
 	}
 	if procInfo.Meta.Cwd == "" {
 		procInfo.Meta.Cwd = "/"
@@ -328,6 +331,7 @@ func (gwCtr *gatewayContainer) Start(ctx context.Context, req client.StartReques
 	eg, ctx := errgroup.WithContext(gwCtr.ctx)
 	gwProc := &gatewayContainerProcess{
 		resize:   resize,
+		signal:   signal,
 		errGroup: eg,
 		groupCtx: ctx,
 	}
@@ -378,6 +382,7 @@ type gatewayContainerProcess struct {
 	errGroup *errgroup.Group
 	groupCtx context.Context
 	resize   chan<- executor.WinSize
+	signal   chan<- syscall.Signal
 	mu       sync.Mutex
 }
 
@@ -386,6 +391,7 @@ func (gwProc *gatewayContainerProcess) Wait() error {
 	gwProc.mu.Lock()
 	defer gwProc.mu.Unlock()
 	close(gwProc.resize)
+	close(gwProc.signal)
 	return err
 }
 
@@ -393,7 +399,7 @@ func (gwProc *gatewayContainerProcess) Resize(ctx context.Context, size client.W
 	gwProc.mu.Lock()
 	defer gwProc.mu.Unlock()
 
-	//  is the container done or should we proceed with sending event?
+	// is the container done or should we proceed with sending event?
 	select {
 	case <-gwProc.groupCtx.Done():
 		return nil
@@ -410,6 +416,31 @@ func (gwProc *gatewayContainerProcess) Resize(ctx context.Context, size client.W
 	case <-gwProc.groupCtx.Done():
 	case <-ctx.Done():
 	case gwProc.resize <- executor.WinSize{Cols: size.Cols, Rows: size.Rows}:
+	}
+	return nil
+}
+
+func (gwProc *gatewayContainerProcess) Signal(ctx context.Context, sig syscall.Signal) error {
+	gwProc.mu.Lock()
+	defer gwProc.mu.Unlock()
+
+	// is the container done or should we proceed with sending event?
+	select {
+	case <-gwProc.groupCtx.Done():
+		return nil
+	case <-ctx.Done():
+		return nil
+	default:
+	}
+
+	// now we select on contexts again in case p.signal blocks b/c
+	// container no longer reading from it.  In that case when
+	// the errgroup finishes we want to unblock on the write
+	// and exit
+	select {
+	case <-gwProc.groupCtx.Done():
+	case <-ctx.Done():
+	case gwProc.signal <- sig:
 	}
 	return nil
 }

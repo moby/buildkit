@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/containerd/containerd/mount"
@@ -42,6 +43,7 @@ import (
 	"github.com/moby/buildkit/util/stack"
 	"github.com/moby/buildkit/util/tracing"
 	"github.com/moby/buildkit/worker"
+	"github.com/moby/sys/signal"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -1008,6 +1010,7 @@ type processIO struct {
 	id       string
 	mu       sync.Mutex
 	resize   func(context.Context, gwclient.WinSize) error
+	signal   func(context.Context, syscall.Signal) error
 	done     chan struct{}
 	doneOnce sync.Once
 	// these track the process side of the io pipe for
@@ -1146,6 +1149,8 @@ func (lbf *llbBridgeForwarder) ExecProcess(srv pb.LLBBridge_ExecProcessServer) e
 				}
 			case *pb.ExecMessage_Resize:
 				bklog.G(ctx).Debugf("|<--- Resize Message %s", execMsg.ProcessID)
+			case *pb.ExecMessage_Signal:
+				bklog.G(ctx).Debugf("|<--- Signal Message %s: %s", execMsg.ProcessID, m.Signal.Name)
 			}
 			select {
 			case <-ctx.Done():
@@ -1198,6 +1203,15 @@ func (lbf *llbBridgeForwarder) ExecProcess(srv pb.LLBBridge_ExecProcessServer) e
 					Cols: resize.Cols,
 					Rows: resize.Rows,
 				})
+			} else if sig := execMsg.GetSignal(); sig != nil {
+				if !pioFound {
+					return stack.Enable(status.Errorf(codes.NotFound, "IO for process %q not found", pid))
+				}
+				syscallSignal, ok := signal.SignalMap[sig.Name]
+				if !ok {
+					return stack.Enable(status.Errorf(codes.InvalidArgument, "Unknown signal %s", sig.Name))
+				}
+				pio.signal(ctx, syscallSignal)
 			} else if init := execMsg.GetInit(); init != nil {
 				if pioFound {
 					return stack.Enable(status.Errorf(codes.AlreadyExists, "Process %s already exists", pid))
@@ -1231,6 +1245,7 @@ func (lbf *llbBridgeForwarder) ExecProcess(srv pb.LLBBridge_ExecProcessServer) e
 					return stack.Enable(err)
 				}
 				pio.resize = proc.Resize
+				pio.signal = proc.Signal
 
 				eg.Go(func() error {
 					<-pio.done

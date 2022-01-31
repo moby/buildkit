@@ -9,10 +9,8 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
-
-	"github.com/moby/buildkit/util/bklog"
-	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/gogo/googleapis/google/rpc"
 	gogotypes "github.com/gogo/protobuf/types"
@@ -23,7 +21,9 @@ import (
 	"github.com/moby/buildkit/identity"
 	opspb "github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/grpcerrors"
+	"github.com/moby/sys/signal"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	fstypes "github.com/tonistiigi/fsutil/types"
@@ -31,6 +31,7 @@ import (
 	spb "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 )
 
@@ -643,6 +644,8 @@ func debugMessage(msg *pb.ExecMessage) string {
 		return fmt.Sprintf("File Message %s, fd=%d, %d bytes", msg.ProcessID, m.File.Fd, len(m.File.Data))
 	case *pb.ExecMessage_Resize:
 		return fmt.Sprintf("Resize Message %s", msg.ProcessID)
+	case *pb.ExecMessage_Signal:
+		return fmt.Sprintf("Signal Message %s: %s", msg.ProcessID, m.Signal.Name)
 	case *pb.ExecMessage_Started:
 		return fmt.Sprintf("Started Message %s", msg.ProcessID)
 	case *pb.ExecMessage_Exit:
@@ -959,6 +962,29 @@ func (ctrProc *containerProcess) Resize(_ context.Context, size client.WinSize) 
 			Resize: &pb.ResizeMessage{
 				Cols: size.Cols,
 				Rows: size.Rows,
+			},
+		},
+	})
+}
+
+var sigToName = map[syscall.Signal]string{}
+
+func init() {
+	for name, value := range signal.SignalMap {
+		sigToName[value] = name
+	}
+}
+
+func (ctrProc *containerProcess) Signal(_ context.Context, sig syscall.Signal) error {
+	name := sigToName[sig]
+	if name == "" {
+		return errors.Errorf("unknown signal %v", sig)
+	}
+	return ctrProc.execMsgs.Send(&pb.ExecMessage{
+		ProcessID: ctrProc.id,
+		Input: &pb.ExecMessage_Signal{
+			Signal: &pb.SignalMessage{
+				Name: name,
 			},
 		},
 	})

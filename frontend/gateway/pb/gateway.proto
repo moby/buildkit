@@ -223,6 +223,8 @@ message ExecMessage {
 		// DoneMessage from server to client will be the last message for any
 		// process.  Note that FdMessage might be sent after ExitMessage.
 		DoneMessage Done = 7;
+		// SignalMessage is used from client to server to send signal events
+		SignalMessage Signal = 8;
 	}
 }
 
@@ -252,4 +254,10 @@ message FdMessage{
 message ResizeMessage{
 	uint32 Rows = 1;
 	uint32 Cols = 2;
+}
+
+message SignalMessage {
+	// we only send name (ie HUP, INT) because the int values
+	// are platform dependent.
+	string Name = 1;
 }
