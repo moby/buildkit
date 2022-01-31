@@ -602,7 +602,7 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 			}
 
 			lex := shell.NewLex('\\')
-			lex.RawQuotes = true
+			lex.SkipProcessQuotes = true
 			return lex.ProcessWord(word, env)
 		})
 		if err != nil {

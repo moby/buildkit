@@ -132,6 +132,16 @@ EOF
 COPY <<EOF slashfile3
 \$
 EOF
+
+COPY <<"EOF" rawslashfile1
+\
+EOF
+COPY <<"EOF" rawslashfile2
+\\
+EOF
+COPY <<"EOF" rawslashfile3
+\$
+EOF
 `)
 
 	dir, err := tmpdir(
@@ -177,6 +187,18 @@ EOF
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "slashfile3"))
 	require.NoError(t, err)
 	require.Equal(t, "$\n", string(dt))
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "rawslashfile1"))
+	require.NoError(t, err)
+	require.Equal(t, "\\\n", string(dt))
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "rawslashfile2"))
+	require.NoError(t, err)
+	require.Equal(t, "\\\\\n", string(dt))
+
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "rawslashfile3"))
+	require.NoError(t, err)
+	require.Equal(t, "\\$\n", string(dt))
 }
 
 func testRunBasicHeredoc(t *testing.T, sb integration.Sandbox) {
@@ -516,6 +538,25 @@ COPY <<"EOF" /dest/c3
 Hello ${name}!
 EOF
 
+COPY <<EOF /dest/q1
+Hello '${name}'!
+EOF
+COPY <<EOF /dest/q2
+Hello "${name}"!
+EOF
+COPY <<'EOF' /dest/qsingle1
+Hello '${name}'!
+EOF
+COPY <<'EOF' /dest/qsingle2
+Hello "${name}"!
+EOF
+COPY <<"EOF" /dest/qdouble1
+Hello '${name}'!
+EOF
+COPY <<"EOF" /dest/qdouble2
+Hello "${name}"!
+EOF
+
 RUN <<EOF
 greeting="Hello"
 echo "${greeting} ${name}!" > /dest/r1
@@ -558,11 +599,17 @@ COPY --from=build /dest /
 	require.NoError(t, err)
 
 	contents := map[string]string{
-		"c1": "Hello world!\n",
-		"c2": "Hello ${name}!\n",
-		"c3": "Hello ${name}!\n",
-		"r1": "Hello world!\n",
-		"r2": "Hello new world!\n",
+		"c1":       "Hello world!\n",
+		"c2":       "Hello ${name}!\n",
+		"c3":       "Hello ${name}!\n",
+		"q1":       "Hello 'world'!\n",
+		"q2":       "Hello \"world\"!\n",
+		"qsingle1": "Hello '${name}'!\n",
+		"qsingle2": "Hello \"${name}\"!\n",
+		"qdouble1": "Hello '${name}'!\n",
+		"qdouble2": "Hello \"${name}\"!\n",
+		"r1":       "Hello world!\n",
+		"r2":       "Hello new world!\n",
 	}
 
 	for name, content := range contents {
