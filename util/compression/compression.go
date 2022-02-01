@@ -34,6 +34,28 @@ const (
 	UnknownCompression Type = -1
 )
 
+type Config struct {
+	Type  Type
+	Force bool
+	Level *int
+}
+
+func New(t Type) Config {
+	return Config{
+		Type: t,
+	}
+}
+
+func (c Config) SetForce(v bool) Config {
+	c.Force = v
+	return c
+}
+
+func (c Config) SetLevel(l int) Config {
+	c.Level = &l
+	return c
+}
+
 const (
 	mediaTypeDockerSchema2LayerZstd = images.MediaTypeDockerSchema2Layer + ".zstd"
 	mediaTypeImageLayerZstd         = ocispecs.MediaTypeImageLayer + "+zstd" // unreleased image-spec#790

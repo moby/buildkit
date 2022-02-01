@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/moby/buildkit/cache"
-	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/util/compression"
 )
 
 type Exporter interface {
@@ -24,5 +24,5 @@ type Source struct {
 }
 
 type Config struct {
-	Compression solver.CompressionOpt
+	Compression compression.Config
 }

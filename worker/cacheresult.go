@@ -66,7 +66,7 @@ func (s *cacheResultStorage) load(ctx context.Context, id string, hidden bool) (
 	return NewWorkerRefResult(ref, w), nil
 }
 
-func (s *cacheResultStorage) LoadRemotes(ctx context.Context, res solver.CacheResult, compressionopt *solver.CompressionOpt, g session.Group) ([]*solver.Remote, error) {
+func (s *cacheResultStorage) LoadRemotes(ctx context.Context, res solver.CacheResult, compressionopt *compression.Config, g session.Group) ([]*solver.Remote, error) {
 	w, refID, err := s.getWorkerRef(res.ID)
 	if err != nil {
 		return nil, err
@@ -81,7 +81,8 @@ func (s *cacheResultStorage) LoadRemotes(ctx context.Context, res solver.CacheRe
 	wref := WorkerRef{ref, w}
 	all := true // load as many compression blobs as possible
 	if compressionopt == nil {
-		compressionopt = &solver.CompressionOpt{Type: compression.Default}
+		comp := compression.New(compression.Default)
+		compressionopt = &comp
 		all = false
 	}
 	remotes, err := wref.GetRemotes(ctx, false, *compressionopt, all, g)

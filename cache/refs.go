@@ -46,7 +46,7 @@ type ImmutableRef interface {
 	Finalize(context.Context) error
 
 	Extract(ctx context.Context, s session.Group) error // +progress
-	GetRemotes(ctx context.Context, createIfNeeded bool, compressionopt solver.CompressionOpt, all bool, s session.Group) ([]*solver.Remote, error)
+	GetRemotes(ctx context.Context, createIfNeeded bool, compressionopt compression.Config, all bool, s session.Group) ([]*solver.Remote, error)
 	LayerChain() RefList
 }
 

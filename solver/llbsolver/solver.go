@@ -254,11 +254,9 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 
 				// all keys have same export chain so exporting others is not needed
 				_, err = r.CacheKeys()[0].Exporter.ExportTo(ctx, e, solver.CacheExportOpt{
-					ResolveRemotes: workerRefResolver(solver.CompressionOpt{
-						Type: compression.Default, // TODO: make configurable
-					}, false, g),
-					Mode:    exp.CacheExportMode,
-					Session: g,
+					ResolveRemotes: workerRefResolver(compression.New(compression.Default), false, g), // TODO: make configurable
+					Mode:           exp.CacheExportMode,
+					Session:        g,
 				})
 				return err
 			}); err != nil {
@@ -295,7 +293,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	}, nil
 }
 
-func inlineCache(ctx context.Context, e remotecache.Exporter, res solver.CachedResult, compressionopt solver.CompressionOpt, g session.Group) ([]byte, error) {
+func inlineCache(ctx context.Context, e remotecache.Exporter, res solver.CachedResult, compressionopt compression.Config, g session.Group) ([]byte, error) {
 	if efl, ok := e.(interface {
 		ExportForLayers(context.Context, []digest.Digest) ([]byte, error)
 	}); ok {

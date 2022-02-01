@@ -234,6 +234,7 @@ Keys supported by image output:
 * `dangling-name-prefix=[value]`: name image with `prefix@<digest>` , used for anonymous images
 * `name-canonical=true`: add additional canonical name `name@<digest>`
 * `compression=[uncompressed,gzip,estargz,zstd]`: choose compression type for layers newly created and cached, gzip is default value. estargz should be used with `oci-mediatypes=true`.
+* `compression-level=[value]`: compression level for gzip, estargz (0-9) and zstd (0-22)
 * `force-compression=true`: forcefully apply `compression` option to all layers (including already existing layers).
 * `buildinfo=[all,imageconfig,metadata,none]`: choose [build dependency](docs/build-repro.md#build-dependencies) version to export (default `all`).
 

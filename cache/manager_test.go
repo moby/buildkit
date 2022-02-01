@@ -386,7 +386,7 @@ func TestMergeBlobchainID(t *testing.T) {
 	mergeRef, err := cm.Merge(ctx, mergeInputs)
 	require.NoError(t, err)
 
-	_, err = mergeRef.GetRemotes(ctx, true, solver.CompressionOpt{Type: compression.Default}, false, nil)
+	_, err = mergeRef.GetRemotes(ctx, true, compression.New(compression.Default), false, nil)
 	require.NoError(t, err)
 
 	// verify the merge blobchain ID isn't just set to one of the inputs (regression test)
@@ -1159,13 +1159,15 @@ func TestConversion(t *testing.T) {
 	eg, egctx := errgroup.WithContext(ctx)
 	for _, orgDesc := range []ocispecs.Descriptor{orgDescGo, orgDescSys} {
 		for _, i := range allCompression {
+			compSrc := compression.New(i)
 			for _, j := range allCompression {
 				i, j, orgDesc := i, j, orgDesc
+				compDest := compression.New(j)
 				eg.Go(func() error {
 					testName := fmt.Sprintf("%s=>%s", i, j)
 
 					// Prepare the source compression type
-					convertFunc, err := getConverter(egctx, store, orgDesc, i)
+					convertFunc, err := getConverter(egctx, store, orgDesc, compSrc)
 					require.NoError(t, err, testName)
 					srcDesc := &orgDesc
 					if convertFunc != nil {
@@ -1174,7 +1176,7 @@ func TestConversion(t *testing.T) {
 					}
 
 					// Convert the blob
-					convertFunc, err = getConverter(egctx, store, *srcDesc, j)
+					convertFunc, err = getConverter(egctx, store, *srcDesc, compDest)
 					require.NoError(t, err, testName)
 					resDesc := srcDesc
 					if convertFunc != nil {
@@ -1183,7 +1185,7 @@ func TestConversion(t *testing.T) {
 					}
 
 					// Check the uncompressed digest is the same as the original
-					convertFunc, err = getConverter(egctx, store, *resDesc, compression.Uncompressed)
+					convertFunc, err = getConverter(egctx, store, *resDesc, compression.New(compression.Uncompressed))
 					require.NoError(t, err, testName)
 					recreatedDesc := resDesc
 					if convertFunc != nil {
@@ -1338,10 +1340,7 @@ func TestGetRemotes(t *testing.T) {
 		ir := ir.(*immutableRef)
 		for _, compressionType := range []compression.Type{compression.Uncompressed, compression.Gzip, compression.EStargz, compression.Zstd} {
 			compressionType := compressionType
-			compressionopt := solver.CompressionOpt{
-				Type:  compressionType,
-				Force: true,
-			}
+			compressionopt := compression.New(compressionType).SetForce(true)
 			eg.Go(func() error {
 				remotes, err := ir.GetRemotes(egctx, true, compressionopt, false, nil)
 				require.NoError(t, err)
@@ -1430,7 +1429,7 @@ func TestGetRemotes(t *testing.T) {
 		require.True(t, ok, ir.ID())
 		for _, compressionType := range []compression.Type{compression.Uncompressed, compression.Gzip, compression.EStargz, compression.Zstd} {
 			compressionType := compressionType
-			compressionopt := solver.CompressionOpt{Type: compressionType}
+			compressionopt := compression.New(compressionType)
 			eg.Go(func() error {
 				remotes, err := ir.GetRemotes(egctx, false, compressionopt, true, nil)
 				require.NoError(t, err)
