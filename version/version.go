@@ -17,14 +17,46 @@
 
 package version
 
+import (
+	"regexp"
+	"sync"
+)
+
+const (
+	defaultVersion = "0.0.0+unknown"
+)
+
 var (
 	// Package is filled at linking time
 	Package = "github.com/moby/buildkit"
 
 	// Version holds the complete version number. Filled in at linking time.
-	Version = "0.0.0+unknown"
+	Version = defaultVersion
 
 	// Revision is filled with the VCS (e.g. git) revision being used to build
 	// the program at linking time.
 	Revision = ""
 )
+
+var (
+	reRelease *regexp.Regexp
+	reDev     *regexp.Regexp
+	reOnce    sync.Once
+)
+
+func UserAgent() string {
+	version := defaultVersion
+
+	reOnce.Do(func() {
+		reRelease = regexp.MustCompile(`^(v[0-9]+\.[0-9]+)\.[0-9]+$`)
+		reDev = regexp.MustCompile(`^(v[0-9]+\.[0-9]+)\.[0-9]+`)
+	})
+
+	if matches := reRelease.FindAllStringSubmatch(version, 1); len(matches) > 0 {
+		version = matches[0][1]
+	} else if matches := reDev.FindAllStringSubmatch(version, 1); len(matches) > 0 {
+		version = matches[0][1] + "-dev"
+	}
+
+	return "buildkit/" + version
+}
