@@ -48,7 +48,7 @@ type ImageWriter struct {
 	opt WriterOpt
 }
 
-func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool, compressionType compression.Type, buildInfoMode buildinfo.ExportMode, forceCompression bool, sessionID string) (*ocispecs.Descriptor, error) {
+func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool, comp compression.Config, buildInfoMode buildinfo.ExportMode, sessionID string) (*ocispecs.Descriptor, error) {
 	platformsBytes, ok := inp.Metadata[exptypes.ExporterPlatformsKey]
 
 	if len(inp.Refs) > 0 && !ok {
@@ -56,7 +56,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 	}
 
 	if len(inp.Refs) == 0 {
-		remotes, err := ic.exportLayers(ctx, compressionType, forceCompression, session.NewGroup(sessionID), inp.Ref)
+		remotes, err := ic.exportLayers(ctx, comp, session.NewGroup(sessionID), inp.Ref)
 		if err != nil {
 			return nil, err
 		}
@@ -94,7 +94,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 		refs = append(refs, r)
 	}
 
-	remotes, err := ic.exportLayers(ctx, compressionType, forceCompression, session.NewGroup(sessionID), refs...)
+	remotes, err := ic.exportLayers(ctx, comp, session.NewGroup(sessionID), refs...)
 	if err != nil {
 		return nil, err
 	}
@@ -165,20 +165,20 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 	return &idxDesc, nil
 }
 
-func (ic *ImageWriter) exportLayers(ctx context.Context, compressionType compression.Type, forceCompression bool, s session.Group, refs ...cache.ImmutableRef) ([]solver.Remote, error) {
-	span, ctx := tracing.StartSpan(ctx, "export layers", trace.WithAttributes(
-		attribute.String("exportLayers.compressionType", compressionType.String()),
-		attribute.Bool("exportLayers.forceCompression", forceCompression),
-	))
+func (ic *ImageWriter) exportLayers(ctx context.Context, comp compression.Config, s session.Group, refs ...cache.ImmutableRef) ([]solver.Remote, error) {
+	attr := []attribute.KeyValue{
+		attribute.String("exportLayers.compressionType", comp.Type.String()),
+		attribute.Bool("exportLayers.forceCompression", comp.Force),
+	}
+	if comp.Level != nil {
+		attr = append(attr, attribute.Int("exportLayers.compressionLevel", *comp.Level))
+	}
+	span, ctx := tracing.StartSpan(ctx, "export layers", trace.WithAttributes(attr...))
 
 	eg, ctx := errgroup.WithContext(ctx)
 	layersDone := oneOffProgress(ctx, "exporting layers")
 
 	out := make([]solver.Remote, len(refs))
-	compressionopt := solver.CompressionOpt{
-		Type:  compressionType,
-		Force: forceCompression,
-	}
 
 	for i, ref := range refs {
 		func(i int, ref cache.ImmutableRef) {
@@ -186,7 +186,7 @@ func (ic *ImageWriter) exportLayers(ctx context.Context, compressionType compres
 				return
 			}
 			eg.Go(func() error {
-				remotes, err := ref.GetRemotes(ctx, true, compressionopt, false, s)
+				remotes, err := ref.GetRemotes(ctx, true, comp, false, s)
 				if err != nil {
 					return err
 				}

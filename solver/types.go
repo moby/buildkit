@@ -102,13 +102,7 @@ type CacheExportOpt struct {
 	Session session.Group
 	// CompressionOpt is an option to specify the compression of the object to load.
 	// If specified, all objects that meet the option will be cached.
-	CompressionOpt *CompressionOpt
-}
-
-// CompressionOpt is compression information of a blob
-type CompressionOpt struct {
-	Type  compression.Type
-	Force bool
+	CompressionOpt *compression.Config
 }
 
 // CacheExporter can export the artifacts of the build chain

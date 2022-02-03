@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"compress/gzip"
 	"context"
 	"fmt"
 	"io"
@@ -34,7 +35,7 @@ var ErrNoBlobs = errors.Errorf("no blobs for snapshot")
 // a blob is missing and createIfNeeded is true, then the blob will be created, otherwise ErrNoBlobs will
 // be returned. Caller must hold a lease when calling this function.
 // If forceCompression is specified but the blob of compressionType doesn't exist, this function creates it.
-func (sr *immutableRef) computeBlobChain(ctx context.Context, createIfNeeded bool, compressionType compression.Type, forceCompression bool, s session.Group) error {
+func (sr *immutableRef) computeBlobChain(ctx context.Context, createIfNeeded bool, comp compression.Config, s session.Group) error {
 	if _, ok := leases.FromContext(ctx); !ok {
 		return errors.Errorf("missing lease requirement for computeBlobChain")
 	}
@@ -52,31 +53,31 @@ func (sr *immutableRef) computeBlobChain(ctx context.Context, createIfNeeded boo
 	// refs rather than every single layer present among their ancestors.
 	filter := sr.layerSet()
 
-	return computeBlobChain(ctx, sr, createIfNeeded, compressionType, forceCompression, s, filter)
+	return computeBlobChain(ctx, sr, createIfNeeded, comp, s, filter)
 }
 
 type compressor func(dest io.Writer, requiredMediaType string) (io.WriteCloser, error)
 
-func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool, compressionType compression.Type, forceCompression bool, s session.Group, filter map[string]struct{}) error {
+func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool, comp compression.Config, s session.Group, filter map[string]struct{}) error {
 	eg, ctx := errgroup.WithContext(ctx)
 	switch sr.kind() {
 	case Merge:
 		for _, parent := range sr.mergeParents {
 			parent := parent
 			eg.Go(func() error {
-				return computeBlobChain(ctx, parent, createIfNeeded, compressionType, forceCompression, s, filter)
+				return computeBlobChain(ctx, parent, createIfNeeded, comp, s, filter)
 			})
 		}
 	case Diff:
 		if _, ok := filter[sr.ID()]; !ok && sr.diffParents.upper != nil {
 			// This diff is just re-using the upper blob, compute that
 			eg.Go(func() error {
-				return computeBlobChain(ctx, sr.diffParents.upper, createIfNeeded, compressionType, forceCompression, s, filter)
+				return computeBlobChain(ctx, sr.diffParents.upper, createIfNeeded, comp, s, filter)
 			})
 		}
 	case Layer:
 		eg.Go(func() error {
-			return computeBlobChain(ctx, sr.layerParent, createIfNeeded, compressionType, forceCompression, s, filter)
+			return computeBlobChain(ctx, sr.layerParent, createIfNeeded, comp, s, filter)
 		})
 	}
 
@@ -93,19 +94,24 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 				var mediaType string
 				var compressorFunc compressor
 				var finalize func(context.Context, content.Store) (map[string]string, error)
-				switch compressionType {
+				switch comp.Type {
 				case compression.Uncompressed:
 					mediaType = ocispecs.MediaTypeImageLayer
 				case compression.Gzip:
+					compressorFunc = func(dest io.Writer, _ string) (io.WriteCloser, error) {
+						return gzipWriter(comp)(dest)
+					}
 					mediaType = ocispecs.MediaTypeImageLayerGzip
 				case compression.EStargz:
-					compressorFunc, finalize = compressEStargz()
+					compressorFunc, finalize = compressEStargz(comp)
 					mediaType = ocispecs.MediaTypeImageLayerGzip
 				case compression.Zstd:
-					compressorFunc = zstdWriter
+					compressorFunc = func(dest io.Writer, _ string) (io.WriteCloser, error) {
+						return zstdWriter(comp)(dest)
+					}
 					mediaType = ocispecs.MediaTypeImageLayer + "+zstd"
 				default:
-					return nil, errors.Errorf("unknown layer compression type: %q", compressionType)
+					return nil, errors.Errorf("unknown layer compression type: %q", comp.Type)
 				}
 
 				var lowerRef *immutableRef
@@ -235,7 +241,7 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 					return nil, errors.Errorf("unknown layer compression type")
 				}
 
-				if err := sr.setBlob(ctx, compressionType, desc); err != nil {
+				if err := sr.setBlob(ctx, comp.Type, desc); err != nil {
 					return nil, err
 				}
 				return nil, nil
@@ -244,9 +250,9 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 				return err
 			}
 
-			if forceCompression {
-				if err := ensureCompression(ctx, sr, compressionType, s); err != nil {
-					return errors.Wrapf(err, "failed to ensure compression type of %q", compressionType)
+			if comp.Force {
+				if err := ensureCompression(ctx, sr, comp, s); err != nil {
+					return errors.Wrapf(err, "failed to ensure compression type of %q", comp.Type)
 				}
 			}
 			return nil
@@ -412,15 +418,15 @@ func isTypeWindows(sr *immutableRef) bool {
 }
 
 // ensureCompression ensures the specified ref has the blob of the specified compression Type.
-func ensureCompression(ctx context.Context, ref *immutableRef, compressionType compression.Type, s session.Group) error {
-	_, err := g.Do(ctx, fmt.Sprintf("%s-%d", ref.ID(), compressionType), func(ctx context.Context) (interface{}, error) {
+func ensureCompression(ctx context.Context, ref *immutableRef, comp compression.Config, s session.Group) error {
+	_, err := g.Do(ctx, fmt.Sprintf("%s-%d", ref.ID(), comp.Type), func(ctx context.Context) (interface{}, error) {
 		desc, err := ref.ociDesc(ctx, ref.descHandlers)
 		if err != nil {
 			return nil, err
 		}
 
 		// Resolve converters
-		layerConvertFunc, err := getConverter(ctx, ref.cm.ContentStore, desc, compressionType)
+		layerConvertFunc, err := getConverter(ctx, ref.cm.ContentStore, desc, comp)
 		if err != nil {
 			return nil, err
 		} else if layerConvertFunc == nil {
@@ -430,11 +436,11 @@ func ensureCompression(ctx context.Context, ref *immutableRef, compressionType c
 				// This ref can be used as the specified compressionType. Keep it lazy.
 				return nil, nil
 			}
-			return nil, ref.addCompressionBlob(ctx, desc, compressionType)
+			return nil, ref.addCompressionBlob(ctx, desc, comp.Type)
 		}
 
 		// First, lookup local content store
-		if _, err := ref.getCompressionBlob(ctx, compressionType); err == nil {
+		if _, err := ref.getCompressionBlob(ctx, comp.Type); err == nil {
 			return nil, nil // found the compression variant. no need to convert.
 		}
 
@@ -453,7 +459,7 @@ func ensureCompression(ctx context.Context, ref *immutableRef, compressionType c
 		}
 
 		// Start to track converted layer
-		if err := ref.addCompressionBlob(ctx, *newDesc, compressionType); err != nil {
+		if err := ref.addCompressionBlob(ctx, *newDesc, comp.Type); err != nil {
 			return nil, errors.Wrapf(err, "failed to add compression blob")
 		}
 		return nil, nil
@@ -461,6 +467,37 @@ func ensureCompression(ctx context.Context, ref *immutableRef, compressionType c
 	return err
 }
 
-func zstdWriter(dest io.Writer, requiredMediaType string) (io.WriteCloser, error) {
-	return zstd.NewWriter(dest)
+func gzipWriter(comp compression.Config) func(io.Writer) (io.WriteCloser, error) {
+	return func(dest io.Writer) (io.WriteCloser, error) {
+		level := gzip.DefaultCompression
+		if comp.Level != nil {
+			level = *comp.Level
+		}
+		return gzip.NewWriterLevel(dest, level)
+	}
+}
+
+func zstdWriter(comp compression.Config) func(io.Writer) (io.WriteCloser, error) {
+	return func(dest io.Writer) (io.WriteCloser, error) {
+		level := zstd.SpeedDefault
+		if comp.Level != nil {
+			level = toZstdEncoderLevel(*comp.Level)
+		}
+		return zstd.NewWriter(dest, zstd.WithEncoderLevel(level))
+	}
+}
+
+func toZstdEncoderLevel(level int) zstd.EncoderLevel {
+	// map zstd compression levels to go-zstd levels
+	// once we also have c based implementation move this to helper pkg
+	if level < 0 {
+		return zstd.SpeedDefault
+	} else if level < 3 {
+		return zstd.SpeedFastest
+	} else if level < 7 {
+		return zstd.SpeedDefault
+	} else if level < 9 {
+		return zstd.SpeedBetterCompression
+	}
+	return zstd.SpeedBestCompression
 }

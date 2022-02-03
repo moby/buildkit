@@ -19,7 +19,6 @@ import (
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
-	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/buildinfo"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/contentutil"
@@ -42,6 +41,7 @@ const (
 	keyNameCanonical    = "name-canonical"
 	keyLayerCompression = "compression"
 	keyForceCompression = "force-compression"
+	keyCompressionLevel = "compression-level"
 	keyBuildInfo        = "buildinfo"
 	ociTypes            = "oci-mediatypes"
 )
@@ -162,9 +162,16 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 			}
 			b, err := strconv.ParseBool(v)
 			if err != nil {
-				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
+				return nil, errors.Wrapf(err, "non-bool value %s specified for %s", v, k)
 			}
 			i.forceCompression = b
+		case keyCompressionLevel:
+			ii, err := strconv.ParseInt(v, 10, 64)
+			if err != nil {
+				return nil, errors.Wrapf(err, "non-integer value %s specified for %s", v, k)
+			}
+			v := int(ii)
+			i.compressionLevel = &v
 		case keyBuildInfo:
 			if v == "" {
 				continue
@@ -200,6 +207,7 @@ type imageExporterInstance struct {
 	danglingPrefix   string
 	layerCompression compression.Type
 	forceCompression bool
+	compressionLevel *int
 	buildInfoMode    buildinfo.ExportMode
 	meta             map[string][]byte
 }
@@ -210,11 +218,16 @@ func (e *imageExporterInstance) Name() string {
 
 func (e *imageExporterInstance) Config() exporter.Config {
 	return exporter.Config{
-		Compression: solver.CompressionOpt{
-			Type:  e.layerCompression,
-			Force: e.forceCompression,
-		},
+		Compression: e.compression(),
 	}
+}
+
+func (e *imageExporterInstance) compression() compression.Config {
+	c := compression.New(e.layerCompression).SetForce(e.forceCompression)
+	if e.compressionLevel != nil {
+		c = c.SetLevel(*e.compressionLevel)
+	}
+	return c
 }
 
 func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source, sessionID string) (map[string]string, error) {
@@ -231,7 +244,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	}
 	defer done(context.TODO())
 
-	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes, e.layerCompression, e.buildInfoMode, e.forceCompression, sessionID)
+	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes, e.compression(), e.buildInfoMode, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -297,12 +310,8 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 			if e.push {
 				annotations := map[digest.Digest]map[string]string{}
 				mprovider := contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
-				compressionopt := solver.CompressionOpt{
-					Type:  e.layerCompression,
-					Force: e.forceCompression,
-				}
 				if src.Ref != nil {
-					remotes, err := src.Ref.GetRemotes(ctx, false, compressionopt, false, session.NewGroup(sessionID))
+					remotes, err := src.Ref.GetRemotes(ctx, false, e.compression(), false, session.NewGroup(sessionID))
 					if err != nil {
 						return nil, err
 					}
@@ -314,7 +323,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 				}
 				if len(src.Refs) > 0 {
 					for _, r := range src.Refs {
-						remotes, err := r.GetRemotes(ctx, false, compressionopt, false, session.NewGroup(sessionID))
+						remotes, err := r.GetRemotes(ctx, false, e.compression(), false, session.NewGroup(sessionID))
 						if err != nil {
 							return nil, err
 						}
@@ -368,11 +377,7 @@ func (e *imageExporterInstance) unpackImage(ctx context.Context, img images.Imag
 		}
 	}
 
-	compressionopt := solver.CompressionOpt{
-		Type:  e.layerCompression,
-		Force: e.forceCompression,
-	}
-	remotes, err := topLayerRef.GetRemotes(ctx, true, compressionopt, false, s)
+	remotes, err := topLayerRef.GetRemotes(ctx, true, e.compression(), false, s)
 	if err != nil {
 		return err
 	}

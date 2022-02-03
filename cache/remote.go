@@ -31,7 +31,7 @@ type Unlazier interface {
 // layers. If all is true, all available chains that has the specified compression type of topmost blob are
 // appended to the result.
 // Note: Use WorkerRef.GetRemotes instead as moby integration requires custom GetRemotes implementation.
-func (sr *immutableRef) GetRemotes(ctx context.Context, createIfNeeded bool, compressionopt solver.CompressionOpt, all bool, s session.Group) ([]*solver.Remote, error) {
+func (sr *immutableRef) GetRemotes(ctx context.Context, createIfNeeded bool, compressionopt compression.Config, all bool, s session.Group) ([]*solver.Remote, error) {
 	ctx, done, err := leaseutil.WithLease(ctx, sr.cm.LeaseManager, leaseutil.MakeTemporary)
 	if err != nil {
 		return nil, err
@@ -136,11 +136,8 @@ func getAvailableBlobs(ctx context.Context, cs content.Store, chain *solver.Remo
 	return res, nil
 }
 
-func (sr *immutableRef) getRemote(ctx context.Context, createIfNeeded bool, compressionopt solver.CompressionOpt, s session.Group) (*solver.Remote, error) {
-	compressionType := compressionopt.Type
-	forceCompression := compressionopt.Force
-
-	err := sr.computeBlobChain(ctx, createIfNeeded, compressionType, forceCompression, s)
+func (sr *immutableRef) getRemote(ctx context.Context, createIfNeeded bool, comp compression.Config, s session.Group) (*solver.Remote, error) {
+	err := sr.computeBlobChain(ctx, createIfNeeded, comp, s)
 	if err != nil {
 		return nil, err
 	}
@@ -213,15 +210,15 @@ func (sr *immutableRef) getRemote(ctx context.Context, createIfNeeded bool, comp
 			}
 		}
 
-		if forceCompression {
-			if needs, err := needsConversion(ctx, sr.cm.ContentStore, desc, compressionType); err != nil {
+		if comp.Force {
+			if needs, err := needsConversion(ctx, sr.cm.ContentStore, desc, comp.Type); err != nil {
 				return nil, err
 			} else if needs {
 				// ensure the compression type.
 				// compressed blob must be created and stored in the content store.
-				blobDesc, err := ref.getCompressionBlob(ctx, compressionType)
+				blobDesc, err := ref.getCompressionBlob(ctx, comp.Type)
 				if err != nil {
-					return nil, errors.Wrapf(err, "compression blob for %q not found", compressionType)
+					return nil, errors.Wrapf(err, "compression blob for %q not found", comp.Type)
 				}
 				newDesc := desc
 				newDesc.MediaType = blobDesc.MediaType
