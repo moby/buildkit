@@ -146,7 +146,7 @@ github.com/containerd/fifo
 # github.com/containerd/fuse-overlayfs-snapshotter v1.0.2
 ## explicit; go 1.16
 github.com/containerd/fuse-overlayfs-snapshotter
-# github.com/containerd/go-cni v1.1.1
+# github.com/containerd/go-cni v1.1.1 => github.com/containerd/go-cni v1.1.1-0.20211026134925-aa8bf14323a5
 ## explicit; go 1.13
 github.com/containerd/go-cni
 # github.com/containerd/go-runc v1.0.0
@@ -716,4 +716,5 @@ gotest.tools/v3/internal/difflib
 gotest.tools/v3/internal/format
 gotest.tools/v3/internal/source
 gotest.tools/v3/poll
+# github.com/containerd/go-cni => github.com/containerd/go-cni v1.1.1-0.20211026134925-aa8bf14323a5
 # github.com/docker/docker => github.com/docker/docker v20.10.3-0.20211208011758-87521affb077+incompatible

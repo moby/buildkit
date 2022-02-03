@@ -124,4 +124,7 @@ require (
 	gotest.tools/v3 v3.0.3 // indirect
 )
 
-replace github.com/docker/docker => github.com/docker/docker v20.10.3-0.20211208011758-87521affb077+incompatible
+replace (
+	github.com/containerd/go-cni => github.com/containerd/go-cni v1.1.1-0.20211026134925-aa8bf14323a5 // https://github.com/moby/buildkit/pull/2589#issuecomment-1028515568
+	github.com/docker/docker => github.com/docker/docker v20.10.3-0.20211208011758-87521affb077+incompatible
+)
