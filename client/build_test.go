@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -52,6 +53,7 @@ func TestClientGatewayIntegration(t *testing.T) {
 		testClientGatewaySlowCacheExecError,
 		testClientGatewayExecFileActionError,
 		testClientGatewayContainerExtraHosts,
+		testClientGatewayContainerSignal,
 		testWarnings,
 	), integration.WithMirroredImages(integration.OfficialImages("busybox:latest")))
 
@@ -1890,6 +1892,104 @@ func testClientGatewayContainerHostNetworking(t *testing.T, sb integration.Sandb
 	}
 	_, err = c.Build(ctx, solveOpts, product, b, nil)
 	require.NoError(t, err)
+
+	checkAllReleasable(t, c, sb, true)
+}
+
+// testClientGatewayContainerSignal is testing that we can send a signal
+func testClientGatewayContainerSignal(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	ctx := sb.Context()
+
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	product := "buildkit_test"
+
+	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
+		ctx, timeout := context.WithTimeout(ctx, 10*time.Second)
+		defer timeout()
+
+		st := llb.Image("busybox:latest")
+
+		def, err := st.Marshal(ctx)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to marshal state")
+		}
+
+		r, err := c.Solve(ctx, client.SolveRequest{
+			Definition: def.ToPB(),
+		})
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to solve")
+		}
+
+		ctr1, err := c.NewContainer(ctx, client.NewContainerRequest{
+			Mounts: []client.Mount{{
+				Dest:      "/",
+				MountType: pb.MountType_BIND,
+				Ref:       r.Ref,
+			}},
+		})
+		require.NoError(t, err)
+		defer ctr1.Release(ctx)
+
+		pid1, err := ctr1.Start(ctx, client.StartRequest{
+			Args: []string{"sh", "-c", `trap 'kill $(jobs -p); exit 99' HUP; sleep 10 & wait`},
+		})
+		require.NoError(t, err)
+
+		// allow for the shell script to setup the trap before we signal it
+		time.Sleep(time.Second)
+
+		err = pid1.Signal(ctx, syscall.SIGHUP)
+		require.NoError(t, err)
+
+		err = pid1.Wait()
+		var exitError *gatewayapi.ExitError
+		require.ErrorAs(t, err, &exitError)
+		require.Equal(t, uint32(99), exitError.ExitCode)
+
+		// Now try again to signal an exec process
+
+		ctr2, err := c.NewContainer(ctx, client.NewContainerRequest{
+			Mounts: []client.Mount{{
+				Dest:      "/",
+				MountType: pb.MountType_BIND,
+				Ref:       r.Ref,
+			}},
+		})
+		require.NoError(t, err)
+		defer ctr2.Release(ctx)
+
+		pid1, err = ctr2.Start(ctx, client.StartRequest{
+			Args: []string{"sleep", "10"},
+		})
+		require.NoError(t, err)
+
+		pid2, err := ctr2.Start(ctx, client.StartRequest{
+			Args: []string{"sh", "-c", `trap 'kill $(jobs -p); exit 111' INT; sleep 10 & wait`},
+		})
+		require.NoError(t, err)
+
+		// allow for the shell script to setup the trap before we signal it
+		time.Sleep(time.Second)
+
+		err = pid2.Signal(ctx, syscall.SIGINT)
+		require.NoError(t, err)
+
+		err = pid2.Wait()
+		require.ErrorAs(t, err, &exitError)
+		require.Equal(t, uint32(111), exitError.ExitCode)
+
+		pid1.Signal(ctx, syscall.SIGKILL)
+		pid1.Wait()
+		return &client.Result{}, err
+	}
+
+	_, err = c.Build(ctx, SolveOpt{}, product, b, nil)
+	require.Error(t, err)
 
 	checkAllReleasable(t, c, sb, true)
 }

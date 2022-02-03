@@ -199,7 +199,7 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.M
 		}
 	}()
 
-	err = w.runProcess(ctx, task, process.Resize, func() {
+	err = w.runProcess(ctx, task, process.Resize, process.Signal, func() {
 		startedOnce.Do(func() {
 			if started != nil {
 				close(started)
@@ -293,7 +293,7 @@ func (w *containerdExecutor) Exec(ctx context.Context, id string, process execut
 		return errors.WithStack(err)
 	}
 
-	err = w.runProcess(ctx, taskProcess, process.Resize, nil)
+	err = w.runProcess(ctx, taskProcess, process.Resize, process.Signal, nil)
 	return err
 }
 
@@ -310,7 +310,7 @@ func fixProcessOutput(process *executor.ProcessInfo) {
 	}
 }
 
-func (w *containerdExecutor) runProcess(ctx context.Context, p containerd.Process, resize <-chan executor.WinSize, started func()) error {
+func (w *containerdExecutor) runProcess(ctx context.Context, p containerd.Process, resize <-chan executor.WinSize, signal <-chan syscall.Signal, started func()) error {
 	// Not using `ctx` here because the context passed only affects the statusCh which we
 	// don't want cancelled when ctx.Done is sent.  We want to process statusCh on cancel.
 	statusCh, err := p.Wait(context.Background())
@@ -335,22 +335,38 @@ func (w *containerdExecutor) runProcess(ctx context.Context, p containerd.Proces
 
 	p.CloseIO(ctx, containerd.WithStdinCloser)
 
-	// resize in separate go loop so it does not potentially block
-	// the container cancel/exit status loop below.
-	resizeCtx, resizeCancel := context.WithCancel(ctx)
-	defer resizeCancel()
+	// handle signals (and resize) in separate go loop so it does not
+	// potentially block the container cancel/exit status loop below.
+	eventCtx, eventCancel := context.WithCancel(ctx)
+	defer eventCancel()
 	go func() {
 		for {
 			select {
-			case <-resizeCtx.Done():
+			case <-eventCtx.Done():
 				return
 			case size, ok := <-resize:
 				if !ok {
 					return // chan closed
 				}
-				err = p.Resize(resizeCtx, size.Cols, size.Rows)
+				err = p.Resize(eventCtx, size.Cols, size.Rows)
 				if err != nil {
-					bklog.G(resizeCtx).Warnf("Failed to resize %s: %s", p.ID(), err)
+					bklog.G(eventCtx).Warnf("Failed to resize %s: %s", p.ID(), err)
+				}
+			}
+		}
+	}()
+	go func() {
+		for {
+			select {
+			case <-eventCtx.Done():
+				return
+			case sig, ok := <-signal:
+				if !ok {
+					return // chan closed
+				}
+				err = p.Kill(eventCtx, sig)
+				if err != nil {
+					bklog.G(eventCtx).Warnf("Failed to signal %s: %s", p.ID(), err)
 				}
 			}
 		}
