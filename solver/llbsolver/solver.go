@@ -329,7 +329,7 @@ func inlineCache(ctx context.Context, e remotecache.Exporter, res solver.CachedR
 }
 
 func withDescHandlerCacheOpts(ctx context.Context, ref cache.ImmutableRef) context.Context {
-	return solver.WithCacheOptGetter(ctx, func(keys ...interface{}) map[interface{}]interface{} {
+	return solver.WithCacheOptGetter(ctx, func(includeAncestors bool, keys ...interface{}) map[interface{}]interface{} {
 		vals := make(map[interface{}]interface{})
 		for _, k := range keys {
 			if key, ok := k.(cache.DescHandlerKey); ok {
