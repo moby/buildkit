@@ -338,13 +338,14 @@ func (c *Controller) Status(req *controlapi.StatusRequest, stream controlapi.Con
 				sr := controlapi.StatusResponse{}
 				for _, v := range ss.Vertexes {
 					sr.Vertexes = append(sr.Vertexes, &controlapi.Vertex{
-						Digest:    v.Digest,
-						Inputs:    v.Inputs,
-						Name:      v.Name,
-						Started:   v.Started,
-						Completed: v.Completed,
-						Error:     v.Error,
-						Cached:    v.Cached,
+						Digest:        v.Digest,
+						Inputs:        v.Inputs,
+						Name:          v.Name,
+						Started:       v.Started,
+						Completed:     v.Completed,
+						Error:         v.Error,
+						Cached:        v.Cached,
+						ProgressGroup: v.ProgressGroup,
 					})
 				}
 				for _, v := range ss.Statuses {

@@ -71,6 +71,7 @@ func (d *diffOp) CacheMap(ctx context.Context, group session.Group, index int) (
 		WriterFactory: progress.FromContext(ctx),
 		Digest:        d.vtx.Digest(),
 		Name:          d.vtx.Name(),
+		ProgressGroup: d.vtx.Options().ProgressGroup,
 	}
 	cm.Opts[cache.ProgressKey{}] = d.pg
 

@@ -889,9 +889,10 @@ func initClientVertex(v Vertex) client.Vertex {
 		inputDigests = append(inputDigests, inp.Vertex.Digest())
 	}
 	return client.Vertex{
-		Inputs: inputDigests,
-		Name:   v.Name(),
-		Digest: v.Digest(),
+		Inputs:        inputDigests,
+		Name:          v.Name(),
+		Digest:        v.Digest(),
+		ProgressGroup: v.Options().ProgressGroup,
 	}
 }
 

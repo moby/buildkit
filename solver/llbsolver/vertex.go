@@ -162,6 +162,7 @@ func newVertex(dgst digest.Digest, op *pb.Op, opMeta *pb.OpMetadata, load func(d
 		if opMeta.ExportCache != nil {
 			opt.ExportCache = &opMeta.ExportCache.Value
 		}
+		opt.ProgressGroup = opMeta.ProgressGroup
 	}
 	for _, fn := range opts {
 		if err := fn(op, opMeta, &opt); err != nil {

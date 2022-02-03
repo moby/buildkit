@@ -63,6 +63,7 @@ func (m *mergeOp) CacheMap(ctx context.Context, group session.Group, index int) 
 		WriterFactory: progress.FromContext(ctx),
 		Digest:        m.vtx.Digest(),
 		Name:          m.vtx.Name(),
+		ProgressGroup: m.vtx.Options().ProgressGroup,
 	}
 	cm.Opts[cache.ProgressKey{}] = m.pg
 

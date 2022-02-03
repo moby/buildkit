@@ -725,6 +725,7 @@ func (cm *cacheManager) createMergeRef(ctx context.Context, parents parentRefs, 
 	}
 	if len(parents.mergeParents) == 1 {
 		// merge of 1 thing is that thing
+		parents.mergeParents[0].progress = pg
 		return parents.mergeParents[0], nil
 	}
 

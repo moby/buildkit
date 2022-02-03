@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/progress"
 	digest "github.com/opencontainers/go-digest"
 )
@@ -18,6 +19,7 @@ type Controller struct {
 	Digest        digest.Digest
 	Name          string
 	WriterFactory progress.WriterFactory
+	ProgressGroup *pb.ProgressGroup
 }
 
 var _ progress.Controller = &Controller{}
@@ -32,9 +34,10 @@ func (c *Controller) Start(ctx context.Context) (context.Context, func(error)) {
 
 		if c.Digest != "" {
 			c.writer.Write(c.Digest.String(), client.Vertex{
-				Digest:  c.Digest,
-				Name:    c.Name,
-				Started: c.started,
+				Digest:        c.Digest,
+				Name:          c.Name,
+				Started:       c.started,
+				ProgressGroup: c.ProgressGroup,
 			})
 		}
 	}
@@ -47,11 +50,12 @@ func (c *Controller) Start(ctx context.Context) (context.Context, func(error)) {
 			}
 			if c.Digest != "" {
 				c.writer.Write(c.Digest.String(), client.Vertex{
-					Digest:    c.Digest,
-					Name:      c.Name,
-					Started:   c.started,
-					Completed: &now,
-					Error:     errString,
+					Digest:        c.Digest,
+					Name:          c.Name,
+					Started:       c.started,
+					Completed:     &now,
+					Error:         errString,
+					ProgressGroup: c.ProgressGroup,
 				})
 			}
 			c.writer.Close()
