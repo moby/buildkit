@@ -23,6 +23,7 @@ import (
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"github.com/moby/buildkit/frontend/dockerfile/shell"
+	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/suggest"
@@ -1076,6 +1077,9 @@ func dispatchCopyFileOp(d *dispatchState, cfg copyConfig) error {
 	}
 
 	if cfg.opt.llbCaps.Supports(pb.CapMergeOp) == nil && cfg.link && cfg.chmod == "" {
+		d.cmdIndex-- // prefixCommand increases it
+		fileOpt = append(fileOpt, llb.ProgressGroup(identity.NewID(), prefixCommand(d, name, d.prefixPlatform, &platform, env)))
+		d.cmdIndex--
 		mergeOpt := append(fileOpt, llb.WithCustomName(prefixCommand(d, "LINK "+name, d.prefixPlatform, &platform, env)))
 		d.state = llb.Merge([]llb.State{d.state, llb.Scratch().File(a, fileOpt...)}, mergeOpt...)
 	} else {
