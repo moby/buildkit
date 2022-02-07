@@ -647,10 +647,10 @@ func (s *sharedOp) LoadCache(ctx context.Context, rec *CacheRecord) (Result, err
 	}
 	// no cache hit. start evaluating the node
 	span, ctx := tracing.StartSpan(ctx, "load cache: "+s.st.vtx.Name())
-	notifyStarted(ctx, &s.st.clientVertex, true)
+	notifyStarted(ctx, &s.st.clientVertex, true, "load-cache")
 	res, err := s.Cache().Load(withAncestorCacheOpts(ctx, s.st), rec)
 	tracing.FinishWithError(span, err)
-	notifyCompleted(ctx, &s.st.clientVertex, err, true)
+	notifyCompleted(ctx, &s.st.clientVertex, err, true, "load-cache")
 	return res, err
 }
 
@@ -662,7 +662,8 @@ func (s *sharedOp) CalcSlowCache(ctx context.Context, index Index, p PreprocessF
 		err = errdefs.WithOp(err, s.st.vtx.Sys())
 		err = errdefs.WrapVertex(err, s.st.origDigest)
 	}()
-	key, err := s.g.Do(ctx, fmt.Sprintf("slow-compute-%d", index), func(ctx context.Context) (interface{}, error) {
+	flightControlKey := fmt.Sprintf("slow-compute-%d", index)
+	key, err := s.g.Do(ctx, flightControlKey, func(ctx context.Context) (interface{}, error) {
 		s.slowMu.Lock()
 		// TODO: add helpers for these stored values
 		if res, ok := s.slowCacheRes[index]; ok {
@@ -726,8 +727,8 @@ func (s *sharedOp) CalcSlowCache(ctx context.Context, index Index, p PreprocessF
 		if s.st.mspan.Span != nil {
 			ctx = trace.ContextWithSpan(ctx, s.st.mspan)
 		}
-		notifyStarted(ctx, &s.st.clientVertex, false)
-		notifyCompleted(ctx, &s.st.clientVertex, err, false)
+		notifyStarted(ctx, &s.st.clientVertex, false, flightControlKey)
+		notifyCompleted(ctx, &s.st.clientVertex, err, false, flightControlKey)
 		return "", err
 	}
 	return key.(digest.Digest), nil
@@ -742,7 +743,8 @@ func (s *sharedOp) CacheMap(ctx context.Context, index int) (resp *cacheMapResp,
 	if err != nil {
 		return nil, err
 	}
-	res, err := s.g.Do(ctx, fmt.Sprintf("cachemap-%d", index), func(ctx context.Context) (ret interface{}, retErr error) {
+	flightControlKey := fmt.Sprintf("cachemap-%d", index)
+	res, err := s.g.Do(ctx, flightControlKey, func(ctx context.Context) (ret interface{}, retErr error) {
 		if s.cacheRes != nil && s.cacheDone || index < len(s.cacheRes) {
 			return s.cacheRes, nil
 		}
@@ -757,10 +759,10 @@ func (s *sharedOp) CacheMap(ctx context.Context, index int) (resp *cacheMapResp,
 		if len(s.st.vtx.Inputs()) == 0 {
 			// no cache hit. start evaluating the node
 			span, ctx := tracing.StartSpan(ctx, "cache request: "+s.st.vtx.Name())
-			notifyStarted(ctx, &s.st.clientVertex, false)
+			notifyStarted(ctx, &s.st.clientVertex, false, flightControlKey)
 			defer func() {
 				tracing.FinishWithError(span, retErr)
-				notifyCompleted(ctx, &s.st.clientVertex, retErr, false)
+				notifyCompleted(ctx, &s.st.clientVertex, retErr, false, flightControlKey)
 			}()
 		}
 		res, done, err := op.CacheMap(ctx, s.st, len(s.cacheRes))
@@ -805,7 +807,8 @@ func (s *sharedOp) Exec(ctx context.Context, inputs []Result) (outputs []Result,
 	if err != nil {
 		return nil, nil, err
 	}
-	res, err := s.g.Do(ctx, "exec", func(ctx context.Context) (ret interface{}, retErr error) {
+	flightControlKey := "exec"
+	res, err := s.g.Do(ctx, flightControlKey, func(ctx context.Context) (ret interface{}, retErr error) {
 		if s.execRes != nil || s.execErr != nil {
 			return s.execRes, s.execErr
 		}
@@ -823,10 +826,10 @@ func (s *sharedOp) Exec(ctx context.Context, inputs []Result) (outputs []Result,
 
 		// no cache hit. start evaluating the node
 		span, ctx := tracing.StartSpan(ctx, s.st.vtx.Name())
-		notifyStarted(ctx, &s.st.clientVertex, false)
+		notifyStarted(ctx, &s.st.clientVertex, false, flightControlKey)
 		defer func() {
 			tracing.FinishWithError(span, retErr)
-			notifyCompleted(ctx, &s.st.clientVertex, retErr, false)
+			notifyCompleted(ctx, &s.st.clientVertex, retErr, false, flightControlKey)
 		}()
 
 		res, err := op.Exec(ctx, s.st, inputs)
@@ -926,17 +929,18 @@ func (v *vertexWithCacheOptions) Inputs() []Edge {
 	return v.inputs
 }
 
-func notifyStarted(ctx context.Context, v *client.Vertex, cached bool) {
+func notifyStarted(ctx context.Context, v *client.Vertex, cached bool, idSuffixes ...string) {
 	pw, _, _ := progress.NewFromContext(ctx)
 	defer pw.Close()
 	now := time.Now()
 	v.Started = &now
 	v.Completed = nil
 	v.Cached = cached
-	pw.Write(v.Digest.String(), *v)
+	id := v.Digest.String() + strings.Join(idSuffixes, "-")
+	pw.Write(id, *v)
 }
 
-func notifyCompleted(ctx context.Context, v *client.Vertex, err error, cached bool) {
+func notifyCompleted(ctx context.Context, v *client.Vertex, err error, cached bool, idSuffixes ...string) {
 	pw, _, _ := progress.NewFromContext(ctx)
 	defer pw.Close()
 	now := time.Now()
@@ -950,7 +954,8 @@ func notifyCompleted(ctx context.Context, v *client.Vertex, err error, cached bo
 	} else {
 		v.Error = ""
 	}
-	pw.Write(v.Digest.String(), *v)
+	id := v.Digest.String() + strings.Join(idSuffixes, "-")
+	pw.Write(id, *v)
 }
 
 type SlowCacheError struct {
