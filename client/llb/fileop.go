@@ -683,12 +683,18 @@ func (f *FileOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 		f.constraints.Platform = p
 	}
 
+	state := newMarshalState(ctx)
+	for _, st := range state.actions {
+		if adder, isCapAdder := st.action.(capAdder); isCapAdder {
+			adder.addCaps(f)
+		}
+	}
+
 	pop, md := MarshalConstraints(c, &f.constraints)
 	pop.Op = &pb.Op_File{
 		File: pfo,
 	}
 
-	state := newMarshalState(ctx)
 	_, err := state.add(f.action, c)
 	if err != nil {
 		return "", nil, nil, nil, err
@@ -696,10 +702,6 @@ func (f *FileOp) Marshal(ctx context.Context, c *Constraints) (digest.Digest, []
 	pop.Inputs = state.inputs
 
 	for i, st := range state.actions {
-		if adder, isCapAdder := st.action.(capAdder); isCapAdder {
-			adder.addCaps(f)
-		}
-
 		output := pb.OutputIndex(-1)
 		if i+1 == len(state.actions) {
 			output = 0
