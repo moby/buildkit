@@ -185,7 +185,7 @@ func TestShellParser4Words(t *testing.T) {
 }
 
 func TestGetEnv(t *testing.T) {
-	sw := &shellWord{envs: nil}
+	sw := &shellWord{envs: nil, matches: make(map[string]struct{})}
 
 	getEnv := func(name string) string {
 		value, _ := sw.getEnv(name)
@@ -224,4 +224,27 @@ func TestGetEnv(t *testing.T) {
 	if getEnv("car") != "bike" {
 		t.Fatal("8 - 'car' should map to 'bike'")
 	}
+}
+
+func TestProcessWithMatches(t *testing.T) {
+	shlex := NewLex('\\')
+
+	w, matches, err := shlex.ProcessWordWithMatches("foo ${BAR} ${UNUSED}", map[string]string{
+		"ANOTHER": "bar",
+		"BAR":     "baz",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "foo baz ", w)
+
+	require.Equal(t, 1, len(matches))
+	_, ok := matches["BAR"]
+	require.True(t, ok)
+
+	w, matches, err = shlex.ProcessWordWithMatches("foo ${BAR:-abc} ${UNUSED}", map[string]string{
+		"ANOTHER": "bar",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "foo abc ", w)
+
+	require.Equal(t, 0, len(matches))
 }
