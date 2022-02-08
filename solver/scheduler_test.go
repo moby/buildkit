@@ -310,7 +310,6 @@ func TestSingleLevelCache(t *testing.T) {
 
 	require.NoError(t, j2.Discard())
 	j2 = nil
-
 }
 
 func TestSingleLevelCacheParallel(t *testing.T) {
@@ -388,7 +387,6 @@ func TestSingleLevelCacheParallel(t *testing.T) {
 	require.Equal(t, int64(1), *g1.Vertex.(*vertex).cacheCallCount)
 	// only one execution ran
 	require.Equal(t, int64(1), *g0.Vertex.(*vertex).execCallCount+*g1.Vertex.(*vertex).execCallCount)
-
 }
 
 func TestMultiLevelCacheParallel(t *testing.T) {
@@ -525,7 +523,6 @@ func TestSingleCancelCache(t *testing.T) {
 
 	require.NoError(t, j0.Discard())
 	j0 = nil
-
 }
 func TestSingleCancelExec(t *testing.T) {
 	t.Parallel()
@@ -729,7 +726,6 @@ func TestMultiLevelCalculation(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, unwrapInt(res), 42)
 	require.Equal(t, len(bi), 0)
-
 }
 
 func TestHugeGraph(t *testing.T) {
@@ -1139,7 +1135,6 @@ func TestSlowCache(t *testing.T) {
 
 	require.NoError(t, j1.Discard())
 	j1 = nil
-
 }
 
 // TestParallelInputs validates that inputs are processed in parallel
@@ -1334,7 +1329,6 @@ func TestErrorReturns(t *testing.T) {
 
 	require.NoError(t, j2.Discard())
 	j1 = nil
-
 }
 
 func TestMultipleCacheSources(t *testing.T) {
@@ -1893,7 +1887,6 @@ func TestSubbuild(t *testing.T) {
 
 	require.NoError(t, j1.Discard())
 	j1 = nil
-
 }
 
 func TestCacheWithSelector(t *testing.T) {
@@ -3817,10 +3810,11 @@ func (t *testExporterTarget) Add(dgst digest.Digest) CacheExporterRecord {
 	t.records = append(t.records, r)
 	return r
 }
+
 func (t *testExporterTarget) Visit(v interface{}) {
 	t.visited[v] = struct{}{}
-
 }
+
 func (t *testExporterTarget) Visited(v interface{}) bool {
 	_, ok := t.visited[v]
 	return ok

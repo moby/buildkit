@@ -98,7 +98,6 @@ func (s *winApplier) Apply(ctx context.Context, desc ocispecs.Descriptor, mounts
 			Digest:    digester.Digest(),
 		}
 		return nil
-
 	}); err != nil {
 		return ocispecs.Descriptor{}, err
 	}

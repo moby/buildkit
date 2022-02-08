@@ -17,10 +17,9 @@
 package plugin
 
 import (
+	"errors"
 	"fmt"
 	"sync"
-
-	"github.com/pkg/errors"
 )
 
 var (
@@ -57,8 +56,6 @@ const (
 	RuntimePlugin Type = "io.containerd.runtime.v1"
 	// RuntimePluginV2 implements a runtime v2
 	RuntimePluginV2 Type = "io.containerd.runtime.v2"
-	// RuntimeShimPlugin implements the shim manager for runtime v2.
-	RuntimeShimPlugin Type = "io.containerd.runtime-shim.v2"
 	// ServicePlugin implements a internal service
 	ServicePlugin Type = "io.containerd.service.v1"
 	// GRPCPlugin implements a grpc service
@@ -174,7 +171,7 @@ func Register(r *Registration) {
 func checkUnique(r *Registration) error {
 	for _, registered := range register.r {
 		if r.URI() == registered.URI() {
-			return errors.Wrap(ErrIDRegistered, r.URI())
+			return fmt.Errorf("%s: %w", r.URI(), ErrIDRegistered)
 		}
 	}
 	return nil

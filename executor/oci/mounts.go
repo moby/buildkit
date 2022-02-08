@@ -46,7 +46,6 @@ func withCGroup() oci.SpecOpts {
 		})
 		return nil
 	}
-
 }
 
 func hasPrefix(p, prefixDir string) bool {

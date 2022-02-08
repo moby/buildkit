@@ -86,7 +86,6 @@ func (r readerWithCancel) Close() error {
 }
 
 func trackProgress(ctx context.Context, desc ocispecs.Descriptor, manager PullManager, doneCh chan<- struct{}) {
-
 	defer close(doneCh)
 
 	ticker := time.NewTicker(150 * time.Millisecond)
@@ -133,6 +132,5 @@ func trackProgress(ctx context.Context, desc ocispecs.Descriptor, manager PullMa
 			})
 			return
 		}
-
 	}
 }

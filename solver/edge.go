@@ -365,7 +365,6 @@ func (e *edge) unpark(incoming []pipe.Sender, updates, allPipes []pipe.Receiver,
 			e.createInputRequests(desiredState, f, true)
 		}
 	}
-
 }
 
 func (e *edge) makeExportable(k *CacheKey, records []*CacheRecord) ExportableCacheKey {

@@ -501,8 +501,17 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 		if err != nil {
 			return nil, err
 		}
+
+		gitCatFileBuf, err := gitWithinDir(ctx, gitDir, "", sock, knownHosts, gs.auth, "cat-file", "-t", ref)
+		if err != nil {
+			return nil, err
+		}
+		isAnnotatedTag := strings.TrimSpace(gitCatFileBuf.String()) == "tag"
+
 		pullref := ref
-		if isCommitSHA(ref) {
+		if isAnnotatedTag {
+			pullref += ":refs/tags/" + pullref
+		} else if isCommitSHA(ref) {
 			pullref = "refs/buildkit/" + identity.NewID()
 			_, err = gitWithinDir(ctx, gitDir, "", sock, knownHosts, gs.auth, "update-ref", pullref, ref)
 			if err != nil {
@@ -631,11 +640,16 @@ func getGitSSHCommand(knownHosts string) string {
 	return gitSSHCommand
 }
 
-func git(ctx context.Context, dir, sshAuthSock, knownHosts string, args ...string) (*bytes.Buffer, error) {
+func git(ctx context.Context, dir, sshAuthSock, knownHosts string, args ...string) (_ *bytes.Buffer, err error) {
 	for {
-		stdout, stderr := logs.NewLogStreams(ctx, false)
+		stdout, stderr, flush := logs.NewLogStreams(ctx, false)
 		defer stdout.Close()
 		defer stderr.Close()
+		defer func() {
+			if err != nil {
+				flush()
+			}
+		}()
 		cmd := exec.Command("git", args...)
 		cmd.Dir = dir // some commands like submodule require this
 		buf := bytes.NewBuffer(nil)

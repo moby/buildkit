@@ -52,7 +52,6 @@ func TestThrottle(t *testing.T) {
 		}
 		retries++
 	}
-
 }
 
 func TestAfter(t *testing.T) {

@@ -456,7 +456,6 @@ func collectAndCheckChanges(base, upperdir string, expected []TestChange) error 
 
 func diffString(c1, c2 []TestChange) string {
 	return fmt.Sprintf("got(%d):\n%s\nexpected(%d):\n%s", len(c1), changesString(c1), len(c2), changesString(c2))
-
 }
 
 func changesString(c []TestChange) string {

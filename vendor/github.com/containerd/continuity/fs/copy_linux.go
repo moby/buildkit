@@ -27,7 +27,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func copyFileInfo(fi os.FileInfo, name string) error {
+func copyFileInfo(fi os.FileInfo, src, name string) error {
 	st := fi.Sys().(*syscall.Stat_t)
 	if err := os.Lchown(name, int(st.Uid), int(st.Gid)); err != nil {
 		if os.IsPermission(err) {

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/moby/buildkit/util/bklog"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/containerd/containerd/defaults"
 	"github.com/gogo/googleapis/google/rpc"
@@ -1044,7 +1045,7 @@ func grpcClientConn(ctx context.Context) (context.Context, *grpc.ClientConn, err
 	})
 
 	cc, err := grpc.DialContext(ctx, "localhost", dialOpt,
-		grpc.WithInsecure(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithUnaryInterceptor(grpcerrors.UnaryClientInterceptor),
 		grpc.WithStreamInterceptor(grpcerrors.StreamClientInterceptor),
 		grpc.WithInitialWindowSize(65535*32),

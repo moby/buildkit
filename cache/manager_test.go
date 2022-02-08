@@ -1684,6 +1684,179 @@ func TestMergeOp(t *testing.T) {
 	checkDiskUsage(ctx, t, cm, 0, 0)
 }
 
+func TestDiffOp(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Depends on unimplemented diff-op support on Windows")
+	}
+
+	// This just tests the basic Diff method and some of the logic with releasing diff refs.
+	// Tests for the fs diff logic are in client_test and snapshotter_test.
+	t.Parallel()
+
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+
+	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+
+	co, cleanup, err := newCacheManager(ctx, cmOpt{
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	defer cleanup()
+	cm := co.manager
+
+	newLower, err := cm.New(ctx, nil, nil)
+	require.NoError(t, err)
+	lowerA, err := newLower.Commit(ctx)
+	require.NoError(t, err)
+	newUpper, err := cm.New(ctx, nil, nil)
+	require.NoError(t, err)
+	upperA, err := newUpper.Commit(ctx)
+	require.NoError(t, err)
+
+	// verify that releasing parents does not invalidate a diff ref until it is released
+	diff, err := cm.Diff(ctx, lowerA, upperA)
+	require.NoError(t, err)
+	checkDiskUsage(ctx, t, cm, 3, 0)
+	require.NoError(t, lowerA.Release(ctx))
+	require.NoError(t, upperA.Release(ctx))
+	checkDiskUsage(ctx, t, cm, 3, 0)
+	require.NoError(t, cm.Prune(ctx, nil, client.PruneInfo{All: true}))
+	checkDiskUsage(ctx, t, cm, 3, 0)
+	_, err = diff.Mount(ctx, true, nil)
+	require.NoError(t, err)
+	require.NoError(t, diff.Release(ctx))
+	checkDiskUsage(ctx, t, cm, 0, 3)
+	require.NoError(t, cm.Prune(ctx, nil, client.PruneInfo{All: true}))
+	checkDiskUsage(ctx, t, cm, 0, 0)
+
+	// test "unmerge" diffs that are defined as a merge of single-layer diffs
+	newRef, err := cm.New(ctx, nil, nil)
+	require.NoError(t, err)
+	a, err := newRef.Commit(ctx)
+	require.NoError(t, err)
+	newRef, err = cm.New(ctx, a, nil)
+	require.NoError(t, err)
+	b, err := newRef.Commit(ctx)
+	require.NoError(t, err)
+	newRef, err = cm.New(ctx, b, nil)
+	require.NoError(t, err)
+	c, err := newRef.Commit(ctx)
+	require.NoError(t, err)
+	newRef, err = cm.New(ctx, c, nil)
+	require.NoError(t, err)
+	d, err := newRef.Commit(ctx)
+	require.NoError(t, err)
+	newRef, err = cm.New(ctx, d, nil)
+	require.NoError(t, err)
+	e, err := newRef.Commit(ctx)
+	require.NoError(t, err)
+
+	diff, err = cm.Diff(ctx, c, e)
+	require.NoError(t, err)
+	checkDiskUsage(ctx, t, cm, 8, 0) // 5 base refs + 2 diffs + 1 merge
+	require.NoError(t, a.Release(ctx))
+	require.NoError(t, b.Release(ctx))
+	require.NoError(t, c.Release(ctx))
+	require.NoError(t, d.Release(ctx))
+	require.NoError(t, e.Release(ctx))
+	checkDiskUsage(ctx, t, cm, 8, 0)
+	require.NoError(t, cm.Prune(ctx, nil, client.PruneInfo{All: true}))
+	checkDiskUsage(ctx, t, cm, 8, 0)
+	_, err = diff.Mount(ctx, true, nil)
+	require.NoError(t, err)
+	require.NoError(t, diff.Release(ctx))
+	checkDiskUsage(ctx, t, cm, 0, 8)
+	require.NoError(t, cm.Prune(ctx, nil, client.PruneInfo{All: true}))
+	checkDiskUsage(ctx, t, cm, 0, 0)
+}
+
+func TestLoadHalfFinalizedRef(t *testing.T) {
+	// This test simulates the situation where a ref w/ an equalMutable has its
+	// snapshot committed but there is a crash before the metadata is updated to
+	// clear the equalMutable field. It's expected that the mutable will be
+	// removed and the immutable ref will continue to be usable.
+	t.Parallel()
+
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+
+	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+
+	co, cleanup, err := newCacheManager(ctx, cmOpt{
+		tmpdir:          tmpdir,
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	defer cleanup()
+	cm := co.manager.(*cacheManager)
+
+	mref, err := cm.New(ctx, nil, nil, CachePolicyRetain)
+	require.NoError(t, err)
+	mutRef := mref.(*mutableRef)
+
+	iref, err := mutRef.Commit(ctx)
+	require.NoError(t, err)
+	immutRef := iref.(*immutableRef)
+
+	require.NoError(t, mref.Release(ctx))
+
+	_, err = co.lm.Create(ctx, func(l *leases.Lease) error {
+		l.ID = immutRef.ID()
+		l.Labels = map[string]string{
+			"containerd.io/gc.flat": time.Now().UTC().Format(time.RFC3339Nano),
+		}
+		return nil
+	})
+	require.NoError(t, err)
+	err = co.lm.AddResource(ctx, leases.Lease{ID: immutRef.ID()}, leases.Resource{
+		ID:   immutRef.getSnapshotID(),
+		Type: "snapshots/" + cm.Snapshotter.Name(),
+	})
+	require.NoError(t, err)
+
+	err = cm.Snapshotter.Commit(ctx, immutRef.getSnapshotID(), mutRef.getSnapshotID())
+	require.NoError(t, err)
+
+	_, err = cm.Snapshotter.Stat(ctx, mutRef.getSnapshotID())
+	require.Error(t, err)
+
+	require.NoError(t, iref.Release(ctx))
+
+	require.NoError(t, cm.Close())
+	require.NoError(t, cleanup())
+
+	co, cleanup, err = newCacheManager(ctx, cmOpt{
+		tmpdir:          tmpdir,
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	defer cleanup()
+	cm = co.manager.(*cacheManager)
+
+	_, err = cm.GetMutable(ctx, mutRef.ID())
+	require.ErrorIs(t, err, errNotFound)
+
+	iref, err = cm.Get(ctx, immutRef.ID())
+	require.NoError(t, err)
+	require.NoError(t, iref.Finalize(ctx))
+	immutRef = iref.(*immutableRef)
+
+	_, err = cm.Snapshotter.Stat(ctx, immutRef.getSnapshotID())
+	require.NoError(t, err)
+}
+
 func TestMountReadOnly(t *testing.T) {
 	t.Parallel()
 	if runtime.GOOS != "linux" {

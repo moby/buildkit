@@ -131,5 +131,4 @@ func getRemoteChain(layers []CacheLayer, idx int, provider DescriptorProvider, v
 		Descriptors: []ocispecs.Descriptor{descPair.Descriptor},
 		Provider:    descPair.Provider,
 	}, nil
-
 }

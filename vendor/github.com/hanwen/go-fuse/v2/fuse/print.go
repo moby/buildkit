@@ -161,17 +161,17 @@ func (in *OpenOut) string() string {
 }
 
 func (in *InitIn) string() string {
-	return fmt.Sprintf("{%d.%d Ra 0x%x %s}",
+	return fmt.Sprintf("{%d.%d Ra %d %s}",
 		in.Major, in.Minor, in.MaxReadAhead,
 		flagString(initFlagNames, int64(in.Flags), ""))
 }
 
 func (o *InitOut) string() string {
-	return fmt.Sprintf("{%d.%d Ra 0x%x %s %d/%d Wr 0x%x Tg 0x%x}",
+	return fmt.Sprintf("{%d.%d Ra %d %s %d/%d Wr %d Tg %d MaxPages %d}",
 		o.Major, o.Minor, o.MaxReadAhead,
 		flagString(initFlagNames, int64(o.Flags), ""),
 		o.CongestionThreshold, o.MaxBackground, o.MaxWrite,
-		o.TimeGran)
+		o.TimeGran, o.MaxPages)
 }
 
 func (s *FsyncIn) string() string {

@@ -126,7 +126,7 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor,
 	descHandlers := descHandlersOf(opts...)
 	if desc.Digest != "" && (descHandlers == nil || descHandlers[desc.Digest] == nil) {
 		if _, err := cm.ContentStore.Info(ctx, desc.Digest); errors.Is(err, errdefs.ErrNotFound) {
-			return nil, NeedsRemoteProvidersError([]digest.Digest{desc.Digest})
+			return nil, NeedsRemoteProviderError([]digest.Digest{desc.Digest})
 		} else if err != nil {
 			return nil, err
 		}
@@ -171,7 +171,7 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor,
 	for _, si := range sis {
 		ref, err := cm.get(ctx, si.ID(), opts...)
 		if err != nil {
-			if errors.As(err, &NeedsRemoteProvidersError{}) {
+			if errors.As(err, &NeedsRemoteProviderError{}) {
 				// This shouldn't happen and indicates that blobchain IDs are being set incorrectly,
 				// but if it does happen it's not fatal as we can just not try to re-use by blobchainID.
 				// Log the error but continue.
@@ -201,7 +201,7 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor,
 	for _, si := range sis {
 		ref, err := cm.get(ctx, si.ID(), opts...)
 		// if the error was NotFound or NeedsRemoteProvider, we can't re-use the snapshot from the blob so just skip it
-		if err != nil && !IsNotFound(err) && !errors.As(err, &NeedsRemoteProvidersError{}) {
+		if err != nil && !IsNotFound(err) && !errors.As(err, &NeedsRemoteProviderError{}) {
 			return nil, errors.Wrapf(err, "failed to get record %s by chainid", si.ID())
 		}
 		if ref != nil {
@@ -364,7 +364,7 @@ func (cm *cacheManager) get(ctx context.Context, id string, opts ...RefOption) (
 // getRecord returns record for id. Requires manager lock.
 func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOption) (cr *cacheRecord, retErr error) {
 	checkLazyProviders := func(rec *cacheRecord) error {
-		missing := NeedsRemoteProvidersError(nil)
+		missing := NeedsRemoteProviderError(nil)
 		dhs := descHandlersOf(opts...)
 		if err := rec.walkUniqueAncestors(func(cr *cacheRecord) error {
 			blob := cr.getBlob()
@@ -410,25 +410,32 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOpt
 
 	if mutableID := md.getEqualMutable(); mutableID != "" {
 		mutable, err := cm.getRecord(ctx, mutableID)
-		if err != nil {
-			// check loading mutable deleted record from disk
-			if IsNotFound(err) {
-				cm.MetadataStore.Clear(id)
+		if err == nil {
+			rec := &cacheRecord{
+				mu:            &sync.Mutex{},
+				cm:            cm,
+				refs:          make(map[ref]struct{}),
+				parentRefs:    parents,
+				cacheMetadata: md,
+				equalMutable:  &mutableRef{cacheRecord: mutable},
 			}
+			mutable.equalImmutable = &immutableRef{cacheRecord: rec}
+			cm.records[id] = rec
+			return rec, nil
+		} else if IsNotFound(err) {
+			// The equal mutable for this ref is not found, check to see if our snapshot exists
+			if _, statErr := cm.Snapshotter.Stat(ctx, md.getSnapshotID()); statErr != nil {
+				// this ref's snapshot also doesn't exist, just remove this record
+				cm.MetadataStore.Clear(id)
+				return nil, errors.Wrap(errNotFound, id)
+			}
+			// Our snapshot exists, so there may have been a crash while finalizing this ref.
+			// Clear the equal mutable field and continue using this ref.
+			md.clearEqualMutable()
+			md.commitMetadata()
+		} else {
 			return nil, err
 		}
-
-		rec := &cacheRecord{
-			mu:            &sync.Mutex{},
-			cm:            cm,
-			refs:          make(map[ref]struct{}),
-			parentRefs:    parents,
-			cacheMetadata: md,
-			equalMutable:  &mutableRef{cacheRecord: mutable},
-		}
-		mutable.equalImmutable = &immutableRef{cacheRecord: rec}
-		cm.records[id] = rec
-		return rec, nil
 	}
 
 	rec := &cacheRecord{
@@ -446,6 +453,20 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOpt
 			return nil, err
 		}
 		return nil, errors.Wrapf(errNotFound, "failed to get deleted record %s", id)
+	}
+
+	if rec.mutable {
+		// If the record is mutable, then the snapshot must exist
+		if _, err := cm.Snapshotter.Stat(ctx, rec.ID()); err != nil {
+			if !errdefs.IsNotFound(err) {
+				return nil, errors.Wrap(err, "failed to check mutable ref snapshot")
+			}
+			// the snapshot doesn't exist, clear this record
+			if err := rec.remove(ctx, true); err != nil {
+				return nil, errors.Wrap(err, "failed to remove mutable rec with missing snapshot")
+			}
+			return nil, errors.Wrap(errNotFound, rec.ID())
+		}
 	}
 
 	if err := initializeMetadata(rec.cacheMetadata, rec.parentRefs, opts...); err != nil {
@@ -673,6 +694,7 @@ func (cm *cacheManager) Merge(ctx context.Context, inputParents []ImmutableRef, 
 			parent = p.(*immutableRef)
 			defer parent.Release(context.TODO())
 		}
+		// On success, cloned parents will be not be released and will be owned by the returned ref
 		switch parent.kind() {
 		case Merge:
 			// if parent is itself a merge, flatten it out by just setting our parents directly to its parents
@@ -687,9 +709,9 @@ func (cm *cacheManager) Merge(ctx context.Context, inputParents []ImmutableRef, 
 		}
 	}
 
+	// On success, createMergeRef takes ownership of parents
 	mergeRef, err := cm.createMergeRef(ctx, parents, dhs, opts...)
 	if err != nil {
-		parents.release(context.TODO())
 		return nil, err
 	}
 	return mergeRef, nil
@@ -800,10 +822,11 @@ func (cm *cacheManager) Diff(ctx context.Context, lower, upper ImmutableRef, opt
 			parent = p.(*immutableRef)
 			defer parent.Release(context.TODO())
 		}
+		// On success, cloned parents will not be released and will be owned by the returned ref
 		if i == 0 {
-			dps.lower = parent
+			dps.lower = parent.clone()
 		} else {
-			dps.upper = parent
+			dps.upper = parent.clone()
 		}
 		for dgst, handler := range parent.descHandlers {
 			dhs[dgst] = handler
@@ -840,6 +863,7 @@ func (cm *cacheManager) Diff(ctx context.Context, lower, upper ImmutableRef, opt
 			for i := len(lowerLayers); i < len(upperLayers); i++ {
 				subUpper := upperLayers[i]
 				subLower := subUpper.layerParent
+				// On success, cloned refs will not be released and will be owned by the returned ref
 				if subLower == nil {
 					mergeParents.mergeParents[i-len(lowerLayers)] = subUpper.clone()
 				} else {
@@ -853,6 +877,7 @@ func (cm *cacheManager) Diff(ctx context.Context, lower, upper ImmutableRef, opt
 					mergeParents.mergeParents[i-len(lowerLayers)] = diffRef
 				}
 			}
+			// On success, createMergeRef takes ownership of mergeParents
 			mergeRef, err := cm.createMergeRef(ctx, mergeParents, dhs)
 			if err != nil {
 				return nil, err
@@ -862,9 +887,9 @@ func (cm *cacheManager) Diff(ctx context.Context, lower, upper ImmutableRef, opt
 		}
 	}
 
+	// On success, createDiffRef takes ownership of parents
 	diffRef, err := cm.createDiffRef(ctx, parents, dhs, opts...)
 	if err != nil {
-		parents.release(context.TODO())
 		return nil, err
 	}
 	return diffRef, nil

@@ -147,6 +147,21 @@ EOF`,
 				},
 			},
 		},
+		{
+			dockerfile: `COPY <<EOF /quotes
+"quotes"
+EOF`,
+			sourcesAndDest: SourcesAndDest{
+				DestPath: "/quotes",
+				SourceContents: []SourceContent{
+					{
+						Path:   "EOF",
+						Data:   "\"quotes\"\n",
+						Expand: true,
+					},
+				},
+			},
+		},
 	}
 
 	for _, c := range cases {

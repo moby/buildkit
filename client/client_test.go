@@ -695,7 +695,7 @@ func testPushByDigest(t *testing.T, sb integration.Sandbox) {
 	defer c.Close()
 
 	registry, err := sb.NewRegistry()
-	if errors.Is(err, integration.ErrorRequirements) {
+	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
 	}
 	require.NoError(t, err)
@@ -847,13 +847,11 @@ func testSecurityModeSysfs(t *testing.T, sb integration.Sandbox) {
 }
 
 func testSecurityModeErrors(t *testing.T, sb integration.Sandbox) {
-
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 	secMode := sb.Value("secmode")
 	if secMode == securitySandbox {
-
 		st := llb.Image("busybox:latest").
 			Run(llb.Shlex(`sh -c 'echo sandbox'`))
 
@@ -887,7 +885,7 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 	defer c.Close()
 
 	registry, err := sb.NewRegistry()
-	if errors.Is(err, integration.ErrorRequirements) {
+	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
 	}
 	require.NoError(t, err)
@@ -1734,7 +1732,6 @@ func testResolveAndHosts(t *testing.T, sb integration.Sandbox) {
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "hosts"))
 	require.NoError(t, err)
 	require.Contains(t, string(dt), "127.0.0.1	localhost")
-
 }
 
 func testUser(t *testing.T, sb integration.Sandbox) {
@@ -1835,7 +1832,6 @@ func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	for _, exp := range []string{ExporterOCI, ExporterDocker} {
-
 		destDir, err := ioutil.TempDir("", "buildkit")
 		require.NoError(t, err)
 		defer os.RemoveAll(destDir)
@@ -2172,7 +2168,7 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	registry, err := sb.NewRegistry()
-	if errors.Is(err, integration.ErrorRequirements) {
+	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
 	}
 	require.NoError(t, err)
@@ -2458,7 +2454,7 @@ func testPullZstdImage(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	registry, err := sb.NewRegistry()
-	if errors.Is(err, integration.ErrorRequirements) {
+	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
 	}
 	require.NoError(t, err)
@@ -2524,7 +2520,7 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	registry, err := sb.NewRegistry()
-	if errors.Is(err, integration.ErrorRequirements) {
+	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
 	}
 	require.NoError(t, err)
@@ -2715,7 +2711,7 @@ func testStargzLazyPull(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer client.Close()
 	registry, err := sb.NewRegistry()
-	if errors.Is(err, integration.ErrorRequirements) {
+	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
 	}
 	require.NoError(t, err)
@@ -2845,7 +2841,7 @@ func testLazyImagePush(t *testing.T, sb integration.Sandbox) {
 	ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
 
 	registry, err := sb.NewRegistry()
-	if errors.Is(err, integration.ErrorRequirements) {
+	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
 	}
 	require.NoError(t, err)
@@ -3035,7 +3031,7 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptio
 func testBasicRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	skipDockerd(t, sb)
 	registry, err := sb.NewRegistry()
-	if errors.Is(err, integration.ErrorRequirements) {
+	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
 	}
 	require.NoError(t, err)
@@ -3052,7 +3048,7 @@ func testBasicRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
 func testMultipleRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	skipDockerd(t, sb)
 	registry, err := sb.NewRegistry()
-	if errors.Is(err, integration.ErrorRequirements) {
+	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
 	}
 	require.NoError(t, err)
@@ -3096,7 +3092,7 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	skipDockerd(t, sb)
 	requiresLinux(t)
 	registry, err := sb.NewRegistry()
-	if errors.Is(err, integration.ErrorRequirements) {
+	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
 	}
 	require.NoError(t, err)
@@ -3849,7 +3845,6 @@ func testSourceMap(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, 1, len(srcs[2].Ranges))
 	require.Equal(t, int32(7), srcs[2].Ranges[0].Start.Line)
 	require.Equal(t, int32(0), srcs[2].Ranges[0].Start.Character)
-
 }
 
 func testSourceMapFromRef(t *testing.T, sb integration.Sandbox) {
@@ -4029,7 +4024,7 @@ func testMergeOp(t *testing.T, sb integration.Sandbox) {
 
 	ctx := sb.Context()
 	registry, err := sb.NewRegistry()
-	if !errors.Is(err, integration.ErrorRequirements) {
+	if !errors.Is(err, integration.ErrRequirements) {
 		require.NoError(t, err)
 	}
 
@@ -4148,7 +4143,7 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 	ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
 
 	registry, err := sb.NewRegistry()
-	if errors.Is(err, integration.ErrorRequirements) {
+	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
 	}
 	require.NoError(t, err)

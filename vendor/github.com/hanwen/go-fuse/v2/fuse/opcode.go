@@ -10,6 +10,7 @@ import (
 	"log"
 	"reflect"
 	"runtime"
+	"syscall"
 	"time"
 	"unsafe"
 )
@@ -442,7 +443,7 @@ func doStatFs(server *Server, req *request) {
 }
 
 func doIoctl(server *Server, req *request) {
-	req.status = ENOSYS
+	req.status = Status(syscall.ENOTTY)
 }
 
 func doDestroy(server *Server, req *request) {
@@ -735,6 +736,7 @@ func init() {
 		_OP_SETATTR:               func(ptr unsafe.Pointer) interface{} { return (*AttrOut)(ptr) },
 		_OP_INIT:                  func(ptr unsafe.Pointer) interface{} { return (*InitOut)(ptr) },
 		_OP_MKDIR:                 func(ptr unsafe.Pointer) interface{} { return (*EntryOut)(ptr) },
+		_OP_MKNOD:                 func(ptr unsafe.Pointer) interface{} { return (*EntryOut)(ptr) },
 		_OP_NOTIFY_INVAL_ENTRY:    func(ptr unsafe.Pointer) interface{} { return (*NotifyInvalEntryOut)(ptr) },
 		_OP_NOTIFY_INVAL_INODE:    func(ptr unsafe.Pointer) interface{} { return (*NotifyInvalInodeOut)(ptr) },
 		_OP_NOTIFY_STORE_CACHE:    func(ptr unsafe.Pointer) interface{} { return (*NotifyStoreOut)(ptr) },
