@@ -15,6 +15,7 @@ import (
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/frontend/gateway"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/session/secrets"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/llbsolver"
 	"github.com/moby/buildkit/solver/llbsolver/errdefs"
@@ -36,6 +37,7 @@ type execOp struct {
 	op          *pb.ExecOp
 	cm          cache.Manager
 	mm          *mounts.MountManager
+	sm          *session.Manager
 	exec        executor.Executor
 	w           worker.Worker
 	platform    *pb.Platform
@@ -52,6 +54,7 @@ func NewExecOp(v solver.Vertex, op *pb.Op_Exec, platform *pb.Platform, cm cache.
 		op:          op.Exec,
 		mm:          mounts.NewMountManager(name, cm, sm),
 		cm:          cm,
+		sm:          sm,
 		exec:        exec,
 		numInputs:   len(v.Inputs()),
 		w:           w,
@@ -330,6 +333,12 @@ func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 	}
 	meta.Env = addDefaultEnvvar(meta.Env, "PATH", utilsystem.DefaultPathEnv(currentOS))
 
+	secretEnv, err := e.loadSecretEnv(ctx, g)
+	if err != nil {
+		return nil, err
+	}
+	meta.Env = append(meta.Env, secretEnv...)
+
 	stdout, stderr, flush := logs.NewLogStreams(ctx, os.Getenv("BUILDKIT_DEBUG_EXEC_OUTPUT") == "1")
 	defer stdout.Close()
 	defer stderr.Close()
@@ -393,4 +402,35 @@ func (e *execOp) Acquire(ctx context.Context) (solver.ReleaseFunc, error) {
 	return func() {
 		e.parallelism.Release(1)
 	}, nil
+}
+
+func (e *execOp) loadSecretEnv(ctx context.Context, g session.Group) ([]string, error) {
+	secretenv := e.op.Secretenv
+	if len(secretenv) == 0 {
+		return nil, nil
+	}
+	out := make([]string, 0, len(secretenv))
+	for _, sopt := range secretenv {
+		id := sopt.ID
+		if id == "" {
+			return nil, errors.Errorf("secret ID missing for %q environment variable", sopt.Name)
+		}
+		var dt []byte
+		var err error
+		err = e.sm.Any(ctx, g, func(ctx context.Context, _ string, caller session.Caller) error {
+			dt, err = secrets.GetSecret(ctx, caller, id)
+			if err != nil {
+				if errors.Is(err, secrets.ErrNotFound) && sopt.Optional {
+					return nil
+				}
+				return err
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, fmt.Sprintf("%s=%s", sopt.Name, string(dt)))
+	}
+	return out, nil
 }

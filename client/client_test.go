@@ -106,6 +106,7 @@ func TestIntegration(t *testing.T) {
 		testDuplicateCacheMount,
 		testRunCacheWithMounts,
 		testParallelLocalBuilds,
+		testSecretEnv,
 		testSecretMounts,
 		testExtraHosts,
 		testShmSize,
@@ -1081,6 +1082,69 @@ func testSecretMounts(t *testing.T, sb integration.Sandbox) {
 	_, err = c.Solve(sb.Context(), def, SolveOpt{
 		Session: []session.Attachable{secretsprovider.FromMap(map[string][]byte{
 			"mysecret": []byte("pw"),
+		})},
+	}, nil)
+	require.NoError(t, err)
+}
+
+func testSecretEnv(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Image("busybox:latest").
+		Run(llb.Shlex(`sh -c '[ "$(echo ${MY_SECRET})" = 'foo-secret' ]'`), llb.AddSecret("MY_SECRET", llb.SecretAsEnv(true)))
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Session: []session.Attachable{secretsprovider.FromMap(map[string][]byte{
+			"MY_SECRET": []byte("foo-secret"),
+		})},
+	}, nil)
+	require.NoError(t, err)
+
+	// test optional
+	st = llb.Image("busybox:latest").
+		Run(llb.Shlex(`sh -c '[ -z "${MY_SECRET}" ]'`), llb.AddSecret("MY_SECRET", llb.SecretAsEnv(true), llb.SecretOptional))
+
+	def, err = st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Session: []session.Attachable{secretsprovider.FromMap(map[string][]byte{})},
+	}, nil)
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
+	require.NoError(t, err)
+
+	st = llb.Image("busybox:latest").
+		Run(llb.Shlex(`echo foo`), llb.AddSecret("MY_SECRET", llb.SecretAsEnv(true)))
+
+	def, err = st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Session: []session.Attachable{secretsprovider.FromMap(map[string][]byte{})},
+	}, nil)
+	require.Error(t, err)
+
+	// test id
+	st = llb.Image("busybox:latest").
+		Run(llb.Shlex(`sh -c '[ "$(echo ${MYPASSWORD}-${MYTOKEN})" = "pw-token" ]' `),
+			llb.AddSecret("MYPASSWORD", llb.SecretID("pass"), llb.SecretAsEnv(true)),
+			llb.AddSecret("MYTOKEN", llb.SecretAsEnv(true)),
+		)
+
+	def, err = st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Session: []session.Attachable{secretsprovider.FromMap(map[string][]byte{
+			"pass":    []byte("pw"),
+			"MYTOKEN": []byte("token"),
 		})},
 	}, nil)
 	require.NoError(t, err)
