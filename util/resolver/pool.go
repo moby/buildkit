@@ -166,6 +166,9 @@ func (r *Resolver) WithSession(s session.Group) *Resolver {
 	r2 := *r
 	r2.auth = nil
 	r2.g = s
+	r2.Resolver = docker.NewResolver(docker.ResolverOptions{
+		Hosts: r2.HostsFunc, // this refers to the newly-configured session so we need to recreate the resolver.
+	})
 	return &r2
 }
 
