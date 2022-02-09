@@ -70,6 +70,7 @@ func (nopWriteCloser) Close() error { return nil }
 func TestIntegration(t *testing.T) {
 	mirroredImages := integration.OfficialImages("busybox:latest", "alpine:latest")
 	mirroredImages["tonistiigi/test:nolayers"] = "docker.io/tonistiigi/test:nolayers"
+	mirroredImages["cpuguy83/buildkit-foreign:latest"] = "docker.io/cpuguy83/buildkit-foreign:latest"
 	mirrors := integration.WithMirroredImages(mirroredImages)
 
 	tests := integration.TestFuncs(
@@ -144,6 +145,7 @@ func TestIntegration(t *testing.T) {
 		testMergeOpCacheMax,
 		testRmSymlink,
 		testMoveParentDir,
+		testBuildExportWithForeignLayer,
 	)
 	tests = append(tests, diffOpTestCases()...)
 	integration.Run(t, tests, mirrors)
@@ -2211,6 +2213,92 @@ func testTarExporterSymlink(t *testing.T, sb integration.Sandbox) {
 	require.True(t, ok)
 	require.Equal(t, int32(item.Header.Typeflag), tar.TypeSymlink)
 	require.Equal(t, "foo", item.Header.Linkname)
+}
+
+func testBuildExportWithForeignLayer(t *testing.T, sb integration.Sandbox) {
+	if os.Getenv("TEST_DOCKERD") == "1" {
+		t.Skip("image exporter is missing in dockerd")
+	}
+
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Image("cpuguy83/buildkit-foreign:latest")
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	t.Run("propagate=1", func(t *testing.T) {
+		target := registry + "/buildkit/build/exporter:withforeignlayer"
+		_, err = c.Solve(sb.Context(), def, SolveOpt{
+			Exports: []ExportEntry{
+				{
+					Type: ExporterImage,
+					Attrs: map[string]string{
+						"name":                     target,
+						"push":                     "true",
+						"propagate-nondist-layers": "true",
+					},
+				},
+			},
+		}, nil)
+		require.NoError(t, err)
+
+		ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
+		cdAddress := sb.ContainerdAddress()
+		var client *containerd.Client
+		if cdAddress != "" {
+			client, err = newContainerd(cdAddress)
+			require.NoError(t, err)
+			defer client.Close()
+
+			img, err := client.GetImage(ctx, target)
+			require.NoError(t, err)
+			mfst, err := images.Manifest(ctx, client.ContentStore(), img.Target(), nil)
+			require.NoError(t, err)
+			require.Equal(t, 2, len(mfst.Layers))
+			require.Equal(t, images.MediaTypeDockerSchema2LayerForeign, mfst.Layers[0].MediaType)
+			require.Equal(t, images.MediaTypeDockerSchema2Layer, mfst.Layers[1].MediaType)
+		}
+	})
+	t.Run("propagate=0", func(t *testing.T) {
+		target := registry + "/buildkit/build/exporter:noforeignlayer"
+		_, err = c.Solve(sb.Context(), def, SolveOpt{
+			Exports: []ExportEntry{
+				{
+					Type: ExporterImage,
+					Attrs: map[string]string{
+						"name": target,
+						"push": "true",
+					},
+				},
+			},
+		}, nil)
+		require.NoError(t, err)
+
+		ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
+		cdAddress := sb.ContainerdAddress()
+		var client *containerd.Client
+		if cdAddress != "" {
+			client, err = newContainerd(cdAddress)
+			require.NoError(t, err)
+			defer client.Close()
+
+			img, err := client.GetImage(ctx, target)
+			require.NoError(t, err)
+			mfst, err := images.Manifest(ctx, client.ContentStore(), img.Target(), nil)
+			require.NoError(t, err)
+			require.Equal(t, 2, len(mfst.Layers))
+			require.Equal(t, images.MediaTypeDockerSchema2Layer, mfst.Layers[0].MediaType)
+			require.Equal(t, images.MediaTypeDockerSchema2Layer, mfst.Layers[1].MediaType)
+		}
+	})
 }
 
 func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
