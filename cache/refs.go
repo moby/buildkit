@@ -14,11 +14,13 @@ import (
 	"github.com/containerd/containerd/snapshots"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/hashicorp/go-multierror"
+	"github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/compression"
+	"github.com/moby/buildkit/util/convert"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/progress"
@@ -47,7 +49,7 @@ type ImmutableRef interface {
 	Finalize(context.Context) error
 
 	Extract(ctx context.Context, s session.Group) error // +progress
-	GetRemotes(ctx context.Context, createIfNeeded bool, compressionopt compression.Config, all bool, s session.Group) ([]*solver.Remote, error)
+	GetRemotes(ctx context.Context, createIfNeeded bool, cfg config.RefConfig, all bool, s session.Group) ([]*solver.Remote, error)
 	LayerChain() RefList
 }
 
@@ -589,7 +591,7 @@ func (sr *immutableRef) Clone() ImmutableRef {
 	return sr.clone()
 }
 
-func (sr *immutableRef) ociDesc(ctx context.Context, dhs DescHandlers) (ocispecs.Descriptor, error) {
+func (sr *immutableRef) ociDesc(ctx context.Context, dhs DescHandlers, convertNonDist bool) (ocispecs.Descriptor, error) {
 	dgst := sr.getBlob()
 	if dgst == "" {
 		return ocispecs.Descriptor{}, errors.Errorf("no blob set for cache record %s", sr.ID())
@@ -598,9 +600,14 @@ func (sr *immutableRef) ociDesc(ctx context.Context, dhs DescHandlers) (ocispecs
 	desc := ocispecs.Descriptor{
 		Digest:      sr.getBlob(),
 		Size:        sr.getBlobSize(),
-		MediaType:   sr.getMediaType(),
 		Annotations: make(map[string]string),
-		URLs:        sr.getURLs(),
+		MediaType:   sr.getMediaType(),
+	}
+
+	if convertNonDist {
+		desc.MediaType = convert.LayerToDistributable(desc.MediaType)
+	} else {
+		desc.URLs = sr.getURLs()
 	}
 
 	if blobDesc, err := getBlobDesc(ctx, sr.cm.ContentStore, desc.Digest); err == nil {
@@ -1064,7 +1071,7 @@ func (sr *immutableRef) unlazyLayer(ctx context.Context, dhs DescHandlers, pg pr
 		})
 	}
 
-	desc, err := sr.ociDesc(ctx, dhs)
+	desc, err := sr.ociDesc(ctx, dhs, true)
 	if err != nil {
 		return err
 	}

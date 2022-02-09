@@ -33,6 +33,7 @@ import (
 	"github.com/containerd/continuity/fs/fstest"
 	"github.com/containerd/stargz-snapshotter/estargz"
 	"github.com/klauspost/compress/zstd"
+	"github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/session"
@@ -386,7 +387,7 @@ func TestMergeBlobchainID(t *testing.T) {
 	mergeRef, err := cm.Merge(ctx, mergeInputs, nil)
 	require.NoError(t, err)
 
-	_, err = mergeRef.GetRemotes(ctx, true, compression.New(compression.Default), false, nil)
+	_, err = mergeRef.GetRemotes(ctx, true, config.RefConfig{Compression: compression.New(compression.Default)}, false, nil)
 	require.NoError(t, err)
 
 	// verify the merge blobchain ID isn't just set to one of the inputs (regression test)
@@ -1340,9 +1341,9 @@ func TestGetRemotes(t *testing.T) {
 		ir := ir.(*immutableRef)
 		for _, compressionType := range []compression.Type{compression.Uncompressed, compression.Gzip, compression.EStargz, compression.Zstd} {
 			compressionType := compressionType
-			compressionopt := compression.New(compressionType).SetForce(true)
+			refCfg := config.RefConfig{Compression: compression.New(compressionType).SetForce(true)}
 			eg.Go(func() error {
-				remotes, err := ir.GetRemotes(egctx, true, compressionopt, false, nil)
+				remotes, err := ir.GetRemotes(egctx, true, refCfg, false, nil)
 				require.NoError(t, err)
 				require.Equal(t, 1, len(remotes))
 				remote := remotes[0]
@@ -1429,15 +1430,15 @@ func TestGetRemotes(t *testing.T) {
 		require.True(t, ok, ir.ID())
 		for _, compressionType := range []compression.Type{compression.Uncompressed, compression.Gzip, compression.EStargz, compression.Zstd} {
 			compressionType := compressionType
-			compressionopt := compression.New(compressionType)
+			refCfg := config.RefConfig{Compression: compression.New(compressionType)}
 			eg.Go(func() error {
-				remotes, err := ir.GetRemotes(egctx, false, compressionopt, true, nil)
+				remotes, err := ir.GetRemotes(egctx, false, refCfg, true, nil)
 				require.NoError(t, err)
 				require.True(t, len(remotes) > 0, "for %s : %d", compressionType, len(remotes))
 				gotMain, gotVariants := remotes[0], remotes[1:]
 
 				// Check the main blob is compatible with all == false
-				mainOnly, err := ir.GetRemotes(egctx, false, compressionopt, false, nil)
+				mainOnly, err := ir.GetRemotes(egctx, false, refCfg, false, nil)
 				require.NoError(t, err)
 				require.Equal(t, 1, len(mainOnly))
 				mainRemote := mainOnly[0]
@@ -1558,7 +1559,7 @@ func TestNondistributableBlobs(t *testing.T) {
 	ref, err := cm.GetByBlob(ctx, desc, nil, descHandlers)
 	require.NoError(t, err)
 
-	remotes, err := ref.GetRemotes(ctx, true, compression.Config{}, false, nil)
+	remotes, err := ref.GetRemotes(ctx, true, config.RefConfig{}, false, nil)
 	require.NoError(t, err)
 
 	desc2 := remotes[0].Descriptors[0]

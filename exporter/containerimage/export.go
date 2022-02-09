@@ -15,6 +15,7 @@ import (
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/rootfs"
 	"github.com/moby/buildkit/cache"
+	cacheconfig "github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/session"
@@ -255,7 +256,8 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	}
 	defer done(context.TODO())
 
-	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes, e.compression(), e.buildInfoMode, e.propagateNondistLayers, sessionID)
+	refCfg := e.refCfg()
+	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes, refCfg, e.buildInfoMode, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -322,7 +324,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 				annotations := map[digest.Digest]map[string]string{}
 				mprovider := contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
 				if src.Ref != nil {
-					remotes, err := src.Ref.GetRemotes(ctx, false, e.compression(), false, session.NewGroup(sessionID))
+					remotes, err := src.Ref.GetRemotes(ctx, false, refCfg, false, session.NewGroup(sessionID))
 					if err != nil {
 						return nil, err
 					}
@@ -334,7 +336,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 				}
 				if len(src.Refs) > 0 {
 					for _, r := range src.Refs {
-						remotes, err := r.GetRemotes(ctx, false, e.compression(), false, session.NewGroup(sessionID))
+						remotes, err := r.GetRemotes(ctx, false, refCfg, false, session.NewGroup(sessionID))
 						if err != nil {
 							return nil, err
 						}
@@ -359,6 +361,13 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 		resp[exptypes.ExporterImageConfigDigestKey] = v
 	}
 	return resp, nil
+}
+
+func (e *imageExporterInstance) refCfg() cacheconfig.RefConfig {
+	return cacheconfig.RefConfig{
+		Compression:                   e.compression(),
+		ConvertNonDistributableLayers: !e.propagateNondistLayers,
+	}
 }
 
 func (e *imageExporterInstance) unpackImage(ctx context.Context, img images.Image, src exporter.Source, s session.Group) (err0 error) {
@@ -388,7 +397,7 @@ func (e *imageExporterInstance) unpackImage(ctx context.Context, img images.Imag
 		}
 	}
 
-	remotes, err := topLayerRef.GetRemotes(ctx, true, e.compression(), false, s)
+	remotes, err := topLayerRef.GetRemotes(ctx, true, e.refCfg(), false, s)
 	if err != nil {
 		return err
 	}

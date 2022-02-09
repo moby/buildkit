@@ -421,7 +421,7 @@ func isTypeWindows(sr *immutableRef) bool {
 // ensureCompression ensures the specified ref has the blob of the specified compression Type.
 func ensureCompression(ctx context.Context, ref *immutableRef, comp compression.Config, s session.Group) error {
 	_, err := g.Do(ctx, fmt.Sprintf("%s-%d", ref.ID(), comp.Type), func(ctx context.Context) (interface{}, error) {
-		desc, err := ref.ociDesc(ctx, ref.descHandlers)
+		desc, err := ref.ociDesc(ctx, ref.descHandlers, false)
 		if err != nil {
 			return nil, err
 		}

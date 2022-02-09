@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/moby/buildkit/cache"
+	cacheconfig "github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/client"
 	controlgateway "github.com/moby/buildkit/control/gateway"
@@ -254,7 +255,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 
 				// all keys have same export chain so exporting others is not needed
 				_, err = r.CacheKeys()[0].Exporter.ExportTo(ctx, e, solver.CacheExportOpt{
-					ResolveRemotes: workerRefResolver(compression.New(compression.Default), false, g), // TODO: make configurable
+					ResolveRemotes: workerRefResolver(cacheconfig.RefConfig{Compression: compression.New(compression.Default)}, false, g), // TODO: make configurable
 					Mode:           exp.CacheExportMode,
 					Session:        g,
 				})
@@ -302,7 +303,7 @@ func inlineCache(ctx context.Context, e remotecache.Exporter, res solver.CachedR
 			return nil, errors.Errorf("invalid reference: %T", res.Sys())
 		}
 
-		remotes, err := workerRef.GetRemotes(ctx, true, compressionopt, false, g)
+		remotes, err := workerRef.GetRemotes(ctx, true, cacheconfig.RefConfig{Compression: compressionopt}, false, g)
 		if err != nil || len(remotes) == 0 {
 			return nil, nil
 		}
@@ -314,8 +315,9 @@ func inlineCache(ctx context.Context, e remotecache.Exporter, res solver.CachedR
 		}
 
 		ctx = withDescHandlerCacheOpts(ctx, workerRef.ImmutableRef)
+		refCfg := cacheconfig.RefConfig{Compression: compressionopt}
 		if _, err := res.CacheKeys()[0].Exporter.ExportTo(ctx, e, solver.CacheExportOpt{
-			ResolveRemotes: workerRefResolver(compressionopt, true, g), // load as many compression blobs as possible
+			ResolveRemotes: workerRefResolver(refCfg, true, g), // load as many compression blobs as possible
 			Mode:           solver.CacheExportModeMin,
 			Session:        g,
 			CompressionOpt: &compressionopt, // cache possible compression variants

@@ -10,6 +10,7 @@ import (
 	"github.com/containerd/containerd/leases"
 	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/cache"
+	cacheconfig "github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
@@ -178,6 +179,13 @@ func (e *imageExporterInstance) compression() compression.Config {
 	return c
 }
 
+func (e *imageExporterInstance) refCfg() cacheconfig.RefConfig {
+	return cacheconfig.RefConfig{
+		Compression:                   e.compression(),
+		ConvertNonDistributableLayers: !e.propagateNonDist,
+	}
+}
+
 func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source, sessionID string) (map[string]string, error) {
 	if e.opt.Variant == VariantDocker && len(src.Refs) > 0 {
 		return nil, errors.Errorf("docker exporter does not currently support exporting manifest lists")
@@ -196,7 +204,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	}
 	defer done(context.TODO())
 
-	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes, e.compression(), e.buildInfoMode, e.propagateNonDist, sessionID)
+	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes, e.refCfg(), e.buildInfoMode, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -262,7 +270,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 
 	mprovider := contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
 	if src.Ref != nil {
-		remotes, err := src.Ref.GetRemotes(ctx, false, e.compression(), false, session.NewGroup(sessionID))
+		remotes, err := src.Ref.GetRemotes(ctx, false, e.refCfg(), false, session.NewGroup(sessionID))
 		if err != nil {
 			return nil, err
 		}
@@ -280,7 +288,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	}
 	if len(src.Refs) > 0 {
 		for _, r := range src.Refs {
-			remotes, err := r.GetRemotes(ctx, false, e.compression(), false, session.NewGroup(sessionID))
+			remotes, err := r.GetRemotes(ctx, false, e.refCfg(), false, session.NewGroup(sessionID))
 			if err != nil {
 				return nil, err
 			}
