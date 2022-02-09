@@ -12,21 +12,21 @@ type CacheOpts map[interface{}]interface{}
 
 type cacheOptGetterKey struct{}
 
-func CacheOptGetterOf(ctx context.Context) func(keys ...interface{}) map[interface{}]interface{} {
+func CacheOptGetterOf(ctx context.Context) func(includeAncestors bool, keys ...interface{}) map[interface{}]interface{} {
 	if v := ctx.Value(cacheOptGetterKey{}); v != nil {
-		if getter, ok := v.(func(keys ...interface{}) map[interface{}]interface{}); ok {
+		if getter, ok := v.(func(includeAncestors bool, keys ...interface{}) map[interface{}]interface{}); ok {
 			return getter
 		}
 	}
 	return nil
 }
 
-func WithCacheOptGetter(ctx context.Context, getter func(keys ...interface{}) map[interface{}]interface{}) context.Context {
+func WithCacheOptGetter(ctx context.Context, getter func(includeAncestors bool, keys ...interface{}) map[interface{}]interface{}) context.Context {
 	return context.WithValue(ctx, cacheOptGetterKey{}, getter)
 }
 
 func withAncestorCacheOpts(ctx context.Context, start *state) context.Context {
-	return WithCacheOptGetter(ctx, func(keys ...interface{}) map[interface{}]interface{} {
+	return WithCacheOptGetter(ctx, func(includeAncestors bool, keys ...interface{}) map[interface{}]interface{} {
 		keySet := make(map[interface{}]struct{})
 		for _, k := range keys {
 			keySet[k] = struct{}{}
@@ -51,7 +51,7 @@ func withAncestorCacheOpts(ctx context.Context, start *state) context.Context {
 					}
 				}
 			}
-			return false
+			return !includeAncestors // stop after the first state unless includeAncestors is true
 		})
 		return values
 	})

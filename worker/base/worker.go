@@ -227,16 +227,26 @@ func (w *Worker) LoadRef(ctx context.Context, id string, hidden bool) (cache.Imm
 		return nil, nil
 	}
 
-	ref, err := w.CacheMgr.Get(ctx, id, opts...)
+	var pg progress.Controller
+	optGetter := solver.CacheOptGetterOf(ctx)
+	if optGetter != nil {
+		if kv := optGetter(false, cache.ProgressKey{}); kv != nil {
+			if v, ok := kv[cache.ProgressKey{}].(progress.Controller); ok {
+				pg = v
+			}
+		}
+	}
+
+	ref, err := w.CacheMgr.Get(ctx, id, pg, opts...)
 	var needsRemoteProviders cache.NeedsRemoteProviderError
 	if errors.As(err, &needsRemoteProviders) {
-		if optGetter := solver.CacheOptGetterOf(ctx); optGetter != nil {
+		if optGetter != nil {
 			var keys []interface{}
 			for _, dgst := range needsRemoteProviders {
 				keys = append(keys, cache.DescHandlerKey(dgst))
 			}
 			descHandlers := cache.DescHandlers(make(map[digest.Digest]*cache.DescHandler))
-			for k, v := range optGetter(keys...) {
+			for k, v := range optGetter(true, keys...) {
 				if key, ok := k.(cache.DescHandlerKey); ok {
 					if handler, ok := v.(*cache.DescHandler); ok {
 						descHandlers[digest.Digest(key)] = handler
@@ -244,7 +254,7 @@ func (w *Worker) LoadRef(ctx context.Context, id string, hidden bool) (cache.Imm
 				}
 			}
 			opts = append(opts, descHandlers)
-			ref, err = w.CacheMgr.Get(ctx, id, opts...)
+			ref, err = w.CacheMgr.Get(ctx, id, pg, opts...)
 		}
 	}
 	if err != nil {

@@ -103,28 +103,31 @@ type displayInfo struct {
 }
 
 type job struct {
-	startTime     *time.Time
-	completedTime *time.Time
-	name          string
-	status        string
-	hasError      bool
-	isCanceled    bool
-	vertex        *vertex
-	showTerm      bool
+	intervals   []interval
+	isCompleted bool
+	name        string
+	status      string
+	hasError    bool
+	isCanceled  bool
+	vertex      *vertex
+	showTerm    bool
 }
 
 type trace struct {
 	w             io.Writer
+	startTime     *time.Time
 	localTimeDiff time.Duration
 	vertexes      []*vertex
 	byDigest      map[digest.Digest]*vertex
 	nextIndex     int
 	updates       map[digest.Digest]struct{}
 	modeConsole   bool
+	groups        map[string]*vertexGroup // group id -> group
 }
 
 type vertex struct {
 	*client.Vertex
+
 	statuses []*status
 	byID     map[string]*status
 	indent   string
@@ -149,6 +152,11 @@ type vertex struct {
 	term      *vt100.VT100
 	termBytes int
 	termCount int
+
+	// Interval start time in unix nano -> interval. Using a map ensures
+	// that updates for the same interval overwrite their previous updates.
+	intervals       map[int64]interval
+	mostRecentStart *time.Time
 }
 
 func (v *vertex) update(c int) {
@@ -157,6 +165,160 @@ func (v *vertex) update(c int) {
 		v.lastBlockTime = &now
 	}
 	v.count += c
+}
+
+func (v *vertex) isStarted() bool {
+	return len(v.intervals) > 0
+}
+
+func (v *vertex) isCompleted() bool {
+	for _, ival := range v.intervals {
+		if ival.stop == nil {
+			return false
+		}
+	}
+	return true
+}
+
+type vertexGroup struct {
+	*vertex
+	subVtxs map[digest.Digest]client.Vertex
+}
+
+func (vg *vertexGroup) refresh() (changed, newlyStarted bool) {
+	newVtx := *vg.Vertex
+	newVtx.Cached = true
+	alreadyStarted := vg.isStarted()
+	for _, subVtx := range vg.subVtxs {
+		if subVtx.Started != nil {
+			newInterval := interval{
+				start: subVtx.Started,
+				stop:  subVtx.Completed,
+			}
+			prevInterval := vg.intervals[subVtx.Started.UnixNano()]
+			if !newInterval.isEqual(prevInterval) {
+				changed = true
+			}
+			if !alreadyStarted {
+				newlyStarted = true
+			}
+			vg.intervals[subVtx.Started.UnixNano()] = newInterval
+			if vg.mostRecentStart == nil || subVtx.Started.After(*vg.mostRecentStart) {
+				vg.mostRecentStart = subVtx.Started
+			}
+		}
+
+		// Group is considered cached iff all subvtxs are cached
+		newVtx.Cached = newVtx.Cached && subVtx.Cached
+
+		// Group error is set to the first error found in subvtxs, if any
+		if newVtx.Error == "" {
+			newVtx.Error = subVtx.Error
+		}
+	}
+
+	if vg.Cached != newVtx.Cached {
+		changed = true
+	}
+	if vg.Error != newVtx.Error {
+		changed = true
+	}
+	vg.Vertex = &newVtx
+
+	return changed, newlyStarted
+}
+
+type interval struct {
+	start *time.Time
+	stop  *time.Time
+}
+
+func (ival interval) duration() time.Duration {
+	if ival.start == nil {
+		return 0
+	}
+	if ival.stop == nil {
+		return time.Since(*ival.start)
+	}
+	return ival.stop.Sub(*ival.start)
+}
+
+func (ival interval) isEqual(other interval) (isEqual bool) {
+	return equalTimes(ival.start, other.start) && equalTimes(ival.stop, other.stop)
+}
+
+func equalTimes(t1, t2 *time.Time) bool {
+	if t2 == nil {
+		return t1 == nil
+	}
+	if t1 == nil {
+		return false
+	}
+	return t1.Equal(*t2)
+}
+
+// mergeIntervals takes a slice of (start, stop) pairs and returns a slice where
+// any intervals that overlap in time are combined into a single interval. If an
+// interval's stop time is nil, it is treated as positive infinity and consumes
+// any intervals after it. Intervals with nil start times are ignored and not
+// returned.
+func mergeIntervals(intervals []interval) []interval {
+	// remove any intervals that have not started
+	var filtered []interval
+	for _, interval := range intervals {
+		if interval.start != nil {
+			filtered = append(filtered, interval)
+		}
+	}
+	intervals = filtered
+
+	if len(intervals) == 0 {
+		return nil
+	}
+
+	// sort intervals by start time
+	sort.Slice(intervals, func(i, j int) bool {
+		return intervals[i].start.Before(*intervals[j].start)
+	})
+
+	var merged []interval
+	cur := intervals[0]
+	for i := 1; i < len(intervals); i++ {
+		next := intervals[i]
+		if cur.stop == nil {
+			// if cur doesn't stop, all intervals after it will be merged into it
+			merged = append(merged, cur)
+			return merged
+		}
+		if cur.stop.Before(*next.start) {
+			// if cur stops before next starts, no intervals after cur will be
+			// merged into it; cur stands on its own
+			merged = append(merged, cur)
+			cur = next
+			continue
+		}
+		if next.stop == nil {
+			// cur and next partially overlap, but next also never stops, so all
+			// subsequent intervals will be merged with both cur and next
+			merged = append(merged, interval{
+				start: cur.start,
+				stop:  nil,
+			})
+			return merged
+		}
+		if cur.stop.After(*next.stop) || cur.stop.Equal(*next.stop) {
+			// cur fully subsumes next
+			continue
+		}
+		// cur partially overlaps with next, merge them together into cur
+		cur = interval{
+			start: cur.start,
+			stop:  next.stop,
+		}
+	}
+	// append anything we are left with
+	merged = append(merged, cur)
+	return merged
 }
 
 type status struct {
@@ -169,6 +331,7 @@ func newTrace(w io.Writer, modeConsole bool) *trace {
 		updates:     make(map[digest.Digest]struct{}),
 		w:           w,
 		modeConsole: modeConsole,
+		groups:      make(map[string]*vertexGroup),
 	}
 }
 
@@ -222,7 +385,39 @@ func (t *trace) triggerVertexEvent(v *client.Vertex) {
 }
 
 func (t *trace) update(s *client.SolveStatus, termWidth int) {
+	groups := make(map[string]struct{})
 	for _, v := range s.Vertexes {
+		if t.startTime == nil {
+			t.startTime = v.Started
+		}
+		if v.ProgressGroup != nil {
+			group, ok := t.groups[v.ProgressGroup.Id]
+			if !ok {
+				t.nextIndex++
+				group = &vertexGroup{
+					vertex: &vertex{
+						Vertex: &client.Vertex{
+							Digest: digest.Digest(v.ProgressGroup.Id),
+							Name:   v.ProgressGroup.Name,
+						},
+						byID:          make(map[string]*status),
+						statusUpdates: make(map[string]struct{}),
+						index:         t.nextIndex,
+						intervals:     make(map[int64]interval),
+					},
+					subVtxs: make(map[digest.Digest]client.Vertex),
+				}
+				if t.modeConsole {
+					group.term = vt100.NewVT100(termHeight, termWidth-termPad)
+				}
+				t.groups[v.ProgressGroup.Id] = group
+				t.byDigest[group.Digest] = group.vertex
+			}
+			groups[v.ProgressGroup.Id] = struct{}{}
+			group.subVtxs[v.Digest] = *v
+			t.byDigest[v.Digest] = group.vertex
+			continue
+		}
 		prev, ok := t.byDigest[v.Digest]
 		if !ok {
 			t.nextIndex++
@@ -230,23 +425,48 @@ func (t *trace) update(s *client.SolveStatus, termWidth int) {
 				byID:          make(map[string]*status),
 				statusUpdates: make(map[string]struct{}),
 				index:         t.nextIndex,
+				intervals:     make(map[int64]interval),
 			}
 			if t.modeConsole {
 				t.byDigest[v.Digest].term = vt100.NewVT100(termHeight, termWidth-termPad)
 			}
 		}
 		t.triggerVertexEvent(v)
-		if v.Started != nil && (prev == nil || prev.Started == nil) {
+		if v.Started != nil && (prev == nil || !prev.isStarted()) {
 			if t.localTimeDiff == 0 {
 				t.localTimeDiff = time.Since(*v.Started)
 			}
 			t.vertexes = append(t.vertexes, t.byDigest[v.Digest])
 		}
 		// allow a duplicate initial vertex that shouldn't reset state
-		if !(prev != nil && prev.Started != nil && v.Started == nil) {
+		if !(prev != nil && prev.isStarted() && v.Started == nil) {
 			t.byDigest[v.Digest].Vertex = v
 		}
+		if v.Started != nil {
+			t.byDigest[v.Digest].intervals[v.Started.UnixNano()] = interval{
+				start: v.Started,
+				stop:  v.Completed,
+			}
+			if t.byDigest[v.Digest].mostRecentStart == nil || v.Started.After(*t.byDigest[v.Digest].mostRecentStart) {
+				t.byDigest[v.Digest].mostRecentStart = v.Started
+			}
+		}
 		t.byDigest[v.Digest].jobCached = false
+	}
+	for groupID := range groups {
+		group := t.groups[groupID]
+		changed, newlyStarted := group.refresh()
+		if changed {
+			group.update(1)
+			t.updates[group.Digest] = struct{}{}
+		}
+		if newlyStarted {
+			if t.localTimeDiff == 0 {
+				t.localTimeDiff = time.Since(*group.mostRecentStart)
+			}
+			t.vertexes = append(t.vertexes, group.vertex)
+		}
+		group.jobCached = false
 	}
 	for _, s := range s.Statuses {
 		v, ok := t.byDigest[s.Vertex]
@@ -293,8 +513,8 @@ func (t *trace) update(s *client.SolveStatus, termWidth int) {
 				v.logs[len(v.logs)-1] = append(v.logs[len(v.logs)-1], dt...)
 			} else {
 				ts := time.Duration(0)
-				if v.Started != nil {
-					ts = l.Timestamp.Sub(*v.Started)
+				if v.isStarted() {
+					ts = l.Timestamp.Sub(*v.mostRecentStart)
 				}
 				prec := 1
 				sec := ts.Seconds()
@@ -339,12 +559,17 @@ func (t *trace) printErrorLogs(f io.Writer) {
 
 func (t *trace) displayInfo() (d displayInfo) {
 	d.startTime = time.Now()
-	if t.localTimeDiff != 0 {
-		d.startTime = (*t.vertexes[0].Started).Add(t.localTimeDiff)
+	if t.startTime != nil {
+		d.startTime = t.startTime.Add(t.localTimeDiff)
 	}
 	d.countTotal = len(t.byDigest)
 	for _, v := range t.byDigest {
-		if v.Completed != nil {
+		if v.ProgressGroup != nil {
+			// don't count vtxs in a group, they are merged into a single vtx
+			d.countTotal--
+			continue
+		}
+		if v.isCompleted() {
 			d.countCompleted++
 		}
 	}
@@ -356,11 +581,20 @@ func (t *trace) displayInfo() (d displayInfo) {
 		}
 		var jobs []*job
 		j := &job{
-			startTime:     addTime(v.Started, t.localTimeDiff),
-			completedTime: addTime(v.Completed, t.localTimeDiff),
-			name:          strings.Replace(v.Name, "\t", " ", -1),
-			vertex:        v,
+			name:        strings.Replace(v.Name, "\t", " ", -1),
+			vertex:      v,
+			isCompleted: true,
 		}
+		for _, ival := range v.intervals {
+			j.intervals = append(j.intervals, interval{
+				start: addTime(ival.start, t.localTimeDiff),
+				stop:  addTime(ival.stop, t.localTimeDiff),
+			})
+			if ival.stop == nil {
+				j.isCompleted = false
+			}
+		}
+		j.intervals = mergeIntervals(j.intervals)
 		if v.Error != "" {
 			if strings.HasSuffix(v.Error, context.Canceled.Error()) {
 				j.isCanceled = true
@@ -377,9 +611,12 @@ func (t *trace) displayInfo() (d displayInfo) {
 		jobs = append(jobs, j)
 		for _, s := range v.statuses {
 			j := &job{
-				startTime:     addTime(s.Started, t.localTimeDiff),
-				completedTime: addTime(s.Completed, t.localTimeDiff),
-				name:          v.indent + "=> " + s.ID,
+				intervals: []interval{{
+					start: addTime(s.Started, t.localTimeDiff),
+					stop:  addTime(s.Completed, t.localTimeDiff),
+				}},
+				isCompleted: s.Completed != nil,
+				name:        v.indent + "=> " + s.ID,
 			}
 			if s.Total != 0 {
 				j.status = fmt.Sprintf("%.2f / %.2f", units.Bytes(s.Current), units.Bytes(s.Total))
@@ -390,11 +627,18 @@ func (t *trace) displayInfo() (d displayInfo) {
 		}
 		for _, w := range v.warnings {
 			msg := "WARN: " + string(w.Short)
+			mostRecentStart := v.mostRecentStart
+			var mostRecentStop *time.Time
+			if mostRecentStart != nil {
+				mostRecentStop = v.intervals[mostRecentStart.UnixNano()].stop
+			}
 			j := &job{
-				startTime:     addTime(v.Started, t.localTimeDiff),
-				completedTime: addTime(v.Completed, t.localTimeDiff),
-				name:          msg,
-				isCanceled:    true,
+				intervals: []interval{{
+					start: addTime(mostRecentStart, t.localTimeDiff),
+					stop:  addTime(mostRecentStop, t.localTimeDiff),
+				}},
+				name:       msg,
+				isCanceled: true,
 			}
 			jobs = append(jobs, j)
 		}
@@ -456,10 +700,10 @@ func setupTerminals(jobs []*job, height int, all bool) []*job {
 	var candidates []*job
 	numInUse := 0
 	for _, j := range jobs {
-		if j.vertex != nil && j.vertex.termBytes > 0 && j.completedTime == nil {
+		if j.vertex != nil && j.vertex.termBytes > 0 && !j.isCompleted {
 			candidates = append(candidates, j)
 		}
-		if j.completedTime == nil {
+		if j.isCompleted {
 			numInUse++
 		}
 	}
@@ -512,14 +756,13 @@ func (disp *display) print(d displayInfo, width, height int, all bool) {
 	fmt.Fprintln(disp.c, out)
 	lineCount := 0
 	for _, j := range d.jobs {
-		endTime := time.Now()
-		if j.completedTime != nil {
-			endTime = *j.completedTime
-		}
-		if j.startTime == nil {
+		if len(j.intervals) == 0 {
 			continue
 		}
-		dt := endTime.Sub(*j.startTime).Seconds()
+		var dt float64
+		for _, ival := range j.intervals {
+			dt += ival.duration().Seconds()
+		}
 		if dt < 0.05 {
 			dt = 0
 		}
@@ -549,7 +792,7 @@ func (disp *display) print(d displayInfo, width, height int, all bool) {
 		}
 
 		out = align(out, timer, width)
-		if j.completedTime != nil {
+		if j.isCompleted {
 			color := colorRun
 			if j.isCanceled {
 				color = colorCancel
@@ -609,7 +852,7 @@ func wrapHeight(j []*job, limit int) []*job {
 		// wrap things around if incomplete jobs were cut
 		var invisible []*job
 		for _, j := range j[:len(j)-limit] {
-			if j.completedTime == nil {
+			if !j.isCompleted {
 				invisible = append(invisible, j)
 			}
 		}
@@ -617,7 +860,7 @@ func wrapHeight(j []*job, limit int) []*job {
 		if l := len(invisible); l > 0 {
 			rewrapped := make([]*job, 0, len(wrapped))
 			for _, j := range wrapped {
-				if j.completedTime == nil || l <= 0 {
+				if !j.isCompleted || l <= 0 {
 					rewrapped = append(rewrapped, j)
 				}
 				l--

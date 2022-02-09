@@ -181,7 +181,7 @@ func TestManager(t *testing.T) {
 	defer cleanup()
 	cm := co.manager
 
-	_, err = cm.Get(ctx, "foobar")
+	_, err = cm.Get(ctx, "foobar", nil)
 	require.Error(t, err)
 
 	checkDiskUsage(ctx, t, cm, 0, 0)
@@ -247,10 +247,10 @@ func TestManager(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, true, errors.Is(err, errInvalid))
 
-	snap, err = cm.Get(ctx, snap.ID())
+	snap, err = cm.Get(ctx, snap.ID(), nil)
 	require.NoError(t, err)
 
-	snap2, err := cm.Get(ctx, snap.ID())
+	snap2, err := cm.Get(ctx, snap.ID(), nil)
 	require.NoError(t, err)
 
 	checkDiskUsage(ctx, t, cm, 1, 0)
@@ -383,7 +383,7 @@ func TestMergeBlobchainID(t *testing.T) {
 		mergeInputs = append(mergeInputs, curBlob.Clone())
 	}
 
-	mergeRef, err := cm.Merge(ctx, mergeInputs)
+	mergeRef, err := cm.Merge(ctx, mergeInputs, nil)
 	require.NoError(t, err)
 
 	_, err = mergeRef.GetRemotes(ctx, true, compression.New(compression.Default), false, nil)
@@ -505,7 +505,7 @@ func TestSnapshotExtract(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, len(dirs))
 
-	snap, err = cm.Get(ctx, id)
+	snap, err = cm.Get(ctx, id, nil)
 	require.NoError(t, err)
 
 	checkDiskUsage(ctx, t, cm, 2, 0)
@@ -987,7 +987,7 @@ func TestLazyCommit(t *testing.T) {
 	require.Equal(t, true, errors.Is(err, ErrLocked))
 
 	// immutable refs still work
-	snap2, err := cm.Get(ctx, snap.ID())
+	snap2, err := cm.Get(ctx, snap.ID(), nil)
 	require.NoError(t, err)
 	require.Equal(t, snap.ID(), snap2.ID())
 
@@ -998,7 +998,7 @@ func TestLazyCommit(t *testing.T) {
 	require.NoError(t, err)
 
 	// immutable work after final release as well
-	snap, err = cm.Get(ctx, snap.ID())
+	snap, err = cm.Get(ctx, snap.ID(), nil)
 	require.NoError(t, err)
 	require.Equal(t, snap.ID(), snap2.ID())
 
@@ -1016,7 +1016,7 @@ func TestLazyCommit(t *testing.T) {
 	require.Equal(t, active2.ID(), active.ID())
 
 	// because ref was took mutable old immutable are cleared
-	_, err = cm.Get(ctx, snap.ID())
+	_, err = cm.Get(ctx, snap.ID(), nil)
 	require.Error(t, err)
 	require.Equal(t, true, errors.Is(err, errNotFound))
 
@@ -1036,7 +1036,7 @@ func TestLazyCommit(t *testing.T) {
 	require.Equal(t, true, errors.Is(err, errNotFound))
 
 	// immutable still works
-	snap2, err = cm.Get(ctx, snap.ID())
+	snap2, err = cm.Get(ctx, snap.ID(), nil)
 	require.NoError(t, err)
 	require.Equal(t, snap.ID(), snap2.ID())
 
@@ -1065,7 +1065,7 @@ func TestLazyCommit(t *testing.T) {
 	require.NoError(t, err)
 	cm = co.manager
 
-	snap2, err = cm.Get(ctx, snap.ID())
+	snap2, err = cm.Get(ctx, snap.ID(), nil)
 	require.NoError(t, err)
 
 	err = snap2.Release(ctx)
@@ -1074,7 +1074,7 @@ func TestLazyCommit(t *testing.T) {
 	active, err = cm.GetMutable(ctx, active.ID())
 	require.NoError(t, err)
 
-	_, err = cm.Get(ctx, snap.ID())
+	_, err = cm.Get(ctx, snap.ID(), nil)
 	require.Error(t, err)
 	require.Equal(t, true, errors.Is(err, errNotFound))
 
@@ -1095,7 +1095,7 @@ func TestLazyCommit(t *testing.T) {
 	defer cleanup()
 	cm = co.manager
 
-	snap2, err = cm.Get(ctx, snap.ID())
+	snap2, err = cm.Get(ctx, snap.ID(), nil)
 	require.NoError(t, err)
 
 	err = snap2.Finalize(ctx)
@@ -1593,7 +1593,7 @@ func TestMergeOp(t *testing.T) {
 	defer cleanup()
 	cm := co.manager
 
-	emptyMerge, err := cm.Merge(ctx, nil)
+	emptyMerge, err := cm.Merge(ctx, nil, nil)
 	require.NoError(t, err)
 	require.Nil(t, emptyMerge)
 
@@ -1620,7 +1620,7 @@ func TestMergeOp(t *testing.T) {
 		require.EqualValues(t, 8192, size)
 	}
 
-	singleMerge, err := cm.Merge(ctx, baseRefs[:1])
+	singleMerge, err := cm.Merge(ctx, baseRefs[:1], nil)
 	require.NoError(t, err)
 	m, err := singleMerge.Mount(ctx, true, nil)
 	require.NoError(t, err)
@@ -1640,7 +1640,7 @@ func TestMergeOp(t *testing.T) {
 	}})
 	require.NoError(t, err)
 
-	merge1, err := cm.Merge(ctx, baseRefs[:3])
+	merge1, err := cm.Merge(ctx, baseRefs[:3], nil)
 	require.NoError(t, err)
 	_, err = merge1.Mount(ctx, true, nil)
 	require.NoError(t, err)
@@ -1649,7 +1649,7 @@ func TestMergeOp(t *testing.T) {
 	require.EqualValues(t, 4096, size1) // hardlinking means all but the first snapshot doesn't take up space
 	checkDiskUsage(ctx, t, cm, 7, 0)
 
-	merge2, err := cm.Merge(ctx, baseRefs[3:])
+	merge2, err := cm.Merge(ctx, baseRefs[3:], nil)
 	require.NoError(t, err)
 	_, err = merge2.Mount(ctx, true, nil)
 	require.NoError(t, err)
@@ -1664,7 +1664,7 @@ func TestMergeOp(t *testing.T) {
 	checkDiskUsage(ctx, t, cm, 8, 0)
 	// should still be able to use merges based on released refs
 
-	merge3, err := cm.Merge(ctx, []ImmutableRef{merge1, merge2})
+	merge3, err := cm.Merge(ctx, []ImmutableRef{merge1, merge2}, nil)
 	require.NoError(t, err)
 	require.NoError(t, merge1.Release(ctx))
 	require.NoError(t, merge2.Release(ctx))
@@ -1719,7 +1719,7 @@ func TestDiffOp(t *testing.T) {
 	require.NoError(t, err)
 
 	// verify that releasing parents does not invalidate a diff ref until it is released
-	diff, err := cm.Diff(ctx, lowerA, upperA)
+	diff, err := cm.Diff(ctx, lowerA, upperA, nil)
 	require.NoError(t, err)
 	checkDiskUsage(ctx, t, cm, 3, 0)
 	require.NoError(t, lowerA.Release(ctx))
@@ -1756,7 +1756,7 @@ func TestDiffOp(t *testing.T) {
 	e, err := newRef.Commit(ctx)
 	require.NoError(t, err)
 
-	diff, err = cm.Diff(ctx, c, e)
+	diff, err = cm.Diff(ctx, c, e, nil)
 	require.NoError(t, err)
 	checkDiskUsage(ctx, t, cm, 8, 0) // 5 base refs + 2 diffs + 1 merge
 	require.NoError(t, a.Release(ctx))
@@ -1847,7 +1847,7 @@ func TestLoadHalfFinalizedRef(t *testing.T) {
 	_, err = cm.GetMutable(ctx, mutRef.ID())
 	require.ErrorIs(t, err, errNotFound)
 
-	iref, err = cm.Get(ctx, immutRef.ID())
+	iref, err = cm.Get(ctx, immutRef.ID(), nil)
 	require.NoError(t, err)
 	require.NoError(t, iref.Finalize(ctx))
 	immutRef = iref.(*immutableRef)

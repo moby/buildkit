@@ -115,6 +115,7 @@ message Vertex {
 	google.protobuf.Timestamp started = 5 [(gogoproto.stdtime) = true ];
 	google.protobuf.Timestamp completed = 6 [(gogoproto.stdtime) = true ];
 	string error = 7; // typed errors?
+	pb.ProgressGroup progressGroup = 8;
 }
 
 message VertexStatus {

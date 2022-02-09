@@ -373,7 +373,7 @@ func (hs *httpSourceHandler) save(ctx context.Context, resp *http.Response, s se
 
 func (hs *httpSourceHandler) Snapshot(ctx context.Context, g session.Group) (cache.ImmutableRef, error) {
 	if hs.refID != "" {
-		ref, err := hs.cache.Get(ctx, hs.refID)
+		ref, err := hs.cache.Get(ctx, hs.refID, nil)
 		if err == nil {
 			return ref, nil
 		}

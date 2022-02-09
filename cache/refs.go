@@ -21,6 +21,7 @@ import (
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/leaseutil"
+	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/winlayers"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -87,11 +88,12 @@ type cacheRecord struct {
 }
 
 // hold ref lock before calling
-func (cr *cacheRecord) ref(triggerLastUsed bool, descHandlers DescHandlers) *immutableRef {
+func (cr *cacheRecord) ref(triggerLastUsed bool, descHandlers DescHandlers, pg progress.Controller) *immutableRef {
 	ref := &immutableRef{
 		cacheRecord:     cr,
 		triggerLastUsed: triggerLastUsed,
 		descHandlers:    descHandlers,
+		progress:        pg,
 	}
 	cr.refs[ref] = struct{}{}
 	return ref
@@ -446,6 +448,8 @@ type immutableRef struct {
 	*cacheRecord
 	triggerLastUsed bool
 	descHandlers    DescHandlers
+	// TODO:(sipsma) de-dupe progress with the same field inside descHandlers?
+	progress progress.Controller
 }
 
 // Order is from parent->child, sr will be at end of slice. Refs should not
@@ -576,7 +580,7 @@ func (sr *mutableRef) DescHandler(dgst digest.Digest) *DescHandler {
 
 func (sr *immutableRef) clone() *immutableRef {
 	sr.mu.Lock()
-	ref := sr.ref(false, sr.descHandlers)
+	ref := sr.ref(false, sr.descHandlers, sr.progress)
 	sr.mu.Unlock()
 	return ref
 }
@@ -811,14 +815,14 @@ func (sr *immutableRef) Extract(ctx context.Context, s session.Group) (rerr erro
 			if rerr = sr.prepareRemoteSnapshotsStargzMode(ctx, s); rerr != nil {
 				return
 			}
-			rerr = sr.unlazy(ctx, sr.descHandlers, s)
+			rerr = sr.unlazy(ctx, sr.descHandlers, sr.progress, s, true)
 		}); err != nil {
 			return err
 		}
 		return rerr
 	}
 
-	return sr.unlazy(ctx, sr.descHandlers, s)
+	return sr.unlazy(ctx, sr.descHandlers, sr.progress, s, true)
 }
 
 func (sr *immutableRef) withRemoteSnapshotLabelsStargzMode(ctx context.Context, s session.Group, f func()) error {
@@ -949,7 +953,7 @@ func makeTmpLabelsStargzMode(labels map[string]string, s session.Group) (fields 
 	return
 }
 
-func (sr *immutableRef) unlazy(ctx context.Context, dhs DescHandlers, s session.Group) error {
+func (sr *immutableRef) unlazy(ctx context.Context, dhs DescHandlers, pg progress.Controller, s session.Group, topLevel bool) error {
 	_, err := sr.sizeG.Do(ctx, sr.ID()+"-unlazy", func(ctx context.Context) (_ interface{}, rerr error) {
 		if _, err := sr.cm.Snapshotter.Stat(ctx, sr.getSnapshotID()); err == nil {
 			return nil, nil
@@ -957,9 +961,9 @@ func (sr *immutableRef) unlazy(ctx context.Context, dhs DescHandlers, s session.
 
 		switch sr.kind() {
 		case Merge, Diff:
-			return nil, sr.unlazyDiffMerge(ctx, dhs, s)
+			return nil, sr.unlazyDiffMerge(ctx, dhs, pg, s, topLevel)
 		case Layer, BaseLayer:
-			return nil, sr.unlazyLayer(ctx, dhs, s)
+			return nil, sr.unlazyLayer(ctx, dhs, pg, s)
 		}
 		return nil, nil
 	})
@@ -967,7 +971,7 @@ func (sr *immutableRef) unlazy(ctx context.Context, dhs DescHandlers, s session.
 }
 
 // should be called within sizeG.Do call for this ref's ID
-func (sr *immutableRef) unlazyDiffMerge(ctx context.Context, dhs DescHandlers, s session.Group) error {
+func (sr *immutableRef) unlazyDiffMerge(ctx context.Context, dhs DescHandlers, pg progress.Controller, s session.Group, topLevel bool) (rerr error) {
 	eg, egctx := errgroup.WithContext(ctx)
 	var diffs []snapshot.Diff
 	sr.layerWalk(func(sr *immutableRef) {
@@ -977,13 +981,13 @@ func (sr *immutableRef) unlazyDiffMerge(ctx context.Context, dhs DescHandlers, s
 			if sr.diffParents.lower != nil {
 				diff.Lower = sr.diffParents.lower.getSnapshotID()
 				eg.Go(func() error {
-					return sr.diffParents.lower.unlazy(egctx, dhs, s)
+					return sr.diffParents.lower.unlazy(egctx, dhs, pg, s, false)
 				})
 			}
 			if sr.diffParents.upper != nil {
 				diff.Upper = sr.diffParents.upper.getSnapshotID()
 				eg.Go(func() error {
-					return sr.diffParents.upper.unlazy(egctx, dhs, s)
+					return sr.diffParents.upper.unlazy(egctx, dhs, pg, s, false)
 				})
 			}
 		case Layer:
@@ -992,7 +996,7 @@ func (sr *immutableRef) unlazyDiffMerge(ctx context.Context, dhs DescHandlers, s
 		case BaseLayer:
 			diff.Upper = sr.getSnapshotID()
 			eg.Go(func() error {
-				return sr.unlazy(egctx, dhs, s)
+				return sr.unlazy(egctx, dhs, pg, s, false)
 			})
 		}
 		diffs = append(diffs, diff)
@@ -1000,11 +1004,30 @@ func (sr *immutableRef) unlazyDiffMerge(ctx context.Context, dhs DescHandlers, s
 	if err := eg.Wait(); err != nil {
 		return err
 	}
+
+	if pg != nil {
+		action := "merging"
+		if sr.kind() == Diff {
+			action = "diffing"
+		}
+		progressID := sr.GetDescription()
+		if topLevel {
+			progressID = action
+		}
+		if progressID == "" {
+			progressID = fmt.Sprintf("%s %s", action, sr.ID())
+		}
+		_, stopProgress := pg.Start(ctx)
+		defer stopProgress(rerr)
+		statusDone := pg.Status(progressID, action)
+		defer statusDone()
+	}
+
 	return sr.cm.Snapshotter.Merge(ctx, sr.getSnapshotID(), diffs)
 }
 
 // should be called within sizeG.Do call for this ref's ID
-func (sr *immutableRef) unlazyLayer(ctx context.Context, dhs DescHandlers, s session.Group) (rerr error) {
+func (sr *immutableRef) unlazyLayer(ctx context.Context, dhs DescHandlers, pg progress.Controller, s session.Group) (rerr error) {
 	if !sr.getBlobOnly() {
 		return nil
 	}
@@ -1031,7 +1054,7 @@ func (sr *immutableRef) unlazyLayer(ctx context.Context, dhs DescHandlers, s ses
 	parentID := ""
 	if sr.layerParent != nil {
 		eg.Go(func() error {
-			if err := sr.layerParent.unlazy(egctx, dhs, s); err != nil {
+			if err := sr.layerParent.unlazy(egctx, dhs, pg, s, false); err != nil {
 				return err
 			}
 			parentID = sr.layerParent.getSnapshotID()
@@ -1059,10 +1082,13 @@ func (sr *immutableRef) unlazyLayer(ctx context.Context, dhs DescHandlers, s ses
 		return err
 	}
 
-	if dh != nil && dh.Progress != nil {
-		_, stopProgress := dh.Progress.Start(ctx)
+	if pg == nil && dh != nil {
+		pg = dh.Progress
+	}
+	if pg != nil {
+		_, stopProgress := pg.Start(ctx)
 		defer stopProgress(rerr)
-		statusDone := dh.Progress.Status("extracting "+desc.Digest.String(), "extracting")
+		statusDone := pg.Status("extracting "+desc.Digest.String(), "extracting")
 		defer statusDone()
 	}
 
@@ -1251,7 +1277,7 @@ func (sr *mutableRef) commit(ctx context.Context) (_ *immutableRef, rerr error) 
 		return nil, err
 	}
 
-	ref := rec.ref(true, sr.descHandlers)
+	ref := rec.ref(true, sr.descHandlers, nil)
 	sr.equalImmutable = ref
 	return ref, nil
 }

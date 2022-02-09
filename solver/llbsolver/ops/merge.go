@@ -3,9 +3,9 @@ package ops
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"strings"
 
+	"github.com/moby/buildkit/util/progress"
+	"github.com/moby/buildkit/util/progress/controller"
 	"github.com/moby/buildkit/worker"
 	"github.com/pkg/errors"
 
@@ -22,6 +22,8 @@ const mergeCacheType = "buildkit.merge.v0"
 type mergeOp struct {
 	op     *pb.MergeOp
 	worker worker.Worker
+	vtx    solver.Vertex
+	pg     progress.Controller
 }
 
 func NewMergeOp(v solver.Vertex, op *pb.Op_Merge, w worker.Worker) (solver.Op, error) {
@@ -31,6 +33,7 @@ func NewMergeOp(v solver.Vertex, op *pb.Op_Merge, w worker.Worker) (solver.Op, e
 	return &mergeOp{
 		op:     op.Merge,
 		worker: w,
+		vtx:    v,
 	}, nil
 }
 
@@ -53,14 +56,22 @@ func (m *mergeOp) CacheMap(ctx context.Context, group session.Group, index int) 
 			ComputeDigestFunc solver.ResultBasedCacheFunc
 			PreprocessFunc    solver.PreprocessFunc
 		}, len(m.op.Inputs)),
+		Opts: solver.CacheOpts(make(map[interface{}]interface{})),
 	}
+
+	m.pg = &controller.Controller{
+		WriterFactory: progress.FromContext(ctx),
+		Digest:        m.vtx.Digest(),
+		Name:          m.vtx.Name(),
+		ProgressGroup: m.vtx.Options().ProgressGroup,
+	}
+	cm.Opts[cache.ProgressKey{}] = m.pg
 
 	return cm, true, nil
 }
 
 func (m *mergeOp) Exec(ctx context.Context, g session.Group, inputs []solver.Result) ([]solver.Result, error) {
 	refs := make([]cache.ImmutableRef, len(inputs))
-	ids := make([]string, len(inputs))
 	var index int
 	for _, inp := range inputs {
 		if inp == nil {
@@ -74,18 +85,16 @@ func (m *mergeOp) Exec(ctx context.Context, g session.Group, inputs []solver.Res
 			continue
 		}
 		refs[index] = wref.ImmutableRef
-		ids[index] = wref.ImmutableRef.ID()
 		index++
 	}
 	refs = refs[:index]
-	ids = ids[:index]
 
 	if len(refs) == 0 {
 		return nil, nil
 	}
 
-	mergedRef, err := m.worker.CacheManager().Merge(ctx, refs,
-		cache.WithDescription(fmt.Sprintf("merge %s", strings.Join(ids, ";"))))
+	mergedRef, err := m.worker.CacheManager().Merge(ctx, refs, m.pg,
+		cache.WithDescription(m.vtx.Name()))
 	if err != nil {
 		return nil, err
 	}

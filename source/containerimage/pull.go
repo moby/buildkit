@@ -213,6 +213,7 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 			if p.vtx != nil {
 				progressController.Digest = p.vtx.Digest()
 				progressController.Name = p.vtx.Name()
+				progressController.ProgressGroup = p.vtx.Options().ProgressGroup
 			}
 
 			p.descHandlers = cache.DescHandlers(make(map[digest.Digest]*cache.DescHandler))

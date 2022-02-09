@@ -382,7 +382,7 @@ func (gs *gitSourceHandler) Snapshot(ctx context.Context, g session.Group) (out 
 		return nil, errors.Wrapf(err, "failed to search metadata for %s", snapshotKey)
 	}
 	if len(sis) > 0 {
-		return gs.cache.Get(ctx, sis[0].ID())
+		return gs.cache.Get(ctx, sis[0].ID(), nil)
 	}
 
 	gs.locker.Lock(gs.src.Remote)

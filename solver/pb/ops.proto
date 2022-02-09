@@ -207,6 +207,8 @@ message OpMetadata {
 	ExportCache export_cache = 4;
 
 	map<string, bool> caps = 5 [(gogoproto.castkey) = "github.com/moby/buildkit/util/apicaps.CapID", (gogoproto.nullable) = false];
+
+	ProgressGroup progress_group = 6;
 }
 
 // Source is a source mapping description for a file
@@ -247,6 +249,11 @@ message Position {
 
 message ExportCache {
 	bool Value = 1;
+}
+
+message ProgressGroup {
+	string id = 1;
+	string name = 2;
 }
 
 message ProxyEnv {

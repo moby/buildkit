@@ -1142,7 +1142,7 @@ func TestPersistence(t *testing.T) {
 	err = ref.Release(context.TODO())
 	require.NoError(t, err)
 
-	ref, err = cm.Get(context.TODO(), id)
+	ref, err = cm.Get(context.TODO(), id, nil)
 	require.NoError(t, err)
 
 	dgst, err = Checksum(context.TODO(), ref, "foo", ChecksumOpts{FollowLinks: true}, nil)
@@ -1162,7 +1162,7 @@ func TestPersistence(t *testing.T) {
 	defer closeBolt()
 	defer cm.Close()
 
-	ref, err = cm.Get(context.TODO(), id)
+	ref, err = cm.Get(context.TODO(), id, nil)
 	require.NoError(t, err)
 
 	dgst, err = Checksum(context.TODO(), ref, "foo", ChecksumOpts{FollowLinks: true}, nil)

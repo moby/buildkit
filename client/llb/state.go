@@ -505,6 +505,10 @@ func mergeMetadata(m1, m2 pb.OpMetadata) pb.OpMetadata {
 		m1.Caps[k] = true
 	}
 
+	if m2.ProgressGroup != nil {
+		m1.ProgressGroup = m2.ProgressGroup
+	}
+
 	return m1
 }
 
@@ -591,6 +595,12 @@ func Platform(p ocispecs.Platform) ConstraintsOpt {
 func LocalUniqueID(v string) ConstraintsOpt {
 	return constraintsOptFunc(func(c *Constraints) {
 		c.LocalUniqueID = v
+	})
+}
+
+func ProgressGroup(id, name string) ConstraintsOpt {
+	return constraintsOptFunc(func(c *Constraints) {
+		c.Metadata.ProgressGroup = &pb.ProgressGroup{Id: id, Name: name}
 	})
 }
 
