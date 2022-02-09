@@ -1,5 +1,5 @@
 {
-	"cniVersion": "0.4.0",
+	"cniVersion": "1.0.0",
 	"name": "buildkit",
 	"type": "bridge",
 	"bridge": "buildkit0",
@@ -9,6 +9,10 @@
 	"hairpinMode": true,
 	"ipam": {
 		"type": "host-local",
-		"subnet": "10.10.0.0/16"
+		"ranges": [
+			[{
+				"subnet": "10.10.0.0/16"
+			}]
+		]
 	}
 }
