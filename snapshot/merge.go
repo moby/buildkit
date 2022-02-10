@@ -58,9 +58,12 @@ type mergeSnapshotter struct {
 	// Whether we should try to implement merges by hardlinking between underlying directories
 	tryCrossSnapshotLink bool
 
-	// Whether the snapshotter is overlay-based, which enables some some optimizations like
-	// using the first merge input as the parent snapshot.
-	overlayBased bool
+	// Whether the optimization of preparing on top of base layers is supported (see Merge method).
+	skipBaseLayers bool
+
+	// Whether we should use the "user.*" namespace when writing overlay xattrs. If false,
+	// "trusted.*" is used instead.
+	userxattr bool
 }
 
 func NewMergeSnapshotter(ctx context.Context, sn Snapshotter, lm leases.Manager) MergeSnapshotter {
@@ -68,16 +71,24 @@ func NewMergeSnapshotter(ctx context.Context, sn Snapshotter, lm leases.Manager)
 	_, tryCrossSnapshotLink := hardlinkMergeSnapshotters[name]
 	_, overlayBased := overlayBasedSnapshotters[name]
 
+	skipBaseLayers := overlayBased // default to skipping base layer for overlay-based snapshotters
+	var userxattr bool
 	if overlayBased && userns.RunningInUserNS() {
 		// When using an overlay-based snapshotter, if we are running rootless on a pre-5.11
 		// kernel, we will not have userxattr. This results in opaque xattrs not being visible
 		// to us and thus breaking the overlay-optimized differ.
-		userxattr, err := needsUserXAttr(ctx, sn, lm)
+		var err error
+		userxattr, err = needsUserXAttr(ctx, sn, lm)
 		if err != nil {
 			bklog.G(ctx).Debugf("failed to check user xattr: %v", err)
 			tryCrossSnapshotLink = false
+			skipBaseLayers = false
 		} else {
 			tryCrossSnapshotLink = userxattr
+			// Disable skipping base layers when in pre-5.11 rootless mode. Skipping the base layers
+			// necessitates the ability to set opaque xattrs sometimes, which only works in 5.11+
+			// kernels that support userxattr.
+			skipBaseLayers = userxattr
 		}
 	}
 
@@ -85,13 +96,14 @@ func NewMergeSnapshotter(ctx context.Context, sn Snapshotter, lm leases.Manager)
 		Snapshotter:          sn,
 		lm:                   lm,
 		tryCrossSnapshotLink: tryCrossSnapshotLink,
-		overlayBased:         overlayBased,
+		skipBaseLayers:       skipBaseLayers,
+		userxattr:            userxattr,
 	}
 }
 
 func (sn *mergeSnapshotter) Merge(ctx context.Context, key string, diffs []Diff, opts ...snapshots.Opt) error {
 	var baseKey string
-	if sn.overlayBased {
+	if sn.skipBaseLayers {
 		// Overlay-based snapshotters can skip the base snapshot of the merge (if one exists) and just use it as the
 		// parent of the merge snapshot. Other snapshotters will start empty (with baseKey set to "").
 		// Find the baseKey by following the chain of diffs for as long as it follows the pattern of the current lower
