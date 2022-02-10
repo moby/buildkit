@@ -2241,9 +2241,9 @@ func testBuildExportWithForeignLayer(t *testing.T, sb integration.Sandbox) {
 				{
 					Type: ExporterImage,
 					Attrs: map[string]string{
-						"name":                     target,
-						"push":                     "true",
-						"propagate-nondist-layers": "true",
+						"name":                  target,
+						"push":                  "true",
+						"prefer-nondist-layers": "true",
 					},
 				},
 			},

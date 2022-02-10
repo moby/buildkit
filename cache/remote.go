@@ -150,7 +150,7 @@ func (sr *immutableRef) getRemote(ctx context.Context, createIfNeeded bool, refC
 		Provider: mprovider,
 	}
 	for _, ref := range chain {
-		desc, err := ref.ociDesc(ctx, sr.descHandlers, refCfg.ConvertNonDistributableLayers)
+		desc, err := ref.ociDesc(ctx, sr.descHandlers, refCfg.PreferNonDistributable)
 		if err != nil {
 			return nil, err
 		}

@@ -1559,13 +1559,21 @@ func TestNondistributableBlobs(t *testing.T) {
 	ref, err := cm.GetByBlob(ctx, desc, nil, descHandlers)
 	require.NoError(t, err)
 
-	remotes, err := ref.GetRemotes(ctx, true, config.RefConfig{}, false, nil)
+	remotes, err := ref.GetRemotes(ctx, true, config.RefConfig{PreferNonDistributable: true}, false, nil)
 	require.NoError(t, err)
 
 	desc2 := remotes[0].Descriptors[0]
 
 	require.Equal(t, desc.MediaType, desc2.MediaType)
 	require.Equal(t, desc.URLs, desc2.URLs)
+
+	remotes, err = ref.GetRemotes(ctx, true, config.RefConfig{PreferNonDistributable: false}, false, nil)
+	require.NoError(t, err)
+
+	desc2 = remotes[0].Descriptors[0]
+
+	require.Equal(t, ocispecs.MediaTypeImageLayer, desc2.MediaType)
+	require.Len(t, desc2.URLs, 0)
 }
 
 func checkInfo(ctx context.Context, t *testing.T, cs content.Store, info content.Info) {

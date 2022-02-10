@@ -45,10 +45,10 @@ const (
 	keyCompressionLevel = "compression-level"
 	keyBuildInfo        = "buildinfo"
 	ociTypes            = "oci-mediatypes"
-	// propagateNondistLayersKey is an exporter option which can be used to mark a layer as non-distributable if the layer reference was
+	// preferNondistLayersKey is an exporter option which can be used to mark a layer as non-distributable if the layer reference was
 	// already found to use a non-distributable media type.
 	// When this option is not set, the exporter will change the media type of the layer to a distributable one.
-	propagateNondistLayersKey = "propagate-nondist-layers"
+	preferNondistLayersKey = "prefer-nondist-layers"
 )
 
 type Opt struct {
@@ -186,12 +186,12 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 				return nil, err
 			}
 			i.buildInfoMode = bimode
-		case propagateNondistLayersKey:
+		case preferNondistLayersKey:
 			b, err := strconv.ParseBool(v)
 			if err != nil {
 				return nil, errors.Wrapf(err, "non-bool value %s specified for %s", v, k)
 			}
-			i.propagateNondistLayers = b
+			i.preferNondistLayers = b
 		default:
 			if i.meta == nil {
 				i.meta = make(map[string][]byte)
@@ -208,20 +208,20 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 
 type imageExporterInstance struct {
 	*imageExporter
-	targetName             string
-	push                   bool
-	pushByDigest           bool
-	unpack                 bool
-	insecure               bool
-	ociTypes               bool
-	nameCanonical          bool
-	danglingPrefix         string
-	layerCompression       compression.Type
-	forceCompression       bool
-	compressionLevel       *int
-	buildInfoMode          buildinfo.ExportMode
-	meta                   map[string][]byte
-	propagateNondistLayers bool
+	targetName          string
+	push                bool
+	pushByDigest        bool
+	unpack              bool
+	insecure            bool
+	ociTypes            bool
+	nameCanonical       bool
+	danglingPrefix      string
+	layerCompression    compression.Type
+	forceCompression    bool
+	compressionLevel    *int
+	buildInfoMode       buildinfo.ExportMode
+	meta                map[string][]byte
+	preferNondistLayers bool
 }
 
 func (e *imageExporterInstance) Name() string {
@@ -365,8 +365,8 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 
 func (e *imageExporterInstance) refCfg() cacheconfig.RefConfig {
 	return cacheconfig.RefConfig{
-		Compression:                   e.compression(),
-		ConvertNonDistributableLayers: !e.propagateNondistLayers,
+		Compression:            e.compression(),
+		PreferNonDistributable: e.preferNondistLayers,
 	}
 }
 

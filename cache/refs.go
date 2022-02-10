@@ -9,6 +9,7 @@ import (
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
+	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/snapshots"
@@ -20,7 +21,6 @@ import (
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/compression"
-	"github.com/moby/buildkit/util/convert"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/progress"
@@ -591,7 +591,48 @@ func (sr *immutableRef) Clone() ImmutableRef {
 	return sr.clone()
 }
 
-func (sr *immutableRef) ociDesc(ctx context.Context, dhs DescHandlers, convertNonDist bool) (ocispecs.Descriptor, error) {
+// layertoDistributable changes the passed in media type to the "distributable" version of the media type.
+func layerToDistributable(mt string) string {
+	if !images.IsNonDistributable(mt) {
+		// Layer is already a distributable media type (or this is not even a layer).
+		// No conversion needed
+		return mt
+	}
+
+	switch mt {
+	case ocispecs.MediaTypeImageLayerNonDistributable:
+		return ocispecs.MediaTypeImageLayer
+	case ocispecs.MediaTypeImageLayerNonDistributableGzip:
+		return ocispecs.MediaTypeImageLayerGzip
+	case ocispecs.MediaTypeImageLayerNonDistributableZstd:
+		return ocispecs.MediaTypeImageLayerZstd
+	case images.MediaTypeDockerSchema2LayerForeign:
+		return images.MediaTypeDockerSchema2Layer
+	case images.MediaTypeDockerSchema2LayerForeignGzip:
+		return images.MediaTypeDockerSchema2LayerGzip
+	default:
+		return mt
+	}
+}
+
+func layerToNonDistributable(mt string) string {
+	switch mt {
+	case ocispecs.MediaTypeImageLayer:
+		return ocispecs.MediaTypeImageLayerNonDistributable
+	case ocispecs.MediaTypeImageLayerGzip:
+		return ocispecs.MediaTypeImageLayerNonDistributableGzip
+	case ocispecs.MediaTypeImageLayerZstd:
+		return ocispecs.MediaTypeImageLayerNonDistributableZstd
+	case images.MediaTypeDockerSchema2Layer:
+		return images.MediaTypeDockerSchema2LayerForeign
+	case images.MediaTypeDockerSchema2LayerForeignGzip:
+		return images.MediaTypeDockerSchema2LayerForeignGzip
+	default:
+		return mt
+	}
+}
+
+func (sr *immutableRef) ociDesc(ctx context.Context, dhs DescHandlers, preferNonDist bool) (ocispecs.Descriptor, error) {
 	dgst := sr.getBlob()
 	if dgst == "" {
 		return ocispecs.Descriptor{}, errors.Errorf("no blob set for cache record %s", sr.ID())
@@ -604,10 +645,17 @@ func (sr *immutableRef) ociDesc(ctx context.Context, dhs DescHandlers, convertNo
 		MediaType:   sr.getMediaType(),
 	}
 
-	if convertNonDist {
-		desc.MediaType = convert.LayerToDistributable(desc.MediaType)
-	} else {
-		desc.URLs = sr.getURLs()
+	if preferNonDist {
+		if urls := sr.getURLs(); len(urls) > 0 {
+			// Make sure the media type is the non-distributable version
+			// We don't want to rely on the stored media type here because it could have been stored as distributable originally.
+			desc.MediaType = layerToNonDistributable(desc.MediaType)
+			desc.URLs = urls
+		}
+	}
+	if len(desc.URLs) == 0 {
+		// If there are no URL's, there is no reason to have this be non-dsitributable
+		desc.MediaType = layerToDistributable(desc.MediaType)
 	}
 
 	if blobDesc, err := getBlobDesc(ctx, sr.cm.ContentStore, desc.Digest); err == nil {
