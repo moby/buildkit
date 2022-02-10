@@ -30,7 +30,7 @@ import (
 // that accounts for any hardlinks made from existing snapshots. ctx is expected to have a temporary lease
 // associated with it.
 func (sn *mergeSnapshotter) diffApply(ctx context.Context, dest Mountable, diffs ...Diff) (_ snapshots.Usage, rerr error) {
-	a, err := applierFor(dest, sn.tryCrossSnapshotLink)
+	a, err := applierFor(dest, sn.tryCrossSnapshotLink, sn.userxattr)
 	if err != nil {
 		return snapshots.Usage{}, errors.Wrapf(err, "failed to create applier")
 	}
@@ -112,8 +112,9 @@ type change struct {
 
 type changeApply struct {
 	*change
-	dstPath string
-	dstStat *syscall.Stat_t
+	dstPath   string
+	dstStat   *syscall.Stat_t
+	setOpaque bool
 }
 
 type inode struct {
@@ -137,12 +138,14 @@ type applier struct {
 	lowerdirs            []string // ordered highest -> lowest, the order we want to check them in
 	crossSnapshotLinks   map[inode]struct{}
 	createWhiteoutDelete bool
+	userxattr            bool
 	dirModTimes          map[string]unix.Timespec // map of dstPath -> mtime that should be set on that subPath
 }
 
-func applierFor(dest Mountable, tryCrossSnapshotLink bool) (_ *applier, rerr error) {
+func applierFor(dest Mountable, tryCrossSnapshotLink, userxattr bool) (_ *applier, rerr error) {
 	a := &applier{
 		dirModTimes: make(map[string]unix.Timespec),
+		userxattr:   userxattr,
 	}
 	defer func() {
 		if rerr != nil {
@@ -263,6 +266,12 @@ func (a *applier) applyDelete(ctx context.Context, ca *changeApply) (bool, error
 		return false, nil
 	}
 
+	if overwrite && a.createWhiteoutDelete && isWhiteoutDevice(ca.dstStat) && ca.srcStat.Mode&unix.S_IFMT == unix.S_IFDIR {
+		// If we are overwriting a whiteout device with a directory, we need this new dir to be opaque
+		// so that any files from lowerdirs under it are not visible.
+		ca.setOpaque = true
+	}
+
 	if err := os.RemoveAll(ca.dstPath); err != nil {
 		return false, errors.Wrap(err, "failed to remove during apply")
 	}
@@ -376,9 +385,9 @@ func (a *applier) applyCopy(ctx context.Context, ca *changeApply) error {
 		}
 		for _, xattr := range xattrs {
 			if isOpaqueXattr(xattr) {
-				// Don't recreate opaque xattrs during merge. These should only be set when using overlay snapshotters,
-				// in which case we are converting from the "opaque whiteout" format to the "explicit whiteout" format during
-				// the merge (as taken care of by the overlay differ).
+				// Don't recreate opaque xattrs during merge based on the source file. The differs take care of converting
+				// source path from the "opaque whiteout" format to the "explicit whiteout" format. The only time we set
+				// opaque xattrs is handled after this loop below.
 				continue
 			}
 			xattrVal, err := sysx.LGetxattr(ca.srcPath, xattr)
@@ -389,6 +398,14 @@ func (a *applier) applyCopy(ctx context.Context, ca *changeApply) error {
 				// This can often fail, so just log it: https://github.com/moby/buildkit/issues/1189
 				bklog.G(ctx).Debugf("failed to set xattr %s of path %s during apply", xattr, ca.dstPath)
 			}
+		}
+	}
+
+	if ca.setOpaque {
+		// This is set in the case where we are creating a directory that is replacing a whiteout device
+		xattr := opaqueXattr(a.userxattr)
+		if err := sysx.LSetxattr(ca.dstPath, xattr, []byte{'y'}, 0); err != nil {
+			return errors.Wrapf(err, "failed to set opaque xattr %q of path %s", xattr, ca.dstPath)
 		}
 	}
 
@@ -773,13 +790,25 @@ func safeJoin(root, path string) (string, error) {
 	return filepath.Join(parent, base), nil
 }
 
+const (
+	trustedOpaqueXattr = "trusted.overlay.opaque"
+	userOpaqueXattr    = "user.overlay.opaque"
+)
+
 func isOpaqueXattr(s string) bool {
-	for _, k := range []string{"trusted.overlay.opaque", "user.overlay.opaque"} {
+	for _, k := range []string{trustedOpaqueXattr, userOpaqueXattr} {
 		if s == k {
 			return true
 		}
 	}
 	return false
+}
+
+func opaqueXattr(userxattr bool) string {
+	if userxattr {
+		return userOpaqueXattr
+	}
+	return trustedOpaqueXattr
 }
 
 // needsUserXAttr checks whether overlay mounts should be provided the userxattr option. We can't use
@@ -819,4 +848,9 @@ func needsUserXAttr(ctx context.Context, sn Snapshotter, lm leases.Manager) (boo
 		return false, err
 	}
 	return userxattr, nil
+}
+
+func isWhiteoutDevice(st *syscall.Stat_t) bool {
+	// it's a whiteout if it's a char device and has a major/minor of 0/0
+	return st != nil && st.Mode&unix.S_IFMT == unix.S_IFCHR && st.Rdev == unix.Mkdev(0, 0)
 }

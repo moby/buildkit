@@ -1070,6 +1070,31 @@ func diffOpTestCases() (tests []integration.Test) {
 		}
 	}()...)
 
+	// Regression tests
+	tests = append(tests, func() []integration.Test {
+		base := func() llb.State {
+			return llb.Scratch().File(llb.Mkdir("/dir", 0755))
+		}
+		return []integration.Test{
+			verifyContents{
+				// Verifies that when a directory with contents is used a a base layer
+				// in a merge, subsequent merges that first delete the dir (resulting in
+				// a whiteout device w/ overlay snapshotters) and then recreate the dir
+				// correctly set it as opaque.
+				name: "TestDiffMergeOpaqueRegression",
+				state: llb.Merge([]llb.State{
+					base().File(llb.Mkfile("/dir/a", 0644, nil)),
+					base().File(llb.Rm("/dir")),
+					base().File(llb.Mkfile("/dir/b", 0644, nil)),
+				}),
+				contents: apply(
+					fstest.CreateDir("/dir", 0755),
+					fstest.CreateFile("/dir/b", nil, 0644),
+				),
+			},
+		}
+	}()...)
+
 	return tests
 }
 
