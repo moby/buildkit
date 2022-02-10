@@ -93,6 +93,7 @@ BuildKit is used by the following projects:
 -   [Earthly earthfiles](https://github.com/vladaionescu/earthly)
 -   [Gitpod](https://github.com/gitpod-io/gitpod)
 -   [Dagger](https://dagger.io)
+-   [Qovery](https://www.qovery.com)
 
 ## Quick start
 
