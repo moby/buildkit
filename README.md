@@ -92,6 +92,7 @@ BuildKit is used by the following projects:
 -   [Okteto Cloud](https://okteto.com/)
 -   [Earthly earthfiles](https://github.com/vladaionescu/earthly)
 -   [Gitpod](https://github.com/gitpod-io/gitpod)
+-   [Dagger](https://dagger.io)
 
 ## Quick start
 
