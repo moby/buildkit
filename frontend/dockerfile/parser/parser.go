@@ -130,8 +130,17 @@ var validDirectives = map[string]struct{}{
 }
 
 var (
-	heredocDirectives         map[string]bool // directives allowed to contain heredocs
-	heredocCompoundDirectives map[string]bool // directives allowed to contain directives containing heredocs
+	// Directives allowed to contain heredocs
+	heredocDirectives = map[string]bool{
+		command.Add:  true,
+		command.Copy: true,
+		command.Run:  true,
+	}
+
+	// Directives allowed to contain directives containing heredocs
+	heredocCompoundDirectives = map[string]bool{
+		command.Onbuild: true,
+	}
 )
 
 // directive is the structure used during a build run to hold the state of
