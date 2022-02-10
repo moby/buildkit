@@ -19,6 +19,7 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/util/testutil/integration"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
 )
 
@@ -142,14 +143,25 @@ func testBuildMetadataFile(t *testing.T, sb integration.Sandbox) {
 	metadataBytes, err := ioutil.ReadFile(metadataFile)
 	require.NoError(t, err)
 
-	var metadata map[string]string
+	var metadata map[string]interface{}
 	err = json.Unmarshal(metadataBytes, &metadata)
 	require.NoError(t, err)
 
+	require.Contains(t, metadata, "image.name")
 	require.Equal(t, imageName, metadata["image.name"])
 
+	require.Contains(t, metadata, exptypes.ExporterImageDigestKey)
 	digest := metadata[exptypes.ExporterImageDigestKey]
 	require.NotEmpty(t, digest)
+
+	require.Contains(t, metadata, exptypes.ExporterImageDescriptorKey)
+	var desc *ocispecs.Descriptor
+	dtdesc, err := json.Marshal(metadata[exptypes.ExporterImageDescriptorKey])
+	require.NoError(t, err)
+	err = json.Unmarshal(dtdesc, &desc)
+	require.NoError(t, err)
+	require.NotEmpty(t, desc.MediaType)
+	require.NotEmpty(t, desc.Digest.String())
 
 	cdAddress := sb.ContainerdAddress()
 	if cdAddress == "" {

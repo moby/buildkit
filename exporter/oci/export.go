@@ -2,6 +2,8 @@ package oci
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"strconv"
 	"strings"
 	"time"
@@ -208,11 +210,18 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	desc.Annotations[ocispecs.AnnotationCreated] = time.Now().UTC().Format(time.RFC3339)
 
 	resp := make(map[string]string)
+
 	resp[exptypes.ExporterImageDigestKey] = desc.Digest.String()
 	if v, ok := desc.Annotations[exptypes.ExporterConfigDigestKey]; ok {
 		resp[exptypes.ExporterImageConfigDigestKey] = v
 		delete(desc.Annotations, exptypes.ExporterConfigDigestKey)
 	}
+
+	dtdesc, err := json.Marshal(desc)
+	if err != nil {
+		return nil, err
+	}
+	resp[exptypes.ExporterImageDescriptorKey] = base64.StdEncoding.EncodeToString(dtdesc)
 
 	if n, ok := src.Metadata["image.name"]; e.name == "*" && ok {
 		e.name = string(n)

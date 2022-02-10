@@ -11,6 +11,7 @@ const (
 	ExporterImageDigestKey       = "containerimage.digest"
 	ExporterImageConfigKey       = "containerimage.config"
 	ExporterImageConfigDigestKey = "containerimage.config.digest"
+	ExporterImageDescriptorKey   = "containerimage.descriptor"
 	ExporterInlineCache          = "containerimage.inlinecache"
 	ExporterBuildInfo            = "containerimage.buildinfo"
 	ExporterPlatformsKey         = "refs.platforms"

@@ -2,6 +2,8 @@ package containerimage
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -346,7 +348,15 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	resp[exptypes.ExporterImageDigestKey] = desc.Digest.String()
 	if v, ok := desc.Annotations[exptypes.ExporterConfigDigestKey]; ok {
 		resp[exptypes.ExporterImageConfigDigestKey] = v
+		delete(desc.Annotations, exptypes.ExporterConfigDigestKey)
 	}
+
+	dtdesc, err := json.Marshal(desc)
+	if err != nil {
+		return nil, err
+	}
+	resp[exptypes.ExporterImageDescriptorKey] = base64.StdEncoding.EncodeToString(dtdesc)
+
 	return resp, nil
 }
 
