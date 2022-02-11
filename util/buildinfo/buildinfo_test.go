@@ -96,10 +96,8 @@ func TestFormat(t *testing.T) {
 		Frontend: "dockerfile.v0",
 		Attrs: map[string]string{
 			"build-arg:foo": "bar",
-			"cmdline":       "crazymax/dockerfile:master",
 			"context":       "https://github.com/crazy-max/buildkit-buildsources-test.git#master",
 			"filename":      "Dockerfile",
-			"platform":      "linux/amd64,linux/arm64",
 			"source":        "crazymax/dockerfile:master",
 		},
 		Sources: []binfotypes.Source{

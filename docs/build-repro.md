@@ -26,7 +26,6 @@ The structure is base64 encoded and has the following format when decoded:
   "frontend": "dockerfile.v0",
   "attrs": {
     "build-arg:foo": "bar",
-    "cmdline": "crazymax/dockerfile:master",
     "context": "https://github.com/crazy-max/buildkit-buildsources-test.git#master",
     "filename": "Dockerfile",
     "platform": "linux/amd64,linux/arm64",
@@ -74,8 +73,7 @@ base64:
 {
   "ExporterResponse": {
     "containerimage.buildinfo": "<base64>",
-    "containerimage.digest": "sha256:...",
-    "image.name": "..."
+    "containerimage.digest": "sha256:..."
   }
 }
 ```
@@ -88,8 +86,42 @@ platform:
   "ExporterResponse": {
     "containerimage.buildinfo/linux/amd64": "<base64>",
     "containerimage.buildinfo/linux/arm64": "<base64>",
-    "containerimage.digest": "sha256:...",
-    "image.name": "..."
+    "containerimage.digest": "sha256:..."
   }
+}
+```
+
+### Metadata JSON output
+
+If you're using the `--metadata-file` flag with [`buildctl`](../README.md#metadata),
+[`buildx build`](https://github.com/docker/buildx/blob/master/docs/reference/buildx_build.md)
+or [`buildx bake`](https://github.com/docker/buildx/blob/master/docs/reference/buildx_bake.md):
+
+```shell
+jq '.' metadata.json
+```
+```json
+{
+  "containerimage.buildinfo": {
+    "frontend": "dockerfile.v0",
+    "attrs": {
+      "context": "https://github.com/crazy-max/buildkit-buildsources-test.git#master",
+      "filename": "Dockerfile",
+      "source": "docker/dockerfile:master"
+    },
+    "sources": [
+      {
+        "type": "docker-image",
+        "ref": "docker.io/docker/buildx-bin:0.6.1@sha256:a652ced4a4141977c7daaed0a074dcd9844a78d7d2615465b12f433ae6dd29f0",
+        "pin": "sha256:a652ced4a4141977c7daaed0a074dcd9844a78d7d2615465b12f433ae6dd29f0"
+      },
+      {
+        "type": "docker-image",
+        "ref": "docker.io/library/alpine:3.13",
+        "pin": "sha256:026f721af4cf2843e07bba648e158fb35ecc876d822130633cc49f707f0fc88c"
+      }
+    ]
+  },
+  "containerimage.digest": "sha256:..."
 }
 ```
