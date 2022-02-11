@@ -200,6 +200,7 @@ func TestIntegration(t *testing.T) {
 			"denied":  networkHostDenied,
 		}))...)
 	integration.Run(t, heredocTests, opts...)
+	integration.Run(t, outlineTests, opts...)
 }
 
 func testDefaultEnvWithArgs(t *testing.T, sb integration.Sandbox) {
@@ -4781,6 +4782,9 @@ COPY foo foo2
 
 func testFrontendSubrequests(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
+	if _, ok := f.(*clientFrontend); !ok {
+		t.Skip("only test with client frontend")
+	}
 
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -4790,10 +4794,6 @@ func testFrontendSubrequests(t *testing.T, sb integration.Sandbox) {
 FROM scratch
 COPY Dockerfile Dockerfile
 `)
-
-	if gf, ok := f.(*gatewayFrontend); ok {
-		dockerfile = []byte(fmt.Sprintf("#syntax=%s\n\n%s", gf.gw, dockerfile))
-	}
 
 	dir, err := integration.Tmpdir(
 		t,
@@ -4817,6 +4817,7 @@ COPY Dockerfile Dockerfile
 				require.Equal(t, subrequests.RequestType("rpc"), req.Type)
 				require.NotEqual(t, req.Version, "")
 				require.True(t, len(req.Metadata) > 0)
+				require.Equal(t, "result.json", req.Metadata[0].Name)
 			}
 		}
 		require.True(t, hasDescribe)

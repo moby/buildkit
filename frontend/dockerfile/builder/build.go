@@ -24,6 +24,7 @@ import (
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	gwpb "github.com/moby/buildkit/frontend/gateway/pb"
+	"github.com/moby/buildkit/frontend/subrequests/outline"
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
 	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
@@ -60,6 +61,7 @@ const (
 	keyShmSize          = "shm-size"
 	keyTargetPlatform   = "platform"
 	keyUlimit           = "ulimit"
+	keyRequestID        = "requestid"
 
 	// Don't forget to update frontend documentation if you add
 	// a new build-arg: frontend/dockerfile/docs/reference.md
@@ -72,7 +74,7 @@ const (
 
 var httpPrefix = regexp.MustCompile(`^https?://`)
 
-func Build(ctx context.Context, c client.Client) (*client.Result, error) {
+func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 	opts := c.BuildOpts().Opts
 	caps := c.BuildOpts().LLBCaps
 	gwcaps := c.BuildOpts().Caps
@@ -420,49 +422,66 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 		opts[keyHostname] = v
 	}
 
+	convertOpt := dockerfile2llb.ConvertOpt{
+		Target:           opts[keyTarget],
+		MetaResolver:     c,
+		BuildArgs:        filter(opts, buildArgPrefix),
+		Labels:           filter(opts, labelPrefix),
+		CacheIDNamespace: opts[keyCacheNSArg],
+		SessionID:        c.BuildOpts().SessionID,
+		BuildContext:     buildContext,
+		Excludes:         excludes,
+		IgnoreCache:      ignoreCache,
+		TargetPlatform:   targetPlatforms[0],
+		BuildPlatforms:   buildPlatforms,
+		ImageResolveMode: resolveMode,
+		PrefixPlatform:   exportMap,
+		ExtraHosts:       extraHosts,
+		ShmSize:          shmSize,
+		Ulimit:           ulimit,
+		CgroupParent:     opts[keyCgroupParent],
+		ForceNetMode:     defaultNetMode,
+		LLBCaps:          &caps,
+		SourceMap:        sourceMap,
+		Hostname:         opts[keyHostname],
+		Warn: func(msg, url string, detail [][]byte, location *parser.Range) {
+			c.Warn(ctx, defVtx, msg, warnOpts(sourceMap, location, detail, url))
+		},
+		ContextByName: contextByNameFunc(c, c.BuildOpts().SessionID, targetPlatforms[0]),
+	}
+
+	defer func() {
+		var el *parser.ErrorLocation
+		if errors.As(err, &el) {
+			err = wrapSource(err, sourceMap, el.Location)
+		}
+	}()
+
+	if req, ok := opts[keyRequestID]; ok {
+		switch req {
+		case outline.SubrequestsOutlineDefinition.Name:
+			o, err := dockerfile2llb.Dockefile2Outline(ctx, dtDockerfile, convertOpt)
+			if err != nil {
+				return nil, err
+			}
+			return o.ToResult()
+		default:
+			return nil, errdefs.NewUnsupportedSubrequestError(req)
+		}
+	}
+
 	eg, ctx = errgroup.WithContext(ctx)
 
 	for i, tp := range targetPlatforms {
 		func(i int, tp *ocispecs.Platform) {
 			eg.Go(func() (err error) {
-				defer func() {
-					var el *parser.ErrorLocation
-					if errors.As(err, &el) {
-						err = wrapSource(err, sourceMap, el.Location)
-					}
-				}()
-
-				st, img, bi, err := dockerfile2llb.Dockerfile2LLB(ctx, dtDockerfile, dockerfile2llb.ConvertOpt{
-					Target:           opts[keyTarget],
-					MetaResolver:     c,
-					BuildArgs:        filter(opts, buildArgPrefix),
-					Labels:           filter(opts, labelPrefix),
-					CacheIDNamespace: opts[keyCacheNSArg],
-					SessionID:        c.BuildOpts().SessionID,
-					BuildContext:     buildContext,
-					Excludes:         excludes,
-					IgnoreCache:      ignoreCache,
-					TargetPlatform:   tp,
-					BuildPlatforms:   buildPlatforms,
-					ImageResolveMode: resolveMode,
-					PrefixPlatform:   exportMap,
-					ExtraHosts:       extraHosts,
-					ShmSize:          shmSize,
-					Ulimit:           ulimit,
-					CgroupParent:     opts[keyCgroupParent],
-					ForceNetMode:     defaultNetMode,
-					LLBCaps:          &caps,
-					SourceMap:        sourceMap,
-					Hostname:         opts[keyHostname],
-					Warn: func(msg, url string, detail [][]byte, location *parser.Range) {
-						if i != 0 {
-							return
-						}
-						c.Warn(ctx, defVtx, msg, warnOpts(sourceMap, location, detail, url))
-					},
-					ContextByName: contextByNameFunc(c, c.BuildOpts().SessionID, tp),
-				})
-
+				opt := convertOpt
+				opt.TargetPlatform = tp
+				if i != 0 {
+					opt.Warn = nil
+				}
+				opt.ContextByName = contextByNameFunc(c, c.BuildOpts().SessionID, tp)
+				st, img, bi, err := dockerfile2llb.Dockerfile2LLB(ctx, dtDockerfile, opt)
 				if err != nil {
 					return err
 				}

@@ -6,11 +6,12 @@ import (
 
 	"github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/frontend/subrequests"
+	"github.com/moby/buildkit/frontend/subrequests/outline"
 	"github.com/moby/buildkit/solver/errdefs"
 )
 
 func checkSubRequest(ctx context.Context, opts map[string]string) (*client.Result, bool, error) {
-	req, ok := opts["requestid"]
+	req, ok := opts[keyRequestID]
 	if !ok {
 		return nil, false, nil
 	}
@@ -18,6 +19,8 @@ func checkSubRequest(ctx context.Context, opts map[string]string) (*client.Resul
 	case subrequests.RequestSubrequestsDescribe:
 		res, err := describe()
 		return res, true, err
+	case outline.RequestSubrequestsOutline: // handled later
+		return nil, false, nil
 	default:
 		return nil, true, errdefs.NewUnsupportedSubrequestError(req)
 	}
@@ -26,8 +29,9 @@ func checkSubRequest(ctx context.Context, opts map[string]string) (*client.Resul
 func describe() (*client.Result, error) {
 	all := []subrequests.Request{
 		subrequests.SubrequestsDescribeDefinition,
+		outline.SubrequestsOutlineDefinition,
 	}
-	dt, err := json.MarshalIndent(all, "  ", "")
+	dt, err := json.MarshalIndent(all, "", "  ")
 	if err != nil {
 		return nil, err
 	}
