@@ -26,7 +26,7 @@ func Decode(enc string) (bi binfotypes.BuildInfo, _ error) {
 }
 
 // Encode encodes build info.
-func Encode(ctx context.Context, solveReq frontend.SolveRequest, buildSources map[string]string, imageConfig []byte) ([]byte, error) {
+func Encode(ctx context.Context, req frontend.SolveRequest, buildSources map[string]string, imageConfig []byte) ([]byte, error) {
 	icbi, err := FromImageConfig(imageConfig)
 	if err != nil {
 		return nil, err
@@ -36,8 +36,8 @@ func Encode(ctx context.Context, solveReq frontend.SolveRequest, buildSources ma
 		return nil, err
 	}
 	return json.Marshal(binfotypes.BuildInfo{
-		Frontend: solveReq.Frontend,
-		Attrs:    filterAttrs(solveReq.FrontendOpt),
+		Frontend: req.Frontend,
+		Attrs:    filterAttrs(req.FrontendOpt),
 		Sources:  srcs,
 	})
 }
@@ -152,6 +152,29 @@ func FromImageConfig(imageConfig []byte) (bi binfotypes.BuildInfo, _ error) {
 		return bi, errors.Wrap(err, "failed to unmarshal buildinfo")
 	}
 	return bi, nil
+}
+
+// FormatOpts holds build info format options.
+type FormatOpts struct {
+	RemoveAttrs bool
+}
+
+// Format formats build info.
+func Format(dt []byte, format FormatOpts) (_ []byte, err error) {
+	if len(dt) == 0 {
+		return dt, nil
+	}
+	var bi binfotypes.BuildInfo
+	if err := json.Unmarshal(dt, &bi); err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal buildinfo for formatting")
+	}
+	if format.RemoveAttrs {
+		bi.Attrs = nil
+	}
+	if dt, err = json.Marshal(bi); err != nil {
+		return nil, err
+	}
+	return dt, nil
 }
 
 var knownAttrs = []string{

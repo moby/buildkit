@@ -238,6 +238,7 @@ Keys supported by image output:
 * `compression-level=[value]`: compression level for gzip, estargz (0-9) and zstd (0-22)
 * `force-compression=true`: forcefully apply `compression` option to all layers (including already existing layers).
 * `buildinfo=[all,imageconfig,metadata,none]`: choose [build dependency](docs/build-repro.md#build-dependencies) version to export (default `all`).
+* `buildinfo-attrs=true`: inline build info attributes in [image config](docs/build-repro.md#image-config) (default `false`).
 
 If credentials are required, `buildctl` will attempt to read Docker configuration file `$DOCKER_CONFIG/config.json`.
 `$DOCKER_CONFIG` defaults to `~/.docker`.

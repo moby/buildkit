@@ -41,6 +41,7 @@ const (
 	keyForceCompression = "force-compression"
 	keyCompressionLevel = "compression-level"
 	keyBuildInfo        = "buildinfo"
+	keyBuildInfoAttrs   = "buildinfo-attrs"
 	// preferNondistLayersKey is an exporter option which can be used to mark a layer as non-distributable if the layer reference was
 	// already found to use a non-distributable media type.
 	// When this option is not set, the exporter will change the media type of the layer to a distributable one.
@@ -132,6 +133,16 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
 			}
 			i.preferNonDist = b
+		case keyBuildInfoAttrs:
+			if v == "" {
+				i.buildInfoAttrs = false
+				continue
+			}
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
+			}
+			i.buildInfoAttrs = b
 		default:
 			if i.meta == nil {
 				i.meta = make(map[string][]byte)
@@ -161,6 +172,7 @@ type imageExporterInstance struct {
 	compressionLevel *int
 	buildInfoMode    buildinfo.ExportMode
 	preferNonDist    bool
+	buildInfoAttrs   bool
 }
 
 func (e *imageExporterInstance) Name() string {
@@ -206,7 +218,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	}
 	defer done(context.TODO())
 
-	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes, e.refCfg(), e.buildInfoMode, sessionID)
+	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes, e.refCfg(), e.buildInfoMode, e.buildInfoAttrs, sessionID)
 	if err != nil {
 		return nil, err
 	}
