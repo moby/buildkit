@@ -306,6 +306,7 @@ func (sr *immutableRef) setBlob(ctx context.Context, compressionType compression
 	sr.queueBlob(desc.Digest)
 	sr.queueMediaType(desc.MediaType)
 	sr.queueBlobSize(desc.Size)
+	sr.appendURLs(desc.URLs)
 	if err := sr.commitMetadata(); err != nil {
 		return err
 	}
@@ -420,7 +421,7 @@ func isTypeWindows(sr *immutableRef) bool {
 // ensureCompression ensures the specified ref has the blob of the specified compression Type.
 func ensureCompression(ctx context.Context, ref *immutableRef, comp compression.Config, s session.Group) error {
 	_, err := g.Do(ctx, fmt.Sprintf("%s-%d", ref.ID(), comp.Type), func(ctx context.Context) (interface{}, error) {
-		desc, err := ref.ociDesc(ctx, ref.descHandlers)
+		desc, err := ref.ociDesc(ctx, ref.descHandlers, true)
 		if err != nil {
 			return nil, err
 		}

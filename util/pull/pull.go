@@ -225,7 +225,17 @@ func (p *provider) ReaderAt(ctx context.Context, desc ocispecs.Descriptor) (cont
 func filterLayerBlobs(metadata map[digest.Digest]ocispecs.Descriptor, mu sync.Locker) images.HandlerFunc {
 	return func(ctx context.Context, desc ocispecs.Descriptor) ([]ocispecs.Descriptor, error) {
 		switch desc.MediaType {
-		case ocispecs.MediaTypeImageLayer, images.MediaTypeDockerSchema2Layer, ocispecs.MediaTypeImageLayerGzip, images.MediaTypeDockerSchema2LayerGzip, images.MediaTypeDockerSchema2LayerForeign, images.MediaTypeDockerSchema2LayerForeignGzip:
+		case
+			ocispecs.MediaTypeImageLayer,
+			ocispecs.MediaTypeImageLayerNonDistributable,
+			images.MediaTypeDockerSchema2Layer,
+			images.MediaTypeDockerSchema2LayerForeign,
+			ocispecs.MediaTypeImageLayerGzip,
+			images.MediaTypeDockerSchema2LayerGzip,
+			ocispecs.MediaTypeImageLayerNonDistributableGzip,
+			images.MediaTypeDockerSchema2LayerForeignGzip,
+			ocispecs.MediaTypeImageLayerZstd,
+			ocispecs.MediaTypeImageLayerNonDistributableZstd:
 			return nil, images.ErrSkipDesc
 		default:
 			if metadata != nil {

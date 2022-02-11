@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	cacheconfig "github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/compression"
@@ -85,7 +86,10 @@ func (s *cacheResultStorage) LoadRemotes(ctx context.Context, res solver.CacheRe
 		compressionopt = &comp
 		all = false
 	}
-	remotes, err := wref.GetRemotes(ctx, false, *compressionopt, all, g)
+	refCfg := cacheconfig.RefConfig{
+		Compression: *compressionopt,
+	}
+	remotes, err := wref.GetRemotes(ctx, false, refCfg, all, g)
 	if err != nil {
 		return nil, nil // ignore error. loadRemote is best effort
 	}

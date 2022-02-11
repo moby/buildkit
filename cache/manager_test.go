@@ -33,6 +33,7 @@ import (
 	"github.com/containerd/continuity/fs/fstest"
 	"github.com/containerd/stargz-snapshotter/estargz"
 	"github.com/klauspost/compress/zstd"
+	"github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/cache/metadata"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/session"
@@ -386,7 +387,7 @@ func TestMergeBlobchainID(t *testing.T) {
 	mergeRef, err := cm.Merge(ctx, mergeInputs, nil)
 	require.NoError(t, err)
 
-	_, err = mergeRef.GetRemotes(ctx, true, compression.New(compression.Default), false, nil)
+	_, err = mergeRef.GetRemotes(ctx, true, config.RefConfig{Compression: compression.New(compression.Default)}, false, nil)
 	require.NoError(t, err)
 
 	// verify the merge blobchain ID isn't just set to one of the inputs (regression test)
@@ -1340,9 +1341,9 @@ func TestGetRemotes(t *testing.T) {
 		ir := ir.(*immutableRef)
 		for _, compressionType := range []compression.Type{compression.Uncompressed, compression.Gzip, compression.EStargz, compression.Zstd} {
 			compressionType := compressionType
-			compressionopt := compression.New(compressionType).SetForce(true)
+			refCfg := config.RefConfig{Compression: compression.New(compressionType).SetForce(true)}
 			eg.Go(func() error {
-				remotes, err := ir.GetRemotes(egctx, true, compressionopt, false, nil)
+				remotes, err := ir.GetRemotes(egctx, true, refCfg, false, nil)
 				require.NoError(t, err)
 				require.Equal(t, 1, len(remotes))
 				remote := remotes[0]
@@ -1429,15 +1430,15 @@ func TestGetRemotes(t *testing.T) {
 		require.True(t, ok, ir.ID())
 		for _, compressionType := range []compression.Type{compression.Uncompressed, compression.Gzip, compression.EStargz, compression.Zstd} {
 			compressionType := compressionType
-			compressionopt := compression.New(compressionType)
+			refCfg := config.RefConfig{Compression: compression.New(compressionType)}
 			eg.Go(func() error {
-				remotes, err := ir.GetRemotes(egctx, false, compressionopt, true, nil)
+				remotes, err := ir.GetRemotes(egctx, false, refCfg, true, nil)
 				require.NoError(t, err)
 				require.True(t, len(remotes) > 0, "for %s : %d", compressionType, len(remotes))
 				gotMain, gotVariants := remotes[0], remotes[1:]
 
 				// Check the main blob is compatible with all == false
-				mainOnly, err := ir.GetRemotes(egctx, false, compressionopt, false, nil)
+				mainOnly, err := ir.GetRemotes(egctx, false, refCfg, false, nil)
 				require.NoError(t, err)
 				require.Equal(t, 1, len(mainOnly))
 				mainRemote := mainOnly[0]
@@ -1506,6 +1507,73 @@ func checkVariantsCoverage(ctx context.Context, t *testing.T, variants idxToVari
 		delete(got, d.Digest)
 	}
 	require.Equal(t, 0, len(got))
+}
+
+// Make sure that media type and urls are persisted for non-distributable blobs.
+func TestNondistributableBlobs(t *testing.T) {
+	t.Parallel()
+
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+
+	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+
+	co, cleanup, err := newCacheManager(ctx, cmOpt{
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	defer cleanup()
+
+	cm := co.manager
+
+	ctx, done, err := leaseutil.WithLease(ctx, co.lm, leaseutil.MakeTemporary)
+	require.NoError(t, err)
+	defer done(context.TODO())
+
+	contentBuffer := contentutil.NewBuffer()
+	descHandlers := DescHandlers(map[digest.Digest]*DescHandler{})
+
+	data, desc, err := mapToBlob(map[string]string{"foo": "bar"}, false)
+	require.NoError(t, err)
+
+	// Pretend like this is non-distributable
+	desc.MediaType = ocispecs.MediaTypeImageLayerNonDistributable
+	desc.URLs = []string{"https://buildkit.moby.dev/foo"}
+
+	cw, err := contentBuffer.Writer(ctx)
+	require.NoError(t, err)
+	_, err = cw.Write(data)
+	require.NoError(t, err)
+	err = cw.Commit(ctx, 0, cw.Digest())
+	require.NoError(t, err)
+
+	descHandlers[desc.Digest] = &DescHandler{
+		Provider: func(_ session.Group) content.Provider { return contentBuffer },
+	}
+
+	ref, err := cm.GetByBlob(ctx, desc, nil, descHandlers)
+	require.NoError(t, err)
+
+	remotes, err := ref.GetRemotes(ctx, true, config.RefConfig{PreferNonDistributable: true}, false, nil)
+	require.NoError(t, err)
+
+	desc2 := remotes[0].Descriptors[0]
+
+	require.Equal(t, desc.MediaType, desc2.MediaType)
+	require.Equal(t, desc.URLs, desc2.URLs)
+
+	remotes, err = ref.GetRemotes(ctx, true, config.RefConfig{PreferNonDistributable: false}, false, nil)
+	require.NoError(t, err)
+
+	desc2 = remotes[0].Descriptors[0]
+
+	require.Equal(t, ocispecs.MediaTypeImageLayer, desc2.MediaType)
+	require.Len(t, desc2.URLs, 0)
 }
 
 func checkInfo(ctx context.Context, t *testing.T, cs content.Store, info content.Info) {

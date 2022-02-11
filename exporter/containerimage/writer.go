@@ -13,6 +13,7 @@ import (
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/platforms"
 	"github.com/moby/buildkit/cache"
+	cacheconfig "github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/session"
@@ -48,7 +49,7 @@ type ImageWriter struct {
 	opt WriterOpt
 }
 
-func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool, comp compression.Config, buildInfoMode buildinfo.ExportMode, sessionID string) (*ocispecs.Descriptor, error) {
+func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool, refCfg cacheconfig.RefConfig, buildInfoMode buildinfo.ExportMode, sessionID string) (*ocispecs.Descriptor, error) {
 	platformsBytes, ok := inp.Metadata[exptypes.ExporterPlatformsKey]
 
 	if len(inp.Refs) > 0 && !ok {
@@ -56,7 +57,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 	}
 
 	if len(inp.Refs) == 0 {
-		remotes, err := ic.exportLayers(ctx, comp, session.NewGroup(sessionID), inp.Ref)
+		remotes, err := ic.exportLayers(ctx, refCfg, session.NewGroup(sessionID), inp.Ref)
 		if err != nil {
 			return nil, err
 		}
@@ -94,7 +95,7 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 		refs = append(refs, r)
 	}
 
-	remotes, err := ic.exportLayers(ctx, comp, session.NewGroup(sessionID), refs...)
+	remotes, err := ic.exportLayers(ctx, refCfg, session.NewGroup(sessionID), refs...)
 	if err != nil {
 		return nil, err
 	}
@@ -165,13 +166,13 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 	return &idxDesc, nil
 }
 
-func (ic *ImageWriter) exportLayers(ctx context.Context, comp compression.Config, s session.Group, refs ...cache.ImmutableRef) ([]solver.Remote, error) {
+func (ic *ImageWriter) exportLayers(ctx context.Context, refCfg cacheconfig.RefConfig, s session.Group, refs ...cache.ImmutableRef) ([]solver.Remote, error) {
 	attr := []attribute.KeyValue{
-		attribute.String("exportLayers.compressionType", comp.Type.String()),
-		attribute.Bool("exportLayers.forceCompression", comp.Force),
+		attribute.String("exportLayers.compressionType", refCfg.Compression.Type.String()),
+		attribute.Bool("exportLayers.forceCompression", refCfg.Compression.Force),
 	}
-	if comp.Level != nil {
-		attr = append(attr, attribute.Int("exportLayers.compressionLevel", *comp.Level))
+	if refCfg.Compression.Level != nil {
+		attr = append(attr, attribute.Int("exportLayers.compressionLevel", *refCfg.Compression.Level))
 	}
 	span, ctx := tracing.StartSpan(ctx, "export layers", trace.WithAttributes(attr...))
 
@@ -186,7 +187,7 @@ func (ic *ImageWriter) exportLayers(ctx context.Context, comp compression.Config
 				return
 			}
 			eg.Go(func() error {
-				remotes, err := ref.GetRemotes(ctx, true, comp, false, s)
+				remotes, err := ref.GetRemotes(ctx, true, refCfg, false, s)
 				if err != nil {
 					return err
 				}
@@ -278,6 +279,7 @@ func (ic *ImageWriter) commitDistributionManifest(ctx context.Context, ref cache
 		} else {
 			desc.Annotations = nil
 		}
+
 		mfst.Layers = append(mfst.Layers, desc)
 		labels[fmt.Sprintf("containerd.io/gc.ref.content.%d", i+1)] = desc.Digest.String()
 	}

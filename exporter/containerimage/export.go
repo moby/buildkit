@@ -17,6 +17,7 @@ import (
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/rootfs"
 	"github.com/moby/buildkit/cache"
+	cacheconfig "github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/session"
@@ -46,6 +47,10 @@ const (
 	keyCompressionLevel = "compression-level"
 	keyBuildInfo        = "buildinfo"
 	ociTypes            = "oci-mediatypes"
+	// preferNondistLayersKey is an exporter option which can be used to mark a layer as non-distributable if the layer reference was
+	// already found to use a non-distributable media type.
+	// When this option is not set, the exporter will change the media type of the layer to a distributable one.
+	preferNondistLayersKey = "prefer-nondist-layers"
 )
 
 type Opt struct {
@@ -183,6 +188,12 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 				return nil, err
 			}
 			i.buildInfoMode = bimode
+		case preferNondistLayersKey:
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return nil, errors.Wrapf(err, "non-bool value %s specified for %s", v, k)
+			}
+			i.preferNondistLayers = b
 		default:
 			if i.meta == nil {
 				i.meta = make(map[string][]byte)
@@ -199,19 +210,20 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 
 type imageExporterInstance struct {
 	*imageExporter
-	targetName       string
-	push             bool
-	pushByDigest     bool
-	unpack           bool
-	insecure         bool
-	ociTypes         bool
-	nameCanonical    bool
-	danglingPrefix   string
-	layerCompression compression.Type
-	forceCompression bool
-	compressionLevel *int
-	buildInfoMode    buildinfo.ExportMode
-	meta             map[string][]byte
+	targetName          string
+	push                bool
+	pushByDigest        bool
+	unpack              bool
+	insecure            bool
+	ociTypes            bool
+	nameCanonical       bool
+	danglingPrefix      string
+	layerCompression    compression.Type
+	forceCompression    bool
+	compressionLevel    *int
+	buildInfoMode       buildinfo.ExportMode
+	meta                map[string][]byte
+	preferNondistLayers bool
 }
 
 func (e *imageExporterInstance) Name() string {
@@ -246,7 +258,8 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	}
 	defer done(context.TODO())
 
-	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes, e.compression(), e.buildInfoMode, sessionID)
+	refCfg := e.refCfg()
+	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes, refCfg, e.buildInfoMode, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -313,7 +326,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 				annotations := map[digest.Digest]map[string]string{}
 				mprovider := contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
 				if src.Ref != nil {
-					remotes, err := src.Ref.GetRemotes(ctx, false, e.compression(), false, session.NewGroup(sessionID))
+					remotes, err := src.Ref.GetRemotes(ctx, false, refCfg, false, session.NewGroup(sessionID))
 					if err != nil {
 						return nil, err
 					}
@@ -325,7 +338,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 				}
 				if len(src.Refs) > 0 {
 					for _, r := range src.Refs {
-						remotes, err := r.GetRemotes(ctx, false, e.compression(), false, session.NewGroup(sessionID))
+						remotes, err := r.GetRemotes(ctx, false, refCfg, false, session.NewGroup(sessionID))
 						if err != nil {
 							return nil, err
 						}
@@ -360,6 +373,13 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	return resp, nil
 }
 
+func (e *imageExporterInstance) refCfg() cacheconfig.RefConfig {
+	return cacheconfig.RefConfig{
+		Compression:            e.compression(),
+		PreferNonDistributable: e.preferNondistLayers,
+	}
+}
+
 func (e *imageExporterInstance) unpackImage(ctx context.Context, img images.Image, src exporter.Source, s session.Group) (err0 error) {
 	unpackDone := oneOffProgress(ctx, "unpacking to "+img.Name)
 	defer func() {
@@ -387,7 +407,7 @@ func (e *imageExporterInstance) unpackImage(ctx context.Context, img images.Imag
 		}
 	}
 
-	remotes, err := topLayerRef.GetRemotes(ctx, true, e.compression(), false, s)
+	remotes, err := topLayerRef.GetRemotes(ctx, true, e.refCfg(), false, s)
 	if err != nil {
 		return err
 	}

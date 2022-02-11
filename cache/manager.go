@@ -283,6 +283,7 @@ func (cm *cacheManager) GetByBlob(ctx context.Context, desc ocispecs.Descriptor,
 	rec.queueBlobOnly(blobOnly)
 	rec.queueMediaType(desc.MediaType)
 	rec.queueBlobSize(desc.Size)
+	rec.appendURLs(desc.URLs)
 	rec.queueCommitted(true)
 
 	if err := rec.commitMetadata(); err != nil {

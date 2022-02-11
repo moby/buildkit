@@ -28,6 +28,8 @@ import (
 	ctderrdefs "github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/namespaces"
+	"github.com/containerd/containerd/platforms"
+	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/continuity/fs/fstest"
 	"github.com/moby/buildkit/client/llb"
@@ -70,6 +72,7 @@ func (nopWriteCloser) Close() error { return nil }
 func TestIntegration(t *testing.T) {
 	mirroredImages := integration.OfficialImages("busybox:latest", "alpine:latest")
 	mirroredImages["tonistiigi/test:nolayers"] = "docker.io/tonistiigi/test:nolayers"
+	mirroredImages["cpuguy83/buildkit-foreign:latest"] = "docker.io/cpuguy83/buildkit-foreign:latest"
 	mirrors := integration.WithMirroredImages(mirroredImages)
 
 	tests := integration.TestFuncs(
@@ -144,6 +147,7 @@ func TestIntegration(t *testing.T) {
 		testMergeOpCacheMax,
 		testRmSymlink,
 		testMoveParentDir,
+		testBuildExportWithForeignLayer,
 	)
 	tests = append(tests, diffOpTestCases()...)
 	integration.Run(t, tests, mirrors)
@@ -2211,6 +2215,116 @@ func testTarExporterSymlink(t *testing.T, sb integration.Sandbox) {
 	require.True(t, ok)
 	require.Equal(t, int32(item.Header.Typeflag), tar.TypeSymlink)
 	require.Equal(t, "foo", item.Header.Linkname)
+}
+
+func testBuildExportWithForeignLayer(t *testing.T, sb integration.Sandbox) {
+	if os.Getenv("TEST_DOCKERD") == "1" {
+		t.Skip("image exporter is missing in dockerd")
+	}
+
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Image("cpuguy83/buildkit-foreign:latest")
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	t.Run("propagate=1", func(t *testing.T) {
+		registry, err := sb.NewRegistry()
+		if errors.Is(err, integration.ErrRequirements) {
+			t.Skip(err.Error())
+		}
+		require.NoError(t, err)
+
+		target := registry + "/buildkit/build/exporter/foreign:latest"
+		_, err = c.Solve(sb.Context(), def, SolveOpt{
+			Exports: []ExportEntry{
+				{
+					Type: ExporterImage,
+					Attrs: map[string]string{
+						"name":                  target,
+						"push":                  "true",
+						"prefer-nondist-layers": "true",
+					},
+				},
+			},
+		}, nil)
+		require.NoError(t, err)
+
+		ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
+
+		resolver := docker.NewResolver(docker.ResolverOptions{PlainHTTP: true})
+		name, desc, err := resolver.Resolve(ctx, target)
+		require.NoError(t, err)
+
+		fetcher, err := resolver.Fetcher(ctx, name)
+		require.NoError(t, err)
+		mfst, err := images.Manifest(ctx, contentutil.FromFetcher(fetcher), desc, platforms.Any())
+		require.NoError(t, err)
+
+		require.Equal(t, 2, len(mfst.Layers))
+		require.Equal(t, images.MediaTypeDockerSchema2LayerForeign, mfst.Layers[0].MediaType)
+		require.Len(t, mfst.Layers[0].URLs, 1)
+		require.Equal(t, images.MediaTypeDockerSchema2Layer, mfst.Layers[1].MediaType)
+
+		rc, err := fetcher.Fetch(ctx, ocispecs.Descriptor{Digest: mfst.Layers[0].Digest, Size: mfst.Layers[0].Size})
+		require.NoError(t, err)
+		defer rc.Close()
+
+		// `Fetch` doesn't error (in the docker resolver), it just returns a reader immediately and does not make a request.
+		// The request is only made when we attempt to read from the reader.
+		buf := make([]byte, 1)
+		_, err = rc.Read(buf)
+		require.Truef(t, ctderrdefs.IsNotFound(err), "expected error for blob that should not be in registry: %s, %v", mfst.Layers[0].Digest, err)
+	})
+	t.Run("propagate=0", func(t *testing.T) {
+		registry, err := sb.NewRegistry()
+		if errors.Is(err, integration.ErrRequirements) {
+			t.Skip(err.Error())
+		}
+		require.NoError(t, err)
+		target := registry + "/buildkit/build/exporter/noforeign:latest"
+		_, err = c.Solve(sb.Context(), def, SolveOpt{
+			Exports: []ExportEntry{
+				{
+					Type: ExporterImage,
+					Attrs: map[string]string{
+						"name": target,
+						"push": "true",
+					},
+				},
+			},
+		}, nil)
+		require.NoError(t, err)
+
+		ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
+
+		resolver := docker.NewResolver(docker.ResolverOptions{PlainHTTP: true})
+		name, desc, err := resolver.Resolve(ctx, target)
+		require.NoError(t, err)
+
+		fetcher, err := resolver.Fetcher(ctx, name)
+		require.NoError(t, err)
+
+		mfst, err := images.Manifest(ctx, contentutil.FromFetcher(fetcher), desc, platforms.Any())
+		require.NoError(t, err)
+
+		require.Equal(t, 2, len(mfst.Layers))
+		require.Equal(t, images.MediaTypeDockerSchema2Layer, mfst.Layers[0].MediaType)
+		require.Len(t, mfst.Layers[0].URLs, 0)
+		require.Equal(t, images.MediaTypeDockerSchema2Layer, mfst.Layers[1].MediaType)
+
+		rc, err := fetcher.Fetch(ctx, ocispecs.Descriptor{Digest: mfst.Layers[0].Digest, Size: mfst.Layers[0].Size})
+		require.NoError(t, err)
+		defer rc.Close()
+
+		// `Fetch` doesn't error (in the docker resolver), it just returns a reader immediately and does not make a request.
+		// The request is only made when we attempt to read from the reader.
+		buf := make([]byte, 1)
+		_, err = rc.Read(buf)
+		require.NoError(t, err)
+	})
 }
 
 func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {

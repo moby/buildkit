@@ -12,6 +12,7 @@ import (
 	"github.com/containerd/containerd/leases"
 	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/cache"
+	cacheconfig "github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/exporter/containerimage"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
@@ -40,6 +41,10 @@ const (
 	keyForceCompression = "force-compression"
 	keyCompressionLevel = "compression-level"
 	keyBuildInfo        = "buildinfo"
+	// preferNondistLayersKey is an exporter option which can be used to mark a layer as non-distributable if the layer reference was
+	// already found to use a non-distributable media type.
+	// When this option is not set, the exporter will change the media type of the layer to a distributable one.
+	preferNondistLayersKey = "prefer-nondist-layers"
 )
 
 type Opt struct {
@@ -121,6 +126,12 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 				return nil, err
 			}
 			i.buildInfoMode = bimode
+		case preferNondistLayersKey:
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
+			}
+			i.preferNonDist = b
 		default:
 			if i.meta == nil {
 				i.meta = make(map[string][]byte)
@@ -149,6 +160,7 @@ type imageExporterInstance struct {
 	forceCompression bool
 	compressionLevel *int
 	buildInfoMode    buildinfo.ExportMode
+	preferNonDist    bool
 }
 
 func (e *imageExporterInstance) Name() string {
@@ -169,6 +181,13 @@ func (e *imageExporterInstance) compression() compression.Config {
 	return c
 }
 
+func (e *imageExporterInstance) refCfg() cacheconfig.RefConfig {
+	return cacheconfig.RefConfig{
+		Compression:            e.compression(),
+		PreferNonDistributable: e.preferNonDist,
+	}
+}
+
 func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source, sessionID string) (map[string]string, error) {
 	if e.opt.Variant == VariantDocker && len(src.Refs) > 0 {
 		return nil, errors.Errorf("docker exporter does not currently support exporting manifest lists")
@@ -187,7 +206,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	}
 	defer done(context.TODO())
 
-	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes, e.compression(), e.buildInfoMode, sessionID)
+	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes, e.refCfg(), e.buildInfoMode, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -260,7 +279,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 
 	mprovider := contentutil.NewMultiProvider(e.opt.ImageWriter.ContentStore())
 	if src.Ref != nil {
-		remotes, err := src.Ref.GetRemotes(ctx, false, e.compression(), false, session.NewGroup(sessionID))
+		remotes, err := src.Ref.GetRemotes(ctx, false, e.refCfg(), false, session.NewGroup(sessionID))
 		if err != nil {
 			return nil, err
 		}
@@ -278,7 +297,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	}
 	if len(src.Refs) > 0 {
 		for _, r := range src.Refs {
-			remotes, err := r.GetRemotes(ctx, false, e.compression(), false, session.NewGroup(sessionID))
+			remotes, err := r.GetRemotes(ctx, false, e.refCfg(), false, session.NewGroup(sessionID))
 			if err != nil {
 				return nil, err
 			}

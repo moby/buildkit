@@ -9,11 +9,13 @@ import (
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
+	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/snapshots"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/hashicorp/go-multierror"
+	"github.com/moby/buildkit/cache/config"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
@@ -47,7 +49,7 @@ type ImmutableRef interface {
 	Finalize(context.Context) error
 
 	Extract(ctx context.Context, s session.Group) error // +progress
-	GetRemotes(ctx context.Context, createIfNeeded bool, compressionopt compression.Config, all bool, s session.Group) ([]*solver.Remote, error)
+	GetRemotes(ctx context.Context, createIfNeeded bool, cfg config.RefConfig, all bool, s session.Group) ([]*solver.Remote, error)
 	LayerChain() RefList
 }
 
@@ -589,7 +591,48 @@ func (sr *immutableRef) Clone() ImmutableRef {
 	return sr.clone()
 }
 
-func (sr *immutableRef) ociDesc(ctx context.Context, dhs DescHandlers) (ocispecs.Descriptor, error) {
+// layertoDistributable changes the passed in media type to the "distributable" version of the media type.
+func layerToDistributable(mt string) string {
+	if !images.IsNonDistributable(mt) {
+		// Layer is already a distributable media type (or this is not even a layer).
+		// No conversion needed
+		return mt
+	}
+
+	switch mt {
+	case ocispecs.MediaTypeImageLayerNonDistributable:
+		return ocispecs.MediaTypeImageLayer
+	case ocispecs.MediaTypeImageLayerNonDistributableGzip:
+		return ocispecs.MediaTypeImageLayerGzip
+	case ocispecs.MediaTypeImageLayerNonDistributableZstd:
+		return ocispecs.MediaTypeImageLayerZstd
+	case images.MediaTypeDockerSchema2LayerForeign:
+		return images.MediaTypeDockerSchema2Layer
+	case images.MediaTypeDockerSchema2LayerForeignGzip:
+		return images.MediaTypeDockerSchema2LayerGzip
+	default:
+		return mt
+	}
+}
+
+func layerToNonDistributable(mt string) string {
+	switch mt {
+	case ocispecs.MediaTypeImageLayer:
+		return ocispecs.MediaTypeImageLayerNonDistributable
+	case ocispecs.MediaTypeImageLayerGzip:
+		return ocispecs.MediaTypeImageLayerNonDistributableGzip
+	case ocispecs.MediaTypeImageLayerZstd:
+		return ocispecs.MediaTypeImageLayerNonDistributableZstd
+	case images.MediaTypeDockerSchema2Layer:
+		return images.MediaTypeDockerSchema2LayerForeign
+	case images.MediaTypeDockerSchema2LayerForeignGzip:
+		return images.MediaTypeDockerSchema2LayerForeignGzip
+	default:
+		return mt
+	}
+}
+
+func (sr *immutableRef) ociDesc(ctx context.Context, dhs DescHandlers, preferNonDist bool) (ocispecs.Descriptor, error) {
 	dgst := sr.getBlob()
 	if dgst == "" {
 		return ocispecs.Descriptor{}, errors.Errorf("no blob set for cache record %s", sr.ID())
@@ -598,8 +641,21 @@ func (sr *immutableRef) ociDesc(ctx context.Context, dhs DescHandlers) (ocispecs
 	desc := ocispecs.Descriptor{
 		Digest:      sr.getBlob(),
 		Size:        sr.getBlobSize(),
-		MediaType:   sr.getMediaType(),
 		Annotations: make(map[string]string),
+		MediaType:   sr.getMediaType(),
+	}
+
+	if preferNonDist {
+		if urls := sr.getURLs(); len(urls) > 0 {
+			// Make sure the media type is the non-distributable version
+			// We don't want to rely on the stored media type here because it could have been stored as distributable originally.
+			desc.MediaType = layerToNonDistributable(desc.MediaType)
+			desc.URLs = urls
+		}
+	}
+	if len(desc.URLs) == 0 {
+		// If there are no URL's, there is no reason to have this be non-dsitributable
+		desc.MediaType = layerToDistributable(desc.MediaType)
 	}
 
 	if blobDesc, err := getBlobDesc(ctx, sr.cm.ContentStore, desc.Digest); err == nil {
@@ -748,6 +804,7 @@ func getBlobDesc(ctx context.Context, cs content.Store, dgst digest.Digest) (oci
 	if !ok {
 		return ocispecs.Descriptor{}, fmt.Errorf("no media type is stored for %q", info.Digest)
 	}
+
 	desc := ocispecs.Descriptor{
 		Digest:    info.Digest,
 		Size:      info.Size,
@@ -1062,7 +1119,7 @@ func (sr *immutableRef) unlazyLayer(ctx context.Context, dhs DescHandlers, pg pr
 		})
 	}
 
-	desc, err := sr.ociDesc(ctx, dhs)
+	desc, err := sr.ociDesc(ctx, dhs, true)
 	if err != nil {
 		return err
 	}
