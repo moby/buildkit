@@ -148,6 +148,7 @@ func TestIntegration(t *testing.T) {
 		testRmSymlink,
 		testMoveParentDir,
 		testBuildExportWithForeignLayer,
+		testFrontendAttrs,
 	)
 	tests = append(tests, diffOpTestCases()...)
 	integration.Run(t, tests, mirrors)
@@ -5036,6 +5037,40 @@ func testRelativeMountpoint(t *testing.T, sb integration.Sandbox) {
 	dt, err := ioutil.ReadFile(filepath.Join(destDir, "data"))
 	require.NoError(t, err)
 	require.Equal(t, dt, []byte(id))
+}
+
+// moby/buildkit#2476
+func testFrontendAttrs(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	attrs := map[string]string{"build-arg:foo": "bar"}
+	dtattrs, err := json.Marshal(attrs)
+	require.NoError(t, err)
+
+	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		st := llb.Image("busybox:latest").Run(
+			llb.Args([]string{"/bin/sh", "-c", `echo hello`}),
+		)
+		def, err := st.Marshal(sb.Context())
+		if err != nil {
+			return nil, err
+		}
+		res, err := c.Solve(ctx, gateway.SolveRequest{
+			Definition:  def.ToPB(),
+			FrontendOpt: attrs,
+		})
+		require.Contains(t, res.Metadata, "buildinfo.attrs")
+		require.Equal(t, res.Metadata["buildinfo.attrs"], dtattrs)
+		return res, err
+	}
+
+	_, err = c.Build(sb.Context(), SolveOpt{}, "", frontend, nil)
+	require.NoError(t, err)
+
+	checkAllReleasable(t, c, sb, true)
 }
 
 func tmpdir(appliers ...fstest.Applier) (string, error) {

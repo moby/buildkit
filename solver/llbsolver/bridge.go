@@ -2,6 +2,7 @@ package llbsolver
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -12,6 +13,7 @@ import (
 	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/frontend"
 	gw "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/identity"
@@ -142,8 +144,7 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest, sid st
 	if req.Definition != nil && req.Definition.Def != nil {
 		res = &frontend.Result{Ref: newResultProxy(b, req)}
 		if req.Evaluate {
-			_, err := res.Ref.Result(ctx)
-			return res, err
+			_, err = res.Ref.Result(ctx)
 		}
 	} else if req.Frontend != "" {
 		f, ok := b.frontends[req.Frontend]
@@ -157,6 +158,16 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest, sid st
 	} else {
 		return &frontend.Result{}, nil
 	}
+
+	if res.Metadata == nil {
+		res.Metadata = make(map[string][]byte)
+	}
+
+	attrs, errm := json.Marshal(req.FrontendOpt)
+	if errm != nil {
+		return nil, errm
+	}
+	res.Metadata[exptypes.ExporterBuildInfoAttrs] = attrs
 
 	return
 }

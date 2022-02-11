@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/docker/distribution/reference"
-	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/source"
 	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
 	"github.com/moby/buildkit/util/urlutil"
@@ -26,7 +25,7 @@ func Decode(enc string) (bi binfotypes.BuildInfo, _ error) {
 }
 
 // Encode encodes build info.
-func Encode(ctx context.Context, req frontend.SolveRequest, buildSources map[string]string, imageConfig []byte) ([]byte, error) {
+func Encode(ctx context.Context, frontend string, frontendAttrs []byte, buildSources map[string]string, imageConfig []byte) ([]byte, error) {
 	icbi, err := FromImageConfig(imageConfig)
 	if err != nil {
 		return nil, err
@@ -35,9 +34,15 @@ func Encode(ctx context.Context, req frontend.SolveRequest, buildSources map[str
 	if err != nil {
 		return nil, err
 	}
+	attrs := make(map[string]string)
+	if frontendAttrs != nil {
+		if err := json.Unmarshal(frontendAttrs, &attrs); err != nil {
+			return nil, err
+		}
+	}
 	return json.Marshal(binfotypes.BuildInfo{
-		Frontend: req.Frontend,
-		Attrs:    filterAttrs(req.FrontendOpt),
+		Frontend: frontend,
+		Attrs:    filterAttrs(attrs),
 		Sources:  srcs,
 	})
 }

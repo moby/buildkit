@@ -3,6 +3,8 @@ package client
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -55,6 +57,7 @@ func TestClientGatewayIntegration(t *testing.T) {
 		testClientGatewayContainerExtraHosts,
 		testClientGatewayContainerSignal,
 		testWarnings,
+		testClientGatewayFrontendAttrs,
 	), integration.WithMirroredImages(integration.OfficialImages("busybox:latest")))
 
 	integration.Run(t, integration.TestFuncs(
@@ -1990,6 +1993,52 @@ func testClientGatewayContainerSignal(t *testing.T, sb integration.Sandbox) {
 
 	_, err = c.Build(ctx, SolveOpt{}, product, b, nil)
 	require.Error(t, err)
+
+	checkAllReleasable(t, c, sb, true)
+}
+
+// moby/buildkit#2476
+func testClientGatewayFrontendAttrs(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	attrs := map[string]string{"build-arg:foo": "bar"}
+	dtattrs, err := json.Marshal(attrs)
+	require.NoError(t, err)
+
+	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
+		st := llb.Image("busybox:latest").Run(
+			llb.ReadonlyRootFS(),
+			llb.Args([]string{"/bin/sh", "-c", `echo hello`}),
+		)
+		def, err := st.Marshal(sb.Context())
+		if err != nil {
+			return nil, err
+		}
+		res, err := c.Solve(ctx, client.SolveRequest{
+			Definition:  def.ToPB(),
+			FrontendOpt: attrs,
+		})
+		require.Contains(t, res.Metadata, "buildinfo.attrs")
+		require.Equal(t, res.Metadata["buildinfo.attrs"], dtattrs)
+		return res, err
+	}
+
+	res, err := c.Build(sb.Context(), SolveOpt{}, "", b, nil)
+	require.NoError(t, err)
+
+	require.Contains(t, res.ExporterResponse, exptypes.ExporterBuildInfo)
+	decbi, err := base64.StdEncoding.DecodeString(res.ExporterResponse[exptypes.ExporterBuildInfo])
+	require.NoError(t, err)
+
+	var bi binfotypes.BuildInfo
+	err = json.Unmarshal(decbi, &bi)
+	require.NoError(t, err)
+
+	require.Contains(t, bi.Attrs, "build-arg:foo")
+	require.Equal(t, "bar", bi.Attrs["build-arg:foo"])
 
 	checkAllReleasable(t, c, sb, true)
 }
