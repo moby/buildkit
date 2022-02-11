@@ -112,7 +112,17 @@ Validating your updates before submission:
 make validate-all
 ```
 
+### Build website
 
+```shell
+# Build website and output to ./release-site
+docker buildx bake update-website
+
+# Runs website and watch for changes
+docker buildx bake base-website
+docker run --rm -it -p 8000:8000 -v $(pwd):/docs buildx-website:local
+# Open http://localhost:8000 in your browser
+```
 
 ### Pull requests are always welcome
 

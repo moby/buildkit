@@ -8,7 +8,7 @@ used by LLB `Source` operation.
 
 By default, the build dependencies are embedded in the image configuration and
 also available in the solver response. The export mode can be refined with
-the [`buildinfo` attribute](../README.md#imageregistry).
+the [`buildinfo` attribute](https://github.com/moby/buildkit/blob/master/README.md#imageregistry).
 
 ### Image config
 

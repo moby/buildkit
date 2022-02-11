@@ -1,14 +1,12 @@
 # Building multi-platform images
 
-| :zap: For building multi-platform images with `docker buildx`, see [the `docker buildx` documentation](https://github.com/docker/buildx#building-multi-platform-images). |
-|--------------------------------------------------------------------------|
-
-
+!!! warning
+    For building multi-platform images with `docker buildx`, see [the `docker buildx` documentation](https://github.com/docker/buildx#building-multi-platform-images).
 
 BuildKit provides built-in support for building multi-platform by setting a comma-separated list of
 [platform specifiers](https://github.com/containerd/containerd/blob/v1.5.7/platforms/platforms.go#L63) as `platform` option.
 
-```bash
+```shell
 buildctl build \
   --frontend dockerfile.v0 \
   --opt platform=linux/amd64,linux/arm64 \
@@ -36,7 +34,7 @@ In such a case, you have to register QEMU into `/proc/sys/fs/binfmt_misc` so tha
 QEMU is registered into `/proc/sys/fs/binfmt_misc` by default on Docker Desktop.
 On other environments, the common way to register QEMU is to use `tonistiigi/binfmt` Docker image.
 
-```bash
+```shell
 docker run --privileged --rm tonistiigi/binfmt --install all
 ```
 

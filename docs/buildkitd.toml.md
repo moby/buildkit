@@ -2,8 +2,7 @@
 
 ## NAME
 
-buildkitd.toml - configuration file for buildkitd
-
+`buildkitd.toml` - configuration file for buildkitd
 
 ## DESCRIPTION
 
@@ -11,8 +10,10 @@ The TOML file used to configure the buildkitd daemon settings has a short
 list of global settings followed by a series of sections for specific areas
 of daemon configuration.
 
-The file path is `/etc/buildkit/buildkitd.toml` for rootful mode,
-`~/.config/buildkit/buildkitd.toml` for rootless mode.
+The file path is:
+
+* `/etc/buildkit/buildkitd.toml` for rootful mode
+* `~/.config/buildkit/buildkitd.toml` for rootless mode
 
 ## EXAMPLE
 
@@ -20,7 +21,7 @@ The following is a complete **buildkitd.toml** configuration example,
 please note some of the configuration is only good for edge cases, please
 take care of it carefully.
 
-```
+```toml
 debug = true
 # root is where all buildkit state is stored.
 root = "/var/lib/buildkit"

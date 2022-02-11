@@ -1,4 +1,4 @@
-## Buildkit solver design
+# BuildKit solver design
 
 The solver is a component in BuildKit responsible for parsing the build definition and scheduling the operations to the workers for execution.
 
@@ -8,7 +8,7 @@ The implementation of the solver is quite complicated, mostly because it is supp
 
 In addition to avoiding content checksum scanning the implementation is also designed to make decisions with minimum available data. For example, for remote caching sources to be effective the solver will not require the cache to be loaded or exists for all the vertexes in the graph but will only load it for the final node that is determined to match cache. As another example, if one of the inputs (for example image) can produce a definition based cache match for a vertex, and another (for example local source files) can only produce a content-based(slower) cache match, the solver is designed to detect it and skip content-based check for the first input(that would cause a pull to happen).
 
-### Build definition
+## Build definition
 
 The solver takes in a build definition in the form of a content addressable operation definition that forms a graph.
 
@@ -41,8 +41,7 @@ The vertex digest can only be used for comparison while the solver is running an
 
 Options contain extra information that can be associated with the vertex but what doesn't change the definition(or equality check) of it. Normally this is either a hint to the solver, for example, to ignore cache when executing. It can also be used for associating messages with the vertex that can be helpful for tracing purposes.
 
-
-### Operation interface
+## Operation interface
 
 Operation interface is how the solver can evaluate the properties of the actual vertex operation. These methods run on the worker, and their implementation is determined by the value of `vertex.Sys()`. The solver is configured with a "resolve" function that can convert a `vertex.Sys()` into an `Op`.
 
@@ -90,7 +89,7 @@ There are two functions that every operation defines. One describes how to calcu
 `Exec` executes the operation defined by a vertex by passing in the results of the inputs.
 
 
-### Shared graph
+## Shared graph
 
 After new build request is sent to the solver, it first loads all the vertexes to the shared graph structure. For status tracking, a job instance needs to be created, and vertexes are loaded through jobs. A job ID is assigned to every vertex. If vertex with the same digest has already been loaded to the shared graph, a new job ID is appended to the existing record. When the job finishes, it removes all of its references from the loaded vertex. The resources are released if no more references remain.
 
@@ -98,7 +97,7 @@ Loading a vertex also creates a progress writer associated with it and sets up t
 
 After vertexes have been loaded to the job, it is safe to request a result from an edge pointing to a previously loaded vertex. To do this `build(ctx, Edge) (CachedResult, error)` method is called on the static scheduler instance associated with the solver.
 
-### Scheduler
+## Scheduler
 
 The scheduler is a component responsible for invoking the individual operations needed to find the result for the graph. While the build definition is defined with vertexes, the scheduler is solving edges. In the case of LLB solver, a result of a solved edge is associated with a snapshot. Usually, to solve an edge, the input edges need to be solved first and this can be done concurrently, but there are many exceptions like edge may be cached but its input might be not, or solving one input might cause a cache hit while solving others would just be wasteful. Scheduler tries do handle all these cases.
 
@@ -108,7 +107,7 @@ The unpark handler for an edge needs to be non-blocking and execute quickly. The
 
 To avoid bugs and deadlocks in this logic, the unpark method needs to follow the following rules. If unpark has finished without completing all incoming requests it needs to create outgoing requests. Similarly, if an incoming request remains pending, at least one outgoing request needs to exist as well. Failing to comply with this rule will cause the scheduler to panic as a precaution to avoid leaks and hiding errors.
 
-### Edge state
+## Edge state
 
 During unpark, edge state is incremented until it can fulfill the incoming requests.
 
@@ -129,7 +128,7 @@ When an edge needs to resolve an operation to call the async `CacheMap` and `Exe
 Edge state is cleaned up when a final job that loaded the vertexes that they are connected to is discarded.
 
 
-### Cache providers
+## Cache providers
 
 Cache providers determine if there is a result that matches the cache keys generated during the build that could be reused instead of fully reevaluating the vertex and its inputs. There can be multiple cache providers, and specific providers can be defined per vertex using the vertex options.
 
@@ -152,10 +151,10 @@ Load method is used to load a specific record into a result reference. This valu
 
 Save allows adding more records to the cache. 
 
-### Merging edges
+## Merging edges
 
 One final piece of solver logic allows merging two edges into one when they have both returned the same cache key. In practice, this appears for example when a build uses image references `alpine:latest` and `alpine@sha256:abcabc` in its definition and they actually point to the same image. Another case where this appears is when same source files from different sources are being used as part of the build.
 
 After scheduler has called `unpark()` on an edge it checks it the method added any new cache keys to its state. If it did it will check its internal index if another active edge already exists with the same cache key. If it does it performs some basic validation, for example checking that the new edge has not explicitly asked cache to be ignored, and if it passes, merges the states of two edges.
 
-In the result of the merge, the edge that was checked is deleted, its ongoing requests are canceled and the incoming ones are added to the original edge. 
+In the result of the merge, the edge that was checked is deleted, its ongoing requests are canceled and the incoming ones are added to the original edge.

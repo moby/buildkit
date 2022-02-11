@@ -1,6 +1,7 @@
 # Kubernetes manifests for BuildKit
 
 This directory contains Kubernetes manifests for `Pod`, `Deployment` (with `Service`), `StatefulSet`, and `Job`.
+
 * `Pod`: good for quick-start
 * `Deployment` + `Service`: good for random load balancing with registry-side cache
 * `StateFulset`: good for client-side load balancing, without registry-side cache
@@ -8,7 +9,7 @@ This directory contains Kubernetes manifests for `Pod`, `Deployment` (with `Serv
 
 Using Rootless mode (`*.rootless.yaml`) is recommended because Rootless mode image is executed as non-root user (UID 1000) and doesn't need `securityContext.privileged`.
 
-:warning: Rootless mode may not work on some host kernels. See [`../../docs/rootless.md`](../../docs/rootless.md).
+:warning: Rootless mode may not work on some host kernels. See [rootless mode docs](https://github.com/moby/buildkit/blob/master/docs/rootless.md).
 
 See also ["Building Images Efficiently And Securely On Kubernetes With BuildKit" (KubeCon EU 2019)](https://kccnceu19.sched.com/event/MPX5).
 
@@ -30,22 +31,26 @@ If rootless mode doesn't work, try `pod.privileged.yaml`.
 Setting up mTLS is highly recommended.
 
 `./create-certs.sh SAN [SAN...]` can be used for creating certificates.
+
 ```console
 $ ./create-certs.sh 127.0.0.1
 ```
 
 The daemon certificates is created as `Secret` manifest named `buildkit-daemon-certs`.
+
 ```console
 $ kubectl apply -f .certs/buildkit-daemon-certs.yaml
 ```
 
 Apply the `Deployment` and `Service` manifest:
+
 ```console
 $ kubectl apply -f deployment+service.rootless.yaml
 $ kubectl scale --replicas=10 deployment/buildkitd
 ```
 
 Run `buildctl` with TLS client certificates:
+
 ```console
 $ kubectl port-forward service/buildkitd 1234
 $ buildctl \
@@ -57,6 +62,7 @@ $ buildctl \
 ```
 
 ## `StatefulSet`
+
 `StatefulSet` is useful for consistent hash mode.
 
 ```console
@@ -67,7 +73,7 @@ $ buildctl \
   build --frontend dockerfile.v0 --local context=/path/to/dir --local dockerfile=/path/to/dir
 ```
 
-See [`./consistenthash`](./consistenthash) for how to use consistent hashing.
+See [`./consistenthash`](https://github.com/moby/buildkit/tree/master/examples/kubernetes/consistenthash) for how to use consistent hashing.
 
 ## `Job`
 

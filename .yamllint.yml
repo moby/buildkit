@@ -1,5 +1,6 @@
 ignore: |
   /vendor
+  /mkdocs.yml
 
 extends: default
 

@@ -1,4 +1,7 @@
-# Lazy pulling stargz/eStargz base images (Experimental)
+# Lazy pulling stargz/eStargz base images
+
+!!! experimental "Experimental"
+    This feature is considered **EXPERIMENTAL** and under active development until further notice.
 
 This document describes the configuration that allows buildkit to lazily pull [stargz](https://github.com/google/crfs/blob/master/README.md#introducing-stargz)/[eStargz](https://github.com/containerd/stargz-snapshotter/blob/master/docs/stargz-estargz.md)-formatted images from registries and how to obtain stargz/eStargz images.
 
@@ -26,7 +29,7 @@ Buildkit supports two ways to enable lazy pulling of stargz/eStargz images.
 OCI worker has builtin support for stargz/eStargz.
 You can enable this feature by running `buildkitd` with an option `--oci-worker-snapshotter=stargz`.
 
-```
+```shell
 buildkitd --oci-worker-snapshotter=stargz
 ```
 
@@ -50,7 +53,7 @@ func main() {
 
 The example Dockerfile which leverages eStargz-formatted base image will be the following.
 
-```Dockerfile
+```dockerfile
 # Uses eStargz-formatted golang image as the base image. This isn't pulled here.
 FROM ghcr.io/stargz-containers/golang:1.15.3-buster-esgz AS dev
 
@@ -94,7 +97,7 @@ This configuration is for users of containerd worker and ones trying other versi
 Spawn `containerd-stargz-grpc` as a separated process.
 Then run `buildkitd` with an option `--oci-worker-proxy-snapshotter-path=/run/containerd-stargz-grpc/containerd-stargz-grpc.sock` which makes it recognize this snapshotter via the socket.
 
-```
+```shell
 containerd-stargz-grpc
 buildkitd --oci-worker-snapshotter=stargz \
           --oci-worker-proxy-snapshotter-path=/run/containerd-stargz-grpc/containerd-stargz-grpc.sock
@@ -113,7 +116,7 @@ Configure containerd's config.toml (default = `/etc/containerd/config.toml`) to 
 
 Then spawn `containerd-stargz-grpc` and `containerd`, and run `buildkitd` with an option `--containerd-worker-snapshotter=stargz` which tells `containerd` to use stargz snapshotter.
 
-```
+```shell
 containerd-stargz-grpc
 containerd
 buildkitd --containerd-worker-snapshotter=stargz --oci-worker=false --containerd-worker=true
@@ -133,7 +136,7 @@ host = "examplemirror.io"
 
 Then pass this file to stargz snapshotter through `--config` option.
 
-```
+```shell
 containerd-stargz-grpc --config=/etc/containerd-stargz-grpc/config.toml
 ```
 
@@ -154,7 +157,7 @@ BuildKit supports creating eStargz as one of the compression types.
 As shown in the following, `compression=estargz` creates an eStargz-formatted image.
 Specifying `oci-mediatypes=true` option is highly recommended for enabling [layer verification](https://github.com/containerd/stargz-snapshotter/blob/v0.6.4/docs/verification.md) of eStargz.
 
-```
+```shell
 buildctl build ... \
   --output type=image,name=docker.io/username/image,push=true,compression=estargz,oci-mediatypes=true
 ```

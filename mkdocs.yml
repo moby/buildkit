@@ -1,0 +1,122 @@
+site_name: BuildKit
+site_description: Concurrent, cache-efficient, and Dockerfile-agnostic builder toolkit
+site_author: Moby
+site_url: https://moby.github.io/buildkit/
+edit_uri: edit/master/website/
+docs_dir: website
+
+repo_name: moby/buildkit
+repo_url: https://github.com/moby/buildkit/
+
+theme:
+  name: material
+  custom_dir: website/_overrides
+  language: en
+  features:
+    - content.code.annotate
+    - navigation.indexes
+    - search.highlight
+    - search.share
+    - search.suggest
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: blue grey
+      accent: blue
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: blue grey
+      accent: blue
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  font:
+    text: Roboto
+    code: Roboto Mono
+  logo: assets/logo.png
+  favicon: assets/favicon.ico
+  include_search_page: false
+  search_index_only: true
+
+extra:
+  footer: true
+  analytics:
+    provider: google
+    property: !ENV GOOGLE_ANALYTICS_KEY
+  seo:
+    google: !ENV GOOGLE_SEARCH_KEY
+    bing: !ENV BING_SEARCH_KEY
+  social:
+    - icon: fontawesome/solid/house
+      link: https://mobyproject.org
+    - icon: fontawesome/brands/github
+      link: https://github.com/moby
+
+extra_css:
+  - assets/stylesheets/extra.css
+
+markdown_extensions:
+  - admonition
+  - codehilite
+  - footnotes
+  - markdown_include.include:
+      base_path: website
+  - meta
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:materialx.emoji.twemoji
+      emoji_generator: !!python/name:materialx.emoji.to_svg
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - toc:
+      permalink: true
+
+plugins:
+  - exclude:
+      glob:
+        - "_overrides/*"
+  - macros
+  - search:
+      prebuild_index: python
+      lang:
+        - en
+
+nav:
+  - Home: index.md
+  - Introduction: introduction.md
+  - Quick start: quick-start.md
+  - Usage:
+    - Output: usage/output.md
+    - Cache: usage/cache.md
+    - Metadata: usage/metadata.md
+    - Daemon configuration: usage/daemon-configuration.md
+    - OpenTelemetry support: usage/opentelemetry.md
+  - Examples:
+    - Overview: examples/overview.md
+    - Kubernetes: examples/kubernetes.md
+    - buildctl daemonless: examples/buildctl-daemonless.md
+    - Build using a Dockerfile: examples/build-using-dockerfile.md
+    - Consistent hashing: examples/consistent-hashing.md
+  - Frontend:
+    - Overview: frontend/overview.md
+    - Dockerfile: frontend/dockerfile.md
+  - User guides:
+    - Containerizing BuildKit: user-guides/containerizing-buildkit.md
+    - Rootless mode: user-guides/rootless-mode.md
+    - Building multi-platform images: user-guides/building-multi-platform-images.md
+    - Lazy pulling: user-guides/lazy-pulling.md
+    - Build reproducibility: user-guides/build-reproducibility.md
+    - Blog posts: user-guides/blog-posts.md
+  - Design:
+    - Solver design: design/solver.md
+  - Community:
+    - Contributing: community/contributing.md
+    - Code of conduct: community/code-of-conduct.md
+    - Users: community/users.md
+  - Links: links.md
