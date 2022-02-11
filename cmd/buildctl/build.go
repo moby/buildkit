@@ -331,7 +331,7 @@ func writeMetadataFile(filename string, exporterResponse map[string]string) erro
 		}
 		out[k] = json.RawMessage(dt)
 	}
-	b, err := json.Marshal(out)
+	b, err := json.MarshalIndent(out, "", "  ")
 	if err != nil {
 		return err
 	}
