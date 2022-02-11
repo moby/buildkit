@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -597,11 +598,7 @@ func TestExtractOnMutable(t *testing.T) {
 	leaseCtx, done, err := leaseutil.WithLease(ctx, co.lm, leases.WithExpiration(0))
 	require.NoError(t, err)
 
-	compressionType := compression.FromMediaType(desc.MediaType)
-	if compressionType == compression.UnknownCompression {
-		t.Errorf("unhandled layer media type: %q", desc.MediaType)
-	}
-	err = snap.(*immutableRef).setBlob(leaseCtx, compressionType, desc)
+	err = snap.(*immutableRef).setBlob(leaseCtx, desc)
 	done(context.TODO())
 	require.NoError(t, err)
 	err = snap.(*immutableRef).computeChainMetadata(leaseCtx, map[string]struct{}{snap.ID(): {}})
@@ -713,7 +710,7 @@ func TestSetBlob(t *testing.T) {
 	err = content.WriteBlob(ctx, co.cs, "ref1", bytes.NewBuffer(b), desc)
 	require.NoError(t, err)
 
-	err = snap.(*immutableRef).setBlob(ctx, compression.UnknownCompression, ocispecs.Descriptor{
+	err = snap.(*immutableRef).setBlob(ctx, ocispecs.Descriptor{
 		Digest: digest.FromBytes([]byte("foobar")),
 		Annotations: map[string]string{
 			"containerd.io/uncompressed": digest.FromBytes([]byte("foobar2")).String(),
@@ -721,11 +718,7 @@ func TestSetBlob(t *testing.T) {
 	})
 	require.Error(t, err)
 
-	compressionType := compression.FromMediaType(desc.MediaType)
-	if compressionType == compression.UnknownCompression {
-		t.Errorf("unhandled layer media type: %q", desc.MediaType)
-	}
-	err = snap.(*immutableRef).setBlob(ctx, compressionType, desc)
+	err = snap.(*immutableRef).setBlob(ctx, desc)
 	require.NoError(t, err)
 	err = snap.(*immutableRef).computeChainMetadata(ctx, map[string]struct{}{snap.ID(): {}})
 	require.NoError(t, err)
@@ -751,11 +744,7 @@ func TestSetBlob(t *testing.T) {
 	err = content.WriteBlob(ctx, co.cs, "ref2", bytes.NewBuffer(b2), desc2)
 	require.NoError(t, err)
 
-	compressionType2 := compression.FromMediaType(desc2.MediaType)
-	if compressionType2 == compression.UnknownCompression {
-		t.Errorf("unhandled layer media type: %q", desc2.MediaType)
-	}
-	err = snap2.(*immutableRef).setBlob(ctx, compressionType2, desc2)
+	err = snap2.(*immutableRef).setBlob(ctx, desc2)
 	require.NoError(t, err)
 	err = snap2.(*immutableRef).computeChainMetadata(ctx, map[string]struct{}{snap.ID(): {}, snap2.ID(): {}})
 	require.NoError(t, err)
@@ -1110,6 +1099,396 @@ func TestLazyCommit(t *testing.T) {
 	require.Equal(t, true, errors.Is(err, errNotFound))
 }
 
+func TestLoopLeaseContent(t *testing.T) {
+	t.Parallel()
+	// windows fails when lazy blob is being extracted with "invalid windows mount type: 'bind'"
+	if runtime.GOOS != "linux" {
+		t.Skipf("unsupported GOOS: %s", runtime.GOOS)
+	}
+
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+
+	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+
+	co, cleanup, err := newCacheManager(ctx, cmOpt{
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	defer cleanup()
+	cm := co.manager
+
+	ctx, done, err := leaseutil.WithLease(ctx, co.lm, leaseutil.MakeTemporary)
+	require.NoError(t, err)
+	defer done(ctx)
+
+	// store an uncompressed blob to the content store
+	compressionLoop := []compression.Type{compression.Uncompressed, compression.Gzip, compression.Zstd, compression.EStargz}
+	blobBytes, orgDesc, err := mapToBlob(map[string]string{"foo": "1"}, false)
+	require.NoError(t, err)
+	contentBuffer := contentutil.NewBuffer()
+	descHandlers := DescHandlers(map[digest.Digest]*DescHandler{})
+	cw, err := contentBuffer.Writer(ctx, content.WithRef(fmt.Sprintf("write-test-blob-%s", orgDesc.Digest)))
+	require.NoError(t, err)
+	_, err = cw.Write(blobBytes)
+	require.NoError(t, err)
+	require.NoError(t, cw.Commit(ctx, 0, cw.Digest()))
+	descHandlers[orgDesc.Digest] = &DescHandler{
+		Provider: func(_ session.Group) content.Provider { return contentBuffer },
+	}
+
+	// Create a compression loop
+	ref, err := cm.GetByBlob(ctx, orgDesc, nil, descHandlers)
+	require.NoError(t, err)
+	allRefs := []ImmutableRef{ref}
+	defer func() {
+		for _, ref := range allRefs {
+			ref.Release(ctx)
+		}
+	}()
+	var chain []ocispecs.Descriptor
+	for _, compressionType := range compressionLoop {
+		remotes, err := ref.GetRemotes(ctx, true, config.RefConfig{Compression: compression.New(compressionType).SetForce(true)}, false, nil)
+		require.NoError(t, err)
+		require.Equal(t, 1, len(remotes))
+		require.Equal(t, 1, len(remotes[0].Descriptors))
+
+		desc := remotes[0].Descriptors[0]
+		chain = append(chain, desc)
+		ref, err = cm.GetByBlob(ctx, desc, nil, descHandlers)
+		require.NoError(t, err)
+		allRefs = append(allRefs, ref)
+	}
+	require.Equal(t, len(compressionLoop), len(chain))
+	require.NoError(t, ref.(*immutableRef).linkBlob(ctx, chain[0])) // This creates a loop
+
+	// Make sure a loop is created
+	visited := make(map[digest.Digest]struct{})
+	gotChain := []digest.Digest{orgDesc.Digest}
+	cur := orgDesc
+	previous := chain[len(chain)-1].Digest
+	for i := 0; i < 1000; i++ {
+		dgst := cur.Digest
+		visited[dgst] = struct{}{}
+		info, err := co.cs.Info(ctx, dgst)
+		if err != nil && !errors.Is(err, errdefs.ErrNotFound) {
+			require.NoError(t, err)
+		}
+		var children []ocispecs.Descriptor
+		for k, dgstS := range info.Labels {
+			if !strings.HasPrefix(k, blobVariantGCLabel) {
+				continue
+			}
+			cDgst, err := digest.Parse(dgstS)
+			if err != nil || cDgst == dgst || previous == cDgst {
+				continue
+			}
+			cDesc, err := getBlobDesc(ctx, co.cs, cDgst)
+			require.NoError(t, err)
+			children = append(children, cDesc)
+		}
+		require.Equal(t, 1, len(children), "previous=%v, cur=%v, labels: %+v", previous, cur, info.Labels)
+		previous = cur.Digest
+		cur = children[0]
+		if _, ok := visited[cur.Digest]; ok {
+			break
+		}
+		gotChain = append(gotChain, cur.Digest)
+	}
+	require.Equal(t, len(chain), len(gotChain))
+
+	// Prune all refs
+	require.NoError(t, done(ctx))
+	for _, ref := range allRefs {
+		ref.Release(ctx)
+	}
+	ensurePrune(ctx, t, cm, len(gotChain)-1, 10)
+
+	// Check if contents are cleaned up
+	for _, d := range gotChain {
+		_, err := co.cs.Info(ctx, d)
+		require.ErrorIs(t, err, errdefs.ErrNotFound)
+	}
+}
+
+func TestSharingCompressionVariant(t *testing.T) {
+	t.Parallel()
+	// windows fails when lazy blob is being extracted with "invalid windows mount type: 'bind'"
+	if runtime.GOOS != "linux" {
+		t.Skipf("unsupported GOOS: %s", runtime.GOOS)
+	}
+
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+
+	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+
+	co, cleanup, err := newCacheManager(ctx, cmOpt{
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	defer cleanup()
+
+	ctx, done, err := leaseutil.WithLease(ctx, co.lm, leaseutil.MakeTemporary)
+	require.NoError(t, err)
+	defer done(context.TODO())
+
+	allCompressions := []compression.Type{compression.Uncompressed, compression.Gzip, compression.Zstd, compression.EStargz}
+
+	do := func(test func(testCaseSharingCompressionVariant)) {
+		for _, a := range exclude(allCompressions, compression.Uncompressed) {
+			for _, aV1 := range exclude(allCompressions, a) {
+				for _, aV2 := range exclude(allCompressions, a, aV1) {
+					for _, b := range []compression.Type{aV1, aV2} {
+						for _, bV1 := range exclude(allCompressions, a, aV1, aV2) {
+							test(testCaseSharingCompressionVariant{
+								a:         a,
+								aVariants: []compression.Type{aV1, aV2},
+								b:         b,
+								bVariants: []compression.Type{bV1, a},
+							})
+						}
+					}
+				}
+			}
+		}
+	}
+
+	t.Logf("Test cases with possible compression types")
+	do(func(testCase testCaseSharingCompressionVariant) {
+		testCase.checkPrune = true
+		testSharingCompressionVariant(ctx, t, co, testCase)
+		require.NoError(t, co.manager.Prune(ctx, nil, client.PruneInfo{All: true}))
+		checkDiskUsage(ctx, t, co.manager, 0, 0)
+	})
+
+	t.Logf("Test case with many parallel operation")
+	eg, egctx := errgroup.WithContext(ctx)
+	do(func(testCase testCaseSharingCompressionVariant) {
+		eg.Go(func() error {
+			testCase.checkPrune = false
+			testSharingCompressionVariant(egctx, t, co, testCase)
+			return nil
+		})
+	})
+	require.NoError(t, eg.Wait())
+}
+
+func exclude(s []compression.Type, ts ...compression.Type) (res []compression.Type) {
+EachElem:
+	for _, v := range s {
+		for _, t := range ts {
+			if v == t {
+				continue EachElem
+			}
+		}
+		res = append(res, v)
+	}
+	return
+}
+
+// testCaseSharingCompressionVariant is one test case configuration for testSharingCompressionVariant.
+// This configures two refs A and B.
+// A creates compression variants configured by aVariants and
+// B creates compression variants configured by bVariants.
+// This test checks if aVariants are visible from B and bVariants are visible from A.
+type testCaseSharingCompressionVariant struct {
+	// a is the compression of the initial immutableRef's (called A) blob
+	a compression.Type
+
+	// aVariants are the compression variants created from A
+	aVariants []compression.Type
+
+	// b is another immutableRef (called B) which has one of the compression variants of A
+	b compression.Type
+
+	// bVariants are compression variants created from B
+	bVariants []compression.Type
+
+	// checkPrune is whether checking prune API. must be false if run tests in parallel.
+	checkPrune bool
+}
+
+func testSharingCompressionVariant(ctx context.Context, t *testing.T, co *cmOut, testCase testCaseSharingCompressionVariant) {
+	var (
+		cm              = co.manager
+		allCompressions = append(append([]compression.Type{testCase.a, testCase.b}, testCase.aVariants...), testCase.bVariants...)
+		orgContent      = map[string]string{"foo": "1"}
+	)
+	test := func(customized bool) {
+		defer cm.Prune(ctx, nil, client.PruneInfo{})
+
+		// Prepare the original content
+		_, orgContentDesc, err := mapToBlob(orgContent, false)
+		require.NoError(t, err)
+		blobBytes, aDesc, err := mapToBlobWithCompression(orgContent, func(w io.Writer) (io.WriteCloser, string, error) {
+			cw, err := getCompressor(w, testCase.a, customized)
+			if err != nil {
+				return nil, "", err
+			}
+			return cw, testCase.a.DefaultMediaType(), nil
+		})
+		require.NoError(t, err)
+		contentBuffer := contentutil.NewBuffer()
+		descHandlers := DescHandlers(map[digest.Digest]*DescHandler{})
+		cw, err := contentBuffer.Writer(ctx, content.WithRef(fmt.Sprintf("write-test-blob-%s", aDesc.Digest)))
+		require.NoError(t, err)
+		_, err = cw.Write(blobBytes)
+		require.NoError(t, err)
+		require.NoError(t, cw.Commit(ctx, 0, cw.Digest()))
+		descHandlers[aDesc.Digest] = &DescHandler{
+			Provider: func(_ session.Group) content.Provider { return contentBuffer },
+		}
+
+		// Create compression variants
+		aRef, err := cm.GetByBlob(ctx, aDesc, nil, descHandlers)
+		require.NoError(t, err)
+		defer aRef.Release(ctx)
+		var bDesc ocispecs.Descriptor
+		for _, compressionType := range testCase.aVariants {
+			remotes, err := aRef.GetRemotes(ctx, true, config.RefConfig{Compression: compression.New(compressionType).SetForce(true)}, false, nil)
+			require.NoError(t, err)
+			require.Equal(t, 1, len(remotes))
+			require.Equal(t, 1, len(remotes[0].Descriptors))
+			if compressionType == testCase.b {
+				bDesc = remotes[0].Descriptors[0]
+			}
+		}
+		require.NotEqual(t, "", bDesc.Digest, "compression B must be chosen from the variants of A")
+		bRef, err := cm.GetByBlob(ctx, bDesc, nil, descHandlers)
+		require.NoError(t, err)
+		defer bRef.Release(ctx)
+		for _, compressionType := range testCase.bVariants {
+			remotes, err := bRef.GetRemotes(ctx, true, config.RefConfig{Compression: compression.New(compressionType).SetForce(true)}, false, nil)
+			require.NoError(t, err)
+			require.Equal(t, 1, len(remotes))
+			require.Equal(t, 1, len(remotes[0].Descriptors))
+		}
+
+		// check if all compression variables are available on the both refs
+		checkCompression := func(desc ocispecs.Descriptor, compressionType compression.Type) {
+			require.Equal(t, compressionType.DefaultMediaType(), desc.MediaType, "compression: %v", compressionType)
+			if compressionType == compression.EStargz {
+				ok, err := isEStargz(ctx, co.cs, desc.Digest)
+				require.NoError(t, err, "compression: %v", compressionType)
+				require.True(t, ok, "compression: %v", compressionType)
+			}
+		}
+		for _, c := range allCompressions {
+			aDesc, err := aRef.(*immutableRef).getBlobWithCompression(ctx, c)
+			require.NoError(t, err, "compression: %v", c)
+			bDesc, err := bRef.(*immutableRef).getBlobWithCompression(ctx, c)
+			require.NoError(t, err, "compression: %v", c)
+			checkCompression(aDesc, c)
+			checkCompression(bDesc, c)
+		}
+
+		// check if compression variables are availalbe on B still after A is released
+		if testCase.checkPrune && aRef.ID() != bRef.ID() {
+			require.NoError(t, aRef.Release(ctx))
+			ensurePrune(ctx, t, cm, 1, 10)
+			checkDiskUsage(ctx, t, co.manager, 1, 0)
+			for _, c := range allCompressions {
+				_, err = bRef.(*immutableRef).getBlobWithCompression(ctx, c)
+				require.NoError(t, err)
+			}
+		}
+
+		// check if contents are valid
+		for _, c := range allCompressions {
+			bDesc, err := bRef.(*immutableRef).getBlobWithCompression(ctx, c)
+			require.NoError(t, err, "compression: %v", c)
+			uDgst := bDesc.Digest
+			if c != compression.Uncompressed {
+				convertFunc, err := getConverter(ctx, co.cs, bDesc, compression.New(compression.Uncompressed))
+				require.NoError(t, err, "compression: %v", c)
+				uDesc, err := convertFunc(ctx, co.cs, bDesc)
+				require.NoError(t, err, "compression: %v", c)
+				uDgst = uDesc.Digest
+			}
+			require.Equal(t, uDgst, orgContentDesc.Digest, "compression: %v", c)
+		}
+	}
+	for _, customized := range []bool{true, false} {
+		// tests in two patterns: whether making the initial blob customized
+		test(customized)
+	}
+}
+
+func ensurePrune(ctx context.Context, t *testing.T, cm Manager, pruneNum, maxRetry int) {
+	sum := 0
+	for i := 0; i <= maxRetry; i++ {
+		buf := pruneResultBuffer()
+		require.NoError(t, cm.Prune(ctx, buf.C, client.PruneInfo{All: true}))
+		buf.close()
+		sum += len(buf.all)
+		if sum >= pruneNum {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+		t.Logf("Retrying to prune (%v)", i)
+	}
+	require.Equal(t, true, sum >= pruneNum, "actual=%v, expected=%v", sum, pruneNum)
+}
+
+func getCompressor(w io.Writer, compressionType compression.Type, customized bool) (io.WriteCloser, error) {
+	switch compressionType {
+	case compression.Uncompressed:
+		return nil, fmt.Errorf("compression is not requested: %v", compressionType)
+	case compression.Gzip:
+		if customized {
+			gz, _ := gzip.NewWriterLevel(w, gzip.NoCompression)
+			gz.Header.Comment = "hello"
+			gz.Close()
+		}
+		return gzip.NewWriter(w), nil
+	case compression.EStargz:
+		done := make(chan struct{})
+		pr, pw := io.Pipe()
+		level := gzip.BestCompression
+		if customized {
+			level = gzip.BestSpeed
+		}
+		go func() {
+			defer close(done)
+			gw := estargz.NewWriterLevel(w, level)
+			if err := gw.AppendTarLossLess(pr); err != nil {
+				pr.CloseWithError(err)
+				return
+			}
+			if _, err := gw.Close(); err != nil {
+				pr.CloseWithError(err)
+				return
+			}
+			pr.Close()
+		}()
+		return &writeCloser{pw, func() error { <-done; return nil }}, nil
+	case compression.Zstd:
+		if customized {
+			skippableFrameMagic := []byte{0x50, 0x2a, 0x4d, 0x18}
+			s := []byte("hello")
+			size := make([]byte, 4)
+			binary.LittleEndian.PutUint32(size, uint32(len(s)))
+			if _, err := w.Write(append(append(skippableFrameMagic, size...), s...)); err != nil {
+				return nil, err
+			}
+		}
+		return zstd.NewWriter(w)
+	default:
+		return nil, fmt.Errorf("unknown compression type: %q", compressionType)
+	}
+}
+
 func TestConversion(t *testing.T) {
 	t.Parallel()
 	if runtime.GOOS != "linux" {
@@ -1388,7 +1767,7 @@ func TestGetRemotes(t *testing.T) {
 					if needs {
 						require.False(t, isLazy, "layer %q requires conversion so it must be unlazied", desc.Digest)
 					}
-					bDesc, err := r.getCompressionBlob(egctx, compressionType)
+					bDesc, err := r.getBlobWithCompression(egctx, compressionType)
 					if isLazy {
 						require.Error(t, err)
 					} else {
@@ -2076,12 +2455,26 @@ func (b bufferCloser) Close() error {
 }
 
 func mapToBlob(m map[string]string, compress bool) ([]byte, ocispecs.Descriptor, error) {
+	if !compress {
+		return mapToBlobWithCompression(m, nil)
+	}
+	return mapToBlobWithCompression(m, func(w io.Writer) (io.WriteCloser, string, error) {
+		return gzip.NewWriter(w), ocispecs.MediaTypeImageLayerGzip, nil
+	})
+}
+
+func mapToBlobWithCompression(m map[string]string, compress func(io.Writer) (io.WriteCloser, string, error)) ([]byte, ocispecs.Descriptor, error) {
 	buf := bytes.NewBuffer(nil)
 	sha := digest.SHA256.Digester()
 
 	var dest io.WriteCloser = bufferCloser{buf}
-	if compress {
-		dest = gzip.NewWriter(buf)
+	mediaType := ocispecs.MediaTypeImageLayer
+	if compress != nil {
+		var err error
+		dest, mediaType, err = compress(buf)
+		if err != nil {
+			return nil, ocispecs.Descriptor{}, err
+		}
 	}
 	tw := tar.NewWriter(io.MultiWriter(sha.Hash(), dest))
 
@@ -2103,10 +2496,6 @@ func mapToBlob(m map[string]string, compress bool) ([]byte, ocispecs.Descriptor,
 		return nil, ocispecs.Descriptor{}, err
 	}
 
-	mediaType := ocispecs.MediaTypeImageLayer
-	if compress {
-		mediaType = ocispecs.MediaTypeImageLayerGzip
-	}
 	return buf.Bytes(), ocispecs.Descriptor{
 		Digest:    digest.FromBytes(buf.Bytes()),
 		MediaType: mediaType,
