@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
@@ -41,6 +42,7 @@ import (
 	"github.com/moby/buildkit/session/sshforward/sshprovider"
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
+	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/entitlements"
 	"github.com/moby/buildkit/util/testutil"
@@ -148,7 +150,8 @@ func TestIntegration(t *testing.T) {
 		testRmSymlink,
 		testMoveParentDir,
 		testBuildExportWithForeignLayer,
-		testFrontendAttrs,
+		testBuildInfoExporter,
+		testBuildInfoInline,
 	)
 	tests = append(tests, diffOpTestCases()...)
 	integration.Run(t, tests, mirrors)
@@ -5040,15 +5043,11 @@ func testRelativeMountpoint(t *testing.T, sb integration.Sandbox) {
 }
 
 // moby/buildkit#2476
-func testFrontendAttrs(t *testing.T, sb integration.Sandbox) {
+func testBuildInfoExporter(t *testing.T, sb integration.Sandbox) {
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
-
-	attrs := map[string]string{"build-arg:foo": "bar"}
-	dtattrs, err := json.Marshal(attrs)
-	require.NoError(t, err)
 
 	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
 		st := llb.Image("busybox:latest").Run(
@@ -5058,19 +5057,133 @@ func testFrontendAttrs(t *testing.T, sb integration.Sandbox) {
 		if err != nil {
 			return nil, err
 		}
-		res, err := c.Solve(ctx, gateway.SolveRequest{
+		return c.Solve(ctx, gateway.SolveRequest{
 			Definition:  def.ToPB(),
-			FrontendOpt: attrs,
+			FrontendOpt: map[string]string{"build-arg:foo": "bar"},
 		})
-		require.Contains(t, res.Metadata, "buildinfo.attrs")
-		require.Equal(t, res.Metadata["buildinfo.attrs"], dtattrs)
-		return res, err
 	}
 
-	_, err = c.Build(sb.Context(), SolveOpt{}, "", frontend, nil)
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
 	require.NoError(t, err)
 
-	checkAllReleasable(t, c, sb, true)
+	res, err := c.Build(sb.Context(), SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": registry + "/buildkit/test-buildinfo:latest",
+					"push": "true",
+				},
+			},
+		},
+	}, "", frontend, nil)
+	require.NoError(t, err)
+
+	require.Contains(t, res.ExporterResponse, exptypes.ExporterBuildInfo)
+	decbi, err := base64.StdEncoding.DecodeString(res.ExporterResponse[exptypes.ExporterBuildInfo])
+	require.NoError(t, err)
+
+	var exbi binfotypes.BuildInfo
+	err = json.Unmarshal(decbi, &exbi)
+	require.NoError(t, err)
+
+	require.Equal(t, exbi.Attrs, map[string]string{"build-arg:foo": "bar"})
+	require.Equal(t, len(exbi.Sources), 1)
+	require.Equal(t, exbi.Sources[0].Type, binfotypes.SourceTypeDockerImage)
+	require.Equal(t, exbi.Sources[0].Ref, "docker.io/library/busybox:latest")
+}
+
+// moby/buildkit#2476
+func testBuildInfoInline(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Image("busybox:latest").Run(
+		llb.Args([]string{"/bin/sh", "-c", `echo hello`}),
+	)
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	cdAddress := sb.ContainerdAddress()
+	if cdAddress == "" {
+		t.Skip("rest of test requires containerd worker")
+	}
+
+	client, err := newContainerd(cdAddress)
+	require.NoError(t, err)
+	defer client.Close()
+
+	ctx := namespaces.WithNamespace(sb.Context(), "buildkit")
+
+	for _, tt := range []struct {
+		name       string
+		buildAttrs bool
+	}{{
+		"attrsEnabled",
+		true,
+	}, {
+		"attrsDisabled",
+		false,
+	}} {
+		t.Run(tt.name, func(t *testing.T) {
+			target := registry + "/buildkit/test-buildinfo:latest"
+
+			_, err = c.Solve(sb.Context(), def, SolveOpt{
+				Exports: []ExportEntry{
+					{
+						Type: ExporterImage,
+						Attrs: map[string]string{
+							"name":            target,
+							"push":            "true",
+							"buildinfo-attrs": strconv.FormatBool(tt.buildAttrs),
+						},
+					},
+				},
+				FrontendAttrs: map[string]string{
+					"build-arg:foo": "bar",
+				},
+			}, nil)
+			require.NoError(t, err)
+
+			img, err := client.GetImage(ctx, target)
+			require.NoError(t, err)
+
+			desc, err := img.Config(ctx)
+			require.NoError(t, err)
+
+			dt, err := content.ReadBlob(ctx, img.ContentStore(), desc)
+			require.NoError(t, err)
+
+			var config binfotypes.ImageConfig
+			err = json.Unmarshal(dt, &config)
+			require.NoError(t, err)
+
+			var bi binfotypes.BuildInfo
+			err = json.Unmarshal(config.BuildInfo, &bi)
+			require.NoError(t, err)
+
+			if tt.buildAttrs {
+				require.Equal(t, len(bi.Attrs), 1)
+				require.Equal(t, bi.Attrs, map[string]string{"build-arg:foo": "bar"})
+			} else {
+				require.Equal(t, len(bi.Attrs), 0)
+			}
+			require.Equal(t, len(bi.Sources), 1)
+			require.Equal(t, bi.Sources[0].Type, binfotypes.SourceTypeDockerImage)
+			require.Equal(t, bi.Sources[0].Ref, "docker.io/library/busybox:latest")
+		})
+	}
 }
 
 func tmpdir(appliers ...fstest.Applier) (string, error) {
