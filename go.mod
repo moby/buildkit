@@ -18,7 +18,7 @@ require (
 	github.com/containerd/typeurl v1.0.2
 	github.com/coreos/go-systemd/v22 v22.3.2
 	github.com/docker/cli v20.10.12+incompatible
-	github.com/docker/distribution v2.7.1+incompatible
+	github.com/docker/distribution v2.8.0+incompatible
 	// docker: the actual version is replaced in replace()
 	github.com/docker/docker v20.10.7+incompatible // master (v21.xx-dev)
 	github.com/docker/go-connections v0.4.0
