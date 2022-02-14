@@ -21,6 +21,7 @@ import (
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/buildinfo"
+	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/system"
@@ -49,7 +50,7 @@ type ImageWriter struct {
 	opt WriterOpt
 }
 
-func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool, refCfg cacheconfig.RefConfig, buildInfoMode buildinfo.ExportMode, sessionID string) (*ocispecs.Descriptor, error) {
+func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool, refCfg cacheconfig.RefConfig, buildInfoMode buildinfo.ExportMode, buildInfoAttrs bool, sessionID string) (*ocispecs.Descriptor, error) {
 	platformsBytes, ok := inp.Metadata[exptypes.ExporterPlatformsKey]
 
 	if len(inp.Refs) > 0 && !ok {
@@ -64,7 +65,11 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 
 		var buildInfo []byte
 		if buildInfoMode&buildinfo.ExportImageConfig > 0 {
-			buildInfo = inp.Metadata[exptypes.ExporterBuildInfo]
+			if buildInfo, err = buildinfo.Format(inp.Metadata[exptypes.ExporterBuildInfo], buildinfo.FormatOpts{
+				RemoveAttrs: !buildInfoAttrs,
+			}); err != nil {
+				return nil, err
+			}
 		}
 
 		mfstDesc, configDesc, err := ic.commitDistributionManifest(ctx, inp.Ref, inp.Metadata[exptypes.ExporterImageConfigKey], &remotes[0], oci, inp.Metadata[exptypes.ExporterInlineCache], buildInfo)
@@ -131,7 +136,11 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 
 		var buildInfo []byte
 		if buildInfoMode&buildinfo.ExportImageConfig > 0 {
-			buildInfo = inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, p.ID)]
+			if buildInfo, err = buildinfo.Format(inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, p.ID)], buildinfo.FormatOpts{
+				RemoveAttrs: !buildInfoAttrs,
+			}); err != nil {
+				return nil, err
+			}
 		}
 
 		desc, _, err := ic.commitDistributionManifest(ctx, r, config, &remotes[remotesMap[p.ID]], oci, inlineCache, buildInfo)
@@ -416,9 +425,9 @@ func patchImageConfig(dt []byte, descs []ocispecs.Descriptor, history []ocispecs
 		if err != nil {
 			return nil, err
 		}
-		m[buildinfo.ImageConfigField] = dt
-	} else if _, ok := m[buildinfo.ImageConfigField]; ok {
-		delete(m, buildinfo.ImageConfigField)
+		m[binfotypes.ImageConfigField] = dt
+	} else if _, ok := m[binfotypes.ImageConfigField]; ok {
+		delete(m, binfotypes.ImageConfigField)
 	}
 
 	dt, err = json.Marshal(m)

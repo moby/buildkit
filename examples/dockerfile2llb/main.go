@@ -30,7 +30,7 @@ func main() {
 
 	caps := pb.Caps.CapSet(pb.Caps.All())
 
-	state, img, err := dockerfile2llb.Dockerfile2LLB(appcontext.Context(), df, dockerfile2llb.ConvertOpt{
+	state, img, bi, err := dockerfile2llb.Dockerfile2LLB(appcontext.Context(), df, dockerfile2llb.ConvertOpt{
 		MetaResolver: imagemetaresolver.Default(),
 		Target:       opt.target,
 		LLBCaps:      &caps,
@@ -41,6 +41,7 @@ func main() {
 	}
 
 	_ = img
+	_ = bi
 
 	dt, err := state.Marshal(context.TODO())
 	if err != nil {

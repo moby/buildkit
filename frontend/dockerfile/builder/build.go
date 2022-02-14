@@ -433,7 +433,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 					}
 				}()
 
-				st, img, err := dockerfile2llb.Dockerfile2LLB(ctx, dtDockerfile, dockerfile2llb.ConvertOpt{
+				st, img, bi, err := dockerfile2llb.Dockerfile2LLB(ctx, dtDockerfile, dockerfile2llb.ConvertOpt{
 					Target:            opts[keyTarget],
 					MetaResolver:      c,
 					BuildArgs:         filter(opts, buildArgPrefix),
@@ -518,8 +518,14 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 					return err
 				}
 
+				buildinfo, err := json.Marshal(bi)
+				if err != nil {
+					return errors.Wrapf(err, "failed to marshal build info")
+				}
+
 				if !exportMap {
 					res.AddMeta(exptypes.ExporterImageConfigKey, config)
+					res.AddMeta(exptypes.ExporterBuildInfo, buildinfo)
 					res.SetRef(ref)
 				} else {
 					p := platforms.DefaultSpec()
@@ -529,6 +535,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 
 					k := platforms.Format(p)
 					res.AddMeta(fmt.Sprintf("%s/%s", exptypes.ExporterImageConfigKey, k), config)
+					res.AddMeta(fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, k), buildinfo)
 					res.AddRef(k, ref)
 					expPlatforms.Platforms[i] = exptypes.Platform{
 						ID:       k,

@@ -175,8 +175,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 				return nil, errors.Errorf("invalid reference: %T", r.Sys())
 			}
 			inp.Ref = workerRef.ImmutableRef
-
-			dtbi, err := buildinfo.Merge(ctx, res.BuildInfo(), inp.Metadata[exptypes.ExporterImageConfigKey])
+			dtbi, err := buildinfo.Encode(ctx, inp.Metadata[exptypes.ExporterBuildInfo], res.BuildSources())
 			if err != nil {
 				return nil, err
 			}
@@ -207,8 +206,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 						return nil, errors.Errorf("invalid reference: %T", r.Sys())
 					}
 					m[k] = workerRef.ImmutableRef
-
-					dtbi, err := buildinfo.Merge(ctx, res.BuildInfo(), inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterImageConfigKey, k)])
+					dtbi, err := buildinfo.Encode(ctx, inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, k)], res.BuildSources())
 					if err != nil {
 						return nil, err
 					}

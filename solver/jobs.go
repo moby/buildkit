@@ -22,7 +22,7 @@ import (
 type ResolveOpFunc func(Vertex, Builder) (Op, error)
 
 type Builder interface {
-	Build(ctx context.Context, e Edge) (CachedResult, BuildInfo, error)
+	Build(ctx context.Context, e Edge) (CachedResult, BuildSources, error)
 	InContext(ctx context.Context, f func(ctx context.Context, g session.Group) error) error
 	EachValue(ctx context.Context, key string, fn func(interface{}) error) error
 }
@@ -197,7 +197,7 @@ type subBuilder struct {
 	exporters []ExportableCacheKey
 }
 
-func (sb *subBuilder) Build(ctx context.Context, e Edge) (CachedResult, BuildInfo, error) {
+func (sb *subBuilder) Build(ctx context.Context, e Edge) (CachedResult, BuildSources, error) {
 	// TODO(@crazy-max): Handle BuildInfo from subbuild
 	res, err := sb.solver.subBuild(ctx, e, sb.vtx)
 	if err != nil {
@@ -496,7 +496,7 @@ func (jl *Solver) deleteIfUnreferenced(k digest.Digest, st *state) {
 	}
 }
 
-func (j *Job) Build(ctx context.Context, e Edge) (CachedResult, BuildInfo, error) {
+func (j *Job) Build(ctx context.Context, e Edge) (CachedResult, BuildSources, error) {
 	if span := trace.SpanFromContext(ctx); span.SpanContext().IsValid() {
 		j.span = span
 	}
@@ -514,25 +514,25 @@ func (j *Job) Build(ctx context.Context, e Edge) (CachedResult, BuildInfo, error
 
 	j.list.mu.Lock()
 	defer j.list.mu.Unlock()
-	return res, j.walkBuildInfo(ctx, e, make(BuildInfo)), nil
+	return res, j.walkBuildSources(ctx, e, make(BuildSources)), nil
 }
 
-func (j *Job) walkBuildInfo(ctx context.Context, e Edge, bi BuildInfo) BuildInfo {
+func (j *Job) walkBuildSources(ctx context.Context, e Edge, bsrc BuildSources) BuildSources {
 	for _, inp := range e.Vertex.Inputs() {
 		if st, ok := j.list.actives[inp.Vertex.Digest()]; ok {
 			st.mu.Lock()
 			for _, cacheRes := range st.op.cacheRes {
-				for key, val := range cacheRes.BuildInfo {
-					if _, ok := bi[key]; !ok {
-						bi[key] = val
+				for key, val := range cacheRes.BuildSources {
+					if _, ok := bsrc[key]; !ok {
+						bsrc[key] = val
 					}
 				}
 			}
 			st.mu.Unlock()
-			bi = j.walkBuildInfo(ctx, inp, bi)
+			bsrc = j.walkBuildSources(ctx, inp, bsrc)
 		}
 	}
-	return bi
+	return bsrc
 }
 
 func (j *Job) Discard() error {
