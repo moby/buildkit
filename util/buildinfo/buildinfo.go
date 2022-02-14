@@ -25,31 +25,26 @@ func Decode(enc string) (bi binfotypes.BuildInfo, _ error) {
 }
 
 // Encode encodes build info.
-func Encode(ctx context.Context, frontend string, frontendAttrs []byte, buildSources map[string]string, imageConfig []byte) ([]byte, error) {
-	icbi, err := FromImageConfig(imageConfig)
-	if err != nil {
-		return nil, err
-	}
-	srcs, err := mergeSources(ctx, buildSources, icbi)
-	if err != nil {
-		return nil, err
-	}
-	attrs := make(map[string]string)
-	if frontendAttrs != nil {
-		if err := json.Unmarshal(frontendAttrs, &attrs); err != nil {
+func Encode(ctx context.Context, buildInfo []byte, buildSources map[string]string) ([]byte, error) {
+	var bi binfotypes.BuildInfo
+	if buildInfo != nil {
+		if err := json.Unmarshal(buildInfo, &bi); err != nil {
 			return nil, err
 		}
 	}
+	msources, err := mergeSources(ctx, buildSources, bi.Sources)
+	if err != nil {
+		return nil, err
+	}
 	return json.Marshal(binfotypes.BuildInfo{
-		Frontend: frontend,
-		Attrs:    filterAttrs(attrs),
-		Sources:  srcs,
+		Frontend: bi.Frontend,
+		Attrs:    filterAttrs(bi.Attrs),
+		Sources:  msources,
 	})
 }
 
-// mergeSources combines and fixes build sources from image config
-// key binfotypes.ImageConfigField.
-func mergeSources(ctx context.Context, buildSources map[string]string, imageConfigBuildInfo binfotypes.BuildInfo) ([]binfotypes.Source, error) {
+// mergeSources combines and fixes build sources from frontend sources.
+func mergeSources(ctx context.Context, buildSources map[string]string, frontendSources []binfotypes.Source) ([]binfotypes.Source, error) {
 	// Iterate and combine build sources
 	mbs := map[string]binfotypes.Source{}
 	for buildSource, pin := range buildSources {
@@ -59,20 +54,20 @@ func mergeSources(ctx context.Context, buildSources map[string]string, imageConf
 		}
 		switch sourceID := src.(type) {
 		case *source.ImageIdentifier:
-			for i, ics := range imageConfigBuildInfo.Sources {
-				// Use original user input from image config
-				if ics.Type == binfotypes.SourceTypeDockerImage && ics.Alias == sourceID.Reference.String() {
-					if _, ok := mbs[ics.Alias]; !ok {
-						parsed, err := reference.ParseNormalizedNamed(ics.Ref)
+			for i, fsrc := range frontendSources {
+				// use original user input from frontend sources
+				if fsrc.Type == binfotypes.SourceTypeDockerImage && fsrc.Alias == sourceID.Reference.String() {
+					if _, ok := mbs[fsrc.Alias]; !ok {
+						parsed, err := reference.ParseNormalizedNamed(fsrc.Ref)
 						if err != nil {
-							return nil, errors.Wrapf(err, "failed to parse %s", ics.Ref)
+							return nil, errors.Wrapf(err, "failed to parse %s", fsrc.Ref)
 						}
-						mbs[ics.Alias] = binfotypes.Source{
+						mbs[fsrc.Alias] = binfotypes.Source{
 							Type: binfotypes.SourceTypeDockerImage,
 							Ref:  reference.TagNameOnly(parsed).String(),
 							Pin:  pin,
 						}
-						imageConfigBuildInfo.Sources = append(imageConfigBuildInfo.Sources[:i], imageConfigBuildInfo.Sources[i+1:]...)
+						frontendSources = append(frontendSources[:i], frontendSources[i+1:]...)
 					}
 					break
 				}
@@ -110,22 +105,22 @@ func mergeSources(ctx context.Context, buildSources map[string]string, imageConf
 		}
 	}
 
-	// Leftovers build deps in image config. Mostly duplicated ones we
-	// don't need but there is an edge case if no instruction except sources
-	// one is defined (e.g. FROM ...) that can be valid so take it into account.
-	for _, ics := range imageConfigBuildInfo.Sources {
-		if ics.Type != binfotypes.SourceTypeDockerImage {
+	// leftover sources in frontend. Mostly duplicated ones we don't need but
+	// there is an edge case if no instruction except sources one is defined
+	// (e.g. FROM ...) that can be valid so take it into account.
+	for _, fsrc := range frontendSources {
+		if fsrc.Type != binfotypes.SourceTypeDockerImage {
 			continue
 		}
-		if _, ok := mbs[ics.Alias]; !ok {
-			parsed, err := reference.ParseNormalizedNamed(ics.Ref)
+		if _, ok := mbs[fsrc.Alias]; !ok {
+			parsed, err := reference.ParseNormalizedNamed(fsrc.Ref)
 			if err != nil {
-				return nil, errors.Wrapf(err, "failed to parse %s", ics.Ref)
+				return nil, errors.Wrapf(err, "failed to parse %s", fsrc.Ref)
 			}
-			mbs[ics.Alias] = binfotypes.Source{
+			mbs[fsrc.Alias] = binfotypes.Source{
 				Type: binfotypes.SourceTypeDockerImage,
 				Ref:  reference.TagNameOnly(parsed).String(),
-				Pin:  ics.Pin,
+				Pin:  fsrc.Pin,
 			}
 		}
 	}
@@ -139,24 +134,6 @@ func mergeSources(ctx context.Context, buildSources map[string]string, imageConf
 	})
 
 	return srcs, nil
-}
-
-// FromImageConfig returns build dependencies from image config.
-func FromImageConfig(imageConfig []byte) (bi binfotypes.BuildInfo, _ error) {
-	if len(imageConfig) == 0 {
-		return bi, nil
-	}
-	var config binfotypes.ImageConfig
-	if err := json.Unmarshal(imageConfig, &config); err != nil {
-		return bi, errors.Wrap(err, "failed to unmarshal buildinfo from image config")
-	}
-	if len(config.BuildInfo) == 0 {
-		return bi, nil
-	}
-	if err := json.Unmarshal(config.BuildInfo, &bi); err != nil {
-		return bi, errors.Wrap(err, "failed to unmarshal buildinfo")
-	}
-	return bi, nil
 }
 
 // FormatOpts holds build info format options.
@@ -183,7 +160,7 @@ func Format(dt []byte, format FormatOpts) (_ []byte, err error) {
 }
 
 var knownAttrs = []string{
-	"cmdline",
+	//"cmdline",
 	"context",
 	"filename",
 	"source",
@@ -193,7 +170,7 @@ var knownAttrs = []string{
 	//"force-network-mode",
 	//"hostname",
 	//"image-resolve-mode",
-	"platform",
+	//"platform",
 	"shm-size",
 	"target",
 	"ulimit",
@@ -242,4 +219,47 @@ func isControlArg(attrKey string) bool {
 		}
 	}
 	return false
+}
+
+// GetMetadata returns buildinfo metadata for the specified key. If the key
+// is already there, result will be merged.
+func GetMetadata(metadata map[string][]byte, key string, bi binfotypes.BuildInfo) ([]byte, error) {
+	var (
+		dtbi []byte
+		err  error
+	)
+	if v, ok := metadata[key]; ok {
+		var mbi binfotypes.BuildInfo
+		if errm := json.Unmarshal(v, &mbi); errm != nil {
+			return nil, errors.Wrapf(errm, "failed to unmarshal build info for %q", key)
+		}
+		if bi.Frontend != "" {
+			mbi.Frontend = bi.Frontend
+		}
+		mbi.Attrs = reduceMap(mbi.Attrs, bi.Attrs)
+		dtbi, err = json.Marshal(mbi)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to marshal build info for %q", key)
+		}
+	} else {
+		dtbi, err = json.Marshal(bi)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to marshal build info for %q", key)
+		}
+	}
+	return dtbi, nil
+}
+
+// reduceMap joins map string (union)
+func reduceMap(original map[string]string, merger map[string]string) map[string]string {
+	if original == nil && merger == nil {
+		return nil
+	}
+	if original == nil {
+		original = map[string]string{}
+	}
+	for k, v := range merger {
+		original[k] = v
+	}
+	return original
 }

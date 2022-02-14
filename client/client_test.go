@@ -5174,10 +5174,10 @@ func testBuildInfoInline(t *testing.T, sb integration.Sandbox) {
 			require.NoError(t, err)
 
 			if tt.buildAttrs {
-				require.Equal(t, len(bi.Attrs), 1)
-				require.Equal(t, bi.Attrs, map[string]string{"build-arg:foo": "bar"})
+				require.Contains(t, bi.Attrs, "build-arg:foo")
+				require.Equal(t, bi.Attrs["build-arg:foo"], "bar")
 			} else {
-				require.Equal(t, len(bi.Attrs), 0)
+				require.NotContains(t, bi.Attrs, "build-arg:foo")
 			}
 			require.Equal(t, len(bi.Sources), 1)
 			require.Equal(t, bi.Sources[0].Type, binfotypes.SourceTypeDockerImage)

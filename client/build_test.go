@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	gatewayapi "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
@@ -25,6 +26,7 @@ import (
 	"github.com/moby/buildkit/session/sshforward/sshprovider"
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
+	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
 	"github.com/moby/buildkit/util/entitlements"
 	utilsystem "github.com/moby/buildkit/util/system"
 	"github.com/moby/buildkit/util/testutil/echoserver"
@@ -2004,10 +2006,6 @@ func testClientGatewayFrontendAttrs(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	attrs := map[string]string{"build-arg:foo": "bar"}
-	dtattrs, err := json.Marshal(attrs)
-	require.NoError(t, err)
-
 	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
 		st := llb.Image("busybox:latest").Run(
 			llb.ReadonlyRootFS(),
@@ -2018,11 +2016,15 @@ func testClientGatewayFrontendAttrs(t *testing.T, sb integration.Sandbox) {
 			return nil, err
 		}
 		res, err := c.Solve(ctx, client.SolveRequest{
-			Definition:  def.ToPB(),
-			FrontendOpt: attrs,
+			Definition: def.ToPB(),
+			FrontendOpt: map[string]string{
+				"build-arg:foo": "bar",
+			},
 		})
-		require.Contains(t, res.Metadata, "buildinfo.attrs")
-		require.Equal(t, res.Metadata["buildinfo.attrs"], dtattrs)
+		require.Contains(t, res.Metadata, exptypes.ExporterBuildInfo)
+		var bi binfotypes.BuildInfo
+		require.NoError(t, json.Unmarshal(res.Metadata[exptypes.ExporterBuildInfo], &bi))
+		require.Equal(t, map[string]string{"build-arg:foo": "bar"}, bi.Attrs)
 		return res, err
 	}
 
@@ -2034,9 +2036,7 @@ func testClientGatewayFrontendAttrs(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	var bi binfotypes.BuildInfo
-	err = json.Unmarshal(decbi, &bi)
-	require.NoError(t, err)
-
+	require.NoError(t, json.Unmarshal(decbi, &bi))
 	require.Contains(t, bi.Attrs, "build-arg:foo")
 	require.Equal(t, "bar", bi.Attrs["build-arg:foo"])
 

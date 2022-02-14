@@ -72,7 +72,7 @@ type ConvertOpt struct {
 	ContextByName     func(context.Context, string) (*llb.State, *Image, error)
 }
 
-func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State, *Image, error) {
+func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State, *Image, *binfotypes.BuildInfo, error) {
 	contextByName := opt.ContextByName
 	opt.ContextByName = func(ctx context.Context, name string) (*llb.State, *Image, error) {
 		if !strings.EqualFold(name, "scratch") && !strings.EqualFold(name, "context") {
@@ -84,7 +84,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 	}
 
 	if len(dt) == 0 {
-		return nil, nil, errors.Errorf("the Dockerfile cannot be empty")
+		return nil, nil, nil, errors.Errorf("the Dockerfile cannot be empty")
 	}
 
 	if opt.ContextLocalName == "" {
@@ -100,7 +100,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 
 	dockerfile, err := parser.Parse(bytes.NewReader(dt))
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	for _, w := range dockerfile.Warnings {
@@ -111,7 +111,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 
 	stages, metaArgs, err := instructions.Parse(dockerfile.AST)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	shlex := shell.NewLex(dockerfile.EscapeToken)
@@ -136,10 +136,10 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 	for i, st := range stages {
 		name, err := shlex.ProcessWordWithMap(st.BaseName, metaArgsToMap(optMetaArgs))
 		if err != nil {
-			return nil, nil, parser.WithLocation(err, st.Location)
+			return nil, nil, nil, parser.WithLocation(err, st.Location)
 		}
 		if name == "" {
-			return nil, nil, parser.WithLocation(errors.Errorf("base name (%s) should not be blank", st.BaseName), st.Location)
+			return nil, nil, nil, parser.WithLocation(errors.Errorf("base name (%s) should not be blank", st.BaseName), st.Location)
 		}
 		st.BaseName = name
 
@@ -153,7 +153,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		if st.Name != "" {
 			s, img, err := opt.ContextByName(ctx, st.Name)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 			if s != nil {
 				ds.noinit = true
@@ -175,12 +175,12 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		if v := st.Platform; v != "" {
 			v, err := shlex.ProcessWordWithMap(v, metaArgsToMap(optMetaArgs))
 			if err != nil {
-				return nil, nil, parser.WithLocation(errors.Wrapf(err, "failed to process arguments for platform %s", v), st.Location)
+				return nil, nil, nil, parser.WithLocation(errors.Wrapf(err, "failed to process arguments for platform %s", v), st.Location)
 			}
 
 			p, err := platforms.Parse(v)
 			if err != nil {
-				return nil, nil, parser.WithLocation(errors.Wrapf(err, "failed to parse platform %s", v), st.Location)
+				return nil, nil, nil, parser.WithLocation(errors.Wrapf(err, "failed to parse platform %s", v), st.Location)
 			}
 			ds.platform = &p
 		}
@@ -222,7 +222,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		var ok bool
 		target, ok = allDispatchStates.findStateByName(opt.Target)
 		if !ok {
-			return nil, nil, errors.Errorf("target stage %s could not be found", opt.Target)
+			return nil, nil, nil, errors.Errorf("target stage %s could not be found", opt.Target)
 		}
 	}
 
@@ -232,7 +232,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		for i, cmd := range d.stage.Commands {
 			newCmd, err := toCommand(cmd, allDispatchStates)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 			d.commands[i] = newCmd
 			for _, src := range newCmd.sources {
@@ -247,7 +247,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 	}
 
 	if has, state := hasCircularDependency(allDispatchStates.states); has {
-		return nil, nil, errors.Errorf("circular dependency detected on stage: %s", state.stageName)
+		return nil, nil, nil, errors.Errorf("circular dependency detected on stage: %s", state.stageName)
 	}
 
 	if len(allDispatchStates.states) == 1 {
@@ -376,12 +376,12 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 	}
 
 	if err := eg.Wait(); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	buildContext := &mutableOutput{}
 	ctxPaths := map[string]struct{}{}
-	var buildSources []binfotypes.Source
+	buildinfo := &binfotypes.BuildInfo{}
 
 	for _, d := range allDispatchStates.states {
 		if !isReachable(target, d) {
@@ -390,7 +390,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 
 		// collect build dependencies
 		if d.buildSource != nil {
-			buildSources = append(buildSources, *d.buildSource)
+			buildinfo.Sources = append(buildinfo.Sources, *d.buildSource)
 		}
 
 		if d.base != nil {
@@ -418,12 +418,12 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		}
 		if d.image.Config.WorkingDir != "" {
 			if err = dispatchWorkdir(d, &instructions.WorkdirCommand{Path: d.image.Config.WorkingDir}, false, nil); err != nil {
-				return nil, nil, parser.WithLocation(err, d.stage.Location)
+				return nil, nil, nil, parser.WithLocation(err, d.stage.Location)
 			}
 		}
 		if d.image.Config.User != "" {
 			if err = dispatchUser(d, &instructions.UserCommand{User: d.image.Config.User}, false); err != nil {
-				return nil, nil, parser.WithLocation(err, d.stage.Location)
+				return nil, nil, nil, parser.WithLocation(err, d.stage.Location)
 			}
 		}
 		d.state = d.state.Network(opt.ForceNetMode)
@@ -452,13 +452,13 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		}
 
 		if err = dispatchOnBuildTriggers(d, d.image.Config.OnBuild, opt); err != nil {
-			return nil, nil, parser.WithLocation(err, d.stage.Location)
+			return nil, nil, nil, parser.WithLocation(err, d.stage.Location)
 		}
 		d.image.Config.OnBuild = nil
 
 		for _, cmd := range d.commands {
 			if err := dispatch(d, cmd, opt); err != nil {
-				return nil, nil, parser.WithLocation(err, cmd.Location())
+				return nil, nil, nil, parser.WithLocation(err, cmd.Location())
 			}
 		}
 
@@ -467,18 +467,11 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		}
 	}
 
-	// set target with gathered build dependencies
-	target.image.BuildInfo = []byte{}
-	if len(buildSources) > 0 {
-		sort.Slice(buildSources, func(i, j int) bool {
-			return buildSources[i].Ref < buildSources[j].Ref
+	// sort build sources
+	if len(buildinfo.Sources) > 0 {
+		sort.Slice(buildinfo.Sources, func(i, j int) bool {
+			return buildinfo.Sources[i].Ref < buildinfo.Sources[j].Ref
 		})
-		target.image.BuildInfo, err = json.Marshal(&binfotypes.BuildInfo{
-			Sources: buildSources,
-		})
-		if err != nil {
-			return nil, nil, err
-		}
 	}
 
 	if len(opt.Labels) != 0 && target.image.Config.Labels == nil {
@@ -518,7 +511,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		target.image.Variant = platformOpt.targetPlatform.Variant
 	}
 
-	return &st, &target.image, nil
+	return &st, &target.image, buildinfo, nil
 }
 
 func metaArgsToMap(metaArgs []instructions.KeyValuePairOptional) map[string]string {

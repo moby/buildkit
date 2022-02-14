@@ -232,8 +232,6 @@ ADD https://raw.githubusercontent.com/moby/moby/master/README.md /
 
 		require.Contains(t, bi.Attrs, "build-arg:foo")
 		require.Equal(t, "bar", bi.Attrs["build-arg:foo"])
-		require.Contains(t, bi.Attrs, "platform")
-		require.Equal(t, strings.Join(platforms, ","), bi.Attrs["platform"])
 
 		sources := bi.Sources
 		require.Equal(t, 2, len(sources))
