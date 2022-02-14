@@ -23,6 +23,8 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+const defaultExpiration = 60
+
 type authHandlerNS struct {
 	counter int64 // needs to be 64bit aligned for 32bit systems
 
@@ -351,6 +353,9 @@ func (ah *authHandler) fetchToken(ctx context.Context, sm *session.Manager, g se
 		if err != nil {
 			return nil, err
 		}
+		if resp.ExpiresIn == 0 {
+			resp.ExpiresIn = defaultExpiration
+		}
 		issuedAt, expires = time.Unix(resp.IssuedAt, 0), int(resp.ExpiresIn)
 		token = resp.Token
 		return nil, nil
@@ -378,6 +383,9 @@ func (ah *authHandler) fetchToken(ctx context.Context, sm *session.Manager, g se
 					if err != nil {
 						return nil, err
 					}
+					if resp.ExpiresIn == 0 {
+						resp.ExpiresIn = defaultExpiration
+					}
 					issuedAt, expires = resp.IssuedAt, resp.ExpiresIn
 					token = resp.AccessToken
 					return nil, nil
@@ -389,6 +397,9 @@ func (ah *authHandler) fetchToken(ctx context.Context, sm *session.Manager, g se
 			}
 			return nil, err
 		}
+		if resp.ExpiresIn == 0 {
+			resp.ExpiresIn = defaultExpiration
+		}
 		issuedAt, expires = resp.IssuedAt, resp.ExpiresIn
 		token = resp.Token
 		return nil, nil
@@ -397,6 +408,9 @@ func (ah *authHandler) fetchToken(ctx context.Context, sm *session.Manager, g se
 	resp, err := auth.FetchToken(ctx, ah.client, hdr, to)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to fetch anonymous token")
+	}
+	if resp.ExpiresIn == 0 {
+		resp.ExpiresIn = defaultExpiration
 	}
 	issuedAt, expires = resp.IssuedAt, resp.ExpiresIn
 
