@@ -20,7 +20,7 @@ type BuildInfo struct {
 	// Frontend defines the frontend used to build.
 	Frontend string `json:"frontend,omitempty"`
 	// Attrs defines build request attributes.
-	Attrs map[string]string `json:"attrs,omitempty"`
+	Attrs map[string]*string `json:"attrs,omitempty"`
 	// Sources defines build dependencies.
 	Sources []Source `json:"sources,omitempty"`
 }

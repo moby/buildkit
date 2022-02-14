@@ -23,7 +23,6 @@ import (
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/buildinfo"
-	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/worker"
@@ -166,20 +165,14 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest, sid st
 
 	if len(res.Refs) > 0 {
 		for p := range res.Refs {
-			dtbi, errm := buildinfo.GetMetadata(res.Metadata, fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, p), binfotypes.BuildInfo{
-				Frontend: req.Frontend,
-				Attrs:    req.FrontendOpt,
-			})
+			dtbi, errm := buildinfo.GetMetadata(res.Metadata, fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, p), req.Frontend, req.FrontendOpt)
 			if errm != nil {
 				return nil, err
 			}
 			res.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, p)] = dtbi
 		}
 	} else {
-		dtbi, errm := buildinfo.GetMetadata(res.Metadata, exptypes.ExporterBuildInfo, binfotypes.BuildInfo{
-			Frontend: req.Frontend,
-			Attrs:    req.FrontendOpt,
-		})
+		dtbi, errm := buildinfo.GetMetadata(res.Metadata, exptypes.ExporterBuildInfo, req.Frontend, req.FrontendOpt)
 		if errm != nil {
 			return nil, err
 		}

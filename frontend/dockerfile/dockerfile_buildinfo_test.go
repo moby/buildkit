@@ -168,7 +168,7 @@ RUN echo $foo
 	require.NoError(t, err)
 
 	require.Contains(t, bi.Attrs, "build-arg:foo")
-	require.Equal(t, "bar", bi.Attrs["build-arg:foo"])
+	require.Equal(t, "bar", *bi.Attrs["build-arg:foo"])
 }
 
 // moby/buildkit#2476
@@ -231,7 +231,7 @@ ADD https://raw.githubusercontent.com/moby/moby/master/README.md /
 		require.NoError(t, err)
 
 		require.Contains(t, bi.Attrs, "build-arg:foo")
-		require.Equal(t, "bar", bi.Attrs["build-arg:foo"])
+		require.Equal(t, "bar", *bi.Attrs["build-arg:foo"])
 
 		sources := bi.Sources
 		require.Equal(t, 2, len(sources))

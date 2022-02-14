@@ -5090,7 +5090,8 @@ func testBuildInfoExporter(t *testing.T, sb integration.Sandbox) {
 	err = json.Unmarshal(decbi, &exbi)
 	require.NoError(t, err)
 
-	require.Equal(t, exbi.Attrs, map[string]string{"build-arg:foo": "bar"})
+	attrval := "bar"
+	require.Equal(t, exbi.Attrs, map[string]*string{"build-arg:foo": &attrval})
 	require.Equal(t, len(exbi.Sources), 1)
 	require.Equal(t, exbi.Sources[0].Type, binfotypes.SourceTypeDockerImage)
 	require.Equal(t, exbi.Sources[0].Ref, "docker.io/library/busybox:latest")
@@ -5174,8 +5175,9 @@ func testBuildInfoInline(t *testing.T, sb integration.Sandbox) {
 			require.NoError(t, err)
 
 			if tt.buildAttrs {
+				attrval := "bar"
 				require.Contains(t, bi.Attrs, "build-arg:foo")
-				require.Equal(t, bi.Attrs["build-arg:foo"], "bar")
+				require.Equal(t, bi.Attrs["build-arg:foo"], &attrval)
 			} else {
 				require.NotContains(t, bi.Attrs, "build-arg:foo")
 			}

@@ -178,9 +178,12 @@ var knownAttrs = []string{
 
 // filterAttrs filters frontent opt by picking only those that
 // could effectively change the build result.
-func filterAttrs(attrs map[string]string) map[string]string {
-	filtered := make(map[string]string)
+func filterAttrs(attrs map[string]*string) map[string]*string {
+	filtered := make(map[string]*string)
 	for k, v := range attrs {
+		if v == nil {
+			continue
+		}
 		// Control args are filtered out
 		if isControlArg(k) {
 			continue
@@ -223,7 +226,7 @@ func isControlArg(attrKey string) bool {
 
 // GetMetadata returns buildinfo metadata for the specified key. If the key
 // is already there, result will be merged.
-func GetMetadata(metadata map[string][]byte, key string, bi binfotypes.BuildInfo) ([]byte, error) {
+func GetMetadata(metadata map[string][]byte, key string, reqFrontend string, reqAttrs map[string]string) ([]byte, error) {
 	var (
 		dtbi []byte
 		err  error
@@ -233,16 +236,19 @@ func GetMetadata(metadata map[string][]byte, key string, bi binfotypes.BuildInfo
 		if errm := json.Unmarshal(v, &mbi); errm != nil {
 			return nil, errors.Wrapf(errm, "failed to unmarshal build info for %q", key)
 		}
-		if bi.Frontend != "" {
-			mbi.Frontend = bi.Frontend
+		if reqFrontend != "" {
+			mbi.Frontend = reqFrontend
 		}
-		mbi.Attrs = reduceMap(mbi.Attrs, bi.Attrs)
+		mbi.Attrs = convertMap(reduceMap(reqAttrs, mbi.Attrs))
 		dtbi, err = json.Marshal(mbi)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to marshal build info for %q", key)
 		}
 	} else {
-		dtbi, err = json.Marshal(bi)
+		dtbi, err = json.Marshal(binfotypes.BuildInfo{
+			Frontend: reqFrontend,
+			Attrs:    convertMap(reqAttrs),
+		})
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to marshal build info for %q", key)
 		}
@@ -250,16 +256,26 @@ func GetMetadata(metadata map[string][]byte, key string, bi binfotypes.BuildInfo
 	return dtbi, nil
 }
 
-// reduceMap joins map string (union)
-func reduceMap(original map[string]string, merger map[string]string) map[string]string {
-	if original == nil && merger == nil {
+func reduceMap(m1 map[string]string, m2 map[string]*string) map[string]string {
+	if m1 == nil && m2 == nil {
 		return nil
 	}
-	if original == nil {
-		original = map[string]string{}
+	if m1 == nil {
+		m1 = map[string]string{}
 	}
-	for k, v := range merger {
-		original[k] = v
+	for k, v := range m2 {
+		if v != nil {
+			m1[k] = *v
+		}
 	}
-	return original
+	return m1
+}
+
+func convertMap(m map[string]string) map[string]*string {
+	res := make(map[string]*string)
+	for k, v := range m {
+		value := v
+		res[k] = &value
+	}
+	return res
 }

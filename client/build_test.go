@@ -2006,6 +2006,9 @@ func testClientGatewayFrontendAttrs(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
+	fooattrval := "bar"
+	bazattrval := "fuu"
+
 	b := func(ctx context.Context, c client.Client) (*client.Result, error) {
 		st := llb.Image("busybox:latest").Run(
 			llb.ReadonlyRootFS(),
@@ -2018,13 +2021,21 @@ func testClientGatewayFrontendAttrs(t *testing.T, sb integration.Sandbox) {
 		res, err := c.Solve(ctx, client.SolveRequest{
 			Definition: def.ToPB(),
 			FrontendOpt: map[string]string{
-				"build-arg:foo": "bar",
+				"build-arg:foo": fooattrval,
 			},
 		})
+		require.NoError(t, err)
 		require.Contains(t, res.Metadata, exptypes.ExporterBuildInfo)
+
 		var bi binfotypes.BuildInfo
 		require.NoError(t, json.Unmarshal(res.Metadata[exptypes.ExporterBuildInfo], &bi))
-		require.Equal(t, map[string]string{"build-arg:foo": "bar"}, bi.Attrs)
+		require.Contains(t, bi.Attrs, "build-arg:foo")
+		bi.Attrs["build-arg:baz"] = &bazattrval
+
+		bmbi, err := json.Marshal(bi)
+		require.NoError(t, err)
+
+		res.AddMeta(exptypes.ExporterBuildInfo, bmbi)
 		return res, err
 	}
 
@@ -2037,8 +2048,11 @@ func testClientGatewayFrontendAttrs(t *testing.T, sb integration.Sandbox) {
 
 	var bi binfotypes.BuildInfo
 	require.NoError(t, json.Unmarshal(decbi, &bi))
+
 	require.Contains(t, bi.Attrs, "build-arg:foo")
-	require.Equal(t, "bar", bi.Attrs["build-arg:foo"])
+	require.Equal(t, &fooattrval, bi.Attrs["build-arg:foo"])
+	require.Contains(t, bi.Attrs, "build-arg:baz")
+	require.Equal(t, &bazattrval, bi.Attrs["build-arg:baz"])
 
 	checkAllReleasable(t, c, sb, true)
 }

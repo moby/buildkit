@@ -94,11 +94,11 @@ func TestMergeSources(t *testing.T) {
 func TestFormat(t *testing.T) {
 	bi := binfotypes.BuildInfo{
 		Frontend: "dockerfile.v0",
-		Attrs: map[string]string{
-			"build-arg:foo": "bar",
-			"context":       "https://github.com/crazy-max/buildkit-buildsources-test.git#master",
-			"filename":      "Dockerfile",
-			"source":        "crazymax/dockerfile:master",
+		Attrs: map[string]*string{
+			"build-arg:foo": stringPtr("bar"),
+			"context":       stringPtr("https://github.com/crazy-max/buildkit-buildsources-test.git#master"),
+			"filename":      stringPtr("Dockerfile"),
+			"source":        stringPtr("crazymax/dockerfile:master"),
 		},
 		Sources: []binfotypes.Source{
 			{
@@ -155,21 +155,27 @@ func TestFormat(t *testing.T) {
 func TestReduceMap(t *testing.T) {
 	cases := []struct {
 		name     string
-		m1       map[string]string
+		m1       map[string]*string
 		m2       map[string]string
 		expected map[string]string
 	}{
 		{
 			name:     "first",
-			m1:       map[string]string{"foo": "bar", "abc": "def"},
+			m1:       map[string]*string{"foo": stringPtr("bar"), "abc": stringPtr("def")},
 			m2:       map[string]string{"bar": "foo", "abc": "ghi"},
 			expected: map[string]string{"foo": "bar", "abc": "def", "bar": "foo"},
 		},
 		{
 			name:     "last",
-			m1:       map[string]string{"bar": "foo", "abc": "ghi"},
+			m1:       map[string]*string{"bar": stringPtr("foo"), "abc": stringPtr("ghi")},
 			m2:       map[string]string{"foo": "bar", "abc": "def"},
 			expected: map[string]string{"bar": "foo", "abc": "ghi", "foo": "bar"},
+		},
+		{
+			name:     "nilattr",
+			m1:       map[string]*string{"foo": stringPtr("bar"), "abc": stringPtr("fgh"), "baz": nil},
+			m2:       map[string]string{"foo": "bar", "baz": "fuu"},
+			expected: map[string]string{"foo": "bar", "abc": "fgh", "baz": "fuu"},
 		},
 		{
 			name:     "null1",
@@ -179,7 +185,7 @@ func TestReduceMap(t *testing.T) {
 		},
 		{
 			name:     "null2",
-			m1:       map[string]string{"foo": "bar", "abc": "def"},
+			m1:       map[string]*string{"foo": stringPtr("bar"), "abc": stringPtr("def")},
 			m2:       nil,
 			expected: map[string]string{"foo": "bar", "abc": "def"},
 		},
@@ -190,4 +196,9 @@ func TestReduceMap(t *testing.T) {
 			require.Equal(t, tt.expected, reduceMap(tt.m2, tt.m1))
 		})
 	}
+}
+
+// stringPtr returns a pointer to the string value passed in.
+func stringPtr(v string) *string {
+	return &v
 }
