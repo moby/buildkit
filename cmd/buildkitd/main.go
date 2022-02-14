@@ -407,10 +407,10 @@ func setDefaultConfig(cfg *config.Config) {
 	}
 
 	if cfg.Workers.OCI.Platforms == nil {
-		cfg.Workers.OCI.Platforms = archutil.SupportedPlatforms(false)
+		cfg.Workers.OCI.Platforms = formatPlatforms(archutil.SupportedPlatforms(false))
 	}
 	if cfg.Workers.Containerd.Platforms == nil {
-		cfg.Workers.Containerd.Platforms = archutil.SupportedPlatforms(false)
+		cfg.Workers.Containerd.Platforms = formatPlatforms(archutil.SupportedPlatforms(false))
 	}
 
 	cfg.Workers.OCI.NetworkConfig = setDefaultNetworkConfig(cfg.Workers.OCI.NetworkConfig)
@@ -700,8 +700,8 @@ func newWorkerController(c *cli.Context, wiOpt workerInitializerOpt) (*worker.Co
 			return nil, err
 		}
 		for _, w := range ws {
-			p := formatPlatforms(w.Platforms(false))
-			logrus.Infof("found worker %q, labels=%v, platforms=%v", w.ID(), w.Labels(), p)
+			p := w.Platforms(false)
+			logrus.Infof("found worker %q, labels=%v, platforms=%v", w.ID(), w.Labels(), formatPlatforms(p))
 			archutil.WarnIfUnsupported(p)
 			if err = wc.Add(w); err != nil {
 				return nil, err

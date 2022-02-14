@@ -3,6 +3,6 @@
 
 package archutil
 
-func ppc64leSupported() error {
-	return nil
+func ppc64leSupported() (string, error) {
+	return "", nil
 }

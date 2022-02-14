@@ -8,7 +8,7 @@ require (
 	github.com/agext/levenshtein v1.2.3
 	github.com/armon/circbuf v0.0.0-20190214190532-5111143e8da2
 	github.com/containerd/console v1.0.3
-	github.com/containerd/containerd v1.6.0-rc.1
+	github.com/containerd/containerd v1.6.0-rc.1.0.20220127150749-a43703fcba54
 	github.com/containerd/continuity v0.2.2
 	github.com/containerd/fuse-overlayfs-snapshotter v1.0.2
 	github.com/containerd/go-cni v1.1.2
@@ -54,6 +54,7 @@ require (
 	github.com/stretchr/testify v1.7.0
 	github.com/tonistiigi/fsutil v0.0.0-20220115021204-b19f7f9cb274
 	github.com/tonistiigi/go-actions-cache v0.0.0-20211202175116-9642704158ff
+	github.com/tonistiigi/go-archvariant v1.0.0
 	github.com/tonistiigi/units v0.0.0-20180711220420-6950e57a87ea
 	github.com/tonistiigi/vt100 v0.0.0-20210615222946-8066bb97264f
 	github.com/urfave/cli v1.22.4

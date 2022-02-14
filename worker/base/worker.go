@@ -198,14 +198,16 @@ func (w *Worker) Labels() map[string]string {
 
 func (w *Worker) Platforms(noCache bool) []ocispecs.Platform {
 	if noCache {
-		pm := make(map[string]struct{}, len(w.WorkerOpt.Platforms))
-		for _, p := range w.WorkerOpt.Platforms {
-			pm[platforms.Format(p)] = struct{}{}
-		}
 		for _, p := range archutil.SupportedPlatforms(noCache) {
-			if _, ok := pm[p]; !ok {
-				pp, _ := platforms.Parse(p)
-				w.WorkerOpt.Platforms = append(w.WorkerOpt.Platforms, pp)
+			exists := false
+			for _, pp := range w.WorkerOpt.Platforms {
+				if platforms.Only(pp).Match(p) {
+					exists = true
+					break
+				}
+			}
+			if !exists {
+				w.WorkerOpt.Platforms = append(w.WorkerOpt.Platforms, p)
 			}
 		}
 	}

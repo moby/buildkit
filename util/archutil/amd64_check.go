@@ -3,6 +3,6 @@
 
 package archutil
 
-func amd64Supported() error {
-	return check(Binaryamd64)
+func amd64Supported() (string, error) {
+	return check("amd64", Binaryamd64)
 }

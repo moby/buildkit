@@ -305,8 +305,9 @@ github.com/containerd/containerd v1.5.0-rc.0/go.mod h1:V/IXoMqNGgBlabz3tHD2TWDoT
 github.com/containerd/containerd v1.5.1/go.mod h1:0DOxVqwDy2iZvrZp2JUx/E+hS0UNTVn7dJnIOwtYR4g=
 github.com/containerd/containerd v1.5.7/go.mod h1:gyvv6+ugqY25TiXxcZC3L5yOeYgEw0QMhscqVp1AR9c=
 github.com/containerd/containerd v1.5.8/go.mod h1:YdFSv5bTFLpG2HIYmfqDpSYYTDX+mc5qtSuYx1YUb/s=
-github.com/containerd/containerd v1.6.0-rc.1 h1:bFSTay5ZHCSmAE/hzubBXX+eUpptHprbXi0QELuUk0Y=
 github.com/containerd/containerd v1.6.0-rc.1/go.mod h1:jdeOXdXovU4bWF2Bd2hJjqpcOrrpSC1wmFCTtf6LD+A=
+github.com/containerd/containerd v1.6.0-rc.1.0.20220127150749-a43703fcba54 h1:ZQqTZnRLXn44/VOq0LBjnH3vMOgGoEUic+8b1a1TBx4=
+github.com/containerd/containerd v1.6.0-rc.1.0.20220127150749-a43703fcba54/go.mod h1:jdeOXdXovU4bWF2Bd2hJjqpcOrrpSC1wmFCTtf6LD+A=
 github.com/containerd/continuity v0.0.0-20190426062206-aaeac12a7ffc/go.mod h1:GL3xCUCBDV3CZiTSEKksMWbLE66hEyuu9qyDOOqM47Y=
 github.com/containerd/continuity v0.0.0-20190815185530-f2a389ac0a02/go.mod h1:GL3xCUCBDV3CZiTSEKksMWbLE66hEyuu9qyDOOqM47Y=
 github.com/containerd/continuity v0.0.0-20191127005431-f65d91d395eb/go.mod h1:GL3xCUCBDV3CZiTSEKksMWbLE66hEyuu9qyDOOqM47Y=
@@ -1236,6 +1237,8 @@ github.com/tonistiigi/fsutil v0.0.0-20220115021204-b19f7f9cb274 h1:wbyZxD6IPFp0s
 github.com/tonistiigi/fsutil v0.0.0-20220115021204-b19f7f9cb274/go.mod h1:oPAfvw32vlUJSjyDcQ3Bu0nb2ON2B+G0dtVN/SZNJiA=
 github.com/tonistiigi/go-actions-cache v0.0.0-20211202175116-9642704158ff h1:n8i1G5sBFmY8aDteg5Kf2rdU15KnFcS807QrYRM9/yQ=
 github.com/tonistiigi/go-actions-cache v0.0.0-20211202175116-9642704158ff/go.mod h1:qqvyZqkfwkoJuPU/bw61bItaoO0SJ8YSW0vSVRRvsRg=
+github.com/tonistiigi/go-archvariant v1.0.0 h1:5LC1eDWiBNflnTF1prCiX09yfNHIxDC/aukdhCdTyb0=
+github.com/tonistiigi/go-archvariant v1.0.0/go.mod h1:TxFmO5VS6vMq2kvs3ht04iPXtu2rUT/erOnGFYfk5Ho=
 github.com/tonistiigi/units v0.0.0-20180711220420-6950e57a87ea h1:SXhTLE6pb6eld/v/cCndK0AMpt1wiVFb/YYmqB3/QG0=
 github.com/tonistiigi/units v0.0.0-20180711220420-6950e57a87ea/go.mod h1:WPnis/6cRcDZSUvVmezrxJPkiO87ThFYsoUiMwWNDJk=
 github.com/tonistiigi/vt100 v0.0.0-20210615222946-8066bb97264f h1:DLpt6B5oaaS8jyXHa9VA4rrZloBVPVXeCtrOsrFauxc=

@@ -3,6 +3,6 @@
 
 package archutil
 
-func arm64Supported() error {
-	return check(Binaryarm64)
+func arm64Supported() (string, error) {
+	return check("arm64", Binaryarm64)
 }
