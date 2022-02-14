@@ -22,6 +22,7 @@ import (
 	"github.com/moby/buildkit/frontend/dockerfile/instructions"
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"github.com/moby/buildkit/frontend/dockerfile/shell"
+	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
 	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
@@ -616,7 +617,17 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 	case *instructions.WorkdirCommand:
 		err = dispatchWorkdir(d, c, true, &opt)
 	case *instructions.AddCommand:
-		err = dispatchCopy(d, c.SourcesAndDest, opt.buildContext, true, c, c.Chown, c.Chmod, c.Location(), opt)
+		err = dispatchCopy(d, copyConfig{
+			params:       c.SourcesAndDest,
+			source:       opt.buildContext,
+			isAddCommand: true,
+			cmdToPrint:   c,
+			chown:        c.Chown,
+			chmod:        c.Chmod,
+			link:         c.Link,
+			location:     c.Location(),
+			opt:          opt,
+		})
 		if err == nil {
 			for _, src := range c.SourcePaths {
 				if !strings.HasPrefix(src, "http://") && !strings.HasPrefix(src, "https://") {
@@ -651,7 +662,17 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 		if len(cmd.sources) != 0 {
 			l = cmd.sources[0].state
 		}
-		err = dispatchCopy(d, c.SourcesAndDest, l, false, c, c.Chown, c.Chmod, c.Location(), opt)
+		err = dispatchCopy(d, copyConfig{
+			params:       c.SourcesAndDest,
+			source:       l,
+			isAddCommand: false,
+			cmdToPrint:   c,
+			chown:        c.Chown,
+			chmod:        c.Chmod,
+			link:         c.Link,
+			location:     c.Location(),
+			opt:          opt,
+		})
 		if err == nil && len(cmd.sources) == 0 {
 			for _, src := range c.SourcePaths {
 				d.ctxPaths[path.Join("/", filepath.ToSlash(src))] = struct{}{}
@@ -922,25 +943,25 @@ func dispatchWorkdir(d *dispatchState, c *instructions.WorkdirCommand, commit bo
 	return nil
 }
 
-func dispatchCopyFileOp(d *dispatchState, c instructions.SourcesAndDest, sourceState llb.State, isAddCommand bool, cmdToPrint fmt.Stringer, chown string, chmod string, loc []parser.Range, opt dispatchOpt) error {
-	pp, err := pathRelativeToWorkingDir(d.state, c.DestPath)
+func dispatchCopyFileOp(d *dispatchState, cfg copyConfig) error {
+	pp, err := pathRelativeToWorkingDir(d.state, cfg.params.DestPath)
 	if err != nil {
 		return err
 	}
 	dest := path.Join("/", pp)
-	if c.DestPath == "." || c.DestPath == "" || c.DestPath[len(c.DestPath)-1] == filepath.Separator {
+	if cfg.params.DestPath == "." || cfg.params.DestPath == "" || cfg.params.DestPath[len(cfg.params.DestPath)-1] == filepath.Separator {
 		dest += string(filepath.Separator)
 	}
 
 	var copyOpt []llb.CopyOption
 
-	if chown != "" {
-		copyOpt = append(copyOpt, llb.WithUser(chown))
+	if cfg.chown != "" {
+		copyOpt = append(copyOpt, llb.WithUser(cfg.chown))
 	}
 
 	var mode *os.FileMode
-	if chmod != "" {
-		p, err := strconv.ParseUint(chmod, 8, 32)
+	if cfg.chmod != "" {
+		p, err := strconv.ParseUint(cfg.chmod, 8, 32)
 		if err == nil {
 			perm := os.FileMode(p)
 			mode = &perm
@@ -948,7 +969,7 @@ func dispatchCopyFileOp(d *dispatchState, c instructions.SourcesAndDest, sourceS
 	}
 
 	commitMessage := bytes.NewBufferString("")
-	if isAddCommand {
+	if cfg.isAddCommand {
 		commitMessage.WriteString("ADD")
 	} else {
 		commitMessage.WriteString("COPY")
@@ -956,10 +977,10 @@ func dispatchCopyFileOp(d *dispatchState, c instructions.SourcesAndDest, sourceS
 
 	var a *llb.FileAction
 
-	for _, src := range c.SourcePaths {
+	for _, src := range cfg.params.SourcePaths {
 		commitMessage.WriteString(" " + src)
 		if strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://") {
-			if !isAddCommand {
+			if !cfg.isAddCommand {
 				return errors.New("source can't be a URL for COPY")
 			}
 
@@ -976,7 +997,7 @@ func dispatchCopyFileOp(d *dispatchState, c instructions.SourcesAndDest, sourceS
 				}
 			}
 
-			st := llb.HTTP(src, llb.Filename(f), dfCmd(c))
+			st := llb.HTTP(src, llb.Filename(f), dfCmd(cfg.params))
 
 			opts := append([]llb.CopyOption{&llb.CopyInfo{
 				Mode:           mode,
@@ -993,21 +1014,21 @@ func dispatchCopyFileOp(d *dispatchState, c instructions.SourcesAndDest, sourceS
 				Mode:                mode,
 				FollowSymlinks:      true,
 				CopyDirContentsOnly: true,
-				AttemptUnpack:       isAddCommand,
+				AttemptUnpack:       cfg.isAddCommand,
 				CreateDestPath:      true,
 				AllowWildcard:       true,
 				AllowEmptyWildcard:  true,
 			}}, copyOpt...)
 
 			if a == nil {
-				a = llb.Copy(sourceState, filepath.Join("/", src), dest, opts...)
+				a = llb.Copy(cfg.source, filepath.Join("/", src), dest, opts...)
 			} else {
-				a = a.Copy(sourceState, filepath.Join("/", src), dest, opts...)
+				a = a.Copy(cfg.source, filepath.Join("/", src), dest, opts...)
 			}
 		}
 	}
 
-	for _, src := range c.SourceContents {
+	for _, src := range cfg.params.SourceContents {
 		commitMessage.WriteString(" <<" + src.Path)
 
 		data := src.Data
@@ -1029,9 +1050,9 @@ func dispatchCopyFileOp(d *dispatchState, c instructions.SourcesAndDest, sourceS
 		}
 	}
 
-	commitMessage.WriteString(" " + c.DestPath)
+	commitMessage.WriteString(" " + cfg.params.DestPath)
 
-	platform := opt.targetPlatform
+	platform := cfg.opt.targetPlatform
 	if d.platform != nil {
 		platform = *d.platform
 	}
@@ -1041,50 +1062,72 @@ func dispatchCopyFileOp(d *dispatchState, c instructions.SourcesAndDest, sourceS
 		return err
 	}
 
+	name := uppercaseCmd(processCmdEnv(cfg.opt.shlex, cfg.cmdToPrint.String(), env))
 	fileOpt := []llb.ConstraintsOpt{
-		llb.WithCustomName(prefixCommand(d, uppercaseCmd(processCmdEnv(opt.shlex, cmdToPrint.String(), env)), d.prefixPlatform, &platform, env)),
-		location(opt.sourceMap, loc),
+		llb.WithCustomName(prefixCommand(d, name, d.prefixPlatform, &platform, env)),
+		location(cfg.opt.sourceMap, cfg.location),
 	}
 	if d.ignoreCache {
 		fileOpt = append(fileOpt, llb.IgnoreCache)
 	}
 
-	d.state = d.state.File(a, fileOpt...)
+	if cfg.opt.llbCaps.Supports(pb.CapMergeOp) == nil && cfg.link && cfg.chmod == "" {
+		d.cmdIndex-- // prefixCommand increases it
+		fileOpt = append(fileOpt, llb.ProgressGroup(identity.NewID(), prefixCommand(d, name, d.prefixPlatform, &platform, env)))
+		d.cmdIndex--
+		mergeOpt := append(fileOpt, llb.WithCustomName(prefixCommand(d, "LINK "+name, d.prefixPlatform, &platform, env)))
+		d.state = llb.Merge([]llb.State{d.state, llb.Scratch().File(a, fileOpt...)}, mergeOpt...)
+	} else {
+		d.state = d.state.File(a, fileOpt...)
+	}
+
 	return commitToHistory(&d.image, commitMessage.String(), true, &d.state)
 }
 
-func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState llb.State, isAddCommand bool, cmdToPrint fmt.Stringer, chown string, chmod string, loc []parser.Range, opt dispatchOpt) error {
-	if useFileOp(opt.buildArgValues, opt.llbCaps) {
-		return dispatchCopyFileOp(d, c, sourceState, isAddCommand, cmdToPrint, chown, chmod, loc, opt)
+type copyConfig struct {
+	params       instructions.SourcesAndDest
+	source       llb.State
+	isAddCommand bool
+	cmdToPrint   fmt.Stringer
+	chown        string
+	chmod        string
+	link         bool
+	location     []parser.Range
+	opt          dispatchOpt
+}
+
+func dispatchCopy(d *dispatchState, cfg copyConfig) error {
+	if useFileOp(cfg.opt.buildArgValues, cfg.opt.llbCaps) {
+		return dispatchCopyFileOp(d, cfg)
 	}
 
-	if len(c.SourceContents) > 0 {
+	if len(cfg.params.SourceContents) > 0 {
 		return errors.New("inline content copy is not supported")
 	}
 
-	if chmod != "" {
-		if opt.llbCaps != nil && opt.llbCaps.Supports(pb.CapFileBase) != nil {
-			return errors.Wrap(opt.llbCaps.Supports(pb.CapFileBase), "chmod is not supported")
+	if cfg.chmod != "" {
+		if cfg.opt.llbCaps != nil && cfg.opt.llbCaps.Supports(pb.CapFileBase) != nil {
+			return errors.Wrap(cfg.opt.llbCaps.Supports(pb.CapFileBase), "chmod is not supported")
 		}
 		return errors.New("chmod is not supported")
 	}
 
-	img := llb.Image(opt.copyImage, llb.MarkImageInternal, llb.Platform(opt.buildPlatforms[0]), WithInternalName("helper image for file operations"))
-	pp, err := pathRelativeToWorkingDir(d.state, c.DestPath)
+	img := llb.Image(cfg.opt.copyImage, llb.MarkImageInternal, llb.Platform(cfg.opt.buildPlatforms[0]), WithInternalName("helper image for file operations"))
+	pp, err := pathRelativeToWorkingDir(d.state, cfg.params.DestPath)
 	if err != nil {
 		return err
 	}
 	dest := path.Join(".", pp)
-	if c.DestPath == "." || c.DestPath == "" || c.DestPath[len(c.DestPath)-1] == filepath.Separator {
+	if cfg.params.DestPath == "." || cfg.params.DestPath == "" || cfg.params.DestPath[len(cfg.params.DestPath)-1] == filepath.Separator {
 		dest += string(filepath.Separator)
 	}
 	args := []string{"copy"}
-	unpack := isAddCommand
+	unpack := cfg.isAddCommand
 
-	mounts := make([]llb.RunOption, 0, len(c.SourcePaths))
-	if chown != "" {
-		args = append(args, fmt.Sprintf("--chown=%s", chown))
-		_, _, err := parseUser(chown)
+	mounts := make([]llb.RunOption, 0, len(cfg.params.SourcePaths))
+	if cfg.chown != "" {
+		args = append(args, fmt.Sprintf("--chown=%s", cfg.chown))
+		_, _, err := parseUser(cfg.chown)
 		if err != nil {
 			mounts = append(mounts, llb.AddMount("/etc/passwd", d.state, llb.SourcePath("/etc/passwd"), llb.Readonly))
 			mounts = append(mounts, llb.AddMount("/etc/group", d.state, llb.SourcePath("/etc/group"), llb.Readonly))
@@ -1092,16 +1135,16 @@ func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState l
 	}
 
 	commitMessage := bytes.NewBufferString("")
-	if isAddCommand {
+	if cfg.isAddCommand {
 		commitMessage.WriteString("ADD")
 	} else {
 		commitMessage.WriteString("COPY")
 	}
 
-	for i, src := range c.SourcePaths {
+	for i, src := range cfg.params.SourcePaths {
 		commitMessage.WriteString(" " + src)
 		if strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://") {
-			if !isAddCommand {
+			if !cfg.isAddCommand {
 				return errors.New("source can't be a URL for COPY")
 			}
 
@@ -1120,7 +1163,7 @@ func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState l
 			}
 			target := path.Join(fmt.Sprintf("/src-%d", i), f)
 			args = append(args, target)
-			mounts = append(mounts, llb.AddMount(path.Dir(target), llb.HTTP(src, llb.Filename(f), dfCmd(c)), llb.Readonly))
+			mounts = append(mounts, llb.AddMount(path.Dir(target), llb.HTTP(src, llb.Filename(f), dfCmd(cfg.params)), llb.Readonly))
 		} else {
 			d, f := splitWildcards(src)
 			targetCmd := fmt.Sprintf("/src-%d", i)
@@ -1131,18 +1174,18 @@ func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState l
 			}
 			targetCmd = path.Join(targetCmd, f)
 			args = append(args, targetCmd)
-			mounts = append(mounts, llb.AddMount(targetMount, sourceState, llb.SourcePath(d), llb.Readonly))
+			mounts = append(mounts, llb.AddMount(targetMount, cfg.source, llb.SourcePath(d), llb.Readonly))
 		}
 	}
 
-	commitMessage.WriteString(" " + c.DestPath)
+	commitMessage.WriteString(" " + cfg.params.DestPath)
 
 	args = append(args, dest)
 	if unpack {
 		args = append(args[:1], append([]string{"--unpack"}, args[1:]...)...)
 	}
 
-	platform := opt.targetPlatform
+	platform := cfg.opt.targetPlatform
 	if d.platform != nil {
 		platform = *d.platform
 	}
@@ -1156,16 +1199,16 @@ func dispatchCopy(d *dispatchState, c instructions.SourcesAndDest, sourceState l
 		llb.Args(args),
 		llb.Dir("/dest"),
 		llb.ReadonlyRootFS(),
-		dfCmd(cmdToPrint),
-		llb.WithCustomName(prefixCommand(d, uppercaseCmd(processCmdEnv(opt.shlex, cmdToPrint.String(), env)), d.prefixPlatform, &platform, env)),
-		location(opt.sourceMap, loc),
+		dfCmd(cfg.cmdToPrint),
+		llb.WithCustomName(prefixCommand(d, uppercaseCmd(processCmdEnv(cfg.opt.shlex, cfg.cmdToPrint.String(), env)), d.prefixPlatform, &platform, env)),
+		location(cfg.opt.sourceMap, cfg.location),
 	}
 	if d.ignoreCache {
 		runOpt = append(runOpt, llb.IgnoreCache)
 	}
 
-	if opt.llbCaps != nil {
-		if err := opt.llbCaps.Supports(pb.CapExecMetaNetwork); err == nil {
+	if cfg.opt.llbCaps != nil {
+		if err := cfg.opt.llbCaps.Supports(pb.CapExecMetaNetwork); err == nil {
 			runOpt = append(runOpt, llb.Network(llb.NetModeNone))
 		}
 	}

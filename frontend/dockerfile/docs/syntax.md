@@ -25,6 +25,52 @@ incrementing the major component of a version and you may want to pin the image 
 change in between releases on labs channel, the old versions are guaranteed to be backward compatible.
 
 
+## Linked copies `COPY --link`, `ADD --link`
+
+To use this flag set Dockerfile version to at least `1.4`.
+
+```dockerfile
+# syntax=docker/dockerfile:1.4
+```
+
+Enabling this flag in `COPY` or `ADD` commands allows you to copy files with enhanced semantics where your files remain independent on their own layer and don't get invalidated when commands on previous layers are changed.
+
+When `--link` is used your source files are copied into an empty destination directory. That directory is turned into a layer that is linked on top of your previous state.
+
+```dockerfile
+# syntax=docker/dockerfile:1.4
+FROM alpine
+COPY --link /foo /bar
+```
+
+Is equivalent of doing two builds:
+
+```dockerfile
+FROM alpine
+```
+
+and
+
+```dockerfile
+FROM scratch
+COPY /foo /bar
+```
+
+and merging all the layers of both images together.
+
+#### Benefits of using `--link`
+
+Using `--link` allows to reuse already built layers in subsequent builds with `--cache-from` even if the previous layers have changed. This is especially important for multi-stage builds where a `COPY --from` statement would previously get invalidated if any previous commands in the same stage changed, causing the need to rebuild the intermediate stages again. With `--link` the layer the previous build generated is reused and merged on top of the new layers. This also means you can easily rebase your images when the base images receive updates, without having to execute the whole build again. In backends that support it, BuildKit can do this rebase action without the need to push or pull any layers between the client and the registry. BuildKit will detect this case and only create new image manifest that contains the new layers and old layers in correct order.
+
+The same behavior where BuildKit can avoid pulling down the base image can also happen when using `--link` and no other commands that would require access to the files in the base image. In that case BuildKit will only build the layers for the `COPY` commands and push them to the registry directly on top of the layers of the base image.
+
+#### Incompatibilities with `--link=false`
+
+When using `--link` the `COPY/ADD` commands are not allowed to read any files from the previous state. This means that if in previous state the destination directory was a path that contained a symlink, `COPY/ADD` can not follow it. In the final image the destination path created with `--link` will always be a path containing only directories.
+
+If you don't rely on the behavior of following symlinks in the destination path, using `--link` is always recommended. The performance of `--link` is equivalent or better than the default behavior and it creates much better conditions for cache reuse. 
+
+
 ## Build Mounts `RUN --mount=...`
 
 To use this flag set Dockerfile version to at least `1.2`
