@@ -23,6 +23,8 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+const defaultExpiration = 60
+
 type authHandlerNS struct {
 	counter int64 // needs to be 64bit aligned for 32bit systems
 
@@ -351,6 +353,9 @@ func (ah *authHandler) fetchToken(ctx context.Context, sm *session.Manager, g se
 		if err != nil {
 			return nil, err
 		}
+		if resp.ExpiresIn == 0 {
+			resp.ExpiresIn = defaultExpiration
+		}
 		issuedAt, expires = time.Unix(resp.IssuedAt, 0), int(resp.ExpiresIn)
 		token = resp.Token
 		return nil, nil
@@ -378,6 +383,9 @@ func (ah *authHandler) fetchToken(ctx context.Context, sm *session.Manager, g se
 					if err != nil {
 						return nil, err
 					}
+					if resp.ExpiresIn == 0 {
+						resp.ExpiresIn = defaultExpiration
+					}
 					issuedAt, expires = resp.IssuedAt, resp.ExpiresIn
 					token = resp.AccessToken
 					return nil, nil
@@ -389,6 +397,9 @@ func (ah *authHandler) fetchToken(ctx context.Context, sm *session.Manager, g se
 			}
 			return nil, err
 		}
+		if resp.ExpiresIn == 0 {
+			resp.ExpiresIn = defaultExpiration
+		}
 		issuedAt, expires = resp.IssuedAt, resp.ExpiresIn
 		token = resp.Token
 		return nil, nil
@@ -398,6 +409,9 @@ func (ah *authHandler) fetchToken(ctx context.Context, sm *session.Manager, g se
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to fetch anonymous token")
 	}
+	if resp.ExpiresIn == 0 {
+		resp.ExpiresIn = defaultExpiration
+	}
 	issuedAt, expires = resp.IssuedAt, resp.ExpiresIn
 
 	token = resp.Token
@@ -405,11 +419,6 @@ func (ah *authHandler) fetchToken(ctx context.Context, sm *session.Manager, g se
 }
 
 func invalidAuthorization(c auth.Challenge, responses []*http.Response) error {
-	lastResponse := responses[len(responses)-1]
-	if lastResponse.StatusCode == http.StatusUnauthorized {
-		return errors.Wrapf(docker.ErrInvalidAuthorization, "authorization status: %v", lastResponse.StatusCode)
-	}
-
 	errStr := c.Parameters["error"]
 	if errStr == "" {
 		return nil

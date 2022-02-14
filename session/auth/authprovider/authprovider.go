@@ -28,6 +28,8 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+const defaultExpiration = 60
+
 func NewDockerAuthProvider(stderr io.Writer) session.Attachable {
 	return &authProvider{
 		config:      config.LoadDefaultConfigFile(stderr),
@@ -196,6 +198,9 @@ func (ap *authProvider) getAuthorityKey(host string, salt []byte) (ed25519.Priva
 }
 
 func toTokenResponse(token string, issuedAt time.Time, expires int) *auth.FetchTokenResponse {
+	if expires == 0 {
+		expires = defaultExpiration
+	}
 	resp := &auth.FetchTokenResponse{
 		Token:     token,
 		ExpiresIn: int64(expires),
