@@ -181,7 +181,7 @@ func (hs *httpSourceHandler) CacheKey(ctx context.Context, g session.Group, inde
 		resp, err := client.Do(req)
 		if err == nil {
 			if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNotModified {
-				respETag := resp.Header.Get("ETag")
+				respETag := etagValue(resp.Header.Get("ETag"))
 
 				// If a 304 is returned without an ETag and we had only sent one ETag,
 				// the response refers to the ETag we asked about.
@@ -212,7 +212,7 @@ func (hs *httpSourceHandler) CacheKey(ctx context.Context, g session.Group, inde
 		return "", "", nil, false, errors.Errorf("invalid response status %d", resp.StatusCode)
 	}
 	if resp.StatusCode == http.StatusNotModified {
-		respETag := resp.Header.Get("ETag")
+		respETag := etagValue(resp.Header.Get("ETag"))
 		if respETag == "" && onlyETag != "" {
 			respETag = onlyETag
 
@@ -350,6 +350,7 @@ func (hs *httpSourceHandler) save(ctx context.Context, resp *http.Response, s se
 	dgst = digest.NewDigest(digest.SHA256, h)
 
 	if respETag := resp.Header.Get("ETag"); respETag != "" {
+		respETag = etagValue(respETag)
 		if err := md.setETag(respETag); err != nil {
 			return nil, "", err
 		}
@@ -470,4 +471,9 @@ func (md cacheRefMetadata) getHTTPModTime() string {
 
 func (md cacheRefMetadata) setHTTPModTime(s string) error {
 	return md.SetString(keyModTime, s, "")
+}
+
+func etagValue(v string) string {
+	// remove weak for direct comparison
+	return strings.TrimPrefix(v, "W/")
 }
