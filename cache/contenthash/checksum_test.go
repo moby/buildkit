@@ -1223,6 +1223,7 @@ func setupCacheManager(t *testing.T, tmpdir string, snapshotterName string, snap
 		Applier:        applier,
 		Differ:         differ,
 		GarbageCollect: mdb.GarbageCollect,
+		MountPoolRoot:  filepath.Join(tmpdir, "cachemounts"),
 	})
 	require.NoError(t, err)
 

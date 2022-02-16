@@ -46,6 +46,7 @@ type ManagerOpt struct {
 	Applier         diff.Applier
 	Differ          diff.Comparer
 	MetadataStore   *metadata.Store
+	MountPoolRoot   string
 }
 
 type Accessor interface {
@@ -90,6 +91,8 @@ type cacheManager struct {
 	Differ          diff.Comparer
 	MetadataStore   *metadata.Store
 
+	mountPool sharableMountPool
+
 	muPrune sync.Mutex // make sure parallel prune is not allowed so there will not be inconsistent results
 	unlazyG flightcontrol.Group
 }
@@ -110,6 +113,12 @@ func NewManager(opt ManagerOpt) (Manager, error) {
 	if err := cm.init(context.TODO()); err != nil {
 		return nil, err
 	}
+
+	p, err := newSharableMountPool(opt.MountPoolRoot)
+	if err != nil {
+		return nil, err
+	}
+	cm.mountPool = p
 
 	// cm.scheduleGC(5 * time.Minute)
 

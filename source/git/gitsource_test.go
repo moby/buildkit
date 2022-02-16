@@ -571,6 +571,7 @@ func setupGitSource(t *testing.T, tmpdir string) source.Source {
 		Applier:        applier,
 		Differ:         differ,
 		GarbageCollect: mdb.GarbageCollect,
+		MountPoolRoot:  filepath.Join(tmpdir, "cachemounts"),
 	})
 	require.NoError(t, err)
 

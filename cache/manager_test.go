@@ -151,6 +151,7 @@ func newCacheManager(ctx context.Context, opt cmOpt) (co *cmOut, cleanup func() 
 		GarbageCollect: mdb.GarbageCollect,
 		Applier:        applier,
 		Differ:         differ,
+		MountPoolRoot:  filepath.Join(tmpdir, "cachemounts"),
 	})
 	if err != nil {
 		return nil, nil, err
@@ -160,6 +161,32 @@ func newCacheManager(ctx context.Context, opt cmOpt) (co *cmOut, cleanup func() 
 		lm:      lm,
 		cs:      store,
 	}, cleanup, nil
+}
+
+func TestSharableMountPoolCleanup(t *testing.T) {
+	t.Parallel()
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+
+	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	// Emulate the situation where the pool dir is dirty
+	mountPoolDir := filepath.Join(tmpdir, "cachemounts")
+	require.NoError(t, os.MkdirAll(mountPoolDir, 0700))
+	_, err = ioutil.TempDir(mountPoolDir, "buildkit")
+	require.NoError(t, err)
+
+	// Initialize cache manager and check if pool is cleaned up
+	_, cleanup, err := newCacheManager(ctx, cmOpt{
+		tmpdir: tmpdir,
+	})
+	require.NoError(t, err)
+	defer cleanup()
+
+	files, err := os.ReadDir(mountPoolDir)
+	require.NoError(t, err)
+	require.Equal(t, 0, len(files))
 }
 
 func TestManager(t *testing.T) {
