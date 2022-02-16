@@ -2,7 +2,7 @@ package controller
 
 import (
 	"context"
-	"sync/atomic"
+	"sync"
 	"time"
 
 	"github.com/moby/buildkit/client"
@@ -15,6 +15,7 @@ type Controller struct {
 	count   int64
 	started *time.Time
 	writer  progress.Writer
+	mu      sync.Mutex
 
 	Digest        digest.Digest
 	Name          string
@@ -25,7 +26,10 @@ type Controller struct {
 var _ progress.Controller = &Controller{}
 
 func (c *Controller) Start(ctx context.Context) (context.Context, func(error)) {
-	if atomic.AddInt64(&c.count, 1) == 1 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.count++
+	if c.count == 1 {
 		if c.started == nil {
 			now := time.Now()
 			c.started = &now
@@ -42,7 +46,10 @@ func (c *Controller) Start(ctx context.Context) (context.Context, func(error)) {
 		}
 	}
 	return progress.WithProgress(ctx, c.writer), func(err error) {
-		if atomic.AddInt64(&c.count, -1) == 0 {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		c.count--
+		if c.count == 0 {
 			now := time.Now()
 			var errString string
 			if err != nil {
@@ -59,22 +66,27 @@ func (c *Controller) Start(ctx context.Context) (context.Context, func(error)) {
 				})
 			}
 			c.writer.Close()
+			c.started = nil
 		}
 	}
 }
 
 func (c *Controller) Status(id string, action string) func() {
 	start := time.Now()
-	c.writer.Write(id, progress.Status{
-		Action:  action,
-		Started: &start,
-	})
+	if c.writer != nil {
+		c.writer.Write(id, progress.Status{
+			Action:  action,
+			Started: &start,
+		})
+	}
 	return func() {
 		complete := time.Now()
-		c.writer.Write(id, progress.Status{
-			Action:    action,
-			Started:   &start,
-			Completed: &complete,
-		})
+		if c.writer != nil {
+			c.writer.Write(id, progress.Status{
+				Action:    action,
+				Started:   &start,
+				Completed: &complete,
+			})
+		}
 	}
 }
