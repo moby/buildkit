@@ -22,7 +22,6 @@ import (
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
-	"github.com/moby/buildkit/util/buildinfo"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/leaseutil"
@@ -79,7 +78,7 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 	i := &imageExporterInstance{
 		imageExporter:    e,
 		layerCompression: compression.Default,
-		buildInfoMode:    buildinfo.ExportDefault,
+		buildInfo:        true,
 	}
 
 	var esgz bool
@@ -182,19 +181,14 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 			i.compressionLevel = &v
 		case keyBuildInfo:
 			if v == "" {
+				i.buildInfo = true
 				continue
 			}
-			bimode, err := buildinfo.ParseExportMode(v)
-			if err != nil {
-				return nil, err
-			}
-			i.buildInfoMode = bimode
-		case preferNondistLayersKey:
 			b, err := strconv.ParseBool(v)
 			if err != nil {
-				return nil, errors.Wrapf(err, "non-bool value %s specified for %s", v, k)
+				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
 			}
-			i.preferNondistLayers = b
+			i.buildInfo = b
 		case keyBuildInfoAttrs:
 			if v == "" {
 				i.buildInfoAttrs = false
@@ -205,6 +199,12 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
 			}
 			i.buildInfoAttrs = b
+		case preferNondistLayersKey:
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return nil, errors.Wrapf(err, "non-bool value %s specified for %s", v, k)
+			}
+			i.preferNondistLayers = b
 		default:
 			if i.meta == nil {
 				i.meta = make(map[string][]byte)
@@ -232,10 +232,10 @@ type imageExporterInstance struct {
 	layerCompression    compression.Type
 	forceCompression    bool
 	compressionLevel    *int
-	buildInfoMode       buildinfo.ExportMode
+	buildInfo           bool
+	buildInfoAttrs      bool
 	meta                map[string][]byte
 	preferNondistLayers bool
-	buildInfoAttrs      bool
 }
 
 func (e *imageExporterInstance) Name() string {
@@ -271,7 +271,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	defer done(context.TODO())
 
 	refCfg := e.refCfg()
-	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes, refCfg, e.buildInfoMode, e.buildInfoAttrs, sessionID)
+	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes, refCfg, e.buildInfo, e.buildInfoAttrs, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -279,15 +279,6 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	defer func() {
 		e.opt.ImageWriter.ContentStore().Delete(context.TODO(), desc.Digest)
 	}()
-
-	if e.buildInfoMode&buildinfo.ExportMetadata == 0 {
-		for k := range src.Metadata {
-			if !strings.HasPrefix(k, exptypes.ExporterBuildInfo) {
-				continue
-			}
-			delete(src.Metadata, k)
-		}
-	}
 
 	resp := make(map[string]string)
 

@@ -6,9 +6,8 @@ Build dependencies are generated when your image has been built. These
 dependencies include versions of used images, git repositories and HTTP URLs
 used by LLB `Source` operation as well as build request attributes.
 
-By default, the build dependencies are embedded in the image configuration and
-also available in the solver response. The export mode can be refined with
-the [`buildinfo` attribute](../README.md#imageregistry).
+By default, the build dependencies are inlined in the image configuration. You
+can disable this behavior with the [`buildinfo` attribute](../README.md#imageregistry).
 
 ### Image config
 

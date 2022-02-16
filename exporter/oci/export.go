@@ -18,7 +18,6 @@ import (
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/filesync"
-	"github.com/moby/buildkit/util/buildinfo"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/grpcerrors"
@@ -69,7 +68,7 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 	i := &imageExporterInstance{
 		imageExporter:    e,
 		layerCompression: compression.Default,
-		buildInfoMode:    buildinfo.ExportDefault,
+		buildInfo:        true,
 	}
 	var esgz bool
 	for k, v := range opt {
@@ -120,19 +119,14 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 			*ot = b
 		case keyBuildInfo:
 			if v == "" {
+				i.buildInfo = true
 				continue
 			}
-			bimode, err := buildinfo.ParseExportMode(v)
-			if err != nil {
-				return nil, err
-			}
-			i.buildInfoMode = bimode
-		case preferNondistLayersKey:
 			b, err := strconv.ParseBool(v)
 			if err != nil {
 				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
 			}
-			i.preferNonDist = b
+			i.buildInfo = b
 		case keyBuildInfoAttrs:
 			if v == "" {
 				i.buildInfoAttrs = false
@@ -143,6 +137,12 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
 			}
 			i.buildInfoAttrs = b
+		case preferNondistLayersKey:
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
+			}
+			i.preferNonDist = b
 		default:
 			if i.meta == nil {
 				i.meta = make(map[string][]byte)
@@ -170,9 +170,9 @@ type imageExporterInstance struct {
 	layerCompression compression.Type
 	forceCompression bool
 	compressionLevel *int
-	buildInfoMode    buildinfo.ExportMode
-	preferNonDist    bool
+	buildInfo        bool
 	buildInfoAttrs   bool
+	preferNonDist    bool
 }
 
 func (e *imageExporterInstance) Name() string {
@@ -218,22 +218,13 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	}
 	defer done(context.TODO())
 
-	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes, e.refCfg(), e.buildInfoMode, e.buildInfoAttrs, sessionID)
+	desc, err := e.opt.ImageWriter.Commit(ctx, src, e.ociTypes, e.refCfg(), e.buildInfo, e.buildInfoAttrs, sessionID)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
 		e.opt.ImageWriter.ContentStore().Delete(context.TODO(), desc.Digest)
 	}()
-
-	if e.buildInfoMode&buildinfo.ExportMetadata == 0 {
-		for k := range src.Metadata {
-			if !strings.HasPrefix(k, exptypes.ExporterBuildInfo) {
-				continue
-			}
-			delete(src.Metadata, k)
-		}
-	}
 
 	if desc.Annotations == nil {
 		desc.Annotations = map[string]string{}
