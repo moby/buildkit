@@ -1,11 +1,11 @@
 # syntax = docker/dockerfile:1.3
 
 ARG RUNC_VERSION=v1.0.2
-ARG CONTAINERD_VERSION=v1.6.0-rc.2
+ARG CONTAINERD_VERSION=v1.6.0
 # containerd v1.5 for integration tests
-ARG CONTAINERD_ALT_VERSION_15=v1.5.5
+ARG CONTAINERD_ALT_VERSION_15=v1.5.9
 # containerd v1.4 for integration tests
-ARG CONTAINERD_ALT_VERSION_14=v1.4.6
+ARG CONTAINERD_ALT_VERSION_14=v1.4.12
 # available targets: buildkitd, buildkitd.oci_only, buildkitd.containerd_only
 ARG BUILDKIT_TARGET=buildkitd
 ARG REGISTRY_VERSION=2.7.1
