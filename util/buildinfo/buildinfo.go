@@ -188,8 +188,8 @@ func filterAttrs(attrs map[string]*string) map[string]*string {
 		if isControlArg(k) {
 			continue
 		}
-		// Always include args and labels
-		if strings.HasPrefix(k, "build-arg:") || strings.HasPrefix(k, "label:") {
+		// Always include
+		if strings.HasPrefix(k, "build-arg:") || strings.HasPrefix(k, "context:") || strings.HasPrefix(k, "label:") {
 			filtered[k] = v
 			continue
 		}
