@@ -375,7 +375,7 @@ func defaultConf() (config.Config, error) {
 		if !errors.As(err, &pe) {
 			return config.Config{}, err
 		}
-		return cfg, nil
+		logrus.Warnf("failed to load default config: %v", err)
 	}
 	setDefaultConfig(&cfg)
 
