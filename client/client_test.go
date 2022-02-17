@@ -107,6 +107,7 @@ func TestIntegration(t *testing.T) {
 		testLocalSymlinkEscape,
 		testTmpfsMounts,
 		testSharedCacheMounts,
+		testSharedCacheMountsNoScratch,
 		testLockedCacheMounts,
 		testDuplicateCacheMount,
 		testRunCacheWithMounts,
@@ -3541,6 +3542,31 @@ func testSharedCacheMounts(t *testing.T, sb integration.Sandbox) {
 
 	st2 := busybox.Run(llb.Shlex(`sh -e -c "touch two; while [[ ! -f one ]]; do ls -l; usleep 500000; done"`), llb.Dir("/wd"))
 	st2.AddMount("/wd", llb.Scratch(), llb.AsPersistentCacheDir("mycache1", llb.CacheMountShared))
+
+	out := busybox.Run(llb.Shlex("true"))
+	out.AddMount("/m1", st.Root())
+	out.AddMount("/m2", st2.Root())
+
+	def, err := out.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
+	require.NoError(t, err)
+}
+
+// #2334
+func testSharedCacheMountsNoScratch(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("busybox:latest")
+	st := busybox.Run(llb.Shlex(`sh -e -c "touch one; while [[ ! -f two ]]; do ls -l; usleep 500000; done"`), llb.Dir("/wd"))
+	st.AddMount("/wd", llb.Image("busybox:latest"), llb.AsPersistentCacheDir("mycache1", llb.CacheMountShared))
+
+	st2 := busybox.Run(llb.Shlex(`sh -e -c "touch two; while [[ ! -f one ]]; do ls -l; usleep 500000; done"`), llb.Dir("/wd"))
+	st2.AddMount("/wd", llb.Image("busybox:latest"), llb.AsPersistentCacheDir("mycache1", llb.CacheMountShared))
 
 	out := busybox.Run(llb.Shlex("true"))
 	out.AddMount("/m1", st.Root())

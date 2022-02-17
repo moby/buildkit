@@ -3,6 +3,8 @@ package cache
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -1418,6 +1420,10 @@ func (sr *mutableRef) Mount(ctx context.Context, readonly bool, s session.Group)
 		return nil, rerr
 	}
 
+	// Make the mounts sharable. We don't do this for immutableRef mounts because
+	// it requires the raw []mount.Mount for computing diff on overlayfs.
+	mnt = setSharable(mnt)
+	sr.mountCache = mnt
 	if readonly {
 		mnt = setReadonly(mnt)
 	}
@@ -1516,4 +1522,111 @@ func readonlyOverlay(opt []string) []string {
 		}
 	}
 	return out
+}
+
+func setSharable(mounts snapshot.Mountable) snapshot.Mountable {
+	return &sharableMountable{Mountable: mounts}
+}
+
+// sharableMountable allows sharing underlying (possibly writable) mounts among callers.
+// This is useful to share writable overlayfs mounts.
+//
+// NOTE: Mount() method doesn't return the underlying mount configuration (e.g. overlayfs mounts)
+//       instead it always return bind mounts of the temporary mount point. So if the caller
+//       needs to inspect the underlying mount configuration (e.g. for optimized differ for
+//       overlayfs), this wrapper shouldn't be used.
+type sharableMountable struct {
+	snapshot.Mountable
+
+	count int32
+	mu    sync.Mutex
+
+	curMounts     []mount.Mount
+	curMountPoint string
+	curRelease    func() error
+}
+
+func (sm *sharableMountable) Mount() (_ []mount.Mount, _ func() error, retErr error) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	if sm.curMounts == nil {
+		mounts, release, err := sm.Mountable.Mount()
+		if err != nil {
+			return nil, nil, err
+		}
+		defer func() {
+			if retErr != nil {
+				release()
+			}
+		}()
+		var isOverlay bool
+		for _, m := range mounts {
+			if m.Type == "overlay" {
+				isOverlay = true
+				break
+			}
+		}
+		if !isOverlay {
+			// Don't need temporary mount wrapper for non-overlayfs mounts
+			return mounts, release, nil
+		}
+		dir, err := ioutil.TempDir("", "buildkit")
+		if err != nil {
+			return nil, nil, err
+		}
+		defer func() {
+			if retErr != nil {
+				os.Remove(dir)
+			}
+		}()
+		if err := mount.All(mounts, dir); err != nil {
+			return nil, nil, err
+		}
+		defer func() {
+			if retErr != nil {
+				mount.Unmount(dir, 0)
+			}
+		}()
+		sm.curMounts = []mount.Mount{
+			{
+				Source: dir,
+				Type:   "bind",
+				Options: []string{
+					"rw",
+					"rbind",
+				},
+			},
+		}
+		sm.curMountPoint = dir
+		sm.curRelease = release
+	}
+
+	mounts := make([]mount.Mount, len(sm.curMounts))
+	copy(mounts, sm.curMounts)
+
+	sm.count++
+	return mounts, func() error {
+		sm.mu.Lock()
+		defer sm.mu.Unlock()
+
+		sm.count--
+		if sm.count < 0 {
+			if v := os.Getenv("BUILDKIT_DEBUG_PANIC_ON_ERROR"); v == "1" {
+				panic("release of released mount")
+			}
+		} else if sm.count > 0 {
+			return nil
+		}
+
+		// no mount exist. release the current mount.
+		sm.curMounts = nil
+		if err := mount.Unmount(sm.curMountPoint, 0); err != nil {
+			return err
+		}
+		if err := sm.curRelease(); err != nil {
+			return err
+		}
+		return os.Remove(sm.curMountPoint)
+	}, nil
 }
