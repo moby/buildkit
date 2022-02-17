@@ -239,7 +239,7 @@ func GetMetadata(metadata map[string][]byte, key string, reqFrontend string, req
 		if reqFrontend != "" {
 			mbi.Frontend = reqFrontend
 		}
-		mbi.Attrs = convertMap(reduceMap(reqAttrs, mbi.Attrs))
+		mbi.Attrs = filterAttrs(convertMap(reduceMap(reqAttrs, mbi.Attrs)))
 		dtbi, err = json.Marshal(mbi)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to marshal build info for %q", key)
@@ -247,7 +247,7 @@ func GetMetadata(metadata map[string][]byte, key string, reqFrontend string, req
 	} else {
 		dtbi, err = json.Marshal(binfotypes.BuildInfo{
 			Frontend: reqFrontend,
-			Attrs:    convertMap(reqAttrs),
+			Attrs:    filterAttrs(convertMap(reqAttrs)),
 		})
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to marshal build info for %q", key)
