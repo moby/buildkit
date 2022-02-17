@@ -14,6 +14,7 @@ import (
 	v1 "github.com/moby/buildkit/cache/remotecache/v1"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/tracing"
 	"github.com/moby/buildkit/worker"
@@ -87,6 +88,12 @@ func NewExporter(c *Config) (remotecache.Exporter, error) {
 		return nil, err
 	}
 	return &exporter{CacheExporterTarget: cc, chains: cc, cache: cache, config: c}, nil
+}
+
+func (ce *exporter) Config() remotecache.Config {
+	return remotecache.Config{
+		Compression: compression.New(compression.Default),
+	}
 }
 
 func (ce *exporter) blobKey(dgst digest.Digest) string {

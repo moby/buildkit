@@ -360,6 +360,9 @@ buildctl build ... \
 * `mode=max`: export all the layers of all intermediate steps.
 * `ref=docker.io/user/image:tag`: reference
 * `oci-mediatypes=true|false`: whether to use OCI mediatypes in exported manifests. Since BuildKit `v0.8` defaults to true.
+* `compression=[uncompressed,gzip,estargz,zstd]`: choose compression type for layers newly created and cached, gzip is default value. estargz and zstd should be used with `oci-mediatypes=true`.
+* `compression-level=[value]`: compression level for gzip, estargz (0-9) and zstd (0-22)
+* `force-compression=true`: forcibly apply `compression` option to all layers.
 
 `--import-cache` options:
 * `type=registry`
@@ -380,6 +383,9 @@ The directory layout conforms to OCI Image Spec v1.0.
 * `mode=max`: export all the layers of all intermediate steps.
 * `dest=path/to/output-dir`: destination directory for cache exporter
 * `oci-mediatypes=true|false`: whether to use OCI mediatypes in exported manifests. Since BuildKit `v0.8` defaults to true.
+* `compression=[uncompressed,gzip,estargz,zstd]`: choose compression type for layers newly created and cached, gzip is default value. estargz and zstd should be used with `oci-mediatypes=true`.
+* `compression-level=[value]`: compression level for gzip, estargz (0-9) and zstd (0-22)
+* `force-compression=true`: forcibly apply `compression` option to all layers.
 
 `--import-cache` options:
 * `type=local`
