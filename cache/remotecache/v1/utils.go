@@ -5,17 +5,12 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/solver"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
-
-// EmptyLayerRemovalSupported defines if implementation supports removal of empty layers. Buildkit image exporter
-// removes empty layers, but moby layerstore based implementation does not.
-var EmptyLayerRemovalSupported = true
 
 // sortConfig sorts the config structure to make sure it is deterministic
 func sortConfig(cc *CacheConfig) {
@@ -302,10 +297,6 @@ func marshalRemote(ctx context.Context, r *solver.Remote, state *marshalState) s
 		parentID = marshalRemote(ctx, r2, state)
 	}
 	desc := r.Descriptors[len(r.Descriptors)-1]
-
-	if desc.Digest == exptypes.EmptyGZLayer && EmptyLayerRemovalSupported {
-		return parentID
-	}
 
 	state.descriptors[desc.Digest] = DescriptorProviderPair{
 		Descriptor: desc,
