@@ -441,15 +441,7 @@ func applyMainFlags(c *cli.Context, cfg *config.Config) error {
 	}
 
 	if c.IsSet("addr") || len(cfg.GRPC.Address) == 0 {
-		addrs := c.StringSlice("addr")
-		if len(addrs) > 1 {
-			addrs = addrs[1:] // https://github.com/urfave/cli/issues/160
-		}
-
-		cfg.GRPC.Address = make([]string, 0, len(addrs))
-		for _, v := range addrs {
-			cfg.GRPC.Address = append(cfg.GRPC.Address, v)
-		}
+		cfg.GRPC.Address = c.StringSlice("addr")
 	}
 
 	if c.IsSet("allow-insecure-entitlement") {
