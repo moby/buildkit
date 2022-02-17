@@ -2950,7 +2950,7 @@ RUN ["ls"]
 
 	require.Equal(t, "layers", ociimg.RootFS.Type)
 	// this depends on busybox. should be ok after freezing images
-	require.Equal(t, 3, len(ociimg.RootFS.DiffIDs))
+	require.Equal(t, 4, len(ociimg.RootFS.DiffIDs))
 
 	require.Equal(t, 7, len(ociimg.History))
 	require.Contains(t, ociimg.History[2].CreatedBy, "lbl=val")
@@ -2966,7 +2966,7 @@ RUN ["ls"]
 	require.Equal(t, false, ociimg.History[5].EmptyLayer)
 	require.NotNil(t, ociimg.History[5].Created)
 	require.Contains(t, ociimg.History[6].CreatedBy, "RUN ls")
-	require.Equal(t, true, ociimg.History[6].EmptyLayer)
+	require.Equal(t, false, ociimg.History[6].EmptyLayer)
 	require.NotNil(t, ociimg.History[6].Created)
 }
 

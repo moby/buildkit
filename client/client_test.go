@@ -2615,7 +2615,7 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	require.NotEqual(t, "", ociimg.Architecture)
 	require.NotEqual(t, "", ociimg.Config.WorkingDir)
 	require.Equal(t, "layers", ociimg.RootFS.Type)
-	require.Equal(t, 2, len(ociimg.RootFS.DiffIDs))
+	require.Equal(t, 3, len(ociimg.RootFS.DiffIDs))
 	require.NotNil(t, ociimg.Created)
 	require.True(t, time.Since(*ociimg.Created) < 2*time.Minute)
 	require.Condition(t, func() bool {
@@ -2632,7 +2632,7 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	require.Contains(t, ociimg.History[1].CreatedBy, "true")
 	require.Contains(t, ociimg.History[2].CreatedBy, "foo/sub/baz")
 	require.False(t, ociimg.History[0].EmptyLayer)
-	require.True(t, ociimg.History[1].EmptyLayer)
+	require.False(t, ociimg.History[1].EmptyLayer)
 	require.False(t, ociimg.History[2].EmptyLayer)
 
 	dt, err = content.ReadBlob(ctx, img.ContentStore(), img.Target())
@@ -2647,7 +2647,7 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	require.Equal(t, images.MediaTypeDockerSchema2Manifest, mfst.MediaType)
-	require.Equal(t, 2, len(mfst.Layers))
+	require.Equal(t, 3, len(mfst.Layers))
 	require.Equal(t, images.MediaTypeDockerSchema2LayerGzip, mfst.Layers[0].MediaType)
 	require.Equal(t, images.MediaTypeDockerSchema2LayerGzip, mfst.Layers[1].MediaType)
 
@@ -2674,7 +2674,7 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	_, ok = m["foo/sub/baz"]
 	require.False(t, ok)
 
-	dt, err = content.ReadBlob(ctx, img.ContentStore(), ocispecs.Descriptor{Digest: mfst.Layers[1].Digest})
+	dt, err = content.ReadBlob(ctx, img.ContentStore(), ocispecs.Descriptor{Digest: mfst.Layers[2].Digest})
 	require.NoError(t, err)
 
 	m, err = testutil.ReadTarToMap(dt, true)

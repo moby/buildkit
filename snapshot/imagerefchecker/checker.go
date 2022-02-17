@@ -9,7 +9,6 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/images"
 	"github.com/moby/buildkit/cache"
-	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -90,9 +89,7 @@ func toDigests(layers []ocispecs.Descriptor) []digest.Digest {
 func layerKey(layers []digest.Digest) string {
 	b := &strings.Builder{}
 	for _, l := range layers {
-		if l != exptypes.EmptyGZLayer {
-			b.Write([]byte(l))
-		}
+		b.Write([]byte(l))
 	}
 	return b.String()
 }
