@@ -62,13 +62,13 @@ require (
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.29.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace v0.29.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.29.0
-	go.opentelemetry.io/otel v1.4.0
-	go.opentelemetry.io/otel/exporters/jaeger v1.4.0
-	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.4.0
-	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.4.0
-	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.4.0
-	go.opentelemetry.io/otel/sdk v1.4.0
-	go.opentelemetry.io/otel/trace v1.4.0
+	go.opentelemetry.io/otel v1.4.1
+	go.opentelemetry.io/otel/exporters/jaeger v1.4.1
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.4.1
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.4.1
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.4.1
+	go.opentelemetry.io/otel/sdk v1.4.1
+	go.opentelemetry.io/otel/trace v1.4.1
 	go.opentelemetry.io/proto/otlp v0.12.0
 	golang.org/x/crypto v0.0.0-20211202192323-5770296d904e
 	golang.org/x/net v0.0.0-20211216030914-fe4d6282115f
@@ -116,7 +116,7 @@ require (
 	github.com/shurcooL/sanitized_anchor_name v1.0.0 // indirect
 	github.com/vbatts/tar-split v0.11.2 // indirect
 	go.opencensus.io v0.23.0 // indirect
-	go.opentelemetry.io/otel/exporters/otlp/internal/retry v1.4.0 // indirect
+	go.opentelemetry.io/otel/exporters/otlp/internal/retry v1.4.1 // indirect
 	go.opentelemetry.io/otel/internal/metric v0.27.0 // indirect
 	go.opentelemetry.io/otel/metric v0.27.0 // indirect
 	golang.org/x/text v0.3.7 // indirect
