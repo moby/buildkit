@@ -6,10 +6,12 @@ import (
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/remotes/docker"
+	"github.com/containerd/containerd/snapshots"
 	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/util/contentutil"
+	"github.com/moby/buildkit/util/estargz"
 	"github.com/moby/buildkit/util/push"
 	"github.com/moby/buildkit/util/resolver"
 	"github.com/moby/buildkit/util/resolver/limited"
@@ -104,4 +106,18 @@ func (dsl *withDistributionSourceLabel) SetDistributionSourceAnnotation(desc oci
 	}
 	desc.Annotations["containerd.io/distribution.source.ref"] = dsl.ref
 	return desc
+}
+
+func (dsl *withDistributionSourceLabel) SnapshotLabels(descs []ocispecs.Descriptor, index int) map[string]string {
+	if len(descs) < index {
+		return nil
+	}
+	labels := snapshots.FilterInheritedLabels(descs[index].Annotations)
+	if labels == nil {
+		labels = make(map[string]string)
+	}
+	for k, v := range estargz.SnapshotLabels(dsl.ref, descs, index) {
+		labels[k] = v
+	}
+	return labels
 }

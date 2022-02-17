@@ -397,9 +397,20 @@ func (w *Worker) FromRemote(ctx context.Context, remote *solver.Remote) (ref cac
 			WriterFactory: progress.FromContext(ctx),
 		},
 	}
+	snapshotLabels := func([]ocispecs.Descriptor, int) map[string]string { return nil }
+	if cd, ok := remote.Provider.(interface {
+		SnapshotLabels([]ocispecs.Descriptor, int) map[string]string
+	}); ok {
+		snapshotLabels = cd.SnapshotLabels
+	}
 	descHandlers := cache.DescHandlers(make(map[digest.Digest]*cache.DescHandler))
-	for _, desc := range remote.Descriptors {
-		descHandlers[desc.Digest] = descHandler
+	for i, desc := range remote.Descriptors {
+		descHandlers[desc.Digest] = &cache.DescHandler{
+			Provider:       descHandler.Provider,
+			Progress:       descHandler.Progress,
+			Annotations:    desc.Annotations,
+			SnapshotLabels: snapshotLabels(remote.Descriptors, i),
+		}
 	}
 
 	var current cache.ImmutableRef
@@ -417,10 +428,17 @@ func (w *Worker) FromRemote(ctx context.Context, remote *solver.Remote) (ref cac
 		if v, ok := desc.Annotations["buildkit/description"]; ok {
 			descr = v
 		}
-		ref, err := w.CacheMgr.GetByBlob(ctx, desc, current,
+		opts := []cache.RefOption{
 			cache.WithDescription(descr),
 			cache.WithCreationTime(tm),
-			descHandlers)
+			descHandlers,
+		}
+		if dh, ok := descHandlers[desc.Digest]; ok {
+			if ref, ok := dh.Annotations["containerd.io/distribution.source.ref"]; ok {
+				opts = append(opts, cache.WithImageRef(ref)) // can set by registry cache importer
+			}
+		}
+		ref, err := w.CacheMgr.GetByBlob(ctx, desc, current, opts...)
 		if current != nil {
 			current.Release(context.TODO())
 		}

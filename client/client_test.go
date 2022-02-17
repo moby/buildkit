@@ -138,6 +138,7 @@ func TestIntegration(t *testing.T) {
 		testSourceMapFromRef,
 		testLazyImagePush,
 		testStargzLazyPull,
+		testStargzLazyInlineCacheImportExport,
 		testFileOpInputSwap,
 		testRelativeMountpoint,
 		testLocalSourceDiffer,
@@ -2878,6 +2879,161 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 
 	_, ok = m["foo/sub/bar"]
 	require.False(t, ok)
+}
+
+func testStargzLazyInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
+	skipDockerd(t, sb)
+	requiresLinux(t)
+
+	cdAddress := sb.ContainerdAddress()
+	if cdAddress == "" || sb.Snapshotter() != "stargz" {
+		t.Skip("test requires containerd worker with stargz snapshotter")
+	}
+
+	client, err := newContainerd(cdAddress)
+	require.NoError(t, err)
+	defer client.Close()
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	var (
+		imageService = client.ImageService()
+		contentStore = client.ContentStore()
+		ctx          = namespaces.WithNamespace(sb.Context(), "buildkit")
+	)
+
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	// Prepare stargz inline cache
+	orgImage := "docker.io/library/alpine:latest"
+	sgzImage := registry + "/stargz/alpine:" + identity.NewID()
+	baseDef := llb.Image(orgImage).Run(llb.Args([]string{"/bin/touch", "/foo"}))
+	def, err := baseDef.Marshal(sb.Context())
+	require.NoError(t, err)
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name":              sgzImage,
+					"push":              "true",
+					"compression":       "estargz",
+					"oci-mediatypes":    "true",
+					"force-compression": "true",
+				},
+			},
+		},
+		CacheExports: []CacheOptionsEntry{
+			{
+				Type: "inline",
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	// clear all local state out
+	err = imageService.Delete(ctx, sgzImage, images.SynchronousDelete())
+	require.NoError(t, err)
+	checkAllReleasable(t, c, sb, true)
+
+	// stargz layers should be lazy even for executing something on them
+	def, err = baseDef.
+		Run(llb.Args([]string{"/bin/touch", "/bar"})).
+		Marshal(sb.Context())
+	require.NoError(t, err)
+	target := registry + "/buildkit/testlazyimage:" + identity.NewID()
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name":           target,
+					"push":           "true",
+					"oci-mediatypes": "true",
+					"compression":    "estargz",
+				},
+			},
+		},
+		CacheExports: []CacheOptionsEntry{
+			{
+				Type: "inline",
+			},
+		},
+		CacheImports: []CacheOptionsEntry{
+			{
+				Type: "registry",
+				Attrs: map[string]string{
+					"ref": sgzImage,
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	img, err := imageService.Get(ctx, target)
+	require.NoError(t, err)
+
+	manifest, err := images.Manifest(ctx, contentStore, img.Target, nil)
+	require.NoError(t, err)
+
+	// Check if image layers are lazy.
+	// The topmost(last) layer created by `Run` isn't lazy so we skip the check for the layer.
+	var sgzLayers []ocispecs.Descriptor
+	for i, layer := range manifest.Layers[:len(manifest.Layers)-1] {
+		_, err = contentStore.Info(ctx, layer.Digest)
+		require.ErrorIs(t, err, ctderrdefs.ErrNotFound, "unexpected error %v on layer %+v (%d)", err, layer, i)
+		sgzLayers = append(sgzLayers, layer)
+	}
+	require.NotEqual(t, 0, len(sgzLayers), "no layer can be used for checking lazypull")
+
+	// The topmost(last) layer created by `Run` shouldn't be lazy
+	_, err = contentStore.Info(ctx, manifest.Layers[len(manifest.Layers)-1].Digest)
+	require.NoError(t, err)
+
+	// clear all local state out
+	err = imageService.Delete(ctx, img.Name, images.SynchronousDelete())
+	require.NoError(t, err)
+	checkAllReleasable(t, c, sb, true)
+
+	// stargz layers should be exportable
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+	out := filepath.Join(destDir, "out.tar")
+	outW, err := os.Create(out)
+	require.NoError(t, err)
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:   ExporterOCI,
+				Output: fixedWriteCloser(outW),
+			},
+		},
+		CacheImports: []CacheOptionsEntry{
+			{
+				Type: "registry",
+				Attrs: map[string]string{
+					"ref": sgzImage,
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	// Check if image layers are un-lazied
+	for _, layer := range sgzLayers {
+		_, err = contentStore.Info(ctx, layer.Digest)
+		require.NoError(t, err)
+	}
+
+	err = c.Prune(sb.Context(), nil, PruneAll)
+	require.NoError(t, err)
+	checkAllRemoved(t, c, sb)
 }
 
 func testStargzLazyPull(t *testing.T, sb integration.Sandbox) {
