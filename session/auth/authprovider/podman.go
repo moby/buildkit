@@ -1,0 +1,62 @@
+package authprovider
+
+import (
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+
+	"github.com/docker/cli/cli/config/configfile"
+	"github.com/pkg/errors"
+
+	"github.com/moby/buildkit/session"
+)
+
+const (
+	// PodmanConfigFileName is the name of config file
+	PodmanConfigFileName = "auth.json"
+
+	// XDGSubPath is the subpath in the XDG_RUNTIME_DIR directory that contains the podman config file
+	XDGSubPath = "containers"
+)
+
+// NewPodmanAuthProvider provides an attachable that loads the Podman config instead of the hardcoded docker ones. It is
+// More or less a copy of the relevant pieces for loading Docker config files used by the DockerAuthProvider, just using
+// Podmans default config paths & names.
+func NewPodmanAuthProvider(stderr io.Writer) session.Attachable {
+	xdgRuntime := os.Getenv("XDG_RUNTIME_DIR")
+
+	filename := filepath.Join(xdgRuntime, XDGSubPath, PodmanConfigFileName)
+	configFile := configfile.New(filename)
+
+	if file, err := os.Open(filename); err == nil {
+		defer file.Close()
+
+		err = configFile.LoadFromReader(file)
+		if err != nil {
+			err = errors.Wrap(err, filename)
+			fmt.Fprintf(stderr, "WARNING: Error loading config file: %v\n", err)
+		}
+
+		return &authProvider{
+			config:      configFile,
+			seeds:       &tokenSeeds{dir: filepath.Dir(filename)},
+			loggerCache: map[string]struct{}{},
+		}
+	} else if !os.IsNotExist(err) {
+		// if file is there but we can't stat it for any reason other
+		// than it doesn't exist then stop
+		fmt.Fprintf(stderr, "WARNING: Error loading config file: %v\n", err)
+		return &authProvider{
+			config:      configFile,
+			seeds:       &tokenSeeds{dir: filepath.Dir(filename)},
+			loggerCache: map[string]struct{}{},
+		}
+	}
+
+	// No Podman config file, just use the docker one then to pick up docker credentials.
+	// Podman uses docker's default settings location when the XDG path does not exist.
+	// See here for more details: https://docs.podman.io/en/latest/markdown/podman-login.1.html
+	fmt.Fprintf(stderr, "WARNING: %s did not exist, trying Docker config", configFile)
+	return NewDockerAuthProvider(stderr)
+}
