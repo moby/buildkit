@@ -57,6 +57,6 @@ func NewPodmanAuthProvider(stderr io.Writer) session.Attachable {
 	// No Podman config file, just use the docker one then to pick up docker credentials.
 	// Podman uses docker's default settings location when the XDG path does not exist.
 	// See here for more details: https://docs.podman.io/en/latest/markdown/podman-login.1.html
-	fmt.Fprintf(stderr, "WARNING: %s did not exist, trying Docker config", configFile)
+	fmt.Fprintf(stderr, "WARNING: %s did not exist, trying Docker config", filename)
 	return NewDockerAuthProvider(stderr)
 }
