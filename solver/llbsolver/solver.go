@@ -157,6 +157,33 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		return nil, err
 	}
 
+	if res.Metadata == nil {
+		res.Metadata = make(map[string][]byte)
+	}
+	if r := res.Ref; r != nil {
+		dtbi, err := buildinfo.Encode(ctx, res.Metadata[exptypes.ExporterBuildInfo], r.BuildSources())
+		if err != nil {
+			return nil, err
+		}
+		if dtbi != nil && len(dtbi) > 0 {
+			res.Metadata[exptypes.ExporterBuildInfo] = dtbi
+		}
+	}
+	if res.Refs != nil {
+		for k, r := range res.Refs {
+			if r == nil {
+				continue
+			}
+			dtbi, err := buildinfo.Encode(ctx, res.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, k)], r.BuildSources())
+			if err != nil {
+				return nil, err
+			}
+			if dtbi != nil && len(dtbi) > 0 {
+				res.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, k)] = dtbi
+			}
+		}
+	}
+
 	var exporterResponse map[string]string
 	if e := exp.Exporter; e != nil {
 		inp := exporter.Source{
@@ -175,14 +202,6 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 				return nil, errors.Errorf("invalid reference: %T", r.Sys())
 			}
 			inp.Ref = workerRef.ImmutableRef
-			dtbi, err := buildinfo.Encode(ctx, inp.Metadata[exptypes.ExporterBuildInfo], res.BuildSources())
-			if err != nil {
-				return nil, err
-			}
-			if dtbi != nil && len(dtbi) > 0 {
-				inp.Metadata[exptypes.ExporterBuildInfo] = dtbi
-			}
-
 			dtic, err := inlineCache(ctx, exp.CacheExporter, r, e.Config().Compression, session.NewGroup(sessionID))
 			if err != nil {
 				return nil, err
@@ -206,14 +225,6 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 						return nil, errors.Errorf("invalid reference: %T", r.Sys())
 					}
 					m[k] = workerRef.ImmutableRef
-					dtbi, err := buildinfo.Encode(ctx, inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, k)], res.BuildSources())
-					if err != nil {
-						return nil, err
-					}
-					if dtbi != nil && len(dtbi) > 0 {
-						inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, k)] = dtbi
-					}
-
 					dtic, err := inlineCache(ctx, exp.CacheExporter, r, e.Config().Compression, session.NewGroup(sessionID))
 					if err != nil {
 						return nil, err
@@ -225,7 +236,6 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 			}
 			inp.Refs = m
 		}
-
 		if err := inBuilderContext(ctx, j, e.Name(), "", func(ctx context.Context, _ session.Group) error {
 			exporterResponse, err = e.Export(ctx, inp, j.SessionID)
 			return err

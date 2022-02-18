@@ -153,6 +153,7 @@ func TestIntegration(t *testing.T) {
 		testBuildExportWithForeignLayer,
 		testBuildInfoExporter,
 		testBuildInfoInline,
+		testBuildInfoNoExport,
 	)
 	tests = append(tests, diffOpTestCases()...)
 	integration.Run(t, tests, mirrors)
@@ -5212,6 +5213,44 @@ func testBuildInfoInline(t *testing.T, sb integration.Sandbox) {
 			require.Equal(t, bi.Sources[0].Ref, "docker.io/library/busybox:latest")
 		})
 	}
+}
+
+func testBuildInfoNoExport(t *testing.T, sb integration.Sandbox) {
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		st := llb.Image("busybox:latest").Run(
+			llb.Args([]string{"/bin/sh", "-c", `echo hello`}),
+		)
+		def, err := st.Marshal(sb.Context())
+		if err != nil {
+			return nil, err
+		}
+		return c.Solve(ctx, gateway.SolveRequest{
+			Definition:  def.ToPB(),
+			FrontendOpt: map[string]string{"build-arg:foo": "bar"},
+		})
+	}
+
+	res, err := c.Build(sb.Context(), SolveOpt{}, "", frontend, nil)
+	require.NoError(t, err)
+
+	require.Contains(t, res.ExporterResponse, exptypes.ExporterBuildInfo)
+	decbi, err := base64.StdEncoding.DecodeString(res.ExporterResponse[exptypes.ExporterBuildInfo])
+	require.NoError(t, err)
+
+	var exbi binfotypes.BuildInfo
+	err = json.Unmarshal(decbi, &exbi)
+	require.NoError(t, err)
+
+	attrval := "bar"
+	require.Equal(t, exbi.Attrs, map[string]*string{"build-arg:foo": &attrval})
+	require.Equal(t, len(exbi.Sources), 1)
+	require.Equal(t, exbi.Sources[0].Type, binfotypes.SourceTypeDockerImage)
+	require.Equal(t, exbi.Sources[0].Ref, "docker.io/library/busybox:latest")
 }
 
 func tmpdir(appliers ...fstest.Applier) (string, error) {

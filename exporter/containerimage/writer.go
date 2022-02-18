@@ -50,7 +50,7 @@ type ImageWriter struct {
 	opt WriterOpt
 }
 
-func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool, refCfg cacheconfig.RefConfig, buildInfoMode buildinfo.ExportMode, buildInfoAttrs bool, sessionID string) (*ocispecs.Descriptor, error) {
+func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool, refCfg cacheconfig.RefConfig, buildInfo bool, buildInfoAttrs bool, sessionID string) (*ocispecs.Descriptor, error) {
 	platformsBytes, ok := inp.Metadata[exptypes.ExporterPlatformsKey]
 
 	if len(inp.Refs) > 0 && !ok {
@@ -63,16 +63,16 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 			return nil, err
 		}
 
-		var buildInfo []byte
-		if buildInfoMode&buildinfo.ExportImageConfig > 0 {
-			if buildInfo, err = buildinfo.Format(inp.Metadata[exptypes.ExporterBuildInfo], buildinfo.FormatOpts{
+		var dtbi []byte
+		if buildInfo {
+			if dtbi, err = buildinfo.Format(inp.Metadata[exptypes.ExporterBuildInfo], buildinfo.FormatOpts{
 				RemoveAttrs: !buildInfoAttrs,
 			}); err != nil {
 				return nil, err
 			}
 		}
 
-		mfstDesc, configDesc, err := ic.commitDistributionManifest(ctx, inp.Ref, inp.Metadata[exptypes.ExporterImageConfigKey], &remotes[0], oci, inp.Metadata[exptypes.ExporterInlineCache], buildInfo)
+		mfstDesc, configDesc, err := ic.commitDistributionManifest(ctx, inp.Ref, inp.Metadata[exptypes.ExporterImageConfigKey], &remotes[0], oci, inp.Metadata[exptypes.ExporterInlineCache], dtbi)
 		if err != nil {
 			return nil, err
 		}
@@ -134,16 +134,16 @@ func (ic *ImageWriter) Commit(ctx context.Context, inp exporter.Source, oci bool
 		config := inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterImageConfigKey, p.ID)]
 		inlineCache := inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterInlineCache, p.ID)]
 
-		var buildInfo []byte
-		if buildInfoMode&buildinfo.ExportImageConfig > 0 {
-			if buildInfo, err = buildinfo.Format(inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, p.ID)], buildinfo.FormatOpts{
+		var dtbi []byte
+		if buildInfo {
+			if dtbi, err = buildinfo.Format(inp.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, p.ID)], buildinfo.FormatOpts{
 				RemoveAttrs: !buildInfoAttrs,
 			}); err != nil {
 				return nil, err
 			}
 		}
 
-		desc, _, err := ic.commitDistributionManifest(ctx, r, config, &remotes[remotesMap[p.ID]], oci, inlineCache, buildInfo)
+		desc, _, err := ic.commitDistributionManifest(ctx, r, config, &remotes[remotesMap[p.ID]], oci, inlineCache, dtbi)
 		if err != nil {
 			return nil, err
 		}
