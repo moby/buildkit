@@ -165,15 +165,15 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest, sid st
 
 	if len(res.Refs) > 0 {
 		for p := range res.Refs {
-			dtbi, errm := buildinfo.GetMetadata(res.Metadata, fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, p), req.Frontend, req.FrontendOpt)
-			if errm != nil {
+			dtbi, err := buildinfo.GetMetadata(res.Metadata, fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, p), req.Frontend, req.FrontendOpt)
+			if err != nil {
 				return nil, err
 			}
 			res.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, p)] = dtbi
 		}
 	} else {
-		dtbi, errm := buildinfo.GetMetadata(res.Metadata, exptypes.ExporterBuildInfo, req.Frontend, req.FrontendOpt)
-		if errm != nil {
+		dtbi, err := buildinfo.GetMetadata(res.Metadata, exptypes.ExporterBuildInfo, req.Frontend, req.FrontendOpt)
+		if err != nil {
 			return nil, err
 		}
 		res.Metadata[exptypes.ExporterBuildInfo] = dtbi
