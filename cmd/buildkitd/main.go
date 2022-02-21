@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/containerd/containerd/log"
 	"github.com/containerd/containerd/pkg/seed"
 	"github.com/containerd/containerd/pkg/userns"
 	"github.com/containerd/containerd/platforms"
@@ -76,9 +75,6 @@ func init() {
 	if reexec.Init() {
 		os.Exit(0)
 	}
-
-	// overwrites containerd/log.G
-	log.G = bklog.GetLogger
 }
 
 var propagators = propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{})
