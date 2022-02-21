@@ -25,6 +25,7 @@ import (
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/network"
+	rootlessspecconv "github.com/moby/buildkit/util/rootless/specconv"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 )
@@ -39,10 +40,11 @@ type containerdExecutor struct {
 	mu               sync.Mutex
 	apparmorProfile  string
 	traceSocket      string
+	rootless         bool
 }
 
 // New creates a new executor backed by connection to containerd API
-func New(client *containerd.Client, root, cgroup string, networkProviders map[pb.NetMode]network.Provider, dnsConfig *oci.DNSConfig, apparmorProfile string, traceSocket string) executor.Executor {
+func New(client *containerd.Client, root, cgroup string, networkProviders map[pb.NetMode]network.Provider, dnsConfig *oci.DNSConfig, apparmorProfile string, traceSocket string, rootless bool) executor.Executor {
 	// clean up old hosts/resolv.conf file. ignore errors
 	os.RemoveAll(filepath.Join(root, "hosts"))
 	os.RemoveAll(filepath.Join(root, "resolv.conf"))
@@ -56,6 +58,7 @@ func New(client *containerd.Client, root, cgroup string, networkProviders map[pb
 		running:          make(map[string]chan error),
 		apparmorProfile:  apparmorProfile,
 		traceSocket:      traceSocket,
+		rootless:         rootless,
 	}
 }
 
@@ -164,6 +167,11 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.M
 	}
 	defer cleanup()
 	spec.Process.Terminal = meta.Tty
+	if w.rootless {
+		if err := rootlessspecconv.ToRootless(spec); err != nil {
+			return err
+		}
+	}
 
 	container, err := w.client.NewContainer(ctx, id,
 		containerd.WithSpec(spec),

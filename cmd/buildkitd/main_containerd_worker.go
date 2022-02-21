@@ -11,6 +11,7 @@ import (
 	"time"
 
 	ctd "github.com/containerd/containerd"
+	"github.com/containerd/containerd/pkg/userns"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
 	"github.com/moby/buildkit/util/network/cniprovider"
 	"github.com/moby/buildkit/util/network/netproviders"
@@ -99,6 +100,19 @@ func init() {
 			Usage: "set the name of the apparmor profile applied to containers",
 		},
 	}
+	n := "containerd-worker-rootless"
+	u := "enable rootless mode"
+	if userns.RunningInUserNS() {
+		flags = append(flags, cli.BoolTFlag{
+			Name:  n,
+			Usage: u,
+		})
+	} else {
+		flags = append(flags, cli.BoolFlag{
+			Name:  n,
+			Usage: u,
+		})
+	}
 
 	if defaultConf.Workers.Containerd.GC == nil || *defaultConf.Workers.Containerd.GC {
 		flags = append(flags, cli.BoolTFlag{
@@ -147,13 +161,14 @@ func applyContainerdFlags(c *cli.Context, cfg *config.Config) error {
 		cfg.Workers.Containerd.Enabled = boolOrAuto
 	}
 
-	// GlobalBool works for BoolT as well
-	rootless := c.GlobalBool("rootless")
-	if rootless {
-		logrus.Warn("rootless mode is not supported for containerd workers. disabling containerd worker.")
-		b := false
-		cfg.Workers.Containerd.Enabled = &b
-		return nil
+	if c.GlobalIsSet("rootless") || c.GlobalBool("rootless") {
+		cfg.Workers.Containerd.Rootless = c.GlobalBool("rootless")
+	}
+	if c.GlobalIsSet("containerd-worker-rootless") {
+		if !userns.RunningInUserNS() || os.Geteuid() > 0 {
+			return errors.New("rootless mode requires to be executed as the mapped root in a user namespace; you may use RootlessKit for setting up the namespace")
+		}
+		cfg.Workers.Containerd.Rootless = c.GlobalBool("containerd-worker-rootless")
 	}
 
 	labels, err := attrMap(c.GlobalStringSlice("containerd-worker-labels"))
@@ -217,6 +232,13 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 		return nil, nil
 	}
 
+	if cfg.Rootless {
+		logrus.Debugf("running in rootless mode")
+		if common.config.Workers.Containerd.NetworkConfig.Mode == "auto" {
+			common.config.Workers.Containerd.NetworkConfig.Mode = "host"
+		}
+	}
+
 	dns := getDNSConfig(common.config.DNS)
 
 	nc := netproviders.Opt{
@@ -237,7 +259,7 @@ func containerdWorkerInitializer(c *cli.Context, common workerInitializerOpt) ([
 	if cfg.Snapshotter != "" {
 		snapshotter = cfg.Snapshotter
 	}
-	opt, err := containerd.NewWorkerOpt(common.config.Root, cfg.Address, snapshotter, cfg.Namespace, cfg.Labels, dns, nc, common.config.Workers.Containerd.ApparmorProfile, parallelismSem, common.traceSocket, ctd.WithTimeout(60*time.Second))
+	opt, err := containerd.NewWorkerOpt(common.config.Root, cfg.Address, snapshotter, cfg.Namespace, cfg.Rootless, cfg.Labels, dns, nc, common.config.Workers.Containerd.ApparmorProfile, parallelismSem, common.traceSocket, ctd.WithTimeout(60*time.Second))
 	if err != nil {
 		return nil, err
 	}
