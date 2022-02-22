@@ -395,6 +395,7 @@ func snapshotterFactory(commonRoot string, cfg config.OCIConfig, sm *session.Man
 				sgzCfg,
 				// Source info based on the buildkit's registry config and session
 				sgzfs.WithGetSources(sourceWithSession(hosts, sm)),
+				sgzfs.WithMetricsLogLevel(logrus.DebugLevel),
 			)
 			if err != nil {
 				return nil, err

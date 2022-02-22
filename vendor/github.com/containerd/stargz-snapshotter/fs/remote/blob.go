@@ -37,7 +37,6 @@ import (
 	"github.com/containerd/stargz-snapshotter/cache"
 	"github.com/containerd/stargz-snapshotter/fs/source"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/singleflight"
 )
@@ -352,7 +351,7 @@ func (b *blob) fetchRegions(allData map[region]io.Writer, fetched map[region]boo
 		if err == io.EOF {
 			break
 		} else if err != nil {
-			return errors.Wrapf(err, "failed to read multipart resp")
+			return fmt.Errorf("failed to read multipart resp: %w", err)
 		}
 		if err := b.walkChunks(reg, func(chunk region) (retErr error) {
 			id := fr.genID(chunk)
@@ -386,7 +385,7 @@ func (b *blob) fetchRegions(allData map[region]io.Writer, fetched map[region]boo
 			fetched[chunk] = true
 			return nil
 		}); err != nil {
-			return errors.Wrapf(err, "failed to get chunks")
+			return fmt.Errorf("failed to get chunks: %w", err)
 		}
 	}
 
