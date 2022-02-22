@@ -1,6 +1,7 @@
 package authprovider
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/util/bklog"
 )
 
 const (
@@ -24,7 +26,13 @@ const (
 // More or less a copy of the relevant pieces for loading Docker config files used by the DockerAuthProvider, just using
 // Podmans default config paths & names.
 func NewPodmanAuthProvider(stderr io.Writer) session.Attachable {
-	xdgRuntime := os.Getenv("XDG_RUNTIME_DIR")
+	xdgRuntime, ok := os.LookupEnv("XDG_RUNTIME_DIR")
+	if ok {
+		// Podman uses docker's default settings location when the XDG_RUNTIME_DIR is missing.
+		// See here for more details: https://docs.podman.io/en/latest/markdown/podman-login.1.html
+		bklog.G(context.TODO()).Debugf("WARNING: XDG_RUNTIME_DIR is not set, trying Docker config")
+		return NewDockerAuthProvider(stderr)
+	}
 
 	filename := filepath.Join(xdgRuntime, XDGSubPath, PodmanConfigFileName)
 	configFile := configfile.New(filename)
@@ -57,6 +65,6 @@ func NewPodmanAuthProvider(stderr io.Writer) session.Attachable {
 	// No Podman config file, just use the docker one then to pick up docker credentials.
 	// Podman uses docker's default settings location when the XDG path does not exist.
 	// See here for more details: https://docs.podman.io/en/latest/markdown/podman-login.1.html
-	fmt.Fprintf(stderr, "WARNING: %s did not exist, trying Docker config", filename)
+	bklog.G(context.TODO()).Debugf("WARNING: %s did not exist, trying Docker config", filename)
 	return NewDockerAuthProvider(stderr)
 }
