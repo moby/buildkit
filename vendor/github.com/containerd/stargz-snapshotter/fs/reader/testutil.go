@@ -38,7 +38,6 @@ import (
 	"github.com/containerd/stargz-snapshotter/metadata"
 	"github.com/containerd/stargz-snapshotter/util/testutil"
 	digest "github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -408,7 +407,7 @@ func checkError(wantFail bool, err error) error {
 	if wantFail && err == nil {
 		return fmt.Errorf("wanted to fail but succeeded")
 	} else if !wantFail && err != nil {
-		return errors.Wrapf(err, "wanted to succeed verification but failed")
+		return fmt.Errorf("wanted to succeed verification but failed: %w", err)
 	}
 	return nil
 }
