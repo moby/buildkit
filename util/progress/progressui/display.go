@@ -703,7 +703,7 @@ func setupTerminals(jobs []*job, height int, all bool) []*job {
 		if j.vertex != nil && j.vertex.termBytes > 0 && !j.isCompleted {
 			candidates = append(candidates, j)
 		}
-		if j.isCompleted {
+		if !j.isCompleted {
 			numInUse++
 		}
 	}
