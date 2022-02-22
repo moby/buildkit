@@ -598,9 +598,9 @@ func LocalUniqueID(v string) ConstraintsOpt {
 	})
 }
 
-func ProgressGroup(id, name string) ConstraintsOpt {
+func ProgressGroup(id, name string, weak bool) ConstraintsOpt {
 	return constraintsOptFunc(func(c *Constraints) {
-		c.Metadata.ProgressGroup = &pb.ProgressGroup{Id: id, Name: name}
+		c.Metadata.ProgressGroup = &pb.ProgressGroup{Id: id, Name: name, Weak: weak}
 	})
 }
 

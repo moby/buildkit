@@ -254,6 +254,7 @@ message ExportCache {
 message ProgressGroup {
 	string id = 1;
 	string name = 2;
+	bool weak = 3;
 }
 
 message ProxyEnv {
