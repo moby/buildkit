@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/containerd/containerd/images"
+	reference "github.com/containerd/containerd/reference/docker"
 	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
-	distreference "github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/version"
@@ -76,7 +76,7 @@ func (p *Pool) Clear() {
 // GetResolver gets a resolver for a specified scope from the pool
 func (p *Pool) GetResolver(hosts docker.RegistryHosts, ref, scope string, sm *session.Manager, g session.Group) *Resolver {
 	name := ref
-	named, err := distreference.ParseNormalizedNamed(ref)
+	named, err := reference.ParseNormalizedNamed(ref)
 	if err == nil {
 		name = named.Name()
 	}

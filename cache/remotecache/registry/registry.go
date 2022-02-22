@@ -5,8 +5,8 @@ import (
 	"strconv"
 
 	"github.com/containerd/containerd/content"
+	reference "github.com/containerd/containerd/reference/docker"
 	"github.com/containerd/containerd/remotes/docker"
-	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/util/contentutil"
