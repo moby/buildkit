@@ -3,21 +3,17 @@ package containerimage
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"runtime"
-	"strings"
 	"time"
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/diff"
 	containerderrdefs "github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
-	ctdlabels "github.com/containerd/containerd/labels"
 	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/snapshots"
-	"github.com/containerd/stargz-snapshotter/estargz"
 	"github.com/moby/buildkit/cache"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/session"
@@ -26,6 +22,7 @@ import (
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/source"
 	srctypes "github.com/moby/buildkit/source/types"
+	"github.com/moby/buildkit/util/estargz"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/imageutil"
 	"github.com/moby/buildkit/util/leaseutil"
@@ -218,31 +215,13 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 
 			p.descHandlers = cache.DescHandlers(make(map[digest.Digest]*cache.DescHandler))
 			for i, desc := range p.manifest.Descriptors {
-				// Hints for remote/stargz snapshotter for searching for remote snapshots
 				labels := snapshots.FilterInheritedLabels(desc.Annotations)
 				if labels == nil {
 					labels = make(map[string]string)
 				}
-				for _, k := range []string{estargz.TOCJSONDigestAnnotation, estargz.StoreUncompressedSizeAnnotation} {
-					labels[k] = desc.Annotations[k]
+				for k, v := range estargz.SnapshotLabels(p.manifest.Ref, p.manifest.Descriptors, i) {
+					labels[k] = v
 				}
-				labels["containerd.io/snapshot/remote/stargz.reference"] = p.manifest.Ref
-				labels["containerd.io/snapshot/remote/stargz.digest"] = desc.Digest.String()
-				var (
-					layersKey = "containerd.io/snapshot/remote/stargz.layers"
-					layers    string
-				)
-				for _, l := range p.manifest.Descriptors[i:] {
-					ls := fmt.Sprintf("%s,", l.Digest.String())
-					// This avoids the label hits the size limitation.
-					// Skipping layers is allowed here and only affects performance.
-					if err := ctdlabels.Validate(layersKey, layers+ls); err != nil {
-						break
-					}
-					layers += ls
-				}
-				labels[layersKey] = strings.TrimSuffix(layers, ",")
-
 				p.descHandlers[desc.Digest] = &cache.DescHandler{
 					Provider:       p.manifest.Provider,
 					Progress:       progressController,
