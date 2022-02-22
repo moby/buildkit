@@ -10,6 +10,7 @@ import (
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/diff"
+	"github.com/containerd/containerd/diff/walking"
 	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/mount"
 	"github.com/klauspost/compress/zstd"
@@ -202,6 +203,20 @@ func computeBlobChain(ctx context.Context, sr *immutableRef, createIfNeeded bool
 					}
 					if ok {
 						desc = computed
+					}
+				}
+
+				if desc.Digest == "" && !isTypeWindows(sr) && (comp.Type == compression.Zstd || comp.Type == compression.EStargz) {
+					// These compression types aren't supported by containerd differ. So try to compute diff on buildkit side.
+					// This case can be happen on containerd worker + non-overlayfs snapshotter (e.g. native).
+					// See also: https://github.com/containerd/containerd/issues/4263
+					desc, err = walking.NewWalkingDiff(sr.cm.ContentStore).Compare(ctx, lower, upper,
+						diff.WithMediaType(mediaType),
+						diff.WithReference(sr.ID()),
+						diff.WithCompressor(compressorFunc),
+					)
+					if err != nil {
+						logrus.WithError(err).Warnf("failed to compute blob by buildkit differ")
 					}
 				}
 

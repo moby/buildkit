@@ -99,6 +99,8 @@ type ContainerdConfig struct {
 	ApparmorProfile string `toml:"apparmor-profile"`
 
 	MaxParallelism int `toml:"max-parallelism"`
+
+	Rootless bool `toml:"rootless"`
 }
 
 type GCPolicy struct {
