@@ -27,7 +27,7 @@ const (
 // Podmans default config paths & names.
 func NewPodmanAuthProvider(stderr io.Writer) session.Attachable {
 	xdgRuntime, ok := os.LookupEnv("XDG_RUNTIME_DIR")
-	if ok {
+	if !ok {
 		// Podman uses docker's default settings location when the XDG_RUNTIME_DIR is missing.
 		// See here for more details: https://docs.podman.io/en/latest/markdown/podman-login.1.html
 		bklog.G(context.TODO()).Debugf("WARNING: XDG_RUNTIME_DIR is not set, trying Docker config")
