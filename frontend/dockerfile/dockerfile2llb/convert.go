@@ -1076,7 +1076,7 @@ func dispatchCopyFileOp(d *dispatchState, cfg copyConfig) error {
 		fileOpt = append(fileOpt, llb.ProgressGroup(identity.NewID(), prefixCommand(d, name, d.prefixPlatform, &platform, env)))
 		d.cmdIndex--
 		mergeOpt := append(fileOpt, llb.WithCustomName(prefixCommand(d, "LINK "+name, d.prefixPlatform, &platform, env)))
-		d.state = llb.Merge([]llb.State{d.state, llb.Scratch().File(a, fileOpt...)}, mergeOpt...)
+		d.state = d.state.WithOutput(llb.Merge([]llb.State{d.state, llb.Scratch().File(a, fileOpt...)}, mergeOpt...).Output())
 	} else {
 		d.state = d.state.File(a, fileOpt...)
 	}
