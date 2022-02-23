@@ -1,6 +1,7 @@
 package dockerfile
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -16,16 +17,21 @@ import (
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/frontend/dockerfile/builder"
+	gateway "github.com/moby/buildkit/frontend/gateway/client"
+	"github.com/moby/buildkit/solver/pb"
 	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
 	"github.com/moby/buildkit/util/testutil/integration"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 var buildinfoTests = integration.TestFuncs(
-	testBuildSources,
-	testBuildAttrs,
+	testBuildInfoSources,
+	testBuildInfoAttrs,
 	testBuildInfoMultiPlatform,
+	testBuildInfoDeps,
+	testBuildInfoDepsMultiPlatform,
 )
 
 func init() {
@@ -33,7 +39,7 @@ func init() {
 }
 
 // moby/buildkit#2311
-func testBuildSources(t *testing.T, sb integration.Sandbox) {
+func testBuildInfoSources(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 
 	gitDir, err := ioutil.TempDir("", "buildkit")
@@ -114,7 +120,7 @@ COPY --from=alpine /bin/busybox /alpine-busybox
 }
 
 // moby/buildkit#2476
-func testBuildAttrs(t *testing.T, sb integration.Sandbox) {
+func testBuildInfoAttrs(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
 
@@ -243,5 +249,278 @@ ADD https://raw.githubusercontent.com/moby/moby/master/README.md /
 		assert.Equal(t, binfotypes.SourceTypeHTTP, sources[1].Type)
 		assert.Equal(t, "https://raw.githubusercontent.com/moby/moby/master/README.md", sources[1].Ref)
 		assert.Equal(t, "sha256:419455202b0ef97e480d7f8199b26a721a417818bc0e2d106975f74323f25e6c", sources[1].Pin)
+	}
+}
+
+func testBuildInfoDeps(t *testing.T, sb integration.Sandbox) {
+	ctx := sb.Context()
+	f := getFrontend(t, sb)
+	f.RequiresBuildctl(t)
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	dockerfile := []byte(`
+FROM alpine
+ENV FOO=bar
+RUN echo first > /out
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	dockerfile2 := []byte(`
+FROM base AS build
+RUN echo "foo is $FOO" > /foo
+FROM busybox
+COPY --from=build /foo /out /
+`)
+
+	dir2, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile2, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	b := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		res, err := f.SolveGateway(ctx, c, gateway.SolveRequest{})
+		if err != nil {
+			return nil, err
+		}
+		ref, err := res.SingleRef()
+		if err != nil {
+			return nil, err
+		}
+		st, err := ref.ToState()
+		if err != nil {
+			return nil, err
+		}
+
+		def, err := st.Marshal(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		dtic, ok := res.Metadata[exptypes.ExporterImageConfigKey]
+		if !ok {
+			return nil, errors.Errorf("no containerimage.config in metadata")
+		}
+
+		dtbi, ok := res.Metadata[exptypes.ExporterBuildInfo]
+		if !ok {
+			return nil, errors.Errorf("no containerimage.buildinfo in metadata")
+		}
+
+		dt, err := json.Marshal(map[string][]byte{
+			exptypes.ExporterImageConfigKey: dtic,
+			exptypes.ExporterBuildInfo:      dtbi,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		res, err = f.SolveGateway(ctx, c, gateway.SolveRequest{
+			FrontendOpt: map[string]string{
+				"dockerfilekey":       builder.DefaultLocalNameDockerfile + "2",
+				"context:base":        "input:base",
+				"input-metadata:base": string(dt),
+			},
+			FrontendInputs: map[string]*pb.Definition{
+				"base": def.ToPB(),
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+		return res, nil
+	}
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	res, err := c.Build(ctx, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile:       dir,
+			builder.DefaultLocalNameContext:          dir,
+			builder.DefaultLocalNameDockerfile + "2": dir2,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, "", b, nil)
+	require.NoError(t, err)
+
+	require.Contains(t, res.ExporterResponse, exptypes.ExporterBuildInfo)
+	dtbi, err := base64.StdEncoding.DecodeString(res.ExporterResponse[exptypes.ExporterBuildInfo])
+	require.NoError(t, err)
+
+	var bi binfotypes.BuildInfo
+	err = json.Unmarshal(dtbi, &bi)
+	require.NoError(t, err)
+
+	require.Equal(t, 2, len(bi.Sources))
+	assert.Equal(t, binfotypes.SourceTypeDockerImage, bi.Sources[0].Type)
+	assert.True(t, strings.HasPrefix(bi.Sources[0].Ref, "docker.io/library/alpine"))
+	assert.NotEmpty(t, bi.Sources[0].Pin)
+	assert.Equal(t, binfotypes.SourceTypeDockerImage, bi.Sources[1].Type)
+	assert.Equal(t, "docker.io/library/busybox:latest", bi.Sources[1].Ref)
+	assert.NotEmpty(t, bi.Sources[1].Pin)
+
+	require.Contains(t, bi.Deps, "base")
+	depsrc := bi.Deps["base"].Sources
+	require.Equal(t, 1, len(depsrc))
+	assert.Equal(t, binfotypes.SourceTypeDockerImage, depsrc[0].Type)
+	assert.Equal(t, "alpine", depsrc[0].Ref)
+	assert.NotEmpty(t, depsrc[0].Pin)
+}
+
+func testBuildInfoDepsMultiPlatform(t *testing.T, sb integration.Sandbox) {
+	ctx := sb.Context()
+	f := getFrontend(t, sb)
+	f.RequiresBuildctl(t)
+
+	platforms := []string{"linux/amd64", "linux/arm64"}
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	dockerfile := []byte(`
+FROM --platform=$BUILDPLATFORM alpine
+ARG TARGETARCH
+ENV FOO=bar-$TARGETARCH
+RUN echo "foo $TARGETARCH" > /out
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	dockerfile2 := []byte(`
+FROM base AS build
+RUN echo "foo is $FOO" > /foo
+FROM busybox
+COPY --from=build /foo /out /
+`)
+
+	dir2, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile2, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	b := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		res, err := f.SolveGateway(ctx, c, gateway.SolveRequest{
+			FrontendOpt: map[string]string{
+				"platform": strings.Join(platforms, ","),
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		if len(res.Refs) != 2 {
+			return nil, errors.Errorf("expected 2 refs, got %d", len(res.Refs))
+		}
+
+		frontendOpt := map[string]string{
+			"dockerfilekey": builder.DefaultLocalNameDockerfile + "2",
+			"platform":      strings.Join(platforms, ","),
+		}
+
+		inputs := map[string]*pb.Definition{}
+		for _, platform := range platforms {
+			frontendOpt["context:base::"+platform] = "input:base::" + platform
+
+			st, err := res.Refs[platform].ToState()
+			if err != nil {
+				return nil, err
+			}
+			def, err := st.Marshal(ctx)
+			if err != nil {
+				return nil, err
+			}
+			inputs["base::"+platform] = def.ToPB()
+
+			dtic, ok := res.Metadata[exptypes.ExporterImageConfigKey+"/"+platform]
+			if !ok {
+				return nil, errors.Errorf("no containerimage.config/" + platform + " in metadata")
+			}
+			dtbi, ok := res.Metadata[exptypes.ExporterBuildInfo+"/"+platform]
+			if !ok {
+				return nil, errors.Errorf("no containerimage.buildinfo/" + platform + " in metadata")
+			}
+			dt, err := json.Marshal(map[string][]byte{
+				exptypes.ExporterImageConfigKey: dtic,
+				exptypes.ExporterBuildInfo:      dtbi,
+			})
+			if err != nil {
+				return nil, err
+			}
+			frontendOpt["input-metadata:base::"+platform] = string(dt)
+		}
+
+		res, err = f.SolveGateway(ctx, c, gateway.SolveRequest{
+			FrontendOpt:    frontendOpt,
+			FrontendInputs: inputs,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return res, nil
+	}
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	res, err := c.Build(ctx, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile:       dir,
+			builder.DefaultLocalNameContext:          dir,
+			builder.DefaultLocalNameDockerfile + "2": dir2,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, "", b, nil)
+	require.NoError(t, err)
+
+	for _, platform := range platforms {
+		require.Contains(t, res.ExporterResponse, fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, platform))
+		dtbi, err := base64.StdEncoding.DecodeString(res.ExporterResponse[fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, platform)])
+		require.NoError(t, err)
+
+		var bi binfotypes.BuildInfo
+		err = json.Unmarshal(dtbi, &bi)
+		require.NoError(t, err)
+
+		require.Equal(t, 2, len(bi.Sources))
+		assert.Equal(t, binfotypes.SourceTypeDockerImage, bi.Sources[0].Type)
+		assert.True(t, strings.HasPrefix(bi.Sources[0].Ref, "docker.io/library/alpine"))
+		assert.NotEmpty(t, bi.Sources[0].Pin)
+		assert.Equal(t, binfotypes.SourceTypeDockerImage, bi.Sources[1].Type)
+		assert.Equal(t, "docker.io/library/busybox:latest", bi.Sources[1].Ref)
+		assert.NotEmpty(t, bi.Sources[1].Pin)
+
+		require.Contains(t, bi.Deps, "base")
+		depsrc := bi.Deps["base"].Sources
+		require.Equal(t, 1, len(depsrc))
+		assert.Equal(t, binfotypes.SourceTypeDockerImage, depsrc[0].Type)
+		assert.Equal(t, "alpine", depsrc[0].Ref)
+		assert.NotEmpty(t, depsrc[0].Pin)
 	}
 }

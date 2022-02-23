@@ -382,16 +382,16 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 
 	buildContext := &mutableOutput{}
 	ctxPaths := map[string]struct{}{}
-	buildinfo := &binfotypes.BuildInfo{}
+	buildInfo := &binfotypes.BuildInfo{}
 
 	for _, d := range allDispatchStates.states {
 		if !isReachable(target, d) {
 			continue
 		}
 
-		// collect build dependencies
+		// collect build sources and dependencies
 		if d.buildSource != nil {
-			buildinfo.Sources = append(buildinfo.Sources, *d.buildSource)
+			buildInfo.Sources = append(buildInfo.Sources, *d.buildSource)
 		}
 
 		if d.base != nil {
@@ -469,9 +469,9 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 	}
 
 	// sort build sources
-	if len(buildinfo.Sources) > 0 {
-		sort.Slice(buildinfo.Sources, func(i, j int) bool {
-			return buildinfo.Sources[i].Ref < buildinfo.Sources[j].Ref
+	if len(buildInfo.Sources) > 0 {
+		sort.Slice(buildInfo.Sources, func(i, j int) bool {
+			return buildInfo.Sources[i].Ref < buildInfo.Sources[j].Ref
 		})
 	}
 
@@ -512,7 +512,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		target.image.Variant = platformOpt.targetPlatform.Variant
 	}
 
-	return &st, &target.image, buildinfo, nil
+	return &st, &target.image, buildInfo, nil
 }
 
 func metaArgsToMap(metaArgs []instructions.KeyValuePairOptional) map[string]string {

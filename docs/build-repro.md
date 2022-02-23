@@ -6,18 +6,6 @@ Build dependencies are generated when your image has been built. These
 dependencies include versions of used images, git repositories and HTTP URLs
 used by LLB `Source` operation as well as build request attributes.
 
-By default, the build dependencies are inlined in the image configuration. You
-can disable this behavior with the [`buildinfo` attribute](../README.md#imageregistry).
-
-### Image config
-
-A new field similar to the one for inline cache has been added to the image
-configuration to embed build dependencies:
-
-```text
-"moby.buildkit.buildinfo.v1": <base64>
-```
-
 The structure is base64 encoded and has the following format when decoded:
 
 ```json
@@ -57,10 +45,25 @@ The structure is base64 encoded and has the following format when decoded:
 
 * `frontend` defines the frontend used to build.
 * `attrs` defines build request attributes.
-* `sources` defines build dependencies.
+* `sources` defines build sources.
   * `type` defines the source type (`docker-image`, `git` or `http`).
   * `ref` is the reference of the source.
   * `pin` is the source digest.
+* `deps` defines build dependencies of input contexts.
+
+### Image config
+
+A new field similar to the one for inline cache has been added to the image
+configuration to embed build dependencies:
+
+```json
+{
+  "moby.buildkit.buildinfo.v0": "<base64>"
+}
+```
+
+By default, the build dependencies are inlined in the image configuration. You
+can disable this behavior with the [`buildinfo` attribute](../README.md#imageregistry).
 
 ### Exporter response (metadata)
 
