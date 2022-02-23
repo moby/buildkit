@@ -5350,12 +5350,13 @@ func testBuildInfoInline(t *testing.T, sb integration.Sandbox) {
 			require.NoError(t, err)
 
 			var config binfotypes.ImageConfig
-			err = json.Unmarshal(dt, &config)
+			require.NoError(t, json.Unmarshal(dt, &config))
+
+			dec, err := base64.StdEncoding.DecodeString(config.BuildInfo)
 			require.NoError(t, err)
 
 			var bi binfotypes.BuildInfo
-			err = json.Unmarshal(config.BuildInfo, &bi)
-			require.NoError(t, err)
+			require.NoError(t, json.Unmarshal(dec, &bi))
 
 			if tt.buildAttrs {
 				attrval := "bar"

@@ -10,7 +10,7 @@ const ImageConfigField = "moby.buildkit.buildinfo.v1"
 // ImageConfig defines the structure of build dependencies
 // inside image config.
 type ImageConfig struct {
-	BuildInfo []byte `json:"moby.buildkit.buildinfo.v1,omitempty"`
+	BuildInfo string `json:"moby.buildkit.buildinfo.v1,omitempty"`
 }
 
 // BuildInfo defines the main structure added to image config as
@@ -23,6 +23,8 @@ type BuildInfo struct {
 	Attrs map[string]*string `json:"attrs,omitempty"`
 	// Sources defines build dependencies.
 	Sources []Source `json:"sources,omitempty"`
+	// Deps defines context dependencies.
+	Deps map[string]BuildInfo `json:"deps,omitempty"`
 }
 
 // Source defines a build dependency.
