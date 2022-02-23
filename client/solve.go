@@ -75,7 +75,7 @@ func (c *Client) Solve(ctx context.Context, def *llb.Definition, opt SolveOpt, s
 	return c.solve(ctx, def, nil, opt, statusChan)
 }
 
-type runGatewayCB func(ref string, s *session.Session) error
+type runGatewayCB func(ref string, s *session.Session, opts map[string]string) error
 
 func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runGatewayCB, opt SolveOpt, statusChan chan *SolveStatus) (*SolveResponse, error) {
 	if def != nil && runGateway != nil {
@@ -109,7 +109,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		}
 	}
 
-	cacheOpt, err := parseCacheOptions(ctx, opt)
+	cacheOpt, err := parseCacheOptions(ctx, runGateway != nil, opt)
 	if err != nil {
 		return nil, err
 	}
@@ -171,6 +171,9 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 	}
 
 	for k, v := range cacheOpt.frontendAttrs {
+		if opt.FrontendAttrs == nil {
+			opt.FrontendAttrs = map[string]string{}
+		}
 		opt.FrontendAttrs[k] = v
 	}
 
@@ -225,7 +228,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 
 	if runGateway != nil {
 		eg.Go(func() error {
-			err := runGateway(ref, s)
+			err := runGateway(ref, s, opt.FrontendAttrs)
 			if err == nil {
 				return nil
 			}
@@ -386,7 +389,7 @@ type cacheOptions struct {
 	frontendAttrs   map[string]string
 }
 
-func parseCacheOptions(ctx context.Context, opt SolveOpt) (*cacheOptions, error) {
+func parseCacheOptions(ctx context.Context, isGateway bool, opt SolveOpt) (*cacheOptions, error) {
 	var (
 		cacheExports []*controlapi.CacheOptionsEntry
 		cacheImports []*controlapi.CacheOptionsEntry
@@ -471,7 +474,7 @@ func parseCacheOptions(ctx context.Context, opt SolveOpt) (*cacheOptions, error)
 			})
 		}
 	}
-	if opt.Frontend != "" {
+	if opt.Frontend != "" || isGateway {
 		// use legacy API for registry importers, because the frontend might not support the new API
 		if len(legacyImportRefs) > 0 {
 			frontendAttrs["cache-from"] = strings.Join(legacyImportRefs, ",")

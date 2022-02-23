@@ -44,7 +44,13 @@ func (c *Client) Build(ctx context.Context, opt SolveOpt, product string, buildF
 		})
 	}
 
-	cb := func(ref string, s *session.Session) error {
+	cb := func(ref string, s *session.Session, opts map[string]string) error {
+		for k, v := range opts {
+			if feOpts == nil {
+				feOpts = map[string]string{}
+			}
+			feOpts[k] = v
+		}
 		gwClient := c.gatewayClientForBuild(ref)
 		g, err := grpcclient.New(ctx, feOpts, s.ID(), product, gwClient, gworkers)
 		if err != nil {

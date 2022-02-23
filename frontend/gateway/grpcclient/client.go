@@ -341,6 +341,24 @@ func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (res *
 		}
 	}
 
+	// these options are added by go client in solve()
+	if _, ok := creq.FrontendOpt["cache-imports"]; !ok {
+		if v, ok := c.opts["cache-imports"]; ok {
+			if creq.FrontendOpt == nil {
+				creq.FrontendOpt = map[string]string{}
+			}
+			creq.FrontendOpt["cache-imports"] = v
+		}
+	}
+	if _, ok := creq.FrontendOpt["cache-from"]; !ok {
+		if v, ok := c.opts["cache-from"]; ok {
+			if creq.FrontendOpt == nil {
+				creq.FrontendOpt = map[string]string{}
+			}
+			creq.FrontendOpt["cache-from"] = v
+		}
+	}
+
 	req := &pb.SolveRequest{
 		Definition:          creq.Definition,
 		Frontend:            creq.Frontend,
