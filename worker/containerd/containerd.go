@@ -132,6 +132,7 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 		LeaseManager:   lm,
 		GarbageCollect: gc,
 		ParallelismSem: parallelismSem,
+		MountPoolRoot:  filepath.Join(root, "cachemounts"),
 	}
 	return opt, nil
 }

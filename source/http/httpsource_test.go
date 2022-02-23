@@ -373,6 +373,7 @@ func newHTTPSource(tmpdir string) (source.Source, error) {
 		Applier:        applier,
 		Differ:         differ,
 		GarbageCollect: mdb.GarbageCollect,
+		MountPoolRoot:  filepath.Join(tmpdir, "cachemounts"),
 	})
 	if err != nil {
 		return nil, err

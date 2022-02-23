@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -22,11 +23,13 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/winlayers"
+	"github.com/moby/sys/mountinfo"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -1422,7 +1425,7 @@ func (sr *mutableRef) Mount(ctx context.Context, readonly bool, s session.Group)
 
 	// Make the mounts sharable. We don't do this for immutableRef mounts because
 	// it requires the raw []mount.Mount for computing diff on overlayfs.
-	mnt = setSharable(mnt)
+	mnt = sr.cm.mountPool.setSharable(mnt)
 	sr.mountCache = mnt
 	if readonly {
 		mnt = setReadonly(mnt)
@@ -1524,8 +1527,42 @@ func readonlyOverlay(opt []string) []string {
 	return out
 }
 
-func setSharable(mounts snapshot.Mountable) snapshot.Mountable {
-	return &sharableMountable{Mountable: mounts}
+func newSharableMountPool(tmpdirRoot string) (sharableMountPool, error) {
+	if tmpdirRoot != "" {
+		if err := os.MkdirAll(tmpdirRoot, 0700); err != nil {
+			return sharableMountPool{}, fmt.Errorf("failed to prepare mount pool: %w", err)
+		}
+		// If tmpdirRoot is specified, remove existing mounts to avoid conflict.
+		files, err := os.ReadDir(tmpdirRoot)
+		if err != nil {
+			return sharableMountPool{}, fmt.Errorf("failed to read mount pool: %w", err)
+		}
+		for _, file := range files {
+			if file.IsDir() {
+				dir := filepath.Join(tmpdirRoot, file.Name())
+				bklog.G(context.Background()).Debugf("cleaning up existing temporary mount %q", dir)
+				if err := mount.Unmount(dir, 0); err != nil {
+					if mounted, merr := mountinfo.Mounted(dir); merr != nil || mounted {
+						bklog.G(context.Background()).WithError(err).WithError(merr).
+							WithField("mounted", mounted).Warnf("failed to unmount existing temporary mount %q", dir)
+						continue
+					}
+				}
+				if err := os.Remove(dir); err != nil {
+					bklog.G(context.Background()).WithError(err).Warnf("failed to remove existing temporary mount %q", dir)
+				}
+			}
+		}
+	}
+	return sharableMountPool{tmpdirRoot}, nil
+}
+
+type sharableMountPool struct {
+	tmpdirRoot string
+}
+
+func (p sharableMountPool) setSharable(mounts snapshot.Mountable) snapshot.Mountable {
+	return &sharableMountable{Mountable: mounts, mountPoolRoot: p.tmpdirRoot}
 }
 
 // sharableMountable allows sharing underlying (possibly writable) mounts among callers.
@@ -1538,8 +1575,9 @@ func setSharable(mounts snapshot.Mountable) snapshot.Mountable {
 type sharableMountable struct {
 	snapshot.Mountable
 
-	count int32
-	mu    sync.Mutex
+	count         int32
+	mu            sync.Mutex
+	mountPoolRoot string
 
 	curMounts     []mount.Mount
 	curMountPoint string
@@ -1571,7 +1609,7 @@ func (sm *sharableMountable) Mount() (_ []mount.Mount, _ func() error, retErr er
 			// Don't need temporary mount wrapper for non-overlayfs mounts
 			return mounts, release, nil
 		}
-		dir, err := ioutil.TempDir("", "buildkit")
+		dir, err := ioutil.TempDir(sm.mountPoolRoot, "buildkit")
 		if err != nil {
 			return nil, nil, err
 		}

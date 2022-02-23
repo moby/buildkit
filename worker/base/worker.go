@@ -75,6 +75,7 @@ type WorkerOpt struct {
 	GarbageCollect  func(context.Context) (gc.Stats, error)
 	ParallelismSem  *semaphore.Weighted
 	MetadataStore   *metadata.Store
+	MountPoolRoot   string
 }
 
 // Worker is a local worker instance with dedicated snapshotter, cache, and so on.
@@ -103,6 +104,7 @@ func NewWorker(ctx context.Context, opt WorkerOpt) (*Worker, error) {
 		ContentStore:    opt.ContentStore,
 		Differ:          opt.Differ,
 		MetadataStore:   opt.MetadataStore,
+		MountPoolRoot:   opt.MountPoolRoot,
 	})
 	if err != nil {
 		return nil, err

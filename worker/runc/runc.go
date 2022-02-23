@@ -135,6 +135,7 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		LeaseManager:    lm,
 		GarbageCollect:  mdb.GarbageCollect,
 		ParallelismSem:  parallelismSem,
+		MountPoolRoot:   filepath.Join(root, "cachemounts"),
 	}
 	return opt, nil
 }
