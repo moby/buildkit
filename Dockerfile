@@ -1,4 +1,4 @@
-# syntax = docker/dockerfile:1.3
+# syntax = docker/dockerfile-upstream:master
 
 ARG RUNC_VERSION=v1.0.2
 ARG CONTAINERD_VERSION=v1.6.0
@@ -27,7 +27,7 @@ FROM --platform=$BUILDPLATFORM golang:1.17-alpine AS golatest
 # gobuild is base stage for compiling go/cgo
 FROM golatest AS gobuild-base
 RUN apk add --no-cache file bash clang lld pkgconfig git make
-COPY --from=xx / /
+COPY --link --from=xx / /
 
 # runc source
 FROM git AS runc-src
@@ -81,18 +81,18 @@ RUN --mount=target=. --mount=target=/root/.cache,type=cache \
   xx-verify --static /usr/bin/buildkitd
 
 FROM scratch AS binaries-linux-helper
-COPY --from=runc /usr/bin/runc /buildkit-runc
+COPY --link --from=runc /usr/bin/runc /buildkit-runc
 # built from https://github.com/tonistiigi/binfmt/releases/tag/buildkit%2Fv6.2.0-24
-COPY --from=tonistiigi/binfmt:buildkit@sha256:ea7632b4e0b2406db438730c604339b38c23ac51a2f73c89ba50abe5e2146b4b / /
+COPY --link --from=tonistiigi/binfmt:buildkit@sha256:ea7632b4e0b2406db438730c604339b38c23ac51a2f73c89ba50abe5e2146b4b / /
 FROM binaries-linux-helper AS binaries-linux
-COPY --from=buildctl /usr/bin/buildctl /
-COPY --from=buildkitd /usr/bin/buildkitd /
+COPY --link --from=buildctl /usr/bin/buildctl /
+COPY --link --from=buildkitd /usr/bin/buildkitd /
 
 FROM scratch AS binaries-darwin
-COPY --from=buildctl /usr/bin/buildctl /
+COPY --link --from=buildctl /usr/bin/buildctl /
 
 FROM scratch AS binaries-windows
-COPY --from=buildctl /usr/bin/buildctl /buildctl.exe
+COPY --link --from=buildctl /usr/bin/buildctl /buildctl.exe
 
 FROM binaries-$TARGETOS AS binaries
 
@@ -105,13 +105,13 @@ RUN --mount=from=binaries \
   mkdir -p /out && tar czvf "/out/buildkit-$(cat /tmp/.version).$(echo $TARGETPLATFORM | sed 's/\//-/g').tar.gz" --mtime='2015-10-21 00:00Z' --sort=name --transform 's/^./bin/' .
 
 FROM scratch AS release
-COPY --from=releaser /out/ /
+COPY --link --from=releaser /out/ /
 
 # tonistiigi/alpine supports riscv64
 FROM tonistiigi/alpine:${ALPINE_VERSION} AS buildkit-export
 RUN apk add --no-cache fuse3 git openssh pigz xz \
   && ln -s fusermount3 /usr/bin/fusermount
-COPY examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
+COPY --link examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
 VOLUME /var/lib/buildkit
 
 FROM git AS containerd-src
@@ -185,33 +185,33 @@ RUN --mount=target=/root/.cache,type=cache \
 
 # Copy together all binaries needed for oci worker mode
 FROM buildkit-export AS buildkit-buildkitd.oci_only
-COPY --from=buildkitd.oci_only /usr/bin/buildkitd.oci_only /usr/bin/
-COPY --from=buildctl /usr/bin/buildctl /usr/bin/
+COPY --link --from=buildkitd.oci_only /usr/bin/buildkitd.oci_only /usr/bin/
+COPY --link --from=buildctl /usr/bin/buildctl /usr/bin/
 ENTRYPOINT ["buildkitd.oci_only"]
 
 # Copy together all binaries for containerd worker mode
 FROM buildkit-export AS buildkit-buildkitd.containerd_only
-COPY --from=buildkitd.containerd_only /usr/bin/buildkitd.containerd_only /usr/bin/
-COPY --from=buildctl /usr/bin/buildctl /usr/bin/
+COPY --link --from=buildkitd.containerd_only /usr/bin/buildkitd.containerd_only /usr/bin/
+COPY --link --from=buildctl /usr/bin/buildctl /usr/bin/
 ENTRYPOINT ["buildkitd.containerd_only"]
 
 # Copy together all binaries for oci+containerd mode
 FROM buildkit-export AS buildkit-buildkitd-linux
-COPY --from=binaries / /usr/bin/
+COPY --link --from=binaries / /usr/bin/
 ENTRYPOINT ["buildkitd"]
 
 FROM binaries AS buildkit-buildkitd-darwin
 
 FROM binaries AS buildkit-buildkitd-windows
 # this is not in binaries-windows because it is not intended for release yet, just CI
-COPY --from=buildkitd /usr/bin/buildkitd /buildkitd.exe
+COPY --link --from=buildkitd /usr/bin/buildkitd /buildkitd.exe
 
 FROM buildkit-buildkitd-$TARGETOS AS buildkit-buildkitd
 
 FROM alpine:${ALPINE_VERSION} AS containerd-runtime
-COPY --from=runc /usr/bin/runc /usr/bin/
-COPY --from=containerd /out/containerd* /usr/bin/
-COPY --from=containerd /out/ctr /usr/bin/
+COPY --link --from=runc /usr/bin/runc /usr/bin/
+COPY --link --from=containerd /out/containerd* /usr/bin/
+COPY --link --from=containerd /out/ctr /usr/bin/
 VOLUME /var/lib/containerd
 VOLUME /run/containerd
 ENTRYPOINT ["containerd"]
@@ -237,16 +237,16 @@ RUN apk add --no-cache shadow shadow-uidmap sudo vim iptables fuse \
 ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.4=/opt/containerd-alt-14/bin,containerd-1.5=/opt/containerd-alt-15/bin"
 ENV BUILDKIT_INTEGRATION_SNAPSHOTTER=stargz
 ENV CGO_ENABLED=0
-COPY --from=stargz-snapshotter /out/* /usr/bin/
-COPY --from=rootlesskit /rootlesskit /usr/bin/
-COPY --from=containerd-alt-14 /out/containerd* /opt/containerd-alt-14/bin/
-COPY --from=containerd-alt-15 /out/containerd* /opt/containerd-alt-15/bin/
-COPY --from=registry /bin/registry /usr/bin
-COPY --from=runc /usr/bin/runc /usr/bin
-COPY --from=containerd /out/containerd* /usr/bin/
-COPY --from=cni-plugins /opt/cni/bin/bridge /opt/cni/bin/host-local /opt/cni/bin/loopback /opt/cni/bin/
-COPY hack/fixtures/cni.json /etc/buildkit/cni.json
-COPY --from=binaries / /usr/bin/
+COPY --link --from=stargz-snapshotter /out/* /usr/bin/
+COPY --link --from=rootlesskit /rootlesskit /usr/bin/
+COPY --link --from=containerd-alt-14 /out/containerd* /opt/containerd-alt-14/bin/
+COPY --link --from=containerd-alt-15 /out/containerd* /opt/containerd-alt-15/bin/
+COPY --link --from=registry /bin/registry /usr/bin/
+COPY --link --from=runc /usr/bin/runc /usr/bin/
+COPY --link --from=containerd /out/containerd* /usr/bin/
+COPY --link --from=cni-plugins /opt/cni/bin/bridge /opt/cni/bin/host-local /opt/cni/bin/loopback /opt/cni/bin/
+COPY --link hack/fixtures/cni.json /etc/buildkit/cni.json
+COPY --link --from=binaries / /usr/bin/
 
 FROM integration-tests-base AS integration-tests
 COPY . .
@@ -262,9 +262,9 @@ RUN adduser -D -u 1000 user \
   && mkdir -p /run/user/1000 /home/user/.local/tmp /home/user/.local/share/buildkit \
   && chown -R user /run/user/1000 /home/user \
   && echo user:100000:65536 | tee /etc/subuid | tee /etc/subgid
-COPY --from=rootlesskit /rootlesskit /usr/bin/
-COPY --from=binaries / /usr/bin/
-COPY examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
+COPY --link --from=rootlesskit /rootlesskit /usr/bin/
+COPY --link --from=binaries / /usr/bin/
+COPY --link examples/buildctl-daemonless/buildctl-daemonless.sh /usr/bin/
 # Kubernetes runAsNonRoot requires USER to be numeric
 USER 1000:1000
 ENV HOME /home/user
