@@ -73,6 +73,7 @@ type FileSystem interface {
 // SnapshotterConfig is used to configure the remote snapshotter instance
 type SnapshotterConfig struct {
 	asyncRemove bool
+	noRestore   bool
 }
 
 // Opt is an option to configure the remote snapshotter
@@ -87,6 +88,11 @@ func AsynchronousRemove(config *SnapshotterConfig) error {
 	return nil
 }
 
+func NoRestore(config *SnapshotterConfig) error {
+	config.noRestore = true
+	return nil
+}
+
 type snapshotter struct {
 	root        string
 	ms          *storage.MetaStore
@@ -95,6 +101,7 @@ type snapshotter struct {
 	// fs is a filesystem that this snapshotter recognizes.
 	fs        FileSystem
 	userxattr bool // whether to enable "userxattr" mount option
+	noRestore bool
 }
 
 // NewSnapshotter returns a Snapshotter which can use unpacked remote layers
@@ -143,6 +150,7 @@ func NewSnapshotter(ctx context.Context, root string, targetFs FileSystem, opts 
 		asyncRemove: config.asyncRemove,
 		fs:          targetFs,
 		userxattr:   userxattr,
+		noRestore:   config.noRestore,
 	}
 
 	if err := o.restoreRemoteSnapshot(ctx); err != nil {
@@ -717,6 +725,10 @@ func (o *snapshotter) restoreRemoteSnapshot(ctx context.Context) error {
 				return fmt.Errorf("failed to unmount %s: %w", m.Mountpoint, err)
 			}
 		}
+	}
+
+	if o.noRestore {
+		return nil
 	}
 
 	var task []snapshots.Info

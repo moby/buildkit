@@ -13,8 +13,8 @@ require (
 	github.com/containerd/fuse-overlayfs-snapshotter v1.0.2
 	github.com/containerd/go-cni v1.1.3
 	github.com/containerd/go-runc v1.0.0
-	github.com/containerd/stargz-snapshotter v0.11.1
-	github.com/containerd/stargz-snapshotter/estargz v0.11.1
+	github.com/containerd/stargz-snapshotter v0.11.2-0.20220223051521-b1ce4c8d8294
+	github.com/containerd/stargz-snapshotter/estargz v0.11.2-0.20220223051521-b1ce4c8d8294
 	github.com/containerd/typeurl v1.0.2
 	github.com/coreos/go-systemd/v22 v22.3.2
 	github.com/docker/cli v20.10.12+incompatible

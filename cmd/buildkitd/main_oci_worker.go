@@ -402,7 +402,7 @@ func snapshotterFactory(commonRoot string, cfg config.OCIConfig, sm *session.Man
 			}
 			return remotesn.NewSnapshotter(context.Background(),
 				filepath.Join(root, "snapshotter"),
-				fs, remotesn.AsynchronousRemove)
+				fs, remotesn.AsynchronousRemove, remotesn.NoRestore)
 		}
 	default:
 		return snFactory, errors.Errorf("unknown snapshotter name: %q", name)
