@@ -308,6 +308,10 @@ func (cr *cacheRecord) viewLeaseID() string {
 	return cr.ID() + "-view"
 }
 
+func (cr *cacheRecord) compressionVariantsLeaseID() string {
+	return cr.ID() + "-variants"
+}
+
 func (cr *cacheRecord) viewSnapshotID() string {
 	return cr.getSnapshotID() + "-view"
 }
@@ -437,6 +441,11 @@ func (cr *cacheRecord) remove(ctx context.Context, removeSnapshot bool) error {
 			ID: cr.ID(),
 		}); err != nil && !errdefs.IsNotFound(err) {
 			return errors.Wrapf(err, "failed to delete lease for %s", cr.ID())
+		}
+		if err := cr.cm.LeaseManager.Delete(ctx, leases.Lease{
+			ID: cr.compressionVariantsLeaseID(),
+		}); err != nil && !errdefs.IsNotFound(err) {
+			return errors.Wrapf(err, "failed to delete compression variant lease for %s", cr.ID())
 		}
 	}
 	if err := cr.cm.MetadataStore.Clear(cr.ID()); err != nil {
@@ -699,6 +708,19 @@ const (
 // this ref. This doesn't record the blob to the cache record (i.e. the passed blob can't
 // be acquired through getBlob). Use setBlob for that purpose.
 func (sr *immutableRef) linkBlob(ctx context.Context, desc ocispecs.Descriptor) error {
+	if _, err := sr.cm.LeaseManager.Create(ctx, func(l *leases.Lease) error {
+		l.ID = sr.compressionVariantsLeaseID()
+		// do not make it flat lease to allow linking blobs using gc label
+		return nil
+	}); err != nil && !errdefs.IsAlreadyExists(err) {
+		return err
+	}
+	if err := sr.cm.LeaseManager.AddResource(ctx, leases.Lease{ID: sr.compressionVariantsLeaseID()}, leases.Resource{
+		ID:   desc.Digest.String(),
+		Type: "content",
+	}); err != nil {
+		return err
+	}
 	cs := sr.cm.ContentStore
 	blobDigest := sr.getBlob()
 	info, err := cs.Info(ctx, blobDigest)

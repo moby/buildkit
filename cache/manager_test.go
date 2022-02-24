@@ -1266,10 +1266,6 @@ func TestSharingCompressionVariant(t *testing.T) {
 	require.NoError(t, err)
 	defer cleanup()
 
-	ctx, done, err := leaseutil.WithLease(ctx, co.lm, leaseutil.MakeTemporary)
-	require.NoError(t, err)
-	defer done(context.TODO())
-
 	allCompressions := []compression.Type{compression.Uncompressed, compression.Gzip, compression.Zstd, compression.EStargz}
 
 	do := func(test func(testCaseSharingCompressionVariant)) {
@@ -1382,7 +1378,7 @@ func testSharingCompressionVariant(ctx context.Context, t *testing.T, co *cmOut,
 		require.NoError(t, err)
 		defer aRef.Release(ctx)
 		var bDesc ocispecs.Descriptor
-		for _, compressionType := range testCase.aVariants {
+		for _, compressionType := range append([]compression.Type{testCase.a}, testCase.aVariants...) {
 			remotes, err := aRef.GetRemotes(ctx, true, config.RefConfig{Compression: compression.New(compressionType).SetForce(true)}, false, nil)
 			require.NoError(t, err)
 			require.Equal(t, 1, len(remotes))
@@ -1395,7 +1391,7 @@ func testSharingCompressionVariant(ctx context.Context, t *testing.T, co *cmOut,
 		bRef, err := cm.GetByBlob(ctx, bDesc, nil, descHandlers)
 		require.NoError(t, err)
 		defer bRef.Release(ctx)
-		for _, compressionType := range testCase.bVariants {
+		for _, compressionType := range append([]compression.Type{testCase.b}, testCase.bVariants...) {
 			remotes, err := bRef.GetRemotes(ctx, true, config.RefConfig{Compression: compression.New(compressionType).SetForce(true)}, false, nil)
 			require.NoError(t, err)
 			require.Equal(t, 1, len(remotes))
