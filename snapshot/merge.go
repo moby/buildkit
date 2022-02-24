@@ -19,7 +19,6 @@ import (
 var hardlinkMergeSnapshotters = map[string]struct{}{
 	"native":    {},
 	"overlayfs": {},
-	"stargz":    {},
 }
 
 // overlayBasedSnapshotters are the names of snapshotter that use overlay mounts, which
@@ -84,7 +83,7 @@ func NewMergeSnapshotter(ctx context.Context, sn Snapshotter, lm leases.Manager)
 			tryCrossSnapshotLink = false
 			skipBaseLayers = false
 		} else {
-			tryCrossSnapshotLink = userxattr
+			tryCrossSnapshotLink = tryCrossSnapshotLink && userxattr
 			// Disable skipping base layers when in pre-5.11 rootless mode. Skipping the base layers
 			// necessitates the ability to set opaque xattrs sometimes, which only works in 5.11+
 			// kernels that support userxattr.
