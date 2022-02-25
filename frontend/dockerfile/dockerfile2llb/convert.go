@@ -1072,11 +1072,20 @@ func dispatchCopyFileOp(d *dispatchState, cfg copyConfig) error {
 	}
 
 	if cfg.opt.llbCaps.Supports(pb.CapMergeOp) == nil && cfg.link && cfg.chmod == "" {
+		pgID := identity.NewID()
 		d.cmdIndex-- // prefixCommand increases it
-		fileOpt = append(fileOpt, llb.ProgressGroup(identity.NewID(), prefixCommand(d, name, d.prefixPlatform, &platform, env)))
+		pgName := prefixCommand(d, name, d.prefixPlatform, &platform, env)
+
+		var copyOpts []llb.ConstraintsOpt
+		copy(copyOpts, fileOpt)
+		copyOpts = append(copyOpts, llb.ProgressGroup(pgID, pgName, true))
+
+		var mergeOpts []llb.ConstraintsOpt
+		copy(mergeOpts, fileOpt)
 		d.cmdIndex--
-		mergeOpt := append(fileOpt, llb.WithCustomName(prefixCommand(d, "LINK "+name, d.prefixPlatform, &platform, env)))
-		d.state = d.state.WithOutput(llb.Merge([]llb.State{d.state, llb.Scratch().File(a, fileOpt...)}, mergeOpt...).Output())
+		mergeOpts = append(mergeOpts, llb.ProgressGroup(pgID, pgName, false), llb.WithCustomName(prefixCommand(d, "LINK "+name, d.prefixPlatform, &platform, env)))
+
+		d.state = d.state.WithOutput(llb.Merge([]llb.State{d.state, llb.Scratch().File(a, copyOpts...)}, mergeOpts...).Output())
 	} else {
 		d.state = d.state.File(a, fileOpt...)
 	}

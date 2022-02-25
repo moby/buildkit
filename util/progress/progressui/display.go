@@ -157,6 +157,10 @@ type vertex struct {
 	// that updates for the same interval overwrite their previous updates.
 	intervals       map[int64]interval
 	mostRecentStart *time.Time
+
+	// whether the vertex should be hidden due to being in a progress group
+	// that doesn't have any non-weak members that have started
+	hidden bool
 }
 
 func (v *vertex) update(c int) {
@@ -185,10 +189,11 @@ type vertexGroup struct {
 	subVtxs map[digest.Digest]client.Vertex
 }
 
-func (vg *vertexGroup) refresh() (changed, newlyStarted bool) {
+func (vg *vertexGroup) refresh() (changed, newlyStarted, newlyRevealed bool) {
 	newVtx := *vg.Vertex
 	newVtx.Cached = true
 	alreadyStarted := vg.isStarted()
+	wasHidden := vg.hidden
 	for _, subVtx := range vg.subVtxs {
 		if subVtx.Started != nil {
 			newInterval := interval{
@@ -206,6 +211,10 @@ func (vg *vertexGroup) refresh() (changed, newlyStarted bool) {
 			if vg.mostRecentStart == nil || subVtx.Started.After(*vg.mostRecentStart) {
 				vg.mostRecentStart = subVtx.Started
 			}
+
+			if !subVtx.ProgressGroup.Weak {
+				vg.hidden = false
+			}
 		}
 
 		// Group is considered cached iff all subvtxs are cached
@@ -214,6 +223,8 @@ func (vg *vertexGroup) refresh() (changed, newlyStarted bool) {
 		// Group error is set to the first error found in subvtxs, if any
 		if newVtx.Error == "" {
 			newVtx.Error = subVtx.Error
+		} else {
+			vg.hidden = false
 		}
 	}
 
@@ -225,7 +236,12 @@ func (vg *vertexGroup) refresh() (changed, newlyStarted bool) {
 	}
 	vg.Vertex = &newVtx
 
-	return changed, newlyStarted
+	if !vg.hidden && wasHidden {
+		changed = true
+		newlyRevealed = true
+	}
+
+	return changed, newlyStarted, newlyRevealed
 }
 
 type interval struct {
@@ -385,7 +401,8 @@ func (t *trace) triggerVertexEvent(v *client.Vertex) {
 }
 
 func (t *trace) update(s *client.SolveStatus, termWidth int) {
-	groups := make(map[string]struct{})
+	seenGroups := make(map[string]struct{})
+	var groups []string
 	for _, v := range s.Vertexes {
 		if t.startTime == nil {
 			t.startTime = v.Started
@@ -404,6 +421,7 @@ func (t *trace) update(s *client.SolveStatus, termWidth int) {
 						statusUpdates: make(map[string]struct{}),
 						index:         t.nextIndex,
 						intervals:     make(map[int64]interval),
+						hidden:        true,
 					},
 					subVtxs: make(map[digest.Digest]client.Vertex),
 				}
@@ -413,7 +431,10 @@ func (t *trace) update(s *client.SolveStatus, termWidth int) {
 				t.groups[v.ProgressGroup.Id] = group
 				t.byDigest[group.Digest] = group.vertex
 			}
-			groups[v.ProgressGroup.Id] = struct{}{}
+			if _, ok := seenGroups[v.ProgressGroup.Id]; !ok {
+				groups = append(groups, v.ProgressGroup.Id)
+				seenGroups[v.ProgressGroup.Id] = struct{}{}
+			}
 			group.subVtxs[v.Digest] = *v
 			t.byDigest[v.Digest] = group.vertex
 			continue
@@ -453,18 +474,23 @@ func (t *trace) update(s *client.SolveStatus, termWidth int) {
 		}
 		t.byDigest[v.Digest].jobCached = false
 	}
-	for groupID := range groups {
+	for _, groupID := range groups {
 		group := t.groups[groupID]
-		changed, newlyStarted := group.refresh()
-		if changed {
-			group.update(1)
-			t.updates[group.Digest] = struct{}{}
-		}
+		changed, newlyStarted, newlyRevealed := group.refresh()
 		if newlyStarted {
 			if t.localTimeDiff == 0 {
 				t.localTimeDiff = time.Since(*group.mostRecentStart)
 			}
+		}
+		if group.hidden {
+			continue
+		}
+		if newlyRevealed {
 			t.vertexes = append(t.vertexes, group.vertex)
+		}
+		if changed {
+			group.update(1)
+			t.updates[group.Digest] = struct{}{}
 		}
 		group.jobCached = false
 	}
@@ -564,7 +590,7 @@ func (t *trace) displayInfo() (d displayInfo) {
 	}
 	d.countTotal = len(t.byDigest)
 	for _, v := range t.byDigest {
-		if v.ProgressGroup != nil {
+		if v.ProgressGroup != nil || v.hidden {
 			// don't count vtxs in a group, they are merged into a single vtx
 			d.countTotal--
 			continue
@@ -703,7 +729,7 @@ func setupTerminals(jobs []*job, height int, all bool) []*job {
 		if j.vertex != nil && j.vertex.termBytes > 0 && !j.isCompleted {
 			candidates = append(candidates, j)
 		}
-		if j.isCompleted {
+		if !j.isCompleted {
 			numInUse++
 		}
 	}
