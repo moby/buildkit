@@ -2654,11 +2654,23 @@ func testPullZstdImage(t *testing.T, sb integration.Sandbox) {
 					"name":        target,
 					"push":        "true",
 					"compression": "zstd",
+
+					// containerd applier supports only zstd with oci-mediatype.
+					"oci-mediatypes": "true",
 				},
 			},
 		},
 	}, nil)
 	require.NoError(t, err)
+
+	if sb.Name() == "containerd-1.4" {
+		// containerd 1.4 doesn't support zstd compression
+		return
+	}
+	err = c.Prune(sb.Context(), nil, PruneAll)
+	require.NoError(t, err)
+
+	checkAllRemoved(t, c, sb)
 
 	st = llb.Scratch().File(llb.Copy(llb.Image(target), "/data", "/zdata"))
 
