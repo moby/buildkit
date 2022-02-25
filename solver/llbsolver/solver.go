@@ -16,6 +16,7 @@ import (
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/frontend/gateway"
+	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/util/buildinfo"
@@ -431,37 +432,32 @@ func inBuilderContext(ctx context.Context, b solver.Builder, name, id string, f 
 	}
 	return b.InContext(ctx, func(ctx context.Context, g session.Group) error {
 		pw, _, ctx := progress.NewFromContext(ctx, progress.WithMetadata("vertex", v.Digest))
-		notifyStarted(ctx, &v, false)
+		notifyCompleted := notifyStarted(ctx, &v, false)
 		defer pw.Close()
 		err := f(ctx, g)
-		notifyCompleted(ctx, &v, err, false)
+		notifyCompleted(err, false)
 		return err
 	})
 }
 
-func notifyStarted(ctx context.Context, v *client.Vertex, cached bool) {
+func notifyStarted(ctx context.Context, v *client.Vertex, cached bool) func(err error, cached bool) {
 	pw, _, _ := progress.NewFromContext(ctx)
-	defer pw.Close()
-	now := time.Now()
-	v.Started = &now
+	start := time.Now()
+	v.Started = &start
 	v.Completed = nil
 	v.Cached = cached
-	pw.Write(v.Digest.String(), *v)
-}
-
-func notifyCompleted(ctx context.Context, v *client.Vertex, err error, cached bool) {
-	pw, _, _ := progress.NewFromContext(ctx)
-	defer pw.Close()
-	now := time.Now()
-	if v.Started == nil {
-		v.Started = &now
+	id := identity.NewID()
+	pw.Write(id, *v)
+	return func(err error, cached bool) {
+		defer pw.Close()
+		stop := time.Now()
+		v.Completed = &stop
+		v.Cached = cached
+		if err != nil {
+			v.Error = err.Error()
+		}
+		pw.Write(id, *v)
 	}
-	v.Completed = &now
-	v.Cached = cached
-	if err != nil {
-		v.Error = err.Error()
-	}
-	pw.Write(v.Digest.String(), *v)
 }
 
 func supportedEntitlements(ents []string) []entitlements.Entitlement {

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/progress"
 	digest "github.com/opencontainers/go-digest"
@@ -16,6 +17,7 @@ type Controller struct {
 	started *time.Time
 	writer  progress.Writer
 	mu      sync.Mutex
+	id      string
 
 	Digest        digest.Digest
 	Name          string
@@ -34,10 +36,11 @@ func (c *Controller) Start(ctx context.Context) (context.Context, func(error)) {
 			now := time.Now()
 			c.started = &now
 			c.writer, _, _ = c.WriterFactory(ctx)
+			c.id = identity.NewID()
 		}
 
 		if c.Digest != "" {
-			c.writer.Write(c.Digest.String(), client.Vertex{
+			c.writer.Write(c.id, client.Vertex{
 				Digest:        c.Digest,
 				Name:          c.Name,
 				Started:       c.started,
@@ -56,7 +59,7 @@ func (c *Controller) Start(ctx context.Context) (context.Context, func(error)) {
 				errString = err.Error()
 			}
 			if c.Digest != "" {
-				c.writer.Write(c.Digest.String(), client.Vertex{
+				c.writer.Write(c.id, client.Vertex{
 					Digest:        c.Digest,
 					Name:          c.Name,
 					Started:       c.started,
@@ -67,6 +70,7 @@ func (c *Controller) Start(ctx context.Context) (context.Context, func(error)) {
 			}
 			c.writer.Close()
 			c.started = nil
+			c.id = ""
 		}
 	}
 }
