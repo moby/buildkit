@@ -476,15 +476,10 @@ func normalizeLayersAndHistory(ctx context.Context, remote *solver.Remote, histo
 	var layerIndex int
 	for i, h := range history {
 		if !h.EmptyLayer {
-			if remote.Descriptors[layerIndex].Digest == exptypes.EmptyGZLayer {
-				h.EmptyLayer = true
-				remote.Descriptors = append(remote.Descriptors[:layerIndex], remote.Descriptors[layerIndex+1:]...)
-			} else {
-				if h.Created == nil {
-					h.Created = refMeta[layerIndex].createdAt
-				}
-				layerIndex++
+			if h.Created == nil {
+				h.Created = refMeta[layerIndex].createdAt
 			}
+			layerIndex++
 		}
 		history[i] = h
 	}
