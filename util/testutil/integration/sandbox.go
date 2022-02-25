@@ -51,6 +51,11 @@ type sandbox struct {
 	cleanup *multiCloser
 	mv      matrixValue
 	ctx     context.Context
+	name    string
+}
+
+func (sb *sandbox) Name() string {
+	return sb.name
 }
 
 func (sb *sandbox) Context() context.Context {
@@ -135,6 +140,7 @@ func newSandbox(ctx context.Context, w Worker, mirror string, mv matrixValue) (s
 		cleanup: deferF,
 		mv:      mv,
 		ctx:     ctx,
+		name:    w.Name(),
 	}, cl, nil
 }
 

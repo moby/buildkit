@@ -51,6 +51,7 @@ type Sandbox interface {
 	PrintLogs(*testing.T)
 	NewRegistry() (string, error)
 	Value(string) interface{} // chosen matrix value
+	Name() string
 }
 
 // BackendConfig is used to configure backends created by a worker.
