@@ -349,25 +349,6 @@ func GetMetadata(metadata map[string][]byte, key string, reqFrontend string, req
 	return dtbi, nil
 }
 
-// FromImageConfig returns build info from image config.
-func FromImageConfig(dt []byte) (*binfotypes.BuildInfo, error) {
-	if len(dt) == 0 {
-		return nil, nil
-	}
-	var config binfotypes.ImageConfig
-	if err := json.Unmarshal(dt, &config); err != nil {
-		return nil, errors.Wrap(err, "failed to unmarshal image config")
-	}
-	if len(config.BuildInfo) == 0 {
-		return nil, nil
-	}
-	bi, err := Decode(config.BuildInfo)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to decode build info from image config")
-	}
-	return &bi, nil
-}
-
 func reduceMapString(m1 map[string]string, m2 map[string]*string) map[string]string {
 	if m1 == nil && m2 == nil {
 		return nil
