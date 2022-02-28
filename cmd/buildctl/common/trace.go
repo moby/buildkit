@@ -44,7 +44,7 @@ func AttachAppContext(app *cli.App) error {
 	}
 
 	app.ExitErrHandler = func(clicontext *cli.Context, err error) {
-		if span != nil {
+		if span != nil && err != nil {
 			span.SetStatus(codes.Error, err.Error())
 		}
 		cli.HandleExitCoder(err)
