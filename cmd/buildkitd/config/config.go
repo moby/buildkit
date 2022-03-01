@@ -70,6 +70,7 @@ type OCIConfig struct {
 	// For use in storing the OCI worker binary name that will replace buildkit-runc
 	Binary               string `toml:"binary"`
 	ProxySnapshotterPath string `toml:"proxySnapshotterPath"`
+	DefaultCgroupParent  string `toml:"defaultCgroupParent"`
 
 	// StargzSnapshotterConfig is configuration for stargz snapshotter.
 	// We use a generic map[string]interface{} in order to remove the dependency
