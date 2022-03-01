@@ -75,6 +75,7 @@ func (p *textMux) printVtx(t *trace, dgst digest.Digest) {
 	}
 	v.events = v.events[:0]
 
+	isOpenStatus := false // remote cache loading can currently produce status updates without active vertex
 	for _, s := range v.statuses {
 		if _, ok := v.statusUpdates[s.ID]; ok {
 			doPrint := true
@@ -118,6 +119,8 @@ func (p *textMux) printVtx(t *trace, dgst digest.Digest) {
 			}
 			if s.Completed != nil {
 				tm += " done"
+			} else {
+				isOpenStatus = true
 			}
 			fmt.Fprintf(p.w, "#%d %s%s%s\n", v.index, s.ID, bytes, tm)
 		}
@@ -157,7 +160,7 @@ func (p *textMux) printVtx(t *trace, dgst digest.Digest) {
 	}
 
 	p.current = dgst
-	if v.Completed != nil {
+	if v.Completed != nil && !isOpenStatus {
 		p.current = ""
 		v.count = 0
 
