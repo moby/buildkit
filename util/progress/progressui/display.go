@@ -119,7 +119,6 @@ type trace struct {
 	localTimeDiff time.Duration
 	vertexes      []*vertex
 	byDigest      map[digest.Digest]*vertex
-	nextIndex     int
 	updates       map[digest.Digest]struct{}
 	modeConsole   bool
 	groups        map[string]*vertexGroup // group id -> group
@@ -410,7 +409,6 @@ func (t *trace) update(s *client.SolveStatus, termWidth int) {
 		if v.ProgressGroup != nil {
 			group, ok := t.groups[v.ProgressGroup.Id]
 			if !ok {
-				t.nextIndex++
 				group = &vertexGroup{
 					vertex: &vertex{
 						Vertex: &client.Vertex{
@@ -419,7 +417,6 @@ func (t *trace) update(s *client.SolveStatus, termWidth int) {
 						},
 						byID:          make(map[string]*status),
 						statusUpdates: make(map[string]struct{}),
-						index:         t.nextIndex,
 						intervals:     make(map[int64]interval),
 						hidden:        true,
 					},
@@ -441,11 +438,9 @@ func (t *trace) update(s *client.SolveStatus, termWidth int) {
 		}
 		prev, ok := t.byDigest[v.Digest]
 		if !ok {
-			t.nextIndex++
 			t.byDigest[v.Digest] = &vertex{
 				byID:          make(map[string]*status),
 				statusUpdates: make(map[string]struct{}),
-				index:         t.nextIndex,
 				intervals:     make(map[int64]interval),
 			}
 			if t.modeConsole {
