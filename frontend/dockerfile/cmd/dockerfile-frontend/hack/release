@@ -87,7 +87,7 @@ case $TYP in
   buildxCmd build $platformFlag $cacheFromFlags $cacheToFlags \
     --build-arg "CHANNEL=$TAG" \
     --build-arg "BUILDTAGS=$buildTags" \
-    --output "type=image,name=$REPO:$pushTag,$pushFlag" \
+    --output "type=image,name=$REPO:$pushTag,buildinfo-attrs=true,$pushFlag" \
     --file "./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile" \
     $currentcontext
   ;;
@@ -104,7 +104,7 @@ case $TYP in
   buildxCmd build $platformFlag $cacheFromFlags $cacheToFlags \
     --build-arg "CHANNEL=$TAG" \
     --build-arg "BUILDTAGS=$buildTags" \
-    --output "type=image,\"name=$publishedNames\",$pushFlag" \
+    --output "type=image,\"name=$publishedNames\",buildinfo-attrs=true,$pushFlag" \
     --file "./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile" \
     $currentcontext
   ;;
@@ -144,7 +144,7 @@ case $TYP in
       buildxCmd build $platformFlag $cacheFromFlags $cacheToFlags \
         --build-arg "CHANNEL=$TAG" \
         --build-arg "BUILDTAGS=$buildTags" \
-        --output "type=image,name=$REPO:$dt-$TAG,$pushFlag" \
+        --output "type=image,name=$REPO:$dt-$TAG,buildinfo-attrs=true,$pushFlag" \
         --file "./frontend/dockerfile/cmd/dockerfile-frontend/Dockerfile" \
         $currentcontext
       rm $tmp/buildid
