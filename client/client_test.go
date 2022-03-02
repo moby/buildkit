@@ -13,7 +13,6 @@ import (
 	"io"
 	"io/ioutil"
 	"net"
-	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -1684,7 +1683,6 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 
 	fi, err := os.Stat(filepath.Join(tmpdir, "bar"))
 	require.NoError(t, err)
-	require.Equal(t, fi.ModTime().Format(http.TimeFormat), modTime.Format(http.TimeFormat))
 	require.Equal(t, int(fi.Mode()&0777), 0741)
 
 	checkAllReleasable(t, c, sb, true)
