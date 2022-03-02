@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/moby/buildkit/util/bklog"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/cio"
@@ -207,8 +209,10 @@ func (w *containerdExecutor) Run(ctx context.Context, id string, root executor.M
 		}
 	}()
 
+	trace.SpanFromContext(ctx).AddEvent("Container created")
 	err = w.runProcess(ctx, task, process.Resize, process.Signal, func() {
 		startedOnce.Do(func() {
+			trace.SpanFromContext(ctx).AddEvent("Container started")
 			if started != nil {
 				close(started)
 			}
@@ -396,6 +400,12 @@ func (w *containerdExecutor) runProcess(ctx context.Context, p containerd.Proces
 			if cancel != nil {
 				cancel()
 			}
+			trace.SpanFromContext(ctx).AddEvent(
+				"Container exited",
+				trace.WithAttributes(
+					attribute.Int("exit.code", int(status.ExitCode())),
+				),
+			)
 			if status.ExitCode() != 0 {
 				exitErr := &gatewayapi.ExitError{
 					ExitCode: status.ExitCode(),
