@@ -27,10 +27,11 @@ type lastStatus struct {
 }
 
 type textMux struct {
-	w        io.Writer
-	current  digest.Digest
-	last     map[string]lastStatus
-	notFirst bool
+	w         io.Writer
+	current   digest.Digest
+	last      map[string]lastStatus
+	notFirst  bool
+	nextIndex int
 }
 
 func (p *textMux) printVtx(t *trace, dgst digest.Digest) {
@@ -41,6 +42,11 @@ func (p *textMux) printVtx(t *trace, dgst digest.Digest) {
 	v, ok := t.byDigest[dgst]
 	if !ok {
 		return
+	}
+
+	if v.index == 0 {
+		p.nextIndex++
+		v.index = p.nextIndex
 	}
 
 	if dgst != p.current {
