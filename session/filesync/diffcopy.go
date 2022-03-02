@@ -102,6 +102,7 @@ func syncTargetDiffCopy(ds grpc.ServerStream, dest string) error {
 	if err := os.MkdirAll(dest, 0700); err != nil {
 		return errors.Wrapf(err, "failed to create synctarget dest dir %s", dest)
 	}
+	modTime := time.Now().UnixNano() // earthly-specific
 	return errors.WithStack(fsutil.Receive(ds.Context(), ds, dest, fsutil.ReceiveOpt{
 		Merge: true,
 		Filter: func() func(string, *fstypes.Stat) bool {
@@ -110,6 +111,7 @@ func syncTargetDiffCopy(ds grpc.ServerStream, dest string) error {
 			return func(p string, st *fstypes.Stat) bool {
 				st.Uid = uint32(uid)
 				st.Gid = uint32(gid)
+				st.ModTime = modTime
 				return true
 			}
 		}(),
