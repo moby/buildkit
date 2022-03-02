@@ -1,4 +1,4 @@
-# syntax = docker/dockerfile:1.3
+# syntax=docker/dockerfile-upstream:master
 
 FROM golang:1.17-alpine AS vendored
 RUN  apk add --no-cache git

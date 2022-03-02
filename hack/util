@@ -59,5 +59,5 @@ if [ "$GITHUB_ACTIONS" = "true" ]; then
   fi
 fi
 if [ -n "$currentref" ]; then
-  currentcontext="--build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 --build-arg BUILDKIT_INLINE_BUILDINFO_ATTRS=1 $currentref"
+  currentcontext="--build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 $currentref"
 fi
