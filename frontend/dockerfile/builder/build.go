@@ -819,6 +819,10 @@ func contextByNameFunc(c client.Client, p *ocispecs.Platform) func(context.Conte
 		}
 		name = strings.TrimSuffix(reference.FamiliarString(named), ":latest")
 
+		if p == nil {
+			pp := platforms.Normalize(platforms.DefaultSpec())
+			p = &pp
+		}
 		if p != nil {
 			name := name + "::" + platforms.Format(platforms.Normalize(*p))
 			st, img, err := contextByName(ctx, c, name, p)
