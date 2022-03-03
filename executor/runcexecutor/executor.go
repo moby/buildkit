@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/moby/buildkit/util/bklog"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/containerd/containerd/mount"
 	containerdoci "github.com/containerd/containerd/oci"
@@ -316,8 +318,10 @@ func (w *runcExecutor) Run(ctx context.Context, id string, root executor.Mount, 
 
 	bklog.G(ctx).Debugf("> creating %s %v", id, meta.Args)
 
+	trace.SpanFromContext(ctx).AddEvent("Container created")
 	err = w.run(runCtx, id, bundle, process, func() {
 		startedOnce.Do(func() {
+			trace.SpanFromContext(ctx).AddEvent("Container started")
 			if started != nil {
 				close(started)
 			}
@@ -339,6 +343,12 @@ func exitError(ctx context.Context, err error) error {
 				ExitCode: uint32(runcExitError.Status),
 			}
 		}
+		trace.SpanFromContext(ctx).AddEvent(
+			"Container exited",
+			trace.WithAttributes(
+				attribute.Int("exit.code", int(exitErr.ExitCode)),
+			),
+		)
 		select {
 		case <-ctx.Done():
 			exitErr.Err = errors.Wrapf(ctx.Err(), exitErr.Error())
@@ -348,6 +358,10 @@ func exitError(ctx context.Context, err error) error {
 		}
 	}
 
+	trace.SpanFromContext(ctx).AddEvent(
+		"Container exited",
+		trace.WithAttributes(attribute.Int("exit.code", 0)),
+	)
 	return nil
 }
 
