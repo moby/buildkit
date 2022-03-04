@@ -2412,7 +2412,7 @@ func checkDiskUsage(ctx context.Context, t *testing.T, cm Manager, inuse, unused
 
 func esgzBlobDigest(uncompressedBlobBytes []byte) (blobDigest digest.Digest, err error) {
 	esgzDigester := digest.Canonical.Digester()
-	w := estargz.NewWriter(esgzDigester.Hash())
+	w := estargz.NewWriterLevel(esgzDigester.Hash(), gzip.DefaultCompression)
 	if err := w.AppendTarLossLess(bytes.NewReader(uncompressedBlobBytes)); err != nil {
 		return "", err
 	}

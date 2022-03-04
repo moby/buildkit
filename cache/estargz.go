@@ -44,7 +44,7 @@ func compressEStargz(comp compression.Config) (compressorFunc compressor, finali
 
 				blobInfoW, bInfoCh := calculateBlobInfo()
 				defer blobInfoW.Close()
-				level := gzip.BestCompression
+				level := gzip.DefaultCompression
 				if comp.Level != nil {
 					level = *comp.Level
 				}
