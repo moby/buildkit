@@ -20,6 +20,7 @@ import (
 	"github.com/moby/buildkit/util/leaseutil"
 	"github.com/moby/buildkit/util/network/netproviders"
 	"github.com/moby/buildkit/util/winlayers"
+	"github.com/moby/buildkit/worker"
 	"github.com/moby/buildkit/worker/base"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	bolt "go.etcd.io/bbolt"
@@ -98,7 +99,16 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 	if err != nil {
 		return opt, err
 	}
-	xlabels := base.Labels("oci", snFactory.Name)
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = "unknown"
+	}
+	xlabels := map[string]string{
+		worker.LabelExecutor:    "oci",
+		worker.LabelSnapshotter: snFactory.Name,
+		worker.LabelHostname:    hostname,
+	}
+
 	for k, v := range labels {
 		xlabels[k] = v
 	}

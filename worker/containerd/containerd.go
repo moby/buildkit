@@ -57,7 +57,15 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 		return base.WorkerOpt{}, err
 	}
 
-	xlabels := base.Labels("containerd", snapshotterName)
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = "unknown"
+	}
+	xlabels := map[string]string{
+		worker.LabelExecutor:    "containerd",
+		worker.LabelSnapshotter: snapshotterName,
+		worker.LabelHostname:    hostname,
+	}
 	xlabels[worker.LabelContainerdNamespace] = ns
 	xlabels[worker.LabelContainerdUUID] = serverInfo.UUID
 	for k, v := range labels {

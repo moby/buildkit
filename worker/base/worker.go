@@ -44,7 +44,6 @@ import (
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/progress/controller"
-	"github.com/moby/buildkit/worker"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -450,21 +449,6 @@ func (w *Worker) FromRemote(ctx context.Context, remote *solver.Remote) (ref cac
 		current = ref
 	}
 	return current, nil
-}
-
-// Labels returns default labels
-// utility function. could be moved to the constructor logic?
-func Labels(executor, snapshotter string) map[string]string {
-	hostname, err := os.Hostname()
-	if err != nil {
-		hostname = "unknown"
-	}
-	labels := map[string]string{
-		worker.LabelExecutor:    executor,
-		worker.LabelSnapshotter: snapshotter,
-		worker.LabelHostname:    hostname,
-	}
-	return labels
 }
 
 // ID reads the worker id from the `workerid` file.
