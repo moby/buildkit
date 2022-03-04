@@ -45,6 +45,11 @@ type Exporter interface {
 	// Finalize finalizes and return metadata that are returned to the client
 	// e.g. ExporterResponseManifestDesc
 	Finalize(ctx context.Context) (map[string]string, error)
+	Config() Config
+}
+
+type Config struct {
+	Compression compression.Config
 }
 
 const (
@@ -59,11 +64,18 @@ type contentCacheExporter struct {
 	ingester content.Ingester
 	oci      bool
 	ref      string
+	comp     compression.Config
 }
 
-func NewExporter(ingester content.Ingester, ref string, oci bool) Exporter {
+func NewExporter(ingester content.Ingester, ref string, oci bool, compressionConfig compression.Config) Exporter {
 	cc := v1.NewCacheChains()
-	return &contentCacheExporter{CacheExporterTarget: cc, chains: cc, ingester: ingester, oci: oci, ref: ref}
+	return &contentCacheExporter{CacheExporterTarget: cc, chains: cc, ingester: ingester, oci: oci, ref: ref, comp: compressionConfig}
+}
+
+func (ce *contentCacheExporter) Config() Config {
+	return Config{
+		Compression: ce.comp,
+	}
 }
 
 func (ce *contentCacheExporter) Finalize(ctx context.Context) (map[string]string, error) {

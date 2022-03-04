@@ -10,6 +10,7 @@ import (
 	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/estargz"
 	"github.com/moby/buildkit/util/push"
@@ -32,12 +33,19 @@ func canonicalizeRef(rawRef string) (string, error) {
 }
 
 const (
-	attrRef           = "ref"
-	attrOCIMediatypes = "oci-mediatypes"
+	attrRef              = "ref"
+	attrOCIMediatypes    = "oci-mediatypes"
+	attrLayerCompression = "compression"
+	attrForceCompression = "force-compression"
+	attrCompressionLevel = "compression-level"
 )
 
 func ResolveCacheExporterFunc(sm *session.Manager, hosts docker.RegistryHosts) remotecache.ResolveCacheExporterFunc {
 	return func(ctx context.Context, g session.Group, attrs map[string]string) (remotecache.Exporter, error) {
+		compressionConfig, err := attrsToCompression(attrs)
+		if err != nil {
+			return nil, err
+		}
 		ref, err := canonicalizeRef(attrs[attrRef])
 		if err != nil {
 			return nil, err
@@ -55,7 +63,7 @@ func ResolveCacheExporterFunc(sm *session.Manager, hosts docker.RegistryHosts) r
 		if err != nil {
 			return nil, err
 		}
-		return remotecache.NewExporter(contentutil.FromPusher(pusher), ref, ociMediatypes), nil
+		return remotecache.NewExporter(contentutil.FromPusher(pusher), ref, ociMediatypes, *compressionConfig), nil
 	}
 }
 
@@ -120,4 +128,35 @@ func (dsl *withDistributionSourceLabel) SnapshotLabels(descs []ocispecs.Descript
 		labels[k] = v
 	}
 	return labels
+}
+
+func attrsToCompression(attrs map[string]string) (*compression.Config, error) {
+	compressionType := compression.Default
+	if v, ok := attrs[attrLayerCompression]; ok {
+		if c := compression.Parse(v); c != compression.UnknownCompression {
+			compressionType = c
+		}
+	}
+	compressionConfig := compression.New(compressionType)
+	if v, ok := attrs[attrForceCompression]; ok {
+		var force bool
+		if v == "" {
+			force = true
+		} else {
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return nil, errors.Wrapf(err, "non-bool value %s specified for %s", v, attrForceCompression)
+			}
+			force = b
+		}
+		compressionConfig = compressionConfig.SetForce(force)
+	}
+	if v, ok := attrs[attrCompressionLevel]; ok {
+		ii, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			return nil, errors.Wrapf(err, "non-integer value %s specified for %s", v, attrCompressionLevel)
+		}
+		compressionConfig = compressionConfig.SetLevel(int(ii))
+	}
+	return &compressionConfig, nil
 }

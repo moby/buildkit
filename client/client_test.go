@@ -155,6 +155,12 @@ func TestIntegration(t *testing.T) {
 		testBuildInfoExporter,
 		testBuildInfoInline,
 		testBuildInfoNoExport,
+		testZstdLocalCacheExport,
+		testZstdRegistryCacheImportExport,
+		testZstdLocalCacheImportExport,
+		testUncompressedLocalCacheImportExport,
+		testUncompressedRegistryCacheImportExport,
+		testStargzLazyRegistryCacheImportExport,
 	)
 	tests = append(tests, diffOpTestCases()...)
 	integration.Run(t, tests, mirrors)
@@ -2895,6 +2901,158 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	require.False(t, ok)
 }
 
+func testStargzLazyRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
+	skipDockerd(t, sb)
+	requiresLinux(t)
+
+	cdAddress := sb.ContainerdAddress()
+	if cdAddress == "" || sb.Snapshotter() != "stargz" {
+		t.Skip("test requires containerd worker with stargz snapshotter")
+	}
+
+	client, err := newContainerd(cdAddress)
+	require.NoError(t, err)
+	defer client.Close()
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	var (
+		imageService = client.ImageService()
+		contentStore = client.ContentStore()
+		ctx          = namespaces.WithNamespace(sb.Context(), "buildkit")
+	)
+
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	// Prepare stargz registry cache
+	orgImage := "docker.io/library/alpine:latest"
+	sgzCache := registry + "/stargz/alpinecache:" + identity.NewID()
+	baseDef := llb.Image(orgImage).Run(llb.Args([]string{"/bin/touch", "/foo"}))
+	def, err := baseDef.Marshal(sb.Context())
+	require.NoError(t, err)
+	out := filepath.Join(destDir, "out.tar")
+	outW, err := os.Create(out)
+	require.NoError(t, err)
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:   ExporterOCI,
+				Output: fixedWriteCloser(outW),
+			},
+		},
+		CacheExports: []CacheOptionsEntry{
+			{
+				Type: "registry",
+				Attrs: map[string]string{
+					"ref":               sgzCache,
+					"compression":       "estargz",
+					"oci-mediatypes":    "true",
+					"force-compression": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	// clear all local state out
+	err = c.Prune(sb.Context(), nil, PruneAll)
+	require.NoError(t, err)
+	checkAllRemoved(t, c, sb)
+
+	// stargz layers should be lazy even for executing something on them
+	def, err = baseDef.
+		Run(llb.Args([]string{"/bin/touch", "/bar"})).
+		Marshal(sb.Context())
+	require.NoError(t, err)
+	target := registry + "/buildkit/testlazyimage:" + identity.NewID()
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+		CacheImports: []CacheOptionsEntry{
+			{
+				Type: "registry",
+				Attrs: map[string]string{
+					"ref": sgzCache,
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	img, err := imageService.Get(ctx, target)
+	require.NoError(t, err)
+
+	manifest, err := images.Manifest(ctx, contentStore, img.Target, nil)
+	require.NoError(t, err)
+
+	// Check if image layers are lazy.
+	// The topmost(last) layer created by `Run` isn't lazy so we skip the check for the layer.
+	var sgzLayers []ocispecs.Descriptor
+	for i, layer := range manifest.Layers[:len(manifest.Layers)-1] {
+		_, err = contentStore.Info(ctx, layer.Digest)
+		require.ErrorIs(t, err, ctderrdefs.ErrNotFound, "unexpected error %v on layer %+v (%d)", err, layer, i)
+		sgzLayers = append(sgzLayers, layer)
+	}
+	require.NotEqual(t, 0, len(sgzLayers), "no layer can be used for checking lazypull")
+
+	// The topmost(last) layer created by `Run` shouldn't be lazy
+	_, err = contentStore.Info(ctx, manifest.Layers[len(manifest.Layers)-1].Digest)
+	require.NoError(t, err)
+
+	// clear all local state out
+	err = imageService.Delete(ctx, img.Name, images.SynchronousDelete())
+	require.NoError(t, err)
+	checkAllReleasable(t, c, sb, true)
+
+	// stargz layers should be exportable
+	out = filepath.Join(destDir, "out2.tar")
+	outW, err = os.Create(out)
+	require.NoError(t, err)
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:   ExporterOCI,
+				Output: fixedWriteCloser(outW),
+			},
+		},
+		CacheImports: []CacheOptionsEntry{
+			{
+				Type: "registry",
+				Attrs: map[string]string{
+					"ref": sgzCache,
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	// Check if image layers are un-lazied
+	for _, layer := range sgzLayers {
+		_, err = contentStore.Info(ctx, layer.Digest)
+		require.NoError(t, err)
+	}
+
+	err = c.Prune(sb.Context(), nil, PruneAll)
+	require.NoError(t, err)
+	checkAllRemoved(t, c, sb)
+}
+
 func testStargzLazyInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	skipDockerd(t, sb)
 	requiresLinux(t)
@@ -3309,6 +3467,173 @@ func testLazyImagePush(t *testing.T, sb integration.Sandbox) {
 
 	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
 	require.NoError(t, err)
+}
+
+func testZstdLocalCacheExport(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	busybox := llb.Image("busybox:latest")
+	cmd := `sh -e -c "echo -n zstd > data"`
+
+	st := llb.Scratch()
+	st = busybox.Run(llb.Shlex(cmd), llb.Dir("/wd")).AddMount("/wd", st)
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	destOutDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destOutDir)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type:      ExporterLocal,
+				OutputDir: destOutDir,
+			},
+		},
+		// compression option should work even with inline cache exports
+		CacheExports: []CacheOptionsEntry{
+			{
+				Type: "local",
+				Attrs: map[string]string{
+					"dest":        destDir,
+					"compression": "zstd",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	var index ocispecs.Index
+	dt, err := ioutil.ReadFile(filepath.Join(destDir, "index.json"))
+	require.NoError(t, err)
+	err = json.Unmarshal(dt, &index)
+	require.NoError(t, err)
+
+	var layerIndex ocispecs.Index
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "blobs/sha256/"+index.Manifests[0].Digest.Hex()))
+	require.NoError(t, err)
+	err = json.Unmarshal(dt, &layerIndex)
+	require.NoError(t, err)
+
+	lastLayer := layerIndex.Manifests[len(layerIndex.Manifests)-2]
+	require.Equal(t, ocispecs.MediaTypeImageLayer+"+zstd", lastLayer.MediaType)
+
+	zstdLayerDigest := lastLayer.Digest.Hex()
+	dt, err = ioutil.ReadFile(filepath.Join(destDir, "blobs/sha256/"+zstdLayerDigest))
+	require.NoError(t, err)
+	require.Equal(t, dt[:4], []byte{0x28, 0xb5, 0x2f, 0xfd})
+}
+
+func testUncompressedLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
+	skipDockerd(t, sb)
+	dir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+	im := CacheOptionsEntry{
+		Type: "local",
+		Attrs: map[string]string{
+			"src": dir,
+		},
+	}
+	ex := CacheOptionsEntry{
+		Type: "local",
+		Attrs: map[string]string{
+			"dest":              dir,
+			"compression":       "uncompressed",
+			"force-compression": "true",
+		},
+	}
+	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{im}, []CacheOptionsEntry{ex})
+}
+
+func testUncompressedRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
+	skipDockerd(t, sb)
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+	target := registry + "/buildkit/testexport:latest"
+	im := CacheOptionsEntry{
+		Type: "registry",
+		Attrs: map[string]string{
+			"ref": target,
+		},
+	}
+	ex := CacheOptionsEntry{
+		Type: "registry",
+		Attrs: map[string]string{
+			"ref":               target,
+			"compression":       "uncompressed",
+			"force-compression": "true",
+		},
+	}
+	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{im}, []CacheOptionsEntry{ex})
+}
+
+func testZstdLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
+	skipDockerd(t, sb)
+	if sb.Name() == "containerd-1.4" {
+		// containerd 1.4 doesn't support zstd compression
+		return
+	}
+	dir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+	im := CacheOptionsEntry{
+		Type: "local",
+		Attrs: map[string]string{
+			"src": dir,
+		},
+	}
+	ex := CacheOptionsEntry{
+		Type: "local",
+		Attrs: map[string]string{
+			"dest":              dir,
+			"compression":       "zstd",
+			"force-compression": "true",
+			"oci-mediatypes":    "true", // containerd applier supports only zstd with oci-mediatype.
+		},
+	}
+	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{im}, []CacheOptionsEntry{ex})
+}
+
+func testZstdRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
+	skipDockerd(t, sb)
+	if sb.Name() == "containerd-1.4" {
+		// containerd 1.4 doesn't support zstd compression
+		return
+	}
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+	target := registry + "/buildkit/testexport:latest"
+	im := CacheOptionsEntry{
+		Type: "registry",
+		Attrs: map[string]string{
+			"ref": target,
+		},
+	}
+	ex := CacheOptionsEntry{
+		Type: "registry",
+		Attrs: map[string]string{
+			"ref":               target,
+			"compression":       "zstd",
+			"force-compression": "true",
+			"oci-mediatypes":    "true", // containerd applier supports only zstd with oci-mediatype.
+		},
+	}
+	testBasicCacheImportExport(t, sb, []CacheOptionsEntry{im}, []CacheOptionsEntry{ex})
 }
 
 func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptionsEntryImport, cacheOptionsEntryExport []CacheOptionsEntry) {

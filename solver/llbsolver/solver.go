@@ -278,11 +278,15 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 				}
 				ctx = withDescHandlerCacheOpts(ctx, workerRef.ImmutableRef)
 
+				// Configure compression
+				compressionConfig := e.Config().Compression
+
 				// all keys have same export chain so exporting others is not needed
 				_, err = r.CacheKeys()[0].Exporter.ExportTo(ctx, e, solver.CacheExportOpt{
-					ResolveRemotes: workerRefResolver(cacheconfig.RefConfig{Compression: compression.New(compression.Default)}, false, g), // TODO: make configurable
+					ResolveRemotes: workerRefResolver(cacheconfig.RefConfig{Compression: compressionConfig}, false, g),
 					Mode:           exp.CacheExportMode,
 					Session:        g,
+					CompressionOpt: &compressionConfig,
 				})
 				return err
 			}); err != nil {
