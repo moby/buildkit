@@ -104,10 +104,11 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		hostname = "unknown"
 	}
 	xlabels := map[string]string{
-		worker.LabelExecutor:    "oci",
-		worker.LabelSnapshotter: snFactory.Name,
-		worker.LabelHostname:    hostname,
-		worker.LabelNetwork:     npResolvedMode,
+		worker.LabelExecutor:       "oci",
+		worker.LabelSnapshotter:    snFactory.Name,
+		worker.LabelHostname:       hostname,
+		worker.LabelNetwork:        npResolvedMode,
+		worker.LabelOCIProcessMode: processMode.String(),
 	}
 	if apparmorProfile != "" {
 		xlabels[worker.LabelApparmorProfile] = apparmorProfile

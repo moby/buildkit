@@ -50,6 +50,7 @@ const (
 	LabelHostname            = labelPrefix + "hostname"
 	LabelNetwork             = labelPrefix + "network" // "cni" or "host"
 	LabelApparmorProfile     = labelPrefix + "apparmor.profile"
+	LabelOCIProcessMode      = labelPrefix + "oci.process-mode"     // OCI worker: process mode ("sandbox", "no-sandbox")
 	LabelContainerdUUID      = labelPrefix + "containerd.uuid"      // containerd worker: containerd UUID
 	LabelContainerdNamespace = labelPrefix + "containerd.namespace" // containerd worker: containerd namespace
 )
