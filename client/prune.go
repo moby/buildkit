@@ -59,10 +59,10 @@ type PruneOption interface {
 }
 
 type PruneInfo struct {
-	Filter       []string
-	All          bool
-	KeepDuration time.Duration
-	KeepBytes    int64
+	Filter       []string      `json:"filter"`
+	All          bool          `json:"all"`
+	KeepDuration time.Duration `json:"keepDuration"`
+	KeepBytes    int64         `json:"keepBytes"`
 }
 
 type pruneOptionFunc func(*PruneInfo)

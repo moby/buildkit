@@ -13,10 +13,10 @@ import (
 
 // WorkerInfo contains information about a worker
 type WorkerInfo struct {
-	ID        string
-	Labels    map[string]string
-	Platforms []ocispecs.Platform
-	GCPolicy  []PruneInfo
+	ID        string              `json:"id"`
+	Labels    map[string]string   `json:"labels"`
+	Platforms []ocispecs.Platform `json:"platforms"`
+	GCPolicy  []PruneInfo         `json:"gcPolicy"`
 }
 
 // ListWorkers lists all active workers
