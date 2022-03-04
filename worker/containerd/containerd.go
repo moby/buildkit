@@ -57,7 +57,24 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 		return base.WorkerOpt{}, err
 	}
 
-	xlabels := base.Labels("containerd", snapshotterName)
+	np, npResolvedMode, err := netproviders.Providers(nopt)
+	if err != nil {
+		return base.WorkerOpt{}, err
+	}
+
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = "unknown"
+	}
+	xlabels := map[string]string{
+		worker.LabelExecutor:    "containerd",
+		worker.LabelSnapshotter: snapshotterName,
+		worker.LabelHostname:    hostname,
+		worker.LabelNetwork:     npResolvedMode,
+	}
+	if apparmorProfile != "" {
+		xlabels[worker.LabelApparmorProfile] = apparmorProfile
+	}
 	xlabels[worker.LabelContainerdNamespace] = ns
 	xlabels[worker.LabelContainerdUUID] = serverInfo.UUID
 	for k, v := range labels {
@@ -93,11 +110,6 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 				Variant:      p.Variant,
 			})
 		}
-	}
-
-	np, err := netproviders.Providers(nopt)
-	if err != nil {
-		return base.WorkerOpt{}, err
 	}
 
 	snap := containerdsnapshot.NewSnapshotter(snapshotterName, client.SnapshotService(snapshotterName), ns, nil)
