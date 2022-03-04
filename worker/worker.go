@@ -48,6 +48,7 @@ const (
 	LabelExecutor            = labelPrefix + "executor"    // "oci" or "containerd"
 	LabelSnapshotter         = labelPrefix + "snapshotter" // containerd snapshotter name ("overlay", "native", ...)
 	LabelHostname            = labelPrefix + "hostname"
+	LabelNetwork             = labelPrefix + "network"              // "cni" or "host"
 	LabelContainerdUUID      = labelPrefix + "containerd.uuid"      // containerd worker: containerd UUID
 	LabelContainerdNamespace = labelPrefix + "containerd.namespace" // containerd worker: containerd namespace
 )

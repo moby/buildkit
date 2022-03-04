@@ -42,7 +42,7 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		return opt, err
 	}
 
-	np, err := netproviders.Providers(nopt)
+	np, npResolvedMode, err := netproviders.Providers(nopt)
 	if err != nil {
 		return opt, err
 	}
@@ -107,6 +107,7 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		worker.LabelExecutor:    "oci",
 		worker.LabelSnapshotter: snFactory.Name,
 		worker.LabelHostname:    hostname,
+		worker.LabelNetwork:     npResolvedMode,
 	}
 
 	for k, v := range labels {

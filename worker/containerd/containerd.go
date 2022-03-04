@@ -57,6 +57,11 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 		return base.WorkerOpt{}, err
 	}
 
+	np, npResolvedMode, err := netproviders.Providers(nopt)
+	if err != nil {
+		return base.WorkerOpt{}, err
+	}
+
 	hostname, err := os.Hostname()
 	if err != nil {
 		hostname = "unknown"
@@ -65,6 +70,7 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 		worker.LabelExecutor:    "containerd",
 		worker.LabelSnapshotter: snapshotterName,
 		worker.LabelHostname:    hostname,
+		worker.LabelNetwork:     npResolvedMode,
 	}
 	xlabels[worker.LabelContainerdNamespace] = ns
 	xlabels[worker.LabelContainerdUUID] = serverInfo.UUID
@@ -101,11 +107,6 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 				Variant:      p.Variant,
 			})
 		}
-	}
-
-	np, err := netproviders.Providers(nopt)
-	if err != nil {
-		return base.WorkerOpt{}, err
 	}
 
 	snap := containerdsnapshot.NewSnapshotter(snapshotterName, client.SnapshotService(snapshotterName), ns, nil)
