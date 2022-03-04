@@ -36,6 +36,9 @@ func parseImportCacheCSV(s string) (client.CacheOptionsEntry, error) {
 	if im.Type == "" {
 		return im, errors.New("--import-cache requires type=<type>")
 	}
+	if im.Type == "gha" {
+		return loadGithubEnv(im)
+	}
 	return im, nil
 }
 
