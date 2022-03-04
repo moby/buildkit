@@ -91,6 +91,7 @@ func main() {
 		diskUsageCommand,
 		pruneCommand,
 		buildCommand,
+		workersCommand,
 		debugCommand,
 		dialStdioCommand,
 	}
