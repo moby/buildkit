@@ -72,6 +72,9 @@ func newContainerd(root string, client *containerd.Client, snapshotterName, ns s
 		worker.LabelHostname:    hostname,
 		worker.LabelNetwork:     npResolvedMode,
 	}
+	if apparmorProfile != "" {
+		xlabels[worker.LabelApparmorProfile] = apparmorProfile
+	}
 	xlabels[worker.LabelContainerdNamespace] = ns
 	xlabels[worker.LabelContainerdUUID] = serverInfo.UUID
 	for k, v := range labels {

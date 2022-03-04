@@ -109,6 +109,9 @@ func NewWorkerOpt(root string, snFactory SnapshotterFactory, rootless bool, proc
 		worker.LabelHostname:    hostname,
 		worker.LabelNetwork:     npResolvedMode,
 	}
+	if apparmorProfile != "" {
+		xlabels[worker.LabelApparmorProfile] = apparmorProfile
+	}
 
 	for k, v := range labels {
 		xlabels[k] = v
