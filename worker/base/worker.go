@@ -392,11 +392,24 @@ func (w *Worker) FromRemote(ctx context.Context, remote *solver.Remote) (ref cac
 		}
 	}
 
+	var pg progress.Controller
+	optGetter := solver.CacheOptGetterOf(ctx)
+	if optGetter != nil {
+		if kv := optGetter(false, cache.ProgressKey{}); kv != nil {
+			if v, ok := kv[cache.ProgressKey{}].(progress.Controller); ok {
+				pg = v
+			}
+		}
+	}
+	if pg == nil {
+		pg = &controller.Controller{
+			WriterFactory: progress.FromContext(ctx),
+		}
+	}
+
 	descHandler := &cache.DescHandler{
 		Provider: func(session.Group) content.Provider { return remote.Provider },
-		Progress: &controller.Controller{
-			WriterFactory: progress.FromContext(ctx),
-		},
+		Progress: pg,
 	}
 	snapshotLabels := func([]ocispecs.Descriptor, int) map[string]string { return nil }
 	if cd, ok := remote.Provider.(interface {
