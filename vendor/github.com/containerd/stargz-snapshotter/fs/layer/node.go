@@ -619,6 +619,9 @@ func (sf *statFile) updateStatUnlocked() ([]byte, error) {
 func entryToAttr(ino uint64, e metadata.Attr, out *fuse.Attr) fusefs.StableAttr {
 	out.Ino = ino
 	out.Size = uint64(e.Size)
+	if e.Mode&os.ModeSymlink != 0 {
+		out.Size = uint64(len(e.LinkName))
+	}
 	out.Blksize = blockSize
 	out.Blocks = out.Size / uint64(out.Blksize)
 	if out.Size%uint64(out.Blksize) > 0 {

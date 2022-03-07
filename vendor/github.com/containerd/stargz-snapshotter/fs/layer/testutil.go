@@ -501,6 +501,15 @@ func testExistence(t *testing.T, factory metadata.Store) {
 				hasExtraMode("test", os.ModeSticky),
 			},
 		},
+		{
+			name: "symlink_size",
+			in: []testutil.TarEntry{
+				testutil.Symlink("test", "target"),
+			},
+			want: []check{
+				hasSize("test", len("target")),
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -594,6 +603,22 @@ func hasFileDigest(filename string, digest string) check {
 		}
 		if ndgst := digestFor(string(res)); ndgst != digest {
 			t.Fatalf("Digest(%q) = %q, want %q", filename, ndgst, digest)
+		}
+	}
+}
+
+func hasSize(name string, size int) check {
+	return func(t *testing.T, root *node) {
+		_, n, err := getDirentAndNode(t, root, name)
+		if err != nil {
+			t.Fatalf("failed to get node %q: %v", name, err)
+		}
+		var ao fuse.AttrOut
+		if errno := n.Operations().(fusefs.NodeGetattrer).Getattr(context.Background(), nil, &ao); errno != 0 {
+			t.Fatalf("failed to get attributes of node %q: %v", name, errno)
+		}
+		if ao.Attr.Size != uint64(size) {
+			t.Fatalf("got size = %d, want %d", ao.Attr.Size, size)
 		}
 	}
 }
