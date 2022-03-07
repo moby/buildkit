@@ -13,8 +13,8 @@ require (
 	github.com/containerd/fuse-overlayfs-snapshotter v1.0.2
 	github.com/containerd/go-cni v1.1.3
 	github.com/containerd/go-runc v1.0.0
-	github.com/containerd/stargz-snapshotter v0.11.2-0.20220223051521-b1ce4c8d8294
-	github.com/containerd/stargz-snapshotter/estargz v0.11.2-0.20220223051521-b1ce4c8d8294
+	github.com/containerd/stargz-snapshotter v0.11.2
+	github.com/containerd/stargz-snapshotter/estargz v0.11.2
 	github.com/containerd/typeurl v1.0.2
 	github.com/coreos/go-systemd/v22 v22.3.2
 	github.com/docker/cli v20.10.12+incompatible
@@ -32,7 +32,7 @@ require (
 	github.com/hashicorp/go-immutable-radix v1.3.1
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/hashicorp/golang-lru v0.5.3
-	github.com/klauspost/compress v1.14.3
+	github.com/klauspost/compress v1.15.0
 	github.com/mitchellh/hashstructure/v2 v2.0.2
 	github.com/moby/locker v1.0.1
 	github.com/moby/sys/mountinfo v0.6.0
