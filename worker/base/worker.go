@@ -229,20 +229,11 @@ func (w *Worker) LoadRef(ctx context.Context, id string, hidden bool) (cache.Imm
 		return nil, nil
 	}
 
-	var pg progress.Controller
-	optGetter := solver.CacheOptGetterOf(ctx)
-	if optGetter != nil {
-		if kv := optGetter(false, cache.ProgressKey{}); kv != nil {
-			if v, ok := kv[cache.ProgressKey{}].(progress.Controller); ok {
-				pg = v
-			}
-		}
-	}
-
+	pg := solver.ProgressControllerFromContext(ctx)
 	ref, err := w.CacheMgr.Get(ctx, id, pg, opts...)
 	var needsRemoteProviders cache.NeedsRemoteProviderError
 	if errors.As(err, &needsRemoteProviders) {
-		if optGetter != nil {
+		if optGetter := solver.CacheOptGetterOf(ctx); optGetter != nil {
 			var keys []interface{}
 			for _, dgst := range needsRemoteProviders {
 				keys = append(keys, cache.DescHandlerKey(dgst))
@@ -391,15 +382,7 @@ func (w *Worker) FromRemote(ctx context.Context, remote *solver.Remote) (ref cac
 		}
 	}
 
-	var pg progress.Controller
-	optGetter := solver.CacheOptGetterOf(ctx)
-	if optGetter != nil {
-		if kv := optGetter(false, cache.ProgressKey{}); kv != nil {
-			if v, ok := kv[cache.ProgressKey{}].(progress.Controller); ok {
-				pg = v
-			}
-		}
-	}
+	pg := solver.ProgressControllerFromContext(ctx)
 	if pg == nil {
 		pg = &controller.Controller{
 			WriterFactory: progress.FromContext(ctx),
