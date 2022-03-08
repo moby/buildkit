@@ -3677,10 +3677,7 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptio
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "unique"))
 	require.NoError(t, err)
 
-	err = c.Prune(sb.Context(), nil, PruneAll)
-	require.NoError(t, err)
-
-	checkAllRemoved(t, c, sb)
+	ensurePruneAll(t, c, sb)
 
 	destDir, err = ioutil.TempDir("", "buildkit")
 	require.NoError(t, err)
@@ -5302,6 +5299,22 @@ func requiresLinux(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skipf("unsupported GOOS: %s", runtime.GOOS)
 	}
+}
+
+func ensurePruneAll(t *testing.T, c *Client, sb integration.Sandbox) {
+	for i := 0; i < 2; i++ {
+		require.NoError(t, c.Prune(sb.Context(), nil, PruneAll))
+		for j := 0; j < 20; j++ {
+			du, err := c.DiskUsage(sb.Context())
+			require.NoError(t, err)
+			if len(du) == 0 {
+				return
+			}
+			time.Sleep(500 * time.Millisecond)
+		}
+		t.Logf("retrying prune(%d)", i)
+	}
+	t.Fatalf("failed to ensure prune")
 }
 
 func checkAllRemoved(t *testing.T, c *Client, sb integration.Sandbox) {
