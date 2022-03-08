@@ -1077,7 +1077,7 @@ func diffOpTestCases() (tests []integration.Test) {
 		}
 		return []integration.Test{
 			verifyContents{
-				// Verifies that when a directory with contents is used a a base layer
+				// Verifies that when a directory with contents is used as a base layer
 				// in a merge, subsequent merges that first delete the dir (resulting in
 				// a whiteout device w/ overlay snapshotters) and then recreate the dir
 				// correctly set it as opaque.
@@ -1085,6 +1085,19 @@ func diffOpTestCases() (tests []integration.Test) {
 				state: llb.Merge([]llb.State{
 					base().File(llb.Mkfile("/dir/a", 0644, nil)),
 					base().File(llb.Rm("/dir")),
+					base().File(llb.Mkfile("/dir/b", 0644, nil)),
+				}),
+				contents: apply(
+					fstest.CreateDir("/dir", 0755),
+					fstest.CreateFile("/dir/b", nil, 0644),
+				),
+			},
+			verifyContents{
+				// Same as above, but with a file overwrite instead of an rm
+				name: "TestDiffMergeOpaqueRegressionWithFileOverwrite",
+				state: llb.Merge([]llb.State{
+					base().File(llb.Mkfile("/dir/a", 0644, nil)),
+					llb.Scratch().File(llb.Mkfile("/dir", 0644, nil)),
 					base().File(llb.Mkfile("/dir/b", 0644, nil)),
 				}),
 				contents: apply(
