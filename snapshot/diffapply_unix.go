@@ -266,16 +266,17 @@ func (a *applier) applyDelete(ctx context.Context, ca *changeApply) (bool, error
 		return false, nil
 	}
 
-	if overwrite && a.createWhiteoutDelete && isWhiteoutDevice(ca.dstStat) && ca.srcStat.Mode&unix.S_IFMT == unix.S_IFDIR {
-		// If we are overwriting a whiteout device with a directory, we need this new dir to be opaque
-		// so that any files from lowerdirs under it are not visible.
-		ca.setOpaque = true
-	}
-
 	if err := os.RemoveAll(ca.dstPath); err != nil {
 		return false, errors.Wrap(err, "failed to remove during apply")
 	}
 	ca.dstStat = nil
+
+	if overwrite && a.createWhiteoutDelete && ca.srcStat.Mode&unix.S_IFMT == unix.S_IFDIR {
+		// If we are using an overlay snapshotter and overwriting an existing non-directory
+		// with a directory, we need this new dir to be opaque so that any files from lowerdirs
+		// under it are not visible.
+		ca.setOpaque = true
+	}
 
 	if deleteOnly && a.createWhiteoutDelete {
 		// only create a whiteout device if there is something to delete
@@ -848,9 +849,4 @@ func needsUserXAttr(ctx context.Context, sn Snapshotter, lm leases.Manager) (boo
 		return false, err
 	}
 	return userxattr, nil
-}
-
-func isWhiteoutDevice(st *syscall.Stat_t) bool {
-	// it's a whiteout if it's a char device and has a major/minor of 0/0
-	return st != nil && st.Mode&unix.S_IFMT == unix.S_IFCHR && st.Rdev == unix.Mkdev(0, 0)
 }
