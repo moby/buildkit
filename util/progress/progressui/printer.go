@@ -166,7 +166,7 @@ func (p *textMux) printVtx(t *trace, dgst digest.Digest) {
 	}
 
 	p.current = dgst
-	if v.Completed != nil && !isOpenStatus {
+	if v.isCompleted() && !isOpenStatus {
 		p.current = ""
 		v.count = 0
 
@@ -183,8 +183,17 @@ func (p *textMux) printVtx(t *trace, dgst digest.Digest) {
 			fmt.Fprintf(p.w, "#%d CACHED\n", v.index)
 		} else {
 			tm := ""
-			if v.Started != nil {
-				tm = fmt.Sprintf(" %.1fs", v.Completed.Sub(*v.Started).Seconds())
+			var ivals []interval
+			for _, ival := range v.intervals {
+				ivals = append(ivals, ival)
+			}
+			ivals = mergeIntervals(ivals)
+			if len(ivals) > 0 {
+				var dt float64
+				for _, ival := range ivals {
+					dt += ival.duration().Seconds()
+				}
+				tm = fmt.Sprintf(" %.1fs", dt)
 			}
 			fmt.Fprintf(p.w, "#%d DONE%s\n", v.index, tm)
 		}
@@ -199,7 +208,9 @@ func sortCompleted(t *trace, m map[digest.Digest]struct{}) []digest.Digest {
 		out = append(out, k)
 	}
 	sort.Slice(out, func(i, j int) bool {
-		return t.byDigest[out[i]].Completed.Before(*t.byDigest[out[j]].Completed)
+		vtxi := t.byDigest[out[i]]
+		vtxj := t.byDigest[out[j]]
+		return vtxi.mostRecentInterval().stop.Before(*vtxj.mostRecentInterval().stop)
 	})
 	return out
 }
@@ -213,7 +224,11 @@ func (p *textMux) print(t *trace) {
 		if !ok {
 			continue
 		}
-		if v.Vertex.Completed != nil {
+		if v.ProgressGroup != nil || v.hidden {
+			// skip vtxs in a group (they are merged into a single vtx) and hidden ones
+			continue
+		}
+		if v.isCompleted() {
 			completed[dgst] = struct{}{}
 		} else {
 			rest[dgst] = struct{}{}
@@ -235,13 +250,13 @@ func (p *textMux) print(t *trace) {
 
 	if len(rest) == 0 {
 		if current != "" {
-			if v := t.byDigest[current]; v.Started != nil && v.Completed == nil {
+			if v := t.byDigest[current]; v.isStarted() && !v.isCompleted() {
 				return
 			}
 		}
 		// make any open vertex active
 		for dgst, v := range t.byDigest {
-			if v.Started != nil && v.Completed == nil {
+			if v.isStarted() && !v.isCompleted() {
 				p.printVtx(t, dgst)
 				return
 			}
