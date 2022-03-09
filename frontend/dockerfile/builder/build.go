@@ -27,6 +27,7 @@ import (
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
+	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -811,11 +812,11 @@ func warnOpts(sm *llb.SourceMap, r *parser.Range, detail [][]byte, url string) c
 	return opts
 }
 
-func contextByNameFunc(c client.Client, p *ocispecs.Platform) func(context.Context, string) (*llb.State, *dockerfile2llb.Image, error) {
-	return func(ctx context.Context, name string) (*llb.State, *dockerfile2llb.Image, error) {
+func contextByNameFunc(c client.Client, p *ocispecs.Platform) func(context.Context, string) (*llb.State, *dockerfile2llb.Image, *binfotypes.BuildInfo, error) {
+	return func(ctx context.Context, name string) (*llb.State, *dockerfile2llb.Image, *binfotypes.BuildInfo, error) {
 		named, err := reference.ParseNormalizedNamed(name)
 		if err != nil {
-			return nil, nil, errors.Wrapf(err, "invalid context name %s", name)
+			return nil, nil, nil, errors.Wrapf(err, "invalid context name %s", name)
 		}
 		name = strings.TrimSuffix(reference.FamiliarString(named), ":latest")
 
@@ -825,28 +826,28 @@ func contextByNameFunc(c client.Client, p *ocispecs.Platform) func(context.Conte
 		}
 		if p != nil {
 			name := name + "::" + platforms.Format(platforms.Normalize(*p))
-			st, img, err := contextByName(ctx, c, name, p)
+			st, img, bi, err := contextByName(ctx, c, name, p)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 			if st != nil {
-				return st, img, nil
+				return st, img, bi, nil
 			}
 		}
 		return contextByName(ctx, c, name, p)
 	}
 }
 
-func contextByName(ctx context.Context, c client.Client, name string, platform *ocispecs.Platform) (*llb.State, *dockerfile2llb.Image, error) {
+func contextByName(ctx context.Context, c client.Client, name string, platform *ocispecs.Platform) (*llb.State, *dockerfile2llb.Image, *binfotypes.BuildInfo, error) {
 	opts := c.BuildOpts().Opts
 	v, ok := opts["context:"+name]
 	if !ok {
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 
 	vv := strings.SplitN(v, ":", 2)
 	if len(vv) != 2 {
-		return nil, nil, errors.Errorf("invalid context specifier %s for %s", v, name)
+		return nil, nil, nil, errors.Errorf("invalid context specifier %s for %s", v, name)
 	}
 	switch vv[0] {
 	case "docker-image":
@@ -859,20 +860,20 @@ func contextByName(ctx context.Context, c client.Client, name string, platform *
 			imgOpt = append(imgOpt, llb.Platform(*platform))
 		}
 		st := llb.Image(ref, imgOpt...)
-		return &st, nil, nil
+		return &st, nil, nil, nil
 	case "git":
 		st, ok := detectGitContext(v, "1")
 		if !ok {
-			return nil, nil, errors.Errorf("invalid git context %s", v)
+			return nil, nil, nil, errors.Errorf("invalid git context %s", v)
 		}
-		return st, nil, nil
+		return st, nil, nil, nil
 	case "http", "https":
 		st, ok := detectGitContext(v, "1")
 		if !ok {
 			httpst := llb.HTTP(v, llb.WithCustomName("[context "+name+"] "+v))
 			st = &httpst
 		}
-		return st, nil, nil
+		return st, nil, nil, nil
 	case "local":
 		st := llb.Local(vv[1],
 			llb.SessionID(c.BuildOpts().SessionID),
@@ -883,18 +884,18 @@ func contextByName(ctx context.Context, c client.Client, name string, platform *
 		)
 		def, err := st.Marshal(ctx)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		res, err := c.Solve(ctx, client.SolveRequest{
 			Evaluate:   true,
 			Definition: def.ToPB(),
 		})
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		ref, err := res.SingleRef()
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		dt, _ := ref.ReadFile(ctx, client.ReadRequest{
 			Filename: dockerignoreFilename,
@@ -903,7 +904,7 @@ func contextByName(ctx context.Context, c client.Client, name string, platform *
 		if len(dt) != 0 {
 			excludes, err = dockerignore.ReadAll(bytes.NewBuffer(dt))
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 		}
 		st = llb.Local(vv[1],
@@ -912,38 +913,49 @@ func contextByName(ctx context.Context, c client.Client, name string, platform *
 			llb.SharedKeyHint("context:"+name),
 			llb.ExcludePatterns(excludes),
 		)
-		return &st, nil, nil
+		return &st, nil, nil, nil
 	case "input":
 		inputs, err := c.Inputs(ctx)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		st, ok := inputs[vv[1]]
 		if !ok {
-			return nil, nil, errors.Errorf("invalid input %s for %s", vv[1], name)
+			return nil, nil, nil, errors.Errorf("invalid input %s for %s", vv[1], name)
 		}
 		md, ok := opts["input-metadata:"+vv[1]]
 		if ok {
 			m := make(map[string][]byte)
 			if err := json.Unmarshal([]byte(md), &m); err != nil {
-				return nil, nil, errors.Wrapf(err, "failed to parse input metadata %s", md)
+				return nil, nil, nil, errors.Wrapf(err, "failed to parse input metadata %s", md)
 			}
-			dt, ok := m["containerimage.config"]
-			if ok {
-				st, err = st.WithImageConfig([]byte(dt))
+			var bi *binfotypes.BuildInfo
+			if dtbi, ok := m[exptypes.ExporterBuildInfo]; ok {
+				var depbi binfotypes.BuildInfo
+				if err := json.Unmarshal(dtbi, &depbi); err != nil {
+					return nil, nil, nil, errors.Wrapf(err, "failed to parse buildinfo for %s", name)
+				}
+				bi = &binfotypes.BuildInfo{
+					Deps: map[string]binfotypes.BuildInfo{
+						strings.SplitN(vv[1], "::", 2)[0]: depbi,
+					},
+				}
+			}
+			var img *dockerfile2llb.Image
+			if dtic, ok := m[exptypes.ExporterImageConfigKey]; ok {
+				st, err = st.WithImageConfig(dtic)
 				if err != nil {
-					return nil, nil, err
+					return nil, nil, nil, err
 				}
-				var img dockerfile2llb.Image
-				if err := json.Unmarshal(dt, &img); err != nil {
-					return nil, nil, errors.Wrapf(err, "failed to parse image config for %s", name)
+				if err := json.Unmarshal(dtic, &img); err != nil {
+					return nil, nil, nil, errors.Wrapf(err, "failed to parse image config for %s", name)
 				}
-				return &st, &img, nil
 			}
+			return &st, img, bi, nil
 		}
-		return &st, nil, nil
+		return &st, nil, nil, nil
 	default:
-		return nil, nil, errors.Errorf("unsupported context source %s for %s", vv[0], name)
+		return nil, nil, nil, errors.Errorf("unsupported context source %s for %s", vv[0], name)
 	}
 }
 

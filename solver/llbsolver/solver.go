@@ -158,15 +158,15 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		return nil, err
 	}
 
-	if res.Metadata == nil {
-		res.Metadata = make(map[string][]byte)
-	}
 	if r := res.Ref; r != nil {
 		dtbi, err := buildinfo.Encode(ctx, res.Metadata, exptypes.ExporterBuildInfo, r.BuildSources())
 		if err != nil {
 			return nil, err
 		}
 		if dtbi != nil && len(dtbi) > 0 {
+			if res.Metadata == nil {
+				res.Metadata = make(map[string][]byte)
+			}
 			res.Metadata[exptypes.ExporterBuildInfo] = dtbi
 		}
 	}
@@ -180,6 +180,9 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 				return nil, err
 			}
 			if dtbi != nil && len(dtbi) > 0 {
+				if res.Metadata == nil {
+					res.Metadata = make(map[string][]byte)
+				}
 				res.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, k)] = dtbi
 			}
 		}

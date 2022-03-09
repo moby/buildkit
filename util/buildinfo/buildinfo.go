@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	ctnref "github.com/containerd/containerd/reference"
 	"github.com/docker/distribution/reference"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	"github.com/moby/buildkit/source"
@@ -26,7 +27,7 @@ func Decode(enc string) (bi binfotypes.BuildInfo, _ error) {
 }
 
 // Encode encodes build info.
-func Encode(ctx context.Context, metadata map[string][]byte, key string, buildSources map[string]string) ([]byte, error) {
+func Encode(ctx context.Context, metadata map[string][]byte, key string, llbSources map[string]string) ([]byte, error) {
 	var bi binfotypes.BuildInfo
 	if metadata == nil {
 		metadata = make(map[string][]byte)
@@ -36,46 +37,48 @@ func Encode(ctx context.Context, metadata map[string][]byte, key string, buildSo
 			return nil, err
 		}
 	}
-	if deps, err := decodeDeps(key, bi.Attrs); err == nil {
-		bi.Deps = reduceMapBuildInfo(deps, bi.Deps)
-	} else {
-		return nil, err
-	}
-	if sources, err := mergeSources(ctx, buildSources, bi.Sources); err == nil {
+	if sources, err := mergeSources(llbSources, bi.Sources); err == nil {
 		bi.Sources = sources
 	} else {
 		return nil, err
 	}
-	bi.Attrs = filterAttrs(key, bi.Attrs)
+	bi.Sources = dedupSources(bi, allDepsSources(bi, nil))
 	return json.Marshal(bi)
 }
 
 // mergeSources combines and fixes build sources from frontend sources.
-func mergeSources(ctx context.Context, buildSources map[string]string, frontendSources []binfotypes.Source) ([]binfotypes.Source, error) {
-	// Iterate and combine build sources
+func mergeSources(llbSources map[string]string, frontendSources []binfotypes.Source) ([]binfotypes.Source, error) {
+	if llbSources == nil {
+		llbSources = make(map[string]string)
+	}
+	// iterate and combine build sources
 	mbs := map[string]binfotypes.Source{}
-	for buildSource, pin := range buildSources {
-		src, err := source.FromString(buildSource)
+	for llbSource, pin := range llbSources {
+		src, err := source.FromString(llbSource)
 		if err != nil {
 			return nil, err
 		}
 		switch sourceID := src.(type) {
 		case *source.ImageIdentifier:
 			for i, fsrc := range frontendSources {
+				if fsrc.Type != binfotypes.SourceTypeDockerImage {
+					continue
+				}
 				// use original user input from frontend sources
-				if fsrc.Type == binfotypes.SourceTypeDockerImage && fsrc.Alias == sourceID.Reference.String() {
-					if _, ok := mbs[fsrc.Alias]; !ok {
-						parsed, err := reference.ParseNormalizedNamed(fsrc.Ref)
-						if err != nil {
-							return nil, errors.Wrapf(err, "failed to parse %s", fsrc.Ref)
-						}
-						mbs[fsrc.Alias] = binfotypes.Source{
-							Type: binfotypes.SourceTypeDockerImage,
-							Ref:  reference.TagNameOnly(parsed).String(),
-							Pin:  pin,
-						}
-						frontendSources = append(frontendSources[:i], frontendSources[i+1:]...)
+				if fsrc.Alias == sourceID.Reference.String() || fsrc.Pin == pin {
+					if fsrc.Alias == "" {
+						fsrc.Alias = sourceID.Reference.String()
 					}
+					parsed, err := reference.ParseNormalizedNamed(fsrc.Ref)
+					if err != nil {
+						return nil, errors.Wrapf(err, "failed to parse %s", fsrc.Ref)
+					}
+					mbs[fsrc.Alias] = binfotypes.Source{
+						Type: binfotypes.SourceTypeDockerImage,
+						Ref:  reference.TagNameOnly(parsed).String(),
+						Pin:  pin,
+					}
+					frontendSources = append(frontendSources[:i], frontendSources[i+1:]...)
 					break
 				}
 			}
@@ -147,8 +150,7 @@ func mergeSources(ctx context.Context, buildSources map[string]string, frontendS
 func decodeDeps(key string, attrs map[string]*string) (map[string]binfotypes.BuildInfo, error) {
 	var platform string
 	// extract platform from metadata key
-	skey := strings.SplitN(key, "/", 2)
-	if len(skey) == 2 {
+	if skey := strings.SplitN(key, "/", 2); len(skey) == 2 {
 		platform = skey[1]
 	}
 
@@ -159,8 +161,10 @@ func decodeDeps(key string, attrs map[string]*string) (map[string]binfotypes.Bui
 			continue
 		}
 
-		// if platform is defined, only decode dependencies for that platform
-		if platform != "" && !strings.HasSuffix(k, "::"+platform) {
+		// if platform is defined in the key, only decode dependencies
+		// for that platform and vice versa
+		hasPlatform := len(strings.SplitN(k, "::", 2)) == 2
+		if (platform != "" && !hasPlatform) || (platform == "" && hasPlatform) {
 			continue
 		}
 
@@ -184,7 +188,10 @@ func decodeDeps(key string, attrs map[string]*string) (map[string]binfotypes.Bui
 		// set dep key
 		var depkey string
 		kl := strings.SplitN(k, ":", 2)
-		depkey = kl[1]
+		if len(kl) != 2 {
+			continue
+		}
+		depkey = strings.SplitN(kl[1], "::", 2)[0]
 		if platform != "" {
 			depkey = strings.TrimSuffix(depkey, "::"+platform)
 		}
@@ -195,6 +202,58 @@ func decodeDeps(key string, attrs map[string]*string) (map[string]binfotypes.Bui
 		return nil, nil
 	}
 	return res, nil
+}
+
+// dedupSources deduplicates regular sources from dependencies ones.
+func dedupSources(bi binfotypes.BuildInfo, depsSources []binfotypes.Source) (srcs []binfotypes.Source) {
+	// dedup sources from deps
+	for i, src := range bi.Sources {
+		for _, dsrc := range depsSources {
+			if src == dsrc {
+				bi.Sources = append(bi.Sources[:i], bi.Sources[i+1:]...)
+			} else if src.Type == binfotypes.SourceTypeDockerImage {
+				_, dgst := ctnref.SplitObject(src.Ref)
+				if dgst != "" && src.Pin == dsrc.Pin {
+					bi.Sources = append(bi.Sources[:i], bi.Sources[i+1:]...)
+				}
+			}
+		}
+	}
+	// dedup regular sources
+	msrc := make(map[binfotypes.Source]struct{})
+	for _, src := range bi.Sources {
+		msrc[src] = struct{}{}
+	}
+	for src := range msrc {
+		srcs = append(srcs, src)
+	}
+	sort.Slice(srcs, func(i, j int) bool {
+		return srcs[i].Ref < srcs[j].Ref
+	})
+	return srcs
+}
+
+// allDepsSources gathers dependencies sources.
+func allDepsSources(bi binfotypes.BuildInfo, visited map[binfotypes.Source]struct{}) (res []binfotypes.Source) {
+	if visited == nil {
+		visited = make(map[binfotypes.Source]struct{})
+	}
+	if len(bi.Deps) == 0 {
+		return res
+	}
+	for _, dbi := range bi.Deps {
+		for _, dsrc := range dbi.Sources {
+			if _, ok := visited[dsrc]; ok {
+				continue
+			}
+			visited[dsrc] = struct{}{}
+		}
+		res = allDepsSources(dbi, visited)
+	}
+	for src := range visited {
+		res = append(res, src)
+	}
+	return res
 }
 
 // FormatOpts holds build info format options.
@@ -263,16 +322,20 @@ func filterAttrs(key string, attrs map[string]*string) map[string]*string {
 		// input context key and value has to be cleaned up
 		// before being included
 		if strings.HasPrefix(k, "context:") {
-			if platform != "" {
-				// if platform is defined, only include the relevant platform
-				if !strings.HasSuffix(k, "::"+platform) {
-					continue
-				}
-				ctxival := strings.TrimSuffix(*v, "::"+platform)
-				filtered[strings.TrimSuffix(k, "::"+platform)] = &ctxival
+			ctxkey := strings.SplitN(k, "::", 2)
+			hasCtxPlatform := len(ctxkey) == 2
+			// if platform is set and also defined in key, set context
+			// for the right one.
+			if hasCtxPlatform && platform != "" && platform != ctxkey[1] {
 				continue
 			}
-			filtered[k] = v
+			if platform == "" && hasCtxPlatform {
+				ctxval := strings.TrimSuffix(*v, "::"+ctxkey[1])
+				filtered[strings.TrimSuffix(k, "::"+ctxkey[1])] = &ctxval
+				continue
+			}
+			ctxival := strings.TrimSuffix(*v, "::"+platform)
+			filtered[strings.TrimSuffix(k, "::"+platform)] = &ctxival
 			continue
 		}
 		// filter only for known attributes
@@ -347,25 +410,6 @@ func GetMetadata(metadata map[string][]byte, key string, reqFrontend string, req
 		}
 	}
 	return dtbi, nil
-}
-
-// FromImageConfig returns build info from image config.
-func FromImageConfig(dt []byte) (*binfotypes.BuildInfo, error) {
-	if len(dt) == 0 {
-		return nil, nil
-	}
-	var config binfotypes.ImageConfig
-	if err := json.Unmarshal(dt, &config); err != nil {
-		return nil, errors.Wrap(err, "failed to unmarshal image config")
-	}
-	if len(config.BuildInfo) == 0 {
-		return nil, nil
-	}
-	bi, err := Decode(config.BuildInfo)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to decode build info from image config")
-	}
-	return &bi, nil
 }
 
 func reduceMapString(m1 map[string]string, m2 map[string]*string) map[string]string {
