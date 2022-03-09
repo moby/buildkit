@@ -2673,10 +2673,8 @@ func testPullZstdImage(t *testing.T, sb integration.Sandbox) {
 		// containerd 1.4 doesn't support zstd compression
 		return
 	}
-	err = c.Prune(sb.Context(), nil, PruneAll)
-	require.NoError(t, err)
 
-	checkAllRemoved(t, c, sb)
+	ensurePruneAll(t, c, sb)
 
 	st = llb.Scratch().File(llb.Copy(llb.Image(target), "/data", "/zdata"))
 
@@ -2964,9 +2962,7 @@ func testStargzLazyRegistryCacheImportExport(t *testing.T, sb integration.Sandbo
 	require.NoError(t, err)
 
 	// clear all local state out
-	err = c.Prune(sb.Context(), nil, PruneAll)
-	require.NoError(t, err)
-	checkAllRemoved(t, c, sb)
+	ensurePruneAll(t, c, sb)
 
 	// stargz layers should be lazy even for executing something on them
 	def, err = baseDef.
@@ -3048,9 +3044,7 @@ func testStargzLazyRegistryCacheImportExport(t *testing.T, sb integration.Sandbo
 		require.NoError(t, err)
 	}
 
-	err = c.Prune(sb.Context(), nil, PruneAll)
-	require.NoError(t, err)
-	checkAllRemoved(t, c, sb)
+	ensurePruneAll(t, c, sb)
 }
 
 func testStargzLazyInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
@@ -3203,9 +3197,7 @@ func testStargzLazyInlineCacheImportExport(t *testing.T, sb integration.Sandbox)
 		require.NoError(t, err)
 	}
 
-	err = c.Prune(sb.Context(), nil, PruneAll)
-	require.NoError(t, err)
-	checkAllRemoved(t, c, sb)
+	ensurePruneAll(t, c, sb)
 }
 
 func testStargzLazyPull(t *testing.T, sb integration.Sandbox) {
@@ -3330,9 +3322,7 @@ func testStargzLazyPull(t *testing.T, sb integration.Sandbox) {
 		require.NoError(t, err)
 	}
 
-	err = c.Prune(sb.Context(), nil, PruneAll)
-	require.NoError(t, err)
-	checkAllRemoved(t, c, sb)
+	ensurePruneAll(t, c, sb)
 }
 
 func testLazyImagePush(t *testing.T, sb integration.Sandbox) {
@@ -3677,10 +3667,7 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptio
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "unique"))
 	require.NoError(t, err)
 
-	err = c.Prune(sb.Context(), nil, PruneAll)
-	require.NoError(t, err)
-
-	checkAllRemoved(t, c, sb)
+	ensurePruneAll(t, c, sb)
 
 	destDir, err = ioutil.TempDir("", "buildkit")
 	require.NoError(t, err)
@@ -3817,10 +3804,7 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	unique, err := readFileInImage(sb.Context(), c, target+"@"+dgst, "/unique")
 	require.NoError(t, err)
 
-	err = c.Prune(sb.Context(), nil, PruneAll)
-	require.NoError(t, err)
-
-	checkAllRemoved(t, c, sb)
+	ensurePruneAll(t, c, sb)
 
 	resp, err = c.Solve(sb.Context(), def, SolveOpt{
 		// specifying inline cache exporter is needed for reproducing containerimage.digest
@@ -3855,10 +3839,7 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 
 	require.Equal(t, dgst, dgst2)
 
-	err = c.Prune(sb.Context(), nil, PruneAll)
-	require.NoError(t, err)
-
-	checkAllRemoved(t, c, sb)
+	ensurePruneAll(t, c, sb)
 
 	// Export the cache again with compression
 	resp, err = c.Solve(sb.Context(), def, SolveOpt{
@@ -3899,10 +3880,7 @@ func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	require.EqualValues(t, unique, unique2uncompress)
 
-	err = c.Prune(sb.Context(), nil, PruneAll)
-	require.NoError(t, err)
-
-	checkAllRemoved(t, c, sb)
+	ensurePruneAll(t, c, sb)
 
 	resp, err = c.Solve(sb.Context(), def, SolveOpt{
 		Exports: []ExportEntry{
@@ -5304,19 +5282,25 @@ func requiresLinux(t *testing.T) {
 	}
 }
 
-func checkAllRemoved(t *testing.T, c *Client, sb integration.Sandbox) {
-	retries := 0
-	for {
-		require.True(t, 20 > retries)
-		retries++
-		du, err := c.DiskUsage(sb.Context())
-		require.NoError(t, err)
-		if len(du) > 0 {
+// ensurePruneAll tries to ensure Prune completes with retries.
+// Current cache implementation defers release-related logic using goroutine so
+// there can be situation where a build has finished but the following prune doesn't
+// cleanup cache because some records still haven't been released.
+// This function tries to ensure prune by retrying it.
+func ensurePruneAll(t *testing.T, c *Client, sb integration.Sandbox) {
+	for i := 0; i < 2; i++ {
+		require.NoError(t, c.Prune(sb.Context(), nil, PruneAll))
+		for j := 0; j < 20; j++ {
+			du, err := c.DiskUsage(sb.Context())
+			require.NoError(t, err)
+			if len(du) == 0 {
+				return
+			}
 			time.Sleep(500 * time.Millisecond)
-			continue
 		}
-		break
+		t.Logf("retrying prune(%d)", i)
 	}
+	t.Fatalf("failed to ensure prune")
 }
 
 func checkAllReleasable(t *testing.T, c *Client, sb integration.Sandbox, checkContent bool) {

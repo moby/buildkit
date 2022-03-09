@@ -4172,10 +4172,7 @@ COPY --from=base arch /
 	require.NotEqual(t, dtamd, dtarm)
 
 	for i := 0; i < 2; i++ {
-		err = c.Prune(sb.Context(), nil, client.PruneAll)
-		require.NoError(t, err)
-
-		checkAllRemoved(t, c, sb)
+		ensurePruneAll(t, c, sb)
 
 		_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 			FrontendAttrs: map[string]string{
@@ -4281,10 +4278,7 @@ COPY --from=base unique /
 	dt, err = ioutil.ReadFile(filepath.Join(destDir, "unique"))
 	require.NoError(t, err)
 
-	err = c.Prune(sb.Context(), nil, client.PruneAll)
-	require.NoError(t, err)
-
-	checkAllRemoved(t, c, sb)
+	ensurePruneAll(t, c, sb)
 
 	destDir, err = ioutil.TempDir("", "buildkit")
 	require.NoError(t, err)
@@ -4465,10 +4459,7 @@ RUN echo bar > bar
 	err = ctd.ImageService().Delete(ctx, target)
 	require.NoError(t, err)
 
-	err = c.Prune(sb.Context(), nil, client.PruneAll)
-	require.NoError(t, err)
-
-	checkAllRemoved(t, c, sb)
+	ensurePruneAll(t, c, sb)
 
 	target2 := "example.com/moby/dockerfileexpids2:test"
 
@@ -5716,19 +5707,25 @@ func runShell(dir string, cmds ...string) error {
 	return nil
 }
 
-func checkAllRemoved(t *testing.T, c *client.Client, sb integration.Sandbox) {
-	retries := 0
-	for {
-		require.True(t, 20 > retries)
-		retries++
-		du, err := c.DiskUsage(sb.Context())
-		require.NoError(t, err)
-		if len(du) > 0 {
+// ensurePruneAll tries to ensure Prune completes with retries.
+// Current cache implementation defers release-related logic using goroutine so
+// there can be situation where a build has finished but the following prune doesn't
+// cleanup cache because some records still haven't been released.
+// This function tries to ensure prune by retrying it.
+func ensurePruneAll(t *testing.T, c *client.Client, sb integration.Sandbox) {
+	for i := 0; i < 2; i++ {
+		require.NoError(t, c.Prune(sb.Context(), nil, client.PruneAll))
+		for j := 0; j < 20; j++ {
+			du, err := c.DiskUsage(sb.Context())
+			require.NoError(t, err)
+			if len(du) == 0 {
+				return
+			}
 			time.Sleep(500 * time.Millisecond)
-			continue
 		}
-		break
+		t.Logf("retrying prune(%d)", i)
 	}
+	t.Fatalf("failed to ensure prune")
 }
 
 func checkAllReleasable(t *testing.T, c *client.Client, sb integration.Sandbox, checkContent bool) {
