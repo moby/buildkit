@@ -6,7 +6,6 @@ package snapshot
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -48,7 +47,7 @@ func newSnapshotter(ctx context.Context, snapshotterName string) (_ context.Cont
 		}
 	}()
 
-	tmpdir, err := ioutil.TempDir("", "buildkit-test")
+	tmpdir, err := os.MkdirTemp("", "buildkit-test")
 	if err != nil {
 		return nil, nil, nil, err
 	}

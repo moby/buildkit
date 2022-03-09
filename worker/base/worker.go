@@ -3,7 +3,6 @@ package base
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"time"
@@ -468,11 +467,11 @@ func (w *Worker) FromRemote(ctx context.Context, remote *solver.Remote) (ref cac
 // If not exist, it creates a random one,
 func ID(root string) (string, error) {
 	f := filepath.Join(root, "workerid")
-	b, err := ioutil.ReadFile(f)
+	b, err := os.ReadFile(f)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			id := identity.NewID()
-			err := ioutil.WriteFile(f, []byte(id), 0400)
+			err := os.WriteFile(f, []byte(id), 0400)
 			return id, err
 		}
 		return "", err

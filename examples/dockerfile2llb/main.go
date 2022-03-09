@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"flag"
-	"io/ioutil"
+	"io"
 	"log"
 	"os"
 
@@ -23,7 +23,7 @@ func main() {
 	flag.StringVar(&opt.target, "target", "", "target stage")
 	flag.Parse()
 
-	df, err := ioutil.ReadAll(os.Stdin)
+	df, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		panic(err)
 	}

@@ -5,7 +5,6 @@ package containerd
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
 	"testing"
 
@@ -29,7 +28,7 @@ func TestContainerdWorkerIntegration(t *testing.T) {
 }
 
 func newWorkerOpt(t *testing.T, addr string) (base.WorkerOpt, func()) {
-	tmpdir, err := ioutil.TempDir("", "workertest")
+	tmpdir, err := os.MkdirTemp("", "workertest")
 	require.NoError(t, err)
 	cleanup := func() { os.RemoveAll(tmpdir) }
 	rootless := false

@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -31,7 +30,7 @@ func NewRegistry(dir string) (url string, cl func() error, err error) {
 	}()
 
 	if dir == "" {
-		tmpdir, err := ioutil.TempDir("", "test-registry")
+		tmpdir, err := os.MkdirTemp("", "test-registry")
 		if err != nil {
 			return "", nil, err
 		}
@@ -52,7 +51,7 @@ http:
     addr: 127.0.0.1:0
 `, filepath.Join(dir, "data"))
 
-		if err := ioutil.WriteFile(filepath.Join(dir, "config.yaml"), []byte(template), 0600); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, "config.yaml"), []byte(template), 0600); err != nil {
 			return "", nil, err
 		}
 	}
@@ -84,7 +83,7 @@ func detectPort(ctx context.Context, rc io.ReadCloser) (string, error) {
 	found := make(chan struct{})
 	defer func() {
 		close(found)
-		go io.Copy(ioutil.Discard, rc)
+		go io.Copy(io.Discard, rc)
 	}()
 
 	go func() {

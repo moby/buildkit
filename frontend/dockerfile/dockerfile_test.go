@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -242,7 +241,7 @@ echo -n $my_arg $1 > /out
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -271,7 +270,7 @@ echo -n $my_arg $1 > /out
 			}, nil)
 			require.NoError(t, err)
 
-			dt, err := ioutil.ReadFile(filepath.Join(destDir, "out"))
+			dt, err := os.ReadFile(filepath.Join(destDir, "out"))
 			require.NoError(t, err)
 			require.Equal(t, x.expected, string(dt))
 		})
@@ -297,7 +296,7 @@ RUN [ "$myenv" = 'foo%sbar' ]
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -434,7 +433,7 @@ COPY --from=base2 /foo /f
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	cacheDir, err := ioutil.TempDir("", "buildkit")
+	cacheDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(cacheDir)
 
@@ -584,7 +583,7 @@ WORKDIR /
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -790,7 +789,7 @@ COPY --from=base unique /
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -808,13 +807,13 @@ COPY --from=base unique /
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "unique"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "unique"))
 	require.NoError(t, err)
 
-	err = ioutil.WriteFile(filepath.Join(dir, "bar"), []byte("bar-data-mod"), 0600)
+	err = os.WriteFile(filepath.Join(dir, "bar"), []byte("bar-data-mod"), 0600)
 	require.NoError(t, err)
 
-	destDir, err = ioutil.TempDir("", "buildkit")
+	destDir, err = os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -832,14 +831,14 @@ COPY --from=base unique /
 	}, nil)
 	require.NoError(t, err)
 
-	dt2, err := ioutil.ReadFile(filepath.Join(destDir, "unique"))
+	dt2, err := os.ReadFile(filepath.Join(destDir, "unique"))
 	require.NoError(t, err)
 	require.Equal(t, string(dt), string(dt2))
 
-	err = ioutil.WriteFile(filepath.Join(dir, "foo2"), []byte("foo2-data-mod"), 0600)
+	err = os.WriteFile(filepath.Join(dir, "foo2"), []byte("foo2-data-mod"), 0600)
 	require.NoError(t, err)
 
-	destDir, err = ioutil.TempDir("", "buildkit")
+	destDir, err = os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -857,7 +856,7 @@ COPY --from=base unique /
 	}, nil)
 	require.NoError(t, err)
 
-	dt2, err = ioutil.ReadFile(filepath.Join(destDir, "unique"))
+	dt2, err = os.ReadFile(filepath.Join(destDir, "unique"))
 	require.NoError(t, err)
 	require.NotEqual(t, string(dt), string(dt2))
 }
@@ -881,7 +880,7 @@ COPY foo nomatch* /
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -899,7 +898,7 @@ COPY foo nomatch* /
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "foo"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "foo"))
 	require.NoError(t, err)
 	require.Equal(t, "contents0", string(dt))
 }
@@ -1068,7 +1067,7 @@ COPY link/foo .
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1089,7 +1088,7 @@ COPY link/foo .
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "foo"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "foo"))
 	require.NoError(t, err)
 	require.Equal(t, "contents", string(dt))
 }
@@ -1116,7 +1115,7 @@ COPY --from=build /sub2/foo bar
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1137,7 +1136,7 @@ COPY --from=build /sub2/foo bar
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "foo"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "foo"))
 	require.NoError(t, err)
 	require.Equal(t, "data", string(dt))
 }
@@ -1162,7 +1161,7 @@ COPY . /
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1241,7 +1240,7 @@ COPY --from=build /out .
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1259,7 +1258,7 @@ COPY --from=build /out .
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "out"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
 	require.Equal(t, "bar-box-foo", string(dt))
 }
@@ -1287,7 +1286,7 @@ COPY --from=build /out .
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1305,7 +1304,7 @@ COPY --from=build /out .
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "out"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
 	require.Equal(t, "foo bar:box-foo:123 456", string(dt))
 }
@@ -1330,7 +1329,7 @@ COPY Dockerfile .
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1355,7 +1354,7 @@ COPY Dockerfile .
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "out.tar"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "out.tar"))
 	require.NoError(t, err)
 
 	m, err := testutil.ReadTarToMap(dt, false)
@@ -1426,7 +1425,7 @@ COPY arch-$TARGETARCH whoami
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1447,21 +1446,21 @@ COPY arch-$TARGETARCH whoami
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "windows_amd64/whoami"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "windows_amd64/whoami"))
 	require.NoError(t, err)
 	require.Equal(t, "i am amd64", string(dt))
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "linux_arm_v7/whoami"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "linux_arm_v7/whoami"))
 	require.NoError(t, err)
 	require.Equal(t, "i am arm", string(dt))
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "linux_s390x/whoami"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "linux_s390x/whoami"))
 	require.NoError(t, err)
 	require.Equal(t, "i am s390x", string(dt))
 
 	// repeat with oci exporter
 
-	destDir, err = ioutil.TempDir("", "buildkit")
+	destDir, err = os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1486,7 +1485,7 @@ COPY arch-$TARGETARCH whoami
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "out.tar"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "out.tar"))
 	require.NoError(t, err)
 
 	m, err := testutil.ReadTarToMap(dt, false)
@@ -1580,7 +1579,7 @@ COPY foo /
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1601,7 +1600,7 @@ COPY foo /
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "foo"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "foo"))
 	require.NoError(t, err)
 	require.Equal(t, "contents2", string(dt))
 }
@@ -1681,7 +1680,7 @@ COPY foo/sub bar
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1726,7 +1725,7 @@ COPY sub/l* alllinks/
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1747,19 +1746,19 @@ COPY sub/l* alllinks/
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "foo"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "foo"))
 	require.NoError(t, err)
 	require.Equal(t, "bar-contents", string(dt))
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "alllinks/l0"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "alllinks/l0"))
 	require.NoError(t, err)
 	require.Equal(t, "subfile-contents", string(dt))
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "alllinks/lfile"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "alllinks/lfile"))
 	require.NoError(t, err)
 	require.Equal(t, "lfile-contents", string(dt))
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "alllinks/l1"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "alllinks/l1"))
 	require.NoError(t, err)
 	require.Equal(t, "baz-contents", string(dt))
 }
@@ -1774,11 +1773,11 @@ FROM scratch
 COPY --from=0 /foo /foo
 `)
 
-	srcDir, err := ioutil.TempDir("", "buildkit")
+	srcDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(srcDir)
 
-	err = ioutil.WriteFile(filepath.Join(srcDir, "Dockerfile"), dockerfile, 0600)
+	err = os.WriteFile(filepath.Join(srcDir, "Dockerfile"), dockerfile, 0600)
 	require.NoError(t, err)
 
 	resp := httpserver.Response{
@@ -1791,7 +1790,7 @@ COPY --from=0 /foo /foo
 	})
 	defer server.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1813,7 +1812,7 @@ COPY --from=0 /foo /foo
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "foo"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "foo"))
 	require.NoError(t, err)
 	require.Equal(t, "foo-contents", string(dt))
 }
@@ -2015,7 +2014,7 @@ COPY foo .
 	def, err := echo.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -2033,7 +2032,7 @@ COPY foo .
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "foo"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "foo"))
 	require.NoError(t, err)
 	require.Equal(t, "foo0", string(dt))
 }
@@ -2237,7 +2236,7 @@ ADD %s /dest/
 	err = cmd.Run()
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "dest/foo"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "dest/foo"))
 	require.NoError(t, err)
 	require.Equal(t, []byte("content1"), dt)
 
@@ -2265,7 +2264,7 @@ ADD %s /dest/
 	require.NoError(t, err)
 
 	destFile := filepath.Join(destDir, "dest/__unnamed__")
-	dt, err = ioutil.ReadFile(destFile)
+	dt, err = os.ReadFile(destFile)
 	require.NoError(t, err)
 	require.Equal(t, []byte("content2"), dt)
 
@@ -2315,7 +2314,7 @@ ADD t.tar /
 	cmd := sb.Cmd(args + fmt.Sprintf(" --exporter=local --exporter-opt output=%s", destDir))
 	require.NoError(t, cmd.Run())
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "foo"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "foo"))
 	require.NoError(t, err)
 	require.Equal(t, expectedContent, dt)
 
@@ -2349,7 +2348,7 @@ ADD t.tar.gz /
 	cmd = sb.Cmd(args + fmt.Sprintf(" --exporter=local --exporter-opt output=%s", destDir))
 	require.NoError(t, cmd.Run())
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "foo"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "foo"))
 	require.NoError(t, err)
 	require.Equal(t, expectedContent, dt)
 
@@ -2376,7 +2375,7 @@ COPY t.tar.gz /
 	cmd = sb.Cmd(args + fmt.Sprintf(" --exporter=local --exporter-opt output=%s", destDir))
 	require.NoError(t, cmd.Run())
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "t.tar.gz"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "t.tar.gz"))
 	require.NoError(t, err)
 	require.Equal(t, buf2.Bytes(), dt)
 
@@ -2412,7 +2411,7 @@ ADD %s /
 	cmd = sb.Cmd(args + fmt.Sprintf(" --exporter=local --exporter-opt output=%s", destDir))
 	require.NoError(t, cmd.Run())
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "t.tar.gz"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "t.tar.gz"))
 	require.NoError(t, err)
 	require.Equal(t, buf2.Bytes(), dt)
 
@@ -2438,7 +2437,7 @@ ADD %s /newname.tar.gz
 	cmd = sb.Cmd(args + fmt.Sprintf(" --exporter=local --exporter-opt output=%s", destDir))
 	require.NoError(t, cmd.Run())
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "newname.tar.gz"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "newname.tar.gz"))
 	require.NoError(t, err)
 	require.Equal(t, buf2.Bytes(), dt)
 }
@@ -2489,7 +2488,7 @@ ADD *.tar /dest
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -2511,11 +2510,11 @@ ADD *.tar /dest
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "dest/foo"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "dest/foo"))
 	require.NoError(t, err)
 	require.Equal(t, "content0", string(dt))
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "dest/bar"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "dest/bar"))
 	require.NoError(t, err)
 	require.Equal(t, "content1", string(dt))
 }
@@ -2597,7 +2596,7 @@ COPY foo /symlink/
 	cmd := sb.Cmd(args + fmt.Sprintf(" --exporter=local --exporter-opt output=%s", destDir))
 	require.NoError(t, cmd.Run())
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "tmp/symlink-target/foo"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "tmp/symlink-target/foo"))
 	require.NoError(t, err)
 	require.Equal(t, expectedContent, dt)
 }
@@ -2775,7 +2774,7 @@ Dockerfile
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -2793,7 +2792,7 @@ Dockerfile
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "foo"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "foo"))
 	require.NoError(t, err)
 	require.Equal(t, "foo-contents", string(dt))
 
@@ -2813,7 +2812,7 @@ Dockerfile
 	require.Error(t, err)
 	require.True(t, errors.Is(err, os.ErrNotExist))
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "bay"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "bay"))
 	require.NoError(t, err)
 	require.Equal(t, "bay-contents", string(dt))
 }
@@ -3037,7 +3036,7 @@ USER nobody
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -3055,11 +3054,11 @@ USER nobody
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "rootuser"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "rootuser"))
 	require.NoError(t, err)
 	require.Equal(t, "root\n", string(dt))
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "daemonuser"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "daemonuser"))
 	require.NoError(t, err)
 	require.Equal(t, "daemon\n", string(dt))
 
@@ -3140,7 +3139,7 @@ COPY --from=base /out /
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -3162,15 +3161,15 @@ COPY --from=base /out /
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "fooowner"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "fooowner"))
 	require.NoError(t, err)
 	require.Equal(t, "daemon daemon\n", string(dt))
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "subowner"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "subowner"))
 	require.NoError(t, err)
 	require.Equal(t, "1000 nobody\n", string(dt))
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "foobisowner"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "foobisowner"))
 	require.NoError(t, err)
 	require.Equal(t, "1000 nobody\n", string(dt))
 }
@@ -3207,7 +3206,7 @@ COPY --from=base /out /
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -3233,15 +3232,15 @@ COPY --from=base /out /
 	}
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "fooperm"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "fooperm"))
 	require.NoError(t, err)
 	require.Equal(t, "0644\n", string(dt))
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "barperm"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "barperm"))
 	require.NoError(t, err)
 	require.Equal(t, "0777\n", string(dt))
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "foobisperm"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "foobisperm"))
 	require.NoError(t, err)
 	require.Equal(t, "0000\n", string(dt))
 }
@@ -3275,7 +3274,7 @@ COPY files dest
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -3296,11 +3295,11 @@ COPY files dest
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "sub/dir1/dir2/foo"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "sub/dir1/dir2/foo"))
 	require.NoError(t, err)
 	require.Equal(t, "foo-contents", string(dt))
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "dest/foo.go"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "dest/foo.go"))
 	require.NoError(t, err)
 	require.Equal(t, "foo.go-contents", string(dt))
 }
@@ -3327,7 +3326,7 @@ COPY $FOO baz
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -3348,7 +3347,7 @@ COPY $FOO baz
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "baz"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "baz"))
 	require.NoError(t, err)
 	require.Equal(t, "bar-contents", string(dt))
 }
@@ -3386,7 +3385,7 @@ COPY sub/dir1 subdest6
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -3407,45 +3406,45 @@ COPY sub/dir1 subdest6
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "gofiles/foo.go"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "gofiles/foo.go"))
 	require.NoError(t, err)
 	require.Equal(t, "foo-contents", string(dt))
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "gofiles/bar.go"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "gofiles/bar.go"))
 	require.NoError(t, err)
 	require.Equal(t, "bar-contents", string(dt))
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "foo2.go"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "foo2.go"))
 	require.NoError(t, err)
 	require.Equal(t, "foo-contents", string(dt))
 
 	if isFileOp { // non-fileop implementation is historically buggy
-		dt, err = ioutil.ReadFile(filepath.Join(destDir, "subdest/dir2/foo"))
+		dt, err = os.ReadFile(filepath.Join(destDir, "subdest/dir2/foo"))
 		require.NoError(t, err)
 		require.Equal(t, "foo-contents", string(dt))
 	}
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "subdest2/foo"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "subdest2/foo"))
 	require.NoError(t, err)
 	require.Equal(t, "foo-contents", string(dt))
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "subdest3/bar"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "subdest3/bar"))
 	require.NoError(t, err)
 	require.Equal(t, "foo-contents", string(dt))
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "all/foo.go"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "all/foo.go"))
 	require.NoError(t, err)
 	require.Equal(t, "foo-contents", string(dt))
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "subdest4/dir2/foo"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "subdest4/dir2/foo"))
 	require.NoError(t, err)
 	require.Equal(t, "foo-contents", string(dt))
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "subdest5/dir2/foo"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "subdest5/dir2/foo"))
 	require.NoError(t, err)
 	require.Equal(t, "foo-contents", string(dt))
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "subdest6/dir2/foo"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "subdest6/dir2/foo"))
 	require.NoError(t, err)
 	require.Equal(t, "foo-contents", string(dt))
 }
@@ -3555,7 +3554,7 @@ COPY --from=build /dest /dest
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "dest"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "dest"))
 	require.NoError(t, err)
 	require.Equal(t, []byte("0644\n0755\n0413\n"), dt)
 }
@@ -3563,7 +3562,7 @@ COPY --from=build /dest /dest
 func testDockerfileFromGit(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 
-	gitDir, err := ioutil.TempDir("", "buildkit")
+	gitDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(gitDir)
 
@@ -3574,7 +3573,7 @@ FROM scratch
 COPY --from=build foo bar
 `
 
-	err = ioutil.WriteFile(filepath.Join(gitDir, "Dockerfile"), []byte(dockerfile), 0600)
+	err = os.WriteFile(filepath.Join(gitDir, "Dockerfile"), []byte(dockerfile), 0600)
 	require.NoError(t, err)
 
 	err = runShell(gitDir,
@@ -3591,7 +3590,7 @@ COPY --from=build foo bar
 COPY --from=build foo bar2
 `
 
-	err = ioutil.WriteFile(filepath.Join(gitDir, "Dockerfile"), []byte(dockerfile), 0600)
+	err = os.WriteFile(filepath.Join(gitDir, "Dockerfile"), []byte(dockerfile), 0600)
 	require.NoError(t, err)
 
 	err = runShell(gitDir,
@@ -3604,7 +3603,7 @@ COPY --from=build foo bar2
 	server := httptest.NewServer(http.FileServer(http.Dir(filepath.Join(gitDir))))
 	defer server.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -3625,7 +3624,7 @@ COPY --from=build foo bar2
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "bar"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "bar"))
 	require.NoError(t, err)
 	require.Equal(t, "fromgit", string(dt))
 
@@ -3634,7 +3633,7 @@ COPY --from=build foo bar2
 	require.True(t, errors.Is(err, os.ErrNotExist))
 
 	// second request from master branch contains both files
-	destDir, err = ioutil.TempDir("", "buildkit")
+	destDir, err = os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -3651,11 +3650,11 @@ COPY --from=build foo bar2
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "bar"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "bar"))
 	require.NoError(t, err)
 	require.Equal(t, "fromgit", string(dt))
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "bar2"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "bar2"))
 	require.NoError(t, err)
 	require.Equal(t, "fromgit", string(dt))
 }
@@ -3696,7 +3695,7 @@ COPY foo bar
 	})
 	defer server.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -3718,7 +3717,7 @@ COPY foo bar
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "bar"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "bar"))
 	require.NoError(t, err)
 	require.Equal(t, "foo-contents", string(dt))
 }
@@ -3741,7 +3740,7 @@ COPY --from=busybox /etc/passwd test
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -3759,7 +3758,7 @@ COPY --from=busybox /etc/passwd test
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "test"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "test"))
 	require.NoError(t, err)
 	require.Contains(t, string(dt), "root")
 
@@ -3779,7 +3778,7 @@ COPY --from=golang /usr/bin/go go
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	destDir, err = ioutil.TempDir("", "buildkit")
+	destDir, err = os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -3797,7 +3796,7 @@ COPY --from=golang /usr/bin/go go
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "go"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "go"))
 	require.NoError(t, err)
 	require.Contains(t, string(dt), "foo")
 }
@@ -3824,7 +3823,7 @@ COPY --from=stage1 baz bax
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -3845,7 +3844,7 @@ COPY --from=stage1 baz bax
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "baz"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "baz"))
 	require.NoError(t, err)
 	require.Contains(t, string(dt), "foo-contents")
 }
@@ -3868,7 +3867,7 @@ LABEL foo=bar
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -3945,7 +3944,7 @@ RUN ls /files/file1
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4055,7 +4054,7 @@ ONBUILD RUN mkdir -p /out && echo -n 11 >> /out/foo
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4073,7 +4072,7 @@ ONBUILD RUN mkdir -p /out && echo -n 11 >> /out/foo
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "foo"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "foo"))
 	require.NoError(t, err)
 	require.Equal(t, "11", string(dt))
 }
@@ -4232,7 +4231,7 @@ COPY --from=base unique /
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4258,16 +4257,16 @@ COPY --from=base unique /
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "const"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "const"))
 	require.NoError(t, err)
 	require.Equal(t, "foobar", string(dt))
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "unique"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "unique"))
 	require.NoError(t, err)
 
 	ensurePruneAll(t, c, sb)
 
-	destDir, err = ioutil.TempDir("", "buildkit")
+	destDir, err = os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4288,15 +4287,15 @@ COPY --from=base unique /
 	}, nil)
 	require.NoError(t, err)
 
-	dt2, err := ioutil.ReadFile(filepath.Join(destDir, "const"))
+	dt2, err := os.ReadFile(filepath.Join(destDir, "const"))
 	require.NoError(t, err)
 	require.Equal(t, "foobar", string(dt2))
 
-	dt2, err = ioutil.ReadFile(filepath.Join(destDir, "unique"))
+	dt2, err = os.ReadFile(filepath.Join(destDir, "unique"))
 	require.NoError(t, err)
 	require.Equal(t, string(dt), string(dt2))
 
-	destDir, err = ioutil.TempDir("", "buildkit")
+	destDir, err = os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 }
@@ -4322,7 +4321,7 @@ RUN echo bar > bar
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4403,7 +4402,7 @@ RUN echo bar > bar
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4484,7 +4483,7 @@ COPY --from=s1 unique2 /
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4505,7 +4504,7 @@ COPY --from=s1 unique2 /
 	_, err = f.Solve(sb.Context(), c, opt, nil)
 	require.NoError(t, err)
 
-	destDir2, err := ioutil.TempDir("", "buildkit")
+	destDir2, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4515,22 +4514,22 @@ COPY --from=s1 unique2 /
 	_, err = f.Solve(sb.Context(), c, opt, nil)
 	require.NoError(t, err)
 
-	unique1Dir1, err := ioutil.ReadFile(filepath.Join(destDir, "unique"))
+	unique1Dir1, err := os.ReadFile(filepath.Join(destDir, "unique"))
 	require.NoError(t, err)
 
-	unique1Dir2, err := ioutil.ReadFile(filepath.Join(destDir2, "unique"))
+	unique1Dir2, err := os.ReadFile(filepath.Join(destDir2, "unique"))
 	require.NoError(t, err)
 
-	unique2Dir1, err := ioutil.ReadFile(filepath.Join(destDir, "unique2"))
+	unique2Dir1, err := os.ReadFile(filepath.Join(destDir, "unique2"))
 	require.NoError(t, err)
 
-	unique2Dir2, err := ioutil.ReadFile(filepath.Join(destDir2, "unique2"))
+	unique2Dir2, err := os.ReadFile(filepath.Join(destDir2, "unique2"))
 	require.NoError(t, err)
 
 	require.NotEqual(t, string(unique1Dir1), string(unique1Dir2))
 	require.NotEqual(t, string(unique2Dir1), string(unique2Dir2))
 
-	destDir3, err := ioutil.TempDir("", "buildkit")
+	destDir3, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4540,10 +4539,10 @@ COPY --from=s1 unique2 /
 	_, err = f.Solve(sb.Context(), c, opt, nil)
 	require.NoError(t, err)
 
-	unique1Dir3, err := ioutil.ReadFile(filepath.Join(destDir3, "unique"))
+	unique1Dir3, err := os.ReadFile(filepath.Join(destDir3, "unique"))
 	require.NoError(t, err)
 
-	unique2Dir3, err := ioutil.ReadFile(filepath.Join(destDir3, "unique2"))
+	unique2Dir3, err := os.ReadFile(filepath.Join(destDir3, "unique2"))
 	require.NoError(t, err)
 
 	require.Equal(t, string(unique1Dir2), string(unique1Dir3))
@@ -4572,7 +4571,7 @@ COPY foo2 bar2
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4592,11 +4591,11 @@ COPY foo2 bar2
 	_, err = f.Solve(sb.Context(), c, opt, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "bar"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "bar"))
 	require.NoError(t, err)
 	require.Equal(t, "d0", string(dt))
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "bar2"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "bar2"))
 	require.NoError(t, err)
 	require.Equal(t, "d1", string(dt))
 }
@@ -4623,7 +4622,7 @@ COPY --from=build out .
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4647,11 +4646,11 @@ COPY --from=build out .
 	_, err = f.Solve(sb.Context(), c, opt, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "platform"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "platform"))
 	require.NoError(t, err)
 	require.Equal(t, "darwin/ppc64le", string(dt))
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "os"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "os"))
 	require.NoError(t, err)
 	require.Equal(t, "freebsd", string(dt))
 }
@@ -4679,7 +4678,7 @@ COPY --from=build /out /
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4704,12 +4703,12 @@ COPY --from=build /out /
 	_, err = f.Solve(sb.Context(), c, opt, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "out"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
 	require.Equal(t, "hpvalue::npvalue::foocontents::::bazcontent", string(dt))
 
 	// repeat with changed default args should match the old cache
-	destDir, err = ioutil.TempDir("", "buildkit")
+	destDir, err = os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4733,12 +4732,12 @@ COPY --from=build /out /
 	_, err = f.Solve(sb.Context(), c, opt, nil)
 	require.NoError(t, err)
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "out"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
 	require.Equal(t, "hpvalue::npvalue::foocontents::::bazcontent", string(dt))
 
 	// changing actual value invalidates cache
-	destDir, err = ioutil.TempDir("", "buildkit")
+	destDir, err = os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4762,7 +4761,7 @@ COPY --from=build /out /
 	_, err = f.Solve(sb.Context(), c, opt, nil)
 	require.NoError(t, err)
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "out"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
 	require.Equal(t, "hpvalue2::::foocontents2::::bazcontent", string(dt))
 }
@@ -4856,7 +4855,7 @@ COPY foo bar
 	url := up.Add(buf)
 
 	// repeat with changed default args should match the old cache
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4880,7 +4879,7 @@ COPY foo bar
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "bar"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "bar"))
 	require.NoError(t, err)
 	require.Equal(t, string(dt), "contents")
 }
@@ -4933,7 +4932,7 @@ COPY foo foo2
 		})
 	}
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4951,7 +4950,7 @@ COPY foo foo2
 	}, "", frontend, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "foo3"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "foo3"))
 	require.NoError(t, err)
 	require.Equal(t, dt, []byte("data"))
 }
@@ -4963,7 +4962,7 @@ func testFrontendInputs(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4984,7 +4983,7 @@ func testFrontendInputs(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	expected, err := ioutil.ReadFile(filepath.Join(destDir, "foo"))
+	expected, err := os.ReadFile(filepath.Join(destDir, "foo"))
 	require.NoError(t, err)
 
 	dockerfile := []byte(`
@@ -5014,7 +5013,7 @@ COPY foo foo2
 	}, nil)
 	require.NoError(t, err)
 
-	actual, err := ioutil.ReadFile(filepath.Join(destDir, "foo2"))
+	actual, err := os.ReadFile(filepath.Join(destDir, "foo2"))
 	require.NoError(t, err)
 	require.Equal(t, expected, actual)
 }
@@ -5176,7 +5175,7 @@ COPY --from=base /shmsize /
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -5197,7 +5196,7 @@ COPY --from=base /shmsize /
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "shmsize"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "shmsize"))
 	require.NoError(t, err)
 	require.Contains(t, string(dt), `size=131072k`)
 }
@@ -5221,7 +5220,7 @@ COPY --from=base /ulimit /
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -5242,7 +5241,7 @@ COPY --from=base /ulimit /
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "ulimit"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "ulimit"))
 	require.NoError(t, err)
 	require.Equal(t, `1062`, strings.TrimSpace(string(dt)))
 }
@@ -5270,7 +5269,7 @@ COPY --from=base /out /
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -5291,7 +5290,7 @@ COPY --from=base /out /
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "out"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
 	require.Contains(t, strings.TrimSpace(string(dt)), `/foocgroup/buildkit/`)
 }
@@ -5318,7 +5317,7 @@ COPY --from=base /out /
 
 	f := getFrontend(t, sb)
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -5340,7 +5339,7 @@ COPY --from=base /out /
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "out"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
 	require.True(t, len(dt) > 0)
 
@@ -5625,7 +5624,7 @@ COPY --from=base /o* /
 
 	f := getFrontend(t, sb)
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -5647,11 +5646,11 @@ COPY --from=base /o* /
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "out"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
 	require.True(t, len(dt) > 0)
 
-	_, err = ioutil.ReadFile(filepath.Join(destDir, "out2"))
+	_, err = os.ReadFile(filepath.Join(destDir, "out2"))
 	require.Error(t, err)
 	require.True(t, errors.Is(err, os.ErrNotExist))
 }
@@ -5739,7 +5738,7 @@ COPY --from=build /foo /out /
 
 	product := "buildkit_test"
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -5758,11 +5757,11 @@ COPY --from=build /foo /out /
 	}, product, b, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "out"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
 	require.Equal(t, "first\n", string(dt))
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "foo"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "foo"))
 	require.NoError(t, err)
 	require.Equal(t, "foo is bar\n", string(dt))
 }
@@ -5881,7 +5880,7 @@ COPY --from=build /foo /out /
 
 	product := "buildkit_test"
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -5900,25 +5899,25 @@ COPY --from=build /foo /out /
 	}, product, b, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "linux_amd64/out"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "linux_amd64/out"))
 	require.NoError(t, err)
 	require.Equal(t, "foo amd64\n", string(dt))
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "linux_amd64/foo"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "linux_amd64/foo"))
 	require.NoError(t, err)
 	require.Equal(t, "foo is bar-amd64\n", string(dt))
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "linux_arm64/out"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "linux_arm64/out"))
 	require.NoError(t, err)
 	require.Equal(t, "foo arm64\n", string(dt))
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "linux_arm64/foo"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "linux_arm64/foo"))
 	require.NoError(t, err)
 	require.Equal(t, "foo is bar-arm64\n", string(dt))
 }
 
 func tmpdir(appliers ...fstest.Applier) (string, error) {
-	tmpdir, err := ioutil.TempDir("", "buildkit-dockerfile")
+	tmpdir, err := os.MkdirTemp("", "buildkit-dockerfile")
 	if err != nil {
 		return "", err
 	}

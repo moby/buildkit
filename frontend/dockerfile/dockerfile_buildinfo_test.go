@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -48,7 +47,7 @@ func testBuildInfoSources(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
 
-	gitDir, err := ioutil.TempDir("", "buildkit")
+	gitDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(gitDir)
 
@@ -59,7 +58,7 @@ ADD https://raw.githubusercontent.com/moby/moby/master/README.md /
 COPY --from=alpine /bin/busybox /alpine-busybox
 `
 
-	err = ioutil.WriteFile(filepath.Join(gitDir, "Dockerfile"), []byte(dockerfile), 0600)
+	err = os.WriteFile(filepath.Join(gitDir, "Dockerfile"), []byte(dockerfile), 0600)
 	require.NoError(t, err)
 
 	err = runShell(gitDir,
@@ -554,7 +553,7 @@ COPY --from=build /foo /out /
 		return res, nil
 	}
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -700,7 +699,7 @@ COPY --from=build /foo /out /
 		return res, nil
 	}
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -831,7 +830,7 @@ RUN echo "foo is $FOO" > /foo
 		return res, nil
 	}
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 

@@ -2,7 +2,6 @@ package frontend
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -43,7 +42,7 @@ func testReturnNil(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -297,7 +296,7 @@ func testRefStatFile(t *testing.T, sb integration.Sandbox) {
 }
 
 func tmpdir(appliers ...fstest.Applier) (string, error) {
-	tmpdir, err := ioutil.TempDir("", "buildkit-frontend")
+	tmpdir, err := os.MkdirTemp("", "buildkit-frontend")
 	if err != nil {
 		return "", err
 	}

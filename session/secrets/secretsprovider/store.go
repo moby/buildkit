@@ -2,7 +2,6 @@ package secretsprovider
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
 
 	"github.com/moby/buildkit/session/secrets"
@@ -57,7 +56,7 @@ func (fs *fileStore) GetSecret(ctx context.Context, id string) ([]byte, error) {
 	if v.Env != "" {
 		return []byte(os.Getenv(v.Env)), nil
 	}
-	dt, err := ioutil.ReadFile(v.FilePath)
+	dt, err := os.ReadFile(v.FilePath)
 	if err != nil {
 		return nil, err
 	}
