@@ -28,10 +28,14 @@ import (
 
 var buildinfoTests = integration.TestFuncs(
 	testBuildInfoSources,
+	testBuildInfoSourcesNoop,
 	testBuildInfoAttrs,
 	testBuildInfoMultiPlatform,
+	testBuildInfoImageContext,
+	testBuildInfoLocalContext,
 	testBuildInfoDeps,
 	testBuildInfoDepsMultiPlatform,
+	testBuildInfoDepsMainNoSource,
 )
 
 func init() {
@@ -41,6 +45,7 @@ func init() {
 // moby/buildkit#2311
 func testBuildInfoSources(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
+	f.RequiresBuildctl(t)
 
 	gitDir, err := ioutil.TempDir("", "buildkit")
 	require.NoError(t, err)
@@ -103,6 +108,9 @@ COPY --from=alpine /bin/busybox /alpine-busybox
 	err = json.Unmarshal(dtbi, &bi)
 	require.NoError(t, err)
 
+	require.Contains(t, bi.Attrs, "context")
+	require.Equal(t, server.URL+"/.git#buildinfo", *bi.Attrs["context"])
+
 	sources := bi.Sources
 	require.Equal(t, 3, len(sources))
 
@@ -117,6 +125,62 @@ COPY --from=alpine /bin/busybox /alpine-busybox
 	assert.Equal(t, binfotypes.SourceTypeHTTP, sources[2].Type)
 	assert.Equal(t, "https://raw.githubusercontent.com/moby/moby/master/README.md", sources[2].Ref)
 	assert.Equal(t, "sha256:419455202b0ef97e480d7f8199b26a721a417818bc0e2d106975f74323f25e6c", sources[2].Pin)
+}
+
+func testBuildInfoSourcesNoop(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+	f.RequiresBuildctl(t)
+
+	dockerfile := `
+FROM busybox:latest
+`
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", []byte(dockerfile), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	out := filepath.Join(destDir, "out.tar")
+	outW, err := os.Create(out)
+	require.NoError(t, err)
+
+	res, err := f.Solve(sb.Context(), c, client.SolveOpt{
+		Exports: []client.ExportEntry{
+			{
+				Type:   client.ExporterOCI,
+				Output: fixedWriteCloser(outW),
+			},
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	require.Contains(t, res.ExporterResponse, exptypes.ExporterBuildInfo)
+	dtbi, err := base64.StdEncoding.DecodeString(res.ExporterResponse[exptypes.ExporterBuildInfo])
+	require.NoError(t, err)
+
+	var bi binfotypes.BuildInfo
+	err = json.Unmarshal(dtbi, &bi)
+	require.NoError(t, err)
+
+	sources := bi.Sources
+	require.Equal(t, 1, len(sources))
+
+	assert.Equal(t, binfotypes.SourceTypeDockerImage, sources[0].Type)
+	assert.Equal(t, "docker.io/library/busybox:latest", sources[0].Ref)
+	assert.NotEmpty(t, sources[0].Pin)
 }
 
 // moby/buildkit#2476
@@ -252,6 +316,147 @@ ADD https://raw.githubusercontent.com/moby/moby/master/README.md /
 	}
 }
 
+func testBuildInfoImageContext(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+	f.RequiresBuildctl(t)
+
+	dockerfile := `
+FROM busybox AS base
+RUN cat /etc/alpine-release > /out
+FROM scratch
+COPY --from=base /out /
+`
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", []byte(dockerfile), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	out := filepath.Join(destDir, "out.tar")
+	outW, err := os.Create(out)
+	require.NoError(t, err)
+
+	res, err := f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"build-arg:foo":   "bar",
+			"context:busybox": "docker-image://alpine",
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:   client.ExporterOCI,
+				Output: fixedWriteCloser(outW),
+			},
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	require.Contains(t, res.ExporterResponse, exptypes.ExporterBuildInfo)
+	dtbi, err := base64.StdEncoding.DecodeString(res.ExporterResponse[exptypes.ExporterBuildInfo])
+	require.NoError(t, err)
+
+	var bi binfotypes.BuildInfo
+	err = json.Unmarshal(dtbi, &bi)
+	require.NoError(t, err)
+
+	require.Contains(t, bi.Attrs, "context:busybox")
+	require.Equal(t, "docker-image://alpine", *bi.Attrs["context:busybox"])
+	require.Contains(t, bi.Attrs, "build-arg:foo")
+	require.Equal(t, "bar", *bi.Attrs["build-arg:foo"])
+
+	sources := bi.Sources
+	require.Equal(t, 1, len(sources))
+	assert.Equal(t, binfotypes.SourceTypeDockerImage, sources[0].Type)
+	assert.Equal(t, "docker.io/library/alpine:latest", sources[0].Ref)
+	assert.NotEmpty(t, sources[0].Pin)
+}
+
+func testBuildInfoLocalContext(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+	f.RequiresBuildctl(t)
+
+	dockerfile := `
+FROM busybox AS base
+RUN cat /etc/alpine-release > /out
+FROM scratch
+COPY --from=base /o* /
+`
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", []byte(dockerfile), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	out := filepath.Join(destDir, "out.tar")
+	outW, err := os.Create(out)
+	require.NoError(t, err)
+
+	outf := []byte(`dummy-result`)
+
+	dir2, err := tmpdir(
+		fstest.CreateFile("out", outf, 0600),
+		fstest.CreateFile("out2", outf, 0600),
+		fstest.CreateFile(".dockerignore", []byte("out2\n"), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir2)
+
+	res, err := f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"build-arg:foo": "bar",
+			"context:base":  "local:basedir",
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:   client.ExporterOCI,
+				Output: fixedWriteCloser(outW),
+			},
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+			"basedir":                          dir2,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	require.Contains(t, res.ExporterResponse, exptypes.ExporterBuildInfo)
+	dtbi, err := base64.StdEncoding.DecodeString(res.ExporterResponse[exptypes.ExporterBuildInfo])
+	require.NoError(t, err)
+
+	var bi binfotypes.BuildInfo
+	err = json.Unmarshal(dtbi, &bi)
+	require.NoError(t, err)
+
+	require.Contains(t, bi.Attrs, "context:base")
+	require.Equal(t, "local:basedir", *bi.Attrs["context:base"])
+	require.Contains(t, bi.Attrs, "build-arg:foo")
+	require.Equal(t, "bar", *bi.Attrs["build-arg:foo"])
+
+	require.Equal(t, 0, len(bi.Sources))
+}
+
 func testBuildInfoDeps(t *testing.T, sb integration.Sandbox) {
 	ctx := sb.Context()
 	f := getFrontend(t, sb)
@@ -264,6 +469,7 @@ func testBuildInfoDeps(t *testing.T, sb integration.Sandbox) {
 	dockerfile := []byte(`
 FROM alpine
 ENV FOO=bar
+ADD https://raw.githubusercontent.com/moby/moby/master/README.md /
 RUN echo first > /out
 `)
 
@@ -366,19 +572,24 @@ COPY --from=build /foo /out /
 	err = json.Unmarshal(dtbi, &bi)
 	require.NoError(t, err)
 
+	require.Contains(t, bi.Attrs, "context:base")
+	require.Equal(t, "input:base", *bi.Attrs["context:base"])
+
 	require.Equal(t, 2, len(bi.Sources))
+
 	assert.Equal(t, binfotypes.SourceTypeDockerImage, bi.Sources[0].Type)
-	assert.True(t, strings.HasPrefix(bi.Sources[0].Ref, "docker.io/library/alpine"))
+	assert.Equal(t, "docker.io/library/busybox:latest", bi.Sources[0].Ref)
 	assert.NotEmpty(t, bi.Sources[0].Pin)
-	assert.Equal(t, binfotypes.SourceTypeDockerImage, bi.Sources[1].Type)
-	assert.Equal(t, "docker.io/library/busybox:latest", bi.Sources[1].Ref)
-	assert.NotEmpty(t, bi.Sources[1].Pin)
+
+	assert.Equal(t, binfotypes.SourceTypeHTTP, bi.Sources[1].Type)
+	assert.Equal(t, "https://raw.githubusercontent.com/moby/moby/master/README.md", bi.Sources[1].Ref)
+	assert.Equal(t, "sha256:419455202b0ef97e480d7f8199b26a721a417818bc0e2d106975f74323f25e6c", bi.Sources[1].Pin)
 
 	require.Contains(t, bi.Deps, "base")
 	depsrc := bi.Deps["base"].Sources
 	require.Equal(t, 1, len(depsrc))
 	assert.Equal(t, binfotypes.SourceTypeDockerImage, depsrc[0].Type)
-	assert.Equal(t, "alpine", depsrc[0].Ref)
+	assert.Equal(t, "docker.io/library/alpine:latest", depsrc[0].Ref)
 	assert.NotEmpty(t, depsrc[0].Pin)
 }
 
@@ -508,19 +719,149 @@ COPY --from=build /foo /out /
 		err = json.Unmarshal(dtbi, &bi)
 		require.NoError(t, err)
 
-		require.Equal(t, 2, len(bi.Sources))
+		require.Contains(t, bi.Attrs, "context:base")
+		require.Equal(t, "input:base", *bi.Attrs["context:base"])
+
+		require.Equal(t, 1, len(bi.Sources))
 		assert.Equal(t, binfotypes.SourceTypeDockerImage, bi.Sources[0].Type)
-		assert.True(t, strings.HasPrefix(bi.Sources[0].Ref, "docker.io/library/alpine"))
+		assert.Equal(t, "docker.io/library/busybox:latest", bi.Sources[0].Ref)
 		assert.NotEmpty(t, bi.Sources[0].Pin)
-		assert.Equal(t, binfotypes.SourceTypeDockerImage, bi.Sources[1].Type)
-		assert.Equal(t, "docker.io/library/busybox:latest", bi.Sources[1].Ref)
-		assert.NotEmpty(t, bi.Sources[1].Pin)
 
 		require.Contains(t, bi.Deps, "base")
 		depsrc := bi.Deps["base"].Sources
 		require.Equal(t, 1, len(depsrc))
 		assert.Equal(t, binfotypes.SourceTypeDockerImage, depsrc[0].Type)
-		assert.Equal(t, "alpine", depsrc[0].Ref)
+		assert.Equal(t, "docker.io/library/alpine:latest", depsrc[0].Ref)
 		assert.NotEmpty(t, depsrc[0].Pin)
 	}
+}
+
+func testBuildInfoDepsMainNoSource(t *testing.T, sb integration.Sandbox) {
+	ctx := sb.Context()
+	f := getFrontend(t, sb)
+	f.RequiresBuildctl(t)
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	dockerfile := []byte(`
+FROM alpine
+ENV FOO=bar
+ADD https://raw.githubusercontent.com/moby/moby/master/README.md /
+RUN echo first > /out
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	dockerfile2 := []byte(`
+FROM base AS build
+RUN echo "foo is $FOO" > /foo
+`)
+
+	dir2, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile2, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	b := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		res, err := f.SolveGateway(ctx, c, gateway.SolveRequest{})
+		if err != nil {
+			return nil, err
+		}
+		ref, err := res.SingleRef()
+		if err != nil {
+			return nil, err
+		}
+		st, err := ref.ToState()
+		if err != nil {
+			return nil, err
+		}
+
+		def, err := st.Marshal(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		dtic, ok := res.Metadata[exptypes.ExporterImageConfigKey]
+		if !ok {
+			return nil, errors.Errorf("no containerimage.config in metadata")
+		}
+
+		dtbi, ok := res.Metadata[exptypes.ExporterBuildInfo]
+		if !ok {
+			return nil, errors.Errorf("no containerimage.buildinfo in metadata")
+		}
+
+		dt, err := json.Marshal(map[string][]byte{
+			exptypes.ExporterImageConfigKey: dtic,
+			exptypes.ExporterBuildInfo:      dtbi,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		res, err = f.SolveGateway(ctx, c, gateway.SolveRequest{
+			FrontendOpt: map[string]string{
+				"dockerfilekey":       builder.DefaultLocalNameDockerfile + "2",
+				"context:base":        "input:base",
+				"input-metadata:base": string(dt),
+			},
+			FrontendInputs: map[string]*pb.Definition{
+				"base": def.ToPB(),
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+		return res, nil
+	}
+
+	destDir, err := ioutil.TempDir("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	res, err := c.Build(ctx, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile:       dir,
+			builder.DefaultLocalNameContext:          dir,
+			builder.DefaultLocalNameDockerfile + "2": dir2,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, "", b, nil)
+	require.NoError(t, err)
+
+	require.Contains(t, res.ExporterResponse, exptypes.ExporterBuildInfo)
+	dtbi, err := base64.StdEncoding.DecodeString(res.ExporterResponse[exptypes.ExporterBuildInfo])
+	require.NoError(t, err)
+
+	var bi binfotypes.BuildInfo
+	err = json.Unmarshal(dtbi, &bi)
+	require.NoError(t, err)
+
+	require.Contains(t, bi.Attrs, "context:base")
+	require.Equal(t, "input:base", *bi.Attrs["context:base"])
+
+	require.Equal(t, 1, len(bi.Sources))
+
+	assert.Equal(t, binfotypes.SourceTypeHTTP, bi.Sources[0].Type)
+	assert.Equal(t, "https://raw.githubusercontent.com/moby/moby/master/README.md", bi.Sources[0].Ref)
+	assert.Equal(t, "sha256:419455202b0ef97e480d7f8199b26a721a417818bc0e2d106975f74323f25e6c", bi.Sources[0].Pin)
+
+	require.Contains(t, bi.Deps, "base")
+	depsrc := bi.Deps["base"].Sources
+	require.Equal(t, 1, len(depsrc))
+	assert.Equal(t, binfotypes.SourceTypeDockerImage, depsrc[0].Type)
+	assert.Equal(t, "docker.io/library/alpine:latest", depsrc[0].Ref)
+	assert.NotEmpty(t, depsrc[0].Pin)
 }

@@ -39,6 +39,7 @@ import (
 	opspb "github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/bklog"
+	"github.com/moby/buildkit/util/buildinfo"
 	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/moby/buildkit/util/stack"
 	"github.com/moby/buildkit/util/tracing"
@@ -663,6 +664,16 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 			if ref == nil {
 				id = ""
 			} else {
+				dtbi, err := buildinfo.Encode(ctx, pbRes.Metadata, fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, k), ref.BuildSources())
+				if err != nil {
+					return nil, err
+				}
+				if dtbi != nil && len(dtbi) > 0 {
+					if pbRes.Metadata == nil {
+						pbRes.Metadata = make(map[string][]byte)
+					}
+					pbRes.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, k)] = dtbi
+				}
 				lbf.refs[id] = ref
 			}
 			ids[k] = id
@@ -686,6 +697,16 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 		if ref == nil {
 			id = ""
 		} else {
+			dtbi, err := buildinfo.Encode(ctx, pbRes.Metadata, exptypes.ExporterBuildInfo, ref.BuildSources())
+			if err != nil {
+				return nil, err
+			}
+			if dtbi != nil && len(dtbi) > 0 {
+				if pbRes.Metadata == nil {
+					pbRes.Metadata = make(map[string][]byte)
+				}
+				pbRes.Metadata[exptypes.ExporterBuildInfo] = dtbi
+			}
 			def = ref.Definition()
 			lbf.refs[id] = ref
 		}

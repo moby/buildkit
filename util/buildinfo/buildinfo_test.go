@@ -1,7 +1,6 @@
 package buildinfo
 
 import (
-	"context"
 	"encoding/json"
 	"testing"
 
@@ -55,7 +54,7 @@ func TestMergeSources(t *testing.T) {
 		},
 	}
 
-	srcs, err := mergeSources(context.Background(), buildSourcesLLB, frontendSources)
+	srcs, err := mergeSources(buildSourcesLLB, frontendSources)
 	require.NoError(t, err)
 
 	assert.Equal(t, []binfotypes.Source{
@@ -107,7 +106,7 @@ func TestDecodeDeps(t *testing.T) {
 				"build-arg:foo":         stringPtr("bar"),
 				"context:baseapp":       stringPtr("input:0-base"),
 				"filename":              stringPtr("Dockerfile"),
-				"input-metadata:0-base": stringPtr("{\"containerimage.buildinfo\":\"eyJmcm9udGVuZCI6ImRvY2tlcmZpbGUudjAiLCJhdHRycyI6eyJidWlsZC1hcmc6YmFyIjoiZm9vIiwiYnVpbGQtYXJnOmZvbyI6ImJhciIsImZpbGVuYW1lIjoiYmFzZWFwcC5Eb2NrZXJmaWxlIn0sInNvdXJjZXMiOlt7InR5cGUiOiJkb2NrZXItaW1hZ2UiLCJyZWYiOiJidXN5Ym94IiwiYWxpYXMiOiJkb2NrZXIuaW8vbGlicmFyeS9idXN5Ym94QHNoYTI1NjphZmNjN2YxYWMxYjQ5ZGIzMTdhNzE5NmM5MDJlNjFjNmMzYzQ2MDdkNjM1OTllZTFhODJkNzAyZDI0OWEwY2NiIiwicGluIjoic2hhMjU2OmFmY2M3ZjFhYzFiNDlkYjMxN2E3MTk2YzkwMmU2MWM2YzNjNDYwN2Q2MzU5OWVlMWE4MmQ3MDJkMjQ5YTBjY2IifV19\",\"containerimage.config\":\"eyJhcmNoaXRlY3R1cmUiOiJhbWQ2NCIsIm9zIjoibGludXgiLCJyb290ZnMiOnsidHlwZSI6ImxheWVycyIsImRpZmZfaWRzIjpbInNoYTI1NjpkMzE1MDVmZDUwNTBmNmI5NmNhMzI2OGQxZGI1OGZjOTFhZTU2MWRkZjE0ZWFhYmM0MWQ2M2VhMmVmOGMxYzZkIl19LCJoaXN0b3J5IjpbeyJjcmVhdGVkIjoiMjAyMi0wMi0wNFQyMToyMDoxMi4zMTg5MTc4MjJaIiwiY3JlYXRlZF9ieSI6Ii9iaW4vc2ggLWMgIyhub3ApIEFERCBmaWxlOjFjODUwN2UzZTliMjJiOTc3OGYyZWRiYjk1MDA2MWUwNmJkZTZhMWY1M2I2OWUxYzYxMDI1MDAyOWMzNzNiNzIgaW4gLyAifSx7ImNyZWF0ZWQiOiIyMDIyLTAyLTA0VDIxOjIwOjEyLjQ5Nzc5NDgwOVoiLCJjcmVhdGVkX2J5IjoiL2Jpbi9zaCAtYyAjKG5vcCkgIENNRCBbXCJzaFwiXSIsImVtcHR5X2xheWVyIjp0cnVlfSx7ImNyZWF0ZWRfYnkiOiJXT1JLRElSIC9zcmMiLCJjb21tZW50IjoiYnVpbGRraXQuZG9ja2VyZmlsZS52MCJ9XSwiY29uZmlnIjp7IkVudiI6WyJQQVRIPS91c3IvbG9jYWwvc2JpbjovdXNyL2xvY2FsL2JpbjovdXNyL3NiaW46L3Vzci9iaW46L3NiaW46L2JpbiJdLCJDbWQiOlsic2giXSwiV29ya2luZ0RpciI6Ii9zcmMiLCJPbkJ1aWxkIjpudWxsfX0=\"}"),
+				"input-metadata:0-base": stringPtr("{\"containerimage.buildinfo\":\"eyJmcm9udGVuZCI6ImRvY2tlcmZpbGUudjAiLCJhdHRycyI6eyJidWlsZC1hcmc6YmFyIjoiZm9vIiwiYnVpbGQtYXJnOmZvbyI6ImJhciIsImZpbGVuYW1lIjoiYmFzZWFwcC5Eb2NrZXJmaWxlIn0sInNvdXJjZXMiOlt7InR5cGUiOiJkb2NrZXItaW1hZ2UiLCJyZWYiOiJkb2NrZXIuaW8vbGlicmFyeS9idXN5Ym94OmxhdGVzdCIsInBpbiI6InNoYTI1NjphZmNjN2YxYWMxYjQ5ZGIzMTdhNzE5NmM5MDJlNjFjNmMzYzQ2MDdkNjM1OTllZTFhODJkNzAyZDI0OWEwY2NiIn1dfQ==\",\"containerimage.config\":\"eyJhcmNoaXRlY3R1cmUiOiJhbWQ2NCIsIm9zIjoibGludXgiLCJyb290ZnMiOnsidHlwZSI6ImxheWVycyIsImRpZmZfaWRzIjpbInNoYTI1NjpkMzE1MDVmZDUwNTBmNmI5NmNhMzI2OGQxZGI1OGZjOTFhZTU2MWRkZjE0ZWFhYmM0MWQ2M2VhMmVmOGMxYzZkIl19LCJoaXN0b3J5IjpbeyJjcmVhdGVkIjoiMjAyMi0wMi0wNFQyMToyMDoxMi4zMTg5MTc4MjJaIiwiY3JlYXRlZF9ieSI6Ii9iaW4vc2ggLWMgIyhub3ApIEFERCBmaWxlOjFjODUwN2UzZTliMjJiOTc3OGYyZWRiYjk1MDA2MWUwNmJkZTZhMWY1M2I2OWUxYzYxMDI1MDAyOWMzNzNiNzIgaW4gLyAifSx7ImNyZWF0ZWQiOiIyMDIyLTAyLTA0VDIxOjIwOjEyLjQ5Nzc5NDgwOVoiLCJjcmVhdGVkX2J5IjoiL2Jpbi9zaCAtYyAjKG5vcCkgIENNRCBbXCJzaFwiXSIsImVtcHR5X2xheWVyIjp0cnVlfSx7ImNyZWF0ZWRfYnkiOiJXT1JLRElSIC9zcmMiLCJjb21tZW50IjoiYnVpbGRraXQuZG9ja2VyZmlsZS52MCJ9XSwiY29uZmlnIjp7IkVudiI6WyJQQVRIPS91c3IvbG9jYWwvc2JpbjovdXNyL2xvY2FsL2JpbjovdXNyL3NiaW46L3Vzci9iaW46L3NiaW46L2JpbiJdLCJDbWQiOlsic2giXSwiV29ya2luZ0RpciI6Ii9zcmMiLCJPbkJ1aWxkIjpudWxsfX0=\"}"),
 			},
 			want: map[string]binfotypes.BuildInfo{
 				"0-base": {
@@ -119,10 +118,9 @@ func TestDecodeDeps(t *testing.T) {
 					},
 					Sources: []binfotypes.Source{
 						{
-							Type:  binfotypes.SourceTypeDockerImage,
-							Ref:   "busybox",
-							Alias: "docker.io/library/busybox@sha256:afcc7f1ac1b49db317a7196c902e61c6c3c4607d63599ee1a82d702d249a0ccb",
-							Pin:   "sha256:afcc7f1ac1b49db317a7196c902e61c6c3c4607d63599ee1a82d702d249a0ccb",
+							Type: binfotypes.SourceTypeDockerImage,
+							Ref:  "docker.io/library/busybox:latest",
+							Pin:  "sha256:afcc7f1ac1b49db317a7196c902e61c6c3c4607d63599ee1a82d702d249a0ccb",
 						},
 					},
 				},
@@ -135,8 +133,8 @@ func TestDecodeDeps(t *testing.T) {
 				"context:base::linux/amd64":        stringPtr("input:base::linux/amd64"),
 				"context:base::linux/arm64":        stringPtr("input:base::linux/arm64"),
 				"dockerfilekey":                    stringPtr("dockerfile2"),
-				"input-metadata:base::linux/amd64": stringPtr("{\"containerimage.buildinfo\":\"eyJmcm9udGVuZCI6ImRvY2tlcmZpbGUudjAiLCJzb3VyY2VzIjpbeyJ0eXBlIjoiZG9ja2VyLWltYWdlIiwicmVmIjoiYWxwaW5lIiwiYWxpYXMiOiJkb2NrZXIuaW8vbGlicmFyeS9hbHBpbmVAc2hhMjU2OmU3ZDg4ZGU3M2RiM2QzZmQ5YjJkNjNhYTdmNDQ3YTEwZmQwMjIwYjdjYmYzOTgwM2M4MDNmMmFmOWJhMjU2YjMiLCJwaW4iOiJzaGEyNTY6ZTdkODhkZTczZGIzZDNmZDliMmQ2M2FhN2Y0NDdhMTBmZDAyMjBiN2NiZjM5ODAzYzgwM2YyYWY5YmEyNTZiMyJ9XX0=\",\"containerimage.config\":\"eyJhcmNoaXRlY3R1cmUiOiJhbWQ2NCIsIm9zIjoibGludXgiLCJyb290ZnMiOnsidHlwZSI6ImxheWVycyIsImRpZmZfaWRzIjpbInNoYTI1Njo4ZDNhYzM0ODk5OTY0MjNmNTNkNjA4N2M4MTE4MDAwNjI2M2I3OWYyMDZkM2ZkZWM5ZTY2ZjBlMjdjZWI4NzU5Il19LCJoaXN0b3J5IjpbeyJjcmVhdGVkIjoiMjAyMS0xMS0yNFQyMDoxOTo0MC4xOTk3MDA5NDZaIiwiY3JlYXRlZF9ieSI6Ii9iaW4vc2ggLWMgIyhub3ApIEFERCBmaWxlOjkyMzNmNmYyMjM3ZDc5NjU5YTk1MjFmN2UzOTBkZjIxN2NlYzQ5ZjFhOGFhM2ExMjE0N2JiY2ExOTU2YWNkYjkgaW4gLyAifSx7ImNyZWF0ZWQiOiIyMDIxLTExLTI0VDIwOjE5OjQwLjQ4MzM2NzU0NloiLCJjcmVhdGVkX2J5IjoiL2Jpbi9zaCAtYyAjKG5vcCkgIENNRCBbXCIvYmluL3NoXCJdIiwiZW1wdHlfbGF5ZXIiOnRydWV9LHsiY3JlYXRlZF9ieSI6IkFSRyBUQVJHRVRBUkNIIiwiY29tbWVudCI6ImJ1aWxka2l0LmRvY2tlcmZpbGUudjAiLCJlbXB0eV9sYXllciI6dHJ1ZX0seyJjcmVhdGVkX2J5IjoiRU5WIEZPTz1iYXItYW1kNjQiLCJjb21tZW50IjoiYnVpbGRraXQuZG9ja2VyZmlsZS52MCIsImVtcHR5X2xheWVyIjp0cnVlfSx7ImNyZWF0ZWRfYnkiOiJSVU4gfDEgVEFSR0VUQVJDSD1hbWQ2NCAvYmluL3NoIC1jIGVjaG8gXCJmb28gJFRBUkdFVEFSQ0hcIiBcdTAwM2UgL291dCAjIGJ1aWxka2l0IiwiY29tbWVudCI6ImJ1aWxka2l0LmRvY2tlcmZpbGUudjAifV0sImNvbmZpZyI6eyJFbnYiOlsiUEFUSD0vdXNyL2xvY2FsL3NiaW46L3Vzci9sb2NhbC9iaW46L3Vzci9zYmluOi91c3IvYmluOi9zYmluOi9iaW4iLCJGT089YmFyLWFtZDY0Il0sIkNtZCI6WyIvYmluL3NoIl0sIk9uQnVpbGQiOm51bGx9fQ==\"}"),
-				"input-metadata:base::linux/arm64": stringPtr("{\"containerimage.buildinfo\":\"eyJmcm9udGVuZCI6ImRvY2tlcmZpbGUudjAiLCJzb3VyY2VzIjpbeyJ0eXBlIjoiZG9ja2VyLWltYWdlIiwicmVmIjoiYWxwaW5lIiwiYWxpYXMiOiJkb2NrZXIuaW8vbGlicmFyeS9hbHBpbmVAc2hhMjU2OmU3ZDg4ZGU3M2RiM2QzZmQ5YjJkNjNhYTdmNDQ3YTEwZmQwMjIwYjdjYmYzOTgwM2M4MDNmMmFmOWJhMjU2YjMiLCJwaW4iOiJzaGEyNTY6ZTdkODhkZTczZGIzZDNmZDliMmQ2M2FhN2Y0NDdhMTBmZDAyMjBiN2NiZjM5ODAzYzgwM2YyYWY5YmEyNTZiMyJ9XX0=\",\"containerimage.config\":\"eyJhcmNoaXRlY3R1cmUiOiJhcm02NCIsIm9zIjoibGludXgiLCJyb290ZnMiOnsidHlwZSI6ImxheWVycyIsImRpZmZfaWRzIjpbInNoYTI1Njo4ZDNhYzM0ODk5OTY0MjNmNTNkNjA4N2M4MTE4MDAwNjI2M2I3OWYyMDZkM2ZkZWM5ZTY2ZjBlMjdjZWI4NzU5Il19LCJoaXN0b3J5IjpbeyJjcmVhdGVkIjoiMjAyMS0xMS0yNFQyMDoxOTo0MC4xOTk3MDA5NDZaIiwiY3JlYXRlZF9ieSI6Ii9iaW4vc2ggLWMgIyhub3ApIEFERCBmaWxlOjkyMzNmNmYyMjM3ZDc5NjU5YTk1MjFmN2UzOTBkZjIxN2NlYzQ5ZjFhOGFhM2ExMjE0N2JiY2ExOTU2YWNkYjkgaW4gLyAifSx7ImNyZWF0ZWQiOiIyMDIxLTExLTI0VDIwOjE5OjQwLjQ4MzM2NzU0NloiLCJjcmVhdGVkX2J5IjoiL2Jpbi9zaCAtYyAjKG5vcCkgIENNRCBbXCIvYmluL3NoXCJdIiwiZW1wdHlfbGF5ZXIiOnRydWV9LHsiY3JlYXRlZF9ieSI6IkFSRyBUQVJHRVRBUkNIIiwiY29tbWVudCI6ImJ1aWxka2l0LmRvY2tlcmZpbGUudjAiLCJlbXB0eV9sYXllciI6dHJ1ZX0seyJjcmVhdGVkX2J5IjoiRU5WIEZPTz1iYXItYXJtNjQiLCJjb21tZW50IjoiYnVpbGRraXQuZG9ja2VyZmlsZS52MCIsImVtcHR5X2xheWVyIjp0cnVlfSx7ImNyZWF0ZWRfYnkiOiJSVU4gfDEgVEFSR0VUQVJDSD1hcm02NCAvYmluL3NoIC1jIGVjaG8gXCJmb28gJFRBUkdFVEFSQ0hcIiBcdTAwM2UgL291dCAjIGJ1aWxka2l0IiwiY29tbWVudCI6ImJ1aWxka2l0LmRvY2tlcmZpbGUudjAifV0sImNvbmZpZyI6eyJFbnYiOlsiUEFUSD0vdXNyL2xvY2FsL3NiaW46L3Vzci9sb2NhbC9iaW46L3Vzci9zYmluOi91c3IvYmluOi9zYmluOi9iaW4iLCJGT089YmFyLWFybTY0Il0sIkNtZCI6WyIvYmluL3NoIl0sIk9uQnVpbGQiOm51bGx9fQ==\"}"),
+				"input-metadata:base::linux/amd64": stringPtr("{\"containerimage.buildinfo\":\"eyJmcm9udGVuZCI6ImRvY2tlcmZpbGUudjAiLCJzb3VyY2VzIjpbeyJ0eXBlIjoiZG9ja2VyLWltYWdlIiwicmVmIjoiZG9ja2VyLmlvL2xpYnJhcnkvYWxwaW5lOmxhdGVzdCIsInBpbiI6InNoYTI1NjplN2Q4OGRlNzNkYjNkM2ZkOWIyZDYzYWE3ZjQ0N2ExMGZkMDIyMGI3Y2JmMzk4MDNjODAzZjJhZjliYTI1NmIzIn1dfQ==\",\"containerimage.config\":\"eyJhcmNoaXRlY3R1cmUiOiJhbWQ2NCIsIm9zIjoibGludXgiLCJyb290ZnMiOnsidHlwZSI6ImxheWVycyIsImRpZmZfaWRzIjpbInNoYTI1Njo4ZDNhYzM0ODk5OTY0MjNmNTNkNjA4N2M4MTE4MDAwNjI2M2I3OWYyMDZkM2ZkZWM5ZTY2ZjBlMjdjZWI4NzU5Il19LCJoaXN0b3J5IjpbeyJjcmVhdGVkIjoiMjAyMS0xMS0yNFQyMDoxOTo0MC4xOTk3MDA5NDZaIiwiY3JlYXRlZF9ieSI6Ii9iaW4vc2ggLWMgIyhub3ApIEFERCBmaWxlOjkyMzNmNmYyMjM3ZDc5NjU5YTk1MjFmN2UzOTBkZjIxN2NlYzQ5ZjFhOGFhM2ExMjE0N2JiY2ExOTU2YWNkYjkgaW4gLyAifSx7ImNyZWF0ZWQiOiIyMDIxLTExLTI0VDIwOjE5OjQwLjQ4MzM2NzU0NloiLCJjcmVhdGVkX2J5IjoiL2Jpbi9zaCAtYyAjKG5vcCkgIENNRCBbXCIvYmluL3NoXCJdIiwiZW1wdHlfbGF5ZXIiOnRydWV9LHsiY3JlYXRlZF9ieSI6IkFSRyBUQVJHRVRBUkNIIiwiY29tbWVudCI6ImJ1aWxka2l0LmRvY2tlcmZpbGUudjAiLCJlbXB0eV9sYXllciI6dHJ1ZX0seyJjcmVhdGVkX2J5IjoiRU5WIEZPTz1iYXItYW1kNjQiLCJjb21tZW50IjoiYnVpbGRraXQuZG9ja2VyZmlsZS52MCIsImVtcHR5X2xheWVyIjp0cnVlfSx7ImNyZWF0ZWRfYnkiOiJSVU4gfDEgVEFSR0VUQVJDSD1hbWQ2NCAvYmluL3NoIC1jIGVjaG8gXCJmb28gJFRBUkdFVEFSQ0hcIiBcdTAwM2UgL291dCAjIGJ1aWxka2l0IiwiY29tbWVudCI6ImJ1aWxka2l0LmRvY2tlcmZpbGUudjAifV0sImNvbmZpZyI6eyJFbnYiOlsiUEFUSD0vdXNyL2xvY2FsL3NiaW46L3Vzci9sb2NhbC9iaW46L3Vzci9zYmluOi91c3IvYmluOi9zYmluOi9iaW4iLCJGT089YmFyLWFtZDY0Il0sIkNtZCI6WyIvYmluL3NoIl0sIk9uQnVpbGQiOm51bGx9fQ==\"}"),
+				"input-metadata:base::linux/arm64": stringPtr("{\"containerimage.buildinfo\":\"eyJmcm9udGVuZCI6ImRvY2tlcmZpbGUudjAiLCJzb3VyY2VzIjpbeyJ0eXBlIjoiZG9ja2VyLWltYWdlIiwicmVmIjoiZG9ja2VyLmlvL2xpYnJhcnkvYWxwaW5lOmxhdGVzdCIsInBpbiI6InNoYTI1NjplN2Q4OGRlNzNkYjNkM2ZkOWIyZDYzYWE3ZjQ0N2ExMGZkMDIyMGI3Y2JmMzk4MDNjODAzZjJhZjliYTI1NmIzIn1dfQ==\",\"containerimage.config\":\"eyJhcmNoaXRlY3R1cmUiOiJhcm02NCIsIm9zIjoibGludXgiLCJyb290ZnMiOnsidHlwZSI6ImxheWVycyIsImRpZmZfaWRzIjpbInNoYTI1Njo4ZDNhYzM0ODk5OTY0MjNmNTNkNjA4N2M4MTE4MDAwNjI2M2I3OWYyMDZkM2ZkZWM5ZTY2ZjBlMjdjZWI4NzU5Il19LCJoaXN0b3J5IjpbeyJjcmVhdGVkIjoiMjAyMS0xMS0yNFQyMDoxOTo0MC4xOTk3MDA5NDZaIiwiY3JlYXRlZF9ieSI6Ii9iaW4vc2ggLWMgIyhub3ApIEFERCBmaWxlOjkyMzNmNmYyMjM3ZDc5NjU5YTk1MjFmN2UzOTBkZjIxN2NlYzQ5ZjFhOGFhM2ExMjE0N2JiY2ExOTU2YWNkYjkgaW4gLyAifSx7ImNyZWF0ZWQiOiIyMDIxLTExLTI0VDIwOjE5OjQwLjQ4MzM2NzU0NloiLCJjcmVhdGVkX2J5IjoiL2Jpbi9zaCAtYyAjKG5vcCkgIENNRCBbXCIvYmluL3NoXCJdIiwiZW1wdHlfbGF5ZXIiOnRydWV9LHsiY3JlYXRlZF9ieSI6IkFSRyBUQVJHRVRBUkNIIiwiY29tbWVudCI6ImJ1aWxka2l0LmRvY2tlcmZpbGUudjAiLCJlbXB0eV9sYXllciI6dHJ1ZX0seyJjcmVhdGVkX2J5IjoiRU5WIEZPTz1iYXItYXJtNjQiLCJjb21tZW50IjoiYnVpbGRraXQuZG9ja2VyZmlsZS52MCIsImVtcHR5X2xheWVyIjp0cnVlfSx7ImNyZWF0ZWRfYnkiOiJSVU4gfDEgVEFSR0VUQVJDSD1hcm02NCAvYmluL3NoIC1jIGVjaG8gXCJmb28gJFRBUkdFVEFSQ0hcIiBcdTAwM2UgL291dCAjIGJ1aWxka2l0IiwiY29tbWVudCI6ImJ1aWxka2l0LmRvY2tlcmZpbGUudjAifV0sImNvbmZpZyI6eyJFbnYiOlsiUEFUSD0vdXNyL2xvY2FsL3NiaW46L3Vzci9sb2NhbC9iaW46L3Vzci9zYmluOi91c3IvYmluOi9zYmluOi9iaW4iLCJGT089YmFyLWFybTY0Il0sIkNtZCI6WyIvYmluL3NoIl0sIk9uQnVpbGQiOm51bGx9fQ==\"}"),
 				"platform":                         stringPtr("linux/amd64,linux/arm64"),
 			},
 			want: map[string]binfotypes.BuildInfo{
@@ -145,10 +143,9 @@ func TestDecodeDeps(t *testing.T) {
 					Attrs:    nil,
 					Sources: []binfotypes.Source{
 						{
-							Type:  binfotypes.SourceTypeDockerImage,
-							Ref:   "alpine",
-							Alias: "docker.io/library/alpine@sha256:e7d88de73db3d3fd9b2d63aa7f447a10fd0220b7cbf39803c803f2af9ba256b3",
-							Pin:   "sha256:e7d88de73db3d3fd9b2d63aa7f447a10fd0220b7cbf39803c803f2af9ba256b3",
+							Type: binfotypes.SourceTypeDockerImage,
+							Ref:  "docker.io/library/alpine:latest",
+							Pin:  "sha256:e7d88de73db3d3fd9b2d63aa7f447a10fd0220b7cbf39803c803f2af9ba256b3",
 						},
 					},
 				},
@@ -161,6 +158,116 @@ func TestDecodeDeps(t *testing.T) {
 			deps, err := decodeDeps(tt.key, tt.attrs)
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, deps)
+		})
+	}
+}
+
+func TestDedupSources(t *testing.T) {
+	cases := []struct {
+		name string
+		bi   binfotypes.BuildInfo
+		want []binfotypes.Source
+	}{
+		{
+			name: "deps",
+			bi: binfotypes.BuildInfo{
+				Frontend: "dockerfile.v0",
+				Attrs: map[string]*string{
+					"context:base": stringPtr("input:base"),
+				},
+				Sources: []binfotypes.Source{
+					{
+						Type: "docker-image",
+						Ref:  "docker.io/library/alpine@sha256:e7d88de73db3d3fd9b2d63aa7f447a10fd0220b7cbf39803c803f2af9ba256b3",
+						Pin:  "sha256:e7d88de73db3d3fd9b2d63aa7f447a10fd0220b7cbf39803c803f2af9ba256b3",
+					},
+					{
+						Type: "docker-image",
+						Ref:  "docker.io/library/busybox:latest",
+						Pin:  "sha256:b69959407d21e8a062e0416bf13405bb2b71ed7a84dde4158ebafacfa06f5578",
+					},
+					{
+						Type: "http",
+						Ref:  "https://raw.githubusercontent.com/moby/moby/master/README.md",
+						Pin:  "sha256:419455202b0ef97e480d7f8199b26a721a417818bc0e2d106975f74323f25e6c",
+					},
+				},
+				Deps: map[string]binfotypes.BuildInfo{
+					"base": {
+						Frontend: "dockerfile.v0",
+						Sources: []binfotypes.Source{
+							{
+								Type: "docker-image",
+								Ref:  "docker.io/library/alpine:latest",
+								Pin:  "sha256:e7d88de73db3d3fd9b2d63aa7f447a10fd0220b7cbf39803c803f2af9ba256b3",
+							},
+						},
+					},
+				},
+			},
+			want: []binfotypes.Source{
+				{
+					Type: "docker-image",
+					Ref:  "docker.io/library/busybox:latest",
+					Pin:  "sha256:b69959407d21e8a062e0416bf13405bb2b71ed7a84dde4158ebafacfa06f5578",
+				},
+				{
+					Type: "http",
+					Ref:  "https://raw.githubusercontent.com/moby/moby/master/README.md",
+					Pin:  "sha256:419455202b0ef97e480d7f8199b26a721a417818bc0e2d106975f74323f25e6c",
+				},
+			},
+		},
+		{
+			name: "regular",
+			bi: binfotypes.BuildInfo{
+				Frontend: "dockerfile.v0",
+				Attrs: map[string]*string{
+					"context:base": stringPtr("input:base"),
+				},
+				Sources: []binfotypes.Source{
+					{
+						Type: "docker-image",
+						Ref:  "docker.io/library/alpine@sha256:e7d88de73db3d3fd9b2d63aa7f447a10fd0220b7cbf39803c803f2af9ba256b3",
+						Pin:  "sha256:e7d88de73db3d3fd9b2d63aa7f447a10fd0220b7cbf39803c803f2af9ba256b3",
+					},
+					{
+						Type: "docker-image",
+						Ref:  "docker.io/library/busybox:latest",
+						Pin:  "sha256:b69959407d21e8a062e0416bf13405bb2b71ed7a84dde4158ebafacfa06f5578",
+					},
+					{
+						Type: "docker-image",
+						Ref:  "docker.io/library/busybox:latest",
+						Pin:  "sha256:b69959407d21e8a062e0416bf13405bb2b71ed7a84dde4158ebafacfa06f5578",
+					},
+				},
+				Deps: map[string]binfotypes.BuildInfo{
+					"base": {
+						Frontend: "dockerfile.v0",
+						Sources: []binfotypes.Source{
+							{
+								Type: "docker-image",
+								Ref:  "docker.io/library/alpine:latest",
+								Pin:  "sha256:e7d88de73db3d3fd9b2d63aa7f447a10fd0220b7cbf39803c803f2af9ba256b3",
+							},
+						},
+					},
+				},
+			},
+			want: []binfotypes.Source{
+				{
+					Type: "docker-image",
+					Ref:  "docker.io/library/busybox:latest",
+					Pin:  "sha256:b69959407d21e8a062e0416bf13405bb2b71ed7a84dde4158ebafacfa06f5578",
+				},
+			},
+		},
+	}
+	for _, tt := range cases {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, dedupSources(tt.bi, allDepsSources(tt.bi, nil)))
 		})
 	}
 }
@@ -198,8 +305,8 @@ func TestFilterAttrs(t *testing.T) {
 				"context:base::linux/amd64":        stringPtr("input:base::linux/amd64"),
 				"context:base::linux/arm64":        stringPtr("input:base::linux/arm64"),
 				"dockerfilekey":                    stringPtr("dockerfile2"),
-				"input-metadata:base::linux/amd64": stringPtr("{\"containerimage.buildinfo\":\"eyJmcm9udGVuZCI6ImRvY2tlcmZpbGUudjAiLCJzb3VyY2VzIjpbeyJ0eXBlIjoiZG9ja2VyLWltYWdlIiwicmVmIjoiYWxwaW5lIiwiYWxpYXMiOiJkb2NrZXIuaW8vbGlicmFyeS9hbHBpbmVAc2hhMjU2OmU3ZDg4ZGU3M2RiM2QzZmQ5YjJkNjNhYTdmNDQ3YTEwZmQwMjIwYjdjYmYzOTgwM2M4MDNmMmFmOWJhMjU2YjMiLCJwaW4iOiJzaGEyNTY6ZTdkODhkZTczZGIzZDNmZDliMmQ2M2FhN2Y0NDdhMTBmZDAyMjBiN2NiZjM5ODAzYzgwM2YyYWY5YmEyNTZiMyJ9XX0=\",\"containerimage.config\":\"eyJhcmNoaXRlY3R1cmUiOiJhbWQ2NCIsIm9zIjoibGludXgiLCJyb290ZnMiOnsidHlwZSI6ImxheWVycyIsImRpZmZfaWRzIjpbInNoYTI1Njo4ZDNhYzM0ODk5OTY0MjNmNTNkNjA4N2M4MTE4MDAwNjI2M2I3OWYyMDZkM2ZkZWM5ZTY2ZjBlMjdjZWI4NzU5Il19LCJoaXN0b3J5IjpbeyJjcmVhdGVkIjoiMjAyMS0xMS0yNFQyMDoxOTo0MC4xOTk3MDA5NDZaIiwiY3JlYXRlZF9ieSI6Ii9iaW4vc2ggLWMgIyhub3ApIEFERCBmaWxlOjkyMzNmNmYyMjM3ZDc5NjU5YTk1MjFmN2UzOTBkZjIxN2NlYzQ5ZjFhOGFhM2ExMjE0N2JiY2ExOTU2YWNkYjkgaW4gLyAifSx7ImNyZWF0ZWQiOiIyMDIxLTExLTI0VDIwOjE5OjQwLjQ4MzM2NzU0NloiLCJjcmVhdGVkX2J5IjoiL2Jpbi9zaCAtYyAjKG5vcCkgIENNRCBbXCIvYmluL3NoXCJdIiwiZW1wdHlfbGF5ZXIiOnRydWV9LHsiY3JlYXRlZF9ieSI6IkFSRyBUQVJHRVRBUkNIIiwiY29tbWVudCI6ImJ1aWxka2l0LmRvY2tlcmZpbGUudjAiLCJlbXB0eV9sYXllciI6dHJ1ZX0seyJjcmVhdGVkX2J5IjoiRU5WIEZPTz1iYXItYW1kNjQiLCJjb21tZW50IjoiYnVpbGRraXQuZG9ja2VyZmlsZS52MCIsImVtcHR5X2xheWVyIjp0cnVlfSx7ImNyZWF0ZWRfYnkiOiJSVU4gfDEgVEFSR0VUQVJDSD1hbWQ2NCAvYmluL3NoIC1jIGVjaG8gXCJmb28gJFRBUkdFVEFSQ0hcIiBcdTAwM2UgL291dCAjIGJ1aWxka2l0IiwiY29tbWVudCI6ImJ1aWxka2l0LmRvY2tlcmZpbGUudjAifV0sImNvbmZpZyI6eyJFbnYiOlsiUEFUSD0vdXNyL2xvY2FsL3NiaW46L3Vzci9sb2NhbC9iaW46L3Vzci9zYmluOi91c3IvYmluOi9zYmluOi9iaW4iLCJGT089YmFyLWFtZDY0Il0sIkNtZCI6WyIvYmluL3NoIl0sIk9uQnVpbGQiOm51bGx9fQ==\"}"),
-				"input-metadata:base::linux/arm64": stringPtr("{\"containerimage.buildinfo\":\"eyJmcm9udGVuZCI6ImRvY2tlcmZpbGUudjAiLCJzb3VyY2VzIjpbeyJ0eXBlIjoiZG9ja2VyLWltYWdlIiwicmVmIjoiYWxwaW5lIiwiYWxpYXMiOiJkb2NrZXIuaW8vbGlicmFyeS9hbHBpbmVAc2hhMjU2OmU3ZDg4ZGU3M2RiM2QzZmQ5YjJkNjNhYTdmNDQ3YTEwZmQwMjIwYjdjYmYzOTgwM2M4MDNmMmFmOWJhMjU2YjMiLCJwaW4iOiJzaGEyNTY6ZTdkODhkZTczZGIzZDNmZDliMmQ2M2FhN2Y0NDdhMTBmZDAyMjBiN2NiZjM5ODAzYzgwM2YyYWY5YmEyNTZiMyJ9XX0=\",\"containerimage.config\":\"eyJhcmNoaXRlY3R1cmUiOiJhcm02NCIsIm9zIjoibGludXgiLCJyb290ZnMiOnsidHlwZSI6ImxheWVycyIsImRpZmZfaWRzIjpbInNoYTI1Njo4ZDNhYzM0ODk5OTY0MjNmNTNkNjA4N2M4MTE4MDAwNjI2M2I3OWYyMDZkM2ZkZWM5ZTY2ZjBlMjdjZWI4NzU5Il19LCJoaXN0b3J5IjpbeyJjcmVhdGVkIjoiMjAyMS0xMS0yNFQyMDoxOTo0MC4xOTk3MDA5NDZaIiwiY3JlYXRlZF9ieSI6Ii9iaW4vc2ggLWMgIyhub3ApIEFERCBmaWxlOjkyMzNmNmYyMjM3ZDc5NjU5YTk1MjFmN2UzOTBkZjIxN2NlYzQ5ZjFhOGFhM2ExMjE0N2JiY2ExOTU2YWNkYjkgaW4gLyAifSx7ImNyZWF0ZWQiOiIyMDIxLTExLTI0VDIwOjE5OjQwLjQ4MzM2NzU0NloiLCJjcmVhdGVkX2J5IjoiL2Jpbi9zaCAtYyAjKG5vcCkgIENNRCBbXCIvYmluL3NoXCJdIiwiZW1wdHlfbGF5ZXIiOnRydWV9LHsiY3JlYXRlZF9ieSI6IkFSRyBUQVJHRVRBUkNIIiwiY29tbWVudCI6ImJ1aWxka2l0LmRvY2tlcmZpbGUudjAiLCJlbXB0eV9sYXllciI6dHJ1ZX0seyJjcmVhdGVkX2J5IjoiRU5WIEZPTz1iYXItYXJtNjQiLCJjb21tZW50IjoiYnVpbGRraXQuZG9ja2VyZmlsZS52MCIsImVtcHR5X2xheWVyIjp0cnVlfSx7ImNyZWF0ZWRfYnkiOiJSVU4gfDEgVEFSR0VUQVJDSD1hcm02NCAvYmluL3NoIC1jIGVjaG8gXCJmb28gJFRBUkdFVEFSQ0hcIiBcdTAwM2UgL291dCAjIGJ1aWxka2l0IiwiY29tbWVudCI6ImJ1aWxka2l0LmRvY2tlcmZpbGUudjAifV0sImNvbmZpZyI6eyJFbnYiOlsiUEFUSD0vdXNyL2xvY2FsL3NiaW46L3Vzci9sb2NhbC9iaW46L3Vzci9zYmluOi91c3IvYmluOi9zYmluOi9iaW4iLCJGT089YmFyLWFybTY0Il0sIkNtZCI6WyIvYmluL3NoIl0sIk9uQnVpbGQiOm51bGx9fQ==\"}"),
+				"input-metadata:base::linux/amd64": stringPtr("{\"containerimage.buildinfo\":\"eyJmcm9udGVuZCI6ImRvY2tlcmZpbGUudjAiLCJzb3VyY2VzIjpbeyJ0eXBlIjoiZG9ja2VyLWltYWdlIiwicmVmIjoiZG9ja2VyLmlvL2xpYnJhcnkvYWxwaW5lOmxhdGVzdCIsInBpbiI6InNoYTI1NjplN2Q4OGRlNzNkYjNkM2ZkOWIyZDYzYWE3ZjQ0N2ExMGZkMDIyMGI3Y2JmMzk4MDNjODAzZjJhZjliYTI1NmIzIn1dfQ==\",\"containerimage.config\":\"eyJhcmNoaXRlY3R1cmUiOiJhbWQ2NCIsIm9zIjoibGludXgiLCJyb290ZnMiOnsidHlwZSI6ImxheWVycyIsImRpZmZfaWRzIjpbInNoYTI1Njo4ZDNhYzM0ODk5OTY0MjNmNTNkNjA4N2M4MTE4MDAwNjI2M2I3OWYyMDZkM2ZkZWM5ZTY2ZjBlMjdjZWI4NzU5Il19LCJoaXN0b3J5IjpbeyJjcmVhdGVkIjoiMjAyMS0xMS0yNFQyMDoxOTo0MC4xOTk3MDA5NDZaIiwiY3JlYXRlZF9ieSI6Ii9iaW4vc2ggLWMgIyhub3ApIEFERCBmaWxlOjkyMzNmNmYyMjM3ZDc5NjU5YTk1MjFmN2UzOTBkZjIxN2NlYzQ5ZjFhOGFhM2ExMjE0N2JiY2ExOTU2YWNkYjkgaW4gLyAifSx7ImNyZWF0ZWQiOiIyMDIxLTExLTI0VDIwOjE5OjQwLjQ4MzM2NzU0NloiLCJjcmVhdGVkX2J5IjoiL2Jpbi9zaCAtYyAjKG5vcCkgIENNRCBbXCIvYmluL3NoXCJdIiwiZW1wdHlfbGF5ZXIiOnRydWV9LHsiY3JlYXRlZF9ieSI6IkFSRyBUQVJHRVRBUkNIIiwiY29tbWVudCI6ImJ1aWxka2l0LmRvY2tlcmZpbGUudjAiLCJlbXB0eV9sYXllciI6dHJ1ZX0seyJjcmVhdGVkX2J5IjoiRU5WIEZPTz1iYXItYW1kNjQiLCJjb21tZW50IjoiYnVpbGRraXQuZG9ja2VyZmlsZS52MCIsImVtcHR5X2xheWVyIjp0cnVlfSx7ImNyZWF0ZWRfYnkiOiJSVU4gfDEgVEFSR0VUQVJDSD1hbWQ2NCAvYmluL3NoIC1jIGVjaG8gXCJmb28gJFRBUkdFVEFSQ0hcIiBcdTAwM2UgL291dCAjIGJ1aWxka2l0IiwiY29tbWVudCI6ImJ1aWxka2l0LmRvY2tlcmZpbGUudjAifV0sImNvbmZpZyI6eyJFbnYiOlsiUEFUSD0vdXNyL2xvY2FsL3NiaW46L3Vzci9sb2NhbC9iaW46L3Vzci9zYmluOi91c3IvYmluOi9zYmluOi9iaW4iLCJGT089YmFyLWFtZDY0Il0sIkNtZCI6WyIvYmluL3NoIl0sIk9uQnVpbGQiOm51bGx9fQ==\"}"),
+				"input-metadata:base::linux/arm64": stringPtr("{\"containerimage.buildinfo\":\"eyJmcm9udGVuZCI6ImRvY2tlcmZpbGUudjAiLCJzb3VyY2VzIjpbeyJ0eXBlIjoiZG9ja2VyLWltYWdlIiwicmVmIjoiZG9ja2VyLmlvL2xpYnJhcnkvYWxwaW5lOmxhdGVzdCIsInBpbiI6InNoYTI1NjplN2Q4OGRlNzNkYjNkM2ZkOWIyZDYzYWE3ZjQ0N2ExMGZkMDIyMGI3Y2JmMzk4MDNjODAzZjJhZjliYTI1NmIzIn1dfQ==\",\"containerimage.config\":\"eyJhcmNoaXRlY3R1cmUiOiJhcm02NCIsIm9zIjoibGludXgiLCJyb290ZnMiOnsidHlwZSI6ImxheWVycyIsImRpZmZfaWRzIjpbInNoYTI1Njo4ZDNhYzM0ODk5OTY0MjNmNTNkNjA4N2M4MTE4MDAwNjI2M2I3OWYyMDZkM2ZkZWM5ZTY2ZjBlMjdjZWI4NzU5Il19LCJoaXN0b3J5IjpbeyJjcmVhdGVkIjoiMjAyMS0xMS0yNFQyMDoxOTo0MC4xOTk3MDA5NDZaIiwiY3JlYXRlZF9ieSI6Ii9iaW4vc2ggLWMgIyhub3ApIEFERCBmaWxlOjkyMzNmNmYyMjM3ZDc5NjU5YTk1MjFmN2UzOTBkZjIxN2NlYzQ5ZjFhOGFhM2ExMjE0N2JiY2ExOTU2YWNkYjkgaW4gLyAifSx7ImNyZWF0ZWQiOiIyMDIxLTExLTI0VDIwOjE5OjQwLjQ4MzM2NzU0NloiLCJjcmVhdGVkX2J5IjoiL2Jpbi9zaCAtYyAjKG5vcCkgIENNRCBbXCIvYmluL3NoXCJdIiwiZW1wdHlfbGF5ZXIiOnRydWV9LHsiY3JlYXRlZF9ieSI6IkFSRyBUQVJHRVRBUkNIIiwiY29tbWVudCI6ImJ1aWxka2l0LmRvY2tlcmZpbGUudjAiLCJlbXB0eV9sYXllciI6dHJ1ZX0seyJjcmVhdGVkX2J5IjoiRU5WIEZPTz1iYXItYXJtNjQiLCJjb21tZW50IjoiYnVpbGRraXQuZG9ja2VyZmlsZS52MCIsImVtcHR5X2xheWVyIjp0cnVlfSx7ImNyZWF0ZWRfYnkiOiJSVU4gfDEgVEFSR0VUQVJDSD1hcm02NCAvYmluL3NoIC1jIGVjaG8gXCJmb28gJFRBUkdFVEFSQ0hcIiBcdTAwM2UgL291dCAjIGJ1aWxka2l0IiwiY29tbWVudCI6ImJ1aWxka2l0LmRvY2tlcmZpbGUudjAifV0sImNvbmZpZyI6eyJFbnYiOlsiUEFUSD0vdXNyL2xvY2FsL3NiaW46L3Vzci9sb2NhbC9iaW46L3Vzci9zYmluOi91c3IvYmluOi9zYmluOi9iaW4iLCJGT089YmFyLWFybTY0Il0sIkNtZCI6WyIvYmluL3NoIl0sIk9uQnVpbGQiOm51bGx9fQ==\"}"),
 				"platform":                         stringPtr("linux/amd64,linux/arm64"),
 			},
 			want: map[string]*string{

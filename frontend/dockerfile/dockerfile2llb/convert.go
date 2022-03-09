@@ -70,18 +70,31 @@ type ConvertOpt struct {
 	SourceMap         *llb.SourceMap
 	Hostname          string
 	Warn              func(short, url string, detail [][]byte, location *parser.Range)
-	ContextByName     func(context.Context, string) (*llb.State, *Image, error)
+	ContextByName     func(context.Context, string) (*llb.State, *Image, *binfotypes.BuildInfo, error)
 }
 
 func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State, *Image, *binfotypes.BuildInfo, error) {
+	buildInfo := &binfotypes.BuildInfo{}
 	contextByName := opt.ContextByName
-	opt.ContextByName = func(ctx context.Context, name string) (*llb.State, *Image, error) {
+	opt.ContextByName = func(ctx context.Context, name string) (*llb.State, *Image, *binfotypes.BuildInfo, error) {
 		if !strings.EqualFold(name, "scratch") && !strings.EqualFold(name, "context") {
 			if contextByName != nil {
-				return contextByName(ctx, name)
+				st, img, bi, err := contextByName(ctx, name)
+				if err != nil {
+					return nil, nil, nil, err
+				}
+				if bi != nil && bi.Deps != nil {
+					for k := range bi.Deps {
+						if buildInfo.Deps == nil {
+							buildInfo.Deps = make(map[string]binfotypes.BuildInfo)
+						}
+						buildInfo.Deps[k] = bi.Deps[k]
+					}
+				}
+				return st, img, bi, nil
 			}
 		}
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 
 	if len(dt) == 0 {
@@ -152,7 +165,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		}
 
 		if st.Name != "" {
-			s, img, err := opt.ContextByName(ctx, st.Name)
+			s, img, bi, err := opt.ContextByName(ctx, st.Name)
 			if err != nil {
 				return nil, nil, nil, err
 			}
@@ -161,6 +174,9 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 				ds.state = *s
 				if img != nil {
 					ds.image = *img
+				}
+				if bi != nil {
+					ds.buildInfo = *bi
 				}
 				allDispatchStates.addState(ds)
 				continue
@@ -291,7 +307,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 					d.stage.BaseName = reference.TagNameOnly(ref).String()
 
 					var isScratch bool
-					st, img, err := opt.ContextByName(ctx, d.stage.BaseName)
+					st, img, bi, err := opt.ContextByName(ctx, d.stage.BaseName)
 					if err != nil {
 						return err
 					}
@@ -300,6 +316,9 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 							d.image = *img
 						} else {
 							d.image = emptyImage(platformOpt.targetPlatform)
+						}
+						if bi != nil {
+							d.buildInfo = *bi
 						}
 						d.state = *st
 						d.platform = platform
@@ -349,12 +368,12 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 						if !isScratch {
 							// if image not scratch set original image name as ref
 							// and actual reference as alias in binfotypes.Source
-							d.buildSource = &binfotypes.Source{
+							d.buildInfo.Sources = append(d.buildInfo.Sources, binfotypes.Source{
 								Type:  binfotypes.SourceTypeDockerImage,
 								Ref:   origName,
 								Alias: ref.String(),
 								Pin:   dgst.String(),
-							}
+							})
 						}
 						d.image = img
 					}
@@ -382,7 +401,6 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 
 	buildContext := &mutableOutput{}
 	ctxPaths := map[string]struct{}{}
-	buildInfo := &binfotypes.BuildInfo{}
 
 	for _, d := range allDispatchStates.states {
 		if !isReachable(target, d) {
@@ -390,8 +408,16 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 		}
 
 		// collect build sources and dependencies
-		if d.buildSource != nil {
-			buildInfo.Sources = append(buildInfo.Sources, *d.buildSource)
+		if len(d.buildInfo.Sources) > 0 {
+			buildInfo.Sources = append(buildInfo.Sources, d.buildInfo.Sources...)
+		}
+		if d.buildInfo.Deps != nil {
+			for name, bi := range d.buildInfo.Deps {
+				if buildInfo.Deps == nil {
+					buildInfo.Deps = make(map[string]binfotypes.BuildInfo)
+				}
+				buildInfo.Deps[name] = bi
+			}
 		}
 
 		if d.base != nil {
@@ -701,7 +727,7 @@ type dispatchState struct {
 	cmdIndex       int
 	cmdTotal       int
 	prefixPlatform bool
-	buildSource    *binfotypes.Source
+	buildInfo      binfotypes.BuildInfo
 }
 
 type dispatchStates struct {

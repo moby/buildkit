@@ -159,24 +159,30 @@ func (b *llbBridge) Solve(ctx context.Context, req frontend.SolveRequest, sid st
 		return &frontend.Result{}, nil
 	}
 
-	if res.Metadata == nil {
-		res.Metadata = make(map[string][]byte)
-	}
-
 	if len(res.Refs) > 0 {
 		for p := range res.Refs {
 			dtbi, err := buildinfo.GetMetadata(res.Metadata, fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, p), req.Frontend, req.FrontendOpt)
 			if err != nil {
 				return nil, err
 			}
-			res.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, p)] = dtbi
+			if dtbi != nil && len(dtbi) > 0 {
+				if res.Metadata == nil {
+					res.Metadata = make(map[string][]byte)
+				}
+				res.Metadata[fmt.Sprintf("%s/%s", exptypes.ExporterBuildInfo, p)] = dtbi
+			}
 		}
 	} else {
 		dtbi, err := buildinfo.GetMetadata(res.Metadata, exptypes.ExporterBuildInfo, req.Frontend, req.FrontendOpt)
 		if err != nil {
 			return nil, err
 		}
-		res.Metadata[exptypes.ExporterBuildInfo] = dtbi
+		if dtbi != nil && len(dtbi) > 0 {
+			if res.Metadata == nil {
+				res.Metadata = make(map[string][]byte)
+			}
+			res.Metadata[exptypes.ExporterBuildInfo] = dtbi
+		}
 	}
 
 	return
