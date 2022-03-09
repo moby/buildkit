@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -168,7 +167,7 @@ func runBuildkitd(ctx context.Context, conf *BackendConfig, args []string, logs 
 		args = append(args, "--config="+conf.ConfigFile)
 	}
 
-	tmpdir, err := ioutil.TempDir("", "bktest_buildkitd")
+	tmpdir, err := os.MkdirTemp("", "bktest_buildkitd")
 	if err != nil {
 		return "", nil, err
 	}

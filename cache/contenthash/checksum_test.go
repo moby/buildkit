@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -43,7 +42,7 @@ const (
 
 func TestChecksumSymlinkNoParentScan(t *testing.T) {
 	t.Parallel()
-	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	tmpdir, err := os.MkdirTemp("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -72,7 +71,7 @@ func TestChecksumSymlinkNoParentScan(t *testing.T) {
 
 func TestChecksumHardlinks(t *testing.T) {
 	t.Parallel()
-	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	tmpdir, err := os.MkdirTemp("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -155,7 +154,7 @@ func TestChecksumHardlinks(t *testing.T) {
 
 func TestChecksumWildcardOrFilter(t *testing.T) {
 	t.Parallel()
-	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	tmpdir, err := os.MkdirTemp("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -212,7 +211,7 @@ func TestChecksumWildcardOrFilter(t *testing.T) {
 
 func TestChecksumWildcardWithBadMountable(t *testing.T) {
 	t.Parallel()
-	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	tmpdir, err := os.MkdirTemp("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -232,7 +231,7 @@ func TestChecksumWildcardWithBadMountable(t *testing.T) {
 
 func TestSymlinksNoFollow(t *testing.T) {
 	t.Parallel()
-	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	tmpdir, err := os.MkdirTemp("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -291,7 +290,7 @@ func TestSymlinksNoFollow(t *testing.T) {
 
 func TestChecksumBasicFile(t *testing.T) {
 	t.Parallel()
-	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	tmpdir, err := os.MkdirTemp("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -449,7 +448,7 @@ func TestChecksumIncludeExclude(t *testing.T) {
 func testChecksumIncludeExclude(t *testing.T, wildcard bool) {
 	t.Parallel()
 
-	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	tmpdir, err := os.MkdirTemp("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -584,7 +583,7 @@ func testChecksumIncludeExclude(t *testing.T, wildcard bool) {
 
 func TestChecksumIncludeDoubleStar(t *testing.T) {
 	t.Parallel()
-	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	tmpdir, err := os.MkdirTemp("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -652,7 +651,7 @@ func TestChecksumIncludeDoubleStar(t *testing.T) {
 
 func TestChecksumIncludeSymlink(t *testing.T) {
 	t.Parallel()
-	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	tmpdir, err := os.MkdirTemp("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -725,7 +724,7 @@ func TestChecksumIncludeSymlink(t *testing.T) {
 
 func TestHandleChange(t *testing.T) {
 	t.Parallel()
-	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	tmpdir, err := os.MkdirTemp("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -803,7 +802,7 @@ func TestHandleChange(t *testing.T) {
 
 func TestHandleRecursiveDir(t *testing.T) {
 	t.Parallel()
-	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	tmpdir, err := os.MkdirTemp("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -852,7 +851,7 @@ func TestHandleRecursiveDir(t *testing.T) {
 
 func TestChecksumUnorderedFiles(t *testing.T) {
 	t.Parallel()
-	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	tmpdir, err := os.MkdirTemp("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -905,7 +904,7 @@ func TestChecksumUnorderedFiles(t *testing.T) {
 
 func TestSymlinkInPathScan(t *testing.T) {
 	t.Parallel()
-	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	tmpdir, err := os.MkdirTemp("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -936,7 +935,7 @@ func TestSymlinkInPathScan(t *testing.T) {
 
 func TestSymlinkNeedsScan(t *testing.T) {
 	t.Parallel()
-	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	tmpdir, err := os.MkdirTemp("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -969,7 +968,7 @@ func TestSymlinkNeedsScan(t *testing.T) {
 
 func TestSymlinkAbsDirSuffix(t *testing.T) {
 	t.Parallel()
-	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	tmpdir, err := os.MkdirTemp("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -996,7 +995,7 @@ func TestSymlinkAbsDirSuffix(t *testing.T) {
 
 func TestSymlinkThroughParent(t *testing.T) {
 	t.Parallel()
-	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	tmpdir, err := os.MkdirTemp("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -1051,7 +1050,7 @@ func TestSymlinkThroughParent(t *testing.T) {
 
 func TestSymlinkInPathHandleChange(t *testing.T) {
 	t.Parallel()
-	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	tmpdir, err := os.MkdirTemp("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -1114,7 +1113,7 @@ func TestSymlinkInPathHandleChange(t *testing.T) {
 
 func TestPersistence(t *testing.T) {
 	t.Parallel()
-	tmpdir, err := ioutil.TempDir("", "buildkit-state")
+	tmpdir, err := os.MkdirTemp("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -55,7 +54,7 @@ func testBuildLocalExporter(t *testing.T, sb integration.Sandbox) {
 	rdr, err := marshal(sb.Context(), out)
 	require.NoError(t, err)
 
-	tmpdir, err := ioutil.TempDir("", "buildkit-buildctl")
+	tmpdir, err := os.MkdirTemp("", "buildkit-buildctl")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -65,7 +64,7 @@ func testBuildLocalExporter(t *testing.T, sb integration.Sandbox) {
 
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(tmpdir, "foo"))
+	dt, err := os.ReadFile(filepath.Join(tmpdir, "foo"))
 	require.NoError(t, err)
 	require.Equal(t, string(dt), "bar")
 }
@@ -121,7 +120,7 @@ func testBuildMetadataFile(t *testing.T, sb integration.Sandbox) {
 	rdr, err := marshal(sb.Context(), st.Root())
 	require.NoError(t, err)
 
-	tmpDir, err := ioutil.TempDir("", "buildkit-buildctl")
+	tmpDir, err := os.MkdirTemp("", "buildkit-buildctl")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpDir)
 
@@ -140,7 +139,7 @@ func testBuildMetadataFile(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	require.FileExists(t, metadataFile)
-	metadataBytes, err := ioutil.ReadFile(metadataFile)
+	metadataBytes, err := os.ReadFile(metadataFile)
 	require.NoError(t, err)
 
 	var metadata map[string]interface{}
@@ -193,7 +192,7 @@ func marshal(ctx context.Context, st llb.State) (io.Reader, error) {
 }
 
 func tmpdir(appliers ...fstest.Applier) (string, error) {
-	tmpdir, err := ioutil.TempDir("", "buildkit-buildctl")
+	tmpdir, err := os.MkdirTemp("", "buildkit-buildctl")
 	if err != nil {
 		return "", err
 	}

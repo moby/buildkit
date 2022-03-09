@@ -3,7 +3,6 @@ package sshprovider
 import (
 	"context"
 	"io"
-	"io/ioutil"
 	"net"
 	"os"
 	"runtime"
@@ -166,7 +165,7 @@ func toAgentSource(paths []string) (source, error) {
 		if err != nil {
 			return source{}, errors.Wrapf(err, "failed to open %s", p)
 		}
-		dt, err := ioutil.ReadAll(&io.LimitedReader{R: f, N: 100 * 1024})
+		dt, err := io.ReadAll(&io.LimitedReader{R: f, N: 100 * 1024})
 		if err != nil {
 			return source{}, errors.Wrapf(err, "failed to read %s", p)
 		}

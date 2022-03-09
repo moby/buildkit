@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"os"
 	"path"
 	"testing"
@@ -120,7 +119,7 @@ func TestWriteMetadataFile(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			fname := path.Join(tmpdir, "metadata_"+tt.name)
 			require.NoError(t, writeMetadataFile(fname, tt.exporterResponse))
-			current, err := ioutil.ReadFile(fname)
+			current, err := os.ReadFile(fname)
 			require.NoError(t, err)
 			var raw map[string]interface{}
 			require.NoError(t, json.Unmarshal(current, &raw))

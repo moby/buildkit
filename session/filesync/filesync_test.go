@@ -2,7 +2,7 @@ package filesync
 
 import (
 	"context"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -16,16 +16,16 @@ import (
 func TestFileSyncIncludePatterns(t *testing.T) {
 	ctx := context.TODO()
 	t.Parallel()
-	tmpDir, err := ioutil.TempDir("", "fsynctest")
+	tmpDir, err := os.MkdirTemp("", "fsynctest")
 	require.NoError(t, err)
 
-	destDir, err := ioutil.TempDir("", "fsynctest")
+	destDir, err := os.MkdirTemp("", "fsynctest")
 	require.NoError(t, err)
 
-	err = ioutil.WriteFile(filepath.Join(tmpDir, "foo"), []byte("content1"), 0600)
+	err = os.WriteFile(filepath.Join(tmpDir, "foo"), []byte("content1"), 0600)
 	require.NoError(t, err)
 
-	err = ioutil.WriteFile(filepath.Join(tmpDir, "bar"), []byte("content2"), 0600)
+	err = os.WriteFile(filepath.Join(tmpDir, "bar"), []byte("content2"), 0600)
 	require.NoError(t, err)
 
 	s, err := session.NewSession(ctx, "foo", "bar")
@@ -58,10 +58,10 @@ func TestFileSyncIncludePatterns(t *testing.T) {
 			return err
 		}
 
-		_, err = ioutil.ReadFile(filepath.Join(destDir, "foo"))
+		_, err = os.ReadFile(filepath.Join(destDir, "foo"))
 		assert.Error(t, err)
 
-		dt, err := ioutil.ReadFile(filepath.Join(destDir, "bar"))
+		dt, err := os.ReadFile(filepath.Join(destDir, "bar"))
 		if err != nil {
 			return err
 		}

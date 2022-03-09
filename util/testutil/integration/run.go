@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"os/exec"
@@ -295,7 +294,7 @@ mirrors=["%s"]
 }
 
 func writeConfig(updaters []ConfigUpdater) (string, error) {
-	tmpdir, err := ioutil.TempDir("", "bktest_config")
+	tmpdir, err := os.MkdirTemp("", "bktest_config")
 	if err != nil {
 		return "", err
 	}
@@ -308,7 +307,7 @@ func writeConfig(updaters []ConfigUpdater) (string, error) {
 		s = upt.UpdateConfigFile(s)
 	}
 
-	if err := ioutil.WriteFile(filepath.Join(tmpdir, buildkitdConfigFile), []byte(s), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpdir, buildkitdConfigFile), []byte(s), 0644); err != nil {
 		return "", err
 	}
 	return tmpdir, nil
@@ -428,7 +427,7 @@ func runStargzSnapshotter(cfg *BackendConfig) (address string, cl func() error, 
 		}
 	}()
 
-	tmpStargzDir, err := ioutil.TempDir("", "bktest_containerd_stargz_grpc")
+	tmpStargzDir, err := os.MkdirTemp("", "bktest_containerd_stargz_grpc")
 	if err != nil {
 		return "", nil, err
 	}

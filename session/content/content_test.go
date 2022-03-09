@@ -2,7 +2,6 @@ package content
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
 	"testing"
 
@@ -24,7 +23,7 @@ func TestContentAttachable(t *testing.T) {
 	attachableStores := make(map[string]content.Store)
 	testBlobs := make(map[string]map[digest.Digest][]byte)
 	for _, id := range ids {
-		tmpDir, err := ioutil.TempDir("", "contenttest")
+		tmpDir, err := os.MkdirTemp("", "contenttest")
 		require.NoError(t, err)
 		defer os.RemoveAll(tmpDir)
 		store, err := local.NewStore(tmpDir)

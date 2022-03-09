@@ -3,7 +3,6 @@ package integration
 import (
 	"context"
 	"encoding/json"
-	"io/ioutil"
 	"os"
 
 	"github.com/containerd/containerd/content"
@@ -15,7 +14,7 @@ import (
 func providerFromBinary(fn string) (_ ocispecs.Descriptor, _ content.Provider, _ func(), err error) {
 	ctx := context.TODO()
 
-	tmpDir, err := ioutil.TempDir("", "buildkit-state")
+	tmpDir, err := os.MkdirTemp("", "buildkit-state")
 	if err != nil {
 		return ocispecs.Descriptor{}, nil, nil, err
 	}

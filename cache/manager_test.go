@@ -8,7 +8,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -75,7 +74,7 @@ func newCacheManager(ctx context.Context, opt cmOpt) (co *cmOut, cleanup func() 
 		opt.snapshotterName = "native"
 	}
 
-	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	tmpdir, err := os.MkdirTemp("", "cachemanager")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -167,14 +166,14 @@ func TestSharableMountPoolCleanup(t *testing.T) {
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	tmpdir, err := os.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
 	// Emulate the situation where the pool dir is dirty
 	mountPoolDir := filepath.Join(tmpdir, "cachemounts")
 	require.NoError(t, os.MkdirAll(mountPoolDir, 0700))
-	_, err = ioutil.TempDir(mountPoolDir, "buildkit")
+	_, err = os.MkdirTemp(mountPoolDir, "buildkit")
 	require.NoError(t, err)
 
 	// Initialize cache manager and check if pool is cleaned up
@@ -194,7 +193,7 @@ func TestManager(t *testing.T) {
 
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	tmpdir, err := os.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -317,7 +316,7 @@ func TestManager(t *testing.T) {
 	err = cm.Close()
 	require.NoError(t, err)
 
-	dirs, err := ioutil.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
+	dirs, err := os.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
 	require.NoError(t, err)
 	require.Equal(t, 0, len(dirs))
 }
@@ -326,7 +325,7 @@ func TestLazyGetByBlob(t *testing.T) {
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	tmpdir, err := os.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -371,7 +370,7 @@ func TestMergeBlobchainID(t *testing.T) {
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	tmpdir, err := os.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -444,7 +443,7 @@ func TestSnapshotExtract(t *testing.T) {
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	tmpdir, err := os.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -487,7 +486,7 @@ func TestSnapshotExtract(t *testing.T) {
 
 	require.Equal(t, false, !snap2.(*immutableRef).getBlobOnly())
 
-	dirs, err := ioutil.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
+	dirs, err := os.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
 	require.NoError(t, err)
 	require.Equal(t, 0, len(dirs))
 
@@ -499,7 +498,7 @@ func TestSnapshotExtract(t *testing.T) {
 	require.Equal(t, true, !snap.(*immutableRef).getBlobOnly())
 	require.Equal(t, true, !snap2.(*immutableRef).getBlobOnly())
 
-	dirs, err = ioutil.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
+	dirs, err = os.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
 	require.NoError(t, err)
 	require.Equal(t, 2, len(dirs))
 
@@ -512,7 +511,7 @@ func TestSnapshotExtract(t *testing.T) {
 
 	require.Equal(t, len(buf.all), 0)
 
-	dirs, err = ioutil.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
+	dirs, err = os.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
 	require.NoError(t, err)
 	require.Equal(t, 2, len(dirs))
 
@@ -530,7 +529,7 @@ func TestSnapshotExtract(t *testing.T) {
 
 	checkDiskUsage(ctx, t, cm, 2, 0)
 
-	dirs, err = ioutil.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
+	dirs, err = os.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
 	require.NoError(t, err)
 	require.Equal(t, 2, len(dirs))
 
@@ -553,7 +552,7 @@ func TestSnapshotExtract(t *testing.T) {
 
 	require.Equal(t, len(buf.all), 1)
 
-	dirs, err = ioutil.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
+	dirs, err = os.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
 	require.NoError(t, err)
 	require.Equal(t, 1, len(dirs))
 
@@ -569,7 +568,7 @@ func TestSnapshotExtract(t *testing.T) {
 
 	checkDiskUsage(ctx, t, cm, 0, 0)
 
-	dirs, err = ioutil.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
+	dirs, err = os.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
 	require.NoError(t, err)
 	require.Equal(t, 0, len(dirs))
 
@@ -584,7 +583,7 @@ func TestExtractOnMutable(t *testing.T) {
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	tmpdir, err := os.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -643,7 +642,7 @@ func TestExtractOnMutable(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(len(b2)), size)
 
-	dirs, err := ioutil.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
+	dirs, err := os.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
 	require.NoError(t, err)
 	require.Equal(t, 1, len(dirs))
 
@@ -664,7 +663,7 @@ func TestExtractOnMutable(t *testing.T) {
 
 	require.Equal(t, len(buf.all), 0)
 
-	dirs, err = ioutil.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
+	dirs, err = os.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
 	require.NoError(t, err)
 	require.Equal(t, 2, len(dirs))
 
@@ -682,7 +681,7 @@ func TestExtractOnMutable(t *testing.T) {
 
 	require.Equal(t, len(buf.all), 2)
 
-	dirs, err = ioutil.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
+	dirs, err = os.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
 	require.NoError(t, err)
 	require.Equal(t, 0, len(dirs))
 
@@ -693,7 +692,7 @@ func TestSetBlob(t *testing.T) {
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	tmpdir, err := os.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -866,7 +865,7 @@ func TestPrune(t *testing.T) {
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	tmpdir, err := os.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -896,7 +895,7 @@ func TestPrune(t *testing.T) {
 
 	checkDiskUsage(ctx, t, cm, 2, 0)
 
-	dirs, err := ioutil.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
+	dirs, err := os.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
 	require.NoError(t, err)
 	require.Equal(t, 2, len(dirs))
 
@@ -909,7 +908,7 @@ func TestPrune(t *testing.T) {
 	checkDiskUsage(ctx, t, cm, 2, 0)
 	require.Equal(t, len(buf.all), 0)
 
-	dirs, err = ioutil.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
+	dirs, err = os.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
 	require.NoError(t, err)
 	require.Equal(t, 2, len(dirs))
 
@@ -927,7 +926,7 @@ func TestPrune(t *testing.T) {
 	checkDiskUsage(ctx, t, cm, 1, 0)
 	require.Equal(t, len(buf.all), 1)
 
-	dirs, err = ioutil.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
+	dirs, err = os.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
 	require.NoError(t, err)
 	require.Equal(t, 1, len(dirs))
 
@@ -967,7 +966,7 @@ func TestPrune(t *testing.T) {
 	checkDiskUsage(ctx, t, cm, 0, 0)
 	require.Equal(t, len(buf.all), 2)
 
-	dirs, err = ioutil.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
+	dirs, err = os.ReadDir(filepath.Join(tmpdir, "snapshots/snapshots"))
 	require.NoError(t, err)
 	require.Equal(t, 0, len(dirs))
 }
@@ -977,7 +976,7 @@ func TestLazyCommit(t *testing.T) {
 
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	tmpdir, err := os.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -1135,7 +1134,7 @@ func TestLoopLeaseContent(t *testing.T) {
 
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	tmpdir, err := os.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -1252,7 +1251,7 @@ func TestSharingCompressionVariant(t *testing.T) {
 
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	tmpdir, err := os.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -1520,7 +1519,7 @@ func TestConversion(t *testing.T) {
 
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	tmpdir, err := os.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -1617,7 +1616,7 @@ func TestGetRemotes(t *testing.T) {
 
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	tmpdir, err := os.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -1917,7 +1916,7 @@ func TestNondistributableBlobs(t *testing.T) {
 
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	tmpdir, err := os.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -2048,7 +2047,7 @@ func TestMergeOp(t *testing.T) {
 
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	tmpdir, err := os.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -2168,7 +2167,7 @@ func TestDiffOp(t *testing.T) {
 
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	tmpdir, err := os.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -2272,7 +2271,7 @@ func TestLoadHalfFinalizedRef(t *testing.T) {
 
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	tmpdir, err := os.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -2352,7 +2351,7 @@ func TestMountReadOnly(t *testing.T) {
 
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := ioutil.TempDir("", "cachemanager")
+	tmpdir, err := os.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -2658,7 +2657,7 @@ func fileToBlob(file *os.File, compress bool) ([]byte, ocispecs.Descriptor, erro
 }
 
 func mapToSystemTarBlob(m map[string]string) ([]byte, ocispecs.Descriptor, error) {
-	tmpdir, err := ioutil.TempDir("", "tarcreation")
+	tmpdir, err := os.MkdirTemp("", "tarcreation")
 	if err != nil {
 		return nil, ocispecs.Descriptor{}, err
 	}
@@ -2667,7 +2666,7 @@ func mapToSystemTarBlob(m map[string]string) ([]byte, ocispecs.Descriptor, error
 	expected := map[string]string{}
 	for k, v := range m {
 		expected[k] = v
-		if err := ioutil.WriteFile(filepath.Join(tmpdir, k), []byte(v), 0600); err != nil {
+		if err := os.WriteFile(filepath.Join(tmpdir, k), []byte(v), 0600); err != nil {
 			return nil, ocispecs.Descriptor{}, err
 		}
 	}
@@ -2696,7 +2695,7 @@ func mapToSystemTarBlob(m map[string]string) ([]byte, ocispecs.Descriptor, error
 			return nil, ocispecs.Descriptor{}, errors.Errorf("unexpected file %s", h.Name)
 		}
 		delete(expected, k)
-		gotV, err := ioutil.ReadAll(tr)
+		gotV, err := io.ReadAll(tr)
 		if err != nil {
 			return nil, ocispecs.Descriptor{}, err
 		}

@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -134,7 +133,7 @@ func testClientGatewaySolve(t *testing.T, sb integration.Sandbox) {
 		return r, nil
 	}
 
-	tmpdir, err := ioutil.TempDir("", "buildkit")
+	tmpdir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -153,7 +152,7 @@ func testClientGatewaySolve(t *testing.T, sb integration.Sandbox) {
 	}, product, b, nil)
 	require.NoError(t, err)
 
-	read, err := ioutil.ReadFile(filepath.Join(tmpdir, "foo"))
+	read, err := os.ReadFile(filepath.Join(tmpdir, "foo"))
 	require.NoError(t, err)
 	require.Equal(t, testStr, string(read))
 
@@ -476,7 +475,7 @@ func testClientGatewayContainerExecPipe(t *testing.T, sb integration.Sandbox) {
 			Args:   []string{"cat"},
 			Cwd:    "/",
 			Tty:    false,
-			Stdin:  ioutil.NopCloser(stdin2),
+			Stdin:  io.NopCloser(stdin2),
 			Stdout: stdout2,
 		})
 
@@ -688,11 +687,11 @@ func testClientGatewayContainerMounts(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	tmpdir, err := ioutil.TempDir("", "buildkit-buildctl")
+	tmpdir, err := os.MkdirTemp("", "buildkit-buildctl")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
-	err = ioutil.WriteFile(filepath.Join(tmpdir, "local-file"), []byte("local"), 0644)
+	err = os.WriteFile(filepath.Join(tmpdir, "local-file"), []byte("local"), 0644)
 	require.NoError(t, err)
 
 	a := agent.NewKeyring()
