@@ -6,7 +6,6 @@ package overlay
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -337,7 +336,7 @@ func TestLchtimes(t *testing.T) {
 }
 
 func testDiffWithBase(base, diff fstest.Applier, expected []TestChange, opts ...string) error {
-	t1, err := ioutil.TempDir("", "diff-with-base-lower-")
+	t1, err := os.MkdirTemp("", "diff-with-base-lower-")
 	if err != nil {
 		return errors.Wrap(err, "failed to create temp dir")
 	}
@@ -347,13 +346,13 @@ func testDiffWithBase(base, diff fstest.Applier, expected []TestChange, opts ...
 		return errors.Wrap(err, "failed to apply base filesystem")
 	}
 
-	tupper, err := ioutil.TempDir("", "diff-with-base-upperdir-")
+	tupper, err := os.MkdirTemp("", "diff-with-base-upperdir-")
 	if err != nil {
 		return errors.Wrap(err, "failed to create temp dir")
 	}
 	defer os.RemoveAll(tupper)
 
-	workdir, err := ioutil.TempDir("", "diff-with-base-workdir-")
+	workdir, err := os.MkdirTemp("", "diff-with-base-workdir-")
 	if err != nil {
 		return errors.Wrap(err, "failed to create temp dir")
 	}
@@ -420,7 +419,7 @@ func collectAndCheckChanges(base, upperdir string, expected []TestChange) error 
 	ctx := context.Background()
 	changes := []TestChange{}
 
-	emptyLower, err := ioutil.TempDir("", "buildkit-test-emptylower") // empty directory used for the lower of diff view
+	emptyLower, err := os.MkdirTemp("", "buildkit-test-emptylower") // empty directory used for the lower of diff view
 	if err != nil {
 		return errors.Wrapf(err, "failed to create temp dir")
 	}

@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"os/user"
@@ -594,7 +593,7 @@ func serverCredentials(cfg config.TLSConfig) (*tls.Config, error) {
 	}
 	if caFile != "" {
 		certPool := x509.NewCertPool()
-		ca, err := ioutil.ReadFile(caFile)
+		ca, err := os.ReadFile(caFile)
 		if err != nil {
 			return nil, errors.Wrap(err, "could not read ca certificate")
 		}

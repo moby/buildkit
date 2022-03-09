@@ -1,7 +1,6 @@
 package dockerfile
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -187,7 +186,7 @@ COPY --from=second /unique /unique
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -205,7 +204,7 @@ COPY --from=second /unique /unique
 	}, nil)
 	require.NoError(t, err)
 
-	dt1, err := ioutil.ReadFile(filepath.Join(destDir, "unique"))
+	dt1, err := os.ReadFile(filepath.Join(destDir, "unique"))
 	require.NoError(t, err)
 
 	// repeat with changed file that should be still cached by content
@@ -216,7 +215,7 @@ COPY --from=second /unique /unique
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	destDir, err = ioutil.TempDir("", "buildkit")
+	destDir, err = os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -234,7 +233,7 @@ COPY --from=second /unique /unique
 	}, nil)
 	require.NoError(t, err)
 
-	dt2, err := ioutil.ReadFile(filepath.Join(destDir, "unique"))
+	dt2, err := os.ReadFile(filepath.Join(destDir, "unique"))
 	require.NoError(t, err)
 	require.Equal(t, dt1, dt2)
 }
@@ -474,7 +473,7 @@ COPY --from=base /tmpfssize /
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -492,7 +491,7 @@ COPY --from=base /tmpfssize /
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "tmpfssize"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "tmpfssize"))
 	require.NoError(t, err)
 	require.Contains(t, string(dt), `size=131072k`)
 }
