@@ -281,7 +281,12 @@ type secretMountInstance struct {
 }
 
 func (sm *secretMountInstance) Mount() ([]mount.Mount, func() error, error) {
-	dir, err := os.MkdirTemp("", "buildkit-secrets")
+	// TODO Just trying to get the correct directory name for now
+	//   The idea goal is to derive the buildkitDir from the context Root
+	//   that is set up by the code in docker here https://github.com/moby/moby/blob/5263bea70f2a8285242da5758f14ebafb176bfc9/cmd/dockerd/daemon.go#L299
+	//   Some feedback/pointers would be appreciated
+	buildkitDir := filepath.Join(filepath.Dir(os.TempDir()), "buildkit", "mounts", "secrets")
+	dir, err := os.MkdirTemp(buildkitDir, "buildkit-secrets")
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to create temp dir")
 	}
