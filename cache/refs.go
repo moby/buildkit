@@ -533,7 +533,7 @@ func (cr *cacheRecord) layerDigestChain() []digest.Digest {
 	}
 	switch cr.kind() {
 	case Diff:
-		if cr.getBlob() == "" {
+		if cr.getBlob() == "" && cr.diffParents.upper != nil {
 			// this diff just reuses the upper blob
 			cr.layerDigestChainCache = cr.diffParents.upper.layerDigestChain()
 		} else {
