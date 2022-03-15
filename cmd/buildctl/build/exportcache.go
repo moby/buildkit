@@ -39,6 +39,9 @@ func parseExportCacheCSV(s string) (client.CacheOptionsEntry, error) {
 	if _, ok := ex.Attrs["mode"]; !ok {
 		ex.Attrs["mode"] = "min"
 	}
+	if ex.Type == "gha" {
+		return loadGithubEnv(ex)
+	}
 	return ex, nil
 }
 
