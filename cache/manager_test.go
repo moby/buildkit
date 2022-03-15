@@ -2242,6 +2242,20 @@ func TestDiffOp(t *testing.T) {
 	checkDiskUsage(ctx, t, cm, 0, 8)
 	require.NoError(t, cm.Prune(ctx, nil, client.PruneInfo{All: true}))
 	checkDiskUsage(ctx, t, cm, 0, 0)
+
+	// Test using nil as upper
+	newLower, err = cm.New(ctx, nil, nil)
+	require.NoError(t, err)
+	lowerB, err := newLower.Commit(ctx)
+	require.NoError(t, err)
+	diff, err = cm.Diff(ctx, lowerB, nil, nil)
+	require.NoError(t, err)
+	checkDiskUsage(ctx, t, cm, 2, 0)
+	require.NoError(t, lowerB.Release(ctx))
+	require.NoError(t, diff.Release(ctx))
+	checkDiskUsage(ctx, t, cm, 0, 2)
+	require.NoError(t, cm.Prune(ctx, nil, client.PruneInfo{All: true}))
+	checkDiskUsage(ctx, t, cm, 0, 0)
 }
 
 func TestLoadHalfFinalizedRef(t *testing.T) {
