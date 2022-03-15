@@ -5,6 +5,8 @@ export BUILDX_NO_DEFAULT_LOAD=true
 : ${PREFER_LEGACY=}
 : ${CI=}
 : ${GITHUB_ACTIONS=}
+
+: ${CONTEXT=}
 : ${CACHE_FROM=}
 : ${CACHE_TO=}
 
@@ -60,4 +62,7 @@ if [ "$GITHUB_ACTIONS" = "true" ]; then
 fi
 if [ -n "$currentref" ]; then
   currentcontext="--build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 $currentref"
+fi
+if [ -n "$CONTEXT" ]; then
+  currentcontext=$CONTEXT
 fi
