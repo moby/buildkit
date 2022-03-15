@@ -11,6 +11,7 @@ run:
 linters:
   enable:
     - deadcode
+    - depguard
     - gofmt
     - goimports
     - revive
@@ -30,6 +31,13 @@ linters:
   disable-all: true
 
 linters-settings:
+  depguard:
+    list-type: blacklist
+    include-go-root: true
+    packages:
+      # The io/ioutil package has been deprecated.
+      # https://go.dev/doc/go1.16#ioutil
+      - io/ioutil
   importas:
     alias:
       - pkg: "github.com/opencontainers/image-spec/specs-go/v1"

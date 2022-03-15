@@ -5,7 +5,6 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -55,11 +54,11 @@ RUN --mount=type=ssh,mode=741,uid=100,gid=102 [ "$(stat -c "%u %g %f" $SSH_AUTH_
 		},
 	)
 
-	tmpDir, err := ioutil.TempDir("", "buildkit")
+	tmpDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpDir)
 
-	err = ioutil.WriteFile(filepath.Join(tmpDir, "key"), dt, 0600)
+	err = os.WriteFile(filepath.Join(tmpDir, "key"), dt, 0600)
 	require.NoError(t, err)
 
 	ssh, err := sshprovider.NewSSHAgentProvider([]sshprovider.AgentConfig{{

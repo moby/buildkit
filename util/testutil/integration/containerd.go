@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -110,7 +109,7 @@ func (c *containerd) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl
 		rootless = true
 	}
 
-	tmpdir, err := ioutil.TempDir("", "bktest_containerd")
+	tmpdir, err := os.MkdirTemp("", "bktest_containerd")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -158,7 +157,7 @@ disabled_plugins = ["cri"]
 	}
 
 	configFile := filepath.Join(tmpdir, "config.toml")
-	if err := ioutil.WriteFile(configFile, []byte(config), 0644); err != nil {
+	if err := os.WriteFile(configFile, []byte(config), 0644); err != nil {
 		return nil, nil, err
 	}
 

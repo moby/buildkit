@@ -12,7 +12,6 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -198,11 +197,11 @@ func testCacheExportCacheKeyLoop(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	tmpdir, err := ioutil.TempDir("", "buildkit-buildctl")
+	tmpdir, err := os.MkdirTemp("", "buildkit-buildctl")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
-	err = ioutil.WriteFile(filepath.Join(tmpdir, "foo"), []byte("foodata"), 0600)
+	err = os.WriteFile(filepath.Join(tmpdir, "foo"), []byte("foodata"), 0600)
 	require.NoError(t, err)
 
 	for _, mode := range []bool{false, true} {
@@ -297,7 +296,7 @@ func testExportBusyboxLocal(t *testing.T, sb integration.Sandbox) {
 	def, err := llb.Image("busybox").Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -439,7 +438,7 @@ func testSSHMount(t *testing.T, sb integration.Sandbox) {
 	def, err = out.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -454,11 +453,11 @@ func testSSHMount(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "sock"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "sock"))
 	require.NoError(t, err)
 	require.Equal(t, "/run/buildkit/ssh_agent.0", string(dt))
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "out"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
 	require.Contains(t, string(dt), "2048")
 	require.Contains(t, string(dt), "(RSA)")
@@ -486,7 +485,7 @@ func testSSHMount(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "out"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
 	require.Contains(t, string(dt), "agent refused operation")
 
@@ -510,11 +509,11 @@ func testSSHMount(t *testing.T, sb integration.Sandbox) {
 		},
 	)
 
-	tmpDir, err := ioutil.TempDir("", "buildkit")
+	tmpDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpDir)
 
-	err = ioutil.WriteFile(filepath.Join(tmpDir, "key"), dt, 0600)
+	err = os.WriteFile(filepath.Join(tmpDir, "key"), dt, 0600)
 	require.NoError(t, err)
 
 	ssh, err = sshprovider.NewSSHAgentProvider([]sshprovider.AgentConfig{{
@@ -522,7 +521,7 @@ func testSSHMount(t *testing.T, sb integration.Sandbox) {
 	}})
 	require.NoError(t, err)
 
-	destDir, err = ioutil.TempDir("", "buildkit")
+	destDir, err = os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -537,7 +536,7 @@ func testSSHMount(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "out"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
 	require.Contains(t, string(dt), "1024")
 	require.Contains(t, string(dt), "(RSA)")
@@ -572,7 +571,7 @@ func testShmSize(t *testing.T, sb integration.Sandbox) {
 	def, err := out.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -586,7 +585,7 @@ func testShmSize(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "out"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
 	require.Contains(t, string(dt), `size=131072k`)
 }
@@ -609,7 +608,7 @@ func testUlimit(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -623,11 +622,11 @@ func testUlimit(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "first"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "first"))
 	require.NoError(t, err)
 	require.Equal(t, `1062`, strings.TrimSpace(string(dt)))
 
-	dt2, err := ioutil.ReadFile(filepath.Join(destDir, "second"))
+	dt2, err := os.ReadFile(filepath.Join(destDir, "second"))
 	require.NoError(t, err)
 	require.NotEqual(t, `1062`, strings.TrimSpace(string(dt2)))
 }
@@ -654,7 +653,7 @@ func testCgroupParent(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -668,11 +667,11 @@ func testCgroupParent(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "first"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "first"))
 	require.NoError(t, err)
 	require.Contains(t, strings.TrimSpace(string(dt)), `/foocgroup/buildkit/`)
 
-	dt2, err := ioutil.ReadFile(filepath.Join(destDir, "second"))
+	dt2, err := os.ReadFile(filepath.Join(destDir, "second"))
 	require.NoError(t, err)
 	require.NotContains(t, strings.TrimSpace(string(dt2)), `/foocgroup/buildkit/`)
 }
@@ -796,7 +795,7 @@ func testSecurityMode(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -812,7 +811,7 @@ func testSecurityMode(t *testing.T, sb integration.Sandbox) {
 
 	require.NoError(t, err)
 
-	contents, err := ioutil.ReadFile(filepath.Join(destDir, "out"))
+	contents, err := os.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
 
 	caps, err := strconv.ParseUint(strings.TrimSpace(string(contents)), 16, 64)
@@ -917,7 +916,7 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 			require.Contains(t, exporterResponse, "image.name")
 			require.Equal(t, exporterResponse["image.name"], "docker.io/library/"+imageName)
 
-			dt, err := ioutil.ReadFile(out)
+			dt, err := os.ReadFile(out)
 			require.NoError(t, err)
 
 			m, err := testutil.ReadTarToMap(dt, false)
@@ -989,7 +988,7 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 			for _, exp := range []string{ExporterOCI, ExporterDocker, ExporterImage} {
 				exp := exp // capture loop variable.
 				t.Run(exp, func(t *testing.T) {
-					destDir, err := ioutil.TempDir("", "buildkit")
+					destDir, err := os.MkdirTemp("", "buildkit")
 					require.NoError(t, err)
 					defer os.RemoveAll(destDir)
 
@@ -1255,7 +1254,7 @@ func testRelativeWorkDir(t *testing.T, sb integration.Sandbox) {
 	def, err := pwd.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1269,7 +1268,7 @@ func testRelativeWorkDir(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "pwd"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "pwd"))
 	require.NoError(t, err)
 	require.Equal(t, []byte("/test1/test2\n"), dt)
 }
@@ -1286,7 +1285,7 @@ func testFileOpMkdirMkfile(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1304,7 +1303,7 @@ func testFileOpMkdirMkfile(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	require.Equal(t, true, fi.IsDir())
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "bar"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "bar"))
 	require.NoError(t, err)
 	require.Equal(t, []byte("contents"), dt)
 }
@@ -1340,7 +1339,7 @@ func testFileOpCopyRm(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1358,7 +1357,7 @@ func testFileOpCopyRm(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "myfile2"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "myfile2"))
 	require.NoError(t, err)
 	require.Equal(t, []byte("data0"), dt)
 
@@ -1366,14 +1365,14 @@ func testFileOpCopyRm(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	require.Equal(t, true, fi.IsDir())
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "out/bar"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "out/bar"))
 	require.NoError(t, err)
 	require.Equal(t, []byte("bar0"), dt)
 
 	_, err = os.Stat(filepath.Join(destDir, "out/foo"))
 	require.ErrorIs(t, err, os.ErrNotExist)
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "file2"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "file2"))
 	require.NoError(t, err)
 	require.Equal(t, []byte("file2"), dt)
 }
@@ -1411,7 +1410,7 @@ func testFileOpCopyIncludeExclude(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1428,7 +1427,7 @@ func testFileOpCopyIncludeExclude(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "sub", "foo"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "sub", "foo"))
 	require.NoError(t, err)
 	require.Equal(t, []byte("foo0"), dt)
 
@@ -1437,7 +1436,7 @@ func testFileOpCopyIncludeExclude(t *testing.T, sb integration.Sandbox) {
 		require.ErrorIs(t, err, os.ErrNotExist)
 	}
 
-	randBytes, err := ioutil.ReadFile(filepath.Join(destDir, "unique"))
+	randBytes, err := os.ReadFile(filepath.Join(destDir, "unique"))
 	require.NoError(t, err)
 
 	// Create additional file which doesn't match the include pattern, and make
@@ -1460,7 +1459,7 @@ func testFileOpCopyIncludeExclude(t *testing.T, sb integration.Sandbox) {
 	def, err = st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err = ioutil.TempDir("", "buildkit")
+	destDir, err = os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1477,7 +1476,7 @@ func testFileOpCopyIncludeExclude(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	randBytes2, err := ioutil.ReadFile(filepath.Join(destDir, "unique"))
+	randBytes2, err := os.ReadFile(filepath.Join(destDir, "unique"))
 	require.NoError(t, err)
 
 	require.Equal(t, randBytes, randBytes2)
@@ -1543,7 +1542,7 @@ func testLocalSourceWithDiffer(t *testing.T, sb integration.Sandbox, d llb.DiffT
 	def, err := st.Marshal(context.TODO())
 	require.NoError(t, err)
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1560,11 +1559,11 @@ func testLocalSourceWithDiffer(t *testing.T, sb integration.Sandbox, d llb.DiffT
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "foo"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "foo"))
 	require.NoError(t, err)
 	require.Equal(t, []byte("foo"), dt)
 
-	err = ioutil.WriteFile(filepath.Join(dir, "foo"), []byte("bar"), 0600)
+	err = os.WriteFile(filepath.Join(dir, "foo"), []byte("bar"), 0600)
 	require.NoError(t, err)
 
 	err = syscall.UtimesNano(filepath.Join(dir, "foo"), []syscall.Timespec{tv, tv})
@@ -1583,7 +1582,7 @@ func testLocalSourceWithDiffer(t *testing.T, sb integration.Sandbox, d llb.DiffT
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "foo"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "foo"))
 	require.NoError(t, err)
 	if d == llb.DiffMetadata {
 		require.Equal(t, []byte("foo"), dt)
@@ -1618,7 +1617,7 @@ func testFileOpRmWildcard(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1635,7 +1634,7 @@ func testFileOpRmWildcard(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "bar/remaining"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "bar/remaining"))
 	require.NoError(t, err)
 	require.Equal(t, []byte("bar1"), dt)
 
@@ -1719,7 +1718,7 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, server.Stats("/foo").AllRequests, 1)
 	require.Equal(t, server.Stats("/foo").CachedRequests, 0)
 
-	tmpdir, err := ioutil.TempDir("", "buildkit")
+	tmpdir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -1736,7 +1735,7 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, server.Stats("/foo").AllRequests, 2)
 	require.Equal(t, server.Stats("/foo").CachedRequests, 1)
 
-	dt, err := ioutil.ReadFile(filepath.Join(tmpdir, "foo"))
+	dt, err := os.ReadFile(filepath.Join(tmpdir, "foo"))
 	require.NoError(t, err)
 	require.Equal(t, []byte("content1"), dt)
 
@@ -1759,7 +1758,7 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, server.Stats("/foo").AllRequests, 3)
 	require.Equal(t, server.Stats("/foo").CachedRequests, 1)
 
-	dt, err = ioutil.ReadFile(filepath.Join(tmpdir, "bar"))
+	dt, err = os.ReadFile(filepath.Join(tmpdir, "bar"))
 	require.NoError(t, err)
 	require.Equal(t, []byte("content1"), dt)
 
@@ -1792,7 +1791,7 @@ func testResolveAndHosts(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1806,11 +1805,11 @@ func testResolveAndHosts(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "resolv.conf"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "resolv.conf"))
 	require.NoError(t, err)
 	require.Contains(t, string(dt), "nameserver")
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "hosts"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "hosts"))
 	require.NoError(t, err)
 	require.Contains(t, string(dt), "127.0.0.1	localhost")
 }
@@ -1846,7 +1845,7 @@ func testUser(t *testing.T, sb integration.Sandbox) {
 	def, err := out.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1860,32 +1859,32 @@ func testUser(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "user"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "user"))
 	require.NoError(t, err)
 	require.Equal(t, "daemon", strings.TrimSpace(string(dt)))
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "group"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "group"))
 	require.NoError(t, err)
 	require.Equal(t, "daemon", strings.TrimSpace(string(dt)))
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "nobody"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "nobody"))
 	require.NoError(t, err)
 	require.Equal(t, "nobody", strings.TrimSpace(string(dt)))
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "userone"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "userone"))
 	require.NoError(t, err)
 	require.Equal(t, "1", strings.TrimSpace(string(dt)))
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "root_supplementary"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "root_supplementary"))
 	require.NoError(t, err)
 	require.True(t, strings.HasPrefix(string(dt), "root "))
 	require.True(t, strings.Contains(string(dt), "wheel"))
 
-	dt2, err := ioutil.ReadFile(filepath.Join(destDir, "default_supplementary"))
+	dt2, err := os.ReadFile(filepath.Join(destDir, "default_supplementary"))
 	require.NoError(t, err)
 	require.Equal(t, string(dt), string(dt2))
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "default_uid"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "default_uid"))
 	require.NoError(t, err)
 	require.Equal(t, "0", strings.TrimSpace(string(dt)))
 
@@ -1913,7 +1912,7 @@ func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	for _, exp := range []string{ExporterOCI, ExporterDocker} {
-		destDir, err := ioutil.TempDir("", "buildkit")
+		destDir, err := os.MkdirTemp("", "buildkit")
 		require.NoError(t, err)
 		defer os.RemoveAll(destDir)
 
@@ -1936,7 +1935,7 @@ func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 		}, nil)
 		require.NoError(t, err)
 
-		dt, err := ioutil.ReadFile(out)
+		dt, err := os.ReadFile(out)
 		require.NoError(t, err)
 
 		m, err := testutil.ReadTarToMap(dt, false)
@@ -2015,7 +2014,7 @@ func testFrontendMetadataReturn(t *testing.T, sb integration.Sandbox) {
 			{
 				Type:   ExporterOCI,
 				Attrs:  map[string]string{},
-				Output: fixedWriteCloser(nopWriteCloser{ioutil.Discard}),
+				Output: fixedWriteCloser(nopWriteCloser{io.Discard}),
 			},
 		},
 	}, "", frontend, nil)
@@ -2074,7 +2073,7 @@ func testFrontendUseSolveResults(t *testing.T, sb integration.Sandbox) {
 		})
 	}
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -2088,7 +2087,7 @@ func testFrontendUseSolveResults(t *testing.T, sb integration.Sandbox) {
 	}, "", frontend, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "foo2"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "foo2"))
 	require.NoError(t, err)
 	require.Equal(t, dt, []byte("data"))
 }
@@ -2154,7 +2153,7 @@ func testTarExporterWithSocket(t *testing.T, sb integration.Sandbox) {
 				Type:  ExporterTar,
 				Attrs: map[string]string{},
 				Output: func(m map[string]string) (io.WriteCloser, error) {
-					return nopWriteCloser{ioutil.Discard}, nil
+					return nopWriteCloser{io.Discard}, nil
 				},
 			},
 		},
@@ -2547,7 +2546,7 @@ func testBuildExportZstd(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -2574,7 +2573,7 @@ func testBuildExportZstd(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(out)
+	dt, err := os.ReadFile(out)
 	require.NoError(t, err)
 
 	m, err := testutil.ReadTarToMap(dt, false)
@@ -2612,7 +2611,7 @@ func testBuildExportZstd(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err = ioutil.ReadFile(out)
+	dt, err = os.ReadFile(out)
 	require.NoError(t, err)
 
 	m, err = testutil.ReadTarToMap(dt, false)
@@ -2681,7 +2680,7 @@ func testPullZstdImage(t *testing.T, sb integration.Sandbox) {
 	def, err = st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -2695,7 +2694,7 @@ func testPullZstdImage(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "zdata"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "zdata"))
 	require.NoError(t, err)
 	require.Equal(t, dt, []byte("zstd"))
 }
@@ -2747,7 +2746,7 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	def, err = firstBuild.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -2761,11 +2760,11 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "foo/sub/bar"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "foo/sub/bar"))
 	require.NoError(t, err)
 	require.Equal(t, dt, []byte("first"))
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "foo/sub/baz"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "foo/sub/baz"))
 	require.NoError(t, err)
 	require.Equal(t, dt, []byte("second"))
 
@@ -2927,7 +2926,7 @@ func testStargzLazyRegistryCacheImportExport(t *testing.T, sb integration.Sandbo
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -3167,7 +3166,7 @@ func testStargzLazyInlineCacheImportExport(t *testing.T, sb integration.Sandbox)
 	checkAllReleasable(t, c, sb, true)
 
 	// stargz layers should be exportable
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 	out := filepath.Join(destDir, "out.tar")
@@ -3300,7 +3299,7 @@ func testStargzLazyPull(t *testing.T, sb integration.Sandbox) {
 	checkAllReleasable(t, c, sb, true)
 
 	// stargz layers should be exportable
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 	out := filepath.Join(destDir, "out.tar")
@@ -3473,11 +3472,11 @@ func testZstdLocalCacheExport(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	destOutDir, err := ioutil.TempDir("", "buildkit")
+	destOutDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destOutDir)
 
@@ -3502,13 +3501,13 @@ func testZstdLocalCacheExport(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	var index ocispecs.Index
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "index.json"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "index.json"))
 	require.NoError(t, err)
 	err = json.Unmarshal(dt, &index)
 	require.NoError(t, err)
 
 	var layerIndex ocispecs.Index
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "blobs/sha256/"+index.Manifests[0].Digest.Hex()))
+	dt, err = os.ReadFile(filepath.Join(destDir, "blobs/sha256/"+index.Manifests[0].Digest.Hex()))
 	require.NoError(t, err)
 	err = json.Unmarshal(dt, &layerIndex)
 	require.NoError(t, err)
@@ -3517,14 +3516,14 @@ func testZstdLocalCacheExport(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, ocispecs.MediaTypeImageLayer+"+zstd", lastLayer.MediaType)
 
 	zstdLayerDigest := lastLayer.Digest.Hex()
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "blobs/sha256/"+zstdLayerDigest))
+	dt, err = os.ReadFile(filepath.Join(destDir, "blobs/sha256/"+zstdLayerDigest))
 	require.NoError(t, err)
 	require.Equal(t, dt[:4], []byte{0x28, 0xb5, 0x2f, 0xfd})
 }
 
 func testUncompressedLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	skipDockerd(t, sb)
-	dir, err := ioutil.TempDir("", "buildkit")
+	dir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 	im := CacheOptionsEntry{
@@ -3575,7 +3574,7 @@ func testZstdLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
 		// containerd 1.4 doesn't support zstd compression
 		return
 	}
-	dir, err := ioutil.TempDir("", "buildkit")
+	dir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 	im := CacheOptionsEntry{
@@ -3645,7 +3644,7 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptio
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -3660,16 +3659,16 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptio
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "const"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "const"))
 	require.NoError(t, err)
 	require.Equal(t, string(dt), "foobar")
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "unique"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "unique"))
 	require.NoError(t, err)
 
 	ensurePruneAll(t, c, sb)
 
-	destDir, err = ioutil.TempDir("", "buildkit")
+	destDir, err = os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -3683,11 +3682,11 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptio
 	}, nil)
 	require.NoError(t, err)
 
-	dt2, err := ioutil.ReadFile(filepath.Join(destDir, "const"))
+	dt2, err := os.ReadFile(filepath.Join(destDir, "const"))
 	require.NoError(t, err)
 	require.Equal(t, string(dt2), "foobar")
 
-	dt2, err = ioutil.ReadFile(filepath.Join(destDir, "unique"))
+	dt2, err = os.ReadFile(filepath.Join(destDir, "unique"))
 	require.NoError(t, err)
 	require.Equal(t, string(dt), string(dt2))
 }
@@ -3734,7 +3733,7 @@ func testMultipleRegistryCacheImportExport(t *testing.T, sb integration.Sandbox)
 
 func testBasicLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	skipDockerd(t, sb)
-	dir, err := ioutil.TempDir("", "buildkit")
+	dir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 	im := CacheOptionsEntry{
@@ -3917,7 +3916,7 @@ func readFileInImage(ctx context.Context, c *Client, ref, path string) ([]byte, 
 	if err != nil {
 		return nil, err
 	}
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	if err != nil {
 		return nil, err
 	}
@@ -3934,7 +3933,7 @@ func readFileInImage(ctx context.Context, c *Client, ref, path string) ([]byte, 
 	if err != nil {
 		return nil, err
 	}
-	return ioutil.ReadFile(filepath.Join(destDir, filepath.Clean(path)))
+	return os.ReadFile(filepath.Join(destDir, filepath.Clean(path)))
 }
 
 func testCachedMounts(t *testing.T, sb integration.Sandbox) {
@@ -3970,7 +3969,7 @@ func testCachedMounts(t *testing.T, sb integration.Sandbox) {
 	st.AddMount("/src0", llb.Scratch(), llb.AsPersistentCacheDir("mycache1", llb.CacheMountShared))
 	st.AddMount("/src1", base, llb.AsPersistentCacheDir("mycache2", llb.CacheMountShared))
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -3987,15 +3986,15 @@ func testCachedMounts(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "foo"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "foo"))
 	require.NoError(t, err)
 	require.Equal(t, string(dt), "first")
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "bar"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "bar"))
 	require.NoError(t, err)
 	require.Equal(t, string(dt), "second")
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "baz"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "baz"))
 	require.NoError(t, err)
 	require.Equal(t, string(dt), "base")
 
@@ -4215,7 +4214,7 @@ func testDuplicateWhiteouts(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4233,7 +4232,7 @@ func testDuplicateWhiteouts(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(out)
+	dt, err := os.ReadFile(out)
 	require.NoError(t, err)
 
 	m, err := testutil.ReadTarToMap(dt, false)
@@ -4287,7 +4286,7 @@ func testWhiteoutParentDir(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4304,7 +4303,7 @@ func testWhiteoutParentDir(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(out)
+	dt, err := os.ReadFile(out)
 	require.NoError(t, err)
 
 	m, err := testutil.ReadTarToMap(dt, false)
@@ -4352,7 +4351,7 @@ func testMoveParentDir(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4369,7 +4368,7 @@ func testMoveParentDir(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(out)
+	dt, err := os.ReadFile(out)
 	require.NoError(t, err)
 
 	m, err := testutil.ReadTarToMap(dt, false)
@@ -4612,7 +4611,7 @@ func testRmSymlink(t *testing.T, sb integration.Sandbox) {
 	def, err := mnt.File(llb.Rm("link")).Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4648,7 +4647,7 @@ func testProxyEnv(t *testing.T, sb integration.Sandbox) {
 	def, err := out.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4662,7 +4661,7 @@ func testProxyEnv(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "env"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "env"))
 	require.NoError(t, err)
 	require.Equal(t, string(dt), "httpvalue-httpsvalue-noproxyvalue-noproxyvalue-allproxyvalue-allproxyvalue")
 
@@ -4676,7 +4675,7 @@ func testProxyEnv(t *testing.T, sb integration.Sandbox) {
 	def, err = out.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err = ioutil.TempDir("", "buildkit")
+	destDir, err = os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4690,7 +4689,7 @@ func testProxyEnv(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err = ioutil.ReadFile(filepath.Join(destDir, "env"))
+	dt, err = os.ReadFile(filepath.Join(destDir, "env"))
 	require.NoError(t, err)
 	require.Equal(t, string(dt), "httpvalue-httpsvalue-noproxyvalue-noproxyvalue-allproxyvalue-allproxyvalue")
 }
@@ -4961,7 +4960,7 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 	}
 
 	// get the random value at /bar/2
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4975,7 +4974,7 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 	}, nil)
 	require.NoError(t, err)
 
-	bar2Contents, err := ioutil.ReadFile(filepath.Join(destDir, "bar", "2"))
+	bar2Contents, err := os.ReadFile(filepath.Join(destDir, "bar", "2"))
 	require.NoError(t, err)
 
 	// clear all local state out
@@ -5067,7 +5066,7 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 	}
 
 	// check the random value at /bar/2 didn't change
-	destDir, err = ioutil.TempDir("", "buildkit")
+	destDir, err = os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -5082,7 +5081,7 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 	}, nil)
 	require.NoError(t, err)
 
-	newBar2Contents, err := ioutil.ReadFile(filepath.Join(destDir, "bar", "2"))
+	newBar2Contents, err := os.ReadFile(filepath.Join(destDir, "bar", "2"))
 	require.NoError(t, err)
 
 	require.Equalf(t, bar2Contents, newBar2Contents, "bar/2 contents changed")
@@ -5116,7 +5115,7 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 	require.NoError(t, err)
 
 	// check the random value at /bar/2 didn't change
-	destDir, err = ioutil.TempDir("", "buildkit")
+	destDir, err = os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -5131,7 +5130,7 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 	}, nil)
 	require.NoError(t, err)
 
-	newBar2Contents, err = ioutil.ReadFile(filepath.Join(destDir, "bar", "2"))
+	newBar2Contents, err = os.ReadFile(filepath.Join(destDir, "bar", "2"))
 	require.NoError(t, err)
 
 	require.Equalf(t, bar2Contents, newBar2Contents, "bar/2 contents changed")
@@ -5177,7 +5176,7 @@ func requireContents(ctx context.Context, t *testing.T, c *Client, sb integratio
 	def, err := state.Marshal(ctx)
 	require.NoError(t, err)
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -5227,7 +5226,7 @@ func requireEqualContents(ctx context.Context, t *testing.T, c *Client, stateA, 
 	defA, err := stateA.Marshal(ctx)
 	require.NoError(t, err)
 
-	destDirA, err := ioutil.TempDir("", "buildkit")
+	destDirA, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDirA)
 
@@ -5244,7 +5243,7 @@ func requireEqualContents(ctx context.Context, t *testing.T, c *Client, stateA, 
 	defB, err := stateB.Marshal(ctx)
 	require.NoError(t, err)
 
-	destDirB, err := ioutil.TempDir("", "buildkit")
+	destDirB, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDirB)
 
@@ -5393,7 +5392,7 @@ func testInvalidExporter(t *testing.T, sb integration.Sandbox) {
 	def, err := llb.Image("busybox:latest").Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -5478,7 +5477,7 @@ func testParallelLocalBuilds(t *testing.T, sb integration.Sandbox) {
 				def, err := llb.Local("source").Marshal(sb.Context())
 				require.NoError(t, err)
 
-				destDir, err := ioutil.TempDir("", "buildkit")
+				destDir, err := os.MkdirTemp("", "buildkit")
 				require.NoError(t, err)
 				defer os.RemoveAll(destDir)
 
@@ -5495,7 +5494,7 @@ func testParallelLocalBuilds(t *testing.T, sb integration.Sandbox) {
 				}, nil)
 				require.NoError(t, err)
 
-				act, err := ioutil.ReadFile(filepath.Join(destDir, fn))
+				act, err := os.ReadFile(filepath.Join(destDir, fn))
 				require.NoError(t, err)
 
 				require.Equal(t, "contents", string(act))
@@ -5527,7 +5526,7 @@ func testRelativeMountpoint(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := ioutil.TempDir("", "buildkit")
+	destDir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -5541,7 +5540,7 @@ func testRelativeMountpoint(t *testing.T, sb integration.Sandbox) {
 	}, nil)
 	require.NoError(t, err)
 
-	dt, err := ioutil.ReadFile(filepath.Join(destDir, "data"))
+	dt, err := os.ReadFile(filepath.Join(destDir, "data"))
 	require.NoError(t, err)
 	require.Equal(t, dt, []byte(id))
 }
@@ -5732,7 +5731,7 @@ func testBuildInfoNoExport(t *testing.T, sb integration.Sandbox) {
 }
 
 func tmpdir(appliers ...fstest.Applier) (string, error) {
-	tmpdir, err := ioutil.TempDir("", "buildkit-client")
+	tmpdir, err := os.MkdirTemp("", "buildkit-client")
 	if err != nil {
 		return "", err
 	}
@@ -5743,7 +5742,7 @@ func tmpdir(appliers ...fstest.Applier) (string, error) {
 }
 
 func makeSSHAgentSock(agent agent.Agent) (p string, cleanup func() error, err error) {
-	tmpDir, err := ioutil.TempDir("", "buildkit")
+	tmpDir, err := os.MkdirTemp("", "buildkit")
 	if err != nil {
 		return "", nil, err
 	}

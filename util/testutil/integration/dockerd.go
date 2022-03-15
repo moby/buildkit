@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"os"
 	"time"
@@ -58,7 +57,7 @@ func (c dockerd) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl fun
 	var proxyGroup errgroup.Group
 	deferF.append(proxyGroup.Wait)
 
-	workDir, err := ioutil.TempDir("", "integration")
+	workDir, err := os.MkdirTemp("", "integration")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -98,7 +97,7 @@ func (c dockerd) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl fun
 	// Create a file descriptor to be used as a Unix domain socket.
 	// Remove it immediately (the name will still be valid for the socket) so that
 	// we don't leave files all over the users tmp tree.
-	f, err := ioutil.TempFile("", "buildkit-integration")
+	f, err := os.CreateTemp("", "buildkit-integration")
 	if err != nil {
 		return
 	}

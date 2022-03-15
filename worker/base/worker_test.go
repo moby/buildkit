@@ -1,7 +1,6 @@
 package base
 
 import (
-	"io/ioutil"
 	"os"
 	"testing"
 
@@ -10,7 +9,7 @@ import (
 
 func TestID(t *testing.T) {
 	t.Parallel()
-	tmpdir, err := ioutil.TempDir("", "worker-base-test-id")
+	tmpdir, err := os.MkdirTemp("", "worker-base-test-id")
 	require.NoError(t, err)
 
 	id0, err := ID(tmpdir)

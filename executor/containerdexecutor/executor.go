@@ -3,7 +3,6 @@ package containerdexecutor
 import (
 	"context"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sync"
@@ -315,10 +314,10 @@ func fixProcessOutput(process *executor.ProcessInfo) {
 	// failed to start io pipe copy: unable to copy pipes: containerd-shim: opening file "" failed: open : no such file or directory: unknown
 	// So just stub out any missing output
 	if process.Stdout == nil {
-		process.Stdout = &nopCloser{ioutil.Discard}
+		process.Stdout = &nopCloser{io.Discard}
 	}
 	if process.Stderr == nil {
-		process.Stderr = &nopCloser{ioutil.Discard}
+		process.Stderr = &nopCloser{io.Discard}
 	}
 }
 
