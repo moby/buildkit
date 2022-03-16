@@ -27,6 +27,7 @@ import (
 	fuseoverlayfs "github.com/containerd/fuse-overlayfs-snapshotter"
 	sgzfs "github.com/containerd/stargz-snapshotter/fs"
 	sgzconf "github.com/containerd/stargz-snapshotter/fs/config"
+	sgzlayer "github.com/containerd/stargz-snapshotter/fs/layer"
 	sgzsource "github.com/containerd/stargz-snapshotter/fs/source"
 	remotesn "github.com/containerd/stargz-snapshotter/snapshot"
 	"github.com/moby/buildkit/cmd/buildkitd/config"
@@ -391,11 +392,20 @@ func snapshotterFactory(commonRoot string, cfg config.OCIConfig, sm *session.Man
 			}
 		}
 		snFactory.New = func(root string) (ctdsnapshot.Snapshotter, error) {
+			userxattr, err := overlayutils.NeedsUserXAttr(root)
+			if err != nil {
+				logrus.WithError(err).Warnf("cannot detect whether \"userxattr\" option needs to be used, assuming to be %v", userxattr)
+			}
+			opq := sgzlayer.OverlayOpaqueTrusted
+			if userxattr {
+				opq = sgzlayer.OverlayOpaqueUser
+			}
 			fs, err := sgzfs.NewFilesystem(filepath.Join(root, "stargz"),
 				sgzCfg,
 				// Source info based on the buildkit's registry config and session
 				sgzfs.WithGetSources(sourceWithSession(hosts, sm)),
 				sgzfs.WithMetricsLogLevel(logrus.DebugLevel),
+				sgzfs.WithOverlayOpaqueType(opq),
 			)
 			if err != nil {
 				return nil, err
