@@ -76,10 +76,11 @@ const (
 type Option func(*options)
 
 type options struct {
-	getSources      source.GetSources
-	resolveHandlers map[string]remote.Handler
-	metadataStore   metadata.Store
-	metricsLogLevel *logrus.Level
+	getSources        source.GetSources
+	resolveHandlers   map[string]remote.Handler
+	metadataStore     metadata.Store
+	metricsLogLevel   *logrus.Level
+	overlayOpaqueType layer.OverlayOpaqueType
 }
 
 func WithGetSources(s source.GetSources) Option {
@@ -106,6 +107,12 @@ func WithMetadataStore(metadataStore metadata.Store) Option {
 func WithMetricsLogLevel(logLevel logrus.Level) Option {
 	return func(opts *options) {
 		opts.metricsLogLevel = &logLevel
+	}
+}
+
+func WithOverlayOpaqueType(overlayOpaqueType layer.OverlayOpaqueType) Option {
+	return func(opts *options) {
+		opts.overlayOpaqueType = overlayOpaqueType
 	}
 }
 
@@ -141,7 +148,7 @@ func NewFilesystem(root string, cfg config.Config, opts ...Option) (_ snapshot.F
 		})
 	}
 	tm := task.NewBackgroundTaskManager(maxConcurrency, 5*time.Second)
-	r, err := layer.NewResolver(root, tm, cfg, fsOpts.resolveHandlers, metadataStore)
+	r, err := layer.NewResolver(root, tm, cfg, fsOpts.resolveHandlers, metadataStore, fsOpts.overlayOpaqueType)
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup resolver: %w", err)
 	}
