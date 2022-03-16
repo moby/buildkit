@@ -8,6 +8,8 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
+	"strings"
+	"testing"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -142,7 +144,23 @@ func (c dockerd) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl fun
 	})
 
 	return backend{
-		address:  "unix://" + listener.Addr().String(),
-		rootless: false,
+		address:   "unix://" + listener.Addr().String(),
+		rootless:  false,
+		isDockerd: true,
 	}, cl, nil
+}
+
+func SkipIfDockerd(t *testing.T, sb Sandbox, reason ...string) {
+	t.Helper()
+	sbx, ok := sb.(*sandbox)
+	if !ok {
+		t.Fatalf("invalid sandbox type %T", sb)
+	}
+	b, ok := sbx.Backend.(backend)
+	if !ok {
+		t.Fatalf("invalid backend type %T", b)
+	}
+	if b.isDockerd {
+		t.Skipf("dockerd worker can not currently run this test due to missing features (%s)", strings.Join(reason, ", "))
+	}
 }
