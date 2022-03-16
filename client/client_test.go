@@ -705,7 +705,7 @@ func testNetworkMode(t *testing.T, sb integration.Sandbox) {
 }
 
 func testPushByDigest(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb)
+	integration.SkipIfDockerd(t, sb, "direct push")
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -895,7 +895,7 @@ func testSecurityModeErrors(t *testing.T, sb integration.Sandbox) {
 }
 
 func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb)
+	integration.SkipIfDockerd(t, sb, "oci exporter", "direct push")
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -1892,7 +1892,7 @@ func testUser(t *testing.T, sb integration.Sandbox) {
 }
 
 func testOCIExporter(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb)
+	integration.SkipIfDockerd(t, sb, "oci exporter")
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -1995,7 +1995,7 @@ func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 }
 
 func testFrontendMetadataReturn(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb)
+	integration.SkipIfDockerd(t, sb, "oci exporter")
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -2093,7 +2093,7 @@ func testFrontendUseSolveResults(t *testing.T, sb integration.Sandbox) {
 }
 
 func testExporterTargetExists(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb)
+	integration.SkipIfDockerd(t, sb, "oci exporter")
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -2691,7 +2691,7 @@ func testPullZstdImage(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, dt, []byte("zstd"))
 }
 func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb)
+	integration.SkipIfDockerd(t, sb, "direct push")
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -2891,7 +2891,7 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 }
 
 func testStargzLazyRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb)
+	integration.SkipIfDockerd(t, sb, "remote cache export")
 	requiresLinux(t)
 
 	cdAddress := sb.ContainerdAddress()
@@ -3039,7 +3039,7 @@ func testStargzLazyRegistryCacheImportExport(t *testing.T, sb integration.Sandbo
 }
 
 func testStargzLazyInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb)
+	integration.SkipIfDockerd(t, sb, "remote cache export")
 	requiresLinux(t)
 
 	cdAddress := sb.ContainerdAddress()
@@ -3192,7 +3192,6 @@ func testStargzLazyInlineCacheImportExport(t *testing.T, sb integration.Sandbox)
 }
 
 func testStargzLazyPull(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb)
 	requiresLinux(t)
 
 	cdAddress := sb.ContainerdAddress()
@@ -3317,7 +3316,7 @@ func testStargzLazyPull(t *testing.T, sb integration.Sandbox) {
 }
 
 func testLazyImagePush(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb)
+	integration.SkipIfDockerd(t, sb, "direct push")
 	requiresLinux(t)
 
 	cdAddress := sb.ContainerdAddress()
@@ -3514,7 +3513,7 @@ func testZstdLocalCacheExport(t *testing.T, sb integration.Sandbox) {
 }
 
 func testUncompressedLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb)
+	integration.SkipIfDockerd(t, sb, "remote cache export")
 	dir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
@@ -3536,7 +3535,7 @@ func testUncompressedLocalCacheImportExport(t *testing.T, sb integration.Sandbox
 }
 
 func testUncompressedRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb)
+	integration.SkipIfDockerd(t, sb, "remote cache export")
 	registry, err := sb.NewRegistry()
 	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
@@ -3561,7 +3560,7 @@ func testUncompressedRegistryCacheImportExport(t *testing.T, sb integration.Sand
 }
 
 func testZstdLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb)
+	integration.SkipIfDockerd(t, sb, "remote cache export")
 	if sb.Name() == "containerd-1.4" {
 		// containerd 1.4 doesn't support zstd compression
 		return
@@ -3588,7 +3587,7 @@ func testZstdLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
 }
 
 func testZstdRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb)
+	integration.SkipIfDockerd(t, sb, "remote cache export")
 	if sb.Name() == "containerd-1.4" {
 		// containerd 1.4 doesn't support zstd compression
 		return
@@ -3684,7 +3683,7 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptio
 }
 
 func testBasicRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb)
+	integration.SkipIfDockerd(t, sb, "remote cache export")
 	registry, err := sb.NewRegistry()
 	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
@@ -3701,7 +3700,7 @@ func testBasicRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
 }
 
 func testMultipleRegistryCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb)
+	integration.SkipIfDockerd(t, sb, "remote cache export")
 	registry, err := sb.NewRegistry()
 	if errors.Is(err, integration.ErrRequirements) {
 		t.Skip(err.Error())
@@ -3724,7 +3723,7 @@ func testMultipleRegistryCacheImportExport(t *testing.T, sb integration.Sandbox)
 }
 
 func testBasicLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb)
+	integration.SkipIfDockerd(t, sb, "remote cache export")
 	dir, err := os.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
@@ -3744,7 +3743,7 @@ func testBasicLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBasicInlineCacheImportExport(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb)
+	integration.SkipIfDockerd(t, sb, "direct push")
 	requiresLinux(t)
 	registry, err := sb.NewRegistry()
 	if errors.Is(err, integration.ErrRequirements) {
@@ -4187,7 +4186,7 @@ func testCopyFromEmptyImage(t *testing.T, sb integration.Sandbox) {
 
 // containerd/containerd#2119
 func testDuplicateWhiteouts(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb)
+	integration.SkipIfDockerd(t, sb, "oci exporter")
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -4259,7 +4258,7 @@ func testDuplicateWhiteouts(t *testing.T, sb integration.Sandbox) {
 
 // #276
 func testWhiteoutParentDir(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb)
+	integration.SkipIfDockerd(t, sb, "oci exporter")
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -4799,7 +4798,7 @@ func testMergeOpCacheMax(t *testing.T, sb integration.Sandbox) {
 
 func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 	t.Helper()
-	integration.SkipIfDockerd(t, sb)
+	integration.SkipIfDockerd(t, sb, "direct push")
 	requiresLinux(t)
 
 	cdAddress := sb.ContainerdAddress()
