@@ -36,6 +36,7 @@ import (
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/contentutil"
+	"github.com/moby/buildkit/util/system"
 	"github.com/moby/buildkit/util/testutil"
 	"github.com/moby/buildkit/util/testutil/httpserver"
 	"github.com/moby/buildkit/util/testutil/integration"
@@ -227,7 +228,7 @@ echo -n $my_arg $1 > /out
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -282,7 +283,7 @@ RUN [ "$myenv" = 'foo%sbar' ]
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -415,7 +416,7 @@ COPY --from=base2 /foo /f
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	cacheDir, err := os.MkdirTemp("", "buildkit")
+	cacheDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(cacheDir)
 
@@ -565,7 +566,7 @@ WORKDIR /
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -771,7 +772,7 @@ COPY --from=base unique /
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -795,7 +796,7 @@ COPY --from=base unique /
 	err = os.WriteFile(filepath.Join(dir, "bar"), []byte("bar-data-mod"), 0600)
 	require.NoError(t, err)
 
-	destDir, err = os.MkdirTemp("", "buildkit")
+	destDir, err = system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -820,7 +821,7 @@ COPY --from=base unique /
 	err = os.WriteFile(filepath.Join(dir, "foo2"), []byte("foo2-data-mod"), 0600)
 	require.NoError(t, err)
 
-	destDir, err = os.MkdirTemp("", "buildkit")
+	destDir, err = system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -862,7 +863,7 @@ COPY foo nomatch* /
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1034,7 +1035,7 @@ COPY link/foo .
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1078,7 +1079,7 @@ COPY --from=build /sub2/foo bar
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1120,7 +1121,7 @@ COPY . /
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1196,7 +1197,7 @@ COPY --from=build /out .
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1242,7 +1243,7 @@ COPY --from=build /out .
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1285,7 +1286,7 @@ COPY Dockerfile .
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1381,7 +1382,7 @@ COPY arch-$TARGETARCH whoami
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1416,7 +1417,7 @@ COPY arch-$TARGETARCH whoami
 
 	// repeat with oci exporter
 
-	destDir, err = os.MkdirTemp("", "buildkit")
+	destDir, err = system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1531,7 +1532,7 @@ COPY foo /
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1621,7 +1622,7 @@ COPY foo/sub bar
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1662,7 +1663,7 @@ COPY sub/l* alllinks/
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1707,7 +1708,7 @@ FROM scratch
 COPY --from=0 /foo /foo
 `)
 
-	srcDir, err := os.MkdirTemp("", "buildkit")
+	srcDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(srcDir)
 
@@ -1724,7 +1725,7 @@ COPY --from=0 /foo /foo
 	})
 	defer server.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1948,7 +1949,7 @@ COPY foo .
 	def, err := echo.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -2422,7 +2423,7 @@ ADD *.tar /dest
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -2706,7 +2707,7 @@ Dockerfile
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -2968,7 +2969,7 @@ USER nobody
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -3070,7 +3071,7 @@ COPY --from=base /out /
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -3135,7 +3136,7 @@ COPY --from=base /out /
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -3195,7 +3196,7 @@ COPY files dest
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -3243,7 +3244,7 @@ COPY $FOO baz
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -3298,7 +3299,7 @@ COPY sub/dir1 subdest6
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -3466,7 +3467,7 @@ COPY --from=build /dest /dest
 func testDockerfileFromGit(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 
-	gitDir, err := os.MkdirTemp("", "buildkit")
+	gitDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(gitDir)
 
@@ -3507,7 +3508,7 @@ COPY --from=build foo bar2
 	server := httptest.NewServer(http.FileServer(http.Dir(filepath.Join(gitDir))))
 	defer server.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -3537,7 +3538,7 @@ COPY --from=build foo bar2
 	require.True(t, errors.Is(err, os.ErrNotExist))
 
 	// second request from master branch contains both files
-	destDir, err = os.MkdirTemp("", "buildkit")
+	destDir, err = system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -3599,7 +3600,7 @@ COPY foo bar
 	})
 	defer server.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -3644,7 +3645,7 @@ COPY --from=busybox /etc/passwd test
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -3682,7 +3683,7 @@ COPY --from=golang /usr/bin/go go
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	destDir, err = os.MkdirTemp("", "buildkit")
+	destDir, err = system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -3727,7 +3728,7 @@ COPY --from=stage1 baz bax
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -3771,7 +3772,7 @@ LABEL foo=bar
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -3848,7 +3849,7 @@ RUN ls /files/file1
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -3958,7 +3959,7 @@ ONBUILD RUN mkdir -p /out && echo -n 11 >> /out/foo
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4135,7 +4136,7 @@ COPY --from=base unique /
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4170,7 +4171,7 @@ COPY --from=base unique /
 
 	ensurePruneAll(t, c, sb)
 
-	destDir, err = os.MkdirTemp("", "buildkit")
+	destDir, err = system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4199,7 +4200,7 @@ COPY --from=base unique /
 	require.NoError(t, err)
 	require.Equal(t, string(dt), string(dt2))
 
-	destDir, err = os.MkdirTemp("", "buildkit")
+	destDir, err = system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 }
@@ -4225,7 +4226,7 @@ RUN echo bar > bar
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4306,7 +4307,7 @@ RUN echo bar > bar
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4387,7 +4388,7 @@ COPY --from=s1 unique2 /
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4408,7 +4409,7 @@ COPY --from=s1 unique2 /
 	_, err = f.Solve(sb.Context(), c, opt, nil)
 	require.NoError(t, err)
 
-	destDir2, err := os.MkdirTemp("", "buildkit")
+	destDir2, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4433,7 +4434,7 @@ COPY --from=s1 unique2 /
 	require.NotEqual(t, string(unique1Dir1), string(unique1Dir2))
 	require.NotEqual(t, string(unique2Dir1), string(unique2Dir2))
 
-	destDir3, err := os.MkdirTemp("", "buildkit")
+	destDir3, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4475,7 +4476,7 @@ COPY foo2 bar2
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4526,7 +4527,7 @@ COPY --from=build out .
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4582,7 +4583,7 @@ COPY --from=build /out /
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4612,7 +4613,7 @@ COPY --from=build /out /
 	require.Equal(t, "hpvalue::npvalue::foocontents::::bazcontent", string(dt))
 
 	// repeat with changed default args should match the old cache
-	destDir, err = os.MkdirTemp("", "buildkit")
+	destDir, err = system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4641,7 +4642,7 @@ COPY --from=build /out /
 	require.Equal(t, "hpvalue::npvalue::foocontents::::bazcontent", string(dt))
 
 	// changing actual value invalidates cache
-	destDir, err = os.MkdirTemp("", "buildkit")
+	destDir, err = system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4756,7 +4757,7 @@ COPY foo bar
 	url := up.Add(buf)
 
 	// repeat with changed default args should match the old cache
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4832,7 +4833,7 @@ COPY foo foo2
 		})
 	}
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4862,7 +4863,7 @@ func testFrontendInputs(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -5075,7 +5076,7 @@ COPY --from=base /shmsize /
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -5120,7 +5121,7 @@ COPY --from=base /ulimit /
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -5169,7 +5170,7 @@ COPY --from=base /out /
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -5217,7 +5218,7 @@ COPY --from=base /out /
 
 	f := getFrontend(t, sb)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -5275,7 +5276,7 @@ COPY --from=base /o* /
 
 	f := getFrontend(t, sb)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -5389,7 +5390,7 @@ COPY --from=build /foo /out /
 
 	product := "buildkit_test"
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -5531,7 +5532,7 @@ COPY --from=build /foo /out /
 
 	product := "buildkit_test"
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -5568,7 +5569,7 @@ COPY --from=build /foo /out /
 }
 
 func tmpdir(appliers ...fstest.Applier) (string, error) {
-	tmpdir, err := os.MkdirTemp("", "buildkit-dockerfile")
+	tmpdir, err := system.MkdirTemp("", "buildkit-dockerfile")
 	if err != nil {
 		return "", err
 	}

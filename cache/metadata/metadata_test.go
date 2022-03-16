@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/moby/buildkit/util/system"
 	"github.com/stretchr/testify/require"
 	bolt "go.etcd.io/bbolt"
 )
@@ -12,7 +13,7 @@ import (
 func TestGetSetSearch(t *testing.T) {
 	t.Parallel()
 
-	tmpdir, err := os.MkdirTemp("", "buildkit-storage")
+	tmpdir, err := system.MkdirTemp("", "buildkit-storage")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -111,7 +112,7 @@ func TestGetSetSearch(t *testing.T) {
 func TestIndexes(t *testing.T) {
 	t.Parallel()
 
-	tmpdir, err := os.MkdirTemp("", "buildkit-storage")
+	tmpdir, err := system.MkdirTemp("", "buildkit-storage")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -171,7 +172,7 @@ func TestIndexes(t *testing.T) {
 func TestExternalData(t *testing.T) {
 	t.Parallel()
 
-	tmpdir, err := os.MkdirTemp("", "buildkit-storage")
+	tmpdir, err := system.MkdirTemp("", "buildkit-storage")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 

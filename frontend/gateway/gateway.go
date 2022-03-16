@@ -42,6 +42,7 @@ import (
 	"github.com/moby/buildkit/util/buildinfo"
 	"github.com/moby/buildkit/util/grpcerrors"
 	"github.com/moby/buildkit/util/stack"
+	"github.com/moby/buildkit/util/system"
 	"github.com/moby/buildkit/util/tracing"
 	"github.com/moby/buildkit/worker"
 	"github.com/moby/sys/signal"
@@ -300,7 +301,7 @@ func metadataMount(def *opspb.Definition) (*executor.Mount, func(), error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	dir, err := os.MkdirTemp("", "buildkit-metadata")
+	dir, err := system.MkdirTemp("", "buildkit-metadata")
 	if err != nil {
 		return nil, nil, err
 	}

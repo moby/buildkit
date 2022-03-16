@@ -8,13 +8,14 @@ import (
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/content/local"
 	"github.com/containerd/containerd/images/archive"
+	"github.com/moby/buildkit/util/system"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 func providerFromBinary(fn string) (_ ocispecs.Descriptor, _ content.Provider, _ func(), err error) {
 	ctx := context.TODO()
 
-	tmpDir, err := os.MkdirTemp("", "buildkit-state")
+	tmpDir, err := system.MkdirTemp("", "buildkit-state")
 	if err != nil {
 		return ocispecs.Descriptor{}, nil, nil, err
 	}

@@ -6,6 +6,7 @@ import (
 	"path"
 	"testing"
 
+	"github.com/moby/buildkit/util/system"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/stretchr/testify/require"
 )
@@ -36,7 +37,7 @@ func testUsage(t *testing.T, sb integration.Sandbox) {
 }
 
 func TestWriteMetadataFile(t *testing.T) {
-	tmpdir, err := os.MkdirTemp("", "buildkit")
+	tmpdir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 

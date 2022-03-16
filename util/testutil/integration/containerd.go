@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/moby/buildkit/util/system"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -109,7 +110,7 @@ func (c *containerd) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl
 		rootless = true
 	}
 
-	tmpdir, err := os.MkdirTemp("", "bktest_containerd")
+	tmpdir, err := system.MkdirTemp("", "bktest_containerd")
 	if err != nil {
 		return nil, nil, err
 	}

@@ -23,6 +23,7 @@ import (
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/util/leaseutil"
+	"github.com/moby/buildkit/util/system"
 	"github.com/moby/buildkit/util/winlayers"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
@@ -51,13 +52,13 @@ func testRepeatedFetch(t *testing.T, keepGitDir bool) {
 	t.Parallel()
 	ctx := context.TODO()
 
-	tmpdir, err := os.MkdirTemp("", "buildkit-state")
+	tmpdir, err := system.MkdirTemp("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
 	gs := setupGitSource(t, tmpdir)
 
-	repodir, err := os.MkdirTemp("", "buildkit-gitsource")
+	repodir, err := system.MkdirTemp("", "buildkit-gitsource")
 	require.NoError(t, err)
 	defer os.RemoveAll(repodir)
 
@@ -170,13 +171,13 @@ func testFetchBySHA(t *testing.T, keepGitDir bool) {
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := os.MkdirTemp("", "buildkit-state")
+	tmpdir, err := system.MkdirTemp("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
 	gs := setupGitSource(t, tmpdir)
 
-	repodir, err := os.MkdirTemp("", "buildkit-gitsource")
+	repodir, err := system.MkdirTemp("", "buildkit-gitsource")
 	require.NoError(t, err)
 	defer os.RemoveAll(repodir)
 
@@ -256,13 +257,13 @@ func testFetchByTag(t *testing.T, tag, expectedCommitSubject string, isAnnotated
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := os.MkdirTemp("", "buildkit-state")
+	tmpdir, err := system.MkdirTemp("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
 	gs := setupGitSource(t, tmpdir)
 
-	repodir, err := os.MkdirTemp("", "buildkit-gitsource")
+	repodir, err := system.MkdirTemp("", "buildkit-gitsource")
 	require.NoError(t, err)
 	defer os.RemoveAll(repodir)
 
@@ -350,20 +351,20 @@ func testMultipleRepos(t *testing.T, keepGitDir bool) {
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := os.MkdirTemp("", "buildkit-state")
+	tmpdir, err := system.MkdirTemp("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
 	gs := setupGitSource(t, tmpdir)
 
-	repodir, err := os.MkdirTemp("", "buildkit-gitsource")
+	repodir, err := system.MkdirTemp("", "buildkit-gitsource")
 	require.NoError(t, err)
 	defer os.RemoveAll(repodir)
 
 	repodir, err = setupGitRepo(repodir)
 	require.NoError(t, err)
 
-	repodir2, err := os.MkdirTemp("", "buildkit-gitsource")
+	repodir2, err := system.MkdirTemp("", "buildkit-gitsource")
 	require.NoError(t, err)
 	defer os.RemoveAll(repodir2)
 
@@ -447,7 +448,7 @@ func TestCredentialRedaction(t *testing.T) {
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := os.MkdirTemp("", "buildkit-state")
+	tmpdir, err := system.MkdirTemp("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -479,13 +480,13 @@ func testSubdir(t *testing.T, keepGitDir bool) {
 	t.Parallel()
 	ctx := context.TODO()
 
-	tmpdir, err := os.MkdirTemp("", "buildkit-state")
+	tmpdir, err := system.MkdirTemp("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
 	gs := setupGitSource(t, tmpdir)
 
-	repodir, err := os.MkdirTemp("", "buildkit-gitsource")
+	repodir, err := system.MkdirTemp("", "buildkit-gitsource")
 	require.NoError(t, err)
 	defer os.RemoveAll(repodir)
 

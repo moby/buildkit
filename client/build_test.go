@@ -27,6 +27,7 @@ import (
 	"github.com/moby/buildkit/solver/pb"
 	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
 	"github.com/moby/buildkit/util/entitlements"
+	"github.com/moby/buildkit/util/system"
 	utilsystem "github.com/moby/buildkit/util/system"
 	"github.com/moby/buildkit/util/testutil/echoserver"
 	"github.com/moby/buildkit/util/testutil/integration"
@@ -133,7 +134,7 @@ func testClientGatewaySolve(t *testing.T, sb integration.Sandbox) {
 		return r, nil
 	}
 
-	tmpdir, err := os.MkdirTemp("", "buildkit")
+	tmpdir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -687,7 +688,7 @@ func testClientGatewayContainerMounts(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	tmpdir, err := os.MkdirTemp("", "buildkit-buildctl")
+	tmpdir, err := system.MkdirTemp("", "buildkit-buildctl")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 

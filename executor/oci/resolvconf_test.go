@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/docker/docker/libnetwork/resolvconf"
+	"github.com/moby/buildkit/util/system"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,7 +27,7 @@ nameserver 8.8.4.4
 nameserver 2001:4860:4860::8888
 nameserver 2001:4860:4860::8844`
 
-	dir, err := os.MkdirTemp("", "buildkit-test")
+	dir, err := system.MkdirTemp("", "buildkit-test")
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 	ctx := context.Background()

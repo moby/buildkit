@@ -10,6 +10,7 @@ import (
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
 	gateway "github.com/moby/buildkit/frontend/gateway/client"
+	"github.com/moby/buildkit/util/system"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -42,7 +43,7 @@ func testReturnNil(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -296,7 +297,7 @@ func testRefStatFile(t *testing.T, sb integration.Sandbox) {
 }
 
 func tmpdir(appliers ...fstest.Applier) (string, error) {
-	tmpdir, err := os.MkdirTemp("", "buildkit-frontend")
+	tmpdir, err := system.MkdirTemp("", "buildkit-frontend")
 	if err != nil {
 		return "", err
 	}

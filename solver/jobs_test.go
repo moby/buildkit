@@ -7,6 +7,7 @@ import (
 
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
+	"github.com/moby/buildkit/util/system"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -61,7 +62,7 @@ func testParallelism(t *testing.T, sb integration.Sandbox) {
 
 	timeStart := time.Now()
 	eg, egCtx := errgroup.WithContext(ctx)
-	tmpDir, err := os.MkdirTemp("", "solver-jobs-test-")
+	tmpDir, err := system.MkdirTemp("", "solver-jobs-test-")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpDir)
 	solveOpt := client.SolveOpt{

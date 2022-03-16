@@ -21,6 +21,7 @@ import (
 	"github.com/gofrs/flock"
 	"github.com/moby/buildkit/util/appcontext"
 	"github.com/moby/buildkit/util/contentutil"
+	"github.com/moby/buildkit/util/system"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
@@ -294,7 +295,7 @@ mirrors=["%s"]
 }
 
 func writeConfig(updaters []ConfigUpdater) (string, error) {
-	tmpdir, err := os.MkdirTemp("", "bktest_config")
+	tmpdir, err := system.MkdirTemp("", "bktest_config")
 	if err != nil {
 		return "", err
 	}
@@ -427,7 +428,7 @@ func runStargzSnapshotter(cfg *BackendConfig) (address string, cl func() error, 
 		}
 	}()
 
-	tmpStargzDir, err := os.MkdirTemp("", "bktest_containerd_stargz_grpc")
+	tmpStargzDir, err := system.MkdirTemp("", "bktest_containerd_stargz_grpc")
 	if err != nil {
 		return "", nil, err
 	}

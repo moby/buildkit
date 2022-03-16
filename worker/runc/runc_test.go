@@ -23,13 +23,14 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/util/network/netproviders"
+	"github.com/moby/buildkit/util/system"
 	"github.com/moby/buildkit/worker/base"
 	"github.com/moby/buildkit/worker/tests"
 	"github.com/stretchr/testify/require"
 )
 
 func newWorkerOpt(t *testing.T, processMode oci.ProcessMode) (base.WorkerOpt, func()) {
-	tmpdir, err := os.MkdirTemp("", "workertest")
+	tmpdir, err := system.MkdirTemp("", "workertest")
 	require.NoError(t, err)
 	cleanup := func() { os.RemoveAll(tmpdir) }
 

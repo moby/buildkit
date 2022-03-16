@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/shlex"
+	"github.com/moby/buildkit/util/system"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -167,7 +168,7 @@ func runBuildkitd(ctx context.Context, conf *BackendConfig, args []string, logs 
 		args = append(args, "--config="+conf.ConfigFile)
 	}
 
-	tmpdir, err := os.MkdirTemp("", "bktest_buildkitd")
+	tmpdir, err := system.MkdirTemp("", "bktest_buildkitd")
 	if err != nil {
 		return "", nil, err
 	}

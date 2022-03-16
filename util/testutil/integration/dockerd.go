@@ -14,6 +14,7 @@ import (
 
 	"github.com/docker/docker/client"
 	"github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/util/system"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
@@ -53,7 +54,7 @@ func (c dockerd) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl fun
 	var proxyGroup errgroup.Group
 	deferF.append(proxyGroup.Wait)
 
-	workDir, err := os.MkdirTemp("", "integration")
+	workDir, err := system.MkdirTemp("", "integration")
 	if err != nil {
 		return nil, nil, err
 	}

@@ -23,6 +23,7 @@ import (
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/leaseutil"
+	"github.com/moby/buildkit/util/system"
 	"github.com/moby/buildkit/util/winlayers"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -52,7 +53,7 @@ func newCacheManager(ctx context.Context, opt cmOpt) (co *cmOut, cleanup func() 
 		opt.snapshotterName = "native"
 	}
 
-	tmpdir, err := os.MkdirTemp("", "cachemanager")
+	tmpdir, err := system.MkdirTemp("", "cachemanager")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -152,7 +153,7 @@ func TestCacheMountPrivateRefs(t *testing.T) {
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := os.MkdirTemp("", "cachemanager")
+	tmpdir, err := system.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -219,7 +220,7 @@ func TestCacheMountSharedRefs(t *testing.T) {
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := os.MkdirTemp("", "cachemanager")
+	tmpdir, err := system.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -269,7 +270,7 @@ func TestCacheMountLockedRefs(t *testing.T) {
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := os.MkdirTemp("", "cachemanager")
+	tmpdir, err := system.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -332,7 +333,7 @@ func TestCacheMountSharedRefsDeadlock(t *testing.T) {
 	// not parallel
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := os.MkdirTemp("", "cachemanager")
+	tmpdir, err := system.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 

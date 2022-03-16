@@ -44,6 +44,7 @@ import (
 	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/entitlements"
+	"github.com/moby/buildkit/util/system"
 	"github.com/moby/buildkit/util/testutil"
 	"github.com/moby/buildkit/util/testutil/echoserver"
 	"github.com/moby/buildkit/util/testutil/httpserver"
@@ -199,7 +200,7 @@ func testCacheExportCacheKeyLoop(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	tmpdir, err := os.MkdirTemp("", "buildkit-buildctl")
+	tmpdir, err := system.MkdirTemp("", "buildkit-buildctl")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -298,7 +299,7 @@ func testExportBusyboxLocal(t *testing.T, sb integration.Sandbox) {
 	def, err := llb.Image("busybox").Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -440,7 +441,7 @@ func testSSHMount(t *testing.T, sb integration.Sandbox) {
 	def, err = out.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -511,7 +512,7 @@ func testSSHMount(t *testing.T, sb integration.Sandbox) {
 		},
 	)
 
-	tmpDir, err := os.MkdirTemp("", "buildkit")
+	tmpDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpDir)
 
@@ -523,7 +524,7 @@ func testSSHMount(t *testing.T, sb integration.Sandbox) {
 	}})
 	require.NoError(t, err)
 
-	destDir, err = os.MkdirTemp("", "buildkit")
+	destDir, err = system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -573,7 +574,7 @@ func testShmSize(t *testing.T, sb integration.Sandbox) {
 	def, err := out.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -610,7 +611,7 @@ func testUlimit(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -655,7 +656,7 @@ func testCgroupParent(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -797,7 +798,7 @@ func testSecurityMode(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -990,7 +991,7 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 			for _, exp := range []string{ExporterOCI, ExporterDocker, ExporterImage} {
 				exp := exp // capture loop variable.
 				t.Run(exp, func(t *testing.T) {
-					destDir, err := os.MkdirTemp("", "buildkit")
+					destDir, err := system.MkdirTemp("", "buildkit")
 					require.NoError(t, err)
 					defer os.RemoveAll(destDir)
 
@@ -1256,7 +1257,7 @@ func testRelativeWorkDir(t *testing.T, sb integration.Sandbox) {
 	def, err := pwd.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1287,7 +1288,7 @@ func testFileOpMkdirMkfile(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1341,7 +1342,7 @@ func testFileOpCopyRm(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1412,7 +1413,7 @@ func testFileOpCopyIncludeExclude(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1461,7 +1462,7 @@ func testFileOpCopyIncludeExclude(t *testing.T, sb integration.Sandbox) {
 	def, err = st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err = os.MkdirTemp("", "buildkit")
+	destDir, err = system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1544,7 +1545,7 @@ func testLocalSourceWithDiffer(t *testing.T, sb integration.Sandbox, d llb.DiffT
 	def, err := st.Marshal(context.TODO())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1619,7 +1620,7 @@ func testFileOpRmWildcard(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1720,7 +1721,7 @@ func testBuildHTTPSource(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, server.Stats("/foo").AllRequests, 1)
 	require.Equal(t, server.Stats("/foo").CachedRequests, 0)
 
-	tmpdir, err := os.MkdirTemp("", "buildkit")
+	tmpdir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -1793,7 +1794,7 @@ func testResolveAndHosts(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1847,7 +1848,7 @@ func testUser(t *testing.T, sb integration.Sandbox) {
 	def, err := out.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -1914,7 +1915,7 @@ func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 
 	for _, exp := range []string{ExporterOCI, ExporterDocker} {
-		destDir, err := os.MkdirTemp("", "buildkit")
+		destDir, err := system.MkdirTemp("", "buildkit")
 		require.NoError(t, err)
 		defer os.RemoveAll(destDir)
 
@@ -2084,7 +2085,7 @@ func testFrontendUseSolveResults(t *testing.T, sb integration.Sandbox) {
 		})
 	}
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -2539,7 +2540,7 @@ func testBuildExportZstd(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -2674,7 +2675,7 @@ func testPullZstdImage(t *testing.T, sb integration.Sandbox) {
 	def, err = st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -2740,7 +2741,7 @@ func testBuildPushAndValidate(t *testing.T, sb integration.Sandbox) {
 	def, err = firstBuild.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -2920,7 +2921,7 @@ func testStargzLazyRegistryCacheImportExport(t *testing.T, sb integration.Sandbo
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -3160,7 +3161,7 @@ func testStargzLazyInlineCacheImportExport(t *testing.T, sb integration.Sandbox)
 	checkAllReleasable(t, c, sb, true)
 
 	// stargz layers should be exportable
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 	out := filepath.Join(destDir, "out.tar")
@@ -3292,7 +3293,7 @@ func testStargzLazyPull(t *testing.T, sb integration.Sandbox) {
 	checkAllReleasable(t, c, sb, true)
 
 	// stargz layers should be exportable
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 	out := filepath.Join(destDir, "out.tar")
@@ -3466,11 +3467,11 @@ func testZstdLocalCacheExport(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	destOutDir, err := os.MkdirTemp("", "buildkit")
+	destOutDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destOutDir)
 
@@ -3517,7 +3518,7 @@ func testZstdLocalCacheExport(t *testing.T, sb integration.Sandbox) {
 
 func testUncompressedLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	integration.SkipIfDockerd(t, sb, "remote cache export")
-	dir, err := os.MkdirTemp("", "buildkit")
+	dir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 	im := CacheOptionsEntry{
@@ -3568,7 +3569,7 @@ func testZstdLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
 		// containerd 1.4 doesn't support zstd compression
 		return
 	}
-	dir, err := os.MkdirTemp("", "buildkit")
+	dir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 	im := CacheOptionsEntry{
@@ -3638,7 +3639,7 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptio
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -3662,7 +3663,7 @@ func testBasicCacheImportExport(t *testing.T, sb integration.Sandbox, cacheOptio
 
 	ensurePruneAll(t, c, sb)
 
-	destDir, err = os.MkdirTemp("", "buildkit")
+	destDir, err = system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -3727,7 +3728,7 @@ func testMultipleRegistryCacheImportExport(t *testing.T, sb integration.Sandbox)
 
 func testBasicLocalCacheImportExport(t *testing.T, sb integration.Sandbox) {
 	integration.SkipIfDockerd(t, sb, "remote cache export")
-	dir, err := os.MkdirTemp("", "buildkit")
+	dir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 	im := CacheOptionsEntry{
@@ -3910,7 +3911,7 @@ func readFileInImage(ctx context.Context, c *Client, ref, path string) ([]byte, 
 	if err != nil {
 		return nil, err
 	}
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	if err != nil {
 		return nil, err
 	}
@@ -3963,7 +3964,7 @@ func testCachedMounts(t *testing.T, sb integration.Sandbox) {
 	st.AddMount("/src0", llb.Scratch(), llb.AsPersistentCacheDir("mycache1", llb.CacheMountShared))
 	st.AddMount("/src1", base, llb.AsPersistentCacheDir("mycache2", llb.CacheMountShared))
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4208,7 +4209,7 @@ func testDuplicateWhiteouts(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4280,7 +4281,7 @@ func testWhiteoutParentDir(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4346,7 +4347,7 @@ func testMoveParentDir(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4606,7 +4607,7 @@ func testRmSymlink(t *testing.T, sb integration.Sandbox) {
 	def, err := mnt.File(llb.Rm("link")).Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4642,7 +4643,7 @@ func testProxyEnv(t *testing.T, sb integration.Sandbox) {
 	def, err := out.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4670,7 +4671,7 @@ func testProxyEnv(t *testing.T, sb integration.Sandbox) {
 	def, err = out.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err = os.MkdirTemp("", "buildkit")
+	destDir, err = system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -4955,7 +4956,7 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 	}
 
 	// get the random value at /bar/2
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -5061,7 +5062,7 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 	}
 
 	// check the random value at /bar/2 didn't change
-	destDir, err = os.MkdirTemp("", "buildkit")
+	destDir, err = system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -5110,7 +5111,7 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 	require.NoError(t, err)
 
 	// check the random value at /bar/2 didn't change
-	destDir, err = os.MkdirTemp("", "buildkit")
+	destDir, err = system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -5171,7 +5172,7 @@ func requireContents(ctx context.Context, t *testing.T, c *Client, sb integratio
 	def, err := state.Marshal(ctx)
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -5221,7 +5222,7 @@ func requireEqualContents(ctx context.Context, t *testing.T, c *Client, stateA, 
 	defA, err := stateA.Marshal(ctx)
 	require.NoError(t, err)
 
-	destDirA, err := os.MkdirTemp("", "buildkit")
+	destDirA, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDirA)
 
@@ -5238,7 +5239,7 @@ func requireEqualContents(ctx context.Context, t *testing.T, c *Client, stateA, 
 	defB, err := stateB.Marshal(ctx)
 	require.NoError(t, err)
 
-	destDirB, err := os.MkdirTemp("", "buildkit")
+	destDirB, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDirB)
 
@@ -5387,7 +5388,7 @@ func testInvalidExporter(t *testing.T, sb integration.Sandbox) {
 	def, err := llb.Image("busybox:latest").Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -5472,7 +5473,7 @@ func testParallelLocalBuilds(t *testing.T, sb integration.Sandbox) {
 				def, err := llb.Local("source").Marshal(sb.Context())
 				require.NoError(t, err)
 
-				destDir, err := os.MkdirTemp("", "buildkit")
+				destDir, err := system.MkdirTemp("", "buildkit")
 				require.NoError(t, err)
 				defer os.RemoveAll(destDir)
 
@@ -5521,7 +5522,7 @@ func testRelativeMountpoint(t *testing.T, sb integration.Sandbox) {
 	def, err := st.Marshal(sb.Context())
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -5737,7 +5738,7 @@ func testCallInfo(t *testing.T, sb integration.Sandbox) {
 }
 
 func tmpdir(appliers ...fstest.Applier) (string, error) {
-	tmpdir, err := os.MkdirTemp("", "buildkit-client")
+	tmpdir, err := system.MkdirTemp("", "buildkit-client")
 	if err != nil {
 		return "", err
 	}
@@ -5748,7 +5749,7 @@ func tmpdir(appliers ...fstest.Applier) (string, error) {
 }
 
 func makeSSHAgentSock(agent agent.Agent) (p string, cleanup func() error, err error) {
-	tmpDir, err := os.MkdirTemp("", "buildkit")
+	tmpDir, err := system.MkdirTemp("", "buildkit")
 	if err != nil {
 		return "", nil, err
 	}

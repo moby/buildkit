@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/moby/buildkit/util/system"
 	"github.com/pkg/errors"
 )
 
@@ -30,7 +31,7 @@ func NewRegistry(dir string) (url string, cl func() error, err error) {
 	}()
 
 	if dir == "" {
-		tmpdir, err := os.MkdirTemp("", "test-registry")
+		tmpdir, err := system.MkdirTemp("", "test-registry")
 		if err != nil {
 			return "", nil, err
 		}

@@ -25,6 +25,7 @@ import (
 	"github.com/hashicorp/go-multierror"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/util/leaseutil"
+	"github.com/moby/buildkit/util/system"
 	"github.com/stretchr/testify/require"
 	bolt "go.etcd.io/bbolt"
 )
@@ -47,7 +48,7 @@ func newSnapshotter(ctx context.Context, snapshotterName string) (_ context.Cont
 		}
 	}()
 
-	tmpdir, err := os.MkdirTemp("", "buildkit-test")
+	tmpdir, err := system.MkdirTemp("", "buildkit-test")
 	if err != nil {
 		return nil, nil, nil, err
 	}

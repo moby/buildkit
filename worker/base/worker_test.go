@@ -4,12 +4,13 @@ import (
 	"os"
 	"testing"
 
+	"github.com/moby/buildkit/util/system"
 	"github.com/stretchr/testify/require"
 )
 
 func TestID(t *testing.T) {
 	t.Parallel()
-	tmpdir, err := os.MkdirTemp("", "worker-base-test-id")
+	tmpdir, err := system.MkdirTemp("", "worker-base-test-id")
 	require.NoError(t, err)
 
 	id0, err := ID(tmpdir)

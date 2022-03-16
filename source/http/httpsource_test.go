@@ -20,6 +20,7 @@ import (
 	containerdsnapshot "github.com/moby/buildkit/snapshot/containerd"
 	"github.com/moby/buildkit/source"
 	"github.com/moby/buildkit/util/leaseutil"
+	"github.com/moby/buildkit/util/system"
 	"github.com/moby/buildkit/util/testutil/httpserver"
 	"github.com/moby/buildkit/util/winlayers"
 	digest "github.com/opencontainers/go-digest"
@@ -35,7 +36,7 @@ func TestHTTPSource(t *testing.T) {
 	t.Parallel()
 	ctx := context.TODO()
 
-	tmpdir, err := os.MkdirTemp("", "buildkit-state")
+	tmpdir, err := system.MkdirTemp("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -158,7 +159,7 @@ func TestHTTPDefaultName(t *testing.T) {
 	t.Parallel()
 	ctx := context.TODO()
 
-	tmpdir, err := os.MkdirTemp("", "buildkit-state")
+	tmpdir, err := system.MkdirTemp("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -208,7 +209,7 @@ func TestHTTPInvalidURL(t *testing.T) {
 	t.Parallel()
 	ctx := context.TODO()
 
-	tmpdir, err := os.MkdirTemp("", "buildkit-state")
+	tmpdir, err := system.MkdirTemp("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -236,7 +237,7 @@ func TestHTTPChecksum(t *testing.T) {
 	t.Parallel()
 	ctx := context.TODO()
 
-	tmpdir, err := os.MkdirTemp("", "buildkit-state")
+	tmpdir, err := system.MkdirTemp("", "buildkit-state")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 

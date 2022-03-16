@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/moby/buildkit/util/network/netproviders"
+	"github.com/moby/buildkit/util/system"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/moby/buildkit/worker/base"
 	"github.com/moby/buildkit/worker/tests"
@@ -28,7 +29,7 @@ func TestContainerdWorkerIntegration(t *testing.T) {
 }
 
 func newWorkerOpt(t *testing.T, addr string) (base.WorkerOpt, func()) {
-	tmpdir, err := os.MkdirTemp("", "workertest")
+	tmpdir, err := system.MkdirTemp("", "workertest")
 	require.NoError(t, err)
 	cleanup := func() { os.RemoveAll(tmpdir) }
 	rootless := false

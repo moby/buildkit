@@ -8,6 +8,7 @@ import (
 
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/testutil"
+	"github.com/moby/buildkit/util/system"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -16,10 +17,10 @@ import (
 func TestFileSyncIncludePatterns(t *testing.T) {
 	ctx := context.TODO()
 	t.Parallel()
-	tmpDir, err := os.MkdirTemp("", "fsynctest")
+	tmpDir, err := system.MkdirTemp("", "fsynctest")
 	require.NoError(t, err)
 
-	destDir, err := os.MkdirTemp("", "fsynctest")
+	destDir, err := system.MkdirTemp("", "fsynctest")
 	require.NoError(t, err)
 
 	err = os.WriteFile(filepath.Join(tmpDir, "foo"), []byte("content1"), 0600)

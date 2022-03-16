@@ -9,6 +9,7 @@ import (
 	"github.com/containerd/containerd/content/local"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/testutil"
+	"github.com/moby/buildkit/util/system"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
@@ -23,7 +24,7 @@ func TestContentAttachable(t *testing.T) {
 	attachableStores := make(map[string]content.Store)
 	testBlobs := make(map[string]map[digest.Digest][]byte)
 	for _, id := range ids {
-		tmpDir, err := os.MkdirTemp("", "contenttest")
+		tmpDir, err := system.MkdirTemp("", "contenttest")
 		require.NoError(t, err)
 		defer os.RemoveAll(tmpDir)
 		store, err := local.NewStore(tmpDir)

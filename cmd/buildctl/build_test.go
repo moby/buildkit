@@ -17,6 +17,7 @@ import (
 	"github.com/containerd/continuity/fs/fstest"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
+	"github.com/moby/buildkit/util/system"
 	"github.com/moby/buildkit/util/testutil/integration"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
@@ -54,7 +55,7 @@ func testBuildLocalExporter(t *testing.T, sb integration.Sandbox) {
 	rdr, err := marshal(sb.Context(), out)
 	require.NoError(t, err)
 
-	tmpdir, err := os.MkdirTemp("", "buildkit-buildctl")
+	tmpdir, err := system.MkdirTemp("", "buildkit-buildctl")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -120,7 +121,7 @@ func testBuildMetadataFile(t *testing.T, sb integration.Sandbox) {
 	rdr, err := marshal(sb.Context(), st.Root())
 	require.NoError(t, err)
 
-	tmpDir, err := os.MkdirTemp("", "buildkit-buildctl")
+	tmpDir, err := system.MkdirTemp("", "buildkit-buildctl")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpDir)
 
@@ -192,7 +193,7 @@ func marshal(ctx context.Context, st llb.State) (io.Reader, error) {
 }
 
 func tmpdir(appliers ...fstest.Applier) (string, error) {
-	tmpdir, err := os.MkdirTemp("", "buildkit-buildctl")
+	tmpdir, err := system.MkdirTemp("", "buildkit-buildctl")
 	if err != nil {
 		return "", err
 	}

@@ -5,10 +5,12 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/moby/buildkit/util/system"
 )
 
 func TestReadAll(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "dockerignore-test")
+	tmpDir, err := system.MkdirTemp("", "dockerignore-test")
 	if err != nil {
 		t.Fatal(err)
 	}

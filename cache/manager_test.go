@@ -43,6 +43,7 @@ import (
 	"github.com/moby/buildkit/util/compression"
 	"github.com/moby/buildkit/util/contentutil"
 	"github.com/moby/buildkit/util/leaseutil"
+	"github.com/moby/buildkit/util/system"
 	"github.com/moby/buildkit/util/winlayers"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -74,7 +75,7 @@ func newCacheManager(ctx context.Context, opt cmOpt) (co *cmOut, cleanup func() 
 		opt.snapshotterName = "native"
 	}
 
-	tmpdir, err := os.MkdirTemp("", "cachemanager")
+	tmpdir, err := system.MkdirTemp("", "cachemanager")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -166,14 +167,14 @@ func TestSharableMountPoolCleanup(t *testing.T) {
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := os.MkdirTemp("", "cachemanager")
+	tmpdir, err := system.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
 	// Emulate the situation where the pool dir is dirty
 	mountPoolDir := filepath.Join(tmpdir, "cachemounts")
 	require.NoError(t, os.MkdirAll(mountPoolDir, 0700))
-	_, err = os.MkdirTemp(mountPoolDir, "buildkit")
+	_, err = system.MkdirTemp(mountPoolDir, "buildkit")
 	require.NoError(t, err)
 
 	// Initialize cache manager and check if pool is cleaned up
@@ -193,7 +194,7 @@ func TestManager(t *testing.T) {
 
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := os.MkdirTemp("", "cachemanager")
+	tmpdir, err := system.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -325,7 +326,7 @@ func TestLazyGetByBlob(t *testing.T) {
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := os.MkdirTemp("", "cachemanager")
+	tmpdir, err := system.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -370,7 +371,7 @@ func TestMergeBlobchainID(t *testing.T) {
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := os.MkdirTemp("", "cachemanager")
+	tmpdir, err := system.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -443,7 +444,7 @@ func TestSnapshotExtract(t *testing.T) {
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := os.MkdirTemp("", "cachemanager")
+	tmpdir, err := system.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -583,7 +584,7 @@ func TestExtractOnMutable(t *testing.T) {
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := os.MkdirTemp("", "cachemanager")
+	tmpdir, err := system.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -692,7 +693,7 @@ func TestSetBlob(t *testing.T) {
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := os.MkdirTemp("", "cachemanager")
+	tmpdir, err := system.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -865,7 +866,7 @@ func TestPrune(t *testing.T) {
 	t.Parallel()
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := os.MkdirTemp("", "cachemanager")
+	tmpdir, err := system.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -976,7 +977,7 @@ func TestLazyCommit(t *testing.T) {
 
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := os.MkdirTemp("", "cachemanager")
+	tmpdir, err := system.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -1134,7 +1135,7 @@ func TestLoopLeaseContent(t *testing.T) {
 
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := os.MkdirTemp("", "cachemanager")
+	tmpdir, err := system.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -1251,7 +1252,7 @@ func TestSharingCompressionVariant(t *testing.T) {
 
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := os.MkdirTemp("", "cachemanager")
+	tmpdir, err := system.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -1519,7 +1520,7 @@ func TestConversion(t *testing.T) {
 
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := os.MkdirTemp("", "cachemanager")
+	tmpdir, err := system.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -1616,7 +1617,7 @@ func TestGetRemotes(t *testing.T) {
 
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := os.MkdirTemp("", "cachemanager")
+	tmpdir, err := system.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -1916,7 +1917,7 @@ func TestNondistributableBlobs(t *testing.T) {
 
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := os.MkdirTemp("", "cachemanager")
+	tmpdir, err := system.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -2047,7 +2048,7 @@ func TestMergeOp(t *testing.T) {
 
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := os.MkdirTemp("", "cachemanager")
+	tmpdir, err := system.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -2163,7 +2164,7 @@ func TestDiffOp(t *testing.T) {
 
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := os.MkdirTemp("", "cachemanager")
+	tmpdir, err := system.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -2267,7 +2268,7 @@ func TestLoadHalfFinalizedRef(t *testing.T) {
 
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := os.MkdirTemp("", "cachemanager")
+	tmpdir, err := system.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -2347,7 +2348,7 @@ func TestMountReadOnly(t *testing.T) {
 
 	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
 
-	tmpdir, err := os.MkdirTemp("", "cachemanager")
+	tmpdir, err := system.MkdirTemp("", "cachemanager")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
@@ -2595,7 +2596,7 @@ func fileToBlob(file *os.File, compress bool) ([]byte, ocispecs.Descriptor, erro
 }
 
 func mapToSystemTarBlob(m map[string]string) ([]byte, ocispecs.Descriptor, error) {
-	tmpdir, err := os.MkdirTemp("", "tarcreation")
+	tmpdir, err := system.MkdirTemp("", "tarcreation")
 	if err != nil {
 		return nil, ocispecs.Descriptor{}, err
 	}

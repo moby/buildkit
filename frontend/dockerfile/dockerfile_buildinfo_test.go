@@ -20,6 +20,7 @@ import (
 	gateway "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/solver/pb"
 	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
+	"github.com/moby/buildkit/util/system"
 	"github.com/moby/buildkit/util/testutil/integration"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
@@ -47,7 +48,7 @@ func testBuildInfoSources(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
 
-	gitDir, err := os.MkdirTemp("", "buildkit")
+	gitDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(gitDir)
 
@@ -553,7 +554,7 @@ COPY --from=build /foo /out /
 		return res, nil
 	}
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -699,7 +700,7 @@ COPY --from=build /foo /out /
 		return res, nil
 	}
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
@@ -830,7 +831,7 @@ RUN echo "foo is $FOO" > /foo
 		return res, nil
 	}
 
-	destDir, err := os.MkdirTemp("", "buildkit")
+	destDir, err := system.MkdirTemp("", "buildkit")
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
