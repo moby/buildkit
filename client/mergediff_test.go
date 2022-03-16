@@ -1310,7 +1310,6 @@ func (tc verifyBlobReuse) Name() string {
 }
 
 func (tc verifyBlobReuse) Run(t *testing.T, sb integration.Sandbox) {
-	skipDockerd(t, sb)
 	requiresLinux(t)
 
 	cdAddress := sb.ContainerdAddress()

@@ -1649,7 +1649,7 @@ func testClientGatewayContainerSecurityMode(t *testing.T, sb integration.Sandbox
 		}
 		allowedEntitlements = []entitlements.Entitlement{}
 	} else {
-		skipDockerd(t, sb)
+		integration.SkipIfDockerd(t, sb)
 		assertCaps = func(caps uint64) {
 			/*
 				$ capsh --decode=0000003fffffffff
