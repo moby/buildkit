@@ -90,6 +90,11 @@ func (p *Puller) tryLocalResolve(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
+	if ok, err := contentutil.HasSource(info, p.Src); err != nil || !ok {
+		return errors.Errorf("no matching source")
+	}
+
 	desc.Size = info.Size
 	p.ref = p.Src.String()
 	ra, err := p.ContentStore.ReaderAt(ctx, desc)
