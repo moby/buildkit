@@ -125,6 +125,7 @@ func TestIntegration(t *testing.T) {
 		testStargzLazyPull,
 		testFileOpInputSwap,
 		testRelativeMountpoint,
+		testValidateDigestOrigin,
 	}, mirrors)
 
 	integration.Run(t, []integration.Test{
@@ -3483,6 +3484,73 @@ func testRelativeMountpoint(t *testing.T, sb integration.Sandbox) {
 	dt, err := ioutil.ReadFile(filepath.Join(destDir, "data"))
 	require.NoError(t, err)
 	require.Equal(t, dt, []byte(id))
+}
+
+func testValidateDigestOrigin(t *testing.T, sb integration.Sandbox) {
+	ctx := context.TODO()
+
+	requiresLinux(t)
+	c, err := New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Image("busybox:latest").Run(llb.Shlex("touch foo"), llb.Dir("/wd")).AddMount("/wd", llb.Scratch())
+
+	def, err := st.Marshal(ctx)
+	require.NoError(t, err)
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrorRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	target := registry + "/buildkit/testdigest:latest"
+
+	resp, err := c.Solve(ctx, def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dgst, ok := resp.ExporterResponse["containerimage.digest"]
+	require.True(t, ok)
+
+	err = c.Prune(ctx, nil, PruneAll)
+	require.NoError(t, err)
+
+	st = llb.Image(target + "@" + dgst)
+
+	def, err = st.Marshal(ctx)
+	require.NoError(t, err)
+
+	_, err = c.Solve(ctx, def, SolveOpt{}, nil)
+	require.NoError(t, err)
+
+	// accessing the digest from invalid names should fail
+	st = llb.Image("example.invalid/nosuchrepo@" + dgst)
+
+	def, err = st.Marshal(ctx)
+	require.NoError(t, err)
+
+	_, err = c.Solve(ctx, def, SolveOpt{}, nil)
+	require.Error(t, err)
+
+	// also check repo that does exists but not digest
+	st = llb.Image("docker.io/library/ubuntu@" + dgst)
+
+	def, err = st.Marshal(ctx)
+	require.NoError(t, err)
+
+	_, err = c.Solve(ctx, def, SolveOpt{}, nil)
+	require.Error(t, err)
 }
 
 func tmpdir(appliers ...fstest.Applier) (string, error) {
