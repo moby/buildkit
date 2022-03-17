@@ -81,6 +81,9 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 		if sd, ok := o.(*withSessionDialer); ok {
 			sessionDialer = sd.dialer
 		}
+		if rpc, ok := o.(*withRPCCreds); ok {
+			gopts = append(gopts, grpc.WithPerRPCCredentials(rpc.creds))
+		}
 	}
 
 	if !customTracer {
@@ -268,6 +271,14 @@ func WithSessionDialer(dialer func(context.Context, string, map[string][]string)
 
 type withSessionDialer struct {
 	dialer func(context.Context, string, map[string][]string) (net.Conn, error)
+}
+
+type withRPCCreds struct {
+	creds credentials.PerRPCCredentials
+}
+
+func WithRPCCreds(c credentials.PerRPCCredentials) ClientOpt {
+	return &withRPCCreds{c}
 }
 
 func resolveDialer(address string) (func(context.Context, string) (net.Conn, error), error) {

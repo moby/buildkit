@@ -85,6 +85,11 @@ func main() {
 			Usage: "timeout backend connection after value seconds",
 			Value: 5,
 		},
+		cli.StringFlag{
+			Name:  "authorization-token",
+			Usage: "authorization token (optional)",
+			Value: "",
+		},
 	}
 
 	app.Commands = []cli.Command{
