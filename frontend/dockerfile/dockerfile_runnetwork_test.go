@@ -141,8 +141,12 @@ RUN --network=host nc 127.0.0.1 %s | grep foo
 	case networkHostGranted:
 		require.NoError(t, err)
 	case networkHostDenied:
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "entitlement network.host is not allowed")
+		if !integration.IsTestDockerd() {
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "entitlement network.host is not allowed")
+		} else {
+			require.NoError(t, err)
+		}
 	default:
 		require.Fail(t, "unexpected network.host mode %q", hostAllowed)
 	}
@@ -188,8 +192,12 @@ RUN --network=none ! nc -z 127.0.0.1 %s
 	case networkHostGranted:
 		require.NoError(t, err)
 	case networkHostDenied:
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "entitlement network.host is not allowed")
+		if !integration.IsTestDockerd() {
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "entitlement network.host is not allowed")
+		} else {
+			require.NoError(t, err)
+		}
 	default:
 		require.Fail(t, "unexpected network.host mode %q", hostAllowed)
 	}
