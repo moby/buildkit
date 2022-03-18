@@ -166,7 +166,9 @@ func (a *dockerAuthorizer) AddResponses(ctx context.Context, responses []*http.R
 
 				// this hacky way seems to be best method to detect that error is fatal and should not be retried with a new token
 				if c.Parameters["error"] == "insufficient_scope" && parseScopes(oldScopes).contains(parseScopes(strings.Split(c.Parameters["scope"], " "))) {
-					return err
+					if !isCrossRepoBlobMountRequest(last.Request) {
+						return err
+					}
 				}
 			}
 
@@ -416,6 +418,26 @@ func (ah *authHandler) fetchToken(ctx context.Context, sm *session.Manager, g se
 
 	token = resp.Token
 	return nil, nil
+}
+
+func isCrossRepoBlobMountRequest(req *http.Request) bool {
+	if req.Method != http.MethodPost {
+		return false
+	}
+
+	if !strings.HasSuffix(req.URL.Path, "/blobs/uploads/") {
+		return false
+	}
+
+	query := req.URL.Query()
+	if _, ok := query["mount"]; !ok {
+		return false
+	}
+
+	if _, ok := query["from"]; !ok {
+		return false
+	}
+	return true
 }
 
 func invalidAuthorization(c auth.Challenge, responses []*http.Response) error {
