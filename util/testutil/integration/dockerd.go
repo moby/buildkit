@@ -95,7 +95,7 @@ func (c dockerd) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl fun
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "dockerd startcmd error: %s", formatLogs(cfg.Logs))
 	}
-	if err := waitUnix(daemonSocket, 5*time.Second); err != nil {
+	if err := waitUnix(daemonSocket, 15*time.Second); err != nil {
 		dockerdStop()
 		return nil, nil, errors.Wrapf(err, "dockerd did not start up: %s", formatLogs(cfg.Logs))
 	}
