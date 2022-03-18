@@ -76,7 +76,7 @@ func waitUnix(address string, d time.Duration) error {
 	address = strings.TrimPrefix(address, "unix://")
 	addr, err := net.ResolveUnixAddr("unix", address)
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "failed resolving unix addr: %s", address)
 	}
 
 	step := 50 * time.Millisecond
