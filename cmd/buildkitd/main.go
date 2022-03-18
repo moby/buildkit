@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net"
+	"net/http"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -58,6 +59,7 @@ import (
 	"github.com/moby/buildkit/worker"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
@@ -304,6 +306,12 @@ func main() {
 		if err := serveGRPC(cfg.GRPC, server, errCh); err != nil {
 			return err
 		}
+
+		http.Handle("/metrics", promhttp.Handler())
+		go func() {
+			logrus.Info("running metrics server on :2112")
+			http.ListenAndServe(":2112", nil)
+		}()
 
 		select {
 		case serverErr := <-errCh:
