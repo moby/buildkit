@@ -3,7 +3,6 @@ package client
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 
@@ -1218,7 +1217,7 @@ func (tc verifyContents) Run(t *testing.T, sb integration.Sandbox) {
 	var exportInlineCacheOpts []CacheOptionsEntry
 	var importRegistryCacheOpts []CacheOptionsEntry
 	var exportRegistryCacheOpts []CacheOptionsEntry
-	if os.Getenv("TEST_DOCKERD") != "1" {
+	if !integration.IsTestDockerd() {
 		importInlineCacheOpts = []CacheOptionsEntry{{
 			Type: "registry",
 			Attrs: map[string]string{
@@ -1245,7 +1244,7 @@ func (tc verifyContents) Run(t *testing.T, sb integration.Sandbox) {
 	resetState(t, c, sb)
 	requireContents(ctx, t, c, sb, tc.state, nil, exportInlineCacheOpts, imageTarget, tc.contents(sb))
 
-	if os.Getenv("TEST_DOCKERD") == "1" {
+	if integration.IsTestDockerd() {
 		return
 	}
 

@@ -57,7 +57,7 @@ import (
 )
 
 func init() {
-	if os.Getenv("TEST_DOCKERD") == "1" {
+	if integration.IsTestDockerd() {
 		integration.InitDockerdWorker()
 	} else {
 		integration.InitOCIWorker()
@@ -2128,9 +2128,7 @@ func testExporterTargetExists(t *testing.T, sb integration.Sandbox) {
 }
 
 func testTarExporterWithSocket(t *testing.T, sb integration.Sandbox) {
-	if os.Getenv("TEST_DOCKERD") == "1" {
-		t.Skip("tar exporter is temporarily broken on dockerd")
-	}
+	integration.SkipIfDockerd(t, sb, "tar exporter")
 
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
@@ -2156,9 +2154,7 @@ func testTarExporterWithSocket(t *testing.T, sb integration.Sandbox) {
 }
 
 func testTarExporterWithSocketCopy(t *testing.T, sb integration.Sandbox) {
-	if os.Getenv("TEST_DOCKERD") == "1" {
-		t.Skip("tar exporter is temporarily broken on dockerd")
-	}
+	integration.SkipIfDockerd(t, sb, "tar exporter")
 
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
@@ -2224,9 +2220,7 @@ func testTarExporterSymlink(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBuildExportWithForeignLayer(t *testing.T, sb integration.Sandbox) {
-	if os.Getenv("TEST_DOCKERD") == "1" {
-		t.Skip("image exporter is missing in dockerd")
-	}
+	integration.SkipIfDockerd(t, sb, "image exporter")
 
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -2334,9 +2328,8 @@ func testBuildExportWithForeignLayer(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
-	if os.Getenv("TEST_DOCKERD") == "1" {
-		t.Skip("image exporter is missing in dockerd")
-	}
+	integration.SkipIfDockerd(t, sb, "image exporter")
+
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -4705,7 +4698,7 @@ func testMergeOp(t *testing.T, sb integration.Sandbox) {
 	}
 
 	var imageTarget string
-	if os.Getenv("TEST_DOCKERD") == "1" {
+	if integration.IsTestDockerd() {
 		// do image export but use a fake url as the image should just end up in moby's
 		// local store
 		imageTarget = "fake.invalid:33333/buildkit/testmergeop:latest"
@@ -5193,7 +5186,7 @@ func requireContents(ctx context.Context, t *testing.T, c *Client, sb integratio
 
 	if imageTarget != "" {
 		var exports []ExportEntry
-		if os.Getenv("TEST_DOCKERD") == "1" {
+		if integration.IsTestDockerd() {
 			exports = []ExportEntry{{
 				Type: "moby",
 				Attrs: map[string]string{
