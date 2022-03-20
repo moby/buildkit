@@ -202,3 +202,7 @@ func SkipIfDockerd(t *testing.T, sb Sandbox, reason ...string) {
 		t.Skipf("dockerd worker can not currently run this test due to missing features (%s)", strings.Join(reason, ", "))
 	}
 }
+
+func IsTestDockerd() bool {
+	return os.Getenv("TEST_DOCKERD") == "1"
+}

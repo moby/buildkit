@@ -47,7 +47,7 @@ import (
 )
 
 func init() {
-	if os.Getenv("TEST_DOCKERD") == "1" {
+	if integration.IsTestDockerd() {
 		integration.InitDockerdWorker()
 	} else {
 		integration.InitOCIWorker()
