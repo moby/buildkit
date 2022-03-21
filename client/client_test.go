@@ -160,6 +160,7 @@ func TestIntegration(t *testing.T) {
 		testUncompressedLocalCacheImportExport,
 		testUncompressedRegistryCacheImportExport,
 		testStargzLazyRegistryCacheImportExport,
+		testCallInfo,
 	)
 	tests = append(tests, diffOpTestCases()...)
 	integration.Run(t, tests, mirrors)
@@ -5725,6 +5726,14 @@ func testBuildInfoNoExport(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, len(exbi.Sources), 1)
 	require.Equal(t, exbi.Sources[0].Type, binfotypes.SourceTypeDockerImage)
 	require.Equal(t, exbi.Sources[0].Ref, "docker.io/library/busybox:latest")
+}
+
+func testCallInfo(t *testing.T, sb integration.Sandbox) {
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+	_, err = c.Info(sb.Context())
+	require.NoError(t, err)
 }
 
 func tmpdir(appliers ...fstest.Applier) (string, error) {
