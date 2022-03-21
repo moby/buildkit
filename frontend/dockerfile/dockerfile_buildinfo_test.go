@@ -44,6 +44,7 @@ func init() {
 
 // moby/buildkit#2311
 func testBuildInfoSources(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "oci export")
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
 
@@ -128,6 +129,7 @@ COPY --from=alpine /bin/busybox /alpine-busybox
 }
 
 func testBuildInfoSourcesNoop(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "oci export")
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
 
@@ -185,6 +187,7 @@ FROM busybox:latest
 
 // moby/buildkit#2476
 func testBuildInfoAttrs(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "oci export")
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
 
@@ -243,6 +246,7 @@ RUN echo $foo
 
 // moby/buildkit#2476
 func testBuildInfoMultiPlatform(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "oci export")
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
 
@@ -317,6 +321,7 @@ ADD https://raw.githubusercontent.com/moby/moby/master/README.md /
 }
 
 func testBuildInfoImageContext(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "oci export")
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
 
@@ -384,6 +389,7 @@ COPY --from=base /out /
 }
 
 func testBuildInfoLocalContext(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "oci export")
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
 
