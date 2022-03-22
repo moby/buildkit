@@ -164,8 +164,14 @@ disabled_plugins = ["cri"]
 	containerdArgs := []string{c.containerd, "--config", configFile}
 	rootlessKitState := filepath.Join(tmpdir, "rootlesskit-containerd")
 	if rootless {
-		containerdArgs = append([]string{"sudo", "-u", fmt.Sprintf("#%d", c.uid), "-i", "--", "exec",
-			"rootlesskit", "--copy-up=/run", "--state-dir", rootlessKitState}, containerdArgs...)
+		containerdArgs = append(append([]string{"sudo", "-u", fmt.Sprintf("#%d", c.uid), "-i",
+			fmt.Sprintf("CONTAINERD_ROOTLESS_ROOTLESSKIT_STATE_DIR=%s", rootlessKitState),
+			// Integration test requires the access to localhost of the host network namespace.
+			// TODO: remove these configurations
+			"CONTAINERD_ROOTLESS_ROOTLESSKIT_NET=host",
+			"CONTAINERD_ROOTLESS_ROOTLESSKIT_PORT_DRIVER=none",
+			"CONTAINERD_ROOTLESS_ROOTLESSKIT_FLAGS=--mtu=0",
+		}, c.extraEnv...), "containerd-rootless.sh", "-c", configFile)
 	}
 
 	cmd := exec.Command(containerdArgs[0], containerdArgs[1:]...)
