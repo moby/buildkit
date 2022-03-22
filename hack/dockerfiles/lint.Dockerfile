@@ -2,7 +2,7 @@
 
 FROM golang:1.18-alpine
 RUN apk add --no-cache gcc musl-dev yamllint
-RUN wget -O- -nv https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.43.0
+RUN wget -O- -nv https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.45.0
 WORKDIR /go/src/github.com/moby/buildkit
 RUN --mount=target=/go/src/github.com/moby/buildkit --mount=target=/root/.cache,type=cache \
   GOARCH=amd64 golangci-lint run && \
