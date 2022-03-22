@@ -158,6 +158,7 @@ WORKDIR /go/src/github.com/containerd/containerd
 
 FROM containerd-base AS containerd
 ARG CONTAINERD_VERSION
+ARG GO111MODULE=off
 RUN --mount=from=containerd-src,src=/usr/src/containerd,readwrite --mount=target=/root/.cache,type=cache \
   git fetch origin \
   && git checkout -q "$CONTAINERD_VERSION" \
