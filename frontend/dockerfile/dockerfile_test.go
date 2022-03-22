@@ -47,7 +47,7 @@ import (
 )
 
 func init() {
-	if os.Getenv("TEST_DOCKERD") == "1" {
+	if integration.IsTestDockerd() {
 		integration.InitDockerdWorker()
 	} else {
 		integration.InitOCIWorker()
@@ -405,6 +405,7 @@ RUN [ "$(cat testfile)" == "contents0" ]
 }
 
 func testExportCacheLoop(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "cache export")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -2666,6 +2667,7 @@ ENV foo=bar
 }
 
 func testExposeExpansion(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "image export")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -2905,6 +2907,8 @@ RUN ["ls"]
 	args, trace := f.DFCmdArgs(dir, dir)
 	defer os.RemoveAll(trace)
 
+	integration.SkipIfDockerd(t, sb, "image export")
+
 	target := "example.com/moby/dockerfilescratch:test"
 	cmd := sb.Cmd(args + " --exporter=image --exporter-opt=name=" + target)
 	require.NoError(t, cmd.Run())
@@ -2957,6 +2961,7 @@ RUN ["ls"]
 }
 
 func testUser(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "image export")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -3843,6 +3848,7 @@ COPY --from=stage1 baz bax
 }
 
 func testLabels(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "image export")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -3962,6 +3968,7 @@ RUN ls /files/file1
 }
 
 func testOnBuildCleared(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "direct push")
 	f := getFrontend(t, sb)
 
 	registry, err := sb.NewRegistry()
@@ -4292,6 +4299,7 @@ COPY --from=base unique /
 }
 
 func testReproducibleIDs(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "image export")
 	f := getFrontend(t, sb)
 
 	dockerfile := []byte(`
@@ -5508,6 +5516,7 @@ COPY --from=build /foo /out /
 }
 
 func testNamedMultiplatformInputContext(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "multiplatform")
 	ctx := sb.Context()
 
 	c, err := client.New(ctx, sb.Address())

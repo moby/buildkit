@@ -56,7 +56,7 @@ import (
 )
 
 func init() {
-	if os.Getenv("TEST_DOCKERD") == "1" {
+	if integration.IsTestDockerd() {
 		integration.InitDockerdWorker()
 	} else {
 		integration.InitOCIWorker()
@@ -193,6 +193,7 @@ func newContainerd(cdAddress string) (*containerd.Client, error) {
 
 // moby/buildkit#1336
 func testCacheExportCacheKeyLoop(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "remote cache export")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -1995,7 +1996,6 @@ func testOCIExporter(t *testing.T, sb integration.Sandbox) {
 }
 
 func testFrontendMetadataReturn(t *testing.T, sb integration.Sandbox) {
-	integration.SkipIfDockerd(t, sb, "oci exporter")
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -2009,14 +2009,24 @@ func testFrontendMetadataReturn(t *testing.T, sb integration.Sandbox) {
 		return res, nil
 	}
 
-	res, err := c.Build(sb.Context(), SolveOpt{
-		Exports: []ExportEntry{
-			{
-				Type:   ExporterOCI,
-				Attrs:  map[string]string{},
-				Output: fixedWriteCloser(nopWriteCloser{io.Discard}),
+	var exports []ExportEntry
+	if integration.IsTestDockerd() {
+		exports = []ExportEntry{{
+			Type: "moby",
+			Attrs: map[string]string{
+				"name": "reg.dummy:5000/buildkit/test:latest",
 			},
-		},
+		}}
+	} else {
+		exports = []ExportEntry{{
+			Type:   ExporterOCI,
+			Attrs:  map[string]string{},
+			Output: fixedWriteCloser(nopWriteCloser{io.Discard}),
+		}}
+	}
+
+	res, err := c.Build(sb.Context(), SolveOpt{
+		Exports: exports,
 	}, "", frontend, nil)
 	require.NoError(t, err)
 	require.Contains(t, res.ExporterResponse, "frontend.returned")
@@ -2126,10 +2136,6 @@ func testExporterTargetExists(t *testing.T, sb integration.Sandbox) {
 }
 
 func testTarExporterWithSocket(t *testing.T, sb integration.Sandbox) {
-	if os.Getenv("TEST_DOCKERD") == "1" {
-		t.Skip("tar exporter is temporarily broken on dockerd")
-	}
-
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -2154,10 +2160,6 @@ func testTarExporterWithSocket(t *testing.T, sb integration.Sandbox) {
 }
 
 func testTarExporterWithSocketCopy(t *testing.T, sb integration.Sandbox) {
-	if os.Getenv("TEST_DOCKERD") == "1" {
-		t.Skip("tar exporter is temporarily broken on dockerd")
-	}
-
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -2222,9 +2224,7 @@ func testTarExporterSymlink(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBuildExportWithForeignLayer(t *testing.T, sb integration.Sandbox) {
-	if os.Getenv("TEST_DOCKERD") == "1" {
-		t.Skip("image exporter is missing in dockerd")
-	}
+	integration.SkipIfDockerd(t, sb, "image exporter")
 
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -2332,9 +2332,8 @@ func testBuildExportWithForeignLayer(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
-	if os.Getenv("TEST_DOCKERD") == "1" {
-		t.Skip("image exporter is missing in dockerd")
-	}
+	integration.SkipIfDockerd(t, sb, "image exporter")
+
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
@@ -2525,6 +2524,7 @@ func testBuildExportWithUncompressed(t *testing.T, sb integration.Sandbox) {
 }
 
 func testBuildExportZstd(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "oci export")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -2622,6 +2622,7 @@ func testBuildExportZstd(t *testing.T, sb integration.Sandbox) {
 }
 
 func testPullZstdImage(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "direct push")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -3450,6 +3451,7 @@ func testLazyImagePush(t *testing.T, sb integration.Sandbox) {
 }
 
 func testZstdLocalCacheExport(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "remote cache export")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -4325,6 +4327,7 @@ func testWhiteoutParentDir(t *testing.T, sb integration.Sandbox) {
 
 // #2490
 func testMoveParentDir(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "oci export")
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
@@ -4699,7 +4702,7 @@ func testMergeOp(t *testing.T, sb integration.Sandbox) {
 	}
 
 	var imageTarget string
-	if os.Getenv("TEST_DOCKERD") == "1" {
+	if integration.IsTestDockerd() {
 		// do image export but use a fake url as the image should just end up in moby's
 		// local store
 		imageTarget = "fake.invalid:33333/buildkit/testmergeop:latest"
@@ -5187,7 +5190,7 @@ func requireContents(ctx context.Context, t *testing.T, c *Client, sb integratio
 
 	if imageTarget != "" {
 		var exports []ExportEntry
-		if os.Getenv("TEST_DOCKERD") == "1" {
+		if integration.IsTestDockerd() {
 			exports = []ExportEntry{{
 				Type: "moby",
 				Attrs: map[string]string{
@@ -5557,22 +5560,24 @@ func testBuildInfoExporter(t *testing.T, sb integration.Sandbox) {
 		})
 	}
 
-	registry, err := sb.NewRegistry()
-	if errors.Is(err, integration.ErrRequirements) {
-		t.Skip(err.Error())
+	var exports []ExportEntry
+	if integration.IsTestDockerd() {
+		exports = []ExportEntry{{
+			Type: "moby",
+			Attrs: map[string]string{
+				"name": "reg.dummy:5000/buildkit/test:latest",
+			},
+		}}
+	} else {
+		exports = []ExportEntry{{
+			Type:   ExporterOCI,
+			Attrs:  map[string]string{},
+			Output: fixedWriteCloser(nopWriteCloser{io.Discard}),
+		}}
 	}
-	require.NoError(t, err)
 
 	res, err := c.Build(sb.Context(), SolveOpt{
-		Exports: []ExportEntry{
-			{
-				Type: ExporterImage,
-				Attrs: map[string]string{
-					"name": registry + "/buildkit/test-buildinfo:latest",
-					"push": "true",
-				},
-			},
-		},
+		Exports: exports,
 	}, "", frontend, nil)
 	require.NoError(t, err)
 
@@ -5593,6 +5598,7 @@ func testBuildInfoExporter(t *testing.T, sb integration.Sandbox) {
 
 // moby/buildkit#2476
 func testBuildInfoInline(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "direct push")
 	requiresLinux(t)
 	c, err := New(sb.Context(), sb.Address())
 	require.NoError(t, err)

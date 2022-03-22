@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -74,25 +75,28 @@ COPY --from=alpine /bin/busybox /alpine-busybox
 	server := httptest.NewServer(http.FileServer(http.Dir(filepath.Join(gitDir))))
 	defer server.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
-
-	out := filepath.Join(destDir, "out.tar")
-	outW, err := os.Create(out)
-	require.NoError(t, err)
-
 	c, err := client.New(sb.Context(), sb.Address())
 	require.NoError(t, err)
 	defer c.Close()
 
-	res, err := f.Solve(sb.Context(), c, client.SolveOpt{
-		Exports: []client.ExportEntry{
-			{
-				Type:   client.ExporterOCI,
-				Output: fixedWriteCloser(outW),
+	var exports []client.ExportEntry
+	if integration.IsTestDockerd() {
+		exports = []client.ExportEntry{{
+			Type: "moby",
+			Attrs: map[string]string{
+				"name": "reg.dummy:5000/buildkit/test:latest",
 			},
-		},
+		}}
+	} else {
+		exports = []client.ExportEntry{{
+			Type:   client.ExporterOCI,
+			Attrs:  map[string]string{},
+			Output: fixedWriteCloser(nopWriteCloser{io.Discard}),
+		}}
+	}
+
+	res, err := f.Solve(sb.Context(), c, client.SolveOpt{
+		Exports: exports,
 		FrontendAttrs: map[string]string{
 			builder.DefaultLocalNameContext: server.URL + "/.git#buildinfo",
 		},
@@ -144,21 +148,24 @@ FROM busybox:latest
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
-
-	out := filepath.Join(destDir, "out.tar")
-	outW, err := os.Create(out)
-	require.NoError(t, err)
+	var exports []client.ExportEntry
+	if integration.IsTestDockerd() {
+		exports = []client.ExportEntry{{
+			Type: "moby",
+			Attrs: map[string]string{
+				"name": "reg.dummy:5000/buildkit/test:latest",
+			},
+		}}
+	} else {
+		exports = []client.ExportEntry{{
+			Type:   client.ExporterOCI,
+			Attrs:  map[string]string{},
+			Output: fixedWriteCloser(nopWriteCloser{io.Discard}),
+		}}
+	}
 
 	res, err := f.Solve(sb.Context(), c, client.SolveOpt{
-		Exports: []client.ExportEntry{
-			{
-				Type:   client.ExporterOCI,
-				Output: fixedWriteCloser(outW),
-			},
-		},
+		Exports: exports,
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -203,24 +210,27 @@ RUN echo $foo
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
-
-	out := filepath.Join(destDir, "out.tar")
-	outW, err := os.Create(out)
-	require.NoError(t, err)
+	var exports []client.ExportEntry
+	if integration.IsTestDockerd() {
+		exports = []client.ExportEntry{{
+			Type: "moby",
+			Attrs: map[string]string{
+				"name": "reg.dummy:5000/buildkit/test:latest",
+			},
+		}}
+	} else {
+		exports = []client.ExportEntry{{
+			Type:   client.ExporterOCI,
+			Attrs:  map[string]string{},
+			Output: fixedWriteCloser(nopWriteCloser{io.Discard}),
+		}}
+	}
 
 	res, err := f.Solve(sb.Context(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
 			"build-arg:foo": "bar",
 		},
-		Exports: []client.ExportEntry{
-			{
-				Type:   client.ExporterOCI,
-				Output: fixedWriteCloser(outW),
-			},
-		},
+		Exports: exports,
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -242,6 +252,7 @@ RUN echo $foo
 
 // moby/buildkit#2476
 func testBuildInfoMultiPlatform(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "multi-platform")
 	f := getFrontend(t, sb)
 	f.RequiresBuildctl(t)
 
@@ -262,14 +273,6 @@ ADD https://raw.githubusercontent.com/moby/moby/master/README.md /
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
-
-	out := filepath.Join(destDir, "out.tar")
-	outW, err := os.Create(out)
-	require.NoError(t, err)
-
 	platforms := []string{"linux/amd64", "linux/arm64"}
 
 	res, err := f.Solve(sb.Context(), c, client.SolveOpt{
@@ -280,7 +283,7 @@ ADD https://raw.githubusercontent.com/moby/moby/master/README.md /
 		Exports: []client.ExportEntry{
 			{
 				Type:   client.ExporterOCI,
-				Output: fixedWriteCloser(outW),
+				Output: fixedWriteCloser(nopWriteCloser{io.Discard}),
 			},
 		},
 		LocalDirs: map[string]string{
@@ -336,25 +339,28 @@ COPY --from=base /out /
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
-
-	out := filepath.Join(destDir, "out.tar")
-	outW, err := os.Create(out)
-	require.NoError(t, err)
+	var exports []client.ExportEntry
+	if integration.IsTestDockerd() {
+		exports = []client.ExportEntry{{
+			Type: "moby",
+			Attrs: map[string]string{
+				"name": "reg.dummy:5000/buildkit/test:latest",
+			},
+		}}
+	} else {
+		exports = []client.ExportEntry{{
+			Type:   client.ExporterOCI,
+			Attrs:  map[string]string{},
+			Output: fixedWriteCloser(nopWriteCloser{io.Discard}),
+		}}
+	}
 
 	res, err := f.Solve(sb.Context(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
 			"build-arg:foo":   "bar",
 			"context:busybox": "docker-image://alpine",
 		},
-		Exports: []client.ExportEntry{
-			{
-				Type:   client.ExporterOCI,
-				Output: fixedWriteCloser(outW),
-			},
-		},
+		Exports: exports,
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -403,14 +409,6 @@ COPY --from=base /o* /
 	require.NoError(t, err)
 	defer c.Close()
 
-	destDir, err := os.MkdirTemp("", "buildkit")
-	require.NoError(t, err)
-	defer os.RemoveAll(destDir)
-
-	out := filepath.Join(destDir, "out.tar")
-	outW, err := os.Create(out)
-	require.NoError(t, err)
-
 	outf := []byte(`dummy-result`)
 
 	dir2, err := tmpdir(
@@ -421,17 +419,28 @@ COPY --from=base /o* /
 	require.NoError(t, err)
 	defer os.RemoveAll(dir2)
 
+	var exports []client.ExportEntry
+	if integration.IsTestDockerd() {
+		exports = []client.ExportEntry{{
+			Type: "moby",
+			Attrs: map[string]string{
+				"name": "reg.dummy:5000/buildkit/test:latest",
+			},
+		}}
+	} else {
+		exports = []client.ExportEntry{{
+			Type:   client.ExporterOCI,
+			Attrs:  map[string]string{},
+			Output: fixedWriteCloser(nopWriteCloser{io.Discard}),
+		}}
+	}
+
 	res, err := f.Solve(sb.Context(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
 			"build-arg:foo": "bar",
 			"context:base":  "local:basedir",
 		},
-		Exports: []client.ExportEntry{
-			{
-				Type:   client.ExporterOCI,
-				Output: fixedWriteCloser(outW),
-			},
-		},
+		Exports: exports,
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
