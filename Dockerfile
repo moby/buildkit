@@ -23,7 +23,7 @@ RUN apk add --no-cache git
 FROM --platform=$BUILDPLATFORM tonistiigi/xx:golang@sha256:6f7d999551dd471b58f70716754290495690efa8421e0a1fcf18eb11d0c0a537 AS xgo
 
 # gobuild is base stage for compiling go/cgo
-FROM --platform=$BUILDPLATFORM golang:1.17-buster AS gobuild-minimal
+FROM --platform=$BUILDPLATFORM golang:1.18-buster AS gobuild-minimal
 COPY --from=xgo / /
 RUN apt-get update && apt-get install --no-install-recommends -y libseccomp-dev file
 
