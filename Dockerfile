@@ -123,7 +123,7 @@ RUN git clone https://github.com/containerd/containerd.git containerd
 FROM gobuild-base AS containerd-base
 WORKDIR /go/src/github.com/containerd/containerd
 ARG TARGETPLATFORM
-ENV CGO_ENABLED=1 BUILDTAGS=no_btrfs
+ENV CGO_ENABLED=1 BUILDTAGS=no_btrfs GO111MODULE=off
 RUN xx-apk add musl-dev gcc && xx-go --wrap
 
 FROM containerd-base AS containerd
