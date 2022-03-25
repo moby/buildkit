@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile-upstream:master
 
 FROM golang:1.18-alpine
+ENV GOFLAGS="-buildvcs=false"
 RUN apk add --no-cache gcc musl-dev yamllint
 RUN wget -O- -nv https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.45.0
 WORKDIR /go/src/github.com/moby/buildkit
