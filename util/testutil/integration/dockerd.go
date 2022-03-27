@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -144,7 +145,11 @@ func (c dockerd) New(ctx context.Context, cfg *BackendConfig) (b Backend, cl fun
 			}
 			conn, err := dockerAPI.DialHijack(ctx, "/grpc", "h2c", nil)
 			if err != nil {
-				return errors.Wrapf(err, "dockerd grpc conn error: %s", formatLogs(cfg.Logs))
+				if errors.Is(err, syscall.ECONNRESET) || errors.Is(err, net.ErrClosed) {
+					logrus.Warn("dockerd conn already closed: ", err)
+					return nil
+				}
+				return errors.Wrap(err, "dockerd grpc conn error")
 			}
 
 			proxyGroup.Go(func() error {
