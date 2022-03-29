@@ -403,10 +403,10 @@ func (e *imageExporterInstance) unpackImage(ctx context.Context, img images.Imag
 
 	topLayerRef := src.Ref
 	if len(src.Refs) > 0 {
-		if r, ok := src.Refs[platforms.DefaultString()]; ok {
+		if r, ok := src.Refs[defaultPlatform()]; ok {
 			topLayerRef = r
 		} else {
-			return errors.Errorf("no reference for default platform %s", platforms.DefaultString())
+			return errors.Errorf("no reference for default platform %s", defaultPlatform())
 		}
 	}
 
@@ -481,4 +481,10 @@ func addAnnotations(m map[digest.Digest]map[string]string, desc ocispecs.Descrip
 	for k, v := range desc.Annotations {
 		a[k] = v
 	}
+}
+
+func defaultPlatform() string {
+	// Use normalized platform string to avoid the mismatch with platform options which
+	// are normalized using platforms.Normalize()
+	return platforms.Format(platforms.Normalize(platforms.DefaultSpec()))
 }
