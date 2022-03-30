@@ -401,7 +401,11 @@ func (e *execOp) copyLocally(ctx context.Context, root executor.Mount, g session
 	if meta.Args[0] != localhost.CopyFileMagicStr {
 		panic("arg[0] must be CopyFileMagicStr; this should not have happened")
 	}
-	src := filepath.Clean(meta.Args[1])
+	src := meta.Args[1]
+	if !strings.HasPrefix(src, "/") && meta.Cwd != "" {
+		src = filepath.Join(meta.Cwd, src)
+	}
+	src = filepath.Clean(src)
 	dst := meta.Args[2]
 
 	if src == "/" {
@@ -514,6 +518,9 @@ func (e *execOp) sendLocally(ctx context.Context, root executor.Mount, mounts []
 				finalDst = path.Join(dst, path.Base(f))
 			} else {
 				finalDst = dst
+			}
+			if !strings.HasPrefix(dst, "/") && meta.Cwd != "" {
+				finalDst = path.Join(meta.Cwd, finalDst)
 			}
 			bklog.G(ctx).Debugf("calling LocalhostPut src=%s dst=%s", finalSrc, finalDst)
 			err = localhost.LocalhostPut(ctx, caller, finalSrc, finalDst)
