@@ -401,7 +401,11 @@ func (e *execOp) copyLocally(ctx context.Context, root executor.Mount, g session
 	if meta.Args[0] != localhost.CopyFileMagicStr {
 		panic("arg[0] must be CopyFileMagicStr; this should not have happened")
 	}
-	src := filepath.Clean(meta.Args[1])
+	src := meta.Args[1]
+	if !strings.HasPrefix(src, "/") && meta.Cwd != "" {
+		src = filepath.Join(meta.Cwd, src)
+	}
+	src = filepath.Clean(src)
 	dst := meta.Args[2]
 
 	if src == "/" {
