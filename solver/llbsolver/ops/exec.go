@@ -515,6 +515,9 @@ func (e *execOp) sendLocally(ctx context.Context, root executor.Mount, mounts []
 			} else {
 				finalDst = dst
 			}
+			if !strings.HasPrefix(dst, "/") && meta.Cwd != "" {
+				finalDst = path.Join(meta.Cwd, finalDst)
+			}
 			bklog.G(ctx).Debugf("calling LocalhostPut src=%s dst=%s", finalSrc, finalDst)
 			err = localhost.LocalhostPut(ctx, caller, finalSrc, finalDst)
 			if err != nil {
