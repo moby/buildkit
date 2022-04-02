@@ -8,10 +8,10 @@ require (
 	github.com/agext/levenshtein v1.2.3
 	github.com/armon/circbuf v0.0.0-20190214190532-5111143e8da2
 	github.com/containerd/console v1.0.3
-	github.com/containerd/containerd v1.6.2
-	github.com/containerd/continuity v0.2.2
+	github.com/containerd/containerd v1.6.3-0.20220401172941-5ff8fce1fcc6
+	github.com/containerd/continuity v0.2.3-0.20220330195504-d132b287edc8
 	github.com/containerd/fuse-overlayfs-snapshotter v1.0.2
-	github.com/containerd/go-cni v1.1.3
+	github.com/containerd/go-cni v1.1.4
 	github.com/containerd/go-runc v1.0.0
 	github.com/containerd/stargz-snapshotter v0.11.3
 	github.com/containerd/stargz-snapshotter/estargz v0.11.3
@@ -39,8 +39,8 @@ require (
 	github.com/moby/sys/signal v0.6.0
 	github.com/morikuni/aec v1.0.0
 	github.com/opencontainers/go-digest v1.0.0
-	github.com/opencontainers/image-spec v1.0.2-0.20211117181255-693428a734f5
-	github.com/opencontainers/runc v1.1.0
+	github.com/opencontainers/image-spec v1.0.3-0.20211202183452-c5a74bcca799
+	github.com/opencontainers/runc v1.1.1
 	github.com/opencontainers/runtime-spec v1.0.3-0.20210326190908-1c3f411f0417
 	github.com/opencontainers/selinux v1.10.0
 	github.com/pelletier/go-toml v1.9.4
