@@ -78,7 +78,7 @@ func BuildManifest(ctx Context) (*Manifest, error) {
 
 	if err := ctx.Walk(func(p string, fi os.FileInfo, err error) error {
 		if err != nil {
-			return fmt.Errorf("error walking %s: %v", p, err)
+			return fmt.Errorf("error walking %s: %w", p, err)
 		}
 
 		if p == string(os.PathSeparator) {
@@ -101,7 +101,7 @@ func BuildManifest(ctx Context) (*Manifest, error) {
 			return nil
 		} else if err != errNotAHardLink {
 			// handle any other case where we have a proper error.
-			return fmt.Errorf("adding hardlink %s: %v", p, err)
+			return fmt.Errorf("adding hardlink %s: %w", p, err)
 		}
 
 		resourcesByPath[p] = resource
