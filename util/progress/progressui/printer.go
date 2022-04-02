@@ -256,7 +256,7 @@ func (p *textMux) print(t *trace) {
 		}
 		// make any open vertex active
 		for dgst, v := range t.byDigest {
-			if v.isStarted() && !v.isCompleted() {
+			if v.isStarted() && !v.isCompleted() && v.ProgressGroup == nil && !v.hidden {
 				p.printVtx(t, dgst)
 				return
 			}
@@ -279,6 +279,10 @@ func (p *textMux) print(t *trace) {
 	for dgst := range rest {
 		v, ok := t.byDigest[dgst]
 		if !ok {
+			continue
+		}
+		if v.lastBlockTime == nil {
+			// shouldn't happen, but not worth crashing over
 			continue
 		}
 		tm := now.Sub(*v.lastBlockTime)
