@@ -12,6 +12,7 @@ ARG REGISTRY_VERSION=2.8.0
 ARG ROOTLESSKIT_VERSION=v0.14.6
 ARG CNI_VERSION=v1.1.0
 ARG STARGZ_SNAPSHOTTER_VERSION=v0.11.3
+ARG NERDCTL_VERSION=v0.17.1
 
 ARG ALPINE_VERSION=3.15
 
@@ -226,13 +227,16 @@ RUN curl -Ls https://github.com/containernetworking/plugins/releases/download/$C
 
 FROM buildkit-base AS integration-tests-base
 ENV BUILDKIT_INTEGRATION_ROOTLESS_IDPAIR="1000:1000"
-RUN apk add --no-cache shadow shadow-uidmap sudo vim iptables fuse \
+ARG NERDCTL_VERSION
+RUN apk add --no-cache shadow shadow-uidmap sudo vim iptables fuse curl \
   && useradd --create-home --home-dir /home/user --uid 1000 -s /bin/sh user \
   && echo "XDG_RUNTIME_DIR=/run/user/1000; export XDG_RUNTIME_DIR" >> /home/user/.profile \
   && mkdir -m 0700 -p /run/user/1000 \
   && chown -R user /run/user/1000 /home/user \
   && ln -s /sbin/iptables-legacy /usr/bin/iptables \
-  && xx-go --wrap
+  && xx-go --wrap \
+  && curl -Ls https://raw.githubusercontent.com/containerd/nerdctl/$NERDCTL_VERSION/extras/rootless/containerd-rootless.sh > /usr/bin/containerd-rootless.sh \
+  && chmod 0755 /usr/bin/containerd-rootless.sh
 # musl is needed to directly use the registry binary that is built on alpine
 ENV BUILDKIT_INTEGRATION_CONTAINERD_EXTRA="containerd-1.4=/opt/containerd-alt-14/bin,containerd-1.5=/opt/containerd-alt-15/bin"
 ENV BUILDKIT_INTEGRATION_SNAPSHOTTER=stargz
