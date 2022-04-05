@@ -164,43 +164,92 @@ func TestDecodeDeps(t *testing.T) {
 
 func TestDedupSources(t *testing.T) {
 	cases := []struct {
-		name string
-		bi   binfotypes.BuildInfo
-		want []binfotypes.Source
+		name    string
+		sources []binfotypes.Source
+		deps    map[string]binfotypes.BuildInfo
+		want    []binfotypes.Source
 	}{
 		{
 			name: "deps",
-			bi: binfotypes.BuildInfo{
-				Frontend: "dockerfile.v0",
-				Attrs: map[string]*string{
-					"context:base": stringPtr("input:base"),
+			sources: []binfotypes.Source{
+				{
+					Type: "docker-image",
+					Ref:  "docker.io/library/alpine@sha256:e7d88de73db3d3fd9b2d63aa7f447a10fd0220b7cbf39803c803f2af9ba256b3",
+					Pin:  "sha256:e7d88de73db3d3fd9b2d63aa7f447a10fd0220b7cbf39803c803f2af9ba256b3",
 				},
-				Sources: []binfotypes.Source{
-					{
-						Type: "docker-image",
-						Ref:  "docker.io/library/alpine@sha256:e7d88de73db3d3fd9b2d63aa7f447a10fd0220b7cbf39803c803f2af9ba256b3",
-						Pin:  "sha256:e7d88de73db3d3fd9b2d63aa7f447a10fd0220b7cbf39803c803f2af9ba256b3",
-					},
-					{
-						Type: "docker-image",
-						Ref:  "docker.io/library/busybox:latest",
-						Pin:  "sha256:b69959407d21e8a062e0416bf13405bb2b71ed7a84dde4158ebafacfa06f5578",
-					},
-					{
-						Type: "http",
-						Ref:  "https://raw.githubusercontent.com/moby/moby/master/README.md",
-						Pin:  "sha256:419455202b0ef97e480d7f8199b26a721a417818bc0e2d106975f74323f25e6c",
+				{
+					Type: "docker-image",
+					Ref:  "docker.io/library/busybox:latest",
+					Pin:  "sha256:b69959407d21e8a062e0416bf13405bb2b71ed7a84dde4158ebafacfa06f5578",
+				},
+				{
+					Type: "http",
+					Ref:  "https://raw.githubusercontent.com/moby/moby/master/README.md",
+					Pin:  "sha256:419455202b0ef97e480d7f8199b26a721a417818bc0e2d106975f74323f25e6c",
+				},
+			},
+			deps: map[string]binfotypes.BuildInfo{
+				"base": {
+					Frontend: "dockerfile.v0",
+					Sources: []binfotypes.Source{
+						{
+							Type: "docker-image",
+							Ref:  "docker.io/library/alpine:latest",
+							Pin:  "sha256:e7d88de73db3d3fd9b2d63aa7f447a10fd0220b7cbf39803c803f2af9ba256b3",
+						},
 					},
 				},
-				Deps: map[string]binfotypes.BuildInfo{
-					"base": {
-						Frontend: "dockerfile.v0",
-						Sources: []binfotypes.Source{
-							{
-								Type: "docker-image",
-								Ref:  "docker.io/library/alpine:latest",
-								Pin:  "sha256:e7d88de73db3d3fd9b2d63aa7f447a10fd0220b7cbf39803c803f2af9ba256b3",
-							},
+			},
+			want: []binfotypes.Source{
+				{
+					Type: "docker-image",
+					Ref:  "docker.io/library/busybox:latest",
+					Pin:  "sha256:b69959407d21e8a062e0416bf13405bb2b71ed7a84dde4158ebafacfa06f5578",
+				},
+				{
+					Type: "http",
+					Ref:  "https://raw.githubusercontent.com/moby/moby/master/README.md",
+					Pin:  "sha256:419455202b0ef97e480d7f8199b26a721a417818bc0e2d106975f74323f25e6c",
+				},
+			},
+		},
+		{
+			name: "multideps",
+			sources: []binfotypes.Source{
+				{
+					Type: "docker-image",
+					Ref:  "docker.io/library/alpine@sha256:e7d88de73db3d3fd9b2d63aa7f447a10fd0220b7cbf39803c803f2af9ba256b3",
+					Pin:  "sha256:e7d88de73db3d3fd9b2d63aa7f447a10fd0220b7cbf39803c803f2af9ba256b3",
+				},
+				{
+					Type: "docker-image",
+					Ref:  "docker.io/library/busybox:1.35.0@sha256:20246233b52de844fa516f8c51234f1441e55e71ecdd1a1d91ebb252e1fd4603",
+					Pin:  "sha256:20246233b52de844fa516f8c51234f1441e55e71ecdd1a1d91ebb252e1fd4603",
+				},
+				{
+					Type: "docker-image",
+					Ref:  "docker.io/library/busybox:latest",
+					Pin:  "sha256:b69959407d21e8a062e0416bf13405bb2b71ed7a84dde4158ebafacfa06f5578",
+				},
+				{
+					Type: "http",
+					Ref:  "https://raw.githubusercontent.com/moby/moby/master/README.md",
+					Pin:  "sha256:419455202b0ef97e480d7f8199b26a721a417818bc0e2d106975f74323f25e6c",
+				},
+			},
+			deps: map[string]binfotypes.BuildInfo{
+				"base": {
+					Frontend: "dockerfile.v0",
+					Sources: []binfotypes.Source{
+						{
+							Type: "docker-image",
+							Ref:  "docker.io/library/alpine:latest",
+							Pin:  "sha256:e7d88de73db3d3fd9b2d63aa7f447a10fd0220b7cbf39803c803f2af9ba256b3",
+						},
+						{
+							Type: "docker-image",
+							Ref:  "docker.io/library/busybox:1.35.0",
+							Pin:  "sha256:20246233b52de844fa516f8c51234f1441e55e71ecdd1a1d91ebb252e1fd4603",
 						},
 					},
 				},
@@ -220,37 +269,31 @@ func TestDedupSources(t *testing.T) {
 		},
 		{
 			name: "regular",
-			bi: binfotypes.BuildInfo{
-				Frontend: "dockerfile.v0",
-				Attrs: map[string]*string{
-					"context:base": stringPtr("input:base"),
+			sources: []binfotypes.Source{
+				{
+					Type: "docker-image",
+					Ref:  "docker.io/library/alpine@sha256:e7d88de73db3d3fd9b2d63aa7f447a10fd0220b7cbf39803c803f2af9ba256b3",
+					Pin:  "sha256:e7d88de73db3d3fd9b2d63aa7f447a10fd0220b7cbf39803c803f2af9ba256b3",
 				},
-				Sources: []binfotypes.Source{
-					{
-						Type: "docker-image",
-						Ref:  "docker.io/library/alpine@sha256:e7d88de73db3d3fd9b2d63aa7f447a10fd0220b7cbf39803c803f2af9ba256b3",
-						Pin:  "sha256:e7d88de73db3d3fd9b2d63aa7f447a10fd0220b7cbf39803c803f2af9ba256b3",
-					},
-					{
-						Type: "docker-image",
-						Ref:  "docker.io/library/busybox:latest",
-						Pin:  "sha256:b69959407d21e8a062e0416bf13405bb2b71ed7a84dde4158ebafacfa06f5578",
-					},
-					{
-						Type: "docker-image",
-						Ref:  "docker.io/library/busybox:latest",
-						Pin:  "sha256:b69959407d21e8a062e0416bf13405bb2b71ed7a84dde4158ebafacfa06f5578",
-					},
+				{
+					Type: "docker-image",
+					Ref:  "docker.io/library/busybox:latest",
+					Pin:  "sha256:b69959407d21e8a062e0416bf13405bb2b71ed7a84dde4158ebafacfa06f5578",
 				},
-				Deps: map[string]binfotypes.BuildInfo{
-					"base": {
-						Frontend: "dockerfile.v0",
-						Sources: []binfotypes.Source{
-							{
-								Type: "docker-image",
-								Ref:  "docker.io/library/alpine:latest",
-								Pin:  "sha256:e7d88de73db3d3fd9b2d63aa7f447a10fd0220b7cbf39803c803f2af9ba256b3",
-							},
+				{
+					Type: "docker-image",
+					Ref:  "docker.io/library/busybox:latest",
+					Pin:  "sha256:b69959407d21e8a062e0416bf13405bb2b71ed7a84dde4158ebafacfa06f5578",
+				},
+			},
+			deps: map[string]binfotypes.BuildInfo{
+				"base": {
+					Frontend: "dockerfile.v0",
+					Sources: []binfotypes.Source{
+						{
+							Type: "docker-image",
+							Ref:  "docker.io/library/alpine:latest",
+							Pin:  "sha256:e7d88de73db3d3fd9b2d63aa7f447a10fd0220b7cbf39803c803f2af9ba256b3",
 						},
 					},
 				},
@@ -267,7 +310,7 @@ func TestDedupSources(t *testing.T) {
 	for _, tt := range cases {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, dedupSources(tt.bi, allDepsSources(tt.bi, nil)))
+			assert.Equal(t, tt.want, dedupSources(tt.sources, allDepsSources(tt.deps, nil)))
 		})
 	}
 }
@@ -329,16 +372,42 @@ func TestFormat(t *testing.T) {
 		Frontend: "dockerfile.v0",
 		Attrs: map[string]*string{
 			"build-arg:foo": stringPtr("bar"),
-			"context":       stringPtr("https://github.com/crazy-max/buildkit-buildsources-test.git#master"),
+			"context:base":  stringPtr("input:base"),
 			"filename":      stringPtr("Dockerfile"),
 			"source":        stringPtr("crazymax/dockerfile:master"),
 		},
 		Sources: []binfotypes.Source{
 			{
-				Type:  binfotypes.SourceTypeDockerImage,
-				Ref:   "docker.io/docker/buildx-bin:0.6.1@sha256:a652ced4a4141977c7daaed0a074dcd9844a78d7d2615465b12f433ae6dd29f0",
-				Alias: "docker.io/docker/buildx-bin:0.6.1@sha256:a652ced4a4141977c7daaed0a074dcd9844a78d7d2615465b12f433ae6dd29f0",
-				Pin:   "sha256:a652ced4a4141977c7daaed0a074dcd9844a78d7d2615465b12f433ae6dd29f0",
+				Type: "docker-image",
+				Ref:  "docker.io/library/busybox:latest",
+				Pin:  "sha256:b69959407d21e8a062e0416bf13405bb2b71ed7a84dde4158ebafacfa06f5578",
+			},
+			{
+				Type: "http",
+				Ref:  "https://raw.githubusercontent.com/moby/moby/master/README.md",
+				Pin:  "sha256:419455202b0ef97e480d7f8199b26a721a417818bc0e2d106975f74323f25e6c",
+			},
+		},
+		Deps: map[string]binfotypes.BuildInfo{
+			"base": {
+				Frontend: "dockerfile.v0",
+				Attrs: map[string]*string{
+					"build-arg:foo": stringPtr("bar"),
+					"filename":      stringPtr("Dockerfile2"),
+					"source":        stringPtr("crazymax/dockerfile:master"),
+				},
+				Sources: []binfotypes.Source{
+					{
+						Type: "docker-image",
+						Ref:  "docker.io/library/alpine:latest",
+						Pin:  "sha256:e7d88de73db3d3fd9b2d63aa7f447a10fd0220b7cbf39803c803f2af9ba256b3",
+					},
+					{
+						Type: "docker-image",
+						Ref:  "docker.io/library/busybox:1.35.0",
+						Pin:  "sha256:20246233b52de844fa516f8c51234f1441e55e71ecdd1a1d91ebb252e1fd4603",
+					},
+				},
 			},
 		},
 	}
@@ -360,10 +429,24 @@ func TestFormat(t *testing.T) {
 				Frontend: "dockerfile.v0",
 				Sources: []binfotypes.Source{
 					{
-						Type:  binfotypes.SourceTypeDockerImage,
-						Ref:   "docker.io/docker/buildx-bin:0.6.1@sha256:a652ced4a4141977c7daaed0a074dcd9844a78d7d2615465b12f433ae6dd29f0",
-						Alias: "docker.io/docker/buildx-bin:0.6.1@sha256:a652ced4a4141977c7daaed0a074dcd9844a78d7d2615465b12f433ae6dd29f0",
-						Pin:   "sha256:a652ced4a4141977c7daaed0a074dcd9844a78d7d2615465b12f433ae6dd29f0",
+						Type: "docker-image",
+						Ref:  "docker.io/library/alpine:latest",
+						Pin:  "sha256:e7d88de73db3d3fd9b2d63aa7f447a10fd0220b7cbf39803c803f2af9ba256b3",
+					},
+					{
+						Type: "docker-image",
+						Ref:  "docker.io/library/busybox:1.35.0",
+						Pin:  "sha256:20246233b52de844fa516f8c51234f1441e55e71ecdd1a1d91ebb252e1fd4603",
+					},
+					{
+						Type: "docker-image",
+						Ref:  "docker.io/library/busybox:latest",
+						Pin:  "sha256:b69959407d21e8a062e0416bf13405bb2b71ed7a84dde4158ebafacfa06f5578",
+					},
+					{
+						Type: "http",
+						Ref:  "https://raw.githubusercontent.com/moby/moby/master/README.md",
+						Pin:  "sha256:419455202b0ef97e480d7f8199b26a721a417818bc0e2d106975f74323f25e6c",
 					},
 				},
 			},
