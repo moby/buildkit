@@ -27,6 +27,7 @@ on:
 
 env:
   REPO_SLUG_TARGET: "moby/buildkit"
+  BUILDX_VERSION: "v0.8.2"  # leave empty to use the one available on GitHub virtual environment
 
 jobs:
   create:
@@ -41,6 +42,8 @@ jobs:
       -
         name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
+        with:
+          version: ${{ env.BUILDX_VERSION }}
       -
         name: Login to DockerHub
         if: github.event.inputs.dry-run != 'true'
