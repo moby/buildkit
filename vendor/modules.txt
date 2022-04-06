@@ -459,7 +459,7 @@ github.com/stretchr/testify/require
 github.com/tonistiigi/fsutil
 github.com/tonistiigi/fsutil/copy
 github.com/tonistiigi/fsutil/types
-# github.com/tonistiigi/go-actions-cache v0.0.0-20211202175116-9642704158ff
+# github.com/tonistiigi/go-actions-cache v0.0.0-20220404170428-0bdeb6e1eac7
 ## explicit; go 1.16
 github.com/tonistiigi/go-actions-cache
 # github.com/tonistiigi/go-archvariant v1.0.0
