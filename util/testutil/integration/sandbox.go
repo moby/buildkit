@@ -26,6 +26,7 @@ type backend struct {
 	containerdAddress string
 	rootless          bool
 	snapshotter       string
+	isDockerd         bool
 }
 
 func (b backend) Address() string {

@@ -3,7 +3,6 @@ package client
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 
@@ -1192,6 +1191,13 @@ func (tc verifyContents) Run(t *testing.T, sb integration.Sandbox) {
 		t.Skip("rootless")
 	}
 
+	// FIXME: TestDiffUpperScratch broken on dockerd and seems flaky with containerd.
+	// 	see https://github.com/moby/buildkit/pull/2726#issuecomment-1070978499
+	// 	and https://github.com/moby/buildkit/pull/2725#issuecomment-1066521712
+	if integration.IsTestDockerd() && tc.name == "TestDiffUpperScratch" {
+		t.Skip("TestDiffUpperScratch is temporarily broken on dockerd")
+	}
+
 	requiresLinux(t)
 	cdAddress := sb.ContainerdAddress()
 
@@ -1218,7 +1224,7 @@ func (tc verifyContents) Run(t *testing.T, sb integration.Sandbox) {
 	var exportInlineCacheOpts []CacheOptionsEntry
 	var importRegistryCacheOpts []CacheOptionsEntry
 	var exportRegistryCacheOpts []CacheOptionsEntry
-	if os.Getenv("TEST_DOCKERD") != "1" {
+	if !integration.IsTestDockerd() {
 		importInlineCacheOpts = []CacheOptionsEntry{{
 			Type: "registry",
 			Attrs: map[string]string{
@@ -1245,7 +1251,7 @@ func (tc verifyContents) Run(t *testing.T, sb integration.Sandbox) {
 	resetState(t, c, sb)
 	requireContents(ctx, t, c, sb, tc.state, nil, exportInlineCacheOpts, imageTarget, tc.contents(sb))
 
-	if os.Getenv("TEST_DOCKERD") == "1" {
+	if integration.IsTestDockerd() {
 		return
 	}
 
@@ -1310,7 +1316,6 @@ func (tc verifyBlobReuse) Name() string {
 }
 
 func (tc verifyBlobReuse) Run(t *testing.T, sb integration.Sandbox) {
-	skipDockerd(t, sb)
 	requiresLinux(t)
 
 	cdAddress := sb.ContainerdAddress()
