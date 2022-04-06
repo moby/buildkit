@@ -15,6 +15,7 @@ on:
 
 env:
   REPO_SLUG_ORIGIN: "moby/buildkit:latest"
+  BUILDX_VERSION: "v0.8.2"  # leave empty to use the one available on GitHub virtual environment
 
 jobs:
   validate:
@@ -35,6 +36,7 @@ jobs:
         name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
         with:
+          version: ${{ env.BUILDX_VERSION }}
           driver-opts: image=${{ env.REPO_SLUG_ORIGIN }}
       -
         name: Run
