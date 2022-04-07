@@ -61,14 +61,23 @@ func NewController(opt Opt) (*Controller, error) {
 
 	gatewayForwarder := controlgateway.NewGatewayForwarder()
 
-	solver, err := llbsolver.New(opt.WorkerController, opt.Frontends, cache, opt.ResolveCacheImporterFuncs, gatewayForwarder, opt.SessionManager, opt.Entitlements)
+	s, err := llbsolver.New(llbsolver.Opt{
+		WorkerController: opt.WorkerController,
+		Frontends:        opt.Frontends,
+		CacheManager:     cache,
+		CacheResolvers:   opt.ResolveCacheImporterFuncs,
+		GatewayForwarder: gatewayForwarder,
+		SessionManager:   opt.SessionManager,
+		Entitlements:     opt.Entitlements,
+	})
+
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create solver")
 	}
 
 	c := &Controller{
 		opt:              opt,
-		solver:           solver,
+		solver:           s,
 		cache:            cache,
 		gatewayForwarder: gatewayForwarder,
 	}
