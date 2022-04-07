@@ -5,7 +5,7 @@ if [ -z "${BINDIR:-}" ] && [ -z "${PREFIX:-}" ]; then
   PREFIX="$(realpath "$(dirname "$0")/..")"
 fi
 
-: "${VERSION:=v0.8.0}"
+: "${VERSION:=v0.8.2}"
 : "${BINDIR:="${PREFIX}/bin"}"
 : "${DEST:="${BINDIR}/buildx"}"
 
