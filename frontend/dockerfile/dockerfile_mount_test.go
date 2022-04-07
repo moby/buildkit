@@ -3,7 +3,6 @@ package dockerfile
 import (
 	"os"
 	"path/filepath"
-	"strconv"
 	"testing"
 
 	"github.com/containerd/continuity/fs/fstest"
@@ -25,12 +24,11 @@ var mountTests = integration.TestFuncs(
 	testMountFromError,
 	testMountInvalid,
 	testMountTmpfsSize,
+	testCacheMountUser,
 )
 
 func init() {
 	allTests = append(allTests, mountTests...)
-
-	fileOpTests = append(fileOpTests, integration.TestFuncs(testCacheMountUser)...)
 }
 
 func testMountContext(t *testing.T, sb integration.Sandbox) {
@@ -240,7 +238,6 @@ COPY --from=second /unique /unique
 
 func testCacheMountUser(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
-	isFileOp := getFileOp(t, sb)
 
 	dockerfile := []byte(`
 FROM busybox
@@ -258,9 +255,6 @@ RUN --mount=type=cache,target=/mycache,uid=1001,gid=1002,mode=0751 [ "$(stat -c 
 	defer c.Close()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
-		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
