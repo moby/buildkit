@@ -15,7 +15,6 @@ spec:
         app: buildkitd
       annotations:
         container.apparmor.security.beta.kubernetes.io/buildkitd: unconfined
-        container.seccomp.security.alpha.kubernetes.io/buildkitd: unconfined
     # see buildkit/docs/rootless.md for caveats of rootless mode
     spec:
       containers:
@@ -52,6 +51,9 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 30
           securityContext:
+            # Needs Kubernetes >= 1.19
+            seccompProfile:
+              type: Unconfined
             # To change UID/GID, you need to rebuild the image
             runAsUser: 1000
             runAsGroup: 1000
