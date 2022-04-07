@@ -2166,7 +2166,7 @@ ADD %s /dest/
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	cmd := sb.Cmd(args + fmt.Sprintf(" --exporter=local --exporter-opt output=%s", destDir))
+	cmd := sb.Cmd(args + fmt.Sprintf(" --output type=local,dest=%s", destDir))
 	err = cmd.Run()
 	require.NoError(t, err)
 
@@ -2193,7 +2193,7 @@ ADD %s /dest/
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	cmd = sb.Cmd(args + fmt.Sprintf(" --exporter=local --exporter-opt output=%s", destDir))
+	cmd = sb.Cmd(args + fmt.Sprintf(" --output type=local,dest=%s", destDir))
 	err = cmd.Run()
 	require.NoError(t, err)
 
@@ -2245,7 +2245,7 @@ ADD t.tar /
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	cmd := sb.Cmd(args + fmt.Sprintf(" --exporter=local --exporter-opt output=%s", destDir))
+	cmd := sb.Cmd(args + fmt.Sprintf(" --output type=local,dest=%s", destDir))
 	require.NoError(t, cmd.Run())
 
 	dt, err := os.ReadFile(filepath.Join(destDir, "foo"))
@@ -2279,7 +2279,7 @@ ADD t.tar.gz /
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	cmd = sb.Cmd(args + fmt.Sprintf(" --exporter=local --exporter-opt output=%s", destDir))
+	cmd = sb.Cmd(args + fmt.Sprintf(" --output type=local,dest=%s", destDir))
 	require.NoError(t, cmd.Run())
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "foo"))
@@ -2306,7 +2306,7 @@ COPY t.tar.gz /
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	cmd = sb.Cmd(args + fmt.Sprintf(" --exporter=local --exporter-opt output=%s", destDir))
+	cmd = sb.Cmd(args + fmt.Sprintf(" --output type=local,dest=%s", destDir))
 	require.NoError(t, cmd.Run())
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "t.tar.gz"))
@@ -2342,7 +2342,7 @@ ADD %s /
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	cmd = sb.Cmd(args + fmt.Sprintf(" --exporter=local --exporter-opt output=%s", destDir))
+	cmd = sb.Cmd(args + fmt.Sprintf(" --output type=local,dest=%s", destDir))
 	require.NoError(t, cmd.Run())
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "t.tar.gz"))
@@ -2368,7 +2368,7 @@ ADD %s /newname.tar.gz
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	cmd = sb.Cmd(args + fmt.Sprintf(" --exporter=local --exporter-opt output=%s", destDir))
+	cmd = sb.Cmd(args + fmt.Sprintf(" --output type=local,dest=%s", destDir))
 	require.NoError(t, cmd.Run())
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "newname.tar.gz"))
@@ -2525,7 +2525,7 @@ COPY foo /symlink/
 	require.NoError(t, err)
 	defer os.RemoveAll(destDir)
 
-	cmd := sb.Cmd(args + fmt.Sprintf(" --exporter=local --exporter-opt output=%s", destDir))
+	cmd := sb.Cmd(args + fmt.Sprintf(" --output type=local,dest=%s", destDir))
 	require.NoError(t, cmd.Run())
 
 	dt, err := os.ReadFile(filepath.Join(destDir, "tmp/symlink-target/foo"))
@@ -2556,7 +2556,7 @@ ENV foo=bar
 	defer os.RemoveAll(trace)
 
 	target := "example.com/moby/dockerfilescratch:test"
-	cmd := sb.Cmd(args + " --exporter=image --exporter-opt=name=" + target)
+	cmd := sb.Cmd(args + " --output type=image,name=" + target)
 	err = cmd.Run()
 	require.NoError(t, err)
 
@@ -2844,7 +2844,7 @@ RUN ["ls"]
 	integration.SkipIfDockerd(t, sb, "image export")
 
 	target := "example.com/moby/dockerfilescratch:test"
-	cmd := sb.Cmd(args + " --exporter=image --exporter-opt=name=" + target)
+	cmd := sb.Cmd(args + " --output type=image,name=" + target)
 	require.NoError(t, cmd.Run())
 
 	// TODO: expose this test to OCI worker
