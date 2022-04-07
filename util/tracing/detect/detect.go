@@ -112,7 +112,7 @@ func TracerProvider() (trace.TracerProvider, error) {
 			err = err1
 		}
 	})
-	b, _ := strconv.ParseBool(os.Getenv("OTEL_INGORE_ERROR"))
+	b, _ := strconv.ParseBool(os.Getenv("OTEL_IGNORE_ERROR"))
 	if err != nil && !b {
 		return nil, err
 	}
