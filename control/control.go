@@ -81,11 +81,10 @@ func NewController(opt Opt) (*Controller, error) {
 	return c, nil
 }
 
-func (c *Controller) Register(server *grpc.Server) error {
+func (c *Controller) Register(server *grpc.Server) {
 	controlapi.RegisterControlServer(server, c)
 	c.gatewayForwarder.Register(server)
 	tracev1.RegisterTraceServiceServer(server, c)
-	return nil
 }
 
 func (c *Controller) DiskUsage(ctx context.Context, r *controlapi.DiskUsageRequest) (*controlapi.DiskUsageResponse, error) {
