@@ -1,9 +1,9 @@
 # syntax=docker/dockerfile-upstream:master
 
 ARG RUNC_VERSION=v1.0.2
-ARG CONTAINERD_VERSION=v1.6.1
+ARG CONTAINERD_VERSION=v1.6.2
 # containerd v1.5 for integration tests
-ARG CONTAINERD_ALT_VERSION_15=v1.5.10
+ARG CONTAINERD_ALT_VERSION_15=v1.5.11
 # containerd v1.4 for integration tests
 ARG CONTAINERD_ALT_VERSION_14=v1.4.13
 # available targets: buildkitd, buildkitd.oci_only, buildkitd.containerd_only
@@ -11,7 +11,7 @@ ARG BUILDKIT_TARGET=buildkitd
 ARG REGISTRY_VERSION=2.8.0
 ARG ROOTLESSKIT_VERSION=v0.14.6
 ARG CNI_VERSION=v1.1.0
-ARG STARGZ_SNAPSHOTTER_VERSION=v0.11.2
+ARG STARGZ_SNAPSHOTTER_VERSION=v0.11.3
 
 ARG ALPINE_VERSION=3.15
 

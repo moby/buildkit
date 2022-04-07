@@ -8,16 +8,16 @@ require (
 	github.com/agext/levenshtein v1.2.3
 	github.com/armon/circbuf v0.0.0-20190214190532-5111143e8da2
 	github.com/containerd/console v1.0.3
-	github.com/containerd/containerd v1.6.1
-	github.com/containerd/continuity v0.2.2
+	github.com/containerd/containerd v1.6.3-0.20220401172941-5ff8fce1fcc6
+	github.com/containerd/continuity v0.2.3-0.20220330195504-d132b287edc8
 	github.com/containerd/fuse-overlayfs-snapshotter v1.0.2
-	github.com/containerd/go-cni v1.1.3
+	github.com/containerd/go-cni v1.1.4
 	github.com/containerd/go-runc v1.0.0
-	github.com/containerd/stargz-snapshotter v0.11.2
-	github.com/containerd/stargz-snapshotter/estargz v0.11.2
+	github.com/containerd/stargz-snapshotter v0.11.3
+	github.com/containerd/stargz-snapshotter/estargz v0.11.3
 	github.com/containerd/typeurl v1.0.2
 	github.com/coreos/go-systemd/v22 v22.3.2
-	github.com/docker/cli v20.10.12+incompatible
+	github.com/docker/cli v20.10.13+incompatible
 	github.com/docker/distribution v2.8.0+incompatible
 	github.com/docker/docker v20.10.7+incompatible // master (v21.xx-dev), see replace()
 	github.com/docker/go-connections v0.4.0
@@ -32,15 +32,15 @@ require (
 	github.com/hashicorp/go-immutable-radix v1.3.1
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/hashicorp/golang-lru v0.5.3
-	github.com/klauspost/compress v1.15.0
+	github.com/klauspost/compress v1.15.1
 	github.com/mitchellh/hashstructure/v2 v2.0.2
 	github.com/moby/locker v1.0.1
 	github.com/moby/sys/mountinfo v0.6.0
 	github.com/moby/sys/signal v0.6.0
 	github.com/morikuni/aec v1.0.0
 	github.com/opencontainers/go-digest v1.0.0
-	github.com/opencontainers/image-spec v1.0.2-0.20211117181255-693428a734f5
-	github.com/opencontainers/runc v1.1.0
+	github.com/opencontainers/image-spec v1.0.3-0.20211202183452-c5a74bcca799
+	github.com/opencontainers/runc v1.1.1
 	github.com/opencontainers/runtime-spec v1.0.3-0.20210326190908-1c3f411f0417
 	github.com/opencontainers/selinux v1.10.0
 	github.com/pelletier/go-toml v1.9.4
@@ -50,7 +50,7 @@ require (
 	github.com/sirupsen/logrus v1.8.1
 	github.com/stretchr/testify v1.7.0
 	github.com/tonistiigi/fsutil v0.0.0-20220115021204-b19f7f9cb274
-	github.com/tonistiigi/go-actions-cache v0.0.0-20211202175116-9642704158ff
+	github.com/tonistiigi/go-actions-cache v0.0.0-20220404170428-0bdeb6e1eac7
 	github.com/tonistiigi/go-archvariant v1.0.0
 	github.com/tonistiigi/units v0.0.0-20180711220420-6950e57a87ea
 	github.com/tonistiigi/vt100 v0.0.0-20210615222946-8066bb97264f
@@ -73,7 +73,7 @@ require (
 	golang.org/x/sys v0.0.0-20220114195835-da31bd327af9
 	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac
 	google.golang.org/genproto v0.0.0-20211208223120-3a66f561d7aa
-	google.golang.org/grpc v1.44.0
+	google.golang.org/grpc v1.45.0
 )
 
 require (
