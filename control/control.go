@@ -6,8 +6,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/moby/buildkit/util/bklog"
-
 	controlapi "github.com/moby/buildkit/api/services/control"
 	apitypes "github.com/moby/buildkit/api/types"
 	"github.com/moby/buildkit/cache/remotecache"
@@ -20,9 +18,11 @@ import (
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/llbsolver"
 	"github.com/moby/buildkit/solver/pb"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/imageutil"
 	"github.com/moby/buildkit/util/throttle"
 	"github.com/moby/buildkit/util/tracing/transform"
+	"github.com/moby/buildkit/version"
 	"github.com/moby/buildkit/worker"
 	"github.com/pkg/errors"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -434,13 +434,24 @@ func (c *Controller) ListWorkers(ctx context.Context, r *controlapi.ListWorkersR
 	}
 	for _, w := range workers {
 		resp.Record = append(resp.Record, &apitypes.WorkerRecord{
-			ID:        w.ID(),
-			Labels:    w.Labels(),
-			Platforms: pb.PlatformsFromSpec(w.Platforms(true)),
-			GCPolicy:  toPBGCPolicy(w.GCPolicy()),
+			ID:              w.ID(),
+			Labels:          w.Labels(),
+			Platforms:       pb.PlatformsFromSpec(w.Platforms(true)),
+			GCPolicy:        toPBGCPolicy(w.GCPolicy()),
+			BuildkitVersion: toPBBuildkitVersion(w.BuildkitVersion()),
 		})
 	}
 	return resp, nil
+}
+
+func (c *Controller) Info(ctx context.Context, r *controlapi.InfoRequest) (*controlapi.InfoResponse, error) {
+	return &controlapi.InfoResponse{
+		BuildkitVersion: &apitypes.BuildkitVersion{
+			Package:  version.Package,
+			Version:  version.Version,
+			Revision: version.Revision,
+		},
+	}, nil
 }
 
 func (c *Controller) gc() {
@@ -507,4 +518,12 @@ func toPBGCPolicy(in []client.PruneInfo) []*apitypes.GCPolicy {
 		})
 	}
 	return policy
+}
+
+func toPBBuildkitVersion(in client.BuildkitVersion) *apitypes.BuildkitVersion {
+	return &apitypes.BuildkitVersion{
+		Package:  in.Package,
+		Version:  in.Version,
+		Revision: in.Revision,
+	}
 }
