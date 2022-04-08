@@ -4,29 +4,37 @@ import (
 	"context"
 
 	controlapi "github.com/moby/buildkit/api/services/control"
+	apitypes "github.com/moby/buildkit/api/types"
 	"github.com/pkg/errors"
 )
 
-type InfoResponse struct {
-	BuildkitVersion Version
+type Info struct {
+	BuildkitVersion BuildkitVersion
 }
 
-func (c *Client) Info(ctx context.Context) (*InfoResponse, error) {
+type BuildkitVersion struct {
+	Package  string
+	Version  string
+	Revision string
+}
+
+func (c *Client) Info(ctx context.Context) (*Info, error) {
 	res, err := c.controlClient().Info(ctx, &controlapi.InfoRequest{})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to call info")
 	}
-	return &InfoResponse{
-		BuildkitVersion: Version{
-			Package:  res.BuildkitVersion.Package,
-			Version:  res.BuildkitVersion.Version,
-			Revision: res.BuildkitVersion.Revision,
-		},
+	return &Info{
+		BuildkitVersion: fromAPIBuildkitVersion(res.BuildkitVersion),
 	}, nil
 }
 
-type Version struct {
-	Package  string
-	Version  string
-	Revision string
+func fromAPIBuildkitVersion(in *apitypes.BuildkitVersion) BuildkitVersion {
+	if in == nil {
+		return BuildkitVersion{}
+	}
+	return BuildkitVersion{
+		Package:  in.Package,
+		Version:  in.Version,
+		Revision: in.Revision,
+	}
 }

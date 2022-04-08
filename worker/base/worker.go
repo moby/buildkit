@@ -61,6 +61,7 @@ type WorkerOpt struct {
 	Labels          map[string]string
 	Platforms       []ocispecs.Platform
 	GCPolicy        []client.PruneInfo
+	BuildkitVersion client.BuildkitVersion
 	Executor        executor.Executor
 	Snapshotter     snapshot.Snapshotter
 	ContentStore    content.Store
@@ -216,6 +217,10 @@ func (w *Worker) Platforms(noCache bool) []ocispecs.Platform {
 
 func (w *Worker) GCPolicy() []client.PruneInfo {
 	return w.WorkerOpt.GCPolicy
+}
+
+func (w *Worker) BuildkitVersion() client.BuildkitVersion {
+	return w.WorkerOpt.BuildkitVersion
 }
 
 func (w *Worker) LoadRef(ctx context.Context, id string, hidden bool) (cache.ImmutableRef, error) {
