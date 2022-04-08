@@ -15,7 +15,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -29,7 +28,6 @@ import (
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/frontend/dockerfile/builder"
-	"github.com/moby/buildkit/frontend/dockerfile/dockerfile2llb"
 	gateway "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/frontend/subrequests"
 	"github.com/moby/buildkit/identity"
@@ -118,9 +116,6 @@ var allTests = integration.TestFuncs(
 	testNamedLocalContext,
 	testNamedInputContext,
 	testNamedMultiplatformInputContext,
-)
-
-var fileOpTests = integration.TestFuncs(
 	testEmptyDestDir,
 	testCopyChownCreateDest,
 	testCopyThroughSymlinkContext,
@@ -169,9 +164,6 @@ func init() {
 
 	opts = []integration.TestOpt{
 		integration.WithMirroredImages(integration.OfficialImages("busybox:latest")),
-		integration.WithMirroredImages(map[string]string{
-			"docker/dockerfile-copy:v0.1.9": "docker.io/" + dockerfile2llb.DefaultCopyImage,
-		}),
 		integration.WithMatrix("frontend", frontends),
 	}
 
@@ -193,10 +185,6 @@ func init() {
 
 func TestIntegration(t *testing.T) {
 	integration.Run(t, allTests, opts...)
-	integration.Run(t, fileOpTests, append(opts, integration.WithMatrix("fileop", map[string]interface{}{
-		"true":  true,
-		"false": false,
-	}))...)
 	integration.Run(t, securityTests, append(append(opts, securityOpts...),
 		integration.WithMatrix("security.insecure", map[string]interface{}{
 			"granted": securityInsecureGranted,
@@ -372,7 +360,6 @@ foo
 
 func testEmptyDestDir(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
-	isFileOp := getFileOp(t, sb)
 
 	dockerfile := []byte(`
 FROM busybox
@@ -393,9 +380,6 @@ RUN [ "$(cat testfile)" == "contents0" ]
 	defer c.Close()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
-		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -903,7 +887,6 @@ COPY foo nomatch* /
 
 func testWorkdirUser(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
-	isFileOp := getFileOp(t, sb)
 
 	dockerfile := []byte(`
 FROM busybox
@@ -924,9 +907,6 @@ RUN [ "$(stat -c "%U %G" /mydir)" == "user user" ]
 	defer c.Close()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
-		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -937,7 +917,6 @@ RUN [ "$(stat -c "%U %G" /mydir)" == "user user" ]
 
 func testWorkdirCopyIgnoreRelative(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
-	isFileOp := getFileOp(t, sb)
 
 	dockerfile := []byte(`
 FROM scratch AS base
@@ -959,9 +938,6 @@ COPY --from=base Dockerfile .
 	defer c.Close()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
-		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -972,7 +948,6 @@ COPY --from=base Dockerfile .
 
 func testWorkdirExists(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
-	isFileOp := getFileOp(t, sb)
 
 	dockerfile := []byte(`
 FROM busybox
@@ -993,9 +968,6 @@ RUN [ "$(stat -c "%U %G" /mydir)" == "user user" ]
 	defer c.Close()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
-		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -1006,7 +978,6 @@ RUN [ "$(stat -c "%U %G" /mydir)" == "user user" ]
 
 func testCopyChownCreateDest(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
-	isFileOp := getFileOp(t, sb)
 
 	dockerfile := []byte(`
 FROM busybox
@@ -1032,8 +1003,7 @@ RUN [ "$(stat -c "%U %G" /dest01)" == "user01 user" ]
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
-			"build-arg:group":                   "user",
+			"build-arg:group": "user",
 		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
@@ -1045,7 +1015,6 @@ RUN [ "$(stat -c "%U %G" /dest01)" == "user01 user" ]
 
 func testCopyThroughSymlinkContext(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
-	isFileOp := getFileOp(t, sb)
 
 	dockerfile := []byte(`
 FROM scratch
@@ -1076,9 +1045,6 @@ COPY link/foo .
 				OutputDir: destDir,
 			},
 		},
-		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
-		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -1093,7 +1059,6 @@ COPY link/foo .
 
 func testCopyThroughSymlinkMultiStage(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
-	isFileOp := getFileOp(t, sb)
 
 	dockerfile := []byte(`
 FROM busybox AS build
@@ -1124,9 +1089,6 @@ COPY --from=build /sub2/foo bar
 				OutputDir: destDir,
 			},
 		},
-		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
-		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -1141,7 +1103,6 @@ COPY --from=build /sub2/foo bar
 
 func testCopySocket(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
-	isFileOp := getFileOp(t, sb)
 
 	dockerfile := []byte(`
 FROM scratch
@@ -1169,9 +1130,6 @@ COPY . /
 				Type:      client.ExporterLocal,
 				OutputDir: destDir,
 			},
-		},
-		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
 		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
@@ -1540,7 +1498,6 @@ COPY arch-$TARGETARCH whoami
 // tonistiigi/fsutil#46
 func testContextChangeDirToFile(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
-	isFileOp := getFileOp(t, sb)
 
 	dockerfile := []byte(`
 FROM scratch
@@ -1560,9 +1517,6 @@ COPY foo /
 	defer c.Close()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
-		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -1588,9 +1542,6 @@ COPY foo /
 				OutputDir: destDir,
 			},
 		},
-		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
-		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -1605,7 +1556,6 @@ COPY foo /
 
 func testNoSnapshotLeak(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
-	isFileOp := getFileOp(t, sb)
 
 	dockerfile := []byte(`
 FROM scratch
@@ -1624,9 +1574,6 @@ COPY foo /
 	defer c.Close()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
-		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -1638,9 +1585,6 @@ COPY foo /
 	require.NoError(t, err)
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
-		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -1657,7 +1601,6 @@ COPY foo /
 // #1197
 func testCopyFollowAllSymlinks(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
-	isFileOp := getFileOp(t, sb)
 
 	dockerfile := []byte(`
 FROM scratch
@@ -1683,9 +1626,6 @@ COPY foo/sub bar
 	defer os.RemoveAll(destDir)
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
-		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -1696,7 +1636,6 @@ COPY foo/sub bar
 
 func testCopySymlinks(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
-	isFileOp := getFileOp(t, sb)
 
 	dockerfile := []byte(`
 FROM scratch
@@ -1733,9 +1672,6 @@ COPY sub/l* alllinks/
 				Type:      client.ExporterLocal,
 				OutputDir: destDir,
 			},
-		},
-		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
 		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
@@ -2519,7 +2455,6 @@ ADD *.tar /dest
 
 func testDockerfileAddChownExpand(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
-	isFileOp := getFileOp(t, sb)
 
 	dockerfile := []byte(`
 FROM busybox
@@ -2542,8 +2477,7 @@ RUN [ "$(stat -c "%u %G" /foo)" == "1000 nobody" ]
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
-			"build-arg:group":                   "nobody",
+			"build-arg:group": "nobody",
 		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
@@ -3107,7 +3041,6 @@ USER nobody
 
 func testCopyChown(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
-	isFileOp := getFileOp(t, sb)
 
 	dockerfile := []byte(`
 FROM busybox AS base
@@ -3149,8 +3082,7 @@ COPY --from=base /out /
 			},
 		},
 		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
-			"build-arg:group":                   "nobody",
+			"build-arg:group": "nobody",
 		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
@@ -3174,7 +3106,6 @@ COPY --from=base /out /
 
 func testCopyChmod(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
-	isFileOp := getFileOp(t, sb)
 
 	dockerfile := []byte(`
 FROM busybox AS base
@@ -3215,19 +3146,12 @@ COPY --from=base /out /
 				OutputDir: destDir,
 			},
 		},
-		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
-		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
 		},
 	}, nil)
 
-	if !isFileOp {
-		require.Contains(t, err.Error(), "chmod is not supported")
-		return
-	}
 	require.NoError(t, err)
 
 	dt, err := os.ReadFile(filepath.Join(destDir, "fooperm"))
@@ -3245,7 +3169,6 @@ COPY --from=base /out /
 
 func testCopyOverrideFiles(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
-	isFileOp := getFileOp(t, sb)
 
 	dockerfile := []byte(`
 FROM scratch AS base
@@ -3283,9 +3206,6 @@ COPY files dest
 				OutputDir: destDir,
 			},
 		},
-		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
-		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -3304,7 +3224,6 @@ COPY files dest
 
 func testCopyVarSubstitution(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
-	isFileOp := getFileOp(t, sb)
 
 	dockerfile := []byte(`
 FROM scratch AS base
@@ -3335,9 +3254,6 @@ COPY $FOO baz
 				OutputDir: destDir,
 			},
 		},
-		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
-		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -3352,7 +3268,6 @@ COPY $FOO baz
 
 func testCopyWildcards(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
-	isFileOp := getFileOp(t, sb)
 
 	dockerfile := []byte(`
 FROM scratch AS base
@@ -3394,9 +3309,6 @@ COPY sub/dir1 subdest6
 				OutputDir: destDir,
 			},
 		},
-		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
-		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -3416,11 +3328,9 @@ COPY sub/dir1 subdest6
 	require.NoError(t, err)
 	require.Equal(t, "foo-contents", string(dt))
 
-	if isFileOp { // non-fileop implementation is historically buggy
-		dt, err = os.ReadFile(filepath.Join(destDir, "subdest/dir2/foo"))
-		require.NoError(t, err)
-		require.Equal(t, "foo-contents", string(dt))
-	}
+	dt, err = os.ReadFile(filepath.Join(destDir, "subdest/dir2/foo"))
+	require.NoError(t, err)
+	require.Equal(t, "foo-contents", string(dt))
 
 	dt, err = os.ReadFile(filepath.Join(destDir, "subdest2/foo"))
 	require.NoError(t, err)
@@ -3449,7 +3359,6 @@ COPY sub/dir1 subdest6
 
 func testCopyRelative(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
-	isFileOp := getFileOp(t, sb)
 
 	dockerfile := []byte(`
 FROM busybox
@@ -3487,9 +3396,6 @@ RUN sh -c "[ $(cat /test5/foo) = 'hello' ]"
 	defer c.Close()
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
-		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
-		},
 		LocalDirs: map[string]string{
 			builder.DefaultLocalNameDockerfile: dir,
 			builder.DefaultLocalNameContext:    dir,
@@ -4766,7 +4672,6 @@ COPY --from=build /out /
 
 func testTarContext(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
-	isFileOp := getFileOp(t, sb)
 
 	dockerfile := []byte(`
 FROM scratch
@@ -4807,8 +4712,7 @@ COPY foo /
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
-			"context":                           url,
+			"context": url,
 		},
 		Session: []session.Attachable{up},
 	}, nil)
@@ -4817,7 +4721,6 @@ COPY foo /
 
 func testTarContextExternalDockerfile(t *testing.T, sb integration.Sandbox) {
 	f := getFrontend(t, sb)
-	isFileOp := getFileOp(t, sb)
 
 	foo := []byte("contents")
 
@@ -4859,10 +4762,9 @@ COPY foo bar
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
-			"build-arg:BUILDKIT_DISABLE_FILEOP": strconv.FormatBool(!isFileOp),
-			"context":                           url,
-			"dockerfilekey":                     builder.DefaultLocalNameDockerfile,
-			"contextsubdir":                     "sub/dir",
+			"context":       url,
+			"dockerfilekey": builder.DefaultLocalNameDockerfile,
+			"contextsubdir": "sub/dir",
 		},
 		Session: []session.Attachable{up},
 		LocalDirs: map[string]string{
@@ -5876,14 +5778,6 @@ func getFrontend(t *testing.T, sb integration.Sandbox) frontend {
 	fn, ok := v.(frontend)
 	require.True(t, ok)
 	return fn
-}
-
-func getFileOp(t *testing.T, sb integration.Sandbox) bool {
-	v := sb.Value("fileop")
-	require.NotNil(t, v)
-	vv, ok := v.(bool)
-	require.True(t, ok)
-	return vv
 }
 
 type nopWriteCloser struct {
