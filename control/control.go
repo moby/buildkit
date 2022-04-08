@@ -426,10 +426,11 @@ func (c *Controller) ListWorkers(ctx context.Context, r *controlapi.ListWorkersR
 	}
 	for _, w := range workers {
 		resp.Record = append(resp.Record, &apitypes.WorkerRecord{
-			ID:        w.ID(),
-			Labels:    w.Labels(),
-			Platforms: pb.PlatformsFromSpec(w.Platforms(true)),
-			GCPolicy:  toPBGCPolicy(w.GCPolicy()),
+			ID:              w.ID(),
+			Labels:          w.Labels(),
+			Platforms:       pb.PlatformsFromSpec(w.Platforms(true)),
+			GCPolicy:        toPBGCPolicy(w.GCPolicy()),
+			BuildkitVersion: toPBBuildkitVersion(w.BuildkitVersion()),
 		})
 	}
 	return resp, nil
@@ -437,7 +438,7 @@ func (c *Controller) ListWorkers(ctx context.Context, r *controlapi.ListWorkersR
 
 func (c *Controller) Info(ctx context.Context, r *controlapi.InfoRequest) (*controlapi.InfoResponse, error) {
 	return &controlapi.InfoResponse{
-		BuildkitVersion: &controlapi.Version{
+		BuildkitVersion: &apitypes.BuildkitVersion{
 			Package:  version.Package,
 			Version:  version.Version,
 			Revision: version.Revision,
@@ -509,4 +510,12 @@ func toPBGCPolicy(in []client.PruneInfo) []*apitypes.GCPolicy {
 		})
 	}
 	return policy
+}
+
+func toPBBuildkitVersion(in client.BuildkitVersion) *apitypes.BuildkitVersion {
+	return &apitypes.BuildkitVersion{
+		Package:  in.Package,
+		Version:  in.Version,
+		Revision: in.Revision,
+	}
 }
