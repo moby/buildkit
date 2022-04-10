@@ -322,7 +322,7 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 		if strings.HasPrefix(k, "frontend.") {
 			exporterResponse[k] = string(v)
 		}
-		if strings.HasPrefix(k, exptypes.ExporterBuildInfo) {
+		if strings.HasPrefix(k, exptypes.ExporterBuildInfo) || strings.HasPrefix(k, exptypes.ExporterPinConsumed) {
 			exporterResponse[k] = base64.StdEncoding.EncodeToString(v)
 		}
 	}

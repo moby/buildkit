@@ -26,9 +26,11 @@ import (
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
 	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
+	"github.com/moby/buildkit/util/pin"
 	"github.com/moby/buildkit/util/suggest"
 	"github.com/moby/buildkit/util/system"
 	"github.com/moby/sys/signal"
+	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -68,6 +70,8 @@ type ConvertOpt struct {
 	Hostname         string
 	Warn             func(short, url string, detail [][]byte, location *parser.Range)
 	ContextByName    func(ctx context.Context, name, resolveMode string) (*llb.State, *Image, *binfotypes.BuildInfo, error)
+	// PinApplier must correspond to MetaResolver when PinApplier is non-nil.
+	PinApplier *pin.Applier
 }
 
 func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State, *Image, *binfotypes.BuildInfo, error) {
@@ -134,6 +138,10 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 			}
 			optMetaArgs = append(optMetaArgs, setKVValue(metaArg, opt.BuildArgs))
 		}
+	}
+
+	if opt.PinApplier != nil && opt.MetaResolver != nil && opt.PinApplier != opt.MetaResolver {
+		return nil, nil, nil, fmt.Errorf("opt.PinApplier must correspond to opt.MetaResolver when non-nil")
 	}
 
 	metaResolver := opt.MetaResolver
@@ -473,6 +481,7 @@ func Dockerfile2LLB(ctx context.Context, dt []byte, opt ConvertOpt) (*llb.State,
 			cgroupParent:      opt.CgroupParent,
 			llbCaps:           opt.LLBCaps,
 			sourceMap:         opt.SourceMap,
+			pinApplier:        opt.PinApplier,
 		}
 
 		if err = dispatchOnBuildTriggers(d, d.image.Config.OnBuild, opt); err != nil {
@@ -597,6 +606,7 @@ type dispatchOpt struct {
 	cgroupParent      string
 	llbCaps           *apicaps.CapSet
 	sourceMap         *llb.SourceMap
+	pinApplier        *pin.Applier
 }
 
 func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
@@ -1019,7 +1029,14 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 				}
 			}
 
-			st := llb.HTTP(src, llb.Filename(f), dfCmd(cfg.params))
+			var checksum digest.Digest
+			if cfg.opt.pinApplier != nil {
+				checksum, err = cfg.opt.pinApplier.HTTPChecksum(src)
+				if err != nil {
+					return err
+				}
+			}
+			st := llb.HTTP(src, llb.Filename(f), dfCmd(cfg.params), llb.Checksum(checksum))
 
 			opts := append([]llb.CopyOption{&llb.CopyInfo{
 				Mode:           mode,

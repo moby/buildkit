@@ -127,3 +127,36 @@ jq '.' metadata.json
   "containerimage.digest": "sha256:..."
 }
 ```
+
+### Reproducible build with `Dockerfile.pin`
+
+<!-- TODO: dockerfile-upstream:master -> dockerfile:1.5 after the release of 1.5 -->>
+`Dockerfile.pin` is supported in the `docker/dockerfile-upstream:master` syntax.
+```dockerfile
+# syntax=docker/dockerfile-upstream:master`
+```
+
+When `Dockerfile.pin` exists in the context, the Dockerfile builder does:
+- Pinning the digest of `docker-image` sources (`FROM ...`)
+- Pinning the digest of `http` sources (`ADD https://...`)
+- Recording the consumed entries to the exporter response `pin.consumed`
+
+The content of `Dockerfile.pin` is a subset of the build info structure:
+```json
+{
+    "sources": [
+      {
+        "type": "docker-image",
+        "ref": "docker.io/library/alpine:latest",
+        "pin": "sha256:4edbd2beb5f78b1014028f4fbb99f3237d9561100b6881aabbf5acce2c4f9454"
+      },
+      {
+        "type": "http",
+        "ref": "https://raw.githubusercontent.com/moby/buildkit/v0.10.1/README.md",
+        "pin": "sha256:6e4b94fc270e708e1068be28bd3551dc6917a4fc5a61293d51bb36e6b75c4b53"
+      }
+    ]
+}
+```
+
+In the future, Dockerfile should also support `ADD https://example.com/repo.git /dir` and pinning its commit hash.

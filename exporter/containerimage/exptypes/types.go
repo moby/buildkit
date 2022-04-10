@@ -13,6 +13,7 @@ const (
 	ExporterInlineCache          = "containerimage.inlinecache"
 	ExporterBuildInfo            = "containerimage.buildinfo"
 	ExporterPlatformsKey         = "refs.platforms"
+	ExporterPinConsumed          = "pin.consumed" // base64-encoded JSON of util/pin/types.Consumed
 )
 
 type Platforms struct {
