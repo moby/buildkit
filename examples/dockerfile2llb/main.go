@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"io"
-	"log"
 	"os"
 
 	"github.com/moby/buildkit/client/llb"
@@ -12,6 +11,7 @@ import (
 	"github.com/moby/buildkit/frontend/dockerfile/dockerfile2llb"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/appcontext"
+	"github.com/sirupsen/logrus"
 )
 
 type buildOpt struct {
@@ -19,13 +19,19 @@ type buildOpt struct {
 }
 
 func main() {
+	if err := xmain(); err != nil {
+		logrus.Fatal(err)
+	}
+}
+
+func xmain() error {
 	var opt buildOpt
 	flag.StringVar(&opt.target, "target", "", "target stage")
 	flag.Parse()
 
 	df, err := io.ReadAll(os.Stdin)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	caps := pb.Caps.CapSet(pb.Caps.All())
@@ -36,8 +42,7 @@ func main() {
 		LLBCaps:      &caps,
 	})
 	if err != nil {
-		log.Printf("err: %+v", err)
-		panic(err)
+		return err
 	}
 
 	_ = img
@@ -45,7 +50,7 @@ func main() {
 
 	dt, err := state.Marshal(context.TODO())
 	if err != nil {
-		panic(err)
+		return err
 	}
-	llb.WriteTo(dt, os.Stdout)
+	return llb.WriteTo(dt, os.Stdout)
 }
