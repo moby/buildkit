@@ -794,7 +794,7 @@ func (cm *cacheManager) createMergeRef(ctx context.Context, parents parentRefs, 
 	}
 
 	rec.queueSnapshotID(snapshotID)
-
+	rec.queueCommitted(true)
 	if err := rec.commitMetadata(); err != nil {
 		return nil, err
 	}
@@ -969,6 +969,7 @@ func (cm *cacheManager) createDiffRef(ctx context.Context, parents parentRefs, d
 	}
 
 	rec.queueSnapshotID(snapshotID)
+	rec.queueCommitted(true)
 	if err := rec.commitMetadata(); err != nil {
 		return nil, err
 	}

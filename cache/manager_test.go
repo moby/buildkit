@@ -2091,6 +2091,7 @@ func TestMergeOp(t *testing.T) {
 
 	singleMerge, err := cm.Merge(ctx, baseRefs[:1], nil)
 	require.NoError(t, err)
+	require.True(t, singleMerge.(*immutableRef).getCommitted())
 	m, err := singleMerge.Mount(ctx, true, nil)
 	require.NoError(t, err)
 	ms, unmount, err := m.Mount()
@@ -2111,6 +2112,7 @@ func TestMergeOp(t *testing.T) {
 
 	merge1, err := cm.Merge(ctx, baseRefs[:3], nil)
 	require.NoError(t, err)
+	require.True(t, merge1.(*immutableRef).getCommitted())
 	_, err = merge1.Mount(ctx, true, nil)
 	require.NoError(t, err)
 	size1, err := merge1.(*immutableRef).size(ctx)
@@ -2120,6 +2122,7 @@ func TestMergeOp(t *testing.T) {
 
 	merge2, err := cm.Merge(ctx, baseRefs[3:], nil)
 	require.NoError(t, err)
+	require.True(t, merge2.(*immutableRef).getCommitted())
 	_, err = merge2.Mount(ctx, true, nil)
 	require.NoError(t, err)
 	size2, err := merge2.(*immutableRef).size(ctx)
@@ -2135,6 +2138,7 @@ func TestMergeOp(t *testing.T) {
 
 	merge3, err := cm.Merge(ctx, []ImmutableRef{merge1, merge2}, nil)
 	require.NoError(t, err)
+	require.True(t, merge3.(*immutableRef).getCommitted())
 	require.NoError(t, merge1.Release(ctx))
 	require.NoError(t, merge2.Release(ctx))
 	_, err = merge3.Mount(ctx, true, nil)
