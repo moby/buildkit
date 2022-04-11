@@ -458,6 +458,13 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOpt
 		cacheMetadata: md,
 	}
 
+	// TODO:(sipsma) this is kludge to deal with a bug in v0.10.{0,1} where
+	// merge and diff refs didn't have committed set to true:
+	// https://github.com/moby/buildkit/issues/2740
+	if kind := rec.kind(); kind == Merge || kind == Diff {
+		rec.mutable = false
+	}
+
 	// the record was deleted but we crashed before data on disk was removed
 	if md.getDeleted() {
 		if err := rec.remove(ctx, true); err != nil {
