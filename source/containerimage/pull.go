@@ -12,9 +12,12 @@ import (
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/platforms"
+	"github.com/containerd/containerd/reference"
+	"github.com/containerd/containerd/remotes"
 	"github.com/containerd/containerd/remotes/docker"
 	"github.com/containerd/containerd/snapshots"
 	"github.com/moby/buildkit/cache"
+	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/snapshot"
@@ -39,6 +42,13 @@ import (
 // TODO: break apart containerd specifics like contentstore so the resolver
 // code can be used with any implementation
 
+type ResolverType int
+
+const (
+	ResolverTypeRegistry ResolverType = iota
+	ResolverTypeOCILayout
+)
+
 type SourceOpt struct {
 	Snapshotter   snapshot.Snapshotter
 	ContentStore  content.Store
@@ -46,7 +56,8 @@ type SourceOpt struct {
 	CacheAccessor cache.Accessor
 	ImageStore    images.Store // optional
 	RegistryHosts docker.RegistryHosts
-	LeaseManager  leases.Manager
+	ResolverType
+	LeaseManager leases.Manager
 }
 
 type Source struct {
@@ -65,6 +76,9 @@ func NewSource(opt SourceOpt) (*Source, error) {
 }
 
 func (is *Source) ID() string {
+	if is.ResolverType == ResolverTypeOCILayout {
+		return srctypes.OCIScheme
+	}
 	return srctypes.DockerImageScheme
 }
 
@@ -73,20 +87,42 @@ func (is *Source) ResolveImageConfig(ctx context.Context, ref string, opt llb.Re
 		dgst digest.Digest
 		dt   []byte
 	}
+	var typed *t
 	key := ref
 	if platform := opt.Platform; platform != nil {
 		key += platforms.Format(*platform)
 	}
+	var (
+		rm    source.ResolveMode
+		rslvr remotes.Resolver
+		err   error
+	)
 
-	rm, err := source.ParseImageResolveMode(opt.ResolveMode)
-	if err != nil {
-		return "", nil, err
+	switch is.ResolverType {
+	case ResolverTypeRegistry:
+		rm, err = source.ParseImageResolveMode(opt.ResolveMode)
+		if err != nil {
+			return "", nil, err
+		}
+		rslvr = resolver.DefaultPool.GetResolver(is.RegistryHosts, ref, "pull", sm, g).WithImageStore(is.ImageStore, rm)
+	case ResolverTypeOCILayout:
+		// with OCI layout, we always just "pull"
+		rm = source.ResolveModeForcePull
+		// get the content store ID from the ref
+		parsed, err := reference.Parse(ref)
+		if err != nil {
+			return "", nil, errors.Errorf("invalid oci-layout ref format '%s', must be content-store/image@sha256:digest", ref)
+		}
+		if parsed.Digest() == "" {
+			return "", nil, errors.Errorf("oci-layout ref format '%s' missing digest, must be content-store/image@sha256:digest", ref)
+		}
+		storeID := parsed.Hostname()
+
+		rslvr = getOCILayoutResolver(storeID, sm, opt.SessionID, g)
 	}
 	key += rm.String()
-
 	res, err := is.g.Do(ctx, key, func(ctx context.Context) (interface{}, error) {
-		res := resolver.DefaultPool.GetResolver(is.RegistryHosts, ref, "pull", sm, g).WithImageStore(is.ImageStore, rm)
-		dgst, dt, err := imageutil.Config(ctx, ref, res, is.ContentStore, is.LeaseManager, opt.Platform)
+		dgst, dt, err := imageutil.Config(ctx, ref, rslvr, is.ContentStore, is.LeaseManager, opt.Platform)
 		if err != nil {
 			return nil, err
 		}
@@ -95,37 +131,73 @@ func (is *Source) ResolveImageConfig(ctx context.Context, ref string, opt llb.Re
 	if err != nil {
 		return "", nil, err
 	}
-	typed := res.(*t)
+	typed = res.(*t)
 	return typed.dgst, typed.dt, nil
 }
 
 func (is *Source) Resolve(ctx context.Context, id source.Identifier, sm *session.Manager, vtx solver.Vertex) (source.SourceInstance, error) {
-	imageIdentifier, ok := id.(*source.ImageIdentifier)
-	if !ok {
-		return nil, errors.Errorf("invalid image identifier %v", id)
-	}
+	var (
+		p          *puller
+		platform   = platforms.DefaultSpec()
+		pullerUtil *pull.Puller
+		mode       source.ResolveMode
+		recordType client.UsageRecordType
+		ref        reference.Spec
+		sessionID  string
+		storeID    string
+		layerLimit *int
+	)
+	switch is.ResolverType {
+	case ResolverTypeRegistry:
+		imageIdentifier, ok := id.(*source.ImageIdentifier)
+		if !ok {
+			return nil, errors.Errorf("invalid image identifier %v", id)
+		}
 
-	platform := platforms.DefaultSpec()
-	if imageIdentifier.Platform != nil {
-		platform = *imageIdentifier.Platform
-	}
+		if imageIdentifier.Platform != nil {
+			platform = *imageIdentifier.Platform
+		}
+		mode = imageIdentifier.ResolveMode
+		recordType = imageIdentifier.RecordType
+		ref = imageIdentifier.Reference
+		layerLimit = imageIdentifier.LayerLimit
+	case ResolverTypeOCILayout:
+		ociIdentifier, ok := id.(*source.OCIIdentifier)
+		if !ok {
+			return nil, errors.Errorf("invalid OCI layout identifier %v", id)
+		}
 
-	pullerUtil := &pull.Puller{
+		if ociIdentifier.Platform != nil {
+			platform = *ociIdentifier.Platform
+		}
+		mode = source.ResolveModeForcePull // with OCI layout, we always just "pull"
+		sessionID = ociIdentifier.SessionID
+		ref = reference.Spec{Locator: "oci-layout/dummy", Object: "@" + ociIdentifier.Manifest.String()}
+		storeID = ociIdentifier.Name
+		layerLimit = ociIdentifier.LayerLimit
+	default:
+		return nil, errors.Errorf("unknown resolver type: %v", is.ResolverType)
+	}
+	pullerUtil = &pull.Puller{
 		ContentStore: is.ContentStore,
 		Platform:     platform,
-		Src:          imageIdentifier.Reference,
+		Src:          ref,
 	}
-	p := &puller{
+	p = &puller{
 		CacheAccessor:  is.CacheAccessor,
 		LeaseManager:   is.LeaseManager,
 		Puller:         pullerUtil,
-		id:             imageIdentifier,
 		RegistryHosts:  is.RegistryHosts,
+		ResolverType:   is.ResolverType,
 		ImageStore:     is.ImageStore,
-		Mode:           imageIdentifier.ResolveMode,
-		Ref:            imageIdentifier.Reference.String(),
+		Mode:           mode,
+		RecordType:     recordType,
+		Ref:            ref.String(),
 		SessionManager: sm,
+		SessionID:      sessionID,
 		vtx:            vtx,
+		storeID:        storeID,
+		layerLimit:     layerLimit,
 	}
 	return p, nil
 }
@@ -136,10 +208,14 @@ type puller struct {
 	RegistryHosts  docker.RegistryHosts
 	ImageStore     images.Store
 	Mode           source.ResolveMode
+	RecordType     client.UsageRecordType
 	Ref            string
 	SessionManager *session.Manager
-	id             *source.ImageIdentifier
+	SessionID      string
+	layerLimit     *int
 	vtx            solver.Vertex
+	ResolverType
+	storeID string
 
 	g                flightcontrol.Group
 	cacheKeyErr      error
@@ -173,7 +249,19 @@ func mainManifestKey(ctx context.Context, desc ocispecs.Descriptor, platform oci
 }
 
 func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cacheKey string, imgDigest string, cacheOpts solver.CacheOpts, cacheDone bool, err error) {
-	p.Puller.Resolver = resolver.DefaultPool.GetResolver(p.RegistryHosts, p.Ref, "pull", p.SessionManager, g).WithImageStore(p.ImageStore, p.id.ResolveMode)
+	var getResolver pull.SessionResolver
+	switch p.ResolverType {
+	case ResolverTypeRegistry:
+		resolver := resolver.DefaultPool.GetResolver(p.RegistryHosts, p.Ref, "pull", p.SessionManager, g).WithImageStore(p.ImageStore, p.Mode)
+		p.Puller.Resolver = resolver
+		getResolver = func(g session.Group) remotes.Resolver { return resolver.WithSession(g) }
+	case ResolverTypeOCILayout:
+		resolver := getOCILayoutResolver(p.storeID, p.SessionManager, p.SessionID, g)
+		p.Puller.Resolver = resolver
+		// OCILayout has no need for session
+		getResolver = func(g session.Group) remotes.Resolver { return resolver }
+	default:
+	}
 
 	// progressFactory needs the outer context, the context in `p.g.Do` will
 	// be canceled before the progress output is complete
@@ -200,12 +288,12 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 			resolveProgressDone(err)
 		}()
 
-		p.manifest, err = p.PullManifests(ctx)
+		p.manifest, err = p.PullManifests(ctx, getResolver)
 		if err != nil {
 			return nil, err
 		}
 
-		if ll := p.id.LayerLimit; ll != nil {
+		if ll := p.layerLimit; ll != nil {
 			if *ll > len(p.manifest.Descriptors) {
 				return nil, errors.Errorf("layer limit %d is greater than the number of layers in the image %d", *ll, len(p.manifest.Descriptors))
 			}
@@ -242,7 +330,7 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 		}
 
 		desc := p.manifest.MainManifestDesc
-		k, err := mainManifestKey(ctx, desc, p.Platform, p.id.LayerLimit)
+		k, err := mainManifestKey(ctx, desc, p.Platform, p.layerLimit)
 		if err != nil {
 			return nil, err
 		}
@@ -252,7 +340,7 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 		if err != nil {
 			return nil, err
 		}
-		ck, err := cacheKeyFromConfig(dt, p.id.LayerLimit)
+		ck, err := cacheKeyFromConfig(dt, p.layerLimit)
 		if err != nil {
 			return nil, err
 		}
@@ -277,7 +365,19 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 }
 
 func (p *puller) Snapshot(ctx context.Context, g session.Group) (ir cache.ImmutableRef, err error) {
-	p.Puller.Resolver = resolver.DefaultPool.GetResolver(p.RegistryHosts, p.Ref, "pull", p.SessionManager, g).WithImageStore(p.ImageStore, p.id.ResolveMode)
+	var getResolver pull.SessionResolver
+	switch p.ResolverType {
+	case ResolverTypeRegistry:
+		resolver := resolver.DefaultPool.GetResolver(p.RegistryHosts, p.Ref, "pull", p.SessionManager, g).WithImageStore(p.ImageStore, p.Mode)
+		p.Puller.Resolver = resolver
+		getResolver = func(g session.Group) remotes.Resolver { return resolver.WithSession(g) }
+	case ResolverTypeOCILayout:
+		resolver := getOCILayoutResolver(p.storeID, p.SessionManager, p.SessionID, g)
+		p.Puller.Resolver = resolver
+		// OCILayout has no need for session
+		getResolver = func(g session.Group) remotes.Resolver { return resolver }
+	default:
+	}
 
 	if len(p.manifest.Descriptors) == 0 {
 		return nil, nil
@@ -323,7 +423,7 @@ func (p *puller) Snapshot(ctx context.Context, g session.Group) (ir cache.Immuta
 			}
 			defer done(ctx)
 
-			if _, err := p.PullManifests(ctx); err != nil {
+			if _, err := p.PullManifests(ctx, getResolver); err != nil {
 				return nil, err
 			}
 		} else if err != nil {
@@ -338,8 +438,8 @@ func (p *puller) Snapshot(ctx context.Context, g session.Group) (ir cache.Immuta
 		}
 	}
 
-	if p.id.RecordType != "" && current.GetRecordType() == "" {
-		if err := current.SetRecordType(p.id.RecordType); err != nil {
+	if p.RecordType != "" && current.GetRecordType() == "" {
+		if err := current.SetRecordType(p.RecordType); err != nil {
 			return nil, err
 		}
 	}

@@ -81,10 +81,11 @@ type WorkerOpt struct {
 // TODO: s/Worker/OpWorker/g ?
 type Worker struct {
 	WorkerOpt
-	CacheMgr      cache.Manager
-	SourceManager *source.Manager
-	imageWriter   *imageexporter.ImageWriter
-	ImageSource   *containerimage.Source
+	CacheMgr        cache.Manager
+	SourceManager   *source.Manager
+	imageWriter     *imageexporter.ImageWriter
+	ImageSource     *containerimage.Source
+	OCILayoutSource *containerimage.Source
 }
 
 // NewWorker instantiates a local worker
@@ -121,6 +122,7 @@ func NewWorker(ctx context.Context, opt WorkerOpt) (*Worker, error) {
 		ImageStore:    opt.ImageStore,
 		CacheAccessor: cm,
 		RegistryHosts: opt.RegistryHosts,
+		ResolverType:  containerimage.ResolverTypeRegistry,
 		LeaseManager:  opt.LeaseManager,
 	})
 	if err != nil {
@@ -158,6 +160,21 @@ func NewWorker(ctx context.Context, opt WorkerOpt) (*Worker, error) {
 	}
 	sm.Register(ss)
 
+	os, err := containerimage.NewSource(containerimage.SourceOpt{
+		Snapshotter:   opt.Snapshotter,
+		ContentStore:  opt.ContentStore,
+		Applier:       opt.Applier,
+		ImageStore:    opt.ImageStore,
+		CacheAccessor: cm,
+		ResolverType:  containerimage.ResolverTypeOCILayout,
+		LeaseManager:  opt.LeaseManager,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	sm.Register(os)
+
 	iw, err := imageexporter.NewImageWriter(imageexporter.WriterOpt{
 		Snapshotter:  opt.Snapshotter,
 		ContentStore: opt.ContentStore,
@@ -177,11 +194,12 @@ func NewWorker(ctx context.Context, opt WorkerOpt) (*Worker, error) {
 	}
 
 	return &Worker{
-		WorkerOpt:     opt,
-		CacheMgr:      cm,
-		SourceManager: sm,
-		imageWriter:   iw,
-		ImageSource:   is,
+		WorkerOpt:       opt,
+		CacheMgr:        cm,
+		SourceManager:   sm,
+		imageWriter:     iw,
+		ImageSource:     is,
+		OCILayoutSource: os,
 	}, nil
 }
 
@@ -320,6 +338,14 @@ func (w *Worker) PruneCacheMounts(ctx context.Context, ids []string) error {
 }
 
 func (w *Worker) ResolveImageConfig(ctx context.Context, ref string, opt llb.ResolveImageConfigOpt, sm *session.Manager, g session.Group) (digest.Digest, []byte, error) {
+	// is this an registry source? Or an OCI layout source?
+	switch opt.ResolverType {
+	case llb.ResolverTypeOCILayout:
+		return w.OCILayoutSource.ResolveImageConfig(ctx, ref, opt, sm, g)
+		// we probably should put an explicit case llb.ResolverTypeRegistry and default here,
+		// but then go complains that we do not have a return statement,
+		// so we just add it after
+	}
 	return w.ImageSource.ResolveImageConfig(ctx, ref, opt, sm, g)
 }
 

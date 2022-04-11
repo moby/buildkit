@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -21,6 +22,7 @@ import (
 
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/content"
+	"github.com/containerd/containerd/content/local"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/snapshots"
@@ -114,6 +116,7 @@ var allTests = integration.TestFuncs(
 	testCgroupParent,
 	testNamedImageContext,
 	testNamedLocalContext,
+	testNamedOCILayoutContext,
 	testNamedInputContext,
 	testNamedMultiplatformInputContext,
 	testEmptyDestDir,
@@ -5396,6 +5399,144 @@ COPY --from=base /o* /
 	_, err = os.ReadFile(filepath.Join(destDir, "out2"))
 	require.Error(t, err)
 	require.True(t, errors.Is(err, os.ErrNotExist))
+}
+
+func testNamedOCILayoutContext(t *testing.T, sb integration.Sandbox) {
+	// how this test works:
+	// 1- we use a regular builder with a dockerfile to create an image two files: "out" with content "first", "out2" with content "second"
+	// 2- we save the output to an OCI layout dir
+	// 3- we use another regular builder with a dockerfile to build using a referenced context "base", but override it to reference the output of the previous build
+	// 4- we check that the output of the second build matches our OCI layout, and not the referenced image
+	ctx := sb.Context()
+
+	c, err := client.New(ctx, sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	// create a tempdir where we will store the OCI layout
+	ocidir, err := os.MkdirTemp("", "buildkit-oci-layout")
+	require.NoError(t, err)
+	defer os.RemoveAll(ocidir)
+
+	ociDockerfile := []byte(`
+	FROM busybox:latest
+	RUN sh -c "echo -n first > out"
+	RUN sh -c "echo -n second > out2"
+	ENV foo=bar
+	`)
+	inDir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", ociDockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(inDir)
+
+	f := getFrontend(t, sb)
+
+	outW := bytes.NewBuffer(nil)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: inDir,
+			builder.DefaultLocalNameContext:    inDir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:   client.ExporterOCI,
+				Output: fixedWriteCloser(nopWriteCloser{outW}),
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	// extract the tar stream to the directory as OCI layout
+	m, err := testutil.ReadTarToMap(outW.Bytes(), false)
+	require.NoError(t, err)
+
+	for filename, content := range m {
+		fullFilename := path.Join(ocidir, filename)
+		err = os.MkdirAll(path.Dir(fullFilename), 0755)
+		require.NoError(t, err)
+		if content.Header.FileInfo().IsDir() {
+			err = os.MkdirAll(fullFilename, 0755)
+			require.NoError(t, err)
+		} else {
+			err = os.WriteFile(fullFilename, content.Data, 0644)
+			require.NoError(t, err)
+		}
+	}
+
+	var index ocispecs.Index
+	err = json.Unmarshal(m["index.json"].Data, &index)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(index.Manifests))
+	digest := index.Manifests[0].Digest.Hex()
+
+	store, err := local.NewStore(ocidir)
+	ociID := "ocione"
+	require.NoError(t, err)
+
+	// we will use this simple dockerfile to test
+	// 1. busybox is used as is, but because we override the context for base,
+	//    when we run `COPY --from=base`, it should take the /o* from the image in the store,
+	//    rather than what we built on the first 2 lines here.
+	// 2. we override the context for `foo` to be our local OCI store, which has an `ENV foo=bar` override.
+	//    As such, the `RUN echo $foo` step should have `$foo` set to `"bar"`, and so
+	//    when we `COPY --from=imported`, it should have the content of `/outfoo` as `"bar"`
+	dockerfile := []byte(`
+FROM busybox AS base
+RUN cat /etc/alpine-release > /out
+FROM foo AS imported
+RUN echo -n $foo > /outfoo
+FROM scratch
+COPY --from=base /o* /
+COPY --from=imported /outfoo /
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	destDir, err := os.MkdirTemp("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"context:base": fmt.Sprintf("oci-layout:%s@sha256:%s", ociID, digest),
+			"context:foo":  fmt.Sprintf("oci-layout:%s@sha256:%s", ociID, digest),
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+		OCIStores: map[string]content.Store{
+			ociID: store,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(destDir, "out"))
+	require.NoError(t, err)
+	require.True(t, len(dt) > 0)
+	require.Equal(t, []byte("first"), dt)
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "out2"))
+	require.NoError(t, err)
+	require.True(t, len(dt) > 0)
+	require.Equal(t, []byte("second"), dt)
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "outfoo"))
+	require.NoError(t, err)
+	require.True(t, len(dt) > 0)
+	require.Equal(t, []byte("bar"), dt)
 }
 
 func testNamedInputContext(t *testing.T, sb integration.Sandbox) {
