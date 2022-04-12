@@ -65,28 +65,6 @@ func ParseOutput(exports []string) ([]client.ExportEntry, error) {
 	return entries, nil
 }
 
-// ParseLegacyExporter parses legacy --exporter <type> --exporter-opt <opt>=<optval>
-func ParseLegacyExporter(legacyExporter string, legacyExporterOpts []string) ([]client.ExportEntry, error) {
-	var ex client.ExportEntry
-	ex.Type = legacyExporter
-	var err error
-	ex.Attrs, err = attrMap(legacyExporterOpts)
-	if err != nil {
-		return nil, errors.Wrap(err, "invalid exporter-opt")
-	}
-	if v, ok := ex.Attrs["dest"]; ok {
-		return nil, errors.Errorf("dest=%s not supported for --exporter-opt, you meant output=%s?", v, v)
-	}
-	ex.Output, ex.OutputDir, err = resolveExporterDest(ex.Type, ex.Attrs["output"])
-	if err != nil {
-		return nil, errors.Wrap(err, "invalid exporter option: output")
-	}
-	if ex.Output != nil || ex.OutputDir != "" {
-		delete(ex.Attrs, "output")
-	}
-	return []client.ExportEntry{ex}, nil
-}
-
 // resolveExporterDest returns at most either one of io.WriteCloser (single file) or a string (directory path).
 func resolveExporterDest(exporter, dest string) (func(map[string]string) (io.WriteCloser, error), string, error) {
 	wrapWriter := func(wc io.WriteCloser) func(map[string]string) (io.WriteCloser, error) {

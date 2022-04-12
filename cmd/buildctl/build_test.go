@@ -58,7 +58,7 @@ func testBuildLocalExporter(t *testing.T, sb integration.Sandbox) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 
-	cmd := sb.Cmd(fmt.Sprintf("build --progress=plain --exporter=local --exporter-opt output=%s", tmpdir))
+	cmd := sb.Cmd(fmt.Sprintf("build --progress=plain --output type=local,dest=%s", tmpdir))
 	cmd.Stdin = rdr
 	err = cmd.Run()
 
@@ -85,8 +85,7 @@ func testBuildContainerdExporter(t *testing.T, sb integration.Sandbox) {
 
 	buildCmd := []string{
 		"build", "--progress=plain",
-		"--exporter=image", "--exporter-opt", "unpack=true",
-		"--exporter-opt", "name=" + imageName,
+		"--output", "type=image,unpack=true,name=" + imageName,
 	}
 
 	cmd := sb.Cmd(strings.Join(buildCmd, " "))

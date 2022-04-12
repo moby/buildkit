@@ -39,16 +39,6 @@ var buildCommand = cli.Command{
 			Usage: "Define exports for build result, e.g. --output type=image,name=docker.io/username/image,push=true",
 		},
 		cli.StringFlag{
-			Name:   "exporter",
-			Usage:  "Define exporter for build result (DEPRECATED: use --export type=<type>[,<opt>=<optval>]",
-			Hidden: true,
-		},
-		cli.StringSliceFlag{
-			Name:   "exporter-opt",
-			Usage:  "Define custom options for exporter (DEPRECATED: use --output type=<type>[,<opt>=<optval>]",
-			Hidden: true,
-		},
-		cli.StringFlag{
 			Name:  "progress",
 			Usage: "Set type of progress (auto, plain, tty). Use plain to show container output",
 			Value: "auto",
@@ -69,11 +59,6 @@ var buildCommand = cli.Command{
 			Name:  "opt",
 			Usage: "Define custom options for frontend, e.g. --opt target=foo --opt build-arg:foo=bar",
 		},
-		cli.StringSliceFlag{
-			Name:   "frontend-opt",
-			Usage:  "Define custom options for frontend, e.g. --frontend-opt target=foo --frontend-opt build-arg:foo=bar (DEPRECATED: use --opt)",
-			Hidden: true,
-		},
 		cli.BoolFlag{
 			Name:  "no-cache",
 			Usage: "Disable cache for all the vertices",
@@ -81,11 +66,6 @@ var buildCommand = cli.Command{
 		cli.StringSliceFlag{
 			Name:  "export-cache",
 			Usage: "Export build cache, e.g. --export-cache type=registry,ref=example.com/foo/bar, or --export-cache type=local,dest=path/to/dir",
-		},
-		cli.StringSliceFlag{
-			Name:   "export-cache-opt",
-			Usage:  "Define custom options for cache exporting (DEPRECATED: use --export-cache type=<type>,<opt>=<optval>[,<opt>=<optval>]",
-			Hidden: true,
 		},
 		cli.StringSliceFlag{
 			Name:  "import-cache",
@@ -186,21 +166,12 @@ func buildAction(clicontext *cli.Context) error {
 		return err
 	}
 
-	var exports []client.ExportEntry
-	if legacyExporter := clicontext.String("exporter"); legacyExporter != "" {
-		logrus.Warnf("--exporter <exporter> is deprecated. Please use --output type=<exporter>[,<opt>=<optval>] instead.")
-		if len(clicontext.StringSlice("output")) > 0 {
-			return errors.New("--exporter cannot be used with --output")
-		}
-		exports, err = build.ParseLegacyExporter(clicontext.String("exporter"), clicontext.StringSlice("exporter-opt"))
-	} else {
-		exports, err = build.ParseOutput(clicontext.StringSlice("output"))
-	}
+	exports, err := build.ParseOutput(clicontext.StringSlice("output"))
 	if err != nil {
 		return err
 	}
 
-	cacheExports, err := build.ParseExportCache(clicontext.StringSlice("export-cache"), clicontext.StringSlice("export-cache-opt"))
+	cacheExports, err := build.ParseExportCache(clicontext.StringSlice("export-cache"))
 	if err != nil {
 		return err
 	}
@@ -222,7 +193,7 @@ func buildAction(clicontext *cli.Context) error {
 		AllowedEntitlements: allowed,
 	}
 
-	solveOpt.FrontendAttrs, err = build.ParseOpt(clicontext.StringSlice("opt"), clicontext.StringSlice("frontend-opt"))
+	solveOpt.FrontendAttrs, err = build.ParseOpt(clicontext.StringSlice("opt"))
 	if err != nil {
 		return errors.Wrap(err, "invalid opt")
 	}
