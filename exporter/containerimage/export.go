@@ -51,6 +51,12 @@ const (
 	// already found to use a non-distributable media type.
 	// When this option is not set, the exporter will change the media type of the layer to a distributable one.
 	preferNondistLayersKey = "prefer-nondist-layers"
+	keyStore               = "store"
+
+	// keyUnsafeInternalStoreAllowIncomplete should only be used for tests. This option allows exporting image to the image store
+	// as well as lacking some blobs in the content store. Some integration tests for lazyref behaviour depends on this option.
+	// Ignored when store=false.
+	keyUnsafeInternalStoreAllowIncomplete = "unsafe-internal-store-allow-incomplete"
 )
 
 type Opt struct {
@@ -79,6 +85,7 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 		imageExporter:    e,
 		layerCompression: compression.Default,
 		buildInfo:        true,
+		store:            true,
 	}
 
 	var esgz bool
@@ -126,6 +133,26 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
 			}
 			i.unpack = b
+		case keyStore:
+			if v == "" {
+				i.store = true
+				continue
+			}
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
+			}
+			i.store = b
+		case keyUnsafeInternalStoreAllowIncomplete:
+			if v == "" {
+				i.storeAllowIncomplete = true
+				continue
+			}
+			b, err := strconv.ParseBool(v)
+			if err != nil {
+				return nil, errors.Wrapf(err, "non-bool value specified for %s", k)
+			}
+			i.storeAllowIncomplete = b
 		case ociTypes:
 			if v == "" {
 				i.ociTypes = true
@@ -221,21 +248,23 @@ func (e *imageExporter) Resolve(ctx context.Context, opt map[string]string) (exp
 
 type imageExporterInstance struct {
 	*imageExporter
-	targetName          string
-	push                bool
-	pushByDigest        bool
-	unpack              bool
-	insecure            bool
-	ociTypes            bool
-	nameCanonical       bool
-	danglingPrefix      string
-	layerCompression    compression.Type
-	forceCompression    bool
-	compressionLevel    *int
-	buildInfo           bool
-	buildInfoAttrs      bool
-	meta                map[string][]byte
-	preferNondistLayers bool
+	targetName           string
+	push                 bool
+	pushByDigest         bool
+	unpack               bool
+	store                bool
+	storeAllowIncomplete bool
+	insecure             bool
+	ociTypes             bool
+	nameCanonical        bool
+	danglingPrefix       string
+	layerCompression     compression.Type
+	forceCompression     bool
+	compressionLevel     *int
+	buildInfo            bool
+	buildInfoAttrs       bool
+	meta                 map[string][]byte
+	preferNondistLayers  bool
 }
 
 func (e *imageExporterInstance) Name() string {
@@ -295,7 +324,7 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 	if e.targetName != "" {
 		targetNames := strings.Split(e.targetName, ",")
 		for _, targetName := range targetNames {
-			if e.opt.Images != nil {
+			if e.opt.Images != nil && e.store {
 				tagDone := oneOffProgress(ctx, "naming to "+targetName)
 				img := images.Image{
 					Target:    *desc,
@@ -322,6 +351,35 @@ func (e *imageExporterInstance) Export(ctx context.Context, src exporter.Source,
 				if e.unpack {
 					if err := e.unpackImage(ctx, img, src, session.NewGroup(sessionID)); err != nil {
 						return nil, err
+					}
+				}
+
+				if !e.storeAllowIncomplete {
+					if src.Ref != nil {
+						remotes, err := src.Ref.GetRemotes(ctx, false, refCfg, false, session.NewGroup(sessionID))
+						if err != nil {
+							return nil, err
+						}
+						remote := remotes[0]
+						if unlazier, ok := remote.Provider.(cache.Unlazier); ok {
+							if err := unlazier.Unlazy(ctx); err != nil {
+								return nil, err
+							}
+						}
+					}
+					if len(src.Refs) > 0 {
+						for _, r := range src.Refs {
+							remotes, err := r.GetRemotes(ctx, false, refCfg, false, session.NewGroup(sessionID))
+							if err != nil {
+								return nil, err
+							}
+							remote := remotes[0]
+							if unlazier, ok := remote.Provider.(cache.Unlazier); ok {
+								if err := unlazier.Unlazy(ctx); err != nil {
+									return nil, err
+								}
+							}
+						}
 					}
 				}
 			}
