@@ -27,6 +27,7 @@ import (
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
 	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
+	"github.com/moby/buildkit/util/gitutil"
 	"github.com/moby/buildkit/util/suggest"
 	"github.com/moby/buildkit/util/system"
 	"github.com/moby/sys/signal"
@@ -652,6 +653,7 @@ func dispatch(d *dispatchState, cmd command, opt dispatchOpt) error {
 			chown:        c.Chown,
 			chmod:        c.Chmod,
 			link:         c.Link,
+			keepGitDir:   c.KeepGitDir,
 			location:     c.Location(),
 			opt:          opt,
 		})
@@ -1006,7 +1008,34 @@ func dispatchCopy(d *dispatchState, cfg copyConfig) error {
 
 	for _, src := range cfg.params.SourcePaths {
 		commitMessage.WriteString(" " + src)
-		if strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://") {
+		gitRef, gitRefErr := gitutil.ParseGitRef(src)
+		if gitRefErr == nil && !gitRef.IndistinguishableFromLocal {
+			if !cfg.isAddCommand {
+				return errors.New("source can't be a git ref for COPY")
+			}
+			if !addGitEnabled {
+				return errors.New("instruction ADD <git ref> requires the labs channel")
+			}
+			// TODO: print a warning (not an error) if gitRef.UnencryptedTCP is true
+			commit := gitRef.Commit
+			if gitRef.SubDir != "" {
+				commit += ":" + gitRef.SubDir
+			}
+			var gitOptions []llb.GitOption
+			if cfg.keepGitDir {
+				gitOptions = append(gitOptions, llb.KeepGitDir())
+			}
+			st := llb.Git(gitRef.Remote, commit, gitOptions...)
+			opts := append([]llb.CopyOption{&llb.CopyInfo{
+				Mode:           mode,
+				CreateDestPath: true,
+			}}, copyOpt...)
+			if a == nil {
+				a = llb.Copy(st, "/", dest, opts...)
+			} else {
+				a = a.Copy(st, "/", dest, opts...)
+			}
+		} else if strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://") {
 			if !cfg.isAddCommand {
 				return errors.New("source can't be a URL for COPY")
 			}
@@ -1129,6 +1158,7 @@ type copyConfig struct {
 	chown        string
 	chmod        string
 	link         bool
+	keepGitDir   bool
 	location     []parser.Range
 	opt          dispatchOpt
 }

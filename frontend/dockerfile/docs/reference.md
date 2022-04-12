@@ -1500,6 +1500,44 @@ guide – Leverage build cache](https://docs.docker.com/develop/develop-images/d
 - If `<dest>` doesn't exist, it is created along with all missing directories
   in its path.
 
+### Adding a git repository `ADD <git ref> <dir>`
+
+> **Note**
+>
+> Available in [`docker/dockerfile-upstream:master-labs`](#syntax).
+> Will be included in `docker/dockerfile:1.5-labs`.
+
+This form allows adding a git repository to an image directly, without using the `git` command inside the image:
+```
+ADD [--keep-git-dir=<boolean>] <git ref> <dir>
+```
+
+```dockerfile
+# syntax=docker/dockerfile-upstream:master-labs
+FROM alpine
+ADD --keep-git-dir=true https://github.com/moby/buildkit.git#v0.10.1 /buildkit
+```
+
+The `--keep-git-dir=true` flag adds the `.git` directory. This flag defaults to false.
+
+### Adding a private git repository
+To add a private repo via SSH, create a Dockerfile with the following form:
+```dockerfile
+# syntax = docker/dockerfile-upstream:master-labs
+FROM alpine
+ADD git@git.example.com:foo/bar.git /bar
+```
+
+This Dockerfile can be built with `docker build --ssh` or `buildctl build --ssh`, e.g.,
+
+```console
+$ docker build --ssh default
+```
+
+```console
+$ buildctl build --frontend=dockerfile.v0 --local context=. --local dockerfile=. --ssh default
+```
+
 ## ADD --link
 
 See [`COPY --link`](#copy---link).

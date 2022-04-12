@@ -27,6 +27,7 @@ import (
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
 	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
+	"github.com/moby/buildkit/util/gitutil"
 	digest "github.com/opencontainers/go-digest"
 	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
@@ -70,7 +71,6 @@ const (
 )
 
 var httpPrefix = regexp.MustCompile(`^https?://`)
-var gitURLPathWithFragmentSuffix = regexp.MustCompile(`\.git(?:#.+)?$`)
 
 func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 	opts := c.BuildOpts().Opts
@@ -181,7 +181,11 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 
 	var buildContext *llb.State
 	isNotLocalContext := false
-	if st, ok := detectGitContext(opts[localNameContext], opts[keyContextKeepGitDirArg]); ok {
+	keepGit := false
+	if v, err := strconv.ParseBool(opts[keyContextKeepGitDirArg]); err == nil {
+		keepGit = v
+	}
+	if st, ok := detectGitContext(opts[localNameContext], keepGit); ok {
 		if !forceLocalDockerfile {
 			src = *st
 		}
@@ -599,40 +603,21 @@ func filter(opt map[string]string, key string) map[string]string {
 	return m
 }
 
-func detectGitContext(ref, gitContext string) (*llb.State, bool) {
-	found := false
-	if httpPrefix.MatchString(ref) && gitURLPathWithFragmentSuffix.MatchString(ref) {
-		found = true
-	}
-
-	keepGit := false
-	if gitContext != "" {
-		if v, err := strconv.ParseBool(gitContext); err == nil {
-			keepGit = v
-		}
-	}
-
-	for _, prefix := range []string{"git://", "github.com/", "git@"} {
-		if strings.HasPrefix(ref, prefix) {
-			found = true
-			break
-		}
-	}
-	if !found {
+func detectGitContext(ref string, keepGit bool) (*llb.State, bool) {
+	g, err := gitutil.ParseGitRef(ref)
+	if err != nil {
 		return nil, false
 	}
-
-	parts := strings.SplitN(ref, "#", 2)
-	branch := ""
-	if len(parts) > 1 {
-		branch = parts[1]
+	commit := g.Commit
+	if g.SubDir != "" {
+		commit += ":" + g.SubDir
 	}
 	gitOpts := []llb.GitOption{dockerfile2llb.WithInternalName("load git source " + ref)}
 	if keepGit {
 		gitOpts = append(gitOpts, llb.KeepGitDir())
 	}
 
-	st := llb.Git(parts[0], branch, gitOpts...)
+	st := llb.Git(g.Remote, commit, gitOpts...)
 	return &st, true
 }
 
@@ -870,13 +855,13 @@ func contextByName(ctx context.Context, c client.Client, sessionID, name string,
 		}
 		return &st, &img, nil, nil
 	case "git":
-		st, ok := detectGitContext(v, "1")
+		st, ok := detectGitContext(v, true)
 		if !ok {
 			return nil, nil, nil, errors.Errorf("invalid git context %s", v)
 		}
 		return st, nil, nil, nil
 	case "http", "https":
-		st, ok := detectGitContext(v, "1")
+		st, ok := detectGitContext(v, true)
 		if !ok {
 			httpst := llb.HTTP(v, llb.WithCustomName("[context "+name+"] "+v))
 			st = &httpst
