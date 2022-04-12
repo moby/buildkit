@@ -152,7 +152,7 @@ otherwise cleanup our project.
     <td>
       <p>
         Register for the Docker Community Slack (dockercommunity.slack.com)
-        <a href="https://join.slack.com/t/dockercommunity/shared_invite/enQtNDY4MDc1Mzc0MzIwLTgxZDBlMmM4ZGEyNDc1N2FkMzlhODJkYmE1YTVkYjM1MDE3ZjAwZjBkOGFlOTJkZjRmZGYzNjYyY2M3ZTUxYzQ" target="_blank">Click here for an invite to docker community slack</a>.
+        <a href="https://dockr.ly/slack" target="_blank">Click here for an invite to docker community slack</a>.
         You'll find us in <code>#buildkit</code> channel, and the <code>#moby-project</code> channel for general discussions.
       </p>
     </td>
