@@ -503,6 +503,11 @@ func (cm *cacheManager) getRecord(ctx context.Context, id string, opts ...RefOpt
 }
 
 func (cm *cacheManager) parentsOf(ctx context.Context, md *cacheMetadata, opts ...RefOption) (ps parentRefs, rerr error) {
+	defer func() {
+		if rerr != nil {
+			ps.release(context.TODO())
+		}
+	}()
 	if parentID := md.getParent(); parentID != "" {
 		p, err := cm.get(ctx, parentID, nil, append(opts, NoUpdateLastUsed))
 		if err != nil {
