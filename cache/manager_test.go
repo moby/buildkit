@@ -2412,6 +2412,64 @@ func TestMountReadOnly(t *testing.T) {
 	}
 }
 
+func TestLoadBrokenParents(t *testing.T) {
+	// Test that a ref that has a parent that can't be loaded will not result in any leaks
+	// of other parent refs
+	t.Parallel()
+
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+
+	tmpdir, err := os.MkdirTemp("", "cachemanager")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+
+	co, cleanup, err := newCacheManager(ctx, cmOpt{
+		tmpdir:          tmpdir,
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	defer cleanup()
+	cm := co.manager.(*cacheManager)
+
+	mutRef, err := cm.New(ctx, nil, nil)
+	require.NoError(t, err)
+	refA, err := mutRef.Commit(ctx)
+	require.NoError(t, err)
+	refAID := refA.ID()
+	mutRef, err = cm.New(ctx, nil, nil)
+	require.NoError(t, err)
+	refB, err := mutRef.Commit(ctx)
+	require.NoError(t, err)
+
+	_, err = cm.Merge(ctx, []ImmutableRef{refA, refB}, nil)
+	require.NoError(t, err)
+	checkDiskUsage(ctx, t, cm, 3, 0)
+
+	// set refB as deleted
+	require.NoError(t, refB.(*immutableRef).queueDeleted())
+	require.NoError(t, refB.(*immutableRef).commitMetadata())
+	require.NoError(t, cm.Close())
+	require.NoError(t, cleanup())
+
+	co, cleanup, err = newCacheManager(ctx, cmOpt{
+		tmpdir:          tmpdir,
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	defer cleanup()
+	cm = co.manager.(*cacheManager)
+
+	checkDiskUsage(ctx, t, cm, 0, 1)
+	refA, err = cm.Get(ctx, refAID, nil)
+	require.NoError(t, err)
+	require.Len(t, refA.(*immutableRef).refs, 1)
+}
+
 func checkDiskUsage(ctx context.Context, t *testing.T, cm Manager, inuse, unused int) {
 	du, err := cm.DiskUsage(ctx, client.DiskUsageInfo{})
 	require.NoError(t, err)
