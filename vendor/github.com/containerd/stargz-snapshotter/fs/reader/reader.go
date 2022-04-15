@@ -29,7 +29,6 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"runtime"
 	"sync"
@@ -242,7 +241,7 @@ func (vr *VerifiableReader) cacheWithReader(ctx context.Context, currentDepth in
 					vr.storeLastVerifyErr(err)
 					vr.prohibitVerifyFailureMu.RUnlock()
 				}
-				tee := ioutil.Discard
+				tee := io.Discard
 				if v != nil {
 					tee = io.Writer(v) // verification is required
 				}
