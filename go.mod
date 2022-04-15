@@ -19,7 +19,7 @@ require (
 	github.com/coreos/go-systemd/v22 v22.3.2
 	github.com/docker/cli v20.10.13+incompatible
 	github.com/docker/distribution v2.8.1+incompatible
-	github.com/docker/docker v20.10.7+incompatible // master (v21.xx-dev), see replace()
+	github.com/docker/docker v20.10.7+incompatible // master (v22.xx-dev), see replace()
 	github.com/docker/go-connections v0.4.0
 	github.com/docker/go-units v0.4.0
 	github.com/gofrs/flock v0.7.3
@@ -122,4 +122,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 )
 
-replace github.com/docker/docker => github.com/docker/docker v20.10.3-0.20220224222438-c78f6963a1c0+incompatible
+replace github.com/docker/docker => github.com/docker/docker v20.10.3-0.20220414164044-61404de7df1a+incompatible
