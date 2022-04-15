@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sync"
@@ -365,7 +364,7 @@ func (dc *directoryCache) cachePath(key string) string {
 }
 
 func (dc *directoryCache) wipFile(key string) (*os.File, error) {
-	return ioutil.TempFile(dc.wipDirectory, key+"-*")
+	return os.CreateTemp(dc.wipDirectory, key+"-*")
 }
 
 func NewMemoryCache() BlobCache {

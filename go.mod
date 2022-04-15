@@ -3,21 +3,21 @@ module github.com/moby/buildkit
 go 1.17
 
 require (
-	github.com/Microsoft/go-winio v0.5.1
+	github.com/Microsoft/go-winio v0.5.2
 	github.com/Microsoft/hcsshim v0.9.2
 	github.com/agext/levenshtein v1.2.3
 	github.com/armon/circbuf v0.0.0-20190214190532-5111143e8da2
 	github.com/containerd/console v1.0.3
 	github.com/containerd/containerd v1.6.3-0.20220401172941-5ff8fce1fcc6
-	github.com/containerd/continuity v0.2.3-0.20220330195504-d132b287edc8
+	github.com/containerd/continuity v0.3.0
 	github.com/containerd/fuse-overlayfs-snapshotter v1.0.2
 	github.com/containerd/go-cni v1.1.4
 	github.com/containerd/go-runc v1.0.0
-	github.com/containerd/stargz-snapshotter v0.11.3
-	github.com/containerd/stargz-snapshotter/estargz v0.11.3
+	github.com/containerd/stargz-snapshotter v0.11.4
+	github.com/containerd/stargz-snapshotter/estargz v0.11.4
 	github.com/containerd/typeurl v1.0.2
 	github.com/coreos/go-systemd/v22 v22.3.2
-	github.com/docker/cli v20.10.13+incompatible
+	github.com/docker/cli v20.10.14+incompatible
 	github.com/docker/distribution v2.8.1+incompatible
 	github.com/docker/docker v20.10.7+incompatible // master (v21.xx-dev), see replace()
 	github.com/docker/go-connections v0.4.0
@@ -68,11 +68,11 @@ require (
 	go.opentelemetry.io/otel/trace v1.4.1
 	go.opentelemetry.io/proto/otlp v0.12.0
 	golang.org/x/crypto v0.0.0-20220315160706-3147a52a75dd
-	golang.org/x/net v0.0.0-20211216030914-fe4d6282115f
+	golang.org/x/net v0.0.0-20220127200216-cd36cc0744dd
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/sys v0.0.0-20220114195835-da31bd327af9
+	golang.org/x/sys v0.0.0-20220405210540-1e041c57c461
 	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac
-	google.golang.org/genproto v0.0.0-20211208223120-3a66f561d7aa
+	google.golang.org/genproto v0.0.0-20220107163113-42d7afdf6368
 	google.golang.org/grpc v1.45.0
 )
 
