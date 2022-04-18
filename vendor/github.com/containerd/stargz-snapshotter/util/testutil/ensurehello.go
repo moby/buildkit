@@ -21,8 +21,8 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
+	"os"
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/content/local"
@@ -57,7 +57,7 @@ func EnsureHello(ctx context.Context) (*ocispec.Descriptor, content.Store, error
 		return nil, nil, err
 	}
 
-	tempDir, err := ioutil.TempDir("", "test-estargz")
+	tempDir, err := os.MkdirTemp("", "test-estargz")
 	if err != nil {
 		return nil, nil, err
 	}

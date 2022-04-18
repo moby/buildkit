@@ -27,7 +27,6 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"mime"
 	"mime/multipart"
@@ -331,7 +330,7 @@ func redirect(ctx context.Context, blobURL string, tr http.RoundTripper, timeout
 		return "", fmt.Errorf("failed to request: %w", err)
 	}
 	defer func() {
-		io.Copy(ioutil.Discard, res.Body)
+		io.Copy(io.Discard, res.Body)
 		res.Body.Close()
 	}()
 
@@ -382,7 +381,7 @@ func getSize(ctx context.Context, url string, tr http.RoundTripper, timeout time
 		return 0, fmt.Errorf("failed to request: %w", err)
 	}
 	defer func() {
-		io.Copy(ioutil.Discard, res.Body)
+		io.Copy(io.Discard, res.Body)
 		res.Body.Close()
 	}()
 
@@ -523,7 +522,7 @@ func (f *httpFetcher) check() error {
 		return fmt.Errorf("check failed: failed to request to registry: %w", err)
 	}
 	defer func() {
-		io.Copy(ioutil.Discard, res.Body)
+		io.Copy(io.Discard, res.Body)
 		res.Body.Close()
 	}()
 	if res.StatusCode == http.StatusOK || res.StatusCode == http.StatusPartialContent {

@@ -29,7 +29,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"os"
@@ -200,7 +199,7 @@ func testPrefetch(t *testing.T, factory metadata.Store) {
 					t.Fatalf("failed to open file %q", file)
 				}
 				blob.readCalled = false
-				if _, err := io.Copy(ioutil.Discard, io.NewSectionReader(wantFile, 0, e.Size)); err != nil {
+				if _, err := io.Copy(io.Discard, io.NewSectionReader(wantFile, 0, e.Size)); err != nil {
 					t.Fatalf("failed to read file %q", file)
 				}
 				if blob.readCalled {

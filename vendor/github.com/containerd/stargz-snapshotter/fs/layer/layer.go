@@ -27,7 +27,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sync"
@@ -211,7 +210,7 @@ func newCache(root string, cacheType string, cfg config.Config) (cache.BlobCache
 	if err := os.MkdirAll(root, 0700); err != nil {
 		return nil, err
 	}
-	cachePath, err := ioutil.TempDir(root, "")
+	cachePath, err := os.MkdirTemp(root, "")
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize directory cache: %w", err)
 	}
