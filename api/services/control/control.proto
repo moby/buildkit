@@ -6,6 +6,7 @@ import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 import "google/protobuf/timestamp.proto";
 import "github.com/moby/buildkit/solver/pb/ops.proto";
 import "github.com/moby/buildkit/api/types/worker.proto";
+import "github.com/moby/buildkit/frontend/gateway/pb/gateway.proto";
 
 option (gogoproto.sizer_all) = true;
 option (gogoproto.marshaler_all) = true;
@@ -19,7 +20,16 @@ service Control {
 	rpc Session(stream BytesMessage) returns (stream BytesMessage);
 	rpc ListWorkers(ListWorkersRequest) returns (ListWorkersResponse);
 	rpc Info(InfoRequest) returns (InfoResponse);
+
+	rpc DebugExecProcess(stream moby.buildkit.v1.frontend.ExecMessage) returns (stream moby.buildkit.v1.frontend.ExecMessage);
+	rpc DebugClose(DebugCloseRequest) returns (DebugCloseResponse);
 }
+
+message DebugCloseRequest {
+	string Ref = 1;
+}
+
+message DebugCloseResponse {}
 
 message PruneRequest {
 	repeated string filter = 1;
@@ -62,6 +72,7 @@ message SolveRequest {
 	CacheOptions Cache = 8 [(gogoproto.nullable) = false];
 	repeated string Entitlements = 9 [(gogoproto.customtype) = "github.com/moby/buildkit/util/entitlements.Entitlement" ];
 	map<string, pb.Definition> FrontendInputs = 10;
+	bool Debug = 11;
 }
 
 message CacheOptions {

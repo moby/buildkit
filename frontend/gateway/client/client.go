@@ -64,6 +64,7 @@ type StartRequest struct {
 	Stdin          io.ReadCloser
 	Stdout, Stderr io.WriteCloser
 	SecurityMode   pb.SecurityMode
+	Attrs          map[string]string
 }
 
 // WinSize is same as executor.WinSize, copied here to prevent circular package

@@ -111,7 +111,18 @@ func (s *Solver) Solve(ctx context.Context, id string, sessionID string, req fro
 	}
 
 	defer j.Discard()
+	return s.SolveWithJob(ctx, j, sessionID, req, exp, ent)
+}
 
+func (s *Solver) NewJob(id string, debug bool) (*solver.Job, error) {
+	if debug {
+		return s.solver.NewDebugJob(id)
+	}
+	return s.solver.NewJob(id)
+}
+
+func (s *Solver) SolveWithJob(ctx context.Context, j *solver.Job, sessionID string, req frontend.SolveRequest, exp ExporterRequest, ent []entitlements.Entitlement) (*client.SolveResponse, error) {
+	id := j.ID()
 	set, err := entitlements.WhiteList(ent, supportedEntitlements(s.entitlements))
 	if err != nil {
 		return nil, err

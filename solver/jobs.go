@@ -11,6 +11,7 @@ import (
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver/errdefs"
+	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/flightcontrol"
 	"github.com/moby/buildkit/util/progress"
 	"github.com/moby/buildkit/util/progress/controller"
@@ -193,6 +194,20 @@ func (s *state) Release() {
 	}
 }
 
+func (s *state) registerDebugHandler(key string, h DebugHandler) {
+	for j := range s.jobs {
+		if !j.debug {
+			continue
+		}
+		j.debugHandlersMu.Lock()
+		if j.debugHandlers == nil {
+			j.debugHandlers = make(map[string]DebugHandler)
+		}
+		j.debugHandlers[key] = h
+		j.debugHandlersMu.Unlock()
+	}
+}
+
 type subBuilder struct {
 	*state
 	mu        sync.Mutex
@@ -240,6 +255,10 @@ type Job struct {
 
 	progressCloser func()
 	SessionID      string
+
+	debugHandlers   map[string]DebugHandler
+	debugHandlersMu sync.Mutex
+	debug           bool
 }
 
 type SolverOpt struct {
@@ -431,6 +450,14 @@ func (jl *Solver) connectProgressFromState(target, src *state) {
 }
 
 func (jl *Solver) NewJob(id string) (*Job, error) {
+	return jl.newJob(id, false)
+}
+
+func (jl *Solver) NewDebugJob(id string) (*Job, error) {
+	return jl.newJob(id, true)
+}
+
+func (jl *Solver) newJob(id string, debug bool) (*Job, error) {
 	jl.mu.Lock()
 	defer jl.mu.Unlock()
 
@@ -449,6 +476,7 @@ func (jl *Solver) NewJob(id string) (*Job, error) {
 		progressCloser: progressCloser,
 		span:           span,
 		id:             id,
+		debug:          debug,
 	}
 	jl.jobs[id] = j
 
@@ -496,6 +524,10 @@ func (jl *Solver) deleteIfUnreferenced(k digest.Digest, st *state) {
 		st.Release()
 		delete(jl.actives, k)
 	}
+}
+
+func (j *Job) ID() string {
+	return j.id
 }
 
 func (j *Job) Build(ctx context.Context, e Edge) (CachedResult, BuildSources, error) {
@@ -581,6 +613,16 @@ func (j *Job) EachValue(ctx context.Context, key string, fn func(interface{}) er
 		return fn(v)
 	}
 	return nil
+}
+
+func (j *Job) GetDebugHandler(ctx context.Context, id string) (DebugHandler, error) {
+	j.debugHandlersMu.Lock()
+	h, ok := j.debugHandlers[id]
+	j.debugHandlersMu.Unlock()
+	if !ok || h == nil {
+		return nil, fmt.Errorf("not found")
+	}
+	return h, nil
 }
 
 type cacheMapResp struct {
@@ -842,6 +884,14 @@ func (s *sharedOp) Exec(ctx context.Context, inputs []Result) (outputs []Result,
 			tracing.FinishWithError(span, retErr)
 			notifyCompleted(retErr, false)
 		}()
+
+		if debugOp, ok := op.(DebuggableOp); ok {
+			if handler, err := debugOp.GetDebugHandler(ctx, s.st, inputs); err != nil {
+				bklog.G(context.TODO()).WithError(err).Debugf("failed to get debug handler of %v", s.st.vtx.Digest())
+			} else {
+				s.st.registerDebugHandler(s.st.vtx.Digest().String(), handler)
+			}
+		}
 
 		res, err := op.Exec(ctx, s.st, inputs)
 		complete := true

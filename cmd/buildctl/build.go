@@ -87,6 +87,10 @@ var buildCommand = cli.Command{
 			Name:  "metadata-file",
 			Usage: "Output build metadata (e.g., image digest) to a file as JSON",
 		},
+		cli.BoolFlag{
+			Name:  "debug-build",
+			Usage: "Allow debugging the build",
+		},
 	},
 }
 
@@ -191,6 +195,7 @@ func buildAction(clicontext *cli.Context) error {
 		CacheImports:        cacheImports,
 		Session:             attachable,
 		AllowedEntitlements: allowed,
+		Debug:               clicontext.Bool("debug-build"),
 	}
 
 	solveOpt.FrontendAttrs, err = build.ParseOpt(clicontext.StringSlice("opt"))

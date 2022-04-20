@@ -234,15 +234,13 @@ func addDefaultEnvvar(env []string, k, v string) []string {
 	return append(env, k+"="+v)
 }
 
-func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Result) (results []solver.Result, err error) {
-	trace.SpanFromContext(ctx).AddEvent("ExecOp started")
-
+func (e *execOp) prepare(ctx context.Context, g session.Group, inputs []solver.Result) (_ gateway.PreparedMounts, _ executor.Meta, _ func([]solver.Result, error) error, retErr error) {
 	refs := make([]*worker.WorkerRef, len(inputs))
 	for i, inp := range inputs {
 		var ok bool
 		refs[i], ok = inp.Sys().(*worker.WorkerRef)
 		if !ok {
-			return nil, errors.Errorf("invalid reference for exec %T", inp.Sys())
+			return gateway.PreparedMounts{}, executor.Meta{}, nil, errors.Errorf("invalid reference for exec %T", inp.Sys())
 		}
 	}
 
@@ -250,7 +248,7 @@ func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 		desc := fmt.Sprintf("mount %s from exec %s", m.Dest, strings.Join(e.op.Meta.Args, " "))
 		return e.cm.New(ctx, ref, g, cache.WithDescription(desc))
 	})
-	defer func() {
+	done := func(results []solver.Result, err error) error {
 		if err != nil {
 			execInputs := make([]solver.Result, len(e.op.Mounts))
 			for i, m := range e.op.Mounts {
@@ -288,19 +286,25 @@ func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 				o.Ref.Release(context.TODO())
 			}
 		}
+		return err
+	}
+	defer func() {
+		if retErr != nil {
+			retErr = done(nil, retErr)
+		}
 	}()
 	if err != nil {
-		return nil, err
+		return gateway.PreparedMounts{}, executor.Meta{}, nil, err
 	}
 
 	extraHosts, err := gateway.ParseExtraHosts(e.op.Meta.ExtraHosts)
 	if err != nil {
-		return nil, err
+		return gateway.PreparedMounts{}, executor.Meta{}, nil, err
 	}
 
 	emu, err := getEmulator(ctx, e.platform, e.cm.IdentityMapping())
 	if err != nil {
-		return nil, err
+		return gateway.PreparedMounts{}, executor.Meta{}, nil, err
 	}
 	if emu != nil {
 		e.op.Meta.Args = append([]string{qemuMountName}, e.op.Meta.Args...)
@@ -337,9 +341,23 @@ func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Resu
 
 	secretEnv, err := e.loadSecretEnv(ctx, g)
 	if err != nil {
-		return nil, err
+		return gateway.PreparedMounts{}, executor.Meta{}, nil, err
 	}
 	meta.Env = append(meta.Env, secretEnv...)
+
+	return p, meta, done, nil
+}
+
+func (e *execOp) Exec(ctx context.Context, g session.Group, inputs []solver.Result) (results []solver.Result, err error) {
+	trace.SpanFromContext(ctx).AddEvent("ExecOp started")
+
+	p, meta, done, prepareErr := e.prepare(ctx, g, inputs)
+	if prepareErr != nil {
+		return nil, prepareErr
+	}
+	defer func() {
+		err = done(results, err)
+	}()
 
 	stdout, stderr, flush := logs.NewLogStreams(ctx, os.Getenv("BUILDKIT_DEBUG_EXEC_OUTPUT") == "1")
 	defer stdout.Close()
@@ -435,4 +453,25 @@ func (e *execOp) loadSecretEnv(ctx context.Context, g session.Group) ([]string, 
 		out = append(out, fmt.Sprintf("%s=%s", sopt.Name, string(dt)))
 	}
 	return out, nil
+}
+
+func (e *execOp) GetDebugHandler(ctx context.Context, g session.Group, inputs []solver.Result) (solver.DebugHandler, error) {
+	return &handler{e, g, inputs}, nil
+}
+
+type handler struct {
+	e      *execOp
+	g      session.Group
+	inputs []solver.Result
+}
+
+func (h *handler) Exec(ctx context.Context, processInfo func(meta executor.Meta) executor.ProcessInfo) (err error) {
+	p, meta, done, prepareErr := h.e.prepare(ctx, h.g, h.inputs)
+	if prepareErr != nil {
+		return prepareErr
+	}
+	defer func() {
+		err = done(nil, err)
+	}()
+	return h.e.exec.Run(ctx, "", p.Root, p.Mounts, processInfo(meta), nil)
 }

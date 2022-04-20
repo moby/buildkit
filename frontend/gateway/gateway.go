@@ -1128,6 +1128,49 @@ func (w *outputWriter) Write(msg []byte) (int, error) {
 }
 
 func (lbf *llbBridgeForwarder) ExecProcess(srv pb.LLBBridge_ExecProcessServer) error {
+	return ExecProcess(srv, func(ctx context.Context, req *InitProcessRequest) (*InitProcessResponse, error) {
+		init := req.Init
+		id := init.ContainerID
+		lbf.ctrsMu.Lock()
+		ctr, ok := lbf.ctrs[id]
+		lbf.ctrsMu.Unlock()
+		if !ok {
+			return nil, stack.Enable(status.Errorf(codes.NotFound, "container %q previously released or not created", id))
+		}
+
+		proc, err := ctr.Start(ctx, gwclient.StartRequest{
+			Args:         init.Meta.Args,
+			Env:          init.Meta.Env,
+			User:         init.Meta.User,
+			Cwd:          init.Meta.Cwd,
+			Tty:          init.Tty,
+			Stdin:        req.Stdin,
+			Stdout:       req.Stdout,
+			Stderr:       req.Stderr,
+			SecurityMode: init.Security,
+		})
+		if err != nil {
+			return nil, stack.Enable(err)
+		}
+
+		return &InitProcessResponse{proc.Resize, proc.Signal, proc.Wait}, nil
+	})
+}
+
+type InitProcessRequest struct {
+	Init   *pb.InitMessage
+	Stdin  io.ReadCloser
+	Stdout io.WriteCloser
+	Stderr io.WriteCloser
+}
+
+type InitProcessResponse struct {
+	ResizeCallback func(ctx context.Context, size gwclient.WinSize) error
+	SignalCallback func(ctx context.Context, sig syscall.Signal) error
+	WaitForExit    func() error
+}
+
+func ExecProcess(srv pb.LLBBridge_ExecProcessServer, initFn func(ctx context.Context, req *InitProcessRequest) (*InitProcessResponse, error)) error {
 	eg, ctx := errgroup.WithContext(srv.Context())
 
 	msgs := make(chan *pb.ExecMessage)
@@ -1203,10 +1246,12 @@ func (lbf *llbBridgeForwarder) ExecProcess(srv pb.LLBBridge_ExecProcessServer) e
 				if !pioFound {
 					return stack.Enable(status.Errorf(codes.NotFound, "IO for process %q not found", pid))
 				}
-				pio.resize(ctx, gwclient.WinSize{
-					Cols: resize.Cols,
-					Rows: resize.Rows,
-				})
+				if pio.resize != nil {
+					pio.resize(ctx, gwclient.WinSize{
+						Cols: resize.Cols,
+						Rows: resize.Rows,
+					})
+				}
 			} else if sig := execMsg.GetSignal(); sig != nil {
 				if !pioFound {
 					return stack.Enable(status.Errorf(codes.NotFound, "IO for process %q not found", pid))
@@ -1215,17 +1260,12 @@ func (lbf *llbBridgeForwarder) ExecProcess(srv pb.LLBBridge_ExecProcessServer) e
 				if !ok {
 					return stack.Enable(status.Errorf(codes.InvalidArgument, "Unknown signal %s", sig.Name))
 				}
-				pio.signal(ctx, syscallSignal)
+				if pio.signal != nil {
+					pio.signal(ctx, syscallSignal)
+				}
 			} else if init := execMsg.GetInit(); init != nil {
 				if pioFound {
 					return stack.Enable(status.Errorf(codes.AlreadyExists, "Process %s already exists", pid))
-				}
-				id := init.ContainerID
-				lbf.ctrsMu.Lock()
-				ctr, ok := lbf.ctrs[id]
-				lbf.ctrsMu.Unlock()
-				if !ok {
-					return stack.Enable(status.Errorf(codes.NotFound, "container %q previously released or not created", id))
 				}
 
 				initCtx, initCancel := context.WithCancel(context.Background())
@@ -1234,22 +1274,20 @@ func (lbf *llbBridgeForwarder) ExecProcess(srv pb.LLBBridge_ExecProcessServer) e
 				pio := newProcessIO(pid, init.Fds)
 				pios[pid] = pio
 
-				proc, err := ctr.Start(initCtx, gwclient.StartRequest{
-					Args:         init.Meta.Args,
-					Env:          init.Meta.Env,
-					User:         init.Meta.User,
-					Cwd:          init.Meta.Cwd,
-					Tty:          init.Tty,
-					Stdin:        pio.processReaders[0],
-					Stdout:       pio.processWriters[1],
-					Stderr:       pio.processWriters[2],
-					SecurityMode: init.Security,
-				})
+				resp, err := initFn(initCtx, &InitProcessRequest{init, pio.processReaders[0], pio.processWriters[1], pio.processWriters[2]})
 				if err != nil {
+					bklog.G(ctx).Debugf("|---> Done Message %s", pid)
+					srv.Send(&pb.ExecMessage{
+						ProcessID: pid,
+						Input: &pb.ExecMessage_Done{
+							Done: &pb.DoneMessage{},
+						},
+					})
 					return stack.Enable(err)
 				}
-				pio.resize = proc.Resize
-				pio.signal = proc.Signal
+				wait := resp.WaitForExit
+				pio.resize = resp.ResizeCallback
+				pio.signal = resp.SignalCallback
 
 				eg.Go(func() error {
 					<-pio.done
@@ -1267,7 +1305,7 @@ func (lbf *llbBridgeForwarder) ExecProcess(srv pb.LLBBridge_ExecProcessServer) e
 					defer func() {
 						pio.Close()
 					}()
-					err := proc.Wait()
+					err := wait()
 
 					var statusCode uint32
 					var exitError *pb.ExitError

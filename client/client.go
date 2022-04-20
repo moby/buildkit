@@ -27,11 +27,15 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+
+	"github.com/moby/buildkit/frontend/gateway/grpcclient"
+	gatewaypb "github.com/moby/buildkit/frontend/gateway/pb"
 )
 
 type Client struct {
 	conn          *grpc.ClientConn
 	sessionDialer func(ctx context.Context, proto string, meta map[string][]string) (net.Conn, error)
+	execMsgs      *grpcclient.MessageForwarder
 }
 
 type ClientOpt interface{}
@@ -150,6 +154,9 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 	c := &Client{
 		conn:          conn,
 		sessionDialer: sessionDialer,
+		execMsgs: grpcclient.NewMessageForwarder(context.TODO(), func(ctx context.Context) (gatewaypb.LLBBridge_ExecProcessClient, error) {
+			return controlapi.NewControlClient(conn).DebugExecProcess(ctx)
+		}),
 	}
 
 	if tracerDelegate != nil {

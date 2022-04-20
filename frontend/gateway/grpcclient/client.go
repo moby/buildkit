@@ -67,7 +67,7 @@ func New(ctx context.Context, opts map[string]string, session, product string, c
 		caps:      pb.Caps.CapSet(resp.FrontendAPICaps),
 		llbCaps:   opspb.Caps.CapSet(resp.LLBCaps),
 		requests:  map[string]*pb.SolveRequest{},
-		execMsgs:  newMessageForwarder(ctx, c),
+		execMsgs:  NewMessageForwarder(ctx, func(ctx context.Context) (pb.LLBBridge_ExecProcessClient, error) { return c.ExecProcess(ctx) }),
 	}, nil
 }
 
@@ -276,7 +276,7 @@ type grpcClient struct {
 	caps      apicaps.CapSet
 	llbCaps   apicaps.CapSet
 	requests  map[string]*pb.SolveRequest
-	execMsgs  *messageForwarder
+	execMsgs  *MessageForwarder
 }
 
 func (c *grpcClient) requestForRef(ref client.Reference) (*pb.SolveRequest, error) {
@@ -564,17 +564,17 @@ func (b *procMessageForwarder) Close() {
 	b.Send(context.Background(), nil) // ensure channel is closed
 }
 
-// messageForwarder manages a single grpc stream for ExecProcess to facilitate
+// MessageForwarder manages a single grpc stream for ExecProcess to facilitate
 // a pub/sub message channel for each new process started from the client
 // connection.
-type messageForwarder struct {
-	client pb.LLBBridgeClient
-	ctx    context.Context
-	cancel func()
-	eg     *errgroup.Group
-	mu     sync.Mutex
-	pids   map[string]*procMessageForwarder
-	stream pb.LLBBridge_ExecProcessClient
+type MessageForwarder struct {
+	startFn func(ctx context.Context) (pb.LLBBridge_ExecProcessClient, error)
+	ctx     context.Context
+	cancel  func()
+	eg      *errgroup.Group
+	mu      sync.Mutex
+	pids    map[string]*procMessageForwarder
+	stream  pb.LLBBridge_ExecProcessClient
 	// startOnce used to only start the exec message forwarder once,
 	// so we only have one exec stream per client
 	startOnce sync.Once
@@ -583,19 +583,20 @@ type messageForwarder struct {
 	startErr error
 }
 
-func newMessageForwarder(ctx context.Context, client pb.LLBBridgeClient) *messageForwarder {
+// func NewMessageForwarder(ctx context.Context, client pb.LLBBridgeClient) *MessageForwarder {
+func NewMessageForwarder(ctx context.Context, startFn func(ctx context.Context) (pb.LLBBridge_ExecProcessClient, error)) *MessageForwarder {
 	ctx, cancel := context.WithCancel(ctx)
 	eg, ctx := errgroup.WithContext(ctx)
-	return &messageForwarder{
-		client: client,
-		pids:   map[string]*procMessageForwarder{},
-		ctx:    ctx,
-		cancel: cancel,
-		eg:     eg,
+	return &MessageForwarder{
+		startFn: startFn,
+		pids:    map[string]*procMessageForwarder{},
+		ctx:     ctx,
+		cancel:  cancel,
+		eg:      eg,
 	}
 }
 
-func (m *messageForwarder) Start() (err error) {
+func (m *MessageForwarder) Start() (err error) {
 	defer func() {
 		if err != nil {
 			m.startErr = err
@@ -607,7 +608,7 @@ func (m *messageForwarder) Start() (err error) {
 	}
 
 	m.startOnce.Do(func() {
-		m.stream, err = m.client.ExecProcess(m.ctx)
+		m.stream, err = m.startFn(m.ctx)
 		if err != nil {
 			return
 		}
@@ -661,7 +662,7 @@ func debugMessage(msg *pb.ExecMessage) string {
 	return fmt.Sprintf("Unknown Message %s", msg.String())
 }
 
-func (m *messageForwarder) Send(msg *pb.ExecMessage) error {
+func (m *MessageForwarder) Send(msg *pb.ExecMessage) error {
 	m.mu.Lock()
 	_, ok := m.pids[msg.ProcessID]
 	defer m.mu.Unlock()
@@ -672,12 +673,12 @@ func (m *messageForwarder) Send(msg *pb.ExecMessage) error {
 	return m.stream.Send(msg)
 }
 
-func (m *messageForwarder) Release() error {
+func (m *MessageForwarder) Release() error {
 	m.cancel()
 	return m.eg.Wait()
 }
 
-func (m *messageForwarder) Register(pid string) *procMessageForwarder {
+func (m *MessageForwarder) register(pid string) *procMessageForwarder {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	sender := newProcMessageForwarder()
@@ -685,7 +686,7 @@ func (m *messageForwarder) Register(pid string) *procMessageForwarder {
 	return sender
 }
 
-func (m *messageForwarder) Deregister(pid string) {
+func (m *MessageForwarder) deregister(pid string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	sender, ok := m.pids[pid]
@@ -697,7 +698,7 @@ func (m *messageForwarder) Deregister(pid string) {
 }
 
 type msgWriter struct {
-	mux       *messageForwarder
+	mux       *MessageForwarder
 	fd        uint32
 	processID string
 }
@@ -775,15 +776,19 @@ func (c *grpcClient) NewContainer(ctx context.Context, req client.NewContainerRe
 type container struct {
 	client   pb.LLBBridgeClient
 	id       string
-	execMsgs *messageForwarder
+	execMsgs *MessageForwarder
 }
 
 func (ctr *container) Start(ctx context.Context, req client.StartRequest) (client.ContainerProcess, error) {
-	pid := fmt.Sprintf("%s:%s", ctr.id, identity.NewID())
-	msgs := ctr.execMsgs.Register(pid)
+	return StartProcess(ctx, ctr.id, req, ctr.execMsgs)
+}
+
+func StartProcess(ctx context.Context, containerID string, req client.StartRequest, execMsgs *MessageForwarder) (client.ContainerProcess, error) {
+	pid := fmt.Sprintf("%s:%s", containerID, identity.NewID())
+	msgs := execMsgs.register(pid)
 
 	init := &pb.InitMessage{
-		ContainerID: ctr.id,
+		ContainerID: containerID,
 		Meta: &opspb.Meta{
 			Args: req.Args,
 			Env:  req.Env,
@@ -792,6 +797,7 @@ func (ctr *container) Start(ctx context.Context, req client.StartRequest) (clien
 		},
 		Tty:      req.Tty,
 		Security: req.SecurityMode,
+		Attrs:    req.Attrs,
 	}
 	if req.Stdin != nil {
 		init.Fds = append(init.Fds, 0)
@@ -803,7 +809,7 @@ func (ctr *container) Start(ctx context.Context, req client.StartRequest) (clien
 		init.Fds = append(init.Fds, 2)
 	}
 
-	err := ctr.execMsgs.Send(&pb.ExecMessage{
+	err := execMsgs.Send(&pb.ExecMessage{
 		ProcessID: pid,
 		Input: &pb.ExecMessage_Init{
 			Init: init,
@@ -826,7 +832,7 @@ func (ctr *container) Start(ctx context.Context, req client.StartRequest) (clien
 	done := make(chan struct{})
 
 	ctrProc := &containerProcess{
-		execMsgs: ctr.execMsgs,
+		execMsgs: execMsgs,
 		id:       pid,
 		eg:       eg,
 	}
@@ -854,7 +860,7 @@ func (ctr *container) Start(ctx context.Context, req client.StartRequest) (clien
 
 		ctrProc.eg.Go(func() error {
 			m := &msgWriter{
-				mux:       ctr.execMsgs,
+				mux:       execMsgs,
 				processID: pid,
 				fd:        0,
 			}
@@ -864,7 +870,7 @@ func (ctr *container) Start(ctx context.Context, req client.StartRequest) (clien
 				return err
 			}
 			// not an error so must be eof
-			return ctr.execMsgs.Send(&pb.ExecMessage{
+			return execMsgs.Send(&pb.ExecMessage{
 				ProcessID: pid,
 				Input: &pb.ExecMessage_File{
 					File: &pb.FdMessage{
@@ -950,13 +956,13 @@ func (ctr *container) Release(ctx context.Context) error {
 }
 
 type containerProcess struct {
-	execMsgs *messageForwarder
+	execMsgs *MessageForwarder
 	id       string
 	eg       *errgroup.Group
 }
 
 func (ctrProc *containerProcess) Wait() error {
-	defer ctrProc.execMsgs.Deregister(ctrProc.id)
+	defer ctrProc.execMsgs.deregister(ctrProc.id)
 	return ctrProc.eg.Wait()
 }
 

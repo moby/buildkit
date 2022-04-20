@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/containerd/containerd/content"
+	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/compression"
@@ -243,4 +244,13 @@ type CacheManager interface {
 
 	// Save saves a result based on a cache key
 	Save(key *CacheKey, s Result, createdAt time.Time) (*ExportableCacheKey, error)
+}
+
+type DebuggableOp interface {
+	Op
+	GetDebugHandler(ctx context.Context, g session.Group, inputs []Result) (DebugHandler, error)
+}
+
+type DebugHandler interface {
+	Exec(ctx context.Context, processInfo func(meta executor.Meta) executor.ProcessInfo) error
 }

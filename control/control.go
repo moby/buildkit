@@ -2,8 +2,10 @@ package control
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	controlapi "github.com/moby/buildkit/api/services/control"
@@ -11,6 +13,7 @@ import (
 	"github.com/moby/buildkit/cache/remotecache"
 	"github.com/moby/buildkit/client"
 	controlgateway "github.com/moby/buildkit/control/gateway"
+	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/exporter"
 	"github.com/moby/buildkit/frontend"
 	"github.com/moby/buildkit/session"
@@ -20,6 +23,7 @@ import (
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/bklog"
 	"github.com/moby/buildkit/util/imageutil"
+	"github.com/moby/buildkit/util/stack"
 	"github.com/moby/buildkit/util/throttle"
 	"github.com/moby/buildkit/util/tracing/transform"
 	"github.com/moby/buildkit/version"
@@ -31,6 +35,9 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	frontendgateway "github.com/moby/buildkit/frontend/gateway"
+	gatewayclient "github.com/moby/buildkit/frontend/gateway/client"
 )
 
 type Opt struct {
@@ -54,6 +61,9 @@ type Controller struct { // TODO: ControlService
 	throttledGC      func()
 	gcmu             sync.Mutex
 	*tracev1.UnimplementedTraceServiceServer
+
+	debugJobs   map[string]*solver.Job
+	debugJobsMu sync.Mutex
 }
 
 func NewController(opt Opt) (*Controller, error) {
@@ -243,6 +253,23 @@ func translateLegacySolveRequest(req *controlapi.SolveRequest) error {
 }
 
 func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*controlapi.SolveResponse, error) {
+	var j *solver.Job
+	if req.Debug {
+		var err error
+		j, err = c.solver.NewJob(req.Ref, true)
+		if err != nil {
+			return nil, err
+		}
+		defer func() {
+			c.debugJobsMu.Lock()
+			if c.debugJobs == nil {
+				c.debugJobs = make(map[string]*solver.Job)
+			}
+			c.debugJobs[req.Ref] = j
+			c.debugJobsMu.Unlock()
+		}()
+	}
+
 	atomic.AddInt64(&c.buildCount, 1)
 	defer atomic.AddInt64(&c.buildCount, -1)
 
@@ -307,17 +334,24 @@ func (c *Controller) Solve(ctx context.Context, req *controlapi.SolveRequest) (*
 		})
 	}
 
-	resp, err := c.solver.Solve(ctx, req.Ref, req.Session, frontend.SolveRequest{
+	solveReq := frontend.SolveRequest{
 		Frontend:       req.Frontend,
 		Definition:     req.Definition,
 		FrontendOpt:    req.FrontendAttrs,
 		FrontendInputs: req.FrontendInputs,
 		CacheImports:   cacheImports,
-	}, llbsolver.ExporterRequest{
+	}
+	expReq := llbsolver.ExporterRequest{
 		Exporter:        expi,
 		CacheExporter:   cacheExporter,
 		CacheExportMode: cacheExportMode,
-	}, req.Entitlements)
+	}
+	var resp *client.SolveResponse
+	if j != nil {
+		resp, err = c.solver.SolveWithJob(ctx, j, req.Session, solveReq, expReq, req.Entitlements)
+	} else {
+		resp, err = c.solver.Solve(ctx, req.Ref, req.Session, solveReq, expReq, req.Entitlements)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -526,4 +560,76 @@ func toPBBuildkitVersion(in client.BuildkitVersion) *apitypes.BuildkitVersion {
 		Version:  in.Version,
 		Revision: in.Revision,
 	}
+}
+
+func (c *Controller) DebugClose(ctx context.Context, req *controlapi.DebugCloseRequest) (*controlapi.DebugCloseResponse, error) {
+	c.debugJobsMu.Lock()
+	j, ok := c.debugJobs[req.Ref]
+	if ok {
+		delete(c.debugJobs, req.Ref)
+	}
+	c.debugJobsMu.Unlock()
+	if !ok {
+		return nil, fmt.Errorf("job %q isn't registered or not completed", req.Ref)
+	}
+	return &controlapi.DebugCloseResponse{}, j.Discard()
+}
+
+func (c *Controller) DebugExecProcess(srv controlapi.Control_DebugExecProcessServer) error {
+	return frontendgateway.ExecProcess(srv, func(ctx context.Context, req *frontendgateway.InitProcessRequest) (*frontendgateway.InitProcessResponse, error) {
+		init := req.Init
+		ref, ok := init.Attrs["control.ref.debug"]
+		if !ok {
+			return nil, fmt.Errorf("job ref must be passed")
+		}
+		vtx, ok := init.Attrs["control.vtx.debug"]
+		if !ok {
+			return nil, fmt.Errorf("target vtx must be passed")
+		}
+
+		c.debugJobsMu.Lock()
+		j, ok := c.debugJobs[ref]
+		c.debugJobsMu.Unlock()
+		if !ok {
+			return nil, fmt.Errorf("job %q isn't registered or not completed", ref)
+		}
+		handler, err := j.GetDebugHandler(ctx, vtx)
+		if err != nil {
+			return nil, stack.Enable(err)
+		} else if handler == nil {
+			return nil, stack.Enable(fmt.Errorf("Op %q doesn't implement debug handler", vtx))
+		}
+
+		var res frontendgateway.InitProcessResponse
+		procG, procGCtx := errgroup.WithContext(srv.Context())
+		procG.Go(func() error {
+			handler.Exec(procGCtx, func(meta executor.Meta) executor.ProcessInfo {
+				resize := make(chan executor.WinSize)
+				signal := make(chan syscall.Signal)
+				procInfo := executor.ProcessInfo{
+					Meta:   meta,
+					Stdin:  req.Stdin,
+					Stdout: req.Stdout,
+					Stderr: req.Stderr,
+					Resize: resize,
+					Signal: signal,
+				}
+				procInfo.Meta.Args = init.Meta.Args
+				procInfo.Meta.Tty = init.Tty
+				// TODO: allow overwrite other fields as well
+				res.ResizeCallback = func(ctx context.Context, size gatewayclient.WinSize) error {
+					resize <- executor.WinSize{Cols: size.Cols, Rows: size.Rows}
+					return nil
+				}
+				res.SignalCallback = func(ctx context.Context, sig syscall.Signal) error {
+					signal <- sig
+					return nil
+				}
+				return procInfo
+			})
+			return stack.Enable(err)
+		})
+		res.WaitForExit = procG.Wait
+		return &res, nil
+	})
 }

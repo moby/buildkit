@@ -230,6 +230,7 @@ message InitMessage{
 	repeated uint32 Fds = 3;
 	bool Tty = 4;
 	pb.SecurityMode Security = 5;
+	map<string, string> Attrs = 6;
 }
 
 message ExitMessage {

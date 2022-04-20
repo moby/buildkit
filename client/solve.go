@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -27,6 +28,9 @@ import (
 	fstypes "github.com/tonistiigi/fsutil/types"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
+
+	gatewayclient "github.com/moby/buildkit/frontend/gateway/client"
+	"github.com/moby/buildkit/frontend/gateway/grpcclient"
 )
 
 type SolveOpt struct {
@@ -42,6 +46,7 @@ type SolveOpt struct {
 	AllowedEntitlements   []entitlements.Entitlement
 	SharedSession         *session.Session // TODO: refactor to better session syncing
 	SessionPreInitialized bool             // TODO: refactor to better session syncing
+	Debug                 bool
 }
 
 type ExportEntry struct {
@@ -89,6 +94,9 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 
 	ref := identity.NewID()
 	eg, ctx := errgroup.WithContext(ctx)
+	if opt.Debug {
+		defer bklog.G(ctx).Infof("debug for build %q is enabled", ref)
+	}
 
 	statusContext, cancelStatus := context.WithCancel(context.Background())
 	defer cancelStatus()
@@ -216,6 +224,7 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			FrontendInputs: frontendInputs,
 			Cache:          cacheOpt.options,
 			Entitlements:   opt.AllowedEntitlements,
+			Debug:          opt.Debug,
 		})
 		if err != nil {
 			return errors.Wrap(err, "failed to solve")
@@ -259,6 +268,10 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 			resp, err := stream.Recv()
 			if err != nil {
 				if err == io.EOF {
+					return nil
+				} else if (errors.Is(err, context.Canceled) || errors.Is(statusContext.Err(), context.Canceled)) && opt.Debug {
+					// We cancel watching status while the job hasn't been discarded for debugging. This situation isn't an error.
+					bklog.G(ctx).WithError(err).Info("canceled watching status")
 					return nil
 				}
 				return errors.Wrap(err, "failed to receive status")
@@ -330,6 +343,26 @@ func (c *Client) solve(ctx context.Context, def *llb.Definition, runGateway runG
 		}
 	}
 	return res, nil
+}
+
+func (c *Client) DebugClose(ctx context.Context, ref string) error {
+	_, err := c.controlClient().DebugClose(ctx, &controlapi.DebugCloseRequest{
+		Ref: ref,
+	})
+	return err
+}
+
+func (c *Client) DebugExecProcess(ctx context.Context, ref, vtx string, req gatewayclient.StartRequest) (gatewayclient.ContainerProcess, error) {
+	// ensure message forwarder is started, only sets up stream first time called
+	if err := c.execMsgs.Start(); err != nil {
+		return nil, fmt.Errorf("failed to start execMsgs: %w", err)
+	}
+	if req.Attrs == nil {
+		req.Attrs = make(map[string]string)
+	}
+	req.Attrs["control.ref.debug"] = ref
+	req.Attrs["control.vtx.debug"] = vtx
+	return grpcclient.StartProcess(ctx, vtx, req, c.execMsgs)
 }
 
 func prepareSyncedDirs(def *llb.Definition, localDirs map[string]string) ([]filesync.SyncedDir, error) {
