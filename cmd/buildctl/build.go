@@ -87,6 +87,10 @@ var buildCommand = cli.Command{
 			Name:  "metadata-file",
 			Usage: "Output build metadata (e.g., image digest) to a file as JSON",
 		},
+		cli.StringFlag{
+			Name:  "response-file",
+			Usage: "Output full solver response to a file as JSON",
+		},
 	},
 }
 
@@ -267,6 +271,12 @@ func buildAction(clicontext *cli.Context) error {
 		for k, v := range resp.ExporterResponse {
 			logrus.Debugf("exporter response: %s=%s", k, v)
 		}
+		responseFile := clicontext.String("response-file")
+		if responseFile != "" {
+			if err := writeResponseFile(responseFile, resp); err != nil {
+				return err
+			}
+		}
 
 		metadataFile := clicontext.String("metadata-file")
 		if metadataFile != "" && resp.ExporterResponse != nil {
@@ -303,6 +313,14 @@ func writeMetadataFile(filename string, exporterResponse map[string]string) erro
 		out[k] = json.RawMessage(dt)
 	}
 	b, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		return err
+	}
+	return continuity.AtomicWriteFile(filename, b, 0666)
+}
+
+func writeResponseFile(filename string, resp *client.SolveResponse) error {
+	b, err := json.MarshalIndent(resp, "", "  ")
 	if err != nil {
 		return err
 	}
