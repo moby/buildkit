@@ -159,6 +159,7 @@ func (d *DefinitionOp) Marshal(ctx context.Context, c *Constraints) (digest.Dige
 	defer d.mu.Unlock()
 
 	meta := d.metas[d.dgst]
+	meta = mergeMetadata(meta, c.Metadata)
 	return d.dgst, d.defs[d.dgst], &meta, d.sources[d.dgst], nil
 }
 
