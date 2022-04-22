@@ -2091,6 +2091,7 @@ func TestMergeOp(t *testing.T) {
 
 	singleMerge, err := cm.Merge(ctx, baseRefs[:1], nil)
 	require.NoError(t, err)
+	require.True(t, singleMerge.(*immutableRef).getCommitted())
 	m, err := singleMerge.Mount(ctx, true, nil)
 	require.NoError(t, err)
 	ms, unmount, err := m.Mount()
@@ -2111,6 +2112,7 @@ func TestMergeOp(t *testing.T) {
 
 	merge1, err := cm.Merge(ctx, baseRefs[:3], nil)
 	require.NoError(t, err)
+	require.True(t, merge1.(*immutableRef).getCommitted())
 	_, err = merge1.Mount(ctx, true, nil)
 	require.NoError(t, err)
 	size1, err := merge1.(*immutableRef).size(ctx)
@@ -2120,6 +2122,7 @@ func TestMergeOp(t *testing.T) {
 
 	merge2, err := cm.Merge(ctx, baseRefs[3:], nil)
 	require.NoError(t, err)
+	require.True(t, merge2.(*immutableRef).getCommitted())
 	_, err = merge2.Mount(ctx, true, nil)
 	require.NoError(t, err)
 	size2, err := merge2.(*immutableRef).size(ctx)
@@ -2135,6 +2138,7 @@ func TestMergeOp(t *testing.T) {
 
 	merge3, err := cm.Merge(ctx, []ImmutableRef{merge1, merge2}, nil)
 	require.NoError(t, err)
+	require.True(t, merge3.(*immutableRef).getCommitted())
 	require.NoError(t, merge1.Release(ctx))
 	require.NoError(t, merge2.Release(ctx))
 	_, err = merge3.Mount(ctx, true, nil)
@@ -2406,6 +2410,64 @@ func TestMountReadOnly(t *testing.T) {
 		mutRef, err = cm.New(ctx, immutRef, nil)
 		require.NoError(t, err)
 	}
+}
+
+func TestLoadBrokenParents(t *testing.T) {
+	// Test that a ref that has a parent that can't be loaded will not result in any leaks
+	// of other parent refs
+	t.Parallel()
+
+	ctx := namespaces.WithNamespace(context.Background(), "buildkit-test")
+
+	tmpdir, err := os.MkdirTemp("", "cachemanager")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpdir)
+
+	snapshotter, err := native.NewSnapshotter(filepath.Join(tmpdir, "snapshots"))
+	require.NoError(t, err)
+
+	co, cleanup, err := newCacheManager(ctx, cmOpt{
+		tmpdir:          tmpdir,
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	defer cleanup()
+	cm := co.manager.(*cacheManager)
+
+	mutRef, err := cm.New(ctx, nil, nil)
+	require.NoError(t, err)
+	refA, err := mutRef.Commit(ctx)
+	require.NoError(t, err)
+	refAID := refA.ID()
+	mutRef, err = cm.New(ctx, nil, nil)
+	require.NoError(t, err)
+	refB, err := mutRef.Commit(ctx)
+	require.NoError(t, err)
+
+	_, err = cm.Merge(ctx, []ImmutableRef{refA, refB}, nil)
+	require.NoError(t, err)
+	checkDiskUsage(ctx, t, cm, 3, 0)
+
+	// set refB as deleted
+	require.NoError(t, refB.(*immutableRef).queueDeleted())
+	require.NoError(t, refB.(*immutableRef).commitMetadata())
+	require.NoError(t, cm.Close())
+	require.NoError(t, cleanup())
+
+	co, cleanup, err = newCacheManager(ctx, cmOpt{
+		tmpdir:          tmpdir,
+		snapshotter:     snapshotter,
+		snapshotterName: "native",
+	})
+	require.NoError(t, err)
+	defer cleanup()
+	cm = co.manager.(*cacheManager)
+
+	checkDiskUsage(ctx, t, cm, 0, 1)
+	refA, err = cm.Get(ctx, refAID, nil)
+	require.NoError(t, err)
+	require.Len(t, refA.(*immutableRef).refs, 1)
 }
 
 func checkDiskUsage(ctx context.Context, t *testing.T, cm Manager, inuse, unused int) {
