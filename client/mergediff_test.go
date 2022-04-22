@@ -1272,8 +1272,9 @@ func (tc verifyContents) Run(t *testing.T, sb integration.Sandbox) {
 					{
 						Type: ExporterImage,
 						Attrs: map[string]string{
-							"name": imageTarget,
-							"push": "true",
+							"name":                                   imageTarget,
+							"push":                                   "true",
+							"unsafe-internal-store-allow-incomplete": "true",
 						},
 					},
 				},

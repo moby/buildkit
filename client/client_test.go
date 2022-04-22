@@ -2968,8 +2968,10 @@ func testStargzLazyRegistryCacheImportExport(t *testing.T, sb integration.Sandbo
 			{
 				Type: ExporterImage,
 				Attrs: map[string]string{
-					"name": target,
-					"push": "true",
+					"name":                                   target,
+					"push":                                   "true",
+					"store":                                  "true",
+					"unsafe-internal-store-allow-incomplete": "true",
 				},
 			},
 		},
@@ -3111,10 +3113,12 @@ func testStargzLazyInlineCacheImportExport(t *testing.T, sb integration.Sandbox)
 			{
 				Type: ExporterImage,
 				Attrs: map[string]string{
-					"name":           target,
-					"push":           "true",
-					"oci-mediatypes": "true",
-					"compression":    "estargz",
+					"name":                                   target,
+					"push":                                   "true",
+					"oci-mediatypes":                         "true",
+					"compression":                            "estargz",
+					"store":                                  "true",
+					"unsafe-internal-store-allow-incomplete": "true",
 				},
 			},
 		},
@@ -3257,9 +3261,11 @@ func testStargzLazyPull(t *testing.T, sb integration.Sandbox) {
 			{
 				Type: ExporterImage,
 				Attrs: map[string]string{
-					"name":           target,
-					"push":           "true",
-					"oci-mediatypes": "true",
+					"name":                                   target,
+					"push":                                   "true",
+					"oci-mediatypes":                         "true",
+					"store":                                  "true",
+					"unsafe-internal-store-allow-incomplete": "true",
 				},
 			},
 		},
@@ -3354,8 +3360,10 @@ func testLazyImagePush(t *testing.T, sb integration.Sandbox) {
 			{
 				Type: ExporterImage,
 				Attrs: map[string]string{
-					"name": target,
-					"push": "true",
+					"name":                                   target,
+					"push":                                   "true",
+					"store":                                  "true",
+					"unsafe-internal-store-allow-incomplete": "true",
 				},
 			},
 		},
@@ -3392,8 +3400,10 @@ func testLazyImagePush(t *testing.T, sb integration.Sandbox) {
 			{
 				Type: ExporterImage,
 				Attrs: map[string]string{
-					"name": target2,
-					"push": "true",
+					"name":                                   target2,
+					"push":                                   "true",
+					"store":                                  "true",
+					"unsafe-internal-store-allow-incomplete": "true",
 				},
 			},
 		},
@@ -3424,8 +3434,10 @@ func testLazyImagePush(t *testing.T, sb integration.Sandbox) {
 			{
 				Type: ExporterImage,
 				Attrs: map[string]string{
-					"name": target3,
-					"push": "true",
+					"name":                                   target3,
+					"push":                                   "true",
+					"store":                                  "true",
+					"unsafe-internal-store-allow-incomplete": "true",
 				},
 			},
 		},
@@ -4838,8 +4850,10 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 			{
 				Type: ExporterImage,
 				Attrs: map[string]string{
-					"name": busyboxTarget,
-					"push": "true",
+					"name":                                   busyboxTarget,
+					"push":                                   "true",
+					"store":                                  "true",
+					"unsafe-internal-store-allow-incomplete": "true",
 				},
 			},
 		},
@@ -4939,8 +4953,10 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 			{
 				Type: ExporterImage,
 				Attrs: map[string]string{
-					"name": target,
-					"push": "true",
+					"name":                                   target,
+					"push":                                   "true",
+					"store":                                  "true",
+					"unsafe-internal-store-allow-incomplete": "true",
 				},
 			},
 		},
@@ -4993,8 +5009,10 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 		Exports: []ExportEntry{{
 			Type: ExporterImage,
 			Attrs: map[string]string{
-				"name": target,
-				"push": "true",
+				"name":                                   target,
+				"push":                                   "true",
+				"store":                                  "true",
+				"unsafe-internal-store-allow-incomplete": "true",
 			},
 		}},
 		CacheImports: cacheImports,
@@ -5029,8 +5047,10 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 		Exports: []ExportEntry{{
 			Type: ExporterImage,
 			Attrs: map[string]string{
-				"name": target,
-				"push": "true",
+				"name":                                   target,
+				"push":                                   "true",
+				"store":                                  "true",
+				"unsafe-internal-store-allow-incomplete": "true",
 			},
 		}},
 		CacheExports: cacheExports,
@@ -5100,8 +5120,10 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 		Exports: []ExportEntry{{
 			Type: ExporterImage,
 			Attrs: map[string]string{
-				"name": target,
-				"push": "true",
+				"name":                                   target,
+				"push":                                   "true",
+				"store":                                  "true",
+				"unsafe-internal-store-allow-incomplete": "true",
 			},
 		}},
 		CacheExports: cacheExports,
@@ -5144,8 +5166,10 @@ func testMergeOpCache(t *testing.T, sb integration.Sandbox, mode string) {
 		Exports: []ExportEntry{{
 			Type: ExporterImage,
 			Attrs: map[string]string{
-				"name": target,
-				"push": "true",
+				"name":                                   target,
+				"push":                                   "true",
+				"store":                                  "true",
+				"unsafe-internal-store-allow-incomplete": "true",
 			},
 		}},
 		CacheImports: cacheImports,
