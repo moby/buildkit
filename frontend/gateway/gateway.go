@@ -651,7 +651,7 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 				if err != nil {
 					return nil, err
 				}
-				if dtbi != nil && len(dtbi) > 0 {
+				if len(dtbi) > 0 {
 					if pbRes.Metadata == nil {
 						pbRes.Metadata = make(map[string][]byte)
 					}
@@ -684,7 +684,7 @@ func (lbf *llbBridgeForwarder) Solve(ctx context.Context, req *pb.SolveRequest) 
 			if err != nil {
 				return nil, err
 			}
-			if dtbi != nil && len(dtbi) > 0 {
+			if len(dtbi) > 0 {
 				if pbRes.Metadata == nil {
 					pbRes.Metadata = make(map[string][]byte)
 				}

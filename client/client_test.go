@@ -912,7 +912,6 @@ func testFrontendImageNaming(t *testing.T, sb integration.Sandbox) {
 	checkImageName := map[string]func(out, imageName string, exporterResponse map[string]string){
 		ExporterOCI: func(out, imageName string, exporterResponse map[string]string) {
 			// Nothing to check
-			return
 		},
 		ExporterDocker: func(out, imageName string, exporterResponse map[string]string) {
 			require.Contains(t, exporterResponse, "image.name")
