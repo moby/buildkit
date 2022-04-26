@@ -7,6 +7,8 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
+// WithAdditionalHeaders adds metadata to all outgoing gRPC calls. It acts just like metadata.Pairs does, and calls *will* fail if
+// you provide an odd number of items. Values should be in alternating key-value order - ("k1", "v1", "k1", "v2", "k2", "v3").
 func WithAdditionalHeaders(kv ...string) ClientOpt {
 	return &withAdditionalHeaders{kv}
 }
