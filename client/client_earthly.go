@@ -1,0 +1,30 @@
+package client
+
+import (
+	"context"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
+)
+
+func WithAdditionalHeaders(kv ...string) ClientOpt {
+	return &withAdditionalHeaders{kv}
+}
+
+type withAdditionalHeaders struct {
+	kv []string
+}
+
+func headersUnaryInterceptor(kv ...string) grpc.UnaryClientInterceptor {
+	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		ctx = metadata.AppendToOutgoingContext(ctx, kv...)
+		return invoker(ctx, method, req, reply, cc, opts...)
+	}
+}
+
+func headersStreamInterceptor(kv ...string) grpc.StreamClientInterceptor {
+	return func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+		ctx = metadata.AppendToOutgoingContext(ctx, kv...)
+		return streamer(ctx, desc, cc, method, opts...)
+	}
+}

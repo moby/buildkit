@@ -39,7 +39,7 @@ type ClientOpt interface{}
 // New returns a new buildkit client. Address can be empty for the system-default address.
 func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error) {
 	gopts := []grpc.DialOption{
-		grpc.WithInitialWindowSize(65535 * 32), //earthly
+		grpc.WithInitialWindowSize(65535 * 32),     //earthly
 		grpc.WithInitialConnWindowSize(65535 * 16), //earthly
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(defaults.DefaultMaxRecvMsgSize)),
 		grpc.WithDefaultCallOptions(grpc.MaxCallSendMsgSize(defaults.DefaultMaxSendMsgSize)),
@@ -55,6 +55,7 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 	var tracerProvider trace.TracerProvider
 	var tracerDelegate TracerDelegate
 	var sessionDialer func(context.Context, string, map[string][]string) (net.Conn, error)
+	var headersKV []string
 
 	for _, o := range opts {
 		if _, ok := o.(*withFailFast); ok {
@@ -83,6 +84,9 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 		if sd, ok := o.(*withSessionDialer); ok {
 			sessionDialer = sd.dialer
 		}
+		if h, ok := o.(*withAdditionalHeaders); ok {
+			headersKV = h.kv
+		}
 	}
 
 	if !customTracer {
@@ -109,6 +113,10 @@ func New(ctx context.Context, address string, opts ...ClientOpt) (*Client, error
 	}
 	if address == "" {
 		address = appdefaults.Address
+	}
+	if len(headersKV) > 0 {
+		unary = append(unary, headersUnaryInterceptor(headersKV...))
+		stream = append(stream, headersStreamInterceptor(headersKV...))
 	}
 
 	// Setting :authority pseudo header
