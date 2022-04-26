@@ -19,6 +19,7 @@ import (
 	"github.com/moby/buildkit/frontend/gateway/client"
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
+	"github.com/moby/buildkit/session/sessionio"
 	opspb "github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
 	"github.com/moby/buildkit/util/bklog"
@@ -81,7 +82,16 @@ func current() (GrpcClient, error) {
 		return nil, err
 	}
 
-	return New(ctx, opts(), sessionID(), product(), pb.NewLLBBridgeClient(conn), workers())
+	c, err := New(ctx, opts(), sessionID(), product(), pb.NewLLBBridgeClient(conn), workers())
+	if err != nil {
+		return nil, err
+	}
+	if cg, ok := c.(*grpcClient); ok {
+		cg.newSessionIO = func() (ioClient *sessionio.IOClient, stdin io.ReadCloser, stdout, stderr io.WriteCloser, err error) {
+			return sessionio.New(conn)
+		}
+	}
+	return c, nil
 }
 
 func convertRef(ref client.Reference) (*pb.Ref, error) {
@@ -268,15 +278,16 @@ func defaultLLBCaps() []apicaps.PBCap {
 }
 
 type grpcClient struct {
-	client    pb.LLBBridgeClient
-	opts      map[string]string
-	sessionID string
-	product   string
-	workers   []client.WorkerInfo
-	caps      apicaps.CapSet
-	llbCaps   apicaps.CapSet
-	requests  map[string]*pb.SolveRequest
-	execMsgs  *messageForwarder
+	client       pb.LLBBridgeClient
+	opts         map[string]string
+	sessionID    string
+	product      string
+	workers      []client.WorkerInfo
+	caps         apicaps.CapSet
+	llbCaps      apicaps.CapSet
+	requests     map[string]*pb.SolveRequest
+	execMsgs     *messageForwarder
+	newSessionIO func() (ioClient *sessionio.IOClient, stdin io.ReadCloser, stdout, stderr io.WriteCloser, err error)
 }
 
 func (c *grpcClient) requestForRef(ref client.Reference) (*pb.SolveRequest, error) {
@@ -311,6 +322,25 @@ func (c *grpcClient) Warn(ctx context.Context, dgst digest.Digest, msg string, o
 		Url:    opts.URL,
 	})
 	return err
+}
+
+func (c *grpcClient) SessionIO(ctx context.Context, signalFn func(context.Context, syscall.Signal) error, resizeFn func(context.Context, client.WinSize) error) (stdin io.ReadCloser, stdout, stderr io.WriteCloser, done func() error, _ error) {
+	if c.newSessionIO == nil {
+		return nil, nil, nil, nil, fmt.Errorf("session IO is unavailable")
+	}
+	ioClient, stdin, stdout, stderr, err := c.newSessionIO()
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	ioClient.SignalFn = signalFn
+	ioClient.ResizeFn = func(ctx context.Context, win sessionio.WinSize) error {
+		return resizeFn(ctx, client.WinSize{Rows: win.Rows, Cols: win.Cols})
+	}
+	if err := ioClient.Start(ctx); err != nil {
+		ioClient.Close()
+		return nil, nil, nil, nil, err
+	}
+	return stdin, stdout, stderr, ioClient.Close, nil
 }
 
 func (c *grpcClient) Solve(ctx context.Context, creq client.SolveRequest) (res *client.Result, err error) {

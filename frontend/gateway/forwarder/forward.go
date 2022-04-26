@@ -2,7 +2,9 @@ package forwarder
 
 import (
 	"context"
+	"io"
 	"sync"
+	"syscall"
 
 	cacheutil "github.com/moby/buildkit/cache/util"
 	"github.com/moby/buildkit/client/llb"
@@ -12,6 +14,7 @@ import (
 	gwpb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/session/sessionio"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/errdefs"
@@ -49,6 +52,22 @@ type bridgeClient struct {
 	refs          []*ref
 	workers       worker.Infos
 	workerRefByID map[string]*worker.WorkerRef
+}
+
+func (c *bridgeClient) SessionIO(ctx context.Context, signalFn func(context.Context, syscall.Signal) error, resizeFn func(context.Context, client.WinSize) error) (stdin io.ReadCloser, stdout, stderr io.WriteCloser, done func() error, _ error) {
+	ioClient, stdin, stdout, stderr, err := sessionio.NewFromSession(ctx, c.sm, c.sid)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	ioClient.SignalFn = signalFn
+	ioClient.ResizeFn = func(ctx context.Context, win sessionio.WinSize) error {
+		return resizeFn(ctx, client.WinSize{Rows: win.Rows, Cols: win.Cols})
+	}
+	if err := ioClient.Start(ctx); err != nil {
+		ioClient.Close()
+		return nil, nil, nil, nil, err
+	}
+	return stdin, stdout, stderr, ioClient.Close, nil
 }
 
 func (c *bridgeClient) Solve(ctx context.Context, req client.SolveRequest) (*client.Result, error) {
@@ -228,7 +247,7 @@ func (c *bridgeClient) NewContainer(ctx context.Context, req client.NewContainer
 		Mounts:      make([]gateway.Mount, len(req.Mounts)),
 	}
 
-	eg, ctx := errgroup.WithContext(ctx)
+	eg, egCtx := errgroup.WithContext(ctx)
 
 	for i, m := range req.Mounts {
 		i, m := i, m
@@ -240,7 +259,7 @@ func (c *bridgeClient) NewContainer(ctx context.Context, req client.NewContainer
 					return errors.Errorf("unexpected Ref type: %T", m.Ref)
 				}
 
-				res, err := refProxy.Result(ctx)
+				res, err := refProxy.Result(egCtx)
 				if err != nil {
 					return err
 				}

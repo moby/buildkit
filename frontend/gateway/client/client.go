@@ -20,6 +20,7 @@ type Client interface {
 	Inputs(ctx context.Context) (map[string]llb.State, error)
 	NewContainer(ctx context.Context, req NewContainerRequest) (Container, error)
 	Warn(ctx context.Context, dgst digest.Digest, msg string, opts WarnOpts) error
+	SessionIO(ctx context.Context, signalFn func(context.Context, syscall.Signal) error, resizeFn func(context.Context, WinSize) error) (stdin io.ReadCloser, stdout, stderr io.WriteCloser, done func() error, retErr error)
 }
 
 // NewContainerRequest encapsulates the requirements for a client to define a

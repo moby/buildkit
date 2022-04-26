@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
+	"sync"
 
+	"github.com/containerd/console"
 	"github.com/containerd/continuity"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/client/llb"
@@ -14,6 +17,7 @@ import (
 	bccommon "github.com/moby/buildkit/cmd/buildctl/common"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/auth/authprovider"
+	"github.com/moby/buildkit/session/sessionio"
 	"github.com/moby/buildkit/session/sshforward/sshprovider"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/progress/progresswriter"
@@ -87,6 +91,10 @@ var buildCommand = cli.Command{
 			Name:  "metadata-file",
 			Usage: "Output build metadata (e.g., image digest) to a file as JSON",
 		},
+		cli.BoolFlag{
+			Name:  "interactive",
+			Usage: "Allow forwarding stdio and signals to the builder.",
+		},
 	},
 }
 
@@ -159,6 +167,34 @@ func buildAction(clicontext *cli.Context) error {
 			return err
 		}
 		attachable = append(attachable, secretProvider)
+	}
+
+	if clicontext.Bool("interactive") {
+		if clicontext.String("progress") != "plain" {
+			return fmt.Errorf("\"progress\" must be \"plain\" to use \"interactive\" option")
+		}
+		var serving bool
+		var servingMu sync.Mutex
+		attachable = append(attachable, sessionio.NewProvider(func(ctx context.Context) (sessionio.IOConfig, error) {
+			servingMu.Lock()
+			if serving {
+				servingMu.Unlock()
+				return sessionio.IOConfig{}, fmt.Errorf("IO is ongoing; one client is only supported as of now")
+			}
+			serving = true
+			servingMu.Unlock()
+			ioCtx, ioCancel := context.WithCancel(ctx)
+			sigCh, resCh := watchSignal(ioCtx, console.Current())
+			closeFn := func() error {
+				ioCancel()
+				servingMu.Lock()
+				serving = false
+				servingMu.Unlock()
+				return nil
+			}
+			return sessionio.IOConfig{Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr,
+				Signal: sigCh, Resize: resCh, Close: closeFn}, nil
+		}))
 	}
 
 	allowed, err := build.ParseAllow(clicontext.StringSlice("allow"))

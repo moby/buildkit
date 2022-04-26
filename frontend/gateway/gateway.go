@@ -32,6 +32,7 @@ import (
 	pb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/session/sessionio"
 	"github.com/moby/buildkit/snapshot"
 	"github.com/moby/buildkit/solver"
 	"github.com/moby/buildkit/solver/errdefs"
@@ -431,6 +432,11 @@ func serveLLBBridgeForwarder(ctx context.Context, llbBridge frontend.FrontendLLB
 	server := grpc.NewServer(grpc.UnaryInterceptor(grpcerrors.UnaryServerInterceptor), grpc.StreamInterceptor(grpcerrors.StreamServerInterceptor))
 	grpc_health_v1.RegisterHealthServer(server, health.NewServer())
 	pb.RegisterLLBBridgeServer(server, lbf)
+	if s, err := sessionio.NewServerFromSession(ctx, sm, sid); err == nil {
+		sessionio.RegisterIOForwarderServer(server, s)
+	} else {
+		bklog.G(ctx).WithError(err).Debugf("failed to attach session IO")
+	}
 
 	go func() {
 		serve(ctx, server, lbf.conn)

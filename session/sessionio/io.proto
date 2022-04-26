@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package moby.sessionio.v1;
+
+option go_package = "sessionio";
+
+service IOForwarder {
+	rpc ForwardIO(stream Message) returns (stream Message);
+}
+
+message Message {
+	oneof Input {
+		// InitDoneMessage is used from server to client to notify server is ready
+		InitDoneMessage InitDone = 1;
+		// FdMessage used from client to server for input (stdout, stderr) and 
+		// from server to client for output (stdin)
+		FdMessage File = 2;
+		// ResizeMessage used from server to client for terminal resize events
+		ResizeMessage Resize = 3;
+		// SignalMessage is used from server to client to send signal events
+		SignalMessage Signal = 4;
+	}
+}
+
+message InitDoneMessage{
+	string error = 1; // typed errors?
+}
+
+message FdMessage{
+	uint32 Fd = 1; // what fd the data was from
+	bool EOF = 2;  // true if eof was reached
+	bytes Data = 3; // should be chunked smaller than 4MB: https://pkg.go.dev/google.golang.org/grpc#MaxRecvMsgSize
+}
+
+message ResizeMessage{
+	uint32 Rows = 1;
+	uint32 Cols = 2;
+}
+
+message SignalMessage {
+	// we only send name (ie HUP, INT) because the int values
+	// are platform dependent.
+	string Name = 1;
+}
