@@ -551,9 +551,7 @@ func (j *Job) Discard() error {
 			delete(st.jobs, j)
 			j.list.deleteIfUnreferenced(k, st)
 		}
-		if _, ok := st.allPw[j.pw]; ok {
-			delete(st.allPw, j.pw)
-		}
+		delete(st.allPw, j.pw)
 		st.mu.Unlock()
 	}
 

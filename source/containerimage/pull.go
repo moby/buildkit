@@ -178,7 +178,7 @@ func (p *puller) CacheKey(ctx context.Context, g session.Group, index int) (cach
 	progressFactory := progress.FromContext(ctx)
 
 	_, err = p.g.Do(ctx, "", func(ctx context.Context) (_ interface{}, err error) {
-		if p.cacheKeyErr != nil || p.cacheKeyDone == true {
+		if p.cacheKeyErr != nil || p.cacheKeyDone {
 			return nil, p.cacheKeyErr
 		}
 		defer func() {

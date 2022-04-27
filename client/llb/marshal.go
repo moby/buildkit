@@ -87,10 +87,7 @@ func MarshalConstraints(base, override *Constraints) (*pb.Op, *pb.OpMetadata) {
 		c.Platform = p
 	}
 
-	for _, wc := range override.WorkerConstraints {
-		c.WorkerConstraints = append(c.WorkerConstraints, wc)
-	}
-
+	c.WorkerConstraints = append(c.WorkerConstraints, override.WorkerConstraints...)
 	c.Metadata = mergeMetadata(c.Metadata, override.Metadata)
 
 	if c.Platform == nil {

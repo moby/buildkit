@@ -426,7 +426,7 @@ func patchImageConfig(dt []byte, descs []ocispecs.Descriptor, history []ocispecs
 			return nil, err
 		}
 		m[binfotypes.ImageConfigField] = dt
-	} else if _, ok := m[binfotypes.ImageConfigField]; ok {
+	} else {
 		delete(m, binfotypes.ImageConfigField)
 	}
 

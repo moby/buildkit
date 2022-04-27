@@ -619,9 +619,7 @@ var (
 
 func Require(filters ...string) ConstraintsOpt {
 	return constraintsOptFunc(func(c *Constraints) {
-		for _, f := range filters {
-			c.WorkerConstraints = append(c.WorkerConstraints, f)
-		}
+		c.WorkerConstraints = append(c.WorkerConstraints, filters...)
 	})
 }
 
