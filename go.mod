@@ -8,7 +8,7 @@ require (
 	github.com/agext/levenshtein v1.2.3
 	github.com/armon/circbuf v0.0.0-20190214190532-5111143e8da2
 	github.com/containerd/console v1.0.3
-	github.com/containerd/containerd v1.6.3-0.20220401172941-5ff8fce1fcc6
+	github.com/containerd/containerd v1.6.3
 	github.com/containerd/continuity v0.3.0
 	github.com/containerd/fuse-overlayfs-snapshotter v1.0.2
 	github.com/containerd/go-cni v1.1.4
