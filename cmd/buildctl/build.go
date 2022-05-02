@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/containerd/continuity"
 	"github.com/docker/cli/cli/config"
@@ -13,6 +15,7 @@ import (
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/cmd/buildctl/build"
 	bccommon "github.com/moby/buildkit/cmd/buildctl/common"
+	gateway "github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/auth/authprovider"
 	"github.com/moby/buildkit/session/sshforward/sshprovider"
@@ -262,13 +265,40 @@ func buildAction(clicontext *cli.Context) error {
 		}
 	}
 
+	var subMetadata map[string][]byte
+
 	eg.Go(func() error {
 		defer func() {
 			for _, w := range writers {
 				close(w.Status())
 			}
 		}()
-		resp, err := c.Solve(ctx, def, solveOpt, progresswriter.ResetTime(mw.WithPrefix("", false)).Status())
+		sreq := gateway.SolveRequest{
+			Frontend:    solveOpt.Frontend,
+			FrontendOpt: solveOpt.FrontendAttrs,
+		}
+		if def != nil {
+			sreq.Definition = def.ToPB()
+		}
+		solveOpt.Frontend = ""
+		solveOpt.FrontendAttrs = nil
+
+		resp, err := c.Build(ctx, solveOpt, "buildctl", func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+			_, isSubRequest := sreq.FrontendOpt["requestid"]
+			if isSubRequest {
+				if _, ok := sreq.FrontendOpt["frontend.caps"]; !ok {
+					sreq.FrontendOpt["frontend.caps"] = "moby.buildkit.frontend.subrequests"
+				}
+			}
+			res, err := c.Solve(ctx, sreq)
+			if err != nil {
+				return nil, err
+			}
+			if isSubRequest && res != nil {
+				subMetadata = res.Metadata
+			}
+			return res, err
+		}, progresswriter.ResetTime(mw.WithPrefix("", false)).Status())
 		if err != nil {
 			return err
 		}
@@ -291,7 +321,16 @@ func buildAction(clicontext *cli.Context) error {
 		return pw.Err()
 	})
 
-	return eg.Wait()
+	if err := eg.Wait(); err != nil {
+		return err
+	}
+
+	for k, v := range subMetadata {
+		if strings.HasPrefix(k, "result.") {
+			fmt.Printf("%s\n", v)
+		}
+	}
+	return nil
 }
 
 func writeMetadataFile(filename string, exporterResponse map[string]string) error {
