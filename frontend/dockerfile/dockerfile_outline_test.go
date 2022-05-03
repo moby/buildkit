@@ -19,6 +19,7 @@ import (
 
 var outlineTests = integration.TestFuncs(
 	testOutlineArgs,
+	testOutlineSecrets,
 	testOutlineDescribeDefinition,
 )
 
@@ -116,6 +117,105 @@ FROM second
 		arg = outline.Args[4]
 		require.Equal(t, "ABC", arg.Name)
 		require.Equal(t, "a", arg.Value)
+
+		called = true
+		return nil, nil
+	}
+
+	_, err = c.Build(sb.Context(), client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+		},
+	}, "", frontend, nil)
+	require.NoError(t, err)
+
+	require.True(t, called)
+}
+
+func testOutlineSecrets(t *testing.T, sb integration.Sandbox) {
+	f := getFrontend(t, sb)
+	if _, ok := f.(*clientFrontend); !ok {
+		t.Skip("only test with client frontend")
+	}
+
+	dockerfile := []byte(`
+FROM busybox AS first
+RUN --mount=type=secret,target=/etc/passwd,required=true --mount=type=ssh true
+
+FROM alpine AS second
+RUN --mount=type=secret,id=unused --mount=type=ssh,id=ssh2 true
+
+FROM scratch AS third
+ARG BAR
+RUN --mount=type=secret,id=second${BAR} true
+
+FROM third AS target
+COPY --from=first /foo /
+RUN --mount=type=ssh,id=ssh3,required true
+
+FROM second
+`)
+
+	dir, err := tmpdir(
+		fstest.CreateFile("Dockerfile", []byte(dockerfile), 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	c, err := client.New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	destDir, err := os.MkdirTemp("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	called := false
+	frontend := func(ctx context.Context, c gateway.Client) (*gateway.Result, error) {
+		res, err := c.Solve(ctx, gateway.SolveRequest{
+			FrontendOpt: map[string]string{
+				"frontend.caps": "moby.buildkit.frontend.subrequests",
+				"requestid":     "frontend.outline",
+				"build-arg:BAR": "678",
+				"target":        "target",
+			},
+			Frontend: "dockerfile.v0",
+		})
+		require.NoError(t, err)
+
+		outline, err := unmarshalOutline(res)
+		require.NoError(t, err)
+
+		require.Equal(t, 1, len(outline.Sources))
+		require.Equal(t, dockerfile, outline.Sources[0])
+
+		require.Equal(t, 2, len(outline.Secrets))
+
+		secret := outline.Secrets[0]
+		require.Equal(t, "passwd", secret.Name)
+		require.Equal(t, true, secret.Required)
+		require.Equal(t, int32(0), secret.Location.SourceIndex)
+		require.Equal(t, int32(3), secret.Location.Ranges[0].Start.Line)
+
+		secret = outline.Secrets[1]
+		require.Equal(t, "second678", secret.Name)
+		require.Equal(t, false, secret.Required)
+		require.Equal(t, int32(0), secret.Location.SourceIndex)
+		require.Equal(t, int32(10), secret.Location.Ranges[0].Start.Line)
+
+		require.Equal(t, 2, len(outline.SSH))
+
+		ssh := outline.SSH[0]
+		require.Equal(t, "default", ssh.Name)
+		require.Equal(t, false, ssh.Required)
+		require.Equal(t, int32(0), ssh.Location.SourceIndex)
+		require.Equal(t, int32(3), ssh.Location.Ranges[0].Start.Line)
+
+		ssh = outline.SSH[1]
+		require.Equal(t, "ssh3", ssh.Name)
+		require.Equal(t, true, ssh.Required)
+		require.Equal(t, int32(0), ssh.Location.SourceIndex)
+		require.Equal(t, int32(14), ssh.Location.Ranges[0].Start.Line)
 
 		called = true
 		return nil, nil

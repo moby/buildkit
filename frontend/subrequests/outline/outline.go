@@ -30,7 +30,7 @@ var SubrequestsOutlineDefinition = subrequests.Request{
 
 type Outline struct {
 	Args    []Arg        `json:"args,omitempty"`
-	Secret  []Secret     `json:"secret,omitempty"`
+	Secrets []Secret     `json:"secrets,omitempty"`
 	SSH     []SSH        `json:"ssh,omitempty"`
 	Cache   []CacheMount `json:"cache,omitempty"`
 	Sources [][]byte     `json:"sources,omitempty"`
@@ -56,13 +56,16 @@ type Arg struct {
 type Secret struct {
 	Name     string
 	Required bool
+	Location *pb.Location
 }
 
 type SSH struct {
 	Name     string
 	Required bool
+	Location *pb.Location
 }
 
 type CacheMount struct {
-	ID string
+	ID       string
+	Location *pb.Location
 }
