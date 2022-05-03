@@ -12,14 +12,16 @@ func TestSpecFromURL(t *testing.T) {
 		"ssh://foo": {
 			Host: "foo",
 		},
-		"ssh://me@foo:10022": {
-			User: "me", Host: "foo", Port: "10022",
+		"ssh://me@foo:10022/s/o/c/k/e/t.sock": {
+			User: "me", Host: "foo", Port: "10022", Socket: "/s/o/c/k/e/t.sock",
 		},
 		"ssh://me:passw0rd@foo": nil,
-		"ssh://foo/bar":         nil,
-		"ssh://foo?bar":         nil,
-		"ssh://foo#bar":         nil,
-		"ssh://":                nil,
+		"ssh://foo/bar": {
+			Host: "foo", Socket: "/bar",
+		},
+		"ssh://foo?bar": nil,
+		"ssh://foo#bar": nil,
+		"ssh://":        nil,
 	}
 	for s, expected := range cases {
 		u, err := url.Parse(s)

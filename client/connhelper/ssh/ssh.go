@@ -23,25 +23,31 @@ func Helper(u *url.URL) (*connhelper.ConnectionHelper, error) {
 	}
 	return &connhelper.ConnectionHelper{
 		ContextDialer: func(ctx context.Context, addr string) (net.Conn, error) {
-			ctxFlags := []string{}
+			args := []string{}
 			if sp.User != "" {
-				ctxFlags = append(ctxFlags, "-l", sp.User)
+				args = append(args, "-l", sp.User)
 			}
 			if sp.Port != "" {
-				ctxFlags = append(ctxFlags, "-p", sp.Port)
+				args = append(args, "-p", sp.Port)
 			}
-			ctxFlags = append(ctxFlags, "--", sp.Host)
+			args = append(args, "--", sp.Host)
+			args = append(args, "buildctl")
+			if socket := sp.Socket; socket != "" {
+				args = append(args, "--addr", "unix://"+socket)
+			}
+			args = append(args, "dial-stdio")
 			// using background context because context remains active for the duration of the process, after dial has completed
-			return commandconn.New(context.Background(), "ssh", append(ctxFlags, []string{"buildctl", "dial-stdio"}...)...)
+			return commandconn.New(context.Background(), "ssh", args...)
 		},
 	}, nil
 }
 
 // Spec
 type Spec struct {
-	User string
-	Host string
-	Port string
+	User   string
+	Host   string
+	Port   string
+	Socket string
 }
 
 // SpecFromURL creates Spec from URL.
@@ -49,8 +55,9 @@ type Spec struct {
 // Only <host> part is mandatory.
 func SpecFromURL(u *url.URL) (*Spec, error) {
 	sp := Spec{
-		Host: u.Hostname(),
-		Port: u.Port(),
+		Host:   u.Hostname(),
+		Port:   u.Port(),
+		Socket: u.Path,
 	}
 	if user := u.User; user != nil {
 		sp.User = user.Username()
@@ -60,9 +67,6 @@ func SpecFromURL(u *url.URL) (*Spec, error) {
 	}
 	if sp.Host == "" {
 		return nil, errors.Errorf("no host specified")
-	}
-	if u.Path != "" {
-		return nil, errors.Errorf("extra path after the host: %q", u.Path)
 	}
 	if u.RawQuery != "" {
 		return nil, errors.Errorf("extra query after the host: %q", u.RawQuery)
