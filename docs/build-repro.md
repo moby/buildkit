@@ -126,4 +126,4 @@ jq '.' metadata.json
   },
   "containerimage.digest": "sha256:..."
 }
-```
+```blackrgound air
