@@ -24,6 +24,7 @@ import (
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
 	"github.com/moby/buildkit/frontend/dockerfile/shell"
 	"github.com/moby/buildkit/frontend/subrequests/outline"
+	"github.com/moby/buildkit/frontend/subrequests/targets"
 	"github.com/moby/buildkit/identity"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/moby/buildkit/util/apicaps"
@@ -88,6 +89,35 @@ func Dockefile2Outline(ctx context.Context, dt []byte, opt ConvertOpt) (*outline
 	}
 	o := ds.Outline(dt)
 	return &o, nil
+}
+
+func ListTargets(ctx context.Context, dt []byte) (*targets.List, error) {
+	dockerfile, err := parser.Parse(bytes.NewReader(dt))
+	if err != nil {
+		return nil, err
+	}
+	stages, _, err := instructions.Parse(dockerfile.AST)
+	if err != nil {
+		return nil, err
+	}
+
+	l := &targets.List{
+		Sources: [][]byte{dt},
+	}
+
+	for i, s := range stages {
+		if s.Name == "" && i != len(stages)-1 {
+			continue
+		}
+		t := targets.Target{
+			Name:        s.Name,
+			Description: s.Comment,
+			Default:     i == len(stages)-1,
+			Location:    toSourceLocation(s.Location),
+		}
+		l.Targets = append(l.Targets, t)
+	}
+	return l, nil
 }
 
 func toDispatchState(ctx context.Context, dt []byte, opt ConvertOpt) (*dispatchState, *binfotypes.BuildInfo, error) {

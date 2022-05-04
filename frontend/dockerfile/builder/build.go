@@ -25,6 +25,7 @@ import (
 	"github.com/moby/buildkit/frontend/gateway/client"
 	gwpb "github.com/moby/buildkit/frontend/gateway/pb"
 	"github.com/moby/buildkit/frontend/subrequests/outline"
+	"github.com/moby/buildkit/frontend/subrequests/targets"
 	"github.com/moby/buildkit/solver/errdefs"
 	"github.com/moby/buildkit/solver/pb"
 	binfotypes "github.com/moby/buildkit/util/buildinfo/types"
@@ -465,6 +466,12 @@ func Build(ctx context.Context, c client.Client) (_ *client.Result, err error) {
 				return nil, err
 			}
 			return o.ToResult()
+		case targets.SubrequestsTargetsDefinition.Name:
+			targets, err := dockerfile2llb.ListTargets(ctx, dtDockerfile)
+			if err != nil {
+				return nil, err
+			}
+			return targets.ToResult()
 		default:
 			return nil, errdefs.NewUnsupportedSubrequestError(req)
 		}

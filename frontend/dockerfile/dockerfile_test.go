@@ -201,6 +201,7 @@ func TestIntegration(t *testing.T) {
 		}))...)
 	integration.Run(t, heredocTests, opts...)
 	integration.Run(t, outlineTests, opts...)
+	integration.Run(t, targetsTests, opts...)
 }
 
 func testDefaultEnvWithArgs(t *testing.T, sb integration.Sandbox) {
