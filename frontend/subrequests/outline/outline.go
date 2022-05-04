@@ -14,7 +14,7 @@ var SubrequestsOutlineDefinition = subrequests.Request{
 	Name:        RequestSubrequestsOutline,
 	Version:     "1.0.0",
 	Type:        subrequests.TypeRPC,
-	Description: "List all parameters current build takes",
+	Description: "List all parameters current build target supports",
 	Opts: []subrequests.Named{
 		{
 			Name:        "target",
@@ -29,11 +29,13 @@ var SubrequestsOutlineDefinition = subrequests.Request{
 }
 
 type Outline struct {
-	Args    []Arg        `json:"args,omitempty"`
-	Secrets []Secret     `json:"secrets,omitempty"`
-	SSH     []SSH        `json:"ssh,omitempty"`
-	Cache   []CacheMount `json:"cache,omitempty"`
-	Sources [][]byte     `json:"sources,omitempty"`
+	Name        string       `json:"name,omitempty"`
+	Description string       `json:"description,omitempty"`
+	Args        []Arg        `json:"args,omitempty"`
+	Secrets     []Secret     `json:"secrets,omitempty"`
+	SSH         []SSH        `json:"ssh,omitempty"`
+	Cache       []CacheMount `json:"cache,omitempty"`
+	Sources     [][]byte     `json:"sources,omitempty"`
 }
 
 func (o Outline) ToResult() (*client.Result, error) {

@@ -49,13 +49,15 @@ RUN true
 FROM scratch AS third
 ARG ABC=a
 
+# target defines build target
 FROM third AS target
 COPY --from=first /etc/passwd /
 
 FROM second
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", []byte(dockerfile), 0600),
 	)
 	require.NoError(t, err)
@@ -84,6 +86,9 @@ FROM second
 
 		outline, err := unmarshalOutline(res)
 		require.NoError(t, err)
+
+		require.Equal(t, "target", outline.Name)
+		require.Equal(t, "defines build target", outline.Description)
 
 		require.Equal(t, 1, len(outline.Sources))
 		require.Equal(t, dockerfile, outline.Sources[0])
@@ -156,7 +161,8 @@ RUN --mount=type=ssh,id=ssh3,required true
 FROM second
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", []byte(dockerfile), 0600),
 	)
 	require.NoError(t, err)
@@ -246,7 +252,8 @@ FROM scratch
 COPY Dockerfile Dockerfile
 `)
 
-	dir, err := tmpdir(
+	dir, err := integration.Tmpdir(
+		t,
 		fstest.CreateFile("Dockerfile", dockerfile, 0600),
 	)
 	require.NoError(t, err)

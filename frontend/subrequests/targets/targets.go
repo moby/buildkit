@@ -14,7 +14,7 @@ var SubrequestsTargetsDefinition = subrequests.Request{
 	Name:        RequestTargets,
 	Version:     "1.0.0",
 	Type:        subrequests.TypeRPC,
-	Description: "List all targets current build takes",
+	Description: "List all targets current build supports",
 	Opts:        []subrequests.Named{},
 	Metadata: []subrequests.Named{
 		{

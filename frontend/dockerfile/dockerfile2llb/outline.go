@@ -163,10 +163,12 @@ func (ds *dispatchState) Outline(dt []byte) outline.Outline {
 	})
 
 	out := outline.Outline{
-		Sources: [][]byte{dt},
-		Args:    args,
-		Secrets: secrets,
-		SSH:     ssh,
+		Name:        ds.stage.Name,
+		Description: ds.stage.Comment,
+		Sources:     [][]byte{dt},
+		Args:        args,
+		Secrets:     secrets,
+		SSH:         ssh,
 	}
 
 	return out

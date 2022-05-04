@@ -29,9 +29,9 @@ func checkSubRequest(ctx context.Context, opts map[string]string) (*client.Resul
 
 func describe() (*client.Result, error) {
 	all := []subrequests.Request{
-		subrequests.SubrequestsDescribeDefinition,
 		outline.SubrequestsOutlineDefinition,
 		targets.SubrequestsTargetsDefinition,
+		subrequests.SubrequestsDescribeDefinition,
 	}
 	dt, err := json.MarshalIndent(all, "", "  ")
 	if err != nil {
