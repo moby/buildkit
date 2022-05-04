@@ -5322,6 +5322,7 @@ COPY --from=base /out /
 
 	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
 		FrontendAttrs: map[string]string{
+			// Make sure image resolution works as expected, do not add a tag or locator.
 			"context:busybox": "docker-image://alpine",
 		},
 		LocalDirs: map[string]string{
@@ -5340,6 +5341,95 @@ COPY --from=base /out /
 	dt, err := ioutil.ReadFile(filepath.Join(destDir, "out"))
 	require.NoError(t, err)
 	require.True(t, len(dt) > 0)
+
+	// Now test with an image with custom envs
+	dockerfile = []byte(`
+FROM alpine:latest
+ENV PATH=/foobar:$PATH
+ENV FOOBAR=foobar
+`)
+
+	dir, err = tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+	target := registry + "/buildkit/testnamedimagecontext:latest"
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type: client.ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dockerfile = []byte(`
+FROM busybox AS base
+RUN cat /etc/alpine-release > /out
+RUN env | grep PATH > /env_path
+RUN env | grep FOOBAR > /env_foobar
+FROM scratch
+COPY --from=base /out /
+COPY --from=base /env_path /
+COPY --from=base /env_foobar /
+	`)
+
+	dir, err = tmpdir(
+		fstest.CreateFile("Dockerfile", dockerfile, 0600),
+	)
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+
+	f = getFrontend(t, sb)
+
+	destDir, err = os.MkdirTemp("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = f.Solve(sb.Context(), c, client.SolveOpt{
+		FrontendAttrs: map[string]string{
+			"context:busybox": "docker-image://" + target,
+		},
+		LocalDirs: map[string]string{
+			builder.DefaultLocalNameDockerfile: dir,
+			builder.DefaultLocalNameContext:    dir,
+		},
+		Exports: []client.ExportEntry{
+			{
+				Type:      client.ExporterLocal,
+				OutputDir: destDir,
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "out"))
+	require.NoError(t, err)
+	require.True(t, len(dt) > 0)
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "env_foobar"))
+	require.NoError(t, err)
+	require.Equal(t, "FOOBAR=foobar", strings.TrimSpace(string(dt)))
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "env_path"))
+	require.NoError(t, err)
+	require.Contains(t, string(dt), "/foobar:")
 }
 
 func testNamedLocalContext(t *testing.T, sb integration.Sandbox) {
