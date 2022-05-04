@@ -127,3 +127,4 @@ jq '.' metadata.json
   "containerimage.digest": "sha256:..."
 }
 ```blackrgound air
+587d78a4367417b2b2512ad5
