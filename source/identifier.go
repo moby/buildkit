@@ -85,6 +85,15 @@ func FromLLB(op *pb.Op_Source, platform *pb.Platform) (Identifier, error) {
 					return nil, err
 				}
 				id.RecordType = rt
+			case pb.AttrImageLayerLimit:
+				l, err := strconv.Atoi(v)
+				if err != nil {
+					return nil, errors.Wrapf(err, "invalid layer limit %s", v)
+				}
+				if l <= 0 {
+					return nil, errors.Errorf("invalid layer limit %s", v)
+				}
+				id.LayerLimit = &l
 			}
 		}
 	}
@@ -190,6 +199,7 @@ type ImageIdentifier struct {
 	Platform    *ocispecs.Platform
 	ResolveMode ResolveMode
 	RecordType  client.UsageRecordType
+	LayerLimit  *int
 }
 
 func NewImageIdentifier(str string) (*ImageIdentifier, error) {

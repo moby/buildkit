@@ -161,6 +161,7 @@ func TestIntegration(t *testing.T) {
 		testUncompressedRegistryCacheImportExport,
 		testStargzLazyRegistryCacheImportExport,
 		testCallInfo,
+		testPullWithLayerLimit,
 	)
 	tests = append(tests, diffOpTestCases()...)
 	integration.Run(t, tests, mirrors)
@@ -5749,6 +5750,125 @@ func testBuildInfoNoExport(t *testing.T, sb integration.Sandbox) {
 	require.Equal(t, len(exbi.Sources), 1)
 	require.Equal(t, exbi.Sources[0].Type, binfotypes.SourceTypeDockerImage)
 	require.Equal(t, exbi.Sources[0].Ref, "docker.io/library/busybox:latest")
+}
+
+func testPullWithLayerLimit(t *testing.T, sb integration.Sandbox) {
+	integration.SkipIfDockerd(t, sb, "direct push")
+	requiresLinux(t)
+	c, err := New(sb.Context(), sb.Address())
+	require.NoError(t, err)
+	defer c.Close()
+
+	st := llb.Scratch().
+		File(llb.Mkfile("/first", 0644, []byte("first"))).
+		File(llb.Mkfile("/second", 0644, []byte("second"))).
+		File(llb.Mkfile("/third", 0644, []byte("third")))
+
+	def, err := st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	registry, err := sb.NewRegistry()
+	if errors.Is(err, integration.ErrRequirements) {
+		t.Skip(err.Error())
+	}
+	require.NoError(t, err)
+
+	target := registry + "/buildkit/testlayers:latest"
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{
+			{
+				Type: ExporterImage,
+				Attrs: map[string]string{
+					"name": target,
+					"push": "true",
+				},
+			},
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	// pull 2 first layers
+	st = llb.Image(target, llb.WithLayerLimit(2)).
+		File(llb.Mkfile("/forth", 0644, []byte("forth")))
+
+	def, err = st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir, err := os.MkdirTemp("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{{
+			Type:      ExporterLocal,
+			OutputDir: destDir,
+		}},
+	}, nil)
+	require.NoError(t, err)
+
+	dt, err := os.ReadFile(filepath.Join(destDir, "first"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), "first")
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "second"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), "second")
+
+	_, err = os.ReadFile(filepath.Join(destDir, "third"))
+	require.Error(t, err)
+	require.True(t, errors.Is(err, os.ErrNotExist))
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "forth"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), "forth")
+
+	// pull 3rd layer only
+	st = llb.Diff(
+		llb.Image(target, llb.WithLayerLimit(2)),
+		llb.Image(target)).
+		File(llb.Mkfile("/forth", 0644, []byte("forth")))
+
+	def, err = st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	destDir, err = os.MkdirTemp("", "buildkit")
+	require.NoError(t, err)
+	defer os.RemoveAll(destDir)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{
+		Exports: []ExportEntry{{
+			Type:      ExporterLocal,
+			OutputDir: destDir,
+		}},
+	}, nil)
+	require.NoError(t, err)
+
+	_, err = os.ReadFile(filepath.Join(destDir, "first"))
+	require.Error(t, err)
+	require.True(t, errors.Is(err, os.ErrNotExist))
+
+	_, err = os.ReadFile(filepath.Join(destDir, "second"))
+	require.Error(t, err)
+	require.True(t, errors.Is(err, os.ErrNotExist))
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "third"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), "third")
+
+	dt, err = os.ReadFile(filepath.Join(destDir, "forth"))
+	require.NoError(t, err)
+	require.Equal(t, string(dt), "forth")
+
+	// zero limit errors cleanly
+	st = llb.Image(target, llb.WithLayerLimit(0))
+
+	def, err = st.Marshal(sb.Context())
+	require.NoError(t, err)
+
+	_, err = c.Solve(sb.Context(), def, SolveOpt{}, nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid layer limit")
 }
 
 func testCallInfo(t *testing.T, sb integration.Sandbox) {

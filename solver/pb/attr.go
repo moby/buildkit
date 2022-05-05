@@ -26,6 +26,7 @@ const AttrImageResolveModeDefault = "default"
 const AttrImageResolveModeForcePull = "pull"
 const AttrImageResolveModePreferLocal = "local"
 const AttrImageRecordType = "image.recordtype"
+const AttrImageLayerLimit = "image.layerlimit"
 
 const AttrLocalDiffer = "local.differ"
 const AttrLocalDifferNone = "none"

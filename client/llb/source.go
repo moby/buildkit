@@ -116,6 +116,11 @@ func Image(ref string, opts ...ImageOption) State {
 		attrs[pb.AttrImageRecordType] = info.RecordType
 	}
 
+	if ll := info.layerLimit; ll != nil {
+		attrs[pb.AttrImageLayerLimit] = strconv.FormatInt(int64(*ll), 10)
+		addCap(&info.Constraints, pb.CapSourceImageLayerLimit)
+	}
+
 	src := NewSource("docker-image://"+ref, attrs, info.Constraints) // controversial
 	if err != nil {
 		src.err = err
@@ -204,6 +209,7 @@ type ImageInfo struct {
 	metaResolver  ImageMetaResolver
 	resolveDigest bool
 	resolveMode   ResolveMode
+	layerLimit    *int
 	RecordType    string
 }
 
